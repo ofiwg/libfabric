@@ -525,6 +525,15 @@ static int pp_ctrl_recv(struct ct_pingpong *ct, char *buf, size_t size)
 	return ret;
 }
 
+static int pp_ctrl_recv_str(struct ct_pingpong *ct, char *buf, size_t size)
+{
+	int ret;
+
+	ret = pp_ctrl_recv(ct, buf, size);
+	buf[size - 1] = '\0';
+	return ret;
+}
+
 static int pp_send_name(struct ct_pingpong *ct, struct fid *endpoint)
 {
 	size_t addrlen = 0;
@@ -654,12 +663,11 @@ static int pp_ctrl_sync(struct ct_pingpong *ct)
 		}
 		PP_DEBUG("CLIENT: syncing now\n");
 
-		ret = pp_ctrl_recv(ct, ct->ctrl_buf, sizeof(PP_MSG_SYNC_A));
+		ret = pp_ctrl_recv_str(ct, ct->ctrl_buf, sizeof(PP_MSG_SYNC_A));
 		PP_DEBUG("CLIENT: after recv / ret=%d\n", ret);
 		if (ret < 0)
 			return ret;
 		if (strcmp(ct->ctrl_buf, PP_MSG_SYNC_A)) {
-			ct->ctrl_buf[PP_CTRL_BUF_LEN] = '\0';
 			PP_DEBUG("CLIENT: sync error while acking A: <%s> "
 				 "(len=%zu)\n",
 				 ct->ctrl_buf, strlen(ct->ctrl_buf));
@@ -668,12 +676,11 @@ static int pp_ctrl_sync(struct ct_pingpong *ct)
 		PP_DEBUG("CLIENT: synced\n");
 	} else {
 		PP_DEBUG("SERVER: syncing\n");
-		ret = pp_ctrl_recv(ct, ct->ctrl_buf, sizeof(PP_MSG_SYNC_Q));
+		ret = pp_ctrl_recv_str(ct, ct->ctrl_buf, sizeof(PP_MSG_SYNC_Q));
 		PP_DEBUG("SERVER: after recv / ret=%d\n", ret);
 		if (ret < 0)
 			return ret;
 		if (strcmp(ct->ctrl_buf, PP_MSG_SYNC_Q)) {
-			ct->ctrl_buf[PP_CTRL_BUF_LEN] = '\0';
 			PP_DEBUG("SERVER: sync error while acking Q: <%s> "
 				 "(len=%zu)\n",
 				 ct->ctrl_buf, strlen(ct->ctrl_buf));
@@ -724,8 +731,8 @@ static int pp_ctrl_txrx_msg_count(struct ct_pingpong *ct)
 		}
 		PP_DEBUG("CLIENT: sent count\n");
 
-		ret =
-		    pp_ctrl_recv(ct, ct->ctrl_buf, sizeof(PP_MSG_CHECK_CNT_OK));
+		ret = pp_ctrl_recv_str(ct, ct->ctrl_buf,
+				       sizeof(PP_MSG_CHECK_CNT_OK));
 		if (ret < 0)
 			return ret;
 		if (ret < sizeof(PP_MSG_CHECK_CNT_OK)) {
@@ -1829,7 +1836,7 @@ static void pp_free_res(struct ct_pingpong *ct)
 
 	free(ct->rem_name);
 	free(ct->local_name);
-	
+
 	if (ct->buf) {
 		ofi_freealign(ct->buf);
 		ct->buf = ct->rx_buf = ct->tx_buf = NULL;
