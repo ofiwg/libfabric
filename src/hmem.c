@@ -145,12 +145,19 @@ void ofi_hmem_init(void)
 
 	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
 		ret = hmem_ops[iface].init();
-		if (ret != FI_SUCCESS)
-			FI_WARN(&core_prov, FI_LOG_CORE,
-				"Failed to initialize hmem iface %s",
-				fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
-		else
+		if (ret != FI_SUCCESS) {
+			if (ret == -FI_ENOSYS)
+				FI_INFO(&core_prov, FI_LOG_CORE,
+					"Hmem iface %s not supported\n",
+					fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+			else
+				FI_WARN(&core_prov, FI_LOG_CORE,
+					"Failed to initialize hmem iface %s: %s\n",
+					fi_tostr(&iface, FI_TYPE_HMEM_IFACE),
+					fi_strerror(-ret));
+		} else {
 			hmem_ops[iface].initialized = true;
+		}
 	}
 }
 
