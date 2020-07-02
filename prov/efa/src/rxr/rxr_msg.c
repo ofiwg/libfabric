@@ -219,7 +219,7 @@ ssize_t rxr_msg_send(struct fid_ep *ep, const void *buf, size_t len,
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
-	return rxr_msg_sendv(ep, &iov, desc, 1, dest_addr, context);
+	return rxr_msg_sendv(ep, &iov, &desc, 1, dest_addr, context);
 }
 
 static
@@ -236,7 +236,7 @@ ssize_t rxr_msg_senddata(struct fid_ep *ep, const void *buf, size_t len,
 
 	memset(&msg, 0, sizeof(msg));
 	msg.msg_iov = &iov;
-	msg.desc = desc;
+	msg.desc = &desc;
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
 	msg.context = context;
@@ -364,7 +364,7 @@ ssize_t rxr_msg_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	iov.iov_len = len;
 
 	msg.msg_iov = &iov;
-	msg.desc = desc;
+	msg.desc = &desc;
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
 	msg.context = context;

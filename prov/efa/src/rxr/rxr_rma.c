@@ -499,7 +499,7 @@ ssize_t rxr_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 
 	memset(&msg, 0, sizeof(msg));
 	msg.msg_iov = &iov;
-	msg.desc = desc;
+	msg.desc = &desc;
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
 	msg.context = context;

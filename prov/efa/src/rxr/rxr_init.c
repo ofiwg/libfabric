@@ -394,19 +394,15 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 
 			info->domain_attr->mr_mode |= FI_MR_HMEM;
 
-			/*
-			 * If in this case application add FI_MR_LOCAL to hints,
-			 * it would mean that application want provide descriptor
-			 * for system memory too, which we are able to use, so
-			 * we add FI_MR_LOCAL to mr_mode.
-			 *
-			 * TODO: add FI_MR_LOCAL to mr_mode for any applcations
-			 * the requested it, not just CUDA application.
-			 */
-			if (hints->domain_attr->mr_mode & FI_MR_LOCAL)
-				info->domain_attr->mr_mode |= FI_MR_LOCAL;
 		}
 #endif
+		/*
+		 * The provider does not force applications to register buffers
+		 * with the device, but if an application is able to, reuse
+		 * their registrations and avoid the bounce buffers.
+		 */
+		if (hints->domain_attr->mr_mode & FI_MR_LOCAL)
+			info->domain_attr->mr_mode |= FI_MR_LOCAL;
 	}
 
 	rxr_set_rx_tx_size(info, core_info);
