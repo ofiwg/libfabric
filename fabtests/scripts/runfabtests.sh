@@ -73,7 +73,7 @@ declare -i pass_count=0
 declare -i fail_count=0
 declare -i total_failures=0
 
-python=$(which python3 2>/dev/null) || python=$(which python2 2>/dev/null)
+python=$(which python3 2>/dev/null) || python=$(which python2 2>/dev/null) || python=$(which python 2>/dev/null)
 
 if [ $? -ne 0 ]; then
 	echo "Unable to find python dependency, exiting..."
