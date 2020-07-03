@@ -226,13 +226,13 @@ vrb_eq_cm_getinfo(struct rdma_cm_event *event, struct fi_info *pep_info,
 
 	free((*info)->src_addr);
 
-	(*info)->src_addrlen = vrb_sockaddr_len(rdma_get_local_addr(event->id));
+	(*info)->src_addrlen = ofi_sizeofaddr(rdma_get_local_addr(event->id));
 	(*info)->src_addr = malloc((*info)->src_addrlen);
 	if (!((*info)->src_addr))
 		goto err2;
 	memcpy((*info)->src_addr, rdma_get_local_addr(event->id), (*info)->src_addrlen);
 
-	(*info)->dest_addrlen = vrb_sockaddr_len(rdma_get_peer_addr(event->id));
+	(*info)->dest_addrlen = ofi_sizeofaddr(rdma_get_peer_addr(event->id));
 	(*info)->dest_addr = malloc((*info)->dest_addrlen);
 	if (!((*info)->dest_addr))
 		goto err2;

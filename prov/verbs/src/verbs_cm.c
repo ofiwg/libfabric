@@ -37,7 +37,7 @@
 
 static int vrb_copy_addr(void *dst_addr, size_t *dst_addrlen, void *src_addr)
 {
-	size_t src_addrlen = vrb_sockaddr_len(src_addr);
+	size_t src_addrlen = ofi_sizeofaddr(src_addr);
 
 	if (*dst_addrlen == 0) {
 		*dst_addrlen = src_addrlen;

@@ -995,13 +995,6 @@ int vrb_get_port_space(const struct fi_info *info)
 		return RDMA_PS_TCP;
 }
 
-void vrb_set_sid(enum rdma_port_space ps,
-        uint16_t port, struct sockaddr_ib *sib)
-{
-	sib->sib_sid = htonll(((uint64_t) ps << 16) + ntohs(port));
-	sib->sib_sid_mask = htonll(OFI_IB_IP_PS_MASK | OFI_IB_IP_PORT_MASK);
-}
-
 static struct rdma_addrinfo *vrb_alloc_ib_addrinfo(uint8_t port_num,
 			const union ibv_gid *gid, uint16_t pkey)
 {
@@ -1029,7 +1022,7 @@ static struct rdma_addrinfo *vrb_alloc_ib_addrinfo(uint8_t port_num,
 	sib->sib_pkey = pkey;
 	sib->sib_scope_id = port_num;
 
-	vrb_set_sid(RDMA_PS_IB, 0, sib);
+	ofi_addr_set_port((struct sockaddr *)sib, 0);
 
 	return rai;
 }
@@ -1226,21 +1219,6 @@ static int vrb_get_srcaddr_devs(struct fi_info **info)
 	return 0;
 }
 
-static void vrb_sockaddr_set_port(struct sockaddr *sa, uint16_t port)
-{
-	switch(sa->sa_family) {
-	case AF_INET:
-		((struct sockaddr_in *)sa)->sin_port = port;
-		break;
-	case AF_INET6:
-		((struct sockaddr_in6 *)sa)->sin6_port = port;
-		break;
-	case AF_IB:
-		vrb_set_sid(RDMA_PS_IB, port, (struct sockaddr_ib *)sa);
-		break;
-	}
-}
-
 /* the `rai` parameter is used for the MSG EP type */
 /* the `fmt`, `[src | dest]_addr` parameters are used for the DGRAM EP type */
 /* if the `fmt` parameter isn't used, pass FI_FORMAT_UNSPEC */
@@ -1301,7 +1279,7 @@ static int vrb_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
 	 * corresponds to a valid dest addr) */
 	local_addr = rdma_get_local_addr(id);
 
-	rai->ai_src_len = vrb_sockaddr_len(local_addr);
+	rai->ai_src_len = ofi_sizeofaddr(local_addr);
 	rai->ai_src_addr = malloc(rai->ai_src_len);
 	if (!rai->ai_src_addr)
 		return -FI_ENOMEM;
@@ -1310,7 +1288,7 @@ static int vrb_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
 	/* User didn't specify a port. Zero out the random port
 	 * assigned by rdmamcm so that this rai/fi_info can be
 	 * used multiple times to create rdma endpoints.*/
-	vrb_sockaddr_set_port(rai->ai_src_addr, 0);
+	ofi_addr_set_port(rai->ai_src_addr, 0);
 
 rai_to_fi:
 	return vrb_set_info_addrs(*info, rai, FI_FORMAT_UNSPEC,
