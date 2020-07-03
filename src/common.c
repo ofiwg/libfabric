@@ -858,10 +858,10 @@ static int ofi_is_any_addr_port(struct sockaddr *addr)
 {
 	switch (ofi_sa_family(addr)) {
 	case AF_INET:
-		return (ofi_ipv4_is_any_addr(addr) &&
+		return (ofi_sin_is_any_addr(addr) &&
 			ofi_sin_port(addr));
 	case AF_INET6:
-		return (ofi_ipv6_is_any_addr(addr) &&
+		return (ofi_sin6_is_any_addr(addr) &&
 			ofi_sin6_port(addr));
 	default:
 		FI_WARN(&core_prov, FI_LOG_CORE,
