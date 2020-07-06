@@ -884,17 +884,16 @@ static void rxm_do_atomic(struct rxm_pkt *pkt, void *dst, void *src,
 {
 	switch (pkt->hdr.op) {
 	case ofi_op_atomic:
-		ofi_atomic_write_handlers[op][datatype](dst, src, count);
+		assert(ofi_atomic_iswrite_op(op));
+		ofi_atomic_write_handler(op, datatype, dst, src, count);
 		break;
 	case ofi_op_atomic_fetch:
-		ofi_atomic_readwrite_handlers[op][datatype](dst, src, res,
-							    count);
+		assert(ofi_atomic_isreadwrite_op(op));
+		ofi_atomic_readwrite_handler(op, datatype, dst, src, res, count);
 		break;
 	case ofi_op_atomic_compare:
-		assert(op >= OFI_SWAP_OP_START &&
-		       op < OFI_SWAP_OP_START + OFI_SWAP_OP_LAST);
-		ofi_atomic_swap_handlers[op - OFI_SWAP_OP_START][datatype](dst,
-						src, cmp, res, count);
+		assert(ofi_atomic_isswap_op(op));
+		ofi_atomic_swap_handler(op, datatype, dst, src, cmp, res, count);
 		break;
 	default:
 		/* Validated prior to calling function */

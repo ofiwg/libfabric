@@ -865,16 +865,15 @@ static void sock_pe_do_atomic(void *cmp, void *dst, void *src,
 {
 	char tmp_result[SOCK_EP_MAX_ATOMIC_SZ];
 
-	if (op >= OFI_SWAP_OP_START) {
-		ofi_atomic_swap_handlers[op - OFI_SWAP_OP_START][datatype](dst,
-			src, cmp, tmp_result, cnt);
+	if (ofi_atomic_isswap_op(op)) {
+		ofi_atomic_swap_handler(op, datatype, dst, src, cmp,
+					tmp_result, cnt);
                 if (cmp != NULL)
 			memcpy(cmp, tmp_result, ofi_datatype_size(datatype) * cnt);
-	} else if (fetch) {
-		ofi_atomic_readwrite_handlers[op][datatype](dst, src,
-			cmp /*results*/, cnt);
-	} else {
-		ofi_atomic_write_handlers[op][datatype](dst, src, cnt);
+	} else if (fetch && ofi_atomic_isreadwrite_op(op)) {
+		ofi_atomic_readwrite_handler(op, datatype, dst, src, cmp, cnt);
+	} else if (ofi_atomic_iswrite_op(op)) {
+		ofi_atomic_write_handler(op, datatype, dst, src, cnt);
 	}
 }
 
@@ -2714,7 +2713,7 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 	pthread_mutex_init(&pe->list_lock, NULL);
 	pe->domain = domain;
 
-	
+
 	ret = ofi_bufpool_create(&pe->pe_rx_pool,
 				 sizeof(struct sock_pe_entry), 16, 0, 1024, 0);
 	if (ret) {

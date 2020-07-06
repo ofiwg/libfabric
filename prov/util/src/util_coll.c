@@ -871,11 +871,10 @@ void util_coll_collective_comp(struct util_coll_operation *coll_op)
 static int util_coll_proc_reduce_item(struct util_coll_reduce_item *reduce_item)
 {
 	if (FI_MIN <= reduce_item->op && FI_BXOR >= reduce_item->op) {
-		ofi_atomic_write_handlers[reduce_item->op]
-					 [reduce_item->datatype](
-						 reduce_item->inout_buf,
-						 reduce_item->in_buf,
-						 reduce_item->count);
+		ofi_atomic_write_handler(reduce_item->op, reduce_item->datatype,
+					 reduce_item->inout_buf,
+					 reduce_item->in_buf,
+					 reduce_item->count);
 	} else {
 		return -FI_ENOSYS;
 	}
