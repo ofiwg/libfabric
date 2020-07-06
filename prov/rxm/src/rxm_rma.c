@@ -36,7 +36,7 @@
 static ssize_t
 rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 		   void **desc, void **desc_storage, size_t iov_count,
-		   uint64_t comp_flags, struct rxm_rma_buf *rma_buf)
+		   uint64_t access, struct rxm_rma_buf *rma_buf)
 {
 	size_t i, ret;
 
@@ -45,7 +45,7 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 
 	if (!rxm_ep->rdm_mr_local) {
 		ret = rxm_msg_mr_regv(rxm_ep, msg_iov, iov_count, SIZE_MAX,
-				      comp_flags, rma_buf->mr.mr);
+				      access, rma_buf->mr.mr);
 		if (OFI_UNLIKELY(ret))
 			return ret;
 

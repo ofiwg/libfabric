@@ -1248,7 +1248,7 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 		memcpy(&addr_entry->ipaddr, ifa->ifa_addr,
 			ofi_sizeofaddr(ifa->ifa_addr));
 		strncpy(addr_entry->ifa_name, ifa->ifa_name,
-			sizeof(addr_entry->ifa_name));
+			sizeof(addr_entry->ifa_name) - 1);
 		ofi_set_netmask_str(addr_entry->net_name,
 				    sizeof(addr_entry->net_name), ifa);
 

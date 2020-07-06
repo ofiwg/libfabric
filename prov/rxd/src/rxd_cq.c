@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2020 Intel Corporation. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -93,7 +93,7 @@ static int rxd_match_pkt_entry(struct slist_entry *item, const void *arg)
 {
 	return ((struct rxd_pkt_entry *) arg ==
 		container_of(item, struct rxd_pkt_entry, s_entry));
-} 
+}
 
 static void rxd_remove_rx_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
@@ -214,7 +214,7 @@ static void rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_
 
 	ep->peers[addr].peer_addr = peer_addr;
 
-	if (!dlist_empty(&ep->peers[addr].unacked) && 
+	if (!dlist_empty(&ep->peers[addr].unacked) &&
 	    rxd_get_base_hdr(container_of((&ep->peers[addr].unacked)->next,
 			     struct rxd_pkt_entry, d_entry))->type == RXD_RTS) {
 		dlist_pop_front(&ep->peers[addr].unacked,
@@ -302,12 +302,12 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 			}
 			continue;
 		}
-				
+
 		if (tx_entry->op == RXD_DATA_READ && !tx_entry->bytes_done) {
 			if (ep->peers[tx_entry->peer].unacked_cnt >=
 		    	    ep->peers[tx_entry->peer].tx_window) {
 				break;
-			} 
+			}
 			tx_entry->start_seq = ep->peers[tx_entry->peer].tx_seq_no;
 			ep->peers[tx_entry->peer].tx_seq_no = tx_entry->start_seq +
 							      tx_entry->num_segs;
@@ -556,7 +556,7 @@ static int rxd_verify_iov(struct rxd_ep *ep, struct ofi_rma_iov *rma,
 		iov[i].iov_len = rma[i].len;
 		if (ret) {
 			FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "could not verify MR\n");
-			return -FI_EACCES; 
+			return -FI_EACCES;
 		}
 	}
 	return 0;
@@ -781,10 +781,12 @@ void rxd_do_atomic(void *src, void *dst, void *cmp, enum fi_datatype datatype,
 {
 	char tmp_result[RXD_MAX_MTU_SIZE];
 
-	if (atomic_op >= OFI_SWAP_OP_START) {
+	if (atomic_op >= OFI_SWAP_OP_START &&
+	    atomic_op < OFI_SWAP_OP_LAST) {
 		ofi_atomic_swap_handlers[atomic_op - OFI_SWAP_OP_START][datatype](dst,
 			src, cmp, tmp_result, cnt);
-	} else if (atomic_op != FI_ATOMIC_READ) {
+	} else if (atomic_op != FI_ATOMIC_READ &&
+		   atomic_op < OFI_WRITE_OP_LAST) {
 		ofi_atomic_write_handlers[atomic_op][datatype](dst, src, cnt);
 	}
 }
@@ -1102,7 +1104,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 	}
 
 	rxd_progress_tx_list(ep, &ep->peers[ack->base_hdr.peer]);
-} 
+}
 
 void rxd_handle_send_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 {
@@ -1182,7 +1184,7 @@ void rxd_handle_error(struct rxd_ep *ep)
 	} else {
 		FI_WARN(&rxd_prov, FI_LOG_CQ,
 			"Received %s error from core provider: %s\n",
-			err.flags & FI_SEND ? "tx" : "rx", fi_strerror(-err.err)); 
+			err.flags & FI_SEND ? "tx" : "rx", fi_strerror(-err.err));
 	}
 }
 

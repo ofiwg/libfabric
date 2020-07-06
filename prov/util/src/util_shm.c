@@ -122,7 +122,7 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 
 	total_size = ep_name_offset + SMR_NAME_MAX;
 
-	/* 
+	/*
  	 * Revisit later to see if we really need the size adjustment, or
  	 * at most align to a multiple of a page size.
  	 */
@@ -153,13 +153,14 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	fd = shm_open(attr->name, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
 		FI_WARN(prov, FI_LOG_EP_CTRL, "shm_open error\n");
-		goto err1;
+		return -errno;
 	}
 
 	ep_name = calloc(1, sizeof(*ep_name));
 	if (!ep_name) {
 		FI_WARN(prov, FI_LOG_EP_CTRL, "calloc error\n");
-		return -FI_ENOMEM;
+		ret = -FI_ENOMEM;
+		goto close;
 	}
 	strncpy(ep_name->name, (char *)attr->name, SMR_NAME_MAX - 1);
 	ep_name->name[SMR_NAME_MAX - 1] = '\0';
@@ -170,14 +171,16 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	ret = ftruncate(fd, total_size);
 	if (ret < 0) {
 		FI_WARN(prov, FI_LOG_EP_CTRL, "ftruncate error\n");
-		goto err2;
+		ret = -errno;
+		goto remove;
 	}
 
 	mapped_addr = mmap(NULL, total_size, PROT_READ | PROT_WRITE,
 			   MAP_SHARED, fd, 0);
 	if (mapped_addr == MAP_FAILED) {
 		FI_WARN(prov, FI_LOG_EP_CTRL, "mmap error\n");
-		goto err2;
+		ret = -errno;
+		goto remove;
 	}
 
 	close(fd);
@@ -210,7 +213,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	smr_cmd_queue_init(smr_cmd_queue(*smr), rx_size);
 	smr_resp_queue_init(smr_resp_queue(*smr), tx_size);
 	smr_inject_pool_init(smr_inject_pool(*smr), rx_size);
-	smr_sar_pool_init(smr_sar_pool(*smr), SMR_MAX_PEERS); 
+	smr_sar_pool_init(smr_sar_pool(*smr), SMR_MAX_PEERS);
 	for (i = 0; i < SMR_MAX_PEERS; i++) {
 		smr_peer_addr_init(&smr_peer_data(*smr)[i].addr);
 		smr_peer_data(*smr)[i].sar_status = 0;
@@ -221,12 +224,14 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 
 	return 0;
 
-err2:
-	shm_unlink(attr->name);
-	close(fd);
+remove:
+	dlist_remove(&ep_name->entry);
 	pthread_mutex_unlock(&ep_list_lock);
-err1:
-	return -errno;
+	free(ep_name);
+close:
+	close(fd);
+	shm_unlink(attr->name);
+	return ret;
 }
 
 void smr_free(struct smr_region *smr)

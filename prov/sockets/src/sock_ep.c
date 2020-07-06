@@ -1758,8 +1758,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	/* default config */
 	sock_ep->attr->min_multi_recv = SOCK_EP_MIN_MULTI_RECV;
 
-	if (info)
-		memcpy(&sock_ep->attr->info, info, sizeof(struct fi_info));
+	memcpy(&sock_ep->attr->info, info, sizeof(struct fi_info));
 
 	sock_ep->attr->domain = sock_dom;
 	fastlock_init(&sock_ep->attr->cm.lock);

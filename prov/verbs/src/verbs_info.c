@@ -765,7 +765,7 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		assert(0);
 		return -FI_EINVAL;
 	}
-		
+
 
 	*(fi->fabric_attr) = verbs_fabric_attr;
 
@@ -921,7 +921,7 @@ err1:
 static int vrb_ifa_rdma_info(const struct ifaddrs *ifa, char **dev_name,
 				struct rdma_addrinfo **rai)
 {
-	char name[INET6_ADDRSTRLEN];
+	char name[INET6_ADDRSTRLEN + 16];
 	struct rdma_addrinfo rai_hints = {
 		.ai_flags = RAI_PASSIVE | RAI_NUMERICHOST,
 	}, *rai_;
@@ -940,9 +940,8 @@ static int vrb_ifa_rdma_info(const struct ifaddrs *ifa, char **dev_name,
 	 * TODO should we do something similar for IPv4? */
 	if (!strncmp(name, IPV6_LINK_LOCAL_ADDR_PREFIX_STR,
 		     strlen(IPV6_LINK_LOCAL_ADDR_PREFIX_STR))) {
-		assert(strlen(name) + strlen(ifa->ifa_name) < INET6_ADDRSTRLEN);
-		strcat(name, "%");
-		strcat(name, ifa->ifa_name);
+		strncat(name, "%", sizeof(name) - strlen(name) - 1);
+		strncat(name, ifa->ifa_name, sizeof(name) - strlen(name) - 1);
 	}
 
 	ret = rdma_getaddrinfo((char *) name, NULL, &rai_hints, &rai_);
@@ -1181,14 +1180,10 @@ static int vrb_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
 	 * though it fills the destination address (presence of id->verbs
 	 * corresponds to a valid dest addr) */
 	local_addr = rdma_get_local_addr(id);
-	if (!local_addr) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Unable to get local address\n");
-		return -FI_ENODATA;
-	}
 
 	rai->ai_src_len = vrb_sockaddr_len(local_addr);
-	if (!(rai->ai_src_addr = malloc(rai->ai_src_len)))
+	rai->ai_src_addr = malloc(rai->ai_src_len);
+	if (!rai->ai_src_addr)
 		return -FI_ENOMEM;
 
 	memcpy(rai->ai_src_addr, local_addr, rai->ai_src_len);

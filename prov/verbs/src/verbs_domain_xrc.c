@@ -307,13 +307,11 @@ void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn)
 		}
 
 		addr = rdma_get_local_addr(ep->base_ep.id);
-		if (addr)
-			ofi_straddr_dbg(&vrb_prov, FI_LOG_EP_CTRL,
-					"XRC connect src_addr", addr);
+		ofi_straddr_dbg(&vrb_prov, FI_LOG_EP_CTRL,
+				"XRC connect src_addr", addr);
 		addr = rdma_get_peer_addr(ep->base_ep.id);
-		if (addr)
-			ofi_straddr_dbg(&vrb_prov, FI_LOG_EP_CTRL,
-					"XRC connect dest_addr", addr);
+		ofi_straddr_dbg(&vrb_prov, FI_LOG_EP_CTRL,
+				"XRC connect dest_addr", addr);
 
 		ep->base_ep.ibv_qp = ep->ini_conn->ini_qp;
 		ret = vrb_process_ini_conn(ep, ep->conn_setup->pending_recip,

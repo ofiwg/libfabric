@@ -128,7 +128,7 @@ void vrb_log_ep_conn(struct vrb_xrc_ep *ep, char *desc)
 {
 	struct sockaddr *addr;
 	char buf[OFI_ADDRSTRLEN];
-	size_t len = sizeof(buf);
+	size_t len;
 
 	if (!fi_log_enabled(&vrb_prov, FI_LOG_INFO, FI_LOG_EP_CTRL))
 		return;
@@ -141,20 +141,14 @@ void vrb_log_ep_conn(struct vrb_xrc_ep *ep, char *desc)
 
 	if (ep->base_ep.id) {
 		addr = rdma_get_local_addr(ep->base_ep.id);
-		if (addr) {
-			ofi_straddr(buf, &len, ep->base_ep.info->addr_format,
-				    addr);
-			VERBS_INFO(FI_LOG_EP_CTRL, "EP %p src_addr: %s\n",
-				   ep, buf);
-		}
+		len = sizeof(buf);
+		ofi_straddr(buf, &len, ep->base_ep.info->addr_format, addr);
+		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p src_addr: %s\n", ep, buf);
+
 		addr = rdma_get_peer_addr(ep->base_ep.id);
-		if (addr) {
-			len = sizeof(buf);
-			ofi_straddr(buf, &len, ep->base_ep.info->addr_format,
-				    addr);
-			VERBS_INFO(FI_LOG_EP_CTRL, "EP %p dst_addr: %s\n",
-				   ep, buf);
-		}
+		len = sizeof(buf);
+		ofi_straddr(buf, &len, ep->base_ep.info->addr_format, addr);
+		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p dst_addr: %s\n", ep, buf);
 	}
 
 	if (ep->base_ep.ibv_qp) {

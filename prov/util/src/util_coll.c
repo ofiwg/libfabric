@@ -641,7 +641,7 @@ static int util_coll_scatter(struct util_coll_operation *coll_op, const void *da
 			// according to destination rank. if we're rank 3, data intended for
 			// ranks 0-2 will be moved to the end
 			*temp = malloc(cur_cnt * ofi_datatype_size(datatype));
-			if (!temp)
+			if (!*temp)
 				return -FI_ENOMEM;
 			ret = util_coll_sched_copy(coll_op,
 						   (char *) data + nbytes * local_rank, *temp,
