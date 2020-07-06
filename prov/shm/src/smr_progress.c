@@ -438,14 +438,14 @@ static void smr_do_atomic(void *src, void *dst, void *cmp, enum fi_datatype data
 {
 	char tmp_result[SMR_INJECT_SIZE];
 
-	if (op >= OFI_SWAP_OP_START && op < OFI_SWAP_OP_LAST) {
-		ofi_atomic_swap_handlers[op - OFI_SWAP_OP_START][datatype](dst,
-			src, cmp, tmp_result, cnt);
-	} else if (flags & SMR_RMA_REQ && op < OFI_READWRITE_OP_LAST) {
-		ofi_atomic_readwrite_handlers[op][datatype](dst, src,
-			tmp_result, cnt);
-	} else if (op != FI_ATOMIC_READ && op < OFI_WRITE_OP_LAST) {
-		ofi_atomic_write_handlers[op][datatype](dst, src, cnt);
+	if (ofi_atomic_isswap_op(op)) {
+		ofi_atomic_swap_handler(op, datatype, dst, src, cmp,
+					tmp_result, cnt);
+	} else if (flags & SMR_RMA_REQ && ofi_atomic_isreadwrite_op(op)) {
+		ofi_atomic_readwrite_handler(op, datatype, dst, src,
+					     tmp_result, cnt);
+	} else if (ofi_atomic_iswrite_op(op)) {
+		ofi_atomic_write_handler(op, datatype, dst, src, cnt);
 	} else {
 		FI_WARN(&smr_prov, FI_LOG_EP_DATA,
 			"invalid atomic operation\n");

@@ -132,13 +132,11 @@ static int verify_atomic(void)
 	}
 
 	if (is_compare_func(test_info.class_function)) {
-		ofi_atomic_swap_handlers[op - OFI_SWAP_OP_START][type](dst,
-			src, cmp, tmp, count);
+		ofi_atomic_swap_handler(op, type, dst, src, cmp, tmp, count);
 	} else if (is_fetch_func(test_info.class_function)) {
-		ofi_atomic_readwrite_handlers[op][type](dst,
-			src, tmp, count);
+		ofi_atomic_readwrite_handler(op, type, dst, src, tmp, count);
 	} else {
-		ofi_atomic_write_handlers[op][type](dst, src, count);
+		ofi_atomic_write_handler(op, type, dst, src, count);
 	}
 
 	SWITCH_TYPES(type, CHECK_LOCAL, dst, ft_mr_ctrl.buf, count, ret);

@@ -781,13 +781,11 @@ void rxd_do_atomic(void *src, void *dst, void *cmp, enum fi_datatype datatype,
 {
 	char tmp_result[RXD_MAX_MTU_SIZE];
 
-	if (atomic_op >= OFI_SWAP_OP_START &&
-	    atomic_op < OFI_SWAP_OP_LAST) {
-		ofi_atomic_swap_handlers[atomic_op - OFI_SWAP_OP_START][datatype](dst,
-			src, cmp, tmp_result, cnt);
-	} else if (atomic_op != FI_ATOMIC_READ &&
-		   atomic_op < OFI_WRITE_OP_LAST) {
-		ofi_atomic_write_handlers[atomic_op][datatype](dst, src, cnt);
+	if (ofi_atomic_isswap_op(atomic_op)) {
+		ofi_atomic_swap_handler(atomic_op, datatype, dst, src, cmp,
+					tmp_result, cnt);
+	} else if (ofi_atomic_iswrite_op(atomic_op)) {
+		ofi_atomic_write_handler(atomic_op, datatype, dst, src, cnt);
 	}
 }
 
