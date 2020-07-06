@@ -863,8 +863,10 @@ int hook_debug_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		return -FI_ENOMEM;
 
 	ret = hook_eq_init(fabric, attr, eq, context, &myeq->hook_eq);
-	if (ret)
+	if (ret) {
 		free(myeq);
+		return ret;
+	}
 
 	myeq->hook_eq.eq.ops = &hook_debug_eq_ops;
 	myeq->hook_eq.eq.fid.ops = &hook_debug_eq_fid_ops;
