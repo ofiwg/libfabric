@@ -484,7 +484,7 @@ static int util_wait_fd_close(struct fid *fid)
 	if (wait->util_wait.wait_obj == FI_WAIT_FD)
 		ofi_epoll_close(wait->epoll_fd);
 	else
-		ofi_epoll_close(wait->epoll_fd);
+		ofi_pollfds_close(wait->pollfds);
 	free(wait);
 	return 0;
 }
