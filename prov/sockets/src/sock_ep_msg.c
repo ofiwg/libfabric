@@ -223,7 +223,7 @@ static void sock_ep_cm_monitor_handle(struct sock_ep_cm_head *cm_head,
 {
 	int ret;
 
-	fastlock_acquire(&cm_head->signal_lock);
+	pthread_mutex_lock(&cm_head->signal_lock);
 	if (handle->monitored)
 		goto unlock;
 
@@ -239,7 +239,7 @@ static void sock_ep_cm_monitor_handle(struct sock_ep_cm_head *cm_head,
 		fd_signal_set(&cm_head->signal);
 	}
 unlock:
-	fastlock_release(&cm_head->signal_lock);
+	pthread_mutex_unlock(&cm_head->signal_lock);
 }
 
 static void
@@ -271,9 +271,9 @@ static void sock_ep_cm_unmonitor_handle(struct sock_ep_cm_head *cm_head,
                                        struct sock_conn_req_handle *handle,
                                        int close_socket)
 {
-	fastlock_acquire(&cm_head->signal_lock);
+	pthread_mutex_lock(&cm_head->signal_lock);
 	sock_ep_cm_unmonitor_handle_locked(cm_head, handle, close_socket);
-	fastlock_release(&cm_head->signal_lock);
+	pthread_mutex_unlock(&cm_head->signal_lock);
 }
 
 static void sock_ep_cm_shutdown_report(struct sock_ep *ep, int send_shutdown)
@@ -728,9 +728,9 @@ static struct fi_info *sock_ep_msg_get_info(struct sock_pep *pep,
 
 void sock_ep_cm_signal(struct sock_ep_cm_head *cm_head)
 {
-	fastlock_acquire(&cm_head->signal_lock);
+	pthread_mutex_lock(&cm_head->signal_lock);
 	fd_signal_set(&cm_head->signal);
-	fastlock_release(&cm_head->signal_lock);
+	pthread_mutex_unlock(&cm_head->signal_lock);
 }
 
 static void sock_ep_cm_process_rejected(struct sock_ep_cm_head *cm_head,
@@ -783,13 +783,13 @@ sock_ep_cm_pop_from_msg_list(struct sock_ep_cm_head *cm_head)
 	struct dlist_entry *entry;
 	struct sock_conn_req_handle *hreq = NULL;
 
-	fastlock_acquire(&cm_head->signal_lock);
+	pthread_mutex_lock(&cm_head->signal_lock);
 	if (!dlist_empty(&cm_head->msg_list)) {
 		entry = cm_head->msg_list.next;
 		dlist_remove(entry);
 		hreq = container_of(entry, struct sock_conn_req_handle, entry);
 	}
-	fastlock_release(&cm_head->signal_lock);
+	pthread_mutex_unlock(&cm_head->signal_lock);
 	return hreq;
 }
 
@@ -1001,9 +1001,9 @@ static int sock_pep_reject(struct fid_pep *pep, fid_t handle,
 
 	cm_head = &_pep->cm_head;
 	hreq->state = SOCK_CONN_HANDLE_REJECTED;
-	fastlock_acquire(&cm_head->signal_lock);
+	pthread_mutex_lock(&cm_head->signal_lock);
 	sock_ep_cm_add_to_msg_list(cm_head, hreq);
-	fastlock_release(&cm_head->signal_lock);
+	pthread_mutex_unlock(&cm_head->signal_lock);
 	return 0;
 }
 
@@ -1173,7 +1173,7 @@ static void *sock_ep_cm_thread(void *arg)
 			continue;
 		}
 
-		fastlock_acquire(&cm_head->signal_lock);
+		pthread_mutex_lock(&cm_head->signal_lock);
 		for (i = 0; i < num_fds; i++) {
 			handle = ep_contexts[i];
 
@@ -1195,7 +1195,7 @@ static void *sock_ep_cm_thread(void *arg)
 			assert(handle->sock_fd != INVALID_SOCKET);
 			sock_ep_cm_handle_rx(cm_head, handle);
 		}
-		fastlock_release(&cm_head->signal_lock);
+		pthread_mutex_unlock(&cm_head->signal_lock);
 	}
 	return NULL;
 }
@@ -1205,7 +1205,7 @@ int sock_ep_cm_start_thread(struct sock_ep_cm_head *cm_head)
 {
 	assert(cm_head->do_listen == 0);
 
-	fastlock_init(&cm_head->signal_lock);
+	pthread_mutex_init(&cm_head->signal_lock, NULL);
 	dlist_init(&cm_head->msg_list);
 
 	int ret = ofi_epoll_create(&cm_head->emap);
@@ -1251,9 +1251,9 @@ void sock_ep_cm_wait_handle_finalized(struct sock_ep_cm_head *cm_head,
                                       struct sock_conn_req_handle *handle)
 {
 	handle->state = SOCK_CONN_HANDLE_FINALIZING;
-	fastlock_acquire(&cm_head->signal_lock);
+	pthread_mutex_lock(&cm_head->signal_lock);
 	sock_ep_cm_add_to_msg_list(cm_head, handle);
-	fastlock_release(&cm_head->signal_lock);
+	pthread_mutex_unlock(&cm_head->signal_lock);
 
 	pthread_mutex_lock(&handle->finalized_mutex);
 	while (handle->state != SOCK_CONN_HANDLE_FINALIZED)
@@ -1272,10 +1272,10 @@ void sock_ep_cm_stop_thread(struct sock_ep_cm_head *cm_head)
 	sock_ep_cm_signal(cm_head);
 
 	if (cm_head->listener_thread &&
-			pthread_join(cm_head->listener_thread, NULL)) {
+	    pthread_join(cm_head->listener_thread, NULL)) {
 		SOCK_LOG_DBG("pthread join failed\n");
 	}
 	ofi_epoll_close(cm_head->emap);
 	fd_signal_free(&cm_head->signal);
-	fastlock_destroy(&cm_head->signal_lock);
+	pthread_mutex_destroy(&cm_head->signal_lock);
 }
