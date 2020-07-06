@@ -802,22 +802,30 @@ void rxd_progress_atom_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 			  void **msg, size_t msg_size)
 {
 	char *src, *cmp;
-	size_t len;
+	size_t data_size, len;
 	int i, iov_count;
 
 	src = (char *) (*msg);
-	cmp = base_hdr->type == RXD_ATOMIC_COMPARE ? (char *) (*msg) +
-		(msg_size / 2) : NULL;
-
+	cmp = base_hdr->type == RXD_ATOMIC_COMPARE ? src + (msg_size / 2) : NULL;
 	iov_count = sar_hdr ? sar_hdr->iov_count : 1;
-	for (i = len = 0; i < iov_count; i++) {
+
+	data_size = ofi_datatype_size(atom_hdr->datatype);
+	if (!data_size) {
+		FI_WARN(&rxd_prov, FI_LOG_EP_DATA,
+			"Invalid atomic datatype received\n");
+		len = ofi_total_iov_len(rx_entry->iov, iov_count);
+		goto out;
+	}
+
+	for (i = 0, len = 0; i < iov_count; i++) {
 		rxd_do_atomic(&src[len], rx_entry->iov[i].iov_base,
-			      cmp ? &cmp[len] : NULL, atom_hdr->datatype,
-			      atom_hdr->atomic_op, rx_entry->iov[i].iov_len /
-			      ofi_datatype_size(atom_hdr->datatype));
+			      cmp ? &cmp[len] : NULL,
+			      atom_hdr->datatype, atom_hdr->atomic_op,
+			      rx_entry->iov[i].iov_len / data_size);
 		len += rx_entry->iov[i].iov_len;
 	}
 
+out:
 	if (base_hdr->type == RXD_ATOMIC)
 		rx_entry->bytes_done = len;
 }
