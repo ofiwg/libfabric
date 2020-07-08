@@ -215,7 +215,7 @@ struct sock_conn_listener {
 struct sock_ep_cm_head {
 	ofi_epoll_t emap;
 	struct fd_signal signal;
-	fastlock_t signal_lock;
+	pthread_mutex_t signal_lock;
 	pthread_t listener_thread;
 	struct dlist_entry msg_list;
 	int do_listen;
@@ -1218,7 +1218,6 @@ static inline size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry)
 
 int sock_ep_cm_start_thread(struct sock_ep_cm_head *cm_head);
 void sock_ep_cm_signal(struct sock_ep_cm_head *cm_head);
-void sock_ep_cm_signal_locked(struct sock_ep_cm_head *cm_head);
 void sock_ep_cm_stop_thread(struct sock_ep_cm_head *cm_head);
 void sock_ep_cm_wait_handle_finalized(struct sock_ep_cm_head *cm_head,
                                       struct sock_conn_req_handle *handle);
