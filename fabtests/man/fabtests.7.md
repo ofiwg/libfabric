@@ -209,6 +209,9 @@ testing scope is limited.
 *fi_mr_test*
 : Tests memory registration.
 
+*fi_mr_cache_evict*
+: Tests provider MR cache eviction capabilities.
+
 *fi_resource_freeing*
 : Allocates and closes fabric resources to check for proper cleanup.
 

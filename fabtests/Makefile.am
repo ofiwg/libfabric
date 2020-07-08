@@ -4,6 +4,7 @@ ACLOCAL_AMFLAGS = -I config
 
 if MACOS
 os_excludes = -f ./test_configs/osx.exclude
+AM_CFLAGS += -I$(srcdir)/include/osx
 endif
 
 if FREEBSD
@@ -52,6 +53,7 @@ bin_PROGRAMS = \
 	unit/fi_eq_test \
 	unit/fi_cq_test \
 	unit/fi_mr_test \
+	unit/fi_mr_cache_evict \
 	unit/fi_cntr_test \
 	unit/fi_av_test \
 	unit/fi_dom_test \
@@ -302,6 +304,11 @@ unit_fi_mr_test_SOURCES = \
 	unit/mr_test.c \
 	$(unit_srcs)
 unit_fi_mr_test_LDADD = libfabtests.la
+
+unit_fi_mr_cache_evict_SOURCES = \
+	unit/mr_cache_evict.c \
+	$(unit_srcs)
+unit_fi_mr_cache_evict_LDADD = libfabtests.la
 
 unit_fi_cntr_test_SOURCES = \
 	unit/cntr_test.c \
