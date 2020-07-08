@@ -297,7 +297,6 @@ struct rxr_peer {
 	int timeout_interval;		/* initial RNR timeout value */
 	int rnr_timeout_exp;		/* RNR timeout exponentation calc val */
 	struct dlist_entry rnr_entry;	/* linked to rxr_ep peer_backoff_list */
-	struct dlist_entry entry;	/* linked to rxr_ep peer_list */
 };
 
 struct rxr_queued_ctrl_info {
@@ -508,8 +507,8 @@ struct rxr_ep {
 	/* per-peer information */
 	struct rxr_peer *peer;
 
-	/* free stack for reorder buffer */
-	struct rxr_robuf_fs *robuf_fs;
+	/* bufpool for reorder buffer */
+	struct ofi_bufpool *robuf_pool;
 
 	/* core provider fid */
 	struct fid_ep *rdm_ep;
@@ -607,8 +606,6 @@ struct rxr_ep {
 	struct dlist_entry read_pending_list;
 	/* rxr_peer entries that are in backoff due to RNR */
 	struct dlist_entry peer_backoff_list;
-	/* rxr_peer entries with an allocated robuf */
-	struct dlist_entry peer_list;
 
 #if ENABLE_DEBUG
 	/* rx_entries waiting for data to arrive (large messages) */
@@ -676,11 +673,10 @@ static inline void rxr_ep_peer_init_rx(struct rxr_ep *ep, struct rxr_peer *peer)
 {
 	assert(!peer->rx_init);
 
-	peer->robuf = freestack_pop(ep->robuf_fs);
+	peer->robuf = ofi_buf_alloc(ep->robuf_pool);
+	assert(peer->robuf);
 	peer->robuf = ofi_recvwin_buf_alloc(peer->robuf,
 					    rxr_env.recvwin_size);
-	assert(peer->robuf);
-	dlist_insert_tail(&peer->entry, &ep->peer_list);
 	peer->rx_credits = rxr_env.rx_window_size;
 	peer->rx_init = 1;
 }
