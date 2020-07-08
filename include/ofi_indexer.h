@@ -38,6 +38,7 @@
 #include "config.h"
 
 #include <sys/types.h>
+#include <stdbool.h>
 
 /*
  * Indexer:
@@ -97,6 +98,10 @@ static inline void *ofi_idx_lookup(struct indexer *idx, int index)
 	return ofi_idx_is_valid(idx, index) ? ofi_idx_at(idx, index) : NULL;
 }
 
+static inline bool ofi_idx_free_list_empty(struct indexer *idx)
+{
+	return (idx->free_list == 0);
+}
 /*
  * Index map:
  * The index map is similar in concept to the indexer.  It allows the user

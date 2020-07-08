@@ -36,7 +36,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <stdlib.h>
-
+#include <assert.h>
 #include <ofi_indexer.h>
 
 /*
@@ -110,6 +110,32 @@ void *ofi_idx_remove(struct indexer *idx, int index)
 	entry[entry_index].item = NULL;
 	entry[entry_index].next = idx->free_list;
 	idx->free_list = index;
+	return item;
+}
+
+void *ofi_idx_remove_ordered(struct indexer *idx, int index)
+{
+	struct ofi_idx_entry *entry;
+	void *item;
+	int temp_index;
+	int entry_index = ofi_idx_entry_index(index);
+
+	entry = idx->array[ofi_idx_array_index(index)];
+	item = entry[entry_index].item;
+	assert(item != NULL);
+	entry[entry_index].item = NULL;	
+	if (ofi_idx_free_list_empty(idx) || index < idx->free_list) {
+		entry[entry_index].next = idx->free_list;
+		idx->free_list = index;
+		return item;
+	}
+	temp_index = idx->free_list;
+	while (entry[ofi_idx_entry_index(temp_index)].next < index) {
+		temp_index = entry[ofi_idx_entry_index(temp_index)].next;
+	}
+	entry[entry_index].next = entry[ofi_idx_entry_index(temp_index)].next;
+	entry[ofi_idx_entry_index(temp_index)].next = index;
+
 	return item;
 }
 
