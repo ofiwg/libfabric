@@ -581,6 +581,9 @@ requested the FI_HMEM capability.
 : Uses Nvidia CUDA interfaces such as cuMemAlloc, cuMemAllocHost,
   cuMemAllocManaged, cuMemFree, cudaMalloc, cudaFree.
 
+*FI_HMEM_ROCR*
+: Uses AMD ROCR interfaces such as hsa_memory_allocate and hsa_memory_free.
+
 ## device
 Reserved 64 bits for device identifier if using non-standard HMEM interface.
 This field is ignore unless the iface field is valid.
