@@ -156,6 +156,7 @@ void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 
 extern struct ofi_mem_monitor *default_monitor;
 extern struct ofi_mem_monitor *default_cuda_monitor;
+extern struct ofi_mem_monitor *default_rocr_monitor;
 
 /*
  * Userfault fd memory monitor
@@ -179,6 +180,8 @@ struct ofi_memhooks {
 extern struct ofi_mem_monitor *memhooks_monitor;
 
 extern struct ofi_mem_monitor *cuda_monitor;
+
+extern struct ofi_mem_monitor *rocr_monitor;
 
 /*
  * Used to store registered memory regions into a lookup map.  This
@@ -242,6 +245,7 @@ struct ofi_mr_cache_params {
 	size_t				max_size;
 	char *				monitor;
 	int				cuda_monitor_enabled;
+	int				rocr_monitor_enabled;
 };
 
 extern struct ofi_mr_cache_params	cache_params;
