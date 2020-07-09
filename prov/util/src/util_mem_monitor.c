@@ -51,6 +51,7 @@ static struct ofi_uffd uffd = {
 struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
 
 struct ofi_mem_monitor *default_monitor;
+struct ofi_mem_monitor *default_cuda_monitor;
 
 static size_t ofi_default_cache_size(void)
 {
@@ -86,6 +87,7 @@ void ofi_monitors_init(void)
 {
 	uffd_monitor->init(uffd_monitor);
 	memhooks_monitor->init(memhooks_monitor);
+	cuda_monitor->init(cuda_monitor);
 
 #if HAVE_MEMHOOKS_MONITOR
         default_monitor = memhooks_monitor;
@@ -116,10 +118,15 @@ void ofi_monitors_init(void)
 			" and free calls.  Userfaultfd is the default if"
 			" available on the system. 'disabled' option disables"
 			" memory caching.");
+	fi_param_define(NULL, "mr_cuda_cache_monitor_enabled", FI_PARAM_BOOL,
+			"Enable or disable the CUDA cache memory monitor."
+			"Monitor is enabled by default.");
 
 	fi_param_get_size_t(NULL, "mr_cache_max_size", &cache_params.max_size);
 	fi_param_get_size_t(NULL, "mr_cache_max_count", &cache_params.max_cnt);
 	fi_param_get_str(NULL, "mr_cache_monitor", &cache_params.monitor);
+	fi_param_get_bool(NULL, "mr_cuda_cache_monitor_enabled",
+			  &cache_params.cuda_monitor_enabled);
 
 	if (!cache_params.max_size)
 		cache_params.max_size = ofi_default_cache_size();
@@ -143,12 +150,18 @@ void ofi_monitors_init(void)
 			default_monitor = NULL;
 		}
 	}
+
+	if (cache_params.cuda_monitor_enabled)
+		default_cuda_monitor = cuda_monitor;
+	else
+		default_cuda_monitor = NULL;
 }
 
 void ofi_monitors_cleanup(void)
 {
 	uffd_monitor->cleanup(uffd_monitor);
 	memhooks_monitor->cleanup(memhooks_monitor);
+	cuda_monitor->cleanup(cuda_monitor);
 }
 
 /* Monitors array must be of size OFI_HMEM_MAX. */
@@ -231,14 +244,15 @@ void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
 }
 
 int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
-			  const void *addr, size_t len)
+			  const void *addr, size_t len,
+			  union ofi_mr_hmem_info *hmem_info)
 {
 	int ret;
 
 	FI_DBG(&core_prov, FI_LOG_MR,
 	       "subscribing addr=%p len=%zu\n", addr, len);
 
-	ret = monitor->subscribe(monitor, addr, len);
+	ret = monitor->subscribe(monitor, addr, len, hmem_info);
 	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"Failed (ret = %d) to monitor addr=%p len=%zu\n",
@@ -248,11 +262,12 @@ int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
 }
 
 void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
-			     const void *addr, size_t len)
+			     const void *addr, size_t len,
+			     union ofi_mr_hmem_info *hmem_info)
 {
 	FI_DBG(&core_prov, FI_LOG_MR,
 	       "unsubscribing addr=%p len=%zu\n", addr, len);
-	monitor->unsubscribe(monitor, addr, len);
+	monitor->unsubscribe(monitor, addr, len, hmem_info);
 }
 
 #if HAVE_UFFD_MONITOR
@@ -290,7 +305,7 @@ static void *ofi_uffd_handler(void *arg)
 			ofi_monitor_unsubscribe(&uffd.monitor,
 				(void *) (uintptr_t) msg.arg.remove.start,
 				(size_t) (msg.arg.remove.end -
-					  msg.arg.remove.start));
+					  msg.arg.remove.start), NULL);
 			/* fall through */
 		case UFFD_EVENT_UNMAP:
 			ofi_monitor_notify(&uffd.monitor,
@@ -334,7 +349,8 @@ static int ofi_uffd_register(const void *addr, size_t len, size_t page_size)
 }
 
 static int ofi_uffd_subscribe(struct ofi_mem_monitor *monitor,
-			      const void *addr, size_t len)
+			      const void *addr, size_t len,
+			      union ofi_mr_hmem_info *hmem_info)
 {
 	int i;
 
@@ -367,7 +383,8 @@ static int ofi_uffd_unregister(const void *addr, size_t len, size_t page_size)
 
 /* May be called from mr cache notifier callback */
 static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
-				 const void *addr, size_t len)
+				 const void *addr, size_t len,
+				 union ofi_mr_hmem_info *hmem_info)
 {
 	int i;
 
@@ -378,6 +395,13 @@ static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
 	}
 }
 
+static bool ofi_uffd_valid(struct ofi_mem_monitor *monitor, const void *addr,
+			   size_t len, union ofi_mr_hmem_info *hmem_info)
+{
+	/* no-op */
+	return true;
+}
+
 static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 {
 	struct uffdio_api api;
@@ -385,6 +409,7 @@ static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 
 	uffd.monitor.subscribe = ofi_uffd_subscribe;
 	uffd.monitor.unsubscribe = ofi_uffd_unsubscribe;
+	uffd.monitor.valid = ofi_uffd_valid;
 
 	if (!num_page_sizes)
 		return -FI_ENODATA;

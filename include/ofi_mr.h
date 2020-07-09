@@ -108,6 +108,10 @@ extern pthread_mutex_t mm_lock;
 
 struct ofi_mr_cache;
 
+union ofi_mr_hmem_info {
+	uint64_t cuda_id;
+};
+
 struct ofi_mem_monitor {
 	struct dlist_entry		list;
 	enum fi_hmem_iface		iface;
@@ -117,9 +121,20 @@ struct ofi_mem_monitor {
 	int (*start)(struct ofi_mem_monitor *monitor);
 	void (*stop)(struct ofi_mem_monitor *monitor);
 	int (*subscribe)(struct ofi_mem_monitor *notifier,
-			 const void *addr, size_t len);
+			 const void *addr, size_t len,
+			 union ofi_mr_hmem_info *hmem_info);
 	void (*unsubscribe)(struct ofi_mem_monitor *notifier,
-			    const void *addr, size_t len);
+			    const void *addr, size_t len,
+			    union ofi_mr_hmem_info *hmem_info);
+
+	/* Valid is a memory monitor operation used to query a memory monitor to
+	 * see if the memory monitor's view of the buffer is still valid. If the
+	 * memory monitor's view of the buffer is no longer valid (e.g. the
+	 * pages behind a given virtual address have changed), the buffer needs
+	 * to be re-registered.
+	 */
+	bool (*valid)(struct ofi_mem_monitor *notifier, const void *addr,
+		      size_t len, union ofi_mr_hmem_info *hmem_info);
 };
 
 void ofi_monitor_init(struct ofi_mem_monitor *monitor);
@@ -133,11 +148,14 @@ void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
 			const void *addr, size_t len);
 
 int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
-			  const void *addr, size_t len);
+			  const void *addr, size_t len,
+			  union ofi_mr_hmem_info *hmem_info);
 void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
-			     const void *addr, size_t len);
+			     const void *addr, size_t len,
+			     union ofi_mr_hmem_info *hmem_info);
 
 extern struct ofi_mem_monitor *default_monitor;
+extern struct ofi_mem_monitor *default_cuda_monitor;
 
 /*
  * Userfault fd memory monitor
@@ -160,6 +178,7 @@ struct ofi_memhooks {
 
 extern struct ofi_mem_monitor *memhooks_monitor;
 
+extern struct ofi_mem_monitor *cuda_monitor;
 
 /*
  * Used to store registered memory regions into a lookup map.  This
@@ -222,6 +241,7 @@ struct ofi_mr_cache_params {
 	size_t				max_cnt;
 	size_t				max_size;
 	char *				monitor;
+	int				cuda_monitor_enabled;
 };
 
 extern struct ofi_mr_cache_params	cache_params;
@@ -232,6 +252,7 @@ struct ofi_mr_entry {
 	unsigned int			subscribed:1;
 	int				use_cnt;
 	struct dlist_entry		list_entry;
+	union ofi_mr_hmem_info		hmem_info;
 	uint8_t				data[];
 };
 

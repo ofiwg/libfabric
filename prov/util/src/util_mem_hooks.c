@@ -466,16 +466,26 @@ static int ofi_intercept_brk(const void *brkaddr)
 }
 
 static int ofi_memhooks_subscribe(struct ofi_mem_monitor *monitor,
-				 const void *addr, size_t len)
+				  const void *addr, size_t len,
+				  union ofi_mr_hmem_info *hmem_info)
 {
 	/* no-op */
 	return FI_SUCCESS;
 }
 
 static void ofi_memhooks_unsubscribe(struct ofi_mem_monitor *monitor,
-				    const void *addr, size_t len)
+				     const void *addr, size_t len,
+				     union ofi_mr_hmem_info *hmem_info)
 {
 	/* no-op */
+}
+
+static bool ofi_memhooks_valid(struct ofi_mem_monitor *monitor,
+			       const void *addr, size_t len,
+			       union ofi_mr_hmem_info *hmem_info)
+{
+	/* no-op */
+	return true;
 }
 
 static int ofi_memhooks_start(struct ofi_mem_monitor *monitor)
@@ -487,6 +497,7 @@ static int ofi_memhooks_start(struct ofi_mem_monitor *monitor)
 
 	memhooks_monitor->subscribe = ofi_memhooks_subscribe;
 	memhooks_monitor->unsubscribe = ofi_memhooks_unsubscribe;
+	memhooks_monitor->valid = ofi_memhooks_valid;
 	dlist_init(&memhooks.intercept_list);
 
 	for (i = 0; i < OFI_INTERCEPT_MAX; ++i)

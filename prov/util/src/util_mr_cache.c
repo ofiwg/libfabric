@@ -45,6 +45,7 @@
 
 struct ofi_mr_cache_params cache_params = {
 	.max_cnt = 1024,
+	.cuda_monitor_enabled = true,
 };
 
 static int util_mr_find_within(struct ofi_rbmap *map, void *key, void *data)
@@ -270,7 +271,8 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 		cache->cached_size += info->iov.iov_len;
 
 		ret = ofi_monitor_subscribe(monitor, info->iov.iov_base,
-					    info->iov.iov_len);
+					    info->iov.iov_len,
+					    &(*entry)->hmem_info);
 		if (ret) {
 			util_mr_uncache_entry_storage(cache, *entry);
 			cache->uncached_cnt++;
@@ -322,7 +324,13 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 
 		cache->search_cnt++;
 		*entry = cache->storage.find(&cache->storage, &info);
-		if (*entry && ofi_iov_within(attr->mr_iov, &(*entry)->info.iov))
+
+		if (*entry &&
+		    ofi_iov_within(attr->mr_iov, &(*entry)->info.iov) &&
+		    monitor->valid(monitor,
+				   (const void *)(*entry)->info.iov.iov_base,
+				   (*entry)->info.iov.iov_len,
+				   &(*entry)->hmem_info))
 			goto hit;
 
 		/* Purge regions that overlap with new region */
