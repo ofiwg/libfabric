@@ -548,8 +548,8 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 {
 	size_t i = 0;
 	struct rxr_peer *peer;
-	struct dlist_entry *tmp;
 #if ENABLE_DEBUG
+	struct dlist_entry *tmp;
 	struct dlist_entry *entry;
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
