@@ -469,6 +469,11 @@ static ssize_t rxd_ep_send_rts(struct rxd_ep *rxd_ep, fi_addr_t rxd_addr)
 
 ssize_t rxd_send_rts_if_needed(struct rxd_ep *ep, fi_addr_t addr)
 {
+	if (!rxd_peer(ep, addr)) {
+		if (rxd_create_peer(ep, addr) < 0)
+			return -FI_ENOMEM;
+	}
+
 	if (rxd_peer(ep, addr)->peer_addr == FI_ADDR_UNSPEC &&
 	    dlist_empty(&(rxd_peer(ep, addr)->unacked)))
 		return rxd_ep_send_rts(ep, addr);
@@ -659,6 +664,7 @@ static int rxd_ep_close(struct fid *fid)
 	struct rxd_pkt_entry *pkt_entry;
 	struct slist_entry *entry;
 	struct rxd_peer *peer;
+	int i;
 
 	ep = container_of(fid, struct rxd_ep, util_ep.ep_fid.fid);
 
@@ -689,7 +695,11 @@ static int rxd_ep_close(struct fid *fid)
 				pkt_entry, d_entry);
 		ofi_buf_free(pkt_entry);
 	}
-
+	if (ep->peers){
+		for (i = 0; i < rxd_env.max_peers; i++)
+			free(ep->peers[i]);
+		free(ep->peers);	
+	}
 	rxd_ep_free_res(ep);
 	ofi_endpoint_close(&ep->util_ep);
 	free(ep);
@@ -1137,27 +1147,32 @@ err:
 	return ret;
 }
 
-static void rxd_init_peer(struct rxd_ep *ep, uint64_t rxd_addr)
+int rxd_create_peer(struct rxd_ep *ep, uint64_t rxd_addr)
 {
-	struct rxd_peer *peer_ptr;
 
-	peer_ptr = rxd_peer(ep, rxd_addr);
+	struct rxd_peer *peer;	
+	ep->peers[rxd_addr] = calloc(1, sizeof(struct rxd_peer));
+	peer = rxd_peer(ep, rxd_addr);
+	if (!peer)
+		return -FI_ENOMEM;	
 
-	peer_ptr->peer_addr = FI_ADDR_UNSPEC;
-	peer_ptr->tx_seq_no = 0;
-	peer_ptr->rx_seq_no = 0;
-	peer_ptr->last_rx_ack = 0;
-	peer_ptr->last_tx_ack = 0;
-	peer_ptr->rx_window = rxd_env.max_unacked;
-	peer_ptr->tx_window = rxd_env.max_unacked;
-	peer_ptr->unacked_cnt = 0;
-	peer_ptr->retry_cnt = 0;
-	peer_ptr->active = 0;
-	dlist_init(&(peer_ptr->unacked));
-	dlist_init(&(peer_ptr->tx_list));
-	dlist_init(&(peer_ptr->rx_list));
-	dlist_init(&(peer_ptr->rma_rx_list));
-	dlist_init(&(peer_ptr->buf_pkts));
+	peer->peer_addr = FI_ADDR_UNSPEC;
+	peer->tx_seq_no = 0;
+	peer->rx_seq_no = 0;
+	peer->last_rx_ack = 0;
+	peer->last_tx_ack = 0;
+	peer->rx_window = rxd_env.max_unacked;
+	peer->tx_window = rxd_env.max_unacked;
+	peer->unacked_cnt = 0;
+	peer->retry_cnt = 0;
+	peer->active = 0;
+	dlist_init(&(peer->unacked));
+	dlist_init(&(peer->tx_list));
+	dlist_init(&(peer->rx_list));
+	dlist_init(&(peer->rma_rx_list));
+	dlist_init(&(peer->buf_pkts));
+
+	return 0;
 }
 
 int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -1166,10 +1181,12 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct fi_info *dg_info;
 	struct rxd_domain *rxd_domain;
 	struct rxd_ep *rxd_ep;
-	int ret, i;
+	int ret;
 
-	rxd_ep = calloc(1, sizeof(*rxd_ep) + sizeof(struct rxd_peer) *
-			rxd_env.max_peers);
+
+
+	rxd_ep = calloc(1, sizeof(*rxd_ep));
+
 	if (!rxd_ep)
 		return -FI_ENOMEM;
 
@@ -1210,10 +1227,11 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ret = rxd_ep_init_res(rxd_ep, info);
 	if (ret)
 		goto err3;
-
-	for (i = 0; i < rxd_env.max_peers; rxd_init_peer(rxd_ep, i++))
-		;
-
+	
+	rxd_ep->peers = calloc(rxd_env.max_peers, sizeof(*(rxd_ep->peers)));
+	if (!rxd_ep->peers)
+		goto err4;
+	
 	rxd_ep->util_ep.ep_fid.fid.ops = &rxd_ep_fi_ops;
 	rxd_ep->util_ep.ep_fid.cm = &rxd_ep_cm;
 	rxd_ep->util_ep.ep_fid.ops = &rxd_ops_ep;
@@ -1225,6 +1243,8 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	*ep = &rxd_ep->util_ep.ep_fid;
 	return 0;
 
+err4:
+	rxd_ep_free_res(rxd_ep);
 err3:
 	fi_close(&rxd_ep->dg_ep->fid);
 err2:
