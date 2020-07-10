@@ -26,6 +26,9 @@ int fi_domain_bind(struct fid_domain *domain, struct fid *eq,
 
 int fi_open_ops(struct fid *domain, const char *name, uint64_t flags,
     void **ops, void *context);
+
+int fi_set_ops(struct fid *domain, const char *name, uint64_t flags,
+    void *ops, void *context);
 ```
 
 # ARGUMENTS
@@ -73,6 +76,74 @@ fi_open_ops is used to open provider specific interfaces.  Provider
 interfaces may be used to access low-level resources and operations
 that are specific to the opened resource domain.  The details of
 domain interfaces are outside the scope of this documentation.
+
+## fi_set_ops
+
+fi_set_ops assigns callbacks that a provider should invoke in place
+of performing selected tasks. This allows users to modify or control
+a provider's default behavior. Conceptually, it allows the user to
+hook specific functions used by a provider and replace it with their
+own.
+
+The operations being modified are identified using a well-known
+character string, passed as the name parameter. The format of the
+ops parameter is dependent upon the name value. The ops parameter will
+reference a structure containing the callbacks and other fields needed
+by the provider to invoke the user's functions.
+
+If a provider accepts the override, it will return FI_SUCCESS. If the
+override is unknown or not supported, the provider will return
+-FI_ENOSYS. Overrides should be set prior to allocating resources on
+the domain.
+
+The following fi_set_ops operations and corresponding callback
+structures are defined.
+
+**FI_SET_OPS_HMEM_OVERRIDE -- Heterogeneous Memory Overrides**
+
+HMEM override allows users to override HMEM related operations a
+provider may perform. Currently, the scope of the HMEM override
+is to allow a user to define the memory movement functions a provider
+should use when accessing a user buffer. The user-defined memory
+movement functions need to account for all the different HMEM iface
+types a provider may encounter.
+
+All objects allocated against a domain will inherit this override.
+
+The following is the HMEM override operation name and structure.
+
+```c
+#define FI_SET_OPS_HMEM_OVERRIDE "hmem_override_ops"
+
+struct fi_hmem_override_ops {
+    size_t	size;
+
+    ssize_t (*copy_from_hmem_iov)(void *dest, size_t size,
+        const struct iovec *hmem_iov, enum fi_hmem_iface hmem_iface,
+        size_t hmem_iov_count, uint64_t hmem_iov_offset);
+
+    ssize_t (*copy_to_hmem_iov)(const struct iovec *hmem_iov,
+        enum fi_hmem_iface hmem_iface, size_t hmem_iov_count,
+        uint64_t hmem_iov_offset, const void *src, size_t size);
+};
+```
+
+All fields in struct fi_hmem_override_ops must be set (non-null) to a
+valid value.
+
+*size*
+: This should be set to the sizeof(struct fi_hmem_override_ops). The
+size field is used for forward and backward compatibility purposes.
+
+*copy_from_hmem_iov*
+: Copy data from the device/hmem to host memory. This function should
+return a negative fi_errno on error, or the number of bytes copied on
+success.
+
+*copy_to_hmem_iov*
+: Copy data from host memory to the device/hmem. This function should
+return a negative fi_errno on error, or the number of bytes copied on
+success.
 
 ## fi_domain_bind
 
