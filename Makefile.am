@@ -41,6 +41,7 @@ rdmainclude_HEADERS =
 # internal utility functions shared by in-tree providers:
 common_srcs =				\
 	src/hmem.c			\
+	src/hmem_rocr.c			\
 	src/hmem_cuda.c			\
 	src/common.c			\
 	src/enosys.c			\

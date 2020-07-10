@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -115,6 +116,7 @@ struct fid_mr {
 enum fi_hmem_iface {
 	FI_HMEM_SYSTEM	= 0,
 	FI_HMEM_CUDA,
+	FI_HMEM_ROCR,
 };
 
 struct fi_mr_attr {

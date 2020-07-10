@@ -550,6 +550,41 @@ LDFLAGS="$LDFLAGS $cuda_LDFLAGS"
 
 AS_IF([test x"$enable_cuda_dlopen" != x"yes"], [LIBS="$LIBS $cuda_LIBS"])
 
+dnl Check for ROCR runtime libraries.
+AC_ARG_WITH([rocr],
+	    [AC_HELP_STRING([--with-rocr=DIR],
+			    [Provide path to where the ROCR/HSA development
+			    and runtime libraries are installed.])],
+	    [], [])
+
+AC_ARG_ENABLE([rocr-dlopen],
+    [AS_HELP_STRING([--enable-rocr-dlopen],
+        [Enable dlopen of ROCR libraries @<:@default=no@:>@])
+    ],
+    [
+        AS_IF([test "$freebsd" == "0"], [
+            AC_CHECK_LIB(dl, dlopen, [],
+                [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+        ])
+        AC_DEFINE([ENABLE_ROCR_DLOPEN], [1], [dlopen ROCR libraries])
+    ],
+    [enable_rocr_dlopen=no])
+
+FI_CHECK_PACKAGE([rocr],
+		 [hsa/hsa_ext_amd.h],
+		 [hsa-runtime64],
+		 [hsa_amd_pointer_info],
+		 [],
+		 [$with_rocr],
+		 [$with_rocr/lib],
+		 [AC_DEFINE([HAVE_ROCR], [1], [ROCR HSA support])],
+		 [], [])
+
+CPPFLAGS="$CPPFLAGS $rocr_CPPFLAGS"
+LDFLAGS="$LDFLAGS $rocr_LDFLAGS"
+
+AS_IF([test x"$enable_rocr_dlopen" != x"yes"], [LIBS="$LIBS $rocr_LIBS"])
+
 dnl Provider-specific checks
 FI_PROVIDER_INIT
 FI_PROVIDER_SETUP([psm])
