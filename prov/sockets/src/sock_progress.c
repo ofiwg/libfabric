@@ -1322,6 +1322,11 @@ static int sock_pe_process_rx_send(struct sock_pe *pe,
 	struct sock_rx_entry *rx_entry;
 	uint64_t len, rem, offset, data_len, done_data, used;
 
+	if (pe_entry->addr == FI_ADDR_NOTAVAIL) {
+		pe_entry->addr = sock_av_get_addr_index(pe_entry->ep_attr->av,
+							&pe_entry->conn->addr);
+	}
+
 	offset = 0;
 	len = sizeof(struct sock_msg_hdr);
 
