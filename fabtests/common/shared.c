@@ -358,6 +358,36 @@ void ft_free_bit_combo(uint64_t *combo)
 	free(combo);
 }
 
+static int ft_reg_mr(void *buf, size_t size, uint64_t access,
+		     uint64_t key, struct fid_mr **mr, void **desc)
+{
+	struct fi_mr_attr attr = {0};
+	struct iovec iov = {0};
+	int ret;
+
+	if (!(fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
+	    !(fi->caps & (FI_RMA | FI_ATOMIC)))
+		return 0;
+
+	iov.iov_base = buf;
+	iov.iov_len = size;
+	attr.mr_iov = &iov;
+	attr.iov_count = 1;
+	attr.access = access;
+	attr.offset = 0;
+	attr.requested_key = key;
+	attr.context = NULL;
+
+	ret = fi_mr_regattr(domain, &attr, 0, mr);
+	if (ret)
+		return ret;
+
+	if (desc)
+		*desc = fi_mr_desc(*mr);
+
+	return FI_SUCCESS;
+}
+
 static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
 			      char *default_buf, size_t mr_size,
 			      uint64_t start_key)
@@ -386,20 +416,12 @@ static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
 		}
 		(*mr_bufs)[i] = calloc(1, mr_size);
 		context->buf = (*mr_bufs)[i];
-    		if (((fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
-		     (fi->caps & (FI_RMA | FI_ATOMIC)))) {
-			ret = fi_mr_reg(domain, context->buf,
-					mr_size, access, 0,
-					start_key + i, 0,
-					&context->mr, NULL);
-			if (ret)
-				return ret;
 
-			context->desc = fi_mr_desc(context->mr);
-		} else {
-			context->mr =  NULL;
-			context->desc = NULL;
-		}
+		ret = ft_reg_mr(context->buf, mr_size, access,
+				start_key + i, &context->mr,
+				&context->desc);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
@@ -470,16 +492,12 @@ static int ft_alloc_msgs(void)
 
 	remote_cq_data = ft_init_cq_data(fi);
 
-	if (!ft_mr_alloc_func && !ft_check_opts(FT_OPT_SKIP_REG_MR) &&
-	    ((fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
-	     (fi->caps & (FI_RMA | FI_ATOMIC)))) {
-		ret = fi_mr_reg(domain, buf, buf_size, ft_info_to_mr_access(fi),
-				0, FT_MR_KEY, 0, &mr, NULL);
-		if (ret) {
-			FT_PRINTERR("fi_mr_reg", ret);
+	mr = &no_mr;
+	if (!ft_mr_alloc_func && !ft_check_opts(FT_OPT_SKIP_REG_MR)) {
+		ret = ft_reg_mr(buf, buf_size, ft_info_to_mr_access(fi),
+				FT_MR_KEY, &mr, &mr_desc);
+		if (ret)
 			return ret;
-		}
-		mr_desc = ft_check_mr_local_flag(fi) ? fi_mr_desc(mr) : NULL;
 	} else {
 		if (ft_mr_alloc_func) {
 			assert(!ft_check_opts(FT_OPT_SKIP_REG_MR));
@@ -487,7 +505,6 @@ static int ft_alloc_msgs(void)
 			if (ret)
 				return ret;
 		}
-		mr = &no_mr;
 	}
 
 	ret = ft_alloc_ctx_array(&tx_ctx_arr, &tx_mr_bufs, tx_buf,
