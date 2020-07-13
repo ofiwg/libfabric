@@ -77,7 +77,7 @@ static void rxd_progress_unexp_msg(struct rxd_ep *ep, struct rxd_x_entry *rx_ent
 {
 	struct rxd_pkt_entry *pkt_entry;
 	uint64_t num_segs = 0;
-	uint16_t curr_id = ep->peers[unexp_msg->base_hdr->peer].curr_rx_id;
+	uint16_t curr_id = rxd_peer(ep, unexp_msg->base_hdr->peer)->curr_rx_id;
 
 	rxd_progress_op(ep, rx_entry, unexp_msg->pkt_entry, unexp_msg->base_hdr,
 			unexp_msg->sar_hdr, unexp_msg->tag_hdr,
@@ -93,11 +93,11 @@ static void rxd_progress_unexp_msg(struct rxd_ep *ep, struct rxd_x_entry *rx_ent
 		num_segs++;
 	}
 
-	if (ep->peers[unexp_msg->base_hdr->peer].curr_unexp) {
+	if (rxd_peer(ep, unexp_msg->base_hdr->peer)->curr_unexp) {
 		if (!unexp_msg->sar_hdr || num_segs == unexp_msg->sar_hdr->num_segs - 1)
-			ep->peers[unexp_msg->base_hdr->peer].curr_rx_id = curr_id;
+			rxd_peer(ep, unexp_msg->base_hdr->peer)->curr_rx_id = curr_id;
 		else
-			ep->peers[unexp_msg->base_hdr->peer].curr_unexp = NULL;
+			rxd_peer(ep, unexp_msg->base_hdr->peer)->curr_unexp = NULL;
 	}
 
 	rxd_free_unexp_msg(unexp_msg);
@@ -143,8 +143,9 @@ static int rxd_ep_discard_recv(struct rxd_ep *rxd_ep, void *context,
 	assert(unexp_msg->tag_hdr);
 	seq += unexp_msg->sar_hdr ? unexp_msg->sar_hdr->num_segs : 1;
 
-	rxd_ep->peers[unexp_msg->base_hdr->peer].rx_seq_no =
-			MAX(seq, rxd_ep->peers[unexp_msg->base_hdr->peer].rx_seq_no);
+	rxd_peer(rxd_ep, unexp_msg->base_hdr->peer)->rx_seq_no =
+			MAX(seq, rxd_peer(rxd_ep, 
+				 unexp_msg->base_hdr->peer)->rx_seq_no);
 	rxd_ep_send_ack(rxd_ep, unexp_msg->base_hdr->peer);
 
 	ret = ofi_cq_write(rxd_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
@@ -371,7 +372,7 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		goto out;
 	}
 
-	if (rxd_ep->peers[rxd_addr].peer_addr != FI_ADDR_UNSPEC)
+	if (rxd_peer(rxd_ep, rxd_addr)->peer_addr != FI_ADDR_UNSPEC)
 		(void) rxd_start_xfer(rxd_ep, tx_entry);
 
 out:
@@ -409,7 +410,7 @@ ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	if (!tx_entry)
 		goto out;
 
-	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC)
+	if (rxd_peer(rxd_ep, rxd_addr)->peer_addr == FI_ADDR_UNSPEC)
 		goto out;
 
 	ret = rxd_start_xfer(rxd_ep, tx_entry);

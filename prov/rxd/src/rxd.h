@@ -219,6 +219,10 @@ struct rxd_ep {
 	struct rxd_peer peers[];
 };
 
+static inline struct rxd_peer *rxd_peer(struct rxd_ep *ep, fi_addr_t rxd_addr)
+{
+	return &ep->peers[rxd_addr];
+}
 static inline struct rxd_domain *rxd_ep_domain(struct rxd_ep *ep)
 {
 	return container_of(ep->util_ep.domain, struct rxd_domain, util_domain);

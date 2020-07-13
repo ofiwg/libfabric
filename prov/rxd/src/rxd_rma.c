@@ -114,7 +114,7 @@ static ssize_t rxd_generic_write_inject(struct rxd_ep *rxd_ep,
 		goto out;
 	}
 
-	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC)
+	if (rxd_peer(rxd_ep, rxd_addr)->peer_addr == FI_ADDR_UNSPEC)
 		goto out;
 
 	ret = rxd_start_xfer(rxd_ep, tx_entry);
@@ -161,7 +161,7 @@ ssize_t rxd_generic_rma(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		goto out;
 	}
 
-	if (rxd_ep->peers[rxd_addr].peer_addr == FI_ADDR_UNSPEC)
+	if (rxd_peer(rxd_ep, rxd_addr)->peer_addr == FI_ADDR_UNSPEC)
 		goto out;
 
 	ret = rxd_start_xfer(rxd_ep, tx_entry);
