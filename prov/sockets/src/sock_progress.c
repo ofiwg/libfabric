@@ -2357,24 +2357,6 @@ void sock_pe_remove_rx_ctx(struct sock_rx_ctx *rx_ctx)
 	pthread_mutex_unlock(&rx_ctx->domain->pe->list_lock);
 }
 
-static int sock_pe_progress_pe_entry_list(struct sock_pe *pe,
-					  struct sock_rx_ctx *rx_ctx)
-{
-	int ret = 0;
-	struct dlist_entry *entry;
-	struct sock_pe_entry *pe_entry;
-
-	for (entry = rx_ctx->pe_entry_list.next;
-	     entry != &rx_ctx->pe_entry_list;) {
-		pe_entry = container_of(entry, struct sock_pe_entry, ctx_entry);
-		entry = entry->next;
-		ret = sock_pe_progress_rx_pe_entry(pe, pe_entry, rx_ctx);
-		if (ret < 0)
-			break;
-	}
-	return ret;
-}
-
 static int sock_pe_progress_rx_ep(struct sock_pe *pe,
 				  struct sock_ep_attr *ep_attr,
 				  struct sock_rx_ctx *rx_ctx)
@@ -2408,8 +2390,8 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe,
 		return num_fds;
 	}
 
+	fastlock_acquire(&map->lock);
 	for (i = 0; i < num_fds; i++) {
-		fastlock_acquire(&map->lock);
 		conn = map->epoll_ctxs[i];
 		if (!conn)
 			SOCK_LOG_ERROR("ofi_idm_lookup failed\n");
@@ -2418,9 +2400,8 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe,
 			continue;
 
 		sock_pe_new_rx_entry(pe, rx_ctx, ep_attr, conn);
-		fastlock_release(&map->lock);
-		sock_pe_progress_pe_entry_list(pe, rx_ctx);
 	}
+	fastlock_release(&map->lock);
 
 	return 0;
 }
