@@ -581,7 +581,7 @@ struct test_entry test_array[] = {
 
 static void usage(void)
 {
-	ft_unit_usage("mr_cache",
+	ft_unit_usage("fi_mr_cache_evict",
 		"Test a provider's ability to evict MR cache entries.\n"
 		"Evictions are verified using MMAP, BRK, and SBRK allocations.\n"
 		"Users should set the FI_MR_CACHE_MONITOR env variable to \n"
