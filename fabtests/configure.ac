@@ -96,6 +96,21 @@ AC_ARG_WITH([libfabric],
              LDFLAGS="-L$withval/$fab_libdir $LDFLAGS"],
             [])
 
+dnl Check for CUDA support. Require fabtests to dlopen CUDA runtime.
+AC_ARG_WITH([cuda],
+            [AC_HELP_STRING([--with-cuda=DIR],
+                            [Provide path to where the CUDA development
+                             and runtime libraries are installed.])],
+            [AS_IF([test "$freebsd" == "0"],
+                   [AC_CHECK_LIB(dl, dlopen, [], [AC_MSG_ERROR([dlopen not found.])])],
+                   [])
+             CPPFLAGS="-I$withval/include $CPPFLAGS"
+             AC_CHECK_HEADER([cuda_runtime.h],
+                             [AC_DEFINE([HAVE_CUDA_RUNTIME_H], [1],
+                                        [Define to 1 if you have <cuda_runtime.h>])],
+                             [AC_MSG_ERROR([<cuda_runtime.h> not found])])],
+            [])
+
 dnl Checks for libraries
 AC_CHECK_LIB([fabric], fi_getinfo, [],
     AC_MSG_ERROR([fi_getinfo() not found.  fabtests requires libfabric.]))
