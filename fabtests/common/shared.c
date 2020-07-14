@@ -49,6 +49,7 @@
 #include <rdma/fi_collective.h>
 
 #include <shared.h>
+#include <hmem.h>
 
 struct fi_info *fi_pep, *fi, *hints;
 struct fid_fabric *fabric;
@@ -365,7 +366,10 @@ static int ft_reg_mr(void *buf, size_t size, uint64_t access,
 	struct iovec iov = {0};
 	int ret;
 
-	if (!(fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
+	if (((!(fi->domain_attr->mr_mode & FI_MR_LOCAL) &&
+	      !(opts.options & FT_OPT_USE_DEVICE)) ||
+	     (!(fi->domain_attr->mr_mode & FI_MR_HMEM) &&
+	      opts.options & FT_OPT_USE_DEVICE)) &&
 	    !(fi->caps & (FI_RMA | FI_ATOMIC)))
 		return 0;
 
@@ -377,6 +381,7 @@ static int ft_reg_mr(void *buf, size_t size, uint64_t access,
 	attr.offset = 0;
 	attr.requested_key = key;
 	attr.context = NULL;
+	attr.iface = opts.iface;
 
 	ret = fi_mr_regattr(domain, &attr, 0, mr);
 	if (ret)
@@ -415,6 +420,11 @@ static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
 			continue;
 		}
 		(*mr_bufs)[i] = calloc(1, mr_size);
+		ret = ft_hmem_alloc(opts.iface, opts.device,
+				    (void **) &((*mr_bufs)[i]), mr_size);
+		if (ret)
+			return ret;
+
 		context->buf = (*mr_bufs)[i];
 
 		ret = ft_reg_mr(context->buf, mr_size, access,
@@ -463,7 +473,7 @@ static int ft_alloc_msgs(void)
 			   MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size;
 	}
 
-	if (opts.options & FT_OPT_ALIGN) {
+	if (opts.options & FT_OPT_ALIGN && !(opts.options & FT_OPT_USE_DEVICE)) {
 		alignment = sysconf(_SC_PAGESIZE);
 		if (alignment < 0)
 			return -errno;
@@ -476,13 +486,13 @@ static int ft_alloc_msgs(void)
 			return ret;
 		}
 	} else {
-		buf = malloc(buf_size);
-		if (!buf) {
-			perror("malloc");
-			return -FI_ENOMEM;
-		}
+		ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &buf, buf_size);
+		if (ret)
+			return ret;
 	}
-	memset(buf, 0, buf_size);
+	ret = ft_hmem_memset(opts.iface, opts.device, (void *) buf, 0, buf_size);
+	if (ret)
+		return ret;
 	rx_buf = buf;
 
 	if (opts.options & FT_OPT_ALLOC_MULT_MR)
@@ -659,12 +669,20 @@ int ft_alloc_active_res(struct fi_info *fi)
 	return 0;
 }
 
-static void ft_init(void)
+static int ft_init(void)
 {
 	tx_seq = 0;
 	rx_seq = 0;
 	tx_cq_cntr = 0;
 	rx_cq_cntr = 0;
+
+	//If using device memory for transfers, require OOB address
+	//exchange because extra steps are involved when passing
+	//device buffers into fi_av_insert
+	if (opts.options & FT_OPT_USE_DEVICE)
+		opts.options |= FT_OPT_OOB_ADDR_EXCH;
+
+	return ft_hmem_init(opts.iface);
 }
 
 int ft_init_oob(void)
@@ -753,6 +771,9 @@ int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 	if (!hints->ep_attr->type)
 		hints->ep_attr->type = FI_EP_RDM;
 
+	if (opts.options & FT_OPT_ENABLE_HMEM)
+		hints->caps |= FI_HMEM;
+
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
@@ -785,7 +806,10 @@ int ft_start_server(void)
 {
 	int ret;
 
-	ft_init();
+	ret = ft_init();
+	if (ret)
+		return ret;
+
 	ret = ft_init_oob();
 	if (ret)
 		return ret;
@@ -947,7 +971,10 @@ int ft_client_connect(void)
 {
 	int ret;
 
-	ft_init();
+	ret = ft_init();
+	if (ret)
+		return ret;
+
 	ret = ft_init_oob();
 	if (ret)
 		return ret;
@@ -979,7 +1006,10 @@ int ft_init_fabric(void)
 {
 	int ret;
 
-	ft_init();
+	ret = ft_init();
+	if (ret)
+		return ret;
+
 	ret = ft_init_oob();
 	if (ret)
 		return ret;
@@ -1466,14 +1496,16 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 
 static void ft_cleanup_mr_array(struct ft_context *ctx_arr, char **mr_bufs)
 {
-	int i;
+	int i, ret;
 
 	if (!mr_bufs)
 		return;
 
 	for (i = 0; i < opts.window_size; i++) {
 		FT_CLOSE_FID(ctx_arr[i].mr);
-		free(mr_bufs[i]);
+		ret = ft_hmem_free(opts.iface, mr_bufs[i]);
+		if (ret)
+			FT_PRINTERR("ft_hmem_free", ret);
 	}
 }
 
@@ -1503,6 +1535,8 @@ static void ft_close_fids(void)
 
 void ft_free_res(void)
 {
+	int ret;
+
 	ft_cleanup_mr_array(tx_ctx_arr, tx_mr_bufs);
 	ft_cleanup_mr_array(rx_ctx_arr, rx_mr_bufs);
 
@@ -1514,7 +1548,9 @@ void ft_free_res(void)
 	ft_close_fids();
 
 	if (buf) {
-		free(buf);
+		ret = ft_hmem_free(opts.iface, buf);
+		if (ret)
+			FT_PRINTERR("ft_hmem_free", ret);
 		buf = rx_buf = tx_buf = NULL;
 		buf_size = rx_size = tx_size = tx_mr_size = rx_mr_size = 0;
 	}
@@ -1530,6 +1566,10 @@ void ft_free_res(void)
 		fi_freeinfo(hints);
 		hints = NULL;
 	}
+	
+	ret = ft_hmem_cleanup(opts.iface);
+	if (ret)
+		FT_PRINTERR("ft_hmem_cleanup", ret);
 }
 
 static int dupaddr(void **dst_addr, size_t *dst_addrlen,
@@ -2573,7 +2613,6 @@ int ft_finalize_ep(struct fid_ep *ep)
 	int ret;
 	struct fi_context ctx;
 
-	strcpy(tx_buf + ft_tx_prefix_size(), "fin");
 	iov.iov_base = tx_buf;
 	iov.iov_len = 4 + ft_tx_prefix_size();
 
@@ -2776,6 +2815,10 @@ void ft_mcusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
+	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface (default: None). "
+			     "Automatically enables FI_HMEM (-H)");
+	FT_PRINT_OPTS_USAGE("-i <device_id>", "Specify which device to use (default: 0)");
+	FT_PRINT_OPTS_USAGE("-H", "Enable provider FI_HMEM support");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
 	return;
@@ -2841,6 +2884,15 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
 	case 'M':
 		if (!strncasecmp("mr_local", optarg, 8))
 			opts->mr_mode &= ~FI_MR_LOCAL;
+		break;
+	case 'D':
+		opts->options |= FT_OPT_ENABLE_HMEM | FT_OPT_USE_DEVICE;
+		break;
+	case 'i':
+		opts->device = atoi(optarg);
+		break;
+	case 'H':
+		opts->options |= FT_OPT_ENABLE_HMEM;
 		break;
 	default:
 		/* let getopt handle unknown opts*/

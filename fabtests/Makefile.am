@@ -110,7 +110,9 @@ noinst_LTLIBRARIES = libfabtests.la
 libfabtests_la_SOURCES = \
 	common/shared.c \
 	common/jsmn.c \
+	common/hmem.c \
 	include/shared.h \
+	include/hmem.h \
 	include/jsmn.h \
 	include/unix/osd.h \
 	include/ft_osd.h

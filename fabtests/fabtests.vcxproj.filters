@@ -48,6 +48,9 @@
     <ClCompile Include="common\jsmn.c">
       <Filter>Source Files\common</Filter>
     </ClCompile>
+    <ClCompile Include="common\hmem.c">
+      <Filter>Source Files\common</Filter>
+    </ClCompile>
     <ClCompile Include="common\shared.c">
       <Filter>Source Files\common</Filter>
     </ClCompile>
@@ -183,6 +186,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\jsmn.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\hmem.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\shared.h">
