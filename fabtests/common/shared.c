@@ -383,6 +383,14 @@ static int ft_reg_mr(void *buf, size_t size, uint64_t access,
 	attr.context = NULL;
 	attr.iface = opts.iface;
 
+	switch (opts.iface) {
+	case FI_HMEM_ZE:
+		attr.device.ze = opts.device;
+		break;
+	default:
+		break;
+	}
+
 	ret = fi_mr_regattr(domain, &attr, 0, mr);
 	if (ret)
 		return ret;
@@ -2816,7 +2824,7 @@ void ft_mcusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
-	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface (default: None). "
+	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: eg ze (default: None). "
 			     "Automatically enables FI_HMEM (-H)");
 	FT_PRINT_OPTS_USAGE("-i <device_id>", "Specify which device to use (default: 0)");
 	FT_PRINT_OPTS_USAGE("-H", "Enable provider FI_HMEM support");
@@ -2887,6 +2895,10 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
 			opts->mr_mode &= ~FI_MR_LOCAL;
 		break;
 	case 'D':
+		if (!strncasecmp("ze", optarg, 2))
+			opts->iface = FI_HMEM_ZE;
+		else
+			printf("Unsupported interface\n");
 		opts->options |= FT_OPT_ENABLE_HMEM | FT_OPT_USE_DEVICE;
 		break;
 	case 'i':
