@@ -189,14 +189,14 @@ int rocr_hmem_init(void)
 	}
 
 	rocr_ops.hsa_shut_down = dlsym(rocr_handle, "hsa_shut_down");
-	if (!rocr_ops.hsa_init) {
+	if (!rocr_ops.hsa_shut_down) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_shut_down\n");
 		goto err;
 	}
 
 	rocr_ops.hsa_status_string = dlsym(rocr_handle, "hsa_status_string");
-	if (!rocr_ops.hsa_init) {
+	if (!rocr_ops.hsa_status_string) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_status_string\n");
 		goto err;
