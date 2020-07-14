@@ -37,6 +37,7 @@
 #include <ofi_file.h>
 #include <ofi_osd.h>
 #include <ofi_util.h>
+#include <ofi_mem.h>
 
 #include "libcxi/libcxi.h"
 #include "cxip_faults.h"
@@ -463,6 +464,7 @@ struct cxip_eq {
 struct cxip_req_rma {
 	struct cxip_txc *txc;
 	struct cxip_md *local_md;	// RMA target buffer
+	void *ibuf;
 };
 
 struct cxip_req_amo {
@@ -473,6 +475,7 @@ struct cxip_req_amo {
 	char oper1[16];
 	bool tmp_result;
 	bool tmp_oper1;
+	void *ibuf;
 };
 
 struct cxip_req_recv {
@@ -522,6 +525,7 @@ struct cxip_req_send {
 	uint64_t tag;
 	uint64_t data;
 	uint64_t flags;
+	void *ibuf;
 
 	/* Control info */
 	struct dlist_entry txc_entry;
@@ -709,6 +713,9 @@ struct cxip_cq {
 	struct ofi_bufpool *req_pool;
 	struct indexer req_table;
 	struct dlist_entry req_list;
+
+	struct ofi_bufpool *ibuf_pool;
+	fastlock_t ibuf_lock;
 
 	struct dlist_entry dom_entry;
 };
@@ -1249,6 +1256,9 @@ void cxip_rxc_free(struct cxip_rxc *rxc);
 int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);
 
+struct cxip_md *cxip_cq_ibuf_md(void *ibuf);
+void *cxip_cq_ibuf_alloc(struct cxip_cq *cq);
+void cxip_cq_ibuf_free(struct cxip_cq *cq, void *ibuf);
 int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
 		       bool match);
 void cxip_cq_req_discard(struct cxip_cq *cq, void *req_ctx);

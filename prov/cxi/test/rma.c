@@ -397,6 +397,33 @@ Test(rma, simple_writemsg_inject)
 			     mem_window.mem[i], send_buf[i]);
 
 	mr_destroy(&mem_window);
+
+	/* Try using standard MR */
+
+	key_val = 1000;
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+	rma[0].key = key_val;
+
+	/* Send 8 bytes from send buffer data to RMA window 0 at FI address 0
+	 * (self)
+	 */
+	ret = fi_writemsg(cxit_ep, &msg, flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg failed %d", ret);
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+	validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+	/* Validate sent data */
+	for (int i = 0; i < send_len; i++)
+		cr_assert_eq(mem_window.mem[i], send_buf[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     mem_window.mem[i], send_buf[i]);
+
+	mr_destroy(&mem_window);
+
 	free(send_buf);
 }
 

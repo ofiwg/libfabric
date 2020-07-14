@@ -3343,7 +3343,6 @@ int cxip_txc_rdzv_src_fini(struct cxip_txc *txc)
 static ssize_t _cxip_send_long(struct cxip_req *req)
 {
 	struct cxip_txc *txc = req->send.txc;
-	struct cxip_domain *dom;
 	struct cxip_md *send_md;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
@@ -3355,20 +3354,13 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	struct cxip_cmdq *cmdq =
 		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
 
-	if (req->send.flags & FI_INJECT) {
-		CXIP_LOG_DBG("Invalid inject\n");
-		return -FI_EMSGSIZE;
-	}
-
-	dom = txc->domain;
-
 	/* Calculate DFA */
 	pid_idx = CXIP_PTL_IDX_RXC(req->send.rxc_id);
 	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
 		      pid_idx, &dfa, &idx_ext);
 
 	/* Map local buffer */
-	ret = cxip_map(dom, req->send.buf, req->send.len, &send_md);
+	ret = cxip_map(txc->domain, req->send.buf, req->send.len, &send_md);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to map send buffer: %d\n", ret);
 		return ret;
@@ -3494,10 +3486,14 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 	int match_complete = req->flags & FI_MATCH_COMPLETE;
 	int ret;
 
-	/* IDCs don't have an MD */
 	if (req->send.send_md) {
 		cxip_unmap(req->send.send_md);
 		req->send.send_md = NULL;
+	}
+
+	if (req->send.ibuf) {
+		cxip_cq_ibuf_free(req->cq, req->send.ibuf);
+		req->send.ibuf = NULL;
 	}
 
 	req->send.rc = cxi_init_event_rc(event);
@@ -3546,7 +3542,6 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 static ssize_t _cxip_send_eager(struct cxip_req *req)
 {
 	struct cxip_txc *txc = req->send.txc;
-	struct cxip_domain *dom;
 	struct cxip_md *send_md = NULL;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
@@ -3560,28 +3555,35 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	int tx_id;
 	struct cxip_cmdq *cmdq =
 		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
+	const void *buf = NULL;
 
 	/* Always use IDCs when the payload fits */
 	idc = (req->send.len <= CXIP_INJECT_SIZE) && !req->triggered;
-
-	if ((req->send.flags & FI_INJECT) && !idc) {
-		CXIP_LOG_DBG("Invalid inject\n");
-		return -FI_EMSGSIZE;
-	}
-
-	dom = txc->domain;
 
 	/* Calculate DFA */
 	pid_idx = CXIP_PTL_IDX_RXC(req->send.rxc_id);
 	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
 		      pid_idx, &dfa, &idx_ext);
 
-	/* Map local buffer */
-	if (!idc) {
-		ret = cxip_map(dom, req->send.buf, req->send.len, &send_md);
-		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("Failed to map send buffer: %d\n", ret);
-			return ret;
+	if (req->send.len) {
+		if (req->send.flags & FI_INJECT) {
+			/* Allocate an internal buffer to hold source data. */
+			req->send.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
+			if (!req->send.ibuf)
+				return -FI_ENOSPC;
+
+			memcpy(req->send.ibuf, req->send.buf, req->send.len);
+			buf = req->send.ibuf;
+		} else {
+			/* Map user buffer for DMA command. */
+			ret = cxip_map(txc->domain, req->send.buf,
+				       req->send.len, &send_md);
+			if (ret != FI_SUCCESS) {
+				CXIP_LOG_DBG("Failed to map send buffer: %d\n",
+					     ret);
+				return ret;
+			}
+			buf = req->send.buf;
 		}
 	}
 	req->send.send_md = send_md;
@@ -3664,7 +3666,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		cmd.idc_msg.user_ptr = (uint64_t)req;
 
 		ret = cxi_cq_emit_idc_msg(cmdq->dev_cmdq, &cmd.idc_msg,
-					  req->send.buf, req->send.len);
+					  buf, req->send.len);
 		if (ret) {
 			CXIP_LOG_DBG("Failed to write IDC: %d\n", ret);
 
@@ -3675,6 +3677,9 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		}
 	} else {
 		struct c_full_dma_cmd cmd = {};
+
+		/* Inject should only use IDCs. */
+		assert(!req->send.ibuf);
 
 		cmd.command.cmd_type = C_CMD_TYPE_DMA;
 		cmd.command.opcode = C_CMD_PUT;
@@ -3738,7 +3743,9 @@ err_unlock:
 	if (match_complete)
 		cxip_tx_id_free(txc->ep_obj, req->send.tx_id);
 err_unmap:
-	if (!idc)
+	if (req->send.ibuf)
+		cxip_cq_ibuf_free(req->cq, req->send.ibuf);
+	if (send_md)
 		cxip_unmap(send_md);
 
 	return ret;
@@ -4066,6 +4073,11 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 
 	if (len > CXIP_EP_MAX_MSG_SZ)
 		return -FI_EMSGSIZE;
+
+	if (flags & FI_INJECT && len > CXIP_INJECT_SIZE) {
+		CXIP_LOG_DBG("Invalid inject length: %lu\n", len);
+		return -FI_EMSGSIZE;
+	}
 
 	req = cxip_cq_req_alloc(txc->send_cq, false, txc);
 	if (!req) {

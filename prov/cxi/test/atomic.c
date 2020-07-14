@@ -498,6 +498,33 @@ Test(atomic, simple_inject)
 	cr_assert(ret == -FI_EAGAIN);
 
 	_cxit_destroy_mr(&mr);
+
+	/* Try using standard MR */
+
+	exp_remote = 0;
+	rma = _cxit_create_mr(&mr, 1000);
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_inject_atomic(cxit_ep, &operand1, 1,
+			       cxit_ep_fi_addr, 0, 1000,
+			       FI_UINT64, FI_SUM);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	count++;
+	while (fi_cntr_read(cxit_write_cntr) != count)
+		sched_yield();
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	/* Make sure no events were delivered */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	_cxit_destroy_mr(&mr);
 }
 
 Test(atomic, simple_fetch)

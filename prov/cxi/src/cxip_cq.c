@@ -25,6 +25,65 @@
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_CQ, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_CQ, __VA_ARGS__)
 
+struct cxip_md *cxip_cq_ibuf_md(void *ibuf)
+{
+	return ofi_buf_hdr(ibuf)->region->context;
+}
+
+/*
+ * cxip_ibuf_alloc() - Allocate an inject buffer.
+ */
+void *cxip_cq_ibuf_alloc(struct cxip_cq *cq)
+{
+	void *ibuf;
+
+	fastlock_acquire(&cq->ibuf_lock);
+	ibuf = (struct cxip_req *)ofi_buf_alloc(cq->ibuf_pool);
+	fastlock_release(&cq->ibuf_lock);
+
+	if (ibuf)
+		CXIP_LOG_DBG("Allocated inject buffer: %p\n", ibuf);
+	else
+		CXIP_LOG_ERROR("Failed to allocate inject buffer\n");
+
+	return ibuf;
+}
+
+/*
+ * cxip_ibuf_free() - Free an inject buffer.
+ */
+void cxip_cq_ibuf_free(struct cxip_cq *cq, void *ibuf)
+{
+	fastlock_acquire(&cq->ibuf_lock);
+	ofi_buf_free(ibuf);
+	fastlock_release(&cq->ibuf_lock);
+
+	CXIP_LOG_DBG("Freed inject buffer: %p\n", ibuf);
+}
+
+int cxip_ibuf_chunk_init(struct ofi_bufpool_region *region)
+{
+	struct cxip_cq *cq = region->pool->attr.context;
+	struct cxip_md *md;
+	int ret;
+
+	ret = cxip_map(cq->domain, region->mem_region,
+		       region->pool->alloc_size, &md);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_ERROR("Failed to map inject buffer chunk\n");
+		return ret;
+	}
+
+	region->context = md;
+
+	return FI_SUCCESS;
+}
+
+void cxip_ibuf_chunk_fini(struct ofi_bufpool_region *region)
+{
+	cxip_unmap(region->context);
+}
+
 /*
  * cxip_cq_req_cancel() - Cancel one request.
  *
@@ -103,17 +162,29 @@ void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
 			 */
 			switch (req->type) {
 			case CXIP_REQ_RMA:
-				cxip_unmap(req->rma.local_md);
+				if (req->rma.local_md)
+					cxip_unmap(req->rma.local_md);
+				if (req->rma.ibuf)
+					cxip_cq_ibuf_free(req->cq,
+							  req->rma.ibuf);
 				break;
 
 			case CXIP_REQ_AMO:
-				cxip_unmap(req->amo.oper1_md);
+				if (req->amo.oper1_md)
+					cxip_unmap(req->amo.oper1_md);
 				if (req->amo.result_md)
 					cxip_unmap(req->amo.result_md);
+				if (req->amo.ibuf)
+					cxip_cq_ibuf_free(req->cq,
+							  req->amo.ibuf);
 				break;
 
 			case CXIP_REQ_SEND:
-				cxip_unmap(req->send.send_md);
+				if (req->send.send_md)
+					cxip_unmap(req->send.send_md);
+				if (req->send.ibuf)
+					cxip_cq_ibuf_free(req->cq,
+							  req->send.ibuf);
 				break;
 
 			default:
@@ -485,6 +556,21 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 
 	memset(&cxi_cq->req_table, 0, sizeof(cxi_cq->req_table));
 
+	memset(&bp_attrs, 0, sizeof(bp_attrs));
+	bp_attrs.size = CXIP_INJECT_SIZE;
+	bp_attrs.alignment = 8;
+	bp_attrs.max_cnt = UINT16_MAX;
+	bp_attrs.chunk_cnt = 64;
+	bp_attrs.alloc_fn = cxip_ibuf_chunk_init;
+	bp_attrs.free_fn = cxip_ibuf_chunk_fini;
+	bp_attrs.context = cxi_cq;
+
+	ret = ofi_bufpool_create_attr(&bp_attrs, &cxi_cq->ibuf_pool);
+	if (ret) {
+		ret = -FI_ENOMEM;
+		goto free_req_pool;
+	}
+
 	cxi_cq->enabled = true;
 	fastlock_release(&cxi_cq->lock);
 	dlist_init(&cxi_cq->req_list);
@@ -492,6 +578,8 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	CXIP_LOG_DBG("CQ enabled: %p (EQ: %d)\n", cxi_cq, cxi_cq->evtq->eqn);
 	return FI_SUCCESS;
 
+free_req_pool:
+	ofi_bufpool_destroy(cxi_cq->req_pool);
 free_evtq:
 	cxil_destroy_evtq(cxi_cq->evtq);
 unmap_evtq_buf:
@@ -519,6 +607,8 @@ static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 		goto unlock;
 
 	ofi_idx_reset(&cxi_cq->req_table);
+
+	ofi_bufpool_destroy(cxi_cq->ibuf_pool);
 
 	ofi_bufpool_destroy(cxi_cq->req_pool);
 
@@ -555,6 +645,7 @@ static int cxip_cq_close(struct fid *fid)
 	ofi_cq_cleanup(&cq->util_cq);
 
 	fastlock_destroy(&cq->lock);
+	fastlock_destroy(&cq->ibuf_lock);
 	fastlock_destroy(&cq->req_lock);
 
 	cxip_domain_remove_cq(cq->domain, cq);
@@ -658,6 +749,7 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	ofi_atomic_initialize32(&cxi_cq->ref, 0);
 	fastlock_init(&cxi_cq->lock);
 	fastlock_init(&cxi_cq->req_lock);
+	fastlock_init(&cxi_cq->ibuf_lock);
 
 	cxip_domain_add_cq(cxi_dom, cxi_cq);
 

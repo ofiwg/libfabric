@@ -73,9 +73,11 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 
 	req->flags &= (FI_RMA | FI_READ | FI_WRITE);
 
-	/* IDCs don't have an MD */
 	if (req->rma.local_md)
 		cxip_unmap(req->rma.local_md);
+
+	if (req->rma.ibuf)
+		cxip_cq_ibuf_free(req->cq, req->rma.ibuf);
 
 	event_rc = cxi_init_event_rc(event);
 	if (event_rc == C_RC_OK) {
@@ -107,10 +109,6 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
  * are used instead for Write operations smaller than the maximum IDC payload
  * size.
  *
- * If the FI_INJECT flag is specified, an IDC must be used in order to
- * guarantee that source buffer is unused on return. It is an error if
- * FI_INJECT is specified and the payload is longer than the IDC maximum.
- *
  * If the FI_COMPLETION flag is specified, the operation will generate a
  * libfabric completion event. If an event is not requested and an IDC command
  * is used, hardware success events will be suppressed. If a completion is
@@ -127,7 +125,6 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			struct cxip_cntr *comp_cntr)
 {
 	int ret;
-	struct cxip_md *md = NULL;
 	struct cxip_req *req = NULL;
 	struct cxip_addr caddr;
 	union c_fab_addr dfa;
@@ -147,28 +144,19 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	if (len && !buf)
 		return -FI_EINVAL;
 
+	if (((flags & FI_INJECT) && len > CXIP_INJECT_SIZE) ||
+	    len > CXIP_EP_MAX_MSG_SZ)
+		return -FI_EMSGSIZE;
+
 	/* Use IDCs if the payload fits and targeting an optimized MR. */
 	idc = (op == FI_OP_WRITE) && (len <= C_MAX_IDC_PAYLOAD_RES) &&
 	       cxip_mr_key_opt(key) && !triggered;
-
-	/* TODO support inject without IDCs */
-	if (((flags & FI_INJECT) && !idc) || len > CXIP_EP_MAX_MSG_SZ)
-		return -FI_EMSGSIZE;
 
 	/* Look up target CXI address */
 	ret = _cxip_av_lookup(txc->ep_obj->av, tgt_addr, &caddr);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to look up FI addr: %d\n", ret);
 		return ret;
-	}
-
-	if (len && !idc) {
-		/* Map local buffer */
-		ret = cxip_map(txc->domain, buf, len, &md);
-		if (ret) {
-			CXIP_LOG_DBG("Failed to map buffer: %d\n", ret);
-			return ret;
-		}
 	}
 
 	/* DMA commands must always be tracked. IDCs must be tracked if the
@@ -178,8 +166,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
 			CXIP_LOG_DBG("Failed to allocate request\n");
-			ret = -FI_ENOMEM;
-			goto unmap_op;
+			return -FI_ENOMEM;
 		}
 
 		/* Populate request */
@@ -194,10 +181,28 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		req->cb = cxip_rma_cb;
 		req->flags = FI_RMA | (op == FI_OP_READ ? FI_READ : FI_WRITE) |
 				(flags & FI_COMPLETION);
-		req->rma.local_md = md;
 		req->rma.txc = txc;
 		req->type = CXIP_REQ_RMA;
 		req->trig_cntr = trig_cntr;
+	}
+
+	if (len && !idc) {
+		if (flags & FI_INJECT) {
+			/* Allocate an internal buffer to hold source data. */
+			req->rma.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
+			if (!req->rma.ibuf)
+				goto req_free;
+
+			memcpy(req->rma.ibuf, buf, len);
+		} else {
+			/* Map user buffer for DMA command. */
+			ret = cxip_map(txc->domain, buf, len,
+				       &req->rma.local_md);
+			if (ret) {
+				CXIP_LOG_DBG("Failed to map buffer: %d\n", ret);
+				goto req_free;
+			}
+		}
 	}
 
 	/* Generate the destination fabric address */
@@ -300,10 +305,23 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 				(op == FI_OP_READ ? C_CMD_GET : C_CMD_PUT);
 		cmd.command.cmd_type = C_CMD_TYPE_DMA;
 		cmd.index_ext = idx_ext;
+
 		if (len) {
-			cmd.lac = md->md->lac;
-			cmd.local_addr = CXI_VA_TO_IOVA(md->md, buf);
+			if (!req->rma.ibuf) {
+				cmd.lac = req->rma.local_md->md->lac;
+				cmd.local_addr =
+					CXI_VA_TO_IOVA(req->rma.local_md->md,
+						       buf);
+			} else {
+				struct cxip_md *ibuf_md =
+						cxip_cq_ibuf_md(req->rma.ibuf);
+
+				cmd.local_addr = CXI_VA_TO_IOVA(ibuf_md->md,
+								req->rma.ibuf);
+				cmd.lac = ibuf_md->md->lac;
+			}
 		}
+
 		cmd.event_send_disable = 1;
 		cmd.dfa = dfa;
 		cmd.remote_offset = addr;
@@ -373,11 +391,13 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 unlock_op:
 	fastlock_release(&txc->tx_cmdq->lock);
+	if (req->rma.ibuf)
+		cxip_cq_ibuf_free(req->cq, req->rma.ibuf);
+	if (req->rma.local_md)
+		cxip_unmap(req->rma.local_md);
+req_free:
 	if (req)
 		cxip_cq_req_free(req);
-unmap_op:
-	if (md)
-		cxip_unmap(md);
 
 	return ret;
 }
