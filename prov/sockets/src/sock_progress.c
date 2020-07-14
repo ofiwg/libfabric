@@ -2383,7 +2383,7 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe,
 	}
 
 	num_fds = ofi_epoll_wait(map->epoll_set, map->epoll_ctxs,
-	                        MIN(map->used, map->epoll_ctxs_sz), 0);
+	                         1, 0);
 	if (num_fds < 0 || num_fds == 0) {
 		if (num_fds < 0)
 			SOCK_LOG_ERROR("epoll failed: %d\n", num_fds);
