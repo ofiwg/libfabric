@@ -252,7 +252,6 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
 
 static
 size_t rxr_pkt_req_copy_data(struct rxr_rx_entry *rx_entry,
-			     struct rxr_pkt_entry *pkt_entry,
 			     char *data, size_t data_size)
 {
 	struct efa_mr *desc;
@@ -876,8 +875,7 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 	data = (char *)pkt_entry->pkt + hdr_size;
 	data_size = pkt_entry->pkt_size - hdr_size;
-	bytes_left = rxr_pkt_req_copy_data(rx_entry, pkt_entry,
-					   data, data_size);
+	bytes_left = rxr_pkt_req_copy_data(rx_entry,  data, data_size);
 	if (!bytes_left) {
 		/*
 		 * rxr_cq_handle_rx_completion() releases pkt_entry, thus
@@ -1302,7 +1300,7 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 	data = (char *)pkt_entry->pkt + hdr_size;
 	data_size = pkt_entry->pkt_size - hdr_size;
-	bytes_left = rxr_pkt_req_copy_data(rx_entry, pkt_entry, data, data_size);
+	bytes_left = rxr_pkt_req_copy_data(rx_entry, data, data_size);
 	if (bytes_left != 0) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Eager RTM bytes_left is %ld, which should be 0.",
 			bytes_left);
@@ -1359,7 +1357,7 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 	data = (char *)pkt_entry->pkt + hdr_size;
 	data_size = pkt_entry->pkt_size - hdr_size;
-	bytes_left = rxr_pkt_req_copy_data(rx_entry, pkt_entry, data, data_size);
+	bytes_left = rxr_pkt_req_copy_data(rx_entry, data, data_size);
 	if (OFI_UNLIKELY(bytes_left <= 0)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Long RTM bytes_left is %ld, which should be > 0.",
 			bytes_left);
