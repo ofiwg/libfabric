@@ -71,24 +71,34 @@ static ssize_t tcpx_read_from_buffer(struct stage_buf *stage_buf,
 	return ret;
 }
 
-int tcpx_recv_hdr(SOCKET sock, struct stage_buf *stage_buf,
-		  struct tcpx_cur_rx_msg *cur_rx_msg)
+ssize_t tcpx_recv_hdr(SOCKET sock, struct stage_buf *stage_buf,
+		      struct tcpx_cur_rx_msg *cur_rx_msg)
 {
-	void *rem_buf;
+	ssize_t bytes_recvd, bytes_read;
 	size_t rem_len;
-	ssize_t bytes_recvd;
+	void *rem_buf;
 
 	rem_buf = (uint8_t *) &cur_rx_msg->hdr + cur_rx_msg->done_len;
 	rem_len = cur_rx_msg->hdr_len - cur_rx_msg->done_len;
 
-	if (stage_buf->cur_pos < stage_buf->bytes_avail)
-		bytes_recvd = tcpx_read_from_buffer(stage_buf, rem_buf, rem_len);
-	else
-		bytes_recvd = ofi_recv_socket(sock, rem_buf, rem_len, 0);
-	if (bytes_recvd <= 0)
-		return bytes_recvd ? -ofi_sockerr(): -FI_ENOTCONN;
+	if (stage_buf->cur_pos < stage_buf->bytes_avail) {
+		bytes_read = tcpx_read_from_buffer(stage_buf, rem_buf, rem_len);
+		rem_len -= bytes_read;
+		if (!rem_len)
+			return bytes_read;
 
-	return bytes_recvd;
+		rem_buf = (char *) rem_buf + bytes_read;
+	} else {
+		bytes_read = 0;
+	}
+
+	bytes_recvd = ofi_recv_socket(sock, rem_buf, rem_len, 0);
+	if (bytes_recvd < 0)
+		return bytes_read ? bytes_read : -ofi_sockerr();
+	else if (bytes_recvd == 0)
+		return -FI_ENOTCONN;
+
+	return bytes_read + bytes_recvd;
 }
 
 static ssize_t tcpx_readv_from_buffer(struct stage_buf *stage_buf,
@@ -116,25 +126,32 @@ static ssize_t tcpx_readv_from_buffer(struct stage_buf *stage_buf,
 
 int tcpx_recv_msg_data(struct tcpx_xfer_entry *rx_entry)
 {
-	ssize_t bytes_recvd;
+	struct stage_buf *stage_buf;
+	ssize_t bytes_recvd, bytes_read;
 
 	if (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len)
 		return FI_SUCCESS;
 
-	if (rx_entry->ep->stage_buf.cur_pos < rx_entry->ep->stage_buf.bytes_avail)
-		bytes_recvd = tcpx_readv_from_buffer(&rx_entry->ep->stage_buf,
-						     rx_entry->iov,
-						     rx_entry->iov_cnt);
-	else
-		bytes_recvd = ofi_readv_socket(rx_entry->ep->sock,
-					       rx_entry->iov,
-					       rx_entry->iov_cnt);
-	if (bytes_recvd <= 0)
-		return (bytes_recvd) ? -ofi_sockerr(): -FI_ENOTCONN;
+	stage_buf = &rx_entry->ep->stage_buf;
+	if (stage_buf->cur_pos < stage_buf->bytes_avail) {
+		bytes_read = tcpx_readv_from_buffer(stage_buf,
+						    rx_entry->iov,
+						    rx_entry->iov_cnt);
+		ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, bytes_read);
+		if (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len)
+			return FI_SUCCESS;
+	}
+
+	bytes_recvd = ofi_readv_socket(rx_entry->ep->sock, rx_entry->iov,
+				       rx_entry->iov_cnt);
+	if (bytes_recvd < 0)
+		return bytes_read ? -FI_EAGAIN : -ofi_sockerr();
+	else if (bytes_recvd == 0)
+		return -FI_ENOTCONN;
 
 	ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, bytes_recvd);
-	return (rx_entry->iov_cnt && rx_entry->iov[0].iov_len) ?
-		-FI_EAGAIN: FI_SUCCESS;
+	return (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len) ?
+		FI_SUCCESS : -FI_EAGAIN;
 }
 
 int tcpx_read_to_buffer(SOCKET sock, struct stage_buf *stage_buf)

@@ -575,11 +575,11 @@ int tcpx_op_read_rsp(struct tcpx_ep *tcpx_ep)
 
 static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 {
-	int ret;
+	ssize_t ret;
 
 	ret = tcpx_recv_hdr(ep->sock, &ep->stage_buf, &ep->cur_rx_msg);
 	if (ret < 0)
-		return ret;
+		return (int) ret;
 
 	ep->cur_rx_msg.done_len += ret;
 	if (ep->cur_rx_msg.done_len >= sizeof(ep->cur_rx_msg.hdr.base_hdr)) {
@@ -590,7 +590,7 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 			ret = tcpx_recv_hdr(ep->sock, &ep->stage_buf,
 					    &ep->cur_rx_msg);
 			if (ret < 0)
-				return ret;
+				return (int) ret;
 
 			ep->cur_rx_msg.done_len += ret;
 		}
