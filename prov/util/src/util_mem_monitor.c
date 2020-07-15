@@ -171,6 +171,7 @@ int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 	int ret = 0;
 	enum fi_hmem_iface iface;
 	struct ofi_mem_monitor *monitor;
+	unsigned int success_count = 0;
 
 	if (!monitors) {
 		for (iface = FI_HMEM_SYSTEM; iface < OFI_HMEM_MAX; iface++)
@@ -192,19 +193,29 @@ int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 
 		if (dlist_empty(&monitor->list)) {
 			ret = monitor->start(monitor);
-			if (ret) {
-				cache->monitors[iface] = NULL;
-				goto out;
-			}
+			if (ret && ret != -FI_ENOSYS)
+				goto err;
 		}
 
+		success_count++;
 		cache->monitors[iface] = monitor;
 		dlist_insert_tail(&cache->notify_entries[iface],
 				  &monitor->list);
 	}
 
-out:
 	pthread_mutex_unlock(&mm_lock);
+
+	return success_count ? FI_SUCCESS : -FI_ENOSYS;
+
+err:
+	pthread_mutex_unlock(&mm_lock);
+
+	FI_WARN(&core_prov, FI_LOG_MR,
+		"Failed to start %s memory monitor: %s\n",
+		fi_tostr(&iface, FI_TYPE_HMEM_IFACE), fi_strerror(-ret));
+
+	ofi_monitors_del_cache(cache);
+
 	return ret;
 }
 
