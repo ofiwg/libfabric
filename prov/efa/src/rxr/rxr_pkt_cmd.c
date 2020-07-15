@@ -189,6 +189,9 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 	case RXR_DC_EAGER_RTW_PKT:
 		ret = rxr_pkt_init_dc_eager_rtw(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
+	case RXR_DC_WRITE_RTA_PKT:
+		ret = rxr_pkt_init_dc_write_rta(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
 	default:
 		ret = -FI_EINVAL;
 		assert(0 && "unknown pkt type to init");
@@ -254,6 +257,7 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 		rxr_pkt_handle_rtr_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_WRITE_RTA_PKT:
+	case RXR_DC_WRITE_RTA_PKT:
 	case RXR_FETCH_RTA_PKT:
 	case RXR_COMPARE_RTA_PKT:
 		rxr_pkt_handle_rta_sent(rxr_ep, pkt_entry);
@@ -559,6 +563,9 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 	case RXR_DC_EAGER_RTW_PKT:
 		/* completion will be written upon receving the receipt packet, thus no action to be taken here */
 		break;
+	case RXR_DC_WRITE_RTA_PKT:
+		/* no action to be taken here */
+		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"invalid control pkt type %d\n",
@@ -721,6 +728,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	case RXR_READ_MSGRTM_PKT:
 	case RXR_READ_TAGRTM_PKT:
 	case RXR_WRITE_RTA_PKT:
+	case RXR_DC_WRITE_RTA_PKT:
 	case RXR_FETCH_RTA_PKT:
 	case RXR_COMPARE_RTA_PKT:
 	case RXR_DC_EAGER_MSGRTM_PKT:

@@ -89,7 +89,6 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 
 	delivery_complete_requested = rxr_ep->util_ep.tx_op_flags & FI_DELIVERY_COMPLETE;
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
-
 	if (peer->is_local) {
 		assert(rxr_ep->use_shm);
 		/* intra instance message */
