@@ -24,6 +24,7 @@ struct fi_eq_attr cxit_eq_attr = {};
 struct fid_eq *cxit_eq;
 struct fi_cq_attr cxit_tx_cq_attr = { .format = FI_CQ_FORMAT_TAGGED };
 struct fi_cq_attr cxit_rx_cq_attr = { .format = FI_CQ_FORMAT_TAGGED };
+uint64_t cxit_eq_bind_flags = 0;
 uint64_t cxit_tx_cq_bind_flags = FI_TRANSMIT;
 uint64_t cxit_rx_cq_bind_flags = FI_RECV;
 struct fid_cq *cxit_tx_cq, *cxit_rx_cq;
@@ -33,6 +34,7 @@ struct fid_cntr *cxit_read_cntr, *cxit_write_cntr;
 struct fid_cntr *cxit_rem_cntr;
 struct fi_av_attr cxit_av_attr;
 struct fid_av *cxit_av;
+struct cxit_coll_mc_list cxit_coll_mc_list = { .count = 5 };
 char *cxit_node, *cxit_service;
 uint64_t cxit_flags;
 int cxit_n_ifs;
@@ -165,6 +167,15 @@ void cxit_destroy_eq(void)
 	cxit_eq = NULL;
 }
 
+void cxit_bind_eq(void)
+{
+	int ret;
+
+	/* NOTE: ofi implementation does not allow any flags */
+	ret = fi_ep_bind(cxit_ep, &cxit_eq->fid, cxit_eq_bind_flags);
+	cr_assert(!ret, "fi_ep_bind EQ");
+}
+
 void cxit_create_cqs(void)
 {
 	int ret;
@@ -291,6 +302,96 @@ void cxit_bind_av(void)
 	cr_assert(!ret, "fi_ep_bind AV");
 }
 
+/* expand AV and create av_sets for collectives */
+static void _create_av_set(int count, int rank, struct fid_av_set **av_set_fid)
+{
+	struct cxip_ep *ep;
+	struct cxip_coll_comm_key comm_key = {
+		.type = COMM_KEY_RANK,
+		.dest_addr = rank,
+		.hwroot_rank = 0,
+	};
+	struct fi_av_set_attr attr = {
+		.count = 0,
+		.start_addr = FI_ADDR_NOTAVAIL,
+		.end_addr = FI_ADDR_NOTAVAIL,
+		.stride = 1,
+		.comm_key_size = sizeof(comm_key),
+		.comm_key = (void *)&comm_key,
+		.flags = 0,
+	};
+	struct cxip_addr caddr;
+	int i, ret;
+
+	ep = container_of(cxit_ep, struct cxip_ep, ep);
+
+	/* lookup initiator caddr */
+	ret = _cxip_av_lookup(ep->ep_obj->av, cxit_ep_fi_addr, &caddr);
+	cr_assert(ret == 0, "bad lookup on address %ld: %d\n",
+		  cxit_ep_fi_addr, ret);
+
+	/* create empty av_set */
+	ret = fi_av_set(&ep->ep_obj->av->av_fid, &attr, av_set_fid, NULL);
+	cr_assert(ret == 0, "av_set creation failed: %d\n", ret);
+
+	/* add source address as multiple av entries */
+	for (i=count-1; i >= 0; i--) {
+		fi_addr_t fi_addr;
+		ret = fi_av_insert(&ep->ep_obj->av->av_fid, &caddr, 1,
+				   &fi_addr, 0, NULL);
+		cr_assert(ret == 1, "%d cxip_av_insert failed: %d\n", i, ret);
+		ret = fi_av_set_insert(*av_set_fid, fi_addr);
+		cr_assert(ret == 0, "%d fi_av_set_insert failed: %d\n", i, ret);
+	}
+}
+
+void cxit_create_netsim_collective(int count)
+{
+	struct cxip_ep *ep;
+	uint32_t event;
+	int i, ret;
+
+	cxit_coll_mc_list.count = count;
+	cxit_coll_mc_list.av_set_fid = calloc(cxit_coll_mc_list.count,
+					      sizeof(struct fid_av_set *));
+	cxit_coll_mc_list.mc_fid = calloc(cxit_coll_mc_list.count,
+					  sizeof(struct fid_mc *));
+
+	for (i = 0; i < cxit_coll_mc_list.count; i++) {
+		 _create_av_set(cxit_coll_mc_list.count, i,
+				&cxit_coll_mc_list.av_set_fid[i]);
+
+		ret = cxip_join_collective(cxit_ep, FI_ADDR_NOTAVAIL,
+					   cxit_coll_mc_list.av_set_fid[i],
+					   0, &cxit_coll_mc_list.mc_fid[i],
+					   NULL);
+		cr_assert(ret == 0, "cxip_coll_enable failed: %d\n", ret);
+
+		ep = container_of(cxit_ep, struct cxip_ep, ep);
+		do {
+			sched_yield();
+			ret = fi_eq_read(&ep->ep_obj->eq->util_eq.eq_fid,
+					 &event, NULL, 0, 0);
+		} while (ret == -FI_EAGAIN);
+		cr_assert(event == FI_JOIN_COMPLETE, "join event = %d\n",
+			  event);
+	}
+}
+
+void cxit_destroy_netsim_collective(void)
+{
+	int i;
+
+	for (i = cxit_coll_mc_list.count - 1; i >= 0; i--) {
+		fi_close(&cxit_coll_mc_list.mc_fid[i]->fid);
+		fi_close(&cxit_coll_mc_list.av_set_fid[i]->fid);
+	}
+	free(cxit_coll_mc_list.mc_fid);
+	free(cxit_coll_mc_list.av_set_fid);
+	cxit_coll_mc_list.mc_fid = NULL;
+	cxit_coll_mc_list.av_set_fid = NULL;
+}
+
 static void cxit_init(void)
 {
 	struct slist_entry *entry, *prev __attribute__ ((unused));
@@ -396,6 +497,8 @@ void cxit_setup_enabled_ep(void)
 
 	/* Set up RMA objects */
 	cxit_create_ep();
+	cxit_create_eq();
+	cxit_bind_eq();
 	cxit_create_cqs();
 	cxit_bind_cqs();
 	cxit_create_cntrs();
@@ -437,6 +540,7 @@ void cxit_teardown_rma(void)
 	cxit_destroy_av();
 	cxit_destroy_cntrs();
 	cxit_destroy_cqs();
+	cxit_destroy_eq();
 	cxit_teardown_ep();
 }
 

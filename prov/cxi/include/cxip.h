@@ -107,7 +107,8 @@
 	 FI_DIRECTED_RECV | FI_MSG | FI_NAMED_RX_CTX)
 #define CXIP_EP_SEC_CAPS \
 	(FI_SOURCE | FI_SHARED_AV | FI_LOCAL_COMM | FI_REMOTE_COMM | \
-	 FI_RMA_EVENT | FI_MULTI_RECV | FI_FENCE | FI_TRIGGER)
+	 FI_RMA_EVENT | FI_MULTI_RECV | FI_FENCE | FI_TRIGGER | \
+	 FI_COLLECTIVE)
 #define CXIP_EP_CAPS (CXIP_EP_PRI_CAPS | CXIP_EP_SEC_CAPS)
 #define CXIP_MSG_ORDER			(FI_ORDER_SAS | \
 					 FI_ORDER_WAW | \
@@ -118,7 +119,8 @@
 					 FI_ORDER_ATOMIC_RAR)
 
 #define CXIP_EP_CQ_FLAGS \
-	(FI_SEND | FI_TRANSMIT | FI_RECV | FI_SELECTIVE_COMPLETION)
+	(FI_SEND | FI_TRANSMIT | FI_RECV | FI_SELECTIVE_COMPLETION | \
+	 FI_COLLECTIVE)
 #define CXIP_EP_CNTR_FLAGS \
 	(FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | \
 	 FI_REMOTE_WRITE)
@@ -575,13 +577,8 @@ struct cxip_req_search {
 };
 
 struct cxip_req_coll {
-	struct dlist_entry rxc_entry;
-	struct cxip_ep_obj *ep_obj;
-	struct cxip_coll_buf *buf;
-	struct cxip_coll_mc *cxi_mc;
-	struct cxip_addr caddr;
-	uint8_t rx_id;
-	void *op_context;
+	struct cxip_coll_pte *coll_pte;
+	struct cxip_coll_buf *coll_buf;
 	uint32_t mrecv_space;
 	size_t hw_req_len;
 	int rc;
@@ -808,18 +805,12 @@ struct cxip_ep_coll_obj {
 	struct cxip_cntr *tx_cntr;	// shared with STD EP
 	struct cxip_cq *rx_cq;		// shared with STD EP
 	struct cxip_cq *tx_cq;		// shared with STD EP
-	struct cxip_pte *pte;		// Collectives PTE
-	enum c_ptlte_state pte_state;	// PTE state
-	struct dlist_entry buf_list;	// PTE receive buffers
-	struct dlist_entry mc_list;	// joined MC objects
 	ofi_atomic32_t mc_count;	// count of MC objects
 	fastlock_t lock;		// collectives lock
-	size_t min_multi_recv;		// trigger value to rotate
+	size_t min_multi_recv;		// trigger value to rotate bufs
 	size_t buffer_size;		// size of receive buffers
 	size_t buffer_count;		// count of receive buffers
 	bool enabled;			// enabled
-	bool is_netsim;			// for development
-	uint64_t buf_swap_cnt;		// for diagnostics
 };
 
 /*
@@ -1116,7 +1107,8 @@ struct cxip_av {
 	fastlock_t list_lock;
 };
 
-/* AV Set communication key.
+/*
+ * AV Set communication key.
  *
  * For production, use COMM_KEY_MULTICAST type. The av_set should be joined once
  * on each node. The dest_addr is the 13-bit multicast ID value supplied by the
@@ -1173,31 +1165,79 @@ struct cxip_av_set {
 	ofi_atomic32_t ref;
 };
 
-/*
- * Collective Multicast Address
- *
- * Support structure.
- *
- * Created in fi_join_collective().
+/* Supported collective operation types
  */
-struct cxip_coll_mc {			// TODO: placeholder
-	struct fid_mc mc_fid;
+enum cxip_coll_type {
+	CXIP_COLL_TYPE_NONE,
+	CXIP_COLL_TYPE_JOIN,
+	CXIP_COLL_TYPE_BROADCAST,
+	CXIP_COLL_TYPE_ALLREDUCE,
+	CXIP_COLL_TYPE_BARRIER
 };
 
-/*
- * Collective message structure.
- *
- * Used for list of RX buffers on EP.
- *
- * Support structure.
+/* Collective operation states
  */
+enum cxip_coll_state {
+	CXIP_COLL_STATE_NONE,
+	CXIP_COLL_STATE_READY,
+	CXIP_COLL_STATE_BLOCKED,
+};
+
 struct cxip_coll_buf {
-	struct dlist_entry buf_entry;
-	struct cxip_req *req;
-	struct cxip_md *cxi_md;
-	size_t bufsiz;
-	size_t buflen;
-	uint8_t buffer[0];
+	struct dlist_entry buf_entry;		// linked list of buffers
+	struct cxip_req *req;			// associated LINK request
+	struct cxip_md *cxi_md;			// buffer memory descriptor
+	size_t bufsiz;				// buffer size in bytes
+	uint8_t buffer[0];			// buffer data
+};
+
+struct cxip_coll_pte {
+	struct cxip_pte *pte;			// Collectives PTE
+	struct cxip_ep_obj *ep_obj;		// Associated endpoint
+	struct cxip_coll_mc *mc_obj;		// Associated multicast object
+	enum c_ptlte_state pte_state;		// PTE state
+	struct dlist_entry buf_list;		// PTE receive buffers
+	uint64_t buf_swap_cnt;			// for diagnostics
+	bool enabled;				// enabled
+};
+
+struct cxip_coll_reduction {
+	struct cxip_coll_mc *mc_obj;		// parent mc_obj
+	uint32_t red_id;			// reduction id
+	uint16_t seqno;				// reduction sequence number
+	struct cxip_req *op_inject_req;		// active operation request
+	enum cxip_coll_state op_state;		// reduction state on node
+	int op_code;				// requested CXI operation
+	const void *op_send_data;		// user send buffer
+	void *op_rslt_data;			// user recv buffer
+	size_t op_data_len;			// bytes in send/recv buffers
+	void *op_context;			// caller's context
+	bool in_use;				// reduction is in-use
+
+	uint8_t red_data[CXIP_COLL_MAX_TX_SIZE];
+	bool red_init;				// set by first packet
+	int red_op;				// set by first packet
+	int red_rc;				// set by first error
+	int red_cnt;				// incremented by packet
+
+	uint8_t tx_msg[64];			// static packet memory
+};
+
+struct cxip_coll_mc {
+	struct fid_mc mc_fid;
+	struct cxip_ep_obj *ep_obj;		// Associated endpoint
+	struct cxip_av_set *av_set;		// associated AV set
+	struct cxip_coll_pte *coll_pte;		// collective PTE
+	unsigned int mynode_rank;		// rank of this mc in av_set
+	uint32_t mcast_id;			// 13-bit multicast address
+	bool is_joined;				// true if joined
+	int next_red_id;			// round-robin counter
+	ofi_atomic32_t send_cnt;		// for diagnostics
+	ofi_atomic32_t recv_cnt;		// for diagnostics
+	ofi_atomic32_t pkt_cnt;			// for diagnostics
+	fastlock_t lock;
+
+	struct cxip_coll_reduction reduction[CXIP_COLL_MAX_CONCUR];
 };
 
 /*
@@ -1357,12 +1397,13 @@ int cxip_coll_init(struct cxip_ep_obj *ep_obj);
 int cxip_coll_enable(struct cxip_ep_obj *ep_obj);
 int cxip_coll_disable(struct cxip_ep_obj *ep_obj);
 int cxip_coll_close(struct cxip_ep_obj *ep_obj);
-int cxip_coll_send(struct cxip_ep_obj *ep_obj, const void *buf, size_t len,
-		   fi_addr_t dest_addr);
-
+void cxip_coll_reset_mc_ctrs(struct cxip_coll_mc *mc_obj);
+int cxip_coll_send(struct cxip_coll_reduction *reduction,
+		   fi_addr_t dest_addr, const void *buffer, size_t buflen);
 int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 			 const struct fid_av_set *coll_av_set,
 			 uint64_t flags, struct fid_mc **mc, void *context);
+
 /*
  * cxip_fid_to_txc() - Return TXC from FID provided to a transmit API.
  */

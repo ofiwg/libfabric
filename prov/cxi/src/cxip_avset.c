@@ -336,7 +336,7 @@ int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 
 	/* Allocate enough space to add all addresses */
 	cxi_set->fi_addr_ary = calloc(cxi_av->table_hdr->size,
-					sizeof(*cxi_set->fi_addr_ary));
+				      sizeof(*cxi_set->fi_addr_ary));
 	if (!cxi_set->fi_addr_ary) {
 		ret = -FI_ENOMEM;
 		goto err1;

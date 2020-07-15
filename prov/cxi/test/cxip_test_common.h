@@ -79,6 +79,7 @@ void cxit_setup_rma(void);
 void cxit_teardown_rma(void);
 #define cxit_teardown_tagged cxit_teardown_rma
 #define cxit_teardown_msg cxit_teardown_rma
+#define	cxit_teardown_enabled_ep cxit_teardown_rma
 int cxit_await_completion(struct fid_cq *cq, struct fi_cq_tagged_entry *cqe);
 void validate_tx_event(struct fi_cq_tagged_entry *cqe, uint64_t flags,
 		       void *context);
@@ -97,5 +98,15 @@ struct mem_region {
 int mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
 	      struct mem_region *mr);
 void mr_destroy(struct mem_region *mr);
+
+struct cxit_coll_mc_list {
+	int count;
+	struct fid_av_set **av_set_fid;
+	struct fid_mc **mc_fid;
+};
+extern struct cxit_coll_mc_list cxit_coll_mc_list;
+
+void cxit_create_netsim_collective(int count);
+void cxit_destroy_netsim_collective(void);
 
 #endif
