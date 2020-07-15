@@ -85,6 +85,7 @@ struct rxr_req_inf REQ_INF_LIST[] = {
 	[RXR_READ_RTR_PKT] = {4, sizeof(struct rxr_base_hdr), RXR_REQ_FEATURE_RDMA_READ},
 	/* rta header */
 	[RXR_WRITE_RTA_PKT] = {4, sizeof(struct rxr_rta_hdr), 0},
+	[RXR_DC_WRITE_RTA_PKT] = {4, sizeof(struct rxr_rta_hdr), RXR_REQ_FEATURE_DELIVERY_COMPLETE},
 	[RXR_FETCH_RTA_PKT] = {4, sizeof(struct rxr_rta_hdr), 0},
 	[RXR_COMPARE_RTA_PKT] = {4, sizeof(struct rxr_rta_hdr), 0},
 };
@@ -168,6 +169,7 @@ size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry)
 		 base_hdr->type == RXR_LONG_RTR_PKT)
 		hdr_size += rxr_get_rtr_hdr(pkt_entry->pkt)->rma_iov_count * sizeof(struct fi_rma_iov);
 	else if (base_hdr->type == RXR_WRITE_RTA_PKT ||
+		 base_hdr->type == RXR_DC_WRITE_RTA_PKT ||
 		 base_hdr->type == RXR_FETCH_RTA_PKT ||
 		 base_hdr->type == RXR_COMPARE_RTA_PKT)
 		hdr_size += rxr_get_rta_hdr(pkt_entry->pkt)->rma_iov_count * sizeof(struct fi_rma_iov);
@@ -1083,6 +1085,8 @@ ssize_t rxr_pkt_proc_rtm_rta(struct rxr_ep *ep,
 		return rxr_pkt_proc_tagrtm(ep, pkt_entry);
 	case RXR_WRITE_RTA_PKT:
 		return rxr_pkt_proc_write_rta(ep, pkt_entry);
+	case RXR_DC_WRITE_RTA_PKT:
+		return rxr_pkt_proc_dc_write_rta(ep, pkt_entry);
 	case RXR_FETCH_RTA_PKT:
 		return rxr_pkt_proc_fetch_rta(ep, pkt_entry);
 	case RXR_COMPARE_RTA_PKT:
@@ -1837,6 +1841,14 @@ ssize_t rxr_pkt_init_write_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	return 0;
 }
 
+ssize_t rxr_pkt_init_dc_write_rta(struct rxr_ep *ep,
+				  struct rxr_tx_entry *tx_entry,
+				  struct rxr_pkt_entry *pkt_entry)
+{
+	rxr_pkt_init_rta(ep, tx_entry, RXR_DC_WRITE_RTA_PKT, pkt_entry);
+	return 0;
+}
+
 ssize_t rxr_pkt_init_fetch_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 			      struct rxr_pkt_entry *pkt_entry)
 {
@@ -1917,6 +1929,11 @@ struct rxr_rx_entry *rxr_pkt_alloc_rta_rx_entry(struct rxr_ep *ep, struct rxr_pk
 		return NULL;
 	}
 
+	if (op == ofi_op_atomic) {
+		rx_entry->addr = pkt_entry->addr;
+		return rx_entry;
+	}
+
 	rta_hdr = (struct rxr_rta_hdr *)pkt_entry->pkt;
 	rx_entry->atomic_hdr.atomic_op = rta_hdr->atomic_op;
 	rx_entry->atomic_hdr.datatype = rta_hdr->atomic_datatype;
@@ -1947,6 +1964,49 @@ struct rxr_rx_entry *rxr_pkt_alloc_rta_rx_entry(struct rxr_ep *ep, struct rxr_pk
 	}
 
 	return rx_entry;
+}
+
+int rxr_pkt_proc_dc_write_rta(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_rta_hdr *rta_hdr;
+	ssize_t err;
+	int ret;
+
+	rx_entry = rxr_pkt_alloc_rta_rx_entry(ep, pkt_entry, ofi_op_atomic);
+	if (OFI_UNLIKELY(!rx_entry)) {
+		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return -FI_ENOBUFS;
+	}
+
+	rta_hdr = (struct rxr_rta_hdr *)pkt_entry->pkt;
+	rx_entry->tx_id = rta_hdr->tx_id;
+	rx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
+
+	ret = rxr_pkt_proc_write_rta(ep, pkt_entry);
+	if (OFI_UNLIKELY(ret)) {
+		FI_WARN(&rxr_prov,
+			FI_LOG_CQ,
+			"Error while processing the write rta packet\n");
+		return ret;
+	}
+
+	err = rxr_pkt_post_ctrl_or_queue(ep,
+					 RXR_RX_ENTRY,
+					 rx_entry,
+					 RXR_RECEIPT_PKT, 0);
+	if (OFI_UNLIKELY(err)) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"Posting of receipt packet failed! err=%s\n",
+			fi_strerror(err));
+		if (rxr_cq_handle_rx_error(ep, rx_entry, err))
+			assert(0 && "Cannot handle rx error");
+		return err;
+	}
+
+	return ret;
 }
 
 int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
