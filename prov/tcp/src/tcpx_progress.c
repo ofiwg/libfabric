@@ -628,6 +628,13 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 					goto err;
 			}
 
+			if (ep->cur_rx_msg.hdr.base_hdr.op >=
+			    ARRAY_SIZE(ep->start_op)) {
+				FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+					"Received invalid opcode\n");
+				ret = -FI_ENOTCONN; /* force shutdown */
+				goto err;
+			}
 			ret = ep->start_op[ep->cur_rx_msg.hdr.base_hdr.op](ep);
 			if (ret)
 				goto err;
@@ -641,9 +648,6 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 err:
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return;
-
-	/* Failed current RX entry should clean itself */
-	assert(!ep->cur_rx_entry);
 
 	if (ret == -FI_ENOTCONN)
 		tcpx_ep_shutdown_report(ep, &ep->util_ep.ep_fid.fid);
