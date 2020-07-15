@@ -670,6 +670,8 @@ struct rxr_rta_hdr *rxr_get_rta_hdr(void *pkt)
 
 ssize_t rxr_pkt_init_write_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry, struct rxr_pkt_entry *pkt_entry);
 
+ssize_t rxr_pkt_init_dc_write_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry, struct rxr_pkt_entry *pkt_entry);
+
 ssize_t rxr_pkt_init_fetch_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry, struct rxr_pkt_entry *pkt_entry);
 
 ssize_t rxr_pkt_init_compare_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry, struct rxr_pkt_entry *pkt_entry);
@@ -689,6 +691,9 @@ void rxr_pkt_handle_write_rta_send_completion(struct rxr_ep *ep,
 
 int rxr_pkt_proc_write_rta(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry);
+
+int rxr_pkt_proc_dc_write_rta(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry);
 
 int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry);
