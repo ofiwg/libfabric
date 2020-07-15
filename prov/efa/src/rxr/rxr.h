@@ -352,6 +352,8 @@ struct rxr_rx_entry {
 	uint16_t credit_request;
 	int credit_cts;
 
+	bool delivery_complete_requested;
+
 	uint64_t total_len;
 
 	enum rxr_rx_comm_type state;
@@ -426,6 +428,8 @@ struct rxr_tx_entry {
 	int64_t window;
 	uint16_t credit_request;
 	uint16_t credit_allocated;
+
+	bool delivery_complete_requested;
 
 	uint64_t total_len;
 

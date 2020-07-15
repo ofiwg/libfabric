@@ -139,6 +139,7 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 	}
 
 	delivery_complete_requested = rxr_ep->util_ep.tx_op_flags & FI_DELIVERY_COMPLETE;
+	tx_entry->delivery_complete_requested = delivery_complete_requested;
 	if (delivery_complete_requested) {
 		/*
 		 * Because delivery complete is defined as an extra

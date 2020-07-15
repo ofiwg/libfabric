@@ -57,6 +57,7 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 	rx_entry->type = RXR_RX_ENTRY;
 	rx_entry->rx_id = ofi_buf_index(rx_entry);
 	rx_entry->addr = msg->addr;
+	rx_entry->delivery_complete_requested = 0;
 	rx_entry->fi_flags = flags;
 	rx_entry->rxr_flags = 0;
 	rx_entry->bytes_done = 0;
@@ -352,6 +353,8 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	tx_entry->tx_id = ofi_buf_index(tx_entry);
 	tx_entry->state = RXR_TX_REQ;
 	tx_entry->addr = msg->addr;
+
+	tx_entry->delivery_complete_requested = 0;
 
 	tx_entry->send_flags = 0;
 	tx_entry->bytes_acked = 0;
