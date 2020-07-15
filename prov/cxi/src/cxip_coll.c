@@ -35,13 +35,13 @@
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, \
 		"COLL " __VA_ARGS__)
 
-static inline bool is_netsim(struct cxip_ep_obj *ep_obj)
+static inline int key_rank_idx_ext(int rank)
 {
-	return (ep_obj->domain->iface->info->device_platform == 1);
+	return CXIP_EP_MAX_RX_CNT + rank;
 }
 
-static ssize_t _coll_recv(struct cxip_coll_pte *coll_pte,
-			  struct cxip_coll_buf *buf);
+static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
+				   struct cxip_coll_buf *buf);
 
 /****************************************************************************
  * SEND operation (restricted IDC Put to a remote PTE)
@@ -70,7 +70,7 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		 * - dfa == multicast destination
 		 * - index_ext == 0
 		 */
-		if (is_netsim(ep_obj))
+		if (CXI_PLATFORM_NETSIM)
 			return -FI_EINVAL;
 		dest_addr = av_set->comm_key.dest_addr;
 		idx_ext = 0;
@@ -80,7 +80,7 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		*is_mcast = true;
 		break;
 	case COMM_KEY_UNICAST:
-		/* - dest_addr == av_set rank of destination NIC
+		/* - dest_addr == destination AV index
 		 * - idx_ext == CXIP_PTL_IDX_COLL
 		 * - dfa = remote nic
 		 * - index_ext == CXIP_PTL_IDX_COLL
@@ -98,16 +98,16 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		*is_mcast = false;
 		break;
 	case COMM_KEY_RANK:
-		/* - dest_addr == reduction rank of mc_obj
+		/* - dest_addr == multicast object index
 		 * - idx_ext == CXIP_PTL_IDX_COLL
 		 * - dfa == source NIC
-		 * - index_ext == 16+idx_ext
+		 * - index_ext == idx_ext offset beyond RXCs
 		 */
 		if (dest_addr >= av_set->fi_addr_cnt)
 			return -FI_EINVAL;
 		dest_caddr = ep_obj->src_addr;
 		pid_bits = ep_obj->domain->iface->dev->info.pid_bits;
-		idx_ext = 16 + dest_addr;
+		idx_ext = key_rank_idx_ext(dest_addr);
 		cxi_build_dfa(dest_caddr.nic, dest_caddr.pid, pid_bits,
 			      idx_ext, dfa, index_ext);
 		*is_mcast = false;
@@ -145,8 +145,6 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 		return -FI_EINVAL;
 
 	ep_obj = reduction->mc_obj->ep_obj;
-	if (buflen >= ep_obj->coll.min_multi_recv)
-		return -FI_EMSGSIZE;
 
 	ret = _gen_tx_dfa(reduction, dest_addr, &dfa, &index_ext, &is_mcast);
 	if (ret)
@@ -276,11 +274,12 @@ static void _coll_rx_req_report(struct cxip_req *req)
 		struct cxip_coll_pte *coll_pte = req->coll.coll_pte;
 		struct cxip_coll_buf *buf = req->coll.coll_buf;
 
-		/* Useful for testing */
-		coll_pte->buf_swap_cnt++;
+		/* Will be re-incremented when LINK is received */
+		ofi_atomic_dec32(&coll_pte->buf_cnt);
+		ofi_atomic_inc32(&coll_pte->buf_swap_cnt);
 
 		/* Re-use this buffer in the hardware */
-		ret = _coll_recv(coll_pte, buf);
+		ret = _coll_append_buffer(coll_pte, buf);
 		if (ret != FI_SUCCESS)
 			CXIP_LOG_ERROR("Re-link buffer failed: %d\n", ret);
 
@@ -296,10 +295,6 @@ static void _coll_rx_progress(struct cxip_req *req,
 {
 	struct cxip_coll_mc *mc_obj;
 
-	/* sanity check */
-	if (req->type != CXIP_REQ_COLL)
-		return;
-
 	mc_obj = req->coll.coll_pte->mc_obj;
 	ofi_atomic_inc32(&mc_obj->recv_cnt);
 }
@@ -311,13 +306,14 @@ static int _coll_recv_cb(struct cxip_req *req, const union c_event *event)
 	req->coll.rc = cxi_tgt_event_rc(event);
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
-		/* Normally disabled, errors only */
+		/* Enabled */
 		if (req->coll.rc != C_RC_OK) {
 			CXIP_LOG_ERROR("LINK event error = %d\n",
 				       req->coll.rc);
 			break;
 		}
 		CXIP_LOG_DBG("LINK event seen\n");
+		ofi_atomic_inc32(&req->coll.coll_pte->buf_cnt);
 		break;
 	case C_EVENT_UNLINK:
 		/* Normally disabled, errors only */
@@ -367,8 +363,7 @@ static int _hw_coll_recv(struct cxip_coll_pte *coll_pte, struct cxip_req *req)
 	/* Always set manage_local in Receive LEs. This makes Cassini ignore
 	 * initiator remote_offset in all Puts.
 	 */
-	le_flags = C_LE_EVENT_LINK_DISABLE | C_LE_EVENT_UNLINK_DISABLE |
-		   C_LE_OP_PUT | C_LE_MANAGE_LOCAL;
+	le_flags = C_LE_EVENT_UNLINK_DISABLE | C_LE_OP_PUT | C_LE_MANAGE_LOCAL;
 
 	recv_iova = CXI_VA_TO_IOVA(req->coll.coll_buf->cxi_md->md,
 				   (uint64_t)req->coll.coll_buf->buffer);
@@ -394,8 +389,8 @@ static int _hw_coll_recv(struct cxip_coll_pte *coll_pte, struct cxip_req *req)
 
 /* Append a receive buffer to the PTE, with callback to handle receives.
  */
-static ssize_t _coll_recv(struct cxip_coll_pte *coll_pte,
-			  struct cxip_coll_buf *buf)
+static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
+				   struct cxip_coll_buf *buf)
 {
 	struct cxip_req *req;
 	int ret;
@@ -438,7 +433,7 @@ static ssize_t _coll_recv(struct cxip_coll_pte *coll_pte,
 	req->trig_thresh = 0;
 	req->trig_cntr = NULL;
 	req->context = (uint64_t)buf;
-	req->data_len = (uint64_t)0;
+	req->data_len = 0;
 	req->buf = (uint64_t)buf->buffer;
 	req->data = 0;
 	req->tag = 0;
@@ -487,83 +482,54 @@ static void _coll_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
  */
 static void _coll_pte_free(struct cxip_coll_pte *coll_pte)
 {
-	if (coll_pte->pte)
-		cxip_pte_free(coll_pte->pte);
+	cxip_pte_free(coll_pte->pte);
 	free(coll_pte);
 }
 
-/* Enable a collective PTE. Wait for completion.
+/* Change state for a collective PTE. Wait for completion.
  */
-static int _coll_pte_enable(struct cxip_coll_pte *coll_pte,
-			    uint32_t drop_count)
+static int _coll_pte_setstate(struct cxip_coll_pte *coll_pte,
+			      int state, uint32_t drop_count)
 {
 	union c_cmdu cmd = {};
 	int ret;
 
-	if (!coll_pte->pte) {
-		CXIP_LOG_ERROR("Collective PTE not allocated\n");
-		return -FI_EINVAL;
-	}
-
-	cmd.command.opcode = C_CMD_TGT_SETSTATE;
-	cmd.set_state.ptlte_index = coll_pte->pte->pte->ptn;
-	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
-	cmd.set_state.drop_count = drop_count;
-
-	ret = cxi_cq_emit_target(coll_pte->ep_obj->coll.rx_cmdq->dev_cmdq,
-				 &cmd);
-	if (ret) {
-		CXIP_LOG_ERROR("Failed to enqueue PTE ENABLE: %d\n", ret);
-		return -FI_EAGAIN;
-	}
-
-	cxi_cq_ring(coll_pte->ep_obj->coll.rx_cmdq->dev_cmdq);
-	CXIP_LOG_DBG("PTE enable started\n");
-
-	do {
-		sched_yield();
-		cxip_cq_progress(coll_pte->ep_obj->coll.rx_cq);
-	} while (coll_pte->pte_state != C_PTLTE_ENABLED);
-	CXIP_LOG_DBG("PTE enable completed\n");
-
-	return FI_SUCCESS;
-}
-
-/* Disable a collective PTE. Wait for completion.
- */
-static int _coll_pte_disable(struct cxip_coll_pte *coll_pte)
-{
-	union c_cmdu cmd = {};
-	int ret;
-
-	if (!coll_pte->pte) {
-		CXIP_LOG_ERROR("Collective PTE not allocated\n");
-		return -FI_EINVAL;
-	}
-
-	if (coll_pte->pte_state != C_PTLTE_ENABLED)
+	if (coll_pte->pte_state == state)
 		return FI_SUCCESS;
 
 	cmd.command.opcode = C_CMD_TGT_SETSTATE;
 	cmd.set_state.ptlte_index = coll_pte->pte->pte->ptn;
-	cmd.set_state.ptlte_state = C_PTLTE_DISABLED;
+	cmd.set_state.ptlte_state = state;
+	cmd.set_state.drop_count = drop_count;
 
-	ret = cxi_cq_emit_target(coll_pte->ep_obj->coll.rx_cmdq->dev_cmdq,
-				 &cmd);
-	if (ret) {
-		CXIP_LOG_ERROR("Failed to enqueue PTE DISABLE: %d\n", ret);
-		return -FI_EAGAIN;
-	}
+	do {
+		ret = cxi_cq_emit_target(
+			coll_pte->ep_obj->coll.rx_cmdq->dev_cmdq, &cmd);
+	} while (ret == -ENOSPC);
 
 	cxi_cq_ring(coll_pte->ep_obj->coll.rx_cmdq->dev_cmdq);
 
 	do {
 		sched_yield();
 		cxip_cq_progress(coll_pte->ep_obj->coll.rx_cq);
-	} while (coll_pte->pte_state != C_PTLTE_DISABLED);
-	CXIP_LOG_DBG("PTE disable completed\n");
+	} while (coll_pte->pte_state != state);
 
 	return FI_SUCCESS;
+}
+
+/* Enable a collective PTE. Wait for completion.
+ */
+static inline int _coll_pte_enable(struct cxip_coll_pte *coll_pte,
+				   uint32_t drop_count)
+{
+	return _coll_pte_setstate(coll_pte, C_PTLTE_ENABLED, drop_count);
+}
+
+/* Disable a collective PTE. Wait for completion.
+ */
+static inline int _coll_pte_disable(struct cxip_coll_pte *coll_pte)
+{
+	return _coll_pte_setstate(coll_pte, C_PTLTE_DISABLED, 0);
 }
 
 /* Destroy and unmap all buffers used by the collectives PTE.
@@ -590,13 +556,13 @@ static int _coll_add_buffers(struct cxip_coll_pte *coll_pte, size_t size,
 	int ret, i;
 
 	if (count < CXIP_COLL_MIN_RX_BUFS) {
-		CXIP_LOG_ERROR("Buffer count %ld < minimum (%d):\n",
+		CXIP_LOG_ERROR("Buffer count %ld < minimum (%d)\n",
 			       count, CXIP_COLL_MIN_RX_BUFS);
 		return -FI_EINVAL;
 	}
 
 	if (size < CXIP_COLL_MIN_RX_SIZE) {
-		CXIP_LOG_ERROR("Buffer size %ld < minimum (%d):\n",
+		CXIP_LOG_ERROR("Buffer size %ld < minimum (%d)\n",
 			       size, CXIP_COLL_MIN_RX_SIZE);
 		return -FI_EINVAL;
 	}
@@ -615,13 +581,18 @@ static int _coll_add_buffers(struct cxip_coll_pte *coll_pte, size_t size,
 		buf->bufsiz = size;
 		dlist_insert_tail(&buf->buf_entry, &coll_pte->buf_list);
 
-		ret = _coll_recv(coll_pte, buf);
+		ret = _coll_append_buffer(coll_pte, buf);
 		if (ret) {
 			CXIP_LOG_ERROR("Add buffer %d of %ld: %d\n",
 				       i, count, ret);
 			goto out;
 		}
 	}
+	do {
+		sched_yield();
+		cxip_cq_progress(coll_pte->ep_obj->coll.rx_cq);
+	} while (ofi_atomic_get32(&coll_pte->buf_cnt) < count);
+
 	return FI_SUCCESS;
 del_msg:
 	free(buf);
@@ -677,11 +648,6 @@ int cxip_coll_enable(struct cxip_ep_obj *ep_obj)
 {
 	if (ep_obj->coll.enabled)
 		return FI_SUCCESS;
-
-	if (!ep_obj->enabled) {
-		CXIP_LOG_ERROR("Parent STD EP not enabled\n");
-		return -FI_EOPBADSTATE;
-	}
 
 	/* A read-only or write-only endpoint is legal */
 	if (!(ofi_recv_allowed(ep_obj->rxcs[0]->attr.caps) &&
@@ -749,15 +715,13 @@ int cxip_coll_close(struct cxip_ep_obj *ep_obj)
 	return FI_SUCCESS;
 }
 
-/* Post a join completion request to the EP EQ.
+/* Write a Join Complete event to the endpoint EQ
  */
 static int _post_join_complete(struct cxip_coll_mc *mc_obj, void *context)
 {
-	/* signals join completion by writing to the endpoint EQ */
-	struct fi_eq_entry entry;
+	struct fi_eq_entry entry = {};
 	int ret;
 
-	memset(&entry, 0, sizeof(entry));
 	entry.fid = &mc_obj->mc_fid.fid;
 	entry.context = context;
 
@@ -828,27 +792,6 @@ static struct fi_ops mc_ops = {
 	.close = _close_mc,
 };
 
-/* Find rank of a NIC identifier in the av_set.
- */
-static int _find_nic_rank(struct cxip_av_set *av_set, struct cxip_addr *myaddr)
-{
-	struct cxip_addr caddr;
-	int rank;
-	int ret;
-
-	for (rank = 0; rank < av_set->fi_addr_cnt; rank++) {
-		ret = _cxip_av_lookup(av_set->cxi_av,
-				      av_set->fi_addr_ary[rank], &caddr);
-		if (ret) {
-			// make noise
-			return -FI_EINVAL;
-		}
-		if (CXIP_ADDR_EQUAL(caddr, *myaddr))
-			return rank;
-	}
-	return -1;
-}
-
 /* Allocate a multicast object.
  */
 static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
@@ -863,7 +806,6 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	struct cxip_coll_pte *coll_pte;
 	uint64_t pid_idx;
 	bool is_multicast;
-	int mynode_rank;
 	int mcast_id;
 	int red_id;
 	int state;
@@ -874,26 +816,19 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 
 	switch (av_set->comm_key.type) {
 	case COMM_KEY_MULTICAST:
-		mynode_rank = _find_nic_rank(av_set, &ep_obj->src_addr);
-		if (mynode_rank < 0)
-			return -FI_EINVAL;
 		mcast_id = av_set->comm_key.dest_addr;
 		pid_idx = av_set->comm_key.dest_addr;
 		is_multicast = true;
 		break;
 	case COMM_KEY_UNICAST:
 		/* Use unicast addresses to a known PTE index */
-		mynode_rank = _find_nic_rank(av_set, &ep_obj->src_addr);
-		if (mynode_rank < 0)
-			return -FI_EINVAL;
 		mcast_id = av_set->comm_key.dest_addr;
 		pid_idx = CXIP_PTL_IDX_RXC(CXIP_PTL_IDX_COLL);
 		is_multicast = false;
 		break;
 	case COMM_KEY_RANK:
-		mynode_rank = av_set->comm_key.dest_addr;
 		mcast_id = av_set->comm_key.dest_addr;
-		pid_idx = 16 + av_set->comm_key.dest_addr;
+		pid_idx = key_rank_idx_ext(av_set->comm_key.dest_addr);
 		is_multicast = false;
 		break;
 	default:
@@ -912,6 +847,8 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	dlist_init(&coll_pte->buf_list);
 	coll_pte->ep_obj = ep_obj;
 	coll_pte->pte_state = C_PTLTE_DISABLED;
+	ofi_atomic_initialize32(&coll_pte->buf_cnt, 0);
+	ofi_atomic_initialize32(&coll_pte->buf_swap_cnt, 0);
 
 	ret = cxip_pte_alloc(ep_obj->if_dom, ep_obj->coll.rx_cq->evtq,
 			     pid_idx, is_multicast, &pt_opts, _coll_pte_cb, coll_pte,
@@ -938,7 +875,6 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	mc_obj->ep_obj = ep_obj;
 	mc_obj->av_set = av_set;
 	mc_obj->mcast_id = mcast_id;
-	mc_obj->mynode_rank = mynode_rank;
 	mc_obj->is_joined = true;
 	state = CXIP_COLL_STATE_NONE;
 	for (red_id = 0; red_id < CXIP_COLL_MAX_CONCUR; red_id++) {

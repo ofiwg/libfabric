@@ -230,8 +230,10 @@ void _put_data(int count, int from_rank, int to_rank)
 	_progress(ep->ep_obj->coll.rx_cq, sendcnt, &dataval);
 	if (count * sizeof(*buf) >
 	    ep->ep_obj->coll.buffer_size - ep->ep_obj->min_multi_recv) {
-		cr_assert(mc_obj->coll_pte->buf_swap_cnt > 0,
-			  "Did not recirculate buffers\n");
+		uint32_t swap;
+
+		swap = ofi_atomic_get32(&mc_obj->coll_pte->buf_swap_cnt);
+		cr_assert(swap > 0, "Did not recirculate buffers\n");
 	}
 
 	mc_obj = container_of(cxit_coll_mc_list.mc_fid[from_rank],
