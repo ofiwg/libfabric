@@ -45,6 +45,7 @@ static inline int key_rank_idx_ext(int rank)
 
 static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 				   struct cxip_coll_buf *buf);
+static void _populate_opcodes(void);
 
 /****************************************************************************
  * Collective cookie structure.
@@ -126,6 +127,7 @@ union cxip_coll_data {
  *  | rt_cookie      | Cookie value             | 64  | 32 |
  *  --------------------------------------------------------
  */
+// TODO move to cxi_prov_hw.h (?)
 struct red_pkt {
 	uint8_t pad[5];
 	union {
@@ -148,6 +150,7 @@ struct red_pkt {
 
 /* Reduction rt_rc values.
  */
+// TODO move to cxi_prov_hw.h (?)
 enum pkt_rc {
 	RC_SUCCESS = 0,
 	RC_FLT_INEXACT = 1,
@@ -211,6 +214,9 @@ static inline void _ntoh_red_pkt(struct red_pkt *pkt)
  * SEND operation (restricted IDC Put to a remote PTE)
  */
 
+static void _progress_coll(struct cxip_coll_reduction *reduction,
+			   struct red_pkt *pkt);
+
 /* Generate a dfa and index extension for a reduction.
  */
 static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
@@ -236,7 +242,7 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		 * - dfa == multicast destination
 		 * - index_ext == 0
 		 */
-		if (CXI_PLATFORM_NETSIM)
+		if (is_netsim(ep_obj))
 			return -FI_EINVAL;
 		idx_ext = 0;
 		cxi_build_mcast_dfa(av_set->comm_key.mcast.mcast_id,
@@ -460,6 +466,7 @@ static void _coll_rx_progress(struct cxip_req *req,
 {
 	struct cxip_coll_mc *mc_obj;
 	union cxip_coll_cookie cookie;
+	struct cxip_coll_reduction *reduction;
 	struct red_pkt *pkt;
 
 	mc_obj = req->coll.coll_pte->mc_obj;
@@ -482,6 +489,8 @@ static void _coll_rx_progress(struct cxip_req *req,
 	}
 
 	ofi_atomic_inc32(&mc_obj->pkt_cnt);
+	reduction = &mc_obj->reduction[cookie.red_id];
+	_progress_coll(reduction, pkt);
 }
 
 /* Event-handling callback for posted receive buffers.
@@ -624,7 +633,7 @@ static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 	req->tag = 0;
 	req->coll.coll_pte = coll_pte;
 	req->coll.coll_buf = buf;
-        req->coll.mrecv_space = req->coll.coll_buf->bufsiz;
+	req->coll.mrecv_space = req->coll.coll_buf->bufsiz;
 
 	/* Returns FI_SUCCESS or FI_EAGAIN */
 	ret = _hw_coll_recv(coll_pte, req);
@@ -793,6 +802,8 @@ out:
  */
 int cxip_coll_init(struct cxip_ep_obj *ep_obj)
 {
+	_populate_opcodes();
+
 	ep_obj->coll.rx_cmdq = NULL;
 	ep_obj->coll.tx_cmdq = NULL;
 	ep_obj->coll.rx_cntr = NULL;
@@ -812,7 +823,7 @@ int cxip_coll_init(struct cxip_ep_obj *ep_obj)
 /**
  * Enable collectives.
  *
- * Must be preceded by cxip_coll_init(), and EP must be enabled.
+ * Must be preceded by cxip_coll_init(), called from STD EP enable.
  *
  * There is only one collectives object associated with an EP. It can be safely
  * enabled multiple times.
@@ -938,6 +949,17 @@ static inline uint64_t _generate_cookie(uint32_t mcast_id, uint32_t red_id,
 	return cookie.raw;
 }
 
+static inline void _zcopy_pkt_data(void *tgt, const void *data, size_t len)
+{
+	if (tgt) {
+		if (data)
+			memcpy(tgt, data, len);
+		else
+			len = 0;
+		memset((uint8_t *)tgt + len, 0, CXIP_COLL_MAX_TX_SIZE - len);
+	}
+}
+
 /* Simulated unicast send of multiple packets as root node to leaf nodes.
  */
 static ssize_t _send_pkt_as_root(struct cxip_coll_reduction *reduction,
@@ -1016,7 +1038,7 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 			   size_t len, bool retry)
 {
 	struct red_pkt *pkt;
-	int seqno, arm;
+	int seqno, arm, ret;
 
 	if (len > CXIP_COLL_MAX_TX_SIZE)
 		return -FI_EINVAL;
@@ -1038,17 +1060,153 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 	pkt->cookie = _generate_cookie(reduction->mc_obj->mc_idcode,
 				       reduction->red_id,
 				       retry);
-	if (data && len)
-		memcpy(&pkt->data.databuf[0], data, len);
-	/* zero unused fields, could cause errors on FLT if random bits */
-	memset(&pkt->data.databuf[len], 0, sizeof(pkt->data.databuf) - len);
+	_zcopy_pkt_data(pkt->data.databuf, data, len);
 	_hton_red_pkt(pkt);
-	return _send_pkt(reduction, retry);
+
+	/* -FI_EAGAIN means HW queue is full, should self-clear */
+	do {
+		ret = _send_pkt(reduction, retry);
+	} while (ret == -FI_EAGAIN);
+
+	return ret;
+}
+
+/****************************************************************************
+ * Reduction operations.
+ */
+
+/**
+ * Opcodes for collective operations supported by Rosetta.
+ *
+ * Opcode implies data type.
+ */
+
+// TODO move to cxi_prov_hw.h (?)
+#define	COLL_OPCODE_BARRIER		0x00
+#define	COLL_OPCODE_BIT_AND		0x01
+#define	COLL_OPCODE_BIT_OR		0x02
+#define	COLL_OPCODE_BIT_XOR		0x03
+#define	COLL_OPCODE_INT_MIN		0x10
+#define	COLL_OPCODE_INT_MAX		0x11
+#define	COLL_OPCODE_INT_MINMAXLOC	0x12
+#define	COLL_OPCODE_INT_SUM		0x14
+#define	COLL_OPCODE_FLT_MIN		0x20
+#define	COLL_OPCODE_FLT_MAX		0x21
+#define	COLL_OPCODE_FLT_MINMAXLOC	0x22
+#define	COLL_OPCODE_FLT_MINNUM		0x24
+#define	COLL_OPCODE_FLT_MAXNUM		0x25
+#define	COLL_OPCODE_FLT_MINMAXNUMLOC	0x26
+#define	COLL_OPCODE_FLT_SUM_NOFTZ_RND0	0x28
+#define	COLL_OPCODE_FLT_SUM_NOFTZ_RND1	0x29
+#define	COLL_OPCODE_FLT_SUM_NOFTZ_RND2	0x2a
+#define	COLL_OPCODE_FLT_SUM_NOFTZ_RND3	0x2b
+#define	COLL_OPCODE_FLT_SUM_FTZ_RND0	0x2c
+#define	COLL_OPCODE_FLT_SUM_FTZ_RND1	0x2d
+#define	COLL_OPCODE_FLT_SUM_FTZ_RND2	0x2e
+#define	COLL_OPCODE_FLT_SUM_FTZ_RND3	0x2f
+#define	COLL_OPCODE_FLT_REPSUM		0x30
+
+/* Convert exported op values to Rosetta opcodes
+ */
+static unsigned int _int_op_to_opcode[CXI_COLL_OP_LAST];
+static unsigned int _flt_op_to_opcode[CXI_COLL_OP_LAST];
+static unsigned int _flt_sum_to_opcode[CXI_COLL_FLT_LAST];
+
+/* One-time dynamic initialization of FI to CXI opcode.
+ *
+ * The array lookup is faster than a switch. Non-static initialization makes
+ * this adaptive to changes in header files (e.g. new opcodes in FI).
+ */
+static void _populate_opcodes(void)
+{
+	static bool init = false;
+
+	if (init)
+		return;
+	memset(_int_op_to_opcode, -1, sizeof(_int_op_to_opcode));
+	_int_op_to_opcode[FI_MIN] = COLL_OPCODE_INT_MIN;
+	_int_op_to_opcode[FI_MAX] = COLL_OPCODE_INT_MAX;
+	_int_op_to_opcode[FI_SUM] = COLL_OPCODE_INT_SUM;
+	_int_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
+	_int_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
+	_int_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
+	_int_op_to_opcode[CXI_COLL_BARRIER] =
+		COLL_OPCODE_BARRIER;
+	_int_op_to_opcode[CXI_COLL_MINMAXLOC] =
+		COLL_OPCODE_INT_MINMAXLOC;
+
+	memset(_flt_op_to_opcode, -1, sizeof(_flt_op_to_opcode));
+	_flt_op_to_opcode[FI_MIN] = COLL_OPCODE_FLT_MIN;
+	_flt_op_to_opcode[FI_MAX] = COLL_OPCODE_FLT_MAX;
+	_flt_op_to_opcode[FI_MAX] = COLL_OPCODE_FLT_MAX;
+	_flt_op_to_opcode[CXI_COLL_MINMAXLOC] =
+		COLL_OPCODE_FLT_MINMAXLOC;
+	_flt_op_to_opcode[CXI_COLL_MINNUM] =
+		COLL_OPCODE_FLT_MINNUM;
+	_flt_op_to_opcode[CXI_COLL_MAXNUM] =
+		COLL_OPCODE_FLT_MAXNUM;
+	_flt_op_to_opcode[CXI_COLL_MINMAXNUMLOC] =
+		COLL_OPCODE_FLT_MINMAXNUMLOC;
+
+	memset(_flt_sum_to_opcode, -1, sizeof(_flt_sum_to_opcode));
+	_flt_sum_to_opcode[CXI_COLL_FLT_SUM_DEFAULT] =
+		COLL_OPCODE_FLT_SUM_NOFTZ_RND0;
+	_flt_sum_to_opcode[CXI_COLL_FLT_SUM_NOFTZ_NEAR] =
+		COLL_OPCODE_FLT_SUM_NOFTZ_RND0;
+	_flt_sum_to_opcode[CXI_COLL_FLT_SUM_NOFTZ_CEIL] =
+		COLL_OPCODE_FLT_SUM_NOFTZ_RND1;
+	_flt_sum_to_opcode[CXI_COLL_FLT_SUM_NOFTZ_FLOOR] =
+		COLL_OPCODE_FLT_SUM_NOFTZ_RND2;
+	_flt_sum_to_opcode[CXI_COLL_FLT_SUM_NOFTZ_CHOP] =
+		COLL_OPCODE_FLT_SUM_NOFTZ_RND3;
+	_flt_sum_to_opcode[CXI_COLL_FLT_SUM_FTZ_NEAR] =
+		COLL_OPCODE_FLT_SUM_FTZ_RND0;
+	_flt_sum_to_opcode[CXI_COLL_FLT_SUM_FTZ_CEIL] =
+		COLL_OPCODE_FLT_SUM_FTZ_RND1;
+	_flt_sum_to_opcode[CXI_COLL_FLT_SUM_FTZ_FLOOR] =
+		COLL_OPCODE_FLT_SUM_FTZ_RND2;
+	_flt_sum_to_opcode[CXI_COLL_FLT_SUM_FTZ_CHOP] =
+		COLL_OPCODE_FLT_SUM_FTZ_RND3;
+	_flt_sum_to_opcode[CXI_COLL_FLT_REPSUM] =
+		COLL_OPCODE_FLT_REPSUM;
+
+	init = true;
+}
+
+/* Convert fi datatypes to Rosetta datatypes
+ */
+static inline int get_cxi_datatype(int datatype)
+{
+	switch (datatype) {
+	case FI_UINT64:
+		return FI_UINT64;
+	case FI_DOUBLE:
+	case FI_LONG_DOUBLE:
+		return FI_LONG_DOUBLE;
+	default:
+		return -1;
+	}
+}
+
+static inline int _get_cxi_opcode(int op, int datatype,
+				  enum cxip_coll_flt_sum_mode round)
+{
+	int opcode;
+
+	if (datatype != FI_LONG_DOUBLE)
+		opcode = _int_op_to_opcode[op];
+	else if (op != FI_SUM)
+		opcode = _flt_op_to_opcode[op];
+	else
+		opcode = _flt_sum_to_opcode[round];
+
+	return opcode;
 }
 
 /* Find NIC address and convert to index in av_set.
  */
-static int _nic_to_idx(struct cxip_av_set *av_set, uint32_t nic, int *idx)
+static int _nic_to_idx(struct cxip_av_set *av_set, uint32_t nic,
+		       unsigned int *idx)
 {
 	struct cxip_addr addr;
 	size_t size = sizeof(addr);
@@ -1068,19 +1226,636 @@ static int _nic_to_idx(struct cxip_av_set *av_set, uint32_t nic, int *idx)
 	return -FI_EADDRNOTAVAIL;
 }
 
-/****************************************************************************
- * Reduction operations.
+/* Find fi_addr_t address and convert to index in av_set.
  */
+static inline int _fi_addr_to_idx(struct cxip_av_set *av_set,
+				  fi_addr_t fi_addr, unsigned int *idx)
+{
+	int i;
+
+	for (i = 0; i < av_set->fi_addr_cnt; i++) {
+		if (av_set->fi_addr_ary[i] == fi_addr) {
+			*idx = i;
+			return FI_SUCCESS;
+		}
+	}
+	return -FI_EADDRNOTAVAIL;
+}
+
+/* Post a reduction completion request to the collective TX CQ.
+ */
+static void _post_coll_complete(struct cxip_coll_reduction *reduction)
+{
+	struct cxip_req *req;
+	int ret;
+
+	/* Indicates collective completion by writing to the endpoint TX CQ */
+	req = reduction->op_inject_req;
+	reduction->op_inject_req = NULL;
+	if (req) {
+		reduction->in_use = false;
+		if (reduction->red_rc) {
+			ret = cxip_cq_req_error(req, 0, FI_EIO,
+						reduction->red_rc, NULL, 0);
+		} else {
+			ret = cxip_cq_req_complete(req);
+		}
+		if (ret < 0) {
+			CXIP_LOG_ERROR("Collective complete post failed: %d\n",
+				       ret);
+		}
+	}
+}
+
+/* Record only the first of multiple errors.
+ */
+static inline void _set_reduce_error(struct cxip_coll_reduction *reduction,
+				     enum pkt_rc rc)
+{
+	if (!reduction->red_rc)
+		reduction->red_rc = rc;
+}
+
+/* Perform a reduction on the root in software.
+ */
+static int _root_reduce(struct cxip_coll_reduction *reduction,
+			struct red_pkt *pkt, uint32_t exp_count)
+{
+	union cxip_coll_data *red_data;
+	int i;
+
+	/* first packet to arrive (root or leaf) sets up the reduction */
+	red_data = (union cxip_coll_data *)reduction->red_data;
+	if (!reduction->red_init) {
+		_zcopy_pkt_data(reduction->red_data, pkt->data.databuf,
+				reduction->op_data_len);
+		reduction->red_op = pkt->hdr.op;
+		reduction->red_rc = pkt->hdr.rc;
+		reduction->red_cnt = pkt->hdr.redcnt;
+		reduction->red_init = true;
+		goto out;
+	}
+
+	reduction->red_cnt += pkt->hdr.redcnt;
+	if (pkt->hdr.rc != RC_SUCCESS) {
+		_set_reduce_error(reduction, pkt->hdr.rc);
+		goto out;
+	}
+
+	if (pkt->hdr.op != reduction->red_op) {
+		_set_reduce_error(reduction, RC_OP_MISMATCH);
+		goto out;
+	}
+
+	if (reduction->red_cnt > exp_count) {
+		_set_reduce_error(reduction, RC_CONTR_OVERFLOW);
+		goto out;
+	}
+
+	switch (reduction->red_op) {
+	case COLL_OPCODE_BARRIER:
+		break;
+	case COLL_OPCODE_BIT_AND:
+		for (i = 0; i < 4; i++)
+			red_data->ival[i] &= pkt->data.ival[i];
+		break;
+	case COLL_OPCODE_BIT_OR:
+		for (i = 0; i < 4; i++)
+			red_data->ival[i] |= pkt->data.ival[i];
+		break;
+	case COLL_OPCODE_BIT_XOR:
+		for (i = 0; i < 4; i++)
+			red_data->ival[i] ^= pkt->data.ival[i];
+		break;
+	case COLL_OPCODE_INT_MIN:
+		for (i = 0; i < 4; i++)
+			if (red_data->ival[i] > pkt->data.ival[i])
+				red_data->ival[i] = pkt->data.ival[i];
+		break;
+	case COLL_OPCODE_INT_MAX:
+		for (i = 0; i < 4; i++)
+			if (red_data->ival[i] < pkt->data.ival[i])
+				red_data->ival[i] = pkt->data.ival[i];
+		break;
+	case COLL_OPCODE_INT_MINMAXLOC:
+		if (red_data->ival[0] > pkt->data.ival[0]) {
+			red_data->ival[0] = pkt->data.ival[0];
+			red_data->ival[1] = pkt->data.ival[1];
+		}
+		if (red_data->ival[2] < pkt->data.ival[2]) {
+			red_data->ival[2] = pkt->data.ival[2];
+			red_data->ival[3] = pkt->data.ival[3];
+		}
+		break;
+	case COLL_OPCODE_INT_SUM:
+		for (i = 0; i < 4; i++)
+			red_data->ival[i] += pkt->data.ival[i];
+		break;
+	case COLL_OPCODE_FLT_MIN:
+		// TODO NaN behavior
+		for (i = 0; i < 4; i++)
+			if (red_data->fval[i] > pkt->data.fval[i])
+				red_data->fval[i] = pkt->data.fval[i];
+		break;
+	case COLL_OPCODE_FLT_MAX:
+		// TODO NaN behavior
+		for (i = 0; i < 4; i++)
+			if (red_data->fval[i] < pkt->data.fval[i])
+				red_data->fval[i] = pkt->data.fval[i];
+		break;
+	case COLL_OPCODE_FLT_MINMAXLOC:
+		// TODO NaN behavior
+		if (red_data->fval[0] > pkt->data.fval[0]) {
+			red_data->fval[0] = pkt->data.fval[0];
+			red_data->fval[1] = pkt->data.fval[1];
+		}
+		if (red_data->fval[2] < pkt->data.fval[2]) {
+			red_data->fval[2] = pkt->data.fval[2];
+			red_data->fval[3] = pkt->data.fval[3];
+		}
+		break;
+	case COLL_OPCODE_FLT_MINNUM:
+		// TODO
+		break;
+	case COLL_OPCODE_FLT_MAXNUM:
+		// TODO
+		break;
+	case COLL_OPCODE_FLT_MINMAXNUMLOC:
+		// TODO
+		break;
+	case COLL_OPCODE_FLT_SUM_NOFTZ_RND0:
+		// TODO
+		break;
+	case COLL_OPCODE_FLT_SUM_NOFTZ_RND1:
+		// TODO
+		break;
+	case COLL_OPCODE_FLT_SUM_NOFTZ_RND2:
+		// TODO
+		break;
+	case COLL_OPCODE_FLT_SUM_NOFTZ_RND3:
+		// TODO
+		break;
+	case COLL_OPCODE_FLT_SUM_FTZ_RND0:
+		// TODO
+		break;
+	case COLL_OPCODE_FLT_SUM_FTZ_RND1:
+		// TODO
+		break;
+	case COLL_OPCODE_FLT_SUM_FTZ_RND2:
+		// TODO
+		break;
+	case COLL_OPCODE_FLT_SUM_FTZ_RND3:
+		// TODO
+		break;
+	case COLL_OPCODE_FLT_REPSUM:
+		// TODO
+		break;
+	}
+out:
+	return (reduction->red_cnt < exp_count) ? -1 : 0;
+}
+
+/****************************************************************************
+ * Collective State Machine
+ *
+ * The basic flow is:
+ *   - all nodes reach a reduction call (at different times)
+ *   - leaf nodes send their data, to be reduced, and block, polling CQ
+ *   - root node prepares for the reduction, and blocks, polling CQ
+ *   - root node receives leaf packets and reduces them, until all received
+ *   - root node sends Arm Packet with results, and unblocks
+ *   - leaf nodes receive Arm Packet with results, and unblock
+ *
+ * The Rosetta acceleration comes from the Arm Packet, which speculatively
+ * arms the Rosetta tree for the NEXT operation. This persists until a
+ * timeout expires. The timeout is specified when the multicast tree is created
+ * by the Rosetta configuration service.
+ *
+ * If the next collective operation occurs within the timeout, the leaf results
+ * will be reduced in reduction engines by Rosetta as they move up the tree,
+ * reducing the number of packets received by the root.
+ *
+ * If the reduction engine times out with partial results, it forwards the
+ * partial results, and all subsequent results are passed directly to the next
+ * Rosetta.
+ *
+ * There are eight reduction_id values, which can be used to acquire and use
+ * up to eight independent reduction engines (REs) at each upstream port of each
+ * Rosetta switch.
+ *
+ * We use a round-robin selection of reduction id values.
+ * Consider:
+ *
+ *   MPI_Ireduce(..., &req0) // uses reduction id 0
+ *   sleep(random)
+ *   MPI_Ireduce(..., &req1) // uses reduction id 1
+ *   sleep(random)
+ *   MPI_Wait(..., &req0)
+ *   MPI_Ireduce(..., &req3)
+ *
+ * On all nodes, these calls must use the SAME reduction id for each reduction.
+ * There is no libfabric syntax for specifying this on the reduction call, short
+ * of having a separate multicast object for each reduction ID. In principle, we
+ * know that req3 cannot begin on any node until it has verified that req0 has
+ * completed on that node: thus, we could reuse reduction id 0.
+ *
+ * But we have no way of knowing in libfabric that MPI_Wait() was even called,
+ * much less whether it was called on req0 or req1. With that knowledge, we
+ * could safely re-use reduction id 0. Without that knowledge, we have to
+ * continue to advance the reduction id.
+ *
+ * We cannot rely upon our internal detection of req0 completion. Although this
+ * is broadcast from the root to all leaves with a single write, there will be
+ * delays in each Rosetta due to packet retransmission, so every leaf will
+ * receive the completion packet at slightly different times, potentially
+ * resulting in req3 using different reduction ID values.
+ */
+
+static inline bool _root_retry_required(struct cxip_coll_reduction *reduction)
+{
+	// TODO
+	return false;
+}
+
+static inline
+struct red_pkt * _root_prepare_data(struct cxip_coll_reduction *reduction,
+				    void *packet)
+{
+	struct red_pkt *rootpkt = (struct red_pkt *)packet;
+
+	rootpkt->hdr.redcnt = 1;
+	rootpkt->hdr.seqno = reduction->seqno;
+	rootpkt->hdr.resno = reduction->seqno;
+	rootpkt->hdr.rc = RC_SUCCESS;
+	rootpkt->hdr.op = reduction->op_code;
+	_zcopy_pkt_data(rootpkt->data.databuf, reduction->op_send_data,
+			reduction->op_data_len);
+
+	return rootpkt;
+}
+
+/* Root node state machine.
+ * !pkt means this is progressing from injection call (e.g. fi_reduce())
+ *  pkt means this is progressing from event callback (receipt of packet)
+ */
+static void _progress_root(struct cxip_coll_reduction *reduction,
+			   struct red_pkt *pkt)
+{
+	struct red_pkt *rootpkt = (struct red_pkt *)reduction->tx_msg;
+	ssize_t ret;
+
+	if (reduction->op_state == CXIP_COLL_STATE_NONE)
+		return;
+
+	/* Initial state for root is BLOCKED. The root makes the transition from
+	 * BLOCKED to READY to BLOCKED in a single pass through this code, so we
+	 * do not set or check the state.
+	 */
+
+	if (!pkt) {
+		/* Root prepares its own contribution with fake packet,
+		 * containing the root data to be reduced.
+		 */
+		pkt = _root_prepare_data(reduction, reduction->tx_msg);
+	} else {
+		/* Drop old packets */
+		if (pkt->hdr.resno != reduction->seqno) {
+			ofi_atomic_inc32(&reduction->mc_obj->seq_err_cnt);
+			return;
+		}
+
+		/* process a retry request from CQ polling */
+		if (_root_retry_required(reduction)) {
+			CXIP_LOG_DBG("RETRY collective packet\n");
+
+			/* auto-advances the seqno */
+			ret = cxip_coll_send_red_pkt(reduction, 0, 0, NULL, 0,
+						     true);
+			if (ret) {
+				/* fatal send error, collectives broken */
+				CXIP_LOG_ERROR("Collective send failure %ld\n",
+					       ret);
+				reduction->red_rc = ret;
+				_post_coll_complete(reduction);
+				reduction->op_state = CXIP_COLL_STATE_NONE;
+				return;
+			}
+
+			/* start reduction over */
+			pkt = _root_prepare_data(reduction, reduction->tx_msg);
+		}
+	}
+
+	/* perform reduction on packet, or root self-contribution */
+	ret = _root_reduce(reduction, pkt,
+			   reduction->mc_obj->av_set->fi_addr_cnt);
+
+	/* return != 0 means more work to do */
+	if (ret != 0)
+		return;
+
+	/* reduction->op_state = CXIP_COLL_STATE_READY, not necessary */
+	rootpkt->hdr.rc = reduction->red_rc;
+
+	/* 'send' result to ourselves */
+	if (reduction->op_rslt_data && reduction->op_data_len)
+		memcpy(reduction->op_rslt_data, reduction->red_data,
+		       reduction->op_data_len);
+
+	/* send result to everyone else */
+	ret = cxip_coll_send_red_pkt(reduction,
+				     rootpkt->hdr.redcnt,
+				     reduction->op_code,
+				     reduction->op_rslt_data,
+				     reduction->op_data_len,
+				     false);
+	if (ret) {
+		/* fatal send error, leaves are hung */
+		CXIP_LOG_ERROR("Collective send error %ld\n", ret);
+		reduction->red_rc = ret;
+		_post_coll_complete(reduction);
+		reduction->op_state = CXIP_COLL_STATE_NONE;
+		return;
+	}
+
+	reduction->red_init = false;
+
+	/* Reduction completed on root */
+	_post_coll_complete(reduction);
+
+	/* reduction->op_state = CXIP_COLL_STATE_BLOCKED, not necessary */
+}
+
+/* Leaf node state machine.
+ * !pkt means this is progressing from injection call (e.g. fi_reduce())
+ *  pkt means this is progressing from event callback (receipt of packet)
+ */
+static void _progress_leaf(struct cxip_coll_reduction *reduction,
+			   struct red_pkt *pkt)
+{
+	union cxip_coll_cookie cookie;
+	int ret;
+
+	if (reduction->op_state == CXIP_COLL_STATE_NONE)
+		return;
+
+	/* initial state for leaf is always READY */
+
+	if (!pkt) {
+		/* Application called a collective operation. We can't get here
+		 * if reduction channel isn't in the READY state, because
+		 * it would not have been possible to acquire a reduction
+		 * channel. So no state check is required.
+		 */
+		ret = cxip_coll_send_red_pkt(reduction, 1,
+					     reduction->op_code,
+					     reduction->op_send_data,
+					     reduction->op_data_len, false);
+		if (ret) {
+			/* fatal send error, root will time out and retry */
+			CXIP_LOG_ERROR("Collective send error %d\n", ret);
+			return;
+		}
+		reduction->op_state = CXIP_COLL_STATE_BLOCKED;
+	} else {
+		/* Extract sequence number for next response */
+		reduction->seqno = pkt->hdr.seqno;
+		cookie.raw = pkt->cookie;
+		if (cookie.retry) {
+			// TODO -- this needs to be expanded, see design
+			/* Send the previous packet with new seqno */
+			CXIP_LOG_DBG("leaf sending retry packet\n");
+			pkt = (struct red_pkt *)&reduction->tx_msg;
+			pkt->redhdr = be64toh(pkt->redhdr);
+			pkt->hdr.seqno = reduction->seqno;
+			pkt->redhdr = htobe64(pkt->redhdr);
+			_send_pkt(reduction, true);
+			/* do not change state, wait for next ARM */
+			return;
+		}
+
+		/* We can't get to here unless we are in the BLOCKED state. The
+		 * root node can send unsolicited RETRY packets, but it cannot
+		 * send unsolicited non-RETRY packets. A solicited packet means
+		 * that all of the leaf nodes have sent data, including this
+		 * one, meaning we must be in the BLOCKED state. So no state
+		 * check is required.
+		 */
+
+		/* Capture final reduction data */
+		reduction->red_rc = pkt->hdr.rc;
+		if (reduction->op_rslt_data && reduction->op_data_len) {
+			memcpy(reduction->op_rslt_data, reduction->red_data,
+			       reduction->op_data_len);
+		}
+
+		/* Reduction completed on leaf */
+		_post_coll_complete(reduction);
+		reduction->op_state = CXIP_COLL_STATE_READY;
+	}
+}
+
+/* Root or leaf progress state machine.
+ */
+static void _progress_coll(struct cxip_coll_reduction *reduction,
+			   struct red_pkt *pkt)
+{
+	if (is_hw_root(reduction->mc_obj))
+		_progress_root(reduction, pkt);
+	else
+		_progress_leaf(reduction, pkt);
+}
+
+/* Generic collective request injection.
+ */
+ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
+			 enum fi_collective_op op_type,
+			 enum fi_datatype datatype, enum fi_op op,
+			 const void *op_send_data, void *op_rslt_data,
+			 size_t op_count, void *context, int *reduction_id)
+{
+	struct cxip_coll_reduction *reduction;
+	int cxi_opcode;
+	int red_id;
+	size_t size;
+
+	if (!mc_obj->is_joined) {
+		CXIP_LOG_ERROR("Multicast object not joined\n");
+		return -FI_EOPBADSTATE;
+	}
+
+	/* Note: only INT64 and DOUBLE supported by HW */
+	datatype = get_cxi_datatype(datatype);
+	if (datatype < 0)
+		return -FI_EOPNOTSUPP;
+
+	size = op_count * sizeof(uint64_t);
+	if (size > CXIP_COLL_MAX_TX_SIZE)
+		return -FI_EINVAL;
+
+	switch (op_type) {
+	case FI_BARRIER:
+		cxi_opcode = CXI_COLL_BARRIER;
+		break;
+	case FI_BROADCAST:
+		cxi_opcode = COLL_OPCODE_BIT_OR;
+		break;
+	case FI_ALLREDUCE:
+		cxi_opcode = _get_cxi_opcode(op, datatype,
+					     mc_obj->av_set->comm_key.round);
+		break;
+	default:
+		cxi_opcode = -1;
+	}
+	if (cxi_opcode < 0)
+		return -FI_EOPNOTSUPP;
+
+	/* Acquire reduction ID */
+	fastlock_acquire(&mc_obj->lock);
+	red_id = mc_obj->next_red_id;
+	if (mc_obj->reduction[red_id].in_use) {
+		fastlock_release(&mc_obj->lock);
+		return -FI_EBUSY;
+	}
+	mc_obj->reduction[red_id].in_use = true;
+	mc_obj->next_red_id++;
+	mc_obj->next_red_id &= 0x7;
+	fastlock_release(&mc_obj->lock);
+
+	/* Pass reduction parameters through the reduction structure */
+	reduction = &mc_obj->reduction[red_id];
+	reduction->op_code = cxi_opcode;
+	reduction->op_send_data = op_send_data;
+	reduction->op_rslt_data = op_rslt_data;
+	reduction->op_data_len = size;
+	reduction->op_context = context;
+	reduction->op_inject_req = cxip_cq_req_alloc(mc_obj->ep_obj->coll.tx_cq,
+						     1, reduction);
+	if (! reduction->op_inject_req) {
+		reduction->in_use = false;
+		return -FI_ENOMEM;
+	}
+	reduction->op_inject_req->context = (uint64_t)context;
+
+	if (reduction_id)
+		*reduction_id = red_id;
+
+	_progress_coll(reduction, NULL);
+	return FI_SUCCESS;
+}
+
+ssize_t cxip_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
+{
+	struct cxip_ep *cxi_ep;
+	struct cxip_coll_mc *mc_obj;
+	int ret;
+
+	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
+	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
+
+	if (mc_obj->ep_obj != cxi_ep->ep_obj)
+		return -FI_EINVAL;
+
+	ret = cxip_coll_inject(mc_obj, FI_BARRIER,
+			       FI_UINT64, 0, NULL, NULL, 0,
+			       context, NULL);
+
+	return ret;
+}
+
+ssize_t cxip_broadcast(struct fid_ep *ep, void *buf, size_t count,
+		       void *desc, fi_addr_t coll_addr, fi_addr_t root_addr,
+		       enum fi_datatype datatype, uint64_t flags,
+		       void *context)
+{
+	struct cxip_ep *cxi_ep;
+	struct cxip_coll_mc *mc_obj;
+	unsigned int root_idx;
+	void *result;
+	int ret;
+
+	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
+	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
+
+	if (mc_obj->ep_obj != cxi_ep->ep_obj)
+		return -FI_EINVAL;
+
+	ret = _fi_addr_to_idx(mc_obj->av_set, root_addr, &root_idx);
+	if (ret)
+		return ret;
+
+	result = NULL;
+	if (root_idx != mc_obj->mynode_index) {
+		result = buf;
+		buf = NULL;
+	}
+	ret = cxip_coll_inject(mc_obj, FI_BROADCAST,
+			       FI_UINT64, 0,
+			       buf, result, count,
+			       context, NULL);
+	return ret;
+}
+
+ssize_t cxip_reduce(struct fid_ep *ep, const void *buf, size_t count,
+		    void *desc, void *result, void *result_desc,
+		    fi_addr_t coll_addr, fi_addr_t root_addr,
+		    enum fi_datatype datatype, enum fi_op op, uint64_t flags,
+		    void *context)
+{
+	struct cxip_ep *cxi_ep;
+	struct cxip_coll_mc *mc_obj;
+	unsigned int root_idx;
+	int ret;
+
+	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
+	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
+
+	if (mc_obj->ep_obj != cxi_ep->ep_obj)
+		return -FI_EINVAL;
+
+	ret = _fi_addr_to_idx(mc_obj->av_set, root_addr, &root_idx);
+	if (ret)
+		return ret;
+	if (root_idx != mc_obj->mynode_index)
+		result = NULL;
+	ret = cxip_coll_inject(mc_obj, FI_ALLREDUCE,
+			       datatype, op, buf, result, count,
+			       context, NULL);
+
+	return ret;
+}
+
+ssize_t cxip_allreduce(struct fid_ep *ep, const void *buf, size_t count,
+		       void *desc, void *result, void *result_desc,
+		       fi_addr_t coll_addr, enum fi_datatype datatype,
+		       enum fi_op op, uint64_t flags, void *context)
+{
+	struct cxip_ep *cxi_ep;
+	struct cxip_coll_mc *mc_obj;
+	int ret;
+
+	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
+	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
+
+	if (mc_obj->ep_obj != cxi_ep->ep_obj)
+		return -FI_EINVAL;
+
+	ret = cxip_coll_inject(mc_obj, FI_ALLREDUCE,
+			       datatype, op, buf, result, count,
+			       context, NULL);
+
+	return ret;
+}
 
 struct fi_ops_collective cxip_collective_ops = {
 	.size = sizeof(struct fi_ops_collective),
-	.barrier = fi_coll_no_barrier,
-	.broadcast = fi_coll_no_broadcast,
+	.barrier = cxip_barrier,
+	.broadcast = cxip_broadcast,
 	.alltoall = fi_coll_no_alltoall,
-	.allreduce = fi_coll_no_allreduce,
+	.allreduce = cxip_allreduce,
 	.allgather = fi_coll_no_allgather,
 	.reduce_scatter = fi_coll_no_reduce_scatter,
-	.reduce = fi_coll_no_reduce,
+	.reduce = cxip_reduce,
 	.scatter = fi_coll_no_scatter,
 	.gather = fi_coll_no_gather,
 	.msg = fi_coll_no_msg,
@@ -1151,8 +1926,8 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	bool is_multicast;
 	uint32_t mc_idcode;
 	uint64_t pid_idx;
-	int hwroot_idx;
-	int mynode_idx;
+	unsigned int hwroot_idx;
+	unsigned int mynode_idx;
 	int red_id;
 	int state;
 	int ret;
@@ -1164,6 +1939,10 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	/* PTE receive address */
 	switch (av_set->comm_key.type) {
 	case COMM_KEY_MULTICAST:
+		if (is_netsim(ep_obj)) {
+			CXIP_LOG_ERROR("Multicast not supported\n");
+			return -FI_EINVAL;
+		}
 		is_multicast = true;
 		pid_idx = av_set->comm_key.mcast.mcast_id;
 		mc_idcode = av_set->comm_key.mcast.mcast_id;
@@ -1245,7 +2024,9 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	mc_obj->hwroot_index = hwroot_idx;
 	mc_obj->mynode_index = mynode_idx;
 	mc_obj->is_joined = true;
-	state = CXIP_COLL_STATE_NONE;
+	state = is_hw_root(mc_obj) ?
+		CXIP_COLL_STATE_BLOCKED :
+		CXIP_COLL_STATE_READY;
 	for (red_id = 0; red_id < CXIP_COLL_MAX_CONCUR; red_id++) {
 		struct cxip_coll_reduction *reduction;
 
@@ -1259,6 +2040,7 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	ofi_atomic_initialize32(&mc_obj->send_cnt, 0);
 	ofi_atomic_initialize32(&mc_obj->recv_cnt, 0);
 	ofi_atomic_initialize32(&mc_obj->pkt_cnt, 0);
+	ofi_atomic_initialize32(&mc_obj->seq_err_cnt, 0);
 
 	ofi_atomic_inc32(&ep_obj->coll.mc_count);
 	ofi_atomic_inc32(&av_set->ref);
@@ -1286,6 +2068,7 @@ void cxip_coll_reset_mc_ctrs(struct cxip_coll_mc *mc_obj)
 	ofi_atomic_set32(&mc_obj->send_cnt, 0);
 	ofi_atomic_set32(&mc_obj->recv_cnt, 0);
 	ofi_atomic_set32(&mc_obj->pkt_cnt, 0);
+	ofi_atomic_set32(&mc_obj->seq_err_cnt, 0);
 	fastlock_release(&mc_obj->lock);
 }
 
@@ -1341,12 +2124,14 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 /* Exported through fi_cxi_ext.h. Generates only MULTICAST comm_keys.
  */
 size_t cxip_coll_init_mcast_comm_key(struct cxip_coll_comm_key *comm_key,
+				     enum cxip_coll_flt_sum_mode round,
 				     uint32_t mcast_id,
 				     uint32_t hwroot_nic)
 {
 	struct cxip_comm_key *key = (struct cxip_comm_key *)comm_key;
 
 	key->type = COMM_KEY_MULTICAST;
+	key->round = round;
 	key->mcast.mcast_id = mcast_id;
 	key->mcast.hwroot_nic = hwroot_nic;
 

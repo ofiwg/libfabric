@@ -308,6 +308,7 @@ static void _create_av_set(int count, int rank, struct fid_av_set **av_set_fid)
 	struct cxip_ep *ep;
 	struct cxip_comm_key comm_key = {
 		.type = COMM_KEY_RANK,
+		.round = 0,
 		.rank.rank = rank,
 		.rank.hwroot_rank = 0,
 	};

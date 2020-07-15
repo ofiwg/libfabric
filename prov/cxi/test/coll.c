@@ -361,8 +361,9 @@ void _put_red_pkt(int count)
 
 	sendcnt = 0;
 	dataval = 0;
+	reduction = &mc_obj->reduction[0];
+	reduction->op_state = CXIP_COLL_STATE_NONE;
 	for (i = 0; i < count; i++) {
-		reduction = &mc_obj->reduction[0];
 		ret = cxip_coll_send_red_pkt(reduction, 1, 0,
 					     &dataval, sizeof(uint64_t), false);
 		cr_assert(ret == FI_SUCCESS,
@@ -415,18 +416,16 @@ Test(coll_put, put_red_pkt_distrib)
 
 	cxit_create_netsim_collective(5);
 
-	for (i = 0; i < 5; i++)
+	for (i = 0; i < 5; i++) {
 		mc_obj[i] = container_of(cxit_coll_mc_list.mc_fid[i],
 					 struct cxip_coll_mc, mc_fid);
+		mc_obj[i]->reduction[0].op_state = CXIP_COLL_STATE_NONE;
+		cxip_coll_reset_mc_ctrs(mc_obj[i]);
+	}
 
 	data = 0;
 	rx_cq = mc_obj[0]->ep_obj->coll.rx_cq;
 
-	/* clear counters */
-	for (i = 0; i < 5; i++)
-		cxip_coll_reset_mc_ctrs(mc_obj[i]);
-
-	/* Send data from root (0) to other nodes */
 	reduction = &mc_obj[0]->reduction[0];
 	ret = cxip_coll_send_red_pkt(reduction, 1, 0,
 				     &data, sizeof(uint64_t), false);
@@ -444,7 +443,6 @@ Test(coll_put, put_red_pkt_distrib)
 		cr_assert(cnt == 1,
 			  "Bad recv counter on leaf[%d]: %d\n", i, cnt);
 	}
-
 
 	/* Send data from leaf (!0) to root */
 	for (i = 0; i < 5; i++)
@@ -470,5 +468,297 @@ Test(coll_put, put_red_pkt_distrib)
 	cr_assert(cnt == 4,
 		  "Bad recv counter on root: %d\n", cnt);
 
+	cxit_destroy_netsim_collective();
+}
+
+/***************************************/
+
+TestSuite(coll_reduce, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
+	  .disabled = false, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+/* Simulated user context, specifically to return error codes */
+struct user_context {
+	struct dlist_entry entry;
+	int node;		// reduction simulated node (MC object)
+	int seqno;		// reduction sequence number
+	int red_id;		// reduction ID
+	int errcode;		// reduction error code
+	int hw_rc;		// reduction hardware failure code
+	uint64_t expval;	// expected reduction value
+};
+
+/* Simulated user data type */
+struct int_data {
+	uint64_t ival[4];
+};
+
+/* Test makes a direct call into cxip_coll_inject(), to obtain red_id */
+ssize_t _allreduce(struct fid_ep *ep, const void *buf, size_t count,
+		   void *desc, void *result, void *result_desc,
+		   fi_addr_t coll_addr, enum fi_datatype datatype,
+		   enum fi_op op, uint64_t flags, void *context,
+		   int *reduction_id)
+{
+	struct cxip_ep *cxi_ep;
+	struct cxip_coll_mc *mc_obj;
+	int ret;
+
+	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
+	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
+
+	if (mc_obj->ep_obj != cxi_ep->ep_obj)
+		return -FI_EINVAL;
+
+	ret = cxip_coll_inject(mc_obj, FI_ALLREDUCE,
+			       datatype, op, buf, result, count,
+			       context, reduction_id);
+
+	return ret;
+}
+
+/* Poll rx and tx CQs until user context seen.
+ *
+ * If context == NULL, this polls to advance the state and returns.
+ */
+void _reduce_wait(struct fid_cq *rx_cq, struct fid_cq *tx_cq,
+		  struct user_context *context)
+{
+	static struct dlist_entry done_list, *done;
+	static int initialized = 0;
+
+	struct fi_cq_data_entry entry;
+	struct fi_cq_err_entry err_entry;
+	struct user_context *ctx;
+	int ret;
+
+	/* initialize the static locals */
+	if (! initialized) {
+		dlist_init(&done_list);
+		initialized = 1;
+	}
+
+	/* search for prior detection of context */
+	dlist_foreach(&done_list, done) {
+		if ((void *)context == (void *)done) {
+			dlist_remove(done);
+			return;
+		}
+	}
+
+	do {
+		/* Wait for a tx CQ completion event */
+		do {
+			sched_yield();
+			/* read rx CQ and progress state until nothing to do */
+			ret = fi_cq_read(rx_cq, &entry, 1);
+			if (ret == -FI_EAGAIN && context)
+				continue;
+			/* read tx CQ to see a completion event */
+			ret = fi_cq_read(tx_cq, &entry, 1);
+			if (ret != -FI_EAGAIN || !context)
+				break;
+		} while (true);
+		ctx = NULL;
+		if (ret == -FI_EAVAIL) {
+			/* tx CQ posted an error, copy to user context */
+			ret = fi_cq_readerr(tx_cq, &err_entry, 1);
+			cr_assert(ret == 1, "fi_cq_readerr failed: %d\n", ret);
+			ctx = err_entry.op_context;
+			ctx->errcode = err_entry.err;
+			ctx->hw_rc = err_entry.prov_errno;
+			cr_assert(err_entry.err != 0,
+				  "Failure with good return\n");
+		} else if (ret == 1) {
+			/* tx CQ posted a normal completion */
+			ctx = entry.op_context;
+			ctx->errcode = 0;
+			ctx->hw_rc = 0;
+		}
+		if (ctx == context)
+			return;
+		if (ctx)
+			dlist_insert_tail(&ctx->entry, &done_list);
+	} while (context);
+}
+
+/* Exercise the collective state machine.
+ *
+ * This presumes NETSIM, and considers the size of the collective to be the
+ * number of mc_objects in the cxit_coll_mc_list. The first node (zero) is
+ * always the root node.
+ *
+ * We initiate the collective in sequence, beginning with 'start'. If start is
+ * zero, the root node initiates first, otherwise a leaf node initiates first.
+ *
+ * We inject an error by specifying a 'bad' node in the range of nodes. If bad
+ * is outside the range (e.g. -1), no errors will be injected. The injection is
+ * done by choosing to send the wrong reduction operation code for the bad node,
+ * which causes the entire reduction to fail.
+ *
+ * We perform 'count' reductions to exercise the round-robin reduction ID
+ * handling and blocking.
+ *
+ * We generate different results for each reduction.
+ */
+void _reduce(int start, int bad, int count)
+{
+	struct cxip_ep_obj *ep_obj;
+	struct cxip_coll_mc **mc_obj;
+	struct user_context **context;
+	struct int_data **rslt;
+	struct int_data *data;
+	struct fid_cq *rx_cq, *tx_cq;
+	ssize_t size;
+	int nodes, first, last, base;
+	char label[128];
+	int i, ret;
+
+	count = MAX(count, 1);
+	nodes = cxit_coll_mc_list.count;
+	context = calloc(nodes, sizeof(**context));
+	mc_obj = calloc(nodes, sizeof(**mc_obj));
+	rslt = calloc(nodes, sizeof(**rslt));
+	data = calloc(nodes, sizeof(*data));
+	start %= nodes;
+	snprintf(label, sizeof(label), "{%2d,%2d,%2d}",
+		 start, bad, count);
+	ep_obj = NULL;
+	for (i = 0; i < nodes; i++) {
+		context[i] = calloc(count, sizeof(struct user_context));
+		rslt[i] = calloc(count, sizeof(struct int_data));
+		mc_obj[i] = container_of(cxit_coll_mc_list.mc_fid[i],
+					 struct cxip_coll_mc, mc_fid);
+		if (!ep_obj)
+			ep_obj = mc_obj[i]->ep_obj;
+		cr_assert(mc_obj[i]->ep_obj == ep_obj,
+			  "%s Mismatched endpoints\n", label);
+	}
+	cr_assert(ep_obj != NULL,
+		  "%s Did not find an endpoint object\n", label);
+	rx_cq = &ep_obj->coll.rx_cq->util_cq.cq_fid;
+	tx_cq = &ep_obj->coll.tx_cq->util_cq.cq_fid;
+	first = last = 0;
+
+	/* Issue all of the collectives */
+	base = 1;
+	while (last < count) {
+		uint64_t result = 0;
+		for (i = 0; i < nodes; i++) {
+			enum fi_op op = (start == bad) ? FI_BAND : FI_BOR;
+			int red_id;
+
+			data[start].ival[0] = (base << start);
+			base <<= 1;
+			if (base > 16)
+				base = 1;
+			context[start][last].node = start;
+			context[start][last].seqno = last;
+			result |= data[start].ival[0];
+			do {
+				_reduce_wait(rx_cq, tx_cq, NULL);
+				size = _allreduce(cxit_ep, &data[start], 1,
+						  NULL, &rslt[start][last],
+						  NULL,
+						  (fi_addr_t)mc_obj[start],
+						  FI_UINT64, op, 0,
+						  &context[start][last],
+						  &red_id);
+			} while (size == -FI_EBUSY);
+			context[start][last].red_id = red_id;
+			start = (start + 1) % nodes;
+		}
+		for (i = 0; i < nodes; i++)
+			context[i][last].expval = result;
+
+		/* Ensure these all used the same reduction ID */
+		ret = 0;
+		for (i = 1; i < nodes; i++)
+			if (context[0][last].red_id != context[i][last].red_id)
+				ret = -1;
+		if (ret) {
+			for (i = 0; i < nodes; i++)
+				printf("%s [%d, %d] red_id = %d\n",
+				       label, i, last,
+				       context[i][last].red_id);
+			cr_assert(true, "%s reduction ID mismatch\n", label);
+		}
+		last++;
+	}
+
+	/* Wait for all reductions to complete */
+	while (first < last) {
+		struct user_context *ctx;
+		int red_id0, errcode0, hw_rc0;
+		uint64_t actval0;
+
+		for (i = 0; i < nodes; i++) {
+			_reduce_wait(rx_cq, tx_cq, &context[i][first]);
+			if (i == 0) {
+				red_id0 = context[i][first].red_id;
+				errcode0 = context[i][first].errcode;
+				hw_rc0 = context[i][first].hw_rc;
+				actval0 = rslt[i][first].ival[0];
+			}
+			ctx = &context[i][first];
+			if (ctx->node != i ||
+			    ctx->seqno != first  ||
+			    ctx->red_id != red_id0 ||
+			    ctx->errcode != errcode0 ||
+			    ctx->hw_rc != hw_rc0 ||
+			    (!errcode0 && ctx->expval != actval0)) {
+				printf("%s =====\n", label);
+				printf("  node    %3d, exp %3d\n",
+				       ctx->node, i);
+				printf("  seqno   %3d, exp %3d\n",
+				       ctx->seqno, first);
+				printf("  red_id  %3d, exp %3d\n",
+				       ctx->red_id, red_id0);
+				printf("  errcode %3d, exp %3d\n",
+				       ctx->errcode, errcode0);
+				printf("  hw_rc   %3d, exp %3d\n",
+				       ctx->hw_rc, hw_rc0);
+				printf("  value   %08lx, exp %08lx\n",
+				       ctx->expval, actval0);
+				cr_assert(true, "%s context failure\n",
+					  label);
+			}
+		}
+		first++;
+	}
+	for (i = 0; i < nodes; i++) {
+		free(rslt[i]);
+		free(context[i]);
+	}
+	free(context);
+	free(rslt);
+	free(data);
+	free(mc_obj);
+}
+
+Test(coll_reduce, permute)
+{
+	printf("\n");
+	cxit_create_netsim_collective(5);
+	_reduce(0, -1, 1);
+	_reduce(1, -1, 1);
+	_reduce(2, -1, 1);
+	_reduce(3, -1, 1);
+	_reduce(4, -1, 1);
+	_reduce(0, 0, 1);
+	_reduce(0, 1, 1);
+	_reduce(1, 0, 1);
+	cxit_destroy_netsim_collective();
+}
+
+Test(coll_reduce, concur)
+{
+	printf("\n");
+	cxit_create_netsim_collective(5);
+	_reduce(0, -1, 29);
+	_reduce(0,  0, 29);
+	_reduce(0,  1, 29);
+	_reduce(1, -1, 29);
+	_reduce(1,  0, 29);
+	_reduce(1,  1, 29);
 	cxit_destroy_netsim_collective();
 }

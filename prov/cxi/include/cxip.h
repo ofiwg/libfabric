@@ -1175,6 +1175,7 @@ struct cxip_coll_rank_key {
 
 struct cxip_comm_key {
 	enum cxip_comm_key_type type;
+	enum cxip_coll_flt_sum_mode round;
 	union {
 		struct cxip_coll_mcast_key mcast;
 		struct cxip_coll_unicast_key ucast;
@@ -1255,13 +1256,15 @@ struct cxip_coll_mc {
 	struct cxip_av_set *av_set;		// associated AV set
 	struct cxip_coll_pte *coll_pte;		// collective PTE
 	bool is_joined;				// true if joined
-	int mynode_index;			// av_set index of this node
-	int hwroot_index;			// av_set index of hwroot node
+	unsigned int mynode_index;		// av_set index of this node
+	unsigned int hwroot_index;		// av_set index of hwroot node
+	enum cxip_coll_flt_sum_mode round;	// float sum rounding mode
 	int next_red_id;			// round-robin counter
 	uint32_t mc_idcode;			// MC object id for cookie
 	ofi_atomic32_t send_cnt;		// for diagnostics
 	ofi_atomic32_t recv_cnt;		// for diagnostics
 	ofi_atomic32_t pkt_cnt;			// for diagnostics
+	ofi_atomic32_t seq_err_cnt;		// for diagnostics
 	fastlock_t lock;
 
 	struct cxip_coll_reduction reduction[CXIP_COLL_MAX_CONCUR];
@@ -1430,6 +1433,25 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 			   size_t redcnt, int op, const void *data, size_t len,
 			   bool retry);
+ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
+			 enum fi_collective_op op_type,
+			 enum fi_datatype datatype, enum fi_op op,
+			 const void *op_send_data, void *op_rslt_data,
+			 size_t op_count, void *context, int *reduction_id);
+ssize_t cxip_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context);
+ssize_t cxip_broadcast(struct fid_ep *ep, void *buf, size_t count,
+		       void *desc, fi_addr_t coll_addr, fi_addr_t root_addr,
+		       enum fi_datatype datatype, uint64_t flags,
+		       void *context);
+ssize_t cxip_reduce(struct fid_ep *ep, const void *buf, size_t count,
+		    void *desc, void *result, void *result_desc,
+		    fi_addr_t coll_addr, fi_addr_t root_addr,
+		    enum fi_datatype datatype, enum fi_op op, uint64_t flags,
+		    void *context);
+ssize_t cxip_allreduce(struct fid_ep *ep, const void *buf, size_t count, void *desc,
+		       void *result, void *result_desc, fi_addr_t coll_addr,
+		       enum fi_datatype datatype, enum fi_op op,
+		       uint64_t flags, void *context);
 int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 			 const struct fid_av_set *coll_av_set,
 			 uint64_t flags, struct fid_mc **mc, void *context);
@@ -1627,6 +1649,12 @@ static inline uint32_t cxip_mac_to_nic(struct ether_addr *mac)
 	return mac->ether_addr_octet[5] |
 			(mac->ether_addr_octet[4] << 8) |
 			((mac->ether_addr_octet[3] & 0xF) << 16);
+}
+
+static inline bool is_netsim(struct cxip_ep_obj *ep_obj)
+{
+	return (ep_obj->domain->iface->info->device_platform ==
+		CXI_PLATFORM_NETSIM);
 }
 
 #define _CXIP_LOG_DBG(subsys, ...) FI_DBG(&cxip_prov, subsys, __VA_ARGS__)
