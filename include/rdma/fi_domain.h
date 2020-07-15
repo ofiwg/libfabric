@@ -245,8 +245,9 @@ struct fi_ops_domain {
 	int	(*query_atomic)(struct fid_domain *domain,
 			enum fi_datatype datatype, enum fi_op op,
 			struct fi_atomic_attr *attr, uint64_t flags);
-	int (*query_collective)(struct fid_domain *domain, enum fi_collective_op coll,
-				struct fi_collective_attr *attr, uint64_t flags);
+	int	(*query_collective)(struct fid_domain *domain,
+			enum fi_collective_op coll,
+			struct fi_collective_attr *attr, uint64_t flags);
 };
 
 /* Memory registration flags */
