@@ -133,8 +133,11 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
-
-	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
+	
+	rxd_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->fi_addr_idx),
+					     RXD_IDX_OFFSET(addr));
+	if (!rxd_addr)
+		goto out;
 	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
 	if (ret)
 		goto out;
@@ -234,8 +237,11 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
+	rxd_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->fi_addr_idx), 
+					     RXD_IDX_OFFSET(addr));
+	if (!rxd_addr)
+		goto out;
 
-	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[dest_addr];
 	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
 	if (ret)
 		goto out;

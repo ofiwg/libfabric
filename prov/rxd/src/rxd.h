@@ -54,6 +54,7 @@
 #include <ofi_util.h>
 #include <ofi_tree.h>
 #include <ofi_atomic.h>
+#include <ofi_indexer.h>
 #include "rxd_proto.h"
 
 #ifndef _RXD_H_
@@ -82,6 +83,8 @@
 #define RXD_TAG_HDR		(1 << 4)
 #define RXD_INLINE		(1 << 5)
 #define RXD_MULTI_RECV		(1 << 6)
+
+#define RXD_IDX_OFFSET(x)	(x + 1)	
 
 struct rxd_env {
 	int spin_count;
@@ -151,13 +154,12 @@ struct rxd_av {
 	struct util_av util_av;
 	struct fid_av *dg_av;
 	struct ofi_rbmap rbmap;
-	int fi_addr_idx;
+	
 	int rxd_addr_idx;
 
 	int dg_av_used;
 	size_t dg_addrlen;
-
-	fi_addr_t *fi_addr_table;
+	struct indexer fi_addr_idx;	
 	struct rxd_addr *rxd_addr_table;
 };
 

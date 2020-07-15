@@ -202,10 +202,13 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	struct rxd_x_entry *rx_entry;
 	struct dlist_entry *unexp_list, *rx_list;
 	struct rxd_unexp_msg *unexp_msg;
+	fi_addr_t rxd_addr;
 
+	
 	assert(iov_count <= RXD_IOV_LIMIT);
 	assert(!(rxd_flags & RXD_MULTI_RECV) || iov_count == 1);
 	assert(!(flags & FI_PEEK) || op == RXD_TAGGED);
+
 
 	fastlock_acquire(&rxd_ep->util_ep.lock);
 
@@ -227,12 +230,15 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 				    unexp_list);
 		goto out;
 	}
-
 	if (!(flags & FI_DISCARD)) {
+		rxd_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->fi_addr_idx), 
+						     RXD_IDX_OFFSET(addr));
+		if (!rxd_addr)
+			addr = FI_ADDR_UNSPEC;
+
 		rx_entry = rxd_rx_entry_init(rxd_ep, iov, iov_count, tag, ignore, context,
 					(rxd_ep->util_ep.caps & FI_DIRECTED_RECV &&
-					addr != FI_ADDR_UNSPEC) ?
-					rxd_ep_av(rxd_ep)->fi_addr_table[addr] :
+					addr != FI_ADDR_UNSPEC) ? rxd_addr : 
 					FI_ADDR_UNSPEC, op, rxd_flags);
 		if (!rx_entry) {
 			ret = -FI_EAGAIN;
@@ -359,8 +365,12 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
+	
+	rxd_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->fi_addr_idx), 
+					     RXD_IDX_OFFSET(addr));
+	if (!rxd_addr)
+		goto out;
 
-	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
 	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
 	if (ret)
 		goto out;
@@ -399,8 +409,12 @@ ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
-
-	rxd_addr = rxd_ep_av(rxd_ep)->fi_addr_table[addr];
+	
+	rxd_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->fi_addr_idx), 
+					     RXD_IDX_OFFSET(addr));
+	if (!rxd_addr)
+		goto out;
+	
 	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
 	if (ret)
 		goto out;
