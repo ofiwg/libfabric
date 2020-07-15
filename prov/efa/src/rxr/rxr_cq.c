@@ -858,7 +858,8 @@ void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entr
 		if (tx_entry->fi_flags & FI_COMPLETION) {
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
-			efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
+			if (!(tx_entry->fi_flags & RXR_NO_COUNTER))
+				efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
 			rxr_release_tx_entry(ep, tx_entry);
 		}
 	} else {

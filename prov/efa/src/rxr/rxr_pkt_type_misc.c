@@ -506,6 +506,38 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
+/* receipt packet related functions */
+int rxr_pkt_init_receipt(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+			 struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_receipt_hdr *receipt_hdr;
+
+	receipt_hdr = rxr_get_receipt_hdr(pkt_entry->pkt);
+	receipt_hdr->type = RXR_RECEIPT_PKT;
+	receipt_hdr->version = RXR_BASE_PROTOCOL_VERSION;
+	receipt_hdr->flags = 0;
+	receipt_hdr->ret_code = 0;
+	receipt_hdr->tx_id = rx_entry->tx_id;
+	receipt_hdr->msg_id = rx_entry->msg_id;
+
+	pkt_entry->pkt_size = sizeof(struct rxr_receipt_hdr);
+	pkt_entry->addr = rx_entry->addr;
+	pkt_entry->x_entry = rx_entry;
+
+	return 0;
+}
+
+void rxr_pkt_handle_receipt_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+}
+
+void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+
+	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
+	rxr_release_rx_entry(ep, rx_entry);
+}
 
 /* atomrsp packet related functions: init, handle_sent, handle_send_completion and recv
  *
@@ -578,6 +610,21 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 		rxr_release_tx_entry(ep, tx_entry);
 	}
 
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
+}
+
+void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
+				 struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_tx_entry *tx_entry = NULL;
+	struct rxr_receipt_hdr *receipt_hdr;
+
+	receipt_hdr = rxr_get_receipt_hdr(pkt_entry->pkt);
+	/* Retrive the tx_entry that will be written into TX CQ*/
+	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool,
+					receipt_hdr->tx_id);
+
+	rxr_cq_handle_tx_completion(ep, tx_entry);
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 

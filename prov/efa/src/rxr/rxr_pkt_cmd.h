@@ -51,6 +51,8 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 				    struct fi_cq_data_entry *cq_entry,
 				    fi_addr_t src_addr);
 
+ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_peer *peer);
+
 #if ENABLE_DEBUG
 void rxr_pkt_print(char *prefix,
 		   struct rxr_ep *ep,

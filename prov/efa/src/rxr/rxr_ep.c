@@ -829,6 +829,8 @@ void rxr_ep_set_features(struct rxr_ep *ep)
 	/* RDMA read is an extra feature defined in protocol version 4 (the base version) */
 	if (efa_ep_support_rdma_read(ep->rdm_ep))
 		ep->features[0] |= RXR_REQ_FEATURE_RDMA_READ;
+
+	ep->features[0] |= RXR_REQ_FEATURE_DELIVERY_COMPLETE;
 }
 
 static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
