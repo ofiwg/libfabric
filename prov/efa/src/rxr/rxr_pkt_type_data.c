@@ -234,8 +234,26 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 	tx_entry->bytes_acked +=
 		rxr_get_data_pkt(pkt_entry->pkt)->hdr.seg_size;
 
-	if (tx_entry->total_len == tx_entry->bytes_acked)
-		rxr_cq_handle_tx_completion(ep, tx_entry);
+	if (tx_entry->total_len == tx_entry->bytes_acked) {
+		if (!(tx_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED))
+			rxr_cq_handle_tx_completion(ep, tx_entry);
+		else
+			if (tx_entry->rxr_flags & RXR_RECEIPT_RECEIVED)
+				/*
+				 * For long message protocol,
+				 * when FI_DELIVERY_COMPLETE
+				 * is requested,
+				 * we have to write tx completions
+				 * in either
+				 * rxr_pkt_handle_data_send_completion()
+				 * or rxr_pkt_handle_receipt_recv()
+				 * depending on which of them
+				 * is called later due
+				 * to avoid accessing released
+				 * tx_entry.
+				 */
+				rxr_cq_handle_tx_completion(ep, tx_entry);
+	}
 }
 
 /*

@@ -117,6 +117,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 
 	assert(RXR_DC_EAGER_MSGRTM_PKT + 1 == RXR_DC_EAGER_TAGRTM_PKT);
 	assert(RXR_DC_MEDIUM_MSGRTM_PKT + 1 == RXR_DC_MEDIUM_TAGRTM_PKT);
+	assert(RXR_DC_LONG_MSGRTM_PKT + 1 == RXR_DC_LONG_TAGRTM_PKT);
 
 	int tagged;
 	size_t max_rtm_data_size;
@@ -138,6 +139,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
 
 	if (delivery_complete_requested && !(peer->is_local)) {
+		tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 		/*
 		 * Because delivery complete is defined as an extra
 		 * feature, the receiver might not support it.
@@ -174,6 +176,10 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		assert(rxr_ep->use_shm);
 		/* intra instance message */
 		if (tx_entry->total_len > max_rtm_data_size)
+			/*
+			 * Read message support
+			 * FI_DELIVERY_COMPLETE implicitly.
+			 */
 			ctrl_type = RXR_READ_MSGRTM_PKT;
 		else
 			ctrl_type = delivery_complete_requested ? RXR_DC_EAGER_MSGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
@@ -225,7 +231,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	if (tx_entry->total_len >= rxr_env.efa_min_read_msg_size &&
 	    efa_both_support_rdma_read(rxr_ep, peer) &&
 	    (tx_entry->desc[0] || efa_is_cache_available(efa_domain))) {
-		/* use read message protocol */
+		/* Read message support FI_DELIVERY_COMPLETE implicitly. */
 		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
 						 RXR_READ_MSGRTM_PKT + tagged, 0);
 
@@ -242,8 +248,9 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	if (OFI_UNLIKELY(err))
 		return err;
 
+	ctrl_type = delivery_complete_requested ? RXR_DC_LONG_MSGRTM_PKT : RXR_LONG_MSGRTM_PKT;
 	return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					  RXR_LONG_MSGRTM_PKT + tagged, 0);
+					  ctrl_type + tagged, 0);
 }
 
 ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,

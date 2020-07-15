@@ -410,6 +410,7 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 
 	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
 	if (delivery_complete_requested) {
+		tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 		/*
 		 * Because delivery complete is defined as an extra
 		 * feature, the receiver might not support it.
@@ -465,7 +466,9 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	if (OFI_UNLIKELY(err))
 		return err;
 
-	return rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_LONG_RTW_PKT, 0);
+	ctrl_type = delivery_complete_requested ?
+		RXR_DC_LONG_RTW_PKT : RXR_LONG_RTW_PKT;
+	return rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, ctrl_type, 0);
 }
 
 ssize_t rxr_rma_writemsg(struct fid_ep *ep,

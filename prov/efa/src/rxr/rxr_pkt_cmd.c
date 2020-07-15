@@ -181,8 +181,17 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 	case RXR_DC_MEDIUM_TAGRTM_PKT:
 		ret = rxr_pkt_init_dc_medium_tagrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
+	case RXR_DC_LONG_MSGRTM_PKT:
+		ret = rxr_pkt_init_dc_long_msgrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_DC_LONG_TAGRTM_PKT:
+		ret = rxr_pkt_init_dc_long_tagrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
 	case RXR_DC_EAGER_RTW_PKT:
 		ret = rxr_pkt_init_dc_eager_rtw(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_DC_LONG_RTW_PKT:
+		ret = rxr_pkt_init_dc_long_rtw(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
 	case RXR_DC_WRITE_RTA_PKT:
 		ret = rxr_pkt_init_dc_write_rta(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
@@ -231,7 +240,9 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 		rxr_pkt_handle_medium_rtm_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_LONG_MSGRTM_PKT:
+	case RXR_DC_LONG_MSGRTM_PKT:
 	case RXR_LONG_TAGRTM_PKT:
+	case RXR_DC_LONG_TAGRTM_PKT:
 		rxr_pkt_handle_long_rtm_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_READ_MSGRTM_PKT:
@@ -242,6 +253,7 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 		rxr_pkt_handle_eager_rtw_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_LONG_RTW_PKT:
+	case RXR_DC_LONG_RTW_PKT:
 		rxr_pkt_handle_long_rtw_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_READ_RTW_PKT:
@@ -502,7 +514,10 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
 		       pkt_type == RXR_DC_EAGER_TAGRTM_PKT ||
 		       pkt_type == RXR_DC_MEDIUM_MSGRTM_PKT ||
 		       pkt_type == RXR_DC_MEDIUM_TAGRTM_PKT ||
-		       pkt_type == RXR_DC_EAGER_RTW_PKT);
+		       pkt_type == RXR_DC_LONG_MSGRTM_PKT ||
+		       pkt_type == RXR_DC_LONG_TAGRTM_PKT ||
+		       pkt_type == RXR_DC_EAGER_RTW_PKT ||
+		       pkt_type == RXR_DC_LONG_RTW_PKT);
 
 		return pkt_entry->pkt_size - rxr_pkt_req_hdr_size(pkt_entry);
 	}
@@ -689,12 +704,20 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 		/* no action to be taken here */
 		/* For non-dc version of the packet types,
 		 * this is the place to write tx completion.
-		 * However, for dc tx completion will be
-		 * written upon receving the receipt packet.
+		 * However, for dc tx completion will always be
+		 * written upon receving the receipt packet
+		 * if not using long message protocols.
 		 * Moreoever, because receipt can arrive
 		 * before send completion, we cannot take
-		 * any action here.
+		 * any action on tx_entry here.
 		 */
+		break;
+	case RXR_DC_LONG_MSGRTM_PKT:
+	case RXR_DC_LONG_TAGRTM_PKT:
+		rxr_pkt_handle_dc_long_rtm_send_completion(ep, pkt_entry);
+		break;
+	case RXR_DC_LONG_RTW_PKT:
+		rxr_pkt_handle_dc_long_rtw_send_completion(ep, pkt_entry);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
@@ -864,6 +887,8 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	case RXR_DC_MEDIUM_TAGRTM_PKT:
 	case RXR_LONG_MSGRTM_PKT:
 	case RXR_LONG_TAGRTM_PKT:
+	case RXR_DC_LONG_MSGRTM_PKT:
+	case RXR_DC_LONG_TAGRTM_PKT:
 	case RXR_READ_MSGRTM_PKT:
 	case RXR_READ_TAGRTM_PKT:
 	case RXR_WRITE_RTA_PKT:
@@ -876,6 +901,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		rxr_pkt_handle_eager_rtw_recv(ep, pkt_entry);
 		return;
 	case RXR_LONG_RTW_PKT:
+	case RXR_DC_LONG_RTW_PKT:
 		rxr_pkt_handle_long_rtw_recv(ep, pkt_entry);
 		return;
 	case RXR_READ_RTW_PKT:

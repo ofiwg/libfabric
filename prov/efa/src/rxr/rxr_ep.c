@@ -392,6 +392,7 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	tx_entry->addr = msg->addr;
 
 	tx_entry->send_flags = 0;
+	tx_entry->rxr_flags = 0;
 	tx_entry->bytes_acked = 0;
 	tx_entry->bytes_sent = 0;
 	tx_entry->window = 0;
