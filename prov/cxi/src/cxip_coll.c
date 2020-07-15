@@ -412,8 +412,6 @@ static int _coll_pte_alloc(struct cxip_ep_obj *ep_obj,
 	struct cxi_pt_alloc_opts pt_opts = {
 		.use_long_event = 1,
 		.do_space_check = 1,
-		.pe_num = CXI_PE_NUM_ANY,
-		.le_pool = CXI_LE_POOL_ANY,
 		.en_restricted_unicast_lm = 1,
 	};
 	uint64_t pid_idx;

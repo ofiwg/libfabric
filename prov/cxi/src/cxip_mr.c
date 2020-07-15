@@ -260,10 +260,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	int ret;
 	union c_cmdu cmd = {};
 	int buffer_id;
-	struct cxi_pt_alloc_opts opts = {
-		.pe_num = CXI_PE_NUM_ANY,
-		.le_pool = CXI_LE_POOL_ANY
-	};
+	struct cxi_pt_alloc_opts opts = {};
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 	uint32_t le_flags;
 

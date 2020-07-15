@@ -325,8 +325,6 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	struct cxi_pt_alloc_opts pt_opts = {
 		.use_long_event = 1,
 		.is_matching = 1,
-		.pe_num = CXI_PE_NUM_ANY,
-		.le_pool = CXI_LE_POOL_ANY
 	};
 	struct cxi_eq_attr eq_attr = {};
 	union c_cmdu cmd = {};
