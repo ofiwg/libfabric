@@ -216,12 +216,15 @@ struct rxd_ep {
 	struct dlist_entry rts_sent_list;
 	struct dlist_entry ctrl_pkts;
 
-	struct rxd_peer **peers;
+	struct index_map peers_idm;
 };
 
 static inline struct rxd_peer *rxd_peer(struct rxd_ep *ep, fi_addr_t rxd_addr)
 {
-	return ep->peers[rxd_addr];
+	fastlock_tryacquire(&ep->util_ep.lock);
+	return ofi_idm_lookup(&ep->peers_idm, rxd_addr);
+	fastlock_release(&ep->util_ep.lock);
+
 }
 static inline struct rxd_domain *rxd_ep_domain(struct rxd_ep *ep)
 {
