@@ -118,6 +118,9 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 	case RXR_ATOMRSP_PKT:
 		ret = rxr_pkt_init_atomrsp(rxr_ep, (struct rxr_rx_entry *)x_entry, pkt_entry);
 		break;
+	case RXR_RECEIPT_PKT:
+		ret = rxr_pkt_init_receipt(rxr_ep, (struct rxr_rx_entry *)x_entry, pkt_entry);
+		break;
 	case RXR_EAGER_MSGRTM_PKT:
 		ret = rxr_pkt_init_eager_msgrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
@@ -166,6 +169,12 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 	case RXR_COMPARE_RTA_PKT:
 		ret = rxr_pkt_init_compare_rta(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
+	case RXR_DC_EAGER_MSGRTM_PKT:
+		ret = rxr_pkt_init_dc_eager_msgrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_DC_EAGER_TAGRTM_PKT:
+		ret = rxr_pkt_init_dc_eager_tagrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
 	default:
 		ret = -FI_EINVAL;
 		assert(0 && "unknown pkt type to init");
@@ -195,6 +204,9 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 		break;
 	case RXR_ATOMRSP_PKT:
 		rxr_pkt_handle_atomrsp_sent(rxr_ep, pkt_entry);
+		break;
+	case RXR_RECEIPT_PKT:
+		rxr_pkt_handle_receipt_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_EAGER_MSGRTM_PKT:
 	case RXR_EAGER_TAGRTM_PKT:
@@ -229,6 +241,9 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 	case RXR_FETCH_RTA_PKT:
 	case RXR_COMPARE_RTA_PKT:
 		rxr_pkt_handle_rta_sent(rxr_ep, pkt_entry);
+		break;
+	case RXR_DC_EAGER_MSGRTM_PKT:
+	case RXR_DC_EAGER_TAGRTM_PKT:
 		break;
 	default:
 		assert(0 && "Unknown packet type to handle sent");
@@ -462,7 +477,10 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
 		assert(pkt_type == RXR_EAGER_MSGRTM_PKT || pkt_type == RXR_EAGER_TAGRTM_PKT ||
 		       pkt_type == RXR_MEDIUM_MSGRTM_PKT || pkt_type == RXR_MEDIUM_TAGRTM_PKT ||
 		       pkt_type == RXR_LONG_MSGRTM_PKT || pkt_type == RXR_LONG_TAGRTM_PKT ||
-		       pkt_type == RXR_EAGER_RTW_PKT || pkt_type == RXR_LONG_RTW_PKT);
+		       pkt_type == RXR_EAGER_RTW_PKT ||
+		       pkt_type == RXR_LONG_RTW_PKT ||
+		       pkt_type == RXR_DC_EAGER_MSGRTM_PKT ||
+		       pkt_type == RXR_DC_EAGER_TAGRTM_PKT);
 
 		return pkt_entry->pkt_size - rxr_pkt_req_hdr_size(pkt_entry);
 	}
@@ -529,12 +547,38 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 				size_t data_size)
 {
 	struct rxr_rx_entry *rx_entry;
+	ssize_t ret;
 
 	rx_entry = pkt_entry->x_entry;
 	assert(rx_entry);
 	rx_entry->bytes_copied += data_size;
 
 	if (rx_entry->total_len == rx_entry->bytes_copied) {
+		if (rx_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED) {
+			ret = rxr_pkt_post_ctrl_or_queue(ep,
+							 RXR_RX_ENTRY,
+							 rx_entry,
+							 RXR_RECEIPT_PKT, 0);
+			if (OFI_UNLIKELY(ret)) {
+				FI_WARN(&rxr_prov,
+					FI_LOG_CQ,
+					"Posting of receipt packet failed! err=%s\n",
+					fi_strerror(ret));
+				efa_eq_write_error(&ep->util_ep,
+						   FI_EIO,
+						   ret);
+				rxr_release_rx_entry(ep,
+						     rx_entry);
+				return;
+			}
+			rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
+			rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
+			/* rx_entry will be released
+			 * when sender receives the
+			 * receipt packet.
+			 */
+			return;
+		}
 		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
 		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 		rxr_release_rx_entry(ep, rx_entry);
@@ -573,6 +617,9 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 	case RXR_ATOMRSP_PKT:
 		rxr_pkt_handle_atomrsp_send_completion(ep, pkt_entry);
 		break;
+	case RXR_RECEIPT_PKT:
+		rxr_pkt_handle_receipt_send_completion(ep, pkt_entry);
+		break;
 	case RXR_EAGER_MSGRTM_PKT:
 	case RXR_EAGER_TAGRTM_PKT:
 		rxr_pkt_handle_eager_rtm_send_completion(ep, pkt_entry);
@@ -610,6 +657,18 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 		break;
 	case RXR_COMPARE_RTA_PKT:
 		/* no action to be taken here */
+		break;
+	case RXR_DC_EAGER_MSGRTM_PKT:
+	case RXR_DC_EAGER_TAGRTM_PKT:
+		/* no action to be taken here */
+		/* For non-dc version of the packet types,
+		 * this is the place to write tx completion.
+		 * However, for dc tx completion will be
+		 * written upon receving the receipt packet.
+		 * Moreoever, because receipt can arrive
+		 * before send completion, we cannot take
+		 * any action here.
+		 */
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
@@ -761,6 +820,9 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	case RXR_ATOMRSP_PKT:
 		rxr_pkt_handle_atomrsp_recv(ep, pkt_entry);
 		return;
+	case RXR_RECEIPT_PKT:
+		rxr_pkt_handle_receipt_recv(ep, pkt_entry);
+		return;
 	case RXR_EAGER_MSGRTM_PKT:
 		if (ep->use_zcpy_rx && pkt_entry->type == RXR_PKT_ENTRY_USER)
 			rxr_pkt_handle_zcpy_recv(ep, pkt_entry);
@@ -768,6 +830,8 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 			rxr_pkt_handle_rtm_rta_recv(ep, pkt_entry);
 		return;
 	case RXR_EAGER_TAGRTM_PKT:
+	case RXR_DC_EAGER_MSGRTM_PKT:
+	case RXR_DC_EAGER_TAGRTM_PKT:
 	case RXR_MEDIUM_MSGRTM_PKT:
 	case RXR_MEDIUM_TAGRTM_PKT:
 	case RXR_LONG_MSGRTM_PKT:

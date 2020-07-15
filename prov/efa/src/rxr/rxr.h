@@ -157,6 +157,13 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 #define RXR_MULTI_RECV_CONSUMER	BIT_ULL(5)
 
 /*
+ * Flags to tell if the transmission is using FI_DELIVERY_COMPLETE
+ * protocols
+ */
+
+#define RXR_DELIVERY_COMPLETE_REQUESTED	BIT_ULL(6)
+
+/*
  * OFI flags
  * The 64-bit flag field is used as follows:
  * 1-grow up    common (usable with multiple operations)

@@ -72,6 +72,7 @@
  *     Extra Feature Flags
  */
 #define RXR_REQ_FEATURE_RDMA_READ	BIT_ULL(0)
+#define RXR_REQ_FEATURE_DELIVERY_COMPLETE BIT_ULL(1)
 
 /*
  *     Utility struct and functions for
@@ -181,6 +182,42 @@ struct rxr_eager_tagrtm_hdr {
 	uint64_t tag;
 };
 
+struct rxr_dc_eager_rtm_base_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	uint32_t msg_id;
+	uint32_t tx_id;
+	uint32_t padding;
+};
+
+static inline
+struct rxr_dc_eager_rtm_base_hdr *rxr_get_dc_eager_rtm_base_hdr(void *pkt)
+{
+	return (struct rxr_dc_eager_rtm_base_hdr *)pkt;
+}
+
+struct rxr_dc_eager_msgrtm_hdr {
+	struct rxr_dc_eager_rtm_base_hdr hdr;
+};
+
+static inline
+struct rxr_dc_eager_msgrtm_hdr *rxr_get_dc_eager_msgrtm_hdr(void *pkt)
+{
+	return (struct rxr_dc_eager_msgrtm_hdr *)pkt;
+}
+
+struct rxr_dc_eager_tagrtm_hdr {
+	struct rxr_dc_eager_rtm_base_hdr hdr;
+	uint64_t tag;
+};
+
+static inline
+struct rxr_dc_eager_tagrtm_hdr *rxr_get_dc_eager_tagrtm_hdr(void *pkt)
+{
+	return (struct rxr_dc_eager_tagrtm_hdr *)pkt;
+}
+
 struct rxr_medium_rtm_base_hdr {
 	struct rxr_rtm_base_hdr hdr;
 	uint64_t data_len;
@@ -261,6 +298,10 @@ ssize_t rxr_pkt_init_eager_msgrtm(struct rxr_ep *ep,
 				  struct rxr_tx_entry *tx_entry,
 				  struct rxr_pkt_entry *pkt_entry);
 
+ssize_t rxr_pkt_init_dc_eager_msgrtm(struct rxr_ep *ep,
+				     struct rxr_tx_entry *tx_entry,
+				     struct rxr_pkt_entry *pkt_entry);
+
 ssize_t rxr_pkt_init_eager_tagrtm(struct rxr_ep *ep,
 				  struct rxr_tx_entry *tx_entry,
 				  struct rxr_pkt_entry *pkt_entry);
@@ -268,6 +309,10 @@ ssize_t rxr_pkt_init_eager_tagrtm(struct rxr_ep *ep,
 ssize_t rxr_pkt_init_medium_msgrtm(struct rxr_ep *ep,
 				   struct rxr_tx_entry *tx_entry,
 				   struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_dc_eager_tagrtm(struct rxr_ep *ep,
+				     struct rxr_tx_entry *tx_entry,
+				     struct rxr_pkt_entry *pkt_entry);
 
 ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_ep *ep,
 				   struct rxr_tx_entry *tx_entry,
