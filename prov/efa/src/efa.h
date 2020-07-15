@@ -398,6 +398,17 @@ bool efa_peer_support_rdma_read(struct rxr_peer *peer)
 }
 
 static inline
+bool rxr_peer_support_delivery_complete(struct rxr_peer *peer)
+{
+	/* FI_DELIVERY_COMPLETE is an extra feature defined in version 4 (the base version).
+	 * Because it is an extra feature, an EP will assume the peer does not support
+	 * it before a handshake packet was received.
+	 */
+	return (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED) &&
+	       (peer->features[0] & RXR_REQ_FEATURE_DELIVERY_COMPLETE);
+}
+
+static inline
 bool efa_both_support_rdma_read(struct rxr_ep *ep, struct rxr_peer *peer)
 {
 	if (!rxr_env.use_device_rdma)

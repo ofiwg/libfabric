@@ -166,7 +166,7 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
  * 60 - 63      provider specific
  */
 #define RXR_NO_COMPLETION	BIT_ULL(60)
-
+#define RXR_NO_COUNTER  	BIT_ULL(61)
 /*
  * RM flags
  */
