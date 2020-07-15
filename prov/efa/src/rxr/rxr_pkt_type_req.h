@@ -224,8 +224,20 @@ struct rxr_medium_rtm_base_hdr {
 	uint64_t offset;
 };
 
+struct rxr_dc_medium_rtm_base_hdr {
+	struct rxr_rtm_base_hdr hdr;
+	uint64_t data_len;
+	uint64_t offset;
+	uint32_t tx_id;
+	uint32_t padding;
+};
+
 struct rxr_medium_msgrtm_hdr {
 	struct rxr_medium_rtm_base_hdr hdr;
+};
+
+struct rxr_dc_medium_msgrtm_hdr {
+	struct rxr_dc_medium_rtm_base_hdr hdr;
 };
 
 struct rxr_medium_tagrtm_hdr {
@@ -233,10 +245,33 @@ struct rxr_medium_tagrtm_hdr {
 	uint64_t tag;
 };
 
+struct rxr_dc_medium_tagrtm_hdr {
+	struct rxr_dc_medium_rtm_base_hdr hdr;
+	uint64_t tag;
+};
+
 static inline
 struct rxr_medium_rtm_base_hdr *rxr_get_medium_rtm_base_hdr(void *pkt)
 {
 	return (struct rxr_medium_rtm_base_hdr *)pkt;
+}
+
+static inline
+struct rxr_dc_medium_rtm_base_hdr *rxr_get_dc_medium_rtm_base_hdr(void *pkt)
+{
+	return (struct rxr_dc_medium_rtm_base_hdr *)pkt;
+}
+
+static inline
+struct rxr_dc_medium_msgrtm_hdr *rxr_get_dc_medium_msgrtm_hdr(void *pkt)
+{
+	return (struct rxr_dc_medium_msgrtm_hdr *)pkt;
+}
+
+static inline
+struct rxr_dc_medium_tagrtm_hdr *rxr_get_dc_medium_tagrtm_hdr(void *pkt)
+{
+	return (struct rxr_dc_medium_tagrtm_hdr *)pkt;
 }
 
 struct rxr_long_rtm_base_hdr {
@@ -314,9 +349,17 @@ ssize_t rxr_pkt_init_dc_eager_tagrtm(struct rxr_ep *ep,
 				     struct rxr_tx_entry *tx_entry,
 				     struct rxr_pkt_entry *pkt_entry);
 
+ssize_t rxr_pkt_init_dc_medium_msgrtm(struct rxr_ep *ep,
+				      struct rxr_tx_entry *tx_entry,
+				      struct rxr_pkt_entry *pkt_entry);
+
 ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_ep *ep,
 				   struct rxr_tx_entry *tx_entry,
 				   struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_dc_medium_tagrtm(struct rxr_ep *ep,
+				      struct rxr_tx_entry *tx_entry,
+				      struct rxr_pkt_entry *pkt_entry);
 
 ssize_t rxr_pkt_init_long_msgrtm(struct rxr_ep *ep,
 				 struct rxr_tx_entry *tx_entry,
@@ -368,6 +411,8 @@ void rxr_pkt_handle_medium_rtm_send_completion(struct rxr_ep *ep,
 void rxr_pkt_handle_long_rtm_send_completion(struct rxr_ep *ep,
 					     struct rxr_pkt_entry *pkt_entry);
 
+void rxr_pkt_handle_dc_medium_rtm_send_completion(struct rxr_ep *ep,
+						  struct rxr_pkt_entry *pkt_entry);
 static inline
 void rxr_pkt_handle_read_rtm_send_completion(struct rxr_ep *ep,
 					     struct rxr_pkt_entry *pkt_entry)
