@@ -151,7 +151,6 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct efa_mr *efa_mr;
 	struct ofi_mr_entry *entry;
 	int ret;
-	static const int EFA_MR_CACHE_FLUSH_CHECK = 512;
 
 	if (flags & OFI_MR_NOCACHE) {
 		ret = efa_mr_regattr(fid, attr, flags, mr_fid);
@@ -166,10 +165,6 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	domain = container_of(fid, struct efa_domain,
 			      util_domain.domain_fid.fid);
-
-	if (domain->cache.cached_cnt > 0 && domain->cache.cached_cnt % EFA_MR_CACHE_FLUSH_CHECK==0) {
-		ofi_mr_cache_flush(&domain->cache, false);
-	}
 
 	ret = ofi_mr_cache_search(&domain->cache, attr, &entry);
 	if (OFI_UNLIKELY(ret))
