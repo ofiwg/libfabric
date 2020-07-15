@@ -427,6 +427,12 @@ struct rxr_rtw_base_hdr *rxr_get_rtw_base_hdr(void *pkt)
 	return (struct rxr_rtw_base_hdr *)pkt;
 }
 
+struct efa_rma_iov {
+	uint64_t		addr;
+	size_t			len;
+	uint64_t		key;
+};
+
 struct rxr_eager_rtw_hdr {
 	uint8_t type;
 	uint8_t version;
@@ -435,6 +441,24 @@ struct rxr_eager_rtw_hdr {
 	uint32_t rma_iov_count;
 	struct fi_rma_iov rma_iov[0];
 };
+
+struct rxr_dc_eager_rtw_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint32_t rma_iov_count;
+	/* end of rxr_rtw_base_hdr */
+	uint32_t tx_id;
+	uint32_t padding;
+	struct efa_rma_iov rma_iov[0];
+};
+
+static inline
+struct rxr_dc_eager_rtw_hdr *rxr_get_dc_eager_rtw_hdr(void *pkt)
+{
+	return (struct rxr_dc_eager_rtw_hdr *)pkt;
+}
 
 struct rxr_long_rtw_hdr {
 	uint8_t type;
@@ -474,6 +498,10 @@ ssize_t rxr_pkt_init_long_rtw(struct rxr_ep *ep,
 ssize_t rxr_pkt_init_read_rtw(struct rxr_ep *ep,
 			      struct rxr_tx_entry *tx_entry,
 			      struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_dc_eager_rtw(struct rxr_ep *ep,
+				  struct rxr_tx_entry *tx_entry,
+				  struct rxr_pkt_entry *pkt_entry);
 /*
  *     handle_sent() functions
  */
@@ -514,6 +542,9 @@ void rxr_pkt_handle_read_rtw_send_completion(struct rxr_ep *ep,
  */
 void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_dc_eager_rtw_recv(struct rxr_ep *ep,
+				      struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 				  struct rxr_pkt_entry *pkt_entry);

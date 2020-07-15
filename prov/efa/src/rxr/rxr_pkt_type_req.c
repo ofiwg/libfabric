@@ -74,6 +74,7 @@ struct rxr_req_inf REQ_INF_LIST[] = {
 	[RXR_DC_EAGER_TAGRTM_PKT] = {4, sizeof(struct rxr_dc_eager_tagrtm_hdr), RXR_REQ_FEATURE_DELIVERY_COMPLETE},
 	/* rtw header */
 	[RXR_EAGER_RTW_PKT] = {4, sizeof(struct rxr_eager_rtw_hdr), 0},
+	[RXR_DC_EAGER_RTW_PKT] = {4, sizeof(struct rxr_dc_eager_rtw_hdr), RXR_REQ_FEATURE_DELIVERY_COMPLETE},
 	[RXR_LONG_RTW_PKT] = {4, sizeof(struct rxr_long_rtw_hdr), 0},
 	[RXR_READ_RTW_PKT] = {4, sizeof(struct rxr_read_rtw_hdr), RXR_REQ_FEATURE_RDMA_READ},
 	/* rtr header */
@@ -157,6 +158,7 @@ size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry)
 
 	hdr_size = REQ_INF_LIST[base_hdr->type].base_hdr_size;
 	if (base_hdr->type == RXR_EAGER_RTW_PKT ||
+	    base_hdr->type == RXR_DC_EAGER_RTW_PKT ||
 	    base_hdr->type == RXR_LONG_RTW_PKT ||
 	    base_hdr->type == RXR_READ_RTW_PKT)
 		hdr_size += rxr_get_rtw_base_hdr(pkt_entry->pkt)->rma_iov_count * sizeof(struct fi_rma_iov);
@@ -231,7 +233,9 @@ size_t rxr_pkt_req_max_header_size(int pkt_type)
 		+ sizeof(struct rxr_req_opt_raw_addr_hdr) + RXR_MAX_NAME_LENGTH
 		+ sizeof(struct rxr_req_opt_cq_data_hdr);
 
-	if (pkt_type == RXR_EAGER_RTW_PKT || pkt_type == RXR_LONG_RTW_PKT)
+	if (pkt_type == RXR_EAGER_RTW_PKT ||
+	    pkt_type == RXR_DC_EAGER_RTW_PKT ||
+	    pkt_type == RXR_LONG_RTW_PKT)
 		max_hdr_size += RXR_IOV_LIMIT * sizeof(struct fi_rma_iov);
 
 	return max_hdr_size;
@@ -1225,6 +1229,23 @@ ssize_t rxr_pkt_init_eager_rtw(struct rxr_ep *ep,
 	return 0;
 }
 
+ssize_t rxr_pkt_init_dc_eager_rtw(struct rxr_ep *ep,
+				  struct rxr_tx_entry *tx_entry,
+				  struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_dc_eager_rtw_hdr *dc_eager_rtw_hdr;
+
+	assert(tx_entry->op == ofi_op_write);
+
+	dc_eager_rtw_hdr = (struct rxr_dc_eager_rtw_hdr *)pkt_entry->pkt;
+	dc_eager_rtw_hdr->rma_iov_count = tx_entry->rma_iov_count;
+	rxr_pkt_init_req_hdr(ep, tx_entry, RXR_DC_EAGER_RTW_PKT, pkt_entry);
+	rxr_pkt_init_rtw_data(ep, tx_entry, pkt_entry,
+			      (struct fi_rma_iov *)dc_eager_rtw_hdr->rma_iov);
+	dc_eager_rtw_hdr->tx_id = tx_entry->tx_id;
+	return 0;
+}
+
 ssize_t rxr_pkt_init_long_rtw(struct rxr_ep *ep,
 			      struct rxr_tx_entry *tx_entry,
 			      struct rxr_pkt_entry *pkt_entry)
@@ -1354,28 +1375,19 @@ struct rxr_rx_entry *rxr_pkt_alloc_rtw_rx_entry(struct rxr_ep *ep,
 	return rx_entry;
 }
 
-void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
-				   struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_proc_eager_rtw(struct rxr_ep *ep,
+			    struct fi_rma_iov *rma_iov,
+			    size_t rma_iov_count,
+			    struct rxr_rx_entry *rx_entry,
+			    struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_rx_entry *rx_entry;
-	struct rxr_eager_rtw_hdr *rtw_hdr;
+	ssize_t err;
 	char *data;
 	size_t data_size, hdr_size;
-	ssize_t err;
 
-	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
-	if (!rx_entry) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"RX entries exhausted.\n");
-		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		return;
-	}
-
-	rtw_hdr = (struct rxr_eager_rtw_hdr *)pkt_entry->pkt;
-	rx_entry->iov_count = rtw_hdr->rma_iov_count;
-	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
+	err = rxr_rma_verified_copy_iov(ep, rma_iov, rma_iov_count,
 					FI_REMOTE_WRITE, rx_entry->iov, rx_entry->desc);
+
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_eq_write_error(&ep->util_ep, FI_EIO, err);
@@ -1409,6 +1421,55 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		rxr_release_rx_entry(ep, rx_entry);
 	}
+}
+
+void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
+				   struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_eager_rtw_hdr *rtw_hdr;
+
+	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
+
+	if (!rx_entry) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"RX entries exhausted.\n");
+		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
+	}
+
+	rtw_hdr = (struct rxr_eager_rtw_hdr *)pkt_entry->pkt;
+	rx_entry->iov_count = rtw_hdr->rma_iov_count;
+	rxr_pkt_proc_eager_rtw(ep,
+			       rtw_hdr->rma_iov,
+			       rtw_hdr->rma_iov_count,
+			       rx_entry, pkt_entry);
+}
+
+void rxr_pkt_handle_dc_eager_rtw_recv(struct rxr_ep *ep,
+				      struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_dc_eager_rtw_hdr *rtw_hdr;
+
+	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
+	if (!rx_entry) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"RX entries exhausted.\n");
+		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
+	}
+
+	rx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
+	rtw_hdr = (struct rxr_dc_eager_rtw_hdr *)pkt_entry->pkt;
+	rx_entry->tx_id = rtw_hdr->tx_id;
+	rx_entry->iov_count = rtw_hdr->rma_iov_count;
+	rxr_pkt_proc_eager_rtw(ep,
+			       (struct fi_rma_iov *)rtw_hdr->rma_iov,
+			       rtw_hdr->rma_iov_count,
+			       rx_entry, pkt_entry);
 }
 
 void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,

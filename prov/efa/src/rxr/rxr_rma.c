@@ -395,6 +395,9 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	ssize_t err;
 	struct rxr_peer *peer;
 	struct efa_domain *efa_domain;
+	bool delivery_complete_requested;
+	int ctrl_type;
+	size_t max_rtm_data_size;
 	struct rxr_domain *rxr_domain = rxr_ep_domain(ep);
 
 	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
@@ -405,9 +408,46 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	if (peer->is_local)
 		return rxr_rma_post_shm_write(ep, tx_entry);
 
+	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
+	if (delivery_complete_requested) {
+		/*
+		 * Because delivery complete is defined as an extra
+		 * feature, the receiver might not support it.
+		 *
+		 * The sender cannot send with FI_DELIVERY_COMPLETE
+		 * if the peer is not able to handle it.
+		 *
+		 * If the sender does not know whether the peer
+		 * can handle it, it needs to wait for
+		 * a handshake packet from the peer.
+		 *
+		 * The handshake packet contains
+		 * the information whether the peer
+		 * support it or not.
+		 */
+		err = rxr_pkt_wait_handshake(ep, tx_entry->addr, peer);
+		if (OFI_UNLIKELY(err))
+			return err;
+
+		assert(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED);
+		if (!rxr_peer_support_delivery_complete(peer))
+			return -FI_EOTHER;
+
+		max_rtm_data_size = rxr_pkt_req_max_data_size(ep,
+							      tx_entry->addr,
+							      RXR_DC_EAGER_RTW_PKT);
+	} else {
+		max_rtm_data_size = rxr_pkt_req_max_data_size(ep,
+							      tx_entry->addr,
+							      RXR_EAGER_RTW_PKT);
+	}
+
 	/* Inter instance */
-	if (tx_entry->total_len < rxr_pkt_req_max_data_size(ep, tx_entry->addr, RXR_EAGER_RTW_PKT))
-		return rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0);
+	if (tx_entry->total_len < max_rtm_data_size) {
+		ctrl_type = delivery_complete_requested ?
+			RXR_DC_EAGER_RTW_PKT : RXR_EAGER_RTW_PKT;
+		return rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, ctrl_type, 0);
+	}
 
 	if (tx_entry->total_len >= rxr_env.efa_min_read_write_size &&
 	    efa_both_support_rdma_read(ep, peer) &&
