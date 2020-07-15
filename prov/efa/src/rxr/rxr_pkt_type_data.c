@@ -234,7 +234,8 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 	tx_entry->bytes_acked +=
 		rxr_get_data_pkt(pkt_entry->pkt)->hdr.seg_size;
 
-	if (tx_entry->total_len == tx_entry->bytes_acked)
+	/* If FI_DELIVERY_COMPLETE requested, rx_cq_handle_tx_completion() will be called upon receiving RECEIPT */
+	if (tx_entry->total_len == tx_entry->bytes_acked && !tx_entry->delivery_complete_requested)
 		rxr_cq_handle_tx_completion(ep, tx_entry);
 }
 
@@ -294,15 +295,25 @@ int rxr_pkt_proc_data(struct rxr_ep *ep,
 	bytes_left = rx_entry->total_len - rx_entry->bytes_done;
 	assert(bytes_left >= 0);
 	if (!bytes_left) {
+		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
+		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 #if ENABLE_DEBUG
 		dlist_remove(&rx_entry->rx_pending_entry);
 		ep->rx_pending--;
 #endif
-		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
+		if (rx_entry->delivery_complete_requested) {
+			ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_RECEIPT_PKT, 0);
+			if (OFI_UNLIKELY(ret)) {
+				FI_WARN(&rxr_prov, FI_LOG_CQ, "Posting of receipt packet failed! err=%ld\n", ret);
+				efa_eq_write_error(&ep->util_ep, FI_EIO, ret);
+				rxr_release_rx_entry(ep, rx_entry);
+				return ret;
+			}
+			return 0;
+		}
 
-		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 		rxr_release_rx_entry(ep, rx_entry);
-		return 0;
+		return ret;
 	}
 
 	if (!rx_entry->window) {
