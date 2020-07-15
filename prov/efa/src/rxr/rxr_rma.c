@@ -315,6 +315,12 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	if (peer->is_local) {
 		assert(rxr_ep->use_shm);
 		use_lower_ep_read = true;
+	} else if (peer->is_self) {
+		/*
+		 * when peer is myself, I want to use rdma read as long as
+		 * device support it (disregard rxr_env.use_device_rdma).
+		 */
+		use_lower_ep_read = efa_ep_support_rdma_read(rxr_ep->rdm_ep);
 	} else if (efa_both_support_rdma_read(rxr_ep, peer)) {
 		/* efa_both_support_rdma_read also check rxr_env.use_device_rdma,
 		 * so we do not check it here
