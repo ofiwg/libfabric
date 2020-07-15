@@ -577,10 +577,6 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 {
 	int ret;
 
-	/* hdr already read from socket in previous call */
-	if (ep->cur_rx_msg.done_len >= ep->cur_rx_msg.hdr_len)
-		return FI_SUCCESS;
-
 	ret = tcpx_recv_hdr(ep->sock, &ep->stage_buf, &ep->cur_rx_msg);
 	if (ret < 0)
 		return ret;
@@ -591,7 +587,6 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 						  base_hdr.payload_off;
 
 		if (ep->cur_rx_msg.hdr_len > ep->cur_rx_msg.done_len) {
-			/* Still more header to read */
 			ret = tcpx_recv_hdr(ep->sock, &ep->stage_buf,
 					    &ep->cur_rx_msg);
 			if (ret < 0)
@@ -623,9 +618,11 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 
 	do {
 		if (!ep->cur_rx_entry) {
-			ret = tcpx_get_next_rx_hdr(ep);
-			if (ret)
-				goto err;
+			if (ep->cur_rx_msg.done_len < ep->cur_rx_msg.hdr_len) {
+				ret = tcpx_get_next_rx_hdr(ep);
+				if (ret)
+					goto err;
+			}
 
 			ret = ep->start_op[ep->cur_rx_msg.hdr.base_hdr.op](ep);
 			if (ret)
