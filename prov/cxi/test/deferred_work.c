@@ -180,7 +180,7 @@ Test(deferred_work, eager_message_no_comp_event)
 	deferred_msg_op_test(false, 1024, 123546, false, 0);
 }
 
-Test(deferred_work, rendezvous_message_no_comp_event)
+Test(deferred_work, rendezvous_message_no_comp_event, .timeout=60)
 {
 	deferred_msg_op_test(false, 1024 * 1024, 123546, false, 0);
 }
@@ -200,7 +200,7 @@ Test(deferred_work, tagged_eager_message_no_comp_event)
 	deferred_msg_op_test(false, 1024, 123546, true, 987654321);
 }
 
-Test(deferred_work, tagged_rendezvous_message_no_comp_event)
+Test(deferred_work, tagged_rendezvous_message_no_comp_event, .timeout=60)
 {
 	deferred_msg_op_test(false, 1024 * 1024, 123546, true, 987654321);
 }
@@ -798,7 +798,7 @@ Test(deferred_work, recv_eager_message_no_comp_event)
 	deferred_recv_op_test(false, 1024, 0, false, 0);
 }
 
-Test(deferred_work, recv_rendezvous_message_no_comp_event)
+Test(deferred_work, recv_rendezvous_message_no_comp_event, .timeout=60)
 {
 	deferred_recv_op_test(false, 1024 * 1024, 0, false, 0);
 }
@@ -818,7 +818,7 @@ Test(deferred_work, recv_tagged_eager_message_no_comp_event)
 	deferred_recv_op_test(false, 1024, 0, true, 987654321);
 }
 
-Test(deferred_work, recv_tagged_rendezvous_message_no_comp_event)
+Test(deferred_work, recv_tagged_rendezvous_message_no_comp_event, .timeout=60)
 {
 	deferred_recv_op_test(false, 1024 * 1024, 0, true, 987654321);
 }

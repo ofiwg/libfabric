@@ -1326,7 +1326,7 @@ static void *tagged_evt_worker(void *data)
 	pthread_exit(NULL);
 }
 
-Test(tagged, multitudes_sw_rdzv)
+Test(tagged, multitudes_sw_rdzv, .timeout=60)
 {
 	int ret;
 	size_t buf_len = 4 * 1024;
@@ -1461,7 +1461,7 @@ ParameterizedTestParameters(tagged, multitudes)
 				   param_sz);
 }
 
-ParameterizedTest(struct multitudes_params *param, tagged, multitudes)
+ParameterizedTest(struct multitudes_params *param, tagged, multitudes, .timeout=60)
 {
 	int ret;
 	size_t buf_len = param->length;
@@ -2096,7 +2096,7 @@ ParameterizedTestParameters(tagged, rx)
 				   param_sz);
 }
 
-ParameterizedTest(struct tagged_rx_params *param, tagged, rx)
+ParameterizedTest(struct tagged_rx_params *param, tagged, rx, .timeout=30)
 {
 	uint8_t *recv_buf,
 		*send_buf;
@@ -2158,7 +2158,7 @@ Test(tagged, rput_abort, .disabled=true)
 }
 
 
-Test(tagged, oflow_replenish, .timeout=30)
+Test(tagged, oflow_replenish, .timeout=180)
 {
 	uint8_t *recv_buf,
 		*send_buf;
@@ -3253,7 +3253,7 @@ Test(tagged, recv_more)
  * Post matching Receives and check data to validate correct ordering amid flow
  * control recovery.
  */
-Test(tagged, fc, .timeout = 30)
+Test(tagged, fc, .timeout = 180)
 {
 	int i, j, ret, tx_ret;
 	uint8_t *send_bufs;
