@@ -303,7 +303,22 @@ void rxr_pkt_data_from_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 			   &tx_iov_index, &tx_iov_offset);
 	assert(tx_iov_index < tx_entry->iov_count);
 	assert(tx_iov_offset < tx_entry->iov[tx_iov_index].iov_len);
-	if (!tx_entry->desc[tx_iov_index]) {
+
+	/*
+	 * We want to go through the bounce-buffers here only when
+	 * one of the following conditions are true:
+	 * 1. The application can not register buffers (no FI_MR_LOCAL)
+	 * 2. desc.peer.iface is anything but FI_HMEM_SYSTEM
+	 * 3. prov/shm is not used for this transfer, and #1 or #2 hold true.
+	 *
+	 * In the first case, we use the pre-registered pkt_entry's MR. In the
+	 * second case, this is for the eager and medium-message protocols which
+	 * can not rendezvous and pull the data from a peer. In the third case,
+	 * the bufpool would not have been created with a registration handler,
+	 * so pkt_entry->mr will be NULL.
+	 *
+	 */
+	if (!tx_entry->desc[tx_iov_index] && pkt_entry->mr) {
 		data = (char *)pkt_entry->pkt + hdr_size;
 		data_size = rxr_copy_from_tx(data, data_size, tx_entry, data_offset);
 		pkt_entry->send->iov_count = 0;
@@ -311,11 +326,10 @@ void rxr_pkt_data_from_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 		return;
 	}
 
-	/* when desc is available, we use it instead of copying */
 	assert(ep->core_iov_limit >= 2);
 	pkt_entry->send->iov[0].iov_base = pkt_entry->pkt;
 	pkt_entry->send->iov[0].iov_len = hdr_size;
-	pkt_entry->send->desc[0] = fi_mr_desc(pkt_entry->mr);
+	pkt_entry->send->desc[0] = pkt_entry->mr ? fi_mr_desc(pkt_entry->mr) : NULL;
 
 	pkt_entry->send->iov[1].iov_base = (char *)tx_entry->iov[tx_iov_index].iov_base + tx_iov_offset;
 	pkt_entry->send->iov[1].iov_len = MIN(data_size, tx_entry->iov[tx_iov_index].iov_len - tx_iov_offset);
