@@ -59,11 +59,16 @@ static struct fi_ops vrb_mr_fi_ops = {
 
 static inline
 int vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *buf,
-		      size_t len, void *context)
+		      size_t len, void *context, enum fi_hmem_iface iface,
+		      uint64_t device)
 {
 	/* ops should be set in special functions */
 	md->mr_fid.fid.fclass = FI_CLASS_MR;
 	md->mr_fid.fid.context = context;
+	md->info.iface = iface;
+	md->info.device = device;
+	md->info.iov.iov_base = (void *) buf;
+	md->info.iov.iov_len = len;
 
 	if (md->domain->flags & VRB_USE_ODP)
 		vrb_access |= VRB_ACCESS_ON_DEMAND;
@@ -131,7 +136,8 @@ vrb_mr_ofi2ibv_access(uint64_t ofi_access, struct vrb_domain *domain)
 static int
 vrb_mr_nocache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 		   uint64_t access, uint64_t offset, uint64_t requested_key,
-		   uint64_t flags, struct fid_mr **mr, void *context)
+		   uint64_t flags, struct fid_mr **mr, void *context,
+		   enum fi_hmem_iface iface, uint64_t device)
 {
 	struct vrb_mem_desc *md;
 	int ret;
@@ -147,7 +153,7 @@ vrb_mr_nocache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 	md->mr_fid.fid.ops = &vrb_mr_fi_ops;
 
 	ret = vrb_mr_reg_common(md, vrb_mr_ofi2ibv_access(access, md->domain),
-				buf, len, context);
+				buf, len, context, iface, device);
 	if (OFI_UNLIKELY(ret))
 		goto err;
 
@@ -186,7 +192,8 @@ int vrb_mr_cache_add_region(struct ofi_mr_cache *cache,
 	return vrb_mr_reg_common(md, IBV_ACCESS_LOCAL_WRITE |
 			IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC |
 			IBV_ACCESS_REMOTE_READ, entry->info.iov.iov_base,
-			entry->info.iov.iov_len, NULL);
+			entry->info.iov.iov_len, NULL, entry->info.iface,
+			entry->info.device);
 }
 
 void vrb_mr_cache_delete_region(struct ofi_mr_cache *cache,
@@ -200,7 +207,8 @@ void vrb_mr_cache_delete_region(struct ofi_mr_cache *cache,
 static int
 vrb_mr_cache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 		 uint64_t access, uint64_t offset, uint64_t requested_key,
-		 uint64_t flags, struct fid_mr **mr, void *context)
+		 uint64_t flags, struct fid_mr **mr, void *context,
+		 enum fi_hmem_iface iface, uint64_t device)
 {
 	struct vrb_mem_desc *md;
 	struct ofi_mr_entry *entry;
@@ -220,7 +228,8 @@ vrb_mr_cache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 	attr.offset = offset;
 	attr.requested_key = requested_key;
 	attr.auth_key_size = 0;
-	attr.iface = FI_HMEM_SYSTEM;
+	attr.iface = iface;
+	attr.device.reserved = device;
 
 	ret = (flags & OFI_MR_NOCACHE) ?
 	      ofi_mr_cache_reg(&domain->cache, &attr, &entry) :
@@ -234,27 +243,31 @@ vrb_mr_cache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 }
 
 static int
-vrb_mr_reg(struct fid *fid, const void *buf, size_t len, uint64_t access,
-	   uint64_t offset, uint64_t requested_key, uint64_t flags,
-	   struct fid_mr **mr, void *context)
+vrb_mr_reg_iface(struct fid *fid, const void *buf, size_t len, uint64_t access,
+		 uint64_t offset, uint64_t requested_key, uint64_t flags,
+		 struct fid_mr **mr, void *context, enum fi_hmem_iface iface,
+		 uint64_t device)
 {
 	struct vrb_domain *domain;
 
 	domain = container_of(fid, struct vrb_domain,
 			      util_domain.domain_fid.fid);
 
-	if (domain->cache.monitors[FI_HMEM_SYSTEM])
+	if (domain->cache.monitors[iface])
 		return vrb_mr_cache_reg(domain, buf, len, access, offset,
-					requested_key, flags, mr, context);
+					requested_key, flags, mr, context,
+					iface, device);
 	else
 		return vrb_mr_nocache_reg(domain, buf, len, access, offset,
-					  requested_key, flags, mr, context);
+					  requested_key, flags, mr, context,
+					  iface, device);
 }
 
 static int
-vrb_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
-	    uint64_t access, uint64_t offset, uint64_t requested_key,
-	    uint64_t flags, struct fid_mr **mr, void *context)
+vrb_mr_regv_iface(struct fid *fid, const struct iovec *iov, size_t count,
+		  uint64_t access, uint64_t offset, uint64_t requested_key,
+		  uint64_t flags, struct fid_mr **mr, void *context,
+		  enum fi_hmem_iface iface, uint64_t device)
 {
 	const void *addr = count ? iov->iov_base: NULL;
 	size_t len = count ? iov->iov_len : 0;
@@ -262,16 +275,35 @@ vrb_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
 	if (OFI_UNLIKELY(count > 1))
 		return -FI_EINVAL;
 
-	return vrb_mr_reg(fid, addr, len, access, offset, requested_key, flags,
-			  mr, context);
+	return vrb_mr_reg_iface(fid, addr, len, access, offset, requested_key,
+				flags, mr, context, iface, device);
+}
+
+static int
+vrb_mr_reg(struct fid *fid, const void *buf, size_t len, uint64_t access,
+	   uint64_t offset, uint64_t requested_key, uint64_t flags,
+	   struct fid_mr **mr, void *context)
+{
+	return vrb_mr_reg_iface(fid, buf, len, access, offset, requested_key,
+				flags, mr, context, FI_HMEM_SYSTEM, 0);
+}
+
+static int
+vrb_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
+	    uint64_t access, uint64_t offset, uint64_t requested_key,
+	    uint64_t flags, struct fid_mr **mr, void *context)
+{
+	return vrb_mr_regv_iface(fid, iov, count, access, offset, requested_key,
+				 flags, mr, context, FI_HMEM_SYSTEM, 0);
 }
 
 static int vrb_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			  uint64_t flags, struct fid_mr **mr)
 {
-	return vrb_mr_regv(fid, attr->mr_iov, attr->iov_count, attr->access,
-			   attr->offset, attr->requested_key, flags, mr,
-			   attr->context);
+	return vrb_mr_regv_iface(fid, attr->mr_iov, attr->iov_count,
+				 attr->access, attr->offset,
+				 attr->requested_key, flags, mr, attr->context,
+				 attr->iface, attr->device.reserved);
 }
 
 struct fi_ops_mr vrb_mr_ops = {
