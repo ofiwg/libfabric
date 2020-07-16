@@ -380,6 +380,8 @@ static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
 		context = &(*mr_array)[i];
 		if (!(opts.options & FT_OPT_ALLOC_MULT_MR)) {
 			context->buf = default_buf + mr_size * i;
+			context->mr = mr;
+			context->desc = mr_desc;
 			continue;
 		}
 		(*mr_bufs)[i] = calloc(1, mr_size);
