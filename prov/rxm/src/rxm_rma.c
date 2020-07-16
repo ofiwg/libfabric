@@ -183,12 +183,17 @@ static void
 rxm_ep_format_rma_msg(struct rxm_rma_buf *rma_buf, const struct fi_msg_rma *orig_msg,
 		      struct iovec *rxm_iov, struct fi_msg_rma *rxm_msg)
 {
+	ssize_t ret __attribute__((unused));
+
 	rxm_msg->context = rma_buf;
 	rxm_msg->addr = orig_msg->addr;
 	rxm_msg->data = orig_msg->data;
 
-	ofi_copy_from_iov(rma_buf->pkt.data, rma_buf->pkt.hdr.size,
-			  orig_msg->msg_iov, orig_msg->iov_count, 0);
+	ret = ofi_copy_from_hmem_iov(rma_buf->pkt.data, rma_buf->pkt.hdr.size,
+				     FI_HMEM_SYSTEM, 0, orig_msg->msg_iov,
+				     orig_msg->iov_count, 0);
+	assert(ret == rma_buf->pkt.hdr.size);
+
 	rxm_iov->iov_base = &rma_buf->pkt.data;
 	rxm_iov->iov_len = rma_buf->pkt.hdr.size;
 	rxm_msg->msg_iov = rxm_iov;

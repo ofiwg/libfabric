@@ -1074,6 +1074,7 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	struct fid_mr *rxm_mr_msg_mr[RXM_IOV_LIMIT];
 	struct fid_mr **mr_iov;
+	size_t len;
 	ssize_t ret;
 	struct rxm_tx_rndv_buf *tx_buf;
 	size_t i;
@@ -1116,16 +1117,20 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	rxm_rndv_hdr_init(rxm_ep, &tx_buf->pkt.data, iov, tx_buf->count,
 			  mr_iov);
 
-	ret = sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr);
+	len = sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr);
 
 	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV) {
-		ofi_copy_from_iov(rxm_pkt_rndv_data(&tx_buf->pkt),
-				  rxm_ep->buffered_min, iov, count, 0);
-		ret += rxm_ep->buffered_min;
+		ret = ofi_copy_from_hmem_iov(rxm_pkt_rndv_data(&tx_buf->pkt),
+					     rxm_ep->buffered_min,
+					     FI_HMEM_SYSTEM, 0, iov, count, 0);
+		assert(ret == rxm_ep->buffered_min);
+
+		len += rxm_ep->buffered_min;
 	}
 
 	*tx_rndv_buf = tx_buf;
-	return ret;
+	return len;
+
 err:
 	*tx_rndv_buf = NULL;
 	ofi_buf_free(tx_buf);
@@ -1226,6 +1231,7 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep,
 {
 	struct rxm_tx_sar_buf *tx_buf;
 	enum rxm_sar_seg_type seg_type = RXM_SAR_SEG_MIDDLE;
+	ssize_t ret __attribute__((unused));
 
 	if (seg_no == (segs_cnt - 1)) {
 		seg_type = RXM_SAR_SEG_LAST;
@@ -1241,7 +1247,10 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep,
 		return -FI_EAGAIN;
 	}
 
-	ofi_copy_from_iov(tx_buf->pkt.data, seg_len, iov, count, *iov_offset);
+	ret = ofi_copy_from_hmem_iov(tx_buf->pkt.data, seg_len, FI_HMEM_SYSTEM,
+				     0, iov, count, *iov_offset);
+	assert(ret == seg_len);
+
 	*iov_offset += seg_len;
 
 	*out_tx_buf = tx_buf;
@@ -1271,8 +1280,10 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (!first_tx_buf)
 		return -FI_EAGAIN;
 
-	ofi_copy_from_iov(first_tx_buf->pkt.data, rxm_eager_limit,
-			  iov, count, iov_offset);
+	ret = ofi_copy_from_hmem_iov(first_tx_buf->pkt.data, rxm_eager_limit,
+				     FI_HMEM_SYSTEM, 0, iov, count, iov_offset);
+	assert(ret == rxm_eager_limit);
+
 	iov_offset += rxm_eager_limit;
 
 	ret = fi_send(rxm_conn->msg_ep, &first_tx_buf->pkt,
@@ -1341,6 +1352,10 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	struct rxm_tx_eager_buf *tx_buf;
 	ssize_t ret;
+	const struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
 
 	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 	if (!tx_buf) {
@@ -1352,7 +1367,11 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	tx_buf->app_context = NULL;
 
 	rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag, flags, &tx_buf->pkt);
-	memcpy(tx_buf->pkt.data, buf, len);
+
+	ret = ofi_copy_from_hmem_iov(tx_buf->pkt.data, len, FI_HMEM_SYSTEM, 0,
+				     &iov, 1, 0);
+	assert(ret == len);
+
 	tx_buf->flags = flags;
 
 	ret = rxm_ep_msg_normal_send(rxm_conn, &tx_buf->pkt, pkt_size,
@@ -1455,8 +1474,12 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
 					 flags, &tx_buf->pkt);
-		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
-				  iov, count, 0);
+
+		ret = ofi_copy_from_hmem_iov(tx_buf->pkt.data,
+					     tx_buf->pkt.hdr.size,
+					     FI_HMEM_SYSTEM, 0, iov, count, 0);
+		assert(ret == tx_buf->pkt.hdr.size);
+
 		tx_buf->app_context = context;
 		tx_buf->flags = flags;
 

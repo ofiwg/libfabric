@@ -394,14 +394,17 @@ static int rxm_rx_buf_match_msg_id(struct dlist_entry *item, const void *arg)
 
 static ssize_t rxm_process_seg_data(struct rxm_rx_buf *rx_buf, int *done)
 {
-	uint64_t done_len;
+	ssize_t done_len;
 	ssize_t ret;
 
-	done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
-				   rx_buf->recv_entry->rxm_iov.count,
-				   rx_buf->recv_entry->sar.total_recv_len,
-				   rx_buf->pkt.data,
-				   rx_buf->pkt.ctrl_hdr.seg_size);
+	done_len = ofi_copy_to_hmem_iov(FI_HMEM_SYSTEM, 0,
+					rx_buf->recv_entry->rxm_iov.iov,
+					rx_buf->recv_entry->rxm_iov.count,
+					rx_buf->recv_entry->sar.total_recv_len,
+					rx_buf->pkt.data,
+					rx_buf->pkt.ctrl_hdr.seg_size);
+	assert(done_len == rx_buf->pkt.ctrl_hdr.seg_size);
+
 	rx_buf->recv_entry->sar.total_recv_len += done_len;
 
 	if ((rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) == RXM_SAR_SEG_LAST) ||
@@ -640,22 +643,28 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 
 ssize_t rxm_handle_eager(struct rxm_rx_buf *rx_buf)
 {
-	uint64_t done_len;
+	ssize_t done_len;
 
-	done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
-				   rx_buf->recv_entry->rxm_iov.count,
-				   0, rx_buf->pkt.data, rx_buf->pkt.hdr.size);
+	done_len = ofi_copy_to_hmem_iov(FI_HMEM_SYSTEM, 0,
+					rx_buf->recv_entry->rxm_iov.iov,
+					rx_buf->recv_entry->rxm_iov.count, 0,
+					rx_buf->pkt.data, rx_buf->pkt.hdr.size);
+	assert(done_len == rx_buf->pkt.hdr.size);
+
 	return rxm_finish_recv(rx_buf, done_len);
 }
 
 ssize_t rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 {
-	uint64_t done_len;
+	ssize_t done_len;
 	ssize_t ret;
 
-	done_len = ofi_copy_to_iov(rx_buf->recv_entry->rxm_iov.iov,
-				   rx_buf->recv_entry->rxm_iov.count,
-				   0, rx_buf->pkt.data, rx_buf->pkt.hdr.size);
+	done_len = ofi_copy_to_hmem_iov(FI_HMEM_SYSTEM, 0,
+					rx_buf->recv_entry->rxm_iov.iov,
+					rx_buf->recv_entry->rxm_iov.count, 0,
+					rx_buf->pkt.data, rx_buf->pkt.hdr.size);
+	assert(done_len == rx_buf->pkt.hdr.size);
+
 	if (rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
 		ofi_coll_handle_xfer_comp(rx_buf->pkt.hdr.tag,
 				rx_buf->recv_entry->context);
@@ -1261,14 +1270,13 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 				    result_len, FI_SUCCESS);
 }
 
-
 static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 				      struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_tx_atomic_buf *tx_buf;
 	struct rxm_atomic_resp_hdr *resp_hdr;
 	uint64_t len;
-	int ret = 0;
+	ssize_t ret = 0;
 
 	resp_hdr = (struct rxm_atomic_resp_hdr *) rx_buf->pkt.data;
 	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX_ATOMIC].pool,
@@ -1281,6 +1289,7 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 
 	if (resp_hdr->status) {
 		struct util_cntr *cntr = NULL;
+
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 		       "bad atomic response status %d\n", ntohl(resp_hdr->status));
 
@@ -1301,8 +1310,11 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 
 	len = ofi_total_iov_len(tx_buf->result_iov, tx_buf->result_iov_count);
 	assert(ntohl(resp_hdr->result_len) == len);
-	ofi_copy_to_iov(tx_buf->result_iov, tx_buf->result_iov_count, 0,
-			resp_hdr->data, len);
+
+	ret = ofi_copy_to_hmem_iov(FI_HMEM_SYSTEM, 0, tx_buf->result_iov,
+				   tx_buf->result_iov_count, 0, resp_hdr->data,
+				   len);
+	assert(ret == len);
 
 	if (!(tx_buf->flags & FI_INJECT))
 		ret = rxm_cq_write_tx_comp(rxm_ep,

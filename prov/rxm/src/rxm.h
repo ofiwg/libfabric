@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -53,6 +54,7 @@
 #include <ofi_list.h>
 #include <ofi_proto.h>
 #include <ofi_iov.h>
+#include <ofi_hmem.h>
 
 #ifndef _RXM_H_
 #define _RXM_H_

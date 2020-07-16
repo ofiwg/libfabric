@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2018 Cray Inc. All rights reserved.
  * Copyright (c) 2018 System Fabric Works, Inc. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -157,11 +158,16 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	atomic_hdr = (struct rxm_atomic_hdr *) tx_buf->pkt.data;
 
-	ofi_copy_from_iov(atomic_hdr->data, buf_len, buf_iov,
-			  msg->iov_count, 0);
-	if (cmp_len)
-		ofi_copy_from_iov(atomic_hdr->data + buf_len, cmp_len,
-				  cmp_iov, compare_iov_count, 0);
+	ret = ofi_copy_from_hmem_iov(atomic_hdr->data, buf_len, FI_HMEM_SYSTEM,
+				     0, buf_iov, msg->iov_count, 0);
+	assert(ret == buf_len);
+
+	if (cmp_len) {
+		ret = ofi_copy_from_hmem_iov(atomic_hdr->data + buf_len,
+					     cmp_len, FI_HMEM_SYSTEM, 0,
+					     cmp_iov, compare_iov_count, 0);
+		assert(ret == cmp_len);
+	}
 
 	tx_buf->result_iov_count = result_iov_count;
 	if (resultv)
