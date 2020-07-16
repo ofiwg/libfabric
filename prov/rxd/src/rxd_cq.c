@@ -207,7 +207,7 @@ static void rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_
 {
 	struct rxd_pkt_entry *pkt_entry;
 
-	if (rxd_peer(ep, addr)->peer_addr != FI_ADDR_UNSPEC &&
+	if (rxd_peer(ep, addr)->peer_addr != RXD_ADDR_INVALID &&
 	    rxd_peer(ep, addr)->peer_addr != peer_addr)
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
 			"overwriting active peer - unexpected behavior\n");
@@ -280,7 +280,7 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 					    struct rxd_pkt_entry, d_entry))->seq_no;
 	}
 
-	if (peer->peer_addr == FI_ADDR_UNSPEC)
+	if (peer->peer_addr == RXD_ADDR_INVALID)
 		return;
 
 	dlist_foreach_container_safe(&peer->tx_list, struct rxd_x_entry,
@@ -529,7 +529,6 @@ static struct rxd_x_entry *rxd_match_rx(struct rxd_ep *ep,
 	}
 
 	rx_entry = container_of(match, struct rxd_x_entry, entry);
-
 	total_size = op ? op->size : msg_size;
 
 	if (rx_entry->flags & RXD_MULTI_RECV) {
@@ -996,7 +995,7 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 				   &rxd_comp_pkt_seq_no, &pkt_entry->d_entry);
 		return;
 	} else if (rxd_peer(ep, pkt->base_hdr.peer)->peer_addr != 
-		   FI_ADDR_UNSPEC) {
+		   RXD_ADDR_INVALID) {
 		rxd_ep_send_ack(ep, pkt->base_hdr.peer);
 	}
 free:
@@ -1023,12 +1022,12 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 			return;
 		}
 
-		if (rxd_peer(ep, base_hdr->peer)->peer_addr != FI_ADDR_UNSPEC)
+		if (rxd_peer(ep, base_hdr->peer)->peer_addr != RXD_ADDR_INVALID)
 			goto ack;
 		goto release;
 	}
 
-	if (rxd_peer(ep, base_hdr->peer)->peer_addr == FI_ADDR_UNSPEC)
+	if (rxd_peer(ep, base_hdr->peer)->peer_addr == RXD_ADDR_INVALID)
 		goto release;
 
 	ret = rxd_unpack_init_rx(ep, &rx_entry, pkt_entry, base_hdr, &sar_hdr,

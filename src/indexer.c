@@ -122,7 +122,6 @@ void *ofi_idx_remove_ordered(struct indexer *idx, int index)
 
 	entry = idx->array[ofi_idx_array_index(index)];
 	item = entry[entry_index].item;
-	assert(item != NULL);
 	entry[entry_index].item = NULL;	
 	if (ofi_idx_free_list_empty(idx) || index < idx->free_list) {
 		entry[entry_index].next = idx->free_list;

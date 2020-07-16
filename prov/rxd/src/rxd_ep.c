@@ -414,12 +414,13 @@ ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 int rxd_ep_send_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	int ret;
-
+	fi_addr_t dg_addr;
 	pkt_entry->timestamp = ofi_gettime_ms();
 
+	dg_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(ep)->rxdaddr_dg_idx),
+					    pkt_entry->peer);
 	ret = fi_send(ep->dg_ep, (const void *) rxd_pkt_start(pkt_entry),
-		      pkt_entry->pkt_size, pkt_entry->desc,
-		      rxd_ep_av(ep)->rxd_addr_table[pkt_entry->peer].dg_addr,
+		      pkt_entry->pkt_size, pkt_entry->desc, dg_addr,
 		      &pkt_entry->context);
 	if (ret) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "error sending packet: %d (%s)\n",
@@ -474,7 +475,7 @@ ssize_t rxd_send_rts_if_needed(struct rxd_ep *ep, fi_addr_t addr)
 			return -FI_ENOMEM;
 	}
 
-	if (rxd_peer(ep, addr)->peer_addr == FI_ADDR_UNSPEC &&
+	if (rxd_peer(ep, addr)->peer_addr == RXD_ADDR_INVALID &&
 	    dlist_empty(&(rxd_peer(ep, addr)->unacked)))
 		return rxd_ep_send_rts(ep, addr);
 	return 0;
@@ -1151,7 +1152,7 @@ int rxd_create_peer(struct rxd_ep *ep, uint64_t rxd_addr)
 	if (!peer)
 		return -FI_ENOMEM;	
 
-	peer->peer_addr = FI_ADDR_UNSPEC;
+	peer->peer_addr = RXD_ADDR_INVALID;
 	peer->tx_seq_no = 0;
 	peer->rx_seq_no = 0;
 	peer->last_rx_ack = 0;

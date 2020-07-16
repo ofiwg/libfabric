@@ -148,7 +148,7 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 	if (!tx_entry)
 		goto out;
 
-	if (rxd_peer(rxd_ep, rxd_addr)->peer_addr != FI_ADDR_UNSPEC)
+	if (rxd_peer(rxd_ep, rxd_addr)->peer_addr != RXD_ADDR_INVALID)
 		(void) rxd_start_xfer(rxd_ep, tx_entry);
 
 out:
@@ -252,7 +252,7 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	if (!tx_entry)
 		goto out;
 
-	if (rxd_peer(rxd_ep, rxd_addr)->peer_addr == FI_ADDR_UNSPEC)
+	if (rxd_peer(rxd_ep, rxd_addr)->peer_addr == RXD_ADDR_INVALID)
 		goto out;
 
 	(void) rxd_start_xfer(rxd_ep, tx_entry);

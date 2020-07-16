@@ -72,6 +72,7 @@
 #define RXD_RX_POOL_CHUNK_CNT	1024
 #define RXD_MAX_PENDING		128
 #define RXD_MAX_PKT_RETRY	50
+#define RXD_ADDR_INVALID	0
 
 #define RXD_PKT_IN_USE		(1 << 0)
 #define RXD_PKT_ACKED		(1 << 1)
@@ -154,13 +155,12 @@ struct rxd_av {
 	struct util_av util_av;
 	struct fid_av *dg_av;
 	struct ofi_rbmap rbmap;
-	
-	int rxd_addr_idx;
 
 	int dg_av_used;
 	size_t dg_addrlen;
 	struct indexer fi_addr_idx;	
-	struct rxd_addr *rxd_addr_table;
+	struct indexer rxdaddr_dg_idx;
+	struct index_map rxdaddr_fi_idm;
 };
 
 struct rxd_cq;
@@ -397,7 +397,7 @@ struct rxd_match_attr {
 
 static inline int rxd_match_addr(fi_addr_t addr, fi_addr_t match_addr)
 {
-	return (addr == FI_ADDR_UNSPEC || addr == match_addr);
+	return (addr == RXD_ADDR_INVALID || addr == match_addr);
 }
 
 static inline int rxd_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag)
