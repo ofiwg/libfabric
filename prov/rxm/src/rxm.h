@@ -450,7 +450,7 @@ struct rxm_rx_buf {
 	uint8_t repost;
 
 	/* Used for large messages */
-	struct rxm_rndv_hdr *rndv_hdr;
+	struct rxm_rndv_hdr *remote_rndv_hdr;
 	size_t rndv_rma_index;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 

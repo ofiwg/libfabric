@@ -439,9 +439,9 @@ rxm_prepare_deferred_rndv_read(struct rxm_deferred_tx_entry **def_tx_entry,
 
 	(*def_tx_entry)->rndv_read.rx_buf = rx_buf;
 	(*def_tx_entry)->rndv_read.rma_iov.addr =
-			rx_buf->rndv_hdr->iov[index].addr;
+			rx_buf->remote_rndv_hdr->iov[index].addr;
 	(*def_tx_entry)->rndv_read.rma_iov.key =
-			rx_buf->rndv_hdr->iov[index].key;
+			rx_buf->remote_rndv_hdr->iov[index].key;
 
 	for (i = 0; i < count; i++) {
 		(*def_tx_entry)->rndv_read.rxm_iov.iov[i] = iov[i];
@@ -479,7 +479,7 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 	       "Got incoming recv with msg_id: 0x%" PRIx64 "\n",
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
-	rx_buf->rndv_hdr = (struct rxm_rndv_hdr *) rx_buf->pkt.data;
+	rx_buf->remote_rndv_hdr = (struct rxm_rndv_hdr *) rx_buf->pkt.data;
 	rx_buf->rndv_rma_index = 0;
 
 	if (!rx_buf->ep->rdm_mr_local) {
@@ -506,13 +506,13 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 				     rx_buf->pkt.hdr.size);
 	}
 
-	assert(rx_buf->rndv_hdr->count &&
-	       (rx_buf->rndv_hdr->count <= RXM_IOV_LIMIT));
+	assert(rx_buf->remote_rndv_hdr->count &&
+	       (rx_buf->remote_rndv_hdr->count <= RXM_IOV_LIMIT));
 
 	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_READ);
 
-	for (i = 0; i < rx_buf->rndv_hdr->count; i++) {
-		size_t copy_len = MIN(rx_buf->rndv_hdr->iov[i].len,
+	for (i = 0; i < rx_buf->remote_rndv_hdr->count; i++) {
+		size_t copy_len = MIN(rx_buf->remote_rndv_hdr->iov[i].len,
 				      total_recv_len);
 
 		ret = ofi_copy_iov_desc(&iov[0], &desc[0], &count,
@@ -527,8 +527,8 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 		}
 		total_recv_len -= copy_len;
 		ret = fi_readv(rx_buf->conn->msg_ep, iov, desc, count, 0,
-			       rx_buf->rndv_hdr->iov[i].addr,
-			       rx_buf->rndv_hdr->iov[i].key, rx_buf);
+			       rx_buf->remote_rndv_hdr->iov[i].addr,
+			       rx_buf->remote_rndv_hdr->iov[i].key, rx_buf);
 		if (ret) {
 			if (ret == -FI_EAGAIN) {
 				struct rxm_deferred_tx_entry *def_tx_entry;
@@ -1149,7 +1149,7 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	case RXM_RNDV_READ:
 		rx_buf = comp->op_context;
 		assert(comp->flags & FI_READ);
-		if (++rx_buf->rndv_rma_index < rx_buf->rndv_hdr->count)
+		if (++rx_buf->rndv_rma_index < rx_buf->remote_rndv_hdr->count)
 			return 0;
 		else
 			return rxm_rndv_send_ack(rx_buf);
