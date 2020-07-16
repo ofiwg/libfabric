@@ -3,6 +3,7 @@
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2018-2019 Cray Inc. All rights reserved.
  * Copyright (c) 2018-2019 System Fabric Works, Inc. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -431,7 +432,6 @@ struct vrb_mem_desc {
 };
 
 extern struct fi_ops_mr vrb_mr_ops;
-extern struct fi_ops_mr vrb_mr_cache_ops;
 
 int vrb_mr_cache_add_region(struct ofi_mr_cache *cache,
 			       struct ofi_mr_entry *entry);
