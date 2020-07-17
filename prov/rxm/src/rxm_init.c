@@ -470,6 +470,12 @@ RXM_INI
 			"Force auto-progress for data transfers even if app "
 			"requested manual progress (default: false/no).");
 
+	fi_param_define(&rxm_prov, "use_rndv_write", FI_PARAM_BOOL,
+			"Set this environment variable to control the  "
+			"RxM Rendezvous protocol.  If set (1), RxM will use "
+			"RMA writes rather than RMA reads during Rendezvous "
+			"transactions. (default: 0).");
+
 	rxm_init_infos();
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);
 	fi_param_get_size_t(&rxm_prov, "msg_rx_size", &rxm_msg_rx_size);

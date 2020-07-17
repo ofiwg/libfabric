@@ -2866,7 +2866,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep_fid, void *context)
 {
 	struct rxm_ep *rxm_ep;
-	int ret;
+	int ret, use_rndv_write = 0;
 
 	rxm_ep = calloc(1, sizeof(*rxm_ep));
 	if (!rxm_ep)
@@ -2914,7 +2914,10 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		rxm_ep->eager_ops = &def_eager_ops;
 	}
 
-	rxm_ep->rndv_ops = &rxm_rndv_ops_read;
+	if (!fi_param_get_bool(&rxm_prov, "use_rndv_write", &use_rndv_write) && use_rndv_write)
+		rxm_ep->rndv_ops = &rxm_rndv_ops_write;
+	else
+		rxm_ep->rndv_ops = &rxm_rndv_ops_read;
 	dlist_init(&rxm_ep->rndv_wait_list);
 
 	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
