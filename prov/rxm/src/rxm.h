@@ -497,6 +497,12 @@ struct rxm_tx_rndv_buf {
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 	uint8_t count;
 
+	struct {
+		struct iovec iov[RXM_IOV_LIMIT];
+		void *desc[RXM_IOV_LIMIT];
+		struct rxm_conn *conn;
+	} write_rndv;
+
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
 };

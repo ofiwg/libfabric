@@ -1005,7 +1005,7 @@ static void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 	struct rxm_rndv_hdr *rndv_hdr = (struct rxm_rndv_hdr *)buf;
 	size_t i;
 
-	for (i = 0; i < count; i++) {
+	for (i = 0; i < count && mr[i]; i++) {
 		rndv_hdr->iov[i].addr = RXM_MR_VIRT_ADDR(rxm_ep->msg_info) ?
 			(uintptr_t)iov[i].iov_base : 0;
 		rndv_hdr->iov[i].len = (uint64_t)iov[i].iov_len;
@@ -1053,6 +1053,7 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	struct fid_mr **mr_iov;
 	ssize_t ret;
 	struct rxm_tx_rndv_buf *tx_buf;
+	size_t i;
 
 	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV);
 	if (!tx_buf) {
@@ -1070,13 +1071,22 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	if (!rxm_ep->rdm_mr_local) {
 		ret = rxm_msg_mr_regv(rxm_ep, iov, tx_buf->count, data_len,
-				      FI_REMOTE_READ, tx_buf->mr);
+				      FI_REMOTE_READ | FI_WRITE,
+				      tx_buf->mr);
 		if (ret)
 			goto err;
 		mr_iov = tx_buf->mr;
 	} else {
 		/* desc is msg fid_mr * array */
 		mr_iov = (struct fid_mr **)desc;
+	}
+
+	if (rxm_ep_rndv_write(rxm_ep)) {
+		tx_buf->write_rndv.conn = rxm_conn;
+		for (i = 0; i < count; i++) {
+			tx_buf->write_rndv.iov[i] = iov[i];
+			tx_buf->write_rndv.desc[i] = fi_mr_desc(mr_iov[i]);
+		}
 	}
 
 	rxm_rndv_hdr_init(rxm_ep, &tx_buf->pkt.data, iov, tx_buf->count,
