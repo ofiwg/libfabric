@@ -1082,8 +1082,7 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	if (!rxm_ep->rdm_mr_local) {
 		ret = rxm_msg_mr_regv(rxm_ep, iov, tx_buf->count, data_len,
-				      FI_REMOTE_READ | FI_WRITE,
-				      tx_buf->mr);
+				      rxm_ep->rndv_ops->tx_mr_access, tx_buf->mr);
 		if (ret)
 			goto err;
 		mr_iov = tx_buf->mr;
@@ -1623,7 +1622,25 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
 						   def_tx_entry->rndv_read.rx_buf->
 							recv_entry->context, ret);
-				break;
+			}
+			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
+			free(def_tx_entry);
+			break;
+		case RXM_DEFERRED_TX_RNDV_WRITE:
+			ret = rxm_ep->rndv_ops->xfer(
+				def_tx_entry->rxm_conn->msg_ep,
+				def_tx_entry->rndv_write.rxm_iov.iov,
+				def_tx_entry->rndv_write.rxm_iov.desc,
+				def_tx_entry->rndv_write.rxm_iov.count, 0,
+				def_tx_entry->rndv_write.rma_iov.addr,
+				def_tx_entry->rndv_write.rma_iov.key,
+				def_tx_entry->rndv_write.tx_buf);
+			if (ret) {
+				if (ret == -FI_EAGAIN)
+					break;
+				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
+						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
+						   def_tx_entry->rndv_write.tx_buf, ret);
 			}
 			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
 			free(def_tx_entry);
@@ -2800,13 +2817,17 @@ rxm_prepare_deferred_rndv_write(struct rxm_deferred_tx_entry **def_tx_entry,
 	return 0;
 }
 
-static struct rxm_rndv_ops rxm_rndv_ops_read = {
+struct rxm_rndv_ops rxm_rndv_ops_read = {
+	.rx_mr_access = FI_READ,
+	.tx_mr_access = FI_REMOTE_READ,
 	.handle_rx = rxm_rndv_read,
 	.xfer = fi_readv,
 	.defer_xfer = rxm_prepare_deferred_rndv_read
 };
 
-static struct rxm_rndv_ops rxm_rndv_ops_write = {
+struct rxm_rndv_ops rxm_rndv_ops_write = {
+	.rx_mr_access = FI_REMOTE_WRITE,
+	.tx_mr_access = FI_WRITE,
 	.handle_rx = rxm_rndv_write_ack,
 	.xfer = fi_writev,
 	.defer_xfer = rxm_prepare_deferred_rndv_write

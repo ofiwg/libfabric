@@ -501,6 +501,46 @@ ssize_t rxm_rndv_read(struct rxm_rx_buf *rx_buf)
 	return ret;
 }
 
+static ssize_t rxm_rndv_write(struct rxm_rx_buf *rx_buf)
+{
+	int i;
+	ssize_t ret;
+	struct rxm_tx_rndv_buf *tx_buf;
+	size_t total_len, rma_len = 0;
+	struct rxm_rndv_hdr *rx_hdr = (struct rxm_rndv_hdr *) rx_buf->pkt.data;
+
+	tx_buf = ofi_bufpool_get_ibuf(
+		rx_buf->ep->buf_pools[RXM_BUF_POOL_TX_RNDV].pool,
+		rx_buf->pkt.ctrl_hdr.msg_id);
+	total_len = tx_buf->pkt.hdr.size;
+
+	tx_buf->write_rndv.remote_hdr.count = rx_hdr->count;
+	memcpy(tx_buf->write_rndv.remote_hdr.iov, rx_hdr->iov,
+	       rx_hdr->count * sizeof(rx_hdr->iov[0]));
+	// calculate number of RMA writes required to complete the transfer.
+	// there me be less than iov count RMA writes required,
+	// depending on differences between remote and local IOV sizes.
+	for (i = 0; i < tx_buf->write_rndv.remote_hdr.count; i++) {
+		if (total_len > rma_len) {
+			tx_buf->write_rndv.rndv_rma_count++;
+			rma_len += tx_buf->write_rndv.remote_hdr.iov[i].len;
+		}
+	}
+
+	RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_WRITE);
+
+	ret = rxm_rndv_xfer(rx_buf->ep, tx_buf->write_rndv.conn->msg_ep, rx_hdr,
+			    tx_buf->write_rndv.iov, tx_buf->write_rndv.desc,
+			    tx_buf->count, total_len, tx_buf);
+
+	if (ret)
+		rxm_cq_write_error(rx_buf->ep->util_ep.rx_cq,
+				   rx_buf->ep->util_ep.rx_cntr,
+				   tx_buf, ret);
+	rxm_rx_buf_free(rx_buf);
+	return ret;
+}
+
 static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 {
 	int ret = 0, i;
@@ -531,10 +571,11 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 	if (!rx_buf->ep->rdm_mr_local) {
 		total_recv_len = MIN(rx_buf->recv_entry->total_len,
 				     rx_buf->pkt.hdr.size);
-		ret = rxm_msg_mr_regv(rx_buf->ep,
-				      rx_buf->recv_entry->rxm_iov.iov,
+		ret = rxm_msg_mr_regv(rx_buf->ep, rx_buf->recv_entry->rxm_iov.iov,
 				      rx_buf->recv_entry->rxm_iov.count,
-				      total_recv_len, FI_READ, rx_buf->mr);
+				      total_recv_len,
+				      rx_buf->ep->rndv_ops->rx_mr_access,
+				      rx_buf->mr);
 		if (ret)
 			return ret;
 
@@ -823,6 +864,11 @@ out:
 err:
 	ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
 	return ret;
+}
+
+static ssize_t rxm_rndv_send_done(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_buf)
+{
+	return -FI_ENOSYS;
 }
 
 ssize_t rxm_rndv_write_ack(struct rxm_rx_buf *rx_buf)
@@ -1270,6 +1316,14 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 			return 0;
 		else
 			return rxm_rndv_send_ack(rx_buf);
+	case RXM_RNDV_WRITE:
+		tx_rndv_buf = comp->op_context;
+		assert(comp->flags & FI_WRITE);
+		if (++tx_rndv_buf->write_rndv.rndv_rma_index <
+		    tx_rndv_buf->write_rndv.rndv_rma_count)
+			return 0;
+		else
+			return rxm_rndv_send_done(rxm_ep, tx_rndv_buf);
 	case RXM_RNDV_ACK_SENT:
 		assert(comp->flags & FI_SEND);
 		return rxm_finish_send_rndv_ack(comp->op_context);
@@ -1408,6 +1462,8 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		err_entry.op_context = 0;
 		err_entry.flags = ofi_tx_cq_flags(base_buf->pkt.hdr.op);
 		break;
+	case RXM_RNDV_WRITE:
+		/* fall through */
 	case RXM_RNDV_TX:
 		rndv_buf = err_entry.op_context;
 		err_entry.op_context = rndv_buf->app_context;

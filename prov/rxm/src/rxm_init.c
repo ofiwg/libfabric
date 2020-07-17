@@ -103,7 +103,7 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 
 		/* FI_RMA cap is needed for large message transfer protocol */
 		if (core_info->caps & FI_MSG)
-			core_info->caps |= FI_RMA | FI_READ | FI_REMOTE_READ;
+			core_info->caps |= FI_RMA | FI_READ | FI_REMOTE_READ | FI_REMOTE_WRITE;
 
 		if (hints->domain_attr) {
 			core_info->domain_attr->caps |= hints->domain_attr->caps;

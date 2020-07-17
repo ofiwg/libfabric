@@ -338,6 +338,7 @@ struct rxm_atomic_resp_hdr {
 	FUNC(RXM_RNDV_ACK_WAIT),	\
 	FUNC(RXM_RNDV_DONE_WAIT),	\
 	FUNC(RXM_RNDV_READ),		\
+	FUNC(RXM_RNDV_WRITE),		\
 	FUNC(RXM_RNDV_ACK_SENT),	\
 	FUNC(RXM_RNDV_ACK_RECVD),	\
 	FUNC(RXM_RNDV_FINISH),		\
@@ -505,6 +506,9 @@ struct rxm_tx_rndv_buf {
 		struct iovec iov[RXM_IOV_LIMIT];
 		void *desc[RXM_IOV_LIMIT];
 		struct rxm_conn *conn;
+		size_t rndv_rma_index;
+		size_t rndv_rma_count;
+		struct rxm_rndv_hdr remote_hdr;
 	} write_rndv;
 
 	/* Must stay at bottom */
@@ -542,6 +546,7 @@ struct rxm_tx_atomic_buf {
 enum rxm_deferred_tx_entry_type {
 	RXM_DEFERRED_TX_RNDV_ACK,
 	RXM_DEFERRED_TX_RNDV_READ,
+	RXM_DEFERRED_TX_RNDV_WRITE,
 	RXM_DEFERRED_TX_SAR_SEG,
 	RXM_DEFERRED_TX_ATOMIC_RESP,
 	RXM_DEFERRED_TX_CREDIT_SEND,
@@ -563,6 +568,11 @@ struct rxm_deferred_tx_entry {
 			struct fi_rma_iov rma_iov;
 			struct rxm_iov rxm_iov;
 		} rndv_read;
+		struct {
+			struct rxm_tx_rndv_buf *tx_buf;
+			struct fi_rma_iov rma_iov;
+			struct rxm_iov rxm_iov;
+		} rndv_write;
 		struct {
 			struct rxm_tx_sar_buf *cur_seg_tx_buf;
 			struct {
@@ -662,6 +672,8 @@ struct rxm_eager_ops {
 };
 
 struct rxm_rndv_ops {
+	int rx_mr_access;
+	int tx_mr_access;
 	ssize_t (*handle_rx)(struct rxm_rx_buf *rx_buf);
 	ssize_t (*xfer)(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			size_t count, fi_addr_t remote_addr, uint64_t addr,
@@ -773,6 +785,7 @@ int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			uint64_t flags);
 ssize_t rxm_rndv_read(struct rxm_rx_buf *rx_buf);
 ssize_t rxm_rndv_write_ack(struct rxm_rx_buf *rx_buf);
+int rxm_ep_rndv_write(struct rxm_ep* rxm_ep);
 void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 			      const struct iovec *iov, size_t count,
 			      struct fid_mr **mr);
