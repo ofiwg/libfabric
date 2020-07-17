@@ -336,6 +336,7 @@ struct rxm_atomic_resp_hdr {
 	FUNC(RXM_CREDIT_TX),		\
 	FUNC(RXM_RNDV_TX),		\
 	FUNC(RXM_RNDV_ACK_WAIT),	\
+	FUNC(RXM_RNDV_DONE_WAIT),	\
 	FUNC(RXM_RNDV_READ),		\
 	FUNC(RXM_RNDV_ACK_SENT),	\
 	FUNC(RXM_RNDV_ACK_RECVD),	\
@@ -356,7 +357,8 @@ enum {
 	rxm_ctrl_rndv_ack,
 	rxm_ctrl_atomic,
 	rxm_ctrl_atomic_resp,
-	rxm_ctrl_credit
+	rxm_ctrl_credit,
+	rxm_ctrl_rndv_write_ack
 };
 
 struct rxm_pkt {
@@ -415,6 +417,7 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_INJECT,
 	RXM_BUF_POOL_TX_ACK,
 	RXM_BUF_POOL_TX_RNDV,
+	RXM_BUF_POOL_TX_RNDV_WRITE_ACK,
 	RXM_BUF_POOL_TX_ATOMIC,
 	RXM_BUF_POOL_TX_CREDIT,
 	RXM_BUF_POOL_TX_SAR,
@@ -450,6 +453,7 @@ struct rxm_rx_buf {
 	uint8_t repost;
 
 	/* Used for large messages */
+	struct dlist_entry rndv_wait_entry;
 	struct rxm_rndv_hdr *remote_rndv_hdr;
 	size_t rndv_rma_index;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
@@ -552,6 +556,7 @@ struct rxm_deferred_tx_entry {
 	union {
 		struct {
 			struct rxm_rx_buf *rx_buf;
+			size_t pkt_size;
 		} rndv_ack;
 		struct {
 			struct rxm_rx_buf *rx_buf;
@@ -696,6 +701,7 @@ struct rxm_ep {
 
 	struct dlist_entry	repost_ready_list;
 	struct dlist_entry	deferred_tx_conn_queue;
+	struct dlist_entry	rndv_wait_list;
 
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
@@ -766,6 +772,10 @@ int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
 ssize_t rxm_rndv_read(struct rxm_rx_buf *rx_buf);
+ssize_t rxm_rndv_write_ack(struct rxm_rx_buf *rx_buf);
+void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
+			      const struct iovec *iov, size_t count,
+			      struct fid_mr **mr);
 
 static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 {
@@ -904,6 +914,7 @@ rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	assert((type == RXM_BUF_POOL_TX) ||
 	       (type == RXM_BUF_POOL_TX_INJECT) ||
 	       (type == RXM_BUF_POOL_TX_ACK) ||
+	       (type == RXM_BUF_POOL_TX_RNDV_WRITE_ACK) ||
 	       (type == RXM_BUF_POOL_TX_RNDV) ||
 	       (type == RXM_BUF_POOL_TX_ATOMIC) ||
 	       (type == RXM_BUF_POOL_TX_CREDIT) ||

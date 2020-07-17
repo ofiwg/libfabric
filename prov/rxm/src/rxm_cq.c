@@ -272,7 +272,7 @@ static int rxm_finish_sar_segment_send(struct rxm_ep *rxm_ep,
 	return ret;
 }
 
-static int rxm_finish_send_rndv_ack(struct rxm_rx_buf *rx_buf)
+static int rxm_rndv_rx_finish(struct rxm_rx_buf *rx_buf)
 {
 	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_FINISH);
 
@@ -286,6 +286,17 @@ static int rxm_finish_send_rndv_ack(struct rxm_rx_buf *rx_buf)
 				  rx_buf->recv_entry->rxm_iov.count);
 
 	return rxm_finish_recv(rx_buf, rx_buf->recv_entry->total_len);
+}
+
+static int rxm_finish_send_rndv_ack(struct rxm_rx_buf *rx_buf)
+{
+	if (rxm_ep_rndv_write(rx_buf->ep)) {
+		dlist_insert_tail(&rx_buf->rndv_wait_entry, &rx_buf->ep->rndv_wait_list);
+		RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_DONE_WAIT);
+		return 0;
+	}
+
+	return rxm_rndv_rx_finish(rx_buf);
 }
 
 static int rxm_rndv_tx_finish(struct rxm_ep *rxm_ep,
@@ -711,6 +722,41 @@ static ssize_t rxm_rndv_send_ack_inject(struct rxm_rx_buf *rx_buf)
 	return fi_sendmsg(rx_buf->conn->msg_ep, &msg, FI_INJECT);
 }
 
+static ssize_t rxm_rndv_write_ack_inject(struct rxm_rx_buf *rx_buf)
+{
+	ssize_t ret;
+	struct rxm_pkt *pkt = alloca(sizeof(*pkt) + sizeof(struct rxm_rndv_hdr));
+	if (!pkt)
+		return -FI_ENOMEM;
+
+	struct iovec iov = {
+		.iov_base = pkt,
+		.iov_len = sizeof(*pkt) + sizeof(struct rxm_rndv_hdr),
+	};
+	struct fi_msg msg = {
+		.msg_iov = &iov,
+		.iov_count = 1,
+		.context = rx_buf,
+	};
+
+	memset(pkt, 0, sizeof(*pkt));
+	pkt->hdr.op = ofi_op_msg;
+	pkt->hdr.version = OFI_OP_VERSION;
+	pkt->hdr.size = iov.iov_len;
+	pkt->ctrl_hdr.version = RXM_CTRL_VERSION;
+	pkt->ctrl_hdr.type = rxm_ctrl_rndv_write_ack;
+	pkt->ctrl_hdr.conn_id = rx_buf->conn->handle.remote_key;
+	pkt->ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
+
+	rxm_rndv_hdr_init(
+		rx_buf->ep, pkt->data,
+		rx_buf->recv_entry->rxm_iov.iov,
+		rx_buf->recv_entry->rxm_iov.count, rx_buf->mr);
+
+	ret = fi_sendmsg(rx_buf->conn->msg_ep, &msg, FI_INJECT);
+	return ret;
+}
+
 static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_deferred_tx_entry *def_tx_entry;
@@ -762,6 +808,7 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 			}
 
 			def_tx_entry->rndv_ack.rx_buf = rx_buf;
+			def_tx_entry->rndv_ack.pkt_size = sizeof(rx_buf->pkt);
 			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
 			return 0;
 		} else {
@@ -778,7 +825,81 @@ err:
 	return ret;
 }
 
+ssize_t rxm_rndv_write_ack(struct rxm_rx_buf *rx_buf)
+{
+	struct rxm_deferred_tx_entry *def_tx_entry;
+	ssize_t ret;
 
+	assert(rx_buf->conn);
+
+	if ((sizeof(rx_buf->pkt) + sizeof(struct rxm_rndv_hdr)) <= rx_buf->ep->inject_limit) {
+		ret = rxm_rndv_write_ack_inject(rx_buf);
+		if (!ret)
+			goto out;
+
+		if (ret != -FI_EAGAIN) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"send ack via inject failed for MSG provider\n");
+			return ret;
+		}
+	}
+
+	rx_buf->recv_entry->rndv.tx_buf =
+		rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_RNDV_WRITE_ACK);
+	if (!rx_buf->recv_entry->rndv.tx_buf) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"ran out of buffers from RNDV_WRITE ACK buffer pool\n");
+		return -FI_EAGAIN;
+	}
+	assert(rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.type ==
+	       rxm_ctrl_rndv_write_ack);
+
+	rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.conn_id =
+		rx_buf->conn->handle.remote_key;
+	rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.msg_id =
+		rx_buf->pkt.ctrl_hdr.msg_id;
+
+	rxm_rndv_hdr_init(
+		rx_buf->ep, rx_buf->recv_entry->rndv.tx_buf->pkt.data,
+		rx_buf->recv_entry->rxm_iov.iov,
+		rx_buf->recv_entry->rxm_iov.count, rx_buf->mr);
+
+	ret = fi_send(rx_buf->conn->msg_ep, &rx_buf->recv_entry->rndv.tx_buf->pkt,
+		      sizeof(rx_buf->recv_entry->rndv.tx_buf->pkt) +
+			      sizeof(struct rxm_rndv_hdr),
+		      rx_buf->recv_entry->rndv.tx_buf->hdr.desc, 0, rx_buf);
+	if (ret) {
+		if (ret == -FI_EAGAIN) {
+			def_tx_entry = rxm_ep_alloc_deferred_tx_entry(
+				rx_buf->ep, rx_buf->conn,
+				RXM_DEFERRED_TX_RNDV_ACK);
+			if (!def_tx_entry) {
+				FI_WARN(&rxm_prov, FI_LOG_CQ,
+					"unable to "
+					"allocate TX entry for deferred ACK\n");
+				ret = -FI_EAGAIN;
+				goto err;
+			}
+
+			def_tx_entry->rndv_ack.rx_buf = rx_buf;
+			def_tx_entry->rndv_ack.pkt_size =
+				sizeof(rx_buf->recv_entry->rndv.tx_buf->pkt) +
+				sizeof(struct rxm_rndv_hdr);
+			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+			return 0;
+		} else {
+			FI_WARN(&rxm_prov, FI_LOG_CQ, "unable to send ACK: %zd\n",
+				ret);
+		}
+		goto err;
+	}
+out:
+	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_ACK_SENT);
+	return 0;
+err:
+	ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
+	return ret;
+}
 
 static int rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 				   struct fi_cq_data_entry *comp)
@@ -1115,6 +1236,8 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 			return rxm_handle_recv_comp(rx_buf);
 		case rxm_ctrl_rndv_ack:
 			return rxm_rndv_handle_ack(rxm_ep, rx_buf);
+		case rxm_ctrl_rndv_write_ack:
+			return rxm_rndv_write(rx_buf);
 		case rxm_ctrl_seg:
 			return rxm_sar_handle_segment(rx_buf);
 		case rxm_ctrl_atomic:

@@ -210,6 +210,14 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 		pkt = &tx_base_buf->pkt;
 		type = rxm_ctrl_rndv_ack;
 		break;
+	case RXM_BUF_POOL_TX_RNDV_WRITE_ACK:
+		tx_base_buf = buf;
+		tx_base_buf->pkt.hdr.op = ofi_op_msg;
+
+		tx_base_buf->hdr.desc = mr_desc;
+		pkt = &tx_base_buf->pkt;
+		type = rxm_ctrl_rndv_write_ack;
+		break;
 	case RXM_BUF_POOL_RMA:
 		rma_buf = buf;
 		rma_buf->pkt.hdr.op = ofi_op_msg;
@@ -351,6 +359,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		[RXM_BUF_POOL_TX_INJECT] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_ACK] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_RNDV] = rxm_ep->msg_info->tx_attr->size,
+		[RXM_BUF_POOL_TX_RNDV_WRITE_ACK] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_ATOMIC] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_SAR] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_CREDIT] = rxm_ep->msg_info->tx_attr->size,
@@ -367,6 +376,8 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		[RXM_BUF_POOL_TX_RNDV] = sizeof(struct rxm_rndv_hdr) +
 					 rxm_ep->buffered_min +
 					 sizeof(struct rxm_tx_rndv_buf),
+		[RXM_BUF_POOL_TX_RNDV_WRITE_ACK] = sizeof(struct rxm_rndv_hdr) +
+						   sizeof(struct rxm_tx_base_buf),
 		[RXM_BUF_POOL_TX_ATOMIC] = rxm_eager_limit +
 					 sizeof(struct rxm_tx_atomic_buf),
 		[RXM_BUF_POOL_TX_SAR] = rxm_eager_limit +
@@ -998,7 +1009,7 @@ static ssize_t rxm_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 				  context, rxm_ep->util_ep.rx_op_flags);
 }
 
-static void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
+void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 			      const struct iovec *iov, size_t count,
 			      struct fid_mr **mr)
 {
@@ -1578,8 +1589,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			ret = fi_send(def_tx_entry->rxm_conn->msg_ep,
 				      &def_tx_entry->rndv_ack.rx_buf->
 					recv_entry->rndv.tx_buf->pkt,
-				      sizeof(def_tx_entry->rndv_ack.rx_buf->
-					recv_entry->rndv.tx_buf->pkt),
+				      def_tx_entry->rndv_ack.pkt_size,
 				      def_tx_entry->rndv_ack.rx_buf->recv_entry->
 					rndv.tx_buf->hdr.desc,
 				      0, def_tx_entry->rndv_ack.rx_buf);
@@ -1588,7 +1598,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 					break;
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
 						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
-						   def_tx_entry->rndv_read.rx_buf->
+						   def_tx_entry->rndv_ack.rx_buf->
 						   recv_entry->context, ret);
 			}
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA,
@@ -2760,10 +2770,46 @@ rxm_prepare_deferred_rndv_read(struct rxm_deferred_tx_entry **def_tx_entry,
 	return 0;
 }
 
+static ssize_t
+rxm_prepare_deferred_rndv_write(struct rxm_deferred_tx_entry **def_tx_entry,
+			       size_t index, struct iovec *iov,
+			       void *desc[RXM_IOV_LIMIT], size_t count,
+			       void *buf)
+{
+	uint8_t i;
+	struct rxm_tx_rndv_buf *tx_buf = buf;
+	struct rxm_ep *rxm_ep = tx_buf->write_rndv.conn->handle.cmap->ep;
+
+	*def_tx_entry = rxm_ep_alloc_deferred_tx_entry(rxm_ep, tx_buf->write_rndv.conn,
+						       RXM_DEFERRED_TX_RNDV_WRITE);
+	if (!*def_tx_entry)
+		return -FI_ENOMEM;
+
+	(*def_tx_entry)->rndv_write.tx_buf = tx_buf;
+	(*def_tx_entry)->rndv_write.rma_iov.addr =
+			tx_buf->write_rndv.remote_hdr.iov[index].addr;
+	(*def_tx_entry)->rndv_write.rma_iov.key =
+			tx_buf->write_rndv.remote_hdr.iov[index].key;
+
+	for (i = 0; i < count; i++) {
+		(*def_tx_entry)->rndv_write.rxm_iov.iov[i] = iov[i];
+		(*def_tx_entry)->rndv_write.rxm_iov.desc[i] = desc[i];
+	}
+	(*def_tx_entry)->rndv_write.rxm_iov.count = count;
+
+	return 0;
+}
+
 static struct rxm_rndv_ops rxm_rndv_ops_read = {
 	.handle_rx = rxm_rndv_read,
 	.xfer = fi_readv,
 	.defer_xfer = rxm_prepare_deferred_rndv_read
+};
+
+static struct rxm_rndv_ops rxm_rndv_ops_write = {
+	.handle_rx = rxm_rndv_write_ack,
+	.xfer = fi_writev,
+	.defer_xfer = rxm_prepare_deferred_rndv_write
 };
 
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -2819,6 +2865,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	rxm_ep->rndv_ops = &rxm_rndv_ops_read;
+	dlist_init(&rxm_ep->rndv_wait_list);
 
 	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
 		(*ep_fid)->msg = &rxm_ops_msg_thread_unsafe;
@@ -2840,4 +2887,9 @@ err1:
 		fi_freeinfo(rxm_ep->rxm_info);
 	free(rxm_ep);
 	return ret;
+}
+
+int rxm_ep_rndv_write(struct rxm_ep* rxm_ep)
+{
+	return rxm_ep->rndv_ops == &rxm_rndv_ops_write;
 }
