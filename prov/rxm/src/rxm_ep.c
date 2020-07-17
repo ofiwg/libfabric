@@ -210,6 +210,14 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 		pkt = &tx_base_buf->pkt;
 		type = rxm_ctrl_rndv_ack;
 		break;
+	case RXM_BUF_POOL_TX_DONE:
+		tx_base_buf = buf;
+		tx_base_buf->pkt.hdr.op = ofi_op_msg;
+
+		tx_base_buf->hdr.desc = mr_desc;
+		pkt = &tx_base_buf->pkt;
+		type = rxm_ctrl_rndv_done;
+		break;
 	case RXM_BUF_POOL_TX_RNDV_WRITE_ACK:
 		tx_base_buf = buf;
 		tx_base_buf->pkt.hdr.op = ofi_op_msg;
@@ -358,6 +366,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		[RXM_BUF_POOL_TX] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_INJECT] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_ACK] = rxm_ep->msg_info->tx_attr->size,
+		[RXM_BUF_POOL_TX_DONE] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_RNDV] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_RNDV_WRITE_ACK] = rxm_ep->msg_info->tx_attr->size,
 		[RXM_BUF_POOL_TX_ATOMIC] = rxm_ep->msg_info->tx_attr->size,
@@ -373,6 +382,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		[RXM_BUF_POOL_TX_INJECT] = rxm_ep->inject_limit +
 					   sizeof(struct rxm_tx_base_buf),
 		[RXM_BUF_POOL_TX_ACK] = sizeof(struct rxm_tx_base_buf),
+		[RXM_BUF_POOL_TX_DONE] = sizeof(struct rxm_tx_base_buf),
 		[RXM_BUF_POOL_TX_RNDV] = sizeof(struct rxm_rndv_hdr) +
 					 rxm_ep->buffered_min +
 					 sizeof(struct rxm_tx_rndv_buf),
@@ -1603,6 +1613,25 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA,
 					 def_tx_entry->rndv_ack.rx_buf,
 					 RXM_RNDV_ACK_SENT);
+			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
+			free(def_tx_entry);
+			break;
+		case RXM_DEFERRED_TX_RNDV_DONE:
+			ret = fi_send(def_tx_entry->rxm_conn->msg_ep,
+				      &def_tx_entry->rndv_done.tx_buf->write_rndv.done_buf->pkt,
+				      sizeof(struct rxm_pkt),
+				      def_tx_entry->rndv_done.tx_buf->write_rndv.done_buf->hdr.desc,
+				      0, def_tx_entry->rndv_done.tx_buf);
+			if (ret) {
+				if (ret == -FI_EAGAIN)
+					break;
+				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.tx_cq,
+						   def_tx_entry->rxm_ep->util_ep.tx_cntr,
+						   def_tx_entry->rndv_done.tx_buf, ret);
+			}
+			RXM_UPDATE_STATE(FI_LOG_EP_DATA,
+					 def_tx_entry->rndv_done.tx_buf,
+					 RXM_RNDV_DONE_SENT);
 			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
 			free(def_tx_entry);
 			break;

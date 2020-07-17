@@ -341,6 +341,8 @@ struct rxm_atomic_resp_hdr {
 	FUNC(RXM_RNDV_WRITE),		\
 	FUNC(RXM_RNDV_ACK_SENT),	\
 	FUNC(RXM_RNDV_ACK_RECVD),	\
+	FUNC(RXM_RNDV_DONE_SENT),	\
+	FUNC(RXM_RNDV_DONE_RECVD),	\
 	FUNC(RXM_RNDV_FINISH),		\
 	FUNC(RXM_ATOMIC_RESP_WAIT),	\
 	FUNC(RXM_ATOMIC_RESP_SENT)
@@ -359,7 +361,8 @@ enum {
 	rxm_ctrl_atomic,
 	rxm_ctrl_atomic_resp,
 	rxm_ctrl_credit,
-	rxm_ctrl_rndv_write_ack
+	rxm_ctrl_rndv_write_ack,
+	rxm_ctrl_rndv_done
 };
 
 struct rxm_pkt {
@@ -417,6 +420,7 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_START	= RXM_BUF_POOL_TX,
 	RXM_BUF_POOL_TX_INJECT,
 	RXM_BUF_POOL_TX_ACK,
+	RXM_BUF_POOL_TX_DONE,
 	RXM_BUF_POOL_TX_RNDV,
 	RXM_BUF_POOL_TX_RNDV_WRITE_ACK,
 	RXM_BUF_POOL_TX_ATOMIC,
@@ -508,6 +512,7 @@ struct rxm_tx_rndv_buf {
 		struct rxm_conn *conn;
 		size_t rndv_rma_index;
 		size_t rndv_rma_count;
+		struct rxm_tx_base_buf *done_buf;
 		struct rxm_rndv_hdr remote_hdr;
 	} write_rndv;
 
@@ -545,6 +550,7 @@ struct rxm_tx_atomic_buf {
 
 enum rxm_deferred_tx_entry_type {
 	RXM_DEFERRED_TX_RNDV_ACK,
+	RXM_DEFERRED_TX_RNDV_DONE,
 	RXM_DEFERRED_TX_RNDV_READ,
 	RXM_DEFERRED_TX_RNDV_WRITE,
 	RXM_DEFERRED_TX_SAR_SEG,
@@ -563,6 +569,9 @@ struct rxm_deferred_tx_entry {
 			struct rxm_rx_buf *rx_buf;
 			size_t pkt_size;
 		} rndv_ack;
+		struct {
+			struct rxm_tx_rndv_buf *tx_buf;
+		} rndv_done;
 		struct {
 			struct rxm_rx_buf *rx_buf;
 			struct fi_rma_iov rma_iov;
@@ -928,6 +937,7 @@ rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	       (type == RXM_BUF_POOL_TX_INJECT) ||
 	       (type == RXM_BUF_POOL_TX_ACK) ||
 	       (type == RXM_BUF_POOL_TX_RNDV_WRITE_ACK) ||
+	       (type == RXM_BUF_POOL_TX_DONE) ||
 	       (type == RXM_BUF_POOL_TX_RNDV) ||
 	       (type == RXM_BUF_POOL_TX_ATOMIC) ||
 	       (type == RXM_BUF_POOL_TX_CREDIT) ||

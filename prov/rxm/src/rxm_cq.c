@@ -312,6 +312,10 @@ static int rxm_rndv_tx_finish(struct rxm_ep *rxm_ep,
 	ret = rxm_cq_write_tx_comp(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
 				   tx_buf->app_context, tx_buf->flags);
 
+	if (rxm_ep_rndv_write(rxm_ep) && tx_buf->write_rndv.done_buf) {
+		ofi_buf_free(tx_buf->write_rndv.done_buf);
+		tx_buf->write_rndv.done_buf = NULL;
+	}
 	assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
 	ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
 
@@ -342,6 +346,49 @@ static int rxm_rndv_handle_ack(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 		RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_ACK_RECVD);
 		ret = 0;
 	}
+	return ret;
+}
+
+static int rxm_rndv_rx_match(struct dlist_entry *item, const void *arg)
+{
+	uint64_t msg_id = *((uint64_t *) arg);
+	struct rxm_rx_buf *rx_buf;
+
+	rx_buf = container_of(item, struct rxm_rx_buf, rndv_wait_entry);
+	return (msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
+}
+
+static int rxm_rndv_handle_done(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
+{
+	struct dlist_entry *rx_buf_entry;
+	struct rxm_rx_buf *rndv_rx_buf;
+	int ret;
+
+	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got DONE for msg_id: 0x%" PRIx64 "\n",
+	       rx_buf->pkt.ctrl_hdr.msg_id);
+
+	rx_buf_entry = dlist_remove_first_match(&rx_buf->ep->rndv_wait_list,
+						rxm_rndv_rx_match,
+						&rx_buf->pkt.ctrl_hdr.msg_id);
+	if (!rx_buf_entry) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"Failed to find rndv wait entry for msg_id: 0x%" PRIx64 "\n",
+			rx_buf->pkt.ctrl_hdr.msg_id);
+		ret = -FI_EINVAL;
+		goto out;
+	}
+	rndv_rx_buf =
+		container_of(rx_buf_entry, struct rxm_rx_buf, rndv_wait_entry);
+
+	if (rndv_rx_buf->hdr.state == RXM_RNDV_DONE_WAIT) {
+		ret = rxm_rndv_rx_finish(rndv_rx_buf);
+	} else {
+		assert(rndv_rx_buf->hdr.state == RXM_RNDV_ACK_SENT);
+		RXM_UPDATE_STATE(FI_LOG_CQ, rndv_rx_buf, RXM_RNDV_DONE_RECVD);
+		ret = 0;
+	}
+out:
+	rxm_rx_buf_free(rx_buf);
 	return ret;
 }
 
@@ -866,9 +913,90 @@ err:
 	return ret;
 }
 
+
+static ssize_t rxm_rndv_send_done_inject(struct rxm_tx_rndv_buf *tx_buf)
+{
+	struct rxm_pkt pkt = {
+		.hdr.op = ofi_op_msg,
+		.hdr.version = OFI_OP_VERSION,
+		.ctrl_hdr.version = RXM_CTRL_VERSION,
+		.ctrl_hdr.type = rxm_ctrl_rndv_done,
+		.ctrl_hdr.conn_id = tx_buf->write_rndv.conn->handle.remote_key,
+		.ctrl_hdr.msg_id = tx_buf->pkt.ctrl_hdr.msg_id
+	};
+	struct iovec iov = {
+		.iov_base = &pkt,
+		.iov_len = sizeof(pkt),
+	};
+	struct fi_msg msg = {
+		.msg_iov = &iov,
+		.iov_count = 1,
+		.context = tx_buf,
+	};
+
+	return fi_sendmsg(tx_buf->write_rndv.conn->msg_ep, &msg, FI_INJECT);
+}
+
 static ssize_t rxm_rndv_send_done(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_buf)
 {
-	return -FI_ENOSYS;
+	struct rxm_deferred_tx_entry *def_tx_entry;
+	ssize_t ret;
+
+	if (sizeof(tx_buf->pkt) <= rxm_ep->inject_limit) {
+		ret = rxm_rndv_send_done_inject(tx_buf);
+		if (!ret)
+			goto out;
+
+		if (ret != -FI_EAGAIN) {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"send done via inject failed for MSG provider\n");
+			return ret;
+		}
+	}
+
+	tx_buf->write_rndv.done_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_DONE);
+	if (!tx_buf->write_rndv.done_buf) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"ran out of buffers from DONE buffer pool\n");
+		return -FI_EAGAIN;
+	}
+	assert(tx_buf->write_rndv.done_buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_done);
+	assert(tx_buf->hdr.state == RXM_RNDV_WRITE);
+
+	tx_buf->write_rndv.done_buf->pkt.ctrl_hdr.conn_id = tx_buf->pkt.ctrl_hdr.conn_id;
+	tx_buf->write_rndv.done_buf->pkt.ctrl_hdr.msg_id = tx_buf->pkt.ctrl_hdr.msg_id;
+
+	ret = fi_send(tx_buf->write_rndv.conn->msg_ep,
+		      &tx_buf->write_rndv.done_buf->pkt,
+		      sizeof(tx_buf->write_rndv.done_buf->pkt),
+		      tx_buf->write_rndv.done_buf->hdr.desc, 0, tx_buf);
+	if (ret) {
+		if (ret == -FI_EAGAIN) {
+			def_tx_entry = rxm_ep_alloc_deferred_tx_entry(
+				rxm_ep, tx_buf->write_rndv.conn,
+				RXM_DEFERRED_TX_RNDV_DONE);
+			if (!def_tx_entry) {
+				FI_WARN(&rxm_prov, FI_LOG_CQ, "unable to "
+					"allocate TX entry for deferred DONE\n");
+				ret = -FI_EAGAIN;
+				goto err;
+			}
+
+			def_tx_entry->rndv_done.tx_buf = tx_buf;
+			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+			return 0;
+		} else {
+			FI_WARN(&rxm_prov, FI_LOG_CQ,
+				"unable to send DONE: %zd\n", ret);
+		}
+		goto err;
+	}
+out:
+	RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_DONE_SENT);
+	return 0;
+err:
+	ofi_buf_free(tx_buf->write_rndv.done_buf);
+	return ret;
 }
 
 ssize_t rxm_rndv_write_ack(struct rxm_rx_buf *rx_buf)
@@ -1282,6 +1410,8 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 			return rxm_handle_recv_comp(rx_buf);
 		case rxm_ctrl_rndv_ack:
 			return rxm_rndv_handle_ack(rxm_ep, rx_buf);
+		case rxm_ctrl_rndv_done:
+			return rxm_rndv_handle_done(rxm_ep, rx_buf);
 		case rxm_ctrl_rndv_write_ack:
 			return rxm_rndv_write(rx_buf);
 		case rxm_ctrl_seg:
@@ -1327,10 +1457,13 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	case RXM_RNDV_ACK_SENT:
 		assert(comp->flags & FI_SEND);
 		return rxm_finish_send_rndv_ack(comp->op_context);
+	case RXM_RNDV_DONE_SENT:
 	case RXM_RNDV_ACK_RECVD:
-		tx_rndv_buf = comp->op_context;
+		assert(comp->flags & FI_SEND || comp->flags & FI_WRITE);
+		return rxm_rndv_tx_finish(rxm_ep, comp->op_context);
+	case RXM_RNDV_DONE_RECVD:
 		assert(comp->flags & FI_SEND);
-		return rxm_rndv_tx_finish(rxm_ep, tx_rndv_buf);
+		return rxm_rndv_rx_finish(comp->op_context);
 	case RXM_RNDV_FINISH:
 		assert(0);
 		return -FI_EOPBADSTATE;
