@@ -92,6 +92,7 @@ enum {
 	OFI_INTERCEPT_SHMAT,
 	OFI_INTERCEPT_SHMDT,
 	OFI_INTERCEPT_BRK,
+	OFI_INTERCEPT_SBRK,
 	OFI_INTERCEPT_MAX
 };
 
@@ -105,6 +106,7 @@ static int ofi_intercept_madvise(void *addr, size_t length, int advice);
 static void *ofi_intercept_shmat(int shmid, const void *shmaddr, int shmflg);
 static int ofi_intercept_shmdt(const void *shmaddr);
 static int ofi_intercept_brk(const void *brkaddr);
+static void *ofi_intercept_sbrk(intptr_t increment);
 
 static struct ofi_intercept intercepts[] = {
 	[OFI_INTERCEPT_DLOPEN] = { .symbol = "dlopen",
@@ -123,6 +125,8 @@ static struct ofi_intercept intercepts[] = {
 				.our_func = ofi_intercept_shmdt},
 	[OFI_INTERCEPT_BRK] = { .symbol = "brk",
 				.our_func = ofi_intercept_brk},
+	[OFI_INTERCEPT_SBRK] = { .symbol = "sbrk",
+				.our_func = ofi_intercept_sbrk},
 };
 
 struct ofi_mem_calls {
@@ -135,6 +139,7 @@ struct ofi_mem_calls {
 	void *(*shmat)(int shmid, const void *shmaddr, int shmflg);
 	int (*shmdt)(const void *shmaddr);
 	int (*brk)(const void *brkaddr);
+	void *(*sbrk)(intptr_t);
 };
 
 static struct ofi_mem_calls real_calls;
@@ -455,14 +460,31 @@ static int ofi_intercept_brk(const void *brkaddr)
 	FI_DBG(&core_prov, FI_LOG_MR,
 	      "intercepted brk addr %p\n", brkaddr);
 
-	old_addr = sbrk (0);
+	old_addr = real_calls.sbrk(0);
 
-	if(brkaddr > old_addr) {
-		ofi_intercept_handler(brkaddr, (intptr_t) brkaddr -
-							  (intptr_t) old_addr);
+	if (brkaddr < old_addr) {
+		ofi_intercept_handler(brkaddr, (intptr_t) old_addr -
+				      (intptr_t) brkaddr);
 	}
 
 	return real_calls.brk(brkaddr);
+}
+
+static void *ofi_intercept_sbrk(intptr_t increment)
+{
+	void *old_brk;
+
+	FI_DBG(&core_prov, FI_LOG_MR,
+		   "intercepted sbrk increment %d\n", increment);
+
+	old_brk = real_calls.sbrk(increment);
+
+	if (increment < 0) {
+		ofi_intercept_handler((void *)((intptr_t) old_brk + increment),
+				      -increment);
+	}
+
+	return old_brk;
 }
 
 static int ofi_memhooks_subscribe(struct ofi_mem_monitor *monitor,
@@ -564,6 +586,14 @@ static int ofi_memhooks_start(struct ofi_mem_monitor *monitor)
 	if (ret) {
 		FI_WARN(&core_prov, FI_LOG_MR,
 		       "intercept brk failed %d %s\n", ret, fi_strerror(ret));
+		return ret;
+	}
+
+	ret = ofi_intercept_symbol(&intercepts[OFI_INTERCEPT_SBRK],
+				   (void **) &real_calls.sbrk);
+	if (ret) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+		       "intercept sbrk failed %d %s\n", ret, fi_strerror(ret));
 		return ret;
 	}
 
