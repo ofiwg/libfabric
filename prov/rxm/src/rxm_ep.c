@@ -1588,13 +1588,14 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			free(def_tx_entry);
 			break;
 		case RXM_DEFERRED_TX_RNDV_READ:
-			ret = fi_readv(def_tx_entry->rxm_conn->msg_ep,
-				       def_tx_entry->rndv_read.rxm_iov.iov,
-				       def_tx_entry->rndv_read.rxm_iov.desc,
-				       def_tx_entry->rndv_read.rxm_iov.count, 0,
-				       def_tx_entry->rndv_read.rma_iov.addr,
-				       def_tx_entry->rndv_read.rma_iov.key,
-				       def_tx_entry->rndv_read.rx_buf);
+			ret = rxm_ep->rndv_ops->xfer(
+				def_tx_entry->rxm_conn->msg_ep,
+				def_tx_entry->rndv_read.rxm_iov.iov,
+				def_tx_entry->rndv_read.rxm_iov.desc,
+				def_tx_entry->rndv_read.rxm_iov.count, 0,
+				def_tx_entry->rndv_read.rma_iov.addr,
+				def_tx_entry->rndv_read.rma_iov.key,
+				def_tx_entry->rndv_read.rx_buf);
 			if (ret) {
 				if (ret == -FI_EAGAIN)
 					break;
@@ -2720,6 +2721,41 @@ err1:
 	return ret;
 }
 
+static ssize_t
+rxm_prepare_deferred_rndv_read(struct rxm_deferred_tx_entry **def_tx_entry,
+			       size_t index, struct iovec *iov,
+			       void *desc[RXM_IOV_LIMIT], size_t count,
+			       void *buf)
+{
+	uint8_t i;
+	struct rxm_rx_buf *rx_buf = buf;
+
+	*def_tx_entry = rxm_ep_alloc_deferred_tx_entry(rx_buf->ep, rx_buf->conn,
+						       RXM_DEFERRED_TX_RNDV_READ);
+	if (!*def_tx_entry)
+		return -FI_ENOMEM;
+
+	(*def_tx_entry)->rndv_read.rx_buf = rx_buf;
+	(*def_tx_entry)->rndv_read.rma_iov.addr =
+			rx_buf->remote_rndv_hdr->iov[index].addr;
+	(*def_tx_entry)->rndv_read.rma_iov.key =
+			rx_buf->remote_rndv_hdr->iov[index].key;
+
+	for (i = 0; i < count; i++) {
+		(*def_tx_entry)->rndv_read.rxm_iov.iov[i] = iov[i];
+		(*def_tx_entry)->rndv_read.rxm_iov.desc[i] = desc[i];
+	}
+	(*def_tx_entry)->rndv_read.rxm_iov.count = count;
+
+	return 0;
+}
+
+static struct rxm_rndv_ops rxm_rndv_ops_read = {
+	.handle_rx = rxm_rndv_read,
+	.xfer = fi_readv,
+	.defer_xfer = rxm_prepare_deferred_rndv_read
+};
+
 int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep_fid, void *context)
 {
@@ -2771,6 +2807,8 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		(*ep_fid)->collective = &rxm_ops_collective_none;
 		rxm_ep->eager_ops = &def_eager_ops;
 	}
+
+	rxm_ep->rndv_ops = &rxm_rndv_ops_read;
 
 	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
 		(*ep_fid)->msg = &rxm_ops_msg_thread_unsafe;

@@ -424,41 +424,76 @@ static ssize_t rxm_handle_seg_data(struct rxm_rx_buf *rx_buf)
 	return ret;
 }
 
-static ssize_t
-rxm_prepare_deferred_rndv_read(struct rxm_deferred_tx_entry **def_tx_entry,
-			       size_t index, struct iovec *iov,
-			       void *desc[RXM_IOV_LIMIT], size_t count,
-			       struct rxm_rx_buf *rx_buf)
+static ssize_t rxm_rndv_xfer(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep,
+			     struct rxm_rndv_hdr *remote_hdr, struct iovec *local_iov,
+			     void **local_desc, size_t local_count, size_t total_len,
+			     void *context)
 {
-	uint8_t i;
+	size_t i, index = 0, offset = 0, count, copy_len;
+	struct iovec iov[RXM_IOV_LIMIT];
+	void *desc[RXM_IOV_LIMIT];
+	ssize_t ret = FI_SUCCESS;
 
-	*def_tx_entry = rxm_ep_alloc_deferred_tx_entry(rx_buf->ep, rx_buf->conn,
-						       RXM_DEFERRED_TX_RNDV_READ);
-	if (!*def_tx_entry)
-		return -FI_ENOMEM;
+	for (i = 0; i < remote_hdr->count && total_len > 0; i++) {
+		copy_len = MIN(remote_hdr->iov[i].len, total_len);
 
-	(*def_tx_entry)->rndv_read.rx_buf = rx_buf;
-	(*def_tx_entry)->rndv_read.rma_iov.addr =
-			rx_buf->remote_rndv_hdr->iov[index].addr;
-	(*def_tx_entry)->rndv_read.rma_iov.key =
-			rx_buf->remote_rndv_hdr->iov[index].key;
+		ret = ofi_copy_iov_desc(&iov[0], &desc[0], &count,
+					&local_iov[0],
+					&local_desc[0],
+					local_count,
+					&index, &offset, copy_len);
+		if (ret)
+			return ret;
+		total_len -= copy_len;
+		ret = rxm_ep->rndv_ops->xfer(msg_ep, iov, desc, count, 0,
+			       remote_hdr->iov[i].addr, remote_hdr->iov[i].key,
+			       context);
 
-	for (i = 0; i < count; i++) {
-		(*def_tx_entry)->rndv_read.rxm_iov.iov[i] = iov[i];
-		(*def_tx_entry)->rndv_read.rxm_iov.desc[i] = desc[i];
+		if (ret) {
+			if (ret == -FI_EAGAIN) {
+				struct rxm_deferred_tx_entry *def_tx_entry;
+
+				ret = rxm_ep->rndv_ops->defer_xfer(
+					&def_tx_entry, i, iov, desc, count,
+					context);
+
+				if (ret)
+					break;
+				rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+				continue;
+			}
+			break;
+		}
 	}
-	(*def_tx_entry)->rndv_read.rxm_iov.count = count;
+	assert(!total_len);
+	return ret;
+}
 
-	return 0;
+ssize_t rxm_rndv_read(struct rxm_rx_buf *rx_buf)
+{
+	ssize_t ret;
+	size_t total_len =
+		MIN(rx_buf->recv_entry->total_len, rx_buf->pkt.hdr.size);
+
+	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_READ);
+
+	ret = rxm_rndv_xfer(rx_buf->ep, rx_buf->conn->msg_ep, rx_buf->remote_rndv_hdr,
+			    rx_buf->recv_entry->rxm_iov.iov,
+			    rx_buf->recv_entry->rxm_iov.desc,
+			    rx_buf->recv_entry->rxm_iov.count, total_len,
+			    rx_buf);
+
+	if (ret)
+		rxm_cq_write_error(rx_buf->ep->util_ep.rx_cq,
+				   rx_buf->ep->util_ep.rx_cntr,
+				   rx_buf, ret);
+	return ret;
 }
 
 static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 {
-	size_t i, index = 0, offset = 0, count, total_recv_len;
-	struct iovec iov[RXM_IOV_LIMIT];
-	void *desc[RXM_IOV_LIMIT];
-	int ret = 0;
-
+	int ret = 0, i;
+	size_t total_recv_len;
 
 	/* En-queue new rx buf to be posted ASAP so that we don't block any
 	* incoming messages. RNDV processing can take a while. */
@@ -476,7 +511,7 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 	assert(rx_buf->conn);
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ,
-	       "Got incoming recv with msg_id: 0x%" PRIx64 "\n",
+	       "Got incoming rndv req with msg_id: 0x%" PRIx64 "\n",
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
 	rx_buf->remote_rndv_hdr = (struct rxm_rndv_hdr *) rx_buf->pkt.data;
@@ -499,57 +534,16 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 		}
 	} else {
 		for (i = 0; i < rx_buf->recv_entry->rxm_iov.count; i++) {
+			rx_buf->mr[i] = rx_buf->recv_entry->rxm_iov.desc[i];
 			rx_buf->recv_entry->rxm_iov.desc[i] =
-				fi_mr_desc(rx_buf->recv_entry->rxm_iov.desc[i]);
+				fi_mr_desc(rx_buf->mr[i]);
 		}
-		total_recv_len = MIN(rx_buf->recv_entry->total_len,
-				     rx_buf->pkt.hdr.size);
 	}
 
 	assert(rx_buf->remote_rndv_hdr->count &&
 	       (rx_buf->remote_rndv_hdr->count <= RXM_IOV_LIMIT));
 
-	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_READ);
-
-	for (i = 0; i < rx_buf->remote_rndv_hdr->count; i++) {
-		size_t copy_len = MIN(rx_buf->remote_rndv_hdr->iov[i].len,
-				      total_recv_len);
-
-		ret = ofi_copy_iov_desc(&iov[0], &desc[0], &count,
-					&rx_buf->recv_entry->rxm_iov.iov[0],
-					&rx_buf->recv_entry->rxm_iov.desc[0],
-					rx_buf->recv_entry->rxm_iov.count,
-					&index, &offset, copy_len);
-		if (ret) {
-			assert(ret == -FI_ETOOSMALL);
-			return rxm_cq_write_error_trunc(rx_buf, rx_buf->
-							recv_entry->total_len);
-		}
-		total_recv_len -= copy_len;
-		ret = fi_readv(rx_buf->conn->msg_ep, iov, desc, count, 0,
-			       rx_buf->remote_rndv_hdr->iov[i].addr,
-			       rx_buf->remote_rndv_hdr->iov[i].key, rx_buf);
-		if (ret) {
-			if (ret == -FI_EAGAIN) {
-				struct rxm_deferred_tx_entry *def_tx_entry;
-
-				ret = rxm_prepare_deferred_rndv_read(
-						&def_tx_entry, i, iov, desc,
-						count, rx_buf);
-				if (ret)
-					goto readv_err;
-				rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
-				continue;
-			}
-readv_err:
-			rxm_cq_write_error(rx_buf->ep->util_ep.rx_cq,
-					   rx_buf->ep->util_ep.rx_cntr,
-					   rx_buf->recv_entry->context, ret);
-			break;
-		}
-	}
-	assert(!total_recv_len);
-	return ret;
+	return rx_buf->ep->rndv_ops->handle_rx(rx_buf);
 }
 
 ssize_t rxm_handle_eager(struct rxm_rx_buf *rx_buf)

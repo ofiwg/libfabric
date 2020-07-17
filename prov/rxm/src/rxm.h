@@ -650,6 +650,17 @@ struct rxm_eager_ops {
 	ssize_t (*handle_rx)(struct rxm_rx_buf *rx_buf);
 };
 
+struct rxm_rndv_ops {
+	ssize_t (*handle_rx)(struct rxm_rx_buf *rx_buf);
+	ssize_t (*xfer)(struct fid_ep *ep, const struct iovec *iov, void **desc,
+			size_t count, fi_addr_t remote_addr, uint64_t addr,
+			uint64_t key, void *context);
+	ssize_t (*defer_xfer)(struct rxm_deferred_tx_entry **def_tx_entry,
+			      size_t index, struct iovec *iov,
+			      void *desc[RXM_IOV_LIMIT], size_t count,
+			      void *buf);
+};
+
 struct rxm_ep {
 	struct util_ep 		util_ep;
 	struct fi_info 		*rxm_info;
@@ -684,6 +695,7 @@ struct rxm_ep {
 	struct rxm_recv_queue	trecv_queue;
 
 	struct rxm_eager_ops	*eager_ops;
+	struct rxm_rndv_ops	*rndv_ops;
 };
 
 struct rxm_conn {
@@ -747,6 +759,7 @@ int rxm_msg_ep_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
+ssize_t rxm_rndv_read(struct rxm_rx_buf *rx_buf);
 
 static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 {
