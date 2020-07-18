@@ -374,6 +374,8 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_
 
 ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry, uint64_t flags);
 
+bool efa_device_support_rdma_read(void);
+
 static inline
 bool efa_ep_support_rdma_read(struct fid_ep *ep_fid)
 {

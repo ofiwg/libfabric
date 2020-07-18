@@ -130,6 +130,26 @@ err_free_dev_list:
 	return ret;
 }
 
+bool efa_device_support_rdma_read(void)
+{
+#ifdef HAVE_RDMA_SIZE
+	int err;
+	struct efadv_device_attr efadv_attr;
+
+	if (dev_cnt <=0)
+		return false;
+
+	assert(dev_cnt > 0);
+	err = efadv_query_device(ctx_list[0]->ibv_ctx, &efadv_attr, sizeof(efadv_attr));
+	if (err)
+		return false;
+
+	return efadv_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+#else
+	return false;
+#endif
+}
+
 void efa_device_free(void)
 {
 	int i;
