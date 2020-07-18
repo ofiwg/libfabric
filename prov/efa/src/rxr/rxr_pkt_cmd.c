@@ -397,7 +397,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 		break;
 	case RXR_MEDIUM_MSGRTM_PKT:
 	case RXR_MEDIUM_TAGRTM_PKT:
-		rxr_pkt_handle_long_rtm_send_completion(ep, pkt_entry);
+		rxr_pkt_handle_medium_rtm_send_completion(ep, pkt_entry);
 		break;
 	case RXR_LONG_MSGRTM_PKT:
 	case RXR_LONG_TAGRTM_PKT:
