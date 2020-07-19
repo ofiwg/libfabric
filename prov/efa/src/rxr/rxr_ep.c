@@ -71,6 +71,8 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 
 	memset(&rx_entry->cq_entry, 0, sizeof(rx_entry->cq_entry));
 
+	rx_entry->owner = ep->use_zcpy_rx ? RXR_RX_USER_BUF : RXR_RX_PROV_BUF;
+
 	/* Handle case where we're allocating an unexpected rx_entry */
 	if (msg->msg_iov) {
 		memcpy(rx_entry->iov, msg->msg_iov, sizeof(*rx_entry->iov) * msg->iov_count);
@@ -1458,7 +1460,8 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	struct dlist_entry *tmp;
 	ssize_t ret;
 
-	rxr_ep_check_available_data_bufs_timer(ep);
+	if (!ep->use_zcpy_rx)
+		rxr_ep_check_available_data_bufs_timer(ep);
 
 	// Poll the EFA completion queue
 	rxr_ep_poll_cq(ep, ep->rdm_cq, rxr_env.efa_cq_read_size, 0);

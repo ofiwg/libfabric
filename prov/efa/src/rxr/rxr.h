@@ -261,6 +261,11 @@ enum rxr_rx_comm_type {
 	RXR_RX_WAIT_ATOMRSP_SENT, /* rx_entry wait for atomrsp packet sent completion */
 };
 
+enum rxr_rx_buf_owner {
+	RXR_RX_PROV_BUF = 0,	 /* Bounce buffers allocated and owned by provider */
+	RXR_RX_USER_BUF,	 /* Recv buffers posted by applications */
+};
+
 #define RXR_PEER_REQ_SENT BIT_ULL(0) /* sent a REQ to the peer, peer should send a handshake back */
 #define RXR_PEER_HANDSHAKE_SENT BIT_ULL(1)
 #define RXR_PEER_HANDSHAKE_RECEIVED BIT_ULL(2)
@@ -364,8 +369,10 @@ struct rxr_rx_entry {
 	size_t iov_count;
 	struct iovec iov[RXR_IOV_LIMIT];
 
-	/* App-provided reg descriptor */
+	/* App-provided buffers and descriptors */
 	void *desc[RXR_IOV_LIMIT];
+	enum rxr_rx_buf_owner owner;
+	struct fi_msg *posted_recv;
 
 	/* iov_count on sender side, used for large message READ over shm */
 	size_t rma_iov_count;

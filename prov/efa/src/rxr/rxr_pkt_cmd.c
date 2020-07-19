@@ -664,6 +664,11 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		rxr_pkt_handle_atomrsp_recv(ep, pkt_entry);
 		return;
 	case RXR_EAGER_MSGRTM_PKT:
+		if (ep->use_zcpy_rx && pkt_entry->type == RXR_PKT_ENTRY_USER)
+			rxr_pkt_handle_zcpy_recv(ep, pkt_entry);
+		else
+			rxr_pkt_handle_rtm_rta_recv(ep, pkt_entry);
+		return;
 	case RXR_EAGER_TAGRTM_PKT:
 	case RXR_MEDIUM_MSGRTM_PKT:
 	case RXR_MEDIUM_TAGRTM_PKT:

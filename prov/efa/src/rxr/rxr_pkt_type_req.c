@@ -1024,6 +1024,51 @@ ssize_t rxr_pkt_proc_rtm_rta(struct rxr_ep *ep,
 	return -FI_EINVAL;
 }
 
+void rxr_pkt_handle_zcpy_recv(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+
+	struct rxr_base_hdr *base_hdr __attribute__((unused));
+	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	assert(base_hdr->type >= RXR_BASELINE_REQ_PKT_BEGIN);
+	assert(base_hdr->type != RXR_MEDIUM_MSGRTM_PKT);
+	assert(base_hdr->type != RXR_MEDIUM_TAGRTM_PKT);
+	assert(pkt_entry->type == RXR_PKT_ENTRY_USER);
+
+	rx_entry = rxr_pkt_get_msgrtm_rx_entry(ep, &pkt_entry);
+	if (OFI_UNLIKELY(!rx_entry)) {
+		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
+	}
+	pkt_entry->x_entry = rx_entry;
+	if (rx_entry->state != RXR_RX_MATCHED)
+		return;
+
+	/*
+	 * The incoming receive will always get matched to the first posted
+	 * rx_entry available, so this is a constant cost. No real tag or
+	 * address matching happens.
+	 */
+	assert(rx_entry->state == RXR_RX_MATCHED);
+
+	/*
+	 * Adjust rx_entry->cq_entry.len as needed.
+	 * Initialy rx_entry->cq_entry.len is total recv buffer size.
+	 * rx_entry->total_len is from REQ packet and is total send buffer size.
+	 * if send buffer size < recv buffer size, we adjust value of rx_entry->cq_entry.len
+	 * if send buffer size > recv buffer size, we have a truncated message and will
+	 * write error CQ entry.
+	 */
+	if (rx_entry->cq_entry.len > rx_entry->total_len)
+		rx_entry->cq_entry.len = rx_entry->total_len;
+
+	rxr_cq_write_rx_completion(ep, rx_entry);
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
+	rxr_release_rx_entry(ep, rx_entry);
+}
+
 void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry)
 {

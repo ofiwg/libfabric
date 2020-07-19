@@ -346,6 +346,11 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 ssize_t rxr_pkt_proc_rtm_rta(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 /*
+ *         This function handles zero-copy receives that do not require ordering
+ */
+void rxr_pkt_handle_zcpy_recv(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry);
+/*
  *         This function is shared by all RTM packet types which handle
  *         reordering
  */
