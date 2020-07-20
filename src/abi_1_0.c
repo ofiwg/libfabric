@@ -88,6 +88,18 @@ struct fi_ep_attr_1_0 {
 	size_t			rx_ctx_cnt;
 };
 
+struct fi_tx_attr_1_0 {
+        uint64_t                caps;
+        uint64_t                mode;
+        uint64_t                op_flags;
+        uint64_t                msg_order;
+        uint64_t                comp_order;
+        size_t                  inject_size;
+        size_t                  size;
+        size_t                  iov_limit;
+        size_t                  rma_iov_limit;
+};
+
 struct fi_info_1_0 {
 	struct fi_info			*next;
 	uint64_t			caps;
@@ -98,7 +110,7 @@ struct fi_info_1_0 {
 	void				*src_addr;
 	void				*dest_addr;
 	fid_t				handle;
-	struct fi_tx_attr		*tx_attr;
+	struct fi_tx_attr_1_0		*tx_attr;
 	struct fi_rx_attr		*rx_attr;
 	struct fi_ep_attr_1_0		*ep_attr;
 	struct fi_domain_attr_1_0	*domain_attr;
@@ -115,23 +127,11 @@ struct fi_info_1_1 {
 	void				*src_addr;
 	void				*dest_addr;
 	fid_t				handle;
-	struct fi_tx_attr		*tx_attr;
+	struct fi_tx_attr_1_0		*tx_attr;
 	struct fi_rx_attr		*rx_attr;
 	struct fi_ep_attr_1_0		*ep_attr;
 	struct fi_domain_attr_1_0	*domain_attr;
 	struct fi_fabric_attr_1_0	*fabric_attr;
-};
-
-struct fi_tx_attr_1_2 {
-        uint64_t                caps;
-        uint64_t                mode;
-        uint64_t                op_flags;
-        uint64_t                msg_order;
-        uint64_t                comp_order;
-        size_t                  inject_size;
-        size_t                  size;
-        size_t                  iov_limit;
-        size_t                  rma_iov_limit;
 };
 
 struct fi_ep_attr_1_2 {
@@ -189,7 +189,7 @@ struct fi_info_1_2 {
         void                      *src_addr;
         void                      *dest_addr;
         fid_t                     handle;
-        struct fi_tx_attr_1_2     *tx_attr;
+        struct fi_tx_attr_1_0     *tx_attr;
         struct fi_rx_attr         *rx_attr;
         struct fi_ep_attr_1_2     *ep_attr;
         struct fi_domain_attr_1_2 *domain_attr;
