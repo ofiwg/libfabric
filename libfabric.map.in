@@ -7,11 +7,6 @@ FABRIC_1.0 {
 		fi_version;
 		fi_strerror;
 		fi_tostr;
-		fi_log_set_stream_warn;
-		fi_log_set_stream_trace;
-		fi_log_set_stream_info;
-		fi_log_set_stream_debug;
-		fi_log_set_func;
 		fi_log_enabled;
 		fi_log;
 		fi_param_define;
@@ -43,3 +38,9 @@ FABRIC_1.3 {
 		fi_freeinfo;
 		fi_dupinfo;
 } FABRIC_1.2;
+
+FABRIC_1.4 {
+	global:
+		fi_log_set_stream;
+		fi_log_set_func;
+} FABRIC_1.3;

@@ -722,11 +722,16 @@ struct fi_recv_context {
  * distro and would also need to be striped of its current requires
  * (config.h, ...)
  */
-void fi_log_set_stream_warn(FILE *log_stream);
-void fi_log_set_stream_trace(FILE *log_stream);
-void fi_log_set_stream_info(FILE *log_stream);
-void fi_log_set_stream_debug(FILE *log_stream);
+void fi_log_set_stream(FILE *log_stream, int level);
 void fi_log_set_func(int (*log_func)(FILE *stream, const char *format, ...));
+
+enum fi_log_level {
+        FI_LOG_WARN,
+        FI_LOG_TRACE,
+        FI_LOG_INFO,
+        FI_LOG_DEBUG,
+        FI_LOG_MAX
+};
 
 #ifdef __cplusplus
 }
