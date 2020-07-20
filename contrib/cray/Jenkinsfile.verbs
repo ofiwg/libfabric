@@ -136,6 +136,7 @@ pipeline {
                 SFT_TEST_RESULTS_EXPECTED = 'expected_'
                 SFT_TEST_RESULTS_PREFIX = 'BUILD_'
                 SFT_TEST_RESULTS_CI = 'sft_ci_results.yaml'
+                FI_VERBS_MIN_RNR_TIMER= '4'
             }
             options {
                 timeout (time: 22, unit: 'MINUTES')
@@ -316,19 +317,29 @@ pipeline {
                 }
                 stage("Applications") {
                     steps {
-                        tee ('mpi.tap') {
+                        tee ('omb.tap') {
                             timeout(time: 10, unit: 'MINUTES') {
-                                sh '${BATS_INSTALL_PATH}/bats -t contrib/cray/bats/mpi.bats'
+                                sh '${BATS_INSTALL_PATH}/bats -t contrib/cray/bats/omb.bats'
                             }
                         }
+                        tee ('imb.tap') {
+                            timeout(time: 10, unit: 'MINUTES') {
+                                sh '${BATS_INSTALL_PATH}/bats -t contrib/cray/bats/imb.bats'
+			    }
+			}
                     }
                     post {
                         always {
                             sh """contrib/cray/bin/parse_logfiles.sh \\
-                                    -r mpi.tap \\
-                                    -w mpi.xml \\
+                                    -r omb.tap \\
+                                    -w omb.xml \\
                                     tap applications.mpi applications"""
-                        }
+                        
+                            sh """contrib/cray/bin/parse_logfiles.sh \\
+                                    -r imb.tap \\
+                                    -w imb.xml \\
+                                    tap applications.mpi applications"""
+		    	}
                     }
                 }
             }
@@ -468,6 +479,7 @@ pipeline {
         FABTEST_PATH = "${WORKSPACE + '/installs/fabtests'}"
         LIBFABRIC_BUILD_PATH = "${ROOT_BUILD_PATH + '/libfabric'}"
         OMB_BUILD_PATH = "${ROOT_BUILD_PATH + '/osu-micro-benchmarks/stable/libexec/osu-micro-benchmarks/mpi'}"
+        IMB_BUILD_PATH = "${ROOT_BUILD_PATH + '/imb/v2019.6'}"
         MPICH_PATH = "${ROOT_BUILD_PATH + '/mpich/stable'}"
         SFT_INSTALL_PATH = "${ROOT_BUILD_PATH + '/libfabric-sft/stable'}"
         BATS_INSTALL_PATH = "${ROOT_BUILD_PATH + '/bats/stable/bin'}"
