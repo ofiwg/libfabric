@@ -439,6 +439,11 @@ static void rxd_handle_rts(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 			return;
 	}
 
+	if (!rxd_peer(ep, rxd_addr)) {
+		if (rxd_create_peer(ep, rxd_addr) < 0)
+			return;
+	}
+
 	if (rxd_send_cts(ep, pkt, rxd_addr)) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
 			"error posting CTS\n");

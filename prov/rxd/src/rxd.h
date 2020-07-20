@@ -216,12 +216,12 @@ struct rxd_ep {
 	struct dlist_entry rts_sent_list;
 	struct dlist_entry ctrl_pkts;
 
-	struct rxd_peer peers[];
+	struct rxd_peer **peers;
 };
 
 static inline struct rxd_peer *rxd_peer(struct rxd_ep *ep, fi_addr_t rxd_addr)
 {
-	return &ep->peers[rxd_addr];
+	return ep->peers[rxd_addr];
 }
 static inline struct rxd_domain *rxd_ep_domain(struct rxd_ep *ep)
 {
@@ -514,5 +514,8 @@ void rxd_cleanup_unexp_msg(struct rxd_unexp_msg *unexp_msg);
 /* CQ sub-functions */
 void rxd_cq_report_error(struct rxd_cq *cq, struct fi_cq_err_entry *err_entry);
 void rxd_cq_report_tx_comp(struct rxd_cq *cq, struct rxd_x_entry *tx_entry);
+
+
+int rxd_create_peer(struct rxd_ep *ep, uint64_t rxd_addr);
 
 #endif
