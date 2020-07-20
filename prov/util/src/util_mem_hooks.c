@@ -475,7 +475,7 @@ static void *ofi_intercept_sbrk(intptr_t increment)
 	void *old_brk;
 
 	FI_DBG(&core_prov, FI_LOG_MR,
-		   "intercepted sbrk increment %d\n", increment);
+		   "intercepted sbrk increment %ld\n", increment);
 
 	old_brk = real_calls.sbrk(increment);
 
