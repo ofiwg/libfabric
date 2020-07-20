@@ -95,6 +95,26 @@ static inline int ofi_hugepage_enabled(void)
 	return 0;
 }
 
+static inline ssize_t ofi_process_vm_readv(pid_t pid,
+			const struct iovec *local_iov,
+			unsigned long liovcnt,
+			const struct iovec *remote_iov,
+			unsigned long riovcnt,
+			unsigned long flags)
+{
+	return -FI_ENOSYS;
+}
+
+static inline size_t ofi_process_vm_writev(pid_t pid,
+			 const struct iovec *local_iov,
+			 unsigned long liovcnt,
+			 const struct iovec *remote_iov,
+			 unsigned long riovcnt,
+			 unsigned long flags)
+{
+	return -FI_ENOSYS;
+}
+
 #ifdef __cplusplus
 }
 #endif
