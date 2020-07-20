@@ -627,9 +627,19 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 			rxr_pkt_entry_release_tx(rxr_ep, pkt);
 	}
 
-	dlist_foreach_safe(&rxr_ep->rx_pkt_list, entry, tmp) {
-		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-		rxr_pkt_entry_release_rx(rxr_ep, pkt);
+	if (!rxr_ep->use_zcpy_rx) {
+		/*
+		 * The provider does not own these entries, and there's no need
+		 * to deep-free them even in a debug build.
+		 */
+		dlist_foreach_safe(&rxr_ep->rx_pkt_list, entry, tmp) {
+			pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
+			rxr_pkt_entry_release_rx(rxr_ep, pkt);
+		}
+		dlist_foreach_safe(&rxr_ep->rx_posted_buf_list, entry, tmp) {
+			pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
+			ofi_buf_free(pkt);
+		}
 	}
 
 	dlist_foreach_safe(&rxr_ep->tx_pkt_list, entry, tmp) {
@@ -637,10 +647,6 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		rxr_pkt_entry_release_tx(rxr_ep, pkt);
 	}
 
-	dlist_foreach_safe(&rxr_ep->rx_posted_buf_list, entry, tmp) {
-		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-		ofi_buf_free(pkt);
-	}
 	dlist_foreach_safe(&rxr_ep->rx_entry_list, entry, tmp) {
 		rx_entry = container_of(entry, struct rxr_rx_entry,
 					rx_entry_entry);
