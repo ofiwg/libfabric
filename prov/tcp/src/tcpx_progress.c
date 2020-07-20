@@ -583,6 +583,11 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 
 	ep->cur_rx_msg.done_len += ret;
 	if (ep->cur_rx_msg.done_len >= sizeof(ep->cur_rx_msg.hdr.base_hdr)) {
+		if (ep->cur_rx_msg.hdr.base_hdr.payload_off > TCPX_MAX_HDR_SZ) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+				"Payload offset is too large\n");
+			return -FI_EIO;
+		}
 		ep->cur_rx_msg.hdr_len = (size_t) ep->cur_rx_msg.hdr.
 						  base_hdr.payload_off;
 
@@ -596,7 +601,6 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 		}
 	}
 
-	/* TODO: cur_rx_msg.hdr_len is initialized in some non-obvious place */
 	if (ep->cur_rx_msg.done_len < ep->cur_rx_msg.hdr_len)
 		return -FI_EAGAIN;
 
@@ -624,6 +628,13 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 					goto err;
 			}
 
+			if (ep->cur_rx_msg.hdr.base_hdr.op >=
+			    ARRAY_SIZE(ep->start_op)) {
+				FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+					"Received invalid opcode\n");
+				ret = -FI_ENOTCONN; /* force shutdown */
+				goto err;
+			}
 			ret = ep->start_op[ep->cur_rx_msg.hdr.base_hdr.op](ep);
 			if (ret)
 				goto err;
@@ -637,9 +648,6 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 err:
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return;
-
-	/* Failed current RX entry should clean itself */
-	assert(!ep->cur_rx_entry);
 
 	if (ret == -FI_ENOTCONN)
 		tcpx_ep_shutdown_report(ep, &ep->util_ep.ep_fid.fid);
