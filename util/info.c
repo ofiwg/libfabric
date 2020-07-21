@@ -80,7 +80,7 @@ static const char *help_strings[][2] = {
 	{"FMT", "\t\tspecify accepted address format: FI_FORMAT_UNSPEC, FI_SOCKADDR..."},
 	{"PROV", "\t\tspecify provider explicitly"},
 	{"", "\t\tprint libfabric environment variables"},
-	{"", "\t\tprint libfabric environment variables with substr"},
+	{"SUBSTR", "\t\tprint libfabric environment variables with substr"},
 	{"", "\t\tlist available libfabric providers"},
 	{"", "\t\tverbose output"},
 	{"", "\t\tprint version info and exit"},
