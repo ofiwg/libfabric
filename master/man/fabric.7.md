@@ -297,6 +297,68 @@ portability across providers.
   fabric domain may not be available in a child process because of copy
   on write restrictions.
 
+# ABI CHANGES
+
+libfabric releases maintain compatibility with older releases, so that
+compiled applications can continue to work as-is, and previously written
+applications will compile against newer versions of the library without
+needing source code changes.  The changes below describe ABI updates
+that have occurred and which libfabric release corresponds to the
+changes.
+
+Note that because most functions called by applications actually call
+static inline functions, which in turn reference function pointers in
+order to call directly into providers, libfabric only exports a handful
+of functions directly.  ABI changes are limited to those functions,
+most notably the fi_getinfo call and its returned attribute structures.
+
+The ABI version is independent from the libfabric release version.
+
+## ABI 1.0
+
+The initial libfabric release (1.0.0) also corresponds to ABI version 1.0.
+The 1.0 ABI was unchanged for libfabric major.minor versions 1.0, 1.1, 1.2,
+1.3, and 1.4.
+
+## ABI 1.1
+
+A number of external data structures were appended starting with libfabric
+version 1.5.  These changes included adding the fields to the following
+data structures.  The 1.1 ABI was exported by libfabric versions 1.5 and
+1.6.
+
+*fi_fabric_attr*
+: Added api_version
+
+*fi_domain_attr*
+: Added cntr_cnt, mr_iov_limit, caps, mode, auth_key, auth_key_size,
+  max_err_data, and mr_cnt fields.  The mr_mode field was also changed
+  from an enum to an integer flag field.
+
+*fi_ep_attr*
+: Added auth_key_size and auth_key fields.
+
+## ABI 1.2
+
+The 1.2 ABI version was exported by libfabric versions 1.7 and 1.8, and
+expanded the following structure.
+
+*fi_info*
+: The fi_info structure was expanded to reference a new fabric object,
+  fid_nic.  When available, the fid_nic references a new set of attributes
+  related to network hardware details.
+
+## ABI 1.3
+
+The 1.3 ABI is also the current ABI version.  All libfabric releases
+starting at 1.9 export this ABI.
+
+*fi_domain_attr*
+: Added tclass
+
+*fi_tx_attr*
+: Added tclass
+
 # SEE ALSO
 
 [`fi_info`(1)](fi_info.1.html),
