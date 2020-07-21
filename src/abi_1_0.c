@@ -129,25 +129,9 @@ struct fi_info_1_1 {
 	fid_t				handle;
 	struct fi_tx_attr_1_0		*tx_attr;
 	struct fi_rx_attr		*rx_attr;
-	struct fi_ep_attr_1_0		*ep_attr;
+	struct fi_ep_attr		*ep_attr;
 	struct fi_domain_attr_1_0	*domain_attr;
 	struct fi_fabric_attr_1_0	*fabric_attr;
-};
-
-struct fi_ep_attr_1_2 {
-        enum fi_ep_type         type;
-        uint32_t                protocol;
-        uint32_t                protocol_version;
-        size_t                  max_msg_size;
-        size_t                  msg_prefix_size;
-        size_t                  max_order_raw_size;
-        size_t                  max_order_war_size;
-        size_t                  max_order_waw_size;
-        uint64_t                mem_tag_format;
-        size_t                  tx_ctx_cnt;
-        size_t                  rx_ctx_cnt;
-        size_t                  auth_key_size;
-        uint8_t                 *auth_key;
 };
 
 struct fi_domain_attr_1_2 {
@@ -191,7 +175,7 @@ struct fi_info_1_2 {
         fid_t                     handle;
         struct fi_tx_attr_1_0     *tx_attr;
         struct fi_rx_attr         *rx_attr;
-        struct fi_ep_attr_1_2     *ep_attr;
+        struct fi_ep_attr         *ep_attr;
         struct fi_domain_attr_1_2 *domain_attr;
         struct fi_fabric_attr     *fabric_attr;
         struct fid_nic            *nic;
