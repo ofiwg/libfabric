@@ -287,46 +287,47 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	struct fi_info *fi_ptr;
 	struct fi_info *fi_ptr_tmp;
 	struct ether_addr *mac;
-	uint32_t scan_nic;
-	uint32_t scan_pid;
+	uint32_t scan_nic = 0;
+	uint32_t scan_pid = 0;
 	struct cxip_addr *addr;
 	struct cxip_if *iface;
+	bool copy_dest;
 
 	if (flags & FI_SOURCE) {
 		if (!node && !service) {
 			CXIP_LOG_INFO("FI_SOURCE set, but no node or service\n");
 			return -FI_EINVAL;
 		}
+	}
 
-		if (node) {
-			iface = cxip_if_lookup_name(node);
-			if (iface) {
-				scan_nic = iface->info->nic_addr;
-			} else if ((mac = ether_aton(node))) {
-				scan_nic = cxip_mac_to_nic(mac);
-			} else if (sscanf(node, "%i", &scan_nic) != 1) {
-				CXIP_LOG_INFO("Invalid node: %s\n", node);
-				return -FI_EINVAL;
-			}
-
-			CXIP_LOG_DBG("Node NIC: %#x\n", scan_nic);
+	if (node) {
+		iface = cxip_if_lookup_name(node);
+		if (iface) {
+			scan_nic = iface->info->nic_addr;
+		} else if ((mac = ether_aton(node))) {
+			scan_nic = cxip_mac_to_nic(mac);
+		} else if (sscanf(node, "%i", &scan_nic) != 1) {
+			CXIP_LOG_INFO("Invalid node: %s\n", node);
+			return -FI_EINVAL;
 		}
 
-		if (service) {
-			if (sscanf(service, "%i", &scan_pid) != 1) {
-				CXIP_LOG_INFO("Invalid service: %s\n",
-					      service);
-				return -FI_EINVAL;
-			}
+		CXIP_LOG_DBG("Node NIC: %#x\n", scan_nic);
+	}
 
-			if (scan_pid >= C_PID_ANY) {
-				CXIP_LOG_INFO("Service out of range [0-%d): %u\n",
-					      C_PID_ANY, scan_pid);
-				return -FI_EINVAL;
-			}
-
-			CXIP_LOG_DBG("Service PID: %u\n", scan_pid);
+	if (service) {
+		if (sscanf(service, "%i", &scan_pid) != 1) {
+			CXIP_LOG_INFO("Invalid service: %s\n",
+				      service);
+			return -FI_EINVAL;
 		}
+
+		if (scan_pid >= C_PID_ANY) {
+			CXIP_LOG_INFO("Service out of range [0-%d): %u\n",
+				      C_PID_ANY, scan_pid);
+			return -FI_EINVAL;
+		}
+
+		CXIP_LOG_DBG("Service PID: %u\n", scan_pid);
 	}
 
 	/* Find all matching domains, ignoring addresses. */
@@ -374,11 +375,54 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	if (!*info)
 		return FI_SUCCESS;
 
-	/* Set client-assigned PID value in source address. */
-	if (flags & FI_SOURCE && service) {
-		for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
-			addr = (struct cxip_addr *)fi_ptr->src_addr;
-			addr->pid = scan_pid;
+	for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
+		if (flags & FI_SOURCE) {
+			/* Set client-assigned PID value in source address. */
+			if (service) {
+				addr = (struct cxip_addr *)fi_ptr->src_addr;
+				addr->pid = scan_pid;
+			}
+
+			copy_dest = (hints && hints->dest_addr);
+		} else {
+			if (node) {
+				struct cxip_addr addr = {};
+
+				addr.nic = scan_nic;
+				addr.pid = scan_pid;
+
+				fi_ptr->dest_addr = mem_dup(&addr,
+							    sizeof(addr));
+				if (!fi_ptr->dest_addr) {
+					ret = -FI_ENOMEM;
+					goto freeinfo;
+				}
+				fi_ptr->dest_addrlen = sizeof(addr);
+			} else {
+				copy_dest = (hints && hints->dest_addr);
+			}
+
+			if (hints && hints->src_addr) {
+				fi_ptr->src_addr = mem_dup(hints->src_addr,
+							   hints->src_addrlen);
+				if (!fi_ptr->src_addr) {
+					ret = -FI_ENOMEM;
+					goto freeinfo;
+				}
+				fi_ptr->src_addrlen = hints->src_addrlen;
+				fi_ptr->addr_format = hints->addr_format;
+			}
+		}
+
+		if (copy_dest) {
+			fi_ptr->dest_addr = mem_dup(hints->dest_addr,
+						    hints->dest_addrlen);
+			if (!fi_ptr->dest_addr) {
+				ret = -FI_ENOMEM;
+				goto freeinfo;
+			}
+			fi_ptr->dest_addrlen = hints->dest_addrlen;
+			fi_ptr->addr_format = hints->addr_format;
 		}
 	}
 

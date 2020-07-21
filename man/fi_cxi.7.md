@@ -418,6 +418,38 @@ The CXI provider checks for the following environment variables:
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 
+# FABTESTS
+
+The CXI provider does not currently support fabtests which depend on IP
+addressing.
+
+fabtest RDM benchmarks are supported, like:
+
+```c
+# Start server by specifying source PID and interface
+./fabtests/benchmarks/fi_rdm_tagged_pingpong -B 10 -s cxi0
+
+# Read server NIC address
+CXI0_ADDR=$(cat /sys/class/cxi/cxi0/device/properties/nic_addr)
+
+# Start client by specifying server PID and NIC address
+./fabtests/benchmarks/fi_rdm_tagged_pingpong -P 10 $CXI0_ADDR
+
+# The client may be bound to a specific interface, like:
+./fabtests/benchmarks/fi_rdm_tagged_pingpong -B 10 -s cxi1 -P 10 $CXI0_ADDR
+```
+
+Some functional fabtests are supported (including fi_bw). Others use IP sockets
+and are not yet supported.
+
+multinode fabtests are not yet supported.
+
+ubertest is supported for test configs matching the provider's current
+capabilities.
+
+unit tests are supported where the test feature set matches the CXI provider's
+current capabilities.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
