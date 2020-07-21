@@ -546,7 +546,11 @@ fixed value of the maximum number of endpoints supported by the
 underlying hardware, or may be a dynamic value, based on the default
 attributes of an allocated endpoint, such as the endpoint capabilities
 and size.  The endpoint count is the number of addressable endpoints
-supported by the provider.
+supported by the provider. Providers return capability limits based on
+configured hardware maximum capabilities. Providers cannot predict all
+possible system limitations without posteriori knowledge acquired during
+runtime that will further limit these hardware maximums (e.g. application
+memory consumption, FD usage, etc.).
 
 ## Transmit Context Count (tx_ctx_cnt)
 
