@@ -117,24 +117,7 @@ struct fi_info_1_0 {
 	struct fi_fabric_attr_1_0	*fabric_attr;
 };
 
-struct fi_info_1_1 {
-	struct fi_info			*next;
-	uint64_t			caps;
-	uint64_t			mode;
-	uint32_t			addr_format;
-	size_t				src_addrlen;
-	size_t				dest_addrlen;
-	void				*src_addr;
-	void				*dest_addr;
-	fid_t				handle;
-	struct fi_tx_attr_1_0		*tx_attr;
-	struct fi_rx_attr		*rx_attr;
-	struct fi_ep_attr		*ep_attr;
-	struct fi_domain_attr_1_0	*domain_attr;
-	struct fi_fabric_attr_1_0	*fabric_attr;
-};
-
-struct fi_domain_attr_1_2 {
+struct fi_domain_attr_1_1 {
         struct fid_domain       *domain;
         char                    *name;
         enum fi_threading       threading;
@@ -163,6 +146,23 @@ struct fi_domain_attr_1_2 {
         size_t                  mr_cnt;
 };
 
+struct fi_info_1_1 {
+	struct fi_info			*next;
+	uint64_t			caps;
+	uint64_t			mode;
+	uint32_t			addr_format;
+	size_t				src_addrlen;
+	size_t				dest_addrlen;
+	void				*src_addr;
+	void				*dest_addr;
+	fid_t				handle;
+	struct fi_tx_attr_1_0		*tx_attr;
+	struct fi_rx_attr		*rx_attr;
+	struct fi_ep_attr		*ep_attr;
+	struct fi_domain_attr_1_1	*domain_attr;
+	struct fi_fabric_attr_1_0	*fabric_attr;
+};
+
 struct fi_info_1_2 {
         struct fi_info            *next;
         uint64_t                  caps;
@@ -176,7 +176,7 @@ struct fi_info_1_2 {
         struct fi_tx_attr_1_0     *tx_attr;
         struct fi_rx_attr         *rx_attr;
         struct fi_ep_attr         *ep_attr;
-        struct fi_domain_attr_1_2 *domain_attr;
+        struct fi_domain_attr_1_1 *domain_attr;
         struct fi_fabric_attr     *fabric_attr;
         struct fid_nic            *nic;
 };
