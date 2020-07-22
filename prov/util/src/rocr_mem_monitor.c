@@ -135,11 +135,6 @@ static void rocr_mm_dealloc_cb(void *addr, void *user_data)
 	pthread_mutex_unlock(&mm_lock);
 }
 
-static void *rocr_mm_entry_end_addr(struct rocr_mm_entry *entry)
-{
-	return (void *) ((uintptr_t) entry->iov.iov_base + entry->iov.iov_len);
-}
-
 static void rocr_mm_entry_free(struct rocr_mm_entry *entry)
 {
 	hsa_status_t hsa_ret __attribute__((unused));
@@ -266,6 +261,7 @@ static void rocr_mm_unsubscribe(struct ofi_mem_monitor *monitor,
 	struct rocr_mm_entry *entry;
 	size_t cur_len = len;
 	void *cur_addr = (void *) addr;
+	void *next_addr;
 
 	/* The user unsubscribe region may span multiple ROCR memory regions.
 	 * Each ROCR memory region needs to be freed and MR caches notified.
@@ -275,10 +271,6 @@ static void rocr_mm_unsubscribe(struct ofi_mem_monitor *monitor,
 		if (!entry)
 			break;
 
-		cur_len -= MIN((uintptr_t) rocr_mm_entry_end_addr(entry) -
-			       (uintptr_t) cur_addr, cur_len);
-		cur_addr = rocr_mm_entry_end_addr(entry);
-
 		ofi_monitor_notify(rocr_monitor, entry->iov.iov_base,
 				   entry->iov.iov_len);
 
@@ -286,7 +278,13 @@ static void rocr_mm_unsubscribe(struct ofi_mem_monitor *monitor,
 		       "ROCR buffer address %p length %lu unsubscribed\n",
 		       entry->iov.iov_base, entry->iov.iov_len);
 
+		next_addr = (void *) ((uintptr_t) ofi_iov_end(&entry->iov) + 1);
+
 		rocr_mm_entry_free(entry);
+
+		cur_len -= MIN((uintptr_t) next_addr - (uintptr_t) cur_addr,
+			       cur_len);
+		cur_addr = next_addr;
 	}
 
 	if (cur_len)
@@ -315,6 +313,7 @@ static int rocr_mm_subscribe(struct ofi_mem_monitor *monitor, const void *addr,
 	int ret = FI_SUCCESS;
 	size_t cur_len = len;
 	void *cur_addr = (void *) addr;
+	void *next_addr;
 
 	/* The user subscribe region may span multiple ROCR memory regions. For
 	 * this case, each ROCR memory region needs to be monitored. This
@@ -338,9 +337,10 @@ static int rocr_mm_subscribe(struct ofi_mem_monitor *monitor, const void *addr,
 				break;
 		}
 
-		cur_len -= MIN((uintptr_t) rocr_mm_entry_end_addr(entry) -
-			       (uintptr_t) cur_addr, cur_len);
-		cur_addr = rocr_mm_entry_end_addr(entry);
+		next_addr = (void *) ((uintptr_t) ofi_iov_end(&entry->iov) + 1);
+		cur_len -= MIN((uintptr_t) next_addr - (uintptr_t) cur_addr,
+			       cur_len);
+		cur_addr = next_addr;
 	}
 
 	FI_LOG(&core_prov, ret ? FI_LOG_WARN : FI_LOG_DEBUG, FI_LOG_MR,
