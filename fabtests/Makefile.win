@@ -27,8 +27,8 @@ outdir = $(output_root)$(arch)\release-v141
 CFLAGS = $(CFLAGS) /O2 /MT
 !endif
 
-basedeps = common\shared.c common\jsmn.c common\windows\getopt.c \
-	common\windows\osd.c
+basedeps = common\hmem.c common\shared.c common\jsmn.c \
+	common\windows\getopt.c common\windows\osd.c
 
 includes = /Iinclude /Iinclude\windows /I..\include /FIft_osd.h \
 	/Iinclude\windows\getopt

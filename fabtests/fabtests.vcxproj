@@ -108,6 +108,7 @@
     <ClCompile Include="benchmarks\rdm_tagged_pingpong.c" />
     <ClCompile Include="benchmarks\rma_bw.c" />
     <ClCompile Include="common\jsmn.c" />
+    <ClCompile Include="common\hmem.c" />
     <ClCompile Include="common\shared.c" />
     <ClCompile Include="common\windows\getopt.c" />
     <ClCompile Include="common\windows\osd.c" />
@@ -150,6 +151,7 @@
     <ClInclude Include="ubertest\fabtest.h" />
     <ClInclude Include="include\ft_osd.h" />
     <ClInclude Include="include\jsmn.h" />
+    <ClInclude Include="include\hmem.h" />
     <ClInclude Include="include\shared.h" />
     <ClInclude Include="include\unit_common.h" />
     <ClInclude Include="include\windows\getopt\getopt.h" />

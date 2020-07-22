@@ -111,6 +111,8 @@ enum {
 	FT_OPT_OOB_ADDR_EXCH	= 1 << 14,
 	FT_OPT_ALLOC_MULT_MR	= 1 << 15,
 	FT_OPT_SERVER_PERSIST	= 1 << 16,
+	FT_OPT_ENABLE_HMEM	= 1 << 17,
+	FT_OPT_USE_DEVICE	= 1 << 18,
 	FT_OPT_OOB_CTRL		= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
 };
 
@@ -167,6 +169,9 @@ struct ft_opts {
 	uint64_t mr_mode;
 	/* Fail if the selected provider does not support FI_MSG_PREFIX.  */
 	int force_prefix;
+	enum fi_hmem_iface iface;
+	uint64_t device;
+	
 	char **argv;
 };
 
@@ -237,7 +242,7 @@ extern int ft_socket_pair[2];
 extern int sock;
 extern int listen_sock;
 #define ADDR_OPTS "B:P:s:a:b::E::C:"
-#define FAB_OPTS "f:d:p:"
+#define FAB_OPTS "f:d:p:D:i:H"
 #define INFO_OPTS FAB_OPTS "e:M:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
 #define NO_CQ_DATA 0
@@ -258,6 +263,8 @@ extern char default_port[8];
 		.rma_op = FT_RMA_WRITE, \
 		.oob_port = NULL, \
 		.mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP, \
+		.iface = FI_HMEM_SYSTEM, \
+		.device = 0, \
 		.argc = argc, .argv = argv \
 	}
 
