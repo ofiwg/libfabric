@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,6 +39,7 @@
 #include <stddef.h>
 #include <sys/types.h>
 #include <sys/uio.h>
+#include <rdma/fi_errno.h>
 
 #ifdef __GNUC__
 #define FI_DEPRECATED_FUNC __attribute__((deprecated))
@@ -531,6 +533,8 @@ struct fi_ops {
 	int	(*ops_open)(struct fid *fid, const char *name,
 			    uint64_t flags, void **ops, void *context);
 	int	(*tostr)(const struct fid *fid, char *buf, size_t len);
+	int	(*ops_set)(struct fid *fid, const char *name, uint64_t flags,
+			   void *ops, void *context);
 };
 
 /* All fabric interface descriptors must start with this structure */
@@ -648,6 +652,14 @@ fi_open_ops(struct fid *fid, const char *name, uint64_t flags,
 	    void **ops, void *context)
 {
 	return fid->ops->ops_open(fid, name, flags, ops, context);
+}
+
+static inline int
+fi_set_ops(struct fid *fid, const char *name, uint64_t flags,
+	   void *ops, void *context)
+{
+	return FI_CHECK_OP(fid->ops, struct fi_ops, ops_set) ?
+		fid->ops->ops_set(fid, name, flags, ops, context) : -FI_ENOSYS;
 }
 
 enum fi_type {

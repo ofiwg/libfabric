@@ -140,6 +140,23 @@ struct fi_mr_modify {
 	struct fi_mr_attr	attr;
 };
 
+#define FI_SET_OPS_HMEM_OVERRIDE "hmem_override_ops"
+
+struct fi_hmem_override_ops {
+	size_t	size;
+
+	ssize_t	(*copy_from_hmem_iov)(void *dest, size_t size,
+				      const struct iovec *hmem_iov,
+				      enum fi_hmem_iface hmem_iface,
+				      size_t hmem_iov_count,
+				      uint64_t hmem_iov_offset);
+
+	ssize_t (*copy_to_hmem_iov)(const struct iovec *hmem_iov,
+				    enum fi_hmem_iface hmem_iface,
+				    size_t hmem_iov_count,
+				    uint64_t hmem_iov_offset, const void *src,
+				    size_t size);
+};
 
 #ifdef FABRIC_DIRECT
 #include <rdma/fi_direct_atomic_def.h>
