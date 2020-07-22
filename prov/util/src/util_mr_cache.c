@@ -277,8 +277,6 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 			util_mr_uncache_entry_storage(cache, *entry);
 			cache->uncached_cnt++;
 			cache->uncached_size += (*entry)->info.iov.iov_len;
-		} else {
-			(*entry)->subscribed = 1;
 		}
 	}
 	pthread_mutex_unlock(&mm_lock);
@@ -335,8 +333,6 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 
 		/* Purge regions that overlap with new region */
 		while (*entry) {
-			/* New entry will expand range of subscription */
-			(*entry)->subscribed = 0;
 			util_mr_uncache_entry(cache, *entry);
 			*entry = cache->storage.find(&cache->storage, &info);
 		}
