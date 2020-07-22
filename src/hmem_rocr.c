@@ -53,6 +53,11 @@ struct rocr_ops {
 	hsa_status_t (*hsa_shut_down)(void);
 	hsa_status_t (*hsa_status_string)(hsa_status_t status,
 					  const char **status_string);
+	hsa_status_t (*hsa_amd_dereg_dealloc_cb)(void *ptr,
+						 hsa_amd_deallocation_callback_t cb);
+	hsa_status_t (*hsa_amd_reg_dealloc_cb)(void *ptr,
+					       hsa_amd_deallocation_callback_t cb,
+					       void *user_data);
 };
 
 #ifdef ENABLE_ROCR_DLOPEN
@@ -70,6 +75,10 @@ static struct rocr_ops rocr_ops = {
 	.hsa_init = hsa_init,
 	.hsa_shut_down = hsa_shut_down,
 	.hsa_status_string = hsa_status_string,
+	.hsa_amd_dereg_dealloc_cb =
+		hsa_amd_deregister_deallocation_callback,
+	.hsa_amd_reg_dealloc_cb =
+		hsa_amd_register_deallocation_callback,
 };
 
 #endif /* ENABLE_ROCR_DLOPEN */
@@ -114,6 +123,19 @@ const char *ofi_hsa_status_to_string(hsa_status_t status)
 		return "unknown error";
 
 	return str;
+}
+
+hsa_status_t ofi_hsa_amd_dereg_dealloc_cb(void *ptr,
+					  hsa_amd_deallocation_callback_t cb)
+{
+	return rocr_ops.hsa_amd_dereg_dealloc_cb(ptr, cb);
+}
+
+hsa_status_t ofi_hsa_amd_reg_dealloc_cb(void *ptr,
+					hsa_amd_deallocation_callback_t cb,
+					void *user_data)
+{
+	return rocr_ops.hsa_amd_reg_dealloc_cb(ptr, cb, user_data);
 }
 
 int rocr_memcpy(void *dest, const void *src, size_t size)
@@ -199,6 +221,22 @@ int rocr_hmem_init(void)
 	if (!rocr_ops.hsa_status_string) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_status_string\n");
+		goto err;
+	}
+
+	rocr_ops.hsa_amd_dereg_dealloc_cb =
+		dlsym(rocr_handle, "hsa_amd_deregister_deallocation_callback");
+	if (!rocr_ops.hsa_amd_dereg_dealloc_cb) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_amd_deregister_deallocation_callback\n");
+		goto err;
+	}
+
+	rocr_ops.hsa_amd_reg_dealloc_cb =
+		dlsym(rocr_handle, "hsa_amd_register_deallocation_callback");
+	if (!rocr_ops.hsa_amd_reg_dealloc_cb) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_amd_register_deallocation_callback\n");
 		goto err;
 	}
 #endif /* ENABLE_ROCR_DLOPEN */

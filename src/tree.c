@@ -378,6 +378,13 @@ void ofi_rbmap_delete(struct ofi_rbmap *map, struct ofi_rbnode *node)
 	ofi_rbnode_free(map, node);
 }
 
+struct ofi_rbnode *ofi_rbmap_get_root(struct ofi_rbmap *map)
+{
+	if (ofi_rbmap_empty(map))
+		return NULL;
+	return map->root;
+}
+
 struct ofi_rbnode *ofi_rbmap_find(struct ofi_rbmap *map, void *key)
 {
 	struct ofi_rbnode *node;
