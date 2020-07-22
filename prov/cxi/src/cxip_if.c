@@ -584,6 +584,12 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 	}
 
 	new_cmdq->dev_cmdq = dev_cmdq;
+
+	if (lni->iface->info->device_platform == CXI_PLATFORM_NETSIM)
+		new_cmdq->llring_mode = CXIP_LLRING_NEVER;
+	else
+		new_cmdq->llring_mode = cxip_env.llring_mode;
+
 	fastlock_init(&new_cmdq->lock);
 	*cmdq = new_cmdq;
 

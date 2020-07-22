@@ -641,7 +641,8 @@ int cxip_coll_enable(struct cxip_ep_obj *ep_obj)
 	}
 
 	ep_obj->coll.is_netsim =
-		(ep_obj->domain->iface->info->device_platform == 1);
+			(ep_obj->domain->iface->info->device_platform ==
+			 CXI_PLATFORM_NETSIM);
 
 	fastlock_acquire(&ep_obj->coll.lock);
 

@@ -3460,8 +3460,8 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 		goto err_unlock;
 	}
 
-	if (!(req->send.flags & FI_MORE))
-		cxi_cq_ring(cmdq->dev_cmdq);
+	cxip_txq_ring(cmdq, req->send.flags & FI_MORE,
+		      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
 
 	fastlock_release(&cmdq->lock);
 
@@ -3731,8 +3731,9 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		}
 	}
 
-	if (!(req->send.flags & FI_MORE))
-		cxi_cq_ring(cmdq->dev_cmdq);
+	cxip_txq_ring(cmdq, req->send.flags & FI_MORE,
+		      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
+
 
 	fastlock_release(&cmdq->lock);
 

@@ -210,10 +210,13 @@ struct cxip_environment cxip_env = {
 	.oflow_buf_size = CXIP_OFLOW_BUF_SIZE,
 	.oflow_buf_count = CXIP_OFLOW_BUF_COUNT,
 	.optimized_mrs = true,
+	.llring_mode = CXIP_LLRING_IDLE,
 };
 
 static void cxip_env_init(void)
 {
+	char *param_str = NULL;
+
 	fi_param_define(&cxip_prov, "odp", FI_PARAM_BOOL,
 			"Enables on-demand paging.");
 	fi_param_get_bool(&cxip_prov, "odp", &cxip_env.odp);
@@ -245,6 +248,22 @@ static void cxip_env_init(void)
 			"Enables optimized memory regions.");
 	fi_param_get_bool(&cxip_prov, "optimized_mrs",
 			  &cxip_env.optimized_mrs);
+
+	fi_param_define(&cxip_prov, "llring_mode", FI_PARAM_STRING,
+			"Set low-latency command queue ring mode.");
+	fi_param_get_str(&cxip_prov, "llring_mode", &param_str);
+
+	if (param_str) {
+		if (!strcmp(param_str, "always"))
+			cxip_env.llring_mode = CXIP_LLRING_ALWAYS;
+		else if (!strcmp(param_str, "idle"))
+			cxip_env.llring_mode = CXIP_LLRING_IDLE;
+		else if (!strcmp(param_str, "never"))
+			cxip_env.llring_mode = CXIP_LLRING_NEVER;
+		else
+			CXIP_LOG_INFO("Unrecognized llring_mode: %s\n",
+				      param_str);
+	}
 }
 
 /*

@@ -158,6 +158,12 @@ extern struct fi_ep_attr cxip_ep_attr;
 extern struct fi_tx_attr cxip_tx_attr;
 extern struct fi_rx_attr cxip_rx_attr;
 
+enum cxip_llring_mode {
+	CXIP_LLRING_NEVER,
+	CXIP_LLRING_IDLE,
+	CXIP_LLRING_ALWAYS,
+};
+
 struct cxip_environment {
 	/* Translation */
 	int odp;
@@ -170,6 +176,8 @@ struct cxip_environment {
 	size_t oflow_buf_count;
 
 	int optimized_mrs;
+
+	enum cxip_llring_mode llring_mode;
 };
 
 extern struct cxip_environment cxip_env;
@@ -302,6 +310,11 @@ union cxip_match_bits {
 
 /* libcxi Wrapper Structures */
 
+#define CXI_PLATFORM_ASIC 0
+#define CXI_PLATFORM_NETSIM 1
+#define CXI_PLATFORM_Z1 2
+#define CXI_PLATFORM_FPGA 3
+
 /*
  * CXI Device wrapper
  *
@@ -373,6 +386,7 @@ struct cxip_cmdq {
 	struct cxi_cq *dev_cmdq;
 	fastlock_t lock;
 	struct c_cstate_cmd c_state;
+	enum cxip_llring_mode llring_mode;
 };
 
 
@@ -1356,6 +1370,28 @@ static inline int cxip_fid_to_rxc(struct fid_ep *ep, struct cxip_rxc **rxc)
 
 	default:
 		return -FI_EINVAL;
+	}
+}
+
+static inline void cxip_txq_ring(struct cxip_cmdq *cmdq, bool more,
+				 int otx_reqs)
+{
+	if (!more) {
+		switch (cmdq->llring_mode) {
+		case CXIP_LLRING_IDLE:
+			if (!otx_reqs)
+				cxi_cq_ll_ring(cmdq->dev_cmdq);
+			else
+				cxi_cq_ring(cmdq->dev_cmdq);
+			break;
+		case CXIP_LLRING_ALWAYS:
+			cxi_cq_ll_ring(cmdq->dev_cmdq);
+			break;
+		case CXIP_LLRING_NEVER:
+		default:
+			cxi_cq_ring(cmdq->dev_cmdq);
+			break;
+		}
 	}
 }
 

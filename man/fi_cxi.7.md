@@ -415,6 +415,11 @@ The CXI provider checks for the following environment variables:
 *FI_CXI_OPTIMIZED_MRS*
 : Enables optimized memory regions.
 
+*FI_CXI_LLRING_MODE*
+: Set the policy for use of the low-latency command queue ring mechanism. This
+mechanism improves the latency of command processing on an idle command queue.
+Valid values are idle, always, and never.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 
