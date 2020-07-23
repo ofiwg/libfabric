@@ -583,9 +583,7 @@ static void usage(void)
 {
 	ft_unit_usage("fi_mr_cache_evict",
 		"Test a provider's ability to evict MR cache entries.\n"
-		"Evictions are verified using MMAP, BRK, and SBRK allocations.\n"
-		"Users should set the FI_MR_CACHE_MONITOR env variable to \n"
-		"change the memory monitor used by the MR cache.\n\n"
+		"Evictions are verified using MMAP, BRK, and SBRK allocations.\n\n"
 		"With debug enabled, when running as root, the physical \n"
 		"address of the first page of the MMAP, BRK, and SBRK \n"
 		"allocation is returned. This can be used to verify the \n"
