@@ -139,8 +139,8 @@ vrb_msg_ep_prepare_rdma_cm_hdr(void *priv_data,
 {
 	struct vrb_rdma_cm_hdr *rdma_cm_hdr = priv_data;
 
-	rdma_cm_hdr->ip_version = 0;
-	rdma_cm_hdr->port = 0;
+	rdma_cm_hdr->ip_version = 6 << 4; /* IPv6 */
+	rdma_cm_hdr->port = htons(ofi_addr_get_port(&id->route.addr.src_addr));
 
 	/* Record the GIDs */
 	memcpy(rdma_cm_hdr->src_addr,

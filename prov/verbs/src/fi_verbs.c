@@ -237,11 +237,11 @@ static int vrb_get_sib_rai(const char *node, const char *service, uint64_t flags
 int vrb_get_rdma_rai(const char *node, const char *service, uint64_t flags,
 		 const struct fi_info *hints, struct rdma_addrinfo **rai)
 {
-	if (hints && hints->addr_format == FI_SOCKADDR_IB) {
-		if (node || hints->src_addr || hints->dest_addr)
-			return vrb_get_sib_rai(node, service, flags, hints, rai);
-		/* fallthrough */
+	if (hints && hints->addr_format == FI_SOCKADDR_IB &&
+	    (node || hints->src_addr || hints->dest_addr)) {
+		return vrb_get_sib_rai(node, service, flags, hints, rai);
 	}
+
 	return vrb_get_rdmacm_rai(node, service, flags, hints, rai);
 }
 
