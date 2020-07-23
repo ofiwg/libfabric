@@ -633,7 +633,9 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 	cur_ooo_entry = *ofi_recvwin_get_msg(peer->robuf, msg_id);
 	if (cur_ooo_entry) {
 		assert(rxr_get_base_hdr(cur_ooo_entry->pkt)->type == RXR_MEDIUM_MSGRTM_PKT ||
-		       rxr_get_base_hdr(cur_ooo_entry->pkt)->type == RXR_MEDIUM_TAGRTM_PKT);
+		       rxr_get_base_hdr(cur_ooo_entry->pkt)->type == RXR_MEDIUM_TAGRTM_PKT ||
+		       rxr_get_base_hdr(cur_ooo_entry->pkt)->type == RXR_DC_MEDIUM_MSGRTM_PKT ||
+		       rxr_get_base_hdr(cur_ooo_entry->pkt)->type == RXR_DC_MEDIUM_TAGRTM_PKT);
 		assert(rxr_pkt_msg_id(cur_ooo_entry) == msg_id);
 		assert(rxr_pkt_rtm_total_len(cur_ooo_entry) == rxr_pkt_rtm_total_len(ooo_entry));
 		rxr_pkt_entry_append(cur_ooo_entry, ooo_entry);
@@ -858,7 +860,8 @@ void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entr
 		if (tx_entry->fi_flags & FI_COMPLETION) {
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
-			efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
+			if (!(tx_entry->fi_flags & RXR_NO_COUNTER))
+				efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
 			rxr_release_tx_entry(ep, tx_entry);
 		}
 	} else {

@@ -36,6 +36,9 @@
 #include "rxr_cntr.h"
 #include "rxr_pkt_cmd.h"
 
+/* Handshake wait timeout in microseconds */
+#define RXR_HANDSHAKE_WAIT_TIMEOUT 1000000
+
 /* This file implements 4 actions that can be applied to a packet:
  *          posting,
  *          handling send completion and,
@@ -120,6 +123,9 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 	case RXR_ATOMRSP_PKT:
 		ret = rxr_pkt_init_atomrsp(rxr_ep, (struct rxr_rx_entry *)x_entry, pkt_entry);
 		break;
+	case RXR_RECEIPT_PKT:
+		ret = rxr_pkt_init_receipt(rxr_ep, (struct rxr_rx_entry *)x_entry, pkt_entry);
+		break;
 	case RXR_EAGER_MSGRTM_PKT:
 		ret = rxr_pkt_init_eager_msgrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
@@ -168,6 +174,33 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 	case RXR_COMPARE_RTA_PKT:
 		ret = rxr_pkt_init_compare_rta(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
+	case RXR_DC_EAGER_MSGRTM_PKT:
+		ret = rxr_pkt_init_dc_eager_msgrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_DC_EAGER_TAGRTM_PKT:
+		ret = rxr_pkt_init_dc_eager_tagrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_DC_MEDIUM_MSGRTM_PKT:
+		ret = rxr_pkt_init_dc_medium_msgrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_DC_MEDIUM_TAGRTM_PKT:
+		ret = rxr_pkt_init_dc_medium_tagrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_DC_LONG_MSGRTM_PKT:
+		ret = rxr_pkt_init_dc_long_msgrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_DC_LONG_TAGRTM_PKT:
+		ret = rxr_pkt_init_dc_long_tagrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_DC_EAGER_RTW_PKT:
+		ret = rxr_pkt_init_dc_eager_rtw(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_DC_LONG_RTW_PKT:
+		ret = rxr_pkt_init_dc_long_rtw(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_DC_WRITE_RTA_PKT:
+		ret = rxr_pkt_init_dc_write_rta(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
 	default:
 		ret = -FI_EINVAL;
 		assert(0 && "unknown pkt type to init");
@@ -198,16 +231,23 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 	case RXR_ATOMRSP_PKT:
 		rxr_pkt_handle_atomrsp_sent(rxr_ep, pkt_entry);
 		break;
+	case RXR_RECEIPT_PKT:
+		rxr_pkt_handle_receipt_sent(rxr_ep, pkt_entry);
+		break;
 	case RXR_EAGER_MSGRTM_PKT:
 	case RXR_EAGER_TAGRTM_PKT:
 		rxr_pkt_handle_eager_rtm_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_MEDIUM_MSGRTM_PKT:
 	case RXR_MEDIUM_TAGRTM_PKT:
+	case RXR_DC_MEDIUM_MSGRTM_PKT:
+	case RXR_DC_MEDIUM_TAGRTM_PKT:
 		rxr_pkt_handle_medium_rtm_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_LONG_MSGRTM_PKT:
+	case RXR_DC_LONG_MSGRTM_PKT:
 	case RXR_LONG_TAGRTM_PKT:
+	case RXR_DC_LONG_TAGRTM_PKT:
 		rxr_pkt_handle_long_rtm_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_READ_MSGRTM_PKT:
@@ -218,6 +258,7 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 		rxr_pkt_handle_eager_rtw_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_LONG_RTW_PKT:
+	case RXR_DC_LONG_RTW_PKT:
 		rxr_pkt_handle_long_rtw_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_READ_RTW_PKT:
@@ -228,9 +269,15 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 		rxr_pkt_handle_rtr_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_WRITE_RTA_PKT:
+	case RXR_DC_WRITE_RTA_PKT:
 	case RXR_FETCH_RTA_PKT:
 	case RXR_COMPARE_RTA_PKT:
 		rxr_pkt_handle_rta_sent(rxr_ep, pkt_entry);
+		break;
+	case RXR_DC_EAGER_MSGRTM_PKT:
+	case RXR_DC_EAGER_TAGRTM_PKT:
+	case RXR_DC_EAGER_RTW_PKT:
+		/* no action to be taken here */
 		break;
 	default:
 		assert(0 && "Unknown packet type to handle sent");
@@ -313,7 +360,10 @@ ssize_t rxr_pkt_post_ctrl(struct rxr_ep *ep, int entry_type, void *x_entry,
 	ssize_t err;
 	struct rxr_tx_entry *tx_entry;
 
-	if (ctrl_type == RXR_MEDIUM_TAGRTM_PKT || ctrl_type == RXR_MEDIUM_MSGRTM_PKT) {
+	if (ctrl_type == RXR_MEDIUM_TAGRTM_PKT ||
+	    ctrl_type == RXR_MEDIUM_MSGRTM_PKT ||
+	    ctrl_type == RXR_DC_MEDIUM_MSGRTM_PKT ||
+	    ctrl_type == RXR_DC_MEDIUM_TAGRTM_PKT) {
 		assert(entry_type == RXR_TX_ENTRY);
 		assert(!inject);
 
@@ -362,6 +412,86 @@ ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_en
 }
 
 /*
+ * This function is used for any extra feature that does not have an alternative,
+ * for example FI_DELIVERY_COMPLETE
+ *
+ * This function will send a eager rtw packet with no data. Then keep calling
+ * rxr_ep_progress_internal() until rxr_peer->flags has the HANDSHAKE_RECEIVED flag.
+ * Upon receiving the eager RTW, the receiver will post a handshake,
+ * which will be processed in sender's rxr_ep_progress_internal().
+ *
+ * ep: The endpoint on which the packet for triggering handshake will be sent.
+ * peer: The peer from which the sender receives handshake.
+ * addr: The address of the peer.
+ *
+ * This function will return 0 if sender successfully receives / have already
+ * received the handshake from the peer
+ *
+ * This function will return FI_EAGAIN if it fails to allocate or send the trigger packet or
+ * it fails to receive handshake packet within a certain period of time.
+ */
+
+ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_peer *peer)
+{
+	struct rxr_tx_entry *tx_entry;
+	ssize_t err;
+
+	uint64_t start, endwait;
+
+	if (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)
+		return 0;
+
+	tx_entry = ofi_buf_alloc(ep->tx_entry_pool);
+	if (OFI_UNLIKELY(!tx_entry)) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "TX entries exhausted.\n");
+		return -FI_EAGAIN;
+	}
+
+	tx_entry->total_len = 0;
+	tx_entry->addr = addr;
+	tx_entry->msg_id = -1;
+	tx_entry->cq_entry.flags = FI_RMA | FI_WRITE;
+	tx_entry->cq_entry.buf = NULL;
+	dlist_init(&tx_entry->queued_pkts);
+
+	tx_entry->type = RXR_TX_ENTRY;
+	tx_entry->op = ofi_op_write;
+	tx_entry->state = RXR_TX_REQ;
+
+	tx_entry->send_flags = 0;
+	tx_entry->bytes_acked = 0;
+	tx_entry->bytes_sent = 0;
+	tx_entry->window = 0;
+	tx_entry->rma_iov_count = 0;
+	tx_entry->iov_count = 0;
+	tx_entry->iov_index = 0;
+	tx_entry->iov_mr_start = 0;
+	tx_entry->iov_offset = 0;
+	tx_entry->fi_flags = RXR_NO_COMPLETION | RXR_NO_COUNTER;
+
+#if ENABLE_DEBUG
+	dlist_insert_tail(&tx_entry->tx_entry_entry, &ep->tx_entry_list);
+#endif
+
+	err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0);
+
+	if (OFI_UNLIKELY(err))
+		return err;
+
+	start = ofi_gettime_us();
+	endwait = start + RXR_HANDSHAKE_WAIT_TIMEOUT;
+	while (start < endwait && !(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)) {
+		rxr_ep_progress_internal(ep);
+		start = ofi_gettime_us();
+	}
+
+	if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
+		return FI_ETIMEDOUT;
+
+	return 0;
+}
+
+/*
  *   Functions used to handle packet send completion
  */
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *comp)
@@ -390,6 +520,9 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 		return;
 	case RXR_ATOMRSP_PKT:
 		rxr_pkt_handle_atomrsp_send_completion(ep, pkt_entry);
+		break;
+	case RXR_RECEIPT_PKT:
+		rxr_pkt_handle_receipt_send_completion(ep, pkt_entry);
 		break;
 	case RXR_EAGER_MSGRTM_PKT:
 	case RXR_EAGER_TAGRTM_PKT:
@@ -427,6 +560,29 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 		/* no action to be taken here */
 		break;
 	case RXR_COMPARE_RTA_PKT:
+		/* no action to be taken here */
+		break;
+	case RXR_DC_EAGER_MSGRTM_PKT:
+		/* completion will be written upon receving the receipt packet, thus no action to be taken here */
+		break;
+	case RXR_DC_EAGER_TAGRTM_PKT:
+		/* completion will be written upon receving the receipt packet, thus no action to be taken her */
+		break;
+	case RXR_DC_MEDIUM_MSGRTM_PKT:
+	case RXR_DC_MEDIUM_TAGRTM_PKT:
+		rxr_pkt_handle_dc_medium_rtm_send_completion(ep, pkt_entry);
+		break;
+	case RXR_DC_LONG_MSGRTM_PKT:
+	case RXR_DC_LONG_TAGRTM_PKT:
+		rxr_pkt_handle_dc_long_rtm_send_completion(ep, pkt_entry);
+		break;
+	case RXR_DC_EAGER_RTW_PKT:
+		/* no action to be taken here */
+		break;
+	case RXR_DC_LONG_RTW_PKT:
+		rxr_pkt_handle_dc_long_rtw_send_completion(ep, pkt_entry);
+		break;
+	case RXR_DC_WRITE_RTA_PKT:
 		/* no action to be taken here */
 		break;
 	default:
@@ -577,23 +733,34 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	case RXR_ATOMRSP_PKT:
 		rxr_pkt_handle_atomrsp_recv(ep, pkt_entry);
 		return;
+	case RXR_RECEIPT_PKT:
+		rxr_pkt_handle_receipt_recv(ep, pkt_entry);
+		return;
 	case RXR_EAGER_MSGRTM_PKT:
 	case RXR_EAGER_TAGRTM_PKT:
 	case RXR_MEDIUM_MSGRTM_PKT:
 	case RXR_MEDIUM_TAGRTM_PKT:
+	case RXR_DC_MEDIUM_MSGRTM_PKT:
+	case RXR_DC_MEDIUM_TAGRTM_PKT:
 	case RXR_LONG_MSGRTM_PKT:
 	case RXR_LONG_TAGRTM_PKT:
+	case RXR_DC_LONG_MSGRTM_PKT:
+	case RXR_DC_LONG_TAGRTM_PKT:
 	case RXR_READ_MSGRTM_PKT:
 	case RXR_READ_TAGRTM_PKT:
 	case RXR_WRITE_RTA_PKT:
+	case RXR_DC_WRITE_RTA_PKT:
 	case RXR_FETCH_RTA_PKT:
 	case RXR_COMPARE_RTA_PKT:
+	case RXR_DC_EAGER_MSGRTM_PKT:
+	case RXR_DC_EAGER_TAGRTM_PKT:
 		rxr_pkt_handle_rtm_rta_recv(ep, pkt_entry);
 		return;
 	case RXR_EAGER_RTW_PKT:
 		rxr_pkt_handle_eager_rtw_recv(ep, pkt_entry);
 		return;
 	case RXR_LONG_RTW_PKT:
+	case RXR_DC_LONG_RTW_PKT:
 		rxr_pkt_handle_long_rtw_recv(ep, pkt_entry);
 		return;
 	case RXR_READ_RTW_PKT:
@@ -602,6 +769,9 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	case RXR_SHORT_RTR_PKT:
 	case RXR_LONG_RTR_PKT:
 		rxr_pkt_handle_rtr_recv(ep, pkt_entry);
+		return;
+	case RXR_DC_EAGER_RTW_PKT:
+		rxr_pkt_handle_dc_eager_rtw_recv(ep, pkt_entry);
 		return;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
