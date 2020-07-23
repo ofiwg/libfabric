@@ -271,7 +271,7 @@ static void rocr_mm_unsubscribe(struct ofi_mem_monitor *monitor,
 	 * Each ROCR memory region needs to be freed and MR caches notified.
 	 */
 	while (cur_len) {
-		entry = rocr_mm_entry_find(addr);
+		entry = rocr_mm_entry_find(cur_addr);
 		if (!entry)
 			break;
 
