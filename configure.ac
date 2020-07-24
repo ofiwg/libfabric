@@ -509,6 +509,24 @@ FI_CHECK_PACKAGE([cuda],
 		 [AC_DEFINE([HAVE_LIBCUDA], [1],[CUDA support])],
 		 [], [])
 
+AC_ARG_WITH([ze],
+	AC_HELP_STRING([--with-ze=DIR], [Provide path to where the ZE
+					 libraries and headers are installed.]),
+	[], [])
+
+FI_CHECK_PACKAGE([ze],
+	[level_zero/ze_api.h],
+	[ze_loader],
+	[zeInit],
+	[],
+	[$with_ze],
+	[],
+	[AC_DEFINE([HAVE_LIBZE], [1],[ZE support])],
+	[], [])
+
+CPPFLAGS="$CPPFLAGS $ze_CPPFLAGS"
+LDFLAGS="$LDFLAGS $ze_LDFLAGS"
+LIBS="$LIBS $ze_LIBS"
 
 enable_memhooks=1
 AC_ARG_ENABLE([memhooks-monitor],
