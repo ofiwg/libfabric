@@ -45,9 +45,10 @@ enum rxr_pkt_entry_state {
 
 /* pkt_entry types for rx pkts */
 enum rxr_pkt_entry_type {
-	RXR_PKT_ENTRY_POSTED = 1,   /* entries that are posted to the core */
+	RXR_PKT_ENTRY_POSTED = 1,   /* entries that are posted to the device from the RX bufpool */
 	RXR_PKT_ENTRY_UNEXP,        /* entries used to stage unexpected msgs */
-	RXR_PKT_ENTRY_OOO	    /* entries used to stage out-of-order RTM or RTA */
+	RXR_PKT_ENTRY_OOO,	    /* entries used to stage out-of-order RTM or RTA */
+	RXR_PKT_ENTRY_USER	    /* entries backed by user-provided msg prefix (FI_MSG_PREFIX)*/
 };
 
 struct rxr_pkt_sendv {
@@ -112,6 +113,10 @@ DECLARE_FREESTACK(struct rxr_robuf, rxr_robuf_fs);
 struct rxr_ep;
 
 struct rxr_tx_entry;
+
+struct rxr_pkt_entry *rxr_pkt_entry_init_prefix(struct rxr_ep *ep,
+						const struct fi_msg *posted_buf,
+						struct ofi_bufpool *pkt_pool);
 
 struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
 					  struct ofi_bufpool *pkt_pool);

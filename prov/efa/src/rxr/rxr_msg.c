@@ -784,7 +784,12 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 	unexp_list = (op == ofi_op_tagged) ? &rxr_ep->rx_unexp_tagged_list :
 		     &rxr_ep->rx_unexp_list;
 
-	if (!dlist_empty(unexp_list)) {
+	/*
+	 * Attempt to match against stashed unexpected messages. This is not
+	 * applicable to the zero-copy path where unexpected messages are not
+	 * applicable, since there's no tag or address to match against.
+	 */
+	if (!dlist_empty(unexp_list) && !rxr_ep->use_zcpy_rx) {
 		ret = rxr_msg_proc_unexp_msg_list(rxr_ep, msg, tag,
 						  ignore, op, flags, NULL);
 
@@ -806,6 +811,9 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 		dlist_insert_tail(&rx_entry->entry, &rxr_ep->rx_tagged_list);
 	else
 		dlist_insert_tail(&rx_entry->entry, &rxr_ep->rx_list);
+
+	if (rxr_ep->use_zcpy_rx)
+		rxr_ep_post_buf(rxr_ep, msg, flags, EFA_EP);
 
 out:
 	fastlock_release(&rxr_ep->util_ep.lock);

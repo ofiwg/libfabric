@@ -613,8 +613,10 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	}
 
 #if ENABLE_DEBUG
-	dlist_remove(&pkt_entry->dbg_entry);
-	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_pkt_list);
+	if (!ep->use_zcpy_rx) {
+		dlist_remove(&pkt_entry->dbg_entry);
+		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_pkt_list);
+	}
 #ifdef ENABLE_RXR_PKT_DUMP
 	rxr_pkt_print("Received", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
 #endif
