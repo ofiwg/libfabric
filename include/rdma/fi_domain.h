@@ -117,6 +117,7 @@ enum fi_hmem_iface {
 	FI_HMEM_SYSTEM	= 0,
 	FI_HMEM_CUDA,
 	FI_HMEM_ROCR,
+	FI_HMEM_ZE,
 };
 
 struct fi_mr_attr {
@@ -132,6 +133,7 @@ struct fi_mr_attr {
 	union {
 		uint64_t	reserved;
 		int		cuda;
+		int		ze;
 	} device;
 };
 
