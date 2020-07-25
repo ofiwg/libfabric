@@ -67,7 +67,6 @@
 #define RXR_EOR_PKT		7
 #define RXR_ATOMRSP_PKT         8
 #define RXR_HANDSHAKE_PKT	9
-#define RXR_RECEIPT_PKT 10
 
 #define RXR_REQ_PKT_BEGIN		64
 #define RXR_BASELINE_REQ_PKT_BEGIN	64
@@ -91,17 +90,7 @@
 #define RXR_READ_TAGRTM_PKT		129
 #define RXR_READ_RTW_PKT		130
 #define RXR_READ_RTR_PKT		131
-
-#define RXR_DC_EAGER_MSGRTM_PKT 	132
-#define RXR_DC_EAGER_TAGRTM_PKT 	133
-#define RXR_DC_MEDIUM_MSGRTM_PKT 	134
-#define RXR_DC_MEDIUM_TAGRTM_PKT 	135
-#define RXR_DC_LONG_MSGRTM_PKT  	136
-#define RXR_DC_LONG_TAGRTM_PKT  	137
-#define RXR_DC_EAGER_RTW_PKT    	138
-#define RXR_DC_LONG_RTW_PKT     	139
-#define RXR_DC_WRITE_RTA_PKT    	140
-#define RXR_EXTRA_REQ_PKT_END   	141
+#define RXR_EXTRA_REQ_PKT_END		132
 
 /*
  *  Packet fields common to all rxr packets. The other packet headers below must
@@ -400,35 +389,6 @@ static inline struct rxr_atomrsp_hdr *rxr_get_atomrsp_hdr(void *pkt)
 {
 	return (struct rxr_atomrsp_hdr *)pkt;
 }
-
-/* receipt packet headers */
-struct rxr_receipt_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	uint32_t tx_id;
-	uint32_t msg_id;
-	int32_t ret_code;
-	int32_t padding;
-};
-
-static inline
-struct rxr_receipt_hdr *rxr_get_receipt_hdr(void *pkt)
-{
-	return (struct rxr_receipt_hdr *)pkt;
-}
-
-/* receipt packet functions: init, handle_sent, handle_send_completion, recv*/
-int rxr_pkt_init_receipt(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
-			 struct rxr_pkt_entry *pkt_entry);
-
-void rxr_pkt_handle_receipt_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
-
-void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
-
-void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
-				 struct rxr_pkt_entry *pkt_entry);
 
 /* atomrsp functions: init, handle_sent, handle_send_completion, recv */
 int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
