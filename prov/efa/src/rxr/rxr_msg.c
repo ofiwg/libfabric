@@ -69,16 +69,10 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	assert(RXR_LONG_MSGRTM_PKT + 1 == RXR_LONG_TAGRTM_PKT);
 	assert(RXR_MEDIUM_MSGRTM_PKT + 1 == RXR_MEDIUM_TAGRTM_PKT);
 
-	assert(RXR_DC_EAGER_MSGRTM_PKT + 1 == RXR_DC_EAGER_TAGRTM_PKT);
-	assert(RXR_DC_MEDIUM_MSGRTM_PKT + 1 == RXR_DC_MEDIUM_TAGRTM_PKT);
-	assert(RXR_DC_LONG_MSGRTM_PKT + 1 == RXR_DC_LONG_TAGRTM_PKT);
-
 	int tagged;
 	size_t max_rtm_data_size;
 	ssize_t err;
 	struct rxr_peer *peer;
-	ssize_t delivery_complete_requested;
-	int ctrl_type;
 
 	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
 	tagged = (tx_entry->op == ofi_op_tagged);
@@ -88,9 +82,8 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 						      tx_entry->addr,
 						      RXR_EAGER_MSGRTM_PKT + tagged);
 
-	delivery_complete_requested = rxr_ep->util_ep.tx_op_flags & FI_DELIVERY_COMPLETE;
-	tx_entry->delivery_complete_requested = delivery_complete_requested;
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+
 	if (peer->is_local) {
 		assert(rxr_ep->use_shm);
 		/* intra instance message */
@@ -100,38 +93,10 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, rtm_type + tagged, 0);
 	}
 
-	if (delivery_complete_requested) {
-		/*
-		 * Because delivery complete is defined as an extra
-		 * feature, the receiver might not support it.
-		 *
-		 * The sender cannot send with FI_DELIVERY_COMPLETE
-		 * if the peer is not able to handle it.
-		 *
-		 * If the sender does not know whether the peer
-		 * can handle it, it needs to wait for
-		 * a handshake packet from the peer.
-		 *
-		 * The handshake packet contains
-		 * the information whether the peer
-		 * support it or not.
-		 */
-		err = rxr_pkt_wait_handshake(rxr_ep, tx_entry->addr, peer);
-		if (OFI_UNLIKELY(err))
-			return err;
-
-		assert(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED);
-		if (!rxr_peer_support_delivery_complete(peer))
-			return -FI_EOPNOTSUPP;
-	}
-
 	/* inter instance message */
-	if (tx_entry->total_len <= max_rtm_data_size) {
-		ctrl_type = (delivery_complete_requested) ?
-			RXR_DC_EAGER_MSGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
+	if (tx_entry->total_len <= max_rtm_data_size)
 		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						  ctrl_type + tagged, 0);
-	}
+						  RXR_EAGER_MSGRTM_PKT + tagged, 0);
 
 	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size) {
 		/* we do not check the return value of rxr_ep_init_mr_desc()
@@ -140,10 +105,8 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		if (efa_mr_cache_enable)
 			rxr_ep_tx_init_mr_desc(rxr_ep_domain(rxr_ep),
 					       tx_entry, 0, FI_SEND);
-
-		ctrl_type = delivery_complete_requested  ? RXR_DC_MEDIUM_MSGRTM_PKT : RXR_MEDIUM_MSGRTM_PKT;
 		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						  ctrl_type + tagged, 0);
+						  RXR_MEDIUM_MSGRTM_PKT + tagged, 0);
 	}
 
 	if (tx_entry->total_len >= rxr_env.efa_min_read_msg_size &&
@@ -166,9 +129,8 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	if (OFI_UNLIKELY(err))
 		return err;
 
-	ctrl_type = delivery_complete_requested ? RXR_DC_LONG_MSGRTM_PKT : RXR_LONG_MSGRTM_PKT;
 	return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					  ctrl_type + tagged, 0);
+					  RXR_LONG_MSGRTM_PKT + tagged, 0);
 }
 
 ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
