@@ -57,7 +57,8 @@ nodist_prov_cxi_test_cxitest_SOURCES = \
 	prov/cxi/test/tagged_stress.c \
 	prov/cxi/test/mr.c \
 	prov/cxi/test/deferred_work.c \
-	prov/cxi/test/coll.c
+	prov/cxi/test/coll.c \
+	prov/cxi/test/lat.c
 
 prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
 	$(cxitest_CPPFLAGS) $(PTHREAD_CFLAGS)
