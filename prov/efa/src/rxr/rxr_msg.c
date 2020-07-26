@@ -242,15 +242,9 @@ ssize_t rxr_msg_sendv(struct fid_ep *ep, const struct iovec *iov,
 		      void *context)
 {
 	struct rxr_ep *rxr_ep;
-	struct fi_msg msg;
+	struct fi_msg msg = {0};
 
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = iov;
-	msg.desc = desc;
-	msg.iov_count = count;
-	msg.addr = dest_addr;
-	msg.context = context;
-
+	rxr_setup_msg(&msg, iov, desc, count, dest_addr, context, 0);
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	return rxr_msg_sendmsg(ep, &msg, rxr_tx_flags(rxr_ep));
 }
@@ -271,21 +265,14 @@ ssize_t rxr_msg_senddata(struct fid_ep *ep, const void *buf, size_t len,
 			 void *desc, uint64_t data, fi_addr_t dest_addr,
 			 void *context)
 {
-	struct fi_msg msg;
+	struct fi_msg msg = {0};
 	struct iovec iov;
 	struct rxr_ep *rxr_ep;
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
 
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.desc = &desc;
-	msg.iov_count = 1;
-	msg.addr = dest_addr;
-	msg.context = context;
-	msg.data = data;
-
+	rxr_setup_msg(&msg, &iov, &desc, 1, dest_addr, context, data);
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	return rxr_msg_generic_send(ep, &msg, 0, ofi_op_msg,
 				    rxr_tx_flags(rxr_ep) | FI_REMOTE_CQ_DATA);
@@ -296,17 +283,13 @@ ssize_t rxr_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 		       fi_addr_t dest_addr)
 {
 	struct rxr_ep *rxr_ep;
-	struct fi_msg msg;
+	struct fi_msg msg = {0};
 	struct iovec iov;
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
 
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.iov_count = 1;
-	msg.addr = dest_addr;
-
+	rxr_setup_msg(&msg, &iov, NULL, 1, dest_addr, NULL, 0);
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_msgrtm_hdr));
 
@@ -326,12 +309,7 @@ ssize_t rxr_msg_injectdata(struct fid_ep *ep, const void *buf,
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
 
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.iov_count = 1;
-	msg.addr = dest_addr;
-	msg.data = data;
-
+	rxr_setup_msg(&msg, &iov, NULL, 1, dest_addr, NULL, data);
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	/*
 	 * We advertise the largest possible inject size with no cq data or
@@ -351,14 +329,9 @@ static
 ssize_t rxr_msg_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *tmsg,
 			 uint64_t flags)
 {
-	struct fi_msg msg;
+	struct fi_msg msg = {0};
 
-	msg.msg_iov = tmsg->msg_iov;
-	msg.desc = tmsg->desc;
-	msg.iov_count = tmsg->iov_count;
-	msg.addr = tmsg->addr;
-	msg.context = tmsg->context;
-	msg.data = tmsg->data;
+	rxr_setup_msg(&msg, tmsg->msg_iov, tmsg->desc, tmsg->iov_count, tmsg->addr, tmsg->context, tmsg->data);
 	return rxr_msg_generic_send(ep_fid, &msg, tmsg->tag, ofi_op_tagged, flags);
 }
 
@@ -368,9 +341,8 @@ ssize_t rxr_msg_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 		       uint64_t tag, void *context)
 {
 	struct rxr_ep *rxr_ep;
-	struct fi_msg_tagged msg;
+	struct fi_msg_tagged msg = {0};
 
-	memset(&msg, 0, sizeof(msg));
 	msg.msg_iov = iov;
 	msg.desc = desc;
 	msg.iov_count = count;
@@ -400,20 +372,14 @@ ssize_t rxr_msg_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 			  void *desc, uint64_t data, fi_addr_t dest_addr,
 			  uint64_t tag, void *context)
 {
-	struct fi_msg msg;
+	struct fi_msg msg = {0};
 	struct iovec iov;
 	struct rxr_ep *rxr_ep;
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
 
-	msg.msg_iov = &iov;
-	msg.desc = &desc;
-	msg.iov_count = 1;
-	msg.addr = dest_addr;
-	msg.context = context;
-	msg.data = data;
-
+	rxr_setup_msg(&msg, &iov, &desc, 1, dest_addr, context, data);
 	rxr_ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
 	return rxr_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
 				    rxr_tx_flags(rxr_ep) | FI_REMOTE_CQ_DATA);
@@ -424,17 +390,13 @@ ssize_t rxr_msg_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 			fi_addr_t dest_addr, uint64_t tag)
 {
 	struct rxr_ep *rxr_ep;
-	struct fi_msg msg;
+	struct fi_msg msg = {0};
 	struct iovec iov;
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
 
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.iov_count = 1;
-	msg.addr = dest_addr;
-
+	rxr_setup_msg(&msg, &iov, NULL, 1, dest_addr, NULL, 0);
 	rxr_ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
 	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_tagrtm_hdr));
 
@@ -447,18 +409,13 @@ ssize_t rxr_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 			    uint64_t data, fi_addr_t dest_addr, uint64_t tag)
 {
 	struct rxr_ep *rxr_ep;
-	struct fi_msg msg;
+	struct fi_msg msg = {0};
 	struct iovec iov;
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
 
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.iov_count = 1;
-	msg.addr = dest_addr;
-	msg.data = data;
-
+	rxr_setup_msg(&msg, &iov, NULL, 1, dest_addr, NULL, data);
 	rxr_ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
 	/*
 	 * We advertise the largest possible inject size with no cq data or
@@ -1005,20 +962,13 @@ static
 ssize_t rxr_msg_recv(struct fid_ep *ep, void *buf, size_t len,
 		     void *desc, fi_addr_t src_addr, void *context)
 {
-	struct fi_msg msg;
-	struct iovec msg_iov;
+	struct fi_msg msg = {0};
+	struct iovec iov;
 
-	memset(&msg, 0, sizeof(msg));
-	msg_iov.iov_base = buf;
-	msg_iov.iov_len = len;
+	iov.iov_base = buf;
+	iov.iov_len = len;
 
-	msg.msg_iov = &msg_iov;
-	msg.desc = &desc;
-	msg.iov_count = 1;
-	msg.addr = src_addr;
-	msg.context = context;
-	msg.data = 0;
-
+	rxr_setup_msg(&msg, &iov, &desc, 1, src_addr, context, 0);
 	return rxr_msg_recvmsg(ep, &msg, 0);
 }
 
@@ -1027,16 +977,9 @@ ssize_t rxr_msg_recvv(struct fid_ep *ep, const struct iovec *iov,
 		      void **desc, size_t count, fi_addr_t src_addr,
 		      void *context)
 {
-	struct fi_msg msg;
+	struct fi_msg msg = {0};
 
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = iov;
-	msg.desc = desc;
-	msg.iov_count = count;
-	msg.addr = src_addr;
-	msg.context = context;
-	msg.data = 0;
-
+	rxr_setup_msg(&msg, iov, desc, count, src_addr, context, 0);
 	return rxr_msg_recvmsg(ep, &msg, 0);
 }
 
@@ -1048,18 +991,13 @@ ssize_t rxr_msg_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 		      fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
 		      void *context)
 {
-	struct fi_msg msg;
-	struct iovec msg_iov;
+	struct fi_msg msg = {0};
+	struct iovec iov;
 
-	msg_iov.iov_base = (void *)buf;
-	msg_iov.iov_len = len;
+	iov.iov_base = (void *)buf;
+	iov.iov_len = len;
 
-	msg.msg_iov = &msg_iov;
-	msg.iov_count = 1;
-	msg.addr = src_addr;
-	msg.context = context;
-	msg.desc = &desc;
-
+	rxr_setup_msg(&msg, &iov, &desc, 1, src_addr, context, 0);
 	return rxr_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, 0);
 }
 
@@ -1068,39 +1006,29 @@ ssize_t rxr_msg_trecvv(struct fid_ep *ep_fid, const struct iovec *iov,
 		       void **desc, size_t count, fi_addr_t src_addr,
 		       uint64_t tag, uint64_t ignore, void *context)
 {
-	struct fi_msg msg;
+	struct fi_msg msg = {0};
 
-	msg.msg_iov = iov;
-	msg.iov_count = count;
-	msg.addr = src_addr;
-	msg.desc = desc;
-	msg.context = context;
-
+	rxr_setup_msg(&msg, iov, desc, count, src_addr, context, 0);
 	return rxr_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, 0);
 }
 
 static
-ssize_t rxr_msg_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *tagmsg,
+ssize_t rxr_msg_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *tmsg,
 			 uint64_t flags)
 {
 	ssize_t ret;
-	struct fi_msg msg;
+	struct fi_msg msg = {0};
 
 	if (flags & FI_PEEK) {
-		ret = rxr_msg_peek_trecv(ep_fid, tagmsg, flags);
+		ret = rxr_msg_peek_trecv(ep_fid, tmsg, flags);
 		goto out;
 	} else if (flags & FI_CLAIM) {
-		ret = rxr_msg_claim_trecv(ep_fid, tagmsg, flags);
+		ret = rxr_msg_claim_trecv(ep_fid, tmsg, flags);
 		goto out;
 	}
 
-	msg.msg_iov = tagmsg->msg_iov;
-	msg.iov_count = tagmsg->iov_count;
-	msg.addr = tagmsg->addr;
-	msg.desc = tagmsg->desc;
-	msg.context = tagmsg->context;
-
-	ret = rxr_msg_generic_recv(ep_fid, &msg, tagmsg->tag, tagmsg->ignore,
+	rxr_setup_msg(&msg, tmsg->msg_iov, tmsg->desc, tmsg->iov_count, tmsg->addr, tmsg->context, tmsg->data);
+	ret = rxr_msg_generic_recv(ep_fid, &msg, tmsg->tag, tmsg->ignore,
 				   ofi_op_tagged, flags);
 
 out:

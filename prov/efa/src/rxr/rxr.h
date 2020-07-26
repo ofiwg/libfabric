@@ -667,6 +667,17 @@ static inline struct rxr_peer *rxr_ep_get_peer(struct rxr_ep *ep,
 	return &ep->peer[addr];
 }
 
+static inline void rxr_setup_msg(struct fi_msg *msg, const struct iovec *iov, void **desc,
+				 size_t count, fi_addr_t addr, void *context, uint32_t data)
+{
+	msg->msg_iov = iov;
+	msg->desc = desc;
+	msg->iov_count = count;
+	msg->addr = addr;
+	msg->context = context;
+	msg->data = data;
+}
+
 static inline void rxr_ep_peer_init_rx(struct rxr_ep *ep, struct rxr_peer *peer)
 {
 	assert(!peer->rx_init);

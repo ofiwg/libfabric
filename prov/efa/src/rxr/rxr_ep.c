@@ -260,7 +260,7 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 /* Post buf as undirected recv (FI_ADDR_UNSPEC) */
 int rxr_ep_post_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lower_ep_type)
 {
-	struct fi_msg msg;
+	struct fi_msg msg = {0};
 	struct iovec msg_iov;
 	void *desc;
 	struct rxr_pkt_entry *rx_pkt_entry = NULL;
@@ -289,12 +289,7 @@ int rxr_ep_post_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lo
 
 	msg_iov.iov_base = (void *)rxr_pkt_start(rx_pkt_entry);
 	msg_iov.iov_len = ep->mtu_size;
-
-	msg.msg_iov = &msg_iov;
-	msg.iov_count = 1;
-	msg.addr = FI_ADDR_UNSPEC;
-	msg.context = rx_pkt_entry;
-	msg.data = 0;
+	rxr_setup_msg(&msg, &msg_iov, NULL, 1, FI_ADDR_UNSPEC, rx_pkt_entry, 0);
 
 	switch (lower_ep_type) {
 	case SHM_EP:
