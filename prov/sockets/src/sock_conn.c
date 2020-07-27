@@ -332,6 +332,15 @@ static void *sock_conn_listener_thread(void *arg)
 		}
 
 		fastlock_acquire(&conn_listener->signal_lock);
+		if (conn_listener->removed_from_epollfd) {
+			/* The epoll set changed between calling wait and wait
+			 * returning.  Get an updated set of events to avoid
+			 * possible use after free error.
+			 */
+			conn_listener->removed_from_epollfd = false;
+			goto skip;
+		}
+
 		for (i = 0; i < num_fds; i++) {
 			conn_handle = ep_contexts[i];
 
@@ -360,6 +369,7 @@ static void *sock_conn_listener_thread(void *arg)
 			fastlock_release(&ep_attr->cmap.lock);
 			sock_pe_signal(ep_attr->domain->pe);
 		}
+skip:
 		fastlock_release(&conn_listener->signal_lock);
 	}
 
@@ -393,6 +403,7 @@ int sock_conn_start_listener_thread(struct sock_conn_listener *conn_listener)
 	}
 
 	conn_listener->do_listen = 1;
+	conn_listener->removed_from_epollfd = false;
 	ret = pthread_create(&conn_listener->listener_thread, NULL,
 	                     sock_conn_listener_thread, conn_listener);
 	if (ret < 0) {

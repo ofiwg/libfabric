@@ -210,6 +210,7 @@ struct sock_conn_listener {
 	fastlock_t signal_lock; /* acquire before map lock */
 	pthread_t listener_thread;
 	int do_listen;
+	bool removed_from_epollfd;
 };
 
 struct sock_ep_cm_head {
@@ -219,6 +220,7 @@ struct sock_ep_cm_head {
 	pthread_t listener_thread;
 	struct dlist_entry msg_list;
 	int do_listen;
+	bool removed_from_epollfd;
 };
 
 struct sock_domain {

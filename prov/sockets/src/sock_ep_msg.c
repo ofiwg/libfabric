@@ -255,6 +255,7 @@ sock_ep_cm_unmonitor_handle_locked(struct sock_ep_cm_head *cm_head,
 			SOCK_LOG_ERROR("failed to unmonitor fd %d: %d\n",
 			               handle->sock_fd, ret);
 		handle->monitored = 0;
+		cm_head->removed_from_epollfd = true;
 	}
 
 	/* Multiple threads might call sock_ep_cm_unmonitor_handle() at the
@@ -1174,6 +1175,15 @@ static void *sock_ep_cm_thread(void *arg)
 		}
 
 		pthread_mutex_lock(&cm_head->signal_lock);
+		if (cm_head->removed_from_epollfd) {
+			/* If we removed a socket from the epollfd after
+			 * ofi_epoll_wait returned, we can hit a use after
+			 * free error.  If a change was made, we skip processing
+			 * and recheck for events.
+			 */
+			cm_head->removed_from_epollfd = false;
+			goto skip;
+		}
 		for (i = 0; i < num_fds; i++) {
 			handle = ep_contexts[i];
 
@@ -1195,6 +1205,7 @@ static void *sock_ep_cm_thread(void *arg)
 			assert(handle->sock_fd != INVALID_SOCKET);
 			sock_ep_cm_handle_rx(cm_head, handle);
 		}
+skip:
 		pthread_mutex_unlock(&cm_head->signal_lock);
 	}
 	return NULL;
@@ -1230,6 +1241,7 @@ int sock_ep_cm_start_thread(struct sock_ep_cm_head *cm_head)
 	}
 
 	cm_head->do_listen = 1;
+	cm_head->removed_from_epollfd = false;
 	ret = pthread_create(&cm_head->listener_thread, 0,
 	                     sock_ep_cm_thread, cm_head);
 	if (ret) {
