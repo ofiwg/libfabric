@@ -229,7 +229,7 @@ static void sock_ep_cm_monitor_handle(struct sock_ep_cm_head *cm_head,
 
 	/* Mark the handle as monitored before adding it to the pollset */
 	handle->monitored = 1;
-	ret = ofi_epoll_add(cm_head->emap, handle->sock_fd,
+	ret = ofi_epoll_add(cm_head->epollfd, handle->sock_fd,
 	                   events, handle);
 	if (ret) {
 		SOCK_LOG_ERROR("failed to monitor fd %d: %d\n",
@@ -250,7 +250,7 @@ sock_ep_cm_unmonitor_handle_locked(struct sock_ep_cm_head *cm_head,
 	int ret;
 
 	if (handle->monitored) {
-		ret = ofi_epoll_del(cm_head->emap, handle->sock_fd);
+		ret = ofi_epoll_del(cm_head->epollfd, handle->sock_fd);
 		if (ret)
 			SOCK_LOG_ERROR("failed to unmonitor fd %d: %d\n",
 			               handle->sock_fd, ret);
@@ -1166,7 +1166,7 @@ static void *sock_ep_cm_thread(void *arg)
 	while (cm_head->do_listen) {
 		sock_ep_cm_check_closing_rejected_list(cm_head);
 
-		num_fds = ofi_epoll_wait(cm_head->emap, ep_contexts,
+		num_fds = ofi_epoll_wait(cm_head->epollfd, ep_contexts,
 		                        SOCK_EPOLL_WAIT_EVENTS, -1);
 		if (num_fds < 0) {
 			SOCK_LOG_ERROR("poll failed : %s\n", strerror(errno));
@@ -1208,7 +1208,7 @@ int sock_ep_cm_start_thread(struct sock_ep_cm_head *cm_head)
 	pthread_mutex_init(&cm_head->signal_lock, NULL);
 	dlist_init(&cm_head->msg_list);
 
-	int ret = ofi_epoll_create(&cm_head->emap);
+	int ret = ofi_epoll_create(&cm_head->epollfd);
 	if (ret < 0) {
 		SOCK_LOG_ERROR("failed to create epoll set\n");
 		goto err1;
@@ -1221,7 +1221,7 @@ int sock_ep_cm_start_thread(struct sock_ep_cm_head *cm_head)
 		goto err2;
 	}
 
-	ret = ofi_epoll_add(cm_head->emap,
+	ret = ofi_epoll_add(cm_head->epollfd,
 	                   cm_head->signal.fd[FI_READ_FD],
 	                   OFI_EPOLL_IN, NULL);
 	if (ret != 0){
@@ -1242,7 +1242,7 @@ err3:
 	cm_head->do_listen = 0;
 	fd_signal_free(&cm_head->signal);
 err2:
-	ofi_epoll_close(cm_head->emap);
+	ofi_epoll_close(cm_head->epollfd);
 err1:
 	return ret;
 }
@@ -1275,7 +1275,7 @@ void sock_ep_cm_stop_thread(struct sock_ep_cm_head *cm_head)
 	    pthread_join(cm_head->listener_thread, NULL)) {
 		SOCK_LOG_DBG("pthread join failed\n");
 	}
-	ofi_epoll_close(cm_head->emap);
+	ofi_epoll_close(cm_head->epollfd);
 	fd_signal_free(&cm_head->signal);
 	pthread_mutex_destroy(&cm_head->signal_lock);
 }

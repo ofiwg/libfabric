@@ -680,7 +680,7 @@ static int sock_ep_close(struct fid *fid)
 
 	if (sock_ep->attr->conn_handle.do_listen) {
 		fastlock_acquire(&sock_ep->attr->domain->conn_listener.signal_lock);
-		ofi_epoll_del(sock_ep->attr->domain->conn_listener.emap,
+		ofi_epoll_del(sock_ep->attr->domain->conn_listener.epollfd,
 		             sock_ep->attr->conn_handle.sock);
 		fastlock_release(&sock_ep->attr->domain->conn_listener.signal_lock);
 		ofi_close_socket(sock_ep->attr->conn_handle.sock);
