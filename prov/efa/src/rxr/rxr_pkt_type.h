@@ -90,7 +90,19 @@
 #define RXR_READ_TAGRTM_PKT		129
 #define RXR_READ_RTW_PKT		130
 #define RXR_READ_RTR_PKT		131
-#define RXR_EXTRA_REQ_PKT_END		132
+
+#define RXR_DC_REQ_PKT_BEGIN		132
+#define RXR_DC_EAGER_MSGRTM_PKT 	133
+#define RXR_DC_EAGER_TAGRTM_PKT 	134
+#define RXR_DC_MEDIUM_MSGRTM_PKT 	135
+#define RXR_DC_MEDIUM_TAGRTM_PKT 	136
+#define RXR_DC_LONG_MSGRTM_PKT  	137
+#define RXR_DC_LONG_TAGRTM_PKT  	138
+#define RXR_DC_EAGER_RTW_PKT    	139
+#define RXR_DC_LONG_RTW_PKT     	140
+#define RXR_DC_WRITE_RTA_PKT    	141
+#define RXR_DC_REQ_PKT_END		142
+#define RXR_EXTRA_REQ_PKT_END   	142
 
 /*
  *  Packet fields common to all rxr packets. The other packet headers below must
