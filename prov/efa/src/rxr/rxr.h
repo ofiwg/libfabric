@@ -192,6 +192,7 @@ struct rxr_env {
 	int tx_max_credits;
 	int tx_queue_size;
 	int use_device_rdma;
+	int use_zcpy_rx;
 	int enable_shm_transfer;
 	int shm_av_size;
 	int shm_max_medium_size;
@@ -531,6 +532,9 @@ struct rxr_ep {
 	/* core's capabilities */
 	uint64_t core_caps;
 
+	/* Endpoint's capability to support zero-copy rx */
+	bool use_zcpy_rx;
+
 	/* rx/tx queue size of core provider */
 	size_t core_rx_size;
 	size_t max_outstanding_tx;
@@ -544,6 +548,9 @@ struct rxr_ep {
 	uint64_t msg_order;
 	/* core's supported tx/rx msg_order */
 	uint64_t core_msg_order;
+
+	/* Application's maximum msg size hint */
+	size_t max_msg_size;
 
 	/* RxR protocol's max header size */
 	size_t max_proto_hdr_size;
@@ -802,6 +809,17 @@ static inline size_t rxr_get_tx_pool_chunk_cnt(struct rxr_ep *ep)
 static inline int rxr_need_sas_ordering(struct rxr_ep *ep)
 {
 	return ep->msg_order & FI_ORDER_SAS;
+}
+
+static inline int rxr_ep_use_zcpy_rx(struct rxr_ep *ep, struct fi_info *info)
+{
+	return !(ep->util_ep.caps & FI_DIRECTED_RECV) &&
+		!(ep->util_ep.caps & FI_TAGGED) &&
+		!(ep->util_ep.caps & FI_ATOMIC) &&
+		(ep->max_msg_size <= ep->mtu_size - ep->max_proto_hdr_size) &&
+		!rxr_need_sas_ordering(ep) &&
+		info->mode & FI_MSG_PREFIX &&
+		rxr_env.use_zcpy_rx;
 }
 
 /* Initialization functions */

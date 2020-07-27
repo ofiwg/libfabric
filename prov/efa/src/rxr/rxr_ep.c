@@ -1668,6 +1668,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->msg_order = info->rx_attr->msg_order;
 	rxr_ep->core_msg_order = rdm_info->rx_attr->msg_order;
 	rxr_ep->core_inject_size = rdm_info->tx_attr->inject_size;
+	rxr_ep->max_msg_size = info->ep_attr->max_msg_size;
 	rxr_ep->max_proto_hdr_size = rxr_pkt_max_header_size();
 	rxr_ep->mtu_size = rdm_info->ep_attr->max_msg_size;
 	fi_freeinfo(rdm_info);
@@ -1684,6 +1685,10 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (rxr_env.tx_queue_size > 0 &&
 	    rxr_env.tx_queue_size < rxr_ep->max_outstanding_tx)
 		rxr_ep->max_outstanding_tx = rxr_env.tx_queue_size;
+
+
+	rxr_ep->use_zcpy_rx = rxr_ep_use_zcpy_rx(rxr_ep, info);
+	FI_INFO(&rxr_prov, FI_LOG_EP_CTRL, "rxr_ep->use_zcpy_rx = %d\n", rxr_ep->use_zcpy_rx);
 
 #if ENABLE_DEBUG
 	rxr_ep->sends = 0;
