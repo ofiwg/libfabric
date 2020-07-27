@@ -1668,6 +1668,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->msg_order = info->rx_attr->msg_order;
 	rxr_ep->core_msg_order = rdm_info->rx_attr->msg_order;
 	rxr_ep->core_inject_size = rdm_info->tx_attr->inject_size;
+	rxr_ep->max_proto_hdr_size = rxr_pkt_max_header_size();
 	rxr_ep->mtu_size = rdm_info->ep_attr->max_msg_size;
 	fi_freeinfo(rdm_info);
 
@@ -1678,12 +1679,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		rxr_ep->mtu_size = RXR_MTU_MAX_LIMIT;
 
 	rxr_ep->max_data_payload_size = rxr_ep->mtu_size - sizeof(struct rxr_data_hdr);
-	/*
-	 * Assume our eager message size is the largest control header size
-	 * without the source address. Use that value to set the default
-	 * receive release threshold.
-	 */
-	rxr_ep->min_multi_recv_size = rxr_ep->mtu_size - sizeof(struct rxr_eager_tagrtm_hdr) - sizeof(struct rxr_req_opt_cq_data_hdr);
+	rxr_ep->min_multi_recv_size = rxr_ep->mtu_size - rxr_ep->max_proto_hdr_size;
 
 	if (rxr_env.tx_queue_size > 0 &&
 	    rxr_env.tx_queue_size < rxr_ep->max_outstanding_tx)

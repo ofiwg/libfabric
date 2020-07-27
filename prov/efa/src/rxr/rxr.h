@@ -545,6 +545,9 @@ struct rxr_ep {
 	/* core's supported tx/rx msg_order */
 	uint64_t core_msg_order;
 
+	/* RxR protocol's max header size */
+	size_t max_proto_hdr_size;
+
 	/* tx iov limit of core provider */
 	size_t core_iov_limit;
 

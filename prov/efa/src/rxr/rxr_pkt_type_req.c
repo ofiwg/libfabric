@@ -235,6 +235,24 @@ size_t rxr_pkt_req_max_header_size(int pkt_type)
 	return max_hdr_size;
 }
 
+size_t rxr_pkt_max_header_size(void)
+{
+	size_t max_hdr_size = 0;
+	size_t pkt_type = RXR_REQ_PKT_BEGIN;
+
+	while (pkt_type < RXR_EXTRA_REQ_PKT_END) {
+		max_hdr_size = MAX(max_hdr_size,
+				rxr_pkt_req_max_header_size(pkt_type));
+		if (pkt_type == RXR_BASELINE_REQ_PKT_END)
+			pkt_type = RXR_EXTRA_REQ_PKT_BEGIN;
+		else
+			pkt_type += 1;
+	}
+
+	return max_hdr_size;
+
+}
+
 size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type)
 {
 	struct rxr_peer *peer;
