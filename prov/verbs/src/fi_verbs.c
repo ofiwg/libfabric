@@ -103,7 +103,7 @@ int vrb_sockaddr_len(struct sockaddr *addr)
 }
 
 static int
-vrb_get_rdma_rai(const char *node, const char *service, uint64_t flags,
+vrb_get_rdmacm_rai(const char *node, const char *service, uint64_t flags,
 		 const struct fi_info *hints, struct rdma_addrinfo **rai)
 {
 	struct rdma_addrinfo rai_hints, *_rai;
@@ -154,6 +154,97 @@ out:
 	return ret;
 }
 
+static int vrb_get_sib_rai(const char *node, const char *service, uint64_t flags,
+		      const struct fi_info *hints, struct rdma_addrinfo **rai)
+{
+	struct sockaddr_ib *sib;
+	size_t sib_len;
+	char *straddr;
+	uint32_t fmt;
+	int ret;
+	bool has_prefix;
+	const char *prefix = "fi_sockaddr_ib://";
+
+	*rai = calloc(1, sizeof(struct rdma_addrinfo));
+	if (*rai == NULL)
+		return -FI_ENOMEM;
+
+	ret = vrb_fi_to_rai(hints, flags, *rai);
+	if (ret)
+		return ret;
+
+	if (node) {
+		fmt = ofi_addr_format(node);
+		if (fmt == FI_SOCKADDR_IB)
+			has_prefix = true;
+		else if (fmt == FI_FORMAT_UNSPEC)
+			has_prefix = false;
+		else
+			return -FI_EINVAL;
+
+		if (service) {
+			ret = asprintf(&straddr, "%s%s:%s", has_prefix ? "" : prefix,
+			                                    node, service);
+		} else {
+			ret = asprintf(&straddr, "%s%s", has_prefix ? "" : prefix, node);
+		}
+
+		if (ret == -1)
+			return -FI_ENOMEM;
+
+		ret = ofi_str_toaddr(straddr, &fmt, (void **)&sib, &sib_len);
+		free(straddr);
+
+		if (ret || fmt != FI_SOCKADDR_IB) {
+			return -FI_EINVAL;
+		}
+
+		if (flags & FI_SOURCE) {
+			(*rai)->ai_flags |= RAI_PASSIVE;
+			if ((*rai)->ai_src_addr)
+				free((*rai)->ai_src_addr);
+			(*rai)->ai_src_addr = (void *)sib;
+			(*rai)->ai_src_len = sizeof(struct sockaddr_ib);
+		} else {
+			if ((*rai)->ai_dst_addr)
+				free((*rai)->ai_dst_addr);
+			(*rai)->ai_dst_addr = (void *)sib;
+			(*rai)->ai_dst_len = sizeof(struct sockaddr_ib);
+		}
+
+	} else if (service) {
+		if ((flags & FI_SOURCE) && (*rai)->ai_src_addr) {
+			if ((*rai)->ai_src_len < sizeof(struct sockaddr_ib))
+				return -FI_EINVAL;
+
+			(*rai)->ai_src_len = sizeof(struct sockaddr_ib);
+			sib = (struct sockaddr_ib *)(*rai)->ai_src_addr;
+		} else {
+			if ((*rai)->ai_dst_len < sizeof(struct sockaddr_ib))
+				return -FI_EINVAL;
+
+			(*rai)->ai_dst_len = sizeof(struct sockaddr_ib);
+			sib = (struct sockaddr_ib *)(*rai)->ai_dst_addr;
+		}
+
+		sib->sib_sid = htonll(((uint64_t) RDMA_PS_IB << 16) + (uint16_t)atoi(service));
+		sib->sib_sid_mask = htonll(OFI_IB_IP_PS_MASK | OFI_IB_IP_PORT_MASK);
+	}
+
+	return 0;
+}
+
+int vrb_get_rdma_rai(const char *node, const char *service, uint64_t flags,
+		 const struct fi_info *hints, struct rdma_addrinfo **rai)
+{
+	if (hints && hints->addr_format == FI_SOCKADDR_IB &&
+	    (node || hints->src_addr || hints->dest_addr)) {
+		return vrb_get_sib_rai(node, service, flags, hints, rai);
+	}
+
+	return vrb_get_rdmacm_rai(node, service, flags, hints, rai);
+}
+
 int vrb_get_rai_id(const char *node, const char *service, uint64_t flags,
 		      const struct fi_info *hints, struct rdma_addrinfo **rai,
 		      struct rdma_cm_id **id)
@@ -165,7 +256,7 @@ int vrb_get_rai_id(const char *node, const char *service, uint64_t flags,
 	if (ret)
 		return ret;
 
-	ret = rdma_create_id(NULL, id, NULL, RDMA_PS_TCP);
+	ret = rdma_create_id(NULL, id, NULL, vrb_get_port_space(hints));
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_create_id", errno);
 		ret = -errno;

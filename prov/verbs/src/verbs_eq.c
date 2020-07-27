@@ -226,13 +226,13 @@ vrb_eq_cm_getinfo(struct rdma_cm_event *event, struct fi_info *pep_info,
 
 	free((*info)->src_addr);
 
-	(*info)->src_addrlen = vrb_sockaddr_len(rdma_get_local_addr(event->id));
+	(*info)->src_addrlen = ofi_sizeofaddr(rdma_get_local_addr(event->id));
 	(*info)->src_addr = malloc((*info)->src_addrlen);
 	if (!((*info)->src_addr))
 		goto err2;
 	memcpy((*info)->src_addr, rdma_get_local_addr(event->id), (*info)->src_addrlen);
 
-	(*info)->dest_addrlen = vrb_sockaddr_len(rdma_get_peer_addr(event->id));
+	(*info)->dest_addrlen = ofi_sizeofaddr(rdma_get_peer_addr(event->id));
 	(*info)->dest_addr = malloc((*info)->dest_addrlen);
 	if (!((*info)->dest_addr))
 		goto err2;
@@ -282,6 +282,17 @@ static inline int vrb_eq_copy_event_data(struct fi_eq_cm_entry *entry,
 		memcpy(entry->data, cm_hdr->data, datalen);
 
 	return datalen;
+}
+
+static void vrb_eq_skip_rdma_cm_hdr(const void **priv_data,
+						size_t *priv_data_len)
+{
+	size_t rdma_cm_hdr_len = sizeof(struct vrb_rdma_cm_hdr);
+
+	if (*priv_data_len > rdma_cm_hdr_len) {
+		*priv_data = (void*)((char *)*priv_data + rdma_cm_hdr_len);
+		*priv_data_len -= rdma_cm_hdr_len;
+	}
 }
 
 static void vrb_eq_skip_xrc_cm_data(const void **priv_data,
@@ -896,6 +907,8 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 			}
 			if (*event == FI_CONNECTED)
 				goto ack;
+		} else if (cma_event->id->route.addr.src_addr.sa_family == AF_IB) {
+			vrb_eq_skip_rdma_cm_hdr(&priv_data, &priv_datalen);
 		}
 		break;
 	case RDMA_CM_EVENT_CONNECT_RESPONSE:

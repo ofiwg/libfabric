@@ -594,6 +594,7 @@ struct vrb_ep {
 	size_t				rx_cq_size;
 	struct rdma_conn_param		conn_param;
 	struct vrb_cm_data_hdr		*cm_hdr;
+	void				*cm_priv_data;
 };
 
 
@@ -700,6 +701,17 @@ struct vrb_connreq {
 	struct vrb_xrc_conn_info	xrc;
 };
 
+/* Structure below is a copy of the RDMA CM header (structure ib_connect_hdr in
+ * file librdmacm/cma.h)
+ * DO NOT MODIFY! */
+struct vrb_rdma_cm_hdr {
+	uint8_t  cma_version; /* Set by the kernel */
+	uint8_t  ip_version; /*  IP version: 7:4 */
+	uint16_t port;
+	uint32_t src_addr[4];
+	uint32_t dst_addr[4];
+};
+
 struct vrb_cm_data_hdr {
 	uint8_t	size;
 	char	data[];
@@ -755,7 +767,6 @@ void vrb_ep_tgt_conn_done(struct vrb_xrc_ep *qp);
 int vrb_ep_destroy_xrc_qp(struct vrb_xrc_ep *ep);
 
 int vrb_xrc_close_srq(struct vrb_srq_ep *srq_ep);
-int vrb_sockaddr_len(struct sockaddr *addr);
 
 int vrb_init_info(const struct fi_info **all_infos);
 int vrb_getinfo(uint32_t version, const char *node, const char *service,
@@ -768,6 +779,7 @@ int vrb_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 int vrb_get_matching_info(uint32_t version, const struct fi_info *hints,
 			     struct fi_info **info, const struct fi_info *verbs_info,
 			     uint8_t passive);
+int vrb_get_port_space(const struct fi_info *info);
 void vrb_alter_info(const struct fi_info *hints, struct fi_info *info);
 
 struct verbs_ep_domain {

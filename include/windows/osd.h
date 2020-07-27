@@ -261,6 +261,7 @@ do						\
 #define strcasecmp _stricmp
 #define snprintf _snprintf
 #define sleep(x) Sleep(x * 1000)
+#define strtok_r strtok_s
 
 #define __PRI64_PREFIX "ll"
 

@@ -382,6 +382,9 @@ the list available for that test.
 *-s <address>*
 : Specifies the address of the local endpoint.
 
+*-F <address_format>
+: Specifies the address format.
+
 *-b[=oob_port]*
 : Enables out-of-band (via sockets) address exchange and test
   synchronization.  A port for the out-of-band connection may be specified
