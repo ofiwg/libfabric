@@ -35,6 +35,7 @@ _cxi_files = \
 
 _cxi_headers = \
 	prov/cxi/include/cxip.h \
+	prov/cxi/include/cxip_faults.h \
 	prov/cxi/include/fi_cxi_ext.h
 
 if HAVE_CRITERION
