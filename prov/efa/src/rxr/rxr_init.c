@@ -657,8 +657,8 @@ static void rxr_fini(void)
 
 struct fi_provider rxr_prov = {
 	.name = "efa",
-	.version = FI_VERSION(RXR_MAJOR_VERSION, RXR_MINOR_VERSION),
-	.fi_version = RXR_FI_VERSION,
+	.version = OFI_VERSION_DEF_PROV,
+	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = rxr_getinfo,
 	.fabric = rxr_fabric,
 	.cleanup = rxr_fini

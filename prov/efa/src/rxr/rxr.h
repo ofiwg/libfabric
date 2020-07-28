@@ -66,9 +66,6 @@
 #include "rxr_pkt_entry.h"
 #include "rxr_pkt_type.h"
 
-#define RXR_MAJOR_VERSION	(2)
-#define RXR_MINOR_VERSION	(0)
-
 /*
  * EFA support interoperability between protocol version 4 and above,
  * and version 4 is considered the base version.
