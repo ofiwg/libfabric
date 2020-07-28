@@ -110,6 +110,7 @@
     <ClCompile Include="common\jsmn.c" />
     <ClCompile Include="common\hmem.c" />
     <ClCompile Include="common\hmem_cuda.c" />
+    <ClCompile Include="common\hmem_rocr.c" />
     <ClCompile Include="common\shared.c" />
     <ClCompile Include="common\windows\getopt.c" />
     <ClCompile Include="common\windows\osd.c" />

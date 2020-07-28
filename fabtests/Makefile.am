@@ -112,6 +112,7 @@ libfabtests_la_SOURCES = \
 	common/jsmn.c \
 	common/hmem.c \
 	common/hmem_cuda.c \
+	common/hmem_rocr.c \
 	include/shared.h \
 	include/hmem.h \
 	include/jsmn.h \
