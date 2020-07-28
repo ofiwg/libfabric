@@ -54,6 +54,15 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.copy_to_hmem = ft_host_memcpy,
 		.copy_from_hmem = ft_host_memcpy,
 	},
+	[FI_HMEM_CUDA] = {
+		.init = ft_cuda_init,
+		.cleanup = ft_cuda_cleanup,
+		.alloc = ft_cuda_alloc,
+		.free = ft_cuda_free,
+		.memset = ft_cuda_memset,
+		.copy_to_hmem = ft_cuda_copy_to_hmem,
+		.copy_from_hmem = ft_cuda_copy_from_hmem,
+	},
 };
 
 int ft_hmem_init(enum fi_hmem_iface iface)

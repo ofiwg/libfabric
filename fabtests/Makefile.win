@@ -28,7 +28,8 @@ CFLAGS = $(CFLAGS) /O2 /MT
 !endif
 
 basedeps = common\hmem.c common\shared.c common\jsmn.c \
-	common\windows\getopt.c common\windows\osd.c
+	common\windows\getopt.c common\windows\osd.c \
+	common\hmem_cuda.c
 
 includes = /Iinclude /Iinclude\windows /I..\include /FIft_osd.h \
 	/Iinclude\windows\getopt
