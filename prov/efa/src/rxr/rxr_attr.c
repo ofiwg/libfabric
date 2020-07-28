@@ -110,7 +110,7 @@ struct fi_domain_attr rxr_domain_attr = {
 };
 
 struct fi_fabric_attr rxr_fabric_attr = {
-	.prov_version = FI_VERSION(RXR_MAJOR_VERSION, RXR_MINOR_VERSION),
+	.prov_version = OFI_VERSION_DEF_PROV,
 };
 
 struct fi_info rxr_info = {
