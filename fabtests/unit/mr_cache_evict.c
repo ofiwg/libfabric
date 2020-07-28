@@ -50,6 +50,7 @@ enum alloc_type {
 	BRK,
 	SBRK,
 	CUDA,
+	ROCR,
 };
 
 static void *reuse_addr = NULL;
@@ -280,6 +281,23 @@ static void *mmap_alloc(void)
 	return ptr;
 }
 
+static void rocr_free(void *ptr)
+{
+	ft_hmem_free(FI_HMEM_ROCR, ptr);
+}
+
+static void *rocr_malloc(void)
+{
+	int ret;
+	void *ptr;
+
+	ret = ft_hmem_alloc(FI_HMEM_ROCR, 0, &ptr, mr_buf_size);
+	if (ret)
+		return NULL;
+	return ptr;
+}
+
+
 static void cuda_free(void *ptr)
 {
 	ft_hmem_free(FI_HMEM_CUDA, ptr);
@@ -314,6 +332,9 @@ static void mem_free(void *ptr, enum alloc_type type)
 	case CUDA:
 		cuda_free(ptr);
 		break;
+	case ROCR:
+		rocr_free(ptr);
+		break;
 	default:
 		return;
 	}
@@ -326,6 +347,8 @@ static enum fi_hmem_iface alloc_type_to_iface(enum alloc_type type)
 	switch (type) {
 	case CUDA:
 		return FI_HMEM_CUDA;
+	case ROCR:
+		return FI_HMEM_ROCR;
 	default:
 		return FI_HMEM_SYSTEM;
 	}
@@ -350,6 +373,9 @@ static void *mem_alloc(enum alloc_type type)
 		break;
 	case CUDA:
 		ptr = cuda_malloc();
+		break;
+	case ROCR:
+		ptr = rocr_malloc();
 		break;
 	default:
 		return NULL;
@@ -483,20 +509,33 @@ static int mr_cache_test(enum alloc_type type)
 	/* A priming MR registration is used to ensure the first timed MR
 	 * registration does not take into account the setting up of CPU caches.
 	 */
-	if (iface == FI_HMEM_CUDA) {
+	switch (iface) {
+	case FI_HMEM_CUDA:
 		prime_buf = cuda_malloc();
 		if (!prime_buf) {
 			ret = -ENOMEM;
 			FT_UNIT_STRERR(err_buf, "cuda_malloc failed", ret);
 			goto cleanup;
 		}
-	} else {
+		break;
+
+	case FI_HMEM_ROCR:
+		prime_buf = rocr_malloc();
+		if (!prime_buf) {
+			ret = -ENOMEM;
+			FT_UNIT_STRERR(err_buf, "rocr_malloc failed", ret);
+			goto cleanup;
+		}
+		break;
+
+	default:
 		prime_buf = malloc(mr_buf_size);
 		if (!prime_buf) {
 			ret = -ENOMEM;
 			FT_UNIT_STRERR(err_buf, "malloc failed", ret);
 			goto cleanup;
 		}
+		break;
 	}
 
 	ret = mr_register(prime_buf, &prime_mr, &mr_reg_time, iface);
@@ -606,10 +645,19 @@ cleanup:
 		fi_close(&prime_mr->fid);
 
 	if (prime_buf) {
-		if (iface == FI_HMEM_CUDA)
+		switch (iface) {
+		case FI_HMEM_CUDA:
 			cuda_free(prime_buf);
-		else
+			break;
+
+		case FI_HMEM_ROCR:
+			rocr_free(prime_buf);
+			break;
+
+		default:
 			free(prime_buf);
+			break;
+		}
 	}
 
 	return TEST_RET_VAL(ret, testret);
@@ -653,11 +701,34 @@ static int mr_cache_cuda_test(void)
 	return ret;
 }
 
+static int mr_cache_rocr_test(void)
+{
+	int ret;
+
+	if (!(opts.options & FT_OPT_ENABLE_HMEM)) {
+		sprintf(err_buf, "FI_HMEM support not requested");
+		return SKIPPED;
+	}
+
+	ret = ft_hmem_init(FI_HMEM_ROCR);
+	if (ret) {
+		sprintf(err_buf, "ft_hmem_init(FI_HMEM_ROCR) failed");
+		return TEST_RET_VAL(ret, FAIL);
+	}
+
+	ret = mr_cache_test(ROCR);
+
+	ft_hmem_cleanup(FI_HMEM_ROCR);
+
+	return ret;
+}
+
 struct test_entry test_array[] = {
 	TEST_ENTRY(mr_cache_mmap_test, "MR cache eviction test using MMAP"),
 	TEST_ENTRY(mr_cache_brk_test, "MR cache eviction test using BRK"),
 	TEST_ENTRY(mr_cache_sbrk_test, "MR cache eviction test using SBRK"),
 	TEST_ENTRY(mr_cache_cuda_test, "MR cache eviction test using CUDA"),
+	TEST_ENTRY(mr_cache_rocr_test, "MR cache eviction test using ROCR"),
 	{ NULL, "" }
 };
 
@@ -665,9 +736,9 @@ static void usage(void)
 {
 	ft_unit_usage("fi_mr_cache_evict",
 		"Test a provider's ability to evict MR cache entries.\n"
-		"Evictions are verified using MMAP, BRK, SBRK and CUDA\n"
-		"allocations. FI_HMEM support must be enabled to run CUDA\n"
-		"tests.\n\n"
+		"Evictions are verified using MMAP, BRK, SBRK, CUDA and ROCR\n"
+		"allocations. FI_HMEM support must be enabled to run CUDA and\n"
+		"ROCR tests.\n\n"
 		"With debug enabled, when running as root, the physical \n"
 		"address of the first page of the MMAP, BRK, and SBRK \n"
 		"allocation is returned. This can be used to verify the \n"
