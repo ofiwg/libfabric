@@ -205,20 +205,22 @@ struct sock_conn_map {
 };
 
 struct sock_conn_listener {
-	ofi_epoll_t emap;
+	ofi_epoll_t epollfd;
 	struct fd_signal signal;
 	fastlock_t signal_lock; /* acquire before map lock */
 	pthread_t listener_thread;
 	int do_listen;
+	bool removed_from_epollfd;
 };
 
 struct sock_ep_cm_head {
-	ofi_epoll_t emap;
+	ofi_epoll_t epollfd;
 	struct fd_signal signal;
 	pthread_mutex_t signal_lock;
 	pthread_t listener_thread;
 	struct dlist_entry msg_list;
 	int do_listen;
+	bool removed_from_epollfd;
 };
 
 struct sock_domain {
