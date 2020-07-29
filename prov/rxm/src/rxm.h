@@ -756,6 +756,8 @@ extern struct fi_fabric_attr rxm_fabric_attr;
 extern struct fi_domain_attr rxm_domain_attr;
 extern struct fi_tx_attr rxm_tx_attr;
 extern struct fi_rx_attr rxm_rx_attr;
+extern struct rxm_rndv_ops rxm_rndv_ops_read;
+extern struct rxm_rndv_ops rxm_rndv_ops_write;
 
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
@@ -794,7 +796,6 @@ int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			uint64_t flags);
 ssize_t rxm_rndv_read(struct rxm_rx_buf *rx_buf);
 ssize_t rxm_rndv_write_ack(struct rxm_rx_buf *rx_buf);
-int rxm_ep_rndv_write(struct rxm_ep* rxm_ep);
 void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 			      const struct iovec *iov, size_t count,
 			      struct fid_mr **mr);

@@ -1101,7 +1101,7 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		mr_iov = (struct fid_mr **)desc;
 	}
 
-	if (rxm_ep_rndv_write(rxm_ep)) {
+	if (rxm_ep->rndv_ops == &rxm_rndv_ops_write) {
 		tx_buf->write_rndv.conn = rxm_conn;
 		for (i = 0; i < count; i++) {
 			tx_buf->write_rndv.iov[i] = iov[i];
@@ -2940,9 +2940,4 @@ err1:
 		fi_freeinfo(rxm_ep->rxm_info);
 	free(rxm_ep);
 	return ret;
-}
-
-int rxm_ep_rndv_write(struct rxm_ep* rxm_ep)
-{
-	return rxm_ep->rndv_ops == &rxm_rndv_ops_write;
 }

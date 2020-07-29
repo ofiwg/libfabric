@@ -290,7 +290,7 @@ static int rxm_rndv_rx_finish(struct rxm_rx_buf *rx_buf)
 
 static int rxm_finish_send_rndv_ack(struct rxm_rx_buf *rx_buf)
 {
-	if (rxm_ep_rndv_write(rx_buf->ep)) {
+	if (rx_buf->ep->rndv_ops == &rxm_rndv_ops_write) {
 		dlist_insert_tail(&rx_buf->rndv_wait_entry, &rx_buf->ep->rndv_wait_list);
 		RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_DONE_WAIT);
 		return 0;
@@ -312,7 +312,8 @@ static int rxm_rndv_tx_finish(struct rxm_ep *rxm_ep,
 	ret = rxm_cq_write_tx_comp(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
 				   tx_buf->app_context, tx_buf->flags);
 
-	if (rxm_ep_rndv_write(rxm_ep) && tx_buf->write_rndv.done_buf) {
+	if (rxm_ep->rndv_ops == &rxm_rndv_ops_write &&
+	    tx_buf->write_rndv.done_buf) {
 		ofi_buf_free(tx_buf->write_rndv.done_buf);
 		tx_buf->write_rndv.done_buf = NULL;
 	}
