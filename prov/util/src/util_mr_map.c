@@ -250,7 +250,7 @@ int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	}
 
 	mr->mr_fid.key = mr->key = key;
-	mr->mr_fid.mem_desc = (void *) (uintptr_t) key;
+	mr->mr_fid.mem_desc = (void *) mr;
 
 	*mr_fid = &mr->mr_fid;
 	ofi_atomic_inc32(&domain->ref);
