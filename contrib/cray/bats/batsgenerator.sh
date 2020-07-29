@@ -3,7 +3,7 @@
 # Assumes IMB test suite has been installed and included in Jenkinsfile.verbs file
 # Example:
 # Add IMB-EXT Windows test running 20 ranks, 5 ranks per node to imb.bats
-#       ./batsgenerator.sh imb_EXT windows 20 5 imb.bats
+#       ./batsgenerator.sh IMB-EXT windows 20 5 imb.bats
 
 # Insert shebang and load test helper
 shebang="#!/usr/bin/env bats\n\n"
