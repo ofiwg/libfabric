@@ -101,11 +101,7 @@ const struct fi_domain_attr efa_domain_attr = {
 	.control_progress	= FI_PROGRESS_AUTO,
 	.data_progress		= FI_PROGRESS_AUTO,
 	.resource_mgmt		= FI_RM_DISABLED,
-#ifdef HAVE_LIBCUDA
-	.mr_mode		= OFI_MR_BASIC_MAP | FI_MR_LOCAL | FI_MR_BASIC | FI_MR_HMEM,
-#else
 	.mr_mode		= OFI_MR_BASIC_MAP | FI_MR_LOCAL | FI_MR_BASIC,
-#endif
 	.mr_key_size		= sizeof_field(struct ibv_sge, lkey),
 	.cq_data_size		= 0,
 	.tx_ctx_cnt		= 1024,
@@ -481,6 +477,28 @@ err_free_nic:
 	return ret;
 }
 
+static int efa_get_gdr_support(char *device_name)
+{
+	char *gdr_path = NULL;
+	char gdr_support = '0';
+	int ret;
+
+	ret = asprintf(&gdr_path, "class/infiniband/%s/device/gdr", device_name);
+	if (ret < 0) {
+		EFA_INFO_ERRNO(FI_LOG_FABRIC, "asprintf to build sysfs file name failed", ret);
+		goto out;
+	}
+
+	ret = fi_read_file(get_sysfs_path(), gdr_path, &gdr_support, sizeof(char));
+	if (ret < 0)
+		goto out;
+
+	ret = atoi(&gdr_support);
+out:
+	free(gdr_path);
+	return ret;
+}
+
 static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 {
 	struct efadv_device_attr efadv_attr;
@@ -526,6 +544,11 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 	info->domain_attr->max_ep_rx_ctx	= 1;
 	info->domain_attr->resource_mgmt	= FI_RM_DISABLED;
 	info->domain_attr->mr_cnt		= base_attr->max_mr;
+
+#ifdef HAVE_LIBCUDA
+	if (efa_get_gdr_support(ctx->ibv_ctx->device->name) == 1)
+		info->domain_attr->mr_mode	|= FI_MR_HMEM;
+#endif
 
 	EFA_DBG(FI_LOG_DOMAIN, "Domain attribute :\n"
 				"\t info->domain_attr->cq_cnt		= %zu\n"
