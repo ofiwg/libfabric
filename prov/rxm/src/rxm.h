@@ -1002,4 +1002,6 @@ static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
 				    rx_buf->pkt.hdr.tag);
 }
 
+struct rxm_mr *rxm_mr_get_map_entry(struct rxm_domain *domain, uint64_t key);
+
 #endif
