@@ -546,8 +546,7 @@ struct rxm_tx_atomic_buf {
 
 	void *app_context;
 	uint64_t flags;
-	struct iovec result_iov[RXM_IOV_LIMIT];
-	uint8_t result_iov_count;
+	struct rxm_iov result_iov;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;

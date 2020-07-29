@@ -1308,11 +1308,12 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 		goto free;
 	}
 
-	len = ofi_total_iov_len(tx_buf->result_iov, tx_buf->result_iov_count);
+	len = ofi_total_iov_len(tx_buf->result_iov.iov,
+				tx_buf->result_iov.count);
 	assert(ntohl(resp_hdr->result_len) == len);
 
-	ret = ofi_copy_to_hmem_iov(FI_HMEM_SYSTEM, 0, tx_buf->result_iov,
-				   tx_buf->result_iov_count, 0, resp_hdr->data,
+	ret = ofi_copy_to_hmem_iov(FI_HMEM_SYSTEM, 0, tx_buf->result_iov.iov,
+				   tx_buf->result_iov.count, 0, resp_hdr->data,
 				   len);
 	assert(ret == len);
 

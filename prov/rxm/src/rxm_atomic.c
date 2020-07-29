@@ -103,6 +103,7 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	size_t cmp_len = 0;
 	size_t tot_len;
 	ssize_t ret;
+	int i;
 
 	assert(msg->iov_count <= RXM_IOV_LIMIT &&
 	       msg->rma_iov_count <= RXM_IOV_LIMIT);
@@ -169,10 +170,16 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		assert(ret == cmp_len);
 	}
 
-	tx_buf->result_iov_count = result_iov_count;
-	if (resultv)
-		ofi_ioc_to_iov(resultv, tx_buf->result_iov, result_iov_count,
-			       datatype_sz);
+	tx_buf->result_iov.count = result_iov_count;
+	if (resultv) {
+		ofi_ioc_to_iov(resultv, tx_buf->result_iov.iov,
+			       result_iov_count, datatype_sz);
+
+		if (result_desc) {
+			for (i = 0; i < result_iov_count; i++)
+				tx_buf->result_iov.desc[i] = result_desc[i];
+		}
+	}
 
 	ret = rxm_ep_send_atomic_req(rxm_ep, rxm_conn, tx_buf, tot_len);
 	if (OFI_LIKELY(!ret))
