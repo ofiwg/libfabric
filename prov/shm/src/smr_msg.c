@@ -51,7 +51,7 @@ static inline uint16_t smr_convert_rx_flags(uint64_t fi_flags)
 }
 
 static struct smr_rx_entry *smr_get_recv_entry(struct smr_ep *ep,
-		const struct iovec *iov, size_t count, fi_addr_t addr,
+		const struct iovec *iov, void **desc, size_t count, fi_addr_t addr,
 		void *context, uint64_t tag, uint64_t ignore, uint64_t flags)
 {
 	struct smr_rx_entry *entry;
@@ -74,10 +74,13 @@ static struct smr_rx_entry *smr_get_recv_entry(struct smr_ep *ep,
 	entry->tag = tag;
 	entry->ignore = ignore;
 
+	entry->iface = smr_get_mr_hmem_iface(ep->util_ep.domain, desc,
+					     &entry->device);
+
 	return entry;
 }
 
-ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov,
+ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov, void **desc,
 			 size_t iov_count, fi_addr_t addr, void *context,
 			 uint64_t tag, uint64_t ignore, uint64_t flags,
 			 struct smr_queue *recv_queue,
@@ -92,7 +95,7 @@ ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov,
 	fastlock_acquire(&ep->region->lock);
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 
-	entry = smr_get_recv_entry(ep, iov, iov_count, addr, context, tag,
+	entry = smr_get_recv_entry(ep, iov, desc, iov_count, addr, context, tag,
 				   ignore, flags);
 	if (!entry)
 		goto out;
@@ -112,8 +115,8 @@ ssize_t smr_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
-	return smr_generic_recv(ep, msg->msg_iov, msg->iov_count, msg->addr,
-				msg->context, 0, 0,
+	return smr_generic_recv(ep, msg->msg_iov, msg->desc, msg->iov_count,
+				msg->addr, msg->context, 0, 0,
 				flags | ep->util_ep.rx_msg_flags,
 				&ep->recv_queue, &ep->unexp_msg_queue);
 }
@@ -125,7 +128,7 @@ ssize_t smr_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
-	return smr_generic_recv(ep, iov, count, src_addr, context, 0, 0,
+	return smr_generic_recv(ep, iov, desc, count, src_addr, context, 0, 0,
 				smr_ep_rx_flags(ep), &ep->recv_queue,
 				&ep->unexp_msg_queue);
 }
@@ -141,15 +144,15 @@ ssize_t smr_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	iov.iov_base = buf;
 	iov.iov_len = len;
 
-	return smr_generic_recv(ep, &iov, 1, src_addr, context, 0, 0,
+	return smr_generic_recv(ep, &iov, &desc, 1, src_addr, context, 0, 0,
 				smr_ep_rx_flags(ep), &ep->recv_queue,
 				&ep->unexp_msg_queue);
 }
 
 static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
-				   size_t iov_count, fi_addr_t addr, uint64_t tag,
-				   uint64_t data, void *context, uint32_t op,
-				   uint64_t op_flags)
+				   void **desc, size_t iov_count, fi_addr_t addr,
+				   uint64_t tag, uint64_t data, void *context,
+				   uint32_t op, uint64_t op_flags)
 {
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
@@ -157,6 +160,8 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	struct smr_resp *resp;
 	struct smr_cmd *cmd;
 	struct smr_tx_entry *pend;
+	enum fi_hmem_iface iface;
+	uint64_t device;
 	int id, peer_id;
 	ssize_t ret = 0;
 	size_t total_len;
@@ -183,17 +188,19 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 		goto unlock_cq;
 	}
 
+	iface = smr_get_mr_hmem_iface(ep->util_ep.domain, desc, &device);
+
 	total_len = ofi_total_iov_len(iov, iov_count);
 
 	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
 
 	if (total_len <= SMR_MSG_DATA_LEN && !(op_flags & FI_DELIVERY_COMPLETE)) {
-		smr_format_inline(cmd, iov, iov_count);
+		smr_format_inline(cmd, iface, device, iov, iov_count);
 	} else if (total_len <= SMR_INJECT_SIZE &&
 		   !(op_flags & FI_DELIVERY_COMPLETE)) {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
-		smr_format_inject(cmd, iov, iov_count, peer_smr, tx_buf);
+		smr_format_inject(cmd, iface, device, iov, iov_count, peer_smr, tx_buf);
 	} else {
 		if (ofi_cirque_isfull(smr_resp_queue(ep->region))) {
 			ret = -FI_EAGAIN;
@@ -201,15 +208,19 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 		}
 		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
 		pend = freestack_pop(ep->pend_fs);
-		if (ep->region->cma_cap == SMR_CMA_CAP_ON) {
-			smr_format_iov(cmd, iov, iov_count, total_len, ep->region, resp);
+		if (ep->region->cma_cap == SMR_CMA_CAP_ON &&
+		    iface == FI_HMEM_SYSTEM) {
+			smr_format_iov(cmd, iov, iov_count, total_len, ep->region,
+				       resp);
 		} else {
-			if (total_len <= smr_env.sar_threshold) {
+			if (total_len <= smr_env.sar_threshold ||
+			    iface != FI_HMEM_SYSTEM) {
 				if (!peer_smr->sar_cnt) {
 					ret = -FI_EAGAIN;
 				} else {
 					sar = smr_freestack_pop(smr_sar_pool(peer_smr));
-					smr_format_sar(cmd, iov, iov_count, total_len,
+					smr_format_sar(cmd, iface, device, iov,
+						       iov_count, total_len,
 						       ep->region, peer_smr, sar,
 						       pend, resp);
 					peer_smr->sar_cnt--;
@@ -225,7 +236,8 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 				goto unlock_cq;
 			}
 		}
-		smr_format_pend_resp(pend, cmd, context, iov, iov_count, id, resp);
+		smr_format_pend_resp(pend, cmd, context, iface, device, iov,
+				     iov_count, id, resp);
 		ofi_cirque_commit(smr_resp_queue(ep->region));
 		goto commit;
 	}
@@ -257,7 +269,7 @@ ssize_t smr_send(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
 
-	return smr_generic_sendmsg(ep, &msg_iov, 1, dest_addr, 0,
+	return smr_generic_sendmsg(ep, &msg_iov, &desc, 1, dest_addr, 0,
 				   0, context, ofi_op_msg, smr_ep_tx_flags(ep));
 }
 
@@ -269,7 +281,7 @@ ssize_t smr_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
-	return smr_generic_sendmsg(ep, iov, count, dest_addr, 0,
+	return smr_generic_sendmsg(ep, iov, desc, count, dest_addr, 0,
 				   0, context, ofi_op_msg, smr_ep_tx_flags(ep));
 }
 
@@ -280,7 +292,7 @@ ssize_t smr_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
-	return smr_generic_sendmsg(ep, msg->msg_iov, msg->iov_count,
+	return smr_generic_sendmsg(ep, msg->msg_iov, msg->desc, msg->iov_count,
 				   msg->addr, 0, msg->data, msg->context,
 				   ofi_op_msg, flags | ep->util_ep.tx_msg_flags);
 }
@@ -321,10 +333,11 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
 
 	if (len <= SMR_MSG_DATA_LEN) {
-		smr_format_inline(cmd, &msg_iov, 1);
+		smr_format_inline(cmd, FI_HMEM_SYSTEM, 0, &msg_iov, 1);
 	} else {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
-		smr_format_inject(cmd, &msg_iov, 1, peer_smr, tx_buf);
+		smr_format_inject(cmd, FI_HMEM_SYSTEM, 0, &msg_iov, 1,
+				  peer_smr, tx_buf);
 	}
 	ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
 	peer_smr->cmd_cnt--;
@@ -354,8 +367,8 @@ ssize_t smr_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
 
-	return smr_generic_sendmsg(ep, &iov, 1, dest_addr, 0, data, context,
-				   ofi_op_msg,
+	return smr_generic_sendmsg(ep, &iov, &desc, 1, dest_addr, 0, data,
+				   context, ofi_op_msg,
 				   FI_REMOTE_CQ_DATA | smr_ep_tx_flags(ep));
 }
 
@@ -390,7 +403,7 @@ ssize_t smr_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	iov.iov_base = buf;
 	iov.iov_len = len;
 
-	return smr_generic_recv(ep, &iov, 1, src_addr, context, tag, ignore,
+	return smr_generic_recv(ep, &iov, &desc, 1, src_addr, context, tag, ignore,
 				smr_ep_rx_flags(ep), &ep->trecv_queue,
 				&ep->unexp_tagged_queue);
 }
@@ -403,7 +416,7 @@ ssize_t smr_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
-	return smr_generic_recv(ep, iov, count, src_addr, context, tag, ignore,
+	return smr_generic_recv(ep, iov, desc, count, src_addr, context, tag, ignore,
 				smr_ep_rx_flags(ep), &ep->trecv_queue,
 				&ep->unexp_tagged_queue);
 }
@@ -415,8 +428,8 @@ ssize_t smr_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
-	return smr_generic_recv(ep, msg->msg_iov, msg->iov_count, msg->addr,
-				msg->context, msg->tag, msg->ignore,
+	return smr_generic_recv(ep, msg->msg_iov, msg->desc, msg->iov_count,
+				msg->addr, msg->context, msg->tag, msg->ignore,
 				flags | ep->util_ep.rx_msg_flags,
 				&ep->trecv_queue, &ep->unexp_tagged_queue);
 }
@@ -432,7 +445,7 @@ ssize_t smr_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
 
-	return smr_generic_sendmsg(ep, &msg_iov, 1, dest_addr, tag,
+	return smr_generic_sendmsg(ep, &msg_iov, &desc, 1, dest_addr, tag,
 				   0, context, ofi_op_tagged,
 				   smr_ep_tx_flags(ep));
 }
@@ -445,7 +458,7 @@ ssize_t smr_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
-	return smr_generic_sendmsg(ep, iov, count, dest_addr, tag,
+	return smr_generic_sendmsg(ep, iov, desc, count, dest_addr, tag,
 				   0, context, ofi_op_tagged,
 				   smr_ep_tx_flags(ep));
 }
@@ -457,7 +470,7 @@ ssize_t smr_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
-	return smr_generic_sendmsg(ep, msg->msg_iov, msg->iov_count,
+	return smr_generic_sendmsg(ep, msg->msg_iov, msg->desc, msg->iov_count,
 				   msg->addr, msg->tag, msg->data, msg->context,
 				   ofi_op_tagged, flags | ep->util_ep.tx_msg_flags);
 }
@@ -481,8 +494,8 @@ ssize_t smr_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
 
-	return smr_generic_sendmsg(ep, &iov, 1, dest_addr, tag, data, context,
-				   ofi_op_tagged,
+	return smr_generic_sendmsg(ep, &iov, &desc, 1, dest_addr, tag, data,
+				   context, ofi_op_tagged,
 				   FI_REMOTE_CQ_DATA | smr_ep_tx_flags(ep));
 }
 

@@ -35,6 +35,7 @@
 #include <sys/uio.h>
 
 #include "ofi_iov.h"
+#include "ofi_hmem.h"
 #include "smr.h"
 
 extern struct fi_ops_msg smr_msg_ops;
@@ -242,8 +243,9 @@ static void smr_init_queue(struct smr_queue *queue,
 }
 
 void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
-			  void *context, const struct iovec *iov,
-			  uint32_t iov_count, fi_addr_t id, struct smr_resp *resp)
+			  void *context, enum fi_hmem_iface iface, uint64_t device,
+			  const struct iovec *iov, uint32_t iov_count,
+			  fi_addr_t id, struct smr_resp *resp)
 {
 	pend->cmd = *cmd;
 	pend->context = context;
@@ -252,6 +254,9 @@ void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 	pend->addr = id;
 	if (cmd->msg.hdr.op_src != smr_src_sar)
 		pend->bytes_done = 0;
+
+	pend->iface = iface;
+	pend->device = device;
 
 	resp->msg_id = (uint64_t) (uintptr_t) pend;
 	resp->status = FI_EBUSY;
@@ -272,22 +277,23 @@ void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id, uint32_t op,
 		cmd->msg.hdr.op_flags |= SMR_TX_COMPLETION;
 }
 
-void smr_format_inline(struct smr_cmd *cmd, const struct iovec *iov,
-		       size_t count)
+void smr_format_inline(struct smr_cmd *cmd, enum fi_hmem_iface iface,
+		       uint64_t device, const struct iovec *iov, size_t count)
 {
 	cmd->msg.hdr.op_src = smr_src_inline;
-	cmd->msg.hdr.size = ofi_copy_from_iov(cmd->msg.data.msg,
-					      SMR_MSG_DATA_LEN, iov, count, 0);
+	cmd->msg.hdr.size = ofi_copy_from_hmem_iov(cmd->msg.data.msg,
+						SMR_MSG_DATA_LEN, iface, device,
+						iov, count, 0);
 }
 
-void smr_format_inject(struct smr_cmd *cmd, const struct iovec *iov,
-		       size_t count, struct smr_region *smr,
-		       struct smr_inject_buf *tx_buf)
+void smr_format_inject(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t device,
+		       const struct iovec *iov, size_t count,
+		       struct smr_region *smr, struct smr_inject_buf *tx_buf)
 {
 	cmd->msg.hdr.op_src = smr_src_inject;
 	cmd->msg.hdr.src_data = smr_get_offset(smr, tx_buf);
-	cmd->msg.hdr.size = ofi_copy_from_iov(tx_buf->data, SMR_INJECT_SIZE,
-					      iov, count, 0);
+	cmd->msg.hdr.size = ofi_copy_from_hmem_iov(tx_buf->data, SMR_INJECT_SIZE,
+						   iface, device, iov, count, 0);
 }
 
 void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
@@ -381,14 +387,16 @@ remove_entry:
 }
 
 size_t smr_copy_to_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
-		       struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+		       struct smr_cmd *cmd, enum fi_hmem_iface iface,
+		       uint64_t device, const struct iovec *iov, size_t count,
 		       size_t *bytes_done, int *next)
 {
 	size_t start = *bytes_done;
 
 	if (sar_msg->sar[0].status == SMR_SAR_FREE && !*next) {
-		*bytes_done += ofi_copy_from_iov(sar_msg->sar[0].buf, SMR_SAR_SIZE,
-						 iov, count, *bytes_done);
+		*bytes_done += ofi_copy_from_hmem_iov(sar_msg->sar[0].buf,
+					SMR_SAR_SIZE, iface, device,
+					iov, count, *bytes_done);
 		sar_msg->sar[0].status = SMR_SAR_READY;
 		if (cmd->msg.hdr.op == ofi_op_read_req)
 			resp->status = FI_SUCCESS;
@@ -397,8 +405,9 @@ size_t smr_copy_to_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
 
 	if (*bytes_done < cmd->msg.hdr.size &&
 	    sar_msg->sar[1].status == SMR_SAR_FREE && *next) {
-		*bytes_done += ofi_copy_from_iov(sar_msg->sar[1].buf, SMR_SAR_SIZE,
-						 iov, count, *bytes_done);
+		*bytes_done += ofi_copy_from_hmem_iov(sar_msg->sar[1].buf,
+					SMR_SAR_SIZE, iface, device,
+					iov, count, *bytes_done);
 		sar_msg->sar[1].status = SMR_SAR_READY;
 		if (cmd->msg.hdr.op == ofi_op_read_req)
 			resp->status = FI_SUCCESS;
@@ -408,14 +417,16 @@ size_t smr_copy_to_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
 }
 
 size_t smr_copy_from_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
-			 struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+			 struct smr_cmd *cmd, enum fi_hmem_iface iface,
+			 uint64_t device, const struct iovec *iov, size_t count,
 			 size_t *bytes_done, int *next)
 {
 	size_t start = *bytes_done;
 
 	if (sar_msg->sar[0].status == SMR_SAR_READY && !*next) {
-		*bytes_done += ofi_copy_to_iov(iov, count, *bytes_done,
-					       sar_msg->sar[0].buf, SMR_SAR_SIZE);
+		*bytes_done += ofi_copy_to_hmem_iov(iface, device, iov, count,
+					*bytes_done, sar_msg->sar[0].buf,
+					SMR_SAR_SIZE);
 		sar_msg->sar[0].status = SMR_SAR_FREE;
 		if (cmd->msg.hdr.op != ofi_op_read_req)
 			resp->status = FI_SUCCESS;
@@ -424,8 +435,9 @@ size_t smr_copy_from_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
 
 	if (*bytes_done < cmd->msg.hdr.size &&
 	    sar_msg->sar[1].status == SMR_SAR_READY && *next) {
-		*bytes_done += ofi_copy_to_iov(iov, count, *bytes_done,
-					       sar_msg->sar[1].buf, SMR_SAR_SIZE);
+		*bytes_done += ofi_copy_to_hmem_iov(iface, device, iov, count,
+					*bytes_done, sar_msg->sar[1].buf,
+					SMR_SAR_SIZE);
 		sar_msg->sar[1].status = SMR_SAR_FREE;
 		if (cmd->msg.hdr.op != ofi_op_read_req)
 			resp->status = FI_SUCCESS;
@@ -434,7 +446,8 @@ size_t smr_copy_from_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
 	return *bytes_done - start;
 }
 
-void smr_format_sar(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+void smr_format_sar(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t device,
+		    const struct iovec *iov, size_t count,
 		    size_t total_len, struct smr_region *smr,
 		    struct smr_region *peer_smr, struct smr_sar_msg *sar_msg,
 		    struct smr_tx_entry *pending, struct smr_resp *resp)
@@ -449,7 +462,7 @@ void smr_format_sar(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
 	sar_msg->sar[0].status = SMR_SAR_FREE;
 	sar_msg->sar[1].status = SMR_SAR_FREE;
 	if (cmd->msg.hdr.op != ofi_op_read_req)
-		smr_copy_to_sar(sar_msg, NULL, cmd, iov, count,
+		smr_copy_to_sar(sar_msg, NULL, cmd, iface, device ,iov, count,
 				&pending->bytes_done, &pending->next);
 }
 

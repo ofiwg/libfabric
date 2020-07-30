@@ -106,6 +106,8 @@ struct smr_rx_entry {
 	uint32_t		iov_count;
 	uint16_t		flags;
 	uint64_t		err;
+	enum fi_hmem_iface	iface;
+	uint64_t		device;
 };
 
 struct smr_tx_entry {
@@ -118,6 +120,8 @@ struct smr_tx_entry {
 	int		next;
 	void		*map_ptr;
 	struct smr_ep_name *map_name;
+	enum fi_hmem_iface	iface;
+	uint64_t		device;
 };
 
 struct smr_sar_entry {
@@ -128,6 +132,8 @@ struct smr_sar_entry {
 	int			next;
 	struct iovec		iov[SMR_IOV_LIMIT];
 	size_t			iov_count;
+	enum fi_hmem_iface	iface;
+	uint64_t		device;
 };
 
 struct smr_ep;
@@ -153,6 +159,16 @@ static inline int smr_match_addr(fi_addr_t addr, fi_addr_t match_addr)
 static inline int smr_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag)
 {
 	return ((tag | ignore) == (match_tag | ignore));
+}
+
+static inline enum fi_hmem_iface smr_get_mr_hmem_iface(struct util_domain *domain,
+				void **desc, uint64_t *device)
+{
+	if (!(domain->mr_mode & FI_MR_HMEM) || !desc || !*desc)
+		return FI_HMEM_SYSTEM;
+
+	*device = ((struct ofi_mr *) *desc)->device;
+	return ((struct ofi_mr *) *desc)->iface;
 }
 
 struct smr_unexp_msg {
@@ -250,31 +266,34 @@ int smr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 int smr_verify_peer(struct smr_ep *ep, int peer_id);
 
 void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
-			  void *context, const struct iovec *iov,
-			  uint32_t iov_count, fi_addr_t id,
-			  struct smr_resp *resp);
+			  void *context, enum fi_hmem_iface iface, uint64_t device,
+			  const struct iovec *iov, uint32_t iov_count,
+			  fi_addr_t id, struct smr_resp *resp);
 void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags);
-void smr_format_inline(struct smr_cmd *cmd, const struct iovec *iov,
-		       size_t count);
-void smr_format_inject(struct smr_cmd *cmd, const struct iovec *iov,
-		       size_t count, struct smr_region *smr,
-		       struct smr_inject_buf *tx_buf);
+void smr_format_inline(struct smr_cmd *cmd, enum fi_hmem_iface iface,
+		       uint64_t device, const struct iovec *iov, size_t count);
+void smr_format_inject(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t device,
+		       const struct iovec *iov, size_t count,
+		       struct smr_region *smr, struct smr_inject_buf *tx_buf);
 void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
 		    size_t total_len, struct smr_region *smr,
 		    struct smr_resp *resp);
 int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
 		    const struct iovec *iov, size_t count, size_t total_len,
 		    struct smr_tx_entry *pend, struct smr_resp *resp);
-void smr_format_sar(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+void smr_format_sar(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t deivce,
+		    const struct iovec *iov, size_t count,
 		    size_t total_len, struct smr_region *smr,
 		    struct smr_region *peer_smr, struct smr_sar_msg *sar_msg,
 		    struct smr_tx_entry *pending, struct smr_resp *resp);
 size_t smr_copy_to_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
-		       struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+		       struct smr_cmd *cmd, enum fi_hmem_iface,
+		       uint64_t device, const struct iovec *iov, size_t count,
 		       size_t *bytes_done, int *next);
 size_t smr_copy_from_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
-			 struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+			 struct smr_cmd *cmd, enum fi_hmem_iface iface,
+			 uint64_t device, const struct iovec *iov, size_t count,
 			 size_t *bytes_done, int *next);
 
 int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,

@@ -74,6 +74,7 @@ enum {
 	smr_src_iov,	/* reference iovec via CMA */
 	smr_src_mmap,	/* mmap-based fallback protocol */
 	smr_src_sar,	/* segmentation fallback protocol */
+	smr_src_ipc,	/* device IPC handle protocol */
 };
 
 #define SMR_REMOTE_CQ_DATA	(1 << 0)
@@ -119,6 +120,15 @@ struct smr_msg_hdr {
 
 #define SMR_MSG_DATA_LEN	(SMR_CMD_SIZE - sizeof(struct smr_msg_hdr))
 #define SMR_COMP_DATA_LEN	(SMR_MSG_DATA_LEN / 2)
+
+#define IPC_HANDLE_SIZE		64
+struct smr_ipc_info {
+	uint64_t	iface;
+	union {
+		uint8_t	ipc_handle[IPC_HANDLE_SIZE];
+	};
+};
+
 union smr_cmd_data {
 	uint8_t			msg[SMR_MSG_DATA_LEN];
 	struct {
@@ -133,6 +143,7 @@ union smr_cmd_data {
 	struct {
 		uint64_t	sar;
 	};
+	struct smr_ipc_info	ipc_info;
 };
 
 struct smr_cmd_msg {

@@ -80,18 +80,19 @@ hsa_status_t ofi_hsa_amd_reg_dealloc_cb(void *ptr,
 
 #endif /* HAVE_ROCR */
 
-int rocr_memcpy(void *dest, const void *src, size_t size);
+int rocr_memcpy(uint64_t device, void *dest, const void *src, size_t size);
 int rocr_hmem_init(void);
 int rocr_hmem_cleanup(void);
 bool rocr_is_addr_valid(const void *addr);
 
-int cuda_copy_to_dev(void *dev, const void *host, size_t size);
-int cuda_copy_from_dev(void *host, const void *dev, size_t size);
+int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
+int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
 int cuda_hmem_init(void);
 int cuda_hmem_cleanup(void);
 bool cuda_is_addr_valid(const void *addr);
 
-static inline int ofi_memcpy(void *dest, const void *src, size_t size)
+static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
+			     size_t size)
 {
 	memcpy(dest, src, size);
 	return FI_SUCCESS;
@@ -107,15 +108,35 @@ static inline int ofi_hmem_cleanup_noop(void)
 	return FI_SUCCESS;
 }
 
+static inline int ofi_hmem_no_get_handle(void *dev_buffer, void **handle)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_hmem_no_open_handle(void **handle, uint64_t device, void **ipc_ptr)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_hmem_no_close_handle(void *ipc_ptr)
+{
+	return -FI_ENOSYS;
+}
+
 ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,
+			       enum fi_hmem_iface hmem_iface, uint64_t device,
 			       const struct iovec *hmem_iov,
-			       enum fi_hmem_iface hmem_iface,
 			       size_t hmem_iov_count, uint64_t hmem_iov_offset);
 
-ssize_t ofi_copy_to_hmem_iov(const struct iovec *hmem_iov,
-			     enum fi_hmem_iface hmem_iface,
+ssize_t ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
+			     const struct iovec *hmem_iov,
 			     size_t hmem_iov_count, uint64_t hmem_iov_offset,
 			     void *src, size_t size);
+
+int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *dev_buf, void **handle);
+int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
+			 uint64_t device, void **ipc_ptr);
+int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr);
 
 void ofi_hmem_init(void);
 void ofi_hmem_cleanup(void);

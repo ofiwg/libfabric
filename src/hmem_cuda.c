@@ -93,7 +93,7 @@ CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 	return cuda_ops.cuPointerGetAttribute(data, attribute, ptr);
 }
 
-int cuda_copy_to_dev(void *dev, const void *host, size_t size)
+int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
 {
 	cudaError_t cuda_ret;
 
@@ -109,7 +109,7 @@ int cuda_copy_to_dev(void *dev, const void *host, size_t size)
 	return -FI_EIO;
 }
 
-int cuda_copy_from_dev(void *host, const void *dev, size_t size)
+int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size)
 {
 	cudaError_t cuda_ret;
 
@@ -242,12 +242,12 @@ bool cuda_is_addr_valid(const void *addr)
 
 #else
 
-int cuda_copy_to_dev(void *dev, const void *host, size_t size)
+int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
 {
 	return -FI_ENOSYS;
 }
 
-int cuda_copy_from_dev(void *host, const void *dev, size_t size)
+int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size)
 {
 	return -FI_ENOSYS;
 }

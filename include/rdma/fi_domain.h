@@ -146,13 +146,13 @@ struct fi_hmem_override_ops {
 	size_t	size;
 
 	ssize_t	(*copy_from_hmem_iov)(void *dest, size_t size,
+				      enum fi_hmem_iface iface, uint64_t device,
 				      const struct iovec *hmem_iov,
-				      enum fi_hmem_iface hmem_iface,
 				      size_t hmem_iov_count,
 				      uint64_t hmem_iov_offset);
 
-	ssize_t (*copy_to_hmem_iov)(const struct iovec *hmem_iov,
-				    enum fi_hmem_iface hmem_iface,
+	ssize_t (*copy_to_hmem_iov)(enum fi_hmem_iface iface, uint64_t device,
+				    const struct iovec *hmem_iov,
 				    size_t hmem_iov_count,
 				    uint64_t hmem_iov_offset, const void *src,
 				    size_t size);

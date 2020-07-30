@@ -243,6 +243,13 @@ int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	mr->domain = domain;
 	mr->flags = flags;
 
+	if (domain->mr_mode & FI_MR_HMEM) {
+		mr->iface = attr->iface;
+		mr->device = attr->device.reserved;
+	} else {
+		mr->iface = FI_HMEM_SYSTEM;
+	}
+
 	ret = ofi_mr_map_insert(&domain->mr_map, attr, &key, mr);
 	if (ret) {
 		free(mr);
@@ -250,7 +257,7 @@ int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	}
 
 	mr->mr_fid.key = mr->key = key;
-	mr->mr_fid.mem_desc = (void *) (uintptr_t) key;
+	mr->mr_fid.mem_desc = (void *) mr;
 
 	*mr_fid = &mr->mr_fid;
 	ofi_atomic_inc32(&domain->ref);

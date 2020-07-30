@@ -221,6 +221,8 @@ struct ofi_mr {
 	struct util_domain *domain;
 	uint64_t key;
 	uint64_t flags;
+	enum fi_hmem_iface iface;
+	uint64_t device;
 };
 
 int ofi_mr_close(struct fid *fid);

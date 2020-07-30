@@ -35,6 +35,7 @@
 #include <ofi_prov.h>
 #include "smr.h"
 #include "smr_signal.h"
+#include <ofi_hmem.h>
 
 extern struct sigaction *old_action;
 struct smr_env smr_env = {
@@ -125,7 +126,7 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 	int ret;
 
 	mr_mode = hints && hints->domain_attr ? hints->domain_attr->mr_mode :
-						FI_MR_VIRT_ADDR;
+						FI_MR_VIRT_ADDR | FI_MR_HMEM;
 	msg_order = hints && hints->tx_attr ? hints->tx_attr->msg_order : 0;
 	fast_rma = smr_fast_rma_enabled(mr_mode, msg_order);
 
@@ -159,6 +160,17 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 			cur->ep_attr->max_order_raw_size = 0;
 			cur->ep_attr->max_order_waw_size = 0;
 			cur->ep_attr->max_order_war_size = 0;
+		}
+		if (cur->caps & FI_HMEM) {
+			if (!(mr_mode & FI_MR_HMEM)) {
+				fi_freeinfo(cur);
+				return -FI_ENODATA;
+			}
+			cur->domain_attr->mr_mode |= FI_MR_HMEM;
+			cur->tx_attr->inject_size = 0;
+			ofi_hmem_init();
+		} else {
+			cur->domain_attr->mr_mode &= ~FI_MR_HMEM;
 		}
 	}
 	return 0;
