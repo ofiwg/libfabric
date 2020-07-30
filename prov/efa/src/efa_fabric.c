@@ -896,9 +896,6 @@ static int efa_fabric_close(fid_t fid)
 	struct efa_fabric *fab;
 	int ret;
 
-	if (efa_set_rdmav_hugepages_safe)
-		unsetenv("RDMAV_HUGEPAGES_SAFE");
-
 	fab = container_of(fid, struct efa_fabric, util_fabric.fabric_fid.fid);
 	ret = ofi_fabric_close(&fab->util_fabric);
 	if (ret)
@@ -968,28 +965,6 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	const struct fi_info *info;
 	struct efa_fabric *fab;
 	int ret = 0;
-
-	if (!getenv("RDMAV_HUGEPAGES_SAFE")) {
-		/*
-		 * Setting RDMAV_HUGEPAGES_SAFE alone will not impact
-		 * application performance, because rdma-core will only
-		 * check this environment variable when either
-		 * RDMAV_FORK_SAFE or IBV_FORK_SAFE is set.
-		 */
-		ret = setenv("RDMAV_HUGEPAGES_SAFE", "1", 1);
-		if (ret)
-			return -errno;
-
-		efa_set_rdmav_hugepages_safe = 1;
-	}
-
-	ret = pthread_atfork(efa_atfork_callback, NULL, NULL);
-	if (ret) {
-		EFA_WARN(FI_LOG_FABRIC,
-			 "Unable to register atfork callback\n");
-		return -ret;
-	}
-
 	fab = calloc(1, sizeof(*fab));
 	if (!fab)
 		return -FI_ENOMEM;
@@ -1018,6 +993,9 @@ static void fi_efa_fini(void)
 {
 	struct efa_context **ctx_list;
 	int num_devices;
+
+	if (efa_set_rdmav_hugepages_safe)
+		unsetenv("RDMAV_HUGEPAGES_SAFE");
 
 	fi_freeinfo((void *)efa_util_prov.info);
 	efa_util_prov.info = NULL;
@@ -1089,6 +1067,32 @@ static int efa_init_info(const struct fi_info **all_infos)
 
 struct fi_provider *init_lower_efa_prov()
 {
+	int err;
+
+	if (!getenv("RDMAV_HUGEPAGES_SAFE")) {
+		/*
+		 * Setting RDMAV_HUGEPAGES_SAFE alone will not impact
+		 * application performance, because rdma-core will only
+		 * check this environment variable when either
+		 * RDMAV_FORK_SAFE or IBV_FORK_SAFE is set.
+		 */
+		err = setenv("RDMAV_HUGEPAGES_SAFE", "1", 1);
+		if (err) {
+			EFA_WARN(FI_LOG_FABRIC,
+				 "Unable to set environment variable RDMAV_HUGEPAGES_SAFE\n");
+			return NULL;
+		}
+
+		efa_set_rdmav_hugepages_safe = 1;
+	}
+
+	err = pthread_atfork(efa_atfork_callback, NULL, NULL);
+	if (err) {
+		EFA_WARN(FI_LOG_FABRIC,
+			 "Unable to register atfork callback\n");
+		return NULL;
+	}
+
 	if (efa_init_info(&efa_util_prov.info))
 		return NULL;
 
