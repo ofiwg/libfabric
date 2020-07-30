@@ -669,8 +669,8 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	size_t total_len = 0;
 	int err = 0, ret = 0;
 	struct ofi_mr *mr;
-	enum fi_hmem_iface iface;
-	uint64_t device;
+	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
+	uint64_t device = 0;
 
 	domain = container_of(ep->util_ep.domain, struct smr_domain,
 			      util_domain);

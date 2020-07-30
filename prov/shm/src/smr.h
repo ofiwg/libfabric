@@ -164,8 +164,10 @@ static inline int smr_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_ta
 static inline enum fi_hmem_iface smr_get_mr_hmem_iface(struct util_domain *domain,
 				void **desc, uint64_t *device)
 {
-	if (!(domain->mr_mode & FI_MR_HMEM) || !desc || !*desc)
+	if (!(domain->mr_mode & FI_MR_HMEM) || !desc || !*desc) {
+		*device = 0;
 		return FI_HMEM_SYSTEM;
+	}
 
 	*device = ((struct ofi_mr *) *desc)->device;
 	return ((struct ofi_mr *) *desc)->iface;
