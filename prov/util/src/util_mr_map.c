@@ -280,6 +280,9 @@ int ofi_mr_regv(struct fid *fid, const struct iovec *iov,
 	attr.offset = offset;
 	attr.requested_key = requested_key;
 	attr.context = context;
+	attr.iface = FI_HMEM_SYSTEM;
+	attr.device.reserved = 0;
+
 	return ofi_mr_regattr(fid, &attr, flags, mr_fid);
 }
 
