@@ -93,6 +93,15 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, rtm_type + tagged, 0);
 	}
 
+	if (efa_ep_is_cuda_mr(tx_entry->desc[0])) {
+		if (tx_entry->total_len == 0)
+			return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+							  RXR_EAGER_MSGRTM_PKT + tagged, 0);
+
+		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+						 RXR_READ_MSGRTM_PKT + tagged, 0);
+	}
+
 	/* inter instance message */
 	if (tx_entry->total_len <= max_rtm_data_size)
 		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
