@@ -36,6 +36,9 @@
 #include "rxr_cntr.h"
 #include "rxr_pkt_cmd.h"
 
+/* Handshake wait timeout in microseconds */
+#define RXR_HANDSHAKE_WAIT_TIMEOUT 1000000
+
 /* This file implements 4 actions that can be applied to a packet:
  *          posting,
  *          handling send completion and,
@@ -359,6 +362,87 @@ ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_en
 	}
 
 	return err;
+}
+
+/*
+ * This function is used for any extra feature that does not have an alternative.
+ *
+ * This function will send a eager rtw packet to trigger handshake.
+ *
+ * We do not send eager rtm packets here because the receiver might require
+ * ordering and an extra eager rtm will interrupt the reorder
+ * process.
+ *
+ * ep: The endpoint on which the packet for triggering handshake will be sent.
+ * peer: The peer from which the sender receives handshake.
+ * addr: The address of the peer.
+ *
+ * This function will return 0 if sender successfully receives / have already
+ * received the handshake from the peer
+ *
+ * This function will return FI_EAGAIN if it fails to allocate or send the trigger packet.
+ * It will return FI_ETIMEDOUT if it fails to receive
+ * handshake packet within a certain period of time.
+ */
+
+ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_peer *peer)
+{
+	struct rxr_tx_entry *tx_entry;
+	ssize_t err;
+
+	uint64_t current, endwait;
+
+	if (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)
+		return 0;
+
+	tx_entry = ofi_buf_alloc(ep->tx_entry_pool);
+	if (OFI_UNLIKELY(!tx_entry)) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "TX entries exhausted.\n");
+		return -FI_EAGAIN;
+	}
+
+	tx_entry->total_len = 0;
+	tx_entry->addr = addr;
+	tx_entry->msg_id = -1;
+	tx_entry->cq_entry.flags = FI_RMA | FI_WRITE;
+	tx_entry->cq_entry.buf = NULL;
+	dlist_init(&tx_entry->queued_pkts);
+
+	tx_entry->type = RXR_TX_ENTRY;
+	tx_entry->op = ofi_op_write;
+	tx_entry->state = RXR_TX_REQ;
+
+	tx_entry->send_flags = 0;
+	tx_entry->bytes_acked = 0;
+	tx_entry->bytes_sent = 0;
+	tx_entry->window = 0;
+	tx_entry->rma_iov_count = 0;
+	tx_entry->iov_count = 0;
+	tx_entry->iov_index = 0;
+	tx_entry->iov_mr_start = 0;
+	tx_entry->iov_offset = 0;
+	tx_entry->fi_flags = RXR_NO_COMPLETION | RXR_NO_COUNTER;
+
+#if ENABLE_DEBUG
+	dlist_insert_tail(&tx_entry->tx_entry_entry, &ep->tx_entry_list);
+#endif
+
+	err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0);
+
+	if (OFI_UNLIKELY(err))
+		return err;
+
+	current = ofi_gettime_us();
+	endwait = current + RXR_HANDSHAKE_WAIT_TIMEOUT;
+	while (current < endwait && !(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)) {
+		rxr_ep_progress_internal(ep);
+		current = ofi_gettime_us();
+	}
+
+	if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
+		return FI_ETIMEDOUT;
+
+	return 0;
 }
 
 /*
