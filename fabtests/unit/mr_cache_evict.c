@@ -42,12 +42,15 @@
 
 #include "unit_common.h"
 #include "shared.h"
+#include "hmem.h"
 
 /* Supported memory region types. */
 enum alloc_type {
 	MMAP,
 	BRK,
 	SBRK,
+	CUDA,
+	ROCR,
 };
 
 static void *reuse_addr = NULL;
@@ -278,6 +281,39 @@ static void *mmap_alloc(void)
 	return ptr;
 }
 
+static void rocr_free(void *ptr)
+{
+	ft_hmem_free(FI_HMEM_ROCR, ptr);
+}
+
+static void *rocr_malloc(void)
+{
+	int ret;
+	void *ptr;
+
+	ret = ft_hmem_alloc(FI_HMEM_ROCR, 0, &ptr, mr_buf_size);
+	if (ret)
+		return NULL;
+	return ptr;
+}
+
+
+static void cuda_free(void *ptr)
+{
+	ft_hmem_free(FI_HMEM_CUDA, ptr);
+}
+
+static void *cuda_malloc(void)
+{
+	int ret;
+	void *ptr;
+
+	ret = ft_hmem_alloc(FI_HMEM_CUDA, 0, &ptr, mr_buf_size);
+	if (ret)
+		return NULL;
+	return ptr;
+}
+
 /* Generic allocation/deallocation function. Only a single allocation of any
  * type should be outstanding.
  */
@@ -293,11 +329,29 @@ static void mem_free(void *ptr, enum alloc_type type)
 	case BRK:
 		brk_free(ptr);
 		break;
+	case CUDA:
+		cuda_free(ptr);
+		break;
+	case ROCR:
+		rocr_free(ptr);
+		break;
 	default:
 		return;
 	}
 
 	FT_DEBUG("Memory freed: va=%p", ptr);
+}
+
+static enum fi_hmem_iface alloc_type_to_iface(enum alloc_type type)
+{
+	switch (type) {
+	case CUDA:
+		return FI_HMEM_CUDA;
+	case ROCR:
+		return FI_HMEM_ROCR;
+	default:
+		return FI_HMEM_SYSTEM;
+	}
 }
 
 /* User defined global mr_buf_size controls allocation size. */
@@ -317,12 +371,19 @@ static void *mem_alloc(enum alloc_type type)
 	case BRK:
 		ptr = brk_alloc();
 		break;
+	case CUDA:
+		ptr = cuda_malloc();
+		break;
+	case ROCR:
+		ptr = rocr_malloc();
+		break;
 	default:
 		return NULL;
 	}
 
 	if (ptr) {
-		if (geteuid() == 0) {
+		if (geteuid() == 0 &&
+		    alloc_type_to_iface(type) == FI_HMEM_SYSTEM) {
 			/* Perform a write to the buffer to ensure the kernel
 			 * has faulted in a page for this allocation. This will
 			 * help prevent virt_to_phys() from returning an error
@@ -345,14 +406,24 @@ static void *mem_alloc(enum alloc_type type)
 /* MR registration function which returns the MR and the elapsed time, in
  * nanoseconds, to register the MR.
  */
-static int mr_register(const void *buf, struct fid_mr **mr, int64_t *elapsed)
+static int mr_register(const void *buf, struct fid_mr **mr, int64_t *elapsed,
+		       enum fi_hmem_iface iface)
 {
-	uint64_t access = ft_info_to_mr_access(fi);
 	int ret;
+	const struct iovec iov = {
+		.iov_base = (void *) buf,
+		.iov_len = mr_buf_size,
+	};
+	struct fi_mr_attr mr_attr = {
+		.mr_iov = &iov,
+		.iov_count = 1,
+		.access = ft_info_to_mr_access(fi),
+		.requested_key = FT_MR_KEY,
+		.iface = iface,
+	};
 
 	ft_start();
-	ret = fi_mr_reg(domain, buf, mr_buf_size, access, 0, FT_MR_KEY, 0, mr,
-			NULL);
+	ret = fi_mr_regattr(domain, &mr_attr, 0, mr);
 	ft_stop();
 
 	if (ret != FI_SUCCESS) {
@@ -412,6 +483,7 @@ static int mr_cache_test(enum alloc_type type)
 	int ret;
 	void *prev_buf;
 	int testret = FAIL;
+	enum fi_hmem_iface iface = alloc_type_to_iface(type);
 
 	/* Reallocate the domain to reset the MR cache. */
 	if (!domain) {
@@ -437,14 +509,36 @@ static int mr_cache_test(enum alloc_type type)
 	/* A priming MR registration is used to ensure the first timed MR
 	 * registration does not take into account the setting up of CPU caches.
 	 */
-	prime_buf = malloc(mr_buf_size);
-	if (!prime_buf) {
-		ret = -ENOMEM;
-		FT_UNIT_STRERR(err_buf, "malloc failed", ret);
-		goto cleanup;
+	switch (iface) {
+	case FI_HMEM_CUDA:
+		prime_buf = cuda_malloc();
+		if (!prime_buf) {
+			ret = -ENOMEM;
+			FT_UNIT_STRERR(err_buf, "cuda_malloc failed", ret);
+			goto cleanup;
+		}
+		break;
+
+	case FI_HMEM_ROCR:
+		prime_buf = rocr_malloc();
+		if (!prime_buf) {
+			ret = -ENOMEM;
+			FT_UNIT_STRERR(err_buf, "rocr_malloc failed", ret);
+			goto cleanup;
+		}
+		break;
+
+	default:
+		prime_buf = malloc(mr_buf_size);
+		if (!prime_buf) {
+			ret = -ENOMEM;
+			FT_UNIT_STRERR(err_buf, "malloc failed", ret);
+			goto cleanup;
+		}
+		break;
 	}
 
-	ret = mr_register(prime_buf, &prime_mr, &mr_reg_time);
+	ret = mr_register(prime_buf, &prime_mr, &mr_reg_time, iface);
 	if (ret) {
 		FT_UNIT_STRERR(err_buf, "mr_register failed", ret);
 		goto cleanup;
@@ -460,7 +554,7 @@ static int mr_cache_test(enum alloc_type type)
 		goto cleanup;
 	}
 
-	ret = mr_register(buf, &mr, &mr_reg_time);
+	ret = mr_register(buf, &mr, &mr_reg_time, iface);
 	if (ret) {
 		FT_UNIT_STRERR(err_buf, "mr_register failed", ret);
 		goto cleanup;
@@ -471,7 +565,7 @@ static int mr_cache_test(enum alloc_type type)
 	/* Perform another allocation using the same buffer. This should hit the
 	 * MR cache.
 	 */
-	ret = mr_register(buf, &cached_mr, &cached_mr_reg_time);
+	ret = mr_register(buf, &cached_mr, &cached_mr_reg_time, iface);
 	if (ret) {
 		FT_UNIT_STRERR(err_buf, "mr_register failed", ret);
 		goto cleanup;
@@ -515,7 +609,7 @@ static int mr_cache_test(enum alloc_type type)
 	/* Verify reallocated MR registration time is close to the initial MR
 	 * registration time and greater than the cached MR registration time.
 	 */
-	ret = mr_register(buf, &realloc_mr, &realloc_mr_reg_time);
+	ret = mr_register(buf, &realloc_mr, &realloc_mr_reg_time, iface);
 	if (ret) {
 		FT_UNIT_STRERR(err_buf, "mr_register failed", ret);
 		goto cleanup;
@@ -550,8 +644,21 @@ cleanup:
 	if (prime_mr)
 		fi_close(&prime_mr->fid);
 
-	if (prime_buf)
-		free(prime_buf);
+	if (prime_buf) {
+		switch (iface) {
+		case FI_HMEM_CUDA:
+			cuda_free(prime_buf);
+			break;
+
+		case FI_HMEM_ROCR:
+			rocr_free(prime_buf);
+			break;
+
+		default:
+			free(prime_buf);
+			break;
+		}
+	}
 
 	return TEST_RET_VAL(ret, testret);
 }
@@ -572,10 +679,56 @@ static int mr_cache_sbrk_test(void)
 	return mr_cache_test(SBRK);
 }
 
+static int mr_cache_cuda_test(void)
+{
+	int ret;
+
+	if (!(opts.options & FT_OPT_ENABLE_HMEM)) {
+		sprintf(err_buf, "FI_HMEM support not requested");
+		return SKIPPED;
+	}
+
+	ret = ft_hmem_init(FI_HMEM_CUDA);
+	if (ret) {
+		sprintf(err_buf, "ft_hmem_init(FI_HMEM_CUDA) failed");
+		return TEST_RET_VAL(ret, FAIL);
+	}
+
+	ret = mr_cache_test(CUDA);
+
+	ft_hmem_cleanup(FI_HMEM_CUDA);
+
+	return ret;
+}
+
+static int mr_cache_rocr_test(void)
+{
+	int ret;
+
+	if (!(opts.options & FT_OPT_ENABLE_HMEM)) {
+		sprintf(err_buf, "FI_HMEM support not requested");
+		return SKIPPED;
+	}
+
+	ret = ft_hmem_init(FI_HMEM_ROCR);
+	if (ret) {
+		sprintf(err_buf, "ft_hmem_init(FI_HMEM_ROCR) failed");
+		return TEST_RET_VAL(ret, FAIL);
+	}
+
+	ret = mr_cache_test(ROCR);
+
+	ft_hmem_cleanup(FI_HMEM_ROCR);
+
+	return ret;
+}
+
 struct test_entry test_array[] = {
 	TEST_ENTRY(mr_cache_mmap_test, "MR cache eviction test using MMAP"),
 	TEST_ENTRY(mr_cache_brk_test, "MR cache eviction test using BRK"),
 	TEST_ENTRY(mr_cache_sbrk_test, "MR cache eviction test using SBRK"),
+	TEST_ENTRY(mr_cache_cuda_test, "MR cache eviction test using CUDA"),
+	TEST_ENTRY(mr_cache_rocr_test, "MR cache eviction test using ROCR"),
 	{ NULL, "" }
 };
 
@@ -583,9 +736,9 @@ static void usage(void)
 {
 	ft_unit_usage("fi_mr_cache_evict",
 		"Test a provider's ability to evict MR cache entries.\n"
-		"Evictions are verified using MMAP, BRK, and SBRK allocations.\n"
-		"Users should set the FI_MR_CACHE_MONITOR env variable to \n"
-		"change the memory monitor used by the MR cache.\n\n"
+		"Evictions are verified using MMAP, BRK, SBRK, CUDA and ROCR\n"
+		"allocations. FI_HMEM support must be enabled to run CUDA and\n"
+		"ROCR tests.\n\n"
 		"With debug enabled, when running as root, the physical \n"
 		"address of the first page of the MMAP, BRK, and SBRK \n"
 		"allocation is returned. This can be used to verify the \n"
@@ -593,6 +746,7 @@ static void usage(void)
 		"SBRK allocations. When running as non-root, the reported \n"
 		"physical address is always zero.");
 	FT_PRINT_OPTS_USAGE("-s <bytes>", "Memory region size to be tested.");
+	FT_PRINT_OPTS_USAGE("-H", "Enable provider FI_HMEM support");
 }
 
 int main(int argc, char **argv)
@@ -648,6 +802,9 @@ int main(int argc, char **argv)
 	hints->domain_attr->mode = ~0;
 	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
 	hints->caps |= FI_MSG | FI_RMA;
+
+	if (opts.options & FT_OPT_ENABLE_HMEM)
+		hints->caps |= FI_HMEM;
 
 	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints, &fi);
 	if (ret) {
