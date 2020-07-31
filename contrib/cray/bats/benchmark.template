@@ -1,13 +1,13 @@
 # RC                                                                                                                                     
 @test "@TEST_SUITE@ @BENCHMARK@ @RANKS@ ranks, @RPN@ ranks per node using RC verbs" {
         run $CONTRIB_BIN/logwrap -w ${BATS_TEST_LOGFILE} -- \
-                $(batch_launcher @RANKS@ @RPN@) timeout 300 "$IMB_BUILD_PATH/@TEST_SUITE@ @BENCHMARK@"
+                $(batch_launcher @RANKS@ @RPN@) timeout 300 "$IMB_BUILD_PATH/@TEST_SUITE@ -npmin @RANKS@ -iter 100 -time 10 -mem 2 -msglog 2:18 @BENCHMARK@"
         [ "$status" -eq 0 ]
 }
 
 # XRC
 @test "@TEST_SUITE@ @BENCHMARK@ @RANKS@ ranks, @RPN@ ranks per node using XRC verbs" {
         FI_OFI_RXM_USE_SRX=1 FI_VERBS_PREFER_XRC=1 run $CONTRIB_BIN/logwrap -w ${BATS_TEST_LOGFILE} -- \
-                $(batch_launcher @RANKS@ @RPN@) timeout 300 "$IMB_BUILD_PATH/@TEST_SUITE@ @BENCHMARK@"
+                $(batch_launcher @RANKS@ @RPN@) timeout 300 "$IMB_BUILD_PATH/@TEST_SUITE@ -npmin @RANKS@ -iter 100 -time 10 -mem 2 -msglog 2:18 @BENCHMARK@"
         [ "$status" -eq 0 ]
 }

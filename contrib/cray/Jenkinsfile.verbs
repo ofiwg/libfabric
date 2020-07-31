@@ -323,7 +323,7 @@ pipeline {
                             }
                         }
                         tee ('imb.tap') {
-                            timeout(time: 10, unit: 'MINUTES') {
+                            timeout(time: 20, unit: 'MINUTES') {
                                 sh '${BATS_INSTALL_PATH}/bats -t contrib/cray/bats/imb.bats'
 			    }
 			}
@@ -368,7 +368,11 @@ pipeline {
                     step ([$class: 'XUnitPublisher',
                        thresholds: [
                             [$class: 'FailedThreshold', unstableThreshold: '0']],
-                            tools: [[$class: 'JUnitType', pattern: "mpi.xml"]]])
+                            tools: [[$class: 'JUnitType', pattern: "omb.xml"]]])
+                    step ([$class: 'XUnitPublisher',
+                       thresholds: [
+                            [$class: 'FailedThreshold', unstableThreshold: '0']],
+                            tools: [[$class: 'JUnitType', pattern: "imb.xml"]]])
                 }
                 cleanup {
                     echo "*** Test: Post: Cleanup: env.BRANCH_NAME: ${BRANCH_NAME} ***"
