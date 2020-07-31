@@ -111,6 +111,21 @@ AC_ARG_WITH([cuda],
                              [AC_MSG_ERROR([<cuda_runtime.h> not found])])],
             [])
 
+dnl Check for ROCR support. Require fabtests to dlopen ROCR.
+AC_ARG_WITH([rocr],
+            [AC_HELP_STRING([--with-rocr=DIR],
+                            [Provide path to where the ROCR development
+                             and runtime libraries are installed.])],
+            [AS_IF([test "$freebsd" == "0"],
+                   [AC_CHECK_LIB(dl, dlopen, [], [AC_MSG_ERROR([dlopen not found.])])],
+                   [])
+             CPPFLAGS="-I$withval/include $CPPFLAGS"
+             AC_CHECK_HEADER([hsa/hsa.h],
+                             [AC_DEFINE([HAVE_ROCR_RUNTIME_H], [1],
+                                        [Define to 1 if you have <hsa/hsa.h>])],
+                             [AC_MSG_ERROR([<hsa/hsa.h> not found])])],
+            [])
+
 dnl Checks for libraries
 AC_CHECK_LIB([fabric], fi_getinfo, [],
     AC_MSG_ERROR([fi_getinfo() not found.  fabtests requires libfabric.]))
