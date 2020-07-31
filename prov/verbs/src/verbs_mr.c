@@ -301,10 +301,22 @@ vrb_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
 static int vrb_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			  uint64_t flags, struct fid_mr **mr)
 {
-	return vrb_mr_regv_iface(fid, attr->mr_iov, attr->iov_count,
-				 attr->access, attr->offset,
-				 attr->requested_key, flags, mr, attr->context,
-				 attr->iface, attr->device.reserved);
+	struct vrb_domain *domain;
+	struct fi_mr_attr cur_abi_attr;
+
+	domain = container_of(fid, struct vrb_domain,
+			      util_domain.domain_fid.fid);
+
+	ofi_mr_update_attr(domain->util_domain.fabric->fabric_fid.api_version,
+			   domain->util_domain.info_domain_caps, attr,
+			   &cur_abi_attr);
+
+	return vrb_mr_regv_iface(fid, cur_abi_attr.mr_iov,
+				 cur_abi_attr.iov_count, cur_abi_attr.access,
+				 cur_abi_attr.offset,
+				 cur_abi_attr.requested_key, flags, mr,
+				 cur_abi_attr.context, cur_abi_attr.iface,
+				 cur_abi_attr.device.reserved);
 }
 
 struct fi_ops_mr vrb_mr_ops = {
