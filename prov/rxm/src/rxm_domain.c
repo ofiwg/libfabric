@@ -266,6 +266,10 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (!rxm_mr)
 		return -FI_ENOMEM;
 
+	ofi_mr_update_attr(rxm_domain->util_domain.fabric->fabric_fid.api_version,
+			   rxm_domain->util_domain.info_domain_caps, attr,
+			   &msg_attr);
+
 	msg_attr.access = rxm_mr_get_msg_access(rxm_domain, attr->access);
 
 	ret = fi_mr_regattr(rxm_domain->msg_domain, &msg_attr,
@@ -277,6 +281,7 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	rxm_mr_init(rxm_mr, rxm_domain, attr->context);
 	fastlock_init(&rxm_mr->amo_lock);
 	rxm_mr->iface = msg_attr.iface;
+	rxm_mr->device = msg_attr.device.reserved;
 	*mr = &rxm_mr->mr_fid;
 
 	if (rxm_domain->util_domain.info_domain_caps & FI_ATOMIC) {
