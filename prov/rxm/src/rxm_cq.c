@@ -288,17 +288,6 @@ static int rxm_rndv_rx_finish(struct rxm_rx_buf *rx_buf)
 	return rxm_finish_recv(rx_buf, rx_buf->recv_entry->total_len);
 }
 
-static int rxm_finish_send_rndv_ack(struct rxm_rx_buf *rx_buf)
-{
-	if (rx_buf->ep->rndv_ops == &rxm_rndv_ops_write) {
-		dlist_insert_tail(&rx_buf->rndv_wait_entry, &rx_buf->ep->rndv_wait_list);
-		RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_DONE_WAIT);
-		return 0;
-	}
-
-	return rxm_rndv_rx_finish(rx_buf);
-}
-
 static int rxm_rndv_tx_finish(struct rxm_ep *rxm_ep,
 			      struct rxm_tx_rndv_buf *tx_buf)
 {
@@ -325,7 +314,7 @@ static int rxm_rndv_tx_finish(struct rxm_ep *rxm_ep,
 	return ret;
 }
 
-static int rxm_rndv_handle_ack(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
+static int rxm_rndv_handle_rd_done(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_tx_rndv_buf *tx_buf;
 	int ret;
@@ -359,7 +348,7 @@ static int rxm_rndv_rx_match(struct dlist_entry *item, const void *arg)
 	return (msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
 }
 
-static int rxm_rndv_handle_done(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
+static int rxm_rndv_handle_wr_done(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 {
 	struct dlist_entry *rx_buf_entry;
 	struct rxm_rx_buf *rndv_rx_buf;
@@ -549,7 +538,7 @@ ssize_t rxm_rndv_read(struct rxm_rx_buf *rx_buf)
 	return ret;
 }
 
-static ssize_t rxm_rndv_write(struct rxm_rx_buf *rx_buf)
+static ssize_t rxm_rndv_handle_wr_data(struct rxm_rx_buf *rx_buf)
 {
 	int i;
 	ssize_t ret;
@@ -788,7 +777,7 @@ static ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 	return rxm_handle_seg_data(rx_buf);
 }
 
-static ssize_t rxm_rndv_send_ack_inject(struct rxm_rx_buf *rx_buf)
+static ssize_t rxm_rndv_send_rd_done_inject(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_pkt pkt = {
 		.hdr.op = ofi_op_msg,
@@ -811,7 +800,7 @@ static ssize_t rxm_rndv_send_ack_inject(struct rxm_rx_buf *rx_buf)
 	return fi_sendmsg(rx_buf->conn->msg_ep, &msg, FI_INJECT);
 }
 
-static ssize_t rxm_rndv_write_ack_inject(struct rxm_rx_buf *rx_buf)
+static ssize_t rxm_rndv_send_wr_data_inject(struct rxm_rx_buf *rx_buf)
 {
 	ssize_t ret;
 	struct rxm_pkt *pkt = alloca(sizeof(*pkt) + sizeof(struct rxm_rndv_hdr));
@@ -846,7 +835,7 @@ static ssize_t rxm_rndv_write_ack_inject(struct rxm_rx_buf *rx_buf)
 	return ret;
 }
 
-static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
+static ssize_t rxm_rndv_send_rd_done(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_deferred_tx_entry *def_tx_entry;
 	ssize_t ret;
@@ -854,7 +843,7 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 	assert(rx_buf->conn);
 
 	if (sizeof(rx_buf->pkt) <= rx_buf->ep->inject_limit) {
-		ret = rxm_rndv_send_ack_inject(rx_buf);
+		ret = rxm_rndv_send_rd_done_inject(rx_buf);
 		if (!ret)
 			goto out;
 
@@ -915,7 +904,7 @@ err:
 }
 
 
-static ssize_t rxm_rndv_send_done_inject(struct rxm_tx_rndv_buf *tx_buf)
+static ssize_t rxm_rndv_send_wr_done_inject(struct rxm_tx_rndv_buf *tx_buf)
 {
 	struct rxm_pkt pkt = {
 		.hdr.op = ofi_op_msg,
@@ -938,13 +927,13 @@ static ssize_t rxm_rndv_send_done_inject(struct rxm_tx_rndv_buf *tx_buf)
 	return fi_sendmsg(tx_buf->write_rndv.conn->msg_ep, &msg, FI_INJECT);
 }
 
-static ssize_t rxm_rndv_send_done(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_buf)
+static ssize_t rxm_rndv_send_wr_done(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_buf)
 {
 	struct rxm_deferred_tx_entry *def_tx_entry;
 	ssize_t ret;
 
 	if (sizeof(tx_buf->pkt) <= rxm_ep->inject_limit) {
-		ret = rxm_rndv_send_done_inject(tx_buf);
+		ret = rxm_rndv_send_wr_done_inject(tx_buf);
 		if (!ret)
 			goto out;
 
@@ -1000,7 +989,7 @@ err:
 	return ret;
 }
 
-ssize_t rxm_rndv_write_ack(struct rxm_rx_buf *rx_buf)
+ssize_t rxm_rndv_send_wr_data(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_deferred_tx_entry *def_tx_entry;
 	ssize_t ret;
@@ -1008,7 +997,7 @@ ssize_t rxm_rndv_write_ack(struct rxm_rx_buf *rx_buf)
 	assert(rx_buf->conn);
 
 	if ((sizeof(rx_buf->pkt) + sizeof(struct rxm_rndv_hdr)) <= rx_buf->ep->inject_limit) {
-		ret = rxm_rndv_write_ack_inject(rx_buf);
+		ret = rxm_rndv_send_wr_data_inject(rx_buf);
 		if (!ret)
 			goto out;
 
@@ -1410,11 +1399,11 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		case rxm_ctrl_rndv_req:
 			return rxm_handle_recv_comp(rx_buf);
 		case rxm_ctrl_rndv_rd_done:
-			return rxm_rndv_handle_ack(rxm_ep, rx_buf);
+			return rxm_rndv_handle_rd_done(rxm_ep, rx_buf);
 		case rxm_ctrl_rndv_wr_done:
-			return rxm_rndv_handle_done(rxm_ep, rx_buf);
+			return rxm_rndv_handle_wr_done(rxm_ep, rx_buf);
 		case rxm_ctrl_rndv_wr_data:
-			return rxm_rndv_write(rx_buf);
+			return rxm_rndv_handle_wr_data(rx_buf);
 		case rxm_ctrl_seg:
 			return rxm_sar_handle_segment(rx_buf);
 		case rxm_ctrl_atomic:
@@ -1446,7 +1435,7 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		if (++rx_buf->rndv_rma_index < rx_buf->remote_rndv_hdr->count)
 			return 0;
 		else
-			return rxm_rndv_send_ack(rx_buf);
+			return rxm_rndv_send_rd_done(rx_buf);
 	case RXM_RNDV_WRITE:
 		tx_rndv_buf = comp->op_context;
 		assert(comp->flags & FI_WRITE);
@@ -1454,10 +1443,17 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		    tx_rndv_buf->write_rndv.rndv_rma_count)
 			return 0;
 		else
-			return rxm_rndv_send_done(rxm_ep, tx_rndv_buf);
+			return rxm_rndv_send_wr_done(rxm_ep, tx_rndv_buf);
 	case RXM_RNDV_ACK_SENT:
+		rx_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		return rxm_finish_send_rndv_ack(comp->op_context);
+		if (rx_buf->ep->rndv_ops == &rxm_rndv_ops_write) {
+			dlist_insert_tail(&rx_buf->rndv_wait_entry, &rx_buf->ep->rndv_wait_list);
+			RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_DONE_WAIT);
+			return 0;
+		} else {
+			return rxm_rndv_rx_finish(rx_buf);
+		}
 	case RXM_RNDV_DONE_SENT:
 	case RXM_RNDV_ACK_RECVD:
 		assert(comp->flags & FI_SEND || comp->flags & FI_WRITE);

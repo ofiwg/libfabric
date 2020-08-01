@@ -795,7 +795,7 @@ int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
 ssize_t rxm_rndv_read(struct rxm_rx_buf *rx_buf);
-ssize_t rxm_rndv_write_ack(struct rxm_rx_buf *rx_buf);
+ssize_t rxm_rndv_send_wr_data(struct rxm_rx_buf *rx_buf);
 void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 			      const struct iovec *iov, size_t count,
 			      struct fid_mr **mr);

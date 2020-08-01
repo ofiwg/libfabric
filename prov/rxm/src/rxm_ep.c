@@ -2857,7 +2857,7 @@ struct rxm_rndv_ops rxm_rndv_ops_read = {
 struct rxm_rndv_ops rxm_rndv_ops_write = {
 	.rx_mr_access = FI_REMOTE_WRITE,
 	.tx_mr_access = FI_WRITE,
-	.handle_rx = rxm_rndv_write_ack,
+	.handle_rx = rxm_rndv_send_wr_data,
 	.xfer = fi_writev,
 	.defer_xfer = rxm_prepare_deferred_rndv_write
 };
