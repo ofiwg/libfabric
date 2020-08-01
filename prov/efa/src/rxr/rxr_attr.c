@@ -52,7 +52,7 @@ const uint32_t rxr_poison_value = 0xdeadbeef;
 /* TODO: Add support for true FI_DELIVERY_COMPLETE */
 #define RXR_TX_OP_FLAGS (FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE | \
 			 FI_DELIVERY_COMPLETE)
-#define RXR_RX_OP_FLAGS (FI_COMPLETION)
+#define RXR_RX_OP_FLAGS (FI_COMPLETION | FI_MULTI_RECV)
 
 struct fi_tx_attr rxr_tx_attr = {
 	.caps = RXR_TX_CAPS,
