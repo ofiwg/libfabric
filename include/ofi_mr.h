@@ -225,6 +225,9 @@ struct ofi_mr {
 	uint64_t device;
 };
 
+void ofi_mr_update_attr(uint32_t user_version, uint64_t caps,
+			const struct fi_mr_attr *user_attr,
+			struct fi_mr_attr *cur_abi_attr);
 int ofi_mr_close(struct fid *fid);
 int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		   uint64_t flags, struct fid_mr **mr_fid);
