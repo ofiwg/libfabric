@@ -477,6 +477,7 @@ err_free_nic:
 	return ret;
 }
 
+#ifdef HAVE_LIBCUDA
 static int efa_get_gdr_support(char *device_name)
 {
 	char *gdr_path = NULL;
@@ -498,6 +499,7 @@ out:
 	free(gdr_path);
 	return ret;
 }
+#endif
 
 static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 {
