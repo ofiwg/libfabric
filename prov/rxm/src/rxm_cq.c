@@ -95,7 +95,7 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 	if (rx_buf->pkt.ctrl_hdr.type != rxm_ctrl_eager)
 		flags |= FI_MORE;
 
-	if (rx_buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv)
+	if (rx_buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_req)
 		data = rxm_pkt_rndv_data(&rx_buf->pkt);
 	else
 		data = rx_buf->pkt.data;
@@ -682,7 +682,7 @@ ssize_t rxm_handle_rx_buf(struct rxm_rx_buf *rx_buf)
 	switch (rx_buf->pkt.ctrl_hdr.type) {
 	case rxm_ctrl_eager:
 		return rx_buf->ep->eager_ops->handle_rx(rx_buf);
-	case rxm_ctrl_rndv:
+	case rxm_ctrl_rndv_req:
 		return rxm_handle_rndv(rx_buf);
 	case rxm_ctrl_seg:
 		return rxm_handle_seg_data(rx_buf);
@@ -794,7 +794,7 @@ static ssize_t rxm_rndv_send_ack_inject(struct rxm_rx_buf *rx_buf)
 		.hdr.op = ofi_op_msg,
 		.hdr.version = OFI_OP_VERSION,
 		.ctrl_hdr.version = RXM_CTRL_VERSION,
-		.ctrl_hdr.type = rxm_ctrl_rndv_ack,
+		.ctrl_hdr.type = rxm_ctrl_rndv_rd_done,
 		.ctrl_hdr.conn_id = rx_buf->conn->handle.remote_key,
 		.ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id
 	};
@@ -833,7 +833,7 @@ static ssize_t rxm_rndv_write_ack_inject(struct rxm_rx_buf *rx_buf)
 	pkt->hdr.version = OFI_OP_VERSION;
 	pkt->hdr.size = iov.iov_len;
 	pkt->ctrl_hdr.version = RXM_CTRL_VERSION;
-	pkt->ctrl_hdr.type = rxm_ctrl_rndv_write_ack;
+	pkt->ctrl_hdr.type = rxm_ctrl_rndv_wr_data;
 	pkt->ctrl_hdr.conn_id = rx_buf->conn->handle.remote_key;
 	pkt->ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
 
@@ -873,7 +873,7 @@ static ssize_t rxm_rndv_send_ack(struct rxm_rx_buf *rx_buf)
 		return -FI_EAGAIN;
 	}
 	assert(rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.type ==
-	       rxm_ctrl_rndv_ack);
+	       rxm_ctrl_rndv_rd_done);
 
 	assert(rx_buf->hdr.state == RXM_RNDV_READ);
 
@@ -921,7 +921,7 @@ static ssize_t rxm_rndv_send_done_inject(struct rxm_tx_rndv_buf *tx_buf)
 		.hdr.op = ofi_op_msg,
 		.hdr.version = OFI_OP_VERSION,
 		.ctrl_hdr.version = RXM_CTRL_VERSION,
-		.ctrl_hdr.type = rxm_ctrl_rndv_done,
+		.ctrl_hdr.type = rxm_ctrl_rndv_wr_done,
 		.ctrl_hdr.conn_id = tx_buf->write_rndv.conn->handle.remote_key,
 		.ctrl_hdr.msg_id = tx_buf->pkt.ctrl_hdr.msg_id
 	};
@@ -961,7 +961,7 @@ static ssize_t rxm_rndv_send_done(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf 
 			"ran out of buffers from DONE buffer pool\n");
 		return -FI_EAGAIN;
 	}
-	assert(tx_buf->write_rndv.done_buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_done);
+	assert(tx_buf->write_rndv.done_buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_wr_done);
 	assert(tx_buf->hdr.state == RXM_RNDV_WRITE);
 
 	tx_buf->write_rndv.done_buf->pkt.ctrl_hdr.conn_id = tx_buf->pkt.ctrl_hdr.conn_id;
@@ -1027,7 +1027,7 @@ ssize_t rxm_rndv_write_ack(struct rxm_rx_buf *rx_buf)
 		return -FI_EAGAIN;
 	}
 	assert(rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.type ==
-	       rxm_ctrl_rndv_write_ack);
+	       rxm_ctrl_rndv_wr_data);
 
 	rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.conn_id =
 		rx_buf->conn->handle.remote_key;
@@ -1407,13 +1407,13 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 
 		switch (rx_buf->pkt.ctrl_hdr.type) {
 		case rxm_ctrl_eager:
-		case rxm_ctrl_rndv:
+		case rxm_ctrl_rndv_req:
 			return rxm_handle_recv_comp(rx_buf);
-		case rxm_ctrl_rndv_ack:
+		case rxm_ctrl_rndv_rd_done:
 			return rxm_rndv_handle_ack(rxm_ep, rx_buf);
-		case rxm_ctrl_rndv_done:
+		case rxm_ctrl_rndv_wr_done:
 			return rxm_rndv_handle_done(rxm_ep, rx_buf);
-		case rxm_ctrl_rndv_write_ack:
+		case rxm_ctrl_rndv_wr_data:
 			return rxm_rndv_write(rx_buf);
 		case rxm_ctrl_seg:
 			return rxm_sar_handle_segment(rx_buf);

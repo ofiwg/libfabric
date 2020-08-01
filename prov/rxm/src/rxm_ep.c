@@ -193,7 +193,7 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 
 		tx_rndv_buf->hdr.desc = mr_desc;
 		pkt = &tx_rndv_buf->pkt;
-		type = rxm_ctrl_rndv;
+		type = rxm_ctrl_rndv_req;
 		break;
 	case RXM_BUF_POOL_TX_ATOMIC:
 		tx_atomic_buf = buf;
@@ -208,7 +208,7 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 
 		tx_base_buf->hdr.desc = mr_desc;
 		pkt = &tx_base_buf->pkt;
-		type = rxm_ctrl_rndv_ack;
+		type = rxm_ctrl_rndv_rd_done;
 		break;
 	case RXM_BUF_POOL_TX_DONE:
 		tx_base_buf = buf;
@@ -216,7 +216,7 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 
 		tx_base_buf->hdr.desc = mr_desc;
 		pkt = &tx_base_buf->pkt;
-		type = rxm_ctrl_rndv_done;
+		type = rxm_ctrl_rndv_wr_done;
 		break;
 	case RXM_BUF_POOL_TX_RNDV_WRITE_ACK:
 		tx_base_buf = buf;
@@ -224,7 +224,7 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 
 		tx_base_buf->hdr.desc = mr_desc;
 		pkt = &tx_base_buf->pkt;
-		type = rxm_ctrl_rndv_write_ack;
+		type = rxm_ctrl_rndv_wr_data;
 		break;
 	case RXM_BUF_POOL_RMA:
 		rma_buf = buf;

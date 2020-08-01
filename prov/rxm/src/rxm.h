@@ -356,13 +356,13 @@ extern char *rxm_proto_state_str[];
 enum {
 	rxm_ctrl_eager,
 	rxm_ctrl_seg,
-	rxm_ctrl_rndv,
-	rxm_ctrl_rndv_ack,
+	rxm_ctrl_rndv_req,
+	rxm_ctrl_rndv_rd_done,
 	rxm_ctrl_atomic,
 	rxm_ctrl_atomic_resp,
 	rxm_ctrl_credit,
-	rxm_ctrl_rndv_write_ack,
-	rxm_ctrl_rndv_done
+	rxm_ctrl_rndv_wr_data,
+	rxm_ctrl_rndv_wr_done
 };
 
 struct rxm_pkt {
