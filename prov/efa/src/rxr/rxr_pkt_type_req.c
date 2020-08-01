@@ -261,7 +261,7 @@ size_t rxr_pkt_req_copy_data(struct rxr_rx_entry *rx_entry,
 
 	desc = rx_entry->desc[0];
 	bytes_copied = ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-					    desc ? desc->peer.device.reserved : NULL,
+					    desc ? desc->peer.device.reserved : 0,
 					    rx_entry->iov,
 					    rx_entry->iov_count,
 					    0,
@@ -337,7 +337,7 @@ void rxr_pkt_data_from_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 		data_size = ofi_copy_from_hmem_iov(data,
 					data_size,
 					desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-					desc ? desc->peer.device.reserved : NULL,
+					desc ? desc->peer.device.reserved : 0,
 					tx_entry->iov,
 					tx_entry->iov_count,
 					data_offset);
@@ -822,7 +822,7 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 		data_size = cur->pkt_size - hdr_size;
 		desc = rx_entry->desc[0];
 		ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-				     desc ? desc->peer.device.reserved : NULL,
+				     desc ? desc->peer.device.reserved : 0,
 				     rx_entry->iov,
 				     rx_entry->iov_count,
 				     offset,
