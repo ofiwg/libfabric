@@ -439,8 +439,12 @@ ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_pee
 		current = ofi_gettime_us();
 	}
 
-	if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
-		return FI_ETIMEDOUT;
+	if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"did not get handshake back in %f second(s). returning -FI_EAGAIN!\n",
+			RXR_HANDSHAKE_WAIT_TIMEOUT*1e-6);
+		return -FI_EAGAIN;
+	}
 
 	return 0;
 }
