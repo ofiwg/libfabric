@@ -91,6 +91,14 @@ int cuda_hmem_init(void);
 int cuda_hmem_cleanup(void);
 bool cuda_is_addr_valid(const void *addr);
 
+int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);
+int ze_hmem_init(void);
+int ze_hmem_cleanup(void);
+bool ze_is_addr_valid(const void *addr);
+int ze_hmem_get_handle(void *dev_buf, void **handle);
+int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr);
+int ze_hmem_close_handle(void *ipc_ptr);
+
 static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
 			     size_t size)
 {

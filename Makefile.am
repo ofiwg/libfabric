@@ -43,6 +43,7 @@ common_srcs =				\
 	src/hmem.c			\
 	src/hmem_rocr.c			\
 	src/hmem_cuda.c			\
+	src/hmem_ze.c			\
 	src/common.c			\
 	src/enosys.c			\
 	src/rbtree.c			\

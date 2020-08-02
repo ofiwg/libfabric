@@ -475,6 +475,7 @@ struct fi_mr_attr {
 	union {
 		uint64_t         reserved;
 		int              cuda;
+		int		 ze
 	} device;
 };
 ```
@@ -584,12 +585,19 @@ requested the FI_HMEM capability.
 *FI_HMEM_ROCR*
 : Uses AMD ROCR interfaces such as hsa_memory_allocate and hsa_memory_free.
 
+*FI_HMEM_ZE*
+: Uses Intel L0 ZE interfaces such as zeDriverAllocSharedMem,
+  zeDriverFreeMem. 
+
 ## device
 Reserved 64 bits for device identifier if using non-standard HMEM interface.
 This field is ignore unless the iface field is valid.
 
 *cuda*
 : For FI_HMEM_CUDA, this is equivalent to CUdevice (int).
+
+*ze*
+: For FI_HMEM_ZE, this is equivalent to the ze_device_handle_t index (int).
 
 # NOTES
 
