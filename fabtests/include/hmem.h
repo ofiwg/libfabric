@@ -35,6 +35,13 @@
 #include <rdma/fi_domain.h>
 #include <rdma/fi_errno.h>
 
+int ft_ze_init(void);
+int ft_ze_cleanup(void);
+int ft_ze_alloc(uint64_t device, void **buf, size_t size);
+int ft_ze_free(void *buf);
+int ft_ze_memset(uint64_t device, void *buf, int value, size_t size);
+int ft_ze_copy(uint64_t device, void *dst, const void *src, size_t size);
+
 static inline int ft_host_init()
 {
 	return FI_SUCCESS;

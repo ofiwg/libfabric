@@ -72,6 +72,15 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.copy_to_hmem = ft_rocr_memcpy,
 		.copy_from_hmem = ft_rocr_memcpy,
 	},
+	[FI_HMEM_ZE] = {
+		.init = ft_ze_init,
+		.cleanup = ft_ze_cleanup,
+		.alloc = ft_ze_alloc,
+		.free = ft_ze_free,
+		.memset = ft_ze_memset,
+		.copy_to_hmem = ft_ze_copy,
+		.copy_from_hmem = ft_ze_copy,
+	},
 };
 
 int ft_hmem_init(enum fi_hmem_iface iface)

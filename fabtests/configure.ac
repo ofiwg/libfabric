@@ -135,6 +135,18 @@ AC_HEADER_STDC
 AC_CHECK_HEADER([rdma/fabric.h], [],
     [AC_MSG_ERROR([<rdma/fabric.h> not found.  fabtests requires libfabric.])])
 
+AC_ARG_WITH([ze],
+            AC_HELP_STRING([--with-ze], [Use non-default ZE location - default NO]),
+            [CPPFLAGS="-I$withval/include $CPPFLAGS"
+             LDFLAGS="-L$withval/$lib $LDFLAGS"],
+            [])
+
+dnl Checks for ZE libraries
+AC_CHECK_LIB([ze_loader], zeInit,
+	     AC_CHECK_HEADER([level_zero/ze_api.h],
+			     AC_DEFINE([HAVE_LIBZE], 1, [ZE support])),
+	     [])
+
 AC_MSG_CHECKING([for fi_trywait support])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <rdma/fi_eq.h>]],
 	       [[fi_trywait(NULL, NULL, 0);]])],
