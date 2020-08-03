@@ -50,6 +50,8 @@ struct ofi_hmem_ops {
 	int (*get_handle)(void *dev_buf, void **handle);
 	int (*open_handle)(void **handle, uint64_t device, void **ipc_ptr);
 	int (*close_handle)(void *ipc_ptr);
+	int (*host_register)(void *ptr, size_t size);
+	int (*host_unregister)(void *ptr);
 };
 
 static struct ofi_hmem_ops hmem_ops[] = {
@@ -62,6 +64,8 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.get_handle = ofi_hmem_no_get_handle,
 		.open_handle = ofi_hmem_no_open_handle,
 		.close_handle = ofi_hmem_no_close_handle,
+		.host_register = ofi_hmem_register_noop,
+		.host_unregister = ofi_hmem_host_unregister_noop,
 	},
 	[FI_HMEM_CUDA] = {
 		.initialized = false,
@@ -73,6 +77,8 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.get_handle = ofi_hmem_no_get_handle,
 		.open_handle = ofi_hmem_no_open_handle,
 		.close_handle = ofi_hmem_no_close_handle,
+		.host_register = ofi_hmem_register_noop,
+		.host_unregister = ofi_hmem_host_unregister_noop,
 	},
 	[FI_HMEM_ROCR] = {
 		.initialized = false,
@@ -84,6 +90,8 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.get_handle = ofi_hmem_no_get_handle,
 		.open_handle = ofi_hmem_no_open_handle,
 		.close_handle = ofi_hmem_no_close_handle,
+		.host_register = ofi_hmem_register_noop,
+		.host_unregister = ofi_hmem_host_unregister_noop,
 	},
 	[FI_HMEM_ZE] = {
 		.initialized = false,
@@ -95,6 +103,8 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.get_handle = ze_hmem_get_handle,
 		.open_handle = ze_hmem_open_handle,
 		.close_handle = ze_hmem_close_handle,
+		.host_register = ofi_hmem_register_noop,
+		.host_unregister = ofi_hmem_host_unregister_noop,
 	},
 };
 
@@ -237,4 +247,61 @@ enum fi_hmem_iface ofi_get_hmem_iface(const void *addr)
 	}
 
 	return FI_HMEM_SYSTEM;
+}
+
+int ofi_hmem_host_register(void *ptr, size_t size)
+{
+	enum fi_hmem_iface iface;
+	int ret;
+
+	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
+		if (!hmem_ops[iface].initialized)
+			continue;
+
+		ret = hmem_ops[iface].host_register(ptr, size);
+		if (ret != FI_SUCCESS)
+			goto err;
+	}
+
+	return FI_SUCCESS;
+
+err:
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to register host memory with hmem iface %s: %s\n",
+		fi_tostr(&iface, FI_TYPE_HMEM_IFACE),
+		fi_strerror(-ret));
+
+	for (iface--; iface >= 0; iface--) {
+		if (!hmem_ops[iface].initialized)
+			continue;
+
+		hmem_ops[iface].host_unregister(ptr);
+	}
+
+	return ret;
+}
+
+int ofi_hmem_host_unregister(void *ptr)
+{
+	enum fi_hmem_iface iface;
+	int ret;
+
+	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
+		if (!hmem_ops[iface].initialized)
+			continue;
+
+		ret = hmem_ops[iface].host_unregister(ptr);
+		if (ret != FI_SUCCESS)
+			goto err;
+	}
+
+	return FI_SUCCESS;
+
+err:
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to unregister host memory with hmem iface %s: %s\n",
+		fi_tostr(&iface, FI_TYPE_HMEM_IFACE),
+		fi_strerror(-ret));
+
+	return ret;
 }

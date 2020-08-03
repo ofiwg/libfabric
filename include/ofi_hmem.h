@@ -132,6 +132,16 @@ static inline int ofi_hmem_no_close_handle(void *ipc_ptr)
 	return -FI_ENOSYS;
 }
 
+static inline int ofi_hmem_register_noop(void *ptr, size_t size)
+{
+	return FI_SUCCESS;
+}
+
+static inline int ofi_hmem_host_unregister_noop(void *ptr)
+{
+	return FI_SUCCESS;
+}
+
 ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,
 			       enum fi_hmem_iface hmem_iface, uint64_t device,
 			       const struct iovec *hmem_iov,
@@ -150,5 +160,7 @@ int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr);
 void ofi_hmem_init(void);
 void ofi_hmem_cleanup(void);
 enum fi_hmem_iface ofi_get_hmem_iface(const void *addr);
+int ofi_hmem_host_register(void *ptr, size_t size);
+int ofi_hmem_host_unregister(void *ptr);
 
 #endif /* _OFI_HMEM_H_ */
