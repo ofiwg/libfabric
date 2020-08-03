@@ -5,6 +5,44 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.11.0, Fri Aug 14, 2020
+=========================
+
+## Core
+
+-
+
+## EFA
+
+-
+
+## PSM2
+
+-
+
+## RxD
+
+-
+
+## RxM
+
+-
+
+## SHM
+
+-
+
+## Sockets
+
+-
+
+## TCP
+
+-
+
+## Verbs
+
+-
 
 v1.10.0, Fri Apr 24, 2020
 =========================
