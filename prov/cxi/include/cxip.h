@@ -516,6 +516,7 @@ struct cxip_req_recv {
 	uint8_t rdzv_lac;		// Rendezvous source LAC
 	int rdzv_events;		// Processed rdzv event count
 	bool canceled;			// Request canceled?
+	bool unlinked;
 	bool multi_recv;
 	bool tgt_event;
 	uint64_t start_offset;

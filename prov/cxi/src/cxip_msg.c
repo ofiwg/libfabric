@@ -191,16 +191,16 @@ static void recv_req_report(struct cxip_req *req)
 					       ret);
 		}
 	} else {
-		if (req->recv.rc == C_RC_CANCELED) {
+		if (req->recv.unlinked) {
 			err = FI_ECANCELED;
 			if (req->recv.multi_recv)
 				req->flags |= FI_MULTI_RECV;
-			CXIP_LOG_DBG("Request cancelled: %p (err: %d, %s)\n",
-				     req, err, cxi_rc_to_str(req->recv.rc));
+			CXIP_LOG_DBG("Request canceled: %p (err: %d)\n",
+				     req, err);
 		} else if (truncated) {
 			err = FI_EMSGSIZE;
-			CXIP_LOG_DBG("Request truncated: %p (err: %d, %s)\n",
-				     req, err, cxi_rc_to_str(req->recv.rc));
+			CXIP_LOG_DBG("Request truncated: %p (err: %d)\n",
+				     req, err);
 		} else {
 			err = FI_EIO;
 			CXIP_LOG_ERROR("Request error: %p (err: %d, %s)\n",
@@ -984,7 +984,7 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 
 	fastlock_release(&rxc->rx_lock);
 
-	CXIP_LOG_ERROR("Overflow beat Put event: %p\n", def_ev->req);
+	CXIP_LOG_DBG("Overflow beat Put event: %p\n", def_ev->req);
 
 	return FI_SUCCESS;
 
@@ -1046,7 +1046,7 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 
 	fastlock_release(&rxc->rx_lock);
 
-	CXIP_LOG_ERROR("Overflow beat Put event: %p\n", def_ev->req);
+	CXIP_LOG_DBG("Overflow beat Put event: %p\n", def_ev->req);
 
 	return FI_SUCCESS;
 
@@ -1207,7 +1207,7 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 	fastlock_release(&rxc->rx_lock);
 
-	CXIP_LOG_ERROR("Overflow beat Put event: %p\n", def_ev->req);
+	CXIP_LOG_DBG("Overflow beat Put event: %p\n", def_ev->req);
 
 	return FI_SUCCESS;
 
@@ -1955,7 +1955,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
 		if (!event->tgt_long.auto_unlinked) {
-			req->recv.rc = C_RC_CANCELED;
+			req->recv.unlinked = true;
 			recv_req_report(req);
 			recv_req_complete(req);
 		} else {

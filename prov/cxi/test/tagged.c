@@ -2334,7 +2334,7 @@ Test(tagged, cancel_recvs_sync)
 			  "Error RX CQE flags mismatch");
 		cr_assert(err_cqe.err == FI_ECANCELED,
 			  "Invalid Error RX CQE code\n");
-		cr_assert(err_cqe.prov_errno == C_RC_CANCELED,
+		cr_assert(err_cqe.prov_errno == 0,
 			  "Invalid Error RX CQE errno");
 	}
 }
