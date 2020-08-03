@@ -135,11 +135,14 @@ int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size
 static int cuda_hmem_dl_init(void)
 {
 #ifdef ENABLE_CUDA_DLOPEN
+	/* Assume failure to dlopen CUDA runtime is caused by the library not
+	 * being found. Thus, CUDA is not supported.
+	 */
 	cudart_handle = dlopen("libcudart.so", RTLD_NOW);
 	if (!cudart_handle) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
+		FI_INFO(&core_prov, FI_LOG_CORE,
 			"Failed to dlopen libcudart.so\n");
-		goto err;
+		return -FI_ENOSYS;
 	}
 
 	cuda_handle = dlopen("libcuda.so", RTLD_NOW);
@@ -190,7 +193,7 @@ err_dlclose_cuda:
 	dlclose(cuda_handle);
 err_dlclose_cudart:
 	dlclose(cudart_handle);
-err:
+
 	return -FI_ENODATA;
 #else
 	return FI_SUCCESS;
