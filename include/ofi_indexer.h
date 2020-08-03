@@ -80,6 +80,7 @@ struct indexer
 
 int ofi_idx_insert(struct indexer *idx, void *item);
 void *ofi_idx_remove(struct indexer *idx, int index);
+void *ofi_idx_remove_ordered(struct indexer *idx, int index);
 void ofi_idx_replace(struct indexer *idx, int index, void *item);
 void ofi_idx_reset(struct indexer *idx);
 

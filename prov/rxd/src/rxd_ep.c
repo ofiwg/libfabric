@@ -414,12 +414,13 @@ ssize_t rxd_ep_post_data_pkts(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 int rxd_ep_send_pkt(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 {
 	int ret;
-
+	fi_addr_t dg_addr;
 	pkt_entry->timestamp = ofi_gettime_ms();
 
+	dg_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(ep)->rxdaddr_dg_idx),
+					    pkt_entry->peer);
 	ret = fi_send(ep->dg_ep, (const void *) rxd_pkt_start(pkt_entry),
-		      pkt_entry->pkt_size, pkt_entry->desc,
-		      rxd_ep_av(ep)->rxd_addr_table[pkt_entry->peer].dg_addr,
+		      pkt_entry->pkt_size, pkt_entry->desc, dg_addr,
 		      &pkt_entry->context);
 	if (ret) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL, "error sending packet: %d (%s)\n",
@@ -474,7 +475,7 @@ ssize_t rxd_send_rts_if_needed(struct rxd_ep *ep, fi_addr_t addr)
 			return -FI_ENOMEM;
 	}
 
-	if (rxd_peer(ep, addr)->peer_addr == FI_ADDR_UNSPEC &&
+	if (rxd_peer(ep, addr)->peer_addr == RXD_ADDR_INVALID &&
 	    dlist_empty(&(rxd_peer(ep, addr)->unacked)))
 		return rxd_ep_send_rts(ep, addr);
 	return 0;
@@ -664,7 +665,6 @@ static int rxd_ep_close(struct fid *fid)
 	struct rxd_pkt_entry *pkt_entry;
 	struct slist_entry *entry;
 	struct rxd_peer *peer;
-	int i;
 
 	ep = container_of(fid, struct rxd_ep, util_ep.ep_fid.fid);
 
@@ -695,11 +695,8 @@ static int rxd_ep_close(struct fid *fid)
 				pkt_entry, d_entry);
 		ofi_buf_free(pkt_entry);
 	}
-	if (ep->peers){
-		for (i = 0; i < rxd_env.max_peers; i++)
-			free(ep->peers[i]);
-		free(ep->peers);	
-	}
+	
+	ofi_idm_reset(&(ep->peers_idm));	
 	rxd_ep_free_res(ep);
 	ofi_endpoint_close(&ep->util_ep);
 	free(ep);
@@ -1151,12 +1148,11 @@ int rxd_create_peer(struct rxd_ep *ep, uint64_t rxd_addr)
 {
 
 	struct rxd_peer *peer;	
-	ep->peers[rxd_addr] = calloc(1, sizeof(struct rxd_peer));
-	peer = rxd_peer(ep, rxd_addr);
+	peer = calloc(1, sizeof(struct rxd_peer));
 	if (!peer)
 		return -FI_ENOMEM;	
 
-	peer->peer_addr = FI_ADDR_UNSPEC;
+	peer->peer_addr = RXD_ADDR_INVALID;
 	peer->tx_seq_no = 0;
 	peer->rx_seq_no = 0;
 	peer->last_rx_ack = 0;
@@ -1171,8 +1167,17 @@ int rxd_create_peer(struct rxd_ep *ep, uint64_t rxd_addr)
 	dlist_init(&(peer->rx_list));
 	dlist_init(&(peer->rma_rx_list));
 	dlist_init(&(peer->buf_pkts));
-
+	
+	fastlock_tryacquire(&ep->util_ep.lock);
+	if (ofi_idm_set(&(ep->peers_idm), rxd_addr, peer) < 0)
+		goto err;
+	fastlock_release(&ep->util_ep.lock);
+	
 	return 0;
+err:	
+	fastlock_release(&ep->util_ep.lock);
+	free(peer);
+	return -FI_ENOMEM;
 }
 
 int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -1228,9 +1233,7 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err3;
 	
-	rxd_ep->peers = calloc(rxd_env.max_peers, sizeof(*(rxd_ep->peers)));
-	if (!rxd_ep->peers)
-		goto err4;
+	memset(&(rxd_ep->peers_idm), 0, sizeof(rxd_ep->peers_idm));
 	
 	rxd_ep->util_ep.ep_fid.fid.ops = &rxd_ep_fi_ops;
 	rxd_ep->util_ep.ep_fid.cm = &rxd_ep_cm;
@@ -1243,8 +1246,6 @@ int rxd_endpoint(struct fid_domain *domain, struct fi_info *info,
 	*ep = &rxd_ep->util_ep.ep_fid;
 	return 0;
 
-err4:
-	rxd_ep_free_res(rxd_ep);
 err3:
 	fi_close(&rxd_ep->dg_ep->fid);
 err2:
