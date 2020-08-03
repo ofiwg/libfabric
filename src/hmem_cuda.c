@@ -50,6 +50,7 @@ struct cuda_ops {
 	CUresult (*cuPointerGetAttribute)(void *data,
 					  CUpointer_attribute attribute,
 					  CUdeviceptr ptr);
+	CUresult (*cuInit)(unsigned int flags);
 };
 
 #ifdef ENABLE_CUDA_DLOPEN
@@ -67,6 +68,7 @@ static struct cuda_ops cuda_ops = {
 	.cudaGetErrorName = cudaGetErrorName,
 	.cudaGetErrorString = cudaGetErrorString,
 	.cuPointerGetAttribute = cuPointerGetAttribute,
+	.cuInit = cuInit,
 };
 
 #endif /* ENABLE_CUDA_DLOPEN */
@@ -91,6 +93,11 @@ CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 				   CUdeviceptr ptr)
 {
 	return cuda_ops.cuPointerGetAttribute(data, attribute, ptr);
+}
+
+CUresult ofi_cuInit(unsigned int flags)
+{
+	return cuda_ops.cuInit(flags);
 }
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
@@ -125,7 +132,7 @@ int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size
 	return -FI_EIO;
 }
 
-int cuda_hmem_init(void)
+static int cuda_hmem_dl_init(void)
 {
 #ifdef ENABLE_CUDA_DLOPEN
 	cudart_handle = dlopen("libcudart.so", RTLD_NOW);
@@ -171,6 +178,12 @@ int cuda_hmem_init(void)
 		goto err_dlclose_cuda;
 	}
 
+	cuda_ops.cuInit = dlsym(cuda_handle, "cuInit");
+	if (!cuda_ops.cuInit) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find cuInit\n");
+		goto err_dlclose_cuda;
+	}
+
 	return FI_SUCCESS;
 
 err_dlclose_cuda:
@@ -182,6 +195,33 @@ err:
 #else
 	return FI_SUCCESS;
 #endif /* ENABLE_CUDA_DLOPEN */
+}
+
+int cuda_hmem_init(void)
+{
+	int ret;
+	CUresult cu_ret;
+
+	ret = cuda_hmem_dl_init();
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	cu_ret = ofi_cuInit(0);
+	if (cu_ret == CUDA_SUCCESS)
+		return FI_SUCCESS;
+
+	cuda_hmem_cleanup();
+
+	/* Treat CUDA_ERROR_NO_DEVICE error as CUDA not being supported. */
+	if (cu_ret != CUDA_ERROR_NO_DEVICE) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"cuInit failed %d. CUDA memory no supported\n", cu_ret);
+		return -FI_EIO;
+	}
+
+	FI_INFO(&core_prov, FI_LOG_CORE, "No CUDA devices found\n");
+
+	return -FI_ENOSYS;
 }
 
 int cuda_hmem_cleanup(void)
