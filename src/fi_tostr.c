@@ -689,6 +689,7 @@ static void ofi_tostr_hmem_iface(char *buf, enum fi_hmem_iface iface)
 	CASEENUMSTR(FI_HMEM_SYSTEM);
 	CASEENUMSTR(FI_HMEM_CUDA);
 	CASEENUMSTR(FI_HMEM_ROCR);
+	CASEENUMSTR(FI_HMEM_ZE);
 	default:
 		ofi_strcatf(buf, "Unknown");
 		break;
