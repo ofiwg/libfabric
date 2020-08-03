@@ -58,6 +58,46 @@
 /**
  *   Utility functions used by both non-tagged and tagged send.
  */
+static inline
+ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
+{
+	int err, tagged;
+	struct rxr_peer *peer;
+
+	assert(RXR_EAGER_MSGRTM_PKT + 1 == RXR_EAGER_TAGRTM_PKT);
+	assert(RXR_READ_MSGRTM_PKT + 1 == RXR_READ_TAGRTM_PKT);
+
+	tagged = (tx_entry->op == ofi_op_tagged);
+	assert(tagged == 0 || tagged == 1);
+
+	if (tx_entry->total_len == 0)
+		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+							  RXR_EAGER_MSGRTM_PKT + tagged, 0);
+
+	/* Currently cuda data must be sent using read message protocol.
+	 * However, because read message protocol is an extra feature, we cannot
+	 * sure if the receiver supports it.
+	 * The only way we can be sure of that is through the handshake packet
+	 * from the receiver, so here we call rxr_pkt_wait_handshake().
+	 */
+	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+	assert(peer);
+	err = rxr_pkt_wait_handshake(rxr_ep, tx_entry->addr, peer);
+	if (OFI_UNLIKELY(err)) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "waiting for handshake packet failed!\n");
+		return err;
+	}
+
+	assert(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED);
+	if (!efa_peer_support_rdma_read(peer)) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Cannot send gpu data because receiver does not support RDMA\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+					  RXR_READ_MSGRTM_PKT + tagged, 0);
+}
+
 ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 {
 	/*
@@ -94,12 +134,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	}
 
 	if (efa_ep_is_cuda_mr(tx_entry->desc[0])) {
-		if (tx_entry->total_len == 0)
-			return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-							  RXR_EAGER_MSGRTM_PKT + tagged, 0);
-
-		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						 RXR_READ_MSGRTM_PKT + tagged, 0);
+		return rxr_msg_post_cuda_rtm(rxr_ep, tx_entry);
 	}
 
 	/* inter instance message */
