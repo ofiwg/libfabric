@@ -47,6 +47,41 @@
 /*
  *   General purpose utility functions
  */
+
+struct rxr_pkt_entry *rxr_pkt_entry_init_prefix(struct rxr_ep *ep,
+						const struct fi_msg *posted_buf,
+						struct ofi_bufpool *pkt_pool)
+{
+	struct rxr_pkt_entry *pkt_entry;
+	struct efa_mr *mr;
+
+	/*
+	 * Given the pkt_entry->pkt immediately follows the pkt_entry
+	 * fields, we can directly map the user-provided fi_msg address
+	 * as the pkt_entry, which will hold the metadata in the prefix.
+	 */
+	assert(posted_buf->msg_iov->iov_len >= sizeof(struct rxr_pkt_entry) + sizeof(struct rxr_eager_msgrtm_hdr));
+	pkt_entry = (struct rxr_pkt_entry *) posted_buf->msg_iov->iov_base;
+	if (!pkt_entry)
+		return NULL;
+
+	/*
+	 * The ownership of the prefix buffer lies with the application, do not
+	 * put it on the dbg list for cleanup during shutdown or poison it. The
+	 * provider loses jurisdiction over it soon after writing the rx
+	 * completion.
+	 */
+	dlist_init(&pkt_entry->entry);
+	mr = (struct efa_mr *) posted_buf->desc[0];
+	pkt_entry->mr = &mr->mr_fid;
+
+	pkt_entry->type = RXR_PKT_ENTRY_USER;
+	pkt_entry->state = RXR_PKT_ENTRY_IN_USE;
+	pkt_entry->next = NULL;
+
+	return pkt_entry;
+}
+
 struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
 					  struct ofi_bufpool *pkt_pool)
 {
@@ -56,6 +91,7 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
 	pkt_entry = ofi_buf_alloc_ex(pkt_pool, &mr);
 	if (!pkt_entry)
 		return NULL;
+
 #ifdef ENABLE_EFA_POISONING
 	memset(pkt_entry, 0, sizeof(*pkt_entry));
 #endif
@@ -63,12 +99,14 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
 #if ENABLE_DEBUG
 	dlist_init(&pkt_entry->dbg_entry);
 #endif
-	pkt_entry->mr = (struct fid_mr *)mr;
+	pkt_entry->mr = (struct fid_mr *) mr;
 #ifdef ENABLE_EFA_POISONING
 	memset(pkt_entry->pkt, 0, ep->mtu_size);
 #endif
+	pkt_entry->type = RXR_PKT_ENTRY_POSTED;
 	pkt_entry->state = RXR_PKT_ENTRY_IN_USE;
 	pkt_entry->next = NULL;
+
 	return pkt_entry;
 }
 
@@ -145,6 +183,9 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_pkt_entry *next;
+
+	if (ep->use_zcpy_rx && pkt_entry->type == RXR_PKT_ENTRY_USER)
+		return;
 
 	while (pkt_entry) {
 		next = pkt_entry->next;

@@ -84,6 +84,7 @@ struct fi_ep_attr rxr_ep_attr = {
 	.mem_tag_format = FI_TAG_GENERIC,
 	.protocol_version = RXR_CUR_PROTOCOL_VERSION,
 	.max_msg_size = UINT64_MAX,
+	.msg_prefix_size = 0,
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1
 };

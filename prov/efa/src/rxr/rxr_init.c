@@ -51,6 +51,8 @@ struct rxr_env rxr_env = {
 	.tx_queue_size = 0,
 	.enable_shm_transfer = 1,
 	.use_device_rdma = 0,
+	.use_zcpy_rx = 1,
+	.zcpy_rx_seed = 0,
 	.shm_av_size = 128,
 	.shm_max_medium_size = 4096,
 	.recvwin_size = RXR_RECVWIN_SIZE,
@@ -81,6 +83,8 @@ static void rxr_init_env(void)
 	fi_param_get_int(&rxr_prov, "tx_queue_size", &rxr_env.tx_queue_size);
 	fi_param_get_int(&rxr_prov, "enable_shm_transfer", &rxr_env.enable_shm_transfer);
 	fi_param_get_int(&rxr_prov, "use_device_rdma", &rxr_env.use_device_rdma);
+	fi_param_get_int(&rxr_prov, "use_zcpy_rx", &rxr_env.use_zcpy_rx);
+	fi_param_get_int(&rxr_prov, "zcpy_rx_seed", &rxr_env.zcpy_rx_seed);
 	fi_param_get_int(&rxr_prov, "shm_av_size", &rxr_env.shm_av_size);
 	fi_param_get_int(&rxr_prov, "shm_max_medium_size", &rxr_env.shm_max_medium_size);
 	fi_param_get_int(&rxr_prov, "recvwin_size", &rxr_env.recvwin_size);
@@ -280,6 +284,10 @@ void rxr_reset_rx_tx_to_core(const struct fi_info *user_info,
 		user_info->tx_attr->size : core_info->tx_attr->size;
 }
 
+/*
+ * Used to set tx/rx attributes that are characteristic of the device for the
+ * two endpoint types and not emulated in software.
+ */
 void rxr_set_rx_tx_size(struct fi_info *info,
 			const struct fi_info *core_info)
 {
@@ -417,6 +425,34 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 		 */
 		if (hints->domain_attr->mr_mode & FI_MR_LOCAL)
 			info->domain_attr->mr_mode |= FI_MR_LOCAL;
+
+		/*
+		 * Same goes for prefix mode, where the protocol does not
+		 * absolutely need a prefix before receive buffers, but it can
+		 * use it when available to optimize transfers with endpoints
+		 * having the following profile:
+		 *	- Requires FI_MSG and not FI_TAGGED/FI_ATOMIC/FI_RMA
+		 *	- Can handle registrations (FI_MR_LOCAL)
+		 *	- No need for FI_DIRECTED_RECV
+		 *	- Guaranteed to send msgs smaller than info->nic->link_attr->mtu
+		 */
+		if (hints->mode & FI_MSG_PREFIX) {
+			FI_INFO(&rxr_prov, FI_LOG_CORE,
+				"FI_MSG_PREFIX supported by application.\n");
+			info->mode |= FI_MSG_PREFIX;
+			info->tx_attr->mode |= FI_MSG_PREFIX;
+			info->rx_attr->mode |= FI_MSG_PREFIX;
+
+			/*
+			 * The prefix needs to be a multiple of 8. The pkt_entry
+			 * is already at 64 bytes (128 with debug).
+			 */
+			info->ep_attr->msg_prefix_size =  sizeof(struct rxr_pkt_entry)
+							  + sizeof(struct rxr_eager_msgrtm_hdr);
+			assert(!(info->ep_attr->msg_prefix_size % 8));
+			FI_INFO(&rxr_prov, FI_LOG_CORE,
+				"FI_MSG_PREFIX size = %ld\n", info->ep_attr->msg_prefix_size);
+		}
 	}
 
 	rxr_set_rx_tx_size(info, core_info);
@@ -678,6 +714,10 @@ EFA_INI
 			"Enable using SHM provider to provide the communication between processes on the same system. (Default: 1)");
 	fi_param_define(&rxr_prov, "use_device_rdma", FI_PARAM_INT,
 			"whether to use device's RDMA functionality for one-sided and two-sided transfer.");
+	fi_param_define(&rxr_prov, "use_zcpy_rx", FI_PARAM_INT,
+			"Enables the use of application's receive buffers in place of bounce-buffers when feasible. (Default: 1)");
+	fi_param_define(&rxr_prov, "zcpy_rx_seed", FI_PARAM_INT,
+			"Defines the number of bounce-buffers the provider will prepost during EP initialization.  (Default: 0)");
 	fi_param_define(&rxr_prov, "shm_av_size", FI_PARAM_INT,
 			"Defines the maximum number of entries in SHM provider's address vector (Default 128).");
 	fi_param_define(&rxr_prov, "shm_max_medium_size", FI_PARAM_INT,

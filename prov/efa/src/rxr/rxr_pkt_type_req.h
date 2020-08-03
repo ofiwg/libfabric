@@ -96,6 +96,8 @@ size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
 size_t rxr_pkt_req_max_header_size(int pkt_type);
 
+size_t rxr_pkt_max_header_size(void);
+
 size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type);
 
 /*
@@ -343,6 +345,11 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 
 ssize_t rxr_pkt_proc_rtm_rta(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
+/*
+ *         This function handles zero-copy receives that do not require ordering
+ */
+void rxr_pkt_handle_zcpy_recv(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry);
 /*
  *         This function is shared by all RTM packet types which handle
  *         reordering

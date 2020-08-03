@@ -192,6 +192,8 @@ struct rxr_env {
 	int tx_max_credits;
 	int tx_queue_size;
 	int use_device_rdma;
+	int use_zcpy_rx;
+	int zcpy_rx_seed;
 	int enable_shm_transfer;
 	int shm_av_size;
 	int shm_max_medium_size;
@@ -257,6 +259,11 @@ enum rxr_rx_comm_type {
 	RXR_RX_QUEUED_CTS_RNR,	/* rx_entry RNR sending CTS */
 	RXR_RX_WAIT_READ_FINISH, /* rx_entry wait for send to finish, FI_READ */
 	RXR_RX_WAIT_ATOMRSP_SENT, /* rx_entry wait for atomrsp packet sent completion */
+};
+
+enum rxr_rx_buf_owner {
+	RXR_RX_PROV_BUF = 0,	 /* Bounce buffers allocated and owned by provider */
+	RXR_RX_USER_BUF,	 /* Recv buffers posted by applications */
 };
 
 #define RXR_PEER_REQ_SENT BIT_ULL(0) /* sent a REQ to the peer, peer should send a handshake back */
@@ -362,8 +369,10 @@ struct rxr_rx_entry {
 	size_t iov_count;
 	struct iovec iov[RXR_IOV_LIMIT];
 
-	/* App-provided reg descriptor */
+	/* App-provided buffers and descriptors */
 	void *desc[RXR_IOV_LIMIT];
+	enum rxr_rx_buf_owner owner;
+	struct fi_msg *posted_recv;
 
 	/* iov_count on sender side, used for large message READ over shm */
 	size_t rma_iov_count;
@@ -531,6 +540,9 @@ struct rxr_ep {
 	/* core's capabilities */
 	uint64_t core_caps;
 
+	/* Endpoint's capability to support zero-copy rx */
+	bool use_zcpy_rx;
+
 	/* rx/tx queue size of core provider */
 	size_t core_rx_size;
 	size_t max_outstanding_tx;
@@ -544,6 +556,12 @@ struct rxr_ep {
 	uint64_t msg_order;
 	/* core's supported tx/rx msg_order */
 	uint64_t core_msg_order;
+
+	/* Application's maximum msg size hint */
+	size_t max_msg_size;
+
+	/* RxR protocol's max header size */
+	size_t max_proto_hdr_size;
 
 	/* tx iov limit of core provider */
 	size_t core_iov_limit;
@@ -665,6 +683,17 @@ static inline struct rxr_peer *rxr_ep_get_peer(struct rxr_ep *ep,
 					       fi_addr_t addr)
 {
 	return &ep->peer[addr];
+}
+
+static inline void rxr_setup_msg(struct fi_msg *msg, const struct iovec *iov, void **desc,
+				 size_t count, fi_addr_t addr, void *context, uint32_t data)
+{
+	msg->msg_iov = iov;
+	msg->desc = desc;
+	msg->iov_count = count;
+	msg->addr = addr;
+	msg->context = context;
+	msg->data = data;
 }
 
 static inline void rxr_ep_peer_init_rx(struct rxr_ep *ep, struct rxr_peer *peer)
@@ -790,6 +819,17 @@ static inline int rxr_need_sas_ordering(struct rxr_ep *ep)
 	return ep->msg_order & FI_ORDER_SAS;
 }
 
+static inline int rxr_ep_use_zcpy_rx(struct rxr_ep *ep, struct fi_info *info)
+{
+	return !(ep->util_ep.caps & FI_DIRECTED_RECV) &&
+		!(ep->util_ep.caps & FI_TAGGED) &&
+		!(ep->util_ep.caps & FI_ATOMIC) &&
+		(ep->max_msg_size <= ep->mtu_size - ep->max_proto_hdr_size) &&
+		!rxr_need_sas_ordering(ep) &&
+		info->mode & FI_MSG_PREFIX &&
+		rxr_env.use_zcpy_rx;
+}
+
 /* Initialization functions */
 void rxr_reset_rx_tx_to_core(const struct fi_info *user_info,
 			     struct fi_info *core_info);
@@ -809,7 +849,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 /* EP sub-functions */
 void rxr_ep_progress(struct util_ep *util_ep);
 void rxr_ep_progress_internal(struct rxr_ep *rxr_ep);
-int rxr_ep_post_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lower_ep);
+int rxr_ep_post_buf(struct rxr_ep *ep, const struct fi_msg *posted_recv,
+		    uint64_t flags, enum rxr_lower_ep_type lower_ep);
 
 int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
 				 struct rxr_tx_entry *tx_entry);
