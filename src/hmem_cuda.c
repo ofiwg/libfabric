@@ -51,6 +51,9 @@ struct cuda_ops {
 					  CUpointer_attribute attribute,
 					  CUdeviceptr ptr);
 	CUresult (*cuInit)(unsigned int flags);
+	cudaError_t (*cudaHostRegister)(void *ptr, size_t size,
+					unsigned int flags);
+	cudaError_t (*cudaHostUnregister)(void *ptr);
 };
 
 #ifdef ENABLE_CUDA_DLOPEN
@@ -69,6 +72,8 @@ static struct cuda_ops cuda_ops = {
 	.cudaGetErrorString = cudaGetErrorString,
 	.cuPointerGetAttribute = cuPointerGetAttribute,
 	.cuInit = cuInit,
+	.cudaHostRegister = cudaHostRegister,
+	.cudaHostUnregister = cudaHostUnregister,
 };
 
 #endif /* ENABLE_CUDA_DLOPEN */
@@ -98,6 +103,16 @@ CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 CUresult ofi_cuInit(unsigned int flags)
 {
 	return cuda_ops.cuInit(flags);
+}
+
+cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags)
+{
+	return cuda_ops.cudaHostRegister(ptr, size, flags);
+}
+
+cudaError_t ofi_cudaHostUnregister(void *ptr)
+{
+	return cuda_ops.cudaHostUnregister(ptr);
 }
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
@@ -184,6 +199,21 @@ static int cuda_hmem_dl_init(void)
 	cuda_ops.cuInit = dlsym(cuda_handle, "cuInit");
 	if (!cuda_ops.cuInit) {
 		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find cuInit\n");
+		goto err_dlclose_cuda;
+	}
+
+	cuda_ops.cudaHostRegister = dlsym(cudart_handle, "cudaHostRegister");
+	if (!cuda_ops.cudaHostRegister) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find cudaHostRegister\n");
+		goto err_dlclose_cuda;
+	}
+
+	cuda_ops.cudaHostUnregister = dlsym(cudart_handle,
+					    "cudaHostUnregister");
+	if (!cuda_ops.cudaHostUnregister) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find cudaHostUnregister\n");
 		goto err_dlclose_cuda;
 	}
 
@@ -283,6 +313,38 @@ bool cuda_is_addr_valid(const void *addr)
 	return false;
 }
 
+int cuda_host_register(void *ptr, size_t size)
+{
+	cudaError_t cuda_ret;
+
+	cuda_ret = ofi_cudaHostRegister(ptr, size, cudaHostRegisterDefault);
+	if (cuda_ret == cudaSuccess)
+		return FI_SUCCESS;
+
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to perform cudaMemcpy: %s:%s\n",
+		ofi_cudaGetErrorName(cuda_ret),
+		ofi_cudaGetErrorString(cuda_ret));
+
+	return -FI_EIO;
+}
+
+int cuda_host_unregister(void *ptr)
+{
+	cudaError_t cuda_ret;
+
+	cuda_ret = ofi_cudaHostUnregister(ptr);
+	if (cuda_ret == cudaSuccess)
+		return FI_SUCCESS;
+
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to perform cudaMemcpy: %s:%s\n",
+		ofi_cudaGetErrorName(cuda_ret),
+		ofi_cudaGetErrorString(cuda_ret));
+
+	return -FI_EIO;
+}
+
 #else
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
@@ -308,6 +370,16 @@ int cuda_hmem_cleanup(void)
 bool cuda_is_addr_valid(const void *addr)
 {
 	return false;
+}
+
+int cuda_host_register(void *ptr, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_host_unregister(void *ptr)
+{
+	return -FI_ENOSYS;
 }
 
 #endif /* HAVE_LIBCUDA */

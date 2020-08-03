@@ -77,8 +77,8 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.get_handle = ofi_hmem_no_get_handle,
 		.open_handle = ofi_hmem_no_open_handle,
 		.close_handle = ofi_hmem_no_close_handle,
-		.host_register = ofi_hmem_register_noop,
-		.host_unregister = ofi_hmem_host_unregister_noop,
+		.host_register = cuda_host_register,
+		.host_unregister = cuda_host_unregister,
 	},
 	[FI_HMEM_ROCR] = {
 		.initialized = false,

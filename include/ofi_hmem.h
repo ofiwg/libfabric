@@ -53,6 +53,8 @@ const char *ofi_cudaGetErrorString(cudaError_t error);
 CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 				   CUdeviceptr ptr);
 CUresult ofi_cuInit(unsigned int flags);
+cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags);
+cudaError_t ofi_cudaHostUnregister(void *ptr);
 
 #endif /* HAVE_LIBCUDA */
 
@@ -91,6 +93,8 @@ int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size
 int cuda_hmem_init(void);
 int cuda_hmem_cleanup(void);
 bool cuda_is_addr_valid(const void *addr);
+int cuda_host_register(void *ptr, size_t size);
+int cuda_host_unregister(void *ptr);
 
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);
 int ze_hmem_init(void);
