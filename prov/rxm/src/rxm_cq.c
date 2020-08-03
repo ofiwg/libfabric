@@ -319,7 +319,7 @@ static int rxm_rndv_handle_rd_done(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_
 	struct rxm_tx_rndv_buf *tx_buf;
 	int ret;
 
-	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX_RNDV].pool,
+	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX_RNDV_REQ].pool,
 				      rx_buf->pkt.ctrl_hdr.msg_id);
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got ACK for msg_id: 0x%" PRIx64 "\n",
@@ -547,7 +547,7 @@ static ssize_t rxm_rndv_handle_wr_data(struct rxm_rx_buf *rx_buf)
 	struct rxm_rndv_hdr *rx_hdr = (struct rxm_rndv_hdr *) rx_buf->pkt.data;
 
 	tx_buf = ofi_bufpool_get_ibuf(
-		rx_buf->ep->buf_pools[RXM_BUF_POOL_TX_RNDV].pool,
+		rx_buf->ep->buf_pools[RXM_BUF_POOL_TX_RNDV_REQ].pool,
 		rx_buf->pkt.ctrl_hdr.msg_id);
 	total_len = tx_buf->pkt.hdr.size;
 
@@ -855,7 +855,7 @@ static ssize_t rxm_rndv_send_rd_done(struct rxm_rx_buf *rx_buf)
 	}
 
 	rx_buf->recv_entry->rndv.tx_buf = rxm_tx_buf_alloc(rx_buf->ep,
-							   RXM_BUF_POOL_TX_ACK);
+							   RXM_BUF_POOL_TX_RNDV_RD_DONE);
 	if (!rx_buf->recv_entry->rndv.tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"ran out of buffers from ACK buffer pool\n");
@@ -944,7 +944,7 @@ static ssize_t rxm_rndv_send_wr_done(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_b
 		}
 	}
 
-	tx_buf->write_rndv.done_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_DONE);
+	tx_buf->write_rndv.done_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV_WR_DONE);
 	if (!tx_buf->write_rndv.done_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"ran out of buffers from DONE buffer pool\n");
@@ -1009,7 +1009,7 @@ ssize_t rxm_rndv_send_wr_data(struct rxm_rx_buf *rx_buf)
 	}
 
 	rx_buf->recv_entry->rndv.tx_buf =
-		rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_RNDV_WRITE_ACK);
+		rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_RNDV_WR_DATA);
 	if (!rx_buf->recv_entry->rndv.tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"ran out of buffers from RNDV_WRITE ACK buffer pool\n");

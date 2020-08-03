@@ -422,10 +422,10 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX,
 	RXM_BUF_POOL_TX_START	= RXM_BUF_POOL_TX,
 	RXM_BUF_POOL_TX_INJECT,
-	RXM_BUF_POOL_TX_ACK,
-	RXM_BUF_POOL_TX_DONE,
-	RXM_BUF_POOL_TX_RNDV,
-	RXM_BUF_POOL_TX_RNDV_WRITE_ACK,
+	RXM_BUF_POOL_TX_RNDV_RD_DONE,
+	RXM_BUF_POOL_TX_RNDV_WR_DONE,
+	RXM_BUF_POOL_TX_RNDV_REQ,
+	RXM_BUF_POOL_TX_RNDV_WR_DATA,
 	RXM_BUF_POOL_TX_ATOMIC,
 	RXM_BUF_POOL_TX_CREDIT,
 	RXM_BUF_POOL_TX_SAR,
@@ -939,10 +939,10 @@ rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
 	assert((type == RXM_BUF_POOL_TX) ||
 	       (type == RXM_BUF_POOL_TX_INJECT) ||
-	       (type == RXM_BUF_POOL_TX_ACK) ||
-	       (type == RXM_BUF_POOL_TX_RNDV_WRITE_ACK) ||
-	       (type == RXM_BUF_POOL_TX_DONE) ||
-	       (type == RXM_BUF_POOL_TX_RNDV) ||
+	       (type == RXM_BUF_POOL_TX_RNDV_RD_DONE) ||
+	       (type == RXM_BUF_POOL_TX_RNDV_WR_DATA) ||
+	       (type == RXM_BUF_POOL_TX_RNDV_WR_DONE) ||
+	       (type == RXM_BUF_POOL_TX_RNDV_REQ) ||
 	       (type == RXM_BUF_POOL_TX_ATOMIC) ||
 	       (type == RXM_BUF_POOL_TX_CREDIT) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
