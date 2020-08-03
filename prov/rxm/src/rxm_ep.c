@@ -1136,7 +1136,10 @@ rxm_ep_rndv_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_TX);
 	if (pkt_size <= rxm_ep->inject_limit) {
-		RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_ACK_WAIT);
+		if (rxm_ep->rndv_ops == &rxm_rndv_ops_write)
+			RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_WRITE_DATA_WAIT);
+		else
+			RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_READ_DONE_WAIT);
 		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt,
 					     pkt_size, ofi_cntr_inc_noop);
 	} else {
@@ -1610,9 +1613,16 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 						   def_tx_entry->rndv_ack.rx_buf->
 						   recv_entry->context, ret);
 			}
-			RXM_UPDATE_STATE(FI_LOG_EP_DATA,
-					 def_tx_entry->rndv_ack.rx_buf,
-					 RXM_RNDV_ACK_SENT);
+			if (def_tx_entry->rndv_ack.rx_buf->recv_entry->rndv
+				    .tx_buf->pkt.ctrl_hdr
+				    .type == rxm_ctrl_rndv_rd_done)
+				RXM_UPDATE_STATE(FI_LOG_EP_DATA,
+						 def_tx_entry->rndv_ack.rx_buf,
+						 RXM_RNDV_READ_DONE_SENT);
+			else
+				RXM_UPDATE_STATE(FI_LOG_EP_DATA,
+						 def_tx_entry->rndv_ack.rx_buf,
+						 RXM_RNDV_WRITE_DATA_SENT);
 			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
 			free(def_tx_entry);
 			break;
@@ -1631,7 +1641,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			}
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA,
 					 def_tx_entry->rndv_done.tx_buf,
-					 RXM_RNDV_DONE_SENT);
+					 RXM_RNDV_WRITE_DONE_SENT);
 			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
 			free(def_tx_entry);
 			break;

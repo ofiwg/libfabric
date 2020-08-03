@@ -329,11 +329,11 @@ static int rxm_rndv_handle_rd_done(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_
 
 	rxm_rx_buf_free(rx_buf);
 
-	if (tx_buf->hdr.state == RXM_RNDV_ACK_WAIT) {
+	if (tx_buf->hdr.state == RXM_RNDV_READ_DONE_WAIT) {
 		ret = rxm_rndv_tx_finish(rxm_ep, tx_buf);
 	} else {
 		assert(tx_buf->hdr.state == RXM_RNDV_TX);
-		RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_ACK_RECVD);
+		RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_READ_DONE_RECVD);
 		ret = 0;
 	}
 	return ret;
@@ -370,11 +370,11 @@ static int rxm_rndv_handle_wr_done(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_
 	rndv_rx_buf =
 		container_of(rx_buf_entry, struct rxm_rx_buf, rndv_wait_entry);
 
-	if (rndv_rx_buf->hdr.state == RXM_RNDV_DONE_WAIT) {
+	if (rndv_rx_buf->hdr.state == RXM_RNDV_WRITE_DONE_WAIT) {
 		ret = rxm_rndv_rx_finish(rndv_rx_buf);
 	} else {
-		assert(rndv_rx_buf->hdr.state == RXM_RNDV_ACK_SENT);
-		RXM_UPDATE_STATE(FI_LOG_CQ, rndv_rx_buf, RXM_RNDV_DONE_RECVD);
+		assert(rndv_rx_buf->hdr.state == RXM_RNDV_WRITE_DATA_SENT);
+		RXM_UPDATE_STATE(FI_LOG_CQ, rndv_rx_buf, RXM_RNDV_WRITE_DONE_RECVD);
 		ret = 0;
 	}
 out:
@@ -896,7 +896,7 @@ static ssize_t rxm_rndv_send_rd_done(struct rxm_rx_buf *rx_buf)
 		goto err;
 	}
 out:
-	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_ACK_SENT);
+	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_READ_DONE_SENT);
 	return 0;
 err:
 	ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
@@ -982,7 +982,7 @@ static ssize_t rxm_rndv_send_wr_done(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_b
 		goto err;
 	}
 out:
-	RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_DONE_SENT);
+	RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_WRITE_DONE_SENT);
 	return 0;
 err:
 	ofi_buf_free(tx_buf->write_rndv.done_buf);
@@ -1058,7 +1058,7 @@ ssize_t rxm_rndv_send_wr_data(struct rxm_rx_buf *rx_buf)
 		goto err;
 	}
 out:
-	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_ACK_SENT);
+	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_WRITE_DATA_SENT);
 	return 0;
 err:
 	ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
@@ -1424,9 +1424,15 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	case RXM_RNDV_TX:
 		tx_rndv_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		RXM_UPDATE_STATE(FI_LOG_CQ, tx_rndv_buf, RXM_RNDV_ACK_WAIT);
+		if (rxm_ep->rndv_ops == &rxm_rndv_ops_write)
+			RXM_UPDATE_STATE(FI_LOG_CQ, tx_rndv_buf,
+					 RXM_RNDV_WRITE_DATA_WAIT);
+		else
+			RXM_UPDATE_STATE(FI_LOG_CQ, tx_rndv_buf,
+					 RXM_RNDV_READ_DONE_WAIT);
 		return 0;
-	case RXM_RNDV_ACK_WAIT:
+	case RXM_RNDV_READ_DONE_WAIT:
+	case RXM_RNDV_WRITE_DATA_WAIT:
 		assert(0);
 		return -FI_EOPBADSTATE;
 	case RXM_RNDV_READ:
@@ -1444,21 +1450,20 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 			return 0;
 		else
 			return rxm_rndv_send_wr_done(rxm_ep, tx_rndv_buf);
-	case RXM_RNDV_ACK_SENT:
+	case RXM_RNDV_READ_DONE_SENT:
+		assert(comp->flags & FI_SEND);
+		return rxm_rndv_rx_finish(comp->op_context);
+	case RXM_RNDV_WRITE_DATA_SENT:
 		rx_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		if (rx_buf->ep->rndv_ops == &rxm_rndv_ops_write) {
-			dlist_insert_tail(&rx_buf->rndv_wait_entry, &rx_buf->ep->rndv_wait_list);
-			RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_DONE_WAIT);
-			return 0;
-		} else {
-			return rxm_rndv_rx_finish(rx_buf);
-		}
-	case RXM_RNDV_DONE_SENT:
-	case RXM_RNDV_ACK_RECVD:
+		dlist_insert_tail(&rx_buf->rndv_wait_entry, &rx_buf->ep->rndv_wait_list);
+		RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_WRITE_DONE_WAIT);
+		return 0;
+	case RXM_RNDV_WRITE_DONE_SENT:
+	case RXM_RNDV_READ_DONE_RECVD:
 		assert(comp->flags & FI_SEND || comp->flags & FI_WRITE);
 		return rxm_rndv_tx_finish(rxm_ep, comp->op_context);
-	case RXM_RNDV_DONE_RECVD:
+	case RXM_RNDV_WRITE_DONE_RECVD:
 		assert(comp->flags & FI_SEND);
 		return rxm_rndv_rx_finish(comp->op_context);
 	case RXM_RNDV_FINISH:
@@ -1612,7 +1617,8 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 			return;
 		}
 		/* fall through */
-	case RXM_RNDV_ACK_SENT:
+	case RXM_RNDV_READ_DONE_SENT:
+	case RXM_RNDV_WRITE_DATA_SENT:
 		/* fall through */
 	case RXM_RNDV_READ:
 		rx_buf = (struct rxm_rx_buf *) err_entry.op_context;
