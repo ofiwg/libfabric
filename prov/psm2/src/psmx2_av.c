@@ -202,8 +202,8 @@ static void psmx2_set_epaddr_context(struct psmx2_trx_ctxt *trx_ctxt,
 	trx_ctxt->domain->peer_unlock_fn(&trx_ctxt->peer_lock, 2);
 }
 
-int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
-			 psm2_epid_t epid, psm2_epaddr_t *epaddr)
+void psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
+			  psm2_epid_t epid, psm2_epaddr_t *epaddr)
 {
 	int err;
 	psm2_error_t errors;
@@ -215,7 +215,7 @@ int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 		context = psm2_epaddr_getctxt(epconn.addr);
 		if (context && context->epid  == epid) {
 			*epaddr = epconn.addr;
-			return 0;
+			return;
 		}
 	}
 
@@ -223,13 +223,16 @@ int psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 			      (int64_t) psmx2_env.conn_timeout * 1000000000LL);
 	if (err == PSM2_OK || err == PSM2_EPID_ALREADY_CONNECTED) {
 		psmx2_set_epaddr_context(trx_ctxt, epid, *epaddr);
-		return 0;
+		return;
 	}
 
 	FI_WARN(&psmx2_prov, FI_LOG_AV,
-		"psm2_ep_connect retured error %s, remote epid=%lx.\n",
-		psm2_error_get_string(err), epid);
-	return psmx2_errno(err);
+		"psm2_ep_connect retured error %s, remote epid=%lx."
+		"If it is a timeout error, try setting FI_PSM2_CONN_TIMEOUT "
+		"to a larger value (current: %d seconds).\n",
+		psm2_error_get_string(err), epid, psmx2_env.conn_timeout);
+
+	abort();
 }
 
 /*
@@ -335,11 +338,9 @@ int psmx2_av_query_sep(struct psmx2_fid_av *av,
 	psm2_amarg_t args[3];
 	int error;
 
-	if (!av->conn_info[trx_ctxt->id].epaddrs[idx]) {
+	if (!av->conn_info[trx_ctxt->id].epaddrs[idx])
 		psmx2_epid_to_epaddr(trx_ctxt, av->table[idx].epid,
 				     &av->conn_info[trx_ctxt->id].epaddrs[idx]);
-		assert(av->conn_info[trx_ctxt->id].epaddrs[idx]);
-	}
 
 	psmx2_am_init(trx_ctxt); /* check AM handler installation */
 
