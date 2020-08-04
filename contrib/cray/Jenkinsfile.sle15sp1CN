@@ -5,4 +5,5 @@ sle15sp1CN {
     product = 'shasta-premium'
     buildPrepScript = "contrib/cray/runBuildPrep.sh"
     rpmBuildScript = "contrib/cray/cray_rpmbuild.sh"
+    masterBranch = "integration"
 }
