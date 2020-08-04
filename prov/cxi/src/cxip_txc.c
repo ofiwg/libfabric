@@ -67,7 +67,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 	/* Reserve the Rendezvous Send PTE */
 	pid_idx = txc->domain->iface->dev->info.rdzv_get_idx;
 	ret = cxip_pte_alloc(txc->ep_obj->if_dom, txc->send_cq->evtq,
-			     pid_idx, &pt_opts, cxip_rdzv_pte_cb, txc,
+			     pid_idx, false, &pt_opts, cxip_rdzv_pte_cb, txc,
 			     &txc->rdzv_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate RDZV PTE: %d\n", ret);

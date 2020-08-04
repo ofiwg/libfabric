@@ -378,7 +378,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	}
 
 	ret = cxip_pte_alloc(ep_obj->if_dom, ep_obj->ctrl_evtq,
-			     CXIP_PTL_IDX_CTRL, &pt_opts, NULL, NULL,
+			     CXIP_PTL_IDX_CTRL, false, &pt_opts, NULL, NULL,
 			     &ep_obj->ctrl_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate control PTE: %d\n", ret);

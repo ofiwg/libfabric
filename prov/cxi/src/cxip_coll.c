@@ -420,7 +420,8 @@ static int _coll_pte_alloc(struct cxip_ep_obj *ep_obj,
 	if (ep_obj->coll.is_netsim) {
 		pid_idx = CXIP_PTL_IDX_RXC(CXIP_PTL_IDX_COLL);
 		ret = cxip_pte_alloc(ep_obj->if_dom, ep_obj->coll.rx_cq->evtq,
-				     pid_idx, &pt_opts, _coll_pte_cb, ep_obj, pte);
+				     pid_idx, false, &pt_opts, _coll_pte_cb,
+				     ep_obj, pte);
 		if (ret != FI_SUCCESS) {
 			CXIP_LOG_ERROR("PTE allocation error = %d\n", ret);
 			return ret;

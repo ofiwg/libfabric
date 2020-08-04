@@ -296,7 +296,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	}
 
 	ret = cxip_pte_alloc(ep_obj->if_dom, ep_obj->ctrl_evtq,
-			     CXIP_PTL_IDX_MR_OPT(mr->key), &opts,
+			     CXIP_PTL_IDX_MR_OPT(mr->key), false, &opts,
 			     cxip_mr_opt_pte_cb, mr, &mr->pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);

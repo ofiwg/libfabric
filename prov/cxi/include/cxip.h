@@ -1199,7 +1199,8 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 		    int buffer_id, struct cxip_cmdq *cmdq);
 int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
-		   uint64_t pid_idx, struct cxi_pt_alloc_opts *opts,
+		   uint64_t pid_idx, bool is_multicast,
+		   struct cxi_pt_alloc_opts *opts,
 		   void (*state_change_cb)(struct cxip_pte *pte,
 					   enum c_ptlte_state state),
 		   void *ctx, struct cxip_pte **pte);

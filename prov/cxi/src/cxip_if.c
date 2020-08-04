@@ -455,7 +455,8 @@ int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
  * cxip_pte_alloc() - Allocate and map a PTE for use.
  */
 int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
-		   uint64_t pid_idx, struct cxi_pt_alloc_opts *opts,
+		   uint64_t pid_idx, bool is_multicast,
+		   struct cxi_pt_alloc_opts *opts,
 		   void (*state_change_cb)(struct cxip_pte *pte,
 					   enum c_ptlte_state state),
 		   void *ctx, struct cxip_pte **pte)
@@ -479,7 +480,7 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 	}
 
 	/* Map the PTE to the LEP */
-	ret = cxil_map_pte(new_pte->pte, if_dom->dom, pid_idx, 0,
+	ret = cxil_map_pte(new_pte->pte, if_dom->dom, pid_idx, is_multicast,
 			   &new_pte->pte_map);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to map PTE: %d\n", ret);

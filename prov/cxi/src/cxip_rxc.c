@@ -145,7 +145,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	}
 
 	ret = cxip_pte_alloc(rxc->ep_obj->if_dom, rxc->recv_cq->evtq,
-			     pid_idx, &pt_opts, cxip_recv_pte_cb, rxc,
+			     pid_idx, false, &pt_opts, cxip_recv_pte_cb, rxc,
 			     &rxc->rx_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate RX PTE: %d\n", ret);
