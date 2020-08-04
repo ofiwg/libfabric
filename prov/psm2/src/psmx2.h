@@ -1023,7 +1023,7 @@ struct	psmx2_cq_event *psmx2_cq_create_event(struct psmx2_fid_cq *cq,
 int	psmx2_cq_poll_mq(struct psmx2_fid_cq *cq, struct psmx2_trx_ctxt *trx_ctxt,
 			 struct psmx2_cq_event *event, int count, fi_addr_t *src_addr);
 
-int	psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
+void	psmx2_epid_to_epaddr(struct psmx2_trx_ctxt *trx_ctxt,
 			     psm2_epid_t epid, psm2_epaddr_t *epaddr);
 
 int	psmx2_av_add_trx_ctxt(struct psmx2_fid_av *av, struct psmx2_trx_ctxt *trx_ctxt);
@@ -1043,7 +1043,6 @@ psm2_epaddr_t psmx2_av_translate_addr(struct psmx2_fid_av *av,
 	psm2_epaddr_t epaddr;
 	size_t idx;
 	int ctxt;
-	int err;
 
 	if (av_type == FI_AV_MAP)
 		return (psm2_epaddr_t) addr;
@@ -1068,25 +1067,18 @@ psm2_epaddr_t psmx2_av_translate_addr(struct psmx2_fid_av *av,
 		ctxt = PSMX2_ADDR_CTXT(addr, av->rx_ctx_bits);
 		assert(ctxt < av->sep_info[idx].ctxt_cnt);
 
-		if (OFI_UNLIKELY(!av->conn_info[trx_ctxt->id].sepaddrs[idx][ctxt])) {
-			err = psmx2_epid_to_epaddr(trx_ctxt,
-						   av->sep_info[idx].epids[ctxt],
-						   &av->conn_info[trx_ctxt->id].sepaddrs[idx][ctxt]);
-			assert(!err);
-		}
+		if (OFI_UNLIKELY(!av->conn_info[trx_ctxt->id].sepaddrs[idx][ctxt]))
+			 psmx2_epid_to_epaddr(trx_ctxt,
+					      av->sep_info[idx].epids[ctxt],
+					      &av->conn_info[trx_ctxt->id].sepaddrs[idx][ctxt]);
 		epaddr = av->conn_info[trx_ctxt->id].sepaddrs[idx][ctxt];
 	} else {
-		if (OFI_UNLIKELY(!av->conn_info[trx_ctxt->id].epaddrs[idx])) {
-			err = psmx2_epid_to_epaddr(trx_ctxt, av->table[idx].epid,
-						   &av->conn_info[trx_ctxt->id].epaddrs[idx]);
-			assert(!err);
-		}
+		if (OFI_UNLIKELY(!av->conn_info[trx_ctxt->id].epaddrs[idx]))
+			psmx2_epid_to_epaddr(trx_ctxt, av->table[idx].epid,
+					     &av->conn_info[trx_ctxt->id].epaddrs[idx]);
 		epaddr = av->conn_info[trx_ctxt->id].epaddrs[idx];
 	}
 
-#ifdef NDEBUG
-	(void) err;
-#endif
 	av->domain->av_unlock_fn(&av->lock, 1);
 	return epaddr;
 }
