@@ -81,12 +81,19 @@ hsa_status_t ofi_hsa_amd_reg_dealloc_cb(void *ptr,
 					hsa_amd_deallocation_callback_t cb,
 					void *user_data);
 
+hsa_status_t ofi_hsa_amd_memory_lock(void *host_ptr, size_t size,
+				     hsa_agent_t *agents, int num_agents,
+				     void **agent_ptr);
+hsa_status_t ofi_hsa_amd_memory_unlock(void *host_ptr);
+
 #endif /* HAVE_ROCR */
 
 int rocr_memcpy(uint64_t device, void *dest, const void *src, size_t size);
 int rocr_hmem_init(void);
 int rocr_hmem_cleanup(void);
 bool rocr_is_addr_valid(const void *addr);
+int rocr_host_register(void *ptr, size_t size);
+int rocr_host_unregister(void *ptr);
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
