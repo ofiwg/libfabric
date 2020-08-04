@@ -174,10 +174,8 @@ bool rocr_is_addr_valid(const void *addr)
 	return false;
 }
 
-int rocr_hmem_init(void)
+static int rocr_hmem_dl_init(void)
 {
-	hsa_status_t hsa_ret;
-
 #ifdef ENABLE_ROCR_DLOPEN
 	/* Assume if dlopen fails, the ROCR library could not be found. Do not
 	 * treat this as an error.
@@ -239,23 +237,58 @@ int rocr_hmem_init(void)
 			"Failed to find hsa_amd_register_deallocation_callback\n");
 		goto err;
 	}
-#endif /* ENABLE_ROCR_DLOPEN */
-
-	hsa_ret = ofi_hsa_init();
-	if (hsa_ret != HSA_STATUS_SUCCESS) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to perform hsa_init: %s\n",
-			ofi_hsa_status_to_string(hsa_ret));
-		goto err;
-	}
 
 	return FI_SUCCESS;
 
 err:
+	dlclose(rocr_handle);
+
+	return -FI_ENODATA;
+#else
+	return FI_SUCCESS;
+#endif /* ENABLE_ROCR_DLOPEN */
+}
+
+static void rocr_hmem_dl_cleanup(void)
+{
 #ifdef ENABLE_ROCR_DLOPEN
 	dlclose(rocr_handle);
 #endif
-	return -FI_ENODATA;
+}
+
+int rocr_hmem_init(void)
+{
+	hsa_status_t hsa_ret;
+	int ret;
+	int log_level;
+
+	ret = rocr_hmem_dl_init();
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	hsa_ret = ofi_hsa_init();
+	if (hsa_ret == HSA_STATUS_SUCCESS)
+		return FI_SUCCESS;
+
+	/* Treat HSA_STATUS_ERROR_OUT_OF_RESOURCES as ROCR not being supported
+	 * instead of an error. This ROCR error is typically returned if no
+	 * devices are supported.
+	 */
+	if (hsa_ret == HSA_STATUS_ERROR_OUT_OF_RESOURCES) {
+		log_level = FI_LOG_INFO;
+		ret = -FI_ENOSYS;
+	} else {
+		log_level = FI_LOG_WARN;
+		ret = -FI_EIO;
+	}
+
+	FI_LOG(&core_prov, log_level, FI_LOG_CORE,
+	       "Failed to perform hsa_init: %s\n",
+	       ofi_hsa_status_to_string(hsa_ret));
+
+	rocr_hmem_dl_cleanup();
+
+	return ret;
 }
 
 int rocr_hmem_cleanup(void)
@@ -270,9 +303,7 @@ int rocr_hmem_cleanup(void)
 		return -FI_ENODATA;
 	}
 
-#ifdef ENABLE_ROCR_DLOPEN
-	dlclose(rocr_handle);
-#endif
+	rocr_hmem_dl_cleanup();
 
 	return FI_SUCCESS;
 }
