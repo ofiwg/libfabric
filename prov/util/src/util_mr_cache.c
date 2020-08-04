@@ -310,6 +310,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 
 	info.iov = *attr->mr_iov;
 	info.iface = attr->iface;
+	info.device = attr->device.reserved;
 
 	do {
 		pthread_mutex_lock(&mm_lock);
