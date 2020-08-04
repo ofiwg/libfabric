@@ -43,37 +43,47 @@
 
 #define ZE_MAX_DEVICES 4
 
-static ze_driver_handle_t driver;
+static ze_context_handle_t context;
 static ze_device_handle_t devices[ZE_MAX_DEVICES];
 static ze_command_queue_handle_t cmd_queue[ZE_MAX_DEVICES];
 static int num_devices = 0;
 
 static const ze_command_queue_desc_t cq_desc = {
-	.version	= ZE_COMMAND_QUEUE_DESC_VERSION_CURRENT,
-	.flags		= ZE_COMMAND_QUEUE_FLAG_NONE,
+	.stype		= ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
+	.pNext		= NULL,
+	.ordinal	= 0,
+	.index		= 0,
+	.flags		= 0,
 	.mode		= ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS,
 	.priority	= ZE_COMMAND_QUEUE_PRIORITY_NORMAL,
-	.ordinal	= 0,
 };
 
 static const ze_command_list_desc_t cl_desc = {
-	.version	= ZE_COMMAND_LIST_DESC_VERSION_CURRENT,
-	.flags		= ZE_COMMAND_LIST_FLAG_NONE,
+	.stype				= ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC,
+	.pNext				= NULL,
+	.commandQueueGroupOrdinal	= 0,
+	.flags				= 0,
 };
 
 int ze_hmem_init(void)
 {
+	ze_driver_handle_t driver;
+	ze_context_desc_t context_desc = {0};
 	ze_result_t ze_ret;
 	uint32_t count;
 
-	ze_ret = zeInit(ZE_INIT_FLAG_NONE);
+	ze_ret = zeInit(ZE_INIT_FLAG_GPU_ONLY);
 	if (ze_ret)
-		goto err;
+		return -FI_EIO;
 
 	count = 1;
 	ze_ret = zeDriverGet(&count, &driver);
 	if (ze_ret)
-		goto err;
+		return -FI_EIO;
+
+	ze_ret = zeContextCreate(driver, &context_desc, &context);
+	if (ze_ret)
+		return -FI_EIO;
 
 	count = 0;
 	ze_ret = zeDeviceGet(driver, &count, NULL);
@@ -85,7 +95,7 @@ int ze_hmem_init(void)
 		goto err;
 
 	for (num_devices = 0; num_devices < count; num_devices++) {
-		ze_ret = zeCommandQueueCreate(devices[num_devices], &cq_desc,
+		ze_ret = zeCommandQueueCreate(context, devices[num_devices], &cq_desc,
 					      &cmd_queue[num_devices]);
 		if (ze_ret)
 			goto free;
@@ -93,10 +103,8 @@ int ze_hmem_init(void)
 
 	return FI_SUCCESS;
 
-free:
-	(void) ze_hmem_cleanup();
-
 err:
+	(void) ze_hmem_cleanup();
 	FI_WARN(&core_prov, FI_LOG_CORE,
 		"Failed to initialize ZE driver resources\n");
 
@@ -115,6 +123,9 @@ int ze_hmem_cleanup(void)
 		}
 	}
 
+	if (zeContextDestroy(context))
+		return -FI_EINVAL;
+
 	return ret;
 }
 
@@ -124,11 +135,11 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
 	ze_result_t ze_ret;
 	int dev_id = (int) device;
 
-	ze_ret = zeCommandListCreate(devices[dev_id], &cl_desc, &cmd_list);
+	ze_ret = zeCommandListCreate(context, devices[dev_id], &cl_desc, &cmd_list);
 	if (ze_ret)
 		goto err;
 
-	ze_ret = zeCommandListAppendMemoryCopy(cmd_list, dst, src, size, NULL);
+	ze_ret = zeCommandListAppendMemoryCopy(cmd_list, dst, src, size, NULL, 0, NULL);
 	if (ze_ret)
 		goto free;
 
@@ -156,8 +167,8 @@ bool ze_is_addr_valid(const void *addr)
 	int i;
 
 	for (i = 0; i < num_devices; i++) {
-		ze_ret = zeDriverGetMemAllocProperties(driver, addr, &mem_prop,
-						       &devices[i]);
+		ze_ret = zeMemGetAllocProperties(context, addr, &mem_prop,
+						 &devices[i]);
 		if (!ze_ret && mem_prop.type == ZE_MEMORY_TYPE_DEVICE)
 			return true;
 	}
@@ -168,8 +179,8 @@ int ze_hmem_get_handle(void *dev_buf, void **handle)
 {
 	ze_result_t ze_ret;
 
-	ze_ret = zeDriverGetMemIpcHandle(driver, dev_buf,
-                                 (ze_ipc_mem_handle_t *) handle);
+	ze_ret = zeMemGetIpcHandle(context, dev_buf,
+				   (ze_ipc_mem_handle_t *) handle);
 	if (ze_ret) {
 		FI_WARN(&core_prov, FI_LOG_CORE, "Unable to get handle\n");
 		return -FI_EINVAL;
@@ -182,9 +193,9 @@ int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr)
 {
 	ze_result_t ze_ret;
 
-	ze_ret = zeDriverOpenMemIpcHandle(driver, devices[device],
-					  *((ze_ipc_mem_handle_t *) handle),
-					  ZE_IPC_MEMORY_FLAG_NONE, ipc_ptr);
+	ze_ret = zeMemOpenIpcHandle(context, devices[device],
+				    *((ze_ipc_mem_handle_t *) handle),
+				    0, ipc_ptr);
 	if (ze_ret) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Unable to open memory handle\n");
@@ -198,7 +209,7 @@ int ze_hmem_close_handle(void *ipc_ptr)
 {
 	ze_result_t ze_ret;
 
-	ze_ret = zeDriverCloseMemIpcHandle(driver, ipc_ptr);
+	ze_ret = zeMemCloseIpcHandle(context, ipc_ptr);
 	if (ze_ret) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Unable to close memory handle\n");
