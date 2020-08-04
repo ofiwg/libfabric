@@ -779,8 +779,10 @@ int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 	if (!hints->ep_attr->type)
 		hints->ep_attr->type = FI_EP_RDM;
 
-	if (opts.options & FT_OPT_ENABLE_HMEM)
+	if (opts.options & FT_OPT_ENABLE_HMEM) {
 		hints->caps |= FI_HMEM;
+		hints->domain_attr->mr_mode |= FI_MR_HMEM;
+	}
 
 	ret = fi_getinfo(FT_FIVERSION, node, service, flags, hints, info);
 	if (ret) {
