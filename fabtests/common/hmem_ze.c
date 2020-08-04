@@ -42,41 +42,49 @@
 
 #define ZE_MAX_DEVICES 4
 
-static ze_driver_handle_t driver;
+static ze_context_handle_t context;
 static ze_device_handle_t devices[ZE_MAX_DEVICES];
 static ze_command_queue_handle_t cmd_queue[ZE_MAX_DEVICES];
 static int num_devices = 0;
 
-static inline int _ze_cmd_queue_create(ze_device_handle_t device,
-				       ze_command_queue_handle_t *cmd_queue)
-{
-	ze_command_queue_desc_t desc = {
-		.version	= ZE_COMMAND_QUEUE_DESC_VERSION_CURRENT,
-		.flags		= ZE_COMMAND_QUEUE_FLAG_NONE,
-		.mode		= ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS,
-		.priority	= ZE_COMMAND_QUEUE_PRIORITY_NORMAL,
-		.ordinal	= 0,
-	};
+static const ze_command_queue_desc_t cq_desc = {
+	.stype		= ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
+	.pNext		= NULL,
+	.ordinal	= 0,
+	.index		= 0,
+	.flags		= 0,
+	.mode		= ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS,
+	.priority	= ZE_COMMAND_QUEUE_PRIORITY_NORMAL,
+};
 
-	return zeCommandQueueCreate(device, &desc, cmd_queue);
-}
+static const ze_command_list_desc_t cl_desc = {
+	.stype				= ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC,
+	.pNext				= NULL,
+	.commandQueueGroupOrdinal	= 0,
+	.flags				= 0,
+};
 
-static inline int _ze_cmd_list_create(ze_device_handle_t device,
-				      ze_command_list_handle_t *cmd_list)
-{
-	ze_command_list_desc_t desc = {
-		.version	= ZE_COMMAND_LIST_DESC_VERSION_CURRENT,
-		.flags		= ZE_COMMAND_LIST_FLAG_NONE,
-	};
-	return zeCommandListCreate(device, &desc, cmd_list);
-}
+static const ze_device_mem_alloc_desc_t device_desc = {
+	.stype		= ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC,
+	.pNext		= NULL,
+	.flags		= 0,
+	.ordinal	= 0,
+};
+
+static const ze_host_mem_alloc_desc_t host_desc = {
+	.stype		= ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC,
+	.pNext		= NULL,
+	.flags		= 0,
+};
 
 int ft_ze_init(void)
 {
+	ze_driver_handle_t driver;
+	ze_context_desc_t context_desc = {0};
 	ze_result_t ze_ret;
 	uint32_t count;
 
-	ze_ret = zeInit(ZE_INIT_FLAG_NONE);
+	ze_ret = zeInit(ZE_INIT_FLAG_GPU_ONLY);
 	if (ze_ret)
 		return -FI_EIO;
 
@@ -85,25 +93,31 @@ int ft_ze_init(void)
 	if (ze_ret)
 		return -FI_EIO;
 
-	count = 0;
-	ze_ret = zeDeviceGet(driver, &count, NULL);
-	if (ze_ret || count > ZE_MAX_DEVICES)
-		return -FI_EIO;
-
-	ze_ret = zeDeviceGet(driver, &count, devices);
+	ze_ret = zeContextCreate(driver, &context_desc, &context);
 	if (ze_ret)
 		return -FI_EIO;
 
+	count = 0;
+	ze_ret = zeDeviceGet(driver, &count, NULL);
+	if (ze_ret || count > ZE_MAX_DEVICES)
+		goto err;;
+
+	ze_ret = zeDeviceGet(driver, &count, devices);
+	if (ze_ret)
+		goto err;
+
 	for (num_devices = 0; num_devices < count; num_devices++) {
-		ze_ret = _ze_cmd_queue_create(devices[num_devices],
+		ze_ret = zeCommandQueueCreate(context, devices[num_devices], &cq_desc,
 					      &cmd_queue[num_devices]);
-		if (ze_ret) {
-			(void) ft_ze_cleanup();
-			return -FI_EIO;
-		}
+		if (ze_ret)
+			goto err;
 	}
 
 	return FI_SUCCESS;
+
+err:
+	(void) ft_ze_cleanup();
+	return -FI_EIO;
 }
 
 int ft_ze_cleanup(void)
@@ -115,30 +129,22 @@ int ft_ze_cleanup(void)
 			ret = -FI_EINVAL;
 	}
 
+	if (zeContextDestroy(context))
+		return -FI_EINVAL;
+
 	return ret;
 }
 
 int ft_ze_alloc(uint64_t device, void **buf, size_t size)
 {
-	ze_device_mem_alloc_desc_t device_desc;
-	ze_host_mem_alloc_desc_t host_desc;
-	ze_result_t ze_ret;
-
-	device_desc.version = ZE_DEVICE_MEM_ALLOC_DESC_VERSION_CURRENT;
-	device_desc.ordinal = 0;
-	device_desc.flags = ZE_DEVICE_MEM_ALLOC_FLAG_DEFAULT;
-
-	host_desc.version = ZE_HOST_MEM_ALLOC_DESC_VERSION_CURRENT;
-	host_desc.flags = ZE_HOST_MEM_ALLOC_FLAG_DEFAULT;
-
-	ze_ret = zeDriverAllocSharedMem(driver, &device_desc, &host_desc,
-					size, 16, devices[device], buf);
-	return !ze_ret ? ze_ret : -FI_EINVAL;
+	return zeMemAllocShared(context, &device_desc, &host_desc,
+				size, 16, devices[device], buf) ?
+				-FI_EINVAL : 0;
 }
 
 int ft_ze_free(void *buf)
 {
-	return zeDriverFreeMem(driver, buf) ? -FI_EINVAL : FI_SUCCESS;
+	return zeMemFree(context, buf) ? -FI_EINVAL : FI_SUCCESS;
 }
 
 int ft_ze_memset(uint64_t device, void *buf, int value, size_t size)
@@ -146,12 +152,12 @@ int ft_ze_memset(uint64_t device, void *buf, int value, size_t size)
 	ze_command_list_handle_t cmd_list;
 	ze_result_t ze_ret;
 
-	ze_ret = _ze_cmd_list_create(devices[device], &cmd_list);
+	ze_ret = zeCommandListCreate(context, devices[device], &cl_desc, &cmd_list);
 	if (ze_ret)
 		return -FI_EIO;
 
 	ze_ret = zeCommandListAppendMemoryFill(cmd_list, buf, &value,
-					       sizeof(value), size, NULL);
+					       sizeof(value), size, NULL, 0, NULL);
 	if (ze_ret)
 		goto free;
 
@@ -174,11 +180,11 @@ int ft_ze_copy(uint64_t device, void *dst, const void *src, size_t size)
 	ze_command_list_handle_t cmd_list;
 	ze_result_t ze_ret;
 
-	ze_ret = _ze_cmd_list_create(devices[device], &cmd_list);
+	ze_ret = zeCommandListCreate(context, devices[device], &cl_desc, &cmd_list);
 	if (ze_ret)
 		return -FI_EIO;
 
-	ze_ret = zeCommandListAppendMemoryCopy(cmd_list, dst, src, size, NULL);
+	ze_ret = zeCommandListAppendMemoryCopy(cmd_list, dst, src, size, NULL, 0, NULL);
 	if (ze_ret)
 		goto free;
 
