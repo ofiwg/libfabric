@@ -332,7 +332,7 @@ void smr_map_to_endpoint(struct smr_region *region, int index)
 	peer_smr = smr_peer_region(region, index);
 	peer_peers = smr_peer_data(peer_smr);
 
-	if (region->cma_cap == SMR_CMA_CAP_NA)
+	if (region->cma_cap == SMR_CMA_CAP_NA && region != peer_smr)
 		smr_cma_check(region, peer_smr);
 
 	for (peer_index = 0; peer_index < SMR_MAX_PEERS; peer_index++) {
