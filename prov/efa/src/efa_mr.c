@@ -178,8 +178,11 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	efa_mr = (struct efa_mr *)entry->data;
 	efa_mr->entry = entry;
 
-	efa_mr->peer.iface = attr->iface;
-	if (attr->iface == FI_HMEM_CUDA)
+	if (domain->util_domain.info_domain_caps & FI_HMEM)
+		efa_mr->peer.iface = attr->iface;
+	else
+		efa_mr->peer.iface = FI_HMEM_SYSTEM;
+	if (efa_mr->peer.iface == FI_HMEM_CUDA)
 		efa_mr->peer.device.cuda = attr->device.cuda;
 
 	*mr_fid = &efa_mr->mr_fid;
@@ -315,8 +318,15 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 
 	efa_mr->mr_fid.mem_desc = efa_mr;
 	efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
-	efa_mr->peer.iface = mr_attr->iface;
-	if (mr_attr->iface == FI_HMEM_CUDA)
+	/*
+	 * Skipping the domain type check is okay here since util_domain is at
+	 * the beginning of efa_domain and rxr_domain.
+	 */
+	if (efa_mr->domain->util_domain.info_domain_caps & FI_HMEM)
+		efa_mr->peer.iface = mr_attr->iface;
+	else
+		efa_mr->peer.iface = FI_HMEM_SYSTEM;
+	if (efa_mr->peer.iface == FI_HMEM_CUDA)
 		efa_mr->peer.device.cuda = mr_attr->device.cuda;
 	assert(efa_mr->mr_fid.key != FI_KEY_NOTAVAIL);
 

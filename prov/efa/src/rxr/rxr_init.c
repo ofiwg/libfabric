@@ -220,6 +220,9 @@ static int rxr_copy_attr(const struct fi_info *info, struct fi_info *dup)
 		if (!dup->nic)
 			return -FI_ENOMEM;
 	}
+	if (info->caps & FI_HMEM)
+		dup->caps |= FI_HMEM;
+
 	return 0;
 }
 

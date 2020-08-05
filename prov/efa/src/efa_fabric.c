@@ -537,8 +537,13 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 	info->domain_attr->mr_cnt		= base_attr->max_mr;
 
 #ifdef HAVE_LIBCUDA
-	if (efa_get_gdr_support(ctx->ibv_ctx->device->name) == 1)
+	if (info->ep_attr->type == FI_EP_RDM &&
+	    efa_get_gdr_support(ctx->ibv_ctx->device->name) == 1) {
+		info->caps			|= FI_HMEM;
+		info->tx_attr->caps		|= FI_HMEM;
+		info->rx_attr->caps		|= FI_HMEM;
 		info->domain_attr->mr_mode	|= FI_MR_HMEM;
+	}
 #endif
 
 	EFA_DBG(FI_LOG_DOMAIN, "Domain attribute :\n"
