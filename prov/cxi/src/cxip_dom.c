@@ -176,7 +176,7 @@ static int cxip_dom_dwq_op_send(struct cxip_domain *dom, struct fi_op_msg *msg,
 		CXIP_LOG_DBG("Failed to emit message triggered op, ret=%d\n",
 			     ret);
 	else
-		CXIP_LOG_DBG("Queued triggered message operation with threshold %lu",
+		CXIP_LOG_DBG("Queued triggered message operation with threshold %lu\n",
 			     trig_thresh);
 
 	return ret;
@@ -211,7 +211,7 @@ static int cxip_dom_dwq_op_tsend(struct cxip_domain *dom,
 		CXIP_LOG_DBG("Failed to emit tagged message triggered op, ret=%d\n",
 			     ret);
 	else
-		CXIP_LOG_DBG("Queued triggered tagged message operation with threshold %lu",
+		CXIP_LOG_DBG("Queued triggered tagged message operation with threshold %lu\n",
 			     trig_thresh);
 
 	return ret;
@@ -246,7 +246,7 @@ static int cxip_dom_dwq_op_rma(struct cxip_domain *dom, struct fi_op_rma *rma,
 		CXIP_LOG_DBG("Failed to emit RMA triggered op, ret=%d\n",
 			     ret);
 	else
-		CXIP_LOG_DBG("Queued triggered RMA operation with threshold %lu",
+		CXIP_LOG_DBG("Queued triggered RMA operation with threshold %lu\n",
 			     trig_thresh);
 
 	return ret;
@@ -275,7 +275,7 @@ static int cxip_dom_dwq_op_atomic(struct cxip_domain *dom,
 		CXIP_LOG_DBG("Failed to emit AMO triggered op, ret=%d\n",
 			     ret);
 	else
-		CXIP_LOG_DBG("Queued triggered AMO operation with threshold %lu",
+		CXIP_LOG_DBG("Queued triggered AMO operation with threshold %lu\n",
 			     trig_thresh);
 
 	return ret;
@@ -306,7 +306,7 @@ static int cxip_dom_dwq_op_fetch_atomic(struct cxip_domain *dom,
 		CXIP_LOG_DBG("Failed to emit fetching AMO triggered op, ret=%d\n",
 			     ret);
 	else
-		CXIP_LOG_DBG("Queued triggered fetching AMO operation with threshold %lu",
+		CXIP_LOG_DBG("Queued triggered fetching AMO operation with threshold %lu\n",
 			     trig_thresh);
 
 	return ret;
@@ -338,7 +338,7 @@ static int cxip_dom_dwq_op_comp_atomic(struct cxip_domain *dom,
 		CXIP_LOG_DBG("Failed to emit compare AMO triggered op, ret=%d\n",
 			     ret);
 	else
-		CXIP_LOG_DBG("Queued triggered compare AMO operation with threshold %lu",
+		CXIP_LOG_DBG("Queued triggered compare AMO operation with threshold %lu\n",
 			     trig_thresh);
 
 	return ret;
