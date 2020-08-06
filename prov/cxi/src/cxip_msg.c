@@ -3353,6 +3353,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	int ret;
 	struct cxip_cmdq *cmdq =
 		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
+	bool trig = req->triggered;
 
 	/* Calculate DFA */
 	pid_idx = CXIP_PTL_IDX_RXC(req->send.rxc_id);
@@ -3438,7 +3439,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 		cmd.match_bits = put_mb.raw;
 	}
 
-	if (req->triggered) {
+	if (trig) {
 		const struct c_ct_cmd ct_cmd = {
 			.trig_ct = req->trig_cntr->ct->ctn,
 			.threshold = req->trig_thresh,
@@ -3460,7 +3461,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 		goto err_unlock;
 	}
 
-	cxip_txq_ring(cmdq, req->send.flags & FI_MORE,
+	cxip_txq_ring(cmdq, req->send.flags & FI_MORE, trig,
 		      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
 
 	fastlock_release(&cmdq->lock);
@@ -3556,9 +3557,10 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	struct cxip_cmdq *cmdq =
 		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
 	const void *buf = NULL;
+	bool trig = req->triggered;
 
 	/* Always use IDCs when the payload fits */
-	idc = (req->send.len <= CXIP_INJECT_SIZE) && !req->triggered;
+	idc = (req->send.len <= CXIP_INJECT_SIZE) && !trig;
 
 	/* Calculate DFA */
 	pid_idx = CXIP_PTL_IDX_RXC(req->send.rxc_id);
@@ -3706,7 +3708,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		}
 
 		/* Issue Eager Put command */
-		if (req->triggered) {
+		if (trig) {
 			const struct c_ct_cmd ct_cmd = {
 				.trig_ct = req->trig_cntr->ct->ctn,
 				.threshold = req->trig_thresh,
@@ -3731,9 +3733,8 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		}
 	}
 
-	cxip_txq_ring(cmdq, req->send.flags & FI_MORE,
+	cxip_txq_ring(cmdq, req->send.flags & FI_MORE, trig,
 		      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
-
 
 	fastlock_release(&cmdq->lock);
 

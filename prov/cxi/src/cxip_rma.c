@@ -375,7 +375,8 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		}
 	}
 
-	cxip_txq_ring(cmdq, flags & FI_MORE, ofi_atomic_get32(&txc->otx_reqs));
+	cxip_txq_ring(cmdq, flags & FI_MORE, triggered,
+		      ofi_atomic_get32(&txc->otx_reqs));
 
 	if (req)
 		ofi_atomic_inc32(&txc->otx_reqs);

@@ -750,7 +750,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		}
 	}
 
-	cxip_txq_ring(cmdq, flags & FI_MORE, ofi_atomic_get32(&txc->otx_reqs));
+	cxip_txq_ring(cmdq, flags & FI_MORE, triggered,
+		      ofi_atomic_get32(&txc->otx_reqs));
 
 	if (req)
 		ofi_atomic_inc32(&txc->otx_reqs);
