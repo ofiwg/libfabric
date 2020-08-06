@@ -43,6 +43,9 @@ static void poll_counter_assert(struct fid_cntr *cntr, uint64_t expected_value,
 				     expected_value, value);
 			break;
 		}
+
+		/* Progress TX side for rendezvous tests */
+		fi_cq_read(cxit_tx_cq, NULL, 0);
 	}
 }
 
