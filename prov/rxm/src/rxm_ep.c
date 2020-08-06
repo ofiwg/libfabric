@@ -110,8 +110,17 @@ static int rxm_match_unexp_msg_tag_addr(struct dlist_entry *item, const void *ar
 static int rxm_buf_reg(struct ofi_bufpool_region *region)
 {
 	struct rxm_buf_pool *pool = region->pool->attr.context;
+	struct rxm_ep *rxm_ep = pool->rxm_ep;
 	struct rxm_domain *rxm_domain;
 	int ret;
+	bool hmem_enabled = !!(rxm_ep->util_ep.caps & FI_HMEM);
+
+	if (hmem_enabled) {
+		ret = ofi_hmem_host_register(region->mem_region,
+					region->pool->region_size);
+		if (ret != FI_SUCCESS)
+			return ret;
+	}
 
 	if ((pool->type == RXM_BUF_POOL_TX_INJECT) ||
 	    !pool->rxm_ep->msg_mr_local)
@@ -119,11 +128,17 @@ static int rxm_buf_reg(struct ofi_bufpool_region *region)
 
 	rxm_domain = container_of(pool->rxm_ep->util_ep.domain,
 				  struct rxm_domain, util_domain);
+
 	ret = rxm_msg_mr_reg_internal(rxm_domain, region->mem_region,
 				      region->pool->region_size,
 				      FI_SEND | FI_RECV | FI_READ | FI_WRITE,
 				      OFI_MR_NOCACHE,
 				      (struct fid_mr **) &region->context);
+
+	if (ret != FI_SUCCESS) {
+		if (hmem_enabled)
+			ofi_hmem_host_unregister(region->mem_region);
+	}
 
 	return ret;
 }
@@ -253,6 +268,10 @@ static void rxm_buf_close(struct ofi_bufpool_region *region)
 {
 	struct rxm_buf_pool *pool = region->pool->attr.context;
 	struct rxm_ep *rxm_ep = pool->rxm_ep;
+	bool hmem_enabled = !!(rxm_ep->util_ep.caps & FI_HMEM);
+
+	if (hmem_enabled)
+		ofi_hmem_host_unregister(region->mem_region);
 
 	if ((rxm_ep->msg_mr_local) && (pool->type != RXM_BUF_POOL_TX_INJECT)) {
 		/* We would get a (fid_mr *) in context but
