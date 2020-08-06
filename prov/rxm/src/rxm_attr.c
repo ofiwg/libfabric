@@ -63,6 +63,25 @@ struct fi_rx_attr rxm_rx_attr = {
 	.iov_limit= RXM_IOV_LIMIT,
 };
 
+struct fi_tx_attr rxm_tx_attr_coll = {
+	.caps = RXM_TX_CAPS | FI_COLLECTIVE,
+	.op_flags = RXM_PASSTHRU_TX_OP_FLAGS | RXM_TX_OP_FLAGS,
+	.msg_order = ~0x0ULL,
+	.comp_order = FI_ORDER_NONE,
+	.size = 1024,
+	.iov_limit = RXM_IOV_LIMIT,
+	.rma_iov_limit = RXM_IOV_LIMIT,
+};
+
+struct fi_rx_attr rxm_rx_attr_coll = {
+	.caps = RXM_RX_CAPS | FI_COLLECTIVE,
+	.op_flags = RXM_PASSTHRU_RX_OP_FLAGS | RXM_RX_OP_FLAGS,
+	.msg_order = ~0x0ULL,
+	.comp_order = FI_ORDER_NONE,
+	.size = 1024,
+	.iov_limit= RXM_IOV_LIMIT,
+};
+
 struct fi_ep_attr rxm_ep_attr = {
 	.type = FI_EP_RDM,
 	.protocol = FI_PROTO_RXM,
@@ -128,8 +147,8 @@ struct fi_fabric_attr rxm_tcp_fabric_attr = {
 struct fi_info rxm_coll_info = {
 	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS | FI_COLLECTIVE,
 	.addr_format = FI_SOCKADDR,
-	.tx_attr = &rxm_tx_attr,
-	.rx_attr = &rxm_rx_attr,
+	.tx_attr = &rxm_tx_attr_coll,
+	.rx_attr = &rxm_rx_attr_coll,
 	.ep_attr = &rxm_ep_attr_coll,
 	.domain_attr = &rxm_domain_attr,
 	.fabric_attr = &rxm_fabric_attr
