@@ -88,7 +88,10 @@ hsa_status_t ofi_hsa_amd_memory_unlock(void *host_ptr);
 
 #endif /* HAVE_ROCR */
 
-int rocr_memcpy(uint64_t device, void *dest, const void *src, size_t size);
+int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
+		       size_t size);
+int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
+		     size_t size);
 int rocr_hmem_init(void);
 int rocr_hmem_cleanup(void);
 bool rocr_is_addr_valid(const void *addr);

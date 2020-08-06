@@ -157,7 +157,7 @@ hsa_status_t ofi_hsa_amd_reg_dealloc_cb(void *ptr,
 	return rocr_ops.hsa_amd_reg_dealloc_cb(ptr, cb, user_data);
 }
 
-int rocr_memcpy(uint64_t device, void *dest, const void *src, size_t size)
+static int rocr_memcpy(void *dest, const void *src, size_t size)
 {
 	hsa_status_t hsa_ret;
 
@@ -170,6 +170,63 @@ int rocr_memcpy(uint64_t device, void *dest, const void *src, size_t size)
 		ofi_hsa_status_to_string(hsa_ret));
 
 	return -FI_EIO;
+}
+
+static int rocr_host_memory_ptr(void *host_ptr, void **ptr)
+{
+	hsa_amd_pointer_info_t info = {
+		.size = sizeof(info),
+	};
+	hsa_status_t hsa_ret;
+
+	hsa_ret = ofi_hsa_amd_pointer_info((void *)host_ptr, &info, NULL, NULL,
+					   NULL);
+	if (hsa_ret != HSA_STATUS_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to perform hsa_amd_pointer_info: %s\n",
+			ofi_hsa_status_to_string(hsa_ret));
+
+		return -FI_EIO;
+	}
+
+	if (info.type != HSA_EXT_POINTER_TYPE_LOCKED)
+		*ptr = host_ptr;
+	else
+		*ptr = (void *) ((uintptr_t) info.agentBaseAddress +
+				 (uintptr_t) host_ptr -
+				 (uintptr_t) info.hostBaseAddress);
+
+	return FI_SUCCESS;
+}
+
+int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
+		       size_t size)
+{
+	int ret;
+	void *dest_memcpy_ptr;
+
+	ret = rocr_host_memory_ptr(dest, &dest_memcpy_ptr);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	ret = rocr_memcpy(dest_memcpy_ptr, src, size);
+
+	return ret;
+}
+
+int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
+		     size_t size)
+{
+	int ret;
+	void *src_memcpy_ptr;
+
+	ret = rocr_host_memory_ptr((void *) src, &src_memcpy_ptr);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	ret = rocr_memcpy(dest, src_memcpy_ptr, size);
+
+	return ret;
 }
 
 bool rocr_is_addr_valid(const void *addr)
@@ -376,7 +433,14 @@ int rocr_host_unregister(void *ptr)
 
 #else
 
-int rocr_memcpy(uint64_t device, void *dest, const void *src, size_t size)
+int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
+		       size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
+		     size_t size)
 {
 	return -FI_ENOSYS;
 }
