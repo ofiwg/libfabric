@@ -98,7 +98,7 @@ int ze_hmem_init(void)
 		ze_ret = zeCommandQueueCreate(context, devices[num_devices], &cq_desc,
 					      &cmd_queue[num_devices]);
 		if (ze_ret)
-			goto free;
+			goto err;
 	}
 
 	return FI_SUCCESS;
