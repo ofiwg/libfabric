@@ -40,13 +40,8 @@
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, \
 		"COLL " __VA_ARGS__)
 
-static void _coll_progress(void)
-{
-	/* stub */
-}
-
 static ssize_t _coll_recv(struct cxip_ep_obj *ep_obj,
-			  struct cxip_coll_buf *msg);
+			  struct cxip_coll_buf *buf);
 
 /****************************************************************************
  * SEND operations (send data to a remote PTE)
@@ -158,9 +153,14 @@ err_unlock:
  * Receive operations (posting buffers to collective PTE)
  */
 
+static void _coll_rx_progress(struct cxip_req *req, const union c_event *event)
+{
+	/* stub */
+}
+
 /* Report results of an event.
  */
-static void _coll_req_report(struct cxip_req *req)
+static void _coll_rx_req_report(struct cxip_req *req)
 {
 	size_t overflow;
 	int err, ret;
@@ -214,7 +214,7 @@ static void _coll_req_report(struct cxip_req *req)
 
 	if (req->coll.mrecv_space < req->coll.ep_obj->coll.min_multi_recv) {
 		struct cxip_ep_obj *ep_obj = req->coll.ep_obj;
-		struct cxip_coll_buf *msg = req->coll.msg;
+		struct cxip_coll_buf *buf = req->coll.buf;
 
 		/* Useful for testing */
 		ep_obj->coll.buf_swap_cnt++;
@@ -223,7 +223,7 @@ static void _coll_req_report(struct cxip_req *req)
 		cxip_cq_req_free(req);
 
 		/* Re-use this buffer in the hardware */
-		ret = _coll_recv(ep_obj, msg);
+		ret = _coll_recv(ep_obj, buf);
 		if (ret != FI_SUCCESS) {
 			CXIP_LOG_ERROR("Re-link buffer failed: %d\n", ret);
 		}
@@ -263,13 +263,13 @@ static int _coll_recv_cb(struct cxip_req *req, const union c_event *event)
 		}
 		CXIP_LOG_DBG("PUT event seen\n");
 		req->buf = (uint64_t)(CXI_IOVA_TO_VA(
-					req->coll.msg->cxi_md->md,
+					req->coll.buf->cxi_md->md,
 					event->tgt_long.start));
 		req->coll.mrecv_space -= event->tgt_long.mlength;
 		req->coll.hw_req_len = event->tgt_long.rlength;
 		req->data_len = event->tgt_long.mlength;
-		_coll_req_report(req);
-		_coll_progress();
+		_coll_rx_progress(req, event);
+		_coll_rx_req_report(req);
 		break;
 	default:
 		req->coll.rc = cxi_tgt_event_rc(event);
@@ -295,13 +295,13 @@ static int _hw_coll_recv(struct cxip_ep_obj *ep_obj, struct cxip_req *req)
 	le_flags = C_LE_EVENT_LINK_DISABLE | C_LE_EVENT_UNLINK_DISABLE |
 		   C_LE_OP_PUT | C_LE_MANAGE_LOCAL;
 
-	recv_iova = CXI_VA_TO_IOVA(req->coll.msg->cxi_md->md,
-				   (uint64_t)req->coll.msg->buffer);
+	recv_iova = CXI_VA_TO_IOVA(req->coll.buf->cxi_md->md,
+				   (uint64_t)req->coll.buf->buffer);
 
 	ret = cxip_pte_append(ep_obj->coll.pte,
 			      recv_iova,
-			      req->coll.msg->bufsiz,
-			      req->coll.msg->cxi_md->md->lac,
+			      req->coll.buf->bufsiz,
+			      req->coll.buf->cxi_md->md->lac,
 			      C_PTL_LIST_PRIORITY,
 			      req->req_id,
 			      0, 0, 0,
@@ -320,23 +320,23 @@ static int _hw_coll_recv(struct cxip_ep_obj *ep_obj, struct cxip_req *req)
 /* Append a receive buffer to the PTE.
  */
 static ssize_t _coll_recv(struct cxip_ep_obj *ep_obj,
-			  struct cxip_coll_buf *msg)
+			  struct cxip_coll_buf *buf)
 {
 	struct cxip_req *req;
 	int ret;
 
-	if (msg->bufsiz && !msg->buffer)
+	if (buf->bufsiz && !buf->buffer)
 		return -FI_EINVAL;
 
 	/* Allocate and populate a new request
 	 * Sets:
 	 * - req->cq
 	 * - req->req_id to request index
-	 * - req->req_ctx to passed context (msg)
+	 * - req->req_ctx to passed context (buf)
 	 * - req->discard to false
 	 * - Inserts into the cq->req_list
 	 */
-	req = cxip_cq_req_alloc(ep_obj->coll.rx_cq, true, msg);
+	req = cxip_cq_req_alloc(ep_obj->coll.rx_cq, true, buf);
 	if (!req) {
 		CXIP_LOG_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -362,14 +362,14 @@ static ssize_t _coll_recv(struct cxip_ep_obj *ep_obj,
 	req->triggered = false;
 	req->trig_thresh = 0;
 	req->trig_cntr = NULL;
-	req->context = (uint64_t)msg;
-	req->data_len = (uint64_t)msg->buflen;
-	req->buf = (uint64_t)msg->buffer;
+	req->context = (uint64_t)buf;
+	req->data_len = (uint64_t)buf->buflen;
+	req->buf = (uint64_t)buf->buffer;
 	req->data = 0;
 	req->tag = 0;
 	req->coll.ep_obj = ep_obj;
-	req->coll.msg = msg;
-	req->coll.mrecv_space = req->coll.msg->bufsiz;
+	req->coll.buf = buf;
+	req->coll.mrecv_space = req->coll.buf->bufsiz;
 
 	/* Returns FI_SUCCESS or FI_EAGAIN */
 	ret = _hw_coll_recv(ep_obj, req);
@@ -382,7 +382,7 @@ recv_dequeue:
 	cxip_cq_req_free(req);
 
 recv_unmap:
-	cxip_unmap(msg->cxi_md);
+	cxip_unmap(buf->cxi_md);
 	return ret;
 }
 
@@ -518,12 +518,12 @@ static int _coll_pte_disable(struct cxip_ep_obj *ep_obj)
 static void _coll_destroy_buffers(struct cxip_ep_obj *ep_obj)
 {
 	struct dlist_entry *list = &ep_obj->coll.buf_list;
-	struct cxip_coll_buf *msg;
+	struct cxip_coll_buf *buf;
 
 	while (!dlist_empty(list)) {
-		dlist_pop_front(list, struct cxip_coll_buf, msg, msg_entry);
-		cxip_unmap(msg->cxi_md);
-		free(msg);
+		dlist_pop_front(list, struct cxip_coll_buf, buf, buf_entry);
+		cxip_unmap(buf->cxi_md);
+		free(buf);
 	}
 }
 
@@ -533,24 +533,24 @@ static void _coll_destroy_buffers(struct cxip_ep_obj *ep_obj)
 static int _coll_add_buffers(struct cxip_ep_obj *ep_obj, size_t size,
 			     size_t count)
 {
-	struct cxip_coll_buf *msg;
+	struct cxip_coll_buf *buf;
 	int ret, i;
 
 	CXIP_LOG_DBG("Adding %ld buffers of size %ld\n", count, size);
 	for (i = 0; i < count; i++) {
-		msg = calloc(1, sizeof(*msg) + size);
-		if (!msg) {
+		buf = calloc(1, sizeof(*buf) + size);
+		if (!buf) {
 			ret = -FI_ENOMEM;
 			goto out;
 		}
-		ret = cxip_map(ep_obj->domain, (void *)msg->buffer, size,
-			       &msg->cxi_md);
+		ret = cxip_map(ep_obj->domain, (void *)buf->buffer, size,
+			       &buf->cxi_md);
 		if (ret)
 			goto del_msg;
-		msg->bufsiz = size;
-		dlist_insert_tail(&msg->msg_entry, &ep_obj->coll.buf_list);
+		buf->bufsiz = size;
+		dlist_insert_tail(&buf->buf_entry, &ep_obj->coll.buf_list);
 
-		ret = _coll_recv(ep_obj, msg);
+		ret = _coll_recv(ep_obj, buf);
 		if (ret) {
 			CXIP_LOG_ERROR("Add buffer %d of %ld: %d\n",
 				       i, count, ret);
@@ -559,7 +559,7 @@ static int _coll_add_buffers(struct cxip_ep_obj *ep_obj, size_t size,
 	}
 	return FI_SUCCESS;
 del_msg:
-	free(msg);
+	free(buf);
 out:
 	_coll_destroy_buffers(ep_obj);
 	return ret;
@@ -641,6 +641,13 @@ int cxip_coll_enable(struct cxip_ep_obj *ep_obj)
 		return -FI_EOPBADSTATE;
 	}
 
+	/* A read-only or write-only endpoint is legal */
+	if (!(ofi_recv_allowed(ep_obj->rxcs[0]->attr.caps) &&
+	      ofi_send_allowed(ep_obj->txcs[0]->attr.caps))) {
+		CXIP_LOG_DBG("EP not recv/send, collectives not enabled\n");
+		return FI_SUCCESS;
+	}
+
 	ep_obj->coll.is_netsim =
 			(ep_obj->domain->iface->info->device_platform ==
 			 CXI_PLATFORM_NETSIM);
@@ -678,6 +685,23 @@ int cxip_coll_enable(struct cxip_ep_obj *ep_obj)
 rls_lock:
 	fastlock_release(&ep_obj->coll.lock);
 	return ret;
+}
+
+/**
+ * Disable collectives.
+ *
+ * @param ep_obj - EP object
+ *
+ * @return int - FI return code
+ */
+int cxip_coll_disable(struct cxip_ep_obj *ep_obj)
+{
+	if (!ep_obj->coll.enabled)
+		return FI_SUCCESS;
+
+	ep_obj->coll.enabled = false;
+
+	return FI_SUCCESS;
 }
 
 /**
@@ -732,3 +756,10 @@ struct fi_ops_collective cxip_no_collective_ops = {
 	.msg = fi_coll_no_msg,
 };
 
+int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
+			 const struct fid_av_set *coll_av_set,
+			 uint64_t flags, struct fid_mc **mc, void *context)
+{
+	/* stub */
+	return FI_SUCCESS;
+}

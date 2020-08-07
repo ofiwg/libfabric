@@ -213,10 +213,10 @@ int cxip_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr)
 	struct cxip_av_set *av_set;
 
 	av_set = container_of(set, struct cxip_av_set, av_set_fid);
-	if (!av_set->cxi_mc)
+	if (!av_set->mc_obj)
 		return -FI_EINVAL;
 
-	*coll_addr = (uintptr_t)av_set->cxi_mc;
+	*coll_addr = (uintptr_t)av_set->mc_obj;
 	return FI_SUCCESS;
 }
 
@@ -278,10 +278,6 @@ int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 
 	/* We need the AV to stick around now */
 	ofi_atomic_inc32(&cxi_av->ref);
-
-	/* TODO: attr->comm_key contains the application-managed collective
-	 * information needed to perform first fi_join_collective().
-	 */
 
 	/* May change values below, don't alter struct */
 	start = attr->start_addr;
@@ -361,6 +357,11 @@ int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 		cxi_set->fi_addr_cnt++;
 	}
 
+	/* copy comm_key from attributes, if present */
+	if (attr->comm_key)
+		memcpy(&cxi_set->comm_key, attr->comm_key,
+		       sizeof(struct cxip_coll_comm_key));
+
 	ofi_atomic_initialize32(&cxi_set->ref, 0);
 	cxi_set->av_set_fid.fid.fclass = FI_CLASS_AV_SET;
 	cxi_set->av_set_fid.fid.context = context;
@@ -377,5 +378,3 @@ err0:
 	ofi_atomic_dec32(&cxi_av->ref);
 	return ret;
 }
-
-

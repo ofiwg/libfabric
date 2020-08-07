@@ -280,6 +280,14 @@ static int cxip_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 	return (len == sizeof(struct cxip_addr)) ? FI_SUCCESS : -FI_ETOOSMALL;
 }
 
+static int _join_collective(struct fid_ep *ep, const void *addr,
+			    uint64_t flags, struct fid_mc **mc, void *context)
+{
+	struct fi_collective_addr *arg = (struct fi_collective_addr *)addr;
+	return cxip_join_collective(ep, arg->coll_addr, arg->set,
+				    flags, mc, context);
+}
+
 struct fi_ops_cm cxip_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = fi_no_setname,
@@ -290,7 +298,7 @@ struct fi_ops_cm cxip_ep_cm_ops = {
 	.accept = fi_no_accept,
 	.reject = fi_no_reject,
 	.shutdown = fi_no_shutdown,
-	.join = fi_no_join,
+	.join = _join_collective,
 };
 
 /**
@@ -1052,6 +1060,12 @@ static int cxip_ep_enable(struct fid_ep *ep)
 			CXIP_LOG_DBG("cxip_rxc_enable returned: %d\n", ret);
 			return ret;
 		}
+
+		ret = cxip_coll_enable(cxi_ep->ep_obj);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("cxip_coll_enable returned: %d\n", ret);
+			/* collectives will not function, but EP will */
+		}
 	} else {
 		ret = ep_enable(cxi_ep->ep_obj);
 		if (ret != FI_SUCCESS)
@@ -1071,6 +1085,7 @@ static int cxip_ep_enable(struct fid_ep *ep)
 static void cxip_ep_disable(struct cxip_ep *cxi_ep)
 {
 	if (cxi_ep->ep_obj->enabled) {
+		cxip_coll_disable(cxi_ep->ep_obj);
 		cxip_ep_ctrl_fini(cxi_ep->ep_obj);
 		cxip_free_if_domain(cxi_ep->ep_obj->if_dom);
 		cxi_ep->ep_obj->enabled = false;
