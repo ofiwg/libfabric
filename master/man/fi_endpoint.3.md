@@ -479,7 +479,7 @@ The following option levels and option names and parameters are defined.
 : Defines the maximum size of a buffered message that will be reported
   to users as part of a receive completion when the FI_BUFFERED_RECV mode
   is enabled on an endpoint.
-  
+
   fi_getopt() will return the currently configured threshold, or the
   provider's default threshold if one has not be set by the application.
   fi_setopt() allows an application to configure the threshold.  If the
@@ -693,7 +693,7 @@ The protocol version allows providers to extend an existing protocol,
 by adding support for additional features or functionality for example,
 in a backward compatible manner.  Providers that support different versions
 of the same protocol should inter-operate, but only when using the
-capabilities defined for the lesser version. 
+capabilities defined for the lesser version.
 
 ## max_msg_size - Max Message Size
 
@@ -830,7 +830,7 @@ details.
 ## auth_key_size - Authorization Key Length
 
 The length of the authorization key in bytes.  This field will be 0 if
-authorization keys are not available or used.  This field is ignored 
+authorization keys are not available or used.  This field is ignored
 unless the fabric is opened with API version 1.5 or greater.
 
 ## auth_key - Authorization Key
@@ -841,9 +841,9 @@ to limit communication between endpoints.  Only peer endpoints that are
 programmed to use the same authorization key may communicate.
 Authorization keys are often used to implement job keys, to ensure
 that processes running in different jobs do not accidentally
-cross traffic.  The domain authorization key will be used if auth_key_size 
+cross traffic.  The domain authorization key will be used if auth_key_size
 is set to 0.  This field is ignored unless the fabric is opened with API
-version 1.5 or greater. 
+version 1.5 or greater.
 
 # TRANSMIT CONTEXT ATTRIBUTES
 
@@ -875,7 +875,8 @@ capability bits from the fi_info structure will be used.
 
 The following capabilities apply to the transmit attributes: FI_MSG,
 FI_RMA, FI_TAGGED, FI_ATOMIC, FI_READ, FI_WRITE, FI_SEND, FI_HMEM,
-FI_TRIGGER, FI_FENCE, FI_MULTICAST, FI_RMA_PMEM, and FI_NAMED_RX_CTX.
+FI_TRIGGER, FI_FENCE, FI_MULTICAST, FI_RMA_PMEM, FI_NAMED_RX_CTX,
+and FI_COLLECTIVE.
 
 Many applications will be able to ignore this field and rely solely
 on the fi_info::caps field.  Use of this field provides fine grained
@@ -1171,7 +1172,8 @@ capability bits from the fi_info structure will be used.
 The following capabilities apply to the receive attributes: FI_MSG,
 FI_RMA, FI_TAGGED, FI_ATOMIC, FI_REMOTE_READ, FI_REMOTE_WRITE, FI_RECV,
 FI_HMEM, FI_TRIGGER, FI_RMA_PMEM, FI_DIRECTED_RECV, FI_VARIABLE_MSG,
-FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, and FI_SOURCE_ERR.
+FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SOURCE_ERR, and
+FI_COLLECTIVE.
 
 Many applications will be able to ignore this field and rely solely
 on the fi_info::caps field.  Use of this field provides fine grained
@@ -1359,7 +1361,7 @@ associated with completion queues or counters.  Completed receive
 operations are posted to the CQs bound to the endpoint.  An endpoint
 may only be associated with a single receive context, and all
 connectionless endpoints associated with a shared receive context must
-also share the same address vector. 
+also share the same address vector.
 
 Endpoints associated with a shared transmit context may use dedicated
 receive contexts, and vice-versa.  Or an endpoint may use shared
