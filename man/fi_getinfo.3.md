@@ -263,6 +263,11 @@ additional optimizations.
   FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the
   types of atomic operations supported by an endpoint.
 
+*FI_COLLECTIVE*
+: Requests support for collective operations.  Endpoints that support
+  this capability support the collective operations defined in
+  [`fi_collective`(3)](fi_collective.3.html).
+
 *FI_DIRECTED_RECV*
 : Requests that the communication endpoint use the source address of
   an incoming message when matching it with a receive buffer.  If this
@@ -279,7 +284,7 @@ additional optimizations.
 
 *FI_HMEM*
 : Specifies that the endpoint should support transfers to and from
-  device memory. 
+  device memory.
 
 *FI_LOCAL_COMM*
 : Indicates that the endpoint support host local communication.  This
@@ -440,7 +445,7 @@ may optionally report non-selected secondary capabilities if doing so
 would not compromise performance or security.
 
 Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_MULTICAST,
-FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_VARIABLE_MSG, FI_HMEM
+FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_VARIABLE_MSG, FI_HMEM, FI_COLLECTIVE
 
 Primary modifiers: FI_READ, FI_WRITE, FI_RECV, FI_SEND,
 FI_REMOTE_READ, FI_REMOTE_WRITE
