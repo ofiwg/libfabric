@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2017 Cisco Systems, Inc.  All rights reserved.
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -61,6 +62,7 @@ void ft_parse_benchmark_opts(int op, char *optarg)
 
 void ft_benchmark_usage(void)
 {
+	ft_hmem_usage();
 	FT_PRINT_OPTS_USAGE("-v", "enables data_integrity checks");
 	FT_PRINT_OPTS_USAGE("-k", "force prefix mode");
 	FT_PRINT_OPTS_USAGE("-j", "maximum inject message size");
