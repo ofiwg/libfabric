@@ -22,7 +22,13 @@ v1.11.0, Fri Aug 14, 2020
 
 ## RxD
 
--
+- updated AV design to be dynamically extensible using indexer and index map.
+- updated static allocation of peers with runtime allocation during rts.
+- added wrapper to fetch pointer to a peer from the peers data structure. 
+- Updated to show correct msg_ordering.
+- Check datatype size when handling atomic ops. 
+- Verify atomic opcode in range for fixing Klocwork issue.
+- Corrected use of addr in rxd_atomic_inject for retrieving rxd_addr.
 
 ## RxM
 
