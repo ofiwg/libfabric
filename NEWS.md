@@ -10,7 +10,40 @@ v1.11.0, Fri Aug 14, 2020
 
 ## Core
 
--
+- Add generalized hmem_ops interface for device ops
+- Add FI_HMEM_CUDA, FI_HMEM_ROCR, and FI_HMEM_ZE interfaces and device support
+- Add CUDA and ROCR memory monitors and support for multiple monitors
+- Add fi_tostr for FI_HMEM_* interfaces
+- Add utility interface and device support
+- Add documentation for hmem override ops
+- Save mr_map mem_desc as ofi_mr
+- Rework and reorganize memory monitor code
+- Add mr_cache argument flush_lru to ofi_mr_cache_flush
+- Fix 1.1 ABI domain, EP, and tx attributes
+- Add loading of DL providers by name
+- Add CMA wrappers and define CMA for OSX 
+- Fix util getinfo: use base fi_info caps, altering mr_mode properly,
+  FI_MR_HMEM support, NULL hints, set CQ FI_MSG flag, query FI_COLLECTIVE,
+  list FI_MATCH_COMPLETE, select and request specific core provider
+- Add rbmap interface to get root node
+- Add support of AF_IB to addr manipulation functions
+- Windows: Map strtok_r() to strtok_s()
+- Define OFI_IB_IP_{PORT,PS}_MASK
+- Make fi_addr_format() public
+- Remove mr_cache entry subscribed field
+- Update memhooks brk and implement sbrk intercepts
+- Fix vrb_speed units
+- Fix possible null dereference in ofi_create_filter
+- Add ofi_idx_ordered_remove
+- Add functions ofi_generate_seed() and ofi_xorshift_random_r()
+- Call correct close fd call in util_wait_fd_close
+- Set a libfabric default universe size
+- Add compatibility with SUSE packaging
+- Windows: Handle socket API size limitations
+- Fix UBSAN warnings
+- Save and restore the errno in FI_LOG
+- Ensure that access to atomic handlers are in range
+- Ensure ifa_name is null terminated in ofi_get_list_of_addr
 
 ## EFA
 
