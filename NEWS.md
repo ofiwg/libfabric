@@ -18,7 +18,8 @@ v1.11.0, Fri Aug 14, 2020
 
 ## PSM2
 
--
+- Treat dynamic connection errors as fatal
+- Add missing return status checking for PSM2 AM calls
 
 ## RxD
 
@@ -85,6 +86,10 @@ v1.10.0, Fri Apr 24, 2020
 - Fixes AV error handling paths
 - Fixes shm error handling paths
 - Fixes compiler warnings
+
+## PSM2
+
+- Improve source address translation for scalable endpoints
 
 ## RxM
 
