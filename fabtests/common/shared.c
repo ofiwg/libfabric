@@ -81,6 +81,7 @@ int ft_socket_pair[2];
 
 fi_addr_t remote_fi_addr = FI_ADDR_UNSPEC;
 char *buf, *tx_buf, *rx_buf;
+static char *bounce_buf;
 char **tx_mr_bufs = NULL, **rx_mr_bufs = NULL;
 size_t buf_size, tx_size, rx_size, tx_mr_size, rx_mr_size;
 int rx_fd = -1, tx_fd = -1;
@@ -455,6 +456,21 @@ static void ft_set_tx_rx_sizes(size_t *set_tx, size_t *set_rx)
 	*set_tx += ft_tx_prefix_size();
 }
 
+static void ft_cleanup_mr_array(struct ft_context *ctx_arr, char **mr_bufs)
+{
+	int i, ret;
+
+	if (!mr_bufs)
+		return;
+
+	for (i = 0; i < opts.window_size; i++) {
+		FT_CLOSE_FID(ctx_arr[i].mr);
+		ret = ft_hmem_free(opts.iface, mr_bufs[i]);
+		if (ret)
+			FT_PRINTERR("ft_hmem_free", ret);
+	}
+}
+
 /*
  * Include FI_MSG_PREFIX space in the allocated buffer, and ensure that the
  * buffer is large enough for a control message used to exchange addressing
@@ -477,7 +493,7 @@ static int ft_alloc_msgs(void)
 		ft_set_tx_rx_sizes(&tx_size, &rx_size);
 		tx_mr_size = 0;
 		rx_mr_size = 0;
-		buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) * opts.window_size + 
+		buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) * opts.window_size +
 			   MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size;
 	}
 
@@ -491,17 +507,25 @@ static int ft_alloc_msgs(void)
 				buf_size);
 		if (ret) {
 			FT_PRINTERR("posix_memalign", ret);
-			return ret;
+			goto err;
 		}
 	} else {
 		ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &buf, buf_size);
 		if (ret)
-			return ret;
+			goto err;
 	}
 	ret = ft_hmem_memset(opts.iface, opts.device, (void *) buf, 0, buf_size);
 	if (ret)
-		return ret;
+		goto err_free_buf;
 	rx_buf = buf;
+
+	if (ft_check_opts(FT_OPT_ENABLE_HMEM)) {
+		bounce_buf = malloc(buf_size);
+		if (!bounce_buf) {
+			ret = -FI_ENOMEM;
+			goto err_free_buf;
+		}
+	}
 
 	if (opts.options & FT_OPT_ALLOC_MULT_MR)
 		tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG);
@@ -515,27 +539,51 @@ static int ft_alloc_msgs(void)
 		ret = ft_reg_mr(buf, buf_size, ft_info_to_mr_access(fi),
 				FT_MR_KEY, &mr, &mr_desc);
 		if (ret)
-			return ret;
+			goto err_free_bounce_buf;
 	} else {
 		if (ft_mr_alloc_func) {
 			assert(!ft_check_opts(FT_OPT_SKIP_REG_MR));
 			ret = ft_mr_alloc_func();
 			if (ret)
-				return ret;
+				goto err_free_bounce_buf;
 		}
 	}
 
 	ret = ft_alloc_ctx_array(&tx_ctx_arr, &tx_mr_bufs, tx_buf,
 				 tx_mr_size, FT_TX_MR_KEY);
-	if (ret)
-		return -FI_ENOMEM;
+	if (ret) {
+		ret = -FI_ENOMEM;
+		goto err_free_mr;
+	}
 
 	ret = ft_alloc_ctx_array(&rx_ctx_arr, &rx_mr_bufs, rx_buf,
 				 rx_mr_size, FT_RX_MR_KEY);
-	if (ret)
-		return -FI_ENOMEM;
+	if (ret) {
+		ret = -FI_ENOMEM;
+		goto err_free_tx_ctx;
+	}
 
 	return 0;
+
+err_free_tx_ctx:
+	ft_cleanup_mr_array(tx_ctx_arr, tx_mr_bufs);
+	free(tx_ctx_arr);
+	tx_ctx_arr = NULL;
+err_free_mr:
+	if (mr) {
+		fi_close(&mr->fid);
+		mr = NULL;
+	}
+err_free_bounce_buf:
+	if (bounce_buf) {
+		free(bounce_buf);
+		bounce_buf = NULL;
+	}
+err_free_buf:
+	ft_hmem_free(opts.iface, buf);
+	buf = NULL;
+err:
+	return ret;
 }
 
 int ft_open_fabric_res(void)
@@ -1504,21 +1552,6 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 	return ret;
 }
 
-static void ft_cleanup_mr_array(struct ft_context *ctx_arr, char **mr_bufs)
-{
-	int i, ret;
-
-	if (!mr_bufs)
-		return;
-
-	for (i = 0; i < opts.window_size; i++) {
-		FT_CLOSE_FID(ctx_arr[i].mr);
-		ret = ft_hmem_free(opts.iface, mr_bufs[i]);
-		if (ret)
-			FT_PRINTERR("ft_hmem_free", ret);
-	}
-}
-
 static void ft_close_fids(void)
 {
 	if (mr != &no_mr)
@@ -1547,15 +1580,20 @@ void ft_free_res(void)
 {
 	int ret;
 
-	ft_cleanup_mr_array(tx_ctx_arr, tx_mr_bufs);
 	ft_cleanup_mr_array(rx_ctx_arr, rx_mr_bufs);
-
-	free(tx_ctx_arr);
 	free(rx_ctx_arr);
-	tx_ctx_arr = NULL;
 	rx_ctx_arr = NULL;
 
+	if (tx_ctx_arr) {
+		ft_cleanup_mr_array(tx_ctx_arr, tx_mr_bufs);
+		free(tx_ctx_arr);
+		tx_ctx_arr = NULL;
+	}
+
 	ft_close_fids();
+
+	if (bounce_buf)
+		free(bounce_buf);
 
 	if (buf) {
 		ret = ft_hmem_free(opts.iface, buf);
@@ -1576,7 +1614,7 @@ void ft_free_res(void)
 		fi_freeinfo(hints);
 		hints = NULL;
 	}
-	
+
 	ret = ft_hmem_cleanup(opts.iface);
 	if (ret)
 		FT_PRINTERR("ft_hmem_cleanup", ret);
@@ -1844,8 +1882,11 @@ ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx)
 {
 	ssize_t ret;
 
-	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE))
-		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+		ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
+		if (ret)
+			return ret;
+	}
 
 	ret = ft_post_tx(ep, fi_addr, size, NO_CQ_DATA, ctx);
 	if (ret)
@@ -1875,8 +1916,11 @@ ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
 {
 	ssize_t ret;
 
-	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE))
-		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+		ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
+		if (ret)
+			return ret;
+	}
 
 	ret = ft_post_inject(ep, fi_addr, size);
 	if (ret)
@@ -3046,20 +3090,27 @@ int ft_parse_rma_opts(int op, char *optarg, struct fi_info *hints,
 	return 0;
 }
 
-void ft_fill_buf(void *buf, int size)
+int ft_fill_buf(void *buf, int size)
 {
 	char *msg_buf;
 	int msg_index;
 	static unsigned int iter = 0;
 	int i;
+	int ret = FI_SUCCESS;
 
 	msg_index = ((iter++)*INTEG_SEED) % integ_alphabet_length;
-	msg_buf = (char *)buf;
+	msg_buf = ft_check_opts(FT_OPT_ENABLE_HMEM) ? bounce_buf : (char *) buf;
 	for (i = 0; i < size; i++) {
 		msg_buf[i] = integ_alphabet[msg_index++];
 		if (msg_index >= integ_alphabet_length)
 			msg_index = 0;
 	}
+
+	if (ft_check_opts(FT_OPT_ENABLE_HMEM))
+		ret = ft_hmem_copy_to(opts.iface, opts.device, buf,
+				      bounce_buf, size);
+
+	return ret;
 }
 
 int ft_check_buf(void *buf, int size)
@@ -3069,9 +3120,18 @@ int ft_check_buf(void *buf, int size)
 	static unsigned int iter = 0;
 	int msg_index;
 	int i;
+	int ret;
+
+	if (ft_check_opts(FT_OPT_ENABLE_HMEM)) {
+		ret = ft_hmem_copy_from(opts.iface, opts.device, bounce_buf,
+					buf, size);
+		if (ret != FI_SUCCESS)
+			return ret;
+	}
 
 	msg_index = ((iter++)*INTEG_SEED) % integ_alphabet_length;
-	recv_data = (char *)buf;
+	recv_data = ft_check_opts(FT_OPT_ENABLE_HMEM) ?
+		bounce_buf : (char *) buf;
 
 	for (i = 0; i < size; i++) {
 		c = integ_alphabet[msg_index++];
@@ -3080,6 +3140,7 @@ int ft_check_buf(void *buf, int size)
 		if (c != recv_data[i])
 			break;
 	}
+
 	if (i != size) {
 		printf("Error at iteration=%d size=%d byte=%d\n",
 			iter, size, i);
