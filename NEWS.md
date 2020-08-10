@@ -30,7 +30,17 @@ v1.11.0, Fri Aug 14, 2020
 
 ## SHM
 
--
+- Fix a CMA check bug
+- Fix shm provider signal handler calling the original handler
+- Add initial framework for IPC device copies
+- Add FI_HMEM support and integrate hmem_ops
+- Fix error handling path in smr_create
+- Fix AV insertion error handling
+- Verify atomic op value
+- Redefine shm addrlen to not use NAME_MAX
+- Fix snprintf to exclude byte for null terminator
+- Mark smr_region as volatile
+- Fix memory leaks
 
 ## Sockets
 
