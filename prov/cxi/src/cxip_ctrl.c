@@ -29,7 +29,7 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		.raw = event->tgt_long.match_bits,
 	};
 	uint32_t init = event->tgt_long.initiator.initiator.process;
-	int ret;
+	int ret __attribute__((unused));
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_PUT:

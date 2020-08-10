@@ -689,8 +689,6 @@ rls_lock:
  */
 int cxip_coll_close(struct cxip_ep_obj *ep_obj)
 {
-	int ret;
-
 	ep_obj->coll.enabled = false;
 
 	if (ofi_atomic_get32(&ep_obj->coll.mc_count) != 0) {

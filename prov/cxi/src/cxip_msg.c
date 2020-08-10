@@ -2100,7 +2100,7 @@ int cxip_recv_reenable(struct cxip_rxc *rxc)
 	int total_drops = -1;
 	struct cxi_pte_status pte_status = {};
 	struct cxip_fc_drops *fc_drops;
-	int ret;
+	int ret __attribute__((unused));
 
 	if (rxc->pte_state == C_PTLTE_ENABLED || rxc->enable_pending)
 		return FI_SUCCESS;
@@ -2171,7 +2171,7 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
 {
 	struct cxip_rxc *rxc = ep_obj->rxcs[rxc_id];
 	struct cxip_fc_drops *fc_drops;
-	int ret;
+	int ret __attribute__((unused));
 
 	fc_drops = calloc(1, sizeof(*fc_drops));
 	if (!fc_drops) {
@@ -2281,7 +2281,7 @@ int cxip_recv_resume(struct cxip_rxc *rxc)
 {
 	struct cxip_fc_drops *fc_drops;
 	struct dlist_entry *tmp;
-	int ret;
+	int ret __attribute__((unused));
 
 	dlist_foreach_container_safe(&rxc->fc_drops,
 				     struct cxip_fc_drops, fc_drops,
@@ -2304,7 +2304,7 @@ int cxip_recv_resume(struct cxip_rxc *rxc)
 static void cxip_ux_onload_complete(struct cxip_req *req)
 {
 	struct cxip_rxc *rxc = req->search.rxc;
-	int ret;
+	int ret __attribute__((unused));
 
 	CXIP_LOG_DBG("UX onload complete (sw_ux_list_len: %d): %p\n",
 		     rxc->sw_ux_list_len, rxc);
@@ -2451,7 +2451,7 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 {
 	struct cxip_rxc *rxc = (struct cxip_rxc *)pte->ctx;
-	int ret;
+	int ret __attribute__((unused));
 
 	fastlock_acquire(&rxc->lock);
 
@@ -2652,7 +2652,7 @@ static int cxip_recv_sw_matcher(struct cxip_req *req)
 static int cxip_recv_req_dropped(struct cxip_req *req)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
-	int ret;
+	int ret __attribute__((unused));
 
 	fastlock_acquire(&rxc->lock);
 
@@ -2732,7 +2732,7 @@ static int cxip_recv_req_queue(struct cxip_req *req)
 static void cxip_recv_req_dequeue_nolock(struct cxip_req *req)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
-	int ret;
+	int ret __attribute__((unused));
 
 	dlist_remove(&req->recv.rxc_entry);
 
@@ -3916,7 +3916,7 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
 	};
 	struct cxip_req *req;
 	struct dlist_entry *tmp;
-	int ret;
+	int ret __attribute__((unused));
 
 	fastlock_acquire(&txc->lock);
 

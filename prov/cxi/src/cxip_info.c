@@ -310,7 +310,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	uint32_t scan_pid = 0;
 	struct cxip_addr *addr;
 	struct cxip_if *iface;
-	bool copy_dest;
+	bool copy_dest = NULL;
 
 	if (flags & FI_SOURCE) {
 		if (!node && !service) {
