@@ -2,6 +2,7 @@
  * Copyright (c) 2013-2018 Intel Corporation.  All rights reserved.
  * Copyright (c) 2016 Cray Inc.  All rights reserved.
  * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under the BSD license below:
  *
@@ -2825,7 +2826,7 @@ void ft_mcusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
-	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: eg ze (default: None). "
+	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: eg ze, cuda, or rocr (default: None). "
 			     "Automatically enables FI_HMEM (-H)");
 	FT_PRINT_OPTS_USAGE("-i <device_id>", "Specify which device to use (default: 0)");
 	FT_PRINT_OPTS_USAGE("-H", "Enable provider FI_HMEM support");
@@ -2898,6 +2899,10 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
 	case 'D':
 		if (!strncasecmp("ze", optarg, 2))
 			opts->iface = FI_HMEM_ZE;
+		else if (!strncasecmp("cuda", optarg, 4))
+			opts->iface = FI_HMEM_CUDA;
+		else if (!strncasecmp("rocr", optarg, 4))
+			opts->iface = FI_HMEM_ROCR;
 		else
 			printf("Unsupported interface\n");
 		opts->options |= FT_OPT_ENABLE_HMEM | FT_OPT_USE_DEVICE;
