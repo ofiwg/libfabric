@@ -426,7 +426,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 		 * with the device, but if an application is able to, reuse
 		 * their registrations and avoid the bounce buffers.
 		 */
-		if (hints->domain_attr->mr_mode & FI_MR_LOCAL)
+		if (hints->domain_attr && hints->domain_attr->mr_mode & FI_MR_LOCAL)
 			info->domain_attr->mr_mode |= FI_MR_LOCAL;
 
 		/*
