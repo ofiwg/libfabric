@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
  * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under the BSD license below:
  *
@@ -225,6 +226,7 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts);
 int ft_parse_rma_opts(int op, char *optarg, struct fi_info *hints,
 		      struct ft_opts *opts);
 void ft_addr_usage();
+void ft_hmem_usage(void);
 void ft_usage(char *name, char *desc);
 void ft_mcusage(char *name, char *desc);
 void ft_csusage(char *name, char *desc);

@@ -2777,6 +2777,14 @@ void ft_addr_usage()
 	FT_PRINT_OPTS_USAGE("-F <addr_format>", "Address format (default:FI_FORMAT_UNSPEC)");
 }
 
+void ft_hmem_usage(void)
+{
+	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: eg ze, cuda, or rocr (default: None). "
+			     "Automatically enables FI_HMEM (-H)");
+	FT_PRINT_OPTS_USAGE("-i <device_id>", "Specify which device to use (default: 0)");
+	FT_PRINT_OPTS_USAGE("-H", "Enable provider FI_HMEM support");
+}
+
 void ft_usage(char *name, char *desc)
 {
 	fprintf(stderr, "Usage:\n");
@@ -2826,10 +2834,7 @@ void ft_mcusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
-	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: eg ze, cuda, or rocr (default: None). "
-			     "Automatically enables FI_HMEM (-H)");
-	FT_PRINT_OPTS_USAGE("-i <device_id>", "Specify which device to use (default: 0)");
-	FT_PRINT_OPTS_USAGE("-H", "Enable provider FI_HMEM support");
+	ft_hmem_usage();
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
 	return;
