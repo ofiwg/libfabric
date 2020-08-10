@@ -48,6 +48,9 @@
  * not built: no-op call for ctor
 */
 
+#ifndef HAVE_GNI
+#define HAVE_GNI 0
+#endif
 #if (HAVE_GNI) && (HAVE_GNI_DL)
 #  define GNI_INI FI_EXT_INI
 #  define GNI_INIT NULL
@@ -59,6 +62,9 @@ GNI_INI ;
 #  define GNI_INIT NULL
 #endif
 
+#ifndef HAVE_VERBS
+#define HAVE_VERBS 0
+#endif
 #if (HAVE_VERBS) && (HAVE_VERBS_DL)
 #  define VERBS_INI FI_EXT_INI
 #  define VERBS_INIT NULL
@@ -70,6 +76,9 @@ VERBS_INI ;
 #  define VERBS_INIT NULL
 #endif
 
+#ifndef HAVE_EFA
+#define HAVE_EFA 0
+#endif
 #if (HAVE_EFA) && (HAVE_EFA_DL)
 #  define EFA_INI FI_EXT_INI
 #  define EFA_INIT NULL
@@ -81,6 +90,9 @@ EFA_INI ;
 #  define EFA_INIT NULL
 #endif
 
+#ifndef HAVE_PSM
+#define HAVE_PSM 0
+#endif
 #if (HAVE_PSM) && (HAVE_PSM_DL)
 #  define PSM_INI FI_EXT_INI
 #  define PSM_INIT NULL
@@ -92,6 +104,9 @@ PSM_INI ;
 #  define PSM_INIT NULL
 #endif
 
+#ifndef HAVE_PSM2
+#define HAVE_PSM2 0
+#endif
 #if (HAVE_PSM2) && (HAVE_PSM2_DL)
 #  define PSM2_INI FI_EXT_INI
 #  define PSM2_INIT NULL
@@ -103,6 +118,9 @@ PSM2_INI ;
 #  define PSM2_INIT NULL
 #endif
 
+#ifndef HAVE_SOCKETS
+#define HAVE_SOCKETS 0
+#endif
 #if (HAVE_SOCKETS) && (HAVE_SOCKETS_DL)
 #  define SOCKETS_INI FI_EXT_INI
 #  define SOCKETS_INIT NULL
@@ -114,6 +132,9 @@ SOCKETS_INI ;
 #  define SOCKETS_INIT NULL
 #endif
 
+#ifndef HAVE_USNIC
+#define HAVE_USNIC 0
+#endif
 #if (HAVE_USNIC) && (HAVE_USNIC_DL)
 #  define USNIC_INI FI_EXT_INI
 #  define USNIC_INIT NULL
@@ -125,6 +146,9 @@ USNIC_INI ;
 #  define USNIC_INIT NULL
 #endif
 
+#ifndef HAVE_UDP
+#define HAVE_UDP 0
+#endif
 #if (HAVE_UDP) && (HAVE_UDP_DL)
 #  define UDP_INI FI_EXT_INI
 #  define UDP_INIT NULL
@@ -136,6 +160,9 @@ UDP_INI ;
 #  define UDP_INIT NULL
 #endif
 
+#ifndef HAVE_TCP
+#define HAVE_TCP 0
+#endif
 #if (HAVE_TCP) && (HAVE_TCP_DL)
 #  define TCP_INI FI_EXT_INI
 #  define TCP_INIT NULL
@@ -147,6 +174,9 @@ TCP_INI ;
 #  define TCP_INIT NULL
 #endif
 
+#ifndef HAVE_RXM
+#define HAVE_RXM 0
+#endif
 #if (HAVE_RXM) && (HAVE_RXM_DL)
 #  define RXM_INI FI_EXT_INI
 #  define RXM_INIT NULL
@@ -158,6 +188,9 @@ RXM_INI ;
 #  define RXM_INIT NULL
 #endif
 
+#ifndef HAVE_RXD
+#define HAVE_RXD 0
+#endif
 #if (HAVE_RXD) && (HAVE_RXD_DL)
 #  define RXD_INI FI_EXT_INI
 #  define RXD_INIT NULL
@@ -169,6 +202,9 @@ RXD_INI ;
 #  define RXD_INIT NULL
 #endif
 
+#ifndef HAVE_BGQ
+#define HAVE_BGQ 0
+#endif
 #if (HAVE_BGQ) && (HAVE_BGQ_DL)
 #  define BGQ_INI FI_EXT_INI
 #  define BGQ_INIT NULL
@@ -195,6 +231,9 @@ NETDIR_INI ;
 #  define NETDIR_INIT NULL
 #endif /* _WIN32 */
 
+#ifndef HAVE_SHM
+#define HAVE_SHM 0
+#endif
 #if (HAVE_SHM) && (HAVE_SHM_DL)
 #  define SHM_INI FI_EXT_INI
 #  define SHM_INIT NULL
@@ -206,6 +245,9 @@ SHM_INI ;
 #  define SHM_INIT NULL
 #endif
 
+#ifndef HAVE_MRAIL
+#define HAVE_MRAIL 0
+#endif
 #if (HAVE_MRAIL) && (HAVE_MRAIL_DL)
 #  define MRAIL_INI FI_EXT_INI
 #  define MRAIL_INIT NULL
@@ -217,6 +259,9 @@ MRAIL_INI ;
 #  define MRAIL_INIT NULL
 #endif
 
+#ifndef HAVE_RSTREAM
+#define HAVE_RSTREAM 0
+#endif
 #if (HAVE_RSTREAM) && (HAVE_RSTREAM_DL)
 #  define RSTREAM_INI FI_EXT_INI
 #  define RSTREAM_INIT NULL
@@ -228,6 +273,9 @@ RSTREAM_INI ;
 #  define RSTREAM_INIT NULL
 #endif
 
+#ifndef HAVE_PERF
+#define HAVE_PERF 0
+#endif
 #if(HAVE_PERF)
 #  define HOOK_PERF_INI INI_SIG(fi_hook_perf_ini)
 #  define HOOK_PERF_INIT fi_hook_perf_ini()
@@ -236,6 +284,9 @@ HOOK_PERF_INI ;
 #  define HOOK_PERF_INIT NULL
 #endif
 
+#ifndef HAVE_HOOK_DEBUG
+#define HAVE_HOOK_DEBUG 0
+#endif
 #if(HAVE_HOOK_DEBUG)
 #  define HOOK_DEBUG_INI INI_SIG(fi_debug_hook_ini)
 #  define HOOK_DEBUG_INIT fi_debug_hook_ini()
