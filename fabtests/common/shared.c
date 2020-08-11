@@ -1501,22 +1501,28 @@ int ft_exchange_raw_keys(struct fi_rma_iov *peer_iov)
 
 int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 {
-	struct fi_rma_iov *rma_iov;
+	struct fi_rma_iov rma_iov = {};
 	int ret;
 
 	if (fi->domain_attr->mr_mode & FI_MR_RAW)
 		return ft_exchange_raw_keys(peer_iov);
 
 	if (opts.dst_addr) {
-		rma_iov = (struct fi_rma_iov *) (tx_buf + ft_tx_prefix_size());
 		if ((fi->domain_attr->mr_mode == FI_MR_BASIC) ||
 		    (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
-			rma_iov->addr = (uintptr_t) rx_buf + ft_rx_prefix_size();
+			rma_iov.addr = (uintptr_t) rx_buf + ft_rx_prefix_size();
 		} else {
-			rma_iov->addr = 0;
+			rma_iov.addr = 0;
 		}
-		rma_iov->key = fi_mr_key(mr);
-		ret = ft_tx(ep, remote_fi_addr, sizeof *rma_iov, &tx_ctx);
+		rma_iov.key = fi_mr_key(mr);
+
+		ret = ft_hmem_copy_to(opts.iface, opts.device,
+				      tx_buf + ft_tx_prefix_size(), &rma_iov,
+				      sizeof(rma_iov));
+		if (ret)
+			return ret;
+
+		ret = ft_tx(ep, remote_fi_addr, sizeof(rma_iov), &tx_ctx);
 		if (ret)
 			return ret;
 
@@ -1524,29 +1530,45 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 		if (ret)
 			return ret;
 
-		rma_iov = (struct fi_rma_iov *) (rx_buf + ft_rx_prefix_size());
-		*peer_iov = *rma_iov;
+		ret = ft_hmem_copy_from(opts.iface, opts.device, &rma_iov,
+					rx_buf + ft_rx_prefix_size(),
+					sizeof(rma_iov));
+		if (ret)
+			return ret;
+
+		*peer_iov = rma_iov;
 		ret = ft_post_rx(ep, rx_size, &rx_ctx);
 	} else {
 		ret = ft_get_rx_comp(rx_seq);
 		if (ret)
 			return ret;
 
-		rma_iov = (struct fi_rma_iov *) (rx_buf + ft_rx_prefix_size());
-		*peer_iov = *rma_iov;
+		ret = ft_hmem_copy_from(opts.iface, opts.device, &rma_iov,
+					rx_buf + ft_rx_prefix_size(),
+					sizeof(rma_iov));
+		if (ret)
+			return ret;
+
+		*peer_iov = rma_iov;
 		ret = ft_post_rx(ep, rx_size, &rx_ctx);
 		if (ret)
 			return ret;
 
-		rma_iov = (struct fi_rma_iov *) (tx_buf + ft_tx_prefix_size());
 		if ((fi->domain_attr->mr_mode == FI_MR_BASIC) ||
 		    (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
-			rma_iov->addr = (uintptr_t) rx_buf + ft_rx_prefix_size();
+			rma_iov.addr = (uintptr_t) rx_buf + ft_rx_prefix_size();
 		} else {
-			rma_iov->addr = 0;
+			rma_iov.addr = 0;
 		}
-		rma_iov->key = fi_mr_key(mr);
-		ret = ft_tx(ep, remote_fi_addr, sizeof *rma_iov, &tx_ctx);
+		rma_iov.key = fi_mr_key(mr);
+
+		ret = ft_hmem_copy_to(opts.iface, opts.device,
+				      tx_buf + ft_tx_prefix_size(), &rma_iov,
+				      sizeof(rma_iov));
+		if (ret)
+			return ret;
+
+		ret = ft_tx(ep, remote_fi_addr, sizeof(rma_iov), &tx_ctx);
 	}
 
 	return ret;
