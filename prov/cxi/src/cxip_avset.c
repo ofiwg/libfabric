@@ -312,6 +312,11 @@ int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	if (abeg && count == 0)
 		goto err0;
 
+	/* Comm_key data must match in our structure */
+	if (attr->comm_key && attr->comm_key_size &&
+	    attr->comm_key_size != sizeof(struct cxip_comm_key))
+		goto err0;
+
 	/* Must specify a range if non-sequential stride */
 	if (!abeg && stride > 1)
 		goto err0;
@@ -358,9 +363,10 @@ int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	}
 
 	/* copy comm_key from attributes, if present */
-	if (attr->comm_key)
+	if (attr->comm_key && attr->comm_key_size) {
 		memcpy(&cxi_set->comm_key, attr->comm_key,
-		       sizeof(struct cxip_coll_comm_key));
+		       attr->comm_key_size);
+	}
 
 	ofi_atomic_initialize32(&cxi_set->ref, 0);
 	cxi_set->av_set_fid.fid.fclass = FI_CLASS_AV_SET;

@@ -1118,41 +1118,68 @@ struct cxip_av {
 /*
  * AV Set communication key.
  *
- * For production, use COMM_KEY_MULTICAST type. The av_set should be joined once
- * on each node. The dest_addr is the 13-bit multicast ID value supplied by the
- * Rosetta fabic service. The PTE will receive at the multicast ID value, and an
- * index extension of zero. Sending to the multicast ID will cause delivery to
- * nodes according to the tree topology.
+ * For production, use COMM_KEY_MULTICAST type.
+ * - The av_set should be joined once on each node.
+ * - dest_addr is the 13-bit multicast ID value supplied by the Rosetta fabic
+ *   service.
+ * - hwroot_nic is the NIC address of the node that serves as the root of the
+ *   multicast tree.
+ * - The PTE will receive at the multicast ID value, index extension of zero.
+ * - Sending to the multicast ID will cause delivery to nodes according to the
+ *   tree topology.
  *
  * For testing on a multinode system without multicast, use COMM_KEY_UNICAST.
- * The av_set should be joined once on each node. The dest_addr is ignored: the
- * PTE will use the node NIC address and process PID, with a PID_IDX of
- * CXIP_PTL_IDX_COLL. Sending to a node address with CXIP_PTL_IDX_COLL will
- * target the collectives PTE on that node.
+ * - The av_set should be joined once on each node.
+ * - dest_addr is ignored.
+ * - hwroot_nic is the NIC address of the node that serves as the simulated
+ *   hardware root of the tree.
+ * - The PTE will use the EP source NIC address and process PID, with a
+ *   PID_IDX of CXIP_PTL_IDX_COLL.
+ * - Sending to any (valid) node address with CXIP_PTL_IDX_COLL will target the
+ *   collectives PTE on that node.
+ * - The root/leaf send routines will distribute one or more packets to all
+ *   fi_addr_t in the av_set as appropriate.
  *
- * For testing on a single node (typically under NETSIM), use COMM_KEY_RANK. The
- * node must join N identical av_set objects, each representing a simulated
- * "node" target in the av_set. The dest_addr is the rank of the simulated node
- * in the av_set. The PTE will use the (single) node NIC address and process
- * PID, with a PID_IDX = 16 + dest_addr (rank). Sending to the node's own
- * address with a PID_IDX of 16 + rank will target the appropriate simulated
- * node.
- *
- * The hwroot_rank is the rank of the target serving as the hardware root of the
- * multicast tree. For COMM_KEY_MULTICAST, it must match the actual hardware
- * root of the multicast tree in Rosetta.
+ * For testing on a single node (typically under NETSIM), use COMM_KEY_RANK.
+ * - The node must join N identical av_set objects, each representing a
+ *   simulated "node" target in the av_set, to result in N separate MC objects,
+ *   which are numbered (0, N-1).
+ * - dest_addr is the MC object index.
+ * - hwroot_nic is the MC object index for the MC object to serve as the
+ *   simulated hardware root.
+ * - The PTE will use the EP source NIC address and process PID, with a PID_IDX
+ *   of 16 + dest_addr (MC object index).
+ * - Sending to the node's own address with a PID_IDX of 16 + MC index will
+ *   target the appropriate MC object.
  */
-enum cxip_coll_comm_key_type {
+enum cxip_comm_key_type {
 	COMM_KEY_NONE = 0,
 	COMM_KEY_MULTICAST,
 	COMM_KEY_UNICAST,
 	COMM_KEY_RANK,
 };
 
-struct cxip_coll_comm_key {
-	enum cxip_coll_comm_key_type type;	// comm_key type
-	uint32_t dest_addr;			// destination address
-	uint32_t hwroot_rank;			// hwroot rank in av_set
+struct cxip_coll_mcast_key {
+	uint32_t hwroot_nic;
+	uint32_t mcast_id;
+};
+
+struct cxip_coll_unicast_key {
+	uint32_t hwroot_nic;
+};
+
+struct cxip_coll_rank_key {
+	uint32_t hwroot_rank;
+	uint32_t rank;
+};
+
+struct cxip_comm_key {
+	enum cxip_comm_key_type type;
+	union {
+		struct cxip_coll_mcast_key mcast;
+		struct cxip_coll_unicast_key ucast;
+		struct cxip_coll_rank_key rank;
+	};
 };
 
 /*
@@ -1168,7 +1195,7 @@ struct cxip_av_set {
 	struct cxip_coll_mc *mc_obj;	// reference MC
 	fi_addr_t *fi_addr_ary;		// addresses in set
 	size_t fi_addr_cnt;		// count of addresses
-	struct cxip_coll_comm_key comm_key;	// communication key
+	struct cxip_comm_key comm_key;	// communication key
 	uint64_t flags;
 	ofi_atomic32_t ref;
 };
@@ -1227,9 +1254,11 @@ struct cxip_coll_mc {
 	struct cxip_ep_obj *ep_obj;		// Associated endpoint
 	struct cxip_av_set *av_set;		// associated AV set
 	struct cxip_coll_pte *coll_pte;		// collective PTE
-	uint32_t mcast_id;			// 13-bit multicast address
 	bool is_joined;				// true if joined
+	int mynode_index;			// av_set index of this node
+	int hwroot_index;			// av_set index of hwroot node
 	int next_red_id;			// round-robin counter
+	uint32_t mc_idcode;			// MC object id for cookie
 	ofi_atomic32_t send_cnt;		// for diagnostics
 	ofi_atomic32_t recv_cnt;		// for diagnostics
 	ofi_atomic32_t pkt_cnt;			// for diagnostics
@@ -1397,7 +1426,10 @@ int cxip_coll_disable(struct cxip_ep_obj *ep_obj);
 int cxip_coll_close(struct cxip_ep_obj *ep_obj);
 void cxip_coll_reset_mc_ctrs(struct cxip_coll_mc *mc_obj);
 int cxip_coll_send(struct cxip_coll_reduction *reduction,
-		   fi_addr_t dest_addr, const void *buffer, size_t buflen);
+		   int av_set_idx, const void *buffer, size_t buflen);
+int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
+			   size_t redcnt, int op, const void *data, size_t len,
+			   bool retry);
 int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 			 const struct fid_av_set *coll_av_set,
 			 uint64_t flags, struct fid_mc **mc, void *context);

@@ -37,4 +37,36 @@ struct cxi_auth_key {
 	uint16_t vni;
 };
 
+/*
+ * CXI Collectives
+ */
+
+/**
+ * Exported comm_key structure. Use initializion routines below to prepare this.
+ *
+ * The address to a comm_key structure can be passed through the info->comm_key
+ * structure when initializing an av_set. It is copied to the av_set structure
+ * and can be reused or freed after the av_set is created.
+ */
+struct cxip_coll_comm_key {
+	uint8_t data[64];
+};
+
+/**
+ * Initialize a multicast comm_key structure.
+ *
+ * The mcast_id and hwroot_nic values are provided by the Rosetta configuration
+ * service, and together represent the multicast collective acceleration tree
+ * set up for use by this av_set.
+ *
+ * @param comm_key - space to contain an intialized comm_key
+ * @param mcast_id - 13-bit multicast address
+ * @param hwroot_nic 20-bit NIC address of the hardware root node
+ *
+ * @return size_t size of comm_key structure initialized
+ */
+size_t cxip_coll_init_mcast_comm_key(struct cxip_coll_comm_key *comm_key,
+				     uint32_t mcast_id,
+				     uint32_t hwroot_nic);
+
 #endif /* _FI_CXI_EXT_H_ */

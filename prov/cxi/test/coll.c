@@ -55,7 +55,6 @@ Test(coll_join, noop)
 {
 	struct cxip_ep *ep;
 
-	printf("\n");
 	cxit_setup_rma();
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
 
@@ -71,7 +70,6 @@ Test(coll_join, enable)
 	struct cxip_ep *ep;
 	int ret;
 
-	printf("\n");
 	cxit_setup_rma();
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
 
@@ -89,7 +87,6 @@ Test(coll_join, disable)
 	struct cxip_ep *ep;
 	int ret;
 
-	printf("\n");
 	cxit_setup_rma();
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
 
@@ -107,7 +104,6 @@ Test(coll_join, reenable)
 	struct cxip_ep *ep;
 	int ret;
 
-	printf("\n");
 	cxit_setup_rma();
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
 
@@ -132,7 +128,6 @@ TestSuite(coll_put, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
  */
 Test(coll_put, join1)
 {
-	printf("\n");
 	cxit_create_netsim_collective(1);
 	cxit_destroy_netsim_collective();
 }
@@ -141,7 +136,6 @@ Test(coll_put, join1)
  */
 Test(coll_put, join2)
 {
-	printf("\n");
 	cxit_create_netsim_collective(2);
 	cxit_destroy_netsim_collective();
 }
@@ -160,9 +154,10 @@ struct fakebuf {
  * the netsim resources run out and this gets blocked.
  */
 #define	PROGRESS_COUNT	10
-void _progress(struct cxip_cq *cq, int sendcnt, uint64_t *dataval)
+void _progress_put(struct cxip_cq *cq, int sendcnt, uint64_t *dataval)
 {
 	struct fi_cq_tagged_entry entry[PROGRESS_COUNT];
+	struct fi_cq_err_entry err;
 	int i, ret;
 
 	while (sendcnt > 0) {
@@ -171,11 +166,24 @@ void _progress(struct cxip_cq *cq, int sendcnt, uint64_t *dataval)
 			sched_yield();
 			ret = fi_cq_read(&cq->util_cq.cq_fid, entry, cnt);
 		} while (ret == -FI_EAGAIN);
+		if (ret == -FI_EAVAIL) {
+			ret = fi_cq_readerr(&cq->util_cq.cq_fid, &err, 0);
+			memcpy(&entry[0], &err, sizeof(entry[0]));
+		}
 		for (i = 0; i < ret; i++) {
 			struct fakebuf *fb = entry[i].buf;
-			cr_assert(fb->count[0] == *dataval);
-			cr_assert(fb->count[5] == *dataval);
-			cr_assert(fb->pad == (*dataval & 0xffff));
+			cr_assert(entry[i].len == sizeof(*fb),
+				  "fb->len exp %ld, saw %ld\n",
+				  sizeof(*fb), entry[i].len);
+			cr_assert(fb->count[0] == *dataval,
+				  "fb->count[0] exp %ld, saw %ld\n",
+				  fb->count[0], *dataval);
+			cr_assert(fb->count[5] == *dataval,
+				  "fb->count[5] exp %ld, saw %ld\n",
+				  fb->count[5], *dataval);
+			cr_assert(fb->pad == (uint16_t)*dataval,
+				  "fb_pad exp %x, saw %x\n",
+				  fb->pad, (uint16_t)*dataval);
 			(*dataval)++;
 		}
 		sendcnt -= ret;
@@ -187,22 +195,29 @@ void _progress(struct cxip_cq *cq, int sendcnt, uint64_t *dataval)
  */
 void _put_data(int count, int from_rank, int to_rank)
 {
-	struct cxip_coll_mc *mc_obj;
+	struct cxip_coll_mc *mc_obj_send, *mc_obj_recv;
 	struct cxip_coll_reduction *reduction;
 	struct cxip_ep *ep;
 	struct fakebuf *buf;
 	void *buffers;
-	int sendcnt, recvcnt;
+	int sendcnt, cnt;
 	uint64_t dataval;
 	int i, j, ret;
 
-	cr_assert(sizeof(*buf) != 49);
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
-	mc_obj = container_of(cxit_coll_mc_list.mc_fid[from_rank],
-			      struct cxip_coll_mc, mc_fid);
-	reduction = &mc_obj->reduction[0];
 
-	cxip_coll_reset_mc_ctrs(mc_obj);
+	/* from and to (may be the same mc_obj) */
+	mc_obj_send = container_of(cxit_coll_mc_list.mc_fid[from_rank],
+				 struct cxip_coll_mc, mc_fid);
+	mc_obj_recv = container_of(cxit_coll_mc_list.mc_fid[to_rank],
+				 struct cxip_coll_mc, mc_fid);
+
+	/* clear any prior values */
+	cxip_coll_reset_mc_ctrs(mc_obj_send);
+	cxip_coll_reset_mc_ctrs(mc_obj_recv);
+
+	/* from_rank reduction */
+	reduction = &mc_obj_send->reduction[0];
 
 	/* must persist until _progress called, for validation */
 	buffers = calloc(PROGRESS_COUNT, sizeof(*buf));
@@ -213,42 +228,41 @@ void _put_data(int count, int from_rank, int to_rank)
 	for (i = 0; i < count; i++) {
 		for (j = 0; j < 6; j++)
 			buf->count[j] = i;
-		buf->pad = (i & 0xffff);
-		// create dfa
+		buf->pad = i;
 		ret = cxip_coll_send(reduction, to_rank, buf, sizeof(*buf));
 		cr_assert(ret == 0, "cxip_coll_send failed: %d\n", ret);
 
 		buf++;
 		sendcnt++;
-		if (sendcnt >= 10) {
-			/* _progress() advances dataval by 10 */
-			_progress(ep->ep_obj->coll.rx_cq, sendcnt, &dataval);
+		if (sendcnt >= PROGRESS_COUNT) {
+			_progress_put(ep->ep_obj->coll.rx_cq, sendcnt,
+				      &dataval);
 			buf = buffers;
 			sendcnt = 0;
 		}
 	}
-	_progress(ep->ep_obj->coll.rx_cq, sendcnt, &dataval);
+	_progress_put(ep->ep_obj->coll.rx_cq, sendcnt, &dataval);
+
+	/* check final counts */
 	if (count * sizeof(*buf) >
 	    ep->ep_obj->coll.buffer_size - ep->ep_obj->min_multi_recv) {
-		uint32_t swap;
-
-		swap = ofi_atomic_get32(&mc_obj->coll_pte->buf_swap_cnt);
-		cr_assert(swap > 0, "Did not recirculate buffers\n");
+		cnt = ofi_atomic_get32(&mc_obj_recv->coll_pte->buf_swap_cnt);
+		cr_assert(cnt > 0, "Did not recirculate buffers\n");
 	}
 
-	mc_obj = container_of(cxit_coll_mc_list.mc_fid[from_rank],
-			      struct cxip_coll_mc, mc_fid);
-	sendcnt= ofi_atomic_get32(&mc_obj->send_cnt);
-	cr_assert(sendcnt == count,
+	cnt = ofi_atomic_get32(&mc_obj_send->send_cnt);
+	cr_assert(cnt == count,
 		  "Expected mc_obj[%d] send_cnt == %d, saw %d",
-		  from_rank, count, sendcnt);
+		  from_rank, count, cnt);
 
-	mc_obj = container_of(cxit_coll_mc_list.mc_fid[to_rank],
-			      struct cxip_coll_mc, mc_fid);
-	recvcnt = ofi_atomic_get32(&mc_obj->recv_cnt);
-	cr_assert(recvcnt == count,
-		  "Expected mc_obj[%d] recv_cnt == %d, saw %d",
-		  to_rank, count, recvcnt);
+	cnt = ofi_atomic_get32(&mc_obj_recv->recv_cnt);
+	cr_assert(cnt == count,
+		  "Expected mc_obj[%d]->[%d] recv_cnt == %d, saw %d",
+		  from_rank, to_rank, count, cnt);
+	cnt = ofi_atomic_get32(&mc_obj_recv->pkt_cnt);
+	cr_assert(cnt == 0,
+		  "Expected mc_obj[%d]->[%d] pkt_cnt == %d, saw %d",
+		  from_rank, to_rank, 0, cnt);
 
 	free(buffers);
 }
@@ -262,7 +276,6 @@ Test(coll_put, put_bad_rank)
 	struct fakebuf buf;
 	int ret;
 
-	printf("\n");
 	cxit_create_netsim_collective(2);
 
 	mc_obj = container_of(cxit_coll_mc_list.mc_fid[0],
@@ -277,19 +290,18 @@ Test(coll_put, put_bad_rank)
 
 /* Basic test with one packet from rank 0 to rank 0.
  */
-Test(coll_put, put1)
+Test(coll_put, put_one)
 {
-	printf("\n");
 	cxit_create_netsim_collective(1);
 	_put_data(1, 0, 0);
 	cxit_destroy_netsim_collective();
 }
 
 /* Basic test with one packet from each rank to another rank.
+ * Exercises NETSIM rank-based target addressing.
  */
-Test(coll_put, put1_ranks)
+Test(coll_put, put_ranks)
 {
-	printf("\n");
 	cxit_create_netsim_collective(2);
 	_put_data(1, 0, 0);
 	_put_data(1, 0, 1);
@@ -302,8 +314,161 @@ Test(coll_put, put1_ranks)
  */
 Test(coll_put, put_many)
 {
-	printf("\n");
 	cxit_create_netsim_collective(1);
 	_put_data(4000, 0, 0);
+	cxit_destroy_netsim_collective();
+}
+
+void _progress_red_pkt(struct cxip_cq *cq, int sendcnt, uint64_t *dataval)
+{
+	struct fi_cq_tagged_entry entry[PROGRESS_COUNT];
+	struct fi_cq_err_entry err;
+	int i, ret;
+
+	while (sendcnt > 0) {
+		do {
+			int cnt = MIN(PROGRESS_COUNT, sendcnt);
+			sched_yield();
+			ret = fi_cq_read(&cq->util_cq.cq_fid, entry, cnt);
+		} while (ret == -FI_EAGAIN);
+		if (ret == -FI_EAVAIL) {
+			ret = fi_cq_readerr(&cq->util_cq.cq_fid, &err, 0);
+			memcpy(&entry[0], &err, sizeof(entry[0]));
+		}
+		for (i = 0; i < ret; i++)
+			(*dataval)++;
+		sendcnt -= ret;
+	}
+}
+
+/* Test red_pkt sends. With only one node, root sends to self.
+ */
+void _put_red_pkt(int count)
+{
+	struct cxip_coll_mc *mc_obj;
+	struct cxip_coll_reduction *reduction;
+	int sendcnt, cnt;
+	uint64_t dataval;
+	int i, ret;
+
+	cxit_create_netsim_collective(1);
+
+	mc_obj = container_of(cxit_coll_mc_list.mc_fid[0],
+			      struct cxip_coll_mc, mc_fid);
+
+	/* clear counters */
+	cxip_coll_reset_mc_ctrs(mc_obj);
+
+	sendcnt = 0;
+	dataval = 0;
+	for (i = 0; i < count; i++) {
+		reduction = &mc_obj->reduction[0];
+		ret = cxip_coll_send_red_pkt(reduction, 1, 0,
+					     &dataval, sizeof(uint64_t), false);
+		cr_assert(ret == FI_SUCCESS,
+			  "Packet send from root failed: %d\n", ret);
+
+		sendcnt++;
+		if (sendcnt >= PROGRESS_COUNT) {
+			_progress_red_pkt(mc_obj->ep_obj->coll.rx_cq, sendcnt,
+					  &dataval);
+			sendcnt = 0;
+		}
+	}
+	_progress_red_pkt(mc_obj->ep_obj->coll.rx_cq, sendcnt, &dataval);
+
+	cnt = ofi_atomic_get32(&mc_obj->send_cnt);
+	cr_assert(cnt == count, "Bad send counter on root: %d\n", cnt);
+	cnt = ofi_atomic_get32(&mc_obj->recv_cnt);
+	cr_assert(cnt == count, "Bad recv counter on root: %d\n", cnt);
+	cnt = ofi_atomic_get32(&mc_obj->pkt_cnt);
+	cr_assert(cnt == count, "Bad pkt counter on root: %d\n", cnt);
+
+	cxit_destroy_netsim_collective();
+}
+
+/* Test of a single red_pkt from root to root.
+ */
+Test(coll_put, put_red_pkt_one)
+{
+	_put_red_pkt(1);
+}
+
+/* Test of a many red_pkts from root to root.
+ */
+Test(coll_put, put_red_pkt_many)
+{
+	_put_red_pkt(4000);
+}
+
+/* Test of the reduction packet code distribution under NETSIM.
+ * Exercises distribution root->leaves, leaves->root, single packet.
+ */
+Test(coll_put, put_red_pkt_distrib)
+{
+	struct cxip_coll_mc *mc_obj[5];
+	struct cxip_cq *rx_cq;
+	struct cxip_coll_reduction *reduction;
+	struct fi_cq_data_entry entry;
+	uint64_t data;
+	int i, cnt, ret;
+
+	cxit_create_netsim_collective(5);
+
+	for (i = 0; i < 5; i++)
+		mc_obj[i] = container_of(cxit_coll_mc_list.mc_fid[i],
+					 struct cxip_coll_mc, mc_fid);
+
+	data = 0;
+	rx_cq = mc_obj[0]->ep_obj->coll.rx_cq;
+
+	/* clear counters */
+	for (i = 0; i < 5; i++)
+		cxip_coll_reset_mc_ctrs(mc_obj[i]);
+
+	/* Send data from root (0) to other nodes */
+	reduction = &mc_obj[0]->reduction[0];
+	ret = cxip_coll_send_red_pkt(reduction, 1, 0,
+				     &data, sizeof(uint64_t), false);
+	cr_assert(ret == FI_SUCCESS,
+		  "Packet send from root failed: %d\n", ret);
+	cnt = ofi_atomic_get32(&mc_obj[0]->send_cnt);
+	cr_assert(cnt == 4, "Bad send counter on root: %d\n", cnt);
+	for (i = 1; i < 5; i++) {
+		do {
+			sched_yield();
+			ret = fi_cq_read(&rx_cq->util_cq.cq_fid, &entry, 1);
+		} while (ret == -FI_EAGAIN);
+		cr_assert(ret == 1, "Bad CQ response[%d]: %d\n", i, ret);
+		cnt = ofi_atomic_get32(&mc_obj[i]->recv_cnt);
+		cr_assert(cnt == 1,
+			  "Bad recv counter on leaf[%d]: %d\n", i, cnt);
+	}
+
+
+	/* Send data from leaf (!0) to root */
+	for (i = 0; i < 5; i++)
+		cxip_coll_reset_mc_ctrs(mc_obj[i]);
+	for (i = 1; i < 5; i++) {
+		data = i;
+		reduction = &mc_obj[i]->reduction[0];
+		ret = cxip_coll_send_red_pkt(reduction, 1, 0,
+					     &data, sizeof(uint64_t), false);
+		cr_assert(ret == FI_SUCCESS,
+			  "Packet send from leaf[%d] failed: %d\n", i, ret);
+		cnt = ofi_atomic_get32(&mc_obj[i]->send_cnt);
+		cr_assert(cnt == 1,
+			  "Bad send counter on leaf[%d]: %d\n", i, cnt);
+		do {
+			sched_yield();
+			ret = fi_cq_read(&rx_cq->util_cq.cq_fid, &entry, 1);
+		} while (ret == -FI_EAGAIN);
+		cr_assert(ret == 1, "Bad CQ response[%d]: %d\n", i, ret);
+	}
+
+	cnt = ofi_atomic_get32(&mc_obj[0]->recv_cnt);
+	cr_assert(cnt == 4,
+		  "Bad recv counter on root: %d\n", cnt);
+
 	cxit_destroy_netsim_collective();
 }

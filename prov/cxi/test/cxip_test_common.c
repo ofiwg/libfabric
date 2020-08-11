@@ -306,10 +306,10 @@ void cxit_bind_av(void)
 static void _create_av_set(int count, int rank, struct fid_av_set **av_set_fid)
 {
 	struct cxip_ep *ep;
-	struct cxip_coll_comm_key comm_key = {
+	struct cxip_comm_key comm_key = {
 		.type = COMM_KEY_RANK,
-		.dest_addr = rank,
-		.hwroot_rank = 0,
+		.rank.rank = rank,
+		.rank.hwroot_rank = 0,
 	};
 	struct fi_av_set_attr attr = {
 		.count = 0,

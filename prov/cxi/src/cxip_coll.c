@@ -22,6 +22,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <endian.h>
 #include <sys/time.h>
 #include <sys/types.h>
 
@@ -29,6 +30,8 @@
 #include <ofi.h>
 
 #include "cxip.h"
+
+#define	MAGIC	0x1776
 
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_CTRL, \
 		"COLL " __VA_ARGS__)
@@ -44,18 +47,180 @@ static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 				   struct cxip_coll_buf *buf);
 
 /****************************************************************************
+ * Collective cookie structure.
+ *
+ * mcast_id is not necessary given one PTE per multicast address: all request
+ * structures used for posting receive buffers will receive events from
+ * only that multicast. If underlying drivers are changed to allow a single PTE
+ * to be mapped to multiple multicast addresses, the mcast_id field will be
+ * needed to disambiguate packets.
+ *
+ * red_id is needed to disambiguate packets delivered for different concurrent
+ * reductions.
+ *
+ * retry is a control bit that can be invoked by the hw root node to initiate a
+ * retransmission of the data from the leaves, if packets are lost.
+ *
+ * magic is a magic number used to identify this packet as a reduction packet.
+ * The basic send/receive code can be used for other kinds of restricted IDC
+ * packets.
+ */
+union cxip_coll_cookie {
+	struct {
+		uint32_t mcast_id:13;
+		uint32_t red_id:3;
+		uint32_t magic: 15;
+		uint32_t retry: 1;
+	};
+	uint32_t raw;
+};
+
+/**
+ * Packed data structure used for all reductions.
+ */
+union cxip_coll_data {
+	uint8_t databuf[CXIP_COLL_MAX_TX_SIZE];
+	uint64_t ival[CXIP_COLL_MAX_TX_SIZE/(sizeof(uint64_t))];
+	double fval[CXIP_COLL_MAX_TX_SIZE/(sizeof(double))];
+	struct {
+		int64_t iminval;
+		uint64_t iminidx;
+		int64_t imaxval;
+		uint64_t imaxidx;
+
+	} iminmax;
+	struct {
+		double fminval;
+		uint64_t fminidx;
+		double fmaxval;
+		uint64_t fmaxidx;
+	} fminmax;
+} __attribute__((packed));
+
+/**
+ * Reduction packet for Cassini:
+ *
+ *  +----------------------------------------------------------+
+ *  | BYTES | Mnemonic    | Definition                         |
+ *  +----------------------------------------------------------+
+ *  | 48:17 | RED_PAYLOAD | Reduction payload, always 32 bytes |
+ *  | 16:5  | RED_HDR     | Reduction Header (below)           |
+ *  | 4:0   | RED_PADDING | Padding                            |
+ *  +----------------------------------------------------------+
+ *
+ *  Reduction header format, from Table 95 in CSDG 5.7.2, Table 24 in RSDG
+ *  4.5.9.4:
+ *  --------------------------------------------------------
+ *  | Field          | Description              | Bit | Size (bits)
+ *  --------------------------------------------------------
+ *  | rt_seqno       | Sequence number          |  0  | 10 |
+ *  | rt_arm         | Multicast arm command    | 10  |  1 |
+ *  | rt_op          | Reduction operation      | 11  |  6 |
+ *  | rt_count       | Number of contributions  | 17  | 20 |
+ *  | rt_resno       | Result number            | 37  | 10 |
+ *  | rt_rc          | result code              | 47  |  4 |
+ *  | rt_repsum_m    | Reproducible sum M value | 51  |  8 |
+ *  | rt_repsum_ovfl | Reproducible sum M ovfl  | 59  |  2 |
+ *  | rt_pad         | Pad to 64 bits           | 61  |  3 |
+ *  --------------------------------------------------------
+ *  | rt_cookie      | Cookie value             | 64  | 32 |
+ *  --------------------------------------------------------
+ */
+struct red_pkt {
+	uint8_t pad[5];
+	union {
+		struct {
+			uint64_t seqno:10;
+			uint64_t arm:1;
+			uint64_t op:6;
+			uint64_t redcnt:20;
+			uint64_t resno:10;
+			uint64_t rc:4;
+			uint64_t repsum_m:8;
+			uint64_t repsum_ovfl:2;
+			uint64_t pad:3;
+		} hdr;
+		uint64_t redhdr;
+	};
+	uint32_t cookie;
+	union cxip_coll_data data;
+} __attribute__((packed));
+
+/* Reduction rt_rc values.
+ */
+enum pkt_rc {
+	RC_SUCCESS = 0,
+	RC_FLT_INEXACT = 1,
+	RC_FLT_OVERFLOW = 3,
+	RC_FLT_INVALID = 4,
+	RC_REPSUM_INEXACT = 5,
+	RC_INT_OVERFLOW = 6,
+	RC_CONTR_OVERFLOW = 7,
+	RC_OP_MISMATCH = 8,
+};
+
+__attribute__((unused))
+static void _dump_red_data(const void *buf)
+{
+	const union cxip_coll_data *data = (const union cxip_coll_data *)buf;
+	int i;
+	for (i = 0; i < 4; i++)
+		printf("  ival[%d]     = %016lx\n", i, data->ival[i]);
+}
+
+__attribute__((unused))
+static void _dump_red_pkt(struct red_pkt *pkt, char *dir)
+{
+	printf("---------------\n");
+	printf("Reduction packet (%s):\n", dir);
+	printf("  seqno       = %d\n", pkt->hdr.seqno);
+	printf("  arm         = %d\n", pkt->hdr.arm);
+	printf("  op          = %d\n", pkt->hdr.op);
+	printf("  redcnt      = %d\n", pkt->hdr.redcnt);
+	printf("  resno       = %d\n", pkt->hdr.resno);
+	printf("  rc          = %d\n", pkt->hdr.rc);
+	printf("  repsum_m    = %d\n", pkt->hdr.repsum_m);
+	printf("  repsum_ovfl = %d\n", pkt->hdr.repsum_ovfl);
+	printf("  cookie      = %08x\n", pkt->cookie);
+	_dump_red_data(pkt->data.databuf);
+	printf("---------------\n");
+	fflush(stdout);
+}
+
+static inline void _hton_red_pkt(struct red_pkt *pkt)
+{
+	int i;
+
+	pkt->redhdr = htobe64(pkt->redhdr);
+	pkt->cookie = htobe32(pkt->cookie);
+	for (i = 0; i < 4; i++)
+		pkt->data.ival[i] = htobe64(pkt->data.ival[i]);
+}
+
+static inline void _ntoh_red_pkt(struct red_pkt *pkt)
+{
+	int i;
+
+	pkt->redhdr = be64toh(pkt->redhdr);
+	pkt->cookie = be32toh(pkt->cookie);
+	for (i = 0; i < 4; i++)
+		pkt->data.ival[i] = be64toh(pkt->data.ival[i]);
+}
+
+/****************************************************************************
  * SEND operation (restricted IDC Put to a remote PTE)
  */
 
 /* Generate a dfa and index extension for a reduction.
  */
 static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
-		       fi_addr_t dest_addr, union c_fab_addr *dfa,
+		       int av_set_idx, union c_fab_addr *dfa,
 		       uint8_t *index_ext, bool *is_mcast)
 {
 	struct cxip_ep_obj *ep_obj;
 	struct cxip_av_set *av_set;
 	struct cxip_addr dest_caddr;
+	fi_addr_t dest_addr;
 	int pid_bits;
 	int idx_ext;
 	int ret;
@@ -63,6 +228,7 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 	ep_obj = reduction->mc_obj->ep_obj;
 	av_set = reduction->mc_obj->av_set;
 
+	/* Send address */
 	switch (av_set->comm_key.type) {
 	case COMM_KEY_MULTICAST:
 		/* - dest_addr == multicast ID
@@ -72,9 +238,8 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		 */
 		if (CXI_PLATFORM_NETSIM)
 			return -FI_EINVAL;
-		dest_addr = av_set->comm_key.dest_addr;
 		idx_ext = 0;
-		cxi_build_mcast_dfa(dest_addr,
+		cxi_build_mcast_dfa(av_set->comm_key.mcast.mcast_id,
 				    reduction->red_id, idx_ext,
 				    dfa, index_ext);
 		*is_mcast = true;
@@ -85,9 +250,9 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		 * - dfa = remote nic
 		 * - index_ext == CXIP_PTL_IDX_COLL
 		 */
-		if (dest_addr >= av_set->fi_addr_cnt)
+		if (av_set_idx >= av_set->fi_addr_cnt)
 			return -FI_EINVAL;
-		dest_addr = av_set->fi_addr_ary[dest_addr];
+		dest_addr = av_set->fi_addr_ary[av_set_idx];
 		ret = _cxip_av_lookup(ep_obj->av, dest_addr, &dest_caddr);
 		if (ret != FI_SUCCESS)
 			return ret;
@@ -99,15 +264,15 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		break;
 	case COMM_KEY_RANK:
 		/* - dest_addr == multicast object index
-		 * - idx_ext == CXIP_PTL_IDX_COLL
+		 * - idx_ext == multicast object index
 		 * - dfa == source NIC
 		 * - index_ext == idx_ext offset beyond RXCs
 		 */
-		if (dest_addr >= av_set->fi_addr_cnt)
+		if (av_set_idx >= av_set->fi_addr_cnt)
 			return -FI_EINVAL;
 		dest_caddr = ep_obj->src_addr;
 		pid_bits = ep_obj->domain->iface->dev->info.pid_bits;
-		idx_ext = key_rank_idx_ext(dest_addr);
+		idx_ext = CXIP_EP_MAX_RX_CNT + av_set_idx;
 		cxi_build_dfa(dest_caddr.nic, dest_caddr.pid, pid_bits,
 			      idx_ext, dfa, index_ext);
 		*is_mcast = false;
@@ -124,14 +289,14 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
  * Exported for unit testing.
  *
  * @param reduction - reduction object
- * @param dest_addr - comm_key destination address
+ * @param av_set_idx - index of address in av_set
  * @param buffer - buffer containing data to send
  * @param buflen - byte count of data in buffer
  *
  * @return int - return code
  */
 int cxip_coll_send(struct cxip_coll_reduction *reduction,
-		   fi_addr_t dest_addr, const void *buffer, size_t buflen)
+		   int av_set_idx, const void *buffer, size_t buflen)
 {
 	struct cxip_ep_obj *ep_obj;
 	struct cxip_cmdq *cmdq;
@@ -146,7 +311,7 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 
 	ep_obj = reduction->mc_obj->ep_obj;
 
-	ret = _gen_tx_dfa(reduction, dest_addr, &dfa, &index_ext, &is_mcast);
+	ret = _gen_tx_dfa(reduction, av_set_idx, &dfa, &index_ext, &is_mcast);
 	if (ret)
 		return ret;
 
@@ -294,9 +459,29 @@ static void _coll_rx_progress(struct cxip_req *req,
 			      const union c_event *event)
 {
 	struct cxip_coll_mc *mc_obj;
+	union cxip_coll_cookie cookie;
+	struct red_pkt *pkt;
 
 	mc_obj = req->coll.coll_pte->mc_obj;
 	ofi_atomic_inc32(&mc_obj->recv_cnt);
+
+	if (req->data_len != sizeof(struct red_pkt)) {
+		CXIP_LOG_DBG("Bad coll packet size: %ld\n", req->data_len);
+		req->coll.rc = C_RC_PKTBUF_ERROR;
+		return;
+	}
+
+	pkt = (struct red_pkt *)req->buf;
+	_ntoh_red_pkt(pkt);
+	cookie.raw = pkt->cookie;
+	if (cookie.magic != MAGIC)
+	{
+		CXIP_LOG_DBG("Bad coll MAGIC: %x\n", cookie.magic);
+		req->coll.rc = C_RC_PKTBUF_ERROR;
+		return;
+	}
+
+	ofi_atomic_inc32(&mc_obj->pkt_cnt);
 }
 
 /* Event-handling callback for posted receive buffers.
@@ -476,14 +661,6 @@ static void _coll_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 	default:
 		CXIP_LOG_ERROR("Unexpected state received: %u\n", state);
 	}
-}
-
-/* Destroy a collective multicast PTE.
- */
-static void _coll_pte_free(struct cxip_coll_pte *coll_pte)
-{
-	cxip_pte_free(coll_pte->pte);
-	free(coll_pte);
 }
 
 /* Change state for a collective PTE. Wait for completion.
@@ -734,6 +911,166 @@ static int _post_join_complete(struct cxip_coll_mc *mc_obj, void *context)
 	return FI_SUCCESS;
 }
 
+/****************************************************************************
+ * Reduction packet management.
+ */
+
+static inline bool is_hw_root(struct cxip_coll_mc *mc_obj)
+{
+	return (mc_obj->hwroot_index == mc_obj->mynode_index);
+}
+
+static inline int _advance_seqno(struct cxip_coll_reduction *reduction)
+{
+	reduction->seqno = (reduction->seqno + 1) & CXIP_COLL_SEQNO_MASK;
+	return reduction->seqno;
+}
+
+static inline uint64_t _generate_cookie(uint32_t mcast_id, uint32_t red_id,
+					bool retry)
+{
+	union cxip_coll_cookie cookie = {
+		.mcast_id = mcast_id,
+		.red_id = red_id,
+		.retry = retry,
+		.magic = MAGIC,
+	};
+	return cookie.raw;
+}
+
+/* Simulated unicast send of multiple packets as root node to leaf nodes.
+ */
+static ssize_t _send_pkt_as_root(struct cxip_coll_reduction *reduction,
+					bool retry)
+{
+	int i, ret;
+
+	for (i = 0; i < reduction->mc_obj->av_set->fi_addr_cnt; i++) {
+		if (i == reduction->mc_obj->mynode_index &&
+		    reduction->mc_obj->av_set->fi_addr_cnt > 1)
+			continue;
+		ret = cxip_coll_send(reduction, i,
+				     reduction->tx_msg,
+				     sizeof(struct red_pkt));
+		if (ret)
+			return ret;
+	}
+	return FI_SUCCESS;
+}
+
+/* Simulated unicast send of single packet as leaf node to root node.
+ */
+static inline ssize_t _send_pkt_as_leaf(struct cxip_coll_reduction *reduction,
+					bool retry)
+{
+	int ret;
+
+	ret = cxip_coll_send(reduction, reduction->mc_obj->hwroot_index,
+			     reduction->tx_msg, sizeof(struct red_pkt));
+	return ret;
+}
+
+/* Multicast send of single packet from root or leaf node.
+ */
+static inline ssize_t _send_pkt_mc(struct cxip_coll_reduction *reduction,
+				   bool retry)
+{
+	return cxip_coll_send(reduction, 0,
+			      reduction->tx_msg,
+			      sizeof(struct red_pkt));
+}
+
+/* Send packet from root or leaf node as appropriate.
+ */
+static inline ssize_t _send_pkt(struct cxip_coll_reduction *reduction,
+				bool retry)
+{
+	int ret;
+
+	if (reduction->mc_obj->av_set->comm_key.type == COMM_KEY_MULTICAST) {
+		ret = _send_pkt_mc(reduction, retry);
+	} else if (is_hw_root(reduction->mc_obj)) {
+		ret = _send_pkt_as_root(reduction, retry);
+	} else {
+		ret = _send_pkt_as_leaf(reduction, retry);
+	}
+	return ret;
+}
+
+/**
+ * Send a reduction packet.
+ *
+ * Exported for unit testing.
+ *
+ * @param reduction - reduction object pointer
+ * @param redcnt - reduction count needed
+ * @param op - operation code
+ * @param data - pointer to send buffer
+ * @param len - length of send data in bytes
+ * @param retry - retry flag
+ *
+ * @return int - return code
+ */
+int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
+			   size_t redcnt, int op, const void *data,
+			   size_t len, bool retry)
+{
+	struct red_pkt *pkt;
+	int seqno, arm;
+
+	if (len > CXIP_COLL_MAX_TX_SIZE)
+		return -FI_EINVAL;
+
+	pkt = (struct red_pkt *)reduction->tx_msg;
+
+	if (is_hw_root(reduction->mc_obj)) {
+		seqno = _advance_seqno(reduction);
+		arm = 1;
+	} else {
+		seqno = reduction->seqno;
+		arm = 0;
+	}
+	pkt->hdr.seqno = seqno;
+	pkt->hdr.resno = seqno;
+	pkt->hdr.arm = arm;
+	pkt->hdr.redcnt = redcnt;
+	pkt->hdr.op = op;
+	pkt->cookie = _generate_cookie(reduction->mc_obj->mc_idcode,
+				       reduction->red_id,
+				       retry);
+	if (data && len)
+		memcpy(&pkt->data.databuf[0], data, len);
+	/* zero unused fields, could cause errors on FLT if random bits */
+	memset(&pkt->data.databuf[len], 0, sizeof(pkt->data.databuf) - len);
+	_hton_red_pkt(pkt);
+	return _send_pkt(reduction, retry);
+}
+
+/* Find NIC address and convert to index in av_set.
+ */
+static int _nic_to_idx(struct cxip_av_set *av_set, uint32_t nic, int *idx)
+{
+	struct cxip_addr addr;
+	size_t size = sizeof(addr);
+	int i, ret;
+
+	for (i = 0; i < av_set->fi_addr_cnt; i++) {
+		ret = fi_av_lookup(&av_set->cxi_av->av_fid,
+				   av_set->fi_addr_ary[i],
+				   &addr, &size);
+		if (ret)
+			return ret;
+		if (nic == addr.nic) {
+			*idx = i;
+			return FI_SUCCESS;
+		}
+	}
+	return -FI_EADDRNOTAVAIL;
+}
+
+/****************************************************************************
+ * Reduction operations.
+ */
 
 struct fi_ops_collective cxip_collective_ops = {
 	.size = sizeof(struct fi_ops_collective),
@@ -763,6 +1100,10 @@ struct fi_ops_collective cxip_no_collective_ops = {
 	.msg = fi_coll_no_msg,
 };
 
+/****************************************************************************
+ * Collective join operation.
+ */
+
 /* Close a multicast object.
  */
 static int _close_mc(struct fid *fid)
@@ -777,7 +1118,8 @@ static int _close_mc(struct fid *fid)
 	} while (ret == -FI_EAGAIN);
 
 	_coll_destroy_buffers(mc_obj->coll_pte);
-	_coll_pte_free(mc_obj->coll_pte);
+	cxip_pte_free(mc_obj->coll_pte->pte);
+	free(mc_obj->coll_pte);
 
 	mc_obj->av_set->mc_obj = NULL;
 	ofi_atomic_dec32(&mc_obj->av_set->ref);
@@ -797,6 +1139,8 @@ static struct fi_ops mc_ops = {
 static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 		     struct cxip_coll_mc **mc)
 {
+	static int unicast_idcode = 0;
+
 	struct cxi_pt_alloc_opts pt_opts = {
 		.use_long_event = 1,
 		.do_space_check = 1,
@@ -804,32 +1148,57 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	};
 	struct cxip_coll_mc *mc_obj;
 	struct cxip_coll_pte *coll_pte;
-	uint64_t pid_idx;
 	bool is_multicast;
-	int mcast_id;
+	uint32_t mc_idcode;
+	uint64_t pid_idx;
+	int hwroot_idx;
+	int mynode_idx;
 	int red_id;
 	int state;
 	int ret;
 
+	/* remapping is not allowed */
 	if (av_set->mc_obj)
 		return -FI_EINVAL;
 
+	/* PTE receive address */
 	switch (av_set->comm_key.type) {
 	case COMM_KEY_MULTICAST:
-		mcast_id = av_set->comm_key.dest_addr;
-		pid_idx = av_set->comm_key.dest_addr;
 		is_multicast = true;
+		pid_idx = av_set->comm_key.mcast.mcast_id;
+		mc_idcode = av_set->comm_key.mcast.mcast_id;
+		ret = _nic_to_idx(av_set, av_set->comm_key.mcast.hwroot_nic,
+				  &hwroot_idx);
+		if (ret)
+			return ret;
+		ret = _nic_to_idx(av_set, ep_obj->src_addr.nic, &mynode_idx);
+		if (ret)
+			return ret;
 		break;
 	case COMM_KEY_UNICAST:
-		/* Use unicast addresses to a known PTE index */
-		mcast_id = av_set->comm_key.dest_addr;
-		pid_idx = CXIP_PTL_IDX_RXC(CXIP_PTL_IDX_COLL);
 		is_multicast = false;
+		pid_idx = CXIP_PTL_IDX_COLL;
+		fastlock_acquire(&ep_obj->lock);
+		mc_idcode = unicast_idcode++;
+		fastlock_release(&ep_obj->lock);
+		ret = _nic_to_idx(av_set, av_set->comm_key.ucast.hwroot_nic,
+				  &hwroot_idx);
+		if (ret)
+			return ret;
+		ret = _nic_to_idx(av_set, ep_obj->src_addr.nic, &mynode_idx);
+		if (ret)
+			return ret;
 		break;
 	case COMM_KEY_RANK:
-		mcast_id = av_set->comm_key.dest_addr;
-		pid_idx = key_rank_idx_ext(av_set->comm_key.dest_addr);
 		is_multicast = false;
+		pid_idx = CXIP_EP_MAX_RX_CNT + av_set->comm_key.rank.rank;
+		mc_idcode = av_set->comm_key.rank.rank;
+		hwroot_idx = av_set->comm_key.rank.hwroot_rank;
+		if (hwroot_idx >= av_set->fi_addr_cnt)
+			return -FI_EINVAL;
+		mynode_idx = av_set->comm_key.rank.rank;
+		if (mynode_idx >= av_set->fi_addr_cnt)
+			return -FI_EINVAL;
 		break;
 	default:
 		return -FI_EINVAL;
@@ -856,17 +1225,15 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	if (ret)
 		goto free_coll_pte;
 
-	do {
-		ret = _coll_pte_enable(coll_pte, CXIP_PTE_IGNORE_DROPS);
-	} while (ret == -FI_EAGAIN);
+	ret = _coll_pte_enable(coll_pte, CXIP_PTE_IGNORE_DROPS);
 	if (ret)
-		goto disable_coll_pte;
+		goto coll_pte_destroy;
 
 	ret = _coll_add_buffers(coll_pte,
 				ep_obj->coll.buffer_size,
 				ep_obj->coll.buffer_count);
 	if (ret)
-		goto disable_coll_pte;
+		goto coll_pte_disable;
 
 	mc_obj->mc_fid.fid.fclass = FI_CLASS_MC;
 	mc_obj->mc_fid.fid.context = mc_obj;
@@ -874,7 +1241,9 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	mc_obj->coll_pte = coll_pte;
 	mc_obj->ep_obj = ep_obj;
 	mc_obj->av_set = av_set;
-	mc_obj->mcast_id = mcast_id;
+	mc_obj->mc_idcode = mc_idcode;
+	mc_obj->hwroot_index = hwroot_idx;
+	mc_obj->mynode_index = mynode_idx;
 	mc_obj->is_joined = true;
 	state = CXIP_COLL_STATE_NONE;
 	for (red_id = 0; red_id < CXIP_COLL_MAX_CONCUR; red_id++) {
@@ -900,10 +1269,12 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 
 	return FI_SUCCESS;
 
-disable_coll_pte:
+coll_pte_disable:
 	_coll_pte_disable(coll_pte);
+coll_pte_destroy:
+	cxip_pte_free(coll_pte->pte);
 free_coll_pte:
-	_coll_pte_free(coll_pte);
+	free(coll_pte);
 free_mc_obj:
 	free(mc_obj);
 	return ret;
@@ -965,4 +1336,19 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	*mc = &mc_obj->mc_fid;
 
 	return FI_SUCCESS;
+}
+
+/* Exported through fi_cxi_ext.h. Generates only MULTICAST comm_keys.
+ */
+size_t cxip_coll_init_mcast_comm_key(struct cxip_coll_comm_key *comm_key,
+				     uint32_t mcast_id,
+				     uint32_t hwroot_nic)
+{
+	struct cxip_comm_key *key = (struct cxip_comm_key *)comm_key;
+
+	key->type = COMM_KEY_MULTICAST;
+	key->mcast.mcast_id = mcast_id;
+	key->mcast.hwroot_nic = hwroot_nic;
+
+	return sizeof(struct cxip_comm_key);
 }
