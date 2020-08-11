@@ -30,7 +30,10 @@
 #endif
 
 #include <inttypes.h>
+#include <stdbool.h>
 #include "hmem.h"
+
+static bool hmem_initialized = false;
 
 struct ft_hmem_ops {
 	int (*init)(void);
@@ -85,12 +88,26 @@ static struct ft_hmem_ops hmem_ops[] = {
 
 int ft_hmem_init(enum fi_hmem_iface iface)
 {
-	return hmem_ops[iface].init();
+	int ret;
+
+	ret = hmem_ops[iface].init();
+	if (ret == FI_SUCCESS)
+		hmem_initialized = true;
+
+	return ret;
 }
 
 int ft_hmem_cleanup(enum fi_hmem_iface iface)
 {
-	return hmem_ops[iface].cleanup();
+	int ret = FI_SUCCESS;
+
+	if (hmem_initialized) {
+		ret = hmem_ops[iface].cleanup();
+		if (ret == FI_SUCCESS)
+			hmem_initialized = false;
+	}
+
+	return ret;
 }
 
 int ft_hmem_alloc(enum fi_hmem_iface iface, uint64_t device, void **buf,
