@@ -588,15 +588,6 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	assert(pkt_entry->pkt_size > 0);
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
-	if (base_hdr->type >= RXR_EXTRA_REQ_PKT_END) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"Peer %d is requesting feature %d, which this EP does not support.\n",
-			(int)src_addr, base_hdr->type);
-
-		assert(0 && "invalid REQ packe type");
-		rxr_cq_handle_cq_error(ep, -FI_EIO);
-		return;
-	}
 
 	if (base_hdr->type >= RXR_REQ_PKT_BEGIN) {
 		/*
@@ -634,6 +625,17 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		ep->posted_bufs_shm--;
 	} else {
 		ep->posted_bufs_efa--;
+	}
+
+	if (base_hdr->type >= RXR_EXTRA_REQ_PKT_END) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"Peer %d is requesting feature %d, which this EP does not support.\n"
+			"A handshake packet contains capability bits has been sent to peer.\n"
+			"This packet will be ignored.\n",
+			(int)src_addr, base_hdr->type);
+
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
 	}
 
 	switch (base_hdr->type) {
