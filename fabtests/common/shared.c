@@ -2045,24 +2045,60 @@ ssize_t ft_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
 ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
 		struct fi_rma_iov *remote)
 {
-	switch (op) {
-	case FT_RMA_WRITE:
-		FT_POST(fi_inject_write, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"fi_inject_write", ep, tx_buf, opts.transfer_size,
-			remote_fi_addr, remote->addr, remote->key);
-		break;
-	case FT_RMA_WRITEDATA:
-		FT_POST(fi_inject_writedata, ft_progress, txcq, tx_seq,
-			&tx_cq_cntr, "fi_inject_writedata", ep, tx_buf,
-			opts.transfer_size, remote_cq_data, remote_fi_addr,
-			remote->addr, remote->key);
-		break;
-	default:
-		FT_ERR("Unknown RMA inject op type\n");
-		return EXIT_FAILURE;
+	if (ft_check_opts(FT_OPT_ENABLE_HMEM)) {
+		uint64_t flags = FI_INJECT;
+		const struct iovec iov = {
+			.iov_base = tx_buf,
+			.iov_len = opts.transfer_size,
+		};
+		const struct fi_rma_iov rma_iov = {
+			.addr = remote->addr,
+			.len = opts.transfer_size,
+			.key = remote->key,
+		};
+		const struct fi_msg_rma msg_rma = {
+			.msg_iov = &iov,
+			.desc = &mr_desc,
+			.iov_count = 1,
+			.addr = remote_fi_addr,
+			.rma_iov = &rma_iov,
+			.data = remote_cq_data,
+		};
+
+		switch (op) {
+		case FT_RMA_WRITE:
+			break;
+		case FT_RMA_WRITEDATA:
+			flags |= FI_REMOTE_CQ_DATA;
+			break;
+		default:
+			FT_ERR("Unknown RMA inject op type\n");
+			return EXIT_FAILURE;
+		}
+
+		FT_POST(fi_writemsg, ft_progress, txcq, tx_seq, &tx_cq_cntr,
+			"fi_writemsg", ep, &msg_rma, flags);
+	} else {
+		switch (op) {
+		case FT_RMA_WRITE:
+			FT_POST(fi_inject_write, ft_progress, txcq, tx_seq, &tx_cq_cntr,
+				"fi_inject_write", ep, tx_buf, opts.transfer_size,
+				remote_fi_addr, remote->addr, remote->key);
+			break;
+		case FT_RMA_WRITEDATA:
+			FT_POST(fi_inject_writedata, ft_progress, txcq, tx_seq,
+				&tx_cq_cntr, "fi_inject_writedata", ep, tx_buf,
+				opts.transfer_size, remote_cq_data, remote_fi_addr,
+				remote->addr, remote->key);
+			break;
+		default:
+			FT_ERR("Unknown RMA inject op type\n");
+			return EXIT_FAILURE;
+		}
+
+		tx_cq_cntr++;
 	}
 
-	tx_cq_cntr++;
 	return 0;
 }
 
