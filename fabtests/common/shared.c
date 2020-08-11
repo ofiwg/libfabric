@@ -1920,17 +1920,50 @@ ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx)
 
 ssize_t ft_post_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
 {
-	if (hints->caps & FI_TAGGED) {
-		FT_POST(fi_tinject, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"inject", ep, tx_buf, size + ft_tx_prefix_size(),
-			fi_addr, tx_seq);
+	if (ft_check_opts(FT_OPT_ENABLE_HMEM)) {
+		const struct iovec iov = {
+			.iov_base = tx_buf,
+			.iov_len = size + ft_tx_prefix_size(),
+		};
+
+		if (hints->caps & FI_TAGGED) {
+			const struct fi_msg_tagged msg_tagged = {
+				.msg_iov = &iov,
+				.desc = &mr_desc,
+				.iov_count = 1,
+				.addr = fi_addr,
+				.tag = tx_seq,
+			};
+
+			FT_POST(fi_tsendmsg, ft_progress, txcq, tx_seq,
+				&tx_cq_cntr, "fi_tsendmsg", ep, &msg_tagged,
+				FI_INJECT);
+		} else {
+			const struct fi_msg msg = {
+				.msg_iov = &iov,
+				.desc = &mr_desc,
+				.iov_count = 1,
+				.addr = fi_addr,
+			};
+
+			FT_POST(fi_sendmsg, ft_progress, txcq, tx_seq,
+				&tx_cq_cntr, "fi_sendmsg", ep, &msg,
+				FI_INJECT);
+		}
 	} else {
-		FT_POST(fi_inject, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"inject", ep, tx_buf, size + ft_tx_prefix_size(),
-			fi_addr);
+		if (hints->caps & FI_TAGGED) {
+			FT_POST(fi_tinject, ft_progress, txcq, tx_seq,
+				&tx_cq_cntr, "inject", ep, tx_buf,
+				size + ft_tx_prefix_size(), fi_addr, tx_seq);
+		} else {
+			FT_POST(fi_inject, ft_progress, txcq, tx_seq,
+				&tx_cq_cntr, "inject", ep, tx_buf,
+				size + ft_tx_prefix_size(), fi_addr);
+		}
+
+		tx_cq_cntr++;
 	}
 
-	tx_cq_cntr++;
 	return 0;
 }
 
