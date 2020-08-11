@@ -47,7 +47,17 @@ v1.11.0, Fri Aug 14, 2020
 
 ## EFA
 
--
+- Add support to use user posted receive buffers with RDM EP when requested
+- Various fixes to FI_HMEM support
+- Added fork handler and abort if rdma-core is incorrectly configured
+- Fix bandwidth regression due to increased structure size
+- Reuse verbs protection domain when in same process address space
+- Periodically flush MR cache to reduce MR usage
+- Properly handle setting/unsetting RDMAV_HUGEPAGES_SAFE
+- Fix provider_version reported by EFA
+- Populate additional fields in fid_nic
+- Fix various bugs in the completion, info, and domain paths
+- Fix various memory leaks
 
 ## PSM2
 
