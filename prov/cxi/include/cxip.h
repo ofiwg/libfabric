@@ -986,6 +986,7 @@ struct cxip_ep_obj {
 	ofi_atomic32_t tgq_refs[CXIP_EP_MAX_TX_CNT];
 	fastlock_t cmdq_lock;
 
+	uint64_t caps;
 	struct fi_ep_attr ep_attr;
 	size_t txq_size;
 	size_t tgq_size;

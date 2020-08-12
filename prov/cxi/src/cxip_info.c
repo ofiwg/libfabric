@@ -58,7 +58,7 @@ struct fi_ep_attr cxip_ep_attr = {
 };
 
 struct fi_tx_attr cxip_tx_attr = {
-	.caps = CXIP_EP_CAPS,
+	.caps = CXIP_EP_CAPS & ~OFI_IGNORED_TX_CAPS,
 	.op_flags = CXIP_TX_OP_FLAGS,
 	.msg_order = CXIP_MSG_ORDER,
 	.inject_size = CXIP_INJECT_SIZE,
@@ -68,7 +68,7 @@ struct fi_tx_attr cxip_tx_attr = {
 };
 
 struct fi_rx_attr cxip_rx_attr = {
-	.caps = CXIP_EP_CAPS,
+	.caps = CXIP_EP_CAPS & ~OFI_IGNORED_RX_CAPS,
 	.op_flags = CXIP_RX_OP_FLAGS,
 	.msg_order = CXIP_MSG_ORDER,
 	.comp_order = FI_ORDER_NONE,
@@ -503,7 +503,6 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		 */
 		if (hints->caps && !(hints->caps & FI_RMA_EVENT)) {
 			fi_ptr->caps &= ~FI_RMA_EVENT;
-			fi_ptr->tx_attr->caps &= ~FI_RMA_EVENT;
 			fi_ptr->rx_attr->caps &= ~FI_RMA_EVENT;
 		}
 
@@ -512,7 +511,6 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		 */
 		if (hints->caps && !(hints->caps & FI_SOURCE)) {
 			fi_ptr->caps &= ~FI_SOURCE;
-			fi_ptr->tx_attr->caps &= ~FI_SOURCE;
 			fi_ptr->rx_attr->caps &= ~FI_SOURCE;
 		}
 	}

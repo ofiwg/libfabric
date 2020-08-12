@@ -1841,6 +1841,7 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	}
 
 	/* Copy EP attributes from hints */
+	cxi_ep->ep_obj->caps = hints->caps;
 	cxi_ep->ep_obj->ep_attr = *hints->ep_attr;
 	cxi_ep->ep_obj->txq_size = hints->tx_attr->size;
 	cxi_ep->ep_obj->tgq_size = hints->rx_attr->size;

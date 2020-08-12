@@ -215,7 +215,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	 * standard MR, use unrestricted commands. Ordered Gets are never
 	 * supported.
 	 */
-	unr = !cxip_mr_key_opt(key) || txc->attr.caps & FI_RMA_EVENT;
+	unr = !cxip_mr_key_opt(key) || txc->ep_obj->caps & FI_RMA_EVENT;
 	if (!unr && op == FI_OP_WRITE)
 		unr = txc->attr.msg_order & (FI_ORDER_WAW | FI_ORDER_RMA_WAW);
 
