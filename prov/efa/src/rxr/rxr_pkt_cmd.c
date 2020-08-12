@@ -587,7 +587,21 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	pkt_entry->pkt_size = cq_entry->len;
 	assert(pkt_entry->pkt_size > 0);
 
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	if (!(peer->flags & RXR_PEER_HANDSHAKE_SENT))
+		rxr_pkt_post_handshake(ep, peer, pkt_entry->addr);
+
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	if (base_hdr->type >= RXR_EXTRA_REQ_PKT_END) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"Peer %d is requesting feature %d, which this EP does not support.\n"
+			"A handshake packet contains capability bits has been sent to peer.\n"
+			"This packet will be ignored.\n",
+			(int)src_addr, base_hdr->type);
+
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
+	}
 
 	if (base_hdr->type >= RXR_REQ_PKT_BEGIN) {
 		/*
@@ -616,26 +630,12 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	rxr_pkt_print("Received", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
 #endif
 #endif
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	if (!(peer->flags & RXR_PEER_HANDSHAKE_SENT))
-		rxr_pkt_post_handshake(ep, peer, pkt_entry->addr);
 
 	if (peer->is_local) {
 		assert(ep->use_shm);
 		ep->posted_bufs_shm--;
 	} else {
 		ep->posted_bufs_efa--;
-	}
-
-	if (base_hdr->type >= RXR_EXTRA_REQ_PKT_END) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"Peer %d is requesting feature %d, which this EP does not support.\n"
-			"A handshake packet contains capability bits has been sent to peer.\n"
-			"This packet will be ignored.\n",
-			(int)src_addr, base_hdr->type);
-
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		return;
 	}
 
 	switch (base_hdr->type) {
