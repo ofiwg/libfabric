@@ -700,15 +700,29 @@ configure registration caches.
   zero will disable registration caching.
 
 *FI_MR_CACHE_MONITOR*
-: The cache monitor is responsible for detecting changes made between the
-  virtual addresses used by an application and the underlying physical pages.
-  Valid monitor options are: userfaultfd, memhooks, and disabled.  Selecting
-  disabled will turn off the registration cache.  Userfaultfd is a Linux
-  kernel feature used to report virtual to physical address mapping changes
-  to user space.  Memhooks operates by intercepting relevant memory
-  allocation and deallocation calls which may result in the mappings changing,
-  such as malloc, mmap, free, etc.  Note that memhooks operates at the elf
-  linker layer, and does not use glibc memory hooks.
+: The cache monitor is responsible for detecting system memory (FI_HMEM_SYSTEM)
+  changes made between the virtual addresses used by an application and the
+  underlying physical pages. Valid monitor options are: userfaultfd, memhooks,
+  and disabled.  Selecting disabled will turn off the registration cache.
+  Userfaultfd is a Linux kernel feature used to report virtual to physical
+  address mapping changes to user space. Memhooks operates by intercepting
+  relevant memory allocation and deallocation calls which may result in the
+  mappings changing, such as malloc, mmap, free, etc.  Note that memhooks
+  operates at the elf linker layer, and does not use glibc memory hooks.
+
+*FI_MR_CUDA_CACHE_MONITOR_ENABLED*
+: The CUDA cache monitor is responsible for detecting CUDA device memory
+  (FI_HMEM_CUDA) changes made between the device virtual addresses used by an
+  application and the underlying device physical pages. Valid monitor options
+  are: 0 or 1. Note that the CUDA memory monitor requires a CUDA toolkit version
+  with unified virtual addressing enabled.
+
+*FI_MR_ROCR_CACHE_MONITOR_ENABLED*
+: The ROCR cache monitor is responsible for detecting ROCR device memory
+  (FI_HMEM_ROCR) changes made between the device virtual addresses used by an
+  application and the underlying device physical pages. Valid monitor options
+  are: 0 or 1. Note that the ROCR memory monitor requires a ROCR version with
+  unified virtual addressing enabled.
 
 # SEE ALSO
 
