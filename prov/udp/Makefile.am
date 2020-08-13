@@ -10,16 +10,18 @@ AM_CPPFLAGS = \
 	-I$(srcdir)/include \
 	-D_GNU_SOURCE -D__USE_XOPEN2K8 \
 	-DSYSCONFDIR=\"$(sysconfdir)\" \
-	-DRDMADIR=\"@rdmadir@\" \
 	-DPROVDLDIR=\"$(pkglibdir)\"
 
 noinst_LTLIBRARIES =
 lib_LTLIBRARIES =
+# libfabric_pkglibdir = $(libdir)/libfabric
+# ibfabric_pkglib_LTLIBRARIES =
 
 if EMBEDDED
 noinst_LTLIBRARIES += src/libudp-fi.la
 else
 lib_LTLIBRARIES += src/libudp-fi.la
+# libfabric_pkglib_LTLIBRARIES += src/libudp-fi.la
 endif
 
 ACLOCAL_AMFLAGS = -I config
@@ -30,10 +32,6 @@ if HAVE_LD_VERSION_SCRIPT
 else !HAVE_LD_VERSION_SCRIPT
     libudp_fi_version_script =
 endif !HAVE_LD_VERSION_SCRIPT
-
-# rdmaincludedir = $(includedir)/rdma
-
-# rdmainclude_HEADERS =
 
 # internal utility functions shared by in-tree providers:
 common_srcs = \
@@ -97,9 +95,6 @@ common_srcs += include/linux/rdpmc.h
 common_srcs += include/linux/osd.h
 common_srcs += include/unix/osd.h
 endif
-
-# ensure dl-built providers link back to libfabric
-# linkback = src/libfabric.la
 
 bin_SCRIPTS =
 

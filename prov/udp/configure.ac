@@ -14,7 +14,6 @@ AC_CONFIG_MACRO_DIR(config)
 AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE([1.11 dist-bzip2 foreign -Wall -Werror subdir-objects parallel-tests tar-pax])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
-dnl --- m4_include(config/fi_check_package.m4)
 AC_DEFINE([HAVE_UDP], [1], [Build libfabric UDP provider])
 AC_DEFINE([HAVE_UDP_DL], [1], [Build libfabric UDP provider])
 
