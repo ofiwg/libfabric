@@ -11,6 +11,8 @@ import common
 import shlex
 from abc import ABC, abstractmethod # abstract base class for creating abstract classes in python
 
+job_cadence = os.environ['JOB_CADENCE']
+
 # A Jenkins env variable for job name is composed of the name of the jenkins job and the branch name
 # it is building for. for e.g. in our case jobname = 'ofi_libfabric/master'
 class Test:
@@ -24,6 +26,7 @@ class Test:
         self.fabric = fabric
         self.hosts = hosts
         self.ofi_build_mode = ofi_build_mode
+        self.job_cadence = job_cadence
         if (len(hosts) == 2):
             self.server = hosts[0]
             self.client = hosts[1]
@@ -189,7 +192,9 @@ class ShmemTest(Test):
 
     @property
     def execute_condn(self):
-        return True if (self.core_prov == "psm2" or self.core_prov == "sockets") \
+        return True if (self.job_cadence == 'daily' and \
+                        (self.core_prov == "psm2" or \
+                        self.core_prov == "sockets")) \
                     else False
             
     def execute_cmd(self, shmem_testname):
@@ -454,7 +459,8 @@ class MpiTestStress(MpiTests):
         # Due to an mpich issue when the correct mpich options are enabled during
         # mpich builds, sttress test is failing. disabling mpich + stress tests
         # untill the mpich team fixes the issue. 
-        return True if (self.mpi != 'mpich' and (self.mpi != 'ompi' or \
+        return True if ((self.job_cadence  == 'daily') and \
+                       (self.mpi != 'ompi' or \
                         self.ofi_build_mode != 'dbg')) else  False
     
     def execute_cmd(self):
@@ -493,10 +499,11 @@ class MpiTestOSU(MpiTests):
     @property
     def execute_condn(self): 
         # sockets and psm2 have some issues with OSU benchmark testing.
-        return True if (self.mpi != "ompi" or \
-                       (self.core_prov != "sockets" and \
-                        self.core_prov != "psm2" and \
-                        self.ofi_build_mode!="dbg")) \
+        return True if ((self.job_cadence  == 'daily') and \
+                        (self.mpi != "ompi" or \
+                        (self.core_prov != "sockets" and \
+                         self.core_prov != "psm2" and \
+                         self.ofi_build_mode!="dbg"))) \
                     else False
     
     def execute_cmd(self):
