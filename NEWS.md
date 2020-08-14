@@ -21,7 +21,7 @@ v1.11.0, Fri Aug 14, 2020
 - Add mr_cache argument flush_lru to ofi_mr_cache_flush
 - Fix 1.1 ABI domain, EP, and tx attributes
 - Add loading of DL providers by name
-- Add CMA wrappers and define CMA for OSX 
+- Add CMA wrappers and define CMA for OSX
 - Fix util getinfo: use base fi_info caps, altering mr_mode properly,
   FI_MR_HMEM support, NULL hints, set CQ FI_MSG flag, query FI_COLLECTIVE,
   list FI_MATCH_COMPLETE, select and request specific core provider
@@ -44,6 +44,7 @@ v1.11.0, Fri Aug 14, 2020
 - Save and restore the errno in FI_LOG
 - Ensure that access to atomic handlers are in range
 - Ensure ifa_name is null terminated in ofi_get_list_of_addr
+- Buffer pools fallback to normal allocations when hugepage allocations fail
 
 ## EFA
 
@@ -68,15 +69,24 @@ v1.11.0, Fri Aug 14, 2020
 
 - updated AV design to be dynamically extensible using indexer and index map.
 - updated static allocation of peers with runtime allocation during rts.
-- added wrapper to fetch pointer to a peer from the peers data structure. 
+- added wrapper to fetch pointer to a peer from the peers data structure.
 - Updated to show correct msg_ordering.
-- Check datatype size when handling atomic ops. 
+- Check datatype size when handling atomic ops.
 - Verify atomic opcode in range for fixing Klocwork issue.
 - Corrected use of addr in rxd_atomic_inject for retrieving rxd_addr.
 
 ## RxM
 
--
+- Align reporting of FI_COLLECTIVE with man pages
+- Show correct ordering of atomic operations
+- Fix error handling inserting IP addresses into an AV
+- Minor code cleanups and bug fixes
+- Select different optimizations based on running over tcp vs verbs
+- Use SRX by default when using tcp to improve scaling
+- Correct CQ size calculation when using SRX
+- Fix MR registration error path when handling iov's
+- Allow selecting tcp wait objects separate from verbs
+- Only repost Rx buffers if necessary
 
 ## SHM
 
@@ -94,15 +104,80 @@ v1.11.0, Fri Aug 14, 2020
 
 ## Sockets
 
--
+- Fix backwards compatibility accessing struct fi_mr_attr
+- Fix use after free error in CM threads
+- Free unclaimed messages during endpoint cleanup to avoid memory leaks
+- Improve handling of socket disconnection
+- Limit time spent in progress when expected list is long
+- Avoid thread starvation by converting spinlocks to mutex
 
 ## TCP
 
--
+- Minor bug fixes
+- Verify received opcode values are valid
+- Avoid possible receive buffer overflow from malformed packets
+- Fix fi_cq_sread failing with ECANCELED
+- Optimize receive progress handling
+- Do not alter pseudo random sequence numbers
+- Increase default listen backlog size to improve scaling
+- Handle processing of NACK packets during connection setup
+- Fix wrong error handling during passive endpoint creation
+- Add logging messages during shutdown handling
+- Improve logging and error handling
+- Fix possible use after free issues during CM setup
+- Minor code restructuring
+
+## Util
+
+- Use internal flags in place of epoll flags for portability
+- Support HMEM with the mr_cache
+- Verify application requested FI_HMEM prior to accessing fi_mr_attr fields
+- Fix memory leak when using POLLFD wait sets
+- Ensure AV data is aligned even if address length is not
+- Fix handling of mr mode bits for API < 1.5
+- Allow user to force use of userfaultfd memory monitor
 
 ## Verbs
 
--
+- Add support for AF_IB and native IB addressing
+- Minor code cleanups
+- Avoid possible string overrun parsing interface names
+- Fix memory leak handling duplication interface names
+- Add XRC shared Rx CQ credit reservation
+- Fix possible segfault when closing an XRC SRQ
+- Fix verbs speed units to MBps
+- Add flow control support to avoid RQ overruns
+- Fix memory leak of address data when creating endpoints
+
+v1.10.1, Fri May 8, 2020
+========================
+
+## Core
+
+- Fixed library version
+
+## EFA
+
+- Allow endpoint to choose shm usage
+- Fix handling of REQ packets
+- Fix logic writing a Tx completion entry
+- Use correct Tx operation flags for msg sends
+
+## Fabtests
+
+- Use pax tar format when creating source packages
+
+## RxD
+
+- Use correct peer address for atomic_inject calls
+
+## SHM
+
+- Fix BSD build failure
+
+## TCP
+
+- Add locking around signaling a wait fd
 
 v1.10.0, Fri Apr 24, 2020
 =========================
