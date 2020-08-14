@@ -21,7 +21,7 @@ v1.11.0, Fri Aug 14, 2020
 - Add mr_cache argument flush_lru to ofi_mr_cache_flush
 - Fix 1.1 ABI domain, EP, and tx attributes
 - Add loading of DL providers by name
-- Add CMA wrappers and define CMA for OSX 
+- Add CMA wrappers and define CMA for OSX
 - Fix util getinfo: use base fi_info caps, altering mr_mode properly,
   FI_MR_HMEM support, NULL hints, set CQ FI_MSG flag, query FI_COLLECTIVE,
   list FI_MATCH_COMPLETE, select and request specific core provider
@@ -68,9 +68,9 @@ v1.11.0, Fri Aug 14, 2020
 
 - updated AV design to be dynamically extensible using indexer and index map.
 - updated static allocation of peers with runtime allocation during rts.
-- added wrapper to fetch pointer to a peer from the peers data structure. 
+- added wrapper to fetch pointer to a peer from the peers data structure.
 - Updated to show correct msg_ordering.
-- Check datatype size when handling atomic ops. 
+- Check datatype size when handling atomic ops.
 - Verify atomic opcode in range for fixing Klocwork issue.
 - Corrected use of addr in rxd_atomic_inject for retrieving rxd_addr.
 
@@ -103,6 +103,36 @@ v1.11.0, Fri Aug 14, 2020
 ## Verbs
 
 -
+
+v1.10.1, Fri May 8, 2020
+========================
+
+## Core
+
+- Fixed library version
+
+## EFA
+
+- Allow endpoint to choose shm usage
+- Fix handling of REQ packets
+- Fix logic writing a Tx completion entry
+- Use correct Tx operation flags for msg sends
+
+## Fabtests
+
+- Use pax tar format when creating source packages
+
+## RxD
+
+- Use correct peer address for atomic_inject calls
+
+## SHM
+
+- Fix BSD build failure
+
+## TCP
+
+- Add locking around signaling a wait fd
 
 v1.10.0, Fri Apr 24, 2020
 =========================
