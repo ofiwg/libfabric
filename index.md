@@ -45,7 +45,8 @@ A comprehensive developer's guide is being developed.  Some sections are incompl
 
 A set of man pages have been carefully written to specify the libfabric API.
 
-* [Man pages for v1.10.1](v1.10.1/man/)
+* [Man pages for v1.11.0](v1.11.0/man/)
+  * Older: [Man pages for v1.10.1](v1.10.1/man/)
   * Older: [Man pages for v1.10.0](v1.10.0/man/)
   * Older: [Man pages for v1.9.1](v1.9.1/man/)
   * Older: [Man pages for v1.9.0](v1.9.0/man/)
