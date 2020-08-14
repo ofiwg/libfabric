@@ -16,7 +16,7 @@ data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_orange_
 Latest releases
 ===============
 
-* The libfabric library, unit tests, and documentation: [libfabric v1.10.1](https://github.com/ofiwg/libfabric/releases/tag/v1.10.1) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
+* The libfabric library, unit tests, and documentation: [libfabric v1.11.0](https://github.com/ofiwg/libfabric/releases/tag/v1.11.0) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
 
 
 Overview
