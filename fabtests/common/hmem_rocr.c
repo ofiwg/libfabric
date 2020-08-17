@@ -61,6 +61,8 @@ struct rocr_ops {
 	hsa_status_t (*hsa_memory_allocate)(hsa_region_t region, size_t size,
 					    void **ptr);
 	hsa_status_t (*hsa_memory_free)(void *ptr);
+	hsa_status_t (*hsa_amd_memory_fill)(void* ptr, uint32_t value,
+					    size_t count);
 };
 
 static struct rocr_ops rocr_ops;
@@ -191,6 +193,13 @@ int ft_rocr_init(void)
 		goto err_dlclose_rocr;
 	}
 
+	rocr_ops.hsa_amd_memory_fill = dlsym(rocr_handle,
+					     "hsa_amd_memory_fill");
+	if (!rocr_ops.hsa_amd_memory_fill) {
+		FT_ERR("Failed to find hsa_amd_memory_fill");
+		goto err_dlclose_rocr;
+	}
+
 	hsa_ret = rocr_ops.hsa_init();
 	if (hsa_ret != HSA_STATUS_SUCCESS) {
 		ROCR_ERR(hsa_ret, "hsa_init failed");
@@ -259,17 +268,62 @@ int ft_rocr_free(void *buf)
 	return -FI_EIO;
 }
 
+#define ROCR_MEM_FILL_BYTE_ALIGNMENT 4U
+
 int ft_rocr_memset(uint64_t device, void *buf, int value, size_t size)
 {
-	unsigned char *ptr = buf;
 	unsigned char set_value = value;
+	void *mem_fill_ptr;
+	size_t mem_fill_size;
+	uint32_t mem_fill_value;
+	hsa_status_t hsa_ret;
+	unsigned char *ptr = buf;
 	int ret;
 
-	while (size-- > 0) {
+	/* Determine if ROCR memory fill can be used to set device memory. ROCR
+	 * memory fill requires 4-byte alignment.
+	 */
+	mem_fill_ptr = (void *) ALIGN((uintptr_t) buf,
+				      ROCR_MEM_FILL_BYTE_ALIGNMENT);
+
+	/* Use ROCR memory copy to fill the start of the buffer until the buffer
+	 * is correctly aligned.
+	 */
+	while (ptr != mem_fill_ptr && size > 0) {
 		ret = ft_rocr_memcpy(device, ptr, &set_value, sizeof(*ptr));
 		if (ret != FI_SUCCESS)
 			return ret;
 
+		size--;
+		ptr++;
+	}
+
+	/* Use ROCR memory fill to fill the middle of the buffer. */
+	if (size >= ROCR_MEM_FILL_BYTE_ALIGNMENT) {
+		mem_fill_size = ALIGN_DOWN(size, ROCR_MEM_FILL_BYTE_ALIGNMENT);
+
+		memset(&mem_fill_value, set_value, sizeof(mem_fill_value));
+
+		hsa_ret = rocr_ops.hsa_amd_memory_fill(mem_fill_ptr,
+						       mem_fill_value,
+						       mem_fill_size /
+						       ROCR_MEM_FILL_BYTE_ALIGNMENT);
+		if (hsa_ret != HSA_STATUS_SUCCESS) {
+			ROCR_ERR(hsa_ret, "hsa_amd_memory_fill failed");
+			return -FI_EIO;
+		}
+
+		size -= mem_fill_size;
+		ptr += mem_fill_size;
+	}
+
+	/* Use ROCR memory copy to fill the end of the buffer. */
+	while (size > 0) {
+		ret = ft_rocr_memcpy(device, ptr, &set_value, sizeof(*ptr));
+		if (ret != FI_SUCCESS)
+			return ret;
+
+		size--;
 		ptr++;
 	}
 
