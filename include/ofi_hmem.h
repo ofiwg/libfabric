@@ -140,7 +140,7 @@ ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,
 ssize_t ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
 			     const struct iovec *hmem_iov,
 			     size_t hmem_iov_count, uint64_t hmem_iov_offset,
-			     void *src, size_t size);
+			     const void *src, size_t size);
 
 int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *dev_buf, void **handle);
 int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
