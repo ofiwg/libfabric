@@ -220,7 +220,7 @@ static uint64_t
 rxm_mr_get_msg_access(struct rxm_domain *rxm_domain, uint64_t access)
 {
 	/* Additional flags to use RMA read for large message transfers */
-	access |= FI_READ | FI_REMOTE_READ;
+	access |= FI_READ | FI_REMOTE_READ | FI_REMOTE_WRITE;
 
 	if (rxm_domain->mr_local)
 		access |= FI_WRITE;

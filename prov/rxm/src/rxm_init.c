@@ -103,7 +103,7 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 
 		/* FI_RMA cap is needed for large message transfer protocol */
 		if (core_info->caps & FI_MSG)
-			core_info->caps |= FI_RMA | FI_READ | FI_REMOTE_READ;
+			core_info->caps |= FI_RMA | FI_READ | FI_REMOTE_READ | FI_REMOTE_WRITE;
 
 		if (hints->domain_attr) {
 			core_info->domain_attr->caps |= hints->domain_attr->caps;
@@ -469,6 +469,12 @@ RXM_INI
 	fi_param_define(&rxm_prov, "data_auto_progress", FI_PARAM_BOOL,
 			"Force auto-progress for data transfers even if app "
 			"requested manual progress (default: false/no).");
+
+	fi_param_define(&rxm_prov, "use_rndv_write", FI_PARAM_BOOL,
+			"Set this environment variable to control the  "
+			"RxM Rendezvous protocol.  If set (1), RxM will use "
+			"RMA writes rather than RMA reads during Rendezvous "
+			"transactions. (default: 0).");
 
 	rxm_init_infos();
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);

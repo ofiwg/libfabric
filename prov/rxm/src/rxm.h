@@ -335,10 +335,17 @@ struct rxm_atomic_resp_hdr {
 	FUNC(RXM_SAR_TX),		\
 	FUNC(RXM_CREDIT_TX),		\
 	FUNC(RXM_RNDV_TX),		\
-	FUNC(RXM_RNDV_ACK_WAIT),	\
+	FUNC(RXM_RNDV_READ_DONE_WAIT),	\
+	FUNC(RXM_RNDV_WRITE_DATA_WAIT),	\
+	FUNC(RXM_RNDV_WRITE_DONE_WAIT),	\
 	FUNC(RXM_RNDV_READ),		\
-	FUNC(RXM_RNDV_ACK_SENT),	\
-	FUNC(RXM_RNDV_ACK_RECVD),	\
+	FUNC(RXM_RNDV_WRITE),		\
+	FUNC(RXM_RNDV_READ_DONE_SENT),	\
+	FUNC(RXM_RNDV_READ_DONE_RECVD),	\
+	FUNC(RXM_RNDV_WRITE_DATA_SENT),	\
+	FUNC(RXM_RNDV_WRITE_DATA_RECVD),\
+	FUNC(RXM_RNDV_WRITE_DONE_SENT),	\
+	FUNC(RXM_RNDV_WRITE_DONE_RECVD),\
 	FUNC(RXM_RNDV_FINISH),		\
 	FUNC(RXM_ATOMIC_RESP_WAIT),	\
 	FUNC(RXM_ATOMIC_RESP_SENT)
@@ -352,11 +359,13 @@ extern char *rxm_proto_state_str[];
 enum {
 	rxm_ctrl_eager,
 	rxm_ctrl_seg,
-	rxm_ctrl_rndv,
-	rxm_ctrl_rndv_ack,
+	rxm_ctrl_rndv_req,
+	rxm_ctrl_rndv_rd_done,
 	rxm_ctrl_atomic,
 	rxm_ctrl_atomic_resp,
-	rxm_ctrl_credit
+	rxm_ctrl_credit,
+	rxm_ctrl_rndv_wr_data,
+	rxm_ctrl_rndv_wr_done
 };
 
 struct rxm_pkt {
@@ -413,8 +422,10 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX,
 	RXM_BUF_POOL_TX_START	= RXM_BUF_POOL_TX,
 	RXM_BUF_POOL_TX_INJECT,
-	RXM_BUF_POOL_TX_ACK,
-	RXM_BUF_POOL_TX_RNDV,
+	RXM_BUF_POOL_TX_RNDV_RD_DONE,
+	RXM_BUF_POOL_TX_RNDV_WR_DONE,
+	RXM_BUF_POOL_TX_RNDV_REQ,
+	RXM_BUF_POOL_TX_RNDV_WR_DATA,
 	RXM_BUF_POOL_TX_ATOMIC,
 	RXM_BUF_POOL_TX_CREDIT,
 	RXM_BUF_POOL_TX_SAR,
@@ -450,7 +461,8 @@ struct rxm_rx_buf {
 	uint8_t repost;
 
 	/* Used for large messages */
-	struct rxm_rndv_hdr *rndv_hdr;
+	struct dlist_entry rndv_wait_entry;
+	struct rxm_rndv_hdr *remote_rndv_hdr;
 	size_t rndv_rma_index;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 
@@ -497,6 +509,16 @@ struct rxm_tx_rndv_buf {
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 	uint8_t count;
 
+	struct {
+		struct iovec iov[RXM_IOV_LIMIT];
+		void *desc[RXM_IOV_LIMIT];
+		struct rxm_conn *conn;
+		size_t rndv_rma_index;
+		size_t rndv_rma_count;
+		struct rxm_tx_base_buf *done_buf;
+		struct rxm_rndv_hdr remote_hdr;
+	} write_rndv;
+
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
 };
@@ -531,7 +553,9 @@ struct rxm_tx_atomic_buf {
 
 enum rxm_deferred_tx_entry_type {
 	RXM_DEFERRED_TX_RNDV_ACK,
+	RXM_DEFERRED_TX_RNDV_DONE,
 	RXM_DEFERRED_TX_RNDV_READ,
+	RXM_DEFERRED_TX_RNDV_WRITE,
 	RXM_DEFERRED_TX_SAR_SEG,
 	RXM_DEFERRED_TX_ATOMIC_RESP,
 	RXM_DEFERRED_TX_CREDIT_SEND,
@@ -546,12 +570,21 @@ struct rxm_deferred_tx_entry {
 	union {
 		struct {
 			struct rxm_rx_buf *rx_buf;
+			size_t pkt_size;
 		} rndv_ack;
+		struct {
+			struct rxm_tx_rndv_buf *tx_buf;
+		} rndv_done;
 		struct {
 			struct rxm_rx_buf *rx_buf;
 			struct fi_rma_iov rma_iov;
 			struct rxm_iov rxm_iov;
 		} rndv_read;
+		struct {
+			struct rxm_tx_rndv_buf *tx_buf;
+			struct fi_rma_iov rma_iov;
+			struct rxm_iov rxm_iov;
+		} rndv_write;
 		struct {
 			struct rxm_tx_sar_buf *cur_seg_tx_buf;
 			struct {
@@ -650,6 +683,19 @@ struct rxm_eager_ops {
 	ssize_t (*handle_rx)(struct rxm_rx_buf *rx_buf);
 };
 
+struct rxm_rndv_ops {
+	int rx_mr_access;
+	int tx_mr_access;
+	ssize_t (*handle_rx)(struct rxm_rx_buf *rx_buf);
+	ssize_t (*xfer)(struct fid_ep *ep, const struct iovec *iov, void **desc,
+			size_t count, fi_addr_t remote_addr, uint64_t addr,
+			uint64_t key, void *context);
+	ssize_t (*defer_xfer)(struct rxm_deferred_tx_entry **def_tx_entry,
+			      size_t index, struct iovec *iov,
+			      void *desc[RXM_IOV_LIMIT], size_t count,
+			      void *buf);
+};
+
 struct rxm_ep {
 	struct util_ep 		util_ep;
 	struct fi_info 		*rxm_info;
@@ -679,11 +725,13 @@ struct rxm_ep {
 
 	struct dlist_entry	repost_ready_list;
 	struct dlist_entry	deferred_tx_conn_queue;
+	struct dlist_entry	rndv_wait_list;
 
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
 
 	struct rxm_eager_ops	*eager_ops;
+	struct rxm_rndv_ops	*rndv_ops;
 };
 
 struct rxm_conn {
@@ -711,6 +759,8 @@ extern struct fi_fabric_attr rxm_fabric_attr;
 extern struct fi_domain_attr rxm_domain_attr;
 extern struct fi_tx_attr rxm_tx_attr;
 extern struct fi_rx_attr rxm_rx_attr;
+extern struct rxm_rndv_ops rxm_rndv_ops_read;
+extern struct rxm_rndv_ops rxm_rndv_ops_write;
 
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 			void *context);
@@ -747,6 +797,11 @@ int rxm_msg_ep_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
 int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
 			uint64_t flags);
+ssize_t rxm_rndv_read(struct rxm_rx_buf *rx_buf);
+ssize_t rxm_rndv_send_wr_data(struct rxm_rx_buf *rx_buf);
+void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
+			      const struct iovec *iov, size_t count,
+			      struct fid_mr **mr);
 
 static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 {
@@ -884,8 +939,10 @@ rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
 	assert((type == RXM_BUF_POOL_TX) ||
 	       (type == RXM_BUF_POOL_TX_INJECT) ||
-	       (type == RXM_BUF_POOL_TX_ACK) ||
-	       (type == RXM_BUF_POOL_TX_RNDV) ||
+	       (type == RXM_BUF_POOL_TX_RNDV_RD_DONE) ||
+	       (type == RXM_BUF_POOL_TX_RNDV_WR_DATA) ||
+	       (type == RXM_BUF_POOL_TX_RNDV_WR_DONE) ||
+	       (type == RXM_BUF_POOL_TX_RNDV_REQ) ||
 	       (type == RXM_BUF_POOL_TX_ATOMIC) ||
 	       (type == RXM_BUF_POOL_TX_CREDIT) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
