@@ -163,6 +163,7 @@ struct ofi_addr_list_entry {
 	size_t			speed;
 	char			net_name[OFI_ADDRSTRLEN];
 	char			ifa_name[OFI_ADDRSTRLEN];
+	uint64_t		comm_caps;
 };
 
 int ofi_addr_cmp(const struct fi_provider *prov, const struct sockaddr *sa1,
