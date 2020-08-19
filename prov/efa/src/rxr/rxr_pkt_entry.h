@@ -41,6 +41,9 @@ enum rxr_pkt_entry_state {
 	RXR_PKT_ENTRY_FREE = 0,
 	RXR_PKT_ENTRY_IN_USE,
 	RXR_PKT_ENTRY_RNR_RETRANSMIT,
+	RXR_PKT_ENTRY_COPY_BY_READ, /* entries contain data. A read request has been posted to copy
+				     * to receiving buffer
+				     */
 };
 
 /* pkt_entry types for rx pkts */

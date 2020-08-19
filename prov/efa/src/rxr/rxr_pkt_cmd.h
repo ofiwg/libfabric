@@ -44,6 +44,10 @@ ssize_t rxr_pkt_post_ctrl(struct rxr_ep *ep, int entry_type, void *x_entry,
 ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry,
 				   int ctrl_type, bool inject);
 
+void rxr_pkt_proc_data(struct rxr_ep *rxr_ep, struct rxr_rx_entry *rx_entry,
+		       size_t data_offset, struct rxr_pkt_entry *pkt_eentry,
+		       char *data, size_t data_size);
+
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep,
 				    struct fi_cq_data_entry *cq_entry);
 

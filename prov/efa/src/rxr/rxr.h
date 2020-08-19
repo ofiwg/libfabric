@@ -521,6 +521,9 @@ struct rxr_ep {
 	struct fid_ep *rdm_ep;
 	struct fid_cq *rdm_cq;
 
+	/* address of myself in my AV, used to post read to my self */
+	fi_addr_t rdm_self_addr;
+
 	/* shm provider fid */
 	bool use_shm;
 	struct fid_ep *shm_ep;
