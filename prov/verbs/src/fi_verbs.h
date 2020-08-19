@@ -97,14 +97,14 @@
 
 
 #define VERBS_INJECT_FLAGS(ep, len, flags) ((((flags) & FI_INJECT) || \
-		len <= (ep)->inject_limit) ? IBV_SEND_INLINE : 0)
-#define VERBS_INJECT(ep, len) VERBS_INJECT_FLAGS(ep, len, (ep)->info->tx_attr->op_flags)
+		len <= (ep)->info_attr.inject_size) ? IBV_SEND_INLINE : 0)
+#define VERBS_INJECT(ep, len) VERBS_INJECT_FLAGS(ep, len, (ep)->util_ep.tx_op_flags)
 
 #define VERBS_COMP_FLAGS(ep, flags, context)		\
 	(((ep)->util_ep.tx_op_flags | (flags)) &		\
 	 FI_COMPLETION ? context : VERBS_NO_COMP_FLAG)
 #define VERBS_COMP(ep, context)						\
-	VERBS_COMP_FLAGS((ep), (ep)->info->tx_attr->op_flags, context)
+	VERBS_COMP_FLAGS((ep), (ep)->util_ep.tx_op_flags, context)
 
 #define VERBS_WCE_CNT 1024
 #define VERBS_WRE_CNT 1024
@@ -481,12 +481,6 @@ struct vrb_srq_ep {
 int vrb_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		       struct fid_ep **rx_ep, void *context);
 
-static inline int vrb_is_xrc(struct fi_info *info)
-{
-	return (VRB_EP_TYPE(info) == FI_EP_MSG) &&
-	       (VRB_EP_PROTO(info) == FI_PROTO_RDMA_CM_IB_XRC);
-}
-
 int vrb_domain_xrc_init(struct vrb_domain *domain);
 int vrb_domain_xrc_cleanup(struct vrb_domain *domain);
 
@@ -584,11 +578,22 @@ struct vrb_ep {
 		};
 	};
 
-	size_t				inject_limit;
-
+	struct {
+		size_t			inject_size;
+		size_t                  tx_size;
+		size_t                  tx_iov_limit;
+		size_t                  rx_size;
+		size_t                  rx_iov_limit;
+		uint32_t                protocol;
+		uint32_t                addr_format;
+		size_t                  src_addrlen;
+		size_t                  dest_addrlen;
+		void                    *src_addr;
+		void                    *dest_addr;
+		void                    *handle;
+	} info_attr;
 	struct vrb_eq			*eq;
 	struct vrb_srq_ep		*srq_ep;
-	struct fi_info			*info;
 
 	struct {
 		struct ibv_send_wr	rma_wr;
@@ -643,11 +648,23 @@ struct vrb_xrc_ep {
 	struct vrb_xrc_ep_conn_setup	*conn_setup;
 };
 
+static inline int vrb_is_xrc_info(struct fi_info *info)
+{
+	return (VRB_EP_TYPE(info) == FI_EP_MSG) &&
+		(VRB_EP_PROTO(info) == FI_PROTO_RDMA_CM_IB_XRC);
+}
+
+static inline int vrb_is_xrc_ep(struct vrb_ep *ep)
+{
+	return (ep->util_ep.type == FI_EP_MSG) &&
+		(ep->info_attr.protocol == FI_PROTO_RDMA_CM_IB_XRC);
+}
+
 int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep, void *context);
 int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		      struct fid_pep **pep, void *context);
-int vrb_create_ep(const struct fi_info *hints, enum rdma_port_space ps,
+int vrb_create_ep(struct vrb_ep *ep, enum rdma_port_space ps,
 		     struct rdma_cm_id **id);
 int vrb_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			 struct fid_av **av_fid, void *context);
@@ -778,12 +795,13 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		   struct fi_info **info);
 const struct fi_info *vrb_get_verbs_info(const struct fi_info *ilist,
 					    const char *domain_name);
-int vrb_fi_to_rai(const struct fi_info *fi, uint64_t flags,
-		     struct rdma_addrinfo *rai);
+int vrb_set_rai(uint32_t addr_format, void *src_addr, size_t src_addrlen,
+		void *dest_addr, size_t dest_addrlen, uint64_t flags,
+		struct rdma_addrinfo *rai);
 int vrb_get_matching_info(uint32_t version, const struct fi_info *hints,
 			     struct fi_info **info, const struct fi_info *verbs_info,
 			     uint8_t passive);
-int vrb_get_port_space(const struct fi_info *info);
+int vrb_get_port_space(uint32_t addr_format);
 void vrb_alter_info(const struct fi_info *hints, struct fi_info *info);
 
 struct verbs_ep_domain {
@@ -910,7 +928,7 @@ int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc);
 
 #define vrb_send_iov(ep, wr, iov, desc, count)		\
 	vrb_send_iov_flags(ep, wr, iov, desc, count,		\
-			      (ep)->info->tx_attr->op_flags)
+			      (ep)->util_ep.tx_op_flags)
 
 #define vrb_send_msg(ep, wr, msg, flags)				\
 	vrb_send_iov_flags(ep, wr, (msg)->msg_iov, (msg)->desc,	\

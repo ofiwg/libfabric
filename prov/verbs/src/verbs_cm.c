@@ -61,24 +61,24 @@ static int vrb_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 	struct vrb_ep *ep =
 		container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
 
-	if (addrlen != ep->info->src_addrlen) {
+	if (addrlen != ep->info_attr.src_addrlen) {
 		VERBS_INFO(FI_LOG_EP_CTRL,"addrlen expected: %zu, got: %zu.\n",
-			   ep->info->src_addrlen, addrlen);
+			   ep->info_attr.src_addrlen, addrlen);
 		return -FI_EINVAL;
 	}
 
-	save_addr = ep->info->src_addr;
+	save_addr = ep->info_attr.src_addr;
 
-	ep->info->src_addr = malloc(ep->info->src_addrlen);
-	if (!ep->info->src_addr) {
+	ep->info_attr.src_addr = malloc(ep->info_attr.src_addrlen);
+	if (!ep->info_attr.src_addr) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "memory allocation failure\n");
 		ret = -FI_ENOMEM;
 		goto err1;
 	}
 
-	memcpy(ep->info->src_addr, addr, ep->info->src_addrlen);
+	memcpy(ep->info_attr.src_addr, addr, ep->info_attr.src_addrlen);
 
-	ret = vrb_create_ep(ep->info, RDMA_PS_TCP, &id);
+	ret = vrb_create_ep(ep, RDMA_PS_TCP, &id);
 	if (ret)
 		goto err2;
 
@@ -91,9 +91,9 @@ static int vrb_msg_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 
 	return 0;
 err2:
-	free(ep->info->src_addr);
+	free(ep->info_attr.src_addr);
 err1:
-	ep->info->src_addr = save_addr;
+	ep->info_attr.src_addr = save_addr;
 	return ret;
 }
 
@@ -232,7 +232,7 @@ vrb_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	if (ret)
 		return -errno;
 
-	connreq = container_of(_ep->info->handle, struct vrb_connreq, handle);
+	connreq = container_of(_ep->info_attr.handle, struct vrb_connreq, handle);
 	free(connreq);
 
 	return 0;
@@ -342,7 +342,7 @@ vrb_msg_xrc_cm_common_verify(struct vrb_xrc_ep *ep, size_t paramlen)
 {
 	int ret;
 
-	if (!vrb_is_xrc(ep->base_ep.info)) {
+	if (!vrb_is_xrc_ep(&ep->base_ep)) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "EP is not using XRC\n");
 		return -FI_EINVAL;
 	}
@@ -518,7 +518,7 @@ static int vrb_pep_listen(struct fid_pep *pep_fid)
 	if (ret)
 		return -errno;
 
-	if (vrb_is_xrc(pep->info)) {
+	if (vrb_is_xrc_info(pep->info)) {
 		ret = rdma_listen(pep->xrc_ps_udp_id, pep->backlog);
 		if (ret)
 			ret = -errno;

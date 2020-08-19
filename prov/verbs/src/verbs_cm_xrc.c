@@ -142,12 +142,12 @@ void vrb_log_ep_conn(struct vrb_xrc_ep *ep, char *desc)
 	if (ep->base_ep.id) {
 		addr = rdma_get_local_addr(ep->base_ep.id);
 		len = sizeof(buf);
-		ofi_straddr(buf, &len, ep->base_ep.info->addr_format, addr);
+		ofi_straddr(buf, &len, ep->base_ep.info_attr.addr_format, addr);
 		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p src_addr: %s\n", ep, buf);
 
 		addr = rdma_get_peer_addr(ep->base_ep.id);
 		len = sizeof(buf);
-		ofi_straddr(buf, &len, ep->base_ep.info->addr_format, addr);
+		ofi_straddr(buf, &len, ep->base_ep.info_attr.addr_format, addr);
 		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p dst_addr: %s\n", ep, buf);
 	}
 
@@ -192,6 +192,9 @@ void vrb_free_xrc_conn_setup(struct vrb_xrc_ep *ep, int disconnect)
 	if (!disconnect) {
 		free(ep->conn_setup);
 		ep->conn_setup = NULL;
+		free(ep->base_ep.info_attr.src_addr);
+		ep->base_ep.info_attr.src_addr = NULL;
+		ep->base_ep.info_attr.src_addrlen = 0;
 	}
 }
 
@@ -323,7 +326,7 @@ int vrb_accept_xrc(struct vrb_xrc_ep *ep, int reciprocal,
 	if (addr)
 		ofi_straddr_dbg(&vrb_prov, FI_LOG_CORE, "dest_addr", addr);
 
-	connreq = container_of(ep->base_ep.info->handle,
+	connreq = container_of(ep->base_ep.info_attr.handle,
 			       struct vrb_connreq, handle);
 	ret = vrb_ep_create_tgt_qp(ep, connreq->xrc.tgt_qpn);
 	if (ret)
@@ -393,8 +396,8 @@ int vrb_process_xrc_connreq(struct vrb_ep *ep,
 	struct vrb_xrc_ep *xrc_ep = container_of(ep, struct vrb_xrc_ep,
 						    base_ep);
 
-	assert(ep->info->src_addr);
-	assert(ep->info->dest_addr);
+	assert(ep->info_attr.src_addr);
+	assert(ep->info_attr.dest_addr);
 
 	xrc_ep->conn_setup = calloc(1, sizeof(*xrc_ep->conn_setup));
 	if (!xrc_ep->conn_setup) {
@@ -407,8 +410,8 @@ int vrb_process_xrc_connreq(struct vrb_ep *ep,
 	/* This endpoint was created on the passive side of a connection
 	 * request. The reciprocal connection request will go back to the
 	 * passive port indicated by the active side */
-	ofi_addr_set_port(ep->info->src_addr, 0);
-	ofi_addr_set_port(ep->info->dest_addr, connreq->xrc.port);
+	ofi_addr_set_port(ep->info_attr.src_addr, 0);
+	ofi_addr_set_port(ep->info_attr.dest_addr, connreq->xrc.port);
 	xrc_ep->tgt_id = connreq->id;
 	xrc_ep->tgt_id->context = &ep->util_ep.ep_fid.fid;
 

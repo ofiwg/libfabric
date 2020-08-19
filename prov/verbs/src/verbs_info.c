@@ -293,8 +293,9 @@ static int vrb_check_hints(uint32_t version, const struct fi_info *hints,
 	return FI_SUCCESS;
 }
 
-int vrb_fi_to_rai(const struct fi_info *fi, uint64_t flags,
-		     struct rdma_addrinfo *rai)
+int vrb_set_rai(uint32_t addr_format, void *src_addr, size_t src_addrlen,
+	void *dest_addr, size_t dest_addrlen, uint64_t flags,
+	struct rdma_addrinfo *rai)
 {
 	memset(rai, 0, sizeof *rai);
 	if (flags & FI_SOURCE)
@@ -304,10 +305,7 @@ int vrb_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 
 	rai->ai_qp_type = IBV_QPT_RC;
 
-	if (!fi)
-		return 0;
-
-	switch(fi->addr_format) {
+	switch(addr_format) {
 	case FI_SOCKADDR_IN:
 	case FI_FORMAT_UNSPEC:
 		rai->ai_port_space = RDMA_PS_TCP;
@@ -326,29 +324,29 @@ int vrb_fi_to_rai(const struct fi_info *fi, uint64_t flags,
 		break;
 	case FI_SOCKADDR:
 		rai->ai_port_space = RDMA_PS_TCP;
-		if (fi->src_addrlen) {
-			rai->ai_family = ((struct sockaddr *)fi->src_addr)->sa_family;
+		if (src_addrlen) {
+			rai->ai_family = ((struct sockaddr *)src_addr)->sa_family;
 			rai->ai_flags |= RAI_FAMILY;
-		} else if (fi->dest_addrlen) {
-			rai->ai_family = ((struct sockaddr *)fi->dest_addr)->sa_family;
+		} else if (dest_addrlen) {
+			rai->ai_family = ((struct sockaddr *)dest_addr)->sa_family;
 			rai->ai_flags |= RAI_FAMILY;
 		}
 		break;
 	default:
-		VERBS_INFO(FI_LOG_FABRIC, "Unknown fi->addr_format\n");
+		VERBS_INFO(FI_LOG_FABRIC, "Unknown addr_format\n");
 	}
 
-	if (fi->src_addrlen) {
-		if (!(rai->ai_src_addr = malloc(fi->src_addrlen)))
+	if (src_addrlen) {
+		if (!(rai->ai_src_addr = malloc(src_addrlen)))
 			return -FI_ENOMEM;
-		memcpy(rai->ai_src_addr, fi->src_addr, fi->src_addrlen);
-		rai->ai_src_len = fi->src_addrlen;
+		memcpy(rai->ai_src_addr, src_addr, src_addrlen);
+		rai->ai_src_len = src_addrlen;
 	}
-	if (fi->dest_addrlen) {
-		if (!(rai->ai_dst_addr = malloc(fi->dest_addrlen)))
+	if (dest_addrlen) {
+		if (!(rai->ai_dst_addr = malloc(dest_addrlen)))
 			return -FI_ENOMEM;
-		memcpy(rai->ai_dst_addr, fi->dest_addr, fi->dest_addrlen);
-		rai->ai_dst_len = fi->dest_addrlen;
+		memcpy(rai->ai_dst_addr, dest_addr, dest_addrlen);
+		rai->ai_dst_len = dest_addrlen;
 	}
 
 	return 0;
@@ -987,9 +985,9 @@ err1:
 	return ret;
 }
 
-int vrb_get_port_space(const struct fi_info *info)
+int vrb_get_port_space(uint32_t addr_format)
 {
-	if (info != NULL && info->addr_format == FI_SOCKADDR_IB)
+	if (addr_format == FI_SOCKADDR_IB)
 		return RDMA_PS_IB;
 	else
 		return RDMA_PS_TCP;
