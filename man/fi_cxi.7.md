@@ -420,6 +420,9 @@ The CXI provider checks for the following environment variables:
 mechanism improves the latency of command processing on an idle command queue.
 Valid values are idle, always, and never.
 
+*FI_CXI_DEFAULT_VNI*
+: Default VNI value (masked to 16 bits).
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 

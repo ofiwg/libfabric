@@ -731,7 +731,7 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	} else {
 		/* Use default service and VNI */
 		cxi_domain->auth_key.svc_id = CXI_DEFAULT_SVC_ID;
-		cxi_domain->auth_key.vni = 10;
+		cxi_domain->auth_key.vni = cxip_env.default_vni;
 	}
 
 	if (info->domain_attr->tclass != FI_TC_UNSPEC) {

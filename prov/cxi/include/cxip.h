@@ -181,6 +181,8 @@ struct cxip_environment {
 	int optimized_mrs;
 
 	enum cxip_llring_mode llring_mode;
+
+	size_t default_vni;
 };
 
 extern struct cxip_environment cxip_env;

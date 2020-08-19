@@ -211,6 +211,7 @@ struct cxip_environment cxip_env = {
 	.oflow_buf_count = CXIP_OFLOW_BUF_COUNT,
 	.optimized_mrs = true,
 	.llring_mode = CXIP_LLRING_IDLE,
+	.default_vni = 10,
 };
 
 static void cxip_env_init(void)
@@ -264,6 +265,11 @@ static void cxip_env_init(void)
 			CXIP_LOG_INFO("Unrecognized llring_mode: %s\n",
 				      param_str);
 	}
+
+	fi_param_define(&cxip_prov, "default_vni", FI_PARAM_SIZE_T,
+			"Default VNI value.");
+	fi_param_get_size_t(&cxip_prov, "default_vni",
+			    &cxip_env.default_vni);
 }
 
 /*
