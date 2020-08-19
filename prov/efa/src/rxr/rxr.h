@@ -215,6 +215,7 @@ struct rxr_env {
 	size_t efa_min_read_msg_size;
 	size_t efa_min_read_write_size;
 	size_t efa_read_segment_size;
+	size_t efa_max_gdrcopy_size;
 };
 
 enum rxr_lower_ep_type {
@@ -520,6 +521,9 @@ struct rxr_ep {
 	/* core provider fid */
 	struct fid_ep *rdm_ep;
 	struct fid_cq *rdm_cq;
+
+	/* address of myself in my AV, used to post read to my self */
+	fi_addr_t rdm_self_addr;
 
 	/* shm provider fid */
 	bool use_shm;

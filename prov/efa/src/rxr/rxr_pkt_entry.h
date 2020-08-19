@@ -41,6 +41,8 @@ enum rxr_pkt_entry_state {
 	RXR_PKT_ENTRY_FREE = 0,
 	RXR_PKT_ENTRY_IN_USE,
 	RXR_PKT_ENTRY_RNR_RETRANSMIT,
+	RXR_PKT_ENTRY_COPY_BY_READ, /* the pkt entry contains data. A RDMA read has been issued to copy 
+				       data to GPU receivingbuffer */
 };
 
 /* pkt_entry types for rx pkts */
@@ -129,6 +131,11 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 
 void rxr_pkt_entry_append(struct rxr_pkt_entry *dst,
 			  struct rxr_pkt_entry *src);
+
+void rxr_pkt_entry_copy(struct rxr_ep *ep,
+			struct rxr_pkt_entry *dest,
+			struct rxr_pkt_entry *src,
+			int new_entry_type);
 
 struct rxr_pkt_entry *rxr_pkt_entry_clone(struct rxr_ep *ep,
 					  struct ofi_bufpool *pkt_pool,

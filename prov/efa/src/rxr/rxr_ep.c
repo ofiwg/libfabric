@@ -1651,7 +1651,6 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep = calloc(1, sizeof(*rxr_ep));
 	if (!rxr_ep)
 		return -FI_ENOMEM;
-
 	rxr_domain = container_of(domain, struct rxr_domain,
 				  util_domain.domain_fid);
 	memset(&cq_attr, 0, sizeof(cq_attr));
@@ -1675,6 +1674,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  &rxr_ep->rdm_ep, rxr_ep);
 	if (ret)
 		goto err_free_rdm_info;
+
+	rxr_ep->rdm_self_addr = FI_ADDR_NOTAVAIL;
 
 	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
 				  util_domain.domain_fid);

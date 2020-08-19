@@ -34,6 +34,7 @@
 #include "efa.h"
 #include "rxr.h"
 #include "rxr_cntr.h"
+#include "rxr_read.h"
 #include "rxr_pkt_cmd.h"
 
 /* Handshake wait timeout in microseconds */
@@ -56,9 +57,13 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	struct rxr_data_pkt *data_pkt;
 	ssize_t ret;
 
+	assert(tx_entry->window > 0);
+	assert(tx_entry->window + tx_entry->bytes_sent <= tx_entry->total_len);
+
 	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_efa_pool);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_ENOMEM;
+
 
 	pkt_entry->x_entry = (void *)tx_entry;
 	pkt_entry->addr = tx_entry->addr;
@@ -99,6 +104,89 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	assert(data_pkt->hdr.seg_size > 0);
 	assert(tx_entry->window >= 0);
 	return ret;
+}
+
+/*
+ * This function determine whether to use read to copy data from
+ * bounce buffer to GPU memory buffer.
+ */
+bool rxr_pkt_use_read_copy(struct efa_mr *recv_mr, size_t data_size)
+{
+	if (!recv_mr || recv_mr->peer.iface == FI_HMEM_SYSTEM)
+		return false;
+
+	assert(recv_mr && recv_mr->peer.iface == FI_HMEM_CUDA);
+
+#ifdef HAVE_GDRCOPY
+	if (!recv_mr->peer.device.reserved) {
+		/* gdrcopy_reg failed, have to use read copy */
+		return true;
+	}
+
+	return data_size > rxr_env.efa_max_gdrcopy_size;
+#else
+	/* when gdrcopy is not available, we use read copy to
+	 * avoid using cudaMemcopy
+	 */
+	return true;
+#endif
+}
+
+
+
+/*
+ * This function post a rdma read to copy data to load data to receiving buffer.
+ * It is used when receive buffer is on GPU memory.
+ */
+ssize_t rxr_pkt_post_read_to_copy_data(struct rxr_ep *rxr_ep,
+				       struct rxr_pkt_entry *pkt_entry,
+				       char *data, size_t data_size,
+				       struct rxr_rx_entry *rx_entry,
+				       size_t data_offset)
+{
+	struct efa_ep *efa_ep;
+	ssize_t err;
+	int iov_idx;
+	size_t iov_offset;
+	void *dest_buf;
+
+	assert(pkt_entry->x_entry == rx_entry);
+
+	err = rxr_locate_iov_pos(rx_entry->iov, rx_entry->iov_count, data_offset,
+				 &iov_idx, &iov_offset);
+
+	assert(err == 0);
+	assert(iov_idx >=0 && iov_idx < rx_entry->iov_count);
+	assert(efa_ep_is_cuda_mr(rx_entry->desc[iov_idx]));
+	assert(iov_offset + data_size <= rx_entry->iov[iov_idx].iov_len);
+
+	dest_buf = (char *)rx_entry->iov[iov_idx].iov_base + iov_offset;
+
+	pkt_entry->state = RXR_PKT_ENTRY_COPY_BY_READ;
+	if (rxr_ep->rdm_self_addr == FI_ADDR_NOTAVAIL) {
+		efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+		err = efa_av_insert_addr(efa_ep->av, (struct efa_ep_addr *)rxr_ep->core_addr,
+				 &rxr_ep->rdm_self_addr, 0, NULL);
+		if (OFI_UNLIKELY(err)) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "insert address failed!\n");
+			return err;
+		}
+	}
+
+	assert(pkt_entry->mr);
+	assert(rxr_ep->rdm_self_addr != FI_ADDR_NOTAVAIL);
+
+	err = fi_read(rxr_ep->rdm_ep,
+		      dest_buf, data_size, rx_entry->desc[iov_idx],
+		      rxr_ep->rdm_self_addr,
+		      (uint64_t)data, fi_mr_key(pkt_entry->mr),
+		      pkt_entry);
+
+	if (OFI_UNLIKELY(err)) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "Failed to post read to copy data\n");
+	}
+
+	return err;
 }
 
 /*
@@ -452,6 +540,34 @@ ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_pee
 /*
  *   Functions used to handle packet send completion
  */
+void rxr_pkt_handle_copy_by_read_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
+	case RXR_DATA_PKT:
+		rxr_data_pkt_handle_data_copied(ep, pkt_entry);
+		break;
+	case RXR_EAGER_MSGRTM_PKT:
+	case RXR_EAGER_TAGRTM_PKT:
+		rxr_pkt_handle_eager_rtm_data_copied(ep, pkt_entry);
+		break;
+	case RXR_MEDIUM_MSGRTM_PKT:
+	case RXR_MEDIUM_TAGRTM_PKT:
+		rxr_pkt_handle_medium_rtm_data_copied(ep, pkt_entry);
+		break;
+	case RXR_LONG_MSGRTM_PKT:
+	case RXR_LONG_TAGRTM_PKT:
+		rxr_pkt_handle_long_rtm_data_copied(ep, pkt_entry);
+		break;
+	default:
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"invalid control pkt type %d\n",
+			rxr_get_base_hdr(pkt_entry->pkt)->type);
+		assert(0 && "invalid control pkt type");
+		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		return;
+	}
+}
+
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *comp)
 {
 	struct rxr_pkt_entry *pkt_entry;
@@ -459,6 +575,12 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 
 	pkt_entry = (struct rxr_pkt_entry *)comp->op_context;
 
+	if (pkt_entry->state == RXR_PKT_ENTRY_COPY_BY_READ) {
+		rxr_pkt_handle_copy_by_read_completion(ep, pkt_entry);
+		return;
+	}
+
+	assert(pkt_entry->state == RXR_PKT_ENTRY_IN_USE);
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
 	case RXR_HANDSHAKE_PKT:
 		break;

@@ -38,6 +38,12 @@
 
 ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry);
 
+ssize_t rxr_pkt_post_read_to_copy_data(struct rxr_ep *rxr_ep,
+				       struct rxr_pkt_entry *pkt_entry,
+				       char *data, size_t data_size,
+				       struct rxr_rx_entry *rx_entry,
+				       size_t data_offset);
+
 ssize_t rxr_pkt_post_ctrl(struct rxr_ep *ep, int entry_type, void *x_entry,
 			  int ctrl_type, bool inject);
 

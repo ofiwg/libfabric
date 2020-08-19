@@ -73,6 +73,7 @@ struct rxr_env rxr_env = {
 	.efa_min_read_msg_size = 1048576,
 	.efa_min_read_write_size = 65536,
 	.efa_read_segment_size = 1073741824,
+	.efa_max_gdrcopy_size = 8192,
 };
 
 static void rxr_init_env(void)
@@ -122,6 +123,8 @@ static void rxr_init_env(void)
 			    &rxr_env.efa_min_read_write_size);
 	fi_param_get_size_t(&rxr_prov, "inter_read_segment_size",
 			    &rxr_env.efa_read_segment_size);
+	fi_param_get_size_t(&rxr_prov, "inter_max_gdrcopy_size",
+			    &rxr_env.efa_max_gdrcopy_size);
 }
 
 /*
@@ -768,6 +771,8 @@ EFA_INI
 			"The mimimum message size for inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536).");
 	fi_param_define(&rxr_prov, "inter_read_segment_size", FI_PARAM_INT,
 			"Calls to RDMA read is segmented using this value.");
+	fi_param_define(&rxr_prov, "inter_max_gdrcopy_size", FI_PARAM_INT,
+			"The maximum size to use gdrcopy to copy data from bounce buffer to target GPU memory (Default 8192)");
 	rxr_init_env();
 
 #if HAVE_EFA_DL

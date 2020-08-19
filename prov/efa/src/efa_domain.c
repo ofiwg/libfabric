@@ -53,10 +53,11 @@ static int efa_domain_close(fid_t fid)
 		ofi_mr_cache_cleanup(&domain->cache);
 
 #ifdef HAVE_GDRCOPY
-	assert(domain->gdr);
-	ret = ofi_gdrcopy_close(domain->gdr);
-	if (ret) {
-		EFA_WARN(FI_LOG_DOMAIN, "gdr_close failed!\n");
+	if (domain->gdr) {
+		ret = ofi_gdrcopy_close(domain->gdr);
+		if (ret) {
+			EFA_WARN(FI_LOG_DOMAIN, "gdrcopy_close failed!\n");
+		}
 	}
 #endif
 
@@ -241,9 +242,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 #ifdef HAVE_GDRCOPY
 	domain->gdr = ofi_gdrcopy_open();
 	if (!domain->gdr) {
-		EFA_WARN(FI_LOG_DOMAIN, "gdr_open failed!\n");
-		ret = -FI_ENOMEM;
-		goto err_free_info;
+		EFA_WARN(FI_LOG_DOMAIN, "gdrcopy_open failed! The EFA provider will use local read as fallback\n");
 	}
 #endif
 

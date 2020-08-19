@@ -268,40 +268,6 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
 	return ep->mtu_size - rxr_pkt_req_max_header_size(pkt_type);
 }
 
-static
-size_t rxr_pkt_req_copy_data(struct rxr_rx_entry *rx_entry,
-			     struct rxr_pkt_entry *pkt_entry,
-			     char *data, size_t data_size)
-{
-	struct efa_mr *desc;
-	size_t bytes_copied;
-	int bytes_left;
-
-	desc = rx_entry->desc[0];
-	bytes_copied = ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-					    desc ? desc->peer.device.reserved : 0,
-					    rx_entry->iov,
-					    rx_entry->iov_count,
-					    0,
-					    data,
-					    data_size);
-
-	if (OFI_UNLIKELY(bytes_copied < data_size)) {
-		/* recv buffer is not big enough to hold req, this must be a truncated message */
-		assert(bytes_copied == rx_entry->cq_entry.len &&
-		       rx_entry->cq_entry.len < rx_entry->total_len);
-		rx_entry->bytes_done = bytes_copied;
-		bytes_left = 0;
-	} else {
-		assert(bytes_copied == data_size);
-		rx_entry->bytes_done = data_size;
-		bytes_left = rx_entry->total_len - rx_entry->bytes_done;
-	}
-
-	assert(bytes_left >= 0);
-	return bytes_left;
-}
-
 /*
  * REQ packet type functions
  *
@@ -823,46 +789,178 @@ ssize_t rxr_pkt_proc_matched_read_rtm(struct rxr_ep *ep,
 	return rxr_read_post_or_queue(ep, RXR_RX_ENTRY, rx_entry);
 }
 
+void rxr_pkt_handle_eager_rtm_data_copied(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+
+	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
+	assert(rx_entry);
+
+	/* rxr_cq_handle_rx_completion release pkt_entry */
+	rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
+	rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
+	rxr_release_rx_entry(ep, rx_entry);
+}
+
+void rxr_pkt_handle_medium_rtm_data_copied(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+	size_t data_size;
+
+	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
+	assert(rx_entry);
+	data_size = pkt_entry->pkt_size - rxr_pkt_req_hdr_size(pkt_entry);
+
+	rx_entry->bytes_done += data_size;
+
+	if (rx_entry->bytes_done == rx_entry->total_len) {
+		rxr_pkt_rx_map_remove(ep, pkt_entry, rx_entry);
+	
+		/* rxr_cq_handle_rx_completion release pkt_entry */
+		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
+		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
+		rxr_release_rx_entry(ep, rx_entry);
+	} else {
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+	}
+}
+
+void rxr_pkt_handle_long_rtm_data_copied(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+	size_t data_size;
+	int err;
+
+	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
+	assert(rx_entry);
+	data_size = pkt_entry->pkt_size - rxr_pkt_req_hdr_size(pkt_entry);
+
+#if ENABLE_DEBUG
+	dlist_insert_tail(&rx_entry->rx_pending_entry, &ep->rx_pending_list);
+	ep->rx_pending++;
+#endif
+	rx_entry->bytes_done = data_size;
+	rx_entry->state = RXR_RX_RECV;
+	rx_entry->tx_id = rxr_get_long_rtm_base_hdr(pkt_entry->pkt)->tx_id;
+	/* we have noticed using the default value achieve better bandwidth */
+	rx_entry->credit_request = rxr_env.tx_min_credits;
+	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
+	if (err) {
+		rxr_cq_handle_rx_error(ep, rx_entry, err);
+		rxr_release_rx_entry(ep, rx_entry);
+	}
+
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
+}
+
+static inline
+ssize_t rxr_pkt_proc_matched_eager_rtm(struct rxr_ep *ep,
+				       struct rxr_rx_entry *rx_entry,
+				       struct rxr_pkt_entry *pkt_entry)
+{
+	size_t hdr_size, data_size;
+	struct efa_mr *efa_mr;
+	char * data;
+	int ret;
+
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	data = (char *)pkt_entry->pkt + hdr_size;
+	data_size = pkt_entry->pkt_size - hdr_size;
+	assert(data_size == rx_entry->total_len);
+
+	efa_mr = (struct efa_mr *)rx_entry->desc[0];
+	if (rxr_pkt_use_read_copy(rx_entry->desc[0], data_size))
+		return rxr_pkt_post_read_to_copy_data(ep, pkt_entry, data, data_size, rx_entry, 0);
+
+	ret = ofi_copy_to_hmem_iov(efa_mr ? efa_mr->peer.iface : FI_HMEM_SYSTEM,
+				   efa_mr ? efa_mr->peer.device.reserved : 0,
+				   rx_entry->iov, rx_entry->iov_count, 0, data, data_size);
+	if (ret < 0)
+		return ret;
+
+	rxr_pkt_handle_eager_rtm_data_copied(ep, pkt_entry);
+	return 0;
+}
+
 ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 					struct rxr_rx_entry *rx_entry,
 					struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_pkt_entry *cur;
+	struct rxr_pkt_entry *nxt;
 	struct efa_mr *desc;
 	char *data;
 	size_t offset, hdr_size, data_size;
+	int err;
 
 	cur = pkt_entry;
 	while (cur) {
-		hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+		cur->x_entry = rx_entry;
+		hdr_size = rxr_pkt_req_hdr_size(cur);
 		data = (char *)cur->pkt + hdr_size;
 		offset = rxr_get_medium_rtm_base_hdr(cur->pkt)->offset;
 		data_size = cur->pkt_size - hdr_size;
 		desc = rx_entry->desc[0];
-		ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-				     desc ? desc->peer.device.reserved : 0,
-				     rx_entry->iov,
-				     rx_entry->iov_count,
-				     offset,
-				     data,
-				     data_size);
-		rx_entry->bytes_done += data_size;
-		cur = cur->next;
-	}
 
-	if (rx_entry->total_len == rx_entry->bytes_done) {
-		rxr_pkt_rx_map_remove(ep, pkt_entry, rx_entry);
-		/*
-		 * rxr_cq_handle_rx_completion() releases pkt_entry, thus
-		 * we do not release it here.
+		/* 
+		 * cur will be released by rxr_pkt_handle_rtm_data_copied(), so we have to
+		 * save cur->next here. we also set cur->next to NULL, which is required by
+		 * rxr_pkt_entry_release_rx().
 		 */
-		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
-		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
-		rxr_release_rx_entry(ep, rx_entry);
-		return 0;
+		nxt = cur->next; 
+		cur->next = NULL;
+
+		if (rxr_pkt_use_read_copy(desc, data_size)) {
+			err = rxr_pkt_post_read_to_copy_data(ep, cur, data, data_size, rx_entry, offset);
+			if (OFI_UNLIKELY(err))
+				return err;
+		} else {
+			err = ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+						   desc ? desc->peer.device.reserved : 0,
+						   rx_entry->iov, rx_entry->iov_count,
+						   offset, data, data_size);
+			if (err < 0)
+				return err;
+			rxr_pkt_handle_medium_rtm_data_copied(ep, cur);
+		}
+		cur = nxt;
 	}
 
-	rxr_pkt_entry_release_rx(ep, pkt_entry);
+	return 0;
+}
+
+static inline
+size_t rxr_pkt_proc_matched_long_rtm(struct rxr_ep *ep,
+				     struct rxr_rx_entry *rx_entry,
+				     struct rxr_pkt_entry *pkt_entry)
+{
+	size_t hdr_size, data_size;
+	struct efa_mr *desc;
+	char *data;
+	int err;
+
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	data = (char *)pkt_entry->pkt + hdr_size;
+	data_size = pkt_entry->pkt_size - hdr_size;
+	assert(data_size < rx_entry->total_len);
+
+	desc = rx_entry->desc[0];
+	if (rxr_pkt_use_read_copy(desc, data_size)) {
+		err = rxr_pkt_post_read_to_copy_data(ep, pkt_entry, data, data_size, rx_entry, 0);
+		if (err) {
+			rxr_cq_handle_rx_error(ep, rx_entry, err);
+			rxr_pkt_entry_release_rx(ep, pkt_entry);
+			return err;
+		}
+	} else {
+		err = ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+					   desc ? desc->peer.device.reserved : 0,
+					   rx_entry->iov, rx_entry->iov_count, 0, data, data_size);
+		if (err < 0)
+			return err;
+		rxr_pkt_handle_long_rtm_data_copied(ep, pkt_entry);
+	}
+
 	return 0;
 }
 
@@ -871,11 +969,9 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry)
 {
 	int pkt_type;
-	char *data;
-	size_t hdr_size, data_size, bytes_left;
-	ssize_t ret;
 
 	assert(rx_entry->state == RXR_RX_MATCHED);
+	pkt_entry->x_entry = rx_entry;
 
 	/* Adjust rx_entry->cq_entry.len as needed.
 	 * Initialy rx_entry->cq_entry.len is total recv buffer size.
@@ -888,43 +984,25 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 		rx_entry->cq_entry.len = rx_entry->total_len;
 
 	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
-	if (pkt_type == RXR_READ_MSGRTM_PKT || pkt_type == RXR_READ_TAGRTM_PKT)
-		return rxr_pkt_proc_matched_read_rtm(ep, rx_entry, pkt_entry);
-
-	if (pkt_type == RXR_MEDIUM_MSGRTM_PKT || pkt_type == RXR_MEDIUM_TAGRTM_PKT)
+	switch (pkt_type) {
+	case RXR_EAGER_MSGRTM_PKT:
+	case RXR_EAGER_TAGRTM_PKT:
+		return rxr_pkt_proc_matched_eager_rtm(ep, rx_entry, pkt_entry);
+	case RXR_MEDIUM_MSGRTM_PKT:
+	case RXR_MEDIUM_TAGRTM_PKT:
 		return rxr_pkt_proc_matched_medium_rtm(ep, rx_entry, pkt_entry);
-
-	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
-	data = (char *)pkt_entry->pkt + hdr_size;
-	data_size = pkt_entry->pkt_size - hdr_size;
-	bytes_left = rxr_pkt_req_copy_data(rx_entry, pkt_entry,
-					   data, data_size);
-	if (!bytes_left) {
-		/*
-		 * rxr_cq_handle_rx_completion() releases pkt_entry, thus
-		 * we do not release it here.
-		 */
-		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
-		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
-		rxr_release_rx_entry(ep, rx_entry);
-		ret = 0;
-	} else {
-		/*
-		 * long message protocol
-		 */
-#if ENABLE_DEBUG
-		dlist_insert_tail(&rx_entry->rx_pending_entry, &ep->rx_pending_list);
-		ep->rx_pending++;
-#endif
-		rx_entry->state = RXR_RX_RECV;
-		rx_entry->tx_id = rxr_get_long_rtm_base_hdr(pkt_entry->pkt)->tx_id;
-		/* we have noticed using the default value achieve better bandwidth */
-		rx_entry->credit_request = rxr_env.tx_min_credits;
-		ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
+	case RXR_LONG_MSGRTM_PKT:
+	case RXR_LONG_TAGRTM_PKT:
+		return rxr_pkt_proc_matched_long_rtm(ep, rx_entry, pkt_entry);
+	case RXR_READ_MSGRTM_PKT:
+	case RXR_READ_TAGRTM_PKT:
+		return rxr_pkt_proc_matched_read_rtm(ep, rx_entry, pkt_entry);
+	default:
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid pkt type: %d\n", pkt_type);
+		assert(0 && "invalid pkt type");
 	}
 
-	return ret;
+	return 0;
 }
 
 ssize_t rxr_pkt_proc_msgrtm(struct rxr_ep *ep,
@@ -1337,7 +1415,7 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 	struct rxr_eager_rtw_hdr *rtw_hdr;
 	char *data;
 	size_t data_size, hdr_size;
-	ssize_t err, bytes_left;
+	ssize_t err;
 
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
 	if (!rx_entry) {
@@ -1368,10 +1446,9 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 	data = (char *)pkt_entry->pkt + hdr_size;
 	data_size = pkt_entry->pkt_size - hdr_size;
-	bytes_left = rxr_pkt_req_copy_data(rx_entry, pkt_entry, data, data_size);
-	if (bytes_left != 0) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Eager RTM bytes_left is %ld, which should be 0.",
-			bytes_left);
+	if (data_size != rx_entry->total_len) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "Eager RTM data_size is %ld, total len is %ld.",
+			data_size, rx_entry->total_len);
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "target buffer: %p length: %ld", rx_entry->iov[0].iov_base,
 			rx_entry->iov[0].iov_len);
 		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
@@ -1380,6 +1457,7 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 		return;
 	}
 
+	ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count, 0, data, data_size);
 	if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
 		rxr_cq_write_rx_completion(ep, rx_entry);
 
@@ -1394,7 +1472,7 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	struct rxr_long_rtw_hdr *rtw_hdr;
 	char *data;
 	size_t hdr_size, data_size;
-	ssize_t err, bytes_left;
+	ssize_t err;
 
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
 	if (!rx_entry) {
@@ -1425,10 +1503,9 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 	data = (char *)pkt_entry->pkt + hdr_size;
 	data_size = pkt_entry->pkt_size - hdr_size;
-	bytes_left = rxr_pkt_req_copy_data(rx_entry, pkt_entry, data, data_size);
-	if (OFI_UNLIKELY(bytes_left <= 0)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Long RTM bytes_left is %ld, which should be > 0.",
-			bytes_left);
+	if (data_size >= rx_entry->total_len) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "Long RTM data size is %ld, which is larger than total len %ld",
+			data_size, rx_entry->total_len);
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "target buffer: %p length: %ld", rx_entry->iov[0].iov_base,
 			rx_entry->iov[0].iov_len);
 		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
@@ -1437,12 +1514,14 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 		return;
 	}
 
+	ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count, 0, data, data_size);
 #if ENABLE_DEBUG
 	dlist_insert_tail(&rx_entry->rx_pending_entry, &ep->rx_pending_list);
 	ep->rx_pending++;
 #endif
 	rx_entry->state = RXR_RX_RECV;
 	rx_entry->tx_id = rtw_hdr->tx_id;
+	rx_entry->bytes_done = data_size;
 	rx_entry->credit_request = rxr_env.tx_min_credits;
 	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
 	if (OFI_UNLIKELY(err)) {

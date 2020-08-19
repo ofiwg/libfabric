@@ -237,11 +237,14 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 
 	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
 #ifdef HAVE_GDRCOPY
-		err = ofi_gdrcopy_dereg(efa_domain->gdr, &efa_mr->peer.gdrcopy);
-		if (err) {
-			EFA_WARN(FI_LOG_MR,
-				"Unable to deregister memory handle with gdrcopy\n");
-			ret = err;
+		if (efa_domain->gdr) {
+			assert(efa_mr->peer.device.reserved == (uint64_t)&efa_mr->peer.gdrcopy);
+			err = ofi_gdrcopy_dereg(efa_domain->gdr, &efa_mr->peer.gdrcopy);
+			if (err) {
+				EFA_WARN(FI_LOG_MR,
+					"Unable to deregister memory handle with gdrcopy\n");
+				ret = err;
+			}
 		}
 #endif
 	}
@@ -341,21 +344,24 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 
 	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
 #ifdef HAVE_GDRCOPY
-		assert(efa_mr->domain->gdr);
-		ret = ofi_gdrcopy_reg(mr_attr->mr_iov->iov_base,
-				      mr_attr->mr_iov->iov_len,
-				      efa_mr->domain->gdr,
-				      &efa_mr->peer.gdrcopy);
-		if (ret) {
-			EFA_WARN(FI_LOG_MR, "Unable to register with gdrcopy: %s\n",
-				 fi_strerror(ret));
-			ibv_dereg_mr(efa_mr->ibv_mr);
-			return ret;
-		}
+		if (efa_mr->domain->gdr) {
+			ret = ofi_gdrcopy_reg(mr_attr->mr_iov->iov_base,
+					      mr_attr->mr_iov->iov_len,
+					      efa_mr->domain->gdr,
+					      &efa_mr->peer.gdrcopy);
+			if (ret) {
+				EFA_WARN(FI_LOG_MR, "Unable to register with gdrcopy: %s\n",
+					 fi_strerror(ret));
+				ibv_dereg_mr(efa_mr->ibv_mr);
+				return ret;
+			}
 
-		efa_mr->peer.device.reserved = (uint64_t)&efa_mr->peer.gdrcopy;
+			efa_mr->peer.device.reserved = (uint64_t)&efa_mr->peer.gdrcopy;
+		} else {
+			efa_mr->peer.device.reserved = 0;
+		}
 #else
-		efa_mr->peer.device.cuda = mr_attr->device.cuda;
+		efa_mr->peer.device.reserved = 0;
 #endif
 	}
 
