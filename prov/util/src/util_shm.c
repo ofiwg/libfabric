@@ -190,12 +190,10 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 
 	*smr = mapped_addr;
 	fastlock_init(&(*smr)->lock);
-	fastlock_acquire(&(*smr)->lock);
 
 	(*smr)->map = map;
 	(*smr)->version = SMR_VERSION;
 	(*smr)->flags = SMR_FLAG_ATOMIC | SMR_FLAG_DEBUG;
-	(*smr)->pid = getpid();
 	(*smr)->cma_cap = SMR_CMA_CAP_NA;
 	(*smr)->base_addr = *smr;
 
@@ -220,8 +218,9 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	}
 
 	strncpy((char *) smr_name(*smr), attr->name, total_size - name_offset);
-	fastlock_release(&(*smr)->lock);
 
+	/* Must be set last to signal full initialization to peers */
+	(*smr)->pid = getpid();
 	return 0;
 
 remove:
