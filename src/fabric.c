@@ -415,9 +415,8 @@ static void ofi_ordered_provs_init(void)
 	};
 #else /* _WIN32 */
 	char *ordered_prov_names[] = {
-		"efa", "psm2", "psm", "usnic", "mlx", "psm3", "gni", "bgq", 
-		"verbs", "netdir", "ucx", "ofi_rxm", "ofi_rxd",
-
+		"psm2", "psm", "efa", "usnic", "mlx", "psm3", "gni",
+		"bgq", "netdir", "ofi_rxm", "ofi_rxd", "verbs",
 		/* Initialize the socket based providers last of the
 		 * standard providers.  This will result in them being
 		 * the least preferred providers.
@@ -630,7 +629,11 @@ static void ofi_reg_dl_prov(const char *lib)
 	}
 }
 
+#ifdef I_MPI
+static void ofi_ini_dir(const char *dir, int dir_position)
+#else /* I_MPI */
 static void ofi_ini_dir(const char *dir)
+#endif /* I_MPI */
 {
 	int n;
 	char *lib;
@@ -641,6 +644,13 @@ static void ofi_ini_dir(const char *dir)
 		goto libdl_done;
 
 	while (n--) {
+#ifdef I_MPI
+		/* from second, third, etc. directories in FI_PROVIDER_PATH
+  		 * we want to load only psm3 provider */
+		if (dir_position >= 1 && !strstr(liblist[n]->d_name, "psm3")) {
+			continue;
+		}
+#endif /* I_MPI */
 		if (asprintf(&lib, "%s/%s", dir, liblist[n]->d_name) < 0) {
 			FI_WARN(&core_prov, FI_LOG_CORE,
 			       "asprintf failed to allocate memory\n");
@@ -680,8 +690,19 @@ static void ofi_find_prov_libs(void)
 			short_prov_name = prov->prov_name;
 		}
 
-		if (asprintf(&lib, "%s%s%s%s", lib_prefix,
-			short_prov_name, "-", FI_LIB_SUFFIX) < 0) {
+		/* add "x" to psm and psm2 providers lib name - e.g libpsmx2-fi.so */
+		if (!strcmp(short_prov_name, "psm") ||
+			!strcmp(short_prov_name, "psm2")) {
+			short_prov_name += strlen("psm");
+			if (asprintf(&lib, "%s%s%s%s%s", lib_prefix, "psmx",
+				short_prov_name, "-", FI_LIB_SUFFIX) < 0) {
+				FI_WARN(&core_prov, FI_LOG_CORE,
+				"asprintf failed to allocate memory\n");
+				continue;
+			}
+		}
+		else if (asprintf(&lib, "%s%s%s%s", lib_prefix,
+				 short_prov_name, "-", FI_LIB_SUFFIX) < 0) {
 			FI_WARN(&core_prov, FI_LOG_CORE,
 				"asprintf failed to allocate memory\n");
 			continue;
@@ -728,8 +749,11 @@ static void ofi_load_dl_prov(void)
 
 	if (dirs) {
 		for (i = 0; dirs[i]; i++)
-			ofi_ini_dir(dirs[i]);
-
+#ifdef I_MPI
+                    ofi_ini_dir(dirs[i], i);
+#else /* I_MPI */
+                    ofi_ini_dir(dirs[i]);
+#endif /* I_MPI */
 		ofi_free_string_array(dirs);
 	}
 }
