@@ -1167,15 +1167,12 @@ int rxd_create_peer(struct rxd_ep *ep, uint64_t rxd_addr)
 	dlist_init(&(peer->rx_list));
 	dlist_init(&(peer->rma_rx_list));
 	dlist_init(&(peer->buf_pkts));
-	
-	fastlock_tryacquire(&ep->util_ep.lock);
+		
 	if (ofi_idm_set(&(ep->peers_idm), rxd_addr, peer) < 0)
 		goto err;
-	fastlock_release(&ep->util_ep.lock);
 	
 	return 0;
 err:	
-	fastlock_release(&ep->util_ep.lock);
 	free(peer);
 	return -FI_ENOMEM;
 }
