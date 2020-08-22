@@ -357,35 +357,38 @@ void tcpx_ep_wait_fd_del(struct tcpx_ep *ep)
 {
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "releasing ep=%p\n", ep);
 
-	struct tcpx_eq *eq;
-
-	eq = container_of(ep->util_ep.eq, struct tcpx_eq,
-			  util_eq);
-
-	/* eq->close_lock protects from processing stale connection events */
-	fastlock_acquire(&eq->close_lock);
 	if (ep->util_ep.rx_cq)
 		ofi_wait_del_fd(ep->util_ep.rx_cq->wait, ep->sock);
 
 	if (ep->util_ep.tx_cq)
 		ofi_wait_del_fd(ep->util_ep.tx_cq->wait, ep->sock);
 
-	if (ep->util_ep.eq->wait)
+	if (ep->util_ep.eq && ep->util_ep.eq->wait)
 		ofi_wait_del_fd(ep->util_ep.eq->wait, ep->sock);
-
-	fastlock_release(&eq->close_lock);
 }
 
 static int tcpx_ep_close(struct fid *fid)
 {
-	struct tcpx_ep *ep = container_of(fid, struct tcpx_ep,
-					  util_ep.ep_fid.fid);
+	struct tcpx_ep *ep;
+	struct tcpx_eq *eq;
+
+	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
+	eq = ep->util_ep.eq ?
+	     container_of(ep->util_ep.eq, struct tcpx_eq, util_eq) : NULL;
+
+	/* eq->close_lock protects from processing stale connection events */
+	if (eq)
+		fastlock_acquire(&eq->close_lock);
+	tcpx_ep_wait_fd_del(ep);
+	if (eq)
+		fastlock_release(&eq->close_lock);
 
 	tcpx_ep_tx_rx_queues_release(ep);
 
-	tcpx_ep_wait_fd_del(ep); /* ensure that everything is really released */
-
-	ofi_eq_remove_fid_events(ep->util_ep.eq, &ep->util_ep.ep_fid.fid);
+	if (eq) {
+		ofi_eq_remove_fid_events(ep->util_ep.eq,
+					 &ep->util_ep.ep_fid.fid);
+	}
 	ofi_close_socket(ep->sock);
 	ofi_endpoint_close(&ep->util_ep);
 	fastlock_destroy(&ep->lock);
