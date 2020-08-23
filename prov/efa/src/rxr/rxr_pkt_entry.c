@@ -201,16 +201,20 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 			int new_entry_type)
 {
 	FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
-	       "Copying packet out of posted buffer\n");
+	       "Copying packet out of posted buffer! new_entry_type: %d\n",
+		new_entry_type);
 	assert(src->type == RXR_PKT_ENTRY_POSTED);
-	memcpy(dest, src, sizeof(struct rxr_pkt_entry));
-	memcpy(dest->pkt, src->pkt, ep->mtu_size);
 	dlist_init(&dest->entry);
 #if ENABLE_DEBUG
 	dlist_init(&dest->dbg_entry);
 #endif
-	dest->state = RXR_PKT_ENTRY_IN_USE;
+	dest->x_entry = src->x_entry;
+	dest->pkt_size = src->pkt_size;
+	dest->addr = src->addr;
 	dest->type = new_entry_type;
+	dest->state = RXR_PKT_ENTRY_IN_USE;
+	dest->next = NULL;
+	memcpy(dest->pkt, src->pkt, ep->mtu_size);
 }
 
 /*
