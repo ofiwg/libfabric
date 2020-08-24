@@ -207,6 +207,7 @@ struct cxip_environment cxip_env = {
 	.ats = true,
 	.rdzv_offload = true,
 	.rdzv_threshold = CXIP_RDZV_THRESHOLD,
+	.rdzv_get_min = 0,
 	.oflow_buf_size = CXIP_OFLOW_BUF_SIZE,
 	.oflow_buf_count = CXIP_OFLOW_BUF_COUNT,
 	.optimized_mrs = true,
@@ -235,10 +236,28 @@ static void cxip_env_init(void)
 	fi_param_get_size_t(&cxip_prov, "rdzv_threshold",
 			    &cxip_env.rdzv_threshold);
 
+	fi_param_define(&cxip_prov, "rdzv_get_min", FI_PARAM_SIZE_T,
+			"Minimum rendezvous Get payload size.");
+	fi_param_get_size_t(&cxip_prov, "rdzv_get_min",
+			    &cxip_env.rdzv_get_min);
+
 	fi_param_define(&cxip_prov, "oflow_buf_size", FI_PARAM_SIZE_T,
 			"Overflow buffer size.");
 	fi_param_get_size_t(&cxip_prov, "oflow_buf_size",
 			    &cxip_env.oflow_buf_size);
+
+	if (cxip_env.rdzv_threshold > cxip_env.oflow_buf_size) {
+		CXIP_LOG_INFO("Invalid rdzv_threshold: %lu\n",
+			      cxip_env.rdzv_threshold);
+		cxip_env.rdzv_threshold = CXIP_RDZV_THRESHOLD;
+	}
+
+	if (cxip_env.rdzv_get_min >
+	    (cxip_env.oflow_buf_size - cxip_env.rdzv_threshold)) {
+		CXIP_LOG_INFO("Invalid rdzv_get_min: %lu\n",
+			      cxip_env.rdzv_get_min);
+		cxip_env.rdzv_get_min = 0;
+	}
 
 	fi_param_define(&cxip_prov, "oflow_buf_count", FI_PARAM_SIZE_T,
 			"Overflow buffer count.");

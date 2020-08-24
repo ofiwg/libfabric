@@ -1290,8 +1290,9 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 					     oflow_buf->buf),
 			      rxc->oflow_buf_size, oflow_buf->md->md->lac,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
-			      CXI_MATCH_ID_ANY, rxc->rdzv_threshold, le_flags,
-			      NULL, rxc->rx_cmdq, true);
+			      CXI_MATCH_ID_ANY,
+			      rxc->rdzv_threshold + rxc->rdzv_get_min,
+			      le_flags, NULL, rxc->rx_cmdq, true);
 	if (ret) {
 		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
 		goto oflow_req_free;
@@ -1300,7 +1301,8 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	/* Initialize oflow_buf structure */
 	dlist_insert_tail(&oflow_buf->list, &rxc->oflow_bufs);
 	oflow_buf->rxc = rxc;
-	oflow_buf->min_bytes = rxc->oflow_buf_size - rxc->rdzv_threshold;
+	oflow_buf->min_bytes = rxc->oflow_buf_size -
+			(rxc->rdzv_threshold + rxc->rdzv_get_min);
 	oflow_buf->buffer_id = req->req_id;
 	oflow_buf->type = CXIP_LE_TYPE_RX;
 
@@ -3755,7 +3757,9 @@ err_unmap:
 
 static ssize_t _cxip_send_req(struct cxip_req *req)
 {
-	if (req->send.len > req->send.txc->rdzv_threshold)
+	if (req->send.len >
+	    (req->send.txc->rdzv_threshold +
+	     req->send.txc->rdzv_get_min))
 		return _cxip_send_long(req);
 	else
 		return _cxip_send_eager(req);

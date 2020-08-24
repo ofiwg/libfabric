@@ -175,6 +175,7 @@ struct cxip_environment {
 	/* Messaging */
 	int rdzv_offload;
 	size_t rdzv_threshold;
+	size_t rdzv_get_min;
 	size_t oflow_buf_size;
 	size_t oflow_buf_count;
 
@@ -853,6 +854,7 @@ struct cxip_rxc {
 
 	int min_multi_recv;
 	int rdzv_threshold;
+	int rdzv_get_min;
 
 	/* Unexpected message handling */
 	fastlock_t rx_lock;			// RX message lock
@@ -927,6 +929,7 @@ struct cxip_txc {
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
 	enum c_ptlte_state pte_state;
 	int rdzv_threshold;
+	int rdzv_get_min;
 	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
 	ofi_atomic32_t rdzv_src_lacs;	// Bitmask of LACs
 	struct dlist_entry rdzv_src_reqs;

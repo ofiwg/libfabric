@@ -397,6 +397,7 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	rxc->disabling = false;
 
 	rxc->rdzv_threshold = cxip_env.rdzv_threshold;
+	rxc->rdzv_get_min = cxip_env.rdzv_get_min;
 	rxc->oflow_buf_size = cxip_env.oflow_buf_size;
 	rxc->oflow_bufs_max = cxip_env.oflow_buf_count;
 
