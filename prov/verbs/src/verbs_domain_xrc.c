@@ -112,7 +112,7 @@ static inline void vrb_set_ini_conn_key(struct vrb_xrc_ep *ep,
 				  struct vrb_cq, util_cq);
 }
 
-/* Caller must hold domain:eq:lock */
+/* Caller must hold domain:xrc.ini_lock */
 int vrb_get_shared_ini_conn(struct vrb_xrc_ep *ep,
 			       struct vrb_ini_shared_conn **ini_conn) {
 	struct vrb_domain *domain = vrb_ep_to_domain(&ep->base_ep);
@@ -168,8 +168,8 @@ insert_err:
 	return ret;
 }
 
-/* Caller must hold domain:eq:lock */
-void vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
+/* Caller must hold domain:xrc.ini_lock */
+void _vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
 {
 	struct vrb_domain *domain = vrb_ep_to_domain(&ep->base_ep);
 	struct vrb_ini_shared_conn *ini_conn;
@@ -213,7 +213,16 @@ void vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
 	}
 }
 
-/* Caller must hold domain:eq:lock */
+void vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
+{
+	struct vrb_domain *domain = vrb_ep_to_domain(&ep->base_ep);
+
+	domain->xrc.lock_acquire(&domain->xrc.ini_lock);
+	_vrb_put_shared_ini_conn(ep);
+	domain->xrc.lock_release(&domain->xrc.ini_lock);
+}
+
+/* Caller must hold domain:xrc.ini_lock */
 void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, int reciprocal,
 				 void *conn_param, size_t conn_paramlen)
 {
@@ -238,7 +247,7 @@ static void vrb_create_shutdown_event(struct vrb_xrc_ep *ep)
 		dlistfd_insert_tail(&eq_entry->item, &ep->base_ep.eq->list_head);
 }
 
-/* Caller must hold domain:eq:lock */
+/* Caller must hold domain:xrc.ini_lock */
 void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn)
 {
 	struct vrb_xrc_ep *ep;
@@ -317,7 +326,7 @@ void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn)
 err:
 		if (ret) {
 			ep->ini_conn->state = last_state;
-			vrb_put_shared_ini_conn(ep);
+			_vrb_put_shared_ini_conn(ep);
 
 			/* We need to let the application know that the
 			 * connect request has failed. */
@@ -555,6 +564,14 @@ int vrb_domain_xrc_init(struct vrb_domain *domain)
 		goto rbmap_err;
 	}
 
+	fastlock_init(&domain->xrc.ini_lock);
+	if (domain->util_domain.threading == FI_THREAD_DOMAIN) {
+		domain->xrc.lock_acquire = ofi_fastlock_acquire_noop;
+		domain->xrc.lock_release = ofi_fastlock_release_noop;
+	} else {
+		domain->xrc.lock_acquire = ofi_fastlock_acquire;
+		domain->xrc.lock_release = ofi_fastlock_release;
+	}
 	domain->flags |= VRB_USE_XRC;
 	return FI_SUCCESS;
 
@@ -577,7 +594,6 @@ int vrb_domain_xrc_cleanup(struct vrb_domain *domain)
 	int ret;
 
 	assert(domain->xrc.xrcd);
-
 	/* All endpoint and hence XRC INI QP should be closed */
 	if (!ofi_rbmap_empty(domain->xrc.ini_conn_rbmap)) {
 		VERBS_WARN(FI_LOG_DOMAIN, "XRC domain busy\n");
@@ -595,6 +611,7 @@ int vrb_domain_xrc_cleanup(struct vrb_domain *domain)
 	}
 
 	ofi_rbmap_destroy(domain->xrc.ini_conn_rbmap);
+	fastlock_destroy(&domain->xrc.ini_lock);
 #endif /* VERBS_HAVE_XRC */
 	return 0;
 }
