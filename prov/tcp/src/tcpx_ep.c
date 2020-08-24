@@ -97,7 +97,8 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	struct tcpx_cm_context *cm_ctx;
 	int ret;
 
-	if (!addr || !tcpx_ep->sock || paramlen > TCPX_MAX_CM_DATA_SIZE)
+	if (!addr || !tcpx_ep->sock || paramlen > TCPX_MAX_CM_DATA_SIZE ||
+	    tcpx_ep->state != TCPX_IDLE)
 		return -FI_EINVAL;
 
 	cm_ctx = calloc(1, sizeof(*cm_ctx));
@@ -107,11 +108,13 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 		return -FI_ENOMEM;
 	}
 
+	tcpx_ep->state = TCPX_CONNECTING;
 	ret = connect(tcpx_ep->sock, (struct sockaddr *) addr,
 		      (socklen_t) ofi_sizeofaddr(addr));
 	if (ret && ofi_sockerr() != FI_EINPROGRESS) {
+		tcpx_ep->state = TCPX_IDLE;
 		ret =  -ofi_sockerr();
-		goto err;
+		goto free;
 	}
 
 	cm_ctx->fid = &tcpx_ep->util_ep.ep_fid.fid;
@@ -125,10 +128,13 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	ret = ofi_wait_add_fd(tcpx_ep->util_ep.eq->wait, tcpx_ep->sock,
 			      POLLOUT, tcpx_eq_wait_try_func, NULL,cm_ctx);
 	if (ret)
-		goto err;
+		goto disable;
 
 	return 0;
-err:
+
+disable:
+	tcpx_ep_disable(tcpx_ep, -ret);
+free:
 	free(cm_ctx);
 	return ret;
 }
@@ -139,7 +145,7 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	struct tcpx_cm_context *cm_ctx;
 	int ret;
 
-	if (tcpx_ep->sock == INVALID_SOCKET)
+	if (tcpx_ep->sock == INVALID_SOCKET || tcpx_ep->state != TCPX_RCVD_REQ)
 		return -FI_EINVAL;
 
 	cm_ctx = calloc(1, sizeof(*cm_ctx));
@@ -149,6 +155,7 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 		return -FI_ENOMEM;
 	}
 
+	tcpx_ep->state = TCPX_ACCEPTING;
 	cm_ctx->fid = &tcpx_ep->util_ep.ep_fid.fid;
 	cm_ctx->type = SERVER_SEND_CM_ACCEPT;
 	if (paramlen) {
@@ -159,9 +166,81 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	ret = ofi_wait_add_fd(tcpx_ep->util_ep.eq->wait, tcpx_ep->sock,
 			      POLLOUT, tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret)
-		free(cm_ctx);
+		goto free;
 
+	return 0;
+
+free:
+	tcpx_ep->state = TCPX_RCVD_REQ;
+	free(cm_ctx);
 	return ret;
+}
+
+static void tcpx_ep_flush_pending_xfers(struct tcpx_ep *ep)
+{
+	struct slist_entry *entry;
+	struct tcpx_xfer_entry *tx_entry;
+	struct tcpx_cq *cq;
+
+	while (!slist_empty(&ep->tx_rsp_pend_queue)) {
+		entry = slist_remove_head(&ep->tx_rsp_pend_queue);
+		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
+		tcpx_cq_report_error(ep->util_ep.tx_cq, tx_entry, FI_ENOTCONN);
+
+		cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
+		tcpx_xfer_entry_release(cq, tx_entry);
+	}
+}
+
+/* must hold ep->lock */
+void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
+{
+	struct util_wait_fd *wait;
+	struct fi_eq_cm_entry cm_entry = {0};
+	struct fi_eq_err_entry err_entry = {0};
+
+	switch (ep->state) {
+	case TCPX_RCVD_REQ:
+		break;
+	case TCPX_CONNECTED:
+		if (ep->util_ep.tx_cq) {
+			wait = container_of(ep->util_ep.tx_cq->wait,
+					    struct util_wait_fd, util_wait);
+			ofi_wait_fdset_del(wait, ep->sock);
+		}
+
+		if (ep->util_ep.rx_cq) {
+			wait = container_of(ep->util_ep.rx_cq->wait,
+					    struct util_wait_fd, util_wait);
+			ofi_wait_fdset_del(wait, ep->sock);
+		}
+
+		tcpx_ep_flush_pending_xfers(ep);
+		/* fall through */
+	case TCPX_ACCEPTING:
+	case TCPX_CONNECTING:
+		wait = container_of(ep->util_ep.eq->wait,
+				    struct util_wait_fd, util_wait);
+		ofi_wait_fdset_del(wait, ep->sock);
+		break;
+
+	default:
+		return;
+	}
+
+	if (cm_err) {
+		err_entry.fid = &ep->util_ep.ep_fid.fid;
+		err_entry.context = ep->util_ep.ep_fid.fid.context;
+		err_entry.err = cm_err;
+		(void) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
+				   &err_entry, sizeof(err_entry),
+				   UTIL_FLAG_ERROR);
+	} else {
+		cm_entry.fid = &ep->util_ep.ep_fid.fid;
+		(void) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
+				   &cm_entry, sizeof(cm_entry), 0);
+	}
+	ep->state = TCPX_DISCONNECTED;
 }
 
 static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
@@ -177,12 +256,10 @@ static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 	}
 
 	fastlock_acquire(&tcpx_ep->lock);
-	ret = tcpx_ep_shutdown_report(tcpx_ep, &ep->fid);
+	tcpx_ep_disable(tcpx_ep, 0);
 	fastlock_release(&tcpx_ep->lock);
-	if (ret)
-		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA, "Error writing to EQ\n");
 
-	return ret;
+	return FI_SUCCESS;
 }
 
 static int tcpx_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen)
@@ -350,23 +427,6 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 	fastlock_release(&ep->lock);
 }
 
-/**
- * Release the ep from polling
- */
-void tcpx_ep_wait_fd_del(struct tcpx_ep *ep)
-{
-	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "releasing ep=%p\n", ep);
-
-	if (ep->util_ep.rx_cq)
-		ofi_wait_del_fd(ep->util_ep.rx_cq->wait, ep->sock);
-
-	if (ep->util_ep.tx_cq)
-		ofi_wait_del_fd(ep->util_ep.tx_cq->wait, ep->sock);
-
-	if (ep->util_ep.eq && ep->util_ep.eq->wait)
-		ofi_wait_del_fd(ep->util_ep.eq->wait, ep->sock);
-}
-
 static int tcpx_ep_close(struct fid *fid)
 {
 	struct tcpx_ep *ep;
@@ -379,7 +439,16 @@ static int tcpx_ep_close(struct fid *fid)
 	/* eq->close_lock protects from processing stale connection events */
 	if (eq)
 		fastlock_acquire(&eq->close_lock);
-	tcpx_ep_wait_fd_del(ep);
+
+	if (ep->util_ep.rx_cq)
+		ofi_wait_del_fd(ep->util_ep.rx_cq->wait, ep->sock);
+
+	if (ep->util_ep.tx_cq)
+		ofi_wait_del_fd(ep->util_ep.tx_cq->wait, ep->sock);
+
+	if (ep->util_ep.eq && ep->util_ep.eq->wait)
+		ofi_wait_del_fd(ep->util_ep.eq->wait, ep->sock);
+
 	if (eq)
 		fastlock_release(&eq->close_lock);
 
@@ -526,6 +595,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 			ep->sock = pep->sock;
 			pep->sock = INVALID_SOCKET;
 		} else {
+			ep->state = TCPX_RCVD_REQ;
 			handle = container_of(info->handle,
 					      struct tcpx_conn_handle, handle);
 			ep->sock = handle->sock;
@@ -549,7 +619,6 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 			goto err3;
 	}
 
-	ep->cm_state = TCPX_EP_CONNECTING;
 	ret = fastlock_init(&ep->lock);
 	if (ret)
 		goto err3;
