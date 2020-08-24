@@ -220,12 +220,10 @@ struct rxd_ep {
 
 	struct index_map peers_idm;
 };
-
+/* ensure ep lock is held before this function is called */
 static inline struct rxd_peer *rxd_peer(struct rxd_ep *ep, fi_addr_t rxd_addr)
 {
-	fastlock_tryacquire(&ep->util_ep.lock);
 	return ofi_idm_lookup(&ep->peers_idm, rxd_addr);
-	fastlock_release(&ep->util_ep.lock);
 
 }
 static inline struct rxd_domain *rxd_ep_domain(struct rxd_ep *ep)
