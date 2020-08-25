@@ -516,8 +516,7 @@ Test(cq, cq_readerr_no_errs)
 	/* Attempt to read an err with a CQ with a NULL buff pointer */
 	ret = fi_cq_readerr(cxi_open_cq, &err_entry, (uint64_t)0);
 	/* Expect no completions to be available */
-	cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_readerr returned %d - %s", ret,
-		     fi_cq_strerror(cxi_open_cq, ret, NULL, NULL, 0));
+	cr_assert_eq(ret, -FI_EAGAIN, "fi_cq_readerr returned %d", ret);
 
 	ret = fi_close(&cxi_open_cq->fid);
 	cr_assert_eq(ret, FI_SUCCESS);
@@ -553,6 +552,7 @@ Test(cq, cq_readerr_err)
 		data_fake[i] = (uint8_t)i;
 		data_err[i] = (uint8_t)0xa5;
 	}
+	fake_entry.prov_errno = 18;
 	fake_entry.err_data = err_entry.err_data = NULL;
 	fake_entry.err_data_size = err_entry.err_data_size = 0;
 
@@ -568,10 +568,12 @@ Test(cq, cq_readerr_err)
 	/* Attempt to read an err with a CQ with a NULL buff pointer */
 	ret = fi_cq_readerr(cxi_open_cq, &err_entry, (uint64_t)0);
 	/* Expect 1 completion to be available */
-	cr_assert_eq(ret, 1, "fi_cq_readerr returned %d - %s", ret,
-		     fi_cq_strerror(cxi_open_cq, ret, NULL, NULL, 0));
+	cr_assert_eq(ret, 1, "fi_cq_readerr returned %d", ret);
 	/* Expect the data to match the fake entry */
 	err_entry_comp(&err_entry, &fake_entry, sizeof(fake_entry));
+	printf("prov_errno: %s\n",
+			fi_cq_strerror(cxi_open_cq, err_entry.prov_errno,
+				       NULL, NULL, 0));
 
 	ret = fi_close(&cxi_open_cq->fid);
 	cr_assert_eq(ret, FI_SUCCESS);
@@ -612,8 +614,7 @@ Test(cq, cq_readerr_reperr)
 
 	/* Attempt to read an err with a CQ with a NULL buff pointer */
 	ret = fi_cq_readerr(cxit_tx_cq, &err_entry, (uint64_t)0);
-	cr_assert_eq(ret, 1, "fi_cq_readerr returned %d - %s", ret,
-		     fi_cq_strerror(cxit_tx_cq, ret, NULL, NULL, 0));
+	cr_assert_eq(ret, 1, "fi_cq_readerr returned %d", ret);
 
 	/* Expect the data to match the fake entry */
 	cr_assert_eq(err_entry.err, err);

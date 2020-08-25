@@ -499,6 +499,17 @@ void cxip_util_cq_progress(struct util_cq *util_cq)
 }
 
 /*
+ * cxip_cq_strerror() - Converts provider specific error information into a
+ * printable string.
+ */
+static const char *cxip_cq_strerror(struct fid_cq *cq, int prov_errno,
+				    const void *err_data, char *buf,
+				    size_t len)
+{
+	return cxi_rc_to_str(prov_errno);
+}
+
+/*
  * cxip_cq_enable() - Assign hardware resources to the CQ.
  */
 int cxip_cq_enable(struct cxip_cq *cxi_cq)
@@ -743,6 +754,7 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto err_util_cq;
 	}
 
+	cxi_cq->util_cq.cq_fid.ops->strerror = &cxip_cq_strerror;
 	cxi_cq->util_cq.cq_fid.fid.ops = &cxip_cq_fi_ops;
 
 	cxi_cq->domain = cxi_dom;
