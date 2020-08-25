@@ -53,8 +53,10 @@ The following features are supported:
   registrations on the DGRAM endpoint.
 
 *Memory registration modes*
-: The RDM endpoint does not require memory registration and the
-  *FI_EP_DGRAM* endpoint only supports *FI_MR_LOCAL*.
+: The RDM endpoint does not require memory registration for send and receive
+  operations, i.e. it does not require *FI_MR_LOCAL*. Applications may specify
+  *FI_MR_LOCAL* in the MR mode flags in order to use descriptors provided by the
+  application. The *FI_EP_DGRAM* endpoint only supports *FI_MR_LOCAL*.
 
 *Progress*
 : The RDM endpoint supports both *FI_PROGRESS_AUTO* and *FI_PROGRESS_MANUAL*,
@@ -69,14 +71,14 @@ The following features are supported:
 
 # LIMITATIONS
 
-The provider does not support *FI_ATOMIC* interfaces. For RMA operations,
+The DGRAM endpoint does not support *FI_ATOMIC* interfaces. For RMA operations,
 completion events for RMA targets (*FI_RMA_EVENT*) is not supported. The DGRAM
 endpoint does not fully protect against resource overruns, so resource
 management is disabled for this endpoint (*FI_RM_DISABLED*).
 
 No support for selective completions.
 
-No support for counters.
+No support for counters for the DGRAM endpoint.
 
 No support for inject.
 
