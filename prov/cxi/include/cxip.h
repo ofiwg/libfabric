@@ -791,7 +791,8 @@ struct cxip_oflow_buf {
 	};
 	void *buf;
 	struct cxip_md *md;
-	int min_bytes;
+	size_t sw_consumed;
+	size_t hw_consumed;
 	int buffer_id;
 };
 

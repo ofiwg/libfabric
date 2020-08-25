@@ -3812,3 +3812,75 @@ Test(tagged, rdzv_fc_mt, .timeout = 60)
 
 	pthread_attr_destroy(&attr);
 }
+
+Test(tagged, NC2192)
+{
+	int i, ret;
+	uint8_t *recv_buf,
+		*send_buf;
+	int send_len = CXIP_RDZV_THRESHOLD - 1;
+	int recv_len = send_len;
+	struct fi_cq_tagged_entry tx_cqe,
+				  rx_cqe;
+	fi_addr_t from;
+	int sends = (CXIP_OFLOW_BUF_SIZE - CXIP_RDZV_THRESHOLD) / send_len + 1;
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+	memset(recv_buf, 0, recv_len);
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	/* Consume 1 oflow byte */
+	ret = fi_tsend(cxit_ep, send_buf, 1, NULL, cxit_ep_fi_addr, 0,
+		       NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	for (i = 0; i < sends; i++) {
+		ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
+			       cxit_ep_fi_addr, 1, NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	for (i = 0; i < sends + 1; i++) {
+		ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+		cr_assert(ret == 1);
+
+		validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+	}
+
+	for (i = 0; i < sends; i++) {
+		ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
+			       FI_ADDR_UNSPEC, 1, 0, NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	for (i = 0; i < sends; i++) {
+		/* Wait for async event indicating data has been received */
+		do {
+			ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+		} while (ret == -FI_EAGAIN);
+		cr_assert(ret == 1);
+
+		validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV,
+				  NULL, 0, 1);
+		cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+	}
+
+	/* Match the 1 byte Send */
+	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
+		       FI_ADDR_UNSPEC, 0, 0, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
+	cr_assert(ret == 1);
+
+	validate_rx_event(&rx_cqe, NULL, 1, FI_TAGGED | FI_RECV, NULL, 0, 0);
+	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+
+	free(send_buf);
+	free(recv_buf);
+}

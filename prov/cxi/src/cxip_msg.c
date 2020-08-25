@@ -465,6 +465,8 @@ static void rdzv_recv_req_event(struct cxip_req *req)
  */
 static void oflow_buf_free(struct cxip_oflow_buf *oflow_buf)
 {
+	CXIP_LOG_DBG("Freeing: %p\n", oflow_buf);
+
 	dlist_remove(&oflow_buf->list);
 	ofi_atomic_dec32(&oflow_buf->rxc->oflow_bufs_in_use);
 
@@ -482,10 +484,15 @@ static void oflow_buf_free(struct cxip_oflow_buf *oflow_buf)
  */
 static void oflow_req_put_bytes(struct cxip_req *req, size_t bytes)
 {
-	CXIP_LOG_DBG("Putting %lu bytes: %p\n", bytes, req);
-	req->oflow.oflow_buf->min_bytes -= bytes;
-	if (req->oflow.oflow_buf->min_bytes < 0) {
-		oflow_buf_free(req->oflow.oflow_buf);
+	struct cxip_oflow_buf *oflow_buf = req->oflow.oflow_buf;
+
+	oflow_buf->sw_consumed += bytes;
+	CXIP_LOG_DBG("Putting %lu bytes (%lu/%lu): %p\n",
+		     bytes, oflow_buf->sw_consumed, oflow_buf->hw_consumed,
+		     req);
+
+	if (oflow_buf->sw_consumed == oflow_buf->hw_consumed) {
+		oflow_buf_free(oflow_buf);
 		cxip_cq_req_free(req);
 	}
 }
@@ -1139,13 +1146,15 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		ofi_atomic_dec32(&rxc->oflow_bufs_submitted);
 		ofi_atomic_dec32(&rxc->oflow_bufs_linked);
 
-		if (!event->tgt_long.auto_unlinked) {
-			uint64_t bytes = rxc->oflow_buf_size -
-					(event->tgt_long.start -
-					 CXI_VA_TO_IOVA(oflow_buf->md->md,
-							oflow_buf->buf));
-			oflow_req_put_bytes(req, bytes);
-		} else {
+		/* Record the number of bytes consumed by HW */
+		oflow_buf->hw_consumed = event->tgt_long.start -
+			      CXI_VA_TO_IOVA(oflow_buf->md->md,
+					     oflow_buf->buf);
+
+		/* Check if SW has consumed a matching count of bytes. */
+		oflow_req_put_bytes(req, 0);
+
+		if (event->tgt_long.auto_unlinked) {
 			/* Replace the eager overflow buffer */
 			cxip_rxc_eager_replenish(rxc);
 		}
@@ -1301,8 +1310,6 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	/* Initialize oflow_buf structure */
 	dlist_insert_tail(&oflow_buf->list, &rxc->oflow_bufs);
 	oflow_buf->rxc = rxc;
-	oflow_buf->min_bytes = rxc->oflow_buf_size -
-			(rxc->rdzv_threshold + rxc->rdzv_get_min);
 	oflow_buf->buffer_id = req->req_id;
 	oflow_buf->type = CXIP_LE_TYPE_RX;
 
