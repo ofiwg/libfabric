@@ -105,6 +105,17 @@ int cuda_hmem_cleanup(void);
 bool cuda_is_addr_valid(const void *addr);
 int cuda_host_register(void *ptr, size_t size);
 int cuda_host_unregister(void *ptr);
+int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
+int cuda_dev_unregister(uint64_t handle);
+
+void cuda_gdrcopy_to_dev(uint64_t handle, void *dev,
+			 const void *host, size_t size);
+void cuda_gdrcopy_from_dev(uint64_t handle, void *host,
+			   const void *dev, size_t size);
+int cuda_gdrcopy_hmem_init(void);
+int cuda_gdrcopy_hmem_cleanup(void);
+int cuda_gdrcopy_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
+int cuda_gdrcopy_dev_unregister(uint64_t handle);
 
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);
 int ze_hmem_init(void);

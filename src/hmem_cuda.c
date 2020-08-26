@@ -56,6 +56,8 @@ struct cuda_ops {
 	cudaError_t (*cudaHostUnregister)(void *ptr);
 };
 
+static int hmem_cuda_use_gdrcopy;
+
 #ifdef ENABLE_CUDA_DLOPEN
 
 #include <dlfcn.h>
@@ -117,6 +119,11 @@ cudaError_t ofi_cudaHostUnregister(void *ptr)
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
 {
+	if (hmem_cuda_use_gdrcopy) {
+		cuda_gdrcopy_to_dev(device, dev, host, size);
+		return FI_SUCCESS;
+	}
+
 	cudaError_t cuda_ret;
 
 	cuda_ret = ofi_cudaMemcpy(dev, host, size, cudaMemcpyHostToDevice);
@@ -133,6 +140,11 @@ int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
 
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size)
 {
+	if (hmem_cuda_use_gdrcopy) {
+		cuda_gdrcopy_from_dev(device, host, dev, size);
+		return FI_SUCCESS;
+	}
+
 	cudaError_t cuda_ret;
 
 	cuda_ret = ofi_cudaMemcpy(host, dev, size, cudaMemcpyDeviceToHost);
@@ -145,6 +157,23 @@ int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size
 		ofi_cudaGetErrorString(cuda_ret));
 
 	return -FI_EIO;
+}
+
+int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle)
+{
+	if (hmem_cuda_use_gdrcopy)
+		return cuda_gdrcopy_dev_register(mr_attr, handle);
+
+	*handle = mr_attr->device.cuda;
+	return FI_SUCCESS;
+}
+
+int cuda_dev_unregister(uint64_t handle)
+{
+	if (hmem_cuda_use_gdrcopy)
+		return cuda_gdrcopy_dev_unregister(handle);
+
+	return FI_SUCCESS;
 }
 
 static int cuda_hmem_dl_init(void)
@@ -239,6 +268,20 @@ int cuda_hmem_init(void)
 	if (ret != FI_SUCCESS)
 		return ret;
 
+	ret = cuda_gdrcopy_hmem_init();
+	if (ret == FI_SUCCESS) {
+		hmem_cuda_use_gdrcopy = 1;
+		fi_param_define(NULL, "hmem_cuda_use_gdrcopy", FI_PARAM_BOOL,
+				"Use gdrcopy to copy data to/from GPU memory");
+		fi_param_get_bool(NULL, "hmem_cuda_use_gdrcopy",
+				  &hmem_cuda_use_gdrcopy);
+	} else {
+		hmem_cuda_use_gdrcopy = 0;
+		if (ret != -FI_ENOSYS)
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"gdrcopy initialization failed! gdrcopy will not be used.\n");
+	}
+
 	cu_ret = ofi_cuInit(0);
 	if (cu_ret == CUDA_SUCCESS)
 		return FI_SUCCESS;
@@ -264,6 +307,7 @@ int cuda_hmem_cleanup(void)
 	dlclose(cudart_handle);
 #endif
 
+	cuda_gdrcopy_hmem_cleanup();
 	return FI_SUCCESS;
 }
 
@@ -380,6 +424,16 @@ int cuda_host_register(void *ptr, size_t size)
 int cuda_host_unregister(void *ptr)
 {
 	return -FI_ENOSYS;
+}
+
+int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle)
+{
+	return FI_SUCCESS;
+}
+
+int cuda_dev_unregister(uint64_t handle)
+{
+	return FI_SUCCESS;
 }
 
 #endif /* HAVE_LIBCUDA */
