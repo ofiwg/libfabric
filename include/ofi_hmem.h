@@ -81,6 +81,22 @@ hsa_status_t ofi_hsa_amd_reg_dealloc_cb(void *ptr,
 
 #endif /* HAVE_ROCR */
 
+#ifdef HAVE_GDRCOPY
+#include <gdrapi.h>
+
+struct ofi_gdrcopy_handle {
+	gdr_mh_t mh; /* memory handler */
+	void *cuda_ptr; /* page aligned gpu pointer */
+	void *user_ptr; /* user space ptr mapped to GPU memory */
+	size_t length; /* page aligned length */
+};
+
+gdr_t ofi_gdrcopy_open();
+int ofi_gdrcopy_close(gdr_t gdr);
+ssize_t ofi_gdrcopy_reg(void *addr, size_t len, gdr_t gdr, struct ofi_gdrcopy_handle *gdrcopy);
+ssize_t ofi_gdrcopy_dereg(gdr_t gdr, struct ofi_gdrcopy_handle *gdrcopy);
+#endif
+
 int rocr_memcpy(uint64_t device, void *dest, const void *src, size_t size);
 int rocr_hmem_init(void);
 int rocr_hmem_cleanup(void);
@@ -99,6 +115,11 @@ bool ze_is_addr_valid(const void *addr);
 int ze_hmem_get_handle(void *dev_buf, void **handle);
 int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr);
 int ze_hmem_close_handle(void *ipc_ptr);
+
+int cuda_gdrcopy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
+int cuda_gdrcopy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
+int cuda_gdrcopy_hmem_init(void);
+int cuda_gdrcopy_hmem_cleanup(void);
 
 static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
 			     size_t size)

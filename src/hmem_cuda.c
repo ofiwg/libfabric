@@ -102,6 +102,14 @@ CUresult ofi_cuInit(unsigned int flags)
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
 {
+#ifdef HAVE_GDRCOPY
+	int err;
+
+	err = cuda_gdrcopy_to_dev(device, dev, host, size);
+	if (!err)
+		return 0; 
+#endif
+
 	cudaError_t cuda_ret;
 
 	cuda_ret = ofi_cudaMemcpy(dev, host, size, cudaMemcpyHostToDevice);
@@ -118,8 +126,14 @@ int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
 
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size)
 {
-	cudaError_t cuda_ret;
+#ifdef HAVE_GDRCOPY
+	int err;
 
+	err = cuda_gdrcopy_from_dev(device, host, dev, size);
+	if (!err)
+		return 0; 
+#endif
+	cudaError_t cuda_ret;
 	cuda_ret = ofi_cudaMemcpy(host, dev, size, cudaMemcpyDeviceToHost);
 	if (cuda_ret == cudaSuccess)
 		return 0;
@@ -209,6 +223,12 @@ int cuda_hmem_init(void)
 	if (ret != FI_SUCCESS)
 		return ret;
 
+#ifdef HAVE_GDRCOPY
+	ret = cuda_gdrcopy_hmem_init();
+	if (ret != FI_SUCCESS)
+		FI_WARN(&core_prov, FI_LOG_CORE, "gdrcopy initialization failed! gdrcopy will not be used.\n");
+#endif
+
 	cu_ret = ofi_cuInit(0);
 	if (cu_ret == CUDA_SUCCESS)
 		return FI_SUCCESS;
@@ -234,6 +254,9 @@ int cuda_hmem_cleanup(void)
 	dlclose(cudart_handle);
 #endif
 
+#ifdef HAVE_GDRCOPY
+	cuda_gdrcopy_hmem_cleanup();
+#endif
 	return FI_SUCCESS;
 }
 

@@ -569,6 +569,41 @@ LDFLAGS="$LDFLAGS $cuda_LDFLAGS"
 
 AS_IF([test x"$enable_cuda_dlopen" != x"yes"], [LIBS="$LIBS $cuda_LIBS"])
 
+#gdrcopy related configs
+AC_ARG_WITH([gdrcopy],
+	    [AC_HELP_STRING([--with-gdrcopy=DIR],
+			    [Provide path to where the gdrcopy development
+			    and runtime libraries are installed.])],
+	    [], [])
+
+FI_CHECK_PACKAGE([gdrcopy],
+		 [gdrapi.h],
+		 [gdrapi],
+		 [gdr_open],
+		 [-lgdrapi],
+		 [$with_gdrcopy],
+		 [],
+		 [AC_DEFINE([HAVE_GDRCOPY], [1],[gdrcopy support])],
+		 [], [])
+
+AC_ARG_ENABLE([gdrcopy-dlopen],
+    [AS_HELP_STRING([--enable-gdrcopy-dlopen],
+        [Enable dlopen of gdrcopy libraries @<:@default=no@:>@])
+    ],
+    [
+        AS_IF([test "$freebsd" == "0"], [
+            AC_CHECK_LIB(dl, dlopen, [],
+                [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+        ])
+        AC_DEFINE([ENABLE_GDRCOPY_DLOPEN], [1], [dlopen CUDA libraries])
+    ],
+    [enable_gdrcopy_dlopen=no])
+
+CPPFLAGS="$CPPFLAGS $gdrcopy_CPPFLAGS"
+LDFLAGS="$LDFLAGS $gdrcopy_LDFLAGS"
+AS_IF([test x"$enable_gdrcopy_dlopen" != x"yes"], [LIBS="$LIBS $gdrcopy_LIBS"])
+#end gdrcopy configures
+
 dnl Check for ROCR runtime libraries.
 AC_ARG_WITH([rocr],
 	    [AC_HELP_STRING([--with-rocr=DIR],
