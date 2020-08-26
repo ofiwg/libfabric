@@ -514,19 +514,20 @@ AC_ARG_WITH([ze],
 					 libraries and headers are installed.]),
 	[], [])
 
-FI_CHECK_PACKAGE([ze],
-	[level_zero/ze_api.h],
-	[ze_loader],
-	[zeInit],
-	[],
-	[$with_ze],
-	[],
-	[AC_DEFINE([HAVE_LIBZE], [1],[ZE support])],
-	[], [])
-
-CPPFLAGS="$CPPFLAGS $ze_CPPFLAGS"
-LDFLAGS="$LDFLAGS $ze_LDFLAGS"
-LIBS="$LIBS $ze_LIBS"
+AS_IF([test x"$with_ze" != x"no"],
+      [FI_CHECK_PACKAGE([ze],
+			[level_zero/ze_api.h],
+			[ze_loader],
+			[zeInit],
+			[],
+			[$with_ze],
+			[],
+			[AC_DEFINE([HAVE_LIBZE], [1],[ZE support])],
+			[], [])
+       CPPFLAGS="$CPPFLAGS $ze_CPPFLAGS"
+       LDFLAGS="$LDFLAGS $ze_LDFLAGS"
+       LIBS="$LIBS $ze_LIBS"],
+      [])
 
 enable_memhooks=1
 AC_ARG_ENABLE([memhooks-monitor],
