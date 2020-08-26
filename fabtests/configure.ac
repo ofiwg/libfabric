@@ -142,10 +142,12 @@ AC_ARG_WITH([ze],
             [])
 
 dnl Checks for ZE libraries
-AC_CHECK_LIB([ze_loader], zeInit,
-	     AC_CHECK_HEADER([level_zero/ze_api.h],
-			     AC_DEFINE([HAVE_LIBZE], 1, [ZE support])),
-	     [])
+AS_IF([test x"$with_ze" != x"no"],
+      [AC_CHECK_LIB([ze_loader], zeInit,
+       AC_CHECK_HEADER([level_zero/ze_api.h],
+			AC_DEFINE([HAVE_LIBZE], 1, [ZE support])),
+			[])]
+      [])
 
 AC_MSG_CHECKING([for fi_trywait support])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <rdma/fi_eq.h>]],
