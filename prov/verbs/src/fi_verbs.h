@@ -364,11 +364,15 @@ struct vrb_domain {
 		int			xrcd_fd;
 		struct ibv_xrcd		*xrcd;
 
-		/* The domain maintains a RBTree for mapping an endpoint
-		 * destination addresses to physical XRC INI QP connected
-		 * to that host. The map is protected using the EQ lock
-		 * bound to the domain to avoid the need for additional
-		 * locking. */
+		/* XRC INI QP connections can be shared between endpoint
+		 * within the same domain. The domain maintains an RBTree
+		 * for mapping endpoint destination addresses to the
+		 * physical XRC INI connection to the associated node. The
+		 * map and XRC INI connection object state information are
+		 * protected via the ini_lock. */
+		fastlock_t		ini_lock;
+		ofi_fastlock_acquire_t	lock_acquire;
+		ofi_fastlock_release_t	lock_release;
 		struct ofi_rbmap	*ini_conn_rbmap;
 	} xrc;
 
