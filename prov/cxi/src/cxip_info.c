@@ -204,7 +204,7 @@ static int cxip_info_init(void)
 
 struct cxip_environment cxip_env = {
 	.odp = false,
-	.ats = true,
+	.ats = false,
 	.rdzv_offload = true,
 	.rdzv_threshold = CXIP_RDZV_THRESHOLD,
 	.rdzv_get_min = 0,

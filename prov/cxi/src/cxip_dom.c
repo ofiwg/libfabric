@@ -750,7 +750,7 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (cxip_env.odp)
 		cxi_domain->odp = true;
 
-	if (cxip_env.ats)
+	if (!cxip_env.ats)
 		cxi_domain->ats_init = true;
 
 	cxi_domain->util_domain.domain_fid.fid.ops = &cxip_dom_fi_ops;

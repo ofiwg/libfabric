@@ -66,6 +66,8 @@ static struct cxip_md *cxip_dom_ats_md(struct cxip_domain *dom)
 		if (!ret) {
 			dom->ats_md.dom = dom;
 			dom->ats_enabled = true;
+
+			CXIP_LOG_DBG("PCIe ATS enabled.\n");
 		} else {
 			CXIP_LOG_INFO("PCIe ATS unsupported.\n");
 		}
