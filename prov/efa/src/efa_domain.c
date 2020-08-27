@@ -52,6 +52,14 @@ static int efa_domain_close(fid_t fid)
 	if (efa_mr_cache_enable)
 		ofi_mr_cache_cleanup(&domain->cache);
 
+#ifdef HAVE_GDRCOPY
+	assert(domain->gdr);
+	ret = ofi_gdrcopy_close(domain->gdr);
+	if (ret) {
+		EFA_WARN(FI_LOG_DOMAIN, "gdr_close failed!\n");
+	}
+#endif
+
 	if (domain->ibv_pd) {
 		fastlock_acquire(&pd_list_lock);
 		efa_pd = &pd_list[domain->ctx->dev_idx];
@@ -229,6 +237,15 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	domain->fab = fabric;
 
 	*domain_fid = &domain->util_domain.domain_fid;
+
+#ifdef HAVE_GDRCOPY
+	domain->gdr = ofi_gdrcopy_open();
+	if (!domain->gdr) {
+		EFA_WARN(FI_LOG_DOMAIN, "gdr_open failed!\n");
+		ret = -FI_ENOMEM;
+		goto err_free_info;
+	}
+#endif
 
 	if (efa_mr_cache_enable) {
 		if (!efa_mr_max_cached_count)

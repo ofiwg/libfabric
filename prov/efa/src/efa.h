@@ -154,6 +154,9 @@ struct efa_domain {
 	struct ofi_mr_cache	cache;
 	struct efa_qp		**qp_table;
 	size_t			qp_table_sz_m1;
+#ifdef HAVE_GDRCOPY
+	gdr_t			gdr;
+#endif
 };
 
 extern struct fi_ops_mr efa_domain_mr_ops;
@@ -223,6 +226,9 @@ struct efa_mr_peer {
 		uint64_t        reserved;
 		int             cuda;
 	} device;
+#ifdef HAVE_GDRCOPY
+	struct ofi_gdrcopy_handle gdrcopy;
+#endif
 };
 
 struct efa_mr {
