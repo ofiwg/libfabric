@@ -452,9 +452,11 @@ int ofi_wait_fd_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 int ofi_wait_add_fd(struct util_wait *wait, int fd, uint32_t events,
 		    ofi_wait_try_func wait_try, void *arg, void *context);
 int ofi_wait_del_fd(struct util_wait *wait, int fd);
+int ofi_wait_fdset_del(struct util_wait_fd *wait_fd, int fd);
 int ofi_wait_add_fid(struct util_wait *wat, fid_t fid, uint32_t events,
 		     ofi_wait_try_func wait_try);
 int ofi_wait_del_fid(struct util_wait *wait, fid_t fid);
+
 
 struct util_wait_yield {
 	struct util_wait	util_wait;
