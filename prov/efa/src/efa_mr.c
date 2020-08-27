@@ -234,6 +234,16 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 	int err;
 
 	efa_domain = efa_mr->domain;
+
+	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
+		err = cuda_dev_unregister(efa_mr->peer.device.reserved);
+		if (err) {
+			EFA_WARN(FI_LOG_MR,
+				"Unable to deregister memory handle with gdrcopy\n");
+			ret = err;
+		}
+	}
+
 	err = -ibv_dereg_mr(efa_mr->ibv_mr);
 	if (err) {
 		EFA_WARN(FI_LOG_MR,
@@ -326,8 +336,17 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 		efa_mr->peer.iface = mr_attr->iface;
 	else
 		efa_mr->peer.iface = FI_HMEM_SYSTEM;
-	if (efa_mr->peer.iface == FI_HMEM_CUDA)
-		efa_mr->peer.device.cuda = mr_attr->device.cuda;
+
+	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
+		ret = cuda_dev_register(mr_attr, &efa_mr->peer.device.reserved);
+		if (ret) {
+			EFA_WARN(FI_LOG_MR, "Unable to register with gdrcopy: %s\n",
+				 fi_strerror(ret));
+			ibv_dereg_mr(efa_mr->ibv_mr);
+			return ret;
+		}
+	}
+
 	assert(efa_mr->mr_fid.key != FI_KEY_NOTAVAIL);
 
 	mr_attr->requested_key = efa_mr->mr_fid.key;
