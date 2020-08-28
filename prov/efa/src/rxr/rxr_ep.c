@@ -46,6 +46,34 @@
 #include "rxr_read.h"
 #include "rxr_atomic.h"
 
+struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep)
+{
+	return (struct efa_ep_addr *)ep->core_addr;
+}
+
+char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen)
+{
+	return ofi_straddr(buf, buflen, FI_ADDR_EFA, rxr_ep_raw_addr(ep));
+}
+
+struct efa_ep_addr *rxr_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
+{
+	struct efa_ep *efa_ep;
+	struct efa_av *efa_av;
+	struct efa_conn *efa_conn;
+
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	efa_av = efa_ep->av;
+	efa_conn = efa_av->conn_table[(int)addr];
+
+	return &efa_conn->ep_addr;
+}
+
+char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen)
+{
+	return ofi_straddr(buf, buflen, FI_ADDR_EFA, rxr_peer_raw_addr(ep, addr));
+}
+
 struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 					  struct rxr_rx_entry *rx_entry,
 					  const struct fi_msg *msg,
