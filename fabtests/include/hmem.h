@@ -55,7 +55,7 @@ static inline int ft_host_cleanup()
 static inline int ft_host_alloc(uint64_t device, void **buffer, size_t size)
 {
 	*buffer = malloc(size);
-	return !buffer ? -FI_ENOMEM : FI_SUCCESS;
+	return !*buffer ? -FI_ENOMEM : FI_SUCCESS;
 }
 
 static inline int ft_host_free(void *buf)
