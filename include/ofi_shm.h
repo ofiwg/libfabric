@@ -42,6 +42,7 @@
 #include <ofi_proto.h>
 #include <ofi_mem.h>
 #include <ofi_rbuf.h>
+#include <ofi_tree.h>
 
 #include <rdma/providers/fi_prov.h>
 
@@ -204,8 +205,9 @@ struct smr_peer {
 #define SMR_MAX_PEERS	256
 
 struct smr_map {
-	fastlock_t	lock;
-	struct smr_peer	peers[SMR_MAX_PEERS];
+	fastlock_t		lock;
+	struct ofi_rbmap	rbmap;
+	struct smr_peer		peers[SMR_MAX_PEERS];
 };
 
 struct smr_region {
@@ -326,7 +328,7 @@ void	smr_map_to_endpoint(struct smr_region *region, int index);
 void	smr_unmap_from_endpoint(struct smr_region *region, int index);
 void	smr_exchange_all_peers(struct smr_region *region);
 int	smr_map_add(const struct fi_provider *prov,
-		    struct smr_map *map, const char *name, int id);
+		    struct smr_map *map, const char *name, fi_addr_t id);
 void	smr_map_del(struct smr_map *map, int id);
 void	smr_map_free(struct smr_map *map);
 
