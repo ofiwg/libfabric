@@ -90,7 +90,7 @@ static inline void ofi_bitmask_set_all(struct bitmask *mask)
 
 static inline size_t ofi_bitmask_get_lsbset(struct bitmask mask)
 {
-	int cur;
+	size_t cur;
 	uint8_t tmp;
 	size_t ret = 0;
 
