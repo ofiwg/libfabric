@@ -574,7 +574,7 @@ struct vrb_ep {
 	uint64_t			peer_rq_credits;
 	/* Protected by recv CQ lock */
 	int64_t				rq_credits_avail;
-	uint64_t			threshold;
+	int64_t				threshold;
 
 	union {
 		struct rdma_cm_id	*id;
