@@ -427,7 +427,6 @@ static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
 			context->desc = mr_desc;
 			continue;
 		}
-		(*mr_bufs)[i] = calloc(1, mr_size);
 		ret = ft_hmem_alloc(opts.iface, opts.device,
 				    (void **) &((*mr_bufs)[i]), mr_size);
 		if (ret)
@@ -2971,7 +2970,7 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 			opts->sizes_enabled = FT_ENABLE_ALL;
 		} else {
 			opts->options |= FT_OPT_SIZE;
-			opts->transfer_size = atoi(optarg);
+			opts->transfer_size = atol(optarg);
 		}
 		break;
 	case 'm':

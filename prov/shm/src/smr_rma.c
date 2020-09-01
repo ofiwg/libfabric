@@ -59,10 +59,11 @@ ssize_t smr_rma_fast(struct smr_region *peer_smr, struct smr_cmd *cmd,
 		     void **desc, int peer_id, void *context, uint32_t op,
 		     uint64_t op_flags)
 {
-	struct iovec rma_iovec[SMR_IOV_LIMIT];
+	struct iovec cma_iovec[SMR_IOV_LIMIT], rma_iovec[SMR_IOV_LIMIT];
 	size_t total_len;
 	int ret, i;
 
+	memcpy(cma_iovec, iov, sizeof(*iov) * iov_count);
 	for (i = 0; i < rma_count; i++) {
 		rma_iovec[i].iov_base = (void *) rma_iov[i].addr;
 		rma_iovec[i].iov_len = rma_iov[i].len;
@@ -70,26 +71,11 @@ ssize_t smr_rma_fast(struct smr_region *peer_smr, struct smr_cmd *cmd,
 
 	total_len = ofi_total_iov_len(iov, iov_count);
 
-	if (op == ofi_op_write) {
-		ret = ofi_process_vm_writev(peer_smr->pid, iov, iov_count,
-					    rma_iovec, rma_count, 0);
-	} else {
-		ret = ofi_process_vm_readv(peer_smr->pid, iov, iov_count,
-					   rma_iovec, rma_count, 0);
-	}
+	ret = smr_cma_loop(peer_smr->pid, cma_iovec, iov_count, rma_iovec,
+			   rma_count, 0, total_len, op == ofi_op_write);
 
-	if (ret != total_len) {
-		if (ret < 0) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"CMA write error\n");
-			ret = -errno;
-		} else {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"unable to process tx completion\n");
-			ret = -FI_EIO;
-		}
+	if (ret)
 		return ret;
-	}
 
 	smr_format_rma_resp(cmd, peer_id, rma_iov, rma_count, total_len,
 			    (op == ofi_op_write) ? ofi_op_write_async :
