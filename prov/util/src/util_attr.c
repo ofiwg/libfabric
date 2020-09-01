@@ -95,12 +95,13 @@ int ofi_exclude_prov_name(char **prov_name_list, const char *util_prov_name)
 {
 	char *exclude, *name, *temp;
 
-	exclude = malloc(strlen(util_prov_name) + 2);
+	int length = strlen(util_prov_name) + 2;
+	exclude = malloc(length);
 	if (!exclude)
 		return -FI_ENOMEM;
 
 	exclude[0] = '^';
-	strcpy(&exclude[1], util_prov_name);
+	snprintf(&exclude[1], length - 1, util_prov_name); // The -1 accounts for the '^' character.
 
 	if (!*prov_name_list)
 		goto out;
