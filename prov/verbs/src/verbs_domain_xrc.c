@@ -107,7 +107,7 @@ static int vrb_create_ini_qp(struct vrb_xrc_ep *ep)
 static inline void vrb_set_ini_conn_key(struct vrb_xrc_ep *ep,
 					   struct vrb_ini_conn_key *key)
 {
-	key->addr = ep->base_ep.info->dest_addr;
+	key->addr = ep->base_ep.info_attr.dest_addr;
 	key->tx_cq = container_of(ep->base_ep.util_ep.tx_cq,
 				  struct vrb_cq, util_cq);
 }
@@ -270,7 +270,7 @@ void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn)
 				  &ep->ini_conn->active_list);
 		last_state = ep->ini_conn->state;
 
-		ret = vrb_create_ep(ep->base_ep.info,
+		ret = vrb_create_ep(&ep->base_ep,
 				       last_state == VRB_INI_QP_UNCONNECTED ?
 				       RDMA_PS_TCP : RDMA_PS_UDP,
 				       &ep->base_ep.id);

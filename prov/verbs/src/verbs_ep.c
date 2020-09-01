@@ -186,21 +186,21 @@ static inline int vrb_msg_ep_cmdata_size(fid_t fid)
 {
 	struct vrb_pep *pep;
 	struct vrb_ep *ep;
-	struct fi_info *info;
+	bool is_xrc;
 
 	switch (fid->fclass) {
 	case FI_CLASS_PEP:
 		pep = container_of(fid, struct vrb_pep, pep_fid.fid);
-		info = pep->info;
+		is_xrc = vrb_is_xrc_info(pep->info);
 		break;
 	case FI_CLASS_EP:
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid.fid);
-		info = ep->info;
+		is_xrc = vrb_is_xrc_ep(ep);
 		break;
 	default:
-		info = NULL;
+		is_xrc = 0;
 	};
-	if (vrb_is_xrc(info))
+	if (is_xrc)
 		return VERBS_CM_DATA_SIZE - sizeof(struct vrb_xrc_cm_data);
 	else
 		return VERBS_CM_DATA_SIZE;
@@ -303,7 +303,7 @@ vrb_alloc_init_ep(struct fi_info *info, struct vrb_domain *domain,
 	struct vrb_xrc_ep *xrc_ep;
 	int ret;
 
-	if (vrb_is_xrc(info)) {
+	if (vrb_is_xrc_info(info)) {
 		xrc_ep = calloc(1, sizeof(*xrc_ep));
 		if (!xrc_ep)
 			return NULL;
@@ -315,19 +315,9 @@ vrb_alloc_init_ep(struct fi_info *info, struct vrb_domain *domain,
 			return NULL;
 	}
 
-	// When we are enabling flow control, we artificially inject
-	// a credit so that the credit messaging itself is not blocked
-	// by a lack of credits.  To counter this, we will adjust the number
-	// of credit we send the first time by initializing to -1.
-	ep->rq_credits_avail = -1;
-
-	ep->info = fi_dupinfo(info);
-	if (!ep->info)
-		goto err1;
-
 	if (domain->util_domain.threading != FI_THREAD_SAFE) {
 		if (vrb_alloc_wrs(ep))
-			goto err2;
+			goto err1;
 	}
 
 	ret = ofi_endpoint_init(&domain->util_domain.domain_fid, &vrb_util_prov, info,
@@ -335,20 +325,18 @@ vrb_alloc_init_ep(struct fi_info *info, struct vrb_domain *domain,
 	if (ret) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Unable to initialize EP, error - %d\n", ret);
-		goto err3;
+		goto err2;
 	}
 
 	ep->util_ep.ep_fid.msg = calloc(1, sizeof(*ep->util_ep.ep_fid.msg));
 	if (!ep->util_ep.ep_fid.msg)
-		goto err4;
+		goto err3;
 
 	return ep;
-err4:
-	(void) ofi_endpoint_close(&ep->util_ep);
 err3:
-	vrb_free_wrs(ep);
+	(void) ofi_endpoint_close(&ep->util_ep);
 err2:
-	fi_freeinfo(ep->info);
+	vrb_free_wrs(ep);
 err1:
 	free(ep);
 	return NULL;
@@ -374,7 +362,8 @@ static int vrb_close_free_ep(struct vrb_ep *ep)
 		return ret;
 
 	vrb_free_wrs(ep);
-	fi_freeinfo(ep->info);
+	free(ep->info_attr.src_addr);
+	free(ep->info_attr.dest_addr);
 	free(ep);
 
 	return 0;
@@ -418,7 +407,7 @@ static int vrb_ep_close(fid_t fid)
 			vrb_eq_remove_events(ep->eq, fid);
 		}
 
-		if (vrb_is_xrc(ep->info))
+		if (vrb_is_xrc_ep(ep))
 			vrb_ep_xrc_close(ep);
 		else
 			rdma_destroy_ep(ep->id);
@@ -511,7 +500,7 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 		/* Make sure EQ channel is not polled during migrate */
 		fastlock_acquire(&ep->eq->lock);
-		if (vrb_is_xrc(ep->info))
+		if (vrb_is_xrc_ep(ep))
 			ret = vrb_ep_xrc_set_tgt_chan(ep);
 		else
 			ret = rdma_migrate_id(ep->id, ep->eq->channel);
@@ -740,7 +729,7 @@ done:
 }
 
 void vrb_msg_ep_get_qp_attr(struct vrb_ep *ep,
-			       struct ibv_qp_init_attr *attr)
+			    struct ibv_qp_init_attr *attr)
 {
 	attr->qp_context = ep;
 
@@ -748,8 +737,8 @@ void vrb_msg_ep_get_qp_attr(struct vrb_ep *ep,
 		struct vrb_cq *cq = container_of(ep->util_ep.tx_cq,
 						    struct vrb_cq, util_cq);
 
-		attr->cap.max_send_wr = ep->info->tx_attr->size;
-		attr->cap.max_send_sge = ep->info->tx_attr->iov_limit;
+		attr->cap.max_send_wr = ep->info_attr.tx_size;
+		attr->cap.max_send_sge = ep->info_attr.tx_iov_limit;
 		attr->send_cq = cq->cq;
 	} else {
 		struct vrb_cq *cq =
@@ -762,8 +751,8 @@ void vrb_msg_ep_get_qp_attr(struct vrb_ep *ep,
 		struct vrb_cq *cq =
 			container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
 
-		attr->cap.max_recv_wr = ep->info->rx_attr->size;
-		attr->cap.max_recv_sge = ep->info->rx_attr->iov_limit;
+		attr->cap.max_recv_wr = ep->info_attr.rx_size;
+		attr->cap.max_recv_sge = ep->info_attr.rx_iov_limit;
 		attr->recv_cq = cq->cq;
 	} else {
 		struct vrb_cq *cq =
@@ -771,7 +760,7 @@ void vrb_msg_ep_get_qp_attr(struct vrb_ep *ep,
 
 		attr->recv_cq = cq->cq;
 	}
-	attr->cap.max_inline_data = ep->info->tx_attr->inject_size;
+	attr->cap.max_inline_data = ep->info_attr.inject_size;
 	attr->qp_type = IBV_QPT_RC;
 	attr->sq_sig_all = 1;
 
@@ -896,30 +885,30 @@ static int vrb_dgram_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 	int ret = FI_SUCCESS;
 
 	ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid.fid);
-	if (addrlen < ep->info->src_addrlen) {
+	if (addrlen < ep->info_attr.src_addrlen) {
 		VERBS_INFO(FI_LOG_EP_CTRL,
 			   "addrlen expected: %zu, got: %zu\n",
-			   ep->info->src_addrlen, addrlen);
+			   ep->info_attr.src_addrlen, addrlen);
 		return -FI_ETOOSMALL;
 	}
 	/*
 	 * save previous address to be able make
 	 * a roll back on the previous one
 	 */
-	save_addr = ep->info->src_addr;
+	save_addr = ep->info_attr.src_addr;
 
-	ep->info->src_addr = calloc(1, ep->info->src_addrlen);
-	if (!ep->info->src_addr) {
-		ep->info->src_addr = save_addr;
+	ep->info_attr.src_addr = calloc(1, ep->info_attr.src_addrlen);
+	if (!ep->info_attr.src_addr) {
+		ep->info_attr.src_addr = save_addr;
 		ret = -FI_ENOMEM;
 		goto err;
 	}
 
-	memcpy(ep->info->src_addr, addr, ep->info->src_addrlen);
-	memcpy(&ep->ep_name, addr, ep->info->src_addrlen);
+	memcpy(ep->info_attr.src_addr, addr, ep->info_attr.src_addrlen);
+	memcpy(&ep->ep_name, addr, ep->info_attr.src_addrlen);
 
 err:
-	ep->info->src_addr = save_addr;
+	ep->info_attr.src_addr = save_addr;
 	return ret;
 }
 
@@ -963,6 +952,39 @@ static struct fi_ops_cm vrb_dgram_cm_ops = {
 	.shutdown = fi_no_shutdown,
 	.join = fi_no_join,
 };
+
+static int vrb_ep_save_info_attr(struct vrb_ep *ep, struct fi_info *info)
+{
+	ep->info_attr.protocol = info->ep_attr ? info->ep_attr->protocol:
+	    FI_PROTO_UNSPEC;
+	ep->info_attr.inject_size = info->tx_attr->inject_size;
+	ep->info_attr.tx_size = info->tx_attr->size;
+	ep->info_attr.tx_iov_limit = info->tx_attr->iov_limit;
+	ep->info_attr.rx_size = info->rx_attr->size;
+	ep->info_attr.rx_iov_limit = info->rx_attr->iov_limit;
+	ep->info_attr.addr_format = info->addr_format;
+	ep->info_attr.handle = info->handle;
+
+	if (info->src_addr) {
+		ep->info_attr.src_addr = mem_dup(info->src_addr, info->src_addrlen);
+		if (ep->info_attr.src_addr == NULL) {
+			VERBS_WARN(FI_LOG_EP_CTRL, "Memory error save src addr\n");
+			return -FI_ENOMEM;
+		}
+		ep->info_attr.src_addrlen = info->src_addrlen;
+	}
+	if (info->dest_addr) {
+		ep->info_attr.dest_addr = mem_dup(info->dest_addr, info->dest_addrlen);
+		if (ep->info_attr.dest_addr == NULL) {
+			VERBS_WARN(FI_LOG_EP_CTRL, "Memory error save dest addr\n");
+			free(ep->info_attr.src_addr);
+			ep->info_attr.src_addr = NULL;
+			return -FI_ENOMEM;
+		}
+		ep->info_attr.dest_addrlen = info->dest_addrlen;
+	}
+	return FI_SUCCESS;
+}
 
 int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 		   struct fid_ep **ep_fid, void *context)
@@ -1021,9 +1043,12 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 		return -FI_ENOMEM;
 	}
 
-	ep->inject_limit = ep->info->tx_attr->inject_size;
 	ep->peer_rq_credits = UINT64_MAX;
 	ep->threshold = INT64_MAX; /* disables RQ flow control */
+
+	ret = vrb_ep_save_info_attr(ep, info);
+	if (ret)
+		goto err1;
 
 	switch (info->ep_attr->type) {
 	case FI_EP_MSG:
@@ -1052,8 +1077,8 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 		if (!info->handle) {
 			/* Only RC, XRC active RDMA CM ID is created at connect */
 			if (!(dom->flags & VRB_USE_XRC)) {
-				ret = vrb_create_ep(info, vrb_get_port_space(info),
-						       &ep->id);
+				ret = vrb_create_ep(ep,
+					vrb_get_port_space(info->addr_format), &ep->id);
 				if (ret)
 					goto err1;
 				ep->id->context = &ep->util_ep.ep_fid.fid;
@@ -1156,20 +1181,20 @@ static int vrb_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	 * it limits an EQ to a single passive endpoint. TODO: implement
 	 * a more general solution.
 	 */
-	if (vrb_is_xrc(pep->info)) {
-	       if (pep->eq->xrc.pep_port) {
+	if (vrb_is_xrc_info(pep->info)) {
+		if (pep->eq->xrc.pep_port) {
 			VERBS_WARN(FI_LOG_EP_CTRL,
 				   "XRC limits EQ binding to a single PEP\n");
 			return -FI_EINVAL;
-	       }
-	       pep->eq->xrc.pep_port = ntohs(rdma_get_src_port(pep->id));
+		}
+		pep->eq->xrc.pep_port = ntohs(rdma_get_src_port(pep->id));
 	}
 
 	ret = rdma_migrate_id(pep->id, pep->eq->channel);
 	if (ret)
 		return -errno;
 
-	if (vrb_is_xrc(pep->info)) {
+	if (vrb_is_xrc_info(pep->info)) {
 		ret = rdma_migrate_id(pep->xrc_ps_udp_id, pep->eq->channel);
 		if (ret)
 			return -errno;
@@ -1259,7 +1284,7 @@ int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	ret = rdma_create_id(NULL, &_pep->id, &_pep->pep_fid.fid,
-	                     vrb_get_port_space(info));
+			     vrb_get_port_space(_pep->info->addr_format));
 	if (ret) {
 		VERBS_INFO(FI_LOG_DOMAIN, "Unable to create PEP rdma_cm_id\n");
 		goto err2;
@@ -1275,7 +1300,7 @@ int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	/* XRC listens on both RDMA_PS_TCP and RDMA_PS_UDP */
-	if (vrb_is_xrc(info)) {
+	if (vrb_is_xrc_info(info)) {
 		ret = rdma_create_id(NULL, &_pep->xrc_ps_udp_id,
 				     &_pep->pep_fid.fid, RDMA_PS_UDP);
 		if (ret) {

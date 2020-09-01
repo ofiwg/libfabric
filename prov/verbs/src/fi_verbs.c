@@ -104,13 +104,15 @@ int vrb_sockaddr_len(struct sockaddr *addr)
 
 static int
 vrb_get_rdmacm_rai(const char *node, const char *service, uint64_t flags,
-		 const struct fi_info *hints, struct rdma_addrinfo **rai)
+		uint32_t addr_format, void *src_addr, size_t src_addrlen,
+		void *dest_addr, size_t dest_addrlen, struct rdma_addrinfo **rai)
 {
 	struct rdma_addrinfo rai_hints, *_rai;
 	struct rdma_addrinfo **cur, *next;
 	int ret;
 
-	ret = vrb_fi_to_rai(hints, flags, &rai_hints);
+	ret = vrb_set_rai(addr_format, src_addr, src_addrlen, dest_addr,
+				       dest_addrlen, flags, &rai_hints);
 	if (ret)
 		goto out;
 
@@ -132,7 +134,7 @@ vrb_get_rdmacm_rai(const char *node, const char *service, uint64_t flags,
 	 * Remove ib_rai entries added by IBACM to
 	 * prevent wrong ib_connect_hdr from being sent in connect request.
 	 */
-	if (hints && (hints->addr_format != FI_SOCKADDR_IB)) {
+	if (addr_format && (addr_format != FI_SOCKADDR_IB)) {
 		for (cur = &_rai; *cur; ) {
 			if ((*cur)->ai_family == AF_IB) {
 				next = (*cur)->ai_next;
@@ -154,8 +156,10 @@ out:
 	return ret;
 }
 
-static int vrb_get_sib_rai(const char *node, const char *service, uint64_t flags,
-		      const struct fi_info *hints, struct rdma_addrinfo **rai)
+static int
+vrb_get_sib_rai(const char *node, const char *service, uint64_t flags,
+		uint32_t addr_format, void *src_addr, size_t src_addrlen,
+		void *dest_addr, size_t dest_addrlen, struct rdma_addrinfo **rai)
 {
 	struct sockaddr_ib *sib;
 	size_t sib_len;
@@ -169,7 +173,8 @@ static int vrb_get_sib_rai(const char *node, const char *service, uint64_t flags
 	if (*rai == NULL)
 		return -FI_ENOMEM;
 
-	ret = vrb_fi_to_rai(hints, flags, *rai);
+	ret = vrb_set_rai(addr_format, src_addr, src_addrlen, dest_addr, 
+						 dest_addrlen, flags, *rai);
 	if (ret)
 		return ret;
 
@@ -184,7 +189,7 @@ static int vrb_get_sib_rai(const char *node, const char *service, uint64_t flags
 
 		if (service) {
 			ret = asprintf(&straddr, "%s%s:%s", has_prefix ? "" : prefix,
-			                                    node, service);
+				       node, service);
 		} else {
 			ret = asprintf(&straddr, "%s%s", has_prefix ? "" : prefix, node);
 		}
@@ -234,15 +239,18 @@ static int vrb_get_sib_rai(const char *node, const char *service, uint64_t flags
 	return 0;
 }
 
-int vrb_get_rdma_rai(const char *node, const char *service, uint64_t flags,
-		 const struct fi_info *hints, struct rdma_addrinfo **rai)
+static int
+vrb_get_rdma_rai(const char *node, const char *service, uint32_t addr_format,
+		void *src_addr, size_t src_addrlen, void *dest_addr,
+		size_t dest_addrlen, uint64_t flags, struct rdma_addrinfo **rai)
 {
-	if (hints && hints->addr_format == FI_SOCKADDR_IB &&
-	    (node || hints->src_addr || hints->dest_addr)) {
-		return vrb_get_sib_rai(node, service, flags, hints, rai);
+	if (addr_format == FI_SOCKADDR_IB && (node || src_addr || dest_addr)) {
+		return vrb_get_sib_rai(node, service, flags, addr_format, src_addr,
+					src_addrlen, dest_addr, dest_addrlen, rai);
 	}
 
-	return vrb_get_rdmacm_rai(node, service, flags, hints, rai);
+	return vrb_get_rdmacm_rai(node, service, flags, addr_format, src_addr,
+					src_addrlen, dest_addr, dest_addrlen, rai);
 }
 
 int vrb_get_rai_id(const char *node, const char *service, uint64_t flags,
@@ -252,11 +260,19 @@ int vrb_get_rai_id(const char *node, const char *service, uint64_t flags,
 	int ret;
 
 	// TODO create a similar function that won't require pruning ib_rai
-	ret = vrb_get_rdma_rai(node, service, flags, hints, rai);
+	if (hints) {
+		ret = vrb_get_rdma_rai(node, service, hints->addr_format, hints->src_addr,
+				       hints->src_addrlen, hints->dest_addr,
+				       hints->dest_addrlen, flags, rai);
+	} else {
+		ret = vrb_get_rdma_rai(node, service, FI_FORMAT_UNSPEC, NULL, 0, NULL,
+				       0, flags, rai);
+	}
 	if (ret)
 		return ret;
 
-	ret = rdma_create_id(NULL, id, NULL, vrb_get_port_space(hints));
+	ret = rdma_create_id(NULL, id, NULL, vrb_get_port_space(hints ? hints->addr_format:
+					FI_FORMAT_UNSPEC));
 	if (ret) {
 		VERBS_INFO_ERRNO(FI_LOG_FABRIC, "rdma_create_id", errno);
 		ret = -errno;
@@ -295,13 +311,16 @@ err1:
 	return ret;
 }
 
-int vrb_create_ep(const struct fi_info *hints, enum rdma_port_space ps,
+int vrb_create_ep(struct vrb_ep *ep, enum rdma_port_space ps,
 		     struct rdma_cm_id **id)
 {
 	struct rdma_addrinfo *rai = NULL;
 	int ret;
 
-	ret = vrb_get_rdma_rai(NULL, NULL, 0, hints, &rai);
+	ret = vrb_get_rdma_rai(NULL, NULL, ep->info_attr.addr_format,
+				ep->info_attr.src_addr, ep->info_attr.src_addrlen,
+				ep->info_attr.dest_addr, ep->info_attr.dest_addrlen,
+				0, &rai);
 	if (ret) {
 		return ret;
 	}
