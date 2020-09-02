@@ -1870,7 +1870,6 @@ static int pp_finalize(struct ct_pingpong *ct)
 	PP_DEBUG("Terminating test\n");
 
 	snprintf(ct->tx_buf, fin_buf_size, fin_buf);
-	((char *)ct->tx_buf)[fin_buf_size - 1] = '\0';
 
 	iov.iov_base = ct->tx_buf;
 	iov.iov_len = fin_buf_size + ct->tx_prefix_size;
