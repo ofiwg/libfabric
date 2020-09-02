@@ -162,7 +162,7 @@ static inline void ofi_fastlock_acquire_noop(fastlock_t *lock)
 	assert(!lock->in_use);
 	lock->in_use = 1;
 #else
-    (void)lock;
+	(void) lock;
 #endif
 }
 static inline void ofi_fastlock_release_noop(fastlock_t *lock)
@@ -171,7 +171,7 @@ static inline void ofi_fastlock_release_noop(fastlock_t *lock)
 	assert(lock->in_use);
 	lock->in_use = 0;
 #else
-    (void)lock;
+	(void) lock;
 #endif
 }
 
