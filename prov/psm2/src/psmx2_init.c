@@ -392,9 +392,9 @@ static int psmx2_update_hfi_info(void)
 		if (psmx2_hfi_info.num_active_units > 1)
 			offset = snprintf(psmx2_hfi_info.default_domain_name,
 				sizeof(psmx2_hfi_info.default_domain_name), ";");
-		snprintf((psmx2_hfi_info.default_domain_name,
+		snprintf(psmx2_hfi_info.default_domain_name,
 			sizeof(psmx2_hfi_info.default_domain_name) - offset,
-			"%s", unit_name));
+			"%s", unit_name);
 
 		if (multirail)
 			break;
