@@ -57,11 +57,9 @@
 
 #include "rdma/bgq/fi_bgq_spi.h"
 
-static inline void node_block_write(char *value, int value_length, char *current_node_block_value, int current_node_block_length,
-                                    int current_block_id, int current_node_block_count, int proc_count) {
-	int offset = strlen(value);
-	snprintf(current_node_block_value, current_node_block_length, ",(%d,%d,%d)", current_block_id, current_node_block_count, proc_count);
-	snprintf(value+offset, value_length-offset, "%s", current_node_block_value);
+static inline void node_block_write(char *value, char *current_node_block_value, int current_block_id, int current_node_block_count, int proc_count) {
+	sprintf(current_node_block_value,",(%d,%d,%d)",current_block_id,current_node_block_count,proc_count);
+	strcat(value,current_node_block_value);
 }
 
 static inline void *
@@ -289,7 +287,7 @@ int PMI_KVS_Get (const char kvsname[], const char key[], char value[], int lengt
 		/* Build the pmi node block list from the bgq node list computed
 		   in the PMI_Init. */
 		char current_node_block_value[BGQ_SINGLE_ENTRY_NODE_BLOCK_MAX_LEN*2];
-		snprintf(value, length, "(vector");
+		strcpy(value,"(vector");
 
 		/* These are the variables holding values written out as a tuple
 		   for a node block. */
@@ -327,8 +325,7 @@ int PMI_KVS_Get (const char kvsname[], const char key[], char value[], int lengt
 					else {
 						/* new node with different proc count than previous - write out the previous
 						   node block and advance to next node. */
-						node_block_write(value, length, current_node_block_value, sizeof(current_node_block_value),
-								current_block_id, current_node_block_count, prev_proc_count);
+						node_block_write(value, current_node_block_value, current_block_id, current_node_block_count, prev_proc_count);
 						prev_proc_count = current_proc_count;
 						current_proc_count = 1;
 						current_block_id += current_node_block_count;
@@ -341,29 +338,24 @@ int PMI_KVS_Get (const char kvsname[], const char key[], char value[], int lengt
 		/* After the bgq node list loop write out last node blocks. */
 		if (current_node_id == bgq_node_list[0]) {
 			/* If only 1 node this is simple. */
-			node_block_write(value, length, current_node_block_value, sizeof(current_node_block_value),
-					current_block_id, 1, current_proc_count);
+			node_block_write(value, current_node_block_value, current_block_id, 1, current_proc_count);
 		}
 		else {
 			if (prev_proc_count == current_proc_count) {
 				/* Loop ended with last two nodes having equal number of procs. */
 				current_node_block_count++;
-				node_block_write(value, length, current_node_block_value, sizeof(current_node_block_value),
-						current_block_id, current_node_block_count, prev_proc_count);
+				node_block_write(value, current_node_block_value, current_block_id, current_node_block_count, prev_proc_count);
 			}
 			else {
 				/* Loop ended with last node having different number of procs than
 				   second-to-last node. */
-				node_block_write(value, length, current_node_block_value, sizeof(current_node_block_value),
-						current_block_id, current_node_block_count, prev_proc_count);
+				node_block_write(value, current_node_block_value, current_block_id, current_node_block_count, prev_proc_count);
 				current_block_id += current_node_block_count;
-				node_block_write(value, length, current_node_block_value, sizeof(current_node_block_value),
-						current_block_id, 1, current_proc_count);
+				node_block_write(value, current_node_block_value, current_block_id, 1, current_proc_count);
 			}
 		}
 		// add closing bracket to value
-		int offset = strlen(value);
-		snprintf(value+offset, length-offset, ")");
+		strcat(value,")");
 		return PMI_SUCCESS;
 	}
 	else

@@ -57,7 +57,7 @@ int fi_bgq_getname(fid_t fid, void *addr, size_t *addrlen)
 	case FI_CLASS_EP:
 		bgq_ep = container_of(fid, struct fi_bgq_ep, ep_fid);
 		addr_str = (char *) addr;
-		snprintf(addr_str, *addrlen, "%u.%u.%u.%u.%u.%u",
+		sprintf(addr_str, "%u.%u.%u.%u.%u.%u",
 			bgq_ep->domain->my_coords.a,
 			bgq_ep->domain->my_coords.b,
 			bgq_ep->domain->my_coords.c,
@@ -68,7 +68,7 @@ int fi_bgq_getname(fid_t fid, void *addr, size_t *addrlen)
 	case FI_CLASS_SEP:
                 bgq_sep = container_of(fid, struct fi_bgq_sep, ep_fid);
                 addr_str = (char *) addr;
-                snprintf(addr_str, *addrlen, "%u.%u.%u.%u.%u.%u",
+                sprintf(addr_str, "%u.%u.%u.%u.%u.%u",
                         bgq_sep->domain->my_coords.a,
                         bgq_sep->domain->my_coords.b,
                         bgq_sep->domain->my_coords.c,
