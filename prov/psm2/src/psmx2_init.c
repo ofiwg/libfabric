@@ -286,6 +286,7 @@ static int psmx2_update_hfi_info(void)
 	char unit_name[8];
 	uint32_t cnt = 0;
 	int tmp_nctxts, tmp_nfreectxts;
+	int offset = 0;
 
 #if HAVE_PSM2_INFO_QUERY
 	int unit_active;
@@ -388,12 +389,12 @@ static int psmx2_update_hfi_info(void)
 		psmx2_hfi_info.active_units[psmx2_hfi_info.num_active_units++] = i;
 
 		snprintf(unit_name, sizeof(unit_name), "hfi1_%hu", i);
-		int offset = 0;
 		if (psmx2_hfi_info.num_active_units > 1)
 			offset = snprintf(psmx2_hfi_info.default_domain_name,
-					sizeof(psmx2_hfi_info.default_domain_name), ";");
-		snprintf((psmx2_hfi_info.default_domain_name, sizeof(psmx2_hfi_info.default_domain_name) - offset,
-			"%s", unit_name);
+				sizeof(psmx2_hfi_info.default_domain_name), ";");
+		snprintf((psmx2_hfi_info.default_domain_name,
+			sizeof(psmx2_hfi_info.default_domain_name) - offset,
+			"%s", unit_name));
 
 		if (multirail)
 			break;
