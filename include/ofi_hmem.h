@@ -53,6 +53,8 @@ const char *ofi_cudaGetErrorString(cudaError_t error);
 CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 				   CUdeviceptr ptr);
 CUresult ofi_cuInit(unsigned int flags);
+cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags);
+cudaError_t ofi_cudaHostUnregister(void *ptr);
 
 #endif /* HAVE_LIBCUDA */
 
@@ -79,18 +81,30 @@ hsa_status_t ofi_hsa_amd_reg_dealloc_cb(void *ptr,
 					hsa_amd_deallocation_callback_t cb,
 					void *user_data);
 
+hsa_status_t ofi_hsa_amd_memory_lock(void *host_ptr, size_t size,
+				     hsa_agent_t *agents, int num_agents,
+				     void **agent_ptr);
+hsa_status_t ofi_hsa_amd_memory_unlock(void *host_ptr);
+
 #endif /* HAVE_ROCR */
 
-int rocr_memcpy(uint64_t device, void *dest, const void *src, size_t size);
+int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
+		       size_t size);
+int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
+		     size_t size);
 int rocr_hmem_init(void);
 int rocr_hmem_cleanup(void);
 bool rocr_is_addr_valid(const void *addr);
+int rocr_host_register(void *ptr, size_t size);
+int rocr_host_unregister(void *ptr);
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
 int cuda_hmem_init(void);
 int cuda_hmem_cleanup(void);
 bool cuda_is_addr_valid(const void *addr);
+int cuda_host_register(void *ptr, size_t size);
+int cuda_host_unregister(void *ptr);
 
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);
 int ze_hmem_init(void);
@@ -132,6 +146,16 @@ static inline int ofi_hmem_no_close_handle(void *ipc_ptr)
 	return -FI_ENOSYS;
 }
 
+static inline int ofi_hmem_register_noop(void *ptr, size_t size)
+{
+	return FI_SUCCESS;
+}
+
+static inline int ofi_hmem_host_unregister_noop(void *ptr)
+{
+	return FI_SUCCESS;
+}
+
 ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,
 			       enum fi_hmem_iface hmem_iface, uint64_t device,
 			       const struct iovec *hmem_iov,
@@ -150,5 +174,7 @@ int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr);
 void ofi_hmem_init(void);
 void ofi_hmem_cleanup(void);
 enum fi_hmem_iface ofi_get_hmem_iface(const void *addr);
+int ofi_hmem_host_register(void *ptr, size_t size);
+int ofi_hmem_host_unregister(void *ptr);
 
 #endif /* _OFI_HMEM_H_ */

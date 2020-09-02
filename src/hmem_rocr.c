@@ -58,6 +58,10 @@ struct rocr_ops {
 	hsa_status_t (*hsa_amd_reg_dealloc_cb)(void *ptr,
 					       hsa_amd_deallocation_callback_t cb,
 					       void *user_data);
+	hsa_status_t (*hsa_amd_memory_lock)(void *host_ptr, size_t size,
+					    hsa_agent_t *agents, int num_agents,
+					    void **agent_ptr);
+	hsa_status_t (*hsa_amd_memory_unlock)(void *host_ptr);
 };
 
 #ifdef ENABLE_ROCR_DLOPEN
@@ -79,9 +83,24 @@ static struct rocr_ops rocr_ops = {
 		hsa_amd_deregister_deallocation_callback,
 	.hsa_amd_reg_dealloc_cb =
 		hsa_amd_register_deallocation_callback,
+	.hsa_amd_memory_lock = hsa_amd_memory_lock,
+	.hsa_amd_memory_unlock = hsa_amd_memory_unlock,
 };
 
 #endif /* ENABLE_ROCR_DLOPEN */
+
+hsa_status_t ofi_hsa_amd_memory_lock(void *host_ptr, size_t size,
+				     hsa_agent_t *agents, int num_agents,
+				     void **agent_ptr)
+{
+	return rocr_ops.hsa_amd_memory_lock(host_ptr, size, agents, num_agents,
+					    agent_ptr);
+}
+
+hsa_status_t ofi_hsa_amd_memory_unlock(void *host_ptr)
+{
+	return rocr_ops.hsa_amd_memory_unlock(host_ptr);
+}
 
 hsa_status_t ofi_hsa_memory_copy(void *dst, const void *src, size_t size)
 {
@@ -138,7 +157,7 @@ hsa_status_t ofi_hsa_amd_reg_dealloc_cb(void *ptr,
 	return rocr_ops.hsa_amd_reg_dealloc_cb(ptr, cb, user_data);
 }
 
-int rocr_memcpy(uint64_t device, void *dest, const void *src, size_t size)
+static int rocr_memcpy(void *dest, const void *src, size_t size)
 {
 	hsa_status_t hsa_ret;
 
@@ -151,6 +170,63 @@ int rocr_memcpy(uint64_t device, void *dest, const void *src, size_t size)
 		ofi_hsa_status_to_string(hsa_ret));
 
 	return -FI_EIO;
+}
+
+static int rocr_host_memory_ptr(void *host_ptr, void **ptr)
+{
+	hsa_amd_pointer_info_t info = {
+		.size = sizeof(info),
+	};
+	hsa_status_t hsa_ret;
+
+	hsa_ret = ofi_hsa_amd_pointer_info((void *)host_ptr, &info, NULL, NULL,
+					   NULL);
+	if (hsa_ret != HSA_STATUS_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to perform hsa_amd_pointer_info: %s\n",
+			ofi_hsa_status_to_string(hsa_ret));
+
+		return -FI_EIO;
+	}
+
+	if (info.type != HSA_EXT_POINTER_TYPE_LOCKED)
+		*ptr = host_ptr;
+	else
+		*ptr = (void *) ((uintptr_t) info.agentBaseAddress +
+				 (uintptr_t) host_ptr -
+				 (uintptr_t) info.hostBaseAddress);
+
+	return FI_SUCCESS;
+}
+
+int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
+		       size_t size)
+{
+	int ret;
+	void *dest_memcpy_ptr;
+
+	ret = rocr_host_memory_ptr(dest, &dest_memcpy_ptr);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	ret = rocr_memcpy(dest_memcpy_ptr, src, size);
+
+	return ret;
+}
+
+int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
+		     size_t size)
+{
+	int ret;
+	void *src_memcpy_ptr;
+
+	ret = rocr_host_memory_ptr((void *) src, &src_memcpy_ptr);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	ret = rocr_memcpy(dest, src_memcpy_ptr, size);
+
+	return ret;
 }
 
 bool rocr_is_addr_valid(const void *addr)
@@ -238,6 +314,22 @@ static int rocr_hmem_dl_init(void)
 		goto err;
 	}
 
+	rocr_ops.hsa_amd_memory_lock = dlsym(rocr_handle,
+					     "hsa_amd_memory_lock");
+	if (!rocr_ops.hsa_amd_memory_lock) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_amd_memory_lock\n");
+		goto err;
+	}
+
+	rocr_ops.hsa_amd_memory_unlock = dlsym(rocr_handle,
+					       "hsa_amd_memory_unlock");
+	if (!rocr_ops.hsa_amd_memory_lock) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_amd_memory_unlock\n");
+		goto err;
+	}
+
 	return FI_SUCCESS;
 
 err:
@@ -308,9 +400,47 @@ int rocr_hmem_cleanup(void)
 	return FI_SUCCESS;
 }
 
+int rocr_host_register(void *ptr, size_t size)
+{
+	hsa_status_t hsa_ret;
+	void *tmp;
+
+	hsa_ret = ofi_hsa_amd_memory_lock(ptr, size, NULL, 0, &tmp);
+	if (hsa_ret == HSA_STATUS_SUCCESS)
+		return FI_SUCCESS;
+
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to perform hsa_amd_memory_lock: %s\n",
+		ofi_hsa_status_to_string(hsa_ret));
+
+	return -FI_EIO;
+}
+
+int rocr_host_unregister(void *ptr)
+{
+	hsa_status_t hsa_ret;
+
+	hsa_ret = ofi_hsa_amd_memory_unlock(ptr);
+	if (hsa_ret == HSA_STATUS_SUCCESS)
+		return FI_SUCCESS;
+
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to perform hsa_amd_memory_unlock: %s\n",
+		ofi_hsa_status_to_string(hsa_ret));
+
+	return -FI_EIO;
+}
+
 #else
 
-int rocr_memcpy(uint64_t device, void *dest, const void *src, size_t size)
+int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
+		       size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
+		     size_t size)
 {
 	return -FI_ENOSYS;
 }
@@ -328,6 +458,16 @@ int rocr_hmem_cleanup(void)
 bool rocr_is_addr_valid(const void *addr)
 {
 	return false;
+}
+
+int rocr_host_register(void *ptr, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int rocr_host_unregister(void *ptr)
+{
+	return -FI_ENOSYS;
 }
 
 #endif /* HAVE_ROCR */
