@@ -57,6 +57,20 @@ AC_DEFUN([FI_VERBS_CONFIGURE],[
 	AC_DEFINE_UNQUOTED([VERBS_HAVE_QUERY_EX],[$VERBS_HAVE_QUERY_EX],
 		[Whether infiniband/verbs.h has ibv_query_device_ex() support or not])
 
+	#See if we can query by GID type
+	VERBS_HAVE_IBV_QUERY_GID_TYPE=0
+	AS_IF([test $verbs_ibverbs_happy -eq 1], [
+		AC_CHECK_LIB([ibverbs], [ibv_query_gid_type],[],[],[])
+		AC_CHECK_FUNCS([ibv_query_gid_type],[],[],
+			[[#include <infiniband/drivers.h>]])
+		AC_CHECK_DECL([ibv_query_gid_type],
+			[VERBS_HAVE_IBV_QUERY_GID_TYPE=1],[],
+			[[#include <infiniband/drivers.h>]])
+		])
+	AC_DEFINE_UNQUOTED([VERBS_HAVE_IBV_QUERY_GID_TYPE],
+		[$VERBS_HAVE_IBV_QUERY_GID_TYPE],
+		[Whether verbs have ibv_query_gid_type() support or not])
+
 	#See if we have XRC support
 	VERBS_HAVE_XRC=0
 	AS_IF([test $verbs_ibverbs_happy -eq 1 && \

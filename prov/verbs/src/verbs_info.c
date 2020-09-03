@@ -41,6 +41,8 @@
 
 
 #define VERBS_IB_PREFIX "IB-0x"
+#define VERBS_ROCEV1_PREFIX "RoCEv1-"
+#define VERBS_ROCEV2_PREFIX "RoCEv2-"
 #define VERBS_IWARP_FABRIC "Ethernet-iWARP"
 
 #define VERBS_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
@@ -729,10 +731,11 @@ static int vrb_have_device(void)
 }
 
 static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
-			     const struct verbs_ep_domain *ep_dom)
+			  const struct verbs_ep_domain *ep_dom)
 {
 	struct fi_info *fi;
 	union ibv_gid gid;
+	enum ibv_gid_type gid_type;
 	size_t name_len;
 	const char *dev_name = ibv_get_device_name(ctx->device);
 	int ret;
@@ -798,14 +801,46 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 			goto err;
 		}
 
-		name_len = strlen(VERBS_IB_PREFIX) + INET6_ADDRSTRLEN;
-		if (!(fi->fabric_attr->name = calloc(1, name_len + 1))) {
-			ret = -FI_ENOMEM;
+		if (ibv_query_gid_type(ctx, 1, vrb_gl_data.gid_idx, &gid_type)) {
+			VERBS_INFO_ERRNO(FI_LOG_FABRIC,
+					 "ibv_query_gid_type", errno);
+			ret = -errno;
 			goto err;
 		}
+		switch (gid_type) {
+		case IBV_GID_TYPE_IB:
+			name_len = strlen(VERBS_IB_PREFIX) + INET6_ADDRSTRLEN;
+			if (!(fi->fabric_attr->name = calloc(1, name_len + 1))) {
+				ret = -FI_ENOMEM;
+				goto err;
+			}
 
-		snprintf(fi->fabric_attr->name, name_len, VERBS_IB_PREFIX "%" PRIx64,
-			 be64toh(gid.global.subnet_prefix));
+			snprintf(fi->fabric_attr->name, name_len, VERBS_IB_PREFIX "%" PRIx64,
+				 be64toh(gid.global.subnet_prefix));
+			break;
+		case IBV_GID_TYPE_ROCE_V1:
+			name_len = strlen(VERBS_ROCEV1_PREFIX) + INET6_ADDRSTRLEN;
+			if (!(fi->fabric_attr->name = calloc(1, name_len + 1))) {
+				ret = -FI_ENOMEM;
+				goto err;
+			}
+
+			snprintf(fi->fabric_attr->name, name_len,
+				 VERBS_ROCEV1_PREFIX "%" PRIx64,
+				 be64toh(gid.global.subnet_prefix));
+			break;
+		case IBV_GID_TYPE_ROCE_V2:
+			name_len = strlen(VERBS_ROCEV2_PREFIX) + INET6_ADDRSTRLEN;
+			if (!(fi->fabric_attr->name = calloc(1, name_len + 1))) {
+				ret = -FI_ENOMEM;
+				goto err;
+			}
+
+			snprintf(fi->fabric_attr->name, name_len,
+				 VERBS_ROCEV2_PREFIX "%" PRIx64,
+				 be64toh(gid.global.subnet_prefix));
+		}
+		break;
 
 		switch (ep_dom->type) {
 		case FI_EP_MSG:
@@ -1813,3 +1848,4 @@ out:
 	else
 		return -FI_ENODATA;
 }
+

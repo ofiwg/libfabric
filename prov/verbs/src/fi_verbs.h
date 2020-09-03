@@ -484,6 +484,18 @@ int vrb_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 int vrb_domain_xrc_init(struct vrb_domain *domain);
 int vrb_domain_xrc_cleanup(struct vrb_domain *domain);
 
+#if !VERBS_HAVE_IBV_QUERY_GID_TYPE
+enum ibv_gid_type {
+	IBV_GID_TYPE_IB,
+	IBV_GID_TYPE_ROCE_V1,
+	IBV_GID_TYPE_ROCE_V2,
+};
+
+	extern int *ibv_query_gid_type(struct ibv_context *context,
+					uint8_t port_num, unsigned int index,
+					enum ibv_gid_type *gid_type);
+#endif
+
 enum vrb_ini_qp_state {
 	VRB_INI_QP_UNCONNECTED,
 	VRB_INI_QP_CONNECTING,
