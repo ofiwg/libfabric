@@ -280,6 +280,8 @@ struct rxm_domain {
 	uint64_t mr_key;
 	uint8_t mr_local;
 	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
+	struct ofi_bufpool *amo_bufpool;
+	fastlock_t amo_bufpool_lock;
 };
 
 int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,

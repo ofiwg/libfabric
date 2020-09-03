@@ -125,6 +125,8 @@ static int rxm_domain_close(fid_t fid)
 
 	rxm_domain = container_of(fid, struct rxm_domain, util_domain.domain_fid.fid);
 
+	ofi_bufpool_destroy(rxm_domain->amo_bufpool);
+
 	ret = fi_close(&rxm_domain->msg_domain->fid);
 	if (ret)
 		return ret;
@@ -492,6 +494,13 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	rxm_domain->mr_local = ofi_mr_local(msg_info) && !ofi_mr_local(info);
 
+	ret = ofi_bufpool_create(&rxm_domain->amo_bufpool,
+				 rxm_domain->max_atomic_size, 64, 0, 0, 0);
+	if (ret)
+		goto err3;
+
+	fastlock_init(&rxm_domain->amo_bufpool_lock);
+
 	ret = fi_open_ops(&rxm_domain->msg_domain->fid, OFI_OPS_FLOW_CTRL, 0,
 			  (void **) &flow_ctrl_ops, NULL);
 	if (!ret && flow_ctrl_ops) {
@@ -501,11 +510,13 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	} else if (ret == -FI_ENOSYS) {
 		rxm_domain->flow_ctrl_ops = &rxm_no_ops_flow_ctrl;
 	} else {
-		goto err3;
+		goto err4;
 	}
 
 	fi_freeinfo(msg_info);
 	return 0;
+err4:
+	ofi_bufpool_destroy(rxm_domain->amo_bufpool);
 err3:
 	fi_close(&rxm_domain->msg_domain->fid);
 err2:

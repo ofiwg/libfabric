@@ -1218,6 +1218,7 @@ static int rxm_do_device_mem_atomic(struct rxm_mr *dev_mr, uint8_t op,
 				    enum fi_datatype datatype,
 				    enum fi_op amo_op, size_t amo_op_size)
 {
+	struct rxm_domain *dom = dev_mr->domain;
 	void *bounce_buf;
 	ssize_t ret __attribute__((unused));
 	struct iovec iov = {
@@ -1225,7 +1226,10 @@ static int rxm_do_device_mem_atomic(struct rxm_mr *dev_mr, uint8_t op,
 		.iov_len = amo_op_size,
 	};
 
-	bounce_buf = malloc(amo_op_size);
+	fastlock_acquire(&dom->amo_bufpool_lock);
+	bounce_buf = ofi_buf_alloc(dom->amo_bufpool);
+	fastlock_release(&dom->amo_bufpool_lock);
+
 	if (!bounce_buf)
 		return -FI_ENOMEM;
 
@@ -1243,7 +1247,9 @@ static int rxm_do_device_mem_atomic(struct rxm_mr *dev_mr, uint8_t op,
 
 	fastlock_release(&dev_mr->amo_lock);
 
-	free(bounce_buf);
+	fastlock_acquire(&dom->amo_bufpool_lock);
+	ofi_buf_free(bounce_buf);
+	fastlock_release(&dom->amo_bufpool_lock);
 
 	return FI_SUCCESS;
 }
