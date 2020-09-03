@@ -1013,6 +1013,7 @@ static int
 cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_rxc *rxc = req->oflow.rxc;
+	struct cxip_oflow_buf *oflow_buf = req->oflow.oflow_buf;
 	struct cxip_deferred_event *def_ev;
 	int ret;
 
@@ -1024,6 +1025,11 @@ cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
 
 	/* Handle Put events */
 	fastlock_acquire(&rxc->rx_lock);
+
+	if (event->tgt_long.auto_unlinked)
+		oflow_buf->hw_consumed = event->tgt_long.start -
+			CXI_VA_TO_IOVA(oflow_buf->md->md, oflow_buf->buf)
+			+ event->tgt_long.mlength;
 
 	/* Check for a previously received Put Overflow event */
 	def_ev = match_put_event(rxc, event);
@@ -1146,10 +1152,16 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		ofi_atomic_dec32(&rxc->oflow_bufs_submitted);
 		ofi_atomic_dec32(&rxc->oflow_bufs_linked);
 
-		/* Record the number of bytes consumed by HW */
-		oflow_buf->hw_consumed = event->tgt_long.start -
-			      CXI_VA_TO_IOVA(oflow_buf->md->md,
-					     oflow_buf->buf);
+		/* Set hardware consumed if the overflow buffer has been
+		 * manually unlinked or if the overflow buffer hardware consumed
+		 * is zero. For the latter, if the buffer is automatically
+		 * unlinked, the corresponding put event will always update the
+		 * hardware consumed again.
+		 */
+		if (!event->tgt_long.auto_unlinked || !oflow_buf->hw_consumed)
+			oflow_buf->hw_consumed = event->tgt_long.start -
+				CXI_VA_TO_IOVA(oflow_buf->md->md,
+					       oflow_buf->buf);
 
 		/* Check if SW has consumed a matching count of bytes. */
 		oflow_req_put_bytes(req, 0);
@@ -1170,6 +1182,11 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 			       event->hdr.event_type);
 		abort();
 	}
+
+	if (event->tgt_long.auto_unlinked)
+		oflow_buf->hw_consumed = event->tgt_long.start -
+			CXI_VA_TO_IOVA(oflow_buf->md->md, oflow_buf->buf)
+			+ event->tgt_long.mlength;
 
 	/* Drop all unexpected 0-byte Put events. */
 	if (!event->tgt_long.rlength) {
