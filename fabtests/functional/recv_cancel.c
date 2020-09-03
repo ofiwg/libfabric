@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2013-2020 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -47,7 +47,8 @@ static int recv_cancel_client(void)
 		return ret;
 
 	ft_tag = CANCEL_TAG;
-	ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, NO_CQ_DATA, &tx_ctx);
+	ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, NO_CQ_DATA,
+			 &tx_ctx);
 	if (ret)
 		return ret;
 
@@ -55,7 +56,8 @@ static int recv_cancel_client(void)
 		fprintf(stdout, "CANCEL msg posted to server\n");
 
 	ft_tag = STANDARD_TAG;
-	ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, NO_CQ_DATA, &tx_ctx);
+	ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, NO_CQ_DATA,
+			 &tx_ctx);
 	if (ret)
 		return ret;
 
@@ -110,16 +112,18 @@ static int recv_cancel_host(void)
 		usleep(1000);
 	} while ((ret == -FI_EAGAIN) && (retries < 5000));
 	if (retries >= 5000) {
-		FT_PRINTERR("ERROR: failed to detect error CQ entry in cq_read", -FI_EOTHER);
+		FT_PRINTERR("ERROR: no error CQ entry in cq_read deteceted",
+			    -FI_EOTHER);
 		return -FI_EOTHER;
 	} else {
 		if (opts.verbose)
-			fprintf(stdout, "GOOD: detected error cq entry in cq_read\n");
+			fprintf(stdout, "GOOD: detected error cq entry\n");
 	}
 
 	/* Verify the error CQ has been populated */
 	if (fi_cq_readerr(rxcq, &cancel_error_entry, 0) != 1) {
-		FT_PRINTERR("ERROR: No cancel CQ error entry was populated", -FI_EOTHER);
+		FT_PRINTERR("ERROR: No cancel CQ error entry was populated",
+			    -FI_EOTHER);
 		return -FI_EOTHER;
 	}
 
@@ -129,7 +133,8 @@ static int recv_cancel_host(void)
 	}
 
 	if (!(cancel_error_entry.flags & FI_RECV)) {
-		FT_PRINTERR("ERROR: cancelled completion flags is incorrect", -FI_EOTHER);
+		FT_PRINTERR("ERROR: cancelled completion flags are incorrect",
+			    -FI_EOTHER);
 		return -FI_EOTHER;
 	}
 
@@ -138,19 +143,21 @@ static int recv_cancel_host(void)
 
 	/* Verify only one CQ err entry can be read */
 	if (fi_cq_readerr(rxcq, &cancel_error_entry, 0) != -FI_EAGAIN) {
-		FT_PRINTERR("ERROR: Another CQ error entry was populated", -FI_EOTHER);
+		FT_PRINTERR("ERROR: Another CQ error entry was populated",
+			    -FI_EOTHER);
 		return -FI_EOTHER;
 	}
 
 	if (opts.verbose)
-		fprintf(stdout, "GOOD: no additional error entries have been detected\n");
+		fprintf(stdout, "GOOD: no extra error entries detected\n");
 
 	/* Check for second recv completion*/
 	do {
 		ret = fi_cq_read(rxcq, &recv_completion, 1);
 		if (ret > 0) {
 			if (recv_completion.op_context != &standard_recv_ctx) {
-				FT_PRINTERR("ERROR: op_context does not match recv ctx", -FI_EOTHER);
+				FT_PRINTERR("ERROR: op_context does not match",
+					    -FI_EOTHER);
 				return -FI_EOTHER;
 			}
 		} else if ((ret <= 0) && (ret != -FI_EAGAIN)) {
@@ -160,6 +167,28 @@ static int recv_cancel_host(void)
 
 	if (opts.verbose)
 		fprintf(stdout, "GOOD: Completed uncancelled recv\n");
+
+	/* Repost cancelled recv and get completion */
+	ft_tag = CANCEL_TAG;
+	ret = ft_post_rx(ep, opts.transfer_size, &cancel_recv_ctx);
+	if (ret)
+		return ret;
+
+	do {
+		ret = fi_cq_read(rxcq, &recv_completion, 1);
+		if (ret > 0) {
+			if (recv_completion.op_context != &cancel_recv_ctx) {
+				FT_PRINTERR("ERROR: op_context does not match",
+					    -FI_EOTHER);
+				return -FI_EOTHER;
+			}
+		} else if ((ret <= 0) && (ret != -FI_EAGAIN)) {
+			FT_PRINTERR("fi_cq_read", ret);
+		}
+	} while (ret == -FI_EAGAIN);
+
+	if (opts.verbose)
+		fprintf(stdout, "GOOD: Completed reposted cancelled recv\n");
 
 	fprintf(stdout, "GOOD: Completed Recv Cancel Test\n");
 
