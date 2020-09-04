@@ -94,13 +94,14 @@ char *ofi_strdup_append(const char *head, const char *tail)
 int ofi_exclude_prov_name(char **prov_name_list, const char *util_prov_name)
 {
 	char *exclude, *name, *temp;
+	int length;
 
-	exclude = malloc(strlen(util_prov_name) + 2);
+	length = strlen(util_prov_name) + 2;
+	exclude = malloc(length);
 	if (!exclude)
 		return -FI_ENOMEM;
 
-	exclude[0] = '^';
-	strcpy(&exclude[1], util_prov_name);
+	snprintf(exclude, length, "^%s", util_prov_name);
 
 	if (!*prov_name_list)
 		goto out;
