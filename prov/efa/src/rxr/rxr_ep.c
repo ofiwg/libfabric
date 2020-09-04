@@ -51,7 +51,7 @@ struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep)
 	return (struct efa_ep_addr *)ep->core_addr;
 }
 
-char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen)
+const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen)
 {
 	return ofi_straddr(buf, buflen, FI_ADDR_EFA, rxr_ep_raw_addr(ep));
 }
@@ -69,7 +69,7 @@ struct efa_ep_addr *rxr_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
 	return &efa_conn->ep_addr;
 }
 
-char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen)
+const char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen)
 {
 	return ofi_straddr(buf, buflen, FI_ADDR_EFA, rxr_peer_raw_addr(ep, addr));
 }

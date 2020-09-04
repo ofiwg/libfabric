@@ -717,11 +717,11 @@ static inline void rxr_ep_peer_init_tx(struct rxr_peer *peer)
 
 struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep);
 
-char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen);
+const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen);
 
 struct efa_ep_addr *rxr_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr);
 
-char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen);
+const char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen);
 
 struct rxr_rx_entry *rxr_ep_get_rx_entry(struct rxr_ep *ep,
 					 const struct fi_msg *msg,
