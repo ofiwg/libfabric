@@ -179,16 +179,58 @@ static struct fi_ops_ep smr_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-int smr_verify_peer(struct smr_ep *ep, int peer_id)
+static void smr_send_name(struct smr_ep *ep, fi_addr_t id)
 {
+	struct smr_region *peer_smr;
+	struct smr_cmd *cmd;
+	struct smr_inject_buf *tx_buf;
+
+	peer_smr = smr_peer_region(ep->region, id);
+
+	fastlock_acquire(&peer_smr->lock);
+
+	if (smr_peer_data(ep->region)[id].name_sent || !peer_smr->cmd_cnt)
+		goto out;
+
+	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
+
+	cmd->msg.hdr.op = SMR_OP_MAX + ofi_ctrl_connreq;
+	cmd->msg.hdr.addr = id;
+
+	tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
+	cmd->msg.hdr.src_data = smr_get_offset(peer_smr, tx_buf);
+
+	cmd->msg.hdr.size = strlen(smr_name(ep->region)) + 1;
+	memcpy(tx_buf->data, smr_name(ep->region), cmd->msg.hdr.size);
+
+	smr_peer_data(ep->region)[id].name_sent = 1;
+	ofi_cirque_commit(smr_cmd_queue(peer_smr));
+
+out:
+	fastlock_release(&peer_smr->lock);
+}
+
+fi_addr_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
+{
+	fi_addr_t id;
 	int ret;
 
-	if (ep->region->map->peers[peer_id].peer.addr != FI_ADDR_UNSPEC)
-		return 0;
+	id = *((fi_addr_t *) ofi_av_get_addr(ep->util_ep.av, fi_addr));
+	assert(id < SMR_MAX_PEERS);
 
-	ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[peer_id]);
+	if (smr_peer_data(ep->region)[id].addr.addr != FI_ADDR_UNSPEC)
+		return id;
 
-	return (ret == -ENOENT) ? -FI_EAGAIN : ret;
+	if (ep->region->map->peers[id].peer.addr == FI_ADDR_UNSPEC) {
+		ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[id]);
+		if (ret == -ENOENT)
+			return FI_ADDR_UNSPEC;
+
+	}
+
+	smr_send_name(ep, id);
+
+	return FI_ADDR_UNSPEC;
 }
 
 static int smr_match_msg(struct dlist_entry *item, const void *args)

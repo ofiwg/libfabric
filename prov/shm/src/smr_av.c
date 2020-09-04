@@ -63,7 +63,7 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	struct smr_ep *smr_ep;
 	struct dlist_entry *av_entry;
 	const char *ep_name;
-	fi_addr_t index;
+	fi_addr_t index, shm_addr = FI_ADDR_UNSPEC;
 	int i, ret;
 	int succ_count = 0;
 
@@ -73,7 +73,11 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	for (i = 0; i < count; i++, addr = (char *) addr + strlen(addr) + 1) {
 		if (smr_av->used < SMR_MAX_PEERS) {
 			ep_name = smr_no_prefix(addr);
-			ret = ofi_av_insert_addr(util_av, ep_name, &index);
+			ret = smr_map_add(&smr_prov, smr_av->smr_map,
+					  ep_name, &shm_addr);
+			if (!ret)
+				ret = ofi_av_insert_addr(util_av, &shm_addr,
+							 &index);
 		} else {
 			FI_WARN(&smr_prov, FI_LOG_AV,
 				"AV insert failed. The maximum number of AV "
@@ -88,17 +92,12 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		if (ret) {
 			if (util_av->eq)
 				ofi_av_write_event(util_av, i, -ret, context);
+			if (shm_addr != FI_ADDR_UNSPEC)
+				smr_map_del(smr_av->smr_map, shm_addr);
 			continue;
 		} else {
-			ret = smr_map_add(&smr_prov, smr_av->smr_map,
-					  ep_name, index);
-			if (ret) {
-				if (util_av->eq)
-					ofi_av_write_event(util_av, i, -ret, context);
-			} else {
-				succ_count++;
-				smr_av->used++;
-			}
+			succ_count++;
+			smr_av->used++;
 		}
 
 		dlist_foreach(&util_av->ep_list, av_entry) {
@@ -223,7 +222,7 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (!smr_av)
 		return -FI_ENOMEM;
 
-	util_attr.addrlen = SMR_NAME_MAX;
+	util_attr.addrlen = sizeof(fi_addr_t);
 	util_attr.context_len = 0;
 	util_attr.flags = 0;
 	if (attr->count > SMR_MAX_PEERS) {
