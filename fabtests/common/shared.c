@@ -686,7 +686,7 @@ static int ft_init(void)
 	//If using device memory for transfers, require OOB address
 	//exchange because extra steps are involved when passing
 	//device buffers into fi_av_insert
-	if (opts.options & FT_OPT_USE_DEVICE)
+	if (opts.options & FT_OPT_ENABLE_HMEM)
 		opts.options |= FT_OPT_OOB_ADDR_EXCH;
 
 	return ft_hmem_init(opts.iface);
