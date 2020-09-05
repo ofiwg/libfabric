@@ -827,18 +827,19 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 					struct rxr_rx_entry *rx_entry,
 					struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_pkt_entry *cur;
+	struct rxr_pkt_entry *cur, *nxt;
 	struct efa_mr *desc;
 	char *data;
 	size_t offset, hdr_size, data_size;
 
 	cur = pkt_entry;
 	while (cur) {
-		hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+		hdr_size = rxr_pkt_req_hdr_size(cur);
 		data = (char *)cur->pkt + hdr_size;
 		offset = rxr_get_medium_rtm_base_hdr(cur->pkt)->offset;
 		data_size = cur->pkt_size - hdr_size;
 		desc = rx_entry->desc[0];
+
 		ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
 				     desc ? desc->peer.device.reserved : 0,
 				     rx_entry->iov,
@@ -847,22 +848,25 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 				     data,
 				     data_size);
 		rx_entry->bytes_done += data_size;
-		cur = cur->next;
+
+		nxt = cur->next;
+		cur->next = NULL;
+		if (rx_entry->total_len == rx_entry->bytes_done) {
+			rxr_pkt_rx_map_remove(ep, cur, rx_entry);
+			/*
+			 * rxr_cq_handle_rx_completion() releases pkt_entry, thus
+			 * we do not release it here.
+			 */
+			rxr_cq_handle_rx_completion(ep, cur, rx_entry);
+			rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
+			rxr_release_rx_entry(ep, rx_entry);
+		} else {
+			rxr_pkt_entry_release_rx(ep, cur);
+		}
+
+		cur = nxt;
 	}
 
-	if (rx_entry->total_len == rx_entry->bytes_done) {
-		rxr_pkt_rx_map_remove(ep, pkt_entry, rx_entry);
-		/*
-		 * rxr_cq_handle_rx_completion() releases pkt_entry, thus
-		 * we do not release it here.
-		 */
-		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
-		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
-		rxr_release_rx_entry(ep, rx_entry);
-		return 0;
-	}
-
-	rxr_pkt_entry_release_rx(ep, pkt_entry);
 	return 0;
 }
 

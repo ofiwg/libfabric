@@ -154,10 +154,24 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 	}
 }
 
-static
-void rxr_pkt_entry_release_single_rx(struct rxr_ep *ep,
-				     struct rxr_pkt_entry *pkt_entry)
+/*
+ * rxr_pkt_entry_release_rx() release a rx packet entry.
+ * It requires input pkt_entry to be unlinked.
+ *
+ * RX packet entry can be linked when medium message protocol
+ * is used.
+ *
+ * In that case, caller is responsible to unlink the pkt_entry
+ * can call this function on next packet entry.
+ */
+void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry)
 {
+	assert(pkt_entry->next == NULL);
+
+	if (ep->use_zcpy_rx && pkt_entry->type == RXR_PKT_ENTRY_USER)
+		return;
+
 	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED) {
 		struct rxr_peer *peer;
 
@@ -179,38 +193,30 @@ void rxr_pkt_entry_release_single_rx(struct rxr_ep *ep,
 	ofi_buf_free(pkt_entry);
 }
 
-void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
-			      struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_pkt_entry *next;
-
-	if (ep->use_zcpy_rx && pkt_entry->type == RXR_PKT_ENTRY_USER)
-		return;
-
-	while (pkt_entry) {
-		next = pkt_entry->next;
-		rxr_pkt_entry_release_single_rx(ep, pkt_entry);
-		pkt_entry = next;
-	}
-}
-
-static
 void rxr_pkt_entry_copy(struct rxr_ep *ep,
 			struct rxr_pkt_entry *dest,
 			struct rxr_pkt_entry *src,
 			int new_entry_type)
 {
 	FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
-	       "Copying packet out of posted buffer\n");
+	       "Copying packet out of posted buffer! new_entry_type: %d\n",
+		new_entry_type);
 	assert(src->type == RXR_PKT_ENTRY_POSTED);
-	memcpy(dest, src, sizeof(struct rxr_pkt_entry));
-	memcpy(dest->pkt, src->pkt, ep->mtu_size);
 	dlist_init(&dest->entry);
 #if ENABLE_DEBUG
 	dlist_init(&dest->dbg_entry);
 #endif
-	dest->state = RXR_PKT_ENTRY_IN_USE;
+	/* dest->mr was set in rxr_pkt_entry_alloc(), and
+	 * is tied to the memory region, therefore should
+	 * not be changed.
+	 */
+	dest->x_entry = src->x_entry;
+	dest->pkt_size = src->pkt_size;
+	dest->addr = src->addr;
 	dest->type = new_entry_type;
+	dest->state = RXR_PKT_ENTRY_IN_USE;
+	dest->next = NULL;
+	memcpy(dest->pkt, src->pkt, ep->mtu_size);
 }
 
 /*
