@@ -834,7 +834,7 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 
 	cur = pkt_entry;
 	while (cur) {
-		hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+		hdr_size = rxr_pkt_req_hdr_size(cur);
 		data = (char *)cur->pkt + hdr_size;
 		offset = rxr_get_medium_rtm_base_hdr(cur->pkt)->offset;
 		data_size = cur->pkt_size - hdr_size;
