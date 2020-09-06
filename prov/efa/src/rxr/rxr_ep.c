@@ -1137,13 +1137,14 @@ static void rxr_buf_region_free_hndlr(struct ofi_bufpool_region *region)
 }
 
 static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
-			       size_t chunk_count,
+			       size_t max_count, size_t chunk_count,
+			       uint64_t flags,
 			       struct ofi_bufpool **buf_pool)
 {
 	struct ofi_bufpool_attr attr = {
 		.size		= size,
 		.alignment	= RXR_BUF_POOL_ALIGNMENT,
-		.max_cnt	= chunk_count,
+		.max_cnt	= max_count,
 		.chunk_cnt	= chunk_count,
 		.alloc_fn	= rxr_ep_mr_local(ep) ?
 					rxr_buf_region_alloc_hndlr : NULL,
@@ -1151,7 +1152,7 @@ static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
 					rxr_buf_region_free_hndlr : NULL,
 		.init_fn	= NULL,
 		.context	= rxr_ep_domain(ep),
-		.flags		= OFI_BUFPOOL_HUGEPAGES,
+		.flags		= flags,
 	};
 
 	return ofi_bufpool_create_attr(&attr, buf_pool);
@@ -1168,29 +1169,34 @@ int rxr_ep_init(struct rxr_ep *ep)
 	ep->rx_pkt_pool_entry_sz = entry_sz;
 #endif
 
-	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_tx_pool_chunk_cnt(ep),
+	ret = rxr_create_pkt_pool(ep, entry_sz,
+				  rxr_get_tx_pool_chunk_cnt(ep),
+				  rxr_get_tx_pool_chunk_cnt(ep),
+				  OFI_BUFPOOL_HUGEPAGES,
 				  &ep->tx_pkt_efa_pool);
 	if (ret)
 		goto err_out;
 
-	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_rx_pool_chunk_cnt(ep),
+	ret = rxr_create_pkt_pool(ep, entry_sz,
+				  rxr_get_rx_pool_chunk_cnt(ep),
+				  rxr_get_rx_pool_chunk_cnt(ep),
+				  OFI_BUFPOOL_HUGEPAGES,
 				  &ep->rx_pkt_efa_pool);
 	if (ret)
 		goto err_free_tx_pool;
 
 	if (rxr_env.rx_copy_unexp) {
-		ret = ofi_bufpool_create(&ep->rx_unexp_pkt_pool, entry_sz,
-					 RXR_BUF_POOL_ALIGNMENT, 0,
-					 rxr_get_rx_pool_chunk_cnt(ep), 0);
-
+		ret = rxr_create_pkt_pool(ep, entry_sz,
+					  0, rxr_get_rx_pool_chunk_cnt(ep),
+					  0, &ep->rx_unexp_pkt_pool);
 		if (ret)
 			goto err_free_rx_pool;
 	}
 
 	if (rxr_env.rx_copy_ooo) {
-		ret = ofi_bufpool_create(&ep->rx_ooo_pkt_pool, entry_sz,
-					 RXR_BUF_POOL_ALIGNMENT, 0,
-					 rxr_env.recvwin_size, 0);
+		ret = rxr_create_pkt_pool(ep, entry_sz,
+					  0, rxr_env.recvwin_size,
+					  0, &ep->rx_ooo_pkt_pool);
 
 		if (ret)
 			goto err_free_rx_unexp_pool;
