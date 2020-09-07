@@ -1179,16 +1179,18 @@ int rxr_ep_init(struct rxr_ep *ep)
 		goto err_free_tx_pool;
 
 	if (rxr_env.rx_copy_unexp) {
-		ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_rx_pool_chunk_cnt(ep),
-					  &ep->rx_unexp_pkt_pool);
+		ret = ofi_bufpool_create(&ep->rx_unexp_pkt_pool, entry_sz,
+					 RXR_BUF_POOL_ALIGNMENT, 0,
+					 rxr_get_rx_pool_chunk_cnt(ep), 0);
 
 		if (ret)
 			goto err_free_rx_pool;
 	}
 
 	if (rxr_env.rx_copy_ooo) {
-		ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_rx_pool_chunk_cnt(ep),
-					  &ep->rx_ooo_pkt_pool);
+		ret = ofi_bufpool_create(&ep->rx_ooo_pkt_pool, entry_sz,
+					 RXR_BUF_POOL_ALIGNMENT, 0,
+					 rxr_env.recvwin_size, 0);
 
 		if (ret)
 			goto err_free_rx_unexp_pool;
