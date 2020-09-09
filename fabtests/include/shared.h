@@ -229,8 +229,8 @@ void ft_usage(char *name, char *desc);
 void ft_mcusage(char *name, char *desc);
 void ft_csusage(char *name, char *desc);
 
-void ft_fill_buf(void *buf, int size);
-int ft_check_buf(void *buf, int size);
+void ft_fill_buf(void *buf, size_t size);
+int ft_check_buf(void *buf, size_t size);
 int ft_check_opts(uint64_t flags);
 uint64_t ft_init_cq_data(struct fi_info *info);
 int ft_sock_listen(char *node, char *service);
