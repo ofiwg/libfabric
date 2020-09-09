@@ -1632,5 +1632,11 @@ static inline uint32_t cxip_mac_to_nic(struct ether_addr *mac)
 #define _CXIP_LOG_DBG(subsys, ...) FI_DBG(&cxip_prov, subsys, __VA_ARGS__)
 #define _CXIP_LOG_ERROR(subsys, ...) FI_WARN(&cxip_prov, subsys, __VA_ARGS__)
 #define _CXIP_LOG_INFO(subsys, ...) FI_INFO(&cxip_prov, subsys, __VA_ARGS__)
+#define CXIP_LOG_FATAL(...)					\
+	do {							\
+		fi_log(&cxip_prov, FI_LOG_WARN, FI_LOG_CORE,	\
+		       __func__, __LINE__, __VA_ARGS__);	\
+		abort();					\
+	} while (0)
 
 #endif

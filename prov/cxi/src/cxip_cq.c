@@ -475,10 +475,8 @@ void cxip_cq_progress(struct cxip_cq *cq)
 	if (events)
 		cxi_eq_ack_events(cq->evtq);
 
-	if (cxi_eq_get_drops(cq->evtq)) {
-		CXIP_LOG_ERROR("EQ drops detected\n");
-		abort();
-	}
+	if (cxi_eq_get_drops(cq->evtq))
+		CXIP_LOG_FATAL("Cassini Event Queue overflow detected.\n");
 
 out:
 	fastlock_release(&cq->lock);
