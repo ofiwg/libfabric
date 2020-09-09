@@ -345,7 +345,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		goto free_txq;
 	}
 
-	ep_obj->ctrl_evtq_buf_len = C_PAGE_SIZE;
+	ep_obj->ctrl_evtq_buf_len = 4 * C_PAGE_SIZE;
 	ep_obj->ctrl_evtq_buf = aligned_alloc(C_PAGE_SIZE,
 					      ep_obj->ctrl_evtq_buf_len);
 	if (!ep_obj->ctrl_evtq_buf) {
