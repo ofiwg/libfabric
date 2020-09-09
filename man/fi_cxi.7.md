@@ -374,7 +374,15 @@ Theoretically, Cassini has resources to support 64k standard MRs or 2k optimized
 MRs. Practically, the limits are much lower and depend greatly on application
 behavior.
 
-TODO provide method to validate the use of low overhead packets.
+Hardware counters can be used to validate the use of the low overhead packets.
+The counter C_CNTR_IXE_RX_PTL_RESTRICTED_PKT counts the number of low overhead
+packets received at the target NIC. Counter C_CNTR_IXE_RX_PTL_UNRESTRICTED_PKT
+counts the number of ordered RDMA packets received at the target NIC.
+
+Message rate performance may be further optimized by avoiding target counting
+events. To avoid counting events, do not bind a counter to the MR. To validate
+optimal writes without target counting events, monitor the counter:
+C_CNTR_LPE_PLEC_HITS.
 
 ## Counters
 
@@ -433,6 +441,36 @@ Valid values are idle, always, and never.
 
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
+
+# CXI EXTENSIONS
+
+The CXI provider supports various fabric-specific extensions. Extensions are
+accessed using the fi_open_ops function. Currently, extensions are only
+supported for CXI domains.
+
+CXI domain extensions have been named *FI_CXI_DOM_OPS_1*. The flags parameter
+is ignored. The fi_open_ops function takes a `struct fi_cxi_dom_ops`. See an
+example of usage below:
+
+```c
+struct fi_cxi_dom_ops *dom_ops;
+
+ret = fi_open_ops(&domain->fid, FI_CXI_DOM_OPS_1, 0, (void **)&dom_ops, NULL);
+```
+
+The following domain extensions are defined:
+
+```c
+struct fi_cxi_dom_ops {
+	int (*cntr_read)(struct fid *fid, unsigned int cntr, uint64_t *value,
+		      struct timespec *ts);
+};
+```
+
+The cntr_read extension is used to read hardware counter values. Valid values
+of the cntr argument are found in the Cassini-specific header file
+cassini_cntr_defs.h. Note that Counter accesses by applications may be
+rate-limited to 1HZ.
 
 # FABTESTS
 

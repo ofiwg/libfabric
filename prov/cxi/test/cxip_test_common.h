@@ -95,6 +95,8 @@ struct mem_region {
 	struct fid_mr *mr;
 };
 
+int mr_create_ext(size_t len, uint64_t access, uint8_t seed, uint64_t key,
+		  struct fid_cntr *cntr, struct mem_region *mr);
 int mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
 	      struct mem_region *mr);
 void mr_destroy(struct mem_region *mr);

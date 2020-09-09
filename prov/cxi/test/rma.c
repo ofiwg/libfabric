@@ -83,6 +83,7 @@ Test(rma_opt, opt_write)
 	uint64_t res_end;
 	uint64_t hits_start;
 	uint64_t hits_end;
+	struct cxip_ep *cxi_ep;
 
 	ret = dom_ops->cntr_read(&cxit_domain->fid,
 				 C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
@@ -97,7 +98,8 @@ Test(rma_opt, opt_write)
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+	mr_create_ext(win_len, FI_REMOTE_WRITE, 0xa0, key_val, NULL,
+		      &mem_window);
 
 	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
 		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
@@ -132,9 +134,15 @@ Test(rma_opt, opt_write)
 				 C_CNTR_LPE_PLEC_HITS,
 				 &hits_end, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
-	//cr_expect(hits_end > hits_start);
-	if (hits_end == hits_start)
-		printf("PLEC Hits not registered (unsupported on netsim)\n");
+
+	cxi_ep = container_of(cxit_ep, struct cxip_ep, ep);
+	if (cxi_ep->ep_obj->domain->iface->info->device_platform !=
+	    CXI_PLATFORM_NETSIM) {
+		cr_assert(hits_end > hits_start);
+	} else {
+		if (hits_end == hits_start)
+			printf("PLEC Hits not registered (unsupported on netsim)\n");
+	}
 }
 
 /* Test simple writes to a standard MR. */

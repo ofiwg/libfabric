@@ -593,8 +593,8 @@ void validate_multi_recv_rx_event(struct fi_cq_tagged_entry *cqe, void
 	cr_assert(cqe->tag == tag, "Invalid CQE tag %#lx %#lx", cqe->tag, tag);
 }
 
-int mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
-	      struct mem_region *mr)
+int mr_create_ext(size_t len, uint64_t access, uint8_t seed, uint64_t key,
+		  struct fid_cntr *cntr, struct mem_region *mr)
 {
 	int ret;
 
@@ -617,10 +617,19 @@ int mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
 	ret = fi_mr_bind(mr->mr, &cxit_ep->fid, 0);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind(ep) failed %d", ret);
 
-	ret = fi_mr_bind(mr->mr, &cxit_rem_cntr->fid, FI_REMOTE_WRITE);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind(cntr) failed %d", ret);
+	if (cntr) {
+		ret = fi_mr_bind(mr->mr, &cntr->fid, FI_REMOTE_WRITE);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind(cntr) failed %d",
+			     ret);
+	}
 
 	return fi_mr_enable(mr->mr);
+}
+
+int mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
+	      struct mem_region *mr)
+{
+	return mr_create_ext(len, access, seed, key, cxit_rem_cntr, mr);
 }
 
 void mr_destroy(struct mem_region *mr)
