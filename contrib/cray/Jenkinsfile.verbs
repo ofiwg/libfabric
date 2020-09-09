@@ -431,7 +431,7 @@ pipeline {
                             tools: [[$class: 'JUnitType', pattern: "imb.xml"]]])
                 }
                 cleanup {
-                    echo "*** Test: Post: Cleanup: env.BRANCH_NAME: ${BRANCH_NAME} ***"
+                    echo "*** Test: Post: Cleanup: env.BRANCH_NAME: ${env.BRANCH_NAME} ***"
                     echo "*** Test: Post: Cleanup: isOfiwgBuild: " + isOfiwgBuild() + " ***"
                     script {
                         if ( isInternalBuild() ) {
@@ -452,18 +452,19 @@ pipeline {
             }
             environment {
                 LIBFABRIC_INSTALL_PATH="${LIBFABRIC_BUILD_PATH + '/' + GIT_DESCRIPTION}"
-                BUILD_LIBFABRIC = false
             }
             steps {
                 script {
+                    BUILD_LIBFABRIC = 'false'
                     if ( isInternalBuild &&
                         (( env.BRANCH_NAME == 'master' ) || buildingTag())) {
-                        BUILD_LIBFABRIC = true
+                        BUILD_LIBFABRIC = 'true'
                     } else if ( isOfiwgBuild() && ( env.BRANCH_NAME == 'master' )) {
                         LIBFABRIC_INSTALL_PATH="${LIBFABRIC_BUILD_PATH + '/' + 'OFIWG_' + GIT_DESCRIPTION}"
-                        BUILD_LIBFABRIC = true
+                        BUILD_LIBFABRIC = 'true'
                     }
-                    if ( $BUILD_LIBFABRIC == true ) {
+                    echo "*** Install Libfabric Build: BUILD_LIBFABRIC: $BUILD_LIBFABRIC ***"
+                    if ( BUILD_LIBFABRIC == 'true' ) {
                         sh "./autogen.sh"
                         sh "./configure --prefix=$LIBFABRIC_INSTALL_PATH --disable-memhooks-monitor"
                         sh "make -j 12"
