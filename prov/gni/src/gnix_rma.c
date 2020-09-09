@@ -270,8 +270,8 @@ int __smsg_rma_data(void *data, void *msg)
 
 	if (GNIX_ALLOW_FI_REMOTE_CQ_DATA(hdr->flags, ep->caps) && ep->recv_cq) {
 		ret = _gnix_cq_add_event(ep->recv_cq, ep, NULL, hdr->user_flags,
-					 0, 0, hdr->user_data, 0,
-					 FI_ADDR_NOTAVAIL);
+					 0, (void*)hdr->user_addr,
+					 hdr->user_data, 0, FI_ADDR_NOTAVAIL);
 		if (ret != FI_SUCCESS)  {
 			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_cq_add_event returned %d\n",
@@ -362,6 +362,7 @@ static int __gnix_rma_send_data_req(void *arg)
 			txd->rma_data_hdr.user_flags |= FI_REMOTE_READ;
 		}
 		txd->rma_data_hdr.user_data = req->rma.imm;
+		txd->rma_data_hdr.user_addr = req->rma.rem_addr;
 	}
 
 	if (req->vc->peer_caps & FI_RMA_EVENT) {

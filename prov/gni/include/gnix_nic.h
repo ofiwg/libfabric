@@ -299,11 +299,13 @@ struct gnix_smsg_rndzv_fin_hdr {
  * @var flags       control flags
  * @var user_flags  remote CQ user flags
  * @var user_data   remote CQ user immediate data
+ * @var user_addr   remote CQ user buf address
  */
 struct gnix_smsg_rma_data_hdr {
 	uint64_t flags;
 	uint64_t user_flags;
 	uint64_t user_data;
+  	uint64_t user_addr;
 };
 
 /**
