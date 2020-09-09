@@ -1,6 +1,7 @@
 image:
   - Visual Studio 2015
   - Visual Studio 2017
+  - Visual Studio 2019
 
 build:
   project: libfabric.sln
@@ -8,15 +9,29 @@ build:
 configuration:
   - Debug-v140
   - Debug-v141
+  - Debug-v142
   - Release-v140
   - Release-v141
+  - Release-v142
 
 matrix:
   exclude:
+    - configuration: Debug-v140
+      image: Visual Studio 2019
     - configuration: Debug-v141
       image: Visual Studio 2015
+    - configuration: Debug-v142
+      image: Visual Studio 2015
+    - configuration: Debug-v142
+      image: Visual Studio 2017
+    - configuration: Release-v140
+      image: Visual Studio 2019
     - configuration: Release-v141
       image: Visual Studio 2015
+    - configuration: Release-v142
+      image: Visual Studio 2015
+    - configuration: Release-v142
+      image: Visual Studio 2017
 
 before_build:
   - ps: .appveyor.ps1 -Verbose
