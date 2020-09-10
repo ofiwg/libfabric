@@ -18,12 +18,20 @@ CFLAGS = $(CFLAGS) /Zi /Od /MTd
 outdir = $(output_root)$(arch)\debug-v141
 CFLAGS = $(CFLAGS) /Zi /Od /MTd
 !endif
+!if "$(config)" == "Debug-v142"
+outdir = $(output_root)$(arch)\debug-v142
+CFLAGS = $(CFLAGS) /Zi /Od /MTd
+!endif
 !if "$(config)" == "Release-v140"
 outdir = $(output_root)$(arch)\release-v140
 CFLAGS = $(CFLAGS) /O2 /MT
 !endif
 !if "$(config)" == "Release-v141"
 outdir = $(output_root)$(arch)\release-v141
+CFLAGS = $(CFLAGS) /O2 /MT
+!endif
+!if "$(config)" == "Release-v142"
+outdir = $(output_root)$(arch)\release-v142
 CFLAGS = $(CFLAGS) /O2 /MT
 !endif
 
