@@ -200,8 +200,7 @@ int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr)
 
 void ofi_hmem_init(void)
 {
-	enum fi_hmem_iface iface;
-	int ret;
+	int iface, ret;
 
 	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
 		ret = hmem_ops[iface].init();
@@ -233,7 +232,7 @@ void ofi_hmem_cleanup(void)
 
 enum fi_hmem_iface ofi_get_hmem_iface(const void *addr)
 {
-	enum fi_hmem_iface iface;
+	int iface;
 
 	/* Since a is_addr_valid function is not implemented for FI_HMEM_SYSTEM,
 	 * HMEM iface is skipped. In addition, if no other HMEM ifaces claim the
@@ -251,8 +250,7 @@ enum fi_hmem_iface ofi_get_hmem_iface(const void *addr)
 
 int ofi_hmem_host_register(void *ptr, size_t size)
 {
-	enum fi_hmem_iface iface;
-	int ret;
+	int iface, ret;
 
 	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
 		if (!hmem_ops[iface].initialized)
@@ -283,8 +281,7 @@ err:
 
 int ofi_hmem_host_unregister(void *ptr)
 {
-	enum fi_hmem_iface iface;
-	int ret;
+	int iface, ret;
 
 	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
 		if (!hmem_ops[iface].initialized)
