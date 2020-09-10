@@ -406,6 +406,7 @@ Even though windows isn't fully supported yet it is possible to compile and link
       1-2: Debug/Release ICC (restricted support for Intel Compiler XE 15.0 only)
       3-4: Debug/Release v140 (VS 2015 tool set)
       5-6: Debug/Release v141 (VS 2017 tool set)
+      7-8: Debug/Release v142 (VS 2019 tool set)
 
   make sure you choose the correct target fitting your compiler.
   By default the library will be compiled to `<libfabricroot>\x64\<yourconfigchoice>`
