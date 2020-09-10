@@ -145,7 +145,7 @@
     <LinkIncremental>false</LinkIncremental>
     <IntDir>$(Platform)\$(Configuration)\libfabric\</IntDir>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-v141|x64'">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-v142|x64'">
     <LinkIncremental>false</LinkIncremental>
     <IntDir>$(Platform)\$(Configuration)\libfabric\</IntDir>
   </PropertyGroup>
