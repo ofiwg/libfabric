@@ -475,8 +475,9 @@ ssize_t rxr_pkt_post_read_to_copy_data(struct rxr_ep *rxr_ep,
 {
 	ssize_t err;
 	int iov_idx;
-	size_t iov_offset;
+	size_t iov_offset, pkt_offset;
 	void *dest_buf;
+	struct rxr_pkt_entry *pkt_entry_copy;
 
 	assert(pkt_entry->x_entry == rx_entry);
 
@@ -493,13 +494,34 @@ ssize_t rxr_pkt_post_read_to_copy_data(struct rxr_ep *rxr_ep,
 	assert(iov_idx >=0 && iov_idx < rx_entry->iov_count);
 	assert(efa_ep_is_cuda_mr(rx_entry->desc[iov_idx]));
 	assert(iov_offset + data_size <= rx_entry->iov[iov_idx].iov_len);
+	assert(!pkt_entry->next);
 
 	dest_buf = (char *)rx_entry->iov[iov_idx].iov_base + iov_offset;
 
-	pkt_entry->state = RXR_PKT_ENTRY_COPY_BY_READ;
-	assert(pkt_entry->mr);
-	assert(rxr_ep->rdm_self_addr != FI_ADDR_NOTAVAIL);
+	if (!pkt_entry->mr) {
+		assert(pkt_entry->type == RXR_PKT_ENTRY_OOO ||
+		       pkt_entry->type == RXR_PKT_ENTRY_UNEXP);
+		/* ooo and unexp packet entry's memory is not registered with device,
+		 * so we allocate a rx packet entry from tx_pkt_efa_pool (which is registered),
+		 * and copy data to the new packet entry
+		 */
+		pkt_offset = data - (char *)pkt_entry->pkt;
+		assert(pkt_offset > sizeof(struct rxr_base_hdr));
 
+		pkt_entry_copy = rxr_pkt_entry_clone(rxr_ep, rxr_ep->tx_pkt_efa_pool,
+						     pkt_entry, RXR_PKT_ENTRY_READ_COPY);
+		if (!pkt_entry_copy)
+			return -FI_ENOBUFS;
+
+		rxr_pkt_entry_release_rx(rxr_ep, pkt_entry);
+		pkt_entry = pkt_entry_copy;
+		data = (char *)pkt_entry->pkt + pkt_offset;
+	}
+
+	assert(rxr_ep->rdm_self_addr != FI_ADDR_NOTAVAIL);
+	assert(pkt_entry->mr);
+
+	pkt_entry->state = RXR_PKT_ENTRY_READING;
 	err = fi_read(rxr_ep->rdm_ep,
 		      dest_buf, data_size, rx_entry->desc[iov_idx],
 		      rxr_ep->rdm_self_addr,
@@ -594,7 +616,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 	struct rxr_peer *peer;
 
 	pkt_entry = (struct rxr_pkt_entry *)comp->op_context;
-	if (pkt_entry->state == RXR_PKT_ENTRY_COPY_BY_READ) {
+	if (pkt_entry->state == RXR_PKT_ENTRY_READING) {
 		rxr_pkt_handle_data_copied(ep, pkt_entry);
 		return;
 	}

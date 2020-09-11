@@ -41,9 +41,9 @@ enum rxr_pkt_entry_state {
 	RXR_PKT_ENTRY_FREE = 0,
 	RXR_PKT_ENTRY_IN_USE,
 	RXR_PKT_ENTRY_RNR_RETRANSMIT,
-	RXR_PKT_ENTRY_COPY_BY_READ, /* entries contain data. A read request has been posted to copy
-				     * to receiving buffer
-				     */
+	RXR_PKT_ENTRY_READING, /* entries contain data. A read request has been posted to copy
+				* to receiving buffer
+				*/
 };
 
 /* pkt_entry types for rx pkts */
@@ -51,7 +51,8 @@ enum rxr_pkt_entry_type {
 	RXR_PKT_ENTRY_POSTED = 1,   /* entries that are posted to the device from the RX bufpool */
 	RXR_PKT_ENTRY_UNEXP,        /* entries used to stage unexpected msgs */
 	RXR_PKT_ENTRY_OOO,	    /* entries used to stage out-of-order RTM or RTA */
-	RXR_PKT_ENTRY_USER	    /* entries backed by user-provided msg prefix (FI_MSG_PREFIX)*/
+	RXR_PKT_ENTRY_USER,	    /* entries backed by user-provided msg prefix (FI_MSG_PREFIX)*/
+	RXR_PKT_ENTRY_READ_COPY,    /* entries used to stage copy by read */
 };
 
 struct rxr_pkt_sendv {
