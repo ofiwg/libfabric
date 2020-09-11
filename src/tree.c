@@ -229,8 +229,11 @@ int ofi_rbmap_insert(struct ofi_rbmap *map, void *key, void *data,
 
 	while (current != &map->sentinel) {
 		ret = map->compare(map, key, current->data);
-		if (ret == 0)
+		if (ret == 0) {
+			if (ret_node)
+				*ret_node = current;
 			return -FI_EALREADY;
+		}
 
 		parent = current;
 		current = (ret < 0) ? current->left : current->right;

@@ -596,6 +596,38 @@ static int smr_progress_msg_common(struct smr_ep *ep, struct smr_cmd *cmd,
 	return 0;
 }
 
+static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
+{
+	struct smr_region *peer_smr;
+	struct smr_inject_buf *tx_buf;
+	size_t inj_offset;
+	fi_addr_t idx;
+	int ret = 0;
+
+	inj_offset = (size_t) cmd->msg.hdr.src_data;
+	tx_buf = smr_get_ptr(ep->region, inj_offset);
+
+	ret = smr_map_add(&smr_prov, ep->region->map,
+			  (char *) tx_buf->data, &idx);
+	if (ret)
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"Error processing mapping request\n");
+
+	peer_smr = smr_peer_region(ep->region, idx);
+	if (peer_smr != ep->region && fastlock_tryacquire(&peer_smr->lock))
+		return;
+
+	smr_peer_data(peer_smr)[cmd->msg.hdr.addr].addr.addr = idx;
+
+	if (peer_smr != ep->region)
+		fastlock_release(&peer_smr->lock);
+
+	smr_peer_data(ep->region)[idx].addr.addr = cmd->msg.hdr.addr;
+
+	ofi_cirque_discard(smr_cmd_queue(ep->region));
+	ep->region->cmd_cnt++;
+}
+
 static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 {
 	struct smr_queue *recv_queue;
@@ -834,7 +866,8 @@ static void smr_progress_cmd(struct smr_ep *ep)
 			break;
 		case ofi_op_write_async:
 		case ofi_op_read_async:
-			ofi_ep_rx_cntr_inc_func(&ep->util_ep, cmd->msg.hdr.op);
+			ofi_ep_rx_cntr_inc_func(&ep->util_ep,
+						cmd->msg.hdr.op);
 			ofi_cirque_discard(smr_cmd_queue(ep->region));
 			ep->region->cmd_cnt++;
 			break;
@@ -843,12 +876,14 @@ static void smr_progress_cmd(struct smr_ep *ep)
 		case ofi_op_atomic_compare:
 			ret = smr_progress_cmd_atomic(ep, cmd);
 			break;
+		case SMR_OP_MAX + ofi_ctrl_connreq:
+			smr_progress_connreq(ep, cmd);
+			break;
 		default:
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"unidentified operation type\n");
 			ret = -FI_EINVAL;
 		}
-
 		if (ret) {
 			if (ret != -FI_EAGAIN) {
 				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,

@@ -266,7 +266,7 @@ int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 int smr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context);
 
-int smr_verify_peer(struct smr_ep *ep, int peer_id);
+fi_addr_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr);
 
 void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 			  void *context, enum fi_hmem_iface iface, uint64_t device,

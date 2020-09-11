@@ -98,7 +98,8 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	struct smr_tx_entry *pend;
 	enum fi_hmem_iface iface;
 	uint64_t device;
-	int id, peer_id, cmds, err = 0, comp = 1;
+	fi_addr_t id, peer_id;
+	int cmds, err = 0, comp = 1;
 	uint16_t comp_flags;
 	ssize_t ret = 0;
 	size_t total_len;
@@ -108,19 +109,18 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 
 	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
 
-	id = (int) addr;
-	peer_id = smr_peer_data(ep->region)[id].addr.addr;
-
-	ret = smr_verify_peer(ep, id);
-	if (ret)
-		return ret;
+	id = smr_verify_peer(ep, addr);
+	if (id == FI_ADDR_UNSPEC)
+		return -FI_EAGAIN;
 
 	cmds = 1 + !(domain->fast_rma && !(op_flags &
 		    (FI_REMOTE_CQ_DATA | FI_DELIVERY_COMPLETE)) &&
 		     rma_count == 1 &&
 		     ep->region->cma_cap == SMR_CMA_CAP_ON);
 
+	peer_id = smr_peer_data(ep->region)[id].addr.addr;
 	peer_smr = smr_peer_region(ep->region, id);
+
 	fastlock_acquire(&peer_smr->lock);
 	if (peer_smr->cmd_cnt < cmds ||
 	    smr_peer_data(ep->region)[id].sar_status) {
@@ -354,24 +354,24 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	struct smr_cmd *cmd;
 	struct iovec iov;
 	struct fi_rma_iov rma_iov;
-	int id, peer_id, cmds;
+	fi_addr_t id, peer_id;
+	int cmds;
 	ssize_t ret = 0;
 
 	assert(len <= SMR_INJECT_SIZE);
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
 
-	id = (int) dest_addr;
-	peer_id = smr_peer_data(ep->region)[id].addr.addr;
-
-	ret = smr_verify_peer(ep, id);
-	if (ret)
-		return ret;
+	id = smr_verify_peer(ep, dest_addr);
+	if (id == FI_ADDR_UNSPEC)
+		return -FI_EAGAIN;
 
 	cmds = 1 + !(domain->fast_rma && !(flags & FI_REMOTE_CQ_DATA) &&
 		     ep->region->cma_cap == SMR_CMA_CAP_ON);
 
+	peer_id = smr_peer_data(ep->region)[id].addr.addr;
 	peer_smr = smr_peer_region(ep->region, id);
+
 	fastlock_acquire(&peer_smr->lock);
 	if (peer_smr->cmd_cnt < cmds ||
 	    smr_peer_data(ep->region)[id].sar_status) {
