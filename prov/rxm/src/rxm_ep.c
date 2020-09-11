@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2020 Intel Corporation. All rights reserved.
  * Copyright (c) 2020 Cisco Systems, Inc.  All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1065,13 +1066,15 @@ rxm_ep_msg_normal_send(struct rxm_conn *rxm_conn, struct rxm_pkt *tx_pkt,
 }
 
 static ssize_t
-rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-			 void *context, uint8_t count, const struct iovec *iov,
-			 void **desc, size_t data_len, uint64_t data,
-			 uint64_t flags, uint64_t tag, uint8_t op,
-			 struct rxm_tx_rndv_buf **tx_rndv_buf)
+rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *context,
+			uint8_t count, const struct iovec *iov, void **desc, size_t data_len,
+			uint64_t data, uint64_t flags, uint64_t tag, uint8_t op,
+			struct rxm_tx_rndv_buf **tx_rndv_buf,
+			enum fi_hmem_iface iface, uint64_t device)
 {
+	struct fid_mr *rxm_mr_msg_mr[RXM_IOV_LIMIT];
 	struct fid_mr **mr_iov;
+	size_t len;
 	ssize_t ret;
 	struct rxm_tx_rndv_buf *tx_buf;
 	size_t i;
@@ -1097,8 +1100,10 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			goto err;
 		mr_iov = tx_buf->mr;
 	} else {
-		/* desc is msg fid_mr * array */
-		mr_iov = (struct fid_mr **)desc;
+		for (i = 0; i < count; i++)
+			rxm_mr_msg_mr[i] = ((struct rxm_mr *) desc[i])->msg_mr;
+
+		mr_iov = rxm_mr_msg_mr;
 	}
 
 	if (rxm_ep->rndv_ops == &rxm_rndv_ops_write) {
@@ -1112,16 +1117,20 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	rxm_rndv_hdr_init(rxm_ep, &tx_buf->pkt.data, iov, tx_buf->count,
 			  mr_iov);
 
-	ret = sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr);
+	len = sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr);
 
 	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV) {
-		ofi_copy_from_iov(rxm_pkt_rndv_data(&tx_buf->pkt),
-				  rxm_ep->buffered_min, iov, count, 0);
-		ret += rxm_ep->buffered_min;
+		ret = ofi_copy_from_hmem_iov(rxm_pkt_rndv_data(&tx_buf->pkt),
+					     rxm_ep->buffered_min, iface,
+					     device, iov, count, 0);
+		assert(ret == rxm_ep->buffered_min);
+
+		len += rxm_ep->buffered_min;
 	}
 
 	*tx_rndv_buf = tx_buf;
-	return ret;
+	return len;
+
 err:
 	*tx_rndv_buf = NULL;
 	ofi_buf_free(tx_buf);
@@ -1218,10 +1227,12 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep,
 		size_t seg_no, size_t segs_cnt, uint64_t data, uint64_t flags,
 		uint64_t tag, uint8_t op, const struct iovec *iov,
 		uint8_t count, size_t *iov_offset,
-		struct rxm_tx_sar_buf **out_tx_buf)
+		struct rxm_tx_sar_buf **out_tx_buf,
+		enum fi_hmem_iface iface, uint64_t device)
 {
 	struct rxm_tx_sar_buf *tx_buf;
 	enum rxm_sar_seg_type seg_type = RXM_SAR_SEG_MIDDLE;
+	ssize_t ret __attribute__((unused));
 
 	if (seg_no == (segs_cnt - 1)) {
 		seg_type = RXM_SAR_SEG_LAST;
@@ -1237,7 +1248,10 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep,
 		return -FI_EAGAIN;
 	}
 
-	ofi_copy_from_iov(tx_buf->pkt.data, seg_len, iov, count, *iov_offset);
+	ret = ofi_copy_from_hmem_iov(tx_buf->pkt.data, seg_len, iface, device,
+				     iov, count, *iov_offset);
+	assert(ret == seg_len);
+
 	*iov_offset += seg_len;
 
 	*out_tx_buf = tx_buf;
@@ -1250,7 +1264,8 @@ static ssize_t
 rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   void *context, uint8_t count, const struct iovec *iov,
 		   size_t data_len, size_t segs_cnt, uint64_t data,
-		   uint64_t flags, uint64_t tag, uint8_t op)
+		   uint64_t flags, uint64_t tag, uint8_t op,
+		   enum fi_hmem_iface iface, uint64_t device)
 {
 	struct rxm_tx_sar_buf *tx_buf, *first_tx_buf;
 	size_t i, iov_offset = 0, remain_len = data_len;
@@ -1267,8 +1282,10 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (!first_tx_buf)
 		return -FI_EAGAIN;
 
-	ofi_copy_from_iov(first_tx_buf->pkt.data, rxm_eager_limit,
-			  iov, count, iov_offset);
+	ret = ofi_copy_from_hmem_iov(first_tx_buf->pkt.data, rxm_eager_limit,
+				     iface, device, iov, count, iov_offset);
+	assert(ret == rxm_eager_limit);
+
 	iov_offset += rxm_eager_limit;
 
 	ret = fi_send(rxm_conn->msg_ep, &first_tx_buf->pkt,
@@ -1284,11 +1301,11 @@ rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	remain_len -= rxm_eager_limit;
 
 	for (i = 1; i < segs_cnt; i++) {
-		ret = rxm_ep_sar_tx_prepare_and_send_segment(rxm_ep, rxm_conn,
-				context, data_len, remain_len,
-				msg_id, rxm_eager_limit, i, segs_cnt,
-				data, flags, tag, op, iov, count,
-				&iov_offset, &tx_buf);
+		ret = rxm_ep_sar_tx_prepare_and_send_segment(
+					rxm_ep, rxm_conn, context, data_len, remain_len,
+					msg_id, rxm_eager_limit, i, segs_cnt, data,
+					flags, tag, op, iov, count, &iov_offset, &tx_buf,
+					iface, device);
 		if (ret) {
 			if (ret == -FI_EAGAIN)
 				goto defer;
@@ -1325,6 +1342,8 @@ defer:
 	def_tx->sar_seg.total_len = data_len;
 	def_tx->sar_seg.remain_len = remain_len;
 	def_tx->sar_seg.msg_id = msg_id;
+	def_tx->sar_seg.iface = iface;
+	def_tx->sar_seg.device = device;
 	rxm_ep_enqueue_deferred_tx_queue(def_tx);
 	return 0;
 }
@@ -1337,6 +1356,11 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	struct rxm_tx_eager_buf *tx_buf;
 	ssize_t ret;
+	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
+	const struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
 
 	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 	if (!tx_buf) {
@@ -1348,7 +1372,11 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	tx_buf->app_context = NULL;
 
 	rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag, flags, &tx_buf->pkt);
-	memcpy(tx_buf->pkt.data, buf, len);
+
+	ret = ofi_copy_from_hmem_iov(tx_buf->pkt.data, len, iface, 0, &iov, 1,
+				     0);
+	assert(ret == len);
+
 	tx_buf->flags = flags;
 
 	ret = rxm_ep_msg_normal_send(rxm_conn, &tx_buf->pkt, pkt_size,
@@ -1370,8 +1398,7 @@ rxm_ep_inject_send_fast(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	if (pkt_size <= rxm_ep->inject_limit &&
-	    !rxm_ep->util_ep.tx_cntr) {
+	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
 		inject_pkt->hdr.size = len;
 		memcpy(inject_pkt->data, buf, len);
 		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, inject_pkt,
@@ -1434,11 +1461,15 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	size_t data_len = ofi_total_iov_len(iov, count);
 	size_t total_len = sizeof(struct rxm_pkt) + data_len;
 	ssize_t ret;
+	enum fi_hmem_iface iface;
+	uint64_t device;
 
 	assert(count <= rxm_ep->rxm_info->tx_attr->iov_limit);
 	assert((!(flags & FI_INJECT) &&
 		(data_len > rxm_ep->rxm_info->tx_attr->inject_size)) ||
 	       (data_len <= rxm_ep->rxm_info->tx_attr->inject_size));
+
+	iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
 
 	if (data_len <= rxm_eager_limit) {
 		tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
@@ -1451,8 +1482,12 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
 					 flags, &tx_buf->pkt);
-		ofi_copy_from_iov(tx_buf->pkt.data, tx_buf->pkt.hdr.size,
-				  iov, count, 0);
+
+		ret = ofi_copy_from_hmem_iov(tx_buf->pkt.data,
+					     tx_buf->pkt.hdr.size, iface,
+					     device, iov, count, 0);
+		assert(ret == tx_buf->pkt.hdr.size);
+
 		tx_buf->app_context = context;
 		tx_buf->flags = flags;
 
@@ -1470,14 +1505,13 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		ret = rxm_ep_sar_tx_send(rxm_ep, rxm_conn, context,
 					 count, iov, data_len,
 					 rxm_ep_sar_calc_segs_cnt(rxm_ep, data_len),
-					 data, flags, tag, op);
+					 data, flags, tag, op, iface, device);
 	} else {
 		struct rxm_tx_rndv_buf *tx_buf;
 
-		ret = rxm_ep_alloc_rndv_tx_res(rxm_ep, rxm_conn, context,
-					       (uint8_t) count, iov, desc,
-					       data_len, data, flags, tag, op,
-					       &tx_buf);
+		ret = rxm_ep_alloc_rndv_tx_res(rxm_ep, rxm_conn, context, (uint8_t)count,
+					      iov, desc, data_len, data, flags, tag, op,
+					      &tx_buf, iface, device);
 		if (ret >= 0)
 			ret = rxm_ep_rndv_tx_send(rxm_ep, rxm_conn, tx_buf, ret);
 	}
@@ -1562,7 +1596,9 @@ rxm_ep_progress_sar_deferred_segments(struct rxm_deferred_tx_entry *def_tx_entry
 				def_tx_entry->sar_seg.payload.iov,
 				def_tx_entry->sar_seg.payload.count,
 				&def_tx_entry->sar_seg.payload.cur_iov_offset,
-				&def_tx_entry->sar_seg.cur_seg_tx_buf);
+				&def_tx_entry->sar_seg.cur_seg_tx_buf,
+				def_tx_entry->sar_seg.iface,
+				def_tx_entry->sar_seg.device);
 		if (ret) {
 			if (ret != -FI_EAGAIN) {
 				rxm_ep_sar_handle_segment_failure(def_tx_entry, ret);

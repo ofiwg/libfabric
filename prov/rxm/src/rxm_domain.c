@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -106,12 +107,25 @@ static int rxm_mr_add_map_entry(struct util_domain *domain,
 	return ret;
 }
 
+struct rxm_mr *rxm_mr_get_map_entry(struct rxm_domain *domain, uint64_t key)
+{
+	struct rxm_mr *mr;
+
+	fastlock_acquire(&domain->util_domain.lock);
+	mr = ofi_mr_map_get(&domain->util_domain.mr_map, key);
+	fastlock_release(&domain->util_domain.lock);
+
+	return mr;
+}
+
 static int rxm_domain_close(fid_t fid)
 {
 	struct rxm_domain *rxm_domain;
 	int ret;
 
 	rxm_domain = container_of(fid, struct rxm_domain, util_domain.domain_fid.fid);
+
+	ofi_bufpool_destroy(rxm_domain->amo_bufpool);
 
 	ret = fi_close(&rxm_domain->msg_domain->fid);
 	if (ret)
@@ -233,10 +247,7 @@ static void rxm_mr_init(struct rxm_mr *rxm_mr, struct rxm_domain *domain,
 	rxm_mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	rxm_mr->mr_fid.fid.context = context;
 	rxm_mr->mr_fid.fid.ops = &rxm_mr_ops;
-	/* Store msg_mr as rxm_mr descriptor so that we can get its key when
-	 * the app passes msg_mr as the descriptor in fi_send and friends.
-	 * The key would be used in large message transfer protocol and RMA. */
-	rxm_mr->mr_fid.mem_desc = rxm_mr->msg_mr;
+	rxm_mr->mr_fid.mem_desc = rxm_mr;
 	rxm_mr->mr_fid.key = fi_mr_key(rxm_mr->msg_mr);
 	rxm_mr->domain = domain;
 	ofi_atomic_inc32(&domain->util_domain.ref);
@@ -257,6 +268,10 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (!rxm_mr)
 		return -FI_ENOMEM;
 
+	ofi_mr_update_attr(rxm_domain->util_domain.fabric->fabric_fid.api_version,
+			   rxm_domain->util_domain.info_domain_caps, attr,
+			   &msg_attr);
+
 	msg_attr.access = rxm_mr_get_msg_access(rxm_domain, attr->access);
 
 	ret = fi_mr_regattr(rxm_domain->msg_domain, &msg_attr,
@@ -266,6 +281,9 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		goto err;
 	}
 	rxm_mr_init(rxm_mr, rxm_domain, attr->context);
+	fastlock_init(&rxm_mr->amo_lock);
+	rxm_mr->iface = msg_attr.iface;
+	rxm_mr->device = msg_attr.device.reserved;
 	*mr = &rxm_mr->mr_fid;
 
 	if (rxm_domain->util_domain.info_domain_caps & FI_ATOMIC) {
@@ -476,6 +494,13 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	rxm_domain->mr_local = ofi_mr_local(msg_info) && !ofi_mr_local(info);
 
+	ret = ofi_bufpool_create(&rxm_domain->amo_bufpool,
+				 rxm_domain->max_atomic_size, 64, 0, 0, 0);
+	if (ret)
+		goto err3;
+
+	fastlock_init(&rxm_domain->amo_bufpool_lock);
+
 	ret = fi_open_ops(&rxm_domain->msg_domain->fid, OFI_OPS_FLOW_CTRL, 0,
 			  (void **) &flow_ctrl_ops, NULL);
 	if (!ret && flow_ctrl_ops) {
@@ -485,11 +510,13 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	} else if (ret == -FI_ENOSYS) {
 		rxm_domain->flow_ctrl_ops = &rxm_no_ops_flow_ctrl;
 	} else {
-		goto err3;
+		goto err4;
 	}
 
 	fi_freeinfo(msg_info);
 	return 0;
+err4:
+	ofi_bufpool_destroy(rxm_domain->amo_bufpool);
 err3:
 	fi_close(&rxm_domain->msg_domain->fid);
 err2:

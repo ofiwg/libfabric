@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2020 Intel Corporation. All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -54,7 +55,8 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 		rma_buf->mr.count = iov_count;
 	} else {
 		for (i = 0; i < iov_count; i++)
-			desc_storage[i] = fi_mr_desc(desc[i]);
+			desc_storage[i] =
+				fi_mr_desc(((struct rxm_mr *) desc[i])->msg_mr);
 	}
 	return FI_SUCCESS;
 }
@@ -181,12 +183,22 @@ static void
 rxm_ep_format_rma_msg(struct rxm_rma_buf *rma_buf, const struct fi_msg_rma *orig_msg,
 		      struct iovec *rxm_iov, struct fi_msg_rma *rxm_msg)
 {
+	ssize_t ret __attribute__((unused));
+	enum fi_hmem_iface iface;
+	uint64_t device;
+
+	iface = rxm_mr_desc_to_hmem_iface_dev(orig_msg->desc,
+					      orig_msg->iov_count, &device);
+
 	rxm_msg->context = rma_buf;
 	rxm_msg->addr = orig_msg->addr;
 	rxm_msg->data = orig_msg->data;
 
-	ofi_copy_from_iov(rma_buf->pkt.data, rma_buf->pkt.hdr.size,
-			  orig_msg->msg_iov, orig_msg->iov_count, 0);
+	ret = ofi_copy_from_hmem_iov(rma_buf->pkt.data, rma_buf->pkt.hdr.size,
+				     iface, device, orig_msg->msg_iov,
+				     orig_msg->iov_count, 0);
+	assert(ret == rma_buf->pkt.hdr.size);
+
 	rxm_iov->iov_base = &rma_buf->pkt.data;
 	rxm_iov->iov_len = rma_buf->pkt.hdr.size;
 	rxm_msg->msg_iov = rxm_iov;
