@@ -316,9 +316,10 @@ void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
 	rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, readrsp_hdr->rx_id);
 	assert(rx_entry->cq_entry.flags & FI_READ);
 	rx_entry->tx_id = readrsp_hdr->tx_id;
-	rxr_pkt_proc_data(ep, rx_entry, pkt_entry,
+	rxr_pkt_proc_data(ep, rx_entry, 0,
+			  pkt_entry,
 			  readrsp_pkt->data,
-			  0, readrsp_hdr->seg_size);
+			  readrsp_hdr->seg_size);
 }
 
 /*  RMA_CONTEXT packet functions

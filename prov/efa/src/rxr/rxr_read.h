@@ -44,6 +44,9 @@ enum rxr_read_entry_state {
 	RXR_RDMA_ENTRY_PENDING
 };
 
+int rxr_locate_iov_pos(struct iovec *iov, int iov_count, size_t offset,
+		       int *iov_idx, size_t *iov_offset);
+
 /* rxr_read_entry was arranged as a packet
  * and was put in a rxr_pkt_entry. Because rxr_pkt_entry is used
  * as context.
