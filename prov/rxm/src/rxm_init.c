@@ -85,13 +85,13 @@ void rxm_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
 		else
 			core_info->domain_attr->mr_mode |=
 				hints->domain_attr->mr_mode;
-	}
 
-	/* RxM is setup to support FI_HMEM with the core provider requiring
-	 * FI_MR_HMEM. Always set this MR mode bit.
-	 */
-	if (hints && hints->caps & FI_HMEM)
-		core_info->domain_attr->mr_mode |= FI_MR_HMEM;
+		/* RxM is setup to support FI_HMEM with the core provider requiring
+		 * FI_MR_HMEM. Always set this MR mode bit.
+		 */
+		if (hints && hints->caps & FI_HMEM)
+			core_info->domain_attr->mr_mode |= FI_MR_HMEM;
+	}
 }
 
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
