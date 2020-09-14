@@ -139,7 +139,10 @@ vrb_msg_ep_prepare_rdma_cm_hdr(void *priv_data,
 {
 	struct vrb_rdma_cm_hdr *rdma_cm_hdr = priv_data;
 
-	rdma_cm_hdr->ip_version = 6 << 4; /* IPv6 */
+	/* ip_version=6 would requires IPoIB to be installed and the IP link
+	 * to be UP, which we don't want. As a work-around, we set ip_version to 0,
+	 * which let the CMA kernel code to skip any requirement for IPoIB. */
+	rdma_cm_hdr->ip_version = 0;
 	rdma_cm_hdr->port = htons(ofi_addr_get_port(&id->route.addr.src_addr));
 
 	/* Record the GIDs */
