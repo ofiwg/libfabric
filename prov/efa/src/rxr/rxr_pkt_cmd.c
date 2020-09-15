@@ -477,6 +477,7 @@ ssize_t rxr_pkt_post_read_to_copy_data(struct rxr_ep *rxr_ep,
 	int iov_idx;
 	size_t iov_offset, pkt_offset;
 	void *dest_buf;
+	struct rxr_peer *peer;
 	struct rxr_pkt_entry *pkt_entry_copy;
 
 	assert(pkt_entry->x_entry == rx_entry);
@@ -533,6 +534,8 @@ ssize_t rxr_pkt_post_read_to_copy_data(struct rxr_ep *rxr_ep,
 		return err;
 	}
 
+	peer = rxr_ep_get_peer(rxr_ep, rxr_ep->rdm_self_addr);
+	rxr_ep_inc_tx_pending(rxr_ep, peer);
 	return 0;
 }
 
@@ -618,6 +621,8 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 	pkt_entry = (struct rxr_pkt_entry *)comp->op_context;
 	if (pkt_entry->state == RXR_PKT_ENTRY_READING) {
 		rxr_pkt_handle_data_copied(ep, pkt_entry);
+		peer = rxr_ep_get_peer(ep, ep->rdm_self_addr);
+		rxr_ep_dec_tx_pending(ep, peer, 0);
 		return;
 	}
 
