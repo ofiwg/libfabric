@@ -98,7 +98,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	struct smr_tx_entry *pend;
 	enum fi_hmem_iface iface;
 	uint64_t device;
-	fi_addr_t id, peer_id;
+	int64_t id, peer_id;
 	int cmds, err = 0, comp = 1;
 	uint16_t comp_flags;
 	ssize_t ret = 0;
@@ -110,7 +110,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
 
 	id = smr_verify_peer(ep, addr);
-	if (id == FI_ADDR_UNSPEC)
+	if (id < 0)
 		return -FI_EAGAIN;
 
 	cmds = 1 + !(domain->fast_rma && !(op_flags &
@@ -118,7 +118,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 		     rma_count == 1 &&
 		     ep->region->cma_cap == SMR_CMA_CAP_ON);
 
-	peer_id = smr_peer_data(ep->region)[id].addr.addr;
+	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
 
 	fastlock_acquire(&peer_smr->lock);
@@ -354,7 +354,7 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	struct smr_cmd *cmd;
 	struct iovec iov;
 	struct fi_rma_iov rma_iov;
-	fi_addr_t id, peer_id;
+	int64_t id, peer_id;
 	int cmds;
 	ssize_t ret = 0;
 
@@ -363,13 +363,13 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
 
 	id = smr_verify_peer(ep, dest_addr);
-	if (id == FI_ADDR_UNSPEC)
+	if (id < 0)
 		return -FI_EAGAIN;
 
 	cmds = 1 + !(domain->fast_rma && !(flags & FI_REMOTE_CQ_DATA) &&
 		     ep->region->cma_cap == SMR_CMA_CAP_ON);
 
-	peer_id = smr_peer_data(ep->region)[id].addr.addr;
+	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
 
 	fastlock_acquire(&peer_smr->lock);
