@@ -39,6 +39,7 @@
 #include "rxr.h"
 #include "rxr_rma.h"
 #include "rxr_msg.h"
+#include "rxr_read.h"
 #include "rxr_cntr.h"
 #include "rxr_atomic.h"
 #include "efa.h"
@@ -305,6 +306,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
+	struct rxr_local_read_entry *local_read_entry;
 	struct rxr_peer *peer;
 	ssize_t ret;
 
@@ -427,6 +429,18 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 					  &ep->rx_entry_queued_list);
 		}
 		return 0;
+	} else if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_LOCAL_READ_ENTRY) {
+		local_read_entry = (struct rxr_local_read_entry *)pkt_entry->x_entry;
+		if (err_entry.err == -FI_EAGAIN) {
+			dlist_insert_tail(&local_read_entry->pending_entry,
+					  &ep->local_read_pending_list);
+			return 0;
+		}
+
+		ret = rxr_cq_handle_rx_error(ep, local_read_entry->rx_entry,
+					     err_entry.prov_errno);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return ret;
 	}
 
 	FI_WARN(&rxr_prov, FI_LOG_CQ,

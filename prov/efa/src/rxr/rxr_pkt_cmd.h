@@ -35,14 +35,18 @@
 #define _RXR_PKT_CMD_H
 
 #include "rxr.h"
+#include "rxr_read.h"
 
 ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry);
 
 ssize_t rxr_pkt_post_ctrl(struct rxr_ep *ep, int entry_type, void *x_entry,
 			  int ctrl_type, bool inject);
 
+
 ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry,
 				   int ctrl_type, bool inject);
+
+ssize_t rxr_pkt_post_local_read(struct rxr_ep *ep, struct rxr_local_read_entry *local_read_entry);
 
 void rxr_pkt_proc_data(struct rxr_ep *rxr_ep, struct rxr_rx_entry *rx_entry,
 		       size_t data_offset, struct rxr_pkt_entry *pkt_eentry,

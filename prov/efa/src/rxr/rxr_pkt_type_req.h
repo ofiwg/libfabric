@@ -333,30 +333,23 @@ void rxr_pkt_handle_read_rtm_send_completion(struct rxr_ep *ep,
  * handle_data_copied() functions for RTM packet types.
  * Note: read rtm does not contain data, so does not have such a handler.
  */
-void rxr_pkt_handle_eager_rtm_data_copied(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+void rxr_pkt_handle_eager_rtm_data_copied(struct rxr_ep *ep,
+					  struct rxr_pkt_entry *pkt_entry,
+					  struct rxr_rx_entry *rx_entry);
 
-void rxr_pkt_handle_eager_rtm_data_copied(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+void rxr_pkt_handle_medium_rtm_data_copied(struct rxr_ep *ep,
+					  struct rxr_pkt_entry *pkt_entry,
+					  struct rxr_rx_entry *rx_entry);
 
-void rxr_pkt_handle_eager_rtm_data_copied(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+void rxr_pkt_handle_long_rtm_data_copied(struct rxr_ep *ep,
+					 struct rxr_pkt_entry *pkt_entry,
+					 struct rxr_rx_entry *rx_entry);
 
 /*
  *   proc() functions for RTM packet types
  */
 void rxr_pkt_rtm_init_rx_entry(struct rxr_pkt_entry *pkt_entry,
 			       struct rxr_rx_entry *rx_entry);
-
-/*         This function is called by both
- *            rxr_pkt_handle_rtm_recv() and
- *            rxr_msg_handle_unexp_match()
- */
-void rxr_pkt_handle_eager_rtm_data_copied(struct rxr_ep *ep,
-					  struct rxr_pkt_entry *pkt_entry);
-
-void rxr_pkt_handle_medium_rtm_data_copied(struct rxr_ep *ep,
-					   struct rxr_pkt_entry *pkt_entry);
-
-void rxr_pkt_handle_long_rtm_data_copied(struct rxr_ep *ep,
-					 struct rxr_pkt_entry *pkt_entry);
 
 ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 				 struct rxr_rx_entry *rx_entry,
@@ -487,10 +480,12 @@ void rxr_pkt_handle_read_rtw_send_completion(struct rxr_ep *ep,
  *     handle_data_copied() functions for RTW packets
  */
 void rxr_pkt_handle_eager_rtw_data_copied(struct rxr_ep *ep,
-					  struct rxr_pkt_entry *pkt_entry);
+					  struct rxr_pkt_entry *pkt_entry,
+					  struct rxr_rx_entry *rx_entry);
 
 void rxr_pkt_handle_long_rtw_data_copied(struct rxr_ep *ep,
-					 struct rxr_pkt_entry *pkt_entry);
+					 struct rxr_pkt_entry *pkt_entry,
+					 struct rxr_rx_entry *rx_entry);
 /*
  *     handle_recv() functions
  */

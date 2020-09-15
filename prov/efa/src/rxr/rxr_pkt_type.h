@@ -238,7 +238,8 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 					 struct rxr_pkt_entry *pkt_entry);
 
 void rxr_data_pkt_handle_data_copied(struct rxr_ep *ep,
-				     struct rxr_pkt_entry *pkt_entry);
+				     struct rxr_pkt_entry *pkt_entry,
+				     struct rxr_rx_entry *rx_entry);
 
 void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);

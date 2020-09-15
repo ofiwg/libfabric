@@ -466,68 +466,70 @@ ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_pee
  * If data is copied by read. The progress engine will call the
  * event handler.
  */
-static inline
-ssize_t rxr_pkt_post_read_to_copy_data(struct rxr_ep *rxr_ep,
-				       struct rxr_pkt_entry *pkt_entry,
-				       char *data, size_t data_size,
-				       struct rxr_rx_entry *rx_entry,
-				       size_t data_offset)
+ssize_t rxr_pkt_post_local_read(struct rxr_ep *rxr_ep,
+				struct rxr_local_read_entry *local_read)
 {
 	ssize_t err;
 	int iov_idx;
 	size_t iov_offset, pkt_offset;
-	void *dest_buf;
+	char *dest_buf;
 	struct rxr_peer *peer;
 	struct rxr_pkt_entry *pkt_entry_copy;
 
-	assert(pkt_entry->x_entry == rx_entry);
+	assert(local_read->pkt_entry->x_entry == local_read);
 
-	err = rxr_locate_iov_pos(rx_entry->iov, rx_entry->iov_count, data_offset,
+	err = rxr_locate_iov_pos(local_read->rx_entry->iov,
+				 local_read->rx_entry->iov_count,
+				 local_read->data_offset,
 				 &iov_idx, &iov_offset);
 
 	if (err) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"data_offset %ld out of range\n",
-			data_offset);
+			local_read->data_offset);
 		return err;
 	}
 
-	assert(iov_idx >=0 && iov_idx < rx_entry->iov_count);
-	assert(efa_ep_is_cuda_mr(rx_entry->desc[iov_idx]));
-	assert(iov_offset + data_size <= rx_entry->iov[iov_idx].iov_len);
-	assert(!pkt_entry->next);
+	assert(iov_idx >=0 && iov_idx < local_read->rx_entry->iov_count);
+	assert(efa_ep_is_cuda_mr(local_read->rx_entry->desc[iov_idx]));
+	assert(iov_offset + local_read->data_size <= local_read->rx_entry->iov[iov_idx].iov_len);
+	assert(!local_read->pkt_entry->next);
 
-	dest_buf = (char *)rx_entry->iov[iov_idx].iov_base + iov_offset;
+	dest_buf = (char *)local_read->rx_entry->iov[iov_idx].iov_base + iov_offset;
 
-	if (!pkt_entry->mr) {
-		assert(pkt_entry->type == RXR_PKT_ENTRY_OOO ||
-		       pkt_entry->type == RXR_PKT_ENTRY_UNEXP);
+	if (!local_read->pkt_entry->mr) {
+		assert(local_read->pkt_entry->type == RXR_PKT_ENTRY_OOO ||
+		       local_read->pkt_entry->type == RXR_PKT_ENTRY_UNEXP);
 		/* ooo and unexp packet entry's memory is not registered with device,
 		 * so we allocate a rx packet entry from tx_pkt_efa_pool (which is registered),
 		 * and copy data to the new packet entry
 		 */
-		pkt_offset = data - (char *)pkt_entry->pkt;
+		pkt_offset = local_read->data - (char *)local_read->pkt_entry->pkt;
 		assert(pkt_offset > sizeof(struct rxr_base_hdr));
 
 		pkt_entry_copy = rxr_pkt_entry_clone(rxr_ep, rxr_ep->tx_pkt_efa_pool,
-						     pkt_entry, RXR_PKT_ENTRY_READ_COPY);
+						     local_read->pkt_entry,
+						     RXR_PKT_ENTRY_READ_COPY);
 		if (!pkt_entry_copy)
-			return -FI_ENOBUFS;
+			return -FI_EAGAIN;
 
-		rxr_pkt_entry_release_rx(rxr_ep, pkt_entry);
-		pkt_entry = pkt_entry_copy;
-		data = (char *)pkt_entry->pkt + pkt_offset;
+		rxr_pkt_entry_release_rx(rxr_ep, local_read->pkt_entry);
+		local_read->pkt_entry = pkt_entry_copy;
+		local_read->data = (char *)pkt_entry_copy->pkt + pkt_offset;
 	}
 
 	assert(rxr_ep->rdm_self_addr != FI_ADDR_NOTAVAIL);
-	assert(pkt_entry->mr);
+	assert(local_read->pkt_entry->mr);
 
-	pkt_entry->state = RXR_PKT_ENTRY_READING;
+	local_read->pkt_entry->state = RXR_PKT_ENTRY_READING;
 	err = fi_read(rxr_ep->rdm_ep,
-		      dest_buf, data_size, rx_entry->desc[iov_idx],
+		      dest_buf,
+		      local_read->data_size,
+		      local_read->rx_entry->desc[iov_idx],
 		      rxr_ep->rdm_self_addr,
-		      (uint64_t)data, fi_mr_key(pkt_entry->mr),
-		      pkt_entry);
+		      (uint64_t)local_read->data,
+		      fi_mr_key(local_read->pkt_entry->mr),
+		      local_read->pkt_entry);
 
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Failed to post read to copy data\n");
@@ -540,8 +542,47 @@ ssize_t rxr_pkt_post_read_to_copy_data(struct rxr_ep *rxr_ep,
 }
 
 static inline
+ssize_t rxr_pkt_post_local_read_or_queue(struct rxr_ep *ep,
+					 struct rxr_pkt_entry *pkt_entry,
+					 char *data, size_t data_size,
+					 struct rxr_rx_entry *rx_entry,
+					 size_t data_offset)
+{
+	ssize_t err;
+	struct rxr_local_read_entry *local_read_entry;
+
+	local_read_entry = ofi_buf_alloc(ep->local_read_entry_pool);
+	if (!local_read_entry) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "local read entry exhausted!\n");
+		return -FI_ENOBUFS;
+	}
+
+	local_read_entry->x_entry_type = RXR_LOCAL_READ_ENTRY;
+	local_read_entry->pkt_entry = pkt_entry;
+	local_read_entry->data = data;
+	local_read_entry->data_size = data_size;
+	local_read_entry->rx_entry = rx_entry;
+	local_read_entry->data_offset = data_offset;
+	pkt_entry->x_entry = local_read_entry;
+	err = rxr_pkt_post_local_read(ep, local_read_entry);
+	if (err == -FI_EAGAIN) {
+		dlist_insert_tail(&local_read_entry->pending_entry,
+				  &ep->local_read_pending_list);
+		return 0;
+	}
+
+	if (err) {
+		ofi_buf_free(local_read_entry);
+		return err;
+	}
+
+	return 0;
+}
+
+static inline
 void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
-				struct rxr_pkt_entry *pkt_entry)
+				struct rxr_pkt_entry *pkt_entry,
+				struct rxr_rx_entry *rx_entry)
 {
 	int pkt_type;
 
@@ -550,25 +591,25 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 	switch(pkt_type) {
 	case RXR_DATA_PKT:
 	case RXR_READRSP_PKT:
-		rxr_data_pkt_handle_data_copied(ep, pkt_entry);
+		rxr_data_pkt_handle_data_copied(ep, pkt_entry, rx_entry);
 		break;
 	case RXR_EAGER_MSGRTM_PKT:
 	case RXR_EAGER_TAGRTM_PKT:
-		rxr_pkt_handle_eager_rtm_data_copied(ep, pkt_entry);
+		rxr_pkt_handle_eager_rtm_data_copied(ep, pkt_entry, rx_entry);
 		break;
 	case RXR_MEDIUM_MSGRTM_PKT:
 	case RXR_MEDIUM_TAGRTM_PKT:
-		rxr_pkt_handle_medium_rtm_data_copied(ep, pkt_entry);
+		rxr_pkt_handle_medium_rtm_data_copied(ep, pkt_entry, rx_entry);
 		break;
 	case RXR_LONG_MSGRTM_PKT:
 	case RXR_LONG_TAGRTM_PKT:
-		rxr_pkt_handle_long_rtm_data_copied(ep, pkt_entry);
+		rxr_pkt_handle_long_rtm_data_copied(ep, pkt_entry, rx_entry);
 		break;
 	case RXR_EAGER_RTW_PKT:
-		rxr_pkt_handle_eager_rtw_data_copied(ep, pkt_entry);
+		rxr_pkt_handle_eager_rtw_data_copied(ep, pkt_entry, rx_entry);
 		break;
 	case RXR_LONG_RTW_PKT:
-		rxr_pkt_handle_long_rtw_data_copied(ep, pkt_entry);
+		rxr_pkt_handle_long_rtw_data_copied(ep, pkt_entry, rx_entry);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
@@ -587,18 +628,16 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 {
 	ssize_t err;
 
-	pkt_entry->x_entry = rx_entry;
-
 	if (OFI_UNLIKELY(rx_entry->rxr_flags & RXR_RECV_CANCEL) ||
 	    data_offset >= rx_entry->cq_entry.len) {
-		rxr_pkt_handle_data_copied(ep, pkt_entry);
+		rxr_pkt_handle_data_copied(ep, pkt_entry, rx_entry);
 		return;
 	}
 
 	if (efa_ep_is_cuda_mr(rx_entry->desc[0])) {
-		err = rxr_pkt_post_read_to_copy_data(ep, pkt_entry, data,
-						     data_size, rx_entry,
-						     data_offset);
+		err = rxr_pkt_post_local_read_or_queue(ep, pkt_entry, data,
+						       data_size, rx_entry,
+						       data_offset);
 		if (OFI_UNLIKELY(err)) {
 			if (rxr_cq_handle_rx_error(ep, rx_entry, -FI_EINVAL))
 				assert(0 && "error writing error cq entry\n");
@@ -606,7 +645,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 	} else {
 		ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count,
 				data_offset, data, data_size);
-		rxr_pkt_handle_data_copied(ep, pkt_entry);
+		rxr_pkt_handle_data_copied(ep, pkt_entry, rx_entry);
 	}
 }
 
@@ -615,14 +654,18 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
  */
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *comp)
 {
+	struct rxr_local_read_entry *local_read_entry;
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_peer *peer;
 
 	pkt_entry = (struct rxr_pkt_entry *)comp->op_context;
 	if (pkt_entry->state == RXR_PKT_ENTRY_READING) {
-		rxr_pkt_handle_data_copied(ep, pkt_entry);
+		local_read_entry = pkt_entry->x_entry;
+		assert(local_read_entry);
+		rxr_pkt_handle_data_copied(ep, pkt_entry, local_read_entry->rx_entry);
 		peer = rxr_ep_get_peer(ep, ep->rdm_self_addr);
 		rxr_ep_dec_tx_pending(ep, peer, 0);
+		ofi_buf_free(local_read_entry);
 		return;
 	}
 

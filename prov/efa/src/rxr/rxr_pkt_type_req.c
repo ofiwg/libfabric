@@ -768,11 +768,10 @@ struct rxr_rx_entry *rxr_pkt_get_tagrtm_rx_entry(struct rxr_ep *ep,
 /*
  * handle_data_copied() functions for RTM packets
  */
-void rxr_pkt_handle_eager_rtm_data_copied(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_eager_rtm_data_copied(struct rxr_ep *ep,
+					  struct rxr_pkt_entry *pkt_entry,
+					  struct rxr_rx_entry *rx_entry)
 {
-	struct rxr_rx_entry *rx_entry;
-
-	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
 	assert(rx_entry);
 
 	/* rxr_cq_handle_rx_completion release pkt_entry */
@@ -781,12 +780,12 @@ void rxr_pkt_handle_eager_rtm_data_copied(struct rxr_ep *ep, struct rxr_pkt_entr
 	rxr_release_rx_entry(ep, rx_entry);
 }
 
-void rxr_pkt_handle_medium_rtm_data_copied(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_medium_rtm_data_copied(struct rxr_ep *ep,
+					   struct rxr_pkt_entry *pkt_entry,
+					   struct rxr_rx_entry *rx_entry)
 {
-	struct rxr_rx_entry *rx_entry;
 	size_t data_size;
 
-	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
 	assert(rx_entry);
 	data_size = pkt_entry->pkt_size - rxr_pkt_req_hdr_size(pkt_entry);
 
@@ -804,13 +803,13 @@ void rxr_pkt_handle_medium_rtm_data_copied(struct rxr_ep *ep, struct rxr_pkt_ent
 	}
 }
 
-void rxr_pkt_handle_long_rtm_data_copied(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_long_rtm_data_copied(struct rxr_ep *ep,
+					 struct rxr_pkt_entry *pkt_entry,
+					 struct rxr_rx_entry *rx_entry)
 {
-	struct rxr_rx_entry *rx_entry;
 	size_t data_size;
 	int err;
 
-	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
 	assert(rx_entry);
 	data_size = pkt_entry->pkt_size - rxr_pkt_req_hdr_size(pkt_entry);
 
@@ -1332,12 +1331,9 @@ void rxr_pkt_handle_long_rtw_send_completion(struct rxr_ep *ep,
  *     handle_data_copied() functions for RTW packets
  */
 void rxr_pkt_handle_eager_rtw_data_copied(struct rxr_ep *ep,
-					  struct rxr_pkt_entry *pkt_entry)
+					  struct rxr_pkt_entry *pkt_entry,
+					  struct rxr_rx_entry *rx_entry)
 {
-	struct rxr_rx_entry *rx_entry;
-
-	rx_entry = pkt_entry->x_entry;
-
 	if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
 		rxr_cq_write_rx_completion(ep, rx_entry);
 
@@ -1346,13 +1342,12 @@ void rxr_pkt_handle_eager_rtw_data_copied(struct rxr_ep *ep,
 }
 
 void rxr_pkt_handle_long_rtw_data_copied(struct rxr_ep *ep,
-					 struct rxr_pkt_entry *pkt_entry)
+					 struct rxr_pkt_entry *pkt_entry,
+					 struct rxr_rx_entry *rx_entry)
 {
 	int err;
 	size_t data_size;
-	struct rxr_rx_entry *rx_entry;
 
-	rx_entry = pkt_entry->x_entry;
 	assert(rx_entry);
 	data_size = pkt_entry->pkt_size - rxr_pkt_req_hdr_size(pkt_entry);
 

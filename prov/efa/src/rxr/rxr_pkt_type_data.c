@@ -239,15 +239,13 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 		rxr_cq_handle_tx_completion(ep, tx_entry);
 }
 
-void rxr_data_pkt_handle_data_copied(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_data_pkt_handle_data_copied(struct rxr_ep *ep,
+				     struct rxr_pkt_entry *pkt_entry,
+				     struct rxr_rx_entry *rx_entry)
 {
 	int pkt_type;
-	struct rxr_rx_entry *rx_entry;
 	struct rxr_peer *peer;
 	ssize_t err, seg_size, bytes_left;
-
-	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
-	assert(rx_entry);
 
 	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
 	assert(pkt_type == RXR_DATA_PKT || pkt_type == RXR_READRSP_PKT);

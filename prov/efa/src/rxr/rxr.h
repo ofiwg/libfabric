@@ -225,6 +225,7 @@ enum rxr_lower_ep_type {
 enum rxr_x_entry_type {
 	RXR_TX_ENTRY = 1,
 	RXR_RX_ENTRY,
+	RXR_LOCAL_READ_ENTRY,
 };
 
 enum rxr_tx_comm_type {
@@ -599,6 +600,8 @@ struct rxr_ep {
 	struct ofi_bufpool *readrsp_tx_entry_pool;
 	/* data structure to maintain read */
 	struct ofi_bufpool *read_entry_pool;
+	/* data structure to maintain local read */
+	struct ofi_bufpool *local_read_entry_pool;
 	/* data structure to maintain pkt rx map */
 	struct ofi_bufpool *map_entry_pool;
 	/* rxr medium message pkt_entry to rx_entry map */
@@ -623,6 +626,8 @@ struct rxr_ep {
 	struct dlist_entry tx_pending_list;
 	/* read entries with data to be read */
 	struct dlist_entry read_pending_list;
+	/* local read entries with data to be read */
+	struct dlist_entry local_read_pending_list;
 	/* rxr_peer entries that are in backoff due to RNR */
 	struct dlist_entry peer_backoff_list;
 

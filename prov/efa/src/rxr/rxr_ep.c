@@ -705,6 +705,9 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	if (rxr_ep->read_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->read_entry_pool);
 
+	if (rxr_ep->local_read_entry_pool)
+		ofi_bufpool_destroy(rxr_ep->local_read_entry_pool);
+
 	if (rxr_ep->readrsp_tx_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->readrsp_tx_entry_pool);
 
@@ -1230,13 +1233,21 @@ int rxr_ep_init(struct rxr_ep *ep)
 	if (ret)
 		goto err_free_tx_entry_pool;
 
+	ret = ofi_bufpool_create(&ep->local_read_entry_pool,
+				 sizeof(struct rxr_local_read_entry),
+				 RXR_BUF_POOL_ALIGNMENT,
+				 RXR_MAX_RX_QUEUE_SIZE,
+				 ep->rx_size, 0);
+	if (ret)
+		goto err_free_read_entry_pool;
+
 	ret = ofi_bufpool_create(&ep->readrsp_tx_entry_pool,
 				 sizeof(struct rxr_tx_entry),
 				 RXR_BUF_POOL_ALIGNMENT,
 				 RXR_MAX_RX_QUEUE_SIZE,
 				 ep->rx_size, 0);
 	if (ret)
-		goto err_free_read_entry_pool;
+		goto err_free_local_read_entry_pool;
 
 	ret = ofi_bufpool_create(&ep->rx_entry_pool,
 				 sizeof(struct rxr_rx_entry),
@@ -1286,6 +1297,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 	dlist_init(&ep->tx_entry_queued_list);
 	dlist_init(&ep->tx_pending_list);
 	dlist_init(&ep->read_pending_list);
+	dlist_init(&ep->local_read_pending_list);
 	dlist_init(&ep->peer_backoff_list);
 #if ENABLE_DEBUG
 	dlist_init(&ep->rx_pending_list);
@@ -1310,6 +1322,9 @@ err_free_rx_entry_pool:
 err_free_readrsp_tx_entry_pool:
 	if (ep->readrsp_tx_entry_pool)
 		ofi_bufpool_destroy(ep->readrsp_tx_entry_pool);
+err_free_local_read_entry_pool:
+	if (ep->local_read_entry_pool)
+		ofi_bufpool_destroy(ep->local_read_entry_pool);
 err_free_read_entry_pool:
 	if (ep->read_entry_pool)
 		ofi_bufpool_destroy(ep->read_entry_pool);
@@ -1510,6 +1525,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_read_entry *read_entry;
+	struct rxr_local_read_entry *local_read_entry;
 	struct dlist_entry *tmp;
 	ssize_t ret;
 
@@ -1632,6 +1648,28 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			goto read_err;
 
 		dlist_remove(&read_entry->pending_entry);
+	}
+
+	/*
+	 * Send local read requests until finish or error encoutered
+	 */
+	dlist_foreach_container_safe(&ep->local_read_pending_list, struct rxr_local_read_entry,
+				     local_read_entry, pending_entry, tmp) {
+		/*
+		 * The TX queue is full so we can't do any
+		 * additional work.
+		 */
+		if (ep->tx_pending == ep->max_outstanding_tx)
+			goto out;
+
+		ret = rxr_pkt_post_local_read(ep, local_read_entry);
+		if (ret == -FI_EAGAIN)
+			break;
+
+		if (OFI_UNLIKELY(ret))
+			goto read_err;
+
+		dlist_remove(&local_read_entry->pending_entry);
 	}
 
 out:

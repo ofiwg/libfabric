@@ -97,5 +97,17 @@ void rxr_read_handle_read_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pk
 
 int rxr_read_handle_error(struct rxr_ep *ep, struct rxr_read_entry *read_entry, int ret);
 
+struct rxr_local_read_entry {
+	enum rxr_x_entry_type x_entry_type;
+	struct rxr_pkt_entry *pkt_entry;
+	char *data;
+	size_t data_size;
+
+	struct rxr_rx_entry *rx_entry;
+	size_t data_offset;
+
+	struct dlist_entry pending_entry;
+};
+
 #endif
 
