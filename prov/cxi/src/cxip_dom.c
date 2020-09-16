@@ -38,7 +38,7 @@ int cxip_domain_enable(struct cxip_domain *dom)
 	ret = cxip_get_if(dom->nic_addr, &dom->iface);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to get IF\n");
-		ret = -FI_EDOMAIN;
+		ret = -FI_ENODEV;
 		goto unlock;
 	}
 
@@ -52,7 +52,7 @@ int cxip_domain_enable(struct cxip_domain *dom)
 	ret = cxip_iomm_init(dom);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to initialize IOMM: %d\n", ret);
-		ret = -FI_EDOMAIN;
+		assert(ret == -FI_ENOMEM);
 		goto free_lni;
 	}
 

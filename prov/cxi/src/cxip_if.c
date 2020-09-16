@@ -140,6 +140,12 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **iface)
 		return -FI_ENODEV;
 	}
 
+	if (!if_entry->info->link_state) {
+		CXIP_LOG_INFO("Interface %s link down.\n",
+			      if_entry->info->device_name);
+		return -FI_ENODEV;
+	}
+
 	/* Lock the IF to serialize opening the device */
 	fastlock_acquire(&if_entry->lock);
 
