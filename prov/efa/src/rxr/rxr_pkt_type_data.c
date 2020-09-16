@@ -239,20 +239,44 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 		rxr_cq_handle_tx_completion(ep, tx_entry);
 }
 
-void rxr_data_pkt_handle_data_copied(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+/*
+ *  rxr_pkt_handle_data_recv() and related functions
+ */
+int rxr_pkt_proc_data(struct rxr_ep *ep,
+		      struct rxr_rx_entry *rx_entry,
+		      struct rxr_pkt_entry *pkt_entry,
+		      char *data, size_t seg_offset,
+		      size_t seg_size)
 {
-	int pkt_type;
-	struct rxr_rx_entry *rx_entry;
 	struct rxr_peer *peer;
-	ssize_t err, seg_size, bytes_left;
+	struct efa_mr *desc;
+	int64_t bytes_left, bytes_copied;
+	ssize_t ret = 0;
 
-	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
-	assert(rx_entry);
+#if ENABLE_DEBUG
+	int pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
 
-	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
 	assert(pkt_type == RXR_DATA_PKT || pkt_type == RXR_READRSP_PKT);
-	seg_size = (pkt_type == RXR_DATA_PKT) ? rxr_get_data_pkt(pkt_entry->pkt)->hdr.seg_size
-					      : rxr_get_readrsp_hdr(pkt_entry->pkt)->seg_size;
+#endif
+	/* we are sinking message for CANCEL/DISCARD entry */
+	if (OFI_LIKELY(!(rx_entry->rxr_flags & RXR_RECV_CANCEL)) &&
+	    rx_entry->cq_entry.len > seg_offset) {
+		desc = rx_entry->desc[0];
+		bytes_copied = ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+						    desc ? desc->peer.device.reserved : 0,
+						    rx_entry->iov,
+						    rx_entry->iov_count,
+						    seg_offset,
+						    data,
+						    seg_size);
+
+		if (bytes_copied != MIN(seg_size, rx_entry->cq_entry.len - seg_offset)) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
+				bytes_copied);
+			if (rxr_cq_handle_rx_error(ep, rx_entry, -FI_EINVAL))
+				assert(0 && "error writing error cq entry for EOR\n");
+		}
+	}
 
 	rx_entry->bytes_done += seg_size;
 
@@ -280,20 +304,16 @@ void rxr_data_pkt_handle_data_copied(struct rxr_ep *ep, struct rxr_pkt_entry *pk
 
 		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 		rxr_release_rx_entry(ep, rx_entry);
-		return;
+		return 0;
 	}
 
 	if (!rx_entry->window) {
 		assert(rx_entry->state == RXR_RX_RECV);
-		err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
-		if (OFI_UNLIKELY(err)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "Cannot post CTS packet\n");
-			rxr_cq_handle_rx_error(ep, rx_entry, err);
-			rxr_release_rx_entry(ep, rx_entry);
-		}
+		ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
 	}
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
+	return ret;
 }
 
 void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
@@ -308,9 +328,9 @@ void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
 					data_pkt->hdr.rx_id);
 
 	rxr_pkt_proc_data(ep, rx_entry,
-			  data_pkt->hdr.seg_offset,
 			  pkt_entry,
 			  data_pkt->data,
+			  data_pkt->hdr.seg_offset,
 			  data_pkt->hdr.seg_size);
 }
 

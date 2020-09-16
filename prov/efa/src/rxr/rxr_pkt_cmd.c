@@ -34,15 +34,13 @@
 #include "efa.h"
 #include "rxr.h"
 #include "rxr_cntr.h"
-#include "rxr_read.h"
 #include "rxr_pkt_cmd.h"
 
 /* Handshake wait timeout in microseconds */
 #define RXR_HANDSHAKE_WAIT_TIMEOUT 1000000
 
-/* This file implements 5 actions that can be applied to a packet:
+/* This file implements 4 actions that can be applied to a packet:
  *          posting,
- *          processing data,
  *          handling send completion and,
  *          handing recv completion.
  *          dump (for debug only)
@@ -102,7 +100,6 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	assert(tx_entry->window >= 0);
 	return ret;
 }
-
 
 /*
  *   rxr_pkt_init_ctrl() uses init functions declared in rxr_pkt_type.h
@@ -453,140 +450,7 @@ ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_pee
 }
 
 /*
- * Functions to copy data to receiving buffer in a packet entry.
- *
- * Each packet type that may contain data will implement
- * a handler function to handle data copied event.
- *
- * Data can be copied either directly or by a read request.
- *
- * If data is copied directly, the event handler will be called
- * immediately.
- *
- * If data is copied by read. The progress engine will call the
- * event handler.
- */
-static inline
-ssize_t rxr_pkt_post_read_to_copy_data(struct rxr_ep *rxr_ep,
-				       struct rxr_pkt_entry *pkt_entry,
-				       char *data, size_t data_size,
-				       struct rxr_rx_entry *rx_entry,
-				       size_t data_offset)
-{
-	ssize_t err;
-	int iov_idx;
-	size_t iov_offset;
-	void *dest_buf;
-
-	assert(pkt_entry->x_entry == rx_entry);
-
-	err = rxr_locate_iov_pos(rx_entry->iov, rx_entry->iov_count, data_offset,
-				 &iov_idx, &iov_offset);
-
-	if (err) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"data_offset %ld out of range\n",
-			data_offset);
-		return err;
-	}
-
-	assert(iov_idx >=0 && iov_idx < rx_entry->iov_count);
-	assert(efa_ep_is_cuda_mr(rx_entry->desc[iov_idx]));
-	assert(iov_offset + data_size <= rx_entry->iov[iov_idx].iov_len);
-
-	dest_buf = (char *)rx_entry->iov[iov_idx].iov_base + iov_offset;
-
-	pkt_entry->state = RXR_PKT_ENTRY_COPY_BY_READ;
-	assert(pkt_entry->mr);
-	assert(rxr_ep->rdm_self_addr != FI_ADDR_NOTAVAIL);
-
-	err = fi_read(rxr_ep->rdm_ep,
-		      dest_buf, data_size, rx_entry->desc[iov_idx],
-		      rxr_ep->rdm_self_addr,
-		      (uint64_t)data, fi_mr_key(pkt_entry->mr),
-		      pkt_entry);
-
-	if (OFI_UNLIKELY(err)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Failed to post read to copy data\n");
-		return err;
-	}
-
-	return 0;
-}
-
-static inline
-void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
-				struct rxr_pkt_entry *pkt_entry)
-{
-	int pkt_type;
-
-	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
-
-	switch(pkt_type) {
-	case RXR_DATA_PKT:
-	case RXR_READRSP_PKT:
-		rxr_data_pkt_handle_data_copied(ep, pkt_entry);
-		break;
-	case RXR_EAGER_MSGRTM_PKT:
-	case RXR_EAGER_TAGRTM_PKT:
-		rxr_pkt_handle_eager_rtm_data_copied(ep, pkt_entry);
-		break;
-	case RXR_MEDIUM_MSGRTM_PKT:
-	case RXR_MEDIUM_TAGRTM_PKT:
-		rxr_pkt_handle_medium_rtm_data_copied(ep, pkt_entry);
-		break;
-	case RXR_LONG_MSGRTM_PKT:
-	case RXR_LONG_TAGRTM_PKT:
-		rxr_pkt_handle_long_rtm_data_copied(ep, pkt_entry);
-		break;
-	case RXR_EAGER_RTW_PKT:
-		rxr_pkt_handle_eager_rtw_data_copied(ep, pkt_entry);
-		break;
-	case RXR_LONG_RTW_PKT:
-		rxr_pkt_handle_long_rtw_data_copied(ep, pkt_entry);
-		break;
-	default:
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"invalid control pkt type %d\n",
-			rxr_get_base_hdr(pkt_entry->pkt)->type);
-		assert(0 && "invalid control pkt type");
-		rxr_cq_handle_cq_error(ep, -FI_EIO);
-	}
-}
-
-void rxr_pkt_proc_data(struct rxr_ep *ep,
-		       struct rxr_rx_entry *rx_entry,
-		       size_t data_offset,
-		       struct rxr_pkt_entry *pkt_entry,
-		       char *data, size_t data_size)
-{
-	ssize_t err;
-
-	pkt_entry->x_entry = rx_entry;
-
-	if (OFI_UNLIKELY(rx_entry->rxr_flags & RXR_RECV_CANCEL) ||
-	    data_offset >= rx_entry->cq_entry.len) {
-		rxr_pkt_handle_data_copied(ep, pkt_entry);
-		return;
-	}
-
-	if (efa_ep_is_cuda_mr(rx_entry->desc[0])) {
-		err = rxr_pkt_post_read_to_copy_data(ep, pkt_entry, data,
-						     data_size, rx_entry,
-						     data_offset);
-		if (OFI_UNLIKELY(err)) {
-			if (rxr_cq_handle_rx_error(ep, rx_entry, -FI_EINVAL))
-				assert(0 && "error writing error cq entry\n");
-		}
-	} else {
-		ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count,
-				data_offset, data, data_size);
-		rxr_pkt_handle_data_copied(ep, pkt_entry);
-	}
-}
-
-/*
- * Functions handle send completions
+ *   Functions used to handle packet send completion
  */
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *comp)
 {
@@ -594,10 +458,6 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *
 	struct rxr_peer *peer;
 
 	pkt_entry = (struct rxr_pkt_entry *)comp->op_context;
-	if (pkt_entry->state == RXR_PKT_ENTRY_COPY_BY_READ) {
-		rxr_pkt_handle_data_copied(ep, pkt_entry);
-		return;
-	}
 
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
 	case RXR_HANDSHAKE_PKT:
