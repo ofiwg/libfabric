@@ -118,9 +118,9 @@ struct fi_fabric_attr mlx_fabric_attrs = {
 struct fi_ep_attr mlx_ep_attrs = {
 	.type = FI_EP_UNSPEC,
 	.protocol = FI_PROTO_MLX,
-	.protocol_version = (((1) << UCP_VERSION_MAJOR_SHIFT)|
-			((5) << UCP_VERSION_MINOR_SHIFT)),
-	.max_msg_size = 0xFFFFFFFF,
+	.protocol_version = ((FI_MLX_VERSION_MAJOR << UCP_VERSION_MAJOR_SHIFT)|
+			(FI_MLX_VERSION_MINOR << UCP_VERSION_MINOR_SHIFT)),
+	.max_msg_size = SIZE_MAX,
 	.mem_tag_format = 0x0,
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1,
@@ -275,7 +275,7 @@ void mlx_cleanup(void)
 struct fi_provider mlx_prov = {
 	.name = FI_MLX_FABRIC_NAME,
 	.version = FI_MLX_VERSION,
-	.fi_version = FI_VERSION(1, 8),
+	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = mlx_getinfo,
 	.fabric = mlx_fabric_open,
 	.cleanup = mlx_cleanup,
