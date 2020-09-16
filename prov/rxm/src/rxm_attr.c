@@ -49,7 +49,7 @@
  * requested by the app. */
 
 struct fi_tx_attr rxm_tx_attr = {
-	.caps = RXM_TX_CAPS,
+	.caps = RXM_TX_CAPS | FI_HMEM,
 	.op_flags = RXM_PASSTHRU_TX_OP_FLAGS | RXM_TX_OP_FLAGS,
 	.msg_order = ~0x0ULL,
 	.comp_order = FI_ORDER_NONE,
@@ -59,7 +59,7 @@ struct fi_tx_attr rxm_tx_attr = {
 };
 
 struct fi_rx_attr rxm_rx_attr = {
-	.caps = RXM_RX_CAPS,
+	.caps = RXM_RX_CAPS | FI_HMEM,
 	.op_flags = RXM_PASSTHRU_RX_OP_FLAGS | RXM_RX_OP_FLAGS,
 	.msg_order = ~0x0ULL,
 	.comp_order = FI_ORDER_NONE,
@@ -159,7 +159,7 @@ struct fi_info rxm_coll_info = {
 };
 
 struct fi_info rxm_base_info = {
-	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS,
+	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS | FI_HMEM,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxm_tx_attr,
 	.rx_attr = &rxm_rx_attr,
@@ -181,7 +181,7 @@ struct fi_info rxm_tcp_info = {
 };
 
 struct fi_info rxm_verbs_info = {
-	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS,
+	.caps = RXM_TX_CAPS | RXM_RX_CAPS | RXM_DOMAIN_CAPS | FI_HMEM,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &rxm_tx_attr,
 	.rx_attr = &rxm_rx_attr,
