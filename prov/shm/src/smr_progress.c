@@ -619,6 +619,7 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 
 	smr_peer_data(ep->region)[idx].addr.addr = cmd->msg.hdr.addr;
 
+	smr_freestack_push(smr_inject_pool(ep->region), tx_buf);
 	ofi_cirque_discard(smr_cmd_queue(ep->region));
 	ep->region->cmd_cnt++;
 }

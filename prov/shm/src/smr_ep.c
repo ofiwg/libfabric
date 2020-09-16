@@ -205,6 +205,7 @@ static void smr_send_name(struct smr_ep *ep, fi_addr_t id)
 
 	smr_peer_data(ep->region)[id].name_sent = 1;
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
+	peer_smr->cmd_cnt--;
 
 out:
 	fastlock_release(&peer_smr->lock);
