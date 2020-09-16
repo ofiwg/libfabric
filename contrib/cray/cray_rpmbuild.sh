@@ -16,23 +16,19 @@ LIBFABRIC_VERSION=$(grep AC_INIT configure.ac | \
     sed -e 's/,//g' -e 's/\[//g' -e 's/\]//g')
 
 VERSION=${LIBFABRIC_VERSION}-$(git rev-parse --short HEAD)
-ENABLED_PROVIDERS="-i cxi"
+ENABLED_PROVIDERS="-i cxi -i tcp -i udp -i rxm -i rxd"
 
-DISABLED_PROVIDERS="-e rxd \
--e psm \
+DISABLED_PROVIDERS="-e psm \
 -e psm2 \
 -e usnic \
 -e mlx \
 -e gni \
--e udp \
--e tcp \
 -e mrail \
 -e bgq \
 -e rstream \
 -e shm \
 -e verbs \
--e sockets \
--e rxm"
+-e sockets"
 
 ORIGINAL_VERSION=$(echo ${LIBFABRIC_VERSION} | \
 	sed -e 's/b.*//g' \
