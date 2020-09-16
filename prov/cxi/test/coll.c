@@ -312,7 +312,7 @@ Test(coll_put, put_ranks)
 
 /* Test a lot of packets to force buffer rollover.
  */
-Test(coll_put, put_many)
+Test(coll_put, put_many, .timeout = 30)
 {
 	cxit_create_netsim_collective(1);
 	_put_data(4000, 0, 0);
