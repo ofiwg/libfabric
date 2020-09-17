@@ -167,7 +167,6 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 				return -FI_ENODATA;
 			}
 			cur->domain_attr->mr_mode |= FI_MR_HMEM;
-			cur->tx_attr->inject_size = 0;
 			ofi_hmem_init();
 		} else {
 			cur->domain_attr->mr_mode &= ~FI_MR_HMEM;

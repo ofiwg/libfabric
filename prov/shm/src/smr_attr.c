@@ -32,11 +32,10 @@
 
 #include "smr.h"
 
-#define SMR_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS | FI_ATOMICS | \
-		     FI_HMEM)
+#define SMR_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS | FI_ATOMICS)
 #define SMR_RX_CAPS (FI_SOURCE | FI_RMA_EVENT | OFI_RX_MSG_CAPS | FI_TAGGED | \
 		     OFI_RX_RMA_CAPS | FI_ATOMICS | FI_DIRECTED_RECV | \
-		     FI_MULTI_RECV | FI_HMEM)
+		     FI_MULTI_RECV)
 #define SMR_TX_OP_FLAGS (FI_COMPLETION | FI_INJECT_COMPLETE | \
 			 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)
 #define SMR_RX_OP_FLAGS (FI_COMPLETION | FI_MULTI_RECV)
@@ -54,6 +53,26 @@ struct fi_tx_attr smr_tx_attr = {
 
 struct fi_rx_attr smr_rx_attr = {
 	.caps = SMR_RX_CAPS,
+	.op_flags = SMR_RX_OP_FLAGS,
+	.comp_order = FI_ORDER_STRICT,
+	.msg_order = SMR_RMA_ORDER | FI_ORDER_SAS,
+	.size = 1024,
+	.iov_limit = SMR_IOV_LIMIT
+};
+
+struct fi_tx_attr smr_hmem_tx_attr = {
+	.caps = SMR_TX_CAPS | FI_HMEM,
+	.op_flags = SMR_TX_OP_FLAGS,
+	.comp_order = FI_ORDER_NONE,
+	.msg_order = SMR_RMA_ORDER | FI_ORDER_SAS,
+	.inject_size = 0,
+	.size = 1024,
+	.iov_limit = SMR_IOV_LIMIT,
+	.rma_iov_limit = SMR_IOV_LIMIT
+};
+
+struct fi_rx_attr smr_hmem_rx_attr = {
+	.caps = SMR_RX_CAPS | FI_HMEM,
 	.op_flags = SMR_RX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = SMR_RMA_ORDER | FI_ORDER_SAS,
@@ -99,6 +118,16 @@ struct fi_fabric_attr smr_fabric_attr = {
 	.prov_version = OFI_VERSION_DEF_PROV
 };
 
+struct fi_info smr_hmem_info = {
+	.caps = SMR_TX_CAPS | SMR_RX_CAPS | FI_HMEM | FI_MULTI_RECV,
+	.addr_format = FI_ADDR_STR,
+	.tx_attr = &smr_hmem_tx_attr,
+	.rx_attr = &smr_hmem_rx_attr,
+	.ep_attr = &smr_ep_attr,
+	.domain_attr = &smr_domain_attr,
+	.fabric_attr = &smr_fabric_attr
+};
+
 struct fi_info smr_info = {
 	.caps = SMR_TX_CAPS | SMR_RX_CAPS | FI_MULTI_RECV,
 	.addr_format = FI_ADDR_STR,
@@ -106,5 +135,6 @@ struct fi_info smr_info = {
 	.rx_attr = &smr_rx_attr,
 	.ep_attr = &smr_ep_attr,
 	.domain_attr = &smr_domain_attr,
-	.fabric_attr = &smr_fabric_attr
+	.fabric_attr = &smr_fabric_attr,
+	.next = &smr_hmem_info,
 };
