@@ -234,11 +234,15 @@ ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
 			       struct rxr_tx_entry *tx_entry,
 			       struct rxr_pkt_entry *pkt_entry);
 
+int rxr_pkt_proc_data(struct rxr_ep *ep,
+		      struct rxr_rx_entry *rx_entry,
+		      struct rxr_pkt_entry *pkt_entry,
+		      char *data, size_t seg_offset,
+		      size_t seg_size);
+
 void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 					 struct rxr_pkt_entry *pkt_entry);
 
-void rxr_data_pkt_handle_data_copied(struct rxr_ep *ep,
-				     struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);

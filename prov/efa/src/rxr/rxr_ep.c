@@ -890,7 +890,6 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 	ssize_t ret;
 	size_t i;
 	struct rxr_ep *ep;
-	struct efa_ep *efa_ep;
 	uint64_t flags = FI_MORE;
 	size_t rx_size, shm_rx_size;
 	char shm_ep_name[NAME_MAX];
@@ -963,17 +962,6 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 				if (ret)
 					goto out;
 			}
-		}
-
-		/*
-		 * insert EP's own address to AV and save the address as
-		 * ep->rdm_self_addr. It is used when copy data to GPU memory by local read
-		 */
-		efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-		ret = efa_av_insert_addr(efa_ep->av, (struct efa_ep_addr *)ep->core_addr,
-					 &ep->rdm_self_addr, 0, NULL);
-		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "insert EP's own address failed!\n");
 		}
 
 out:
@@ -1149,14 +1137,13 @@ static void rxr_buf_region_free_hndlr(struct ofi_bufpool_region *region)
 }
 
 static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
-			       size_t max_count, size_t chunk_count,
-			       uint64_t flags,
+			       size_t chunk_count,
 			       struct ofi_bufpool **buf_pool)
 {
 	struct ofi_bufpool_attr attr = {
 		.size		= size,
 		.alignment	= RXR_BUF_POOL_ALIGNMENT,
-		.max_cnt	= max_count,
+		.max_cnt	= chunk_count,
 		.chunk_cnt	= chunk_count,
 		.alloc_fn	= rxr_ep_mr_local(ep) ?
 					rxr_buf_region_alloc_hndlr : NULL,
@@ -1164,7 +1151,7 @@ static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
 					rxr_buf_region_free_hndlr : NULL,
 		.init_fn	= NULL,
 		.context	= rxr_ep_domain(ep),
-		.flags		= flags,
+		.flags		= OFI_BUFPOOL_HUGEPAGES,
 	};
 
 	return ofi_bufpool_create_attr(&attr, buf_pool);
@@ -1181,34 +1168,29 @@ int rxr_ep_init(struct rxr_ep *ep)
 	ep->rx_pkt_pool_entry_sz = entry_sz;
 #endif
 
-	ret = rxr_create_pkt_pool(ep, entry_sz,
-				  rxr_get_tx_pool_chunk_cnt(ep),
-				  rxr_get_tx_pool_chunk_cnt(ep),
-				  OFI_BUFPOOL_HUGEPAGES,
+	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_tx_pool_chunk_cnt(ep),
 				  &ep->tx_pkt_efa_pool);
 	if (ret)
 		goto err_out;
 
-	ret = rxr_create_pkt_pool(ep, entry_sz,
-				  rxr_get_rx_pool_chunk_cnt(ep),
-				  rxr_get_rx_pool_chunk_cnt(ep),
-				  OFI_BUFPOOL_HUGEPAGES,
+	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_rx_pool_chunk_cnt(ep),
 				  &ep->rx_pkt_efa_pool);
 	if (ret)
 		goto err_free_tx_pool;
 
 	if (rxr_env.rx_copy_unexp) {
-		ret = rxr_create_pkt_pool(ep, entry_sz,
-					  0, rxr_get_rx_pool_chunk_cnt(ep),
-					  0, &ep->rx_unexp_pkt_pool);
+		ret = ofi_bufpool_create(&ep->rx_unexp_pkt_pool, entry_sz,
+					 RXR_BUF_POOL_ALIGNMENT, 0,
+					 rxr_get_rx_pool_chunk_cnt(ep), 0);
+
 		if (ret)
 			goto err_free_rx_pool;
 	}
 
 	if (rxr_env.rx_copy_ooo) {
-		ret = rxr_create_pkt_pool(ep, entry_sz,
-					  0, rxr_env.recvwin_size,
-					  0, &ep->rx_ooo_pkt_pool);
+		ret = ofi_bufpool_create(&ep->rx_ooo_pkt_pool, entry_sz,
+					 RXR_BUF_POOL_ALIGNMENT, 0,
+					 rxr_env.recvwin_size, 0);
 
 		if (ret)
 			goto err_free_rx_unexp_pool;
@@ -1723,8 +1705,6 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  &rxr_ep->rdm_ep, rxr_ep);
 	if (ret)
 		goto err_free_rdm_info;
-
-	rxr_ep->rdm_self_addr = FI_ADDR_NOTAVAIL;
 
 	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
 				  util_domain.domain_fid);
