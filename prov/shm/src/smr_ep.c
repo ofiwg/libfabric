@@ -216,7 +216,7 @@ fi_addr_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
 	fi_addr_t id;
 	int ret;
 
-	id = *((fi_addr_t *) ofi_av_get_addr(ep->util_ep.av, fi_addr));
+	id = smr_addr_lookup(ep->util_ep.av, fi_addr);
 	assert(id < SMR_MAX_PEERS);
 
 	if (smr_peer_data(ep->region)[id].addr.addr != FI_ADDR_UNSPEC)
