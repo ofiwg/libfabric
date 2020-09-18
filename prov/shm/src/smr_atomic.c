@@ -143,7 +143,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	struct iovec result_iov[SMR_IOV_LIMIT];
 	enum fi_hmem_iface iface;
 	uint64_t device;
-	fi_addr_t id, peer_id;
+	int64_t id, peer_id;
 	int err = 0;
 	uint16_t flags = 0;
 	ssize_t ret = 0;
@@ -155,10 +155,10 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	assert(rma_count <= SMR_IOV_LIMIT);
 
 	id = smr_verify_peer(ep, addr);
-	if (id == FI_ADDR_UNSPEC)
+	if (id < 0)
 		return -FI_EAGAIN;
 
-	peer_id = smr_peer_data(ep->region)[id].addr.addr;
+	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
 
 	fastlock_acquire(&peer_smr->lock);
@@ -325,7 +325,7 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	struct smr_cmd *cmd;
 	struct iovec iov;
 	struct fi_rma_ioc rma_ioc;
-	fi_addr_t id, peer_id;
+	int64_t id, peer_id;
 	ssize_t ret = 0;
 	size_t total_len;
 
@@ -334,10 +334,10 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	id = smr_verify_peer(ep, dest_addr);
-	if (id == FI_ADDR_UNSPEC)
+	if (id < 0)
 		return -FI_EAGAIN;
 
-	peer_id = smr_peer_data(ep->region)[id].addr.addr;
+	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
 
 	fastlock_acquire(&peer_smr->lock);

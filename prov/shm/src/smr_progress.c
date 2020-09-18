@@ -252,10 +252,9 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 {
 	struct smr_region *peer_smr;
 	struct smr_resp *resp;
-	int peer_id, ret;
+	int ret;
 
-	peer_id = (int) cmd->msg.hdr.addr;
-	peer_smr = smr_peer_region(ep->region, peer_id);
+	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.addr);
 	resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
 
 	if (err) {
@@ -282,13 +281,12 @@ static int smr_mmap_peer_copy(struct smr_ep *ep, struct smr_cmd *cmd,
 {
 	char shm_name[SMR_NAME_MAX];
 	void *mapped_ptr;
-	int peer_id, fd, num;
+	int fd, num;
 	int ret = 0;
 
-	peer_id = (int) cmd->msg.hdr.addr;
-
-	num = smr_mmap_name(shm_name, ep->region->map->peers[peer_id].peer.name,
-			    cmd->msg.hdr.msg_id);
+	num = smr_mmap_name(shm_name,
+			ep->region->map->peers[cmd->msg.hdr.addr].peer.name,
+			cmd->msg.hdr.msg_id);
 	if (num < 0) {
 		FI_WARN(&smr_prov, FI_LOG_AV, "generating shm file name failed\n");
 		return -errno;
@@ -342,10 +340,9 @@ static int smr_progress_mmap(struct smr_cmd *cmd, struct iovec *iov,
 {
 	struct smr_region *peer_smr;
 	struct smr_resp *resp;
-	int peer_id, ret;
+	int ret;
 
-	peer_id = (int) cmd->msg.hdr.addr;
-	peer_smr = smr_peer_region(ep->region, peer_id);
+	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.addr);
 	resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
 
 	ret = smr_mmap_peer_copy(ep, cmd, iov, iov_count, total_len);
@@ -601,7 +598,7 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
 	size_t inj_offset;
-	fi_addr_t idx = FI_ADDR_UNSPEC;
+	int64_t idx = -1;
 	int ret = 0;
 
 	inj_offset = (size_t) cmd->msg.hdr.src_data;
@@ -615,9 +612,9 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 
 	peer_smr = smr_peer_region(ep->region, idx);
 
-	smr_peer_data(peer_smr)[cmd->msg.hdr.addr].addr.addr = idx;
+	smr_peer_data(peer_smr)[cmd->msg.hdr.addr].addr.id = idx;
 
-	smr_peer_data(ep->region)[idx].addr.addr = cmd->msg.hdr.addr;
+	smr_peer_data(ep->region)[idx].addr.id = cmd->msg.hdr.addr;
 
 	smr_freestack_push(smr_inject_pool(ep->region), tx_buf);
 	ofi_cirque_discard(smr_cmd_queue(ep->region));

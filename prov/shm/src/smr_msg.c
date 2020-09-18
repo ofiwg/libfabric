@@ -70,7 +70,9 @@ static struct smr_rx_entry *smr_get_recv_entry(struct smr_ep *ep,
 	entry->context = context;
 	entry->err = 0;
 	entry->flags = smr_convert_rx_flags(flags);
-	entry->addr = ep->util_ep.caps & FI_DIRECTED_RECV ? addr : FI_ADDR_UNSPEC;
+	entry->addr = ep->util_ep.caps & FI_DIRECTED_RECV &&
+				addr != FI_ADDR_UNSPEC ?
+				smr_addr_lookup(ep->util_ep.av, addr) : -1;
 	entry->tag = tag;
 	entry->ignore = ignore;
 
@@ -162,17 +164,17 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	struct smr_tx_entry *pend;
 	enum fi_hmem_iface iface;
 	uint64_t device;
-	fi_addr_t id, peer_id;
+	int64_t id, peer_id;
 	ssize_t ret = 0;
 	size_t total_len;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 
 	id = smr_verify_peer(ep, addr);
-	if (id == FI_ADDR_UNSPEC)
+	if (id < 0)
 		return -FI_EAGAIN;
 
-	peer_id = smr_peer_data(ep->region)[id].addr.addr;
+	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
 
 	fastlock_acquire(&peer_smr->lock);
@@ -304,7 +306,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
 	struct smr_cmd *cmd;
-	fi_addr_t id, peer_id;
+	int64_t id, peer_id;
 	ssize_t ret = 0;
 	struct iovec msg_iov;
 
@@ -316,10 +318,10 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
 
 	id = smr_verify_peer(ep, dest_addr);
-	if (id == FI_ADDR_UNSPEC)
+	if (id < 0)
 		return -FI_EAGAIN;
 
-	peer_id = smr_peer_data(ep->region)[id].addr.addr;
+	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
 
 	fastlock_acquire(&peer_smr->lock);

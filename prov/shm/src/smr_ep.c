@@ -179,7 +179,7 @@ static struct fi_ops_ep smr_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-static void smr_send_name(struct smr_ep *ep, fi_addr_t id)
+static void smr_send_name(struct smr_ep *ep, int64_t id)
 {
 	struct smr_region *peer_smr;
 	struct smr_cmd *cmd;
@@ -211,27 +211,27 @@ out:
 	fastlock_release(&peer_smr->lock);
 }
 
-fi_addr_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
+int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
 {
-	fi_addr_t id;
+	int64_t id;
 	int ret;
 
-	id = *((fi_addr_t *) ofi_av_get_addr(ep->util_ep.av, fi_addr));
+	id = smr_addr_lookup(ep->util_ep.av, fi_addr);
 	assert(id < SMR_MAX_PEERS);
 
-	if (smr_peer_data(ep->region)[id].addr.addr != FI_ADDR_UNSPEC)
+	if (smr_peer_data(ep->region)[id].addr.id >= 0)
 		return id;
 
-	if (ep->region->map->peers[id].peer.addr == FI_ADDR_UNSPEC) {
+	if (ep->region->map->peers[id].peer.id < 0) {
 		ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[id]);
 		if (ret == -ENOENT)
-			return FI_ADDR_UNSPEC;
+			return -1;
 
 	}
 
 	smr_send_name(ep, id);
 
-	return FI_ADDR_UNSPEC;
+	return -1;
 }
 
 static int smr_match_msg(struct dlist_entry *item, const void *args)
@@ -288,7 +288,7 @@ static void smr_init_queue(struct smr_queue *queue,
 void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 			  void *context, enum fi_hmem_iface iface, uint64_t device,
 			  const struct iovec *iov, uint32_t iov_count,
-			  fi_addr_t id, struct smr_resp *resp)
+			  int64_t id, struct smr_resp *resp)
 {
 	pend->cmd = *cmd;
 	pend->context = context;
@@ -305,7 +305,7 @@ void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 	resp->status = FI_EBUSY;
 }
 
-void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id, uint32_t op,
+void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags)
 {
 	cmd->msg.hdr.op = op;
