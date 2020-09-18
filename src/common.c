@@ -954,9 +954,13 @@ void ofi_straddr_log_internal(const char *func, int line,
 	size_t len = sizeof(buf);
 
 	if (fi_log_enabled(prov, level, subsys)) {
-		addr_format = ofi_translate_addr_format(ofi_sa_family(addr));
-		fi_log(prov, level, subsys, func, line, "%s: %s\n", log_str,
-		       ofi_straddr(buf, &len, addr_format, addr));
+		if (addr) {
+			addr_format = ofi_translate_addr_format(ofi_sa_family(addr));
+			fi_log(prov, level, subsys, func, line, "%s: %s\n", log_str,
+			       ofi_straddr(buf, &len, addr_format, addr));
+		} else {
+			fi_log(prov, level, subsys, func, line, "%s: (null)\n", log_str);
+		}
 	}
 }
 
