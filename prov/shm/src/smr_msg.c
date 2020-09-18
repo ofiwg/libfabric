@@ -70,7 +70,7 @@ static struct smr_rx_entry *smr_get_recv_entry(struct smr_ep *ep,
 	entry->context = context;
 	entry->err = 0;
 	entry->flags = smr_convert_rx_flags(flags);
-	entry->addr = ep->util_ep.caps & FI_DIRECTED_RECV &&
+	entry->peer_id = ep->util_ep.caps & FI_DIRECTED_RECV &&
 				addr != FI_ADDR_UNSPEC ?
 				smr_addr_lookup(ep->util_ep.av, addr) : -1;
 	entry->tag = tag;
