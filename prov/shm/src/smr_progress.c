@@ -70,7 +70,7 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 	struct smr_sar_msg *sar_msg = NULL;
 	uint8_t *src;
 
-	peer_smr = smr_peer_region(ep->region, pending->addr);
+	peer_smr = smr_peer_region(ep->region, pending->peer_id);
 
 	switch (pending->cmd.msg.hdr.op_src) {
 	case smr_src_iov:
@@ -156,7 +156,7 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 	} else if (sar_msg) {
 		smr_freestack_push(smr_sar_pool(peer_smr), sar_msg);
 		peer_smr->sar_cnt++;
-		smr_peer_data(ep->region)[pending->addr].sar_status = 0;
+		smr_peer_data(ep->region)[pending->peer_id].sar_status = 0;
 	}
 
 	if (peer_smr != ep->region)
@@ -254,7 +254,7 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 	struct smr_resp *resp;
 	int ret;
 
-	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.addr);
+	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 	resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
 
 	if (err) {
@@ -285,7 +285,7 @@ static int smr_mmap_peer_copy(struct smr_ep *ep, struct smr_cmd *cmd,
 	int ret = 0;
 
 	num = smr_mmap_name(shm_name,
-			ep->region->map->peers[cmd->msg.hdr.addr].peer.name,
+			ep->region->map->peers[cmd->msg.hdr.id].peer.name,
 			cmd->msg.hdr.msg_id);
 	if (num < 0) {
 		FI_WARN(&smr_prov, FI_LOG_AV, "generating shm file name failed\n");
@@ -342,7 +342,7 @@ static int smr_progress_mmap(struct smr_cmd *cmd, struct iovec *iov,
 	struct smr_resp *resp;
 	int ret;
 
-	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.addr);
+	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 	resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
 
 	ret = smr_mmap_peer_copy(ep, cmd, iov, iov_count, total_len);
@@ -366,7 +366,7 @@ static struct smr_sar_entry *smr_progress_sar(struct smr_cmd *cmd,
 	int next = 0;
 
 	sar_msg = smr_get_ptr(ep->region, cmd->msg.data.sar);
-	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.addr);
+	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 	resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
 
 	memcpy(sar_iov, iov, sizeof(*iov) * iov_count);
@@ -577,7 +577,7 @@ static int smr_progress_msg_common(struct smr_ep *ep, struct smr_cmd *cmd,
 
 	if (!sar) {
 		ret = smr_complete_rx(ep, entry->context, cmd->msg.hdr.op,
-				comp_flags, total_len, comp_buf, cmd->msg.hdr.addr,
+				comp_flags, total_len, comp_buf, cmd->msg.hdr.id,
 				cmd->msg.hdr.tag, cmd->msg.hdr.data, entry->err);
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -612,9 +612,9 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 
 	peer_smr = smr_peer_region(ep->region, idx);
 
-	smr_peer_data(peer_smr)[cmd->msg.hdr.addr].addr.id = idx;
+	smr_peer_data(peer_smr)[cmd->msg.hdr.id].addr.id = idx;
 
-	smr_peer_data(ep->region)[idx].addr.id = cmd->msg.hdr.addr;
+	smr_peer_data(ep->region)[idx].addr.id = cmd->msg.hdr.id;
 
 	smr_freestack_push(smr_inject_pool(ep->region), tx_buf);
 	ofi_cirque_discard(smr_cmd_queue(ep->region));
@@ -638,7 +638,7 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 	recv_queue = (cmd->msg.hdr.op == ofi_op_tagged) ?
 		      &ep->trecv_queue : &ep->recv_queue;
 
-	match_attr.addr = cmd->msg.hdr.addr;
+	match_attr.id = cmd->msg.hdr.id;
 	match_attr.tag = cmd->msg.hdr.tag;
 
 	dlist_entry = dlist_find_first_match(&recv_queue->list,
@@ -730,7 +730,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 		err = smr_progress_inject(cmd, iface, device, iov, iov_count,
 					  &total_len, ep, ret);
 		if (cmd->msg.hdr.op == ofi_op_read_req && cmd->msg.hdr.data) {
-			peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.addr);
+			peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 			resp = smr_get_ptr(peer_smr, cmd->msg.hdr.data);
 			resp->status = -err;
 		} else {
@@ -757,7 +757,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	ret = smr_complete_rx(ep, (void *) cmd->msg.hdr.msg_id,
 			      cmd->msg.hdr.op, cmd->msg.hdr.op_flags,
 			      total_len, iov_count ? iov[0].iov_base : NULL,
-			      cmd->msg.hdr.addr, 0, cmd->msg.hdr.data, err);
+			      cmd->msg.hdr.id, 0, cmd->msg.hdr.data, err);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 		"unable to process rx completion\n");
@@ -817,7 +817,7 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 		err = -FI_EINVAL;
 	}
 	if (cmd->msg.hdr.data) {
-		peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.addr);
+		peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 		resp = smr_get_ptr(peer_smr, cmd->msg.hdr.data);
 		resp->status = -err;
 	} else {
@@ -830,7 +830,7 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 
 	ret = smr_complete_rx(ep, NULL, cmd->msg.hdr.op, cmd->msg.hdr.op_flags,
 			      total_len, ioc_count ? ioc[0].addr : NULL,
-			      cmd->msg.hdr.addr, 0, cmd->msg.hdr.data, err);
+			      cmd->msg.hdr.id, 0, cmd->msg.hdr.data, err);
 	if (ret)
 		return ret;
 
@@ -904,7 +904,7 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 	dlist_foreach_container_safe(&ep->sar_list, struct smr_sar_entry,
 				     sar_entry, entry, tmp) {
 		sar_msg = smr_get_ptr(ep->region, sar_entry->cmd.msg.data.sar);
-		peer_smr = smr_peer_region(ep->region, sar_entry->cmd.msg.hdr.addr);
+		peer_smr = smr_peer_region(ep->region, sar_entry->cmd.msg.hdr.id);
 		resp = smr_get_ptr(peer_smr, sar_entry->cmd.msg.hdr.src_data);
 		if (sar_entry->cmd.msg.hdr.op == ofi_op_read_req)
 			smr_try_progress_to_sar(sar_msg, resp, &sar_entry->cmd,
@@ -923,7 +923,7 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 					sar_entry->rx_entry.flags,
 					sar_entry->bytes_done,
 					sar_entry->rx_entry.iov[0].iov_base,
-					sar_entry->cmd.msg.hdr.addr,
+					sar_entry->cmd.msg.hdr.id,
 					sar_entry->cmd.msg.hdr.tag,
 					sar_entry->cmd.msg.hdr.data, 0);
 			if (ret) {
@@ -960,7 +960,7 @@ int smr_progress_unexp_queue(struct smr_ep *ep, struct smr_rx_entry *entry,
 	int multi_recv;
 	int ret;
 
-	match_attr.addr = entry->addr;
+	match_attr.id = entry->peer_id;
 	match_attr.ignore = entry->ignore;
 	match_attr.tag = entry->tag;
 

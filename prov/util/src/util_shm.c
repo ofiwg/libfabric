@@ -329,44 +329,44 @@ out:
 	return ret;
 }
 
-void smr_map_to_endpoint(struct smr_region *region, int64_t index)
+void smr_map_to_endpoint(struct smr_region *region, int64_t id)
 {
 	struct smr_region *peer_smr;
 	struct smr_peer_data *local_peers;
 
-	if (region->map->peers[index].peer.id < 0)
+	if (region->map->peers[id].peer.id < 0)
 		return;
 
 	local_peers = smr_peer_data(region);
 
-	strncpy(local_peers[index].addr.name,
-		region->map->peers[index].peer.name, SMR_NAME_MAX - 1);
-	local_peers[index].addr.name[SMR_NAME_MAX - 1] = '\0';
+	strncpy(local_peers[id].addr.name,
+		region->map->peers[id].peer.name, SMR_NAME_MAX - 1);
+	local_peers[id].addr.name[SMR_NAME_MAX - 1] = '\0';
 
-	peer_smr = smr_peer_region(region, index);
+	peer_smr = smr_peer_region(region, id);
 
 	if (region->cma_cap == SMR_CMA_CAP_NA && region != peer_smr)
 		smr_cma_check(region, peer_smr);
 }
 
-void smr_unmap_from_endpoint(struct smr_region *region, int64_t index)
+void smr_unmap_from_endpoint(struct smr_region *region, int64_t id)
 {
 	struct smr_region *peer_smr;
 	struct smr_peer_data *local_peers, *peer_peers;
-	int64_t peer_index;
+	int64_t peer_id;
 
 	local_peers = smr_peer_data(region);
 
-	memset(local_peers[index].addr.name, 0, SMR_NAME_MAX);
-	peer_index = region->map->peers[index].peer.id;
-	if (peer_index < 0)
+	memset(local_peers[id].addr.name, 0, SMR_NAME_MAX);
+	peer_id = region->map->peers[id].peer.id;
+	if (peer_id < 0)
 		return;
 
-	peer_smr = smr_peer_region(region, index);
+	peer_smr = smr_peer_region(region, id);
 	peer_peers = smr_peer_data(peer_smr);
 
-	peer_peers[peer_index].addr.id = -1;
-	peer_peers[peer_index].name_sent = 0;
+	peer_peers[peer_id].addr.id = -1;
+	peer_peers[peer_id].name_sent = 0;
 }
 
 void smr_exchange_all_peers(struct smr_region *region)
@@ -391,15 +391,15 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 		return 0;
 	}
 
-	while (map->peers[map->cur_idx].peer.id != -1 &&
+	while (map->peers[map->cur_id].peer.id != -1 &&
 	       tries < SMR_MAX_PEERS) {
-		if (++map->cur_idx == SMR_MAX_PEERS)
-			map->cur_idx = 0;
+		if (++map->cur_id == SMR_MAX_PEERS)
+			map->cur_id = 0;
 		tries++;
 	}
 
-	assert(map->cur_idx < SMR_MAX_PEERS && tries < SMR_MAX_PEERS);
-	*id = map->cur_idx;
+	assert(map->cur_id < SMR_MAX_PEERS && tries < SMR_MAX_PEERS);
+	*id = map->cur_id;
 	node->data = (void *) *id;
 	strncpy(map->peers[*id].peer.name, name, SMR_NAME_MAX);
 	map->peers[*id].peer.name[SMR_NAME_MAX - 1] = '\0';
