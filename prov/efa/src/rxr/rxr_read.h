@@ -38,22 +38,43 @@
 #ifndef _RXR_RDMA_H_
 #define _RXR_RDMA_H_
 
+/*
+ * read can used in 2 scenarios:
+ *
+ * 1. application posted a read request.
+ *
+ * 2. read message protocol is being used, receiver is going
+ *    to post a read requst.
+ *
+ * To distinguish them, we use a pointer as context.
+ *
+ * For 1, the tx_entry is used as context
+ * For 2, the rx_entry is used as context
+ *
+ * We also store rxr_read_context_type in read_entry to specify
+ * context type.
+ */
+enum rxr_read_context_type {
+	RXR_READ_CONTEXT_TX_ENTRY,
+	RXR_READ_CONTEXT_RX_ENTRY,
+};
+
 enum rxr_read_entry_state {
 	RXR_RDMA_ENTRY_FREE = 0,
 	RXR_RDMA_ENTRY_CREATED,
 	RXR_RDMA_ENTRY_PENDING
 };
 
-/* rxr_read_entry was arranged as a packet
- * and was put in a rxr_pkt_entry. Because rxr_pkt_entry is used
- * as context.
+/*
+ * rxr_read_entry contains the information of a read request
  */
 struct rxr_read_entry {
 	int read_id;
 	enum rxr_lower_ep_type lower_ep_type;
 
-	enum rxr_x_entry_type x_entry_type;
-	int x_entry_id;
+	void *context;
+	enum rxr_read_context_type context_type;
+
 	enum rxr_read_entry_state state;
 
 	fi_addr_t addr;
