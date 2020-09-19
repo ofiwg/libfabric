@@ -379,6 +379,10 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 	assert(read_entry->total_len == MIN(total_iov_len, total_rma_iov_len));
 
 	while (read_entry->bytes_submitted < read_entry->total_len) {
+
+		if (ep->tx_pending == ep->max_outstanding_tx)
+			return -FI_EAGAIN;
+
 		assert(iov_idx < read_entry->iov_count);
 		assert(iov_offset < read_entry->iov[iov_idx].iov_len);
 		assert(rma_iov_idx < read_entry->rma_iov_count);
