@@ -891,6 +891,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 	ssize_t ret;
 	size_t i;
 	struct rxr_ep *ep;
+	struct efa_ep *efa_ep;
 	uint64_t flags = FI_MORE;
 	size_t rx_size, shm_rx_size;
 	char shm_ep_name[NAME_MAX];
@@ -964,6 +965,16 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 					goto out;
 			}
 		}
+
+		/*
+		 * insert EP's own address to AV and save the address as
+		 * ep->rdm_self_addr. It is used when copy data to GPU memory by local read
+		 */
+		efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+		ret = efa_av_insert_addr(efa_ep->av, (struct efa_ep_addr *)ep->core_addr,
+					 &ep->rdm_self_addr, 0, NULL);
+		if (OFI_UNLIKELY(ret))
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "insert EP's own address failed!\n");
 
 out:
 		fastlock_release(&ep->util_ep.lock);
@@ -1706,6 +1717,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  &rxr_ep->rdm_ep, rxr_ep);
 	if (ret)
 		goto err_free_rdm_info;
+
+	rxr_ep->rdm_self_addr = FI_ADDR_NOTAVAIL;
 
 	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
 				  util_domain.domain_fid);
