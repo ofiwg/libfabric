@@ -427,7 +427,6 @@ static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
 			context->desc = mr_desc;
 			continue;
 		}
-		(*mr_bufs)[i] = calloc(1, mr_size);
 		ret = ft_hmem_alloc(opts.iface, opts.device,
 				    (void **) &((*mr_bufs)[i]), mr_size);
 		if (ret)
@@ -687,7 +686,7 @@ static int ft_init(void)
 	//If using device memory for transfers, require OOB address
 	//exchange because extra steps are involved when passing
 	//device buffers into fi_av_insert
-	if (opts.options & FT_OPT_USE_DEVICE)
+	if (opts.options & FT_OPT_ENABLE_HMEM)
 		opts.options |= FT_OPT_OOB_ADDR_EXCH;
 
 	return ft_hmem_init(opts.iface);
