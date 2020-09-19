@@ -379,7 +379,8 @@ void ofi_intercept_handler(const void *addr, size_t len)
 static void *ofi_intercept_mmap(void *start, size_t length,
                             int prot, int flags, int fd, off_t offset)
 {
-	ofi_intercept_handler(start, length);
+	if ((flags & MAP_FIXED) && start)
+		ofi_intercept_handler(start, length);
 
 	return real_calls.mmap(start, length, prot, flags, fd, offset);
 }
