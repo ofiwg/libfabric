@@ -402,7 +402,16 @@ static void *ofi_intercept_mremap(void *old_address, size_t old_size,
 
 static int ofi_intercept_madvise(void *addr, size_t length, int advice)
 {
-	ofi_intercept_handler(addr, length);
+	if (advice == MADV_DONTNEED ||
+#ifdef MADV_FREE
+	    advice == MADV_FREE ||
+#endif
+#ifdef MADV_REMOVE
+	    advice == MADV_REMOVE ||
+#endif
+	    advice == POSIX_MADV_DONTNEED) {
+		ofi_intercept_handler(addr, length);
+	}
 
 	return real_calls.madvise(addr, length, advice);
 }
