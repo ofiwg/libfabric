@@ -381,12 +381,13 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	assert(read_entry->bytes_finished <= read_entry->total_len);
 
 	if (read_entry->bytes_finished == read_entry->total_len) {
-		if (read_entry->x_entry_type == RXR_TX_ENTRY) {
-			tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, read_entry->x_entry_id);
+		if (read_entry->context_type == RXR_READ_CONTEXT_TX_ENTRY) {
+			tx_entry = read_entry->context;
 			assert(tx_entry && tx_entry->cq_entry.flags & FI_READ);
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
-			rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, read_entry->x_entry_id);
+			assert(read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY);
+			rx_entry = read_entry->context;
 			if (rx_entry->op == ofi_op_msg || rx_entry->op == ofi_op_tagged) {
 				rxr_cq_write_rx_completion(ep, rx_entry);
 			} else {
