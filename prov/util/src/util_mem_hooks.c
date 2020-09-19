@@ -379,8 +379,6 @@ void ofi_intercept_handler(const void *addr, size_t len)
 static void *ofi_intercept_mmap(void *start, size_t length,
                             int prot, int flags, int fd, off_t offset)
 {
-	FI_DBG(&core_prov, FI_LOG_MR,
-	       "intercepted mmap start %p len %zu\n", start, length);
 	ofi_intercept_handler(start, length);
 
 	return real_calls.mmap(start, length, prot, flags, fd, offset);
@@ -388,8 +386,6 @@ static void *ofi_intercept_mmap(void *start, size_t length,
 
 static int ofi_intercept_munmap(void *start, size_t length)
 {
-	FI_DBG(&core_prov, FI_LOG_MR,
-	       "intercepted munmap start %p len %zu\n", start, length);
 	ofi_intercept_handler(start, length);
 
 	return real_calls.munmap(start, length);
@@ -398,9 +394,6 @@ static int ofi_intercept_munmap(void *start, size_t length)
 static void *ofi_intercept_mremap(void *old_address, size_t old_size,
 		size_t new_size, int flags, void *new_address)
 {
-	FI_DBG(&core_prov, FI_LOG_MR,
-	       "intercepted mremap old_addr %p old_size %zu\n",
-	       old_address, old_size);
 	ofi_intercept_handler(old_address, old_size);
 
 	return real_calls.mremap(old_address, old_size, new_size, flags,
@@ -409,8 +402,6 @@ static void *ofi_intercept_mremap(void *old_address, size_t old_size,
 
 static int ofi_intercept_madvise(void *addr, size_t length, int advice)
 {
-	FI_DBG(&core_prov, FI_LOG_MR,
-	       "intercepted madvise addr %p len %zu\n", addr, length);
 	ofi_intercept_handler(addr, length);
 
 	return real_calls.madvise(addr, length, advice);
@@ -422,9 +413,6 @@ static void *ofi_intercept_shmat(int shmid, const void *shmaddr, int shmflg)
 	const void *start;
 	size_t len;
 	int ret;
-
-	FI_DBG(&core_prov, FI_LOG_MR,
-	       "intercepted shmat addr %p\n", shmaddr);
 
 	if (shmflg & SHM_REMAP) {
 		ret = shmctl(shmid, IPC_STAT, &ds);
@@ -445,8 +433,6 @@ static void *ofi_intercept_shmat(int shmid, const void *shmaddr, int shmflg)
 
 static int ofi_intercept_shmdt(const void *shmaddr)
 {
-	FI_DBG(&core_prov, FI_LOG_MR,
-	       "intercepted shmdt addr %p\n", shmaddr);
 	/* Overly aggressive, but simple.  Invalidate everything after shmaddr */
 	ofi_intercept_handler(shmaddr, SIZE_MAX - (uintptr_t) shmaddr);
 
@@ -456,9 +442,6 @@ static int ofi_intercept_shmdt(const void *shmaddr)
 static int ofi_intercept_brk(const void *brkaddr)
 {
 	void *old_addr;
-
-	FI_DBG(&core_prov, FI_LOG_MR,
-	      "intercepted brk addr %p\n", brkaddr);
 
 	old_addr = real_calls.sbrk(0);
 
