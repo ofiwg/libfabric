@@ -539,6 +539,13 @@ AC_ARG_ENABLE([memhooks-monitor],
 AC_DEFINE_UNQUOTED(ENABLE_MEMHOOKS_MONITOR, [$enable_memhooks],
 	[Define to 1 to enable memhooks memory monitor])
 
+AS_IF([test "$enable_memhooks" == "1"], [
+	AC_CHECK_FUNCS([__curbrk __clear_cache])
+	AC_CHECK_HEADERS([linux/mman.h sys/syscall.h])
+	AC_CHECK_DECLS([__syscall], [], [], [#include <sys/syscall.h>])
+	AC_CHECK_FUNCS([__syscall])
+	], [])
+
 enable_uffd=1
 AC_ARG_ENABLE([uffd-monitor],
               [AC_HELP_STRING([--disable-uffd-monitor],
@@ -551,7 +558,7 @@ AC_DEFINE_UNQUOTED(ENABLE_UFFD_MONITOR, [$enable_uffd],
 
 
 AH_BOTTOM([
-#if defined(__linux__) && defined(HAVE_ELF_H) && defined(HAVE_SYS_AUXV_H) && ENABLE_MEMHOOKS_MONITOR
+#if defined(__linux__) && (defined(__x86_64__) || defined(__amd64__) || defined(__aarch64__)) && ENABLE_MEMHOOKS_MONITOR
 #define HAVE_MEMHOOKS_MONITOR 1
 #else
 #define HAVE_MEMHOOKS_MONITOR 0
