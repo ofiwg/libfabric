@@ -402,12 +402,6 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 					assert(0 && "failed to write err cq entry");
 				rxr_release_rx_entry(ep, rx_entry);
 			}
-
-			/* inject will not generate a completion, so we release rx_entry here,
-			 * otherwise, rx_entry was released in rxr_pkt_handle_eor_send_completion
-			 */
-			if (inject)
-				rxr_release_rx_entry(ep, rx_entry);
 		}
 
 		rxr_read_release_entry(ep, read_entry);
@@ -467,14 +461,18 @@ int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struct rx
 	return 0;
 }
 
-void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
-					struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_eor_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_rx_entry *rx_entry;
 
 	rx_entry = pkt_entry->x_entry;
 	assert(rx_entry && rx_entry->rx_id == rxr_get_eor_hdr(pkt_entry->pkt)->rx_id);
 	rxr_release_rx_entry(ep, rx_entry);
+}
+
+void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
+					struct rxr_pkt_entry *pkt_entry)
+{
 }
 
 /*
