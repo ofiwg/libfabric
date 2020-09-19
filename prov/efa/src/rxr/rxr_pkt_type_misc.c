@@ -402,12 +402,6 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 					assert(0 && "failed to write err cq entry");
 				rxr_release_rx_entry(ep, rx_entry);
 			}
-
-			/* inject will not generate a completion, so we release rx_entry here,
-			 * otherwise, rx_entry was released in rxr_pkt_handle_eor_send_completion
-			 */
-			if (inject)
-				rxr_release_rx_entry(ep, rx_entry);
 		}
 
 		rxr_read_release_entry(ep, read_entry);

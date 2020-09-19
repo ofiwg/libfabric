@@ -287,9 +287,17 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	 * if inject, there will not be completion, therefore tx_pkt_entry has to be
 	 * released here
 	 */
-	if (inject)
+	if (inject) {
 		err = rxr_pkt_entry_inject(rxr_ep, pkt_entry, addr);
-	else if (pkt_entry->send->iov_count > 0)
+		/* Currently only EOR packet is injected using shm ep
+		 * It indicates that the x_entry is rx_entry, and the receiver has
+		 * already received all data using fi_read via shm provider.
+		 * If EAGAIN happens, we should not release rx_entry, as it will
+		 * be inserted to queued_list in order to post again later.
+		 */
+		if (!err && ctrl_type == RXR_EOR_PKT)
+			rxr_release_rx_entry(rxr_ep, x_entry);
+	} else if (pkt_entry->send->iov_count > 0)
 		err = rxr_pkt_entry_sendv(rxr_ep, pkt_entry, addr,
 					  pkt_entry->send->iov, pkt_entry->send->desc,
 					  pkt_entry->send->iov_count, 0);
