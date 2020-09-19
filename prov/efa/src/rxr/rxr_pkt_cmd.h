@@ -52,6 +52,10 @@ ssize_t rxr_pkt_copy_to_rx(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
 			   char *data, size_t data_size);
 
+void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
+				struct rxr_pkt_entry *pkt_entry,
+				size_t data_size);
+
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep,
 				    struct fi_cq_data_entry *cq_entry);
 

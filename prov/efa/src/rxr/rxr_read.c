@@ -80,6 +80,61 @@ int rxr_locate_rma_iov_pos(struct fi_rma_iov *rma_iov, int rma_iov_count, size_t
 }
 
 /*
+ * rxr_read_prepare_pkt_entry_mr() ensure pkt_entry's memory is registered.
+ *
+ * For a packet entry whose memory is not registered, it will reserve a pkt entry
+ * from rx_readcopy_pkt_pool and copy data their.
+ *
+ * Return value:
+ *
+ *     On success, return 0
+ *     On pack entry reservation failure, return -FI_EAGAIN
+ */
+static
+ssize_t rxr_read_prepare_pkt_entry_mr(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
+{
+	size_t pkt_offset;
+	struct rxr_pkt_entry *pkt_entry;
+	struct rxr_pkt_entry *pkt_entry_copy;
+
+	assert(read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY);
+	/*
+	 * In this case, target buffer is data in a pkt_entry, so rma_iov_count must be 1.
+	 */
+	assert(read_entry->rma_iov_count == 1);
+
+	pkt_entry = read_entry->context;
+	if (pkt_entry->mr) {
+		assert(read_entry->rma_iov[0].key == fi_mr_key(pkt_entry->mr));
+		return 0;
+	}
+
+	/* only ooo and unexp packet entry's memory is not registered with device */
+	assert(pkt_entry->type == RXR_PKT_ENTRY_OOO ||
+	       pkt_entry->type == RXR_PKT_ENTRY_UNEXP);
+
+	pkt_offset = (char *)read_entry->rma_iov[0].addr - (char *)pkt_entry->pkt;
+	assert(pkt_offset > sizeof(struct rxr_base_hdr));
+
+	pkt_entry_copy = rxr_pkt_entry_clone(ep, ep->rx_readcopy_pkt_pool,
+					     pkt_entry, RXR_PKT_ENTRY_READ_COPY);
+	if (!pkt_entry_copy) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"readcopy pkt pool exhausted! Set FI_EFA_READCOPY_POOL_SIZE to a higher value!");
+		return -FI_EAGAIN;
+	}
+
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
+
+	assert(pkt_entry_copy->mr);
+	read_entry->context = pkt_entry_copy;
+	read_entry->rma_iov[0].addr = (uint64_t)pkt_entry_copy->pkt + pkt_offset;
+	read_entry->rma_iov[0].key = fi_mr_key(pkt_entry_copy->mr);
+
+	return 0;
+}
+
+/*
  * rxr_read_mr_reg register the memory of local buffer if application did not
  * provide descriptor.
  * It is called by rxr_read_post().
@@ -243,11 +298,30 @@ void rxr_read_release_entry(struct rxr_ep *ep, struct rxr_read_entry *read_entry
 	ofi_buf_free(read_entry);
 }
 
-int rxr_read_post_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry)
+static inline
+int rxr_read_post_or_queue(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
+{
+	int err;
+
+	err = rxr_read_post(ep, read_entry);
+	if (err == -FI_EAGAIN) {
+		dlist_insert_tail(&read_entry->pending_entry, &ep->read_pending_list);
+		read_entry->state = RXR_RDMA_ENTRY_PENDING;
+		err = 0;
+	} else if(err) {
+		rxr_read_release_entry(ep, read_entry);
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"RDMA post read failed. errno=%d.\n", err);
+	}
+
+	return err;
+}
+
+int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry)
 {
 	struct rxr_peer *peer;
 	struct rxr_read_entry *read_entry;
-	int err, lower_ep_type;
+	int lower_ep_type;
 
 	if (entry_type == RXR_TX_ENTRY) {
 		peer = rxr_ep_get_peer(ep, ((struct rxr_tx_entry *)x_entry)->addr);
@@ -265,18 +339,67 @@ int rxr_read_post_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry)
 		return -FI_ENOBUFS;
 	}
 
-	err = rxr_read_post(ep, read_entry);
-	if (err == -FI_EAGAIN) {
-		dlist_insert_tail(&read_entry->pending_entry, &ep->read_pending_list);
-		read_entry->state = RXR_RDMA_ENTRY_PENDING;
-		err = 0;
-	} else if(err) {
-		rxr_read_release_entry(ep, read_entry);
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"RDMA post read failed. errno=%d.\n", err);
+	return rxr_read_post_or_queue(ep, read_entry);
+}
+
+int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
+				      struct rxr_rx_entry *rx_entry,
+				      size_t data_offset,
+				      struct rxr_pkt_entry *pkt_entry,
+				      char *data, size_t data_size)
+{
+	int err;
+	struct rxr_read_entry *read_entry;
+
+	read_entry = ofi_buf_alloc(ep->read_entry_pool);
+	if (!read_entry) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "RDMA entries exhausted\n");
+		return -FI_ENOBUFS;
 	}
 
-	return err;
+	assert(ep->rdm_self_addr != FI_ADDR_NOTAVAIL);
+	read_entry->read_id = ofi_buf_index(read_entry);
+	read_entry->lower_ep_type = EFA_EP;
+	read_entry->context_type = RXR_READ_CONTEXT_PKT_ENTRY;
+	read_entry->context = pkt_entry;
+	read_entry->state = RXR_RDMA_ENTRY_CREATED;
+	read_entry->addr = ep->rdm_self_addr;
+	read_entry->total_len = data_size;
+	read_entry->bytes_submitted = 0;
+	read_entry->bytes_finished = 0;
+
+	/* setup rma_iov */
+	read_entry->rma_iov_count = 1;
+	read_entry->rma_iov[0].addr = (uint64_t)data;
+	read_entry->rma_iov[0].len = data_size;
+	read_entry->rma_iov[0].key = (pkt_entry->mr) ? fi_mr_key(pkt_entry->mr) : 0;
+
+	/* setup iov */
+	assert(pkt_entry->x_entry == rx_entry);
+	assert(rx_entry->desc && efa_ep_is_cuda_mr(rx_entry->desc[0]));
+	read_entry->iov_count = rx_entry->iov_count;
+	memcpy(read_entry->iov, rx_entry->iov, rx_entry->iov_count * sizeof(struct iovec));
+	memcpy(read_entry->mr_desc, rx_entry->desc, rx_entry->iov_count * sizeof(void *));
+	ofi_consume_iov_desc(read_entry->iov, read_entry->mr_desc, &read_entry->iov_count, data_offset);
+	if (read_entry->iov_count == 0) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"data_offset %ld out of range\n",
+			data_offset);
+		ofi_buf_free(read_entry);
+		return -FI_ETRUNC;
+	}
+
+	assert(efa_ep_is_cuda_mr(read_entry->mr_desc[0]));
+	err = ofi_truncate_iov(read_entry->iov, &read_entry->iov_count, data_size);
+	if (err) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"data_offset %ld data_size %ld out of range\n",
+			data_offset, data_size);
+		ofi_buf_free(read_entry);
+		return -FI_ETRUNC;
+	}
+
+	return rxr_read_post_or_queue(ep, read_entry);
 }
 
 int rxr_read_init_iov(struct rxr_ep *ep,
@@ -349,6 +472,13 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 	assert(read_entry->iov_count > 0);
 	assert(read_entry->rma_iov_count > 0);
 	assert(read_entry->bytes_submitted < read_entry->total_len);
+
+	if (read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY) {
+		assert(read_entry->lower_ep_type == EFA_EP);
+		ret = rxr_read_prepare_pkt_entry_mr(ep, read_entry);
+		if (ret)
+			return ret;
+	}
 
 	if (read_entry->lower_ep_type == EFA_EP) {
 		ret = rxr_read_mr_reg(ep, read_entry);
