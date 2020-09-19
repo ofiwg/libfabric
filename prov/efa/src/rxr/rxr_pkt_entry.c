@@ -205,9 +205,8 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 			int new_entry_type)
 {
 	FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
-	       "Copying packet out of posted buffer! new_entry_type: %d\n",
-		new_entry_type);
-	assert(src->type == RXR_PKT_ENTRY_POSTED);
+	       "Copying packet out of posted buffer! src_entry_type: %d new_entry_type: %d\n",
+		src->type, new_entry_type);
 	dlist_init(&dest->entry);
 #if ENABLE_DEBUG
 	dlist_init(&dest->dbg_entry);
@@ -277,7 +276,8 @@ struct rxr_pkt_entry *rxr_pkt_entry_clone(struct rxr_ep *ep,
 
 	assert(src);
 	assert(new_entry_type == RXR_PKT_ENTRY_OOO ||
-	       new_entry_type == RXR_PKT_ENTRY_UNEXP);
+	       new_entry_type == RXR_PKT_ENTRY_UNEXP ||
+	       new_entry_type == RXR_PKT_ENTRY_READ_COPY);
 
 	dst = rxr_pkt_entry_alloc(ep, pkt_pool);
 	if (!dst)

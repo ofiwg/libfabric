@@ -35,6 +35,7 @@
 #include "rxr.h"
 #include "rxr_msg.h"
 #include "rxr_cntr.h"
+#include "rxr_read.h"
 #include "rxr_pkt_cmd.h"
 
 /* Handshake wait timeout in microseconds */
@@ -480,9 +481,13 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
 
 /*
  * rxr_pkt_copy_to_rx() copy data to receiving buffer then
- * update counter in rx_entry. If all data has been copied
- * to receiving buffer, it will write rx completion and
- * release rx_entry.
+ * update counter in rx_entry.
+ *
+ * If receiving buffer is on GPU memory, it will post a
+ * read request, otherwise it will copy data.
+ *
+ * If all data has been copied to receiving buffer,
+ * it will write rx completion and release rx_entry.
  *
  * Return value and states:
  *
@@ -495,19 +500,26 @@ ssize_t rxr_pkt_copy_to_rx(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
 			   char *data, size_t data_size)
 {
-	struct efa_mr *desc;
-	size_t bytes_copied;
+	ssize_t err, bytes_copied;
+
+	pkt_entry->x_entry = rx_entry;
+
+	if (data_size > 0 && efa_ep_is_cuda_mr(rx_entry->desc[0])) {
+		err = rxr_read_post_local_read_or_queue(ep, rx_entry, data_offset,
+							pkt_entry, data, data_size);
+		if (err)
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "cannot post read to copy data\n");
+
+		return err;
+	}
 
 	if (OFI_LIKELY(!(rx_entry->rxr_flags & RXR_RECV_CANCEL)) &&
-	    rx_entry->cq_entry.len > data_offset) {
-		desc = rx_entry->desc[0];
-		bytes_copied = ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-						    desc ? desc->peer.device.reserved : 0,
-						    rx_entry->iov,
-						    rx_entry->iov_count,
-						    data_offset,
-						    data,
-						    data_size);
+	    rx_entry->cq_entry.len > data_offset && data_size > 0) {
+		bytes_copied = ofi_copy_to_iov(rx_entry->iov,
+					       rx_entry->iov_count,
+					       data_offset,
+					       data,
+					       data_size);
 		if (bytes_copied != MIN(data_size, rx_entry->cq_entry.len - data_offset)) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
 				bytes_copied);
@@ -515,6 +527,18 @@ ssize_t rxr_pkt_copy_to_rx(struct rxr_ep *ep,
 		}
 	}
 
+	rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
+	return 0;
+}
+
+void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
+				struct rxr_pkt_entry *pkt_entry,
+				size_t data_size)
+{
+	struct rxr_rx_entry *rx_entry;
+
+	rx_entry = pkt_entry->x_entry;
+	assert(rx_entry);
 	rx_entry->bytes_copied += data_size;
 
 	if (rx_entry->total_len == rx_entry->bytes_copied) {
@@ -524,8 +548,6 @@ ssize_t rxr_pkt_copy_to_rx(struct rxr_ep *ep,
 	} else {
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 	}
-
-	return 0;
 }
 
 /*

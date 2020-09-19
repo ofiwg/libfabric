@@ -46,10 +46,15 @@
  * 2. read message protocol is being used, receiver is going
  *    to post a read requst.
  *
+ * 3. a packet entry with data has been received, and the
+ *    receiving buffer is on GPU memroy. A read request is
+ *    being posted to copy data to receiving buffer.
+ *
  * To distinguish them, we use a pointer as context.
  *
  * For 1, the tx_entry is used as context
  * For 2, the rx_entry is used as context
+ * For 3, the pkt_entry is used as context
  *
  * We also store rxr_read_context_type in read_entry to specify
  * context type.
@@ -57,6 +62,7 @@
 enum rxr_read_context_type {
 	RXR_READ_CONTEXT_TX_ENTRY,
 	RXR_READ_CONTEXT_RX_ENTRY,
+	RXR_READ_CONTEXT_PKT_ENTRY,
 };
 
 enum rxr_read_entry_state {
@@ -109,7 +115,13 @@ int rxr_read_init_iov(struct rxr_ep *ep,
 
 int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry);
 
-int rxr_read_post_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry);
+int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry);
+
+int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
+				      struct rxr_rx_entry *rx_entry,
+				      size_t data_offset,
+				      struct rxr_pkt_entry *pkt_entry,
+				      char *data, size_t data_size);
 
 void rxr_read_handle_read_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 

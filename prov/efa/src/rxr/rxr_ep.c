@@ -709,8 +709,14 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	if (rxr_ep->readrsp_tx_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->readrsp_tx_entry_pool);
 
-	if (rxr_ep->rx_readcopy_pkt_pool)
+	if (rxr_ep->rx_readcopy_pkt_pool) {
+		FI_INFO(&rxr_prov, FI_LOG_EP_CTRL, "current usage of read copy packet pool is %d\n",
+			rxr_ep->rx_readcopy_pkt_pool_used);
+		FI_INFO(&rxr_prov, FI_LOG_EP_CTRL, "maximum usage of read copy packet pool is %d\n",
+			rxr_ep->rx_readcopy_pkt_pool_max_used);
+		assert(!rxr_ep->rx_readcopy_pkt_pool_used);
 		ofi_bufpool_destroy(rxr_ep->rx_readcopy_pkt_pool);
+	}
 
 	if (rxr_ep->rx_ooo_pkt_pool)
 		ofi_bufpool_destroy(rxr_ep->rx_ooo_pkt_pool);

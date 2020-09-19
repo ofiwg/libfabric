@@ -326,7 +326,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	}
 
 	if (use_lower_ep_read) {
-		err = rxr_read_post_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry);
+		err = rxr_read_post_remote_read_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry);
 		if (OFI_UNLIKELY(err == -FI_ENOBUFS)) {
 			rxr_release_tx_entry(rxr_ep, tx_entry);
 			err = -FI_EAGAIN;
