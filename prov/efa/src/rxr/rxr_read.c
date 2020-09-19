@@ -79,15 +79,70 @@ int rxr_locate_rma_iov_pos(struct fi_rma_iov *rma_iov, int rma_iov_count, size_t
 	return -1;
 }
 
+/*
+ * rxr_read_mr_reg register the memory of local buffer if application did not
+ * provide descriptor.
+ * It is called by rxr_read_post().
+ * On success, it return 0.
+ * If memory registration failed with -FI_ENOMEM, it will return -FI_EAGAIN.
+ * If memory registration failed with other error, it will return the error code.
+ */
+ssize_t rxr_read_mr_reg(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
+{
+	size_t i;
+	int err;
+
+	for (i = 0; i < read_entry->iov_count; ++i) {
+		if (read_entry->mr_desc[i] || read_entry->mr[i]) {
+			continue;
+		}
+
+		err = fi_mr_reg(rxr_ep_domain(ep)->rdm_domain,
+				read_entry->iov[i].iov_base, read_entry->iov[i].iov_len,
+				FI_RECV, 0, 0, 0, &read_entry->mr[i], NULL);
+
+		if (err) {
+			/* If registration failed with -FI_ENOMEM, we return -FI_EAGAIN.
+			 * This read entry will be put into a queue.
+			 *
+			 * The progress engine will progress other message transfers, which
+			 * will release registrations. Thus, when the progress engine call this
+			 * function again later, there will be registrations available.
+			 *
+			 * All registration opened here will be closed during release of
+			 * the read_entry.
+			 */
+			FI_WARN(&rxr_prov, FI_LOG_MR, "Unable to register MR buf for read!\n");
+			if (err == -FI_ENOMEM)
+				err = -FI_EAGAIN;
+			return err;
+		}
+
+		read_entry->mr_desc[i] = fi_mr_desc(read_entry->mr[i]);
+	}
+
+	return 0;
+}
+
+/* rxr_read_alloc_entry allocates a read entry.
+ * It is called by rxr_read_post_or_queue().
+ * Input:
+ *   x_entry: can be a tx_entry or an rx_entry.
+ *            If x_entry is tx_entry, application called fi_read().
+ *            If x_entry is rx_entry, read message protocol is being used.
+ *   lower_ep_type: EFA_EP or SHM_EP
+ * Return:
+ *   On success, return the pointer of allocated read_entry
+ *   Otherwise, return NULL
+ */
 struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, void *x_entry,
 					    enum rxr_lower_ep_type lower_ep_type)
 {
 	struct rxr_tx_entry *tx_entry = NULL;
 	struct rxr_rx_entry *rx_entry = NULL;
 	struct rxr_read_entry *read_entry;
-	int i, err;
+	int i;
 	size_t total_iov_len, total_rma_iov_len;
-	void **mr_desc;
 
 	read_entry = ofi_buf_alloc(ep->read_entry_pool);
 	if (OFI_UNLIKELY(!read_entry)) {
@@ -115,7 +170,12 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, v
 		total_iov_len = ofi_total_iov_len(tx_entry->iov, tx_entry->iov_count);
 		total_rma_iov_len = ofi_total_rma_iov_len(tx_entry->rma_iov, tx_entry->rma_iov_count);
 		read_entry->total_len = MIN(total_iov_len, total_rma_iov_len);
-		mr_desc = tx_entry->desc;
+
+		if (tx_entry->desc) {
+			memcpy(read_entry->mr_desc, tx_entry->desc,
+			       read_entry->iov_count * sizeof(void *));
+		}
+
 	} else {
 		rx_entry = (struct rxr_rx_entry *)x_entry;
 		assert(rx_entry->op == ofi_op_write || rx_entry->op == ofi_op_msg ||
@@ -131,47 +191,20 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, v
 		read_entry->rma_iov_count = rx_entry->rma_iov_count;
 		read_entry->rma_iov = rx_entry->rma_iov;
 
-		mr_desc = rx_entry->desc;
 		total_iov_len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 		total_rma_iov_len = ofi_total_rma_iov_len(rx_entry->rma_iov, rx_entry->rma_iov_count);
 		read_entry->total_len = MIN(total_iov_len, total_rma_iov_len);
+
+		if (rx_entry->desc) {
+			memcpy(read_entry->mr_desc, rx_entry->desc,
+			       read_entry->iov_count * sizeof(void *));
+		}
 	}
 
-	if (lower_ep_type == EFA_EP) {
-		/* EFA provider need local buffer registration */
-		for (i = 0; i < read_entry->iov_count; ++i) {
-			if (mr_desc && mr_desc[i]) {
-				read_entry->mr[i] = NULL;
-				read_entry->mr_desc[i] = mr_desc[i];
-			} else {
-				err = fi_mr_reg(rxr_ep_domain(ep)->rdm_domain,
-						read_entry->iov[i].iov_base, read_entry->iov[i].iov_len,
-						FI_RECV, 0, 0, 0, &read_entry->mr[i], NULL);
+	memset(read_entry->mr, 0, read_entry->iov_count * sizeof(struct fid_mr *));
 
-				if (err == -FI_ENOMEM && efa_mr_cache_enable) {
-					/* In this case, we will try registration one more time because
-					 * mr cache will try to release MR when encountered error
-					 */
-					FI_WARN(&rxr_prov, FI_LOG_MR, "Unable to register MR buf for FI_ENOMEM!\n");
-					FI_WARN(&rxr_prov, FI_LOG_MR, "Try again because MR cache will try release to release unused MR entry.\n");
-					err = fi_mr_reg(rxr_ep_domain(ep)->rdm_domain,
-							read_entry->iov[i].iov_base, read_entry->iov[i].iov_len,
-							FI_RECV, 0, 0, 0, &read_entry->mr[i], NULL);
-					if (!err)
-						FI_WARN(&rxr_prov, FI_LOG_MR, "The 2nd attemp was successful!");
-				}
-
-				if (err) {
-					FI_WARN(&rxr_prov, FI_LOG_MR, "Unable to register MR buf\n");
-					return NULL;
-				}
-
-				read_entry->mr_desc[i] = fi_mr_desc(read_entry->mr[i]);
-			}
-		}
-	} else {
+	if (lower_ep_type == SHM_EP) {
 		assert(lower_ep_type == SHM_EP);
-		memset(read_entry->mr, 0, read_entry->iov_count * sizeof(struct fid_mr *));
 		/* FI_MR_VIRT_ADDR is not being set, use 0-based offset instead. */
 		if (!(shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
 			for (i = 0; i < read_entry->rma_iov_count; ++i)
@@ -312,6 +345,12 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 	assert(read_entry->iov_count > 0);
 	assert(read_entry->rma_iov_count > 0);
 	assert(read_entry->bytes_submitted < read_entry->total_len);
+
+	if (read_entry->lower_ep_type == EFA_EP) {
+		ret = rxr_read_mr_reg(ep, read_entry);
+		if (ret)
+			return ret;
+	}
 
 	peer = rxr_ep_get_peer(ep, read_entry->addr);
 	if (read_entry->lower_ep_type == EFA_EP) {
