@@ -709,6 +709,9 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	if (rxr_ep->readrsp_tx_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->readrsp_tx_entry_pool);
 
+	if (rxr_ep->rx_readcopy_pkt_pool)
+		ofi_bufpool_destroy(rxr_ep->rx_readcopy_pkt_pool);
+
 	if (rxr_ep->rx_ooo_pkt_pool)
 		ofi_bufpool_destroy(rxr_ep->rx_ooo_pkt_pool);
 
@@ -1220,12 +1223,36 @@ int rxr_ep_init(struct rxr_ep *ep)
 			goto err_free_rx_unexp_pool;
 	}
 
+	if ((rxr_env.rx_copy_unexp || rxr_env.rx_copy_ooo) &&
+	    (rxr_ep_domain(ep)->util_domain.mr_mode & FI_MR_HMEM)) {
+		/* this pool is only needed when application requested FI_HMEM
+		 * capability
+		 */
+		ret = rxr_create_pkt_pool(ep, entry_sz,
+					  rxr_env.readcopy_pool_size,
+					  0, &ep->rx_readcopy_pkt_pool);
+
+		if (ret)
+			goto err_free_rx_ooo_pool;
+
+		ret = ofi_bufpool_grow(ep->rx_readcopy_pkt_pool);
+		if (ret) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"cannot allocate and register memory for readcopy packet pool. error: %s\n",
+				strerror(-ret));
+			goto err_free_rx_readcopy_pool;
+		}
+
+		ep->rx_readcopy_pkt_pool_used = 0;
+		ep->rx_readcopy_pkt_pool_max_used = 0;
+	}
+
 	ret = ofi_bufpool_create(&ep->tx_entry_pool,
 				 sizeof(struct rxr_tx_entry),
 				 RXR_BUF_POOL_ALIGNMENT,
 				 ep->tx_size, ep->tx_size, 0);
 	if (ret)
-		goto err_free_rx_ooo_pool;
+		goto err_free_rx_readcopy_pool;
 
 	ret = ofi_bufpool_create(&ep->read_entry_pool,
 				 sizeof(struct rxr_read_entry),
@@ -1321,6 +1348,9 @@ err_free_read_entry_pool:
 err_free_tx_entry_pool:
 	if (ep->tx_entry_pool)
 		ofi_bufpool_destroy(ep->tx_entry_pool);
+err_free_rx_readcopy_pool:
+	if (ep->rx_readcopy_pkt_pool)
+		ofi_bufpool_destroy(ep->rx_readcopy_pkt_pool);
 err_free_rx_ooo_pool:
 	if (rxr_env.rx_copy_ooo && ep->rx_ooo_pkt_pool)
 		ofi_bufpool_destroy(ep->rx_ooo_pkt_pool);

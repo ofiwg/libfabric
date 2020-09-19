@@ -198,6 +198,7 @@ struct rxr_env {
 	int shm_av_size;
 	int shm_max_medium_size;
 	int recvwin_size;
+	int readcopy_pool_size;
 	int cq_size;
 	size_t max_memcpy_size;
 	size_t mtu_size;
@@ -587,6 +588,11 @@ struct rxr_ep {
 	/* staging area for unexpected and out-of-order packets */
 	struct ofi_bufpool *rx_unexp_pkt_pool;
 	struct ofi_bufpool *rx_ooo_pkt_pool;
+
+	/* staging area for read copy */
+	struct ofi_bufpool *rx_readcopy_pkt_pool;
+	int rx_readcopy_pkt_pool_used;
+	int rx_readcopy_pkt_pool_max_used;
 
 #ifdef ENABLE_EFA_POISONING
 	size_t tx_pkt_pool_entry_sz;

@@ -182,6 +182,12 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 		else
 			ep->rx_bufs_efa_to_post++;
 	}
+
+	if (pkt_entry->type == RXR_PKT_ENTRY_READ_COPY) {
+		assert(ep->rx_readcopy_pkt_pool_used > 0);
+		ep->rx_readcopy_pkt_pool_used--;
+	}
+
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
@@ -276,6 +282,13 @@ struct rxr_pkt_entry *rxr_pkt_entry_clone(struct rxr_ep *ep,
 	dst = rxr_pkt_entry_alloc(ep, pkt_pool);
 	if (!dst)
 		return NULL;
+
+	if (new_entry_type == RXR_PKT_ENTRY_READ_COPY) {
+		assert(pkt_pool == ep->rx_readcopy_pkt_pool);
+		ep->rx_readcopy_pkt_pool_used++;
+		ep->rx_readcopy_pkt_pool_max_used = MAX(ep->rx_readcopy_pkt_pool_used,
+							ep->rx_readcopy_pkt_pool_max_used);
+	}
 
 	rxr_pkt_entry_copy(ep, dst, src, new_entry_type);
 	root = dst;
