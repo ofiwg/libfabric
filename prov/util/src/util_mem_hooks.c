@@ -426,12 +426,12 @@ static void *ofi_intercept_shmat(int shmid, const void *shmaddr, int shmflg)
 	size_t len;
 	int ret;
 
-	if (shmflg & SHM_REMAP) {
+	if (shmaddr && (shmflg & SHM_REMAP)) {
 		ret = shmctl(shmid, IPC_STAT, &ds);
 		len = (ret < 0) ? 0 : ds.shm_segsz;
 
 		if (shmflg & SHM_RND) {
-			start = (char *) shmaddr + ((uintptr_t) shmaddr) % SHMLBA;
+			start = (char *) shmaddr - ((uintptr_t) shmaddr) % SHMLBA;
 			len += ((uintptr_t) shmaddr) % SHMLBA;
 		} else {
 			start = shmaddr;
