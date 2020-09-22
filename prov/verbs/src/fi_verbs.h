@@ -573,7 +573,7 @@ struct vrb_ep {
 	uint64_t			sq_credits;
 	uint64_t			peer_rq_credits;
 	/* Protected by recv CQ lock */
-	uint64_t			rq_credits_avail;
+	int64_t				rq_credits_avail;
 	uint64_t			threshold;
 
 	union {
