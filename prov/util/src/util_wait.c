@@ -180,7 +180,7 @@ static int ofi_wait_match_fd(struct dlist_entry *item, const void *arg)
 	return fd_entry->fd == *(int *) arg;
 }
 
-static int ofi_wait_fdset_del(struct util_wait_fd *wait_fd, int fd)
+int ofi_wait_fdset_del(struct util_wait_fd *wait_fd, int fd)
 {
 	wait_fd->change_index++;
 
@@ -190,7 +190,7 @@ static int ofi_wait_fdset_del(struct util_wait_fd *wait_fd, int fd)
 }
 
 static int ofi_wait_fdset_add(struct util_wait_fd *wait_fd, int fd,
-			       uint32_t events, void *context)
+			      uint32_t events, void *context)
 {
 	int ret;
 
