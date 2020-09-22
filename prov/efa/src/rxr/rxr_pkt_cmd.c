@@ -450,6 +450,34 @@ ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_pee
 	return 0;
 }
 
+/* return the data size in a packet entry */
+size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
+{
+	int pkt_type;
+
+	assert(pkt_entry);
+	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
+
+	if (pkt_type == RXR_DATA_PKT)
+		return pkt_entry->pkt_size - sizeof(struct rxr_data_hdr);
+
+	if (pkt_type == RXR_READRSP_PKT)
+		return pkt_entry->pkt_size - sizeof(struct rxr_readrsp_hdr);
+
+	if (pkt_type >= RXR_REQ_PKT_BEGIN) {
+		assert(pkt_type == RXR_EAGER_MSGRTM_PKT || pkt_type == RXR_EAGER_TAGRTM_PKT ||
+		       pkt_type == RXR_MEDIUM_MSGRTM_PKT || pkt_type == RXR_MEDIUM_TAGRTM_PKT ||
+		       pkt_type == RXR_LONG_MSGRTM_PKT || pkt_type == RXR_LONG_TAGRTM_PKT ||
+		       pkt_type == RXR_EAGER_RTW_PKT || pkt_type == RXR_LONG_RTW_PKT);
+
+		return pkt_entry->pkt_size - rxr_pkt_req_hdr_size(pkt_entry);
+	}
+
+	/* other packet type does not contain data, thus return 0
+	 */
+	return 0;
+}
+
 /*
  * rxr_pkt_copy_to_rx() copy data to receiving buffer then
  * update counter in rx_entry. If all data has been copied
