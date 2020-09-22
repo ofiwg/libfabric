@@ -271,7 +271,7 @@ static struct ofi_prov *ofi_getprov(const char *prov_name, size_t len)
 
 	for (prov = prov_head; prov; prov = prov->next) {
 		if ((strlen(prov->prov_name) == len) &&
-		    !strncmp(prov->prov_name, prov_name, len))
+		    !strncasecmp(prov->prov_name, prov_name, len))
 			return prov;
 	}
 
