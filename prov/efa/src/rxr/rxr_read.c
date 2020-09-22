@@ -162,10 +162,12 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, v
 		read_entry->addr = tx_entry->addr;
 
 		read_entry->iov_count = tx_entry->iov_count;
-		read_entry->iov = tx_entry->iov;
+		memcpy(read_entry->iov, tx_entry->iov,
+		       tx_entry->iov_count * sizeof(struct iovec));
 
 		read_entry->rma_iov_count = tx_entry->rma_iov_count;
-		read_entry->rma_iov = tx_entry->rma_iov;
+		memcpy(read_entry->rma_iov, tx_entry->rma_iov,
+		       tx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
 
 		total_iov_len = ofi_total_iov_len(tx_entry->iov, tx_entry->iov_count);
 		total_rma_iov_len = ofi_total_rma_iov_len(tx_entry->rma_iov, tx_entry->rma_iov_count);
@@ -186,10 +188,12 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, v
 		read_entry->addr = rx_entry->addr;
 
 		read_entry->iov_count = rx_entry->iov_count;
-		read_entry->iov = rx_entry->iov;
+		memcpy(read_entry->iov, rx_entry->iov,
+		       rx_entry->iov_count * sizeof(struct iovec));
 
 		read_entry->rma_iov_count = rx_entry->rma_iov_count;
-		read_entry->rma_iov = rx_entry->rma_iov;
+		memcpy(read_entry->rma_iov, rx_entry->rma_iov,
+		       rx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
 
 		total_iov_len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 		total_rma_iov_len = ofi_total_rma_iov_len(rx_entry->rma_iov, rx_entry->rma_iov_count);
