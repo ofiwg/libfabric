@@ -79,12 +79,12 @@ struct rxr_read_entry {
 
 	fi_addr_t addr;
 
-	struct iovec *iov;
+	struct iovec iov[RXR_IOV_LIMIT];
 	size_t iov_count;
 	struct fid_mr *mr[RXR_IOV_LIMIT];
 	void *mr_desc[RXR_IOV_LIMIT];
 
-	struct fi_rma_iov *rma_iov;
+	struct fi_rma_iov rma_iov[RXR_IOV_LIMIT];
 	size_t rma_iov_count;
 
 	size_t total_len;
