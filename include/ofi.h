@@ -194,6 +194,7 @@ enum ofi_prov_type {
 struct fi_prov_context {
 	enum ofi_prov_type type;
 	int disable_logging;
+	int disable_layering;
 };
 
 struct fi_filter {
