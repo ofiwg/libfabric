@@ -2970,7 +2970,7 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 			opts->sizes_enabled = FT_ENABLE_ALL;
 		} else {
 			opts->options |= FT_OPT_SIZE;
-			opts->transfer_size = atoi(optarg);
+			opts->transfer_size = atol(optarg);
 		}
 		break;
 	case 'm':
