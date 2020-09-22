@@ -199,10 +199,12 @@ void vrb_free_xrc_conn_setup(struct vrb_xrc_ep *ep, int disconnect)
 int vrb_connect_xrc(struct vrb_xrc_ep *ep, struct sockaddr *addr,
 		       int reciprocal, void *param, size_t paramlen)
 {
+	struct vrb_domain *domain = vrb_ep_to_domain(&ep->base_ep);
 	int ret;
 
 	assert(!ep->base_ep.id && !ep->base_ep.ibv_qp && !ep->ini_conn);
 
+	domain->xrc.lock_acquire(&domain->xrc.ini_lock);
 	ret = vrb_get_shared_ini_conn(ep, &ep->ini_conn);
 	if (ret) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
@@ -211,12 +213,14 @@ int vrb_connect_xrc(struct vrb_xrc_ep *ep, struct sockaddr *addr,
 			free(ep->conn_setup);
 			ep->conn_setup = NULL;
 		}
+		domain->xrc.lock_release(&domain->xrc.ini_lock);
 		return ret;
 	}
 
 	vrb_eq_set_xrc_conn_tag(ep);
 	vrb_add_pending_ini_conn(ep, reciprocal, param, paramlen);
 	vrb_sched_ini_conn(ep->ini_conn);
+	domain->xrc.lock_release(&domain->xrc.ini_lock);
 
 	return FI_SUCCESS;
 }
@@ -224,8 +228,11 @@ int vrb_connect_xrc(struct vrb_xrc_ep *ep, struct sockaddr *addr,
 /* Caller must hold the eq:lock */
 void vrb_ep_ini_conn_done(struct vrb_xrc_ep *ep, uint32_t tgt_qpn)
 {
+	struct vrb_domain *domain = vrb_ep_to_domain(&ep->base_ep);
+
 	assert(ep->base_ep.id && ep->ini_conn);
 
+	domain->xrc.lock_acquire(&domain->xrc.ini_lock);
 	assert(ep->ini_conn->state == VRB_INI_QP_CONNECTING ||
 	       ep->ini_conn->state == VRB_INI_QP_CONNECTED);
 
@@ -245,6 +252,7 @@ void vrb_ep_ini_conn_done(struct vrb_xrc_ep *ep, uint32_t tgt_qpn)
 
 	vrb_log_ep_conn(ep, "INI Connection Done");
 	vrb_sched_ini_conn(ep->ini_conn);
+	domain->xrc.lock_release(&domain->xrc.ini_lock);
 }
 
 /* Caller must hold the eq:lock */
