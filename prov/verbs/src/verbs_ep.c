@@ -1023,7 +1023,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	ep->inject_limit = ep->info->tx_attr->inject_size;
 	ep->peer_rq_credits = UINT64_MAX;
-	ep->threshold = UINT64_MAX; /* disables RQ flow control */
+	ep->threshold = INT64_MAX; /* disables RQ flow control */
 
 	switch (info->ep_attr->type) {
 	case FI_EP_MSG:
