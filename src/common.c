@@ -1216,10 +1216,11 @@ void ofi_insert_loopback_addr(const struct fi_provider *prov, struct slist *addr
 {
 	struct ofi_addr_list_entry *addr_entry;
 
-	addr_entry = calloc(1, sizeof(struct ofi_addr_list_entry));
+	addr_entry = calloc(1, sizeof(*addr_entry));
 	if (!addr_entry)
 		return;
 
+	addr_entry->comm_caps = FI_LOCAL_COMM;
 	addr_entry->ipaddr.sin.sin_family = AF_INET;
 	addr_entry->ipaddr.sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 	ofi_straddr_log(prov, FI_LOG_INFO, FI_LOG_CORE,
@@ -1230,10 +1231,11 @@ void ofi_insert_loopback_addr(const struct fi_provider *prov, struct slist *addr
 	strncpy(addr_entry->ifa_name, "lo", sizeof(addr_entry->ifa_name));
 	slist_insert_tail(&addr_entry->entry, addr_list);
 
-	addr_entry = calloc(1, sizeof(struct ofi_addr_list_entry));
+	addr_entry = calloc(1, sizeof(*addr_entry));
 	if (!addr_entry)
 		return;
 
+	addr_entry->comm_caps = FI_LOCAL_COMM;
 	addr_entry->ipaddr.sin6.sin6_family = AF_INET6;
 	addr_entry->ipaddr.sin6.sin6_addr = in6addr_loopback;
 	ofi_straddr_log(prov, FI_LOG_INFO, FI_LOG_CORE,
@@ -1358,6 +1360,7 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 		if (!addr_entry)
 			continue;
 
+		addr_entry->comm_caps = FI_LOCAL_COMM | FI_REMOTE_COMM;
 		memcpy(&addr_entry->ipaddr, ifa->ifa_addr,
 			ofi_sizeofaddr(ifa->ifa_addr));
 		strncpy(addr_entry->ifa_name, ifa->ifa_name,
@@ -1422,6 +1425,7 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			if (!addr_entry)
 				break;
 
+			addr_entry->comm_caps = FI_LOCAL_COMM | FI_REMOTE_COMM;
 			addr_entry->ipaddr.sin.sin_family = AF_INET;
 			addr_entry->ipaddr.sin.sin_addr.s_addr =
 						iptbl->table[i].dwAddr;
