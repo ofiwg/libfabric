@@ -161,6 +161,28 @@ static int recv_cancel_host(void)
 	if (opts.verbose)
 		fprintf(stdout, "GOOD: Completed uncancelled recv\n");
 
+	/* Repost cancelled recv and get completion */
+	ft_tag = CANCEL_TAG;
+	ret = ft_post_rx(ep, opts.transfer_size, &cancel_recv_ctx);
+	if (ret)
+		return ret;
+
+	do {
+		ret = fi_cq_read(rxcq, &recv_completion, 1);
+		if (ret > 0) {
+			if (recv_completion.op_context != &cancel_recv_ctx) {
+				FT_PRINTERR("ERROR: op_context does not match",
+					    -FI_EOTHER);
+				return -FI_EOTHER;
+			}
+		} else if ((ret <= 0) && (ret != -FI_EAGAIN)) {
+			FT_PRINTERR("fi_cq_read", ret);
+		}
+	} while (ret == -FI_EAGAIN);
+
+	if (opts.verbose)
+		fprintf(stdout, "GOOD: Completed reposted cancelled recv\n");
+
 	fprintf(stdout, "GOOD: Completed Recv Cancel Test\n");
 
 	return 0;
