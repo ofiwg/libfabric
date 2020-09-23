@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2020 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2020 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -130,9 +131,11 @@ static void rocr_mm_dealloc_cb(void *addr, void *user_data)
 {
 	size_t len = (size_t) user_data;
 
+	pthread_rwlock_rdlock(&mm_list_rwlock);
 	pthread_mutex_lock(&mm_lock);
 	ofi_monitor_unsubscribe(rocr_monitor, addr, len, NULL);
 	pthread_mutex_unlock(&mm_lock);
+	pthread_rwlock_unlock(&mm_list_rwlock);
 }
 
 static void rocr_mm_entry_free(struct rocr_mm_entry *entry)
