@@ -796,7 +796,7 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 	struct rxr_pkt_entry *cur, *nxt;
 	char *data;
 	ssize_t ret, err;
-	size_t offset, hdr_size, data_size, bytes_received;
+	size_t offset, hdr_size, data_size;
 
 	ret = 0;
 	cur = pkt_entry;
@@ -809,8 +809,8 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 		/* rxr_pkt_copy_to_rx() can release rx_entry, so
 		 * bytes_received must be calculated before it.
 		 */
-		bytes_received = rx_entry->bytes_done + data_size;
-		if (rx_entry->total_len == bytes_received)
+		rx_entry->bytes_received += data_size;
+		if (rx_entry->total_len == rx_entry->bytes_received)
 			rxr_pkt_rx_map_remove(ep, cur, rx_entry);
 
 		/* rxr_pkt_copy_to_rx() will release cur, so
@@ -862,6 +862,8 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 	data = (char *)pkt_entry->pkt + hdr_size;
 	data_size = pkt_entry->pkt_size - hdr_size;
+
+	rx_entry->bytes_received += data_size;
 	ret = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
 	if (ret) {
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -1287,7 +1289,8 @@ struct rxr_rx_entry *rxr_pkt_alloc_rtw_rx_entry(struct rxr_ep *ep,
 	}
 
 	rx_entry->addr = pkt_entry->addr;
-	rx_entry->bytes_done = 0;
+	rx_entry->bytes_received = 0;
+	rx_entry->bytes_copied = 0;
 	return rx_entry;
 }
 
@@ -1330,6 +1333,7 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 	data = (char *)pkt_entry->pkt + hdr_size;
 	data_size = pkt_entry->pkt_size - hdr_size;
 
+	rx_entry->bytes_received += data_size;
 	if (data_size != rx_entry->total_len) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Eager RTM size mismatch! data_size: %ld total_len: %ld.",
 			data_size, rx_entry->total_len);
@@ -1386,6 +1390,7 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	data = (char *)pkt_entry->pkt + hdr_size;
 	data_size = pkt_entry->pkt_size - hdr_size;
 
+	rx_entry->bytes_received += data_size;
 	if (data_size >= rx_entry->total_len) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Long RTM size mismatch! pkt_data_size: %ld total_len: %ld\n",
 			data_size, rx_entry->total_len);
@@ -1566,7 +1571,8 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	}
 
 	rx_entry->addr = pkt_entry->addr;
-	rx_entry->bytes_done = 0;
+	rx_entry->bytes_received = 0;
+	rx_entry->bytes_copied = 0;
 	rx_entry->cq_entry.flags |= (FI_RMA | FI_READ);
 	rx_entry->cq_entry.len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;

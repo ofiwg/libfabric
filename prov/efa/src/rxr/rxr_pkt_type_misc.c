@@ -180,7 +180,7 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 	cts_hdr->tx_id = rx_entry->tx_id;
 	cts_hdr->rx_id = rx_entry->rx_id;
 
-	bytes_left = rx_entry->total_len - rx_entry->bytes_done;
+	bytes_left = rx_entry->total_len - rx_entry->bytes_received;
 	peer = rxr_ep_get_peer(ep, rx_entry->addr);
 	rxr_pkt_calc_cts_window_credits(ep, peer, bytes_left,
 					rx_entry->credit_request,

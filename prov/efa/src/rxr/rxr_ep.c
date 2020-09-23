@@ -87,7 +87,8 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 	rx_entry->addr = msg->addr;
 	rx_entry->fi_flags = flags;
 	rx_entry->rxr_flags = 0;
-	rx_entry->bytes_done = 0;
+	rx_entry->bytes_received = 0;
+	rx_entry->bytes_copied = 0;
 	rx_entry->window = 0;
 	rx_entry->iov_count = msg->iov_count;
 	rx_entry->tag = tag;

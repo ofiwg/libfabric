@@ -487,9 +487,9 @@ ssize_t rxr_pkt_copy_to_rx(struct rxr_ep *ep,
 		}
 	}
 
-	rx_entry->bytes_done += data_size;
+	rx_entry->bytes_copied += data_size;
 
-	if (rx_entry->total_len == rx_entry->bytes_done) {
+	if (rx_entry->total_len == rx_entry->bytes_copied) {
 		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
 		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 		rxr_release_rx_entry(ep, rx_entry);
