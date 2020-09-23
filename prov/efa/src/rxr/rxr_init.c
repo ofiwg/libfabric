@@ -56,6 +56,7 @@ struct rxr_env rxr_env = {
 	.shm_av_size = 128,
 	.shm_max_medium_size = 4096,
 	.recvwin_size = RXR_RECVWIN_SIZE,
+	.readcopy_pool_size = 256,
 	.cq_size = RXR_DEF_CQ_SIZE,
 	.max_memcpy_size = 4096,
 	.mtu_size = 0,
@@ -88,6 +89,7 @@ static void rxr_init_env(void)
 	fi_param_get_int(&rxr_prov, "shm_av_size", &rxr_env.shm_av_size);
 	fi_param_get_int(&rxr_prov, "shm_max_medium_size", &rxr_env.shm_max_medium_size);
 	fi_param_get_int(&rxr_prov, "recvwin_size", &rxr_env.recvwin_size);
+	fi_param_get_int(&rxr_prov, "readcopy_pool_size", &rxr_env.readcopy_pool_size);
 	fi_param_get_int(&rxr_prov, "cq_size", &rxr_env.cq_size);
 	fi_param_get_size_t(&rxr_prov, "max_memcpy_size",
 			    &rxr_env.max_memcpy_size);
@@ -727,6 +729,8 @@ EFA_INI
 			"Defines the switch point between small/medium message and large message. The message larger than this switch point will be transferred with large message protocol (Default 4096).");
 	fi_param_define(&rxr_prov, "recvwin_size", FI_PARAM_INT,
 			"Defines the size of sliding receive window. (Default: 16384)");
+	fi_param_define(&rxr_prov, "readcopy_pool_size", FI_PARAM_INT,
+			"Defines the size of readcopy packet pool size. (Default: 256)");
 	fi_param_define(&rxr_prov, "cq_size", FI_PARAM_INT,
 			"Define the size of completion queue. (Default: 8192)");
 	fi_param_define(&rxr_prov, "mr_cache_enable", FI_PARAM_BOOL,

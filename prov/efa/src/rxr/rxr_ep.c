@@ -87,7 +87,8 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 	rx_entry->addr = msg->addr;
 	rx_entry->fi_flags = flags;
 	rx_entry->rxr_flags = 0;
-	rx_entry->bytes_done = 0;
+	rx_entry->bytes_received = 0;
+	rx_entry->bytes_copied = 0;
 	rx_entry->window = 0;
 	rx_entry->iov_count = msg->iov_count;
 	rx_entry->tag = tag;
@@ -708,6 +709,15 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	if (rxr_ep->readrsp_tx_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->readrsp_tx_entry_pool);
 
+	if (rxr_ep->rx_readcopy_pkt_pool) {
+		FI_INFO(&rxr_prov, FI_LOG_EP_CTRL, "current usage of read copy packet pool is %d\n",
+			rxr_ep->rx_readcopy_pkt_pool_used);
+		FI_INFO(&rxr_prov, FI_LOG_EP_CTRL, "maximum usage of read copy packet pool is %d\n",
+			rxr_ep->rx_readcopy_pkt_pool_max_used);
+		assert(!rxr_ep->rx_readcopy_pkt_pool_used);
+		ofi_bufpool_destroy(rxr_ep->rx_readcopy_pkt_pool);
+	}
+
 	if (rxr_ep->rx_ooo_pkt_pool)
 		ofi_bufpool_destroy(rxr_ep->rx_ooo_pkt_pool);
 
@@ -890,6 +900,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 	ssize_t ret;
 	size_t i;
 	struct rxr_ep *ep;
+	struct efa_ep *efa_ep;
 	uint64_t flags = FI_MORE;
 	size_t rx_size, shm_rx_size;
 	char shm_ep_name[NAME_MAX];
@@ -963,6 +974,16 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 					goto out;
 			}
 		}
+
+		/*
+		 * insert EP's own address to AV and save the address as
+		 * ep->rdm_self_addr. It is used when copy data to GPU memory by local read
+		 */
+		efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+		ret = efa_av_insert_addr(efa_ep->av, (struct efa_ep_addr *)ep->core_addr,
+					 &ep->rdm_self_addr, 0, NULL);
+		if (OFI_UNLIKELY(ret))
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "insert EP's own address failed!\n");
 
 out:
 		fastlock_release(&ep->util_ep.lock);
@@ -1136,8 +1157,18 @@ static void rxr_buf_region_free_hndlr(struct ofi_bufpool_region *region)
 			fi_strerror(-ret));
 }
 
+/*
+ * rxr_create_pkt_pool create a packet pool. The size of pool is fixed
+ * and the memory is registered with device.
+ *
+ * Important arguments:
+ *      size: packet entry size
+ *      flags: caller can specify OFI_BUFPOOL_HUGEPAGES so the pool
+ *             will be backed by huge pages.
+ */
 static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
 			       size_t chunk_count,
+			       size_t flags,
 			       struct ofi_bufpool **buf_pool)
 {
 	struct ofi_bufpool_attr attr = {
@@ -1151,7 +1182,7 @@ static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
 					rxr_buf_region_free_hndlr : NULL,
 		.init_fn	= NULL,
 		.context	= rxr_ep_domain(ep),
-		.flags		= OFI_BUFPOOL_HUGEPAGES,
+		.flags		= flags,
 	};
 
 	return ofi_bufpool_create_attr(&attr, buf_pool);
@@ -1169,11 +1200,13 @@ int rxr_ep_init(struct rxr_ep *ep)
 #endif
 
 	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_tx_pool_chunk_cnt(ep),
+				  OFI_BUFPOOL_HUGEPAGES,
 				  &ep->tx_pkt_efa_pool);
 	if (ret)
 		goto err_out;
 
 	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_rx_pool_chunk_cnt(ep),
+				  OFI_BUFPOOL_HUGEPAGES,
 				  &ep->rx_pkt_efa_pool);
 	if (ret)
 		goto err_free_tx_pool;
@@ -1196,12 +1229,36 @@ int rxr_ep_init(struct rxr_ep *ep)
 			goto err_free_rx_unexp_pool;
 	}
 
+	if ((rxr_env.rx_copy_unexp || rxr_env.rx_copy_ooo) &&
+	    (rxr_ep_domain(ep)->util_domain.mr_mode & FI_MR_HMEM)) {
+		/* this pool is only needed when application requested FI_HMEM
+		 * capability
+		 */
+		ret = rxr_create_pkt_pool(ep, entry_sz,
+					  rxr_env.readcopy_pool_size,
+					  0, &ep->rx_readcopy_pkt_pool);
+
+		if (ret)
+			goto err_free_rx_ooo_pool;
+
+		ret = ofi_bufpool_grow(ep->rx_readcopy_pkt_pool);
+		if (ret) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"cannot allocate and register memory for readcopy packet pool. error: %s\n",
+				strerror(-ret));
+			goto err_free_rx_readcopy_pool;
+		}
+
+		ep->rx_readcopy_pkt_pool_used = 0;
+		ep->rx_readcopy_pkt_pool_max_used = 0;
+	}
+
 	ret = ofi_bufpool_create(&ep->tx_entry_pool,
 				 sizeof(struct rxr_tx_entry),
 				 RXR_BUF_POOL_ALIGNMENT,
 				 ep->tx_size, ep->tx_size, 0);
 	if (ret)
-		goto err_free_rx_ooo_pool;
+		goto err_free_rx_readcopy_pool;
 
 	ret = ofi_bufpool_create(&ep->read_entry_pool,
 				 sizeof(struct rxr_read_entry),
@@ -1297,6 +1354,9 @@ err_free_read_entry_pool:
 err_free_tx_entry_pool:
 	if (ep->tx_entry_pool)
 		ofi_bufpool_destroy(ep->tx_entry_pool);
+err_free_rx_readcopy_pool:
+	if (ep->rx_readcopy_pkt_pool)
+		ofi_bufpool_destroy(ep->rx_readcopy_pkt_pool);
 err_free_rx_ooo_pool:
 	if (rxr_env.rx_copy_ooo && ep->rx_ooo_pkt_pool)
 		ofi_bufpool_destroy(ep->rx_ooo_pkt_pool);
@@ -1705,6 +1765,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 			  &rxr_ep->rdm_ep, rxr_ep);
 	if (ret)
 		goto err_free_rdm_info;
+
+	rxr_ep->rdm_self_addr = FI_ADDR_NOTAVAIL;
 
 	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
 				  util_domain.domain_fid);

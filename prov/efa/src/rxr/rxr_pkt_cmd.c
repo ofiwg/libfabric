@@ -33,7 +33,9 @@
 
 #include "efa.h"
 #include "rxr.h"
+#include "rxr_msg.h"
 #include "rxr_cntr.h"
+#include "rxr_read.h"
 #include "rxr_pkt_cmd.h"
 
 /* Handshake wait timeout in microseconds */
@@ -447,6 +449,105 @@ ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_pee
 	}
 
 	return 0;
+}
+
+/* return the data size in a packet entry */
+size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
+{
+	int pkt_type;
+
+	assert(pkt_entry);
+	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
+
+	if (pkt_type == RXR_DATA_PKT)
+		return pkt_entry->pkt_size - sizeof(struct rxr_data_hdr);
+
+	if (pkt_type == RXR_READRSP_PKT)
+		return pkt_entry->pkt_size - sizeof(struct rxr_readrsp_hdr);
+
+	if (pkt_type >= RXR_REQ_PKT_BEGIN) {
+		assert(pkt_type == RXR_EAGER_MSGRTM_PKT || pkt_type == RXR_EAGER_TAGRTM_PKT ||
+		       pkt_type == RXR_MEDIUM_MSGRTM_PKT || pkt_type == RXR_MEDIUM_TAGRTM_PKT ||
+		       pkt_type == RXR_LONG_MSGRTM_PKT || pkt_type == RXR_LONG_TAGRTM_PKT ||
+		       pkt_type == RXR_EAGER_RTW_PKT || pkt_type == RXR_LONG_RTW_PKT);
+
+		return pkt_entry->pkt_size - rxr_pkt_req_hdr_size(pkt_entry);
+	}
+
+	/* other packet type does not contain data, thus return 0
+	 */
+	return 0;
+}
+
+/*
+ * rxr_pkt_copy_to_rx() copy data to receiving buffer then
+ * update counter in rx_entry.
+ *
+ * If receiving buffer is on GPU memory, it will post a
+ * read request, otherwise it will copy data.
+ *
+ * If all data has been copied to receiving buffer,
+ * it will write rx completion and release rx_entry.
+ *
+ * Return value and states:
+ *
+ *    On success, return 0 and release pkt_entry
+ *    On failure, return error code
+ */
+ssize_t rxr_pkt_copy_to_rx(struct rxr_ep *ep,
+			   struct rxr_rx_entry *rx_entry,
+			   size_t data_offset,
+			   struct rxr_pkt_entry *pkt_entry,
+			   char *data, size_t data_size)
+{
+	ssize_t err, bytes_copied;
+
+	pkt_entry->x_entry = rx_entry;
+
+	if (data_size > 0 && efa_ep_is_cuda_mr(rx_entry->desc[0])) {
+		err = rxr_read_post_local_read_or_queue(ep, rx_entry, data_offset,
+							pkt_entry, data, data_size);
+		if (err)
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "cannot post read to copy data\n");
+
+		return err;
+	}
+
+	if (OFI_LIKELY(!(rx_entry->rxr_flags & RXR_RECV_CANCEL)) &&
+	    rx_entry->cq_entry.len > data_offset && data_size > 0) {
+		bytes_copied = ofi_copy_to_iov(rx_entry->iov,
+					       rx_entry->iov_count,
+					       data_offset,
+					       data,
+					       data_size);
+		if (bytes_copied != MIN(data_size, rx_entry->cq_entry.len - data_offset)) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
+				bytes_copied);
+			return -FI_EINVAL;
+		}
+	}
+
+	rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
+	return 0;
+}
+
+void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
+				struct rxr_pkt_entry *pkt_entry,
+				size_t data_size)
+{
+	struct rxr_rx_entry *rx_entry;
+
+	rx_entry = pkt_entry->x_entry;
+	assert(rx_entry);
+	rx_entry->bytes_copied += data_size;
+
+	if (rx_entry->total_len == rx_entry->bytes_copied) {
+		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
+		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
+		rxr_release_rx_entry(ep, rx_entry);
+	} else {
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+	}
 }
 
 /*
