@@ -33,6 +33,7 @@
 
 #include "efa.h"
 #include "rxr.h"
+#include "rxr_msg.h"
 #include "rxr_cntr.h"
 #include "rxr_pkt_cmd.h"
 
@@ -444,6 +445,56 @@ ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_pee
 			"did not get handshake back in %f second(s). returning -FI_EAGAIN!\n",
 			RXR_HANDSHAKE_WAIT_TIMEOUT*1e-6);
 		return -FI_EAGAIN;
+	}
+
+	return 0;
+}
+
+/*
+ * rxr_pkt_copy_to_rx() copy data to receiving buffer then
+ * update counter in rx_entry. If all data has been copied
+ * to receiving buffer, it will write rx completion and
+ * release rx_entry.
+ *
+ * Return value and states:
+ *
+ *    On success, return 0 and release pkt_entry
+ *    On failure, return error code
+ */
+ssize_t rxr_pkt_copy_to_rx(struct rxr_ep *ep,
+			   struct rxr_rx_entry *rx_entry,
+			   size_t data_offset,
+			   struct rxr_pkt_entry *pkt_entry,
+			   char *data, size_t data_size)
+{
+	struct efa_mr *desc;
+	size_t bytes_copied;
+
+	if (OFI_LIKELY(!(rx_entry->rxr_flags & RXR_RECV_CANCEL)) &&
+	    rx_entry->cq_entry.len > data_offset) {
+		desc = rx_entry->desc[0];
+		bytes_copied = ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+						    desc ? desc->peer.device.reserved : 0,
+						    rx_entry->iov,
+						    rx_entry->iov_count,
+						    data_offset,
+						    data,
+						    data_size);
+		if (bytes_copied != MIN(data_size, rx_entry->cq_entry.len - data_offset)) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
+				bytes_copied);
+			return -FI_EINVAL;
+		}
+	}
+
+	rx_entry->bytes_done += data_size;
+
+	if (rx_entry->total_len == rx_entry->bytes_done) {
+		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
+		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
+		rxr_release_rx_entry(ep, rx_entry);
+	} else {
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 	}
 
 	return 0;
