@@ -213,6 +213,7 @@ struct cxip_environment cxip_env = {
 	.optimized_mrs = true,
 	.llring_mode = CXIP_LLRING_IDLE,
 	.default_vni = 10,
+	.eq_ack_batch_size = 32,
 };
 
 static void cxip_env_init(void)
@@ -289,6 +290,14 @@ static void cxip_env_init(void)
 			"Default VNI value.");
 	fi_param_get_size_t(&cxip_prov, "default_vni",
 			    &cxip_env.default_vni);
+
+	fi_param_define(&cxip_prov, "eq_ack_batch_size", FI_PARAM_SIZE_T,
+			"Number of EQ events to process before acknowledgement");
+	fi_param_get_size_t(&cxip_prov, "eq_ack_batch_size",
+			    &cxip_env.eq_ack_batch_size);
+
+	if (!cxip_env.eq_ack_batch_size)
+		cxip_env.eq_ack_batch_size = 1;
 }
 
 /*

@@ -449,7 +449,6 @@ void cxip_cq_progress(struct cxip_cq *cq)
 {
 	const union c_event *event;
 	struct cxip_req *req;
-	int events = 0;
 	int ret;
 
 	fastlock_acquire(&cq->lock);
@@ -457,7 +456,6 @@ void cxip_cq_progress(struct cxip_cq *cq)
 	if (!cq->enabled)
 		goto out;
 
-	/* TODO Limit the maximum number of events processed */
 	while ((event = cxi_eq_peek_event(cq->evtq))) {
 		req = cxip_cq_event_req(cq, event);
 		if (req) {
@@ -469,11 +467,12 @@ void cxip_cq_progress(struct cxip_cq *cq)
 		/* Consume event. */
 		cxi_eq_next_event(cq->evtq);
 
-		events++;
+		cq->unacked_events++;
+		if (cq->unacked_events == cq->ack_batch_size) {
+			cxi_eq_ack_events(cq->evtq);
+			cq->unacked_events = 0;
+		}
 	}
-
-	if (events)
-		cxi_eq_ack_events(cq->evtq);
 
 	if (cxi_eq_get_drops(cq->evtq))
 		CXIP_LOG_FATAL("Cassini Event Queue overflow detected.\n");
@@ -756,6 +755,7 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	cxi_cq->util_cq.cq_fid.fid.ops = &cxip_cq_fi_ops;
 
 	cxi_cq->domain = cxi_dom;
+	cxi_cq->ack_batch_size = cxip_env.eq_ack_batch_size;
 	ofi_atomic_initialize32(&cxi_cq->ref, 0);
 	fastlock_init(&cxi_cq->lock);
 	fastlock_init(&cxi_cq->req_lock);

@@ -184,6 +184,8 @@ struct cxip_environment {
 	enum cxip_llring_mode llring_mode;
 
 	size_t default_vni;
+
+	size_t eq_ack_batch_size;
 };
 
 extern struct cxip_environment cxip_env;
@@ -722,6 +724,8 @@ struct cxip_cq {
 	fastlock_t lock;
 	bool enabled;
 	struct cxi_eq *evtq;
+	unsigned int unacked_events;
+	unsigned int ack_batch_size;
 	void *evtq_buf;
 	size_t evtq_buf_len;
 	struct cxi_md *evtq_buf_md;

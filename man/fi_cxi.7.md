@@ -439,6 +439,11 @@ Valid values are idle, always, and never.
 *FI_CXI_DEFAULT_VNI*
 : Default VNI value (masked to 16 bits).
 
+*FI_CXI_EQ_ACK_BATCH_SIZE*
+: Number of EQ events to process before writing an acknowledgement to HW.
+Batching ACKs amortizes the cost of event acknowledgement over multiple
+network operations.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 
