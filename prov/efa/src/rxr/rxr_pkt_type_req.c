@@ -268,40 +268,6 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
 	return ep->mtu_size - rxr_pkt_req_max_header_size(pkt_type);
 }
 
-static
-size_t rxr_pkt_req_copy_data(struct rxr_rx_entry *rx_entry,
-			     struct rxr_pkt_entry *pkt_entry,
-			     char *data, size_t data_size)
-{
-	struct efa_mr *desc;
-	size_t bytes_copied;
-	int bytes_left;
-
-	desc = rx_entry->desc[0];
-	bytes_copied = ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-					    desc ? desc->peer.device.reserved : 0,
-					    rx_entry->iov,
-					    rx_entry->iov_count,
-					    0,
-					    data,
-					    data_size);
-
-	if (OFI_UNLIKELY(bytes_copied < data_size)) {
-		/* recv buffer is not big enough to hold req, this must be a truncated message */
-		assert(bytes_copied == rx_entry->cq_entry.len &&
-		       rx_entry->cq_entry.len < rx_entry->total_len);
-		rx_entry->bytes_done = bytes_copied;
-		bytes_left = 0;
-	} else {
-		assert(bytes_copied == data_size);
-		rx_entry->bytes_done = data_size;
-		bytes_left = rx_entry->total_len - rx_entry->bytes_done;
-	}
-
-	assert(bytes_left >= 0);
-	return bytes_left;
-}
-
 /*
  * REQ packet type functions
  *
@@ -828,46 +794,41 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 					struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_pkt_entry *cur, *nxt;
-	struct efa_mr *desc;
 	char *data;
-	size_t offset, hdr_size, data_size;
+	ssize_t ret, err;
+	size_t offset, hdr_size, data_size, bytes_received;
 
+	ret = 0;
 	cur = pkt_entry;
 	while (cur) {
 		hdr_size = rxr_pkt_req_hdr_size(cur);
 		data = (char *)cur->pkt + hdr_size;
 		offset = rxr_get_medium_rtm_base_hdr(cur->pkt)->offset;
 		data_size = cur->pkt_size - hdr_size;
-		desc = rx_entry->desc[0];
 
-		ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-				     desc ? desc->peer.device.reserved : 0,
-				     rx_entry->iov,
-				     rx_entry->iov_count,
-				     offset,
-				     data,
-				     data_size);
-		rx_entry->bytes_done += data_size;
+		/* rxr_pkt_copy_to_rx() can release rx_entry, so
+		 * bytes_received must be calculated before it.
+		 */
+		bytes_received = rx_entry->bytes_done + data_size;
+		if (rx_entry->total_len == bytes_received)
+			rxr_pkt_rx_map_remove(ep, cur, rx_entry);
 
+		/* rxr_pkt_copy_to_rx() will release cur, so
+		 * cur->next must be copied out before it.
+		 */
 		nxt = cur->next;
 		cur->next = NULL;
-		if (rx_entry->total_len == rx_entry->bytes_done) {
-			rxr_pkt_rx_map_remove(ep, cur, rx_entry);
-			/*
-			 * rxr_cq_handle_rx_completion() releases pkt_entry, thus
-			 * we do not release it here.
-			 */
-			rxr_cq_handle_rx_completion(ep, cur, rx_entry);
-			rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
-			rxr_release_rx_entry(ep, rx_entry);
-		} else {
+
+		err = rxr_pkt_copy_to_rx(ep, rx_entry, offset, cur, data, data_size);
+		if (err) {
 			rxr_pkt_entry_release_rx(ep, cur);
+			ret = err;
 		}
 
 		cur = nxt;
 	}
 
-	return 0;
+	return ret;
 }
 
 ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
@@ -876,7 +837,7 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 {
 	int pkt_type;
 	char *data;
-	size_t hdr_size, data_size, bytes_left;
+	size_t hdr_size, data_size;
 	ssize_t ret;
 
 	assert(rx_entry->state == RXR_RX_MATCHED);
@@ -901,16 +862,13 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 	data = (char *)pkt_entry->pkt + hdr_size;
 	data_size = pkt_entry->pkt_size - hdr_size;
-	bytes_left = rxr_pkt_req_copy_data(rx_entry, pkt_entry,
-					   data, data_size);
-	if (!bytes_left) {
-		/*
-		 * rxr_cq_handle_rx_completion() releases pkt_entry, thus
-		 * we do not release it here.
-		 */
-		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
-		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
-		rxr_release_rx_entry(ep, rx_entry);
+	ret = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
+	if (ret) {
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return ret;
+	}
+
+	if (pkt_type == RXR_EAGER_MSGRTM_PKT || pkt_type == RXR_EAGER_TAGRTM_PKT) {
 		ret = 0;
 	} else {
 		/*
@@ -925,7 +883,6 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 		/* we have noticed using the default value achieve better bandwidth */
 		rx_entry->credit_request = rxr_env.tx_min_credits;
 		ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
 	}
 
 	return ret;
@@ -1341,7 +1298,7 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 	struct rxr_eager_rtw_hdr *rtw_hdr;
 	char *data;
 	size_t data_size, hdr_size;
-	ssize_t err, bytes_left;
+	ssize_t err;
 
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
 	if (!rx_entry) {
@@ -1372,23 +1329,22 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 	data = (char *)pkt_entry->pkt + hdr_size;
 	data_size = pkt_entry->pkt_size - hdr_size;
-	bytes_left = rxr_pkt_req_copy_data(rx_entry, pkt_entry, data, data_size);
-	if (bytes_left != 0) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Eager RTM bytes_left is %ld, which should be 0.",
-			bytes_left);
+
+	if (data_size != rx_entry->total_len) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "Eager RTM size mismatch! data_size: %ld total_len: %ld.",
+			data_size, rx_entry->total_len);
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "target buffer: %p length: %ld", rx_entry->iov[0].iov_base,
 			rx_entry->iov[0].iov_len);
-		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
-		rxr_release_rx_entry(ep, rx_entry);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		return;
+		err = FI_EINVAL;
+	} else {
+		err = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
 	}
 
-	if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
-		rxr_cq_write_rx_completion(ep, rx_entry);
-
-	rxr_release_rx_entry(ep, rx_entry);
-	rxr_pkt_entry_release_rx(ep, pkt_entry);
+	if (err) {
+		efa_eq_write_error(&ep->util_ep, err, -err);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		rxr_release_rx_entry(ep, rx_entry);
+	}
 }
 
 void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
@@ -1398,7 +1354,7 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	struct rxr_long_rtw_hdr *rtw_hdr;
 	char *data;
 	size_t hdr_size, data_size;
-	ssize_t err, bytes_left;
+	ssize_t err;
 
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
 	if (!rx_entry) {
@@ -1429,12 +1385,18 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 	data = (char *)pkt_entry->pkt + hdr_size;
 	data_size = pkt_entry->pkt_size - hdr_size;
-	bytes_left = rxr_pkt_req_copy_data(rx_entry, pkt_entry, data, data_size);
-	if (OFI_UNLIKELY(bytes_left <= 0)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Long RTM bytes_left is %ld, which should be > 0.",
-			bytes_left);
+
+	if (data_size >= rx_entry->total_len) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "Long RTM size mismatch! pkt_data_size: %ld total_len: %ld\n",
+			data_size, rx_entry->total_len);
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "target buffer: %p length: %ld", rx_entry->iov[0].iov_base,
 			rx_entry->iov[0].iov_len);
+		err = FI_EINVAL;
+	} else {
+		err = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
+	}
+
+	if (err) {
 		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
 		rxr_release_rx_entry(ep, rx_entry);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -1454,7 +1416,6 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 		rxr_cq_handle_rx_error(ep, rx_entry, err);
 		rxr_release_rx_entry(ep, rx_entry);
 	}
-	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
 void rxr_pkt_handle_read_rtw_recv(struct rxr_ep *ep,

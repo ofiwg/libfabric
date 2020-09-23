@@ -254,8 +254,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 		       size_t seg_size)
 {
 	struct rxr_peer *peer;
-	struct efa_mr *desc;
-	int64_t bytes_left, bytes_copied;
+	size_t bytes_received, total_len;
 	ssize_t err;
 
 #if ENABLE_DEBUG
@@ -263,27 +262,9 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 
 	assert(pkt_type == RXR_DATA_PKT || pkt_type == RXR_READRSP_PKT);
 #endif
-	/* we are sinking message for CANCEL/DISCARD entry */
-	if (OFI_LIKELY(!(rx_entry->rxr_flags & RXR_RECV_CANCEL)) &&
-	    rx_entry->cq_entry.len > seg_offset) {
-		desc = rx_entry->desc[0];
-		bytes_copied = ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-						    desc ? desc->peer.device.reserved : 0,
-						    rx_entry->iov,
-						    rx_entry->iov_count,
-						    seg_offset,
-						    data,
-						    seg_size);
-
-		if (bytes_copied != MIN(seg_size, rx_entry->cq_entry.len - seg_offset)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
-				bytes_copied);
-			if (rxr_cq_handle_rx_error(ep, rx_entry, -FI_EINVAL))
-				assert(0 && "error writing error cq entry for EOR\n");
-		}
-	}
-
-	rx_entry->bytes_done += seg_size;
+	total_len = rx_entry->total_len;
+	bytes_received = rx_entry->bytes_done + seg_size;
+	assert(bytes_received <= total_len);
 
 	peer = rxr_ep_get_peer(ep, rx_entry->addr);
 	peer->rx_credits += ofi_div_ceil(seg_size, ep->max_data_payload_size);
@@ -292,25 +273,25 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 	if (ep->available_data_bufs < rxr_get_rx_pool_chunk_cnt(ep))
 		ep->available_data_bufs++;
 
-	/* bytes_done is total bytes sent/received, which could be larger than
-	 * to bytes copied to recv buffer (for truncated messages).
-	 * rx_entry->total_len is from rtm header and is the size of send buffer,
-	 * thus we always have:
-	 *             rx_entry->total >= rx_entry->bytes_done
-	 */
-	bytes_left = rx_entry->total_len - rx_entry->bytes_done;
-	assert(bytes_left >= 0);
-	if (!bytes_left) {
 #if ENABLE_DEBUG
+	/* rx_entry can be released by rxr_pkt_copy_to_rx
+	 * so the call to dlist_remove must happen before
+	 * call to rxr_copy_to_rx
+	 */
+	if (bytes_received == total_len) {
 		dlist_remove(&rx_entry->rx_pending_entry);
 		ep->rx_pending--;
-#endif
-		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
-
-		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
-		rxr_release_rx_entry(ep, rx_entry);
-		return;
 	}
+#endif
+	err = rxr_pkt_copy_to_rx(ep, rx_entry, seg_offset,
+				 pkt_entry, data, seg_size);
+	if (err) {
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		rxr_cq_handle_rx_error(ep, rx_entry, err);
+	}
+
+	if (bytes_received == total_len)
+		return;
 
 	if (!rx_entry->window) {
 		assert(rx_entry->state == RXR_RX_RECV);
@@ -320,8 +301,6 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 			rxr_cq_handle_rx_error(ep, rx_entry, err);
 		}
 	}
-
-	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
 void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
