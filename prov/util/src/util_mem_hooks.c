@@ -200,10 +200,21 @@ static inline void ofi_clear_instruction_cache(uintptr_t address, size_t data_si
 static inline int ofi_write_patch(unsigned char *patch_data, void *address,
 				  size_t data_size)
 {
-	long page_size = ofi_get_page_size();
-	void *base = ofi_get_page_start(address, page_size);
-	void *bound = ofi_get_page_end(address, page_size);
-	size_t length = (uintptr_t) bound - (uintptr_t) base;
+	long page_size;
+	void *base;
+	void *bound;
+	size_t length;
+
+	page_size = ofi_get_page_size();
+	if (page_size < 0) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"failed to get page size: %s\n", fi_strerror(-page_size));
+		return page_size;
+	}
+
+	base = ofi_get_page_start(address, page_size);
+	bound = ofi_get_page_end(address, page_size);
+	length = (uintptr_t) bound - (uintptr_t) base;
 
 	if (mprotect(base, length, PROT_EXEC|PROT_READ|PROT_WRITE)) {
 		FI_WARN(&core_prov, FI_LOG_MR,
