@@ -254,7 +254,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 		       size_t seg_size)
 {
 	struct rxr_peer *peer;
-	size_t bytes_received, total_len;
+	bool all_received = 0;
 	ssize_t err;
 
 #if ENABLE_DEBUG
@@ -262,9 +262,9 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 
 	assert(pkt_type == RXR_DATA_PKT || pkt_type == RXR_READRSP_PKT);
 #endif
-	total_len = rx_entry->total_len;
-	bytes_received = rx_entry->bytes_done + seg_size;
-	assert(bytes_received <= total_len);
+	rx_entry->bytes_received += seg_size;
+	assert(rx_entry->bytes_received <= rx_entry->total_len);
+	all_received = (rx_entry->bytes_received == rx_entry->total_len);
 
 	peer = rxr_ep_get_peer(ep, rx_entry->addr);
 	peer->rx_credits += ofi_div_ceil(seg_size, ep->max_data_payload_size);
@@ -278,7 +278,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 	 * so the call to dlist_remove must happen before
 	 * call to rxr_copy_to_rx
 	 */
-	if (bytes_received == total_len) {
+	if (all_received) {
 		dlist_remove(&rx_entry->rx_pending_entry);
 		ep->rx_pending--;
 	}
@@ -290,7 +290,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 		rxr_cq_handle_rx_error(ep, rx_entry, err);
 	}
 
-	if (bytes_received == total_len)
+	if (all_received)
 		return;
 
 	if (!rx_entry->window) {

@@ -353,7 +353,8 @@ struct rxr_rx_entry {
 	uint64_t tag;
 	uint64_t ignore;
 
-	uint64_t bytes_done;
+	uint64_t bytes_received;
+	uint64_t bytes_copied;
 	int64_t window;
 	uint16_t credit_request;
 	int credit_cts;
