@@ -60,6 +60,7 @@
 #include <ofi_signal.h>
 #include <ofi_util.h>
 #include <ofi_atomic.h>
+#include <ofi_iov.h>
 
 #ifndef _SMR_H_
 #define _SMR_H_
@@ -323,6 +324,35 @@ int smr_rx_src_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 uint64_t smr_rx_cq_flags(uint32_t op, uint16_t op_flags);
 
 void smr_ep_progress(struct util_ep *util_ep);
+
+static inline int smr_cma_loop(pid_t pid, struct iovec *local,
+			unsigned long local_cnt, struct iovec *remote,
+			unsigned long remote_cnt, unsigned long flags,
+			size_t total, bool write)
+{
+	ssize_t ret;
+
+	while (1) {
+		if (write)
+			ret = ofi_process_vm_writev(pid, local, local_cnt, remote,
+						    remote_cnt, flags);
+		else
+			ret = ofi_process_vm_readv(pid, local, local_cnt, remote,
+						   remote_cnt, flags);
+		if (ret < 0) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"CMA error %d\n", errno);
+			return -FI_EIO;
+		}
+
+		total -= ret;
+		if (!total)
+			return FI_SUCCESS;
+
+		ofi_consume_iov(local, &local_cnt, (size_t) ret);
+		ofi_consume_iov(remote, &remote_cnt, (size_t) ret);
+	}
+}
 
 int smr_progress_unexp_queue(struct smr_ep *ep, struct smr_rx_entry *entry,
 			     struct smr_queue *unexp_queue);

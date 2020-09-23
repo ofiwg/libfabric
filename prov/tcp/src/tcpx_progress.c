@@ -42,55 +42,6 @@
 #include <ofi_util.h>
 #include <ofi_iov.h>
 
-static void tcpx_cq_report_xfer_fail(struct tcpx_ep *tcpx_ep, int err)
-{
-	struct slist_entry *entry;
-	struct tcpx_xfer_entry *tx_entry;
-	struct tcpx_cq *tcpx_cq;
-
-	while (!slist_empty(&tcpx_ep->tx_rsp_pend_queue)) {
-		entry = slist_remove_head(&tcpx_ep->tx_rsp_pend_queue);
-		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-		tcpx_cq_report_error(tx_entry->ep->util_ep.tx_cq, tx_entry, -err);
-
-		tcpx_cq = container_of(tx_entry->ep->util_ep.tx_cq,
-				       struct tcpx_cq, util_cq);
-		tcpx_xfer_entry_release(tcpx_cq, tx_entry);
-	}
-}
-
-/**
- * Shutdown is done in two phases, phase1 writes the FI_SHUTDOWN event, which
- * a polling thread still needs to handle, phase2 removes the fd
- * of the ep from polling, so that a polling thread won't spin
- * if it does not close the connection immediately after it handled
- * FI_SHUTDOWN
- */
-int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid)
-{
-	struct fi_eq_cm_entry cm_entry = {0};
-	ssize_t len;
-
-	switch (ep->cm_state) {
-	case TCPX_EP_POLL_REMOVED:
-		break;
-	case TCPX_EP_SHUTDOWN:
-		tcpx_ep_wait_fd_del(ep);
-		ep->cm_state = TCPX_EP_POLL_REMOVED;
-		break;
-	default:
-		tcpx_cq_report_xfer_fail(ep, -FI_ENOTCONN);
-		ep->cm_state = TCPX_EP_SHUTDOWN;
-		cm_entry.fid = fid;
-		len =  fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
-				   &cm_entry, sizeof(cm_entry), 0);
-		if (len < 0)
-			return (int) len;
-		break;
-	}
-
-	return FI_SUCCESS;
-}
 
 static void process_tx_entry(struct tcpx_xfer_entry *tx_entry)
 {
@@ -107,8 +58,7 @@ static void process_tx_entry(struct tcpx_xfer_entry *tx_entry)
 
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
-		tcpx_ep_shutdown_report(tx_entry->ep,
-					&tx_entry->ep->util_ep.ep_fid.fid);
+		tcpx_ep_disable(tx_entry->ep, 0);
 		tcpx_cq_report_error(tx_entry->ep->util_ep.tx_cq,
 				     tx_entry, -ret);
 	} else {
@@ -172,8 +122,7 @@ static int process_rx_entry(struct tcpx_xfer_entry *rx_entry)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 			"msg recv Failed ret = %d\n", ret);
 
-		tcpx_ep_shutdown_report(rx_entry->ep,
-					&rx_entry->ep->util_ep.ep_fid.fid);
+		tcpx_ep_disable(rx_entry->ep, 0);
 		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 		tcpx_rx_msg_release(rx_entry);
 	} else if (rx_entry->hdr.base_hdr.flags & OFI_DELIVERY_COMPLETE) {
@@ -259,8 +208,7 @@ static int process_remote_write(struct tcpx_xfer_entry *rx_entry)
 			"remote write Failed ret = %d\n",
 			ret);
 
-		tcpx_ep_shutdown_report(rx_entry->ep,
-					&rx_entry->ep->util_ep.ep_fid.fid);
+		tcpx_ep_disable(rx_entry->ep, 0);
 		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 		tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 				       struct tcpx_cq, util_cq);
@@ -295,8 +243,7 @@ static int process_remote_read(struct tcpx_xfer_entry *rx_entry)
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"msg recv Failed ret = %d\n", ret);
-		tcpx_ep_shutdown_report(rx_entry->ep,
-					&rx_entry->ep->util_ep.ep_fid.fid);
+		tcpx_ep_disable(rx_entry->ep, 0);
 		tcpx_cq_report_error(rx_entry->ep->util_ep.tx_cq, rx_entry, -ret);
 	} else {
 		tcpx_cq_report_success(rx_entry->ep->util_ep.tx_cq, rx_entry);
@@ -650,7 +597,7 @@ err:
 		return;
 
 	if (ret == -FI_ENOTCONN)
-		tcpx_ep_shutdown_report(ep, &ep->util_ep.ep_fid.fid);
+		tcpx_ep_disable(ep, 0);
 }
 
 /* Must hold ep lock */

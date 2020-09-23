@@ -309,7 +309,7 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err2;
 
 	_domain->ep_type = VRB_EP_TYPE(info);
-	_domain->flags |= vrb_is_xrc(info) ? VRB_USE_XRC : 0;
+	_domain->flags |= vrb_is_xrc_info(info) ? VRB_USE_XRC : 0;
 
 	ret = vrb_open_device_by_name(_domain, info->domain_attr->name);
 	if (ret)

@@ -2970,7 +2970,7 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 			opts->sizes_enabled = FT_ENABLE_ALL;
 		} else {
 			opts->options |= FT_OPT_SIZE;
-			opts->transfer_size = atoi(optarg);
+			opts->transfer_size = atol(optarg);
 		}
 		break;
 	case 'm':
@@ -3036,12 +3036,12 @@ int ft_parse_rma_opts(int op, char *optarg, struct fi_info *hints,
 	return 0;
 }
 
-void ft_fill_buf(void *buf, int size)
+void ft_fill_buf(void *buf, size_t size)
 {
 	char *msg_buf;
 	int msg_index;
 	static unsigned int iter = 0;
-	int i;
+	size_t i;
 
 	msg_index = ((iter++)*INTEG_SEED) % integ_alphabet_length;
 	msg_buf = (char *)buf;
@@ -3052,13 +3052,13 @@ void ft_fill_buf(void *buf, int size)
 	}
 }
 
-int ft_check_buf(void *buf, int size)
+int ft_check_buf(void *buf, size_t size)
 {
 	char *recv_data;
 	char c;
 	static unsigned int iter = 0;
 	int msg_index;
-	int i;
+	size_t i;
 
 	msg_index = ((iter++)*INTEG_SEED) % integ_alphabet_length;
 	recv_data = (char *)buf;
@@ -3071,7 +3071,7 @@ int ft_check_buf(void *buf, int size)
 			break;
 	}
 	if (i != size) {
-		printf("Error at iteration=%d size=%d byte=%d\n",
+		printf("Error at iteration=%d size=%zu byte=%zu\n",
 			iter, size, i);
 		return 1;
 	}

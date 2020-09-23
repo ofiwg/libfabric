@@ -138,6 +138,13 @@ static enum ofi_prov_type ofi_prov_type(const struct fi_provider *provider)
 	return ctx->type;
 }
 
+static int ofi_disable_util_layering(const struct fi_provider *provider) {
+	const struct fi_prov_context *ctx;
+
+	ctx = (const struct fi_prov_context *) &provider->context;
+	return ctx->disable_layering;
+}
+
 static int ofi_is_util_prov(const struct fi_provider *provider)
 {
 	return ofi_prov_type(provider) == OFI_PROV_UTIL;
@@ -264,7 +271,7 @@ static struct ofi_prov *ofi_getprov(const char *prov_name, size_t len)
 
 	for (prov = prov_head; prov; prov = prov->next) {
 		if ((strlen(prov->prov_name) == len) &&
-		    !strncmp(prov->prov_name, prov_name, len))
+		    !strncasecmp(prov->prov_name, prov_name, len))
 			return prov;
 	}
 
@@ -436,6 +443,15 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 
 	if (ofi_apply_filter(&prov_log_filter, provider->name))
 		ctx->disable_logging = 1;
+
+	/*
+	 * Prevent utility providers from layering on these core providers
+	 * unless explicitly requested.
+	 */
+	if (!strcasecmp(provider->name, "sockets") ||
+	    !strcasecmp(provider->name, "shm") ||
+	    !strcasecmp(provider->name, "efa") || ofi_is_util_prov(provider))
+		ctx->disable_layering = 1;
 
 	prov = ofi_getprov(provider->name, strlen(provider->name));
 	if (prov) {
@@ -860,8 +876,9 @@ static void ofi_set_prov_attr(struct fi_fabric_attr *attr,
  *    1b. If a utility provider is specified, return it over any* core provider.
  *    1c. If a core provider is specified, return any utility provider that can
  *        layer over it, plus the core provider itself, if possible.
- *    1d. A utility provider will not layer over the sockets provider unless the
- *        user explicitly requests that combination.
+ *    1d. A utility provider will not layer over a provider that has disabled
+ *        utility provider layering unless the user explicitly requests that
+ *        combination.
  *    1e. OFI_CORE_PROV_ONLY flag prevents utility providers layering over other
  *        utility providers.
  * 2. If both the providers are utility providers or if more than two providers
@@ -875,6 +892,7 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 			   uint64_t flags)
 {
 	char *prov_name;
+	struct ofi_prov *core_ofi_prov;
 	int i;
 
 	/* Excluded providers must be at the end */
@@ -896,9 +914,9 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 			return 0;
 		}
 
-		if ((count == 0) && !strcasecmp(provider->name, "sockets")) {
+		if ((count == 0) && ofi_disable_util_layering(provider)) {
 			FI_INFO(&core_prov, FI_LOG_CORE,
-				"Skipping util;sockets layering\n");
+				"Skipping util;%s layering\n", provider->name);
 			return 0;
 		}
 	}
@@ -913,14 +931,12 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 
 	if ((count == 1) && ofi_is_util_prov(provider) &&
 	    !ofi_has_util_prefix(prov_vec[0])) {
-		if (!strcasecmp(prov_vec[0], "sockets")) {
+		core_ofi_prov = ofi_getprov(prov_vec[0], strlen(prov_vec[0]));
+		if (core_ofi_prov && core_ofi_prov->provider &&
+		    ofi_disable_util_layering(core_ofi_prov->provider)) {
 			FI_INFO(&core_prov, FI_LOG_CORE,
-				"Sockets requested, skipping util layering\n");
-			return 0;
-		}
-		if (!strcasecmp(prov_vec[0], "shm")) {
-			FI_INFO(&core_prov, FI_LOG_CORE,
-				"Shm requested, skipping util layering\n");
+				"Skipping %s;%s layering\n", prov_vec[0],
+				provider->name);
 			return 0;
 		}
 		return 1;

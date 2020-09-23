@@ -263,30 +263,11 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 		goto out;
 	}
 
-	if (cmd->msg.hdr.op == ofi_op_read_req) {
-		ret = ofi_process_vm_writev(peer_smr->pid, iov, iov_count,
-					    cmd->msg.data.iov,
-					    cmd->msg.data.iov_count, 0);
-	} else {
-		ret = ofi_process_vm_readv(peer_smr->pid, iov, iov_count,
-					   cmd->msg.data.iov,
-					   cmd->msg.data.iov_count, 0);
-	}
-
-	if (ret != cmd->msg.hdr.size) {
-		if (ret < 0) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"CMA write error\n");
-			ret = errno;
-		} else {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"partial read occurred\n");
-			ret = FI_EIO;
-		}
-	} else {
-		*total_len = ret;
-		ret = 0;
-	}
+	ret = smr_cma_loop(peer_smr->pid, iov, iov_count, cmd->msg.data.iov,
+			   cmd->msg.data.iov_count, 0, cmd->msg.hdr.size,
+			   cmd->msg.hdr.op == ofi_op_read_req);
+	if (!ret)
+		*total_len = cmd->msg.hdr.size;
 
 out:
 	//Status must be set last (signals peer: op done, valid resp entry)

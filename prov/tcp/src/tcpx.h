@@ -100,6 +100,7 @@ enum tcpx_cm_event_type {
 	SERVER_RECV_CONNREQ,
 	SERVER_SEND_CM_ACCEPT,
 	CLIENT_RECV_CONNRESP,
+	CLIENT_SERVER_ERROR,
 };
 
 struct tcpx_cm_context {
@@ -128,12 +129,13 @@ struct tcpx_pep {
 	struct tcpx_cm_context	cm_ctx;
 };
 
-enum tcpx_cm_state {
-	TCPX_EP_CONNECTING,
-	TCPX_EP_CONNECTED,
-	TCPX_EP_SHUTDOWN,
-	TCPX_EP_POLL_REMOVED,
-	TCPX_EP_ERROR,
+enum tcpx_state {
+	TCPX_IDLE,
+	TCPX_CONNECTING,
+	TCPX_RCVD_REQ,
+	TCPX_ACCEPTING,
+	TCPX_CONNECTED,
+	TCPX_DISCONNECTED,
 };
 
 struct tcpx_base_hdr {
@@ -199,8 +201,8 @@ struct tcpx_ep {
 	struct slist		tx_rsp_pend_queue;
 	struct slist		rma_read_queue;
 	struct tcpx_rx_ctx	*srx_ctx;
-	enum tcpx_cm_state	cm_state;
-	/* lock for protecting tx/rx queues,rma list,cm_state*/
+	enum tcpx_state		state;
+	/* lock for protecting tx/rx queues, rma list, state*/
 	fastlock_t		lock;
 	int (*start_op[ofi_op_write + 1])(struct tcpx_ep *ep);
 	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
@@ -268,6 +270,7 @@ int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context);
+void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err);
 
 
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -288,7 +291,6 @@ int tcpx_read_to_buffer(SOCKET sock, struct stage_buf *stage_buf);
 struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq,
 					      enum tcpx_xfer_op_codes type);
 
-void tcpx_ep_wait_fd_del(struct tcpx_ep *ep);
 void tcpx_xfer_entry_release(struct tcpx_cq *tcpx_cq,
 			     struct tcpx_xfer_entry *xfer_entry);
 void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
@@ -306,7 +308,6 @@ int tcpx_try_func(void *util_ep);
 void tcpx_hdr_none(struct tcpx_base_hdr *hdr);
 void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr);
 
-int tcpx_ep_shutdown_report(struct tcpx_ep *ep, fid_t fid);
 void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,
 			  struct tcpx_xfer_entry *tx_entry);
 
