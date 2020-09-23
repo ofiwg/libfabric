@@ -1,7 +1,8 @@
 /*
  * Copyright (c) 2017 Cray Inc. All rights reserved.
  * Copyright (c) 2017-2019 Intel Inc. All rights reserved.
- * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
+ *                         All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
@@ -37,6 +38,7 @@
 #include <unistd.h>
 
 pthread_mutex_t mm_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_rwlock_t mm_list_rwlock = PTHREAD_RWLOCK_INITIALIZER;
 
 static int ofi_uffd_start(struct ofi_mem_monitor *monitor);
 static void ofi_uffd_stop(struct ofi_mem_monitor *monitor);
@@ -192,7 +194,17 @@ int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 		return -FI_ENOSYS;
 	}
 
-	pthread_mutex_lock(&mm_lock);
+	/* Loops until there are no readers or writers holding the lock */
+	do {
+		ret = pthread_rwlock_trywrlock(&mm_list_rwlock);
+		if (ret && ret != EBUSY) {
+			FI_WARN(&core_prov, FI_LOG_MR,
+				"add_cache cannot obtain write lock, %d\n",
+				ret);
+			return ret;
+		}
+	} while (ret);
+
 	for (iface = FI_HMEM_SYSTEM; iface < OFI_HMEM_MAX; iface++) {
 		cache->monitors[iface] = NULL;
 
@@ -217,11 +229,12 @@ int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 		dlist_insert_tail(&cache->notify_entries[iface],
 				  &monitor->list);
 	}
-	pthread_mutex_unlock(&mm_lock);
+	pthread_rwlock_unlock(&mm_list_rwlock);
 	return success_count ? FI_SUCCESS : -FI_ENOSYS;
 
 err:
-	pthread_mutex_unlock(&mm_lock);
+	pthread_rwlock_unlock(&mm_list_rwlock);
+
 	FI_WARN(&core_prov, FI_LOG_MR,
 		"Failed to start %s memory monitor: %s\n",
 		fi_tostr(&iface, FI_TYPE_HMEM_IFACE), fi_strerror(-ret));
@@ -234,8 +247,18 @@ void ofi_monitors_del_cache(struct ofi_mr_cache *cache)
 {
 	struct ofi_mem_monitor *monitor;
 	enum fi_hmem_iface iface;
+	int ret;
 
-	pthread_mutex_lock(&mm_lock);
+	/* Loops until there are no readers or writers holding the lock */
+	do {
+		ret = pthread_rwlock_trywrlock(&mm_list_rwlock);
+		if (ret && ret != EBUSY) {
+			FI_WARN(&core_prov, FI_LOG_MR,
+				"del_cache cannot obtain write lock, %d\n",
+				ret);
+			return;
+		}
+	} while (ret);
 
 	for (iface = 0; iface < OFI_HMEM_MAX; iface++) {
 		monitor = cache->monitors[iface];
@@ -250,10 +273,16 @@ void ofi_monitors_del_cache(struct ofi_mr_cache *cache)
 		cache->monitors[iface] = NULL;
 	}
 
-	pthread_mutex_unlock(&mm_lock);
+	pthread_rwlock_unlock(&mm_list_rwlock);
 }
 
-/* Must be called holding monitor lock */
+/* Must be called with locks in place like following
+ *	pthread_rwlock_rdlock(&mm_list_rwlock);
+ *	pthread_mutex_lock(&mm_lock);
+ *	ofi_monitor_notify();
+ *	pthread_mutex_unlock(&mm_lock);
+ *	pthread_rwlock_unlock(&mm_list_rwlock);
+ */
 void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
 			const void *addr, size_t len)
 {
@@ -313,6 +342,7 @@ static void *ofi_uffd_handler(void *arg)
 		if (ret != 1)
 			break;
 
+		pthread_rwlock_rdlock(&mm_list_rwlock);
 		pthread_mutex_lock(&mm_lock);
 		ret = read(uffd.fd, &msg, sizeof(msg));
 		if (ret != sizeof(msg)) {
@@ -346,6 +376,7 @@ static void *ofi_uffd_handler(void *arg)
 			break;
 		}
 		pthread_mutex_unlock(&mm_lock);
+		pthread_rwlock_unlock(&mm_list_rwlock);
 	}
 	return NULL;
 }
