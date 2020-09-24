@@ -162,7 +162,7 @@ static int smr_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	peer_smr = smr_map_get(smr_av->smr_map, peer_id);
 
 	if (!peer_smr)
-		return -FI_ADDR_NOTAVAIL;
+		return -FI_ENODATA;
 
 	strncpy((char *)addr, smr_name(peer_smr), *addrlen);
 	((char *) addr)[MIN(*addrlen - 1, strlen(smr_name(peer_smr)))] = '\0';
