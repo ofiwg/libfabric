@@ -7,7 +7,7 @@
 
 # Insert shebang and load test helper
 shebang="#!/usr/bin/env bats\n\n"
-fi_env="export XRC_FI_ENV=\"FI_VERBS_XRCD_FILENAME=/tmp/xrc_imb_\$\$ FI_OFI_RXM_USE_SRX=1 FI_VERBS_PREFER_XRC=1\"\n\n"
+fi_env="XRC_FI_ENV=\"FI_VERBS_XRCD_FILENAME=/tmp/xrc_imb_\$\$ FI_OFI_RXM_USE_SRX=1 FI_VERBS_PREFER_XRC=1\"\n\n"
 
 # Command line input: test suite
 # E.g. IMB-EXT
