@@ -156,6 +156,7 @@ int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 void ofi_monitors_del_cache(struct ofi_mr_cache *cache);
 void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
 			const void *addr, size_t len);
+void ofi_monitor_flush(struct ofi_mem_monitor *monitor);
 
 int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
 			  const void *addr, size_t len,
