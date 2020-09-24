@@ -294,6 +294,25 @@ void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
 	}
 }
 
+/* Must be called with locks in place like following
+ *	pthread_rwlock_rdlock(&mm_list_rwlock);
+ *	pthread_mutex_lock(&mm_lock);
+ *	ofi_monitor_flush();
+ *	pthread_mutex_unlock(&mm_lock);
+ *	pthread_rwlock_unlock(&mm_list_rwlock);
+ */
+void ofi_monitor_flush(struct ofi_mem_monitor *monitor)
+{
+	struct ofi_mr_cache *cache;
+
+	dlist_foreach_container(&monitor->list, struct ofi_mr_cache,
+				cache, notify_entries[monitor->iface]) {
+		pthread_mutex_unlock(&mm_lock);
+		ofi_mr_cache_flush(cache, false);
+		pthread_mutex_lock(&mm_lock);
+	}
+}
+
 int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
 			  const void *addr, size_t len,
 			  union ofi_mr_hmem_info *hmem_info)
