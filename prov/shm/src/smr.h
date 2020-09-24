@@ -83,6 +83,11 @@ struct smr_av {
 	size_t			used;
 };
 
+static inline int64_t smr_addr_lookup(struct util_av *av, fi_addr_t fiaddr)
+{
+	return *((int64_t *) ofi_av_get_addr(av, fiaddr));
+}
+
 int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context);
 
