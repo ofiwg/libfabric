@@ -375,6 +375,7 @@ void ofi_intercept_handler(const void *addr, size_t len)
 	pthread_rwlock_rdlock(&mm_list_rwlock);
 	pthread_mutex_lock(&mm_lock);
 	ofi_monitor_notify(memhooks_monitor, addr, len);
+	ofi_monitor_flush(memhooks_monitor);
 	pthread_mutex_unlock(&mm_lock);
 	pthread_rwlock_unlock(&mm_list_rwlock);
 }
