@@ -21,9 +21,10 @@ BUILD=true
 TEST=true
 UNITTEST=true
 SMOKETEST=true
+IMBTEST=true
+OMBTEST=true
 FABTEST=true
 SFT=true
-MPI=true
 
 function usage {
     echo \
@@ -38,15 +39,16 @@ function set_sections_to_run {
     TEST=false
     UNITTEST=false
     SMOKETEST=false
+    IMBTEST=false
+    OMBTEST=false
     FABTEST=false
     SFT=false
-    MPI=false
 
     sections=$(echo $@ | tr ',' ' ')
     for section in $sections ; do
         section_name=$(echo $section | awk '{print toupper($0)}')
         case $section_name in
-            'UNITTEST'|'SMOKETEST'|'FABTEST'|'SFT'|'MPI')
+            'UNITTEST'|'SMOKETEST'|'IMBTEST'|'OMBTEST'|'FABTEST'|'SFT')
                 TEST=true
                 eval ${section_name}=true
                 ;;
@@ -55,17 +57,19 @@ function set_sections_to_run {
                 TEST=true
                 UNITTEST=true
                 SMOKETEST=true
+                IMBTEST=true
+                OMBTEST=true
                 FABTEST=true
                 SFT=true
-                MPI=true
                 ;;
             'TEST')
                 TEST=true
                 UNITTEST=true
                 SMOKETEST=true
+                IMBTEST=true
+                OMBTEST=true
                 FABTEST=true
                 SFT=true
-                MPI=true
                 ;;
              'BUILD')
                 BUILD=true
@@ -75,7 +79,7 @@ function set_sections_to_run {
         esac
     done
 
-    for each in BUILD TEST UNITTEST SMOKETEST SFT MPI ; do
+    for each in BUILD TEST UNITTEST SMOKETEST IMBTEST OMBTEST SFT ; do
         if $DEBUG ; then echo ${each} = $(eval echo \$$each) ; fi
     done
 }
@@ -127,7 +131,7 @@ verbose "CLEAN:     $CLEAN"
 verbose "SECTIONS:  $SECTIONS"
 verbose "WORKSPACE: $WORKSPACE"
 
-for each in BUILD TEST UNITTEST SMOKETEST FABTEST MPI SFT ; do
+for each in BUILD TEST UNITTEST SMOKETEST IMBTEST OMBTEST FABTEST SFT ; do
     verbose "$each: $(eval echo \$$each)"
 done
 
@@ -172,6 +176,7 @@ export MPICH_PATH="${ROOT_BUILD_PATH}/mpich/stable"
 export SFT_INSTALL_PATH="${ROOT_BUILD_PATH}/libfabric-sft/stable"
 export BATS_INSTALL_PATH="${ROOT_BUILD_PATH}/bats/stable/bin"
 export BATS_LOG_DIRECTORY="$WORKSPACE/logs"
+export IMB_BUILD_PATH="${ROOT_BUILD_PATH}/imb/v2019.6"
 # End pipeline variables
 
 # Start Prologue
@@ -226,6 +231,22 @@ section_start 'smoke tests'
 $BATS_INSTALL_PATH/bats $@ -t contrib/cray/bats/smoketests.bats | tee smoketests.tap
 ## End Smoke Tests
 section_end 'smoke tests'
+fi
+
+if $IMBTEST ; then
+section_start 'imb tests'
+## Start IMB Tests
+$BATS_INSTALL_PATH/bats $@ -t contrib/cray/bats/imb.bats | tee imb.tap
+## End IMB Tests
+section_end 'imb tests'
+fi
+
+if $OMBTEST ; then
+section_start 'omb tests'
+## Start OMB Tests
+$BATS_INSTALL_PATH/bats $@ -t contrib/cray/bats/omb.bats | tee omb.tap
+## End OMB Tests
+section_end 'omb tests'
 fi
 
 if $FABTEST ; then
@@ -286,8 +307,8 @@ timeout 900 ./ci-all.sh \
     --results-file ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS_CI}
 popd
 
-cp  ./${SFT_BASELINE_DIR}/${SFT_BASELINE_RESULTS_FILE} ${SFT_TEST_RESULTS_DIR}/ \
-    ${SFT_TEST_RESULTS_EXPECTED}${SFT_BASELINE_RESULTS_FILE}
+cp  ./${SFT_BASELINE_DIR}/${SFT_BASELINE_RESULTS_FILE} \
+    ${SFT_TEST_RESULTS_DIR}/${SFT_TEST_RESULTS_EXPECTED}${SFT_BASELINE_RESULTS_FILE}
 ${SFT_BIN}/sft_parse_test_results.pm \
     -b ${SFT_TEST_RESULTS_EXPECTED}${SFT_BASELINE_RESULTS_FILE} \
     -d ${SFT_TEST_RESULTS_DIR} \
@@ -302,14 +323,6 @@ cp -r ${SFT_TEST_RESULTS_DIR} .
 rm -rf ${SFT_TEST_RESULTS_DIR} || true
 ## End SFT
 section_end 'sft'
-fi
-
-if $MPI ; then
-section_start 'mpi'
-## Start MPI Tests
-$BATS_INSTALL_PATH/bats -t contrib/cray/bats/mpi.bats | tee mpi.tap
-## End MPI Tests
-section_end 'mpi'
 fi
 
 fi
