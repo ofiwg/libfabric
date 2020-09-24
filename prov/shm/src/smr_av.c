@@ -63,7 +63,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	struct smr_ep *smr_ep;
 	struct dlist_entry *av_entry;
 	const char *ep_name;
-	fi_addr_t index, shm_addr = FI_ADDR_UNSPEC;
+	fi_addr_t index;
+	int64_t shm_addr = -1;
 	int i, ret;
 	int succ_count = 0;
 
@@ -92,10 +93,12 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		if (ret) {
 			if (util_av->eq)
 				ofi_av_write_event(util_av, i, -ret, context);
-			if (shm_addr != FI_ADDR_UNSPEC)
+			if (shm_addr >= 0)
 				smr_map_del(smr_av->smr_map, shm_addr);
 			continue;
 		} else {
+			assert(shm_addr >= 0 && shm_addr < SMR_MAX_PEERS);
+			smr_av->smr_map->peers[shm_addr].fiaddr = index;
 			succ_count++;
 			smr_av->used++;
 		}
@@ -123,12 +126,14 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 	struct smr_ep *smr_ep;
 	struct dlist_entry *av_entry;
 	int i, ret = 0;
+	int64_t id;
 
 	util_av = container_of(av_fid, struct util_av, av_fid);
 	smr_av = container_of(util_av, struct smr_av, util_av);
 
 	fastlock_acquire(&util_av->lock);
 	for (i = 0; i < count; i++) {
+		id = smr_addr_lookup(util_av, fi_addr[i]);
 		ret = ofi_av_remove_addr(util_av, fi_addr[i]);
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_AV,
@@ -136,11 +141,11 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 			break;
 		}
 
-		smr_map_del(smr_av->smr_map, fi_addr[i]);
+		smr_map_del(smr_av->smr_map, id);
 		dlist_foreach(&util_av->ep_list, av_entry) {
 			util_ep = container_of(av_entry, struct util_ep, av_entry);
 			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
-			smr_unmap_from_endpoint(smr_ep->region, fi_addr[i]);
+			smr_unmap_from_endpoint(smr_ep->region, id);
 		}
 		smr_av->used--;
 	}
@@ -155,11 +160,13 @@ static int smr_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	struct util_av *util_av;
 	struct smr_av *smr_av;
 	struct smr_region *peer_smr;
-	int peer_id = (int)fi_addr;
+	int64_t id;
 
 	util_av = container_of(av, struct util_av, av_fid);
 	smr_av = container_of(util_av, struct smr_av, util_av);
-	peer_smr = smr_map_get(smr_av->smr_map, peer_id);
+
+	id = smr_addr_lookup(util_av, fi_addr);
+	peer_smr = smr_map_get(smr_av->smr_map, id);
 
 	if (!peer_smr)
 		return -FI_ENODATA;
@@ -222,7 +229,7 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (!smr_av)
 		return -FI_ENOMEM;
 
-	util_attr.addrlen = sizeof(fi_addr_t);
+	util_attr.addrlen = sizeof(int64_t);
 	util_attr.context_len = 0;
 	util_attr.flags = 0;
 	if (attr->count > SMR_MAX_PEERS) {

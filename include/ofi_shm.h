@@ -97,7 +97,7 @@ enum {
 
 /* 
  * Unique smr_op_hdr for smr message protocol:
- * 	addr - local fi_addr of peer sending msg (for shm lookup)
+ * 	addr - local shm_id of peer sending msg (for shm lookup)
  * 	op - type of op (ex. ofi_op_msg, defined in ofi_proto.h)
  * 	op_src - msg src (ex. smr_src_inline, defined above)
  * 	op_flags - operation flags (ex. SMR_REMOTE_CQ_DATA, defined above)
@@ -106,7 +106,7 @@ enum {
  */
 struct smr_msg_hdr {
 	uint64_t		msg_id;
-	fi_addr_t		addr;
+	int64_t			addr;
 	uint32_t		op;
 	uint16_t		op_src;
 	uint16_t		op_flags;
@@ -182,7 +182,7 @@ struct smr_cmd {
 
 struct smr_addr {
 	char		name[SMR_NAME_MAX];
-	fi_addr_t	addr;
+	int64_t		id;
 };
 
 struct smr_peer_data {
@@ -204,6 +204,7 @@ struct smr_ep_name {
 
 struct smr_peer {
 	struct smr_addr		peer;
+	fi_addr_t		fiaddr;
 	struct smr_region	*region;
 };
 
@@ -211,7 +212,7 @@ struct smr_peer {
 
 struct smr_map {
 	fastlock_t		lock;
-	int			cur_idx;
+	int64_t			cur_idx;
 	struct ofi_rbmap	rbmap;
 	struct smr_peer		peers[SMR_MAX_PEERS];
 };
@@ -330,15 +331,15 @@ int	smr_map_create(const struct fi_provider *prov, int peer_count,
 		       struct smr_map **map);
 int	smr_map_to_region(const struct fi_provider *prov,
 			  struct smr_peer *peer_buf);
-void	smr_map_to_endpoint(struct smr_region *region, int index);
-void	smr_unmap_from_endpoint(struct smr_region *region, int index);
+void	smr_map_to_endpoint(struct smr_region *region, int64_t index);
+void	smr_unmap_from_endpoint(struct smr_region *region, int64_t index);
 void	smr_exchange_all_peers(struct smr_region *region);
 int	smr_map_add(const struct fi_provider *prov,
-		    struct smr_map *map, const char *name, fi_addr_t *id);
-void	smr_map_del(struct smr_map *map, int id);
+		    struct smr_map *map, const char *name, int64_t *id);
+void	smr_map_del(struct smr_map *map, int64_t id);
 void	smr_map_free(struct smr_map *map);
 
-struct smr_region *smr_map_get(struct smr_map *map, int id);
+struct smr_region *smr_map_get(struct smr_map *map, int64_t id);
 
 int	smr_create(const struct fi_provider *prov, struct smr_map *map,
 		   const struct smr_attr *attr, struct smr_region *volatile *smr);

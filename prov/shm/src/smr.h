@@ -105,7 +105,7 @@ int smr_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 struct smr_rx_entry {
 	struct dlist_entry	entry;
 	void			*context;
-	fi_addr_t		addr;
+	int64_t			addr;
 	uint64_t		tag;
 	uint64_t		ignore;
 	struct iovec		iov[SMR_IOV_LIMIT];
@@ -118,7 +118,7 @@ struct smr_rx_entry {
 
 struct smr_tx_entry {
 	struct smr_cmd	cmd;
-	fi_addr_t	addr;
+	int64_t		addr;
 	void		*context;
 	struct iovec	iov[SMR_IOV_LIMIT];
 	uint32_t	iov_count;
@@ -151,15 +151,14 @@ typedef int (*smr_tx_comp_func)(struct smr_ep *ep, void *context, uint32_t op,
 
 
 struct smr_match_attr {
-	fi_addr_t	addr;
+	int64_t		addr;
 	uint64_t	tag;
 	uint64_t	ignore;
 };
 
-static inline int smr_match_addr(fi_addr_t addr, fi_addr_t match_addr)
+static inline int smr_match_addr(int64_t addr, int64_t match_addr)
 {
-	return (addr == FI_ADDR_UNSPEC) || (match_addr == FI_ADDR_UNSPEC) ||
-		(addr == match_addr);
+	return (addr == -1) || (match_addr == -1) || (addr == match_addr);
 }
 
 static inline int smr_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag)
@@ -271,13 +270,13 @@ int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 int smr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context);
 
-fi_addr_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr);
+int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr);
 
 void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 			  void *context, enum fi_hmem_iface iface, uint64_t device,
 			  const struct iovec *iov, uint32_t iov_count,
-			  fi_addr_t id, struct smr_resp *resp);
-void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id, uint32_t op,
+			  int64_t id, struct smr_resp *resp);
+void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags);
 void smr_format_inline(struct smr_cmd *cmd, enum fi_hmem_iface iface,
 		       uint64_t device, const struct iovec *iov, size_t count);
@@ -311,7 +310,7 @@ int smr_tx_comp(struct smr_ep *ep, void *context, uint32_t op,
 int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, uint64_t err);
 int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
+		uint16_t flags, size_t len, void *buf, int64_t id,
 		uint64_t tag, uint64_t data, uint64_t err);
 int smr_rx_comp(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
