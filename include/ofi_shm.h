@@ -78,6 +78,10 @@ enum {
 	smr_src_ipc,	/* device IPC handle protocol */
 };
 
+//reserves 0-255 for defined ops and room for new ops
+//256 and beyond reserved for ctrl ops
+#define SMR_OP_MAX (1 << 8) 
+
 #define SMR_REMOTE_CQ_DATA	(1 << 0)
 #define SMR_RMA_REQ		(1 << 1)
 #define SMR_TX_COMPLETION	(1 << 2)
@@ -183,7 +187,8 @@ struct smr_addr {
 
 struct smr_peer_data {
 	struct smr_addr		addr;
-	uint64_t		sar_status;
+	uint32_t		sar_status;
+	uint32_t		name_sent;
 };
 
 extern struct dlist_entry ep_name_list;
@@ -206,6 +211,7 @@ struct smr_peer {
 
 struct smr_map {
 	fastlock_t		lock;
+	int			cur_idx;
 	struct ofi_rbmap	rbmap;
 	struct smr_peer		peers[SMR_MAX_PEERS];
 };
@@ -328,7 +334,7 @@ void	smr_map_to_endpoint(struct smr_region *region, int index);
 void	smr_unmap_from_endpoint(struct smr_region *region, int index);
 void	smr_exchange_all_peers(struct smr_region *region);
 int	smr_map_add(const struct fi_provider *prov,
-		    struct smr_map *map, const char *name, fi_addr_t id);
+		    struct smr_map *map, const char *name, fi_addr_t *id);
 void	smr_map_del(struct smr_map *map, int id);
 void	smr_map_free(struct smr_map *map);
 
