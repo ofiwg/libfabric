@@ -614,13 +614,8 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 			"Error processing mapping request\n");
 
 	peer_smr = smr_peer_region(ep->region, idx);
-	if (peer_smr != ep->region && fastlock_tryacquire(&peer_smr->lock))
-		return;
 
 	smr_peer_data(peer_smr)[cmd->msg.hdr.addr].addr.addr = idx;
-
-	if (peer_smr != ep->region)
-		fastlock_release(&peer_smr->lock);
 
 	smr_peer_data(ep->region)[idx].addr.addr = cmd->msg.hdr.addr;
 

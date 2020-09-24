@@ -327,27 +327,6 @@ out:
 	return ret;
 }
 
-static void smr_find_insert_peer(struct smr_region *peer_smr,
-				 const char *name, fi_addr_t index,
-				 fi_addr_t *peer_addr)
-{
-	struct smr_peer_data *peers = smr_peer_data(peer_smr);
-
-	fastlock_acquire(&peer_smr->lock);
-
-	for (*peer_addr = 0; *peer_addr < SMR_MAX_PEERS; (*peer_addr)++) {
-		if (!strncmp(name, peers[*peer_addr].addr.name, SMR_NAME_MAX))
-			break;
-	}
-
-	if (*peer_addr == SMR_MAX_PEERS)
-		*peer_addr = FI_ADDR_UNSPEC;
-	else
-		peers[*peer_addr].addr.addr = index;
-
-	fastlock_release(&peer_smr->lock);
-}
-
 void smr_map_to_endpoint(struct smr_region *region, int index)
 {
 	struct smr_region *peer_smr;
@@ -366,9 +345,6 @@ void smr_map_to_endpoint(struct smr_region *region, int index)
 
 	if (region->cma_cap == SMR_CMA_CAP_NA && region != peer_smr)
 		smr_cma_check(region, peer_smr);
-
-	smr_find_insert_peer(peer_smr, smr_name(region), index,
-			     &local_peers[index].addr.addr);
 }
 
 void smr_unmap_from_endpoint(struct smr_region *region, int index)
