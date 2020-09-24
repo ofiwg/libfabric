@@ -847,7 +847,7 @@ void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entr
 
 		if (ep->util_ep.caps & FI_RMA_EVENT) {
 			rx_entry->cq_entry.len = rx_entry->total_len;
-			rx_entry->bytes_done = rx_entry->total_len;
+			rx_entry->bytes_copied = rx_entry->total_len;
 			efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
 		}
 

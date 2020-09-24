@@ -180,7 +180,7 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 	cts_hdr->tx_id = rx_entry->tx_id;
 	cts_hdr->rx_id = rx_entry->rx_id;
 
-	bytes_left = rx_entry->total_len - rx_entry->bytes_done;
+	bytes_left = rx_entry->total_len - rx_entry->bytes_received;
 	peer = rxr_ep_get_peer(ep, rx_entry->addr);
 	rxr_pkt_calc_cts_window_credits(ep, peer, bytes_left,
 					rx_entry->credit_request,
@@ -366,10 +366,12 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 {
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_rx_entry *rx_entry;
+	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_read_entry *read_entry;
 	struct rxr_rma_context_pkt *rma_context_pkt;
 	struct rxr_peer *peer;
 	int inject;
+	size_t data_size;
 	ssize_t ret;
 
 	rma_context_pkt = (struct rxr_rma_context_pkt *)context_pkt_entry->pkt;
@@ -381,12 +383,12 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	assert(read_entry->bytes_finished <= read_entry->total_len);
 
 	if (read_entry->bytes_finished == read_entry->total_len) {
-		if (read_entry->x_entry_type == RXR_TX_ENTRY) {
-			tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, read_entry->x_entry_id);
+		if (read_entry->context_type == RXR_READ_CONTEXT_TX_ENTRY) {
+			tx_entry = read_entry->context;
 			assert(tx_entry && tx_entry->cq_entry.flags & FI_READ);
 			rxr_cq_write_tx_completion(ep, tx_entry);
-		} else {
-			rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, read_entry->x_entry_id);
+		} else if (read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY) {
+			rx_entry = read_entry->context;
 			if (rx_entry->op == ofi_op_msg || rx_entry->op == ofi_op_tagged) {
 				rxr_cq_write_rx_completion(ep, rx_entry);
 			} else {
@@ -402,6 +404,12 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 					assert(0 && "failed to write err cq entry");
 				rxr_release_rx_entry(ep, rx_entry);
 			}
+		} else {
+			assert(read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY);
+			pkt_entry = read_entry->context;
+			data_size = rxr_pkt_data_size(pkt_entry);
+			assert(data_size > 0);
+			rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
 		}
 
 		rxr_read_release_entry(ep, read_entry);

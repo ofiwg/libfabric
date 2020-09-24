@@ -198,6 +198,7 @@ struct rxr_env {
 	int shm_av_size;
 	int shm_max_medium_size;
 	int recvwin_size;
+	int readcopy_pool_size;
 	int cq_size;
 	size_t max_memcpy_size;
 	size_t mtu_size;
@@ -353,7 +354,8 @@ struct rxr_rx_entry {
 	uint64_t tag;
 	uint64_t ignore;
 
-	uint64_t bytes_done;
+	uint64_t bytes_received;
+	uint64_t bytes_copied;
 	int64_t window;
 	uint16_t credit_request;
 	int credit_cts;
@@ -521,6 +523,9 @@ struct rxr_ep {
 	struct fid_ep *rdm_ep;
 	struct fid_cq *rdm_cq;
 
+	/* address of myself in my AV, used to post read to my self */
+	fi_addr_t rdm_self_addr;
+
 	/* shm provider fid */
 	bool use_shm;
 	struct fid_ep *shm_ep;
@@ -583,6 +588,11 @@ struct rxr_ep {
 	/* staging area for unexpected and out-of-order packets */
 	struct ofi_bufpool *rx_unexp_pkt_pool;
 	struct ofi_bufpool *rx_ooo_pkt_pool;
+
+	/* staging area for read copy */
+	struct ofi_bufpool *rx_readcopy_pkt_pool;
+	int rx_readcopy_pkt_pool_used;
+	int rx_readcopy_pkt_pool_max_used;
 
 #ifdef ENABLE_EFA_POISONING
 	size_t tx_pkt_pool_entry_sz;
