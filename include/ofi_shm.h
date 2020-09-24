@@ -106,7 +106,7 @@ enum {
  */
 struct smr_msg_hdr {
 	uint64_t		msg_id;
-	int64_t			addr;
+	int64_t			id;
 	uint32_t		op;
 	uint16_t		op_src;
 	uint16_t		op_flags;
@@ -212,7 +212,7 @@ struct smr_peer {
 
 struct smr_map {
 	fastlock_t		lock;
-	int64_t			cur_idx;
+	int64_t			cur_id;
 	struct ofi_rbmap	rbmap;
 	struct smr_peer		peers[SMR_MAX_PEERS];
 };
@@ -331,8 +331,8 @@ int	smr_map_create(const struct fi_provider *prov, int peer_count,
 		       struct smr_map **map);
 int	smr_map_to_region(const struct fi_provider *prov,
 			  struct smr_peer *peer_buf);
-void	smr_map_to_endpoint(struct smr_region *region, int64_t index);
-void	smr_unmap_from_endpoint(struct smr_region *region, int64_t index);
+void	smr_map_to_endpoint(struct smr_region *region, int64_t id);
+void	smr_unmap_from_endpoint(struct smr_region *region, int64_t id);
 void	smr_exchange_all_peers(struct smr_region *region);
 int	smr_map_add(const struct fi_provider *prov,
 		    struct smr_map *map, const char *name, int64_t *id);

@@ -52,7 +52,7 @@ static int smr_av_close(struct fid *fid)
 
 /*
  * Input address: smr name (string)
- * output address: index (integer), the output from util_av and peer index in map
+ * output address: index (fi_addr_t), the output from util_av
  */
 static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			 fi_addr_t *fi_addr, uint64_t flags, void *context)
@@ -63,8 +63,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	struct smr_ep *smr_ep;
 	struct dlist_entry *av_entry;
 	const char *ep_name;
-	fi_addr_t index;
-	int64_t shm_addr = -1;
+	fi_addr_t util_addr;
+	int64_t shm_id = -1;
 	int i, ret;
 	int succ_count = 0;
 
@@ -75,30 +75,30 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		if (smr_av->used < SMR_MAX_PEERS) {
 			ep_name = smr_no_prefix(addr);
 			ret = smr_map_add(&smr_prov, smr_av->smr_map,
-					  ep_name, &shm_addr);
+					  ep_name, &shm_id);
 			if (!ret)
-				ret = ofi_av_insert_addr(util_av, &shm_addr,
-							 &index);
+				ret = ofi_av_insert_addr(util_av, &shm_id,
+							 &util_addr);
 		} else {
 			FI_WARN(&smr_prov, FI_LOG_AV,
 				"AV insert failed. The maximum number of AV "
 				"entries shm supported has been reached.\n");
-			index = FI_ADDR_NOTAVAIL;
+			util_addr = FI_ADDR_NOTAVAIL;
 			ret = -FI_ENOMEM;
 		}
 
 		if (fi_addr)
-			fi_addr[i] = index;
+			fi_addr[i] = util_addr;
 
 		if (ret) {
 			if (util_av->eq)
 				ofi_av_write_event(util_av, i, -ret, context);
-			if (shm_addr >= 0)
-				smr_map_del(smr_av->smr_map, shm_addr);
+			if (shm_id >= 0)
+				smr_map_del(smr_av->smr_map, shm_id);
 			continue;
 		} else {
-			assert(shm_addr >= 0 && shm_addr < SMR_MAX_PEERS);
-			smr_av->smr_map->peers[shm_addr].fiaddr = index;
+			assert(shm_id >= 0 && shm_id < SMR_MAX_PEERS);
+			smr_av->smr_map->peers[shm_id].fiaddr = util_addr;
 			succ_count++;
 			smr_av->used++;
 		}
@@ -106,7 +106,7 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		dlist_foreach(&util_av->ep_list, av_entry) {
 			util_ep = container_of(av_entry, struct util_ep, av_entry);
 			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
-			smr_map_to_endpoint(smr_ep->region, index);
+			smr_map_to_endpoint(smr_ep->region, shm_id);
 		}
 	}
 
