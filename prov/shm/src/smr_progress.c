@@ -601,7 +601,7 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
 	size_t inj_offset;
-	fi_addr_t idx;
+	fi_addr_t idx = FI_ADDR_UNSPEC;
 	int ret = 0;
 
 	inj_offset = (size_t) cmd->msg.hdr.src_data;
