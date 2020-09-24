@@ -239,6 +239,16 @@ void smr_free(struct smr_region *smr)
 	munmap(smr, smr->total_size);
 }
 
+static int smr_name_compare(struct ofi_rbmap *map, void *key, void *data)
+{
+	struct smr_map *smr_map;
+
+	smr_map = container_of(map, struct smr_map, rbmap);
+
+	return strncmp(smr_map->peers[(fi_addr_t) data].peer.name,
+		       (char *) key, SMR_NAME_MAX);
+}
+
 int smr_map_create(const struct fi_provider *prov, int peer_count,
 		   struct smr_map **map)
 {
@@ -253,6 +263,7 @@ int smr_map_create(const struct fi_provider *prov, int peer_count,
 	for (i = 0; i < peer_count; i++)
 		smr_peer_addr_init(&(*map)->peers[i].peer);
 
+	ofi_rbmap_init(&(*map)->rbmap, smr_name_compare);
 	fastlock_init(&(*map)->lock);
 
 	return 0;
@@ -372,18 +383,25 @@ void smr_exchange_all_peers(struct smr_region *region)
 }
 
 int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
-		const char *name, int id)
+		const char *name, fi_addr_t id)
 {
 	int ret = 0;
 
 	fastlock_acquire(&map->lock);
+
+	ret = ofi_rbmap_insert(&map->rbmap, (void *) name, (void *) id, NULL);
+	if (ret) {
+		assert(ret != -FI_EALREADY);
+		goto out;
+	}
 	strncpy(map->peers[id].peer.name, name, SMR_NAME_MAX);
 	map->peers[id].peer.name[SMR_NAME_MAX - 1] = '\0';
 	ret = smr_map_to_region(prov, &map->peers[id]);
 	if (!ret)
 		map->peers[id].peer.addr = id;
-	fastlock_release(&map->lock);
 
+out:
+	fastlock_release(&map->lock);
 	return ret == -ENOENT ? 0 : ret;
 }
 
@@ -402,6 +420,9 @@ void smr_map_del(struct smr_map *map, int id)
 	if (!entry)
 		munmap(map->peers[id].region, map->peers[id].region->total_size);
 
+	(void) ofi_rbmap_find_delete(&map->rbmap,
+				     (void *) map->peers[id].peer.name);
+		
 	map->peers[id].peer.addr = FI_ADDR_UNSPEC;
 }
 
@@ -412,6 +433,7 @@ void smr_map_free(struct smr_map *map)
 	for (i = 0; i < SMR_MAX_PEERS; i++)
 		smr_map_del(map, i);
 
+	ofi_rbmap_cleanup(&map->rbmap);
 	free(map);
 }
 
