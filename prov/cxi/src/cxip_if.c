@@ -63,7 +63,7 @@ struct cxip_if *cxip_if_lookup_name(const char *name)
 /*
  * cxip_lni_res_count() - Return usage information for LNI resource.
  */
-int cxip_lni_res_cnt(struct cxip_lni *lni, char *res_str, uint32_t *count)
+int cxip_lni_res_cnt(struct cxip_lni *lni, char *res_str)
 {
 	struct dirent *de;
 	char path[100];
@@ -75,7 +75,7 @@ int cxip_lni_res_cnt(struct cxip_lni *lni, char *res_str, uint32_t *count)
 
 	dr = opendir(path);
 	if (!dr)
-		return -FI_ENOSYS;
+		return 0;
 
 	while ((de = readdir(dr))) {
 		if (strncmp(de->d_name, ".", 1))
@@ -84,9 +84,7 @@ int cxip_lni_res_cnt(struct cxip_lni *lni, char *res_str, uint32_t *count)
 
 	closedir(dr);
 
-	*count = c;
-
-	return FI_SUCCESS;
+	return c;
 }
 
 /*
@@ -94,32 +92,32 @@ int cxip_lni_res_cnt(struct cxip_lni *lni, char *res_str, uint32_t *count)
  */
 void cxip_lni_res_dump(struct cxip_lni *lni)
 {
-	int ret;
+	DIR *dr;
 	uint32_t pt_count = 0;
-	uint32_t txq_count = 0;
-	uint32_t tgq_count = 0;
+	uint32_t cq_count = 0;
 	uint32_t eq_count = 0;
 	uint32_t ct_count = 0;
 	uint32_t ac_count = 0;
 
-	ret = cxip_lni_res_cnt(lni, "txq", &txq_count);
-
-	/* Expect failure if debugfs isn't mounted. */
-	if (ret != FI_SUCCESS) {
+	/* Check if debugfs is available. */
+	dr = opendir("/sys/kernel/debug/cxi");
+	if (!dr) {
 		CXIP_LOG_DBG("Resource usage info unavailable: %s RGID: %u.\n",
 			     lni->iface->info->device_name, lni->lni->id);
 		return;
 	}
 
-	cxip_lni_res_cnt(lni, "tgq", &tgq_count);
-	cxip_lni_res_cnt(lni, "pt", &pt_count);
-	cxip_lni_res_cnt(lni, "eq", &eq_count);
-	cxip_lni_res_cnt(lni, "ct", &ct_count);
-	cxip_lni_res_cnt(lni, "ac", &ac_count);
+	closedir(dr);
 
-	CXIP_LOG_INFO("Resource usage: %s RGID: %u TXQ: %u TGQ: %u PTE: %u EQ: %u CT: %u AC: %u\n",
-		      lni->iface->info->device_name, lni->lni->id, txq_count,
-		      tgq_count, pt_count, eq_count, ct_count, ac_count);
+	cq_count = cxip_lni_res_cnt(lni, "cq");
+	pt_count = cxip_lni_res_cnt(lni, "pt");
+	eq_count = cxip_lni_res_cnt(lni, "eq");
+	ct_count = cxip_lni_res_cnt(lni, "ct");
+	ac_count = cxip_lni_res_cnt(lni, "ac");
+
+	CXIP_LOG_INFO("Resource usage: %s RGID: %u CQ: %u PTE: %u EQ: %u CT: %u AC: %u\n",
+		      lni->iface->info->device_name, lni->lni->id, cq_count,
+		      pt_count, eq_count, ct_count, ac_count);
 }
 
 /*
