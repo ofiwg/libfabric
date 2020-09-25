@@ -15,6 +15,7 @@
 #include "cxip.h"
 
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_LOG_INFO(...) _CXIP_LOG_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 /*
@@ -371,8 +372,8 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 			      ep_obj->ctrl_evtq_buf_md,
 			      &eq_attr, NULL, NULL, &ep_obj->ctrl_evtq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Unable to allocate control EVTQ, ret: %d\n",
-			     ret);
+		CXIP_LOG_INFO("Failed to allocate control EQ, ret: %d\n",
+			      ret);
 		ret = -FI_ENODEV;
 		goto free_evtq_md;
 	}

@@ -23,6 +23,7 @@
 #include "cxip.h"
 
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_CQ, __VA_ARGS__)
+#define CXIP_LOG_INFO(...) _CXIP_LOG_INFO(FI_LOG_CQ, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_CQ, __VA_ARGS__)
 
 struct cxip_md *cxip_cq_ibuf_md(void *ibuf)
@@ -546,7 +547,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	ret = cxil_alloc_evtq(cxi_cq->domain->lni->lni, cxi_cq->evtq_buf_md,
 			      &eq_attr, NULL, NULL, &cxi_cq->evtq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Unable to allocate EVTQ, ret: %d\n", ret);
+		CXIP_LOG_INFO("Failed to allocate EQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
 		goto unmap_evtq_buf;
 	}

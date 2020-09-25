@@ -150,7 +150,8 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **iface)
 	if (!if_entry->dev) {
 		ret = cxil_open_device(if_entry->info->dev_id, &if_entry->dev);
 		if (ret) {
-			CXIP_LOG_DBG("cxil_open_device returned: %d\n", ret);
+			CXIP_LOG_INFO("Failed to open CXI Device, ret: %d\n",
+				      ret);
 			ret = -FI_ENODEV;
 			goto unlock;
 		}
@@ -205,7 +206,7 @@ int cxip_alloc_lni(struct cxip_if *iface, uint32_t svc_id,
 
 	ret = cxil_alloc_lni(iface->dev, &lni->lni, svc_id);
 	if (ret) {
-		CXIP_LOG_DBG("cxil_alloc_lni returned: %d\n", ret);
+		CXIP_LOG_INFO("Failed to allocate LNI, ret: %d\n", ret);
 		ret = -FI_ENOSPC;
 		goto free_lni;
 	}
@@ -307,8 +308,8 @@ int cxip_cp_get(struct cxip_lni *lni, uint16_t vni, enum cxi_traffic_class tc,
 		*cp = lni->cps[lni->n_cps++];
 		ret = FI_SUCCESS;
 	} else {
-		CXIP_LOG_DBG("Failed to allocate CP: %d VNI: %u TC: %u\n",
-			     ret, vni, tc);
+		CXIP_LOG_INFO("Failed to allocate CP, ret: %d VNI: %u TC: %u\n",
+			      ret, vni, tc);
 		ret = -FI_EINVAL;
 	}
 
@@ -335,7 +336,7 @@ int cxip_alloc_if_domain(struct cxip_lni *lni, uint32_t vni, uint32_t pid,
 
 	ret = cxil_alloc_domain(lni->lni, vni, pid, &dom->dom);
 	if (ret) {
-		CXIP_LOG_DBG("cxil_alloc_domain returned: %d\n", ret);
+		CXIP_LOG_INFO("Failed to allocate CXI Domain, ret: %d\n", ret);
 		ret = -FI_ENOSPC;
 		goto free_dom;
 	}
@@ -478,7 +479,7 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 	ret = cxil_alloc_pte(if_dom->lni->lni, evtq, opts,
 			     &new_pte->pte);
 	if (ret) {
-		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
+		CXIP_LOG_INFO("Failed to allocate PTE: %d\n", ret);
 		ret = -FI_ENOSPC;
 		goto free_mem;
 	}
@@ -583,7 +584,9 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 
 	ret = cxil_alloc_cmdq(lni->lni, evtq, cq_opts, &dev_cmdq);
 	if (ret) {
-		CXIP_LOG_DBG("cxil_alloc_cmdq() failed, ret: %d\n", ret);
+		CXIP_LOG_INFO("Failed to allocate %s, ret: %d\n",
+			      cq_opts->flags & CXI_CQ_IS_TX ? "TXQ" : "TGQ",
+			      ret);
 		ret = -FI_ENOSPC;
 		goto free_cmdq;
 	}

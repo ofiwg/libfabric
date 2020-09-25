@@ -17,6 +17,7 @@
 #include <ofi_util.h>
 
 #define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
+#define CXIP_LOG_INFO(...) _CXIP_LOG_INFO(FI_LOG_EP_DATA, __VA_ARGS__)
 #define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
 
 static int cxip_dom_cntr_enable(struct cxip_domain *dom)
@@ -356,7 +357,7 @@ int cxip_cntr_enable(struct cxip_cntr *cxi_cntr)
 	ret = cxil_alloc_ct(cxi_cntr->domain->lni->lni,
 			    &cxi_cntr->wb, &cxi_cntr->ct);
 	if (ret) {
-		CXIP_LOG_DBG("Unable to allocate CT, ret: %d\n", ret);
+		CXIP_LOG_INFO("Failed to allocate CT, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
 		goto unlock;
 	}
