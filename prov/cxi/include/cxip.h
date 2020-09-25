@@ -735,6 +735,7 @@ struct cxip_cq {
 	struct cxi_eq *evtq;
 	unsigned int unacked_events;
 	unsigned int ack_batch_size;
+	bool mmap_buf;
 	void *evtq_buf;
 	size_t evtq_buf_len;
 	struct cxi_md *evtq_buf_md;

@@ -523,26 +523,38 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 
 	/* TODO set EQ size based on usage. */
 	cxi_cq->evtq_buf_len = 2*1024*1024;
-	cxi_cq->evtq_buf = aligned_alloc(C_PAGE_SIZE,
-					 cxi_cq->evtq_buf_len);
-	if (!cxi_cq->evtq_buf) {
-		CXIP_LOG_DBG("Unable to allocate MR EVTQ buffer\n");
-		goto unlock;
-	}
 
-	ret = cxil_map(cxi_cq->domain->lni->lni,
-		       cxi_cq->evtq_buf, cxi_cq->evtq_buf_len,
-		       CXI_MAP_PIN | CXI_MAP_WRITE,
-		       NULL, &cxi_cq->evtq_buf_md);
-	if (ret) {
-		CXIP_LOG_DBG("Unable to MAP MR EVTQ buffer, ret: %d\n",
-			     ret);
-		goto free_evtq_buf;
+	cxi_cq->evtq_buf = mmap(NULL, cxi_cq->evtq_buf_len,
+				PROT_READ | PROT_WRITE,
+				MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
+				-1, 0);
+	if (cxi_cq->evtq_buf == MAP_FAILED) {
+		CXIP_LOG_DBG("Unable to map hugepage for EQ\n");
+
+		cxi_cq->evtq_buf = aligned_alloc(C_PAGE_SIZE,
+						 cxi_cq->evtq_buf_len);
+		if (!cxi_cq->evtq_buf) {
+			CXIP_LOG_DBG("Unable to allocate EQ buffer\n");
+			goto unlock;
+		}
+
+		ret = cxil_map(cxi_cq->domain->lni->lni,
+			       cxi_cq->evtq_buf, cxi_cq->evtq_buf_len,
+			       CXI_MAP_PIN | CXI_MAP_WRITE,
+			       NULL, &cxi_cq->evtq_buf_md);
+		if (ret) {
+			CXIP_LOG_DBG("Unable to MAP MR EVTQ buffer, ret: %d\n",
+				     ret);
+			goto free_evtq_buf;
+		}
+	} else {
+		cxi_cq->mmap_buf = true;
+		eq_attr.flags |= CXI_EQ_PASSTHROUGH;
 	}
 
 	eq_attr.queue = cxi_cq->evtq_buf,
 	eq_attr.queue_len = cxi_cq->evtq_buf_len,
-	eq_attr.flags = CXI_EQ_TGT_LONG | CXI_EQ_EC_DISABLE;
+	eq_attr.flags |= CXI_EQ_TGT_LONG | CXI_EQ_EC_DISABLE;
 
 	ret = cxil_alloc_evtq(cxi_cq->domain->lni->lni, cxi_cq->evtq_buf_md,
 			      &eq_attr, NULL, NULL, &cxi_cq->evtq);
@@ -592,11 +604,17 @@ free_req_pool:
 free_evtq:
 	cxil_destroy_evtq(cxi_cq->evtq);
 unmap_evtq_buf:
-	ret = cxil_unmap(cxi_cq->evtq_buf_md);
-	if (ret)
-		CXIP_LOG_ERROR("Failed to unmap evtq MD, ret: %d\n", ret);
+	if (!cxi_cq->mmap_buf) {
+		ret = cxil_unmap(cxi_cq->evtq_buf_md);
+		if (ret)
+			CXIP_LOG_ERROR("Failed to unmap evtq MD, ret: %d\n",
+				       ret);
+	}
 free_evtq_buf:
-	free(cxi_cq->evtq_buf);
+	if (cxi_cq->mmap_buf)
+		munmap(cxi_cq->evtq_buf, cxi_cq->evtq_buf_len);
+	else
+		free(cxi_cq->evtq_buf);
 unlock:
 	fastlock_release(&cxi_cq->lock);
 
@@ -625,11 +643,15 @@ static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 	if (ret)
 		CXIP_LOG_ERROR("Failed to free evtq, ret: %d\n", ret);
 
-	ret = cxil_unmap(cxi_cq->evtq_buf_md);
-	if (ret)
-		CXIP_LOG_ERROR("Failed to unmap evtq MD, ret: %d\n", ret);
-
-	free(cxi_cq->evtq_buf);
+	if (cxi_cq->mmap_buf) {
+		munmap(cxi_cq->evtq_buf, cxi_cq->evtq_buf_len);
+	} else {
+		ret = cxil_unmap(cxi_cq->evtq_buf_md);
+		if (ret)
+			CXIP_LOG_ERROR("Failed to unmap evtq MD, ret: %d\n",
+				       ret);
+		free(cxi_cq->evtq_buf);
+	}
 
 	cxi_cq->enabled = false;
 
