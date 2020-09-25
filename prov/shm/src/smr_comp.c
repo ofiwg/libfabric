@@ -89,16 +89,22 @@ int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 }
 
 int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op, uint16_t flags,
-		    size_t len, void *buf, fi_addr_t addr, uint64_t tag, uint64_t data,
+		    size_t len, void *buf, int64_t id, uint64_t tag, uint64_t data,
 		    uint64_t err)
 {
+	fi_addr_t fiaddr = FI_ADDR_UNSPEC;
+
 	ofi_ep_rx_cntr_inc_func(&ep->util_ep, op);
 
 	if (!err && !(flags & (SMR_REMOTE_CQ_DATA | SMR_RX_COMPLETION)))
 		return 0;
 
+	//TODO I was here
+	if (ep->util_ep.domain->info_domain_caps & FI_SOURCE)
+		fiaddr = ep->region->map->peers[id].fiaddr;
+
 	return ep->rx_comp(ep, context, op, flags, len, buf,
-			   addr, tag, data, err);
+			   fiaddr, tag, data, err);
 }
 
 int smr_rx_comp(struct smr_ep *ep, void *context, uint32_t op,

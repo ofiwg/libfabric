@@ -143,7 +143,7 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 		recv_entry = container_of(entry, struct smr_rx_entry, entry);
 		ret = smr_complete_rx(ep, (void *) recv_entry->context, ofi_op_msg,
 				  recv_entry->flags, 0,
-				  NULL, recv_entry->addr,
+				  NULL, recv_entry->peer_id,
 				  recv_entry->tag, 0, FI_ECANCELED);
 		freestack_push(ep->recv_fs, recv_entry);
 		ret = ret ? ret : 1;
@@ -179,16 +179,59 @@ static struct fi_ops_ep smr_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-int smr_verify_peer(struct smr_ep *ep, int peer_id)
+static void smr_send_name(struct smr_ep *ep, int64_t id)
 {
+	struct smr_region *peer_smr;
+	struct smr_cmd *cmd;
+	struct smr_inject_buf *tx_buf;
+
+	peer_smr = smr_peer_region(ep->region, id);
+
+	fastlock_acquire(&peer_smr->lock);
+
+	if (smr_peer_data(ep->region)[id].name_sent || !peer_smr->cmd_cnt)
+		goto out;
+
+	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
+
+	cmd->msg.hdr.op = SMR_OP_MAX + ofi_ctrl_connreq;
+	cmd->msg.hdr.id = id;
+
+	tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
+	cmd->msg.hdr.src_data = smr_get_offset(peer_smr, tx_buf);
+
+	cmd->msg.hdr.size = strlen(smr_name(ep->region)) + 1;
+	memcpy(tx_buf->data, smr_name(ep->region), cmd->msg.hdr.size);
+
+	smr_peer_data(ep->region)[id].name_sent = 1;
+	ofi_cirque_commit(smr_cmd_queue(peer_smr));
+	peer_smr->cmd_cnt--;
+
+out:
+	fastlock_release(&peer_smr->lock);
+}
+
+int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
+{
+	int64_t id;
 	int ret;
 
-	if (ep->region->map->peers[peer_id].peer.addr != FI_ADDR_UNSPEC)
-		return 0;
+	id = smr_addr_lookup(ep->util_ep.av, fi_addr);
+	assert(id < SMR_MAX_PEERS);
 
-	ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[peer_id]);
+	if (smr_peer_data(ep->region)[id].addr.id >= 0)
+		return id;
 
-	return (ret == -ENOENT) ? -FI_EAGAIN : ret;
+	if (ep->region->map->peers[id].peer.id < 0) {
+		ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[id]);
+		if (ret == -ENOENT)
+			return -1;
+
+	}
+
+	smr_send_name(ep, id);
+
+	return -1;
 }
 
 static int smr_match_msg(struct dlist_entry *item, const void *args)
@@ -197,7 +240,7 @@ static int smr_match_msg(struct dlist_entry *item, const void *args)
 	struct smr_rx_entry *recv_entry;
 
 	recv_entry = container_of(item, struct smr_rx_entry, entry);
-	return smr_match_addr(recv_entry->addr, attr->addr);
+	return smr_match_id(recv_entry->peer_id, attr->id);
 }
 
 static int smr_match_tagged(struct dlist_entry *item, const void *args)
@@ -206,7 +249,7 @@ static int smr_match_tagged(struct dlist_entry *item, const void *args)
 	struct smr_rx_entry *recv_entry;
 
 	recv_entry = container_of(item, struct smr_rx_entry, entry);
-	return smr_match_addr(recv_entry->addr, attr->addr) &&
+	return smr_match_id(recv_entry->peer_id, attr->id) &&
 	       smr_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag); 
 } 
 
@@ -217,7 +260,7 @@ static int smr_match_unexp_msg(struct dlist_entry *item, const void *args)
 
 	unexp_msg = container_of(item, struct smr_unexp_msg, entry);
 	assert(unexp_msg->cmd.msg.hdr.op == ofi_op_msg);
-	return smr_match_addr(unexp_msg->cmd.msg.hdr.addr, attr->addr);
+	return smr_match_id(unexp_msg->cmd.msg.hdr.id, attr->id);
 }
 
 static int smr_match_unexp_tagged(struct dlist_entry *item, const void *args)
@@ -227,10 +270,10 @@ static int smr_match_unexp_tagged(struct dlist_entry *item, const void *args)
 
 	unexp_msg = container_of(item, struct smr_unexp_msg, entry);
 	if (unexp_msg->cmd.msg.hdr.op == ofi_op_msg)
-		return smr_match_addr(unexp_msg->cmd.msg.hdr.addr, attr->addr);
+		return smr_match_id(unexp_msg->cmd.msg.hdr.id, attr->id);
 
 	assert(unexp_msg->cmd.msg.hdr.op == ofi_op_tagged);
-	return smr_match_addr(unexp_msg->cmd.msg.hdr.addr, attr->addr) &&
+	return smr_match_id(unexp_msg->cmd.msg.hdr.id, attr->id) &&
 	       smr_match_tag(unexp_msg->cmd.msg.hdr.tag, attr->ignore,
 			     attr->tag);
 }
@@ -245,13 +288,13 @@ static void smr_init_queue(struct smr_queue *queue,
 void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 			  void *context, enum fi_hmem_iface iface, uint64_t device,
 			  const struct iovec *iov, uint32_t iov_count,
-			  fi_addr_t id, struct smr_resp *resp)
+			  int64_t id, struct smr_resp *resp)
 {
 	pend->cmd = *cmd;
 	pend->context = context;
 	memcpy(pend->iov, iov, sizeof(*iov) * iov_count);
 	pend->iov_count = iov_count;
-	pend->addr = id;
+	pend->peer_id = id;
 	if (cmd->msg.hdr.op_src != smr_src_sar)
 		pend->bytes_done = 0;
 
@@ -262,13 +305,13 @@ void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 	resp->status = FI_EBUSY;
 }
 
-void smr_generic_format(struct smr_cmd *cmd, fi_addr_t peer_id, uint32_t op,
+void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags)
 {
 	cmd->msg.hdr.op = op;
 	cmd->msg.hdr.op_flags = 0;
 	cmd->msg.hdr.tag = tag;
-	cmd->msg.hdr.addr = peer_id;
+	cmd->msg.hdr.id = peer_id;
 	cmd->msg.hdr.data = data;
 
 	if (op_flags & FI_REMOTE_CQ_DATA)

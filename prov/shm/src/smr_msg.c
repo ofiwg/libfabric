@@ -70,7 +70,9 @@ static struct smr_rx_entry *smr_get_recv_entry(struct smr_ep *ep,
 	entry->context = context;
 	entry->err = 0;
 	entry->flags = smr_convert_rx_flags(flags);
-	entry->addr = ep->util_ep.caps & FI_DIRECTED_RECV ? addr : FI_ADDR_UNSPEC;
+	entry->peer_id = ep->util_ep.caps & FI_DIRECTED_RECV &&
+				addr != FI_ADDR_UNSPEC ?
+				smr_addr_lookup(ep->util_ep.av, addr) : -1;
 	entry->tag = tag;
 	entry->ignore = ignore;
 
@@ -162,22 +164,21 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	struct smr_tx_entry *pend;
 	enum fi_hmem_iface iface;
 	uint64_t device;
-	int id, peer_id;
+	int64_t id, peer_id;
 	ssize_t ret = 0;
 	size_t total_len;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 
-	id = (int) addr;
-	peer_id = smr_peer_data(ep->region)[id].addr.addr;
+	id = smr_verify_peer(ep, addr);
+	if (id < 0)
+		return -FI_EAGAIN;
 
-	ret = smr_verify_peer(ep, id);
-	if (ret)
-		return ret;
-
+	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
+
 	fastlock_acquire(&peer_smr->lock);
-	if (!peer_smr->cmd_cnt || smr_peer_data(ep->region)[id].sar_status) {
+	if (!peer_smr->cmd_cnt || smr_peer_data(ep->region)[peer_id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock_region;
 	}
@@ -224,7 +225,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 						       ep->region, peer_smr, sar,
 						       pend, resp);
 					peer_smr->sar_cnt--;
-					smr_peer_data(ep->region)[id].sar_status = 1;
+					smr_peer_data(ep->region)[peer_id].sar_status = 1;
 				}
 			} else {
 				ret = smr_format_mmap(ep, cmd, iov, iov_count,
@@ -305,7 +306,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
 	struct smr_cmd *cmd;
-	int id, peer_id;
+	int64_t id, peer_id;
 	ssize_t ret = 0;
 	struct iovec msg_iov;
 
@@ -315,14 +316,14 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	msg_iov.iov_len = len;
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
-	id = (int) dest_addr;
-	peer_id = smr_peer_data(ep->region)[id].addr.addr;
 
-	ret = smr_verify_peer(ep, id);
-	if (ret)
-		return ret;
+	id = smr_verify_peer(ep, dest_addr);
+	if (id < 0)
+		return -FI_EAGAIN;
 
+	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
+
 	fastlock_acquire(&peer_smr->lock);
 	if (!peer_smr->cmd_cnt || smr_peer_data(ep->region)[id].sar_status) {
 		ret = -FI_EAGAIN;
