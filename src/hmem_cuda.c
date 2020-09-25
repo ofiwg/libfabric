@@ -50,7 +50,6 @@ struct cuda_ops {
 	CUresult (*cuPointerGetAttribute)(void *data,
 					  CUpointer_attribute attribute,
 					  CUdeviceptr ptr);
-	CUresult (*cuInit)(unsigned int flags);
 	cudaError_t (*cudaHostRegister)(void *ptr, size_t size,
 					unsigned int flags);
 	cudaError_t (*cudaHostUnregister)(void *ptr);
@@ -73,7 +72,6 @@ static struct cuda_ops cuda_ops = {
 	.cudaGetErrorName = cudaGetErrorName,
 	.cudaGetErrorString = cudaGetErrorString,
 	.cuPointerGetAttribute = cuPointerGetAttribute,
-	.cuInit = cuInit,
 	.cudaHostRegister = cudaHostRegister,
 	.cudaHostUnregister = cudaHostUnregister,
 };
@@ -100,11 +98,6 @@ CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 				   CUdeviceptr ptr)
 {
 	return cuda_ops.cuPointerGetAttribute(data, attribute, ptr);
-}
-
-CUresult ofi_cuInit(unsigned int flags)
-{
-	return cuda_ops.cuInit(flags);
 }
 
 cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags)
@@ -225,12 +218,6 @@ static int cuda_hmem_dl_init(void)
 		goto err_dlclose_cuda;
 	}
 
-	cuda_ops.cuInit = dlsym(cuda_handle, "cuInit");
-	if (!cuda_ops.cuInit) {
-		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find cuInit\n");
-		goto err_dlclose_cuda;
-	}
-
 	cuda_ops.cudaHostRegister = dlsym(cudart_handle, "cudaHostRegister");
 	if (!cuda_ops.cudaHostRegister) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
@@ -262,7 +249,6 @@ err_dlclose_cudart:
 int cuda_hmem_init(void)
 {
 	int ret;
-	CUresult cu_ret;
 
 	ret = cuda_hmem_dl_init();
 	if (ret != FI_SUCCESS)
@@ -282,22 +268,7 @@ int cuda_hmem_init(void)
 				"gdrcopy initialization failed! gdrcopy will not be used.\n");
 	}
 
-	cu_ret = ofi_cuInit(0);
-	if (cu_ret == CUDA_SUCCESS)
-		return FI_SUCCESS;
-
-	cuda_hmem_cleanup();
-
-	/* Treat CUDA_ERROR_NO_DEVICE error as CUDA not being supported. */
-	if (cu_ret != CUDA_ERROR_NO_DEVICE) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"cuInit failed %d. CUDA memory no supported\n", cu_ret);
-		return -FI_EIO;
-	}
-
-	FI_INFO(&core_prov, FI_LOG_CORE, "No CUDA devices found\n");
-
-	return -FI_ENOSYS;
+	return ret;
 }
 
 int cuda_hmem_cleanup(void)
