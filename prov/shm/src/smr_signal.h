@@ -71,7 +71,7 @@ static void smr_reg_sig_hander(int signum)
 
 	memset(&action, 0, sizeof(action));
 	action.sa_sigaction = smr_handle_signal;
-	action.sa_flags |= SA_SIGINFO;
+	action.sa_flags |= SA_SIGINFO | SA_ONSTACK;
 
 	ret = sigaction(signum, &action, &old_action[signum]);
 	if (ret)
