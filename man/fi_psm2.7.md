@@ -115,6 +115,12 @@ The *psm2* provider checks for the following environment variables:
 
   The default UUID is 00FF00FF-0000-0000-0000-00FF0F0F00FF.
 
+  It is possible to create endpoints with UUID different from the one
+  set here. To achieve that, set 'info->ep_attr->auth_key' to the uuid
+  value and 'info->ep_attr->auth_key_size' to its size (16 bytes) when
+  calling fi_endpoint() or fi_scalable_ep(). It is still true that an
+  endpoint can only communicate with endpoints with the same UUID.
+
 *FI_PSM2_NAME_SERVER*
 : The *psm2* provider has a simple built-in name server that can be used
   to resolve an IP address or host name into a transport address needed

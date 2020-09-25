@@ -528,6 +528,8 @@ struct psmx2_trx_ctxt {
 	ofi_atomic32_t		poll_refcnt;
 	int			poll_active;
 
+	psm2_uuid_t		uuid;
+
 	struct dlist_entry	entry;
 };
 
@@ -989,7 +991,8 @@ int	psmx2_domain_enable_ep(struct psmx2_fid_domain *domain, struct psmx2_fid_ep 
 void	psmx2_trx_ctxt_free(struct psmx2_trx_ctxt *trx_ctxt, int usage_flags);
 struct	psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 					     struct psmx2_ep_name *src_addr,
-					     int sep_ctxt_idx, int usage_flags);
+					     int sep_ctxt_idx, int usage_flags,
+					     uint8_t *uuid);
 
 static inline
 int	psmx2_ns_service_cmp(void *svc1, void *svc2)
