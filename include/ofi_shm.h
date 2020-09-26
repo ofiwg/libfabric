@@ -37,6 +37,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <sys/un.h>
 
 #include <ofi_atom.h>
 #include <ofi_proto.h>
@@ -64,7 +65,6 @@ extern "C" {
 #else
 #define SMR_FLAG_DEBUG	(0 << 1)
 #endif
-
 
 #define SMR_CMD_SIZE		128	/* align with 64-byte cache line */
 
@@ -180,6 +180,12 @@ struct smr_cmd {
 
 #define SMR_NAME_MAX		256
 
+#ifdef UNIX_PATH_MAX
+#define SMR_SOCK_NAME_MAX UNIX_PATH_MAX
+#else
+#define SMR_SOCK_NAME_MAX 92
+#endif
+
 struct smr_addr {
 	char		name[SMR_NAME_MAX];
 	int64_t		id;
@@ -246,6 +252,7 @@ struct smr_region {
 	size_t		sar_pool_offset;
 	size_t		peer_data_offset;
 	size_t		name_offset;
+	size_t		sock_name_offset;
 };
 
 struct smr_resp {
@@ -311,6 +318,11 @@ static inline const char *smr_name(struct smr_region *smr)
 	return (const char *) smr + smr->name_offset;
 }
 
+static inline char *smr_sock_name(struct smr_region *smr)
+{
+	return (char *) smr + smr->sock_name_offset;
+}
+
 static inline void smr_set_map(struct smr_region *smr, struct smr_map *map)
 {
 	smr->map = map;
@@ -325,7 +337,8 @@ struct smr_attr {
 size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 				  size_t *cmd_offset, size_t *resp_offset,
 				  size_t *inject_offset, size_t *sar_offset,
-				  size_t *peer_offset, size_t *name_offset);
+				  size_t *peer_offset, size_t *name_offset,
+				  size_t *sock_offset);
 void	smr_cma_check(struct smr_region *region, struct smr_region *peer_region);
 void	smr_cleanup(void);
 int	smr_map_create(const struct fi_provider *prov, int peer_count,
