@@ -167,7 +167,6 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 				return -FI_ENODATA;
 			}
 			cur->domain_attr->mr_mode |= FI_MR_HMEM;
-			ofi_hmem_init();
 		} else {
 			cur->domain_attr->mr_mode &= ~FI_MR_HMEM;
 		}
@@ -177,6 +176,9 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 
 static void smr_fini(void)
 {
+#if HAVE_SHM_DL
+	ofi_hmem_cleanup()
+#endif
 	smr_cleanup();
 	free(old_action);
 }
@@ -198,6 +200,9 @@ struct util_prov smr_util_prov = {
 
 SHM_INI
 {
+#if HAVE_SHM_DL
+	ofi_hmem_init()
+#endif
 	fi_param_define(&smr_prov, "sar_threshold", FI_PARAM_SIZE_T,
 			"Max size to use for alternate SAR protocol if CMA \
 			 is not available before switching to mmap protocol \
