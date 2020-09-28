@@ -113,13 +113,12 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	if (id < 0)
 		return -FI_EAGAIN;
 
-	cmds = 1 + !(domain->fast_rma && !(op_flags &
-		    (FI_REMOTE_CQ_DATA | FI_DELIVERY_COMPLETE)) &&
-		     rma_count == 1 &&
-		     ep->region->cma_cap == SMR_CMA_CAP_ON);
-
 	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
+
+	cmds = 1 + !(domain->fast_rma && !(op_flags &
+		    (FI_REMOTE_CQ_DATA | FI_DELIVERY_COMPLETE)) &&
+		     rma_count == 1 && smr_cma_enabled(ep, peer_smr));
 
 	fastlock_acquire(&peer_smr->lock);
 	if (peer_smr->cmd_cnt < cmds ||
@@ -178,8 +177,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 		}
 		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
 		pend = freestack_pop(ep->pend_fs);
-		if (ep->region->cma_cap == SMR_CMA_CAP_ON &&
-		    iface == FI_HMEM_SYSTEM) {
+		if (smr_cma_enabled(ep, peer_smr) && iface == FI_HMEM_SYSTEM) {
 			smr_format_iov(cmd, iov, iov_count, total_len, ep->region,
 				       resp);
 		} else {
@@ -366,11 +364,11 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	if (id < 0)
 		return -FI_EAGAIN;
 
-	cmds = 1 + !(domain->fast_rma && !(flags & FI_REMOTE_CQ_DATA) &&
-		     ep->region->cma_cap == SMR_CMA_CAP_ON);
-
 	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
+
+	cmds = 1 + !(domain->fast_rma && !(flags & FI_REMOTE_CQ_DATA) &&
+		     smr_cma_enabled(ep, peer_smr));
 
 	fastlock_acquire(&peer_smr->lock);
 	if (peer_smr->cmd_cnt < cmds ||
