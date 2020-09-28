@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2017-2019 Intel Corporation, Inc. All rights reserved.
- * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
+ *                         All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
@@ -102,6 +103,14 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
 
 /* Single lock used by all memory monitors and MR caches. */
 extern pthread_mutex_t mm_lock;
+/* The read-write lock is an additional lock used to protect the dlist_entry
+ * list of ofi_mem_monitor. Due to the necessity of releasing the mm_lock
+ * while walking the dlist in ofi_monitor_notify, we need a separate lock to
+ * ensure thread safety. This must be a read-write lock because
+ * ofi_monitor_notify may be recursive and cannot block multiple walks from
+ * occurring at the same time.
+ */
+extern pthread_rwlock_t mm_list_rwlock;
 
 /*
  * Memory notifier - Report memory mapping changes to address ranges
@@ -147,6 +156,7 @@ int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 void ofi_monitors_del_cache(struct ofi_mr_cache *cache);
 void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
 			const void *addr, size_t len);
+void ofi_monitor_flush(struct ofi_mem_monitor *monitor);
 
 int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
 			  const void *addr, size_t len,

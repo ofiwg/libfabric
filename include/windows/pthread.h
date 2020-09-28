@@ -1,5 +1,6 @@
 /*
 * Copyright (c) 2017 Intel Corporation. All rights reserved.
+* Copyright (c) 2020 Amazon.com, Inc. or its affiliates. All rights reserved.
 *
 * This software is available to you under a choice of one of two
 * licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,8 +39,10 @@
 #include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #define PTHREAD_MUTEX_INITIALIZER {0}
+#define PTHREAD_RWLOCK_INITIALIZER {0}
 
 #define pthread_cond_signal WakeConditionVariable
 #define pthread_cond_broadcast WakeAllConditionVariable
@@ -154,6 +157,84 @@ typedef struct pthread_cleanup_t
 	pthread_cleanup_callback_t routine;
 	void *arg;
 } pthread_cleanup_t;
+
+/* Read-Write lock implementation */
+
+typedef struct {
+    SRWLOCK	lock; /* Windows Slim Reader Writer Lock */
+    bool	write_mode;
+} pthread_rwlock_t;
+typedef void pthread_rwlockattr_t;
+
+static inline int pthread_rwlock_init(pthread_rwlock_t *rwlock, const pthread_rwlockattr_t *attr)
+{
+	(void)attr;
+	if (rwlock) {
+		InitializeSRWLock(&(rwlock->lock));
+		rwlock->write_mode = false;
+		return 0;
+	}
+	return 1;
+}
+
+static inline int pthread_rwlock_destroy(pthread_rwlock_t *rwlock)
+{
+	/* No SRWLock cleanup function */
+	(void)rwlock;
+	return 0;
+}
+
+static inline int pthread_rwlock_rdlock(pthread_rwlock_t *rwlock)
+{
+	if (rwlock) {
+		AcquireSRWLockShared(&(rwlock->lock));
+		return 0;
+	}
+	return 1;
+}
+
+static inline int pthread_rwlock_tryrdlock(pthread_rwlock_t *rwlock)
+{
+	if (rwlock && TryAcquireSRWLockShared(&(rwlock->lock))) {
+		return 0;
+	}
+	return 1;
+}
+
+static inline int pthread_rwlock_wrlock(pthread_rwlock_t *rwlock)
+{
+	if (rwlock) {
+		AcquireSRWLockExclusive(&(rwlock->lock));
+		rwlock->write_mode = true;
+		return 0;
+	}
+	return 1;
+}
+
+static inline int pthread_rwlock_trywrlock(pthread_rwlock_t *rwlock)
+{
+	if (rwlock && TryAcquireSRWLockExclusive(&(rwlock->lock))) {
+		rwlock->write_mode = true;
+		return 0;
+	}
+	return 1;
+}
+
+
+static inline int pthread_rwlock_unlock(pthread_rwlock_t *rwlock)
+{
+	if (rwlock) {
+		if (rwlock->write_mode) {
+			rwlock->write_mode = false;
+			ReleaseSRWLockExclusive(&(rwlock->lock));
+		} else {
+			ReleaseSRWLockShared(&(rwlock->lock));
+		}
+		return 0;
+	}
+	return 1;
+}
+
 #ifndef __cplusplus 
 #define pthread_cleanup_push(_rout, _arg)				\
 {									\
