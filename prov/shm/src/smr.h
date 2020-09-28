@@ -329,6 +329,13 @@ uint64_t smr_rx_cq_flags(uint32_t op, uint16_t op_flags);
 
 void smr_ep_progress(struct util_ep *util_ep);
 
+static inline bool smr_cma_enabled(struct smr_ep *ep,
+				   struct smr_region *peer_smr)
+{
+	return ep->region->cma_cap == SMR_CMA_CAP_ON ||
+	       ep->region == peer_smr;
+}
+
 static inline int smr_cma_loop(pid_t pid, struct iovec *local,
 			unsigned long local_cnt, struct iovec *remote,
 			unsigned long remote_cnt, unsigned long flags,
