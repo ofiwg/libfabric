@@ -47,6 +47,7 @@ static ze_context_handle_t context;
 static ze_device_handle_t devices[ZE_MAX_DEVICES];
 static ze_command_queue_handle_t cmd_queue[ZE_MAX_DEVICES];
 static int num_devices = 0;
+static bool p2p_enabled = false;
 
 static const ze_command_queue_desc_t cq_desc = {
 	.stype		= ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
@@ -70,7 +71,9 @@ int ze_hmem_init(void)
 	ze_driver_handle_t driver;
 	ze_context_desc_t context_desc = {0};
 	ze_result_t ze_ret;
-	uint32_t count;
+	ze_bool_t access;
+	uint32_t count, i;
+	bool p2p = true;
 
 	ze_ret = zeInit(ZE_INIT_FLAG_GPU_ONLY);
 	if (ze_ret)
@@ -99,8 +102,15 @@ int ze_hmem_init(void)
 					      &cmd_queue[num_devices]);
 		if (ze_ret)
 			goto err;
+
+		for (i = 0; i < count; i++) {
+			if (zeDeviceCanAccessPeer(devices[num_devices],
+					devices[i], &access) || !access)
+				p2p = false;
+		}
 	}
 
+	p2p_enabled = p2p;
 	return FI_SUCCESS;
 
 err:
@@ -219,6 +229,11 @@ int ze_hmem_close_handle(void *ipc_ptr)
 	return FI_SUCCESS;
 }
 
+bool ze_hmem_p2p_enabled(void)
+{
+	return p2p_enabled;
+}
+
 #else
 
 int ze_hmem_init(void)
@@ -254,6 +269,11 @@ int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr)
 int ze_hmem_close_handle(void *ipc_ptr)
 {
 	return -FI_ENOSYS;
+}
+
+bool ze_hmem_p2p_enabled(void)
+{
+	return false;
 }
 
 #endif /* HAVE_LIBZE */

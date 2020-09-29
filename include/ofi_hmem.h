@@ -123,6 +123,7 @@ bool ze_is_addr_valid(const void *addr);
 int ze_hmem_get_handle(void *dev_buf, void **handle);
 int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr);
 int ze_hmem_close_handle(void *ipc_ptr);
+bool ze_hmem_p2p_enabled(void);
 
 static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
 			     size_t size)
