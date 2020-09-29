@@ -371,6 +371,7 @@ static struct cxip_req *mrecv_req_dup(struct cxip_req *mrecv_req)
 
 	/* Duplicate the parent request. */
 	req->cb = mrecv_req->cb;
+	req->context = mrecv_req->context;
 	req->flags = mrecv_req->flags;
 	req->type = mrecv_req->type;
 	req->recv = mrecv_req->recv;

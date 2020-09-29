@@ -938,6 +938,9 @@ Test(msg, tagged_interop)
 	free(recv_buf);
 }
 
+#define RECV_CTX ((void *)0xabc0000000000000)
+#define SEND_CTX ((void *)0xdef0000000000000)
+
 void do_multi_recv(uint8_t *send_buf, size_t send_len,
 		   uint8_t *recv_buf, size_t recv_len,
 		   bool send_first, size_t sends, size_t olen,
@@ -977,24 +980,24 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 	rmsg.msg_iov = &riovec;
 	rmsg.iov_count = 1;
 	rmsg.addr = FI_ADDR_UNSPEC;
-	rmsg.context = NULL;
+	rmsg.context = RECV_CTX;
 
 	trmsg.msg_iov = &riovec;
 	trmsg.iov_count = 1;
 	trmsg.addr = FI_ADDR_UNSPEC;
-	trmsg.context = NULL;
+	trmsg.context = RECV_CTX;
 
 	siovec.iov_base = send_buf;
 	siovec.iov_len = send_len;
 	smsg.msg_iov = &siovec;
 	smsg.iov_count = 1;
 	smsg.addr = cxit_ep_fi_addr;
-	smsg.context = NULL;
+	smsg.context = SEND_CTX;
 
 	tsmsg.msg_iov = &siovec;
 	tsmsg.iov_count = 1;
 	tsmsg.addr = cxit_ep_fi_addr;
-	tsmsg.context = NULL;
+	tsmsg.context = SEND_CTX;
 
 	if (send_first) {
 		for (i = 0; i < sends; i++) {
@@ -1051,8 +1054,9 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 		if (ret == 1) {
 			rxe_flags = (tagged ? FI_TAGGED : FI_MSG) | FI_RECV;
 
-			validate_multi_recv_rx_event(&rx_cqe, NULL, send_len,
-						     rxe_flags, 0, 0);
+			validate_multi_recv_rx_event(&rx_cqe, RECV_CTX,
+						     send_len, rxe_flags,
+						     0, 0);
 			cr_assert(from == cxit_ep_fi_addr,
 				  "Invalid source address");
 
@@ -1088,7 +1092,7 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 			 */
 			rxe_flags = (tagged ? FI_TAGGED : FI_MSG) | FI_RECV;
 
-			cr_assert(err_cqe.op_context == NULL,
+			cr_assert(err_cqe.op_context == RECV_CTX,
 				  "Error RX CQE Context mismatch");
 			cr_assert((err_cqe.flags & ~FI_MULTI_RECV) == rxe_flags,
 				  "Error RX CQE flags mismatch");
@@ -1138,7 +1142,7 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 		if (ret == 1) {
 			txe_flags = (tagged ? FI_TAGGED : FI_MSG) | FI_SEND;
 			sent++;
-			validate_tx_event(&tx_cqe, txe_flags, NULL);
+			validate_tx_event(&tx_cqe, txe_flags, SEND_CTX);
 		} else {
 			cr_assert_eq(ret, -FI_EAGAIN,
 				     "fi_cq_read unexpected value %d",
