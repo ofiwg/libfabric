@@ -124,6 +124,7 @@ int ze_hmem_get_handle(void *dev_buf, void **handle);
 int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr);
 int ze_hmem_close_handle(void *ipc_ptr);
 bool ze_hmem_p2p_enabled(void);
+int ze_hmem_get_base_addr(const void *ptr, void **base);
 
 static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
 			     size_t size)
@@ -167,6 +168,11 @@ static inline int ofi_hmem_host_unregister_noop(void *ptr)
 	return FI_SUCCESS;
 }
 
+static inline int ofi_hmem_no_base_addr(const void *ptr, void **base)
+{
+	return -FI_ENOSYS;
+}
+
 ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,
 			       enum fi_hmem_iface hmem_iface, uint64_t device,
 			       const struct iovec *hmem_iov,
@@ -181,6 +187,8 @@ int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *dev_buf, void **handle);
 int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
 			 uint64_t device, void **ipc_ptr);
 int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr);
+int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *ptr,
+			   void **base);
 
 void ofi_hmem_init(void);
 void ofi_hmem_cleanup(void);

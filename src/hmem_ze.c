@@ -234,6 +234,20 @@ bool ze_hmem_p2p_enabled(void)
 	return p2p_enabled;
 }
 
+int ze_hmem_get_base_addr(const void *ptr, void **base)
+{
+	ze_result_t ze_ret;
+	size_t size;
+
+	ze_ret = zeMemGetAddressRange(context, ptr, base, &size);
+	if (ze_ret) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Could not get base addr\n");
+		return -FI_EINVAL;
+	}
+	return FI_SUCCESS;
+}
+
 #else
 
 int ze_hmem_init(void)
@@ -274,6 +288,11 @@ int ze_hmem_close_handle(void *ipc_ptr)
 bool ze_hmem_p2p_enabled(void)
 {
 	return false;
+}
+
+int ze_hmem_get_base_addr(const void *ptr, void **base)
+{
+	return -FI_ENOSYS;
 }
 
 #endif /* HAVE_LIBZE */
