@@ -255,7 +255,6 @@ void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 			       struct rxm_cmap_handle *handle);
 int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 		     struct rxm_cmap_handle *handle);
-void rxm_cmap_del_handle_ts(struct rxm_cmap_handle *handle);
 void rxm_cmap_free(struct rxm_cmap *cmap);
 int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr);
 int rxm_cmap_remove(struct rxm_cmap *cmap, int index);
