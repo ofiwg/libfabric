@@ -190,8 +190,8 @@ void rxd_ep_recv_data(struct rxd_ep *ep, struct rxd_x_entry *x_entry,
 	x_entry->next_seg_no++;
 
 	if (x_entry->next_seg_no < x_entry->num_segs) {
-		if (!(rxd_peer(ep, pkt->base_hdr.peer)->rx_seq_no) %
-		    (rxd_peer(ep, pkt->base_hdr.peer)->rx_window))
+		if (!(rxd_peer(ep, pkt->base_hdr.peer)->rx_seq_no %
+		    rxd_peer(ep, pkt->base_hdr.peer)->rx_window))
 			rxd_ep_send_ack(ep, pkt->base_hdr.peer);
 		return;
 	}
