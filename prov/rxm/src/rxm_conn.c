@@ -1143,7 +1143,7 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 		free(handle->peer);
 		handle->peer = NULL;
 	} else {
-		cmap->handles_av[handle->fi_addr] = 0;
+		cmap->handles_av[handle->fi_addr] = NULL;
 	}
 	rxm_conn_free(handle);
 	return 0;
