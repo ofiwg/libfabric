@@ -374,6 +374,7 @@ static void *ofi_uffd_handler(void *arg)
 		ret = read(uffd.fd, &msg, sizeof(msg));
 		if (ret != sizeof(msg)) {
 			pthread_mutex_unlock(&mm_lock);
+			pthread_rwlock_unlock(&mm_list_rwlock);
 			if (errno != EAGAIN)
 				break;
 			continue;
