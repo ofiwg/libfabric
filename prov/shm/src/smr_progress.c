@@ -947,8 +947,7 @@ void smr_ep_progress(struct util_ep *util_ep)
 	smr_progress_resp(ep);
 	smr_progress_cmd(ep);
 
-	if (ep->region->cma_cap == SMR_CMA_CAP_OFF)
-		smr_progress_sar_list(ep);
+	smr_progress_sar_list(ep);
 }
 
 int smr_progress_unexp_queue(struct smr_ep *ep, struct smr_rx_entry *entry,
