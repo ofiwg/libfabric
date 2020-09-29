@@ -391,9 +391,9 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 unlock_op:
 	fastlock_release(&txc->tx_cmdq->lock);
-	if (req->rma.ibuf)
+	if (req && req->rma.ibuf)
 		cxip_cq_ibuf_free(req->cq, req->rma.ibuf);
-	if (req->rma.local_md)
+	if (req && req->rma.local_md)
 		cxip_unmap(req->rma.local_md);
 req_free:
 	if (req)

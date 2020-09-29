@@ -778,9 +778,9 @@ unlock_cmdq:
 	if (result)
 		cxip_unmap(req->amo.result_md);
 unmap_oper1:
-	if (req->amo.ibuf)
+	if (req && req->amo.ibuf)
 		cxip_cq_ibuf_free(req->cq, req->amo.ibuf);
-	if (req->amo.oper1_md)
+	if (req && req->amo.oper1_md)
 		cxip_unmap(req->amo.oper1_md);
 free_req:
 	if (req)
