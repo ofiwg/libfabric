@@ -148,13 +148,18 @@ def build_mpi(mpi, mpisrc, mpi_install_path, libfab_install_path,  ofi_build_mod
     common.run_command(["make", "clean"])
     common.run_command(["make", "install", "-j32"])
 
-def build_mpich_suite(mpi, mpi_install_path, libfab_install_path):
+def build_mpich_suite(mpi, mpi_install_path, libfab_install_path, ofi_build_mode):
 
-    mpich_suite_path = '{}/test/'.format(ci_site_config.mpich_src)
+    mpich_suite_build_path = "/mpibuilddir/mpich-suite-build-dir/{}/{}/{}/mpich" \
+                             .format(jobname, buildno, ofi_build_mode);
+    if (os.path.exists(mpich_suite_build_path) == False):
+        shutil.copytree(ci_site_config.mpich_src, mpich_suite_build_path)
+
+    mpich_suite_path = '{}/test/'.format(mpich_suite_build_path)
     mpichsuite_installpath= "{}/mpichsuite/test".format(mpi_install_path)
     pwd = os.getcwd()
     if (mpi == 'impi'):
-        os.chdir("{}/mpi".format(mpich_suite_path))
+        os.chdir("{}/mpi".format(mpich_suite_path)) 
         cmd = ["./configure", "--with-mpi={}/intel64" \
                .format(ci_site_config.impi_root)]
 
@@ -270,7 +275,7 @@ if __name__ == "__main__":
             build_mpi(mpi, mpisrc, mpi_install_path, install_path, ofi_build_mode)
         
 	# build mpich_test_suite
-        build_mpich_suite(mpi, mpi_install_path, install_path)
+        build_mpich_suite(mpi, mpi_install_path, install_path, ofi_build_mode)
         # run stress and osu benchmarks for all mpitypes
         build_stress_bm(mpi, mpi_install_path, install_path)
         build_osu_bm(mpi, mpi_install_path, install_path)
