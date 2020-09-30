@@ -243,6 +243,9 @@ union rxm_cm_data {
 	} reject;
 };
 
+int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
+			  enum rxm_cmap_state state,
+			  struct rxm_cmap_handle **handle);
 struct rxm_cmap_handle *rxm_cmap_key2handle(struct rxm_cmap *cmap, uint64_t key);
 int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr);
 
@@ -838,31 +841,8 @@ static inline void rxm_cq_log_comp(uint64_t flags)
 #endif
 }
 
-static inline ssize_t
-rxm_ep_prepare_tx(struct rxm_ep *rxm_ep, fi_addr_t dest_addr,
-		  struct rxm_conn **rxm_conn)
-{
-	ssize_t ret;
-
-	assert(rxm_ep->util_ep.tx_cq);
-	*rxm_conn = (struct rxm_conn *)rxm_cmap_acquire_handle(rxm_ep->cmap,
-							       dest_addr);
-	if (OFI_UNLIKELY(!*rxm_conn))
-		return -FI_EHOSTUNREACH;
-
-	if (OFI_UNLIKELY((*rxm_conn)->handle.state != RXM_CMAP_CONNECTED)) {
-		ret = rxm_cmap_connect(rxm_ep, dest_addr, &(*rxm_conn)->handle);
-		if (ret)
-			return ret;
-	}
-
-	if (OFI_UNLIKELY(!dlist_empty(&(*rxm_conn)->deferred_tx_queue))) {
-		rxm_ep_do_progress(&rxm_ep->util_ep);
-		if (!dlist_empty(&(*rxm_conn)->deferred_tx_queue))
-			return -FI_EAGAIN;
-	}
-	return 0;
-}
+ssize_t rxm_get_conn(struct rxm_ep *rxm_ep, fi_addr_t addr,
+		     struct rxm_conn **rxm_conn);
 
 static inline void
 rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
@@ -877,7 +857,6 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
 	pkt->hdr.data = data;
 }
 
-
 static inline void *
 rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
@@ -890,7 +869,6 @@ rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	       (type == RXM_BUF_POOL_TX_SAR));
 	return ofi_buf_alloc(rxm_ep->buf_pools[type].pool);
 }
-
 
 static inline struct rxm_rx_buf *
 rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep, uint8_t repost)

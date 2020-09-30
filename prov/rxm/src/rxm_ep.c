@@ -1660,7 +1660,7 @@ rxm_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, msg->addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
@@ -1687,7 +1687,7 @@ static ssize_t rxm_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
@@ -1709,7 +1709,7 @@ static ssize_t rxm_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
@@ -1730,7 +1730,7 @@ static ssize_t rxm_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
@@ -1750,7 +1750,7 @@ static ssize_t rxm_ep_inject_fast(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		return ret;
 
@@ -1772,7 +1772,7 @@ static ssize_t rxm_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t le
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
@@ -1793,7 +1793,7 @@ static ssize_t rxm_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t 
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
@@ -1813,7 +1813,7 @@ static ssize_t rxm_ep_injectdata_fast(struct fid_ep *ep_fid, const void *buf, si
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		return ret;
 
@@ -2012,7 +2012,7 @@ rxm_ep_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, msg->addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
@@ -2040,7 +2040,7 @@ static ssize_t rxm_ep_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
@@ -2062,7 +2062,7 @@ static ssize_t rxm_ep_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
@@ -2083,7 +2083,7 @@ static ssize_t rxm_ep_tinject(struct fid_ep *ep_fid, const void *buf, size_t len
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
@@ -2103,7 +2103,7 @@ static ssize_t rxm_ep_tinject_fast(struct fid_ep *ep_fid, const void *buf, size_
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		return ret;
 
@@ -2127,7 +2127,7 @@ static ssize_t rxm_ep_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t l
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
@@ -2148,7 +2148,7 @@ static ssize_t rxm_ep_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
@@ -2168,7 +2168,7 @@ static ssize_t rxm_ep_tinjectdata_fast(struct fid_ep *ep_fid, const void *buf, s
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		return ret;
 

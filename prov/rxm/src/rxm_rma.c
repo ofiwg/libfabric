@@ -75,7 +75,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 
-	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, msg->addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
 		goto unlock;
 
@@ -270,7 +270,7 @@ rxm_ep_rma_inject_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 
-	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, msg->addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
 		goto unlock;
 
@@ -428,7 +428,7 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
 		goto unlock;
 
@@ -463,7 +463,7 @@ static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 
-	ret = rxm_ep_prepare_tx(rxm_ep, dest_addr, &rxm_conn);
+	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (OFI_UNLIKELY(ret))
 		goto unlock;
 
