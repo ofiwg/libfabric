@@ -654,6 +654,12 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		ret = smr_create(&smr_prov, av->smr_map, &attr, &ep->region);
 		if (ret)
 			return ret;
+
+		if (ep->util_ep.caps & FI_HMEM) {
+			ep->region->cma_cap_peer = SMR_CMA_CAP_OFF;
+			ep->region->cma_cap_self = SMR_CMA_CAP_OFF;
+		}
+
 		smr_exchange_all_peers(ep->region);
 		break;
 	default:
