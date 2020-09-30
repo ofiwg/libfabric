@@ -207,13 +207,12 @@ static ssize_t
 rxm_ep_generic_atomic_writemsg(struct rxm_ep *rxm_ep, const struct fi_msg_atomic *msg,
 			       uint64_t flags)
 {
-	int ret;
 	struct rxm_conn *rxm_conn;
+	ssize_t ret;
 
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-
-	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
-	if (OFI_UNLIKELY(ret))
+	ret = rxm_get_conn(rxm_ep, msg->addr, &rxm_conn);
+	if (ret)
 		goto unlock;
 
 	ret = rxm_ep_atomic_common(rxm_ep, rxm_conn, msg, NULL, NULL, 0,
@@ -318,13 +317,12 @@ rxm_ep_generic_atomic_readwritemsg(struct rxm_ep *rxm_ep,
 				   struct fi_ioc *resultv, void **result_desc,
 				   size_t result_count, uint64_t flags)
 {
-	int ret;
 	struct rxm_conn *rxm_conn;
+	ssize_t ret;
 
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-
-	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
-	if (OFI_UNLIKELY(ret))
+	ret = rxm_get_conn(rxm_ep, msg->addr, &rxm_conn);
+	if (ret)
 		goto unlock;
 
 	ret = rxm_ep_atomic_common(rxm_ep, rxm_conn, msg, NULL, NULL, 0,
@@ -412,13 +410,12 @@ rxm_ep_generic_atomic_compwritemsg(struct rxm_ep *rxm_ep,
 				   void **result_desc, size_t result_count,
 				   uint64_t flags)
 {
-	int ret;
 	struct rxm_conn *rxm_conn;
+	ssize_t ret;
 
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-
-	ret = rxm_ep_prepare_tx(rxm_ep, msg->addr, &rxm_conn);
-	if (OFI_UNLIKELY(ret))
+	ret = rxm_get_conn(rxm_ep, msg->addr, &rxm_conn);
+	if (ret)
 		goto unlock;
 
 	ret = rxm_ep_atomic_common(rxm_ep, rxm_conn, msg, comparev,

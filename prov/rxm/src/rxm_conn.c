@@ -175,6 +175,37 @@ static int rxm_cmap_del_handle(struct rxm_cmap_handle *handle)
 	return 0;
 }
 
+ssize_t rxm_get_conn(struct rxm_ep *rxm_ep, fi_addr_t addr,
+		     struct rxm_conn **rxm_conn)
+{
+	struct rxm_cmap_handle *handle;
+	ssize_t ret;
+
+	assert(rxm_ep->util_ep.tx_cq);
+	handle = rxm_cmap_acquire_handle(rxm_ep->cmap, addr);
+	if (!handle) {
+		ret = rxm_cmap_alloc_handle(rxm_ep->cmap, addr,
+					    RXM_CMAP_IDLE, &handle);
+		if (ret)
+			return ret;
+	}
+
+	*rxm_conn = container_of(handle, struct rxm_conn, handle);
+
+	if (handle->state != RXM_CMAP_CONNECTED) {
+		ret = rxm_cmap_connect(rxm_ep, addr, handle);
+		if (ret)
+			return ret;
+	}
+
+	if (!dlist_empty(&(*rxm_conn)->deferred_tx_queue)) {
+		rxm_ep_do_progress(&rxm_ep->util_ep);
+		if (!dlist_empty(&(*rxm_conn)->deferred_tx_queue))
+			return -FI_EAGAIN;
+	}
+	return 0;
+}
+
 static inline int
 rxm_cmap_check_and_realloc_handles_table(struct rxm_cmap *cmap,
 					 fi_addr_t fi_addr)
@@ -309,23 +340,26 @@ static void rxm_conn_free(struct rxm_cmap_handle *handle)
 	free(rxm_conn);
 }
 
-static int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
-				 enum rxm_cmap_state state,
-				 struct rxm_cmap_handle **handle)
+int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
+			  enum rxm_cmap_state state,
+			  struct rxm_cmap_handle **handle)
 {
 	int ret;
 
 	*handle = rxm_conn_alloc(cmap);
-	if (OFI_UNLIKELY(!*handle))
+	if (!*handle)
 		return -FI_ENOMEM;
+
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 	       "Allocated handle: %p for fi_addr: %" PRIu64 "\n",
 	       *handle, fi_addr);
+
 	ret = rxm_cmap_check_and_realloc_handles_table(cmap, fi_addr);
-	if (OFI_UNLIKELY(ret)) {
+	if (ret) {
 		rxm_conn_free(*handle);
 		return ret;
 	}
+
 	rxm_cmap_init_handle(*handle, cmap, state, fi_addr, NULL);
 	cmap->handles_av[fi_addr] = *handle;
 	return 0;
@@ -340,14 +374,17 @@ static int rxm_cmap_alloc_handle_peer(struct rxm_cmap *cmap, void *addr,
 	peer = calloc(1, sizeof(*peer) + cmap->av->addrlen);
 	if (!peer)
 		return -FI_ENOMEM;
+
 	*handle = rxm_conn_alloc(cmap);
 	if (!*handle) {
 		free(peer);
 		return -FI_ENOMEM;
 	}
-	ofi_straddr_dbg(cmap->av->prov, FI_LOG_AV, "Allocated handle for addr",
-			addr);
+
+	ofi_straddr_dbg(cmap->av->prov, FI_LOG_AV,
+			"Allocated handle for addr", addr);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "handle: %p\n", *handle);
+
 	rxm_cmap_init_handle(*handle, cmap, state, FI_ADDR_NOTAVAIL, peer);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Adding handle to peer list\n");
 	peer->handle = *handle;
@@ -366,6 +403,7 @@ rxm_cmap_get_handle_peer(struct rxm_cmap *cmap, const void *addr)
 				       addr);
 	if (!entry)
 		return NULL;
+
 	ofi_straddr_dbg(cmap->av->prov, FI_LOG_AV,
 			"handle found in peer list for addr", addr);
 	peer = container_of(entry, struct rxm_cmap_peer, entry);
@@ -649,6 +687,9 @@ int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 		ret = rxm_conn_connect(rxm_ep, handle,
 				       ofi_av_get_addr(rxm_ep->cmap->av, fi_addr));
 		if (ret) {
+			if (ret == -FI_ECONNREFUSED)
+				return -FI_EAGAIN;
+
 			rxm_cmap_del_handle(handle);
 		} else {
 			RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNREQ_SENT);
@@ -709,11 +750,10 @@ void rxm_cmap_free(struct rxm_cmap *cmap)
 		if (cmap->handles_av[i]) {
 			rxm_cmap_clear_key(cmap->handles_av[i]);
 			rxm_conn_free(cmap->handles_av[i]);
-			cmap->handles_av[i] = 0;
 		}
 	}
 
-	while(!dlist_empty(&cmap->peer_list)) {
+	while (!dlist_empty(&cmap->peer_list)) {
 		entry = cmap->peer_list.next;
 		peer = container_of(entry, struct rxm_cmap_peer, entry);
 		dlist_remove(&peer->entry);
@@ -947,9 +987,10 @@ rxm_conn_av_updated_handler(struct rxm_cmap_handle *handle)
 
 static struct rxm_cmap_handle *rxm_conn_alloc(struct rxm_cmap *cmap)
 {
-	struct rxm_conn *rxm_conn = calloc(1, sizeof(*rxm_conn));
+	struct rxm_conn *rxm_conn;
 
-	if (OFI_UNLIKELY(!rxm_conn))
+	rxm_conn = calloc(1, sizeof(*rxm_conn));
+	if (!rxm_conn)
 		return NULL;
 
 	if (rxm_conn_res_alloc(cmap->ep, rxm_conn)) {
@@ -1144,7 +1185,7 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 		free(handle->peer);
 		handle->peer = NULL;
 	} else {
-		cmap->handles_av[handle->fi_addr] = 0;
+		cmap->handles_av[handle->fi_addr] = NULL;
 	}
 	rxm_conn_free(handle);
 	return 0;
