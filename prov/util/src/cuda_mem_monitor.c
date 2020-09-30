@@ -32,7 +32,7 @@
 
 #include "ofi_mr.h"
 
-#ifdef HAVE_LIBCUDA
+#if HAVE_LIBCUDA
 
 #include "ofi_hmem.h"
 
