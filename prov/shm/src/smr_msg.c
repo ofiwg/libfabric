@@ -224,7 +224,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 						       ep->region, peer_smr, sar,
 						       pend, resp);
 					peer_smr->sar_cnt--;
-					smr_peer_data(ep->region)[peer_id].sar_status = 1;
+					smr_peer_data(ep->region)[id].sar_status = 1;
 				}
 			} else {
 				ret = smr_format_mmap(ep, cmd, iov, iov_count,
