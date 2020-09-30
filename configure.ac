@@ -486,6 +486,25 @@ AC_ARG_WITH([cuda],
 			    and runtime libraries are installed.])],
 	    [], [])
 
+have_libcuda=0
+AS_IF([test x"$with_cuda" != x"no"],
+	    [FI_CHECK_PACKAGE([cuda],
+			      [cuda_runtime.h],
+			      [cudart],
+			      [cudaMemcpy],
+			      [-lcuda],
+			      [$with_cuda],
+			      [],
+			      [have_libcuda=1],
+			      [],
+			      [])],
+	    [])
+
+AS_IF([test "$with_cuda" = "yes" && test "$have_libcuda" = "0" ],
+	[AC_MSG_ERROR([CUDA support requested but CUDA runtime not available.])],
+	[])
+AC_DEFINE_UNQUOTED([HAVE_LIBCUDA], [$have_libcuda], [Whether we have CUDA runtime or not])
+
 AC_ARG_ENABLE([cuda-dlopen],
     [AS_HELP_STRING([--enable-cuda-dlopen],
         [Enable dlopen of CUDA libraries @<:@default=no@:>@])
@@ -498,16 +517,6 @@ AC_ARG_ENABLE([cuda-dlopen],
         AC_DEFINE([ENABLE_CUDA_DLOPEN], [1], [dlopen CUDA libraries])
     ],
     [enable_cuda_dlopen=no])
-
-FI_CHECK_PACKAGE([cuda],
-		 [cuda_runtime.h],
-		 [cudart],
-		 [cudaMemcpy],
-		 [-lcuda],
-		 [$with_cuda],
-		 [],
-		 [AC_DEFINE([HAVE_LIBCUDA], [1],[CUDA support])],
-		 [], [])
 
 AC_ARG_WITH([ze],
 	AC_HELP_STRING([--with-ze=DIR], [Provide path to where the ZE

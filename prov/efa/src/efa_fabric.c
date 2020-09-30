@@ -466,7 +466,7 @@ err_free_nic:
 	return ret;
 }
 
-#ifdef HAVE_LIBCUDA
+#if HAVE_LIBCUDA
 static int efa_get_gdr_support(char *device_name)
 {
 	char *gdr_path = NULL;
@@ -536,7 +536,7 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 	info->domain_attr->resource_mgmt	= FI_RM_DISABLED;
 	info->domain_attr->mr_cnt		= base_attr->max_mr;
 
-#ifdef HAVE_LIBCUDA
+#if HAVE_LIBCUDA
 	if (info->ep_attr->type == FI_EP_RDM &&
 	    efa_get_gdr_support(ctx->ibv_ctx->device->name) == 1) {
 		info->caps			|= FI_HMEM;
