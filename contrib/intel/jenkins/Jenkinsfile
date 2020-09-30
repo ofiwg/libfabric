@@ -205,7 +205,8 @@ pipeline {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
             sh "rm -rf '/mpibuilddir/mpich-build-dir/${env.JOB_NAME}/${env.BUILD_NUMBER}'"
             sh "rm -rf '/mpibuilddir/ompi-build-dir/${env.JOB_NAME}/${env.BUILD_NUMBER}'"
-            dir("${env.WORKSPACE}"){
+            sh "rm -rf '/mpibuilddir/mpich-suite-build-dir/${env.JOB_NAME}/${env.BUILD_NUMBER}'"
+	    dir("${env.WORKSPACE}"){
                 deleteDir()
             }
         }
