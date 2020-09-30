@@ -709,11 +709,10 @@ void rxm_cmap_free(struct rxm_cmap *cmap)
 		if (cmap->handles_av[i]) {
 			rxm_cmap_clear_key(cmap->handles_av[i]);
 			rxm_conn_free(cmap->handles_av[i]);
-			cmap->handles_av[i] = 0;
 		}
 	}
 
-	while(!dlist_empty(&cmap->peer_list)) {
+	while (!dlist_empty(&cmap->peer_list)) {
 		entry = cmap->peer_list.next;
 		peer = container_of(entry, struct rxm_cmap_peer, entry);
 		dlist_remove(&peer->entry);
