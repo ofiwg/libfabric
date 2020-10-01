@@ -36,7 +36,7 @@
 
 #ifndef _OFI_CUDA_H_
 #define _OFI_CUDA_H_
-#ifdef HAVE_LIBCUDA
+#if HAVE_LIBCUDA
 
 #include <cuda.h>
 #include <cuda_runtime.h>
