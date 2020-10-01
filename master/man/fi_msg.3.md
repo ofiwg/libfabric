@@ -12,7 +12,7 @@ fi_msg - Message data transfer operations
 fi_recv / fi_recvv / fi_recvmsg
 :   Post a buffer to receive an incoming message
 
-fi_send / fi_sendv / fi_sendmsg  
+fi_send / fi_sendv / fi_sendmsg
 fi_inject / fi_senddata
 :   Initiate an operation to send a message
 
@@ -127,11 +127,7 @@ event details.
 
 The call fi_send transfers the data contained in the user-specified
 data buffer to a remote endpoint, with message boundaries being
-maintained.  For connection based endpoints (FI_EP_MSG) the local
-endpoint must be connected to a remote endpoint or destination before
-fi_send is called.  Unless the endpoint has been configured
-differently, the data buffer passed into fi_send must not be touched
-by the application until the fi_send call completes asynchronously.
+maintained.
 
 ## fi_sendv
 
@@ -276,7 +272,7 @@ fi_sendmsg.
 *FI_INJECT_COMPLETE*
 : Applies to fi_sendmsg.  Indicates that a completion should be
   generated when the source buffer(s) may be reused.
-  
+
 *FI_TRANSMIT_COMPLETE*
 : Applies to fi_sendmsg.  Indicates that a completion should not be
   generated until the operation has been successfully transmitted and
@@ -293,7 +289,7 @@ fi_sendmsg.
   targeting the same peer endpoint have completed.  Operations posted
   after the fencing will see and/or replace the results of any
   operations initiated prior to the fenced operation.
-  
+
   The ordering of operations starting at the posting of the fenced
   operation (inclusive) to the posting of a subsequent fenced operation
   (exclusive) is controlled by the endpoint's ordering semantics.
