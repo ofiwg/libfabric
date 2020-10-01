@@ -179,7 +179,7 @@ void rxr_info_to_core_mr_modes(uint32_t version,
 					hints->domain_attr->mr_mode & OFI_MR_BASIC_MAP;
 			core_info->addr_format = hints->addr_format;
 		}
-#ifdef HAVE_LIBCUDA
+#if HAVE_LIBCUDA
 		core_info->domain_attr->mr_mode |= FI_MR_HMEM;
 #endif
 	}
@@ -385,7 +385,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 		if (!hints->domain_attr || hints->domain_attr->av_type == FI_AV_UNSPEC)
 			info->domain_attr->av_type = FI_AV_TABLE;
 
-#ifdef HAVE_LIBCUDA
+#if HAVE_LIBCUDA
 		/* If the application requires HMEM support, we will add FI_MR_HMEM
 		 * to mr_mode, because we need application to provide descriptor
 		 * for cuda buffer.

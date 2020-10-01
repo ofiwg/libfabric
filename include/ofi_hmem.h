@@ -40,7 +40,7 @@
 #include <rdma/fi_domain.h>
 #include <stdbool.h>
 
-#ifdef HAVE_LIBCUDA
+#if HAVE_LIBCUDA
 
 #include <cuda.h>
 #include <cuda_runtime.h>

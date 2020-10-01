@@ -37,7 +37,7 @@
 #include "ofi_hmem.h"
 #include "ofi.h"
 
-#ifdef HAVE_LIBCUDA
+#if HAVE_LIBCUDA
 
 #include <cuda.h>
 #include <cuda_runtime.h>
