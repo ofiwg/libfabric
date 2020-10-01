@@ -212,17 +212,14 @@ testing scope is limited.
 *fi_mr_cache_evict*
 : Tests provider MR cache eviction capabilities.
 
-*fi_resource_freeing*
-: Allocates and closes fabric resources to check for proper cleanup.
-
 # Multinode
 
 This test runs a series of tests over multiple formats and patterns to help
 validate at scale. The patterns are an all to all, one to all, all to one and
 a ring. The tests also run accross multiple capabilites, such as messages, rma,
-atomics, and tagged messages. Currently, there is no option to run these 
+atomics, and tagged messages. Currently, there is no option to run these
 capabilities and patterns independently, however the test is short enough to be
-all run at once.   
+all run at once.
 
 # Ubertest
 
@@ -460,12 +457,12 @@ This will run "fi_rdm_atomic" for all atomic operations with
 
 ## Run multinode tests
 
-	Server and clients are invoked with the same command: 
+	Server and clients are invoked with the same command:
 		fi_multinode -n <number of processes> -s <server_addr> -C <mode>
-	
-	A process on the server must be started before any of the clients can be started 
+
+	A process on the server must be started before any of the clients can be started
 	succesfully. -C lists the mode that the tests will run in. Currently the options are
-  for rma and msg. If not provided, the test will default to msg. 
+  for rma and msg. If not provided, the test will default to msg.
 
 ## Run fi_ubertest
 

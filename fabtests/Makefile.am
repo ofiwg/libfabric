@@ -58,7 +58,6 @@ bin_PROGRAMS = \
 	unit/fi_av_test \
 	unit/fi_dom_test \
 	unit/fi_getinfo_test \
-	unit/fi_resource_freeing \
 	ubertest/fi_ubertest	\
 	multinode/fi_multinode	\
 	multinode/fi_multinode_coll
@@ -335,10 +334,6 @@ unit_fi_getinfo_test_SOURCES = \
 	$(unit_srcs)
 unit_fi_getinfo_test_LDADD = libfabtests.la
 
-unit_fi_resource_freeing_SOURCES = \
-	unit/resource_freeing.c
-unit_fi_resource_freeing_LDADD = libfabtests.la
-
 ubertest_fi_ubertest_SOURCES = \
 	ubertest/fabtest.h \
 	ubertest/ofi_atomic.h \
@@ -426,7 +421,6 @@ dummy_man_pages = \
 	man/man1/fi_eq_test.1 \
 	man/man1/fi_getinfo_test.1 \
 	man/man1/fi_mr_test.1 \
-	man/man1/fi_resource_freeing.1 \
 	man/man1/fi_bw.1 \
 	man/man1/fi_ubertest.1
 
