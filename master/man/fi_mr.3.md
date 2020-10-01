@@ -129,29 +129,44 @@ of a remote RMA or atomic data transfer.  Additionally, a fabric
 provider may require that data buffers be registered before being used
 in local transfers.  Memory registration restrictions are controlled
 using a separate set of mode bits, specified through the domain
-attributes (mr_mode field).
+attributes (mr_mode field).  Each mr_mode bit requires that an
+application take specific steps in order to use memory buffers with
+libfabric interfaces.
 
 The following apply to memory registration.
 
-*Scalable Memory Registration*
-: By default, memory registration is considered scalable.  (For library versions
-  1.4 and earlier, this is indicated by setting mr_mode to FI_MR_SCALABLE,
-  with the fi_info mode bit FI_LOCAL_MR set to 0).  For versions 1.5 and later,
-  scalable is implied by the lack of any mr_mode bits being set.  The setting
-  of mr_mode bits therefore adjusts application behavior as described below.
-  Default, scalable registration has several properties.
+*Default Memory Registration*
+: If no mr_mode bits are set, the default behaviors describe below are
+  followed.  Historically, these defaults were collectively referred to as
+  scalable memory registration.  The default requirements are outlined below,
+  followed by definitions of how each mr_mode bit alters the definition.
 
-  In scalable mode, registration occurs on memory address ranges.
-  Because registration refers to memory regions, versus data buffers, the
-  address ranges given for a registration request do not need to map to
+  Compatibility: For library versions 1.4 and earlier, this was indicated by
+  setting mr_mode to FI_MR_SCALABLE and the fi_info mode bit FI_LOCAL_MR to 0.
+  FI_MR_SCALABLE and FI_LOCAL_MR were deprecated in libfabric version 1.5,
+  though they are supported for backwards compatibility purposes.
+
+  For security, memory registration is required for data buffers that are
+  accessed directly by a peer process.  For example, registration is
+  required for RMA target buffers (read or written to), and those accessed
+  by atomic or collective operations.
+
+  By default, registration occurs on virtual address ranges.
+  Because registration refers to address ranges, rather than allocated
+  data buffers, the address ranges do not need to map to
   data buffers allocated by the application at the time the registration
   call is made.  That is, an application can register any
   range of addresses in their virtual address space, whether or not those
   addresses are backed by physical pages or have been allocated.
 
-  The resulting memory regions are accessible by peers starting at a base
-  address of 0.  That is, the target address that is specified is a byte
-  offset into the registered region.
+  Note that physical pages must back addresses prior to the addresses being
+  accessed as part of a data transfer operation, or the data transfers will
+  fail.  Additionally, depending on the operation, this could result in the
+  local process receiving a segmentation fault for accessing invalid memory.
+
+  Once registered, the resulting memory regions are accessible by peers starting
+  at a base address of 0.  That is, the target address that is specified is a
+  byte offset into the registered region.
 
   The application also selects the access key associated with the MR.  The
   key size is restricted to a maximum of 8 bytes.
@@ -160,6 +175,20 @@ The following apply to memory registration.
   This includes source buffers for all transmit operations -- sends,
   tagged sends, RMA, and atomics -- as well as buffers posted for receive
   and tagged receive operations.
+
+  Although the default memory registration behavior is convenient for
+  application developers, it is difficult to implement in hardware.
+  Attempts to hide the hardware requirements from the application often
+  results in significant and unacceptable impacts to performance.  The
+  following mr_mode bits are provided as input into fi_getinfo.  If a
+  provider requires the behavior defined for an mr_mode bit, it will leave
+  the bit set on output to fi_getinfo.  Otherwise, the provider can clear
+  the bit to indicate that the behavior is not needed.
+
+  By setting an mr_mode bit, the application has agreed to adjust its
+  behavior as indicated.  Importantly, applications that choose to support
+  an mr_mode must be prepared to handle the case where the mr_mode is
+  not required.  A provider will clear an mr_mode bit if it is not needed.
 
 *FI_MR_LOCAL*
 : When the FI_MR_LOCAL mode bit is set, applications must register all
@@ -263,19 +292,20 @@ The following apply to memory registration.
   parameter must either be valid or NULL.
 
 *Basic Memory Registration*
-: Basic memory registration is indicated by the FI_MR_BASIC mr_mode bit.
-  FI_MR_BASIC is maintained for backwards compatibility (libfabric version
-  1.4 or earlier).  The behavior of basic registration is equivalent
-  to setting the following mr_mode bits to one: FI_MR_VIRT_ADDR,
-  FI_MR_ALLOCATED, and FI_MR_PROV_KEY.  Additionally, providers that
-  support basic registration usually required the fi_info mode bit FI_LOCAL_MR.
-  As a result, it is recommended that applications migrating from libfabric 1.4
-  or earlier or wanting to support basic memory registration set the mr_mode
-  to FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_LOCAL.
-  FI_MR_BASIC must be set alone.  Other mr_mode bit pairings are invalid.
+: Basic memory registration was deprecated in libfabric version 1.5, but
+  is supported for backwards compatibility.  Basic memory registration
+  is indicated by setting mr_mode equal to FI_MR_BASIC.
+  FI_MR_BASIC must be set alone and not paired with mr_mode bits.
   Unlike other mr_mode bits, if FI_MR_BASIC is set on input to fi_getinfo(),
-  it will not be cleared by the provider.  That is, setting FI_MR_BASIC
-  to one requests basic registration.
+  it will not be cleared by the provider.  That is, setting mr_mode equal to
+  FI_MR_BASIC forces basic registration if the provider supports it.
+
+  The behavior of basic registration is equivalent
+  to requiring the following mr_mode bits: FI_MR_VIRT_ADDR,
+  FI_MR_ALLOCATED, and FI_MR_PROV_KEY.  Additionally, providers that
+  support basic registration usually require the (deprecated) fi_info mode
+  bit FI_LOCAL_MR, which was incorporated into the FI_MR_LOCAL mr_mode
+  bit.
 
 The registrations functions -- fi_mr_reg, fi_mr_regv, and
 fi_mr_regattr -- are used to register one or more memory regions with
