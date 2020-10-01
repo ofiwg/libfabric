@@ -93,10 +93,10 @@ int fi_mr_enable(struct fid_mr *mr);
 : User specified context associated with the memory region.
 
 *buf*
-: Memory buffer to register with the fabric hardware
+: Memory buffer to register with the fabric hardware.
 
 *len*
-: Length of memory buffer to register
+: Length of memory buffer to register.  Must be > 0.
 
 *iov*
 : Vectored memory buffer.
@@ -565,8 +565,8 @@ version 1.5 or greater.
 Indicates the key to associate with this memory registration.  Authorization
 keys are used to limit communication between endpoints.  Only peer endpoints
 that are programmed to use the same authorization key may access the memory
-region.  The domain authorization key will be used if the auth_key_size 
-provided is 0.  This field is ignored unless the fabric is opened with API 
+region.  The domain authorization key will be used if the auth_key_size
+provided is 0.  This field is ignored unless the fabric is opened with API
 version 1.5 or greater.
 
 ## iface
@@ -587,7 +587,7 @@ requested the FI_HMEM capability.
 
 *FI_HMEM_ZE*
 : Uses Intel L0 ZE interfaces such as zeDriverAllocSharedMem,
-  zeDriverFreeMem. 
+  zeDriverFreeMem.
 
 ## device
 Reserved 64 bits for device identifier if using non-standard HMEM interface.
