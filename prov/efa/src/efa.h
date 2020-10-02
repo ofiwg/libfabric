@@ -251,6 +251,7 @@ struct efa_ep {
 	struct ibv_recv_wr	*recv_more_wr_tail;
 	struct ofi_bufpool	*send_wr_pool;
 	struct ofi_bufpool	*recv_wr_pool;
+	struct ibv_ah		*self_ah;
 };
 
 struct efa_send_wr {

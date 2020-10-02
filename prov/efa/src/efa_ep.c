@@ -221,6 +221,9 @@ err:
 
 static void efa_ep_destroy(struct efa_ep *ep)
 {
+	if (ep->self_ah)
+		ibv_destroy_ah(ep->self_ah);
+
 	efa_ep_destroy_qp(ep->qp);
 	fi_freeinfo(ep->info);
 	free(ep->src_addr);
@@ -367,13 +370,34 @@ static int efa_ep_setflags(struct fid_ep *ep_fid, uint64_t flags)
 	return 0;
 }
 
+/* efa_ep_create_self_ah() create an address handler for
+ * an EP's own address. The address handler is used by
+ * an EP to read from itself. It is used to
+ * copy data from host memory to GPU memory.
+ */
+static inline
+int efa_ep_create_self_ah(struct efa_ep *ep, struct ibv_pd *ibv_pd)
+{
+	struct ibv_ah_attr ah_attr;
+	struct efa_ep_addr *self_addr;
+
+	self_addr = (struct efa_ep_addr *)ep->src_addr;
+
+	memset(&ah_attr, 0, sizeof(ah_attr));
+	ah_attr.port_num = 1;
+	ah_attr.is_global = 1;
+	memcpy(ah_attr.grh.dgid.raw, self_addr->raw, sizeof(self_addr->raw));
+	ep->self_ah = ibv_create_ah(ibv_pd, &ah_attr);
+	return ep->self_ah ? 0 : -FI_EINVAL;
+}
+
 static int efa_ep_enable(struct fid_ep *ep_fid)
 {
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
 	const struct fi_info *efa_info;
 	struct ibv_pd *ibv_pd;
 	struct efa_ep *ep;
-
+	int err;
 	ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 
 	if (!ep->scq && !ep->rcq) {
@@ -436,7 +460,18 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 	attr_ex.qp_context = ep;
 	attr_ex.sq_sig_all = 1;
 
-	return efa_ep_create_qp_ex(ep, ibv_pd, &attr_ex);
+	err = efa_ep_create_qp_ex(ep, ibv_pd, &attr_ex);
+	if (err)
+		return err;
+
+	err = efa_ep_create_self_ah(ep, ibv_pd);
+	if (err) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "Endpoint cannot create ah for its own address\n");
+		efa_ep_destroy_qp(ep->qp);
+	}
+
+	return err;
 }
 
 static int efa_ep_control(struct fid *fid, int command, void *arg)
