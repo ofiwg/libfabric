@@ -347,15 +347,7 @@ void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 #include <sys/ioctl.h>
 #include <linux/userfaultfd.h>
 
-/* The userfault fd monitor requires for events that could
- * trigger it to be handled outside of the monitor functions
- * itself. When a fault occurs on a monitored region, the
- * faulting thread is put to sleep until the event is read
- * via the userfault file descriptor. If this fault occurs
- * within the userfault handling thread, no threads will
- * read this event and our threads cannot progress, resulting
- * in a hang.
- */
+
 static void *ofi_uffd_handler(void *arg)
 {
 	struct uffd_msg msg;
