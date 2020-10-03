@@ -338,6 +338,9 @@ extern struct fi_ops_cm efa_ep_cm_ops;
 extern struct fi_ops_msg efa_ep_msg_ops;
 extern struct fi_ops_rma efa_ep_rma_ops;
 
+ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg,
+			  uint64_t flags, bool self_comm);
+
 extern fastlock_t pd_list_lock;
 // This list has the same indicies as ctx_list.
 extern struct efa_pd *pd_list;
