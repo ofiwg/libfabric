@@ -276,7 +276,7 @@ static void rocr_mm_unsubscribe(struct ofi_mem_monitor *monitor,
 
 		ofi_monitor_notify(rocr_monitor, entry->iov.iov_base,
 				   entry->iov.iov_len);
-		ofi_monitor_flush(rocr_monitor);
+
 		FI_DBG(&core_prov, FI_LOG_MR,
 		       "ROCR buffer address %p length %lu unsubscribed\n",
 		       entry->iov.iov_base, entry->iov.iov_len);
