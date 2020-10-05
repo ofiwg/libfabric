@@ -1332,8 +1332,8 @@ int vrb_init_info(const struct fi_info **all_infos)
 	}
 
 	vrb_getifaddrs(&verbs_devs);
-
-	vrb_get_sib(&verbs_devs);
+	if (!vrb_gl_data.iface)
+		vrb_get_sib(&verbs_devs);
 
 	if (dlist_empty(&verbs_devs))
 		FI_WARN(&vrb_prov, FI_LOG_FABRIC,
