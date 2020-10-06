@@ -154,10 +154,8 @@ void efa_device_free(void)
 {
 	int i;
 
-	for (i = 0; i < dev_cnt; i++) {
-		assert(pd_list[i].use_cnt == 0);
+	for (i = 0; i < dev_cnt; i++)
 		efa_device_close(ctx_list[i]);
-	}
 
 	free(pd_list);
 	free(ctx_list);
