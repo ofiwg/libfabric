@@ -415,9 +415,14 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 		rxr_read_release_entry(ep, read_entry);
 	}
 
-	peer = rxr_ep_get_peer(ep, context_pkt_entry->addr);
-	if (!peer->is_local)
-		rxr_ep_dec_tx_pending(ep, peer, 0);
+	if (read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY) {
+		assert(context_pkt_entry->addr == FI_ADDR_NOTAVAIL);
+		ep->tx_pending--;
+	} else {
+		peer = rxr_ep_get_peer(ep, context_pkt_entry->addr);
+		if (!peer->is_local)
+			rxr_ep_dec_tx_pending(ep, peer, 0);
+	}
 }
 
 void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
