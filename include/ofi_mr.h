@@ -268,7 +268,7 @@ extern struct ofi_mr_cache_params	cache_params;
 
 struct ofi_mr_entry {
 	struct ofi_mr_info		info;
-	void				*storage_context;
+	struct ofi_rbnode		*node;
 	int				use_cnt;
 	struct dlist_entry		list_entry;
 	union ofi_mr_hmem_info		hmem_info;

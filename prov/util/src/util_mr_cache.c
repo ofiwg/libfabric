@@ -105,7 +105,7 @@ static void util_mr_free_entry(struct ofi_mr_cache *cache,
 	FI_DBG(cache->domain->prov, FI_LOG_MR, "free %p (len: %zu)\n",
 	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
-	assert(!entry->storage_context);
+	assert(!entry->node);
 	cache->delete_region(cache, entry);
 	util_mr_entry_free(cache, entry);
 }
@@ -119,9 +119,8 @@ static void util_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
 	 * notification events, but is harmless to correct operation.
 	 */
 
-	ofi_rbmap_delete(&cache->tree,
-			 (struct ofi_rbnode *) entry->storage_context);
-	entry->storage_context = NULL;
+	ofi_rbmap_delete(&cache->tree, entry->node);
+	entry->node = NULL;
 
 	cache->cached_cnt--;
 	cache->cached_size -= entry->info.iov.iov_len;
@@ -232,7 +231,7 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	cache->delete_cnt++;
 
 	if (--entry->use_cnt == 0) {
-		if (!entry->storage_context) {
+		if (!entry->node) {
 			cache->uncached_cnt--;
 			cache->uncached_size -= entry->info.iov.iov_len;
 			pthread_mutex_unlock(&mm_lock);
@@ -271,7 +270,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 	if (!*entry)
 		return -FI_ENOMEM;
 
-	(*entry)->storage_context = NULL;
+	(*entry)->node = NULL;
 	(*entry)->info = *info;
 	(*entry)->use_cnt = 1;
 
@@ -291,9 +290,8 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 		cache->uncached_cnt++;
 		cache->uncached_size += info->iov.iov_len;
 	} else {
-		if (ofi_rbmap_insert(&cache->tree,
-				(void *) &(*entry)->info, (void *) *entry,
-				(struct ofi_rbnode **) &(*entry)->storage_context)) {
+		if (ofi_rbmap_insert(&cache->tree, (void *) &(*entry)->info,
+				     (void *) *entry, &(*entry)->node)) {
 			ret = -FI_ENOMEM;
 			goto unlock;
 		}
@@ -439,7 +437,7 @@ int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 
 	(*entry)->info.iov = *attr->mr_iov;
 	(*entry)->use_cnt = 1;
-	(*entry)->storage_context = NULL;
+	(*entry)->node = NULL;
 
 	ret = cache->add_region(cache, *entry);
 	if (ret)
