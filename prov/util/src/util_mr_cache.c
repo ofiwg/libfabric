@@ -454,7 +454,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 
 static void ofi_mr_rbt_destroy(struct ofi_mr_storage *storage)
 {
-	ofi_rbmap_destroy(storage->storage);
+	ofi_rbmap_cleanup(&storage->tree);
 }
 
 static struct ofi_mr_entry *ofi_mr_rbt_find(struct ofi_mr_storage *storage,
@@ -462,7 +462,7 @@ static struct ofi_mr_entry *ofi_mr_rbt_find(struct ofi_mr_storage *storage,
 {
 	struct ofi_rbnode *node;
 
-	node = ofi_rbmap_find(storage->storage, (void *) key);
+	node = ofi_rbmap_find(&storage->tree, (void *) key);
 	if (!node)
 		return NULL;
 
@@ -474,7 +474,7 @@ static struct ofi_mr_entry *ofi_mr_rbt_overlap(struct ofi_mr_storage *storage,
 {
 	struct ofi_rbnode *node;
 
-	node = ofi_rbmap_search(storage->storage, (void *) key,
+	node = ofi_rbmap_search(&storage->tree, (void *) key,
 				util_mr_find_overlap);
 	if (!node)
 		return NULL;
@@ -487,7 +487,7 @@ static int ofi_mr_rbt_insert(struct ofi_mr_storage *storage,
 			     struct ofi_mr_entry *entry)
 {
 	assert(!entry->storage_context);
-	return ofi_rbmap_insert(storage->storage, (void *) key, (void *) entry,
+	return ofi_rbmap_insert(&storage->tree, (void *) key, (void *) entry,
 				(struct ofi_rbnode **) &entry->storage_context);
 }
 
@@ -495,47 +495,20 @@ static int ofi_mr_rbt_erase(struct ofi_mr_storage *storage,
 			    struct ofi_mr_entry *entry)
 {
 	assert(entry->storage_context);
-	ofi_rbmap_delete(storage->storage,
+	ofi_rbmap_delete(&storage->tree,
 			 (struct ofi_rbnode *) entry->storage_context);
 	entry->storage_context = NULL;
 	return 0;
 }
 
-static int ofi_mr_cache_init_rbt(struct ofi_mr_cache *cache)
+static void ofi_mr_cache_init_storage(struct ofi_mr_cache *cache)
 {
-	cache->storage.storage = ofi_rbmap_create(util_mr_find_within);
-	if (!cache->storage.storage)
-		return -FI_ENOMEM;
-
+	ofi_rbmap_init(&cache->storage.tree, util_mr_find_within);
 	cache->storage.overlap = ofi_mr_rbt_overlap;
 	cache->storage.destroy = ofi_mr_rbt_destroy;
 	cache->storage.find = ofi_mr_rbt_find;
 	cache->storage.insert = ofi_mr_rbt_insert;
 	cache->storage.erase = ofi_mr_rbt_erase;
-	return 0;
-}
-
-static int ofi_mr_cache_init_storage(struct ofi_mr_cache *cache)
-{
-	int ret;
-
-	switch (cache->storage.type) {
-	case OFI_MR_STORAGE_DEFAULT:
-	case OFI_MR_STORAGE_RBT:
-		ret = ofi_mr_cache_init_rbt(cache);
-		break;
-	case OFI_MR_STORAGE_USER:
-		ret = (cache->storage.storage && cache->storage.overlap &&
-		      cache->storage.destroy && cache->storage.find &&
-		      cache->storage.insert && cache->storage.erase) ?
-			0 : -FI_EINVAL;
-		break;
-	default:
-		ret = -FI_EINVAL;
-		break;
-	}
-
-	return ret;
 }
 
 /* Monitors array must be of size OFI_HMEM_MAX. */
@@ -563,13 +536,10 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	cache->domain = domain;
 	ofi_atomic_inc32(&domain->ref);
 
-	ret = ofi_mr_cache_init_storage(cache);
-	if (ret)
-		goto dec;
-
+	ofi_mr_cache_init_storage(cache);
 	ret = ofi_monitors_add_cache(monitors, cache);
 	if (ret)
-		goto del;
+		goto destroy;
 
 	ret = ofi_bufpool_create(&cache->entry_pool,
 				 sizeof(struct ofi_mr_entry) +
@@ -581,8 +551,8 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	return 0;
 del:
 	ofi_monitors_del_cache(cache);
+destroy:
 	cache->storage.destroy(&cache->storage);
-dec:
 	ofi_atomic_dec32(&cache->domain->ref);
 	pthread_mutex_destroy(&cache->lock);
 	cache->domain = NULL;

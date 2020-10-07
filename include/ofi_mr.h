@@ -275,15 +275,8 @@ struct ofi_mr_entry {
 	uint8_t				data[];
 };
 
-enum ofi_mr_storage_type {
-	OFI_MR_STORAGE_DEFAULT = 0,
-	OFI_MR_STORAGE_RBT,
-	OFI_MR_STORAGE_USER,
-};
-
 struct ofi_mr_storage {
-	enum ofi_mr_storage_type	type;
-	void				*storage;
+	struct ofi_rbmap		tree;
 
 	struct ofi_mr_entry *		(*find)(struct ofi_mr_storage *storage,
 						const struct ofi_mr_info *key);
