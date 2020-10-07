@@ -374,6 +374,8 @@ static inline uint32_t ofi_xorshift_random_r(uint32_t *seed)
 
 uint32_t ofi_generate_seed(void);
 
+int ofi_vrb_check_fork_enabled(struct fid_domain *domain_fid);
+
 size_t ofi_vrb_speed(uint8_t speed, uint8_t width);
 
 #ifdef __cplusplus

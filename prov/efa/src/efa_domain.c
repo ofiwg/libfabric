@@ -228,6 +228,8 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
 	domain->fab = fabric;
 
+	domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
+
 	*domain_fid = &domain->util_domain.domain_fid;
 
 	/*
@@ -236,6 +238,17 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	 */
 	if (info->domain_attr && info->domain_attr->mr_mode & FI_MR_LOCAL) {
 		efa_mr_cache_enable = 0;
+	}
+
+	if (efa_mr_cache_enable && ofi_vrb_check_fork_enabled(*domain_fid)) {
+		fprintf(stderr,
+		         "\nEnabling the memory registration cache and libibverbs "
+			 "fork support is currently not supported by the EFA\n"
+			 "provider. Please disable the memory registration "
+			 "cache or libibverbs fork support. The RDMAV_FORK_SAFE\n"
+			 "environment variable may be set or another library in "
+			 "your application may be calling ibv_fork_init().\n");
+		return -FI_EINVAL;
 	}
 
 	if (efa_mr_cache_enable) {
@@ -260,7 +273,6 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		}
 	}
 
-	domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
 	efa_mr_cache_enable = 0;
 
 	return 0;
