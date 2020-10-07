@@ -119,7 +119,10 @@ static void util_mr_uncache_entry_storage(struct ofi_mr_cache *cache,
 	 * notification events, but is harmless to correct operation.
 	 */
 
-	cache->storage.erase(&cache->storage, entry);
+	ofi_rbmap_delete(&cache->tree,
+			 (struct ofi_rbnode *) entry->storage_context);
+	entry->storage_context = NULL;
+
 	cache->cached_cnt--;
 	cache->cached_size -= entry->info.iov.iov_len;
 }
@@ -138,6 +141,31 @@ static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
 	}
 }
 
+static struct ofi_mr_entry *ofi_mr_rbt_find(struct ofi_rbmap *tree,
+					    const struct ofi_mr_info *key)
+{
+	struct ofi_rbnode *node;
+
+	node = ofi_rbmap_find(tree, (void *) key);
+	if (!node)
+		return NULL;
+
+	return node->data;
+}
+
+static struct ofi_mr_entry *ofi_mr_rbt_overlap(struct ofi_rbmap *tree,
+					       const struct iovec *key)
+{
+	struct ofi_rbnode *node;
+
+	node = ofi_rbmap_search(tree, (void *) key,
+				util_mr_find_overlap);
+	if (!node)
+		return NULL;
+
+	return node->data;
+}
+
 /* Caller must hold ofi_mem_monitor lock as well as unsubscribe from the region */
 void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t len)
 {
@@ -148,8 +176,8 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 	iov.iov_base = (void *) addr;
 	iov.iov_len = len;
 
-	for (entry = cache->storage.overlap(&cache->storage, &iov); entry;
-	     entry = cache->storage.overlap(&cache->storage, &iov))
+	for (entry = ofi_mr_rbt_overlap(&cache->tree, &iov); entry;
+	     entry = ofi_mr_rbt_overlap(&cache->tree, &iov))
 		util_mr_uncache_entry(cache, entry);
 }
 
@@ -252,7 +280,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 		goto free;
 
 	pthread_mutex_lock(&mm_lock);
-	cur = cache->storage.find(&cache->storage, info);
+	cur = ofi_mr_rbt_find(&cache->tree, info);
 	if (cur) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -263,8 +291,9 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 		cache->uncached_cnt++;
 		cache->uncached_size += info->iov.iov_len;
 	} else {
-		if (cache->storage.insert(&cache->storage,
-					  &(*entry)->info, *entry)) {
+		if (ofi_rbmap_insert(&cache->tree,
+				(void *) &(*entry)->info, (void *) *entry,
+				(struct ofi_rbnode **) &(*entry)->storage_context)) {
 			ret = -FI_ENOMEM;
 			goto unlock;
 		}
@@ -323,7 +352,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 		}
 
 		cache->search_cnt++;
-		*entry = cache->storage.find(&cache->storage, &info);
+		*entry = ofi_mr_rbt_find(&cache->tree, &info);
 
 		if (*entry &&
 		    ofi_iov_within(attr->mr_iov, &(*entry)->info.iov) &&
@@ -336,7 +365,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 		/* Purge regions that overlap with new region */
 		while (*entry) {
 			util_mr_uncache_entry(cache, *entry);
-			*entry = cache->storage.find(&cache->storage, &info);
+			*entry = ofi_mr_rbt_find(&cache->tree, &info);
 		}
 		pthread_mutex_unlock(&mm_lock);
 
@@ -371,7 +400,7 @@ struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
 	cache->search_cnt++;
 
 	info.iov = *attr->mr_iov;
-	entry = cache->storage.find(&cache->storage, &info);
+	entry = ofi_mr_rbt_find(&cache->tree, &info);
 	if (!entry) {
 		goto unlock;
 	}
@@ -443,72 +472,13 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 
 	pthread_mutex_destroy(&cache->lock);
 	ofi_monitors_del_cache(cache);
-	cache->storage.destroy(&cache->storage);
+	ofi_rbmap_cleanup(&cache->tree);
 	ofi_atomic_dec32(&cache->domain->ref);
 	ofi_bufpool_destroy(cache->entry_pool);
 	assert(cache->cached_cnt == 0);
 	assert(cache->cached_size == 0);
 	assert(cache->uncached_cnt == 0);
 	assert(cache->uncached_size == 0);
-}
-
-static void ofi_mr_rbt_destroy(struct ofi_mr_storage *storage)
-{
-	ofi_rbmap_cleanup(&storage->tree);
-}
-
-static struct ofi_mr_entry *ofi_mr_rbt_find(struct ofi_mr_storage *storage,
-					    const struct ofi_mr_info *key)
-{
-	struct ofi_rbnode *node;
-
-	node = ofi_rbmap_find(&storage->tree, (void *) key);
-	if (!node)
-		return NULL;
-
-	return node->data;
-}
-
-static struct ofi_mr_entry *ofi_mr_rbt_overlap(struct ofi_mr_storage *storage,
-					       const struct iovec *key)
-{
-	struct ofi_rbnode *node;
-
-	node = ofi_rbmap_search(&storage->tree, (void *) key,
-				util_mr_find_overlap);
-	if (!node)
-		return NULL;
-
-	return node->data;
-}
-
-static int ofi_mr_rbt_insert(struct ofi_mr_storage *storage,
-			     struct ofi_mr_info *key,
-			     struct ofi_mr_entry *entry)
-{
-	assert(!entry->storage_context);
-	return ofi_rbmap_insert(&storage->tree, (void *) key, (void *) entry,
-				(struct ofi_rbnode **) &entry->storage_context);
-}
-
-static int ofi_mr_rbt_erase(struct ofi_mr_storage *storage,
-			    struct ofi_mr_entry *entry)
-{
-	assert(entry->storage_context);
-	ofi_rbmap_delete(&storage->tree,
-			 (struct ofi_rbnode *) entry->storage_context);
-	entry->storage_context = NULL;
-	return 0;
-}
-
-static void ofi_mr_cache_init_storage(struct ofi_mr_cache *cache)
-{
-	ofi_rbmap_init(&cache->storage.tree, util_mr_find_within);
-	cache->storage.overlap = ofi_mr_rbt_overlap;
-	cache->storage.destroy = ofi_mr_rbt_destroy;
-	cache->storage.find = ofi_mr_rbt_find;
-	cache->storage.insert = ofi_mr_rbt_insert;
-	cache->storage.erase = ofi_mr_rbt_erase;
 }
 
 /* Monitors array must be of size OFI_HMEM_MAX. */
@@ -536,7 +506,7 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	cache->domain = domain;
 	ofi_atomic_inc32(&domain->ref);
 
-	ofi_mr_cache_init_storage(cache);
+	ofi_rbmap_init(&cache->tree, util_mr_find_within);
 	ret = ofi_monitors_add_cache(monitors, cache);
 	if (ret)
 		goto destroy;
@@ -552,7 +522,7 @@ int ofi_mr_cache_init(struct util_domain *domain,
 del:
 	ofi_monitors_del_cache(cache);
 destroy:
-	cache->storage.destroy(&cache->storage);
+	ofi_rbmap_cleanup(&cache->tree);
 	ofi_atomic_dec32(&cache->domain->ref);
 	pthread_mutex_destroy(&cache->lock);
 	cache->domain = NULL;
