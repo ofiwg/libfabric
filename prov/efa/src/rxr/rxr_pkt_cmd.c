@@ -57,6 +57,12 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_data_pkt *data_pkt;
 	ssize_t ret;
+	struct efa_domain *efa_domain;
+	struct rxr_domain *rxr_domain = rxr_ep_domain(rxr_ep);
+
+	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
+				  util_domain.domain_fid);
+
 
 	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_efa_pool);
 	if (OFI_UNLIKELY(!pkt_entry))
@@ -85,7 +91,7 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	 * For now, always send CUDA buffers through
 	 * rxr_pkt_send_data_desc().
 	 */
-	if (efa_mr_cache_enable || efa_ep_is_cuda_mr(tx_entry->desc[0]))
+	if (efa_is_cache_available(efa_domain) || efa_ep_is_cuda_mr(tx_entry->desc[0]))
 		ret = rxr_pkt_send_data_desc(rxr_ep, tx_entry, pkt_entry);
 	else
 		ret = rxr_pkt_send_data(rxr_ep, tx_entry, pkt_entry);

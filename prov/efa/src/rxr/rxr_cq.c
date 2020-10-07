@@ -818,11 +818,16 @@ void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entr
 {
 	int ret;
 	struct rxr_peer *peer;
+	struct efa_domain *efa_domain;
+	struct rxr_domain *rxr_domain = rxr_ep_domain(ep);
+
+	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
+				  util_domain.domain_fid);
 
 	if (tx_entry->state == RXR_TX_SEND)
 		dlist_remove(&tx_entry->entry);
 
-	if (efa_mr_cache_enable && rxr_ep_mr_local(ep)) {
+	if (efa_is_cache_available(efa_domain) && rxr_ep_mr_local(ep)) {
 		ret = rxr_tx_entry_mr_dereg(tx_entry);
 		if (OFI_UNLIKELY(ret)) {
 			FI_WARN(&rxr_prov, FI_LOG_MR,

@@ -49,9 +49,10 @@ static int efa_domain_close(fid_t fid)
 	domain = container_of(fid, struct efa_domain,
 			      util_domain.domain_fid.fid);
 
-	if (efa_mr_cache_enable) {
+	if (efa_is_cache_available(domain)) {
 		ofi_mr_cache_cleanup(domain->cache);
 		free(domain->cache);
+		domain->cache = NULL;
 	}
 
 	if (domain->ibv_pd) {
@@ -206,9 +207,10 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 {
 	struct efa_domain *domain;
 	struct efa_fabric *fabric;
+	struct rxr_domain *rxr_domain;
 	const struct fi_info *fi;
 	size_t qp_table_size;
-	int ret;
+	int ret, enable_cache = 0;
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
 		[FI_HMEM_SYSTEM] = memhooks_monitor,
 	};
@@ -247,10 +249,18 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		goto err_close_domain;
 	}
 
-	if (EFA_EP_TYPE_IS_RDM(info))
+	if (EFA_EP_TYPE_IS_RDM(info)) {
 		domain->type = EFA_DOMAIN_RDM;
-	else
+		rxr_domain = container_of(domain_fid, struct rxr_domain,
+					  rdm_domain);
+		/*
+		 * If FI_MR_LOCAL is set, we do not want to use the
+		 * MR cache
+		 */
+		enable_cache = efa_mr_cache_enable && !rxr_domain->rxr_mr_local;
+	} else {
 		domain->type = EFA_DOMAIN_DGRAM;
+	}
 
 	ret = efa_open_device_by_name(domain, info->domain_attr->name);
 	if (ret)
@@ -275,15 +285,9 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	*domain_fid = &domain->util_domain.domain_fid;
 
-	/*
-	 * If FI_MR_LOCAL is set, we do not want to use the
-	 * MR cache
-	 */
-	if (info->domain_attr && info->domain_attr->mr_mode & FI_MR_LOCAL) {
-		efa_mr_cache_enable = 0;
-	}
+	domain->cache = NULL;
 
-	if (efa_mr_cache_enable && efa_check_fork_enabled(*domain_fid)) {
+	if (enable_cache && efa_check_fork_enabled(*domain_fid)) {
 		fprintf(stderr,
 		         "\nEnabling the memory registration cache and libibverbs "
 			 "fork support is currently not supported by the EFA\n"
@@ -291,10 +295,17 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 			 "cache or libibverbs fork support. The RDMAV_FORK_SAFE\n"
 			 "environment variable may be set or another library in "
 			 "your application may be calling ibv_fork_init().\n");
-		return -FI_EINVAL;
+		ret = -FI_EINVAL;
+		goto err_free_info;
 	}
 
-	if (efa_mr_cache_enable) {
+	if (enable_cache) {
+		domain->cache = (struct ofi_mr_cache *)calloc(1, sizeof(struct ofi_mr_cache));
+		if (!domain->cache) {
+			ret = -FI_ENOMEM;
+			goto err_free_info;
+		}
+
 		if (!efa_mr_max_cached_count)
 			efa_mr_max_cached_count = info->domain_attr->mr_cnt *
 			                          EFA_MR_CACHE_LIMIT_MULT;
@@ -316,8 +327,8 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		}
 	}
 
-	efa_mr_cache_enable = 0;
-
+	free(domain->cache);
+	domain->cache = NULL;
 	return 0;
 err_free_info:
 	fi_freeinfo(domain->info);

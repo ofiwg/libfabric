@@ -388,6 +388,11 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 {
 	ssize_t err;
 	struct rxr_peer *peer;
+	struct efa_domain *efa_domain;
+	struct rxr_domain *rxr_domain = rxr_ep_domain(ep);
+
+	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
+				  util_domain.domain_fid);
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(peer);
@@ -400,7 +405,7 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 
 	if (tx_entry->total_len >= rxr_env.efa_min_read_write_size &&
 	    efa_both_support_rdma_read(ep, peer) &&
-	    (tx_entry->desc[0] || efa_mr_cache_enable)) {
+	    (tx_entry->desc[0] || efa_is_cache_available(efa_domain))) {
 		err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_READ_RTW_PKT, 0);
 		if (err != -FI_ENOMEM)
 			return err;
