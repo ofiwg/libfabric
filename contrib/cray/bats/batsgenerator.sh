@@ -7,6 +7,7 @@
 
 # Insert shebang and load test helper
 shebang="#!/usr/bin/env bats\n\n"
+fi_env="XRC_FI_ENV=\"FI_VERBS_XRCD_FILENAME=/tmp/xrc_imb_\$\$ FI_OFI_RXM_USE_SRX=1 FI_VERBS_PREFER_XRC=1\"\n\n"
 
 # Command line input: test suite
 # E.g. IMB-EXT
@@ -32,18 +33,20 @@ shift
 # E.g. imb.bats
 bats_file=$1
 
-# Add test to .bats file
-if [ -f "${bats_file}" ]; then
-        sed -e "s/@TEST_SUITE@/${test_suite}/g" \
-        -e "s/@BENCHMARK@/${benchmark}/g" \
-        -e "s/@RANKS@/${num_ranks}/g" \
-        -e "s/@RPN@/${num_rpn}/g" \
-        benchmark.template >> ${bats_file}
+shift
+if [[ $# -gt 0 ]] ; then
+       iter_flag=" -iter $1"
 else
-        printf "${shebang}load test_helper\n\n" >> ${bats_file}
-        sed -e "s/@TEST_SUITE@/${test_suite}/g" \
-        -e "s/@BENCHMARK@/${benchmark}/g" \
-        -e "s/@RANKS@/${num_ranks}/g" \
-        -e "s/@RPN@/${num_rpn}/g" \
-        benchmark.template >> ${bats_file}
+       iter_flag=""
 fi
+
+if [ ! -f "${bats_file}" ]; then
+        printf "${shebang}load test_helper\n\n${fi_env}" >> ${bats_file}
+fi
+
+sed -e "s/@TEST_SUITE@/${test_suite}/g" \
+    -e "s/@BENCHMARK@/${benchmark}/g" \
+    -e "s/@RANKS@/${num_ranks}/g" \
+    -e "s/@RPN@/${num_rpn}/g" \
+    -e "s/@ITER_FLAG@/${iter_flag}/g" \
+    benchmark.template >> ${bats_file}
