@@ -268,7 +268,6 @@ int multi_msg_send()
 		offset = state.sends_posted % opts.window_size;
 		assert(tx_ctx_arr[offset].state == OP_DONE);
 
-		tx_ctx_arr[offset].buf[0] = offset;
 		dest = pm_job.fi_addrs[state.cur_target];
 		ret = ft_post_tx_buf(ep, dest, opts.transfer_size,
 				     NO_CQ_DATA,
