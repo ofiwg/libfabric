@@ -49,8 +49,10 @@ static int efa_domain_close(fid_t fid)
 	domain = container_of(fid, struct efa_domain,
 			      util_domain.domain_fid.fid);
 
-	if (efa_mr_cache_enable)
-		ofi_mr_cache_cleanup(&domain->cache);
+	if (efa_mr_cache_enable) {
+		ofi_mr_cache_cleanup(domain->cache);
+		free(domain->cache);
+	}
 
 	if (domain->ibv_pd) {
 		fastlock_acquire(&pd_list_lock);
@@ -301,11 +303,11 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 			                         EFA_MR_CACHE_LIMIT_MULT;
 		cache_params.max_cnt = efa_mr_max_cached_count;
 		cache_params.max_size = efa_mr_max_cached_size;
-		domain->cache.entry_data_size = sizeof(struct efa_mr);
-		domain->cache.add_region = efa_mr_cache_entry_reg;
-		domain->cache.delete_region = efa_mr_cache_entry_dereg;
+		domain->cache->entry_data_size = sizeof(struct efa_mr);
+		domain->cache->add_region = efa_mr_cache_entry_reg;
+		domain->cache->delete_region = efa_mr_cache_entry_dereg;
 		ret = ofi_mr_cache_init(&domain->util_domain, memory_monitors,
-					&domain->cache);
+					domain->cache);
 		if (!ret) {
 			domain->util_domain.domain_fid.mr = &efa_domain_mr_cache_ops;
 			EFA_INFO(FI_LOG_DOMAIN, "EFA MR cache enabled, max_cnt: %zu max_size: %zu\n",
