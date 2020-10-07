@@ -113,6 +113,12 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	size_t max_rtm_data_size;
 	ssize_t err;
 	struct rxr_peer *peer;
+	struct efa_domain *efa_domain;
+	struct rxr_domain *rxr_domain = rxr_ep_domain(rxr_ep);
+
+	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
+				  util_domain.domain_fid);
+
 
 	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
 	tagged = (tx_entry->op == ofi_op_tagged);
@@ -160,16 +166,15 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		/* we do not check the return value of rxr_ep_init_mr_desc()
 		 * because medium message works even if MR registration failed
 		 */
-		if (efa_mr_cache_enable)
-			rxr_ep_tx_init_mr_desc(rxr_ep_domain(rxr_ep),
-					       tx_entry, 0, FI_SEND);
+		if (efa_is_cache_available(efa_domain))
+			rxr_ep_tx_init_mr_desc(rxr_domain, tx_entry, 0, FI_SEND);
 		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
 						  RXR_MEDIUM_MSGRTM_PKT + tagged, 0);
 	}
 
 	if (tx_entry->total_len >= rxr_env.efa_min_read_msg_size &&
 	    efa_both_support_rdma_read(rxr_ep, peer) &&
-	    (tx_entry->desc[0] || efa_mr_cache_enable)) {
+	    (tx_entry->desc[0] || efa_is_cache_available(efa_domain))) {
 		/* use read message protocol */
 		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
 						 RXR_READ_MSGRTM_PKT + tagged, 0);

@@ -522,12 +522,17 @@ void rxr_pkt_handle_long_rtm_sent(struct rxr_ep *ep,
 				  struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_tx_entry *tx_entry;
+	struct efa_domain *efa_domain;
+	struct rxr_domain *rxr_domain = rxr_ep_domain(ep);
+
+	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
+				  util_domain.domain_fid);
 
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
 
-	if (efa_mr_cache_enable || efa_ep_is_cuda_mr(tx_entry->desc[0]))
+	if (efa_is_cache_available(efa_domain) || efa_ep_is_cuda_mr(tx_entry->desc[0]))
 		rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
 }
 
@@ -1232,11 +1237,16 @@ void rxr_pkt_handle_long_rtw_sent(struct rxr_ep *ep,
 				  struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_tx_entry *tx_entry;
+	struct efa_domain *efa_domain;
+	struct rxr_domain *rxr_domain = rxr_ep_domain(ep);
+
+	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
+				  util_domain.domain_fid);
 
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
-	if (efa_mr_cache_enable || efa_ep_is_cuda_mr(tx_entry->desc[0]))
+	if (efa_is_cache_available(efa_domain) || efa_ep_is_cuda_mr(tx_entry->desc[0]))
 		rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
 }
 
