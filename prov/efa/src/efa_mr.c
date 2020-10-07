@@ -288,7 +288,7 @@ struct fi_ops efa_mr_ops = {
  */
 static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 {
-	uint64_t core_access;
+	uint64_t core_access, original_access;
 	struct fi_mr_attr *mr_attr = (struct fi_mr_attr *)attr;
 	int fi_ibv_access = 0;
 	int ret = 0;
@@ -342,8 +342,14 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 		return ret;
 	}
 	if (efa_mr->domain->shm_domain && rxr_env.enable_shm_transfer) {
+		/* We need to add FI_REMOTE_READ to allow for Read implemented
+		* message protocols.
+		*/
+		original_access = mr_attr->access;
+		mr_attr->access |= FI_REMOTE_READ;
 		ret = fi_mr_regattr(efa_mr->domain->shm_domain, attr,
 				    flags, &efa_mr->shm_mr);
+		mr_attr->access = original_access;
 		if (ret) {
 			EFA_WARN(FI_LOG_MR,
 				"Unable to register shm MR buf (%s): %p len: %zu\n",
