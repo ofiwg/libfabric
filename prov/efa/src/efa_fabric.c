@@ -467,11 +467,22 @@ err_free_nic:
 }
 
 #if HAVE_LIBCUDA
+/*
+ * efa_get_gdr_support() check if GPUDirect RDMA is supported by
+ * reading from sysfs file "class/infiniband/<device_name>/gdr"
+ * and set content of gdr_support accordingly.
+ *
+ * Return value:
+ *   return 1 if sysfs file exist and has 1 in it.
+ *   return 0 if sysfs file does not exist or has 0 in it.
+ *   return a negatie value if error happened.
+ */
 static int efa_get_gdr_support(char *device_name)
 {
+	static const int MAX_GDR_SUPPORT_STRLEN = 8;
 	char *gdr_path = NULL;
-	char gdr_support = '0';
-	int ret;
+	char gdr_support_str[MAX_GDR_SUPPORT_STRLEN];
+	int ret, read_len;
 
 	ret = asprintf(&gdr_path, "class/infiniband/%s/device/gdr", device_name);
 	if (ret < 0) {
@@ -479,11 +490,25 @@ static int efa_get_gdr_support(char *device_name)
 		goto out;
 	}
 
-	ret = fi_read_file(get_sysfs_path(), gdr_path, &gdr_support, sizeof(char));
-	if (ret < 0)
-		goto out;
+	ret = fi_read_file(get_sysfs_path(), gdr_path,
+			   gdr_support_str, MAX_GDR_SUPPORT_STRLEN);
+	if (ret < 0) {
+		if (errno == ENOENT) {
+			/* sysfs file does not exist, gdr is not supported */
+			ret = 0;
+		}
 
-	ret = atoi(&gdr_support);
+		goto out;
+	}
+
+	if (ret == 0) {
+		EFA_WARN(FI_LOG_FABRIC, "Sysfs file %s is empty\n", gdr_path);
+		ret = -FI_EINVAL;
+		goto out;
+	}
+
+	read_len = MIN(ret, MAX_GDR_SUPPORT_STRLEN);
+	ret = (0 == strncmp(gdr_support_str, "1", read_len));
 out:
 	free(gdr_path);
 	return ret;
@@ -537,12 +562,19 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 	info->domain_attr->mr_cnt		= base_attr->max_mr;
 
 #if HAVE_LIBCUDA
-	if (info->ep_attr->type == FI_EP_RDM &&
-	    efa_get_gdr_support(ctx->ibv_ctx->device->name) == 1) {
-		info->caps			|= FI_HMEM;
-		info->tx_attr->caps		|= FI_HMEM;
-		info->rx_attr->caps		|= FI_HMEM;
-		info->domain_attr->mr_mode	|= FI_MR_HMEM;
+	if (info->ep_attr->type == FI_EP_RDM) {
+		ret = efa_get_gdr_support(ctx->ibv_ctx->device->name);
+		if (ret < 0) {
+			EFA_WARN(FI_LOG_FABRIC, "get gdr support failed!\n");
+			return ret;
+		}
+
+		if (ret == 1) {
+			info->caps			|= FI_HMEM;
+			info->tx_attr->caps		|= FI_HMEM;
+			info->rx_attr->caps		|= FI_HMEM;
+			info->domain_attr->mr_mode	|= FI_MR_HMEM;
+		}
 	}
 #endif
 
