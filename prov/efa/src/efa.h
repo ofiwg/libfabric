@@ -151,7 +151,7 @@ struct efa_domain {
 	struct ibv_pd		*ibv_pd;
 	struct fi_info		*info;
 	struct efa_fabric	*fab;
-	struct ofi_mr_cache	cache;
+	struct ofi_mr_cache	*cache;
 	struct efa_qp		**qp_table;
 	size_t			qp_table_sz_m1;
 };
