@@ -469,4 +469,9 @@ static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)
 	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA): false;
 }
 
+static inline bool efa_is_cache_available(struct efa_domain *efa_domain)
+{
+	return efa_domain->cache;
+}
+
 #endif /* EFA_H */
