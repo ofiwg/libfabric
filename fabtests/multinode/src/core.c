@@ -103,6 +103,10 @@ static int multi_setup_fabric(int argc, char **argv)
 	tx_cq_cntr = 0;
 	rx_cq_cntr = 0;
 
+	ret = ft_hmem_init(opts.iface);
+	if (ret)
+		return ret;
+
 	if (pm_job.my_rank != 0)
 		pm_barrier();
 
