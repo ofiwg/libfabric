@@ -59,10 +59,6 @@
 #include <ifaddrs.h>
 #endif
 
-#if HAVE_INFINIBAND_VERBS_H
-#include <infiniband/verbs.h>
-#endif
-
 #include <ofi_signal.h>
 #include <rdma/providers/fi_prov.h>
 #include <rdma/fi_errno.h>
@@ -1739,51 +1735,6 @@ struct fid_nic *ofi_nic_dup(const struct fid_nic *nic)
 fail:
 	ofi_nic_close(&dup_nic->fid);
 	return NULL;
-}
-
-/*
- * Register a temporary buffer and call ibv_fork_init() to determine if fork
- * support is enabled.
- *
- * This relies on internal behavior in rdma-core and is a temporary workaround.
- */
-int ofi_vrb_check_fork_enabled(struct fid_domain *domain_fid)
-{
-#if HAVE_INFINIBAND_VERBS_H
-	struct fid_mr *mr;
-	char *buf;
-	int ret;
-
-	buf = malloc(ofi_get_page_size());
-	if (!buf)
-		return -FI_ENOMEM;
-
-	ret = fi_mr_reg(domain_fid, buf, ofi_get_page_size(),
-			FI_SEND, 0, 0, 0, &mr, NULL);
-	if (ret) {
-		free(buf);
-		return ret;
-	}
-
-	/*
-	 * libibverbs maintains a global variable to determine if any
-	 * registrations have occurred before ibv_fork_init() is called.
-	 * EINVAL is returned if a memory region was registered before
-	 * ibv_fork_init() was called and returns 0 if fork support is
-	 * initialized already.
-	 */
-	ret = ibv_fork_init();
-
-	fi_close(&mr->fid);
-	free(buf);
-
-	if (ret == EINVAL)
-		return 0;
-
-	return 1;
-#else
-	return 0;
-#endif
 }
 
 /*
