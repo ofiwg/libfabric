@@ -357,13 +357,12 @@ int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 		return -FI_ENOBUFS;
 	}
 
-	assert(ep->rdm_self_addr != FI_ADDR_NOTAVAIL);
 	read_entry->read_id = ofi_buf_index(read_entry);
 	read_entry->lower_ep_type = EFA_EP;
 	read_entry->context_type = RXR_READ_CONTEXT_PKT_ENTRY;
 	read_entry->context = pkt_entry;
 	read_entry->state = RXR_RDMA_ENTRY_CREATED;
-	read_entry->addr = ep->rdm_self_addr;
+	read_entry->addr = FI_ADDR_NOTAVAIL;
 	read_entry->total_len = data_size;
 	read_entry->bytes_submitted = 0;
 	read_entry->bytes_finished = 0;
@@ -460,14 +459,16 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 {
 	int ret;
 	int iov_idx = 0, rma_iov_idx = 0;
-	void *iov_ptr, *rma_iov_ptr;
-	struct rxr_peer *peer;
-	struct rxr_pkt_entry *pkt_entry;
+	bool self_comm;
 	size_t iov_offset = 0, rma_iov_offset = 0;
-	size_t total_iov_len, total_rma_iov_len;
-	size_t segsize, max_iov_segsize, max_rma_iov_segsize, max_read_size;
-	struct fid_ep *lower_ep;
-	fi_addr_t lower_ep_addr;
+	size_t total_iov_len, total_rma_iov_len, max_read_size;
+	struct rxr_pkt_entry *pkt_entry;
+	struct iovec iov;
+	struct fi_rma_iov rma_iov;
+	struct fi_msg_rma msg;
+	struct efa_ep *efa_ep;
+	struct rxr_peer *peer;
+	fi_addr_t shm_fiaddr;
 
 	assert(read_entry->iov_count > 0);
 	assert(read_entry->rma_iov_count > 0);
@@ -487,15 +488,12 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 	}
 
 	peer = rxr_ep_get_peer(ep, read_entry->addr);
-	if (read_entry->lower_ep_type == EFA_EP) {
-		max_read_size = efa_max_rdma_size(ep->rdm_ep);
-		lower_ep = ep->rdm_ep;
-		lower_ep_addr = read_entry->addr;
-	} else {
-		max_read_size = SIZE_MAX;
-		lower_ep = ep->shm_ep;
-		lower_ep_addr = peer->shm_fiaddr;
-	}
+	assert(peer);
+	if (read_entry->lower_ep_type == SHM_EP)
+		shm_fiaddr = peer->shm_fiaddr;
+
+	max_read_size = (read_entry->lower_ep_type == EFA_EP) ?
+				efa_max_rdma_size(ep->rdm_ep) : SIZE_MAX;
 	assert(max_read_size > 0);
 
 	ret = rxr_locate_iov_pos(read_entry->iov, read_entry->iov_count,
@@ -522,15 +520,18 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 		assert(rma_iov_idx < read_entry->rma_iov_count);
 		assert(rma_iov_offset < read_entry->rma_iov[rma_iov_idx].len);
 
-		iov_ptr = (char *)read_entry->iov[iov_idx].iov_base + iov_offset;
-		rma_iov_ptr = (char *)read_entry->rma_iov[rma_iov_idx].addr + rma_iov_offset;
+		iov.iov_base = (char *)read_entry->iov[iov_idx].iov_base + iov_offset;
+		iov.iov_len = read_entry->iov[iov_idx].iov_len - iov_offset;
 
-		max_iov_segsize = read_entry->iov[iov_idx].iov_len - iov_offset;
-		max_rma_iov_segsize = read_entry->rma_iov[rma_iov_idx].len - rma_iov_offset;
-		segsize = MIN(max_iov_segsize, max_rma_iov_segsize);
+		rma_iov.addr = (uintptr_t)read_entry->rma_iov[rma_iov_idx].addr + rma_iov_offset;
+		rma_iov.len = read_entry->rma_iov[rma_iov_idx].len - rma_iov_offset;
+		rma_iov.key = read_entry->rma_iov[rma_iov_idx].key;
+
+		iov.iov_len = MIN(iov.iov_len, rma_iov.len);
 		if (read_entry->lower_ep_type == EFA_EP)
-			segsize = MIN(segsize, rxr_env.efa_read_segment_size);
-		segsize = MIN(segsize, max_read_size);
+			iov.iov_len = MIN(iov.iov_len, rxr_env.efa_read_segment_size);
+		iov.iov_len = MIN(iov.iov_len, max_read_size);
+		rma_iov.len = iov.iov_len;
 
 		/* because fi_send uses a pkt_entry as context
 		 * we had to use a pkt_entry as context too
@@ -543,31 +544,49 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
-		rxr_pkt_init_read_context(ep, read_entry, segsize, pkt_entry);
+		rxr_pkt_init_read_context(ep, read_entry, iov.iov_len, pkt_entry);
 
-		ret = fi_read(lower_ep,
-			      iov_ptr, segsize, read_entry->mr_desc[iov_idx],
-			      lower_ep_addr,
-			      (uint64_t)rma_iov_ptr, read_entry->rma_iov[rma_iov_idx].key,
-			      pkt_entry);
+		memset(&msg, 0, sizeof(msg));
+		msg.msg_iov = &iov;
+		msg.desc = &read_entry->mr_desc[iov_idx];
+		msg.iov_count = 1;
+		msg.rma_iov = &rma_iov;
+		msg.rma_iov_count = 1;
+		msg.context = pkt_entry;
+
+		if (read_entry->lower_ep_type == SHM_EP) {
+			msg.addr = shm_fiaddr;
+			ret = fi_readmsg(ep->shm_ep, &msg, 0);
+		} else {
+			efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+			msg.addr = read_entry->addr;
+			self_comm = (read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY);
+			ret = efa_rma_post_read(efa_ep, &msg, 0, self_comm);
+		}
 
 		if (OFI_UNLIKELY(ret)) {
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 			return ret;
 		}
 
-		if (!peer->is_local)
+		if (read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY) {
+			assert(read_entry->lower_ep_type == EFA_EP);
+			/* read from self, no peer */
+			ep->tx_pending++;
+		} else if (read_entry->lower_ep_type == EFA_EP) {
 			rxr_ep_inc_tx_pending(ep, peer);
-		read_entry->bytes_submitted += segsize;
+		}
 
-		iov_offset += segsize;
+		read_entry->bytes_submitted += iov.iov_len;
+
+		iov_offset += iov.iov_len;
 		assert(iov_offset <= read_entry->iov[iov_idx].iov_len);
 		if (iov_offset == read_entry->iov[iov_idx].iov_len) {
 			iov_idx += 1;
 			iov_offset = 0;
 		}
 
-		rma_iov_offset += segsize;
+		rma_iov_offset += rma_iov.len;
 		assert(rma_iov_offset <= read_entry->rma_iov[rma_iov_idx].len);
 		if (rma_iov_offset == read_entry->rma_iov[rma_iov_idx].len) {
 			rma_iov_idx += 1;
