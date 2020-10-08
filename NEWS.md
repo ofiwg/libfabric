@@ -5,6 +5,82 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.11.1, Fri Oct 9, 2021
+========================
+
+## Core
+
+- Remove calls to cuInit to prevent indirect call to fork
+- Ignore case when comparing provider names
+- Prevent layering util providers over EFA
+- Fix segfault if passed a NULL address to print
+- Fail build if CUDA is requested but not available
+
+## EFA
+
+- Switch to memhooks monitor
+- Avoid potential deadlock copying data to GPU buffers
+- Allow creating packet pools with non-huge pages
+- Check return value when processing data packets
+- Minor code restructuring and bug fixes
+- Check if outstanding TX limit has been reached prior to sending
+- Move RDMA read registration to post time
+- Do not overwrite a packet's associated MR when copying packets
+- Pass in correct packet when determining the header size
+- Do not release rx_entry in EAGAIN case
+
+## RxD
+
+- Fix bug that prevents sending timely ACKs for segmented messages
+- Remove calls that recursively try to acquire the EP lock
+
+## RxM
+
+- Allow re-connecting to peers
+
+## SHM
+
+- Create duplicate fi_info's when reporting FI_HMEM support
+- Handle transfers larger than 2GB
+- Register for signal using SA_ONSTACK
+- Fix segfault if peer has not been inserted intqqo local AV
+- Fix command/buffer tracking for sending connection requests
+- Return proper errno on AV lookup failures
+- Remove duplicate call to ofi_hmem_init
+- Fix using incorrect peer id for mid-sized message transfers
+- Fix addressing race conditions
+- Fix mixing of shm AV index values with fi_addr_t values
+- Fix initialization synchronization
+- Ensure progress is invoked for mid-sized message transfers
+- Always use CMA when sending data to self
+
+## Sockets
+
+- Retry address lookup for messages received during CM setup
+
+## TCP
+
+- Fix possible deadlock during EP shutdown due lock inversion
+- Rework CM state maching to fix lock inversion handling disconnect
+
+## Util
+
+- Correctly mark if addresses support local/remote communication
+- Check madvise memhook advice
+- Update mmap intercept hook function
+- Replace memhooks implementation to intercept syscalls
+- Fix shmat intercept hook handling
+- Fix error handling obtaining page sizes
+- Fix incorrect locking in MR cache
+
+## Verbs
+
+- Fix XRC transport shared INI QP locking
+- Account for off-by-one flow control credit issue
+- Fix disabling of receive queue flow control
+- Reduce overall memory footprint on fully connected apps
+- Skip reporting native IB addresses when network interface is requested
+
 v1.11.0, Fri Aug 14, 2020
 =========================
 
