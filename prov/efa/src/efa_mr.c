@@ -44,7 +44,7 @@ static int efa_mr_cache_close(fid_t fid)
 	struct efa_mr *efa_mr = container_of(fid, struct efa_mr,
 					       mr_fid.fid);
 
-	ofi_mr_cache_delete(&efa_mr->domain->cache, efa_mr->entry);
+	ofi_mr_cache_delete(efa_mr->domain->cache, efa_mr->entry);
 
 	return 0;
 }
@@ -167,11 +167,11 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	domain = container_of(fid, struct efa_domain,
 			      util_domain.domain_fid.fid);
 
-	if (domain->cache.cached_cnt > 0 && domain->cache.cached_cnt % EFA_MR_CACHE_FLUSH_CHECK==0) {
-		ofi_mr_cache_flush(&domain->cache, false);
+	if (domain->cache->cached_cnt > 0 && domain->cache->cached_cnt % EFA_MR_CACHE_FLUSH_CHECK==0) {
+		ofi_mr_cache_flush(domain->cache, false);
 	}
 
-	ret = ofi_mr_cache_search(&domain->cache, attr, &entry);
+	ret = ofi_mr_cache_search(domain->cache, attr, &entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 

@@ -498,6 +498,7 @@ struct rxr_domain {
 	size_t mtu_size;
 	size_t addrlen;
 	uint8_t mr_local;
+	uint8_t rxr_mr_local;
 	uint64_t rdm_mode;
 	int do_progress;
 	size_t cq_size;
