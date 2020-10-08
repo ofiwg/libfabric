@@ -103,6 +103,10 @@ static int multi_setup_fabric(int argc, char **argv)
 	tx_cq_cntr = 0;
 	rx_cq_cntr = 0;
 
+	ret = ft_hmem_init(opts.iface);
+	if (ret)
+		return ret;
+
 	if (pm_job.my_rank != 0)
 		pm_barrier();
 
@@ -264,7 +268,6 @@ int multi_msg_send()
 		offset = state.sends_posted % opts.window_size;
 		assert(tx_ctx_arr[offset].state == OP_DONE);
 
-		tx_ctx_arr[offset].buf[0] = offset;
 		dest = pm_job.fi_addrs[state.cur_target];
 		ret = ft_post_tx_buf(ep, dest, opts.transfer_size,
 				     NO_CQ_DATA,
