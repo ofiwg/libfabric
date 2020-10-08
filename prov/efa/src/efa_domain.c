@@ -323,12 +323,12 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 			domain->util_domain.domain_fid.mr = &efa_domain_mr_cache_ops;
 			EFA_INFO(FI_LOG_DOMAIN, "EFA MR cache enabled, max_cnt: %zu max_size: %zu\n",
 			         cache_params.max_cnt, cache_params.max_size);
-			return 0;
+		} else {
+			free(domain->cache);
+			domain->cache = NULL;
 		}
 	}
 
-	free(domain->cache);
-	domain->cache = NULL;
 	return 0;
 err_free_info:
 	fi_freeinfo(domain->info);
