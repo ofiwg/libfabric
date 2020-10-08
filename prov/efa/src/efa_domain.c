@@ -273,14 +273,6 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	*domain_fid = &domain->util_domain.domain_fid;
 
-	/*
-	 * If FI_MR_LOCAL is set, we do not want to use the
-	 * MR cache
-	 */
-	if (info->domain_attr && info->domain_attr->mr_mode & FI_MR_LOCAL) {
-		efa_mr_cache_enable = 0;
-	}
-
 	if (efa_mr_cache_enable && efa_check_fork_enabled(*domain_fid)) {
 		fprintf(stderr,
 		         "\nEnabling the memory registration cache and libibverbs "
