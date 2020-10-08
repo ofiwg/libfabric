@@ -469,6 +469,14 @@ static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)
 	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA): false;
 }
 
+/*
+ * efa_is_cache_available() is a check to see whether a memory registration
+ * cache is available to be used by this domain.
+ *
+ * Return value:
+ *    return true if a memory registration cache exists in this domain.
+ *    return false if a memory registration cache does not exist in this domain.
+ */
 static inline bool efa_is_cache_available(struct efa_domain *efa_domain)
 {
 	return efa_domain->cache;
