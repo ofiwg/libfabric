@@ -207,7 +207,6 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 {
 	struct efa_domain *domain;
 	struct efa_fabric *fabric;
-	struct rxr_domain *rxr_domain;
 	const struct fi_info *fi;
 	size_t qp_table_size;
 	int ret, enable_cache = 0;
@@ -250,6 +249,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	}
 
 	if (EFA_EP_TYPE_IS_RDM(info)) {
+		struct rxr_domain *rxr_domain;
 		domain->type = EFA_DOMAIN_RDM;
 		rxr_domain = container_of(domain_fid, struct rxr_domain,
 					  rdm_domain);
