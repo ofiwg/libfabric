@@ -301,7 +301,7 @@ int cxip_cp_get(struct cxip_lni *lni, uint16_t vni, enum cxi_traffic_class tc,
 		}
 	}
 
-	ret = cxil_alloc_cp(lni->lni, vni, tc, &lni->cps[lni->n_cps]);
+	ret = cxil_alloc_cp(lni->lni, vni, tc, false, &lni->cps[lni->n_cps]);
 	if (!ret) {
 		CXIP_LOG_DBG("Allocated CP: %u VNI: %u TC: %s\n",
 			     lni->cps[lni->n_cps]->lcid, vni, cxi_tc_str(tc));
