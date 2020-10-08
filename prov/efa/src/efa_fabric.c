@@ -971,9 +971,11 @@ void efa_atfork_callback()
 		"other system errors.\n"
 		"\n"
 		"For the libfabric EFA provider to work safely when fork()\n"
-		"is called, you will need to set the following environment\n"
+		"is called, the application must handle memory registrations\n"
+		"(FI_MR_LOCAL) and you will need to set the following environment\n"
 		"variables:\n"
-		"          RDMAV_FORK_SAFE=1 FI_EFA_MR_CACHE_ENABLE=0 \n"
+		"          RDMAV_FORK_SAFE=1\n"
+		"MPI applications do not support this mode.\n"
 		"\n"
 		"However, this setting can result in signficant performance\n"
 		"impact to your application due to increased cost of memory\n"
@@ -982,6 +984,9 @@ void efa_atfork_callback()
 		"You may want to check with your application vendor to see\n"
 		"if an application-level alternative (of not using fork)\n"
 		"exists.\n"
+		"\n"
+		"Please refer to https://github.com/ofiwg/libfabric/issues/6332\n"
+		"for more information.\n"
 		"\n"
 		"Your job will now abort.\n");
 	abort();

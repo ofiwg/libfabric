@@ -210,7 +210,8 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	struct rxr_domain *rxr_domain;
 	const struct fi_info *fi;
 	size_t qp_table_size;
-	int ret, enable_cache = 0;
+	bool app_mr_local;
+	int ret;
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
 		[FI_HMEM_SYSTEM] = memhooks_monitor,
 	};
@@ -253,13 +254,11 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		domain->type = EFA_DOMAIN_RDM;
 		rxr_domain = container_of(domain_fid, struct rxr_domain,
 					  rdm_domain);
-		/*
-		 * If FI_MR_LOCAL is set, we do not want to use the
-		 * MR cache
-		 */
-		enable_cache = efa_mr_cache_enable && !rxr_domain->rxr_mr_local;
+		app_mr_local = rxr_domain->rxr_mr_local;
 	} else {
 		domain->type = EFA_DOMAIN_DGRAM;
+		/* DGRAM always requires FI_MR_LOCAL */
+		app_mr_local = true;
 	}
 
 	ret = efa_open_device_by_name(domain, info->domain_attr->name);
@@ -287,19 +286,26 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	domain->cache = NULL;
 
-	if (enable_cache && efa_check_fork_enabled(*domain_fid)) {
+	/*
+	 * Check whether fork support is enabled when app does not request
+	 * FI_MR_LOCAL even if the cache is disabled.
+	 */
+	if (!app_mr_local && efa_check_fork_enabled(*domain_fid)) {
 		fprintf(stderr,
-		         "\nEnabling the memory registration cache and libibverbs "
-			 "fork support is currently not supported by the EFA\n"
-			 "provider. Please disable the memory registration "
-			 "cache or libibverbs fork support. The RDMAV_FORK_SAFE\n"
-			 "environment variable may be set or another library in "
-			 "your application may be calling ibv_fork_init().\n");
-		ret = -FI_EINVAL;
-		goto err_free_info;
+		         "\nlibibverbs fork support is not supported by the EFA Libfabric\n"
+			 "provider when memory registrations are handled by the provider.\n"
+			 "\nFork support may currently be enabled via the RDMAV_FORK_SAFE\n"
+			 "or IBV_FORK_SAFE environment variable or another library in your\n"
+			 "application may be calling ibv_fork_init().\n"
+			 "\nPlease refer to https://github.com/ofiwg/libfabric/issues/6332\n"
+			 "for more information. Your job will now abort.\n");
+		abort();
 	}
 
-	if (enable_cache) {
+	/*
+	 * If FI_MR_LOCAL is set, we do not want to use the MR cache.
+	 */
+	if (!app_mr_local && efa_mr_cache_enable) {
 		domain->cache = (struct ofi_mr_cache *)calloc(1, sizeof(struct ofi_mr_cache));
 		if (!domain->cache) {
 			ret = -FI_ENOMEM;
