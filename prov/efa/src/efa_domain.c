@@ -136,6 +136,47 @@ static int efa_open_device_by_name(struct efa_domain *domain, const char *name)
 	return ret;
 }
 
+/*
+ * Register a temporary buffer and call ibv_fork_init() to determine if fork
+ * support is enabled.
+ *
+ * This relies on internal behavior in rdma-core and is a temporary workaround.
+ */
+static int efa_check_fork_enabled(struct fid_domain *domain_fid)
+{
+	struct fid_mr *mr;
+	char *buf;
+	int ret;
+
+	buf = malloc(ofi_get_page_size());
+	if (!buf)
+		return -FI_ENOMEM;
+
+	ret = fi_mr_reg(domain_fid, buf, ofi_get_page_size(),
+			FI_SEND, 0, 0, 0, &mr, NULL);
+	if (ret) {
+		free(buf);
+		return ret;
+	}
+
+	/*
+	 * libibverbs maintains a global variable to determine if any
+	 * registrations have occurred before ibv_fork_init() is called.
+	 * EINVAL is returned if a memory region was registered before
+	 * ibv_fork_init() was called and returns 0 if fork support is
+	 * initialized already.
+	 */
+	ret = ibv_fork_init();
+
+	fi_close(&mr->fid);
+	free(buf);
+
+	if (ret == EINVAL)
+		return 0;
+
+	return 1;
+}
+
 static struct fi_ops efa_fid_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = efa_domain_close,
@@ -240,7 +281,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		efa_mr_cache_enable = 0;
 	}
 
-	if (efa_mr_cache_enable && ofi_vrb_check_fork_enabled(*domain_fid)) {
+	if (efa_mr_cache_enable && efa_check_fork_enabled(*domain_fid)) {
 		fprintf(stderr,
 		         "\nEnabling the memory registration cache and libibverbs "
 			 "fork support is currently not supported by the EFA\n"
