@@ -16,7 +16,7 @@ data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_orange_
 Latest releases
 ===============
 
-* The libfabric library, unit tests, and documentation: [libfabric v1.11.0](https://github.com/ofiwg/libfabric/releases/tag/v1.11.0) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
+* The libfabric library, unit tests, and documentation: [libfabric v1.11.1](https://github.com/ofiwg/libfabric/releases/tag/v1.11.1) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
 
 
 Overview
@@ -34,7 +34,7 @@ Libfabric is designed to minimize the impedance mismatch between applications, i
 
 Libfabric targets support for the Linux, Free BSD, Windows, and OS X.  A reasonable effort is made to support all major, modern Linux distributions; however, validation is limited to the most recent 2-3 releases of Red Hat Enterprise Linux (RHEL)and SUSE Linux Enterprise Server (SLES).  Libfabric aligns its supported distributions with the most current OpenFabrics Enterprise Distribution (OFED) software releases.  Support for a particular operating system version or distribution is vendor specific.  The exceptions are the tcp and udp based socket providers are available on all platforms.
 
-Libfabric is supported by a variety of open source HPC middleware applications, including MPICH, Open MPI, Sandia SHMEM, Open SHMEM, Charm++, GasNET, Clang, UPC, and others.  Additionaly, several proprietary software applications, such as Intel MPI, and non-public application ports are known.  Libfabric supports a variety of high-performance fabrics and networking hardware.  It will run over standard TCP and UDP networks, high performance fabrics such as Omni-Path Architecture, InfiniBand, Cray GNI, Blue Gene Architecture, iWarp RDMA Ethernet, RDMA over Converged Ethernet (RoCE), with support for several networking and memory-CPU fabrics under active development.
+Libfabric is supported by a variety of open source HPC middleware applications, including MPICH, Open MPI, Sandia SHMEM, Open SHMEM, Charm++, GasNET, Clang, UPC, and others.  Additionally, several proprietary software applications, such as Intel MPI, and non-public application ports are known.  Libfabric supports a variety of high-performance fabrics and networking hardware.  It will run over standard TCP and UDP networks, high performance fabrics such as Omni-Path Architecture, InfiniBand, Cray GNI, Blue Gene Architecture, iWarp RDMA Ethernet, RDMA over Converged Ethernet (RoCE), with support for several networking and memory-CPU fabrics under active development.
 
 Developer Resources
 ===================
@@ -45,7 +45,8 @@ A comprehensive developer's guide is being developed.  Some sections are incompl
 
 A set of man pages have been carefully written to specify the libfabric API.
 
-* [Man pages for v1.11.0](v1.11.0/man/)
+* [Man pages for v1.11.1](v1.11.1/man/)
+  * Older: [Man pages for v1.11.0](v1.11.0/man/)
   * Older: [Man pages for v1.10.1](v1.10.1/man/)
   * Older: [Man pages for v1.10.0](v1.10.0/man/)
   * Older: [Man pages for v1.9.1](v1.9.1/man/)
