@@ -151,7 +151,7 @@ struct efa_domain {
 	struct ibv_pd		*ibv_pd;
 	struct fi_info		*info;
 	struct efa_fabric	*fab;
-	struct ofi_mr_cache	cache;
+	struct ofi_mr_cache	*cache;
 	struct efa_qp		**qp_table;
 	size_t			qp_table_sz_m1;
 };
@@ -467,6 +467,11 @@ void efa_peer_reset(struct rxr_peer *peer)
 static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)
 {
 	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA): false;
+}
+
+static inline bool efa_is_cache_available(struct efa_domain *efa_domain)
+{
+	return efa_domain->cache;
 }
 
 #endif /* EFA_H */
