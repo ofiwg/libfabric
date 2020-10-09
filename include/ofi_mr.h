@@ -268,33 +268,11 @@ extern struct ofi_mr_cache_params	cache_params;
 
 struct ofi_mr_entry {
 	struct ofi_mr_info		info;
-	void				*storage_context;
+	struct ofi_rbnode		*node;
 	int				use_cnt;
 	struct dlist_entry		list_entry;
 	union ofi_mr_hmem_info		hmem_info;
 	uint8_t				data[];
-};
-
-enum ofi_mr_storage_type {
-	OFI_MR_STORAGE_DEFAULT = 0,
-	OFI_MR_STORAGE_RBT,
-	OFI_MR_STORAGE_USER,
-};
-
-struct ofi_mr_storage {
-	enum ofi_mr_storage_type	type;
-	void				*storage;
-
-	struct ofi_mr_entry *		(*find)(struct ofi_mr_storage *storage,
-						const struct ofi_mr_info *key);
-	struct ofi_mr_entry *		(*overlap)(struct ofi_mr_storage *storage,
-						const struct iovec *key);
-	int				(*insert)(struct ofi_mr_storage *storage,
-						struct ofi_mr_info *key,
-						struct ofi_mr_entry *entry);
-	int				(*erase)(struct ofi_mr_storage *storage,
-						struct ofi_mr_entry *entry);
-	void				(*destroy)(struct ofi_mr_storage *storage);
 };
 
 #define OFI_HMEM_MAX 4
@@ -305,7 +283,7 @@ struct ofi_mr_cache {
 	struct dlist_entry		notify_entries[OFI_HMEM_MAX];
 	size_t				entry_data_size;
 
-	struct ofi_mr_storage		storage;
+	struct ofi_rbmap		tree;
 	struct dlist_entry		lru_list;
 	struct dlist_entry		flush_list;
 	pthread_mutex_t 		lock;
