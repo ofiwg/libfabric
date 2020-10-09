@@ -411,6 +411,11 @@ int ofi_av_close(struct util_av *av)
 	return 0;
 }
 
+size_t ofi_av_size(struct util_av *av)
+{
+	return av->av_entry_pool->entry_cnt;
+}
+
 static int util_verify_av_util_attr(struct util_domain *domain,
 				    const struct util_av_attr *util_attr)
 {
