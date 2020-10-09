@@ -431,7 +431,7 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 			const struct util_av_attr *util_attr)
 {
 	int ret = 0;
-	size_t max_count;
+	size_t orig_size;
 	size_t offset;
 
 	/* offset calculated on a 8-byte boundary */
@@ -457,16 +457,16 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 	if (ret)
 		return ret;
 
-	max_count = attr->count ? attr->count : ofi_universe_size;
-	av->count = roundup_power_of_two(max_count);
-	FI_INFO(av->prov, FI_LOG_AV, "AV size %zu\n", av->count);
+	orig_size = attr->count ? attr->count : ofi_universe_size;
+	orig_size = roundup_power_of_two(orig_size);
+	FI_INFO(av->prov, FI_LOG_AV, "AV size %zu\n", orig_size);
 
 	av->addrlen = util_attr->addrlen;
 	av->context_offset = offset + av->addrlen;
 	av->flags = util_attr->flags | attr->flags;
 	av->hash = NULL;
 
-	pool_attr.chunk_cnt = av->count;
+	pool_attr.chunk_cnt = orig_size;
 	return ofi_bufpool_create_attr(&pool_attr, &av->av_entry_pool);
 }
 

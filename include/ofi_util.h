@@ -707,7 +707,6 @@ struct util_av {
 	struct util_coll_mc	*coll_mc;
 	void			*context;
 	uint64_t		flags;
-	size_t			count;
 	size_t			addrlen;
 	/*
 	 * context_offset is addrlen + offset (required for alignment),
