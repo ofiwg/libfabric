@@ -105,19 +105,19 @@ static void ofi_delete_tree(struct ofi_rbmap *map, struct ofi_rbnode *node)
 
 void ofi_rbmap_cleanup(struct ofi_rbmap *map)
 {
-	ofi_delete_tree(map, map->root);
-}
-
-void ofi_rbmap_destroy(struct ofi_rbmap *map)
-{
 	struct ofi_rbnode *node;
 
-	ofi_rbmap_cleanup(map);
+	ofi_delete_tree(map, map->root);
 	while (map->free_list) {
 		node = map->free_list;
 		map->free_list = node->right;
 		free(node);
 	}
+}
+
+void ofi_rbmap_destroy(struct ofi_rbmap *map)
+{
+	ofi_rbmap_cleanup(map);
 	free(map);
 }
 
