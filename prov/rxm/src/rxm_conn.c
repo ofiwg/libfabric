@@ -721,7 +721,9 @@ static int rxm_cmap_cm_thread_close(struct rxm_cmap *cmap)
 	if (!cmap->cm_thread)
 		return 0;
 
+	ofi_ep_lock_acquire(&cmap->ep->util_ep);
 	cmap->ep->do_progress = false;
+	ofi_ep_lock_release(&cmap->ep->util_ep);
 	ret = rxm_conn_signal(cmap->ep, NULL, RXM_CMAP_EXIT);
 	if (ret) {
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
@@ -1349,14 +1351,17 @@ static void *rxm_conn_progress(void *arg)
 
 	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "Starting auto-progress thread\n");
 
+	ofi_ep_lock_acquire(&ep->util_ep);
 	while (ep->do_progress) {
+		ofi_ep_lock_release(&ep->util_ep);
 		memset(entry, 0, RXM_MSG_EQ_ENTRY_SZ);
 		entry->rd = rxm_eq_sread(ep, RXM_CM_ENTRY_SZ, entry);
-		if (entry->rd < 0 && entry->rd != -FI_ECONNREFUSED)
-			continue;
+		if (entry->rd >= 0 || entry->rd == -FI_ECONNREFUSED)
+			rxm_conn_eq_event(ep, entry);
 
-		rxm_conn_eq_event(ep, entry);
+		ofi_ep_lock_acquire(&ep->util_ep);
 	}
+	ofi_ep_lock_release(&ep->util_ep);
 
 	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "Stopping auto-progress thread\n");
 	return NULL;
@@ -1416,7 +1421,9 @@ static void *rxm_conn_atomic_progress(void *arg)
 	}
 
 	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "Starting auto-progress thread\n");
+	ofi_ep_lock_acquire(&ep->util_ep);
 	while (ep->do_progress) {
+		ofi_ep_lock_release(&ep->util_ep);
 		ret = fi_trywait(fabric->msg_fabric, fids, 2);
 
 		if (!ret) {
@@ -1428,13 +1435,16 @@ static void *rxm_conn_atomic_progress(void *arg)
 				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 					"Select error %s, closing CM thread\n",
 					strerror(errno));
-				break;
+				goto out;
 			}
 		}
 		rxm_conn_auto_progress_eq(ep, entry);
 		ep->util_ep.progress(&ep->util_ep);
+		ofi_ep_lock_acquire(&ep->util_ep);
 	}
+	ofi_ep_lock_release(&ep->util_ep);
 
+out:
 	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "Stopping auto progress thread\n");
 	return NULL;
 }
