@@ -28,6 +28,12 @@ v1.11.1, Fri Oct 9, 2021
 - Do not overwrite a packet's associated MR when copying packets
 - Pass in correct packet when determining the header size
 - Do not release rx_entry in EAGAIN case
+- Disable MR cache if fork support is requested
+- Turn off MR cache if user supports FI_MR_LOCAL
+- Add FI_REMOTE_READ to shm registrations
+- Remove use_cnt assert closing domain to allow driver cleanup
+- Fix off by 1 returned AV address when using AV map
+- Ensure setting FI_HMEM capability is backwards compatible
 
 ## RxD
 
@@ -53,6 +59,7 @@ v1.11.1, Fri Oct 9, 2021
 - Fix initialization synchronization
 - Ensure progress is invoked for mid-sized message transfers
 - Always use CMA when sending data to self
+- Fix hang using SAR protocol
 
 ## Sockets
 
@@ -72,6 +79,7 @@ v1.11.1, Fri Oct 9, 2021
 - Fix shmat intercept hook handling
 - Fix error handling obtaining page sizes
 - Fix incorrect locking in MR cache
+- Fix memory leak in rbtree cleanup
 
 ## Verbs
 
