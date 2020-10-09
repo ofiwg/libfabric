@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
+ * Copyright (c) 2020 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -63,16 +64,16 @@ static struct fid_ep *ep[2];
 static struct fid_av *av;
 static struct fi_info *hints;
 static struct fi_info *fi;
-void *ep_name[2];
-size_t gni_addr[2];
+static void *ep_name[2];
+static size_t gni_addr[2];
 static struct fid_cq *msg_cq[2];
 static struct fi_cq_attr cq_attr;
 
 #define BUF_SZ (8*1024)
-char *target, *target_base;
-char *source, *source_base;
-struct fid_mr *rem_mr, *loc_mr;
-uint64_t mr_key;
+static char *target, *target_base;
+static char *source, *source_base;
+static struct fid_mr *rem_mr, *loc_mr;
+static uint64_t mr_key;
 
 void cancel_setup(void)
 {

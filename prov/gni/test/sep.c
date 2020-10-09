@@ -2,7 +2,8 @@
  * Copyright (c) 2015-2018 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
+ * Copyright (c) 2019-2020 Triad National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -67,19 +68,19 @@ static struct fid_domain *dom[NUMEPS];
 static struct fid_av *av[NUMEPS];
 static struct fid_av *t_av;
 static void *ep_name[TOTALEPS];
-fi_addr_t gni_addr[NUMEPS];
+static fi_addr_t gni_addr[NUMEPS];
 static struct fi_cq_attr cq_attr;
-struct fi_info *hints;
+static struct fi_info *hints;
 static struct fi_info *fi[NUMEPS];
 static struct fid_ep *sep[TOTALEPS];
 
-char *target, *target_base;
-char *source, *source_base;
-struct iovec *src_iov, *dest_iov;
-char *iov_src_buf, *iov_dest_buf, *iov_src_buf_base, *iov_dest_buf_base;
-struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
-struct fid_mr *iov_dest_buf_mr[NUMEPS], *iov_src_buf_mr[NUMEPS];
-uint64_t mr_key[NUMEPS];
+static char *target, *target_base;
+static char *source, *source_base;
+static struct iovec *src_iov, *dest_iov;
+static char *iov_src_buf, *iov_dest_buf, *iov_src_buf_base, *iov_dest_buf_base;
+static struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
+static struct fid_mr *iov_dest_buf_mr[NUMEPS], *iov_src_buf_mr[NUMEPS];
+static uint64_t mr_key[NUMEPS];
 
 static int ctx_cnt = NUMCONTEXTS;
 static int rx_ctx_bits;
@@ -92,8 +93,8 @@ static struct fi_cntr_attr cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
 	.flags = 0
 };
-struct fi_tx_attr tx_attr;
-struct fi_rx_attr rx_attr;
+static struct fi_tx_attr tx_attr;
+static struct fi_rx_attr rx_attr;
 
 static uint64_t sends[NUMEPS] = {0}, recvs[NUMEPS] = {0},
 	send_errs[NUMEPS] = {0}, recv_errs[NUMEPS] = {0};

@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2020 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -69,7 +70,7 @@ static fi_addr_t gni_addr[NUMEPS];
 static struct fid_cq *msg_cq[NUMEPS];
 static struct fi_info *fi[NUMEPS];
 static struct fi_cq_attr cq_attr;
-struct fi_info *hints;
+static struct fi_info *hints;
 static size_t addrlen = 0;
 
 #define BUF_SZ (1<<20)

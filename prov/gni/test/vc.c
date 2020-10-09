@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved
  * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
+ * Copyright (c) 2020 Triad National Security, LLC. All rights reserved.
  *
  *
  * This software is available to you under a choice of one of two
@@ -65,23 +66,23 @@ static struct fi_info *hints;
 static struct fi_info *fi;
 static struct fid_cq *cq[2];
 static struct fi_cq_attr cq_attr;
-void *ep_name[2];
-fi_addr_t gni_addr[2];
-struct gnix_av_addr_entry gnix_addr[2];
+static void *ep_name[2];
+static fi_addr_t gni_addr[2];
+static struct gnix_av_addr_entry gnix_addr[2];
 
 /* Third EP with unqiue domain is used to test inter-CM connect. */
 static struct fid_domain *dom3;
 static struct fid_ep *ep3;
 static struct fid_av *av3;
 static struct fid_cq *cq3;
-void *ep_name3;
-fi_addr_t gni_addr3;
+static void *ep_name3;
+static fi_addr_t gni_addr3;
 
 /* Register a target buffer with both domains for pings. */
-void *target_buf, *target_buf_base;
-int target_len = 64;
-struct fid_mr *rem_mr, *rem_mr3;
-uint64_t mr_key, mr_key3;
+static void *target_buf, *target_buf_base;
+static int target_len = 64;
+static struct fid_mr *rem_mr, *rem_mr3;
+static uint64_t mr_key, mr_key3;
 
 static void vc_setup_common(uint32_t version, int mr_mode);
 

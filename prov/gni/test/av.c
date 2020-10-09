@@ -3,7 +3,7 @@
  *                         All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
- * Copyright (c) 2019      Triad National Security, LLC.
+ * Copyright (c) 2019-2020 Triad National Security, LLC.
  *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -54,7 +54,7 @@ static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fi_info *hints;
 static struct fi_info *fi;
-struct gnix_ep_name *fake_names;
+static struct gnix_ep_name *fake_names;
 static struct fid_av *av;
 static struct gnix_fid_av *gnix_av;
 

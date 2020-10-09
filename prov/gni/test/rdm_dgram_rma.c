@@ -2,7 +2,8 @@
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2015-2018 Cray Inc. All rights reserved.
- * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
+ * Copyright (c) 2019-2020 Triad National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -70,25 +71,25 @@
 static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fid_domain *dom[2];
-struct fi_gni_ops_domain *gni_domain_ops[2];
+static struct fi_gni_ops_domain *gni_domain_ops[2];
 static struct fid_ep *ep[2];
 static struct fid_av *av[2];
 static struct fi_info *hints;
 static struct fi_info *fi;
-void *ep_name[2];
-size_t gni_addr[2];
+static void *ep_name[2];
+static size_t gni_addr[2];
 static struct fid_cq *send_cq[2];
 static struct fid_cq *recv_cq[2];
 static struct fi_cq_attr cq_attr[2];
 
 #define BUF_SZ (64*1024)
-char *target, *target_base;
-char *target2, *target2_base;
-char *source, *source_base;
-char *source2, *source2_base;
-char *uc_source;
-struct fid_mr *rem_mr[2], *loc_mr[2], *rem_mr2[2], *loc_mr2[2];
-uint64_t mr_key[2], mr_key2[2];
+static char *target, *target_base;
+static char *target2, *target2_base;
+static char *source, *source_base;
+static char *source2, *source2_base;
+static char *uc_source;
+static struct fid_mr *rem_mr[2], *loc_mr[2], *rem_mr2[2], *loc_mr2[2];
+static uint64_t mr_key[2], mr_key2[2];
 
 static struct fid_cntr *write_cntr[2], *read_cntr[2];
 static struct fid_cntr *rwrite_cntr;
