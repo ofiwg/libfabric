@@ -344,6 +344,16 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	info->domain_attr->mr_key_size = core_info->domain_attr->mr_key_size;
 
 	/*
+	 * Do not advertise FI_HMEM capabilities when the core can not support
+	 * it or when the application passes NULL hints (given this is a primary
+	 * cap). The logic for device-specific checks pertaining to HMEM comes
+	 * further along this path.
+	 */
+	if ((core_info && !(core_info->caps & FI_HMEM)) || !hints) {
+		info->caps &= ~FI_HMEM;
+	}
+
+	/*
 	 * Handle user-provided hints and adapt the info object passed back up
 	 * based on EFA-specific constraints.
 	 */
@@ -421,6 +431,12 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 
 			info->domain_attr->mr_mode |= FI_MR_HMEM;
 
+		} else {
+			/*
+			 * FI_HMEM is a primary capability. Providers should
+			 * only enable it if requested by applications.
+			 */
+			info->caps &= ~FI_HMEM;
 		}
 #endif
 		/*
