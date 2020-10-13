@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
+ * Copyright (c) 2020 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -90,10 +91,10 @@ static struct fi_cntr_attr cntr_attr = {.events = FI_CNTR_EVENTS_COMP,
 					.flags = 0};
 
 #define BUF_SZ (64*1024)
-char *target, *target_base;
-char *source, *source_base;
-struct fid_mr *rem_mr[NUM_EPS], *loc_mr[NUM_EPS];
-uint64_t mr_key[NUM_EPS];
+static char *target, *target_base;
+static char *source, *source_base;
+static struct fid_mr *rem_mr[NUM_EPS], *loc_mr[NUM_EPS];
+static uint64_t mr_key[NUM_EPS];
 
 static inline void cntr_setup_eps(const uint64_t caps,
 	uint32_t version,

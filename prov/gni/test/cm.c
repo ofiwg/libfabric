@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2016-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
+ * Copyright (c) 2019-2020 Triad National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -83,7 +84,7 @@ static struct fi_info *cli_hints;
 static struct fi_info *cli_fi;
 static struct fid_eq *cli_eq;
 static struct fid_cq *cli_cq;
-char *cli_cm_in_data = "Hola.  Soy cliente.";
+static char *cli_cm_in_data = "Hola.  Soy cliente.";
 
 static struct fid_fabric *srv_fab;
 static struct fid_domain *srv_dom;
@@ -93,7 +94,7 @@ static struct fi_info *srv_hints;
 static struct fi_info *srv_fi;
 static struct fid_eq *srv_eq;
 static struct fid_cq *srv_cq;
-char *srv_cm_in_data = "Este es servidor.";
+static char *srv_cm_in_data = "Este es servidor.";
 
 struct fi_eq_attr eq_attr = {
 	.wait_obj = FI_WAIT_UNSPEC

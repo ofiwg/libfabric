@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc.  All rights reserved.
+ * Copyright (c) 2020 Triad National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -80,7 +81,7 @@ static struct fi_cq_attr cq_attr;
 
 static int target[NUM_EPS];
 static int source[NUM_EPS];
-struct fid_mr *rem_mr[NUM_EPS], *loc_mr[NUM_EPS];
+static struct fid_mr *rem_mr[NUM_EPS], *loc_mr[NUM_EPS];
 static uint64_t mr_key[NUM_EPS];
 
 static int max_eps = NUM_EPS;

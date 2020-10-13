@@ -1,7 +1,8 @@
 /*
  * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
- * Copyright (c) 2019 Triad National Security, LLC. All rights reserved.
+ * Copyright (c) 2019-2020 Triad National Security, LLC.
+ *                         All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -72,23 +73,23 @@
 static uint64_t mode_bits = ~FI_NOTIFY_FLAGS_ONLY;
 static struct fid_fabric *fab;
 static struct fid_domain *dom[NUMEPS];
-struct fi_gni_ops_domain *gni_domain_ops[NUMEPS];
+static struct fi_gni_ops_domain *gni_domain_ops[NUMEPS];
 static struct fid_ep *ep[NUMEPS];
 static struct fid_av *av[NUMEPS];
 static struct fi_info *hints;
 static struct fi_info *fi;
-void *ep_name[NUMEPS];
-size_t gni_addr[NUMEPS];
+static void *ep_name[NUMEPS];
+static size_t gni_addr[NUMEPS];
 static struct fid_cq *send_cq[NUMEPS];
 static struct fid_cq *recv_cq[NUMEPS];
 static struct fi_cq_attr cq_attr;
 
 #define BUF_SZ (64*1024)
-char *target, *target_base;
-char *source, *source_base;
-char *uc_source, *uc_source_base;
-struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
-uint64_t mr_key[NUMEPS];
+static char *target, *target_base;
+static char *source, *source_base;
+static char *uc_source, *uc_source_base;
+static struct fid_mr *rem_mr[NUMEPS], *loc_mr[NUMEPS];
+static uint64_t mr_key[NUMEPS];
 
 static struct fid_cntr *write_cntr[NUMEPS], *read_cntr[NUMEPS];
 static struct fid_cntr *rwrite_cntr;
