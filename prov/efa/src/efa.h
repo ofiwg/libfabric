@@ -280,6 +280,7 @@ struct efa_av {
 	efa_addr_to_conn_func	addr_to_conn;
 	struct efa_reverse_av	*reverse_av;
 	struct util_av		util_av;
+	size_t			count;
 	enum fi_ep_type         ep_type;
 	/* Used only for FI_AV_TABLE */
 	struct efa_conn         **conn_table;

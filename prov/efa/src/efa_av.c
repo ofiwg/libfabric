@@ -116,7 +116,7 @@ static size_t efa_av_tbl_find_first_empty(struct efa_av *av, size_t hint)
 	assert(av->type == FI_AV_TABLE);
 
 	conn_table = av->conn_table;
-	for (; hint < av->util_av.count; hint++) {
+	for (; hint < av->count; hint++) {
 		if (!conn_table[hint])
 			return hint;
 	}
@@ -155,16 +155,16 @@ static int efa_av_resize(struct efa_av *av, size_t new_av_count)
 			return -FI_ENOMEM;
 
 #ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region((uint32_t *)av->conn_table + av->util_av.count,
-			      (new_av_count - av->util_av.count) *
+	rxr_poison_mem_region((uint32_t *)av->conn_table + av->count,
+			      (new_av_count - av->count) *
 			      sizeof(*av->conn_table));
 #endif
 
-		memset(av->conn_table + av->util_av.count, 0,
-		       (new_av_count - av->util_av.count) * sizeof(*av->conn_table));
+		memset(av->conn_table + av->count, 0,
+		       (new_av_count - av->count) * sizeof(*av->conn_table));
 	}
 
-	av->util_av.count = new_av_count;
+	av->count = new_av_count;
 
 	return 0;
 }
@@ -316,8 +316,8 @@ int efa_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 	av_entry->rdm_addr = *fi_addr;
 	av_entry->local_mapping = 0;
 
-	if (av->used + 1 > av->util_av.count) {
-		ret = efa_av_resize(av, av->util_av.count * 2);
+	if (av->used + 1 > av->count) {
+		ret = efa_av_resize(av, av->count * 2);
 		if (ret)
 			goto out;
 		dlist_foreach(&av->util_av.ep_list, ep_list_entry) {
@@ -325,7 +325,7 @@ int efa_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 					       av_entry);
 			rxr_ep = container_of(util_ep, struct rxr_ep, util_ep);
 			ret = efa_peer_resize(rxr_ep, av->used,
-					      av->util_av.count);
+					      av->count);
 			if (ret)
 				goto out;
 		}
@@ -442,7 +442,7 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 			success_cnt++;
 		}
 	} else {
-		if (av->used + count > av->util_av.count) {
+		if (av->used + count > av->count) {
 			ret = efa_av_resize(av, av->used + count);
 			if (ret)
 				goto out;
@@ -491,7 +491,7 @@ static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 	if (av->type == FI_AV_MAP) {
 		conn = (struct efa_conn *)fi_addr;
 	} else { /* (av->type == FI_AV_TABLE) */
-		if (fi_addr >= av->util_av.count)
+		if (fi_addr >= av->count)
 			return -FI_EINVAL;
 
 		conn = av->conn_table[fi_addr];
@@ -577,7 +577,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	fastlock_acquire(&av->util_av.lock);
 	for (i = 0; i < count; i++) {
 		if (fi_addr[i] == FI_ADDR_NOTAVAIL ||
-		    fi_addr[i] > av->util_av.count) {
+		    fi_addr[i] > av->count) {
 			ret = -FI_ENOENT;
 			goto release_lock;
 		}
@@ -664,7 +664,7 @@ static int efa_av_close(struct fid *fid)
 	int i;
 
 	av = container_of(fid, struct efa_av, util_av.av_fid.fid);
-	for (i = 0; i < av->util_av.count; i++) {
+	for (i = 0; i < av->count; i++) {
 		fi_addr_t addr = i;
 
 		ret = efa_av_remove_ah(&av->util_av.av_fid, &addr, 1, 0);
@@ -809,9 +809,10 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	av->used = 0;
 	av->next = 0;
 	av->shm_used = 0;
+	av->count = attr->count;
 
-	if (av->type == FI_AV_TABLE && av->util_av.count > 0) {
-		av->conn_table = calloc(av->util_av.count, sizeof(*av->conn_table));
+	if (av->type == FI_AV_TABLE && av->count > 0) {
+		av->conn_table = calloc(av->count, sizeof(*av->conn_table));
 		if (!av->conn_table) {
 			ret = -FI_ENOMEM;
 			if (av->ep_type == FI_EP_DGRAM)
