@@ -141,8 +141,12 @@ static ssize_t ofi_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t dev
 
 		hmem_buf = (char *)hmem_iov[i].iov_base + hmem_iov_offset;
 		len -= hmem_iov_offset;
+		hmem_iov_offset = 0;
 
 		len = MIN(len, size);
+		if (!len)
+			continue;
+
 		if (dir == OFI_COPY_BUF_TO_IOV)
 			ret = ofi_copy_to_hmem(hmem_iface, device, hmem_buf,
 					       (char *)buf + done, len);
@@ -154,7 +158,6 @@ static ssize_t ofi_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t dev
 		if (ret)
 			return ret;
 
-		hmem_iov_offset = 0;
 		size -= len;
 		done += len;
 	}
