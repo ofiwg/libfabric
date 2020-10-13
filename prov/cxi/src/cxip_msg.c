@@ -1983,6 +1983,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_UNLINK:
 		if (!event->tgt_long.auto_unlinked) {
 			req->recv.unlinked = true;
+            cxip_recv_req_dequeue(req);
 			recv_req_report(req);
 			recv_req_complete(req);
 		} else {
