@@ -149,19 +149,21 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 		 * if the peer is not able to handle it.
 		 *
 		 * If the sender does not know whether the peer
-		 * can handle it, it needs to wait for
+		 * can handle it, it needs to trigger
 		 * a handshake packet from the peer.
 		 *
 		 * The handshake packet contains
 		 * the information whether the peer
 		 * support it or not.
 		 */
-		err = rxr_pkt_wait_handshake(rxr_ep, tx_entry->addr, peer);
+		err = rxr_pkt_trigger_handshake(rxr_ep, tx_entry->addr, peer);
 		if (OFI_UNLIKELY(err))
 			goto out;
 
-		assert(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED);
-		if (!rxr_peer_support_delivery_complete(peer)) {
+		if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)) {
+			err = -FI_EAGAIN;
+			goto out;
+		} else if (!rxr_peer_support_delivery_complete(peer)) {
 			err = -FI_EOPNOTSUPP;
 			goto out;
 		}

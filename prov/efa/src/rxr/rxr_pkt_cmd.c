@@ -428,12 +428,57 @@ ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_en
 
 ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_peer *peer)
 {
-	struct rxr_tx_entry *tx_entry;
-	ssize_t err;
+	ssize_t ret;
 
 	uint64_t current, endwait;
 
-	if (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)
+	ret = rxr_pkt_trigger_handshake(ep, addr, peer);
+	if (OFI_UNLIKELY(ret))
+		return ret;
+
+	current = ofi_gettime_us();
+	endwait = current + RXR_HANDSHAKE_WAIT_TIMEOUT;
+
+	while (current < endwait &&
+	       !(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)) {
+		rxr_ep_progress_internal(ep);
+		current = ofi_gettime_us();
+	}
+
+	if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"did not get handshake back in %f second(s). returning -FI_EAGAIN!\n",
+			RXR_HANDSHAKE_WAIT_TIMEOUT * 1e-6);
+		return -FI_EAGAIN;
+	}
+
+	return 0;
+}
+
+/*
+ * This function is used for any extra feature that does not have an
+ * alternative.
+ *
+ * This function will send a eager rtw packet to trigger handshake.
+ *
+ * We do not send eager rtm packets here because the receiver might require
+ * ordering and an extra eager rtm will interrupt the reorder
+ * process.
+ *
+ * ep: The endpoint on which the packet for triggering handshake will be sent.
+ * peer: The peer from which the sender receives handshake.
+ * addr: The address of the peer.
+ *
+ * This function will return 0 if the eager rtw packet is successfully sent.
+ */
+ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
+				  fi_addr_t addr, struct rxr_peer *peer)
+{
+	struct rxr_tx_entry *tx_entry;
+	ssize_t err;
+
+	if ((peer->flags & RXR_PEER_HANDSHAKE_RECEIVED) ||
+	    (peer->flags & RXR_PEER_REQ_SENT))
 		return 0;
 
 	tx_entry = ofi_buf_alloc(ep->tx_entry_pool);
@@ -472,20 +517,6 @@ ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_pee
 
 	if (OFI_UNLIKELY(err))
 		return err;
-
-	current = ofi_gettime_us();
-	endwait = current + RXR_HANDSHAKE_WAIT_TIMEOUT;
-	while (current < endwait && !(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)) {
-		rxr_ep_progress_internal(ep);
-		current = ofi_gettime_us();
-	}
-
-	if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-			"did not get handshake back in %f second(s). returning -FI_EAGAIN!\n",
-			RXR_HANDSHAKE_WAIT_TIMEOUT*1e-6);
-		return -FI_EAGAIN;
-	}
 
 	return 0;
 }
