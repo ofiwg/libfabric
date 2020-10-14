@@ -597,6 +597,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 {
 	size_t i = 0;
 	struct rxr_peer *peer;
+	struct efa_av *av;
 #if ENABLE_DEBUG
 	struct dlist_entry *tmp;
 	struct dlist_entry *entry;
@@ -606,7 +607,8 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 #endif
 
 	if (rxr_need_sas_ordering(rxr_ep)) {
-		for (i = 0; i < rxr_ep->util_ep.av->count; ++i) {
+		av = container_of(rxr_ep->util_ep.av, struct efa_av, util_av);
+		for (i = 0; i < av->count; ++i) {
 			peer = rxr_ep_get_peer(rxr_ep, i);
 			if (peer->rx_init)
 				efa_free_robuf(peer);
@@ -616,7 +618,8 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	}
 
 #if ENABLE_DEBUG
-	for (i = 0; i < rxr_ep->util_ep.av->count; ++i) {
+	av = container_of(rxr_ep->util_ep.av, struct efa_av, util_av);
+	for (i = 0; i < av->count; ++i) {
 		peer = rxr_ep_get_peer(rxr_ep, i);
 		/*
 		 * TODO: Add support for wait/signal until all pending messages
@@ -812,7 +815,7 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		if (ret)
 			return ret;
 
-		rxr_ep->peer = calloc(av->util_av.count,
+		rxr_ep->peer = calloc(av->count,
 				      sizeof(struct rxr_peer));
 		if (!rxr_ep->peer)
 			return -FI_ENOMEM;
@@ -845,7 +848,7 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 				 * Copy the entire peer array, because we may not be able to make the
 				 * assumption that insertions are always indexed in order in the future.
 				 */
-				for (i = 0; i < av->util_av.count; i++) {
+				for (i = 0; i < av->count; i++) {
 					first_ep_peer = rxr_ep_get_peer(rxr_first_ep, i);
 					if (first_ep_peer->is_local) {
 						peer = rxr_ep_get_peer(rxr_ep, i);
@@ -1252,7 +1255,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 	ret = ofi_bufpool_create(&ep->read_entry_pool,
 				 sizeof(struct rxr_read_entry),
 				 RXR_BUF_POOL_ALIGNMENT,
-				 ep->tx_size + RXR_MAX_RX_QUEUE_SIZE, 
+				 ep->tx_size + RXR_MAX_RX_QUEUE_SIZE,
 				 ep->tx_size + ep->rx_size, 0);
 	if (ret)
 		goto err_free_tx_entry_pool;

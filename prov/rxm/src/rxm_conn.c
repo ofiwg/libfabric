@@ -216,7 +216,7 @@ rxm_cmap_check_and_realloc_handles_table(struct rxm_cmap *cmap,
 	if (OFI_LIKELY(fi_addr < cmap->num_allocated))
 		return 0;
 
-	grow_size = MAX(cmap->av->count, fi_addr - cmap->num_allocated + 1);
+	grow_size = MAX(ofi_av_size(cmap->av), fi_addr - cmap->num_allocated + 1);
 
 	new_handles = realloc(cmap->handles_av,
 			      (grow_size + cmap->num_allocated) *
@@ -796,12 +796,12 @@ int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
 	cmap->ep = rxm_ep;
 	cmap->av = ep->av;
 
-	cmap->handles_av = calloc(cmap->av->count, sizeof(*cmap->handles_av));
+	cmap->handles_av = calloc(ofi_av_size(ep->av), sizeof(*cmap->handles_av));
 	if (!cmap->handles_av) {
 		ret = -FI_ENOMEM;
 		goto err1;
 	}
-	cmap->num_allocated = ep->av->count;
+	cmap->num_allocated = ofi_av_size(ep->av);
 
 	cmap->attr = *attr;
 	cmap->attr.name = mem_dup(attr->name, ep->av->addrlen);
@@ -1055,7 +1055,7 @@ static size_t rxm_conn_get_rx_size(struct rxm_ep *rxm_ep,
 	if (msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT)
 		return MAX(MIN(16, msg_info->rx_attr->size),
 			   (msg_info->rx_attr->size /
-			    rxm_ep->util_ep.av->count));
+			    ofi_av_size(rxm_ep->util_ep.av)));
 	else
 		return msg_info->rx_attr->size;
 }

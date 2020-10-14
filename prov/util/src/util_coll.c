@@ -1145,8 +1145,8 @@ static int util_coll_av_init(struct util_av *av)
 	if (ret)
 		goto err3;
 
-	coll_mc->av_set->fi_addr_array =
-		calloc(av->count, sizeof(*coll_mc->av_set->fi_addr_array));
+	coll_mc->av_set->fi_addr_array = calloc(ofi_av_size(av),
+					 sizeof(*coll_mc->av_set->fi_addr_array));
 	if (!coll_mc->av_set->fi_addr_array) {
 		ret = -FI_ENOMEM;
 		goto err2;
@@ -1194,7 +1194,8 @@ int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	if (ret)
 		goto err1;
 
-	av_set->fi_addr_array = calloc(util_av->count, sizeof(*av_set->fi_addr_array));
+	av_set->fi_addr_array = calloc(ofi_av_size(util_av),
+				       sizeof(*av_set->fi_addr_array));
 	if (!av_set->fi_addr_array)
 		goto err2;
 

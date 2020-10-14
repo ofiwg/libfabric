@@ -707,7 +707,6 @@ struct util_av {
 	struct util_coll_mc	*coll_mc;
 	void			*context;
 	uint64_t		flags;
-	size_t			count;
 	size_t			addrlen;
 	/*
 	 * context_offset is addrlen + offset (required for alignment),
@@ -740,6 +739,7 @@ int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr 
 int ofi_av_close(struct util_av *av);
 int ofi_av_close_lightweight(struct util_av *av);
 
+size_t ofi_av_size(struct util_av *av);
 int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr);
 int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr);
 fi_addr_t ofi_av_lookup_fi_addr_unsafe(struct util_av *av, const void *addr);
