@@ -209,7 +209,7 @@ struct util_domain {
 
 int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 		     struct util_domain *domain, void *context);
-int ofi_domain_bind_eq(struct util_domain *domain, struct util_eq *eq);
+int ofi_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
 int ofi_domain_close(struct util_domain *domain);
 
 static const uint64_t ofi_rx_mr_flags[] = {
