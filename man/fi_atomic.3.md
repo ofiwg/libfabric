@@ -382,7 +382,7 @@ and type of parameters that they accept as input.  Otherwise, they
 perform the same general function.
 
 The call fi_atomic transfers the data contained in the user-specified
-data buffer to a remote node.  For unconnected endpoints, the destination
+data buffer to a remote node.  For connectionless endpoints, the destination
 endpoint is specified through the dest_addr parameter.  Unless
 the endpoint has been configured differently, the data buffer passed
 into fi_atomic must not be touched by the application until the
@@ -405,7 +405,7 @@ discussion below for more details. The requested message size that
 can be used with fi_inject_atomic is limited by inject_size.
 
 The fi_atomicmsg call supports atomic functions over both connected
-and unconnected endpoints, with the ability to control the atomic
+and connectionless endpoints, with the ability to control the atomic
 operation per call through the use of flags.  The fi_atomicmsg
 function takes a struct fi_msg_atomic as input.
 
@@ -600,7 +600,7 @@ with atomic message calls.
   targeting the same peer endpoint have completed.  Operations posted
   after the fencing will see and/or replace the results of any
   operations initiated prior to the fenced operation.
-  
+
   The ordering of operations starting at the posting of the fenced
   operation (inclusive) to the posting of a subsequent fenced operation
   (exclusive) is controlled by the endpoint's ordering semantics.

@@ -198,7 +198,7 @@ Additionally, endpoints that use manual progress must be associated
 with relevant completion queues or event queues in order to drive
 progress.  For endpoints that are only used as the target of RMA or
 atomic operations, this means binding the endpoint to a completion
-queue associated with receive processing.  Unconnected endpoints must
+queue associated with receive processing.  Connectionless endpoints must
 be bound to an address vector.
 
 Once an endpoint has been activated, it may be associated with an address
@@ -594,7 +594,7 @@ desired.  Supported types are:
   flow control that maintains message boundaries.
 
 *FI_EP_RDM*
-: Reliable datagram message.  Provides a reliable, unconnected data
+: Reliable datagram message.  Provides a reliable, connectionless data
   transfer service with flow control that maintains message
   boundaries.
 
@@ -1038,7 +1038,7 @@ message order.  Relaxed completion order may enable faster reporting of
 completed transfers, allow acknowledgments to be sent over different
 fabric paths, and support more sophisticated retry mechanisms.
 This can result in lower-latency completions, particularly when
-using unconnected endpoints.  Strict completion ordering may require
+using connectionless endpoints.  Strict completion ordering may require
 that providers queue completed operations or limit available optimizations.
 
 For transmit requests, completion ordering depends on the endpoint

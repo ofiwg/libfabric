@@ -471,7 +471,7 @@ transfer operation.
 
 When a resource management error occurs on an endpoint, the endpoint is
 transitioned into a disabled state.  Any operations which have not
-already completed will fail and be discarded.  For unconnected endpoints,
+already completed will fail and be discarded.  For connectionless endpoints,
 the endpoint must be re-enabled before it will accept new data transfer
 operations.  For connected endpoints, the connection is torn down and
 must be re-established.
