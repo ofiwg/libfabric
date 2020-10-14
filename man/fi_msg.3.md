@@ -139,7 +139,7 @@ message.
 ## fi_sendmsg
 
 The fi_sendmsg call supports data transfers over both connected and
-unconnected endpoints, with the ability to control the send operation
+connectionless endpoints, with the ability to control the send operation
 per call through the use of flags.  The fi_sendmsg function takes a
 `struct fi_msg` as input.
 
@@ -188,7 +188,7 @@ corresponding endpoint.  Posted receives are searched in the order in
 which they were posted in order to match sends.
 Message boundaries are maintained.  The order in which
 the receives complete is dependent on
-the endpoint type and protocol.  For unconnected endpoints, the
+the endpoint type and protocol.  For connectionless endpoints, the
 src_addr parameter can be used to indicate that a buffer should be
 posted to receive incoming data from a specific remote endpoint.
 
@@ -201,7 +201,7 @@ parameter to a receive incoming data.
 ## fi_recvmsg
 
 The fi_recvmsg call supports posting buffers over both connected and
-unconnected endpoints, with the ability to control the receive
+connectionless endpoints, with the ability to control the receive
 operation per call through the use of flags.  The fi_recvmsg function
 takes a struct fi_msg as input.
 

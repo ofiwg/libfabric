@@ -165,7 +165,7 @@ message.
 ## fi_tsendmsg
 
 The fi_tsendmsg call supports data transfers over both connected and
-unconnected endpoints, with the ability to control the send operation
+connectionless endpoints, with the ability to control the send operation
 per call through the use of flags.  The fi_tsendmsg function takes a
 struct fi_msg_tagged as input.
 
@@ -216,7 +216,7 @@ parameter to a receive incoming data.
 ## fi_trecvmsg
 
 The fi_trecvmsg call supports posting buffers over both connected and
-unconnected endpoints, with the ability to control the receive
+connectionless endpoints, with the ability to control the receive
 operation per call through the use of flags.  The fi_trecvmsg function
 takes a struct fi_msg_tagged as input.
 
@@ -258,7 +258,7 @@ and/or fi_tsendmsg.
 *FI_INJECT_COMPLETE*
 : Applies to fi_tsendmsg.  Indicates that a completion should be
   generated when the source buffer(s) may be reused.
-  
+
 *FI_TRANSMIT_COMPLETE*
 : Applies to fi_tsendmsg.  Indicates that a completion should not be
   generated until the operation has been successfully transmitted and
@@ -276,7 +276,7 @@ and/or fi_tsendmsg.
   targeting the same peer endpoint have completed.  Operations posted
   after the fencing will see and/or replace the results of any
   operations initiated prior to the fenced operation.
-  
+
   The ordering of operations starting at the posting of the fenced
   operation (inclusive) to the posting of a subsequent fenced operation
   (exclusive) is controlled by the endpoint's ordering semantics.
@@ -289,7 +289,7 @@ The following flags may be used with fi_trecvmsg.
   allocated buffering enabled (see fi_rx_attr total_buffered_recv).
   Unlike standard receive operations, a receive operation with the FI_PEEK
   flag set does not remain queued with the provider after the peek completes
-  successfully. The peek operation operates asynchronously, and the results 
+  successfully. The peek operation operates asynchronously, and the results
   of the peek operation are available in the completion queue associated with
   the endpoint. If no message is found matching the tags specified in the peek
   request, then a completion queue error entry with err field set to FI_ENOMSG

@@ -152,7 +152,7 @@ referenced by the iov parameter to the remote memory region.
 ## fi_writemsg
 
 The fi_writemsg call supports data transfers over both connected and
-unconnected endpoints, with the ability to control the write operation
+connectionless endpoints, with the ability to control the write operation
 per call through the use of flags.  The fi_writemsg function takes a
 struct fi_msg_rma as input.
 
@@ -206,7 +206,7 @@ the set of data buffers referenced by the iov parameter.
 ## fi_readmsg
 
 The fi_readmsg call supports data transfers over both connected and
-unconnected endpoints, with the ability to control the read operation
+connectionless endpoints, with the ability to control the read operation
 per call through the use of flags.  The fi_readmsg function takes a
 struct fi_msg_rma as input.
 

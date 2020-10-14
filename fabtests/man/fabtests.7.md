@@ -38,7 +38,7 @@ These tests are a mix of very basic functionality tests that show major
 features of libfabric.
 
 *fi_av_xfer*
-: Tests communication for unconnected endpoints, as addresses
+: Tests communication for connectionless endpoints, as addresses
   are inserted and removed from the local address vector.
 
 *fi_cm_data*
