@@ -399,6 +399,9 @@ the list available for that test.
 *-I <number>*
 : Number of data transfer iterations.
 
+*-Q*
+: Associated any EQ with the domain, rather than directly with the EP.
+
 *-w <number>*
 : Number of warm-up data transfer iterations.
 

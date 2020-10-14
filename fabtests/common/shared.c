@@ -476,7 +476,7 @@ static int ft_alloc_msgs(void)
 		ft_set_tx_rx_sizes(&tx_size, &rx_size);
 		tx_mr_size = 0;
 		rx_mr_size = 0;
-		buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) * opts.window_size + 
+		buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) * opts.window_size +
 			   MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size;
 	}
 
@@ -557,6 +557,14 @@ int ft_open_fabric_res(void)
 	if (ret) {
 		FT_PRINTERR("fi_domain", ret);
 		return ret;
+	}
+
+	if (opts.options & FT_OPT_DOMAIN_EQ) {
+		ret = fi_domain_bind(domain, &eq->fid, 0);
+		if (ret) {
+			FT_PRINTERR("fi_domain_bind", ret);
+			return ret;
+		}
 	}
 
 	return 0;
@@ -938,6 +946,14 @@ int ft_server_connect(void)
 		goto err;
 	}
 
+	if (opts.options & FT_OPT_DOMAIN_EQ) {
+		ret = fi_domain_bind(domain, &eq->fid, 0);
+		if (ret) {
+			FT_PRINTERR("fi_domain_bind", ret);
+			return ret;
+		}
+	}
+
 	ret = ft_alloc_active_res(fi);
 	if (ret)
 		goto err;
@@ -1077,8 +1093,8 @@ int ft_enable_ep(struct fid_ep *ep, struct fid_eq *eq, struct fid_av *av,
 	uint64_t flags;
 	int ret;
 
-	if (fi->ep_attr->type == FI_EP_MSG || fi->caps & FI_MULTICAST ||
-	    fi->caps & FI_COLLECTIVE)
+	if ((fi->ep_attr->type == FI_EP_MSG || fi->caps & FI_MULTICAST ||
+	    fi->caps & FI_COLLECTIVE) && !(opts.options & FT_OPT_DOMAIN_EQ))
 		FT_EP_BIND(ep, eq, 0);
 
 	FT_EP_BIND(ep, av, 0);
@@ -1536,8 +1552,8 @@ static void ft_close_fids(void)
 	FT_CLOSE_FID(txcntr);
 	FT_CLOSE_FID(pollset);
 	FT_CLOSE_FID(av);
-	FT_CLOSE_FID(eq);
 	FT_CLOSE_FID(domain);
+	FT_CLOSE_FID(eq);
 	FT_CLOSE_FID(waitset);
 	FT_CLOSE_FID(fabric);
 }
@@ -1575,7 +1591,7 @@ void ft_free_res(void)
 		fi_freeinfo(hints);
 		hints = NULL;
 	}
-	
+
 	ret = ft_hmem_cleanup(opts.iface);
 	if (ret)
 		FT_PRINTERR("ft_hmem_cleanup", ret);
@@ -2838,6 +2854,7 @@ void ft_csusage(char *name, char *desc)
 {
 	ft_usage(name, desc);
 	FT_PRINT_OPTS_USAGE("-I <number>", "number of iterations");
+	FT_PRINT_OPTS_USAGE("-Q", "bind EQ to domain (vs. endpoint)");
 	FT_PRINT_OPTS_USAGE("-w <number>", "number of warmup iterations");
 	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or 'all'");
 	FT_PRINT_OPTS_USAGE("-l", "align transmit and receive buffers to page size");
@@ -2964,6 +2981,9 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 	case 'I':
 		opts->options |= FT_OPT_ITER;
 		opts->iterations = atoi(optarg);
+		break;
+	case 'Q':
+		opts->options |= FT_OPT_DOMAIN_EQ;
 		break;
 	case 'S':
 		if (!strncasecmp("all", optarg, 3)) {
