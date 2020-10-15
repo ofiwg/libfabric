@@ -366,6 +366,10 @@ the list available for that test.
 : Use the specified endpoint type for the test.  Valid options are msg,
   dgram, and rdm.  The default endpoint type is rdm.
 
+*-D <device_name>*
+: Allocate data buffers on the specified device, rather than in host
+  memory.  Valid options are ze.
+
 *-a <address vector name>*
 : The name of a shared address vector.  This option only applies to tests
   that support shared address vectors.
@@ -394,6 +398,9 @@ the list available for that test.
 
 *-I <number>*
 : Number of data transfer iterations.
+
+*-Q*
+: Associated any EQ with the domain, rather than directly with the EP.
 
 *-w <number>*
 : Number of warm-up data transfer iterations.

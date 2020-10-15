@@ -117,6 +117,7 @@ enum {
 	FT_OPT_SERVER_PERSIST	= 1 << 16,
 	FT_OPT_ENABLE_HMEM	= 1 << 17,
 	FT_OPT_USE_DEVICE	= 1 << 18,
+	FT_OPT_DOMAIN_EQ	= 1 << 19,
 	FT_OPT_OOB_CTRL		= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
 };
 
@@ -249,7 +250,7 @@ extern int listen_sock;
 #define ADDR_OPTS "B:P:s:a:b::E::C:F:"
 #define FAB_OPTS "f:d:p:D:i:H"
 #define INFO_OPTS FAB_OPTS "e:M:"
-#define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
+#define CS_OPTS ADDR_OPTS "I:QS:mc:t:w:l"
 #define NO_CQ_DATA 0
 
 extern char default_port[8];
