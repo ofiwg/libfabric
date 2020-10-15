@@ -39,6 +39,7 @@
 
 #ifdef HAVE_LIBZE
 
+#include <dirent.h>
 #include <level_zero/ze_api.h>
 
 #define ZE_MAX_DEVICES 4
@@ -47,6 +48,7 @@ static ze_context_handle_t context;
 static ze_device_handle_t devices[ZE_MAX_DEVICES];
 static ze_command_queue_handle_t cmd_queue[ZE_MAX_DEVICES];
 static int num_devices = 0;
+static int dev_fds[ZE_MAX_DEVICES];
 static bool p2p_enabled = false;
 
 static const ze_command_queue_desc_t cq_desc = {
@@ -66,6 +68,41 @@ static const ze_command_list_desc_t cl_desc = {
 	.flags				= 0,
 };
 
+static int ze_hmem_init_fds(void)
+{
+	const char *dev_dir = "/dev/dri/by-path";
+	const char *suffix = "-render";
+	DIR *dir;
+	struct dirent *ent = NULL;
+	char dev_name[128];
+	int i = 0;
+
+	dir = opendir(dev_dir);
+	if (dir == NULL)
+		return -FI_EIO;
+
+	while ((ent = readdir(dir)) != NULL) {
+		if (ent->d_name[0] == '.' ||
+		    strstr(ent->d_name, suffix) == NULL)
+			continue;
+
+		memset(dev_name, 0, sizeof(dev_name));
+		strncpy(dev_name, dev_dir, sizeof(dev_name));
+		strncat(dev_name, "/",
+			sizeof(dev_name) - strlen(dev_name));
+		strncat(dev_name, ent->d_name,
+			sizeof(dev_name) - strlen(dev_name));
+		dev_fds[i] = open(dev_name, O_RDWR);
+		if (dev_fds[i] == -1) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"Failed open device %d\n", i);
+			return -FI_EIO;
+		}
+		i++;
+	}
+	return FI_SUCCESS;
+}
+
 int ze_hmem_init(void)
 {
 	ze_driver_handle_t driver;
@@ -74,6 +111,7 @@ int ze_hmem_init(void)
 	ze_bool_t access;
 	uint32_t count, i;
 	bool p2p = true;
+	int ret;
 
 	ze_ret = zeInit(ZE_INIT_FLAG_GPU_ONLY);
 	if (ze_ret)
@@ -88,6 +126,9 @@ int ze_hmem_init(void)
 	if (ze_ret)
 		return -FI_EIO;
 
+	for (i = 0; i < ZE_MAX_DEVICES; dev_fds[i++] = -1)
+		;
+
 	count = 0;
 	ze_ret = zeDeviceGet(driver, &count, NULL);
 	if (ze_ret || count > ZE_MAX_DEVICES)
@@ -95,6 +136,10 @@ int ze_hmem_init(void)
 
 	ze_ret = zeDeviceGet(driver, &count, devices);
 	if (ze_ret)
+		goto err;
+
+	ret = ze_hmem_init_fds();
+	if (ret)
 		goto err;
 
 	for (num_devices = 0; num_devices < count; num_devices++) {
@@ -130,6 +175,10 @@ int ze_hmem_cleanup(void)
 			FI_WARN(&core_prov, FI_LOG_CORE,
 				"Failed to destroy ZE cmd_queue\n");
 			ret = -FI_EINVAL;
+		}
+		if (dev_fds[i] != -1) {
+			close(dev_fds[i]);
+			dev_fds[i] = -1;
 		}
 	}
 
@@ -248,6 +297,12 @@ int ze_hmem_get_base_addr(const void *ptr, void **base)
 	return FI_SUCCESS;
 }
 
+int *ze_hmem_get_dev_fds(int *nfds)
+{
+	*nfds = num_devices;
+	return dev_fds;
+}
+
 #else
 
 int ze_hmem_init(void)
@@ -293,6 +348,12 @@ bool ze_hmem_p2p_enabled(void)
 int ze_hmem_get_base_addr(const void *ptr, void **base)
 {
 	return -FI_ENOSYS;
+}
+
+int *ze_hmem_get_dev_fds(int *nfds)
+{
+	*nfds = 0;
+	return NULL;
 }
 
 #endif /* HAVE_LIBZE */

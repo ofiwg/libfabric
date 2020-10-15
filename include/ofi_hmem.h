@@ -125,6 +125,7 @@ int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr);
 int ze_hmem_close_handle(void *ipc_ptr);
 bool ze_hmem_p2p_enabled(void);
 int ze_hmem_get_base_addr(const void *ptr, void **base);
+int *ze_hmem_get_dev_fds(int *nfds);
 
 static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
 			     size_t size)
