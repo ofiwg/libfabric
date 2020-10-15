@@ -83,25 +83,25 @@ ofi_tostr_fid(const char *label, char *buf, size_t len, const struct fid *fid)
 
 static void ofi_tostr_opflags(char *buf, size_t len, uint64_t flags)
 {
-	IFFLAGSTR(flags, FI_MULTICAST);
+	IFFLAGSTRN(flags, FI_MULTICAST, len);
 
-	IFFLAGSTR(flags, FI_MULTI_RECV);
-	IFFLAGSTR(flags, FI_REMOTE_CQ_DATA);
-	IFFLAGSTR(flags, FI_MORE);
-	IFFLAGSTR(flags, FI_PEEK);
-	IFFLAGSTR(flags, FI_TRIGGER);
-	IFFLAGSTR(flags, FI_FENCE);
+	IFFLAGSTRN(flags, FI_MULTI_RECV, len);
+	IFFLAGSTRN(flags, FI_REMOTE_CQ_DATA, len);
+	IFFLAGSTRN(flags, FI_MORE, len);
+	IFFLAGSTRN(flags, FI_PEEK, len);
+	IFFLAGSTRN(flags, FI_TRIGGER, len);
+	IFFLAGSTRN(flags, FI_FENCE, len);
 
-	IFFLAGSTR(flags, FI_COMPLETION);
-	IFFLAGSTR(flags, FI_INJECT);
-	IFFLAGSTR(flags, FI_INJECT_COMPLETE);
-	IFFLAGSTR(flags, FI_TRANSMIT_COMPLETE);
-	IFFLAGSTR(flags, FI_DELIVERY_COMPLETE);
-	IFFLAGSTR(flags, FI_MATCH_COMPLETE);
-	IFFLAGSTR(flags, FI_AFFINITY);
+	IFFLAGSTRN(flags, FI_COMPLETION, len);
+	IFFLAGSTRN(flags, FI_INJECT, len);
+	IFFLAGSTRN(flags, FI_INJECT_COMPLETE, len);
+	IFFLAGSTRN(flags, FI_TRANSMIT_COMPLETE, len);
+	IFFLAGSTRN(flags, FI_DELIVERY_COMPLETE, len);
+	IFFLAGSTRN(flags, FI_MATCH_COMPLETE, len);
+	IFFLAGSTRN(flags, FI_AFFINITY, len);
 
-	IFFLAGSTR(flags, FI_CLAIM);
-	IFFLAGSTR(flags, FI_DISCARD);
+	IFFLAGSTRN(flags, FI_CLAIM, len);
+	IFFLAGSTRN(flags, FI_DISCARD, len);
 
 	ofi_remove_comma(buf);
 }
@@ -161,23 +161,23 @@ ofi_tostr_threading(char *buf, size_t len, enum fi_threading threading)
 
 static void ofi_tostr_msgorder(char *buf, size_t len, uint64_t flags)
 {
-	IFFLAGSTR(flags, FI_ORDER_RAR);
-	IFFLAGSTR(flags, FI_ORDER_RAW);
-	IFFLAGSTR(flags, FI_ORDER_RAS);
-	IFFLAGSTR(flags, FI_ORDER_WAR);
-	IFFLAGSTR(flags, FI_ORDER_WAW);
-	IFFLAGSTR(flags, FI_ORDER_WAS);
-	IFFLAGSTR(flags, FI_ORDER_SAR);
-	IFFLAGSTR(flags, FI_ORDER_SAW);
-	IFFLAGSTR(flags, FI_ORDER_SAS);
-	IFFLAGSTR(flags, FI_ORDER_RMA_RAR);
-	IFFLAGSTR(flags, FI_ORDER_RMA_RAW);
-	IFFLAGSTR(flags, FI_ORDER_RMA_WAR);
-	IFFLAGSTR(flags, FI_ORDER_RMA_WAW);
-	IFFLAGSTR(flags, FI_ORDER_ATOMIC_RAR);
-	IFFLAGSTR(flags, FI_ORDER_ATOMIC_RAW);
-	IFFLAGSTR(flags, FI_ORDER_ATOMIC_WAR);
-	IFFLAGSTR(flags, FI_ORDER_ATOMIC_WAW);
+	IFFLAGSTRN(flags, FI_ORDER_RAR, len);
+	IFFLAGSTRN(flags, FI_ORDER_RAW, len);
+	IFFLAGSTRN(flags, FI_ORDER_RAS, len);
+	IFFLAGSTRN(flags, FI_ORDER_WAR, len);
+	IFFLAGSTRN(flags, FI_ORDER_WAW, len);
+	IFFLAGSTRN(flags, FI_ORDER_WAS, len);
+	IFFLAGSTRN(flags, FI_ORDER_SAR, len);
+	IFFLAGSTRN(flags, FI_ORDER_SAW, len);
+	IFFLAGSTRN(flags, FI_ORDER_SAS, len);
+	IFFLAGSTRN(flags, FI_ORDER_RMA_RAR, len);
+	IFFLAGSTRN(flags, FI_ORDER_RMA_RAW, len);
+	IFFLAGSTRN(flags, FI_ORDER_RMA_WAR, len);
+	IFFLAGSTRN(flags, FI_ORDER_RMA_WAW, len);
+	IFFLAGSTRN(flags, FI_ORDER_ATOMIC_RAR, len);
+	IFFLAGSTRN(flags, FI_ORDER_ATOMIC_RAW, len);
+	IFFLAGSTRN(flags, FI_ORDER_ATOMIC_WAR, len);
+	IFFLAGSTRN(flags, FI_ORDER_ATOMIC_WAW, len);
 
 	ofi_remove_comma(buf);
 }
@@ -190,43 +190,43 @@ static void ofi_tostr_comporder(char *buf, size_t len, uint64_t flags)
 		ofi_strncatf(buf, len, "FI_ORDER_STRICT, ");
 	}
 
-	IFFLAGSTR(flags, FI_ORDER_DATA);
+	IFFLAGSTRN(flags, FI_ORDER_DATA, len);
 
 	ofi_remove_comma(buf);
 }
 
 static void ofi_tostr_caps(char *buf, size_t len, uint64_t caps)
 {
-	IFFLAGSTR(caps, FI_MSG);
-	IFFLAGSTR(caps, FI_RMA);
-	IFFLAGSTR(caps, FI_TAGGED);
-	IFFLAGSTR(caps, FI_ATOMIC);
-	IFFLAGSTR(caps, FI_MULTICAST);
-	IFFLAGSTR(caps, FI_COLLECTIVE);
+	IFFLAGSTRN(caps, FI_MSG, len);
+	IFFLAGSTRN(caps, FI_RMA, len);
+	IFFLAGSTRN(caps, FI_TAGGED, len);
+	IFFLAGSTRN(caps, FI_ATOMIC, len);
+	IFFLAGSTRN(caps, FI_MULTICAST, len);
+	IFFLAGSTRN(caps, FI_COLLECTIVE, len);
 
-	IFFLAGSTR(caps, FI_READ);
-	IFFLAGSTR(caps, FI_WRITE);
-	IFFLAGSTR(caps, FI_RECV);
-	IFFLAGSTR(caps, FI_SEND);
-	IFFLAGSTR(caps, FI_REMOTE_READ);
-	IFFLAGSTR(caps, FI_REMOTE_WRITE);
+	IFFLAGSTRN(caps, FI_READ, len);
+	IFFLAGSTRN(caps, FI_WRITE, len);
+	IFFLAGSTRN(caps, FI_RECV, len);
+	IFFLAGSTRN(caps, FI_SEND, len);
+	IFFLAGSTRN(caps, FI_REMOTE_READ, len);
+	IFFLAGSTRN(caps, FI_REMOTE_WRITE, len);
 
-	IFFLAGSTR(caps, FI_MULTI_RECV);
-	IFFLAGSTR(caps, FI_REMOTE_CQ_DATA);
-	IFFLAGSTR(caps, FI_TRIGGER);
-	IFFLAGSTR(caps, FI_FENCE);
+	IFFLAGSTRN(caps, FI_MULTI_RECV, len);
+	IFFLAGSTRN(caps, FI_REMOTE_CQ_DATA, len);
+	IFFLAGSTRN(caps, FI_TRIGGER, len);
+	IFFLAGSTRN(caps, FI_FENCE, len);
 
-	IFFLAGSTR(caps, FI_VARIABLE_MSG);
-	IFFLAGSTR(caps, FI_RMA_PMEM);
-	IFFLAGSTR(caps, FI_SOURCE_ERR);
-	IFFLAGSTR(caps, FI_LOCAL_COMM);
-	IFFLAGSTR(caps, FI_REMOTE_COMM);
-	IFFLAGSTR(caps, FI_SHARED_AV);
-	IFFLAGSTR(caps, FI_RMA_EVENT);
-	IFFLAGSTR(caps, FI_SOURCE);
-	IFFLAGSTR(caps, FI_NAMED_RX_CTX);
-	IFFLAGSTR(caps, FI_DIRECTED_RECV);
-	IFFLAGSTR(caps, FI_HMEM);
+	IFFLAGSTRN(caps, FI_VARIABLE_MSG, len);
+	IFFLAGSTRN(caps, FI_RMA_PMEM, len);
+	IFFLAGSTRN(caps, FI_SOURCE_ERR, len);
+	IFFLAGSTRN(caps, FI_LOCAL_COMM, len);
+	IFFLAGSTRN(caps, FI_REMOTE_COMM, len);
+	IFFLAGSTRN(caps, FI_SHARED_AV, len);
+	IFFLAGSTRN(caps, FI_RMA_EVENT, len);
+	IFFLAGSTRN(caps, FI_SOURCE, len);
+	IFFLAGSTRN(caps, FI_NAMED_RX_CTX, len);
+	IFFLAGSTRN(caps, FI_DIRECTED_RECV, len);
+	IFFLAGSTRN(caps, FI_HMEM, len);
 
 	ofi_remove_comma(buf);
 }
@@ -279,15 +279,15 @@ static void ofi_tostr_protocol(char *buf, size_t len, uint32_t protocol)
 
 static void ofi_tostr_mode(char *buf, size_t len, uint64_t mode)
 {
-	IFFLAGSTR(mode, FI_CONTEXT);
-	IFFLAGSTR(mode, FI_MSG_PREFIX);
-	IFFLAGSTR(mode, FI_ASYNC_IOV);
-	IFFLAGSTR(mode, FI_RX_CQ_DATA);
-	IFFLAGSTR(mode, FI_LOCAL_MR);
-	IFFLAGSTR(mode, FI_NOTIFY_FLAGS_ONLY);
-	IFFLAGSTR(mode, FI_RESTRICTED_COMP);
-	IFFLAGSTR(mode, FI_CONTEXT2);
-	IFFLAGSTR(mode, FI_BUFFERED_RECV);
+	IFFLAGSTRN(mode, FI_CONTEXT, len);
+	IFFLAGSTRN(mode, FI_MSG_PREFIX, len);
+	IFFLAGSTRN(mode, FI_ASYNC_IOV, len);
+	IFFLAGSTRN(mode, FI_RX_CQ_DATA, len);
+	IFFLAGSTRN(mode, FI_LOCAL_MR, len);
+	IFFLAGSTRN(mode, FI_NOTIFY_FLAGS_ONLY, len);
+	IFFLAGSTRN(mode, FI_RESTRICTED_COMP, len);
+	IFFLAGSTRN(mode, FI_CONTEXT2, len);
+	IFFLAGSTRN(mode, FI_BUFFERED_RECV, len);
 
 	ofi_remove_comma(buf);
 }
@@ -452,17 +452,17 @@ static void ofi_tostr_av_type(char *buf, size_t len, enum fi_av_type type)
 
 static void ofi_tostr_mr_mode(char *buf, size_t len, int mr_mode)
 {
-	IFFLAGSTR(mr_mode, FI_MR_BASIC);
-	IFFLAGSTR(mr_mode, FI_MR_SCALABLE);
-	IFFLAGSTR(mr_mode, FI_MR_LOCAL);
-	IFFLAGSTR(mr_mode, FI_MR_RAW);
-	IFFLAGSTR(mr_mode, FI_MR_VIRT_ADDR);
-	IFFLAGSTR(mr_mode, FI_MR_ALLOCATED);
-	IFFLAGSTR(mr_mode, FI_MR_PROV_KEY);
-	IFFLAGSTR(mr_mode, FI_MR_MMU_NOTIFY);
-	IFFLAGSTR(mr_mode, FI_MR_RMA_EVENT);
-	IFFLAGSTR(mr_mode, FI_MR_ENDPOINT);
-	IFFLAGSTR(mr_mode, FI_MR_HMEM);
+	IFFLAGSTRN(mr_mode, FI_MR_BASIC, len);
+	IFFLAGSTRN(mr_mode, FI_MR_SCALABLE, len);
+	IFFLAGSTRN(mr_mode, FI_MR_LOCAL, len);
+	IFFLAGSTRN(mr_mode, FI_MR_RAW, len);
+	IFFLAGSTRN(mr_mode, FI_MR_VIRT_ADDR, len);
+	IFFLAGSTRN(mr_mode, FI_MR_ALLOCATED, len);
+	IFFLAGSTRN(mr_mode, FI_MR_PROV_KEY, len);
+	IFFLAGSTRN(mr_mode, FI_MR_MMU_NOTIFY, len);
+	IFFLAGSTRN(mr_mode, FI_MR_RMA_EVENT, len);
+	IFFLAGSTRN(mr_mode, FI_MR_ENDPOINT, len);
+	IFFLAGSTRN(mr_mode, FI_MR_HMEM, len);
 
 	ofi_remove_comma(buf);
 }
@@ -707,20 +707,20 @@ static void ofi_tostr_eq_event(char *buf, size_t len, int type)
 
 static void ofi_tostr_cq_event_flags(char *buf, size_t len, uint64_t flags)
 {
-	IFFLAGSTR(flags, FI_SEND);
-	IFFLAGSTR(flags, FI_RECV);
-	IFFLAGSTR(flags, FI_RMA);
-	IFFLAGSTR(flags, FI_ATOMIC);
-	IFFLAGSTR(flags, FI_MSG);
-	IFFLAGSTR(flags, FI_TAGGED);
-	IFFLAGSTR(flags, FI_READ);
-	IFFLAGSTR(flags, FI_WRITE);
-	IFFLAGSTR(flags, FI_REMOTE_READ);
-	IFFLAGSTR(flags, FI_REMOTE_WRITE);
-	IFFLAGSTR(flags, FI_REMOTE_CQ_DATA);
-	IFFLAGSTR(flags, FI_MULTI_RECV);
-	IFFLAGSTR(flags, FI_MORE);
-	IFFLAGSTR(flags, FI_CLAIM);
+	IFFLAGSTRN(flags, FI_SEND, len);
+	IFFLAGSTRN(flags, FI_RECV, len);
+	IFFLAGSTRN(flags, FI_RMA, len);
+	IFFLAGSTRN(flags, FI_ATOMIC, len);
+	IFFLAGSTRN(flags, FI_MSG, len);
+	IFFLAGSTRN(flags, FI_TAGGED, len);
+	IFFLAGSTRN(flags, FI_READ, len);
+	IFFLAGSTRN(flags, FI_WRITE, len);
+	IFFLAGSTRN(flags, FI_REMOTE_READ, len);
+	IFFLAGSTRN(flags, FI_REMOTE_WRITE, len);
+	IFFLAGSTRN(flags, FI_REMOTE_CQ_DATA, len);
+	IFFLAGSTRN(flags, FI_MULTI_RECV, len);
+	IFFLAGSTRN(flags, FI_MORE, len);
+	IFFLAGSTRN(flags, FI_CLAIM, len);
 	ofi_remove_comma(buf);
 }
 
@@ -848,6 +848,3 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 	return buf;
 }
 DEFAULT_SYMVER(fi_tostr_, fi_tostr, FABRIC_1.0);
-
-
-#undef IFFLAGSTR
