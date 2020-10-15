@@ -109,19 +109,19 @@ static void ofi_tostr_opflags(char *buf, size_t len, uint64_t flags)
 static void ofi_tostr_addr_format(char *buf, size_t len, uint32_t addr_format)
 {
 	switch (addr_format) {
-	CASEENUMSTR(FI_FORMAT_UNSPEC);
-	CASEENUMSTR(FI_SOCKADDR);
-	CASEENUMSTR(FI_SOCKADDR_IN);
-	CASEENUMSTR(FI_SOCKADDR_IN6);
-	CASEENUMSTR(FI_SOCKADDR_IB);
-	CASEENUMSTR(FI_ADDR_PSMX);
-	CASEENUMSTR(FI_ADDR_PSMX2);
-	CASEENUMSTR(FI_ADDR_GNI);
-	CASEENUMSTR(FI_ADDR_BGQ);
-	CASEENUMSTR(FI_ADDR_MLX);
-	CASEENUMSTR(FI_ADDR_STR);
-	CASEENUMSTR(FI_ADDR_IB_UD);
-	CASEENUMSTR(FI_ADDR_EFA);
+	CASEENUMSTRN(FI_FORMAT_UNSPEC, len);
+	CASEENUMSTRN(FI_SOCKADDR, len);
+	CASEENUMSTRN(FI_SOCKADDR_IN, len);
+	CASEENUMSTRN(FI_SOCKADDR_IN6, len);
+	CASEENUMSTRN(FI_SOCKADDR_IB, len);
+	CASEENUMSTRN(FI_ADDR_PSMX, len);
+	CASEENUMSTRN(FI_ADDR_PSMX2, len);
+	CASEENUMSTRN(FI_ADDR_GNI, len);
+	CASEENUMSTRN(FI_ADDR_BGQ, len);
+	CASEENUMSTRN(FI_ADDR_MLX, len);
+	CASEENUMSTRN(FI_ADDR_STR, len);
+	CASEENUMSTRN(FI_ADDR_IB_UD, len);
+	CASEENUMSTRN(FI_ADDR_EFA, len);
 	default:
 		if (addr_format & FI_PROV_SPECIFIC)
 			ofi_strncatf(buf, len, "Provider specific");
@@ -134,9 +134,9 @@ static void ofi_tostr_addr_format(char *buf, size_t len, uint32_t addr_format)
 static void ofi_tostr_progress(char *buf, size_t len, enum fi_progress progress)
 {
 	switch (progress) {
-	CASEENUMSTR(FI_PROGRESS_UNSPEC);
-	CASEENUMSTR(FI_PROGRESS_AUTO);
-	CASEENUMSTR(FI_PROGRESS_MANUAL);
+	CASEENUMSTRN(FI_PROGRESS_UNSPEC, len);
+	CASEENUMSTRN(FI_PROGRESS_AUTO, len);
+	CASEENUMSTRN(FI_PROGRESS_MANUAL, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
@@ -147,12 +147,12 @@ static void
 ofi_tostr_threading(char *buf, size_t len, enum fi_threading threading)
 {
 	switch (threading) {
-	CASEENUMSTR(FI_THREAD_UNSPEC);
-	CASEENUMSTR(FI_THREAD_SAFE);
-	CASEENUMSTR(FI_THREAD_FID);
-	CASEENUMSTR(FI_THREAD_DOMAIN);
-	CASEENUMSTR(FI_THREAD_COMPLETION);
-	CASEENUMSTR(FI_THREAD_ENDPOINT);
+	CASEENUMSTRN(FI_THREAD_UNSPEC, len);
+	CASEENUMSTRN(FI_THREAD_SAFE, len);
+	CASEENUMSTRN(FI_THREAD_FID, len);
+	CASEENUMSTRN(FI_THREAD_DOMAIN, len);
+	CASEENUMSTRN(FI_THREAD_COMPLETION, len);
+	CASEENUMSTRN(FI_THREAD_ENDPOINT, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
@@ -234,12 +234,12 @@ static void ofi_tostr_caps(char *buf, size_t len, uint64_t caps)
 static void ofi_tostr_ep_type(char *buf, size_t len, enum fi_ep_type ep_type)
 {
 	switch (ep_type) {
-	CASEENUMSTR(FI_EP_UNSPEC);
-	CASEENUMSTR(FI_EP_MSG);
-	CASEENUMSTR(FI_EP_DGRAM);
-	CASEENUMSTR(FI_EP_RDM);
-	CASEENUMSTR(FI_EP_SOCK_STREAM);
-	CASEENUMSTR(FI_EP_SOCK_DGRAM);
+	CASEENUMSTRN(FI_EP_UNSPEC, len);
+	CASEENUMSTRN(FI_EP_MSG, len);
+	CASEENUMSTRN(FI_EP_DGRAM, len);
+	CASEENUMSTRN(FI_EP_RDM, len);
+	CASEENUMSTRN(FI_EP_SOCK_STREAM, len);
+	CASEENUMSTRN(FI_EP_SOCK_DGRAM, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
@@ -249,25 +249,25 @@ static void ofi_tostr_ep_type(char *buf, size_t len, enum fi_ep_type ep_type)
 static void ofi_tostr_protocol(char *buf, size_t len, uint32_t protocol)
 {
 	switch (protocol) {
-	CASEENUMSTR(FI_PROTO_UNSPEC);
-	CASEENUMSTR(FI_PROTO_RDMA_CM_IB_RC);
-	CASEENUMSTR(FI_PROTO_IWARP);
-	CASEENUMSTR(FI_PROTO_IB_UD);
-	CASEENUMSTR(FI_PROTO_PSMX);
-	CASEENUMSTR(FI_PROTO_PSMX2);
-	CASEENUMSTR(FI_PROTO_UDP);
-	CASEENUMSTR(FI_PROTO_SOCK_TCP);
-	CASEENUMSTR(FI_PROTO_IB_RDM);
-	CASEENUMSTR(FI_PROTO_IWARP_RDM);
-	CASEENUMSTR(FI_PROTO_GNI);
-	CASEENUMSTR(FI_PROTO_RXM);
-	CASEENUMSTR(FI_PROTO_RXD);
-	CASEENUMSTR(FI_PROTO_MLX);
-	CASEENUMSTR(FI_PROTO_NETWORKDIRECT);
-	CASEENUMSTR(FI_PROTO_SHM);
-	CASEENUMSTR(FI_PROTO_RSTREAM);
-	CASEENUMSTR(FI_PROTO_RDMA_CM_IB_XRC);
-	CASEENUMSTR(FI_PROTO_EFA);
+	CASEENUMSTRN(FI_PROTO_UNSPEC, len);
+	CASEENUMSTRN(FI_PROTO_RDMA_CM_IB_RC, len);
+	CASEENUMSTRN(FI_PROTO_IWARP, len);
+	CASEENUMSTRN(FI_PROTO_IB_UD, len);
+	CASEENUMSTRN(FI_PROTO_PSMX, len);
+	CASEENUMSTRN(FI_PROTO_PSMX2, len);
+	CASEENUMSTRN(FI_PROTO_UDP, len);
+	CASEENUMSTRN(FI_PROTO_SOCK_TCP, len);
+	CASEENUMSTRN(FI_PROTO_IB_RDM, len);
+	CASEENUMSTRN(FI_PROTO_IWARP_RDM, len);
+	CASEENUMSTRN(FI_PROTO_GNI, len);
+	CASEENUMSTRN(FI_PROTO_RXM, len);
+	CASEENUMSTRN(FI_PROTO_RXD, len);
+	CASEENUMSTRN(FI_PROTO_MLX, len);
+	CASEENUMSTRN(FI_PROTO_NETWORKDIRECT, len);
+	CASEENUMSTRN(FI_PROTO_SHM, len);
+	CASEENUMSTRN(FI_PROTO_RSTREAM, len);
+	CASEENUMSTRN(FI_PROTO_RDMA_CM_IB_XRC, len);
+	CASEENUMSTRN(FI_PROTO_EFA, len);
 	default:
 		if (protocol & FI_PROV_SPECIFIC)
 			ofi_strncatf(buf, len, "Provider specific");
@@ -429,9 +429,9 @@ static void
 ofi_tostr_resource_mgmt(char *buf, size_t len, enum fi_resource_mgmt rm)
 {
 	switch (rm) {
-	CASEENUMSTR(FI_RM_UNSPEC);
-	CASEENUMSTR(FI_RM_DISABLED);
-	CASEENUMSTR(FI_RM_ENABLED);
+	CASEENUMSTRN(FI_RM_UNSPEC, len);
+	CASEENUMSTRN(FI_RM_DISABLED, len);
+	CASEENUMSTRN(FI_RM_ENABLED, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
@@ -441,9 +441,9 @@ ofi_tostr_resource_mgmt(char *buf, size_t len, enum fi_resource_mgmt rm)
 static void ofi_tostr_av_type(char *buf, size_t len, enum fi_av_type type)
 {
 	switch (type) {
-	CASEENUMSTR(FI_AV_UNSPEC);
-	CASEENUMSTR(FI_AV_MAP);
-	CASEENUMSTR(FI_AV_TABLE);
+	CASEENUMSTRN(FI_AV_UNSPEC, len);
+	CASEENUMSTRN(FI_AV_MAP, len);
+	CASEENUMSTRN(FI_AV_TABLE, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
@@ -470,17 +470,17 @@ static void ofi_tostr_mr_mode(char *buf, size_t len, int mr_mode)
 static void ofi_tostr_op_type(char *buf, size_t len, int op_type)
 {
 	switch (op_type) {
-	CASEENUMSTR(FI_OP_RECV);
-	CASEENUMSTR(FI_OP_SEND);
-	CASEENUMSTR(FI_OP_TRECV);
-	CASEENUMSTR(FI_OP_TSEND);
-	CASEENUMSTR(FI_OP_READ);
-	CASEENUMSTR(FI_OP_WRITE);
-	CASEENUMSTR(FI_OP_ATOMIC);
-	CASEENUMSTR(FI_OP_FETCH_ATOMIC);
-	CASEENUMSTR(FI_OP_COMPARE_ATOMIC);
-	CASEENUMSTR(FI_OP_CNTR_SET);
-	CASEENUMSTR(FI_OP_CNTR_ADD);
+	CASEENUMSTRN(FI_OP_RECV, len);
+	CASEENUMSTRN(FI_OP_SEND, len);
+	CASEENUMSTRN(FI_OP_TRECV, len);
+	CASEENUMSTRN(FI_OP_TSEND, len);
+	CASEENUMSTRN(FI_OP_READ, len);
+	CASEENUMSTRN(FI_OP_WRITE, len);
+	CASEENUMSTRN(FI_OP_ATOMIC, len);
+	CASEENUMSTRN(FI_OP_FETCH_ATOMIC, len);
+	CASEENUMSTRN(FI_OP_COMPARE_ATOMIC, len);
+	CASEENUMSTRN(FI_OP_CNTR_SET, len);
+	CASEENUMSTRN(FI_OP_CNTR_ADD, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
@@ -616,20 +616,20 @@ static void ofi_tostr_info(char *buf, size_t len, const struct fi_info *info)
 static void ofi_tostr_atomic_type(char *buf, size_t len, enum fi_datatype type)
 {
 	switch (type) {
-	CASEENUMSTR(FI_INT8);
-	CASEENUMSTR(FI_UINT8);
-	CASEENUMSTR(FI_INT16);
-	CASEENUMSTR(FI_UINT16);
-	CASEENUMSTR(FI_INT32);
-	CASEENUMSTR(FI_UINT32);
-	CASEENUMSTR(FI_INT64);
-	CASEENUMSTR(FI_UINT64);
-	CASEENUMSTR(FI_FLOAT);
-	CASEENUMSTR(FI_DOUBLE);
-	CASEENUMSTR(FI_FLOAT_COMPLEX);
-	CASEENUMSTR(FI_DOUBLE_COMPLEX);
-	CASEENUMSTR(FI_LONG_DOUBLE);
-	CASEENUMSTR(FI_LONG_DOUBLE_COMPLEX);
+	CASEENUMSTRN(FI_INT8, len);
+	CASEENUMSTRN(FI_UINT8, len);
+	CASEENUMSTRN(FI_INT16, len);
+	CASEENUMSTRN(FI_UINT16, len);
+	CASEENUMSTRN(FI_INT32, len);
+	CASEENUMSTRN(FI_UINT32, len);
+	CASEENUMSTRN(FI_INT64, len);
+	CASEENUMSTRN(FI_UINT64, len);
+	CASEENUMSTRN(FI_FLOAT, len);
+	CASEENUMSTRN(FI_DOUBLE, len);
+	CASEENUMSTRN(FI_FLOAT_COMPLEX, len);
+	CASEENUMSTRN(FI_DOUBLE_COMPLEX, len);
+	CASEENUMSTRN(FI_LONG_DOUBLE, len);
+	CASEENUMSTRN(FI_LONG_DOUBLE_COMPLEX, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
@@ -639,25 +639,25 @@ static void ofi_tostr_atomic_type(char *buf, size_t len, enum fi_datatype type)
 static void ofi_tostr_atomic_op(char *buf, size_t len, enum fi_op op)
 {
 	switch (op) {
-	CASEENUMSTR(FI_MIN);
-	CASEENUMSTR(FI_MAX);
-	CASEENUMSTR(FI_SUM);
-	CASEENUMSTR(FI_PROD);
-	CASEENUMSTR(FI_LOR);
-	CASEENUMSTR(FI_LAND);
-	CASEENUMSTR(FI_BOR);
-	CASEENUMSTR(FI_BAND);
-	CASEENUMSTR(FI_LXOR);
-	CASEENUMSTR(FI_BXOR);
-	CASEENUMSTR(FI_ATOMIC_READ);
-	CASEENUMSTR(FI_ATOMIC_WRITE);
-	CASEENUMSTR(FI_CSWAP);
-	CASEENUMSTR(FI_CSWAP_NE);
-	CASEENUMSTR(FI_CSWAP_LE);
-	CASEENUMSTR(FI_CSWAP_LT);
-	CASEENUMSTR(FI_CSWAP_GE);
-	CASEENUMSTR(FI_CSWAP_GT);
-	CASEENUMSTR(FI_MSWAP);
+	CASEENUMSTRN(FI_MIN, len);
+	CASEENUMSTRN(FI_MAX, len);
+	CASEENUMSTRN(FI_SUM, len);
+	CASEENUMSTRN(FI_PROD, len);
+	CASEENUMSTRN(FI_LOR, len);
+	CASEENUMSTRN(FI_LAND, len);
+	CASEENUMSTRN(FI_BOR, len);
+	CASEENUMSTRN(FI_BAND, len);
+	CASEENUMSTRN(FI_LXOR, len);
+	CASEENUMSTRN(FI_BXOR, len);
+	CASEENUMSTRN(FI_ATOMIC_READ, len);
+	CASEENUMSTRN(FI_ATOMIC_WRITE, len);
+	CASEENUMSTRN(FI_CSWAP, len);
+	CASEENUMSTRN(FI_CSWAP_NE, len);
+	CASEENUMSTRN(FI_CSWAP_LE, len);
+	CASEENUMSTRN(FI_CSWAP_LT, len);
+	CASEENUMSTRN(FI_CSWAP_GE, len);
+	CASEENUMSTRN(FI_CSWAP_GT, len);
+	CASEENUMSTRN(FI_MSWAP, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
@@ -668,15 +668,15 @@ static void
 ofi_tostr_collective_op(char *buf, size_t len, enum fi_collective_op op)
 {
 	switch (op) {
-	CASEENUMSTR(FI_BARRIER);
-	CASEENUMSTR(FI_BROADCAST);
-	CASEENUMSTR(FI_ALLTOALL);
-	CASEENUMSTR(FI_ALLREDUCE);
-	CASEENUMSTR(FI_ALLGATHER);
-	CASEENUMSTR(FI_REDUCE_SCATTER);
-	CASEENUMSTR(FI_REDUCE);
-	CASEENUMSTR(FI_SCATTER);
-	CASEENUMSTR(FI_GATHER);
+	CASEENUMSTRN(FI_BARRIER, len);
+	CASEENUMSTRN(FI_BROADCAST, len);
+	CASEENUMSTRN(FI_ALLTOALL, len);
+	CASEENUMSTRN(FI_ALLREDUCE, len);
+	CASEENUMSTRN(FI_ALLGATHER, len);
+	CASEENUMSTRN(FI_REDUCE_SCATTER, len);
+	CASEENUMSTRN(FI_REDUCE, len);
+	CASEENUMSTRN(FI_SCATTER, len);
+	CASEENUMSTRN(FI_GATHER, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
@@ -692,13 +692,13 @@ static void ofi_tostr_version(char *buf, size_t len)
 static void ofi_tostr_eq_event(char *buf, size_t len, int type)
 {
 	switch (type) {
-	CASEENUMSTR(FI_NOTIFY);
-	CASEENUMSTR(FI_CONNREQ);
-	CASEENUMSTR(FI_CONNECTED);
-	CASEENUMSTR(FI_SHUTDOWN);
-	CASEENUMSTR(FI_MR_COMPLETE);
-	CASEENUMSTR(FI_AV_COMPLETE);
-	CASEENUMSTR(FI_JOIN_COMPLETE);
+	CASEENUMSTRN(FI_NOTIFY, len);
+	CASEENUMSTRN(FI_CONNREQ, len);
+	CASEENUMSTRN(FI_CONNECTED, len);
+	CASEENUMSTRN(FI_SHUTDOWN, len);
+	CASEENUMSTRN(FI_MR_COMPLETE, len);
+	CASEENUMSTRN(FI_AV_COMPLETE, len);
+	CASEENUMSTRN(FI_JOIN_COMPLETE, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
@@ -728,10 +728,10 @@ static void
 ofi_tostr_hmem_iface(char *buf, size_t len, enum fi_hmem_iface iface)
 {
 	switch (iface) {
-	CASEENUMSTR(FI_HMEM_SYSTEM);
-	CASEENUMSTR(FI_HMEM_CUDA);
-	CASEENUMSTR(FI_HMEM_ROCR);
-	CASEENUMSTR(FI_HMEM_ZE);
+	CASEENUMSTRN(FI_HMEM_SYSTEM, len);
+	CASEENUMSTRN(FI_HMEM_CUDA, len);
+	CASEENUMSTRN(FI_HMEM_ROCR, len);
+	CASEENUMSTRN(FI_HMEM_ZE, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
@@ -849,5 +849,5 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 }
 DEFAULT_SYMVER(fi_tostr_, fi_tostr, FABRIC_1.0);
 
-#undef CASEENUMSTR
+
 #undef IFFLAGSTR

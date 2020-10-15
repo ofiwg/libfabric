@@ -157,8 +157,6 @@ static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
 
 #define TAB "    "
 
-#define CASEENUMSTR(SYM) \
-	case SYM: { ofi_strcatf(buf, #SYM); break; }
 #define IFFLAGSTR(flags, SYM) \
 	do { if (flags & SYM) ofi_strcatf(buf, #SYM ", "); } while(0)
 #define CASEENUMSTRN(SYM, N) \
