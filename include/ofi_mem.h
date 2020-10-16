@@ -232,7 +232,7 @@ static inline void* smr_freestack_pop_impl(void *fs, void *next)
 	return ofi_freestack_get_user_buf(local);
 }
 
-#define DECLARE_SMR_FREESTACK(entrytype, name)			\
+#define SMR_DECLARE_FREESTACK(entrytype, name)			\
 struct name ## _entry {						\
 	void		*next;					\
 	entrytype	buf;					\

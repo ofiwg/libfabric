@@ -80,7 +80,7 @@ enum {
 
 //reserves 0-255 for defined ops and room for new ops
 //256 and beyond reserved for ctrl ops
-#define SMR_OP_MAX (1 << 8) 
+#define SMR_OP_MAX (1 << 8)
 
 #define SMR_REMOTE_CQ_DATA	(1 << 0)
 #define SMR_RMA_REQ		(1 << 1)
@@ -95,7 +95,7 @@ enum {
 	SMR_CMA_CAP_OFF,
 };
 
-/* 
+/*
  * Unique smr_op_hdr for smr message protocol:
  * 	addr - local shm_id of peer sending msg (for shm lookup)
  * 	op - type of op (ex. ofi_op_msg, defined in ofi_proto.h)
@@ -278,8 +278,8 @@ struct smr_sar_msg {
 
 OFI_DECLARE_CIRQUE(struct smr_cmd, smr_cmd_queue);
 OFI_DECLARE_CIRQUE(struct smr_resp, smr_resp_queue);
-DECLARE_SMR_FREESTACK(struct smr_inject_buf, smr_inject_pool);
-DECLARE_SMR_FREESTACK(struct smr_sar_msg, smr_sar_pool);
+SMR_DECLARE_FREESTACK(struct smr_inject_buf, smr_inject_pool);
+SMR_DECLARE_FREESTACK(struct smr_sar_msg, smr_sar_pool);
 
 static inline struct smr_region *smr_peer_region(struct smr_region *smr, int i)
 {
@@ -299,11 +299,11 @@ static inline struct smr_inject_pool *smr_inject_pool(struct smr_region *smr)
 }
 static inline struct smr_peer_data *smr_peer_data(struct smr_region *smr)
 {
-	return (struct smr_peer_data *) ((char *) smr + smr->peer_data_offset); 
+	return (struct smr_peer_data *) ((char *) smr + smr->peer_data_offset);
 }
 static inline struct smr_sar_pool *smr_sar_pool(struct smr_region *smr)
 {
-	return (struct smr_sar_pool *) ((char *) smr + smr->sar_pool_offset); 
+	return (struct smr_sar_pool *) ((char *) smr + smr->sar_pool_offset);
 }
 static inline const char *smr_name(struct smr_region *smr)
 {
