@@ -1695,26 +1695,26 @@ free_ep:
 }
 
 
-#define vrb_atomicvalid(name, flags)					\
+#define VRB_DEF_ATOMICVALID(name, flags)				\
 static int vrb_msg_ep_atomic_ ## name(struct fid_ep *ep_fid,		\
 					 enum fi_datatype datatype,	\
 					 enum fi_op op, size_t *count)	\
 {									\
-	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep,	\
+	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep,		\
 					    util_ep.ep_fid);		\
 	struct fi_atomic_attr attr;					\
 	int ret;							\
 									\
-	ret = vrb_query_atomic(&ep->util_ep.domain->domain_fid,	\
+	ret = vrb_query_atomic(&ep->util_ep.domain->domain_fid,		\
 				  datatype, op, &attr, flags);		\
 	if (!ret)							\
 		*count = attr.count;					\
 	return ret;							\
 }
 
-vrb_atomicvalid(writevalid, 0);
-vrb_atomicvalid(readwritevalid, FI_FETCH_ATOMIC);
-vrb_atomicvalid(compwritevalid, FI_COMPARE_ATOMIC);
+VRB_DEF_ATOMICVALID(writevalid, 0)
+VRB_DEF_ATOMICVALID(readwritevalid, FI_FETCH_ATOMIC)
+VRB_DEF_ATOMICVALID(compwritevalid, FI_COMPARE_ATOMIC)
 
 int vrb_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,
