@@ -82,7 +82,8 @@ static inline struct name * name ## _create(size_t size)	\
 static inline void name ## _free(struct name *cq)		\
 {								\
 	free(cq);						\
-}
+}								\
+void dummy ## name (void) /* work-around global ; scope */
 
 #define ofi_cirque_isempty(cq)		((cq)->wcnt == (cq)->rcnt)
 #define ofi_cirque_usedcnt(cq)		((cq)->wcnt - (cq)->rcnt)
