@@ -142,7 +142,7 @@ struct rstream_ctx_data {
 	size_t len;
 };
 
-DECLARE_FREESTACK(struct rstream_ctx_data, rstream_tx_ctx_fs);
+OFI_DECLARE_FREESTACK(struct rstream_ctx_data, rstream_tx_ctx_fs);
 
 struct rstream_tx_ctx {
 	struct rstream_ctx_data *tx_ctxs;

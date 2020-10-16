@@ -163,7 +163,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 			}
 			cmd->msg.hdr.op_flags |= SMR_RMA_REQ;
 			resp = ofi_cirque_tail(smr_resp_queue(ep->region));
-			pend = freestack_pop(ep->pend_fs);
+			pend = ofi_freestack_pop(ep->pend_fs);
 			smr_format_pend_resp(pend, cmd, context, iface, device, iov,
 					     iov_count, id, resp);
 			cmd->msg.hdr.data = smr_get_offset(ep->region, resp);
@@ -176,7 +176,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 			goto unlock_cq;
 		}
 		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
-		pend = freestack_pop(ep->pend_fs);
+		pend = ofi_freestack_pop(ep->pend_fs);
 		if (smr_cma_enabled(ep, peer_smr) && iface == FI_HMEM_SYSTEM) {
 			smr_format_iov(cmd, iov, iov_count, total_len, ep->region,
 				       resp);
@@ -199,7 +199,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 						      total_len, pend, resp);
 			}
 			if (ret) {
-				freestack_push(ep->pend_fs, pend);
+				ofi_freestack_push(ep->pend_fs, pend);
 				ret = -FI_EAGAIN;
 				goto unlock_cq;
 			}
@@ -251,7 +251,7 @@ ssize_t smr_read(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	rma_iov.len = len;
 	rma_iov.key = key;
 
-	return smr_generic_rma(ep, &msg_iov, 1, &rma_iov, 1, &desc, 
+	return smr_generic_rma(ep, &msg_iov, 1, &rma_iov, 1, &desc,
 			       src_addr, context, ofi_op_read_req, 0,
 			       smr_ep_tx_flags(ep));
 }
@@ -303,7 +303,7 @@ ssize_t smr_write(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc
 	rma_iov.len = len;
 	rma_iov.key = key;
 
-	return smr_generic_rma(ep, &msg_iov, 1, &rma_iov, 1, &desc, 
+	return smr_generic_rma(ep, &msg_iov, 1, &rma_iov, 1, &desc,
 			       dest_addr, context, ofi_op_write, 0,
 			       smr_ep_tx_flags(ep));
 }

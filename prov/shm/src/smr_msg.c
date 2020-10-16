@@ -57,13 +57,13 @@ static struct smr_rx_entry *smr_get_recv_entry(struct smr_ep *ep,
 	struct smr_rx_entry *entry;
 
 	if (ofi_cirque_isfull(ep->util_ep.rx_cq->cirq) ||
-	    freestack_isempty(ep->recv_fs)) {
+	    ofi_freestack_isempty(ep->recv_fs)) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"not enough space to post recv\n");
 		return NULL;
 	}
 
-	entry = freestack_pop(ep->recv_fs);
+	entry = ofi_freestack_pop(ep->recv_fs);
 
 	memcpy(&entry->iov, iov, sizeof(*iov) * count);
 	entry->iov_count = count;
@@ -208,7 +208,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 			goto unlock_cq;
 		}
 		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
-		pend = freestack_pop(ep->pend_fs);
+		pend = ofi_freestack_pop(ep->pend_fs);
 		if (smr_cma_enabled(ep, peer_smr) && iface == FI_HMEM_SYSTEM) {
 			smr_format_iov(cmd, iov, iov_count, total_len, ep->region,
 				       resp);
@@ -231,7 +231,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 						      total_len, pend, resp);
 			}
 			if (ret) {
-				freestack_push(ep->pend_fs, pend);
+				ofi_freestack_push(ep->pend_fs, pend);
 				ret = -FI_EAGAIN;
 				goto unlock_cq;
 			}

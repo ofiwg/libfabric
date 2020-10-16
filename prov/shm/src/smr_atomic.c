@@ -175,7 +175,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 
 	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
 	total_len = ofi_datatype_size(datatype) * ofi_total_ioc_cnt(ioc, count);
-	
+
 	switch (op) {
 	case ofi_op_atomic_compare:
 		assert(compare_ioc);
@@ -222,7 +222,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 				goto unlock_cq;
 			}
 			resp = ofi_cirque_tail(smr_resp_queue(ep->region));
-			pend = freestack_pop(ep->pend_fs);
+			pend = ofi_freestack_pop(ep->pend_fs);
 			smr_format_pend_resp(pend, cmd, context, iface, device, result_iov,
 					     result_count, id, resp);
 			cmd->msg.hdr.data = smr_get_offset(ep->region, resp);
@@ -348,7 +348,7 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
 	total_len = count * ofi_datatype_size(datatype);
-	
+
 	iov.iov_base = (void *) buf;
 	iov.iov_len = total_len;
 
