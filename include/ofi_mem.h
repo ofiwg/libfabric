@@ -191,7 +191,9 @@ static inline int name ## _index(struct name *fs,		\
 static inline void name ## _free(struct name *fs)		\
 {								\
 	free(fs);						\
-}
+}								\
+void dummy ## name (void) /* work-around global ; scope */
+
 
 /*
  * Buffer pool (free stack) template for shared memory regions
@@ -275,7 +277,8 @@ static inline int name ## _index(struct name *fs,		\
 static inline void name ## _free(struct name *fs)		\
 {								\
 	free(fs);						\
-}
+}								\
+void dummy ## name (void) /* work-around global ; scope */
 
 
 /*
