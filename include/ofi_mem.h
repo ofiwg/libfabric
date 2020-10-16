@@ -66,7 +66,7 @@ enum {
 extern size_t *page_sizes;
 extern size_t num_page_sizes;
 
-static inline long ofi_get_page_size()
+static inline long ofi_get_page_size(void)
 {
 	return ofi_sysconf(_SC_PAGESIZE);
 }
