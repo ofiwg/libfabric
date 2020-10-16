@@ -58,6 +58,7 @@
 #include <ofi_rbuf.h>
 #include <ofi_list.h>
 #include <ofi_signal.h>
+#include <ofi_epoll.h>
 #include <ofi_util.h>
 #include <ofi_atomic.h>
 #include <ofi_iov.h>
@@ -208,6 +209,8 @@ struct smr_domain {
 #define SMR_PREFIX	"fi_shm://"
 #define SMR_PREFIX_NS	"fi_ns://"
 
+#define SMR_ZE_SOCK_PATH	"/dev/shm/ze_"
+
 static inline const char *smr_no_prefix(const char *addr)
 {
 	char *start;
@@ -231,6 +234,36 @@ static inline void *smr_get_ptr(void *base, uint64_t offset)
 	return (char *) base + (uintptr_t) offset;
 }
 
+extern struct dlist_entry sock_name_list;
+extern pthread_mutex_t sock_list_lock;
+
+struct smr_sock_name {
+	char name[SMR_SOCK_NAME_MAX];
+	struct dlist_entry entry;
+};
+
+enum smr_cmap_state {
+	SMR_CMAP_INIT = 0,
+	SMR_CMAP_SUCCESS,
+	SMR_CMAP_FAILED,
+};
+
+struct smr_cmap_entry {
+	enum smr_cmap_state	state;
+	int			device_fds[ZE_MAX_DEVICES];
+};
+
+struct smr_sock_info {
+	char			name[SMR_SOCK_NAME_MAX];
+	int			listen_sock;
+	ofi_epoll_t		epollfd;
+	struct fd_signal	signal;
+	pthread_t		listener_thread;
+	int			*my_fds;
+	int			nfds;
+	struct smr_cmap_entry	peers[SMR_MAX_PEERS];
+};
+
 struct smr_ep {
 	struct util_ep		util_ep;
 	smr_rx_comp_func	rx_comp;
@@ -250,6 +283,9 @@ struct smr_ep {
 	struct smr_queue	unexp_msg_queue;
 	struct smr_queue	unexp_tagged_queue;
 	struct dlist_entry	sar_list;
+
+	int			ep_idx;
+	struct smr_sock_info	*sock_info;
 };
 
 #define smr_ep_rx_flags(smr_ep) ((smr_ep)->util_ep.rx_op_flags)
@@ -264,6 +300,7 @@ static inline int smr_mmap_name(char *shm_name, const char *ep_name,
 
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
+void smr_ep_exchange_fds(struct smr_ep *ep, int64_t id);
 
 int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
