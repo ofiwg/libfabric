@@ -256,12 +256,12 @@ struct efa_ep {
 
 struct efa_send_wr {
 	struct ibv_send_wr wr;
-	struct ibv_sge sge[0];
+	struct ibv_sge sge[];
 };
 
 struct efa_recv_wr {
 	struct ibv_recv_wr wr;
-	struct ibv_sge sge[0];
+	struct ibv_sge sge[];
 };
 
 typedef struct efa_conn *
