@@ -803,7 +803,7 @@ void DEFAULT_SYMVER_PRE(fi_freeinfo)(struct fi_info *info)
 		free(info);
 	}
 }
-CURRENT_SYMVER(fi_freeinfo_, fi_freeinfo);
+DEFAULT_SYMVER(fi_freeinfo_, fi_freeinfo, FABRIC_1.3);
 
 /*
  * Make a dummy info object for each provider, and copy in the
@@ -1050,7 +1050,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 
 	return *info ? 0 : -FI_ENODATA;
 }
-CURRENT_SYMVER(fi_getinfo_, fi_getinfo);
+DEFAULT_SYMVER(fi_getinfo_, fi_getinfo, FABRIC_1.3);
 
 struct fi_info *ofi_allocinfo_internal(void)
 {
@@ -1181,7 +1181,7 @@ fail:
 	fi_freeinfo(dup);
 	return NULL;
 }
-CURRENT_SYMVER(fi_dupinfo_, fi_dupinfo);
+DEFAULT_SYMVER(fi_dupinfo_, fi_dupinfo, FABRIC_1.3);
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,

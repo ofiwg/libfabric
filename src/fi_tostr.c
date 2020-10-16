@@ -70,7 +70,6 @@
  * fi_info->caps  : ofi_tostr_caps(..., typeof(caps), ...)
  */
 
-#define OFI_BUFSIZ 8192
 
 static void
 ofi_tostr_fid(const char *label, char *buf, size_t len, const struct fid *fid)
@@ -739,26 +738,20 @@ ofi_tostr_hmem_iface(char *buf, size_t len, enum fi_hmem_iface iface)
 }
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
-char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
+char *DEFAULT_SYMVER_PRE(fi_tostr_r)(char *buf, size_t len,
+				     const void *data, enum fi_type datatype)
 {
-	static char *buf = NULL;
 	const uint64_t *val64;
 	const uint32_t *val32;
 	const int *enumval;
-	size_t len = OFI_BUFSIZ;
 
-	if (!data)
+	if (!data || !buf || !len)
 		return NULL;
 
 	val64 = (const uint64_t *) data;
 	val32 = (const uint32_t *) data;
 	enumval = (const int *) data;
 
-	if (!buf) {
-		buf = calloc(len, 1);
-		if (!buf)
-			return NULL;
-	}
 	buf[0] = '\0';
 
 	switch (datatype) {
@@ -846,5 +839,21 @@ char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 		break;
 	}
 	return buf;
+}
+CURRENT_SYMVER(fi_tostr_r_, fi_tostr_r);
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
+{
+	static char *buf = NULL;
+	size_t len = 8192;
+
+	if (!buf) {
+		buf = calloc(len, 1);
+		if (!buf)
+			return NULL;
+	}
+
+	return fi_tostr_r(buf, len, data, datatype);
 }
 DEFAULT_SYMVER(fi_tostr_, fi_tostr, FABRIC_1.0);
