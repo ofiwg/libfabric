@@ -299,13 +299,13 @@ ofi_tostr_addr(char *buf, size_t len, uint32_t addr_format, void *addr)
 	size_t addrlen;
 
 	p = buf + strlen(buf);
+	addrlen = len - strlen(buf);
 
 	if (addr == NULL) {
-		ofi_strcatf(p, "(null)");
+		ofi_strncatf(p, addrlen, "(null)");
 		return;
 	}
 
-	addrlen = len - strlen(buf);
 	ofi_straddr(p, &addrlen, addr_format, addr);
 }
 
