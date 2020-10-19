@@ -162,8 +162,6 @@ static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
 #define IFFLAGSTRN(flags, SYM, N) \
 	do { if (flags & SYM) ofi_strncatf(buf, N, #SYM ", "); } while(0)
 
-#define ofi_strcatf(dest, ...) \
-	ofi_strncatf(dest, OFI_BUFSIZ, __VA_ARGS__)
 
 /*
  * CPU specific features
