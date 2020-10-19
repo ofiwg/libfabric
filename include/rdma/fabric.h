@@ -662,6 +662,12 @@ fi_set_ops(struct fid *fid, const char *name, uint64_t flags,
 		fid->ops->ops_set(fid, name, flags, ops, context) : -FI_ENOSYS;
 }
 
+struct fi_ep_addr {
+	void			*addr;
+	size_t			len;
+	uint32_t		format;
+};
+
 enum fi_type {
 	FI_TYPE_INFO,
 	FI_TYPE_EP_TYPE,
@@ -689,6 +695,7 @@ enum fi_type {
 	FI_TYPE_FID,
 	FI_TYPE_COLLECTIVE_OP,
 	FI_TYPE_HMEM_IFACE,
+	FI_TYPE_EP_ADDR,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);

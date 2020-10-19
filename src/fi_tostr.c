@@ -741,6 +741,7 @@ __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 char *DEFAULT_SYMVER_PRE(fi_tostr_r)(char *buf, size_t len,
 				     const void *data, enum fi_type datatype)
 {
+	struct fi_ep_addr *ep_addr;
 	const uint64_t *val64;
 	const uint32_t *val32;
 	const int *enumval;
@@ -833,6 +834,10 @@ char *DEFAULT_SYMVER_PRE(fi_tostr_r)(char *buf, size_t len,
 		break;
 	case FI_TYPE_HMEM_IFACE:
 		ofi_tostr_hmem_iface(buf, len, *enumval);
+		break;
+	case FI_TYPE_EP_ADDR:
+		ep_addr = (void *) data;
+		ofi_tostr_addr(buf, len, ep_addr->format, ep_addr->addr);
 		break;
 	default:
 		ofi_strncatf(buf, len, "Unknown type");
