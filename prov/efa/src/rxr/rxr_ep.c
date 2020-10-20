@@ -349,7 +349,7 @@ int rxr_ep_post_buf(struct rxr_ep *ep, const struct fi_msg *posted_recv, uint64_
 			dlist_insert_tail(&rx_pkt_entry->dbg_entry,
 					  &ep->rx_posted_buf_list);
 #endif
-		desc = rxr_ep_mr_local(ep) ? fi_mr_desc(rx_pkt_entry->mr) : NULL;
+		desc = fi_mr_desc(rx_pkt_entry->mr);
 		msg.desc = &desc;
 		/*
 		 * Use the actual receive sizes from the application
@@ -1168,10 +1168,8 @@ static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
 		.alignment	= RXR_BUF_POOL_ALIGNMENT,
 		.max_cnt	= chunk_count,
 		.chunk_cnt	= chunk_count,
-		.alloc_fn	= rxr_ep_mr_local(ep) ?
-					rxr_buf_region_alloc_hndlr : NULL,
-		.free_fn	= rxr_ep_mr_local(ep) ?
-					rxr_buf_region_free_hndlr : NULL,
+		.alloc_fn	= rxr_buf_region_alloc_hndlr,
+		.free_fn	= rxr_buf_region_free_hndlr,
 		.init_fn	= NULL,
 		.context	= rxr_ep_domain(ep),
 		.flags		= flags,

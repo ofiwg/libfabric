@@ -157,7 +157,7 @@ ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
 	/* Assign packet header in constructed iov */
 	iov[i].iov_base = rxr_pkt_start(pkt_entry);
 	iov[i].iov_len = sizeof(struct rxr_data_hdr);
-	desc[i] = rxr_ep_mr_local(ep) ? fi_mr_desc(pkt_entry->mr) : NULL;
+	desc[i] = fi_mr_desc(pkt_entry->mr);
 	i++;
 
 	/*
@@ -168,12 +168,11 @@ ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
 	 */
 	while (tx_entry->iov_index < tx_entry->iov_count &&
 	       remaining_len > 0 && i < ep->core_iov_limit) {
-		if (!rxr_ep_mr_local(ep) || tx_entry->desc[tx_entry->iov_index]) {
+		if (tx_entry->desc[tx_entry->iov_index]) {
 			iov[i].iov_base =
 				(char *)tx_iov[tx_entry->iov_index].iov_base +
 				tx_entry->iov_offset;
-			if (rxr_ep_mr_local(ep))
-				desc[i] = tx_entry->desc[tx_entry->iov_index];
+			desc[i] = tx_entry->desc[tx_entry->iov_index];
 
 			len = tx_iov[tx_entry->iov_index].iov_len
 			      - tx_entry->iov_offset;
