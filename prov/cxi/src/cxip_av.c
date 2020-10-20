@@ -706,7 +706,6 @@ int cxip_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 				  READONLY(av) ? 0 : table_sz, READONLY(av),
 				  (void **)&av->table_hdr);
 		if (ret || av->table_hdr == MAP_FAILED) {
-			CXIP_LOG_ERROR("map failed\n");
 			ret = -FI_ENOMEM;
 			goto err;
 		}
