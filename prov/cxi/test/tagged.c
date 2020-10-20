@@ -3135,8 +3135,8 @@ Test(tagged, recv_more)
 	uint8_t *recv_buf,
 		*recv_buf2,
 		*send_buf;
-	int recv_len = 0x1000;
-	int send_len = 0x1000;
+	int recv_len = 0x2000;
+	int send_len = 0x2000;
 	struct fi_cq_tagged_entry tx_cqe,
 				  rx_cqe;
 	int err = 0;
