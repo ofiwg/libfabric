@@ -21,6 +21,7 @@ bin_PROGRAMS = \
 	functional/fi_rdm_rma_simple \
 	functional/fi_rdm_rma_trigger \
 	functional/fi_rdm_deferred_wq \
+	functional/fi_av_stress \
 	functional/fi_dgram \
 	functional/fi_mcast \
 	functional/fi_dgram_waitset \
@@ -173,6 +174,10 @@ functional_fi_rdm_rma_trigger_LDADD = libfabtests.la
 functional_fi_rdm_deferred_wq_SOURCES = \
 	functional/rdm_deferred_wq.c
 functional_fi_rdm_deferred_wq_LDADD = libfabtests.la
+
+functional_fi_av_stress_SOURCES = \
+	functional/av_stress.c
+functional_fi_av_stress_LDADD = libfabtests.la
 
 functional_fi_dgram_SOURCES = \
 	functional/dgram.c

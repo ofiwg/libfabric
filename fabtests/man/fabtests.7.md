@@ -112,6 +112,11 @@ features of libfabric.
 : Spawns child processes to verify basic functionality of using a shared
   address vector with RDM endpoints.
 
+*fi_av_stress*
+: A multi-threaded client communicates over a large number of RDM
+  endpoints to a single server endpoint, with the client endpoints
+  continually being created and destroyed.
+
 *fi_rdm_tagged_peek*
 : Basic test of using the FI_PEEK operation flag with tagged messages.
   Works with RDM endpoints.
@@ -398,6 +403,10 @@ the list available for that test.
 
 *-U*
 : Run fabtests with FI_DELIVERY_COMPLETE.
+
+*-C <num_connections>
+: The number of connections to establish between the client and server.
+  This option only applies to fi_av_stress.
 
 *-I <number>*
 : Number of data transfer iterations.

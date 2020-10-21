@@ -97,6 +97,7 @@ neg_unit_tests=(
 functional_tests=(
 	"fi_av_xfer -e rdm"
 	"fi_av_xfer -e dgram"
+	"fi_av_stress"
 	"fi_cm_data"
 	"fi_cq_data -e msg"
 	"fi_cq_data -e rdm"

@@ -14,6 +14,9 @@ rdm_cntr_pingpong
 poll
 cq_data
 
+# Exclude av_stress test until hangs are resolved
+av_stress
+
 # Exclude tests with unsupported capabilities
 cm_data
 trigger
