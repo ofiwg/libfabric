@@ -124,7 +124,7 @@ int vrb_verify_xrc_cm_data(struct vrb_xrc_cm_data *remote,
 	return FI_SUCCESS;
 }
 
-void vrb_log_ep_conn(struct vrb_xrc_ep *ep, char *desc)
+static void vrb_log_ep_conn(struct vrb_xrc_ep *ep, char *desc)
 {
 	struct sockaddr *addr;
 	char buf[OFI_ADDRSTRLEN];
@@ -133,33 +133,36 @@ void vrb_log_ep_conn(struct vrb_xrc_ep *ep, char *desc)
 	if (!fi_log_enabled(&vrb_prov, FI_LOG_INFO, FI_LOG_EP_CTRL))
 		return;
 
-	VERBS_INFO(FI_LOG_EP_CTRL, "EP %p, %s\n", ep, desc);
+	VERBS_INFO(FI_LOG_EP_CTRL, "EP %p, %s\n", (void *) ep, desc);
 	VERBS_INFO(FI_LOG_EP_CTRL,
 		  "EP %p, CM ID %p, TGT CM ID %p, SRQN %d Peer SRQN %d\n",
-		  ep, ep->base_ep.id, ep->tgt_id, ep->srqn, ep->peer_srqn);
+		  (void*) ep, (void *) ep->base_ep.id, (void *) ep->tgt_id,
+		  ep->srqn, ep->peer_srqn);
 
 
 	if (ep->base_ep.id) {
 		addr = rdma_get_local_addr(ep->base_ep.id);
 		len = sizeof(buf);
 		ofi_straddr(buf, &len, ep->base_ep.info_attr.addr_format, addr);
-		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p src_addr: %s\n", ep, buf);
+		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p src_addr: %s\n",
+			   (void *) ep, buf);
 
 		addr = rdma_get_peer_addr(ep->base_ep.id);
 		len = sizeof(buf);
 		ofi_straddr(buf, &len, ep->base_ep.info_attr.addr_format, addr);
-		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p dst_addr: %s\n", ep, buf);
+		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p dst_addr: %s\n",
+			   (void *) ep, buf);
 	}
 
 	if (ep->base_ep.ibv_qp) {
 		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p, INI QP Num %d\n",
-			  ep, ep->base_ep.ibv_qp->qp_num);
-		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p, Remote TGT QP Num %d\n", ep,
-			  ep->ini_conn->tgt_qpn);
+			   (void *) ep, ep->base_ep.ibv_qp->qp_num);
+		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p, Remote TGT QP Num %d\n",
+			   (void *) ep, ep->ini_conn->tgt_qpn);
 	}
 	if (ep->tgt_ibv_qp)
 		VERBS_INFO(FI_LOG_EP_CTRL, "EP %p, TGT QP Num %d\n",
-			  ep, ep->tgt_ibv_qp->qp_num);
+			   (void *) ep, ep->tgt_ibv_qp->qp_num);
 }
 
 /* Caller must hold eq:lock */

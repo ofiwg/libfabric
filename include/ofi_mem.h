@@ -66,7 +66,7 @@ enum {
 extern size_t *page_sizes;
 extern size_t num_page_sizes;
 
-static inline long ofi_get_page_size()
+static inline long ofi_get_page_size(void)
 {
 	return ofi_sysconf(_SC_PAGESIZE);
 }
@@ -100,50 +100,50 @@ static inline int ofi_str_dup(const char *src, char **dst)
 /*
  * Buffer pool (free stack) template
  */
-#define FREESTACK_EMPTY	NULL
+#define OFI_FREESTACK_EMPTY	NULL
 
-#define freestack_get_next(user_buf)	((char *)user_buf - sizeof(void *))
-#define freestack_get_user_buf(entry)	((char *)entry + sizeof(void *))
+#define ofi_freestack_get_next(user_buf) ((char *)user_buf - sizeof(void *))
+#define ofi_freestack_get_user_buf(entry) ((char *)entry + sizeof(void *))
 
 #if ENABLE_DEBUG
-#define freestack_init_next(entry)	*((void **)entry) = NULL
-#define freestack_check_next(entry)	assert(*((void **)entry) == NULL)
+#define ofi_freestack_init_next(entry)	*((void **)entry) = NULL
+#define ofi_freestack_check_next(entry)	assert(*((void **)entry) == NULL)
 #else
-#define freestack_init_next(entry)
-#define freestack_check_next(entry)
+#define ofi_freestack_init_next(entry)
+#define ofi_freestack_check_next(entry)
 #endif
 
-#define FREESTACK_HEADER 					\
+#define OFI_FREESTACK_HEADER 					\
 	size_t		size;					\
 	void		*next;					\
 
-#define freestack_isempty(fs)	((fs)->next == FREESTACK_EMPTY)
-#define freestack_push(fs, p)					\
+#define ofi_freestack_isempty(fs) ((fs)->next == OFI_FREESTACK_EMPTY)
+#define ofi_freestack_push(fs, p)				\
 do {								\
-	freestack_check_next(freestack_get_next(p));		\
-	*(void **) (freestack_get_next(p)) = (fs)->next;	\
-	(fs)->next = (freestack_get_next(p));			\
+	ofi_freestack_check_next(ofi_freestack_get_next(p));	\
+	*(void **) (ofi_freestack_get_next(p)) = (fs)->next;	\
+	(fs)->next = (ofi_freestack_get_next(p));		\
 } while (0)
-#define freestack_pop(fs) freestack_pop_impl(fs, (fs)->next)
+#define ofi_freestack_pop(fs) ofi_freestack_pop_impl(fs, (fs)->next)
 
-static inline void* freestack_pop_impl(void *fs, void *fs_next)
+static inline void* ofi_freestack_pop_impl(void *fs, void *fs_next)
 {
 	struct _freestack {
-		FREESTACK_HEADER
+		OFI_FREESTACK_HEADER
 	} *freestack = (struct _freestack *)fs;
-	assert(!freestack_isempty(freestack));
+	assert(!ofi_freestack_isempty(freestack));
 	freestack->next = *((void **)fs_next);
-	freestack_init_next(fs_next);
-	return freestack_get_user_buf(fs_next);
+	ofi_freestack_init_next(fs_next);
+	return ofi_freestack_get_user_buf(fs_next);
 }
 
-#define DECLARE_FREESTACK(entrytype, name)			\
+#define OFI_DECLARE_FREESTACK(entrytype, name)			\
 struct name ## _entry {						\
 	void		*next;					\
 	entrytype	buf;					\
 };								\
 struct name {							\
-	FREESTACK_HEADER					\
+	OFI_FREESTACK_HEADER					\
 	struct name ## _entry	entry[];			\
 };								\
 								\
@@ -158,11 +158,11 @@ name ## _init(struct name *fs, size_t size,			\
 	assert(size == roundup_power_of_two(size));		\
 	assert(sizeof(fs->entry[0].buf) >= sizeof(void *));	\
 	fs->size = size;					\
-	fs->next = FREESTACK_EMPTY;				\
+	fs->next = OFI_FREESTACK_EMPTY;				\
 	for (i = size - 1; i >= 0; i--) {			\
 		if (init)					\
 			init(&fs->entry[i].buf, arg);		\
-		freestack_push(fs, &fs->entry[i].buf);		\
+		ofi_freestack_push(fs, &fs->entry[i].buf);	\
 	}							\
 }								\
 								\
@@ -184,14 +184,16 @@ static inline int name ## _index(struct name *fs,		\
 				 entrytype *entry)		\
 {								\
 	return (int)((struct name ## _entry *)			\
-			(freestack_get_next(entry))		\
+			(ofi_freestack_get_next(entry))		\
 			- (struct name ## _entry *)fs->entry);	\
 }								\
 								\
 static inline void name ## _free(struct name *fs)		\
 {								\
 	free(fs);						\
-}
+}								\
+void dummy ## name (void) /* work-around global ; scope */
+
 
 /*
  * Buffer pool (free stack) template for shared memory regions
@@ -207,9 +209,9 @@ static inline void name ## _free(struct name *fs)		\
 #define smr_freestack_push(fs, local_p)				\
 do {								\
 	void *p = (char **) fs->base_addr +			\
-	    ((char **) freestack_get_next(local_p) -		\
+	    ((char **) ofi_freestack_get_next(local_p) -	\
 		(char **) fs);					\
-	*(void **) freestack_get_next(local_p) = (fs)->next;	\
+	*(void **) ofi_freestack_get_next(local_p) = (fs)->next;\
 	(fs)->next = p;						\
 } while (0)
 #define smr_freestack_pop(fs) smr_freestack_pop_impl(fs, fs->next)
@@ -227,12 +229,12 @@ static inline void* smr_freestack_pop_impl(void *fs, void *next)
 		(char **) freestack->base_addr);
 
 	freestack->next = *((void **)local);
-	freestack_init_next(local);
+	ofi_freestack_init_next(local);
 
-	return freestack_get_user_buf(local);
+	return ofi_freestack_get_user_buf(local);
 }
 
-#define DECLARE_SMR_FREESTACK(entrytype, name)			\
+#define SMR_DECLARE_FREESTACK(entrytype, name)			\
 struct name ## _entry {						\
 	void		*next;					\
 	entrytype	buf;					\
@@ -268,14 +270,15 @@ static inline int name ## _index(struct name *fs,		\
 		entrytype *entry)				\
 {								\
 	return (int)((struct name ## _entry *)			\
-			(freestack_get_next(entry))		\
+			(ofi_freestack_get_next(entry))		\
 			- (struct name ## _entry *)fs->entry);	\
 }								\
 								\
 static inline void name ## _free(struct name *fs)		\
 {								\
 	free(fs);						\
-}
+}								\
+void dummy ## name (void) /* work-around global ; scope */
 
 
 /*

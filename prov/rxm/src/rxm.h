@@ -660,7 +660,7 @@ struct rxm_recv_entry {
 		struct rxm_tx_base_buf *tx_buf;
 	} rndv;
 };
-DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
+OFI_DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
 
 enum rxm_recv_queue_type {
 	RXM_RECV_QUEUE_UNSPEC,
@@ -980,7 +980,7 @@ static inline void
 rxm_recv_entry_release(struct rxm_recv_queue *queue, struct rxm_recv_entry *entry)
 {
 	entry->total_len = 0;
-	freestack_push(queue->fs, entry);
+	ofi_freestack_push(queue->fs, entry);
 }
 
 static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,

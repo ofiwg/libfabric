@@ -690,7 +690,7 @@ struct util_av_entry {
 	 * field in 'data' and addr length should be a multiple
 	 * of 8 bytes to ensure alignment of additional fields
 	 */
-	char		data[0];
+	char		data[];
 };
 
 struct util_av {
@@ -823,7 +823,7 @@ struct util_event {
 	ssize_t			size;
 	int			event;
 	int			err;
-	uint8_t			data[0]; /* offset should be 8-byte aligned */
+	uint8_t			data[]; /* offset should be 8-byte aligned */
 };
 
 int ofi_eq_create(struct fid_fabric *fabric, struct fi_eq_attr *attr,

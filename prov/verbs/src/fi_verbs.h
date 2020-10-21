@@ -888,7 +888,7 @@ int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc);
 	  .lkey = (uint32_t) (uintptr_t) desc }
 
 #define vrb_set_sge_iov(sg_list, iov, count, desc)	\
-({							\
+do {							\
 	size_t i;					\
 	sg_list = alloca(sizeof(*sg_list) * count);	\
 	for (i = 0; i < count; i++) {			\
@@ -897,10 +897,10 @@ int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc);
 				iov[i].iov_len,		\
 				desc[i]);		\
 	}						\
-})
+} while (0)
 
 #define vrb_set_sge_iov_count_len(sg_list, iov, count, desc, len)	\
-({									\
+do {									\
 	size_t i;							\
 	sg_list = alloca(sizeof(*sg_list) * count);			\
 	for (i = 0; i < count; i++) {					\
@@ -910,12 +910,12 @@ int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc);
 				desc[i]);				\
 		len += iov[i].iov_len;					\
 	}								\
-})
+} while (0)
 
 #define vrb_init_sge_inline(buf, len) vrb_init_sge(buf, len, NULL)
 
 #define vrb_set_sge_iov_inline(sg_list, iov, count, len)	\
-({								\
+do {								\
 	size_t i;						\
 	sg_list = alloca(sizeof(*sg_list) * count);		\
 	for (i = 0; i < count; i++) {				\
@@ -924,7 +924,7 @@ int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc);
 					iov[i].iov_len);	\
 		len += iov[i].iov_len;				\
 	}							\
-})
+} while (0)
 
 #define vrb_send_iov(ep, wr, iov, desc, count)		\
 	vrb_send_iov_flags(ep, wr, iov, desc, count,		\

@@ -824,10 +824,10 @@ rxm_recv_entry_get(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	struct rxm_recv_entry *recv_entry;
 	size_t i;
 
-	if (freestack_isempty(recv_queue->fs))
+	if (ofi_freestack_isempty(recv_queue->fs))
 		return NULL;
 
-	recv_entry = freestack_pop(recv_queue->fs);
+	recv_entry = ofi_freestack_pop(recv_queue->fs);
 	assert(!recv_entry->rndv.tx_buf);
 
 	recv_entry->rxm_iov.count = (uint8_t) count;

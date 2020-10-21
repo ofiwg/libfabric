@@ -145,7 +145,7 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 				  recv_entry->flags, 0,
 				  NULL, recv_entry->peer_id,
 				  recv_entry->tag, 0, FI_ECANCELED);
-		freestack_push(ep->recv_fs, recv_entry);
+		ofi_freestack_push(ep->recv_fs, recv_entry);
 		ret = ret ? ret : 1;
 	}
 
@@ -250,8 +250,8 @@ static int smr_match_tagged(struct dlist_entry *item, const void *args)
 
 	recv_entry = container_of(item, struct smr_rx_entry, entry);
 	return smr_match_id(recv_entry->peer_id, attr->id) &&
-	       smr_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag); 
-} 
+	       smr_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag);
+}
 
 static int smr_match_unexp_msg(struct dlist_entry *item, const void *args)
 {
@@ -585,7 +585,7 @@ static int smr_ep_bind_cntr(struct smr_ep *ep, struct util_cntr *cntr, uint64_t 
 	if (ret)
 		return ret;
 
-	if (cntr->wait) {	
+	if (cntr->wait) {
 		ret = ofi_wait_add_fid(cntr->wait, &ep->util_ep.ep_fid.fid, 0,
 				       smr_ep_trywait);
 		if (ret)

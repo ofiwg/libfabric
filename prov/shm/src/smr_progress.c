@@ -198,7 +198,7 @@ static void smr_progress_resp(struct smr_ep *ep)
 				"unable to process tx completion\n");
 			break;
 		}
-		freestack_push(ep->pend_fs, pending);
+		ofi_freestack_push(ep->pend_fs, pending);
 		ofi_cirque_discard(smr_resp_queue(ep->region));
 	}
 	fastlock_release(&ep->util_ep.tx_cq->cq_lock);
@@ -389,7 +389,7 @@ static struct smr_sar_entry *smr_progress_sar(struct smr_cmd *cmd,
 	if (*total_len == cmd->msg.hdr.size)
 		return NULL;
 
-	sar_entry = freestack_pop(ep->sar_fs);
+	sar_entry = ofi_freestack_pop(ep->sar_fs);
 
 	sar_entry->cmd = *cmd;
 	sar_entry->bytes_done = *total_len;
@@ -594,7 +594,7 @@ static int smr_progress_msg_common(struct smr_ep *ep, struct smr_cmd *cmd,
 
 	if (free_entry) {
 		dlist_remove(&entry->entry);
-		freestack_push(ep->recv_fs, entry);
+		ofi_freestack_push(ep->recv_fs, entry);
 		return 1;
 	}
 	return 0;
@@ -652,9 +652,9 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 					     recv_queue->match_func,
 					     &match_attr);
 	if (!dlist_entry) {
-		if (freestack_isempty(ep->unexp_fs))
+		if (ofi_freestack_isempty(ep->unexp_fs))
 			return -FI_EAGAIN;
-		unexp = freestack_pop(ep->unexp_fs);
+		unexp = ofi_freestack_pop(ep->unexp_fs);
 		memcpy(&unexp->cmd, cmd, sizeof(*cmd));
 		ofi_cirque_discard(smr_cmd_queue(ep->region));
 		if (cmd->msg.hdr.op == ofi_op_msg) {
@@ -938,7 +938,7 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 					"unable to process rx completion\n");
 			}
 			dlist_remove(&sar_entry->entry);
-			freestack_push(ep->sar_fs, sar_entry);
+			ofi_freestack_push(ep->sar_fs, sar_entry);
 		}
 	}
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
@@ -980,7 +980,7 @@ int smr_progress_unexp_queue(struct smr_ep *ep, struct smr_rx_entry *entry,
 	while (dlist_entry) {
 		unexp_msg = container_of(dlist_entry, struct smr_unexp_msg, entry);
 		ret = smr_progress_msg_common(ep, &unexp_msg->cmd, entry);
-		freestack_push(ep->unexp_fs, unexp_msg);
+		ofi_freestack_push(ep->unexp_fs, unexp_msg);
 		if (!multi_recv || ret)
 			break;
 

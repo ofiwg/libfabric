@@ -183,10 +183,10 @@ struct smr_unexp_msg {
 	struct smr_cmd cmd;
 };
 
-DECLARE_FREESTACK(struct smr_rx_entry, smr_recv_fs);
-DECLARE_FREESTACK(struct smr_unexp_msg, smr_unexp_fs);
-DECLARE_FREESTACK(struct smr_tx_entry, smr_pend_fs);
-DECLARE_FREESTACK(struct smr_sar_entry, smr_sar_fs);
+OFI_DECLARE_FREESTACK(struct smr_rx_entry, smr_recv_fs);
+OFI_DECLARE_FREESTACK(struct smr_unexp_msg, smr_unexp_fs);
+OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_pend_fs);
+OFI_DECLARE_FREESTACK(struct smr_sar_entry, smr_sar_fs);
 
 struct smr_queue {
 	struct dlist_entry list;
