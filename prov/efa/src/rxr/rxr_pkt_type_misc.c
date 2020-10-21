@@ -284,7 +284,7 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 	assert(tx_entry->window >= 0);
 	if (tx_entry->bytes_sent < tx_entry->total_len) {
 		assert(!efa_ep_is_cuda_mr(tx_entry->desc[0]));
-		if (efa_is_cache_available(efa_domain))
+		if (tx_entry->desc[0] || efa_is_cache_available(efa_domain))
 			rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
 
 		tx_entry->state = RXR_TX_SEND;
