@@ -386,7 +386,7 @@ AC_TRY_LINK(
 		int foo(int arg) { return arg + 3; };
 		int foo2(int arg) __attribute__ (( __alias__("foo")));
 	],
-	[ /* empty main */ ],
+	[ foo2(1); ],
 	[
 		AC_MSG_RESULT(yes)
 		ac_prog_cc_alias_symbols=1
