@@ -184,6 +184,7 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 	/* An IDC command can use up to 4 64 byte slots. */
 	cq_opts.count = size * 4;
 	cq_opts.flags = transmit ? CXI_CQ_IS_TX : 0;
+	cq_opts.policy = cxip_env.cq_policy;
 
 	if (transmit) {
 		enum cxi_traffic_class tc = cxip_ofi_to_cxi_tc(tclass);

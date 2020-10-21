@@ -212,6 +212,7 @@ struct cxip_environment cxip_env = {
 	.oflow_buf_count = CXIP_OFLOW_BUF_COUNT,
 	.optimized_mrs = true,
 	.llring_mode = CXIP_LLRING_IDLE,
+	.cq_policy = CXI_CQ_UPDATE_LOW_FREQ_EMPTY,
 	.default_vni = 10,
 	.eq_ack_batch_size = 32,
 };
@@ -283,6 +284,24 @@ static void cxip_env_init(void)
 			cxip_env.llring_mode = CXIP_LLRING_NEVER;
 		else
 			CXIP_LOG_INFO("Unrecognized llring_mode: %s\n",
+				      param_str);
+	}
+
+	fi_param_define(&cxip_prov, "cq_policy", FI_PARAM_STRING,
+			"Set Command Queue write-back policy.");
+	fi_param_get_str(&cxip_prov, "cq_policy", &param_str);
+
+	if (param_str) {
+		if (!strcmp(param_str, "always"))
+			cxip_env.cq_policy = CXI_CQ_UPDATE_ALWAYS;
+		else if (!strcmp(param_str, "high_empty"))
+			cxip_env.cq_policy = CXI_CQ_UPDATE_HIGH_FREQ_EMPTY;
+		else if (!strcmp(param_str, "low_empty"))
+			cxip_env.cq_policy = CXI_CQ_UPDATE_LOW_FREQ_EMPTY;
+		else if (!strcmp(param_str, "low"))
+			cxip_env.cq_policy = CXI_CQ_UPDATE_LOW_FREQ;
+		else
+			CXIP_LOG_INFO("Unrecognized cq_policy: %s\n",
 				      param_str);
 	}
 

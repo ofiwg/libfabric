@@ -183,6 +183,8 @@ struct cxip_environment {
 
 	enum cxip_llring_mode llring_mode;
 
+	int cq_policy;
+
 	size_t default_vni;
 
 	size_t eq_ack_batch_size;

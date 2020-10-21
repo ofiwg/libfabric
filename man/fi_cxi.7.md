@@ -436,6 +436,12 @@ FI_CXI_RDZV_GET_MIN must be less than or equal to FI_CXI_OFLOW_BUF_SIZE.
 mechanism improves the latency of command processing on an idle command queue.
 Valid values are idle, always, and never.
 
+*FI_CXI_CQ_POLICY*
+: Experimental. Set Command Queue write-back policy. Valid values are always,
+high_empty, low_empty, and low. "always", "high", and "low" refer to the
+frequency of write-backs. "empty" refers to whether a write-back is performed
+when the queue becomes empty.
+
 *FI_CXI_DEFAULT_VNI*
 : Default VNI value (masked to 16 bits).
 
