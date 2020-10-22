@@ -7,6 +7,17 @@
 #ifndef _FI_CXI_EXT_H_
 #define _FI_CXI_EXT_H_
 
+/*
+ * Use CXI High Rate Puts (HRP). Increases message rate performance. Applies to
+ * RMA and unreliable AMO operations.
+ */
+#define FI_CXI_HRP (1ULL << 60)
+
+/*
+ * Disable AMO reliability. Increases message rate performance. Applies to
+ * non-fetching AMOs. Required for HRP AMOs.
+ */
+#define FI_CXI_UNRELIABLE (1ULL << 61)
 
 #define FI_CXI_DOM_OPS_1 "dom_ops_v1"
 

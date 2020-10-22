@@ -223,6 +223,12 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 	fastlock_acquire(&cmdq->lock);
 
+	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
+			      cxip_ofi_to_cxi_tc(txc->tclass),
+			      !unr && (flags & FI_CXI_HRP));
+	if (ret != FI_SUCCESS)
+		goto unlock_op;
+
 	if (flags & FI_FENCE) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
 		if (ret) {

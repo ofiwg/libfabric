@@ -83,6 +83,7 @@
 					 FI_COMPLETION | \
 					 FI_MORE | \
 					 FI_FENCE | \
+					 FI_CXI_HRP | \
 					 CXIP_TX_COMP_MODES)
 #define CXIP_READMSG_ALLOWED_FLAGS	(FI_COMPLETION | \
 					 FI_MORE | \
@@ -404,6 +405,11 @@ struct cxip_cmdq {
 	fastlock_t lock;
 	struct c_cstate_cmd c_state;
 	enum cxip_llring_mode llring_mode;
+
+	uint16_t vni;
+	enum cxi_traffic_class tc;
+	bool hrp;
+	struct cxip_lni *lni;
 };
 
 
@@ -1305,8 +1311,8 @@ int cxip_alloc_lni(struct cxip_if *iface, uint32_t svc_id,
 void cxip_free_lni(struct cxip_lni *lni);
 const char *cxi_tc_str(enum cxi_traffic_class tc);
 enum cxi_traffic_class cxip_ofi_to_cxi_tc(uint32_t ofi_tclass);
-int cxip_cp_get(struct cxip_lni *lni, uint16_t vni, enum cxi_traffic_class tc,
-		struct cxi_cp **cp);
+int cxip_txq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
+		     enum cxi_traffic_class tc, bool hrp);
 int cxip_alloc_if_domain(struct cxip_lni *lni, uint32_t vni, uint32_t pid,
 			 struct cxip_if_domain **if_dom);
 void cxip_free_if_domain(struct cxip_if_domain *if_dom);
@@ -1333,7 +1339,8 @@ int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
 			  enum c_ptlte_state new_state);
 
 int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
-		    struct cxi_cq_alloc_opts *cq_opts,
+		    struct cxi_cq_alloc_opts *cq_opts, uint16_t vni,
+		    enum cxi_traffic_class tc, bool hrp,
 		    struct cxip_cmdq **cmdq);
 void cxip_cmdq_free(struct cxip_cmdq *cmdq);
 

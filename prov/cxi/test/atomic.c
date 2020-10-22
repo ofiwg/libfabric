@@ -2313,3 +2313,137 @@ Test(atomic, fence)
 
 	_cxit_destroy_mr(&mr);
 }
+
+void cxit_setup_amo_opt(void)
+{
+	cxit_setup_getinfo();
+
+	/* Explicitly request unordered RMA */
+	cxit_fi_hints->caps = FI_ATOMIC;
+	cxit_fi_hints->tx_attr->msg_order = 0;
+
+	cxit_setup_rma();
+}
+
+TestSuite(amo_opt, .init = cxit_setup_amo_opt, .fini = cxit_teardown_rma,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
+
+/* Test Unreliable/HRP AMOs */
+Test(amo_opt, hrp)
+{
+	struct mem_region mr;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t operand1;
+	uint64_t exp_remote;
+	uint64_t *rma;
+	int ret;
+	uint64_t key = 0xa;
+	struct fi_msg_atomic msg = {};
+	struct fi_ioc ioc;
+	struct fi_rma_ioc rma_ioc;
+	uint64_t res_start;
+	uint64_t res_end;
+	uint64_t hrp_acks_start;
+	uint64_t hrp_acks_end;
+	struct cxip_ep *cxi_ep;
+
+	/* HRP not supported in netsim */
+	cxi_ep = container_of(cxit_ep, struct cxip_ep, ep);
+	if (is_netsim(cxi_ep->ep_obj))
+		return;
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
+				 &res_start, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_HNI_HRP_ACK,
+				 &hrp_acks_start, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
+	ioc.addr = &operand1;
+	ioc.count = 1;
+
+	rma_ioc.addr = 0;
+	rma_ioc.count = 1;
+	rma_ioc.key = key;
+
+	msg.msg_iov = &ioc;
+	msg.iov_count = 1;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.datatype = FI_UINT64;
+	msg.op = FI_SUM;
+
+	rma = _cxit_create_mr(&mr, key);
+	exp_remote = 0;
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	operand1 = 1;
+
+	exp_remote += operand1;
+	ret = fi_atomicmsg(cxit_ep, &msg, FI_CXI_UNRELIABLE);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+
+	/* Validate sent data */
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	exp_remote += operand1;
+	ret = fi_atomicmsg(cxit_ep, &msg, FI_CXI_UNRELIABLE | FI_CXI_HRP);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+
+	exp_remote += operand1;
+	ret = fi_atomicmsg(cxit_ep, &msg, 0);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+
+	/* wait a second to check the operation was performed. The HRP response
+	 * returns before the request hits the NIC.
+	 */
+	usleep(1000);
+
+	/* Validate sent data */
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	ret = fi_atomicmsg(cxit_ep, &msg, FI_CXI_HRP);
+	cr_assert_eq(ret, -FI_EINVAL, "ret is: %d", ret);
+
+	sleep(1);
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
+				 &res_end, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_HNI_HRP_ACK,
+				 &hrp_acks_end, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
+	cr_assert_eq(hrp_acks_end - hrp_acks_start, 1,
+		     "unexpected hrp_acks count: %lu\n",
+		     hrp_acks_end - hrp_acks_start);
+	cr_assert_eq(res_end - res_start, 2,
+		     "unexpected hrp_acks count: %lu\n",
+		     res_end - res_start);
+
+	_cxit_destroy_mr(&mr);
+}

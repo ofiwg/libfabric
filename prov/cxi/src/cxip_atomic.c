@@ -394,6 +394,9 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	if (!msg)
 		return -FI_EINVAL;
 
+	if (flags & FI_CXI_HRP && !(flags & FI_CXI_UNRELIABLE))
+		return -FI_EINVAL;
+
 	switch (req_type) {
 	case CXIP_RQ_AMO_SWAP:
 		/* Must have a valid compare address */
@@ -573,6 +576,12 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 
 	fastlock_acquire(&cmdq->lock);
 
+	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
+			      cxip_ofi_to_cxi_tc(txc->tclass),
+			      flags & FI_CXI_HRP);
+	if (ret != FI_SUCCESS)
+		goto unlock_cmdq;
+
 	if (flags & FI_FENCE) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
 		if (ret) {
@@ -591,6 +600,9 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		cmd.c_state.event_send_disable = 1;
 		cmd.c_state.index_ext = idx_ext;
 		cmd.c_state.eq = txc->send_cq->evtq->eqn;
+
+		if (flags & FI_CXI_UNRELIABLE)
+			cmd.c_state.restricted = 1;
 
 		if (req) {
 			cmd.c_state.user_ptr = (uint64_t)req;
@@ -726,6 +738,9 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 				cmd.ct = cntr->ct->ctn;
 			}
 		}
+
+		if (flags & FI_CXI_UNRELIABLE)
+			cmd.restricted = 1;
 
 		if (triggered) {
 			const struct c_ct_cmd ct_cmd = {
@@ -870,7 +885,7 @@ static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *ep,
 {
 	struct cxip_txc *txc;
 
-	if (flags & ~CXIP_WRITEMSG_ALLOWED_FLAGS)
+	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS | FI_CXI_UNRELIABLE))
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)

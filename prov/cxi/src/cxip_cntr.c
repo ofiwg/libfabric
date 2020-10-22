@@ -48,7 +48,10 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 	cq_opts.flags = CXI_CQ_IS_TX | CXI_CQ_TX_WITH_TRIG_CMDS;
 	cq_opts.policy = CXI_CQ_UPDATE_ALWAYS;
 
-	ret = cxip_cmdq_alloc(dom->lni, NULL, &cq_opts, &dom->trig_cmdq);
+	ret = cxip_cmdq_alloc(dom->lni, NULL, &cq_opts,
+			      dom->auth_key.vni,
+			      cxip_ofi_to_cxi_tc(dom->tclass), false,
+			      &dom->trig_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Failed to allocate trig_cmdq: %d\n", ret);
 

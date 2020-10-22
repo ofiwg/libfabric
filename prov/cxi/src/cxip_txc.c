@@ -192,23 +192,6 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		goto unlock;
 	}
 
-	/* Make sure the TX CQ TC matches the TXC TC. */
-	ret = cxip_cp_get(txc->domain->lni, txc->ep_obj->auth_key.vni,
-			  cxip_ofi_to_cxi_tc(txc->tclass), &txc->cp);
-	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to get CP: %d\n", ret);
-		goto put_tx_cmdq;
-	}
-
-	fastlock_acquire(&txc->tx_cmdq->lock);
-	ret = cxi_cq_emit_cq_lcid(txc->tx_cmdq->dev_cmdq, txc->cp->lcid);
-	if (ret)
-		CXIP_LOG_ERROR("Failed to update CMDQ(%p) CP: %d\n",
-			       txc->tx_cmdq, ret);
-	else
-		cxi_cq_ring(txc->tx_cmdq->dev_cmdq);
-	fastlock_release(&txc->tx_cmdq->lock);
-
 	if (ofi_send_allowed(txc->attr.caps)) {
 		ret = txc_msg_init(txc);
 		if (ret != FI_SUCCESS) {

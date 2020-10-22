@@ -3442,6 +3442,11 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 
 	fastlock_acquire(&cmdq->lock);
 
+	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
+			      cxip_ofi_to_cxi_tc(txc->tclass), 0);
+	if (ret != FI_SUCCESS)
+		goto err_unlock;
+
 	if (req->send.flags & FI_FENCE) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
 		if (ret) {
@@ -3648,6 +3653,11 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 
 	/* Submit command */
 	fastlock_acquire(&cmdq->lock);
+
+	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
+			      cxip_ofi_to_cxi_tc(txc->tclass), 0);
+	if (ret != FI_SUCCESS)
+		goto err_unlock;
 
 	if (req->send.flags & FI_FENCE) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);

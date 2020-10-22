@@ -157,7 +157,6 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 	ofi_atomic32_t *cmdq_refs;
 	int ret;
 	size_t size;
-	struct cxi_cp *cp = NULL;
 
 	if (transmit) {
 		cmdqs = ep_obj->txqs;
@@ -186,19 +185,9 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 	cq_opts.flags = transmit ? CXI_CQ_IS_TX : 0;
 	cq_opts.policy = cxip_env.cq_policy;
 
-	if (transmit) {
-		enum cxi_traffic_class tc = cxip_ofi_to_cxi_tc(tclass);
-
-		ret = cxip_cp_get(ep_obj->domain->lni, ep_obj->auth_key.vni,
-				  tc, &cp);
-		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("Failed to allocate CP: %d\n", ret);
-			return ret;
-		}
-		cq_opts.lcid = cp->lcid;
-	}
-
-	ret = cxip_cmdq_alloc(ep_obj->domain->lni, NULL, &cq_opts, cmdq);
+	ret = cxip_cmdq_alloc(ep_obj->domain->lni, NULL, &cq_opts,
+			      ep_obj->auth_key.vni, cxip_ofi_to_cxi_tc(tclass),
+			      false, cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("Unable to allocate CMDQ, ret: %d\n", ret);
 		ret = -FI_ENOSPC;
@@ -1858,12 +1847,24 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 			       sizeof(struct cxi_auth_key));
 
 			/* All EPs that share a Domain must use the same
-			 * Service ID. VNI may vary.
+			 * Service ID.
 			 */
 			if (cxi_ep->ep_obj->auth_key.svc_id !=
 			    cxi_dom->auth_key.svc_id) {
 				CXIP_LOG_ERROR("Invalid svc_id: %u\n",
 					       cxi_ep->ep_obj->auth_key.svc_id);
+				ret = -FI_EINVAL;
+				goto err;
+			}
+
+			/* All EPs that share a Domain must use the same VNI.
+			 * This is a simplification due to Cassini requiring
+			 * triggered op TXQs to use CP 0.
+			 */
+			if (cxi_ep->ep_obj->auth_key.vni !=
+			    cxi_dom->auth_key.vni) {
+				CXIP_LOG_ERROR("Invalid VNI: %u\n",
+					       cxi_ep->ep_obj->auth_key.vni);
 				ret = -FI_EINVAL;
 				goto err;
 			}

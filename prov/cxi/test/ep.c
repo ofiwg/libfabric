@@ -1046,22 +1046,8 @@ Test(ep_init, auth_key)
 	cxit_fi->ep_attr->auth_key = mem_dup(&auth_key, sizeof(auth_key));
 	cxit_fi->ep_attr->auth_key_size = sizeof(auth_key);
 
-	/* Create enabled Domain/EP */
-	cxit_setup_rma();
-
-	cxit_teardown_rma();
-
-	/*---*/
-
-	cxit_setup_domain();
-
-	/* Set custom auth key in Domain */
-	auth_key.svc_id = CXI_DEFAULT_SVC_ID;
-	auth_key.vni = 300;
-	cxit_fi->domain_attr->auth_key = mem_dup(&auth_key, sizeof(auth_key));
-	cxit_fi->domain_attr->auth_key_size = sizeof(auth_key);
-
-	cxit_create_domain();
+	ret = fi_endpoint(cxit_domain, cxit_fi, &cxit_ep, NULL);
+	cr_assert_eq(ret, -FI_EINVAL);
 
 	/* Try mis-matched svc_id */
 	auth_key.svc_id = 10;
@@ -1073,17 +1059,6 @@ Test(ep_init, auth_key)
 	cr_assert_eq(ret, -FI_EINVAL);
 
 	free(cxit_fi->ep_attr->auth_key);
-
-	/* override VNI */
-	auth_key.svc_id = CXI_DEFAULT_SVC_ID;
-	auth_key.vni = 302;
-	cxit_fi->ep_attr->auth_key = mem_dup(&auth_key, sizeof(auth_key));
-	cxit_fi->ep_attr->auth_key_size = sizeof(auth_key);
-
-	/* Create enabled Domain/EP */
-	cxit_setup_rma();
-
-	cxit_teardown_rma();
 }
 
 Test(ep_init, tclass)

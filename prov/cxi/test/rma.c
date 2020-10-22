@@ -136,8 +136,7 @@ Test(rma_opt, opt_write)
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 
 	cxi_ep = container_of(cxit_ep, struct cxip_ep, ep);
-	if (cxi_ep->ep_obj->domain->iface->info->device_platform !=
-	    CXI_PLATFORM_NETSIM) {
+	if (!is_netsim(cxi_ep->ep_obj)) {
 		cr_assert(hits_end > hits_start);
 	} else {
 		if (hits_end == hits_start)
@@ -267,6 +266,9 @@ void do_writemsg(uint64_t flags)
 
 	validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
 
+	if (flags & FI_CXI_HRP)
+		usleep(1000);
+
 	/* Validate sent data */
 	for (int i = 0; i < send_len; i++)
 		cr_assert_eq(mem_window.mem[i], send_buf[i],
@@ -282,6 +284,42 @@ Test(rma, writemsg)
 {
 	do_writemsg(0);
 	do_writemsg(FI_FENCE);
+}
+
+/* Test HRP Put */
+Test(rma_opt, hrp)
+{
+	int ret;
+	uint64_t hrp_acks_start;
+	uint64_t hrp_acks_end;
+	struct cxip_ep *cxi_ep;
+
+	/* HRP not supported in netsim */
+	cxi_ep = container_of(cxit_ep, struct cxip_ep, ep);
+	if (is_netsim(cxi_ep->ep_obj))
+		return;
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_HNI_HRP_ACK,
+				 &hrp_acks_start, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
+	do_writemsg(0);
+	do_writemsg(FI_CXI_HRP);
+	do_writemsg(0);
+
+	for (int i = 0; i < 10; i++)
+		do_writemsg(FI_CXI_HRP);
+
+	sleep(1);
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_HNI_HRP_ACK,
+				 &hrp_acks_end, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
+	cr_assert_eq(hrp_acks_end - hrp_acks_start, 11,
+		     "unexpected hrp_acks count: %lu\n",
+		     hrp_acks_end - hrp_acks_start);
 }
 
 /* Perform a write that uses a flushing ZBR at the target. */

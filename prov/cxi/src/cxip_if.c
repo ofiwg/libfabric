@@ -285,8 +285,8 @@ enum cxi_traffic_class cxip_ofi_to_cxi_tc(uint32_t ofi_tclass)
 	}
 }
 
-int cxip_cp_get(struct cxip_lni *lni, uint16_t vni, enum cxi_traffic_class tc,
-		struct cxi_cp **cp)
+static int cxip_cp_get(struct cxip_lni *lni, uint16_t vni,
+		       enum cxi_traffic_class tc, bool hrp, struct cxi_cp **cp)
 {
 	int ret;
 	int i;
@@ -294,27 +294,61 @@ int cxip_cp_get(struct cxip_lni *lni, uint16_t vni, enum cxi_traffic_class tc,
 	fastlock_acquire(&lni->lock);
 
 	for (i = 0; i < lni->n_cps; i++) {
-		if (lni->cps[i]->vni == vni && lni->cps[i]->tc == tc) {
+		if (lni->cps[i]->vni == vni && lni->cps[i]->tc == tc &&
+		    lni->cps[i]->hrp == hrp) {
 			*cp = lni->cps[i];
 			ret = FI_SUCCESS;
 			goto unlock;
 		}
 	}
 
-	ret = cxil_alloc_cp(lni->lni, vni, tc, false, &lni->cps[lni->n_cps]);
+	ret = cxil_alloc_cp(lni->lni, vni, tc, hrp, &lni->cps[lni->n_cps]);
 	if (!ret) {
-		CXIP_LOG_DBG("Allocated CP: %u VNI: %u TC: %s\n",
-			     lni->cps[lni->n_cps]->lcid, vni, cxi_tc_str(tc));
+		CXIP_LOG_DBG("Allocated CP: %u VNI: %u TC: %s HRP: %u\n",
+			     lni->cps[lni->n_cps]->lcid, vni, cxi_tc_str(tc),
+			     hrp);
 		*cp = lni->cps[lni->n_cps++];
 		ret = FI_SUCCESS;
 	} else {
-		CXIP_LOG_INFO("Failed to allocate CP, ret: %d VNI: %u TC: %u\n",
-			      ret, vni, tc);
+		CXIP_LOG_INFO("Failed to allocate CP, ret: %d VNI: %u TC: %u HRP: %u\n",
+			      ret, vni, tc, hrp);
 		ret = -FI_EINVAL;
 	}
 
 unlock:
 	fastlock_release(&lni->lock);
+
+	return ret;
+}
+
+int cxip_txq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
+		     enum cxi_traffic_class tc, bool hrp)
+{
+	struct cxi_cp *cp;
+	int ret;
+
+	if (cmdq->vni == vni && cmdq->tc == tc && cmdq->hrp == hrp)
+		return FI_SUCCESS;
+
+	ret = cxip_cp_get(cmdq->lni, vni, tc, hrp, &cp);
+	if (ret != FI_SUCCESS) {
+		CXIP_LOG_DBG("Failed to get CP: %d\n", ret);
+		return -FI_EOTHER;
+	}
+
+	ret = cxi_cq_emit_cq_lcid(cmdq->dev_cmdq, cp->lcid);
+	if (ret) {
+		CXIP_LOG_DBG("Failed to update CMDQ(%p) CP: %d\n", cmdq, ret);
+		ret = -FI_EAGAIN;
+	} else {
+		ret = FI_SUCCESS;
+		cmdq->vni = vni;
+		cmdq->tc = tc;
+		cmdq->hrp = hrp;
+
+		CXIP_LOG_DBG("Updated CMDQ(%p) CP: %d VNI: %u TC: %s HRP: %u\n",
+			     cmdq, cp->lcid, vni, cxi_tc_str(tc), hrp);
+	}
 
 	return ret;
 }
@@ -569,17 +603,28 @@ int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
  * cxip_cmdq_alloc() - Allocate a command queue.
  */
 int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
-		    struct cxi_cq_alloc_opts *cq_opts,
+		    struct cxi_cq_alloc_opts *cq_opts, uint16_t vni,
+		    enum cxi_traffic_class tc, bool hrp,
 		    struct cxip_cmdq **cmdq)
 {
 	int ret;
 	struct cxi_cq *dev_cmdq;
 	struct cxip_cmdq *new_cmdq;
+	struct cxi_cp *cp = NULL;
 
 	new_cmdq = calloc(1, sizeof(*new_cmdq));
 	if (!new_cmdq) {
 		CXIP_LOG_ERROR("Unable to allocate CMDQ structure\n");
 		return -FI_ENOMEM;
+	}
+
+	if (cq_opts->flags & CXI_CQ_IS_TX) {
+		ret = cxip_cp_get(lni, vni, tc, hrp, &cp);
+		if (ret != FI_SUCCESS) {
+			CXIP_LOG_DBG("Failed to allocate CP: %d\n", ret);
+			return ret;
+		}
+		cq_opts->lcid = cp->lcid;
 	}
 
 	ret = cxil_alloc_cmdq(lni->lni, evtq, cq_opts, &dev_cmdq);
@@ -592,6 +637,10 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 	}
 
 	new_cmdq->dev_cmdq = dev_cmdq;
+	new_cmdq->vni = vni;
+	new_cmdq->tc = tc;
+	new_cmdq->hrp = hrp;
+	new_cmdq->lni = lni;
 
 	if (lni->iface->info->device_platform == CXI_PLATFORM_NETSIM)
 		new_cmdq->llring_mode = CXIP_LLRING_NEVER;
