@@ -128,16 +128,21 @@ static inline void sock_av_report_success(struct sock_av *av, void *context,
 }
 
 static void sock_av_report_error(struct sock_av *av, fi_addr_t *fi_addr,
-				void *context, int index, int err)
+				 void *context, int index, int err,
+				 uint64_t flags)
 {
-	if (fi_addr)
+	int *sync_err;
+
+	if (fi_addr) {
 		fi_addr[index] = FI_ADDR_NOTAVAIL;
+	} else if (flags & FI_SYNC_ERR) {
+		sync_err = context;
+		sync_err[index] = err;
+	}
 
-	if (!av->eq)
-		return;
-
-	sock_eq_report_error(av->eq, &av->av_fid.fid,
-			     context, index, err, -err, NULL, 0);
+	if (av->eq)
+		sock_eq_report_error(av->eq, &av->av_fid.fid,
+				     context, index, err, -err, NULL, 0);
 }
 
 static void sock_update_av_table(struct sock_av *_av, size_t count)
@@ -202,13 +207,20 @@ static int sock_check_table_in(struct sock_av *_av, const struct sockaddr *addr,
 	if ((_av->attr.flags & FI_EVENT) && !_av->eq)
 		return -FI_ENOEQ;
 
+	if (flags & FI_SYNC_ERR) {
+		if (fi_addr || !context || _av->eq)
+			return -FI_EBADFLAGS;
+		memset(context, 0, sizeof(int) * count);
+	}
+
 	if (_av->attr.flags & FI_READ) {
 		for (i = 0; i < count; i++) {
 			for (j = 0; j < _av->table_hdr->size; j++) {
 				if (_av->table[j].valid &&
 				    !ofi_valid_dest_ipaddr(&addr[i])) {
 					sock_av_report_error(_av, fi_addr,
-							context, i, FI_EINVAL);
+							context, i, FI_EINVAL,
+							flags);
 					continue;
 				}
 
@@ -228,7 +240,8 @@ static int sock_check_table_in(struct sock_av *_av, const struct sockaddr *addr,
 
 	for (i = 0, ret = 0; i < count; i++) {
 		if (!ofi_valid_dest_ipaddr(&addr[i])) {
-			sock_av_report_error(_av, fi_addr, context, i, FI_EINVAL);
+			sock_av_report_error(_av, fi_addr, context, i, FI_EINVAL,
+					     flags);
 			continue;
 		}
 		if (_av->table_hdr->stored == _av->table_hdr->size) {
@@ -236,7 +249,8 @@ static int sock_check_table_in(struct sock_av *_av, const struct sockaddr *addr,
 			if (index < 0) {
 				if (sock_resize_av_table(_av)) {
 					sock_av_report_error(_av, fi_addr,
-							context, i, FI_ENOMEM);
+							     context, i,
+							     FI_ENOMEM, flags);
 					continue;
 				}
 				index = _av->table_hdr->stored++;
@@ -321,7 +335,7 @@ static int _sock_av_insertsvc(struct fid_av *av, const char *node,
 	if (ret) {
 		if (_av->eq) {
 			sock_av_report_error(_av, fi_addr, context, 0,
-					     FI_EINVAL);
+					     FI_EINVAL, flags);
 			sock_av_report_success(_av, context, 0, flags);
 		}
 		return -ret;
