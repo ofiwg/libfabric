@@ -592,28 +592,12 @@ fi_addr_t ofi_ip_av_get_fi_addr(struct util_av *av, const void *addr)
 	return ofi_av_lookup_fi_addr(av, addr);
 }
 
-static int ip_av_valid_addr(struct util_av *av, const void *addr)
-{
-	const struct sockaddr_in *sin = addr;
-	const struct sockaddr_in6 *sin6 = addr;
-
-	switch (sin->sin_family) {
-	case AF_INET:
-		return sin->sin_port && sin->sin_addr.s_addr;
-	case AF_INET6:
-		return sin6->sin6_port &&
-		      memcmp(&in6addr_any, &sin6->sin6_addr, sizeof(in6addr_any));
-	default:
-		return 0;
-	}
-}
-
 static int ip_av_insert_addr(struct util_av *av, const void *addr,
 			     fi_addr_t *fi_addr, void *context)
 {
 	int ret;
 
-	if (ip_av_valid_addr(av, addr)) {
+	if (ofi_valid_dest_ipaddr(addr)) {
 		fastlock_acquire(&av->lock);
 		ret = ofi_av_insert_addr(av, addr, fi_addr);
 		fastlock_release(&av->lock);

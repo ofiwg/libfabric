@@ -231,7 +231,7 @@ static inline int ofi_translate_addr_format(int family)
 
 uint16_t ofi_get_sa_family(const struct fi_info *info);
 
-static inline int ofi_sin_is_any_addr(struct sockaddr *sa)
+static inline int ofi_sin_is_any_addr(const struct sockaddr *sa)
 {
 	struct in_addr ia_any = {
 		.s_addr = INADDR_ANY,
@@ -244,7 +244,7 @@ static inline int ofi_sin_is_any_addr(struct sockaddr *sa)
 
 }
 
-static inline int ofi_sin6_is_any_addr(struct sockaddr *sa)
+static inline int ofi_sin6_is_any_addr(const struct sockaddr *sa)
 {
 	struct in6_addr ia6_any = IN6ADDR_ANY_INIT;
 
@@ -254,7 +254,7 @@ static inline int ofi_sin6_is_any_addr(struct sockaddr *sa)
 	return !memcmp(&ofi_sin6_addr(sa), &ia6_any, sizeof(ia6_any));
 }
 
-static inline int ofi_sib_is_any_addr(struct sockaddr *sa)
+static inline int ofi_sib_is_any_addr(const struct sockaddr *sa)
 {
 	struct in6_addr ia6_any = IN6ADDR_ANY_INIT;
 
@@ -264,7 +264,7 @@ static inline int ofi_sib_is_any_addr(struct sockaddr *sa)
 	return !memcmp(&ofi_sib_addr(sa), &ia6_any, sizeof(ia6_any));
 }
 
-static inline int ofi_is_any_addr(struct sockaddr *sa)
+static inline int ofi_is_any_addr(const struct sockaddr *sa)
 {
 	if (!sa)
 		return 0;
@@ -296,7 +296,6 @@ static inline uint16_t ofi_addr_get_port(const struct sockaddr *addr)
 		return (uint16_t)ntohll(((const struct ofi_sockaddr_ib *)addr)->sib_sid);
 	default:
 		FI_WARN(&core_prov, FI_LOG_FABRIC, "Unknown address format\n");
-		assert(0);
 		return 0;
 	}
 }
@@ -335,6 +334,11 @@ static inline void * ofi_get_ipaddr(const struct sockaddr *addr)
 	default:
 		return NULL;
 	}
+}
+
+static inline int ofi_valid_dest_ipaddr(const struct sockaddr *addr)
+{
+	return ofi_addr_get_port(addr) && !ofi_is_any_addr(addr);
 }
 
 static inline int ofi_equals_ipaddr(const struct sockaddr *addr1,
