@@ -140,11 +140,6 @@ static void sock_av_report_error(struct sock_av *av, fi_addr_t *fi_addr,
 			     context, index, err, -err, NULL, 0);
 }
 
-static int sock_av_is_valid_address(const struct sockaddr *addr)
-{
-	return ofi_sizeofaddr(addr);
-}
-
 static void sock_update_av_table(struct sock_av *_av, size_t count)
 {
 	_av->table = (struct sock_av_addr *)
@@ -211,7 +206,7 @@ static int sock_check_table_in(struct sock_av *_av, const struct sockaddr *addr,
 		for (i = 0; i < count; i++) {
 			for (j = 0; j < _av->table_hdr->size; j++) {
 				if (_av->table[j].valid &&
-				    !sock_av_is_valid_address(&addr[i])) {
+				    !ofi_valid_dest_ipaddr(&addr[i])) {
 					sock_av_report_error(_av, fi_addr,
 							context, i, FI_EINVAL);
 					continue;
@@ -232,7 +227,7 @@ static int sock_check_table_in(struct sock_av *_av, const struct sockaddr *addr,
 	}
 
 	for (i = 0, ret = 0; i < count; i++) {
-		if (!sock_av_is_valid_address(&addr[i])) {
+		if (!ofi_valid_dest_ipaddr(&addr[i])) {
 			sock_av_report_error(_av, fi_addr, context, i, FI_EINVAL);
 			continue;
 		}
