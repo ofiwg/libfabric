@@ -127,9 +127,12 @@ static inline void sock_av_report_success(struct sock_av *av, void *context,
 			     &eq_entry, sizeof(eq_entry), flags);
 }
 
-static inline void sock_av_report_error(struct sock_av *av,
-					void *context, int index, int err)
+static void sock_av_report_error(struct sock_av *av, fi_addr_t *fi_addr,
+				void *context, int index, int err)
 {
+	if (fi_addr)
+		fi_addr[index] = FI_ADDR_NOTAVAIL;
+
 	if (!av->eq)
 		return;
 
@@ -208,11 +211,9 @@ static int sock_check_table_in(struct sock_av *_av, const struct sockaddr *addr,
 		for (i = 0; i < count; i++) {
 			for (j = 0; j < _av->table_hdr->size; j++) {
 				if (_av->table[j].valid &&
-				     !sock_av_is_valid_address(&addr[i])) {
-					if (fi_addr)
-						fi_addr[i] = FI_ADDR_NOTAVAIL;
-					sock_av_report_error(_av, context, i,
-								FI_EINVAL);
+				    !sock_av_is_valid_address(&addr[i])) {
+					sock_av_report_error(_av, fi_addr,
+							context, i, FI_EINVAL);
 					continue;
 				}
 
@@ -232,18 +233,15 @@ static int sock_check_table_in(struct sock_av *_av, const struct sockaddr *addr,
 
 	for (i = 0, ret = 0; i < count; i++) {
 		if (!sock_av_is_valid_address(&addr[i])) {
-			if (fi_addr)
-				fi_addr[i] = FI_ADDR_NOTAVAIL;
-			sock_av_report_error(_av, context, i, FI_EINVAL);
+			sock_av_report_error(_av, fi_addr, context, i, FI_EINVAL);
 			continue;
 		}
 		if (_av->table_hdr->stored == _av->table_hdr->size) {
 			index = sock_av_get_next_index(_av);
 			if (index < 0) {
 				if (sock_resize_av_table(_av)) {
-					if (fi_addr)
-						fi_addr[i] = FI_ADDR_NOTAVAIL;
-					sock_av_report_error(_av, context, i, FI_ENOMEM);
+					sock_av_report_error(_av, fi_addr,
+							context, i, FI_ENOMEM);
 					continue;
 				}
 				index = _av->table_hdr->stored++;
@@ -327,7 +325,8 @@ static int _sock_av_insertsvc(struct fid_av *av, const char *node,
 	ret = getaddrinfo(node, service, &sock_hints, &result);
 	if (ret) {
 		if (_av->eq) {
-			sock_av_report_error(_av, context, 0, FI_EINVAL);
+			sock_av_report_error(_av, fi_addr, context, 0,
+					     FI_EINVAL);
 			sock_av_report_success(_av, context, 0, flags);
 		}
 		return -ret;
