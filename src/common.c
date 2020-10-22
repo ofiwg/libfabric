@@ -870,8 +870,8 @@ static int ofi_is_any_addr_port(struct sockaddr *addr)
 	}
 }
 
-int ofi_is_wildcard_listen_addr(const char *node, const char *service,
-				uint64_t flags, const struct fi_info *hints)
+bool ofi_is_wildcard_listen_addr(const char *node, const char *service,
+				 uint64_t flags, const struct fi_info *hints)
 {
 	struct addrinfo *res = NULL;
 	int ret;
@@ -880,30 +880,30 @@ int ofi_is_wildcard_listen_addr(const char *node, const char *service,
 	    hints->addr_format != FI_SOCKADDR &&
 	    hints->addr_format != FI_SOCKADDR_IN &&
 	    hints->addr_format != FI_SOCKADDR_IN6)
-		return 0;
+		return false;
 
 	/* else it's okay to call getaddrinfo, proceed with processing */
 
 	if (node) {
 		if (!(flags & FI_SOURCE))
-			return 0;
+			return false;
 		ret = getaddrinfo(node, service, NULL, &res);
 		if (ret) {
 			FI_WARN(&core_prov, FI_LOG_CORE,
 				"getaddrinfo failed!\n");
-			return 0;
+			return false;
 		}
 		if (ofi_is_any_addr_port(res->ai_addr)) {
 			freeaddrinfo(res);
 			goto out;
 		}
 		freeaddrinfo(res);
-		return 0;
+		return false;
 	}
 
 	if (hints) {
 		if (hints->dest_addr)
-			return 0;
+			return false;
 
 		if (!hints->src_addr)
 			goto out;
@@ -911,7 +911,7 @@ int ofi_is_wildcard_listen_addr(const char *node, const char *service,
 		return ofi_is_any_addr_port(hints->src_addr);
 	}
 out:
-	return ((flags & FI_SOURCE) && service) ? 1 : 0;
+	return ((flags & FI_SOURCE) && service);
 }
 
 size_t ofi_mask_addr(struct sockaddr *maskaddr, const struct sockaddr *srcaddr,
