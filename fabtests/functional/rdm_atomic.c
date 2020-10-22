@@ -495,7 +495,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "ho:z:" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "ho:Uz:" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		case 'o':
 			if (!strncasecmp("all", optarg, 3)) {
@@ -508,6 +508,9 @@ int main(int argc, char **argv)
 					return EXIT_FAILURE;
 				}
 			}
+			break;
+		case 'U':
+			hints->tx_attr->op_flags |= FI_DELIVERY_COMPLETE;
 			break;
 		case 'z':
 			if (!strncasecmp("all", optarg, 3)) {

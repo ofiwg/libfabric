@@ -2817,6 +2817,15 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("", "fi_resmgmt_test");
 	FT_PRINT_OPTS_USAGE("", "fi_inj_complete");
 	FT_PRINT_OPTS_USAGE("", "fi_bw");
+	FT_PRINT_OPTS_USAGE("-U", "run fabtests with FI_DELIVERY_COMPLETE set");
+	FT_PRINT_OPTS_USAGE("", "Only the following tests support this option for now:");
+	FT_PRINT_OPTS_USAGE("", "fi_bw");
+	FT_PRINT_OPTS_USAGE("", "fi_rdm");
+	FT_PRINT_OPTS_USAGE("", "fi_rdm_atomic");
+	FT_PRINT_OPTS_USAGE("", "fi_rdm_pingpong");
+	FT_PRINT_OPTS_USAGE("", "fi_rdm_tagged_bw");
+	FT_PRINT_OPTS_USAGE("", "fi_rdm_tagged_pingpong");
+	FT_PRINT_OPTS_USAGE("", "fi_rma_bw");
 	FT_PRINT_OPTS_USAGE("-M <mode>", "Disable mode bit from test");
 	FT_PRINT_OPTS_USAGE("", "mr_local");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
