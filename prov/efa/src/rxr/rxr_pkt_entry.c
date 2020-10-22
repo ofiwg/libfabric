@@ -387,7 +387,7 @@ ssize_t rxr_pkt_entry_send_with_flags(struct rxr_ep *ep,
 		assert(ep->use_shm);
 		desc = NULL;
 	} else {
-		desc = rxr_ep_mr_local(ep) ? fi_mr_desc(pkt_entry->mr) : NULL;
+		desc = fi_mr_desc(pkt_entry->mr);
 	}
 
 	return rxr_pkt_entry_sendv(ep, pkt_entry, addr, &iov, &desc, 1, flags);
