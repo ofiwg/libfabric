@@ -517,6 +517,82 @@ fail:
 
 /*
  * Tests:
+ * - sync vector with 1 good and 1 bad using FI_SYNC_ERR
+ */
+static int
+av_goodbad_vector_sync_err()
+{
+	int testret, ret;
+	struct fid_av *av;
+	struct fi_av_attr attr;
+	uint8_t addrbuf[4096];
+	int buflen;
+	int sync_err[2];
+
+	if (av_type != FI_AV_TABLE) {
+		ret = 0;
+		testret = SKIPPED;
+		sprintf(err_buf, "test not valid for AV type FI_AV_MAP");
+		goto out;
+	}
+
+	testret = FAIL;
+
+	memset(&attr, 0, sizeof(attr));
+	attr.type = av_type;
+	attr.count = 32;
+
+	av = NULL;
+	ret = fi_av_open(domain, &attr, &av, NULL);
+	if (ret != 0) {
+		sprintf(err_buf, "fi_av_open(%s) = %d, %s",
+				fi_tostr(&av_type, FI_TYPE_AV_TYPE),
+				ret, fi_strerror(-ret));
+		goto fail;
+	}
+
+	sync_err[0] = -1;
+	sync_err[1] = 0;
+
+	buflen = sizeof(addrbuf);
+
+	/* vector is good address + bad address */
+	ret = av_create_address_list(good_address, 0, 1, addrbuf, 0, buflen);
+	if (ret < 0) {
+		goto fail;		// av_create_address_list filled err_buf
+	}
+	ret = av_create_address_list(bad_address, 0, 1, addrbuf, 1, buflen);
+	if (ret < 0) {
+		goto fail;		// av_create_address_list filled err_buf
+	}
+	ret = fi_av_insert(av, addrbuf, 2, NULL, FI_SYNC_ERR, sync_err);
+	if (ret != 1) {
+		if (ret == -FI_EBADFLAGS) {
+			sprintf(err_buf, "FI_SYNC_ERR not supported\n");
+			ret = -FI_ENOSYS;
+		}
+		sprintf(err_buf, "fi_av_insert ret=%d, should be 1", ret);
+		goto fail;
+	}
+
+	if (sync_err[0] != 0) {
+		sprintf(err_buf, "sync_err[0] != 0");
+		goto fail;
+	}
+	if (sync_err[1] == 0) {
+		sprintf(err_buf, "sync_err[1] = 0");
+		goto fail;
+	}
+
+	testret = PASS;
+fail:
+	FT_CLOSE_FID(av);
+out:
+	return TEST_RET_VAL(ret, testret);
+}
+
+/*
+ * Tests:
  * - async good vector
  */
 static int
@@ -958,10 +1034,10 @@ struct test_entry test_array_good[] = {
 	TEST_ENTRY(av_good_sync, "Test sync AV insert with good address"),
 	TEST_ENTRY(av_null_fi_addr, "Test AV insert without specifying fi_addr"),
 	TEST_ENTRY(av_good_vector_async,
-			"Test async AV insert with vector of good addresses"),
+		   "Test async AV insert with vector of good addresses"),
 	TEST_ENTRY(av_zero_async, "Test async insert AV insert of zero addresses"),
 	TEST_ENTRY(av_good_2vector_async,
-			"Test async AV inserts with two address vectors"),
+		   "Test async AV inserts with two address vectors"),
 	TEST_ENTRY(av_insert_stages, "Test AV insert at various stages"),
 	{ NULL, "" }
 };
@@ -969,9 +1045,11 @@ struct test_entry test_array_good[] = {
 struct test_entry test_array_bad[] = {
 	TEST_ENTRY(av_bad_sync, "Test sync AV insert of bad address"),
 	TEST_ENTRY(av_goodbad_vector_sync,
-			"Test sync AV insert of 1 good and 1 bad address"),
+		   "Test sync AV insert of 1 good and 1 bad address"),
 	TEST_ENTRY(av_goodbad_vector_async,
-			"Test async AV insert with good and bad address"),
+		   "Test async AV insert with good and bad address"),
+	TEST_ENTRY(av_goodbad_vector_sync_err,
+		   "Test AV insert of 1 good, 1 bad address using FI_SYNC_ERR"),
 	{ NULL, "" }
 };
 

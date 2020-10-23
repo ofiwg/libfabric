@@ -137,7 +137,7 @@ static int rxm_av_insertsym(struct fid_av *av_fid, const char *node,
 	size_t addrlen, count = nodecnt * svccnt;
 	int ret, retv;
 
-	ret = ofi_verify_av_insert(av, flags);
+	ret = ofi_verify_av_insert(av, flags, context);
 	if (ret)
 		return ret;
 
@@ -148,7 +148,8 @@ static int rxm_av_insertsym(struct fid_av *av_fid, const char *node,
 
 	assert(ret == count);
 
-	ret = ofi_ip_av_insertv(av, addr, addrlen, count, fi_addr, context);
+	ret = ofi_ip_av_insertv(av, addr, addrlen, count, fi_addr, flags,
+				context);
 	if (!av->eq && ret < count) {
 		count = ret;
 	}

@@ -231,43 +231,43 @@ static inline int ofi_translate_addr_format(int family)
 
 uint16_t ofi_get_sa_family(const struct fi_info *info);
 
-static inline int ofi_sin_is_any_addr(struct sockaddr *sa)
+static inline bool ofi_sin_is_any_addr(const struct sockaddr *sa)
 {
 	struct in_addr ia_any = {
 		.s_addr = INADDR_ANY,
 	};
 
 	if (!sa)
-		return 0;
+		return false;
 
 	return !memcmp(&ofi_sin_addr(sa).s_addr, &ia_any, sizeof(ia_any));
 
 }
 
-static inline int ofi_sin6_is_any_addr(struct sockaddr *sa)
+static inline bool ofi_sin6_is_any_addr(const struct sockaddr *sa)
 {
 	struct in6_addr ia6_any = IN6ADDR_ANY_INIT;
 
 	if (!sa)
-		return 0;
+		return false;
 
 	return !memcmp(&ofi_sin6_addr(sa), &ia6_any, sizeof(ia6_any));
 }
 
-static inline int ofi_sib_is_any_addr(struct sockaddr *sa)
+static inline bool ofi_sib_is_any_addr(const struct sockaddr *sa)
 {
 	struct in6_addr ia6_any = IN6ADDR_ANY_INIT;
 
 	if (!sa)
-		return 0;
+		return false;
 
 	return !memcmp(&ofi_sib_addr(sa), &ia6_any, sizeof(ia6_any));
 }
 
-static inline int ofi_is_any_addr(struct sockaddr *sa)
+static inline bool ofi_is_any_addr(const struct sockaddr *sa)
 {
 	if (!sa)
-		return 0;
+		return false;
 
 	switch(sa->sa_family) {
 	case AF_INET:
@@ -278,7 +278,7 @@ static inline int ofi_is_any_addr(struct sockaddr *sa)
 		return ofi_sib_is_any_addr(sa);
 	default:
 		FI_WARN(&core_prov, FI_LOG_CORE, "Unknown address format!\n");
-		return 0;
+		return false;
 	}
 }
 
@@ -296,7 +296,6 @@ static inline uint16_t ofi_addr_get_port(const struct sockaddr *addr)
 		return (uint16_t)ntohll(((const struct ofi_sockaddr_ib *)addr)->sib_sid);
 	default:
 		FI_WARN(&core_prov, FI_LOG_FABRIC, "Unknown address format\n");
-		assert(0);
 		return 0;
 	}
 }
@@ -337,11 +336,16 @@ static inline void * ofi_get_ipaddr(const struct sockaddr *addr)
 	}
 }
 
-static inline int ofi_equals_ipaddr(const struct sockaddr *addr1,
+static inline bool ofi_valid_dest_ipaddr(const struct sockaddr *addr)
+{
+	return ofi_addr_get_port(addr) && !ofi_is_any_addr(addr);
+}
+
+static inline bool ofi_equals_ipaddr(const struct sockaddr *addr1,
 				    const struct sockaddr *addr2)
 {
 	if (addr1->sa_family != addr2->sa_family)
-		return 0;
+		return false;
 
 	switch (addr1->sa_family) {
 	case AF_INET:
@@ -354,19 +358,19 @@ static inline int ofi_equals_ipaddr(const struct sockaddr *addr1,
 	        return !memcmp(&ofi_sib_addr(addr1), &ofi_sib_addr(addr2),
 				sizeof(ofi_sib_addr(addr1)));
 	default:
-		return 0;
+		return false;
 	}
 }
 
-static inline int ofi_equals_sockaddr(const struct sockaddr *addr1,
-				      const struct sockaddr *addr2)
+static inline bool ofi_equals_sockaddr(const struct sockaddr *addr1,
+				       const struct sockaddr *addr2)
 {
         return (ofi_addr_get_port(addr1) == ofi_addr_get_port(addr2)) &&
 		ofi_equals_ipaddr(addr1, addr2);
 }
 
-int ofi_is_wildcard_listen_addr(const char *node, const char *service,
-				uint64_t flags, const struct fi_info *hints);
+bool ofi_is_wildcard_listen_addr(const char *node, const char *service,
+				 uint64_t flags, const struct fi_info *hints);
 
 size_t ofi_mask_addr(struct sockaddr *maskaddr, const struct sockaddr *srcaddr,
 		     const struct sockaddr *netmask);

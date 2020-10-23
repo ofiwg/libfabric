@@ -767,9 +767,10 @@ int ofi_get_src_addr(uint32_t addr_format,
 void ofi_getnodename(uint16_t sa_family, char *buf, int buflen);
 int ofi_av_get_index(struct util_av *av, const void *addr);
 
-int ofi_verify_av_insert(struct util_av *av, uint64_t flags);
+int ofi_verify_av_insert(struct util_av *av, uint64_t flags, void *context);
 int ofi_ip_av_insertv(struct util_av *av, const void *addr, size_t addrlen,
-		      size_t count, fi_addr_t *fi_addr, void *context);
+		      size_t count, fi_addr_t *fi_addr, uint64_t flags,
+		      void *context);
 /* Caller should free *addr */
 int ofi_ip_av_sym_getaddr(struct util_av *av, const char *node,
 			  size_t nodecnt, const char *service,
