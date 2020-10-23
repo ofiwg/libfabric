@@ -53,7 +53,7 @@ struct fi_ep_attr cxip_ep_attr = {
 	.max_order_raw_size = -1,
 	.max_order_war_size = -1,
 	.max_order_waw_size = -1,
-	.mem_tag_format = FI_TAG_GENERIC,
+	.mem_tag_format = FI_TAG_GENERIC >> (64 - CXIP_TAG_WIDTH),
 	.auth_key_size = sizeof(struct cxi_auth_key),
 };
 

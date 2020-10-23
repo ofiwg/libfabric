@@ -2880,6 +2880,12 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	if (!ofi_recv_allowed(rxc->attr.caps))
 		return -FI_ENOPROTOOPT;
 
+	if (tagged && (tag & ~CXIP_TAG_MASK || ignore & ~CXIP_TAG_MASK)) {
+		CXIP_LOG_DBG("Invalid tag: %#018lx ignore: %#018lx (%#018lx)\n",
+			     tag, ignore, CXIP_TAG_MASK);
+		return -FI_EINVAL;
+	}
+
 	/* If FI_DIRECTED_RECV and a src_addr is specified, encode the address
 	 * in the LE for matching. If application AVs are symmetric, use
 	 * logical FI address for matching. Otherwise, use physical address.
@@ -2944,8 +2950,8 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	req->recv.recv_md = recv_md;
 	req->recv.ulen = len;
 	req->recv.match_id = match_id;
-	req->recv.tag = tag & CXIP_TAG_MASK;
-	req->recv.ignore = ignore & CXIP_TAG_MASK;
+	req->recv.tag = tag;
+	req->recv.ignore = ignore;
 	req->recv.flags = flags;
 	req->recv.tagged = tagged;
 	req->recv.start_offset = 0;
@@ -4105,6 +4111,12 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 
 	if (len > CXIP_EP_MAX_MSG_SZ)
 		return -FI_EMSGSIZE;
+
+	if (tagged && tag & ~CXIP_TAG_MASK) {
+		CXIP_LOG_DBG("Invalid tag: %#018lx (%#018lx)\n",
+			     tag, CXIP_TAG_MASK);
+		return -FI_EINVAL;
+	}
 
 	if (flags & FI_INJECT && len > CXIP_INJECT_SIZE) {
 		CXIP_LOG_DBG("Invalid inject length: %lu\n", len);
