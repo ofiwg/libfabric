@@ -2154,21 +2154,25 @@ ft_tag_is_valid(struct fid_cq * cq, struct fi_cq_err_entry *comp, uint64_t tag)
  * fi_cq_err_entry can be cast to any CQ entry format.
  */
 static int ft_spin_for_comp(struct fid_cq *cq, uint64_t *cur,
-			    uint64_t total, int timeout)
+			    uint64_t total, int timeout,
+			    struct fi_cq_err_entry *cq_entries)
 {
-	struct fi_cq_err_entry comp;
+	struct fi_cq_err_entry comp, *comp_ptr;
 	struct timespec a, b;
+	int bgn;
 	int ret;
 
 	if (timeout >= 0)
 		clock_gettime(CLOCK_MONOTONIC, &a);
 
+	bgn = *cur;
 	do {
-		ret = fi_cq_read(cq, &comp, 1);
+		comp_ptr = cq_entries ? &cq_entries[*cur - bgn] : &comp;
+		ret = fi_cq_read(cq, comp_ptr, 1);
 		if (ret > 0) {
 			if (timeout >= 0)
 				clock_gettime(CLOCK_MONOTONIC, &a);
-			if (!ft_tag_is_valid(cq, &comp, ft_tag ? ft_tag : rx_cq_cntr))
+			if (!ft_tag_is_valid(cq, comp_ptr, ft_tag ? ft_tag : rx_cq_cntr))
 				return -FI_EOTHER;
 			(*cur)++;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
@@ -2189,15 +2193,19 @@ static int ft_spin_for_comp(struct fid_cq *cq, uint64_t *cur,
  * fi_cq_err_entry can be cast to any CQ entry format.
  */
 static int ft_wait_for_comp(struct fid_cq *cq, uint64_t *cur,
-			    uint64_t total, int timeout)
+			    uint64_t total, int timeout,
+			    struct fi_cq_err_entry *cq_entries)
 {
-	struct fi_cq_err_entry comp;
+	struct fi_cq_err_entry comp, *comp_ptr;
 	int ret;
+	int bgn;
 
+	bgn = *cur;
 	while (total - *cur > 0) {
-		ret = fi_cq_sread(cq, &comp, 1, NULL, timeout);
+		comp_ptr = cq_entries ? &cq_entries[*cur - bgn] : &comp;
+		ret = fi_cq_sread(cq, comp_ptr, 1, NULL, timeout);
 		if (ret > 0) {
-			if (!ft_tag_is_valid(cq, &comp, ft_tag ? ft_tag : rx_cq_cntr))
+			if (!ft_tag_is_valid(cq, comp_ptr, ft_tag ? ft_tag : rx_cq_cntr))
 				return -FI_EOTHER;
 			(*cur)++;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
@@ -2212,15 +2220,16 @@ static int ft_wait_for_comp(struct fid_cq *cq, uint64_t *cur,
  * fi_cq_err_entry can be cast to any CQ entry format.
  */
 static int ft_fdwait_for_comp(struct fid_cq *cq, uint64_t *cur,
-			    uint64_t total, int timeout)
+			      uint64_t total, int timeout,
+			      struct fi_cq_err_entry *cq_entries)
 {
-	struct fi_cq_err_entry comp;
+	struct fi_cq_err_entry comp, *comp_ptr;
 	struct fid *fids[1];
-	int fd, ret;
+	int fd, ret, bgn;
 
 	fd = cq == txcq ? tx_fd : rx_fd;
 	fids[0] = &cq->fid;
-
+	bgn = *cur;
 	while (total - *cur > 0) {
 		ret = fi_trywait(fabric, fids, 1);
 		if (ret == FI_SUCCESS) {
@@ -2229,9 +2238,10 @@ static int ft_fdwait_for_comp(struct fid_cq *cq, uint64_t *cur,
 				return ret;
 		}
 
-		ret = fi_cq_read(cq, &comp, 1);
+		comp_ptr = cq_entries ? &cq_entries[*cur - bgn] : &comp;
+		ret = fi_cq_read(cq, comp_ptr, 1);
 		if (ret > 0) {
-			if (!ft_tag_is_valid(cq, &comp, ft_tag ? ft_tag : rx_cq_cntr))
+			if (!ft_tag_is_valid(cq, comp_ptr, ft_tag ? ft_tag : rx_cq_cntr))
 				return -FI_EOTHER;
 			(*cur)++;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
@@ -2243,20 +2253,21 @@ static int ft_fdwait_for_comp(struct fid_cq *cq, uint64_t *cur,
 }
 
 static int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur,
-			  uint64_t total, int timeout)
+			  uint64_t total, int timeout,
+			  struct fi_cq_err_entry *cq_entries)
 {
 	int ret;
 
 	switch (opts.comp_method) {
 	case FT_COMP_SREAD:
 	case FT_COMP_YIELD:
-		ret = ft_wait_for_comp(cq, cur, total, timeout);
+		ret = ft_wait_for_comp(cq, cur, total, timeout, cq_entries);
 		break;
 	case FT_COMP_WAIT_FD:
-		ret = ft_fdwait_for_comp(cq, cur, total, timeout);
+		ret = ft_fdwait_for_comp(cq, cur, total, timeout, cq_entries);
 		break;
 	default:
-		ret = ft_spin_for_comp(cq, cur, total, timeout);
+		ret = ft_spin_for_comp(cq, cur, total, timeout, cq_entries);
 		break;
 	}
 
@@ -2336,7 +2347,7 @@ int ft_get_rx_comp(uint64_t total)
 	int ret = FI_SUCCESS;
 
 	if (opts.options & FT_OPT_RX_CQ) {
-		ret = ft_get_cq_comp(rxcq, &rx_cq_cntr, total, timeout);
+		ret = ft_get_cq_comp(rxcq, &rx_cq_cntr, total, timeout, NULL);
 	} else if (rxcntr) {
 		ret = ft_get_cntr_comp(rxcntr, total, timeout);
 	} else {
@@ -2346,18 +2357,46 @@ int ft_get_rx_comp(uint64_t total)
 	return ret;
 }
 
+int ft_get_rx_comp_any(struct fi_cq_err_entry *comp)
+{
+	int ret;
+
+	if (opts.options & FT_OPT_RX_CQ) {
+		ret = ft_get_cq_comp(rxcq, &rx_cq_cntr, rx_cq_cntr + 1, timeout, comp);
+	} else {
+		FT_ERR("Trying to get a RX cq entry when no RX CQ were opened");
+		ret = -FI_EOTHER;
+	}
+
+	return ret;
+}
+
 int ft_get_tx_comp(uint64_t total)
 {
 	int ret;
 
 	if (opts.options & FT_OPT_TX_CQ) {
-		ret = ft_get_cq_comp(txcq, &tx_cq_cntr, total, -1);
+		ret = ft_get_cq_comp(txcq, &tx_cq_cntr, total, -1, NULL);
 	} else if (txcntr) {
 		ret = ft_get_cntr_comp(txcntr, total, -1);
 	} else {
 		FT_ERR("Trying to get a TX completion when no TX CQ or counter were opened");
 		ret = -FI_EOTHER;
 	}
+	return ret;
+}
+
+int ft_get_tx_comp_any(struct fi_cq_err_entry *comp)
+{
+	int ret;
+
+	if (opts.options & FT_OPT_TX_CQ) {
+		ret = ft_get_cq_comp(txcq, &tx_cq_cntr, tx_cq_cntr + 1, -1, comp);
+	} else {
+		FT_ERR("Trying to get a RX cq entry when no RX CQ were opened");
+		ret = -FI_EOTHER;
+	}
+
 	return ret;
 }
 

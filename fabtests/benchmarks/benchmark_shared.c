@@ -33,7 +33,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <assert.h>
 #include <rdma/fi_errno.h>
 
 #include "shared.h"
@@ -54,8 +54,22 @@ void ft_parse_benchmark_opts(int op, char *optarg)
 	case 'W':
 		opts.window_size = atoi(optarg);
 		break;
+	case 'X':
+		if (!strncasecmp("wait_all", optarg, 8))
+			opts.window_type = WAIT_ALL_WINDOW;
+		else if (!strncasecmp("wait_any", optarg, 8))
+			opts.window_type = WAIT_ANY_WINDOW;
+		else
+			printf("Unknown window type: %s\n", optarg);
+
 	default:
 		break;
+	}
+
+	if (opts.window_type == WAIT_ANY_WINDOW) {
+		if (!(opts.options & FT_OPT_TX_CQ) || !(opts.options & FT_OPT_RX_CQ)) {
+			printf("Error: the wait_any window type requires both TX cq and RX cq being opened!\n");
+		}
 	}
 }
 
@@ -132,6 +146,26 @@ static int bw_tx_comp()
 	return ft_rx(ep, 4);
 }
 
+static int bw_tx_comp_any(int *context_id)
+{
+	int j,ret;
+	struct fi_cq_err_entry comp;
+
+	ret = ft_get_tx_comp_any(&comp);
+
+	if (ret)
+		return ret;
+
+	for (j = 0; j < opts.window_size; ++j) {
+		if (comp.op_context == &tx_ctx_arr[j].context) {
+			*context_id = j;
+			return 0;
+		}
+	}
+
+	return -FI_EINVAL;
+}
+
 static int bw_rx_comp()
 {
 	int ret;
@@ -143,58 +177,136 @@ static int bw_rx_comp()
 	return ft_tx(ep, remote_fi_addr, 4, &tx_ctx);
 }
 
+static int bw_rx_comp_any(int *context_id)
+{
+	int j,ret;
+	struct fi_cq_err_entry comp;
+
+	ret = ft_get_rx_comp_any(&comp);
+
+	if (ret)
+		return ret;
+
+	for (j = 0; j < opts.window_size; ++j) {
+		if (comp.op_context == &rx_ctx_arr[j].context) {
+			*context_id = j;
+			return 0;
+		}
+	}
+
+	FT_ERR("mistmatch context! context: %p\n", comp.op_context);
+	return -FI_EINVAL;
+}
+
 int bandwidth(void)
 {
 	int ret, i, j;
+	struct fi_cq_err_entry comp;
 
 	ret = ft_sync();
 	if (ret)
 		return ret;
 
-	/* The loop structured allows for the possibility that the sender
-	 * immediately overruns the receiving side on the first transfer (or
-	 * the entire window). This could result in exercising parts of the
-	 * provider's implementation of FI_RM_ENABLED. For better or worse,
-	 * some MPI-level benchmarks tend to use this type of loop for measuring
-	 * bandwidth.  */
+	/* The loop structure allows for the two types of windows:
+	 *
+	 *    WAIT_ALL_WINDOW: a new TX/RX operation can be submitted only after
+	 *    all operations in the current window finished.
+	 *
+	 *    WAIT_ANY_WINDOW: a new TX/RX operation can be submitted when there
+	 *    operations finished.
+	 *
+	 * Naturally, WAIT_ANY_WINDOW would result higher bandwidth than
+	 * WAIT_ALL_WINDOW.
+	 *
+	 * For better or worse, some MPI-level benchmarks (such as OSU Micro Benchmark)
+	 * tend to use WAIT_ALL_WINDOW for measuring bandwidth.
+	 *
+	 * Meanwhile, some application/benchmarks (such as NCCL and perftest) uses
+	 * WAIT_ANY_WINDOW fore measuring bandwidth.
+	 */
 
 	if (opts.dst_addr) {
 		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
 				ft_start();
 
-			if (opts.transfer_size < fi->tx_attr->inject_size)
-				ret = ft_inject(ep, remote_fi_addr, opts.transfer_size);
-			else
-				ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
-						 NO_CQ_DATA, &tx_ctx_arr[j].context);
-			if (ret)
-				return ret;
-
-			if (++j == opts.window_size) {
-				ret = bw_tx_comp();
+			if (opts.window_type == WAIT_ALL_WINDOW ||
+			    opts.transfer_size < fi->tx_attr->inject_size) {
+				if (opts.transfer_size < fi->tx_attr->inject_size)
+					ret = ft_inject(ep, remote_fi_addr, opts.transfer_size);
+				else
+					ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
+							 NO_CQ_DATA, &tx_ctx_arr[j].context);
 				if (ret)
 					return ret;
-				j = 0;
+
+				if (++j == opts.window_size) {
+					ret = bw_tx_comp();
+					if (ret)
+						return ret;
+					j = 0;
+				}
+			} else {
+				if (i < opts.window_size) {
+					j = i;
+				} else {
+					ret = bw_tx_comp_any(&j);
+					if (ret)
+						return ret;
+
+				}
+
+				assert(j>=0 && j < opts.window_size);
+				ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
+						 NO_CQ_DATA, &tx_ctx_arr[j].context);
+				if (ret)
+					return ret;
 			}
 		}
 		ret = bw_tx_comp();
 		if (ret)
 			return ret;
 	} else {
+		/* get the completion of the RX posted in ft_sync() */
+		ret = ft_get_rx_comp_any(&comp);
+		if (ret)
+			return ret;
+
+		if (comp.op_context != &rx_ctx) {
+			FT_ERR("Error: rx context does not match!\n");
+			return -FI_EINVAL;
+		}
+
 		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 			if (i == opts.warmup_iterations)
 				ft_start();
 
-			ret = ft_post_rx(ep, opts.transfer_size, &rx_ctx_arr[j].context);
-			if (ret)
-				return ret;
-
-			if (++j == opts.window_size) {
-				ret = bw_rx_comp();
+			if (opts.window_type == WAIT_ALL_WINDOW) {
+				ret = ft_post_rx(ep, opts.transfer_size, &rx_ctx_arr[j].context);
 				if (ret)
 					return ret;
-				j = 0;
+
+				if (++j == opts.window_size) {
+					ret = bw_rx_comp();
+					if (ret)
+						return ret;
+					j = 0;
+				}
+			} else {
+				assert(opts.window_type == WAIT_ANY_WINDOW);
+				if (i < opts.window_size) {
+					j = i;
+				} else {
+					ret = bw_rx_comp_any(&j);
+					if (ret)
+						return ret;
+
+				}
+
+				assert(j>=0 && j < opts.window_size);
+				ret = ft_post_rx(ep, opts.transfer_size, &rx_ctx_arr[j].context);
+				if (ret)
+					return ret;
 			}
 		}
 		ret = bw_rx_comp();

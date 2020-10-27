@@ -140,6 +140,15 @@ enum op_state {
 	OP_PENDING
 };
 
+enum ft_window_type {
+	WAIT_ALL_WINDOW,/* New opertaion can be submitted only after
+			 * all operations in a window have finished
+			 */
+	WAIT_ANY_WINDOW,/* New operation can be submitted when there
+			 * is an operation finished.
+			 */
+};
+
 struct ft_context {
 	char *buf;
 	void *desc;
@@ -153,6 +162,7 @@ struct ft_opts {
 	int warmup_iterations;
 	size_t transfer_size;
 	int window_size;
+	enum ft_window_type window_type;
 	int av_size;
 	int verbose;
 	int tx_cq_size;
@@ -261,6 +271,7 @@ extern char default_port[8];
 		.warmup_iterations = 10, \
 		.transfer_size = 1024, \
 		.window_size = 64, \
+		.window_type = WAIT_ALL_WINDOW, \
 		.av_size = 1, \
 		.tx_cq_size = 0, \
 		.rx_cq_size = 0, \
@@ -474,7 +485,9 @@ int check_compare_atomic_op(struct fid_ep *endpoint, enum fi_op op,
 
 int ft_cq_readerr(struct fid_cq *cq);
 int ft_get_rx_comp(uint64_t total);
+int ft_get_rx_comp_any(struct fi_cq_err_entry *comp);
 int ft_get_tx_comp(uint64_t total);
+int ft_get_tx_comp_any(struct fi_cq_err_entry *comp);
 int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		size_t size, void *ctx, int flags);
 int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
