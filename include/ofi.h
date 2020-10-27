@@ -263,7 +263,8 @@ static inline void *ofi_get_page_start(const void *addr, size_t page_size)
 
 static inline void *ofi_get_page_end(const void *addr, size_t page_size)
 {
-	return ofi_get_page_start((const char *) addr + page_size -1, page_size);
+	return (void *)((uintptr_t)ofi_get_page_start((const char *)addr
+			+ page_size, page_size) - 1);
 }
 
 static inline size_t
