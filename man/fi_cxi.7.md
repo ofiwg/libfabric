@@ -299,15 +299,14 @@ sets the RO bit in PCIe TLPs when possible. Cassini sets PCIe RO as follows:
 ## Translation
 
 The CXI provider supports multiple translation modes including: Pinned,
-On-Demand Paged (ODP), and ATS modes. Pinned and ODP modes are supported using a
-NIC translation unit. ATS mode is supported through integration between the NIC
-and the PCIe root complex on supported host CPUs.
+On-Demand Paged (ODP), and ATS modes. Pinned and ODP modes are supported using
+a NIC translation unit. ATS mode is supported through integration between the
+NIC and the PCIe root complex on supported host CPUs. Translation mode is
+controlled using environment variables.
 
-Translation mode is controlled using environment variables. Currently, the
-provider defaults to using the pinned translation mode. In pinned mode, all
-buffers used for data transfers are backed by pinned physical memory. Using
-Pinned mode avoids any overhead due to network page faults but requires all
-buffers to be backed by physical memory.
+In pinned mode, all buffers used for data transfers are backed by pinned
+physical memory. Using Pinned mode avoids any overhead due to network page
+faults but requires all buffers to be backed by physical memory.
 
 In ODP mode, buffers used for data transfers are not required to be backed by
 physical memory. An un-populated buffer that is referenced by the NIC will incur
@@ -407,6 +406,16 @@ The CXI provider checks for the following environment variables:
 
 *FI_CXI_ATS*
 : Enables PCIe ATS.
+
+*FI_CXI_ATS_MLOCK_MODE*
+: Sets ATS mlock mode. The mlock() system call may be used in conjunction with
+ATS to help avoid network page faults. Valid values are "off" and "all". When
+mlock mode is "off", the provider does not use mlock(). An application using
+ATS without mlock() may experience network page faults, reducing network
+performance. When ats_mlock_mode is set to "all", the provider uses mlockall()
+during initialization with ATS. mlockall() causes all mapped addresses to be
+locked in RAM at all times. This helps to avoid most network page faults. Using
+mlockall() may increase pressure on physical memory.
 
 *FI_CXI_RDZV_OFFLOAD*
 : Enables offloaded rendezvous messaging protocol.

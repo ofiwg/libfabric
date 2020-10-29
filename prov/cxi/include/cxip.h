@@ -161,6 +161,12 @@ extern struct fi_ep_attr cxip_ep_attr;
 extern struct fi_tx_attr cxip_tx_attr;
 extern struct fi_rx_attr cxip_rx_attr;
 
+enum cxip_ats_mlock_mode {
+	CXIP_ATS_MLOCK_OFF,
+	CXIP_ATS_MLOCK_CACHE,
+	CXIP_ATS_MLOCK_ALL,
+};
+
 enum cxip_llring_mode {
 	CXIP_LLRING_NEVER,
 	CXIP_LLRING_IDLE,
@@ -171,6 +177,7 @@ struct cxip_environment {
 	/* Translation */
 	int odp;
 	int ats;
+	enum cxip_ats_mlock_mode ats_mlock_mode;
 
 	/* Messaging */
 	int rdzv_offload;

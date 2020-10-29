@@ -68,6 +68,14 @@ static struct cxip_md *cxip_dom_ats_md(struct cxip_domain *dom)
 			dom->ats_enabled = true;
 
 			CXIP_LOG_DBG("PCIe ATS enabled.\n");
+
+			if (cxip_env.ats_mlock_mode == CXIP_ATS_MLOCK_ALL) {
+				ret = mlockall(MCL_CURRENT | MCL_FUTURE);
+				if (ret) {
+					CXIP_LOG_ERROR("mlockall(MCL_CURRENT | MCL_FUTURE) failed: %d\n",
+						       -errno);
+				}
+			}
 		} else {
 			CXIP_LOG_INFO("PCIe ATS unsupported.\n");
 		}

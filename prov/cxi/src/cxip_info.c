@@ -204,7 +204,8 @@ static int cxip_info_init(void)
 
 struct cxip_environment cxip_env = {
 	.odp = false,
-	.ats = false,
+	.ats = true,
+	.ats_mlock_mode = CXIP_ATS_MLOCK_ALL,
 	.rdzv_offload = true,
 	.rdzv_threshold = CXIP_RDZV_THRESHOLD,
 	.rdzv_get_min = 2049, /* Avoid single packet Gets */
@@ -228,6 +229,20 @@ static void cxip_env_init(void)
 	fi_param_define(&cxip_prov, "ats", FI_PARAM_BOOL,
 			"Enables PCIe ATS.");
 	fi_param_get_bool(&cxip_prov, "ats", &cxip_env.ats);
+
+	fi_param_define(&cxip_prov, "ats_mlock_mode", FI_PARAM_STRING,
+			"Sets ATS mlock mode (off | all).");
+	fi_param_get_str(&cxip_prov, "ats_mlock_mode", &param_str);
+
+	if (param_str) {
+		if (!strcmp(param_str, "off"))
+			cxip_env.ats_mlock_mode = CXIP_ATS_MLOCK_OFF;
+		else if (!strcmp(param_str, "all"))
+			cxip_env.ats_mlock_mode = CXIP_ATS_MLOCK_ALL;
+		else
+			CXIP_LOG_INFO("Unrecognized ats_mlock_mode: %s\n",
+				      param_str);
+	}
 
 	fi_param_define(&cxip_prov, "rdzv_offload", FI_PARAM_BOOL,
 			"Enables offloaded rendezvous messaging protocol.");
