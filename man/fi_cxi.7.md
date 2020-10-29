@@ -410,7 +410,9 @@ can tolerate intermittent AMO failures or those where the benefit of increased
 message rate outweighs by the cost of restarting after a failure.
 
 Unreliable, non-fetching AMOs may be performed by specifying the
-FI_CXI_UNRELIABLE flag. Unreliable, fetching AMOs are not supported.
+FI_CXI_UNRELIABLE flag. Unreliable, fetching AMOs are not supported. Unreliable
+AMOs must target an optimized MR and cannot use remote completion notification.
+Unreliable AMOs are not ordered.
 
 ## High Rate Put
 

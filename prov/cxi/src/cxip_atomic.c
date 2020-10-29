@@ -394,6 +394,11 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	if (!msg)
 		return -FI_EINVAL;
 
+	/* Restricted AMOs must target optimized MRs without target events */
+	if (flags & FI_CXI_UNRELIABLE &&
+	    (!cxip_mr_key_opt(key) || txc->ep_obj->caps & FI_RMA_EVENT))
+		return -FI_EINVAL;
+
 	if (flags & FI_CXI_HRP && !(flags & FI_CXI_UNRELIABLE))
 		return -FI_EINVAL;
 
