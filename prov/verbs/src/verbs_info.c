@@ -791,7 +791,7 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 
 	switch (ctx->device->transport_type) {
 	case IBV_TRANSPORT_IB:
-		if (ibv_query_gid(ctx, 1, 0, &gid)) {
+		if (ibv_query_gid(ctx, 1, vrb_gl_data.gid_idx, &gid)) {
 			VERBS_INFO_ERRNO(FI_LOG_FABRIC,
 					 "ibv_query_gid", errno);
 			ret = -errno;
