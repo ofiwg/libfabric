@@ -262,6 +262,29 @@ The *psm2* provider checks for the following environment variables:
   to 1 (means *tag60*) or 2 (means *tag64*), the choice is fixed at compile time
   and this runtime option will be disabled.
 
+# PSM2 EXTENSIONS
+
+The *psm2* provider supports limited low level parameter setting through domain
+level *fi_open_ops* interface. The extension is named *FI_PSM2_DOMAIN_OPS_1*.
+To get access to the extension, *fi_open_ops* is called on the domain fid to
+retrieve a pointer that points to *struct fi_psm2_ops_domain*. 
+
+```c
+struct fi_psm2_ops_domain {
+	int (*set_val)(struct fid *fid, int var, void *val);
+	int (*get_val)(struct fid *fid, int var, void *val);
+};
+```
+
+The value of the parameters can be set or retrieved via the *set_val* and *get_val*
+method, respectively. Currently the following parameters are supported:
+
+* FI_PSM2_DISCONNECT *
+: Overwite the global runtime parameter *FI_PSM2_DISCONNECT* for this domain. See
+  the *RUNTIME PARAMETERS* section for details.
+
+These definitions are in the header file *rdma/fi_ext_psm2.h*.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),

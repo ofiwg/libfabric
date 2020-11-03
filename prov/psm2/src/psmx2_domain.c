@@ -227,12 +227,67 @@ STATIC int psmx2_domain_control(fid_t fid, int command, void *arg)
 	return 0;
 }
 
+static int psmx2_domain_ops_get_val(struct fid *fid, int var, void *val)
+{
+	struct psmx2_fid_domain *domain;
+ 
+	if (!val)
+		return -FI_EINVAL;
+
+	domain = container_of(fid, struct psmx2_fid_domain,
+			      util_domain.domain_fid.fid);
+	if (domain->util_domain.domain_fid.fid.fclass != FI_CLASS_DOMAIN)
+		return -FI_EINVAL;
+ 
+	switch (var) {
+	case FI_PSM2_DISCONNECT:
+		*(uint32_t *)val = domain->params.disconnect;
+		break;
+	}
+
+	return 0;
+}
+
+static int psmx2_domain_ops_set_val(struct fid *fid, int var, void *val)
+{
+	struct psmx2_fid_domain *domain;
+ 
+	if (!val)
+		return -FI_EINVAL;
+
+	domain = container_of(fid, struct psmx2_fid_domain,
+			      util_domain.domain_fid.fid);
+	if (domain->util_domain.domain_fid.fid.fclass != FI_CLASS_DOMAIN)
+		return -FI_EINVAL;
+ 
+	switch (var) {
+	case FI_PSM2_DISCONNECT:
+		domain->params.disconnect = *(uint32_t *)val;
+		break;
+	}
+
+	return 0;
+}
+
+static struct fi_psm2_ops_domain psmx2_ops_domain = {
+	.set_val = psmx2_domain_ops_set_val,
+	.get_val = psmx2_domain_ops_get_val,
+};
+
+DIRECT_FN
+STATIC int psmx2_domain_ops_open(struct fid *fid, const char *ops_name,
+				 uint64_t flags, void **ops, void *context)
+{
+	*ops = &psmx2_ops_domain;
+	return 0;
+}
+
 static struct fi_ops psmx2_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = psmx2_domain_close,
 	.bind = fi_no_bind,
 	.control = psmx2_domain_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = psmx2_domain_ops_open,
 };
 
 static struct fi_ops_domain psmx2_domain_ops = {
@@ -336,6 +391,7 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain_priv->progress_thread_enabled =
 		(info->domain_attr->data_progress == FI_PROGRESS_AUTO);
 	domain_priv->addr_format = info->addr_format;
+	domain_priv->params.disconnect = psmx2_env.disconnect;
 
 	if (info->addr_format == FI_ADDR_STR)
 		src_addr = psmx2_string_to_ep_name(info->src_addr);
