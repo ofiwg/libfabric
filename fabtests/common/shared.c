@@ -2859,6 +2859,8 @@ void ft_csusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or 'all'");
 	FT_PRINT_OPTS_USAGE("-l", "align transmit and receive buffers to page size");
 	FT_PRINT_OPTS_USAGE("-m", "machine readable output");
+	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: eg cuda, ze(default: None). "
+			     "Automatically enables FI_HMEM (-H)");
 	FT_PRINT_OPTS_USAGE("-t <type>", "completion type [queue, counter]");
 	FT_PRINT_OPTS_USAGE("-c <method>", "completion method [spin, sread, fd, yield]");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
@@ -2915,6 +2917,8 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
 	case 'D':
 		if (!strncasecmp("ze", optarg, 2))
 			opts->iface = FI_HMEM_ZE;
+		else if (!strncasecmp("cuda", optarg, 4))
+			opts->iface = FI_HMEM_CUDA;
 		else
 			printf("Unsupported interface\n");
 		opts->options |= FT_OPT_ENABLE_HMEM | FT_OPT_USE_DEVICE;

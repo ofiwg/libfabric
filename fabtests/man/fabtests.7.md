@@ -368,7 +368,7 @@ the list available for that test.
 
 *-D <device_name>*
 : Allocate data buffers on the specified device, rather than in host
-  memory.  Valid options are ze.
+  memory.  Valid options are ze and cuda.
 
 *-a <address vector name>*
 : The name of a shared address vector.  This option only applies to tests
