@@ -131,7 +131,8 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 	case smr_src_inject:
 		inj_offset = (size_t) pending->cmd.msg.hdr.src_data;
 		tx_buf = smr_get_ptr(peer_smr, inj_offset);
-		if (*err || pending->bytes_done == pending->cmd.msg.hdr.size)
+		if (*err || pending->bytes_done == pending->cmd.msg.hdr.size ||
+		    pending->cmd.msg.hdr.op == ofi_op_atomic)
 			break;
 
 		src = pending->cmd.msg.hdr.op == ofi_op_atomic_compare ?
