@@ -52,7 +52,6 @@ const char *ofi_cudaGetErrorName(cudaError_t error);
 const char *ofi_cudaGetErrorString(cudaError_t error);
 CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 				   CUdeviceptr ptr);
-CUresult ofi_cuInit(unsigned int flags);
 cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags);
 cudaError_t ofi_cudaHostUnregister(void *ptr);
 
