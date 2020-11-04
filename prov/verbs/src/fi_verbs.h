@@ -430,6 +430,7 @@ struct vrb_mem_desc {
 	/* this field is used only by MR cache operations */
 	struct ofi_mr_entry	*entry;
 	struct ofi_mr_info	info;
+	uint32_t		lkey;
 };
 
 extern struct fi_ops_mr vrb_mr_ops;
@@ -886,7 +887,7 @@ int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc);
 #define vrb_init_sge(buf, len, desc) (struct ibv_sge)	\
 	{ .addr = (uintptr_t) buf,			\
 	  .length = (uint32_t) len,			\
-	  .lkey = (uint32_t) (uintptr_t) desc }
+	  .lkey = (desc) ? ((struct vrb_mem_desc *) (desc))->lkey : 0 }
 
 #define vrb_set_sge_iov(sg_list, iov, count, desc)	\
 do {							\
