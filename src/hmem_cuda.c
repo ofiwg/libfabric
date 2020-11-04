@@ -246,6 +246,14 @@ err_dlclose_cudart:
 #endif /* ENABLE_CUDA_DLOPEN */
 }
 
+static void cuda_hmem_dl_cleanup(void)
+{
+#ifdef ENABLE_CUDA_DLOPEN
+	dlclose(cuda_handle);
+	dlclose(cudart_handle);
+#endif
+}
+
 int cuda_hmem_init(void)
 {
 	int ret;
@@ -273,11 +281,7 @@ int cuda_hmem_init(void)
 
 int cuda_hmem_cleanup(void)
 {
-#ifdef ENABLE_CUDA_DLOPEN
-	dlclose(cuda_handle);
-	dlclose(cudart_handle);
-#endif
-
+	cuda_hmem_dl_cleanup();
 	cuda_gdrcopy_hmem_cleanup();
 	return FI_SUCCESS;
 }
