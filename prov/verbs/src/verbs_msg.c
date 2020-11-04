@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2018 Intel Corporation, Inc.  All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -110,7 +111,7 @@ vrb_msg_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct ibv_send_wr wr = {
 		.wr_id = VERBS_COMP(ep, (uintptr_t)context),
 		.opcode = IBV_WR_SEND,
-		.send_flags = VERBS_INJECT(ep, len),
+		.send_flags = VERBS_INJECT(ep, len, desc),
 	};
 
 	return vrb_send_buf(ep, &wr, buf, len, desc);
@@ -126,7 +127,7 @@ vrb_msg_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.wr_id = VERBS_COMP(ep, (uintptr_t)context),
 		.opcode = IBV_WR_SEND_WITH_IMM,
 		.imm_data = htonl((uint32_t)data),
-		.send_flags = VERBS_INJECT(ep, len),
+		.send_flags = VERBS_INJECT(ep, len, desc),
 	};
 
 	return vrb_send_buf(ep, &wr, buf, len, desc);
@@ -262,7 +263,7 @@ vrb_msg_xrc_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct ibv_send_wr wr = {
 		.wr_id = VERBS_COMP(&ep->base_ep, (uintptr_t)context),
 		.opcode = IBV_WR_SEND,
-		.send_flags = VERBS_INJECT(&ep->base_ep, len),
+		.send_flags = VERBS_INJECT(&ep->base_ep, len, desc),
 	};
 
 	VRB_SET_REMOTE_SRQN(wr, ep->peer_srqn);
@@ -280,7 +281,7 @@ vrb_msg_xrc_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.wr_id = VERBS_COMP(&ep->base_ep, (uintptr_t)context),
 		.opcode = IBV_WR_SEND_WITH_IMM,
 		.imm_data = htonl((uint32_t)data),
-		.send_flags = VERBS_INJECT(&ep->base_ep, len),
+		.send_flags = VERBS_INJECT(&ep->base_ep, len, desc),
 	};
 
 	VRB_SET_REMOTE_SRQN(wr, ep->peer_srqn);

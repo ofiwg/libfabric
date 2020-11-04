@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -728,6 +729,14 @@ static int vrb_have_device(void)
 	return ret;
 }
 
+static bool vrb_hmem_supported(const char *dev_name)
+{
+	if (vrb_gl_data.peer_mem_support && strstr(dev_name, "mlx"))
+		return true;
+
+	return false;
+}
+
 static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 			     const struct verbs_ep_domain *ep_dom)
 {
@@ -1373,11 +1382,31 @@ int vrb_init_info(const struct fi_info **all_infos)
 				continue;
 
 			ret = vrb_alloc_info(ctx_list[i], &fi, ep_type[j]);
-			if (!ret) {
-				if (!*all_infos)
-					*all_infos = fi;
-				else
-					tail->next = fi;
+			if (ret)
+				continue;
+
+			if (!*all_infos)
+				*all_infos = fi;
+			else
+				tail->next = fi;
+			tail = fi;
+
+			/* If verbs HMEM is supported, duplicate previously
+			 * allocated fi_info and apply HMEM flags.
+			 */
+			if (vrb_hmem_supported(ctx_list[i]->device->name)) {
+				fi = fi_dupinfo(fi);
+				if (!fi) {
+					ret = -FI_ENOMEM;
+					continue;
+				}
+
+				fi->caps |= FI_HMEM;
+				fi->tx_attr->caps |= FI_HMEM;
+				fi->rx_attr->caps |= FI_HMEM;
+				fi->domain_attr->mr_mode |= FI_MR_HMEM;
+
+				tail->next = fi;
 				tail = fi;
 			}
 		}
