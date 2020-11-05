@@ -143,7 +143,7 @@ void psmx2_trx_ctxt_disconnect_peers(struct psmx2_trx_ctxt *trx_ctxt)
 
 	dlist_foreach_safe(&peer_list, item, tmp) {
 		peer = container_of(item, struct psmx2_epaddr_context, entry);
-		if (psmx2_env.disconnect) {
+		if (trx_ctxt->domain->params.disconnect) {
 			FI_INFO(&psmx2_prov, FI_LOG_CORE, "epaddr: %p\n", peer->epaddr);
 			err = psm2_am_request_short(peer->epaddr,
 						    PSMX2_AM_TRX_CTXT_HANDLER,

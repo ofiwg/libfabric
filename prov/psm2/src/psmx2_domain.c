@@ -203,10 +203,51 @@ static int psmx2_domain_close(fid_t fid)
 	return 0;
 }
 
+static int psmx2_domain_get_val(struct fid *fid, int var, void *val)
+{
+	struct psmx2_fid_domain *domain;
+ 
+	if (!val)
+		return -FI_EINVAL;
+
+	domain = container_of(fid, struct psmx2_fid_domain,
+			      util_domain.domain_fid.fid);
+ 
+	switch (var) {
+	case FI_PSM2_DISCONNECT:
+		*(uint32_t *)val = domain->params.disconnect;
+		break;
+	default:
+		return -FI_EINVAL;
+	}
+	return 0;
+}
+
+static int psmx2_domain_set_val(struct fid *fid, int var, void *val)
+{
+	struct psmx2_fid_domain *domain;
+ 
+	if (!val)
+		return -FI_EINVAL;
+
+	domain = container_of(fid, struct psmx2_fid_domain,
+			      util_domain.domain_fid.fid);
+ 
+	switch (var) {
+	case FI_PSM2_DISCONNECT:
+		domain->params.disconnect = *(uint32_t *)val;
+		break;
+	default:
+		return -FI_EINVAL;
+	}
+	return 0;
+}
+
 DIRECT_FN
 STATIC int psmx2_domain_control(fid_t fid, int command, void *arg)
 {
 	struct fi_mr_map_raw *map;
+	struct fi_fid_var *var;
 
 	switch (command) {
 	case FI_MAP_RAW_MR:
@@ -219,6 +260,14 @@ STATIC int psmx2_domain_control(fid_t fid, int command, void *arg)
 	case FI_UNMAP_KEY:
 		/* Nothing to do here */
 		break;
+
+	case FI_GET_VAL:
+		var = arg;
+		return psmx2_domain_get_val(fid, var->name, var->val);
+
+	case FI_SET_VAL:
+		var = arg;
+		return psmx2_domain_set_val(fid, var->name, var->val);
 
 	default:
 		return -FI_ENOSYS;
@@ -336,6 +385,7 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain_priv->progress_thread_enabled =
 		(info->domain_attr->data_progress == FI_PROGRESS_AUTO);
 	domain_priv->addr_format = info->addr_format;
+	domain_priv->params.disconnect = psmx2_env.disconnect;
 
 	if (info->addr_format == FI_ADDR_STR)
 		src_addr = psmx2_string_to_ep_name(info->src_addr);

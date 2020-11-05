@@ -598,6 +598,11 @@ struct fi_alias {
 	uint64_t		flags;
 };
 
+struct fi_fid_var {
+	int		name;
+	void		*val;
+};
+
 struct fi_mr_raw_attr {
 	uint64_t	flags;
 	uint64_t	*base_addr;
@@ -632,6 +637,8 @@ enum {
 	FI_REFRESH,		/* mr: fi_mr_modify */
 	FI_DUP,			/* struct fid ** */
 	FI_GETWAITOBJ,		/*enum fi_wait_obj * */
+	FI_GET_VAL,		/* struct fi_fid_var */
+	FI_SET_VAL,		/* struct fi_fid_var */
 };
 
 static inline int fi_control(struct fid *fid, int command, void *arg)
@@ -645,6 +652,28 @@ static inline int fi_alias(struct fid *fid, struct fid **alias_fid, uint64_t fla
 	alias.fid = alias_fid;
 	alias.flags = flags;
 	return fi_control(fid, FI_ALIAS, &alias);
+}
+
+/* fid value names */
+/*
+ * Currently no common name is defined. Provider specific names should
+ * have the FI_PROV_SPECIFIC bit set.
+ */
+
+static inline int fi_get_val(struct fid *fid, int name, void *val)
+{
+	struct fi_fid_var var;
+	var.name = name;
+	var.val = val;
+	return fi_control(fid, FI_GET_VAL, &var);
+}
+
+static inline int fi_set_val(struct fid *fid, int name, void *val)
+{
+	struct fi_fid_var var;
+	var.name = name;
+	var.val = val;
+	return fi_control(fid, FI_SET_VAL, &var);
 }
 
 static inline int

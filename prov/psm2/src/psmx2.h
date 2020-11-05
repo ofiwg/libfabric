@@ -72,6 +72,7 @@ extern "C" {
 #include "ofi_mem.h"
 #include "rbtree.h"
 #include "version.h"
+#include "fi_ext_psm2.h"
 
 #ifdef FABRIC_DIRECT_ENABLED
 #define DIRECT_FN __attribute__((visibility ("default")))
@@ -589,6 +590,11 @@ struct psmx2_fid_domain {
 	psmx2_unlock_fn_t	context_unlock_fn;
 	psmx2_trylock_fn_t	poll_trylock_fn;
 	psmx2_unlock_fn_t	poll_unlock_fn;
+
+	/* parameters that can be set via domain_ops */
+	struct {
+		int		disconnect;
+	} params;
 };
 
 #define PSMX2_EP_REGULAR	0
