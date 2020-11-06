@@ -53,6 +53,7 @@ struct cuda_ops {
 	cudaError_t (*cudaHostRegister)(void *ptr, size_t size,
 					unsigned int flags);
 	cudaError_t (*cudaHostUnregister)(void *ptr);
+	cudaError_t (*cudaGetDeviceCount)(int *count);
 };
 
 static int hmem_cuda_use_gdrcopy;
@@ -74,6 +75,7 @@ static struct cuda_ops cuda_ops = {
 	.cuPointerGetAttribute = cuPointerGetAttribute,
 	.cudaHostRegister = cudaHostRegister,
 	.cudaHostUnregister = cudaHostUnregister,
+	.cudaGetDeviceCount = cudaGetDeviceCount,
 };
 
 #endif /* ENABLE_CUDA_DLOPEN */
@@ -108,6 +110,11 @@ cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags)
 cudaError_t ofi_cudaHostUnregister(void *ptr)
 {
 	return cuda_ops.cudaHostUnregister(ptr);
+}
+
+static cudaError_t ofi_cudaGetDeviceCount(int *count)
+{
+	return cuda_ops.cudaGetDeviceCount(count);
 }
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
@@ -233,6 +240,14 @@ static int cuda_hmem_dl_init(void)
 		goto err_dlclose_cuda;
 	}
 
+	cuda_ops.cudaGetDeviceCount = dlsym(cudart_handle,
+					    "cudaGetDeviceCount");
+	if (!cuda_ops.cudaGetDeviceCount) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find cudaGetDeviceCount\n");
+		goto err_dlclose_cuda;
+	}
+
 	return FI_SUCCESS;
 
 err_dlclose_cuda:
@@ -246,6 +261,42 @@ err_dlclose_cudart:
 #endif /* ENABLE_CUDA_DLOPEN */
 }
 
+static void cuda_hmem_dl_cleanup(void)
+{
+#ifdef ENABLE_CUDA_DLOPEN
+	dlclose(cuda_handle);
+	dlclose(cudart_handle);
+#endif
+}
+
+static int cuda_hmem_verify_devices(void)
+{
+	int device_count;
+	cudaError_t cuda_ret;
+
+	/* Verify CUDA compute-capable devices are present on the host. */
+	cuda_ret = ofi_cudaGetDeviceCount(&device_count);
+	switch (cuda_ret) {
+	case cudaSuccess:
+		break;
+
+	case cudaErrorNoDevice:
+		return -FI_ENOSYS;
+
+	default:
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to perform cudaGetDeviceCount: %s:%s\n",
+			ofi_cudaGetErrorName(cuda_ret),
+			ofi_cudaGetErrorString(cuda_ret));
+		return -FI_EIO;
+	}
+
+	if (device_count == 0)
+		return -FI_ENOSYS;
+
+	return FI_SUCCESS;
+}
+
 int cuda_hmem_init(void)
 {
 	int ret;
@@ -253,6 +304,10 @@ int cuda_hmem_init(void)
 	ret = cuda_hmem_dl_init();
 	if (ret != FI_SUCCESS)
 		return ret;
+
+	ret = cuda_hmem_verify_devices();
+	if (ret != FI_SUCCESS)
+		goto dl_cleanup;
 
 	ret = cuda_gdrcopy_hmem_init();
 	if (ret == FI_SUCCESS) {
@@ -269,15 +324,16 @@ int cuda_hmem_init(void)
 	}
 
 	return ret;
+
+dl_cleanup:
+	cuda_hmem_dl_cleanup();
+
+	return ret;
 }
 
 int cuda_hmem_cleanup(void)
 {
-#ifdef ENABLE_CUDA_DLOPEN
-	dlclose(cuda_handle);
-	dlclose(cudart_handle);
-#endif
-
+	cuda_hmem_dl_cleanup();
 	cuda_gdrcopy_hmem_cleanup();
 	return FI_SUCCESS;
 }
