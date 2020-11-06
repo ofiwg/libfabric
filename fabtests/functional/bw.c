@@ -199,7 +199,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 
-	while ((op = getopt(argc, argv, "W:vT:h" CS_OPTS ADDR_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "UW:vT:h" CS_OPTS ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
@@ -208,6 +208,9 @@ int main(int argc, char **argv)
 			break;
 		case 'W':
 			opts.window_size = atoi(optarg);
+			break;
+		case 'U':
+			hints->tx_attr->op_flags |= FI_DELIVERY_COMPLETE;
 			break;
 		case 'v':
 			opts.options |= FT_OPT_VERIFY_DATA;

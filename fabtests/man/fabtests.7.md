@@ -396,6 +396,9 @@ the list available for that test.
   out-of-band connection may be specified as part of this option to override
   the default. Cannot be used together with the '-b' option.
 
+*-U*
+: Run fabtests with FI_DELIVERY_COMPLETE.
+
 *-I <number>*
 : Number of data transfer iterations.
 
