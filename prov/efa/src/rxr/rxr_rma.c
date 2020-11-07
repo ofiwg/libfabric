@@ -43,19 +43,25 @@
 #include "rxr_read.h"
 
 int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
-			      size_t count, uint32_t flags, struct iovec *iov)
+			      size_t count, uint32_t flags,
+			      struct iovec *iov, void **desc)
 {
+	void *context;
+	struct efa_mr *efa_mr;
 	struct efa_ep *efa_ep;
 	int i, ret;
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 
 	for (i = 0; i < count; i++) {
-		ret = ofi_mr_verify(&efa_ep->domain->util_domain.mr_map,
-				    rma[i].len,
-				    (uintptr_t *)(&rma[i].addr),
-				    rma[i].key,
-				    flags);
+		fastlock_acquire(&efa_ep->domain->util_domain.lock);
+		ret = ofi_mr_map_verify(&efa_ep->domain->util_domain.mr_map,
+					(uintptr_t *)(&rma[i].addr),
+					rma[i].len, rma[i].key, flags,
+					&context);
+		efa_mr = context;
+		desc[i] = fi_mr_desc(&efa_mr->mr_fid);
+		fastlock_release(&efa_ep->domain->util_domain.lock);
 		if (ret) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"MR verification failed (%s), addr: %lx key: %ld\n",
@@ -92,7 +98,7 @@ rxr_rma_alloc_readrsp_tx_entry(struct rxr_ep *rxr_ep,
 	msg.msg_iov = rx_entry->iov;
 	msg.iov_count = rx_entry->iov_count;
 	msg.addr = rx_entry->addr;
-	msg.desc = NULL;
+	msg.desc = rx_entry->desc;
 	msg.context = NULL;
 	msg.data = 0;
 
