@@ -521,13 +521,10 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 
 	if (rx_entry->cq_entry.flags & FI_WRITE) {
 		/*
-		 * must be on the remote side, notify cq/counter
-		 * if FI_RMA_EVENT is requested or REMOTE_CQ_DATA is on
+		 * must be on the remote side, notify cq if REMOTE_CQ_DATA is on
 		 */
 		if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
 			rxr_cq_write_rx_completion(ep, rx_entry);
-		else if (ep->util_ep.caps & FI_RMA_EVENT)
-			efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
 
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
@@ -552,8 +549,7 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		 * rx_entry receiving data
 		 * receive completed              send completed
 		 * handle_rx_completion()         handle_pkt_send_completion()
-		 * |->write_tx_completion()       |-> if (FI_RMA_EVENT)
-		 *                                         write_rx_completion()
+		 * |->write_tx_completion()
 		 *
 		 * As can be seen, although there is a rx_entry on remote side,
 		 * the entry will not enter into rxr_cq_handle_rx_completion
@@ -849,12 +845,6 @@ void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entr
 		rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, tx_entry->rma_loc_rx_id);
 		assert(rx_entry);
 		assert(rx_entry->state == RXR_RX_WAIT_READ_FINISH);
-
-		if (ep->util_ep.caps & FI_RMA_EVENT) {
-			rx_entry->cq_entry.len = rx_entry->total_len;
-			rx_entry->bytes_copied = rx_entry->total_len;
-			efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
-		}
 
 		rxr_release_rx_entry(ep, rx_entry);
 		/* just release tx, do not write completion */
