@@ -428,6 +428,7 @@ struct vrb_mem_desc {
 	struct vrb_domain	*domain;
 	/* this field is used only by MR cache operations */
 	struct ofi_mr_entry	*entry;
+	struct ofi_mr_info	info;
 };
 
 extern struct fi_ops_mr vrb_mr_ops;
