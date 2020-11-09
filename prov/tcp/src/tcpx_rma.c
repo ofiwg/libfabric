@@ -389,8 +389,8 @@ static ssize_t tcpx_rma_inject_common(struct fid_ep *ep, const void *buf,
 static ssize_t tcpx_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
 			       fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
-	return tcpx_rma_inject_common(ep, buf, len, dest_addr,
-				      0, addr, key, FI_INJECT);
+	return tcpx_rma_inject_common(ep, buf, len, 0 ,dest_addr,
+				      addr, key, FI_INJECT);
 }
 
 static ssize_t
@@ -398,7 +398,7 @@ tcpx_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 		    uint64_t data, fi_addr_t dest_addr, uint64_t addr,
 		    uint64_t key)
 {
-	return tcpx_rma_inject_common(ep, buf, len, dest_addr, data, addr, key,
+	return tcpx_rma_inject_common(ep, buf, len, data, dest_addr, addr, key,
 				      FI_INJECT | FI_REMOTE_CQ_DATA);
 }
 
