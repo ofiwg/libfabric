@@ -425,7 +425,6 @@ struct vrb_mem_desc {
 	struct fid_mr		mr_fid;
 	struct ibv_mr		*mr;
 	struct vrb_domain	*domain;
-	size_t			len;
 	/* this field is used only by MR cache operations */
 	struct ofi_mr_entry	*entry;
 };
