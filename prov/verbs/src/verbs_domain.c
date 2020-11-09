@@ -281,6 +281,7 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 {
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
 		[FI_HMEM_SYSTEM] = default_monitor,
+		[FI_HMEM_CUDA] = default_cuda_monitor,
 	};
 	enum fi_hmem_iface iface;
 	struct vrb_domain *_domain;
