@@ -774,6 +774,28 @@ static void verbs_devs_free(void)
 	}
 }
 
+static void vrb_set_peer_mem_support(void)
+{
+	char *line = NULL;
+	size_t line_size = 0;
+	ssize_t bytes;
+	FILE *kallsyms_fd;
+
+	kallsyms_fd = fopen("/proc/kallsyms", "r");
+	if (!kallsyms_fd)
+		return;
+
+	while ((bytes = getline(&line, &line_size, kallsyms_fd)) != -1) {
+		if (strstr(line, "ib_register_peer_memory_client")) {
+			vrb_gl_data.peer_mem_support = true;
+			break;
+		}
+	}
+
+	free(line);
+	fclose(kallsyms_fd);
+}
+
 static void vrb_fini(void)
 {
 #if HAVE_VERBS_DL
@@ -793,6 +815,8 @@ VERBS_INI
 	ofi_hmem_init();
 	ofi_monitors_init();
 #endif
+	vrb_set_peer_mem_support();
+
 	if (vrb_read_params()|| vrb_init_info(&vrb_util_prov.info))
 		return NULL;
 	return &vrb_prov;

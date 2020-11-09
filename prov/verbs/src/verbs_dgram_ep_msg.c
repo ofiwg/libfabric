@@ -141,7 +141,7 @@ vrb_dgram_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct ibv_send_wr wr = {
 		.wr_id = VERBS_COMP(ep, (uintptr_t)context),
 		.opcode = IBV_WR_SEND,
-		.send_flags = VERBS_INJECT(ep, len),
+		.send_flags = VERBS_INJECT(ep, len, desc),
 	};
 
 	if (vrb_dgram_ep_set_addr(ep, dest_addr, &wr))
@@ -161,7 +161,7 @@ vrb_dgram_ep_senddata(struct fid_ep *ep_fid, const void *buf,
 		.wr_id = VERBS_COMP(ep, (uintptr_t)context),
 		.opcode = IBV_WR_SEND_WITH_IMM,
 		.imm_data = htonl((uint32_t)data),
-		.send_flags = VERBS_INJECT(ep, len),
+		.send_flags = VERBS_INJECT(ep, len, desc),
 	};
 
 	if (vrb_dgram_ep_set_addr(ep, dest_addr, &wr))

@@ -1045,6 +1045,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	ep->peer_rq_credits = UINT64_MAX;
 	ep->threshold = INT64_MAX; /* disables RQ flow control */
+	ep->hmem_enabled = !!(ep->util_ep.caps & FI_HMEM);
 
 	ret = vrb_ep_save_info_attr(ep, info);
 	if (ret)
@@ -1797,7 +1798,7 @@ vrb_msg_ep_atomic_write(struct fid_ep *ep_fid, const void *buf, size_t count,
 		.opcode = IBV_WR_RDMA_WRITE,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)(uintptr_t)key,
-		.send_flags = VERBS_INJECT(ep, sizeof(uint64_t)) |
+		.send_flags = VERBS_INJECT(ep, sizeof(uint64_t), desc) |
 			      IBV_SEND_FENCE,
 	};
 	size_t count_copy;
@@ -1841,7 +1842,7 @@ vrb_msg_ep_atomic_writemsg(struct fid_ep *ep_fid,
 		.wr_id = VERBS_COMP_FLAGS(ep, flags, (uintptr_t)msg->context),
 		.wr.rdma.remote_addr = msg->rma_iov->addr,
 		.wr.rdma.rkey = (uint32_t)(uintptr_t)msg->rma_iov->key,
-		.send_flags = VERBS_INJECT_FLAGS(ep, sizeof(uint64_t), flags) |
+		.send_flags = VERBS_INJECT_FLAGS(ep, sizeof(uint64_t), flags, msg->desc[0]) |
 			      IBV_SEND_FENCE,
 	};
 	size_t count_copy;
@@ -2107,7 +2108,7 @@ vrb_msg_xrc_ep_atomic_write(struct fid_ep *ep_fid, const void *buf,
 		.opcode = IBV_WR_RDMA_WRITE,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)(uintptr_t)key,
-		.send_flags = VERBS_INJECT(&ep->base_ep, sizeof(uint64_t)) |
+		.send_flags = VERBS_INJECT(&ep->base_ep, sizeof(uint64_t), desc) |
 			      IBV_SEND_FENCE,
 	};
 	size_t count_copy;
@@ -2142,7 +2143,7 @@ vrb_msg_xrc_ep_atomic_writemsg(struct fid_ep *ep_fid,
 		.wr.rdma.remote_addr = msg->rma_iov->addr,
 		.wr.rdma.rkey = (uint32_t)(uintptr_t)msg->rma_iov->key,
 		.send_flags = VERBS_INJECT_FLAGS(&ep->base_ep,
-				sizeof(uint64_t), flags) | IBV_SEND_FENCE,
+				sizeof(uint64_t), flags, msg->desc[0]) | IBV_SEND_FENCE,
 	};
 	size_t count_copy;
 	int ret;

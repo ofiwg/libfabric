@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2018 Intel Corporation, Inc.  All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -55,7 +56,7 @@ vrb_msg_ep_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.opcode = IBV_WR_RDMA_WRITE,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
-		.send_flags = VERBS_INJECT(ep, len),
+		.send_flags = VERBS_INJECT(ep, len, desc),
 	};
 
 	return vrb_send_buf(ep, &wr, buf, len, desc);
@@ -169,7 +170,7 @@ vrb_msg_ep_rma_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.imm_data = htonl((uint32_t)data),
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
-		.send_flags = VERBS_INJECT(ep, len),
+		.send_flags = VERBS_INJECT(ep, len, desc),
 	};
 
 	return vrb_send_buf(ep, &wr, buf, len, desc);
@@ -288,7 +289,7 @@ vrb_msg_xrc_ep_rma_write(struct fid_ep *ep_fid, const void *buf,
 		.opcode = IBV_WR_RDMA_WRITE,
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
-		.send_flags = VERBS_INJECT(&ep->base_ep, len),
+		.send_flags = VERBS_INJECT(&ep->base_ep, len, desc),
 	};
 
 	VRB_SET_REMOTE_SRQN(wr, ep->peer_srqn);
@@ -415,7 +416,7 @@ vrb_msg_xrc_ep_rma_writedata(struct fid_ep *ep_fid, const void *buf,
 		.imm_data = htonl((uint32_t)data),
 		.wr.rdma.remote_addr = addr,
 		.wr.rdma.rkey = (uint32_t)key,
-		.send_flags = VERBS_INJECT(&ep->base_ep, len),
+		.send_flags = VERBS_INJECT(&ep->base_ep, len, desc),
 	};
 
 	VRB_SET_REMOTE_SRQN(wr, ep->peer_srqn);
