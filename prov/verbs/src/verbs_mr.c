@@ -81,8 +81,9 @@ int vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *buf,
 			/* Ignore failure for zero length memory registration */
 			assert(errno == FI_EINVAL);
 	} else {
-		md->mr_fid.mem_desc = (void *)(uintptr_t)md->mr->lkey;
+		md->mr_fid.mem_desc = md;
 		md->mr_fid.key = md->mr->rkey;
+		md->lkey = md->mr->lkey;
 	}
 
 	if (md->domain->eq_flags & FI_REG_MR) {
