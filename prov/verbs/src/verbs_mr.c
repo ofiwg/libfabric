@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2019 Intel Corporation, Inc.  All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,33 +34,6 @@
 #include <ofi_util.h>
 #include "fi_verbs.h"
 
-
-static int
-vrb_mr_regv(struct fid *fid, const struct iovec *iov,
-	       size_t count, uint64_t access, uint64_t offset,
-	       uint64_t requested_key, uint64_t flags,
-	       struct fid_mr **mr, void *context)
-{
-	struct fid_domain *domain = container_of(fid, struct fid_domain, fid);
-
-	if (OFI_UNLIKELY(count > 1))
-		return -FI_EINVAL;
-
-	return count ? fi_mr_reg(domain, (const void *) iov->iov_base,
-				 iov->iov_len, access, offset, requested_key,
-				 flags, mr, context) :
-		       fi_mr_reg(domain, NULL, 0, access, offset, requested_key,
-				 flags, mr, context);
-}
-
-static int vrb_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
-			     uint64_t flags, struct fid_mr **mr)
-{
-	return vrb_mr_regv(fid, attr->mr_iov, attr->iov_count, attr->access,
-			      attr->offset, attr->requested_key, flags, mr,
-			      attr->context);
-}
-
 static int vrb_mr_close(fid_t fid)
 {
 	struct vrb_mem_desc *mr;
@@ -84,8 +58,8 @@ static struct fi_ops vrb_mr_fi_ops = {
 };
 
 static inline
-int vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access,
-			 const void *buf, size_t len, void *context)
+int vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *buf,
+		      size_t len, void *context)
 {
 	/* ops should be set in special functions */
 	md->mr_fid.fid.fclass = FI_CLASS_MR;
@@ -113,7 +87,7 @@ int vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access,
 		};
 		if (md->domain->eq)
 			vrb_eq_write_event(md->domain->eq, FI_MR_COMPLETE,
-				 	      &entry, sizeof(entry));
+					   &entry, sizeof(entry));
 		else if (md->domain->util_domain.eq)
 			 /* This branch is taken for the verbs/DGRAM */
 			fi_eq_write(&md->domain->util_domain.eq->eq_fid,
@@ -155,9 +129,9 @@ vrb_mr_ofi2ibv_access(uint64_t ofi_access, struct vrb_domain *domain)
 }
 
 static int
-vrb_mr_reg(struct fid *fid, const void *buf, size_t len,
-	      uint64_t access, uint64_t offset, uint64_t requested_key,
-	      uint64_t flags, struct fid_mr **mr, void *context)
+vrb_mr_nocache_reg(struct vrb_domain *domain, const void *buf, size_t len,
+		   uint64_t access, uint64_t offset, uint64_t requested_key,
+		   uint64_t flags, struct fid_mr **mr, void *context)
 {
 	struct vrb_mem_desc *md;
 	int ret;
@@ -169,12 +143,11 @@ vrb_mr_reg(struct fid *fid, const void *buf, size_t len,
 	if (OFI_UNLIKELY(!md))
 		return -FI_ENOMEM;
 
-	md->domain = container_of(fid, struct vrb_domain,
-				  util_domain.domain_fid.fid);
+	md->domain = domain;
 	md->mr_fid.fid.ops = &vrb_mr_fi_ops;
 
 	ret = vrb_mr_reg_common(md, vrb_mr_ofi2ibv_access(access, md->domain),
-				   buf, len, context);
+				buf, len, context);
 	if (OFI_UNLIKELY(ret))
 		goto err;
 
@@ -189,17 +162,9 @@ static int vrb_mr_cache_close(fid_t fid)
 {
 	struct vrb_mem_desc *md =
 		container_of(fid, struct vrb_mem_desc, mr_fid.fid);
-
 	ofi_mr_cache_delete(&md->domain->cache, md->entry);
 	return FI_SUCCESS;
 }
-
-struct fi_ops_mr vrb_mr_ops = {
-	.size = sizeof(struct fi_ops_mr),
-	.reg = vrb_mr_reg,
-	.regv = vrb_mr_regv,
-	.regattr = vrb_mr_regattr,
-};
 
 static struct fi_ops vrb_mr_cache_fi_ops = {
 	.size = sizeof(struct fi_ops),
@@ -233,11 +198,10 @@ void vrb_mr_cache_delete_region(struct ofi_mr_cache *cache,
 }
 
 static int
-vrb_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
-		    uint64_t access, uint64_t offset, uint64_t requested_key,
-		    uint64_t flags, struct fid_mr **mr, void *context)
+vrb_mr_cache_reg(struct vrb_domain *domain, const void *buf, size_t len,
+		 uint64_t access, uint64_t offset, uint64_t requested_key,
+		 uint64_t flags, struct fid_mr **mr, void *context)
 {
-	struct vrb_domain *domain;
 	struct vrb_mem_desc *md;
 	struct ofi_mr_entry *entry;
 	struct fi_mr_attr attr;
@@ -246,9 +210,6 @@ vrb_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
 
 	if (flags & ~OFI_MR_NOCACHE)
 		return -FI_EBADFLAGS;
-
-	domain = container_of(fid, struct vrb_domain,
-			      util_domain.domain_fid.fid);
 
 	attr.access = access;
 	attr.context = context;
@@ -272,9 +233,50 @@ vrb_mr_cache_reg(struct fid *fid, const void *buf, size_t len,
 	return FI_SUCCESS;
 }
 
-struct fi_ops_mr vrb_mr_cache_ops = {
+static int
+vrb_mr_reg(struct fid *fid, const void *buf, size_t len, uint64_t access,
+	   uint64_t offset, uint64_t requested_key, uint64_t flags,
+	   struct fid_mr **mr, void *context)
+{
+	struct vrb_domain *domain;
+
+	domain = container_of(fid, struct vrb_domain,
+			      util_domain.domain_fid.fid);
+
+	if (domain->cache.monitors[FI_HMEM_SYSTEM])
+		return vrb_mr_cache_reg(domain, buf, len, access, offset,
+					requested_key, flags, mr, context);
+	else
+		return vrb_mr_nocache_reg(domain, buf, len, access, offset,
+					  requested_key, flags, mr, context);
+}
+
+static int
+vrb_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
+	    uint64_t access, uint64_t offset, uint64_t requested_key,
+	    uint64_t flags, struct fid_mr **mr, void *context)
+{
+	const void *addr = count ? iov->iov_base: NULL;
+	size_t len = count ? iov->iov_len : 0;
+
+	if (OFI_UNLIKELY(count > 1))
+		return -FI_EINVAL;
+
+	return vrb_mr_reg(fid, addr, len, access, offset, requested_key, flags,
+			  mr, context);
+}
+
+static int vrb_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+			  uint64_t flags, struct fid_mr **mr)
+{
+	return vrb_mr_regv(fid, attr->mr_iov, attr->iov_count, attr->access,
+			   attr->offset, attr->requested_key, flags, mr,
+			   attr->context);
+}
+
+struct fi_ops_mr vrb_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
-	.reg = vrb_mr_cache_reg,
+	.reg = vrb_mr_reg,
 	.regv = vrb_mr_regv,
 	.regattr = vrb_mr_regattr,
 };

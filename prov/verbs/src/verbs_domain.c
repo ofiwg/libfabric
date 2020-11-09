@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
+ * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -281,6 +282,7 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
 		[FI_HMEM_SYSTEM] = default_monitor,
 	};
+	enum fi_hmem_iface iface;
 	struct vrb_domain *_domain;
 	int ret;
 	struct vrb_fabric *fab =
@@ -325,16 +327,25 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	_domain->util_domain.domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	_domain->util_domain.domain_fid.fid.context = context;
 	_domain->util_domain.domain_fid.fid.ops = &vrb_fid_ops;
+	_domain->util_domain.domain_fid.mr = &vrb_mr_ops;
 
 	_domain->cache.entry_data_size = sizeof(struct vrb_mem_desc);
 	_domain->cache.add_region = vrb_mr_cache_add_region;
 	_domain->cache.delete_region = vrb_mr_cache_delete_region;
 	ret = ofi_mr_cache_init(&_domain->util_domain, memory_monitors,
 				&_domain->cache);
-	if (!ret)
-		_domain->util_domain.domain_fid.mr = &vrb_mr_cache_ops;
-	else
-		_domain->util_domain.domain_fid.mr = &vrb_mr_ops;
+	if (ret) {
+		VERBS_INFO(FI_LOG_MR,
+			   "MR cache init failed: %s. MR caching disabled.\n",
+			   fi_strerror(-ret));
+	} else {
+		for (iface = 0; iface < OFI_HMEM_MAX; iface++) {
+			if (_domain->cache.monitors[iface])
+				VERBS_INFO(FI_LOG_MR,
+					   "MR cache enabled for %s memory\n",
+					   fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+		}
+	}
 
 	switch (_domain->ep_type) {
 	case FI_EP_DGRAM:
