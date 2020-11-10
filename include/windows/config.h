@@ -165,7 +165,7 @@
 #define PACKAGE_TARNAME PACKAGE
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.12.0a1"
+#define PACKAGE_VERSION "1.12.0rc1"
 
 /* Define to the full name and version of this package. */
 #define PACKAGE_STRING PACKAGE_NAME " " PACKAGE_VERSION
@@ -195,7 +195,7 @@
 /* Version number of package */
 #define _FI_EXP(s) #s
 #define _FI_TO_STRING(s) _FI_EXP(s)
-#define VERSION _FI_TO_STRING(FI_MAJOR_VERSION) "." _FI_TO_STRING(FI_MINOR_VERSION) ".1a1"
+#define VERSION _FI_TO_STRING(FI_MAJOR_VERSION) "." _FI_TO_STRING(FI_MINOR_VERSION) "." _FI_TO_STRING(FI_REVISION_VERSION)
 
 #ifndef BUILD_ID
 #define BUILD_ID ""

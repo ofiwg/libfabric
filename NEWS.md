@@ -5,6 +5,69 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
+v1.12.0, Wed Mar 10, 2021
+=========================
+
+## Core
+
+## EFA
+
+## RxM
+
+## SHM
+
+## Sockets
+
+## TCP
+
+## Util
+
+## Verbs
+
+
+v1.11.2, Tue Dec 15, 2020
+=========================
+
+## Core
+
+- Handle data transfers > 4GB on OS X over tcp sockets
+- Fixed spelling and syntax in man pages
+- Fix pmem instruction checks
+
+## EFA
+
+- Use memory registration for emulated read protocol
+- Update send paths to use app memory descriptor if available
+- Remove unneeded check for local memory registration
+- Do not install fork handler if EFA is not used
+- Fix medium message RTM protocol
+- Fix memory registration leak in error path
+- Fix posting of REQ packets when using shm provider
+
+## RxM
+
+- Fix provider initialization when built as a dynamic library
+
+## SHM
+
+- Reverts SAR buffer locking patch
+- Include correct header file for process_vm_readv/writev syscalls
+- Skip atomic fetch processing for non-fetch operations
+
+## TCP
+
+- Fix swapping of address and CQ data in RMA inject path
+
+## Util
+
+- Fix error code returned for invalid AV flags
+- Fix a bug finding the end of a page when the address is aligned
+
+## Verbs
+
+- Fix build warning in XRC CM log messages
+- Fix build warnings in debug macros
+
 v1.11.1, Fri Oct 9, 2021
 ========================
 
