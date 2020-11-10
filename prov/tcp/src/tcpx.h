@@ -232,8 +232,18 @@ struct tcpx_xfer_entry {
 };
 
 struct tcpx_domain {
-	struct util_domain	util_domain;
+	struct util_domain		util_domain;
+	struct ofi_ops_dynamic_rbuf	*dynamic_rbuf;
 };
+
+static inline struct ofi_ops_dynamic_rbuf *tcpx_dynamic_rbuf(struct tcpx_ep *ep)
+{
+	struct tcpx_domain *domain;
+
+	domain = container_of(ep->util_ep.domain, struct tcpx_domain,
+			      util_domain);
+	return domain->dynamic_rbuf;
+}
 
 struct tcpx_buf_pool {
 	struct ofi_bufpool	*pool;
