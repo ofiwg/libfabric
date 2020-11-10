@@ -174,7 +174,7 @@
     <ClCompile Include="functional\msg_sockets.c" />
     <ClCompile Include="functional\poll.c" />
     <ClCompile Include="functional\rdm.c" />
-    <ClCompile Include="functional\rdm_rma_simple.c" />
+    <ClCompile Include="functional\rdm_rma_event.c" />
     <ClCompile Include="functional\rdm_rma_trigger.c" />
     <ClCompile Include="functional\rdm_shared_ctx.c" />
     <ClCompile Include="functional\rdm_tagged_peek.c" />

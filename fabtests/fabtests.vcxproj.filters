@@ -87,7 +87,7 @@
     <ClCompile Include="functional\rdm.c">
       <Filter>Source Files\functional</Filter>
     </ClCompile>
-    <ClCompile Include="functional\rdm_rma_simple.c">
+    <ClCompile Include="functional\rdm_rma_event.c">
       <Filter>Source Files\functional</Filter>
     </ClCompile>
     <ClCompile Include="functional\rdm_rma_trigger.c">
