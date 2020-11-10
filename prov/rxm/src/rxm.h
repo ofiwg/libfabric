@@ -280,7 +280,7 @@ struct rxm_domain {
 	struct fid_domain *msg_domain;
 	size_t max_atomic_size;
 	uint64_t mr_key;
-	uint8_t mr_local;
+	bool mr_local;
 	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
 	struct ofi_bufpool *amo_bufpool;
 	fastlock_t amo_bufpool_lock;
