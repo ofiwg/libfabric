@@ -1036,6 +1036,15 @@ struct ofi_ops_flow_ctrl {
 };
 
 
+/* Dynamic receive buffering support. */
+#define OFI_OPS_DYNAMIC_RBUF "ofix_dynamic_rbuf"
+
+struct ofi_ops_dynamic_rbuf {
+	size_t	size;
+	ssize_t	(*get_rbuf)(struct fi_cq_data_entry *entry, struct iovec *iov,
+			    size_t *count);
+};
+
 #ifdef __cplusplus
 }
 #endif
