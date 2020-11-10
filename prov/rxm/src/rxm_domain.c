@@ -471,6 +471,37 @@ static int rxm_config_flow_ctrl(struct rxm_domain *domain)
 	return 0;
 }
 
+struct ofi_ops_dynamic_rbuf rxm_dynamic_rbuf = {
+	.size = sizeof(struct ofi_ops_dynamic_rbuf),
+	.get_rbuf = rxm_get_dyn_rbuf,
+};
+
+static void rxm_config_dyn_rbuf(struct rxm_domain *domain, struct fi_info *info)
+{
+	int ret = 1;
+
+	/* Collective support requires rxm generated and consumed messages.
+	 * Although we could update the code to handle receiving collective
+	 * messages, collective support is mostly for development purposes.
+	 * So, fallback to bounce buffers when enabled.
+	 */
+	if (info->caps | FI_COLLECTIVE)
+		return;
+
+	fi_param_get_bool(&rxm_prov, "enable_dyn_rbuf", &ret);
+	domain->dyn_rbuf = (ret != 0);
+	if (!domain->dyn_rbuf)
+		return;
+
+	ret = fi_set_ops(&domain->msg_domain->fid, OFI_OPS_DYNAMIC_RBUF, 0,
+			 (void *) &rxm_dynamic_rbuf, NULL);
+	domain->dyn_rbuf = (ret == FI_SUCCESS);
+
+	if (domain->dyn_rbuf) {
+		domain->rx_buf_post_size = sizeof(struct rxm_pkt);
+	}
+}
+
 int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **domain, void *context)
 {
@@ -507,6 +538,8 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	rxm_domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
 
 	rxm_domain->max_atomic_size = rxm_ep_max_atomic_size(info);
+	rxm_domain->rx_buf_post_size = sizeof(struct rxm_pkt) + rxm_eager_limit;
+
 	*domain = &rxm_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &rxm_domain_fi_ops;
 	/* Replace MR ops set by ofi_domain_init() */
@@ -525,6 +558,8 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	ret = rxm_config_flow_ctrl(rxm_domain);
 	if (ret)
 		goto err4;
+
+	rxm_config_dyn_rbuf(rxm_domain, info);
 
 	fi_freeinfo(msg_info);
 	return 0;

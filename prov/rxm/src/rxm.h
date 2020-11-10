@@ -279,8 +279,10 @@ struct rxm_domain {
 	struct util_domain util_domain;
 	struct fid_domain *msg_domain;
 	size_t max_atomic_size;
+	size_t rx_buf_post_size;
 	uint64_t mr_key;
 	bool mr_local;
+	bool dyn_rbuf;
 	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
 	struct ofi_bufpool *amo_bufpool;
 	fastlock_t amo_bufpool_lock;
@@ -472,7 +474,8 @@ struct rxm_rx_buf {
 	/* MSG EP / shared context to which bufs would be posted to */
 	struct fid_ep *msg_ep;
 	struct dlist_entry repost_entry;
-	struct rxm_conn *conn;
+	struct rxm_conn *conn;		/* msg ep data was received on */
+	/* if recv_entry is set, then we matched dyn rbuf */
 	struct rxm_recv_entry *recv_entry;
 	struct rxm_unexp_msg unexp_msg;
 	uint64_t comp_flags;
@@ -667,13 +670,14 @@ enum rxm_recv_queue_type {
 };
 
 struct rxm_recv_queue {
-	struct rxm_ep *rxm_ep;
+	struct rxm_ep		*rxm_ep;
 	enum rxm_recv_queue_type type;
-	struct rxm_recv_fs *fs;
-	struct dlist_entry recv_list;
-	struct dlist_entry unexp_msg_list;
-	dlist_func_t *match_recv;
-	dlist_func_t *match_unexp;
+	struct rxm_recv_fs	*fs;
+	struct dlist_entry	recv_list;
+	struct dlist_entry	unexp_msg_list;
+	size_t			dyn_rbuf_unexp_cnt;
+	dlist_func_t		*match_recv;
+	dlist_func_t		*match_unexp;
 };
 
 struct rxm_buf_pool {
@@ -696,6 +700,9 @@ struct rxm_msg_eq_entry {
 			     sizeof(union rxm_cm_data))
 #define RXM_CM_ENTRY_SZ (sizeof(struct fi_eq_cm_entry) + \
 			 sizeof(union rxm_cm_data))
+
+ssize_t rxm_get_dyn_rbuf(struct fi_cq_data_entry *entry, struct iovec *iov,
+			 size_t *count);
 
 struct rxm_eager_ops {
 	int (*comp_tx)(struct rxm_ep *rxm_ep,

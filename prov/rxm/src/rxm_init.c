@@ -51,6 +51,7 @@
 size_t rxm_msg_tx_size		= 128;
 size_t rxm_msg_rx_size		= 128;
 size_t rxm_eager_limit		= RXM_BUF_SIZE - sizeof(struct rxm_pkt);
+size_t rxm_rx_buf_post_size	= RXM_BUF_SIZE;
 int force_auto_progress		= 0;
 enum fi_wait_obj def_wait_obj = FI_WAIT_FD, def_tcp_wait_obj = FI_WAIT_UNSPEC;
 
@@ -468,8 +469,8 @@ RXM_INI
 			"longer connection establishment times. (default: 10000).");
 
 	fi_param_define(&rxm_prov, "cq_eq_fairness", FI_PARAM_INT,
-			"Defines the maximum number of message provider CQ entries"
-			" that can be consecutively read across progress calls "
+			"Defines the maximum number of message provider CQ entries "
+			"that can be consecutively read across progress calls "
 			"without checking to see if the CM progress interval has "
 			"been reached. (default: 128).");
 
@@ -482,6 +483,14 @@ RXM_INI
 			"RxM Rendezvous protocol.  If set (1), RxM will use "
 			"RMA writes rather than RMA reads during Rendezvous "
 			"transactions. (default: 0).");
+
+	fi_param_define(&rxm_prov, "enable_dyn_rbuf", FI_PARAM_BOOL,
+			"Enable support for dynamic receive buffering, if "
+			"available by the message endpoint provider. "
+			"This allows direct placement of received messages "
+			"into application buffers, bypassing RxM bounce "
+			"buffers.  This feature targets using tcp sockets "
+			"for the message transport.  (default: true)");
 
 	rxm_init_infos();
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);

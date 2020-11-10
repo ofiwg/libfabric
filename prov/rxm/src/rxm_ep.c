@@ -2567,7 +2567,17 @@ err:
 
 static void rxm_ep_sar_init(struct rxm_ep *rxm_ep)
 {
+	struct rxm_domain *domain;
 	size_t param;
+
+	domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
+			      util_domain);
+	if (domain->dyn_rbuf) {
+		FI_INFO(&rxm_prov, FI_LOG_CORE, "Dynamic receive buffer "
+			"enabled, disabling SAR protocol\n");
+		rxm_ep->sar_limit = rxm_eager_limit;
+		return;
+	}
 
 	if (!fi_param_get_size_t(&rxm_prov, "sar_limit", &param)) {
 		if (param <= rxm_eager_limit) {
