@@ -173,7 +173,7 @@ vrb_get_sib_rai(const char *node, const char *service, uint64_t flags,
 	if (*rai == NULL)
 		return -FI_ENOMEM;
 
-	ret = vrb_set_rai(addr_format, src_addr, src_addrlen, dest_addr, 
+	ret = vrb_set_rai(addr_format, src_addr, src_addrlen, dest_addr,
 						 dest_addrlen, flags, *rai);
 	if (ret)
 		return ret;
@@ -682,9 +682,11 @@ static int vrb_read_params(void)
 		return -FI_EINVAL;
 	}
 
-	if (vrb_get_param_bool("prefer_xrc", "Order XRC transport fi_infos"
-				  "ahead of RC. Default orders RC first.",
-				  &vrb_gl_data.msg.prefer_xrc)) {
+	if (vrb_get_param_bool("prefer_xrc", "Order XRC transport fi_infos "
+			       "ahead of RC.  Default orders RC first.  This "
+			       "setting must usually be combined with setting "
+			       "FI_OFI_RXM_USE_SRX.  See fi_verbs.7 man page.",
+				&vrb_gl_data.msg.prefer_xrc)) {
 		VERBS_WARN(FI_LOG_CORE,
 			   "Invalid value of prefer_xrc\n");
 		return -FI_EINVAL;
