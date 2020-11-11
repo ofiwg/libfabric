@@ -1731,16 +1731,16 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 
 	/* Application receive related error */
 	case RXM_RX:
-		/* Silently drop any MSG CQ error entries for canceled receive
+		/* Silently drop any MSG CQ error entries for any failed receive
 		 * operations as these are internal to RxM. This situation can
 		 * happen when the MSG EP receives a reject / shutdown and CM
-		 * thread hasn't handled the event yet. */
-		if (err_entry.err == FI_ECANCELED) {
-			/* No need to re-post these buffers. Free directly */
-			ofi_buf_free((struct rxm_rx_buf *)err_entry.op_context);
-			return;
-		}
-		/* fall through */
+		 * thread hasn't handled the event yet.
+		 *
+		 * There are no application posted receives associated with the
+		 * message endpoint receive at this point.
+		 */
+		ofi_buf_free((struct rxm_rx_buf *)err_entry.op_context);
+		return;
 	case RXM_RNDV_READ_DONE_SENT:
 	case RXM_RNDV_WRITE_DATA_SENT:
 		/* fall through */
