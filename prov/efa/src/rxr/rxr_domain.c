@@ -211,7 +211,6 @@ int rxr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 				info->src_addrlen : info->dest_addrlen;
 	rxr_domain->cq_size = MAX(info->rx_attr->size + info->tx_attr->size,
 				  rxr_env.cq_size);
-	rxr_domain->resource_mgmt = rdm_info->domain_attr->resource_mgmt;
 
 	ret = ofi_domain_init(fabric, info, &rxr_domain->util_domain, context);
 	if (ret)
