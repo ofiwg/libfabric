@@ -280,7 +280,7 @@ struct rxm_domain {
 	struct fid_domain *msg_domain;
 	size_t max_atomic_size;
 	uint64_t mr_key;
-	uint8_t mr_local;
+	bool mr_local;
 	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
 	struct ofi_bufpool *amo_bufpool;
 	fastlock_t amo_bufpool_lock;
@@ -477,9 +477,7 @@ struct rxm_rx_buf {
 	struct rxm_unexp_msg unexp_msg;
 	uint64_t comp_flags;
 	struct fi_recv_context recv_context;
-	// TODO remove this and modify unexp msg handling path to not repost
-	// rx_buf
-	uint8_t repost;
+	bool repost;
 
 	/* Used for large messages */
 	struct dlist_entry rndv_wait_entry;
@@ -945,24 +943,6 @@ rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	       (type == RXM_BUF_POOL_TX_CREDIT) ||
 	       (type == RXM_BUF_POOL_TX_SAR));
 	return ofi_buf_alloc(rxm_ep->buf_pools[type].pool);
-}
-
-static inline struct rxm_rx_buf *
-rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep, uint8_t repost)
-{
-	struct rxm_rx_buf *rx_buf =
-		ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool);
-	if (OFI_LIKELY((long int)rx_buf)) {
-		assert(rx_buf->ep == rxm_ep);
-		rx_buf->hdr.state = RXM_RX;
-		rx_buf->msg_ep = msg_ep;
-		rx_buf->repost = repost;
-
-		if (!rxm_ep->srx_ctx)
-			rx_buf->conn = container_of(msg_ep->fid.context,
-						    struct rxm_conn, handle);
-	}
-	return rx_buf;
 }
 
 static inline void

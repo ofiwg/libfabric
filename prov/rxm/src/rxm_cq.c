@@ -63,12 +63,32 @@ rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	return fi_cq_strerror(rxm_ep->msg_cq, prov_errno, err_data, buf, len);
 }
 
+static struct rxm_rx_buf *
+rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep, bool repost)
+{
+	struct rxm_rx_buf *rx_buf;
+
+	rx_buf = ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool);
+	if (!rx_buf)
+		return NULL;
+
+	assert(rx_buf->ep == rxm_ep);
+	rx_buf->hdr.state = RXM_RX;
+	rx_buf->msg_ep = msg_ep;
+	rx_buf->repost = repost;
+
+	if (!rxm_ep->srx_ctx)
+		rx_buf->conn = container_of(msg_ep->fid.context,
+					    struct rxm_conn, handle);
+	return rx_buf;
+}
+
 static int rxm_repost_new_rx(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_rx_buf *new_rx_buf;
 	if (rx_buf->repost) {
-		rx_buf->repost = 0;
-		new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->msg_ep, 1);
+		rx_buf->repost = false;
+		new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->msg_ep, true);
 		if (!new_rx_buf)
 			return -FI_ENOMEM;
 
@@ -1780,7 +1800,7 @@ int rxm_msg_ep_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
 	size_t i;
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
-		rx_buf = rxm_rx_buf_alloc(rxm_ep, msg_ep, 1);
+		rx_buf = rxm_rx_buf_alloc(rxm_ep, msg_ep, true);
 		if (!rx_buf)
 			return -FI_ENOMEM;
 

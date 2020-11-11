@@ -449,14 +449,35 @@ struct ofi_ops_flow_ctrl rxm_no_ops_flow_ctrl = {
 	.set_send_handler = rxm_no_credit_handler,
 };
 
+static int rxm_config_flow_ctrl(struct rxm_domain *domain)
+{
+	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
+	int ret;
+
+	ret = fi_open_ops(&domain->msg_domain->fid, OFI_OPS_FLOW_CTRL, 0,
+			  (void **) &flow_ctrl_ops, NULL);
+	if (ret) {
+		if (ret == -FI_ENOSYS) {
+			domain->flow_ctrl_ops = &rxm_no_ops_flow_ctrl;
+			return 0;
+		}
+		return ret;
+	}
+
+	assert(flow_ctrl_ops);
+	domain->flow_ctrl_ops = flow_ctrl_ops;
+	domain->flow_ctrl_ops->set_send_handler(domain->msg_domain,
+						rxm_send_credits);
+	return 0;
+}
+
 int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **domain, void *context)
 {
-	int ret;
 	struct rxm_domain *rxm_domain;
 	struct rxm_fabric *rxm_fabric;
 	struct fi_info *msg_info;
-	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
+	int ret;
 
 	rxm_domain = calloc(1, sizeof(*rxm_domain));
 	if (!rxm_domain)
@@ -501,17 +522,9 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	fastlock_init(&rxm_domain->amo_bufpool_lock);
 
-	ret = fi_open_ops(&rxm_domain->msg_domain->fid, OFI_OPS_FLOW_CTRL, 0,
-			  (void **) &flow_ctrl_ops, NULL);
-	if (!ret && flow_ctrl_ops) {
-		rxm_domain->flow_ctrl_ops = flow_ctrl_ops;
-		rxm_domain->flow_ctrl_ops->set_send_handler(
-			rxm_domain->msg_domain, rxm_send_credits);
-	} else if (ret == -FI_ENOSYS) {
-		rxm_domain->flow_ctrl_ops = &rxm_no_ops_flow_ctrl;
-	} else {
+	ret = rxm_config_flow_ctrl(rxm_domain);
+	if (ret)
 		goto err4;
-	}
 
 	fi_freeinfo(msg_info);
 	return 0;
