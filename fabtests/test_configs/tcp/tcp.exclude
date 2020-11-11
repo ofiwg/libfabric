@@ -3,7 +3,7 @@
 ^fi_dgram
 -e dgram
 
-rdm_rma_simple
+rdm_rma_event
 rdm_rma_trigger
 shared_ctx
 scalable_ep

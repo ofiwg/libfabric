@@ -24,7 +24,7 @@ set functional_tests=^
 	"poll -t queue"^
 	"poll -t counter"^
 	"rdm"^
-	"rdm_rma_simple"^
+	"rdm_rma_event"^
 	"rdm_rma_trigger"^
 	"rdm_tagged_peek"^
 	"bw -e rdm -v -T 1"^

@@ -18,7 +18,7 @@ bin_PROGRAMS = \
 	functional/fi_stream_msg \
 	functional/fi_msg_sockets \
 	functional/fi_rdm \
-	functional/fi_rdm_rma_simple \
+	functional/fi_rdm_rma_event \
 	functional/fi_rdm_rma_trigger \
 	functional/fi_rdm_deferred_wq \
 	functional/fi_dgram \
@@ -162,9 +162,9 @@ functional_fi_rdm_shared_av_SOURCES = \
 	functional/rdm_shared_av.c
 functional_fi_rdm_shared_av_LDADD = libfabtests.la
 
-functional_fi_rdm_rma_simple_SOURCES = \
-	functional/rdm_rma_simple.c
-functional_fi_rdm_rma_simple_LDADD = libfabtests.la
+functional_fi_rdm_rma_event_SOURCES = \
+	functional/rdm_rma_event.c
+functional_fi_rdm_rma_event_LDADD = libfabtests.la
 
 functional_fi_rdm_rma_trigger_SOURCES = \
 	functional/rdm_rma_trigger.c
@@ -397,7 +397,7 @@ dummy_man_pages = \
 	man/man1/fi_rdm_deferred_wq.1 \
 	man/man1/fi_rdm_multi_domain.1 \
 	man/man1/fi_multi_recv.1 \
-	man/man1/fi_rdm_rma_simple.1 \
+	man/man1/fi_rdm_rma_event.1 \
 	man/man1/fi_rdm_rma_trigger.1 \
 	man/man1/fi_rdm_shared_av.1 \
 	man/man1/fi_rdm_tagged_peek.1 \

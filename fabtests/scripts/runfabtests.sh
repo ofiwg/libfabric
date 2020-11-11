@@ -110,7 +110,7 @@ functional_tests=(
 	"fi_poll -t counter"
 	"fi_rdm"
 	"fi_rdm -U"
-	"fi_rdm_rma_simple"
+	"fi_rdm_rma_event"
 	"fi_rdm_rma_trigger"
 	"fi_shared_ctx"
 	"fi_shared_ctx --no-tx-shared-ctx"
@@ -604,7 +604,7 @@ function multinode_test {
 	local c_ret=0
 	local c_out_arr=()
 	local num_procs=$2
-	local test_exe="${test} -n $num_procs -p \"${PROV}\"" 	
+	local test_exe="${test} -n $num_procs -p \"${PROV}\""
 	local c_out
 	local start_time
 	local end_time
@@ -613,18 +613,18 @@ function multinode_test {
 	is_excluded "$test" && return
 
 	start_time=$(date '+%s')
-	
+
 	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} -s ${S_INTERFACE}"
 	${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	s_pid=$!
 	sleep 1
-	
-	c_pid_arr=()	
+
+	c_pid_arr=()
 	for ((i=1; i<num_procs; i++))
 	do
 		local c_out=$(mktemp fabtests.c_outp${i}.XXXXXX)
 		c_cmd="${BIN_PATH}${test_exe} ${S_ARGS} -s ${S_INTERFACE}"
-		${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_out & 
+		${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_out &
 		c_pid_arr+=($!)
 		c_out_arr+=($c_out)
 	done
@@ -633,21 +633,21 @@ function multinode_test {
 		wait $pid
 		c_ret=($?)||$c_ret
 	done
-	
+
 	[[ c_ret -ne 0 ]] && kill -9 $s_pid 2> /dev/null
 
 	wait $s_pid
 	s_ret=$?
 	echo "server finished"
-	
+
 	end_time=$(date '+%s')
 	test_time=$(compute_duration "$start_time" "$end_time")
-	
+
 	pe=1
 	if [[ $STRICT_MODE -eq 0 && $s_ret -eq $FI_ENODATA && $c_ret -eq $FI_ENODATA ]] ||
 	   [[ $STRICT_MODE -eq 0 && $s_ret -eq $FI_ENOSYS && $c_ret -eq $FI_ENOSYS ]]; then
 		print_results "$test_exe" "Notrun" "$test_time" "$s_outp" "$s_cmd" "" "$c_cmd"
-		for c_out in "${c_out_arr[@]}" 
+		for c_out in "${c_out_arr[@]}"
 		do
 			printf -- "  client_stdout $pe: |\n"
 			sed -e 's/^/    /' < $c_out
@@ -656,7 +656,7 @@ function multinode_test {
 		skip_count+=1
 	elif [ $s_ret -ne 0 -o $c_ret -ne 0 ]; then
 		print_results "$test_exe" "Fail" "$test_time" "$s_outp" "$s_cmd" "" "$c_cmd"
-		for c_out in "${c_out_arr[@]}" 
+		for c_out in "${c_out_arr[@]}"
 		do
 			printf -- "  client_stdout $pe: |\n"
 			sed -e 's/^/    /' < $c_out
@@ -668,7 +668,7 @@ function multinode_test {
 		fail_count+=1
 	else
 		print_results "$test_exe" "Pass" "$test_time" "$s_outp" "$s_cmd" "" "$c_cmd"
-		for c_out in "${c_out_arr[@]}" 
+		for c_out in "${c_out_arr[@]}"
 		do
 			printf -- "  client_stdout $pe: |\n"
 			sed -e 's/^/    /' < $c_out
@@ -699,7 +699,7 @@ function main {
 
 	set_core_util
 	set_excludes
-	
+
 
 	if [[ $1 == "quick" ]]; then
 		local -r tests="unit functional short"

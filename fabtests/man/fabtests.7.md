@@ -101,8 +101,9 @@ features of libfabric.
 : Transfers multiple messages over an RDM endpoint that are received
   into a single buffer, posted using the FI_MULTI_RECV flag.
 
-*fi_rdm_rma_simple*
-: A simple RMA write example over an RDM endpoint.
+*fi_rdm_rma_event*
+: An RMA write example over an RDM endpoint that uses RMA events
+  to notify the peer that the RMA transfer has completed.
 
 *fi_rdm_rma_trigger*
 : A basic example of queuing an RMA write operation that is initiated

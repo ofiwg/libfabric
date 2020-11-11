@@ -9,7 +9,7 @@
 -e dgram
 
 cm_data
-rdm_rma_simple
+rdm_rma_event
 trigger
 shared_ctx
 scalable_ep
