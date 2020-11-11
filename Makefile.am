@@ -80,6 +80,7 @@ common_srcs =				\
 
 
 if MACOS
+common_srcs += src/osx/osd.c
 common_srcs += src/unix/osd.c
 common_srcs += include/osx/osd.h
 common_srcs += include/unix/osd.h
