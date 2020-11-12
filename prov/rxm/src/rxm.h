@@ -834,10 +834,7 @@ static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 {
 	size_t overhead = sizeof(struct rxm_atomic_hdr) +
 			  sizeof(struct rxm_pkt);
-
-	/* Must be set to eager size or less */
-	return (info->tx_attr && info->tx_attr->inject_size > overhead) ?
-		info->tx_attr->inject_size - overhead : 0;
+	return rxm_eager_limit > overhead ? rxm_eager_limit - overhead : 0;
 }
 
 static inline ssize_t

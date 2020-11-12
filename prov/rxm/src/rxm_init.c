@@ -213,6 +213,8 @@ static void rxm_init_infos(void)
 		}
 
 		rxm_eager_limit = buf_size - sizeof(struct rxm_pkt);
+		if (rxm_eager_limit > UINT32_MAX)
+			rxm_eager_limit = UINT32_MAX;
 	}
 
 	fi_param_get_size_t(&rxm_prov, "tx_size", &tx_size);
