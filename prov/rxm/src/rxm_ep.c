@@ -1474,7 +1474,7 @@ static ssize_t
 rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   const struct iovec *iov, void **desc, size_t count,
 		   void *context, uint64_t data, uint64_t flags, uint64_t tag,
-		   uint8_t op, struct rxm_pkt *inject_pkt)
+		   uint8_t op)
 {
 	struct rxm_tx_eager_buf *tx_buf;
 	size_t data_len = ofi_total_iov_len(iov, count);
@@ -1495,8 +1495,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		if (!tx_buf) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of buffers from Eager buffer pool\n");
-			ret = -FI_EAGAIN;
-			goto unlock;
+			return -FI_EAGAIN;
 		}
 
 		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
@@ -1534,7 +1533,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		if (ret >= 0)
 			ret = rxm_ep_rndv_tx_send(rxm_ep, rxm_conn, tx_buf, ret);
 	}
-unlock:
+
 	return ret;
 }
 
@@ -1798,9 +1797,7 @@ rxm_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, msg->msg_iov, msg->desc,
 				 msg->iov_count, msg->context, msg->data,
-				 flags | rxm_ep->util_ep.tx_msg_flags, 0, ofi_op_msg,
-				 ((flags & FI_REMOTE_CQ_DATA) ?
-				 rxm_conn->inject_data_pkt : rxm_conn->inject_pkt));
+				 flags | rxm_ep->util_ep.tx_msg_flags, 0, ofi_op_msg);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -1824,8 +1821,7 @@ static ssize_t rxm_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 		goto unlock;
 
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context,
-				  0, rxm_ep->util_ep.tx_op_flags, 0, ofi_op_msg,
-				  rxm_conn->inject_pkt);
+				  0, rxm_ep->util_ep.tx_op_flags, 0, ofi_op_msg);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -1846,8 +1842,7 @@ static ssize_t rxm_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 		goto unlock;
 
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, iov, desc, count, context,
-				  0, rxm_ep->util_ep.tx_op_flags, 0, ofi_op_msg,
-				  rxm_conn->inject_pkt);
+				  0, rxm_ep->util_ep.tx_op_flags, 0, ofi_op_msg);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -1910,7 +1905,7 @@ static ssize_t rxm_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t le
 
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, data,
 				 rxm_ep->util_ep.tx_op_flags | FI_REMOTE_CQ_DATA,
-				 0, ofi_op_msg, rxm_conn->inject_data_pkt);
+				 0, ofi_op_msg);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2151,8 +2146,7 @@ rxm_ep_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, msg->msg_iov, msg->desc,
 				  msg->iov_count, msg->context, msg->data,
 				  flags | rxm_ep->util_ep.tx_msg_flags, msg->tag,
-				  ofi_op_tagged, ((flags & FI_REMOTE_CQ_DATA) ?
-				   rxm_conn->tinject_data_pkt : rxm_conn->tinject_pkt));
+				  ofi_op_tagged);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2177,8 +2171,7 @@ static ssize_t rxm_ep_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 		goto unlock;
 
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, 0,
-				 rxm_ep->util_ep.tx_op_flags, tag, ofi_op_tagged,
-				 rxm_conn->tinject_pkt);
+				 rxm_ep->util_ep.tx_op_flags, tag, ofi_op_tagged);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2199,8 +2192,7 @@ static ssize_t rxm_ep_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 		goto unlock;
 
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, iov, desc, count, context, 0,
-				 rxm_ep->util_ep.tx_op_flags, tag, ofi_op_tagged,
-				 rxm_conn->tinject_pkt);
+				 rxm_ep->util_ep.tx_op_flags, tag, ofi_op_tagged);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2265,7 +2257,7 @@ static ssize_t rxm_ep_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t l
 
 	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, data,
 				 rxm_ep->util_ep.tx_op_flags | FI_REMOTE_CQ_DATA,
-				 tag, ofi_op_tagged, rxm_conn->tinject_data_pkt);
+				 tag, ofi_op_tagged);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
