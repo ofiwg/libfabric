@@ -1470,18 +1470,52 @@ unlock:
 
 }
 
+static bool
+rxm_use_direct_send(struct rxm_ep *ep, size_t iov_count, uint64_t flags)
+{
+	struct rxm_domain *domain;
+
+	domain = container_of(ep->util_ep.domain, struct rxm_domain,
+			      util_domain);
+	return !(flags & FI_INJECT) && !(domain->mr_local) &&
+		(iov_count < ep->msg_info->tx_attr->iov_limit);
+}
+
+static ssize_t
+rxm_direct_send(struct rxm_conn *rxm_conn, struct rxm_tx_eager_buf *tx_buf,
+		const struct iovec *iov, void **desc, size_t count)
+{
+	struct iovec send_iov[RXM_IOV_LIMIT];
+	void *send_desc[RXM_IOV_LIMIT];
+
+	send_iov[0].iov_base = &tx_buf->pkt;
+	send_iov[0].iov_len = sizeof(tx_buf->pkt);
+	send_desc[0] = tx_buf->hdr.desc;
+
+	if (count) {
+		memcpy(&send_iov[1], (void *) iov, sizeof(*iov) * count);
+		if (desc)
+			memcpy(&send_desc[1], desc, sizeof(*desc) * count);
+	}
+	return fi_sendv(rxm_conn->msg_ep, send_iov, send_desc,
+			count + 1, 0, tx_buf);
+}
+
 static ssize_t
 rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   const struct iovec *iov, void **desc, size_t count,
 		   void *context, uint64_t data, uint64_t flags, uint64_t tag,
 		   uint8_t op)
 {
-	struct rxm_tx_eager_buf *tx_buf;
-	size_t data_len = ofi_total_iov_len(iov, count);
-	size_t total_len = sizeof(struct rxm_pkt) + data_len;
+	struct rxm_tx_eager_buf *eager_buf;
+	struct rxm_tx_rndv_buf *rndv_buf;
+	size_t data_len, total_len;
 	ssize_t ret;
 	enum fi_hmem_iface iface;
 	uint64_t device;
+
+	data_len = ofi_total_iov_len(iov, count);
+	total_len = sizeof(struct rxm_pkt) + data_len;
 
 	assert(count <= rxm_ep->rxm_info->tx_attr->iov_limit);
 	assert((!(flags & FI_INJECT) &&
@@ -1491,30 +1525,37 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
 
 	if (data_len <= rxm_eager_limit) {
-		tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
-		if (!tx_buf) {
+		eager_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
+		if (!eager_buf) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of buffers from Eager buffer pool\n");
 			return -FI_EAGAIN;
 		}
 
+		eager_buf->app_context = context;
+		eager_buf->flags = flags;
 		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
-					 flags, &tx_buf->pkt);
+					 flags, &eager_buf->pkt);
 
-		ret = ofi_copy_from_hmem_iov(tx_buf->pkt.data,
-					     tx_buf->pkt.hdr.size, iface,
-					     device, iov, count, 0);
-		assert(ret == tx_buf->pkt.hdr.size);
+		if (rxm_use_direct_send(rxm_ep, count, flags)) {
+			ret = rxm_direct_send(rxm_conn, eager_buf, iov,
+					      desc, count);
+		} else {
+			ret = ofi_copy_from_hmem_iov(eager_buf->pkt.data,
+						     eager_buf->pkt.hdr.size,
+						     iface, device, iov,
+						     count, 0);
+			assert(ret == eager_buf->pkt.hdr.size);
 
-		tx_buf->app_context = context;
-		tx_buf->flags = flags;
-
-		ret = rxm_ep_msg_normal_send(rxm_conn, &tx_buf->pkt, total_len,
-					     tx_buf->hdr.desc, tx_buf);
+			ret = rxm_ep_msg_normal_send(rxm_conn, &eager_buf->pkt,
+						     total_len,
+						     eager_buf->hdr.desc,
+						     eager_buf);
+		}
 		if (ret) {
 			if (ret == -FI_EAGAIN)
 				rxm_ep_do_progress(&rxm_ep->util_ep);
-			ofi_buf_free(tx_buf);
+			ofi_buf_free(eager_buf);
 		}
 	} else if (data_len <= rxm_ep->sar_limit &&
 		   /* SAR uses eager_limit as segment size */
@@ -1525,13 +1566,13 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					 rxm_ep_sar_calc_segs_cnt(rxm_ep, data_len),
 					 data, flags, tag, op, iface, device);
 	} else {
-		struct rxm_tx_rndv_buf *tx_buf;
-
-		ret = rxm_ep_alloc_rndv_tx_res(rxm_ep, rxm_conn, context, (uint8_t)count,
-					      iov, desc, data_len, data, flags, tag, op,
-					      &tx_buf, iface, device);
+		ret = rxm_ep_alloc_rndv_tx_res(rxm_ep, rxm_conn, context,
+					       (uint8_t) count, iov, desc,
+					       data_len, data, flags, tag, op,
+					       &rndv_buf, iface, device);
 		if (ret >= 0)
-			ret = rxm_ep_rndv_tx_send(rxm_ep, rxm_conn, tx_buf, ret);
+			ret = rxm_ep_rndv_tx_send(rxm_ep, rxm_conn,
+						  rndv_buf, ret);
 	}
 
 	return ret;
