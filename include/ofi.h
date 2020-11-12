@@ -159,13 +159,15 @@ static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
 /*
  * CPU specific features
  */
+
+/* X86_64 */
 enum {
-	OFI_CLWB_REG		= 2,
+	OFI_CLWB_REG		= 1,
 	OFI_CLWB_BIT		= (1 << 24),
 	OFI_CLFLUSHOPT_REG	= 1,
-	OFI_CLFLUSHOPT_BIT	= (1 << 24),
+	OFI_CLFLUSHOPT_BIT	= (1 << 23),
 	OFI_CLFLUSH_REG		= 3,
-	OFI_CLFLUSH_BIT		= (1 << 23),
+	OFI_CLFLUSH_BIT		= (1 << 19),
 };
 
 int ofi_cpu_supports(unsigned func, unsigned reg, unsigned bit);
