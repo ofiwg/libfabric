@@ -1085,39 +1085,39 @@ rxm_ep_msg_normal_send(struct rxm_conn *rxm_conn, struct rxm_pkt *tx_pkt,
 }
 
 static ssize_t
-rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void *context,
-			uint8_t count, const struct iovec *iov, void **desc, size_t data_len,
-			uint64_t data, uint64_t flags, uint64_t tag, uint8_t op,
-			struct rxm_tx_rndv_buf **tx_rndv_buf,
-			enum fi_hmem_iface iface, uint64_t device)
+rxm_alloc_rndv_buf(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		   void *context, uint8_t count, const struct iovec *iov,
+		   void **desc, size_t data_len, uint64_t data,
+		   uint64_t flags, uint64_t tag, uint8_t op,
+		   enum fi_hmem_iface iface, uint64_t device,
+		   struct rxm_tx_rndv_buf **rndv_buf)
 {
 	struct fid_mr *rxm_mr_msg_mr[RXM_IOV_LIMIT];
 	struct fid_mr **mr_iov;
-	size_t len;
+	size_t len, i;
 	ssize_t ret;
-	struct rxm_tx_rndv_buf *tx_buf;
-	size_t i;
 
-	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV_REQ);
-	if (!tx_buf) {
+	*rndv_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV_REQ);
+	if (!*rndv_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from RNDV buffer pool\n");
 		return -FI_EAGAIN;
 	}
 
 	rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
-				 flags, &(tx_buf)->pkt);
-	tx_buf->pkt.ctrl_hdr.msg_id = ofi_buf_index(tx_buf);
-	tx_buf->app_context = context;
-	tx_buf->flags = flags;
-	tx_buf->count = count;
+				 flags, &(*rndv_buf)->pkt);
+	(*rndv_buf)->pkt.ctrl_hdr.msg_id = ofi_buf_index(*rndv_buf);
+	(*rndv_buf)->app_context = context;
+	(*rndv_buf)->flags = flags;
+	(*rndv_buf)->count = count;
 
 	if (!rxm_ep->rdm_mr_local) {
-		ret = rxm_msg_mr_regv(rxm_ep, iov, tx_buf->count, data_len,
-				      rxm_ep->rndv_ops->tx_mr_access, tx_buf->mr);
+		ret = rxm_msg_mr_regv(rxm_ep, iov, (*rndv_buf)->count, data_len,
+				      rxm_ep->rndv_ops->tx_mr_access,
+				      (*rndv_buf)->mr);
 		if (ret)
 			goto err;
-		mr_iov = tx_buf->mr;
+		mr_iov = (*rndv_buf)->mr;
 	} else {
 		for (i = 0; i < count; i++)
 			rxm_mr_msg_mr[i] = ((struct rxm_mr *) desc[i])->msg_mr;
@@ -1126,20 +1126,20 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 	}
 
 	if (rxm_ep->rndv_ops == &rxm_rndv_ops_write) {
-		tx_buf->write_rndv.conn = rxm_conn;
+		(*rndv_buf)->write_rndv.conn = rxm_conn;
 		for (i = 0; i < count; i++) {
-			tx_buf->write_rndv.iov[i] = iov[i];
-			tx_buf->write_rndv.desc[i] = fi_mr_desc(mr_iov[i]);
+			(*rndv_buf)->write_rndv.iov[i] = iov[i];
+			(*rndv_buf)->write_rndv.desc[i] = fi_mr_desc(mr_iov[i]);
 		}
 	}
 
-	rxm_rndv_hdr_init(rxm_ep, &tx_buf->pkt.data, iov, tx_buf->count,
-			  mr_iov);
+	rxm_rndv_hdr_init(rxm_ep, &(*rndv_buf)->pkt.data, iov,
+			  (*rndv_buf)->count, mr_iov);
 
 	len = sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr);
 
 	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV) {
-		ret = ofi_copy_from_hmem_iov(rxm_pkt_rndv_data(&tx_buf->pkt),
+		ret = ofi_copy_from_hmem_iov(rxm_pkt_rndv_data(&(*rndv_buf)->pkt),
 					     rxm_ep->buffered_min, iface,
 					     device, iov, count, 0);
 		assert(ret == rxm_ep->buffered_min);
@@ -1147,12 +1147,10 @@ rxm_ep_alloc_rndv_tx_res(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn, void 
 		len += rxm_ep->buffered_min;
 	}
 
-	*tx_rndv_buf = tx_buf;
 	return len;
 
 err:
-	*tx_rndv_buf = NULL;
-	ofi_buf_free(tx_buf);
+	ofi_buf_free(*rndv_buf);
 	return ret;
 }
 
@@ -1566,10 +1564,10 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					 rxm_ep_sar_calc_segs_cnt(rxm_ep, data_len),
 					 data, flags, tag, op, iface, device);
 	} else {
-		ret = rxm_ep_alloc_rndv_tx_res(rxm_ep, rxm_conn, context,
-					       (uint8_t) count, iov, desc,
-					       data_len, data, flags, tag, op,
-					       &rndv_buf, iface, device);
+		ret = rxm_alloc_rndv_buf(rxm_ep, rxm_conn, context,
+					 (uint8_t) count, iov, desc,
+					 data_len, data, flags, tag, op,
+					 iface, device, &rndv_buf);
 		if (ret >= 0)
 			ret = rxm_ep_rndv_tx_send(rxm_ep, rxm_conn,
 						  rndv_buf, ret);
