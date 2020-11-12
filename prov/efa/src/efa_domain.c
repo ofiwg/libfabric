@@ -207,7 +207,6 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 {
 	struct efa_domain *domain;
 	struct efa_fabric *fabric;
-	struct rxr_domain *rxr_domain;
 	const struct fi_info *fi;
 	size_t qp_table_size;
 	bool app_mr_local;
@@ -251,6 +250,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	}
 
 	if (EFA_EP_TYPE_IS_RDM(info)) {
+		struct rxr_domain *rxr_domain;
 		domain->type = EFA_DOMAIN_RDM;
 		rxr_domain = container_of(domain_fid, struct rxr_domain,
 					  rdm_domain);
@@ -329,12 +329,12 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 			domain->util_domain.domain_fid.mr = &efa_domain_mr_cache_ops;
 			EFA_INFO(FI_LOG_DOMAIN, "EFA MR cache enabled, max_cnt: %zu max_size: %zu\n",
 			         cache_params.max_cnt, cache_params.max_size);
-			return 0;
+		} else {
+			free(domain->cache);
+			domain->cache = NULL;
 		}
 	}
 
-	free(domain->cache);
-	domain->cache = NULL;
 	return 0;
 err_free_info:
 	fi_freeinfo(domain->info);
