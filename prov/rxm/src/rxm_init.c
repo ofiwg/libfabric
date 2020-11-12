@@ -155,14 +155,24 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 		    const struct fi_info *base_info, struct fi_info *info)
 {
 	info->caps = base_info->caps;
-	// TODO find which other modes should be filtered
 	info->mode = (core_info->mode & ~FI_RX_CQ_DATA) | base_info->mode;
 
 	info->tx_attr->caps		= base_info->tx_attr->caps;
 	info->tx_attr->mode		= info->mode;
 	info->tx_attr->msg_order 	= core_info->tx_attr->msg_order;
 	info->tx_attr->comp_order 	= base_info->tx_attr->comp_order;
-	info->tx_attr->inject_size	= base_info->tx_attr->inject_size;
+
+	/* If the core provider requires registering send buffers, it's
+	 * usually faster to copy small transfer through bounce buffers
+	 * than requiring the user to register the buffers.  Bump the
+	 * inject size up to the rxm limit (eager buffer size) in this
+	 * case.  If registration is not required, use the core provider's
+	 * limit, which avoids potential extra data copies.
+	 */
+	info->tx_attr->inject_size = ofi_mr_local(info) ?
+				     base_info->tx_attr->inject_size :
+				     core_info->tx_attr->inject_size;
+
 	info->tx_attr->size 		= base_info->tx_attr->size;
 	info->tx_attr->iov_limit 	= MIN(base_info->tx_attr->iov_limit,
 					      core_info->tx_attr->iov_limit);
@@ -234,12 +244,6 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 	struct fi_info *cur;
 
 	for (cur = info; cur; cur = cur->next) {
-		/* RxM can support higher inject size without any big
-		 * performance penalty even if app had requested lower value
-		 * in hints. App is still free to reduce this when opening an
-		 * endpoint. This overrides setting by ofi_alter_info */
-		cur->tx_attr->inject_size = rxm_eager_limit;
-
 		/* Remove the following caps if they are not requested as they
 		 * may affect performance in fast-path */
 		if (!hints) {
