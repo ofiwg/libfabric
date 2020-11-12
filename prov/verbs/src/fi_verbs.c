@@ -173,7 +173,7 @@ vrb_get_sib_rai(const char *node, const char *service, uint64_t flags,
 	if (*rai == NULL)
 		return -FI_ENOMEM;
 
-	ret = vrb_set_rai(addr_format, src_addr, src_addrlen, dest_addr, 
+	ret = vrb_set_rai(addr_format, src_addr, src_addrlen, dest_addr,
 						 dest_addrlen, flags, *rai);
 	if (ret)
 		return ret;
@@ -629,106 +629,93 @@ static int vrb_read_params(void)
 {
 	/* Common parameters */
 	if (vrb_get_param_int("tx_size", "Default maximum tx context size",
-				 &vrb_gl_data.def_tx_size) ||
+			      &vrb_gl_data.def_tx_size) ||
 	    (vrb_gl_data.def_tx_size < 0)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of tx_size\n");
+		VERBS_WARN(FI_LOG_CORE, "Invalid value of tx_size\n");
 		return -FI_EINVAL;
 	}
 	if (vrb_get_param_int("rx_size", "Default maximum rx context size",
-				 &vrb_gl_data.def_rx_size) ||
+			      &vrb_gl_data.def_rx_size) ||
 	    (vrb_gl_data.def_rx_size < 0)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of rx_size\n");
+		VERBS_WARN(FI_LOG_CORE, "Invalid value of rx_size\n");
 		return -FI_EINVAL;
 	}
 	if (vrb_get_param_int("tx_iov_limit", "Default maximum tx iov_limit",
-				 &vrb_gl_data.def_tx_iov_limit) ||
+			      &vrb_gl_data.def_tx_iov_limit) ||
 	    (vrb_gl_data.def_tx_iov_limit < 0)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of tx_iov_limit\n");
+		VERBS_WARN(FI_LOG_CORE, "Invalid value of tx_iov_limit\n");
 		return -FI_EINVAL;
 	}
 	if (vrb_get_param_int("rx_iov_limit", "Default maximum rx iov_limit",
-				 &vrb_gl_data.def_rx_iov_limit) ||
+			      &vrb_gl_data.def_rx_iov_limit) ||
 	    (vrb_gl_data.def_rx_iov_limit < 0)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of rx_iov_limit\n");
+		VERBS_WARN(FI_LOG_CORE, "Invalid value of rx_iov_limit\n");
 		return -FI_EINVAL;
 	}
 	if (vrb_get_param_int("inline_size", "Default maximum inline size. "
-				 "Actual inject size returned in fi_info may be "
-				 "greater", &vrb_gl_data.def_inline_size) ||
+			      "Actual inject size returned in fi_info may be "
+			      "greater", &vrb_gl_data.def_inline_size) ||
 	    (vrb_gl_data.def_inline_size < 0)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of inline_size\n");
+		VERBS_WARN(FI_LOG_CORE, "Invalid value of inline_size\n");
 		return -FI_EINVAL;
 	}
 	if (vrb_get_param_int("min_rnr_timer", "Set min_rnr_timer QP "
-				 "attribute (0 - 31)",
-				 &vrb_gl_data.min_rnr_timer) ||
+			      "attribute (0 - 31)",
+			      &vrb_gl_data.min_rnr_timer) ||
 	    ((vrb_gl_data.min_rnr_timer < 0) ||
 	     (vrb_gl_data.min_rnr_timer > 31))) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of min_rnr_timer\n");
+		VERBS_WARN(FI_LOG_CORE, "Invalid value of min_rnr_timer\n");
 		return -FI_EINVAL;
 	}
 
 	if (vrb_get_param_bool("use_odp", "Enable on-demand paging memory "
-	    "registrations, if supported.  This is currently required to "
-	    "register DAX file system mmapped memory.", &vrb_gl_data.use_odp)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of use_odp\n");
+			       "registrations, if supported.  This is "
+			       "currently required to register DAX file system "
+			       "mmapped memory.", &vrb_gl_data.use_odp)) {
+		VERBS_WARN(FI_LOG_CORE, "Invalid value of use_odp\n");
 		return -FI_EINVAL;
 	}
 
-	if (vrb_get_param_bool("prefer_xrc", "Order XRC transport fi_infos"
-				  "ahead of RC. Default orders RC first.",
-				  &vrb_gl_data.msg.prefer_xrc)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of prefer_xrc\n");
+	if (vrb_get_param_bool("prefer_xrc", "Order XRC transport fi_infos "
+			       "ahead of RC.  Default orders RC first.  This "
+			       "setting must usually be combined with setting "
+			       "FI_OFI_RXM_USE_SRX.  See fi_verbs.7 man page.",
+				&vrb_gl_data.msg.prefer_xrc)) {
+		VERBS_WARN(FI_LOG_CORE, "Invalid value of prefer_xrc\n");
 		return -FI_EINVAL;
 	}
 
 	if (vrb_get_param_str("xrcd_filename", "A file to "
-				 "associate with the XRC domain.",
-				 &vrb_gl_data.msg.xrcd_filename)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of xrcd_filename\n");
+			      "associate with the XRC domain.",
+			      &vrb_gl_data.msg.xrcd_filename)) {
+		VERBS_WARN(FI_LOG_CORE, "Invalid value of xrcd_filename\n");
 		return -FI_EINVAL;
 	}
 	if (vrb_get_param_int("cqread_bunch_size", "The number of entries to "
-				 "be read from the verbs completion queue at a time",
-				 &vrb_gl_data.cqread_bunch_size) ||
+			      "be read from the verbs completion queue at a time",
+			      &vrb_gl_data.cqread_bunch_size) ||
 	    (vrb_gl_data.cqread_bunch_size <= 0)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of cqread_bunch_size\n");
+		VERBS_WARN(FI_LOG_CORE, "Invalid value of cqread_bunch_size\n");
 		return -FI_EINVAL;
 	}
 	if (vrb_get_param_int("gid_idx", "Set which gid index to use "
-				 "attribute (0 - 255)",
-				 &vrb_gl_data.gid_idx) ||
-	    (vrb_gl_data.gid_idx < 0 ||
-	     vrb_gl_data.gid_idx > 255)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of gid index\n");
+			      "attribute (0 - 255)", &vrb_gl_data.gid_idx) ||
+	    (vrb_gl_data.gid_idx < 0 || vrb_gl_data.gid_idx > 255)) {
+		VERBS_WARN(FI_LOG_CORE, "Invalid value of gid index\n");
 		return -FI_EINVAL;
 	}
 
 	if (vrb_get_param_str("device_name", "The prefix or the full name of the "
-			      "verbs device to use",
-			      &vrb_gl_data.device_name)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of device_name\n");
+			      "verbs device to use", &vrb_gl_data.device_name)) {
+		VERBS_WARN(FI_LOG_CORE, "Invalid value of device_name\n");
 		return -FI_EINVAL;
 	}
 
 	/* MSG-specific parameter */
 	if (vrb_get_param_str("iface", "The prefix or the full name of the "
-				 "network interface associated with the verbs device",
-				 &vrb_gl_data.iface)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of iface\n");
+			      "network interface associated with the verbs "
+			      "device", &vrb_gl_data.iface)) {
+		VERBS_WARN(FI_LOG_CORE, "Invalid value of iface\n");
 		return -FI_EINVAL;
 	}
 
@@ -736,21 +723,19 @@ static int vrb_read_params(void)
 	if (getenv("OMPI_COMM_WORLD_RANK") || getenv("PMI_RANK"))
 		vrb_gl_data.dgram.use_name_server = 0;
 	if (vrb_get_param_bool("dgram_use_name_server", "The option that "
-				  "enables/disables OFI Name Server thread that is used "
-				  "to resolve IP-addresses to provider specific "
-				  "addresses. If MPI is used, the NS is disabled "
-				  "by default.", &vrb_gl_data.dgram.use_name_server)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of dgram_use_name_server\n");
+			       "enables/disables OFI Name Server thread used "
+			       "to resolve IP-addresses to provider specific "
+			       "addresses. If MPI is used, the NS is disabled "
+			       "by default.", &vrb_gl_data.dgram.use_name_server)) {
+		VERBS_WARN(FI_LOG_CORE, "Invalid dgram_use_name_server\n");
 		return -FI_EINVAL;
 	}
-	if (vrb_get_param_int("dgram_name_server_port", "The port on which Name Server "
-				 "thread listens incoming connections and requestes.",
-				 &vrb_gl_data.dgram.name_server_port) ||
+	if (vrb_get_param_int("dgram_name_server_port", "The port on which "
+			      "the name server thread listens incoming "
+			      "requests.", &vrb_gl_data.dgram.name_server_port) ||
 	    (vrb_gl_data.dgram.name_server_port < 0 ||
 	     vrb_gl_data.dgram.name_server_port > 65535)) {
-		VERBS_WARN(FI_LOG_CORE,
-			   "Invalid value of dgram_name_server_port\n");
+		VERBS_WARN(FI_LOG_CORE, "Invalid dgram_name_server_port\n");
 		return -FI_EINVAL;
 	}
 
