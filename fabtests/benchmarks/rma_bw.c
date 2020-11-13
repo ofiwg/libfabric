@@ -127,6 +127,7 @@ int main(int argc, char **argv)
 		opts.dst_addr = argv[optind];
 
 	hints->domain_attr->mr_mode = opts.mr_mode;
+	hints->tx_attr->tclass = FI_TC_BULK_DATA;
 
 	ret = run();
 
