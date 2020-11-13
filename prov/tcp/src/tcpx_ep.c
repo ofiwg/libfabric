@@ -69,7 +69,7 @@ void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr)
 	}
 }
 
-static int tcpx_setup_socket(SOCKET sock)
+static int tcpx_setup_socket(SOCKET sock, struct fi_info *info)
 {
 	int ret, optval = 1;
 
@@ -80,14 +80,20 @@ static int tcpx_setup_socket(SOCKET sock)
 		return -ofi_sockerr();
 	}
 
+	if ((tcpx_nodelay == 0) || ((tcpx_nodelay < 0) &&
+	    (info->fabric_attr->api_version >= FI_VERSION(1, 9) &&
+	    info->tx_attr->tclass == FI_TC_BULK_DATA)))
+		return 0;
+
 	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &optval,
-			 sizeof(optval));
+			sizeof(optval));
 	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,"setsockopt nodelay failed\n");
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"setsockopt nodelay failed\n");
 		return -ofi_sockerr();
 	}
 
-	return ret;
+	return 0;
 }
 
 static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
@@ -315,7 +321,7 @@ static int tcpx_pep_sock_create(struct tcpx_pep *pep)
 			strerror(ofi_sockerr()));
 		return -FI_EIO;
 	}
-	ret = tcpx_setup_socket(pep->sock);
+	ret = tcpx_setup_socket(pep->sock, pep->info);
 	if (ret) {
 		goto err;
 	}
@@ -603,7 +609,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 					tcpx_hdr_none : tcpx_hdr_bswap;
 			free(handle);
 
-			ret = tcpx_setup_socket(ep->sock);
+			ret = tcpx_setup_socket(ep->sock, info);
 			if (ret)
 				goto err3;
 		}
@@ -614,7 +620,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 			goto err2;
 		}
 
-		ret = tcpx_setup_socket(ep->sock);
+		ret = tcpx_setup_socket(ep->sock, info);
 		if (ret)
 			goto err3;
 	}

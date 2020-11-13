@@ -79,6 +79,7 @@ extern struct fi_provider	tcpx_prov;
 extern struct util_prov		tcpx_util_prov;
 extern struct fi_info		tcpx_info;
 extern struct tcpx_port_range	port_range;
+extern int			tcpx_nodelay;
 struct tcpx_xfer_entry;
 struct tcpx_ep;
 
