@@ -375,6 +375,8 @@ fi_addr_t efa_ahn_qpn_to_addr(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 
 struct fi_provider *init_lower_efa_prov();
 
+ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr);
+
 ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_t *src_addr);
 
 ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry, uint64_t flags);
@@ -388,6 +390,18 @@ bool efa_ep_support_rdma_read(struct fid_ep *ep_fid)
 
 	efa_ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 	return efa_ep->domain->ctx->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+}
+
+static inline
+bool efa_ep_support_rnr_retry_modify(struct fid_ep *ep_fid)
+{
+	struct efa_ep *efa_ep;
+#ifdef HAVE_CAPS_RNR_RETRY
+	efa_ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
+	return efa_ep->domain->ctx->device_caps & EFADV_DEVICE_ATTR_CAPS_RNR_RETRY;
+#else
+	return false;
+#endif
 }
 
 static inline

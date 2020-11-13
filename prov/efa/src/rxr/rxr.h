@@ -501,7 +501,6 @@ struct rxr_domain {
 	uint64_t rdm_mode;
 	int do_progress;
 	size_t cq_size;
-	enum fi_resource_mgmt resource_mgmt;
 };
 
 struct rxr_ep {
@@ -544,6 +543,9 @@ struct rxr_ep {
 
 	/* Endpoint's capability to support zero-copy rx */
 	bool use_zcpy_rx;
+
+	/* Application requested resource management support */
+	int handle_resource_management;
 
 	/* rx/tx queue size of core provider */
 	size_t core_rx_size;

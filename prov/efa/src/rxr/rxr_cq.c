@@ -391,8 +391,8 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		rxr_ep_dec_tx_pending(ep, peer, 1);
 	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
 		tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
-		if (err_entry.err != -FI_EAGAIN ||
-		    rxr_ep_domain(ep)->resource_mgmt == FI_RM_ENABLED) {
+		if (err_entry.prov_errno != IBV_WC_RNR_RETRY_EXC_ERR ||
+		    ep->handle_resource_management != FI_RM_ENABLED) {
 			ret = rxr_cq_handle_tx_error(ep, tx_entry,
 						     err_entry.prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
@@ -413,8 +413,8 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		return 0;
 	} else if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_RX_ENTRY) {
 		rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
-		if (err_entry.err != -FI_EAGAIN ||
-		    rxr_ep_domain(ep)->resource_mgmt == FI_RM_ENABLED) {
+		if (err_entry.prov_errno != IBV_WC_RNR_RETRY_EXC_ERR ||
+		    ep->handle_resource_management != FI_RM_ENABLED) {
 			ret = rxr_cq_handle_rx_error(ep, rx_entry,
 						     err_entry.prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);

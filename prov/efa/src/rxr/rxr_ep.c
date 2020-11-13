@@ -1538,9 +1538,12 @@ static inline void rxr_ep_poll_cq(struct rxr_ep *ep,
 
 void rxr_ep_progress_internal(struct rxr_ep *ep)
 {
+	struct ibv_send_wr *bad_wr;
+	struct efa_ep *efa_ep;
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_read_entry *read_entry;
+	struct rxr_peer *peer;
 	struct dlist_entry *tmp;
 	ssize_t ret;
 
@@ -1620,6 +1623,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	 */
 	dlist_foreach_container(&ep->tx_pending_list, struct rxr_tx_entry,
 				tx_entry, entry) {
+		peer = rxr_ep_get_peer(ep, tx_entry->addr);
 		if (tx_entry->window > 0)
 			tx_entry->send_flags |= FI_MORE;
 		else
@@ -1635,6 +1639,10 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			 */
 			if (ep->tx_pending == ep->max_outstanding_tx)
 				goto out;
+
+			if (peer->flags & RXR_PEER_IN_BACKOFF)
+				break;
+
 			ret = rxr_pkt_post_data(ep, tx_entry);
 			if (OFI_UNLIKELY(ret)) {
 				tx_entry->send_flags &= ~FI_MORE;
@@ -1666,6 +1674,13 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	}
 
 out:
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	if (efa_ep->xmit_more_wr_tail != &efa_ep->xmit_more_wr_head) {
+		ret = efa_post_flush(efa_ep, &bad_wr);
+		if (OFI_UNLIKELY(ret))
+			goto tx_err;
+	}
+
 	return;
 rx_err:
 	if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
@@ -1809,6 +1824,11 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	rxr_ep->use_zcpy_rx = rxr_ep_use_zcpy_rx(rxr_ep, info);
 	FI_INFO(&rxr_prov, FI_LOG_EP_CTRL, "rxr_ep->use_zcpy_rx = %d\n", rxr_ep->use_zcpy_rx);
+
+	rxr_ep->handle_resource_management = info->domain_attr->resource_mgmt;
+	FI_INFO(&rxr_prov, FI_LOG_EP_CTRL,
+		"rxr_ep->handle_resource_management = %d\n",
+		rxr_ep->handle_resource_management);
 
 #if ENABLE_DEBUG
 	rxr_ep->sends = 0;

@@ -93,11 +93,20 @@ static int efa_ep_modify_qp_state(struct efa_qp *qp, enum ibv_qp_state qp_state,
 	if (attr_mask & IBV_QP_QKEY)
 		attr.qkey = qp->qkey;
 
+	/*
+	 * You can set how many times the firmware retries here.
+	 * Valid values are from 0(included) to 7(included).
+	 * 0 stands for no firmware level retries.
+	 * 7 means firmware retries infinitely.
+	 */
+	if (attr_mask & IBV_QP_RNR_RETRY)
+		attr.rnr_retry = 3;
+
 	return -ibv_modify_qp(qp->ibv_qp, &attr, attr_mask);
 
 }
 
-static int efa_ep_modify_qp_rst2rts(struct efa_qp *qp)
+static int efa_ep_modify_qp_rst2rts(struct efa_ep *ep, struct efa_qp *qp)
 {
 	int err;
 
@@ -110,6 +119,11 @@ static int efa_ep_modify_qp_rst2rts(struct efa_qp *qp)
 	err = efa_ep_modify_qp_state(qp, IBV_QPS_RTR, IBV_QP_STATE);
 	if (err)
 		return err;
+
+	if (ep->util_ep.type != FI_EP_DGRAM &&
+	    efa_ep_support_rnr_retry_modify(&ep->util_ep.ep_fid))
+		return efa_ep_modify_qp_state(qp, IBV_QPS_RTS,
+			IBV_QP_STATE | IBV_QP_SQ_PSN | IBV_QP_RNR_RETRY);
 
 	return efa_ep_modify_qp_state(qp, IBV_QPS_RTS,
 				      IBV_QP_STATE | IBV_QP_SQ_PSN);
@@ -146,7 +160,7 @@ static int efa_ep_create_qp_ex(struct efa_ep *ep,
 
 	qp->ibv_qp_ex = ibv_qp_to_qp_ex(qp->ibv_qp);
 	qp->qkey = efa_generate_qkey();
-	err = efa_ep_modify_qp_rst2rts(qp);
+	err = efa_ep_modify_qp_rst2rts(ep, qp);
 	if (err)
 		goto err_destroy_qp;
 
