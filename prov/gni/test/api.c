@@ -79,7 +79,6 @@ static fi_addr_t gni_addr[NUMEPS];
 static struct fid_cq *msg_cq[NUMEPS];
 static struct fi_info *fi[NUMEPS];
 static struct fi_cq_attr cq_attr;
-static const char *api_cdm_id[NUMEPS] = { "5000", "5001" };
 static struct fi_info *hints[NUMEPS];
 
 #define BUF_SZ (1<<20)

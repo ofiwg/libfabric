@@ -76,7 +76,6 @@ static struct fid_ep *ep3;
 static struct fid_av *av3;
 static struct fid_cq *cq3;
 static void *ep_name3;
-static fi_addr_t gni_addr3;
 
 /* Register a target buffer with both domains for pings. */
 static void *target_buf, *target_buf_base;

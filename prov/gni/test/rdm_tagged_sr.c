@@ -84,7 +84,7 @@ static struct fi_cq_attr cq_attr;
 static char *target, *target_base;
 static char *source, *source_base;
 static struct iovec *src_iov, *dest_iov;
-static char *iov_src_buf, *iov_dest_buf, *iov_src_buf_base, *iov_dest_buf_base;
+static char *iov_src_buf, *iov_dest_buf;
 static struct fid_mr *rem_mr, *loc_mr;
 static uint64_t mr_key;
 
