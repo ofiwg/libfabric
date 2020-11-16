@@ -258,7 +258,6 @@ static const char * const tc_strs[] = {
 	[CXI_TC_LOW_LATENCY] = "LOW_LATENCY",
 	[CXI_TC_BULK_DATA] = "BUlK_DATA",
 	[CXI_TC_BEST_EFFORT] = "BEST_EFFORT",
-	[CXI_TC_SCAVENGER] = "SCAVENGER",
 };
 
 const char *cxi_tc_str(enum cxi_traffic_class tc)
