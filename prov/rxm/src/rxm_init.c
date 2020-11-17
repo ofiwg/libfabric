@@ -194,6 +194,13 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 			return -FI_ENOMEM;
 	}
 
+	/* FI_HMEM is only supported if core provider supports it. */
+	if (!(core_info->caps & FI_HMEM)) {
+		info->caps &= ~FI_HMEM;
+		info->tx_attr->caps &= ~FI_HMEM;
+		info->rx_attr->caps &= ~FI_HMEM;
+	}
+
 	return 0;
 }
 
