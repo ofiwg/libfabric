@@ -22,6 +22,9 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 
 	dom = container_of(cache, struct cxip_domain, iomm);
 
+	if (dom->ats)
+		map_flags |= CXI_MAP_ATS;
+
 	if (!dom->odp)
 		map_flags |= CXI_MAP_PIN;
 
@@ -49,52 +52,62 @@ static void cxip_do_unmap(struct ofi_mr_cache *cache,
 		CXIP_LOG_ERROR("cxil_unmap failed: %d\n", ret);
 }
 
-static struct cxip_md *cxip_dom_ats_md(struct cxip_domain *dom)
+static int cxip_scalable_iomm_init(struct cxip_domain *dom)
 {
 	int ret;
 	uint32_t map_flags = (CXI_MAP_READ | CXI_MAP_WRITE | CXI_MAP_ATS);
 
-	if (dom->ats_init)
-		goto noinit;
-
-	/* Initialize ATS */
+	/* Create ATS MD to cover all addresses. */
 	fastlock_acquire(&dom->iomm_lock);
 
-	if (!dom->ats_init) {
-		ret = cxil_map(dom->lni->lni, 0, -1,
-			       map_flags, NULL, &dom->ats_md.md);
-		if (!ret) {
-			dom->ats_md.dom = dom;
-			dom->ats_enabled = true;
+	ret = cxil_map(dom->lni->lni, 0, -1, map_flags, NULL,
+		       &dom->scalable_md.md);
+	if (!ret) {
+		dom->scalable_md.dom = dom;
+		dom->scalable_iomm = true;
 
-			CXIP_LOG_DBG("PCIe ATS enabled.\n");
+		CXIP_LOG_DBG("Scalable IOMM enabled.\n");
 
-			if (cxip_env.ats_mlock_mode == CXIP_ATS_MLOCK_ALL) {
-				ret = mlockall(MCL_CURRENT | MCL_FUTURE);
-				if (ret) {
-					CXIP_LOG_ERROR("mlockall(MCL_CURRENT | MCL_FUTURE) failed: %d\n",
-						       -errno);
-				}
+		if (cxip_env.ats_mlock_mode == CXIP_ATS_MLOCK_ALL) {
+			ret = mlockall(MCL_CURRENT | MCL_FUTURE);
+			if (ret) {
+				CXIP_LOG_ERROR("mlockall(MCL_CURRENT | MCL_FUTURE) failed: %d\n",
+					       -errno);
 			}
-		} else {
-			CXIP_LOG_INFO("PCIe ATS unsupported.\n");
 		}
 
-		dom->ats_init = true;
+		ret = FI_SUCCESS;
+	} else {
+		ret = -FI_ENOSYS;
 	}
 
 	fastlock_release(&dom->iomm_lock);
 
-noinit:
-	if (dom->ats_enabled)
-		return &dom->ats_md;
-	return NULL;
+	return ret;
 }
 
-static void cxip_dom_ats_cleanup(struct cxip_domain *dom)
+static void cxip_scalable_iomm_fini(struct cxip_domain *dom)
 {
-	if (dom->ats_enabled)
-		cxil_unmap(dom->ats_md.md);
+	cxil_unmap(dom->scalable_md.md);
+}
+
+static int cxip_ats_check(struct cxip_domain *dom)
+{
+	uint32_t map_flags = CXI_MAP_READ | CXI_MAP_WRITE | CXI_MAP_ATS;
+	int stack_var;
+	struct cxi_md *md;
+	int ret;
+
+	ret = cxil_map(dom->lni->lni, &stack_var, sizeof(stack_var), map_flags,
+		       NULL, &md);
+	if (!ret) {
+		cxil_unmap(md);
+		CXIP_LOG_INFO("PCIe ATS supported.\n");
+		return 1;
+	}
+
+	CXIP_LOG_INFO("PCIe ATS not supported.\n");
+	return 0;
 }
 
 /*
@@ -107,17 +120,37 @@ int cxip_iomm_init(struct cxip_domain *dom)
 	};
 	int ret;
 
-	dom->iomm.entry_data_size = sizeof(struct cxip_md);
-	dom->iomm.add_region = cxip_do_map;
-	dom->iomm.delete_region = cxip_do_unmap;
-	ret = ofi_mr_cache_init(&dom->util_domain, memory_monitors,
-				&dom->iomm);
-	if (ret)
-		CXIP_LOG_ERROR("ofi_mr_cache_init failed: %d\n", ret);
-
 	fastlock_init(&dom->iomm_lock);
 
-	return ret;
+	/* Check if ATS is supported */
+	if (cxip_env.ats && cxip_ats_check(dom))
+		dom->ats = true;
+
+	if (cxip_env.odp)
+		dom->odp = true;
+
+	/* Unpinned ATS translation is scalable. A single MD covers all
+	 * memory addresses and a cache isn't necessary.
+	 */
+	if (dom->ats && cxip_env.odp) {
+		ret = cxip_scalable_iomm_init(dom);
+		if (ret)
+			CXIP_LOG_ERROR("cxip_scalable_iomm_init() returned: %d\n",
+				       ret);
+			return ret;
+	} else {
+		dom->iomm.entry_data_size = sizeof(struct cxip_md);
+		dom->iomm.add_region = cxip_do_map;
+		dom->iomm.delete_region = cxip_do_unmap;
+		ret = ofi_mr_cache_init(&dom->util_domain, memory_monitors,
+					&dom->iomm);
+		if (ret) {
+			CXIP_LOG_ERROR("ofi_mr_cache_init failed: %d\n", ret);
+			return ret;
+		}
+	}
+
+	return FI_SUCCESS;
 }
 
 /*
@@ -126,8 +159,11 @@ int cxip_iomm_init(struct cxip_domain *dom)
 void cxip_iomm_fini(struct cxip_domain *dom)
 {
 	fastlock_destroy(&dom->iomm_lock);
-	ofi_mr_cache_cleanup(&dom->iomm);
-	cxip_dom_ats_cleanup(dom);
+
+	if (dom->scalable_iomm)
+		cxip_scalable_iomm_fini(dom);
+	else
+		ofi_mr_cache_cleanup(&dom->iomm);
 }
 
 /*
@@ -148,8 +184,10 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	};
 	struct ofi_mr_entry *entry;
 
-	if ((*md = cxip_dom_ats_md(dom)))
+	if (dom->scalable_iomm) {
+		*md = &dom->scalable_md;
 		return FI_SUCCESS;
+	}
 
 	/* TODO align buffer inside cache so driver can control mapping
 	 * size.
@@ -185,7 +223,7 @@ void cxip_unmap(struct cxip_md *md)
 
 	entry = container_of(md, struct ofi_mr_entry, data);
 
-	if (md == &md->dom->ats_md)
+	if (md == &md->dom->scalable_md)
 		return;
 
 	fastlock_acquire(&md->dom->iomm_lock);

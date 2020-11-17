@@ -309,27 +309,34 @@ sets the RO bit in PCIe TLPs when possible. Cassini sets PCIe RO as follows:
 
 ## Translation
 
-The CXI provider supports multiple translation modes including: Pinned,
-On-Demand Paged (ODP), and ATS modes. Pinned and ODP modes are supported using
-a NIC translation unit. ATS mode is supported through integration between the
-NIC and the PCIe root complex on supported host CPUs. Translation mode is
-controlled using environment variables.
+The CXI provider supports two translation mechanisms: Address Translation
+Services (ATS) and NIC Translation Agent (NTA). Use the environment variable
+FI_CXI_ATS to select between translation mechanisms.
 
-In pinned mode, all buffers used for data transfers are backed by pinned
+ATS refers to NIC support for PCIe rev. 4 ATS, PRI and PASID features. ATS
+enables the NIC to efficiently access the entire virtual address space of a
+process. ATS mode currently supports AMD hosts using the iommu_v2 API.
+
+The NTA is an on-NIC translation unit. The NTA supports two-level page tables
+and additional hugepage sizes. Most CPUs support 2MB and 1GB hugepage sizes.
+Other hugepage sizes may be supported by SW to enable the NIC to cache more
+address space.
+
+ATS and NTA both support on-demand paging (ODP) in the event of a page fault.
+Use the environment variable FI_CXI_ODP to enable ODP.
+
+With ODP enabled, buffers used for data transfers are not required to be backed
+by physical memory. An un-populated buffer that is referenced by the NIC will
+incur a network page fault. Network page faults will significantly impact
+application performance. Clients should take care to pre-populate buffers used
+for data-tranfer operations to avoid network page faults. Copy-on-write
+semantics work as expected with ODP.
+
+With ODP disabled, all buffers used for data transfers are backed by pinned
 physical memory. Using Pinned mode avoids any overhead due to network page
-faults but requires all buffers to be backed by physical memory.
-
-In ODP mode, buffers used for data transfers are not required to be backed by
-physical memory. An un-populated buffer that is referenced by the NIC will incur
-a network page fault. Nework page faults will significantly impact application
-performance. Clients should take care to pre-populate buffers used for
-data-tranfer operations to avoid network page faults.
-
-In ATS mode, the NIC interfaces with a host CPU's PCIe root complex using PCIe
-rev. 4 ATS, PRI, and PASID features. Conceptually, ATS mode enables the NIC to
-to share a process's view of virtual address space. Addresses are demand-paged
-and copy-on-write semantics work as expected. ATS mode currently supports AMD
-hosts using the iommu_v2 API.
+faults but requires all buffers to be backed by physical memory. Copy-on-write
+semantics are broken when using pinned memory. See the Fork section for more
+information.
 
 ## Translation Cache
 
@@ -449,10 +456,10 @@ offloading are met.
 The CXI provider checks for the following environment variables:
 
 *FI_CXI_ODP*
-: Enables on-demand paging.
+: Enables on-demand paging. If disabled, all DMA buffers are pinned.
 
 *FI_CXI_ATS*
-: Enables PCIe ATS.
+: Enables PCIe ATS. If disabled, the NTA mechanism is used.
 
 *FI_CXI_ATS_MLOCK_MODE*
 : Sets ATS mlock mode. The mlock() system call may be used in conjunction with
@@ -462,7 +469,8 @@ ATS without mlock() may experience network page faults, reducing network
 performance. When ats_mlock_mode is set to "all", the provider uses mlockall()
 during initialization with ATS. mlockall() causes all mapped addresses to be
 locked in RAM at all times. This helps to avoid most network page faults. Using
-mlockall() may increase pressure on physical memory.
+mlockall() may increase pressure on physical memory. Ignored when ODP is
+disabled.
 
 *FI_CXI_RDZV_OFFLOAD*
 : Enables offloaded rendezvous messaging protocol.

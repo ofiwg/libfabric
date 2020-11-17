@@ -464,11 +464,11 @@ struct cxip_domain {
 	struct ofi_mr_cache iomm;
 	fastlock_t iomm_lock;
 	bool odp;
+	bool ats;
 
 	/* ATS translation support */
-	struct cxip_md ats_md;
-	bool ats_init;
-	bool ats_enabled;
+	struct cxip_md scalable_md;
+	bool scalable_iomm;
 
 	/* Domain state */
 	bool enabled;
