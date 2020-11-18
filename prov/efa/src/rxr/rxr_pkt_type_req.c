@@ -532,7 +532,7 @@ void rxr_pkt_handle_long_rtm_sent(struct rxr_ep *ep,
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
 
-	if (efa_is_cache_available(efa_domain) || efa_ep_is_cuda_mr(tx_entry->desc[0]))
+	if (tx_entry->desc[0] || efa_is_cache_available(efa_domain))
 		rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
 }
 
@@ -1246,7 +1246,7 @@ void rxr_pkt_handle_long_rtw_sent(struct rxr_ep *ep,
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
-	if (efa_is_cache_available(efa_domain) || efa_ep_is_cuda_mr(tx_entry->desc[0]))
+	if (tx_entry->desc[0] || efa_is_cache_available(efa_domain))
 		rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
 }
 
@@ -1325,7 +1325,7 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 	rtw_hdr = (struct rxr_eager_rtw_hdr *)pkt_entry->pkt;
 	rx_entry->iov_count = rtw_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
-					FI_REMOTE_WRITE, rx_entry->iov);
+					FI_REMOTE_WRITE, rx_entry->iov, rx_entry->desc);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_eq_write_error(&ep->util_ep, FI_EIO, err);
@@ -1382,7 +1382,7 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	rtw_hdr = (struct rxr_long_rtw_hdr *)pkt_entry->pkt;
 	rx_entry->iov_count = rtw_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
-					FI_REMOTE_WRITE, rx_entry->iov);
+					FI_REMOTE_WRITE, rx_entry->iov, rx_entry->desc);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_eq_write_error(&ep->util_ep, FI_EIO, err);
@@ -1454,7 +1454,7 @@ void rxr_pkt_handle_read_rtw_recv(struct rxr_ep *ep,
 	rtw_hdr = (struct rxr_read_rtw_hdr *)pkt_entry->pkt;
 	rx_entry->iov_count = rtw_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
-					FI_REMOTE_WRITE, rx_entry->iov);
+					FI_REMOTE_WRITE, rx_entry->iov, rx_entry->desc);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
@@ -1593,7 +1593,7 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	rx_entry->window = rtr_hdr->read_req_window;
 	rx_entry->iov_count = rtr_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtr_hdr->rma_iov, rtr_hdr->rma_iov_count,
-					FI_REMOTE_READ, rx_entry->iov);
+					FI_REMOTE_READ, rx_entry->iov, rx_entry->desc);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verification failed!\n");
 		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -FI_EINVAL);
@@ -1708,6 +1708,7 @@ int rxr_pkt_proc_write_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct iovec iov[RXR_IOV_LIMIT];
 	struct rxr_rta_hdr *rta_hdr;
+	void *desc[RXR_IOV_LIMIT];
 	char *data;
 	int iov_count, op, dt, i;
 	size_t dtsize, offset, hdr_size;
@@ -1720,7 +1721,7 @@ int rxr_pkt_proc_write_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 	data = (char *)pkt_entry->pkt + hdr_size;
 	iov_count = rta_hdr->rma_iov_count;
-	rxr_rma_verified_copy_iov(ep, rta_hdr->rma_iov, iov_count, FI_REMOTE_WRITE, iov);
+	rxr_rma_verified_copy_iov(ep, rta_hdr->rma_iov, iov_count, FI_REMOTE_WRITE, iov, desc);
 
 	offset = 0;
 	for (i = 0; i < iov_count; ++i) {
@@ -1753,7 +1754,8 @@ struct rxr_rx_entry *rxr_pkt_alloc_rta_rx_entry(struct rxr_ep *ep, struct rxr_pk
 	rx_entry->atomic_hdr.datatype = rta_hdr->atomic_datatype;
 
 	rx_entry->iov_count = rta_hdr->rma_iov_count;
-	rxr_rma_verified_copy_iov(ep, rta_hdr->rma_iov, rx_entry->iov_count, FI_REMOTE_READ, rx_entry->iov);
+	rxr_rma_verified_copy_iov(ep, rta_hdr->rma_iov, rx_entry->iov_count,
+				  FI_REMOTE_READ, rx_entry->iov, rx_entry->desc);
 	rx_entry->tx_id = rta_hdr->tx_id;
 	rx_entry->total_len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 	/*

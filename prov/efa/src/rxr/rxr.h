@@ -497,7 +497,6 @@ struct rxr_domain {
 	struct fid_domain *rdm_domain;
 	size_t mtu_size;
 	size_t addrlen;
-	uint8_t mr_local;
 	uint8_t rxr_mr_local;
 	uint64_t rdm_mode;
 	int do_progress;
@@ -959,14 +958,6 @@ static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
 static inline struct rxr_domain *rxr_ep_domain(struct rxr_ep *ep)
 {
 	return container_of(ep->util_ep.domain, struct rxr_domain, util_domain);
-}
-
-static inline uint8_t rxr_ep_mr_local(struct rxr_ep *ep)
-{
-	struct rxr_domain *domain = container_of(ep->util_ep.domain,
-						 struct rxr_domain,
-						 util_domain);
-	return domain->mr_local;
 }
 
 /*
