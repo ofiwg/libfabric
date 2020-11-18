@@ -134,6 +134,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	bool unr = false; /* use unrestricted command? */
 	struct cxip_cmdq *cmdq =
 		triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
+	bool write = op == FI_OP_WRITE;
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -206,7 +207,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	}
 
 	/* Generate the destination fabric address */
-	pid_idx = cxip_mr_key_to_ptl_idx(key);
+	pid_idx = cxip_mr_key_to_ptl_idx(key, write);
 	cxi_build_dfa(caddr.nic, caddr.pid, txc->pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
@@ -216,7 +217,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	 * supported.
 	 */
 	unr = !cxip_mr_key_opt(key) || txc->ep_obj->caps & FI_RMA_EVENT;
-	if (!unr && op == FI_OP_WRITE)
+	if (!unr && write)
 		unr = txc->attr.msg_order & (FI_ORDER_WAW | FI_ORDER_RMA_WAW);
 
 	/* Issue command */

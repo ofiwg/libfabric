@@ -372,13 +372,24 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		goto free_evtq_md;
 	}
 
-	ret = cxip_pte_alloc(ep_obj->if_dom, ep_obj->ctrl_evtq,
-			     CXIP_PTL_IDX_CTRL, false, &pt_opts, NULL, NULL,
-			     &ep_obj->ctrl_pte);
+	ret = cxip_pte_alloc_nomap(ep_obj->if_dom, ep_obj->ctrl_evtq, &pt_opts,
+				   NULL, NULL, &ep_obj->ctrl_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate control PTE: %d\n", ret);
-		ret = -FI_ENOSPC;
 		goto free_evtq;
+	}
+
+	/* CXIP_PTL_IDX_WRITE_MR_STD is shared with CXIP_PTL_IDX_CTRL. */
+	ret = cxip_pte_map(ep_obj->ctrl_pte, CXIP_PTL_IDX_WRITE_MR_STD, false);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to map write PTE: %d\n", ret);
+		goto free_pte;
+	}
+
+	ret = cxip_pte_map(ep_obj->ctrl_pte, CXIP_PTL_IDX_READ_MR_STD, false);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to map read PTE: %d\n", ret);
+		goto free_pte;
 	}
 
 	/* Enable the PTE */

@@ -239,18 +239,29 @@ struct cxip_addr {
  * The default maximum RXC count is 16. These endpoints are partitioned by the
  * provider for the following use:
  *
- * 0-15   RX Queue PtlTEs 0-15
- * 50-250 Optimized MR PtlTEs 0-199
- * 254    Standard MR PtlTE
- * 255    Rendezvous source PtlTE
+ * 0-15    RX Queue PtlTEs 0-15
+ * 16      Collective PtlTE entry
+ * 17-116  Optimized write MR PtlTEs 0-99
+ * 117     Standard write MR PtlTE / Control messaging
+ * 128-227 Optimized read MR PtlTEs 0-99
+ * 228     Standard read MR PtlTE
+ * 255     Rendezvous source PtlTE
+ *
+ * Note: Any logical endpoint within a PID granule that issues unrestricted Puts
+ * MUST be within the logical endpoint range 0 - 127 and unrestricted Gets MUST
+ * be within the logical endpoint range 128 - 255.
  */
-#define CXIP_PTL_IDX_MR_OPT_BASE	50
-#define CXIP_PTL_IDX_MR_OPT_CNT		200
+#define CXIP_PTL_IDX_WRITE_MR_OPT_BASE	17
+#define CXIP_PTL_IDX_READ_MR_OPT_BASE	128
+#define CXIP_PTL_IDX_MR_OPT_CNT		100
 
 #define CXIP_PTL_IDX_RXC(rx_id)		(rx_id)
-#define CXIP_PTL_IDX_MR_OPT(key)	(CXIP_PTL_IDX_MR_OPT_BASE + (key))
-#define	CXIP_PTL_IDX_COLL		253
-#define CXIP_PTL_IDX_CTRL		254
+#define CXIP_PTL_IDX_WRITE_MR_OPT(key)	(CXIP_PTL_IDX_WRITE_MR_OPT_BASE + (key))
+#define CXIP_PTL_IDX_READ_MR_OPT(key)	(CXIP_PTL_IDX_READ_MR_OPT_BASE + (key))
+#define CXIP_PTL_IDX_WRITE_MR_STD	117
+#define CXIP_PTL_IDX_COLL		6
+#define CXIP_PTL_IDX_CTRL		CXIP_PTL_IDX_WRITE_MR_STD
+#define CXIP_PTL_IDX_READ_MR_STD	228
 #define CXIP_PTL_IDX_RDZV_SRC		255
 
 static inline bool cxip_mr_key_opt(int key)
@@ -258,11 +269,12 @@ static inline bool cxip_mr_key_opt(int key)
 	return cxip_env.optimized_mrs && key < CXIP_PTL_IDX_MR_OPT_CNT;
 }
 
-static inline int cxip_mr_key_to_ptl_idx(int key)
+static inline int cxip_mr_key_to_ptl_idx(int key, bool write)
 {
 	if (cxip_mr_key_opt(key))
-		return CXIP_PTL_IDX_MR_OPT((key));
-	return CXIP_PTL_IDX_CTRL;
+		return write ? CXIP_PTL_IDX_WRITE_MR_OPT(key) :
+			CXIP_PTL_IDX_READ_MR_OPT(key);
+	return write ? CXIP_PTL_IDX_WRITE_MR_STD : CXIP_PTL_IDX_READ_MR_STD;
 }
 
 /* Messaging Match Bit layout */
@@ -379,6 +391,8 @@ struct cxip_if_domain {
 	struct cxil_domain *dom;
 };
 
+#define MAX_PTE_MAP_COUNT 2
+
 /*
  * CXI Portal Table Entry (PtlTE) wrapper
  *
@@ -387,9 +401,9 @@ struct cxip_if_domain {
 struct cxip_pte {
 	struct dlist_entry pte_entry;
 	struct cxip_if_domain *if_dom;
-	uint64_t pid_idx;
 	struct cxil_pte *pte;
-	struct cxil_pte_map *pte_map;
+	struct cxil_pte_map *pte_map[MAX_PTE_MAP_COUNT];
+	unsigned int pte_map_count;
 
 	void (*state_change_cb)(struct cxip_pte *pte,
 				enum c_ptlte_state state);
@@ -1328,6 +1342,12 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 		    bool ring);
 int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 		    int buffer_id, struct cxip_cmdq *cmdq);
+int cxip_pte_map(struct cxip_pte *pte, uint64_t pid_idx, bool is_multicast);
+int cxip_pte_alloc_nomap(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
+			 struct cxi_pt_alloc_opts *opts,
+			 void (*state_change_cb)(struct cxip_pte *pte,
+						 enum c_ptlte_state state),
+			 void *ctx, struct cxip_pte **pte);
 int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 		   uint64_t pid_idx, bool is_multicast,
 		   struct cxi_pt_alloc_opts *opts,

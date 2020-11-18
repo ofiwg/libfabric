@@ -489,19 +489,42 @@ int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 }
 
 /*
- * cxip_pte_alloc() - Allocate and map a PTE for use.
+ * cxip_pte_map() - Map a PtlTE to a specific PID index. A single PtlTE can be
+ * mapped into MAX_PTE_MAP_COUNT different PID indices.
  */
-int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
-		   uint64_t pid_idx, bool is_multicast,
-		   struct cxi_pt_alloc_opts *opts,
-		   void (*state_change_cb)(struct cxip_pte *pte,
-					   enum c_ptlte_state state),
-		   void *ctx, struct cxip_pte **pte)
+int cxip_pte_map(struct cxip_pte *pte, uint64_t pid_idx, bool is_multicast)
+{
+	int ret;
+
+	if (pte->pte_map_count >= MAX_PTE_MAP_COUNT)
+		return -FI_ENOSPC;
+
+	ret = cxil_map_pte(pte->pte, pte->if_dom->dom, pid_idx, is_multicast,
+			   &pte->pte_map[pte->pte_map_count]);
+	if (ret) {
+		CXIP_WARN("Failed to map PTE: %d\n", ret);
+		return -FI_EADDRINUSE;
+	}
+
+	pte->pte_map_count++;
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_pte_alloc_nomap() - Allocate a PtlTE without performing any mapping
+ * during allocation.
+ */
+int cxip_pte_alloc_nomap(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
+			 struct cxi_pt_alloc_opts *opts,
+			 void (*state_change_cb)(struct cxip_pte *pte,
+						 enum c_ptlte_state state),
+			 void *ctx, struct cxip_pte **pte)
 {
 	struct cxip_pte *new_pte;
-	int ret, tmp;
+	int ret;
 
-	new_pte = malloc(sizeof(*new_pte));
+	new_pte = calloc(1, sizeof(*new_pte));
 	if (!new_pte) {
 		CXIP_WARN("Failed to allocate PTE structure\n");
 		return -FI_ENOMEM;
@@ -516,21 +539,11 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 		goto free_mem;
 	}
 
-	/* Map the PTE to the LEP */
-	ret = cxil_map_pte(new_pte->pte, if_dom->dom, pid_idx, is_multicast,
-			   &new_pte->pte_map);
-	if (ret) {
-		CXIP_DBG("Failed to map PTE: %d\n", ret);
-		ret = -FI_EADDRINUSE;
-		goto free_pte;
-	}
-
 	fastlock_acquire(&if_dom->lni->iface->lock);
 	dlist_insert_tail(&new_pte->pte_entry, &if_dom->lni->iface->ptes);
 	fastlock_release(&if_dom->lni->iface->lock);
 
 	new_pte->if_dom = if_dom;
-	new_pte->pid_idx = pid_idx;
 	new_pte->state_change_cb = state_change_cb;
 	new_pte->ctx = ctx;
 
@@ -538,12 +551,37 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 
 	return FI_SUCCESS;
 
-free_pte:
-	tmp = cxil_destroy_pte(new_pte->pte);
-	if (tmp)
-		CXIP_WARN("cxil_destroy_pte returned: %d\n", tmp);
 free_mem:
 	free(new_pte);
+
+	return ret;
+}
+
+/*
+ * cxip_pte_alloc() - Allocate and map a PTE for use.
+ */
+int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
+		   uint64_t pid_idx, bool is_multicast,
+		   struct cxi_pt_alloc_opts *opts,
+		   void (*state_change_cb)(struct cxip_pte *pte,
+					   enum c_ptlte_state state),
+		   void *ctx, struct cxip_pte **pte)
+{
+	int ret;
+
+	ret = cxip_pte_alloc_nomap(if_dom, evtq, opts, state_change_cb,
+				   ctx, pte);
+	if (ret)
+		return ret;
+
+	ret = cxip_pte_map(*pte, pid_idx, is_multicast);
+	if (ret)
+		goto free_pte;
+
+	return FI_SUCCESS;
+
+free_pte:
+	cxip_pte_free(*pte);
 
 	return ret;
 }
@@ -554,14 +592,17 @@ free_mem:
 void cxip_pte_free(struct cxip_pte *pte)
 {
 	int ret;
+	int i;
 
 	fastlock_acquire(&pte->if_dom->lni->iface->lock);
 	dlist_remove(&pte->pte_entry);
 	fastlock_release(&pte->if_dom->lni->iface->lock);
 
-	ret = cxil_unmap_pte(pte->pte_map);
-	if (ret)
-		CXIP_WARN("Failed to unmap PTE: %d\n", ret);
+	for (i = pte->pte_map_count; i > 0; i--) {
+		ret = cxil_unmap_pte(pte->pte_map[i - 1]);
+		if (ret)
+			CXIP_WARN("Failed to unmap PTE: %d\n", ret);
+	}
 
 	ret = cxil_destroy_pte(pte->pte);
 	if (ret)

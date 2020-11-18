@@ -371,7 +371,7 @@ The CXI provider can achieve higher RMA Write rates when targeting an optimized
 MR.
 
 Both types of MRs are allocated using fi_mr_reg. MRs with client-provided key in
-the range [0-199] are optimized MRs. MRs with key greater or equal to 200 are
+the range [0-99] are optimized MRs. MRs with key greater or equal to 100 are
 standard MRs. An application may create a mix of standard and optimized MRs. To
 disable the use of optimized MRs, set environment variable
 FI_CXI_OPTIMIZED_MRS=false. When disabled, all MR keys are available and all MRs

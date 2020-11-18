@@ -384,6 +384,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	bool idc;
 	struct cxip_cmdq *cmdq =
 		triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
+	bool read = msg->op == FI_ATOMIC_READ || req_type == CXIP_RQ_AMO_FETCH;
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -575,7 +576,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	}
 
 	/* Build destination fabric address. */
-	pid_idx = cxip_mr_key_to_ptl_idx(key);
+	pid_idx = cxip_mr_key_to_ptl_idx(key, !read);
 	cxi_build_dfa(caddr.nic, caddr.pid, txc->pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
