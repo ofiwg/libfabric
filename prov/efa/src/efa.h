@@ -395,8 +395,9 @@ bool efa_ep_support_rdma_read(struct fid_ep *ep_fid)
 static inline
 bool efa_ep_support_rnr_retry_modify(struct fid_ep *ep_fid)
 {
-	struct efa_ep *efa_ep;
 #ifdef HAVE_CAPS_RNR_RETRY
+	struct efa_ep *efa_ep;
+
 	efa_ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 	return efa_ep->domain->ctx->device_caps & EFADV_DEVICE_ATTR_CAPS_RNR_RETRY;
 #else
