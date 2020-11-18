@@ -605,7 +605,7 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 
 	ret = cxip_ep_ctrl_init(ep_obj);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_ERROR("cxip_ep_ctrl_init returned: %u\n", ret);
+		CXIP_LOG_ERROR("cxip_ep_ctrl_init returned: %d\n", ret);
 		goto free_if_domain;
 	}
 
