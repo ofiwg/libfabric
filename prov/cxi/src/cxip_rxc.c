@@ -189,22 +189,25 @@ static int rxc_msg_fini(struct cxip_rxc *rxc)
  */
 int cxip_rxc_enable(struct cxip_rxc *rxc)
 {
-	int ret = FI_SUCCESS;
+	int ret;
 
 	fastlock_acquire(&rxc->lock);
 
-	if (rxc->enabled)
-		goto unlock;
+	if (rxc->enabled) {
+		fastlock_release(&rxc->lock);
+		return FI_SUCCESS;
+	}
 
 	if (!ofi_recv_allowed(rxc->attr.caps)) {
 		rxc->enabled = true;
-		goto unlock;
+		fastlock_release(&rxc->lock);
+		return FI_SUCCESS;
 	}
 
 	if (!rxc->recv_cq) {
 		CXIP_LOG_DBG("Undefined recv CQ\n");
-		ret = -FI_ENOCQ;
-		goto unlock;
+		fastlock_release(&rxc->lock);
+		return -FI_ENOCQ;
 	}
 
 	if (rxc->recv_cntr) {
@@ -212,14 +215,16 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 		if (ret != FI_SUCCESS) {
 			CXIP_LOG_DBG("cxip_cntr_enable(FI_RECV) returned: %d\n",
 				     ret);
-			goto unlock;
+			fastlock_release(&rxc->lock);
+			return ret;
 		}
 	}
 
 	ret = cxip_cq_enable(rxc->recv_cq);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("cxip_cq_enable returned: %d\n", ret);
-		goto unlock;
+		fastlock_release(&rxc->lock);
+		return ret;
 	}
 
 	fastlock_release(&rxc->lock);
@@ -227,8 +232,7 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	ret = rxc_msg_init(rxc);
 	if (ret != FI_SUCCESS) {
 		CXIP_LOG_DBG("rxc_msg_init returned: %d\n", ret);
-		ret = -FI_EDOMAIN;
-		goto unlock;
+		return -FI_EDOMAIN;
 	}
 
 	ret = cxip_rxc_oflow_init(rxc);
@@ -265,8 +269,6 @@ msg_fini:
 	ret = rxc_msg_fini(rxc);
 	if (ret != FI_SUCCESS)
 		CXIP_LOG_ERROR("rxc_msg_fini returned: %d\n", ret);
-unlock:
-	fastlock_release(&rxc->lock);
 
 	return ret;
 }
