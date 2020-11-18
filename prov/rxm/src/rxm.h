@@ -472,7 +472,7 @@ struct rxm_rx_buf {
 
 	struct rxm_ep *ep;
 	/* MSG EP / shared context to which bufs would be posted to */
-	struct fid_ep *msg_ep;
+	struct fid_ep *rx_ep;
 	struct dlist_entry repost_entry;
 	struct rxm_conn *conn;		/* msg ep data was received on */
 	/* if recv_entry is set, then we matched dyn rbuf */
@@ -819,7 +819,7 @@ ssize_t rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf);
 int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf);
 int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf);
 
-int rxm_msg_ep_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep);
+int rxm_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep);
 
 int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 			enum fi_op op, struct fi_atomic_attr *attr,

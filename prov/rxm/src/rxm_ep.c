@@ -2784,7 +2784,7 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 			return ret;
 
 		if (rxm_ep->srx_ctx) {
-			ret = rxm_msg_ep_prepost_recv(rxm_ep, rxm_ep->srx_ctx);
+			ret = rxm_prepost_recv(rxm_ep, rxm_ep->srx_ctx);
 			if (ret) {
 				rxm_cmap_free(rxm_ep->cmap);
 				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
