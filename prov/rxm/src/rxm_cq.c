@@ -1465,9 +1465,11 @@ free:
 
 static ssize_t rxm_handle_credit(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_domain *domain = container_of(rxm_ep->util_ep.domain,
-						 struct rxm_domain, util_domain);
+	struct rxm_domain *domain;
 
+	assert(rx_buf->rx_ep->fid.fclass == FI_CLASS_EP);
+	domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
+			      util_domain);
 	domain->flow_ctrl_ops->add_credits(rx_buf->rx_ep,
 					   rx_buf->pkt.ctrl_hdr.ctrl_data);
 	rxm_rx_buf_free(rx_buf);
