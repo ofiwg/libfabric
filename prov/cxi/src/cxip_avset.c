@@ -254,10 +254,7 @@ static struct fi_ops cxip_av_set_fid_ops = {
 
 static inline int fi_addr_is_valid(struct cxip_av *av, fi_addr_t fi_addr)
 {
-	/* Do not include invalid addresses or multicast addresses in set */
-	return (fi_addr < av->table_hdr->size &&
-		av->table[fi_addr].valid &&
-		!av->table[fi_addr].multicast);
+	return (fi_addr < av->table_hdr->size && av->table[fi_addr].valid);
 }
 
 int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,

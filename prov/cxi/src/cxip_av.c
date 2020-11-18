@@ -290,9 +290,6 @@ static int cxip_check_table_in(struct cxip_av *av, struct cxip_addr *addr,
 		if (fi_addr)
 			fi_addr[i] = (fi_addr_t)index;
 
-		/* Set the multicast bit */
-		av_addr->multicast = (flags & FI_MULTICAST) ? 1 : 0;
-
 		/* Prevent overwrite */
 		av_addr->valid = 1;
 		ret++;
