@@ -2848,23 +2848,21 @@ err:
 	return ret;
 }
 
-static int rxm_ep_msg_res_open(struct rxm_ep *rxm_ep)
+static int rxm_open_core_res(struct rxm_ep *ep)
 {
-	struct rxm_domain *rxm_domain;
+	struct rxm_domain *domain;
 	int ret;
 
-	rxm_domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
-				  util_domain);
- 	ret = ofi_get_core_info(rxm_ep->util_ep.domain->fabric->fabric_fid.api_version,
-				NULL, NULL, 0, &rxm_util_prov, rxm_ep->rxm_info,
-				NULL, rxm_info_to_core, &rxm_ep->msg_info);
+	domain = container_of(ep->util_ep.domain, struct rxm_domain, util_domain);
+	ret = ofi_get_core_info(domain->util_domain.fabric->fabric_fid.api_version,
+				NULL, NULL, 0, &rxm_util_prov, ep->rxm_info,
+				NULL, rxm_info_to_core, &ep->msg_info);
 	if (ret)
 		return ret;
 
- 	if (rxm_ep->msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
-		ret = fi_srx_context(rxm_domain->msg_domain,
-				     rxm_ep->msg_info->rx_attr,
-				     &rxm_ep->srx_ctx, NULL);
+	if (ep->msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
+		ret = fi_srx_context(domain->msg_domain, ep->msg_info->rx_attr,
+				     &ep->srx_ctx, NULL);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"Unable to open shared receive context\n");
@@ -2872,27 +2870,25 @@ static int rxm_ep_msg_res_open(struct rxm_ep *rxm_ep)
 		}
 	}
 
- 	ret = rxm_listener_open(rxm_ep);
+	ret = rxm_listener_open(ep);
 	if (ret)
 		goto err2;
 
- 	/* Zero out the port as we would be creating multiple MSG EPs for a single
-	 * RXM EP and we don't want address conflicts. */
-	if (rxm_ep->msg_info->src_addr) {
-		if (((struct sockaddr *) rxm_ep->msg_info->src_addr)->sa_family == AF_INET)
-			((struct sockaddr_in *) (rxm_ep->msg_info->src_addr))->sin_port = 0;
-		else
-			((struct sockaddr_in6 *) (rxm_ep->msg_info->src_addr))->sin6_port = 0;
-	}
+	/* Zero out the port as we will create multiple MSG EPs for a
+	 * single RXM EP, and we don't want address conflicts.
+	 */
+	if (ep->msg_info->src_addr)
+		ofi_addr_set_port(ep->msg_info->src_addr, 0);
 
 	return 0;
 err2:
-	if (rxm_ep->srx_ctx) {
-		fi_close(&rxm_ep->srx_ctx->fid);
-		rxm_ep->srx_ctx = NULL;
+	if (ep->srx_ctx) {
+		fi_close(&ep->srx_ctx->fid);
+		ep->srx_ctx = NULL;
 	}
 err1:
-	fi_freeinfo(rxm_ep->msg_info);
+	fi_freeinfo(ep->msg_info);
+	ep->msg_info = NULL;
 	return ret;
 }
 
@@ -3004,7 +3000,7 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err1;
 
-	ret = rxm_ep_msg_res_open(rxm_ep);
+	ret = rxm_open_core_res(rxm_ep);
 	if (ret)
 		goto err2;
 
