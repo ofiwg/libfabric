@@ -904,13 +904,13 @@ static int rxm_msg_ep_open(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 			msg_ep, rxm_ep->msg_info->rx_attr->size / 2);
 	}
 
-	rxm_conn->msg_ep = msg_ep;
-
 	if (!rxm_ep->srx_ctx) {
 		ret = rxm_msg_ep_prepost_recv(rxm_ep, msg_ep);
 		if (ret)
 			goto err;
 	}
+
+	rxm_conn->msg_ep = msg_ep;
 	return 0;
 err:
 	fi_close(&msg_ep->fid);
