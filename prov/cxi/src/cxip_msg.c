@@ -3459,7 +3459,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 
 	if (txc->ep_obj->rdzv_offload) {
 		cmd.command.opcode = C_CMD_RENDEZVOUS_PUT;
-		cmd.eager_length = txc->rdzv_threshold;
+		cmd.eager_length = txc->rdzv_eager_size;
 		cmd.use_offset_for_get = 1;
 
 		put_mb.rdzv_lac = send_md->md->lac;

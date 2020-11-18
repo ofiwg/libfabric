@@ -184,6 +184,7 @@ struct cxip_environment {
 	int rdzv_offload;
 	size_t rdzv_threshold;
 	size_t rdzv_get_min;
+	size_t rdzv_eager_size;
 	size_t oflow_buf_size;
 	size_t oflow_buf_count;
 
@@ -951,6 +952,7 @@ struct cxip_txc {
 	enum c_ptlte_state pte_state;
 	int rdzv_threshold;
 	int rdzv_get_min;
+	int rdzv_eager_size;
 	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
 	ofi_atomic32_t rdzv_src_lacs;	// Bitmask of LACs
 	struct dlist_entry rdzv_src_reqs;

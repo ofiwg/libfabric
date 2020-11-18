@@ -330,6 +330,7 @@ static struct cxip_txc *txc_alloc(const struct fi_tx_attr *attr, void *context,
 	txc->attr = *attr;
 	txc->rdzv_threshold = cxip_env.rdzv_threshold;
 	txc->rdzv_get_min = cxip_env.rdzv_get_min;
+	txc->rdzv_eager_size = cxip_env.rdzv_eager_size;
 
 	return txc;
 

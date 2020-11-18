@@ -209,6 +209,7 @@ struct cxip_environment cxip_env = {
 	.rdzv_offload = true,
 	.rdzv_threshold = CXIP_RDZV_THRESHOLD,
 	.rdzv_get_min = 2049, /* Avoid single packet Gets */
+	.rdzv_eager_size = CXIP_RDZV_THRESHOLD,
 	.oflow_buf_size = CXIP_OFLOW_BUF_SIZE,
 	.oflow_buf_count = CXIP_OFLOW_BUF_COUNT,
 	.optimized_mrs = true,
@@ -257,6 +258,17 @@ static void cxip_env_init(void)
 			"Minimum rendezvous Get payload size.");
 	fi_param_get_size_t(&cxip_prov, "rdzv_get_min",
 			    &cxip_env.rdzv_get_min);
+
+	fi_param_define(&cxip_prov, "rdzv_eager_size", FI_PARAM_SIZE_T,
+			"Eager data size for rendezvous protocol.");
+	fi_param_get_size_t(&cxip_prov, "rdzv_eager_size",
+			    &cxip_env.rdzv_eager_size);
+
+	if (cxip_env.rdzv_eager_size > cxip_env.rdzv_threshold) {
+		CXIP_LOG_INFO("Invalid rdzv_eager_size: %lu\n",
+			      cxip_env.rdzv_eager_size);
+		cxip_env.rdzv_eager_size = cxip_env.rdzv_threshold;
+	}
 
 	fi_param_define(&cxip_prov, "oflow_buf_size", FI_PARAM_SIZE_T,
 			"Overflow buffer size.");

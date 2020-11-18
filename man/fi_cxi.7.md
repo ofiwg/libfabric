@@ -478,6 +478,9 @@ with FI_CXI_RDZV_THRESHOLD bytes of payload sent eagerly and the remainder of
 the payload read from the source using a Get. FI_CXI_RDZV_THRESHOLD plus
 FI_CXI_RDZV_GET_MIN must be less than or equal to FI_CXI_OFLOW_BUF_SIZE.
 
+*FI_CXI_RDZV_EAGER_SIZE*
+: Eager data size for rendezvous protocol.
+
 *FI_CXI_OFLOW_BUF_SIZE*
 : Overflow buffer size.
 
