@@ -735,9 +735,20 @@ ssize_t rxm_handle_rx_buf(struct rxm_rx_buf *rx_buf)
 static ssize_t
 rxm_match_rx_buf(struct rxm_rx_buf *rx_buf,
 		 struct rxm_recv_queue *recv_queue,
-		    struct rxm_recv_match_attr *match_attr)
+		 struct rxm_recv_match_attr *match_attr)
 {
 	struct dlist_entry *entry;
+
+	/* Dynamic receive buffers may have already matched */
+	if (rx_buf->recv_entry) {
+		if (rx_buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_req)
+			return rxm_handle_rndv(rx_buf);
+		else
+			return rxm_finish_recv(rx_buf, rx_buf->pkt.hdr.size);
+	}
+
+	if (recv_queue->dyn_rbuf_unexp_cnt)
+		recv_queue->dyn_rbuf_unexp_cnt--;
 
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 recv_queue->match_recv, match_attr);
@@ -755,8 +766,9 @@ rxm_match_rx_buf(struct rxm_rx_buf *rx_buf,
 	dlist_insert_tail(&rx_buf->unexp_msg.entry,
 			  &recv_queue->unexp_msg_list);
 
-	// repost a new buffer now since we don't know when the unexpected
-	// buffer will be consumed
+	/* post a new buffer since we don't know when the unexpected buffer
+	 * will be consumed
+	 */
 	return rxm_repost_new_rx(rx_buf);
 }
 
@@ -952,7 +964,6 @@ err:
 	ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
 	return ret;
 }
-
 
 static ssize_t rxm_rndv_send_wr_done_inject(struct rxm_tx_rndv_buf *tx_buf)
 {
@@ -1609,6 +1620,146 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	}
 }
 
+static int rxm_get_recv_entry(struct rxm_rx_buf *rx_buf)
+{
+	struct rxm_recv_match_attr match_attr;
+	struct rxm_recv_queue *recv_queue;
+	struct dlist_entry *entry;
+
+	assert(!rx_buf->recv_entry);
+	if (rx_buf->ep->rxm_info->caps & (FI_SOURCE | FI_DIRECTED_RECV)) {
+		if (rx_buf->ep->srx_ctx)
+			rx_buf->conn = rxm_key2conn(rx_buf->ep, rx_buf->
+						    pkt.ctrl_hdr.conn_id);
+		if (!rx_buf->conn)
+			return -FI_EOTHER;
+		match_attr.addr = rx_buf->conn->handle.fi_addr;
+	} else {
+		match_attr.addr = FI_ADDR_UNSPEC;
+	}
+
+	if (rx_buf->pkt.hdr.op == ofi_op_msg) {
+		match_attr.tag = 0;
+		recv_queue = &rx_buf->ep->recv_queue;
+	} else {
+		assert(rx_buf->pkt.hdr.op == ofi_op_tagged);
+		match_attr.tag = rx_buf->pkt.hdr.tag;
+		recv_queue = &rx_buf->ep->trecv_queue;
+	}
+
+	/* See comment with rxm_get_dyn_rbuf */
+	if (recv_queue->dyn_rbuf_unexp_cnt == 0) {
+		entry = dlist_remove_first_match(&recv_queue->recv_list,
+						 recv_queue->match_recv,
+						 &match_attr);
+		if (entry) {
+			rx_buf->recv_entry = container_of(entry,
+						struct rxm_recv_entry, entry);
+		} else {
+			recv_queue->dyn_rbuf_unexp_cnt++;
+		}
+	} else {
+		recv_queue->dyn_rbuf_unexp_cnt++;
+	}
+
+	return 0;
+}
+
+/*
+ * Dynamic receive buffer callback from fi_cq_read(msg cq).
+ * We're holding the ep lock.
+ *
+ * There's a subtle race condition handling unexpected messages. If we cannot
+ * find a matching receive, the message will be marked as unexpected.
+ * However, we can't queue it on the unexpected list until is has been fully
+ * received and returned through fi_cq_read().  It's possible for the
+ * application to post the matching buffer prior to that occurring.  That is,
+ * the matching buffer is posted after we checked for a match, but before the
+ * message endpoint is finishes receiving the unexpected data.
+ *
+ * Once the unexpected message has been received, it's completion may be
+ * written to the CQ.  If the message provider continues processing messages
+ * it could invoke a callback for a second message.  If we allow the second
+ * message to match the posted receive buffer, then the second message would
+ * match out of order from the first message.
+ *
+ * To handle this, we need to track the number of unexpected messages queued
+ * within the message provider, so that they can check for matching
+ * receives in order.  If there are any unexpected messages outstanding, we
+ * need to fail all matches until they have been read from the CQ.
+ */
+ssize_t rxm_get_dyn_rbuf(struct fi_cq_data_entry *entry, struct iovec *iov,
+			 size_t *count)
+{
+	struct rxm_rx_buf *rx_buf;
+	int ret;
+
+	rx_buf = entry->op_context;
+	assert((rx_buf->pkt.hdr.version == OFI_OP_VERSION) &&
+		(rx_buf->pkt.ctrl_hdr.version == RXM_CTRL_VERSION));
+	assert(!(rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV));
+
+	switch (rx_buf->pkt.ctrl_hdr.type) {
+	case rxm_ctrl_eager:
+		ret = rxm_get_recv_entry(rx_buf);
+		if (ret)
+			return ret;
+
+		if (rx_buf->recv_entry) {
+			*count = rx_buf->recv_entry->rxm_iov.count;
+			memcpy(iov, rx_buf->recv_entry->rxm_iov.iov, *count *
+			       sizeof(*iov));
+		} else {
+			*count = 1;
+			iov[0].iov_base = &rx_buf->pkt + 1;
+			iov[0].iov_len = rxm_eager_limit;
+		}
+		break;
+	case rxm_ctrl_rndv_req:
+		/* find matching receive to maintain message ordering, but we
+		 * only need to receive rendezvous header to complete message
+		 */
+		ret = rxm_get_recv_entry(rx_buf);
+		if (ret)
+			return ret;
+
+		*count = 1;
+		iov[0].iov_base = &rx_buf->pkt + 1;
+		iov[0].iov_len = sizeof(struct rxm_rndv_hdr);
+		break;
+	case rxm_ctrl_atomic:
+		*count = 1;
+		iov[0].iov_base = &rx_buf->pkt + 1;
+		iov[0].iov_len = sizeof(struct rxm_atomic_hdr);
+		break;
+	case rxm_ctrl_atomic_resp:
+		*count = 1;
+		iov[0].iov_base = &rx_buf->pkt + 1;
+		iov[0].iov_len = sizeof(struct rxm_atomic_resp_hdr);
+		break;
+	case rxm_ctrl_rndv_wr_data:
+		*count = 1;
+		iov[0].iov_base = &rx_buf->pkt + 1;
+		iov[0].iov_len = sizeof(struct rxm_rndv_hdr);
+		break;
+	case rxm_ctrl_rndv_wr_done:
+	case rxm_ctrl_rndv_rd_done:
+	case rxm_ctrl_credit:
+		*count = 0;
+		iov[0].iov_base = NULL;
+		iov[0].iov_len = 0;
+		break;
+	case rxm_ctrl_seg:
+	default:
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"Unexpected request for dynamic rbuf\n");
+		*count = 0;
+		break;
+	}
+
+	return 0;
+}
+
 void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err)
 {
@@ -1729,21 +1880,22 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		err_entry.flags = ofi_tx_cq_flags(rndv_buf->pkt.hdr.op);
 		break;
 
-	/* Application receive related error */
+	/* Incoming application data error */
 	case RXM_RX:
-		/* Silently drop any MSG CQ error entries for canceled receive
-		 * operations as these are internal to RxM. This situation can
-		 * happen when the MSG EP receives a reject / shutdown and CM
-		 * thread hasn't handled the event yet. */
-		if (err_entry.err == FI_ECANCELED) {
-			/* No need to re-post these buffers. Free directly */
+		/* Silently drop MSG CQ error entries for internal receive
+		 * operations not associated with an application posted
+		 * receive. This situation can happen when the MSG EP
+		 * receives a reject / shutdown and CM thread hasn't handled
+		 * the event yet.
+		 */
+		rx_buf = (struct rxm_rx_buf *) err_entry.op_context;
+		if (!rx_buf->recv_entry) {
 			ofi_buf_free((struct rxm_rx_buf *)err_entry.op_context);
 			return;
 		}
 		/* fall through */
 	case RXM_RNDV_READ_DONE_SENT:
 	case RXM_RNDV_WRITE_DATA_SENT:
-		/* fall through */
 	case RXM_RNDV_READ:
 		rx_buf = (struct rxm_rx_buf *) err_entry.op_context;
 		assert(rx_buf->recv_entry);
@@ -1772,15 +1924,19 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 
 static int rxm_msg_ep_recv(struct rxm_rx_buf *rx_buf)
 {
+	struct rxm_domain *domain;
 	int ret, level;
 
 	if (rx_buf->ep->srx_ctx)
 		rx_buf->conn = NULL;
 	rx_buf->hdr.state = RXM_RX;
+	rx_buf->recv_entry = NULL;
 
+	domain = container_of(rx_buf->ep->util_ep.domain,
+			      struct rxm_domain, util_domain);
 	ret = (int) fi_recv(rx_buf->msg_ep, &rx_buf->pkt,
-			    rxm_eager_limit + sizeof(struct rxm_pkt),
-			    rx_buf->hdr.desc, FI_ADDR_UNSPEC, rx_buf);
+			    domain->rx_buf_post_size, rx_buf->hdr.desc,
+			    FI_ADDR_UNSPEC, rx_buf);
 	if (!ret)
 		return 0;
 

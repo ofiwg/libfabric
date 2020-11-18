@@ -110,28 +110,83 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 	return FI_SUCCESS;
 }
 
-static int tcpx_process_recv(struct tcpx_xfer_entry *rx_entry)
+static int tcpx_update_rx_iov(struct tcpx_xfer_entry *rx_entry)
 {
-	int ret = FI_SUCCESS;
+	struct fi_cq_data_entry cq_entry;
+	int ret;
 
-	ret = tcpx_recv_msg_data(rx_entry);
-	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-		return ret;
+	assert(tcpx_dynamic_rbuf(rx_entry->ep));
 
+	cq_entry.op_context = rx_entry->context;
+	cq_entry.flags = rx_entry->flags;
+	cq_entry.len = (rx_entry->hdr.base_hdr.size -
+			 rx_entry->hdr.base_hdr.payload_off) -
+			rx_entry->rem_len;
+	cq_entry.buf = rx_entry->mrecv_msg_start;
+	cq_entry.data = 0;
+
+	rx_entry->iov_cnt = TCPX_IOV_LIMIT;
+	ret = (int) tcpx_dynamic_rbuf(rx_entry->ep)->
+		    get_rbuf(&cq_entry, &rx_entry->iov[0], &rx_entry->iov_cnt);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
-			"msg recv Failed ret = %d\n", ret);
+			"get_rbuf callback failed %s\n",
+			fi_strerror(-ret));
+		return ret;
+	}
 
-		tcpx_ep_disable(rx_entry->ep, 0);
-		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
-		tcpx_rx_msg_release(rx_entry);
-	} else if (rx_entry->hdr.base_hdr.flags & OFI_DELIVERY_COMPLETE) {
+	assert(rx_entry->iov_cnt && rx_entry->iov[0].iov_len &&
+	       rx_entry->iov_cnt <= TCPX_IOV_LIMIT);
+	ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt,
+				rx_entry->rem_len);
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+			"dynamically provided rbuf is too small\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int tcpx_process_recv(struct tcpx_xfer_entry *rx_entry)
+{
+	int ret;
+
+retry:
+	ret = tcpx_recv_msg_data(rx_entry);
+	if (ret) {
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+			return ret;
+
+		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+			"msg recv failed ret = %d (%s)\n", ret,
+			fi_strerror(-ret));
+		goto shutdown;
+	}
+
+	/* iov has been consumed, check for dynamic rbuf handling */
+	if (rx_entry->rem_len) {
+		ret = tcpx_update_rx_iov(rx_entry);
+		if (ret)
+			goto shutdown;
+
+		rx_entry->rem_len = 0;
+		goto retry;
+	}
+
+	if (rx_entry->hdr.base_hdr.flags & OFI_DELIVERY_COMPLETE) {
 		if (tcpx_prepare_rx_entry_resp(rx_entry))
 			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
 	} else {
 		tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
 		tcpx_rx_msg_release(rx_entry);
 	}
+	return 0;
+
+shutdown:
+	tcpx_ep_disable(rx_entry->ep, 0);
+	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
+	tcpx_rx_msg_release(rx_entry);
 	return ret;
 }
 
@@ -416,12 +471,12 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 
 	ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt, msg_len);
 	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
-			"posted rx buffer size is not big enough\n");
-		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq,
-				     rx_entry, -ret);
-		tcpx_rx_msg_release(rx_entry);
-		return ret;
+		if (!tcpx_dynamic_rbuf(tcpx_ep))
+			goto truncate_err;
+
+		rx_entry->rem_len = msg_len -
+				    ofi_total_iov_len(rx_entry->iov,
+						      rx_entry->iov_cnt);
 	}
 
 	if (cur_rx_msg->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA)
@@ -429,6 +484,14 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 
 	tcpx_rx_setup(tcpx_ep, rx_entry, tcpx_process_recv);
 	return FI_SUCCESS;
+
+truncate_err:
+	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+		"posted rx buffer size is not big enough\n");
+	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq,
+				rx_entry, -ret);
+	tcpx_rx_msg_release(rx_entry);
+	return ret;
 }
 
 int tcpx_op_read_req(struct tcpx_ep *tcpx_ep)

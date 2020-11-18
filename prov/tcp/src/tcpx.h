@@ -79,6 +79,7 @@ extern struct fi_provider	tcpx_prov;
 extern struct util_prov		tcpx_util_prov;
 extern struct fi_info		tcpx_info;
 extern struct tcpx_port_range	port_range;
+extern int			tcpx_nodelay;
 struct tcpx_xfer_entry;
 struct tcpx_ep;
 
@@ -232,8 +233,18 @@ struct tcpx_xfer_entry {
 };
 
 struct tcpx_domain {
-	struct util_domain	util_domain;
+	struct util_domain		util_domain;
+	struct ofi_ops_dynamic_rbuf	*dynamic_rbuf;
 };
+
+static inline struct ofi_ops_dynamic_rbuf *tcpx_dynamic_rbuf(struct tcpx_ep *ep)
+{
+	struct tcpx_domain *domain;
+
+	domain = container_of(ep->util_ep.domain, struct tcpx_domain,
+			      util_domain);
+	return domain->dynamic_rbuf;
+}
 
 struct tcpx_buf_pool {
 	struct ofi_bufpool	*pool;

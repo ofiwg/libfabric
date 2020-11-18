@@ -131,6 +131,13 @@ The ofi_rxm provider checks for the following environment variables.
 : Defines the maximum number of MSG provider CQ entries (default: 1) that would
   be read per progress (RxM CQ read).
 
+*FI_OFI_RXM_ENABLE_DYN_RBUF*
+: Enables support for dynamic receive buffering, if available by the message
+  endpoint provider.  This feature allows direct placement of received
+  message data into application buffers, bypassing RxM bounce buffers.
+  This feature targets providers that provide internal network buffering,
+  such as the tcp provider.  (default: true)
+
 *FI_OFI_RXM_SAR_LIMIT*
 : Set this environment variable to control the RxM SAR (Segmentation And Reassembly)
   protocol. Messages of size greater than this (default: 128 Kb) would be transmitted
