@@ -182,6 +182,7 @@ struct cxip_environment {
 
 	/* Messaging */
 	int rdzv_offload;
+	int fc_recovery;
 	size_t rdzv_threshold;
 	size_t rdzv_get_min;
 	size_t rdzv_eager_size;

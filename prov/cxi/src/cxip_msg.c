@@ -22,6 +22,12 @@
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_DATA, __VA_ARGS__)
 
+#define FC_MSG "Message flow-control triggered.\n\n" \
+"Flow-control recovery is disabled. To avoid this condition, increase\n" \
+"Overflow buffer space using environment variables FI_CXI_OFLOW_*. To\n" \
+"enable flow-control recovery (experimental), set environment variable\n" \
+"FI_CXI_FC_RECOVERY=1.\n\n"
+
 static void cxip_ux_onload_complete(struct cxip_req *req);
 static int cxip_ux_onload(struct cxip_rxc *rxc);
 static int cxip_recv_req_queue(struct cxip_req *req);
@@ -2673,6 +2679,9 @@ static int cxip_recv_req_dropped(struct cxip_req *req)
 	struct cxip_rxc *rxc = req->recv.rxc;
 	int ret __attribute__((unused));
 
+	if (!cxip_env.fc_recovery)
+		CXIP_FATAL(FC_MSG);
+
 	fastlock_acquire(&rxc->lock);
 
 	rxc->append_disabled = true;
@@ -3997,6 +4006,9 @@ static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req)
 {
 	struct cxip_fc_peer *peer;
 	int ret;
+
+	if (!cxip_env.fc_recovery)
+		CXIP_FATAL(FC_MSG);
 
 	fastlock_acquire(&txc->lock);
 

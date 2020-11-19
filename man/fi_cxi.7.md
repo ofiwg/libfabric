@@ -478,6 +478,17 @@ disabled.
 *FI_CXI_RDZV_THRESHOLD*
 : Message size threshold for rendezvous protocol.
 
+*FI_CXI_FC_RECOVERY*
+: Enables message flow-control recovery (experimental). Message flow-control is
+triggered when hardware message matching resources become exhausted. Messages
+may be dropped and retransmitted in order to recover. This impacts performance
+significantly.
+
+Programs should be careful to avoid using large numbers of unmatched receive
+operations and unexpected messages to prevent message flow-control. To help
+avoid this condition, increase Overflow buffer space using environment
+variables FI_CXI_OFLOW_*.
+
 *FI_CXI_RDZV_GET_MIN*
 : Minimum rendezvous Get payload size. A Send with length less than or equal to
 FI_CXI_RDZV_THRESHOLD plus FI_CXI_RDZV_GET_MIN will be performed using the

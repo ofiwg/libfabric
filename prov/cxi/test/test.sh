@@ -9,6 +9,7 @@ TEST_OUTPUT=cxitest.out
 export DMA_FAULT_RATE=.1
 export MALLOC_FAULT_RATE=.1
 export FI_LOG_LEVEL=warn
+export FI_CXI_FC_RECOVERY=1
 
 if [[ $# -gt 0 ]]; then
     ./cxitest --verbose --filter="@($1)" --tap=cxitest.tap -j2 
