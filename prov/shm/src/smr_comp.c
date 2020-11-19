@@ -52,7 +52,7 @@ int smr_tx_comp(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, uint64_t err)
 {
 	struct fi_cq_tagged_entry *comp;
-	struct util_cq_oflow_err_entry *entry;
+	struct util_cq_aux_entry *entry;
 
 	comp = ofi_cirque_tail(ep->util_ep.tx_cq->cirq);
 	if (err) {
@@ -112,7 +112,7 @@ int smr_rx_comp(struct smr_ep *ep, void *context, uint32_t op,
 		uint64_t tag, uint64_t data, uint64_t err)
 {
 	struct fi_cq_tagged_entry *comp;
-	struct util_cq_oflow_err_entry *entry;
+	struct util_cq_aux_entry *entry;
 
 	if (ofi_cirque_isfull(ep->util_ep.rx_cq->cirq))
 		return ofi_cq_write_overflow(ep->util_ep.rx_cq, context,

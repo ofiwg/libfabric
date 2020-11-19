@@ -479,8 +479,8 @@ int ofi_wait_yield_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 
 typedef void (*fi_cq_read_func)(void **dst, void *src);
 
-struct util_cq_oflow_err_entry {
-	struct fi_cq_tagged_entry	*parent_comp;
+struct util_cq_aux_entry {
+	struct fi_cq_tagged_entry	*cq_slot;
 	struct fi_cq_err_entry		comp;
 	fi_addr_t			src;
 	struct slist_entry		list_entry;
