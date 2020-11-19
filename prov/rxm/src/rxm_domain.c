@@ -485,7 +485,7 @@ static void rxm_config_dyn_rbuf(struct rxm_domain *domain, struct fi_info *info)
 	 * messages, collective support is mostly for development purposes.
 	 * So, fallback to bounce buffers when enabled.
 	 */
-	if (info->caps | FI_COLLECTIVE)
+	if (info->caps & FI_COLLECTIVE)
 		return;
 
 	fi_param_get_bool(&rxm_prov, "enable_dyn_rbuf", &ret);
