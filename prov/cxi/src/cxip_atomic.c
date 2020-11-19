@@ -385,6 +385,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	struct cxip_cmdq *cmdq =
 		triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
 	bool read = msg->op == FI_ATOMIC_READ || req_type == CXIP_RQ_AMO_FETCH;
+	enum cxi_traffic_class_type tc_type;
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -580,11 +581,17 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	cxi_build_dfa(caddr.nic, caddr.pid, txc->pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
+	if (flags & FI_CXI_HRP)
+		tc_type = CXI_TC_TYPE_HRP;
+	else if (flags & FI_CXI_UNRELIABLE)
+		tc_type = CXI_TC_TYPE_RESTRICTED;
+	else
+		tc_type = CXI_TC_TYPE_DEFAULT;
+
 	fastlock_acquire(&cmdq->lock);
 
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
-			      cxip_ofi_to_cxi_tc(txc->tclass),
-			      flags & FI_CXI_HRP);
+			      cxip_ofi_to_cxi_tc(txc->tclass), tc_type);
 	if (ret != FI_SUCCESS)
 		goto unlock_cmdq;
 

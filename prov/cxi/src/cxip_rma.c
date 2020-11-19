@@ -135,6 +135,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	struct cxip_cmdq *cmdq =
 		triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
 	bool write = op == FI_OP_WRITE;
+	enum cxi_traffic_class_type tc_type;
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -220,13 +221,19 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	if (!unr && write)
 		unr = txc->attr.msg_order & (FI_ORDER_WAW | FI_ORDER_RMA_WAW);
 
+	if (!unr && (flags & FI_CXI_HRP))
+		tc_type = CXI_TC_TYPE_HRP;
+	else if (!unr)
+		tc_type = CXI_TC_TYPE_RESTRICTED;
+	else
+		tc_type = CXI_TC_TYPE_DEFAULT;
+
 	/* Issue command */
 
 	fastlock_acquire(&cmdq->lock);
 
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
-			      cxip_ofi_to_cxi_tc(txc->tclass),
-			      !unr && (flags & FI_CXI_HRP));
+			      cxip_ofi_to_cxi_tc(txc->tclass), tc_type);
 	if (ret != FI_SUCCESS)
 		goto unlock_op;
 

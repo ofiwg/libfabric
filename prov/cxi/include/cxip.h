@@ -365,6 +365,18 @@ struct cxip_if {
 };
 
 /*
+ * CXI communication profile wrapper.
+ *
+ * The wrapper is used to remap user requested traffic class to a communication
+ * profile which actually can be allocated.
+ */
+struct cxip_remap_cp {
+	struct dlist_entry remap_entry;
+	struct cxi_cp remap_cp;
+	struct cxi_cp *hw_cp;
+};
+
+/*
  * CXI Logical Network Interface (LNI) wrapper
  *
  * An LNI is a container used allocate resources from a NIC.
@@ -373,9 +385,12 @@ struct cxip_lni {
 	struct cxip_if *iface;
 	struct cxil_lni *lni;
 
-	/* Communication Profiles */
-	struct cxi_cp *cps[16];
+	/* Hardware communication profiles */
+	struct cxi_cp *hw_cps[16];
 	int n_cps;
+
+	/* Software remapped communication profiles. */
+	struct dlist_entry remap_cps;
 
 	fastlock_t lock;
 };
@@ -420,9 +435,7 @@ struct cxip_cmdq {
 	struct c_cstate_cmd c_state;
 	enum cxip_llring_mode llring_mode;
 
-	uint16_t vni;
-	enum cxi_traffic_class tc;
-	bool hrp;
+	struct cxi_cp *cur_cp;
 	struct cxip_lni *lni;
 };
 
@@ -953,7 +966,6 @@ struct cxip_txc {
 	struct fi_tx_attr attr;		// attributes
 	bool selective_completion;
 	uint32_t tclass;
-	struct cxi_cp *cp;
 
 	struct cxip_cmdq *tx_cmdq;	// added during cxip_txc_enable()
 
@@ -1328,7 +1340,8 @@ void cxip_free_lni(struct cxip_lni *lni);
 const char *cxi_tc_str(enum cxi_traffic_class tc);
 enum cxi_traffic_class cxip_ofi_to_cxi_tc(uint32_t ofi_tclass);
 int cxip_txq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
-		     enum cxi_traffic_class tc, bool hrp);
+		    enum cxi_traffic_class tc,
+		    enum cxi_traffic_class_type tc_type);
 int cxip_alloc_if_domain(struct cxip_lni *lni, uint32_t vni, uint32_t pid,
 			 struct cxip_if_domain **if_dom);
 void cxip_free_if_domain(struct cxip_if_domain *if_dom);
@@ -1362,7 +1375,8 @@ int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
 
 int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 		    struct cxi_cq_alloc_opts *cq_opts, uint16_t vni,
-		    enum cxi_traffic_class tc, bool hrp,
+		    enum cxi_traffic_class tc,
+		    enum cxi_traffic_class_type tc_type,
 		    struct cxip_cmdq **cmdq);
 void cxip_cmdq_free(struct cxip_cmdq *cmdq);
 

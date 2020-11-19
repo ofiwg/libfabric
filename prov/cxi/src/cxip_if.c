@@ -212,6 +212,7 @@ int cxip_alloc_lni(struct cxip_if *iface, uint32_t svc_id,
 
 	lni->iface = iface;
 	fastlock_init(&lni->lock);
+	dlist_init(&lni->remap_cps);
 
 	CXIP_DBG("Allocated LNI, %s RGID: %u\n",
 		 lni->iface->info->device_name, lni->lni->id);
@@ -233,14 +234,20 @@ void cxip_free_lni(struct cxip_lni *lni)
 {
 	int ret;
 	int i;
+	struct dlist_entry *tmp;
+	struct cxip_remap_cp *sw_cp;
 
 	cxip_lni_res_dump(lni);
 
 	CXIP_DBG("Freeing LNI, %s RGID: %u\n",
 		 lni->iface->info->device_name, lni->lni->id);
 
+	dlist_foreach_container_safe(&lni->remap_cps, struct cxip_remap_cp,
+				     sw_cp, remap_entry, tmp)
+		free(sw_cp);
+
 	for (i = 0; i < lni->n_cps; i++) {
-		ret = cxil_destroy_cp(lni->cps[i]);
+		ret = cxil_destroy_cp(lni->hw_cps[i]);
 		if (ret)
 			CXIP_WARN("Failed to destroy CP: %d\n", ret);
 	}
@@ -250,20 +257,6 @@ void cxip_free_lni(struct cxip_lni *lni)
 		CXIP_WARN("Failed to destroy LNI: %d\n", ret);
 
 	free(lni);
-}
-
-static const char * const tc_strs[] = {
-	[CXI_TC_DEDICATED_ACCESS] = "DEDICATED_ACCESS",
-	[CXI_TC_LOW_LATENCY] = "LOW_LATENCY",
-	[CXI_TC_BULK_DATA] = "BUlK_DATA",
-	[CXI_TC_BEST_EFFORT] = "BEST_EFFORT",
-};
-
-const char *cxi_tc_str(enum cxi_traffic_class tc)
-{
-	if (tc < CXI_TC_DEDICATED_ACCESS || tc > CXI_TC_MAX)
-		return NULL;
-	return tc_strs[tc];
 }
 
 enum cxi_traffic_class cxip_ofi_to_cxi_tc(uint32_t ofi_tclass)
@@ -284,51 +277,117 @@ enum cxi_traffic_class cxip_ofi_to_cxi_tc(uint32_t ofi_tclass)
 }
 
 static int cxip_cp_get(struct cxip_lni *lni, uint16_t vni,
-		       enum cxi_traffic_class tc, bool hrp, struct cxi_cp **cp)
+		       enum cxi_traffic_class tc,
+		       enum cxi_traffic_class_type tc_type,
+		       struct cxi_cp **cp)
 {
 	int ret;
 	int i;
+	struct cxip_remap_cp *sw_cp;
+	static const enum cxi_traffic_class remap_tc = CXI_TC_BEST_EFFORT;
 
 	fastlock_acquire(&lni->lock);
 
-	for (i = 0; i < lni->n_cps; i++) {
-		if (lni->cps[i]->vni == vni && lni->cps[i]->tc == tc &&
-		    lni->cps[i]->hrp == hrp) {
-			*cp = lni->cps[i];
-			ret = FI_SUCCESS;
-			goto unlock;
+	/* Always prefer SW remapped CPs over allocating HW CP. */
+	dlist_foreach_container(&lni->remap_cps, struct cxip_remap_cp, sw_cp,
+				remap_entry) {
+		if (sw_cp->remap_cp.vni == vni && sw_cp->remap_cp.tc == tc &&
+		    sw_cp->remap_cp.tc_type == tc_type) {
+			CXIP_DBG("Reusing SW CP: %u VNI: %u TC: %s TYPE: %s\n",
+				 sw_cp->remap_cp.lcid, sw_cp->remap_cp.vni,
+				 cxi_tc_to_str(sw_cp->remap_cp.tc),
+				 cxi_tc_type_to_str(sw_cp->remap_cp.tc_type));
+			*cp = &sw_cp->remap_cp;
+			goto success_unlock;
 		}
 	}
 
-	ret = cxil_alloc_cp(lni->lni, vni, tc, hrp, &lni->cps[lni->n_cps]);
-	if (!ret) {
-		CXIP_DBG("Allocated CP: %u VNI: %u TC: %s HRP: %u\n",
-			 lni->cps[lni->n_cps]->lcid, vni, cxi_tc_str(tc),
-			 hrp);
-		*cp = lni->cps[lni->n_cps++];
-		ret = FI_SUCCESS;
-	} else {
-		CXIP_DBG("Failed to allocate CP, ret: %d VNI: %u TC: %u HRP: %u\n",
-			  ret, vni, tc, hrp);
-		ret = -FI_EINVAL;
+	/* Allocate a new SW remapped CP entry and attempt to allocate the
+	 * user requested HW CP.
+	 */
+	sw_cp = calloc(1, sizeof(*sw_cp));
+	if (!sw_cp) {
+		ret = -FI_ENOMEM;
+		goto err_unlock;
 	}
 
-unlock:
+	ret = cxil_alloc_cp(lni->lni, vni, tc, tc_type,
+			    &lni->hw_cps[lni->n_cps]);
+	if (ret) {
+		/* Attempt to fall back to remap traffic class with the same
+		 * traffic class type and allocate HW CP is necessary.
+		 */
+		CXIP_INFO("Failed to allocate CP, ret: %d VNI: %u TC: %s TYPE: %s\n",
+			  ret, vni, cxi_tc_to_str(tc),
+			  cxi_tc_type_to_str(tc_type));
+		CXIP_INFO("Remapping original TC from %s to %s\n",
+			  cxi_tc_to_str(tc), cxi_tc_to_str(remap_tc));
+
+		/* Check to see if a matching HW CP has already been allocated.
+		 * If so, reuse the entry.
+		 */
+		for (i = 0; i < lni->n_cps; i++) {
+			if (lni->hw_cps[i]->vni == vni &&
+			    lni->hw_cps[i]->tc == remap_tc &&
+			    lni->hw_cps[i]->tc_type == tc_type) {
+				sw_cp->hw_cp = lni->hw_cps[i];
+				goto found_hw_cp;
+			}
+		}
+
+		/* Attempt to allocated a remapped HW CP. */
+		ret = cxil_alloc_cp(lni->lni, vni, remap_tc, tc_type,
+				    &lni->hw_cps[lni->n_cps]);
+		if (ret) {
+			CXIP_WARN("Failed to allocate CP, ret: %d VNI: %u TC: %s TYPE: %s\n",
+				  ret, vni, cxi_tc_to_str(remap_tc),
+				  cxi_tc_type_to_str(tc_type));
+			ret = -FI_EINVAL;
+			goto err_free_sw_cp;
+		}
+	}
+
+	CXIP_DBG("Allocated CP: %u VNI: %u TC: %s TYPE: %s\n",
+		 lni->hw_cps[lni->n_cps]->lcid, vni,
+		 cxi_tc_to_str(lni->hw_cps[lni->n_cps]->tc),
+		 cxi_tc_type_to_str(lni->hw_cps[lni->n_cps]->tc_type));
+
+	sw_cp->hw_cp = lni->hw_cps[lni->n_cps++];
+
+found_hw_cp:
+	sw_cp->remap_cp.vni = vni;
+	sw_cp->remap_cp.tc = tc;
+	sw_cp->remap_cp.tc_type = tc_type;
+	sw_cp->remap_cp.lcid = sw_cp->hw_cp->lcid;
+	dlist_insert_tail(&sw_cp->remap_entry, &lni->remap_cps);
+
+	*cp = &sw_cp->remap_cp;
+
+success_unlock:
+	fastlock_release(&lni->lock);
+
+	return FI_SUCCESS;
+
+err_free_sw_cp:
+	free(sw_cp);
+err_unlock:
 	fastlock_release(&lni->lock);
 
 	return ret;
 }
 
 int cxip_txq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
-		     enum cxi_traffic_class tc, bool hrp)
+		    enum cxi_traffic_class tc,
+		    enum cxi_traffic_class_type tc_type)
 {
 	struct cxi_cp *cp;
 	int ret;
 
-	if (cmdq->vni == vni && cmdq->tc == tc && cmdq->hrp == hrp)
+	if (cmdq->cur_cp->vni == vni && cmdq->cur_cp->tc == tc &&
+	    cmdq->cur_cp->tc_type == tc_type)
 		return FI_SUCCESS;
 
-	ret = cxip_cp_get(cmdq->lni, vni, tc, hrp, &cp);
+	ret = cxip_cp_get(cmdq->lni, vni, tc, tc_type, &cp);
 	if (ret != FI_SUCCESS) {
 		CXIP_DBG("Failed to get CP: %d\n", ret);
 		return -FI_EOTHER;
@@ -340,12 +399,11 @@ int cxip_txq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
 		ret = -FI_EAGAIN;
 	} else {
 		ret = FI_SUCCESS;
-		cmdq->vni = vni;
-		cmdq->tc = tc;
-		cmdq->hrp = hrp;
+		cmdq->cur_cp = cp;
 
-		CXIP_DBG("Updated CMDQ(%p) CP: %d VNI: %u TC: %s HRP: %u\n",
-			 cmdq, cp->lcid, vni, cxi_tc_str(tc), hrp);
+		CXIP_DBG("Updated CMDQ(%p) CP: %d VNI: %u TC: %s TYPE: %s\n",
+			 cmdq, cp->lcid, cp->vni, cxi_tc_to_str(cp->tc),
+			 cxi_tc_type_to_str(cp->tc_type));
 	}
 
 	return ret;
@@ -643,7 +701,8 @@ int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
  */
 int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 		    struct cxi_cq_alloc_opts *cq_opts, uint16_t vni,
-		    enum cxi_traffic_class tc, bool hrp,
+		    enum cxi_traffic_class tc,
+		    enum cxi_traffic_class_type tc_type,
 		    struct cxip_cmdq **cmdq)
 {
 	int ret;
@@ -658,12 +717,14 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 	}
 
 	if (cq_opts->flags & CXI_CQ_IS_TX) {
-		ret = cxip_cp_get(lni, vni, tc, hrp, &cp);
+		ret = cxip_cp_get(lni, vni, tc, tc_type, &cp);
 		if (ret != FI_SUCCESS) {
 			CXIP_WARN("Failed to allocate CP: %d\n", ret);
 			return ret;
 		}
 		cq_opts->lcid = cp->lcid;
+
+		new_cmdq->cur_cp = cp;
 	}
 
 	ret = cxil_alloc_cmdq(lni->lni, evtq, cq_opts, &dev_cmdq);
@@ -675,9 +736,6 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 	}
 
 	new_cmdq->dev_cmdq = dev_cmdq;
-	new_cmdq->vni = vni;
-	new_cmdq->tc = tc;
-	new_cmdq->hrp = hrp;
 	new_cmdq->lni = lni;
 
 	if (lni->iface->info->device_platform == CXI_PLATFORM_NETSIM)

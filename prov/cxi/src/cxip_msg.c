@@ -3440,7 +3440,8 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	fastlock_acquire(&cmdq->lock);
 
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
-			      cxip_ofi_to_cxi_tc(txc->tclass), 0);
+			      cxip_ofi_to_cxi_tc(txc->tclass),
+			      CXI_TC_TYPE_DEFAULT);
 	if (ret != FI_SUCCESS)
 		goto err_unlock;
 
@@ -3652,7 +3653,8 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	fastlock_acquire(&cmdq->lock);
 
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
-			      cxip_ofi_to_cxi_tc(txc->tclass), 0);
+			      cxip_ofi_to_cxi_tc(txc->tclass),
+			      CXI_TC_TYPE_DEFAULT);
 	if (ret != FI_SUCCESS)
 		goto err_unlock;
 

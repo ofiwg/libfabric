@@ -49,7 +49,8 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 
 	ret = cxip_cmdq_alloc(dom->lni, NULL, &cq_opts,
 			      dom->auth_key.vni,
-			      cxip_ofi_to_cxi_tc(dom->tclass), false,
+			      cxip_ofi_to_cxi_tc(dom->tclass),
+			      CXI_TC_TYPE_DEFAULT,
 			      &dom->trig_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate trig_cmdq: %d\n", ret);

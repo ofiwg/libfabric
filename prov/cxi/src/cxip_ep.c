@@ -187,7 +187,7 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 
 	ret = cxip_cmdq_alloc(ep_obj->domain->lni, NULL, &cq_opts,
 			      ep_obj->auth_key.vni, cxip_ofi_to_cxi_tc(tclass),
-			      false, cmdq);
+			      CXI_TC_TYPE_DEFAULT, cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate CMDQ, ret: %d\n", ret);
 		ret = -FI_ENOSPC;
