@@ -22,9 +22,8 @@
 
 #include "cxip.h"
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_CQ, __VA_ARGS__)
-#define CXIP_LOG_INFO(...) _CXIP_LOG_INFO(FI_LOG_CQ, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_CQ, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_CQ, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_CQ, __VA_ARGS__)
 
 struct cxip_md *cxip_cq_ibuf_md(void *ibuf)
 {
@@ -43,9 +42,9 @@ void *cxip_cq_ibuf_alloc(struct cxip_cq *cq)
 	fastlock_release(&cq->ibuf_lock);
 
 	if (ibuf)
-		CXIP_LOG_DBG("Allocated inject buffer: %p\n", ibuf);
+		CXIP_DBG("Allocated inject buffer: %p\n", ibuf);
 	else
-		CXIP_LOG_ERROR("Failed to allocate inject buffer\n");
+		CXIP_WARN("Failed to allocate inject buffer\n");
 
 	return ibuf;
 }
@@ -59,7 +58,7 @@ void cxip_cq_ibuf_free(struct cxip_cq *cq, void *ibuf)
 	ofi_buf_free(ibuf);
 	fastlock_release(&cq->ibuf_lock);
 
-	CXIP_LOG_DBG("Freed inject buffer: %p\n", ibuf);
+	CXIP_DBG("Freed inject buffer: %p\n", ibuf);
 }
 
 int cxip_ibuf_chunk_init(struct ofi_bufpool_region *region)
@@ -71,7 +70,7 @@ int cxip_ibuf_chunk_init(struct ofi_bufpool_region *region)
 	ret = cxip_map(cq->domain, region->mem_region,
 		       region->pool->region_size, &md);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_ERROR("Failed to map inject buffer chunk\n");
+		CXIP_WARN("Failed to map inject buffer chunk\n");
 		return ret;
 	}
 
@@ -120,7 +119,7 @@ static void cxip_cq_req_free_no_lock(struct cxip_req *req)
 {
 	struct cxip_req *table_req;
 
-	CXIP_LOG_DBG("Freeing req: %p (ID: %d)\n", req, req->req_id);
+	CXIP_DBG("Freeing req: %p (ID: %d)\n", req, req->req_id);
 
 	dlist_remove(&req->cq_entry);
 
@@ -128,7 +127,7 @@ static void cxip_cq_req_free_no_lock(struct cxip_req *req)
 		table_req = (struct cxip_req *)ofi_idx_remove(
 			&req->cq->req_table, req->req_id);
 		if (table_req != req)
-			CXIP_LOG_ERROR("Failed to unmap request: %p\n", req);
+			CXIP_WARN("Failed to unmap request: %p\n", req);
 	}
 
 	ofi_buf_free(req);
@@ -189,8 +188,8 @@ void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
 				break;
 
 			default:
-				CXIP_LOG_ERROR("Invalid trig req type: %d\n",
-					       req->type);
+				CXIP_WARN("Invalid trig req type: %d\n",
+					  req->type);
 			}
 
 			ofi_atomic_dec32(&txc->otx_reqs);
@@ -226,7 +225,7 @@ void cxip_cq_req_discard(struct cxip_cq *cq, void *req_ctx)
 	}
 
 	if (discards)
-		CXIP_LOG_DBG("Marked %d requests\n", discards);
+		CXIP_DBG("Marked %d requests\n", discards);
 
 	fastlock_release(&cq->lock);
 }
@@ -237,7 +236,7 @@ void cxip_cq_req_discard(struct cxip_cq *cq, void *req_ctx)
 int cxip_cq_req_complete(struct cxip_req *req)
 {
 	if (req->discard) {
-		CXIP_LOG_DBG("Event discarded: %p\n", req);
+		CXIP_DBG("Event discarded: %p\n", req);
 		return FI_SUCCESS;
 	}
 
@@ -253,7 +252,7 @@ int cxip_cq_req_complete(struct cxip_req *req)
 int cxip_cq_req_complete_addr(struct cxip_req *req, fi_addr_t src)
 {
 	if (req->discard) {
-		CXIP_LOG_DBG("Event discarded: %p\n", req);
+		CXIP_DBG("Event discarded: %p\n", req);
 		return FI_SUCCESS;
 	}
 
@@ -272,7 +271,7 @@ int cxip_cq_req_error(struct cxip_req *req, size_t olen,
 	struct fi_cq_err_entry err_entry;
 
 	if (req->discard) {
-		CXIP_LOG_DBG("Event discarded: %p\n", req);
+		CXIP_DBG("Event discarded: %p\n", req);
 		return FI_SUCCESS;
 	}
 
@@ -314,7 +313,7 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
 
 	req = (struct cxip_req *)ofi_buf_alloc(cq->req_pool);
 	if (!req) {
-		CXIP_LOG_ERROR("Failed to allocate request\n");
+		CXIP_DBG("Failed to allocate request\n");
 		goto out;
 	}
 	memset(req, 0, sizeof(*req));
@@ -324,8 +323,8 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
 
 		/* Target command buffer IDs are 16 bits wide. */
 		if (req->req_id < 0 || req->req_id >= CXIP_BUFFER_ID_MAX) {
-			CXIP_LOG_ERROR("Failed to map request: %d\n",
-				       req->req_id);
+			CXIP_WARN("Failed to map request: %d\n",
+				  req->req_id);
 			if (req->req_id > 0)
 				ofi_idx_remove(&cq->req_table, req->req_id);
 			ofi_buf_free(req);
@@ -336,7 +335,7 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
 		req->req_id = -1;
 	}
 
-	CXIP_LOG_DBG("Allocated req: %p (ID: %d)\n", req, req->req_id);
+	CXIP_DBG("Allocated req: %p (ID: %d)\n", req, req->req_id);
 	req->cq = cq;
 	req->req_ctx = req_ctx;
 	req->discard = false;
@@ -384,16 +383,13 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 		if (req)
 			break;
 		/* HW error can return zero buffer_id */
-		CXIP_LOG_ERROR(
-			"Invalid buffer_id: %d (%s)\n",
-			event->tgt_long.buffer_id,
-			cxi_event_to_str(event));
+		CXIP_WARN("Invalid buffer_id: %d (%s)\n",
+			  event->tgt_long.buffer_id, cxi_event_to_str(event));
 		return_code = cxi_tgt_event_rc(event);
 		if (return_code != C_RC_OK)
-			CXIP_LOG_ERROR(
-				"Hardware return code: %s (%s)\n",
-				cxi_rc_to_str(return_code),
-				cxi_event_to_str(event));
+			CXIP_WARN("Hardware return code: %s (%s)\n",
+				  cxi_rc_to_str(return_code),
+				  cxi_event_to_str(event));
 		break;
 	case C_EVENT_REPLY:
 	case C_EVENT_SEND:
@@ -407,16 +403,14 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 			if (req)
 				break;
 			/* HW error can return zero buffer_id */
-			CXIP_LOG_ERROR(
-				"Invalid buffer_id: %d (%s)\n",
-				event->tgt_long.buffer_id,
-				cxi_event_to_str(event));
+			CXIP_WARN("Invalid buffer_id: %d (%s)\n",
+				  event->tgt_long.buffer_id,
+				  cxi_event_to_str(event));
 			return_code = cxi_tgt_event_rc(event);
 			if (return_code != C_RC_OK)
-				CXIP_LOG_ERROR(
-					"Hardware return code: %s (%s)\n",
-					cxi_rc_to_str(return_code),
-					cxi_event_to_str(event));
+				CXIP_WARN("Hardware return code: %s (%s)\n",
+					  cxi_rc_to_str(return_code),
+					  cxi_event_to_str(event));
 		}
 		break;
 	case C_EVENT_STATE_CHANGE:
@@ -428,15 +422,14 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 		req = NULL;
 		break;
 	default:
-		CXIP_LOG_ERROR("Invalid event type: %d\n",
-				event->hdr.event_type);
+		CXIP_WARN("Invalid event type: %d\n", event->hdr.event_type);
 		req = NULL;
 	}
 
-	CXIP_LOG_DBG("got event: %s rc: %s (req: %p)\n",
-		     cxi_event_to_str(event),
-		     cxi_rc_to_str(cxi_event_rc(event)),
-		     req);
+	CXIP_DBG("got event: %s rc: %s (req: %p)\n",
+		 cxi_event_to_str(event),
+		 cxi_rc_to_str(cxi_event_rc(event)),
+		 req);
 
 	return req;
 }
@@ -476,7 +469,7 @@ void cxip_cq_progress(struct cxip_cq *cq)
 	}
 
 	if (cxi_eq_get_drops(cq->evtq))
-		CXIP_LOG_FATAL("Cassini Event Queue overflow detected.\n");
+		CXIP_FATAL("Cassini Event Queue overflow detected.\n");
 
 out:
 	fastlock_release(&cq->lock);
@@ -529,12 +522,12 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 				MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
 				-1, 0);
 	if (cxi_cq->evtq_buf == MAP_FAILED) {
-		CXIP_LOG_DBG("Unable to map hugepage for EQ\n");
+		CXIP_DBG("Unable to map hugepage for EQ\n");
 
 		cxi_cq->evtq_buf = aligned_alloc(C_PAGE_SIZE,
 						 cxi_cq->evtq_buf_len);
 		if (!cxi_cq->evtq_buf) {
-			CXIP_LOG_DBG("Unable to allocate EQ buffer\n");
+			CXIP_WARN("Unable to allocate EQ buffer\n");
 			goto unlock;
 		}
 
@@ -543,8 +536,8 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 			       CXI_MAP_PIN | CXI_MAP_WRITE,
 			       NULL, &cxi_cq->evtq_buf_md);
 		if (ret) {
-			CXIP_LOG_DBG("Unable to MAP MR EVTQ buffer, ret: %d\n",
-				     ret);
+			CXIP_WARN("Unable to MAP MR EVTQ buffer, ret: %d\n",
+				  ret);
 			goto free_evtq_buf;
 		}
 	} else {
@@ -559,7 +552,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	ret = cxil_alloc_evtq(cxi_cq->domain->lni->lni, cxi_cq->evtq_buf_md,
 			      &eq_attr, NULL, NULL, &cxi_cq->evtq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_INFO("Failed to allocate EQ, ret: %d\n", ret);
+		CXIP_WARN("Failed to allocate EQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
 		goto unmap_evtq_buf;
 	}
@@ -596,7 +589,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	fastlock_release(&cxi_cq->lock);
 	dlist_init(&cxi_cq->req_list);
 
-	CXIP_LOG_DBG("CQ enabled: %p (EQ: %d)\n", cxi_cq, cxi_cq->evtq->eqn);
+	CXIP_DBG("CQ enabled: %p (EQ: %d)\n", cxi_cq, cxi_cq->evtq->eqn);
 	return FI_SUCCESS;
 
 free_req_pool:
@@ -607,8 +600,7 @@ unmap_evtq_buf:
 	if (!cxi_cq->mmap_buf) {
 		ret = cxil_unmap(cxi_cq->evtq_buf_md);
 		if (ret)
-			CXIP_LOG_ERROR("Failed to unmap evtq MD, ret: %d\n",
-				       ret);
+			CXIP_WARN("Failed to unmap evtq MD, ret: %d\n", ret);
 	}
 free_evtq_buf:
 	if (cxi_cq->mmap_buf)
@@ -641,21 +633,21 @@ static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 
 	ret = cxil_destroy_evtq(cxi_cq->evtq);
 	if (ret)
-		CXIP_LOG_ERROR("Failed to free evtq, ret: %d\n", ret);
+		CXIP_WARN("Failed to free evtq, ret: %d\n", ret);
 
 	if (cxi_cq->mmap_buf) {
 		munmap(cxi_cq->evtq_buf, cxi_cq->evtq_buf_len);
 	} else {
 		ret = cxil_unmap(cxi_cq->evtq_buf_md);
 		if (ret)
-			CXIP_LOG_ERROR("Failed to unmap evtq MD, ret: %d\n",
-				       ret);
+			CXIP_WARN("Failed to unmap evtq MD, ret: %d\n",
+				  ret);
 		free(cxi_cq->evtq_buf);
 	}
 
 	cxi_cq->enabled = false;
 
-	CXIP_LOG_DBG("CQ disabled: %p\n", cxi_cq);
+	CXIP_DBG("CQ disabled: %p\n", cxi_cq);
 unlock:
 	fastlock_release(&cxi_cq->lock);
 }
@@ -722,13 +714,13 @@ static int cxip_cq_verify_attr(struct fi_cq_attr *attr)
 		attr->format = cxip_cq_def_attr.format;
 		break;
 	default:
-		CXIP_LOG_ERROR("Unsupported CQ attribute format: %d\n",
-			       attr->format);
+		CXIP_WARN("Unsupported CQ attribute format: %d\n",
+			  attr->format);
 		return -FI_ENOSYS;
 	}
 
 	if (attr->wait_obj != FI_WAIT_NONE) {
-		CXIP_LOG_ERROR("CQ wait objects not supported\n");
+		CXIP_WARN("CQ wait objects not supported\n");
 		return -FI_ENOSYS;
 	}
 
@@ -770,7 +762,7 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	ret = ofi_cq_init(&cxip_prov, domain, &cxi_cq->attr, &cxi_cq->util_cq,
 			  cxip_util_cq_progress, context);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_ERROR("ofi_cq_init() failed: %d\n", ret);
+		CXIP_WARN("ofi_cq_init() failed: %d\n", ret);
 		goto err_util_cq;
 	}
 

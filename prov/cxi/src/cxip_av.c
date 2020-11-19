@@ -51,7 +51,7 @@
 #define	_DEADNULL(_x_)		do {/*If _x_ is 0, already dead*/} while (0)
 #define	_CHECKNULL(_x_, _do_, ...)	do {		\
 		if (!(_x_)) {				\
-			CXIP_LOG_ERROR("Bad arguments: " __VA_ARGS__);	\
+			CXIP_WARN("Bad arguments: " __VA_ARGS__);	\
 			_do_;				\
 		}					\
 	} while (0)
@@ -59,8 +59,8 @@
 /* Note: FI_READ means "read-only" for AV, see fi_av.3 */
 #define	READONLY(av)	(av->attr.flags & FI_READ)
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_AV, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_AV, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_AV, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_AV, __VA_ARGS__)
 
 #define	CXIP_IS_SHARED_AV(shared) ((shared) ? 1 : 0)
 
@@ -160,15 +160,15 @@ static int cxip_resize_av_table(struct cxip_av *av)
 		 * remapping. The order doesn't seem to be important, however.
 		 */
 		if (ftruncate(av->shm.shared_fd, new_sz)) {
-			CXIP_LOG_ERROR("shared memory truncate: %s\n",
-				       strerror(errno));
+			CXIP_WARN("shared memory truncate: %s\n",
+				  strerror(errno));
 			return -FI_ENOMEM;
 		}
 		new_addr =
 			mremap(av->table_hdr, old_sz, new_sz, MREMAP_MAYMOVE);
 		if (!new_addr || new_addr == MAP_FAILED) {
-			CXIP_LOG_ERROR("shared memory remap: %s\n",
-				       strerror(errno));
+			CXIP_WARN("shared memory remap: %s\n",
+				  strerror(errno));
 			return -FI_ENOMEM;
 		}
 
@@ -193,7 +193,7 @@ static int cxip_resize_av_table(struct cxip_av *av)
 		/* Memory is not shared, so we can do what we want. */
 		new_addr = realloc(av->table_hdr, new_sz);
 		if (!new_addr) {
-			CXIP_LOG_ERROR("memory realloc: %s\n", strerror(errno));
+			CXIP_WARN("memory realloc: %s\n", strerror(errno));
 			return -FI_ENOMEM;
 		}
 		memset((uint8_t *)new_addr + old_sz, 0, new_sz - old_sz);
@@ -284,7 +284,7 @@ static int cxip_check_table_in(struct cxip_av *av, struct cxip_addr *addr,
 		if (av->idx_arr)
 			av->idx_arr[index] = index;
 
-		CXIP_LOG_DBG("inserted 0x%x:%u\n", av_addr->nic, av_addr->pid);
+		CXIP_DBG("inserted 0x%x:%u\n", av_addr->nic, av_addr->pid);
 
 		/* If caller wants it, return the index */
 		if (fi_addr)
@@ -385,7 +385,7 @@ int _cxip_av_lookup(struct cxip_av *av, fi_addr_t fi_addr,
 
 	av_addr = &av->table[index];
 	if (!av_addr->valid) {
-		CXIP_LOG_ERROR("requested address is invalid\n");
+		CXIP_WARN("requested address is invalid\n");
 		return -FI_EINVAL;
 	}
 
@@ -420,13 +420,13 @@ static int cxip_av_lookup(struct fid_av *avfid, fi_addr_t fi_addr, void *addr,
 	av = container_of(avfid, struct cxip_av, av_fid);
 	index = ((uint64_t)fi_addr & av->mask);
 	if (index >= av->table_hdr->size) {
-		CXIP_LOG_ERROR("requested address is invalid");
+		CXIP_WARN("requested address is invalid");
 		return -FI_EINVAL;
 	}
 
 	ret = _cxip_av_lookup(av, fi_addr, &av_addr);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_ERROR("Failed to look up FI addr: %lu", fi_addr);
+		CXIP_WARN("Failed to look up FI addr: %lu", fi_addr);
 		return ret;
 	}
 
@@ -545,8 +545,8 @@ static int cxip_av_close(struct fid *fid)
 
 		ret = ofi_shm_unmap(&av->shm);
 		if (ret) {
-			CXIP_LOG_ERROR("unmap failed: %s\n",
-				       strerror(ofi_syserr()));
+			CXIP_WARN("unmap failed: %s\n",
+				  strerror(ofi_syserr()));
 		}
 	}
 
@@ -616,12 +616,12 @@ int cxip_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	 */
 
 	if ((attr->flags & FI_READ) && !attr->name) {
-		CXIP_LOG_ERROR("Invalid read-only and non-shared\n");
+		CXIP_WARN("Invalid read-only and non-shared\n");
 		return -FI_EINVAL;
 	}
 
 	if (attr->rx_ctx_bits > CXIP_EP_MAX_CTX_BITS) {
-		CXIP_LOG_ERROR("Invalid rx_ctx_bits\n");
+		CXIP_WARN("Invalid rx_ctx_bits\n");
 		return -FI_EINVAL;
 	}
 
@@ -638,14 +638,14 @@ int cxip_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		avops = &cxip_at_ops;
 		break;
 	default:
-		CXIP_LOG_ERROR("Invalid FI_AV type\n");
+		CXIP_WARN("Invalid FI_AV type\n");
 		return -FI_EINVAL;
 	}
 
 	dom = container_of(domain, struct cxip_domain, util_domain.domain_fid);
 	if (dom->util_domain.av_type != FI_AV_UNSPEC &&
 	    dom->util_domain.av_type != attr->type) {
-		CXIP_LOG_ERROR("Domain incompatible with CXI\n");
+		CXIP_WARN("Domain incompatible with CXI\n");
 		return -FI_EINVAL;
 	}
 
@@ -654,7 +654,7 @@ int cxip_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		addrlen = sizeof(struct cxip_addr);
 		break;
 	default:
-		CXIP_LOG_ERROR("Invalid address format\n");
+		CXIP_WARN("Invalid address format\n");
 		return -FI_EINVAL;
 	}
 

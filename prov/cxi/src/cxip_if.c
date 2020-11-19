@@ -17,9 +17,9 @@
 
 #include "cxip.h"
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_DOMAIN, __VA_ARGS__)
-#define CXIP_LOG_INFO(...) _CXIP_LOG_INFO(FI_LOG_DOMAIN, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_DOMAIN, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_DOMAIN, __VA_ARGS__)
+#define CXIP_INFO(...) _CXIP_INFO(FI_LOG_DOMAIN, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_DOMAIN, __VA_ARGS__)
 
 struct slist cxip_if_list;
 static struct cxil_device_list *cxi_dev_list;
@@ -102,8 +102,8 @@ void cxip_lni_res_dump(struct cxip_lni *lni)
 	/* Check if debugfs is available. */
 	dr = opendir("/sys/kernel/debug/cxi");
 	if (!dr) {
-		CXIP_LOG_DBG("Resource usage info unavailable: %s RGID: %u.\n",
-			     lni->iface->info->device_name, lni->lni->id);
+		CXIP_INFO("Resource usage info unavailable: %s RGID: %u.\n",
+			  lni->iface->info->device_name, lni->lni->id);
 		return;
 	}
 
@@ -115,9 +115,9 @@ void cxip_lni_res_dump(struct cxip_lni *lni)
 	ct_count = cxip_lni_res_cnt(lni, "ct");
 	ac_count = cxip_lni_res_cnt(lni, "ac");
 
-	CXIP_LOG_INFO("Resource usage: %s RGID: %u CQ: %u PTE: %u EQ: %u CT: %u AC: %u\n",
-		      lni->iface->info->device_name, lni->lni->id, cq_count,
-		      pt_count, eq_count, ct_count, ac_count);
+	CXIP_INFO("Resource usage: %s RGID: %u CQ: %u PTE: %u EQ: %u CT: %u AC: %u\n",
+		  lni->iface->info->device_name, lni->lni->id, cq_count,
+		  pt_count, eq_count, ct_count, ac_count);
 }
 
 /*
@@ -134,13 +134,13 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **iface)
 	/* The IF list device info is static, no need to lock */
 	if_entry = cxip_if_lookup_addr(nic_addr);
 	if (!if_entry) {
-		CXIP_LOG_DBG("interface not found\n");
+		CXIP_DBG("interface not found\n");
 		return -FI_ENODEV;
 	}
 
 	if (!if_entry->info->link_state) {
-		CXIP_LOG_INFO("Interface %s link down.\n",
-			      if_entry->info->device_name);
+		CXIP_INFO("Interface %s link down.\n",
+			  if_entry->info->device_name);
 		return -FI_ENODEV;
 	}
 
@@ -150,13 +150,12 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **iface)
 	if (!if_entry->dev) {
 		ret = cxil_open_device(if_entry->info->dev_id, &if_entry->dev);
 		if (ret) {
-			CXIP_LOG_INFO("Failed to open CXI Device, ret: %d\n",
-				      ret);
+			CXIP_WARN("Failed to open CXI Device, ret: %d\n", ret);
 			ret = -FI_ENODEV;
 			goto unlock;
 		}
 
-		CXIP_LOG_DBG("Opened %s\n", if_entry->info->device_name);
+		CXIP_DBG("Opened %s\n", if_entry->info->device_name);
 	}
 
 	ofi_atomic_inc32(&if_entry->ref);
@@ -183,7 +182,7 @@ void cxip_put_if(struct cxip_if *iface)
 		cxil_close_device(iface->dev);
 		iface->dev = NULL;
 
-		CXIP_LOG_DBG("Closed %s\n", iface->info->device_name);
+		CXIP_DBG("Closed %s\n", iface->info->device_name);
 	}
 
 	fastlock_release(&iface->lock);
@@ -200,13 +199,13 @@ int cxip_alloc_lni(struct cxip_if *iface, uint32_t svc_id,
 
 	lni = calloc(1, sizeof(*lni));
 	if (!lni) {
-		CXIP_LOG_DBG("Unable to allocate LNI\n");
+		CXIP_WARN("Unable to allocate LNI\n");
 		return -FI_ENOMEM;
 	}
 
 	ret = cxil_alloc_lni(iface->dev, &lni->lni, svc_id);
 	if (ret) {
-		CXIP_LOG_INFO("Failed to allocate LNI, ret: %d\n", ret);
+		CXIP_WARN("Failed to allocate LNI, ret: %d\n", ret);
 		ret = -FI_ENOSPC;
 		goto free_lni;
 	}
@@ -214,8 +213,8 @@ int cxip_alloc_lni(struct cxip_if *iface, uint32_t svc_id,
 	lni->iface = iface;
 	fastlock_init(&lni->lock);
 
-	CXIP_LOG_DBG("Allocated LNI, %s RGID: %u\n",
-		     lni->iface->info->device_name, lni->lni->id);
+	CXIP_DBG("Allocated LNI, %s RGID: %u\n",
+		 lni->iface->info->device_name, lni->lni->id);
 
 	*if_lni = lni;
 
@@ -237,18 +236,18 @@ void cxip_free_lni(struct cxip_lni *lni)
 
 	cxip_lni_res_dump(lni);
 
-	CXIP_LOG_DBG("Freeing LNI, %s RGID: %u\n",
-		     lni->iface->info->device_name, lni->lni->id);
+	CXIP_DBG("Freeing LNI, %s RGID: %u\n",
+		 lni->iface->info->device_name, lni->lni->id);
 
 	for (i = 0; i < lni->n_cps; i++) {
 		ret = cxil_destroy_cp(lni->cps[i]);
 		if (ret)
-			CXIP_LOG_ERROR("Failed to destroy CP: %d\n", ret);
+			CXIP_WARN("Failed to destroy CP: %d\n", ret);
 	}
 
 	ret = cxil_destroy_lni(lni->lni);
 	if (ret)
-		CXIP_LOG_ERROR("Failed to destroy LNI: %d\n", ret);
+		CXIP_WARN("Failed to destroy LNI: %d\n", ret);
 
 	free(lni);
 }
@@ -303,14 +302,14 @@ static int cxip_cp_get(struct cxip_lni *lni, uint16_t vni,
 
 	ret = cxil_alloc_cp(lni->lni, vni, tc, hrp, &lni->cps[lni->n_cps]);
 	if (!ret) {
-		CXIP_LOG_DBG("Allocated CP: %u VNI: %u TC: %s HRP: %u\n",
-			     lni->cps[lni->n_cps]->lcid, vni, cxi_tc_str(tc),
-			     hrp);
+		CXIP_DBG("Allocated CP: %u VNI: %u TC: %s HRP: %u\n",
+			 lni->cps[lni->n_cps]->lcid, vni, cxi_tc_str(tc),
+			 hrp);
 		*cp = lni->cps[lni->n_cps++];
 		ret = FI_SUCCESS;
 	} else {
-		CXIP_LOG_INFO("Failed to allocate CP, ret: %d VNI: %u TC: %u HRP: %u\n",
-			      ret, vni, tc, hrp);
+		CXIP_DBG("Failed to allocate CP, ret: %d VNI: %u TC: %u HRP: %u\n",
+			  ret, vni, tc, hrp);
 		ret = -FI_EINVAL;
 	}
 
@@ -331,13 +330,13 @@ int cxip_txq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
 
 	ret = cxip_cp_get(cmdq->lni, vni, tc, hrp, &cp);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to get CP: %d\n", ret);
+		CXIP_DBG("Failed to get CP: %d\n", ret);
 		return -FI_EOTHER;
 	}
 
 	ret = cxi_cq_emit_cq_lcid(cmdq->dev_cmdq, cp->lcid);
 	if (ret) {
-		CXIP_LOG_DBG("Failed to update CMDQ(%p) CP: %d\n", cmdq, ret);
+		CXIP_DBG("Failed to update CMDQ(%p) CP: %d\n", cmdq, ret);
 		ret = -FI_EAGAIN;
 	} else {
 		ret = FI_SUCCESS;
@@ -345,8 +344,8 @@ int cxip_txq_cp_set(struct cxip_cmdq *cmdq, uint16_t vni,
 		cmdq->tc = tc;
 		cmdq->hrp = hrp;
 
-		CXIP_LOG_DBG("Updated CMDQ(%p) CP: %d VNI: %u TC: %s HRP: %u\n",
-			     cmdq, cp->lcid, vni, cxi_tc_str(tc), hrp);
+		CXIP_DBG("Updated CMDQ(%p) CP: %d VNI: %u TC: %s HRP: %u\n",
+			 cmdq, cp->lcid, vni, cxi_tc_str(tc), hrp);
 	}
 
 	return ret;
@@ -363,21 +362,21 @@ int cxip_alloc_if_domain(struct cxip_lni *lni, uint32_t vni, uint32_t pid,
 
 	dom = malloc(sizeof(*dom));
 	if (!dom) {
-		CXIP_LOG_DBG("Unable to allocate IF domain\n");
+		CXIP_WARN("Failed to allocate IF domain\n");
 		return -FI_ENOMEM;
 	}
 
 	ret = cxil_alloc_domain(lni->lni, vni, pid, &dom->dom);
 	if (ret) {
-		CXIP_LOG_INFO("Failed to allocate CXI Domain, ret: %d\n", ret);
+		CXIP_WARN("Failed to allocate CXI Domain, ret: %d\n", ret);
 		ret = -FI_ENOSPC;
 		goto free_dom;
 	}
 
 	dom->lni = lni;
 
-	CXIP_LOG_DBG("Allocated IF Domain, %s VNI: %u PID: %u\n",
-		     lni->iface->info->device_name, vni, dom->dom->pid);
+	CXIP_DBG("Allocated IF Domain, %s VNI: %u PID: %u\n",
+		 lni->iface->info->device_name, vni, dom->dom->pid);
 
 	*if_dom = dom;
 
@@ -396,13 +395,13 @@ void cxip_free_if_domain(struct cxip_if_domain *if_dom)
 {
 	int ret;
 
-	CXIP_LOG_DBG("Freeing IF Domain, %s VNI: %u PID: %u\n",
-		     if_dom->lni->iface->info->device_name, if_dom->dom->vni,
-		     if_dom->dom->pid);
+	CXIP_DBG("Freeing IF Domain, %s VNI: %u PID: %u\n",
+		 if_dom->lni->iface->info->device_name, if_dom->dom->vni,
+		 if_dom->dom->pid);
 
 	ret = cxil_destroy_domain(if_dom->dom);
 	if (ret)
-		CXIP_LOG_ERROR("Failed to destroy domain: %d\n", ret);
+		CXIP_WARN("Failed to destroy domain: %d\n", ret);
 
 	free(if_dom);
 }
@@ -440,7 +439,7 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 
 	rc = cxi_cq_emit_target(cmdq->dev_cmdq, &cmd);
 	if (rc) {
-		CXIP_LOG_DBG("Failed to write Append command: %d\n", rc);
+		CXIP_DBG("Failed to write Append command: %d\n", rc);
 
 		fastlock_release(&cmdq->lock);
 
@@ -474,7 +473,7 @@ int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 
 	rc = cxi_cq_emit_target(cmdq->dev_cmdq, &cmd);
 	if (rc) {
-		CXIP_LOG_DBG("Failed to write Append command: %d\n", rc);
+		CXIP_DBG("Failed to write Append command: %d\n", rc);
 
 		fastlock_release(&cmdq->lock);
 
@@ -504,7 +503,7 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 
 	new_pte = malloc(sizeof(*new_pte));
 	if (!new_pte) {
-		CXIP_LOG_ERROR("Unable to allocate PTE structure\n");
+		CXIP_WARN("Failed to allocate PTE structure\n");
 		return -FI_ENOMEM;
 	}
 
@@ -512,7 +511,7 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 	ret = cxil_alloc_pte(if_dom->lni->lni, evtq, opts,
 			     &new_pte->pte);
 	if (ret) {
-		CXIP_LOG_INFO("Failed to allocate PTE: %d\n", ret);
+		CXIP_WARN("Failed to allocate PTE: %d\n", ret);
 		ret = -FI_ENOSPC;
 		goto free_mem;
 	}
@@ -521,7 +520,7 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 	ret = cxil_map_pte(new_pte->pte, if_dom->dom, pid_idx, is_multicast,
 			   &new_pte->pte_map);
 	if (ret) {
-		CXIP_LOG_DBG("Failed to map PTE: %d\n", ret);
+		CXIP_DBG("Failed to map PTE: %d\n", ret);
 		ret = -FI_EADDRINUSE;
 		goto free_pte;
 	}
@@ -542,7 +541,7 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 free_pte:
 	tmp = cxil_destroy_pte(new_pte->pte);
 	if (tmp)
-		CXIP_LOG_ERROR("cxil_destroy_pte returned: %d\n", tmp);
+		CXIP_WARN("cxil_destroy_pte returned: %d\n", tmp);
 free_mem:
 	free(new_pte);
 
@@ -562,11 +561,11 @@ void cxip_pte_free(struct cxip_pte *pte)
 
 	ret = cxil_unmap_pte(pte->pte_map);
 	if (ret)
-		CXIP_LOG_ERROR("Failed to unmap PTE: %d\n", ret);
+		CXIP_WARN("Failed to unmap PTE: %d\n", ret);
 
 	ret = cxil_destroy_pte(pte->pte);
 	if (ret)
-		CXIP_LOG_ERROR("Failed to free PTE: %d\n", ret);
+		CXIP_WARN("Failed to free PTE: %d\n", ret);
 
 	free(pte);
 }
@@ -613,14 +612,14 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 
 	new_cmdq = calloc(1, sizeof(*new_cmdq));
 	if (!new_cmdq) {
-		CXIP_LOG_ERROR("Unable to allocate CMDQ structure\n");
+		CXIP_WARN("Unable to allocate CMDQ structure\n");
 		return -FI_ENOMEM;
 	}
 
 	if (cq_opts->flags & CXI_CQ_IS_TX) {
 		ret = cxip_cp_get(lni, vni, tc, hrp, &cp);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("Failed to allocate CP: %d\n", ret);
+			CXIP_WARN("Failed to allocate CP: %d\n", ret);
 			return ret;
 		}
 		cq_opts->lcid = cp->lcid;
@@ -628,9 +627,8 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 
 	ret = cxil_alloc_cmdq(lni->lni, evtq, cq_opts, &dev_cmdq);
 	if (ret) {
-		CXIP_LOG_INFO("Failed to allocate %s, ret: %d\n",
-			      cq_opts->flags & CXI_CQ_IS_TX ? "TXQ" : "TGQ",
-			      ret);
+		CXIP_WARN("Failed to allocate %s, ret: %d\n",
+			  cq_opts->flags & CXI_CQ_IS_TX ? "TXQ" : "TGQ", ret);
 		ret = -FI_ENOSPC;
 		goto free_cmdq;
 	}
@@ -666,7 +664,7 @@ void cxip_cmdq_free(struct cxip_cmdq *cmdq)
 
 	ret = cxil_destroy_cmdq(cmdq->dev_cmdq);
 	if (ret)
-		CXIP_LOG_ERROR("cxil_destroy_cmdq failed, ret: %d\n", ret);
+		CXIP_WARN("cxil_destroy_cmdq failed, ret: %d\n", ret);
 
 	fastlock_destroy(&cmdq->lock);
 	free(cmdq);
@@ -685,18 +683,18 @@ static void cxip_query_if_list(struct slist *if_list)
 
 	ret = cxil_get_device_list(&cxi_dev_list);
 	if (ret) {
-		CXIP_LOG_DBG("cxil_get_device_list failed\n");
+		CXIP_WARN("cxil_get_device_list failed\n");
 		return;
 	}
 
 	if (cxi_dev_list->count == 0) {
-		CXIP_LOG_DBG("No IFs found\n");
+		CXIP_DBG("No IFs found\n");
 		cxil_free_device_list(cxi_dev_list);
 		return;
 	}
 
 	if (cxi_dev_list->info[0].min_free_shift) {
-		CXIP_LOG_DBG("Non-zero min_free_shift not supported\n");
+		CXIP_WARN("Non-zero min_free_shift not supported\n");
 		cxil_free_device_list(cxi_dev_list);
 		return;
 	}

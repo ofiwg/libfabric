@@ -16,9 +16,8 @@
 
 #include <ofi_util.h>
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
-#define CXIP_LOG_INFO(...) _CXIP_LOG_INFO(FI_LOG_EP_DATA, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_DATA, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_DATA, __VA_ARGS__)
 
 static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 {
@@ -37,7 +36,7 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 
 		ret = cxip_domain_enable(dom);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_domain_enable returned: %d\n", ret);
+			CXIP_WARN("cxip_domain_enable returned: %d\n", ret);
 			return ret;
 		}
 
@@ -53,7 +52,7 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 			      cxip_ofi_to_cxi_tc(dom->tclass), false,
 			      &dom->trig_cmdq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to allocate trig_cmdq: %d\n", ret);
+		CXIP_WARN("Failed to allocate trig_cmdq: %d\n", ret);
 
 		fastlock_release(&dom->lock);
 		return -FI_ENOSPC;
@@ -61,7 +60,7 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 
 	dom->cntr_init = true;
 
-	CXIP_LOG_DBG("Domain counters enabled: %p\n", dom);
+	CXIP_DBG("Domain counters enabled: %p\n", dom);
 
 	fastlock_release(&dom->lock);
 
@@ -361,15 +360,15 @@ int cxip_cntr_enable(struct cxip_cntr *cxi_cntr)
 	ret = cxil_alloc_ct(cxi_cntr->domain->lni->lni,
 			    &cxi_cntr->wb, &cxi_cntr->ct);
 	if (ret) {
-		CXIP_LOG_INFO("Failed to allocate CT, ret: %d\n", ret);
+		CXIP_WARN("Failed to allocate CT, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
 		goto unlock;
 	}
 
 	cxi_cntr->enabled = true;
 
-	CXIP_LOG_DBG("Counter enabled: %p (CT: %d)\n",
-		     cxi_cntr, cxi_cntr->ct->ctn);
+	CXIP_DBG("Counter enabled: %p (CT: %d)\n",
+		 cxi_cntr, cxi_cntr->ct->ctn);
 
 	fastlock_release(&cxi_cntr->lock);
 
@@ -395,11 +394,11 @@ static void cxip_cntr_disable(struct cxip_cntr *cxi_cntr)
 
 	ret = cxil_destroy_ct(cxi_cntr->ct);
 	if (ret)
-		CXIP_LOG_DBG("Failed to free CT, ret: %d\n", ret);
+		CXIP_WARN("Failed to free CT, ret: %d\n", ret);
 
 	cxi_cntr->enabled = false;
 
-	CXIP_LOG_DBG("Counter disabled: %p\n", cxi_cntr);
+	CXIP_DBG("Counter disabled: %p\n", cxi_cntr);
 
 unlock:
 	fastlock_release(&cxi_cntr->lock);

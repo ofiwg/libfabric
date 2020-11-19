@@ -11,8 +11,8 @@
 
 #include "cxip.h"
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 #if ENABLE_DEBUG
 
@@ -35,7 +35,7 @@ static void fault_init(struct cxip_fault *fault)
 				rate = 1;
 
 			fault->prop = rate * RAND_MAX;
-			CXIP_LOG_DBG("%s: %f\n", fault->env, rate);
+			CXIP_DBG("%s: %f\n", fault->env, rate);
 		}
 	}
 }
@@ -43,15 +43,15 @@ static void fault_init(struct cxip_fault *fault)
 static void fault_fini(struct cxip_fault *fault)
 {
 	if (fault->prop)
-		CXIP_LOG_ERROR("%s: %ld faults injected\n",
-			       fault->env, fault->count);
+		CXIP_WARN("%s: %ld faults injected\n",
+			  fault->env, fault->count);
 }
 
 void cxip_fault_inject_init(void)
 {
 	time_t t = time(NULL);
 
-	CXIP_LOG_DBG("Rand seed: %lu\n", t);
+	CXIP_DBG("Rand seed: %lu\n", t);
 	srand(t);
 
 	fault_init(&dma_fault);

@@ -14,8 +14,8 @@
 
 #include "cxip.h"
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 /*
  * cxip_rdzv_pte_cb() - Process rendezvous source PTE state change events.
@@ -29,7 +29,7 @@ void cxip_rdzv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 		assert(txc->pte_state == C_PTLTE_DISABLED);
 		break;
 	default:
-		CXIP_LOG_ERROR("Unexpected state received: %u\n", state);
+		CXIP_WARN("Unexpected state received: %u\n", state);
 	}
 
 	txc->pte_state = state;
@@ -55,12 +55,12 @@ static int txc_msg_init(struct cxip_txc *txc)
 	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, false, FI_TC_UNSPEC,
 			   &txc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Unable to allocate TGQ, ret: %d\n", ret);
+		CXIP_WARN("Unable to allocate TGQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
 	}
 
 	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
-		CXIP_LOG_DBG("Using logical PTE matching\n");
+		CXIP_DBG("Using logical PTE matching\n");
 		pt_opts.use_logical = 1;
 	}
 
@@ -70,7 +70,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 			     pid_idx, false, &pt_opts, cxip_rdzv_pte_cb, txc,
 			     &txc->rdzv_pte);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to allocate RDZV PTE: %d\n", ret);
+		CXIP_WARN("Failed to allocate RDZV PTE: %d\n", ret);
 		goto put_rx_cmdq;
 	}
 
@@ -82,7 +82,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 	ret = cxi_cq_emit_target(txc->rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
-		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
+		CXIP_WARN("Failed to enqueue command: %d\n", ret);
 		goto free_rdzv_pte;
 	}
 
@@ -96,11 +96,11 @@ static int txc_msg_init(struct cxip_txc *txc)
 
 	ret = cxip_txc_zbp_init(txc);
 	if (ret) {
-		CXIP_LOG_ERROR("Failed to initialize ZBP: %d\n", ret);
+		CXIP_WARN("Failed to initialize ZBP: %d\n", ret);
 		goto free_rdzv_pte;
 	}
 
-	CXIP_LOG_DBG("TXC RDZV PtlTE enabled: %p\n", txc);
+	CXIP_DBG("TXC RDZV PtlTE enabled: %p\n", txc);
 
 	return FI_SUCCESS;
 
@@ -146,22 +146,22 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		goto unlock;
 
 	if (!txc->send_cq) {
-		CXIP_LOG_DBG("Undefined send CQ\n");
+		CXIP_WARN("Undefined send CQ\n");
 		ret = -FI_ENOCQ;
 		goto unlock;
 	}
 
 	ret = cxip_cq_enable(txc->send_cq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("cxip_cq_enable returned: %d\n", ret);
+		CXIP_WARN("cxip_cq_enable returned: %d\n", ret);
 		goto unlock;
 	}
 
 	if (txc->send_cntr) {
 		ret = cxip_cntr_enable(txc->send_cntr);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_cntr_enable(FI_SEND) returned: %d\n",
-				     ret);
+			CXIP_WARN("cxip_cntr_enable(FI_SEND) returned: %d\n",
+				  ret);
 			goto unlock;
 		}
 	}
@@ -169,8 +169,8 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	if (txc->write_cntr) {
 		ret = cxip_cntr_enable(txc->write_cntr);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_cntr_enable(FI_WRITE) returned: %d\n",
-				     ret);
+			CXIP_WARN("cxip_cntr_enable(FI_WRITE) returned: %d\n",
+				  ret);
 			goto unlock;
 		}
 	}
@@ -178,8 +178,8 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	if (txc->read_cntr) {
 		ret = cxip_cntr_enable(txc->read_cntr);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_cntr_enable(FI_READ) returned: %d\n",
-				     ret);
+			CXIP_WARN("cxip_cntr_enable(FI_READ) returned: %d\n",
+				  ret);
 			goto unlock;
 		}
 	}
@@ -187,7 +187,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, true, txc->tclass,
 			   &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Unable to allocate TX CMDQ, ret: %d\n", ret);
+		CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
 		goto unlock;
 	}
@@ -195,7 +195,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	if (ofi_send_allowed(txc->attr.caps)) {
 		ret = txc_msg_init(txc);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("Unable to init TX CTX, ret: %d\n", ret);
+			CXIP_WARN("Unable to init TX CTX, ret: %d\n", ret);
 			goto put_tx_cmdq;
 		}
 	}
@@ -240,7 +240,7 @@ static void txc_cleanup(struct cxip_txc *txc)
 		cxip_cq_progress(txc->send_cq);
 
 		if (ofi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
-			CXIP_LOG_ERROR("Timeout waiting for outstanding requests.\n");
+			CXIP_WARN("Timeout waiting for outstanding requests.\n");
 			break;
 		}
 	}
@@ -279,7 +279,7 @@ static void txc_disable(struct cxip_txc *txc)
 	if (ofi_send_allowed(txc->attr.caps)) {
 		ret = txc_msg_fini(txc);
 		if (ret)
-			CXIP_LOG_ERROR("Unable to destroy TX CTX, ret: %d\n",
+			CXIP_WARN("Unable to destroy TX CTX, ret: %d\n",
 				       ret);
 	}
 

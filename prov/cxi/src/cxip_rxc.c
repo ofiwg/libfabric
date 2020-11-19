@@ -14,8 +14,8 @@
 
 #include "cxip.h"
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 /*
  * rxc_msg_enable() - Enable RXC messaging.
@@ -40,7 +40,7 @@ int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count)
 
 	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
-		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
+		CXIP_WARN("Failed to enqueue command: %d\n", ret);
 
 		fastlock_release(&rxc->rx_cmdq->lock);
 		return -FI_EAGAIN;
@@ -79,7 +79,7 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 
 	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
-		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
+		CXIP_WARN("Failed to enqueue command: %d\n", ret);
 
 		fastlock_release(&rxc->rx_cmdq->lock);
 		return -FI_EAGAIN;
@@ -95,7 +95,7 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 		cxip_cq_progress(rxc->recv_cq);
 	} while (rxc->pte_state != C_PTLTE_DISABLED);
 
-	CXIP_LOG_DBG("RXC PtlTE disabled: %p\n", rxc);
+	CXIP_DBG("RXC PtlTE disabled: %p\n", rxc);
 
 	return FI_SUCCESS;
 }
@@ -121,14 +121,14 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, false, FI_TC_UNSPEC,
 			   &rxc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Unable to allocate RX CMDQ, ret: %d\n", ret);
+		CXIP_WARN("Unable to allocate RX CMDQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
 	}
 
 	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, true, FI_TC_UNSPEC,
 			   &rxc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Unable to allocate TX CMDQ, ret: %d\n", ret);
+		CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
 		goto put_rx_cmdq;
 	}
@@ -140,7 +140,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	 * matching. Otherwise, physical addresses will be used.
 	 */
 	if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
-		CXIP_LOG_DBG("Using logical PTE matching\n");
+		CXIP_DBG("Using logical PTE matching\n");
 		pt_opts.use_logical = 1;
 	}
 
@@ -148,7 +148,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 			     pid_idx, false, &pt_opts, cxip_recv_pte_cb, rxc,
 			     &rxc->rx_pte);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to allocate RX PTE: %d\n", ret);
+		CXIP_WARN("Failed to allocate RX PTE: %d\n", ret);
 		goto put_tx_cmdq;
 	}
 
@@ -205,7 +205,7 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	}
 
 	if (!rxc->recv_cq) {
-		CXIP_LOG_DBG("Undefined recv CQ\n");
+		CXIP_WARN("Undefined recv CQ\n");
 		fastlock_release(&rxc->lock);
 		return -FI_ENOCQ;
 	}
@@ -213,8 +213,8 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	if (rxc->recv_cntr) {
 		ret = cxip_cntr_enable(rxc->recv_cntr);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_cntr_enable(FI_RECV) returned: %d\n",
-				     ret);
+			CXIP_WARN("cxip_cntr_enable(FI_RECV) returned: %d\n",
+				  ret);
 			fastlock_release(&rxc->lock);
 			return ret;
 		}
@@ -222,7 +222,7 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 
 	ret = cxip_cq_enable(rxc->recv_cq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("cxip_cq_enable returned: %d\n", ret);
+		CXIP_WARN("cxip_cq_enable returned: %d\n", ret);
 		fastlock_release(&rxc->lock);
 		return ret;
 	}
@@ -231,22 +231,20 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 
 	ret = rxc_msg_init(rxc);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("rxc_msg_init returned: %d\n", ret);
+		CXIP_WARN("rxc_msg_init returned: %d\n", ret);
 		return -FI_EDOMAIN;
 	}
 
 	ret = cxip_rxc_oflow_init(rxc);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("cxip_rxc_oflow_init returned: %d\n",
-			     ret);
+		CXIP_WARN("cxip_rxc_oflow_init returned: %d\n", ret);
 		goto msg_fini;
 	}
 
 	/* Start accepting Puts. */
 	ret = cxip_rxc_msg_enable(rxc, 0);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("cxip_rxc_msg_enable returned: %d\n",
-			     ret);
+		CXIP_WARN("cxip_rxc_msg_enable returned: %d\n", ret);
 		goto oflow_fini;
 	}
 
@@ -256,7 +254,7 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 		cxip_cq_progress(rxc->recv_cq);
 	} while (rxc->pte_state != C_PTLTE_ENABLED);
 
-	CXIP_LOG_DBG("RXC messaging enabled: %p\n", rxc);
+	CXIP_DBG("RXC messaging enabled: %p\n", rxc);
 
 	rxc->pid_bits = rxc->domain->iface->dev->info.pid_bits;
 	rxc->enabled = true;
@@ -268,7 +266,7 @@ oflow_fini:
 msg_fini:
 	ret = rxc_msg_fini(rxc);
 	if (ret != FI_SUCCESS)
-		CXIP_LOG_ERROR("rxc_msg_fini returned: %d\n", ret);
+		CXIP_WARN("rxc_msg_fini returned: %d\n", ret);
 
 	return ret;
 }
@@ -301,7 +299,7 @@ static void rxc_cleanup(struct cxip_rxc *rxc)
 	} while (ret == FI_SUCCESS);
 
 	if (canceled)
-		CXIP_LOG_DBG("Canceled %d Receives: %p\n", canceled, rxc);
+		CXIP_DBG("Canceled %d Receives: %p\n", canceled, rxc);
 
 	start = ofi_gettime_ms();
 	while (ofi_atomic_get32(&rxc->orx_reqs)) {
@@ -309,7 +307,7 @@ static void rxc_cleanup(struct cxip_rxc *rxc)
 		cxip_cq_progress(rxc->recv_cq);
 
 		if (ofi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
-			CXIP_LOG_ERROR("Timeout waiting for outstanding requests.\n");
+			CXIP_WARN("Timeout waiting for outstanding requests.\n");
 			break;
 		}
 	}
@@ -347,7 +345,7 @@ static void rxc_disable(struct cxip_rxc *rxc)
 		/* Stop accepting Puts. */
 		ret = rxc_msg_disable(rxc);
 		if (ret != FI_SUCCESS)
-			CXIP_LOG_DBG("rxc_msg_disable returned: %d\n", ret);
+			CXIP_WARN("rxc_msg_disable returned: %d\n", ret);
 
 		rxc_cleanup(rxc);
 
@@ -357,7 +355,7 @@ static void rxc_disable(struct cxip_rxc *rxc)
 		/* Free hardware resources. */
 		ret = rxc_msg_fini(rxc);
 		if (ret != FI_SUCCESS)
-			CXIP_LOG_ERROR("rxc_msg_fini returned: %d\n", ret);
+			CXIP_WARN("rxc_msg_fini returned: %d\n", ret);
 	}
 }
 

@@ -33,9 +33,9 @@
 
 #define	MAGIC	0x1776
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_CTRL, \
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, \
 		"COLL " __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, \
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, \
 		"COLL " __VA_ARGS__)
 
 static inline int key_rank_idx_ext(int rank)
@@ -339,8 +339,8 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 	if (memcmp(&cmdq->c_state, &cmd.c_state, sizeof(cmd.c_state))) {
 		ret = cxi_cq_emit_c_state(cmdq->dev_cmdq, &cmd.c_state);
 		if (ret) {
-			CXIP_LOG_DBG("Failed to issue C_STATE command: %d\n",
-				     ret);
+			CXIP_DBG("Failed to issue C_STATE command: %d\n",
+				 ret);
 			/* Return error according to Domain Resource
 			 * Management
 			 */
@@ -357,7 +357,7 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 	ret = cxi_cq_emit_idc_put(cmdq->dev_cmdq, &cmd.idc_put,
 				  buffer, buflen);
 	if (ret) {
-		CXIP_LOG_DBG("Failed to write IDC: %d\n", ret);
+		CXIP_DBG("Failed to write IDC: %d\n", ret);
 
 		/* Return error according to Domain Resource Management
 		 */
@@ -398,7 +398,7 @@ static void _coll_rx_req_report(struct cxip_req *req)
 		if (req->flags & FI_COMPLETION) {
 			ret = cxip_cq_req_complete(req);
 			if (ret != FI_SUCCESS)
-				CXIP_LOG_ERROR(
+				CXIP_WARN(
 				    "Failed to report completion: %d\n",
 				    ret);
 		}
@@ -408,19 +408,18 @@ static void _coll_rx_req_report(struct cxip_req *req)
 				req->coll.coll_pte->ep_obj->coll.rx_cntr, 1,
 				false, false);
 			if (ret)
-				CXIP_LOG_ERROR("cxip_cntr_mod returned: %d\n",
+				CXIP_WARN("cxip_cntr_mod returned: %d\n",
 					       ret);
 		}
 	} else {
 		/* failure */
 		if (overflow) {
 			err = FI_EMSGSIZE;
-			CXIP_LOG_DBG("Request truncated: %p (err: %d, %s)\n",
-				     req, err,
-				     cxi_rc_to_str(req->coll.rc));
+			CXIP_DBG("Request truncated: %p (err: %d, %s)\n",
+				 req, err, cxi_rc_to_str(req->coll.rc));
 		} else {
 			err = FI_EIO;
-			CXIP_LOG_ERROR("Request error: %p (err: %d, %s)\n",
+			CXIP_WARN("Request error: %p (err: %d, %s)\n",
 				       req, err,
 				       cxi_rc_to_str(req->coll.rc));
 		}
@@ -428,14 +427,14 @@ static void _coll_rx_req_report(struct cxip_req *req)
 		ret = cxip_cq_req_error(req, overflow, err, req->coll.rc,
 					NULL, 0);
 		if (ret != FI_SUCCESS)
-			CXIP_LOG_ERROR("Failed to report error: %d\n", ret);
+			CXIP_WARN("Failed to report error: %d\n", ret);
 
 		if (req->coll.coll_pte->ep_obj->coll.rx_cntr) {
 			ret = cxip_cntr_mod(
 				req->coll.coll_pte->ep_obj->coll.rx_cntr, 1,
 				false, true);
 			if (ret)
-				CXIP_LOG_ERROR("cxip_cntr_mod returned: %d\n",
+				CXIP_WARN("cxip_cntr_mod returned: %d\n",
 					       ret);
 		}
 	}
@@ -452,7 +451,7 @@ static void _coll_rx_req_report(struct cxip_req *req)
 		/* Re-use this buffer in the hardware */
 		ret = _coll_append_buffer(coll_pte, buf);
 		if (ret != FI_SUCCESS)
-			CXIP_LOG_ERROR("Re-link buffer failed: %d\n", ret);
+			CXIP_WARN("Re-link buffer failed: %d\n", ret);
 
 		/* Hardware has silently unlinked this */
 		cxip_cq_req_free(req);
@@ -473,7 +472,7 @@ static void _coll_rx_progress(struct cxip_req *req,
 	ofi_atomic_inc32(&mc_obj->recv_cnt);
 
 	if (req->data_len != sizeof(struct red_pkt)) {
-		CXIP_LOG_DBG("Bad coll packet size: %ld\n", req->data_len);
+		CXIP_DBG("Bad coll packet size: %ld\n", req->data_len);
 		req->coll.rc = C_RC_PKTBUF_ERROR;
 		return;
 	}
@@ -483,7 +482,7 @@ static void _coll_rx_progress(struct cxip_req *req,
 	cookie.raw = pkt->cookie;
 	if (cookie.magic != MAGIC)
 	{
-		CXIP_LOG_DBG("Bad coll MAGIC: %x\n", cookie.magic);
+		CXIP_DBG("Bad coll MAGIC: %x\n", cookie.magic);
 		req->coll.rc = C_RC_PKTBUF_ERROR;
 		return;
 	}
@@ -502,31 +501,31 @@ static int _coll_recv_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_LINK:
 		/* Enabled */
 		if (req->coll.rc != C_RC_OK) {
-			CXIP_LOG_ERROR("LINK event error = %d\n",
+			CXIP_WARN("LINK event error = %d\n",
 				       req->coll.rc);
 			break;
 		}
-		CXIP_LOG_DBG("LINK event seen\n");
+		CXIP_DBG("LINK event seen\n");
 		ofi_atomic_inc32(&req->coll.coll_pte->buf_cnt);
 		break;
 	case C_EVENT_UNLINK:
 		/* Normally disabled, errors only */
 		req->coll.rc = cxi_tgt_event_rc(event);
 		if (req->coll.rc != C_RC_OK) {
-			CXIP_LOG_ERROR("UNLINK event error = %d\n",
+			CXIP_WARN("UNLINK event error = %d\n",
 				       req->coll.rc);
 			break;
 		}
-		CXIP_LOG_DBG("UNLINK event seen\n");
+		CXIP_DBG("UNLINK event seen\n");
 		break;
 	case C_EVENT_PUT:
 		req->coll.rc = cxi_tgt_event_rc(event);
 		if (req->coll.rc != C_RC_OK) {
-			CXIP_LOG_ERROR("PUT event error = %d\n",
+			CXIP_WARN("PUT event error = %d\n",
 				       req->coll.rc);
 			break;
 		}
-		CXIP_LOG_DBG("PUT event seen\n");
+		CXIP_DBG("PUT event seen\n");
 		req->buf = (uint64_t)(CXI_IOVA_TO_VA(
 					req->coll.coll_buf->cxi_md->md,
 					event->tgt_long.start));
@@ -538,7 +537,7 @@ static int _coll_recv_cb(struct cxip_req *req, const union c_event *event)
 		break;
 	default:
 		req->coll.rc = cxi_tgt_event_rc(event);
-		CXIP_LOG_ERROR("Unexpected event type %d, error = %d\n",
+		CXIP_WARN("Unexpected event type %d, error = %d\n",
 			       event->hdr.event_type, req->coll.rc);
 		break;
 	}
@@ -574,7 +573,7 @@ static int _hw_coll_recv(struct cxip_coll_pte *coll_pte, struct cxip_req *req)
 			      coll_pte->ep_obj->coll.rx_cmdq,
 			      true);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_ERROR("PTE append inject failed: %d\n", ret);
+		CXIP_WARN("PTE append inject failed: %d\n", ret);
 		return ret;
 	}
 
@@ -602,7 +601,7 @@ static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 	 */
 	req = cxip_cq_req_alloc(coll_pte->ep_obj->coll.rx_cq, 1, buf);
 	if (!req) {
-		CXIP_LOG_DBG("Failed to allocate request\n");
+		CXIP_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
 		goto recv_unmap;
 	}
@@ -668,7 +667,7 @@ static void _coll_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 		coll_pte->pte_state = C_PTLTE_DISABLED;
 		break;
 	default:
-		CXIP_LOG_ERROR("Unexpected state received: %u\n", state);
+		CXIP_WARN("Unexpected state received: %u\n", state);
 	}
 }
 
@@ -742,18 +741,18 @@ static int _coll_add_buffers(struct cxip_coll_pte *coll_pte, size_t size,
 	int ret, i;
 
 	if (count < CXIP_COLL_MIN_RX_BUFS) {
-		CXIP_LOG_ERROR("Buffer count %ld < minimum (%d)\n",
-			       count, CXIP_COLL_MIN_RX_BUFS);
+		CXIP_WARN("Buffer count %ld < minimum (%d)\n",
+			  count, CXIP_COLL_MIN_RX_BUFS);
 		return -FI_EINVAL;
 	}
 
 	if (size < CXIP_COLL_MIN_RX_SIZE) {
-		CXIP_LOG_ERROR("Buffer size %ld < minimum (%d)\n",
-			       size, CXIP_COLL_MIN_RX_SIZE);
+		CXIP_WARN("Buffer size %ld < minimum (%d)\n",
+			  size, CXIP_COLL_MIN_RX_SIZE);
 		return -FI_EINVAL;
 	}
 
-	CXIP_LOG_DBG("Adding %ld buffers of size %ld\n", count, size);
+	CXIP_DBG("Adding %ld buffers of size %ld\n", count, size);
 	for (i = 0; i < count; i++) {
 		buf = calloc(1, sizeof(*buf) + size);
 		if (!buf) {
@@ -769,8 +768,8 @@ static int _coll_add_buffers(struct cxip_coll_pte *coll_pte, size_t size,
 
 		ret = _coll_append_buffer(coll_pte, buf);
 		if (ret) {
-			CXIP_LOG_ERROR("Add buffer %d of %ld: %d\n",
-				       i, count, ret);
+			CXIP_WARN("Add buffer %d of %ld: %d\n",
+				  i, count, ret);
 			goto out;
 		}
 	}
@@ -840,7 +839,7 @@ int cxip_coll_enable(struct cxip_ep_obj *ep_obj)
 	/* A read-only or write-only endpoint is legal */
 	if (!(ofi_recv_allowed(ep_obj->rxcs[0]->attr.caps) &&
 	      ofi_send_allowed(ep_obj->txcs[0]->attr.caps))) {
-		CXIP_LOG_DBG("EP not recv/send, collectives not enabled\n");
+		CXIP_DBG("EP not recv/send, collectives not enabled\n");
 		return FI_SUCCESS;
 	}
 
@@ -894,7 +893,7 @@ int cxip_coll_disable(struct cxip_ep_obj *ep_obj)
 int cxip_coll_close(struct cxip_ep_obj *ep_obj)
 {
 	if (ofi_atomic_get32(&ep_obj->coll.mc_count) != 0) {
-		CXIP_LOG_ERROR("MC objects pending\n");
+		CXIP_WARN("MC objects pending\n");
 		return -FI_EBUSY;
 	}
 
@@ -1261,8 +1260,8 @@ static void _post_coll_complete(struct cxip_coll_reduction *reduction)
 			ret = cxip_cq_req_complete(req);
 		}
 		if (ret < 0) {
-			CXIP_LOG_ERROR("Collective complete post failed: %d\n",
-				       ret);
+			CXIP_WARN("Collective complete post failed: %d\n",
+				  ret);
 		}
 	}
 }
@@ -1526,15 +1525,15 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 
 		/* process a retry request from CQ polling */
 		if (_root_retry_required(reduction)) {
-			CXIP_LOG_DBG("RETRY collective packet\n");
+			CXIP_DBG("RETRY collective packet\n");
 
 			/* auto-advances the seqno */
 			ret = cxip_coll_send_red_pkt(reduction, 0, 0, NULL, 0,
 						     true);
 			if (ret) {
 				/* fatal send error, collectives broken */
-				CXIP_LOG_ERROR("Collective send failure %ld\n",
-					       ret);
+				CXIP_WARN("Collective send failure %ld\n",
+					  ret);
 				reduction->red_rc = ret;
 				_post_coll_complete(reduction);
 				reduction->op_state = CXIP_COLL_STATE_NONE;
@@ -1571,7 +1570,7 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 				     false);
 	if (ret) {
 		/* fatal send error, leaves are hung */
-		CXIP_LOG_ERROR("Collective send error %ld\n", ret);
+		CXIP_WARN("Collective send error %ld\n", ret);
 		reduction->red_rc = ret;
 		_post_coll_complete(reduction);
 		reduction->op_state = CXIP_COLL_STATE_NONE;
@@ -1613,7 +1612,7 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 					     reduction->op_data_len, false);
 		if (ret) {
 			/* fatal send error, root will time out and retry */
-			CXIP_LOG_ERROR("Collective send error %d\n", ret);
+			CXIP_WARN("Collective send error %d\n", ret);
 			return;
 		}
 		reduction->op_state = CXIP_COLL_STATE_BLOCKED;
@@ -1624,7 +1623,7 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 		if (cookie.retry) {
 			// TODO -- this needs to be expanded, see design
 			/* Send the previous packet with new seqno */
-			CXIP_LOG_DBG("leaf sending retry packet\n");
+			CXIP_DBG("leaf sending retry packet\n");
 			pkt = (struct red_pkt *)&reduction->tx_msg;
 			pkt->redhdr = be64toh(pkt->redhdr);
 			pkt->hdr.seqno = reduction->seqno;
@@ -1680,7 +1679,7 @@ ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
 	size_t size;
 
 	if (!mc_obj->is_joined) {
-		CXIP_LOG_ERROR("Multicast object not joined\n");
+		CXIP_WARN("Multicast object not joined\n");
 		return -FI_EOPBADSTATE;
 	}
 
@@ -1940,7 +1939,7 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	switch (av_set->comm_key.type) {
 	case COMM_KEY_MULTICAST:
 		if (is_netsim(ep_obj)) {
-			CXIP_LOG_ERROR("Multicast not supported\n");
+			CXIP_WARN("Multicast not supported\n");
 			return -FI_EINVAL;
 		}
 		is_multicast = true;
@@ -2096,7 +2095,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	av_set = container_of(coll_av_set, struct cxip_av_set, av_set_fid);
 
 	if (!cxi_ep->ep_obj->coll.enabled) {
-		CXIP_LOG_ERROR("Multicast not enabled\n");
+		CXIP_WARN("Multicast not enabled\n");
 		return -FI_EOPBADSTATE;
 	}
 
@@ -2104,7 +2103,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		/* provider-managed not supported */
 		return -FI_EINVAL;
 	} else if (av_set->comm_key.type == COMM_KEY_NONE) {
-		CXIP_LOG_ERROR("av_set comm_key not provided\n");
+		CXIP_WARN("av_set comm_key not provided\n");
 		return -FI_EINVAL;
 	}
 

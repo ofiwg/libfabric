@@ -29,9 +29,6 @@
 
 #include "cxip.h"
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_CQ, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_CQ, __VA_ARGS__)
-
 static int cxip_eq_close(struct fid *fid)
 {
 	struct cxip_eq *cxi_eq;

@@ -19,9 +19,6 @@
 
 #include "cxip.h"
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_FABRIC, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_FABRIC, __VA_ARGS__)
-
 int cxip_av_def_sz = CXIP_AV_DEF_SZ;
 int cxip_cq_def_sz = CXIP_CQ_DEF_SZ;
 int cxip_eq_def_sz = CXIP_EQ_DEF_SZ;

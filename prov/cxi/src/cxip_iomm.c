@@ -6,9 +6,9 @@
 
 #include "cxip.h"
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_MR, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_MR, __VA_ARGS__)
-#define CXIP_LOG_INFO(...) _CXIP_LOG_INFO(FI_LOG_MR, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_MR, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_MR, __VA_ARGS__)
+#define CXIP_INFO(...) _CXIP_INFO(FI_LOG_MR, __VA_ARGS__)
 
 /**
  * cxip_do_map() - IO map a buffer.
@@ -31,7 +31,7 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	ret = cxil_map(dom->lni->lni, entry->info.iov.iov_base,
 		       entry->info.iov.iov_len, map_flags, NULL, &md->md);
 	if (ret)
-		CXIP_LOG_ERROR("cxil_map() failed: %d\n", ret);
+		CXIP_WARN("cxil_map() failed: %d\n", ret);
 	else
 		md->dom = dom;
 
@@ -49,7 +49,7 @@ static void cxip_do_unmap(struct ofi_mr_cache *cache,
 
 	ret = cxil_unmap(md->md);
 	if (ret)
-		CXIP_LOG_ERROR("cxil_unmap failed: %d\n", ret);
+		CXIP_WARN("cxil_unmap failed: %d\n", ret);
 }
 
 static int cxip_scalable_iomm_init(struct cxip_domain *dom)
@@ -66,13 +66,13 @@ static int cxip_scalable_iomm_init(struct cxip_domain *dom)
 		dom->scalable_md.dom = dom;
 		dom->scalable_iomm = true;
 
-		CXIP_LOG_DBG("Scalable IOMM enabled.\n");
+		CXIP_DBG("Scalable IOMM enabled.\n");
 
 		if (cxip_env.ats_mlock_mode == CXIP_ATS_MLOCK_ALL) {
 			ret = mlockall(MCL_CURRENT | MCL_FUTURE);
 			if (ret) {
-				CXIP_LOG_ERROR("mlockall(MCL_CURRENT | MCL_FUTURE) failed: %d\n",
-					       -errno);
+				CXIP_WARN("mlockall(MCL_CURRENT | MCL_FUTURE) failed: %d\n",
+					  -errno);
 			}
 		}
 
@@ -102,11 +102,11 @@ static int cxip_ats_check(struct cxip_domain *dom)
 		       NULL, &md);
 	if (!ret) {
 		cxil_unmap(md);
-		CXIP_LOG_INFO("PCIe ATS supported.\n");
+		CXIP_INFO("PCIe ATS supported.\n");
 		return 1;
 	}
 
-	CXIP_LOG_INFO("PCIe ATS not supported.\n");
+	CXIP_INFO("PCIe ATS not supported.\n");
 	return 0;
 }
 
@@ -135,8 +135,8 @@ int cxip_iomm_init(struct cxip_domain *dom)
 	if (dom->ats && cxip_env.odp) {
 		ret = cxip_scalable_iomm_init(dom);
 		if (ret)
-			CXIP_LOG_ERROR("cxip_scalable_iomm_init() returned: %d\n",
-				       ret);
+			CXIP_WARN("cxip_scalable_iomm_init() returned: %d\n",
+				  ret);
 			return ret;
 	} else {
 		dom->iomm.entry_data_size = sizeof(struct cxip_md);
@@ -145,7 +145,7 @@ int cxip_iomm_init(struct cxip_domain *dom)
 		ret = ofi_mr_cache_init(&dom->util_domain, memory_monitors,
 					&dom->iomm);
 		if (ret) {
-			CXIP_LOG_ERROR("ofi_mr_cache_init failed: %d\n", ret);
+			CXIP_WARN("ofi_mr_cache_init failed: %d\n", ret);
 			return ret;
 		}
 	}
@@ -201,8 +201,8 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	fastlock_acquire(&dom->iomm_lock);
 	ret = ofi_mr_cache_search(&dom->iomm, &attr, &entry);
 	if (ret) {
-		CXIP_LOG_DBG("Failed to acquire mapping (%p, %lu): %d\n",
-			     buf, len, ret);
+		CXIP_DBG("Failed to acquire mapping (%p, %lu): %d\n",
+			 buf, len, ret);
 	} else {
 		*md = (struct cxip_md *)entry->data;
 	}

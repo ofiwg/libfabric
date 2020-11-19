@@ -14,8 +14,8 @@
 
 #include "cxip.h"
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_MR, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_MR, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_MR, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_MR, __VA_ARGS__)
 
 /*
  * cxip_ep_mr_insert() - Insert an MR key into the EP key space.
@@ -73,7 +73,7 @@ int cxip_mr_cb(struct cxip_ctrl_req *req, const union c_event *event)
 
 		mr->mr_state = CXIP_MR_LINKED;
 
-		CXIP_LOG_DBG("MR PTE linked: %p\n", mr);
+		CXIP_DBG("MR PTE linked: %p\n", mr);
 		break;
 	case C_EVENT_UNLINK:
 		assert(cxi_event_rc(event) == C_RC_OK);
@@ -81,11 +81,11 @@ int cxip_mr_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		assert(mr->mr_state == CXIP_MR_LINKED);
 		mr->mr_state = CXIP_MR_UNLINKED;
 
-		CXIP_LOG_DBG("MR PTE unlinked: %p\n", mr);
+		CXIP_DBG("MR PTE unlinked: %p\n", mr);
 		break;
 	default:
-		CXIP_LOG_ERROR("Unexpected event received: %s\n",
-			       cxi_event_to_str(event));
+		CXIP_WARN("Unexpected event received: %s\n",
+			  cxi_event_to_str(event));
 	}
 
 	return FI_SUCCESS;
@@ -112,8 +112,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	if (mr->cntr) {
 		ret = cxip_cntr_enable(mr->cntr);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_cntr_enable() returned: %d\n",
-				     ret);
+			CXIP_WARN("cxip_cntr_enable() returned: %d\n", ret);
 			return ret;
 		}
 	}
@@ -121,8 +120,8 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	fastlock_acquire(&ep_obj->lock);
 	buffer_id = ofi_idx_insert(&ep_obj->req_ids, &mr->req);
 	if (buffer_id < 0 || buffer_id >= CXIP_BUFFER_ID_MAX) {
-		CXIP_LOG_ERROR("Failed to allocate MR buffer ID: %d\n",
-			       buffer_id);
+		CXIP_WARN("Failed to allocate MR buffer ID: %d\n",
+			  buffer_id);
 		fastlock_release(&ep_obj->lock);
 		return -FI_ENOSPC;
 	}
@@ -135,7 +134,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	if (mr->len) {
 		ret = cxip_map(mr->domain, (void *)mr->buf, mr->len, &mr->md);
 		if (ret) {
-			CXIP_LOG_DBG("Failed to map MR buffer: %d\n", ret);
+			CXIP_WARN("Failed to map MR buffer: %d\n", ret);
 			goto err_free_idx;
 		}
 	}
@@ -155,7 +154,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 			      mr->key, 0, CXI_MATCH_ID_ANY,
 			      0, le_flags, mr->cntr, ep_obj->ctrl_tgq, true);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
+		CXIP_WARN("Failed to write Append command: %d\n", ret);
 		goto err_unmap;
 	}
 
@@ -167,7 +166,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 
 	mr->enabled = true;
 
-	CXIP_LOG_DBG("Standard MR enabled: %p (key: %lu)\n", mr, mr->key);
+	CXIP_DBG("Standard MR enabled: %p (key: %lu)\n", mr, mr->key);
 
 	return FI_SUCCESS;
 
@@ -195,7 +194,7 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 	ret = cxip_pte_unlink(ep_obj->ctrl_pte, C_PTL_LIST_PRIORITY,
 			      mr->req.req_id, ep_obj->ctrl_tgq);
 	if (ret) {
-		CXIP_LOG_ERROR("Failed to enqueue Unlink: %d\n", ret);
+		CXIP_WARN("Failed to enqueue Unlink: %d\n", ret);
 		goto cleanup;
 	}
 
@@ -207,8 +206,8 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 	ret = cxil_invalidate_pte_le(ep_obj->ctrl_pte->pte, mr->key,
 				     C_PTL_LIST_PRIORITY);
 	if (ret)
-		CXIP_LOG_ERROR("MR invalidate failed: %d (mr: %p key %lu)\n",
-			       ret, mr, mr->key);
+		CXIP_WARN("MR invalidate failed: %d (mr: %p key %lu)\n",
+			  ret, mr, mr->key);
 
 cleanup:
 	if (mr->len)
@@ -220,7 +219,7 @@ cleanup:
 
 	mr->enabled = false;
 
-	CXIP_LOG_DBG("Standard MR disabled: %p (key: %lu)\n", mr, mr->key);
+	CXIP_DBG("Standard MR disabled: %p (key: %lu)\n", mr, mr->key);
 
 	return FI_SUCCESS;
 }
@@ -237,10 +236,10 @@ void cxip_mr_opt_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 		assert(mr->mr_state == CXIP_MR_DISABLED);
 		mr->mr_state = CXIP_MR_ENABLED;
 
-		CXIP_LOG_DBG("MR PTE enabled: %p\n", mr);
+		CXIP_DBG("MR PTE enabled: %p\n", mr);
 		break;
 	default:
-		CXIP_LOG_ERROR("Unexpected state received: %u\n", state);
+		CXIP_WARN("Unexpected state received: %u\n", state);
 	}
 }
 
@@ -267,8 +266,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	if (mr->cntr) {
 		ret = cxip_cntr_enable(mr->cntr);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_cntr_enable() returned: %d\n",
-				     ret);
+			CXIP_WARN("cxip_cntr_enable() returned: %d\n", ret);
 			return ret;
 		}
 	}
@@ -276,8 +274,8 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	fastlock_acquire(&ep_obj->lock);
 	buffer_id = ofi_idx_insert(&ep_obj->req_ids, &mr->req);
 	if (buffer_id < 0 || buffer_id >= CXIP_BUFFER_ID_MAX) {
-		CXIP_LOG_ERROR("Failed to allocate MR buffer ID: %d\n",
-			       buffer_id);
+		CXIP_WARN("Failed to allocate MR buffer ID: %d\n",
+			  buffer_id);
 		fastlock_release(&ep_obj->lock);
 		return -FI_ENOSPC;
 	}
@@ -290,7 +288,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	if (mr->len) {
 		ret = cxip_map(mr->domain, (void *)mr->buf, mr->len, &mr->md);
 		if (ret) {
-			CXIP_LOG_DBG("Failed to map MR buffer: %d\n", ret);
+			CXIP_WARN("Failed to map MR buffer: %d\n", ret);
 			goto err_free_idx;
 		}
 	}
@@ -299,7 +297,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 			     CXIP_PTL_IDX_MR_OPT(mr->key), false, &opts,
 			     cxip_mr_opt_pte_cb, mr, &mr->pte);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to allocate PTE: %d\n", ret);
+		CXIP_WARN("Failed to allocate PTE: %d\n", ret);
 		goto err_unmap;
 	}
 
@@ -316,7 +314,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
-		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
+		CXIP_WARN("Failed to enqueue command: %d\n", ret);
 		goto err_pte_free;
 	}
 
@@ -336,7 +334,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 			      mr->key, 0, CXI_MATCH_ID_ANY,
 			      0, le_flags, mr->cntr, ep_obj->ctrl_tgq, true);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
+		CXIP_WARN("Failed to write Append command: %d\n", ret);
 		goto err_pte_free;
 	}
 
@@ -348,7 +346,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 
 	mr->enabled = true;
 
-	CXIP_LOG_DBG("Optimized MR enabled: %p (key: %lu)\n", mr, mr->key);
+	CXIP_DBG("Optimized MR enabled: %p (key: %lu)\n", mr, mr->key);
 
 	return FI_SUCCESS;
 
@@ -378,7 +376,7 @@ static int cxip_mr_disable_opt(struct cxip_mr *mr)
 	ret = cxip_pte_unlink(mr->pte, C_PTL_LIST_PRIORITY,
 			      mr->req.req_id, ep_obj->ctrl_tgq);
 	if (ret) {
-		CXIP_LOG_ERROR("Failed to enqueue Unlink: %d\n", ret);
+		CXIP_WARN("Failed to enqueue Unlink: %d\n", ret);
 		goto cleanup;
 	}
 
@@ -399,7 +397,7 @@ cleanup:
 
 	mr->enabled = false;
 
-	CXIP_LOG_DBG("Optimized MR disabled: %p (key: %lu)\n", mr, mr->key);
+	CXIP_DBG("Optimized MR disabled: %p (key: %lu)\n", mr, mr->key);
 
 	return FI_SUCCESS;
 }
@@ -413,7 +411,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 
 	ret = cxip_ep_mr_insert(mr->ep->ep_obj, mr);
 	if (ret) {
-		CXIP_LOG_ERROR("Failed to insert MR key: %lu\n", mr->key);
+		CXIP_WARN("Failed to insert MR key: %lu\n", mr->key);
 		return ret;
 	}
 
@@ -462,7 +460,7 @@ static int cxip_mr_close(struct fid *fid)
 
 	ret = cxip_mr_disable(mr);
 	if (ret != FI_SUCCESS)
-		CXIP_LOG_DBG("Failed to disable MR: %d\n", ret);
+		CXIP_WARN("Failed to disable MR: %d\n", ret);
 
 	if (mr->ep)
 		ofi_atomic_dec32(&mr->ep->ep_obj->ref);
@@ -563,7 +561,7 @@ static int cxip_mr_control(struct fid *fid, int command, void *arg)
 
 		ret = cxip_mr_enable(mr);
 		if (ret != FI_SUCCESS)
-			CXIP_LOG_DBG("Failed to enable MR: %d\n", ret);
+			CXIP_WARN("Failed to enable MR: %d\n", ret);
 
 		break;
 

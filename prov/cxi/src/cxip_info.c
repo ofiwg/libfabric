@@ -9,9 +9,8 @@
 #include "ofi_prov.h"
 #include "cxip.h"
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_FABRIC, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_FABRIC, __VA_ARGS__)
-#define CXIP_LOG_INFO(...) _CXIP_LOG_INFO(FI_LOG_FABRIC, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_FABRIC, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_FABRIC, __VA_ARGS__)
 
 char cxip_prov_name[] = "cxi";
 
@@ -193,7 +192,7 @@ static int cxip_info_init(void)
 			fi_freeinfo((void *)cxip_util_prov.info);
 			break;
 		}
-		CXIP_LOG_DBG("%s info created\n", nic_if->info->device_name);
+		CXIP_DBG("%s info created\n", nic_if->info->device_name);
 
 		*fi_list = fi;
 		fi_list = &(fi->next);
@@ -241,8 +240,8 @@ static void cxip_env_init(void)
 		else if (!strcmp(param_str, "all"))
 			cxip_env.ats_mlock_mode = CXIP_ATS_MLOCK_ALL;
 		else
-			CXIP_LOG_INFO("Unrecognized ats_mlock_mode: %s\n",
-				      param_str);
+			CXIP_WARN("Unrecognized ats_mlock_mode: %s\n",
+				  param_str);
 	}
 
 	fi_param_define(&cxip_prov, "rdzv_offload", FI_PARAM_BOOL,
@@ -265,8 +264,8 @@ static void cxip_env_init(void)
 			    &cxip_env.rdzv_eager_size);
 
 	if (cxip_env.rdzv_eager_size > cxip_env.rdzv_threshold) {
-		CXIP_LOG_INFO("Invalid rdzv_eager_size: %lu\n",
-			      cxip_env.rdzv_eager_size);
+		CXIP_WARN("Invalid rdzv_eager_size: %lu\n",
+			  cxip_env.rdzv_eager_size);
 		cxip_env.rdzv_eager_size = cxip_env.rdzv_threshold;
 	}
 
@@ -276,15 +275,15 @@ static void cxip_env_init(void)
 			    &cxip_env.oflow_buf_size);
 
 	if (cxip_env.rdzv_threshold > cxip_env.oflow_buf_size) {
-		CXIP_LOG_INFO("Invalid rdzv_threshold: %lu\n",
-			      cxip_env.rdzv_threshold);
+		CXIP_WARN("Invalid rdzv_threshold: %lu\n",
+			  cxip_env.rdzv_threshold);
 		cxip_env.rdzv_threshold = CXIP_RDZV_THRESHOLD;
 	}
 
 	if (cxip_env.rdzv_get_min >
 	    (cxip_env.oflow_buf_size - cxip_env.rdzv_threshold)) {
-		CXIP_LOG_INFO("Invalid rdzv_get_min: %lu\n",
-			      cxip_env.rdzv_get_min);
+		CXIP_WARN("Invalid rdzv_get_min: %lu\n",
+			  cxip_env.rdzv_get_min);
 		cxip_env.rdzv_get_min = 0;
 	}
 
@@ -310,8 +309,8 @@ static void cxip_env_init(void)
 		else if (!strcmp(param_str, "never"))
 			cxip_env.llring_mode = CXIP_LLRING_NEVER;
 		else
-			CXIP_LOG_INFO("Unrecognized llring_mode: %s\n",
-				      param_str);
+			CXIP_WARN("Unrecognized llring_mode: %s\n",
+				  param_str);
 	}
 
 	fi_param_define(&cxip_prov, "cq_policy", FI_PARAM_STRING,
@@ -328,8 +327,8 @@ static void cxip_env_init(void)
 		else if (!strcmp(param_str, "low"))
 			cxip_env.cq_policy = CXI_CQ_UPDATE_LOW_FREQ;
 		else
-			CXIP_LOG_INFO("Unrecognized cq_policy: %s\n",
-				      param_str);
+			CXIP_WARN("Unrecognized cq_policy: %s\n",
+				  param_str);
 	}
 
 	fi_param_define(&cxip_prov, "default_vni", FI_PARAM_SIZE_T,
@@ -394,7 +393,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 
 	if (flags & FI_SOURCE) {
 		if (!node && !service) {
-			CXIP_LOG_INFO("FI_SOURCE set, but no node or service\n");
+			CXIP_WARN("FI_SOURCE set, but no node or service\n");
 			return -FI_EINVAL;
 		}
 	}
@@ -406,27 +405,26 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		} else if ((mac = ether_aton(node))) {
 			scan_nic = cxip_mac_to_nic(mac);
 		} else if (sscanf(node, "%i", &scan_nic) != 1) {
-			CXIP_LOG_INFO("Invalid node: %s\n", node);
+			CXIP_WARN("Invalid node: %s\n", node);
 			return -FI_EINVAL;
 		}
 
-		CXIP_LOG_DBG("Node NIC: %#x\n", scan_nic);
+		CXIP_DBG("Node NIC: %#x\n", scan_nic);
 	}
 
 	if (service) {
 		if (sscanf(service, "%i", &scan_pid) != 1) {
-			CXIP_LOG_INFO("Invalid service: %s\n",
-				      service);
+			CXIP_WARN("Invalid service: %s\n", service);
 			return -FI_EINVAL;
 		}
 
 		if (scan_pid >= C_PID_ANY) {
-			CXIP_LOG_INFO("Service out of range [0-%d): %u\n",
-				      C_PID_ANY, scan_pid);
+			CXIP_WARN("Service out of range [0-%d): %u\n",
+				  C_PID_ANY, scan_pid);
 			return -FI_EINVAL;
 		}
 
-		CXIP_LOG_DBG("Service PID: %u\n", scan_pid);
+		CXIP_DBG("Service PID: %u\n", scan_pid);
 	}
 
 	/* Find all matching domains, ignoring addresses. */

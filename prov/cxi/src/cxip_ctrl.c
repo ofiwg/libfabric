@@ -14,9 +14,8 @@
 
 #include "cxip.h"
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
-#define CXIP_LOG_INFO(...) _CXIP_LOG_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 /*
  * cxip_ctrl_msg_cb() - Process control message target events.
@@ -54,20 +53,20 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 
 			break;
 		default:
-			CXIP_LOG_ERROR("Unexpected msg type: %d\n",
-				       mb.ctrl_msg_type);
+			CXIP_WARN("Unexpected msg type: %d\n",
+				  mb.ctrl_msg_type);
 		}
 
 		break;
 	default:
-		CXIP_LOG_ERROR("Unexpected event type: %d\n",
-			       event->hdr.event_type);
+		CXIP_WARN("Unexpected event type: %d\n",
+			  event->hdr.event_type);
 	}
 
-	CXIP_LOG_DBG("got event: %s rc: %s (req: %p)\n",
-		     cxi_event_to_str(event),
-		     cxi_rc_to_str(cxi_event_rc(event)),
-		     req);
+	CXIP_DBG("got event: %s rc: %s (req: %p)\n",
+		 cxi_event_to_str(event),
+		 cxi_rc_to_str(cxi_event_rc(event)),
+		 req);
 
 	return FI_SUCCESS;
 }
@@ -100,8 +99,7 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 	if (memcmp(&txq->c_state, &cmd.c_state, sizeof(cmd.c_state))) {
 		ret = cxi_cq_emit_c_state(txq->dev_cmdq, &cmd.c_state);
 		if (ret) {
-			CXIP_LOG_DBG("Failed to issue C_STATE command: %d\n",
-				     ret);
+			CXIP_DBG("Failed to issue C_STATE command: %d\n", ret);
 
 			/* Return error according to Domain Resource
 			 * Management
@@ -113,7 +111,7 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 		/* Update TXQ C_STATE */
 		txq->c_state = cmd.c_state;
 
-		CXIP_LOG_DBG("Updated C_STATE: %p\n", req);
+		CXIP_DBG("Updated C_STATE: %p\n", req);
 	}
 
 	memset(&cmd.idc_msg, 0, sizeof(cmd.idc_msg));
@@ -123,7 +121,7 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 
 	ret = cxi_cq_emit_idc_msg(txq->dev_cmdq, &cmd.idc_msg, NULL, 0);
 	if (ret) {
-		CXIP_LOG_DBG("Failed to write IDC: %d\n", ret);
+		CXIP_DBG("Failed to write IDC: %d\n", ret);
 
 		/* Return error according to Domain Resource Management
 		 */
@@ -135,7 +133,7 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 
 	fastlock_release(&txq->lock);
 
-	CXIP_LOG_DBG("Queued control message: %p\n", req);
+	CXIP_DBG("Queued control message: %p\n", req);
 
 	return FI_SUCCESS;
 
@@ -165,8 +163,7 @@ int cxip_ctrl_msg_init(struct cxip_ep_obj *ep_obj)
 
 	buffer_id = ofi_idx_insert(&ep_obj->req_ids, &ep_obj->ctrl_msg_req);
 	if (buffer_id < 0 || buffer_id >= CXIP_BUFFER_ID_MAX) {
-		CXIP_LOG_ERROR("Failed to allocate MR buffer ID: %d\n",
-			       buffer_id);
+		CXIP_WARN("Failed to allocate MR buffer ID: %d\n", buffer_id);
 		return -FI_ENOSPC;
 	}
 	ep_obj->ctrl_msg_req.ep_obj = ep_obj;
@@ -183,7 +180,7 @@ int cxip_ctrl_msg_init(struct cxip_ep_obj *ep_obj)
 			      CXI_MATCH_ID_ANY, 0, le_flags, NULL,
 			      ep_obj->ctrl_tgq, true);
 	if (ret) {
-		CXIP_LOG_DBG("Failed to write Append command: %d\n", ret);
+		CXIP_DBG("Failed to write Append command: %d\n", ret);
 		goto err_free_id;
 	}
 
@@ -194,24 +191,24 @@ int cxip_ctrl_msg_init(struct cxip_ep_obj *ep_obj)
 	if (event->hdr.event_type != C_EVENT_LINK ||
 	    event->tgt_long.buffer_id != buffer_id) {
 		/* This is a device malfunction */
-		CXIP_LOG_ERROR("Invalid Link EQE %u %u %u %u\n",
-				event->hdr.event_type,
-				event->tgt_long.return_code,
-				event->tgt_long.buffer_id, buffer_id);
+		CXIP_WARN("Invalid Link EQE %u %u %u %u\n",
+			  event->hdr.event_type,
+			  event->tgt_long.return_code,
+			  event->tgt_long.buffer_id, buffer_id);
 		ret = -FI_EIO;
 		goto err_free_id;
 	}
 
 	if (cxi_event_rc(event) != C_RC_OK) {
-		CXIP_LOG_ERROR("Append failed: %s\n",
-			       cxi_rc_to_str(cxi_event_rc(event)));
+		CXIP_WARN("Append failed: %s\n",
+			  cxi_rc_to_str(cxi_event_rc(event)));
 		ret = -FI_ENOSPC;
 		goto err_free_id;
 	}
 
 	cxi_eq_ack_events(ep_obj->ctrl_evtq);
 
-	CXIP_LOG_DBG("Control messaging initialized: %p\n", ep_obj);
+	CXIP_DBG("Control messaging initialized: %p\n", ep_obj);
 
 	return FI_SUCCESS;
 
@@ -230,7 +227,7 @@ void cxip_ctrl_msg_fini(struct cxip_ep_obj *ep_obj)
 {
 	ofi_idx_remove(&ep_obj->req_ids, ep_obj->ctrl_msg_req.req_id);
 
-	CXIP_LOG_DBG("Control messaging finalized: %p\n", ep_obj);
+	CXIP_DBG("Control messaging finalized: %p\n", ep_obj);
 }
 
 /*
@@ -252,9 +249,9 @@ static struct cxip_ctrl_req *cxip_ep_ctrl_event_req(struct cxip_ep_obj *ep_obj,
 	case C_EVENT_PUT:
 		req = ofi_idx_at(&ep_obj->req_ids, event->tgt_long.buffer_id);
 		if (!req)
-			CXIP_LOG_ERROR("Invalid buffer_id: %d (%s)\n",
-				       event->tgt_long.buffer_id,
-				       cxi_event_to_str(event));
+			CXIP_WARN("Invalid buffer_id: %d (%s)\n",
+				  event->tgt_long.buffer_id,
+				  cxi_event_to_str(event));
 		break;
 	case C_EVENT_STATE_CHANGE:
 		pte_num = event->tgt_long.ptlte_index;
@@ -266,15 +263,14 @@ static struct cxip_ctrl_req *cxip_ep_ctrl_event_req(struct cxip_ep_obj *ep_obj,
 		req = NULL;
 		break;
 	default:
-		CXIP_LOG_ERROR("Invalid event type: %d\n",
-				event->hdr.event_type);
+		CXIP_WARN("Invalid event type: %d\n", event->hdr.event_type);
 		req = NULL;
 	}
 
-	CXIP_LOG_DBG("got control event: %s rc: %s (req: %p)\n",
-		     cxi_event_to_str(event),
-		     cxi_rc_to_str(cxi_event_rc(event)),
-		     req);
+	CXIP_DBG("got control event: %s rc: %s (req: %p)\n",
+		 cxi_event_to_str(event),
+		 cxi_rc_to_str(cxi_event_rc(event)),
+		 req);
 
 	return req;
 }
@@ -309,8 +305,7 @@ void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj)
 		cxi_eq_ack_events(ep_obj->ctrl_evtq);
 
 	if (cxi_eq_get_drops(ep_obj->ctrl_evtq)) {
-		CXIP_LOG_ERROR("Control EQ drops detected\n");
-		abort();
+		CXIP_FATAL("Control EQ drops detected\n");
 	}
 
 	fastlock_release(&ep_obj->lock);
@@ -336,13 +331,13 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	ret = cxip_ep_cmdq(ep_obj, 0, true, ep_obj->domain->tclass,
 			   &ep_obj->ctrl_txq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Unable to allocate control TXQ, ret: %d\n", ret);
+		CXIP_WARN("Failed to allocate control TXQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
 	}
 
 	ret = cxip_ep_cmdq(ep_obj, 0, false, FI_TC_UNSPEC, &ep_obj->ctrl_tgq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Unable to allocate control TGQ, ret: %d\n", ret);
+		CXIP_WARN("Failed to allocate control TGQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
 		goto free_txq;
 	}
@@ -351,7 +346,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	ep_obj->ctrl_evtq_buf = aligned_alloc(C_PAGE_SIZE,
 					      ep_obj->ctrl_evtq_buf_len);
 	if (!ep_obj->ctrl_evtq_buf) {
-		CXIP_LOG_DBG("Unable to allocate control EVTQ buffer\n");
+		CXIP_WARN("Failed to allocate control EVTQ buffer\n");
 		goto free_tgq;
 	}
 
@@ -360,8 +355,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		       CXI_MAP_PIN | CXI_MAP_WRITE,
 		       NULL, &ep_obj->ctrl_evtq_buf_md);
 	if (ret) {
-		CXIP_LOG_DBG("Unable to map control EVTQ buffer, ret: %d\n",
-			     ret);
+		CXIP_WARN("Failed to map control EVTQ buffer, ret: %d\n", ret);
 		goto free_evtq_buf;
 	}
 
@@ -373,8 +367,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 			      ep_obj->ctrl_evtq_buf_md,
 			      &eq_attr, NULL, NULL, &ep_obj->ctrl_evtq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_INFO("Failed to allocate control EQ, ret: %d\n",
-			      ret);
+		CXIP_WARN("Failed to allocate control EQ, ret: %d\n", ret);
 		ret = -FI_ENODEV;
 		goto free_evtq_md;
 	}
@@ -383,7 +376,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 			     CXIP_PTL_IDX_CTRL, false, &pt_opts, NULL, NULL,
 			     &ep_obj->ctrl_pte);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to allocate control PTE: %d\n", ret);
+		CXIP_WARN("Failed to allocate control PTE: %d\n", ret);
 		ret = -FI_ENOSPC;
 		goto free_evtq;
 	}
@@ -396,7 +389,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	ret = cxi_cq_emit_target(ep_obj->ctrl_tgq->dev_cmdq, &cmd);
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
-		CXIP_LOG_ERROR("Failed to enqueue command: %d\n", ret);
+		CXIP_WARN("Failed to enqueue command: %d\n", ret);
 		goto free_pte;
 	}
 
@@ -412,7 +405,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		    C_PTLTE_ENABLED ||
 	    event->tgt_long.ptlte_index != ep_obj->ctrl_pte->pte->ptn) {
 		/* This is a device malfunction */
-		CXIP_LOG_ERROR("Invalid Enable EQE\n");
+		CXIP_WARN("Invalid Enable EQE\n");
 		ret = -FI_EIO;
 		goto free_pte;
 	}
@@ -425,7 +418,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	if (ret != FI_SUCCESS)
 		goto free_pte;
 
-	CXIP_LOG_DBG("EP control initialized: %p\n", ep_obj);
+	CXIP_DBG("EP control initialized: %p\n", ep_obj);
 
 	return FI_SUCCESS;
 
@@ -434,11 +427,11 @@ free_pte:
 free_evtq:
 	ret = cxil_destroy_evtq(ep_obj->ctrl_evtq);
 	if (ret)
-		CXIP_LOG_ERROR("Failed to destroy EVTQ: %d\n", ret);
+		CXIP_WARN("Failed to destroy EVTQ: %d\n", ret);
 free_evtq_md:
 	tmp = cxil_unmap(ep_obj->ctrl_evtq_buf_md);
 	if (tmp)
-		CXIP_LOG_ERROR("Failed to unmap EVTQ buffer: %d\n", ret);
+		CXIP_WARN("Failed to unmap EVTQ buffer: %d\n", ret);
 free_evtq_buf:
 	free(ep_obj->ctrl_evtq_buf);
 free_tgq:
@@ -466,11 +459,11 @@ void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj)
 
 	ret = cxil_destroy_evtq(ep_obj->ctrl_evtq);
 	if (ret)
-		CXIP_LOG_ERROR("Failed to destroy EVTQ: %d\n", ret);
+		CXIP_WARN("Failed to destroy EVTQ: %d\n", ret);
 
 	ret = cxil_unmap(ep_obj->ctrl_evtq_buf_md);
 	if (ret)
-		CXIP_LOG_ERROR("Failed to unmap EVTQ buffer: %d\n",
+		CXIP_WARN("Failed to unmap EVTQ buffer: %d\n",
 			       ret);
 
 	free(ep_obj->ctrl_evtq_buf);
@@ -478,5 +471,5 @@ void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj)
 	cxip_ep_cmdq_put(ep_obj, 0, false);
 	cxip_ep_cmdq_put(ep_obj, 0, true);
 
-	CXIP_LOG_DBG("EP control finalized: %p\n", ep_obj);
+	CXIP_DBG("EP control finalized: %p\n", ep_obj);
 }

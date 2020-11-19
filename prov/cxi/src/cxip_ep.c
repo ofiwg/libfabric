@@ -17,8 +17,8 @@
 #include "ofi_util.h"
 #include "cxip.h"
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 extern struct fi_ops_rma cxip_ep_rma;
 extern struct fi_ops_msg cxip_ep_msg_ops;
@@ -49,7 +49,7 @@ int cxip_tx_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
 	id = ofi_idx_insert(&ep_obj->tx_ids, ctx);
 
 	if (id < 0 || id >= CXIP_TX_IDS) {
-		CXIP_LOG_ERROR("Failed to allocate ID: %d\n", id);
+		CXIP_WARN("Failed to allocate ID: %d\n", id);
 		if (id > 0)
 			ofi_idx_remove(&ep_obj->tx_ids, id);
 		fastlock_release(&ep_obj->tx_id_lock);
@@ -58,7 +58,7 @@ int cxip_tx_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
 
 	fastlock_release(&ep_obj->tx_id_lock);
 
-	CXIP_LOG_DBG("Allocated ID: %d\n", id);
+	CXIP_DBG("Allocated ID: %d\n", id);
 
 	return id;
 }
@@ -75,7 +75,7 @@ int cxip_tx_id_free(struct cxip_ep_obj *ep_obj, int id)
 	ofi_idx_remove(&ep_obj->tx_ids, id);
 	fastlock_release(&ep_obj->tx_id_lock);
 
-	CXIP_LOG_DBG("Freed ID: %d\n", id);
+	CXIP_DBG("Freed ID: %d\n", id);
 
 	return FI_SUCCESS;
 }
@@ -107,7 +107,7 @@ int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
 	id = ofi_idx_insert(&ep_obj->rdzv_ids, ctx);
 
 	if (id < 0 || id >= CXIP_RDZV_IDS) {
-		CXIP_LOG_ERROR("Failed to allocate ID: %d\n", id);
+		CXIP_WARN("Failed to allocate ID: %d\n", id);
 		if (id > 0)
 			ofi_idx_remove(&ep_obj->rdzv_ids, id);
 		fastlock_release(&ep_obj->rdzv_id_lock);
@@ -116,7 +116,7 @@ int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
 
 	fastlock_release(&ep_obj->rdzv_id_lock);
 
-	CXIP_LOG_DBG("Allocated ID: %d\n", id);
+	CXIP_DBG("Allocated ID: %d\n", id);
 
 	return id;
 }
@@ -133,7 +133,7 @@ int cxip_rdzv_id_free(struct cxip_ep_obj *ep_obj, int id)
 	ofi_idx_remove(&ep_obj->rdzv_ids, id);
 	fastlock_release(&ep_obj->rdzv_id_lock);
 
-	CXIP_LOG_DBG("Freed ID: %d\n", id);
+	CXIP_DBG("Freed ID: %d\n", id);
 
 	return FI_SUCCESS;
 }
@@ -174,8 +174,8 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 		ofi_atomic_inc32(&cmdq_refs[ctx_id]);
 		fastlock_release(&ep_obj->cmdq_lock);
 
-		CXIP_LOG_DBG("Reusing %s CMDQ[%d]: %p\n",
-			     transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
+		CXIP_DBG("Reusing %s CMDQ[%d]: %p\n",
+			 transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
 		*cmdq = cmdqs[ctx_id];
 		return FI_SUCCESS;
 	}
@@ -189,7 +189,7 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 			      ep_obj->auth_key.vni, cxip_ofi_to_cxi_tc(tclass),
 			      false, cmdq);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Unable to allocate CMDQ, ret: %d\n", ret);
+		CXIP_WARN("Unable to allocate CMDQ, ret: %d\n", ret);
 		ret = -FI_ENOSPC;
 		goto unlock;
 	}
@@ -197,9 +197,8 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 	cmdqs[ctx_id] = *cmdq;
 	ofi_atomic_inc32(&cmdq_refs[ctx_id]);
 
-	CXIP_LOG_DBG("Allocated %s CMDQ[%d]: %p CP: %u\n",
-		     transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id],
-		     cq_opts.lcid);
+	CXIP_DBG("Allocated %s CMDQ[%d]: %p CP: %u\n",
+		 transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id], cq_opts.lcid);
 
 	fastlock_release(&ep_obj->cmdq_lock);
 
@@ -230,12 +229,12 @@ void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj,
 	if (!ofi_atomic_dec32(cmdq_ref)) {
 		cxip_cmdq_free(cmdqs[ctx_id]);
 
-		CXIP_LOG_DBG("Freed %s CMDQ[%d]: %p\n",
-			     transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
+		CXIP_DBG("Freed %s CMDQ[%d]: %p\n",
+			 transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
 		cmdqs[ctx_id] = NULL;
 	} else {
-		CXIP_LOG_DBG("Put %s CMDQ[%d]: %p\n",
-			     transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
+		CXIP_DBG("Put %s CMDQ[%d]: %p\n",
+			 transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
 	}
 
 	fastlock_release(&ep_obj->cmdq_lock);
@@ -255,14 +254,14 @@ static int cxip_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
 		if (!cxip_ep->ep_obj->enabled)
 			return -FI_EOPBADSTATE;
 
-		CXIP_LOG_DBG("NIC: 0x%x PID: %u\n",
-			     cxip_ep->ep_obj->src_addr.nic,
-			     cxip_ep->ep_obj->src_addr.pid);
+		CXIP_DBG("NIC: 0x%x PID: %u\n",
+			 cxip_ep->ep_obj->src_addr.nic,
+			 cxip_ep->ep_obj->src_addr.pid);
 
 		memcpy(addr, &cxip_ep->ep_obj->src_addr, len);
 		break;
 	default:
-		CXIP_LOG_ERROR("Invalid argument\n");
+		CXIP_WARN("Invalid argument\n");
 		return -FI_EINVAL;
 	}
 
@@ -377,7 +376,7 @@ static int cxip_ctx_close(struct fid *fid)
 		break;
 
 	default:
-		CXIP_LOG_ERROR("Invalid fid\n");
+		CXIP_WARN("Invalid fid\n");
 		return -FI_EINVAL;
 	}
 
@@ -402,7 +401,7 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct cxip_rxc *rxc;
 
 	if ((flags | CXIP_EP_CQ_FLAGS) != CXIP_EP_CQ_FLAGS) {
-		CXIP_LOG_ERROR("Invalid CQ flags\n");
+		CXIP_WARN("Invalid CQ flags\n");
 		return -FI_EINVAL;
 	}
 
@@ -414,7 +413,7 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 		if (cxi_cq->ep_obj) {
 			if (cxi_cq->ep_obj != txc->ep_obj) {
-				CXIP_LOG_ERROR("Binding CQ to multiple EPs not yet supported\n");
+				CXIP_WARN("Binding CQ to multiple EPs not yet supported\n");
 				return -FI_EINVAL;
 			}
 		} else {
@@ -441,7 +440,7 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 		if (cxi_cq->ep_obj) {
 			if (cxi_cq->ep_obj != rxc->ep_obj) {
-				CXIP_LOG_ERROR("Binding CQ to multiple EPs not yet supported\n");
+				CXIP_WARN("Binding CQ to multiple EPs not yet supported\n");
 				return -FI_EINVAL;
 			}
 		} else {
@@ -461,7 +460,7 @@ static int cxip_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	default:
-		CXIP_LOG_ERROR("Invalid fid\n");
+		CXIP_WARN("Invalid fid\n");
 		return -FI_EINVAL;
 	}
 
@@ -486,7 +485,7 @@ static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct cxip_rxc *rxc;
 
 	if ((flags | CXIP_EP_CNTR_FLAGS) != CXIP_EP_CNTR_FLAGS) {
-		CXIP_LOG_ERROR("Invalid cntr flag\n");
+		CXIP_WARN("Invalid cntr flag\n");
 		return -FI_EINVAL;
 	}
 
@@ -519,7 +518,7 @@ static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	default:
-		CXIP_LOG_ERROR("Invalid fid\n");
+		CXIP_WARN("Invalid fid\n");
 		return -FI_EINVAL;
 	}
 
@@ -552,7 +551,7 @@ static int cxip_ctx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		return 0;
 
 	default:
-		CXIP_LOG_ERROR("Invalid bind()\n");
+		CXIP_WARN("Invalid bind()\n");
 		return -FI_EINVAL;
 	}
 }
@@ -582,7 +581,7 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 		goto unlock;
 
 	if (!ep_obj->av) {
-		CXIP_LOG_DBG("enable EP without AV\n");
+		CXIP_WARN("Endpoint must be bound to an AV\n");
 		ret = -FI_ENOAV;
 		goto unlock;
 	}
@@ -590,7 +589,7 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 	/* Assign resources to the libfabric domain. */
 	ret = cxip_domain_enable(ep_obj->domain);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("cxip_domain_enable returned: %d\n", ret);
+		CXIP_WARN("cxip_domain_enable returned: %d\n", ret);
 		goto unlock;
 	}
 
@@ -599,22 +598,22 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 				   ep_obj->src_addr.pid,
 				   &ep_obj->if_dom);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to get IF Domain: %d\n", ret);
+		CXIP_WARN("Failed to get IF Domain: %d\n", ret);
 		goto unlock;
 	}
 
 	ret = cxip_ep_ctrl_init(ep_obj);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_ERROR("cxip_ep_ctrl_init returned: %d\n", ret);
+		CXIP_WARN("cxip_ep_ctrl_init returned: %d\n", ret);
 		goto free_if_domain;
 	}
 
 	/* Store PID in case it was automatically assigned. */
 	ep_obj->src_addr.pid = ep_obj->if_dom->dom->pid;
-	CXIP_LOG_DBG("EP assigned NIC: %#x VNI: %u PID: %u\n",
-		     ep_obj->src_addr.nic,
-		     ep_obj->auth_key.vni,
-		     ep_obj->src_addr.pid);
+	CXIP_DBG("EP assigned NIC: %#x VNI: %u PID: %u\n",
+		 ep_obj->src_addr.nic,
+		 ep_obj->auth_key.vni,
+		 ep_obj->src_addr.pid);
 
 	ep_obj->enabled = true;
 
@@ -655,8 +654,7 @@ static int cxip_ctx_enable(struct fid_ep *ep)
 
 		ret = cxip_rxc_enable(rxc);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_rxc_enable returned: %d\n",
-				     ret);
+			CXIP_WARN("cxip_rxc_enable returned: %d\n", ret);
 			return ret;
 		}
 		return 0;
@@ -670,14 +668,13 @@ static int cxip_ctx_enable(struct fid_ep *ep)
 
 		ret = cxip_txc_enable(txc);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_txc_enable returned: %d\n",
-				     ret);
+			CXIP_WARN("cxip_txc_enable returned: %d\n", ret);
 			return ret;
 		}
 		return 0;
 
 	default:
-		CXIP_LOG_ERROR("Invalid CTX\n");
+		CXIP_WARN("Invalid CTX\n");
 		break;
 	}
 
@@ -699,14 +696,14 @@ int cxip_getopflags(struct fi_tx_attr *tx_attr, struct fi_rx_attr *rx_attr,
 		    uint64_t *flags)
 {
 	if ((*flags & FI_TRANSMIT) && (*flags & FI_RECV)) {
-		CXIP_LOG_ERROR("Both Tx/Rx flags cannot be specified\n");
+		CXIP_WARN("Both Tx/Rx flags cannot be specified\n");
 		return -FI_EINVAL;
 	} else if (tx_attr && (*flags & FI_TRANSMIT)) {
 		*flags = tx_attr->op_flags;
 	} else if (rx_attr && (*flags & FI_RECV)) {
 		*flags = rx_attr->op_flags;
 	} else {
-		CXIP_LOG_ERROR("Tx/Rx flags not specified\n");
+		CXIP_WARN("Tx/Rx flags not specified\n");
 		return -FI_EINVAL;
 	}
 
@@ -728,7 +725,7 @@ int cxip_setopflags(struct fi_tx_attr *tx_attr, struct fi_rx_attr *rx_attr,
 		    uint64_t flags)
 {
 	if ((flags & FI_TRANSMIT) && (flags & FI_RECV)) {
-		CXIP_LOG_ERROR("Both Tx/Rx flags cannot be specified\n");
+		CXIP_WARN("Both Tx/Rx flags cannot be specified\n");
 		return -FI_EINVAL;
 	} else if (tx_attr && (flags & FI_TRANSMIT)) {
 		tx_attr->op_flags = flags;
@@ -740,7 +737,7 @@ int cxip_setopflags(struct fi_tx_attr *tx_attr, struct fi_rx_attr *rx_attr,
 		rx_attr->op_flags = flags;
 		rx_attr->op_flags &= ~FI_RECV;
 	} else {
-		CXIP_LOG_ERROR("Tx/Rx flags not specified\n");
+		CXIP_WARN("Tx/Rx flags not specified\n");
 		return -FI_EINVAL;
 	}
 
@@ -910,8 +907,8 @@ static int cxip_ctx_setopt(fid_t fid, int level, int optname,
 		min_multi_recv = *(size_t *)optval;
 
 		if (min_multi_recv > CXIP_EP_MAX_MULTI_RECV) {
-			CXIP_LOG_ERROR("Maximum min_multi_recv value is: %u\n",
-				       CXIP_EP_MAX_MULTI_RECV);
+			CXIP_WARN("Maximum min_multi_recv value is: %u\n",
+				  CXIP_EP_MAX_MULTI_RECV);
 			return -FI_EINVAL;
 		}
 
@@ -977,7 +974,7 @@ static ssize_t cxip_ep_cancel(fid_t fid, void *context)
 		return -FI_ENOENT;
 
 	default:
-		CXIP_LOG_ERROR("Invalid ep type\n");
+		CXIP_WARN("Invalid ep type\n");
 		return -FI_EINVAL;
 	}
 
@@ -1026,11 +1023,11 @@ static int cxip_ep_enable(struct fid_ep *ep)
 	if (cxi_ep->ep_obj->fclass == FI_CLASS_EP) {
 		/* Check for shared TX/RX not bound */
 		if (!txc) {
-			CXIP_LOG_DBG("enable EP with no TXC\n");
+			CXIP_WARN("enable EP with no TXC\n");
 			return -FI_EINVAL;
 		}
 		if (!rxc) {
-			CXIP_LOG_DBG("enable EP with no RXC\n");
+			CXIP_WARN("enable EP with no RXC\n");
 			return -FI_EINVAL;
 		}
 
@@ -1040,20 +1037,19 @@ static int cxip_ep_enable(struct fid_ep *ep)
 
 		ret = cxip_txc_enable(txc);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_txc_enable returned: %d\n",
-				     ret);
+			CXIP_WARN("cxip_txc_enable returned: %d\n", ret);
 			return ret;
 		}
 
 		ret = cxip_rxc_enable(rxc);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_rxc_enable returned: %d\n", ret);
+			CXIP_WARN("cxip_rxc_enable returned: %d\n", ret);
 			return ret;
 		}
 
 		ret = cxip_coll_enable(cxi_ep->ep_obj);
 		if (ret != FI_SUCCESS) {
-			CXIP_LOG_DBG("cxip_coll_enable returned: %d\n", ret);
+			CXIP_WARN("cxip_coll_enable returned: %d\n", ret);
 			/* collectives will not function, but EP will */
 		}
 	} else {
@@ -1287,7 +1283,7 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				      &ep->ep.fid);
 		fastlock_release(&av->list_lock);
 		if (ret) {
-			CXIP_LOG_ERROR("Error in adding fid in the EP list\n");
+			CXIP_WARN("Error in adding fid in the EP list\n");
 			return ret;
 		}
 		break;
@@ -1485,8 +1481,8 @@ static int cxip_ep_setopt(fid_t fid, int level, int optname, const void *optval,
 		min_multi_recv = *(size_t *)optval;
 
 		if (min_multi_recv > CXIP_EP_MAX_MULTI_RECV) {
-			CXIP_LOG_ERROR("Maximum min_multi_recv value is: %u\n",
-				       CXIP_EP_MAX_MULTI_RECV);
+			CXIP_WARN("Maximum min_multi_recv value is: %u\n",
+				  CXIP_EP_MAX_MULTI_RECV);
 			return -FI_EINVAL;
 		}
 
@@ -1565,7 +1561,7 @@ static int cxip_ep_txc(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 		    ep_attr->tclass <= FI_TC_SCAVENGER) {
 			txc->tclass = ep_attr->tclass;
 		} else {
-			CXIP_LOG_ERROR("Invalid tclass\n");
+			CXIP_WARN("Invalid tclass\n");
 			return -FI_EINVAL;
 		}
 	} else {
@@ -1792,7 +1788,7 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	if (fclass == FI_CLASS_SEP &&
 	    (ofi_send_allowed(hints->tx_attr->caps) ||
 	     ofi_recv_allowed(hints->tx_attr->caps))) {
-		CXIP_LOG_ERROR("Scalable EPs do not support messaging.\n");
+		CXIP_WARN("Scalable EPs do not support messaging.\n");
 		return -FI_ENOPROTOOPT;
 	}
 
@@ -1808,7 +1804,7 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	if (hints->src_addr) {
 		struct cxip_addr *src = hints->src_addr;
 		if (src->nic != nic) {
-			CXIP_LOG_ERROR("bad src_addr NIC value\n");
+			CXIP_WARN("bad src_addr NIC value\n");
 			ret = -FI_EINVAL;
 			goto err;
 		}
@@ -1851,8 +1847,8 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 			 */
 			if (cxi_ep->ep_obj->auth_key.svc_id !=
 			    cxi_dom->auth_key.svc_id) {
-				CXIP_LOG_ERROR("Invalid svc_id: %u\n",
-					       cxi_ep->ep_obj->auth_key.svc_id);
+				CXIP_WARN("Invalid svc_id: %u\n",
+					  cxi_ep->ep_obj->auth_key.svc_id);
 				ret = -FI_EINVAL;
 				goto err;
 			}
@@ -1863,22 +1859,22 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 			 */
 			if (cxi_ep->ep_obj->auth_key.vni !=
 			    cxi_dom->auth_key.vni) {
-				CXIP_LOG_ERROR("Invalid VNI: %u\n",
-					       cxi_ep->ep_obj->auth_key.vni);
+				CXIP_WARN("Invalid VNI: %u\n",
+					  cxi_ep->ep_obj->auth_key.vni);
 				ret = -FI_EINVAL;
 				goto err;
 			}
 		} else {
-			CXIP_LOG_ERROR("Invalid auth_key (%p:%lu)\n",
-				       hints->ep_attr->auth_key,
-				       hints->ep_attr->auth_key_size);
+			CXIP_WARN("Invalid auth_key (%p:%lu)\n",
+				  hints->ep_attr->auth_key,
+				  hints->ep_attr->auth_key_size);
 			ret = -FI_EINVAL;
 			goto err;
 		}
 	} else {
 		/* Inherit auth_key from Domain. */
 		cxi_ep->ep_obj->auth_key = cxi_dom->auth_key;
-		CXIP_LOG_DBG("Inherited domain auth_key\n");
+		CXIP_DBG("Inherited domain auth_key\n");
 	}
 
 	if (cxi_ep->tx_attr.tclass != FI_TC_UNSPEC) {
@@ -1886,7 +1882,7 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 		    cxi_ep->tx_attr.tclass <= FI_TC_SCAVENGER) {
 			tclass = cxi_ep->tx_attr.tclass;
 		} else {
-			CXIP_LOG_ERROR("Invalid tclass\n");
+			CXIP_WARN("Invalid tclass\n");
 			ret = -FI_EINVAL;
 			goto err;
 		}
@@ -1993,21 +1989,21 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 		/* Scalable EP may not use shared CTX */
 		if (cxi_ep->ep_obj->ep_attr.tx_ctx_cnt == FI_SHARED_CONTEXT ||
 		    cxi_ep->ep_obj->ep_attr.rx_ctx_cnt == FI_SHARED_CONTEXT) {
-			CXIP_LOG_ERROR("shared CTX incompatible with SEP\n");
+			CXIP_WARN("shared CTX incompatible with SEP\n");
 			ret = -FI_EINVAL;
 			goto err;
 		}
 		/* Scalable EP has a limit on the number of CTX */
 		if (cxi_ep->ep_obj->ep_attr.tx_ctx_cnt > CXIP_EP_MAX_TX_CNT ||
 		    cxi_ep->ep_obj->ep_attr.rx_ctx_cnt > CXIP_EP_MAX_RX_CNT) {
-			CXIP_LOG_ERROR("too many CTX for SEP\n");
+			CXIP_WARN("too many CTX for SEP\n");
 			ret = -FI_EINVAL;
 			goto err;
 		}
 		/* Scalable EP must have at least one TX OR one RX CTX */
 		if (!cxi_ep->ep_obj->ep_attr.tx_ctx_cnt &&
 		    !cxi_ep->ep_obj->ep_attr.rx_ctx_cnt) {
-			CXIP_LOG_ERROR("no CTX for SEP\n");
+			CXIP_WARN("no CTX for SEP\n");
 			ret = -FI_EINVAL;
 			goto err;
 		}

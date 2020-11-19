@@ -15,8 +15,8 @@
 
 #include "cxip.h"
 
-#define CXIP_LOG_DBG(...) _CXIP_LOG_DBG(FI_LOG_DOMAIN, __VA_ARGS__)
-#define CXIP_LOG_ERROR(...) _CXIP_LOG_ERROR(FI_LOG_DOMAIN, __VA_ARGS__)
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_DOMAIN, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_DOMAIN, __VA_ARGS__)
 
 extern struct fi_ops_mr cxip_dom_mr_ops;
 
@@ -37,21 +37,21 @@ int cxip_domain_enable(struct cxip_domain *dom)
 
 	ret = cxip_get_if(dom->nic_addr, &dom->iface);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Unable to get IF\n");
+		CXIP_WARN("Unable to get IF\n");
 		ret = -FI_ENODEV;
 		goto unlock;
 	}
 
 	ret = cxip_alloc_lni(dom->iface, dom->auth_key.svc_id, &dom->lni);
 	if (ret) {
-		CXIP_LOG_DBG("cxip_alloc_lni returned: %d\n", ret);
+		CXIP_WARN("cxip_alloc_lni returned: %d\n", ret);
 		ret = -FI_ENODEV;
 		goto put_if;
 	}
 
 	ret = cxip_iomm_init(dom);
 	if (ret != FI_SUCCESS) {
-		CXIP_LOG_DBG("Failed to initialize IOMM: %d\n", ret);
+		CXIP_WARN("Failed to initialize IOMM: %d\n", ret);
 		assert(ret == -FI_ENOMEM);
 		goto free_lni;
 	}
@@ -59,10 +59,10 @@ int cxip_domain_enable(struct cxip_domain *dom)
 	dom->enabled = true;
 	fastlock_release(&dom->lock);
 
-	CXIP_LOG_DBG("Allocated interface, %s: %u RGID: %u\n",
-		     dom->iface->info->device_name,
-		     dom->iface->info->nic_addr,
-		     dom->lni->lni->id);
+	CXIP_DBG("Allocated interface, %s: %u RGID: %u\n",
+		 dom->iface->info->device_name,
+		 dom->iface->info->nic_addr,
+		 dom->lni->lni->id);
 
 	return FI_SUCCESS;
 
@@ -92,10 +92,10 @@ static void cxip_domain_disable(struct cxip_domain *dom)
 
 	cxip_iomm_fini(dom);
 
-	CXIP_LOG_DBG("Releasing interface, %s: %u RGID: %u\n",
-		     dom->iface->info->device_name,
-		     dom->iface->info->nic_addr,
-		     dom->lni->lni->id);
+	CXIP_DBG("Releasing interface, %s: %u RGID: %u\n",
+		 dom->iface->info->device_name,
+		 dom->iface->info->nic_addr,
+		 dom->lni->lni->id);
 
 	cxip_free_lni(dom->lni);
 
@@ -173,11 +173,10 @@ static int cxip_dom_dwq_op_send(struct cxip_domain *dom, struct fi_op_msg *msg,
 			       msg->msg.addr, 0, msg->msg.context, msg->flags,
 			       false, true, trig_thresh, trig_cntr, comp_cntr);
 	if (ret)
-		CXIP_LOG_DBG("Failed to emit message triggered op, ret=%d\n",
-			     ret);
+		CXIP_DBG("Failed to emit message triggered op, ret=%d\n", ret);
 	else
-		CXIP_LOG_DBG("Queued triggered message operation with threshold %lu\n",
-			     trig_thresh);
+		CXIP_DBG("Queued triggered message operation with threshold %lu\n",
+			 trig_thresh);
 
 	return ret;
 }
@@ -208,11 +207,11 @@ static int cxip_dom_dwq_op_tsend(struct cxip_domain *dom,
 			       tagged->msg.context, tagged->flags, true, true,
 			       trig_thresh, trig_cntr, comp_cntr);
 	if (ret)
-		CXIP_LOG_DBG("Failed to emit tagged message triggered op, ret=%d\n",
-			     ret);
+		CXIP_DBG("Failed to emit tagged message triggered op, ret=%d\n",
+			 ret);
 	else
-		CXIP_LOG_DBG("Queued triggered tagged message operation with threshold %lu\n",
-			     trig_thresh);
+		CXIP_DBG("Queued triggered tagged message operation with threshold %lu\n",
+			 trig_thresh);
 
 	return ret;
 }
@@ -243,11 +242,10 @@ static int cxip_dom_dwq_op_rma(struct cxip_domain *dom, struct fi_op_rma *rma,
 			      rma->msg.data, rma->flags, rma->msg.context, true,
 			      trig_thresh, trig_cntr, comp_cntr);
 	if (ret)
-		CXIP_LOG_DBG("Failed to emit RMA triggered op, ret=%d\n",
-			     ret);
+		CXIP_DBG("Failed to emit RMA triggered op, ret=%d\n", ret);
 	else
-		CXIP_LOG_DBG("Queued triggered RMA operation with threshold %lu\n",
-			     trig_thresh);
+		CXIP_DBG("Queued triggered RMA operation with threshold %lu\n",
+			 trig_thresh);
 
 	return ret;
 }
@@ -272,11 +270,10 @@ static int cxip_dom_dwq_op_atomic(struct cxip_domain *dom,
 			      NULL, 0, amo->flags, true, trig_thresh, trig_cntr,
 			      comp_cntr);
 	if (ret)
-		CXIP_LOG_DBG("Failed to emit AMO triggered op, ret=%d\n",
-			     ret);
+		CXIP_DBG("Failed to emit AMO triggered op, ret=%d\n", ret);
 	else
-		CXIP_LOG_DBG("Queued triggered AMO operation with threshold %lu\n",
-			     trig_thresh);
+		CXIP_DBG("Queued triggered AMO operation with threshold %lu\n",
+			 trig_thresh);
 
 	return ret;
 }
@@ -303,11 +300,11 @@ static int cxip_dom_dwq_op_fetch_atomic(struct cxip_domain *dom,
 			      fetch_amo->flags, true, trig_thresh, trig_cntr,
 			      comp_cntr);
 	if (ret)
-		CXIP_LOG_DBG("Failed to emit fetching AMO triggered op, ret=%d\n",
-			     ret);
+		CXIP_DBG("Failed to emit fetching AMO triggered op, ret=%d\n",
+			 ret);
 	else
-		CXIP_LOG_DBG("Queued triggered fetching AMO operation with threshold %lu\n",
-			     trig_thresh);
+		CXIP_DBG("Queued triggered fetching AMO operation with threshold %lu\n",
+			 trig_thresh);
 
 	return ret;
 }
@@ -335,11 +332,11 @@ static int cxip_dom_dwq_op_comp_atomic(struct cxip_domain *dom,
 			      comp_amo->fetch.iov_count, comp_amo->flags, true,
 			      trig_thresh, trig_cntr, comp_cntr);
 	if (ret)
-		CXIP_LOG_DBG("Failed to emit compare AMO triggered op, ret=%d\n",
-			     ret);
+		CXIP_DBG("Failed to emit compare AMO triggered op, ret=%d\n",
+			 ret);
 	else
-		CXIP_LOG_DBG("Queued triggered compare AMO operation with threshold %lu\n",
-			     trig_thresh);
+		CXIP_DBG("Queued triggered compare AMO operation with threshold %lu\n",
+			 trig_thresh);
 
 	return ret;
 }
@@ -363,7 +360,7 @@ static int cxip_dom_dwq_op_cntr(struct cxip_domain *dom,
 	op_cntr = container_of(cntr->cntr, struct cxip_cntr, cntr_fid);
 	ret = cxip_cntr_enable(op_cntr);
 	if (ret) {
-		CXIP_LOG_ERROR("Failed to enable operation counter\n");
+		CXIP_WARN("Failed to enable operation counter\n");
 		return ret;
 	}
 
@@ -475,14 +472,14 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 		if (comp_cntr) {
 			ret = cxip_cntr_enable(comp_cntr);
 			if (ret) {
-				CXIP_LOG_ERROR("Failed to enable completion counter\n");
+				CXIP_WARN("Failed to enable completion counter\n");
 				return ret;
 			}
 		}
 
 		ret = cxip_cntr_enable(trig_cntr);
 		if (ret) {
-			CXIP_LOG_ERROR("Failed to enable trigger counter\n");
+			CXIP_WARN("Failed to enable trigger counter\n");
 			return ret;
 		}
 
@@ -538,9 +535,8 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 						    comp_cntr, work->threshold);
 
 		default:
-			CXIP_LOG_ERROR("Invalid FI_QUEUE_WORK op %s\n",
-				       fi_tostr(&work->op_type,
-						FI_TYPE_OP_TYPE));
+			CXIP_WARN("Invalid FI_QUEUE_WORK op %s\n",
+				  fi_tostr(&work->op_type, FI_TYPE_OP_TYPE));
 			return -FI_EINVAL;
 		}
 
@@ -633,7 +629,7 @@ static int cxip_domain_cntr_read(struct fid *fid, unsigned int cntr,
 	int ret;
 
 	if (fid->fclass != FI_CLASS_DOMAIN) {
-		CXIP_LOG_DBG("Invalid FID: %p\n", fid);
+		CXIP_WARN("Invalid FID: %p\n", fid);
 		return -FI_EINVAL;
 	}
 
@@ -711,7 +707,7 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto free_dom;
 
 	if (!info || !info->src_addr) {
-		CXIP_LOG_ERROR("Invalid fi_info\n");
+		CXIP_WARN("Invalid fi_info\n");
 		goto close_util_dom;
 	}
 	src_addr = (struct cxip_addr *)info->src_addr;
@@ -725,7 +721,7 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 			       info->domain_attr->auth_key,
 			       sizeof(struct cxi_auth_key));
 		} else {
-			CXIP_LOG_ERROR("Invalid auth_key\n");
+			CXIP_WARN("Invalid auth_key\n");
 			goto close_util_dom;
 		}
 	} else {
@@ -739,7 +735,7 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		    info->domain_attr->tclass <= FI_TC_SCAVENGER) {
 			cxi_domain->tclass = info->domain_attr->tclass;
 		} else {
-			CXIP_LOG_ERROR("Invalid tclass\n");
+			CXIP_WARN("Invalid tclass\n");
 			goto close_util_dom;
 		}
 	} else {
