@@ -661,7 +661,8 @@ int rxm_msg_eq_progress(struct rxm_ep *rxm_ep)
 
 	while (1) {
 		entry->rd = rxm_eq_read(rxm_ep, RXM_MSG_EQ_ENTRY_SZ, entry);
-		if (entry->rd < 0 && entry->rd != -FI_ECONNREFUSED) {
+		if (entry->rd < 0 && entry->rd != -FI_ECONNREFUSED &&
+			entry->rd != -FI_ECONNRESET) {
 			ret = (int) entry->rd;
 			break;
 		}
@@ -1245,10 +1246,28 @@ rxm_conn_handle_reject(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 }
 
 static int
+rxm_conn_handle_reset(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
+{
+	struct rxm_cmap_handle *handle = entry->err_entry.fid->context;
+
+	if (handle->state == RXM_CMAP_CONNREQ_SENT) {
+		rxm_conn_close(handle);
+		RXM_CM_UPDATE_STATE(handle, RXM_CMAP_IDLE);
+	} else {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Invalid cmap state: "
+				"%s when receiving connection reset\n",
+				rxm_cm_state_str[handle->state]);
+	}
+	return 0;
+}
+
+static int
 rxm_conn_handle_event(struct rxm_ep *rxm_ep, struct rxm_msg_eq_entry *entry)
 {
 	if (entry->rd == -FI_ECONNREFUSED)
 		return rxm_conn_handle_reject(rxm_ep, entry);
+	if (entry->rd == -FI_ECONNRESET)
+		return rxm_conn_handle_reset(rxm_ep, entry);
 
 	switch (entry->event) {
 	case FI_NOTIFY:
