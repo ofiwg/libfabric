@@ -60,7 +60,7 @@ int ofi_cq_write_overflow(struct util_cq *cq, void *context, uint64_t flags, siz
 	entry->comp.tag = tag;
 
 	entry->src = src;
-	slist_insert_tail(&entry->list_entry, &cq->oflow_err_list);
+	slist_insert_tail(&entry->list_entry, &cq->aux_queue);
 
 	return 0;
 }
@@ -78,7 +78,7 @@ int ofi_cq_write_error(struct util_cq *cq,
 
 	entry->comp = *err_entry;
 	cq->cq_fastlock_acquire(&cq->cq_lock);
-	slist_insert_tail(&entry->list_entry, &cq->oflow_err_list);
+	slist_insert_tail(&entry->list_entry, &cq->aux_queue);
 
 	if (OFI_UNLIKELY(ofi_cirque_isfull(cq->cirq))) {
 		comp = ofi_cirque_tail(cq->cirq);
@@ -261,11 +261,11 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 						 UTIL_FLAG_OVERFLOW))) {
 			if (entry->flags & UTIL_FLAG_ERROR) {
 				struct util_cq_oflow_err_entry *oflow_err_entry =
-						container_of(cq->oflow_err_list.head,
+						container_of(cq->aux_queue.head,
 							     struct util_cq_oflow_err_entry,
 							     list_entry);
 				if (oflow_err_entry->comp.err) {
-					/* This handles case when the head of oflow_err_list is
+					/* This handles case when the head of aux_queue is
 					 * an error entry.
 					 *
 					 * NOTE: if this isn't an error entry, we have to handle
@@ -277,9 +277,9 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 				}
 			}
 			if (entry->flags & UTIL_FLAG_OVERFLOW) {
-				assert(!slist_empty(&cq->oflow_err_list));
+				assert(!slist_empty(&cq->aux_queue));
 				struct util_cq_oflow_err_entry *oflow_entry =
-					container_of(cq->oflow_err_list.head,
+					container_of(cq->aux_queue.head,
 						     struct util_cq_oflow_err_entry,
 						     list_entry);
 				if (oflow_entry->parent_comp != entry) {
@@ -289,13 +289,13 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 				} else {
 					uint64_t service_flags =
 						(entry->flags & (UTIL_FLAG_OVERFLOW | UTIL_FLAG_ERROR));
-					slist_remove_head(&cq->oflow_err_list);
+					slist_remove_head(&cq->aux_queue);
 
 					entry->flags &= ~(service_flags);
 					util_cq_read_oflow_entry(cq, oflow_entry, entry,
 								 &buf, src_addr, i);
 					/* To ensure checking of overflow CQ entries once again */
-					if (!slist_empty(&cq->oflow_err_list))
+					if (!slist_empty(&cq->aux_queue))
 						entry->flags |= service_flags;
 					free(oflow_entry);
 					continue;
@@ -336,7 +336,7 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 		goto unlock;
 	}
 
-	entry = slist_remove_head(&cq->oflow_err_list);
+	entry = slist_remove_head(&cq->aux_queue);
 	err = container_of(entry, struct util_cq_oflow_err_entry, list_entry);
 	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5))) && buf->err_data_size) {
 		err_data_size = MIN(buf->err_data_size, err->comp.err_data_size);
@@ -352,9 +352,9 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 	cirq_entry = ofi_cirque_head(cq->cirq);
 	if (!(cirq_entry->flags & UTIL_FLAG_OVERFLOW)) {
 		ofi_cirque_discard(cq->cirq);
-	} else if (!slist_empty(&cq->oflow_err_list)) {
+	} else if (!slist_empty(&cq->aux_queue)) {
 		struct util_cq_oflow_err_entry *oflow_entry =
-			container_of(cq->oflow_err_list.head,
+			container_of(cq->aux_queue.head,
 				     struct util_cq_oflow_err_entry,
 				     list_entry);
 		if (oflow_entry->parent_comp != cirq_entry) {
@@ -363,7 +363,7 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 			 * UTIL_FLAG_ERROR and UTIL_FLAG_OVERFLOW flags */
 			cirq_entry->flags &= ~(UTIL_FLAG_ERROR | UTIL_FLAG_OVERFLOW);
 		}
-		/* If the next entry in the oflow_err_list use the same entry from CIRQ to
+		/* If the next entry in the aux_queue use the same entry from CIRQ to
 		 * report error/overflow, don't unset UTIL_FLAG_ERRO and UTIL_FLAG_OVERFLOW
 		 * flags to ensure the next round of handling overflow/error entries */
 	} else {
@@ -446,8 +446,8 @@ int ofi_cq_cleanup(struct util_cq *cq)
 	if (ofi_atomic_get32(&cq->ref))
 		return -FI_EBUSY;
 
-	while (!slist_empty(&cq->oflow_err_list)) {
-		entry = slist_remove_head(&cq->oflow_err_list);
+	while (!slist_empty(&cq->aux_queue)) {
+		entry = slist_remove_head(&cq->aux_queue);
 		err = container_of(entry, struct util_cq_oflow_err_entry, list_entry);
 		free(err);
 	}
@@ -527,7 +527,7 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 		cq->cq_fastlock_acquire = ofi_fastlock_acquire;
 		cq->cq_fastlock_release = ofi_fastlock_release;
 	}
-	slist_init(&cq->oflow_err_list);
+	slist_init(&cq->aux_queue);
 	cq->read_entry = read_entry;
 
 	cq->cq_fid.fid.fclass = FI_CLASS_CQ;

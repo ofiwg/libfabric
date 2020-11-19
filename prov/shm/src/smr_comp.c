@@ -63,7 +63,7 @@ int smr_tx_comp(struct smr_ep *ep, void *context, uint32_t op,
 		entry->comp.err = err;
 		entry->comp.prov_errno = -err;
 		slist_insert_tail(&entry->list_entry,
-				  &ep->util_ep.tx_cq->oflow_err_list);
+				  &ep->util_ep.tx_cq->aux_queue);
 		comp->flags = UTIL_FLAG_ERROR;
 	} else {
 		comp->op_context = context;
@@ -129,7 +129,7 @@ int smr_rx_comp(struct smr_ep *ep, void *context, uint32_t op,
 		entry->comp.err = err;
 		entry->comp.prov_errno = -err;
 		slist_insert_tail(&entry->list_entry,
-				  &ep->util_ep.rx_cq->oflow_err_list);
+				  &ep->util_ep.rx_cq->aux_queue);
 		comp->flags = UTIL_FLAG_ERROR;
 	} else {
 		comp->op_context = context;

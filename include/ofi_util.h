@@ -504,7 +504,7 @@ struct util_cq {
 	struct util_comp_cirq	*cirq;
 	fi_addr_t		*src;
 
-	struct slist		oflow_err_list;
+	struct slist		aux_queue;
 	fi_cq_read_func		read_entry;
 	int			internal_wait;
 	ofi_atomic32_t		signaled;
