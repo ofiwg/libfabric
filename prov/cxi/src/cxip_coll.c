@@ -35,6 +35,8 @@
 
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, \
 		"COLL " __VA_ARGS__)
+#define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, \
+		"COLL " __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, \
 		"COLL " __VA_ARGS__)
 
@@ -242,8 +244,10 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		 * - dfa == multicast destination
 		 * - index_ext == 0
 		 */
-		if (is_netsim(ep_obj))
+		if (is_netsim(ep_obj)) {
+			CXIP_INFO("NETSIM does not support mcast\n");
 			return -FI_EINVAL;
+		}
 		idx_ext = 0;
 		cxi_build_mcast_dfa(av_set->comm_key.mcast.mcast_id,
 				    reduction->red_id, idx_ext,
@@ -256,8 +260,10 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		 * - dfa = remote nic
 		 * - index_ext == CXIP_PTL_IDX_COLL
 		 */
-		if (av_set_idx >= av_set->fi_addr_cnt)
+		if (av_set_idx >= av_set->fi_addr_cnt) {
+			CXIP_INFO("av_set_idx out-of-range\n");
 			return -FI_EINVAL;
+		}
 		dest_addr = av_set->fi_addr_ary[av_set_idx];
 		ret = _cxip_av_lookup(ep_obj->av, dest_addr, &dest_caddr);
 		if (ret != FI_SUCCESS)
@@ -274,8 +280,10 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		 * - dfa == source NIC
 		 * - index_ext == idx_ext offset beyond RXCs
 		 */
-		if (av_set_idx >= av_set->fi_addr_cnt)
+		if (av_set_idx >= av_set->fi_addr_cnt) {
+			CXIP_INFO("av_set_idx out-of-range\n");
 			return -FI_EINVAL;
+		}
 		dest_caddr = ep_obj->src_addr;
 		pid_bits = ep_obj->domain->iface->dev->info.pid_bits;
 		idx_ext = CXIP_EP_MAX_RX_CNT + av_set_idx;
@@ -284,6 +292,8 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		*is_mcast = false;
 		break;
 	default:
+		CXIP_INFO("unexpected comm_key type: %d\n",
+			  av_set->comm_key.type);
 		return -FI_EINVAL;
 	}
 	return FI_SUCCESS;
@@ -312,8 +322,10 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 	bool is_mcast;
 	int ret;
 
-	if (buflen && !buffer)
+	if (buflen && !buffer) {
+		CXIP_INFO("no buffer\n");
 		return -FI_EINVAL;
+	}
 
 	ep_obj = reduction->mc_obj->ep_obj;
 
@@ -339,8 +351,6 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 	if (memcmp(&cmdq->c_state, &cmd.c_state, sizeof(cmd.c_state))) {
 		ret = cxi_cq_emit_c_state(cmdq->dev_cmdq, &cmd.c_state);
 		if (ret) {
-			CXIP_DBG("Failed to issue C_STATE command: %d\n",
-				 ret);
 			/* Return error according to Domain Resource
 			 * Management
 			 */
@@ -357,8 +367,6 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 	ret = cxi_cq_emit_idc_put(cmdq->dev_cmdq, &cmd.idc_put,
 				  buffer, buflen);
 	if (ret) {
-		CXIP_DBG("Failed to write IDC: %d\n", ret);
-
 		/* Return error according to Domain Resource Management
 		 */
 		ret = -FI_EAGAIN;
@@ -393,52 +401,62 @@ static void _coll_rx_req_report(struct cxip_req *req)
 
 	/* Interpret results */
 	overflow = req->coll.hw_req_len - req->data_len;
-	if (req->coll.rc == C_RC_OK && !overflow) {
+	if (req->coll.rc == C_RC_OK && req->coll.isred && !overflow) {
 		/* success */
 		if (req->flags & FI_COMPLETION) {
+			/* failure means progression is hung */
 			ret = cxip_cq_req_complete(req);
-			if (ret != FI_SUCCESS)
-				CXIP_WARN(
-				    "Failed to report completion: %d\n",
-				    ret);
+			if (ret)
+				CXIP_FATAL(
+				    "cxip_cq_req_complete failed: %d\n", ret);
 		}
 
 		if (req->coll.coll_pte->ep_obj->coll.rx_cntr) {
+			/* failure means counts cannot be trusted */
 			ret = cxip_cntr_mod(
 				req->coll.coll_pte->ep_obj->coll.rx_cntr, 1,
 				false, false);
 			if (ret)
-				CXIP_WARN("cxip_cntr_mod returned: %d\n",
-					       ret);
+				CXIP_WARN(
+					"Failed success cxip_cntr_mod: %d\n",
+					ret);
 		}
 	} else {
 		/* failure */
-		if (overflow) {
-			err = FI_EMSGSIZE;
-			CXIP_DBG("Request truncated: %p (err: %d, %s)\n",
-				 req, err, cxi_rc_to_str(req->coll.rc));
-		} else {
+		if (req->coll.rc != C_RC_OK) {
+			/* real network error of some sort */
 			err = FI_EIO;
 			CXIP_WARN("Request error: %p (err: %d, %s)\n",
-				       req, err,
-				       cxi_rc_to_str(req->coll.rc));
+				  req, err, cxi_rc_to_str(req->coll.rc));
+		} else if (overflow) {
+			/* can only happen on very large packet (> 64 bytes) */
+			err = FI_EMSGSIZE;
+			CXIP_WARN("Request truncated: %p (err: %d, %s)\n",
+				  req, err, cxi_rc_to_str(req->coll.rc));
+		} else {
+			/* non-reduction packet */
+			err = FI_ENOMSG;
+			CXIP_INFO("Not reduction pkt: %p (err: %d, %s)\n",
+				  req, err, cxi_rc_to_str(req->coll.rc));
 		}
 
+		/* failure means progression is hung */
 		ret = cxip_cq_req_error(req, overflow, err, req->coll.rc,
 					NULL, 0);
-		if (ret != FI_SUCCESS)
-			CXIP_WARN("Failed to report error: %d\n", ret);
+		if (ret)
+			CXIP_FATAL("cxip_cq_req_error: %d\n", ret);
 
 		if (req->coll.coll_pte->ep_obj->coll.rx_cntr) {
+			/* failure means counts cannot be trusted */
 			ret = cxip_cntr_mod(
 				req->coll.coll_pte->ep_obj->coll.rx_cntr, 1,
 				false, true);
 			if (ret)
-				CXIP_WARN("cxip_cntr_mod returned: %d\n",
-					       ret);
+				CXIP_WARN("cxip_cntr_mod: %d\n", ret);
 		}
 	}
 
+	/* manage buffer rollover */
 	if (req->coll.mrecv_space <
 	    req->coll.coll_pte->ep_obj->coll.min_multi_recv) {
 		struct cxip_coll_pte *coll_pte = req->coll.coll_pte;
@@ -471,22 +489,25 @@ static void _coll_rx_progress(struct cxip_req *req,
 	mc_obj = req->coll.coll_pte->mc_obj;
 	ofi_atomic_inc32(&mc_obj->recv_cnt);
 
+	/* If not the right size, don't swap bytes */
 	if (req->data_len != sizeof(struct red_pkt)) {
-		CXIP_DBG("Bad coll packet size: %ld\n", req->data_len);
-		req->coll.rc = C_RC_PKTBUF_ERROR;
+		CXIP_INFO("Bad coll packet size: %ld\n", req->data_len);
 		return;
 	}
 
+	/* If swap doesn't look like reduction packet, swap back */
 	pkt = (struct red_pkt *)req->buf;
 	_ntoh_red_pkt(pkt);
 	cookie.raw = pkt->cookie;
 	if (cookie.magic != MAGIC)
 	{
-		CXIP_DBG("Bad coll MAGIC: %x\n", cookie.magic);
-		req->coll.rc = C_RC_PKTBUF_ERROR;
+		CXIP_INFO("Bad coll MAGIC: %x\n", cookie.magic);
+		_hton_red_pkt(pkt);
 		return;
 	}
 
+	/* Treat as a reduction packet */
+	req->coll.isred = true;
 	ofi_atomic_inc32(&mc_obj->pkt_cnt);
 	reduction = &mc_obj->reduction[cookie.red_id];
 	_progress_coll(reduction, pkt);
@@ -501,8 +522,7 @@ static int _coll_recv_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_LINK:
 		/* Enabled */
 		if (req->coll.rc != C_RC_OK) {
-			CXIP_WARN("LINK event error = %d\n",
-				       req->coll.rc);
+			CXIP_WARN("LINK error rc: %d\n", req->coll.rc);
 			break;
 		}
 		CXIP_DBG("LINK event seen\n");
@@ -512,17 +532,16 @@ static int _coll_recv_cb(struct cxip_req *req, const union c_event *event)
 		/* Normally disabled, errors only */
 		req->coll.rc = cxi_tgt_event_rc(event);
 		if (req->coll.rc != C_RC_OK) {
-			CXIP_WARN("UNLINK event error = %d\n",
-				       req->coll.rc);
+			CXIP_WARN("UNLINK error rc: %d\n", req->coll.rc);
 			break;
 		}
 		CXIP_DBG("UNLINK event seen\n");
 		break;
 	case C_EVENT_PUT:
+		req->coll.isred = false;
 		req->coll.rc = cxi_tgt_event_rc(event);
 		if (req->coll.rc != C_RC_OK) {
-			CXIP_WARN("PUT event error = %d\n",
-				       req->coll.rc);
+			CXIP_WARN("PUT error rc: %d\n", req->coll.rc);
 			break;
 		}
 		CXIP_DBG("PUT event seen\n");
@@ -537,8 +556,8 @@ static int _coll_recv_cb(struct cxip_req *req, const union c_event *event)
 		break;
 	default:
 		req->coll.rc = cxi_tgt_event_rc(event);
-		CXIP_WARN("Unexpected event type %d, error = %d\n",
-			       event->hdr.event_type, req->coll.rc);
+		CXIP_WARN("Unexpected event type %d, rc: %d\n",
+			  event->hdr.event_type, req->coll.rc);
 		break;
 	}
 
@@ -588,8 +607,10 @@ static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 	struct cxip_req *req;
 	int ret;
 
-	if (buf->bufsiz && !buf->buffer)
+	if (buf->bufsiz && !buf->buffer) {
+		CXIP_INFO("no buffer\n");
 		return -FI_EINVAL;
+	}
 
 	/* Allocate and populate a new request
 	 * Sets:
@@ -601,7 +622,6 @@ static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 	 */
 	req = cxip_cq_req_alloc(coll_pte->ep_obj->coll.rx_cq, 1, buf);
 	if (!req) {
-		CXIP_DBG("Failed to allocate request\n");
 		ret = -FI_ENOMEM;
 		goto recv_unmap;
 	}
@@ -741,13 +761,13 @@ static int _coll_add_buffers(struct cxip_coll_pte *coll_pte, size_t size,
 	int ret, i;
 
 	if (count < CXIP_COLL_MIN_RX_BUFS) {
-		CXIP_WARN("Buffer count %ld < minimum (%d)\n",
+		CXIP_INFO("Buffer count %ld < minimum (%d)\n",
 			  count, CXIP_COLL_MIN_RX_BUFS);
 		return -FI_EINVAL;
 	}
 
 	if (size < CXIP_COLL_MIN_RX_SIZE) {
-		CXIP_WARN("Buffer size %ld < minimum (%d)\n",
+		CXIP_INFO("Buffer size %ld < minimum (%d)\n",
 			  size, CXIP_COLL_MIN_RX_SIZE);
 		return -FI_EINVAL;
 	}
@@ -839,7 +859,7 @@ int cxip_coll_enable(struct cxip_ep_obj *ep_obj)
 	/* A read-only or write-only endpoint is legal */
 	if (!(ofi_recv_allowed(ep_obj->rxcs[0]->attr.caps) &&
 	      ofi_send_allowed(ep_obj->txcs[0]->attr.caps))) {
-		CXIP_DBG("EP not recv/send, collectives not enabled\n");
+		CXIP_INFO("EP not recv/send, collectives not enabled\n");
 		return FI_SUCCESS;
 	}
 
@@ -892,10 +912,8 @@ int cxip_coll_disable(struct cxip_ep_obj *ep_obj)
  */
 int cxip_coll_close(struct cxip_ep_obj *ep_obj)
 {
-	if (ofi_atomic_get32(&ep_obj->coll.mc_count) != 0) {
-		CXIP_WARN("MC objects pending\n");
+	if (ofi_atomic_get32(&ep_obj->coll.mc_count) != 0)
 		return -FI_EBUSY;
-	}
 
 	fastlock_destroy(&ep_obj->coll.lock);
 
@@ -1039,8 +1057,10 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 	struct red_pkt *pkt;
 	int seqno, arm, ret;
 
-	if (len > CXIP_COLL_MAX_TX_SIZE)
+	if (len > CXIP_COLL_MAX_TX_SIZE) {
+		CXIP_INFO("length too large: %ld\n", len);
 		return -FI_EINVAL;
+	}
 
 	pkt = (struct red_pkt *)reduction->tx_msg;
 
@@ -1260,8 +1280,7 @@ static void _post_coll_complete(struct cxip_coll_reduction *reduction)
 			ret = cxip_cq_req_complete(req);
 		}
 		if (ret < 0) {
-			CXIP_WARN("Collective complete post failed: %d\n",
-				  ret);
+			CXIP_WARN("Collective complete post: %d\n", ret);
 		}
 	}
 }
@@ -1532,8 +1551,7 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 						     true);
 			if (ret) {
 				/* fatal send error, collectives broken */
-				CXIP_WARN("Collective send failure %ld\n",
-					  ret);
+				CXIP_WARN("Collective send: %ld\n", ret);
 				reduction->red_rc = ret;
 				_post_coll_complete(reduction);
 				reduction->op_state = CXIP_COLL_STATE_NONE;
@@ -1570,7 +1588,7 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 				     false);
 	if (ret) {
 		/* fatal send error, leaves are hung */
-		CXIP_WARN("Collective send error %ld\n", ret);
+		CXIP_WARN("Collective send: %ld\n", ret);
 		reduction->red_rc = ret;
 		_post_coll_complete(reduction);
 		reduction->op_state = CXIP_COLL_STATE_NONE;
@@ -1612,7 +1630,7 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 					     reduction->op_data_len, false);
 		if (ret) {
 			/* fatal send error, root will time out and retry */
-			CXIP_WARN("Collective send error %d\n", ret);
+			CXIP_WARN("Collective send: %d\n", ret);
 			return;
 		}
 		reduction->op_state = CXIP_COLL_STATE_BLOCKED;
@@ -1678,10 +1696,8 @@ ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
 	int red_id;
 	size_t size;
 
-	if (!mc_obj->is_joined) {
-		CXIP_WARN("Multicast object not joined\n");
+	if (!mc_obj->is_joined)
 		return -FI_EOPBADSTATE;
-	}
 
 	/* Note: only INT64 and DOUBLE supported by HW */
 	datatype = get_cxi_datatype(datatype);
@@ -1689,8 +1705,10 @@ ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
 		return -FI_EOPNOTSUPP;
 
 	size = op_count * sizeof(uint64_t);
-	if (size > CXIP_COLL_MAX_TX_SIZE)
+	if (size > CXIP_COLL_MAX_TX_SIZE) {
+		CXIP_INFO("size too large: %ld\n", size);
 		return -FI_EINVAL;
+	}
 
 	switch (op_type) {
 	case FI_BARRIER:
@@ -1752,8 +1770,10 @@ ssize_t cxip_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
 	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
 	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
 
-	if (mc_obj->ep_obj != cxi_ep->ep_obj)
+	if (mc_obj->ep_obj != cxi_ep->ep_obj) {
+		CXIP_INFO("bad coll_addr\n");
 		return -FI_EINVAL;
+	}
 
 	ret = cxip_coll_inject(mc_obj, FI_BARRIER,
 			       FI_UINT64, 0, NULL, NULL, 0,
@@ -1776,8 +1796,10 @@ ssize_t cxip_broadcast(struct fid_ep *ep, void *buf, size_t count,
 	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
 	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
 
-	if (mc_obj->ep_obj != cxi_ep->ep_obj)
+	if (mc_obj->ep_obj != cxi_ep->ep_obj) {
+		CXIP_INFO("bad coll_addr\n");
 		return -FI_EINVAL;
+	}
 
 	ret = _fi_addr_to_idx(mc_obj->av_set, root_addr, &root_idx);
 	if (ret)
@@ -1809,8 +1831,10 @@ ssize_t cxip_reduce(struct fid_ep *ep, const void *buf, size_t count,
 	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
 	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
 
-	if (mc_obj->ep_obj != cxi_ep->ep_obj)
+	if (mc_obj->ep_obj != cxi_ep->ep_obj) {
+		CXIP_INFO("bad coll_addr\n");
 		return -FI_EINVAL;
+	}
 
 	ret = _fi_addr_to_idx(mc_obj->av_set, root_addr, &root_idx);
 	if (ret)
@@ -1836,8 +1860,10 @@ ssize_t cxip_allreduce(struct fid_ep *ep, const void *buf, size_t count,
 	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
 	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
 
-	if (mc_obj->ep_obj != cxi_ep->ep_obj)
+	if (mc_obj->ep_obj != cxi_ep->ep_obj) {
+		CXIP_INFO("bad coll_addr\n");
 		return -FI_EINVAL;
+	}
 
 	ret = cxip_coll_inject(mc_obj, FI_ALLREDUCE,
 			       datatype, op, buf, result, count,
@@ -1932,14 +1958,16 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	int ret;
 
 	/* remapping is not allowed */
-	if (av_set->mc_obj)
+	if (av_set->mc_obj) {
+		CXIP_INFO("remap not allowed\n");
 		return -FI_EINVAL;
+	}
 
 	/* PTE receive address */
 	switch (av_set->comm_key.type) {
 	case COMM_KEY_MULTICAST:
 		if (is_netsim(ep_obj)) {
-			CXIP_WARN("Multicast not supported\n");
+			CXIP_INFO("NETSIM does not support mcast\n");
 			return -FI_EINVAL;
 		}
 		is_multicast = true;
@@ -1972,13 +2000,21 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 		pid_idx = CXIP_EP_MAX_RX_CNT + av_set->comm_key.rank.rank;
 		mc_idcode = av_set->comm_key.rank.rank;
 		hwroot_idx = av_set->comm_key.rank.hwroot_rank;
-		if (hwroot_idx >= av_set->fi_addr_cnt)
+		if (hwroot_idx >= av_set->fi_addr_cnt) {
+			CXIP_INFO("hwroot_idx out of range: %d\n",
+				  hwroot_idx);
 			return -FI_EINVAL;
+		}
 		mynode_idx = av_set->comm_key.rank.rank;
-		if (mynode_idx >= av_set->fi_addr_cnt)
+		if (mynode_idx >= av_set->fi_addr_cnt) {
+			CXIP_INFO("mynode_idx out of range: %d\n",
+				  mynode_idx);
 			return -FI_EINVAL;
+		}
 		break;
 	default:
+		CXIP_INFO("unexpected comm_key type: %d\n",
+			  av_set->comm_key.type);
 		return -FI_EINVAL;
 	}
 
@@ -2094,16 +2130,14 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
 	av_set = container_of(coll_av_set, struct cxip_av_set, av_set_fid);
 
-	if (!cxi_ep->ep_obj->coll.enabled) {
-		CXIP_WARN("Multicast not enabled\n");
+	if (!cxi_ep->ep_obj->coll.enabled)
 		return -FI_EOPBADSTATE;
-	}
 
 	if (coll_addr != FI_ADDR_NOTAVAIL) {
-		/* provider-managed not supported */
+		CXIP_INFO("coll_addr is not FI_ADDR_NOTAVAIL\n");
 		return -FI_EINVAL;
 	} else if (av_set->comm_key.type == COMM_KEY_NONE) {
-		CXIP_WARN("av_set comm_key not provided\n");
+		CXIP_INFO("comm_key not specified\n");
 		return -FI_EINVAL;
 	}
 

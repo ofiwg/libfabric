@@ -616,6 +616,7 @@ struct cxip_req_coll {
 	struct cxip_coll_buf *coll_buf;
 	uint32_t mrecv_space;
 	size_t hw_req_len;
+	bool isred;
 	int rc;
 };
 
