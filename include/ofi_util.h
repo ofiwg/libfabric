@@ -74,11 +74,13 @@ extern "C" {
 #endif
 
 /* EQ / CQ flags
- * ERROR: The added entry was the result of an error completion
- * OVERFLOW: The CQ has overflowed, and events have been lost
+ * ERROR: EQ entry was the result of a failed operation,
+ *        or the caller is trying to read the next entry
+ *        if it is an error.
+ * AUX: CQ entries are stored in the auxiliary queue
  */
 #define UTIL_FLAG_ERROR		(1ULL << 60)
-#define UTIL_FLAG_OVERFLOW	(1ULL << 61)
+#define UTIL_FLAG_AUX		(1ULL << 61)
 
 /* Indicates that an EP has been bound to a counter */
 #define OFI_CNTR_ENABLED	(1ULL << 61)
@@ -530,8 +532,9 @@ ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		fi_addr_t *src_addr, const void *cond, int timeout);
 int ofi_cq_signal(struct fid_cq *cq_fid);
 
-int ofi_cq_write_overflow(struct util_cq *cq, void *context, uint64_t flags, size_t len,
-			  void *buf, uint64_t data, uint64_t tag, fi_addr_t src);
+int ofi_cq_write_overflow(struct util_cq *cq, void *context, uint64_t flags,
+			  size_t len, void *buf, uint64_t data, uint64_t tag,
+			  fi_addr_t src);
 
 static inline void util_cq_signal(struct util_cq *cq)
 {
@@ -540,8 +543,8 @@ static inline void util_cq_signal(struct util_cq *cq)
 }
 
 static inline void
-ofi_cq_write_comp_entry(struct util_cq *cq, void *context, uint64_t flags,
-			size_t len, void *buf, uint64_t data, uint64_t tag)
+ofi_cq_write_entry(struct util_cq *cq, void *context, uint64_t flags,
+		   size_t len, void *buf, uint64_t data, uint64_t tag)
 {
 	struct fi_cq_tagged_entry *comp = ofi_cirque_tail(cq->cirq);
 	comp->op_context = context;
@@ -553,18 +556,13 @@ ofi_cq_write_comp_entry(struct util_cq *cq, void *context, uint64_t flags,
 	ofi_cirque_commit(cq->cirq);
 }
 
-static inline int
-ofi_cq_write_thread_unsafe(struct util_cq *cq, void *context, uint64_t flags,
-			   size_t len, void *buf, uint64_t data, uint64_t tag)
+static inline void
+ofi_cq_write_src_entry(struct util_cq *cq, void *context, uint64_t flags,
+		       size_t len, void *buf, uint64_t data, uint64_t tag,
+		       fi_addr_t src)
 {
-	if (OFI_UNLIKELY(ofi_cirque_isfull(cq->cirq))) {
-		FI_DBG(cq->domain->prov, FI_LOG_CQ,
-		       "util_cq cirq is full!\n");
-		return ofi_cq_write_overflow(cq, context, flags, len,
-					     buf, data, tag, 0);
-	}
-	ofi_cq_write_comp_entry(cq, context, flags, len, buf, data, tag);
-	return 0;
+	cq->src[ofi_cirque_windex(cq->cirq)] = src;
+	ofi_cq_write_entry(cq, context, flags, len, buf, data, tag);
 }
 
 static inline int
@@ -572,25 +570,17 @@ ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 	     void *buf, uint64_t data, uint64_t tag)
 {
 	int ret;
+
 	cq->cq_fastlock_acquire(&cq->cq_lock);
-	ret = ofi_cq_write_thread_unsafe(cq, context, flags, len, buf, data, tag);
+	if (ofi_cirque_freecnt(cq->cirq) > 1) {
+		ofi_cq_write_entry(cq, context, flags, len, buf, data, tag);
+		ret = 0;
+	} else {
+		ret = ofi_cq_write_overflow(cq, context, flags, len,
+					    buf, data, tag, FI_ADDR_NOTAVAIL);
+	}
 	cq->cq_fastlock_release(&cq->cq_lock);
 	return ret;
-}
-
-static inline int
-ofi_cq_write_src_thread_unsafe(struct util_cq *cq, void *context, uint64_t flags, size_t len,
-			       void *buf, uint64_t data, uint64_t tag, fi_addr_t src)
-{
-	if (OFI_UNLIKELY(ofi_cirque_isfull(cq->cirq))) {
-		FI_DBG(cq->domain->prov, FI_LOG_CQ,
-		       "util_cq cirq is full!\n");
-		return ofi_cq_write_overflow(cq, context, flags, len,
-					     buf, data, tag, src);
-	}
-	cq->src[ofi_cirque_windex(cq->cirq)] = src;
-	ofi_cq_write_comp_entry(cq, context, flags, len, buf, data, tag);
-	return 0;
 }
 
 static inline int
@@ -598,13 +588,22 @@ ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 		 void *buf, uint64_t data, uint64_t tag, fi_addr_t src)
 {
 	int ret;
+
 	cq->cq_fastlock_acquire(&cq->cq_lock);
-	ret = ofi_cq_write_src_thread_unsafe(cq, context, flags, len,
-					     buf, data, tag, src);
+	if (ofi_cirque_freecnt(cq->cirq) > 1) {
+		ofi_cq_write_src_entry(cq, context, flags, len, buf, data,
+				       tag, src);
+		ret = 0;
+	} else {
+		ret = ofi_cq_write_overflow(cq, context, flags, len,
+					    buf, data, tag, src);
+	}
 	cq->cq_fastlock_release(&cq->cq_lock);
 	return ret;
 }
 
+int ofi_cq_insert_error(struct util_cq *cq,
+			const struct fi_cq_err_entry *err_entry);
 int ofi_cq_write_error(struct util_cq *cq,
 		       const struct fi_cq_err_entry *err_entry);
 int ofi_cq_write_error_peek(struct util_cq *cq, uint64_t tag, void *context);
