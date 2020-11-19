@@ -105,7 +105,7 @@ error()
 # usage information
 ###################
 usage="Usage: $0 [-i provider_name] [-e provider_name]
-       [-n] [-o] [-m] [-d] [-s] [-c] [-r] [-v] [-h] tarball
+       [-n] [-o] [-l] [-m] [-d] [-s] [-c] [-r] [-v] [-h] tarball
 
  Provider options:
 
@@ -120,6 +120,9 @@ usage="Usage: $0 [-i provider_name] [-e provider_name]
 
   -o         install under /opt/libfabric/_VERSION_
                {default: install under /usr/ }
+
+  -l         create symbolic link 'default' to _VERSION_ (requires -o option) 
+              {default: link not create}
 
   -m         install modulefile
               {default: don't install modulefile}
@@ -160,7 +163,7 @@ usage="Usage: $0 [-i provider_name] [-e provider_name]
 # parse args
 ############
 export arguments="$@"
-while getopts DP:M:V:nomi:e:dc:r:svh flag; do
+while getopts DP:M:V:nolmi:e:dc:r:svh flag; do
     case "$flag" in
       n) noop="true"
          ;;
@@ -190,6 +193,8 @@ while getopts DP:M:V:nomi:e:dc:r:svh flag; do
       s) unpack_spec="true"
          ;;
       v) verbose="true"
+         ;;
+      l) version_symbolic_link="true"
          ;;
       h) echo "$usage"
          exit 0
@@ -260,6 +265,9 @@ verbose "Version: $version"
 if [[ -n "$install_in_opt" ]]; then
   if [[ -z "$prefix" ]] ; then
     prefix=$default_opt_prefix
+  fi
+  if [[ -n "$version_symbolic_link" ]]; then
+    rpmbuild_options="$rpmbuild_options --define '_version_symbolic_link $prefix/libfabric/default'"
   fi
   prefix="$prefix/libfabric/$version"
 

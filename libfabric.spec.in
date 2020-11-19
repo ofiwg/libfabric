@@ -81,6 +81,9 @@ EOF
 %makeinstall installdirs
 # remove unpackaged files from the buildroot
 rm -f %{buildroot}%{_libdir}/*.la
+%if 0%{?_version_symbolic_link:1}
+%{__ln_s} %{version} %{buildroot}/%{_version_symbolic_link}
+%endif
 
 %clean
 rm -rf %{buildroot}
@@ -94,6 +97,9 @@ rm -rf %{buildroot}
 %{_bindir}/fi_info
 %{_bindir}/fi_strerror
 %{_bindir}/fi_pingpong
+%if 0%{?_version_symbolic_link:1}
+%{_version_symbolic_link}
+%endif
 %dir %{_libdir}/libfabric/
 %doc AUTHORS COPYING README
 
