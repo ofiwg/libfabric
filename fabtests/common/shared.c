@@ -1520,8 +1520,6 @@ static void ft_cleanup_mr_array(struct ft_context *ctx_arr, char **mr_bufs)
 
 static void ft_close_fids(void)
 {
-	if (mr != &no_mr)
-		FT_CLOSE_FID(mr);
 	FT_CLOSE_FID(mc);
 	FT_CLOSE_FID(alias_ep);
 	FT_CLOSE_FID(ep);
@@ -1535,6 +1533,8 @@ static void ft_close_fids(void)
 	FT_CLOSE_FID(rxcntr);
 	FT_CLOSE_FID(txcntr);
 	FT_CLOSE_FID(pollset);
+	if (mr != &no_mr)
+		FT_CLOSE_FID(mr);
 	FT_CLOSE_FID(av);
 	FT_CLOSE_FID(eq);
 	FT_CLOSE_FID(domain);
