@@ -181,10 +181,18 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	 * inject size up to the rxm limit (eager buffer size) in this
 	 * case.  If registration is not required, use the core provider's
 	 * limit, which avoids potential extra data copies.
+	 *
+	 * If we report the size of the bounce buffer, apps may call inject
+	 * rather than send, which hampers our ability to use the direct
+	 * send feature that avoids data copies.
 	 */
-	info->tx_attr->inject_size = ofi_mr_local(info) ?
-				     base_info->tx_attr->inject_size :
-				     core_info->tx_attr->inject_size;
+	if (ofi_mr_local(info) ||
+	    (core_info->tx_attr->inject_size <= sizeof(struct rxm_pkt))) {
+		info->tx_attr->inject_size = base_info->tx_attr->inject_size;
+	} else {
+		info->tx_attr->inject_size = core_info->tx_attr->inject_size -
+					     sizeof(struct rxm_pkt);
+	}
 
 	info->tx_attr->size 		= base_info->tx_attr->size;
 	info->tx_attr->iov_limit 	= MIN(base_info->tx_attr->iov_limit,
