@@ -1483,23 +1483,36 @@ rxm_use_direct_send(struct rxm_ep *ep, size_t iov_count, uint64_t flags)
 }
 
 static ssize_t
-rxm_direct_send(struct rxm_conn *rxm_conn, struct rxm_tx_eager_buf *tx_buf,
+rxm_direct_send(struct rxm_ep *ep, struct rxm_conn *rxm_conn,
+		struct rxm_tx_eager_buf *tx_buf,
 		const struct iovec *iov, void **desc, size_t count)
 {
 	struct iovec send_iov[RXM_IOV_LIMIT];
 	void *send_desc[RXM_IOV_LIMIT];
+	struct rxm_mr *mr;
+	ssize_t ret;
+	int i;
 
 	send_iov[0].iov_base = &tx_buf->pkt;
 	send_iov[0].iov_len = sizeof(tx_buf->pkt);
-	send_desc[0] = tx_buf->hdr.desc;
+	memcpy(send_iov + 1, iov, sizeof(*iov) * count);
 
-	if (count) {
-		memcpy(&send_iov[1], (void *) iov, sizeof(*iov) * count);
-		if (desc)
-			memcpy(&send_desc[1], desc, sizeof(*desc) * count);
+	if (ep->msg_mr_local) {
+		send_desc[0] = tx_buf->hdr.desc;
+
+		for (i = 0; i < count; i++) {
+			assert(desc[i]);
+			mr = desc[i];
+			send_desc[i + 1] = fi_mr_desc(mr->msg_mr);
+		}
+
+		ret = fi_sendv(rxm_conn->msg_ep, send_iov, send_desc,
+			       count + 1, 0, tx_buf);
+	} else {
+		ret = fi_sendv(rxm_conn->msg_ep, send_iov, NULL,
+			       count + 1, 0, tx_buf);
 	}
-	return fi_sendv(rxm_conn->msg_ep, send_iov, send_desc,
-			count + 1, 0, tx_buf);
+	return ret;
 }
 
 static ssize_t
@@ -1539,8 +1552,8 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					 flags, &eager_buf->pkt);
 
 		if (rxm_use_direct_send(rxm_ep, count, flags)) {
-			ret = rxm_direct_send(rxm_conn, eager_buf, iov,
-					      desc, count);
+			ret = rxm_direct_send(rxm_ep, rxm_conn, eager_buf,
+					      iov, desc, count);
 		} else {
 			ret = ofi_copy_from_hmem_iov(eager_buf->pkt.data,
 						     eager_buf->pkt.hdr.size,
