@@ -100,11 +100,9 @@
 
 
 #define VERBS_INJECT_FLAGS(ep, len, flags, desc) \
-	((flags) & FI_INJECT || \
-	 ((!(desc) || \
-	  ((struct vrb_mem_desc *) (desc))->info.iface == FI_HMEM_SYSTEM) && \
-	 (len) <= (ep)->info_attr.inject_size)) ? \
-	IBV_SEND_INLINE : 0
+	(((flags) & FI_INJECT) || !(desc) || \
+	 ((((struct vrb_mem_desc *) (desc))->info.iface == FI_HMEM_SYSTEM) && \
+	  ((len) <= (ep)->info_attr.inject_size))) ? IBV_SEND_INLINE : 0
 #define VERBS_INJECT(ep, len, desc) \
 	VERBS_INJECT_FLAGS(ep, len, (ep)->util_ep.tx_op_flags, desc)
 
