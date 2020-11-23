@@ -99,7 +99,8 @@ vrb_msg_ep_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		wr.opcode = IBV_WR_RDMA_WRITE;
 	}
 
-	return vrb_send_msg(ep, &wr, msg, flags);
+	return vrb_send_iov_flags(ep, &wr, msg->msg_iov, msg->desc,
+				  msg->iov_count, flags);
 }
 
 static ssize_t
@@ -339,7 +340,8 @@ vrb_msg_xrc_ep_rma_writemsg(struct fid_ep *ep_fid,
 		wr.opcode = IBV_WR_RDMA_WRITE;
 	}
 
-	return vrb_send_msg(&ep->base_ep, &wr, msg, flags);
+	return vrb_send_iov_flags(&ep->base_ep, &wr, msg->msg_iov, msg->desc,
+				  msg->iov_count, flags);
 }
 
 static ssize_t

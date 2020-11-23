@@ -936,10 +936,6 @@ do {								\
 	}							\
 } while (0)
 
-#define vrb_send_msg(ep, wr, msg, flags)			\
-	vrb_send_iov_flags(ep, wr, (msg)->msg_iov, (msg)->desc,	\
-			      (msg)->iov_count, flags)
-
 #define vrb_wr_consumes_recv(wr)						\
 	( wr->opcode == IBV_WR_SEND || wr->opcode == IBV_WR_SEND_WITH_IMM	\
 	|| wr->opcode == IBV_WR_RDMA_WRITE_WITH_IMM )
