@@ -99,8 +99,8 @@ vrb_msg_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t fla
 		wr.opcode = IBV_WR_SEND;
 	}
 
-	return vrb_send_iov_flags(ep, &wr, msg->msg_iov, msg->desc,
-				  msg->iov_count, flags);
+	return vrb_send_iov(ep, &wr, msg->msg_iov, msg->desc,
+			    msg->iov_count, flags);
 }
 
 static ssize_t
@@ -145,8 +145,8 @@ vrb_msg_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		.opcode = IBV_WR_SEND,
 	};
 
-	return vrb_send_iov_flags(ep, &wr, iov, desc, count,
-				  ep->util_ep.tx_op_flags);
+	return vrb_send_iov(ep, &wr, iov, desc, count,
+			    ep->util_ep.tx_op_flags);
 }
 
 static ssize_t vrb_msg_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -253,8 +253,8 @@ vrb_msg_xrc_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t
 		wr.opcode = IBV_WR_SEND;
 	}
 
-	return vrb_send_iov_flags(&ep->base_ep, &wr, msg->msg_iov, msg->desc,
-				  msg->iov_count, flags);
+	return vrb_send_iov(&ep->base_ep, &wr, msg->msg_iov, msg->desc,
+			    msg->iov_count, flags);
 }
 
 static ssize_t
@@ -305,8 +305,8 @@ vrb_msg_xrc_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc
 
 	VRB_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
-	return vrb_send_iov_flags(&ep->base_ep, &wr, iov, desc, count,
-				  ep->base_ep.util_ep.tx_op_flags);
+	return vrb_send_iov(&ep->base_ep, &wr, iov, desc, count,
+			    ep->base_ep.util_ep.tx_op_flags);
 }
 
 static ssize_t vrb_msg_xrc_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,

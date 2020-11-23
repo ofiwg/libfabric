@@ -111,8 +111,8 @@ vrb_dgram_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	if (vrb_dgram_ep_set_addr(ep, msg->addr, &wr))
 		return -FI_ENOENT;
 
-	return vrb_send_iov_flags(ep, &wr, msg->msg_iov, msg->desc,
-				  msg->iov_count, flags);
+	return vrb_send_iov(ep, &wr, msg->msg_iov, msg->desc,
+			    msg->iov_count, flags);
 }
 
 static inline ssize_t
@@ -130,8 +130,8 @@ vrb_dgram_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	if (vrb_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return vrb_send_iov_flags(ep, &wr, iov, desc, count,
-				  ep->util_ep.tx_op_flags);
+	return vrb_send_iov(ep, &wr, iov, desc, count,
+			    ep->util_ep.tx_op_flags);
 }
 
 static ssize_t
