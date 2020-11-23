@@ -949,22 +949,6 @@ vrb_send_buf(struct vrb_ep *ep, struct ibv_send_wr *wr,
 {
 	struct ibv_sge sge = vrb_init_sge(buf, len, desc);
 
-	assert(wr->wr_id != VERBS_NO_COMP_FLAG);
-
-	wr->sg_list = &sge;
-	wr->num_sge = 1;
-
-	return vrb_post_send(ep, wr, 0);
-}
-
-static inline ssize_t
-vrb_send_buf_inline(struct vrb_ep *ep, struct ibv_send_wr *wr,
-		       const void *buf, size_t len)
-{
-	struct ibv_sge sge = vrb_init_sge(buf, len, NULL);
-
-	assert(wr->wr_id == VERBS_NO_COMP_FLAG);
-
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
 

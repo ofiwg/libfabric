@@ -188,7 +188,7 @@ vrb_dgram_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (vrb_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return vrb_send_buf_inline(ep, &wr, buf, len);
+	return vrb_send_buf(ep, &wr, buf, len, NULL);
 }
 
 static ssize_t
@@ -228,7 +228,7 @@ vrb_dgram_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (vrb_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return vrb_send_buf_inline(ep, &wr, buf, len);
+	return vrb_send_buf(ep, &wr, buf, len, NULL);
 }
 
 static ssize_t

@@ -160,7 +160,7 @@ static ssize_t vrb_msg_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t 
 		.send_flags = IBV_SEND_INLINE,
 	};
 
-	return vrb_send_buf_inline(ep, &wr, buf, len);
+	return vrb_send_buf(ep, &wr, buf, len, NULL);
 }
 
 static ssize_t vrb_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -175,7 +175,7 @@ static ssize_t vrb_msg_ep_injectdata(struct fid_ep *ep_fid, const void *buf, siz
 		.send_flags = IBV_SEND_INLINE,
 	};
 
-	return vrb_send_buf_inline(ep, &wr, buf, len);
+	return vrb_send_buf(ep, &wr, buf, len, NULL);
 }
 
 static ssize_t
@@ -322,7 +322,7 @@ static ssize_t vrb_msg_xrc_ep_inject(struct fid_ep *ep_fid, const void *buf, siz
 
 	VRB_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
-	return vrb_send_buf_inline(&ep->base_ep, &wr, buf, len);
+	return vrb_send_buf(&ep->base_ep, &wr, buf, len, NULL);
 }
 
 static ssize_t vrb_msg_xrc_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -339,7 +339,7 @@ static ssize_t vrb_msg_xrc_ep_injectdata(struct fid_ep *ep_fid, const void *buf,
 
 	VRB_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
-	return vrb_send_buf_inline(&ep->base_ep, &wr, buf, len);
+	return vrb_send_buf(&ep->base_ep, &wr, buf, len, NULL);
 }
 
 /* NOTE: Initially the XRC endpoint must be used with a SRQ. */

@@ -192,7 +192,7 @@ vrb_msg_ep_rma_inject_write(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.send_flags = IBV_SEND_INLINE,
 	};
 
-	return vrb_send_buf_inline(ep, &wr, buf, len);
+	return vrb_send_buf(ep, &wr, buf, len, NULL);
 }
 
 static ssize_t
@@ -228,7 +228,7 @@ vrb_msg_ep_rma_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_t l
 		.send_flags = IBV_SEND_INLINE,
 	};
 
-	return vrb_send_buf_inline(ep, &wr, buf, len);
+	return vrb_send_buf(ep, &wr, buf, len, NULL);
 }
 
 static ssize_t
@@ -445,7 +445,7 @@ vrb_msg_xrc_ep_rma_inject_write(struct fid_ep *ep_fid, const void *buf,
 
 	VRB_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
-	return vrb_send_buf_inline(&ep->base_ep, &wr, buf, len);
+	return vrb_send_buf(&ep->base_ep, &wr, buf, len, NULL);
 }
 
 static ssize_t
@@ -483,7 +483,7 @@ vrb_msg_xrc_ep_rma_inject_writedata(struct fid_ep *ep_fid,
 
 	VRB_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
-	return vrb_send_buf_inline(&ep->base_ep, &wr, buf, len);
+	return vrb_send_buf(&ep->base_ep, &wr, buf, len, NULL);
 }
 
 static ssize_t
