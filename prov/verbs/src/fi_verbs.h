@@ -906,32 +906,6 @@ do {								\
 	}							\
 } while (0)
 
-#define vrb_set_sge_iov_count_len(sg_list, iov, count, desc, len)	\
-do {									\
-	size_t i;							\
-	sg_list = alloca(sizeof(*sg_list) * count);			\
-	for (i = 0; i < count; i++) {					\
-		sg_list[i] = vrb_init_sge(				\
-				iov[i].iov_base,			\
-				iov[i].iov_len,				\
-				desc[i]);				\
-		len += iov[i].iov_len;					\
-	}								\
-} while (0)
-
-#define vrb_set_sge_iov_inline(sg_list, iov, count, len)	\
-do {								\
-	size_t i;						\
-	sg_list = alloca(sizeof(*sg_list) * count);		\
-	for (i = 0; i < count; i++) {				\
-		sg_list[i] = vrb_init_sge(			\
-					iov[i].iov_base,	\
-					iov[i].iov_len,		\
-					NULL);			\
-		len += iov[i].iov_len;				\
-	}							\
-} while (0)
-
 #define vrb_wr_consumes_recv(wr)						\
 	( wr->opcode == IBV_WR_SEND || wr->opcode == IBV_WR_SEND_WITH_IMM	\
 	|| wr->opcode == IBV_WR_RDMA_WRITE_WITH_IMM )
