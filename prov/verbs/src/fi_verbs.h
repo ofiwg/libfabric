@@ -898,16 +898,14 @@ int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc);
 	  .length = (uint32_t) len,			\
 	  .lkey = (desc) ? ((struct vrb_mem_desc *) (desc))->lkey : 0 }
 
-#define vrb_set_sge_iov(sg_list, iov, count, desc)	\
-do {							\
-	size_t i;					\
-	sg_list = alloca(sizeof(*sg_list) * count);	\
-	for (i = 0; i < count; i++) {			\
-		sg_list[i] = vrb_init_sge(		\
-				iov[i].iov_base,	\
-				iov[i].iov_len,		\
-				desc[i]);		\
-	}						\
+#define vrb_iov_dupa(dst, iov, desc, count)			\
+do {								\
+	size_t i;						\
+	dst = alloca(sizeof(*dst) * count);			\
+	for (i = 0; i < count; i++) {				\
+		dst[i] = vrb_init_sge(iov[i].iov_base,		\
+				      iov[i].iov_len, desc[i]);	\
+	}							\
 } while (0)
 
 #define vrb_set_sge_iov_count_len(sg_list, iov, count, desc, len)	\

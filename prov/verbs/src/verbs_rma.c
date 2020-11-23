@@ -135,8 +135,7 @@ vrb_msg_ep_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc
 		.num_sge = count,
 	};
 
-	vrb_set_sge_iov(wr.sg_list, iov, count, desc);
-
+	vrb_iov_dupa(wr.sg_list, iov, desc, count);
 	return vrb_post_send(ep, &wr, 0);
 }
 
@@ -154,8 +153,7 @@ vrb_msg_ep_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		.num_sge = msg->iov_count,
 	};
 
-	vrb_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
-
+	vrb_iov_dupa(wr.sg_list, msg->msg_iov, msg->desc, msg->iov_count);
 	return vrb_post_send(ep, &wr, 0);
 }
 
@@ -380,8 +378,7 @@ vrb_msg_xrc_ep_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	VRB_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
-	vrb_set_sge_iov(wr.sg_list, iov, count, desc);
-
+	vrb_iov_dupa(wr.sg_list, iov, desc, count);
 	return vrb_post_send(&ep->base_ep, &wr, 0);
 }
 
@@ -402,8 +399,7 @@ vrb_msg_xrc_ep_rma_readmsg(struct fid_ep *ep_fid,
 
 	VRB_SET_REMOTE_SRQN(wr, ep->peer_srqn);
 
-	vrb_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
-
+	vrb_iov_dupa(wr.sg_list, msg->msg_iov, msg->desc, msg->iov_count);
 	return vrb_post_send(&ep->base_ep, &wr, flags);
 }
 

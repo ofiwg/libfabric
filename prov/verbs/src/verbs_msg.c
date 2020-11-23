@@ -47,7 +47,7 @@ vrb_msg_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t fla
 		.next = NULL,
 	};
 
-	vrb_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
+	vrb_iov_dupa(wr.sg_list, msg->msg_iov, msg->desc, msg->iov_count);
 	return vrb_post_recv(ep, &wr);
 }
 
