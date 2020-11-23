@@ -129,7 +129,8 @@ vrb_dgram_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	if (vrb_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return vrb_send_iov(ep, &wr, iov, desc, count);
+	return vrb_send_iov_flags(ep, &wr, iov, desc, count,
+				  ep->util_ep.tx_op_flags);
 }
 
 static ssize_t

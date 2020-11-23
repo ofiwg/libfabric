@@ -923,25 +923,20 @@ do {									\
 	}								\
 } while (0)
 
-#define vrb_init_sge_inline(buf, len) vrb_init_sge(buf, len, NULL)
-
 #define vrb_set_sge_iov_inline(sg_list, iov, count, len)	\
 do {								\
 	size_t i;						\
 	sg_list = alloca(sizeof(*sg_list) * count);		\
 	for (i = 0; i < count; i++) {				\
-		sg_list[i] = vrb_init_sge_inline(		\
+		sg_list[i] = vrb_init_sge(			\
 					iov[i].iov_base,	\
-					iov[i].iov_len);	\
+					iov[i].iov_len,		\
+					NULL);			\
 		len += iov[i].iov_len;				\
 	}							\
 } while (0)
 
-#define vrb_send_iov(ep, wr, iov, desc, count)		\
-	vrb_send_iov_flags(ep, wr, iov, desc, count,		\
-			      (ep)->util_ep.tx_op_flags)
-
-#define vrb_send_msg(ep, wr, msg, flags)				\
+#define vrb_send_msg(ep, wr, msg, flags)			\
 	vrb_send_iov_flags(ep, wr, (msg)->msg_iov, (msg)->desc,	\
 			      (msg)->iov_count, flags)
 
@@ -970,7 +965,7 @@ static inline ssize_t
 vrb_send_buf_inline(struct vrb_ep *ep, struct ibv_send_wr *wr,
 		       const void *buf, size_t len)
 {
-	struct ibv_sge sge = vrb_init_sge_inline(buf, len);
+	struct ibv_sge sge = vrb_init_sge(buf, len, NULL);
 
 	assert(wr->wr_id == VERBS_NO_COMP_FLAG);
 
