@@ -41,6 +41,8 @@
 #include <sys/mman.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
+#include <sys/syscall.h>
 
 #include <ifaddrs.h>
 #include "unix/osd.h"
