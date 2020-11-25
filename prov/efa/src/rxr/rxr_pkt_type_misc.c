@@ -522,6 +522,39 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
+/* receipt packet related functions */
+int rxr_pkt_init_receipt(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+			 struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_receipt_hdr *receipt_hdr;
+
+	receipt_hdr = rxr_get_receipt_hdr(pkt_entry->pkt);
+	receipt_hdr->type = RXR_RECEIPT_PKT;
+	receipt_hdr->version = RXR_BASE_PROTOCOL_VERSION;
+	receipt_hdr->flags = 0;
+	receipt_hdr->tx_id = rx_entry->tx_id;
+	receipt_hdr->msg_id = rx_entry->msg_id;
+
+	pkt_entry->pkt_size = sizeof(struct rxr_receipt_hdr);
+	pkt_entry->addr = rx_entry->addr;
+	pkt_entry->x_entry = rx_entry;
+
+	return 0;
+}
+
+void rxr_pkt_handle_receipt_sent(struct rxr_ep *ep,
+				 struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+
+	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
+	rxr_release_rx_entry(ep, rx_entry);
+}
+
+void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
+					    struct rxr_pkt_entry *pkt_entry)
+{
+}
 
 /* atomrsp packet related functions: init, handle_sent, handle_send_completion and recv
  *
@@ -592,6 +625,45 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 	} else {
 		efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
 		rxr_release_tx_entry(ep, tx_entry);
+	}
+
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
+}
+
+void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
+				 struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_tx_entry *tx_entry = NULL;
+	struct rxr_receipt_hdr *receipt_hdr;
+
+	receipt_hdr = rxr_get_receipt_hdr(pkt_entry->pkt);
+	/* Retrieve the tx_entry that will be written into TX CQ*/
+	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool,
+					receipt_hdr->tx_id);
+	if (!tx_entry) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"Failed to retrive the tx_entry when hadling receipt packet.\n");
+		return;
+	}
+
+	tx_entry->rxr_flags |= RXR_RECEIPT_RECEIVED;
+	if (!(tx_entry->bytes_acked > 0)) {
+		/* For eager and medium delivery_complete messages,
+		 * bytes_acked is not updated,
+		 * so it is always 0.
+		 */
+		rxr_cq_handle_tx_completion(ep, tx_entry);
+	} else {
+		/*
+		 * For long message protocol, when FI_DELIVERY_COMPLETE
+		 * is requested, we have to write tx completions
+		 * in either rxr_pkt_handle_data_send_completion()
+		 * or rxr_pkt_handle_receipt_recv() depending on which of them
+		 * is called later due to avoid accessing released
+		 * tx_entry.
+		 */
+		if (tx_entry->total_len == tx_entry->bytes_acked)
+			rxr_cq_handle_tx_completion(ep, tx_entry);
 	}
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);

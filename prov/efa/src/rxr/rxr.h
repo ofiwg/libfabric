@@ -157,6 +157,19 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 #define RXR_MULTI_RECV_CONSUMER	BIT_ULL(5)
 
 /*
+ * Flag to tell if the transmission is using FI_DELIVERY_COMPLETE
+ * protocols
+ */
+
+#define RXR_DELIVERY_COMPLETE_REQUESTED	BIT_ULL(6)
+
+/*
+ * Flag to tell if the sender
+ * receives the receipt packet for the tx_entry.
+ */
+#define RXR_RECEIPT_RECEIVED BIT_ULL(7)
+
+/*
  * OFI flags
  * The 64-bit flag field is used as follows:
  * 1-grow up    common (usable with multiple operations)
@@ -443,6 +456,8 @@ struct rxr_tx_entry {
 	struct rxr_queued_ctrl_info queued_ctrl;
 
 	uint64_t fi_flags;
+	uint64_t rxr_flags;
+
 	uint64_t send_flags;
 	size_t iov_count;
 	size_t iov_index;

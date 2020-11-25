@@ -63,16 +63,22 @@ ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 {
 	int err, tagged;
 	struct rxr_peer *peer;
+	int pkt_type;
+	bool delivery_complete_requested;
 
 	assert(RXR_EAGER_MSGRTM_PKT + 1 == RXR_EAGER_TAGRTM_PKT);
 	assert(RXR_READ_MSGRTM_PKT + 1 == RXR_READ_TAGRTM_PKT);
+	assert(RXR_DC_EAGER_MSGRTM_PKT + 1 == RXR_DC_EAGER_TAGRTM_PKT);
 
 	tagged = (tx_entry->op == ofi_op_tagged);
 	assert(tagged == 0 || tagged == 1);
 
-	if (tx_entry->total_len == 0)
+	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
+	if (tx_entry->total_len == 0) {
+		pkt_type = delivery_complete_requested ? RXR_DC_EAGER_MSGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
 		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-							  RXR_EAGER_MSGRTM_PKT + tagged, 0);
+						  pkt_type + tagged, 0);
+	}
 
 	/* Currently cuda data must be sent using read message protocol.
 	 * However, because read message protocol is an extra feature, we cannot
@@ -109,34 +115,81 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	assert(RXR_LONG_MSGRTM_PKT + 1 == RXR_LONG_TAGRTM_PKT);
 	assert(RXR_MEDIUM_MSGRTM_PKT + 1 == RXR_MEDIUM_TAGRTM_PKT);
 
+	assert(RXR_DC_EAGER_MSGRTM_PKT + 1 == RXR_DC_EAGER_TAGRTM_PKT);
+	assert(RXR_DC_MEDIUM_MSGRTM_PKT + 1 == RXR_DC_MEDIUM_TAGRTM_PKT);
+	assert(RXR_DC_LONG_MSGRTM_PKT + 1 == RXR_DC_LONG_TAGRTM_PKT);
+
 	int tagged;
 	size_t max_rtm_data_size;
 	ssize_t err;
 	struct rxr_peer *peer;
+	bool delivery_complete_requested;
+	int ctrl_type;
 	struct efa_domain *efa_domain;
 	struct rxr_domain *rxr_domain = rxr_ep_domain(rxr_ep);
 
 	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
 				  util_domain.domain_fid);
 
-
 	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
 	tagged = (tx_entry->op == ofi_op_tagged);
 	assert(tagged == 0 || tagged == 1);
 
-	max_rtm_data_size = rxr_pkt_req_max_data_size(rxr_ep,
-						      tx_entry->addr,
-						      RXR_EAGER_MSGRTM_PKT + tagged);
-
+	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+
+	if (delivery_complete_requested && !(peer->is_local)) {
+		tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
+		/*
+		 * Because delivery complete is defined as an extra
+		 * feature, the receiver might not support it.
+		 *
+		 * The sender cannot send with FI_DELIVERY_COMPLETE
+		 * if the peer is not able to handle it.
+		 *
+		 * If the sender does not know whether the peer
+		 * can handle it, it needs to trigger
+		 * a handshake packet from the peer.
+		 *
+		 * The handshake packet contains
+		 * the information whether the peer
+		 * support it or not.
+		 */
+		err = rxr_pkt_trigger_handshake(rxr_ep, tx_entry->addr, peer);
+		if (OFI_UNLIKELY(err))
+			return err;
+
+		if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
+			return -FI_EAGAIN;
+
+		else if (!rxr_peer_support_delivery_complete(peer))
+			return -FI_EOPNOTSUPP;
+
+		max_rtm_data_size = rxr_pkt_req_max_data_size(rxr_ep,
+							      tx_entry->addr,
+							      RXR_DC_EAGER_MSGRTM_PKT + tagged);
+	} else {
+		max_rtm_data_size = rxr_pkt_req_max_data_size(rxr_ep,
+							      tx_entry->addr,
+							      RXR_EAGER_MSGRTM_PKT + tagged);
+	}
 
 	if (peer->is_local) {
 		assert(rxr_ep->use_shm);
 		/* intra instance message */
-		int rtm_type = (tx_entry->total_len <= max_rtm_data_size) ? RXR_EAGER_MSGRTM_PKT
-									  : RXR_READ_MSGRTM_PKT;
+		if (tx_entry->total_len > max_rtm_data_size)
+			/*
+			 * Read message support
+			 * FI_DELIVERY_COMPLETE implicitly.
+			 */
+			ctrl_type = RXR_READ_MSGRTM_PKT;
+		else
+			ctrl_type = delivery_complete_requested ? RXR_DC_EAGER_MSGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
 
-		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, rtm_type + tagged, 0);
+		return rxr_pkt_post_ctrl_or_queue(rxr_ep,
+				RXR_TX_ENTRY,
+				tx_entry,
+				ctrl_type + tagged, 0);
 	}
 
 	if (rxr_ep->use_zcpy_rx) {
@@ -158,9 +211,12 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	}
 
 	/* inter instance message */
-	if (tx_entry->total_len <= max_rtm_data_size)
+	if (tx_entry->total_len <= max_rtm_data_size) {
+		ctrl_type = (delivery_complete_requested) ?
+			RXR_DC_EAGER_MSGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
 		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						  RXR_EAGER_MSGRTM_PKT + tagged, 0);
+						  ctrl_type + tagged, 0);
+	}
 
 	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size) {
 		/* we do not check the return value of rxr_ep_init_mr_desc()
@@ -168,14 +224,16 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		 */
 		if (tx_entry->desc[0] || efa_is_cache_available(efa_domain))
 			rxr_ep_tx_init_mr_desc(rxr_domain, tx_entry, 0, FI_SEND);
+
+		ctrl_type = delivery_complete_requested  ? RXR_DC_MEDIUM_MSGRTM_PKT : RXR_MEDIUM_MSGRTM_PKT;
 		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						  RXR_MEDIUM_MSGRTM_PKT + tagged, 0);
+						  ctrl_type + tagged, 0);
 	}
 
 	if (tx_entry->total_len >= rxr_env.efa_min_read_msg_size &&
 	    efa_both_support_rdma_read(rxr_ep, peer) &&
 	    (tx_entry->desc[0] || efa_is_cache_available(efa_domain))) {
-		/* use read message protocol */
+		/* Read message support FI_DELIVERY_COMPLETE implicitly. */
 		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
 						 RXR_READ_MSGRTM_PKT + tagged, 0);
 
@@ -192,8 +250,9 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	if (OFI_UNLIKELY(err))
 		return err;
 
+	ctrl_type = delivery_complete_requested ? RXR_DC_LONG_MSGRTM_PKT : RXR_LONG_MSGRTM_PKT;
 	return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					  RXR_LONG_MSGRTM_PKT + tagged, 0);
+					  ctrl_type + tagged, 0);
 }
 
 ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,

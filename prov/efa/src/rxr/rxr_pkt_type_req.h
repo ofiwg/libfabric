@@ -72,6 +72,7 @@
  *     Extra Feature Flags
  */
 #define RXR_REQ_FEATURE_RDMA_READ	BIT_ULL(0)
+#define RXR_REQ_FEATURE_DELIVERY_COMPLETE BIT_ULL(1)
 
 /*
  *     Utility struct and functions for
@@ -181,8 +182,52 @@ struct rxr_eager_tagrtm_hdr {
 	uint64_t tag;
 };
 
+struct rxr_dc_eager_rtm_base_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	uint32_t msg_id;
+	uint32_t tx_id;
+	uint32_t padding;
+};
+
+static inline
+struct rxr_dc_eager_rtm_base_hdr *rxr_get_dc_eager_rtm_base_hdr(void *pkt)
+{
+	return (struct rxr_dc_eager_rtm_base_hdr *)pkt;
+}
+
+struct rxr_dc_eager_msgrtm_hdr {
+	struct rxr_dc_eager_rtm_base_hdr hdr;
+};
+
+static inline
+struct rxr_dc_eager_msgrtm_hdr *rxr_get_dc_eager_msgrtm_hdr(void *pkt)
+{
+	return (struct rxr_dc_eager_msgrtm_hdr *)pkt;
+}
+
+struct rxr_dc_eager_tagrtm_hdr {
+	struct rxr_dc_eager_rtm_base_hdr hdr;
+	uint64_t tag;
+};
+
+static inline
+struct rxr_dc_eager_tagrtm_hdr *rxr_get_dc_eager_tagrtm_hdr(void *pkt)
+{
+	return (struct rxr_dc_eager_tagrtm_hdr *)pkt;
+}
+
 struct rxr_medium_rtm_base_hdr {
 	struct rxr_rtm_base_hdr hdr;
+	uint64_t data_len;
+	uint64_t offset;
+};
+
+struct rxr_dc_medium_rtm_base_hdr {
+	struct rxr_rtm_base_hdr hdr;
+	uint32_t tx_id;
+	uint32_t padding;
 	uint64_t data_len;
 	uint64_t offset;
 };
@@ -191,8 +236,17 @@ struct rxr_medium_msgrtm_hdr {
 	struct rxr_medium_rtm_base_hdr hdr;
 };
 
+struct rxr_dc_medium_msgrtm_hdr {
+	struct rxr_dc_medium_rtm_base_hdr hdr;
+};
+
 struct rxr_medium_tagrtm_hdr {
 	struct rxr_medium_rtm_base_hdr hdr;
+	uint64_t tag;
+};
+
+struct rxr_dc_medium_tagrtm_hdr {
+	struct rxr_dc_medium_rtm_base_hdr hdr;
 	uint64_t tag;
 };
 
@@ -200,6 +254,24 @@ static inline
 struct rxr_medium_rtm_base_hdr *rxr_get_medium_rtm_base_hdr(void *pkt)
 {
 	return (struct rxr_medium_rtm_base_hdr *)pkt;
+}
+
+static inline
+struct rxr_dc_medium_rtm_base_hdr *rxr_get_dc_medium_rtm_base_hdr(void *pkt)
+{
+	return (struct rxr_dc_medium_rtm_base_hdr *)pkt;
+}
+
+static inline
+struct rxr_dc_medium_msgrtm_hdr *rxr_get_dc_medium_msgrtm_hdr(void *pkt)
+{
+	return (struct rxr_dc_medium_msgrtm_hdr *)pkt;
+}
+
+static inline
+struct rxr_dc_medium_tagrtm_hdr *rxr_get_dc_medium_tagrtm_hdr(void *pkt)
+{
+	return (struct rxr_dc_medium_tagrtm_hdr *)pkt;
 }
 
 struct rxr_long_rtm_base_hdr {
@@ -261,6 +333,10 @@ ssize_t rxr_pkt_init_eager_msgrtm(struct rxr_ep *ep,
 				  struct rxr_tx_entry *tx_entry,
 				  struct rxr_pkt_entry *pkt_entry);
 
+ssize_t rxr_pkt_init_dc_eager_msgrtm(struct rxr_ep *ep,
+				     struct rxr_tx_entry *tx_entry,
+				     struct rxr_pkt_entry *pkt_entry);
+
 ssize_t rxr_pkt_init_eager_tagrtm(struct rxr_ep *ep,
 				  struct rxr_tx_entry *tx_entry,
 				  struct rxr_pkt_entry *pkt_entry);
@@ -269,17 +345,37 @@ ssize_t rxr_pkt_init_medium_msgrtm(struct rxr_ep *ep,
 				   struct rxr_tx_entry *tx_entry,
 				   struct rxr_pkt_entry *pkt_entry);
 
+ssize_t rxr_pkt_init_dc_eager_tagrtm(struct rxr_ep *ep,
+				     struct rxr_tx_entry *tx_entry,
+				     struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_dc_medium_msgrtm(struct rxr_ep *ep,
+				      struct rxr_tx_entry *tx_entry,
+				      struct rxr_pkt_entry *pkt_entry);
+
 ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_ep *ep,
 				   struct rxr_tx_entry *tx_entry,
 				   struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_dc_medium_tagrtm(struct rxr_ep *ep,
+				      struct rxr_tx_entry *tx_entry,
+				      struct rxr_pkt_entry *pkt_entry);
 
 ssize_t rxr_pkt_init_long_msgrtm(struct rxr_ep *ep,
 				 struct rxr_tx_entry *tx_entry,
 				 struct rxr_pkt_entry *pkt_entry);
 
+ssize_t rxr_pkt_init_dc_long_msgrtm(struct rxr_ep *ep,
+				    struct rxr_tx_entry *tx_entry,
+				    struct rxr_pkt_entry *pkt_entry);
+
 ssize_t rxr_pkt_init_long_tagrtm(struct rxr_ep *ep,
 				 struct rxr_tx_entry *tx_entry,
 				 struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_dc_long_tagrtm(struct rxr_ep *ep,
+				    struct rxr_tx_entry *tx_entry,
+				    struct rxr_pkt_entry *pkt_entry);
 
 ssize_t rxr_pkt_init_read_msgrtm(struct rxr_ep *ep,
 				 struct rxr_tx_entry *tx_entry,
@@ -322,6 +418,9 @@ void rxr_pkt_handle_medium_rtm_send_completion(struct rxr_ep *ep,
 
 void rxr_pkt_handle_long_rtm_send_completion(struct rxr_ep *ep,
 					     struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_dc_long_rtm_send_completion(struct rxr_ep *ep,
+						struct rxr_pkt_entry *pkt_entry);
 
 static inline
 void rxr_pkt_handle_read_rtm_send_completion(struct rxr_ep *ep,
@@ -382,6 +481,12 @@ struct rxr_rtw_base_hdr *rxr_get_rtw_base_hdr(void *pkt)
 	return (struct rxr_rtw_base_hdr *)pkt;
 }
 
+struct efa_rma_iov {
+	uint64_t		addr;
+	size_t			len;
+	uint64_t		key;
+};
+
 struct rxr_eager_rtw_hdr {
 	uint8_t type;
 	uint8_t version;
@@ -390,6 +495,24 @@ struct rxr_eager_rtw_hdr {
 	uint32_t rma_iov_count;
 	struct fi_rma_iov rma_iov[0];
 };
+
+struct rxr_dc_eager_rtw_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint32_t rma_iov_count;
+	/* end of rxr_rtw_base_hdr */
+	uint32_t tx_id;
+	uint32_t padding;
+	struct efa_rma_iov rma_iov[0];
+};
+
+static inline
+struct rxr_dc_eager_rtw_hdr *rxr_get_dc_eager_rtw_hdr(void *pkt)
+{
+	return (struct rxr_dc_eager_rtw_hdr *)pkt;
+}
 
 struct rxr_long_rtw_hdr {
 	uint8_t type;
@@ -429,6 +552,15 @@ ssize_t rxr_pkt_init_long_rtw(struct rxr_ep *ep,
 ssize_t rxr_pkt_init_read_rtw(struct rxr_ep *ep,
 			      struct rxr_tx_entry *tx_entry,
 			      struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_dc_eager_rtw(struct rxr_ep *ep,
+				  struct rxr_tx_entry *tx_entry,
+				  struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_dc_long_rtw(struct rxr_ep *ep,
+				 struct rxr_tx_entry *tx_entry,
+				 struct rxr_pkt_entry *pkt_entry);
+
 /*
  *     handle_sent() functions
  */
@@ -458,6 +590,9 @@ void rxr_pkt_handle_eager_rtw_send_completion(struct rxr_ep *ep,
 void rxr_pkt_handle_long_rtw_send_completion(struct rxr_ep *ep,
 					     struct rxr_pkt_entry *pkt_entry);
 
+void rxr_pkt_handle_dc_long_rtw_send_completion(struct rxr_ep *ep,
+						struct rxr_pkt_entry *pkt_entry);
+
 static inline
 void rxr_pkt_handle_read_rtw_send_completion(struct rxr_ep *ep,
 					     struct rxr_pkt_entry *pkt_entry)
@@ -469,6 +604,9 @@ void rxr_pkt_handle_read_rtw_send_completion(struct rxr_ep *ep,
  */
 void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_dc_eager_rtw_recv(struct rxr_ep *ep,
+				      struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 				  struct rxr_pkt_entry *pkt_entry);
@@ -560,6 +698,10 @@ struct rxr_rta_hdr *rxr_get_rta_hdr(void *pkt)
 
 ssize_t rxr_pkt_init_write_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry, struct rxr_pkt_entry *pkt_entry);
 
+ssize_t rxr_pkt_init_dc_write_rta(struct rxr_ep *ep,
+				  struct rxr_tx_entry *tx_entry,
+				  struct rxr_pkt_entry *pkt_entry);
+
 ssize_t rxr_pkt_init_fetch_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry, struct rxr_pkt_entry *pkt_entry);
 
 ssize_t rxr_pkt_init_compare_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry, struct rxr_pkt_entry *pkt_entry);
@@ -579,6 +721,9 @@ void rxr_pkt_handle_write_rta_send_completion(struct rxr_ep *ep,
 
 int rxr_pkt_proc_write_rta(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry);
+
+int rxr_pkt_proc_dc_write_rta(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry);
 
 int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry);
