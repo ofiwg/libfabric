@@ -2655,7 +2655,7 @@ int ft_finalize_ep(struct fid_ep *ep)
 
 		FT_POST(fi_tsendmsg, ft_progress, txcq, tx_seq,
 			&tx_cq_cntr, "tsendmsg", ep, &tmsg,
-			FI_INJECT | FI_TRANSMIT_COMPLETE);
+			FI_TRANSMIT_COMPLETE);
 	} else {
 		struct fi_msg msg;
 
@@ -2668,7 +2668,7 @@ int ft_finalize_ep(struct fid_ep *ep)
 
 		FT_POST(fi_sendmsg, ft_progress, txcq, tx_seq,
 			&tx_cq_cntr, "sendmsg", ep, &msg,
-			FI_INJECT | FI_TRANSMIT_COMPLETE);
+			FI_TRANSMIT_COMPLETE);
 	}
 
 	ret = ft_get_tx_comp(tx_seq);
