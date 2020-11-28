@@ -619,9 +619,25 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 			"Error processing mapping request\n");
 
 	peer_smr = smr_peer_region(ep->region, idx);
+	assert(peer_smr != ep->region);
+	/*
+	 * we are currently under ep->region->lock.
+	 * To avoid dead lock, we need to release it
+	 * before acquiring peer lock. This is because in
+	 * two way communication both end points will
+	 * send and receive connreq and will try update peer.
+	 */
+	fastlock_release(&ep->region->lock);
+
+	if (fastlock_tryacquire(&peer_smr->lock)) {
+		fastlock_acquire(&ep->region->lock);
+		return;
+	}
 
 	smr_peer_data(peer_smr)[cmd->msg.hdr.id].addr.id = idx;
+	fastlock_release(&peer_smr->lock);
 
+	fastlock_acquire(&ep->region->lock);
 	smr_peer_data(ep->region)[idx].addr.id = cmd->msg.hdr.id;
 
 	smr_freestack_push(smr_inject_pool(ep->region), tx_buf);
