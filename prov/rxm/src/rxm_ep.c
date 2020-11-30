@@ -1471,12 +1471,15 @@ unlock:
 static bool
 rxm_use_direct_send(struct rxm_ep *ep, size_t iov_count, uint64_t flags)
 {
+	/* Always use bounce buffers until issues are resolved.
 	struct rxm_domain *domain;
 
 	domain = container_of(ep->util_ep.domain, struct rxm_domain,
 			      util_domain);
 	return !(flags & FI_INJECT) && !(domain->mr_local) &&
 		(iov_count < ep->msg_info->tx_attr->iov_limit);
+	*/
+	return false;
 }
 
 static ssize_t

@@ -478,13 +478,18 @@ struct ofi_ops_dynamic_rbuf rxm_dynamic_rbuf = {
 
 static void rxm_config_dyn_rbuf(struct rxm_domain *domain, struct fi_info *info)
 {
-	int ret = 1;
+	/* int ret = 1; */
+
+	/* Force disabling of dynamic receive buffers until issues are
+	 * resolved.
+	 */
+	domain->dyn_rbuf = false;
+	return;
 
 	/* Collective support requires rxm generated and consumed messages.
 	 * Although we could update the code to handle receiving collective
 	 * messages, collective support is mostly for development purposes.
 	 * So, fallback to bounce buffers when enabled.
-	 */
 	if (info->caps & FI_COLLECTIVE)
 		return;
 
@@ -500,6 +505,7 @@ static void rxm_config_dyn_rbuf(struct rxm_domain *domain, struct fi_info *info)
 	if (domain->dyn_rbuf) {
 		domain->rx_buf_post_size = sizeof(struct rxm_pkt);
 	}
+	 */
 }
 
 int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
