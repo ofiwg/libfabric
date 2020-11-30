@@ -51,7 +51,7 @@ features of libfabric.
 : A basic datagram endpoint example.
 
 *fi_dgram_waitset*
-: Transfers datagrams using waitsets for completion notifcation.
+: Transfers datagrams using waitsets for completion notification.
 
 *fi_inj_complete*
 : Sends messages using the FI_INJECT_COMPLETE operation flag.
@@ -64,7 +64,7 @@ features of libfabric.
 
 *fi_msg_epoll*
 : Transfers messages with completion queues configured to use file
-  descriptors as wait objetcts.  The file descriptors are retrieved
+  descriptors as wait objects.  The file descriptors are retrieved
   by the program and used directly with the Linux epoll API.
 
 *fi_msg_sockets*
@@ -122,7 +122,7 @@ features of libfabric.
 
 *fi_resmgmt_test*
 : Tests the resource management enabled feature.  This verifies that the
-  provider prevents applications from overruning local and remote command
+  provider prevents applications from overrunning local and remote command
   queues and completion queues.  This corresponds to setting the domain
   attribute resource_mgmt to FI_RM_ENABLED.
 
@@ -217,7 +217,7 @@ testing scope is limited.
 
 This test runs a series of tests over multiple formats and patterns to help
 validate at scale. The patterns are an all to all, one to all, all to one and
-a ring. The tests also run accross multiple capabilites, such as messages, rma,
+a ring. The tests also run across multiple capabilities, such as messages, rma,
 atomics, and tagged messages. Currently, there is no option to run these
 capabilities and patterns independently, however the test is short enough to be
 all run at once.
@@ -230,7 +230,7 @@ number of tests by iterating over a large number of test variables.  As a
 result, a full ubertest run can take a significant amount of time.  Because
 ubertest iterates over input variables, it relies on a test configuration
 file for control, rather than extensive command line options that are used
-by other fabtests.  A configuration file must be constructured for each
+by other fabtests.  A configuration file must be constructed for each
 provider.  Example test configurations are at test_configs.
 
 *fi_ubertest*
@@ -313,10 +313,10 @@ The following keys and respective key values may be used in the config file.
 *datatype*
 : For FT_CAP_ATOMIC: FI_INT8, FI_UINT8, FI_INT16, FI_UINT16, FI_INT32,
   FI_UINT32, FI_INT64, FI_UINT64, FI_FLOAT, FI_DOUBLE, FI_FLOAT_COMPLEX,
-  FI_DOUBLE_COMPLEX, FI_LONG_DOUBLE, FI_LONG_DOUBLE_COMPLE
+  FI_DOUBLE_COMPLEX, FI_LONG_DOUBLE, FI_LONG_DOUBLE_COMPLEX
 
 *msg_flags - values OR'ed together*
-: For FT_FUNC_XXXMSG: FI_REMOTE_CQ_DATA, FI_COMPLETION
+: For FT_FUNC_[SEND,WRITE,READ,ATOMIC]MSG: FI_REMOTE_CQ_DATA, FI_COMPLETION
 
 *rx_cq_bind_flags - values OR'ed together*
 : FI_SELECTIVE_COMPLETION
