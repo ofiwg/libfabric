@@ -116,7 +116,6 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 		.is_matching = 1,
 		.en_flowctrl = 1,
 	};
-	uint64_t pid_idx;
 
 	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, false, FI_TC_UNSPEC,
 			   &rxc->rx_cmdq);
@@ -133,9 +132,6 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 		goto put_rx_cmdq;
 	}
 
-	/* Select the LEP where the queue will be mapped */
-	pid_idx = CXIP_PTL_IDX_RXC(rxc->rx_id);
-
 	/* If applications AVs are symmetric, use logical FI addresses for
 	 * matching. Otherwise, physical addresses will be used.
 	 */
@@ -144,9 +140,9 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 		pt_opts.use_logical = 1;
 	}
 
-	ret = cxip_pte_alloc(rxc->ep_obj->if_dom, rxc->recv_cq->evtq,
-			     pid_idx, false, &pt_opts, cxip_recv_pte_cb, rxc,
-			     &rxc->rx_pte);
+	ret = cxip_pte_alloc(rxc->ep_obj->if_dom[rxc->rx_id],
+			     rxc->recv_cq->evtq, CXIP_PTL_IDX_RXQ, false,
+			     &pt_opts, cxip_recv_pte_cb, rxc, &rxc->rx_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate RX PTE: %d\n", ret);
 		goto put_tx_cmdq;

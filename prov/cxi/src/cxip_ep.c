@@ -574,6 +574,7 @@ static int cxip_ctx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 static int ep_enable(struct cxip_ep_obj *ep_obj)
 {
 	int ret = FI_SUCCESS;
+	int i;
 
 	fastlock_acquire(&ep_obj->lock);
 
@@ -586,6 +587,15 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 		goto unlock;
 	}
 
+	if (ep_obj->fclass == FI_CLASS_SEP &&
+	    ep_obj->ep_attr.rx_ctx_cnt &&
+	    ep_obj->caps & FI_DIRECTED_RECV &&
+	    !(ep_obj->av->attr.flags & FI_SYMMETRIC)) {
+		CXIP_WARN("FI_SYMMETRIC is required for Scalable Endpoint Messaging with Source Address Matching.\n");
+		ret = -FI_ENOPROTOOPT;
+		goto unlock;
+	}
+
 	/* Assign resources to the libfabric domain. */
 	ret = cxip_domain_enable(ep_obj->domain);
 	if (ret != FI_SUCCESS) {
@@ -593,23 +603,36 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 		goto unlock;
 	}
 
-	ret = cxip_alloc_if_domain(ep_obj->domain->lni,
-				   ep_obj->auth_key.vni,
-				   ep_obj->src_addr.pid,
-				   &ep_obj->if_dom);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Failed to get IF Domain: %d\n", ret);
-		goto unlock;
+	for (i = 0; i < ep_obj->pids; i++) {
+		ret = cxip_alloc_if_domain(ep_obj->domain->lni,
+					   ep_obj->auth_key.vni,
+					   ep_obj->src_addr.pid + i,
+					   &ep_obj->if_dom[i]);
+		if (ret != FI_SUCCESS) {
+			CXIP_WARN("Failed to allocate IF Domain: %d\n", ret);
+			goto free_if_domains;
+		}
+
+		if (!i) {
+			/* Store assigned base PID. */
+			ep_obj->src_addr.pid = ep_obj->if_dom[i]->dom->pid;
+		} else if ((ep_obj->if_dom[i]->dom->pid - i) !=
+			   ep_obj->src_addr.pid) {
+			/* Ensure PIDs are consecutive */
+			CXIP_WARN("Unexpected PID: %d (%d)\n",
+				  ep_obj->if_dom[i]->dom->pid, i);
+			ret = -FI_EADDRNOTAVAIL;
+			i++; /* Free this Domain, too */
+			goto free_if_domains;
+		}
 	}
 
 	ret = cxip_ep_ctrl_init(ep_obj);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_ep_ctrl_init returned: %d\n", ret);
-		goto free_if_domain;
+		goto free_if_domains;
 	}
 
-	/* Store PID in case it was automatically assigned. */
-	ep_obj->src_addr.pid = ep_obj->if_dom->dom->pid;
 	CXIP_DBG("EP assigned NIC: %#x VNI: %u PID: %u\n",
 		 ep_obj->src_addr.nic,
 		 ep_obj->auth_key.vni,
@@ -621,8 +644,9 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 
 	return FI_SUCCESS;
 
-free_if_domain:
-	cxip_free_if_domain(ep_obj->if_dom);
+free_if_domains:
+	for (i--; i >= 0; i--)
+		cxip_free_if_domain(ep_obj->if_dom[i]);
 unlock:
 	fastlock_release(&ep_obj->lock);
 
@@ -1070,10 +1094,15 @@ static int cxip_ep_enable(struct fid_ep *ep)
  */
 static void cxip_ep_disable(struct cxip_ep *cxi_ep)
 {
+	int i;
+
 	if (cxi_ep->ep_obj->enabled) {
 		cxip_coll_disable(cxi_ep->ep_obj);
 		cxip_ep_ctrl_fini(cxi_ep->ep_obj);
-		cxip_free_if_domain(cxi_ep->ep_obj->if_dom);
+
+		for (i = 0; i < cxi_ep->ep_obj->pids; i++)
+			cxip_free_if_domain(cxi_ep->ep_obj->if_dom[i]);
+
 		cxi_ep->ep_obj->enabled = false;
 	}
 }
@@ -1785,13 +1814,6 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	    !hints->rx_attr)
 		return -FI_EINVAL;
 
-	if (fclass == FI_CLASS_SEP &&
-	    (ofi_send_allowed(hints->tx_attr->caps) ||
-	     ofi_recv_allowed(hints->tx_attr->caps))) {
-		CXIP_WARN("Scalable EPs do not support messaging.\n");
-		return -FI_ENOPROTOOPT;
-	}
-
 	ret = ofi_prov_check_info(&cxip_util_prov, CXIP_FI_VERSION, hints);
 	if (ret != FI_SUCCESS)
 		return -FI_ENOPROTOOPT;
@@ -1985,6 +2007,8 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 		} else {
 			cxi_ep->ep_obj->ep_attr.rx_ctx_cnt = 1;
 		}
+
+		cxi_ep->ep_obj->pids = 1;
 	} else {
 		/* Scalable EP may not use shared CTX */
 		if (cxi_ep->ep_obj->ep_attr.tx_ctx_cnt == FI_SHARED_CONTEXT ||
@@ -2007,6 +2031,23 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 			ret = -FI_EINVAL;
 			goto err;
 		}
+
+		/* One PID is needed for each TX/RX context that supports
+		 * messaging. At least one is needed for MRs (even if no
+		 * contexts support messaging).
+		 */
+		if (ofi_send_allowed(hints->caps)) {
+			cxi_ep->ep_obj->pids =
+				cxi_ep->ep_obj->ep_attr.tx_ctx_cnt;
+		}
+		if (ofi_recv_allowed(hints->caps) &&
+		    (cxi_ep->ep_obj->ep_attr.rx_ctx_cnt >
+		     cxi_ep->ep_obj->pids)) {
+			cxi_ep->ep_obj->pids =
+				cxi_ep->ep_obj->ep_attr.rx_ctx_cnt;
+		}
+		if (!cxi_ep->ep_obj->pids)
+			cxi_ep->ep_obj->pids = 1;
 	}
 
 	/* Allocate space for TX contexts */

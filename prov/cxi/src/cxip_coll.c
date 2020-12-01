@@ -269,9 +269,8 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		if (ret != FI_SUCCESS)
 			return ret;
 		pid_bits = ep_obj->domain->iface->dev->info.pid_bits;
-		idx_ext = CXIP_PTL_IDX_RXC(CXIP_PTL_IDX_COLL);
 		cxi_build_dfa(dest_caddr.nic, dest_caddr.pid, pid_bits,
-			      idx_ext, dfa, index_ext);
+			      CXIP_PTL_IDX_COLL, dfa, index_ext);
 		*is_mcast = false;
 		break;
 	case COMM_KEY_RANK:
@@ -286,7 +285,7 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		}
 		dest_caddr = ep_obj->src_addr;
 		pid_bits = ep_obj->domain->iface->dev->info.pid_bits;
-		idx_ext = CXIP_EP_MAX_RX_CNT + av_set_idx;
+		idx_ext = CXIP_PTL_IDX_COLL + av_set_idx;
 		cxi_build_dfa(dest_caddr.nic, dest_caddr.pid, pid_bits,
 			      idx_ext, dfa, index_ext);
 		*is_mcast = false;
@@ -1997,7 +1996,7 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 		break;
 	case COMM_KEY_RANK:
 		is_multicast = false;
-		pid_idx = CXIP_EP_MAX_RX_CNT + av_set->comm_key.rank.rank;
+		pid_idx = CXIP_PTL_IDX_COLL + av_set->comm_key.rank.rank;
 		mc_idcode = av_set->comm_key.rank.rank;
 		hwroot_idx = av_set->comm_key.rank.hwroot_rank;
 		if (hwroot_idx >= av_set->fi_addr_cnt) {
@@ -2033,9 +2032,9 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	ofi_atomic_initialize32(&coll_pte->buf_cnt, 0);
 	ofi_atomic_initialize32(&coll_pte->buf_swap_cnt, 0);
 
-	ret = cxip_pte_alloc(ep_obj->if_dom, ep_obj->coll.rx_cq->evtq,
-			     pid_idx, is_multicast, &pt_opts, _coll_pte_cb, coll_pte,
-			     &coll_pte->pte);
+	ret = cxip_pte_alloc(ep_obj->if_dom[0], ep_obj->coll.rx_cq->evtq,
+			     pid_idx, is_multicast, &pt_opts, _coll_pte_cb,
+			     coll_pte, &coll_pte->pte);
 	if (ret)
 		goto free_coll_pte;
 

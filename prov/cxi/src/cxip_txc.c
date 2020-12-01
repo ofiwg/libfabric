@@ -49,7 +49,6 @@ static int txc_msg_init(struct cxip_txc *txc)
 	struct cxi_pt_alloc_opts pt_opts = {
 		.is_matching = 1,
 	};
-	uint64_t pid_idx;
 
 	/* Allocate TGQ for posting source data */
 	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, false, FI_TC_UNSPEC,
@@ -65,9 +64,10 @@ static int txc_msg_init(struct cxip_txc *txc)
 	}
 
 	/* Reserve the Rendezvous Send PTE */
-	pid_idx = txc->domain->iface->dev->info.rdzv_get_idx;
-	ret = cxip_pte_alloc(txc->ep_obj->if_dom, txc->send_cq->evtq,
-			     pid_idx, false, &pt_opts, cxip_rdzv_pte_cb, txc,
+	ret = cxip_pte_alloc(txc->ep_obj->if_dom[txc->tx_id],
+			     txc->send_cq->evtq,
+			     txc->domain->iface->dev->info.rdzv_get_idx,
+			     false, &pt_opts, cxip_rdzv_pte_cb, txc,
 			     &txc->rdzv_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate RDZV PTE: %d\n", ret);

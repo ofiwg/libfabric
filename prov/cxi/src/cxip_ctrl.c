@@ -285,6 +285,10 @@ void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj)
 	int events = 0;
 	int ret;
 
+	/* The Control EQ is shared by a SEP. Avoid locking. */
+	if (!cxi_eq_peek_event(ep_obj->ctrl_evtq))
+		return;
+
 	fastlock_acquire(&ep_obj->lock);
 
 	while ((event = cxi_eq_peek_event(ep_obj->ctrl_evtq))) {
@@ -372,8 +376,8 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		goto free_evtq_md;
 	}
 
-	ret = cxip_pte_alloc_nomap(ep_obj->if_dom, ep_obj->ctrl_evtq, &pt_opts,
-				   NULL, NULL, &ep_obj->ctrl_pte);
+	ret = cxip_pte_alloc_nomap(ep_obj->if_dom[0], ep_obj->ctrl_evtq,
+				   &pt_opts, NULL, NULL, &ep_obj->ctrl_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate control PTE: %d\n", ret);
 		goto free_evtq;

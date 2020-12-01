@@ -293,7 +293,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		}
 	}
 
-	ret = cxip_pte_alloc_nomap(ep_obj->if_dom, ep_obj->ctrl_evtq, &opts,
+	ret = cxip_pte_alloc_nomap(ep_obj->if_dom[0], ep_obj->ctrl_evtq, &opts,
 				   cxip_mr_opt_pte_cb, mr, &mr->pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate PTE: %d\n", ret);

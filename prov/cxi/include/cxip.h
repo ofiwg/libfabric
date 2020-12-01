@@ -59,12 +59,13 @@
 
 #define CXIP_BUFFER_ID_MAX		(1 << 16)
 
+#define CXIP_EP_MAX_CTX_BITS		8
+#define CXIP_EP_MAX_TX_CNT		(1 << CXIP_EP_MAX_CTX_BITS)
+#define CXIP_EP_MAX_RX_CNT		(1 << CXIP_EP_MAX_CTX_BITS)
+
 #define CXIP_EP_MAX_MSG_SZ		(1 << 30)
-#define CXIP_EP_MAX_TX_CNT		16
-#define CXIP_EP_MAX_RX_CNT		16
 #define CXIP_EP_MIN_MULTI_RECV		64
 #define CXIP_EP_MAX_MULTI_RECV		((1 << 24) - 1)
-#define CXIP_EP_MAX_CTX_BITS		4
 
 #define CXIP_TX_COMP_MODES		(FI_INJECT_COMPLETE | \
 					 FI_TRANSMIT_COMPLETE | \
@@ -240,7 +241,7 @@ struct cxip_addr {
  * The default maximum RXC count is 16. These endpoints are partitioned by the
  * provider for the following use:
  *
- * 0-15    RX Queue PtlTEs 0-15
+ * 0       RX Queue PtlTE
  * 16      Collective PtlTE entry
  * 17-116  Optimized write MR PtlTEs 0-99
  * 117     Standard write MR PtlTE / Control messaging
@@ -252,11 +253,11 @@ struct cxip_addr {
  * MUST be within the logical endpoint range 0 - 127 and unrestricted Gets MUST
  * be within the logical endpoint range 128 - 255.
  */
+#define CXIP_PTL_IDX_RXQ		0
 #define CXIP_PTL_IDX_WRITE_MR_OPT_BASE	17
 #define CXIP_PTL_IDX_READ_MR_OPT_BASE	128
 #define CXIP_PTL_IDX_MR_OPT_CNT		100
 
-#define CXIP_PTL_IDX_RXC(rx_id)		(rx_id)
 #define CXIP_PTL_IDX_WRITE_MR_OPT(key)	(CXIP_PTL_IDX_WRITE_MR_OPT_BASE + (key))
 #define CXIP_PTL_IDX_READ_MR_OPT(key)	(CXIP_PTL_IDX_READ_MR_OPT_BASE + (key))
 #define CXIP_PTL_IDX_WRITE_MR_STD	117
@@ -559,7 +560,6 @@ struct cxip_req_recv {
 	uint32_t rlen;			// Send length
 	uint64_t oflow_start;		// Overflow buffer address
 	uint32_t initiator;		// DMA initiator address
-	bool init_logical;
 	uint32_t rdzv_id;		// DMA initiator rendezvous ID
 	uint8_t rdzv_lac;		// Rendezvous source LAC
 	int rdzv_events;		// Processed rdzv event count
@@ -1027,6 +1027,7 @@ struct cxip_ep_obj {
 	ofi_atomic32_t num_txc;		// num TX contexts (>= 1)
 
 	/* Shared context resources */
+	int pids;
 	struct cxip_cmdq *txqs[CXIP_EP_MAX_TX_CNT];
 	ofi_atomic32_t txq_refs[CXIP_EP_MAX_TX_CNT];
 	struct cxip_cmdq *tgqs[CXIP_EP_MAX_TX_CNT];
@@ -1047,7 +1048,7 @@ struct cxip_ep_obj {
 	fi_addr_t fi_addr;		// AV address of this EP
 	int rdzv_offload;
 
-	struct cxip_if_domain *if_dom;
+	struct cxip_if_domain *if_dom[CXIP_EP_MAX_TX_CNT];
 
 	/* collectives support */
 	struct cxip_ep_coll_obj coll;

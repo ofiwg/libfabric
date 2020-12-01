@@ -126,10 +126,6 @@ void cxit_create_sep(void)
 {
 	int ret;
 
-	/* Scalable EPs do not support messaging. */
-	cxit_fi->tx_attr->caps &= ~(FI_TAGGED | FI_MSG);
-	cxit_fi->rx_attr->caps &= ~(FI_TAGGED | FI_MSG);
-
 	ret = fi_scalable_ep(cxit_domain, cxit_fi, &cxit_sep, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_scalable_ep");
 	cr_assert_not_null(cxit_sep);
@@ -512,7 +508,7 @@ void cxit_setup_enabled_ep(void)
 
 	/* Find assigned Endpoint address. Address is assigned during enable. */
 	ret = fi_getname(&cxit_ep->fid, &cxit_ep_addr, &addrlen);
-	cr_assert(ret == FI_SUCCESS);
+	cr_assert(ret == FI_SUCCESS, "ret is %d\n", ret);
 	cr_assert(addrlen == sizeof(cxit_ep_addr));
 }
 

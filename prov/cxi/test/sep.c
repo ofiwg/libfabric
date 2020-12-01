@@ -73,12 +73,6 @@ Test(sep, invalid_args)
 
 	ret = fi_scalable_ep(cxit_domain, &info, &cxit_ep, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
-
-	/* Currently don't support scalable endpoints doing tagged sends */
-	info = *cxit_fi;
-	info.caps |= (FI_TAGGED | FI_SEND);
-	ret = fi_scalable_ep(cxit_domain, &info, &cxit_ep, NULL);
-	cr_assert_eq(ret, -FI_ENOPROTOOPT);
 }
 
 /**
@@ -124,8 +118,6 @@ ParameterizedTest(struct sep_test_params *param, sep, fi_sep_types)
 	struct cxip_ep *cep;
 
 	cxit_fi->ep_attr->type = param->type;
-	cxit_fi->tx_attr->caps &= ~(FI_TAGGED | FI_MSG);
-	cxit_fi->rx_attr->caps &= ~(FI_TAGGED | FI_MSG);
 	cxit_ep = NULL;
 
 	ret = fi_scalable_ep(cxit_domain, cxit_fi, &cxit_ep, param->context);
@@ -346,6 +338,7 @@ void cxit_setup_sep(int ntx, int nrx, int nmr, int buf_size)
 
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cxit_av_attr.type = FI_AV_TABLE;
+	cxit_av_attr.flags = FI_SYMMETRIC;
 
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
@@ -365,7 +358,7 @@ void cxit_setup_sep(int ntx, int nrx, int nmr, int buf_size)
 	cr_assert_eq(av->rxc_bits, CXIP_EP_MAX_CTX_BITS,
 		     "av->rxc_bits = %d\n", av->rxc_bits);
 
-	ret = fi_ep_bind(cxit_sep, &cxit_av->fid, 0);
+	ret = fi_scalable_ep_bind(cxit_sep, &cxit_av->fid, 0);
 	cr_assert_eq(ret, FI_SUCCESS, "bad retval = %d\n", ret);
 
 	/* Create TX contexts */
@@ -404,8 +397,8 @@ void cxit_setup_sep(int ntx, int nrx, int nmr, int buf_size)
 		cr_assert_eq(ret, FI_SUCCESS, "bad TXCQ[%d] = %d\n",
 			     i, ret);
 
-		ret = fi_scalable_ep_bind(cxit_sep_tx[i],
-					  &cxit_sep_tx_cq[i]->fid, FI_SEND);
+		ret = fi_ep_bind(cxit_sep_tx[i], &cxit_sep_tx_cq[i]->fid,
+				 FI_SEND);
 		cr_assert_eq(ret, FI_SUCCESS, "bad TX bind[%d] = %d\n",
 			     i, ret);
 	}
@@ -415,8 +408,8 @@ void cxit_setup_sep(int ntx, int nrx, int nmr, int buf_size)
 		cr_assert_eq(ret, FI_SUCCESS, "bad RXCQ[%d] = %d\n",
 			     i, ret);
 
-		ret = fi_scalable_ep_bind(cxit_sep_rx[i],
-					  &cxit_sep_rx_cq[i]->fid, FI_RECV);
+		ret = fi_ep_bind(cxit_sep_rx[i], &cxit_sep_rx_cq[i]->fid,
+				 FI_RECV);
 		cr_assert_eq(ret, FI_SUCCESS, "bad RX bind[%d] = %d\n",
 			     i, ret);
 	}
@@ -458,16 +451,6 @@ void cxit_setup_sep(int ntx, int nrx, int nmr, int buf_size)
 	 */
 	for (i = 0; i < cxit_sep_rx_cnt; i++) {
 		cxit_sep_rx_addr[i] = fi_rx_addr(dest_addr, i, av->rxc_bits);
-	}
-
-	/* Post a single buffer to each RX */
-	for (i = 0; i < cxit_sep_rx_cnt; i++) {
-		cxit_sep_rx_buf[i] = CALLOC(cxit_sep_buf_size);
-		ret = fi_trecv(cxit_sep_rx[i], cxit_sep_rx_buf[i],
-			       cxit_sep_buf_size, NULL,
-			       FI_ADDR_UNSPEC, 0, 0, NULL);
-		cr_assert(ret == FI_SUCCESS, "bad RX post[%d] = %d\n",
-			  i, ret);
 	}
 
 	/* Create MRs */
@@ -1021,3 +1004,86 @@ Test(sep, advancing_amo_fetch, .disabled = true)
 	cxit_teardown_sep();
 }
 
+Test(sep, ping)
+{
+	int i, ret;
+	int txi;
+	uint8_t *recv_buf,
+		*send_buf;
+	int recv_len = 8*1024;
+	int send_len = 8*1024;
+	int sz;
+	struct fi_cq_tagged_entry tx_cqe,
+				  rx_cqe;
+	int err = 0;
+	fi_addr_t from;
+
+	cxit_setup_sep(16, 16, 0, 0);
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	/* Iterate over TX contexts */
+	for (sz = 1024; sz <= recv_len; sz <<= 1) {
+		for (txi = 0; txi < cxit_sep_tx_cnt; txi++) {
+			for (i = 0; i < send_len; i++)
+				send_buf[i] = i + 0xa0;
+			memset(recv_buf, 0, recv_len);
+
+			/* Post RX buffer */
+			ret = fi_trecv(cxit_sep_rx[txi], recv_buf, sz, NULL,
+				       cxit_ep_fi_addr, 0, 0, NULL);
+			cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d",
+				     ret);
+
+			/* Send 64 bytes to self */
+			ret = fi_tsend(cxit_sep_tx[txi], send_buf, sz, NULL,
+				       cxit_sep_rx_addr[txi], 0, NULL);
+			cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d",
+				     ret);
+
+			/* Wait for async event indicating data has been
+			 * received
+			 */
+			do {
+				fi_cq_read(cxit_sep_tx_cq[txi], NULL, 0);
+
+				ret = fi_cq_readfrom(cxit_sep_rx_cq[txi],
+						     &rx_cqe, 1, &from);
+			} while (ret == -FI_EAGAIN);
+			cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d",
+				     ret);
+
+			validate_rx_event(&rx_cqe, NULL, sz,
+					  FI_TAGGED | FI_RECV, NULL, 0, 0);
+			cr_assert(from == cxit_ep_fi_addr,
+				  "Invalid source address %#lx %#lx",
+				  from, cxit_ep_fi_addr);
+
+			/* Wait for event indicating data has been sent */
+			ret = cxit_await_completion(cxit_sep_tx_cq[txi],
+						    &tx_cqe);
+			cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d",
+				     ret);
+
+			validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+			/* Validate sent data */
+			for (i = 0; i < sz; i++) {
+				cr_expect_eq(recv_buf[i], send_buf[i],
+					     "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+					     i, send_buf[i], recv_buf[i],
+					     err++);
+			}
+			cr_assert_eq(err, 0, "Data errors seen\n");
+		}
+	}
+
+	free(send_buf);
+	free(recv_buf);
+
+	cxit_teardown_sep();
+}

@@ -121,8 +121,9 @@ static fi_addr_t recv_req_src_addr(struct cxip_req *req)
 		uint32_t nic;
 		uint32_t pid;
 
-		if (req->recv.init_logical)
-			return req->recv.initiator;
+		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC)
+			return CXI_MATCH_ID(rxc->pid_bits, 0,
+					    req->recv.initiator);
 
 		nic = CXI_MATCH_ID_EP(rxc->pid_bits, req->recv.initiator);
 		pid = CXI_MATCH_ID_PID(rxc->pid_bits, req->recv.initiator);
@@ -291,7 +292,6 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 			/* Take PID out of logical address. */
 			req->recv.initiator = CXI_MATCH_ID_EP(rxc->pid_bits,
 							      init);
-			req->recv.init_logical = true;
 		} else {
 			req->recv.initiator = init;
 		}
@@ -518,7 +518,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 	uint32_t pid;
 	union c_fab_addr dfa;
 
-	if (req->recv.init_logical) {
+	if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
 		struct cxip_addr caddr;
 
 		CXIP_DBG("Translating inititiator: %x, req: %p\n",
@@ -2892,7 +2892,8 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	if (rxc->attr.caps & FI_DIRECTED_RECV &&
 	    src_addr != FI_ADDR_UNSPEC) {
 		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
-			match_id = CXI_MATCH_ID(rxc->pid_bits, caddr.pid,
+			/* PID is not used for matching */
+			match_id = CXI_MATCH_ID(rxc->pid_bits, C_PID_ANY,
 						src_addr);
 		} else {
 			ret = _cxip_av_lookup(rxc->ep_obj->av, src_addr,
@@ -3027,14 +3028,18 @@ static fi_addr_t _txc_fi_addr(struct cxip_txc *txc)
  * way, there is no source address translation overhead involved in the
  * receive.
  */
-static uint32_t cxip_msg_match_id(struct cxip_txc *txc)
+static uint32_t cxip_msg_match_id(struct cxip_req *req)
 {
-	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC)
-		return CXI_MATCH_ID(txc->pid_bits, txc->ep_obj->src_addr.pid,
-				    _txc_fi_addr(txc));
+	struct cxip_txc *txc = req->send.txc;
 
-	return CXI_MATCH_ID(txc->pid_bits, txc->ep_obj->src_addr.pid,
-			    txc->ep_obj->src_addr.nic);
+	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
+		/* PID is not used for matching, but is used for rendezvous. */
+		return CXI_MATCH_ID(txc->pid_bits, req->send.caddr.pid,
+				    _txc_fi_addr(txc));
+	}
+
+	return CXI_MATCH_ID(txc->pid_bits, req->send.caddr.pid,
+			    req->send.caddr.nic);
 }
 
 /*
@@ -3377,7 +3382,6 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	struct cxip_md *send_md;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
-	uint32_t pid_idx;
 	struct c_full_dma_cmd cmd = {};
 	union cxip_match_bits put_mb = {};
 	int rdzv_id;
@@ -3387,9 +3391,8 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	bool trig = req->triggered;
 
 	/* Calculate DFA */
-	pid_idx = CXIP_PTL_IDX_RXC(req->send.rxc_id);
 	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
-		      pid_idx, &dfa, &idx_ext);
+		      CXIP_PTL_IDX_RXQ, &dfa, &idx_ext);
 
 	/* Map local buffer */
 	ret = cxip_map(txc->domain, req->send.buf, req->send.len, &send_md);
@@ -3433,7 +3436,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	cmd.request_len = req->send.len;
 	cmd.eq = txc->send_cq->evtq->eqn;
 	cmd.user_ptr = (uint64_t)req;
-	cmd.initiator = cxip_msg_match_id(txc);
+	cmd.initiator = cxip_msg_match_id(req);
 	cmd.header_data = req->send.data;
 	cmd.remote_offset = CXI_VA_TO_IOVA(send_md->md, req->send.buf);
 
@@ -3583,7 +3586,6 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	struct cxip_md *send_md = NULL;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
-	uint32_t pid_idx;
 	union cxip_match_bits mb = {
 		.le_type = CXIP_LE_TYPE_RX
 	};
@@ -3600,9 +3602,8 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	idc = (req->send.len <= CXIP_INJECT_SIZE) && !trig;
 
 	/* Calculate DFA */
-	pid_idx = CXIP_PTL_IDX_RXC(req->send.rxc_id);
 	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
-		      pid_idx, &dfa, &idx_ext);
+		      CXIP_PTL_IDX_RXQ, &dfa, &idx_ext);
 
 	if (req->send.len) {
 		if (req->send.flags & FI_INJECT) {
@@ -3677,7 +3678,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		cmd.c_state.event_send_disable = 1;
 		cmd.c_state.index_ext = idx_ext;
 		cmd.c_state.eq = txc->send_cq->evtq->eqn;
-		cmd.c_state.initiator = cxip_msg_match_id(txc);
+		cmd.c_state.initiator = cxip_msg_match_id(req);
 
 		/* If MATCH_COMPLETE was requested, software must manage
 		 * counters.
@@ -3741,7 +3742,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		cmd.request_len = req->send.len;
 		cmd.eq = txc->send_cq->evtq->eqn;
 		cmd.user_ptr = (uint64_t)req;
-		cmd.initiator = cxip_msg_match_id(txc);
+		cmd.initiator = cxip_msg_match_id(req);
 		cmd.match_bits = mb.raw;
 		cmd.header_data = req->send.data;
 
@@ -4178,8 +4179,12 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 		CXIP_DBG("Failed to look up FI addr: %d\n", ret);
 		goto req_free;
 	}
-	req->send.caddr = caddr;
+
+	/* Check for RX context ID */
 	req->send.rxc_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
+	caddr.pid += req->send.rxc_id;
+
+	req->send.caddr = caddr;
 
 	/* Check if target peer is disabled */
 	ret = cxip_send_req_queue(req->send.txc, req);
