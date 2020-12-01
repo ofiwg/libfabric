@@ -22,18 +22,24 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 
 	dom = container_of(cache, struct cxip_domain, iomm);
 
-	if (dom->ats)
-		map_flags |= CXI_MAP_ATS;
+	if (entry->info.iface == FI_HMEM_SYSTEM) {
+		if (dom->ats)
+			map_flags |= CXI_MAP_ATS;
 
-	if (!dom->odp)
-		map_flags |= CXI_MAP_PIN;
+		if (!dom->odp)
+			map_flags |= CXI_MAP_PIN;
+	} else {
+		map_flags |= CXI_MAP_DEVICE | CXI_MAP_PIN;
+	}
 
 	ret = cxil_map(dom->lni->lni, entry->info.iov.iov_base,
 		       entry->info.iov.iov_len, map_flags, NULL, &md->md);
-	if (ret)
+	if (ret) {
 		CXIP_WARN("cxil_map() failed: %d\n", ret);
-	else
+	} else {
 		md->dom = dom;
+		md->info = entry->info;
+	}
 
 	return ret;
 }
@@ -117,8 +123,11 @@ int cxip_iomm_init(struct cxip_domain *dom)
 {
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
 		[FI_HMEM_SYSTEM] = default_monitor,
+		[FI_HMEM_CUDA] = default_cuda_monitor,
+		[FI_HMEM_ROCR] = default_rocr_monitor,
 	};
 	int ret;
+	bool scalable;
 
 	fastlock_init(&dom->iomm_lock);
 
@@ -129,16 +138,23 @@ int cxip_iomm_init(struct cxip_domain *dom)
 	if (cxip_env.odp)
 		dom->odp = true;
 
+	if (dom->util_domain.info_domain_caps & FI_HMEM)
+		dom->hmem = true;
+
+	scalable = dom->ats && dom->odp;
+
 	/* Unpinned ATS translation is scalable. A single MD covers all
 	 * memory addresses and a cache isn't necessary.
 	 */
-	if (dom->ats && cxip_env.odp) {
+	if (scalable) {
 		ret = cxip_scalable_iomm_init(dom);
 		if (ret)
 			CXIP_WARN("cxip_scalable_iomm_init() returned: %d\n",
 				  ret);
 			return ret;
-	} else {
+	}
+
+	if (!scalable || dom->hmem) {
 		dom->iomm.entry_data_size = sizeof(struct cxip_md);
 		dom->iomm.add_region = cxip_do_map;
 		dom->iomm.delete_region = cxip_do_unmap;
@@ -146,6 +162,8 @@ int cxip_iomm_init(struct cxip_domain *dom)
 					&dom->iomm);
 		if (ret) {
 			CXIP_WARN("ofi_mr_cache_init failed: %d\n", ret);
+			if (scalable)
+				cxip_scalable_iomm_fini(dom);
 			return ret;
 		}
 	}
@@ -162,7 +180,8 @@ void cxip_iomm_fini(struct cxip_domain *dom)
 
 	if (dom->scalable_iomm)
 		cxip_scalable_iomm_fini(dom);
-	else
+
+	if (!dom->scalable_iomm || dom->hmem)
 		ofi_mr_cache_cleanup(&dom->iomm);
 }
 
@@ -178,13 +197,17 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	int ret;
 	struct iovec iov;
 	unsigned long buf_adj;
-	const struct fi_mr_attr attr = {
+	struct fi_mr_attr attr = {
 		.iov_count = 1,
 		.mr_iov = &iov,
 	};
 	struct ofi_mr_entry *entry;
 
-	if (dom->scalable_iomm) {
+	/* Always need to query memory type if HMEM support is enabled. */
+	if (dom->hmem)
+		attr.iface = ofi_get_hmem_iface(buf);
+
+	if (dom->scalable_iomm && attr.iface == FI_HMEM_SYSTEM) {
 		*md = &dom->scalable_md;
 		return FI_SUCCESS;
 	}

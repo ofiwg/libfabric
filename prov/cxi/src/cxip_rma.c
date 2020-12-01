@@ -133,6 +133,10 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
 	bool write = op == FI_OP_WRITE;
 	enum cxi_traffic_class_type tc_type;
+	void *hmem_buf = NULL;
+	const void *idc_buf = buf;
+	enum fi_hmem_iface iface;
+	struct iovec hmem_iov;
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -216,8 +220,26 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	else
 		tc_type = CXI_TC_TYPE_DEFAULT;
 
-	/* Issue command */
+	/* HMEM bounce buffer is required for IDCs and to non-system memory. */
+	if (txc->hmem && idc) {
+		iface = ofi_get_hmem_iface(buf);
 
+		if (iface != FI_HMEM_SYSTEM) {
+			hmem_iov.iov_base = (void *)buf;
+			hmem_iov.iov_len = len;
+			hmem_buf = cxip_cq_ibuf_alloc(txc->send_cq);
+			if (!hmem_buf)
+				goto md_unmap;
+
+			ret = ofi_copy_from_hmem_iov(hmem_buf, len, iface, 0,
+						     &hmem_iov, 1, 0);
+			assert(ret == len);
+
+			idc_buf = hmem_buf;
+		}
+	}
+
+	/* Issue command */
 	fastlock_acquire(&cmdq->lock);
 
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
@@ -289,7 +311,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		cmd.idc_put.idc_header.dfa = dfa;
 		cmd.idc_put.idc_header.remote_offset = addr;
 
-		ret = cxi_cq_emit_idc_put(cmdq->dev_cmdq, &cmd.idc_put, buf,
+		ret = cxi_cq_emit_idc_put(cmdq->dev_cmdq, &cmd.idc_put, idc_buf,
 					  len);
 		if (ret) {
 			CXIP_DBG("Failed to write IDC: %d\n", ret);
@@ -375,6 +397,9 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 	fastlock_release(&cmdq->lock);
 
+	if (hmem_buf)
+		cxip_cq_ibuf_free(txc->send_cq, hmem_buf);
+
 	CXIP_DBG("%sreq: %p op: %s buf: %p len: %lu tgt_addr: %ld context %p\n",
 		 idc ? "IDC " : "", req, fi_tostr(&op, FI_TYPE_OP_TYPE),
 		 buf, len, tgt_addr, context);
@@ -383,6 +408,9 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 unlock_op:
 	fastlock_release(&txc->tx_cmdq->lock);
+	if (hmem_buf)
+		cxip_cq_ibuf_free(txc->send_cq, hmem_buf);
+md_unmap:
 	if (req && req->rma.local_md)
 		cxip_unmap(req->rma.local_md);
 req_free:

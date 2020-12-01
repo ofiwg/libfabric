@@ -107,7 +107,7 @@
 	(FI_RMA | FI_ATOMICS | FI_TAGGED | FI_RECV | FI_SEND | \
 	 FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
 	 FI_DIRECTED_RECV | FI_MSG | FI_NAMED_RX_CTX | \
-	 FI_COLLECTIVE)
+	 FI_COLLECTIVE | FI_HMEM)
 #define CXIP_EP_SEC_CAPS \
 	(FI_SOURCE | FI_SHARED_AV | FI_LOCAL_COMM | FI_REMOTE_COMM | \
 	 FI_RMA_EVENT | FI_MULTI_RECV | FI_FENCE | FI_TRIGGER | \
@@ -459,6 +459,7 @@ struct cxip_domain;
 struct cxip_md {
 	struct cxip_domain *dom;
 	struct cxi_md *md;
+	struct ofi_mr_info info;
 };
 
 /*
@@ -494,6 +495,7 @@ struct cxip_domain {
 	fastlock_t iomm_lock;
 	bool odp;
 	bool ats;
+	bool hmem;
 
 	/* ATS translation support */
 	struct cxip_md scalable_md;
@@ -537,6 +539,7 @@ struct cxip_req_amo {
 	struct cxip_md *oper1_md;
 	char result[16];
 	char oper1[16];
+	char compare[16];
 	bool tmp_result;
 	bool tmp_oper1;
 };
@@ -945,6 +948,8 @@ struct cxip_txc {
 
 	uint16_t tx_id;			// SEP index
 	bool enabled;
+
+	bool hmem;
 
 	int use_shared;
 	struct cxip_txc *stx;

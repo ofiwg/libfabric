@@ -377,12 +377,14 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	uint64_t off = 0;
 	uint64_t key = 0;
 	int len;
-	int ret;
+	ssize_t ret;
 	bool idc;
 	struct cxip_cmdq *cmdq =
 		triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
 	bool read = msg->op == FI_ATOMIC_READ || req_type == CXIP_RQ_AMO_FETCH;
 	enum cxi_traffic_class_type tc_type;
+	enum fi_hmem_iface iface;
+	struct iovec hmem_iov;
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -442,7 +444,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	/* Look up target CXI address */
 	ret = _cxip_av_lookup(txc->ep_obj->av, msg->addr, &caddr);
 	if (ret != FI_SUCCESS) {
-		CXIP_DBG("Failed to look up dst FI addr: %d\n", ret);
+		CXIP_DBG("Failed to look up dst FI addr: %ld\n", ret);
 		return ret;
 	}
 
@@ -536,7 +538,18 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		uint64_t *mask = compare;
 		uint64_t *tmp_oper = (uint64_t *)&req->amo.oper1;
 
-		memcpy(tmp_oper, oper1, len);
+		if (txc->hmem)
+			iface = ofi_get_hmem_iface(oper1);
+		else
+			iface = FI_HMEM_SYSTEM;
+
+		hmem_iov.iov_base = oper1;
+		hmem_iov.iov_len = len;
+
+		ret = ofi_copy_from_hmem_iov(tmp_oper, len, iface, 0, &hmem_iov,
+					     1, 0);
+		assert(ret == len);
+
 		tmp_oper[0] &= mask[0];
 		if (len > sizeof(uint64_t))
 			tmp_oper[1] &= mask[1];
@@ -547,7 +560,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		/* Map user buffer for DMA command. */
 		ret = cxip_map(txc->domain, oper1, len, &req->amo.oper1_md);
 		if (ret) {
-			CXIP_DBG("Failed to map operand buffer: %d\n", ret);
+			CXIP_DBG("Failed to map operand buffer: %ld\n", ret);
 			goto free_req;
 		}
 	}
@@ -557,7 +570,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		/* Map local buffer */
 		ret = cxip_map(txc->domain, result, len, &req->amo.result_md);
 		if (ret) {
-			CXIP_DBG("Failed to map result buffer: %d\n", ret);
+			CXIP_DBG("Failed to map result buffer: %ld\n", ret);
 			goto unmap_oper1;
 		}
 	}
@@ -574,6 +587,41 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	else
 		tc_type = CXI_TC_TYPE_DEFAULT;
 
+	/* HMEM bounce buffers are needed for IDC operand buffers, and compare
+	 * buffers.
+	 */
+	if (txc->hmem) {
+		if (compare) {
+			iface = ofi_get_hmem_iface(compare);
+			if (iface != FI_HMEM_SYSTEM) {
+				hmem_iov.iov_base = compare;
+				hmem_iov.iov_len = len;
+
+				ret = ofi_copy_from_hmem_iov(&req->amo.compare,
+							     len, iface, 0,
+							     &hmem_iov, 1, 0);
+				assert(ret == len);
+
+				compare = &req->amo.compare;
+			}
+		}
+
+		if (idc && msg->op != FI_MSWAP) {
+			iface = ofi_get_hmem_iface(oper1);
+			if (iface != FI_HMEM_SYSTEM) {
+				hmem_iov.iov_base = oper1;
+				hmem_iov.iov_len = len;
+
+				ret = ofi_copy_from_hmem_iov(&req->amo.oper1,
+							     len, iface, 0,
+							     &hmem_iov, 1, 0);
+				assert(ret == len);
+
+				oper1 = &req->amo.oper1;
+			}
+		}
+	}
+
 	fastlock_acquire(&cmdq->lock);
 
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
@@ -584,7 +632,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	if (flags & FI_FENCE) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
 		if (ret) {
-			CXIP_DBG("Failed to issue CQ_FENCE command: %d\n",
+			CXIP_DBG("Failed to issue CQ_FENCE command: %ld\n",
 				 ret);
 			ret = -FI_EAGAIN;
 			goto unlock_cmdq;
@@ -635,7 +683,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		if (memcmp(&cmdq->c_state, &cmd.c_state, sizeof(cmd.c_state))) {
 			ret = cxi_cq_emit_c_state(cmdq->dev_cmdq, &cmd.c_state);
 			if (ret) {
-				CXIP_DBG("Failed to issue C_STATE command: %d\n",
+				CXIP_DBG("Failed to issue C_STATE command: %ld\n",
 					 ret);
 
 				/* Return error according to Domain Resource
@@ -671,7 +719,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		ret = cxi_cq_emit_idc_amo(cmdq->dev_cmdq, &cmd.idc_amo,
 					  result != NULL);
 		if (ret) {
-			CXIP_DBG("Failed to issue IDC AMO command: %d\n",
+			CXIP_DBG("Failed to issue IDC AMO command: %ld\n",
 				 ret);
 
 			/* Return error according to Domain Resource Mgmt */
@@ -743,7 +791,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		}
 
 		if (ret) {
-			CXIP_DBG("Failed to write DMA AMO command: %d\n", ret);
+			CXIP_DBG("Failed to write DMA AMO command: %ld\n", ret);
 
 			/* Return error according to Domain Resource Management
 			 */

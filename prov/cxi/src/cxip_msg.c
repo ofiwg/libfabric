@@ -729,6 +729,12 @@ static int cxip_ux_send_rdzv(struct cxip_req *recv_req,
 	struct cxip_oflow_buf *oflow_buf = oflow_req->oflow.oflow_buf;
 	void *oflow_va;
 	size_t oflow_bytes;
+	enum fi_hmem_iface iface = recv_req->recv.recv_md->info.iface;
+	uint64_t device = recv_req->recv.recv_md->info.device;
+	struct iovec hmem_iov;
+	ssize_t ret __attribute__((unused));
+
+	assert(recv_req->type == CXIP_REQ_RECV);
 
 	if (recv_req->recv.multi_recv) {
 		recv_req = rdzv_mrecv_req_event(recv_req, put_event);
@@ -755,7 +761,14 @@ static int cxip_ux_send_rdzv(struct cxip_req *recv_req,
 	oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
 			put_event->tgt_long.start);
 	oflow_bytes = MIN(put_event->tgt_long.mlength, recv_req->data_len);
-	memcpy(recv_req->recv.recv_buf, oflow_va, oflow_bytes);
+
+	hmem_iov.iov_base = recv_req->recv.recv_buf;
+	hmem_iov.iov_len = oflow_bytes;
+
+	ret = ofi_copy_to_hmem_iov(iface, device, &hmem_iov, 1, 0, oflow_va,
+				   oflow_bytes);
+	assert(ret == oflow_bytes);
+
 	oflow_req_put_bytes(oflow_req, put_event->tgt_long.mlength);
 
 	/* Count the rendezvous event. */
@@ -777,7 +790,12 @@ static int cxip_ux_send(struct cxip_req *match_req,
 	struct cxip_oflow_buf *oflow_buf = oflow_req->oflow.oflow_buf;
 	void *oflow_va;
 	union cxip_match_bits mb;
-	int ret;
+	enum fi_hmem_iface iface = match_req->recv.recv_md->info.iface;
+	uint64_t device = match_req->recv.recv_md->info.device;
+	struct iovec hmem_iov;
+	ssize_t ret;
+
+	assert(match_req->type == CXIP_REQ_RECV);
 
 	if (match_req->recv.multi_recv) {
 		match_req = mrecv_req_dup(match_req);
@@ -819,7 +837,14 @@ static int cxip_ux_send(struct cxip_req *match_req,
 	/* Copy data out of overflow buffer. */
 	oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
 			put_event->tgt_long.start);
-	memcpy(match_req->recv.recv_buf, oflow_va, match_req->data_len);
+
+	hmem_iov.iov_base = match_req->recv.recv_buf;
+	hmem_iov.iov_len = match_req->data_len;
+
+	ret = ofi_copy_to_hmem_iov(iface, device, &hmem_iov, 1, 0, oflow_va,
+				   match_req->data_len);
+	assert(ret == match_req->data_len);
+
 	oflow_req_put_bytes(oflow_req, put_event->tgt_long.mlength);
 
 	mb.raw = put_event->tgt_long.match_bits;
@@ -3590,13 +3615,15 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		.le_type = CXIP_LE_TYPE_RX
 	};
 	int idc;
-	int ret;
+	ssize_t ret __attribute__((unused));
 	int match_complete = req->send.flags & FI_MATCH_COMPLETE;
 	int tx_id;
 	struct cxip_cmdq *cmdq =
 		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
 	const void *buf = NULL;
 	bool trig = req->triggered;
+	enum fi_hmem_iface iface;
+	struct iovec hmem_iov;
 
 	/* Always use IDCs when the payload fits */
 	idc = (req->send.len <= CXIP_INJECT_SIZE) && !trig;
@@ -3606,13 +3633,27 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		      CXIP_PTL_IDX_RXQ, &dfa, &idx_ext);
 
 	if (req->send.len) {
-		if (req->send.flags & FI_INJECT) {
-			/* Allocate an internal buffer to hold source data. */
+		if (req->send.flags & FI_INJECT || (idc && txc->hmem)) {
+			/* Allocate an internal buffer to hold source data for
+			 * SW retry and/or a FI_HMEM bounce buffer.
+			 */
 			req->send.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
 			if (!req->send.ibuf)
 				return -FI_ENOSPC;
 
-			memcpy(req->send.ibuf, req->send.buf, req->send.len);
+			if (txc->hmem)
+				iface = ofi_get_hmem_iface(req->send.buf);
+			else
+				iface = FI_HMEM_SYSTEM;
+
+			hmem_iov.iov_base = (void *)req->send.buf;
+			hmem_iov.iov_len = req->send.len;
+
+			ret = ofi_copy_from_hmem_iov(req->send.ibuf,
+						     req->send.len, iface, 0,
+						     &hmem_iov, 1, 0);
+			assert(ret == req->send.len);
+
 			buf = req->send.ibuf;
 		} else {
 			/* IDCs do not require memory mapping. */
@@ -3620,7 +3661,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 				ret = cxip_map(txc->domain, req->send.buf,
 					       req->send.len, &send_md);
 				if (ret != FI_SUCCESS) {
-					CXIP_DBG("Failed to map send buffer: %d\n",
+					CXIP_DBG("Failed to map send buffer: %ld\n",
 						 ret);
 					return ret;
 				}
@@ -3641,7 +3682,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	if (match_complete) {
 		tx_id = cxip_tx_id_alloc(txc->ep_obj, req);
 		if (tx_id < 0) {
-			CXIP_DBG("Failed to allocate TX ID: %d\n", ret);
+			CXIP_DBG("Failed to allocate TX ID: %ld\n", ret);
 			goto err_unmap;
 		}
 
@@ -3665,7 +3706,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	if (req->send.flags & FI_FENCE) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
 		if (ret) {
-			CXIP_DBG("Failed to issue CQ_FENCE command: %d\n",
+			CXIP_DBG("Failed to issue CQ_FENCE command: %ld\n",
 				 ret);
 			ret = -FI_EAGAIN;
 			goto err_unlock;
@@ -3692,7 +3733,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 			   sizeof(cmd.c_state))) {
 			ret = cxi_cq_emit_c_state(cmdq->dev_cmdq, &cmd.c_state);
 			if (ret) {
-				CXIP_DBG("Failed to issue C_STATE command: %d\n",
+				CXIP_DBG("Failed to issue C_STATE command: %ld\n",
 					 ret);
 
 				/* Return error according to Domain Resource
@@ -3717,7 +3758,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		ret = cxi_cq_emit_idc_msg(cmdq->dev_cmdq, &cmd.idc_msg,
 					  buf, req->send.len);
 		if (ret) {
-			CXIP_DBG("Failed to write IDC: %d\n", ret);
+			CXIP_DBG("Failed to write IDC: %ld\n", ret);
 
 			/* Return error according to Domain Resource Management
 			 */
@@ -3774,7 +3815,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		}
 
 		if (ret) {
-			CXIP_DBG("Failed to write DMA command: %d\n", ret);
+			CXIP_DBG("Failed to write DMA command: %ld\n", ret);
 			ret = -FI_EAGAIN;
 			goto err_unlock;
 		}
