@@ -468,7 +468,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 	struct fi_msg_rma msg;
 	struct efa_ep *efa_ep;
 	struct rxr_peer *peer;
-	fi_addr_t shm_fiaddr;
+	fi_addr_t shm_fiaddr = FI_ADDR_NOTAVAIL;
 
 	assert(read_entry->iov_count > 0);
 	assert(read_entry->rma_iov_count > 0);
