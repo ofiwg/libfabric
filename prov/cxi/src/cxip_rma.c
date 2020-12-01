@@ -76,9 +76,6 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 	if (req->rma.local_md)
 		cxip_unmap(req->rma.local_md);
 
-	if (req->rma.ibuf)
-		cxip_cq_ibuf_free(req->cq, req->rma.ibuf);
-
 	event_rc = cxi_init_event_rc(event);
 	if (event_rc == C_RC_OK) {
 		if (success_event) {
@@ -189,21 +186,12 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	}
 
 	if (len && !idc) {
-		if (flags & FI_INJECT) {
-			/* Allocate an internal buffer to hold source data. */
-			req->rma.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
-			if (!req->rma.ibuf)
-				goto req_free;
-
-			memcpy(req->rma.ibuf, buf, len);
-		} else {
-			/* Map user buffer for DMA command. */
-			ret = cxip_map(txc->domain, buf, len,
-				       &req->rma.local_md);
-			if (ret) {
-				CXIP_DBG("Failed to map buffer: %d\n", ret);
-				goto req_free;
-			}
+		/* Map user buffer for DMA command. */
+		ret = cxip_map(txc->domain, buf, len,
+				&req->rma.local_md);
+		if (ret) {
+			CXIP_DBG("Failed to map buffer: %d\n", ret);
+			goto req_free;
 		}
 	}
 
@@ -321,19 +309,9 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		cmd.index_ext = idx_ext;
 
 		if (len) {
-			if (!req->rma.ibuf) {
-				cmd.lac = req->rma.local_md->md->lac;
-				cmd.local_addr =
-					CXI_VA_TO_IOVA(req->rma.local_md->md,
-						       buf);
-			} else {
-				struct cxip_md *ibuf_md =
-						cxip_cq_ibuf_md(req->rma.ibuf);
-
-				cmd.local_addr = CXI_VA_TO_IOVA(ibuf_md->md,
-								req->rma.ibuf);
-				cmd.lac = ibuf_md->md->lac;
-			}
+			cmd.lac = req->rma.local_md->md->lac;
+			cmd.local_addr =
+				CXI_VA_TO_IOVA(req->rma.local_md->md, buf);
 		}
 
 		cmd.event_send_disable = 1;
@@ -405,8 +383,6 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 unlock_op:
 	fastlock_release(&txc->tx_cmdq->lock);
-	if (req && req->rma.ibuf)
-		cxip_cq_ibuf_free(req->cq, req->rma.ibuf);
 	if (req && req->rma.local_md)
 		cxip_unmap(req->rma.local_md);
 req_free:

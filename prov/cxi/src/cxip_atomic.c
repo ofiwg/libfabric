@@ -276,9 +276,6 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 	if (req->amo.oper1_md)
 		cxip_unmap(req->amo.oper1_md);
 
-	if (req->amo.ibuf)
-		cxip_cq_ibuf_free(req->cq, req->amo.ibuf);
-
 	req->flags &= (FI_ATOMIC | FI_READ | FI_WRITE);
 
 	event_rc = cxi_init_event_rc(event);
@@ -547,22 +544,11 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	}
 
 	if (!idc) {
-		if (flags & FI_INJECT) {
-			/* Allocate an internal buffer to hold source data. */
-			req->amo.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
-			if (!req->amo.ibuf)
-				goto free_req;
-
-			memcpy(req->amo.ibuf, oper1, len);
-		} else {
-			/* Map user buffer for DMA command. */
-			ret = cxip_map(txc->domain, oper1, len,
-				       &req->amo.oper1_md);
-			if (ret) {
-				CXIP_DBG("Failed to map operand buffer: %d\n",
-					 ret);
-				goto free_req;
-			}
+		/* Map user buffer for DMA command. */
+		ret = cxip_map(txc->domain, oper1, len, &req->amo.oper1_md);
+		if (ret) {
+			CXIP_DBG("Failed to map operand buffer: %d\n", ret);
+			goto free_req;
 		}
 	}
 
@@ -700,20 +686,9 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		cmd.event_send_disable = 1;
 		cmd.dfa = dfa;
 		cmd.remote_offset = off;
-
-		if (!req->amo.ibuf) {
-			cmd.local_read_addr =
-					CXI_VA_TO_IOVA(req->amo.oper1_md->md,
-						       oper1);
-			cmd.lac = req->amo.oper1_md->md->lac;
-		} else {
-			struct cxip_md *ibuf_md =
-					cxip_cq_ibuf_md(req->amo.ibuf);
-
-			cmd.local_read_addr = CXI_VA_TO_IOVA(ibuf_md->md,
-							     req->amo.ibuf);
-			cmd.lac = ibuf_md->md->lac;
-		}
+		cmd.local_read_addr = CXI_VA_TO_IOVA(req->amo.oper1_md->md,
+						     oper1);
+		cmd.lac = req->amo.oper1_md->md->lac;
 
 		if (result) {
 			cmd.local_write_addr =
@@ -805,8 +780,6 @@ unlock_cmdq:
 	if (result)
 		cxip_unmap(req->amo.result_md);
 unmap_oper1:
-	if (req && req->amo.ibuf)
-		cxip_cq_ibuf_free(req->cq, req->amo.ibuf);
 	if (req && req->amo.oper1_md)
 		cxip_unmap(req->amo.oper1_md);
 free_req:
