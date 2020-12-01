@@ -3614,14 +3614,17 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 			memcpy(req->send.ibuf, req->send.buf, req->send.len);
 			buf = req->send.ibuf;
 		} else {
-			/* Map user buffer for DMA command. */
-			ret = cxip_map(txc->domain, req->send.buf,
-				       req->send.len, &send_md);
-			if (ret != FI_SUCCESS) {
-				CXIP_DBG("Failed to map send buffer: %d\n",
-					 ret);
-				return ret;
+			/* IDCs do not require memory mapping. */
+			if (!idc) {
+				ret = cxip_map(txc->domain, req->send.buf,
+					       req->send.len, &send_md);
+				if (ret != FI_SUCCESS) {
+					CXIP_DBG("Failed to map send buffer: %d\n",
+						 ret);
+					return ret;
+				}
 			}
+
 			buf = req->send.buf;
 		}
 	}
