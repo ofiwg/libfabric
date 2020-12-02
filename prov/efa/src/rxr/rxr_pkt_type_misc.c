@@ -647,13 +647,7 @@ void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
 	}
 
 	tx_entry->rxr_flags |= RXR_RECEIPT_RECEIVED;
-	if (!(tx_entry->bytes_acked > 0)) {
-		/* For eager and medium delivery_complete messages,
-		 * bytes_acked is not updated,
-		 * so it is always 0.
-		 */
-		rxr_cq_handle_tx_completion(ep, tx_entry);
-	} else {
+	if (tx_entry->rxr_flags & RXR_LONGCTS_PROTOCOL) {
 		/*
 		 * For long message protocol, when FI_DELIVERY_COMPLETE
 		 * is requested, we have to write tx completions
@@ -664,6 +658,8 @@ void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
 		 */
 		if (tx_entry->total_len == tx_entry->bytes_acked)
 			rxr_cq_handle_tx_completion(ep, tx_entry);
+	} else {
+		rxr_cq_handle_tx_completion(ep, tx_entry);
 	}
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
