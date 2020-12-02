@@ -425,7 +425,9 @@ int ofi_av_close(struct util_av *av)
 
 size_t ofi_av_size(struct util_av *av)
 {
-	return av->av_entry_pool->entry_cnt;
+	return av->av_entry_pool->entry_cnt ?
+	       av->av_entry_pool->entry_cnt :
+	       av->av_entry_pool->attr.chunk_cnt;
 }
 
 static int util_verify_av_util_attr(struct util_domain *domain,

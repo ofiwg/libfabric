@@ -64,7 +64,7 @@ rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 }
 
 static struct rxm_rx_buf *
-rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep, bool repost)
+rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep, bool repost)
 {
 	struct rxm_rx_buf *rx_buf;
 
@@ -74,12 +74,14 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep, bool repost)
 
 	assert(rx_buf->ep == rxm_ep);
 	rx_buf->hdr.state = RXM_RX;
-	rx_buf->msg_ep = msg_ep;
+	rx_buf->rx_ep = rx_ep;
 	rx_buf->repost = repost;
 
-	if (!rxm_ep->srx_ctx)
-		rx_buf->conn = container_of(msg_ep->fid.context,
+	if (!rxm_ep->srx_ctx) {
+		rx_buf->conn = container_of(rx_ep->fid.context,
 					    struct rxm_conn, handle);
+	}
+
 	return rx_buf;
 }
 
@@ -88,7 +90,7 @@ static int rxm_repost_new_rx(struct rxm_rx_buf *rx_buf)
 	struct rxm_rx_buf *new_rx_buf;
 	if (rx_buf->repost) {
 		rx_buf->repost = false;
-		new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->msg_ep, true);
+		new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->rx_ep, true);
 		if (!new_rx_buf)
 			return -FI_ENOMEM;
 
@@ -1463,10 +1465,12 @@ free:
 
 static ssize_t rxm_handle_credit(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_domain *domain = container_of(rxm_ep->util_ep.domain,
-						 struct rxm_domain, util_domain);
+	struct rxm_domain *domain;
 
-	domain->flow_ctrl_ops->add_credits(rx_buf->msg_ep,
+	assert(rx_buf->rx_ep->fid.fclass == FI_CLASS_EP);
+	domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
+			      util_domain);
+	domain->flow_ctrl_ops->add_credits(rx_buf->rx_ep,
 					   rx_buf->pkt.ctrl_hdr.ctrl_data);
 	rxm_rx_buf_free(rx_buf);
 	return FI_SUCCESS;
@@ -1922,7 +1926,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to ofi_cq_write_error\n");
 }
 
-static int rxm_msg_ep_recv(struct rxm_rx_buf *rx_buf)
+static int rxm_post_recv(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_domain *domain;
 	int ret, level;
@@ -1934,7 +1938,7 @@ static int rxm_msg_ep_recv(struct rxm_rx_buf *rx_buf)
 
 	domain = container_of(rx_buf->ep->util_ep.domain,
 			      struct rxm_domain, util_domain);
-	ret = (int) fi_recv(rx_buf->msg_ep, &rx_buf->pkt,
+	ret = (int) fi_recv(rx_buf->rx_ep, &rx_buf->pkt,
 			    domain->rx_buf_post_size, rx_buf->hdr.desc,
 			    FI_ADDR_UNSPEC, rx_buf);
 	if (!ret)
@@ -1949,18 +1953,18 @@ static int rxm_msg_ep_recv(struct rxm_rx_buf *rx_buf)
 	return ret;
 }
 
-int rxm_msg_ep_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep)
+int rxm_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep)
 {
 	struct rxm_rx_buf *rx_buf;
 	int ret;
 	size_t i;
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
-		rx_buf = rxm_rx_buf_alloc(rxm_ep, msg_ep, true);
+		rx_buf = rxm_rx_buf_alloc(rxm_ep, rx_ep, true);
 		if (!rx_buf)
 			return -FI_ENOMEM;
 
-		ret = rxm_msg_ep_recv(rx_buf);
+		ret = rxm_post_recv(rx_buf);
 		if (ret) {
 			ofi_buf_free(&rx_buf->hdr);
 			return ret;
@@ -1990,7 +1994,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 			continue;
 		}
 
-		ret = rxm_msg_ep_recv(buf);
+		ret = rxm_post_recv(buf);
 		if (ret) {
 			if (ret == -FI_EAGAIN)
 				ofi_buf_free(&buf->hdr);

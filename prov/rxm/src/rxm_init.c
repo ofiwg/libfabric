@@ -94,12 +94,25 @@ void rxm_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
 			core_info->domain_attr->mr_mode |= FI_MR_HMEM;
 	}
 }
+static bool rxm_use_srx(const struct fi_info *hints,
+			const struct fi_info *base_info)
+{
+	const struct fi_info *info;
+	int ret, use_srx = 0;
+
+	ret = fi_param_get_bool(&rxm_prov, "use_srx", &use_srx);
+	if (ret != -FI_ENODATA)
+		return use_srx;
+
+	info = base_info ? base_info : hints;
+
+	return info && info->fabric_attr && info->fabric_attr->prov_name &&
+	       !strncasecmp(info->fabric_attr->prov_name, "tcp", 3);
+}
 
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		     const struct fi_info *base_info, struct fi_info *core_info)
 {
-	int ret, use_srx = 0;
-
 	rxm_info_to_core_mr_modes(version, hints, core_info);
 
 	core_info->mode |= FI_RX_CQ_DATA | FI_CONTEXT;
@@ -110,12 +123,15 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 			core_info->caps |= FI_MSG | FI_SEND | FI_RECV;
 
 		/* FI_RMA cap is needed for large message transfer protocol */
-		if (core_info->caps & FI_MSG)
-			core_info->caps |= FI_RMA | FI_READ | FI_REMOTE_READ | FI_REMOTE_WRITE;
+		if (core_info->caps & FI_MSG) {
+			core_info->caps |= FI_RMA | FI_READ |
+					   FI_REMOTE_READ | FI_REMOTE_WRITE;
+		}
 
 		if (hints->domain_attr) {
 			core_info->domain_attr->caps |= hints->domain_attr->caps;
-			core_info->domain_attr->threading = hints->domain_attr->threading;
+			core_info->domain_attr->threading =
+				hints->domain_attr->threading;
 		}
 		if (hints->tx_attr) {
 			core_info->tx_attr->op_flags =
@@ -133,10 +149,7 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 
 	core_info->ep_attr->type = FI_EP_MSG;
 
-	ret = fi_param_get_bool(&rxm_prov, "use_srx", &use_srx);
-	if (use_srx || ((ret == -FI_ENODATA) && base_info &&
-	    base_info->fabric_attr->prov_name &&
-	    !strcmp(base_info->fabric_attr->prov_name, "tcp"))) {
+	if (rxm_use_srx(hints, base_info)) {
 		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
 		       "Requesting shared receive context from core provider\n");
 		core_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
@@ -168,10 +181,18 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	 * inject size up to the rxm limit (eager buffer size) in this
 	 * case.  If registration is not required, use the core provider's
 	 * limit, which avoids potential extra data copies.
+	 *
+	 * If we report the size of the bounce buffer, apps may call inject
+	 * rather than send, which hampers our ability to use the direct
+	 * send feature that avoids data copies.
 	 */
-	info->tx_attr->inject_size = ofi_mr_local(info) ?
-				     base_info->tx_attr->inject_size :
-				     core_info->tx_attr->inject_size;
+	if (ofi_mr_local(info) ||
+	    (core_info->tx_attr->inject_size <= sizeof(struct rxm_pkt))) {
+		info->tx_attr->inject_size = base_info->tx_attr->inject_size;
+	} else {
+		info->tx_attr->inject_size = core_info->tx_attr->inject_size -
+					     sizeof(struct rxm_pkt);
+	}
 
 	info->tx_attr->size 		= base_info->tx_attr->size;
 	info->tx_attr->iov_limit 	= MIN(base_info->tx_attr->iov_limit,

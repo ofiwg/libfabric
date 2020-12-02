@@ -182,6 +182,63 @@ unlock:
 	return -FI_EAGAIN;
 }
 
+ssize_t vrb_send_iov(struct vrb_ep *ep, struct ibv_send_wr *wr,
+		     const struct iovec *iov, void **desc, int count,
+		     uint64_t flags)
+{
+	enum fi_hmem_iface iface;
+	uint64_t device;
+	void *bounce_buf;
+	void *send_desc;
+	size_t i, len = 0;
+	ssize_t ret;
+
+	wr->sg_list = alloca(sizeof(*wr->sg_list) * count);
+	for (i = 0; i < count; i++) {
+		wr->sg_list[i].addr = (uintptr_t) iov[i].iov_base;
+		wr->sg_list[i].length = iov[i].iov_len;
+		wr->sg_list[i].lkey =
+			desc ? ((struct vrb_mem_desc *) desc[i])->lkey : 0;
+		len += iov[i].iov_len;
+	}
+
+	if (desc) {
+		iface = ((struct vrb_mem_desc *) desc[0])->info.iface;
+		device = ((struct vrb_mem_desc *) desc[0])->info.device;
+		send_desc = desc[0];
+
+		wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags, send_desc);
+	} else {
+		iface = FI_HMEM_SYSTEM;
+		device = 0;
+		send_desc = NULL;
+
+		wr->send_flags = IBV_SEND_INLINE;
+	}
+
+	if (wr->send_flags & IBV_SEND_INLINE) {
+		bounce_buf = alloca(len);
+		ret = ofi_copy_from_hmem_iov(bounce_buf, len, iface, device,
+					     iov, count, 0);
+		if (ret != len) {
+			VERBS_WARN(FI_LOG_EP_DATA, "hmem copy error");
+			return -FI_EIO;
+		}
+
+		wr->sg_list[0] = vrb_init_sge(bounce_buf, len, NULL);
+		wr->num_sge = 1;
+	} else {
+		wr->num_sge = count;
+	}
+
+	wr->wr_id = VERBS_COMP_FLAGS(ep, flags, wr->wr_id);
+	if (flags & FI_FENCE)
+		wr->send_flags |= IBV_SEND_FENCE;
+
+	ret = vrb_post_send(ep, wr, flags);
+	return ret;
+}
+
 static inline int vrb_msg_ep_cmdata_size(fid_t fid)
 {
 	struct vrb_pep *pep;
@@ -1439,7 +1496,7 @@ vrb_srq_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t fla
 		.next = NULL,
 	};
 
-	vrb_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
+	vrb_iov_dupa(wr.sg_list, msg->msg_iov, msg->desc, msg->iov_count);
 	return vrb_post_srq(ep, &wr);
 }
 

@@ -100,11 +100,9 @@
 
 
 #define VERBS_INJECT_FLAGS(ep, len, flags, desc) \
-	((flags) & FI_INJECT || \
-	 ((!(desc) || \
-	  ((struct vrb_mem_desc *) (desc))->info.iface == FI_HMEM_SYSTEM) && \
-	 (len) <= (ep)->info_attr.inject_size)) ? \
-	IBV_SEND_INLINE : 0
+	(((flags) & FI_INJECT) || !(desc) || \
+	 ((((struct vrb_mem_desc *) (desc))->info.iface == FI_HMEM_SYSTEM) && \
+	  ((len) <= (ep)->info_attr.inject_size))) ? IBV_SEND_INLINE : 0
 #define VERBS_INJECT(ep, len, desc) \
 	VERBS_INJECT_FLAGS(ep, len, (ep)->util_ep.tx_op_flags, desc)
 
@@ -898,52 +896,15 @@ int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc);
 	  .length = (uint32_t) len,			\
 	  .lkey = (desc) ? ((struct vrb_mem_desc *) (desc))->lkey : 0 }
 
-#define vrb_set_sge_iov(sg_list, iov, count, desc)	\
-do {							\
-	size_t i;					\
-	sg_list = alloca(sizeof(*sg_list) * count);	\
-	for (i = 0; i < count; i++) {			\
-		sg_list[i] = vrb_init_sge(		\
-				iov[i].iov_base,	\
-				iov[i].iov_len,		\
-				desc[i]);		\
-	}						\
-} while (0)
-
-#define vrb_set_sge_iov_count_len(sg_list, iov, count, desc, len)	\
-do {									\
-	size_t i;							\
-	sg_list = alloca(sizeof(*sg_list) * count);			\
-	for (i = 0; i < count; i++) {					\
-		sg_list[i] = vrb_init_sge(				\
-				iov[i].iov_base,			\
-				iov[i].iov_len,				\
-				desc[i]);				\
-		len += iov[i].iov_len;					\
-	}								\
-} while (0)
-
-#define vrb_init_sge_inline(buf, len) vrb_init_sge(buf, len, NULL)
-
-#define vrb_set_sge_iov_inline(sg_list, iov, count, len)	\
+#define vrb_iov_dupa(dst, iov, desc, count)			\
 do {								\
 	size_t i;						\
-	sg_list = alloca(sizeof(*sg_list) * count);		\
+	dst = alloca(sizeof(*dst) * count);			\
 	for (i = 0; i < count; i++) {				\
-		sg_list[i] = vrb_init_sge_inline(		\
-					iov[i].iov_base,	\
-					iov[i].iov_len);	\
-		len += iov[i].iov_len;				\
+		dst[i] = vrb_init_sge(iov[i].iov_base,		\
+				      iov[i].iov_len, desc[i]);	\
 	}							\
 } while (0)
-
-#define vrb_send_iov(ep, wr, iov, desc, count)		\
-	vrb_send_iov_flags(ep, wr, iov, desc, count,		\
-			      (ep)->util_ep.tx_op_flags)
-
-#define vrb_send_msg(ep, wr, msg, flags)				\
-	vrb_send_iov_flags(ep, wr, (msg)->msg_iov, (msg)->desc,	\
-			      (msg)->iov_count, flags)
 
 #define vrb_wr_consumes_recv(wr)						\
 	( wr->opcode == IBV_WR_SEND || wr->opcode == IBV_WR_SEND_WITH_IMM	\
@@ -958,97 +919,15 @@ vrb_send_buf(struct vrb_ep *ep, struct ibv_send_wr *wr,
 {
 	struct ibv_sge sge = vrb_init_sge(buf, len, desc);
 
-	assert(wr->wr_id != VERBS_NO_COMP_FLAG);
-
 	wr->sg_list = &sge;
 	wr->num_sge = 1;
 
 	return vrb_post_send(ep, wr, 0);
 }
 
-static inline ssize_t
-vrb_send_buf_inline(struct vrb_ep *ep, struct ibv_send_wr *wr,
-		       const void *buf, size_t len)
-{
-	struct ibv_sge sge = vrb_init_sge_inline(buf, len);
-
-	assert(wr->wr_id == VERBS_NO_COMP_FLAG);
-
-	wr->sg_list = &sge;
-	wr->num_sge = 1;
-
-	return vrb_post_send(ep, wr, 0);
-}
-
-static inline ssize_t
-vrb_send_iov_flags(struct vrb_ep *ep, struct ibv_send_wr *wr,
-		      const struct iovec *iov, void **desc, int count,
-		      uint64_t flags)
-{
-	size_t len = 0;
-	enum fi_hmem_iface iface;
-	uint64_t device;
-	void *bounce_buf;
-	void *send_desc;
-	ssize_t ret;
-
-	if (ep->hmem_enabled) {
-		if (!desc) {
-			vrb_set_sge_iov_inline(wr->sg_list, iov, count, len);
-			iface = FI_HMEM_SYSTEM;
-			device = 0;
-			send_desc = NULL;
-		} else {
-			vrb_set_sge_iov_count_len(wr->sg_list, iov, count, desc,
-						  len);
-			iface = ((struct vrb_mem_desc *) desc[0])->info.iface;
-			device = ((struct vrb_mem_desc *) desc[0])->info.device;
-			send_desc = desc[0];
-		}
-
-		wr->send_flags = VERBS_INJECT_FLAGS(ep, len, flags, send_desc);
-
-		if (wr->send_flags & IBV_SEND_INLINE &&
-		    iface != FI_HMEM_SYSTEM) {
-			bounce_buf = alloca(len);
-
-			ret = ofi_copy_from_hmem_iov(bounce_buf, len, iface,
-						     device, iov, count, 0);
-			if (ret != len) {
-				if (ret >= 0) {
-					VERBS_WARN(FI_LOG_EP_DATA,
-						   "Unexpected short copy");
-					ret = -FI_EIO;
-				}
-
-				goto out;
-			}
-
-			wr->sg_list[0] = vrb_init_sge(bounce_buf, len, NULL);
-			count = 1;
-		}
-	} else {
-		if (!desc)
-			vrb_set_sge_iov_inline(wr->sg_list, iov, count, len);
-		else
-			vrb_set_sge_iov_count_len(wr->sg_list, iov, count, desc,
-						  len);
-
-		if (flags & FI_INJECT || len < ep->info_attr.inject_size)
-			wr->send_flags = IBV_SEND_INLINE;
-	}
-
-	wr->num_sge = count;
-	wr->wr_id = VERBS_COMP_FLAGS(ep, flags, wr->wr_id);
-
-	if (flags & FI_FENCE)
-		wr->send_flags |= IBV_SEND_FENCE;
-
-	ret = vrb_post_send(ep, wr, flags);
-
-out:
-	return ret;
-}
+ssize_t vrb_send_iov(struct vrb_ep *ep, struct ibv_send_wr *wr,
+		     const struct iovec *iov, void **desc, int count,
+		     uint64_t flags);
 
 void vrb_add_credits(struct fid_ep *ep, size_t credits);
 

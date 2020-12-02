@@ -59,7 +59,7 @@ vrb_dgram_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		.next = NULL,
 	};
 
-	vrb_set_sge_iov(wr.sg_list, msg->msg_iov, msg->iov_count, msg->desc);
+	vrb_iov_dupa(wr.sg_list, msg->msg_iov, msg->desc, msg->iov_count);
 	return vrb_post_recv(ep, &wr);
 }
 
@@ -111,7 +111,8 @@ vrb_dgram_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	if (vrb_dgram_ep_set_addr(ep, msg->addr, &wr))
 		return -FI_ENOENT;
 
-	return vrb_send_msg(ep, &wr, msg, flags);
+	return vrb_send_iov(ep, &wr, msg->msg_iov, msg->desc,
+			    msg->iov_count, flags);
 }
 
 static inline ssize_t
@@ -129,7 +130,8 @@ vrb_dgram_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	if (vrb_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return vrb_send_iov(ep, &wr, iov, desc, count);
+	return vrb_send_iov(ep, &wr, iov, desc, count,
+			    ep->util_ep.tx_op_flags);
 }
 
 static ssize_t
@@ -186,7 +188,7 @@ vrb_dgram_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (vrb_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return vrb_send_buf_inline(ep, &wr, buf, len);
+	return vrb_send_buf(ep, &wr, buf, len, NULL);
 }
 
 static ssize_t
@@ -226,7 +228,7 @@ vrb_dgram_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (vrb_dgram_ep_set_addr(ep, dest_addr, &wr))
 		return -FI_ENOENT;
 
-	return vrb_send_buf_inline(ep, &wr, buf, len);
+	return vrb_send_buf(ep, &wr, buf, len, NULL);
 }
 
 static ssize_t

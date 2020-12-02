@@ -68,6 +68,11 @@ void ofi_eq_handle_err_entry(uint32_t api_version, uint64_t flags,
 	}
 }
 
+/*
+ * fi_eq_read and fi_eq_readerr share this common code path.
+ * If flags contains UTIL_FLAG_ERROR, then we are processing
+ * fi_eq_readerr.
+ */
 ssize_t ofi_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 		    void *buf, size_t len, uint64_t flags)
 {
