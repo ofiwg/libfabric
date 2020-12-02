@@ -210,6 +210,11 @@ static int alloc_ep_res(struct fi_info *fi)
 		return ret;
 	}
 
+	/* We only ues the common code to send messages, so
+	 * set mr_desc to the tx buffer's region.
+	 */
+	mr_desc = fi_mr_desc(mr);
+
 	//Each multi recv buffer will be able to hold at least 2 and
 	//up to 64 messages, allowing proper testing of multi recv
 	//completions and reposting
