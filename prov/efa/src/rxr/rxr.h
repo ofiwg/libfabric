@@ -170,6 +170,12 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 #define RXR_RECEIPT_RECEIVED BIT_ULL(7)
 
 /*
+ * Flag to tell that
+ * long message protocol is used
+ */
+#define RXR_LONGCTS_PROTOCOL BIT_ULL(8)
+
+/*
  * OFI flags
  * The 64-bit flag field is used as follows:
  * 1-grow up    common (usable with multiple operations)
