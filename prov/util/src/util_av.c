@@ -256,7 +256,7 @@ int ofi_verify_av_insert(struct util_av *av, uint64_t flags)
 
 	if (flags & ~(FI_MORE)) {
 		FI_WARN(av->prov, FI_LOG_AV, "unsupported flags\n");
-		return -FI_ENOEQ;
+		return -FI_EBADFLAGS;
 	}
 
 	return 0;
