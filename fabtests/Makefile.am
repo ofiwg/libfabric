@@ -9,6 +9,7 @@ endif
 
 if FREEBSD
 os_excludes = -f ./test_configs/freebsd.exclude
+AM_CFLAGS += -I$(srcdir)/include/freebsd
 endif
 
 bin_PROGRAMS = \
