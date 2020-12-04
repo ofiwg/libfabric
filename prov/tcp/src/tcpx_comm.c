@@ -37,26 +37,6 @@
 #include <ofi_iov.h>
 #include "tcpx.h"
 
-int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry)
-{
-	ssize_t bytes_sent;
-	struct msghdr msg = {0};
-
-	msg.msg_iov = tx_entry->iov;
-	msg.msg_iovlen = tx_entry->iov_cnt;
-
-	bytes_sent = ofi_sendmsg_tcp(tx_entry->ep->sock, &msg, MSG_NOSIGNAL);
-	if (bytes_sent < 0)
-		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
-
-	tx_entry->rem_len -= bytes_sent;
-	if (tx_entry->rem_len) {
-		ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt, bytes_sent);
-		return -FI_EAGAIN;
-	}
-	return FI_SUCCESS;
-}
-
 static ssize_t tcpx_read_from_buffer(struct stage_buf *stage_buf,
 				     uint8_t *buf, size_t len)
 {

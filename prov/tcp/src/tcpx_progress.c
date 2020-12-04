@@ -42,6 +42,115 @@
 #include <ofi_util.h>
 #include <ofi_iov.h>
 
+static struct mmsghdr msgs[8];
+
+static int tcpx_send_msgs(struct tcpx_ep *ep, unsigned max)
+{
+	struct slist_entry *item, *prev;
+	struct tcpx_xfer_entry *tx_entry;
+	int ret, i = 0;
+
+	max = MIN(8, max);
+
+	slist_foreach(&ep->tx_queue, item, prev) {
+		if (i >= max)
+			break;
+		tx_entry = container_of(item, struct tcpx_xfer_entry, entry);
+
+		msgs[i].msg_hdr.msg_iov = tx_entry->iov;
+		msgs[i].msg_hdr.msg_iovlen = tx_entry->iov_cnt;
+
+		// minimal set of writes to this structure?
+		msgs[i].msg_hdr.msg_namelen = 0;
+		msgs[i].msg_hdr.msg_controllen = 0;
+		msgs[i].msg_hdr.msg_flags = 0;
+
+		++i;
+
+		(void) prev;
+	}
+
+	ret = sendmmsg(ep->sock, msgs, i, MSG_NOSIGNAL);
+	if (ret < 0)
+		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
+
+	for (i = 0; i < ret; ++i) {
+		unsigned bytes_sent = msgs[i].msg_len;
+		struct tcpx_cq *tcpx_cq;
+		item = slist_remove_head(&ep->tx_queue);
+		tx_entry = container_of(item, struct tcpx_xfer_entry, entry);
+
+		if (bytes_sent == tx_entry->rem_len) {
+			tx_entry->ep->hdr_bswap(&tx_entry->hdr.base_hdr);
+			if (tx_entry->hdr.base_hdr.flags & (OFI_DELIVERY_COMPLETE | OFI_COMMIT_COMPLETE)) {
+				slist_insert_tail(&tx_entry->entry, &tx_entry->ep->tx_rsp_pend_queue);
+			} else {
+				tcpx_cq_report_success(tx_entry->ep->util_ep.tx_cq, tx_entry);
+				tcpx_cq = container_of(tx_entry->ep->util_ep.tx_cq,
+							struct tcpx_cq, util_cq);
+				tcpx_xfer_entry_release(tcpx_cq, tx_entry);
+			}
+		} else {
+			tx_entry->rem_len -= bytes_sent;
+			assert(tx_entry->rem_len);
+			ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt,bytes_sent);
+			slist_insert_head(item, &ep->tx_queue);
+			// NOTE: assumes the first partial transfer will be the only,
+			// and subsequent entries will have no progress
+			break;
+		}
+	}
+
+	return FI_SUCCESS;
+}
+
+// duplicated logic send_msg and process_tx_entry
+static void tcpx_process_tx_entries(struct tcpx_ep *ep, unsigned max)
+{
+	struct tcpx_xfer_entry *tx_entry;
+	struct tcpx_cq *tcpx_cq;
+	int ret;
+
+	assert(max);
+
+	ret = tcpx_send_msgs(ep, max);
+	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+		return;
+
+	if (ret < 0) {
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
+		tcpx_ep_disable(ep, 0);
+
+		tx_entry = container_of(slist_remove_head(&ep->tx_queue),
+				struct tcpx_xfer_entry,
+				entry);
+
+		tcpx_cq_report_error(ep->util_ep.tx_cq, tx_entry, -ret);
+		tcpx_cq = container_of(tx_entry->ep->util_ep.tx_cq,
+				       struct tcpx_cq, util_cq);
+		tcpx_xfer_entry_release(tcpx_cq, tx_entry);
+	}
+}
+
+static int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry)
+{
+	ssize_t bytes_sent;
+	struct msghdr msg = {0};
+
+	msg.msg_iov = tx_entry->iov;
+	msg.msg_iovlen = tx_entry->iov_cnt;
+
+	bytes_sent = ofi_sendmsg_tcp(tx_entry->ep->sock, &msg, MSG_NOSIGNAL);
+	if (bytes_sent < 0)
+		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
+
+	tx_entry->rem_len -= bytes_sent;
+	if (tx_entry->rem_len) {
+		ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt, bytes_sent);
+		return -FI_EAGAIN;
+	}
+	return FI_SUCCESS;
+}
 
 static void tcpx_process_tx_entry(struct tcpx_xfer_entry *tx_entry)
 {
@@ -666,15 +775,11 @@ err:
 }
 
 /* Must hold ep lock */
+
 void tcpx_progress_tx(struct tcpx_ep *ep)
 {
-	struct tcpx_xfer_entry *tx_entry;
-	struct slist_entry *entry;
-
 	if (!slist_empty(&ep->tx_queue)) {
-		entry = ep->tx_queue.head;
-		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-		tcpx_process_tx_entry(tx_entry);
+		tcpx_process_tx_entries(ep, 8);
 	}
 }
 
