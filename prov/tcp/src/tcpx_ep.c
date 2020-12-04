@@ -433,6 +433,58 @@ static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
 	fastlock_release(&ep->lock);
 }
 
+static int tcpx_match_ctx(struct slist_entry *item, const void *arg)
+{
+	struct tcpx_xfer_entry *xfer_entry;
+
+	xfer_entry = container_of(item, struct tcpx_xfer_entry, entry);
+
+	return (xfer_entry->context == arg);
+}
+
+static bool tcpx_ep_cancel_queue(struct slist *queue, void *context,
+				struct tcpx_cq *tcpx_cq)
+{
+	struct slist_entry *entry;
+	struct tcpx_xfer_entry *xfer_entry;
+
+	entry = slist_remove_first_match(queue, &tcpx_match_ctx, context);
+	if (!entry)
+		return false;
+
+	xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
+
+	tcpx_cq_report_error(&tcpx_cq->util_cq, xfer_entry, FI_ECANCELED);
+	tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
+	return true;
+}
+
+static ssize_t tcpx_ep_cancel(fid_t fid, void *context)
+{
+	struct tcpx_cq *tcpx_cq;
+	struct tcpx_ep *ep;
+	bool found;
+
+	ep = container_of(fid, struct tcpx_ep,
+			  util_ep.ep_fid.fid);
+
+	fastlock_acquire(&ep->lock);
+
+	/*FIXME: The code only allows for canceling receives from ep->rx_queue.
+	 * Canceling an operation from the other queues is not trivial, 
+	 * especially if the operation has already been initiated. */
+
+	tcpx_cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
+	found = tcpx_ep_cancel_queue(&ep->rx_queue, context, tcpx_cq);
+
+	fastlock_release(&ep->lock);
+
+	if (found)
+		return 0;
+	else
+		return -ENOENT;
+}
+
 static int tcpx_ep_close(struct fid *fid)
 {
 	struct tcpx_ep *ep;
@@ -567,7 +619,7 @@ int tcpx_ep_setopt(fid_t fid, int level, int optname,
 
 static struct fi_ops_ep tcpx_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = fi_no_cancel,
+	.cancel = tcpx_ep_cancel,
 	.getopt = tcpx_ep_getopt,
 	.setopt = tcpx_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
