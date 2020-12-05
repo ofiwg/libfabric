@@ -487,5 +487,9 @@ RXM_INI
 			"(FI_OFI_RXM_DATA_AUTO_PROGRESS = 1), domain threading "
 			"level would be set to FI_THREAD_SAFE\n");
 
+#ifdef HAVE_RXM_DL
+	ofi_mem_init();
+#endif
+
 	return &rxm_prov;
 }

@@ -52,6 +52,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <assert.h>
+#include <hmem.h>
 
 char *tx_barrier;
 char *rx_barrier;
@@ -170,7 +171,7 @@ static int multi_setup_fabric(int argc, char **argv)
 		goto err;
 	}
 
-	if (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR) 
+	if (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR)
 		remote->addr = (uintptr_t) rx_buf;
 	else
 		remote->addr = 0;
@@ -323,20 +324,20 @@ int multi_rma_write()
 
 		snprintf((char*) tx_buf + tx_size * state.cur_target, tx_size,
 		        "Hello World! from %zu to %i on the %zuth iteration, %s test",
-		        pm_job.my_rank, state.cur_target, 
+		        pm_job.my_rank, state.cur_target,
 		        (size_t) tx_seq, pattern->name);
 
 		while (1) {
-			ret = fi_write(ep, 
+			ret = fi_write(ep,
 				tx_buf + tx_size * state.cur_target,
-				opts.transfer_size, mr_desc, 
-				pm_job.fi_addrs[state.cur_target], 
+				opts.transfer_size, mr_desc,
+				pm_job.fi_addrs[state.cur_target],
 				pm_job.multi_iovs[state.cur_target].addr,
-				pm_job.multi_iovs[state.cur_target].key, 
+				pm_job.multi_iovs[state.cur_target].key,
 				&tx_ctx_arr[state.tx_window].context);
 			if (!ret)
 				break;
-		
+
 			if (ret != -FI_EAGAIN) {
 				printf("RMA write failed");
 				return ret;
@@ -349,7 +350,7 @@ int multi_rma_write()
 			}
 		}
 		tx_seq++;
-	
+
 		state.sends_posted++;
 		state.tx_window--;
 	}
@@ -393,7 +394,7 @@ int send_recv_barrier(int sync)
 	}
 
 	for (i = 0; i < pm_job.num_ranks; i++) {
-		ret = ft_post_tx_buf(ep, pm_job.fi_addrs[i], 0, 
+		ret = ft_post_tx_buf(ep, pm_job.fi_addrs[i], 0,
 				     NO_CQ_DATA, &barrier_tx_ctx[i],
 		                     tx_buf, mr_desc, 0);
 		if (ret)
@@ -404,7 +405,7 @@ int send_recv_barrier(int sync)
 	if (ret)
 		return ret;
 
-	ret = ft_get_rx_comp(rx_seq);	
+	ret = ft_get_rx_comp(rx_seq);
 
 	return ret;
 }
@@ -482,7 +483,7 @@ int multinode_run_tests(int argc, char **argv)
 	ret = multi_setup_fabric(argc, argv);
 	if (ret)
 		return ret;
-	
+
 
 	for (i = 0; i < NUM_TESTS && !ret; i++) {
 		printf("starting %s... ", patterns[i].name);
