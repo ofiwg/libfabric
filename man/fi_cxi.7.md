@@ -86,7 +86,8 @@ The CXI provider uses a proprietary address format. This format includes fields
 for NIC Address and PID. NIC Address is the topological address of the NIC
 endpoint on the fabric. All OFI Endpoints sharing a Domain share the same NIC
 Address. PID (for Port ID or Process ID, adopted from the Portals 4
-specification), is analogous to an IP socket port number.
+specification), is analogous to an IP socket port number. Valid PIDs are in the
+range [0-510].
 
 A third component of Slingshot network addressing is the Virtual Network ID
 (VNI). VNI is a protection key used by the Slingshot network to provide
@@ -110,6 +111,8 @@ and PID to be assigned to the Endpoint. The NIC interface string should match
 the name of an available CXI domain (in the format cxi[0-9]). The PID string
 will be interpreted as a 9-bit integer. Address conflicts will be detected when
 the Endpoint is enabled.
+
+A Scalable Endpoint is assigned one PID for each pair of TX/RX contexts supported.
 
 ## Authorization Keys
 
@@ -223,6 +226,20 @@ The CXI provider also supports the following operational flags:
 - *FI_FENCE*
 - *FI_COMPLETION*
 - *FI_REMOTE_CQ_DATA*
+
+## Scalable Endpoints
+
+The CXI provider supports Scalable Endpoints (SEPs). A pair of TX/RX contexts
+is generally used by a single thread. For that reason, a pair of TX/RX contexts
+shares transmit and receive resources.
+
+Each pair of contexts is assigned one PID value. It follows that a SEP with 10
+TX and RX contexts is assigned 10 PIDs. A client-specified PID value will be
+used as the base PID value for a SEP. For example, a SEP with 10 TX and RX
+contexts with an assigned PID of 100 will use PIDs 100-109.
+
+Due to a hardware matching limitation, a SEP that supports messaging (FI_MSG or
+FI_TAGGED) and FI_DIRECTED_RECV must use an AV with FI_SYMMETRIC set.
 
 ## Messaging
 
