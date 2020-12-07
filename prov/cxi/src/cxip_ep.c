@@ -603,6 +603,20 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 		goto unlock;
 	}
 
+	/* src_addr.pid may be C_PID_ANY at this point. */
+	ret = cxil_reserve_domain(ep_obj->domain->lni->lni,
+				  ep_obj->auth_key.vni,
+				  ep_obj->src_addr.pid,
+				  ep_obj->pids);
+	if (ret < 0) {
+		CXIP_WARN("Failed to reserve PIDs: %d\n", ret);
+		ret = -FI_EADDRINUSE;
+		goto unlock;
+	}
+
+	/* A real PID is now ready. Store assigned base PID value. */
+	ep_obj->src_addr.pid = ret;
+
 	for (i = 0; i < ep_obj->pids; i++) {
 		ret = cxip_alloc_if_domain(ep_obj->domain->lni,
 					   ep_obj->auth_key.vni,
@@ -610,19 +624,6 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 					   &ep_obj->if_dom[i]);
 		if (ret != FI_SUCCESS) {
 			CXIP_WARN("Failed to allocate IF Domain: %d\n", ret);
-			goto free_if_domains;
-		}
-
-		if (!i) {
-			/* Store assigned base PID. */
-			ep_obj->src_addr.pid = ep_obj->if_dom[i]->dom->pid;
-		} else if ((ep_obj->if_dom[i]->dom->pid - i) !=
-			   ep_obj->src_addr.pid) {
-			/* Ensure PIDs are consecutive */
-			CXIP_WARN("Unexpected PID: %d (%d)\n",
-				  ep_obj->if_dom[i]->dom->pid, i);
-			ret = -FI_EADDRNOTAVAIL;
-			i++; /* Free this Domain, too */
 			goto free_if_domains;
 		}
 	}
