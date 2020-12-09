@@ -65,6 +65,21 @@ Test(mr, std_mrs, .timeout = 600, .disabled = true)
 		mr_destroy(&std_mrs[i]);
 }
 
+Test(mr, opt_mr_recycle, .timeout = 600, .disabled = false)
+{
+	int mr_cnt = 2*1024+1; // more than the total number of  PTEs
+	struct mem_region mr;
+	int i;
+	int ret;
+
+	for (i = 0; i < mr_cnt; i++) {
+		ret = mr_create(8, FI_REMOTE_WRITE, 0, 0, &mr);
+		cr_assert_eq(ret, FI_SUCCESS, "Failed to allocate MR %d\n", i);
+
+		mr_destroy(&mr);
+	}
+}
+
 /* Perform zero-byte Puts to zero-byte standard and optimized MRs. Validate
  * remote counting events.
  */
