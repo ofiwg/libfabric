@@ -1052,7 +1052,12 @@ static int vrb_get_sib(struct dlist_entry *verbs_devs)
 		return -errno;
 
 	for (int dev = 0; dev < num_devices; dev++) {
+		if (!devices[dev])
+			continue;
+
 		context = ibv_open_device(devices[dev]);
+		if (!context)
+			continue;
 
 		ret = ibv_query_device(context, &device_attr);
 		if (ret)
@@ -1364,6 +1369,14 @@ int vrb_init_info(const struct fi_info **all_infos)
 	}
 
 	for (i = 0; i < num_devices; i++) {
+		if (!ctx_list[i]) {
+			FI_INFO(&vrb_prov, FI_LOG_FABRIC,
+				"skipping device: %d, "
+				"the interface may be down, faulty or disabled\n",
+				i);
+			continue;
+		}
+
 		for (j = 0; j < dom_count; j++) {
 			if (ep_type[j]->type == FI_EP_MSG &&
 			    !vrb_device_has_ipoib_addr(ctx_list[i]->device->name)) {
