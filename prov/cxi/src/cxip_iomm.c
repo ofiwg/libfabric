@@ -99,7 +99,8 @@ static void cxip_scalable_iomm_fini(struct cxip_domain *dom)
 
 static int cxip_ats_check(struct cxip_domain *dom)
 {
-	uint32_t map_flags = CXI_MAP_READ | CXI_MAP_WRITE | CXI_MAP_ATS;
+	uint32_t map_flags = CXI_MAP_READ | CXI_MAP_WRITE | CXI_MAP_ATS |
+			     CXI_MAP_PIN;
 	int stack_var;
 	struct cxi_md *md;
 	int ret;
