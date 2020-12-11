@@ -500,8 +500,10 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 	}
 
 	err = rxr_rma_post_write(rxr_ep, tx_entry);
-	if (OFI_UNLIKELY(err))
+	if (OFI_UNLIKELY(err)) {
+		rxr_tx_entry_mr_dereg(tx_entry);
 		rxr_release_tx_entry(rxr_ep, tx_entry);
+	}
 out:
 	fastlock_release(&rxr_ep->util_ep.lock);
 	rxr_perfset_end(rxr_ep, perf_rxr_tx);
