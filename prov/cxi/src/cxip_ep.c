@@ -589,7 +589,8 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 
 	if (ep_obj->fclass == FI_CLASS_SEP &&
 	    ep_obj->ep_attr.rx_ctx_cnt &&
-	    ep_obj->caps & FI_DIRECTED_RECV &&
+	    (ep_obj->caps & FI_SOURCE ||
+	     ep_obj->caps & FI_DIRECTED_RECV) &&
 	    !(ep_obj->av->attr.flags & FI_SYMMETRIC)) {
 		CXIP_WARN("FI_SYMMETRIC is required for Scalable Endpoint Messaging with Source Address Matching.\n");
 		ret = -FI_ENOPROTOOPT;

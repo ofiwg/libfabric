@@ -1016,7 +1016,6 @@ Test(sep, ping)
 	struct fi_cq_tagged_entry tx_cqe,
 				  rx_cqe;
 	int err = 0;
-	fi_addr_t from;
 
 	cxit_setup_sep(16, 16, 0, 0);
 
@@ -1051,17 +1050,14 @@ Test(sep, ping)
 			do {
 				fi_cq_read(cxit_sep_tx_cq[txi], NULL, 0);
 
-				ret = fi_cq_readfrom(cxit_sep_rx_cq[txi],
-						     &rx_cqe, 1, &from);
+				ret = fi_cq_read(cxit_sep_rx_cq[txi],
+						 &rx_cqe, 1);
 			} while (ret == -FI_EAGAIN);
 			cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d",
 				     ret);
 
 			validate_rx_event(&rx_cqe, NULL, sz,
 					  FI_TAGGED | FI_RECV, NULL, 0, 0);
-			cr_assert(from == cxit_ep_fi_addr,
-				  "Invalid source address %#lx %#lx",
-				  from, cxit_ep_fi_addr);
 
 			/* Wait for event indicating data has been sent */
 			ret = cxit_await_completion(cxit_sep_tx_cq[txi],
