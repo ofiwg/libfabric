@@ -267,7 +267,7 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 	tx_entry->rma_loc_rx_id = rx_entry->rx_id;
 
 	if (tx_entry->total_len < ep->mtu_size - sizeof(struct rxr_readrsp_hdr)) {
-		err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_SHORT_RTR_PKT, 0);
+		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_SHORT_RTR_PKT, 0);
 	} else {
 		peer = rxr_ep_get_peer(ep, tx_entry->addr);
 		assert(peer);
@@ -280,7 +280,7 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 		rx_entry->window = window;
 		rx_entry->credit_cts = credits;
 		tx_entry->rma_window = rx_entry->window;
-		err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_LONG_RTR_PKT, 0);
+		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_LONG_RTR_PKT, 0);
 	}
 
 	return err;

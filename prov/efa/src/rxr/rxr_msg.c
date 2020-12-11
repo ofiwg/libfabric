@@ -71,8 +71,8 @@ ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	assert(tagged == 0 || tagged == 1);
 
 	if (tx_entry->total_len == 0)
-		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-							  RXR_EAGER_MSGRTM_PKT + tagged, 0);
+		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
+					 RXR_EAGER_MSGRTM_PKT + tagged, 0);
 
 	/* Currently cuda data must be sent using read message protocol.
 	 * However, because read message protocol is an extra feature, we cannot
@@ -94,8 +94,8 @@ ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 		return -FI_EOPNOTSUPP;
 	}
 
-	return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					  RXR_READ_MSGRTM_PKT + tagged, 0);
+	return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
+				 RXR_READ_MSGRTM_PKT + tagged, 0);
 }
 
 ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
@@ -136,7 +136,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		int rtm_type = (tx_entry->total_len <= max_rtm_data_size) ? RXR_EAGER_MSGRTM_PKT
 									  : RXR_READ_MSGRTM_PKT;
 
-		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry, rtm_type + tagged, 0);
+		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry, rtm_type + tagged, 0);
 	}
 
 	if (rxr_ep->use_zcpy_rx) {
@@ -159,8 +159,8 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 
 	/* inter instance message */
 	if (tx_entry->total_len <= max_rtm_data_size)
-		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						  RXR_EAGER_MSGRTM_PKT + tagged, 0);
+		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
+					 RXR_EAGER_MSGRTM_PKT + tagged, 0);
 
 	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size) {
 		/* we do not check the return value of rxr_ep_init_mr_desc()
@@ -168,16 +168,16 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		 */
 		if (tx_entry->desc[0] || efa_is_cache_available(efa_domain))
 			rxr_ep_tx_init_mr_desc(rxr_domain, tx_entry, 0, FI_SEND);
-		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						  RXR_MEDIUM_MSGRTM_PKT + tagged, 0);
+		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
+					 RXR_MEDIUM_MSGRTM_PKT + tagged, 0);
 	}
 
 	if (tx_entry->total_len >= rxr_env.efa_min_read_msg_size &&
 	    efa_both_support_rdma_read(rxr_ep, peer) &&
 	    (tx_entry->desc[0] || efa_is_cache_available(efa_domain))) {
 		/* use read message protocol */
-		err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						 RXR_READ_MSGRTM_PKT + tagged, 0);
+		err = rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
+					RXR_READ_MSGRTM_PKT + tagged, 0);
 
 		if (err != -FI_ENOMEM)
 			return err;
@@ -192,8 +192,8 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	if (OFI_UNLIKELY(err))
 		return err;
 
-	return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					  RXR_LONG_MSGRTM_PKT + tagged, 0);
+	return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
+				 RXR_LONG_MSGRTM_PKT + tagged, 0);
 }
 
 ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
