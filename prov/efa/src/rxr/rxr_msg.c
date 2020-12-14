@@ -222,9 +222,15 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		if (tx_entry->desc[0] || efa_is_cache_available(efa_domain))
 			rxr_ep_tx_init_mr_desc(rxr_domain, tx_entry, 0, FI_SEND);
 
-		ctrl_type = delivery_complete_requested  ? RXR_DC_MEDIUM_MSGRTM_PKT : RXR_MEDIUM_MSGRTM_PKT;
-		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					 ctrl_type + tagged, 0);
+		/*
+		 * we have to queue message RTM because data is sent as multiple
+		 * medium RTM packets. It could happend that the first several packets
+		 * were sent successfully, but the following packet encountered -FI_EAGAIN
+		 */
+		ctrl_type = delivery_complete_requested ?
+			RXR_DC_MEDIUM_MSGRTM_PKT : RXR_MEDIUM_MSGRTM_PKT;
+		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
+						  ctrl_type + tagged, 0);
 	}
 
 	if (tx_entry->total_len >= rxr_env.efa_min_read_msg_size &&
