@@ -56,7 +56,7 @@ AC_DEFINE_UNQUOTED([BUILD_ID],["$with_build_id"],
 
 # Override autoconf default CFLAG settings (e.g. "-g -O2") while still
 # allowing the user to explicitly set CFLAGS=""
-: ${CFLAGS="-fvisibility=hidden ${base_c_warn_flags}"}
+: ${CFLAGS="-march=native -flto -fvisibility=hidden ${base_c_warn_flags}"}
 
 # AM_PROG_AS would set CFLAGS="-g -O2" by default if not set already so it
 # should not be called earlier
