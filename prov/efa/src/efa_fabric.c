@@ -998,6 +998,15 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	const struct fi_info *info;
 	struct efa_fabric *fab;
 	int ret = 0;
+
+	ret = pthread_atfork(efa_atfork_callback, NULL, NULL);
+	if (ret) {
+		EFA_WARN(FI_LOG_FABRIC,
+			 "Unable to register atfork callback: %s\n",
+			 strerror(-ret));
+		return -ret;
+	}
+
 	fab = calloc(1, sizeof(*fab));
 	if (!fab)
 		return -FI_ENOMEM;
@@ -1117,13 +1126,6 @@ struct fi_provider *init_lower_efa_prov()
 		}
 
 		efa_set_rdmav_hugepages_safe = 1;
-	}
-
-	err = pthread_atfork(efa_atfork_callback, NULL, NULL);
-	if (err) {
-		EFA_WARN(FI_LOG_FABRIC,
-			 "Unable to register atfork callback\n");
-		return NULL;
 	}
 
 	if (efa_init_info(&efa_util_prov.info))
