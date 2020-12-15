@@ -140,9 +140,9 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 	tx_entry->msg_id = (peer->next_msg_id != ~0) ?
 			    peer->next_msg_id++ : ++peer->next_msg_id;
 
-	err = rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY,
-					tx_entry, req_pkt_type_list[op],
-					0);
+	err = rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY,
+				tx_entry, req_pkt_type_list[op],
+				0);
 
 	if (OFI_UNLIKELY(err)) {
 		rxr_release_tx_entry(rxr_ep, tx_entry);
