@@ -82,10 +82,6 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 		    sar_msg->sar[1].status == SMR_SAR_FREE)
 			break;
 
-		if (peer_smr != ep->region) {
-			if (fastlock_tryacquire(&peer_smr->lock))
-				return -FI_EAGAIN;
-		}
 		if (pending->cmd.msg.hdr.op == ofi_op_read_req)
 			smr_try_progress_from_sar(sar_msg, resp,
 					&pending->cmd, pending->iface,
@@ -98,9 +94,6 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 					pending->device, pending->iov,
 					pending->iov_count, &pending->bytes_done,
 					&pending->next);
-		if (peer_smr != ep->region)
-			fastlock_release(&peer_smr->lock);
-
 		if (pending->bytes_done != pending->cmd.msg.hdr.size ||
 		    sar_msg->sar[0].status != SMR_SAR_FREE ||
 		    sar_msg->sar[1].status != SMR_SAR_FREE)
