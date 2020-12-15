@@ -68,21 +68,29 @@ static void smr_peer_addr_init(struct smr_addr *peer)
 void smr_cma_check(struct smr_region *smr, struct smr_region *peer_smr)
 {
 	struct iovec local_iov, remote_iov;
+	int remote_pid;
 	int ret;
 
-	if (peer_smr->cma_cap != SMR_CMA_CAP_NA) {
-		smr->cma_cap = peer_smr->cma_cap;
+	if (smr != peer_smr && peer_smr->cma_cap_peer != SMR_CMA_CAP_NA) {
+		smr->cma_cap_peer = peer_smr->cma_cap_peer;
 		return;
 	}
-	local_iov.iov_base = &smr->cma_cap;
-	local_iov.iov_len = sizeof(smr->cma_cap);
+	remote_pid = peer_smr->pid;
+	local_iov.iov_base = &remote_pid;
+	local_iov.iov_len = sizeof(remote_pid);
 	remote_iov.iov_base = (char *)peer_smr->base_addr +
-			      ((char *)&peer_smr->cma_cap - (char *)peer_smr);
-	remote_iov.iov_len = sizeof(peer_smr->cma_cap);
+			      ((char *)&peer_smr->pid - (char *)peer_smr);
+	remote_iov.iov_len = sizeof(peer_smr->pid);
 	ret = ofi_process_vm_writev(peer_smr->pid, &local_iov, 1,
 				    &remote_iov, 1, 0);
-	smr->cma_cap = (ret == -1) ? SMR_CMA_CAP_OFF : SMR_CMA_CAP_ON;
-	peer_smr->cma_cap = smr->cma_cap;
+	assert(remote_pid == peer_smr->pid);
+
+	if (smr == peer_smr) {
+		smr->cma_cap_self = (ret == -1) ? SMR_CMA_CAP_OFF : SMR_CMA_CAP_ON;
+	} else {
+		smr->cma_cap_peer = (ret == -1) ? SMR_CMA_CAP_OFF : SMR_CMA_CAP_ON;
+		peer_smr->cma_cap_peer = smr->cma_cap_peer;
+	}
 }
 
 size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
@@ -195,7 +203,8 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->map = map;
 	(*smr)->version = SMR_VERSION;
 	(*smr)->flags = SMR_FLAG_ATOMIC | SMR_FLAG_DEBUG;
-	(*smr)->cma_cap = SMR_CMA_CAP_NA;
+	(*smr)->cma_cap_peer = SMR_CMA_CAP_NA;
+	(*smr)->cma_cap_self = SMR_CMA_CAP_NA;
 	(*smr)->base_addr = *smr;
 
 	(*smr)->total_size = total_size;
@@ -345,7 +354,8 @@ void smr_map_to_endpoint(struct smr_region *region, int64_t id)
 
 	peer_smr = smr_peer_region(region, id);
 
-	if (region->cma_cap == SMR_CMA_CAP_NA && region != peer_smr)
+	if ((region != peer_smr && region->cma_cap_peer == SMR_CMA_CAP_NA) ||
+	    (region == peer_smr && region->cma_cap_self == SMR_CMA_CAP_NA))
 		smr_cma_check(region, peer_smr);
 }
 
