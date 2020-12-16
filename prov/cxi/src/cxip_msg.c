@@ -4185,7 +4185,7 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 	ofi_atomic_inc32(&txc->otx_reqs);
 
 	req->triggered = triggered;
-	req->trig_thresh = triggered;
+	req->trig_thresh = trig_thresh;
 	req->trig_cntr = trig_cntr;
 
 	/* Save Send parameters to replay */
