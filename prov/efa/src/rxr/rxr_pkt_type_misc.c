@@ -534,7 +534,7 @@ int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 {
 	struct rxr_atomrsp_hdr *atomrsp_hdr;
 
-	assert(rx_entry->atomrsp_pkt);
+	assert(rx_entry->atomrsp_data);
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = rx_entry;
 
@@ -548,8 +548,8 @@ int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 
 	assert(RXR_ATOMRSP_HDR_SIZE + atomrsp_hdr->seg_size < ep->mtu_size);
 
-	/* rx_entry->atomrsp_buf was filled in rxr_pkt_handle_req_recv() */
-	memcpy((char*)pkt_entry->pkt + RXR_ATOMRSP_HDR_SIZE, rx_entry->atomrsp_buf, atomrsp_hdr->seg_size);
+	/* rx_entry->atomrsp_data was filled in rxr_pkt_handle_req_recv() */
+	memcpy((char*)pkt_entry->pkt + RXR_ATOMRSP_HDR_SIZE, rx_entry->atomrsp_data, atomrsp_hdr->seg_size);
 	pkt_entry->pkt_size = RXR_ATOMRSP_HDR_SIZE + atomrsp_hdr->seg_size;
 	return 0;
 }
@@ -563,7 +563,8 @@ void rxr_pkt_handle_atomrsp_send_completion(struct rxr_ep *ep, struct rxr_pkt_en
 	struct rxr_rx_entry *rx_entry;
 	
 	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
-	rxr_pkt_entry_release_tx(ep, rx_entry->atomrsp_pkt);
+	ofi_buf_free(rx_entry->atomrsp_data);
+	rx_entry->atomrsp_data = NULL;
 	rxr_release_rx_entry(ep, rx_entry);
 }
 
