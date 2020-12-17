@@ -565,12 +565,9 @@ void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
 int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 			 struct rxr_pkt_entry *pkt_entry)
 {
-	size_t pkt_size;
 	struct rxr_atomrsp_hdr *atomrsp_hdr;
 
 	assert(rx_entry->atomrsp_pkt);
-	pkt_size = rx_entry->atomrsp_pkt->pkt_size;
-	pkt_entry->pkt_size = pkt_size;
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = rx_entry;
 
