@@ -15,6 +15,25 @@ modprobe amd_iommu_v2
 insmod $DBS_DIR/slingshot_base_link/sbl.ko
 insmod $DBS_DIR/cxi-driver/cxi/cxi-core.ko
 insmod $DBS_DIR/cxi-driver/cxi/cxi-user.ko
+insmod $DBS_DIR/cxi-driver/cxi/cxi-eth.ko
+
+# Sleep to wait for Ethernet interface to come up
+sleep 3
+
+# Locate the first down Ethernet interface and configure it.
+regex="eth([0-9]{1}).+DOWN"
+eth_id=-1
+interfaces="$(ip addr)"
+if [[ $interfaces =~ $regex ]]; then
+        eth_id=${BASH_REMATCH[1]}
+fi
+
+if [ $eth_id -eq -1 ]; then
+        echo "Failed to find Ethernet interface"
+        exit 1
+fi
+
+ip link set dev eth$eth_id up
 
 # Add pycxi utilities to path
 export PATH=$DBS_DIR/pycxi/utils:$PATH
