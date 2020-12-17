@@ -2030,7 +2030,7 @@ struct rxr_rx_entry *rxr_pkt_alloc_rta_rx_entry(struct rxr_ep *ep, struct rxr_pk
 	rx_entry->tx_id = rta_hdr->tx_id;
 	rx_entry->total_len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 	/*
-	 * prepare a pkt entry to temporarily hold response data.
+	 * prepare a buffer to hold response data.
 	 * Atomic_op operates on 3 data buffers:
 	 *          local_data (input/output),
 	 *          request_data (input),
@@ -2038,13 +2038,13 @@ struct rxr_rx_entry *rxr_pkt_alloc_rta_rx_entry(struct rxr_ep *ep, struct rxr_pk
 	 * The fact local data will be changed by atomic_op means
 	 * response_data is not reproducible.
 	 * Because sending response packet can fail due to
-	 * -FI_EAGAIN, we need a temporary buffer to hold response_data.
-	 * This packet entry will be release in rxr_handle_atomrsp_send_completion()
+	 * -FI_EAGAIN, we need a buffer to hold response_data.
+	 * The buffer will be release in rxr_handle_atomrsp_send_completion()
 	 */
-	rx_entry->atomrsp_pkt = rxr_pkt_entry_alloc(ep, ep->tx_pkt_efa_pool);
-	if (!rx_entry->atomrsp_pkt) {
+	rx_entry->atomrsp_data = ofi_buf_alloc(ep->rx_atomrsp_pool);
+	if (!rx_entry->atomrsp_data) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"pkt entries exhausted.\n");
+			"atomic repsonse buffer pool exhausted.\n");
 		rxr_release_rx_entry(ep, rx_entry);
 		return NULL;
 	}
@@ -2114,13 +2114,12 @@ int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	dtsize = ofi_datatype_size(rx_entry->atomic_hdr.datatype);
 
 	data = (char *)pkt_entry->pkt + rxr_pkt_req_hdr_size(pkt_entry);
-	rx_entry->atomrsp_buf = (char *)rx_entry->atomrsp_pkt->pkt + sizeof(struct rxr_atomrsp_hdr);
 
 	offset = 0;
 	for (i = 0; i < rx_entry->iov_count; ++i) {
 		ofi_atomic_readwrite_handlers[op][dt](rx_entry->iov[i].iov_base,
 						      data + offset,
-						      rx_entry->atomrsp_buf + offset,
+						      rx_entry->atomrsp_data + offset,
 						      rx_entry->iov[i].iov_len / dtsize);
 		offset += rx_entry->iov[i].iov_len;
 	}
@@ -2156,14 +2155,13 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 
 	src_data = (char *)pkt_entry->pkt + rxr_pkt_req_hdr_size(pkt_entry);
 	cmp_data = src_data + rx_entry->total_len;
-	rx_entry->atomrsp_buf = (char *)rx_entry->atomrsp_pkt->pkt + sizeof(struct rxr_atomrsp_hdr);
 
 	offset = 0;
 	for (i = 0; i < rx_entry->iov_count; ++i) {
 		ofi_atomic_swap_handlers[op - FI_CSWAP][dt](rx_entry->iov[i].iov_base,
 							    src_data + offset,
 							    cmp_data + offset,
-							    rx_entry->atomrsp_buf + offset,
+							    rx_entry->atomrsp_data + offset,
 							    rx_entry->iov[i].iov_len / dtsize);
 		offset += rx_entry->iov[i].iov_len;
 	}
@@ -2171,7 +2169,7 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_ATOMRSP_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		efa_eq_write_error(&ep->util_ep, FI_EIO, err);
-		rxr_pkt_entry_release_tx(ep, rx_entry->atomrsp_pkt);
+		ofi_buf_free(rx_entry->atomrsp_data);
 		rxr_release_rx_entry(ep, rx_entry);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return err;
