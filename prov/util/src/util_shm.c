@@ -151,7 +151,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 					&sar_pool_offset, &peer_data_offset,
 					&name_offset);
 
-	fd = shm_open(attr->name, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+	fd = shm_open(attr->name, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
 		FI_WARN(prov, FI_LOG_EP_CTRL, "shm_open error\n");
 		return -errno;
