@@ -395,14 +395,14 @@ sa_sin6:
 
 uint32_t ofi_addr_format(const char *str)
 {
-	char fmt[16];
+	char fmt[17];
 	int ret;
 
+	memset(fmt, 0, sizeof(fmt));
 	ret = sscanf(str, "%16[^:]://", fmt);
 	if (ret != 1)
 		return FI_FORMAT_UNSPEC;
 
-	fmt[sizeof(fmt) - 1] = '\0';
 	if (!strcasecmp(fmt, "fi_sockaddr_in"))
 		return FI_SOCKADDR_IN;
 	else if (!strcasecmp(fmt, "fi_sockaddr_in6"))
