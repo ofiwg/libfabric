@@ -784,7 +784,6 @@ void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn);
 int vrb_get_shared_ini_conn(struct vrb_xrc_ep *ep,
 			       struct vrb_ini_shared_conn **ini_conn);
 void vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep);
-int vrb_reserve_qpn(struct vrb_xrc_ep *ep, struct ibv_qp **qp);
 
 void vrb_save_priv_data(struct vrb_xrc_ep *ep, const void *data,
 			   size_t len);

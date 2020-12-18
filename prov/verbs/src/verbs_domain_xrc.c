@@ -45,38 +45,6 @@ struct vrb_ini_conn_key {
 static int vrb_process_ini_conn(struct vrb_xrc_ep *ep,int reciprocal,
 				   void *param, size_t paramlen);
 
-/*
- * This routine is a work around that creates a QP for the only purpose of
- * reserving the QP number. The QP is not transitioned out of the RESET state.
- */
-int vrb_reserve_qpn(struct vrb_xrc_ep *ep, struct ibv_qp **qp)
-{
-	struct vrb_domain *domain = vrb_ep_to_domain(&ep->base_ep);
-	struct vrb_cq *cq = container_of(ep->base_ep.util_ep.tx_cq,
-					    struct vrb_cq, util_cq);
-	struct ibv_qp_init_attr attr = { 0 };
-	int ret;
-
-	/* Limit library allocated resources and do not INIT QP */
-	attr.cap.max_send_wr = 1;
-	attr.cap.max_send_sge = 1;
-	attr.cap.max_recv_wr = 0;
-	attr.cap.max_recv_sge = 0;
-	attr.cap.max_inline_data = 0;
-	attr.send_cq = cq->cq;
-	attr.recv_cq = cq->cq;
-	attr.qp_type = IBV_QPT_RC;
-
-	*qp = ibv_create_qp(domain->pd, &attr);
-	if (OFI_UNLIKELY(!*qp)) {
-		ret = -errno;
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Reservation QP create failed %d\n", -ret);
-		return ret;
-	}
-	return FI_SUCCESS;
-}
-
 static int vrb_create_ini_qp(struct vrb_xrc_ep *ep)
 {
 #if VERBS_HAVE_XRC
