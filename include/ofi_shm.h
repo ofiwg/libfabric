@@ -132,7 +132,12 @@ struct smr_msg_hdr {
 struct smr_ipc_info {
 	uint64_t	iface;
 	union {
-		uint8_t	ipc_handle[IPC_HANDLE_SIZE];
+		uint8_t		ipc_handle[IPC_HANDLE_SIZE];
+		struct {
+			uint64_t	device;
+			uint64_t	offset;
+			uint64_t	fd_handle;
+		};
 	};
 };
 

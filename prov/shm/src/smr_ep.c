@@ -353,6 +353,41 @@ void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
 	memcpy(cmd->msg.data.iov, iov, sizeof(*iov) * count);
 }
 
+int smr_format_ze_ipc(struct smr_ep *ep, int64_t id, struct smr_cmd *cmd,
+		      const struct iovec *iov, uint64_t device,
+		      size_t total_len, struct smr_region *smr,
+		      struct smr_resp *resp, struct smr_tx_entry *pend)
+{
+	int ret;
+	void *base;
+
+	cmd->msg.hdr.op_src = smr_src_ipc;
+	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
+	cmd->msg.hdr.size = total_len;
+	cmd->msg.data.ipc_info.iface = FI_HMEM_ZE;
+
+	if (ep->sock_info->peers[id].state == SMR_CMAP_INIT)
+		smr_ep_exchange_fds(ep, id);
+	if (ep->sock_info->peers[id].state != SMR_CMAP_SUCCESS)
+		return -FI_EAGAIN;
+
+	ret = ze_hmem_get_base_addr(iov[0].iov_base, &base);
+	if (ret)
+		return ret;
+
+	ret = ze_hmem_get_shared_handle(ep->sock_info->my_fds[device],
+			base, &pend->fd,
+			(void **) &cmd->msg.data.ipc_info.fd_handle);
+	if (ret)
+		return ret;
+
+	cmd->msg.data.ipc_info.device = device;
+	cmd->msg.data.ipc_info.offset = (char *) iov[0].iov_base -
+					(char *) base;
+
+	return FI_SUCCESS;
+}
+
 int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
 		    const struct iovec *iov, size_t count, size_t total_len,
 		    struct smr_tx_entry *pend, struct smr_resp *resp)

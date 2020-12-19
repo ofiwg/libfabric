@@ -129,6 +129,7 @@ struct smr_tx_entry {
 	struct smr_ep_name *map_name;
 	enum fi_hmem_iface	iface;
 	uint64_t		device;
+	int			fd;
 };
 
 struct smr_sar_entry {
@@ -323,6 +324,10 @@ void smr_format_inject(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t d
 void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
 		    size_t total_len, struct smr_region *smr,
 		    struct smr_resp *resp);
+int smr_format_ze_ipc(struct smr_ep *ep, int64_t id, struct smr_cmd *cmd,
+		      const struct iovec *iov, uint64_t device,
+		      size_t total_len, struct smr_region *smr,
+		      struct smr_resp *resp, struct smr_tx_entry *pend);
 int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
 		    const struct iovec *iov, size_t count, size_t total_len,
 		    struct smr_tx_entry *pend, struct smr_resp *resp);
@@ -373,6 +378,13 @@ static inline bool smr_cma_enabled(struct smr_ep *ep,
 		return ep->region->cma_cap_self == SMR_CMA_CAP_ON;
 	else
 		return ep->region->cma_cap_peer == SMR_CMA_CAP_ON;
+}
+
+static inline bool smr_ze_ipc_enabled(struct smr_region *smr,
+				      struct smr_region *peer_smr)
+{
+	return (smr->flags & SMR_FLAG_IPC_SOCK) &&
+	       (peer_smr->flags & SMR_FLAG_IPC_SOCK);
 }
 
 static inline int smr_cma_loop(pid_t pid, struct iovec *local,

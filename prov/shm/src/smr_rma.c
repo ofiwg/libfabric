@@ -181,7 +181,12 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 			smr_format_iov(cmd, iov, iov_count, total_len, ep->region,
 				       resp);
 		} else {
-			if (total_len <= smr_env.sar_threshold ||
+			if (iface == FI_HMEM_ZE && iov_count == 1 &&
+			    smr_ze_ipc_enabled(ep->region, peer_smr)) {
+				ret = smr_format_ze_ipc(ep, id, cmd, iov,
+					device, total_len, ep->region,
+					resp, pend);
+			} else if (total_len <= smr_env.sar_threshold ||
 			    iface != FI_HMEM_SYSTEM) {
 				if (!peer_smr->sar_cnt) {
 					ret = -FI_EAGAIN;

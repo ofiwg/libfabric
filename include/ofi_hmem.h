@@ -123,6 +123,10 @@ int ze_hmem_cleanup(void);
 bool ze_is_addr_valid(const void *addr);
 int ze_hmem_get_handle(void *dev_buf, void **handle);
 int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr);
+int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
+			      void **handle);
+int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
+			       uint64_t device, void **ipc_ptr);
 int ze_hmem_close_handle(void *ipc_ptr);
 bool ze_hmem_p2p_enabled(void);
 int ze_hmem_get_base_addr(const void *ptr, void **base);
