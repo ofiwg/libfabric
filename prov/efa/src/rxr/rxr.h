@@ -218,6 +218,7 @@ struct rxr_env {
 	int shm_max_medium_size;
 	int recvwin_size;
 	int readcopy_pool_size;
+	int atomrsp_pool_size;
 	int cq_size;
 	size_t max_memcpy_size;
 	size_t mtu_size;
@@ -422,8 +423,7 @@ struct rxr_rx_entry {
 	struct rxr_rx_entry *master_entry;
 
 	struct rxr_pkt_entry *unexp_pkt;
-	struct rxr_pkt_entry *atomrsp_pkt;
-	char *atomrsp_buf;
+	char *atomrsp_data;
 
 #if ENABLE_DEBUG
 	/* linked with rx_pending_list in rxr_ep */
@@ -630,6 +630,11 @@ struct rxr_ep {
 	struct ofi_bufpool *map_entry_pool;
 	/* rxr medium message pkt_entry to rx_entry map */
 	struct rxr_pkt_rx_map *pkt_rx_map;
+	/*
+	 * buffer pool for atomic response data, used by
+	 * emulated fetch and compare atomic.
+	 */
+	struct ofi_bufpool *rx_atomrsp_pool;
 	/* rx_entries with recv buf */
 	struct dlist_entry rx_list;
 	/* rx_entries without recv buf (unexpected message) */

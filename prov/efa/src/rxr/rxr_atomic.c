@@ -113,7 +113,8 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 {
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_peer *peer;
-	bool delivery_complete_requested, err;
+	bool delivery_complete_requested;
+	ssize_t err;
 	static int req_pkt_type_list[] = {
 		[ofi_op_atomic] = RXR_WRITE_RTA_PKT,
 		[ofi_op_atomic_fetch] = RXR_FETCH_RTA_PKT,
