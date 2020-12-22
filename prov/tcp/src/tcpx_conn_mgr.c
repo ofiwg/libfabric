@@ -426,9 +426,20 @@ static void server_sock_accept(struct util_wait *wait,
 
 	sock = accept(pep->sock, NULL, 0);
 	if (sock < 0) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"accept error: %d\n", ofi_sockerr());
+		if (!OFI_SOCK_TRY_ACCEPT_AGAIN(ofi_sockerr())) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"accept error: %d\n", ofi_sockerr());
+		}
 		return;
+	}
+
+	/* Make sure the new socket doesn't inherit the non-blocking state
+	 * from the PEP socket (default behavior with BSD and OSX). */
+	ret = fi_fd_block(sock);
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"failed to set socket to blocking\n");
+		goto err1;
 	}
 
 	handle = calloc(1, sizeof(*handle));

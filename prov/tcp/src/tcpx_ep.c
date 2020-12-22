@@ -342,6 +342,14 @@ static int tcpx_pep_sock_create(struct tcpx_pep *pep)
 	if (ret) {
 		goto err;
 	}
+
+	ret = fi_fd_nonblock(pep->sock);
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"failed to set listener socket to nonblocking\n");
+		goto err;
+	}
+
 	if (ofi_addr_get_port(pep->info->src_addr) != 0 || port_range.high == 0) {
 		ret = bind(pep->sock, pep->info->src_addr,
 			  (socklen_t) pep->info->src_addrlen);

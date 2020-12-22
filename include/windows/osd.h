@@ -226,6 +226,10 @@ extern "C" {
 	 ((err) == EWOULDBLOCK)		||	\
 	 ((err) == EAGAIN))
 
+#define OFI_SOCK_TRY_ACCEPT_AGAIN(err)		\
+	(((err) == EAGAIN)		||	\
+	 ((err) == EWOULDBLOCK))
+
 #define OFI_SOCK_TRY_CONN_AGAIN(err)		\
 	(((err) == EWOULDBLOCK)		||	\
 	 ((err) == EINPROGRESS))
