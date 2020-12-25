@@ -492,6 +492,34 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	return tx_entry;
 }
 
+void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
+{
+	int i, err = 0;
+
+	for (i = 0; i < tx_entry->iov_count; i++) {
+		if (tx_entry->mr[i]) {
+			err = fi_close((struct fid *)tx_entry->mr[i]);
+			if (OFI_UNLIKELY(err)) {
+				FI_WARN(&rxr_prov, FI_LOG_CQ, "mr dereg failed. err=%d\n", err);
+				efa_eq_write_error(&ep->util_ep, err, -err);
+			}
+
+			tx_entry->mr[i] = NULL;
+		}
+	}
+
+#if ENABLE_DEBUG
+	dlist_remove(&tx_entry->tx_entry_entry);
+#endif
+	assert(dlist_empty(&tx_entry->queued_pkts));
+#ifdef ENABLE_EFA_POISONING
+	rxr_poison_mem_region((uint32_t *)tx_entry,
+			      sizeof(struct rxr_tx_entry));
+#endif
+	tx_entry->state = RXR_TX_FREE;
+	ofi_buf_free(tx_entry);
+}
+
 int rxr_ep_tx_init_mr_desc(struct rxr_domain *rxr_domain,
 			   struct rxr_tx_entry *tx_entry,
 			   int mr_iov_start, uint64_t access)

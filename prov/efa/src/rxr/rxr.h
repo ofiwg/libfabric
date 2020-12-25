@@ -782,22 +782,7 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 					   uint64_t tag,
 					   uint64_t flags);
 
-int rxr_tx_entry_mr_dereg(struct rxr_tx_entry *tx_entry);
-
-static inline void rxr_release_tx_entry(struct rxr_ep *ep,
-					struct rxr_tx_entry *tx_entry)
-{
-#if ENABLE_DEBUG
-	dlist_remove(&tx_entry->tx_entry_entry);
-#endif
-	assert(dlist_empty(&tx_entry->queued_pkts));
-#ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region((uint32_t *)tx_entry,
-			      sizeof(struct rxr_tx_entry));
-#endif
-	tx_entry->state = RXR_TX_FREE;
-	ofi_buf_free(tx_entry);
-}
+void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry);
 
 static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 					struct rxr_rx_entry *rx_entry)
