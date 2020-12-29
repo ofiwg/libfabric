@@ -100,7 +100,7 @@ static int efa_ep_modify_qp_state(struct efa_qp *qp, enum ibv_qp_state qp_state,
 	 * 7 means firmware retries infinitely.
 	 */
 	if (attr_mask & IBV_QP_RNR_RETRY)
-		attr.rnr_retry = 3;
+		attr.rnr_retry = 7;
 
 	return -ibv_modify_qp(qp->ibv_qp, &attr, attr_mask);
 
