@@ -492,6 +492,34 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	return tx_entry;
 }
 
+void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
+{
+	int i, err = 0;
+
+	for (i = 0; i < tx_entry->iov_count; i++) {
+		if (tx_entry->mr[i]) {
+			err = fi_close((struct fid *)tx_entry->mr[i]);
+			if (OFI_UNLIKELY(err)) {
+				FI_WARN(&rxr_prov, FI_LOG_CQ, "mr dereg failed. err=%d\n", err);
+				efa_eq_write_error(&ep->util_ep, err, -err);
+			}
+
+			tx_entry->mr[i] = NULL;
+		}
+	}
+
+#if ENABLE_DEBUG
+	dlist_remove(&tx_entry->tx_entry_entry);
+#endif
+	assert(dlist_empty(&tx_entry->queued_pkts));
+#ifdef ENABLE_EFA_POISONING
+	rxr_poison_mem_region((uint32_t *)tx_entry,
+			      sizeof(struct rxr_tx_entry));
+#endif
+	tx_entry->state = RXR_TX_FREE;
+	ofi_buf_free(tx_entry);
+}
+
 int rxr_ep_tx_init_mr_desc(struct rxr_domain *rxr_domain,
 			   struct rxr_tx_entry *tx_entry,
 			   int mr_iov_start, uint64_t access)
@@ -1196,13 +1224,13 @@ int rxr_ep_init(struct rxr_ep *ep)
 				  OFI_BUFPOOL_HUGEPAGES,
 				  &ep->tx_pkt_efa_pool);
 	if (ret)
-		goto err_out;
+		goto err_free;
 
 	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_rx_pool_chunk_cnt(ep),
 				  OFI_BUFPOOL_HUGEPAGES,
 				  &ep->rx_pkt_efa_pool);
 	if (ret)
-		goto err_free_tx_pool;
+		goto err_free;
 
 	if (rxr_env.rx_copy_unexp) {
 		ret = ofi_bufpool_create(&ep->rx_unexp_pkt_pool, entry_sz,
@@ -1210,7 +1238,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 					 rxr_get_rx_pool_chunk_cnt(ep), 0);
 
 		if (ret)
-			goto err_free_rx_pool;
+			goto err_free;
 	}
 
 	if (rxr_env.rx_copy_ooo) {
@@ -1219,7 +1247,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 					 rxr_env.recvwin_size, 0);
 
 		if (ret)
-			goto err_free_rx_unexp_pool;
+			goto err_free;
 	}
 
 	if ((rxr_env.rx_copy_unexp || rxr_env.rx_copy_ooo) &&
@@ -1232,14 +1260,14 @@ int rxr_ep_init(struct rxr_ep *ep)
 					  0, &ep->rx_readcopy_pkt_pool);
 
 		if (ret)
-			goto err_free_rx_ooo_pool;
+			goto err_free;
 
 		ret = ofi_bufpool_grow(ep->rx_readcopy_pkt_pool);
 		if (ret) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"cannot allocate and register memory for readcopy packet pool. error: %s\n",
 				strerror(-ret));
-			goto err_free_rx_readcopy_pool;
+			goto err_free;
 		}
 
 		ep->rx_readcopy_pkt_pool_used = 0;
@@ -1251,7 +1279,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 				 RXR_BUF_POOL_ALIGNMENT,
 				 ep->tx_size, ep->tx_size, 0);
 	if (ret)
-		goto err_free_rx_readcopy_pool;
+		goto err_free;
 
 	ret = ofi_bufpool_create(&ep->read_entry_pool,
 				 sizeof(struct rxr_read_entry),
@@ -1259,7 +1287,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 				 ep->tx_size + RXR_MAX_RX_QUEUE_SIZE,
 				 ep->tx_size + ep->rx_size, 0);
 	if (ret)
-		goto err_free_tx_entry_pool;
+		goto err_free;
 
 	ret = ofi_bufpool_create(&ep->readrsp_tx_entry_pool,
 				 sizeof(struct rxr_tx_entry),
@@ -1267,7 +1295,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 				 RXR_MAX_RX_QUEUE_SIZE,
 				 ep->rx_size, 0);
 	if (ret)
-		goto err_free_read_entry_pool;
+		goto err_free;
 
 	ret = ofi_bufpool_create(&ep->rx_entry_pool,
 				 sizeof(struct rxr_rx_entry),
@@ -1275,7 +1303,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 				 RXR_MAX_RX_QUEUE_SIZE,
 				 ep->rx_size, 0);
 	if (ret)
-		goto err_free_readrsp_tx_entry_pool;
+		goto err_free;
 
 	ret = ofi_bufpool_create(&ep->map_entry_pool,
 				 sizeof(struct rxr_pkt_rx_map),
@@ -1284,7 +1312,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 				 ep->rx_size, 0);
 
 	if (ret)
-		goto err_free_rx_entry_pool;
+		goto err_free;
 
 	ret = ofi_bufpool_create(&ep->rx_atomrsp_pool,
 				 ep->mtu_size,
@@ -1292,7 +1320,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 				 RXR_MAX_RX_QUEUE_SIZE,
 				 rxr_env.atomrsp_pool_size, 0);
 	if (ret)
-		goto err_free_map_entry_pool;
+		goto err_free;
 
 	/* create pkt pool for shm */
 	if (ep->use_shm) {
@@ -1302,7 +1330,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 					 shm_info->tx_attr->size,
 					 shm_info->tx_attr->size, 0);
 		if (ret)
-			goto err_free_atomrsp_pool;
+			goto err_free;
 
 		ret = ofi_bufpool_create(&ep->rx_pkt_shm_pool,
 					 entry_sz,
@@ -1310,7 +1338,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 					 shm_info->rx_attr->size,
 					 shm_info->rx_attr->size, 0);
 		if (ret)
-			goto err_free_tx_pkt_shm_pool;
+			goto err_free;
 
 		dlist_init(&ep->rx_posted_buf_shm_list);
 	}
@@ -1337,43 +1365,43 @@ int rxr_ep_init(struct rxr_ep *ep)
 	ep->pkt_rx_map = NULL;
 	return 0;
 
-err_free_tx_pkt_shm_pool:
+err_free:
 	if (ep->tx_pkt_shm_pool)
 		ofi_bufpool_destroy(ep->tx_pkt_shm_pool);
-err_free_atomrsp_pool:
+
 	if (ep->rx_atomrsp_pool)
 		ofi_bufpool_destroy(ep->rx_atomrsp_pool);
-err_free_map_entry_pool:
+
 	if (ep->map_entry_pool)
 		ofi_bufpool_destroy(ep->map_entry_pool);
-err_free_rx_entry_pool:
+
 	if (ep->rx_entry_pool)
 		ofi_bufpool_destroy(ep->rx_entry_pool);
-err_free_readrsp_tx_entry_pool:
+
 	if (ep->readrsp_tx_entry_pool)
 		ofi_bufpool_destroy(ep->readrsp_tx_entry_pool);
-err_free_read_entry_pool:
+
 	if (ep->read_entry_pool)
 		ofi_bufpool_destroy(ep->read_entry_pool);
-err_free_tx_entry_pool:
+
 	if (ep->tx_entry_pool)
 		ofi_bufpool_destroy(ep->tx_entry_pool);
-err_free_rx_readcopy_pool:
+
 	if (ep->rx_readcopy_pkt_pool)
 		ofi_bufpool_destroy(ep->rx_readcopy_pkt_pool);
-err_free_rx_ooo_pool:
+
 	if (rxr_env.rx_copy_ooo && ep->rx_ooo_pkt_pool)
 		ofi_bufpool_destroy(ep->rx_ooo_pkt_pool);
-err_free_rx_unexp_pool:
+
 	if (rxr_env.rx_copy_unexp && ep->rx_unexp_pkt_pool)
 		ofi_bufpool_destroy(ep->rx_unexp_pkt_pool);
-err_free_rx_pool:
+
 	if (ep->rx_pkt_efa_pool)
 		ofi_bufpool_destroy(ep->rx_pkt_efa_pool);
-err_free_tx_pool:
+
 	if (ep->tx_pkt_efa_pool)
 		ofi_bufpool_destroy(ep->tx_pkt_efa_pool);
-err_out:
+
 	return ret;
 }
 

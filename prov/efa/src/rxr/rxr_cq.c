@@ -793,46 +793,12 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 	return;
 }
 
-int rxr_tx_entry_mr_dereg(struct rxr_tx_entry *tx_entry)
-{
-	int i, err = 0;
-
-	for (i = 0; i < tx_entry->iov_count; i++) {
-		if (tx_entry->mr[i]) {
-			err = fi_close((struct fid *)tx_entry->mr[i]);
-			if (OFI_UNLIKELY(err)) {
-				FI_WARN(&rxr_prov, FI_LOG_CQ, "mr dereg failed. err=%d\n", err);
-				return err;
-			}
-
-			tx_entry->mr[i] = NULL;
-		}
-	}
-
-	return 0;
-}
-
 void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 {
-	int ret;
 	struct rxr_peer *peer;
-	struct efa_domain *efa_domain;
-	struct rxr_domain *rxr_domain = rxr_ep_domain(ep);
-
-	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
-				  util_domain.domain_fid);
 
 	if (tx_entry->state == RXR_TX_SEND)
 		dlist_remove(&tx_entry->entry);
-
-	if (efa_is_cache_available(efa_domain)) {
-		ret = rxr_tx_entry_mr_dereg(tx_entry);
-		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxr_prov, FI_LOG_MR,
-				"In-line memory deregistration failed with error: %s.\n",
-				fi_strerror(-ret));
-		}
-	}
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	peer->tx_credits += tx_entry->credit_allocated;

@@ -298,7 +298,6 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	tx_entry->msg_id = peer->next_msg_id++;
 	err = rxr_msg_post_rtm(rxr_ep, tx_entry);
 	if (OFI_UNLIKELY(err)) {
-		rxr_tx_entry_mr_dereg(tx_entry);
 		rxr_release_tx_entry(rxr_ep, tx_entry);
 		peer->next_msg_id--;
 	}
