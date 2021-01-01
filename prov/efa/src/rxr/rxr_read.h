@@ -68,7 +68,8 @@ enum rxr_read_context_type {
 enum rxr_read_entry_state {
 	RXR_RDMA_ENTRY_FREE = 0,
 	RXR_RDMA_ENTRY_CREATED,
-	RXR_RDMA_ENTRY_PENDING
+	RXR_RDMA_ENTRY_PENDING,
+	RXR_RDMA_ENTRY_SUBMITTED,
 };
 
 /*

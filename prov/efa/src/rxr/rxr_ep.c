@@ -1712,6 +1712,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (OFI_UNLIKELY(ret))
 			goto read_err;
 
+		read_entry->state = RXR_RDMA_ENTRY_SUBMITTED;
 		dlist_remove(&read_entry->pending_entry);
 	}
 
