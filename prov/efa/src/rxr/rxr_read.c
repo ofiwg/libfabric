@@ -205,6 +205,7 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, v
 		return NULL;
 	}
 
+	read_entry->type = RXR_READ_ENTRY;
 	read_entry->read_id = ofi_buf_index(read_entry);
 	read_entry->state = RXR_RDMA_ENTRY_CREATED;
 

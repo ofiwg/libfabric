@@ -75,6 +75,7 @@ enum rxr_read_entry_state {
  * rxr_read_entry contains the information of a read request
  */
 struct rxr_read_entry {
+	enum rxr_x_entry_type type;
 	int read_id;
 	enum rxr_lower_ep_type lower_ep_type;
 
