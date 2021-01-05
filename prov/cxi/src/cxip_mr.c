@@ -257,7 +257,6 @@ void cxip_mr_opt_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 static int cxip_mr_enable_opt(struct cxip_mr *mr)
 {
 	int ret;
-	union c_cmdu cmd = {};
 	int buffer_id;
 	struct cxi_pt_alloc_opts opts = {};
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
@@ -312,18 +311,8 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		goto err_pte_free;
 	}
 
-	/* Enable the PTE */
-	cmd.command.opcode = C_CMD_TGT_SETSTATE;
-	cmd.set_state.ptlte_index = mr->pte->pte->ptn;
-	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
-
-	fastlock_acquire(&ep_obj->ctrl_tgq->lock);
-
-	ret = cxi_cq_emit_target(ep_obj->ctrl_tgq->dev_cmdq, &cmd);
-
-	fastlock_release(&ep_obj->ctrl_tgq->lock);
-
-	if (ret) {
+	ret = cxip_pte_set_state(mr->pte, ep_obj->ctrl_tgq, C_PTLTE_ENABLED, 0);
+	if (ret != FI_SUCCESS) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
 		CXIP_WARN("Failed to enqueue command: %d\n", ret);
 		goto err_pte_free;

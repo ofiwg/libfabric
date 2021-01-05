@@ -1350,6 +1350,11 @@ void cxip_free_if_domain(struct cxip_if_domain *if_dom);
 void cxip_if_init(void);
 void cxip_if_fini(void);
 
+int cxip_pte_set_state(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
+		       enum c_ptlte_state new_state, uint32_t drop_count);
+int cxip_pte_set_state_wait(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
+			    struct cxip_cq *cq, enum c_ptlte_state new_state,
+			    uint32_t drop_count);
 int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 		    unsigned int lac, enum c_ptl_list list,
 		    uint32_t buffer_id, uint64_t match_bits,

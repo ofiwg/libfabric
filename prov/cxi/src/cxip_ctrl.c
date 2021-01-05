@@ -327,7 +327,6 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		.is_matching = 1,
 	};
 	struct cxi_eq_attr eq_attr = {};
-	union c_cmdu cmd = {};
 	const union c_event *event;
 	int ret;
 	int tmp;
@@ -396,19 +395,13 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		goto free_pte;
 	}
 
-	/* Enable the PTE */
-	cmd.command.opcode = C_CMD_TGT_SETSTATE;
-	cmd.set_state.ptlte_index = ep_obj->ctrl_pte->pte->ptn;
-	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
-
-	ret = cxi_cq_emit_target(ep_obj->ctrl_tgq->dev_cmdq, &cmd);
+	ret = cxip_pte_set_state(ep_obj->ctrl_pte, ep_obj->ctrl_tgq,
+				 C_PTLTE_ENABLED, 0);
 	if (ret) {
 		/* This is a bug, we have exclusive access to this CMDQ. */
 		CXIP_WARN("Failed to enqueue command: %d\n", ret);
 		goto free_pte;
 	}
-
-	cxi_cq_ring(ep_obj->ctrl_tgq->dev_cmdq);
 
 	/* Wait for Enable event */
 	while (!(event = cxi_eq_get_event(ep_obj->ctrl_evtq)))

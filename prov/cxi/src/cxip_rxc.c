@@ -29,30 +29,13 @@
 int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count)
 {
 	int ret;
-	union c_cmdu cmd = {};
 
-	cmd.command.opcode = C_CMD_TGT_SETSTATE;
-	cmd.set_state.ptlte_index = rxc->rx_pte->pte->ptn;
-	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
-	cmd.set_state.drop_count = drop_count;
+	ret = cxip_pte_set_state(rxc->rx_pte, rxc->rx_cmdq, C_PTLTE_ENABLED,
+				 drop_count);
+	if (ret == FI_SUCCESS)
+		rxc->enable_pending = true;
 
-	fastlock_acquire(&rxc->rx_cmdq->lock);
-
-	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
-	if (ret) {
-		CXIP_WARN("Failed to enqueue command: %d\n", ret);
-
-		fastlock_release(&rxc->rx_cmdq->lock);
-		return -FI_EAGAIN;
-	}
-
-	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
-
-	fastlock_release(&rxc->rx_cmdq->lock);
-
-	rxc->enable_pending = true;
-
-	return FI_SUCCESS;
+	return ret;
 }
 
 /*
@@ -66,38 +49,16 @@ int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count)
 static int rxc_msg_disable(struct cxip_rxc *rxc)
 {
 	int ret;
-	union c_cmdu cmd = {};
 
 	/* Don't treat the state change as flow control */
 	rxc->disabling = true;
 
-	cmd.command.opcode = C_CMD_TGT_SETSTATE;
-	cmd.set_state.ptlte_index = rxc->rx_pte->pte->ptn;
-	cmd.set_state.ptlte_state = C_PTLTE_DISABLED;
+	ret = cxip_pte_set_state_wait(rxc->rx_pte, rxc->rx_cmdq, rxc->recv_cq,
+				      C_PTLTE_DISABLED, 0);
+	if (ret == FI_SUCCESS)
+		CXIP_DBG("RXC PtlTE disabled: %p\n", rxc);
 
-	fastlock_acquire(&rxc->rx_cmdq->lock);
-
-	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
-	if (ret) {
-		CXIP_WARN("Failed to enqueue command: %d\n", ret);
-
-		fastlock_release(&rxc->rx_cmdq->lock);
-		return -FI_EAGAIN;
-	}
-
-	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
-
-	fastlock_release(&rxc->rx_cmdq->lock);
-
-	/* Wait for PTE state change */
-	do {
-		sched_yield();
-		cxip_cq_progress(rxc->recv_cq);
-	} while (rxc->rx_pte->state != C_PTLTE_DISABLED);
-
-	CXIP_DBG("RXC PtlTE disabled: %p\n", rxc);
-
-	return FI_SUCCESS;
+	return ret;
 }
 
 /*

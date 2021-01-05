@@ -464,6 +464,50 @@ void cxip_free_if_domain(struct cxip_if_domain *if_dom)
 	free(if_dom);
 }
 
+int cxip_pte_set_state(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
+		       enum c_ptlte_state new_state, uint32_t drop_count)
+{
+	int ret;
+	struct c_set_state_cmd set_state = {
+		.command.opcode = C_CMD_TGT_SETSTATE,
+		.ptlte_index = pte->pte->ptn,
+		.ptlte_state = new_state,
+		.drop_count = drop_count,
+	};
+
+	fastlock_acquire(&cmdq->lock);
+
+	ret = cxi_cq_emit_target(cmdq->dev_cmdq, &set_state);
+	if (ret) {
+		CXIP_WARN("Failed to enqueue command: %d\n", ret);
+		fastlock_release(&cmdq->lock);
+		return -FI_EAGAIN;
+	}
+
+	cxi_cq_ring(cmdq->dev_cmdq);
+
+	fastlock_release(&cmdq->lock);
+
+	return FI_SUCCESS;
+}
+
+int cxip_pte_set_state_wait(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
+			    struct cxip_cq *cq, enum c_ptlte_state new_state,
+			    uint32_t drop_count)
+{
+	int ret;
+
+	ret = cxip_pte_set_state(pte, cmdq, new_state, drop_count);
+	if (ret == FI_SUCCESS) {
+		do {
+			sched_yield();
+			cxip_cq_progress(cq);
+		} while (pte->state != new_state);
+	}
+
+	return ret;
+}
+
 /*
  * cxip_pte_append() - Append a buffer to a PtlTE.
  */

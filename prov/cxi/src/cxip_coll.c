@@ -685,50 +685,25 @@ static void _coll_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 	}
 }
 
-/* Change state for a collective PTE. Wait for completion.
- */
-static int _coll_pte_setstate(struct cxip_coll_pte *coll_pte,
-			      int state, uint32_t drop_count)
-{
-	union c_cmdu cmd = {};
-	int ret;
-
-	if (coll_pte->pte->state == state)
-		return FI_SUCCESS;
-
-	cmd.command.opcode = C_CMD_TGT_SETSTATE;
-	cmd.set_state.ptlte_index = coll_pte->pte->pte->ptn;
-	cmd.set_state.ptlte_state = state;
-	cmd.set_state.drop_count = drop_count;
-
-	do {
-		ret = cxi_cq_emit_target(
-			coll_pte->ep_obj->coll.rx_cmdq->dev_cmdq, &cmd);
-	} while (ret == -ENOSPC);
-
-	cxi_cq_ring(coll_pte->ep_obj->coll.rx_cmdq->dev_cmdq);
-
-	do {
-		sched_yield();
-		cxip_cq_progress(coll_pte->ep_obj->coll.rx_cq);
-	} while (coll_pte->pte->state != state);
-
-	return FI_SUCCESS;
-}
-
 /* Enable a collective PTE. Wait for completion.
  */
 static inline int _coll_pte_enable(struct cxip_coll_pte *coll_pte,
 				   uint32_t drop_count)
 {
-	return _coll_pte_setstate(coll_pte, C_PTLTE_ENABLED, drop_count);
+	return cxip_pte_set_state_wait(coll_pte->pte,
+				       coll_pte->ep_obj->coll.rx_cmdq,
+				       coll_pte->ep_obj->coll.rx_cq,
+				       C_PTLTE_ENABLED, drop_count);
 }
 
 /* Disable a collective PTE. Wait for completion.
  */
 static inline int _coll_pte_disable(struct cxip_coll_pte *coll_pte)
 {
-	return _coll_pte_setstate(coll_pte, C_PTLTE_DISABLED, 0);
+	return cxip_pte_set_state_wait(coll_pte->pte,
+				       coll_pte->ep_obj->coll.rx_cmdq,
+				       coll_pte->ep_obj->coll.rx_cq,
+				       C_PTLTE_DISABLED, 0);
 }
 
 /* Destroy and unmap all buffers used by the collectives PTE.

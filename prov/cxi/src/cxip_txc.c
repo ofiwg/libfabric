@@ -40,7 +40,6 @@ void cxip_rdzv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 static int txc_msg_init(struct cxip_txc *txc)
 {
 	int ret;
-	union c_cmdu cmd = {};
 	struct cxi_pt_alloc_opts pt_opts = {
 		.is_matching = 1,
 	};
@@ -69,25 +68,12 @@ static int txc_msg_init(struct cxip_txc *txc)
 		goto put_rx_cmdq;
 	}
 
-	/* Enable the Rendezvous PTE */
-	cmd.command.opcode = C_CMD_TGT_SETSTATE;
-	cmd.set_state.ptlte_index = txc->rdzv_pte->pte->ptn;
-	cmd.set_state.ptlte_state = C_PTLTE_ENABLED;
-
-	ret = cxi_cq_emit_target(txc->rx_cmdq->dev_cmdq, &cmd);
-	if (ret) {
-		/* This is a bug, we have exclusive access to this CMDQ. */
+	ret = cxip_pte_set_state_wait(txc->rdzv_pte, txc->rx_cmdq, txc->send_cq,
+				      C_PTLTE_ENABLED, 0);
+	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to enqueue command: %d\n", ret);
 		goto free_rdzv_pte;
 	}
-
-	cxi_cq_ring(txc->rx_cmdq->dev_cmdq);
-
-	/* Wait for Rendezvous PTE state changes */
-	do {
-		sched_yield();
-		cxip_cq_progress(txc->send_cq);
-	} while (txc->rdzv_pte->state != C_PTLTE_ENABLED);
 
 	ret = cxip_txc_zbp_init(txc);
 	if (ret) {
