@@ -62,33 +62,22 @@ struct cxi_auth_key {
  * - FI_BAND	: INT
  * - FI_BXOR	: INT
  *
- * The codes below extend this standard set to explicitly take advantage of
- * extended hardware operations.
+ * The codes below extend this standard FI_ATOMIC set to explicitly take
+ * advantage of extended hardware operations. These can be used as opcodes for
+ * any of the collective operations, just like FI_MIN or FI_SUM.
+ *
+ * Note that the current FI_ATOMIC set ends at opcode == 19. We start this one
+ * at 32, to accommodate possible expansion of the FI_ATOMIC set, and check for
+ * overlap during initialization.
  */
-
 enum cxip_coll_op {
-	CXI_COLL_BARRIER = FI_ATOMIC_OP_LAST,
-	CXI_COLL_MINMAXLOC,	// FLT or INT
-	CXI_COLL_MINNUM,	// FLT only
-	CXI_COLL_MAXNUM,	// FLT only
-	CXI_COLL_MINMAXNUMLOC,	// FLT only
-	CXI_COLL_OP_LAST
-};
-
-/* The codes below define the different float sum rounding modes.
- */
-enum cxip_coll_flt_sum_mode {
-	CXI_COLL_FLT_SUM_DEFAULT = 0,
-	CXI_COLL_FLT_SUM_NOFTZ_NEAR,
-	CXI_COLL_FLT_SUM_NOFTZ_CEIL,
-	CXI_COLL_FLT_SUM_NOFTZ_FLOOR,
-	CXI_COLL_FLT_SUM_NOFTZ_CHOP,
-	CXI_COLL_FLT_SUM_FTZ_NEAR,
-	CXI_COLL_FLT_SUM_FTZ_CEIL,
-	CXI_COLL_FLT_SUM_FTZ_FLOOR,
-	CXI_COLL_FLT_SUM_FTZ_CHOP,
-	CXI_COLL_FLT_REPSUM,
-	CXI_COLL_FLT_LAST,
+	CXI_FI_MINMAXLOC = 32,	// FLT or INT
+	CXI_FI_MINNUM,		// FLT only
+	CXI_FI_MAXNUM,		// FLT only
+	CXI_FI_MINMAXNUMLOC,	// FLT only
+	CXI_FI_REPSUM,		// FLT only
+	CXI_FI_BARRIER,		// no data
+	CXI_FI_OP_LAST
 };
 
 /*
@@ -105,20 +94,20 @@ struct cxip_coll_comm_key {
 /**
  * Initialize a multicast comm_key structure.
  *
- * The mcast_id and hwroot_nic values are provided by the Rosetta configuration
- * service, and together represent the multicast collective acceleration tree
- * set up for use by this av_set.
+ * The mcast_ref, mcast_id, and hwroot_idx values are provided by the Rosetta
+ * configuration service, and together represent the multicast collective
+ * acceleration tree set up for use by this av_set.
  *
  * @param comm_key - space to contain an intialized comm_key
- * @param round - floating-point sum rounding mode (0 = no-flush, nearest)
+ * @param mcast_ref - multicast reference id (from service)
  * @param mcast_id - 13-bit multicast address
- * @param hwroot_nic 20-bit NIC address of the hardware root node
+ * @param hwroot_idx - index (rank) of hwroot in fi_av
  *
  * @return size_t size of comm_key structure initialized
  */
 size_t cxip_coll_init_mcast_comm_key(struct cxip_coll_comm_key *comm_key,
-				     enum cxip_coll_flt_sum_mode round,
+				     uint32_t mcast_ref,
 				     uint32_t mcast_id,
-				     uint32_t hwroot_nic);
+				     uint32_t hwroot_idx);
 
 #endif /* _FI_CXI_EXT_H_ */

@@ -78,6 +78,9 @@ int cxip_av_set_union(struct fid_av_set *dst, const struct fid_av_set *src)
 	if (src_av_set->cxi_av != dst_av_set->cxi_av)
 		return -FI_EINVAL;
 
+	if (dst_av_set->mc_obj)
+		return -FI_EPERM;
+
 	/* New elements placed at end of dst */
 	temp = dst_av_set->fi_addr_cnt;
 	for (i = 0; i < src_av_set->fi_addr_cnt; i++) {
@@ -111,6 +114,9 @@ int cxip_av_set_intersect(struct fid_av_set *dst, const struct fid_av_set *src)
 
 	if (src_av_set->cxi_av != dst_av_set->cxi_av)
 		return -FI_EINVAL;
+
+	if (dst_av_set->mc_obj)
+		return -FI_EPERM;
 
 	/* Old elements removed from dst */
 	temp = 0;
@@ -146,6 +152,9 @@ int cxip_av_set_diff(struct fid_av_set *dst, const struct fid_av_set *src)
 	if (src_av_set->cxi_av != dst_av_set->cxi_av)
 		return -FI_EINVAL;
 
+	if (dst_av_set->mc_obj)
+		return -FI_EPERM;
+
 	/* Old elements removed from dst */
 	temp = 0;
 	for (i = 0; i < dst_av_set->fi_addr_cnt; i++) {
@@ -176,6 +185,9 @@ int cxip_av_set_insert(struct fid_av_set *set, fi_addr_t addr)
 
 	av_set = container_of(set, struct cxip_av_set, av_set_fid);
 
+	if (av_set->mc_obj)
+		return -FI_EPERM;
+
 	/* Do not insert duplicates */
 	for (i = 0; i < av_set->fi_addr_cnt; i++) {
 		if (av_set->fi_addr_ary[i] == addr)
@@ -193,6 +205,9 @@ int cxip_av_set_remove(struct fid_av_set *set, fi_addr_t addr)
 	int i;
 
 	av_set = container_of(set, struct cxip_av_set, av_set_fid);
+
+	if (av_set->mc_obj)
+		return -FI_EPERM;
 
 	for (i = 0; i < av_set->fi_addr_cnt; i++) {
 		if (av_set->fi_addr_ary[i] == addr)

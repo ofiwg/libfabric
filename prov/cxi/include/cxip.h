@@ -1281,22 +1281,22 @@ enum cxip_comm_key_type {
 };
 
 struct cxip_coll_mcast_key {
-	uint32_t hwroot_nic;
-	uint32_t mcast_id;
+	uint32_t hwroot_idx;	// index of hwroot in av_set list
+	uint32_t mcast_id;	// 13-bit multicast address id
+	uint32_t mcast_ref;	// unique multicast reference number
 };
 
 struct cxip_coll_unicast_key {
-	uint32_t hwroot_nic;
+	uint32_t hwroot_idx;	// index of hwroot in av_set list
 };
 
 struct cxip_coll_rank_key {
-	uint32_t hwroot_rank;
+	uint32_t hwroot_idx;	// index of hwroot in av_set list
 	uint32_t rank;
 };
 
 struct cxip_comm_key {
 	enum cxip_comm_key_type type;
-	enum cxip_coll_flt_sum_mode round;
 	union {
 		struct cxip_coll_mcast_key mcast;
 		struct cxip_coll_unicast_key ucast;
@@ -1355,9 +1355,9 @@ struct cxip_coll_reduction {
 	struct cxip_req *op_inject_req;		// active operation request
 	enum cxip_coll_state op_state;		// reduction state on node
 	int op_code;				// requested CXI operation
-	const void *op_send_data;		// user send buffer
-	void *op_rslt_data;			// user recv buffer
-	size_t op_data_len;			// bytes in send/recv buffers
+	const void *op_send_data;		// user send buffer (may be NULL)
+	void *op_rslt_data;			// user recv buffer (may be NULL)
+	int op_data_len;			// bytes in send/recv buffers
 	void *op_context;			// caller's context
 	bool in_use;				// reduction is in-use
 
@@ -1378,9 +1378,8 @@ struct cxip_coll_mc {
 	bool is_joined;				// true if joined
 	unsigned int mynode_index;		// av_set index of this node
 	unsigned int hwroot_index;		// av_set index of hwroot node
-	enum cxip_coll_flt_sum_mode round;	// float sum rounding mode
 	int next_red_id;			// round-robin counter
-	uint32_t mc_idcode;			// MC object id for cookie
+	uint32_t mc_unique;			// MC object id for cookie
 	ofi_atomic32_t send_cnt;		// for diagnostics
 	ofi_atomic32_t recv_cnt;		// for diagnostics
 	ofi_atomic32_t pkt_cnt;			// for diagnostics
@@ -1389,6 +1388,28 @@ struct cxip_coll_mc {
 
 	struct cxip_coll_reduction reduction[CXIP_COLL_MAX_CONCUR];
 };
+
+/**
+ * Packed data structure used for all reductions.
+ */
+union cxip_coll_data {
+	uint8_t databuf[CXIP_COLL_MAX_TX_SIZE];
+	uint64_t ival[CXIP_COLL_MAX_TX_SIZE/(sizeof(uint64_t))];
+	double fval[CXIP_COLL_MAX_TX_SIZE/(sizeof(double))];
+	struct {
+		uint64_t iminval;
+		uint64_t iminidx;
+		uint64_t imaxval;
+		uint64_t imaxidx;
+
+	} iminmax;
+	struct {
+		double fminval;
+		uint64_t fminidx;
+		double fmaxval;
+		uint64_t fmaxidx;
+	} fminmax;
+} __attribute__((packed));
 
 /*
  * CNTR/CQ wait object file list element
@@ -1564,15 +1585,17 @@ int cxip_coll_init(struct cxip_ep_obj *ep_obj);
 int cxip_coll_enable(struct cxip_ep_obj *ep_obj);
 int cxip_coll_disable(struct cxip_ep_obj *ep_obj);
 int cxip_coll_close(struct cxip_ep_obj *ep_obj);
+void cxip_coll_populate_opcodes(void);
+int cxip_fi2cxi_opcode(int op, int datatype);
 void cxip_coll_reset_mc_ctrs(struct cxip_coll_mc *mc_obj);
+void cxip_coll_arm_disable_once(void);
 int cxip_coll_send(struct cxip_coll_reduction *reduction,
 		   int av_set_idx, const void *buffer, size_t buflen);
 int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
-			   size_t redcnt, int op, const void *data, size_t len,
+			   size_t redcnt, int op, const void *data, int len,
 			   bool retry);
 ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
-			 enum fi_collective_op op_type,
-			 enum fi_datatype datatype, enum fi_op op,
+			 enum fi_datatype datatype, int cxi_opcode,
 			 const void *op_send_data, void *op_rslt_data,
 			 size_t op_count, void *context, int *reduction_id);
 ssize_t cxip_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context);

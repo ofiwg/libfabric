@@ -44,6 +44,7 @@ rdmainclude_HEADERS += \
 if HAVE_CRITERION
 bin_PROGRAMS += prov/cxi/test/cxitest
 nodist_prov_cxi_test_cxitest_SOURCES = \
+	prov/cxi/test/ltu_utils_pm.c \
 	prov/cxi/test/cxip_test_common.c \
 	prov/cxi/test/fabric.c \
 	prov/cxi/test/domain.c \
@@ -65,9 +66,9 @@ nodist_prov_cxi_test_cxitest_SOURCES = \
 	prov/cxi/test/lat.c
 
 prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
-	$(cxitest_CPPFLAGS) $(PTHREAD_CFLAGS)
+	$(cxitest_CPPFLAGS) $(PTHREAD_CFLAGS) -DUSE_PMI
 prov_cxi_test_cxitest_LDFLAGS = $(cxitest_LDFLAGS) -static
-prov_cxi_test_cxitest_LDADD =  $(cxitest_LIBS) $(linkback) $(PTHREAD_LIBS)
+prov_cxi_test_cxitest_LDADD =  $(cxitest_LIBS) $(linkback) $(PTHREAD_LIBS) -lpmi
 
 TESTS += prov/cxi/test/cxitest
 endif HAVE_CRITERION
@@ -76,14 +77,14 @@ if HAVE_CXI_DL
 pkglib_LTLIBRARIES += libcxi-fi.la
 libcxi_fi_la_SOURCES = $(_cxi_files) $(_cxi_headers) $(common_srcs)
 libcxi_fi_la_CPPFLAGS = $(cxi_CPPFLAGS)
-libcxi_fi_la_LIBADD = $(linkback) $(cxi_LIBS)
+libcxi_fi_la_LIBADD = $(linkback) $(cxi_LIBS) -lm
 libcxi_fi_la_LDFLAGS = $(cxi_LDFLAGS) \
 	-module -avoid-version -shared -export-dynamic
 libcxi_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_CXI_DL
 src_libfabric_la_SOURCES += $(_cxi_files) $(_cxi_headers)
 src_libfabric_la_CPPFLAGS += $(cxi_CPPFLAGS)
-src_libfabric_la_LIBADD += $(cxi_LIBS)
+src_libfabric_la_LIBADD += $(cxi_LIBS) -lm
 src_libfabric_la_LDFLAGS += $(cxi_LDFLAGS)
 endif !HAVE_CXI_DL
 
