@@ -198,6 +198,35 @@ static void tcpx_ep_flush_pending_xfers(struct tcpx_ep *ep)
 	}
 }
 
+static void tcpx_ep_release_queue(struct slist *queue,
+				  struct tcpx_cq *tcpx_cq)
+{
+	struct tcpx_xfer_entry *xfer_entry;
+
+	while (!slist_empty(queue)) {
+		xfer_entry = container_of(queue->head, struct tcpx_xfer_entry,
+					  entry);
+		slist_remove_head(queue);
+		tcpx_cq_report_error(&tcpx_cq->util_cq, xfer_entry, FI_ECANCELED);
+		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
+	}
+}
+
+static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
+{
+	struct tcpx_cq *tcpx_cq;
+
+	fastlock_acquire(&ep->lock);
+	tcpx_cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
+	tcpx_ep_release_queue(&ep->tx_queue, tcpx_cq);
+	tcpx_ep_release_queue(&ep->rma_read_queue, tcpx_cq);
+	tcpx_ep_release_queue(&ep->tx_rsp_pend_queue, tcpx_cq);
+
+	tcpx_cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
+	tcpx_ep_release_queue(&ep->rx_queue, tcpx_cq);
+	fastlock_release(&ep->lock);
+}
+
 /* must hold ep->lock */
 void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 {
@@ -402,35 +431,6 @@ void tcpx_rx_msg_release(struct tcpx_xfer_entry *rx_entry)
 				       struct tcpx_cq, util_cq);
 		tcpx_xfer_entry_release(tcpx_cq, rx_entry);
 	}
-}
-
-static void tcpx_ep_release_queue(struct slist *queue,
-				  struct tcpx_cq *tcpx_cq)
-{
-	struct tcpx_xfer_entry *xfer_entry;
-
-	while (!slist_empty(queue)) {
-		xfer_entry = container_of(queue->head, struct tcpx_xfer_entry,
-					  entry);
-		slist_remove_head(queue);
-		tcpx_cq_report_error(&tcpx_cq->util_cq, xfer_entry, FI_ECANCELED);
-		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
-	}
-}
-
-static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
-{
-	struct tcpx_cq *tcpx_cq;
-
-	fastlock_acquire(&ep->lock);
-	tcpx_cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-	tcpx_ep_release_queue(&ep->tx_queue, tcpx_cq);
-	tcpx_ep_release_queue(&ep->rma_read_queue, tcpx_cq);
-	tcpx_ep_release_queue(&ep->tx_rsp_pend_queue, tcpx_cq);
-
-	tcpx_cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
-	tcpx_ep_release_queue(&ep->rx_queue, tcpx_cq);
-	fastlock_release(&ep->lock);
 }
 
 static int tcpx_ep_close(struct fid *fid)
