@@ -38,8 +38,8 @@
 #include <unistd.h>
 #include <ofi_iov.h>
 
-void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
-			   struct tcpx_xfer_entry *xfer_entry)
+void tcpx_srx_entry_free(struct tcpx_rx_ctx *srx_ctx,
+			 struct tcpx_xfer_entry *xfer_entry)
 {
 	if (xfer_entry->ep->cur_rx_entry == xfer_entry)
 		xfer_entry->ep->cur_rx_entry = NULL;
@@ -50,7 +50,7 @@ void tcpx_srx_xfer_release(struct tcpx_rx_ctx *srx_ctx,
 }
 
 struct tcpx_xfer_entry *
-tcpx_srx_get_entry(struct tcpx_rx_ctx *srx_ctx, struct tcpx_ep *ep)
+tcpx_srx_entry_alloc(struct tcpx_rx_ctx *srx_ctx, struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry = NULL;
 

@@ -73,7 +73,7 @@ static void tcpx_process_tx_entry(struct tcpx_xfer_entry *tx_entry)
 
 	tcpx_cq = container_of(tx_entry->ep->util_ep.tx_cq,
 			       struct tcpx_cq, util_cq);
-	tcpx_xfer_entry_release(tcpx_cq, tx_entry);
+	tcpx_xfer_entry_free(tcpx_cq, tx_entry);
 }
 
 static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
@@ -106,7 +106,7 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
 	tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
 
-	tcpx_rx_msg_release(rx_entry);
+	tcpx_rx_entry_free(rx_entry);
 	return FI_SUCCESS;
 }
 
@@ -179,14 +179,14 @@ retry:
 			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
 	} else {
 		tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
-		tcpx_rx_msg_release(rx_entry);
+		tcpx_rx_entry_free(rx_entry);
 	}
 	return 0;
 
 shutdown:
 	tcpx_ep_disable(rx_entry->ep, 0);
 	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
-	tcpx_rx_msg_release(rx_entry);
+	tcpx_rx_entry_free(rx_entry);
 	return ret;
 }
 
@@ -221,7 +221,7 @@ static int tcpx_prepare_rx_write_resp(struct tcpx_xfer_entry *rx_entry)
 	tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
 	tcpx_rx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 				  struct tcpx_cq, util_cq);
-	tcpx_xfer_entry_release(tcpx_rx_cq, rx_entry);
+	tcpx_xfer_entry_free(tcpx_rx_cq, rx_entry);
 	return FI_SUCCESS;
 }
 
@@ -267,7 +267,7 @@ static int tcpx_process_remote_write(struct tcpx_xfer_entry *rx_entry)
 		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 		tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 				       struct tcpx_cq, util_cq);
-		tcpx_xfer_entry_release(tcpx_cq, rx_entry);
+		tcpx_xfer_entry_free(tcpx_cq, rx_entry);
 
 	} else if (rx_entry->hdr.base_hdr.flags &
 		  (OFI_DELIVERY_COMPLETE | OFI_COMMIT_COMPLETE)) {
@@ -281,7 +281,7 @@ static int tcpx_process_remote_write(struct tcpx_xfer_entry *rx_entry)
 		tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
 		tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 				       struct tcpx_cq, util_cq);
-		tcpx_xfer_entry_release(tcpx_cq, rx_entry);
+		tcpx_xfer_entry_free(tcpx_cq, rx_entry);
 	}
 	return ret;
 }
@@ -307,7 +307,7 @@ static int tcpx_process_remote_read(struct tcpx_xfer_entry *rx_entry)
 	slist_remove_head(&rx_entry->ep->rma_read_queue);
 	tcpx_cq = container_of(rx_entry->ep->util_ep.tx_cq,
 			       struct tcpx_cq, util_cq);
-	tcpx_xfer_entry_release(tcpx_cq, rx_entry);
+	tcpx_xfer_entry_free(tcpx_cq, rx_entry);
 	return ret;
 }
 
@@ -399,8 +399,7 @@ int tcpx_op_invalid(struct tcpx_ep *tcpx_ep)
 }
 
 /* Must hold ep lock */
-struct tcpx_xfer_entry *
-tcpx_rx_get_entry(struct tcpx_ep *ep)
+static struct tcpx_xfer_entry *tcpx_rx_entry_alloc(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
 
@@ -443,7 +442,7 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 		tcpx_cq_report_success(tx_entry->ep->util_ep.tx_cq, tx_entry);
 
 		slist_remove_head(&tx_entry->ep->tx_rsp_pend_queue);
-		tcpx_xfer_entry_release(tcpx_cq, tx_entry);
+		tcpx_xfer_entry_free(tcpx_cq, tx_entry);
 		tcpx_rx_setup(tcpx_ep, NULL, NULL);
 		return -FI_EAGAIN;
 	}
@@ -452,13 +451,13 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 		   tcpx_ep->cur_rx_msg.hdr.base_hdr.payload_off);
 
 	if (tcpx_ep->srx_ctx) {
-		rx_entry = tcpx_srx_get_entry(tcpx_ep->srx_ctx, tcpx_ep);
+		rx_entry = tcpx_srx_entry_alloc(tcpx_ep->srx_ctx, tcpx_ep);
 		if (!rx_entry)
 			return -FI_EAGAIN;
 
 		rx_entry->flags |= tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION;
 	} else {
-		rx_entry = tcpx_rx_get_entry(tcpx_ep);
+		rx_entry = tcpx_rx_entry_alloc(tcpx_ep);
 		if (!rx_entry)
 			return -FI_EAGAIN;
 	}
@@ -490,7 +489,7 @@ truncate_err:
 		"posted rx buffer size is not big enough\n");
 	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq,
 				rx_entry, -ret);
-	tcpx_rx_msg_release(rx_entry);
+	tcpx_rx_entry_free(rx_entry);
 	return ret;
 }
 
@@ -520,7 +519,7 @@ int tcpx_op_read_req(struct tcpx_ep *tcpx_ep)
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"invalid rma data\n");
-		tcpx_xfer_entry_release(tcpx_cq, rx_entry);
+		tcpx_xfer_entry_free(tcpx_cq, rx_entry);
 		return ret;
 	}
 
@@ -555,7 +554,7 @@ int tcpx_op_write(struct tcpx_ep *tcpx_ep)
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"invalid rma data\n");
-		tcpx_xfer_entry_release(tcpx_cq, rx_entry);
+		tcpx_xfer_entry_free(tcpx_cq, rx_entry);
 		return ret;
 	}
 

@@ -111,7 +111,7 @@ static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 
 	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_READ_RSP);
 	if (!recv_entry) {
-		tcpx_xfer_entry_release(tcpx_cq, send_entry);
+		tcpx_xfer_entry_free(tcpx_cq, send_entry);
 		return -FI_EAGAIN;
 	}
 	tcpx_rma_read_send_entry_fill(send_entry, tcpx_ep, msg);
