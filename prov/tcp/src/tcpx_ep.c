@@ -182,22 +182,7 @@ free:
 	return ret;
 }
 
-static void tcpx_ep_flush_pending_xfers(struct tcpx_ep *ep)
-{
-	struct slist_entry *entry;
-	struct tcpx_xfer_entry *tx_entry;
-	struct tcpx_cq *cq;
-
-	while (!slist_empty(&ep->tx_rsp_pend_queue)) {
-		entry = slist_remove_head(&ep->tx_rsp_pend_queue);
-		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-		tcpx_cq_report_error(ep->util_ep.tx_cq, tx_entry, FI_ENOTCONN);
-
-		cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-		tcpx_xfer_entry_release(cq, tx_entry);
-	}
-}
-
+/* must hold ep->lock */
 static void tcpx_ep_flush_queue(struct slist *queue,
 				struct tcpx_cq *tcpx_cq)
 {
@@ -212,11 +197,11 @@ static void tcpx_ep_flush_queue(struct slist *queue,
 	}
 }
 
+/* must hold ep->lock */
 static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 {
 	struct tcpx_cq *tcpx_cq;
 
-	fastlock_acquire(&ep->lock);
 	tcpx_cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 	tcpx_ep_flush_queue(&ep->tx_queue, tcpx_cq);
 	tcpx_ep_flush_queue(&ep->rma_read_queue, tcpx_cq);
@@ -224,7 +209,6 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 
 	tcpx_cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
 	tcpx_ep_flush_queue(&ep->rx_queue, tcpx_cq);
-	fastlock_release(&ep->lock);
 }
 
 /* must hold ep->lock */
@@ -238,6 +222,10 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 	case TCPX_RCVD_REQ:
 		break;
 	case TCPX_CONNECTED:
+		/* We need to remove the socket from the CQ's fdset,
+		 * or the CQ will be left in a 'signaled' state.  This
+		 * can result in threads spinning on the CQs fdset.
+		 */
 		if (ep->util_ep.tx_cq) {
 			wait = container_of(ep->util_ep.tx_cq->wait,
 					    struct util_wait_fd, util_wait);
@@ -249,8 +237,6 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 					    struct util_wait_fd, util_wait);
 			ofi_wait_fdset_del(wait, ep->sock);
 		}
-
-		tcpx_ep_flush_pending_xfers(ep);
 		/* fall through */
 	case TCPX_ACCEPTING:
 	case TCPX_CONNECTING:
@@ -262,6 +248,8 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 	default:
 		return;
 	}
+
+	tcpx_ep_flush_all_queues(ep);
 
 	if (cm_err) {
 		err_entry.fid = &ep->util_ep.ep_fid.fid;
@@ -458,7 +446,12 @@ static int tcpx_ep_close(struct fid *fid)
 	if (eq)
 		fastlock_release(&eq->close_lock);
 
+	/* Lock not technically needed, since we're freeing the EP.  But it's
+	 * harmless to acquire and silences static code analysis tools.
+	 */
+	fastlock_acquire(&ep->lock);
 	tcpx_ep_flush_all_queues(ep);
+	fastlock_release(&ep->lock);
 
 	if (eq) {
 		ofi_eq_remove_fid_events(ep->util_ep.eq,
