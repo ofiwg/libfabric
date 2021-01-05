@@ -53,6 +53,7 @@ size_t rxm_msg_rx_size		= 128;
 size_t rxm_eager_limit		= RXM_BUF_SIZE - sizeof(struct rxm_pkt);
 size_t rxm_rx_buf_post_size	= RXM_BUF_SIZE;
 int force_auto_progress		= 0;
+int rxm_use_write_rndv		= 0;
 enum fi_wait_obj def_wait_obj = FI_WAIT_FD, def_tcp_wait_obj = FI_WAIT_UNSPEC;
 
 char *rxm_proto_state_str[] = {
@@ -516,7 +517,7 @@ RXM_INI
 			"Set this environment variable to control the  "
 			"RxM Rendezvous protocol.  If set (1), RxM will use "
 			"RMA writes rather than RMA reads during Rendezvous "
-			"transactions. (default: 0).");
+			"transactions. (default: false/no).");
 
 	fi_param_define(&rxm_prov, "enable_dyn_rbuf", FI_PARAM_BOOL,
 			"Enable support for dynamic receive buffering, if "
@@ -536,6 +537,8 @@ RXM_INI
 				(int *) &rxm_cq_eq_fairness))
 		rxm_cq_eq_fairness = 128;
 	fi_param_get_bool(&rxm_prov, "data_auto_progress", &force_auto_progress);
+	fi_param_get_bool(&rxm_prov, "use_rndv_write", &rxm_use_write_rndv);
+
 	rxm_get_def_wait();
 
 	if (force_auto_progress)
