@@ -604,6 +604,7 @@ int cxip_pte_alloc_nomap(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 	new_pte->if_dom = if_dom;
 	new_pte->state_change_cb = state_change_cb;
 	new_pte->ctx = ctx;
+	new_pte->state = C_PTLTE_DISABLED;
 
 	*pte = new_pte;
 
@@ -683,6 +684,7 @@ int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
 	dlist_foreach_container(&dev_if->ptes,
 				struct cxip_pte, pte, pte_entry) {
 		if (pte->pte->ptn == pte_num) {
+			pte->state = new_state;
 			if (pte->state_change_cb)
 				pte->state_change_cb(pte, new_state);
 

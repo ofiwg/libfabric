@@ -2153,7 +2153,7 @@ int cxip_recv_reenable(struct cxip_rxc *rxc)
 	struct cxip_fc_drops *fc_drops;
 	int ret __attribute__((unused));
 
-	if (rxc->pte_state == C_PTLTE_ENABLED || rxc->enable_pending)
+	if (rxc->rx_pte->state == C_PTLTE_ENABLED || rxc->enable_pending)
 		return FI_SUCCESS;
 
 	/* Check if we're ready to re-enable the RX queue */
@@ -2508,11 +2508,9 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 
 	switch (state) {
 	case C_PTLTE_ENABLED:
-		assert(rxc->pte_state == C_PTLTE_DISABLED);
 		assert(rxc->enable_pending);
 
 		rxc->enable_pending = false;
-		rxc->pte_state = C_PTLTE_ENABLED;
 
 		CXIP_DBG("Enabled Receive PTE: %p\n", rxc);
 
@@ -2521,9 +2519,6 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 
 		break;
 	case C_PTLTE_DISABLED:
-		assert(rxc->pte_state == C_PTLTE_ENABLED);
-
-		rxc->pte_state = C_PTLTE_DISABLED;
 
 		if (!rxc->disabling) {
 			CXIP_DBG("Flow control detected: %p\n", rxc);
@@ -2536,7 +2531,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 
 		break;
 	default:
-		CXIP_WARN("Unexpected state received: %u\n", state);
+		CXIP_FATAL("Unexpected state received: %u\n", state);
 	}
 
 	fastlock_release(&rxc->lock);

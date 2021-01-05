@@ -22,17 +22,12 @@
  */
 void cxip_rdzv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 {
-	struct cxip_txc *txc = (struct cxip_txc *)pte->ctx;
-
 	switch (state) {
 	case C_PTLTE_ENABLED:
-		assert(txc->pte_state == C_PTLTE_DISABLED);
 		break;
 	default:
-		CXIP_WARN("Unexpected state received: %u\n", state);
+		CXIP_FATAL("Unexpected state received: %u\n", state);
 	}
-
-	txc->pte_state = state;
 }
 
 /*
@@ -92,7 +87,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 	do {
 		sched_yield();
 		cxip_cq_progress(txc->send_cq);
-	} while (txc->pte_state != C_PTLTE_ENABLED);
+	} while (txc->rdzv_pte->state != C_PTLTE_ENABLED);
 
 	ret = cxip_txc_zbp_init(txc);
 	if (ret) {
@@ -309,7 +304,6 @@ static struct cxip_txc *txc_alloc(const struct fi_tx_attr *attr, void *context,
 	dlist_init(&txc->rdzv_src_reqs);
 	dlist_init(&txc->msg_queue);
 	dlist_init(&txc->fc_peers);
-	txc->pte_state = C_PTLTE_DISABLED;
 
 	switch (fclass) {
 	case FI_CLASS_TX_CTX:

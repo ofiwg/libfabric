@@ -676,17 +676,12 @@ recv_unmap:
  */
 static void _coll_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 {
-	struct cxip_coll_pte *coll_pte = (struct cxip_coll_pte *)pte->ctx;
-
 	switch (state) {
 	case C_PTLTE_ENABLED:
-		coll_pte->pte_state = C_PTLTE_ENABLED;
-		break;
 	case C_PTLTE_DISABLED:
-		coll_pte->pte_state = C_PTLTE_DISABLED;
 		break;
 	default:
-		CXIP_WARN("Unexpected state received: %u\n", state);
+		CXIP_FATAL("Unexpected state received: %u\n", state);
 	}
 }
 
@@ -698,7 +693,7 @@ static int _coll_pte_setstate(struct cxip_coll_pte *coll_pte,
 	union c_cmdu cmd = {};
 	int ret;
 
-	if (coll_pte->pte_state == state)
+	if (coll_pte->pte->state == state)
 		return FI_SUCCESS;
 
 	cmd.command.opcode = C_CMD_TGT_SETSTATE;
@@ -716,7 +711,7 @@ static int _coll_pte_setstate(struct cxip_coll_pte *coll_pte,
 	do {
 		sched_yield();
 		cxip_cq_progress(coll_pte->ep_obj->coll.rx_cq);
-	} while (coll_pte->pte_state != state);
+	} while (coll_pte->pte->state != state);
 
 	return FI_SUCCESS;
 }
@@ -2028,7 +2023,6 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 
 	dlist_init(&coll_pte->buf_list);
 	coll_pte->ep_obj = ep_obj;
-	coll_pte->pte_state = C_PTLTE_DISABLED;
 	ofi_atomic_initialize32(&coll_pte->buf_cnt, 0);
 	ofi_atomic_initialize32(&coll_pte->buf_swap_cnt, 0);
 

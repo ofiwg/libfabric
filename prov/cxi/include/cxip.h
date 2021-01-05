@@ -419,6 +419,7 @@ struct cxip_pte {
 	struct dlist_entry pte_entry;
 	struct cxip_if_domain *if_dom;
 	struct cxil_pte *pte;
+	enum c_ptlte_state state;
 	struct cxil_pte_map *pte_map[MAX_PTE_MAP_COUNT];
 	unsigned int pte_map_count;
 
@@ -895,7 +896,6 @@ struct cxip_rxc {
 	bool selective_completion;
 
 	struct cxip_pte *rx_pte;	// HW RX Queue
-	enum c_ptlte_state pte_state;
 	bool disabling;
 	struct cxip_cmdq *rx_cmdq;	// RX CMDQ for posting receive buffers
 	struct cxip_cmdq *tx_cmdq;	// TX CMDQ for Message Gets
@@ -978,7 +978,6 @@ struct cxip_txc {
 
 	/* Software Rendezvous related structures */
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
-	enum c_ptlte_state pte_state;
 	int rdzv_threshold;
 	int rdzv_get_min;
 	int rdzv_eager_size;
@@ -1273,7 +1272,6 @@ struct cxip_coll_pte {
 	struct cxip_pte *pte;			// Collectives PTE
 	struct cxip_ep_obj *ep_obj;		// Associated endpoint
 	struct cxip_coll_mc *mc_obj;		// Associated multicast object
-	enum c_ptlte_state pte_state;		// PTE state
 	struct dlist_entry buf_list;		// PTE receive buffers
 	ofi_atomic32_t buf_cnt;			// count of linked buffers
 	ofi_atomic32_t buf_swap_cnt;		// for diagnostics

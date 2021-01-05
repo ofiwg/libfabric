@@ -93,7 +93,7 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 	do {
 		sched_yield();
 		cxip_cq_progress(rxc->recv_cq);
-	} while (rxc->pte_state != C_PTLTE_DISABLED);
+	} while (rxc->rx_pte->state != C_PTLTE_DISABLED);
 
 	CXIP_DBG("RXC PtlTE disabled: %p\n", rxc);
 
@@ -248,7 +248,7 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	do {
 		sched_yield();
 		cxip_cq_progress(rxc->recv_cq);
-	} while (rxc->pte_state != C_PTLTE_ENABLED);
+	} while (rxc->rx_pte->state != C_PTLTE_ENABLED);
 
 	CXIP_DBG("RXC messaging enabled: %p\n", rxc);
 
@@ -389,7 +389,6 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	dlist_init(&rxc->msg_queue);
 	dlist_init(&rxc->replay_queue);
 	dlist_init(&rxc->sw_ux_list);
-	rxc->pte_state = C_PTLTE_DISABLED;
 	rxc->disabling = false;
 
 	rxc->rdzv_threshold = cxip_env.rdzv_threshold;
