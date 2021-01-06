@@ -421,6 +421,55 @@ void tcpx_rx_entry_free(struct tcpx_xfer_entry *rx_entry)
 	}
 }
 
+/* Must hold ep->lock. */
+static void tcpx_ep_cancel_rx(struct tcpx_ep *ep, void *context)
+{
+	struct slist_entry *cur, *prev;
+	struct tcpx_xfer_entry *xfer_entry;
+	struct tcpx_cq *cq;
+
+	/* To cancel an active receive, we would need to flush the socket of
+	 * all data associated with that message.  Since some of that data
+	 * may not have arrived yet, this would require additional state
+	 * tracking and complexity.  Fail the cancel in this case, since
+	 * the receive is already in process anyway.
+	 */
+	slist_foreach(&ep->rx_queue, cur, prev) {
+		xfer_entry = container_of(cur, struct tcpx_xfer_entry, entry);
+		if (xfer_entry->context == context) {
+			if (ep->cur_rx_entry == xfer_entry)
+				goto found;
+			break;
+		}
+	}
+
+	return;
+
+found:
+	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
+
+	slist_remove(&ep->rx_queue, cur, prev);
+	tcpx_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
+	tcpx_xfer_entry_free(cq, xfer_entry);
+}
+
+/* We currently only support canceling receives, which is the common case.
+ * Canceling an operation from the other queues is not trivial,
+ * especially if the operation has already been initiated.
+ */
+static ssize_t tcpx_ep_cancel(fid_t fid, void *context)
+{
+	struct tcpx_ep *ep;
+
+	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
+
+	fastlock_acquire(&ep->lock);
+	tcpx_ep_cancel_rx(ep, context);
+	fastlock_release(&ep->lock);
+
+	return 0;
+}
+
 static int tcpx_ep_close(struct fid *fid)
 {
 	struct tcpx_ep *ep;
@@ -560,7 +609,7 @@ int tcpx_ep_setopt(fid_t fid, int level, int optname,
 
 static struct fi_ops_ep tcpx_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = fi_no_cancel,
+	.cancel = tcpx_ep_cancel,
 	.getopt = tcpx_ep_getopt,
 	.setopt = tcpx_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
