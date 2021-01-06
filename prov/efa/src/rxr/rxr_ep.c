@@ -1636,6 +1636,8 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			ret = rxr_pkt_post_data(ep, tx_entry);
 			if (OFI_UNLIKELY(ret)) {
 				tx_entry->send_flags &= ~FI_MORE;
+				if (ret == -FI_EAGAIN)
+					goto out;
 				goto tx_err;
 			}
 		}
