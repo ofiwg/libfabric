@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2015-2021 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -58,6 +58,7 @@
 #include <ofi_rbuf.h>
 #include <ofi_list.h>
 #include <ofi_signal.h>
+#include <ofi_epoll.h>
 #include <ofi_util.h>
 #include <ofi_atomic.h>
 #include <ofi_iov.h>
@@ -128,6 +129,7 @@ struct smr_tx_entry {
 	struct smr_ep_name *map_name;
 	enum fi_hmem_iface	iface;
 	uint64_t		device;
+	int			fd;
 };
 
 struct smr_sar_entry {
@@ -208,6 +210,8 @@ struct smr_domain {
 #define SMR_PREFIX	"fi_shm://"
 #define SMR_PREFIX_NS	"fi_ns://"
 
+#define SMR_ZE_SOCK_PATH	"/dev/shm/ze_"
+
 static inline const char *smr_no_prefix(const char *addr)
 {
 	char *start;
@@ -231,6 +235,36 @@ static inline void *smr_get_ptr(void *base, uint64_t offset)
 	return (char *) base + (uintptr_t) offset;
 }
 
+extern struct dlist_entry sock_name_list;
+extern pthread_mutex_t sock_list_lock;
+
+struct smr_sock_name {
+	char name[SMR_SOCK_NAME_MAX];
+	struct dlist_entry entry;
+};
+
+enum smr_cmap_state {
+	SMR_CMAP_INIT = 0,
+	SMR_CMAP_SUCCESS,
+	SMR_CMAP_FAILED,
+};
+
+struct smr_cmap_entry {
+	enum smr_cmap_state	state;
+	int			device_fds[ZE_MAX_DEVICES];
+};
+
+struct smr_sock_info {
+	char			name[SMR_SOCK_NAME_MAX];
+	int			listen_sock;
+	ofi_epoll_t		epollfd;
+	struct fd_signal	signal;
+	pthread_t		listener_thread;
+	int			*my_fds;
+	int			nfds;
+	struct smr_cmap_entry	peers[SMR_MAX_PEERS];
+};
+
 struct smr_ep {
 	struct util_ep		util_ep;
 	smr_rx_comp_func	rx_comp;
@@ -250,6 +284,9 @@ struct smr_ep {
 	struct smr_queue	unexp_msg_queue;
 	struct smr_queue	unexp_tagged_queue;
 	struct dlist_entry	sar_list;
+
+	int			ep_idx;
+	struct smr_sock_info	*sock_info;
 };
 
 #define smr_ep_rx_flags(smr_ep) ((smr_ep)->util_ep.rx_op_flags)
@@ -264,6 +301,7 @@ static inline int smr_mmap_name(char *shm_name, const char *ep_name,
 
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
+void smr_ep_exchange_fds(struct smr_ep *ep, int64_t id);
 
 int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
@@ -286,6 +324,10 @@ void smr_format_inject(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t d
 void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
 		    size_t total_len, struct smr_region *smr,
 		    struct smr_resp *resp);
+int smr_format_ze_ipc(struct smr_ep *ep, int64_t id, struct smr_cmd *cmd,
+		      const struct iovec *iov, uint64_t device,
+		      size_t total_len, struct smr_region *smr,
+		      struct smr_resp *resp, struct smr_tx_entry *pend);
 int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
 		    const struct iovec *iov, size_t count, size_t total_len,
 		    struct smr_tx_entry *pend, struct smr_resp *resp);
@@ -336,6 +378,13 @@ static inline bool smr_cma_enabled(struct smr_ep *ep,
 		return ep->region->cma_cap_self == SMR_CMA_CAP_ON;
 	else
 		return ep->region->cma_cap_peer == SMR_CMA_CAP_ON;
+}
+
+static inline bool smr_ze_ipc_enabled(struct smr_region *smr,
+				      struct smr_region *peer_smr)
+{
+	return (smr->flags & SMR_FLAG_IPC_SOCK) &&
+	       (peer_smr->flags & SMR_FLAG_IPC_SOCK);
 }
 
 static inline int smr_cma_loop(pid_t pid, struct iovec *local,

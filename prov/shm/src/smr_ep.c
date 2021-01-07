@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved
+ * Copyright (c) 2013-2021 Intel Corporation. All rights reserved
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/uio.h>
+#include <sys/un.h>
 
 #include "ofi_iov.h"
 #include "ofi_hmem.h"
@@ -42,6 +43,8 @@ extern struct fi_ops_msg smr_msg_ops;
 extern struct fi_ops_tagged smr_tagged_ops;
 extern struct fi_ops_rma smr_rma_ops;
 extern struct fi_ops_atomic smr_atomic_ops;
+DEFINE_LIST(sock_name_list);
+pthread_mutex_t sock_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
 int smr_setname(fid_t fid, void *addr, size_t addrlen)
 {
@@ -350,6 +353,41 @@ void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov, size_t count,
 	memcpy(cmd->msg.data.iov, iov, sizeof(*iov) * count);
 }
 
+int smr_format_ze_ipc(struct smr_ep *ep, int64_t id, struct smr_cmd *cmd,
+		      const struct iovec *iov, uint64_t device,
+		      size_t total_len, struct smr_region *smr,
+		      struct smr_resp *resp, struct smr_tx_entry *pend)
+{
+	int ret;
+	void *base;
+
+	cmd->msg.hdr.op_src = smr_src_ipc;
+	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
+	cmd->msg.hdr.size = total_len;
+	cmd->msg.data.ipc_info.iface = FI_HMEM_ZE;
+
+	if (ep->sock_info->peers[id].state == SMR_CMAP_INIT)
+		smr_ep_exchange_fds(ep, id);
+	if (ep->sock_info->peers[id].state != SMR_CMAP_SUCCESS)
+		return -FI_EAGAIN;
+
+	ret = ze_hmem_get_base_addr(iov[0].iov_base, &base);
+	if (ret)
+		return ret;
+
+	ret = ze_hmem_get_shared_handle(ep->sock_info->my_fds[device],
+			base, &pend->fd,
+			(void **) &cmd->msg.data.ipc_info.fd_handle);
+	if (ret)
+		return ret;
+
+	cmd->msg.data.ipc_info.device = device;
+	cmd->msg.data.ipc_info.offset = (char *) iov[0].iov_base -
+					(char *) base;
+
+	return FI_SUCCESS;
+}
+
 int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
 		    const struct iovec *iov, size_t count, size_t total_len,
 		    struct smr_tx_entry *pend, struct smr_resp *resp)
@@ -509,11 +547,26 @@ void smr_format_sar(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t devi
 				&pending->bytes_done, &pending->next);
 }
 
+static void smr_cleanup_epoll(struct smr_sock_info *sock_info)
+{
+	fd_signal_free(&sock_info->signal);
+	ofi_epoll_close(sock_info->epollfd);
+}
+
 static int smr_ep_close(struct fid *fid)
 {
 	struct smr_ep *ep;
 
 	ep = container_of(fid, struct smr_ep, util_ep.ep_fid.fid);
+
+	if (ep->sock_info) {
+		fd_signal_set(&ep->sock_info->signal);
+		pthread_join(ep->sock_info->listener_thread, NULL);
+		close(ep->sock_info->listen_sock);
+		unlink(ep->sock_info->name);
+		smr_cleanup_epoll(ep->sock_info);
+		free(ep->sock_info);
+	}
 
 	ofi_endpoint_close(&ep->util_ep);
 
@@ -631,6 +684,336 @@ static int smr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	return ret;
 }
 
+static int smr_sendmsg_fd(int sock, int64_t id, int64_t peer_id,
+			  int *fds, int nfds)
+{
+	struct msghdr msg;
+	struct cmsghdr *cmsg;
+	struct iovec iov;
+	char *ctrl_buf;
+	size_t ctrl_size;
+	int ret;
+
+	ctrl_size = sizeof(*fds) * nfds;
+	ctrl_buf = calloc(CMSG_SPACE(ctrl_size), 1);
+	if (!ctrl_buf)
+		return -FI_ENOMEM;
+
+	iov.iov_base = &peer_id;
+	iov.iov_len = sizeof(peer_id);
+
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_control = ctrl_buf;
+	msg.msg_controllen = CMSG_SPACE(ctrl_size);
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+
+	cmsg = CMSG_FIRSTHDR(&msg);
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_type = SCM_RIGHTS;
+	cmsg->cmsg_len = CMSG_LEN(ctrl_size);
+	memcpy(CMSG_DATA(cmsg), fds, ctrl_size);
+
+	ret = sendmsg(sock, &msg, 0);
+	if (ret == sizeof(peer_id)) {
+		ret = FI_SUCCESS;
+	} else {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "sendmsg error\n");
+		ret = -FI_EIO;
+	}
+
+	free(ctrl_buf);
+	return ret;
+}
+
+static int smr_recvmsg_fd(int sock, int64_t *peer_id, int *fds, int nfds)
+{
+	struct msghdr msg;
+	struct cmsghdr *cmsg;
+	struct iovec iov;
+	char *ctrl_buf;
+	size_t ctrl_size;
+	int ret;
+
+	ctrl_size = sizeof(*fds) * nfds;
+	ctrl_buf = calloc(CMSG_SPACE(ctrl_size), 1);
+	if (!ctrl_buf)
+		return -FI_ENOMEM;
+
+	iov.iov_base = peer_id;
+	iov.iov_len = sizeof(*peer_id);
+
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_control = ctrl_buf;
+	msg.msg_controllen = CMSG_SPACE(ctrl_size);
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+
+	ret = recvmsg(sock, &msg, 0);
+	if (ret == sizeof(*peer_id)) {
+		ret = FI_SUCCESS;
+	} else {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "recvmsg error\n");
+		ret = -FI_EIO;
+		goto out;
+	}
+
+	assert(!(msg.msg_flags & (MSG_TRUNC | MSG_CTRUNC)));
+	cmsg = CMSG_FIRSTHDR(&msg);
+	assert(cmsg && cmsg->cmsg_len == CMSG_LEN(ctrl_size) &&
+	       cmsg->cmsg_level == SOL_SOCKET &&
+	       cmsg->cmsg_type == SCM_RIGHTS);
+	memcpy(fds, CMSG_DATA(cmsg), ctrl_size);
+out:
+	free(ctrl_buf);
+	return ret;
+}
+
+static void *smr_start_listener(void *args)
+{
+	struct smr_ep *ep = (struct smr_ep *) args;
+	struct sockaddr_un sockaddr;
+	void *ctx[SMR_MAX_PEERS + 1];
+	int i, ret, poll_fds, sock = -1;
+	int peer_fds[ZE_MAX_DEVICES];
+	socklen_t len;
+	int64_t id, peer_id;
+
+	ep->region->flags |= SMR_FLAG_IPC_SOCK;
+	while (1) {
+		poll_fds = ofi_epoll_wait(ep->sock_info->epollfd, ctx,
+					  SMR_MAX_PEERS + 1, -1);
+
+		if (poll_fds < 0) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"epoll error\n");
+			continue;
+		}
+
+		for (i = 0; i < poll_fds; i++) {
+			if (!ctx[i])
+				goto out;
+
+			sock = accept(ep->sock_info->listen_sock,
+				      (struct sockaddr *) &sockaddr, &len);
+			if (sock < 0) {
+				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+					"accept error\n");
+				continue;
+			}
+
+			FI_DBG(&smr_prov, FI_LOG_EP_CTRL,
+			       "EP accepted connection request from %s\n",
+			       sockaddr.sun_path);
+
+			ret = smr_recvmsg_fd(sock, &id, peer_fds,
+					     ep->sock_info->nfds);
+			if (!ret) {
+				memcpy(ep->sock_info->peers[id].device_fds,
+				       peer_fds, sizeof(*peer_fds) *
+				       ep->sock_info->nfds);
+
+				peer_id = smr_peer_data(ep->region)[id].addr.id;
+				ret = smr_sendmsg_fd(sock, id, peer_id,
+						ep->sock_info->my_fds,
+						ep->sock_info->nfds);
+				ep->sock_info->peers[id].state =
+					ret ? SMR_CMAP_FAILED :
+					SMR_CMAP_SUCCESS;
+			}
+
+			close(sock);
+			sock = -1;
+			unlink(sockaddr.sun_path);
+		}
+	}
+out:
+	close(ep->sock_info->listen_sock);
+	unlink(ep->sock_info->name);
+	return NULL;
+}
+
+static int smr_init_epoll(struct smr_sock_info *sock_info)
+{
+	int ret;
+
+	ret = ofi_epoll_create(&sock_info->epollfd);
+	if (ret < 0)
+		return ret;
+
+	ret = fd_signal_init(&sock_info->signal);
+	if (ret < 0)
+		goto err2;
+
+	ret = ofi_epoll_add(sock_info->epollfd,
+	                    sock_info->signal.fd[FI_READ_FD],
+	                    OFI_EPOLL_IN, NULL);
+	if (ret != 0)
+		goto err1;
+
+	ret = ofi_epoll_add(sock_info->epollfd, sock_info->listen_sock,
+			    OFI_EPOLL_IN, sock_info);
+	if (ret != 0)
+		goto err1;
+
+	return FI_SUCCESS;
+err1:
+	ofi_epoll_close(sock_info->epollfd);
+err2:
+	fd_signal_free(&sock_info->signal);
+	return ret;
+}
+
+void smr_ep_exchange_fds(struct smr_ep *ep, int64_t id)
+{
+	struct smr_region *peer_smr = smr_peer_region(ep->region, id);
+	struct sockaddr_un server_sockaddr = {0}, client_sockaddr = {0};
+	char *name1, *name2;
+	int ret = -1, sock = -1;
+	int64_t peer_id;
+	int peer_fds[ZE_MAX_DEVICES];
+
+	if (peer_smr->pid == ep->region->pid ||
+	    !(peer_smr->flags & SMR_FLAG_IPC_SOCK))
+		goto out;
+
+	sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (sock < 0)
+		goto out;
+
+	if (strcmp(smr_sock_name(ep->region), smr_sock_name(peer_smr)) < 1) {
+		name1 = smr_sock_name(ep->region);
+		name2 = smr_sock_name(peer_smr);
+	} else {
+		name1 = smr_sock_name(peer_smr);
+		name2 = smr_sock_name(ep->region);
+	}
+	client_sockaddr.sun_family = AF_UNIX;
+	snprintf(client_sockaddr.sun_path, SMR_SOCK_NAME_MAX, "%s%s:%s",
+		 SMR_ZE_SOCK_PATH, name1, name2);
+
+	ret = bind(sock, (struct sockaddr *) &client_sockaddr,
+		  (socklen_t) sizeof(client_sockaddr));
+	if (ret == -1) {
+		if (errno != EADDRINUSE) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "bind error\n");
+			ep->sock_info->peers[id].state = SMR_CMAP_FAILED;
+		}
+		close(sock);
+		return;
+	}
+
+	server_sockaddr.sun_family = AF_UNIX;
+	snprintf(server_sockaddr.sun_path, SMR_SOCK_NAME_MAX, "%s%s",
+		 SMR_ZE_SOCK_PATH, smr_sock_name(peer_smr));
+
+	ret = connect(sock, (struct sockaddr *) &server_sockaddr,
+		      sizeof(server_sockaddr));
+	if (ret == -1)
+		goto cleanup;
+
+	FI_DBG(&smr_prov, FI_LOG_EP_CTRL, "EP connected to UNIX socket %s\n",
+	       server_sockaddr.sun_path);
+
+	peer_id = smr_peer_data(ep->region)[id].addr.id;
+	ret = smr_sendmsg_fd(sock, id, peer_id, ep->sock_info->my_fds,
+			     ep->sock_info->nfds);
+	if (ret)
+		goto cleanup;
+
+	ret = smr_recvmsg_fd(sock, &id, peer_fds, ep->sock_info->nfds);
+	if (ret)
+		goto cleanup;
+
+	memcpy(ep->sock_info->peers[id].device_fds, peer_fds,
+	       sizeof(*peer_fds) * ep->sock_info->nfds);
+
+cleanup:
+	close(sock);
+	unlink(client_sockaddr.sun_path);
+out:
+	ep->sock_info->peers[id].state = ret ?
+		SMR_CMAP_FAILED : SMR_CMAP_SUCCESS;
+}
+
+static void smr_init_ipc_socket(struct smr_ep *ep)
+{
+	struct smr_domain *domain;
+	struct smr_sock_name *sock_name;
+	struct sockaddr_un sockaddr = {0};
+	int ret;
+
+	ep->sock_info = calloc(1, sizeof(*ep->sock_info));
+	if (!ep->sock_info)
+		goto err_out;
+
+	ep->sock_info->listen_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (ep->sock_info->listen_sock < 0)
+		goto free;
+
+	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
+	snprintf(smr_sock_name(ep->region), SMR_SOCK_NAME_MAX,
+		 "%ld:%d:%d", (long) ep->region->pid, domain->dom_idx,
+		 ep->ep_idx);
+
+	sockaddr.sun_family = AF_UNIX;
+	snprintf(sockaddr.sun_path, SMR_SOCK_NAME_MAX,
+		 "%s%s", SMR_ZE_SOCK_PATH, smr_sock_name(ep->region));
+
+	ret = bind(ep->sock_info->listen_sock, (struct sockaddr *) &sockaddr,
+		   (socklen_t) sizeof(sockaddr));
+	if (ret)
+		goto close;
+
+	ret = listen(ep->sock_info->listen_sock, SMR_MAX_PEERS);
+	if (ret)
+		goto close;
+
+	FI_DBG(&smr_prov, FI_LOG_EP_CTRL, "EP listening on UNIX socket %s\n",
+	       sockaddr.sun_path);
+
+	ret = smr_init_epoll(ep->sock_info);
+	if (ret)
+		goto close;
+
+	sock_name = calloc(1, sizeof(*sock_name));
+	if (!sock_name)
+		goto cleanup;
+
+	memcpy(sock_name->name, sockaddr.sun_path, strlen(sockaddr.sun_path));
+	memcpy(ep->sock_info->name, sockaddr.sun_path,
+	       strlen(sockaddr.sun_path));
+
+	pthread_mutex_lock(&sock_list_lock);
+	dlist_insert_tail(&sock_name->entry, &sock_name_list);
+	pthread_mutex_unlock(&sock_list_lock);
+
+	ep->sock_info->my_fds = ze_hmem_get_dev_fds(&ep->sock_info->nfds);
+	ret = pthread_create(&ep->sock_info->listener_thread, NULL,
+			     &smr_start_listener, ep);
+	if (ret)
+		goto remove;
+
+	return;
+
+remove:
+	pthread_mutex_lock(&sock_list_lock);
+	dlist_remove(&sock_name->entry);
+	pthread_mutex_unlock(&sock_list_lock);
+	free(sock_name);
+cleanup:
+	smr_cleanup_epoll(ep->sock_info);
+close:
+	close(ep->sock_info->listen_sock);
+	unlink(sockaddr.sun_path);
+free:
+	free(ep->sock_info);
+	ep->sock_info = NULL;
+err_out:
+	FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "Unable to initialize IPC socket."
+		"Defaulting to SAR for device transfers\n");
+}
+
 static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	struct smr_attr attr;
@@ -654,6 +1037,14 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		ret = smr_create(&smr_prov, av->smr_map, &attr, &ep->region);
 		if (ret)
 			return ret;
+
+		if (ep->util_ep.caps & FI_HMEM) {
+			ep->region->cma_cap_peer = SMR_CMA_CAP_OFF;
+			ep->region->cma_cap_self = SMR_CMA_CAP_OFF;
+			if (ze_hmem_p2p_enabled())
+				smr_init_ipc_socket(ep);
+		}
+
 		smr_exchange_all_peers(ep->region);
 		break;
 	default:
@@ -693,7 +1084,7 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 {
 	struct smr_ep *ep;
 	struct smr_domain *smr_domain;
-	int ret, ep_idx;
+	int ret;
 	char name[SMR_NAME_MAX];
 
 	ep = calloc(1, sizeof(*ep));
@@ -703,13 +1094,12 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	smr_domain = container_of(domain, struct smr_domain, util_domain.domain_fid);
 
 	fastlock_acquire(&smr_domain->util_domain.lock);
-	ep_idx = smr_domain->ep_idx++;
+	ep->ep_idx = smr_domain->ep_idx++;
 	fastlock_release(&smr_domain->util_domain.lock);
 	ret = smr_endpoint_name(name, info->src_addr, info->src_addrlen,
-			        smr_domain->dom_idx, ep_idx);
+			        smr_domain->dom_idx, ep->ep_idx);
 	if (ret)
 		goto err2;
-
 	ret = smr_setname(&ep->util_ep.ep_fid.fid, name, SMR_NAME_MAX);
 	if (ret)
 		goto err2;

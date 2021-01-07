@@ -71,12 +71,6 @@ static const ze_device_mem_alloc_desc_t device_desc = {
 	.ordinal	= 0,
 };
 
-static const ze_host_mem_alloc_desc_t host_desc = {
-	.stype		= ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC,
-	.pNext		= NULL,
-	.flags		= 0,
-};
-
 int ft_ze_init(void)
 {
 	ze_driver_handle_t driver;
@@ -137,9 +131,8 @@ int ft_ze_cleanup(void)
 
 int ft_ze_alloc(uint64_t device, void **buf, size_t size)
 {
-	return zeMemAllocShared(context, &device_desc, &host_desc,
-				size, 16, devices[device], buf) ?
-				-FI_EINVAL : 0;
+	return zeMemAllocDevice(context, &device_desc, size, 16,
+				devices[device], buf) ? -FI_EINVAL : 0;
 }
 
 int ft_ze_free(void *buf)

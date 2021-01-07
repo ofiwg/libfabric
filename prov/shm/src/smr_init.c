@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015-2021 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -99,7 +99,8 @@ static int smr_shm_space_check(size_t tx_count, size_t rx_count)
 	shm_size_needed = num_of_core *
 			  smr_calculate_size_offsets(tx_count, rx_count,
 						     NULL, NULL, NULL,
-						     NULL, NULL, NULL);
+						     NULL, NULL, NULL,
+						     NULL);
 	err = statvfs(shm_fs, &stat);
 	if (err) {
 		FI_WARN(&smr_prov, FI_LOG_CORE,

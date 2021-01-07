@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved
+ * Copyright (c) 2013-2021 Intel Corporation. All rights reserved
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -213,8 +213,13 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 			smr_format_iov(cmd, iov, iov_count, total_len, ep->region,
 				       resp);
 		} else {
-			if (total_len <= smr_env.sar_threshold ||
-			    iface != FI_HMEM_SYSTEM) {
+			if (iface == FI_HMEM_ZE && iov_count == 1 &&
+			    smr_ze_ipc_enabled(ep->region, peer_smr)) {
+				ret = smr_format_ze_ipc(ep, id, cmd, iov,
+					device, total_len, ep->region,
+					resp, pend);
+			} else if (total_len <= smr_env.sar_threshold ||
+				   iface != FI_HMEM_SYSTEM) {
 				if (!peer_smr->sar_cnt) {
 					ret = -FI_EAGAIN;
 				} else {

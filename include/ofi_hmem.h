@@ -1,5 +1,6 @@
 /*
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+ * (C) Copyright 2020-2021 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -116,13 +117,21 @@ int cuda_gdrcopy_hmem_cleanup(void);
 int cuda_gdrcopy_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
 int cuda_gdrcopy_dev_unregister(uint64_t handle);
 
+#define ZE_MAX_DEVICES 4
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);
 int ze_hmem_init(void);
 int ze_hmem_cleanup(void);
 bool ze_is_addr_valid(const void *addr);
 int ze_hmem_get_handle(void *dev_buf, void **handle);
 int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr);
+int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
+			      void **handle);
+int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
+			       uint64_t device, void **ipc_ptr);
 int ze_hmem_close_handle(void *ipc_ptr);
+bool ze_hmem_p2p_enabled(void);
+int ze_hmem_get_base_addr(const void *ptr, void **base);
+int *ze_hmem_get_dev_fds(int *nfds);
 
 static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
 			     size_t size)
@@ -166,6 +175,11 @@ static inline int ofi_hmem_host_unregister_noop(void *ptr)
 	return FI_SUCCESS;
 }
 
+static inline int ofi_hmem_no_base_addr(const void *ptr, void **base)
+{
+	return -FI_ENOSYS;
+}
+
 ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,
 			       enum fi_hmem_iface hmem_iface, uint64_t device,
 			       const struct iovec *hmem_iov,
@@ -180,6 +194,8 @@ int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *dev_buf, void **handle);
 int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
 			 uint64_t device, void **ipc_ptr);
 int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr);
+int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *ptr,
+			   void **base);
 
 void ofi_hmem_init(void);
 void ofi_hmem_cleanup(void);

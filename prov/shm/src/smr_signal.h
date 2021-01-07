@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2020-2021 Intel Corporation.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -41,11 +42,16 @@ struct sigaction *old_action;
 static void smr_handle_signal(int signum, siginfo_t *info, void *ucontext)
 {
 	struct smr_ep_name *ep_name;
+	struct smr_sock_name *sock_name;
 	int ret;
 
 	dlist_foreach_container(&ep_name_list, struct smr_ep_name,
 				ep_name, entry) {
 		shm_unlink(ep_name->name);
+	}
+	dlist_foreach_container(&sock_name_list, struct smr_sock_name,
+				sock_name, entry) {
+		unlink(sock_name->name);
 	}
 
 	/* Register the original signum handler, SIG_DFL or otherwise */

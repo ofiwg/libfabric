@@ -1,5 +1,6 @@
 /*
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+ * (C) Copyright 2020-2021 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -52,6 +53,7 @@ struct ofi_hmem_ops {
 	int (*close_handle)(void *ipc_ptr);
 	int (*host_register)(void *ptr, size_t size);
 	int (*host_unregister)(void *ptr);
+	int (*get_base_addr)(const void *ptr, void **base);
 };
 
 static struct ofi_hmem_ops hmem_ops[] = {
@@ -66,6 +68,7 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.close_handle = ofi_hmem_no_close_handle,
 		.host_register = ofi_hmem_register_noop,
 		.host_unregister = ofi_hmem_host_unregister_noop,
+		.get_base_addr = ofi_hmem_no_base_addr,
 	},
 	[FI_HMEM_CUDA] = {
 		.initialized = false,
@@ -79,6 +82,7 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.close_handle = ofi_hmem_no_close_handle,
 		.host_register = cuda_host_register,
 		.host_unregister = cuda_host_unregister,
+		.get_base_addr = ofi_hmem_no_base_addr,
 	},
 	[FI_HMEM_ROCR] = {
 		.initialized = false,
@@ -92,6 +96,7 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.close_handle = ofi_hmem_no_close_handle,
 		.host_register = rocr_host_register,
 		.host_unregister = rocr_host_unregister,
+		.get_base_addr = ofi_hmem_no_base_addr,
 	},
 	[FI_HMEM_ZE] = {
 		.initialized = false,
@@ -105,6 +110,7 @@ static struct ofi_hmem_ops hmem_ops[] = {
 		.close_handle = ze_hmem_close_handle,
 		.host_register = ofi_hmem_register_noop,
 		.host_unregister = ofi_hmem_host_unregister_noop,
+		.get_base_addr = ze_hmem_get_base_addr,
 	},
 };
 
@@ -199,6 +205,12 @@ int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
 int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr)
 {
 	return hmem_ops[iface].close_handle(ipc_ptr);
+}
+
+int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *ptr,
+			   void **base)
+{
+	return hmem_ops[iface].get_base_addr(ptr, base);
 }
 
 void ofi_hmem_init(void)
