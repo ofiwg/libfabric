@@ -58,7 +58,6 @@ static void tcpx_process_tx_entry(struct tcpx_xfer_entry *tx_entry)
 
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
-		tcpx_ep_disable(tx_entry->ep, 0);
 		tcpx_cq_report_error(tx_entry->ep->util_ep.tx_cq,
 				     tx_entry, -ret);
 	} else {
