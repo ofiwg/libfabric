@@ -935,6 +935,58 @@ static int cxip_ux_send_zb(struct cxip_req *match_req,
 	return FI_SUCCESS;
 }
 
+/* Must hold rxc->rx_lock. */
+static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
+					struct cxip_req *req,
+					const union c_event *event)
+{
+	int ret;
+	struct cxip_deferred_event *def_ev;
+
+	def_ev = match_put_event(rxc, event);
+	if (!def_ev) {
+		/* Put Overflow event pending. Defer this event until it
+		 * arrives.
+		 */
+		def_ev = defer_put_event(rxc, req, event);
+		if (!def_ev)
+			return -FI_EAGAIN;
+
+		return FI_SUCCESS;
+	}
+
+	CXIP_DBG("Overflow beat Put event: %p\n", def_ev->req);
+
+	if (def_ev->ux_send) {
+		/* Send was onloaded */
+		def_ev->ux_send->oflow_req = req;
+		def_ev->ux_send->put_ev = *event;
+		CXIP_DBG("put complete: %p\n", def_ev->req);
+
+		if (!--def_ev->req->search.puts_pending &&
+		    def_ev->req->search.complete)
+			cxip_ux_onload_complete(def_ev->req);
+	} else {
+		if (event->tgt_long.rendezvous)
+			ret = cxip_ux_send_rdzv(def_ev->req, req, event,
+						def_ev->mrecv_start,
+						def_ev->mrecv_len);
+		else
+			ret = cxip_ux_send(def_ev->req, req, event,
+					   def_ev->mrecv_start,
+					   def_ev->mrecv_len);
+		if (ret != FI_SUCCESS)
+			return -FI_EAGAIN;
+
+		cxip_recv_req_dequeue_nolock(def_ev->req);
+	}
+
+	dlist_remove(&def_ev->rxc_entry);
+	free(def_ev);
+
+	return FI_SUCCESS;
+}
+
 /*
  * cxip_oflow_sink_cb() - Process an Overflow buffer event the sink buffer.
  *
@@ -947,7 +999,6 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	struct cxip_rxc *rxc = req->oflow.rxc;
-	struct cxip_deferred_event *def_ev;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
@@ -967,133 +1018,16 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 		cxip_cq_req_free(req);
 		return FI_SUCCESS;
 	case C_EVENT_PUT:
-		/* Put event handling is complicated. Handle below. */
-		break;
+		fastlock_acquire(&rxc->rx_lock);
+		ret = cxip_oflow_process_put_event(rxc, req, event);
+		fastlock_release(&rxc->rx_lock);
+
+		return ret;
 	default:
 		CXIP_WARN("Unexpected event type: %d\n",
 			  event->hdr.event_type);
 		return FI_SUCCESS;
 	}
-
-	/* Handle Put events */
-	fastlock_acquire(&rxc->rx_lock);
-
-	/* Check for a previously received Put Overflow event */
-	def_ev = match_put_event(rxc, event);
-	if (!def_ev) {
-		/* Put Overflow event pending. Defer this event until it
-		 * arrives.
-		 */
-		def_ev = defer_put_event(rxc, req, event);
-		if (!def_ev)
-			goto err_put;
-
-		fastlock_release(&rxc->rx_lock);
-
-		return FI_SUCCESS;
-	}
-
-	if (def_ev->ux_send) {
-		/* Send was onloaded */
-		def_ev->ux_send->oflow_req = req;
-		def_ev->ux_send->put_ev = *event;
-		CXIP_DBG("put complete: %p\n", def_ev->req);
-
-		if (!--def_ev->req->search.puts_pending &&
-		    def_ev->req->search.complete) {
-			cxip_ux_onload_complete(def_ev->req);
-			CXIP_DBG("onload complete: %p\n", def_ev->req);
-		}
-	} else {
-		ret = cxip_ux_send(def_ev->req, req, event,
-				   def_ev->mrecv_start, def_ev->mrecv_len);
-		if (ret != FI_SUCCESS)
-			goto err_put;
-
-		cxip_recv_req_dequeue_nolock(def_ev->req);
-	}
-
-	dlist_remove(&def_ev->rxc_entry);
-	free(def_ev);
-
-	fastlock_release(&rxc->rx_lock);
-
-	CXIP_DBG("Overflow beat Put event: %p\n", def_ev->req);
-
-	return FI_SUCCESS;
-
-err_put:
-	fastlock_release(&rxc->rx_lock);
-
-	return -FI_EAGAIN;
-}
-
-/*
- * cxip_oflow_rdzv_cb() - Progress an Overflow buffer rendezvous event.
- *
- * All target events which are related to a offloaded rendezvous Put operation
- * have the rendezvous bit set. Handle all rendezvous events from an Overflow
- * buffer. See cxip_oflow_cb() for more details about Overflow buffer event
- * handling.
- */
-static int
-cxip_oflow_rdzv_cb(struct cxip_req *req, const union c_event *event)
-{
-	struct cxip_rxc *rxc = req->oflow.rxc;
-	struct cxip_oflow_buf *oflow_buf = req->oflow.oflow_buf;
-	struct cxip_deferred_event *def_ev;
-	int ret;
-
-	if (event->hdr.event_type != C_EVENT_PUT) {
-		CXIP_WARN("Unexpected event type: %d\n",
-			  event->hdr.event_type);
-		return FI_SUCCESS;
-	}
-
-	/* Handle Put events */
-	fastlock_acquire(&rxc->rx_lock);
-
-	if (event->tgt_long.auto_unlinked)
-		oflow_buf->hw_consumed = event->tgt_long.start -
-			CXI_VA_TO_IOVA(oflow_buf->md->md, oflow_buf->buf)
-			+ event->tgt_long.mlength;
-
-	/* Check for a previously received Put Overflow event */
-	def_ev = match_put_event(rxc, event);
-	if (!def_ev) {
-		/* Put Overflow event pending. Defer this event until it
-		 * arrives.
-		 */
-		def_ev = defer_put_event(rxc, req, event);
-		if (!def_ev)
-			goto err_put;
-
-		fastlock_release(&rxc->rx_lock);
-
-		return FI_SUCCESS;
-	}
-
-	ret = cxip_ux_send_rdzv(def_ev->req, req, event,
-				def_ev->mrecv_start,
-				def_ev->mrecv_len);
-	if (ret != FI_SUCCESS)
-		goto err_put;
-
-	cxip_recv_req_dequeue_nolock(def_ev->req);
-
-	dlist_remove(&def_ev->rxc_entry);
-	free(def_ev);
-
-	fastlock_release(&rxc->rx_lock);
-
-	CXIP_DBG("Overflow beat Put event: %p\n", def_ev->req);
-
-	return FI_SUCCESS;
-
-err_put:
-	fastlock_release(&rxc->rx_lock);
-
-	return -FI_EAGAIN;
 }
 
 int cxip_rxc_eager_replenish(struct cxip_rxc *rxc);
@@ -1137,12 +1071,8 @@ int cxip_rxc_eager_replenish(struct cxip_rxc *rxc);
 static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_rxc *rxc = req->oflow.rxc;
-	struct cxip_deferred_event *def_ev;
 	struct cxip_oflow_buf *oflow_buf = req->oflow.oflow_buf;
 	int ret;
-
-	if (event->tgt_long.rendezvous)
-		return cxip_oflow_rdzv_cb(req, event);
 
 	fastlock_acquire(&rxc->rx_lock);
 
@@ -1221,52 +1151,10 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	}
 
 	/* Handle Put events */
-
-	/* Check for a previously received Put Overflow event */
-	def_ev = match_put_event(rxc, event);
-	if (!def_ev) {
-		/* Put Overflow event pending. Defer this event until it
-		 * arrives.
-		 */
-		def_ev = defer_put_event(rxc, req, event);
-		if (!def_ev)
-			goto err_put;
-
-		fastlock_release(&rxc->rx_lock);
-
-		return FI_SUCCESS;
-	}
-
-	if (def_ev->ux_send) {
-		/* Send was onloaded */
-		def_ev->ux_send->oflow_req = req;
-		def_ev->ux_send->put_ev = *event;
-
-		if (!--def_ev->req->search.puts_pending &&
-		    def_ev->req->search.complete)
-			cxip_ux_onload_complete(def_ev->req);
-	} else {
-		ret = cxip_ux_send(def_ev->req, req, event,
-				   def_ev->mrecv_start, def_ev->mrecv_len);
-		if (ret != FI_SUCCESS)
-			goto err_put;
-
-		cxip_recv_req_dequeue_nolock(def_ev->req);
-	}
-
-	dlist_remove(&def_ev->rxc_entry);
-	free(def_ev);
-
+	ret = cxip_oflow_process_put_event(rxc, req, event);
 	fastlock_release(&rxc->rx_lock);
 
-	CXIP_DBG("Overflow beat Put event: %p\n", def_ev->req);
-
-	return FI_SUCCESS;
-
-err_put:
-	fastlock_release(&rxc->rx_lock);
-
-	return -FI_EAGAIN;
+	return ret;
 }
 
 /*
