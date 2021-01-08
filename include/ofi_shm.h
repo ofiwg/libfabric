@@ -186,12 +186,7 @@ struct smr_cmd {
 #define SMR_SAR_SIZE		16384
 
 #define SMR_NAME_MAX		256
-
-#ifdef UNIX_PATH_MAX
-#define SMR_SOCK_NAME_MAX UNIX_PATH_MAX
-#else
-#define SMR_SOCK_NAME_MAX 92
-#endif
+#define SMR_SOCK_NAME_MAX sizeof(((struct sockaddr_un *)0)->sun_path)
 
 struct smr_addr {
 	char		name[SMR_NAME_MAX];

@@ -823,7 +823,6 @@ static void *smr_start_listener(void *args)
 			}
 
 			close(sock);
-			sock = -1;
 			unlink(sockaddr.sun_path);
 		}
 	}
