@@ -845,6 +845,14 @@ static void cxip_query_if_list(struct slist *if_list)
 	}
 
 	for (i = 0; i < cxi_dev_list->count; i++) {
+		if (!getenv("CXIP_SKIP_RH_CHECK") &&
+		    cxi_dev_list->info[i].device_platform == C_PLATFORM_ASIC &&
+		    !cxil_rh_running(&cxi_dev_list->info[i])) {
+			CXIP_WARN("CXI retry handler not running for device: %s\n",
+				  cxi_dev_list->info[i].device_name);
+			continue;
+		}
+
 		if_entry = calloc(1, sizeof(struct cxip_if));
 		if_entry->info = &cxi_dev_list->info[i];
 		ofi_atomic_initialize32(&if_entry->ref, 0);
