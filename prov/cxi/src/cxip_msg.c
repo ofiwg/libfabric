@@ -28,9 +28,12 @@
 "enable flow-control recovery (experimental), set environment variable\n" \
 "FI_CXI_FC_RECOVERY=1.\n\n"
 
+#define FC_SW_EP_MSG "Flow control triggered due to failure to append LE. "\
+"Software endpoint mode required.\n"
+
 static void cxip_ux_onload_complete(struct cxip_req *req);
 static int cxip_ux_onload(struct cxip_rxc *rxc);
-static int cxip_recv_req_queue(struct cxip_req *req);
+static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state);
 static int cxip_recv_req_dropped(struct cxip_req *req);
 static void cxip_recv_req_dequeue_nolock(struct cxip_req *req);
 static void cxip_recv_req_dequeue(struct cxip_req *req);
@@ -942,6 +945,11 @@ static int cxip_ux_send_zb(struct cxip_req *match_req,
 	return FI_SUCCESS;
 }
 
+static bool cxip_ux_is_onload_complete(struct cxip_req *req)
+{
+	return !req->search.puts_pending && req->search.complete;
+}
+
 /* Must hold rxc->rx_lock. */
 static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 					struct cxip_req *req,
@@ -968,10 +976,10 @@ static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 		/* Send was onloaded */
 		def_ev->ux_send->oflow_req = req;
 		def_ev->ux_send->put_ev = *event;
+		def_ev->req->search.puts_pending--;
 		CXIP_DBG("put complete: %p\n", def_ev->req);
 
-		if (!--def_ev->req->search.puts_pending &&
-		    def_ev->req->search.complete)
+		if (cxip_ux_is_onload_complete(def_ev->req))
 			cxip_ux_onload_complete(def_ev->req);
 	} else {
 		if (event->tgt_long.rendezvous)
@@ -1039,6 +1047,37 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 
 int cxip_rxc_eager_replenish(struct cxip_rxc *rxc);
 
+static int cxip_recv_onload_flow_control(struct cxip_rxc *rxc)
+{
+	int ret;
+
+	fastlock_acquire(&rxc->lock);
+
+	assert(rxc->state == RXC_ENABLED ||
+	       rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
+	       rxc->state == RXC_FLOW_CONTROL);
+
+	/* Having flow control triggered while in flow control is a sign of LE
+	 * exhaustion. Software endpoint mode is required to scale past hardware
+	 * LE limit.
+	 */
+	if (rxc->state == RXC_FLOW_CONTROL) {
+		CXIP_FATAL(FC_SW_EP_MSG);
+	} else if (rxc->state == RXC_ONLOAD_FLOW_CONTROL) {
+		fastlock_release(&rxc->lock);
+		return FI_SUCCESS;
+	}
+
+	ret = cxip_pte_set_state(rxc->rx_pte, rxc->rx_cmdq, C_PTLTE_DISABLED,
+				 0);
+	if (ret == FI_SUCCESS)
+		rxc->state = RXC_ONLOAD_FLOW_CONTROL;
+
+	fastlock_release(&rxc->lock);
+
+	return ret;
+}
+
 /*
  * cxip_oflow_cb() - Process an Overflow buffer event.
  *
@@ -1079,21 +1118,21 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_rxc *rxc = req->oflow.rxc;
 	struct cxip_oflow_buf *oflow_buf = req->oflow.oflow_buf;
-	int ret;
+	int ret = FI_SUCCESS;
 
 	fastlock_acquire(&rxc->rx_lock);
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
 		if (cxi_event_rc(event) == C_RC_NO_SPACE) {
-			/* When all LEs are exhausted and Overflow space fails
-			 * to be added, we can encounter deadlocks.
-			 */
-			CXIP_FATAL("Eager buffer dropped: %p\n", req);
+			CXIP_WARN("Failed to append oflow buffer due to LE exhaustion\n");
 
-			/* Clean up dropped buffer */
-			ofi_atomic_dec32(&rxc->oflow_bufs_submitted);
-			oflow_req_put_bytes(req, rxc->oflow_buf_size);
+			ret = cxip_recv_onload_flow_control(rxc);
+			if (ret == FI_SUCCESS) {
+				/* Clean up dropped buffer */
+				ofi_atomic_dec32(&rxc->oflow_bufs_submitted);
+				oflow_req_put_bytes(req, rxc->oflow_buf_size);
+			}
 		} else {
 			assert(cxi_event_rc(event) == C_RC_OK);
 
@@ -1104,7 +1143,7 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 		fastlock_release(&rxc->rx_lock);
 
-		return FI_SUCCESS;
+		return ret;
 	case C_EVENT_UNLINK:
 		assert(cxi_event_rc(event) == C_RC_OK);
 
@@ -1683,11 +1722,6 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	int ret;
 
 	switch (event->hdr.event_type) {
-	case C_EVENT_LINK:
-		assert(cxi_tgt_event_rc(event) == C_RC_NO_SPACE);
-
-		cxip_recv_req_dropped(req);
-		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
 		/* TODO Handle unlink errors. */
 		assert(cxi_event_rc(event) == C_RC_OK);
@@ -1876,6 +1910,21 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_deferred_event *def_ev;
 	bool rdzv = false;
 
+	/* Transition into onload and flow control if an append fails. */
+	if (event->hdr.event_type == C_EVENT_LINK) {
+		if (cxi_tgt_event_rc(event) != C_RC_NO_SPACE)
+			CXIP_FATAL("Unexpected link event rc: %d\n",
+				   cxi_tgt_event_rc(event));
+
+		CXIP_WARN("Failed to append user buffer due to LE exhaustion\n");
+
+		ret = cxip_recv_onload_flow_control(rxc);
+		if (ret == FI_SUCCESS)
+			cxip_recv_req_dropped(req);
+
+		return ret;
+	}
+
 	/* All events related to an offloaded rendezvous receive will be
 	 * handled by cxip_recv_rdzv_cb(). Those events are identified by the
 	 * event rendezvous field. One exception is a Reply event generated
@@ -1893,11 +1942,6 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		return cxip_recv_rdzv_cb(req, event);
 
 	switch (event->hdr.event_type) {
-	case C_EVENT_LINK:
-		assert(cxi_tgt_event_rc(event) == C_RC_NO_SPACE);
-
-		cxip_recv_req_dropped(req);
-		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
 		if (!event->tgt_long.auto_unlinked) {
 			req->recv.unlinked = true;
@@ -2048,9 +2092,6 @@ int cxip_recv_reenable(struct cxip_rxc *rxc)
 	struct cxip_fc_drops *fc_drops;
 	int ret __attribute__((unused));
 
-	if (rxc->rx_pte->state == C_PTLTE_ENABLED || rxc->enable_pending)
-		return FI_SUCCESS;
-
 	/* Check if we're ready to re-enable the RX queue */
 	dlist_foreach_container(&rxc->fc_drops, struct cxip_fc_drops,
 				fc_drops, rxc_entry) {
@@ -2150,8 +2191,13 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
 	CXIP_DBG("Processed drops: %d NIC: %#x TXC: %d RXC: %p\n",
 		 drops, nic_addr, txc_id, rxc);
 
-	ret = cxip_recv_reenable(rxc);
-	assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
+	/* Wait until search and delete completes before attempting to
+	 * re-enable.
+	 */
+	if (rxc->state == RXC_FLOW_CONTROL) {
+		ret = cxip_recv_reenable(rxc);
+		assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
+	}
 
 	fastlock_release(&rxc->lock);
 
@@ -2174,12 +2220,6 @@ static int cxip_recv_replay(struct cxip_rxc *rxc)
 	bool restart_seq = true;
 	int ret;
 
-	/* Wait until all outstanding Receives complete before replaying. */
-	if (!dlist_empty(&rxc->msg_queue) || rxc->searches_pending)
-		return -FI_EAGAIN;
-
-	rxc->append_disabled = false;
-
 	ret = cxip_rxc_eager_replenish(rxc);
 	if (ret != FI_SUCCESS)
 		CXIP_WARN("cxip_rxc_eager_replenish failed: %d\n", ret);
@@ -2191,7 +2231,11 @@ static int cxip_recv_replay(struct cxip_rxc *rxc)
 
 		CXIP_DBG("Replaying: %p\n", req);
 
-		ret = cxip_recv_req_queue(req);
+		/* Since the RXC and PtlTE are in a controlled state and no new
+		 * user receives are being posted, it is safe to ignore the RXC
+		 * state when replaying failed user posted receives.
+		 */
+		ret = cxip_recv_req_queue(req, false);
 
 		/* Match made in software? */
 		if (ret == -FI_EALREADY)
@@ -2252,12 +2296,13 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 	struct cxip_rxc *rxc = req->search.rxc;
 	int ret __attribute__((unused));
 
+	rxc->state = RXC_FLOW_CONTROL;
+
 	CXIP_DBG("UX onload complete (sw_ux_list_len: %d): %p\n",
 		 rxc->sw_ux_list_len, rxc);
 
 	ofi_atomic_dec32(&rxc->orx_reqs);
 	cxip_cq_req_free(req);
-	rxc->searches_pending--;
 
 	ret = cxip_recv_replay(rxc);
 	assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
@@ -2278,7 +2323,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 
 	fastlock_acquire(&rxc->lock);
 
-	assert(rxc->searches_pending);
+	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL);
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_PUT_OVERFLOW:
@@ -2324,7 +2369,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_SEARCH:
 		req->search.complete = true;
 
-		if (!req->search.puts_pending)
+		if (cxip_ux_is_onload_complete(req))
 			cxip_ux_onload_complete(req);
 
 		break;
@@ -2350,9 +2395,7 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	union c_cmdu cmd = {};
 	int ret;
 
-	/* Allow one search at a time. */
-	if (rxc->searches_pending)
-		return FI_SUCCESS;
+	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL);
 
 	/* Populate request */
 	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
@@ -2393,8 +2436,6 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 
 	fastlock_release(&rxc->rx_cmdq->lock);
 
-	rxc->searches_pending++;
-
 	return FI_SUCCESS;
 }
 
@@ -2410,26 +2451,42 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 
 	switch (state) {
 	case C_PTLTE_ENABLED:
-		assert(rxc->enable_pending);
-
-		rxc->enable_pending = false;
+		assert(rxc->state == RXC_FLOW_CONTROL ||
+		       rxc->state == RXC_DISABLED);
 
 		CXIP_DBG("Enabled Receive PTE: %p\n", rxc);
 
-		ret = cxip_recv_resume(rxc);
+		if (rxc->state == RXC_FLOW_CONTROL) {
+			ret = cxip_recv_resume(rxc);
+			assert(ret == FI_SUCCESS);
+		}
+
+		rxc->state = RXC_ENABLED;
+		break;
+
+	case C_PTLTE_DISABLED:
+		if (rxc->state == RXC_DISABLED)
+			break;
+
+		/* Incorrect drop count was used. Another attempt will be made
+		 * when a peer sends a sideband drop message.
+		 */
+		if (rxc->state == RXC_FLOW_CONTROL) {
+			CXIP_WARN("Failed to reenable PtlTE while in flow control\n");
+			break;
+		}
+
+		assert(rxc->state == RXC_ENABLED ||
+		       rxc->state == RXC_ONLOAD_FLOW_CONTROL);
+
+		rxc->state = RXC_ONLOAD_FLOW_CONTROL;
+
+		CXIP_DBG("Flow control detected: %p\n", rxc);
+
+		ret = cxip_ux_onload(rxc);
 		assert(ret == FI_SUCCESS);
 
-		break;
-	case C_PTLTE_DISABLED:
-
-		if (!rxc->disabling) {
-			CXIP_DBG("Flow control detected: %p\n", rxc);
-
-			ret = cxip_ux_onload(rxc);
-			assert(ret == FI_SUCCESS);
-
-			CXIP_DBG("Started onload\n");
-		}
+		CXIP_DBG("Started onload\n");
 
 		break;
 	default:
@@ -2612,17 +2669,10 @@ static int cxip_recv_req_dropped(struct cxip_req *req)
 
 	fastlock_acquire(&rxc->lock);
 
-	rxc->append_disabled = true;
-
 	dlist_remove(&req->recv.rxc_entry);
 	dlist_insert_tail(&req->recv.rxc_entry, &rxc->replay_queue);
 
 	CXIP_DBG("Receive dropped: %p\n", req);
-
-	if (dlist_empty(&rxc->msg_queue)) {
-		ret = cxip_ux_onload(rxc);
-		assert(ret == FI_SUCCESS);
-	}
 
 	fastlock_release(&rxc->lock);
 
@@ -2632,17 +2682,11 @@ static int cxip_recv_req_dropped(struct cxip_req *req)
 /*
  * cxip_recv_req_queue() - Queue Receive request on RXC.
  *
- * Place the Receive request in an ordered SW queue. There are a couple
- * temporary conditions that prevent queuing new Receives.
- *
- * 1. Appends have been disabled by HW. Previous Receives must be replayed
- *    first.
- * 2. SW is in the process of onloading UX Sends.
- *
  * Before appending a new Receive request to a HW list, attempt to match the
- * Receive to any onloaded UX Sends.
+ * Receive to any onloaded UX Sends. A receive can only be appended to hardware
+ * in RXC_ENABLED state unless check_rxc_state is false.
  */
-static int cxip_recv_req_queue(struct cxip_req *req)
+static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
 	int ret;
@@ -2662,16 +2706,7 @@ static int cxip_recv_req_queue(struct cxip_req *req)
 		CXIP_FATAL("ret == %d\n", ret);
 	}
 
-	/* Don't accept new Receives while there are message that need to be
-	 * replayed.
-	 */
-	if (rxc->append_disabled)
-		return -FI_EAGAIN;
-
-	/* Matching can't be performed while in the intermediate onloading
-	 * state. Wait until software completes building the UX Send list.
-	 */
-	if (rxc->searches_pending)
+	if (check_rxc_state && rxc->state != RXC_ENABLED)
 		return -FI_EAGAIN;
 
 	dlist_insert_tail(&req->recv.rxc_entry, &rxc->msg_queue);
@@ -2686,18 +2721,7 @@ static int cxip_recv_req_queue(struct cxip_req *req)
  */
 static void cxip_recv_req_dequeue_nolock(struct cxip_req *req)
 {
-	struct cxip_rxc *rxc = req->recv.rxc;
-	int ret __attribute__((unused));
-
 	dlist_remove(&req->recv.rxc_entry);
-
-	if (dlist_empty(&rxc->msg_queue) &&
-	    !dlist_empty(&rxc->replay_queue)) {
-		ret = cxip_ux_onload(rxc);
-		assert(ret == FI_SUCCESS);
-
-		CXIP_DBG("Started onload\n");
-	}
 }
 
 /*
@@ -2801,7 +2825,7 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	if (len && !buf)
 		return -FI_EINVAL;
 
-	if (!rxc->enabled)
+	if (rxc->state == RXC_DISABLED)
 		return -FI_EOPBADSTATE;
 
 	if (!ofi_recv_allowed(rxc->attr.caps))
@@ -2892,7 +2916,7 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	req->recv.rdzv_events = 0;
 
 	fastlock_acquire(&rxc->lock);
-	ret = cxip_recv_req_queue(req);
+	ret = cxip_recv_req_queue(req, true);
 	fastlock_release(&rxc->lock);
 
 	/* Match made in software? */

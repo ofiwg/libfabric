@@ -963,7 +963,7 @@ static int cxip_ctx_setopt(fid_t fid, int level, int optname,
  */
 static ssize_t cxip_rxc_cancel(struct cxip_rxc *rxc, void *context)
 {
-	if (!rxc->enabled)
+	if (rxc->state == RXC_DISABLED)
 		return -FI_EOPBADSTATE;
 
 	return cxip_cq_req_cancel(rxc->recv_cq, rxc, context, true);

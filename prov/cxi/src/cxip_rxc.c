@@ -32,8 +32,6 @@ int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count)
 
 	ret = cxip_pte_set_state(rxc->rx_pte, rxc->rx_cmdq, C_PTLTE_ENABLED,
 				 drop_count);
-	if (ret == FI_SUCCESS)
-		rxc->enable_pending = true;
 
 	return ret;
 }
@@ -50,8 +48,7 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 {
 	int ret;
 
-	/* Don't treat the state change as flow control */
-	rxc->disabling = true;
+	rxc->state = RXC_DISABLED;
 
 	ret = cxip_pte_set_state_wait(rxc->rx_pte, rxc->rx_cmdq, rxc->recv_cq,
 				      C_PTLTE_DISABLED, 0);
@@ -150,13 +147,13 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 
 	fastlock_acquire(&rxc->lock);
 
-	if (rxc->enabled) {
+	if (rxc->state != RXC_DISABLED) {
 		fastlock_release(&rxc->lock);
 		return FI_SUCCESS;
 	}
 
 	if (!ofi_recv_allowed(rxc->attr.caps)) {
-		rxc->enabled = true;
+		rxc->state = RXC_ENABLED;
 		fastlock_release(&rxc->lock);
 		return FI_SUCCESS;
 	}
@@ -214,7 +211,6 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	CXIP_DBG("RXC messaging enabled: %p\n", rxc);
 
 	rxc->pid_bits = rxc->domain->iface->dev->info.pid_bits;
-	rxc->enabled = true;
 
 	return FI_SUCCESS;
 
@@ -289,12 +285,10 @@ static void rxc_disable(struct cxip_rxc *rxc)
 
 	fastlock_acquire(&rxc->lock);
 
-	if (!rxc->enabled) {
+	if (rxc->state == RXC_DISABLED) {
 		fastlock_release(&rxc->lock);
 		return;
 	}
-
-	rxc->enabled = false;
 
 	fastlock_release(&rxc->lock);
 
@@ -350,7 +344,6 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	dlist_init(&rxc->msg_queue);
 	dlist_init(&rxc->replay_queue);
 	dlist_init(&rxc->sw_ux_list);
-	rxc->disabling = false;
 
 	rxc->rdzv_threshold = cxip_env.rdzv_threshold;
 	rxc->rdzv_get_min = cxip_env.rdzv_get_min;
@@ -359,6 +352,7 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 
 	/* TODO make configurable */
 	rxc->min_multi_recv = CXIP_EP_MIN_MULTI_RECV;
+	rxc->state = RXC_DISABLED;
 
 	return rxc;
 }

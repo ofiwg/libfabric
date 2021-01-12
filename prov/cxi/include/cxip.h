@@ -868,6 +868,66 @@ struct cxip_ep_coll_obj {
 	bool enabled;			// enabled
 };
 
+/* Receive context state machine.
+ * TODO: Handle unexpected RMA.
+ */
+enum cxip_rxc_state {
+	/* Initial state of an RXC. All user posted receives are rejected until
+	 * the RXC has been enabled.
+	 *
+	 * Note that an RXC can be transitioned from any state into
+	 * RXC_DISABLED.
+	 *
+	 * Validate state changes:
+	 * RXC_ENABLED: User has successfully enabled the RXC.
+	 */
+	RXC_DISABLED = 0,
+
+	/* User posted receives are matched against the software unexpected list
+	 * before being offloaded to hardware. Hardware matches against the
+	 * corresponding PtlTE priority and overflow list.
+	 *
+	 * Validate state changes:
+	 * RXC_ONLOAD_FLOW_CONTROL: Two scenarios can cause this state change.
+	 * 	1. Hardware fails to allocate an LE for an unexpected message.
+	 * 	Hardware automatically transitions the PtlTE from Enabled to
+	 * 	Disabled.
+	 * 	2. Hardware fails to allocate an LE during an append. The PtlTE
+	 * 	remains in the Enabled state but appends to the priority list
+	 * 	are disabled. Software needs to manually disable the PtlTE.
+	 */
+	RXC_ENABLED,
+
+	/* Flow control has occurred and the PtlTE is disabled. Software is
+	 * in the process of onloading the hardware unexpected headers to free
+	 * up LEs. User posted receives are matched against the software
+	 * unexpected list. If a match is not found on the software unexpected
+	 * list, -FI_EAGAIN is returned to the user. Hardware matching is
+	 * disabled.
+	 *
+	 * Validate state changes:
+	 * RXC_FLOW_CONTROL: Onloading of the unexpected headers has completed.
+	 */
+	RXC_ONLOAD_FLOW_CONTROL,
+
+	/* Software is performing sideband communication to recover the dropped
+	 * messages. User posted receives are matched against the software
+	 * unexpected list. If a match is not found on the software unexpected
+	 * list, -FI_EAGAIN is returned to the user. Hardware matching is
+	 * disabled.
+	 *
+	 * If an append fails due to RC_NO_SPACE while in the RXC_FLOW_CONTROL
+	 * state, hardware LEs are exhausted and no more LEs can be freed by
+	 * onloading unexpected headers into software. This is a fatal event
+	 * which requires software endpoint mode to workaround.
+	 *
+	 * Validate state changes:
+	 * RXC_ENABLED: Sideband communication is complete and PtlTE is
+	 * successfully reenabled.
+	 */
+	RXC_FLOW_CONTROL,
+};
+
 /*
  * Receive Context
  *
@@ -878,7 +938,6 @@ struct cxip_rxc {
 	fastlock_t lock;		// Control ops lock
 
 	uint16_t rx_id;			// SEP index
-	bool enabled;
 
 	int use_shared;
 	struct cxip_rxc *srx;
@@ -896,7 +955,6 @@ struct cxip_rxc {
 	bool selective_completion;
 
 	struct cxip_pte *rx_pte;	// HW RX Queue
-	bool disabling;
 	struct cxip_cmdq *rx_cmdq;	// RX CMDQ for posting receive buffers
 	struct cxip_cmdq *tx_cmdq;	// TX CMDQ for Message Gets
 
@@ -923,11 +981,10 @@ struct cxip_rxc {
 	struct dlist_entry fc_drops;
 	struct dlist_entry msg_queue;
 	struct dlist_entry replay_queue;
-	bool append_disabled;
-	bool enable_pending;
-	int searches_pending;
 	struct dlist_entry sw_ux_list;
 	int sw_ux_list_len;
+
+	enum cxip_rxc_state state;
 };
 
 #define CXIP_RDZV_IDS	(1 << CXIP_RDZV_ID_WIDTH)

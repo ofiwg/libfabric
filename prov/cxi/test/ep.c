@@ -985,7 +985,7 @@ Test(ep, srx_ctx)
 	cr_assert_eq(rxc->ctx.fid.fclass, FI_CLASS_SRX_CTX);
 	cr_assert_eq(rxc->ctx.fid.fclass, FI_CLASS_RX_CTX);
 	cr_assert_eq(rxc->ctx.fid.context, context);
-	cr_assert_eq(rxc->enabled, 1);
+	cr_assert_eq(rxc->state, RXC_ENABLED);
 	cr_assert_eq(rxc->min_multi_recv, CXIP_EP_MIN_MULTI_RECV);
 
 	ret = fi_close(&srx->fid);
