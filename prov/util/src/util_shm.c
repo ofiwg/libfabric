@@ -132,6 +132,44 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 	return total_size;
 }
 
+static int smr_retry_map(const char *name, int *fd)
+{
+	char tmp[NAME_MAX];
+	struct smr_region *old_shm;
+	struct stat sts;
+	int shm_pid;
+
+	*fd = shm_open(name, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+	if (*fd < 0)
+		return -errno;
+
+	old_shm = mmap(NULL, sizeof(*old_shm), PROT_READ | PROT_WRITE,
+		       MAP_SHARED, *fd, 0);
+	if (old_shm == MAP_FAILED)
+		goto err;
+
+	if (old_shm->version > SMR_VERSION) {
+		munmap(old_shm, sizeof(*old_shm));
+		goto err;
+	}
+	shm_pid = old_shm->pid;
+	munmap(old_shm, sizeof(*old_shm));
+
+	if (!shm_pid)
+		return FI_SUCCESS;
+
+	memset(tmp, 0, sizeof(tmp));
+	snprintf(tmp, sizeof(tmp), "/proc/%d", shm_pid);
+
+	if (stat(tmp, &sts) == -1 && errno == ENOENT)
+		return FI_SUCCESS;
+
+err:
+	close(*fd);
+	shm_unlink(name);
+	return -FI_EBUSY;
+}
+
 /* TODO: Determine if aligning SMR data helps performance */
 int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	       const struct smr_attr *attr, struct smr_region *volatile *smr)
@@ -153,8 +191,21 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 
 	fd = shm_open(attr->name, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
-		FI_WARN(prov, FI_LOG_EP_CTRL, "shm_open error\n");
-		return -errno;
+		if (errno != EEXIST) {
+			FI_WARN(prov, FI_LOG_EP_CTRL,
+				"shm_open error (%s): %s\n",
+				attr->name, strerror(errno));
+			return -errno;
+		}
+
+		ret = smr_retry_map(attr->name, &fd);
+		if (ret) {
+			FI_WARN(prov, FI_LOG_EP_CTRL, "shm file in use (%s)\n",
+				attr->name);
+			return ret;
+		}
+		FI_WARN(prov, FI_LOG_EP_CTRL,
+			"Overwriting shm from dead process (%s)\n", attr->name);
 	}
 
 	ep_name = calloc(1, sizeof(*ep_name));
