@@ -2086,8 +2086,8 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		free(fc_drops);
 		break;
 	default:
-		CXIP_WARN("Unexpected event type: %d\n",
-			  event->hdr.event_type);
+		CXIP_FATAL("Unexpected event type: %d\n",
+			   event->hdr.event_type);
 	}
 
 	fastlock_release(&rxc->lock);
@@ -3893,12 +3893,9 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
 	fastlock_acquire(&txc->lock);
 
 	peer = cxip_fc_peer_lookup(txc, caddr, rxc_id);
-	if (!peer) {
-		CXIP_WARN("FC peer not found: TXC: %u NIC: %#x PID: %d\n",
-			  txc_id, nic_addr, pid);
-		fastlock_release(&txc->lock);
-		return -FI_ENOENT;
-	}
+	if (!peer)
+		CXIP_FATAL("FC peer not found: TXC: %u NIC: %#x PID: %d\n",
+			   txc_id, nic_addr, pid);
 
 	CXIP_DBG("Replaying dropped sends, TXC: %u NIC: %#x PID: %d\n",
 		 txc_id, nic_addr, pid);
