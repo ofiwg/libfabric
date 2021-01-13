@@ -1391,6 +1391,7 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 	struct rxm_tx_atomic_buf *tx_buf;
 	struct rxm_atomic_resp_hdr *resp_hdr;
 	uint64_t len;
+	ssize_t copy_len;
 	ssize_t ret = 0;
 	enum fi_hmem_iface iface;
 	uint64_t device;
@@ -1433,10 +1434,10 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 				tx_buf->result_iov.count);
 	assert(ntohl(resp_hdr->result_len) == len);
 
-	ret = ofi_copy_to_hmem_iov(iface, device, tx_buf->result_iov.iov,
+	copy_len = ofi_copy_to_hmem_iov(iface, device, tx_buf->result_iov.iov,
 				   tx_buf->result_iov.count, 0, resp_hdr->data,
 				   len);
-	assert(ret == len);
+	assert(copy_len == len);
 
 	if (!(tx_buf->flags & FI_INJECT))
 		ret = rxm_cq_write_tx_comp(rxm_ep,
