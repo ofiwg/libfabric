@@ -182,20 +182,33 @@ free:
 	return ret;
 }
 
-static void tcpx_ep_flush_pending_xfers(struct tcpx_ep *ep)
+/* must hold ep->lock */
+static void tcpx_ep_flush_queue(struct slist *queue,
+				struct tcpx_cq *tcpx_cq)
 {
-	struct slist_entry *entry;
-	struct tcpx_xfer_entry *tx_entry;
-	struct tcpx_cq *cq;
+	struct tcpx_xfer_entry *xfer_entry;
 
-	while (!slist_empty(&ep->tx_rsp_pend_queue)) {
-		entry = slist_remove_head(&ep->tx_rsp_pend_queue);
-		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-		tcpx_cq_report_error(ep->util_ep.tx_cq, tx_entry, FI_ENOTCONN);
-
-		cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-		tcpx_xfer_entry_release(cq, tx_entry);
+	while (!slist_empty(queue)) {
+		xfer_entry = container_of(queue->head, struct tcpx_xfer_entry,
+					  entry);
+		slist_remove_head(queue);
+		tcpx_cq_report_error(&tcpx_cq->util_cq, xfer_entry, FI_ECANCELED);
+		tcpx_xfer_entry_free(tcpx_cq, xfer_entry);
 	}
+}
+
+/* must hold ep->lock */
+static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
+{
+	struct tcpx_cq *tcpx_cq;
+
+	tcpx_cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
+	tcpx_ep_flush_queue(&ep->tx_queue, tcpx_cq);
+	tcpx_ep_flush_queue(&ep->rma_read_queue, tcpx_cq);
+	tcpx_ep_flush_queue(&ep->tx_rsp_pend_queue, tcpx_cq);
+
+	tcpx_cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
+	tcpx_ep_flush_queue(&ep->rx_queue, tcpx_cq);
 }
 
 /* must hold ep->lock */
@@ -209,6 +222,10 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 	case TCPX_RCVD_REQ:
 		break;
 	case TCPX_CONNECTED:
+		/* We need to remove the socket from the CQ's fdset,
+		 * or the CQ will be left in a 'signaled' state.  This
+		 * can result in threads spinning on the CQs fdset.
+		 */
 		if (ep->util_ep.tx_cq) {
 			wait = container_of(ep->util_ep.tx_cq->wait,
 					    struct util_wait_fd, util_wait);
@@ -220,8 +237,6 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 					    struct util_wait_fd, util_wait);
 			ofi_wait_fdset_del(wait, ep->sock);
 		}
-
-		tcpx_ep_flush_pending_xfers(ep);
 		/* fall through */
 	case TCPX_ACCEPTING:
 	case TCPX_CONNECTING:
@@ -233,6 +248,8 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 	default:
 		return;
 	}
+
+	tcpx_ep_flush_all_queues(ep);
 
 	if (cm_err) {
 		err_entry.fid = &ep->util_ep.ep_fid.fid;
@@ -389,48 +406,68 @@ static struct fi_ops_cm tcpx_cm_ops = {
 	.join = fi_no_join,
 };
 
-void tcpx_rx_msg_release(struct tcpx_xfer_entry *rx_entry)
+void tcpx_rx_entry_free(struct tcpx_xfer_entry *rx_entry)
 {
 	struct tcpx_cq *tcpx_cq;
 
 	assert(rx_entry->hdr.base_hdr.op_data == TCPX_OP_MSG_RECV);
 
 	if (rx_entry->ep->srx_ctx) {
-		tcpx_srx_xfer_release(rx_entry->ep->srx_ctx, rx_entry);
+		tcpx_srx_entry_free(rx_entry->ep->srx_ctx, rx_entry);
 	} else {
 		tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 				       struct tcpx_cq, util_cq);
-		tcpx_xfer_entry_release(tcpx_cq, rx_entry);
+		tcpx_xfer_entry_free(tcpx_cq, rx_entry);
 	}
 }
 
-static void tcpx_ep_release_queue(struct slist *queue,
-				  struct tcpx_cq *tcpx_cq)
+/* Must hold ep->lock. */
+static void tcpx_ep_cancel_rx(struct tcpx_ep *ep, void *context)
 {
+	struct slist_entry *cur, *prev;
 	struct tcpx_xfer_entry *xfer_entry;
+	struct tcpx_cq *cq;
 
-	while (!slist_empty(queue)) {
-		xfer_entry = container_of(queue->head, struct tcpx_xfer_entry,
-					  entry);
-		slist_remove_head(queue);
-		tcpx_cq_report_error(&tcpx_cq->util_cq, xfer_entry, FI_ECANCELED);
-		tcpx_xfer_entry_release(tcpx_cq, xfer_entry);
+	/* To cancel an active receive, we would need to flush the socket of
+	 * all data associated with that message.  Since some of that data
+	 * may not have arrived yet, this would require additional state
+	 * tracking and complexity.  Fail the cancel in this case, since
+	 * the receive is already in process anyway.
+	 */
+	slist_foreach(&ep->rx_queue, cur, prev) {
+		xfer_entry = container_of(cur, struct tcpx_xfer_entry, entry);
+		if (xfer_entry->context == context) {
+			if (ep->cur_rx_entry == xfer_entry)
+				goto found;
+			break;
+		}
 	}
+
+	return;
+
+found:
+	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
+
+	slist_remove(&ep->rx_queue, cur, prev);
+	tcpx_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
+	tcpx_xfer_entry_free(cq, xfer_entry);
 }
 
-static void tcpx_ep_tx_rx_queues_release(struct tcpx_ep *ep)
+/* We currently only support canceling receives, which is the common case.
+ * Canceling an operation from the other queues is not trivial,
+ * especially if the operation has already been initiated.
+ */
+static ssize_t tcpx_ep_cancel(fid_t fid, void *context)
 {
-	struct tcpx_cq *tcpx_cq;
+	struct tcpx_ep *ep;
+
+	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
 	fastlock_acquire(&ep->lock);
-	tcpx_cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-	tcpx_ep_release_queue(&ep->tx_queue, tcpx_cq);
-	tcpx_ep_release_queue(&ep->rma_read_queue, tcpx_cq);
-	tcpx_ep_release_queue(&ep->tx_rsp_pend_queue, tcpx_cq);
-
-	tcpx_cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
-	tcpx_ep_release_queue(&ep->rx_queue, tcpx_cq);
+	tcpx_ep_cancel_rx(ep, context);
 	fastlock_release(&ep->lock);
+
+	return 0;
 }
 
 static int tcpx_ep_close(struct fid *fid)
@@ -458,7 +495,12 @@ static int tcpx_ep_close(struct fid *fid)
 	if (eq)
 		fastlock_release(&eq->close_lock);
 
-	tcpx_ep_tx_rx_queues_release(ep);
+	/* Lock not technically needed, since we're freeing the EP.  But it's
+	 * harmless to acquire and silences static code analysis tools.
+	 */
+	fastlock_acquire(&ep->lock);
+	tcpx_ep_flush_all_queues(ep);
+	fastlock_release(&ep->lock);
 
 	if (eq) {
 		ofi_eq_remove_fid_events(ep->util_ep.eq,
@@ -567,7 +609,7 @@ int tcpx_ep_setopt(fid_t fid, int level, int optname,
 
 static struct fi_ops_ep tcpx_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = fi_no_cancel,
+	.cancel = tcpx_ep_cancel,
 	.getopt = tcpx_ep_getopt,
 	.setopt = tcpx_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
