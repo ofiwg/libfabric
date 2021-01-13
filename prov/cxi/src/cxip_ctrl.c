@@ -87,7 +87,8 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 	pid_bits = req->ep_obj->domain->iface->dev->info.pid_bits;
 	cxi_build_dfa(req->send.nic_addr, req->send.pid, pid_bits,
 		      CXIP_PTL_IDX_CTRL, &dfa, &idx_ext);
-	match_id = CXI_MATCH_ID(pid_bits, req->send.pid, req->send.nic_addr);
+	match_id = CXI_MATCH_ID(pid_bits, req->ep_obj->src_addr.pid,
+				req->ep_obj->src_addr.nic);
 
 	cmd.c_state.event_send_disable = 1;
 	cmd.c_state.index_ext = idx_ext;
