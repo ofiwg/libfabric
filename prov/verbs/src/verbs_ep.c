@@ -372,6 +372,12 @@ vrb_alloc_init_ep(struct fi_info *info, struct vrb_domain *domain,
 			return NULL;
 	}
 
+	// When we are enabling flow control, we artificially inject
+	// a credit so that the credit messaging itself is not blocked
+	// by a lack of credits.  To counter this, we will adjust the number
+	// of credit we send the first time by initializing to -1.
+	ep->rq_credits_avail = -1;
+
 	if (domain->util_domain.threading != FI_THREAD_SAFE) {
 		if (vrb_alloc_wrs(ep))
 			goto err1;
