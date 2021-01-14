@@ -69,17 +69,24 @@ match_put_event(struct cxip_rxc *rxc, const union c_event *event)
 					&&
 			    (def_ev->ev.tgt_long.initiator.initiator.process
 					== process))
-				return def_ev;
+				goto found;
 		} else {
 			/* All other events are correlated using start
 			 * address.
 			 */
 			if (def_ev->ev.tgt_long.start == event->tgt_long.start)
-				return def_ev;
+				goto found;
 		}
 	}
 
 	return NULL;
+
+found:
+	assert(def_ev->ev.tgt_long.match_bits == event->tgt_long.match_bits);
+	assert(def_ev->ev.tgt_long.initiator.initiator.process ==
+	       event->tgt_long.initiator.initiator.process);
+
+	return def_ev;
 }
 
 /*
@@ -2281,24 +2288,31 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 		if (!ux_send)
 			return -FI_EAGAIN;
 
-		def_ev = match_put_event(rxc, event);
-		if (!def_ev) {
-			def_ev = defer_put_event(rxc, req, event);
+		/* Zero-byte unexpected onloads require special handling since
+		 * no deferred structure would be allocated.
+		 */
+		if (event->tgt_long.rlength) {
+			def_ev = match_put_event(rxc, event);
 			if (!def_ev) {
-				fastlock_release(&rxc->lock);
-				free(ux_send);
-				return -FI_EAGAIN;
+				def_ev = defer_put_event(rxc, req, event);
+				if (!def_ev) {
+					fastlock_release(&rxc->lock);
+					free(ux_send);
+					return -FI_EAGAIN;
+				}
+
+				/* Gather Put events later */
+				def_ev->ux_send = ux_send;
+				req->search.puts_pending++;
+			} else {
+				ux_send->oflow_req = def_ev->req;
+				ux_send->put_ev = def_ev->ev;
+
+				dlist_remove(&def_ev->rxc_entry);
+				free(def_ev);
 			}
-
-			/* Gather Put events later */
-			def_ev->ux_send = ux_send;
-			req->search.puts_pending++;
 		} else {
-			ux_send->oflow_req = def_ev->req;
-			ux_send->put_ev = def_ev->ev;
-
-			dlist_remove(&def_ev->rxc_entry);
-			free(def_ev);
+			ux_send->put_ev = *event;
 		}
 
 		dlist_insert_tail(&ux_send->rxc_entry, &rxc->sw_ux_list);
@@ -2488,8 +2502,14 @@ static int cxip_recv_sw_match(struct cxip_req *req,
 		/* Count the rendezvous event. */
 		rdzv_recv_req_event(req);
 	} else {
-		ret = cxip_ux_send(req, ux_send->oflow_req, &ux_send->put_ev,
-				   mrecv_start, mrecv_len);
+		if (ux_send->put_ev.tgt_long.rlength)
+			ret = cxip_ux_send(req, ux_send->oflow_req,
+					   &ux_send->put_ev, mrecv_start,
+					   mrecv_len);
+		else
+			ret = cxip_ux_send_zb(req, &ux_send->put_ev,
+					      mrecv_start);
+
 		if (ret != FI_SUCCESS) {
 			/* undo mrecv_req_put_bytes() */
 			req->recv.start_offset -= mrecv_len;
