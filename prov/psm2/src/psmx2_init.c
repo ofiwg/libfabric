@@ -70,8 +70,28 @@ int	 psmx2_tag_layout_locked = 0;
 
 static void psmx2_init_env(void)
 {
+	char *ompi_job_key;
+	psm2_uuid_t uuid = {};
+	unsigned long long *u = (unsigned long long *)uuid;
+
 	if (getenv("OMPI_COMM_WORLD_RANK") || getenv("PMI_RANK") || getenv("PMIX_RANK"))
 		psmx2_env.name_server = 0;
+
+	/*
+	 * Check for Open MPI job key. If set, convert it to the default uuid
+	 * string. This will be overridden by the FI_PSM2_UUID variable, and
+	 * both will have lower priority than the auth_key passed via ep_attr.
+	 */
+	ompi_job_key = getenv("OMPI_MCA_orte_precondition_transports");
+	if (ompi_job_key) {
+		FI_INFO(&psmx2_prov, FI_LOG_CORE,
+			"Open MPI job key: %s.\n", ompi_job_key);
+		if (sscanf(ompi_job_key, "%016llx-%016llx", &u[0], &u[1]) == 2)
+			psmx2_env.uuid = strdup(psmx2_uuid_to_string(uuid));
+		else
+			FI_INFO(&psmx2_prov, FI_LOG_CORE,
+				"Invalid Open MPI job key format.\n");
+	}
 
 	fi_param_get_bool(&psmx2_prov, "name_server", &psmx2_env.name_server);
 	fi_param_get_bool(&psmx2_prov, "tagged_rma", &psmx2_env.tagged_rma);
