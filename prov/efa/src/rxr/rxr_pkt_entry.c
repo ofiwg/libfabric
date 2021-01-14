@@ -176,7 +176,7 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 		struct rxr_peer *peer;
 
 		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-		assert(peer);
+
 		if (peer->is_local)
 			ep->rx_bufs_shm_to_post++;
 		else
@@ -408,7 +408,7 @@ ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,
 
 	/* currently only EOR packet is injected using shm ep */
 	peer = rxr_ep_get_peer(ep, addr);
-	assert(peer);
+
 	assert(ep->use_shm && peer->is_local);
 	return fi_inject(ep->shm_ep, rxr_pkt_start(pkt_entry), pkt_entry->pkt_size,
 			 peer->shm_fiaddr);

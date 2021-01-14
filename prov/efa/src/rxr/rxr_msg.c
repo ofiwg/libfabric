@@ -87,7 +87,7 @@ ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	 * from the receiver, so here we call rxr_pkt_wait_handshake().
 	 */
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
-	assert(peer);
+
 	err = rxr_pkt_wait_handshake(rxr_ep, tx_entry->addr, peer);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "waiting for handshake packet failed!\n");

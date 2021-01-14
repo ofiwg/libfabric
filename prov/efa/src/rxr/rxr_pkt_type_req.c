@@ -118,7 +118,7 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 	base_hdr->flags = 0;
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
-	assert(peer);
+
 	if (OFI_UNLIKELY(!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))) {
 		/*
 		 * This is the first communication with this peer on this
@@ -272,7 +272,6 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
 	struct rxr_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, addr);
-	assert(peer);
 
 	if (peer->is_local) {
 		assert(ep->use_shm);
@@ -1228,7 +1227,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 
 	need_ordering = false;
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	assert(peer);
+
 	if (!peer->is_local) {
 		/*
  		 * only need to reorder msg for efa_ep
