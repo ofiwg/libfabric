@@ -246,6 +246,7 @@ enum rxr_lower_ep_type {
 enum rxr_x_entry_type {
 	RXR_TX_ENTRY = 1,
 	RXR_RX_ENTRY,
+	RXR_READ_ENTRY,
 };
 
 enum rxr_tx_comm_type {
