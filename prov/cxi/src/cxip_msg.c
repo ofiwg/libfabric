@@ -2123,15 +2123,30 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 	struct cxip_fc_drops *fc_drops = container_of(req,
 			struct cxip_fc_drops, req);
 	struct cxip_rxc *rxc = fc_drops->rxc;
+	int ret = FI_SUCCESS;
 
 	fastlock_acquire(&rxc->lock);
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
-		/* TODO handle error. Drops can happen. */
-		assert(cxi_event_rc(event) == C_RC_OK);
+		switch (cxi_event_rc(event)) {
+		case C_RC_OK:
+			free(fc_drops);
+			break;
 
-		free(fc_drops);
+		/* This error occurs when the target's control event queue has
+		 * run out of space. Since the target should be processing the
+		 * event queue, it is safe to replay messages until C_RC_OK is
+		 * returned.
+		 */
+		case C_RC_ENTRY_NOT_FOUND:
+			CXIP_WARN("Target dropped flow control message... replaying message\n");
+			ret = cxip_ctrl_msg_send(req);
+			break;
+		default:
+			CXIP_FATAL("Unexpected event rc: %d\n",
+				   cxi_event_rc(event));
+		}
 		break;
 	default:
 		CXIP_FATAL("Unexpected event type: %d\n",
@@ -2140,7 +2155,7 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 
 	fastlock_release(&rxc->lock);
 
-	return FI_SUCCESS;
+	return ret;
 }
 
 /*
@@ -3834,16 +3849,26 @@ int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
 {
 	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
-		/* TODO handle error. Drops can happen. */
-		assert(cxi_event_rc(event) == C_RC_OK);
-		break;
-	default:
-		CXIP_WARN("Unexpected event type: %d\n",
-			  event->hdr.event_type);
-		return FI_SUCCESS;
-	}
+		switch (cxi_event_rc(event)) {
+		case C_RC_OK:
+			return FI_SUCCESS;
 
-	return FI_SUCCESS;
+		/* This error occurs when the target's control event queue has
+		 * run out of space. Since the target should be processing the
+		 * event queue, it is safe to replay messages until C_RC_OK is
+		 * returned.
+		 */
+		case C_RC_ENTRY_NOT_FOUND:
+			CXIP_WARN("Target dropped flow control message... replaying message\n");
+			return cxip_ctrl_msg_send(req);
+		default:
+			CXIP_FATAL("Unexpected event rc: %d\n",
+				   cxi_event_rc(event));
+		}
+	default:
+		CXIP_FATAL("Unexpected event type: %d\n",
+			   event->hdr.event_type);
+	}
 }
 
 /*
