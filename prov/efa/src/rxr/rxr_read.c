@@ -331,7 +331,6 @@ int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, int entry_type, void *
 		peer = rxr_ep_get_peer(ep, ((struct rxr_rx_entry *)x_entry)->addr);
 	}
 
-	assert(peer);
 	lower_ep_type = (peer->is_local) ? SHM_EP : EFA_EP;
 	read_entry = rxr_read_alloc_entry(ep, entry_type, x_entry, lower_ep_type);
 	if (!read_entry) {
@@ -411,7 +410,6 @@ int rxr_read_init_iov(struct rxr_ep *ep,
 	struct rxr_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
-	assert(peer);
 
 	for (i = 0; i < tx_entry->iov_count; ++i) {
 		read_iov[i].addr = (uint64_t)tx_entry->iov[i].iov_base;
@@ -489,7 +487,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 	}
 
 	peer = rxr_ep_get_peer(ep, read_entry->addr);
-	assert(peer);
+
 	if (read_entry->lower_ep_type == SHM_EP)
 		shm_fiaddr = peer->shm_fiaddr;
 

@@ -339,7 +339,6 @@ int efa_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 		util_ep = container_of(ep_list_entry, struct util_ep, av_entry);
 		rxr_ep = container_of(util_ep, struct rxr_ep, util_ep);
 		peer = rxr_ep_get_peer(rxr_ep, *fi_addr);
-		assert(peer);
 		peer->is_self = efa_is_same_addr((struct efa_ep_addr *)rxr_ep->core_addr,
 						 addr);
 	}

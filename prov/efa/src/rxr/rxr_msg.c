@@ -87,7 +87,7 @@ ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	 * from the receiver, so here we call rxr_pkt_wait_handshake().
 	 */
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
-	assert(peer);
+
 	err = rxr_pkt_wait_handshake(rxr_ep, tx_entry->addr, peer);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "waiting for handshake packet failed!\n");
@@ -283,6 +283,13 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 		goto out;
 	}
 
+	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
+
+	if (peer->flags & RXR_PEER_IN_BACKOFF) {
+		err = -FI_EAGAIN;
+		goto out;
+	}
+
 	tx_entry = rxr_ep_alloc_tx_entry(rxr_ep, msg, op, tag, flags);
 
 	if (OFI_UNLIKELY(!tx_entry)) {
@@ -293,8 +300,6 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 
 	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
 
-	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
-	assert(peer);
 	tx_entry->msg_id = peer->next_msg_id++;
 	err = rxr_msg_post_rtm(rxr_ep, tx_entry);
 	if (OFI_UNLIKELY(err)) {
