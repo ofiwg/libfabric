@@ -92,7 +92,7 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 
 	cmd.c_state.event_send_disable = 1;
 	cmd.c_state.index_ext = idx_ext;
-	cmd.c_state.eq = req->ep_obj->ctrl_evtq->eqn;
+	cmd.c_state.eq = req->ep_obj->ctrl_tx_evtq->eqn;
 	cmd.c_state.initiator = match_id;
 
 	fastlock_acquire(&txq->lock);
@@ -186,7 +186,7 @@ int cxip_ctrl_msg_init(struct cxip_ep_obj *ep_obj)
 	}
 
 	/* Wait for link EQ event */
-	while (!(event = cxi_eq_get_event(ep_obj->ctrl_evtq)))
+	while (!(event = cxi_eq_get_event(ep_obj->ctrl_tgt_evtq)))
 		sched_yield();
 
 	if (event->hdr.event_type != C_EVENT_LINK ||
@@ -207,7 +207,7 @@ int cxip_ctrl_msg_init(struct cxip_ep_obj *ep_obj)
 		goto err_free_id;
 	}
 
-	cxi_eq_ack_events(ep_obj->ctrl_evtq);
+	cxi_eq_ack_events(ep_obj->ctrl_tgt_evtq);
 
 	CXIP_DBG("Control messaging initialized: %p\n", ep_obj);
 
@@ -276,10 +276,8 @@ static struct cxip_ctrl_req *cxip_ep_ctrl_event_req(struct cxip_ep_obj *ep_obj,
 	return req;
 }
 
-/*
- * cxip_ep_ctrl_progress() - Progress operations using the control EQ.
- */
-void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj)
+void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
+			      struct cxi_eq *ctrl_evtq)
 {
 	const union c_event *event;
 	struct cxip_ctrl_req *req;
@@ -287,12 +285,12 @@ void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj)
 	int ret;
 
 	/* The Control EQ is shared by a SEP. Avoid locking. */
-	if (!cxi_eq_peek_event(ep_obj->ctrl_evtq))
+	if (!cxi_eq_peek_event(ctrl_evtq))
 		return;
 
 	fastlock_acquire(&ep_obj->lock);
 
-	while ((event = cxi_eq_peek_event(ep_obj->ctrl_evtq))) {
+	while ((event = cxi_eq_peek_event(ctrl_evtq))) {
 		req = cxip_ep_ctrl_event_req(ep_obj, event);
 		if (req) {
 			ret = req->cb(req, event);
@@ -301,19 +299,27 @@ void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj)
 		}
 
 		/* Consume event. */
-		cxi_eq_next_event(ep_obj->ctrl_evtq);
+		cxi_eq_next_event(ctrl_evtq);
 
 		events++;
 	}
 
 	if (events)
-		cxi_eq_ack_events(ep_obj->ctrl_evtq);
+		cxi_eq_ack_events(ctrl_evtq);
 
-	if (cxi_eq_get_drops(ep_obj->ctrl_evtq)) {
+	if (cxi_eq_get_drops(ctrl_evtq))
 		CXIP_FATAL("Control EQ drops detected\n");
-	}
 
 	fastlock_release(&ep_obj->lock);
+}
+
+/*
+ * cxip_ep_ctrl_progress() - Progress operations using the control EQ.
+ */
+void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj)
+{
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl_tgt_evtq);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl_tx_evtq);
 }
 
 /*
@@ -346,41 +352,70 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		goto free_txq;
 	}
 
-	ep_obj->ctrl_evtq_buf_len = 4 * C_PAGE_SIZE;
-	ep_obj->ctrl_evtq_buf = aligned_alloc(C_PAGE_SIZE,
-					      ep_obj->ctrl_evtq_buf_len);
-	if (!ep_obj->ctrl_evtq_buf) {
-		CXIP_WARN("Failed to allocate control EVTQ buffer\n");
+	ep_obj->ctrl_tx_evtq_buf_len = 4 * C_PAGE_SIZE;
+	ep_obj->ctrl_tx_evtq_buf = aligned_alloc(C_PAGE_SIZE,
+						 ep_obj->ctrl_tx_evtq_buf_len);
+	if (!ep_obj->ctrl_tx_evtq_buf) {
+		CXIP_WARN("Failed to allocate control TX EVTQ buffer\n");
 		goto free_tgq;
 	}
 
-	ret = cxil_map(ep_obj->domain->lni->lni, ep_obj->ctrl_evtq_buf,
-		       ep_obj->ctrl_evtq_buf_len,
+	ret = cxil_map(ep_obj->domain->lni->lni, ep_obj->ctrl_tx_evtq_buf,
+		       ep_obj->ctrl_tx_evtq_buf_len,
 		       CXI_MAP_PIN | CXI_MAP_WRITE,
-		       NULL, &ep_obj->ctrl_evtq_buf_md);
+		       NULL, &ep_obj->ctrl_tx_evtq_buf_md);
 	if (ret) {
-		CXIP_WARN("Failed to map control EVTQ buffer, ret: %d\n", ret);
-		goto free_evtq_buf;
+		CXIP_WARN("Failed to map control TX EVTQ buffer, ret: %d\n",
+			  ret);
+		goto free_tx_evtq_buf;
 	}
 
-	eq_attr.queue = ep_obj->ctrl_evtq_buf;
-	eq_attr.queue_len = ep_obj->ctrl_evtq_buf_len;
-	eq_attr.flags = CXI_EQ_TGT_LONG;
-
+	eq_attr.queue = ep_obj->ctrl_tx_evtq_buf;
+	eq_attr.queue_len = ep_obj->ctrl_tx_evtq_buf_len;
 	ret = cxil_alloc_evtq(ep_obj->domain->lni->lni,
-			      ep_obj->ctrl_evtq_buf_md,
-			      &eq_attr, NULL, NULL, &ep_obj->ctrl_evtq);
+			      ep_obj->ctrl_tx_evtq_buf_md,
+			      &eq_attr, NULL, NULL, &ep_obj->ctrl_tx_evtq);
 	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Failed to allocate control EQ, ret: %d\n", ret);
+		CXIP_WARN("Failed to allocate control TX EQ, ret: %d\n", ret);
 		ret = -FI_ENODEV;
-		goto free_evtq_md;
+		goto free_tx_evtq_md;
 	}
 
-	ret = cxip_pte_alloc_nomap(ep_obj->if_dom[0], ep_obj->ctrl_evtq,
+	ep_obj->ctrl_tgt_evtq_buf_len = 4 * C_PAGE_SIZE;
+	ep_obj->ctrl_tgt_evtq_buf =
+		aligned_alloc(C_PAGE_SIZE, ep_obj->ctrl_tgt_evtq_buf_len);
+	if (!ep_obj->ctrl_tx_evtq_buf) {
+		CXIP_WARN("Failed to allocate control TGT EVTQ buffer\n");
+		goto free_tx_evtq;
+	}
+
+	ret = cxil_map(ep_obj->domain->lni->lni, ep_obj->ctrl_tgt_evtq_buf,
+		       ep_obj->ctrl_tgt_evtq_buf_len,
+		       CXI_MAP_PIN | CXI_MAP_WRITE,
+		       NULL, &ep_obj->ctrl_tgt_evtq_buf_md);
+	if (ret) {
+		CXIP_WARN("Failed to map control TGT EVTQ buffer, ret: %d\n",
+			  ret);
+		goto free_tgt_evtq_buf;
+	}
+
+	eq_attr.queue = ep_obj->ctrl_tgt_evtq_buf;
+	eq_attr.queue_len = ep_obj->ctrl_tgt_evtq_buf_len;
+	eq_attr.flags = CXI_EQ_TGT_LONG;
+	ret = cxil_alloc_evtq(ep_obj->domain->lni->lni,
+			      ep_obj->ctrl_tgt_evtq_buf_md, &eq_attr, NULL,
+			      NULL, &ep_obj->ctrl_tgt_evtq);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to allocate control TGT EQ, ret: %d\n", ret);
+		ret = -FI_ENODEV;
+		goto free_tgt_evtq_md;
+	}
+
+	ret = cxip_pte_alloc_nomap(ep_obj->if_dom[0], ep_obj->ctrl_tgt_evtq,
 				   &pt_opts, NULL, NULL, &ep_obj->ctrl_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate control PTE: %d\n", ret);
-		goto free_evtq;
+		goto free_tgt_evtq;
 	}
 
 	/* CXIP_PTL_IDX_WRITE_MR_STD is shared with CXIP_PTL_IDX_CTRL. */
@@ -405,7 +440,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	}
 
 	/* Wait for Enable event */
-	while (!(event = cxi_eq_get_event(ep_obj->ctrl_evtq)))
+	while (!(event = cxi_eq_get_event(ep_obj->ctrl_tgt_evtq)))
 		sched_yield();
 
 	if (event->hdr.event_type != C_EVENT_STATE_CHANGE ||
@@ -419,7 +454,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		goto free_pte;
 	}
 
-	cxi_eq_ack_events(ep_obj->ctrl_evtq);
+	cxi_eq_ack_events(ep_obj->ctrl_tgt_evtq);
 
 	memset(&ep_obj->req_ids, 0, sizeof(ep_obj->req_ids));
 
@@ -433,16 +468,26 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 
 free_pte:
 	cxip_pte_free(ep_obj->ctrl_pte);
-free_evtq:
-	ret = cxil_destroy_evtq(ep_obj->ctrl_evtq);
-	if (ret)
-		CXIP_WARN("Failed to destroy EVTQ: %d\n", ret);
-free_evtq_md:
-	tmp = cxil_unmap(ep_obj->ctrl_evtq_buf_md);
+free_tgt_evtq:
+	tmp = cxil_destroy_evtq(ep_obj->ctrl_tgt_evtq);
 	if (tmp)
-		CXIP_WARN("Failed to unmap EVTQ buffer: %d\n", ret);
-free_evtq_buf:
-	free(ep_obj->ctrl_evtq_buf);
+		CXIP_WARN("Failed to destroy TGT EVTQ: %d\n", tmp);
+free_tgt_evtq_md:
+	tmp = cxil_unmap(ep_obj->ctrl_tgt_evtq_buf_md);
+	if (tmp)
+		CXIP_WARN("Failed to unmap TGT EVTQ buffer: %d\n", tmp);
+free_tgt_evtq_buf:
+	free(ep_obj->ctrl_tgt_evtq_buf);
+free_tx_evtq:
+	tmp = cxil_destroy_evtq(ep_obj->ctrl_tx_evtq);
+	if (tmp)
+		CXIP_WARN("Failed to destroy TX EVTQ: %d\n", tmp);
+free_tx_evtq_md:
+	tmp = cxil_unmap(ep_obj->ctrl_tx_evtq_buf_md);
+	if (tmp)
+		CXIP_WARN("Failed to unmap TX EVTQ buffer: %d\n", tmp);
+free_tx_evtq_buf:
+	free(ep_obj->ctrl_tx_evtq_buf);
 free_tgq:
 	cxip_ep_cmdq_put(ep_obj, 0, false);
 free_txq:
@@ -466,16 +511,25 @@ void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj)
 
 	ofi_idx_reset(&ep_obj->req_ids);
 
-	ret = cxil_destroy_evtq(ep_obj->ctrl_evtq);
+	ret = cxil_destroy_evtq(ep_obj->ctrl_tgt_evtq);
 	if (ret)
-		CXIP_WARN("Failed to destroy EVTQ: %d\n", ret);
+		CXIP_WARN("Failed to destroy TGT EVTQ: %d\n", ret);
 
-	ret = cxil_unmap(ep_obj->ctrl_evtq_buf_md);
+	ret = cxil_unmap(ep_obj->ctrl_tgt_evtq_buf_md);
 	if (ret)
-		CXIP_WARN("Failed to unmap EVTQ buffer: %d\n",
-			       ret);
+		CXIP_WARN("Failed to unmap TGT EVTQ buffer: %d\n", ret);
 
-	free(ep_obj->ctrl_evtq_buf);
+	free(ep_obj->ctrl_tgt_evtq_buf);
+
+	ret = cxil_destroy_evtq(ep_obj->ctrl_tx_evtq);
+	if (ret)
+		CXIP_WARN("Failed to destroy TX EVTQ: %d\n", ret);
+
+	ret = cxil_unmap(ep_obj->ctrl_tx_evtq_buf_md);
+	if (ret)
+		CXIP_WARN("Failed to unmap TX EVTQ buffer: %d\n", ret);
+
+	free(ep_obj->ctrl_tx_evtq_buf);
 
 	cxip_ep_cmdq_put(ep_obj, 0, false);
 	cxip_ep_cmdq_put(ep_obj, 0, true);

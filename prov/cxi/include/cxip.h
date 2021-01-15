@@ -1123,10 +1123,14 @@ struct cxip_ep_obj {
 	/* Control resources */
 	struct cxip_cmdq *ctrl_tgq;
 	struct cxip_cmdq *ctrl_txq;
-	struct cxi_eq *ctrl_evtq;
-	void *ctrl_evtq_buf;
-	size_t ctrl_evtq_buf_len;
-	struct cxi_md *ctrl_evtq_buf_md;
+	struct cxi_eq *ctrl_tgt_evtq;
+	struct cxi_eq *ctrl_tx_evtq;
+	void *ctrl_tgt_evtq_buf;
+	size_t ctrl_tgt_evtq_buf_len;
+	struct cxi_md *ctrl_tgt_evtq_buf_md;
+	void *ctrl_tx_evtq_buf;
+	size_t ctrl_tx_evtq_buf_len;
+	struct cxi_md *ctrl_tx_evtq_buf_md;
 	struct cxip_pte *ctrl_pte;
 	struct indexer req_ids;
 	struct dlist_entry mr_list;
