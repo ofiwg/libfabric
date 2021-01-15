@@ -1123,6 +1123,7 @@ struct cxip_ep_obj {
 	/* Control resources */
 	struct cxip_cmdq *ctrl_tgq;
 	struct cxip_cmdq *ctrl_txq;
+	unsigned int ctrl_tx_credits;
 	struct cxi_eq *ctrl_tgt_evtq;
 	struct cxi_eq *ctrl_tx_evtq;
 	void *ctrl_tgt_evtq_buf;
@@ -1542,6 +1543,7 @@ void cxip_unmap(struct cxip_md *md);
 
 int cxip_ctrl_msg_send(struct cxip_ctrl_req *req);
 void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj);
+void cxip_ep_tx_ctrl_progress(struct cxip_ep_obj *ep_obj);
 int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj);
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj);
 

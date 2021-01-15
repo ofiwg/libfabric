@@ -2286,13 +2286,14 @@ int cxip_recv_resume(struct cxip_rxc *rxc)
 {
 	struct cxip_fc_drops *fc_drops;
 	struct dlist_entry *tmp;
-	int ret __attribute__((unused));
+	int ret;
 
 	dlist_foreach_container_safe(&rxc->fc_drops,
 				     struct cxip_fc_drops, fc_drops,
 				     rxc_entry, tmp) {
 		ret = cxip_ctrl_msg_send(&fc_drops->req);
-		assert(ret == FI_SUCCESS);
+		if (ret)
+			return ret;
 
 		dlist_remove(&fc_drops->rxc_entry);
 	}
@@ -2471,8 +2472,19 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 
 		CXIP_DBG("Enabled Receive PTE: %p\n", rxc);
 
+		/* Progress the control EP until all control messages can be
+		 * successfully queued.
+		 */
 		if (rxc->state == RXC_FLOW_CONTROL) {
-			ret = cxip_recv_resume(rxc);
+			/* Progress the control TX queues until all resume
+			 * control messages can be successfully queued.
+			 */
+			while ((ret = cxip_recv_resume(rxc)) == -FI_EAGAIN) {
+				fastlock_release(&rxc->lock);
+				cxip_ep_tx_ctrl_progress(rxc->ep_obj);
+				fastlock_acquire(&rxc->lock);
+			}
+
 			assert(ret == FI_SUCCESS);
 		}
 
@@ -3824,7 +3836,7 @@ static struct cxip_fc_peer *cxip_fc_peer_lookup(struct cxip_txc *txc,
  *
  * Caller must hold txc->lock.
  */
-static void cxip_fc_peer_put(struct cxip_fc_peer *peer)
+static int cxip_fc_peer_put(struct cxip_fc_peer *peer)
 {
 	int ret;
 
@@ -3834,12 +3846,14 @@ static void cxip_fc_peer_put(struct cxip_fc_peer *peer)
 
 		ret = cxip_ctrl_msg_send(&peer->req);
 		if (ret)
-			abort();
+			return ret;
 
 		CXIP_DBG("Notified disabled peer, TXC: %p NIC: %#x PID: %u dropped: %u\n",
 			 peer->txc, peer->caddr.nic, peer->caddr.pid,
 			 peer->dropped);
 	}
+
+	return FI_SUCCESS;
 }
 
 /*
@@ -4020,17 +4034,19 @@ static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req)
 			 txc, peer->caddr.nic, peer->caddr.pid, peer->pending);
 	}
 
-	peer->dropped++;
-	CXIP_DBG("Send dropped, req: %p NIC: %#x PID: %u pending: %u dropped: %u\n",
-		 req, peer->caddr.nic, peer->caddr.pid, peer->pending,
-		 peer->dropped);
-
 	/* Account for the dropped message. */
-	cxip_fc_peer_put(peer);
+	peer->dropped++;
+	ret = cxip_fc_peer_put(peer);
+	if (ret)
+		peer->dropped--;
+	else
+		CXIP_DBG("Send dropped, req: %p NIC: %#x PID: %u pending: %u dropped: %u\n",
+			 req, peer->caddr.nic, peer->caddr.pid, peer->pending,
+			 peer->dropped);
 
 	fastlock_release(&txc->lock);
 
-	return FI_SUCCESS;
+	return ret;
 }
 
 /*

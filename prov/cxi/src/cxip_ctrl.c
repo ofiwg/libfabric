@@ -95,7 +95,18 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 	cmd.c_state.eq = req->ep_obj->ctrl_tx_evtq->eqn;
 	cmd.c_state.initiator = match_id;
 
+	/* Cannot use ep_obj->lock else a deadlock will occur. Thus serialize on
+	 * TXQ lock instead.
+	 */
 	fastlock_acquire(&txq->lock);
+
+	if (!req->ep_obj->ctrl_tx_credits) {
+		CXIP_WARN("Control TX credits exhausted\n");
+		ret = -FI_EAGAIN;
+		goto err_unlock;
+	}
+
+	req->ep_obj->ctrl_tx_credits--;
 
 	if (memcmp(&txq->c_state, &cmd.c_state, sizeof(cmd.c_state))) {
 		ret = cxi_cq_emit_c_state(txq->dev_cmdq, &cmd.c_state);
@@ -106,7 +117,7 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 			 * Management
 			 */
 			ret = -FI_EAGAIN;
-			goto err_unlock;
+			goto err_return_credit;
 		}
 
 		/* Update TXQ C_STATE */
@@ -127,7 +138,7 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 		/* Return error according to Domain Resource Management
 		 */
 		ret = -FI_EAGAIN;
-		goto err_unlock;
+		goto err_return_credit;
 	}
 
 	cxi_cq_ring(txq->dev_cmdq);
@@ -138,6 +149,8 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 
 	return FI_SUCCESS;
 
+err_return_credit:
+	req->ep_obj->ctrl_tx_credits++;
 err_unlock:
 	fastlock_release(&txq->lock);
 
@@ -276,8 +289,17 @@ static struct cxip_ctrl_req *cxip_ep_ctrl_event_req(struct cxip_ep_obj *ep_obj,
 	return req;
 }
 
+static void cxip_ep_return_ctrl_tx_credits(struct cxip_ep_obj *ep_obj,
+					   unsigned int credits)
+{
+	/* Control TX credits are serialized on TXQ lock. */
+	fastlock_acquire(&ep_obj->ctrl_txq->lock);
+	ep_obj->ctrl_tx_credits += credits;
+	fastlock_release(&ep_obj->ctrl_txq->lock);
+}
+
 void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
-			      struct cxi_eq *ctrl_evtq)
+			      struct cxi_eq *ctrl_evtq, bool tx_evtq)
 {
 	const union c_event *event;
 	struct cxip_ctrl_req *req;
@@ -299,7 +321,12 @@ void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
 
 		/* Consume and ack event. */
 		cxi_eq_next_event(ctrl_evtq);
+
 		cxi_eq_ack_events(ctrl_evtq);
+
+		if (tx_evtq)
+			cxip_ep_return_ctrl_tx_credits(ep_obj, 1);
+
 	}
 
 	if (cxi_eq_get_drops(ctrl_evtq))
@@ -308,13 +335,18 @@ void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
 	fastlock_release(&ep_obj->lock);
 }
 
+void cxip_ep_tx_ctrl_progress(struct cxip_ep_obj *ep_obj)
+{
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl_tx_evtq, true);
+}
+
 /*
  * cxip_ep_ctrl_progress() - Progress operations using the control EQ.
  */
 void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj)
 {
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl_tgt_evtq);
-	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl_tx_evtq);
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl_tgt_evtq, false);
+	cxip_ep_tx_ctrl_progress(ep_obj);
 }
 
 /*
@@ -456,6 +488,12 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	ret = cxip_ctrl_msg_init(ep_obj);
 	if (ret != FI_SUCCESS)
 		goto free_pte;
+
+	/* Number of TX credits is equal to the number of 64-byte event slots
+	 * in the EQ minus 1 for detecting full EQ.
+	 */
+	ep_obj->ctrl_tx_credits = ((ep_obj->ctrl_tx_evtq->byte_size -
+				    C_EE_CFG_ECB_SIZE) / 64) - 1;
 
 	CXIP_DBG("EP control initialized: %p\n", ep_obj);
 
