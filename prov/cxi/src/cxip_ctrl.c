@@ -281,7 +281,6 @@ void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
 {
 	const union c_event *event;
 	struct cxip_ctrl_req *req;
-	int events = 0;
 	int ret;
 
 	/* The Control EQ is shared by a SEP. Avoid locking. */
@@ -298,14 +297,10 @@ void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
 				break;
 		}
 
-		/* Consume event. */
+		/* Consume and ack event. */
 		cxi_eq_next_event(ctrl_evtq);
-
-		events++;
-	}
-
-	if (events)
 		cxi_eq_ack_events(ctrl_evtq);
+	}
 
 	if (cxi_eq_get_drops(ctrl_evtq))
 		CXIP_FATAL("Control EQ drops detected\n");
