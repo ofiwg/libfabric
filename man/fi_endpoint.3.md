@@ -1072,9 +1072,21 @@ be used with the FI_INJECT data transfer flag.
 
 ## size
 
-The size of the context.  The size is specified as the minimum number
-of transmit operations that may be posted to the endpoint without the
-operation returning -FI_EAGAIN.
+The size of the transmit context.  The mapping of the size value to resources
+is provider specific, but it is directly related to the number of command
+entries allocated for the endpoint.  A smaller size value consumes fewer
+hardware and software resources, while a larger size allows queuing more
+transmit requests.
+
+While the size attribute guides the size of underlying endpoint transmit
+queue, there is not necessarily a one-to-one mapping between a transmit
+operation and a queue entry.  A single transmit operation may consume
+multiple queue entries; for example, one per scatter-gather entry.
+Additionally, the size field is intended to guide the allocation of the
+endpoint's transmit context.  Specifically, for connectionless endpoints,
+there may be lower-level queues use to track communication on a per peer basis.
+The sizes of any lower-level queues may only be significantly smaller than
+the endpoint's transmit size, in order to reduce resource utilization.
 
 ## iov_limit
 
@@ -1254,9 +1266,21 @@ anticipate receiving unexpected messages, rather than modifying this value.
 
 ## size
 
-The size of the context.  The size is specified as the minimum number
-of receive operations that may be posted to the endpoint without the
-operation returning -FI_EAGAIN.
+The size of the receive context.  The mapping of the size value to resources
+is provider specific, but it is directly related to the number of command
+entries allocated for the endpoint.  A smaller size value consumes fewer
+hardware and software resources, while a larger size allows queuing more
+transmit requests.
+
+While the size attribute guides the size of underlying endpoint receive
+queue, there is not necessarily a one-to-one mapping between a receive
+operation and a queue entry.  A single receive operation may consume
+multiple queue entries; for example, one per scatter-gather entry.
+Additionally, the size field is intended to guide the allocation of the
+endpoint's receive context.  Specifically, for connectionless endpoints,
+there may be lower-level queues use to track communication on a per peer basis.
+The sizes of any lower-level queues may only be significantly smaller than
+the endpoint's receive size, in order to reduce resource utilization.
 
 ## iov_limit
 
