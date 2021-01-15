@@ -1635,8 +1635,8 @@ rxm_ep_progress_sar_deferred_segments(struct rxm_deferred_tx_entry *def_tx_entry
 			      tx_buf->hdr.desc, 0, tx_buf);
 		if (ret) {
 			if (ret != -FI_EAGAIN) {
-				rxm_ep_sar_handle_segment_failure(def_tx_entry, ret);
-				goto sar_finish;
+				rxm_ep_sar_handle_segment_failure(def_tx_entry,
+								  ret);
 			}
 			return ret;
 		}
@@ -1648,7 +1648,7 @@ rxm_ep_progress_sar_deferred_segments(struct rxm_deferred_tx_entry *def_tx_entry
 		    def_tx_entry->sar_seg.segs_cnt) {
 			assert(rxm_sar_get_seg_type(&tx_buf->pkt.ctrl_hdr) ==
 			       RXM_SAR_SEG_LAST);
-			goto sar_finish;
+			return 0;
 		}
 	}
 
@@ -1674,8 +1674,8 @@ rxm_ep_progress_sar_deferred_segments(struct rxm_deferred_tx_entry *def_tx_entry
 				def_tx_entry->sar_seg.device);
 		if (ret) {
 			if (ret != -FI_EAGAIN) {
-				rxm_ep_sar_handle_segment_failure(def_tx_entry, ret);
-				goto sar_finish;
+				rxm_ep_sar_handle_segment_failure(def_tx_entry,
+								  ret);
 			}
 
 			return ret;
@@ -1684,11 +1684,7 @@ rxm_ep_progress_sar_deferred_segments(struct rxm_deferred_tx_entry *def_tx_entry
 		def_tx_entry->sar_seg.remain_len -= rxm_eager_limit;
 	}
 
-sar_finish:
-	rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
-	free(def_tx_entry);
-
-	return ret;
+	return 0;
 }
 
 void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
@@ -1716,7 +1712,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				      0, def_tx_entry->rndv_ack.rx_buf);
 			if (ret) {
 				if (ret == -FI_EAGAIN)
-					break;
+					return;
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
 						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
 						   def_tx_entry->rndv_ack.rx_buf->
@@ -1732,8 +1728,6 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				RXM_UPDATE_STATE(FI_LOG_EP_DATA,
 						 def_tx_entry->rndv_ack.rx_buf,
 						 RXM_RNDV_WRITE_DATA_SENT);
-			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
-			free(def_tx_entry);
 			break;
 		case RXM_DEFERRED_TX_RNDV_DONE:
 			ret = fi_send(def_tx_entry->rxm_conn->msg_ep,
@@ -1743,7 +1737,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				      0, def_tx_entry->rndv_done.tx_buf);
 			if (ret) {
 				if (ret == -FI_EAGAIN)
-					break;
+					return;
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.tx_cq,
 						   def_tx_entry->rxm_ep->util_ep.tx_cntr,
 						   def_tx_entry->rndv_done.tx_buf, ret);
@@ -1751,8 +1745,6 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA,
 					 def_tx_entry->rndv_done.tx_buf,
 					 RXM_RNDV_WRITE_DONE_SENT);
-			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
-			free(def_tx_entry);
 			break;
 		case RXM_DEFERRED_TX_RNDV_READ:
 			ret = rxm_ep->rndv_ops->xfer(
@@ -1765,14 +1757,12 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				def_tx_entry->rndv_read.rx_buf);
 			if (ret) {
 				if (ret == -FI_EAGAIN)
-					break;
+					return;
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
 						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
 						   def_tx_entry->rndv_read.rx_buf->
 							recv_entry->context, ret);
 			}
-			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
-			free(def_tx_entry);
 			break;
 		case RXM_DEFERRED_TX_RNDV_WRITE:
 			ret = rxm_ep->rndv_ops->xfer(
@@ -1785,27 +1775,24 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				def_tx_entry->rndv_write.tx_buf);
 			if (ret) {
 				if (ret == -FI_EAGAIN)
-					break;
+					return;
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
 						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
 						   def_tx_entry->rndv_write.tx_buf, ret);
 			}
-			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
-			free(def_tx_entry);
 			break;
 		case RXM_DEFERRED_TX_SAR_SEG:
 			ret = rxm_ep_progress_sar_deferred_segments(def_tx_entry);
+			if (ret == -FI_EAGAIN)
+				return;
 			break;
 		case RXM_DEFERRED_TX_ATOMIC_RESP:
 			ret = rxm_atomic_send_respmsg(rxm_ep,
 					def_tx_entry->rxm_conn,
 					def_tx_entry->atomic_resp.tx_buf,
 					def_tx_entry->atomic_resp.len);
-			if (ret)
-				if (ret == -FI_EAGAIN)
-					break;
-			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
-			free(def_tx_entry);
+			if (ret == -FI_EAGAIN)
+				return;
 			break;
 		case RXM_DEFERRED_TX_CREDIT_SEND:
 			iov.iov_base = &def_tx_entry->credit_msg.tx_buf->pkt;
@@ -1821,19 +1808,20 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			ret = fi_sendmsg(def_tx_entry->rxm_conn->msg_ep, &msg,
 					 FI_PRIORITY);
 			if (ret) {
-				if (ret == -FI_EAGAIN)
-					break;
-				rxm_cq_write_error(
-					def_tx_entry->rxm_ep->util_ep.rx_cq,
-					def_tx_entry->rxm_ep->util_ep.rx_cntr,
-					def_tx_entry->rndv_read.rx_buf->
-						recv_entry->context, ret);
-				break;
+				if (ret != -FI_EAGAIN) {
+					rxm_cq_write_error(
+						def_tx_entry->rxm_ep->util_ep.rx_cq,
+						def_tx_entry->rxm_ep->util_ep.rx_cntr,
+						def_tx_entry->rndv_read.rx_buf->
+							recv_entry->context, ret);
+				}
+				return;
 			}
-			rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
-			free(def_tx_entry);
 			break;
 		}
+
+		rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
+		free(def_tx_entry);
 	}
 }
 
