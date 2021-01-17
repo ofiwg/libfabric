@@ -792,6 +792,12 @@ static inline int fi_fd_nonblock(SOCKET fd)
 	return ioctlsocket(fd, FIONBIO, &argp) ? -WSAGetLastError() : 0;
 }
 
+static inline int fi_fd_block(SOCKET fd)
+{
+	u_long argp = 0;
+	return ioctlsocket(fd, FIONBIO, &argp) ? -WSAGetLastError() : 0;
+}
+
 /* Note: Use static variable `errno` for libc routines
  * (such as fopen, lseek and etc)
  * If you need to define which function/variable is needed

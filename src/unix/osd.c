@@ -91,6 +91,21 @@ int fi_fd_nonblock(int fd)
 	return 0;
 }
 
+int fi_fd_block(int fd)
+{
+	long flags = 0;
+
+	flags = fcntl(fd, F_GETFL);
+	if (flags < 0) {
+		return -errno;
+	}
+
+	if(fcntl(fd, F_SETFL, flags & ~O_NONBLOCK))
+		return -errno;
+
+	return 0;
+}
+
 int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms)
 {
 	uint64_t t;
