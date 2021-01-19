@@ -260,6 +260,10 @@ enum rxr_tx_comm_type {
 	RXR_TX_SENT_READRSP,	/* tx_entry (on remote EP) sent
 				 * read response (FI_READ only)
 				 */
+	RXR_TX_QUEUED_READRSP, /* tx_entry (on remote EP) was
+				* unable to send read response
+				* (FI_READ only)
+				*/
 	RXR_TX_WAIT_READ_FINISH, /* tx_entry (on initiating EP) wait
 				  * for rx_entry to finish receiving
 				  * (FI_READ only)
