@@ -407,7 +407,9 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 
 static void rxm_fini(void)
 {
-	/* yawn */
+#if HAVE_RXM_DL
+	ofi_mem_fini();
+#endif
 }
 
 struct fi_provider rxm_prov = {
@@ -546,7 +548,7 @@ RXM_INI
 			"(FI_OFI_RXM_DATA_AUTO_PROGRESS = 1), domain threading "
 			"level would be set to FI_THREAD_SAFE\n");
 
-#ifdef HAVE_RXM_DL
+#if HAVE_RXM_DL
 	ofi_mem_init();
 #endif
 
