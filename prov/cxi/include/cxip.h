@@ -738,6 +738,8 @@ struct cxip_fc_peer {
 	struct dlist_entry msg_queue;
 	uint32_t pending;
 	uint32_t dropped;
+	uint32_t pending_acks;
+	bool replayed;
 };
 
 struct cxip_fc_drops {

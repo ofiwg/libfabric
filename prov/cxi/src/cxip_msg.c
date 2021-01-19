@@ -3848,6 +3848,8 @@ static int cxip_fc_peer_put(struct cxip_fc_peer *peer)
 		if (ret)
 			return ret;
 
+		peer->pending_acks++;
+
 		CXIP_DBG("Notified disabled peer, TXC: %p NIC: %#x PID: %u dropped: %u\n",
 			 peer->txc, peer->caddr.nic, peer->caddr.pid,
 			 peer->dropped);
@@ -3857,14 +3859,38 @@ static int cxip_fc_peer_put(struct cxip_fc_peer *peer)
 }
 
 /*
+ * cxip_fc_peer_fini() - Remove disabled peer state.
+ *
+ * Caller must hold txc->lock.
+ */
+static void cxip_fc_peer_fini(struct cxip_fc_peer *peer)
+{
+	assert(dlist_empty(&peer->msg_queue));
+	dlist_remove(&peer->txc_entry);
+	free(peer);
+}
+
+/*
  * cxip_fc_notify_cb() - Process FC notify completion events.
  */
 int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
 {
+	struct cxip_fc_peer *peer = container_of(req, struct cxip_fc_peer, req);
+	struct cxip_txc *txc = peer->txc;
+
 	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
 		switch (cxi_event_rc(event)) {
 		case C_RC_OK:
+			fastlock_acquire(&txc->lock);
+
+			/* Peer flow control structure can only be freed if
+			 * replay is complete and all acks accounted for.
+			 */
+			peer->pending_acks--;
+			if (!peer->pending_acks && peer->replayed)
+				cxip_fc_peer_fini(peer);
+			fastlock_release(&txc->lock);
 			return FI_SUCCESS;
 
 		/* This error occurs when the target's control event queue has
@@ -3942,18 +3968,6 @@ static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
 }
 
 /*
- * cxip_fc_peer_fini() - Remove disabled peer state.
- *
- * Caller must hold txc->lock.
- */
-static void cxip_fc_peer_fini(struct cxip_fc_peer *peer)
-{
-	assert(dlist_empty(&peer->msg_queue));
-	dlist_remove(&peer->txc_entry);
-	free(peer);
-}
-
-/*
  * cxip_fc_resume() - Replay dropped Sends.
  *
  * Called by sending EP after being notified disabled peer was re-enabled.
@@ -3996,7 +4010,13 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
 		CXIP_DBG("Replayed %p\n", req);
 	}
 
-	cxip_fc_peer_fini(peer);
+	/* Peer flow control structure can only be freed if replay is complete
+	 * and all acks accounted for.
+	 */
+	if (!peer->pending_acks)
+		cxip_fc_peer_fini(peer);
+	else
+		peer->replayed = true;
 
 	fastlock_release(&txc->lock);
 
