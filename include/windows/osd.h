@@ -226,6 +226,10 @@ extern "C" {
 	 ((err) == EWOULDBLOCK)		||	\
 	 ((err) == EAGAIN))
 
+#define OFI_SOCK_TRY_ACCEPT_AGAIN(err)		\
+	(((err) == EAGAIN)		||	\
+	 ((err) == EWOULDBLOCK))
+
 #define OFI_SOCK_TRY_CONN_AGAIN(err)		\
 	(((err) == EWOULDBLOCK)		||	\
 	 ((err) == EINPROGRESS))
@@ -789,6 +793,12 @@ static inline int ofi_close_socket(SOCKET socket)
 static inline int fi_fd_nonblock(SOCKET fd)
 {
 	u_long argp = 1;
+	return ioctlsocket(fd, FIONBIO, &argp) ? -WSAGetLastError() : 0;
+}
+
+static inline int fi_fd_block(SOCKET fd)
+{
+	u_long argp = 0;
 	return ioctlsocket(fd, FIONBIO, &argp) ? -WSAGetLastError() : 0;
 }
 

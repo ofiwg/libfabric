@@ -73,6 +73,10 @@
 	(((err) == EAGAIN)	||		\
 	 ((err) == EWOULDBLOCK))
 
+#define OFI_SOCK_TRY_ACCEPT_AGAIN(err)		\
+	(((err) == EAGAIN)	||		\
+	 ((err) == EWOULDBLOCK))
+
 #define OFI_SOCK_TRY_CONN_AGAIN(err)	\
 	((err) == EINPROGRESS)
 
@@ -142,6 +146,8 @@ static inline int ofi_close_socket(SOCKET socket)
 }
 
 int fi_fd_nonblock(int fd);
+
+int fi_fd_block(int fd);
 
 static inline int ofi_sockerr(void)
 {
