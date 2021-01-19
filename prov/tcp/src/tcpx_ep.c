@@ -124,7 +124,7 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	}
 
 	cm_ctx->fid = &tcpx_ep->util_ep.ep_fid.fid;
-	cm_ctx->type = CLIENT_SEND_CONNREQ;
+	cm_ctx->state = TCPX_CM_CONNECTING;
 
 	if (paramlen) {
 		cm_ctx->cm_data_sz = paramlen;
@@ -163,7 +163,7 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 
 	tcpx_ep->state = TCPX_ACCEPTING;
 	cm_ctx->fid = &tcpx_ep->util_ep.ep_fid.fid;
-	cm_ctx->type = SERVER_SEND_CM_ACCEPT;
+	cm_ctx->state = TCPX_CM_RESP_READY;
 	if (paramlen) {
 		cm_ctx->cm_data_sz = paramlen;
 		memcpy(cm_ctx->msg.data, param, paramlen);
@@ -919,7 +919,7 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	_pep->cm_ctx.fid = &_pep->util_pep.pep_fid.fid;
-	_pep->cm_ctx.type = SERVER_SOCK_ACCEPT;
+	_pep->cm_ctx.state = TCPX_CM_LISTENING;
 	_pep->cm_ctx.cm_data_sz = 0;
 	_pep->sock = INVALID_SOCKET;
 

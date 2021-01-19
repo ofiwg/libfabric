@@ -173,8 +173,8 @@ unlock:
 	return ret;
 }
 
-static int proc_conn_resp(struct tcpx_cm_context *cm_ctx,
-			  struct tcpx_ep *ep)
+static int tcpx_cm_proc_resp(struct tcpx_cm_context *cm_ctx,
+			     struct tcpx_ep *ep)
 {
 	struct fi_eq_cm_entry *cm_entry;
 	ssize_t len;
@@ -218,8 +218,8 @@ int tcpx_eq_wait_try_func(void *arg)
 	return FI_SUCCESS;
 }
 
-static void client_recv_connresp(struct util_wait *wait,
-				 struct tcpx_cm_context *cm_ctx)
+static void tcpx_cm_recv_resp(struct util_wait *wait,
+			      struct tcpx_cm_context *cm_ctx)
 {
 	struct tcpx_ep *ep;
 	ssize_t ret;
@@ -235,8 +235,7 @@ static void client_recv_connresp(struct util_wait *wait,
 		goto err;
 	}
 
-	/* TODO: merge proc_conn_resp into here */
-	ret = proc_conn_resp(cm_ctx, ep);
+	ret = tcpx_cm_proc_resp(cm_ctx, ep);
 	if (ret)
 		goto err;
 
@@ -247,8 +246,8 @@ err:
 	free(cm_ctx);
 }
 
-static void server_send_cm_accept(struct util_wait *wait,
-				  struct tcpx_cm_context *cm_ctx)
+static void tcpx_cm_send_resp(struct util_wait *wait,
+			      struct tcpx_cm_context *cm_ctx)
 {
 	struct fi_eq_cm_entry cm_entry = {0};
 	struct tcpx_ep *ep;
@@ -291,8 +290,8 @@ err:
 	free(cm_ctx);
 }
 
-static void server_recv_connreq(struct util_wait *wait,
-				struct tcpx_cm_context *cm_ctx)
+static void tcpx_cm_recv_req(struct util_wait *wait,
+			     struct tcpx_cm_context *cm_ctx)
 {
 	struct tcpx_conn_handle *handle;
 	struct fi_eq_cm_entry *cm_entry;
@@ -306,7 +305,7 @@ static void server_recv_connreq(struct util_wait *wait,
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"fd deletion from ofi_wait failed\n");
-		cm_ctx->type = CLIENT_SERVER_ERROR;
+		cm_ctx->state = TCPX_CM_ERROR;
 		return;
 	}
 
@@ -335,6 +334,7 @@ static void server_recv_connreq(struct util_wait *wait,
 	handle->endian_match = (cm_ctx->msg.hdr.conn_data == 1);
 	cm_entry->info->handle = &handle->handle;
 	memcpy(cm_entry->data, cm_ctx->msg.data, cm_ctx->cm_data_sz);
+	cm_ctx->state = TCPX_CM_REQ_RVCD;
 
 	ret = (int) fi_eq_write(&handle->pep->util_pep.eq->eq_fid,
 				FI_CONNREQ, cm_entry,
@@ -357,8 +357,8 @@ err1:
 	free(handle);
 }
 
-static void client_send_connreq(struct util_wait *wait,
-				struct tcpx_cm_context *cm_ctx)
+static void tcpx_cm_send_req(struct util_wait *wait,
+			     struct tcpx_cm_context *cm_ctx)
 {
 	struct tcpx_ep *ep;
 	socklen_t len;
@@ -389,7 +389,7 @@ static void client_send_connreq(struct util_wait *wait,
 
 	ret = ofi_wait_del_fd(wait, ep->sock);
 
-	cm_ctx->type = CLIENT_RECV_CONNRESP;
+	cm_ctx->state = TCPX_CM_REQ_SENT;
 	ret = ofi_wait_add_fd(wait, ep->sock, POLLIN,
 			      tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret)
@@ -402,8 +402,8 @@ err:
 	free(cm_ctx);
 }
 
-static void server_sock_accept(struct util_wait *wait,
-			       struct tcpx_cm_context *cm_ctx)
+static void tcpx_accept(struct util_wait *wait,
+			struct tcpx_cm_context *cm_ctx)
 {
 	struct tcpx_conn_handle *handle;
 	struct tcpx_cm_context *rx_req_cm_ctx;
@@ -411,7 +411,7 @@ static void server_sock_accept(struct util_wait *wait,
 	SOCKET sock;
 	int ret;
 
-	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Received Connreq\n");
+	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "accepting connection\n");
 	assert(cm_ctx->fid->fclass == FI_CLASS_PEP);
 	pep = container_of(cm_ctx->fid, struct tcpx_pep, util_pep.pep_fid.fid);
 
@@ -448,7 +448,7 @@ static void server_sock_accept(struct util_wait *wait,
 	handle->handle.fclass = FI_CLASS_CONNREQ;
 	handle->pep = pep;
 	rx_req_cm_ctx->fid = &handle->handle;
-	rx_req_cm_ctx->type = SERVER_RECV_CONNREQ;
+	rx_req_cm_ctx->state = TCPX_CM_WAIT_REQ;
 
 	ret = ofi_wait_add_fd(wait, sock, POLLIN,
 			      tcpx_eq_wait_try_func,
@@ -465,43 +465,38 @@ err1:
 	ofi_close_socket(sock);
 }
 
-/*
- * The cm_context::fid is an endpoint, which contains the EP state.
- * That state duplicates the cm_context::type.  Remove cm_ctx and use
- * the fid fclass and EP state.
- */
 static void process_cm_ctx(struct util_wait *wait,
 			   struct tcpx_cm_context *cm_ctx)
 {
-	switch (cm_ctx->type) {
-	case SERVER_SOCK_ACCEPT:
+	switch (cm_ctx->state) {
+	case TCPX_CM_LISTENING:
 		assert(cm_ctx->fid->fclass == FI_CLASS_PEP);
-		server_sock_accept(wait, cm_ctx);
+		tcpx_accept(wait, cm_ctx);
 		break;
-	case CLIENT_SEND_CONNREQ:
+	case TCPX_CM_CONNECTING:
 		assert((cm_ctx->fid->fclass == FI_CLASS_EP) &&
 		       (container_of(cm_ctx->fid, struct tcpx_ep,
 				     util_ep.ep_fid.fid)->state ==
 							  TCPX_CONNECTING));
-		client_send_connreq(wait, cm_ctx);
+		tcpx_cm_send_req(wait, cm_ctx);
 		break;
-	case SERVER_RECV_CONNREQ:
+	case TCPX_CM_WAIT_REQ:
 		assert(cm_ctx->fid->fclass == FI_CLASS_CONNREQ);
-		server_recv_connreq(wait, cm_ctx);
+		tcpx_cm_recv_req(wait, cm_ctx);
 		break;
-	case SERVER_SEND_CM_ACCEPT:
+	case TCPX_CM_RESP_READY:
 		assert((cm_ctx->fid->fclass == FI_CLASS_EP) &&
 		       (container_of(cm_ctx->fid, struct tcpx_ep,
 				     util_ep.ep_fid.fid)->state ==
 							  TCPX_ACCEPTING));
-		server_send_cm_accept(wait, cm_ctx);
+		tcpx_cm_send_resp(wait, cm_ctx);
 		break;
-	case CLIENT_RECV_CONNRESP:
+	case TCPX_CM_REQ_SENT:
 		assert((cm_ctx->fid->fclass == FI_CLASS_EP) &&
 		       (container_of(cm_ctx->fid, struct tcpx_ep,
 				     util_ep.ep_fid.fid)->state ==
 							  TCPX_CONNECTING));
-		client_recv_connresp(wait, cm_ctx);
+		tcpx_cm_recv_resp(wait, cm_ctx);
 		break;
 	default:
 		break;
