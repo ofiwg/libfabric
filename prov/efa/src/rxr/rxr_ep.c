@@ -1618,11 +1618,6 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	dlist_foreach_container_safe(&ep->rx_entry_queued_list,
 				     struct rxr_rx_entry,
 				     rx_entry, queued_entry, tmp) {
-		peer = rxr_ep_get_peer(ep, rx_entry->addr);
-
-		if (peer->flags & RXR_PEER_IN_BACKOFF)
-			continue;
-
 		if (rx_entry->state == RXR_RX_QUEUED_CTRL) {
 			/*
 			 * We should only have one packet pending at a time for
@@ -1649,11 +1644,6 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	dlist_foreach_container_safe(&ep->tx_entry_queued_list,
 				     struct rxr_tx_entry,
 				     tx_entry, queued_entry, tmp) {
-		peer = rxr_ep_get_peer(ep, tx_entry->addr);
-
-		if (peer->flags & RXR_PEER_IN_BACKOFF)
-			continue;
-
 		/*
 		 * It is possible to receive an RNR after we queue this
 		 * tx_entry if we run out of resources in the medium message
@@ -1700,10 +1690,6 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	dlist_foreach_container(&ep->tx_pending_list, struct rxr_tx_entry,
 				tx_entry, entry) {
 		peer = rxr_ep_get_peer(ep, tx_entry->addr);
-
-		if (peer->flags & RXR_PEER_IN_BACKOFF)
-			continue;
-
 		if (tx_entry->window > 0)
 			tx_entry->send_flags |= FI_MORE;
 		else
@@ -1738,11 +1724,6 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	 */
 	dlist_foreach_container_safe(&ep->read_pending_list, struct rxr_read_entry,
 				     read_entry, pending_entry, tmp) {
-		peer = rxr_ep_get_peer(ep, read_entry->addr);
-
-		if (peer->flags & RXR_PEER_IN_BACKOFF)
-			continue;
-
 		/*
 		 * The core's TX queue is full so we can't do any
 		 * additional work.
