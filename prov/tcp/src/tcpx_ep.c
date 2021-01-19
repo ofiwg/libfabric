@@ -128,7 +128,7 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 
 	if (paramlen) {
 		cm_ctx->cm_data_sz = paramlen;
-		memcpy(cm_ctx->cm_data, param, paramlen);
+		memcpy(cm_ctx->msg.data, param, paramlen);
 	}
 
 	ret = ofi_wait_add_fd(tcpx_ep->util_ep.eq->wait, tcpx_ep->sock,
@@ -166,7 +166,7 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	cm_ctx->type = SERVER_SEND_CM_ACCEPT;
 	if (paramlen) {
 		cm_ctx->cm_data_sz = paramlen;
-		memcpy(cm_ctx->cm_data, param, paramlen);
+		memcpy(cm_ctx->msg.data, param, paramlen);
 	}
 
 	ret = ofi_wait_add_fd(tcpx_ep->util_ep.eq->wait, tcpx_ep->sock,
