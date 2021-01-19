@@ -1685,12 +1685,6 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			tx_entry->state = RXR_TX_SEND;
 			dlist_insert_tail(&tx_entry->entry,
 					  &ep->tx_pending_list);
-		} else {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
-			        "Unknown queued tx_entry state: %d\n",
-				tx_entry->state);
-			ret = -FI_EIO;
-			goto tx_err;
 		}
 	}
 

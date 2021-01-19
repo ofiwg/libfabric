@@ -194,7 +194,6 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	case RXR_TX_QUEUED_DATA_RNR:
 		dlist_remove(&tx_entry->queued_entry);
 		break;
-	case RXR_TX_SENT_READRSP:
 	case RXR_TX_WAIT_READ_FINISH:
 		break;
 	default:

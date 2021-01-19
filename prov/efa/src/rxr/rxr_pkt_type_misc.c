@@ -278,7 +278,6 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	data_len = rxr_get_readrsp_hdr(pkt_entry->pkt)->seg_size;
-	tx_entry->state = RXR_TX_SENT_READRSP;
 	tx_entry->bytes_sent += data_len;
 	tx_entry->window -= data_len;
 	assert(tx_entry->window >= 0);
