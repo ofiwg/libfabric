@@ -312,19 +312,14 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 		goto out;
 	}
 
-	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
-
-	if (peer->flags & RXR_PEER_IN_BACKOFF) {
-		err = -FI_EAGAIN;
-		goto out;
-	}
-
 	tx_entry = rxr_rma_alloc_tx_entry(rxr_ep, msg, ofi_op_read_req, flags);
 	if (OFI_UNLIKELY(!tx_entry)) {
 		rxr_ep_progress_internal(rxr_ep);
 		err = -FI_EAGAIN;
 		goto out;
 	}
+
+	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 
 	use_lower_ep_read = false;
 	if (peer->is_local) {
@@ -484,7 +479,6 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 			 uint64_t flags)
 {
 	ssize_t err;
-	struct rxr_peer *peer;
 	struct rxr_ep *rxr_ep;
 	struct rxr_tx_entry *tx_entry;
 
@@ -498,13 +492,6 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 
 	rxr_perfset_start(rxr_ep, perf_rxr_tx);
 	fastlock_acquire(&rxr_ep->util_ep.lock);
-
-	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
-
-	if (peer->flags & RXR_PEER_IN_BACKOFF) {
-		err = -FI_EAGAIN;
-		goto out;
-	}
 
 	tx_entry = rxr_rma_alloc_tx_entry(rxr_ep, msg, ofi_op_write, flags);
 	if (OFI_UNLIKELY(!tx_entry)) {
