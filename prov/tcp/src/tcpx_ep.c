@@ -93,6 +93,13 @@ static int tcpx_setup_socket(SOCKET sock, struct fi_info *info)
 		return -ofi_sockerr();
 	}
 
+	ret = fi_fd_nonblock(sock);
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"failed to set socket to nonblocking\n");
+		return ret;
+	}
+
 	return 0;
 }
 

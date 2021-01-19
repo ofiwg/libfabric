@@ -39,13 +39,16 @@
 #include <ofi_util.h>
 
 
+/* The underlying socket has the POLLIN event set.  The entire
+ * CM message should be readable, as it fits within a single MTU
+ * and is the first data transferred over the socket.
+ */
 static int rx_cm_data(SOCKET fd, int type, struct tcpx_cm_context *cm_ctx)
 {
 	size_t data_size = 0;
 	ssize_t ret;
 
-	ret = ofi_recv_socket(fd, &cm_ctx->msg.hdr, sizeof(cm_ctx->msg.hdr),
-			      MSG_WAITALL);
+	ret = ofi_recv_socket(fd, &cm_ctx->msg.hdr, sizeof(cm_ctx->msg.hdr), 0);
 	if (ret != sizeof(cm_ctx->msg.hdr)) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Failed to read cm header\n");
@@ -71,8 +74,7 @@ static int rx_cm_data(SOCKET fd, int type, struct tcpx_cm_context *cm_ctx)
 
 	data_size = MIN(ntohs(cm_ctx->msg.hdr.seg_size), TCPX_MAX_CM_DATA_SIZE);
 	if (data_size) {
-		ret = ofi_recv_socket(fd, cm_ctx->msg.data, data_size,
-				      MSG_WAITALL);
+		ret = ofi_recv_socket(fd, cm_ctx->msg.data, data_size, 0);
 		if ((size_t) ret != data_size) {
 			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 				"Failed to read cm data\n");
@@ -102,6 +104,11 @@ out:
 	return ret;
 }
 
+/* The underlying socket has the POLLOUT event set.  It is ready
+ * to accept outbound data.  We expect to transfer the entire CM
+ * message as it fits into a single MTU and is the first data
+ * transferred over the socket.
+ */
 static int tx_cm_data(SOCKET fd, uint8_t type, struct tcpx_cm_context *cm_ctx)
 {
 	ssize_t ret;
@@ -132,12 +139,6 @@ static int tcpx_ep_enable(struct tcpx_ep *ep)
 		goto unlock;
 	}
 
-	ret = fi_fd_nonblock(ep->sock);
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"failed to set socket to nonblocking\n");
-		goto unlock;
-	}
 	ep->state = TCPX_CONNECTED;
 	fastlock_release(&ep->lock);
 
@@ -422,15 +423,6 @@ static void tcpx_accept(struct util_wait *wait,
 				"accept error: %d\n", ofi_sockerr());
 		}
 		return;
-	}
-
-	/* Make sure the new socket doesn't inherit the non-blocking state
-	 * from the PEP socket (default behavior with BSD and OSX). */
-	ret = fi_fd_block(sock);
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"failed to set socket to blocking\n");
-		goto err1;
 	}
 
 	handle = calloc(1, sizeof(*handle));
