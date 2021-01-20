@@ -103,7 +103,6 @@ enum tcpx_cm_state {
 	TCPX_CM_REQ_RVCD,
 	TCPX_CM_RESP_READY,
 	/* CM context is freed once connected */
-	TCPX_CM_ERROR,
 };
 
 struct tcpx_cm_msg {
