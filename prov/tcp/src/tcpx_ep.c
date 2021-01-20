@@ -128,7 +128,7 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 
 	if (paramlen) {
 		cm_ctx->cm_data_sz = paramlen;
-		memcpy(cm_ctx->cm_data, param, paramlen);
+		memcpy(cm_ctx->msg.data, param, paramlen);
 	}
 
 	ret = ofi_wait_add_fd(tcpx_ep->util_ep.eq->wait, tcpx_ep->sock,
@@ -166,7 +166,7 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	cm_ctx->type = SERVER_SEND_CM_ACCEPT;
 	if (paramlen) {
 		cm_ctx->cm_data_sz = paramlen;
-		memcpy(cm_ctx->cm_data, param, paramlen);
+		memcpy(cm_ctx->msg.data, param, paramlen);
 	}
 
 	ret = ofi_wait_add_fd(tcpx_ep->util_ep.eq->wait, tcpx_ep->sock,
@@ -817,23 +817,24 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 			   const void *param, size_t paramlen)
 {
-	struct ofi_ctrl_hdr hdr;
+	struct tcpx_cm_msg msg;
 	struct tcpx_conn_handle *tcpx_handle;
 	int ret;
 
 	tcpx_handle = container_of(handle, struct tcpx_conn_handle, handle);
 
-	memset(&hdr, 0, sizeof(hdr));
-	hdr.version = TCPX_CTRL_HDR_VERSION;
-	hdr.type = ofi_ctrl_nack;
-	hdr.seg_size = htons((uint16_t) paramlen);
+	memset(&msg.hdr, 0, sizeof(msg.hdr));
+	msg.hdr.version = TCPX_CTRL_HDR_VERSION;
+	msg.hdr.type = ofi_ctrl_nack;
+	msg.hdr.seg_size = htons((uint16_t) paramlen);
+	if (paramlen)
+		memcpy(&msg.data, param, paramlen);
 
-	ret = ofi_send_socket(tcpx_handle->sock, &hdr,
-			      sizeof(hdr), MSG_NOSIGNAL);
-
-	if ((ret == sizeof(hdr)) && paramlen)
-		(void) ofi_send_socket(tcpx_handle->sock, param,
-				       paramlen, MSG_NOSIGNAL);
+	ret = ofi_send_socket(tcpx_handle->sock, &msg,
+			      sizeof(msg.hdr) + paramlen, MSG_NOSIGNAL);
+	if (ret != sizeof(msg.hdr) + paramlen)
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"sending of reject message failed\n");
 
 	ofi_shutdown(tcpx_handle->sock, SHUT_RDWR);
 	ret = ofi_close_socket(tcpx_handle->sock);

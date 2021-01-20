@@ -104,11 +104,16 @@ enum tcpx_cm_event_type {
 	CLIENT_SERVER_ERROR,
 };
 
+struct tcpx_cm_msg {
+	struct ofi_ctrl_hdr hdr;
+	char data[TCPX_MAX_CM_DATA_SIZE];
+};
+
 struct tcpx_cm_context {
 	fid_t			fid;
 	enum tcpx_cm_event_type	type;
 	size_t			cm_data_sz;
-	char			cm_data[TCPX_MAX_CM_DATA_SIZE];
+	struct tcpx_cm_msg	msg;
 };
 
 struct tcpx_port_range {

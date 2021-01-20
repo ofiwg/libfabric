@@ -39,38 +39,39 @@
 #include <ofi_util.h>
 
 
-static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
-		      int type, struct tcpx_cm_context *cm_ctx)
+static int rx_cm_data(SOCKET fd, int type, struct tcpx_cm_context *cm_ctx)
 {
 	size_t data_size = 0;
 	ssize_t ret;
 
-	ret = ofi_recv_socket(fd, hdr, sizeof(*hdr), MSG_WAITALL);
-	if (ret != sizeof(*hdr)) {
+	ret = ofi_recv_socket(fd, &cm_ctx->msg.hdr, sizeof(cm_ctx->msg.hdr),
+			      MSG_WAITALL);
+	if (ret != sizeof(cm_ctx->msg.hdr)) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Failed to read cm header\n");
 		ret = ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
 		goto out;
 	}
 
-	if (hdr->version != TCPX_CTRL_HDR_VERSION) {
+	if (cm_ctx->msg.hdr.version != TCPX_CTRL_HDR_VERSION) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"cm protocol version mismatch\n");
 		ret = -FI_ENOPROTOOPT;
 		goto out;
 	}
 
-	if (hdr->type != type && hdr->type != ofi_ctrl_nack) {
+	if (cm_ctx->msg.hdr.type != type &&
+	    cm_ctx->msg.hdr.type != ofi_ctrl_nack) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"unexpected cm message type, expected %d or %d got: %d\n",
-			type, ofi_ctrl_nack, hdr->type);
+			type, ofi_ctrl_nack, cm_ctx->msg.hdr.type);
 		ret = -FI_ECONNREFUSED;
 		goto out;
 	}
 
-	data_size = MIN(ntohs(hdr->seg_size), TCPX_MAX_CM_DATA_SIZE);
+	data_size = MIN(ntohs(cm_ctx->msg.hdr.seg_size), TCPX_MAX_CM_DATA_SIZE);
 	if (data_size) {
-		ret = ofi_recv_socket(fd, cm_ctx->cm_data, data_size,
+		ret = ofi_recv_socket(fd, cm_ctx->msg.data, data_size,
 				      MSG_WAITALL);
 		if ((size_t) ret != data_size) {
 			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -80,15 +81,15 @@ static int rx_cm_data(SOCKET fd, struct ofi_ctrl_hdr *hdr,
 			goto out;
 		}
 
-		if (ntohs(hdr->seg_size) > TCPX_MAX_CM_DATA_SIZE) {
+		if (ntohs(cm_ctx->msg.hdr.seg_size) > TCPX_MAX_CM_DATA_SIZE) {
 			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 				"Discarding unexpected cm data\n");
-			ofi_discard_socket(fd, ntohs(hdr->seg_size) -
+			ofi_discard_socket(fd, ntohs(cm_ctx->msg.hdr.seg_size) -
 					   TCPX_MAX_CM_DATA_SIZE);
 		}
 	}
 
-	if (hdr->type == ofi_ctrl_nack) {
+	if (cm_ctx->msg.hdr.type == ofi_ctrl_nack) {
 		FI_INFO(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Connection refused from remote\n");
 		ret = -FI_ECONNREFUSED;
@@ -103,29 +104,20 @@ out:
 
 static int tx_cm_data(SOCKET fd, uint8_t type, struct tcpx_cm_context *cm_ctx)
 {
-	struct ofi_ctrl_hdr hdr;
 	ssize_t ret;
 
-	memset(&hdr, 0, sizeof(hdr));
-	hdr.version = TCPX_CTRL_HDR_VERSION;
-	hdr.type = type;
-	hdr.seg_size = htons((uint16_t) cm_ctx->cm_data_sz);
-	hdr.conn_data = 1; /* For testing endianess mismatch at peer */
+	memset(&cm_ctx->msg.hdr, 0, sizeof(cm_ctx->msg.hdr));
+	cm_ctx->msg.hdr.version = TCPX_CTRL_HDR_VERSION;
+	cm_ctx->msg.hdr.type = type;
+	cm_ctx->msg.hdr.seg_size = htons((uint16_t) cm_ctx->cm_data_sz);
+	cm_ctx->msg.hdr.conn_data = 1; /* tests endianess mismatch at peer */
 
-	ret = ofi_send_socket(fd, &hdr, sizeof(hdr), MSG_NOSIGNAL);
-	if (ret != sizeof(hdr))
-		goto err;
-
-	if (cm_ctx->cm_data_sz) {
-		ret = ofi_send_socket(fd, cm_ctx->cm_data,
-				      cm_ctx->cm_data_sz, MSG_NOSIGNAL);
-		if ((size_t) ret != cm_ctx->cm_data_sz)
-			goto err;
-	}
+	ret = ofi_send_socket(fd, &cm_ctx->msg, sizeof(cm_ctx->msg.hdr) +
+			      cm_ctx->cm_data_sz, MSG_NOSIGNAL);
+	if (ret != sizeof(cm_ctx->msg.hdr) + cm_ctx->cm_data_sz)
+		return ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
 
 	return FI_SUCCESS;
-err:
-	return ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
 }
 
 static int tcpx_ep_enable(struct tcpx_ep *ep)
@@ -184,12 +176,11 @@ unlock:
 static int proc_conn_resp(struct tcpx_cm_context *cm_ctx,
 			  struct tcpx_ep *ep)
 {
-	struct ofi_ctrl_hdr conn_resp;
 	struct fi_eq_cm_entry *cm_entry;
 	ssize_t len;
 	int ret = FI_SUCCESS;
 
-	ret = rx_cm_data(ep->sock, &conn_resp, ofi_ctrl_connresp, cm_ctx);
+	ret = rx_cm_data(ep->sock, ofi_ctrl_connresp, cm_ctx);
 	if (ret) {
 		enum fi_log_level level = (ret == -FI_ECONNREFUSED) ?
 				FI_LOG_INFO : FI_LOG_WARN;
@@ -203,9 +194,9 @@ static int proc_conn_resp(struct tcpx_cm_context *cm_ctx,
 		return -FI_ENOMEM;
 
 	cm_entry->fid = cm_ctx->fid;
-	memcpy(cm_entry->data, cm_ctx->cm_data, cm_ctx->cm_data_sz);
+	memcpy(cm_entry->data, cm_ctx->msg.data, cm_ctx->cm_data_sz);
 
-	ep->hdr_bswap = (conn_resp.conn_data == 1) ?
+	ep->hdr_bswap = (cm_ctx->msg.hdr.conn_data == 1) ?
 			tcpx_hdr_none : tcpx_hdr_bswap;
 
 	ret = tcpx_ep_enable(ep);
@@ -305,7 +296,6 @@ static void server_recv_connreq(struct util_wait *wait,
 {
 	struct tcpx_conn_handle *handle;
 	struct fi_eq_cm_entry *cm_entry;
-	struct ofi_ctrl_hdr conn_req;
 	socklen_t len;
 	int ret;
 
@@ -320,7 +310,7 @@ static void server_recv_connreq(struct util_wait *wait,
 		return;
 	}
 
-	ret = rx_cm_data(handle->sock, &conn_req, ofi_ctrl_connreq, cm_ctx);
+	ret = rx_cm_data(handle->sock, ofi_ctrl_connreq, cm_ctx);
 	if (ret)
 		goto err1;
 
@@ -342,11 +332,12 @@ static void server_recv_connreq(struct util_wait *wait,
 	if (ret)
 		goto err3;
 
-	handle->endian_match = (conn_req.conn_data == 1);
+	handle->endian_match = (cm_ctx->msg.hdr.conn_data == 1);
 	cm_entry->info->handle = &handle->handle;
-	memcpy(cm_entry->data, cm_ctx->cm_data, cm_ctx->cm_data_sz);
+	memcpy(cm_entry->data, cm_ctx->msg.data, cm_ctx->cm_data_sz);
 
-	ret = (int) fi_eq_write(&handle->pep->util_pep.eq->eq_fid, FI_CONNREQ, cm_entry,
+	ret = (int) fi_eq_write(&handle->pep->util_pep.eq->eq_fid,
+				FI_CONNREQ, cm_entry,
 				sizeof(*cm_entry) + cm_ctx->cm_data_sz, 0);
 	if (ret < 0) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
