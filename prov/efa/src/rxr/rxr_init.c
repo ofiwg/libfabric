@@ -448,11 +448,6 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 		if (hints->domain_attr && hints->domain_attr->mr_mode & FI_MR_LOCAL)
 			info->domain_attr->mr_mode |= FI_MR_LOCAL;
 
-		if (!hints || !hints->domain_attr)
-			info->domain_attr->resource_mgmt = FI_RM_ENABLED;
-		else
-			info->domain_attr->resource_mgmt = hints->domain_attr->resource_mgmt;
-
 		/*
 		 * Same goes for prefix mode, where the protocol does not
 		 * absolutely need a prefix before receive buffers, but it can
@@ -481,6 +476,12 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 				"FI_MSG_PREFIX size = %ld\n", info->ep_attr->msg_prefix_size);
 		}
 	}
+
+	if (!hints || !hints->domain_attr ||
+	    hints->domain_attr->resource_mgmt == FI_RM_UNSPEC)
+		info->domain_attr->resource_mgmt = FI_RM_ENABLED;
+	else
+		info->domain_attr->resource_mgmt = hints->domain_attr->resource_mgmt;
 
 	rxr_set_rx_tx_size(info, core_info);
 	return 0;
