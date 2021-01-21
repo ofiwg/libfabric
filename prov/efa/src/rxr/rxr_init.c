@@ -392,10 +392,6 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 			info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 		}
 
-		/* Use a table for AV if the app has no strong requirement */
-		if (!hints->domain_attr || hints->domain_attr->av_type == FI_AV_UNSPEC)
-			info->domain_attr->av_type = FI_AV_TABLE;
-
 #if HAVE_LIBCUDA
 		/* If the application requires HMEM support, we will add FI_MR_HMEM
 		 * to mr_mode, because we need application to provide descriptor
@@ -476,6 +472,11 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 				"FI_MSG_PREFIX size = %ld\n", info->ep_attr->msg_prefix_size);
 		}
 	}
+
+	/* Use a table for AV if the app has no strong requirement */
+	if (!hints || !hints->domain_attr ||
+	    hints->domain_attr->av_type == FI_AV_UNSPEC)
+		info->domain_attr->av_type = FI_AV_TABLE;
 
 	if (!hints || !hints->domain_attr ||
 	    hints->domain_attr->resource_mgmt == FI_RM_UNSPEC)
