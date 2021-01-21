@@ -136,7 +136,7 @@ The ofi_rxm provider checks for the following environment variables.
   endpoint provider.  This feature allows direct placement of received
   message data into application buffers, bypassing RxM bounce buffers.
   This feature targets providers that provide internal network buffering,
-  such as the tcp provider.  (default: true)
+  such as the tcp provider.  (default: false)
 
 *FI_OFI_RXM_SAR_LIMIT*
 : Set this environment variable to control the RxM SAR (Segmentation And Reassembly)

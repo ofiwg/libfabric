@@ -525,7 +525,7 @@ RXM_INI
 			"This allows direct placement of received messages "
 			"into application buffers, bypassing RxM bounce "
 			"buffers.  This feature targets using tcp sockets "
-			"for the message transport.  (default: true)");
+			"for the message transport.  (default: false)");
 
 	rxm_init_infos();
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);
