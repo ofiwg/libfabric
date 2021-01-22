@@ -17,8 +17,8 @@ rem "dom_test -n 2"
 
 set functional_tests=^
 	"cq_data"^
-	"dgram -p sockets"^
-	"dgram_waitset -p sockets"^
+rem	"dgram -p udp"^
+rem	"dgram_waitset -p udp"^
 	"msg"^
 	"msg_sockets"^
 	"poll -t queue"^
