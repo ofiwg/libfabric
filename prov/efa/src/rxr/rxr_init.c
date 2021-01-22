@@ -392,10 +392,6 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 			info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 		}
 
-		/* Use a table for AV if the app has no strong requirement */
-		if (!hints->domain_attr || hints->domain_attr->av_type == FI_AV_UNSPEC)
-			info->domain_attr->av_type = FI_AV_TABLE;
-
 #if HAVE_LIBCUDA
 		/* If the application requires HMEM support, we will add FI_MR_HMEM
 		 * to mr_mode, because we need application to provide descriptor
@@ -448,11 +444,6 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 		if (hints->domain_attr && hints->domain_attr->mr_mode & FI_MR_LOCAL)
 			info->domain_attr->mr_mode |= FI_MR_LOCAL;
 
-		if (!hints || !hints->domain_attr)
-			info->domain_attr->resource_mgmt = FI_RM_ENABLED;
-		else
-			info->domain_attr->resource_mgmt = hints->domain_attr->resource_mgmt;
-
 		/*
 		 * Same goes for prefix mode, where the protocol does not
 		 * absolutely need a prefix before receive buffers, but it can
@@ -481,6 +472,17 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 				"FI_MSG_PREFIX size = %ld\n", info->ep_attr->msg_prefix_size);
 		}
 	}
+
+	/* Use a table for AV if the app has no strong requirement */
+	if (!hints || !hints->domain_attr ||
+	    hints->domain_attr->av_type == FI_AV_UNSPEC)
+		info->domain_attr->av_type = FI_AV_TABLE;
+
+	if (!hints || !hints->domain_attr ||
+	    hints->domain_attr->resource_mgmt == FI_RM_UNSPEC)
+		info->domain_attr->resource_mgmt = FI_RM_ENABLED;
+	else
+		info->domain_attr->resource_mgmt = hints->domain_attr->resource_mgmt;
 
 	rxr_set_rx_tx_size(info, core_info);
 	return 0;
