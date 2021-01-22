@@ -381,6 +381,19 @@ static void rxm_recv_queue_close(struct rxm_recv_queue *recv_queue)
 static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 {
 	int ret, i;
+	size_t queue_sizes[] = {
+		[RXM_BUF_POOL_RX] = rxm_ep->msg_info->rx_attr->size,
+		[RXM_BUF_POOL_TX] = rxm_ep->msg_info->tx_attr->size,
+		[RXM_BUF_POOL_TX_INJECT] = rxm_ep->msg_info->tx_attr->size,
+		[RXM_BUF_POOL_TX_RNDV_RD_DONE] = rxm_ep->msg_info->tx_attr->size,
+		[RXM_BUF_POOL_TX_RNDV_WR_DONE] = rxm_ep->msg_info->tx_attr->size,
+		[RXM_BUF_POOL_TX_RNDV_REQ] = rxm_ep->msg_info->tx_attr->size,
+		[RXM_BUF_POOL_TX_RNDV_WR_DATA] = rxm_ep->msg_info->tx_attr->size,
+		[RXM_BUF_POOL_TX_ATOMIC] = rxm_ep->msg_info->tx_attr->size,
+		[RXM_BUF_POOL_TX_SAR] = rxm_ep->msg_info->tx_attr->size,
+		[RXM_BUF_POOL_TX_CREDIT] = rxm_ep->msg_info->tx_attr->size,
+		[RXM_BUF_POOL_RMA] = rxm_ep->msg_info->tx_attr->size,
+	};
 	size_t entry_sizes[] = {
 		[RXM_BUF_POOL_RX] = rxm_eager_limit +
 				    sizeof(struct rxm_rx_buf),
@@ -420,7 +433,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 					  (i == RXM_BUF_POOL_RX ||
 					   i == RXM_BUF_POOL_TX_ATOMIC) ? 0 :
 					  rxm_ep->rxm_info->tx_attr->size,
-					  1024,
+					  queue_sizes[i],
 					  &rxm_ep->buf_pools[i], i);
 		if (ret)
 			goto err;
