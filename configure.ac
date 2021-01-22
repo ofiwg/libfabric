@@ -500,7 +500,7 @@ AS_IF([test x"$with_cuda" != x"no"],
 			      [])],
 	    [])
 
-AS_IF([test "$with_cuda" = "yes" && test "$have_libcuda" = "0" ],
+AS_IF([test "$with_cuda" != x"no" && test "$have_libcuda" = "0" ],
 	[AC_MSG_ERROR([CUDA support requested but CUDA runtime not available.])],
 	[])
 AC_DEFINE_UNQUOTED([HAVE_LIBCUDA], [$have_libcuda], [Whether we have CUDA runtime or not])
