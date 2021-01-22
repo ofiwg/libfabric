@@ -480,16 +480,16 @@ int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struct rx
 
 void rxr_pkt_handle_eor_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_rx_entry *rx_entry;
-
-	rx_entry = pkt_entry->x_entry;
-	assert(rx_entry && rx_entry->rx_id == rxr_get_eor_hdr(pkt_entry->pkt)->rx_id);
-	rxr_release_rx_entry(ep, rx_entry);
 }
 
 void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
 					struct rxr_pkt_entry *pkt_entry)
 {
+	struct rxr_rx_entry *rx_entry;
+
+	rx_entry = pkt_entry->x_entry;
+	assert(rx_entry && rx_entry->rx_id == rxr_get_eor_hdr(pkt_entry->pkt)->rx_id);
+	rxr_release_rx_entry(ep, rx_entry);
 }
 
 /*
@@ -533,15 +533,15 @@ int rxr_pkt_init_receipt(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 void rxr_pkt_handle_receipt_sent(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_rx_entry *rx_entry;
-
-	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
-	rxr_release_rx_entry(ep, rx_entry);
 }
 
 void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
 					    struct rxr_pkt_entry *pkt_entry)
 {
+	struct rxr_rx_entry *rx_entry;
+
+	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
+	rxr_release_rx_entry(ep, rx_entry);
 }
 
 /* atomrsp packet related functions: init, handle_sent, handle_send_completion and recv
