@@ -404,6 +404,10 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		 idc ? "IDC " : "", req, fi_tostr(&op, FI_TYPE_OP_TYPE),
 		 buf, len, tgt_addr, context);
 
+	/* Do progress inline if there are a lot of outstanding operations. */
+	if (ofi_atomic_get32(&txc->otx_reqs) > CXIP_OTX_REQS_POLL_THRESH)
+		cxip_cq_progress(txc->send_cq);
+
 	return FI_SUCCESS;
 
 unlock_op:

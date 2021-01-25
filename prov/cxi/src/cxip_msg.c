@@ -4227,6 +4227,10 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 		 req->send.tagged ? '*' : '-', req->send.tag,
 		 req->context);
 
+	/* Do progress inline if there are a lot of outstanding operations. */
+	if (ofi_atomic_get32(&txc->otx_reqs) > CXIP_OTX_REQS_POLL_THRESH)
+		cxip_cq_progress(txc->send_cq);
+
 	return FI_SUCCESS;
 
 req_dequeue:

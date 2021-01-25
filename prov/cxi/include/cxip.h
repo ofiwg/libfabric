@@ -147,6 +147,8 @@
 #define	CXIP_COLL_MAX_TX_SIZE		32
 #define	CXIP_COLL_SEQNO_MASK		((1 << 10) - 1)
 
+#define CXIP_OTX_REQS_POLL_THRESH	256
+
 extern char cxip_prov_name[];
 extern struct fi_provider cxip_prov;
 extern struct util_prov cxip_util_prov;

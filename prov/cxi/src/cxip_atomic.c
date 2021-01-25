@@ -820,6 +820,10 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		 oper1, msg->addr, msg->context);
 #endif
 
+	/* Do progress inline if there are a lot of outstanding operations. */
+	if (ofi_atomic_get32(&txc->otx_reqs) > CXIP_OTX_REQS_POLL_THRESH)
+		cxip_cq_progress(txc->send_cq);
+
 	return FI_SUCCESS;
 
 unlock_cmdq:
