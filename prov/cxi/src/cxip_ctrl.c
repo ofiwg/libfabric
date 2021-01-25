@@ -485,15 +485,16 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	while (!(event = cxi_eq_get_event(ep_obj->ctrl_tgt_evtq)))
 		sched_yield();
 
-	if (event->hdr.event_type != C_EVENT_STATE_CHANGE ||
-	    event->tgt_long.return_code != C_RC_OK ||
-	    event->tgt_long.initiator.state_change.ptlte_state !=
+	switch (event->hdr.event_type) {
+	case C_EVENT_STATE_CHANGE:
+		if (event->tgt_long.return_code != C_RC_OK ||
+		    event->tgt_long.initiator.state_change.ptlte_state !=
 		    C_PTLTE_ENABLED ||
-	    event->tgt_long.ptlte_index != ep_obj->ctrl_pte->pte->ptn) {
-		/* This is a device malfunction */
-		CXIP_WARN("Invalid Enable EQE\n");
-		ret = -FI_EIO;
-		goto free_pte;
+		    event->tgt_long.ptlte_index != ep_obj->ctrl_pte->pte->ptn)
+			CXIP_FATAL("Invalid PtlTE enable event\n");
+		break;
+	default:
+		CXIP_FATAL("Invalid event type: %d\n", event->hdr.event_type);
 	}
 
 	cxi_eq_ack_events(ep_obj->ctrl_tgt_evtq);
