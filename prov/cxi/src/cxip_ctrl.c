@@ -276,6 +276,13 @@ static struct cxip_ctrl_req *cxip_ep_ctrl_event_req(struct cxip_ep_obj *ep_obj,
 
 		req = NULL;
 		break;
+	case C_EVENT_COMMAND_FAILURE:
+		CXIP_FATAL("Command failure: cq=%u target=%u fail_loc=%u cmd_type=%u cmd_size=%u opcode=%u\n",
+			   event->cmd_fail.cq_id, event->cmd_fail.is_target,
+			   event->cmd_fail.fail_loc,
+			   event->cmd_fail.fail_command.cmd_type,
+			   event->cmd_fail.fail_command.cmd_size,
+			   event->cmd_fail.fail_command.opcode);
 	default:
 		CXIP_WARN("Invalid event type: %d\n", event->hdr.event_type);
 		req = NULL;
@@ -493,6 +500,13 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		    event->tgt_long.ptlte_index != ep_obj->ctrl_pte->pte->ptn)
 			CXIP_FATAL("Invalid PtlTE enable event\n");
 		break;
+	case C_EVENT_COMMAND_FAILURE:
+		CXIP_FATAL("Command failure: cq=%u target=%u fail_loc=%u cmd_type=%u cmd_size=%u opcode=%u\n",
+			   event->cmd_fail.cq_id, event->cmd_fail.is_target,
+			   event->cmd_fail.fail_loc,
+			   event->cmd_fail.fail_command.cmd_type,
+			   event->cmd_fail.fail_command.cmd_size,
+			   event->cmd_fail.fail_command.opcode);
 	default:
 		CXIP_FATAL("Invalid event type: %d\n", event->hdr.event_type);
 	}

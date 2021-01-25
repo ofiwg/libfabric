@@ -415,6 +415,13 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 
 		req = NULL;
 		break;
+	case C_EVENT_COMMAND_FAILURE:
+		CXIP_FATAL("Command failure: cq=%u target=%u fail_loc=%u cmd_type=%u cmd_size=%u opcode=%u\n",
+			   event->cmd_fail.cq_id, event->cmd_fail.is_target,
+			   event->cmd_fail.fail_loc,
+			   event->cmd_fail.fail_command.cmd_type,
+			   event->cmd_fail.fail_command.cmd_size,
+			   event->cmd_fail.fail_command.opcode);
 	default:
 		CXIP_WARN("Invalid event type: %d\n", event->hdr.event_type);
 		req = NULL;
