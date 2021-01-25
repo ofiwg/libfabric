@@ -418,27 +418,13 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	const union c_event *event;
 	int ret;
 
-	ret = cxip_ep_cmdq(ep_obj, 0, true, ep_obj->domain->tclass,
-			   &ep_obj->ctrl_txq);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Failed to allocate control TXQ, ret: %d\n", ret);
-		return -FI_EDOMAIN;
-	}
-
-	ret = cxip_ep_cmdq(ep_obj, 0, false, FI_TC_UNSPEC, &ep_obj->ctrl_tgq);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Failed to allocate control TGQ, ret: %d\n", ret);
-		ret = -FI_EDOMAIN;
-		goto free_txq;
-	}
-
 	ret = cxip_ep_ctrl_eq_alloc(ep_obj, 4 * C_PAGE_SIZE,
 				    &ep_obj->ctrl_tx_evtq_buf,
 				    &ep_obj->ctrl_tx_evtq_buf_md,
 				    &ep_obj->ctrl_tx_evtq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate TX EQ resources, ret: %d\n", ret);
-		goto free_tgq;
+		goto err;
 	}
 
 	ret = cxip_ep_ctrl_eq_alloc(ep_obj, 4 * C_PAGE_SIZE,
@@ -451,11 +437,26 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		goto free_tx_evtq;
 	}
 
+	ret = cxip_ep_cmdq(ep_obj, 0, true, ep_obj->domain->tclass,
+			   &ep_obj->ctrl_txq);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to allocate control TXQ, ret: %d\n", ret);
+		ret = -FI_EDOMAIN;
+		goto free_tgt_evtq;
+	}
+
+	ret = cxip_ep_cmdq(ep_obj, 0, false, FI_TC_UNSPEC, &ep_obj->ctrl_tgq);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to allocate control TGQ, ret: %d\n", ret);
+		ret = -FI_EDOMAIN;
+		goto free_txq;
+	}
+
 	ret = cxip_pte_alloc_nomap(ep_obj->if_dom[0], ep_obj->ctrl_tgt_evtq,
 				   &pt_opts, NULL, NULL, &ep_obj->ctrl_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate control PTE: %d\n", ret);
-		goto free_tgt_evtq;
+		goto free_tgq;
 	}
 
 	/* CXIP_PTL_IDX_WRITE_MR_STD is shared with CXIP_PTL_IDX_CTRL. */
@@ -514,6 +515,10 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 
 free_pte:
 	cxip_pte_free(ep_obj->ctrl_pte);
+free_tgq:
+	cxip_ep_cmdq_put(ep_obj, 0, false);
+free_txq:
+	cxip_ep_cmdq_put(ep_obj, 0, true);
 free_tgt_evtq:
 	cxip_eq_ctrl_eq_free(ep_obj->ctrl_tgt_evtq_buf,
 			     ep_obj->ctrl_tgt_evtq_buf_md,
@@ -521,11 +526,7 @@ free_tgt_evtq:
 free_tx_evtq:
 	cxip_eq_ctrl_eq_free(ep_obj->ctrl_tx_evtq_buf,
 			     ep_obj->ctrl_tx_evtq_buf_md, ep_obj->ctrl_tx_evtq);
-free_tgq:
-	cxip_ep_cmdq_put(ep_obj, 0, false);
-free_txq:
-	cxip_ep_cmdq_put(ep_obj, 0, true);
-
+err:
 	return ret;
 }
 
@@ -542,14 +543,14 @@ void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj)
 
 	ofi_idx_reset(&ep_obj->req_ids);
 
+	cxip_ep_cmdq_put(ep_obj, 0, false);
+	cxip_ep_cmdq_put(ep_obj, 0, true);
+
 	cxip_eq_ctrl_eq_free(ep_obj->ctrl_tgt_evtq_buf,
 			     ep_obj->ctrl_tgt_evtq_buf_md,
 			     ep_obj->ctrl_tgt_evtq);
 	cxip_eq_ctrl_eq_free(ep_obj->ctrl_tx_evtq_buf,
 			     ep_obj->ctrl_tx_evtq_buf_md, ep_obj->ctrl_tx_evtq);
-
-	cxip_ep_cmdq_put(ep_obj, 0, false);
-	cxip_ep_cmdq_put(ep_obj, 0, true);
 
 	CXIP_DBG("EP control finalized: %p\n", ep_obj);
 }
