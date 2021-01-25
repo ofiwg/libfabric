@@ -284,8 +284,7 @@ static struct cxip_ctrl_req *cxip_ep_ctrl_event_req(struct cxip_ep_obj *ep_obj,
 			   event->cmd_fail.fail_command.cmd_size,
 			   event->cmd_fail.fail_command.opcode);
 	default:
-		CXIP_WARN("Invalid event type: %d\n", event->hdr.event_type);
-		req = NULL;
+		CXIP_FATAL("Invalid event type: %d\n", event->hdr.event_type);
 	}
 
 	CXIP_DBG("got control event: %s rc: %s (req: %p)\n",

@@ -423,8 +423,7 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 			   event->cmd_fail.fail_command.cmd_size,
 			   event->cmd_fail.fail_command.opcode);
 	default:
-		CXIP_WARN("Invalid event type: %d\n", event->hdr.event_type);
-		req = NULL;
+		CXIP_FATAL("Invalid event type: %d\n", event->hdr.event_type);
 	}
 
 	CXIP_DBG("got event: %s rc: %s (req: %p)\n",
