@@ -382,10 +382,15 @@ static void sock_ep_cm_connect_handler(struct sock_ep_cm_head *cm_head,
 	struct fi_eq_cm_entry *cm_entry = NULL;
 	int cm_data_sz, response_port;
 
-	assert(hdr->type == SOCK_CONN_ACCEPT
-	       || hdr->type == SOCK_CONN_REJECT);
+	assert(hdr->type == SOCK_CONN_ACCEPT ||
+	       hdr->type == SOCK_CONN_REJECT);
 
 	cm_data_sz = ntohs(hdr->cm_data_sz);
+	if (cm_data_sz > SOCK_EP_MAX_CM_DATA_SZ) {
+		SOCK_LOG_ERROR("CM data size too large\n");
+		goto err;
+	}
+
 	response_port = ntohs(hdr->port);
 	if (cm_data_sz) {
 		param = calloc(1, cm_data_sz);
@@ -846,6 +851,11 @@ static void sock_pep_req_handler(struct sock_ep_cm_head *cm_head,
 	}
 
 	req_cm_data_sz = ntohs(conn_req->hdr.cm_data_sz);
+	if (req_cm_data_sz > SOCK_EP_MAX_CM_DATA_SZ) {
+		SOCK_LOG_ERROR("CM data size is too large\n");
+		goto err;
+	}
+
 	if (req_cm_data_sz) {
 		ret = sock_cm_recv(handle->sock_fd, conn_req->cm_data,
 				   req_cm_data_sz);
