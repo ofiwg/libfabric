@@ -98,6 +98,7 @@ struct pp_opts {
 #define PP_MAX_CTRL_MSG 64
 #define PP_CTRL_BUF_LEN 64
 #define PP_MR_KEY 0xC0DE
+#define PP_MAX_ADDRLEN 1024
 
 #define INTEG_SEED 7
 #define PP_ENABLE_ALL (~0)
@@ -599,6 +600,8 @@ static int pp_recv_name(struct ct_pingpong *ct)
 		return ret;
 
 	len = ntohl(len);
+	if (len > PP_MAX_ADDRLEN)
+		return -EINVAL;
 
 	ct->rem_name = calloc(1, len);
 	if (!ct->rem_name) {
