@@ -815,6 +815,25 @@ void cxip_cmdq_free(struct cxip_cmdq *cmdq)
 	free(cmdq);
 }
 
+/* Must hold cmdq->lock. */
+int cxip_cmdq_emit_c_state(struct cxip_cmdq *cmdq,
+			   const struct c_cstate_cmd *c_state)
+{
+	int ret;
+
+	if (memcmp(&cmdq->c_state, c_state, sizeof(*c_state))) {
+		ret = cxi_cq_emit_c_state(cmdq->dev_cmdq, c_state);
+		if (ret) {
+			CXIP_DBG("Failed to issue C_STATE command: %d\n", ret);
+			return -FI_EAGAIN;
+		}
+
+		cmdq->c_state = *c_state;
+	}
+
+	return FI_SUCCESS;
+}
+
 /*
  * cxip_query_if_list() - Populate static IF data during initialization.
  */
