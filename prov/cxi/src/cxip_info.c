@@ -438,9 +438,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		return ret;
 
-	/* Search for a specific OFI Domain by name. The CXI Domain name
-	 * matches the NIC device file name (cxi[0-9]).
-	 */
+	/* Search for a specific OFI Domain by node string. */
 	if (flags & FI_SOURCE && node) {
 		iface = cxip_if_lookup_addr(scan_nic);
 		if (!iface) {
@@ -472,6 +470,35 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 			break;
 		}
 	}
+
+	/* Search for a specific OFI Domain by name. The CXI Domain name
+	 * matches the NIC device file name (cxi[0-9]).
+	 */
+	if (hints && hints->domain_attr && hints->domain_attr->name) {
+		fi_ptr = *info;
+		*info = NULL;
+		while (fi_ptr) {
+			if (strcmp(fi_ptr->domain_attr->name,
+				   hints->domain_attr->name)) {
+				/* discard entry */
+				fi_ptr_tmp = fi_ptr;
+				fi_ptr = fi_ptr->next;
+
+				fi_ptr_tmp->next = NULL;
+				fi_freeinfo(fi_ptr_tmp);
+				continue;
+			}
+
+			/* Keep the matching info */
+			*info = fi_ptr;
+
+			/* free the rest */
+			fi_freeinfo((*info)->next);
+			(*info)->next = NULL;
+			break;
+		}
+	}
+
 
 	/* Check if any infos remain. */
 	if (!*info)
