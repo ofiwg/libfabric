@@ -42,12 +42,12 @@ int ft_ze_free(void *buf);
 int ft_ze_memset(uint64_t device, void *buf, int value, size_t size);
 int ft_ze_copy(uint64_t device, void *dst, const void *src, size_t size);
 
-static inline int ft_host_init()
+static inline int ft_host_init(void)
 {
 	return FI_SUCCESS;
 }
 
-static inline int ft_host_cleanup()
+static inline int ft_host_cleanup(void)
 {
 	return FI_SUCCESS;
 }
