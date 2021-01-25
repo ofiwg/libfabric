@@ -445,7 +445,7 @@ psm2_mr_cache_t psm2_verbs_alloc_mr_cache(psm2_ep_t ep,
 }
 
 // checks for space for a non-priority registration
-static inline int have_space(psm2_mr_cache_t cache, uint32_t length)
+static inline int have_space(psm2_mr_cache_t cache, uint64_t length)
 {
 	return (cache->inuse < cache->limit_inuse
 			&& cache->inuse_bytes + length < cache->limit_inuse_bytes);
@@ -514,9 +514,9 @@ struct psm2_verbs_mr * psm2_verbs_reg_mr(psm2_mr_cache_t cache,
 		psmi_assert(p_item != cache->map.nil_item);
 		mrc = &p_item->payload;
 		if (! mrc->refcount) {
-			if (! priority && ! have_space(cache, (unsigned)length)) {
-				_HFI_MMDBG("cache has no headroom for non-priority hit addr %p len %u access 0x%x ptr %p\n",
-						addr, (unsigned)length, access, mrc);
+			if (! priority && ! have_space(cache, length)) {
+				_HFI_MMDBG("cache has no headroom for non-priority hit addr %p len %"PRIu64" access 0x%x ptr %p\n",
+						addr, length, access, mrc);
 				cache->rejected++;
 				errno = ENOMEM;
 				return NULL;
@@ -524,19 +524,19 @@ struct psm2_verbs_mr * psm2_verbs_reg_mr(psm2_mr_cache_t cache,
 			// it was an entry on avail_list, take off list
 			TAILQ_REMOVE(&cache->avail_list, mrc, next);
 			INC_STAT(cache, inuse, max_inuse);
-			ADD_STAT(cache, (unsigned)length, inuse_bytes, max_inuse_bytes);
+			ADD_STAT(cache, length, inuse_bytes, max_inuse_bytes);
 		}
 		cache->hit++;
-		_HFI_MMDBG("cache hit MR addr %p len %u access 0x%x ptr %p\n",
-						addr, (unsigned)length, mrc->access, mrc);
+		_HFI_MMDBG("cache hit MR addr %p len %"PRIu64" access 0x%x ptr %p\n",
+						addr, length, mrc->access, mrc);
 		mrc->refcount++;
 		cache->max_refcount = max(cache->max_refcount, mrc->refcount);
 		return mrc;
 	}
 	psmi_assert(p_item == cache->map.nil_item);
-	if (! priority && ! have_space(cache, (unsigned)length)) {
-		_HFI_MMDBG("cache has no headroom for non-priority miss addr %p len %u access 0x%x\n",
-			addr, (unsigned)length, access);
+	if (! priority && ! have_space(cache, length)) {
+		_HFI_MMDBG("cache has no headroom for non-priority miss addr %p len %"PRIu64" access 0x%x\n",
+			addr, length, access);
 		cache->rejected++;
 		errno = ENOMEM;
 		return NULL;
@@ -556,8 +556,8 @@ struct psm2_verbs_mr * psm2_verbs_reg_mr(psm2_mr_cache_t cache,
 		p_item = container_of(mrc, cl_map_item_t, payload);
 		psmi_assert(mrc->mr.mr_ptr);
 		psmi_assert(! mrc->refcount);
-		_HFI_MMDBG("reuse avail MR addr %p len %u access 0x%x ptr %p\n",
-					addr, (unsigned)length, mrc->access, mrc);
+		_HFI_MMDBG("reuse avail MR addr %p len %"PRIu64" access 0x%x ptr %p\n",
+					addr, length, mrc->access, mrc);
 		ips_cl_qmap_remove_item(&mrc->cache->map, p_item);
 		TAILQ_REMOVE(&cache->avail_list, mrc, next);
 #ifdef RNDV_MOD_MR
@@ -654,9 +654,9 @@ struct psm2_verbs_mr * psm2_verbs_reg_mr(psm2_mr_cache_t cache,
 	mrc->access = access;
 	ips_cl_qmap_insert_item(&cache->map, p_item);
 	INC_STAT(cache, inuse, max_inuse);
-	ADD_STAT(cache, (unsigned)length, inuse_bytes, max_inuse_bytes);
-	_HFI_MMDBG("registered new MR pri %d addr %p len %u access 0x%x ptr %p nelems %u\n",
-					priority, addr, (unsigned)length, mrc->access, mrc,
+	ADD_STAT(cache, length, inuse_bytes, max_inuse_bytes);
+	_HFI_MMDBG("registered new MR pri %d addr %p len %"PRIu64" access 0x%x ptr %p nelems %u\n",
+					priority, addr, length, mrc->access, mrc,
 					cache->map.payload.nelems);
 	return mrc;
 }
@@ -672,23 +672,23 @@ int psm2_verbs_release_mr(struct psm2_verbs_mr *mrc)
 		errno = ENXIO;
 		return -1;
 	}
-	_HFI_MMDBG("releasing MR addr %p len %u access 0x%x ref %u ptr %p\n",
-				mrc->addr, (unsigned)mrc->length, mrc->access,
+	_HFI_MMDBG("releasing MR addr %p len %"PRIu64" access 0x%x ref %u ptr %p\n",
+				mrc->addr, mrc->length, mrc->access,
 				mrc->refcount, mrc);
 	if (mrc->cache->cache_mode == MR_CACHE_MODE_USER) {
 		// if refcount now zero, put on avail_list to be reclaimed if needed
 		if (! --(mrc->refcount)) {
 			mrc->cache->inuse--;
-			mrc->cache->inuse_bytes -= (unsigned)mrc->length;
+			mrc->cache->inuse_bytes -= mrc->length;
 			TAILQ_INSERT_TAIL(&mrc->cache->avail_list, mrc, next);
 		}
 	} else {
 		if (! --(mrc->refcount)) {
-			_HFI_MMDBG("freeing MR addr %p len %u access 0x%x ref %u ptr %p nelems %u\n",
-						mrc->addr, (unsigned)mrc->length, mrc->access,
+			_HFI_MMDBG("freeing MR addr %p len %"PRIu64" access 0x%x ref %u ptr %p nelems %u\n",
+						mrc->addr, mrc->length, mrc->access,
 						mrc->refcount, mrc, mrc->cache->map.payload.nelems);
 			mrc->cache->inuse--;
-			mrc->cache->inuse_bytes -= (unsigned)mrc->length;
+			mrc->cache->inuse_bytes -= mrc->length;
 			cl_map_item_t *p_item = container_of(mrc, cl_map_item_t, payload);
 			ips_cl_qmap_remove_item(&mrc->cache->map, p_item);
 #ifdef RNDV_MOD_MR
@@ -722,11 +722,11 @@ void psm2_verbs_free_mr_cache(psm2_mr_cache_t cache)
 		psmi_assert(mrc->mr.mr_ptr);
 		if (mrc->mr.mr_ptr) {
 			int ret;
-			_HFI_MMDBG("free MR addr %p len %u access 0x%x ref %u ptr %p\n",
-					mrc->addr, (unsigned)mrc->length, mrc->access,
+			_HFI_MMDBG("free MR addr %p len %"PRIu64" access 0x%x ref %u ptr %p\n",
+					mrc->addr, mrc->length, mrc->access,
 					mrc->refcount, mrc);
 			if (mrc->refcount)
-				_HFI_ERROR("unreleased MR in psm2_verbs_free_mr_cache addr %p len %u access 0x%x\n", mrc->addr, (unsigned)mrc->length, mrc->access);
+				_HFI_ERROR("unreleased MR in psm2_verbs_free_mr_cache addr %p len %"PRIu64" access 0x%x\n", mrc->addr, mrc->length, mrc->access);
 			mrc->refcount = 0;
 			cl_map_item_t *p_item = container_of(mrc, cl_map_item_t, payload);
 			ips_cl_qmap_remove_item(&cache->map, p_item);
