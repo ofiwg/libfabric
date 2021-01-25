@@ -46,7 +46,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 
 	/* Allocate TGQ for posting source data */
 	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, false, FI_TC_UNSPEC,
-			   &txc->rx_cmdq);
+			   txc->send_cq->evtq, &txc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate TGQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
@@ -166,7 +166,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	}
 
 	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, true, txc->tclass,
-			   &txc->tx_cmdq);
+			   txc->send_cq->evtq, &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;

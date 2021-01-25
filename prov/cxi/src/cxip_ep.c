@@ -150,7 +150,7 @@ void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id)
 }
 
 int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
-		 uint32_t tclass, struct cxip_cmdq **cmdq)
+		 uint32_t tclass, struct cxi_eq *evtq, struct cxip_cmdq **cmdq)
 {
 	struct cxi_cq_alloc_opts cq_opts = {};
 	struct cxip_cmdq **cmdqs;
@@ -185,7 +185,7 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 	cq_opts.flags = transmit ? CXI_CQ_IS_TX : 0;
 	cq_opts.policy = cxip_env.cq_policy;
 
-	ret = cxip_cmdq_alloc(ep_obj->domain->lni, NULL, &cq_opts,
+	ret = cxip_cmdq_alloc(ep_obj->domain->lni, evtq, &cq_opts,
 			      ep_obj->auth_key.vni, cxip_ofi_to_cxi_tc(tclass),
 			      CXI_TC_TYPE_DEFAULT, cmdq);
 	if (ret != FI_SUCCESS) {

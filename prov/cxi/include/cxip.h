@@ -1478,7 +1478,7 @@ int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx);
 int cxip_rdzv_id_free(struct cxip_ep_obj *ep_obj, int id);
 void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id);
 int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
-		 uint32_t tclass, struct cxip_cmdq **cmdq);
+		 uint32_t tclass, struct cxi_eq *evtq, struct cxip_cmdq **cmdq);
 void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj, uint32_t ctx_id,
 		      bool transmit);
 

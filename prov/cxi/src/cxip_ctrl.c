@@ -438,14 +438,15 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	}
 
 	ret = cxip_ep_cmdq(ep_obj, 0, true, ep_obj->domain->tclass,
-			   &ep_obj->ctrl_txq);
+			   ep_obj->ctrl_tx_evtq, &ep_obj->ctrl_txq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate control TXQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
 		goto free_tgt_evtq;
 	}
 
-	ret = cxip_ep_cmdq(ep_obj, 0, false, FI_TC_UNSPEC, &ep_obj->ctrl_tgq);
+	ret = cxip_ep_cmdq(ep_obj, 0, false, FI_TC_UNSPEC,
+			   ep_obj->ctrl_tgt_evtq, &ep_obj->ctrl_tgq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate control TGQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
