@@ -108,22 +108,10 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 
 	req->ep_obj->ctrl_tx_credits--;
 
-	if (memcmp(&txq->c_state, &cmd.c_state, sizeof(cmd.c_state))) {
-		ret = cxi_cq_emit_c_state(txq->dev_cmdq, &cmd.c_state);
-		if (ret) {
-			CXIP_DBG("Failed to issue C_STATE command: %d\n", ret);
-
-			/* Return error according to Domain Resource
-			 * Management
-			 */
-			ret = -FI_EAGAIN;
-			goto err_return_credit;
-		}
-
-		/* Update TXQ C_STATE */
-		txq->c_state = cmd.c_state;
-
-		CXIP_DBG("Updated C_STATE: %p\n", req);
+	ret = cxip_cmdq_emit_c_state(txq, &cmd.c_state);
+	if (ret) {
+		CXIP_DBG("Failed to issue C_STATE command: %d\n", ret);
+		goto err_return_credit;
 	}
 
 	memset(&cmd.idc_msg, 0, sizeof(cmd.idc_msg));

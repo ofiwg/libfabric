@@ -347,19 +347,10 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 					     ep_obj->src_addr.nic);
 
 	fastlock_acquire(&cmdq->lock);
-	if (memcmp(&cmdq->c_state, &cmd.c_state, sizeof(cmd.c_state))) {
-		ret = cxi_cq_emit_c_state(cmdq->dev_cmdq, &cmd.c_state);
-		if (ret) {
-			/* Return error according to Domain Resource
-			 * Management
-			 */
-			ret = -FI_EAGAIN;
-			goto err_unlock;
-		}
 
-		/* Update TXQ C_STATE */
-		cmdq->c_state = cmd.c_state;
-	}
+	ret = cxip_cmdq_emit_c_state(cmdq, &cmd.c_state);
+	if (ret)
+		goto err_unlock;
 
 	memset(&cmd.idc_put, 0, sizeof(cmd.idc_put));
 	cmd.idc_put.idc_header.dfa = dfa;

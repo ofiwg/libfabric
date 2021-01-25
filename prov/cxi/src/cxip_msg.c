@@ -644,24 +644,10 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 
 	fastlock_acquire(&rxc->tx_cmdq->lock);
 
-	if (memcmp(&rxc->tx_cmdq->c_state, &cmd.c_state,
-		   sizeof(cmd.c_state))) {
-		ret = cxi_cq_emit_c_state(rxc->tx_cmdq->dev_cmdq,
-					  &cmd.c_state);
-		if (ret) {
-			CXIP_DBG("Failed to issue C_STATE command: %d\n", ret);
-
-			/* Return error according to Domain Resource
-			 * Management
-			 */
-			ret = -FI_EAGAIN;
-			goto err_unlock;
-		}
-
-		/* Update TXQ C_STATE */
-		rxc->tx_cmdq->c_state = cmd.c_state;
-
-		CXIP_DBG("Updated C_STATE: %p\n", req);
+	ret = cxip_cmdq_emit_c_state(rxc->tx_cmdq, &cmd.c_state);
+	if (ret) {
+		CXIP_DBG("Failed to issue C_STATE command: %d\n", ret);
+		goto err_unlock;
 	}
 
 	memset(&cmd.idc_msg, 0, sizeof(cmd.idc_msg));
@@ -3681,24 +3667,10 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 			cmd.c_state.ct = req->send.cntr->ct->ctn;
 		}
 
-		if (memcmp(&cmdq->c_state, &cmd.c_state,
-			   sizeof(cmd.c_state))) {
-			ret = cxi_cq_emit_c_state(cmdq->dev_cmdq, &cmd.c_state);
-			if (ret) {
-				CXIP_DBG("Failed to issue C_STATE command: %ld\n",
-					 ret);
-
-				/* Return error according to Domain Resource
-				 * Management
-				 */
-				ret = -FI_EAGAIN;
-				goto err_unlock;
-			}
-
-			/* Update TXQ C_STATE */
-			cmdq->c_state = cmd.c_state;
-
-			CXIP_DBG("Updated C_STATE: %p\n", req);
+		ret = cxip_cmdq_emit_c_state(cmdq, &cmd.c_state);
+		if (ret) {
+			CXIP_DBG("Failed to issue C_STATE command: %ld\n", ret);
+			goto err_unlock;
 		}
 
 		memset(&cmd.idc_msg, 0, sizeof(cmd.idc_msg));

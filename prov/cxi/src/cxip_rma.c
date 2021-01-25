@@ -288,23 +288,10 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			cmd.c_state.event_success_disable = 1;
 		}
 
-		if (memcmp(&cmdq->c_state, &cmd.c_state, sizeof(cmd.c_state))) {
-			ret = cxi_cq_emit_c_state(cmdq->dev_cmdq, &cmd.c_state);
-			if (ret) {
-				CXIP_DBG("Failed to issue C_STATE command: %d\n",
-					 ret);
-
-				/* Return error according to Domain Resource
-				 * Management
-				 */
-				ret = -FI_EAGAIN;
-				goto unlock_op;
-			}
-
-			/* Update TXQ C_STATE */
-			cmdq->c_state = cmd.c_state;
-
-			CXIP_DBG("Updated C_STATE: %p\n", req);
+		ret = cxip_cmdq_emit_c_state(cmdq, &cmd.c_state);
+		if (ret) {
+			CXIP_DBG("Failed to issue C_STATE command: %d\n", ret);
+			goto unlock_op;
 		}
 
 		memset(&cmd.idc_put, 0, sizeof(cmd.idc_put));

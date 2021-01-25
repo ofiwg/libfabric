@@ -680,23 +680,10 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
 			cmd.c_state.flush = 1;
 
-		if (memcmp(&cmdq->c_state, &cmd.c_state, sizeof(cmd.c_state))) {
-			ret = cxi_cq_emit_c_state(cmdq->dev_cmdq, &cmd.c_state);
-			if (ret) {
-				CXIP_DBG("Failed to issue C_STATE command: %ld\n",
-					 ret);
-
-				/* Return error according to Domain Resource
-				 * Management
-				 */
-				ret = -FI_EAGAIN;
-				goto unlock_cmdq;
-			}
-
-			/* Update TXQ C_STATE */
-			cmdq->c_state = cmd.c_state;
-
-			CXIP_DBG("Updated C_STATE: %p\n", req);
+		ret = cxip_cmdq_emit_c_state(cmdq, &cmd.c_state);
+		if (ret) {
+			CXIP_DBG("Failed to issue C_STATE command: %ld\n", ret);
+			goto unlock_cmdq;
 		}
 
 		memset(&cmd.idc_amo, 0, sizeof(cmd.idc_amo));
