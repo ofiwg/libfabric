@@ -476,7 +476,6 @@ struct psmx2_multi_recv {
 
 struct psmx2_fid_fabric {
 	struct util_fabric	util_fabric;
-	psm2_uuid_t		uuid;
 	struct util_ns		name_server;
 
 	/* list of all opened domains */
@@ -543,6 +542,7 @@ struct psmx2_fid_domain {
 	struct psmx2_fid_fabric	*fabric;
 	uint64_t		mode;
 	uint64_t		caps;
+	psm2_uuid_t		uuid;
 
 	enum fi_mr_mode		mr_mode;
 	fastlock_t		mr_lock;

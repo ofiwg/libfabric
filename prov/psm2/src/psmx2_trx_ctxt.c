@@ -248,7 +248,7 @@ struct psmx2_trx_ctxt *psmx2_trx_ctxt_alloc(struct psmx2_fid_domain *domain,
 	int compatible_flags = ~asked_flags & PSMX2_TX_RX;
 
 	if (!uuid)
-		uuid = domain->fabric->uuid;
+		uuid = domain->uuid;
 
 	/* Check existing allocations first if only Tx or Rx is needed */
 	if (compatible_flags) {
