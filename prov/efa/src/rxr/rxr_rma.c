@@ -213,7 +213,6 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 	msg.addr = tx_entry->addr;
 	rx_entry = rxr_ep_get_rx_entry(ep, &msg, 0, ~0, ofi_op_msg, 0);
 	if (!rx_entry) {
-		rxr_release_tx_entry(ep, tx_entry);
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RX entries exhausted for read.\n");
 		rxr_ep_progress_internal(ep);
@@ -242,7 +241,6 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 	 * call rxr_ep_progress_internal() might release some buffer
 	 */
 	if (ep->available_data_bufs == 0) {
-		rxr_release_tx_entry(ep, tx_entry);
 		rxr_release_rx_entry(ep, rx_entry);
 		rxr_ep_progress_internal(ep);
 		return -FI_EAGAIN;
@@ -283,6 +281,10 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_LONG_RTR_PKT, 0);
 	}
 
+	if (OFI_UNLIKELY(err)) {
+		rxr_release_rx_entry(ep, rx_entry);
+	}
+
 	return err;
 }
 
@@ -291,7 +293,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	ssize_t err;
 	struct rxr_ep *rxr_ep;
 	struct rxr_peer *peer;
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_tx_entry *tx_entry = NULL;
 	bool use_lower_ep_read;
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
@@ -334,22 +336,22 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	if (use_lower_ep_read) {
 		err = rxr_read_post_remote_read_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry);
 		if (OFI_UNLIKELY(err == -FI_ENOBUFS)) {
-			rxr_release_tx_entry(rxr_ep, tx_entry);
 			err = -FI_EAGAIN;
 			rxr_ep_progress_internal(rxr_ep);
 			goto out;
 		}
 	} else {
 		err = rxr_ep_set_tx_credit_request(rxr_ep, tx_entry);
-		if (OFI_UNLIKELY(err)) {
-			rxr_release_tx_entry(rxr_ep, tx_entry);
+		if (OFI_UNLIKELY(err))
 			goto out;
-		}
 
 		err = rxr_rma_post_efa_emulated_read(rxr_ep, tx_entry);
 	}
 
 out:
+	if (OFI_UNLIKELY(err && tx_entry))
+		rxr_release_tx_entry(rxr_ep, tx_entry);
+
 	fastlock_release(&rxr_ep->util_ep.lock);
 	rxr_perfset_end(rxr_ep, perf_rxr_tx);
 	return err;
