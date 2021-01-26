@@ -613,30 +613,26 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 	if (cq->wait) {
 		ret = fi_poll_add(&cq->wait->pollset->poll_fid,
 				  &cq->cq_fid.fid, 0);
-		if (ret) {
-			ofi_cq_cleanup(cq);
-			return ret;
-		}
+		if (ret)
+			goto cleanup;
 	}
 
 	cq->cirq = util_comp_cirq_create(attr->size == 0 ? UTIL_DEF_CQ_SIZE : attr->size);
 	if (!cq->cirq) {
 		ret = -FI_ENOMEM;
-		goto err1;
+		goto cleanup;
 	}
 
 	if (cq->domain->info_domain_caps & FI_SOURCE) {
 		cq->src = calloc(cq->cirq->size, sizeof *cq->src);
 		if (!cq->src) {
 			ret = -FI_ENOMEM;
-			goto err2;
+			goto cleanup;
 		}
 	}
 	return 0;
 
-err2:
-	util_comp_cirq_free(cq->cirq);
-err1:
+cleanup:
 	ofi_cq_cleanup(cq);
 	return ret;
 }

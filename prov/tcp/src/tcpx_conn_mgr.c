@@ -72,9 +72,13 @@ static int rx_cm_data(SOCKET fd, int type, struct tcpx_cm_context *cm_ctx)
 		goto out;
 	}
 
-	data_size = MIN(ntohs(cm_ctx->msg.hdr.seg_size), TCPX_MAX_CM_DATA_SIZE);
+	data_size = ntohs(cm_ctx->msg.hdr.seg_size);
 	if (data_size) {
-		ret = ofi_recv_socket(fd, cm_ctx->msg.data, data_size, 0);
+		if (data_size > TCPX_MAX_CM_DATA_SIZE)
+			data_size = TCPX_MAX_CM_DATA_SIZE;
+
+		ret = ofi_recv_socket(fd, cm_ctx->msg.data, data_size,
+				      MSG_WAITALL);
 		if ((size_t) ret != data_size) {
 			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 				"Failed to read cm data\n");
