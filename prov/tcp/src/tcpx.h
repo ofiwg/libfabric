@@ -95,20 +95,26 @@ enum tcpx_xfer_op_codes {
 	TCPX_OP_CODE_MAX,
 };
 
-enum tcpx_cm_event_type {
-	SERVER_SOCK_ACCEPT,
-	CLIENT_SEND_CONNREQ,
-	SERVER_RECV_CONNREQ,
-	SERVER_SEND_CM_ACCEPT,
-	CLIENT_RECV_CONNRESP,
-	CLIENT_SERVER_ERROR,
+enum tcpx_cm_state {
+	TCPX_CM_LISTENING,
+	TCPX_CM_CONNECTING,
+	TCPX_CM_WAIT_REQ,
+	TCPX_CM_REQ_SENT,
+	TCPX_CM_REQ_RVCD,
+	TCPX_CM_RESP_READY,
+	/* CM context is freed once connected */
+};
+
+struct tcpx_cm_msg {
+	struct ofi_ctrl_hdr hdr;
+	char data[TCPX_MAX_CM_DATA_SIZE];
 };
 
 struct tcpx_cm_context {
 	fid_t			fid;
-	enum tcpx_cm_event_type	type;
+	enum tcpx_cm_state	state;
 	size_t			cm_data_sz;
-	char			cm_data[TCPX_MAX_CM_DATA_SIZE];
+	struct tcpx_cm_msg	msg;
 };
 
 struct tcpx_port_range {
