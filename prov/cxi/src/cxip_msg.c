@@ -713,67 +713,6 @@ static int mrecv_req_put_bytes(struct cxip_req *req, uint32_t rlen)
 }
 
 /*
- * cxip_ux_send_rdzv() - Progress an unexpected rendezvous Send after
- * receiving matching Put and Put Overflow events.
- */
-static int cxip_ux_send_rdzv(struct cxip_req *recv_req,
-			     struct cxip_req *oflow_req,
-			     const union c_event *put_event,
-			     uint64_t mrecv_start,
-			     uint32_t mrecv_len)
-{
-	struct cxip_oflow_buf *oflow_buf = oflow_req->oflow.oflow_buf;
-	void *oflow_va;
-	size_t oflow_bytes;
-	enum fi_hmem_iface iface = recv_req->recv.recv_md->info.iface;
-	uint64_t device = recv_req->recv.recv_md->info.device;
-	struct iovec hmem_iov;
-	ssize_t ret __attribute__((unused));
-
-	assert(recv_req->type == CXIP_REQ_RECV);
-
-	if (recv_req->recv.multi_recv) {
-		recv_req = rdzv_mrecv_req_event(recv_req, put_event);
-		if (!recv_req)
-			return -FI_EAGAIN;
-
-		/* Set start and length uniquely for an unexpected
-		 * mrecv request.
-		 */
-		recv_req->recv.recv_buf = (uint8_t *)
-				recv_req->recv.parent->recv.recv_buf +
-				mrecv_start;
-		recv_req->buf = (uint64_t)recv_req->recv.recv_buf;
-		recv_req->data_len = mrecv_len;
-	} else {
-		recv_req_tgt_event(recv_req, put_event);
-
-		recv_req->data_len = put_event->tgt_long.rlength;
-		if (recv_req->data_len > recv_req->recv.ulen)
-			recv_req->data_len = recv_req->recv.ulen;
-	}
-
-	/* Copy data out of overflow buffer. */
-	oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
-			put_event->tgt_long.start);
-	oflow_bytes = MIN(put_event->tgt_long.mlength, recv_req->data_len);
-
-	hmem_iov.iov_base = recv_req->recv.recv_buf;
-	hmem_iov.iov_len = oflow_bytes;
-
-	ret = ofi_copy_to_hmem_iov(iface, device, &hmem_iov, 1, 0, oflow_va,
-				   oflow_bytes);
-	assert(ret == oflow_bytes);
-
-	oflow_req_put_bytes(oflow_req, put_event->tgt_long.mlength);
-
-	/* Count the rendezvous event. */
-	rdzv_recv_req_event(recv_req);
-
-	return FI_SUCCESS;
-}
-
-/*
  * cxip_ux_send() - Progress an unexpected Send after receiving matching Put
  * and Put and Put Overflow events.
  */
@@ -785,6 +724,7 @@ static int cxip_ux_send(struct cxip_req *match_req,
 {
 	struct cxip_oflow_buf *oflow_buf = oflow_req->oflow.oflow_buf;
 	void *oflow_va;
+	size_t oflow_bytes;
 	union cxip_match_bits mb;
 	enum fi_hmem_iface iface = match_req->recv.recv_md->info.iface;
 	uint64_t device = match_req->recv.recv_md->info.device;
@@ -794,10 +734,16 @@ static int cxip_ux_send(struct cxip_req *match_req,
 	assert(match_req->type == CXIP_REQ_RECV);
 
 	if (match_req->recv.multi_recv) {
-		match_req = mrecv_req_dup(match_req);
+		if (put_event->tgt_long.rendezvous)
+			match_req = rdzv_mrecv_req_event(match_req, put_event);
+		else
+			match_req = mrecv_req_dup(match_req);
 		if (!match_req)
 			return -FI_EAGAIN;
-		recv_req_tgt_event(match_req, put_event);
+
+		/* Called in rdzv_mrecv_req_event() for rendezvous. */
+		if (!put_event->tgt_long.rendezvous)
+			recv_req_tgt_event(match_req, put_event);
 
 		/* Set start and length uniquely for an unexpected
 		 * mrecv request.
@@ -833,15 +779,24 @@ static int cxip_ux_send(struct cxip_req *match_req,
 	/* Copy data out of overflow buffer. */
 	oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
 			put_event->tgt_long.start);
+	oflow_bytes = MIN(put_event->tgt_long.mlength, match_req->data_len);
 
 	hmem_iov.iov_base = match_req->recv.recv_buf;
 	hmem_iov.iov_len = match_req->data_len;
 
 	ret = ofi_copy_to_hmem_iov(iface, device, &hmem_iov, 1, 0, oflow_va,
-				   match_req->data_len);
-	assert(ret == match_req->data_len);
+				   oflow_bytes);
+	assert(ret == oflow_bytes);
 
 	oflow_req_put_bytes(oflow_req, put_event->tgt_long.mlength);
+
+	/* Remaining unexpected rendezvous processing is deferred until RGet
+	 * completes.
+	 */
+	if (put_event->tgt_long.rendezvous) {
+		rdzv_recv_req_event(match_req);
+		return FI_SUCCESS;
+	}
 
 	mb.raw = put_event->tgt_long.match_bits;
 
@@ -968,14 +923,8 @@ static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 		if (cxip_ux_is_onload_complete(def_ev->req))
 			cxip_ux_onload_complete(def_ev->req);
 	} else {
-		if (event->tgt_long.rendezvous)
-			ret = cxip_ux_send_rdzv(def_ev->req, req, event,
-						def_ev->mrecv_start,
-						def_ev->mrecv_len);
-		else
-			ret = cxip_ux_send(def_ev->req, req, event,
-					   def_ev->mrecv_start,
-					   def_ev->mrecv_len);
+		ret = cxip_ux_send(def_ev->req, req, event, def_ev->mrecv_start,
+				   def_ev->mrecv_len);
 		if (ret != FI_SUCCESS)
 			return -FI_EAGAIN;
 
@@ -1747,9 +1696,8 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		def_ev->mrecv_len = mrecv_req_put_bytes(req,
 				event->tgt_long.rlength);
 
-		ret = cxip_ux_send_rdzv(req, def_ev->req, &def_ev->ev,
-					def_ev->mrecv_start,
-					def_ev->mrecv_len);
+		ret = cxip_ux_send(req, def_ev->req, &def_ev->ev,
+				   def_ev->mrecv_start, def_ev->mrecv_len);
 		if (ret == FI_SUCCESS) {
 			cxip_recv_req_dequeue_nolock(req);
 
@@ -2554,9 +2502,8 @@ static int cxip_recv_sw_match(struct cxip_req *req,
 		 */
 		CXIP_FATAL("RPut onload not supported\n");
 
-		ret = cxip_ux_send_rdzv(req, ux_send->oflow_req,
-					&ux_send->put_ev,
-					mrecv_start, mrecv_len);
+		ret = cxip_ux_send(req, ux_send->oflow_req, &ux_send->put_ev,
+				   mrecv_start, mrecv_len);
 		if (ret != FI_SUCCESS) {
 			req->recv.start_offset += mrecv_len;
 			return ret;
