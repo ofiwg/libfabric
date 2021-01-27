@@ -534,6 +534,7 @@ struct cxip_eq {
 struct cxip_req_rma {
 	struct cxip_txc *txc;
 	struct cxip_md *local_md;	// RMA target buffer
+	void *ibuf;
 };
 
 struct cxip_req_amo {
@@ -545,6 +546,7 @@ struct cxip_req_amo {
 	char compare[16];
 	bool tmp_result;
 	bool tmp_oper1;
+	void *ibuf;
 };
 
 struct cxip_req_recv {

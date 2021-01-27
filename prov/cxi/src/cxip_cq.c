@@ -164,6 +164,9 @@ void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
 			case CXIP_REQ_RMA:
 				if (req->rma.local_md)
 					cxip_unmap(req->rma.local_md);
+				if (req->rma.ibuf)
+					cxip_cq_ibuf_free(req->cq,
+							  req->rma.ibuf);
 				break;
 
 			case CXIP_REQ_AMO:
@@ -171,6 +174,9 @@ void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
 					cxip_unmap(req->amo.oper1_md);
 				if (req->amo.result_md)
 					cxip_unmap(req->amo.result_md);
+				if (req->amo.ibuf)
+					cxip_cq_ibuf_free(req->cq,
+							  req->amo.ibuf);
 				break;
 
 			case CXIP_REQ_SEND:
