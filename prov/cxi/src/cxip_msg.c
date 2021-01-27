@@ -31,6 +31,7 @@
 #define FC_SW_EP_MSG "Flow control triggered due to failure to append LE. "\
 "Software endpoint mode required.\n"
 
+static int cxip_recv_cb(struct cxip_req *req, const union c_event *event);
 static void cxip_ux_onload_complete(struct cxip_req *req);
 static int cxip_ux_onload(struct cxip_rxc *rxc);
 static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state,
@@ -145,16 +146,66 @@ static fi_addr_t recv_req_src_addr(struct cxip_req *req)
 	return FI_ADDR_NOTAVAIL;
 }
 
-/*
- * recv_req_complete() - Complete receive request.
- */
-static void recv_req_complete(struct cxip_req *req)
+static struct cxip_req *cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf,
+					    size_t len)
 {
+	struct cxip_domain *dom = rxc->domain;
+	struct cxip_req *req;
+	struct cxip_md *recv_md = NULL;
+	int ret;
+
+	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc);
+	if (!req) {
+		CXIP_DBG("Failed to allocate recv request\n");
+		goto err;
+	}
+
+	if (len) {
+		ret = cxip_map(dom, (void *)buf, len, &recv_md);
+		if (ret) {
+			CXIP_DBG("Failed to map recv buffer: %d\n", ret);
+			goto err_free_request;
+		}
+	}
+
+	/* Initialize common receive request attributes. */
+	req->type = CXIP_REQ_RECV;
+	req->buf = 0;
+	req->cb = cxip_recv_cb;
+	req->recv.rxc = rxc;
+	req->recv.recv_buf = buf;
+	req->recv.recv_md = recv_md;
+	req->recv.ulen = len;
+	req->recv.start_offset = 0;
+	req->recv.mrecv_bytes = len;
+	req->recv.parent = NULL;
+	dlist_init(&req->recv.children);
+
+	/* Count Put, Rendezvous, and Reply events during offloaded RPut. */
+	req->recv.rdzv_events = 0;
+
+	ofi_atomic_inc32(&rxc->orx_reqs);
+
+	return req;
+
+err_free_request:
+	cxip_cq_req_free(req);
+err:
+	return NULL;
+}
+
+static void cxip_recv_req_free(struct cxip_req *req)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+
+	assert(req->type == CXIP_REQ_RECV);
 	assert(dlist_empty(&req->recv.children));
+
+	ofi_atomic_dec32(&rxc->orx_reqs);
 
 	if (req->recv.recv_md)
 		cxip_unmap(req->recv.recv_md);
-	ofi_atomic_dec32(&req->recv.rxc->orx_reqs);
+
 	cxip_cq_req_free(req);
 }
 
@@ -180,7 +231,7 @@ static void recv_req_report(struct cxip_req *req)
 			 req->buf);
 		if (parent->recv.mrecv_bytes < req->recv.rxc->min_multi_recv) {
 			CXIP_DBG("Freeing parent: %p\n", req->recv.parent);
-			recv_req_complete(req->recv.parent);
+			cxip_recv_req_free(req->recv.parent);
 
 			req->flags |= FI_MULTI_RECV;
 		}
@@ -466,7 +517,7 @@ static void rdzv_recv_req_event(struct cxip_req *req)
 			cxip_cq_req_free(req);
 		} else {
 			recv_req_report(req);
-			recv_req_complete(req);
+			cxip_recv_req_free(req);
 		}
 	}
 }
@@ -602,7 +653,7 @@ cxip_notify_match_cb(struct cxip_req *req, const union c_event *event)
 	if (req->recv.multi_recv)
 		cxip_cq_req_free(req);
 	else
-		recv_req_complete(req);
+		cxip_recv_req_free(req);
 
 	return FI_SUCCESS;
 }
@@ -814,7 +865,7 @@ static int cxip_ux_send(struct cxip_req *match_req,
 	if (match_req->recv.multi_recv)
 		cxip_cq_req_free(match_req);
 	else
-		recv_req_complete(match_req);
+		cxip_recv_req_free(match_req);
 
 	return FI_SUCCESS;
 }
@@ -873,7 +924,7 @@ static int cxip_ux_send_zb(struct cxip_req *match_req,
 	if (match_req->recv.multi_recv)
 		cxip_cq_req_free(match_req);
 	else
-		recv_req_complete(match_req);
+		cxip_recv_req_free(match_req);
 
 	return FI_SUCCESS;
 }
@@ -1873,7 +1924,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			req->recv.unlinked = true;
             cxip_recv_req_dequeue(req);
 			recv_req_report(req);
-			recv_req_complete(req);
+			cxip_recv_req_free(req);
 		} else {
 			assert(cxi_event_rc(event) == C_RC_OK);
 		}
@@ -1960,7 +2011,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			req->data_len = event->tgt_long.mlength;
 			recv_req_tgt_event(req, event);
 			recv_req_report(req);
-			recv_req_complete(req);
+			cxip_recv_req_free(req);
 		}
 		return FI_SUCCESS;
 	case C_EVENT_REPLY:
@@ -1973,7 +2024,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		} else {
 			/* Complete receive request. */
 			recv_req_report(req);
-			recv_req_complete(req);
+			cxip_recv_req_free(req);
 		}
 		return FI_SUCCESS;
 	default:
@@ -2765,9 +2816,7 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 			 uint64_t ignore, void *context, uint64_t flags,
 			 bool tagged, struct cxip_cntr *comp_cntr)
 {
-	struct cxip_domain *dom = rxc->domain;
 	int ret;
-	struct cxip_md *recv_md = NULL;
 	struct cxip_req *req;
 	struct cxip_addr caddr;
 	uint32_t match_id;
@@ -2813,23 +2862,12 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 		match_id = CXI_MATCH_ID_ANY;
 	}
 
-	/* Map local buffer */
-	if (len) {
-		ret = cxip_map(dom, (void *)buf, len, &recv_md);
-		if (ret) {
-			CXIP_DBG("Failed to map recv buffer: %d\n", ret);
-			return ret;
-		}
-	}
-
-	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc);
+	req = cxip_recv_req_alloc(rxc, buf, len);
 	if (!req) {
-		CXIP_DBG("Failed to allocate request\n");
+		CXIP_DBG("Failed to allocate recv request\n");
 		ret = -FI_ENOMEM;
-		goto recv_unmap;
+		goto err;
 	}
-	ofi_atomic_inc32(&rxc->orx_reqs);
 
 	/* req->data_len, req->tag, req->data must be set later. req->buf may
 	 * be overwritten later.
@@ -2842,28 +2880,13 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	else
 		req->flags |= FI_MSG;
 
-	req->buf = 0;
-	req->cb = cxip_recv_cb;
-
-	req->type = CXIP_REQ_RECV;
-	req->recv.rxc = rxc;
 	req->recv.cntr = comp_cntr ? comp_cntr : rxc->recv_cntr;
-	req->recv.recv_buf = buf;
-	req->recv.recv_md = recv_md;
-	req->recv.ulen = len;
 	req->recv.match_id = match_id;
 	req->recv.tag = tag;
 	req->recv.ignore = ignore;
 	req->recv.flags = flags;
 	req->recv.tagged = tagged;
-	req->recv.start_offset = 0;
 	req->recv.multi_recv = (flags & FI_MULTI_RECV ? true : false);
-	req->recv.mrecv_bytes = len;
-	req->recv.parent = NULL;
-	dlist_init(&req->recv.children);
-
-	/* Count Put, Rendezvous, and Reply events during offloaded RPut. */
-	req->recv.rdzv_events = 0;
 
 	fastlock_acquire(&rxc->lock);
 	ret = cxip_recv_req_queue(req, true, false);
@@ -2875,7 +2898,7 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 
 	/* RXC busy (onloading Sends or full CQ)? */
 	if (ret != FI_SUCCESS)
-		goto req_free;
+		goto err_free_request;
 
 	CXIP_DBG("req: %p buf: %p len: %lu src_addr: %ld tag(%c): 0x%lx ignore: 0x%lx context: %p\n",
 		 req, buf, len, src_addr, tagged ? '*' : '-', tag, ignore,
@@ -2883,13 +2906,9 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 
 	return FI_SUCCESS;
 
-req_free:
-	ofi_atomic_dec32(&rxc->orx_reqs);
-	cxip_cq_req_free(req);
-recv_unmap:
-	if (recv_md)
-		cxip_unmap(recv_md);
-
+err_free_request:
+	cxip_recv_req_free(req);
+err:
 	return ret;
 }
 
