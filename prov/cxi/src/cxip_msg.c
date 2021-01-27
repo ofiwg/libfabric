@@ -37,7 +37,6 @@ static int cxip_ux_onload(struct cxip_rxc *rxc);
 static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state,
 			       bool restart_seq);
 static int cxip_recv_req_dropped(struct cxip_req *req);
-static void cxip_recv_req_dequeue_nolock(struct cxip_req *req);
 static void cxip_recv_req_dequeue(struct cxip_req *req);
 static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq);
 
@@ -180,6 +179,7 @@ static struct cxip_req *cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf,
 	req->recv.mrecv_bytes = len;
 	req->recv.parent = NULL;
 	dlist_init(&req->recv.children);
+	dlist_init(&req->recv.rxc_entry);
 
 	/* Count Put, Rendezvous, and Reply events during offloaded RPut. */
 	req->recv.rdzv_events = 0;
@@ -200,6 +200,7 @@ static void cxip_recv_req_free(struct cxip_req *req)
 
 	assert(req->type == CXIP_REQ_RECV);
 	assert(dlist_empty(&req->recv.children));
+	assert(dlist_empty(&req->recv.rxc_entry));
 
 	ofi_atomic_dec32(&rxc->orx_reqs);
 
@@ -970,8 +971,6 @@ static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 				   def_ev->mrecv_len);
 		if (ret != FI_SUCCESS)
 			return -FI_EAGAIN;
-
-		cxip_recv_req_dequeue_nolock(def_ev->req);
 	}
 
 	dlist_remove(&def_ev->rxc_entry);
@@ -1742,8 +1741,6 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		ret = cxip_ux_send(req, def_ev->req, &def_ev->ev,
 				   def_ev->mrecv_start, def_ev->mrecv_len);
 		if (ret == FI_SUCCESS) {
-			cxip_recv_req_dequeue_nolock(req);
-
 			dlist_remove(&def_ev->rxc_entry);
 			free(def_ev);
 		} else {
@@ -1756,8 +1753,6 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		return ret;
 	case C_EVENT_PUT:
 		/* Eager data was delivered directly to the user buffer. */
-		cxip_recv_req_dequeue(req);
-
 		if (req->recv.multi_recv) {
 			req = rdzv_mrecv_req_event(req, event);
 			if (!req)
@@ -1887,8 +1882,13 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_deferred_event *def_ev;
 	bool rdzv = false;
 
-	/* Transition into onload and flow control if an append fails. */
-	if (event->hdr.event_type == C_EVENT_LINK) {
+	/* Common processing for rendezvous and non-rendezvous events.
+	 * TODO: Avoid having two switch statements for event_type.
+	 */
+	switch (event->hdr.event_type) {
+	case C_EVENT_LINK:
+		/* Transition into onload and flow control if an append fails.
+		 */
 		if (cxi_tgt_event_rc(event) != C_RC_NO_SPACE)
 			CXIP_FATAL("Unexpected link event rc: %d\n",
 				   cxi_tgt_event_rc(event));
@@ -1900,6 +1900,14 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			cxip_recv_req_dropped(req);
 
 		return ret;
+
+	case C_EVENT_UNLINK:
+	case C_EVENT_PUT_OVERFLOW:
+	case C_EVENT_PUT:
+		cxip_recv_req_dequeue(req);
+		break;
+	default:
+		break;
 	}
 
 	/* All events related to an offloaded rendezvous receive will be
@@ -1922,7 +1930,6 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_UNLINK:
 		if (!event->tgt_long.auto_unlinked) {
 			req->recv.unlinked = true;
-            cxip_recv_req_dequeue(req);
 			recv_req_report(req);
 			cxip_recv_req_free(req);
 		} else {
@@ -1942,9 +1949,6 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		if (!event->tgt_long.rlength) {
 			ret = cxip_ux_send_zb(req, event,
 					      req->recv.start_offset);
-			if (ret == FI_SUCCESS)
-				cxip_recv_req_dequeue_nolock(req);
-
 			fastlock_release(&rxc->rx_lock);
 			return ret;
 		}
@@ -1978,8 +1982,6 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		if (ret == FI_SUCCESS) {
 			dlist_remove(&def_ev->rxc_entry);
 			free(def_ev);
-
-			cxip_recv_req_dequeue_nolock(req);
 		} else {
 			/* undo mrecv_req_put_bytes() */
 			req->recv.start_offset -= def_ev->mrecv_len;
@@ -1992,8 +1994,6 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		/* Data was delivered directly to the user buffer. Complete the
 		 * request.
 		 */
-		cxip_recv_req_dequeue(req);
-
 		if (req->recv.multi_recv) {
 			req = mrecv_req_dup(req);
 			if (!req)
@@ -2219,7 +2219,7 @@ static int cxip_recv_replay(struct cxip_rxc *rxc)
 	dlist_foreach_container_safe(&rxc->replay_queue,
 				     struct cxip_req, req,
 				     recv.rxc_entry, tmp) {
-		dlist_remove(&req->recv.rxc_entry);
+		dlist_remove_init(&req->recv.rxc_entry);
 
 		CXIP_DBG("Replaying: %p\n", req);
 
@@ -2716,16 +2716,6 @@ static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state,
 }
 
 /*
- * cxip_recv_req_dequeue_nolock() - Dequeue Receive request from RXC.
- *
- * Caller must hold req->recv.rxc->lock.
- */
-static void cxip_recv_req_dequeue_nolock(struct cxip_req *req)
-{
-	dlist_remove(&req->recv.rxc_entry);
-}
-
-/*
  * cxip_recv_req_dequeue() - Dequeue Receive request from RXC.
  *
  * A Receive request may be dequeued from the RXC as soon as there is evidence
@@ -2736,11 +2726,10 @@ static void cxip_recv_req_dequeue(struct cxip_req *req)
 	struct cxip_rxc *rxc = req->recv.rxc;
 
 	fastlock_acquire(&rxc->lock);
-
-	cxip_recv_req_dequeue_nolock(req);
-
+	dlist_remove_init(&req->recv.rxc_entry);
 	fastlock_release(&rxc->lock);
 }
+
 #else
 static int cxip_recv_req_dropped(struct cxip_req *req) {return FI_SUCCESS;}
 static int cxip_recv_req_queue(struct cxip_req *req)  {return FI_SUCCESS;}
