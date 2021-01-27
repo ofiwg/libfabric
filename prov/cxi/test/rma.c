@@ -1271,3 +1271,51 @@ Test(rma, more)
 	mr_destroy(&mem_window);
 	free(send_buf);
 }
+
+Test(rma, std_mr_inject)
+{
+	int ret;
+	uint8_t *send_buf;
+	int iters = 10;
+	int send_len = 8;
+	int win_len = send_len * iters;
+	struct mem_region mem_window;
+	int key_val = CXIP_PTL_IDX_MR_OPT_CNT;
+	struct fi_cq_tagged_entry cqe;
+	int i;
+
+	send_buf = calloc(1, send_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+
+	cr_assert(!fi_cntr_read(cxit_write_cntr));
+
+	for (i = 0; i < iters; i++) {
+		/* Send 8 bytes from send buffer data to RMA window 0 */
+		ret = fi_inject_write(cxit_ep, send_buf, send_len,
+				      cxit_ep_fi_addr, i * send_len, key_val);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* Corrupt the user buffer to make sure the NIC is not using it for an
+	 * inject.
+	 */
+	memset(send_buf, 0xff, send_len);
+
+	while (fi_cntr_read(cxit_write_cntr) != iters)
+		sched_yield();
+
+	/* Validate sent data */
+	for (int i = 0; i < win_len; i++)
+		cr_assert_eq(mem_window.mem[i], 0,
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     mem_window.mem[i], send_buf[i]);
+
+	/* Make sure an event wasn't delivered */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}

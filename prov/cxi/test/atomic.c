@@ -2447,3 +2447,49 @@ Test(amo_opt, hrp)
 
 	_cxit_destroy_mr(&mr);
 }
+
+Test(atomic, std_mr_inject)
+{
+	struct mem_region mr;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t operand1;
+	uint64_t exp_remote = 0;
+	uint64_t *rma;
+	int ret;
+	int count = 0;
+	int i;
+	int win_key = CXIP_PTL_IDX_MR_OPT_CNT;
+
+	rma = _cxit_create_mr(&mr, win_key);
+	cr_assert_eq(*rma, exp_remote,
+			"Result = %ld, expected = %ld",
+			*rma, exp_remote);
+
+	operand1 = 1;
+
+	for (i = 0; i < 10; i++) {
+		exp_remote += operand1;
+		ret = fi_inject_atomic(cxit_ep, &operand1, 1,
+				cxit_ep_fi_addr, 0, win_key,
+				FI_UINT64, FI_SUM);
+		cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+		count++;
+	}
+
+	/* Corrupt the user operand buffer to make sure the NIC is not using it
+	 * for an inject.
+	 */
+	operand1 = 0;
+
+	while (fi_cntr_read(cxit_write_cntr) != count)
+		sched_yield();
+	cr_assert_eq(*rma, exp_remote,
+			"Result = %ld, expected = %ld",
+			*rma, exp_remote);
+
+	/* Make sure no events were delivered */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	_cxit_destroy_mr(&mr);
+}
