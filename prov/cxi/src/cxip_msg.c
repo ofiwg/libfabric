@@ -33,7 +33,8 @@
 
 static void cxip_ux_onload_complete(struct cxip_req *req);
 static int cxip_ux_onload(struct cxip_rxc *rxc);
-static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state);
+static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state,
+			       bool restart_seq);
 static int cxip_recv_req_dropped(struct cxip_req *req);
 static void cxip_recv_req_dequeue_nolock(struct cxip_req *req);
 static void cxip_recv_req_dequeue(struct cxip_req *req);
@@ -2175,7 +2176,7 @@ static int cxip_recv_replay(struct cxip_rxc *rxc)
 		 * user receives are being posted, it is safe to ignore the RXC
 		 * state when replaying failed user posted receives.
 		 */
-		ret = cxip_recv_req_queue(req, false);
+		ret = cxip_recv_req_queue(req, false, restart_seq);
 
 		/* Match made in software? */
 		if (ret == -FI_EALREADY)
@@ -2184,9 +2185,6 @@ static int cxip_recv_replay(struct cxip_rxc *rxc)
 		/* TODO: Low memory or full CQ during SW matching would cause
 		 * -FI_EAGAIN to be seen here.
 		 */
-		assert(ret == FI_SUCCESS);
-
-		ret = _cxip_recv_req(req, restart_seq);
 		assert(ret == FI_SUCCESS);
 
 		restart_seq = false;
@@ -2636,28 +2634,29 @@ static int cxip_recv_req_dropped(struct cxip_req *req)
  * Before appending a new Receive request to a HW list, attempt to match the
  * Receive to any onloaded UX Sends. A receive can only be appended to hardware
  * in RXC_ENABLED state unless check_rxc_state is false.
+ *
+ * Caller must hold the RXC lock.
  */
-static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state)
+static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state,
+			       bool restart_seq)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
 	int ret;
 
 	/* Try to match against onloaded Sends first. */
 	ret = cxip_recv_sw_matcher(req);
-
 	if (ret == FI_SUCCESS)
 		return -FI_EALREADY;
-
-	/* Failed to process match. Retry later. */
-	if (ret == -FI_EAGAIN)
-		return ret;
-
-	/* No SW match available. */
-	if (ret != -FI_ENOMSG) {
-		CXIP_FATAL("ret == %d\n", ret);
-	}
+	else if (ret == -FI_EAGAIN)
+		return -FI_EAGAIN;
+	else if (ret != -FI_ENOMSG)
+		CXIP_FATAL("SW matching failed: %d\n", ret);
 
 	if (check_rxc_state && rxc->state != RXC_ENABLED)
+		return -FI_EAGAIN;
+
+	ret = _cxip_recv_req(req, restart_seq);
+	if (ret)
 		return -FI_EAGAIN;
 
 	dlist_insert_tail(&req->recv.rxc_entry, &rxc->msg_queue);
@@ -2867,7 +2866,7 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	req->recv.rdzv_events = 0;
 
 	fastlock_acquire(&rxc->lock);
-	ret = cxip_recv_req_queue(req, true);
+	ret = cxip_recv_req_queue(req, true, false);
 	fastlock_release(&rxc->lock);
 
 	/* Match made in software? */
@@ -2878,18 +2877,12 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	if (ret != FI_SUCCESS)
 		goto req_free;
 
-	ret = _cxip_recv_req(req, false);
-	if (ret != FI_SUCCESS)
-		goto req_dequeue;
-
 	CXIP_DBG("req: %p buf: %p len: %lu src_addr: %ld tag(%c): 0x%lx ignore: 0x%lx context: %p\n",
 		 req, buf, len, src_addr, tagged ? '*' : '-', tag, ignore,
 		 context);
 
 	return FI_SUCCESS;
 
-req_dequeue:
-	cxip_recv_req_dequeue(req);
 req_free:
 	ofi_atomic_dec32(&rxc->orx_reqs);
 	cxip_cq_req_free(req);
