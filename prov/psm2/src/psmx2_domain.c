@@ -370,6 +370,21 @@ int psmx2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err_out;
 	}
 
+	psmx2_get_uuid(domain_priv->uuid);
+	if (info->ep_attr && info->ep_attr->auth_key) {
+		if (info->ep_attr->auth_key_size != sizeof(psm2_uuid_t)) {
+			FI_WARN(&psmx2_prov, FI_LOG_DOMAIN,
+				"Invalid auth_key_len %"PRIu64
+				", should be %"PRIu64".\n",
+				info->ep_attr->auth_key_size,
+				sizeof(psm2_uuid_t));
+			err = -FI_EINVAL;
+			goto err_out_free_domain;
+		}
+		memcpy(domain_priv->uuid, info->ep_attr->auth_key,
+		       sizeof(psm2_uuid_t));
+	}
+
 	err = ofi_domain_init(fabric, info, &domain_priv->util_domain, context);
 	if (err)
 		goto err_out_free_domain;
