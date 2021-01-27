@@ -554,8 +554,6 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	(*domain)->mr = &rxm_domain_mr_ops;
 	(*domain)->ops = &rxm_domain_ops;
 
-	rxm_domain->mr_local = ofi_mr_local(msg_info) && !ofi_mr_local(info);
-
 	ret = ofi_bufpool_create(&rxm_domain->amo_bufpool,
 				 rxm_domain->max_atomic_size, 64, 0, 0, 0);
 	if (ret)
