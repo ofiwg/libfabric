@@ -441,10 +441,6 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 			 req, mrecv_req, cxi_event_to_str(event));
 	}
 
-	/* Populate common fields with target events. */
-	if (event->hdr.event_type != C_EVENT_REPLY)
-		recv_req_tgt_event(req, event);
-
 	return req;
 }
 
@@ -741,10 +737,6 @@ static int cxip_ux_send(struct cxip_req *match_req,
 		if (!match_req)
 			return -FI_EAGAIN;
 
-		/* Called in rdzv_mrecv_req_event() for rendezvous. */
-		if (!put_event->tgt_long.rendezvous)
-			recv_req_tgt_event(match_req, put_event);
-
 		/* Set start and length uniquely for an unexpected
 		 * mrecv request.
 		 */
@@ -754,12 +746,12 @@ static int cxip_ux_send(struct cxip_req *match_req,
 		match_req->buf = (uint64_t)match_req->recv.recv_buf;
 		match_req->data_len = mrecv_len;
 	} else {
-		recv_req_tgt_event(match_req, put_event);
-
 		match_req->data_len = put_event->tgt_long.rlength;
 		if (match_req->data_len > match_req->recv.ulen)
 			match_req->data_len = match_req->recv.ulen;
 	}
+
+	recv_req_tgt_event(match_req, put_event);
 
 	if (oflow_buf->type == CXIP_LE_TYPE_SINK) {
 		/* For unexpected, long, eager messages, issue a Get to
@@ -847,14 +839,13 @@ static int cxip_ux_send_zb(struct cxip_req *match_req,
 		match_req = mrecv_req_dup(match_req);
 		if (!match_req)
 			return -FI_EAGAIN;
-		recv_req_tgt_event(match_req, oflow_event);
 
 		match_req->buf = (uint64_t)
 				match_req->recv.parent->recv.recv_buf +
 				mrecv_start;
-	} else {
-		recv_req_tgt_event(match_req, oflow_event);
 	}
+
+	recv_req_tgt_event(match_req, oflow_event);
 
 	match_req->data_len = 0;
 
@@ -1724,9 +1715,9 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			 * Put Overflow event (depending on if message was
 			 * unexpected).
 			 */
-		} else {
-			recv_req_tgt_event(req, event);
 		}
+
+		recv_req_tgt_event(req, event);
 
 		/* Count the rendezvous event. */
 		rdzv_recv_req_event(req);
@@ -1757,12 +1748,12 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			if (rtail > mrecv_tail)
 				req->data_len -= rtail - mrecv_tail;
 		} else {
-			recv_req_tgt_event(req, event);
-
 			req->data_len = event->tgt_long.rlength;
 			if (req->data_len > req->recv.ulen)
 				req->data_len = req->recv.ulen;
 		}
+
+		recv_req_tgt_event(req, event);
 
 		if (!event->tgt_long.get_issued) {
 			int ret = issue_rdzv_get(req);
