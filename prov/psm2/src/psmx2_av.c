@@ -735,6 +735,7 @@ STATIC int psmx2_av_map_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t cou
 	struct psmx2_fid_av *av_priv;
 	struct psmx2_trx_ctxt *trx_ctxt;
 	psm2_error_t *errors;
+	int i;
 
 	av_priv = container_of(av, struct psmx2_fid_av, av);
 
@@ -748,6 +749,17 @@ STATIC int psmx2_av_map_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t cou
 	errors = calloc(count, sizeof(*errors));
 	if (!errors)
 		return -FI_ENOMEM;
+
+	trx_ctxt->domain->peer_lock_fn(&trx_ctxt->peer_lock, 2);
+	for (i = 0; i < count; i++) {
+		dlist_remove_first_match(&trx_ctxt->peer_list,
+					 psmx2_peer_match,
+					 (psm2_epaddr_t)(fi_addr[i]));
+	}
+	trx_ctxt->domain->peer_unlock_fn(&trx_ctxt->peer_lock, 2);
+
+	for (i = 0; i < count; i++)
+		psm2_epaddr_setctxt((psm2_epaddr_t)(fi_addr[i]), NULL);
 
 	psm2_ep_disconnect2(trx_ctxt->psm2_ep, count, (psm2_epaddr_t *)fi_addr,
 			    NULL, errors, PSM2_EP_DISCONNECT_FORCE, 0);
