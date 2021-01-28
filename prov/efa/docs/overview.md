@@ -67,28 +67,3 @@ install a pre-packaged version or build the:
 * `FI_HMEM` and CUDA support for NVIDIA GPUDirect + EFA is available, see the
   `--with-cuda` configure flag. GPUDirect will be enabled by default if CUDA is
   installed in the default system paths.
-
-Once you have finished the prerequisite steps, build and install the Libfabric
-provider:
-
-```
-./autogen.sh
-# --enable-efa only required when rdma-core is not in a standard installation
-path
-./configure --enable-efa=<path to rdma-core install> --prefix=$PWD/install
-make -j install
-./install/bin/fi_info -p efa
-provider: efa
-    fabric: EFA-fe80::df:57ff:fe1a:beb3
-    domain: efa_0-rdm
-    version: 112.0
-    type: FI_EP_RDM
-    protocol: FI_PROTO_EFA
-provider: efa
-    fabric: EFA-fe80::df:57ff:fe1a:beb3
-    domain: efa_0-dgrm
-    version: 112.0
-    type: FI_EP_DGRAM
-    protocol: FI_PROTO_EFA
-```
-
