@@ -133,7 +133,13 @@ static int tx_cm_data(SOCKET fd, uint8_t type, struct tcpx_cm_context *cm_ctx)
 
 static int tcpx_ep_enable(struct tcpx_ep *ep)
 {
-	int ret;
+	int ret = 0;
+
+	if (!ep->util_ep.rx_cq && !ep->util_ep.tx_cq) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"ep must be bound to cq's\n");
+		return -FI_ENOCQ;
+	}
 
 	fastlock_acquire(&ep->lock);
 	if (ep->state != TCPX_CONNECTING && ep->state != TCPX_ACCEPTING) {

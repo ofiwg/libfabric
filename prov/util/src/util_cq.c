@@ -633,7 +633,7 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 	return 0;
 
 cleanup:
-	ofi_cq_cleanup(cq);
+	(void) ofi_cq_cleanup(cq);
 	return ret;
 }
 

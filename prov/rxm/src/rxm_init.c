@@ -529,6 +529,14 @@ RXM_INI
 			"buffers.  This feature targets using tcp sockets "
 			"for the message transport.  (default: false)");
 
+	fi_param_define(&rxm_prov, "enable_direct_send", FI_PARAM_BOOL,
+			"Enable support to pass application buffers directly "
+			"to the core provider when possible.  This avoids "
+			"copying application buffers through bounce buffers "
+			"before passing them to the core provider.  This "
+			"feature targets small to medium size message "
+			"transfers over the tcp provider.  (default: false)");
+
 	rxm_init_infos();
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);
 	fi_param_get_size_t(&rxm_prov, "msg_rx_size", &rxm_msg_rx_size);

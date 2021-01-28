@@ -282,7 +282,6 @@ struct rxm_domain {
 	size_t max_atomic_size;
 	size_t rx_buf_post_size;
 	uint64_t mr_key;
-	bool mr_local;
 	bool dyn_rbuf;
 	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
 	struct ofi_bufpool *amo_bufpool;
@@ -741,6 +740,7 @@ struct rxm_ep {
 	bool			msg_mr_local;
 	bool			rdm_mr_local;
 	bool			do_progress;
+	bool			enable_direct_send;
 
 	size_t			min_multi_recv_size;
 	size_t			buffered_min;
