@@ -1835,11 +1835,9 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		rdzv_recv_req_event(req);
 		return FI_SUCCESS;
 	default:
-		CXIP_WARN("Unexpected event type: %d\n",
-			  event->hdr.event_type);
+		CXIP_FATAL("Unexpected event type: %d\n",
+			   event->hdr.event_type);
 	}
-
-	return FI_SUCCESS;
 }
 
 /*
@@ -2028,11 +2026,9 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		}
 		return FI_SUCCESS;
 	default:
-		CXIP_WARN("Unexpected event type: %d\n",
-			  event->hdr.event_type);
+		CXIP_FATAL("Unexpected event type: %d\n",
+			   event->hdr.event_type);
 	}
-
-	return FI_SUCCESS;
 }
 
 /*
