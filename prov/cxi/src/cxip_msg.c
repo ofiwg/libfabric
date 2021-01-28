@@ -2497,7 +2497,6 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 	fastlock_release(&rxc->lock);
 }
 
-#if 1
 /*
  * tag_match() - Compare UX Send tag and Receive tags in SW.
  */
@@ -2729,13 +2728,6 @@ static void cxip_recv_req_dequeue(struct cxip_req *req)
 	dlist_remove_init(&req->recv.rxc_entry);
 	fastlock_release(&rxc->lock);
 }
-
-#else
-static int cxip_recv_req_dropped(struct cxip_req *req) {return FI_SUCCESS;}
-static int cxip_recv_req_queue(struct cxip_req *req)  {return FI_SUCCESS;}
-static void cxip_recv_req_dequeue_nolock(struct cxip_req *req) {}
-static void cxip_recv_req_dequeue(struct cxip_req *req) {}
-#endif
 
 /*
  * _cxip_recv_req() - Submit Receive request to hardware.
