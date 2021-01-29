@@ -1000,8 +1000,7 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 		ofi_atomic_inc32(&rxc->sink_le_linked);
 		return FI_SUCCESS;
 	case C_EVENT_UNLINK:
-		/* TODO Handle append errors. */
-		assert(cxi_event_rc(event) == C_RC_OK);
+		assert(!event->tgt_long.auto_unlinked);
 
 		/* Long sink buffer was manually unlinked. */
 		ofi_atomic_dec32(&rxc->sink_le_linked);
