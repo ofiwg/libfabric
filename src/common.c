@@ -356,6 +356,11 @@ sa_sin6:
 		    snprintf(buf, *len, "fi_addr_psmx2://%" PRIx64 ":%" PRIx64,
 			     *(uint64_t *)addr, *((uint64_t *)addr + 1));
 		break;
+	case FI_ADDR_PSMX3:
+		size =
+		    snprintf(buf, *len, "fi_addr_psmx3://%" PRIx64 ":%" PRIx64,
+			     *(uint64_t *)addr, *((uint64_t *)addr + 1));
+		break;
 	case FI_ADDR_GNI:
 		size = snprintf(buf, *len, "fi_addr_gni://%" PRIx64,
 				*(uint64_t *)addr);
@@ -413,6 +418,8 @@ uint32_t ofi_addr_format(const char *str)
 		return FI_ADDR_PSMX;
 	else if (!strcasecmp(fmt, "fi_addr_psmx2"))
 		return FI_ADDR_PSMX2;
+	else if (!strcasecmp(fmt, "fi_addr_psmx3"))
+		return FI_ADDR_PSMX3;
 	else if (!strcasecmp(fmt, "fi_addr_gni"))
 		return FI_ADDR_GNI;
 	else if (!strcasecmp(fmt, "fi_addr_bgq"))
@@ -445,6 +452,24 @@ static int ofi_str_to_psmx(const char *str, void **addr, size_t *len)
 }
 
 static int ofi_str_to_psmx2(const char *str, void **addr, size_t *len)
+{
+	int ret;
+
+	*len = 2 * sizeof(uint64_t);
+	*addr = calloc(1, *len);
+	if (!(*addr))
+		return -FI_ENOMEM;
+
+	ret = sscanf(str, "%*[^:]://%" SCNx64 ":%" SCNx64,
+		     (uint64_t *) *addr, (uint64_t *) *addr + 1);
+	if (ret == 2)
+		return 0;
+
+	free(*addr);
+	return -FI_EINVAL;
+}
+
+static int ofi_str_to_psmx3(const char *str, void **addr, size_t *len)
 {
 	int ret;
 
@@ -794,6 +819,8 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 		return ofi_str_to_psmx(str, addr, len);
 	case FI_ADDR_PSMX2:
 		return ofi_str_to_psmx2(str, addr, len);
+	case FI_ADDR_PSMX3:
+		return ofi_str_to_psmx3(str, addr, len);
 	case FI_ADDR_IB_UD:
 		return ofi_str_to_ib_ud(str, addr, len);
 	case FI_ADDR_EFA:

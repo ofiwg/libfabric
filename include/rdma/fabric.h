@@ -208,6 +208,7 @@ enum {
 	FI_ADDR_PSMX2,		/* uint64_t[2] */
 	FI_ADDR_IB_UD,		/* uint64_t[4] */
 	FI_ADDR_EFA,
+	FI_ADDR_PSMX3,		/* uint64_t[2] */
 };
 
 #define FI_ADDR_UNSPEC		((uint64_t) -1)
@@ -319,7 +320,8 @@ enum {
 	FI_PROTO_MRAIL,
 	FI_PROTO_RSTREAM,
 	FI_PROTO_RDMA_CM_IB_XRC,
-	FI_PROTO_EFA
+	FI_PROTO_EFA,
+	FI_PROTO_PSMX3
 };
 
 enum {
