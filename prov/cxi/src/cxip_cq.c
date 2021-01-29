@@ -372,8 +372,22 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 	case C_EVENT_ACK:
 		req = (struct cxip_req *)event->init_short.user_ptr;
 		break;
-	case C_EVENT_LINK:
 	case C_EVENT_UNLINK:
+		switch (cxi_tgt_event_rc(event)) {
+		/* User issued unlink events can race with put events. Assume
+		 * C_RC_ENTRY_NOT_FOUND is this case.
+		 */
+		case C_RC_ENTRY_NOT_FOUND:
+			return NULL;
+		case C_RC_OK:
+			break;
+		default:
+			CXIP_FATAL("Unhandled unlink return code: %d\n",
+				   cxi_tgt_event_rc(event));
+		}
+
+		/* Fall through. */
+	case C_EVENT_LINK:
 	case C_EVENT_GET:
 	case C_EVENT_PUT:
 	case C_EVENT_PUT_OVERFLOW:
