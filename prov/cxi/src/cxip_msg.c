@@ -1699,10 +1699,6 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	int ret;
 
 	switch (event->hdr.event_type) {
-	case C_EVENT_UNLINK:
-		/* TODO Handle unlink errors. */
-		assert(cxi_event_rc(event) == C_RC_OK);
-		return FI_SUCCESS;
 	case C_EVENT_SEND:
 		/* TODO Handle Send event errors. */
 		assert(cxi_event_rc(event) == C_RC_OK);
@@ -1900,6 +1896,15 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		return ret;
 
 	case C_EVENT_UNLINK:
+		assert(!event->tgt_long.auto_unlinked);
+
+		req->recv.unlinked = true;
+		recv_req_report(req);
+		cxip_recv_req_dequeue(req);
+		cxip_recv_req_free(req);
+
+		return FI_SUCCESS;
+
 	case C_EVENT_PUT_OVERFLOW:
 	case C_EVENT_PUT:
 		cxip_recv_req_dequeue(req);
@@ -1925,15 +1930,6 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		return cxip_recv_rdzv_cb(req, event);
 
 	switch (event->hdr.event_type) {
-	case C_EVENT_UNLINK:
-		if (!event->tgt_long.auto_unlinked) {
-			req->recv.unlinked = true;
-			recv_req_report(req);
-			cxip_recv_req_free(req);
-		} else {
-			assert(cxi_event_rc(event) == C_RC_OK);
-		}
-		return FI_SUCCESS;
 	case C_EVENT_SEND:
 		/* TODO Handle Send event errors. */
 		assert(cxi_event_rc(event) == C_RC_OK);
