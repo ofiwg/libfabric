@@ -426,7 +426,7 @@ defer:
 	}
 
 	def_tx_entry->credit_msg.tx_buf = tx_buf;
-	rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+	rxm_ep_enqueue_deferred_tx_queue_priority(def_tx_entry);
 	return FI_SUCCESS;
 }
 
