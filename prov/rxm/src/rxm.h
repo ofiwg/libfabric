@@ -884,6 +884,15 @@ rxm_ep_enqueue_deferred_tx_queue(struct rxm_deferred_tx_entry *tx_entry)
 }
 
 static inline void
+rxm_ep_enqueue_deferred_tx_queue_priority(struct rxm_deferred_tx_entry *tx_entry)
+{
+	if (dlist_empty(&tx_entry->rxm_conn->deferred_tx_queue))
+		dlist_insert_head(&tx_entry->rxm_conn->deferred_conn_entry,
+				  &tx_entry->rxm_ep->deferred_tx_conn_queue);
+	dlist_insert_head(&tx_entry->entry, &tx_entry->rxm_conn->deferred_tx_queue);
+}
+
+static inline void
 rxm_ep_dequeue_deferred_tx_queue(struct rxm_deferred_tx_entry *tx_entry)
 {
 	dlist_remove_init(&tx_entry->entry);
