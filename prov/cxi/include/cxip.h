@@ -822,7 +822,7 @@ struct cxip_cntr {
 
 struct cxip_ux_send {
 	struct dlist_entry rxc_entry;
-	struct cxip_req *oflow_req;
+	struct cxip_req *req;
 	union c_event put_ev;
 };
 

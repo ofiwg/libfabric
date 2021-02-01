@@ -992,7 +992,7 @@ static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 
 	if (def_ev->ux_send) {
 		/* Send was onloaded */
-		def_ev->ux_send->oflow_req = req;
+		def_ev->ux_send->req = req;
 		def_ev->ux_send->put_ev = *event;
 		def_ev->req->search.puts_pending--;
 		RXC_DBG(rxc, "put complete: %p\n", def_ev->req);
@@ -2354,7 +2354,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 				def_ev->ux_send = ux_send;
 				req->search.puts_pending++;
 			} else {
-				ux_send->oflow_req = def_ev->req;
+				ux_send->req = def_ev->req;
 				ux_send->put_ev = def_ev->ev;
 
 				dlist_remove(&def_ev->rxc_entry);
@@ -2573,9 +2573,8 @@ static int cxip_recv_sw_match(struct cxip_req *req,
 		rdzv_recv_req_event(req);
 	} else {
 		if (ux_send->put_ev.tgt_long.rlength)
-			ret = cxip_ux_send(req, ux_send->oflow_req,
-					   &ux_send->put_ev, mrecv_start,
-					   mrecv_len);
+			ret = cxip_ux_send(req, ux_send->req, &ux_send->put_ev,
+					   mrecv_start, mrecv_len);
 		else
 			ret = cxip_ux_send_zb(req, &ux_send->put_ev,
 					      mrecv_start);
