@@ -14,6 +14,7 @@
 #include "config.h"
 
 #include <pthread.h>
+#include <endian.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
@@ -99,6 +100,8 @@
 #define CXIP_RDZV_THRESHOLD		2048
 #define CXIP_OFLOW_BUF_SIZE		(2*1024*1024)
 #define CXIP_OFLOW_BUF_COUNT		3
+#define CXIP_REQ_BUF_SIZE		(2*1024*1024)
+#define CXIP_REQ_BUF_COUNT		3
 #define CXIP_UX_BUFFER_SIZE		(CXIP_OFLOW_BUF_COUNT * \
 					 CXIP_OFLOW_BUF_SIZE)
 
@@ -190,6 +193,9 @@ struct cxip_environment {
 	size_t rdzv_eager_size;
 	size_t oflow_buf_size;
 	size_t oflow_buf_count;
+	size_t req_buf_size;
+	size_t req_buf_count;
+	int msg_offload;
 
 	int optimized_mrs;
 
@@ -651,6 +657,7 @@ enum cxip_req_type {
 	CXIP_REQ_RDZV_SRC,
 	CXIP_REQ_SEARCH,
 	CXIP_REQ_COLL,
+	CXIP_REQ_RBUF,
 };
 
 /*
@@ -983,6 +990,19 @@ struct cxip_rxc {
 	struct dlist_entry oflow_bufs;		// Overflow buffers
 	struct dlist_entry deferred_events;
 
+	/* Order list of request buffers emitted to hardware. */
+	struct dlist_entry active_req_bufs;
+
+	/* List of consumed buffers which cannot be reposted yet since
+	 * unexpected entries have not been matched yet.
+	 */
+	struct dlist_entry consumed_req_bufs;
+
+	ofi_atomic32_t req_bufs_linked;
+	ofi_atomic32_t req_bufs_allocated;
+	size_t req_buf_size;
+	size_t req_buf_count;
+
 	/* Long eager send handling */
 	ofi_atomic32_t sink_le_linked;
 	struct cxip_oflow_buf sink_le;		// Long UX sink buffer
@@ -992,8 +1012,58 @@ struct cxip_rxc {
 	struct dlist_entry sw_ux_list;
 	int sw_ux_list_len;
 
+	/* Software receive queue. User posted requests are queued here instead
+	 * of on hardware if the RXC is in software endpoint mode.
+	 */
+	struct dlist_entry sw_recv_queue;
+
 	enum cxip_rxc_state state;
+	bool msg_offload;
 };
+
+/* Request buffer structure. */
+struct cxip_req_buf {
+	/* RX context the request buffer is posted on. */
+	struct cxip_rxc *rxc;
+	struct dlist_entry req_buf_entry;
+	struct cxip_req *req;
+
+	/* Memory mapping of req_buf field. */
+	struct cxip_md *md;
+
+	/* The number of bytes consume by hardware when the request buffer was
+	 * unlinked.
+	 */
+	size_t unlink_length;
+
+	/* Current offset into the req_buf where packets are landing. When
+	 * cur_offset is equal to unlink_length, software has received all
+	 * hardware put events for this request buffer.
+	 */
+	size_t cur_offset;
+
+	/* Pending list of unexpected header entries which could not be placed
+	 * on the RX context unexpected header list due to put events being
+	 * receive out-of-order.
+	 */
+	struct dlist_entry pending_ux_list;
+
+	/* The number of unexpected headers posted placed on the RX context
+	 * unexpected header list which have not been matched.
+	 */
+	ofi_atomic32_t refcount;
+
+	/* Buffer used to land packets matching on the request list. This field
+	 * must remain at the bottom of this structure.
+	 */
+	char req_buf[0];
+};
+
+void cxip_req_buf_ux_free(struct cxip_ux_send *ux);
+int cxip_req_buf_unlink(struct cxip_req_buf *buf);
+int cxip_req_buf_link(struct cxip_req_buf *buf);
+struct cxip_req_buf *cxip_req_buf_alloc(struct cxip_rxc *rxc);
+void cxip_req_buf_free(struct cxip_req_buf *buf);
 
 #define CXIP_RDZV_IDS	(1 << CXIP_RDZV_ID_WIDTH)
 #define CXIP_TX_IDS	(1 << CXIP_TX_ID_WIDTH)
@@ -1509,11 +1579,14 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj, uint32_t ctx_id,
 		      bool transmit);
 
+int cxip_recv_ux_sw_matcher(struct cxip_ux_send *ux);
+int cxip_recv_req_sw_matcher(struct cxip_req *req);
 int cxip_recv_cancel(struct cxip_req *req);
 int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
 			  uint32_t nic_addr, uint32_t pid, uint8_t txc_id,
 			  uint16_t drops);
 void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state);
+void cxip_rxc_req_fini(struct cxip_rxc *rxc);
 int cxip_rxc_oflow_init(struct cxip_rxc *rxc);
 void cxip_rxc_oflow_fini(struct cxip_rxc *rxc);
 int cxip_txc_zbp_init(struct cxip_txc *txc);

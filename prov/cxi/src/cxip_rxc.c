@@ -146,10 +146,92 @@ static void cxip_rxc_free_ux_entries(struct cxip_rxc *rxc)
 	dlist_foreach_container_safe(&rxc->sw_ux_list, struct cxip_ux_send,
 				     ux_send, rxc_entry, tmp) {
 		dlist_remove(&ux_send->rxc_entry);
-		free(ux_send);
-		rxc->sw_ux_list_len--;
+		if (ux_send->req->type == CXIP_REQ_RBUF) {
+			cxip_req_buf_ux_free(ux_send);
+		} else {
+			free(ux_send);
+			rxc->sw_ux_list_len--;
+		}
 	}
 	assert(rxc->sw_ux_list_len == 0);
+}
+
+static void cxip_rxc_req_buf_dlist_free(struct dlist_entry *head)
+{
+	struct cxip_req_buf *buf;
+	struct dlist_entry *tmp;
+
+	dlist_foreach_container_safe(head, struct cxip_req_buf, buf,
+				     req_buf_entry, tmp) {
+		dlist_remove_init(&buf->req_buf_entry);
+		cxip_req_buf_free(buf);
+	}
+}
+
+static int cxip_rxc_req_buf_init(struct cxip_rxc *rxc)
+{
+	int i;
+	struct cxip_req_buf *buf;
+	struct dlist_entry tmp_req_buf_list;
+	struct dlist_entry *tmp;
+	int ret;
+
+	dlist_init(&tmp_req_buf_list);
+
+	for (i = 0; i < rxc->req_buf_count; i++) {
+		buf = cxip_req_buf_alloc(rxc);
+		if (!buf) {
+			ret = -FI_ENOMEM;
+			goto err_free_bufs;
+		}
+
+		dlist_insert_tail(&buf->req_buf_entry, &tmp_req_buf_list);
+	}
+
+	/* Since this is called during RXC initialization, RXQ CMDQ should be
+	 * empty. Thus, linking a request buffer should not fail.
+	 */
+	dlist_foreach_container_safe(&tmp_req_buf_list, struct cxip_req_buf,
+				     buf, req_buf_entry, tmp) {
+		ret = cxip_req_buf_link(buf);
+		if (ret != FI_SUCCESS)
+			CXIP_FATAL("Failed to link request buffer: %d\n", ret);
+	}
+
+	return FI_SUCCESS;
+
+err_free_bufs:
+	cxip_rxc_req_buf_dlist_free(&tmp_req_buf_list);
+
+	return ret;
+}
+
+static void cxip_rxc_req_buf_fini(struct cxip_rxc *rxc)
+{
+	struct cxip_req_buf *buf;
+	int ret;
+
+	assert(rxc->rx_pte->state == C_PTLTE_DISABLED);
+
+	/* All request buffers are split between the active and consumed list.
+	 * Only active buffers need to be unlinked.
+	 */
+	dlist_foreach_container(&rxc->active_req_bufs, struct cxip_req_buf, buf,
+				req_buf_entry) {
+		ret = cxip_req_buf_unlink(buf);
+		if (ret != FI_SUCCESS)
+			CXIP_FATAL("Failed to unlink request buffer: %d\n",
+				   ret);
+	}
+
+	do {
+		cxip_cq_progress(rxc->recv_cq);
+	} while (ofi_atomic_get32(&rxc->req_bufs_linked));
+
+	cxip_rxc_req_buf_dlist_free(&rxc->active_req_bufs);
+	cxip_rxc_req_buf_dlist_free(&rxc->consumed_req_bufs);
+
+	assert(ofi_atomic_get32(&rxc->req_bufs_allocated) == 0);
 }
 
 /*
@@ -161,6 +243,8 @@ static void cxip_rxc_free_ux_entries(struct cxip_rxc *rxc)
 int cxip_rxc_enable(struct cxip_rxc *rxc)
 {
 	int ret;
+	int tmp;
+	enum c_ptlte_state state;
 
 	fastlock_acquire(&rxc->lock);
 
@@ -206,24 +290,28 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 		return -FI_EDOMAIN;
 	}
 
-	ret = cxip_rxc_oflow_init(rxc);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("cxip_rxc_oflow_init returned: %d\n", ret);
-		goto msg_fini;
+	if (!rxc->msg_offload) {
+		state = C_PTLTE_SOFTWARE_MANAGED;
+		ret = cxip_rxc_req_buf_init(rxc);
+	} else {
+		state = C_PTLTE_ENABLED;
+		ret = cxip_rxc_oflow_init(rxc);
 	}
+	if (ret != FI_SUCCESS)
+		goto err_msg_fini;
 
 	/* Start accepting Puts. */
-	ret = cxip_rxc_msg_enable(rxc, 0);
+	ret = cxip_pte_set_state(rxc->rx_pte, rxc->rx_cmdq, state, 0);
 	if (ret != FI_SUCCESS) {
-		CXIP_WARN("cxip_rxc_msg_enable returned: %d\n", ret);
-		goto oflow_fini;
+		CXIP_WARN("cxip_pte_set_state returned: %d\n", ret);
+		goto err_oflow_req_buf_fini;
 	}
 
 	/* Wait for PTE state change */
 	do {
 		sched_yield();
 		cxip_cq_progress(rxc->recv_cq);
-	} while (rxc->rx_pte->state != C_PTLTE_ENABLED);
+	} while (rxc->rx_pte->state != state);
 
 	CXIP_DBG("RXC messaging enabled: %p\n", rxc);
 
@@ -231,12 +319,15 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 
 	return FI_SUCCESS;
 
-oflow_fini:
-	cxip_rxc_oflow_fini(rxc);
-msg_fini:
-	ret = rxc_msg_fini(rxc);
-	if (ret != FI_SUCCESS)
-		CXIP_WARN("rxc_msg_fini returned: %d\n", ret);
+err_oflow_req_buf_fini:
+	if (!rxc->msg_offload)
+		cxip_rxc_req_buf_fini(rxc);
+	else
+		cxip_rxc_oflow_fini(rxc);
+err_msg_fini:
+	tmp = rxc_msg_fini(rxc);
+	if (tmp != FI_SUCCESS)
+		CXIP_WARN("rxc_msg_fini returned: %d\n", tmp);
 
 	return ret;
 }
@@ -319,8 +410,10 @@ static void rxc_disable(struct cxip_rxc *rxc)
 
 		rxc_cleanup(rxc);
 
-		/* Clean up overflow buffers. */
-		cxip_rxc_oflow_fini(rxc);
+		if (!rxc->msg_offload)
+			cxip_rxc_req_buf_fini(rxc);
+		else
+			cxip_rxc_oflow_fini(rxc);
 
 		/* Free hardware resources. */
 		ret = rxc_msg_fini(rxc);
@@ -362,15 +455,24 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	dlist_init(&rxc->fc_drops);
 	dlist_init(&rxc->replay_queue);
 	dlist_init(&rxc->sw_ux_list);
+	dlist_init(&rxc->sw_recv_queue);
+
+	dlist_init(&rxc->active_req_bufs);
+	dlist_init(&rxc->consumed_req_bufs);
+	ofi_atomic_initialize32(&rxc->req_bufs_linked, 0);
+	ofi_atomic_initialize32(&rxc->req_bufs_allocated, 0);
 
 	rxc->rdzv_threshold = cxip_env.rdzv_threshold;
 	rxc->rdzv_get_min = cxip_env.rdzv_get_min;
 	rxc->oflow_buf_size = cxip_env.oflow_buf_size;
 	rxc->oflow_bufs_max = cxip_env.oflow_buf_count;
+	rxc->req_buf_size = cxip_env.req_buf_size;
+	rxc->req_buf_count = cxip_env.req_buf_count;
 
 	/* TODO make configurable */
 	rxc->min_multi_recv = CXIP_EP_MIN_MULTI_RECV;
 	rxc->state = RXC_DISABLED;
+	rxc->msg_offload = cxip_env.msg_offload;
 
 	return rxc;
 }

@@ -790,14 +790,15 @@ static void cxip_recv_req_set_rget_info(struct cxip_req *req)
 /*
  * cxip_ux_send() - Progress an unexpected Send after receiving matching Put
  * and Put and Put Overflow events.
+ *
+ * RXC lock must be held if remove_recv_entry is true.
  */
-static int cxip_ux_send(struct cxip_req *match_req,
-			struct cxip_req *oflow_req,
-			const union c_event *put_event,
-			uint64_t mrecv_start,
-			uint32_t mrecv_len)
+static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
+			const union c_event *put_event, uint64_t mrecv_start,
+			uint32_t mrecv_len, bool remove_recv_entry)
 {
-	struct cxip_oflow_buf *oflow_buf = oflow_req->oflow.oflow_buf;
+	struct cxip_oflow_buf *oflow_buf;
+	struct cxip_req_buf *req_buf;
 	void *oflow_va;
 	size_t oflow_bytes;
 	union cxip_match_bits mb;
@@ -805,6 +806,7 @@ static int cxip_ux_send(struct cxip_req *match_req,
 	uint64_t device = match_req->recv.recv_md->info.device;
 	struct iovec hmem_iov;
 	ssize_t ret;
+	struct cxip_req *parent_req = match_req;
 
 	assert(match_req->type == CXIP_REQ_RECV);
 
@@ -832,27 +834,36 @@ static int cxip_ux_send(struct cxip_req *match_req,
 
 	recv_req_tgt_event(match_req, put_event);
 
-	if (oflow_buf->type == CXIP_LE_TYPE_SINK) {
-		/* For unexpected, long, eager messages, issue a Get to
-		 * retrieve data from the initiator.
-		 */
-		cxip_recv_req_set_rget_info(match_req);
+	if (oflow_req->type == CXIP_REQ_OFLOW) {
+		oflow_buf = oflow_req->oflow.oflow_buf;
 
-		ret = issue_rdzv_get(match_req);
-		if (ret != FI_SUCCESS) {
-			if (match_req->recv.multi_recv)
-				cxip_cq_req_free(match_req);
-			return -FI_EAGAIN;
+		if (oflow_buf->type == CXIP_LE_TYPE_SINK) {
+			/* For unexpected, long, eager messages, issue a Get to
+			 * retrieve data from the initiator.
+			 */
+			cxip_recv_req_set_rget_info(match_req);
+
+			ret = issue_rdzv_get(match_req);
+			if (ret != FI_SUCCESS) {
+				if (match_req->recv.multi_recv)
+					cxip_cq_req_free(match_req);
+				return -FI_EAGAIN;
+			}
+
+			RXC_DBG(match_req->recv.rxc, "Issued Get, req: %p\n",
+				match_req);
+			return FI_SUCCESS;
 		}
 
-		RXC_DBG(match_req->recv.rxc, "Issued Get, req: %p\n",
-			match_req);
-		return FI_SUCCESS;
+		oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
+			put_event->tgt_long.start);
+	} else {
+		req_buf = oflow_req->req_ctx;
+		oflow_va = (void *)CXI_IOVA_TO_VA(req_buf->md->md,
+				put_event->tgt_long.start);
 	}
 
 	/* Copy data out of overflow buffer. */
-	oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
-			put_event->tgt_long.start);
 	oflow_bytes = MIN(put_event->tgt_long.mlength, match_req->data_len);
 
 	hmem_iov.iov_base = match_req->recv.recv_buf;
@@ -862,12 +873,16 @@ static int cxip_ux_send(struct cxip_req *match_req,
 				   oflow_bytes);
 	assert(ret == oflow_bytes);
 
-	oflow_req_put_bytes(oflow_req, put_event->tgt_long.mlength);
+	if (oflow_req->type == CXIP_REQ_OFLOW)
+		oflow_req_put_bytes(oflow_req, put_event->tgt_long.mlength);
 
 	/* Remaining unexpected rendezvous processing is deferred until RGet
 	 * completes.
 	 */
 	if (put_event->tgt_long.rendezvous) {
+		if (remove_recv_entry)
+			dlist_remove_init(&parent_req->recv.rxc_entry);
+
 		rdzv_recv_req_event(match_req);
 		return FI_SUCCESS;
 	}
@@ -887,8 +902,14 @@ static int cxip_ux_send(struct cxip_req *match_req,
 			return -FI_EAGAIN;
 		}
 
+		if (remove_recv_entry)
+			dlist_remove_init(&parent_req->recv.rxc_entry);
+
 		return FI_SUCCESS;
 	}
+
+	if (remove_recv_entry)
+		dlist_remove_init(&parent_req->recv.rxc_entry);
 
 	recv_req_report(match_req);
 
@@ -909,12 +930,12 @@ static int cxip_ux_send(struct cxip_req *match_req,
  */
 static int cxip_ux_send_zb(struct cxip_req *match_req,
 			   const union c_event *oflow_event,
-			   uint64_t mrecv_start)
+			   uint64_t mrecv_start, bool remove_recv_entry)
 {
 	union cxip_match_bits mb;
 	int ret;
+	struct cxip_req *parent_req = match_req;
 
-	assert(oflow_event->hdr.event_type == C_EVENT_PUT_OVERFLOW);
 	assert(!oflow_event->tgt_long.rlength);
 
 	if (match_req->recv.multi_recv) {
@@ -946,7 +967,18 @@ static int cxip_ux_send_zb(struct cxip_req *match_req,
 			return -FI_EAGAIN;
 		}
 
+		if (remove_recv_entry) {
+			assert(fastlock_tryacquire(&parent_req->recv.rxc->lock) == EBUSY);
+			dlist_remove_init(&parent_req->recv.rxc_entry);
+		}
+
 		return FI_SUCCESS;
+	}
+
+	if (remove_recv_entry) {
+		assert(fastlock_tryacquire(&parent_req->recv.rxc->lock) ==
+		       EBUSY);
+		dlist_remove_init(&parent_req->recv.rxc_entry);
 	}
 
 	recv_req_report(match_req);
@@ -997,7 +1029,7 @@ static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 			cxip_ux_onload_complete(def_ev->req);
 	} else {
 		ret = cxip_ux_send(def_ev->req, req, event, def_ev->mrecv_start,
-				   def_ev->mrecv_len);
+				   def_ev->mrecv_len, false);
 		if (ret != FI_SUCCESS)
 			return -FI_EAGAIN;
 	}
@@ -1747,7 +1779,8 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 				event->tgt_long.rlength);
 
 		ret = cxip_ux_send(req, def_ev->req, &def_ev->ev,
-				   def_ev->mrecv_start, def_ev->mrecv_len);
+				   def_ev->mrecv_start, def_ev->mrecv_len,
+				   false);
 		if (ret == FI_SUCCESS) {
 			dlist_remove(&def_ev->rxc_entry);
 			free(def_ev);
@@ -1953,7 +1986,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		/* Unexpected 0-byte Put events are dropped. Skip matching. */
 		if (!event->tgt_long.rlength) {
 			ret = cxip_ux_send_zb(req, event,
-					      req->recv.start_offset);
+					      req->recv.start_offset, false);
 			fastlock_release(&rxc->rx_lock);
 			return ret;
 		}
@@ -1983,7 +2016,8 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 				event->tgt_long.rlength);
 
 		ret = cxip_ux_send(req, def_ev->req, &def_ev->ev,
-				   def_ev->mrecv_start, def_ev->mrecv_len);
+				   def_ev->mrecv_start, def_ev->mrecv_len,
+				   false);
 		if (ret == FI_SUCCESS) {
 			dlist_remove(&def_ev->rxc_entry);
 			free(def_ev);
@@ -2043,13 +2077,25 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
  */
 int cxip_recv_cancel(struct cxip_req *req)
 {
-	int ret;
+	int ret = FI_SUCCESS;
 	struct cxip_rxc *rxc = req->recv.rxc;
 
-	ret = cxip_pte_unlink(rxc->rx_pte, C_PTL_LIST_PRIORITY,
-			      req->req_id, rxc->rx_cmdq);
-	if (ret == FI_SUCCESS)
+	if (!rxc->msg_offload) {
+		fastlock_acquire(&rxc->lock);
+
+		dlist_remove_init(&req->recv.rxc_entry);
 		req->recv.canceled = true;
+		req->recv.unlinked = true;
+		recv_req_report(req);
+		cxip_recv_req_free(req);
+
+		fastlock_release(&rxc->lock);
+	} else {
+		ret = cxip_pte_unlink(rxc->rx_pte, C_PTL_LIST_PRIORITY,
+				req->req_id, rxc->rx_cmdq);
+		if (ret == FI_SUCCESS)
+			req->recv.canceled = true;
+	}
 
 	return ret;
 }
@@ -2479,6 +2525,10 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 		if (rxc->state == RXC_DISABLED)
 			break;
 
+		/* TODO: Support SW EP mode and flow control. */
+		if (!rxc->msg_offload)
+			CXIP_FATAL("Flow control and SW EP mode not supported\n");
+
 		/* Incorrect drop count was used. Another attempt will be made
 		 * when a peer sends a sideband drop message.
 		 */
@@ -2501,6 +2551,13 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 		RXC_DBG(rxc, "Started onload\n");
 
 		break;
+
+	case C_PTLTE_SOFTWARE_MANAGED:
+		assert(rxc->state == RXC_DISABLED);
+		RXC_DBG(rxc, "Software managed enabled\n");
+		rxc->state = RXC_ENABLED;
+		break;
+
 	default:
 		RXC_FATAL(rxc, "Unexpected state received: %u\n", state);
 	}
@@ -2519,10 +2576,15 @@ static bool tag_match(uint64_t init_mb, uint64_t mb, uint64_t ib)
 /*
  * tag_match() - Compare UX Send initiator and Receive initiator in SW.
  */
-static bool init_match(uint32_t init, uint32_t match_id)
+static bool init_match(struct cxip_rxc *rxc, uint32_t init, uint32_t match_id)
 {
 	if (match_id == CXI_MATCH_ID_ANY)
 		return true;
+
+	if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
+		init = CXI_MATCH_ID_EP(rxc->pid_bits, init);
+		match_id = CXI_MATCH_ID_EP(rxc->pid_bits, match_id);
+	}
 
 	return init == match_id;
 }
@@ -2539,41 +2601,60 @@ static int cxip_recv_sw_match(struct cxip_req *req,
 	uint64_t mrecv_start;
 	uint32_t mrecv_len;
 	bool req_done = true;
+	uint32_t ev_init;
+	uint32_t ev_rdzv_id;
+	struct cxip_req *rdzv_req;
+
+	assert(req->type == CXIP_REQ_RECV);
 
 	mrecv_start = req->recv.start_offset;
 	mrecv_len = mrecv_req_put_bytes(req, ux_send->put_ev.tgt_long.rlength);
 
-	if (req->recv.multi_recv && mrecv_len < req->recv.mrecv_bytes)
+	if (req->recv.multi_recv &&
+	    (req->recv.ulen - req->recv.start_offset) >=
+	     req->recv.rxc->min_multi_recv)
 		req_done = false;
 
 	if (ux_send->put_ev.tgt_long.rendezvous) {
 		ret = cxip_ux_send(req, ux_send->req, &ux_send->put_ev,
-				   mrecv_start, mrecv_len);
+				   mrecv_start, mrecv_len, req_done);
 		if (ret != FI_SUCCESS) {
-			req->recv.start_offset += mrecv_len;
+			req->recv.start_offset -= mrecv_len;
 			return ret;
 		}
 
-		/* No Rendezvous event expected. Define RGet address and start
-		 * RGet now.
+		/* If multi-recv, a child request was created from
+		 * cxip_ux_send(). Need to lookup this request.
 		 */
-		cxip_recv_req_set_rget_info(req);
-
-		ret = issue_rdzv_get(req);
-		if (ret != FI_SUCCESS) {
-			req->recv.start_offset += mrecv_len;
-			return ret;
+		if (req->recv.multi_recv) {
+			rdzv_req = rdzv_mrecv_req_lookup(req, &ux_send->put_ev,
+							 &ev_init, &ev_rdzv_id);
+			assert(rdzv_req != NULL);
+		} else {
+			rdzv_req = req;
 		}
 
-		/* Count the rendezvous event. */
-		rdzv_recv_req_event(req);
+		/* Rendezvous event will not happen. So ack rendezvous event
+		 * now.
+		 */
+		rdzv_recv_req_event(rdzv_req);
+
+		cxip_recv_req_set_rget_info(rdzv_req);
+
+		/* User receive request may have been removed from the ordered
+		 * SW queue. RGet must get sent out.
+		 */
+		do {
+			ret = issue_rdzv_get(rdzv_req);
+		} while (ret == -FI_EAGAIN);
+		assert(ret == FI_SUCCESS);
 	} else {
 		if (ux_send->put_ev.tgt_long.rlength)
 			ret = cxip_ux_send(req, ux_send->req, &ux_send->put_ev,
-					   mrecv_start, mrecv_len);
+					   mrecv_start, mrecv_len, req_done);
 		else
 			ret = cxip_ux_send_zb(req, &ux_send->put_ev,
-					      mrecv_start);
+					      mrecv_start, req_done);
 
 		if (ret != FI_SUCCESS) {
 			/* undo mrecv_req_put_bytes() */
@@ -2591,74 +2672,112 @@ static int cxip_recv_sw_match(struct cxip_req *req,
 	return ret;
 }
 
+static int cxip_recv_sw_matcher(struct cxip_rxc *rxc, struct cxip_req *req,
+				struct cxip_ux_send *ux)
+{
+	int ret = -FI_ENOMSG;
+	union cxip_match_bits ux_mb;
+	uint32_t ux_init;
+
+	ux_mb.raw = ux->put_ev.tgt_long.match_bits;
+	ux_init = ux->put_ev.tgt_long.initiator.initiator.process;
+
+	if (req->recv.tagged != ux_mb.tagged)
+		return -FI_ENOMSG;
+
+	if (ux_mb.tagged &&
+	    !tag_match(ux_mb.tag, req->recv.tag, req->recv.ignore))
+		return -FI_ENOMSG;
+
+	if (!init_match(rxc, ux_init, req->recv.match_id))
+		return -FI_ENOMSG;
+
+	ret = cxip_recv_sw_match(req, ux);
+	if (ret == -FI_EAGAIN)
+		return -FI_EAGAIN;
+
+	/* FI_EINPROGRESS is return for a multi-recv match. */
+	assert(ret == FI_SUCCESS || ret == -FI_EINPROGRESS);
+
+	/* TODO: Manage freeing of UX entries better. */
+	dlist_remove(&ux->rxc_entry);
+	if (ux->req && ux->req->type == CXIP_REQ_RBUF) {
+		cxip_req_buf_ux_free(ux);
+	} else {
+		free(ux);
+		rxc->sw_ux_list_len--;
+	}
+
+	RXC_DBG(rxc,
+		"Software match, req: %p ux_send: %p (sw_ux_list_len: %u)\n",
+		req, ux, req->recv.rxc->sw_ux_list_len);
+
+	return ret;
+}
+
 /*
- * cxip_recv_sw_matcher() - Attempt to match the Receive in SW.
+ * cxip_recv_ux_sw_matcher() - Attempt to match an unexpected message to a user
+ * posted receive.
+ *
+ * User must hold the RXC lock.
+ */
+int cxip_recv_ux_sw_matcher(struct cxip_ux_send *ux)
+{
+	struct cxip_req_buf *rbuf = ux->req->req_ctx;
+	struct cxip_rxc *rxc = rbuf->rxc;
+	struct cxip_req *req;
+	struct dlist_entry *tmp;
+	int ret;
+
+	if (dlist_empty(&rxc->sw_recv_queue))
+		return -FI_ENOMSG;
+
+	dlist_foreach_container_safe(&rxc->sw_recv_queue, struct cxip_req, req,
+				     recv.rxc_entry, tmp) {
+		ret = cxip_recv_sw_matcher(rxc, req, ux);
+
+		/* Unexpected message found a match. */
+		if (ret == FI_SUCCESS || ret == -FI_EINPROGRESS)
+			return FI_SUCCESS;
+	}
+
+	return -FI_ENOMSG;
+}
+
+/*
+ * cxip_recv_req_sw_matcher() - Attempt to match the receive request in SW.
  *
  * Loop through all onloaded UX Sends looking for a match for the Receive
  * request. If a match is found, progress the operation.
  *
  * Caller must hold req->recv.rxc->lock.
  */
-static int cxip_recv_sw_matcher(struct cxip_req *req)
+int cxip_recv_req_sw_matcher(struct cxip_req *req)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
 	struct cxip_ux_send *ux_send;
 	struct dlist_entry *tmp;
-	int ret = -FI_ENOMSG;
-	union cxip_match_bits ux_mb;
-	uint32_t ux_init;
+	int ret;
 
 	if (dlist_empty(&rxc->sw_ux_list))
 		return -FI_ENOMSG;
 
 	dlist_foreach_container_safe(&rxc->sw_ux_list, struct cxip_ux_send,
 				     ux_send, rxc_entry, tmp) {
-		ux_mb.raw = ux_send->put_ev.tgt_long.match_bits;
-		ux_init = ux_send->put_ev.tgt_long.initiator.initiator.process;
-
-		if (req->recv.tagged) {
-			if (!ux_mb.tagged)
-				continue;
-
-			if (!tag_match(ux_mb.tag, req->recv.tag,
-				       req->recv.ignore))
-				continue;
-
-			if (!init_match(ux_init, req->recv.match_id))
-				continue;
-		} else {
-			if (ux_mb.tagged)
-				continue;
-
-			if (!init_match(ux_init, req->recv.match_id))
-				continue;
-		}
-
-		ret = cxip_recv_sw_match(req, ux_send);
-		if (ret == -FI_EAGAIN) {
-			/* Couldn't process match, try again */
+		ret = cxip_recv_sw_matcher(rxc, req, ux_send);
+		switch (ret) {
+		/* On successful multi-recv or no match, keep matching. */
+		case -FI_EINPROGRESS:
+		case -FI_ENOMSG:
 			break;
+
+		/* Stop matching. */
+		default:
+			return ret;
 		}
-
-		dlist_remove(&ux_send->rxc_entry);
-		free(ux_send);
-		rxc->sw_ux_list_len--;
-
-		RXC_DBG(rxc,
-			"Software match, req: %p ux_send: %p (sw_ux_list_len: %u)\n",
-			req, ux_send, rxc->sw_ux_list_len);
-
-		if (ret == -FI_EINPROGRESS) {
-			/* Multi-recv, keep matching */
-			ret = -FI_ENOMSG;
-			continue;
-		}
-
-		ret = FI_SUCCESS;
-		break;
 	}
 
-	return ret;
+	return -FI_ENOMSG;
 }
 
 /*
@@ -2704,7 +2823,7 @@ static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state,
 	int ret;
 
 	/* Try to match against onloaded Sends first. */
-	ret = cxip_recv_sw_matcher(req);
+	ret = cxip_recv_req_sw_matcher(req);
 	if (ret == FI_SUCCESS)
 		return -FI_EALREADY;
 	else if (ret == -FI_EAGAIN)
@@ -2715,11 +2834,20 @@ static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state,
 	if (check_rxc_state && rxc->state != RXC_ENABLED)
 		return -FI_EAGAIN;
 
-	ret = _cxip_recv_req(req, restart_seq);
-	if (ret)
-		return -FI_EAGAIN;
+	if (rxc->msg_offload) {
+		ret = _cxip_recv_req(req, restart_seq);
+		if (ret)
+			goto err_dequeue_req;
+	} else {
+		dlist_insert_tail(&req->recv.rxc_entry, &rxc->sw_recv_queue);
+	}
 
 	return FI_SUCCESS;
+
+err_dequeue_req:
+	dlist_remove_init(&req->recv.rxc_entry);
+
+	return -FI_EAGAIN;
 }
 
 /*
@@ -4484,4 +4612,3 @@ struct fi_ops_msg cxip_ep_msg_ops = {
 	.senddata = cxip_senddata,
 	.injectdata = cxip_injectdata,
 };
-

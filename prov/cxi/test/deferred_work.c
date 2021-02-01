@@ -744,9 +744,14 @@ static void deferred_recv_op_test(bool comp_event, size_t xfer_size,
 			      cxit_ep_fi_addr, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
 
-	/* Wait for async send event. */
-	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
-	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+	/* Wait for async send event. In software endpoint mode, RX CQ needs to
+	 * be progress to progress TX CQ.
+	 */
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+		if (ret == -FI_EAGAIN)
+			fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+	} while (ret == -FI_EAGAIN);
 
 	validate_tx_event(&tx_cqe, expected_tx_flags, NULL);
 

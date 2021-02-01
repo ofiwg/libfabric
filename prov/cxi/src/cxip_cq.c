@@ -95,12 +95,13 @@ int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
 {
 	int ret = -FI_ENOENT;
 	struct cxip_req *req;
+	struct dlist_entry *tmp;
 
 	/* Serialize with event processing that could update request state. */
 	fastlock_acquire(&cq->lock);
 
-	dlist_foreach_container(&cq->req_list, struct cxip_req, req,
-				cq_entry) {
+	dlist_foreach_container_safe(&cq->req_list, struct cxip_req, req,
+				     cq_entry, tmp) {
 		if (req->req_ctx == req_ctx &&
 		    !req->recv.canceled &&
 		    !req->recv.parent &&

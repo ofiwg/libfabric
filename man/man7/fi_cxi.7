@@ -648,6 +648,24 @@ Default VNI value (masked to 16 bits).
 Number of EQ events to process before writing an acknowledgement to HW.
 Batching ACKs amortizes the cost of event acknowledgement over multiple
 network operations.
+.TP
+.B \f[I]FI_CXI_MSG_OFFLOAD\f[R]
+Enable or disable message matching offload.
+If disabled, the provider will perform the message matching.
+All incoming unmatched messages are written into a request buffer.
+The environment variables FI_CXI_REQ_BUF_SIZE and FI_CXI_REQ_BUF_COUNT
+are used to control the size and number of request buffers posted to
+handle incoming unmatched messages.
+.TP
+.B \f[I]FI_CXI_REQ_BUF_SIZE\f[R]
+Size of request buffers.
+Increasing the request buffer size allows for more unmatched messages to
+be sent into a single request buffer.
+.TP
+.B \f[I]FI_CXI_REQ_BUF_COUNT\f[R]
+Number of request buffers.
+Dynamically increasing and decreasing request buffer count is not
+currently supported.
 .PP
 Note: Use the fi_info utility to query provider environment variables:
 fi_info -p cxi -e

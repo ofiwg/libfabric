@@ -216,11 +216,15 @@ struct cxip_environment cxip_env = {
 	.cq_policy = CXI_CQ_UPDATE_LOW_FREQ_EMPTY,
 	.default_vni = 10,
 	.eq_ack_batch_size = 32,
+	.req_buf_size = CXIP_REQ_BUF_SIZE,
+	.req_buf_count = CXIP_REQ_BUF_COUNT,
+	.msg_offload = 1,
 };
 
 static void cxip_env_init(void)
 {
 	char *param_str = NULL;
+	size_t min_free;
 
 	fi_param_define(&cxip_prov, "odp", FI_PARAM_BOOL,
 			"Enables on-demand paging.");
@@ -347,6 +351,37 @@ static void cxip_env_init(void)
 
 	if (!cxip_env.eq_ack_batch_size)
 		cxip_env.eq_ack_batch_size = 1;
+
+	fi_param_define(&cxip_prov, "msg_offload", FI_PARAM_BOOL,
+			"Enable or disable hardware message matching.");
+	fi_param_get_bool(&cxip_prov, "msg_offload", &cxip_env.msg_offload);
+
+	fi_param_define(&cxip_prov, "req_buf_size", FI_PARAM_SIZE_T,
+			"Size of request buffer.");
+	fi_param_get_size_t(&cxip_prov, "req_buf_size", &cxip_env.req_buf_size);
+
+	fi_param_define(&cxip_prov, "req_buf_count", FI_PARAM_SIZE_T,
+			"Number of request buffer.");
+	fi_param_get_size_t(&cxip_prov, "req_buf_count",
+			    &cxip_env.req_buf_count);
+
+	if (cxip_env.msg_offload) {
+		min_free = sizeof(struct c_port_fab_hdr) +
+			sizeof(struct c_port_unrestricted_hdr) +
+			cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
+
+		if (cxip_env.req_buf_size < min_free) {
+			cxip_env.req_buf_size = min_free;
+			CXIP_WARN("Requested request buffer size to small. Setting to %lu bytes\n",
+				  cxip_env.req_buf_size);
+		}
+
+		if (cxip_env.req_buf_count < 2) {
+			cxip_env.req_buf_count = 2;
+			CXIP_WARN("Requested request buffer count to small. Setting to %lu\n",
+				  cxip_env.req_buf_count);
+		}
+	}
 }
 
 /*

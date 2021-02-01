@@ -46,4 +46,8 @@ test="FI_CXI_RDZV_OFFLOAD=0 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./c
 echo "running: $test"
 eval $test
 
+test="FI_CXI_MSG_OFFLOAD=0 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j 1 --tap=cxitest-sw-ep-mode.tap >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+
 grep "Tested" $TEST_OUTPUT

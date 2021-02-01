@@ -562,6 +562,21 @@ The CXI provider checks for the following environment variables:
     Batching ACKs amortizes the cost of event acknowledgement over multiple
     network operations.
 
+*FI_CXI_MSG_OFFLOAD*
+:   Enable or disable message matching offload. If disabled, the provider will
+    perform the message matching. All incoming unmatched messages are written
+    into a request buffer. The environment variables FI_CXI_REQ_BUF_SIZE and
+    FI_CXI_REQ_BUF_COUNT are used to control the size and number of request
+    buffers posted to handle incoming unmatched messages.
+
+*FI_CXI_REQ_BUF_SIZE*
+:   Size of request buffers. Increasing the request buffer size allows for more
+    unmatched messages to be sent into a single request buffer.
+
+*FI_CXI_REQ_BUF_COUNT*
+:   Number of request buffers. Dynamically increasing and decreasing request
+    buffer count is not currently supported.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 
