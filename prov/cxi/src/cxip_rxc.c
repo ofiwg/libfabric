@@ -135,6 +135,23 @@ static int rxc_msg_fini(struct cxip_rxc *rxc)
 	return FI_SUCCESS;
 }
 
+static void cxip_rxc_free_ux_entries(struct cxip_rxc *rxc)
+{
+	struct cxip_ux_send *ux_send;
+	struct dlist_entry *tmp;
+
+	/* TODO: Manage freeing of UX entries better. This code is redundant
+	 * with the freeing in cxip_recv_sw_matcher().
+	 */
+	dlist_foreach_container_safe(&rxc->sw_ux_list, struct cxip_ux_send,
+				     ux_send, rxc_entry, tmp) {
+		dlist_remove(&ux_send->rxc_entry);
+		free(ux_send);
+		rxc->sw_ux_list_len--;
+	}
+	assert(rxc->sw_ux_list_len == 0);
+}
+
 /*
  * cxip_rxc_enable() - Enable an RX context for use.
  *
@@ -297,6 +314,8 @@ static void rxc_disable(struct cxip_rxc *rxc)
 		ret = rxc_msg_disable(rxc);
 		if (ret != FI_SUCCESS)
 			CXIP_WARN("rxc_msg_disable returned: %d\n", ret);
+
+		cxip_rxc_free_ux_entries(rxc);
 
 		rxc_cleanup(rxc);
 
