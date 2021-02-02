@@ -265,12 +265,12 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_SENDDATA, enum ft_class_function, buf);
 
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_WRITE, enum ft_class_function, buf);
-		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_WRITEV, enum ft_class_function, buf);	
+		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_WRITEV, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_WRITEMSG, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_WRITEDATA, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_INJECT_WRITE, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_INJECT_WRITEDATA, enum ft_class_function, buf);
-		
+
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_READ, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_READV, enum ft_class_function, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FT_FUNC_READMSG, enum ft_class_function, buf);
@@ -504,8 +504,8 @@ static int ft_parse_config(char *config, int size,
 	 * 	JSMN_STRING
 	 * 	JSMN_STRING : <key>
 	 * 	JSMN_STRING : <value>
-	 * In our case, JSMN_OBJECT would represent a ft_set structure. The rest 
-	 * of the tokens would be treated as key-value pairs. The first JSMN_STRING 
+	 * In our case, JSMN_OBJECT would represent a ft_set structure. The rest
+	 * of the tokens would be treated as key-value pairs. The first JSMN_STRING
 	 * would represent a key and the next would represent a value. A value
 	 * can also be an array. jsmntok_t.size would represent the length of
 	 * the array.
@@ -853,16 +853,17 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	info->cntr_wait_obj = set->cntr_wait_obj[series->cur_cntr_wait_obj];
 
 	if (set->node[0])
-		strncpy(info->node, set->node, sizeof(info->node) - 1);
+		strncpy(info->node, set->node, sizeof(info->node));
 	else if (opts.dst_addr)
-		strncpy(info->node, opts.dst_addr, sizeof(info->node) - 1);
-	if (set->service[0])
-		strncpy(info->service, set->service, sizeof(info->service) - 1);
-	else if (opts.dst_port)
-		strncpy(info->service, opts.dst_port, sizeof(info->service) - 1);
-	strncpy(info->prov_name, set->prov_name, sizeof(info->prov_name) - 1);
-
+		strncpy(info->node, opts.dst_addr, sizeof(info->node));
 	info->node[sizeof(info->node) - 1] = '\0';
+
+	if (set->service[0])
+		strncpy(info->service, set->service, sizeof(info->service));
+	else if (opts.dst_port)
+		strncpy(info->service, opts.dst_port, sizeof(info->service));
 	info->service[sizeof(info->service) - 1] = '\0';
+
+	strncpy(info->prov_name, set->prov_name, sizeof(info->prov_name));
 	info->prov_name[sizeof(info->prov_name) - 1] = '\0';
 }
