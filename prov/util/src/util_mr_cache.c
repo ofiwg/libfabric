@@ -254,7 +254,7 @@ void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
  * restart the entire operation.
  */
 static int
-util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
+util_mr_cache_create(struct ofi_mr_cache *cache, struct ofi_mr_info *info,
 		     struct ofi_mr_entry **entry)
 {
 	struct ofi_mr_entry *cur;
@@ -275,6 +275,16 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 	(*entry)->use_cnt = 1;
 
 	ret = cache->add_region(cache, *entry);
+	if (ret == -FI_EAGAIN)
+		/* A provider may update the memory region that is added
+		 * to accomodate (for instance) alignment to larger page
+		 * boundaries. In that case, we would want to recheck for
+		 * any overlaps with the new region.
+		 *
+		 * TODO: Update the upstream MR cache implementation to
+		 *       accommodate this.
+		 */
+		*info = (*entry)->info;
 	if (ret)
 		goto free;
 

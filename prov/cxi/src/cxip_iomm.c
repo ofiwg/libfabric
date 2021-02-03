@@ -37,6 +37,15 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	if (ret) {
 		CXIP_WARN("cxil_map() failed: %d\n", ret);
 	} else {
+		/* If the md len is larger than the iov_len, the va and
+		 * length have been aligned to a larger page size.
+		 * Update the cache memory region by returning -EAGAIN.
+		 */
+		if (entry->info.iov.iov_len < md->md->len) {
+			entry->info.iov.iov_base = (void*)md->md->va;
+			entry->info.iov.iov_len = md->md->len;
+			ret = -FI_EAGAIN;
+		}
 		md->dom = dom;
 		md->info = entry->info;
 	}
