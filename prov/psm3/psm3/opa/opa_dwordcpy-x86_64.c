@@ -58,7 +58,7 @@
 #include "opa_intf.h"
 #include "psm_user.h"
 
-#if defined(__x86_64__)
+#if defined(__x86_64__) && defined(HAVE_PSM3_DWORD_FAST)
 #define hfi_dwordcpy hfi_dwordcpy_safe
 #define hfi_qwordcpy hfi_qwordcpy_safe
 #endif

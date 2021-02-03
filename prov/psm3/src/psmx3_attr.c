@@ -136,7 +136,7 @@ static struct fi_info psmx3_prov_info = {
 };
 
 #ifdef HAVE_PSM3_DL
-struct fi_info *ofi_allocinfo_internal(void)
+static struct fi_info *psmx3_allocinfo_internal(void)
 {
 	struct fi_info *info;
 
@@ -164,7 +164,7 @@ static struct fi_info *psmx3_dupinfo(const struct fi_info *info)
 	int ret;
 
 	if (!info)
-		return ofi_allocinfo_internal();
+		return psmx3_allocinfo_internal();
 
 	dup = mem_dup(info, sizeof(*dup));
 	if (dup == NULL) {

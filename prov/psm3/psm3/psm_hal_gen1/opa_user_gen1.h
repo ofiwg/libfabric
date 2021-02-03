@@ -260,7 +260,7 @@ void hfi_touch_mmap(void *, size_t) __attribute__ ((noinline));
 /*
 * Safe version of hfi_[d/q]wordcpy that is guaranteed to only copy each byte once.
 */
-#if defined(__x86_64__)
+#if defined(__x86_64__) && defined(HAVE_PSM3_DWORD_FAST)
 void hfi_dwordcpy_safe(volatile uint32_t *dest, const uint32_t *src,
 		       uint32_t ndwords);
 void hfi_qwordcpy_safe(volatile uint64_t *dest, const uint64_t *src,
