@@ -1795,10 +1795,13 @@ static inline bool is_netsim(struct cxip_ep_obj *ep_obj)
 #define _CXIP_WARN(subsys, ...) FI_WARN(&cxip_prov, subsys, __VA_ARGS__)
 #define _CXIP_WARN_ONCE(subsys, ...) FI_WARN_ONCE(&cxip_prov, subsys, \
 						  __VA_ARGS__)
-#define CXIP_FATAL(...)					\
+#define CXIP_LOG(...)						\
+	fi_log(&cxip_prov, FI_LOG_WARN, FI_LOG_CORE,		\
+	       __func__, __LINE__, __VA_ARGS__)
+
+#define CXIP_FATAL(...)						\
 	do {							\
-		fi_log(&cxip_prov, FI_LOG_WARN, FI_LOG_CORE,	\
-		       __func__, __LINE__, __VA_ARGS__);	\
+		CXIP_LOG(__VA_ARGS__);				\
 		abort();					\
 	} while (0)
 

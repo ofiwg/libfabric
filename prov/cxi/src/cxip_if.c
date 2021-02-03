@@ -867,8 +867,8 @@ static void cxip_query_if_list(struct slist *if_list)
 		if (!getenv("CXIP_SKIP_RH_CHECK") &&
 		    cxi_dev_list->info[i].device_platform == C_PLATFORM_ASIC &&
 		    !cxil_rh_running(&cxi_dev_list->info[i])) {
-			CXIP_WARN("CXI retry handler not running for device: %s\n",
-				  cxi_dev_list->info[i].device_name);
+			CXIP_LOG("CXI retry handler not running for device: %s\n",
+				 cxi_dev_list->info[i].device_name);
 			continue;
 		}
 
