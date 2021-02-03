@@ -54,6 +54,9 @@ union sockaddr_any {
 static union sockaddr_any bound_addr;
 static size_t bound_addr_len = sizeof bound_addr;
 
+/* string format is [%s]:%s */
+#define MAXADDRSTR	((BUFSIZ * 2) + 4)
+
 
 /* Wrapper for memcmp for sockaddr.  Note that the sockaddr structure may
  * contain holes, so sockaddr's are expected to have been initialized to all
@@ -113,7 +116,7 @@ sockaddrstr(const union sockaddr_any *addr, socklen_t len, char *buf, size_t buf
 
 static int check_address(struct fid *fid, const char *message)
 {
-	char buf1[BUFSIZ], buf2[BUFSIZ];
+	char buf1[MAXADDRSTR], buf2[MAXADDRSTR];
 	union sockaddr_any tmp;
 	size_t tmplen;
 	const char *ep_addr, *addr_expected;
@@ -127,13 +130,14 @@ static int check_address(struct fid *fid, const char *message)
 	}
 
 	if (sockaddrcmp(&tmp, tmplen, &bound_addr, bound_addr_len)) {
-		ep_addr = sockaddrstr(&tmp, tmplen, buf1, BUFSIZ);
+		ep_addr = sockaddrstr(&tmp, tmplen, buf1, sizeof buf1);
 		if (!ep_addr) {
 			FT_ERR("Unable to get ep_addr as string!");
 			return -FI_EINVAL;
 		}
 
-		addr_expected = sockaddrstr(&bound_addr, bound_addr_len, buf2, BUFSIZ);
+		addr_expected = sockaddrstr(&bound_addr, bound_addr_len, buf2,
+					    sizeof buf2);
 		if (!addr_expected) {
 			FT_ERR("Unable to get addr_expected as string!");
 			return -FI_EINVAL;
@@ -302,7 +306,7 @@ static int client_connect(void)
 
 static int setup_handle(void)
 {
-	static char buf[BUFSIZ];
+	static char buf[MAXADDRSTR];
 	struct addrinfo *ai, aihints;
 	const char *bound_addr_str;
 	char *saved_addr;
@@ -398,7 +402,8 @@ static int setup_handle(void)
 		break;
 	}
 
-	bound_addr_str = sockaddrstr(&bound_addr, bound_addr_len, buf, BUFSIZ);
+	bound_addr_str = sockaddrstr(&bound_addr, bound_addr_len, buf,
+				     sizeof buf);
 	if (!bound_addr_str) {
 		FT_ERR("Unable to get bound_addr as string!");
 		ret = -FI_EINVAL;
