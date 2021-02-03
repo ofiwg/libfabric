@@ -131,6 +131,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	uint8_t idx_ext;
 	uint32_t pid_idx;
 	bool idc;
+	int idc_max_len;
 	bool unr = false; /* use unrestricted command? */
 	struct cxip_cmdq *cmdq =
 		triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
@@ -154,9 +155,18 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	    len > CXIP_EP_MAX_MSG_SZ)
 		return -FI_EMSGSIZE;
 
-	/* Use IDCs if the payload fits and targeting an optimized MR. */
-	idc = (op == FI_OP_WRITE) && (len <= C_MAX_IDC_PAYLOAD_RES) &&
-	       cxip_mr_key_opt(key) && !triggered;
+	/* Unordered Puts are optimally supported with restricted commands.
+	 * When Put ordering or remote events are required, or when targeting a
+	 * standard MR, use unrestricted commands. Ordered Gets are never
+	 * supported.
+	 */
+	unr = !cxip_mr_key_opt(key) || txc->ep_obj->caps & FI_RMA_EVENT;
+	if (!unr && write)
+		unr = txc->attr.msg_order & (FI_ORDER_WAW | FI_ORDER_RMA_WAW);
+
+	idc_max_len = unr ? C_MAX_IDC_PAYLOAD_UNR : C_MAX_IDC_PAYLOAD_RES;
+	idc = (op == FI_OP_WRITE) && (len <= idc_max_len) &&
+			cxip_mr_key_opt(key) && !triggered;
 
 	/* Look up target CXI address */
 	ret = _cxip_av_lookup(txc->ep_obj->av, tgt_addr, &caddr);
@@ -215,15 +225,6 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	pid_idx = cxip_mr_key_to_ptl_idx(key, write);
 	cxi_build_dfa(caddr.nic, caddr.pid, txc->pid_bits, pid_idx, &dfa,
 		      &idx_ext);
-
-	/* Unordered Puts are optimally supported with restricted commands.
-	 * When Put ordering or remote events are required, or when targeting a
-	 * standard MR, use unrestricted commands. Ordered Gets are never
-	 * supported.
-	 */
-	unr = !cxip_mr_key_opt(key) || txc->ep_obj->caps & FI_RMA_EVENT;
-	if (!unr && write)
-		unr = txc->attr.msg_order & (FI_ORDER_WAW | FI_ORDER_RMA_WAW);
 
 	if (!unr && (flags & FI_CXI_HRP))
 		tc_type = CXI_TC_TYPE_HRP;
