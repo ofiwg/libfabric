@@ -35,8 +35,7 @@ ORIGINAL_VERSION=$(echo ${LIBFABRIC_VERSION} | \
             -e 's/a.*//g' \
             -e 's/rc.*//g')
 MINOR=$(git tag | egrep ^v${ORIGINAL_VERSION} | wc -l)
-BUILD_ID=$(git describe --tags | awk -F- '{print $2}')
-NEW_VERSION=${ORIGINAL_VERSION}.${MINOR}.${BUILD_ID}
+NEW_VERSION=${ORIGINAL_VERSION}.${MINOR}
 if [[ -z $BUILD_METADATA ]] ; then
 	RELEASE=1
 else
