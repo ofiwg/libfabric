@@ -3,8 +3,8 @@
 %{!?provider_formal: %define provider_formal PSM3}
 
 Name: lib%{provider}-fi
-Version: 1.11.2
-Release: 88
+Version: @VERSION@
+Release: 1%{?dist}
 Summary: Dynamic %{provider_formal} provider for Libfabric
 
 Group: System Environment/Libraries

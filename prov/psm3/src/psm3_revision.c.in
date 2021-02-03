@@ -1,5 +1,5 @@
 #ifndef PSMX3_IFS_VERSION
-#define PSMX3_IFS_VERSION	"11_0_0_0_157"
+#define PSMX3_IFS_VERSION	"@IFS_VERSION@"
 #endif
 
 #ifndef PSMX3_BUILD_TIMESTAMP
@@ -11,7 +11,7 @@
 #endif
 
 #ifndef PSMX3_GIT_CHECKSUM
-#define PSMX3_GIT_CHECKSUM	"a5a46fefed983c77b390adbb7335c6e0e57bbfba"
+#define PSMX3_GIT_CHECKSUM	"@GIT_HASH@"
 #endif
 
 char psmi_hfi_IFS_version[] = PSMX3_IFS_VERSION;

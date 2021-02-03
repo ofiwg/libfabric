@@ -642,7 +642,8 @@ AC_SUBST(PSM_HAL_INST)
 
 AM_COND_IF([HAVE_PSM3_SRC],
 	   [
-		IFS_VERSION="${RELEASE_TAG}"
+		IFS_VERSION="${RELEASE_TAG:-$(git describe --dirty --always --abbrev=8 --broken --tags 2>/dev/null \
+			|| git describe --dirty --always --abbrev=8 --broken 2>/dev/null || echo 'unknown commit')}"
 		GIT_HASH="$(git log --oneline --format='%H' -1)"
 	   ])
 AC_SUBST(IFS_VERSION)
