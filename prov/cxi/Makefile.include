@@ -38,6 +38,9 @@ _cxi_headers = \
 	prov/cxi/include/cxip_faults.h \
 	prov/cxi/include/fi_cxi_ext.h
 
+rdmainclude_HEADERS += \
+	prov/cxi/include/fi_cxi_ext.h
+
 if HAVE_CRITERION
 bin_PROGRAMS += prov/cxi/test/cxitest
 nodist_prov_cxi_test_cxitest_SOURCES = \
@@ -65,9 +68,6 @@ prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
 	$(cxitest_CPPFLAGS) $(PTHREAD_CFLAGS)
 prov_cxi_test_cxitest_LDFLAGS = $(cxitest_LDFLAGS) -static
 prov_cxi_test_cxitest_LDADD =  $(cxitest_LIBS) $(linkback) $(PTHREAD_LIBS)
-
-rdmainclude_HEADERS += \
-	prov/cxi/include/fi_cxi_ext.h
 
 TESTS += prov/cxi/test/cxitest
 endif HAVE_CRITERION
