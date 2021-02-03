@@ -263,12 +263,12 @@ int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_buf
 	return ret;
 }
 
-static int rxm_finish_sar_segment_send(struct rxm_ep *rxm_ep,
-				       struct rxm_tx_sar_buf *tx_buf, bool err)
+static bool rxm_complete_sar(struct rxm_ep *rxm_ep,
+			     struct rxm_tx_sar_buf *tx_buf)
 {
 	struct rxm_tx_sar_buf *first_tx_buf;
-	int ret = FI_SUCCESS;
 
+	assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
 	switch (rxm_sar_get_seg_type(&tx_buf->pkt.ctrl_hdr)) {
 	case RXM_SAR_SEG_FIRST:
 		break;
@@ -276,23 +276,37 @@ static int rxm_finish_sar_segment_send(struct rxm_ep *rxm_ep,
 		ofi_buf_free(tx_buf);
 		break;
 	case RXM_SAR_SEG_LAST:
-		if (!err) {
-			ret = rxm_cq_write_tx_comp(rxm_ep,
-					ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
-					tx_buf->app_context, tx_buf->flags);
-
-			assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
-			ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
-		}
 		first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->
 					buf_pools[RXM_BUF_POOL_TX_SAR].pool,
 					tx_buf->pkt.ctrl_hdr.msg_id);
 		ofi_buf_free(first_tx_buf);
 		ofi_buf_free(tx_buf);
-		break;
+		return true;
 	}
 
-	return ret;
+	return false;
+}
+
+static int rxm_handle_sar_comp(struct rxm_ep *rxm_ep,
+			       struct rxm_tx_sar_buf *tx_buf)
+{
+	void *app_context;
+	uint64_t comp_flags, tx_flags;
+	int ret;
+
+	app_context = tx_buf->app_context;
+	comp_flags = ofi_tx_cq_flags(tx_buf->pkt.hdr.op);
+	tx_flags = tx_buf->flags;
+
+	if (!rxm_complete_sar(rxm_ep, tx_buf))
+		return 0;
+
+	ret = rxm_cq_write_tx_comp(rxm_ep, comp_flags, app_context, tx_flags);
+	if (ret)
+		return ret;
+
+	ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
+	return 0;
 }
 
 static int rxm_rndv_rx_finish(struct rxm_rx_buf *rx_buf)
@@ -1569,7 +1583,7 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	case RXM_SAR_TX:
 		tx_sar_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		return rxm_finish_sar_segment_send(rxm_ep, tx_sar_buf, false);
+		return rxm_handle_sar_comp(rxm_ep, tx_sar_buf);
 	case RXM_RNDV_TX:
 		tx_rndv_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
@@ -1879,7 +1893,8 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		sar_buf = err_entry.op_context;
 		err_entry.op_context = sar_buf->app_context;
 		err_entry.flags = ofi_tx_cq_flags(sar_buf->pkt.hdr.op);
-		rxm_finish_sar_segment_send(rxm_ep, sar_buf, true);
+		if (!rxm_complete_sar(rxm_ep, sar_buf))
+			return;
 		break;
 	case RXM_CREDIT_TX:
 		base_buf = err_entry.op_context;
