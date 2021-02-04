@@ -568,7 +568,18 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			if (!req->amo.ibuf)
 				goto free_req;
 
-			memcpy(req->amo.ibuf, oper1, len);
+			if (txc->hmem) {
+				iface = ofi_get_hmem_iface(oper1);
+				hmem_iov.iov_base = oper1;
+				hmem_iov.iov_len = len;
+
+				ret = ofi_copy_from_hmem_iov(req->amo.ibuf, len,
+							     iface, 0,
+							     &hmem_iov, 1, 0);
+				assert(ret == len);
+			} else {
+				memcpy(req->amo.ibuf, oper1, len);
+			}
 		} else {
 			/* Map user buffer for DMA command. */
 			ret = cxip_map(txc->domain, oper1, len,
