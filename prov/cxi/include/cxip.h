@@ -543,7 +543,6 @@ struct cxip_req_amo {
 	struct cxip_md *oper1_md;
 	char result[16];
 	char oper1[16];
-	char compare[16];
 	bool tmp_result;
 	bool tmp_oper1;
 	void *ibuf;
