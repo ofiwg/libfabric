@@ -209,7 +209,18 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			if (!req->rma.ibuf)
 				goto req_free;
 
-			memcpy(req->rma.ibuf, buf, len);
+			if (txc->hmem) {
+				iface = ofi_get_hmem_iface(buf);
+				hmem_iov.iov_base = (void *)buf;
+				hmem_iov.iov_len = len;
+
+				ret = ofi_copy_from_hmem_iov(req->rma.ibuf, len,
+							     iface, 0,
+							     &hmem_iov, 1, 0);
+				assert(ret == len);
+			} else {
+				memcpy(req->rma.ibuf, buf, len);
+			}
 		} else {
 			/* Map user buffer for DMA command. */
 			ret = cxip_map(txc->domain, buf, len,
