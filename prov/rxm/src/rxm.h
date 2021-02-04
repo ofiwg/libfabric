@@ -705,9 +705,9 @@ ssize_t rxm_get_dyn_rbuf(struct fi_cq_data_entry *entry, struct iovec *iov,
 			 size_t *count);
 
 struct rxm_eager_ops {
-	int (*comp_tx)(struct rxm_ep *rxm_ep,
-		       struct rxm_tx_eager_buf *tx_eager_buf);
-	ssize_t (*handle_rx)(struct rxm_rx_buf *rx_buf);
+	void (*comp_tx)(struct rxm_ep *rxm_ep,
+			struct rxm_tx_eager_buf *tx_eager_buf);
+	void (*handle_rx)(struct rxm_rx_buf *rx_buf);
 };
 
 struct rxm_rndv_ops {
@@ -815,10 +815,12 @@ void rxm_ep_progress(struct util_ep *util_ep);
 void rxm_ep_progress_coll(struct util_ep *util_ep);
 void rxm_ep_do_progress(struct util_ep *util_ep);
 
-ssize_t rxm_handle_eager(struct rxm_rx_buf *rx_buf);
-ssize_t rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf);
-int rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf);
-int rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_eager_buf);
+void rxm_handle_eager(struct rxm_rx_buf *rx_buf);
+void rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf);
+void rxm_finish_eager_send(struct rxm_ep *rxm_ep,
+			   struct rxm_tx_eager_buf *tx_eager_buf);
+void rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep,
+				struct rxm_tx_eager_buf *tx_eager_buf);
 
 int rxm_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep);
 
@@ -916,16 +918,38 @@ static inline void rxm_cntr_incerr(struct util_cntr *cntr)
 		cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
 }
 
-
-
-static inline void rxm_cq_log_comp(uint64_t flags)
+static inline void
+rxm_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
+	     void *buf, uint64_t data, uint64_t tag)
 {
-#if ENABLE_DEBUG
+	int ret;
+
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting %s completion\n",
-	       fi_tostr((void *)&flags, FI_TYPE_CQ_EVENT_FLAGS));
-#else
-	/* NOP */
-#endif
+	       fi_tostr((void *) &flags, FI_TYPE_CQ_EVENT_FLAGS));
+
+	ret = ofi_cq_write(cq, context, flags, len, buf, data, tag);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"Unable to report completion\n");
+		assert(0);
+	}
+}
+
+static inline void
+rxm_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
+		 void *buf, uint64_t data, uint64_t tag, fi_addr_t addr)
+{
+	int ret;
+
+	FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting %s completion\n",
+	       fi_tostr((void *) &flags, FI_TYPE_CQ_EVENT_FLAGS));
+
+	ret = ofi_cq_write_src(cq, context, flags, len, buf, data, tag, addr);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"Unable to report completion\n");
+		assert(0);
+	}
 }
 
 ssize_t rxm_get_conn(struct rxm_ep *rxm_ep, fi_addr_t addr,
@@ -977,19 +1001,19 @@ rxm_recv_entry_release(struct rxm_recv_queue *queue, struct rxm_recv_entry *entr
 	ofi_freestack_push(queue->fs, entry);
 }
 
-static inline int rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf,
-					 void *context, uint64_t flags,
-					 size_t len, char *buf)
+static inline void
+rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf, void *context, uint64_t flags,
+		       size_t len, char *buf)
 {
 	if (rx_buf->ep->rxm_info->caps & FI_SOURCE)
-		return ofi_cq_write_src(rx_buf->ep->util_ep.rx_cq, context,
-					flags, len, buf, rx_buf->pkt.hdr.data,
-					rx_buf->pkt.hdr.tag,
-					rx_buf->conn->handle.fi_addr);
+		rxm_cq_write_src(rx_buf->ep->util_ep.rx_cq, context,
+				 flags, len, buf, rx_buf->pkt.hdr.data,
+				 rx_buf->pkt.hdr.tag,
+				 rx_buf->conn->handle.fi_addr);
 	else
-		return ofi_cq_write(rx_buf->ep->util_ep.rx_cq, context,
-				    flags, len, buf, rx_buf->pkt.hdr.data,
-				    rx_buf->pkt.hdr.tag);
+		rxm_cq_write(rx_buf->ep->util_ep.rx_cq, context,
+			     flags, len, buf, rx_buf->pkt.hdr.data,
+			     rx_buf->pkt.hdr.tag);
 }
 
 struct rxm_mr *rxm_mr_get_map_entry(struct rxm_domain *domain, uint64_t key);

@@ -754,24 +754,24 @@ static int rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
 
 }
 
-static int rxm_ep_discard_recv(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf,
+static void rxm_ep_discard_recv(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf,
 			       void *context)
 {
-	int ret;
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Discarding message",
 			 rx_buf->unexp_msg.addr, rx_buf->unexp_msg.tag);
 
-	ret = ofi_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
-			    0, NULL, rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+	rxm_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
+		     0, NULL, rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 	rxm_rx_buf_free(rx_buf);
-	return ret;
 }
 
-static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
-			    uint64_t ignore, void *context, uint64_t flags,
-			    struct rxm_recv_queue *recv_queue)
+static void
+rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
+		 uint64_t ignore, void *context, uint64_t flags,
+		 struct rxm_recv_queue *recv_queue)
 {
 	struct rxm_rx_buf *rx_buf;
+	int ret;
 
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Peeking message", addr, tag);
 
@@ -780,15 +780,19 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 	rx_buf = rxm_get_unexp_msg(recv_queue, addr, tag, ignore);
 	if (!rx_buf) {
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Message not found\n");
-		return ofi_cq_write_error_peek(rxm_ep->util_ep.rx_cq, tag,
-					       context);
+		ret = ofi_cq_write_error_peek(rxm_ep->util_ep.rx_cq, tag,
+					      context);
+		if (ret)
+			FI_WARN(&rxm_prov, FI_LOG_CQ, "Error writing to CQ\n");
+		return;
 	}
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Message found\n");
 
 	if (flags & FI_DISCARD) {
 		dlist_remove(&rx_buf->unexp_msg.entry);
-		return rxm_ep_discard_recv(rxm_ep, rx_buf, context);
+		rxm_ep_discard_recv(rxm_ep, rx_buf, context);
+		return;
 	}
 
 	if (flags & FI_CLAIM) {
@@ -797,9 +801,9 @@ static int rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 		dlist_remove(&rx_buf->unexp_msg.entry);
 	}
 
-	return ofi_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
-			    rx_buf->pkt.hdr.size, NULL,
-			    rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
+	rxm_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
+		     rx_buf->pkt.hdr.size, NULL,
+		     rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 }
 
 static struct rxm_recv_entry *
@@ -887,7 +891,7 @@ rxm_ep_post_mrecv(struct rxm_ep *ep, const struct iovec *iov,
 
 	if ((cur_iov.iov_len < ep->min_multi_recv_size) ||
 	    (ret && cur_iov.iov_len != iov->iov_len)) {
-		ofi_cq_write(ep->util_ep.rx_cq, context, FI_MULTI_RECV,
+		rxm_cq_write(ep->util_ep.rx_cq, context, FI_MULTI_RECV,
 			     0, NULL, 0, 0);
 	}
 
@@ -2090,8 +2094,8 @@ rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	}
 
 	if (flags & FI_PEEK) {
-		ret = rxm_ep_peek_recv(rxm_ep, msg->addr, msg->tag, msg->ignore,
-				       context, flags, &rxm_ep->trecv_queue);
+		rxm_ep_peek_recv(rxm_ep, msg->addr, msg->tag, msg->ignore,
+				 context, flags, &rxm_ep->trecv_queue);
 		goto unlock;
 	}
 
@@ -2100,7 +2104,7 @@ rxm_ep_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Claim message\n");
 
 	if (flags & FI_DISCARD) {
-		ret = rxm_ep_discard_recv(rxm_ep, rx_buf, context);
+		rxm_ep_discard_recv(rxm_ep, rx_buf, context);
 		goto unlock;
 	}
 
