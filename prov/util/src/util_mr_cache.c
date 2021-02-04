@@ -133,7 +133,7 @@ static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
 
 	if (entry->use_cnt == 0) {
 		dlist_remove(&entry->list_entry);
-		dlist_insert_tail(&entry->list_entry, &cache->flush_list);
+		dlist_insert_tail(&entry->list_entry, &cache->deferred_list);
 	} else {
 		cache->uncached_cnt++;
 		cache->uncached_size += entry->info.iov.iov_len;
@@ -185,8 +185,8 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru)
 	struct ofi_mr_entry *entry;
 
 	pthread_mutex_lock(&mm_lock);
-	while (!dlist_empty(&cache->flush_list)) {
-		dlist_pop_front(&cache->flush_list, struct ofi_mr_entry,
+	while (!dlist_empty(&cache->deferred_list)) {
+		dlist_pop_front(&cache->deferred_list, struct ofi_mr_entry,
 				entry, list_entry);
 		FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
 		       entry->info.iov.iov_base, entry->info.iov.iov_len);
@@ -492,7 +492,7 @@ int ofi_mr_cache_init(struct util_domain *domain,
 
 	pthread_mutex_init(&cache->lock, NULL);
 	dlist_init(&cache->lru_list);
-	dlist_init(&cache->flush_list);
+	dlist_init(&cache->deferred_list);
 	cache->cached_cnt = 0;
 	cache->cached_size = 0;
 	cache->uncached_cnt = 0;

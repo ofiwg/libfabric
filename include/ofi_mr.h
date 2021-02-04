@@ -285,7 +285,7 @@ struct ofi_mr_cache {
 
 	struct ofi_rbmap		tree;
 	struct dlist_entry		lru_list;
-	struct dlist_entry		flush_list;
+	struct dlist_entry		deferred_list;
 	pthread_mutex_t 		lock;
 
 	size_t				cached_cnt;
