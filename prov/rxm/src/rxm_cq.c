@@ -85,19 +85,20 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep, bool repost)
 	return rx_buf;
 }
 
-static int rxm_repost_new_rx(struct rxm_rx_buf *rx_buf)
+static void rxm_repost_new_rx(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_rx_buf *new_rx_buf;
-	if (rx_buf->repost) {
-		rx_buf->repost = false;
-		new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->rx_ep, true);
-		if (!new_rx_buf)
-			return -FI_ENOMEM;
 
-		dlist_insert_tail(&new_rx_buf->repost_entry,
-				  &new_rx_buf->ep->repost_ready_list);
-	}
-	return FI_SUCCESS;
+	if (!rx_buf->repost)
+		return;
+
+	new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->rx_ep, true);
+	if (!new_rx_buf)
+		return;
+
+	rx_buf->repost = false;
+	dlist_insert_tail(&new_rx_buf->repost_entry,
+			  &new_rx_buf->ep->repost_ready_list);
 }
 
 static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
@@ -110,7 +111,8 @@ static int rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 		dlist_insert_tail(&rx_buf->unexp_msg.entry,
 				  &rx_buf->conn->sar_deferred_rx_msg_list);
 		// repost a new buffer immediately while SAR takes some time to complete
-		return rxm_repost_new_rx(rx_buf);
+		rxm_repost_new_rx(rx_buf);
+		return 0;
 	}
 
 	flags = (rx_buf->pkt.hdr.flags | ofi_rx_flags[rx_buf->pkt.hdr.op]);
@@ -630,10 +632,9 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 	size_t total_recv_len;
 
 	/* En-queue new rx buf to be posted ASAP so that we don't block any
-	* incoming messages. RNDV processing can take a while. */
-	ret = rxm_repost_new_rx(rx_buf);
-	if (ret)
-		return ret;
+	 * incoming messages. RNDV processing can take a while.
+	 */
+	rxm_repost_new_rx(rx_buf);
 
 	if (!rx_buf->conn) {
 		assert(rx_buf->ep->srx_ctx);
@@ -785,7 +786,8 @@ rxm_match_rx_buf(struct rxm_rx_buf *rx_buf,
 	/* post a new buffer since we don't know when the unexpected buffer
 	 * will be consumed
 	 */
-	return rxm_repost_new_rx(rx_buf);
+	rxm_repost_new_rx(rx_buf);
+	return 0;
 }
 
 static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
