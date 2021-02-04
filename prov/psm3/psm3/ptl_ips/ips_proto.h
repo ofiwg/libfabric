@@ -229,8 +229,10 @@ struct ips_proto_stats {
 struct ips_proto_epaddr_stats {
 	uint64_t err_chk_send;
 	uint64_t err_chk_recv;
+#ifdef RNDV_MOD_MR
 	uint64_t err_chk_rdma_send;
 	uint64_t err_chk_rdma_recv;
+#endif
 	uint64_t nak_send;
 	uint64_t nak_recv;
 	uint64_t connect_req_send;
@@ -244,7 +246,9 @@ struct ips_proto_epaddr_stats {
 	uint64_t tids_grant_send;
 	uint64_t tids_grant_recv;
 	uint64_t send_rexmit;
+#ifdef RNDV_MOD_MR
 	uint64_t rdma_rexmit;
+#endif
 };
 
 /* OPP support structure. */
@@ -488,6 +492,7 @@ struct ips_epaddr {
 	// on UD/UDP context only used for hashing adaptive dispersive routing
 	uint32_t remote_qpn;
 #define IPSADDR_HASH remote_qpn
+#ifdef RNDV_MOD_MR
 	union  ibv_gid remote_gid;	/* GID of dest to use for IB CM  */
 	psm2_rv_conn_t rv_conn;
 	uint32_t remote_rv_index; // RV index of dest to use for immed */
@@ -513,6 +518,7 @@ struct ips_epaddr {
 	ptl_arg_t rv_err_chk_rdma_resp_rdesc_id; /* info for resp */
 	ptl_arg_t rv_err_chk_rdma_resp_sdesc_id; /* info for resp */
 	STAILQ_ENTRY(ips_epaddr) pend_err_resp_next; /* queue to send resp */
+#endif
 	// TBD - to reduce memory footprint, perhaps allocate a separate
 	// structure only when RC QP enabled and point to it here
 	struct ibv_qp *rc_qp;
@@ -545,8 +551,10 @@ ips_epaddr_connected(struct ips_epaddr *ipsaddr)
 {
 	if (ipsaddr->rc_connected)
 		return 1;
+#ifdef RNDV_MOD_MR
 	if (ipsaddr->rv_connected)
 		return 1;
+#endif
 	return 0;
 }
 

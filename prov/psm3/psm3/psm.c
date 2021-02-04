@@ -585,7 +585,9 @@ update:
 		       "%s %s build date %s\n"
 		       "%s %s src checksum %s\n"
                        "%s %s git checksum %s\n"
+#ifdef RNDV_MOD_MR
                        "%s %s built against rv interface v%d.%d\n"
+#endif
                        "%s %s Global Rank %d (%d total) Local Rank %d (%d total)\n"
 		       , hfi_get_mylabel(), hfi_ident_tag,
 		       PSM2_VERNO_MAJOR,PSM2_VERNO_MINOR,
@@ -602,9 +604,11 @@ update:
 		       hfi_get_mylabel(), hfi_ident_tag,
 		       (strcmp(psmi_hfi_git_checksum,"") != 0) ?
 		       psmi_hfi_git_checksum : "<not available>",
+#ifdef RNDV_MOD_MR
 		       hfi_get_mylabel(), hfi_ident_tag,
 				psm2_rv_get_user_major_bldtime_version(),
 				psm2_rv_get_user_minor_bldtime_version(),
+#endif
 		       hfi_get_mylabel(), hfi_ident_tag,
 				hfi_get_myrank(), hfi_get_myrank_count(),
 				hfi_get_mylocalrank(),

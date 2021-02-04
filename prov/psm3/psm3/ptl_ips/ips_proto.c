@@ -364,10 +364,12 @@ ips_proto_init(const psmi_context_t *context, const ptl_t *ptl,
 					   &proto->epaddr_stats.err_chk_send),
 			PSMI_STATS_DECLU64("err_chk_recv",
 					   &proto->epaddr_stats.err_chk_recv),
+#ifdef RNDV_MOD_MR
 			PSMI_STATS_DECLU64("err_chk_rdma_send",
 					   &proto->epaddr_stats.err_chk_rdma_send),
 			PSMI_STATS_DECLU64("err_chk_rdma_recv",
 					   &proto->epaddr_stats.err_chk_rdma_recv),
+#endif
 			PSMI_STATS_DECLU64("nak_send",
 					   &proto->epaddr_stats.nak_send),
 			PSMI_STATS_DECLU64("nak_recv",
@@ -394,9 +396,10 @@ ips_proto_init(const psmi_context_t *context, const ptl_t *ptl,
 					   &proto->epaddr_stats.tids_grant_recv),
 			PSMI_STATS_DECLU64("send_rexmit",
 					   &proto->epaddr_stats.send_rexmit),
+#ifdef RNDV_MOD_MR
 			PSMI_STATS_DECLU64("rdma_rexmit",
 					   &proto->epaddr_stats.rdma_rexmit),
-
+#endif
 		};
 
 		err =

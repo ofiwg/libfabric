@@ -65,7 +65,9 @@
 
 #include <sys/types.h>
 #include "psm_user.h"	// pulls in psm_verbs_ep.h and psm_verbs_mr.h
+#ifdef RNDV_MOD_MR
 #include "psm_rndv_mod.h"
+#endif
 #ifdef PSM_FI
 #include "ips_config.h"
 #endif
@@ -118,8 +120,10 @@ struct psm2_mr_cache {
 	// limits to allow headroom for priority registrations
 	uint32_t limit_inuse;
 	uint64_t limit_inuse_bytes;
+#ifdef RNDV_MOD_MR
 	psm2_rv_t rv;
 	int cmd_fd;
+#endif
 #ifdef PSM_FI
 	psm2_ep_t ep;
 #endif
@@ -147,8 +151,10 @@ struct psm2_mr_cache {
 	uint64_t max_inuse_bytes;
 	uint32_t max_nelems;
 	uint32_t max_refcount;
+#ifdef RNDV_MOD_MR
 	struct psm2_rv_cache_stats rv_stats;	// statistics from rv module
 									// will remain 0 if rv not open
+#endif
 };
 
 static int mr_cache_key_cmp(const struct psm2_verbs_mr *a,
@@ -264,6 +270,7 @@ static uint64_t mr_cache_miss_rate(void *context)
 		return 0;
 }
 
+#ifdef RNDV_MOD_MR
 static uint64_t mr_cache_rv_size(void *context)
 {
 	psm2_mr_cache_t cache = (psm2_mr_cache_t)context;
@@ -311,6 +318,7 @@ static uint64_t mr_cache_rv_miss_rate(void *context)
 	else
 		return 0;
 }
+#endif // RNDV_MOD_MR
 
 #define INC_STAT(cache, stat, max_stat) \
 	do { \
@@ -346,6 +354,7 @@ psm2_mr_cache_t psm2_verbs_alloc_mr_cache(psm2_ep_t ep,
 #ifdef PSM_FI
 	cache->ep = ep;
 #endif
+#ifdef RNDV_MOD_MR
 	if (cache->cache_mode == MR_CACHE_MODE_KERNEL
 		|| cache->cache_mode == MR_CACHE_MODE_RV) {
 		if (ep->rv_mr_cache_size*MEGABYTE < pri_size) {
@@ -355,9 +364,12 @@ psm2_mr_cache_t psm2_verbs_alloc_mr_cache(psm2_ep_t ep,
 		}
 		cache->limit_inuse_bytes = ep->rv_mr_cache_size*MEGABYTE - pri_size;
 	} else
+#endif // RNDV_MOD_MR
 		cache->limit_inuse_bytes = UINT64_MAX;	// no limit, just count inuse
+#ifdef RNDV_MOD_MR
 	cache->rv = ep->verbs_ep.rv;
 	cache->cmd_fd = ep->verbs_ep.context->cmd_fd;
+#endif // RNDV_MOD_MR
 	_HFI_MMDBG("cache alloc: max_entries=%u limit_inuse=%u limit_inuse_bytes=%"PRIu64", pri_entries=%u pri_size=%"PRIu64"\n",
 			cache->max_entries, cache->limit_inuse,
 			cache->limit_inuse_bytes, pri_entries, pri_size);
@@ -400,6 +412,7 @@ psm2_mr_cache_t psm2_verbs_alloc_mr_cache(psm2_ep_t ep,
 		PSMI_STATS_DECLU64("rejected", &cache->rejected),
 		PSMI_STATS_DECLU64("full", &cache->full),
 		PSMI_STATS_DECLU64("failed", &cache->failed),
+#ifdef RNDV_MOD_MR
 		PSMI_STATS_DECL_FUNC("rv_size", mr_cache_rv_size),
 		PSMI_STATS_DECL_FUNC("rv_max_size", mr_cache_rv_max_size),
 		PSMI_STATS_DECL_FUNC("rv_limit", mr_cache_rv_limit_size),
@@ -420,6 +433,7 @@ psm2_mr_cache_t psm2_verbs_alloc_mr_cache(psm2_ep_t ep,
 		PSMI_STATS_DECLU64("rv_failed", (uint64_t*)&cache->rv_stats.failed),
 		PSMI_STATS_DECLU64("rv_remove", (uint64_t*)&cache->rv_stats.remove),
 		PSMI_STATS_DECLU64("rv_evict", (uint64_t*)&cache->rv_stats.evict),
+#endif // RNDV_MOD_MR
 	};
 	psmi_stats_register_type("MR_Cache_Statistics",
 					PSMI_STATSTYPE_MR_CACHE,
@@ -477,13 +491,22 @@ struct psm2_verbs_mr * psm2_verbs_reg_mr(psm2_mr_cache_t cache,
 	}
 #endif
 	access |= IBV_ACCESS_LOCAL_WRITE;	// manditory flag
-
+#ifndef RNDV_MOD_MR
+	if (access & IBV_ACCESS_IS_GPU_ADDR) {
+		_HFI_ERROR("unsupported GPU memory registration\n");
+		cache->failed++;
+		errno = EINVAL;
+		return NULL;
+	}
+#endif
 	struct psm2_verbs_mr key = { // our search key
 		.addr = addr,
 		.length = length,
 		// only 8 bits in mrc for access
 		.access = (access & ~(IBV_ACCESS_IS_GPU_ADDR
+#ifdef RNDV_MOD_MR
 								|IBV_ACCESS_KERNEL
+#endif
 								))
 	};
 	cl_map_item_t *p_item = ips_cl_qmap_searchv(&cache->map, &key);
@@ -537,10 +560,12 @@ struct psm2_verbs_mr * psm2_verbs_reg_mr(psm2_mr_cache_t cache,
 					addr, (unsigned)length, mrc->access, mrc);
 		ips_cl_qmap_remove_item(&mrc->cache->map, p_item);
 		TAILQ_REMOVE(&cache->avail_list, mrc, next);
+#ifdef RNDV_MOD_MR
 		if (cache->cache_mode == MR_CACHE_MODE_KERNEL
 			|| cache->cache_mode == MR_CACHE_MODE_RV)	// should not happen
 			ret = __psm2_rv_dereg_mem(cache->rv, mrc->mr.rv_mr);
 		else
+#endif
 			ret = ibv_dereg_mr(mrc->mr.ibv_mr);
 		if (ret) {
 			_HFI_ERROR("unexpected dreg_mr failure: %s", strerror(errno));
@@ -565,6 +590,7 @@ struct psm2_verbs_mr * psm2_verbs_reg_mr(psm2_mr_cache_t cache,
 		// we initialize mrc below
 		cache->max_nelems = max(cache->max_nelems, cache->map.payload.nelems+1);
 	}
+#ifdef RNDV_MOD_MR
 	/* need cmd_fd for access to ucontext when converting user pd into kernel pd */
 	if (cache->cache_mode == MR_CACHE_MODE_KERNEL) {
 		mrc->mr.rv_mr = __psm2_rv_reg_mem(cache->rv, cache->cmd_fd, pd, addr, length, access);
@@ -601,7 +627,8 @@ struct psm2_verbs_mr * psm2_verbs_reg_mr(psm2_mr_cache_t cache,
 		mrc->lkey = mrc->mr.rv_mr->lkey;
 		mrc->rkey = mrc->mr.rv_mr->rkey;
 	} else
-		{
+#endif
+	{
 		mrc->mr.ibv_mr = ibv_reg_mr(pd, addr, length, access);
 		if (! mrc->mr.ibv_mr) {
 			int save_errno = errno;
@@ -664,10 +691,12 @@ int psm2_verbs_release_mr(struct psm2_verbs_mr *mrc)
 			mrc->cache->inuse_bytes -= (unsigned)mrc->length;
 			cl_map_item_t *p_item = container_of(mrc, cl_map_item_t, payload);
 			ips_cl_qmap_remove_item(&mrc->cache->map, p_item);
+#ifdef RNDV_MOD_MR
 			if (mrc->cache->cache_mode == MR_CACHE_MODE_KERNEL
 					|| mrc->cache->cache_mode == MR_CACHE_MODE_RV)
 				ret = __psm2_rv_dereg_mem(mrc->cache->rv, mrc->mr.rv_mr);
 			else
+#endif
 				ret = ibv_dereg_mr(mrc->mr.ibv_mr);
 			if (ret) {
 				// nasty choice, do we leak the MR or leak the cache entry
@@ -702,10 +731,12 @@ void psm2_verbs_free_mr_cache(psm2_mr_cache_t cache)
 			cl_map_item_t *p_item = container_of(mrc, cl_map_item_t, payload);
 			ips_cl_qmap_remove_item(&cache->map, p_item);
 			TAILQ_REMOVE(&cache->avail_list, mrc, next);
+#ifdef RNDV_MOD_MR
 			if (cache->cache_mode == MR_CACHE_MODE_KERNEL
 					|| cache->cache_mode == MR_CACHE_MODE_RV)
 				ret = __psm2_rv_dereg_mem(cache->rv, mrc->mr.rv_mr);
 			else
+#endif
 				ret = ibv_dereg_mr(mrc->mr.ibv_mr);
 			if (ret)
 				_HFI_ERROR("unexpected dreg_mr failure: %s", strerror(errno));

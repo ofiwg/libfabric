@@ -111,12 +111,14 @@ struct ips_protoexp {
 	mpool_t tid_rreq_pool;	/* backptr into proto->ep->mq */
 	uint32_t tid_flags;
 
-	 STAILQ_HEAD(ips_tid_send_pend,	/* pending exp. sends */
-		     ips_tid_send_desc) pend_sendq;
+	STAILQ_HEAD(ips_tid_send_pend,	/* pending exp. sends */
+		    ips_tid_send_desc) pend_sendq;
 	struct psmi_timer timer_send;
 
-	 STAILQ_HEAD(ips_tid_get_pend, ips_tid_get_request) pend_getreqsq;	/* pending tid reqs */
-	 STAILQ_HEAD(ips_tid_err_resp_pend, ips_epaddr) pend_err_resp;	/* pending ERR CHK RDMA RESP */
+	STAILQ_HEAD(ips_tid_get_pend, ips_tid_get_request) pend_getreqsq;	/* pending tid reqs */
+#ifdef RNDV_MOD_MR
+	STAILQ_HEAD(ips_tid_err_resp_pend, ips_epaddr) pend_err_resp;	/* pending ERR CHK RDMA RESP */
+#endif
 	/* services pend_getreqsq and pend_err_chk_rdma_resp */
 	struct psmi_timer timer_getreqs;
 
@@ -336,11 +338,12 @@ psm2_error_t ips_protoexp_fini(struct ips_protoexp *protoexp);
 int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 								int conn_type, uint32_t immed, uint32_t len);
 int ips_protoexp_rdma_write_completion( uint64_t wr_id);
+#ifdef RNDV_MOD_MR
 int ips_protoexp_rdma_write_completion_error(psm2_ep_t ep, uint64_t wr_id,
 												enum ibv_wc_status wc_status);
 int ips_protoexp_process_err_chk_rdma(struct ips_recvhdrq_event *rcv_ev);
 int ips_protoexp_process_err_chk_rdma_resp(struct ips_recvhdrq_event *rcv_ev);
-
+#endif
 
 
 PSMI_ALWAYS_INLINE(

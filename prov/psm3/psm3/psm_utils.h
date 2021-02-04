@@ -138,9 +138,11 @@ typedef enum psmi_memtype {
 	DESCRIPTORS,		/* For tracking send/recv descriptors */
 	UNEXPECTED_BUFFERS,	/* For tracking unexpected recv buffers */
 	STATS,			/* For tracking stats-related allocs */
+#ifdef RNDV_MOD_MR
 	// TBD, should we just tabulate this into PER_PEER_ENDPOINT
 	// maybe once debugged we should consolidate?
 	PEER_RNDV,			/* for tracking Rendezvous per RC QP resources */
+#endif
 } psmi_memtype_t;
 
 /*
@@ -161,8 +163,10 @@ struct psmi_stats_malloc {
 	int64_t m_undefined_max;
 	int64_t m_stats_total;
 	int64_t m_stats_max;
+#ifdef RNDV_MOD_MR
 	int64_t m_peerrndv_total;
 	int64_t m_peerrndv_max;
+#endif
 };
 
 extern struct psmi_stats_malloc psmi_stats_memory;

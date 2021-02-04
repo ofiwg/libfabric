@@ -68,8 +68,13 @@ ips_proto_mq_handle_eager,
 ips_proto_mq_handle_rts,                /* RTS */
 ips_proto_mq_handle_cts,                /* CTS */
 ips_proto_mq_handle_data,               /* DATA */
+#if defined(RNDV_MOD_MR)
 ips_protoexp_process_err_chk_rdma,		/* ERR_CHK_RDMA */
 ips_protoexp_process_err_chk_rdma_resp,		/* ERR_CHK_RDMA_RESP */
+#else
+ips_proto_process_unknown_opcode,
+ips_proto_process_unknown_opcode,
+#endif
 /* these are control packets */
 ips_proto_process_ack,
 ips_proto_process_nak,

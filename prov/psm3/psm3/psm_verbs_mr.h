@@ -103,8 +103,10 @@ struct psm2_verbs_mr {
 	// information may be private in the kernel
 	union {
 		void *mr_ptr;		// for simple test of != NULL or clearing to NULL
+#ifdef RNDV_MOD_MR
 		// when cache_mode = MR_CACHE_MODE_KERNEL
 		psm2_rv_mr_t rv_mr;	// internally we can get addr, length and pd from here
+#endif
 		// when cache_mode = MR_CACHE_MODE_NONE or MR_CACHE_MODE_USER
 		struct ibv_mr *ibv_mr;	// internally we can get addr, length and pd from here
 	} mr;

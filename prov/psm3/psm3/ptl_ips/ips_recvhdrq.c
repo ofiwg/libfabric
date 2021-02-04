@@ -164,7 +164,7 @@ process_pending_acks(struct ips_recvhdrq *recvq))
 	}
 }
 
-
+#ifdef RNDV_MOD_MR
 // check for and process RV RDMA sends and RDMA recv
 psm2_error_t check_rv_completion(psm2_ep_t ep, struct ips_proto *proto)
 {
@@ -213,6 +213,7 @@ psm2_error_t check_rv_completion(psm2_ep_t ep, struct ips_proto *proto)
 	}
 	return ret;;
 }
+#endif // RNDV_MOD_MR
 
 psm2_error_t ips_recvhdrq_progress(struct ips_recvhdrq *recvq)
 {
@@ -230,6 +231,7 @@ psm2_error_t ips_recvhdrq_progress(struct ips_recvhdrq *recvq)
 	uint32_t num_done = 0;
 	int err;
 
+#ifdef RNDV_MOD_MR
 	// rv completes are for larger RDMAs and should be infrequent, give
 	// them 1st chance
 	switch (check_rv_completion(ep, recvq->proto)) {
@@ -242,6 +244,7 @@ psm2_error_t ips_recvhdrq_progress(struct ips_recvhdrq *recvq)
 		goto fail;
 		break;
 	}
+#endif
 #if VERBS_RECV_CQE_BATCH > 1
 	int done = 0;
 	do {

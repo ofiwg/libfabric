@@ -52,6 +52,7 @@
 */
 
 /* Copyright (c) 2003-2016 Intel Corporation. All rights reserved. */
+#if defined(RNDV_MOD_MR)
 
 #ifndef _PSMI_RNDV_MOD_MR_H
 #define _PSMI_RNDV_MOD_MR_H
@@ -194,3 +195,4 @@ extern int __psm2_rv_scan_cq(psm2_rv_t rv, uint8_t event_type,
 			uint32_t imm_mask, uint32_t imm_value);
 
 #endif // _PSMI_RNDV_MOD_MR_H
+#endif // defined(RNDV_MOD_MR)

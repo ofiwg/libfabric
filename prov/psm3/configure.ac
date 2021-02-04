@@ -49,20 +49,36 @@ AC_ARG_ENABLE([psm-rc],
 			      [Enable Verbs RC support (requires UD support) @<:@default=yes@:>@])],
 	      [],
 	      [enable_psm_rc=yes])
-AC_ARG_ENABLE([psm-rndv-mod],
-	      [AS_HELP_STRING([--enable-psm-rndv-mod],
-			      [Enable RNDV module use (requires UD support) @<:@default=no@:>@])],
-	      [],
-	      [enable_psm_rndv_mod=yes])
-AC_ARG_WITH([drvr-headers],
-	    [AC_HELP_STRING([--with-drvr-headers=DIR],
-			    [Provide path to where the driver headers are installed. @<:@default=/usr/include/uapi@:>@])],
-	    [], [with_drvr_headers="/usr/include/uapi"])
-if test "$with_drvr_headers" != "" && test "$with_drvr_headers" != "no"; then
-	CPPFLAGS="$CPPFLAGS -I$with_drvr_headers"
-	AC_CHECK_HEADER(rv/rv_user_ioctls.h, [],
-		AC_MSG_ERROR([RV Driver Headers requested but <rv/rv_user_ioctls.h> not found.]))
-fi
+AC_ARG_WITH([psm3-rv],
+            [AS_HELP_STRING([--with-psm3-rv],
+                            [Enable RV module use @<:@default=check@:>@])])
+AS_IF([test x$with_psm3_rv = xno],
+      [
+	CPPFLAGS="$CPPFLAGS -URNDV_MOD_MR"
+      ],[
+	AS_IF([test "x$with_psm3_rv" = "x"],
+	      [
+		psm3_rv_check=1
+		with_psm3_rv=/usr/include/uapi
+	      ])
+	_FI_CHECK_PACKAGE_HEADER([psm3_rv],
+	                         [$with_psm3_rv/rv/rv_user_ioctls.h],
+	                         [],
+	                         [psm3_rv_happy=1],
+	                         [psm3_rv_happy=0])
+	AS_IF([test "$psm3_rv_happy" -eq 0 && test "$psm3_rv_check" -eq 0],
+	      [
+		AC_MSG_ERROR([RV Module headers requested but <rv/rv_user_ioctls.h> not found.])
+	      ],
+	      [
+		AS_IF([test "$psm3_rv_happy" -eq 1],
+		      [
+			CPPFLAGS="$CPPFLAGS -DRNDV_MOD_MR -I$with_psm3_rv"
+		      ], [
+			CPPFLAGS="$CPPFLAGS -URNDV_MOD_MR"
+		      ])
+	      ])
+      ])
 AC_ARG_WITH([psm-headers],
 	    [AC_HELP_STRING([--with-psm-headers=DIR],
 			    [Provide path to where the psm headers are installed for split build. @<:@default=no@:>@])],
