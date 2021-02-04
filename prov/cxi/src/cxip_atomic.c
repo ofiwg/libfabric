@@ -389,6 +389,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	enum fi_hmem_iface iface;
 	struct iovec hmem_iov;
 	char hmem_compare[16];
+	char hmem_oper1[16];
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -627,12 +628,12 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 				hmem_iov.iov_base = oper1;
 				hmem_iov.iov_len = len;
 
-				ret = ofi_copy_from_hmem_iov(&req->amo.oper1,
+				ret = ofi_copy_from_hmem_iov(hmem_oper1,
 							     len, iface, 0,
 							     &hmem_iov, 1, 0);
 				assert(ret == len);
 
-				oper1 = &req->amo.oper1;
+				oper1 = hmem_oper1;
 			}
 		}
 	}
