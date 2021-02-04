@@ -534,8 +534,8 @@ static struct rxm_eager_ops coll_eager_ops = {
 	.handle_rx = rxm_handle_coll_eager,
 };
 
-static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
-			      struct rxm_recv_queue *recv_queue, void *context)
+static bool rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
+			       struct rxm_recv_queue *recv_queue, void *context)
 {
 	struct fi_cq_err_entry err_entry;
 	struct rxm_recv_entry *recv_entry;
@@ -546,35 +546,35 @@ static int rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 rxm_match_recv_entry_context,
 					 context);
-	if (entry) {
-		recv_entry = container_of(entry, struct rxm_recv_entry, entry);
-		memset(&err_entry, 0, sizeof(err_entry));
-		err_entry.op_context = recv_entry->context;
-		err_entry.flags |= recv_entry->comp_flags;
-		err_entry.tag = recv_entry->tag;
-		err_entry.err = FI_ECANCELED;
-		err_entry.prov_errno = -FI_ECANCELED;
-		rxm_recv_entry_release(recv_queue, recv_entry);
-		ret = ofi_cq_write_error(rxm_ep->util_ep.rx_cq, &err_entry);
-	} else {
-		ret = 0;
+	if (!entry)
+		goto unlock;
+
+	recv_entry = container_of(entry, struct rxm_recv_entry, entry);
+	memset(&err_entry, 0, sizeof(err_entry));
+	err_entry.op_context = recv_entry->context;
+	err_entry.flags |= recv_entry->comp_flags;
+	err_entry.tag = recv_entry->tag;
+	err_entry.err = FI_ECANCELED;
+	err_entry.prov_errno = -FI_ECANCELED;
+	rxm_recv_entry_release(recv_queue, recv_entry);
+	ret = ofi_cq_write_error(rxm_ep->util_ep.rx_cq, &err_entry);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Error writing to CQ\n");
+		assert(0);
 	}
+
+unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
-	return ret;
+	return entry != NULL;
 }
 
 static ssize_t rxm_ep_cancel(fid_t fid_ep, void *context)
 {
-	struct rxm_ep *rxm_ep = container_of(fid_ep, struct rxm_ep, util_ep.ep_fid);
-	int ret;
+	struct rxm_ep *rxm_ep;
 
-	ret = rxm_ep_cancel_recv(rxm_ep, &rxm_ep->recv_queue, context);
-	if (ret)
-		return ret;
-
-	ret = rxm_ep_cancel_recv(rxm_ep, &rxm_ep->trecv_queue, context);
-	if (ret)
-		return ret;
+	rxm_ep = container_of(fid_ep, struct rxm_ep, util_ep.ep_fid);
+	if (!rxm_ep_cancel_recv(rxm_ep, &rxm_ep->recv_queue, context))
+		rxm_ep_cancel_recv(rxm_ep, &rxm_ep->trecv_queue, context);
 
 	return 0;
 }
