@@ -1369,6 +1369,7 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	char *data;
 	size_t hdr_size, data_size;
 	ssize_t err;
+	uint32_t tx_id;
 
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
 	if (!rx_entry) {
@@ -1380,6 +1381,7 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	}
 
 	rtw_hdr = (struct rxr_long_rtw_hdr *)pkt_entry->pkt;
+	tx_id = rtw_hdr->tx_id;
 	rx_entry->iov_count = rtw_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
 					FI_REMOTE_WRITE, rx_entry->iov, rx_entry->desc);
@@ -1423,7 +1425,7 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	ep->rx_pending++;
 #endif
 	rx_entry->state = RXR_RX_RECV;
-	rx_entry->tx_id = rtw_hdr->tx_id;
+	rx_entry->tx_id = tx_id;
 	rx_entry->credit_request = rxr_env.tx_min_credits;
 	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
