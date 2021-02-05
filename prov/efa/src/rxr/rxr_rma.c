@@ -282,6 +282,10 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 	}
 
 	if (OFI_UNLIKELY(err)) {
+#if ENABLE_DEBUG
+	        dlist_remove(&rx_entry->rx_pending_entry);
+		ep->rx_pending--;
+#endif
 		rxr_release_rx_entry(ep, rx_entry);
 	}
 
