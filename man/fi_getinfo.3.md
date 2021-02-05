@@ -623,6 +623,10 @@ fabric.  See [`fi_av`(3)](fi_av.3.html).
 : Address is an Intel proprietary format used with their Performance Scaled
   Messaging protocol version 2.
 
+*FI_ADDR_PSMX3*
+: Address is an Intel proprietary format used with their Performance Scaled
+  Messaging protocol version 3.
+
 *FI_ADDR_STR*
 : Address is a formatted character string.  The length and content of
   the string is address and/or provider specific, but in general follows

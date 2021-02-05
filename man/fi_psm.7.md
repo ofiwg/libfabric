@@ -165,3 +165,4 @@ The *psm* provider checks for the following environment variables:
 [`fabric`(7)](fabric.7.html),
 [`fi_provider`(7)](fi_provider.7.html),
 [`fi_psm2`(7)](fi_psm2.7.html),
+[`fi_psm3`(7)](fi_psm3.7.html),
