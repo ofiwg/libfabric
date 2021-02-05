@@ -450,7 +450,8 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	 */
 	if (!strcasecmp(provider->name, "sockets") ||
 	    !strcasecmp(provider->name, "shm") ||
-	    !strcasecmp(provider->name, "efa") || ofi_is_util_prov(provider))
+	    !strcasecmp(provider->name, "efa") ||
+	    !strcasecmp(provider->name, "psm3") || ofi_is_util_prov(provider))
 		ctx->disable_layering = 1;
 
 	prov = ofi_getprov(provider->name, strlen(provider->name));
