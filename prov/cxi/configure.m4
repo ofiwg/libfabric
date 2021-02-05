@@ -12,23 +12,15 @@ dnl $1: action if configured successfully
 dnl $2: action if not configured successfully
 dnl
 AC_DEFUN([FI_CXI_CONFIGURE],[
-	# Determine if we can support the CXI provider
-	have_cxi=false
-	cxi_CPPFLAGS=
-	cxi_LDFLAGS=
-	have_criterion=false
-	cxitest_CPPFLAGS=
-	cxitest_LDFLAGS=
-	cxitest_LIBS=
+	# Determine if we can support the cxi provider
+	cxi_happy=0
 
 	AS_IF([test x"$enable_cxi" != x"no"],
 		[FI_PKG_CHECK_MODULES([CXI], [libcxi],
 			[cxi_CPPFLAGS=$CXI_CFLAGS
 			cxi_LDFLAGS=$CXI_LIBS
-			have_cxi=true])])
-
-	AC_ARG_WITH([criterion], [AS_HELP_STRING([--with-criterion],
-		[Location for criterion unit testing framework.])])
+			cxi_happy=1],
+			[cxi_happy=0])])
 
 	AS_IF([test "$with_criterion" != ""],
 		[cxitest_CPPFLAGS="-I$with_criterion/include"
@@ -44,5 +36,5 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 	AC_SUBST(cxitest_LDFLAGS)
 	AC_SUBST(cxitest_LIBS)
 
-	AS_IF([test "x$have_cxi" = "xtrue" ], [$1], [$2])
+	AS_IF([test $cxi_happy -eq 1], [$1], [$2])
 ])
