@@ -1496,7 +1496,7 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		return 0;
 	case RXM_INJECT_TX:
 		assert(0);
-		return -FI_EOPBADSTATE;
+		return 0;
 	case RXM_RMA:
 		rma_buf = comp->op_context;
 		assert((comp->flags & (FI_WRITE | FI_RMA)) ||
@@ -1551,7 +1551,7 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	case RXM_RNDV_READ_DONE_WAIT:
 	case RXM_RNDV_WRITE_DATA_WAIT:
 		assert(0);
-		return -FI_EOPBADSTATE;
+		return 0;
 	case RXM_RNDV_READ:
 		rx_buf = comp->op_context;
 		assert(comp->flags & FI_READ);
@@ -1588,7 +1588,7 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		return 0;
 	case RXM_RNDV_FINISH:
 		assert(0);
-		return -FI_EOPBADSTATE;
+		return 0;
 	case RXM_ATOMIC_RESP_WAIT:
 		/* Optional atomic request completion; TX completion
 		 * processing is performed when atomic response is received */
@@ -1601,7 +1601,7 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		return 0;
 	default:
 		assert(0);
-		return -FI_EOPBADSTATE;
+		return 0;
 	}
 }
 
