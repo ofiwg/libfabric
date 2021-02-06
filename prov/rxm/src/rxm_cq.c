@@ -820,29 +820,6 @@ static ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 	return 0;
 }
 
-static ssize_t rxm_rndv_send_rd_done_inject(struct rxm_rx_buf *rx_buf)
-{
-	struct rxm_pkt pkt = {
-		.hdr.op = ofi_op_msg,
-		.hdr.version = OFI_OP_VERSION,
-		.ctrl_hdr.version = RXM_CTRL_VERSION,
-		.ctrl_hdr.type = rxm_ctrl_rndv_rd_done,
-		.ctrl_hdr.conn_id = rx_buf->conn->handle.remote_key,
-		.ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id
-	};
-	struct iovec iov = {
-		.iov_base = &pkt,
-		.iov_len = sizeof(pkt),
-	};
-	struct fi_msg msg = {
-		.msg_iov = &iov,
-		.iov_count = 1,
-		.context = rx_buf,
-	};
-
-	return fi_sendmsg(rx_buf->conn->msg_ep, &msg, FI_INJECT);
-}
-
 static ssize_t rxm_rndv_send_wr_data_inject(struct rxm_rx_buf *rx_buf)
 {
 	ssize_t ret;
@@ -878,72 +855,56 @@ static ssize_t rxm_rndv_send_wr_data_inject(struct rxm_rx_buf *rx_buf)
 	return ret;
 }
 
-static ssize_t rxm_rndv_send_rd_done(struct rxm_rx_buf *rx_buf)
+static void rxm_rndv_send_rd_done(struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_deferred_tx_entry *def_tx_entry;
+	struct rxm_deferred_tx_entry *def_entry;
+	struct rxm_tx_base_buf *buf;
 	ssize_t ret;
 
 	assert(rx_buf->conn);
-
-	if (sizeof(rx_buf->pkt) <= rx_buf->ep->inject_limit) {
-		ret = rxm_rndv_send_rd_done_inject(rx_buf);
-		if (!ret)
-			goto out;
-
-		if (ret != -FI_EAGAIN) {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"send ack via inject failed for MSG provider\n");
-			return ret;
-		}
-	}
-
-	rx_buf->recv_entry->rndv.tx_buf = rxm_tx_buf_alloc(rx_buf->ep,
-							   RXM_BUF_POOL_TX_RNDV_RD_DONE);
-	if (!rx_buf->recv_entry->rndv.tx_buf) {
-		FI_WARN(&rxm_prov, FI_LOG_CQ,
-			"ran out of buffers from ACK buffer pool\n");
-		return -FI_EAGAIN;
-	}
-	assert(rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.type ==
-	       rxm_ctrl_rndv_rd_done);
-
 	assert(rx_buf->hdr.state == RXM_RNDV_READ);
+	buf = rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_RNDV_RD_DONE);
+	if (!buf)
+		goto err;
 
-	rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.conn_id = rx_buf->conn->
-								handle.remote_key;
-	rx_buf->recv_entry->rndv.tx_buf->pkt.ctrl_hdr.msg_id = rx_buf->pkt.
-							       ctrl_hdr.msg_id;
+	rx_buf->recv_entry->rndv.tx_buf = buf;
+	assert(buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_rd_done);
 
-	ret = fi_send(rx_buf->conn->msg_ep, &rx_buf->recv_entry->rndv.tx_buf->pkt,
-		      sizeof(rx_buf->recv_entry->rndv.tx_buf->pkt),
-		      rx_buf->recv_entry->rndv.tx_buf->hdr.desc, 0, rx_buf);
+	buf->pkt.ctrl_hdr.conn_id = rx_buf->conn->handle.remote_key;
+	buf->pkt.ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
+
+	ret = fi_send(rx_buf->conn->msg_ep, &buf->pkt, sizeof(buf->pkt),
+		      buf->hdr.desc, 0, rx_buf);
 	if (ret) {
 		if (ret == -FI_EAGAIN) {
-			def_tx_entry = rxm_ep_alloc_deferred_tx_entry(rx_buf->ep,
-					rx_buf->conn, RXM_DEFERRED_TX_RNDV_ACK);
-			if (!def_tx_entry) {
-				FI_WARN(&rxm_prov, FI_LOG_CQ, "unable to "
-					"allocate TX entry for deferred ACK\n");
-				ret = -FI_EAGAIN;
-				goto err;
+			def_entry = rxm_ep_alloc_deferred_tx_entry(rx_buf->ep,
+						rx_buf->conn,
+						RXM_DEFERRED_TX_RNDV_ACK);
+			if (def_entry) {
+				def_entry->rndv_ack.rx_buf = rx_buf;
+				def_entry->rndv_ack.pkt_size = sizeof(rx_buf->pkt);
+				rxm_ep_enqueue_deferred_tx_queue(def_entry);
+				return;
 			}
-
-			def_tx_entry->rndv_ack.rx_buf = rx_buf;
-			def_tx_entry->rndv_ack.pkt_size = sizeof(rx_buf->pkt);
-			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
-			return 0;
-		} else {
-			FI_WARN(&rxm_prov, FI_LOG_CQ,
-				"unable to send ACK: %zd\n", ret);
 		}
-		goto err;
+		goto free;
 	}
-out:
+
 	RXM_UPDATE_STATE(FI_LOG_CQ, rx_buf, RXM_RNDV_READ_DONE_SENT);
-	return 0;
+	return;
+
+free:
+	ofi_buf_free(buf);
+	rx_buf->recv_entry->rndv.tx_buf = NULL;
 err:
-	ofi_buf_free(rx_buf->recv_entry->rndv.tx_buf);
-	return ret;
+	FI_WARN(&rxm_prov, FI_LOG_CQ,
+		"unable to allocate/send rd rndv ack: %s\n",
+		fi_strerror((int) ret));
+	assert(0);
+	/* TODO: Allocate all resources needed on receiving
+	 * original message receive request, to avoid allocation failures.
+	 * On other failures, we need to fail the receive.
+	 */
 }
 
 static void
@@ -1523,8 +1484,9 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		assert(comp->flags & FI_READ);
 		if (++rx_buf->rndv_rma_index < rx_buf->remote_rndv_hdr->count)
 			return 0;
-		else
-			return rxm_rndv_send_rd_done(rx_buf);
+
+		rxm_rndv_send_rd_done(rx_buf);
+		return 0;
 	case RXM_RNDV_WRITE:
 		tx_rndv_buf = comp->op_context;
 		assert(comp->flags & FI_WRITE);
