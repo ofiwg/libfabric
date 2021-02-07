@@ -65,7 +65,7 @@
 
 #include <sys/types.h>
 #include "psm_user.h"	// pulls in psm_verbs_ep.h and psm_verbs_mr.h
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 #include "psm_rndv_mod.h"
 #endif
 #ifdef PSM_FI
@@ -120,7 +120,7 @@ struct psm2_mr_cache {
 	// limits to allow headroom for priority registrations
 	uint32_t limit_inuse;
 	uint64_t limit_inuse_bytes;
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	psm2_rv_t rv;
 	int cmd_fd;
 #endif
@@ -151,7 +151,7 @@ struct psm2_mr_cache {
 	uint64_t max_inuse_bytes;
 	uint32_t max_nelems;
 	uint32_t max_refcount;
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	struct psm2_rv_cache_stats rv_stats;	// statistics from rv module
 									// will remain 0 if rv not open
 #endif
@@ -270,7 +270,7 @@ static uint64_t mr_cache_miss_rate(void *context)
 		return 0;
 }
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 static uint64_t mr_cache_rv_size(void *context)
 {
 	psm2_mr_cache_t cache = (psm2_mr_cache_t)context;
@@ -318,7 +318,7 @@ static uint64_t mr_cache_rv_miss_rate(void *context)
 	else
 		return 0;
 }
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 
 #define INC_STAT(cache, stat, max_stat) \
 	do { \
@@ -333,7 +333,7 @@ static uint64_t mr_cache_rv_miss_rate(void *context)
 	} while(0)
 
 
-// ep is used for RNDV_MOD_MR, memory tracking and stats
+// ep is used for RNDV_MOD, memory tracking and stats
 psm2_mr_cache_t psm2_verbs_alloc_mr_cache(psm2_ep_t ep,
 							uint32_t max_entries, uint8_t cache_mode,
 							uint32_t pri_entries, uint64_t pri_size)
@@ -354,7 +354,7 @@ psm2_mr_cache_t psm2_verbs_alloc_mr_cache(psm2_ep_t ep,
 #ifdef PSM_FI
 	cache->ep = ep;
 #endif
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	if (cache->cache_mode == MR_CACHE_MODE_KERNEL
 		|| cache->cache_mode == MR_CACHE_MODE_RV) {
 		if (ep->rv_mr_cache_size*MEGABYTE < pri_size) {
@@ -364,12 +364,12 @@ psm2_mr_cache_t psm2_verbs_alloc_mr_cache(psm2_ep_t ep,
 		}
 		cache->limit_inuse_bytes = ep->rv_mr_cache_size*MEGABYTE - pri_size;
 	} else
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 		cache->limit_inuse_bytes = UINT64_MAX;	// no limit, just count inuse
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	cache->rv = ep->verbs_ep.rv;
 	cache->cmd_fd = ep->verbs_ep.context->cmd_fd;
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 	_HFI_MMDBG("cache alloc: max_entries=%u limit_inuse=%u limit_inuse_bytes=%"PRIu64", pri_entries=%u pri_size=%"PRIu64"\n",
 			cache->max_entries, cache->limit_inuse,
 			cache->limit_inuse_bytes, pri_entries, pri_size);
@@ -412,7 +412,7 @@ psm2_mr_cache_t psm2_verbs_alloc_mr_cache(psm2_ep_t ep,
 		PSMI_STATS_DECLU64("rejected", &cache->rejected),
 		PSMI_STATS_DECLU64("full", &cache->full),
 		PSMI_STATS_DECLU64("failed", &cache->failed),
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 		PSMI_STATS_DECL_FUNC("rv_size", mr_cache_rv_size),
 		PSMI_STATS_DECL_FUNC("rv_max_size", mr_cache_rv_max_size),
 		PSMI_STATS_DECL_FUNC("rv_limit", mr_cache_rv_limit_size),
@@ -433,7 +433,7 @@ psm2_mr_cache_t psm2_verbs_alloc_mr_cache(psm2_ep_t ep,
 		PSMI_STATS_DECLU64("rv_failed", (uint64_t*)&cache->rv_stats.failed),
 		PSMI_STATS_DECLU64("rv_remove", (uint64_t*)&cache->rv_stats.remove),
 		PSMI_STATS_DECLU64("rv_evict", (uint64_t*)&cache->rv_stats.evict),
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 	};
 	psmi_stats_register_type("MR_Cache_Statistics",
 					PSMI_STATSTYPE_MR_CACHE,
@@ -491,7 +491,7 @@ struct psm2_verbs_mr * psm2_verbs_reg_mr(psm2_mr_cache_t cache,
 	}
 #endif
 	access |= IBV_ACCESS_LOCAL_WRITE;	// manditory flag
-#ifndef RNDV_MOD_MR
+#ifndef RNDV_MOD
 	if (access & IBV_ACCESS_IS_GPU_ADDR) {
 		_HFI_ERROR("unsupported GPU memory registration\n");
 		cache->failed++;
@@ -504,7 +504,7 @@ struct psm2_verbs_mr * psm2_verbs_reg_mr(psm2_mr_cache_t cache,
 		.length = length,
 		// only 8 bits in mrc for access
 		.access = (access & ~(IBV_ACCESS_IS_GPU_ADDR
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 								|IBV_ACCESS_KERNEL
 #endif
 								))
@@ -560,7 +560,7 @@ struct psm2_verbs_mr * psm2_verbs_reg_mr(psm2_mr_cache_t cache,
 					addr, length, mrc->access, mrc);
 		ips_cl_qmap_remove_item(&mrc->cache->map, p_item);
 		TAILQ_REMOVE(&cache->avail_list, mrc, next);
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 		if (cache->cache_mode == MR_CACHE_MODE_KERNEL
 			|| cache->cache_mode == MR_CACHE_MODE_RV)	// should not happen
 			ret = __psm2_rv_dereg_mem(cache->rv, mrc->mr.rv_mr);
@@ -590,7 +590,7 @@ struct psm2_verbs_mr * psm2_verbs_reg_mr(psm2_mr_cache_t cache,
 		// we initialize mrc below
 		cache->max_nelems = max(cache->max_nelems, cache->map.payload.nelems+1);
 	}
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	/* need cmd_fd for access to ucontext when converting user pd into kernel pd */
 	if (cache->cache_mode == MR_CACHE_MODE_KERNEL) {
 		mrc->mr.rv_mr = __psm2_rv_reg_mem(cache->rv, cache->cmd_fd, pd, addr, length, access);
@@ -691,7 +691,7 @@ int psm2_verbs_release_mr(struct psm2_verbs_mr *mrc)
 			mrc->cache->inuse_bytes -= mrc->length;
 			cl_map_item_t *p_item = container_of(mrc, cl_map_item_t, payload);
 			ips_cl_qmap_remove_item(&mrc->cache->map, p_item);
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 			if (mrc->cache->cache_mode == MR_CACHE_MODE_KERNEL
 					|| mrc->cache->cache_mode == MR_CACHE_MODE_RV)
 				ret = __psm2_rv_dereg_mem(mrc->cache->rv, mrc->mr.rv_mr);
@@ -731,7 +731,7 @@ void psm2_verbs_free_mr_cache(psm2_mr_cache_t cache)
 			cl_map_item_t *p_item = container_of(mrc, cl_map_item_t, payload);
 			ips_cl_qmap_remove_item(&cache->map, p_item);
 			TAILQ_REMOVE(&cache->avail_list, mrc, next);
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 			if (cache->cache_mode == MR_CACHE_MODE_KERNEL
 					|| cache->cache_mode == MR_CACHE_MODE_RV)
 				ret = __psm2_rv_dereg_mem(cache->rv, mrc->mr.rv_mr);

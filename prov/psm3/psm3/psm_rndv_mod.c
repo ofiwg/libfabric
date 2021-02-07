@@ -52,7 +52,7 @@
 */
 
 /* Copyright (c) 2003-2016 Intel Corporation. All rights reserved. */
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 
 #include <stdint.h>
 #include <stddef.h>
@@ -813,4 +813,4 @@ int __psm2_rv_scan_cq(psm2_rv_t rv, uint8_t event_type,
 	}
 	return 0; // not found
 }
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD

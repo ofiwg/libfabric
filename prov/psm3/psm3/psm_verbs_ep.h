@@ -62,7 +62,7 @@
 #define _PSMI_VERBS_EP_H
 
 #include <infiniband/verbs.h>
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 #include <psm_rndv_mod.h>
 #endif
 #include "ptl_ips/ips_path_rec.h"
@@ -318,7 +318,7 @@ struct psm2_verbs_ep {
 	rbuf_t revisit_buf;
 	uint32_t revisit_payload_size;
 #endif
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	psm2_rv_t rv;	// rendezvous module open handle
 	uint32_t rv_index;
 	struct psm2_rv_conn_stats rv_conn_stats;
@@ -373,7 +373,7 @@ extern psm2_error_t psm2_verbs_post_rdma_write_immed(psm2_ep_t ep,
 				uint64_t rem_buf, uint32_t rkey,
 				size_t len, uint32_t immed, uint64_t wr_id);
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 extern psm2_error_t psm2_verbs_post_rv_rdma_write_immed(psm2_ep_t ep,
 				psm2_rv_conn_t conn,
 				void *loc_buf, struct psm2_verbs_mr *loc_mr,

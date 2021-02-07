@@ -229,7 +229,7 @@ struct ips_proto_stats {
 struct ips_proto_epaddr_stats {
 	uint64_t err_chk_send;
 	uint64_t err_chk_recv;
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	uint64_t err_chk_rdma_send;
 	uint64_t err_chk_rdma_recv;
 #endif
@@ -246,7 +246,7 @@ struct ips_proto_epaddr_stats {
 	uint64_t tids_grant_send;
 	uint64_t tids_grant_recv;
 	uint64_t send_rexmit;
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	uint64_t rdma_rexmit;
 #endif
 };
@@ -492,7 +492,7 @@ struct ips_epaddr {
 	// on UD/UDP context only used for hashing adaptive dispersive routing
 	uint32_t remote_qpn;
 #define IPSADDR_HASH remote_qpn
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	union  ibv_gid remote_gid;	/* GID of dest to use for IB CM  */
 	psm2_rv_conn_t rv_conn;
 	uint32_t remote_rv_index; // RV index of dest to use for immed */
@@ -551,7 +551,7 @@ ips_epaddr_connected(struct ips_epaddr *ipsaddr)
 {
 	if (ipsaddr->rc_connected)
 		return 1;
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	if (ipsaddr->rv_connected)
 		return 1;
 #endif

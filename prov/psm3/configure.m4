@@ -106,7 +106,7 @@ ifelse('
 		CFLAGS=$save_CFLAGS
 
 		AS_IF([test x$with_psm3_rv = xno],
-		      [psm3_CPPFLAGS="$psm3_CPPFLAGS -URNDV_MOD_MR"],
+		      [psm3_CPPFLAGS="$psm3_CPPFLAGS -URNDV_MOD"],
 		      [
 			AS_IF([test "x$with_psm3_rv" = "x"],
 			      [
@@ -127,8 +127,8 @@ ifelse('
 				AC_MSG_ERROR([RV Module headers requested but <rv/rv_user_ioctls.h> not found.])
 			      ],[
 				AS_IF([test "$psm3_rv_happy" -eq 1],
-				      [psm3_CPPFLAGS="$psm3_CPPFLAGS -DRNDV_MOD_MR -I$with_psm3_rv"],
-				      [psm3_CPPFLAGS="$psm3_CPPFLAGS -URNDV_MOD_MR"])
+				      [psm3_CPPFLAGS="$psm3_CPPFLAGS -DRNDV_MOD -I$with_psm3_rv"],
+				      [psm3_CPPFLAGS="$psm3_CPPFLAGS -URNDV_MOD"])
 			      ])
 		      ])
 		AS_IF([test $psm3_happy -eq 1], [

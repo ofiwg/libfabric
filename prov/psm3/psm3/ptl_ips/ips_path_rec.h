@@ -182,7 +182,7 @@ typedef struct ips_path_rec {
 
 	// address handle for UD comms
 	struct ibv_ah *ah;
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	psm2_rv_conn_t rv_conn;
 	uint8_t connecting;
 #endif
@@ -192,7 +192,7 @@ psm2_error_t ips_opp_init(struct ips_proto *proto);
 psm2_error_t ips_make_ah(psm2_ep_t ep, ips_path_rec_t *path_rec);
 psm2_error_t ips_path_rec_to_ah_attr(psm2_ep_t ep,
                 const ips_path_rec_t *path_rec, struct ibv_ah_attr *ah_attr);
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 void ips_path_rec_to_ib_user_path_rec(psm2_ep_t ep,
 		const ips_path_rec_t *path_rec, union ibv_gid *dgid,
 		struct ib_user_path_rec *path);

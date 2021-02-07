@@ -211,7 +211,7 @@ psm2_error_t ips_make_ah(psm2_ep_t ep, ips_path_rec_t *path_rec)
 	return PSM2_OK;
 }
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 void ips_path_rec_to_ib_user_path_rec(psm2_ep_t ep,
 		const ips_path_rec_t *path_rec, union ibv_gid *dgid,
 		struct ib_user_path_rec *path)
@@ -247,7 +247,7 @@ void ips_path_rec_to_ib_user_path_rec(psm2_ep_t ep,
 	path->packet_life_time = ep->hfi_qp_timeout - 1;
 	//path->preferences
 }
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 
 static psm2_error_t
 ips_none_path_rec(struct ips_proto *proto,

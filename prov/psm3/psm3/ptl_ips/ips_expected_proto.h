@@ -116,7 +116,7 @@ struct ips_protoexp {
 	struct psmi_timer timer_send;
 
 	STAILQ_HEAD(ips_tid_get_pend, ips_tid_get_request) pend_getreqsq;	/* pending tid reqs */
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	STAILQ_HEAD(ips_tid_err_resp_pend, ips_epaddr) pend_err_resp;	/* pending ERR CHK RDMA RESP */
 #endif
 	/* services pend_getreqsq and pend_err_chk_rdma_resp */
@@ -201,7 +201,7 @@ struct ips_tid_send_desc {
 
 
 	uint8_t is_complete:1;	// all packets for send queued, waiting CQE/response
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	uint8_t rv_need_err_chk_rdma:1; // need to determine if a retry is required
 	uint8_t reserved:6;
 	uint8_t rv_sconn_index;	// sconn in rv we issued RDMA write on
@@ -342,7 +342,7 @@ psm2_error_t ips_protoexp_fini(struct ips_protoexp *protoexp);
 int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 								int conn_type, uint32_t immed, uint32_t len);
 int ips_protoexp_rdma_write_completion( uint64_t wr_id);
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 int ips_protoexp_rdma_write_completion_error(psm2_ep_t ep, uint64_t wr_id,
 												enum ibv_wc_status wc_status);
 int ips_protoexp_process_err_chk_rdma(struct ips_recvhdrq_event *rcv_ev);
