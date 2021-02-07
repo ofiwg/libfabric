@@ -937,9 +937,11 @@ psm2_error_t psm2_verbs_post_rv_rdma_write_immed(psm2_ep_t ep,
 			ret = PSM2_INTERNAL_ERR;
 			break;
 		}
-		if (errno != EBUSY && errno != EAGAIN && errno != ENOMEM)
+		if (errno != EBUSY && errno != EAGAIN && errno != ENOMEM) {
 			_HFI_ERROR("failed to post RV RC SQ on %s: %s",
 					ep->verbs_ep.ib_devname, strerror(errno));
+			psmi_assert_always(errno != EINVAL);
+		}
 		ep->verbs_ep.send_rdma_outstanding--;
 		goto done;
 	}
