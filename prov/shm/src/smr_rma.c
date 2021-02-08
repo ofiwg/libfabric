@@ -133,7 +133,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 		goto unlock_cq;
 	}
 
-	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
+	cmd = ofi_cirque_next(smr_cmd_queue(peer_smr));
 
 	if (cmds == 1) {
 		err = smr_rma_fast(peer_smr, cmd, iov, iov_count, rma_iov,
@@ -162,7 +162,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 				goto unlock_cq;
 			}
 			cmd->msg.hdr.op_flags |= SMR_RMA_REQ;
-			resp = ofi_cirque_tail(smr_resp_queue(ep->region));
+			resp = ofi_cirque_next(smr_resp_queue(ep->region));
 			pend = ofi_freestack_pop(ep->pend_fs);
 			smr_format_pend_resp(pend, cmd, context, iface, device, iov,
 					     iov_count, id, resp);
@@ -175,7 +175,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 			ret = -FI_EAGAIN;
 			goto unlock_cq;
 		}
-		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
+		resp = ofi_cirque_next(smr_resp_queue(ep->region));
 		pend = ofi_freestack_pop(ep->pend_fs);
 		if (smr_cma_enabled(ep, peer_smr) && iface == FI_HMEM_SYSTEM) {
 			smr_format_iov(cmd, iov, iov_count, total_len, ep->region,
@@ -218,7 +218,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	comp_flags = cmd->msg.hdr.op_flags;
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
-	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
+	cmd = ofi_cirque_next(smr_cmd_queue(peer_smr));
 	smr_format_rma_iov(cmd, rma_iov, rma_count);
 
 commit_comp:
@@ -388,7 +388,7 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	rma_iov.len = len;
 	rma_iov.key = key;
 
-	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
+	cmd = ofi_cirque_next(smr_cmd_queue(peer_smr));
 
 	if (cmds == 1) {
 		ret = smr_rma_fast(peer_smr, cmd, &iov, 1, &rma_iov, 1, NULL,
@@ -409,7 +409,7 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
-	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
+	cmd = ofi_cirque_next(smr_cmd_queue(peer_smr));
 	smr_format_rma_iov(cmd, &rma_iov, 1);
 
 commit:

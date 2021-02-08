@@ -546,7 +546,7 @@ static inline void
 ofi_cq_write_entry(struct util_cq *cq, void *context, uint64_t flags,
 		   size_t len, void *buf, uint64_t data, uint64_t tag)
 {
-	struct fi_cq_tagged_entry *comp = ofi_cirque_tail(cq->cirq);
+	struct fi_cq_tagged_entry *comp = ofi_cirque_next(cq->cirq);
 	comp->op_context = context;
 	comp->flags = flags;
 	comp->len = len;

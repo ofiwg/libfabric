@@ -193,7 +193,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 
 	total_len = ofi_total_iov_len(iov, iov_count);
 
-	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
+	cmd = ofi_cirque_next(smr_cmd_queue(peer_smr));
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
 
 	if (total_len <= SMR_MSG_DATA_LEN && !(op_flags & FI_DELIVERY_COMPLETE)) {
@@ -207,7 +207,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 			ret = -FI_EAGAIN;
 			goto unlock_cq;
 		}
-		resp = ofi_cirque_tail(smr_resp_queue(ep->region));
+		resp = ofi_cirque_next(smr_resp_queue(ep->region));
 		pend = ofi_freestack_pop(ep->pend_fs);
 		if (smr_cma_enabled(ep, peer_smr) && iface == FI_HMEM_SYSTEM) {
 			smr_format_iov(cmd, iov, iov_count, total_len, ep->region,
@@ -334,7 +334,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 		goto unlock;
 	}
 
-	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
+	cmd = ofi_cirque_next(smr_cmd_queue(peer_smr));
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
 
 	if (len <= SMR_MSG_DATA_LEN) {

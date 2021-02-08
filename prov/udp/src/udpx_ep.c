@@ -219,7 +219,7 @@ static void udpx_tx_comp(struct udpx_ep *ep, void *context)
 {
 	struct fi_cq_tagged_entry *comp;
 
-	comp = ofi_cirque_tail(ep->util_ep.tx_cq->cirq);
+	comp = ofi_cirque_next(ep->util_ep.tx_cq->cirq);
 	comp->op_context = context;
 	comp->flags = FI_SEND;
 	comp->len = 0;
@@ -239,7 +239,7 @@ static void udpx_rx_comp(struct udpx_ep *ep, void *context, uint64_t flags,
 {
 	struct fi_cq_tagged_entry *comp;
 
-	comp = ofi_cirque_tail(ep->util_ep.rx_cq->cirq);
+	comp = ofi_cirque_next(ep->util_ep.rx_cq->cirq);
 	comp->op_context = context;
 	comp->flags = FI_RECV | flags;
 	comp->len = len;
@@ -316,7 +316,7 @@ static ssize_t udpx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		goto out;
 	}
 
-	entry = ofi_cirque_tail(ep->rxq);
+	entry = ofi_cirque_next(ep->rxq);
 	entry->context = msg->context;
 	for (entry->iov_count = 0; entry->iov_count < msg->iov_count;
 	     entry->iov_count++) {
@@ -357,7 +357,7 @@ static ssize_t udpx_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 		goto out;
 	}
 
-	entry = ofi_cirque_tail(ep->rxq);
+	entry = ofi_cirque_next(ep->rxq);
 	entry->context = context;
 	entry->iov_count = 1;
 	entry->iov[0].iov_base = buf;
