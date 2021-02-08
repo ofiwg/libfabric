@@ -78,7 +78,7 @@ EOF
 %endif
 %endif
 
-%makeinstall installdirs
+%make_install installdirs
 # remove unpackaged files from the buildroot
 rm -f %{buildroot}%{_libdir}/*.la
 %if 0%{?_version_symbolic_link:1}
