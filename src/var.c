@@ -418,7 +418,14 @@ int DEFAULT_SYMVER_PRE(fi_param_get)(struct fi_provider *provider,
 			ret = -FI_EINVAL;
 		break;
 	case FI_PARAM_SIZE_T:
+#ifdef I_MPI
+		* ((size_t *) value) = strtoull(str_value, NULL, 0);
+#else
 		* ((size_t *) value) = strtol(str_value, NULL, 0);
+#endif
+#ifdef I_MPI
+		FI_DBG(provider, FI_LOG_CORE,
+#else /* I_MPI */
 		FI_INFO(provider, FI_LOG_CORE,
 #endif /* I_MPI */
 			"read long var %s=%zu\n", param_name, *(size_t *) value);
