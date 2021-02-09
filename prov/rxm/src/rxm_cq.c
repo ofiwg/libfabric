@@ -829,8 +829,10 @@ static void rxm_rndv_send_rd_done(struct rxm_rx_buf *rx_buf)
 	assert(rx_buf->conn);
 	assert(rx_buf->hdr.state == RXM_RNDV_READ);
 	buf = rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_RNDV_RD_DONE);
-	if (!buf)
+	if (!buf) {
+		ret = -FI_ENOMEM;
 		goto err;
+	}
 
 	rx_buf->recv_entry->rndv.tx_buf = buf;
 	assert(buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_rd_done);
@@ -881,8 +883,10 @@ rxm_rndv_send_wr_done(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_buf)
 
 	assert(tx_buf->hdr.state == RXM_RNDV_WRITE);
 	buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV_WR_DONE);
-	if (!buf)
+	if (!buf) {
+		ret = -FI_ENOMEM;
 		goto err;
+	}
 
 	tx_buf->write_rndv.done_buf = buf;
 	assert(buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_wr_done);
@@ -932,8 +936,10 @@ ssize_t rxm_rndv_send_wr_data(struct rxm_rx_buf *rx_buf)
 	assert(rx_buf->conn);
 
 	buf = rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_RNDV_WR_DATA);
-	if (!buf)
+	if (!buf) {
+		ret = -FI_ENOMEM;
 		goto err;
+	}
 
 	assert(buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_wr_data);
 	rx_buf->recv_entry->rndv.tx_buf = buf;
