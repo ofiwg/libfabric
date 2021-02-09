@@ -195,7 +195,7 @@ static void smr_send_name(struct smr_ep *ep, int64_t id)
 	if (smr_peer_data(ep->region)[id].name_sent || !peer_smr->cmd_cnt)
 		goto out;
 
-	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
+	cmd = ofi_cirque_next(smr_cmd_queue(peer_smr));
 
 	cmd->msg.hdr.op = SMR_OP_MAX + ofi_ctrl_connreq;
 	cmd->msg.hdr.id = id;

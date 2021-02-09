@@ -45,12 +45,12 @@
 static void ofi_cq_insert_aux(struct util_cq *cq,
 			      struct util_cq_aux_entry *entry)
 {
+	if (!ofi_cirque_isfull(cq->cirq))
+		ofi_cirque_commit(cq->cirq);
+
 	entry->cq_slot = ofi_cirque_tail(cq->cirq);
 	entry->cq_slot->flags = UTIL_FLAG_AUX;
 	slist_insert_tail(&entry->list_entry, &cq->aux_queue);
-
-	if (!ofi_cirque_isfull(cq->cirq))
-		ofi_cirque_commit(cq->cirq);
 }
 
 /* Caller must hold 'cq lock' */

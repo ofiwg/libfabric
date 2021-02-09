@@ -173,7 +173,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 		goto unlock_cq;
 	}
 
-	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
+	cmd = ofi_cirque_next(smr_cmd_queue(peer_smr));
 	total_len = ofi_datatype_size(datatype) * ofi_total_ioc_cnt(ioc, count);
 
 	switch (op) {
@@ -221,7 +221,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 				ret = -FI_EAGAIN;
 				goto unlock_cq;
 			}
-			resp = ofi_cirque_tail(smr_resp_queue(ep->region));
+			resp = ofi_cirque_next(smr_resp_queue(ep->region));
 			pend = ofi_freestack_pop(ep->pend_fs);
 			smr_format_pend_resp(pend, cmd, context, iface, device, result_iov,
 					     result_count, id, resp);
@@ -248,7 +248,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 		}
 	}
 
-	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
+	cmd = ofi_cirque_next(smr_cmd_queue(peer_smr));
 	smr_format_rma_ioc(cmd, rma_ioc, rma_count);
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
@@ -346,7 +346,7 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 		goto unlock_region;
 	}
 
-	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
+	cmd = ofi_cirque_next(smr_cmd_queue(peer_smr));
 	total_len = count * ofi_datatype_size(datatype);
 
 	iov.iov_base = (void *) buf;
@@ -369,7 +369,7 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
-	cmd = ofi_cirque_tail(smr_cmd_queue(peer_smr));
+	cmd = ofi_cirque_next(smr_cmd_queue(peer_smr));
 	smr_format_rma_ioc(cmd, &rma_ioc, 1);
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
