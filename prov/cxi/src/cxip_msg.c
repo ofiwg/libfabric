@@ -34,7 +34,6 @@ static int cxip_ux_onload(struct cxip_rxc *rxc);
 static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state,
 			       bool restart_seq);
 static int cxip_recv_req_dropped(struct cxip_req *req);
-static void cxip_recv_req_dequeue(struct cxip_req *req);
 static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq);
 
 static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req);
@@ -1918,14 +1917,12 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 		req->recv.unlinked = true;
 		recv_req_report(req);
-		cxip_recv_req_dequeue(req);
 		cxip_recv_req_free(req);
 
 		return FI_SUCCESS;
 
 	case C_EVENT_PUT_OVERFLOW:
 	case C_EVENT_PUT:
-		cxip_recv_req_dequeue(req);
 		break;
 	default:
 		break;
@@ -2685,7 +2682,7 @@ static int cxip_recv_req_dropped(struct cxip_req *req)
 
 	fastlock_acquire(&rxc->lock);
 
-	dlist_remove(&req->recv.rxc_entry);
+	assert(dlist_empty(&req->recv.rxc_entry));
 	dlist_insert_tail(&req->recv.rxc_entry, &rxc->replay_queue);
 
 	RXC_DBG(rxc, "Receive dropped: %p\n", req);
@@ -2726,24 +2723,7 @@ static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state,
 	if (ret)
 		return -FI_EAGAIN;
 
-	dlist_insert_tail(&req->recv.rxc_entry, &rxc->msg_queue);
-
 	return FI_SUCCESS;
-}
-
-/*
- * cxip_recv_req_dequeue() - Dequeue Receive request from RXC.
- *
- * A Receive request may be dequeued from the RXC as soon as there is evidence
- * that the append command has been accepted.
- */
-static void cxip_recv_req_dequeue(struct cxip_req *req)
-{
-	struct cxip_rxc *rxc = req->recv.rxc;
-
-	fastlock_acquire(&rxc->lock);
-	dlist_remove_init(&req->recv.rxc_entry);
-	fastlock_release(&rxc->lock);
 }
 
 /*
