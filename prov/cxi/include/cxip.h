@@ -570,6 +570,8 @@ struct cxip_req_recv {
 	uint32_t rdzv_id;		// DMA initiator rendezvous ID
 	uint8_t rdzv_lac;		// Rendezvous source LAC
 	int rdzv_events;		// Processed rdzv event count
+	uint32_t rget_nic;
+	uint32_t rget_pid;
 	bool canceled;			// Request canceled?
 	bool unlinked;
 	bool multi_recv;

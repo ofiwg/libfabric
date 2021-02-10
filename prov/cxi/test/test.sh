@@ -12,7 +12,7 @@ export FI_LOG_LEVEL=warn
 export FI_CXI_FC_RECOVERY=1
 
 if [[ $# -gt 0 ]]; then
-    ./cxitest --verbose --filter="@($1)" --tap=cxitest.tap -j2 
+    ./cxitest --verbose --filter="@($1)" --tap=cxitest.tap -j2
     exit $?
 fi
 
@@ -36,5 +36,14 @@ csrutil store csr le_pools[] max_alloc=10 > /dev/null
 echo "running; ./cxitest --verbose --filter=\"tagged/fc*\" --tap=cxitest-fc.tap -j2 >> $TEST_OUTPUT 2>&1"
 ./cxitest --verbose --filter="tagged/fc*" --tap=cxitest-fc.tap -j2 >> $TEST_OUTPUT 2>&1
 csrutil store csr le_pools[] max_alloc=$MAX_ALLOC > /dev/null
+
+# Verify tag matching with rendezvous
+test="FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j2 --filter=\"tagged_directed/*\" --tap=cxitest-hw-rdzv-tag-matching.tap >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+
+test="FI_CXI_RDZV_OFFLOAD=0 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j2 --filter=\"tagged_directed/*\" --tap=cxitest-sw-rdzv-tag-matching.tap >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
 
 grep "Tested" $TEST_OUTPUT

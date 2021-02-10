@@ -303,18 +303,36 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 	union cxip_match_bits mb = {
 		.raw = event->tgt_long.match_bits
 	};
+	uint32_t init = event->tgt_long.initiator.initiator.process;
 
 	assert(event->hdr.event_type == C_EVENT_PUT ||
 	       event->hdr.event_type == C_EVENT_PUT_OVERFLOW ||
 	       event->hdr.event_type == C_EVENT_RENDEZVOUS);
 
-	/* Rendezvous events contain the wrong match bits. */
-	if (event->hdr.event_type != C_EVENT_RENDEZVOUS)
+	/* Rendezvous events contain the wrong match bits and do not provide
+	 * initiator context for symmetric AVs.
+	 */
+	if (event->hdr.event_type != C_EVENT_RENDEZVOUS) {
 		req->tag = mb.tag;
+		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
+			/* Take PID out of logical address. */
+			req->recv.initiator = CXI_MATCH_ID_EP(rxc->pid_bits,
+							      init);
+		} else {
+			req->recv.initiator = init;
+		}
+	}
 
 	/* remote_offset is not provided in Overflow events. */
 	if (event->hdr.event_type != C_EVENT_PUT_OVERFLOW)
 		req->recv.src_offset = event->tgt_long.remote_offset;
+
+	/* For rendezvous, initiator is the RGet DFA. */
+	if (event->hdr.event_type == C_EVENT_RENDEZVOUS) {
+		init = cxi_dfa_to_init(init, rxc->pid_bits);
+		req->recv.rget_nic = CXI_MATCH_ID_EP(rxc->pid_bits, init);
+		req->recv.rget_pid = CXI_MATCH_ID_PID(rxc->pid_bits, init);
+	}
 
 	/* Only need one event to set remaining fields. */
 	if (req->recv.tgt_event)
@@ -342,23 +360,6 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 	}
 	req->recv.rdzv_lac = mb.rdzv_lac;
 	req->recv.rdzv_mlen = event->tgt_long.mlength;
-
-	/* Initiator is provided in completion events. */
-	if (event->hdr.event_type == C_EVENT_RENDEZVOUS) {
-		uint32_t dfa = event->tgt_long.initiator.initiator.process;
-
-		req->recv.initiator = cxi_dfa_to_init(dfa, rxc->pid_bits);
-	} else {
-		uint32_t init = event->tgt_long.initiator.initiator.process;
-
-		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
-			/* Take PID out of logical address. */
-			req->recv.initiator = CXI_MATCH_ID_EP(rxc->pid_bits,
-							      init);
-		} else {
-			req->recv.initiator = init;
-		}
-	}
 
 	/* data_len must be set uniquely for each protocol! */
 }
@@ -573,27 +574,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 	uint8_t idx_ext;
 	union cxip_match_bits mb = {};
 	int ret;
-	uint32_t nic;
-	uint32_t pid;
 	union c_fab_addr dfa;
-
-	if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
-		struct cxip_addr caddr;
-
-		CXIP_DBG("Translating inititiator: %x, req: %p\n",
-			 req->recv.initiator, req);
-
-		ret = _cxip_av_lookup(rxc->ep_obj->av, req->recv.initiator,
-				      &caddr);
-		if (ret != FI_SUCCESS) {
-			CXIP_FATAL("Failed to look up FI addr: %d\n", ret);
-		}
-		nic = caddr.nic;
-		pid = caddr.pid;
-	} else {
-		nic = CXI_MATCH_ID_EP(rxc->pid_bits, req->recv.initiator);
-		pid = CXI_MATCH_ID_PID(rxc->pid_bits, req->recv.initiator);
-	}
 
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.full_dma.command.opcode = C_CMD_GET;
@@ -608,7 +589,8 @@ static int issue_rdzv_get(struct cxip_req *req)
 	cmd.full_dma.user_ptr = (uint64_t)req;
 	cmd.full_dma.remote_offset = req->recv.src_offset;
 
-	cxi_build_dfa(nic, pid, rxc->pid_bits, pid_idx, &dfa, &idx_ext);
+	cxi_build_dfa(req->recv.rget_nic, req->recv.rget_pid, rxc->pid_bits,
+		      pid_idx, &dfa, &idx_ext);
 	cmd.full_dma.dfa = dfa;
 	cmd.full_dma.index_ext = idx_ext;
 
@@ -761,6 +743,37 @@ static int mrecv_req_put_bytes(struct cxip_req *req, uint32_t rlen)
 	return rlen;
 }
 
+/* cxip_recv_req_set_rget_info() - Set RGet NIC and PID fields. Used for
+ * messages where a rendezvous event will not be generated. Current usages are
+ * for the eager long protocol and rendezvous operations which have unexpected
+ * headers onloaded due to flow control.
+ */
+static void cxip_recv_req_set_rget_info(struct cxip_req *req)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+	int ret;
+
+	if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
+		struct cxip_addr caddr;
+
+		CXIP_DBG("Translating inititiator: %x, req: %p\n",
+			 req->recv.initiator, req);
+
+		ret = _cxip_av_lookup(rxc->ep_obj->av, req->recv.initiator,
+				      &caddr);
+		if (ret != FI_SUCCESS)
+			CXIP_FATAL("Failed to look up FI addr: %d\n", ret);
+
+		req->recv.rget_nic = caddr.nic;
+		req->recv.rget_pid = caddr.pid;
+	} else {
+		req->recv.rget_nic = CXI_MATCH_ID_EP(rxc->pid_bits,
+						     req->recv.initiator);
+		req->recv.rget_pid = CXI_MATCH_ID_PID(rxc->pid_bits,
+						      req->recv.initiator);
+	}
+}
+
 /*
  * cxip_ux_send() - Progress an unexpected Send after receiving matching Put
  * and Put and Put Overflow events.
@@ -810,6 +823,8 @@ static int cxip_ux_send(struct cxip_req *match_req,
 		/* For unexpected, long, eager messages, issue a Get to
 		 * retrieve data from the initiator.
 		 */
+		cxip_recv_req_set_rget_info(match_req);
+
 		ret = issue_rdzv_get(match_req);
 		if (ret != FI_SUCCESS) {
 			if (match_req->recv.multi_recv)
@@ -2524,7 +2539,11 @@ static int cxip_recv_sw_match(struct cxip_req *req,
 			return ret;
 		}
 
-		/* No Rendezvous event expected. Start RGet now. */
+		/* No Rendezvous event expected. Define RGet address and start
+		 * RGet now.
+		 */
+		cxip_recv_req_set_rget_info(req);
+
 		ret = issue_rdzv_get(req);
 		if (ret != FI_SUCCESS) {
 			req->recv.start_offset += mrecv_len;
