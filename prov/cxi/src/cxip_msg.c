@@ -2327,6 +2327,12 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_PUT_OVERFLOW:
 		assert(cxi_event_rc(event) == C_RC_OK);
 
+		/* TODO read ULE list before onloaded messages to find RPut
+		 * remote offset.
+		 */
+		if (event->tgt_long.rendezvous)
+			CXIP_FATAL("RPut onload not supported\n");
+
 		ux_send = calloc(1, sizeof(*ux_send));
 		if (!ux_send)
 			return -FI_EAGAIN;
@@ -2545,12 +2551,7 @@ static int cxip_recv_sw_match(struct cxip_req *req,
 		req_done = false;
 
 	if (ux_send->put_ev.tgt_long.rendezvous) {
-		/* TODO read ULE list before onloaded messages to find RPut
-		 * remote offset.
-		 */
-		CXIP_FATAL("RPut onload not supported\n");
-
-		ret = cxip_ux_send(req, ux_send->oflow_req, &ux_send->put_ev,
+		ret = cxip_ux_send(req, ux_send->req, &ux_send->put_ev,
 				   mrecv_start, mrecv_len);
 		if (ret != FI_SUCCESS) {
 			req->recv.start_offset += mrecv_len;
