@@ -679,10 +679,8 @@ struct fi_provider psmx3_prov = {
 PROVIDER_INI
 {
 	FI_INFO(&psmx3_prov, FI_LOG_CORE, "build options: HAVE_PSM3_SRC=%d, "
-			"HAVE_PSM3_AM_REGISTER_HANDLERS_2=%d, "
-			"HAVE_PSM3_MQ_FP_MSG=%d, "
 			"PSMX3_USE_REQ_CONTEXT=%d\n", HAVE_PSM3_SRC,
-			HAVE_PSM3_AM_REGISTER_HANDLERS_2, HAVE_PSM3_MQ_FP_MSG, PSMX3_USE_REQ_CONTEXT);
+			PSMX3_USE_REQ_CONTEXT);
 
 	fi_param_define(&psmx3_prov, "name_server", FI_PARAM_BOOL,
 			"Whether to turn on the name server or not "

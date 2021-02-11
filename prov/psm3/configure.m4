@@ -22,10 +22,6 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
 	 PSM_HAL_INST=gen1
 
 	 psm3_happy=1
-	 have_psm3_am_register_handlers_2=1
-	 have_psm3_mq_fp_msg=1
-	 have_psm3_mq_req_user=1
-	 have_psm3_info_query=1
 	 AS_IF([test x"$enable_psm3" != x"no"],
 	       [
 		FI_CHECK_PACKAGE([psm3_rt],
@@ -141,18 +137,6 @@ ifelse('
 	       ],[psm3_happy=0])
 
 	 AS_IF([test $psm3_happy -eq 1], [$1], [$2])
-	 AC_DEFINE_UNQUOTED([HAVE_PSM3_AM_REGISTER_HANDLERS_2],
-			    $have_psm3_am_register_handlers_2,
-			    [psm3_am_register_handlers_2 function is present])
-	 AC_DEFINE_UNQUOTED([HAVE_PSM3_MQ_FP_MSG],
-			    $have_psm3_mq_fp_msg,
-			    [psm3_mq_fp_msg function is present and enabled])
-	 AC_DEFINE_UNQUOTED([HAVE_PSM3_MQ_REQ_USER],
-			    $have_psm3_mq_req_user,
-			    [psm3_mq_ipeek_dequeue_multi function is present and enabled])
-	 AC_DEFINE_UNQUOTED([HAVE_PSM3_INFO_QUERY],
-			    $have_psm3_info_query,
-			    [psm3_info_query function is present])
 
 	 psm3_CFLAGS="$ARCH_CFLAGS"
 	 psm3_CPPFLAGS="$psm3_CPPFLAGS $psm3_rt_CPPFLAGS $psm3_dl_CPPFLAGS $psm3_numa_CPPFLAGS $psm3_ibv_CPPFLAGS"
