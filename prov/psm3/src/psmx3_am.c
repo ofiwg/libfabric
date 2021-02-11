@@ -33,7 +33,7 @@
 #include "psmx3.h"
 #include "psmx3_trigger.h"
 
-#if !HAVE_PSM2_AM_REGISTER_HANDLERS_2
+#if !HAVE_PSM3_AM_REGISTER_HANDLERS_2
 
 /* Macros to repeat operation 'x' for 1000 times */
 
@@ -73,7 +73,7 @@ int psmx3_am_progress(struct psmx3_trx_ctxt *trx_ctxt)
 	struct slist_entry *item;
 	struct psmx3_trigger *trigger;
 
-#if !HAVE_PSM2_MQ_FP_MSG
+#if !HAVE_PSM3_MQ_FP_MSG
 	struct psmx3_am_request *req;
 	if (psmx3_env.tagged_rma) {
 		trx_ctxt->domain->rma_queue_lock_fn(&trx_ctxt->rma_queue.lock, 2);

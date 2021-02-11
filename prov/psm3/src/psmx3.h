@@ -503,7 +503,7 @@ struct psmx3_trx_ctxt {
 	struct psmx3_fid_domain	*domain;
 	struct psmx3_fid_ep	*ep;
 
-#if !HAVE_PSM2_MQ_FP_MSG
+#if !HAVE_PSM3_MQ_FP_MSG
 	/* incoming req queue for AM based RMA request. */
 	struct psmx3_req_queue	rma_queue;
 #endif
@@ -1189,7 +1189,7 @@ static inline void psmx3_get_source_string_name(psm2_epaddr_t source,
 static inline void psmx3_progress(struct psmx3_trx_ctxt *trx_ctxt)
 {
 	if (trx_ctxt && trx_ctxt->poll_active) {
-#if HAVE_PSM2_MQ_REQ_USER
+#if HAVE_PSM3_MQ_REQ_USER
 		psmx3_cq_poll_mq(NULL, trx_ctxt, NULL, 1, NULL);
 #else
 		psmx3_cq_poll_mq(NULL, trx_ctxt, NULL, 0, NULL);

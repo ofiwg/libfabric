@@ -340,7 +340,7 @@ struct psmx3_trx_ctxt *psmx3_trx_ctxt_alloc(struct psmx3_fid_domain *domain,
 		goto err_out_close_ep;
 	}
 
-#if !HAVE_PSM2_MQ_FP_MSG
+#if !HAVE_PSM3_MQ_FP_MSG
 	fastlock_init(&trx_ctxt->rma_queue.lock);
 	slist_init(&trx_ctxt->rma_queue.list);
 #endif

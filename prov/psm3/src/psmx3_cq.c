@@ -174,7 +174,7 @@ static uint64_t psmx3_comp_flags[PSMX3_MAX_CONTEXT_TYPE] = {
 };
 
 
-#if HAVE_PSM2_MQ_REQ_USER
+#if HAVE_PSM3_MQ_REQ_USER
 
 /*
  * Translate "status" into completion event. A few factors determine where to
@@ -836,7 +836,7 @@ int psmx3_cq_poll_mq(struct psmx3_fid_cq *cq,
 	return count;
 }
 
-#else /* !HAVE_PSM2_MQ_REQ_USER */
+#else /* !HAVE_PSM3_MQ_REQ_USER */
 
 /*
  * Translate "status" into completion event. A few factors determine where to
@@ -1557,7 +1557,7 @@ int psmx3_cq_poll_mq(struct psmx3_fid_cq *cq,
 
 	return read_count;
 }
-#endif /* !HAVE_PSM2_MQ_REQ_USER */
+#endif /* !HAVE_PSM3_MQ_REQ_USER */
 
 DIRECT_FN
 STATIC ssize_t psmx3_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,

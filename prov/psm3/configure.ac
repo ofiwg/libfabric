@@ -156,13 +156,13 @@ have_psm3_mq_req_user=1
 
 psm3_happy=1
 
-AC_DEFINE_UNQUOTED([HAVE_PSM2_AM_REGISTER_HANDLERS_2],
+AC_DEFINE_UNQUOTED([HAVE_PSM3_AM_REGISTER_HANDLERS_2],
 		   $have_psm3_am_register_handlers_2,
 		   [psm3_am_register_handlers_2 function is present])
-AC_DEFINE_UNQUOTED([HAVE_PSM2_MQ_FP_MSG],
+AC_DEFINE_UNQUOTED([HAVE_PSM3_MQ_FP_MSG],
 		   $have_psm3_mq_fp_msg,
 		   [psm3_mq_fp_msg function is present and enabled])
-AC_DEFINE_UNQUOTED([HAVE_PSM2_MQ_REQ_USER],
+AC_DEFINE_UNQUOTED([HAVE_PSM3_MQ_REQ_USER],
 		   $have_psm3_mq_req_user,
 		   [psm3_mq_ipeek_dequeue_multi function is present and enabled])
 
