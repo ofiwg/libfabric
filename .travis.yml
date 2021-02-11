@@ -74,14 +74,16 @@ before_install:
 install:
     - ./autogen.sh
     # Build rdma-core because ubuntu doesn't have a sufficiently new version of
-    # ibverbs/rdma-core for EFA. OS X doesn't have verbs support.
+    # ibverbs/rdma-core for EFA and PSM3. OS X doesn't have verbs support.
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]] ; then
         RDMA_CORE_BRANCH="v27.0";
         git clone --depth 1 -b $RDMA_CORE_BRANCH https://github.com/linux-rdma/rdma-core.git && cd rdma-core && bash build.sh && cd -;
         RDMA_CORE_PATH=$PWD/rdma-core/build ;
         export LD_LIBRARY_PATH="$RDMA_CORE_PATH/lib:$LD_LIBRARY_PATH" ;
         LIBFABRIC_CONFIGURE_ARGS="$LIBFABRIC_CONFIGURE_ARGS --enable-usnic
-        --enable-verbs=$RDMA_CORE_PATH --enable-efa=$RDMA_CORE_PATH";
+        --enable-psm3=$RDMA_CORE_PATH
+        --enable-verbs=$RDMA_CORE_PATH
+        --enable-efa=$RDMA_CORE_PATH";
       fi
     # Test fabric direct
     # (all other providers are automatically disabled by configure)
@@ -98,6 +100,7 @@ install:
       --disable-perf
       --disable-psm
       --disable-psm2
+      --disable-psm3
       --disable-rstream
       --disable-rxd
       --disable-rxm
@@ -125,6 +128,7 @@ install:
     - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
         make dist;
         config_options="--enable-efa=$RDMA_CORE_PATH
+                        --enable-psm3=$RDMA_CORE_PATH
                         --enable-verbs=$RDMA_CORE_PATH --enable-usnic";
         LDFLAGS=-Wl,--build-id rpmbuild -ta
           --define "configopts $config_options" libfabric-*.tar.bz2;
