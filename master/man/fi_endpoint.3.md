@@ -658,6 +658,10 @@ protocol value set to one.
   performance scaled messaging version 2.  PSMX2 is an extended version of the
   PSM2 protocol to support the libfabric interfaces.
 
+*FI_PROTO_PSMX3*
+: The protocol is Intel's protocol known as PSM3, performance scaled
+  messaging version 3.  PSMX3 is implemented over RoCEv2 and verbs.
+
 *FI_PROTO_RDMA_CM_IB_RC*
 : The protocol runs over Infiniband reliable-connected queue pairs,
   using the RDMA CM protocol for connection establishment.
