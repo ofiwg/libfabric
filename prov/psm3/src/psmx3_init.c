@@ -51,7 +51,7 @@ struct psmx3_env psmx3_env = {
 	.conn_timeout	= 10,
 	.prog_interval	= -1,
 	.prog_affinity	= NULL,
-	.multi_ep	= 0,
+	.multi_ep	= 1,
 	.inject_size	= 64,
 	.lock_level	= 2,
 	.lazy_conn	= 0,
@@ -222,7 +222,7 @@ static int psmx3_check_multi_ep_cap(void)
 	uint64_t caps = PSM2_MULTI_EP_CAP;
 	char *s = getenv("PSM3_MULTI_EP");
 
-	if (psm2_get_capability_mask(caps) == caps && psmx3_get_yes_no(s, 0))
+	if (psm2_get_capability_mask(caps) == caps && psmx3_get_yes_no(s, 1))
 		psmx3_env.multi_ep = 1;
 	else
 		psmx3_env.multi_ep = 0;
