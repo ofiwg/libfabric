@@ -362,7 +362,7 @@ static struct ofi_prov *ofi_create_prov_entry(const char *prov_name)
 static void ofi_ordered_provs_init(void)
 {
 	char *ordered_prov_names[] = {
-		"psm2", "psm", "efa", "usnic", "gni", "bgq", "verbs",
+		"psm3", "psm2", "psm", "efa", "usnic", "gni", "bgq", "verbs",
 		"netdir", "ofi_rxm", "ofi_rxd", "shm",
 		/* Initialize the socket based providers last of the
 		 * standard providers.  This will result in them being
@@ -450,7 +450,8 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	 */
 	if (!strcasecmp(provider->name, "sockets") ||
 	    !strcasecmp(provider->name, "shm") ||
-	    !strcasecmp(provider->name, "efa") || ofi_is_util_prov(provider))
+	    !strcasecmp(provider->name, "efa") ||
+	    !strcasecmp(provider->name, "psm3") || ofi_is_util_prov(provider))
 		ctx->disable_layering = 1;
 
 	prov = ofi_getprov(provider->name, strlen(provider->name));
@@ -719,6 +720,7 @@ void fi_ini(void)
 libdl_done:
 #endif
 
+	ofi_register_provider(PSM3_INIT, NULL);
 	ofi_register_provider(PSM2_INIT, NULL);
 	ofi_register_provider(PSM_INIT, NULL);
 	ofi_register_provider(USNIC_INIT, NULL);

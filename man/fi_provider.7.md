@@ -33,6 +33,14 @@ This distribution of libfabric contains the following providers
 : High-speed InfiniBand networking from Intel.  See
   [`fi_psm`(7)](fi_psm.7.html) for more information.
 
+*PSM2*
+: High-speed Omni-Path networking from Intel.  See
+  [`fi_psm2`(7)](fi_psm2.7.html) for more information.
+
+*PSM3*
+: High-speed Ethernet networking from Intel.  See
+  [`fi_psm3`(7)](fi_psm3.7.html) for more information.
+
 *Sockets*
 : A general purpose provider that can be used on any network that
   supports TCP/UDP sockets.  This provider is not intended to provide

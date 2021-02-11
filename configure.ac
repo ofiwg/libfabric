@@ -659,6 +659,7 @@ dnl Provider-specific checks
 FI_PROVIDER_INIT
 FI_PROVIDER_SETUP([psm])
 FI_PROVIDER_SETUP([psm2])
+FI_PROVIDER_SETUP([psm3])
 FI_PROVIDER_SETUP([sockets])
 FI_PROVIDER_SETUP([verbs])
 FI_PROVIDER_SETUP([efa])

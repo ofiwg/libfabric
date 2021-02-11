@@ -26,6 +26,7 @@ def run_command(command):
 Prov = collections.namedtuple('Prov', 'core util')
 prov_list = [
 
+   Prov("psm3", None),
    Prov("psm2", None),
    Prov("verbs", None),
    Prov("verbs", "rxd"),
@@ -45,6 +46,7 @@ enabled_prov_list = [
     "shm"
 ]
 disabled_prov_list = [
+    "psm3",
     'usnic',
     'psm',
     'efa',
