@@ -266,6 +266,8 @@ static int efa_mr_close(fid_t fid)
 	int ret;
 
 	efa_mr = container_of(fid, struct efa_mr, mr_fid.fid);
+	if (!efa_mr->ibv_mr)
+		return 0;
 	ret = efa_mr_dereg_impl(efa_mr);
 	if (ret)
 		EFA_WARN(FI_LOG_MR, "Unable to close MR\n");
@@ -311,13 +313,19 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 				    (void *)mr_attr->mr_iov->iov_base,
 				    mr_attr->mr_iov->iov_len, fi_ibv_access);
 	if (!efa_mr->ibv_mr) {
-		EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
+		if (mr_attr->mr_iov->iov_len) {
+			EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n", 
 				fi_strerror(-errno));
-		return -errno;
+			return -errno;
+		} else {
+			/* Ignore failure for zero length memory registration */
+			return 0;
+		}	
+	} else {
+		efa_mr->mr_fid.mem_desc = efa_mr;
+		efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	}
 
-	efa_mr->mr_fid.mem_desc = efa_mr;
-	efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	/*
 	 * Skipping the domain type check is okay here since util_domain is at
 	 * the beginning of efa_domain and rxr_domain.
