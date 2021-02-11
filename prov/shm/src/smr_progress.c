@@ -74,6 +74,7 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 
 	switch (pending->cmd.msg.hdr.op_src) {
 	case smr_src_iov:
+		break;
 	case smr_src_ipc:
 		close(pending->fd);
 		break;
