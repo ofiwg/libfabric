@@ -159,7 +159,6 @@ static void rxm_cq_write_error_trunc(struct rxm_rx_buf *rx_buf, size_t done_len)
 static void rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 {
 	struct rxm_recv_entry *recv_entry = rx_buf->recv_entry;
-	size_t recv_size;
 
 	if (done_len < rx_buf->pkt.hdr.size) {
 		rxm_cq_write_error_trunc(rx_buf, done_len);
@@ -170,36 +169,16 @@ static void rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 	    rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) {
 		rxm_cq_write_recv_comp(rx_buf, rx_buf->recv_entry->context,
 				       rx_buf->recv_entry->comp_flags |
-				       rx_buf->pkt.hdr.flags,
+				       rx_buf->pkt.hdr.flags |
+				       (rx_buf->recv_entry->flags & FI_MULTI_RECV),
 				       rx_buf->pkt.hdr.size,
 				       rx_buf->recv_entry->rxm_iov.
 				       iov[0].iov_base);
 	}
 	ofi_ep_rx_cntr_inc(&rx_buf->ep->util_ep);
 
-	if (rx_buf->recv_entry->flags & FI_MULTI_RECV) {
-		recv_size = rx_buf->pkt.hdr.size;
-		recv_entry->total_len -= recv_size;
-
-		if (recv_entry->total_len < rx_buf->ep->min_multi_recv_size) {
-			rxm_cq_write(rx_buf->ep->util_ep.rx_cq,
-				     recv_entry->context, FI_MULTI_RECV,
-				     0, NULL, 0, 0);
-			goto release;
-		}
-
-		recv_entry->rxm_iov.iov[0].iov_base = (uint8_t *)
-				recv_entry->rxm_iov.iov[0].iov_base + recv_size;
-		recv_entry->rxm_iov.iov[0].iov_len -= recv_size;
-
-		dlist_insert_head(&recv_entry->entry,
-				  &recv_entry->recv_queue->recv_list);
-		goto free_buf;
-	}
-
 release:
 	rxm_recv_entry_release(recv_entry);
-free_buf:
 	rxm_rx_buf_free(rx_buf);
 }
 
@@ -707,6 +686,38 @@ ssize_t rxm_handle_rx_buf(struct rxm_rx_buf *rx_buf)
 	}
 }
 
+static void rxm_adjust_multi_recv(struct rxm_rx_buf *rx_buf)
+{
+	struct rxm_recv_entry *recv_entry;
+	struct iovec new_iov;
+	size_t recv_size;
+
+	recv_size = rx_buf->pkt.hdr.size;
+
+	if (rx_buf->recv_entry->rxm_iov.iov[0].iov_len < recv_size ||
+	    rx_buf->recv_entry->rxm_iov.iov[0].iov_len - recv_size <
+	    rx_buf->ep->min_multi_recv_size)
+		return;
+
+	new_iov.iov_base = (uint8_t *)
+		rx_buf->recv_entry->rxm_iov.iov[0].iov_base + recv_size;
+	new_iov.iov_len = rx_buf->recv_entry->rxm_iov.iov[0].iov_len - recv_size;;
+
+	rx_buf->recv_entry->rxm_iov.iov[0].iov_len = recv_size;
+
+	recv_entry = rxm_multi_recv_entry_get(rx_buf->ep, &new_iov,
+					rx_buf->recv_entry->rxm_iov.desc, 1,
+					rx_buf->recv_entry->addr,
+					rx_buf->recv_entry->tag,
+					rx_buf->recv_entry->ignore,
+					rx_buf->recv_entry->context,
+					rx_buf->recv_entry->flags);
+
+	rx_buf->recv_entry->flags &= ~FI_MULTI_RECV;
+
+	dlist_insert_head(&recv_entry->entry, &rx_buf->ep->recv_queue.recv_list);
+}
+
 static ssize_t
 rxm_match_rx_buf(struct rxm_rx_buf *rx_buf,
 		 struct rxm_recv_queue *recv_queue,
@@ -730,6 +741,10 @@ rxm_match_rx_buf(struct rxm_rx_buf *rx_buf,
 					 recv_queue->match_recv, match_attr);
 	if (entry) {
 		rx_buf->recv_entry = container_of(entry, struct rxm_recv_entry, entry);
+
+		if (rx_buf->recv_entry->flags & FI_MULTI_RECV)
+			rxm_adjust_multi_recv(rx_buf);
+
 		return rxm_handle_rx_buf(rx_buf);
 	}
 
