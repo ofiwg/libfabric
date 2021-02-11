@@ -188,6 +188,34 @@ pipeline {
                         }
                     }
                 }
+                stage('hfi1-psm3-dbg') {
+                    agent {node {label 'hfi1'}}
+                    steps{
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+                            sh """
+                                env
+                                (
+                                 cd ${env.WORKSPACE}/contrib/intel/jenkins/
+                                 python3.7 runtests.py --prov=psm3 --ofi_build_mode='dbg'
+                                )
+                                """
+                        }
+                    }
+                }
+                stage('mlx5-psm3-dbg') {
+                    agent {node {label 'mlx5'}}
+                    steps{
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+                            sh """
+                                env
+                                (
+                                 cd ${env.WORKSPACE}/contrib/intel/jenkins/
+                                 python3.7 runtests.py --prov=psm3 --ofi_build_mode='dbg'
+                                )
+                                """
+                        }
+                    }
+                }
             }
         }
     }

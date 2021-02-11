@@ -37,6 +37,7 @@ prov_list = [
     Prov("shm", None),
 ]
 enabled_prov_list = [
+    "psm3",
     "psm2",
     "verbs",
     "tcp",
@@ -45,7 +46,6 @@ enabled_prov_list = [
     "shm"
 ]
 disabled_prov_list = [
-    "psm3",
     'usnic',
     'psm',
     'efa',

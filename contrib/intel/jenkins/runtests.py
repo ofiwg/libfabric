@@ -8,8 +8,8 @@ import common
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--prov", help="core provider", choices=["psm2", "verbs", \
-                     "tcp", "udp", "sockets", "shm"])
+parser.add_argument("--prov", help="core provider", choices=["psm3", "psm2",
+                    "verbs", "tcp", "udp", "sockets", "shm"])
 parser.add_argument("--util", help="utility provider", choices=["rxd", "rxm"])
 parser.add_argument("--ofi_build_mode", help="specify the build configuration", \
                      choices = ["dbg", "dl"])
