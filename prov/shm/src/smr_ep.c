@@ -1025,7 +1025,8 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 
 	switch (command) {
 	case FI_ENABLE:
-		if (!ep->util_ep.rx_cq || !ep->util_ep.tx_cq)
+		if ((ofi_needs_rx(ep->util_ep.caps) && !ep->util_ep.rx_cq) ||
+		    (ofi_needs_tx(ep->util_ep.caps) && !ep->util_ep.tx_cq))
 			return -FI_ENOCQ;
 		if (!ep->util_ep.av)
 			return -FI_ENOAV;
