@@ -285,10 +285,13 @@ uint8_t ofi_lsb(uint64_t num);
 
 extern size_t ofi_universe_size;
 
-int ofi_send_allowed(uint64_t caps);
-int ofi_recv_allowed(uint64_t caps);
-int ofi_rma_initiate_allowed(uint64_t caps);
-int ofi_rma_target_allowed(uint64_t caps);
+bool ofi_send_allowed(uint64_t caps);
+bool ofi_recv_allowed(uint64_t caps);
+bool ofi_rma_initiate_allowed(uint64_t caps);
+bool ofi_rma_target_allowed(uint64_t caps);
+bool ofi_needs_tx(uint64_t caps);
+bool ofi_needs_rx(uint64_t caps);
+
 int ofi_ep_bind_valid(const struct fi_provider *prov, struct fid *bfid,
 		      uint64_t flags);
 int ofi_check_rx_mode(const struct fi_info *info, uint64_t flags);
