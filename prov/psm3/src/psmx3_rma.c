@@ -33,7 +33,7 @@
 #include "psmx3.h"
 #include "psmx3_trigger.h"
 
-#if !HAVE_PSM2_MQ_FP_MSG
+#if !HAVE_PSM3_MQ_FP_MSG
 static inline void psmx3_am_enqueue_rma(struct psmx3_trx_ctxt *trx_ctxt,
 					struct psmx3_am_request *req)
 {
@@ -118,7 +118,7 @@ int psmx3_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 	psm2_epaddr_t epaddr;
 	struct psmx3_trx_ctxt *rx;
 
-#if HAVE_PSM2_MQ_FP_MSG
+#if HAVE_PSM3_MQ_FP_MSG
 	psm2_mq_req_t psm2_req;
 	psm2_mq_tag_t psm2_tag, psm2_tagsel;
 #endif
@@ -217,7 +217,7 @@ int psmx3_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 					(has_data ? FI_REMOTE_CQ_DATA : 0),
 			PSMX3_CTXT_TYPE(&req->fi_context) = PSMX3_REMOTE_WRITE_CONTEXT;
 			PSMX3_CTXT_USER(&req->fi_context) = mr;
-#if HAVE_PSM2_MQ_FP_MSG
+#if HAVE_PSM3_MQ_FP_MSG
 			PSMX3_SET_TAG(psm2_tag, (uint64_t)req->write.context, 0,
 					PSMX3_RMA_TYPE_WRITE);
 			PSMX3_SET_MASK(psm2_tagsel, PSMX3_MATCH_ALL, PSMX3_RMA_TYPE_MASK);
@@ -310,7 +310,7 @@ int psmx3_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			req->read.peer_addr = (void *)epaddr;
 			PSMX3_CTXT_TYPE(&req->fi_context) = PSMX3_REMOTE_READ_CONTEXT;
 			PSMX3_CTXT_USER(&req->fi_context) = mr;
-#if HAVE_PSM2_MQ_FP_MSG
+#if HAVE_PSM3_MQ_FP_MSG
 			PSMX3_SET_TAG(psm2_tag, (uint64_t)req->read.context, 0,
 			PSMX3_RMA_TYPE_READ);
 			op_error = psm2_mq_fp_msg(rx->psm2_ep, rx->psm2_mq,
@@ -594,7 +594,7 @@ void psmx3_am_ack_rma(struct psmx3_am_request *req)
 			"failed to send am_ack: err %d.\n", err);
 }
 
-#if !HAVE_PSM2_MQ_FP_MSG
+#if !HAVE_PSM3_MQ_FP_MSG
 int psmx3_am_process_rma(struct psmx3_trx_ctxt *trx_ctxt,
 			 struct psmx3_am_request *req)
 {
