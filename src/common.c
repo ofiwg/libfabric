@@ -119,64 +119,66 @@ uint8_t ofi_lsb(uint64_t num)
 	return ofi_msb(num & (~(num - 1)));
 }
 
-int ofi_send_allowed(uint64_t caps)
+bool ofi_send_allowed(uint64_t caps)
 {
-	if (caps & FI_MSG ||
-		caps & FI_TAGGED) {
+	if ((caps & FI_MSG) || (caps & FI_TAGGED)) {
 		if (caps & FI_SEND)
-			return 1;
+			return true;
 		if (caps & FI_RECV)
-			return 0;
-		return 1;
+			return false;
+		return true;
 	}
 
-	return 0;
+	return false;
 }
 
-int ofi_recv_allowed(uint64_t caps)
+bool ofi_recv_allowed(uint64_t caps)
 {
-	if (caps & FI_MSG ||
-		caps & FI_TAGGED) {
+	if ((caps & FI_MSG) || (caps & FI_TAGGED)) {
 		if (caps & FI_RECV)
-			return 1;
+			return true;
 		if (caps & FI_SEND)
-			return 0;
-		return 1;
+			return false;
+		return true;
 	}
 
-	return 0;
+	return false;
 }
 
-int ofi_rma_initiate_allowed(uint64_t caps)
+bool ofi_rma_initiate_allowed(uint64_t caps)
 {
-	if (caps & FI_RMA ||
-		caps & FI_ATOMICS) {
-		if (caps & FI_WRITE ||
-			caps & FI_READ)
-			return 1;
-		if (caps & FI_REMOTE_WRITE ||
-			caps & FI_REMOTE_READ)
-			return 0;
-		return 1;
+	if ((caps & FI_RMA) || (caps & FI_ATOMICS)) {
+		if ((caps & FI_WRITE) || (caps & FI_READ))
+			return true;
+		if ((caps & FI_REMOTE_WRITE) || (caps & FI_REMOTE_READ))
+			return false;
+		return true;
 	}
 
-	return 0;
+	return false;
 }
 
-int ofi_rma_target_allowed(uint64_t caps)
+bool ofi_rma_target_allowed(uint64_t caps)
 {
-	if (caps & FI_RMA ||
-		caps & FI_ATOMICS) {
-		if (caps & FI_REMOTE_WRITE ||
-			caps & FI_REMOTE_READ)
-			return 1;
-		if (caps & FI_WRITE ||
-			caps & FI_READ)
-			return 0;
-		return 1;
+	if ((caps & FI_RMA) || (caps & FI_ATOMICS)) {
+		if ((caps & FI_REMOTE_WRITE) || (caps & FI_REMOTE_READ))
+			return true;
+		if ((caps & FI_WRITE) || (caps & FI_READ))
+			return false;
+		return true;
 	}
 
-	return 0;
+	return false;
+}
+
+bool ofi_needs_tx(uint64_t caps)
+{
+	return ofi_send_allowed(caps) || ofi_rma_initiate_allowed(caps);
+}
+
+bool ofi_needs_rx(uint64_t caps)
+{
+	return ofi_recv_allowed(caps);
 }
 
 int ofi_ep_bind_valid(const struct fi_provider *prov, struct fid *bfid, uint64_t flags)

@@ -536,10 +536,15 @@ static int tcpx_ep_ctrl(struct fid *fid, int command, void *arg)
 	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
 	switch (command) {
 	case FI_ENABLE:
-		if (!ep->util_ep.rx_cq || !ep->util_ep.tx_cq)
+		if ((ofi_needs_rx(ep->util_ep.caps) && !ep->util_ep.rx_cq) ||
+		    (ofi_needs_tx(ep->util_ep.caps) && !ep->util_ep.tx_cq)) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"missing needed CQ binding\n");
 			return -FI_ENOCQ;
+		}
 		break;
 	default:
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "unsupported command\n");
 		return -FI_ENOSYS;
 	}
 	return FI_SUCCESS;

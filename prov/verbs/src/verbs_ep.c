@@ -855,15 +855,14 @@ static int vrb_ep_enable(struct fid_ep *ep_fid)
 		return -FI_ENOCQ;
 	}
 
-	if (!ep->util_ep.tx_cq && (ofi_send_allowed(ep->util_ep.caps) ||
-				ofi_rma_initiate_allowed(ep->util_ep.caps))) {
+	if (!ep->util_ep.tx_cq && (ofi_needs_tx(ep->util_ep.caps))) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
 			   "a send completion queue when it has transmit "
 			   "capabilities enabled (FI_SEND | FI_RMA).\n");
 		return -FI_ENOCQ;
 	}
 
-	if (!ep->util_ep.rx_cq && ofi_recv_allowed(ep->util_ep.caps)) {
+	if (!ep->util_ep.rx_cq && ofi_needs_rx(ep->util_ep.caps)) {
 		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
 			   "a receive completion queue when it has receive "
 			   "capabilities enabled. (FI_RECV)\n");
