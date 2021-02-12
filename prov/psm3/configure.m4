@@ -131,6 +131,17 @@ ifelse('
 				      [psm3_CPPFLAGS="$psm3_CPPFLAGS -URNDV_MOD_MR"])
 			      ])
 		      ])
+
+		AS_IF([test "x$have_psm2_src" = "x1" && test "x$psm2_happy" = "x1" \
+				&& test "x$psm2_dl" != "x1" && test "x$psm3_dl" != "x1"],
+		[
+			AC_MSG_NOTICE(m4_normalize([
+				Cannot build psm3 provider if psm2 provider is
+				built with psm2 src and neither is a dl provider
+			]))
+			psm3_happy=0
+		])
+
 		AS_IF([test $psm3_happy -eq 1], [
 			AC_CONFIG_FILES([prov/psm3/psm3/psm2_hal_inlines_i.h \
 		                 prov/psm3/psm3/psm2_hal_inlines_d.h \
