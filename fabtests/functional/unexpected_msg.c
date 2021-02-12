@@ -94,7 +94,7 @@ static char *get_rx_buf(int index)
 	return rx_buf + rx_size * index;
 }
 
-static int wait_recvs()
+static int wait_recv(void)
 {
 	struct fi_cq_tagged_entry entry;
 	int ret;
@@ -139,11 +139,14 @@ static int run_test_loop(void)
 			ret = ft_post_tx_buf(ep, remote_fi_addr,
 					     opts.transfer_size,
 					     op_data, &tx_ctx_arr[j].context,
-					     op_buf, mr_desc, op_tag);
+					     op_buf, mr_desc, op_tag + j);
 			if (ret) {
 				printf("ERROR send_msg returned %d\n", ret);
 				return ret;
 			}
+
+			/* Request send progress */
+			(void) fi_cq_read(txcq, NULL, 0);
 		}
 
 		ret = ft_sync();
@@ -154,15 +157,17 @@ static int run_test_loop(void)
 			op_buf = get_rx_buf(j);
 			ret = ft_post_rx_buf(ep, opts.transfer_size,
 					     &rx_ctx_arr[j].context, op_buf,
-					     mr_desc, op_tag);
+					     mr_desc,
+					     op_tag + (concurrent_msgs - 1) - j);
 			if (ret) {
 				printf("ERROR recv_msg returned %d\n", ret);
 				return ret;
 			}
-		}
 
-		for (j = 0; j < concurrent_msgs; j++) {
-			ret = wait_recvs();
+			/* Progress sends */
+			(void) fi_cq_read(txcq, NULL, 0);
+
+			ret = wait_recv();
 			if (ret < 1)
 				return ret;
 		}
