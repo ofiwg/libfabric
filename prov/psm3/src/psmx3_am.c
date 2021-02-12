@@ -33,60 +33,10 @@
 #include "psmx3.h"
 #include "psmx3_trigger.h"
 
-#if !HAVE_PSM3_AM_REGISTER_HANDLERS_2
-
-/* Macros to repeat operation 'x' for 1000 times */
-
-#define R10(p,x)  x(p##0) x(p##1) x(p##2) x(p##3) x(p##4) x(p##5) x(p##6) \
-		  x(p##7) x(p##8) x(p##9)
-#define R100(p,x) R10(p##0,x) R10(p##1,x) R10(p##2,x) R10(p##3,x) R10(p##4,x) \
-		  R10(p##5,x) R10(p##6,x) R10(p##7,x) R10(p##8,x) R10(p##9,x)
-#define R100A(x)  R10(,x) R10(1,x) R10(2,x) R10(3,x) R10(4,x) \
-                  R10(5,x) R10(6,x) R10(7,x) R10(8,x) R10(9,x)
-#define R1000(x)  R100A(x) R100(1,x) R100(2,x) R100(3,x) R100(4,x) R100(5,x) \
-		  R100(6,x) R100(7,x) R100(8,x) R100(9,x)
-
-#define DEFINE_AM_HANDLER(i) \
-	static int psmx3_am_handler_##i(psm2_am_token_t token, \
-					psm2_amarg_t *args, int nargs, \
-					void *src, uint32_t len) \
-	{ \
-		return psmx3_am_handlers_2[i](token, args, nargs, src, len, \
-					      psmx3_am_handler_ctxts[i]); \
-	}
-
-#define GET_AM_HANDLER(i) psmx3_am_handler_##i,
-
-R1000(DEFINE_AM_HANDLER)
-
-psm2_am_handler_fn_t psmx3_am_handlers[PSMX3_MAX_AM_HANDLERS] = {
-				R1000(GET_AM_HANDLER)
-		     };
-psm2_am_handler_2_fn_t psmx3_am_handlers_2[PSMX3_MAX_AM_HANDLERS];
-void *psmx3_am_handler_ctxts[PSMX3_MAX_AM_HANDLERS];
-int psmx3_am_handler_count = 0;
-
-#endif /* !HAVE_AM_REGISTER_HANDLERS_2 */
-
 int psmx3_am_progress(struct psmx3_trx_ctxt *trx_ctxt)
 {
 	struct slist_entry *item;
 	struct psmx3_trigger *trigger;
-
-#if !HAVE_PSM3_MQ_FP_MSG
-	struct psmx3_am_request *req;
-	if (psmx3_env.tagged_rma) {
-		trx_ctxt->domain->rma_queue_lock_fn(&trx_ctxt->rma_queue.lock, 2);
-		while (!slist_empty(&trx_ctxt->rma_queue.list)) {
-			item = slist_remove_head(&trx_ctxt->rma_queue.list);
-			req = container_of(item, struct psmx3_am_request, list_entry);
-			trx_ctxt->domain->rma_queue_unlock_fn(&trx_ctxt->rma_queue.lock, 2);
-			psmx3_am_process_rma(trx_ctxt, req);
-			trx_ctxt->domain->rma_queue_lock_fn(&trx_ctxt->rma_queue.lock, 2);
-		}
-		trx_ctxt->domain->rma_queue_unlock_fn(&trx_ctxt->rma_queue.lock, 2);
-	}
-#endif
 
 	trx_ctxt->domain->trigger_queue_lock_fn(&trx_ctxt->trigger_queue.lock, 2);
 	while (!slist_empty(&trx_ctxt->trigger_queue.list)) {

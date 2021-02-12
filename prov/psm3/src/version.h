@@ -53,8 +53,6 @@
 #define PSMX3_DEFAULT_UUID	"00FF00FF-0000-0000-0000-00FF00FF00FF"
 #define PROVIDER_INI		PSM3_INI
 
-#if HAVE_PSM3_MQ_REQ_USER
-
 #ifndef PSMX3_USE_REQ_CONTEXT
 #define PSMX3_USE_REQ_CONTEXT	1
 #endif
@@ -66,68 +64,6 @@
 #define PSMX3_STATUS_SNDLEN(s)	((s)->send_msglen)
 #define PSMX3_STATUS_PEER(s)	((s)->peer)
 #define PSMX3_STATUS_CONTEXT(s)	((s)->context)
-
-#else /* !HAVE_PSM3_MQ_REQ_USER */
-
-#ifdef PSMX3_USE_REQ_CONTEXT
-#undef PSMX3_USE_REQ_CONTEXT
-#endif
-#define PSMX3_USE_REQ_CONTEXT	0
-
-#define PSMX3_STATUS_TYPE	psm2_mq_status2_t
-#define PSMX3_STATUS_ERROR(s)	((s)->error_code)
-#define PSMX3_STATUS_TAG(s)	((s)->msg_tag)
-#define PSMX3_STATUS_RCVLEN(s)	((s)->nbytes)
-#define PSMX3_STATUS_SNDLEN(s)	((s)->msg_length)
-#define PSMX3_STATUS_PEER(s)	((s)->msg_peer)
-#define PSMX3_STATUS_CONTEXT(s)	((s)->context)
-
-#endif /* !HAVE_PSM3_MQ_REQ_USER */
-
-/*
- * Provide backward compatibility for older PSM2 libraries that lack the
- * psm2_am_register_handlers_2 function.
- */
-
-#if !HAVE_PSM3_AM_REGISTER_HANDLERS_2
-
-#define PSMX3_MAX_AM_HANDLERS 1000
-
-typedef int (*psm2_am_handler_2_fn_t) (
-			psm2_am_token_t token,
-			psm2_amarg_t *args, int nargs,
-			void *src, uint32_t len, void *hctx);
-
-extern psm2_am_handler_fn_t	psmx3_am_handlers[];
-extern psm2_am_handler_2_fn_t	psmx3_am_handlers_2[];
-extern void			*psmx3_am_handler_ctxts[];
-extern int			psmx3_am_handler_count;
-
-static inline
-psm2_error_t psm2_am_register_handlers_2(
-			psm2_ep_t ep,
-			const psm2_am_handler_2_fn_t * handlers,
-			int num_handlers, void **hctx,
-			int *handlers_idx)
-{
-	int i;
-	int start = psmx3_am_handler_count;
-
-	if (start + num_handlers > PSMX3_MAX_AM_HANDLERS)
-		return PSM2_EP_NO_RESOURCES;
-
-	psmx3_am_handler_count += num_handlers;
-
-	for (i = 0; i < num_handlers; i++) {
-		psmx3_am_handlers_2[start + i] = handlers[i];
-		psmx3_am_handler_ctxts[start + i] = hctx[i];
-	}
-
-	return psm2_am_register_handlers(ep, psmx3_am_handlers + start,
-					 num_handlers, handlers_idx);
-}
-
-#endif /* !HAVE_PSM3_AM_REGISTER_HANDLERS_2 */
 
 /*
  * Use reserved space within psm2_mq_req_user for fi_context instead of
