@@ -2706,23 +2706,21 @@ err:
 	return ret;
 }
 
-#define RXM_NEED_RX_CQ_PROGRESS(info) 				\
-	((info->rx_attr->caps & (FI_MSG | FI_TAGGED)) ||	\
-	 (info->rx_attr->caps & FI_ATOMIC))
-
 static int rxm_ep_enable_check(struct rxm_ep *rxm_ep)
 {
 	if (!rxm_ep->util_ep.av)
 		return -FI_EOPBADSTATE;
 
+	if (ofi_needs_tx(rxm_ep->rxm_info->caps) && !rxm_ep->util_ep.tx_cq) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "missing Tx CQ\n");
+		return -FI_ENOCQ;
+	}
+
 	if (rxm_ep->util_ep.rx_cq)
 		return 0;
 
-	if (RXM_NEED_RX_CQ_PROGRESS(rxm_ep->rxm_info)) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "endpoint missing recv CQ"
-			"needed for progress of operations enabled by one "
-			"or more of requested capabilities: %s\n",
-			fi_tostr(&rxm_ep->rxm_info->rx_attr->caps, FI_TYPE_CAPS));
+	if (ofi_needs_rx(rxm_ep->rxm_info->caps)) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "missing Rx CQ\n");
 		return -FI_ENOCQ;
 	}
 
@@ -2731,6 +2729,7 @@ static int rxm_ep_enable_check(struct rxm_ep *rxm_ep)
 			"may be used but endpoint is missing recv CQ\n");
 		return -FI_ENOCQ;
 	}
+
 	return 0;
 }
 
