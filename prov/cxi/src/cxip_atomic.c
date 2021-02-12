@@ -389,6 +389,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	struct iovec hmem_iov;
 	char hmem_compare[16];
 	char hmem_oper1[16];
+	bool flush = flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE);
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -415,6 +416,10 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		compare = comparev[0].addr;
 		/* FALLTHRU */
 	case CXIP_RQ_AMO_FETCH:
+		/* Errata 3184: FAMO with flush returns wrong value. */
+		if (flush)
+			return -FI_EOPNOTSUPP;
+
 		/* Must have a valid result address */
 		if (!_vector_valid(result_count, resultv))
 			return -FI_EINVAL;
@@ -703,7 +708,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			}
 		}
 
-		if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
+		if (flush)
 			cmd.c_state.flush = 1;
 
 		ret = cxip_cmdq_emit_c_state(cmdq, &cmd.c_state);
@@ -780,7 +785,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		if (compare)
 			memcpy(&cmd.op2_word1, compare, len);
 
-		if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
+		if (flush)
 			cmd.flush = 1;
 
 		if (req_type == CXIP_RQ_AMO) {

@@ -2142,6 +2142,8 @@ Test(atomic, flush)
 	int count = 0;
 	uint64_t flushes_start;
 	uint64_t flushes_end;
+	struct fi_ioc compare_ioc = { .count = 1, .addr = &compare_ioc };
+	struct fi_ioc result_ioc = { .count = 1, .addr = &result_ioc };
 
 	ret = dom_ops->cntr_read(&cxit_domain->fid,
 				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
@@ -2190,6 +2192,15 @@ Test(atomic, flush)
 				 &flushes_end, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 	cr_assert(flushes_end > flushes_start);
+
+	/* Test FAMO with flush (invalid due to errata) */
+	ret = fi_fetch_atomicmsg(cxit_ep, &msg, &result_ioc, NULL, 1,
+				 FI_DELIVERY_COMPLETE);
+	cr_assert_eq(ret, -FI_EOPNOTSUPP, "Return code  = %d", ret);
+
+	ret = fi_compare_atomicmsg(cxit_ep, &msg, &compare_ioc, NULL, 1,
+				   &result_ioc, NULL, 1, FI_DELIVERY_COMPLETE);
+	cr_assert_eq(ret, -FI_EOPNOTSUPP, "Return code  = %d", ret);
 }
 
 /* Test AMO FI_MORE */

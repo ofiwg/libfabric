@@ -624,6 +624,11 @@ capabilities.
 unit tests are supported where the test feature set matches the CXI provider's
 current capabilities.
 
+# ERRATA
+
+* Fetch and compare type AMOs with FI_DELIVERY_COMPLETE or FI_MATCH_COMPLETE
+  completion semantics are not supported.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
