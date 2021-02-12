@@ -831,8 +831,10 @@ rxm_recv_entry_get(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	for (i = 0; i < count; i++) {
 		recv_entry->rxm_iov.iov[i] = iov[i];
 		recv_entry->total_len += iov[i].iov_len;
-		if (desc)
+		if (desc && desc[i])
 			recv_entry->rxm_iov.desc[i] = desc[i];
+		else
+			recv_entry->rxm_iov.desc[i] = NULL;
 	}
 
 	return recv_entry;
