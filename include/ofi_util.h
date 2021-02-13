@@ -1055,6 +1055,22 @@ struct ofi_ops_dynamic_rbuf {
 			    size_t *count);
 };
 
+/* Extend CM support for FI_EP_MSG endpoints that connect using a simplex
+ * transport protocol to allow duplex data transfer between peer endpoints.
+ * This helper enables a single simplex based endpoint to both initiate a
+ * connection and accept a connection request. The CM fi_accept() call is
+ * extended to pass connection request fi_info to an existing endpoint.
+ *
+ * accept - Initiate an accept for a connection request associated with the
+ *	fi_info passed.
+ */
+#define OFI_OPS_SIMPLEX_CM "ofix_simplex_cm_v1"
+
+struct ofi_ops_simplex_cm {
+	int (*accept)(struct fid_ep *ep, struct fi_info *info,
+		      const void *param, size_t paramlen);
+};
+
 #ifdef __cplusplus
 }
 #endif
