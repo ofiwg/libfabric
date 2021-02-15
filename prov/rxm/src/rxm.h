@@ -205,7 +205,7 @@ struct rxm_cmap_peer {
 };
 
 struct rxm_cmap_attr {
-	void 				*name;
+	void				*name;
 };
 
 struct rxm_cmap {
@@ -224,7 +224,9 @@ struct rxm_cmap {
 
 	struct dlist_entry	peer_list;
 	struct rxm_cmap_attr	attr;
+	bool			simplex;
 	pthread_t		cm_thread;
+	struct ofi_ops_simplex_cm *simplex_cm_ops;
 	ofi_fastlock_acquire_t	acquire;
 	ofi_fastlock_release_t	release;
 	fastlock_t		lock;
@@ -893,6 +895,18 @@ rxm_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 
 ssize_t rxm_get_conn(struct rxm_ep *rxm_ep, fi_addr_t addr,
 		     struct rxm_conn **rxm_conn);
+
+/* RxM protocols can require duplex message passing via
+ * simplex based peer endpoints (e.g. rendezvous protocol,
+ * simulated atomics). Initiate a connection back to a remote
+ * peer if duplex connectivity does not exist. */
+static inline int
+rxm_check_duplex_conn(struct rxm_cmap_handle *handle)
+{
+	if (!handle->cmap->simplex || handle->tx_state == RXM_CMAP_CONNECTED)
+		return FI_SUCCESS;
+	return rxm_cmap_connect(handle->cmap->ep, handle->fi_addr, handle);
+}
 
 static inline void
 rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
