@@ -225,7 +225,8 @@ static inline ssize_t mlx_do_inject(
 	status = ucp_tag_send_nb(dst_ep, buf, len,
 				 ucp_dt_make_contig(1),
 				 tag, mlx_send_callback_no_compl);
-	if (UCS_PTR_STATUS(status) == UCS_OK)
+
+	if (status == NULL)
 		return FI_SUCCESS;
 
 	if (UCS_PTR_IS_ERR(status)) {
@@ -259,7 +260,7 @@ static inline  ssize_t mlx_do_sendmsg(
 	cq = u_ep->ep.tx_cq;
 
 	cbf = ((!(u_ep->ep.tx_op_flags & FI_SELECTIVE_COMPLETION)) 
-			|| (flags & FI_COMPLETION)) ? 
+			|| (flags & FI_COMPLETION)) ?
 				mlx_send_callback : mlx_send_callback_no_compl;
 
 	if (OFI_UNLIKELY(flags & FI_MATCH_COMPLETE)) {
@@ -323,7 +324,7 @@ static inline  ssize_t mlx_do_sendmsg(
 		_ctx->internal[1] = NULL;
 	}
 
-	if (UCS_PTR_STATUS(status) != UCS_OK) {
+	if (status != NULL) {
 		struct mlx_request *req = (struct mlx_request *)status;
 		req->completion.tagged.op_context = msg->context;
 		req->completion.tagged.flags = FI_SEND | ((mode == MLX_MSG) ? FI_MSG : FI_TAGGED);
