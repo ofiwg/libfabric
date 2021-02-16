@@ -32,53 +32,64 @@ Cassini-specific header files to enable direct hardware access in the data path.
 
 # SUPPORTED FEATURES
 
-The CXI provider supports the following features defined for the libfabric API:
+The CXI provider supports a subset of OFI features.
 
-*Endpoint types*
-: The provider supports the *FI_EP_RDM* endpoint type, including scalable
-  endpoints.
+## Endpoint types
 
-*Address vectors*
-: The provider implements both the *FI_AV_MAP* and *FI_AV_TABLE*
-  address vector types. FI_EVENT is unsupported.
+The provider supports the *FI_EP_RDM* endpoint type, including scalable
+endpoints.
 
-*Memory registration modes*
-: The provider implements scalable memory registration. The provider requires
-  FI_MR_ENDPOINT.
+## Address vectors
 
-*Data transfer operations*
-: The following data transfer interfaces are supported: *FI_ATOMIC*, *FI_MSG*,
-  *FI_RMA*, *FI_TAGGED*.  See DATA TRANSFER OPERATIONS below for more details.
+The provider implements both the *FI_AV_MAP* and *FI_AV_TABLE* address vector
+types. *FI_EVENT* is unsupported.
 
-*Completion events*
-: The CXI provider supports all CQ event formats. Wait objects are not
-currently supported.
+## Memory registration modes
 
-*Modes*
-: The CXI provider does not require any operation modes.
+The provider implements scalable memory registration. The provider requires
+*FI_MR_ENDPOINT*.
 
-*Progress*
-: The CXI provider currently supports *FI_PROGRESS_MANUAL* data and control
-  progress modes.
+## Data transfer operations
 
-*Multi-threading*
-: The CXI provider does not currently optimize for threading model. Data
-  transfer and control interfaces are always considered thread-safe.
+The following data transfer interfaces are supported: *FI_ATOMIC*, *FI_MSG*,
+*FI_RMA*, *FI_TAGGED*.  See DATA TRANSFER OPERATIONS below for more details.
 
-*Wait Objects*
-: The CXI provider does not currently support wait objects.
+## Completion events
 
-*Additional Features*
-: The CXI provider also supports the following capabilities and features:
-- *FI_MULTI_RECV*
-- *FI_SOURCE*
-- *FI_NAMED_RX_CTX*
-- *FI_SHARED_AV*
-- *FI_RM_ENABLED*
-- *FI_RMA_EVENT*
-- *FI_REMOTE_CQ_DATA*
-- *FI_MORE*
-- *FI_FENCE*
+The CXI provider supports all CQ event formats. Wait objects are not currently
+supported.
+
+## Modes
+
+The CXI provider does not require any operation modes.
+
+## Progress
+
+The CXI provider currently supports *FI_PROGRESS_MANUAL* data and control
+progress modes.
+
+## Multi-threading
+
+The CXI provider does not currently optimize for threading model. Data transfer
+and control interfaces are always considered thread-safe.
+
+## Wait Objects
+
+The CXI provider does not currently support wait objects.
+
+## Additional Features
+
+The CXI provider also supports the following capabilities and features:
+
+* *FI_MULTI_RECV*
+* *FI_SOURCE*
+* *FI_NAMED_RX_CTX*
+* *FI_SHARED_AV*
+* *FI_RM_ENABLED*
+* *FI_RMA_EVENT*
+* *FI_REMOTE_CQ_DATA*
+* *FI_MORE*
+* *FI_FENCE*
 
 ## Addressing Format
 
@@ -172,13 +183,13 @@ follows:
 
 ## Address Vectors
 
-Currently, the CXI provider supports both FI_AV_TABLE and FI_AV_MAP with the
-same internal implementation. Optimizations are planned for FI_AV_MAP. In the
-future, when using FI_AV_MAP, the CXI address will be encoded in the FI address.
+Currently, the CXI provider supports both *FI_AV_TABLE* and *FI_AV_MAP* with the
+same internal implementation. Optimizations are planned for *FI_AV_MAP*. In the
+future, when using *FI_AV_MAP*, the CXI address will be encoded in the FI address.
 This will avoid per-operation node address translation and reduce AV memory
 footprint.
 
-The CXI provider uses the FI_SYMMETRIC AV flag for optimization. When a
+The CXI provider uses the *FI_SYMMETRIC* AV flag for optimization. When a
 client guarantees that all processes have symmetric AV layout, the provider
 uses FI addresses for source address matching (rather than physical addresses).
 This reduces the overhead for source address matching during two-sided Receive
@@ -189,43 +200,45 @@ operations.
 The CXI provider supports the following Operation flags:
 
 *FI_MORE*
-: When FI_MORE is specified in a data transfer operation, the provider will
-  defer submission of RDMA commands to hardware. When one or more data transfer
-  operations is performed using FI_MORE, followed by an operation without
-  FI_MORE, the provider will submit the entire batch of queued operations to
-  hardware using a single PCIe transaction, improving PCIe efficiency.
+:   When *FI_MORE* is specified in a data transfer operation, the provider will
+    defer submission of RDMA commands to hardware. When one or more data
+    transfer operations is performed using *FI_MORE*, followed by an operation
+    without *FI_MORE*, the provider will submit the entire batch of queued
+    operations to hardware using a single PCIe transaction, improving PCIe
+    efficiency.
 
-  When FI_MORE is used, queued commands will not be submitted to hardware until
-  another data transfer operation is performed without FI_MORE.
+    When *FI_MORE* is used, queued commands will not be submitted to hardware
+    until another data transfer operation is performed without *FI_MORE*.
 
 *FI_TRANSMIT_COMPLETE*
-: By default, all CXI provider completion events satisfy the requirements of the
-  'transmit complete' completion level. Transmit complete events are generated
-  when the intiator receives an Ack from the target NIC. The Ack is generated
-  once all data has been received by the target NIC. Transmit complete events do
-  not guarantee that data is visibile to the target process.
+:   By default, all CXI provider completion events satisfy the requirements of
+    the 'transmit complete' completion level. Transmit complete events are
+    generated when the intiator receives an Ack from the target NIC. The Ack is
+    generated once all data has been received by the target NIC. Transmit
+    complete events do not guarantee that data is visibile to the target
+    process.
 
 *FI_DELIVERY_COMPLETE*
-: When the 'delivery complete' completion level is used, the event guarantees
-  that data is visible to the target process. To support this, hardware at the
-  target performs a zero-byte read operation to flush data across the PCIe bus
-  before generating an Ack. Flushing reads are performed unconditionally and
-  will lead to higher latency.
+:   When the 'delivery complete' completion level is used, the event guarantees
+    that data is visible to the target process. To support this, hardware at
+    the target performs a zero-byte read operation to flush data across the
+    PCIe bus before generating an Ack. Flushing reads are performed
+    unconditionally and will lead to higher latency.
 
 *FI_MATCH_COMPLETE*
-: When the 'match complete' completion level is used, the event guarantees that
-  the message has been matched to a client-provided buffer. All messages longer
-  than the eager threshold support this guarantee. When 'match complete' is used
-  with a Send that is shorter than the eager threshold, an additional handshake
-  may be performed by the provider to notify the initiator that the Send has
-  been matched.
+:   When the 'match complete' completion level is used, the event guarantees
+    that the message has been matched to a client-provided buffer. All messages
+    longer than the eager threshold support this guarantee. When 'match
+    complete' is used with a Send that is shorter than the eager threshold, an
+    additional handshake may be performed by the provider to notify the
+    initiator that the Send has been matched.
 
-The CXI provider also supports the following operational flags:
+The CXI provider also supports the following operation flags:
 
-- *FI_INJECT*
-- *FI_FENCE*
-- *FI_COMPLETION*
-- *FI_REMOTE_CQ_DATA*
+* *FI_INJECT*
+* *FI_FENCE*
+* *FI_COMPLETION*
+* *FI_REMOTE_CQ_DATA*
 
 ## Scalable Endpoints
 
@@ -238,12 +251,12 @@ TX and RX contexts is assigned 10 PIDs. A client-specified PID value will be
 used as the base PID value for a SEP. For example, a SEP with 10 TX and RX
 contexts with an assigned PID of 100 will use PIDs 100-109.
 
-Due to a hardware matching limitation, a SEP that supports messaging (FI_MSG or
-FI_TAGGED) and FI_DIRECTED_RECV must use an AV with FI_SYMMETRIC set.
+Due to a hardware matching limitation, a SEP that supports messaging (*FI_MSG* or
+*FI_TAGGED*) and *FI_DIRECTED_RECV* must use an AV with *FI_SYMMETRIC* set.
 
 ## Messaging
 
-The CXI provider supports both tagged (FI_TAGGED) and untagged (FI_MSG)
+The CXI provider supports both tagged (*FI_TAGGED*) and untagged (*FI_MSG*)
 two-sided messaging interfaces. In the normal case, message matching is
 performed by hardware. In certain low resource conditions, the responsibility to
 perform message matching may be transferred to software. This is transparently
@@ -267,7 +280,7 @@ operation.
 
 Long messages are transferred using a rendezvous protocol. The provider
 implements two rendezvous protocols: offloaded and eager. The threshold at which
-the rendezvous protocol is used is controlled with the FI_CXI_RDZV_THRESHOLD
+the rendezvous protocol is used is controlled with the *FI_CXI_RDZV_THRESHOLD*
 environment variable.
 
 In the offloaded rendezvous protocol, a portion of the message payload is sent along
@@ -285,27 +298,27 @@ arrives unexpectedly, the message header is saved and the entire payload is
 dropped. Later, when the message is matched to a Receive operation, the entire
 payload is pulled from the source using an RDMA Get operation.
 
-The rendezvous protcol is controlled using the FI_CXI_RDZV_OFFLOAD environment
+The rendezvous protcol is controlled using the *FI_CXI_RDZV_OFFLOAD* environment
 variable. The provider uses the offloaded rendezvous protocol by default.
 
 ## Message Ordering
 
 The CXI provider supports the following ordering rules:
 
-- All message Send operations are always ordered.
-- RMA Writes may be ordered by specifying FI_ORDER_RMA_WAW.
-- AMOs may be ordered by specifying FI_ORDER_AMO_{WAW|WAR|RAW|RAR}.
-- RMA Writes may be ordered with respect to AMOs by specifying FI_ORDER_WAW.
-  Fetching AMOs may be used to perform short reads that are ordered with respect
-  to RMA Writes.
+* All message Send operations are always ordered.
+* RMA Writes may be ordered by specifying *FI_ORDER_RMA_WAW*.
+* AMOs may be ordered by specifying *FI_ORDER_AMO_{WAW|WAR|RAW|RAR}*.
+* RMA Writes may be ordered with respect to AMOs by specifying *FI_ORDER_WAW*.
+  Fetching AMOs may be used to perform short reads that are ordered with
+  respect to RMA Writes.
 
 Ordered RMA size limits are set as follows:
 
-- max_order_waw_size is -1. RMA Writes and non-fetching AMOs of any size are
+* *max_order_waw_size* is -1. RMA Writes and non-fetching AMOs of any size are
   ordered with respect to each other.
-- max_order_raw_size is -1. Fetching AMOs of any size are ordered with respect
-  to RMA Writes and non-fetching AMOs.
-- max_order_war_size is -1. RMA Writes and non-fetching AMOs of any size are
+* *max_order_raw_size* is -1. Fetching AMOs of any size are ordered with
+  respect to RMA Writes and non-fetching AMOs.
+* *max_order_war_size* is -1. RMA Writes and non-fetching AMOs of any size are
   ordered with respect to fetching AMOs.
 
 ## PCIe Ordering
@@ -314,21 +327,21 @@ Generally, PCIe writes are strictly ordered. As an optimization, PCIe TLPs may
 have the Relaxed Order (RO) bit set to allow writes to be reordered. Cassini
 sets the RO bit in PCIe TLPs when possible. Cassini sets PCIe RO as follows:
 
-- Ordering of messaging operations is established using completion events.
+* Ordering of messaging operations is established using completion events.
   Therefore, all PCIe TLPs related to two-sided message payloads will have RO
   set.
-- Every PCIe TLP associated with an unordered RMA or AMO operation will have RO
+* Every PCIe TLP associated with an unordered RMA or AMO operation will have RO
   cleared.
-- PCIe TLPs associated with the last packet of an ordered RMA or AMO operation
+* PCIe TLPs associated with the last packet of an ordered RMA or AMO operation
   will have RO cleared.
-- PCIe TLPs associated with the body packets (all except the last packet of an
+* PCIe TLPs associated with the body packets (all except the last packet of an
   operation) of an ordered RMA operation will have RO set.
 
 ## Translation
 
 The CXI provider supports two translation mechanisms: Address Translation
 Services (ATS) and NIC Translation Agent (NTA). Use the environment variable
-FI_CXI_ATS to select between translation mechanisms.
+*FI_CXI_ATS* to select between translation mechanisms.
 
 ATS refers to NIC support for PCIe rev. 4 ATS, PRI and PASID features. ATS
 enables the NIC to efficiently access the entire virtual address space of a
@@ -340,7 +353,7 @@ Other hugepage sizes may be supported by SW to enable the NIC to cache more
 address space.
 
 ATS and NTA both support on-demand paging (ODP) in the event of a page fault.
-Use the environment variable FI_CXI_ODP to enable ODP.
+Use the environment variable *FI_CXI_ODP* to enable ODP.
 
 With ODP enabled, buffers used for data transfers are not required to be backed
 by physical memory. An un-populated buffer that is referenced by the NIC will
@@ -391,7 +404,7 @@ Both types of MRs are allocated using fi_mr_reg. MRs with client-provided key in
 the range [0-99] are optimized MRs. MRs with key greater or equal to 100 are
 standard MRs. An application may create a mix of standard and optimized MRs. To
 disable the use of optimized MRs, set environment variable
-FI_CXI_OPTIMIZED_MRS=false. When disabled, all MR keys are available and all MRs
+*FI_CXI_OPTIMIZED_MRS=false*. When disabled, all MR keys are available and all MRs
 are implemented as standard MRs. All communicating processes must agree on the
 use of optimized MRs.
 
@@ -401,10 +414,10 @@ Optimized MRs are one requirement for the use of low overhead packet formats
 which enable higher RMA Write rates. An RMA Write will use the low overhead
 format when all the following requirements are met:
 
-- The Write targets an optimized MR
-- The target MR does not require remote completion notifications (no
-  FI_RMA_EVENT)
-- The Write does not have ordering requirements (no FI_RMA_WAW)
+* The Write targets an optimized MR
+* The target MR does not require remote completion notifications (no
+  *FI_RMA_EVENT*)
+* The Write does not have ordering requirements (no *FI_RMA_WAW*)
 
 Theoretically, Cassini has resources to support 64k standard MRs or 2k optimized
 MRs. Practically, the limits are much lower and depend greatly on application
@@ -434,7 +447,7 @@ can tolerate intermittent AMO failures or those where the benefit of increased
 message rate outweighs by the cost of restarting after a failure.
 
 Unreliable, non-fetching AMOs may be performed by specifying the
-FI_CXI_UNRELIABLE flag. Unreliable, fetching AMOs are not supported. Unreliable
+*FI_CXI_UNRELIABLE* flag. Unreliable, fetching AMOs are not supported. Unreliable
 AMOs must target an optimized MR and cannot use remote completion notification.
 Unreliable AMOs are not ordered.
 
@@ -450,7 +463,7 @@ ordering is needed following an HRP operation, the source may follow the
 operation with a normal, fenced Put.
 
 HRP RMA and unreliable AMO operations may be performed by specifying the
-FI_CXI_HRP flag. HRP AMOs must also use the FI_CXI_UNRELIABLE flag. Monitor the
+*FI_CXI_HRP* flag. HRP AMOs must also use the *FI_CXI_UNRELIABLE* flag. Monitor the
 hardware counter C_CNTR_HNI_HRP_ACK at the initiator to validate that HRP is in
 use.
 
@@ -459,11 +472,11 @@ use.
 Cassini offloads light-weight counting events for certain types of operations.
 The rules for offloading are:
 
-- Counting events for RMA and AMO source events are always offloaded.
-- Counting events for RMA and AMO target events are always offloaded.
-- Counting events for Sends are offloaded when message size is less than the
+* Counting events for RMA and AMO source events are always offloaded.
+* Counting events for RMA and AMO target events are always offloaded.
+* Counting events for Sends are offloaded when message size is less than the
   rendezvous threshold.
-- Counting events for message Receives are never offloaded by default.
+* Counting events for message Receives are never offloaded by default.
 
 Software progress is required to update counters unless the criteria for
 offloading are met.
@@ -473,77 +486,78 @@ offloading are met.
 The CXI provider checks for the following environment variables:
 
 *FI_CXI_ODP*
-: Enables on-demand paging. If disabled, all DMA buffers are pinned.
+:   Enables on-demand paging. If disabled, all DMA buffers are pinned.
 
 *FI_CXI_ATS*
-: Enables PCIe ATS. If disabled, the NTA mechanism is used.
+:   Enables PCIe ATS. If disabled, the NTA mechanism is used.
 
 *FI_CXI_ATS_MLOCK_MODE*
-: Sets ATS mlock mode. The mlock() system call may be used in conjunction with
-ATS to help avoid network page faults. Valid values are "off" and "all". When
-mlock mode is "off", the provider does not use mlock(). An application using
-ATS without mlock() may experience network page faults, reducing network
-performance. When ats_mlock_mode is set to "all", the provider uses mlockall()
-during initialization with ATS. mlockall() causes all mapped addresses to be
-locked in RAM at all times. This helps to avoid most network page faults. Using
-mlockall() may increase pressure on physical memory. Ignored when ODP is
-disabled.
+:   Sets ATS mlock mode. The mlock() system call may be used in conjunction
+    with ATS to help avoid network page faults. Valid values are "off" and
+    "all". When mlock mode is "off", the provider does not use mlock(). An
+    application using ATS without mlock() may experience network page faults,
+    reducing network performance. When ats_mlock_mode is set to "all", the
+    provider uses mlockall() during initialization with ATS. mlockall() causes
+    all mapped addresses to be locked in RAM at all times. This helps to avoid
+    most network page faults. Using mlockall() may increase pressure on
+    physical memory.  Ignored when ODP is disabled.
 
 *FI_CXI_RDZV_OFFLOAD*
-: Enables offloaded rendezvous messaging protocol.
+:   Enables offloaded rendezvous messaging protocol.
 
 *FI_CXI_RDZV_THRESHOLD*
-: Message size threshold for rendezvous protocol.
+:   Message size threshold for rendezvous protocol.
 
 *FI_CXI_FC_RECOVERY*
-: Enables message flow-control recovery (experimental). Message flow-control is
-triggered when hardware message matching resources become exhausted. Messages
-may be dropped and retransmitted in order to recover. This impacts performance
-significantly.
+:   Enables message flow-control recovery (experimental). Message flow-control
+    is triggered when hardware message matching resources become exhausted.
+    Messages may be dropped and retransmitted in order to recover. This impacts
+    performance significantly.
 
-Programs should be careful to avoid using large numbers of unmatched receive
-operations and unexpected messages to prevent message flow-control. To help
-avoid this condition, increase Overflow buffer space using environment
-variables FI_CXI_OFLOW_*.
+    Programs should be careful to avoid using large numbers of unmatched
+    receive operations and unexpected messages to prevent message flow-control.
+    To help avoid this condition, increase Overflow buffer space using
+    environment variables *FI_CXI_OFLOW_\**.
 
 *FI_CXI_RDZV_GET_MIN*
-: Minimum rendezvous Get payload size. A Send with length less than or equal to
-FI_CXI_RDZV_THRESHOLD plus FI_CXI_RDZV_GET_MIN will be performed using the
-eager protocol. Larger Sends will be performed using the rendezvous protocol
-with FI_CXI_RDZV_THRESHOLD bytes of payload sent eagerly and the remainder of
-the payload read from the source using a Get. FI_CXI_RDZV_THRESHOLD plus
-FI_CXI_RDZV_GET_MIN must be less than or equal to FI_CXI_OFLOW_BUF_SIZE.
+:   Minimum rendezvous Get payload size. A Send with length less than or equal
+    to *FI_CXI_RDZV_THRESHOLD* plus *FI_CXI_RDZV_GET_MIN* will be performed
+    using the eager protocol. Larger Sends will be performed using the
+    rendezvous protocol with *FI_CXI_RDZV_THRESHOLD* bytes of payload sent
+    eagerly and the remainder of the payload read from the source using a Get.
+    *FI_CXI_RDZV_THRESHOLD* plus *FI_CXI_RDZV_GET_MIN* must be less than or
+    equal to *FI_CXI_OFLOW_BUF_SIZE*.
 
 *FI_CXI_RDZV_EAGER_SIZE*
-: Eager data size for rendezvous protocol.
+:   Eager data size for rendezvous protocol.
 
 *FI_CXI_OFLOW_BUF_SIZE*
-: Overflow buffer size.
+:   Overflow buffer size.
 
 *FI_CXI_OFLOW_BUF_COUNT*
-: Overflow buffer count.
+:   Overflow buffer count.
 
 *FI_CXI_OPTIMIZED_MRS*
-: Enables optimized memory regions.
+:   Enables optimized memory regions.
 
 *FI_CXI_LLRING_MODE*
-: Set the policy for use of the low-latency command queue ring mechanism. This
-mechanism improves the latency of command processing on an idle command queue.
-Valid values are idle, always, and never.
+:   Set the policy for use of the low-latency command queue ring mechanism.
+    This mechanism improves the latency of command processing on an idle
+    command queue.  Valid values are idle, always, and never.
 
 *FI_CXI_CQ_POLICY*
-: Experimental. Set Command Queue write-back policy. Valid values are always,
-high_empty, low_empty, and low. "always", "high", and "low" refer to the
-frequency of write-backs. "empty" refers to whether a write-back is performed
-when the queue becomes empty.
+:   Experimental. Set Command Queue write-back policy. Valid values are always,
+    high_empty, low_empty, and low. "always", "high", and "low" refer to the
+    frequency of write-backs. "empty" refers to whether a write-back is
+    performed when the queue becomes empty.
 
 *FI_CXI_DEFAULT_VNI*
-: Default VNI value (masked to 16 bits).
+:   Default VNI value (masked to 16 bits).
 
 *FI_CXI_EQ_ACK_BATCH_SIZE*
-: Number of EQ events to process before writing an acknowledgement to HW.
-Batching ACKs amortizes the cost of event acknowledgement over multiple
-network operations.
+:   Number of EQ events to process before writing an acknowledgement to HW.
+    Batching ACKs amortizes the cost of event acknowledgement over multiple
+    network operations.
 
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
