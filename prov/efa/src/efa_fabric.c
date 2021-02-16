@@ -890,6 +890,9 @@ int efa_getinfo(uint32_t version, const char *node, const char *service,
 {
 	int ret;
 
+	if ((flags & FI_SOURCE) && !node && !service)
+		return -FI_EINVAL;
+
 	if (!(flags & FI_SOURCE) && hints && hints->src_addr &&
 	    hints->src_addrlen != EFA_EP_ADDR_LEN)
 		return -FI_ENODATA;
