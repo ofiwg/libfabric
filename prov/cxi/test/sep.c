@@ -1083,3 +1083,131 @@ Test(sep, ping)
 
 	cxit_teardown_sep();
 }
+
+/* Test out-of-order multi-receive transaction completion and FI_SYMMETRIC */
+Test(sep, msg_multi_recv_ooo)
+{
+	int i, j, ret;
+	int err = 0;
+	fi_addr_t from;
+	struct fi_msg rmsg = {};
+	struct fi_msg smsg = {};
+	struct iovec riovec;
+	struct iovec siovec;
+	uint64_t rxe_flags;
+	int bytes_sent;
+	uint8_t *recv_buf;
+	uint8_t *send_buf;
+	size_t send_len = 8*1024;
+	int sends = 10;
+	size_t recv_len = send_len * 5 + 64 * 5;
+	int sent;
+	int recved;
+	struct fi_cq_tagged_entry tx_cqe[sends];
+	struct fi_cq_tagged_entry rx_cqe[sends];
+	int txi;
+
+	cxit_setup_sep(3, 3, 0, 0);
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+	memset(recv_buf, 0, recv_len);
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	/* Post RX buffer */
+	riovec.iov_base = recv_buf;
+	riovec.iov_len = recv_len;
+	rmsg.msg_iov = &riovec;
+	rmsg.iov_count = 1;
+	rmsg.context = NULL;
+	rmsg.addr = cxit_ep_fi_addr;
+
+	siovec.iov_base = send_buf;
+	siovec.iov_len = send_len;
+	smsg.msg_iov = &siovec;
+	smsg.iov_count = 1;
+	smsg.context = NULL;
+
+	for (txi = 0; txi < cxit_sep_tx_cnt; txi++) {
+		sent = 0;
+		recved = 0;
+		bytes_sent = 0;
+
+		smsg.addr = cxit_sep_rx_addr[txi];
+
+		ret = fi_recvmsg(cxit_sep_rx[txi], &rmsg, FI_MULTI_RECV);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+
+		sleep(1);
+		for (i = 0; i < sends; i++) {
+			/* Interleave long and short sends. They will complete
+			 * in a different order than they were sent or received.
+			 */
+			if (i % 2)
+				siovec.iov_len = 64;
+			else
+				siovec.iov_len = 8*1024;
+
+			ret = fi_sendmsg(cxit_sep_tx[txi], &smsg, 0);
+			cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d",
+				ret);
+		}
+
+		for (i = 0; i < sends; i++) {
+			/* Gather both events, ensure progress on both sides. */
+			do {
+				ret = fi_cq_readfrom(cxit_sep_rx_cq[txi],
+						     &rx_cqe[recved], 1, &from);
+				if (ret == 1) {
+					recved++;
+				} else {
+					cr_assert_eq(ret, -FI_EAGAIN,
+						     "fi_cq_read unexpected value %d",
+						     ret);
+				}
+
+				ret = fi_cq_read(cxit_sep_tx_cq[txi],
+						 &tx_cqe[sent], 1);
+				if (ret == 1) {
+					sent++;
+				} else {
+					cr_assert_eq(ret, -FI_EAGAIN,
+						"fi_cq_read unexpected value %d",
+						ret);
+				}
+			} while (!(sent == sends && recved == sends));
+		}
+
+		for (i = 0; i < sends; i++) {
+			bytes_sent += rx_cqe[i].len;
+			rxe_flags = FI_MSG | FI_RECV;
+			if (bytes_sent > (recv_len - CXIP_EP_MIN_MULTI_RECV))
+				rxe_flags |= FI_MULTI_RECV;
+
+			cr_assert(rx_cqe[i].flags == rxe_flags,
+				  "CQE flags mismatch");
+			cr_assert(from == cxit_ep_fi_addr,
+				  "Invalid source address");
+
+			validate_tx_event(&tx_cqe[i], FI_MSG | FI_SEND, NULL);
+
+			/* Validate sent data */
+			uint8_t *rbuf = rx_cqe[i].buf;
+
+			for (j = 0; j < rx_cqe[i].len; j++) {
+				cr_expect_eq(rbuf[j], send_buf[j],
+					     "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+					     j, send_buf[j], recv_buf[j],
+					     err++);
+			}
+			cr_assert_eq(err, 0, "Data errors seen\n");
+		}
+	}
+
+	free(send_buf);
+	free(recv_buf);
+}

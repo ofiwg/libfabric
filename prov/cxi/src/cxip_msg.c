@@ -377,6 +377,8 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 	struct cxip_req *child_req;
 	uint32_t ev_init;
 	uint32_t ev_rdzv_id;
+	struct cxip_addr caddr;
+	int ret;
 
 	if (event->hdr.event_type == C_EVENT_REPLY) {
 		struct cxi_rdzv_user_ptr *user_ptr;
@@ -404,6 +406,21 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 		ev_rdzv_id = event->tgt_long.rendezvous_id;
 	}
 
+	if ((event->hdr.event_type == C_EVENT_PUT_OVERFLOW ||
+	     event->hdr.event_type == C_EVENT_PUT)  &&
+	    rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
+		ret = _cxip_av_lookup(rxc->ep_obj->av,
+				      CXI_MATCH_ID_EP(rxc->pid_bits, ev_init),
+				      &caddr);
+		if (ret != FI_SUCCESS)
+			CXIP_FATAL("Failed to look up FI addr 0x%x: %d\n",
+				   ev_init, ret);
+
+		ev_init = CXI_MATCH_ID(rxc->pid_bits,
+				       CXI_MATCH_ID_PID(rxc->pid_bits, ev_init),
+				       caddr.nic);
+	}
+
 	*initiator = ev_init;
 	*rdzv_id = ev_rdzv_id;
 
@@ -415,7 +432,7 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 				struct cxip_req, child_req,
 				recv.children) {
 		if (child_req->recv.rdzv_id == ev_rdzv_id &&
-		    child_req->recv.initiator == ev_init) {
+		    child_req->recv.rdzv_initiator == ev_init) {
 			return child_req;
 		}
 	}
@@ -482,7 +499,7 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 
 		/* Store event initiator and rdzv_id for matching. */
 		req->recv.rdzv_id = ev_rdzv_id;
-		req->recv.initiator = ev_init;
+		req->recv.rdzv_initiator = ev_init;
 
 		dlist_insert_tail(&req->recv.children,
 				  &mrecv_req->recv.children);
