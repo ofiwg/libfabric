@@ -481,10 +481,9 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 			return NULL;
 
 		/* Store event initiator and rdzv_id for matching. */
-		if (event->hdr.event_type == C_EVENT_REPLY) {
-			req->recv.rdzv_id = ev_rdzv_id;
-			req->recv.initiator = ev_init;
-		}
+		req->recv.rdzv_id = ev_rdzv_id;
+		req->recv.initiator = ev_init;
+
 		dlist_insert_tail(&req->recv.children,
 				  &mrecv_req->recv.children);
 
