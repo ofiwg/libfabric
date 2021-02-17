@@ -33,6 +33,9 @@ if [ $eth_id -eq -1 ]; then
         exit 1
 fi
 
+AMA=`cat /sys/class/net/eth$eth_id/address | awk -F':' '{print "02:00:" $3 ":" $4 ":" $5 ":" $6}'`
+
+ip link set eth$eth_id addr $AMA
 ip link set dev eth$eth_id up
 
 # Add pycxi utilities to path

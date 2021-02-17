@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <dirent.h>
+#include <glob.h>
 
 #include "ofi_prov.h"
 #include "ofi_osd.h"
@@ -138,7 +139,7 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **iface)
 		return -FI_ENODEV;
 	}
 
-	if (!if_entry->info->link_state) {
+	if (!if_entry->link) {
 		CXIP_INFO("Interface %s link down.\n",
 			  if_entry->info->device_name);
 		return -FI_ENODEV;
@@ -835,6 +836,206 @@ int cxip_cmdq_emit_c_state(struct cxip_cmdq *cmdq,
 }
 
 /*
+ * netdev_ama_check - Return true if the netdev has an AMA installed.
+ */
+static bool netdev_ama_check(char *netdev)
+{
+	int rc;
+	char addr_path[FI_PATH_MAX];
+	FILE *f;
+	int val;
+
+	rc = snprintf(addr_path, FI_PATH_MAX,
+		      "/sys/class/net/%s/addr_assign_type",
+		      netdev);
+	if (rc < 0)
+		return false;
+
+	f = fopen(addr_path, "r");
+	if (!f)
+		return false;
+
+	rc = fscanf(f, "%d", &val);
+
+	fclose(f);
+
+	if (rc != 1)
+		return false;
+
+	/* Check for temporary address */
+	if (val != 3)
+		return false;
+
+	rc = snprintf(addr_path, FI_PATH_MAX, "/sys/class/net/%s/address",
+		      netdev);
+	if (rc < 0)
+		return false;
+
+	f = fopen(addr_path, "r");
+	if (!f)
+		return false;
+
+	rc = fscanf(f, "%x:%*x:%*x:%*x:%*x", &val);
+
+	fclose(f);
+
+	if (rc != 1)
+		return false;
+
+	/* Check for locally administered unicast address */
+	if ((val & 0x3) != 0x2)
+		return false;
+
+	return true;
+}
+
+/*
+ * netdev_link - Return netdev link state.
+ */
+static int netdev_link(char *netdev, int *link)
+{
+	int rc;
+	char path[FI_PATH_MAX];
+	FILE *f;
+	char state[20];
+	int carrier;
+
+	rc = snprintf(path, FI_PATH_MAX, "/sys/class/net/%s/operstate",
+		      netdev);
+	if (rc < 0)
+		return -1;
+
+	f = fopen(path, "r");
+	if (!f)
+		return -1;
+
+	rc = fscanf(f, "%20s", state);
+
+	fclose(f);
+
+	if (!strncmp(state, "up", strlen("up"))) {
+		*link = 1;
+		return 0;
+	}
+
+	if (strncmp(state, "unknown", strlen("unknown"))) {
+		/* State is not not up or unknown, link is down. */
+		*link = 0;
+		return 0;
+	}
+
+	/* operstate is unknown, must check carrier. */
+	rc = snprintf(path, FI_PATH_MAX, "/sys/class/net/%s/carrier",
+		      netdev);
+	if (rc < 0)
+		return -1;
+
+	f = fopen(path, "r");
+	if (!f)
+		return -1;
+
+	rc = fscanf(f, "%d", &carrier);
+
+	fclose(f);
+
+	if (carrier)
+		*link = 1;
+	else
+		*link = 0;
+
+	return 0;
+}
+
+/*
+ * netdev_speed - Return netdev interface speed.
+ */
+static int netdev_speed(char *netdev, int *speed)
+{
+	int rc;
+	char path[FI_PATH_MAX];
+	FILE *f;
+	int val;
+
+	rc = snprintf(path, FI_PATH_MAX, "/sys/class/net/%s/speed",
+		      netdev);
+	if (rc < 0)
+		return -1;
+
+	f = fopen(path, "r");
+	if (!f)
+		return -1;
+
+	rc = fscanf(f, "%u", &val);
+
+	fclose(f);
+
+	if (rc != 1)
+		return -1;
+
+	*speed = val;
+
+	return 0;
+}
+
+/*
+ * netdev_netdev - Look up the netdev associated with an RDMA device file.
+ */
+static int netdev_lookup(struct cxil_devinfo *info, char **netdev)
+{
+	glob_t globbuf;
+	int rc;
+	int count;
+	int i;
+	char if_path[FI_PATH_MAX];
+	char addr_path[FI_PATH_MAX];
+	char *addr;
+	unsigned int dom;
+	unsigned int bus;
+	unsigned int dev;
+	unsigned int func;
+
+	rc = glob("/sys/class/net/*", 0, NULL, &globbuf);
+	if (rc)
+		return -1;
+
+	count = globbuf.gl_pathc;
+
+	for (i = 0; i < count; i++) {
+		rc = snprintf(if_path, FI_PATH_MAX, "%s/device",
+			      globbuf.gl_pathv[i]);
+		if (rc < 0)
+			goto free_glob;
+
+		rc = readlink(if_path, addr_path, FI_PATH_MAX);
+		if (rc < 0)
+			goto free_glob;
+
+		addr = basename(addr_path);
+
+		rc = sscanf(addr, "%x:%x:%x.%x", &dom, &bus, &dev, &func);
+		if (rc != 4)
+			goto free_glob;
+
+		if (info->pci_domain == dom &&
+		    info->pci_bus == bus &&
+		    info->pci_device == dev &&
+		    info->pci_function == func) {
+			*netdev = strdup(basename(globbuf.gl_pathv[i]));
+			if (!*netdev)
+				goto free_glob;
+
+			globfree(&globbuf);
+			return 0;
+		}
+	}
+
+free_glob:
+	globfree(&globbuf);
+
+	return -1;
+}
+
+/*
  * cxip_query_if_list() - Populate static IF data during initialization.
  */
 static void cxip_query_if_list(struct slist *if_list)
@@ -842,6 +1043,9 @@ static void cxip_query_if_list(struct slist *if_list)
 	struct cxip_if *if_entry;
 	int ret;
 	int i;
+	char *netdev;
+	int speed = 0;
+	int link = 0;
 
 	slist_init(if_list);
 
@@ -872,14 +1076,48 @@ static void cxip_query_if_list(struct slist *if_list)
 			continue;
 		}
 
+		ret = netdev_lookup(&cxi_dev_list->info[i], &netdev);
+		if (ret) {
+			CXIP_LOG("CXI netdev not found for device: %s\n",
+				 cxi_dev_list->info[i].device_name);
+			netdev = strdup("DNE");
+		} else {
+			ret = netdev_link(netdev, &link);
+			if (ret)
+				CXIP_WARN("Failed to read netdev link: %s\n",
+					  netdev);
+
+			ret = netdev_speed(netdev, &speed);
+			if (ret)
+				CXIP_WARN("Failed to read netdev speed: %s\n",
+					  netdev);
+
+			CXIP_DBG("Device %s has netdev %s (link: %u speed: %u)\n",
+				 cxi_dev_list->info[i].device_name,
+				 netdev, link, speed);
+		}
+
+		if (!getenv("CXIP_SKIP_AMA_CHECK") &&
+		    !netdev_ama_check(netdev)) {
+			CXIP_LOG("CXI device %s, netdev %s AMA not recognized\n",
+				 cxi_dev_list->info[i].device_name,
+				 netdev);
+			free(netdev);
+			continue;
+		}
+
+		free(netdev);
+
 		if_entry = calloc(1, sizeof(struct cxip_if));
 		if_entry->info = &cxi_dev_list->info[i];
+		if_entry->link = link;
+		if_entry->speed = speed;
+
 		ofi_atomic_initialize32(&if_entry->ref, 0);
 		dlist_init(&if_entry->ptes);
 		fastlock_init(&if_entry->lock);
 		slist_insert_tail(&if_entry->if_entry, if_list);
 	}
-
 }
 
 /*

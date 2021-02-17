@@ -358,6 +358,8 @@ struct cxip_if {
 
 	/* Device description */
 	struct cxil_devinfo *info;
+	int speed;
+	int link;
 	struct cxil_dev *dev;
 
 	/* PtlTEs (searched during state change events) */
