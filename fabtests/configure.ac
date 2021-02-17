@@ -1,6 +1,6 @@
 dnl
 dnl Copyright (c) 2016-2017 Cisco Systems, Inc.  All rights reserved.
-dnl Copyright (c) 2018-2020 Intel Corporation, Inc.  All rights reserved.
+dnl Copyright (c) 2018-2021 Intel Corporation, Inc.  All rights reserved.
 dnl
 dnl Process this file with autoconf to produce a configure script.
 
@@ -50,6 +50,16 @@ AC_ARG_ENABLE([debug],
 
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG], [$dbg],
 	[defined to 1 if configured with --enable-debug])
+
+AC_ARG_ENABLE([asan],
+	      [AS_HELP_STRING([--enable-asan],
+			      [Enable address sanitizer @<:@default=no@:>@])
+	      ],
+	      [],
+	      [enable_asan=no])
+
+AS_IF([test x"$enable_asan" != x"no"],
+      [CFLAGS="-fsanitize=address $CFLAGS"])
 
 dnl Fix autoconf's habit of adding -g -O2 by default
 AS_IF([test -z "$CFLAGS"],
