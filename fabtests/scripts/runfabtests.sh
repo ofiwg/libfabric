@@ -129,8 +129,6 @@ functional_tests=(
 	"fi_recv_cancel -e rdm -V"
 	"fi_unexpected_msg -e msg -i 10"
 	"fi_unexpected_msg -e rdm -i 10"
-	"fi_unexpected_msg -e msg -S -i 10"
-	"fi_unexpected_msg -e rdm -S -i 10"
 	"fi_inj_complete -e msg"
 	"fi_inj_complete -e rdm"
 	"fi_inj_complete -e dgram"
