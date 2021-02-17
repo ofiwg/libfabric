@@ -1,6 +1,6 @@
 dnl
 dnl Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
-dnl Copyright (c) 2019 Intel, Inc.  All rights reserved.
+dnl Copyright (c) 2019-2021 Intel, Inc.  All rights reserved.
 dnl Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
 dnl (C) Copyright 2020 Hewlett Packard Enterprise Development LP
 dnl
@@ -131,6 +131,16 @@ AS_IF([test x"$enable_debug" != x"no"],
 
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
                    [defined to 1 if libfabric was configured with --enable-debug, 0 otherwise])
+
+AC_ARG_ENABLE([asan],
+	      [AS_HELP_STRING([--enable-asan],
+			      [Enable address sanitizer @<:@default=no@:>@])
+	      ],
+	      [],
+	      [enable_asan=no])
+
+AS_IF([test x"$enable_asan" != x"no"],
+      [CFLAGS="-fsanitize=address $CFLAGS"])
 
 dnl Checks for header files.
 AC_HEADER_STDC
