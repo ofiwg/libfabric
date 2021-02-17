@@ -91,20 +91,19 @@ void hfi_dwordcpy(volatile uint32_t *dest, const uint32_t *src, uint32_t ndwords
 		dest = (volatile uint32_t *) dst64[0];
 
 		switch (ndw) {
-		case 7:
-			*dest++ = *src++;
-		case 6:
-			*dest++ = *src++;
-		case 5:
-			*dest++ = *src++;
-		case 4:
-			*dest++ = *src++;
-		case 3:
-			*dest++ = *src++;
-		case 2:
-			*dest++ = *src++;
-		case 1:
-			*dest++ = *src++;
+		case 7: *dest++ = *src++;
+		/* fall through */
+		case 6: *dest++ = *src++;
+		/* fall through */
+		case 5: *dest++ = *src++;
+		/* fall through */
+		case 4: *dest++ = *src++;
+		/* fall through */
+		case 3: *dest++ = *src++;
+		/* fall through */
+		case 2:	*dest++ = *src++;
+		/* fall through */
+		case 1: *dest++ = *src++;
 		}
 
 	}
@@ -149,20 +148,19 @@ void hfi_qwordcpy(volatile uint64_t *dest, const uint64_t *src, uint32_t nqwords
 	}
 	if (nqw) {
 		switch (nqw) {
-		case 7:
-			*(dst64[0])++ = *(src64[0])++;
-		case 6:
-			*(dst64[0])++ = *(src64[0])++;
-		case 5:
-			*(dst64[0])++ = *(src64[0])++;
-		case 4:
-			*(dst64[0])++ = *(src64[0])++;
-		case 3:
-			*(dst64[0])++ = *(src64[0])++;
-		case 2:
-			*(dst64[0])++ = *(src64[0])++;
-		case 1:
-			*(dst64[0])++ = *(src64[0])++;
+		case 7: *(dst64[0])++ = *(src64[0])++;
+		/* fall through */
+		case 6: *(dst64[0])++ = *(src64[0])++;
+		/* fall through */
+		case 5: *(dst64[0])++ = *(src64[0])++;
+		/* fall through */
+		case 4: *(dst64[0])++ = *(src64[0])++;
+		/* fall through */
+		case 3: *(dst64[0])++ = *(src64[0])++;
+		/* fall through */
+		case 2: *(dst64[0])++ = *(src64[0])++;
+		/* fall through */
+		case 1: *(dst64[0])++ = *(src64[0])++;
 		}
 	}
 }

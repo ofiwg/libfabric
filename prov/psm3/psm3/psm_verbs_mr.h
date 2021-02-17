@@ -68,7 +68,7 @@
 #define MR_CACHE_MODE_KERNEL 1	// kernel MR cache in rendezvous module
 #define MR_CACHE_MODE_USER 2	// user space MR cache (demo quality only)
 #define MR_CACHE_MODE_RV 3	// kernel MRs for kernel rendezvous module QPs
-#define MR_CACHE_MODE_VALID(mode) ((mode) >= 0 && (mode) <= 3)
+#define MR_CACHE_MODE_VALID(mode) ((unsigned)(mode) <= 3)
 
 // This performs memory registration for RDMA Rendezvous when PSM3_RDMA enabled
 // Priority registration calls ere those immediately before the data transfer

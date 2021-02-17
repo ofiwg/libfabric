@@ -1886,6 +1886,7 @@ void process_packet(ptl_t *ptl_gen, am_pkt_short_t *pkt, int isreq)
 		switch (pkt->type) {
 		case AMFMT_LONG_END:
 			isend = 1;
+		/* fall through */
 		case AMFMT_LONG:
 		case AMFMT_SHORT:
 			if (isreq) {
