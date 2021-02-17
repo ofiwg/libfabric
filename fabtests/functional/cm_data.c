@@ -448,6 +448,7 @@ err1:
 	ft_sock_shutdown(sock);
 err2:
 	free(entry);
+	free(cm_data);
 	return ret;
 }
 
@@ -456,7 +457,7 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.options |= FT_OPT_SIZE | FT_OPT_SKIP_REG_MR;
+	opts.options |= FT_OPT_SIZE | FT_OPT_SKIP_REG_MR | FT_OPT_SKIP_MSG_ALLOC;
 
 	hints = fi_allocinfo();
 	if (!hints)
