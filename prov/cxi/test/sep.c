@@ -1210,4 +1210,6 @@ Test(sep, msg_multi_recv_ooo)
 
 	free(send_buf);
 	free(recv_buf);
+
+	cxit_teardown_sep();
 }
