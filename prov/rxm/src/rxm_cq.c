@@ -198,7 +198,7 @@ static void rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 	}
 
 release:
-	rxm_recv_entry_release(recv_entry->recv_queue, recv_entry);
+	rxm_recv_entry_release(recv_entry);
 free_buf:
 	rxm_rx_buf_free(rx_buf);
 }
@@ -683,8 +683,7 @@ void rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 		ofi_coll_handle_xfer_comp(rx_buf->pkt.hdr.tag,
 				rx_buf->recv_entry->context);
 		rxm_rx_buf_free(rx_buf);
-		rxm_recv_entry_release(rx_buf->recv_entry->recv_queue,
-				rx_buf->recv_entry);
+		rxm_recv_entry_release(rx_buf->recv_entry);
 	} else {
 		rxm_finish_recv(rx_buf, done_len);
 	}
