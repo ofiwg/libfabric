@@ -129,8 +129,8 @@ static fi_addr_t recv_req_src_addr(struct cxip_req *req)
 		uint32_t pid;
 
 		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC)
-			return CXI_MATCH_ID(rxc->pid_bits, 0,
-					    req->recv.initiator);
+			return CXI_MATCH_ID_EP(rxc->pid_bits,
+					       req->recv.initiator);
 
 		nic = CXI_MATCH_ID_EP(rxc->pid_bits, req->recv.initiator);
 		pid = CXI_MATCH_ID_PID(rxc->pid_bits, req->recv.initiator);
@@ -314,13 +314,7 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 	 */
 	if (event->hdr.event_type != C_EVENT_RENDEZVOUS) {
 		req->tag = mb.tag;
-		if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
-			/* Take PID out of logical address. */
-			req->recv.initiator = CXI_MATCH_ID_EP(rxc->pid_bits,
-							      init);
-		} else {
-			req->recv.initiator = init;
-		}
+		req->recv.initiator = init;
 	}
 
 	/* remote_offset is not provided in Overflow events. */
@@ -776,19 +770,21 @@ static void cxip_recv_req_set_rget_info(struct cxip_req *req)
 		RXC_DBG(rxc, "Translating initiator: %x, req: %p\n",
 			req->recv.initiator, req);
 
-		ret = _cxip_av_lookup(rxc->ep_obj->av, req->recv.initiator,
+		ret = _cxip_av_lookup(rxc->ep_obj->av,
+				      CXI_MATCH_ID_EP(rxc->pid_bits,
+						      req->recv.initiator),
 				      &caddr);
 		if (ret != FI_SUCCESS)
 			RXC_FATAL(rxc, "Failed to look up FI addr: %d\n", ret);
 
 		req->recv.rget_nic = caddr.nic;
-		req->recv.rget_pid = caddr.pid;
 	} else {
 		req->recv.rget_nic = CXI_MATCH_ID_EP(rxc->pid_bits,
 						     req->recv.initiator);
-		req->recv.rget_pid = CXI_MATCH_ID_PID(rxc->pid_bits,
-						      req->recv.initiator);
 	}
+
+	req->recv.rget_pid = CXI_MATCH_ID_PID(rxc->pid_bits,
+					      req->recv.initiator);
 }
 
 /*
