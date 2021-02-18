@@ -183,12 +183,11 @@ ips_shortcpy(void *vdest, const void *vsrc, uint32_t nchars))
 	dest += (nchars >> 2) << 2;
 	src += (nchars >> 2) << 2;
 	switch (nchars & 0x03) {
-	case 3:
-		*dest++ = *src++;
-	case 2:
-		*dest++ = *src++;
-	case 1:
-		*dest++ = *src++;
+	case 3: *dest++ = *src++;
+	/* fall through */
+	case 2: *dest++ = *src++;
+	/* fall through */
+	case 1: *dest++ = *src++;
 	}
 	return;
 }
@@ -206,12 +205,11 @@ ips_shortcpy_host_mem(void *vdest, const void *vsrc, uint32_t nchars))
 	dest += (nchars >> 2) << 2;
 	src += (nchars >> 2) << 2;
 	switch (nchars & 0x03) {
-	case 3:
-		*dest++ = *src++;
-	case 2:
-		*dest++ = *src++;
-	case 1:
-		*dest++ = *src++;
+	case 3: *dest++ = *src++;
+	/* fall through */
+	case 2: *dest++ = *src++;
+	/* fall through */
+	case 1: *dest++ = *src++;
 	}
 	return;
 }

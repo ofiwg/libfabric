@@ -71,7 +71,7 @@ ifelse('
 			[AC_LANG_PROGRAM(
 				[#include <nmmintrin.h>],
 				[unsigned int crc = 0;
-   				 crc = _mm_crc32_u32(crc, 0);
+				 crc = _mm_crc32_u32(crc, 0);
 				 return crc == 0;])
 			],[
 				AC_MSG_RESULT([yes])
@@ -131,9 +131,11 @@ ifelse('
 				      [psm3_CPPFLAGS="$psm3_CPPFLAGS -URNDV_MOD_MR"])
 			      ])
 		      ])
-		AC_CONFIG_FILES([prov/psm3/psm3/psm2_hal_inlines_i.h \
+		AS_IF([test $psm3_happy -eq 1], [
+			AC_CONFIG_FILES([prov/psm3/psm3/psm2_hal_inlines_i.h \
 		                 prov/psm3/psm3/psm2_hal_inlines_d.h \
 		                 prov/psm3/src/psm3_revision.c])
+		])
 	       ],[psm3_happy=0])
 
 	 AS_IF([test $psm3_happy -eq 1], [$1], [$2])

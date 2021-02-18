@@ -615,6 +615,7 @@ static int psmi_parse_val_pattern(const char *env, int def, int def_syntax)
 					))
 					ret = def;
 		}
+		psmi_free(e);
 	}
 done:
 	return ret;

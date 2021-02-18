@@ -684,7 +684,7 @@ psm2_error_t __psm2_ep_verbs_post_recv(
 	if (pool->recv_buffer_size) {
 		uint32_t index = recv_buffer_index(pool, rbuf_to_buffer(buf));
 		// make sure its a buffer in our pool
-		psmi_assert_always(index >= 0 && index < pool->recv_total);
+		psmi_assert_always(index < pool->recv_total);
 		// assert on index covers these 2 asserts
 		//psmi_assert_always(rbuf_to_buffer(buf) >= pool->recv_buffers);
 		//psmi_assert_always(rbuf_to_buffer(buf) <= pool->recv_buffers +
@@ -1765,10 +1765,6 @@ struct ibv_qp* rc_qp_create(psm2_ep_t ep, void *context, struct ibv_qp_cap *cap)
 				attr.cap.max_recv_wr, HFI_TF_NFLOWS+1);
 		} else {
 			_HFI_UDDBG("RQ WQEs: %u\n", attr.cap.max_recv_wr);
-		}
-		if (0 > attr.cap.max_recv_sge) {
-			_HFI_UDDBG( "Limited to %d RQ SGEs\n",
-				attr.cap.max_recv_sge);
 		}
 	}
 

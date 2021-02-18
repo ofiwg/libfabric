@@ -313,10 +313,10 @@ mq_copy_tiny(uint32_t *dest, uint32_t *src, uint8_t len))
 	}
 #endif
 	switch (len) {
-	case 8:
-		*dest++ = *src++;
-	case 4:
-		*dest++ = *src++;
+	case 8: *dest++ = *src++;
+	/* fall through */
+	case 4: *dest++ = *src++;
+	/* fall through */
 	case 0:
 		return;
 	case 7:
@@ -324,6 +324,7 @@ mq_copy_tiny(uint32_t *dest, uint32_t *src, uint8_t len))
 	case 5:
 		*dest++ = *src++;
 		len -= 4;
+	/* fall through */
 	case 3:
 	case 2:
 	case 1:
@@ -335,12 +336,11 @@ mq_copy_tiny(uint32_t *dest, uint32_t *src, uint8_t len))
 	uint8_t *dest1 = (uint8_t *) dest;
 	uint8_t *src1 = (uint8_t *) src;
 	switch (len) {
-	case 3:
-		*dest1++ = *src1++;
-	case 2:
-		*dest1++ = *src1++;
-	case 1:
-		*dest1++ = *src1++;
+	case 3: *dest1++ = *src1++;
+	/* fall through */
+	case 2: *dest1++ = *src1++;
+	/* fall through */
+	case 1: *dest1++ = *src1++;
 	}
 }
 
@@ -352,10 +352,10 @@ void
 mq_copy_tiny_host_mem(uint32_t *dest, uint32_t *src, uint8_t len))
 {
 	switch (len) {
-	case 8:
-		*dest++ = *src++;
-	case 4:
-		*dest++ = *src++;
+	case 8: *dest++ = *src++;
+	/* fall through */
+	case 4: *dest++ = *src++;
+	/* fall through */
 	case 0:
 		return;
 	case 7:
@@ -363,6 +363,7 @@ mq_copy_tiny_host_mem(uint32_t *dest, uint32_t *src, uint8_t len))
 	case 5:
 		*dest++ = *src++;
 		len -= 4;
+	/* fall through */
 	case 3:
 	case 2:
 	case 1:
@@ -374,12 +375,11 @@ mq_copy_tiny_host_mem(uint32_t *dest, uint32_t *src, uint8_t len))
 	uint8_t *dest1 = (uint8_t *) dest;
 	uint8_t *src1 = (uint8_t *) src;
 	switch (len) {
-	case 3:
-		*dest1++ = *src1++;
-	case 2:
-		*dest1++ = *src1++;
-	case 1:
-		*dest1++ = *src1++;
+	case 3: *dest1++ = *src1++;
+	/* fall through */
+	case 2: *dest1++ = *src1++;
+	/* fall through */
+	case 1: *dest1++ = *src1++;
 	}
 }
 #endif
