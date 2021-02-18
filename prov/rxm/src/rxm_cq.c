@@ -1803,7 +1803,7 @@ static int rxm_post_recv(struct rxm_rx_buf *rx_buf)
 	domain = container_of(rx_buf->ep->util_ep.domain,
 			      struct rxm_domain, util_domain);
 	ret = (int) fi_recv(rx_buf->rx_ep, &rx_buf->pkt,
-			    domain->rx_buf_post_size, rx_buf->hdr.desc,
+			    domain->rx_post_size, rx_buf->hdr.desc,
 			    FI_ADDR_UNSPEC, rx_buf);
 	if (!ret)
 		return 0;

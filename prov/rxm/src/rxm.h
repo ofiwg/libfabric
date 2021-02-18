@@ -64,10 +64,9 @@
 #define RXM_OP_VERSION		3
 #define RXM_CTRL_VERSION	4
 
-#define RXM_BUF_SIZE	16384
 extern size_t rxm_eager_limit;
+extern size_t rxm_buffer_size;
 
-#define RXM_SAR_LIMIT	131072
 #define RXM_SAR_TX_ERROR	UINT64_MAX
 #define RXM_SAR_RX_INIT		UINT64_MAX
 
@@ -280,7 +279,7 @@ struct rxm_domain {
 	struct util_domain util_domain;
 	struct fid_domain *msg_domain;
 	size_t max_atomic_size;
-	size_t rx_buf_post_size;
+	size_t rx_post_size;
 	uint64_t mr_key;
 	bool dyn_rbuf;
 	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
@@ -746,7 +745,6 @@ struct rxm_ep {
 	size_t			buffered_min;
 	size_t			buffered_limit;
 	size_t			inject_limit;
-	size_t			eager_limit;
 	size_t			sar_limit;
 
 	struct rxm_buf_pool	*buf_pools;
@@ -833,11 +831,11 @@ void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 			      const struct iovec *iov, size_t count,
 			      struct fid_mr **mr);
 
+
 static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 {
-	size_t overhead = sizeof(struct rxm_atomic_hdr) +
-			  sizeof(struct rxm_pkt);
-	return rxm_eager_limit > overhead ? rxm_eager_limit - overhead : 0;
+	assert(rxm_eager_limit >= sizeof(struct rxm_atomic_hdr));
+	return rxm_eager_limit - sizeof(struct rxm_atomic_hdr);
 }
 
 static inline ssize_t

@@ -50,8 +50,9 @@
 
 size_t rxm_msg_tx_size		= 128;
 size_t rxm_msg_rx_size		= 128;
-size_t rxm_eager_limit		= RXM_BUF_SIZE - sizeof(struct rxm_pkt);
-size_t rxm_rx_buf_post_size	= RXM_BUF_SIZE;
+size_t rxm_eager_limit		= 16384;
+size_t rxm_buffer_size		= 16384 + sizeof(struct rxm_pkt);
+
 int force_auto_progress		= 0;
 int rxm_use_write_rndv		= 0;
 enum fi_wait_obj def_wait_obj = FI_WAIT_FD, def_tcp_wait_obj = FI_WAIT_UNSPEC;
@@ -240,20 +241,26 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 static void rxm_init_infos(void)
 {
 	struct fi_info *cur;
-	size_t buf_size, tx_size = 0, rx_size = 0;
+	size_t eager_size, tx_size = 0, rx_size = 0;
 
-	if (!fi_param_get_size_t(&rxm_prov, "buffer_size", &buf_size)) {
-		if (buf_size <
-		    sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr)) {
+	/* Historically, 'buffer_size' was the name given for the eager message
+	 * size.  Maintain the name for backwards compatability.
+	 */
+	if (!fi_param_get_size_t(&rxm_prov, "buffer_size", &eager_size)) {
+		/* We need enough space to carry extra headers */
+		if (eager_size < sizeof(struct rxm_rndv_hdr) ||
+		    eager_size < sizeof(struct rxm_atomic_hdr)) {
 			FI_WARN(&rxm_prov, FI_LOG_CORE,
 				"Requested buffer size too small\n");
-			buf_size = sizeof(struct rxm_pkt) +
-				   sizeof(struct rxm_rndv_hdr);
+			eager_size = MAX(sizeof(struct rxm_rndv_hdr),
+					 sizeof(struct rxm_atomic_hdr));
 		}
 
-		rxm_eager_limit = buf_size - sizeof(struct rxm_pkt);
-		if (rxm_eager_limit > UINT32_MAX)
-			rxm_eager_limit = UINT32_MAX;
+		rxm_eager_limit = eager_size;
+		if (rxm_eager_limit > INT32_MAX)
+			rxm_eager_limit = INT32_MAX;
+
+		rxm_buffer_size = rxm_eager_limit + sizeof(struct rxm_pkt);
 	}
 
 	fi_param_get_size_t(&rxm_prov, "tx_size", &tx_size);

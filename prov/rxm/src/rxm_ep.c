@@ -1555,10 +1555,7 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				rxm_ep_do_progress(&rxm_ep->util_ep);
 			ofi_buf_free(eager_buf);
 		}
-	} else if (data_len <= rxm_ep->sar_limit &&
-		   /* SAR uses eager_limit as segment size */
-		   (rxm_eager_limit <
-		    (1ULL << (8 * sizeof_field(struct ofi_ctrl_hdr, seg_size))))) {
+	} else if (data_len <= rxm_ep->sar_limit) {
 		ret = rxm_ep_sar_tx_send(rxm_ep, rxm_conn, context,
 					 count, iov, data_len,
 					 rxm_ep_sar_calc_segs_cnt(rxm_ep, data_len),
@@ -2589,36 +2586,36 @@ static void rxm_ep_sar_init(struct rxm_ep *rxm_ep)
 	struct rxm_domain *domain;
 	size_t param;
 
+	/* SAR segment size is capped at 64k. */
+	if (rxm_eager_limit > UINT16_MAX)
+		goto disable_sar;
+
 	domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
 			      util_domain);
 	if (domain->dyn_rbuf) {
 		FI_INFO(&rxm_prov, FI_LOG_CORE, "Dynamic receive buffer "
 			"enabled, disabling SAR protocol\n");
-		rxm_ep->sar_limit = rxm_eager_limit;
-		return;
+		goto disable_sar;
 	}
 
 	if (!fi_param_get_size_t(&rxm_prov, "sar_limit", &param)) {
 		if (param <= rxm_eager_limit) {
 			FI_WARN(&rxm_prov, FI_LOG_CORE,
-				"Requsted SAR limit (%zd) less or equal "
-				"Eager limit (%zd). SAR limit won't be used. "
-				"Messages of size <= SAR limit would be "
-				"transmitted via Inject/Eager protocol. "
-				"Messages of size > SAR limit would be "
-				"transmitted via Rendezvous protocol\n",
+				"Requested SAR limit (%zd) less or equal to "
+				"eager limit (%zd) - disabling.",
 				param, rxm_eager_limit);
-			param = rxm_eager_limit;
+			goto disable_sar;
 		}
 
 		rxm_ep->sar_limit = param;
 	} else {
-		size_t sar_limit = rxm_ep->msg_info->tx_attr->size *
-				   rxm_eager_limit;
-
-		rxm_ep->sar_limit = (sar_limit > RXM_SAR_LIMIT) ?
-				    RXM_SAR_LIMIT : sar_limit;
+		rxm_ep->sar_limit = rxm_eager_limit * 8;
 	}
+
+	return;
+
+disable_sar:
+	rxm_ep->sar_limit = rxm_eager_limit;
 }
 
 static void rxm_config_direct_send(struct rxm_ep *ep)
@@ -2656,8 +2653,8 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
 	if (rxm_ep->inject_limit >
 	    (sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr)))
 		rxm_ep->buffered_min = MIN((rxm_ep->inject_limit -
-					(sizeof(struct rxm_pkt) +
-					 sizeof(struct rxm_rndv_hdr))),
+					    (sizeof(struct rxm_pkt) +
+					     sizeof(struct rxm_rndv_hdr))),
 					   rxm_eager_limit);
 
 	assert(!rxm_ep->min_multi_recv_size);

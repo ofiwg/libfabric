@@ -506,7 +506,7 @@ static void rxm_config_dyn_rbuf(struct rxm_domain *domain, struct fi_info *info,
 	domain->dyn_rbuf = (ret == FI_SUCCESS);
 
 	if (domain->dyn_rbuf) {
-		domain->rx_buf_post_size = sizeof(struct rxm_pkt);
+		domain->rx_post_size = sizeof(struct rxm_pkt);
 	}
 }
 
@@ -546,7 +546,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	rxm_domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
 
 	rxm_domain->max_atomic_size = rxm_ep_max_atomic_size(info);
-	rxm_domain->rx_buf_post_size = sizeof(struct rxm_pkt) + rxm_eager_limit;
+	rxm_domain->rx_post_size = rxm_buffer_size;
 
 	*domain = &rxm_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &rxm_domain_fi_ops;
