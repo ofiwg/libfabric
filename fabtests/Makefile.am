@@ -93,6 +93,9 @@ nobase_dist_config_DATA = \
 	test_configs/psm2/all.test \
 	test_configs/psm2/verify.test \
 	test_configs/psm2/psm2.exclude \
+	test_configs/psm3/all.test \
+	test_configs/psm3/verify.test \
+	test_configs/psm3/psm3.exclude \
 	test_configs/ofi_rxm/tcp.test \
 	test_configs/ofi_rxm/verbs.test \
 	test_configs/ofi_rxm/ofi_rxm.exclude \
