@@ -330,9 +330,7 @@ struct ofi_bufpool_region {
 	void 				*context;
 	struct ofi_bufpool 		*pool;
 	int				flags;
-#ifndef NDEBUG
-	size_t 				use_cnt;
-#endif
+	OFI_DBG_VAR(size_t,		use_cnt)
 };
 
 struct ofi_bufpool_hdr {

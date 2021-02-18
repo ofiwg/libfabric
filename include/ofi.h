@@ -133,8 +133,6 @@ static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
 #define ofi_val64_inrange(start, length, value) \
     ofi_val64_ge(value, start) && ofi_val64_lt(value, start + length)
 
-#define OFI_MAGIC_64 (0x0F1C0DE0F1C0DE64)
-
 #ifndef BIT
 #define BIT(nr) (1UL << (nr))
 #endif
