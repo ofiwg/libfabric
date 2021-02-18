@@ -114,6 +114,12 @@ retry:
 		buf_hdr = ofi_buf_hdr(buf);
 		buf_hdr->region = buf_region;
 		buf_hdr->index = pool->entry_cnt + i;
+		OFI_DBG_SET(buf_hdr->magic, OFI_MAGIC_SIZE_T);
+		OFI_DBG_SET(buf_hdr->ftr,
+			    (struct ofi_bufpool_ftr *) ((char *) buf +
+			    pool->entry_size - sizeof(struct ofi_bufpool_ftr)));
+		OFI_DBG_SET(buf_hdr->ftr->magic, OFI_MAGIC_SIZE_T);
+
 		if (pool->attr.init_fn) {
 			OFI_DBG_SET(buf_hdr->entry.dlist.next, OFI_MAGIC_PTR);
 			OFI_DBG_SET(buf_hdr->entry.dlist.prev, OFI_MAGIC_PTR);
@@ -163,6 +169,7 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 	pool->attr = *attr;
 
 	entry_sz = (attr->size + sizeof(struct ofi_bufpool_hdr));
+	OFI_DBG_ADD(entry_sz, sizeof(struct ofi_bufpool_ftr));
 	pool->entry_size = ofi_get_aligned_size(entry_sz, attr->alignment);
 
 	if (!attr->chunk_cnt) {
