@@ -1006,9 +1006,10 @@ static int netdev_lookup(struct cxil_devinfo *info, char **netdev)
 		if (rc < 0)
 			goto free_glob;
 
-		rc = readlink(if_path, addr_path, FI_PATH_MAX);
+		rc = readlink(if_path, addr_path, FI_PATH_MAX-1);
 		if (rc < 0)
 			goto free_glob;
+		addr_path[rc] = '\0';
 
 		addr = basename(addr_path);
 
