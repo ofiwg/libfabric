@@ -444,6 +444,22 @@ static void rxm_ep_txrx_pool_destroy(struct rxm_ep *rxm_ep)
 	free(rxm_ep->buf_pools);
 }
 
+static int rxm_multi_recv_pool_init(struct rxm_ep *rxm_ep)
+{
+	struct ofi_bufpool_attr attr = {
+		.size		= sizeof(struct rxm_recv_entry),
+		.alignment	= 16,
+		.max_cnt	= 0,
+		.chunk_cnt	= 16,
+		.alloc_fn	= NULL,
+		.init_fn	= NULL,
+		.context	= rxm_ep,
+		.flags		= OFI_BUFPOOL_NO_TRACK,
+	};
+
+	return ofi_bufpool_create_attr(&attr, &rxm_ep->multi_recv_pool);
+}
+
 static int rxm_ep_rx_queue_init(struct rxm_ep *rxm_ep)
 {
 	int ret;
@@ -460,8 +476,14 @@ static int rxm_ep_rx_queue_init(struct rxm_ep *rxm_ep)
 	if (ret)
 		goto err_recv_tag;
 
+	ret = rxm_multi_recv_pool_init(rxm_ep);
+	if (ret)
+		goto err_multi;
+
 	return FI_SUCCESS;
 
+err_multi:
+	rxm_recv_queue_close(&rxm_ep->trecv_queue);
 err_recv_tag:
 	rxm_recv_queue_close(&rxm_ep->recv_queue);
 	return ret;
@@ -478,6 +500,8 @@ static void rxm_ep_rx_queue_close(struct rxm_ep *rxm_ep)
 static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
 {
 	rxm_ep_rx_queue_close(rxm_ep);
+	if (rxm_ep->multi_recv_pool)
+		ofi_bufpool_destroy(rxm_ep->multi_recv_pool);
 	if (rxm_ep->buf_pools)
 		rxm_ep_txrx_pool_destroy(rxm_ep);
 }
@@ -556,7 +580,7 @@ static bool rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 	err_entry.tag = recv_entry->tag;
 	err_entry.err = FI_ECANCELED;
 	err_entry.prov_errno = -FI_ECANCELED;
-	rxm_recv_entry_release(recv_queue, recv_entry);
+	rxm_recv_entry_release(recv_entry);
 	ret = ofi_cq_write_error(rxm_ep->util_ep.rx_cq, &err_entry);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Error writing to CQ\n");
@@ -806,21 +830,15 @@ rxm_ep_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 		     rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
 }
 
-static struct rxm_recv_entry *
-rxm_recv_entry_get(struct rxm_ep *rxm_ep, const struct iovec *iov,
-		   void **desc, size_t count, fi_addr_t src_addr,
-		   uint64_t tag, uint64_t ignore, void *context,
-		   uint64_t flags, struct rxm_recv_queue *recv_queue)
+static void rxm_recv_entry_init_common(struct rxm_recv_entry *recv_entry,
+		const struct iovec *iov, void **desc, size_t count,
+		fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
+		void *context, uint64_t flags,
+		struct rxm_recv_queue *recv_queue)
 {
-	struct rxm_recv_entry *recv_entry;
 	size_t i;
 
-	if (ofi_freestack_isempty(recv_queue->fs))
-		return NULL;
-
-	recv_entry = ofi_freestack_pop(recv_queue->fs);
 	assert(!recv_entry->rndv.tx_buf);
-
 	recv_entry->rxm_iov.count = (uint8_t) count;
 	recv_entry->addr = src_addr;
 	recv_entry->context = context;
@@ -828,13 +846,53 @@ rxm_recv_entry_get(struct rxm_ep *rxm_ep, const struct iovec *iov,
 	recv_entry->ignore = ignore;
 	recv_entry->tag = tag;
 
+	recv_entry->sar.msg_id = RXM_SAR_RX_INIT;
+	recv_entry->sar.total_recv_len = 0;
+	recv_entry->total_len = 0;
+
 	for (i = 0; i < count; i++) {
 		recv_entry->rxm_iov.iov[i] = iov[i];
 		recv_entry->total_len += iov[i].iov_len;
-		if (desc)
+		if (desc && desc[i])
 			recv_entry->rxm_iov.desc[i] = desc[i];
+		else
+			recv_entry->rxm_iov.desc[i] = NULL;
 	}
+}
 
+static struct rxm_recv_entry *
+rxm_recv_entry_get(struct rxm_ep *rxm_ep, const struct iovec *iov,
+		   void **desc, size_t count, fi_addr_t src_addr,
+		   uint64_t tag, uint64_t ignore, void *context,
+		   uint64_t flags, struct rxm_recv_queue *recv_queue)
+{
+	struct rxm_recv_entry *recv_entry;
+
+	if (ofi_freestack_isempty(recv_queue->fs))
+		return NULL;
+
+	recv_entry = ofi_freestack_pop(recv_queue->fs);
+
+	rxm_recv_entry_init_common(recv_entry, iov, desc, count, src_addr, tag,
+			    ignore, context, flags, recv_queue);
+
+	return recv_entry;
+}
+
+struct rxm_recv_entry *
+rxm_multi_recv_entry_get(struct rxm_ep *rxm_ep, const struct iovec *iov,
+		   void **desc, size_t count, fi_addr_t src_addr,
+		   uint64_t tag, uint64_t ignore, void *context,
+		   uint64_t flags)
+{
+	struct rxm_recv_entry *recv_entry;
+
+	recv_entry = ofi_buf_alloc(rxm_ep->multi_recv_pool);
+
+	rxm_recv_entry_init_common(recv_entry, iov, desc, count, src_addr, tag,
+			    ignore, context, flags, NULL);
+
+	recv_entry->comp_flags = FI_MSG | FI_RECV;
 	return recv_entry;
 }
 

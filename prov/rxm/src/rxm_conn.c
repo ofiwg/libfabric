@@ -964,8 +964,7 @@ static int rxm_conn_reprocess_directed_recvs(struct rxm_recv_queue *recv_queue)
 			rxm_rx_buf_free(rx_buf);
 
 			if (!(rx_buf->recv_entry->flags & FI_MULTI_RECV))
-				rxm_recv_entry_release(recv_queue,
-						       rx_buf->recv_entry);
+				rxm_recv_entry_release(rx_buf->recv_entry);
 		}
 		count++;
 	}

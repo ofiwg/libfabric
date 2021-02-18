@@ -755,6 +755,7 @@ struct rxm_ep {
 
 	struct rxm_recv_queue	recv_queue;
 	struct rxm_recv_queue	trecv_queue;
+	struct ofi_bufpool	*multi_recv_pool;
 
 	struct rxm_eager_ops	*eager_ops;
 	struct rxm_rndv_ops	*rndv_ops;
@@ -993,10 +994,12 @@ rxm_rx_buf_free(struct rxm_rx_buf *rx_buf)
 }
 
 static inline void
-rxm_recv_entry_release(struct rxm_recv_queue *queue, struct rxm_recv_entry *entry)
+rxm_recv_entry_release(struct rxm_recv_entry *entry)
 {
-	entry->total_len = 0;
-	ofi_freestack_push(queue->fs, entry);
+	if (entry->recv_queue)
+		ofi_freestack_push(entry->recv_queue->fs, entry);
+	else
+		ofi_buf_free(entry);
 }
 
 static inline void
@@ -1016,4 +1019,9 @@ rxm_cq_write_recv_comp(struct rxm_rx_buf *rx_buf, void *context, uint64_t flags,
 
 struct rxm_mr *rxm_mr_get_map_entry(struct rxm_domain *domain, uint64_t key);
 
+struct rxm_recv_entry *
+rxm_multi_recv_entry_get(struct rxm_ep *rxm_ep, const struct iovec *iov,
+		   void **desc, size_t count, fi_addr_t src_addr,
+		   uint64_t tag, uint64_t ignore, void *context,
+		   uint64_t flags);
 #endif
