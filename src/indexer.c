@@ -122,7 +122,7 @@ void *ofi_idx_remove_ordered(struct indexer *idx, int index)
 
 	entry = idx->array[ofi_idx_array_index(index)];
 	item = entry[entry_index].item;
-	entry[entry_index].item = NULL;	
+	entry[entry_index].item = NULL;
 	if (ofi_idx_free_list_empty(idx) || index < idx->free_list) {
 		entry[entry_index].next = idx->free_list;
 		idx->free_list = index;
@@ -204,16 +204,29 @@ void *ofi_idm_clear(struct index_map *idm, int index)
 	return item;
 }
 
-void ofi_idm_reset(struct index_map *idm)
+void ofi_idm_reset(struct index_map *idm, void (*callback)(void *item))
 {
-	int i;
+	void **entry;
+	void *item;
+	int a, i;
 
-	for (i=0; i<OFI_IDX_ARRAY_SIZE; i++) {
-		if (idm->array[i]) {
-			free(idm->array[i]);
-			idm->array[i] = NULL;
-			idm->count[i] = 0;
+	for (a = 0; a < OFI_IDX_ARRAY_SIZE; a++) {
+		if (!idm->array[a]) {
+			assert(idm->count[a] == 0);
+			continue;
 		}
+
+		for (i = 0; idm->count[a] && i < OFI_IDX_ARRAY_SIZE; i++) {
+			entry = idm->array[a];
+			item = entry[i];
+			if (item) {
+				if (callback)
+					callback(item);
+				idm->count[a]--;
+			}
+		}
+		free(idm->array[a]);
+		idm->array[a] = NULL;
 	}
 }
 

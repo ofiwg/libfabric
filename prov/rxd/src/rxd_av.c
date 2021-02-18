@@ -390,7 +390,7 @@ static int rxd_av_close(struct fid *fid)
 
 	ofi_idx_reset(&(av->fi_addr_idx));
 	ofi_idx_reset(&(av->rxdaddr_dg_idx));
-	ofi_idm_reset(&(av->rxdaddr_fi_idm));
+	ofi_idm_reset(&(av->rxdaddr_fi_idm), NULL);
 
 	free(av);
 	return 0;
