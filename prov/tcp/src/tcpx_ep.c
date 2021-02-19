@@ -124,7 +124,7 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	tcpx_ep->state = TCPX_CONNECTING;
 	ret = connect(tcpx_ep->sock, (struct sockaddr *) addr,
 		      (socklen_t) ofi_sizeofaddr(addr));
-	if (ret && ofi_sockerr() != FI_EINPROGRESS) {
+	if (ret && !OFI_SOCK_TRY_CONN_AGAIN(ofi_sockerr())) {
 		tcpx_ep->state = TCPX_IDLE;
 		ret =  -ofi_sockerr();
 		goto free;
