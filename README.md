@@ -141,12 +141,6 @@ See the `fi_gni(7)` man page for more details.
 
 - The `gni` provider requires `gcc` version 4.9 or higher.
 
-### mxm
-
-***
-
-The MXM provider has been deprecated and was removed after the 1.4.0 release.
-
 ### psm
 
 ***
@@ -336,27 +330,6 @@ See the `fi_netdir(7)` man page for more details.
   If the libraries and header files are not in default paths (the default path is
   root of provier directory, i.e. \prov\netdir\NetDirect, where NetDirect contains
   the header files), specify them in the configuration properties of the VS project.
-
-### mlx
-
-***
-
-The MLX provider enables applications using OFI to be run over UCX
-communication library. It uses libucp for connections control and data transfer operations.
-Supported UCP API version: 1.2
-
-See the `fi_mlx(7)` man page for more details.
-
-#### Dependencies
-
-- The MLX provider requires UCP API 1.2 capable libucp and libucs (tested with hpcx v1.8.0, v1.9.7).
-  If you are compiling Libfabric from source and want to enable MLX
-  support, you will also need the matching header files for UCX.
-  If the libraries and header files are not in default paths, specify them using:
-
-```
---with-mlx=<path to local UCX installation>
-```
 
 ### shm
 
