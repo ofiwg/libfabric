@@ -726,7 +726,7 @@ static int sock_ep_close(struct fid *fid)
 		free(sock_ep->attr->dest_addr);
 
 	fastlock_acquire(&sock_ep->attr->domain->pe->lock);
-	ofi_idm_reset(&sock_ep->attr->av_idm);
+	ofi_idm_reset(&sock_ep->attr->av_idm, NULL);
 	sock_conn_map_destroy(sock_ep->attr);
 	fastlock_release(&sock_ep->attr->domain->pe->lock);
 

@@ -330,9 +330,11 @@ struct ofi_bufpool_region {
 	void 				*context;
 	struct ofi_bufpool 		*pool;
 	int				flags;
-#ifndef NDEBUG
-	size_t 				use_cnt;
-#endif
+	OFI_DBG_VAR(size_t,		use_cnt)
+};
+
+struct ofi_bufpool_ftr {
+	size_t				magic;
 };
 
 struct ofi_bufpool_hdr {
@@ -342,6 +344,9 @@ struct ofi_bufpool_hdr {
 	} entry;
 	struct ofi_bufpool_region	*region;
 	size_t 				index;
+
+	OFI_DBG_VAR(struct ofi_bufpool_ftr *, ftr)
+	OFI_DBG_VAR(size_t,		magic)
 };
 
 int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
@@ -393,6 +398,9 @@ static inline void ofi_buf_free(void *buf)
 {
 	assert(ofi_buf_region(buf)->use_cnt--);
 	assert(!(ofi_buf_pool(buf)->attr.flags & OFI_BUFPOOL_INDEXED));
+	assert(ofi_buf_hdr(buf)->magic == OFI_MAGIC_SIZE_T);
+	assert(ofi_buf_hdr(buf)->ftr->magic == OFI_MAGIC_SIZE_T);
+
 	slist_insert_head(&ofi_buf_hdr(buf)->entry.slist,
 			  &ofi_buf_pool(buf)->free_list.entries);
 }
@@ -404,13 +412,15 @@ static inline void ofi_ibuf_free(void *buf)
 {
 	struct ofi_bufpool_hdr *buf_hdr;
 
-	assert(ofi_buf_pool(buf)->attr.flags & OFI_BUFPOOL_INDEXED);
-	assert(ofi_buf_region(buf)->use_cnt--);
 	buf_hdr = ofi_buf_hdr(buf);
+
+	assert(ofi_buf_region(buf)->use_cnt--);
+	assert(ofi_buf_pool(buf)->attr.flags & OFI_BUFPOOL_INDEXED);
+	assert(buf_hdr->magic == OFI_MAGIC_SIZE_T);
+	assert(buf_hdr->ftr->magic == OFI_MAGIC_SIZE_T);
 
 	dlist_insert_order(&buf_hdr->region->free_list,
 			   ofi_ibuf_is_lower, &buf_hdr->entry.dlist);
-
 	if (dlist_empty(&buf_hdr->region->entry)) {
 		dlist_insert_order(&buf_hdr->region->pool->free_list.regions,
 				   ofi_ibufpool_region_is_lower,

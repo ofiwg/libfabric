@@ -126,7 +126,7 @@ struct index_map
 
 int ofi_idm_set(struct index_map *idm, int index, void *item);
 void *ofi_idm_clear(struct index_map *idm, int index);
-void ofi_idm_reset(struct index_map *idm);
+void ofi_idm_reset(struct index_map *idm, void (*callback)(void *item));
 
 static inline void *ofi_idm_at(struct index_map *idm, int index)
 {
