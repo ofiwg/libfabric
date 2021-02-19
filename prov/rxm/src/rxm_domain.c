@@ -125,6 +125,7 @@ static int rxm_domain_close(fid_t fid)
 
 	rxm_domain = container_of(fid, struct rxm_domain, util_domain.domain_fid.fid);
 
+	fastlock_destroy(&rxm_domain->amo_bufpool_lock);
 	ofi_bufpool_destroy(rxm_domain->amo_bufpool);
 
 	ret = fi_close(&rxm_domain->msg_domain->fid);
@@ -570,6 +571,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	fi_freeinfo(msg_info);
 	return 0;
 err4:
+	fastlock_destroy(&rxm_domain->amo_bufpool_lock);
 	ofi_bufpool_destroy(rxm_domain->amo_bufpool);
 err3:
 	fi_close(&rxm_domain->msg_domain->fid);
