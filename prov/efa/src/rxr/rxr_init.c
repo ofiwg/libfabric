@@ -405,23 +405,34 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 		 * which means FI_MR_HMEM implies FI_MR_LOCAL for cuda buffer
 		 */
 		if (hints->caps & FI_HMEM) {
+			/*
+			 * XXX: remove this once CUDA IPC is supported by SHM
+			 * and we have a fallback path to use the device when
+			 * SHM doesn't support CUDA IPC.
+			 */
+			if (hints->caps & FI_LOCAL_COMM) {
+				FI_WARN(&rxr_prov, FI_LOG_CORE,
+				        "FI_HMEM is currently not supported by the EFA provider when FI_LOCAL_COMM is requested.\n");
+				return -FI_ENODATA;
+			}
+			info->caps &= ~FI_LOCAL_COMM;
 
 			if (!efa_device_support_rdma_read()) {
-				FI_INFO(&rxr_prov, FI_LOG_CORE,
+				FI_WARN(&rxr_prov, FI_LOG_CORE,
 				        "FI_HMEM capability requires RDMA, which this device does not support.\n");
 				return -FI_ENODATA;
 
 			}
 
 			if (!rxr_env.use_device_rdma) {
-				FI_INFO(&rxr_prov, FI_LOG_CORE,
+				FI_WARN(&rxr_prov, FI_LOG_CORE,
 				        "FI_HMEM capability requires RDMA, which is turned off. You can turn it on by set environment variable FI_EFA_USE_DEVICE_RDMA to 1.\n");
 				return -FI_ENODATA;
 			}
 
 			if (hints->domain_attr &&
 			    !(hints->domain_attr->mr_mode & FI_MR_HMEM)) {
-				FI_INFO(&rxr_prov, FI_LOG_CORE,
+				FI_WARN(&rxr_prov, FI_LOG_CORE,
 				        "FI_HMEM capability requires device registrations (FI_MR_HMEM)\n");
 				return -FI_ENODATA;
 			}
