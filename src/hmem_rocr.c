@@ -62,6 +62,9 @@ struct rocr_ops {
 					    hsa_agent_t *agents, int num_agents,
 					    void **agent_ptr);
 	hsa_status_t (*hsa_amd_memory_unlock)(void *host_ptr);
+	hsa_status_t (*hsa_agent_get_info)(hsa_agent_t agent,
+					   hsa_agent_info_t attribute,
+					   void *value);
 };
 
 #ifdef ENABLE_ROCR_DLOPEN
@@ -85,6 +88,7 @@ static struct rocr_ops rocr_ops = {
 		hsa_amd_register_deallocation_callback,
 	.hsa_amd_memory_lock = hsa_amd_memory_lock,
 	.hsa_amd_memory_unlock = hsa_amd_memory_unlock,
+	.hsa_agent_get_info = hsa_agent_get_info,
 };
 
 #endif /* ENABLE_ROCR_DLOPEN */
@@ -155,6 +159,13 @@ hsa_status_t ofi_hsa_amd_reg_dealloc_cb(void *ptr,
 					void *user_data)
 {
 	return rocr_ops.hsa_amd_reg_dealloc_cb(ptr, cb, user_data);
+}
+
+static hsa_status_t ofi_hsa_agent_get_info(hsa_agent_t agent,
+					   hsa_agent_info_t attribute,
+					   void *value)
+{
+	return rocr_ops.hsa_agent_get_info(agent, attribute, value);
 }
 
 static int rocr_memcpy(void *dest, const void *src, size_t size)
@@ -234,13 +245,23 @@ bool rocr_is_addr_valid(const void *addr)
 	hsa_amd_pointer_info_t hsa_info = {
 		.size = sizeof(hsa_info),
 	};
+	hsa_device_type_t hsa_dev_type;
 	hsa_status_t hsa_ret;
 
 	hsa_ret = ofi_hsa_amd_pointer_info((void *)addr, &hsa_info, NULL, NULL,
 					   NULL);
 	if (hsa_ret == HSA_STATUS_SUCCESS) {
-		if (hsa_info.type == HSA_EXT_POINTER_TYPE_HSA)
-			return true;
+		hsa_ret = ofi_hsa_agent_get_info(hsa_info.agentOwner,
+						 HSA_AGENT_INFO_DEVICE,
+						 (void *) &hsa_dev_type);
+		if (hsa_ret == HSA_STATUS_SUCCESS) {
+			if (hsa_dev_type == HSA_DEVICE_TYPE_GPU)
+				return true;
+		} else {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"Failed to perform hsa_agent_get_info: %s\n",
+				ofi_hsa_status_to_string(hsa_ret));
+		}
 	} else {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to perform hsa_amd_pointer_info: %s\n",
@@ -327,6 +348,13 @@ static int rocr_hmem_dl_init(void)
 	if (!rocr_ops.hsa_amd_memory_lock) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_memory_unlock\n");
+		goto err;
+	}
+
+	rocr_ops.hsa_agent_get_info = dlsym(rocr_handle, "hsa_agent_get_info");
+	if (!rocr_ops.hsa_agent_get_info) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_agent_get_info\n");
 		goto err;
 	}
 
