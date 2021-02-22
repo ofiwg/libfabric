@@ -781,6 +781,28 @@ static void vrb_set_peer_mem_support(void)
 	fclose(kallsyms_fd);
 }
 
+static void vrb_set_dmabuf_support(void)
+{
+	char *line = NULL;
+	size_t line_size = 0;
+	ssize_t bytes;
+	FILE *kallsyms_fd;
+
+	kallsyms_fd = fopen("/proc/kallsyms", "r");
+	if (!kallsyms_fd)
+		return;
+
+	while ((bytes = getline(&line, &line_size, kallsyms_fd)) != -1) {
+		if (strstr(line, "ib_umem_dmabuf_get")) {
+			vrb_gl_data.dmabuf_support = true;
+			break;
+		}
+	}
+
+	free(line);
+	fclose(kallsyms_fd);
+}
+
 static void vrb_fini(void)
 {
 #if HAVE_VERBS_DL
@@ -801,6 +823,7 @@ VERBS_INI
 	ofi_monitors_init();
 #endif
 	vrb_set_peer_mem_support();
+	vrb_set_dmabuf_support();
 
 	if (vrb_read_params()|| vrb_init_info(&vrb_util_prov.info))
 		return NULL;
