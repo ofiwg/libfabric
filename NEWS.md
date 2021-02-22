@@ -3,29 +3,121 @@ Libfabric release notes
 
 This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
-version 1.0.
+version 1.0.  New major releases include all fixes from minor
+releases with earlier release dates.
 
 v1.12.0, Mon Mar 8, 2021
 =========================
 
 ## Core
 
+- Added re-entrant version of fi_tostr
+- Added fi_control commands for accessing fid-specific attributes
+- Added Ze (level-0) HMEM API support
+- Fixed RoCR memory checks
+- Minor code cleanups, restructuring, and fixes
+- Fix possible stack buffer overflow with address string conversion
+- Handle macOS socket API size limitations
+- Verify and improve support for CUDA devices
+- Update internal string functions to protect against buffer overflow
+- Support gdrcopy in addition to cudaMemcpy to avoid deadlocks
+- Properly mark if addresses support only local communication
+- Prevent providers from layering over each other non-optimally
+
 ## EFA
 
 ## PSM3
 
+- New Intel provider optimized for verbs UD QPs
+
+## RxD
+
+- Added missing cleanup to free peer endpoint data with AV
+- Add support for FI_SYNC_ERR flag
+
 ## RxM
+
+- Cleanup atomic buffer pool lock resources
+- Fix unexpected message handling when using multi-recv buffers
+- Handle SAR and rendezvous messages received into multi-recv buffers
+- Give application entire size of eager buffer region
+- Minor code cleanups based on static code analysis
+- Simplify rendezvous message code paths
+- Avoid passing internal errors handling progress directly to applications
+- Limit fi_cancel to canceling at most 1 receive operation
+- Remove incorrect handling if errors occur writing to a CQ
+- Only write 1 CQ entry if a SAR message fails
+- Continue processing if the receive buffer pool is full and reposting delayed
+- Add support for dynamic receive buffering when layering over tcp
+- Add support for direct send to avoid send bounce buffers in certain cases
+- Prioritize credit messages to avoid deadlock
+- Fix conversion to message provider's mr access flags
+- Reduce inject size by the minimum packet header needed by rxm
+- Fix checks to enable shared rx when creating an endpoint
+- Minor code restructuring
+- Fix trying to access freed memory in error handling case
+- Use optimized inject limits to avoid bounce buffer copies
+- Fix possible invalid pointer access handling rx errors
+- Add support for HMEM if supported by msg provider
+- Add missing locks around progress to silence thread-sanitizer
+- Support re-connecting to peers if peer disconnects (client-server model)
+- Cleanup rendezvous protocol handling
+- Add support for RMA write rendezvous protocol
 
 ## SHM
 
+- Add support for Ze IPC protocol
+- Only perform IPC protocol related cleanup when using IPC
+- Disable cross-memory attach protocol when HMEM is enabled
+- Fix cross-memory attach support when running in containers
+- Always call SAR protocol's progress function
+- Enable cross-memory attach protocol when sending to self
+- Minor code cleanups and restructuring for maintenance
+
 ## Sockets
+
+- Verify CM data size is less than supported value
+- Handle FI_SYNC_ERR flag on AV insert
+- Improve destination IP address checks
+- Minor coding cleanups based on static code analysis
 
 ## TCP
 
+- Fix hangs on windows during connection setup
+- Relax CQ checks when enabling EP to handle send/recv only EPs
+- Fix possible use of unset return value in EP enable
+- Minor coding cleanups based on static code analysis
+- Handle EAGAIN during CM message exchanges
+- Set sockets to nonblocking on creation to avoid possible hangs at scale
+- Improve CM state tracking and optimize CM message flows
+- Make passive endpoints nonblocking to avoid hangs
+- Allow reading buffered data from disconnected endpoints
+- Implement fi_cancel for receive queues
+- Flush outstanding operations to user when an EP is disabled
+- Support dynamic receive buffering - removes need for bounce buffers
+- Add direct send feature - removes need for bounce buffers
+- Minor code cleanups and restructuring to improve maintenance
+- Add support for fo_domain_bind
+
 ## Util
+
+- Improve checks that EPs are bound to necessary CQs
+- Fix mistaking the AV's total size with current count to size properly
+- Fix CQ buffer overrun protection mechanisms to avoid lost events
 
 ## Verbs
 
+- Add SW credit flow control to improve performance over Ethernet
+- Skip verbs devices that report faulty information
+- Limit inline messages to iov = 1 to support more devices
+- Minor code improvements and restructuring to improve maintenance
+- Enable caching of device memory (RoCR, CUDA, Ze) registrations
+- Add HMEM support, including proprietary verbs support for P2P
+- Add support for registering device memory
+- Support GIDs at any GID index, not just 0
+- Fix macro definitions to cleanup build warnings
+- Support GID based connection establishment, removes ipoib requirement
+- Reduce per peer memory footprint for large scale fabrics
 
 v1.11.2, Tue Dec 15, 2020
 =========================
@@ -114,7 +206,7 @@ v1.11.1, Fri Oct 9, 2021
 - Create duplicate fi_info's when reporting FI_HMEM support
 - Handle transfers larger than 2GB
 - Register for signal using SA_ONSTACK
-- Fix segfault if peer has not been inserted intqqo local AV
+- Fix segfault if peer has not been inserted into local AV
 - Fix command/buffer tracking for sending connection requests
 - Return proper errno on AV lookup failures
 - Remove duplicate call to ofi_hmem_init
@@ -133,7 +225,7 @@ v1.11.1, Fri Oct 9, 2021
 ## TCP
 
 - Fix possible deadlock during EP shutdown due lock inversion
-- Rework CM state maching to fix lock inversion handling disconnect
+- Rework CM state machine to fix lock inversion handling disconnect
 
 ## Util
 
