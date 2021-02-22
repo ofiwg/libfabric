@@ -1007,8 +1007,15 @@ static int netdev_lookup(struct cxil_devinfo *info, char **netdev)
 			goto free_glob;
 
 		rc = readlink(if_path, addr_path, FI_PATH_MAX-1);
-		if (rc < 0)
+		if (rc < 0) {
+			/* A virtual device, like a bridge, doesn't have a
+			 * device link.
+			 */
+			if (errno == ENOENT)
+				continue;
+
 			goto free_glob;
+		}
 		addr_path[rc] = '\0';
 
 		addr = basename(addr_path);
