@@ -813,4 +813,19 @@ int __psm2_rv_scan_cq(psm2_rv_t rv, uint8_t event_type,
 	}
 	return 0; // not found
 }
+
+// check if CQ has ever overflowed.
+// returns 1 if CQ has overflowed in past
+// returns 0 if CQ has never overflowed
+// In future could use overflow_cnt to identify if ring recently
+// overflowed (eg. save overflow_cnt when check) and trigger PSM recovery
+int __psm2_rv_cq_overflowed(psm2_rv_t rv)
+{
+	if (! rv || ! rv->events.hdr) {
+		errno = EINVAL;
+		return -1;
+	}
+	return (rv->events.hdr->overflow_cnt != 0);
+}
+
 #endif // RNDV_MOD

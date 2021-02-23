@@ -194,5 +194,7 @@ extern int __psm2_rv_poll_cq(psm2_rv_t rv, struct rv_event *ev);
 extern int __psm2_rv_scan_cq(psm2_rv_t rv, uint8_t event_type,
 			uint32_t imm_mask, uint32_t imm_value);
 
+extern int __psm2_rv_cq_overflowed(psm2_rv_t rv);
+
 #endif // _PSMI_RNDV_MOD_H
 #endif // RNDV_MOD

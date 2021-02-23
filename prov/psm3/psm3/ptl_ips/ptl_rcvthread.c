@@ -405,6 +405,12 @@ static void poll_async_events(psm2_ep_t ep)
 
 	first = ep;
 	do {
+#ifdef RNDV_MOD
+		if (IPS_PROTOEXP_FLAG_KERNEL_QP(ep->rdmamode)
+		    && __psm2_rv_cq_overflowed(ep->verbs_ep.rv))
+			psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+				  "RV event ring overflow");
+#endif
 		pfd[num_ep].fd = ep->verbs_ep.context->async_fd;
 		pfd[num_ep].events = POLLIN;
 		pfd[num_ep].revents = 0;
