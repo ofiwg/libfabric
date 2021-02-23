@@ -94,7 +94,7 @@ gdr_convert_gpu_to_host_addr(int gdr_fd, unsigned long buf,
 
 	_HFI_VDBG("buf=%p size=%zu pageaddr=%p pagelen=%u flags=0x%x proto=%p\n",
 		(void *)buf, size, (void *)pageaddr, pagelen, flags, proto);
-
+#ifdef RNDV_MOD_MR
 	host_addr_buf = __psm2_rv_pin_and_mmap(proto->ep->verbs_ep.rv, pageaddr, pagelen);
 	if (! host_addr_buf) {
 		if (errno == ENOMEM || errno == EINVAL) {
@@ -110,6 +110,10 @@ gdr_convert_gpu_to_host_addr(int gdr_fd, unsigned long buf,
 			return NULL;
 		}
 	}
+#else
+	psmi_assert_always(0);	// unimplemented, should not get here
+	host_addr_buf = NULL;
+#endif /* RNDV_MOD_MR */
 	return host_addr_buf + (buf & GPU_PAGE_OFFSET_MASK);
 }
 
@@ -118,6 +122,7 @@ int
 gdr_unmap_gpu_host_addr(int gdr_fd, const void *buf,
 							 size_t size, struct ips_proto* proto)
 {
+#ifdef RNDV_MOD_MR
 	// TBD - will we need to round size up to pagelen?
 	if (0 != __psm2_rv_munmap_and_unpin(proto->ep->verbs_ep.rv, buf, size)) {
 		/* Fatal error */
@@ -127,6 +132,11 @@ gdr_unmap_gpu_host_addr(int gdr_fd, const void *buf,
 		return -1;
 	}
 	return 0;
+#else
+	psmi_assert_always(0);	// unimplemented, should not get here
+	errno = EINVAL;
+	return -1;
+#endif
 }
 
 

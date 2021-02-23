@@ -201,10 +201,14 @@ struct ips_tid_send_desc {
 
 
 	uint8_t is_complete:1;	// all packets for send queued, waiting CQE/response
+#ifdef RNDV_MOD_MR
 	uint8_t rv_need_err_chk_rdma:1; // need to determine if a retry is required
 	uint8_t reserved:6;
 	uint8_t rv_sconn_index;	// sconn in rv we issued RDMA write on
 	uint32_t rv_conn_count;// Count of sconn completed conn establishments
+#else
+	uint8_t reserved:7;
+#endif
 
 #ifdef PSM_CUDA
 	/* As size of cuda_hostbuf is less than equal to window size,
