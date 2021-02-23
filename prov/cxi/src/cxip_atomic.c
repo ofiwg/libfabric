@@ -30,9 +30,6 @@ _Static_assert(CXIP_AMO_MAX_IOV == 1, "Unexpected max IOV #");
  */
 #define CXIP_AMO_MAX_PACKED_IOV (1)
 
-#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
-#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_DATA, __VA_ARGS__)
-
 /**
  * Data type codes for all of the supported fi_datatype values.
  */
@@ -269,6 +266,7 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 	int ret;
 	int event_rc;
 	int success_event = (req->flags & FI_COMPLETION);
+	struct cxip_txc *txc = req->amo.txc;
 
 	if (req->amo.result_md)
 		cxip_unmap(req->amo.result_md);
@@ -286,13 +284,14 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 		if (success_event) {
 			ret = cxip_cq_req_complete(req);
 			if (ret != FI_SUCCESS)
-				CXIP_WARN("Failed to report completion: %d\n",
-					  ret);
+				TXC_WARN(txc,
+					 "Failed to report completion: %d\n",
+					 ret);
 		}
 	} else {
 		ret = cxip_cq_req_error(req, 0, FI_EIO, event_rc, NULL, 0);
 		if (ret != FI_SUCCESS)
-			CXIP_WARN("Failed to report error: %d\n", ret);
+			TXC_WARN(txc, "Failed to report error: %d\n", ret);
 	}
 
 	ofi_atomic_dec32(&req->amo.txc->otx_reqs);
@@ -453,7 +452,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	/* Look up target CXI address */
 	ret = _cxip_av_lookup(txc->ep_obj->av, msg->addr, &caddr);
 	if (ret != FI_SUCCESS) {
-		CXIP_DBG("Failed to look up dst FI addr: %ld\n", ret);
+		TXC_WARN(txc, "Failed to look up dst FI addr: %ld\n", ret);
 		return ret;
 	}
 
@@ -470,7 +469,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	    msg->op == FI_ATOMIC_WRITE) {
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
-			CXIP_DBG("Failed to allocate request\n");
+			TXC_WARN(txc, "Failed to allocate request\n");
 			return -FI_ENOMEM;
 		}
 
@@ -589,7 +588,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			ret = cxip_map(txc->domain, oper1, len,
 				       &req->amo.oper1_md);
 			if (ret) {
-				CXIP_DBG("Failed to map operand buffer: %ld\n",
+				TXC_WARN(txc,
+					 "Failed to map operand buffer: %ld\n",
 					 ret);
 				goto free_req;
 			}
@@ -601,7 +601,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		/* Map local buffer */
 		ret = cxip_map(txc->domain, result, len, &req->amo.result_md);
 		if (ret) {
-			CXIP_DBG("Failed to map result buffer: %ld\n", ret);
+			TXC_WARN(txc, "Failed to map result buffer: %ld\n",
+				 ret);
 			goto unmap_oper1;
 		}
 	}
@@ -663,8 +664,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	if (flags & FI_FENCE) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
 		if (ret) {
-			CXIP_DBG("Failed to issue CQ_FENCE command: %ld\n",
-				 ret);
+			TXC_DBG(txc, "Failed to issue CQ_FENCE command: %ld\n",
+				ret);
 			ret = -FI_EAGAIN;
 			goto unlock_cmdq;
 		}
@@ -713,7 +714,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 
 		ret = cxip_cmdq_emit_c_state(cmdq, &cmd.c_state);
 		if (ret) {
-			CXIP_DBG("Failed to issue C_STATE command: %ld\n", ret);
+			TXC_DBG(txc, "Failed to issue C_STATE command: %ld\n",
+				ret);
 			goto unlock_cmdq;
 		}
 
@@ -737,8 +739,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		ret = cxi_cq_emit_idc_amo(cmdq->dev_cmdq, &cmd.idc_amo,
 					  result != NULL);
 		if (ret) {
-			CXIP_DBG("Failed to issue IDC AMO command: %ld\n",
-				 ret);
+			TXC_DBG(txc, "Failed to issue IDC AMO command: %ld\n",
+				ret);
 
 			/* Return error according to Domain Resource Mgmt */
 			ret = -FI_EAGAIN;
@@ -820,7 +822,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		}
 
 		if (ret) {
-			CXIP_DBG("Failed to write DMA AMO command: %ld\n", ret);
+			TXC_DBG(txc, "Failed to write DMA AMO command: %ld\n",
+				ret);
 
 			/* Return error according to Domain Resource Management
 			 */
@@ -843,10 +846,11 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	char *static_str = fi_tostr(&msg->op, FI_TYPE_ATOMIC_OP);
 
 	strcpy(op_str, static_str);
-	CXIP_DBG("%sreq: %p op: %s type: %s buf: %p dest_addr: %ld context %p\n",
-		 idc ? "IDC " : "", req, op_str,
-		 fi_tostr(&msg->datatype, FI_TYPE_ATOMIC_TYPE),
-		 oper1, msg->addr, msg->context);
+	TXC_DBG(txc,
+		"%sreq: %p op: %s type: %s buf: %p dest_addr: %ld context %p\n",
+		idc ? "IDC " : "", req, op_str,
+		fi_tostr(&msg->datatype, FI_TYPE_ATOMIC_TYPE),
+		oper1, msg->addr, msg->context);
 #endif
 
 	/* Do progress inline if there are a lot of outstanding operations. */

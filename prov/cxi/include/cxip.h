@@ -1831,4 +1831,28 @@ static inline bool is_netsim(struct cxip_ep_obj *ep_obj)
 		abort();					\
 	} while (0)
 
+#define TXC_DBG(txc, fmt, ...) \
+	_CXIP_DBG(FI_LOG_EP_DATA, "TXC (%#x:%u:%u): " fmt "", \
+		  (txc)->ep_obj->src_addr.nic, (txc)->ep_obj->src_addr.pid, \
+		  (txc)->tx_id, ##__VA_ARGS__)
+#define TXC_WARN(txc, fmt, ...) \
+	_CXIP_WARN(FI_LOG_EP_DATA, "TXC (%#x:%u:%u): " fmt "", \
+		   (txc)->ep_obj->src_addr.nic, (txc)->ep_obj->src_addr.pid, \
+		   (txc)->tx_id, ##__VA_ARGS__)
+#define TXC_FATAL(txc, fmt, ...) \
+	CXIP_FATAL("TXC (%#x:%u:%u):: " fmt "", (txc)->ep_obj->src_addr.nic, \
+		   (txc)->ep_obj->src_addr.pid, (txc)->tx_id, ##__VA_ARGS__)
+
+#define RXC_DBG(rxc, fmt, ...) \
+	_CXIP_DBG(FI_LOG_EP_DATA, "RXC (%#x:%u:%u): " fmt "", \
+		  (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
+		  (rxc)->rx_id, ##__VA_ARGS__)
+#define RXC_WARN(rxc, fmt, ...) \
+	_CXIP_WARN(FI_LOG_EP_DATA, "RXC (%#x:%u:%u): " fmt "", \
+		   (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
+		   (rxc)->rx_id, ##__VA_ARGS__)
+#define RXC_FATAL(rxc, fmt, ...) \
+	CXIP_FATAL("RXC (%#x:%u:%u): " fmt "", (rxc)->ep_obj->src_addr.nic, \
+		   (rxc)->ep_obj->src_addr.pid, (rxc)->rx_id, ##__VA_ARGS__)
+
 #endif

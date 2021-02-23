@@ -19,9 +19,6 @@
 
 #include "cxip.h"
 
-#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
-#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_DATA, __VA_ARGS__)
-
 #define FC_MSG "Message flow-control triggered.\n\n" \
 "Flow-control recovery is disabled. To avoid this condition, increase\n" \
 "Overflow buffer space using environment variables FI_CXI_OFLOW_*. To\n" \
@@ -155,14 +152,14 @@ static struct cxip_req *cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf,
 
 	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc);
 	if (!req) {
-		CXIP_DBG("Failed to allocate recv request\n");
+		RXC_WARN(rxc, "Failed to allocate recv request\n");
 		goto err;
 	}
 
 	if (len) {
 		ret = cxip_map(dom, (void *)buf, len, &recv_md);
 		if (ret) {
-			CXIP_DBG("Failed to map recv buffer: %d\n", ret);
+			RXC_WARN(rxc, "Failed to map recv buffer: %d\n", ret);
 			goto err_free_request;
 		}
 	}
@@ -220,6 +217,7 @@ static void recv_req_report(struct cxip_req *req)
 	int err;
 	fi_addr_t src_addr;
 	int success_event = (req->flags & FI_COMPLETION);
+	struct cxip_rxc *rxc = req->recv.rxc;
 
 	req->flags &= (FI_MSG | FI_TAGGED | FI_RECV);
 
@@ -227,11 +225,12 @@ static void recv_req_report(struct cxip_req *req)
 		struct cxip_req *parent = req->recv.parent;
 
 		parent->recv.mrecv_bytes -= req->data_len;
-		CXIP_DBG("Putting %lu mrecv bytes (req: %p left: %lu addr: %#lx)\n",
-			 req->data_len, parent, parent->recv.mrecv_bytes,
-			 req->buf);
+		RXC_DBG(rxc,
+			"Putting %lu mrecv bytes (req: %p left: %lu addr: %#lx)\n",
+			req->data_len, parent, parent->recv.mrecv_bytes,
+			req->buf);
 		if (parent->recv.mrecv_bytes < req->recv.rxc->min_multi_recv) {
-			CXIP_DBG("Freeing parent: %p\n", req->recv.parent);
+			RXC_DBG(rxc, "Freeing parent: %p\n", req->recv.parent);
 			cxip_recv_req_free(req->recv.parent);
 
 			req->flags |= FI_MULTI_RECV;
@@ -240,7 +239,7 @@ static void recv_req_report(struct cxip_req *req)
 
 	truncated = req->recv.rlen - req->data_len;
 	if (req->recv.rc == C_RC_OK && !truncated) {
-		CXIP_DBG("Request success: %p\n", req);
+		RXC_DBG(rxc, "Request success: %p\n", req);
 
 		if (success_event) {
 			if (req->recv.rxc->attr.caps & FI_SOURCE) {
@@ -250,42 +249,44 @@ static void recv_req_report(struct cxip_req *req)
 				ret = cxip_cq_req_complete(req);
 			}
 			if (ret != FI_SUCCESS)
-				CXIP_WARN("Failed to report completion: %d\n",
-					  ret);
+				RXC_WARN(rxc,
+					 "Failed to report completion: %d\n",
+					 ret);
 		}
 
 		if (req->recv.cntr) {
 			ret = cxip_cntr_mod(req->recv.cntr, 1, false, false);
 			if (ret)
-				CXIP_WARN("cxip_cntr_mod returned: %d\n", ret);
+				RXC_WARN(rxc, "cxip_cntr_mod returned: %d\n",
+					 ret);
 		}
 	} else {
 		if (req->recv.unlinked) {
 			err = FI_ECANCELED;
 			if (req->recv.multi_recv)
 				req->flags |= FI_MULTI_RECV;
-			CXIP_DBG("Request canceled: %p (err: %d)\n",
-				     req, err);
+			RXC_DBG(rxc, "Request canceled: %p (err: %d)\n", req,
+				err);
 		} else if (truncated) {
 			err = FI_EMSGSIZE;
-			CXIP_DBG("Request truncated: %p (err: %d)\n",
-				     req, err);
+			RXC_DBG(rxc, "Request truncated: %p (err: %d)\n", req,
+				err);
 		} else {
 			err = FI_EIO;
-			CXIP_WARN("Request error: %p (err: %d, %s)\n",
-				  req, err, cxi_rc_to_str(req->recv.rc));
+			RXC_WARN(rxc, "Request error: %p (err: %d, %s)\n", req,
+				 err, cxi_rc_to_str(req->recv.rc));
 		}
 
 		ret = cxip_cq_req_error(req, truncated, err, req->recv.rc,
 					NULL, 0);
 		if (ret != FI_SUCCESS)
-			CXIP_WARN("Failed to report error: %d\n", ret);
+			RXC_WARN(rxc, "Failed to report error: %d\n", ret);
 
 		if (req->recv.cntr) {
 			ret = cxip_cntr_mod(req->recv.cntr, 1, false, true);
 			if (ret)
-				CXIP_WARN("cxip_cntr_mod returned: %d\n",
-					  ret);
+				RXC_WARN(rxc, "cxip_cntr_mod returned: %d\n",
+					 ret);
 		}
 	}
 }
@@ -485,6 +486,7 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 	uint32_t ev_init;
 	uint32_t ev_rdzv_id;
 	struct cxip_req *req;
+	struct cxip_rxc *rxc = mrecv_req->recv.rxc;
 
 	assert(event->hdr.event_type == C_EVENT_REPLY ||
 	       event->hdr.event_type == C_EVENT_PUT ||
@@ -504,11 +506,11 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 		dlist_insert_tail(&req->recv.children,
 				  &mrecv_req->recv.children);
 
-		CXIP_DBG("New child: %p parent: %p event: %s\n",
-			 req, mrecv_req, cxi_event_to_str(event));
+		RXC_DBG(rxc, "New child: %p parent: %p event: %s\n", req,
+			mrecv_req, cxi_event_to_str(event));
 	} else {
-		CXIP_DBG("Found child: %p parent: %p event: %s\n",
-			 req, mrecv_req, cxi_event_to_str(event));
+		RXC_DBG(rxc, "Found child: %p parent: %p event: %s\n", req,
+			mrecv_req, cxi_event_to_str(event));
 	}
 
 	return req;
@@ -547,7 +549,7 @@ static void rdzv_recv_req_event(struct cxip_req *req)
  */
 static void oflow_buf_free(struct cxip_oflow_buf *oflow_buf)
 {
-	CXIP_DBG("Freeing: %p\n", oflow_buf);
+	RXC_DBG(oflow_buf->rxc, "Freeing: %p\n", oflow_buf);
 
 	dlist_remove(&oflow_buf->list);
 	ofi_atomic_dec32(&oflow_buf->rxc->oflow_bufs_in_use);
@@ -569,8 +571,8 @@ static void oflow_req_put_bytes(struct cxip_req *req, size_t bytes)
 	struct cxip_oflow_buf *oflow_buf = req->oflow.oflow_buf;
 
 	oflow_buf->sw_consumed += bytes;
-	CXIP_DBG("Putting %lu bytes (%lu/%lu): %p\n",
-		 bytes, oflow_buf->sw_consumed, oflow_buf->hw_consumed, req);
+	RXC_DBG(oflow_buf->rxc, "Putting %lu bytes (%lu/%lu): %p\n", bytes,
+		oflow_buf->sw_consumed, oflow_buf->hw_consumed, req);
 
 	if (oflow_buf->sw_consumed == oflow_buf->hw_consumed) {
 		oflow_buf_free(oflow_buf);
@@ -624,7 +626,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 	/* Issue Rendezvous Get command */
 	ret = cxi_cq_emit_dma_f(rxc->tx_cmdq->dev_cmdq, &cmd.full_dma);
 	if (ret) {
-		CXIP_DBG("Failed to queue GET command: %d\n", ret);
+		RXC_DBG(rxc, "Failed to queue GET command: %d\n", ret);
 
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -645,7 +647,7 @@ unlock:
 static int
 cxip_notify_match_cb(struct cxip_req *req, const union c_event *event)
 {
-	CXIP_DBG("Match complete: %p\n", req);
+	RXC_DBG(req->recv.rxc, "Match complete: %p\n", req);
 
 	recv_req_report(req);
 
@@ -693,7 +695,7 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 
 	ret = cxip_cmdq_emit_c_state(rxc->tx_cmdq, &cmd.c_state);
 	if (ret) {
-		CXIP_DBG("Failed to issue C_STATE command: %d\n", ret);
+		RXC_DBG(rxc, "Failed to issue C_STATE command: %d\n", ret);
 		goto err_unlock;
 	}
 
@@ -706,7 +708,7 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 	ret = cxi_cq_emit_idc_msg(rxc->tx_cmdq->dev_cmdq, &cmd.idc_msg,
 				  NULL, 0);
 	if (ret) {
-		CXIP_DBG("Failed to write IDC: %d\n", ret);
+		RXC_DBG(rxc, "Failed to write IDC: %d\n", ret);
 
 		/* Return error according to Domain Resource Management
 		 */
@@ -720,7 +722,7 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 
 	req->cb = cxip_notify_match_cb;
 
-	CXIP_DBG("Queued match completion message: %p\n", req);
+	RXC_DBG(rxc, "Queued match completion message: %p\n", req);
 
 	return FI_SUCCESS;
 
@@ -772,13 +774,13 @@ static void cxip_recv_req_set_rget_info(struct cxip_req *req)
 	if (rxc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
 		struct cxip_addr caddr;
 
-		CXIP_DBG("Translating inititiator: %x, req: %p\n",
-			 req->recv.initiator, req);
+		RXC_DBG(rxc, "Translating initiator: %x, req: %p\n",
+			req->recv.initiator, req);
 
 		ret = _cxip_av_lookup(rxc->ep_obj->av, req->recv.initiator,
 				      &caddr);
 		if (ret != FI_SUCCESS)
-			CXIP_FATAL("Failed to look up FI addr: %d\n", ret);
+			RXC_FATAL(rxc, "Failed to look up FI addr: %d\n", ret);
 
 		req->recv.rget_nic = caddr.nic;
 		req->recv.rget_pid = caddr.pid;
@@ -848,7 +850,8 @@ static int cxip_ux_send(struct cxip_req *match_req,
 			return -FI_EAGAIN;
 		}
 
-		CXIP_DBG("Issued Get, req: %p\n", match_req);
+		RXC_DBG(match_req->recv.rxc, "Issued Get, req: %p\n",
+			match_req);
 		return FI_SUCCESS;
 	}
 
@@ -986,14 +989,14 @@ static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 		return FI_SUCCESS;
 	}
 
-	CXIP_DBG("Overflow beat Put event: %p\n", def_ev->req);
+	RXC_DBG(rxc, "Overflow beat Put event: %p\n", def_ev->req);
 
 	if (def_ev->ux_send) {
 		/* Send was onloaded */
 		def_ev->ux_send->oflow_req = req;
 		def_ev->ux_send->put_ev = *event;
 		def_ev->req->search.puts_pending--;
-		CXIP_DBG("put complete: %p\n", def_ev->req);
+		RXC_DBG(rxc, "put complete: %p\n", def_ev->req);
 
 		if (cxip_ux_is_onload_complete(def_ev->req))
 			cxip_ux_onload_complete(def_ev->req);
@@ -1046,9 +1049,8 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 
 		return ret;
 	default:
-		CXIP_WARN("Unexpected event type: %d\n",
+		RXC_FATAL(rxc, "Unexpected event type: %d\n",
 			  event->hdr.event_type);
-		return FI_SUCCESS;
 	}
 }
 
@@ -1132,7 +1134,8 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
 		if (cxi_event_rc(event) == C_RC_NO_SPACE) {
-			CXIP_WARN("Failed to append oflow buffer due to LE exhaustion\n");
+			RXC_WARN(rxc,
+				 "Failed to append oflow buffer due to LE exhaustion\n");
 
 			ret = cxip_recv_onload_flow_control(rxc);
 			if (ret == FI_SUCCESS) {
@@ -1143,7 +1146,7 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		} else {
 			assert(cxi_event_rc(event) == C_RC_OK);
 
-			CXIP_DBG("Eager buffer linked: %p\n", req);
+			RXC_DBG(rxc, "Eager buffer linked: %p\n", req);
 
 			ofi_atomic_inc32(&rxc->oflow_bufs_linked);
 		}
@@ -1154,7 +1157,7 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_UNLINK:
 		assert(!event->tgt_long.auto_unlinked);
 
-		CXIP_DBG("Eager buffer manually unlinked: %p\n", req);
+		RXC_DBG(rxc, "Eager buffer manually unlinked: %p\n", req);
 
 		ofi_atomic_dec32(&rxc->oflow_bufs_submitted);
 		ofi_atomic_dec32(&rxc->oflow_bufs_linked);
@@ -1168,8 +1171,8 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		/* Put event handling is complicated. Handle below. */
 		break;
 	default:
-		CXIP_FATAL("Unexpected event type: %d\n",
-			   event->hdr.event_type);
+		RXC_FATAL(rxc, "Unexpected event type: %d\n",
+			  event->hdr.event_type);
 	}
 
 	if (event->tgt_long.auto_unlinked) {
@@ -1227,14 +1230,14 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	/* Create an overflow buffer structure */
 	oflow_buf = calloc(1, sizeof(*oflow_buf));
 	if (!oflow_buf) {
-		CXIP_WARN("Unable to allocate oflow buffer structure\n");
+		RXC_WARN(rxc, "Unable to allocate oflow buffer structure\n");
 		return -FI_ENOMEM;
 	}
 
 	/* Allocate overflow data buffer */
 	oflow_buf->buf = calloc(1, rxc->oflow_buf_size);
 	if (!oflow_buf->buf) {
-		CXIP_WARN("Unable to allocate oflow buffer\n");
+		RXC_WARN(rxc, "Unable to allocate oflow buffer\n");
 		ret = -FI_ENOMEM;
 		goto free_oflow;
 	}
@@ -1243,14 +1246,14 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	ret = cxip_map(dom, (void *)oflow_buf->buf, rxc->oflow_buf_size,
 		       &oflow_buf->md);
 	if (ret) {
-		CXIP_WARN("Failed to map oflow buffer: %d\n", ret);
+		RXC_WARN(rxc, "Failed to map oflow buffer: %d\n", ret);
 		goto free_buf;
 	}
 
 	/* Populate request */
 	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
 	if (!req) {
-		CXIP_WARN("Failed to allocate request\n");
+		RXC_WARN(rxc, "Failed to allocate request\n");
 		ret = -FI_ENOMEM;
 		goto oflow_unmap;
 	}
@@ -1274,7 +1277,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 			      rxc->rdzv_threshold + rxc->rdzv_get_min,
 			      le_flags, NULL, rxc->rx_cmdq, true);
 	if (ret) {
-		CXIP_WARN("Failed to write Append command: %d\n", ret);
+		RXC_DBG(rxc, "Failed to write Append command: %d\n", ret);
 		goto oflow_req_free;
 	}
 
@@ -1286,7 +1289,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 
 	ofi_atomic_inc32(&rxc->oflow_bufs_submitted);
 	ofi_atomic_inc32(&rxc->oflow_bufs_in_use);
-	CXIP_DBG("Eager buffer created: %p\n", req);
+	RXC_DBG(rxc, "Eager buffer created: %p\n", req);
 
 	return FI_SUCCESS;
 
@@ -1315,8 +1318,8 @@ int cxip_rxc_eager_replenish(struct cxip_rxc *rxc)
 	       rxc->oflow_bufs_max) {
 		ret = eager_buf_add(rxc);
 		if (ret != FI_SUCCESS) {
-			CXIP_WARN("Failed to append oflow buffer: %d\n",
-				  ret);
+			RXC_WARN(rxc, "Failed to append oflow buffer: %d\n",
+				 ret);
 			break;
 		}
 	}
@@ -1339,7 +1342,7 @@ static int cxip_rxc_eager_fini(struct cxip_rxc *rxc)
 				      oflow_buf->buffer_id, rxc->rx_cmdq);
 		if (ret != FI_SUCCESS) {
 			/* TODO handle error */
-			CXIP_WARN("Failed to enqueue Unlink: %d\n", ret);
+			RXC_WARN(rxc, "Failed to enqueue Unlink: %d\n", ret);
 			break;
 		}
 	}
@@ -1375,7 +1378,7 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 	/* Populate request */
 	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
 	if (!req) {
-		CXIP_WARN("Failed to allocate UX request\n");
+		RXC_WARN(rxc, "Failed to allocate UX request\n");
 		return -FI_ENOMEM;
 	}
 
@@ -1387,7 +1390,7 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 			      CXI_MATCH_ID_ANY, 0,  le_flags, NULL,
 			      rxc->rx_cmdq, true);
 	if (ret) {
-		CXIP_WARN("Failed to write UX Append command: %d\n", ret);
+		RXC_DBG(rxc, "Failed to write UX Append command: %d\n", ret);
 		goto req_free;
 	}
 
@@ -1420,7 +1423,7 @@ static int cxip_rxc_sink_fini(struct cxip_rxc *rxc)
 			      rxc->sink_le.buffer_id, rxc->rx_cmdq);
 	if (ret) {
 		/* TODO handle error */
-		CXIP_WARN("Failed to enqueue Unlink: %d\n", ret);
+		RXC_WARN(rxc, "Failed to enqueue Unlink: %d\n", ret);
 	}
 
 	return ret;
@@ -1464,17 +1467,17 @@ cxip_zbp_cb(struct cxip_req *req, const union c_event *event)
 		mb.raw = event->tgt_long.match_bits;
 		put_req = cxip_tx_id_lookup(txc->ep_obj, mb.tx_id);
 		if (!put_req) {
-			CXIP_WARN("Failed to find TX ID: %d\n", mb.tx_id);
+			TXC_WARN(txc, "Failed to find TX ID: %d\n", mb.tx_id);
 			return FI_SUCCESS;
 		}
 
 		event_rc = cxi_tgt_event_rc(event);
 		if (event_rc != C_RC_OK)
-			CXIP_WARN("ZBP error: %p rc: %s\n",
-				  put_req, cxi_rc_to_str(event_rc));
+			TXC_WARN(txc, "ZBP error: %p rc: %s\n", put_req,
+				 cxi_rc_to_str(event_rc));
 		else
-			CXIP_DBG("ZBP received: %p rc: %s\n",
-				 put_req, cxi_rc_to_str(event_rc));
+			TXC_DBG(txc, "ZBP received: %p rc: %s\n", put_req,
+				cxi_rc_to_str(event_rc));
 
 		cxip_tx_id_free(txc->ep_obj, mb.tx_id);
 
@@ -1495,9 +1498,8 @@ cxip_zbp_cb(struct cxip_req *req, const union c_event *event)
 
 		return FI_SUCCESS;
 	default:
-		CXIP_WARN("Unexpected event type: %d\n",
+		TXC_FATAL(txc, "Unexpected event type: %d\n",
 			  event->hdr.event_type);
-		return FI_SUCCESS;
 	}
 }
 
@@ -1522,7 +1524,7 @@ int cxip_txc_zbp_init(struct cxip_txc *txc)
 	/* Populate request */
 	req = cxip_cq_req_alloc(txc->send_cq, 1, NULL);
 	if (!req) {
-		CXIP_WARN("Failed to allocate request\n");
+		TXC_WARN(txc, "Failed to allocate request\n");
 		return -FI_ENOMEM;
 	}
 
@@ -1534,7 +1536,7 @@ int cxip_txc_zbp_init(struct cxip_txc *txc)
 			      CXI_MATCH_ID_ANY, 0, le_flags, NULL,
 			      txc->rx_cmdq, true);
 	if (ret) {
-		CXIP_WARN("Failed to write Append command: %d\n", ret);
+		TXC_DBG(txc, "Failed to write Append command: %d\n", ret);
 		goto req_free;
 	}
 
@@ -1554,7 +1556,7 @@ int cxip_txc_zbp_init(struct cxip_txc *txc)
 		cxip_cq_progress(txc->send_cq);
 	} while (!ofi_atomic_get32(&txc->zbp_le_linked));
 
-	CXIP_DBG("ZBP LE linked: %p\n", txc);
+	TXC_DBG(txc, "ZBP LE linked\n");
 
 	return FI_SUCCESS;
 
@@ -1575,7 +1577,7 @@ int cxip_txc_zbp_fini(struct cxip_txc *txc)
 			      txc->zbp_le.buffer_id, txc->rx_cmdq);
 	if (ret) {
 		/* TODO handle error */
-		CXIP_WARN("Failed to enqueue Unlink: %d\n", ret);
+		TXC_WARN(txc, "Failed to enqueue Unlink: %d\n", ret);
 	}
 
 	/* Wait for unlink */
@@ -1584,7 +1586,7 @@ int cxip_txc_zbp_fini(struct cxip_txc *txc)
 		cxip_cq_progress(txc->send_cq);
 	} while (ofi_atomic_get32(&txc->zbp_le_linked));
 
-	CXIP_DBG("ZBP LE unlinked: %p\n", txc);
+	TXC_DBG(txc, "ZBP LE unlinked\n");
 
 	return ret;
 }
@@ -1600,13 +1602,13 @@ int cxip_rxc_oflow_init(struct cxip_rxc *rxc)
 
 	ret = cxip_rxc_eager_replenish(rxc);
 	if (ret) {
-		CXIP_WARN("cxip_rxc_eager_replenish failed: %d\n", ret);
+		RXC_WARN(rxc, "cxip_rxc_eager_replenish failed: %d\n", ret);
 		return ret;
 	}
 
 	ret = cxip_rxc_sink_init(rxc);
 	if (ret) {
-		CXIP_WARN("cxip_rxc_sink_init failed: %d\n", ret);
+		RXC_WARN(rxc, "cxip_rxc_sink_init failed: %d\n", ret);
 		cxip_rxc_eager_fini(rxc);
 		return ret;
 	}
@@ -1653,17 +1655,17 @@ void cxip_rxc_oflow_fini(struct cxip_rxc *rxc)
 	}
 
 	if (def_events)
-		CXIP_DBG("Freed %d deferred event(s)\n", def_events);
+		RXC_DBG(rxc, "Freed %d deferred event(s)\n", def_events);
 
 	ret = cxip_rxc_sink_fini(rxc);
 	if (ret != FI_SUCCESS) {
-		CXIP_WARN("cxip_rxc_sink_fini() returned: %d\n", ret);
+		RXC_WARN(rxc, "cxip_rxc_sink_fini() returned: %d\n", ret);
 		return;
 	}
 
 	ret = cxip_rxc_eager_fini(rxc);
 	if (ret != FI_SUCCESS) {
-		CXIP_WARN("cxip_rxc_eager_fini() returned: %d\n", ret);
+		RXC_WARN(rxc, "cxip_rxc_eager_fini() returned: %d\n", ret);
 		return;
 	}
 
@@ -1742,7 +1744,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			return def_ev ? FI_SUCCESS : -FI_EAGAIN;
 		}
 
-		CXIP_DBG("Matched deferred event: %p\n", def_ev);
+		RXC_DBG(rxc, "Matched deferred event: %p\n", def_ev);
 
 		/* Calculate start, length */
 		def_ev->mrecv_start = req->recv.start_offset;
@@ -1825,7 +1827,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 				return -FI_EAGAIN;
 			}
 
-			CXIP_DBG("Software issued Get, req: %p\n", req);
+			RXC_DBG(rxc, "Software issued Get, req: %p\n", req);
 		}
 
 		/* Count the rendezvous event. */
@@ -1846,8 +1848,8 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		rdzv_recv_req_event(req);
 		return FI_SUCCESS;
 	default:
-		CXIP_FATAL("Unexpected event type: %d\n",
-			   event->hdr.event_type);
+		RXC_FATAL(rxc, "Unexpected event type: %d\n",
+			  event->hdr.event_type);
 	}
 }
 
@@ -1902,7 +1904,8 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			CXIP_FATAL("Unexpected link event rc: %d\n",
 				   cxi_tgt_event_rc(event));
 
-		CXIP_WARN("Failed to append user buffer due to LE exhaustion\n");
+		RXC_WARN(rxc,
+			 "Failed to append user buffer due to LE exhaustion\n");
 
 		ret = cxip_recv_onload_flow_control(rxc);
 		if (ret == FI_SUCCESS)
@@ -2037,8 +2040,8 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		}
 		return FI_SUCCESS;
 	default:
-		CXIP_FATAL("Unexpected event type: %d\n",
-			   event->hdr.event_type);
+		RXC_FATAL(rxc, "Unexpected event type: %d\n",
+			  event->hdr.event_type);
 	}
 }
 
@@ -2085,13 +2088,13 @@ int cxip_recv_reenable(struct cxip_rxc *rxc)
 	ret = cxil_pte_status(rxc->rx_pte->pte, &pte_status);
 	assert(!ret);
 
-	CXIP_DBG("Processed %d/%d drops\n",
-		 total_drops+1, pte_status.drop_count+1);
+	RXC_DBG(rxc, "Processed %d/%d drops\n",
+		total_drops + 1, pte_status.drop_count + 1);
 
 	if (total_drops != pte_status.drop_count)
 		return -FI_EAGAIN;
 
-	CXIP_DBG("Re-enabling PTE\n");
+	RXC_DBG(rxc, "Re-enabling PTE\n");
 
 	ret = cxip_rxc_msg_enable(rxc, total_drops);
 	assert(ret == FI_SUCCESS);
@@ -2124,17 +2127,18 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		 * returned.
 		 */
 		case C_RC_ENTRY_NOT_FOUND:
-			CXIP_WARN("Target dropped flow control message... replaying message\n");
+			RXC_WARN(rxc,
+				 "Target dropped flow control message... replaying message\n");
 			ret = cxip_ctrl_msg_send(req);
 			break;
 		default:
-			CXIP_FATAL("Unexpected event rc: %d\n",
-				   cxi_event_rc(event));
+			RXC_FATAL(rxc, "Unexpected event rc: %d\n",
+				  cxi_event_rc(event));
 		}
 		break;
 	default:
-		CXIP_FATAL("Unexpected event type: %d\n",
-			   event->hdr.event_type);
+		RXC_FATAL(rxc, "Unexpected event type: %d\n",
+			  event->hdr.event_type);
 	}
 
 	fastlock_release(&rxc->lock);
@@ -2161,7 +2165,7 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
 
 	fc_drops = calloc(1, sizeof(*fc_drops));
 	if (!fc_drops) {
-		CXIP_DBG("Failed to allocate drops\n");
+		RXC_WARN(rxc, "Failed to allocate drops\n");
 		return -FI_ENOMEM;
 	}
 
@@ -2187,8 +2191,8 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
 
 	dlist_insert_tail(&fc_drops->rxc_entry, &rxc->fc_drops);
 
-	CXIP_DBG("Processed drops: %d NIC: %#x TXC: %d RXC: %p\n",
-		 drops, nic_addr, txc_id, rxc);
+	RXC_DBG(rxc, "Processed drops: %d NIC: %#x TXC: %d RXC: %p\n", drops,
+		nic_addr, txc_id, rxc);
 
 	/* Wait until search and delete completes before attempting to
 	 * re-enable.
@@ -2221,14 +2225,14 @@ static int cxip_recv_replay(struct cxip_rxc *rxc)
 
 	ret = cxip_rxc_eager_replenish(rxc);
 	if (ret != FI_SUCCESS)
-		CXIP_WARN("cxip_rxc_eager_replenish failed: %d\n", ret);
+		RXC_WARN(rxc, "cxip_rxc_eager_replenish failed: %d\n", ret);
 
 	dlist_foreach_container_safe(&rxc->replay_queue,
 				     struct cxip_req, req,
 				     recv.rxc_entry, tmp) {
 		dlist_remove_init(&req->recv.rxc_entry);
 
-		CXIP_DBG("Replaying: %p\n", req);
+		RXC_DBG(rxc, "Replaying: %p\n", req);
 
 		/* Since the RXC and PtlTE are in a controlled state and no new
 		 * user receives are being posted, it is safe to ignore the RXC
@@ -2295,8 +2299,8 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 
 	rxc->state = RXC_FLOW_CONTROL;
 
-	CXIP_DBG("UX onload complete (sw_ux_list_len: %d): %p\n",
-		 rxc->sw_ux_list_len, rxc);
+	RXC_DBG(rxc, "UX onload complete (sw_ux_list_len: %d)\n",
+		rxc->sw_ux_list_len);
 
 	ofi_atomic_dec32(&rxc->orx_reqs);
 	cxip_cq_req_free(req);
@@ -2360,7 +2364,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 		dlist_insert_tail(&ux_send->rxc_entry, &rxc->sw_ux_list);
 		rxc->sw_ux_list_len++;
 
-		CXIP_DBG("Onloaded Send: %p\n", ux_send);
+		RXC_DBG(rxc, "Onloaded Send: %p\n", ux_send);
 
 		break;
 	case C_EVENT_SEARCH:
@@ -2371,7 +2375,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 
 		break;
 	default:
-		CXIP_WARN("Unexpected event type: %d\n",
+		RXC_FATAL(rxc, "Unexpected event type: %d\n",
 			  event->hdr.event_type);
 	}
 
@@ -2397,7 +2401,7 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	/* Populate request */
 	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
 	if (!req) {
-		CXIP_WARN("Failed to allocate request\n");
+		RXC_WARN(rxc, "Failed to allocate request\n");
 		ret = -FI_ENOMEM;
 		return ret;
 	}
@@ -2419,7 +2423,7 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 
 	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
-		CXIP_DBG("Failed to write Search command: %d\n", ret);
+		RXC_WARN(rxc, "Failed to write Search command: %d\n", ret);
 
 		ofi_atomic_dec32(&rxc->orx_reqs);
 		cxip_cq_req_free(req);
@@ -2451,7 +2455,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 		assert(rxc->state == RXC_FLOW_CONTROL ||
 		       rxc->state == RXC_DISABLED);
 
-		CXIP_DBG("Enabled Receive PTE: %p\n", rxc);
+		RXC_DBG(rxc, "Enabled Receive PTE\n");
 
 		/* Progress the control EP until all control messages can be
 		 * successfully queued.
@@ -2480,7 +2484,8 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 		 * when a peer sends a sideband drop message.
 		 */
 		if (rxc->state == RXC_FLOW_CONTROL) {
-			CXIP_WARN("Failed to reenable PtlTE while in flow control\n");
+			RXC_WARN(rxc,
+				 "Failed to reenable PtlTE while in flow control\n");
 			break;
 		}
 
@@ -2489,16 +2494,16 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 
 		rxc->state = RXC_ONLOAD_FLOW_CONTROL;
 
-		CXIP_DBG("Flow control detected: %p\n", rxc);
+		RXC_DBG(rxc, "Flow control detected\n");
 
 		ret = cxip_ux_onload(rxc);
 		assert(ret == FI_SUCCESS);
 
-		CXIP_DBG("Started onload\n");
+		RXC_DBG(rxc, "Started onload\n");
 
 		break;
 	default:
-		CXIP_FATAL("Unexpected state received: %u\n", state);
+		RXC_FATAL(rxc, "Unexpected state received: %u\n", state);
 	}
 
 	fastlock_release(&rxc->lock);
@@ -2646,8 +2651,9 @@ static int cxip_recv_sw_matcher(struct cxip_req *req)
 		free(ux_send);
 		rxc->sw_ux_list_len--;
 
-		CXIP_DBG("Software match, req: %p ux_send: %p (sw_ux_list_len: %u)\n",
-			 req, ux_send, req->recv.rxc->sw_ux_list_len);
+		RXC_DBG(rxc,
+			"Software match, req: %p ux_send: %p (sw_ux_list_len: %u)\n",
+			req, ux_send, rxc->sw_ux_list_len);
 
 		if (ret == -FI_EINPROGRESS) {
 			/* Multi-recv, keep matching */
@@ -2682,7 +2688,7 @@ static int cxip_recv_req_dropped(struct cxip_req *req)
 	dlist_remove(&req->recv.rxc_entry);
 	dlist_insert_tail(&req->recv.rxc_entry, &rxc->replay_queue);
 
-	CXIP_DBG("Receive dropped: %p\n", req);
+	RXC_DBG(rxc, "Receive dropped: %p\n", req);
 
 	fastlock_release(&rxc->lock);
 
@@ -2792,7 +2798,7 @@ static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq)
 			      le_flags, NULL, rxc->rx_cmdq,
 			      !(req->recv.flags & FI_MORE));
 	if (ret != FI_SUCCESS) {
-		CXIP_DBG("Failed to write Append command: %d\n", ret);
+		RXC_DBG(rxc, "Failed to write Append command: %d\n", ret);
 		return ret;
 	}
 
@@ -2823,7 +2829,8 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 		return -FI_ENOPROTOOPT;
 
 	if (tagged && (tag & ~CXIP_TAG_MASK || ignore & ~CXIP_TAG_MASK)) {
-		CXIP_DBG("Invalid tag: %#018lx ignore: %#018lx (%#018lx)\n",
+		RXC_WARN(rxc,
+			 "Invalid tag: %#018lx ignore: %#018lx (%#018lx)\n",
 			 tag, ignore, CXIP_TAG_MASK);
 		return -FI_EINVAL;
 	}
@@ -2842,7 +2849,7 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 			ret = _cxip_av_lookup(rxc->ep_obj->av, src_addr,
 					      &caddr);
 			if (ret != FI_SUCCESS) {
-				CXIP_DBG("Failed to look up FI addr: %d\n",
+				RXC_WARN(rxc, "Failed to look up FI addr: %d\n",
 					 ret);
 				return -FI_EINVAL;
 			}
@@ -2856,7 +2863,7 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 
 	req = cxip_recv_req_alloc(rxc, buf, len);
 	if (!req) {
-		CXIP_DBG("Failed to allocate recv request\n");
+		RXC_WARN(rxc, "Failed to allocate recv request\n");
 		ret = -FI_ENOMEM;
 		goto err;
 	}
@@ -2892,9 +2899,10 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	if (ret != FI_SUCCESS)
 		goto err_free_request;
 
-	CXIP_DBG("req: %p buf: %p len: %lu src_addr: %ld tag(%c): 0x%lx ignore: 0x%lx context: %p\n",
-		 req, buf, len, src_addr, tagged ? '*' : '-', tag, ignore,
-		 context);
+	RXC_DBG(rxc,
+		"req: %p buf: %p len: %lu src_addr: %ld tag(%c): 0x%lx ignore: 0x%lx context: %p\n",
+		req, buf, len, src_addr, tagged ? '*' : '-', tag, ignore,
+		context);
 
 	return FI_SUCCESS;
 
@@ -2915,7 +2923,7 @@ static fi_addr_t _txc_fi_addr(struct cxip_txc *txc)
 						txc->ep_obj->av,
 						txc->ep_obj->src_addr.nic,
 						txc->ep_obj->src_addr.pid);
-		CXIP_DBG("Found EP FI Addr: %lu\n", txc->ep_obj->fi_addr);
+		TXC_DBG(txc, "Found EP FI Addr: %lu\n", txc->ep_obj->fi_addr);
 	}
 
 	return txc->ep_obj->fi_addr;
@@ -2954,36 +2962,40 @@ static void report_send_completion(struct cxip_req *req, bool sw_cntr)
 {
 	int ret;
 	int success_event = (req->flags & FI_COMPLETION);
+	struct cxip_txc *txc = req->send.txc;
 
 	req->flags &= (FI_MSG | FI_TAGGED | FI_SEND);
 
 	if (req->send.rc == C_RC_OK) {
-		CXIP_DBG("Request success: %p\n", req);
+		TXC_DBG(txc, "Request success: %p\n", req);
 
 		if (success_event) {
 			ret = cxip_cq_req_complete(req);
 			if (ret != FI_SUCCESS)
-				CXIP_WARN("Failed to report completion: %d\n",
+				TXC_WARN(txc,
+					 "Failed to report completion: %d\n",
 					 ret);
 		}
 
 		if (sw_cntr && req->send.cntr) {
 			ret = cxip_cntr_mod(req->send.cntr, 1, false, false);
 			if (ret)
-				CXIP_WARN("cxip_cntr_mod returned: %d\n", ret);
+				TXC_WARN(txc, "cxip_cntr_mod returned: %d\n",
+					 ret);
 		}
 	} else {
-		CXIP_WARN("Request error: %p (err: %d, %s)\n",
-			  req, FI_EIO, cxi_rc_to_str(req->send.rc));
+		TXC_WARN(txc, "Request error: %p (err: %d, %s)\n", req, FI_EIO,
+			 cxi_rc_to_str(req->send.rc));
 
 		ret = cxip_cq_req_error(req, 0, FI_EIO, req->send.rc, NULL, 0);
 		if (ret != FI_SUCCESS)
-			CXIP_WARN("Failed to report error: %d\n", ret);
+			TXC_WARN(txc, "Failed to report error: %d\n", ret);
 
 		if (sw_cntr && req->send.cntr) {
 			ret = cxip_cntr_mod(req->send.cntr, 1, false, true);
 			if (ret)
-				CXIP_WARN("cxip_cntr_mod returned: %d\n", ret);
+				TXC_WARN(txc, "cxip_cntr_mod returned: %d\n",
+					 ret);
 		}
 	}
 }
@@ -3030,15 +3042,16 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 {
 	int event_rc;
 	int ret;
+	struct cxip_txc *txc = req->send.txc;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
 		/* The source Put completed. */
 		event_rc = cxi_init_event_rc(event);
 
-		CXIP_DBG("Acked: %p (rc: %s list: %s)\n", req,
-			 cxi_rc_to_str(event_rc),
-			 cxi_ptl_list_to_str(event->init_short.ptl_list));
+		TXC_DBG(txc, "Acked: %p (rc: %s list: %s)\n", req,
+			cxi_rc_to_str(event_rc),
+			cxi_ptl_list_to_str(event->init_short.ptl_list));
 
 		/* If the message was dropped, mark the peer as disabled. Do
 		 * not generate a completion. Free associated resources. Do not
@@ -3080,9 +3093,8 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 		}
 		return FI_SUCCESS;
 	default:
-		CXIP_WARN("Unexpected event received: %s\n",
+		TXC_FATAL(txc, "Unexpected event received: %s\n",
 			  cxi_event_to_str(event));
-		return FI_SUCCESS;
 	}
 }
 
@@ -3101,13 +3113,13 @@ static int rdzv_src_cb(struct cxip_req *req, const union c_event *event)
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
 		if (event_rc != C_RC_OK)
-			CXIP_WARN("%s error: %p rc: %s\n",
-				  cxi_event_to_str(event), req,
-				  cxi_rc_to_str(event_rc));
-		else
-			CXIP_DBG("%s received: %p rc: %s\n",
+			TXC_WARN(txc, "%s error: %p rc: %s\n",
 				 cxi_event_to_str(event), req,
 				 cxi_rc_to_str(event_rc));
+		else
+			TXC_DBG(txc, "%s received: %p rc: %s\n",
+				cxi_event_to_str(event), req,
+				cxi_rc_to_str(event_rc));
 
 		req->rdzv_src.rc = cxi_tgt_event_rc(event);
 		return FI_SUCCESS;
@@ -3116,25 +3128,25 @@ static int rdzv_src_cb(struct cxip_req *req, const union c_event *event)
 		cxip_cq_req_free(req);
 		ofi_atomic_sub32(&txc->rdzv_src_lacs, 1 << req->rdzv_src.lac);
 
-		CXIP_DBG("RDZV source window unlinked (LAC: %u)\n",
-			 req->rdzv_src.lac);
+		TXC_DBG(txc, "RDZV source window unlinked (LAC: %u)\n",
+			req->rdzv_src.lac);
 		return FI_SUCCESS;
 	case C_EVENT_GET:
 		mb.raw = event->tgt_long.match_bits;
 		get_req = cxip_rdzv_id_lookup(txc->ep_obj, mb.rdzv_id_lo);
 		if (!get_req) {
-			CXIP_WARN("Failed to find RDZV ID: %d\n",
-				  mb.rdzv_id_lo);
+			TXC_WARN(txc, "Failed to find RDZV ID: %d\n",
+				 mb.rdzv_id_lo);
 			return FI_SUCCESS;
 		}
 
 		event_rc = cxi_tgt_event_rc(event);
 		if (event_rc != C_RC_OK)
-			CXIP_WARN("Get error: %p rc: %s\n",
-				  get_req, cxi_rc_to_str(event_rc));
+			TXC_WARN(txc, "Get error: %p rc: %s\n", get_req,
+				 cxi_rc_to_str(event_rc));
 		else
-			CXIP_DBG("Get received: %p rc: %s\n",
-				 get_req, cxi_rc_to_str(event_rc));
+			TXC_DBG(txc, "Get received: %p rc: %s\n", get_req,
+				cxi_rc_to_str(event_rc));
 
 		get_req->send.rc = event_rc;
 
@@ -3143,9 +3155,8 @@ static int rdzv_src_cb(struct cxip_req *req, const union c_event *event)
 
 		return FI_SUCCESS;
 	default:
-		CXIP_WARN("Unexpected event received: %s\n",
+		TXC_FATAL(txc, "Unexpected event received: %s\n",
 			  cxi_event_to_str(event));
-		return FI_SUCCESS;
 	}
 }
 
@@ -3211,7 +3222,7 @@ static int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 		ofi_atomic_add32(&txc->rdzv_src_lacs, lac_mask);
 		dlist_insert_tail(&req->rdzv_src.list, &txc->rdzv_src_reqs);
 
-		CXIP_DBG("RDZV source window linked (LAC: %u)\n", lac);
+		TXC_DBG(txc, "RDZV source window linked (LAC: %u)\n", lac);
 	} else {
 		ret = -FI_EAGAIN;
 		goto req_free;
@@ -3242,7 +3253,7 @@ int cxip_txc_rdzv_src_fini(struct cxip_txc *txc)
 		ret = cxip_pte_unlink(txc->rdzv_pte, C_PTL_LIST_PRIORITY,
 				      req->req_id, txc->rx_cmdq);
 		if (ret) {
-			CXIP_WARN("Failed to enqueue Unlink: %d\n", ret);
+			TXC_WARN(txc, "Failed to enqueue Unlink: %d\n", ret);
 			return ret;
 		}
 	}
@@ -3302,7 +3313,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	/* Map local buffer */
 	ret = cxip_map(txc->domain, req->send.buf, req->send.len, &send_md);
 	if (ret) {
-		CXIP_DBG("Failed to map send buffer: %d\n", ret);
+		TXC_WARN(txc, "Failed to map send buffer: %d\n", ret);
 		return ret;
 	}
 	req->send.send_md = send_md;
@@ -3310,8 +3321,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	/* Prepare rendezvous source buffer */
 	ret = cxip_txc_prep_rdzv_src(txc, send_md->md->lac);
 	if (ret != FI_SUCCESS) {
-		CXIP_DBG("Failed to prepare source window: %d\n",
-			     ret);
+		TXC_WARN(txc, "Failed to prepare source window: %d\n", ret);
 		goto err_unmap;
 	}
 
@@ -3356,8 +3366,8 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	if (req->send.flags & FI_FENCE) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
 		if (ret) {
-			CXIP_DBG("Failed to issue CQ_FENCE command: %d\n",
-				 ret);
+			TXC_DBG(txc, "Failed to issue CQ_FENCE command: %d\n",
+				ret);
 			ret = -FI_EAGAIN;
 			goto err_unlock;
 		}
@@ -3402,7 +3412,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	}
 
 	if (ret) {
-		CXIP_WARN("Failed to enqueue Put: %d\n", ret);
+		TXC_DBG(txc, "Failed to enqueue Put: %d\n", ret);
 		goto err_unlock;
 	}
 
@@ -3451,11 +3461,12 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 	if (match_complete) {
 		if (req->send.rc == C_RC_OK &&
 		    event->init_short.ptl_list != C_PTL_LIST_PRIORITY) {
-			CXIP_DBG("Waiting for match complete: %p\n", req);
+			TXC_DBG(req->send.txc,
+				"Waiting for match complete: %p\n", req);
 			return FI_SUCCESS;
 		}
 
-		CXIP_DBG("Match complete with Ack: %p\n", req);
+		TXC_DBG(req->send.txc, "Match complete with Ack: %p\n", req);
 		cxip_tx_id_free(req->send.txc->ep_obj, req->send.tx_id);
 	}
 
@@ -3541,7 +3552,8 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 				ret = cxip_map(txc->domain, req->send.buf,
 					       req->send.len, &send_md);
 				if (ret != FI_SUCCESS) {
-					CXIP_DBG("Failed to map send buffer: %ld\n",
+					TXC_WARN(txc,
+						 "Failed to map send buffer: %ld\n",
 						 ret);
 					return ret;
 				}
@@ -3562,7 +3574,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	if (match_complete) {
 		tx_id = cxip_tx_id_alloc(txc->ep_obj, req);
 		if (tx_id < 0) {
-			CXIP_DBG("Failed to allocate TX ID: %ld\n", ret);
+			TXC_WARN(txc, "Failed to allocate TX ID: %ld\n", ret);
 			goto err_unmap;
 		}
 
@@ -3586,8 +3598,8 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	if (req->send.flags & FI_FENCE) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
 		if (ret) {
-			CXIP_DBG("Failed to issue CQ_FENCE command: %ld\n",
-				 ret);
+			TXC_DBG(txc, "Failed to issue CQ_FENCE command: %ld\n",
+				ret);
 			ret = -FI_EAGAIN;
 			goto err_unlock;
 		}
@@ -3611,7 +3623,8 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 
 		ret = cxip_cmdq_emit_c_state(cmdq, &cmd.c_state);
 		if (ret) {
-			CXIP_DBG("Failed to issue C_STATE command: %ld\n", ret);
+			TXC_DBG(txc, "Failed to issue C_STATE command: %ld\n",
+				ret);
 			goto err_unlock;
 		}
 
@@ -3624,7 +3637,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		ret = cxi_cq_emit_idc_msg(cmdq->dev_cmdq, &cmd.idc_msg,
 					  buf, req->send.len);
 		if (ret) {
-			CXIP_DBG("Failed to write IDC: %ld\n", ret);
+			TXC_DBG(txc, "Failed to write IDC: %ld\n", ret);
 
 			/* Return error according to Domain Resource Management
 			 */
@@ -3681,7 +3694,8 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		}
 
 		if (ret) {
-			CXIP_DBG("Failed to write DMA command: %ld\n", ret);
+			TXC_DBG(txc, "Failed to write DMA command: %ld\n",
+				ret);
 			ret = -FI_EAGAIN;
 			goto err_unlock;
 		}
@@ -3764,9 +3778,9 @@ static int cxip_fc_peer_put(struct cxip_fc_peer *peer)
 
 		peer->pending_acks++;
 
-		CXIP_DBG("Notified disabled peer, TXC: %p NIC: %#x PID: %u dropped: %u\n",
-			 peer->txc, peer->caddr.nic, peer->caddr.pid,
-			 peer->dropped);
+		TXC_DBG(peer->txc,
+			"Notified disabled peer NIC: %#x PID: %u dropped: %u\n",
+			peer->caddr.nic, peer->caddr.pid, peer->dropped);
 	}
 
 	return FI_SUCCESS;
@@ -3813,15 +3827,16 @@ int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		 * returned.
 		 */
 		case C_RC_ENTRY_NOT_FOUND:
-			CXIP_WARN("Target dropped flow control message... replaying message\n");
+			TXC_WARN(txc,
+				 "Target dropped flow control message... replaying message\n");
 			return cxip_ctrl_msg_send(req);
 		default:
-			CXIP_FATAL("Unexpected event rc: %d\n",
-				   cxi_event_rc(event));
+			TXC_FATAL(txc, "Unexpected event rc: %d\n",
+				  cxi_event_rc(event));
 		}
 	default:
-		CXIP_FATAL("Unexpected event type: %d\n",
-			   event->hdr.event_type);
+		TXC_FATAL(txc, "Unexpected event type: %d\n",
+			  event->hdr.event_type);
 	}
 }
 
@@ -3844,7 +3859,7 @@ static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
 
 	p = calloc(1, sizeof(*p));
 	if (!p) {
-		CXIP_WARN("Failed to allocate FC Peer\n");
+		TXC_WARN(txc, "Failed to allocate FC Peer\n");
 		return -FI_ENOMEM;
 	}
 
@@ -3905,11 +3920,11 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
 
 	peer = cxip_fc_peer_lookup(txc, caddr, rxc_id);
 	if (!peer)
-		CXIP_FATAL("FC peer not found: TXC: %u NIC: %#x PID: %d\n",
-			   txc_id, nic_addr, pid);
+		TXC_FATAL(txc, "FC peer not found: NIC: %#x PID: %d\n",
+			  nic_addr, pid);
 
-	CXIP_DBG("Replaying dropped sends, TXC: %u NIC: %#x PID: %d\n",
-		 txc_id, nic_addr, pid);
+	TXC_DBG(txc, "Replaying dropped sends, NIC: %#x PID: %d\n",
+		nic_addr, pid);
 
 	dlist_foreach_container_safe(&peer->msg_queue, struct cxip_req,
 				     req, send.txc_entry, tmp) {
@@ -3921,7 +3936,7 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
 		req->send.fc_peer = NULL;
 		dlist_insert_tail(&req->send.txc_entry, &txc->msg_queue);
 
-		CXIP_DBG("Replayed %p\n", req);
+		TXC_DBG(txc, "Replayed %p\n", req);
 	}
 
 	/* Peer flow control structure can only be freed if replay is complete
@@ -3964,8 +3979,9 @@ static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req)
 			return ret;
 		}
 
-		CXIP_DBG("Disabled peer detected, TXC: %p NIC: %#x PID: %u pending: %u\n",
-			 txc, peer->caddr.nic, peer->caddr.pid, peer->pending);
+		TXC_DBG(txc,
+			"Disabled peer detected, NIC: %#x PID: %u pending: %u\n",
+			peer->caddr.nic, peer->caddr.pid, peer->pending);
 	}
 
 	/* Account for the dropped message. */
@@ -3974,9 +3990,10 @@ static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req)
 	if (ret)
 		peer->dropped--;
 	else
-		CXIP_DBG("Send dropped, req: %p NIC: %#x PID: %u pending: %u dropped: %u\n",
-			 req, peer->caddr.nic, peer->caddr.pid, peer->pending,
-			 peer->dropped);
+		TXC_DBG(txc,
+			"Send dropped, req: %p NIC: %#x PID: %u pending: %u dropped: %u\n",
+			req, peer->caddr.nic, peer->caddr.pid, peer->pending,
+			peer->dropped);
 
 	fastlock_release(&txc->lock);
 
@@ -4024,11 +4041,11 @@ static void cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req)
 
 	if (req->send.fc_peer) {
 		/* The peer was disabled after this message arrived. */
-		CXIP_DBG("Send not dropped, req: %p NIC: %#x PID: %u pending: %u dropped: %u\n",
-			 req, req->send.fc_peer->caddr.nic,
-			 req->send.fc_peer->caddr.pid,
-			 req->send.fc_peer->pending,
-			 req->send.fc_peer->dropped);
+		TXC_DBG(txc,
+			"Send not dropped, req: %p NIC: %#x PID: %u pending: %u dropped: %u\n",
+			req, req->send.fc_peer->caddr.nic,
+			req->send.fc_peer->caddr.pid,
+			req->send.fc_peer->pending, req->send.fc_peer->dropped);
 
 		cxip_fc_peer_put(req->send.fc_peer);
 	}
@@ -4066,19 +4083,19 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 		return -FI_EMSGSIZE;
 
 	if (tagged && tag & ~CXIP_TAG_MASK) {
-		CXIP_DBG("Invalid tag: %#018lx (%#018lx)\n",
+		TXC_WARN(txc, "Invalid tag: %#018lx (%#018lx)\n",
 			 tag, CXIP_TAG_MASK);
 		return -FI_EINVAL;
 	}
 
 	if (flags & FI_INJECT && len > CXIP_INJECT_SIZE) {
-		CXIP_DBG("Invalid inject length: %lu\n", len);
+		TXC_WARN(txc, "Invalid inject length: %lu\n", len);
 		return -FI_EMSGSIZE;
 	}
 
 	req = cxip_cq_req_alloc(txc->send_cq, false, txc);
 	if (!req) {
-		CXIP_DBG("Failed to allocate request\n");
+		TXC_WARN(txc, "Failed to allocate request\n");
 		return -FI_EAGAIN;
 	}
 	ofi_atomic_inc32(&txc->otx_reqs);
@@ -4114,7 +4131,7 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 	/* Look up target CXI address */
 	ret = _cxip_av_lookup(txc->ep_obj->av, dest_addr, &caddr);
 	if (ret != FI_SUCCESS) {
-		CXIP_DBG("Failed to look up FI addr: %d\n", ret);
+		TXC_WARN(txc, "Failed to look up FI addr: %d\n", ret);
 		goto req_free;
 	}
 
@@ -4127,7 +4144,7 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 	/* Check if target peer is disabled */
 	ret = cxip_send_req_queue(req->send.txc, req);
 	if (ret != FI_SUCCESS) {
-		CXIP_DBG("Target peer disabled\n");
+		TXC_DBG(txc, "Target peer disabled\n");
 		goto req_free;
 	}
 
@@ -4136,10 +4153,11 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 	if (ret != FI_SUCCESS)
 		goto req_dequeue;
 
-	CXIP_DBG("req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %#lx\n",
-		 req, req->send.buf, req->send.len, dest_addr,
-		 req->send.tagged ? '*' : '-', req->send.tag,
-		 req->context);
+	TXC_DBG(txc,
+		"req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %#lx\n",
+		req, req->send.buf, req->send.len, dest_addr,
+		req->send.tagged ? '*' : '-', req->send.tag,
+		req->context);
 
 	/* Do progress inline if there are a lot of outstanding operations. */
 	if (ofi_atomic_get32(&txc->otx_reqs) > CXIP_OTX_REQS_POLL_THRESH)

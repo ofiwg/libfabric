@@ -21,9 +21,6 @@
 
 #include "cxip.h"
 
-#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
-#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_DATA, __VA_ARGS__)
-
 /*
  * cxip_rma_inject_cb() - RMA inject event callback.
  */
@@ -70,6 +67,7 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 	int ret;
 	int event_rc;
 	int success_event = (req->flags & FI_COMPLETION);
+	struct cxip_txc *txc = req->rma.txc;
 
 	req->flags &= (FI_RMA | FI_READ | FI_WRITE);
 
@@ -84,14 +82,15 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 		if (success_event) {
 			ret = cxip_cq_req_complete(req);
 			if (ret != FI_SUCCESS)
-				CXIP_WARN("Failed to report completion: %d\n",
-					  ret);
+				TXC_WARN(txc,
+					 "Failed to report completion: %d\n",
+					 ret);
 		}
 	} else {
 		ret = cxip_cq_req_error(req, 0, FI_EIO, event_rc,
 					NULL, 0);
 		if (ret != FI_SUCCESS)
-			CXIP_WARN("Failed to report error: %d\n", ret);
+			TXC_WARN(txc, "Failed to report error: %d\n", ret);
 	}
 
 	ofi_atomic_dec32(&req->rma.txc->otx_reqs);
@@ -171,7 +170,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	/* Look up target CXI address */
 	ret = _cxip_av_lookup(txc->ep_obj->av, tgt_addr, &caddr);
 	if (ret != FI_SUCCESS) {
-		CXIP_DBG("Failed to look up FI addr: %d\n", ret);
+		TXC_WARN(txc, "Failed to look up FI addr: %d\n", ret);
 		return ret;
 	}
 
@@ -181,7 +180,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	if (!idc || (flags & FI_COMPLETION)) {
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
-			CXIP_DBG("Failed to allocate request\n");
+			TXC_WARN(txc, "Failed to allocate request\n");
 			return -FI_ENOMEM;
 		}
 
@@ -226,7 +225,8 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			ret = cxip_map(txc->domain, buf, len,
 				       &req->rma.local_md);
 			if (ret) {
-				CXIP_DBG("Failed to map buffer: %d\n", ret);
+				TXC_WARN(txc, "Failed to map buffer: %d\n",
+					 ret);
 				goto req_free;
 			}
 		}
@@ -274,8 +274,8 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	if (flags & FI_FENCE) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
 		if (ret) {
-			CXIP_DBG("Failed to issue CQ_FENCE command: %d\n",
-				 ret);
+			TXC_DBG(txc, "Failed to issue CQ_FENCE command: %d\n",
+				ret);
 			ret = -FI_EAGAIN;
 			goto unlock_op;
 		}
@@ -314,7 +314,8 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 		ret = cxip_cmdq_emit_c_state(cmdq, &cmd.c_state);
 		if (ret) {
-			CXIP_DBG("Failed to issue C_STATE command: %d\n", ret);
+			TXC_DBG(txc, "Failed to issue C_STATE command: %d\n",
+				ret);
 			goto unlock_op;
 		}
 
@@ -325,7 +326,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		ret = cxi_cq_emit_idc_put(cmdq->dev_cmdq, &cmd.idc_put, idc_buf,
 					  len);
 		if (ret) {
-			CXIP_DBG("Failed to write IDC: %d\n", ret);
+			TXC_DBG(txc, "Failed to write IDC: %d\n", ret);
 
 			/* Return error according to Domain Resource Management
 			 */
@@ -401,7 +402,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		}
 
 		if (ret) {
-			CXIP_DBG("Failed to write DMA command: %d\n", ret);
+			TXC_DBG(txc, "Failed to write DMA command: %d\n", ret);
 
 			/* Return error according to Domain Resource Management
 			 */
@@ -421,9 +422,10 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	if (hmem_buf)
 		cxip_cq_ibuf_free(txc->send_cq, hmem_buf);
 
-	CXIP_DBG("%sreq: %p op: %s buf: %p len: %lu tgt_addr: %ld context %p\n",
-		 idc ? "IDC " : "", req, fi_tostr(&op, FI_TYPE_OP_TYPE),
-		 buf, len, tgt_addr, context);
+	TXC_DBG(txc,
+		"%sreq: %p op: %s buf: %p len: %lu tgt_addr: %ld context %p\n",
+		idc ? "IDC " : "", req, fi_tostr(&op, FI_TYPE_OP_TYPE), buf,
+		len, tgt_addr, context);
 
 	/* Do progress inline if there are a lot of outstanding operations. */
 	if (ofi_atomic_get32(&txc->otx_reqs) > CXIP_OTX_REQS_POLL_THRESH)
