@@ -172,7 +172,21 @@ Intel TrueScale Fabric.
 
 See the `fi_psm2(7)` man page for more details.
 
+### psm3
+
+***
+
+The `psm3` provider provides optimized performance and scalability for most
+verbs UD devices. Additional features and optimizations can be enabled when
+running over Intel's E810 Ethernet NICs and using Intel's rendezvous kernel
+module ([`rv`](https://github.com/intel/iefs-kernel-updates)). PSM 3.x fully integrates the OFI provider and the underlying
+PSM3 protocols/implementation and only exports the OFI APIs.
+
+See [`fi_psm3`(7)](https://ofiwg.github.io/libfabric/master/man/fi_psm3.7.html) for more details.
+
 ### rxm
+
+***
 
 The `ofi_rxm` provider is an utility provider that supports RDM endpoints emulated
 over MSG endpoints of a core provider.
