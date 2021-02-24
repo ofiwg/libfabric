@@ -84,7 +84,6 @@
 					 FI_COMPLETION | \
 					 FI_MORE | \
 					 FI_FENCE | \
-					 FI_CXI_HRP | \
 					 CXIP_TX_COMP_MODES)
 #define CXIP_READMSG_ALLOWED_FLAGS	(FI_COMPLETION | \
 					 FI_MORE | \

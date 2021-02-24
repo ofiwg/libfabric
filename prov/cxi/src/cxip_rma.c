@@ -492,7 +492,7 @@ static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
 	    msg->iov_count != 1 || msg->rma_iov_count != 1)
 		return -FI_EINVAL;
 
-	if (flags & ~CXIP_WRITEMSG_ALLOWED_FLAGS)
+	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS | FI_CXI_HRP))
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)

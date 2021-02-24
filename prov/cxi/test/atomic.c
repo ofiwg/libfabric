@@ -2357,6 +2357,10 @@ Test(amo_opt, hrp)
 	uint64_t hrp_acks_start;
 	uint64_t hrp_acks_end;
 	struct cxip_ep *cxi_ep;
+	uint64_t compare;
+	uint64_t result;
+	struct fi_ioc compare_ioc = { .count = 1, .addr = &compare };
+	struct fi_ioc result_ioc = { .count = 1, .addr = &result };
 
 	/* HRP not supported in netsim */
 	cxi_ep = container_of(cxit_ep, struct cxip_ep, ep);
@@ -2409,6 +2413,10 @@ Test(amo_opt, hrp)
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
 
+	/* HRP requires UNRELIABLE */
+	ret = fi_atomicmsg(cxit_ep, &msg, FI_CXI_HRP);
+	cr_assert(ret == -FI_EINVAL, "Return code  = %d", ret);
+
 	exp_remote += operand1;
 	ret = fi_atomicmsg(cxit_ep, &msg, FI_CXI_UNRELIABLE | FI_CXI_HRP);
 	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
@@ -2425,6 +2433,17 @@ Test(amo_opt, hrp)
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
 
+	/* HRP FAMO is invalid */
+	ret = fi_fetch_atomicmsg(cxit_ep, &msg, &result_ioc, NULL, 1,
+				 FI_CXI_UNRELIABLE | FI_CXI_HRP);
+	cr_assert(ret == -FI_EBADFLAGS, "Return code  = %d", ret);
+
+	/* Try unreliable FAMO */
+	exp_remote += operand1;
+	ret = fi_fetch_atomicmsg(cxit_ep, &msg, &result_ioc, NULL, 1,
+				 FI_CXI_UNRELIABLE);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+
 	/* wait a second to check the operation was performed. The HRP response
 	 * returns before the request hits the NIC.
 	 */
@@ -2435,10 +2454,30 @@ Test(amo_opt, hrp)
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
 
-	ret = fi_atomicmsg(cxit_ep, &msg, FI_CXI_HRP);
-	cr_assert_eq(ret, -FI_EINVAL, "ret is: %d", ret);
+	/* HRP compare AMO is invalid */
+	ret = fi_compare_atomicmsg(cxit_ep, &msg, &compare_ioc, NULL, 1,
+				   &result_ioc, NULL, 1,
+				   FI_CXI_UNRELIABLE | FI_CXI_HRP);
+	cr_assert(ret == -FI_EBADFLAGS, "Return code  = %d", ret);
+
+	/* Try unreliable compare AMO. */
+	msg.op = FI_CSWAP;
+	compare = exp_remote;
+	operand1 = exp_remote + 1;
+	ret = fi_compare_atomicmsg(cxit_ep, &msg, &compare_ioc, NULL, 1,
+				   &result_ioc, NULL, 1, FI_CXI_UNRELIABLE);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
 
 	sleep(1);
+
+	/* Validate data */
+	cr_assert_eq(*rma, operand1,
+		     "Result = %ld, expected = %ld",
+		     *rma, operand1);
+	cr_assert_eq(result, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     result, exp_remote);
+
 	ret = dom_ops->cntr_read(&cxit_domain->fid,
 				 C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
 				 &res_end, NULL);
@@ -2452,9 +2491,19 @@ Test(amo_opt, hrp)
 	cr_assert_eq(hrp_acks_end - hrp_acks_start, 1,
 		     "unexpected hrp_acks count: %lu\n",
 		     hrp_acks_end - hrp_acks_start);
-	cr_assert_eq(res_end - res_start, 2,
-		     "unexpected hrp_acks count: %lu\n",
+	cr_assert_eq(res_end - res_start, 4,
+		     "unexpected restricted packets count: %lu\n",
 		     res_end - res_start);
+
+	/* HRP does not support Fetching AMOS. */
+	ret = fi_fetch_atomicmsg(cxit_ep, &msg, &result_ioc, NULL, 1,
+				 FI_CXI_UNRELIABLE | FI_CXI_HRP);
+	cr_assert(ret == -FI_EBADFLAGS, "Return code  = %d", ret);
+
+	ret = fi_compare_atomicmsg(cxit_ep, &msg, &result_ioc, NULL, 1,
+				   &result_ioc, NULL, 1,
+				   FI_CXI_UNRELIABLE | FI_CXI_HRP);
+	cr_assert(ret == -FI_EBADFLAGS, "Return code  = %d", ret);
 
 	_cxit_destroy_mr(&mr);
 }

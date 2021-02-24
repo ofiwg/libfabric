@@ -953,7 +953,9 @@ static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *ep,
 {
 	struct cxip_txc *txc;
 
-	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS | FI_CXI_UNRELIABLE))
+	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS |
+		      FI_CXI_UNRELIABLE |
+		      FI_CXI_HRP))
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
@@ -1092,7 +1094,7 @@ static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 {
 	struct cxip_txc *txc;
 
-	if (flags & ~CXIP_WRITEMSG_ALLOWED_FLAGS)
+	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS | FI_CXI_UNRELIABLE))
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
@@ -1207,7 +1209,7 @@ cxip_ep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 {
 	struct cxip_txc *txc;
 
-	if (flags & ~CXIP_WRITEMSG_ALLOWED_FLAGS)
+	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS | FI_CXI_UNRELIABLE))
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)

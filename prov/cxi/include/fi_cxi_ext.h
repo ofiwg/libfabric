@@ -9,7 +9,7 @@
 
 /*
  * Use CXI High Rate Puts (HRP). Increases message rate performance. Applies to
- * RMA and unreliable AMO operations.
+ * RMA and unreliable, non-fetching AMO operations.
  */
 #define FI_CXI_HRP (1ULL << 60)
 
