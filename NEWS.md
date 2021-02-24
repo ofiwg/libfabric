@@ -25,6 +25,35 @@ v1.12.0, Mon Mar 8, 2021
 - Prevent providers from layering over each other non-optimally
 
 ## EFA
+- Added support for FI_DELIVERY_COMPLETE via an acknowledgment packet in the
+  provider. Applications that request FI_DELIVERY_COMPLETE will see a
+  performance impact from this release onward. The default delivery semantic
+  for EFA is still FI_TRANSMIT_COMPLETE and acknowledgment packets will not be
+  sent in this mode.
+- Added ability for the provider to notify device that it can correctly handle
+  receiver not ready (RNR) errors. There are still known issues so this is
+  currently turned off by default; the device is still configured to retry
+  indefinitely.
+- Disable FI_HMEM when FI_LOCAL_COMM is requested due to problems in the
+  provider with loopback support for FI_HMEM buffers.
+- Use a loopback read to copy from host memory to FI_HMEM buffers in the
+  receive path. This has a performance impact, but using the native copy API
+  for CUDA can cause a deadlock when the EFA provider is used with NCCL.
+- Only allow fork support when the cache is disabled, i.e. the application
+  handles registrations (FI_MR_LOCAL) to prevent potential data corruption.
+  General fork support will be addressed in a future release.
+- Moved EFA fork handler check to only trigger when an EFA device is present
+  and EFA is selected by an application.
+- Changed default memory registration cache monitor back to userfaultfd due to
+  a conflict with the memory hooks installed by Open MPI.
+- Fixed an issue where packets were incorrectly queued which caused message
+  ordering issues for messages the EFA provider sent via SHM provider.
+- Fixed a bug where bounce buffers were used instead of application provided
+  memory registration descriptors.
+- Various fixes for AV and FI_HMEM capability checks in the getinfo path.
+- Fix bug in the GPUDirect support detection path.
+- Various fixes and refactoring to the protocol implementation to resolve some
+  memory leaks and hangs.
 
 ## PSM3
 
