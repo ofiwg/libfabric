@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2018-2019 Cray Inc. All rights reserved.
- * Copyright (c) 2018-2019 System Fabric Works, Inc. All rights reserved.
+ * Copyright (c) 2018-2021 System Fabric Works, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,7 +41,6 @@
 struct vrb_sidr_conn_key {
 	struct sockaddr		*addr;
 	uint16_t		pep_port;
-	bool			recip;
 };
 
 const struct fi_info *
@@ -76,67 +75,6 @@ unlock:
 	return rd;
 }
 
-void vrb_eq_set_xrc_conn_tag(struct vrb_xrc_ep *ep)
-{
-	struct vrb_eq *eq = ep->base_ep.eq;
-
-	assert(fastlock_held(&eq->lock));
-	assert(ep->conn_setup);
-	assert(ep->conn_setup->conn_tag == VERBS_CONN_TAG_INVALID);
-	ep->conn_setup->conn_tag =
-		(uint32_t)ofi_idx2key(&eq->xrc.conn_key_idx,
-				ofi_idx_insert(eq->xrc.conn_key_map, ep));
-}
-
-void vrb_eq_clear_xrc_conn_tag(struct vrb_xrc_ep *ep)
-{
-	struct vrb_eq *eq = ep->base_ep.eq;
-	int index;
-
-	assert(fastlock_held(&eq->lock));
-	assert(ep->conn_setup);
-	if (ep->conn_setup->conn_tag == VERBS_CONN_TAG_INVALID)
-		return;
-
-	index = ofi_key2idx(&eq->xrc.conn_key_idx,
-			    (uint64_t)ep->conn_setup->conn_tag);
-	if (!ofi_idx_is_valid(eq->xrc.conn_key_map, index))
-	    VERBS_WARN(FI_LOG_EP_CTRL,
-		       "Invalid XRC connection connection tag\n");
-	else
-		ofi_idx_remove(eq->xrc.conn_key_map, index);
-	ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
-}
-
-struct vrb_xrc_ep *vrb_eq_xrc_conn_tag2ep(struct vrb_eq *eq,
-					  uint32_t conn_tag)
-{
-	struct vrb_xrc_ep *ep;
-	int index;
-
-	assert(fastlock_held(&eq->lock));
-	index = ofi_key2idx(&eq->xrc.conn_key_idx, (uint64_t)conn_tag);
-	ep = ofi_idx_lookup(eq->xrc.conn_key_map, index);
-	if (!ep || ep->magic != VERBS_XRC_EP_MAGIC) {
-		VERBS_WARN(FI_LOG_EP_CTRL, "XRC EP is not valid\n");
-		return NULL;
-	}
-	if (!ep->conn_setup) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Bad state, no connection data\n");
-		return NULL;
-	}
-	if (ep->conn_setup->conn_tag != conn_tag) {
-		VERBS_WARN(FI_LOG_EP_CTRL, "Connection tag mismatch\n");
-		return NULL;
-	}
-
-	ofi_idx_remove(eq->xrc.conn_key_map, index);
-	ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
-
-	return ep;
-}
-
 static int vrb_eq_set_xrc_info(struct rdma_cm_event *event,
 				  struct vrb_xrc_conn_info *info)
 {
@@ -145,12 +83,10 @@ static int vrb_eq_set_xrc_info(struct rdma_cm_event *event,
 	int ret;
 
 	ret = vrb_verify_xrc_cm_data(remote,
-					event->param.conn.private_data_len);
+				     event->param.conn.private_data_len);
 	if (ret)
 		return ret;
 
-	info->is_reciprocal = remote->reciprocal;
-	info->conn_tag = ntohl(remote->conn_tag);
 	info->port = ntohs(remote->port);
 	info->tgt_qpn = ntohl(remote->tgt_qpn);
 	info->peer_srqn = ntohl(remote->srqn);
@@ -307,12 +243,11 @@ static void vrb_eq_skip_xrc_cm_data(const void **priv_data,
 }
 
 static inline void vrb_set_sidr_conn_key(struct sockaddr *addr,
-					    uint16_t pep_port, bool recip,
-					    struct vrb_sidr_conn_key *key)
+					 uint16_t pep_port,
+					 struct vrb_sidr_conn_key *key)
 {
 	key->addr = addr;
 	key->pep_port = pep_port;
-	key->recip = recip;
 }
 
 static int vrb_sidr_conn_compare(struct ofi_rbmap *map,
@@ -347,22 +282,19 @@ static int vrb_sidr_conn_compare(struct ofi_rbmap *map,
 	if (ret)
 		return ret;
 
-	if (_key->pep_port != ep->remote_pep_port)
-		return _key->pep_port < ep->remote_pep_port ? -1 : 1;
+	return _key->pep_port < ep->remote_pep_port ?
+		-1 : _key->pep_port > ep->remote_pep_port;
 
-	return _key->recip < ep->recip_accept ?
-		-1 : _key->recip > ep->recip_accept;
 }
 
 struct vrb_xrc_ep *vrb_eq_get_sidr_conn(struct vrb_eq *eq,
-					struct sockaddr *peer,
-					uint16_t pep_port, bool recip)
+					struct sockaddr *peer, uint16_t pep_port)
 {
 	struct ofi_rbnode *node;
 	struct vrb_sidr_conn_key key;
 
 	assert(fastlock_held(&eq->lock));
-	vrb_set_sidr_conn_key(peer, pep_port, recip, &key);
+	vrb_set_sidr_conn_key(peer, pep_port, &key);
 	node = ofi_rbmap_find(&eq->xrc.sidr_conn_rbmap, &key);
 	if (OFI_LIKELY(!node))
 		return NULL;
@@ -370,8 +302,8 @@ struct vrb_xrc_ep *vrb_eq_get_sidr_conn(struct vrb_eq *eq,
 	return (struct vrb_xrc_ep *) node->data;
 }
 
-int vrb_eq_add_sidr_conn(struct vrb_xrc_ep *ep,
-			 void *param_data, size_t param_len)
+int vrb_eq_add_sidr_conn(struct vrb_xrc_ep *ep, void *param_data,
+			 size_t param_len)
 {
 	int ret;
 	struct vrb_sidr_conn_key key;
@@ -382,7 +314,7 @@ int vrb_eq_add_sidr_conn(struct vrb_xrc_ep *ep,
 	assert(ep->tgt_id && ep->tgt_id->ps == RDMA_PS_UDP);
 
 	vrb_set_sidr_conn_key(ep->base_ep.info_attr.dest_addr,
-				 ep->remote_pep_port, ep->recip_accept, &key);
+			      ep->remote_pep_port, &key);
 	ep->accept_param_data = calloc(1, param_len);
 	if (!ep->accept_param_data) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
@@ -419,74 +351,28 @@ void vrb_eq_remove_sidr_conn(struct vrb_xrc_ep *ep)
 }
 
 static int
-vrb_eq_accept_recip_conn(struct vrb_xrc_ep *ep,
-			    struct fi_eq_cm_entry *entry, size_t len,
-			    uint32_t *event, struct rdma_cm_event *cma_event,
-			    int *acked)
-{
-	struct vrb_xrc_cm_data cm_data;
-	int ret;
-
-	assert(ep->conn_state == VRB_XRC_ORIG_CONNECTED);
-
-	ret = vrb_accept_xrc(ep, VRB_RECIP_CONN, &cm_data,
-				sizeof(cm_data));
-	if (ret) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Reciprocal XRC Accept failed %d\n", ret);
-		return ret;
-	}
-
-	/* SIDR based shared reciprocal connections are complete at
-	 * this point, generate the connection established event. */
-	if (ep->tgt_id->ps == RDMA_PS_UDP) {
-		vrb_next_xrc_conn_state(ep);
-		vrb_ep_tgt_conn_done(ep);
-		entry->fid = &ep->base_ep.util_ep.ep_fid.fid;
-		*event = FI_CONNECTED;
-		len = vrb_eq_copy_event_data(entry, len,
-						ep->conn_setup->event_data,
-						ep->conn_setup->event_len);
-		*acked = 1;
-		rdma_ack_cm_event(cma_event);
-		vrb_free_xrc_conn_setup(ep, 1);
-
-		return sizeof(*entry) + len;
-	}
-
-	/* Event is handled internally and not passed to the application */
-	return -FI_EAGAIN;
-}
-
-static int
 vrb_eq_xrc_connreq_event(struct vrb_eq *eq, struct fi_eq_cm_entry *entry,
-			    size_t len, uint32_t *event,
-			    struct rdma_cm_event *cma_event, int *acked,
-			    const void **priv_data, size_t *priv_datalen)
+			 size_t len, uint32_t *event,
+			 struct rdma_cm_event *cma_event)
 {
 	struct vrb_connreq *connreq = container_of(entry->info->handle,
 						struct vrb_connreq, handle);
 	struct vrb_xrc_ep *ep;
 	int ret;
 
-	/*
-	 * If this is a retransmitted SIDR request for a previously accepted
+	/* If this is a retransmitted SIDR request for a previously accepted
 	 * connection then the shared SIDR response message was lost and must
 	 * be retransmitted. Note that a lost SIDR reject response message will
-	 * be rejected again by the application.
-	 */
+	 * be rejected again by the application. */
 	assert(entry->info->dest_addr);
 	if (cma_event->id->ps == RDMA_PS_UDP) {
 		ep = vrb_eq_get_sidr_conn(eq, entry->info->dest_addr,
-					     connreq->xrc.port,
-					     connreq->xrc.is_reciprocal);
+					  connreq->xrc.port);
 		if (ep) {
 			VERBS_DBG(FI_LOG_EP_CTRL,
-				  "SIDR %s request retry received\n",
-				  connreq->xrc.is_reciprocal ?
-				  "reciprocal" : "original");
+				  "SIDR connection request retry received\n");
 			ret = vrb_resend_shared_accept_xrc(ep, connreq,
-							      cma_event->id);
+							   cma_event->id);
 			if (ret)
 				VERBS_WARN(FI_LOG_EP_CTRL,
 					   "SIDR accept resend failure %d\n",
@@ -496,51 +382,7 @@ vrb_eq_xrc_connreq_event(struct vrb_eq *eq, struct fi_eq_cm_entry *entry,
 		}
 	}
 
-	if (!connreq->xrc.is_reciprocal) {
-		vrb_eq_skip_xrc_cm_data(priv_data, priv_datalen);
-		return FI_SUCCESS;
-	}
-
-	/*
-	 * Reciprocal connections are initiated and handled internally by
-	 * the provider, get the endpoint that issued the original connection
-	 * request.
-	 */
-	ep = vrb_eq_xrc_conn_tag2ep(eq, connreq->xrc.conn_tag);
-	if (!ep) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Reciprocal XRC connection tag 0x%x not found\n",
-			   connreq->xrc.conn_tag);
-		return -FI_EAGAIN;
-	}
-	ep->recip_req_received = 1;
-
-	assert(ep->conn_state == VRB_XRC_ORIG_CONNECTED ||
-	       ep->conn_state == VRB_XRC_ORIG_CONNECTING);
-
-	ep->tgt_id = connreq->id;
-	ep->tgt_id->context = &ep->base_ep.util_ep.ep_fid.fid;
-	ep->base_ep.info_attr.handle = entry->info->handle;
-
-	ret = rdma_migrate_id(ep->tgt_id, ep->base_ep.eq->channel);
-	if (ret) {
-		VERBS_WARN(FI_LOG_EP_CTRL, "Could not migrate CM ID\n");
-		goto send_reject;
-	}
-
-	/* If the initial connection has completed proceed with accepting
-	 * the reciprocal; otherwise wait until it has before proceeding */
-	if (ep->conn_state == VRB_XRC_ORIG_CONNECTED)
-		return vrb_eq_accept_recip_conn(ep, entry, len, event,
-						   cma_event, acked);
-
-	return -FI_EAGAIN;
-
-send_reject:
-	if (rdma_reject(connreq->id, *priv_data, *priv_datalen))
-		VERBS_WARN(FI_LOG_EP_CTRL, "rdma_reject %d\n", -errno);
-
-	return -FI_EAGAIN;
+	return FI_SUCCESS;
 }
 
 static void
@@ -554,113 +396,11 @@ vrb_eq_xrc_establish(struct rdma_cm_event *cma_event)
 }
 
 static int
-vrb_eq_xrc_conn_event(struct vrb_xrc_ep *ep,
-			 struct rdma_cm_event *cma_event, int *acked,
-			 struct fi_eq_cm_entry *entry, size_t len,
-			 uint32_t *event)
-{
-	struct vrb_xrc_conn_info xrc_info;
-	struct vrb_xrc_cm_data cm_data;
-	const void *priv_data = cma_event->param.conn.private_data;
-	size_t priv_datalen = cma_event->param.conn.private_data_len;
-	int ret;
-
-	VERBS_DBG(FI_LOG_EP_CTRL, "EP %p INITIAL CONNECTION DONE state %d, ps %d\n",
-		  ep, ep->conn_state, cma_event->id->ps);
-	vrb_next_xrc_conn_state(ep);
-
-	/*
-	 * Original application initiated connect is done, if the passive
-	 * side of that connection initiate the reciprocal connection request
-	 * to create bidirectional connectivity.
-	 */
-	if (priv_data) {
-		ret = vrb_eq_set_xrc_info(cma_event, &xrc_info);
-		if (ret) {
-			vrb_prev_xrc_conn_state(ep);
-			rdma_disconnect(ep->base_ep.id);
-			goto err;
-		}
-		ep->peer_srqn = xrc_info.peer_srqn;
-		vrb_eq_skip_xrc_cm_data(&priv_data, &priv_datalen);
-		vrb_save_priv_data(ep, priv_data, priv_datalen);
-		vrb_ep_ini_conn_done(ep, xrc_info.conn_param.qp_num);
-		vrb_eq_xrc_establish(cma_event);
-
-		/* If we have received the reciprocal connect request,
-		 * process it now */
-		if (ep->recip_req_received)
-			return vrb_eq_accept_recip_conn(ep, entry,
-							   len, event,
-							   cma_event, acked);
-	} else {
-		vrb_ep_tgt_conn_done(ep);
-		ret = vrb_connect_xrc(ep, NULL, VRB_RECIP_CONN, &cm_data,
-					 sizeof(cm_data));
-		if (ret) {
-			vrb_prev_xrc_conn_state(ep);
-			ep->tgt_id->qp = NULL;
-			rdma_disconnect(ep->tgt_id);
-			goto err;
-		}
-	}
-err:
-	entry->info = NULL;
-	/* Event is handled internally and not passed to the application */
-	return -FI_EAGAIN;
-}
-
-static size_t
-vrb_eq_xrc_recip_conn_event(struct vrb_eq *eq,
-			       struct vrb_xrc_ep *ep,
-			       struct rdma_cm_event *cma_event,
-			       struct fi_eq_cm_entry *entry, size_t len)
-{
-	fid_t fid = cma_event->id->context;
-	struct vrb_xrc_conn_info xrc_info;
-	int ret;
-
-	vrb_next_xrc_conn_state(ep);
-	VERBS_DBG(FI_LOG_EP_CTRL, "EP %p RECIPROCAL CONNECTION DONE state %d\n",
-		  ep, ep->conn_state);
-
-	/* If this is the reciprocal active side notification */
-	if (cma_event->param.conn.private_data) {
-		ret = vrb_eq_set_xrc_info(cma_event, &xrc_info);
-		if (ret) {
-			VERBS_WARN(FI_LOG_EP_CTRL,
-				   "Reciprocal connection protocol mismatch\n");
-			eq->err.err = -ret;
-			eq->err.prov_errno = ret;
-			eq->err.fid = fid;
-			return -FI_EAVAIL;
-		}
-
-		ep->peer_srqn = xrc_info.peer_srqn;
-		vrb_ep_ini_conn_done(ep, xrc_info.conn_param.qp_num);
-		vrb_eq_xrc_establish(cma_event);
-	} else {
-		vrb_ep_tgt_conn_done(ep);
-	}
-
-	/* The internal reciprocal XRC connection has completed. Return the
-	 * CONNECTED event application data associated with the original
-	 * connection. */
-	entry->fid = fid;
-	len = vrb_eq_copy_event_data(entry, len,
-					ep->conn_setup->event_data,
-					ep->conn_setup->event_len);
-	entry->info = NULL;
-	return sizeof(*entry) + len;
-}
-
-static int
 vrb_eq_xrc_rej_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event)
 {
 	struct vrb_xrc_ep *ep;
 	fid_t fid = cma_event->id->context;
 	struct vrb_xrc_conn_info xrc_info;
-	enum vrb_xrc_ep_conn_state state;
 
 	assert(fastlock_held(&eq->lock));
 	ep = container_of(fid, struct vrb_xrc_ep, base_ep.util_ep.ep_fid);
@@ -670,10 +410,7 @@ vrb_eq_xrc_rej_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event)
 		return -FI_EAGAIN;
 	}
 
-	state = ep->conn_state;
-	if (ep->base_ep.id != cma_event->id ||
-	    (state != VRB_XRC_ORIG_CONNECTING &&
-	     state != VRB_XRC_RECIP_CONNECTING)) {
+	if (ep->base_ep.id != cma_event->id) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Stale/invalid CM reject %d received\n", cma_event->status);
 		return -FI_EAGAIN;
@@ -700,7 +437,7 @@ vrb_eq_xrc_rej_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event)
 
 	vrb_ep_ini_conn_rejected(ep);
 
-	return state == VRB_XRC_ORIG_CONNECTING ? FI_SUCCESS : -FI_EAGAIN;
+	return FI_SUCCESS;
 }
 
 static int
@@ -722,16 +459,14 @@ vrb_eq_xrc_connect_retry(struct vrb_xrc_ep *ep,
 	rdma_ack_cm_event(cma_event);
 	rdma_destroy_id(ep->base_ep.id);
 	ep->base_ep.id = NULL;
-	vrb_eq_clear_xrc_conn_tag(ep);
 	ep->conn_setup->retry_count++;
-	return vrb_connect_xrc(ep, NULL, ep->conn_setup->pending_recip,
-			       ep->conn_setup->pending_param,
+	return vrb_connect_xrc(ep, NULL, ep->conn_setup->pending_param,
 			       ep->conn_setup->pending_paramlen);
 }
 
-static int
-vrb_eq_xrc_cm_err_event(struct vrb_eq *eq,
-                        struct rdma_cm_event *cma_event, int *acked)
+static inline int
+vrb_eq_xrc_cm_err_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event,
+			int *acked)
 {
 	struct vrb_xrc_ep *ep;
 	fid_t fid = cma_event->id->context;
@@ -773,39 +508,55 @@ vrb_eq_xrc_cm_err_event(struct vrb_eq *eq,
 	if (ep->base_ep.info_attr.dest_addr)
 		ofi_straddr_log(&vrb_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
 				"Dest ", ep->base_ep.info_attr.dest_addr);
-        ep->conn_state = VRB_XRC_ERROR;
         return FI_SUCCESS;
 }
 
-static int
-vrb_eq_xrc_connected_event(struct vrb_eq *eq,
-			   struct rdma_cm_event *cma_event, int *acked,
-			   struct fi_eq_cm_entry *entry, size_t len,
-			   uint32_t *event)
+static inline int
+vrb_eq_xrc_connected_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event,
+			   int *acked)
 {
 	struct vrb_xrc_ep *ep;
 	fid_t fid = cma_event->id->context;
+	struct vrb_xrc_conn_info xrc_info;
 	int ret;
 
 	ep = container_of(fid, struct vrb_xrc_ep, base_ep.util_ep.ep_fid);
+        VERBS_DBG(FI_LOG_EP_CTRL, "EP %p %s CONNECTION DONE, ps %d\n", ep,
+		  cma_event->param.conn.private_data  ? "TX" : "RX", cma_event->id->ps);
 
 	assert(fastlock_held(&eq->lock));
-	assert(ep->conn_state == VRB_XRC_ORIG_CONNECTING ||
-	       ep->conn_state == VRB_XRC_RECIP_CONNECTING);
+	if (cma_event->param.conn.private_data) {
+		/* Active side, TX */
+		ret = vrb_eq_set_xrc_info(cma_event, &xrc_info);
+		if (ret) {
+			if (cma_event->id->ps == RDMA_PS_TCP) {
+				rdma_disconnect(ep->base_ep.id);
+				ep->ini_disconnect_sent = true;
+			}
+			return ret;
+		}
+		ep->peer_srqn = xrc_info.peer_srqn;
+		vrb_ep_ini_conn_done(ep, xrc_info.conn_param.qp_num);
+		vrb_eq_xrc_establish(cma_event);
 
-	if (ep->conn_state == VRB_XRC_ORIG_CONNECTING)
-		return vrb_eq_xrc_conn_event(ep, cma_event, acked,
-						entry, len, event);
+		/* Destroy SIDR based CM ID, TCP will release at timewait */
+		if (cma_event->id->ps == RDMA_PS_UDP) {
+			*acked = 1;
+			rdma_ack_cm_event(cma_event);
+			rdma_destroy_id(ep->base_ep.id);
+			ep->base_ep.id = NULL;
+		}
+	} else {
+		/* Passive side, RX */
+		vrb_ep_tgt_conn_done(ep);
+		*acked = 1;
+		rdma_ack_cm_event(cma_event);
 
-	ret = vrb_eq_xrc_recip_conn_event(eq, ep, cma_event, entry, len);
+		/* Initiate release RDMA CM ID resources */
+		vrb_free_xrc_conn_setup(ep, 1);
+	}
 
-	/* Bidirectional connection setup is complete, release RDMA CM ID
-	 * resources. */
-	*acked = 1;
-	rdma_ack_cm_event(cma_event);
-	vrb_free_xrc_conn_setup(ep, 1);
-
-	return ret;
+	return FI_SUCCESS;
 }
 
 static void
@@ -818,7 +569,6 @@ vrb_eq_xrc_timewait_event(struct vrb_eq *eq,
 
 	assert(fastlock_held(&eq->lock));
 	assert(ep->magic == VERBS_XRC_EP_MAGIC);
-	assert(ep->conn_setup);
 
 	if (cma_event->id == ep->tgt_id) {
 		*acked = 1;
@@ -835,9 +585,8 @@ vrb_eq_xrc_timewait_event(struct vrb_eq *eq,
 		vrb_free_xrc_conn_setup(ep, 0);
 }
 
-static inline void
-vrb_eq_xrc_disconnect_event(struct vrb_eq *eq,
-			       struct rdma_cm_event *cma_event, int *acked)
+static inline int
+vrb_eq_xrc_disconnect_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event)
 {
 	fid_t fid = cma_event->id->context;
 	struct vrb_xrc_ep *ep = container_of(fid, struct vrb_xrc_ep,
@@ -846,11 +595,20 @@ vrb_eq_xrc_disconnect_event(struct vrb_eq *eq,
 	assert(fastlock_held(&eq->lock));
 	assert(ep->magic == VERBS_XRC_EP_MAGIC);
 
-	if (ep->conn_setup && cma_event->id == ep->base_ep.id) {
-		*acked = 1;
-		rdma_ack_cm_event(cma_event);
+	if (ep->base_ep.id && cma_event->id == ep->base_ep.id &&
+	    !ep->ini_disconnect_sent) {
 		rdma_disconnect(ep->base_ep.id);
+		ep->ini_disconnect_sent = true;
+	} else if (ep->tgt_id && cma_event->id == ep->tgt_id &&
+		   !ep->tgt_disconnect_sent) {
+		/* INI/TX initiated disconnect indicates an error */
+		VERBS_WARN(FI_LOG_EP_CTRL, "Peer INI/TX disconnect event\n");
+		rdma_disconnect(ep->tgt_id);
+		ep->tgt_disconnect_sent = true;
+		return FI_SUCCESS;
 	}
+	/* Normal release of RDMA CM IDs */
+	return -FI_EAGAIN;
 }
 
 static ssize_t
@@ -901,15 +659,13 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 
 		if (vrb_is_xrc_info(entry->info)) {
 			ret = vrb_eq_xrc_connreq_event(eq, entry, len, event,
-							  cma_event, &acked,
-							  &priv_data, &priv_datalen);
+						       cma_event);
 			if (ret == -FI_EAGAIN) {
 				fi_freeinfo(entry->info);
 				entry->info = NULL;
 				goto ack;
 			}
-			if (*event == FI_CONNECTED)
-				goto ack;
+			vrb_eq_skip_xrc_cm_data(&priv_data, &priv_datalen);
 		} else if (cma_event->id->route.addr.src_addr.sa_family == AF_IB) {
 			vrb_eq_skip_rdma_cm_hdr(&priv_data, &priv_datalen);
 		}
@@ -927,19 +683,29 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 		}
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
 		if (vrb_is_xrc_ep(ep)) {
-			ret = vrb_eq_xrc_connected_event(eq, cma_event,
-							    &acked, entry, len,
-							    event);
-			goto ack;
+			ret = vrb_eq_xrc_connected_event(eq, cma_event, &acked);
+			if (ret) {
+				/* Bad XRC CM Data */
+				entry->info = NULL;
+				eq->err.err = EINVAL;
+				eq->err.prov_errno = -cma_event->status;
+				if (eq->err.err_data) {
+					free(eq->err.err_data);
+					eq->err.err_data = NULL;
+					eq->err.err_data_size = 0;
+				}
+				goto err;
+			}
+			vrb_eq_skip_xrc_cm_data(&priv_data, &priv_datalen);
 		}
 		entry->info = NULL;
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
 		if (vrb_is_xrc_ep(ep)) {
-			vrb_eq_xrc_disconnect_event(eq, cma_event, &acked);
-			ret = -FI_EAGAIN;
-			goto ack;
+			ret = vrb_eq_xrc_disconnect_event(eq, cma_event);
+			if (ret == -FI_EAGAIN)
+				goto ack;
 		}
 		*event = FI_SHUTDOWN;
 		entry->info = NULL;
@@ -1314,8 +1080,6 @@ static int vrb_eq_close(fid_t fid)
 	dlistfd_head_free(&eq->list_head);
 
 	ofi_rbmap_cleanup(&eq->xrc.sidr_conn_rbmap);
-	ofi_idx_reset(eq->xrc.conn_key_map);
-	free(eq->xrc.conn_key_map);
 	fastlock_destroy(&eq->lock);
 	free(eq);
 
@@ -1342,13 +1106,6 @@ int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 
 	_eq->fab = container_of(fabric, struct vrb_fabric,
 				util_fabric.fabric_fid);
-
-	ofi_key_idx_init(&_eq->xrc.conn_key_idx, VERBS_CONN_TAG_INDEX_BITS);
-	_eq->xrc.conn_key_map = calloc(1, sizeof(*_eq->xrc.conn_key_map));
-	if (!_eq->xrc.conn_key_map) {
-		ret = -ENOMEM;
-		goto err0;
-	}
 	ofi_rbmap_init(&_eq->xrc.sidr_conn_rbmap, vrb_sidr_conn_compare);
 
 	fastlock_init(&_eq->lock);
@@ -1414,8 +1171,6 @@ err2:
 	dlistfd_head_free(&_eq->list_head);
 err1:
 	fastlock_destroy(&_eq->lock);
-	free(_eq->xrc.conn_key_map);
-err0:
 	free(_eq);
 	return ret;
 }

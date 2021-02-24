@@ -265,19 +265,6 @@ struct vrb_eq_entry {
 
 typedef int (*vrb_trywait_func)(struct fid *fid);
 
-/* An OFI indexer is used to maintain a unique connection request to
- * endpoint mapping. The key is a 32-bit value (referred to as a
- * connection tag) and is passed to the remote peer by the active side
- * of a connection request. When the reciprocal XRC connection in the
- * reverse direction is made, the key is passed back and used to map
- * back to the original endpoint. A key is defined as a 32-bit value:
- *
- *     SSSSSSSS:SSSSSSII:IIIIIIII:IIIIIIII
- *     |-- sequence -||--- unique key ---|
- */
-#define VERBS_CONN_TAG_INDEX_BITS	18
-#define VERBS_CONN_TAG_INVALID		0xFFFFFFFF	/* Key is not valid */
-
 struct vrb_eq {
 	struct fid_eq		eq_fid;
 	struct vrb_fabric	*fab;
@@ -291,17 +278,8 @@ struct vrb_eq {
 	enum fi_wait_obj	wait_obj;
 
 	struct {
-		/* The connection key map is used during the XRC connection
-		 * process to map an XRC reciprocal connection request back
-		 * to the active endpoint that initiated the original
-		 * connection request. It is protected with the eq::lock */
-		struct ofi_key_idx	conn_key_idx;
-		struct indexer		*conn_key_map;
-
-		/* TODO: This is limiting and restricts applications to using
-		 * a single listener per EQ. While sufficient for RXM we should
-		 * consider using an internal PEP listener for handling the
-		 * internally processed reciprocal connections. */
+		/* This is limiting and restricts applications to using
+		 * a single listener per EQ, but is sufficient for RxM */
 		uint16_t		pep_port;
 
 		/* SIDR request/responses are a two-way handshake; therefore,
@@ -499,7 +477,6 @@ enum vrb_ini_qp_state {
 };
 
 #define VRB_NO_INI_TGT_QPNUM 0
-#define VRB_RECIP_CONN	1
 
 /*
  * An XRC transport INI QP connection can be shared within a process to
@@ -529,15 +506,6 @@ struct vrb_ini_shared_conn {
 	ofi_atomic32_t			ref_cnt;
 };
 
-enum vrb_xrc_ep_conn_state {
-	VRB_XRC_UNCONNECTED,
-	VRB_XRC_ORIG_CONNECTING,
-	VRB_XRC_ORIG_CONNECTED,
-	VRB_XRC_RECIP_CONNECTING,
-	VRB_XRC_CONNECTED,
-	VRB_XRC_ERROR
-};
-
 /*
  * The following XRC state is only required during XRC connection
  * establishment and can be freed once bidirectional connectivity
@@ -548,21 +516,8 @@ enum vrb_xrc_ep_conn_state {
 struct vrb_xrc_ep_conn_setup {
 	int				retry_count;
 
-	/* The connection tag is used to associate the reciprocal
-	 * XRC INI/TGT QP connection request in the reverse direction
-	 * with the original request. The tag is created by the
-	 * original active side. */
-	uint32_t			conn_tag;
-	uint32_t			remote_conn_tag;
-
-	/* Delivery of the FI_CONNECTED event is delayed until
-	 * bidirectional connectivity is established. */
-	size_t				event_len;
-	uint8_t				event_data[VRB_CM_DATA_SIZE];
-
-	/* Connection request may have to queue waiting for the
+	/* A connection request may have to queue waiting for the
 	 * physical XRC INI/TGT QP connection to complete. */
-	int				pending_recip;
 	size_t				pending_paramlen;
 	uint8_t				pending_param[VRB_CM_DATA_SIZE];
 };
@@ -633,14 +588,12 @@ struct vrb_xrc_ep {
 	/* XRC only fields */
 	struct rdma_cm_id		*tgt_id;
 	struct ibv_qp			*tgt_ibv_qp;
-	enum vrb_xrc_ep_conn_state	conn_state;
-	bool				recip_req_received;
-	uint32_t			magic;
 	uint32_t			srqn;
 	uint32_t			peer_srqn;
+	uint32_t			magic;
 
-	/* A reference is held to a shared physical XRC INI/TGT QP connecting
-	 * to the destination node. */
+	/* A reference is held to a shared physical XRC Initiator QP connected
+	 * to the associated destination node. */
 	struct vrb_ini_shared_conn	*ini_conn;
 	struct dlist_entry		ini_conn_entry;
 
@@ -649,8 +602,10 @@ struct vrb_xrc_ep {
 	void				*accept_param_data;
 	size_t				accept_param_len;
 	uint16_t			remote_pep_port;
-	bool				recip_accept;
 	struct ofi_rbnode		*conn_map_node;
+
+	bool				ini_disconnect_sent;
+	bool				tgt_disconnect_sent;
 
 	/* The following state is allocated during XRC bidirectional setup and
 	 * freed once the connection is established. */
@@ -700,20 +655,17 @@ extern struct fi_ops_rma vrb_msg_ep_rma_ops;
 extern struct fi_ops_rma vrb_msg_xrc_ep_rma_ops_ts;
 extern struct fi_ops_rma vrb_msg_xrc_ep_rma_ops;
 
-#define VRB_XRC_VERSION	2
+#define VRB_XRC_VERSION	3
 
 struct vrb_xrc_cm_data {
 	uint8_t		version;
-	uint8_t		reciprocal;
+	uint8_t		unused;
 	uint16_t	port;
 	uint32_t	tgt_qpn;
 	uint32_t	srqn;
-	uint32_t	conn_tag;
 };
 
 struct vrb_xrc_conn_info {
-	uint32_t		conn_tag;
-	uint32_t		is_reciprocal;
 	uint32_t		ini_qpn;
 	uint32_t		tgt_qpn;
 	uint32_t		peer_srqn;
@@ -725,8 +677,7 @@ struct vrb_connreq {
 	struct fid			handle;
 	struct rdma_cm_id		*id;
 
-	/* Support for XRC bidirectional connections, and
-	 * non-RDMA CM managed QP. */
+	/* Support for XRC non-RDMA CM managed QP. */
 	int				is_xrc;
 	struct vrb_xrc_conn_info	xrc;
 };
@@ -752,41 +703,31 @@ int vrb_eq_add_sidr_conn(struct vrb_xrc_ep *ep,
 void vrb_eq_remove_sidr_conn(struct vrb_xrc_ep *ep);
 struct vrb_xrc_ep *vrb_eq_get_sidr_conn(struct vrb_eq *eq,
 					      struct sockaddr *peer,
-					      uint16_t pep_port, bool recip);
+					      uint16_t pep_port);
 
 void vrb_msg_ep_get_qp_attr(struct vrb_ep *ep,
 			       struct ibv_qp_init_attr *attr);
-int vrb_process_xrc_connreq(struct vrb_ep *ep,
-			       struct vrb_connreq *connreq);
-
-void vrb_next_xrc_conn_state(struct vrb_xrc_ep *ep);
-void vrb_prev_xrc_conn_state(struct vrb_xrc_ep *ep);
-void vrb_eq_set_xrc_conn_tag(struct vrb_xrc_ep *ep);
-void vrb_eq_clear_xrc_conn_tag(struct vrb_xrc_ep *ep);
-struct vrb_xrc_ep *vrb_eq_xrc_conn_tag2ep(struct vrb_eq *eq,
-						uint32_t conn_tag);
-void vrb_set_xrc_cm_data(struct vrb_xrc_cm_data *local, int reciprocal,
-			    uint32_t conn_tag, uint16_t port, uint32_t tgt_qpn,
-			    uint32_t srqn);
+void vrb_set_xrc_cm_data(struct vrb_xrc_cm_data *local, uint16_t port,
+			 uint32_t tgt_qpn, uint32_t srqn);
 int vrb_verify_xrc_cm_data(struct vrb_xrc_cm_data *remote,
 			      int private_data_len);
+int vrb_create_xrc_cm_event(struct vrb_xrc_ep *ep, uint32_t event);
 int vrb_connect_xrc(struct vrb_xrc_ep *ep, struct sockaddr *addr,
-		       int reciprocal, void *param, size_t paramlen);
-int vrb_accept_xrc(struct vrb_xrc_ep *ep, int reciprocal,
-		      void *param, size_t paramlen);
+		    void *param, size_t paramlen);
+int vrb_msg_xrc_ep_simplex_accept(struct fid_ep *ep, struct fi_info *info,
+				  const void *param, size_t paramlen);
+int vrb_accept_xrc(struct vrb_xrc_ep *ep, struct fi_info *info,
+		   void *param, size_t paramlen);
 int vrb_resend_shared_accept_xrc(struct vrb_xrc_ep *ep,
 				    struct vrb_connreq *connreq,
 				    struct rdma_cm_id *id);
 void vrb_free_xrc_conn_setup(struct vrb_xrc_ep *ep, int disconnect);
-void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, int reciprocal,
-				 void *conn_param, size_t conn_paramlen);
+void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, void *conn_param,
+			      size_t conn_paramlen);
 void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn);
 int vrb_get_shared_ini_conn(struct vrb_xrc_ep *ep,
 			       struct vrb_ini_shared_conn **ini_conn);
 void vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep);
-
-void vrb_save_priv_data(struct vrb_xrc_ep *ep, const void *data,
-			   size_t len);
 int vrb_ep_create_ini_qp(struct vrb_xrc_ep *ep, void *dst_addr,
 			    uint32_t *peer_tgt_qpn);
 void vrb_ep_ini_conn_done(struct vrb_xrc_ep *ep, uint32_t peer_tgt_qpn);

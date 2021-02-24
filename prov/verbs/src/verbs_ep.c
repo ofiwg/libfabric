@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2018 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2019 System Fabric Works, Inc. All rights reserved.
+ * Copyright (c) 2019-2021 System Fabric Works, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -438,11 +438,10 @@ static void vrb_ep_xrc_close(struct vrb_ep *ep)
 						 base_ep);
 
 	assert(fastlock_held(&ep->eq->lock));
-	if (xrc_ep->conn_setup)
-		vrb_free_xrc_conn_setup(xrc_ep, 0);
-
+	vrb_free_xrc_conn_setup(xrc_ep, 0);
 	if (xrc_ep->conn_map_node)
 		vrb_eq_remove_sidr_conn(xrc_ep);
+
 	vrb_ep_destroy_xrc_qp(xrc_ep);
 	xrc_ep->magic = 0;
 }
@@ -510,16 +509,6 @@ static int vrb_ep_close(fid_t fid)
 	return 0;
 }
 
-static inline int vrb_ep_xrc_set_tgt_chan(struct vrb_ep *ep)
-{
-	struct vrb_xrc_ep *xrc_ep = container_of(ep, struct vrb_xrc_ep,
-						    base_ep);
-	if (xrc_ep->tgt_id)
-		return rdma_migrate_id(xrc_ep->tgt_id, ep->eq->channel);
-
-	return FI_SUCCESS;
-}
-
 static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct vrb_ep *ep;
@@ -560,17 +549,14 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EINVAL;
 
 		ep->eq = container_of(bfid, struct vrb_eq, eq_fid.fid);
-
-		/* Make sure EQ channel is not polled during migrate */
-		fastlock_acquire(&ep->eq->lock);
-		if (vrb_is_xrc_ep(ep))
-			ret = vrb_ep_xrc_set_tgt_chan(ep);
-		else
+		if (!vrb_is_xrc_ep(ep)) {
+			/* Make sure EQ channel is not polled during migrate */
+			fastlock_acquire(&ep->eq->lock);
 			ret = rdma_migrate_id(ep->id, ep->eq->channel);
-		fastlock_release(&ep->eq->lock);
-		if (ret)
-			return -errno;
-
+			fastlock_release(&ep->eq->lock);
+			if (ret)
+				return -errno;
+		}
 		break;
 	case FI_CLASS_SRX_CTX:
 		if (ep->util_ep.type != FI_EP_MSG)
@@ -727,7 +713,6 @@ static int vrb_ep_enable_xrc(struct vrb_ep *ep)
 
 	/* XRC EP additional initialization */
 	dlist_init(&xrc_ep->ini_conn_entry);
-	xrc_ep->conn_state = VRB_XRC_UNCONNECTED;
 
 	fastlock_acquire(&srq_ep->xrc.prepost_lock);
 	if (srq_ep->srq) {
@@ -1149,16 +1134,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 		} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
 			connreq = container_of(info->handle,
 					       struct vrb_connreq, handle);
-			if (dom->ext_flags & VRB_USE_XRC) {
-				assert(connreq->is_xrc);
-
-				if (!connreq->xrc.is_reciprocal) {
-					ret = vrb_process_xrc_connreq(ep,
-								connreq);
-					if (ret)
-						goto err1;
-				}
-			} else {
+			if (!(dom->ext_flags & VRB_USE_XRC)) {
 				ep->id = connreq->id;
 				ep->ibv_qp = ep->id->qp;
 				ep->id->context = &ep->util_ep.ep_fid.fid;
@@ -1237,13 +1213,12 @@ static int vrb_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		return -FI_EINVAL;
 
 	pep->eq = container_of(bfid, struct vrb_eq, eq_fid.fid);
-	/*
-	 * This is a restrictive solution that enables an XRC EP to
-	 * inform it's peer the port that should be used in making the
-	 * reciprocal connection request. While it meets RXM requirements
-	 * it limits an EQ to a single passive endpoint. TODO: implement
-	 * a more general solution.
-	 */
+
+	/* This is a restrictive solution that enables an XRC EP to
+	 * inform it's peer of the PEP port which is used to
+	 * uniquely identify the passive endpoint that initiated a
+	 * connection request. While this meets RXM requirements it
+	 * limits an EQ to a single passive endpoint. */
 	if (vrb_is_xrc_info(pep->info)) {
 		if (pep->eq->xrc.pep_port) {
 			VERBS_WARN(FI_LOG_EP_CTRL,
