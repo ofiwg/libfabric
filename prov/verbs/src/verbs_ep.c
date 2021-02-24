@@ -438,7 +438,7 @@ static void vrb_ep_xrc_close(struct vrb_ep *ep)
 						 base_ep);
 
 	assert(fastlock_held(&ep->eq->lock));
-	vrb_free_xrc_conn_setup(xrc_ep, 0);
+	vrb_free_xrc_conn_setup(xrc_ep);
 	if (xrc_ep->conn_map_node)
 		vrb_eq_remove_sidr_conn(xrc_ep);
 

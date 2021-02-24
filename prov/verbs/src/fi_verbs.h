@@ -604,9 +604,6 @@ struct vrb_xrc_ep {
 	uint16_t			remote_pep_port;
 	struct ofi_rbnode		*conn_map_node;
 
-	bool				ini_disconnect_sent;
-	bool				tgt_disconnect_sent;
-
 	/* The following state is allocated during XRC bidirectional setup and
 	 * freed once the connection is established. */
 	struct vrb_xrc_ep_conn_setup	*conn_setup;
@@ -721,7 +718,7 @@ int vrb_accept_xrc(struct vrb_xrc_ep *ep, struct fi_info *info,
 int vrb_resend_shared_accept_xrc(struct vrb_xrc_ep *ep,
 				    struct vrb_connreq *connreq,
 				    struct rdma_cm_id *id);
-void vrb_free_xrc_conn_setup(struct vrb_xrc_ep *ep, int disconnect);
+void vrb_free_xrc_conn_setup(struct vrb_xrc_ep *ep);
 void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, void *conn_param,
 			      size_t conn_paramlen);
 void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn);

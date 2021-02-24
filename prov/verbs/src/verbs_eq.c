@@ -529,10 +529,8 @@ vrb_eq_xrc_connected_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event,
 		/* Active side, TX */
 		ret = vrb_eq_set_xrc_info(cma_event, &xrc_info);
 		if (ret) {
-			if (cma_event->id->ps == RDMA_PS_TCP) {
+			if (cma_event->id->ps == RDMA_PS_TCP)
 				rdma_disconnect(ep->base_ep.id);
-				ep->ini_disconnect_sent = true;
-			}
 			return ret;
 		}
 		ep->peer_srqn = xrc_info.peer_srqn;
@@ -546,69 +544,20 @@ vrb_eq_xrc_connected_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event,
 			rdma_destroy_id(ep->base_ep.id);
 			ep->base_ep.id = NULL;
 		}
+		vrb_free_xrc_conn_setup(ep);
 	} else {
 		/* Passive side, RX */
 		vrb_ep_tgt_conn_done(ep);
-		*acked = 1;
-		rdma_ack_cm_event(cma_event);
 
-		/* Initiate release RDMA CM ID resources */
-		vrb_free_xrc_conn_setup(ep, 1);
+		if (cma_event->id->ps == RDMA_PS_UDP) {
+			*acked = 1;
+			rdma_ack_cm_event(cma_event);
+			rdma_destroy_id(ep->tgt_id);
+			ep->tgt_id = NULL;
+		}
 	}
 
 	return FI_SUCCESS;
-}
-
-static void
-vrb_eq_xrc_timewait_event(struct vrb_eq *eq,
-			  struct rdma_cm_event *cma_event, int *acked)
-{
-	fid_t fid = cma_event->id->context;
-	struct vrb_xrc_ep *ep = container_of(fid, struct vrb_xrc_ep,
-						base_ep.util_ep.ep_fid);
-
-	assert(fastlock_held(&eq->lock));
-	assert(ep->magic == VERBS_XRC_EP_MAGIC);
-
-	if (cma_event->id == ep->tgt_id) {
-		*acked = 1;
-		rdma_ack_cm_event(cma_event);
-		rdma_destroy_id(ep->tgt_id);
-		ep->tgt_id = NULL;
-	} else if (cma_event->id == ep->base_ep.id) {
-		*acked = 1;
-		rdma_ack_cm_event(cma_event);
-		rdma_destroy_id(ep->base_ep.id);
-		ep->base_ep.id = NULL;
-	}
-	if (!ep->base_ep.id && !ep->tgt_id)
-		vrb_free_xrc_conn_setup(ep, 0);
-}
-
-static inline int
-vrb_eq_xrc_disconnect_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event)
-{
-	fid_t fid = cma_event->id->context;
-	struct vrb_xrc_ep *ep = container_of(fid, struct vrb_xrc_ep,
-					     base_ep.util_ep.ep_fid);
-
-	assert(fastlock_held(&eq->lock));
-	assert(ep->magic == VERBS_XRC_EP_MAGIC);
-
-	if (ep->base_ep.id && cma_event->id == ep->base_ep.id &&
-	    !ep->ini_disconnect_sent) {
-		rdma_disconnect(ep->base_ep.id);
-		ep->ini_disconnect_sent = true;
-	} else if (ep->tgt_id && cma_event->id == ep->tgt_id &&
-		   !ep->tgt_disconnect_sent) {
-		/* INI/TX initiated disconnect indicates an error */
-		VERBS_WARN(FI_LOG_EP_CTRL, "Peer INI/TX disconnect event\n");
-		rdma_disconnect(ep->tgt_id);
-		ep->tgt_disconnect_sent = true;
-		return FI_SUCCESS;
-	}
-	/* Normal release of RDMA CM IDs */
-	return -FI_EAGAIN;
 }
 
 static ssize_t
@@ -701,19 +650,10 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 		entry->info = NULL;
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
-		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
-		if (vrb_is_xrc_ep(ep)) {
-			ret = vrb_eq_xrc_disconnect_event(eq, cma_event);
-			if (ret == -FI_EAGAIN)
-				goto ack;
-		}
 		*event = FI_SHUTDOWN;
 		entry->info = NULL;
 		break;
 	case RDMA_CM_EVENT_TIMEWAIT_EXIT:
-		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
-		if (vrb_is_xrc_ep(ep))
-			vrb_eq_xrc_timewait_event(eq, cma_event, &acked);
 		ret = -FI_EAGAIN;
 		goto ack;
 	case RDMA_CM_EVENT_ADDR_ERROR:

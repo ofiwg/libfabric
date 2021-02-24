@@ -123,30 +123,13 @@ int vrb_create_xrc_cm_event(struct vrb_xrc_ep *ep, uint32_t event)
 }
 
 /* Caller must hold eq:lock */
-void vrb_free_xrc_conn_setup(struct vrb_xrc_ep *ep, int disconnect)
+void vrb_free_xrc_conn_setup(struct vrb_xrc_ep *ep)
 {
-	/* A disconnect is requested on the RX (target) side to release
-	 * CM ID resources, it does not tear down the connection. */
-	if (disconnect) {
-		assert(ep->tgt_id);
-		assert(!ep->tgt_id->qp);
-
-		if (ep->tgt_id->ps == RDMA_PS_UDP) {
-			rdma_destroy_id(ep->tgt_id);
-			ep->tgt_id = NULL;
-		} else {
-			rdma_disconnect(ep->tgt_id);
-			ep->tgt_disconnect_sent = true;
-		}
-	}
-
-	if (!disconnect) {
-		free(ep->conn_setup);
-		ep->conn_setup = NULL;
-		free(ep->base_ep.info_attr.src_addr);
-		ep->base_ep.info_attr.src_addr = NULL;
-		ep->base_ep.info_attr.src_addrlen = 0;
-	}
+	free(ep->conn_setup);
+	ep->conn_setup = NULL;
+	free(ep->base_ep.info_attr.src_addr);
+	ep->base_ep.info_attr.src_addr = NULL;
+	ep->base_ep.info_attr.src_addrlen = 0;
 }
 
 int vrb_connect_xrc(struct vrb_xrc_ep *ep, struct sockaddr *addr,
@@ -259,9 +242,6 @@ vrb_xrc_connreq_init(struct vrb_ep *ep, struct vrb_connreq *connreq)
 	struct vrb_xrc_ep *xrc_ep = container_of(ep, struct vrb_xrc_ep,
 						 base_ep);
 	int ret;
-
-	assert(ep->info_attr.src_addr);
-	assert(ep->info_attr.dest_addr);
 
 	xrc_ep->tgt_id = connreq->id;
 	xrc_ep->tgt_id->context = &ep->util_ep.ep_fid.fid;
