@@ -60,7 +60,7 @@
 #include <sys/types.h>
 //#include <sys/socket.h>
 //#include <rdma/rdma_verbs.h>
-#include <rv/rv_user_ioctls.h>
+#include <rdma/rv_user_ioctls.h>
 
 struct local_info {
 	uint32_t mr_cache_size;	// in MBs

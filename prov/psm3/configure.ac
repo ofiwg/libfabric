@@ -62,13 +62,13 @@ AS_IF([test x$with_psm3_rv = xno],
 		with_psm3_rv=/usr/include/uapi
 	      ])
 	_FI_CHECK_PACKAGE_HEADER([psm3_rv],
-	                         [$with_psm3_rv/rv/rv_user_ioctls.h],
+	                         [$with_psm3_rv/rdma/rv_user_ioctls.h],
 	                         [],
 	                         [psm3_rv_happy=1],
 	                         [psm3_rv_happy=0])
 	AS_IF([test "$psm3_rv_happy" -eq 0 && test "$psm3_rv_check" -eq 0],
 	      [
-		AC_MSG_ERROR([RV Module headers requested but <rv/rv_user_ioctls.h> not found.])
+		AC_MSG_ERROR([RV Module headers requested but <rdma/rv_user_ioctls.h> not found.])
 	      ],
 	      [
 		AS_IF([test "$psm3_rv_happy" -eq 1],
