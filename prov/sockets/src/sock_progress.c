@@ -1169,6 +1169,8 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context,
 
 		dlist_remove(&rx_buffered->entry);
 		sock_rx_release_entry(rx_buffered);
+		if (rx_ctx->progress_start == entry)
+			rx_ctx->progress_start = &rx_ctx->rx_buffered_list;
 	} else {
 		ret = -FI_ENOMSG;
 	}
