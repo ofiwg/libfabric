@@ -205,7 +205,7 @@ struct cxip_environment cxip_env = {
 	.ats = true,
 	.ats_mlock_mode = CXIP_ATS_MLOCK_ALL,
 	.rdzv_offload = true,
-	.fc_recovery = false,
+	.fc_recovery = true,
 	.rdzv_threshold = CXIP_RDZV_THRESHOLD,
 	.rdzv_get_min = 2049, /* Avoid single packet Gets */
 	.rdzv_eager_size = CXIP_RDZV_THRESHOLD,
@@ -249,7 +249,7 @@ static void cxip_env_init(void)
 	fi_param_get_bool(&cxip_prov, "rdzv_offload", &cxip_env.rdzv_offload);
 
 	fi_param_define(&cxip_prov, "fc_recovery", FI_PARAM_BOOL,
-			"Enables message flow control recovery (experimental).");
+			"Enables message flow control recovery.");
 	fi_param_get_bool(&cxip_prov, "fc_recovery", &cxip_env.fc_recovery);
 
 	fi_param_define(&cxip_prov, "rdzv_threshold", FI_PARAM_SIZE_T,
