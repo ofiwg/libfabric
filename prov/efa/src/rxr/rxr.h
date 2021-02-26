@@ -282,7 +282,7 @@ enum rxr_rx_buf_owner {
 };
 
 #define RXR_PEER_REQ_SENT BIT_ULL(0) /* sent a REQ to the peer, peer should send a handshake back */
-#define RXR_PEER_HANDSHAKE_SENT BIT_ULL(1)
+#define RXR_PEER_HANDSHAKE_SENT_OR_QUEUED BIT_ULL(1)
 #define RXR_PEER_HANDSHAKE_RECEIVED BIT_ULL(2)
 #define RXR_PEER_IN_BACKOFF BIT_ULL(3) /* peer is in backoff, not allowed to send */
 #define RXR_PEER_BACKED_OFF BIT_ULL(4) /* peer backoff was increased during this loop of the progress engine */
@@ -303,6 +303,7 @@ struct rxr_peer {
 	bool rx_init;			/* tracks initialization of rx state */
 	bool is_self;			/* self flag */
 	bool is_local;			/* local/remote peer flag */
+	fi_addr_t efa_fiaddr;		/* fi_addr_t addr from efa provider */
 	fi_addr_t shm_fiaddr;		/* fi_addr_t addr from shm provider */
 	struct rxr_robuf *robuf;	/* tracks expected msg_id on rx */
 	uint32_t next_msg_id;		/* sender's view of msg_id */
@@ -317,6 +318,7 @@ struct rxr_peer {
 	int timeout_interval;		/* initial RNR timeout value */
 	int rnr_timeout_exp;		/* RNR timeout exponentation calc val */
 	struct dlist_entry rnr_entry;	/* linked to rxr_ep peer_backoff_list */
+	struct dlist_entry queued_entry; /* linked with peer_queued_list in rxr_ep */
 };
 
 struct rxr_queued_ctrl_info {
@@ -651,6 +653,8 @@ struct rxr_ep {
 	struct dlist_entry read_pending_list;
 	/* rxr_peer entries that are in backoff due to RNR */
 	struct dlist_entry peer_backoff_list;
+	/* rxr_peer entries that will retry posting handshake pkt */
+	struct dlist_entry peer_queued_list;
 
 #if ENABLE_DEBUG
 	/* rx_entries waiting for data to arrive (large messages) */

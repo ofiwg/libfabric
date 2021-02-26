@@ -157,9 +157,10 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 			       struct rxr_pkt_entry *pkt_entry,
 			       fi_addr_t addr);
 
-void rxr_pkt_post_handshake(struct rxr_ep *ep,
-			    struct rxr_peer *peer,
-			    fi_addr_t addr);
+ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rxr_peer *peer);
+
+void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep,
+				     struct rxr_peer *peer);
 
 void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry);
