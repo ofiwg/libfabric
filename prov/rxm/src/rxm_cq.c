@@ -1517,6 +1517,7 @@ static int rxm_get_recv_entry(struct rxm_rx_buf *rx_buf)
 		match_attr.addr = FI_ADDR_UNSPEC;
 	}
 
+	match_attr.ignore = 0;
 	if (rx_buf->pkt.hdr.op == ofi_op_msg) {
 		match_attr.tag = 0;
 		recv_queue = &rx_buf->ep->recv_queue;
