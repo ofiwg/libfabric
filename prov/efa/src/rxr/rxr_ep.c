@@ -1354,6 +1354,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 	dlist_init(&ep->tx_pending_list);
 	dlist_init(&ep->read_pending_list);
 	dlist_init(&ep->peer_backoff_list);
+	dlist_init(&ep->peer_queued_list);
 #if ENABLE_DEBUG
 	dlist_init(&ep->rx_pending_list);
 	dlist_init(&ep->rx_pkt_list);
@@ -1613,6 +1614,23 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	rxr_ep_check_peer_backoff_timer(ep);
 
 	/*
+	 * Resend handshake packet for any peers where the first
+	 * handshake send failed.
+	 */
+	dlist_foreach_container_safe(&ep->peer_queued_list,
+				     struct rxr_peer, peer,
+				     queued_entry, tmp) {
+
+		ret = rxr_pkt_post_handshake(ep, peer);
+		if (ret == -FI_EAGAIN)
+			break;
+		if (OFI_UNLIKELY(ret))
+			goto handshake_err;
+
+		dlist_remove(&peer->queued_entry);
+	}
+
+	/*
 	 * Send any queued ctrl packets.
 	 */
 	dlist_foreach_container_safe(&ep->rx_entry_queued_list,
@@ -1779,6 +1797,14 @@ read_err:
 	if (rxr_read_handle_error(ep, read_entry, ret))
 		assert(0 &&
 		       "error writing err cq entry while handling RDMA error");
+	return;
+
+handshake_err:
+	FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		"Failed to post HANDSHAKE to peer %ld: %s\n",
+		peer->efa_fiaddr, fi_strerror(-ret));
+	assert(0 && "Failed to post HANDSHAKE to peer");
+	efa_eq_write_error(&ep->util_ep, FI_EIO, -ret);
 	return;
 }
 
