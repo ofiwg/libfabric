@@ -991,14 +991,14 @@ __psm2_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 			// mode 2 (user space MR w/cache) is purposely not documented
 			psmi_getenv("PSM3_MR_CACHE_MODE",
 					"Enable MR caching 0=user space MR no cache"
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 					", 1=kernel MR w/cache [1]",
 #else
 					"[0]",
 #endif
 					PSMI_ENVVAR_LEVEL_USER,
 					PSMI_ENVVAR_TYPE_UINT,
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 					(union psmi_envvar_val)MR_CACHE_MODE_KERNEL,
 #else
 					(union psmi_envvar_val)MR_CACHE_MODE_NONE,
@@ -1008,7 +1008,7 @@ __psm2_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 				|| env_mr_cache_mode.e_uint == MR_CACHE_MODE_RV)
 				env_mr_cache_mode.e_uint = MR_CACHE_MODE_NONE;
 		}
-#ifndef RNDV_MOD_MR
+#ifndef RNDV_MOD
 		if (env_mr_cache_mode.e_uint == MR_CACHE_MODE_KERNEL)
 			env_mr_cache_mode.e_uint = MR_CACHE_MODE_NONE;
 #endif

@@ -52,7 +52,7 @@
 */
 
 /* Copyright (c) 2003-2016 Intel Corporation. All rights reserved. */
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 
 #include <stdint.h>
 #include <stddef.h>
@@ -102,7 +102,7 @@ struct irdma_mem_reg_req {
 static int rv_map_event_ring(psm2_rv_t rv, struct rv_event_ring* ring,
 				int entries, int offset)
 {
-	ring->len = RING_ALLOC_LEN(entries);
+	ring->len = RV_RING_ALLOC_LEN(entries);
 
 	//printf("Calling mmap for offset: %d len:%d\n", offset, ring->len);
 
@@ -813,4 +813,19 @@ int __psm2_rv_scan_cq(psm2_rv_t rv, uint8_t event_type,
 	}
 	return 0; // not found
 }
-#endif // RNDV_MOD_MR
+
+// check if CQ has ever overflowed.
+// returns 1 if CQ has overflowed in past
+// returns 0 if CQ has never overflowed
+// In future could use overflow_cnt to identify if ring recently
+// overflowed (eg. save overflow_cnt when check) and trigger PSM recovery
+int __psm2_rv_cq_overflowed(psm2_rv_t rv)
+{
+	if (! rv || ! rv->events.hdr) {
+		errno = EINVAL;
+		return -1;
+	}
+	return (rv->events.hdr->overflow_cnt != 0);
+}
+
+#endif // RNDV_MOD

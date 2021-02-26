@@ -58,7 +58,7 @@
 #include "ips_proto.h"
 #include "psm_mq_internal.h"
 #include "ips_proto_internal.h"
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 #include "psm_rndv_mod.h"
 #endif
 /*
@@ -101,7 +101,7 @@ struct ips_connect_reqrep {
 	uint8_t reserved[6+16];	// 1st 6 bytes keep fields below 64b aligned
 	// fields below can be zero depending on rdmamode
 
-	// for rndv module connection establishment only set for RNDV_MOD_MR
+	// for rndv module connection establishment only set for RNDV_MOD
 	union ibv_gid gid; /* sender's gid */	// zero if no rndv mod RDMA
 	uint32_t rv_index; /* senders process index */ // zero if no rndv mod RDMA
 	uint32_t resv;	// alignment
@@ -189,7 +189,7 @@ ips_proto_build_connect_message(struct ips_proto *proto,
 	ips_epaddr_t *ipsaddr, uint8_t opcode, void *payload,
 	size_t max_paylen);
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 /* on -1 errno is status
  * EIO is connection error other values are more serious (invalid call, etc)
  */
@@ -211,9 +211,9 @@ static int is_rv_connected(ips_epaddr_t *ipsaddr)
 	ipsaddr->rv_connected = (1 == ret);
 	return ret;
 }
-#else // RNDV_MOD_MR
+#else // RNDV_MOD
 static inline int is_rv_connected(ips_epaddr_t *ipsaddr) { return 1; }
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 /**
  * Configure flows for an ipsaddr.
  *
@@ -355,7 +355,7 @@ ips_ipsaddr_set_req_params(struct ips_proto *proto,
 	if (err)
 		return err;
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	ipsaddr->remote_gid = req->gid;
 	ipsaddr->remote_rv_index = req->rv_index;
 	if (ipsaddr->rv_conn) {
@@ -389,7 +389,7 @@ ips_ipsaddr_set_req_params(struct ips_proto *proto,
 	//	_HFI_ERROR("mismatched PSM3_RDMA config, remote end in mode 1\n");
 	//	return PSM2_INTERNAL_ERR;
 	}
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 	if (ipsaddr->rc_qp) {
 		psmi_assert(IPS_PROTOEXP_FLAG_USER_RC_QP(proto->ep->rdmamode));
 		psmi_assert(proto->ep->verbs_ep.rv
@@ -623,7 +623,7 @@ ips_proto_build_connect_message(struct ips_proto *proto,
 		req->rdmamode = proto->ep->rdmamode & IPS_PROTOEXP_FLAG_RDMA_MASK;
 		req->static_rate = proto->epinfo.ep_link_rate;
 		memset(&req->reserved, 0, sizeof(req->reserved));
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 		// only supply gid if we want to use kernel rv
 		if (IPS_PROTOEXP_FLAG_KERNEL_QP(proto->ep->rdmamode)
 				&& proto->ep->verbs_ep.rv) {
@@ -855,7 +855,7 @@ ips_alloc_epaddr(struct ips_proto *proto, int master, psm2_epid_t epid,
 		ipsaddr->hpp_index = 0;
 
 	if (IPS_PROTOEXP_FLAG_USER_RC_QP(proto->ep->rdmamode)
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 		// if verbs_ep allows us to open w/o rv_open then we can't use RC QP
 		&& (proto->ep->verbs_ep.rv
 			|| proto->ep->mr_cache_mode != MR_CACHE_MODE_KERNEL)
@@ -890,7 +890,7 @@ ips_alloc_epaddr(struct ips_proto *proto, int master, psm2_epid_t epid,
 	ipsaddr->use_qp =  proto->ep->verbs_ep.qp;
 	ipsaddr->use_max_inline_data = proto->ep->verbs_ep.qp_cap.max_inline_data;
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	if (IPS_PROTOEXP_FLAG_KERNEL_QP(proto->ep->rdmamode)
 			&& proto->ep->verbs_ep.rv) {
 		struct ibv_ah_attr ah_attr;
@@ -927,7 +927,7 @@ ips_alloc_epaddr(struct ips_proto *proto, int master, psm2_epid_t epid,
 			}
 		}
 	}
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 
 	/*
 	 * Set up the flows on this ipsaddr
@@ -963,7 +963,7 @@ void ips_free_epaddr(psm2_epaddr_t epaddr, struct ips_proto *proto)
 
 	_HFI_VDBG("epaddr=%p,ipsaddr=%p,connidx_incoming=%d\n", epaddr, ipsaddr,
 		  ipsaddr->connidx_incoming);
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	_HFI_MMDBG("free_epaddr\n");
 	if (ipsaddr->rv_conn) {
 		//__psm2_rv_destroy_conn(ipsaddr->rv_conn);
@@ -978,7 +978,7 @@ void ips_free_epaddr(psm2_epaddr_t epaddr, struct ips_proto *proto)
 		// maybe just call rndv_mod to set context to 0?  But could
 		// be races for callbacks and events already queued
 	}
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 	if (ipsaddr->rc_qp) {
 		rc_qp_destroy(ipsaddr->rc_qp);
 		ipsaddr->rc_qp = NULL;

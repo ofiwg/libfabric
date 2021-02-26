@@ -54,7 +54,7 @@ AC_ARG_WITH([psm3-rv],
                             [Enable RV module use @<:@default=check@:>@])])
 AS_IF([test x$with_psm3_rv = xno],
       [
-	CPPFLAGS="$CPPFLAGS -URNDV_MOD_MR"
+	CPPFLAGS="$CPPFLAGS -URNDV_MOD"
       ],[
 	AS_IF([test "x$with_psm3_rv" = "x"],
 	      [
@@ -62,20 +62,20 @@ AS_IF([test x$with_psm3_rv = xno],
 		with_psm3_rv=/usr/include/uapi
 	      ])
 	_FI_CHECK_PACKAGE_HEADER([psm3_rv],
-	                         [$with_psm3_rv/rv/rv_user_ioctls.h],
+	                         [$with_psm3_rv/rdma/rv_user_ioctls.h],
 	                         [],
 	                         [psm3_rv_happy=1],
 	                         [psm3_rv_happy=0])
 	AS_IF([test "$psm3_rv_happy" -eq 0 && test "$psm3_rv_check" -eq 0],
 	      [
-		AC_MSG_ERROR([RV Module headers requested but <rv/rv_user_ioctls.h> not found.])
+		AC_MSG_ERROR([RV Module headers requested but <rdma/rv_user_ioctls.h> not found.])
 	      ],
 	      [
 		AS_IF([test "$psm3_rv_happy" -eq 1],
 		      [
-			CPPFLAGS="$CPPFLAGS -DRNDV_MOD_MR -I$with_psm3_rv"
+			CPPFLAGS="$CPPFLAGS -DRNDV_MOD -I$with_psm3_rv"
 		      ], [
-			CPPFLAGS="$CPPFLAGS -URNDV_MOD_MR"
+			CPPFLAGS="$CPPFLAGS -URNDV_MOD"
 		      ])
 	      ])
       ])
@@ -105,9 +105,6 @@ AS_IF([test "x$enable_psm_src" == "xyes" && test "x$enable_psm_ud" == "xyes"],
 	      [
 	          CPPFLAGS="$CPPFLAGS -UUSE_RC"
 	      ])
-	AS_IF([test "x$enable_psm_rndv_mod" == "xyes"],
-	      [CPPFLAGS="$CPPFLAGS -DRNDV_MOD_MR"],
-	      [CPPFLAGS="$CPPFLAGS -URNDV_MOD_MR"])
       ])
 AS_IF([test "x$enable_psm_src" == "xyes"],
       [

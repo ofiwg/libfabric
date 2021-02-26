@@ -314,7 +314,7 @@ psmi_stats_initialize(void)
 #ifdef PSM_DEBUG
 			", MEMORY=0x1000"
 #endif
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 			", RVEvents=0x2000, RVRDMA=0x4000"
 #endif
 #ifdef PSM_FI
@@ -756,7 +756,7 @@ void stats_register_mem_stats(psm2_ep_t ep)
 		_SDECL("PSM_desctors_(max)", m_descriptors_max),
 		_SDECL("Unexp._buffers_(current)", m_unexpbufs_total),
 		_SDECL("Unexp._Buffers_(max)", m_unexpbufs_max),
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 		_SDECL("Peer_Rndv_(current)", m_peerrndv_total),
 		_SDECL("Peer_Rndv_(max)", m_peerrndv_max),
 #endif

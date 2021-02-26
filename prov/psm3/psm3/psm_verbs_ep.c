@@ -68,7 +68,7 @@
 #include "psm_user.h"
 #include "psm_mq_internal.h"
 #include "psm_am_internal.h"
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 #include "psm_rndv_mod.h"
 #endif
 #include "opa_byteorder.h"
@@ -137,7 +137,7 @@ static const char *link_layer_str(int8_t link_layer);
 static enum psm_ibv_rate verbs_get_rate(uint8_t width, uint8_t speed);
 
 void __psm2_ep_free_verbs(psm2_ep_t ep);
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 static void deregister_rv_conn_stats(psm2_ep_t ep);
 static void deregister_rv_event_stats(psm2_ep_t ep);
 #endif
@@ -379,7 +379,7 @@ void __psm2_ep_free_verbs(psm2_ep_t ep)
 		ibv_dealloc_pd(ep->verbs_ep.pd);
 		ep->verbs_ep.pd = NULL;
 	}
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	if (ep->verbs_ep.rv) {
 		if (IPS_PROTOEXP_FLAG_KERNEL_QP(ep->rdmamode)) {
 			deregister_rv_conn_stats(ep);
@@ -884,7 +884,7 @@ done:
 	return ret;
 }
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 psm2_error_t psm2_verbs_post_rv_rdma_write_immed(psm2_ep_t ep,
 				psm2_rv_conn_t conn,
 				void *loc_buf, struct psm2_verbs_mr *loc_mr,
@@ -937,9 +937,11 @@ psm2_error_t psm2_verbs_post_rv_rdma_write_immed(psm2_ep_t ep,
 			ret = PSM2_INTERNAL_ERR;
 			break;
 		}
-		if (errno != EBUSY && errno != EAGAIN && errno != ENOMEM)
+		if (errno != EBUSY && errno != EAGAIN && errno != ENOMEM) {
 			_HFI_ERROR("failed to post RV RC SQ on %s: %s",
 					ep->verbs_ep.ib_devname, strerror(errno));
+			psmi_assert_always(errno != EINVAL);
+		}
 		ep->verbs_ep.send_rdma_outstanding--;
 		goto done;
 	}
@@ -949,7 +951,7 @@ done:
 	//printf("XXXX %s ret:%d\n", __FUNCTION__, ret);
 	return ret;
 }
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 
 extern int ips_protoexp_rdma_write_completion( uint64_t wr_id);
 
@@ -1066,7 +1068,7 @@ int verbs_get_port_index2pkey(psm2_ep_t ep, int port, int index)
 	return __be16_to_cpu(pkey);
 }
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 // accessor functions for cm statistics
 #define EP_STAT_FUNC(func, stat) \
 	static uint64_t func(void *context) \
@@ -1376,7 +1378,7 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 
 	return PSM2_OK;
 }
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 
 static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t const job_key)
 {
@@ -1481,7 +1483,7 @@ static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t
 					ep->gid_hi, ep->gid_lo, hi, lo);
 	}
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	if (IPS_PROTOEXP_FLAG_KERNEL_QP(ep->rdmamode)
 		|| ep->mr_cache_mode == MR_CACHE_MODE_KERNEL ) {
 		// cache mode is only set when rdmamode is enabled (eg. kernel or user)

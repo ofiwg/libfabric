@@ -87,7 +87,7 @@ int ips_ptl_epaddr_stats_init(char **desc, uint16_t *flags)
 
 	desc[j++] = "errchecks send";
 	desc[j++] = "errchecks recv";
-#if defined(RNDV_MOD_MR)
+#ifdef RNDV_MOD
 	desc[j++] = "err_chk_rdma send"
 	desc[j++] = "err_chk_rdma recv"
 #endif
@@ -104,7 +104,7 @@ int ips_ptl_epaddr_stats_init(char **desc, uint16_t *flags)
 	desc[j++] = "tid grants send";
 	desc[j++] = "tid grants recv";
 	desc[j++] = "send rexmit";
-#if defined(RNDV_MOD_MR)
+#ifdef RNDV_MOD
 	desc[j++] = "rdma rexmit";
 #endif
 	desc[j++] = "congestion packets";

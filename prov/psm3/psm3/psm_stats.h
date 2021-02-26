@@ -71,7 +71,7 @@
 #endif
 #define PSMI_STATSTYPE_MR_CACHE	    0x00800
 #define PSMI_STATSTYPE_MEMORY	    0x01000
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 #define PSMI_STATSTYPE_RV_EVENT	    0x02000	/* RV user event */
 #define PSMI_STATSTYPE_RV_RDMA	    0x04000	/* RV shared conn RDMA */
 #endif

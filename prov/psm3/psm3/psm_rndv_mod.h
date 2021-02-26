@@ -52,15 +52,15 @@
 */
 
 /* Copyright (c) 2003-2016 Intel Corporation. All rights reserved. */
-#if defined(RNDV_MOD_MR)
+#ifdef RNDV_MOD
 
-#ifndef _PSMI_RNDV_MOD_MR_H
-#define _PSMI_RNDV_MOD_MR_H
+#ifndef _PSMI_RNDV_MOD_H
+#define _PSMI_RNDV_MOD_H
 
 #include <sys/types.h>
 //#include <sys/socket.h>
 //#include <rdma/rdma_verbs.h>
-#include <rv/rv_user_ioctls.h>
+#include <rdma/rv_user_ioctls.h>
 
 struct local_info {
 	uint32_t mr_cache_size;	// in MBs
@@ -194,5 +194,7 @@ extern int __psm2_rv_poll_cq(psm2_rv_t rv, struct rv_event *ev);
 extern int __psm2_rv_scan_cq(psm2_rv_t rv, uint8_t event_type,
 			uint32_t imm_mask, uint32_t imm_value);
 
-#endif // _PSMI_RNDV_MOD_MR_H
-#endif // defined(RNDV_MOD_MR)
+extern int __psm2_rv_cq_overflowed(psm2_rv_t rv);
+
+#endif // _PSMI_RNDV_MOD_H
+#endif // RNDV_MOD

@@ -943,7 +943,7 @@ unsigned psmi_parse_rdmamode(void)
 
 	psmi_getenv("PSM3_RDMA",
 		    "RDMA proto control (0-no RDMA,"
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 			" 1-kernel RDMA,"
 #endif
 			" 2-user RDMA, 3-user RC send/RDMA) "
@@ -953,7 +953,7 @@ unsigned psmi_parse_rdmamode(void)
 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT_FLAGS,
 		    (union psmi_envvar_val)IPS_PROTOEXP_FLAGS_DEFAULT,
 		    &env_rdma);
-#ifndef RNDV_MOD_MR
+#ifndef RNDV_MOD
 	if (IPS_PROTOEXP_FLAG_KERNEL_QP(env_rdma.e_uint))
 		env_rdma.e_uint = 0;
 #endif
@@ -1453,7 +1453,7 @@ void psmi_mem_stats_register(void)
 				(uint64_t*)&psmi_stats_memory.m_unexpbufs_total),
 		PSMI_STATS_DECLU64("Unexp._Buffers_(max)",
 				(uint64_t*)&psmi_stats_memory.m_unexpbufs_max),
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 		PSMI_STATS_DECLU64("Peer_Rndv_(current)",
 				(uint64_t*)&psmi_stats_memory.m_peerrndv_total),
 		PSMI_STATS_DECLU64("Peer_Rndv_(max)",
@@ -1502,7 +1502,7 @@ void psmi_log_memstats(psmi_memtype_t type, int64_t nbytes)
 	case STATS:
 		_add_max_total(stats, nbytes);
 		break;
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	case PEER_RNDV:
 		_add_max_total(peerrndv, nbytes);
 		break;

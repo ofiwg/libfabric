@@ -80,7 +80,7 @@ ips_tid_pendsend_timer_callback(struct psmi_timer *timer, uint64_t current);
 static psm2_error_t
 ips_tid_pendtids_timer_callback(struct psmi_timer *timer, uint64_t current);
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 static void ips_protoexp_send_err_chk_rdma_resp(struct ips_flow *flow);
 static void ips_tid_reissue_rdma_write(struct ips_tid_send_desc *tidsendc);
 #endif
@@ -229,7 +229,7 @@ MOCKABLE(ips_protoexp_init)(const psmi_context_t *context,
 	psmi_timer_entry_init(&protoexp->timer_getreqs,
 			      ips_tid_pendtids_timer_callback, protoexp);
 	STAILQ_INIT(&protoexp->pend_getreqsq);
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	STAILQ_INIT(&protoexp->pend_err_resp);
 #endif
 
@@ -358,7 +358,7 @@ void ips_tid_scbavail_callback(struct ips_scbctrl *scbc, void *context)
 		psmi_timer_request(protoexp->timerq,
 				   &protoexp->timer_send, PSMI_TIMER_PRIO_1);
 	if (!STAILQ_EMPTY(&protoexp->pend_getreqsq)
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 		|| !STAILQ_EMPTY(&protoexp->pend_err_resp)
 #endif
 		)
@@ -687,7 +687,7 @@ ips_protoexp_rdma_write_completion(uint64_t wr_id)
 	return IPS_RECVHDRQ_CONTINUE;
 }
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 // our RV RDMA Write has completed with error on our send Q
 // This is called by the send CQE polling which might be within a send
 // so it cannot issue any sends directly, otherwise we will have a recursive
@@ -745,9 +745,9 @@ fail_ret:
 	PSM2_LOG_MSG("leaving");
 	return PSM2_INTERNAL_ERR;
 }
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 static psm2_error_t ips_protoexp_send_err_chk_rdma(struct ips_tid_send_desc *tidsendc)
 {
 	ips_scb_t *scb = NULL;
@@ -833,9 +833,9 @@ done:
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 // scan all alternate addresses for "expected" (multi-QP and multi-EP)
 // to see if a match for "got" can be found
 static
@@ -851,9 +851,9 @@ int ips_protoexp_ipsaddr_match(ips_epaddr_t *expected, ips_epaddr_t *got)
 
 	return 0;
 }
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 int ips_protoexp_process_err_chk_rdma(struct ips_recvhdrq_event *rcv_ev)
 {
 	struct ips_proto *proto = rcv_ev->proto;
@@ -957,9 +957,9 @@ done:
 	PSM2_LOG_MSG("leaving");
 	return IPS_RECVHDRQ_CONTINUE;
 }
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 static
 void ips_protoexp_send_err_chk_rdma_resp(struct ips_flow *flow)
 {
@@ -1006,9 +1006,9 @@ void ips_protoexp_send_err_chk_rdma_resp(struct ips_flow *flow)
 	PSM2_LOG_MSG("leaving");
 	return;
 }
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 int ips_protoexp_process_err_chk_rdma_resp(struct ips_recvhdrq_event *rcv_ev)
 {
 	struct ips_protoexp *protoexp = rcv_ev->proto->protoexp;
@@ -1081,7 +1081,7 @@ done:
 	PSM2_LOG_MSG("leaving");
 	return IPS_RECVHDRQ_CONTINUE;
 }
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 
 // Intermediate STL100 EXTID packets can be delivered to software when
 // acks are requested.
@@ -1132,7 +1132,7 @@ int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 		// TBD - what to do?
 	}
 	psmi_assert(IPS_PROTOEXP_FLAG_ENABLED & tidrecvc->protoexp->proto->ep->rdmamode);
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	if (conn_type == RDMA_IMMED_RV
 		&& RDMA_UNPACK_IMMED_RV_IDX(immed) != proto->ep->verbs_ep.rv_index) {
 		// RV module should not have delivered this CQE to us
@@ -1151,7 +1151,7 @@ int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 				 	conn_ref, (uint64_t)tidrecvc->ipsaddr);
 		// TBD - what to do?
 	}
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	if (conn_type == RDMA_IMMED_RV
 		&& psm2_rv_conn_get_conn_handle(tidrecvc->ipsaddr->rv_conn)
 					 != conn_ref) {
@@ -1547,7 +1547,7 @@ ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 
 	tidsendc->is_complete = 0;
 	tidsendc->reserved = 0;
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	tidsendc->rv_need_err_chk_rdma = 0;
 	tidsendc->rv_sconn_index = 0;
 	tidsendc->rv_conn_count = 0;
@@ -1647,7 +1647,7 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 	// completion handler decides how to handle any WQE/CQE errors
 	_HFI_MMDBG("tidsendc prior to post userbuf %p buffer %p length %u\n",
 			tidsendc->userbuf,  tidsendc->buffer, tidsendc->length);
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	if (err == PSM2_OK) {
 		psmi_assert(IPS_PROTOEXP_FLAG_ENABLED & protoexp->proto->ep->rdmamode);
 		if (IPS_PROTOEXP_FLAG_KERNEL_QP(protoexp->proto->ep->rdmamode))
@@ -1675,7 +1675,7 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 	}
 	if (err == PSM2_OK)
 		tidsendc->is_complete = 1;	// send queued
-#else // RNDV_MOD_MR
+#else // RNDV_MOD
 	if (err == PSM2_OK) {
 		psmi_assert(IPS_PROTOEXP_FLAG_ENABLED & protoexp->proto->ep->rdmamode);
 		if (IPS_PROTOEXP_FLAG_USER_RC_QP(protoexp->proto->ep->rdmamode))
@@ -1691,7 +1691,7 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 	}
 	if (err == PSM2_OK)
 		tidsendc->is_complete = 1;	// send queued
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 	return err;
 }
 
@@ -1790,7 +1790,7 @@ psm2_error_t ips_tid_send_exp(struct ips_tid_send_desc *tidsendc)
 	return err;
 }
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 // Used when err chk rdma resp indicates we must resend the rdma
 static
 void ips_tid_reissue_rdma_write(struct ips_tid_send_desc *tidsendc)
@@ -1814,7 +1814,7 @@ void ips_tid_reissue_rdma_write(struct ips_tid_send_desc *tidsendc)
 
 	PSM2_LOG_MSG("leaving");
 }
-#endif // RNDV_MOD_MR
+#endif // RNDV_MOD
 
 static
 psm2_error_t
@@ -1830,7 +1830,7 @@ ips_tid_pendsend_timer_callback(struct psmi_timer *timer, uint64_t current)
 		tidsendc = STAILQ_FIRST(phead);
 
 		// we have some scb's and can use them to queue some more EXPTID packets
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 		if (tidsendc->rv_need_err_chk_rdma)
 			err = ips_protoexp_send_err_chk_rdma(tidsendc);
 		else
@@ -2059,7 +2059,7 @@ ips_tid_pendtids_timer_callback(struct psmi_timer *timer, uint64_t current)
 	struct ips_tid_recv_desc *tidrecvc;
 	ips_epaddr_t *ipsaddr;
 	uint32_t nbytes_this, count;
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	struct ips_tid_err_resp_pend *phead_resp =
 	    &((struct ips_protoexp *)timer->context)->pend_err_resp;
 #endif
@@ -2068,7 +2068,7 @@ ips_tid_pendtids_timer_callback(struct psmi_timer *timer, uint64_t current)
 	PSM2_LOG_MSG("entering");
 	_HFI_MMDBG("ips_tid_pendtids_timer_callback\n");
 
-#ifdef RNDV_MOD_MR
+#ifdef RNDV_MOD
 	while (!STAILQ_EMPTY(phead_resp)) {
 		ipsaddr = STAILQ_FIRST(phead_resp);
 		protoexp = ipsaddr->epaddr.proto->protoexp;
