@@ -223,11 +223,12 @@ bool ze_is_addr_valid(const void *addr)
 {
 	ze_result_t ze_ret;
 	ze_memory_allocation_properties_t mem_prop;
+	ze_device_handle_t device;
 	int i;
 
 	for (i = 0; i < num_devices; i++) {
 		ze_ret = zeMemGetAllocProperties(context, addr, &mem_prop,
-						 &devices[i]);
+						 &device);
 		if (!ze_ret && mem_prop.type == ZE_MEMORY_TYPE_DEVICE)
 			return true;
 	}
