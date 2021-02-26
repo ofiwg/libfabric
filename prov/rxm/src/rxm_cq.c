@@ -1535,6 +1535,8 @@ static int rxm_get_recv_entry(struct rxm_rx_buf *rx_buf)
 		if (entry) {
 			rx_buf->recv_entry = container_of(entry,
 						struct rxm_recv_entry, entry);
+			if (rx_buf->recv_entry->flags & FI_MULTI_RECV)
+				rxm_adjust_multi_recv(rx_buf);
 		} else {
 			recv_queue->dyn_rbuf_unexp_cnt++;
 		}
