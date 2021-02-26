@@ -102,7 +102,12 @@ struct irdma_mem_reg_req {
 static int rv_map_event_ring(psm2_rv_t rv, struct rv_event_ring* ring,
 				int entries, int offset)
 {
+#ifdef RV_RING_ALLOC_LEN
 	ring->len = RV_RING_ALLOC_LEN(entries);
+#else /* older version of RV header */
+	ring->len = RING_ALLOC_LEN(entries);
+#endif
+
 
 	//printf("Calling mmap for offset: %d len:%d\n", offset, ring->len);
 
@@ -825,7 +830,10 @@ int __psm2_rv_cq_overflowed(psm2_rv_t rv)
 		errno = EINVAL;
 		return -1;
 	}
+#ifndef HAVE_NO_PSM3_RV_OVERFLOW_CNT
 	return (rv->events.hdr->overflow_cnt != 0);
+#else
+	return 0;
+#endif
 }
-
 #endif // RNDV_MOD

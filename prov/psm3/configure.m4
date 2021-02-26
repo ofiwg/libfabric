@@ -111,24 +111,56 @@ ifelse('
 			AS_IF([test "x$with_psm3_rv" = "x"],
 			      [
 				psm3_rv_check=1
-				with_psm3_rv=/usr/include/uapi
-			      ])
+				with_psm3_rv=/usr/include
+			      ],[psm3_rv_check=0])
+			psm3_rv_old_header=0
 			save_CPPFLAGS=$CPPFLAGS
 			CPPFLAGS="$CPPFLAGS -I$with_psm3_rv"
+			dnl Check for /usr/include/rdma/rv_user_ioctls.h first
 			_FI_CHECK_PACKAGE_HEADER([psm3_rv],
 			                         [rdma/rv_user_ioctls.h],
 			                         [],
 			                         [psm3_rv_happy=1],
 			                         [psm3_rv_happy=0])
+
+			AS_IF([test $psm3_rv_happy -eq 0], [
+				AS_IF([test "$psm3_rv_check" -eq 1],
+				      [with_psm3_rv=/usr/include/uapi])
+				CPPFLAGS="$save_CPPFLAGS -I$with_psm3_rv"
+				_FI_CHECK_PACKAGE_HEADER([psm3_rv],
+				                         [rv/rv_user_ioctls.h],
+				                         [],
+				                         [psm3_rv_happy=1
+				                          psm3_rv_old_header=1],
+				                         [psm3_rv_happy=0])
+			      ])
 			CPPFLAGS=$save_CPPFLAGS
-			AS_IF([test "$psm3_rv_happy" -eq 0 && test "$psm3_rv_check" -eq 0],
+			AS_IF([test "$psm3_rv_happy" -eq 0],
 			      [
-				psm3_happy=0
-				AC_MSG_ERROR([RV Module headers requested but <rdma/rv_user_ioctls.h> not found.])
+				AS_IF([test "$psm3_rv_check" -eq 0], [
+					psm3_happy=0
+					AC_MSG_ERROR([RV Module headers requested but rv_user_ioctls.h not found.])
+				])
+				psm3_CPPFLAGS="$psm3_CPPFLAGS -URNDV_MOD"
 			      ],[
-				AS_IF([test "$psm3_rv_happy" -eq 1],
-				      [psm3_CPPFLAGS="$psm3_CPPFLAGS -DRNDV_MOD -I$with_psm3_rv"],
-				      [psm3_CPPFLAGS="$psm3_CPPFLAGS -URNDV_MOD"])
+				psm3_CPPFLAGS="$psm3_CPPFLAGS -DRNDV_MOD -I$with_psm3_rv"
+				AS_IF([test "$psm3_rv_old_header" -eq 1],
+				      [psm3_CPPFLAGS="$psm3_CPPFLAGS -DHAVE_OLD_RV_HEADER"])
+			      ])
+			AS_IF([test "$psm3_rv_happy" -eq 1], [
+				AC_MSG_CHECKING([for RV support for ring.overflow_cnt])
+				AC_COMPILE_IFELSE(
+					[AC_LANG_PROGRAM(
+						[[#include <sys/types.h>
+						  #include <stdint.h>
+						  #include <rdma/rv_user_ioctls.h>
+						]],[[struct rv_ring_header ring; ring.overflow_cnt=0;]])
+					],[
+						AC_MSG_RESULT(yes)
+					],[
+						AC_MSG_RESULT(no)
+						psm3_CPPFLAGS="$psm3_CPPFLAGS -DHAVE_NO_PSM3_RV_OVERFLOW_CNT"
+					])
 			      ])
 		      ])
 		AS_IF([test $psm3_happy -eq 1], [
