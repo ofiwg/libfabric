@@ -14,7 +14,6 @@
 #include "config.h"
 
 #include <pthread.h>
-#include <endian.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>

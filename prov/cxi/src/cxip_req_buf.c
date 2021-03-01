@@ -102,8 +102,8 @@ static void cxip_req_buf_get_header_info(struct cxip_req_buf *buf,
 	case C_V4_PKT_UNRESTRICTED:
 		*header_length = sizeof(*fab_hdr) +
 			sizeof(struct c_port_unrestricted_hdr);
-		/* This only supports little endian systems. */
-		*remote_offset = be64toh(unres_hdr->remote_offset) >> 8;
+		*remote_offset =
+			c_port_unrestricted_hdr_get_remote_offset(unres_hdr);
 		break;
 	case C_V4_PKT_SMALLMSG:
 		*header_length = sizeof(*fab_hdr) +
