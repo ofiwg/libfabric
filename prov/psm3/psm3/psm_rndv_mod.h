@@ -60,7 +60,11 @@
 #include <sys/types.h>
 //#include <sys/socket.h>
 //#include <rdma/rdma_verbs.h>
+#ifndef HAVE_OLD_RV_HEADER
 #include <rdma/rv_user_ioctls.h>
+#else
+#include <rv/rv_user_ioctls.h>
+#endif
 
 struct local_info {
 	uint32_t mr_cache_size;	// in MBs
