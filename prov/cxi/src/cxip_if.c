@@ -1011,7 +1011,7 @@ static int netdev_lookup(struct cxil_devinfo *info, char **netdev)
 			/* A virtual device, like a bridge, doesn't have a
 			 * device link.
 			 */
-			if (errno == ENOENT)
+			if (errno == ENOENT || errno == ENOTDIR)
 				continue;
 
 			goto free_glob;
