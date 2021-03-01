@@ -392,8 +392,10 @@ ips_ipsaddr_set_req_params(struct ips_proto *proto,
 #endif // RNDV_MOD
 	if (ipsaddr->rc_qp) {
 		psmi_assert(IPS_PROTOEXP_FLAG_USER_RC_QP(proto->ep->rdmamode));
+#ifdef RNDV_MOD
 		psmi_assert(proto->ep->verbs_ep.rv
 					|| proto->ep->mr_cache_mode != MR_CACHE_MODE_KERNEL);
+#endif
 		if (! req->qp_attr.qpn) {
 			_HFI_ERROR("mismatched PSM3_RDMA config, remote end not in mode 2 or 3\n");
 			return PSM2_INTERNAL_ERR;

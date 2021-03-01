@@ -62,7 +62,9 @@
 #define _PSMI_VERBS_MR_H
 
 #include <infiniband/verbs.h>
+#ifdef RNDV_MOD
 #include <psm_rndv_mod.h>
+#endif
 
 #define MR_CACHE_MODE_NONE 0	// user space MRs, but no caching
 #define MR_CACHE_MODE_KERNEL 1	// kernel MR cache in rendezvous module
