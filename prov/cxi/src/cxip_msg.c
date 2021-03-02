@@ -3511,6 +3511,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 		/* Match sink buffer */
 		put_mb.le_type = CXIP_LE_TYPE_SINK;
 		/* Use match bits for rdzv_id */
+		put_mb.rdzv_lac = send_md->md->lac;
 		put_mb.rdzv_id_hi = rdzv_id;
 		cmd.match_bits = put_mb.raw;
 	}
