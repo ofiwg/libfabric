@@ -134,8 +134,7 @@ static int tcpx_update_rx_iov(struct tcpx_xfer_entry *rx_entry)
 		return ret;
 	}
 
-	assert(rx_entry->iov_cnt && rx_entry->iov[0].iov_len &&
-	       rx_entry->iov_cnt <= TCPX_IOV_LIMIT);
+	assert(rx_entry->iov_cnt <= TCPX_IOV_LIMIT);
 	ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt,
 				rx_entry->rem_len);
 	if (ret) {
@@ -163,12 +162,12 @@ retry:
 		goto shutdown;
 	}
 
-	/* iov has been consumed, check for dynamic rbuf handling */
-	if (rx_entry->rem_len) {
+	if (rx_entry->flags & TCPX_NEED_DYN_RBUF) {
 		ret = tcpx_update_rx_iov(rx_entry);
 		if (ret)
 			goto shutdown;
 
+		rx_entry->flags &= ~TCPX_NEED_DYN_RBUF;
 		rx_entry->rem_len = 0;
 		goto retry;
 	}
@@ -466,6 +465,9 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 	rx_entry->ep = tcpx_ep;
 	rx_entry->hdr.base_hdr.op_data = TCPX_OP_MSG_RECV;
 	rx_entry->mrecv_msg_start = rx_entry->iov[0].iov_base;
+
+	if (tcpx_dynamic_rbuf(tcpx_ep))
+		rx_entry->flags |= TCPX_NEED_DYN_RBUF;
 
 	ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt, msg_len);
 	if (ret) {
