@@ -1209,9 +1209,22 @@ static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
 	return ofi_bufpool_create_attr(&attr, buf_pool);
 }
 
+/** @brief Initializes the endpoint and allocates the packet pools.
+ *
+ * This function allocates the various packet pools for the EFA and SHM
+ * provider and does other endpoint initialization.
+ *
+ * Note that ofi_bufpool_create currently does lazy allocation, so memory is
+ * not allocated here. Memory will be allocated the first time the pool is
+ * used.
+ *
+ * @param ep rxr_ep struct to initialize.
+ * @return 0 on success, fi_errno on error.
+ */
 int rxr_ep_init(struct rxr_ep *ep)
 {
 	size_t entry_sz;
+	int hp_pool_flag;
 	int ret;
 
 	entry_sz = ep->mtu_size + sizeof(struct rxr_pkt_entry);
@@ -1220,14 +1233,19 @@ int rxr_ep_init(struct rxr_ep *ep)
 	ep->rx_pkt_pool_entry_sz = entry_sz;
 #endif
 
+	if (efa_fork_status == EFA_FORK_SUPPORT_ON)
+		hp_pool_flag = 0;
+	else
+		hp_pool_flag = OFI_BUFPOOL_HUGEPAGES;
+
 	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_tx_pool_chunk_cnt(ep),
-				  OFI_BUFPOOL_HUGEPAGES,
+				  hp_pool_flag,
 				  &ep->tx_pkt_efa_pool);
 	if (ret)
 		goto err_free;
 
 	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_rx_pool_chunk_cnt(ep),
-				  OFI_BUFPOOL_HUGEPAGES,
+				  hp_pool_flag,
 				  &ep->rx_pkt_efa_pool);
 	if (ret)
 		goto err_free;
