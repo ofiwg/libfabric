@@ -950,6 +950,17 @@ static struct fi_ops_fabric efa_ops_fabric = {
 	.trywait = ofi_trywait
 };
 
+/* @brief Fork handler that is installed when EFA is loaded
+ *
+ * We register this fork handler so that users do not inadvertently trip over
+ * memory corruption when fork is called. Calling fork() without enabling fork
+ * support in rdma-core can cause corruption, even if the registered pages are
+ * not used in the child process.
+ *
+ * It is critical that this fork handler is only installed once an EFA device
+ * is present and selected. We don't want this to trigger when Libfabric is not
+ * running on an EC2 instance.
+ */
 static
 void efa_atfork_callback()
 {
@@ -957,36 +968,27 @@ void efa_atfork_callback()
 
 	if (visited)
 		return;
-
 	visited = 1;
-	if (getenv("RDMAV_FORK_SAFE") || getenv("IBV_FORK_SAFE") )
-		return;
 
 	fprintf(stderr,
 		"A process has executed an operation involving a call\n"
 		"to the fork() system call to create a child process.\n"
 		"\n"
-		"As a result, the libfabric EFA provider is operating in\n"
+		"As a result, the Libfabric EFA provider is operating in\n"
 		"a condition that could result in memory corruption or\n"
 		"other system errors.\n"
 		"\n"
-		"For the libfabric EFA provider to work safely when fork()\n"
-		"is called, the application must handle memory registrations\n"
-		"(FI_MR_LOCAL) and you will need to set the following environment\n"
-		"variables:\n"
+		"For the Libfabric EFA provider to work safely when fork()\n"
+		"is called please set the following environment variable:\n"
 		"          RDMAV_FORK_SAFE=1\n"
-		"MPI applications do not support this mode.\n"
+		"and verify you are using rdma-core v31.1 or later.\n"
 		"\n"
-		"However, this setting can result in signficant performance\n"
-		"impact to your application due to increased cost of memory\n"
-		"registration.\n"
+		"Please note that enabling fork support may cause a\n"
+		"small performance impact.\n"
 		"\n"
 		"You may want to check with your application vendor to see\n"
 		"if an application-level alternative (of not using fork)\n"
 		"exists.\n"
-		"\n"
-		"Please refer to https://github.com/ofiwg/libfabric/issues/6332\n"
-		"for more information.\n"
 		"\n"
 		"Your job will now abort.\n");
 	abort();
@@ -999,12 +1001,14 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	struct efa_fabric *fab;
 	int ret = 0;
 
-	ret = pthread_atfork(efa_atfork_callback, NULL, NULL);
-	if (ret) {
-		EFA_WARN(FI_LOG_FABRIC,
-			 "Unable to register atfork callback: %s\n",
-			 strerror(-ret));
-		return -ret;
+	if (efa_fork_status == EFA_FORK_SUPPORT_OFF) {
+		ret = pthread_atfork(efa_atfork_callback, NULL, NULL);
+		if (ret) {
+			EFA_WARN(FI_LOG_FABRIC,
+				 "Unable to register atfork callback: %s\n",
+				 strerror(-ret));
+			return -ret;
+		}
 	}
 
 	fab = calloc(1, sizeof(*fab));
