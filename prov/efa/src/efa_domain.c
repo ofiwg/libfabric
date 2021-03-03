@@ -260,6 +260,24 @@ static int efa_mr_cache_init(struct efa_domain *domain, struct fi_info *info)
 	return 0;
 }
 
+/* @brief Allocate a domain, open the device, and set it up based on the hints.
+ *
+ * This function creates a domain and uses the info struct to configure the
+ * domain based on what capabilities are set. Fork support is checked here and
+ * the MR cache is also set up here.
+ *
+ * Note the trickery with rxr_domain where detect whether this endpoint is RDM
+ * or DGRAM to set some state in rxr_domain. We can do this as the type field
+ * is at the beginning of efa_domain and rxr_domain, and we know efa_domain
+ * stored within rxr_domain. This will be removed when rxr_domain_open and
+ * efa_domain_open are combined.
+ *
+ * @param fabric_fid fabric that the domain should be tied to
+ * @param info info struct that was validated and returned by fi_getinfo
+ * @param domain_fid pointer where newly domain fid should be stored
+ * @param context void pointer stored with the domain fid
+ * @return 0 on success, fi_errno on error
+ */
 int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		    struct fid_domain **domain_fid, void *context)
 {
