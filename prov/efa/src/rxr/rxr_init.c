@@ -125,6 +125,9 @@ static void rxr_init_env(void)
 			    &rxr_env.efa_min_read_write_size);
 	fi_param_get_size_t(&rxr_prov, "inter_read_segment_size",
 			    &rxr_env.efa_read_segment_size);
+
+	if (getenv("RDMAV_FORK_SAFE") || getenv("IBV_FORK_SAFE"))
+		efa_fork_status = EFA_FORK_SUPPORT_ON;
 }
 
 /*

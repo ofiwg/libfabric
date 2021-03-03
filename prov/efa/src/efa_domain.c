@@ -40,6 +40,8 @@
 fastlock_t pd_list_lock;
 struct efa_pd *pd_list = NULL;
 
+enum efa_fork_support_status efa_fork_status = EFA_FORK_SUPPORT_OFF;
+
 static int efa_domain_close(fid_t fid)
 {
 	struct efa_domain *domain;
@@ -139,11 +141,15 @@ static int efa_open_device_by_name(struct efa_domain *domain, const char *name)
 	return ret;
 }
 
-/*
+/* @brief Check if rdma-core fork support is enabled
+ *
  * Register a temporary buffer and call ibv_fork_init() to determine if fork
  * support is enabled.
  *
  * This relies on internal behavior in rdma-core and is a temporary workaround.
+ *
+ * @param domain_fid domain fid so we can register memory
+ * @return 0 if fork support is not enabled, 1 if it is.
  */
 static int efa_check_fork_enabled(struct fid_domain *domain_fid)
 {
@@ -202,6 +208,58 @@ static struct fi_ops_domain efa_domain_ops = {
 	.query_collective = fi_no_query_collective,
 };
 
+/* @brief Setup the MR cache.
+ *
+ * This function enables the MR cache using the util MR cache code. Note that
+ * if the call to ofi_mr_cache_init fails, we continue but disable the cache.
+ *
+ * @param efa_domain The EFA domain where cache ops should be set
+ * @param info Validated info struct selected by the user
+ * @return 0 on success, fi_errno on failure.
+ */
+static int efa_mr_cache_init(struct efa_domain *domain, struct fi_info *info)
+{
+	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
+		[FI_HMEM_SYSTEM] = memhooks_monitor,
+		[FI_HMEM_CUDA] = cuda_monitor,
+	};
+	int ret;
+
+	domain->cache = (struct ofi_mr_cache *)calloc(1, sizeof(struct ofi_mr_cache));
+	if (!domain->cache)
+		return -FI_ENOMEM;
+
+	if (!efa_mr_max_cached_count)
+		efa_mr_max_cached_count = info->domain_attr->mr_cnt *
+					  EFA_MR_CACHE_LIMIT_MULT;
+	if (!efa_mr_max_cached_size)
+		efa_mr_max_cached_size = domain->ctx->max_mr_size *
+					 EFA_MR_CACHE_LIMIT_MULT;
+	/*
+	 * XXX: we're modifying a global in the util mr cache? do we need an
+	 * API here instead?
+	 */
+	cache_params.max_cnt = efa_mr_max_cached_count;
+	cache_params.max_size = efa_mr_max_cached_size;
+	domain->cache->entry_data_size = sizeof(struct efa_mr);
+	domain->cache->add_region = efa_mr_cache_entry_reg;
+	domain->cache->delete_region = efa_mr_cache_entry_dereg;
+	ret = ofi_mr_cache_init(&domain->util_domain, memory_monitors,
+				domain->cache);
+	if (!ret) {
+		domain->util_domain.domain_fid.mr = &efa_domain_mr_cache_ops;
+		EFA_INFO(FI_LOG_DOMAIN, "EFA MR cache enabled, max_cnt: %zu max_size: %zu\n",
+			 cache_params.max_cnt, cache_params.max_size);
+	} else {
+		EFA_WARN(FI_LOG_DOMAIN, "EFA MR cache init failed: %s\n",
+		         fi_strerror(ret));
+		free(domain->cache);
+		domain->cache = NULL;
+	}
+
+	return 0;
+}
+
 int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		    struct fid_domain **domain_fid, void *context)
 {
@@ -212,10 +270,6 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	size_t qp_table_size;
 	bool app_mr_local;
 	int ret;
-	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
-		[FI_HMEM_SYSTEM] = memhooks_monitor,
-		[FI_HMEM_CUDA] = cuda_monitor,
-	};
 
 	fi = efa_get_efa_info(info->domain_attr->name);
 	if (!fi)
@@ -288,54 +342,37 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	domain->cache = NULL;
 
 	/*
-	 * Check whether fork support is enabled when app does not request
-	 * FI_MR_LOCAL even if the cache is disabled.
+	 * Call ibv_fork_init if the user asked for fork support.
 	 */
-	if (!app_mr_local && efa_check_fork_enabled(*domain_fid)) {
-		fprintf(stderr,
-		         "\nlibibverbs fork support is not supported by the EFA Libfabric\n"
-			 "provider when memory registrations are handled by the provider.\n"
-			 "\nFork support may currently be enabled via the RDMAV_FORK_SAFE\n"
-			 "or IBV_FORK_SAFE environment variable or another library in your\n"
-			 "application may be calling ibv_fork_init().\n"
-			 "\nPlease refer to https://github.com/ofiwg/libfabric/issues/6332\n"
-			 "for more information. Your job will now abort.\n");
-		abort();
+	if (efa_fork_status == EFA_FORK_SUPPORT_ON) {
+		ret = -ibv_fork_init();
+		if (ret) {
+			EFA_WARN(FI_LOG_DOMAIN,
+			         "Fork support requested but ibv_fork_init failed: %s\n",
+			         strerror(-ret));
+			goto err_free_info;
+		}
 	}
+
+	/*
+	 * Run check to see if fork support was enabled by another library. If
+	 * one of the environment variables was set to enable fork support,
+	 * this variable was set to ON during provider init.  Huge pages for
+	 * bounce buffers will not be used if fork support is on.
+	 */
+	if (efa_fork_status == EFA_FORK_SUPPORT_OFF &&
+	    efa_check_fork_enabled(*domain_fid))
+		efa_fork_status = EFA_FORK_SUPPORT_ON;
 
 	/*
 	 * If FI_MR_LOCAL is set, we do not want to use the MR cache.
 	 */
 	if (!app_mr_local && efa_mr_cache_enable) {
-		domain->cache = (struct ofi_mr_cache *)calloc(1, sizeof(struct ofi_mr_cache));
-		if (!domain->cache) {
-			ret = -FI_ENOMEM;
+		ret = efa_mr_cache_init(domain, info);
+		if (ret)
 			goto err_free_info;
-		}
-
-		if (!efa_mr_max_cached_count)
-			efa_mr_max_cached_count = info->domain_attr->mr_cnt *
-			                          EFA_MR_CACHE_LIMIT_MULT;
-		if (!efa_mr_max_cached_size)
-			efa_mr_max_cached_size = domain->ctx->max_mr_size *
-			                         EFA_MR_CACHE_LIMIT_MULT;
-		cache_params.max_cnt = efa_mr_max_cached_count;
-		cache_params.max_size = efa_mr_max_cached_size;
-		domain->cache->entry_data_size = sizeof(struct efa_mr);
-		domain->cache->add_region = efa_mr_cache_entry_reg;
-		domain->cache->delete_region = efa_mr_cache_entry_dereg;
-		ret = ofi_mr_cache_init(&domain->util_domain, memory_monitors,
-					domain->cache);
-		if (!ret) {
-			domain->util_domain.domain_fid.mr = &efa_domain_mr_cache_ops;
-			EFA_INFO(FI_LOG_DOMAIN, "EFA MR cache enabled, max_cnt: %zu max_size: %zu\n",
-			         cache_params.max_cnt, cache_params.max_size);
-			return 0;
-		}
 	}
 
-	free(domain->cache);
-	domain->cache = NULL;
 	return 0;
 err_free_info:
 	fi_freeinfo(domain->info);
