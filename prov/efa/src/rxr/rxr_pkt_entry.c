@@ -110,9 +110,14 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
 	return pkt_entry;
 }
 
-static
-void rxr_pkt_entry_release_single_tx(struct rxr_ep *ep,
-				     struct rxr_pkt_entry *pkt)
+/**
+ * @brief release a TX packet entry
+ *
+ * @param[in]     ep  the end point
+ * @param[in,out] pkt the pkt_entry to be released
+ */
+void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt)
 {
 	struct rxr_peer *peer;
 
@@ -140,18 +145,6 @@ void rxr_pkt_entry_release_single_tx(struct rxr_ep *ep,
 #endif
 	pkt->state = RXR_PKT_ENTRY_FREE;
 	ofi_buf_free(pkt);
-}
-
-void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
-			      struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_pkt_entry *next;
-
-	while (pkt_entry) {
-		next = pkt_entry->next;
-		rxr_pkt_entry_release_single_tx(ep, pkt_entry);
-		pkt_entry = next;
-	}
 }
 
 /*
