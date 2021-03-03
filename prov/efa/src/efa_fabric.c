@@ -979,7 +979,7 @@ void efa_atfork_callback()
 		"\n"
 		"For the Libfabric EFA provider to work safely when fork()\n"
 		"is called please set the following environment variable:\n"
-		"          RDMAV_FORK_SAFE=1\n"
+		"          FI_EFA_FORK_SAFE=1\n"
 		"and verify you are using rdma-core v31.1 or later.\n"
 		"\n"
 		"Please note that enabling fork support may cause a\n"
