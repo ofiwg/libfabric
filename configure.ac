@@ -602,15 +602,30 @@ AC_ARG_WITH([gdrcopy],
 			    and runtime libraries are installed.])],
 	    [], [])
 
-FI_CHECK_PACKAGE([gdrcopy],
-		 [gdrapi.h],
-		 [gdrapi],
-		 [gdr_open],
-		 [-lgdrapi],
-		 [$with_gdrcopy],
-		 [],
-		 [AC_DEFINE([HAVE_GDRCOPY], [1],[gdrcopy support])],
-		 [], [])
+AS_IF([test -n "$with_gdrcopy" && test x"$with_gdrcopy" != x"no" && test "$have_libcuda" == "0"],
+	[AC_MSG_ERROR([gdrcopy is requested but cuda is not requested or cuda runtime is not available.])],
+	[])
+
+have_gdrcopy=0
+AS_IF([test "$have_libcuda" == "1" && test x"$with_gdrcopy" != x"no"],
+	[AS_IF([test x"$with_gdrcopy" == x"yes"],[gdrcopy_dir=""],[gdrcopy_dir=$with_gdrcopy])
+	 FI_CHECK_PACKAGE([gdrcopy],
+			  [gdrapi.h],
+			  [gdrapi],
+			  [gdr_open],
+			  [],
+			  [$gdrcopy_dir],
+			  [],
+			  [have_gdrcopy=1],
+			  [],
+			  [])],
+	[])
+
+AS_IF([test x"$with_gdrcopy" != x"no" && test -n "$with_gdrcopy" && test "$have_gdrcopy" = "0" ],
+	[AC_MSG_ERROR([gdrcopy support requested but gdrcopy development library is not available.])],
+	[])
+
+AC_DEFINE_UNQUOTED([HAVE_GDRCOPY], [$have_gdrcopy], [Whether we have gdrcopy development library or not])
 
 AC_ARG_ENABLE([gdrcopy-dlopen],
     [AS_HELP_STRING([--enable-gdrcopy-dlopen],
