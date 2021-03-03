@@ -364,6 +364,14 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	    efa_check_fork_enabled(*domain_fid))
 		efa_fork_status = EFA_FORK_SUPPORT_ON;
 
+	if (efa_fork_status == EFA_FORK_SUPPORT_ON &&
+	    getenv("RDMAV_HUGEPAGES_SAFE")) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Using libibverbs fork support and huge pages is not supported by the EFA provider.\n");
+		ret = -FI_EINVAL;
+		goto err_free_info;
+	}
+
 	/*
 	 * If FI_MR_LOCAL is set, we do not want to use the MR cache.
 	 */
