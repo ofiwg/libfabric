@@ -77,8 +77,12 @@ struct rxr_env rxr_env = {
 	.efa_read_segment_size = 1073741824,
 };
 
+/* @brief Read and store the FI_EFA_* environment variables.
+ */
 static void rxr_init_env(void)
 {
+	int fork_safe = 0;
+
 	fi_param_get_int(&rxr_prov, "rx_window_size", &rxr_env.rx_window_size);
 	fi_param_get_int(&rxr_prov, "tx_max_credits", &rxr_env.tx_max_credits);
 	fi_param_get_int(&rxr_prov, "tx_min_credits", &rxr_env.tx_min_credits);
@@ -125,8 +129,9 @@ static void rxr_init_env(void)
 			    &rxr_env.efa_min_read_write_size);
 	fi_param_get_size_t(&rxr_prov, "inter_read_segment_size",
 			    &rxr_env.efa_read_segment_size);
+	fi_param_get_bool(&rxr_prov, "fork_safe", &fork_safe);
 
-	if (getenv("RDMAV_FORK_SAFE") || getenv("IBV_FORK_SAFE"))
+	if (fork_safe || getenv("RDMAV_FORK_SAFE") || getenv("IBV_FORK_SAFE"))
 		efa_fork_status = EFA_FORK_SUPPORT_ON;
 }
 
@@ -799,6 +804,8 @@ EFA_INI
 			"The mimimum message size for inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536).");
 	fi_param_define(&rxr_prov, "inter_read_segment_size", FI_PARAM_INT,
 			"Calls to RDMA read is segmented using this value.");
+	fi_param_define(&rxr_prov, "fork_safe", FI_PARAM_BOOL,
+			"Enables fork support and disables internal usage of huge pages. (Default: false)");
 	rxr_init_env();
 
 #if HAVE_EFA_DL
