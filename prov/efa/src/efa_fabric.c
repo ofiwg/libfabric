@@ -83,7 +83,6 @@
 int efa_mr_cache_enable		= EFA_DEF_MR_CACHE_ENABLE;
 size_t efa_mr_max_cached_count;
 size_t efa_mr_max_cached_size;
-int efa_set_rdmav_hugepages_safe = 0;
 
 static void efa_addr_to_str(const uint8_t *raw_addr, char *str);
 static int efa_get_addr(struct efa_context *ctx, void *src_addr);
@@ -1040,9 +1039,6 @@ static void fi_efa_fini(void)
 	struct efa_context **ctx_list;
 	int num_devices;
 
-	if (efa_set_rdmav_hugepages_safe)
-		unsetenv("RDMAV_HUGEPAGES_SAFE");
-
 	fi_freeinfo((void *)efa_util_prov.info);
 	efa_util_prov.info = NULL;
 
@@ -1113,25 +1109,6 @@ static int efa_init_info(const struct fi_info **all_infos)
 
 struct fi_provider *init_lower_efa_prov()
 {
-	int err;
-
-	if (!getenv("RDMAV_HUGEPAGES_SAFE")) {
-		/*
-		 * Setting RDMAV_HUGEPAGES_SAFE alone will not impact
-		 * application performance, because rdma-core will only
-		 * check this environment variable when either
-		 * RDMAV_FORK_SAFE or IBV_FORK_SAFE is set.
-		 */
-		err = setenv("RDMAV_HUGEPAGES_SAFE", "1", 1);
-		if (err) {
-			EFA_WARN(FI_LOG_FABRIC,
-				 "Unable to set environment variable RDMAV_HUGEPAGES_SAFE\n");
-			return NULL;
-		}
-
-		efa_set_rdmav_hugepages_safe = 1;
-	}
-
 	if (efa_init_info(&efa_util_prov.info))
 		return NULL;
 
