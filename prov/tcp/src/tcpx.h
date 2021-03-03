@@ -222,6 +222,8 @@ struct tcpx_fabric {
 	struct util_fabric	util_fabric;
 };
 
+#define TCPX_NEED_DYN_RBUF 	BIT_ULL(61)
+
 struct tcpx_xfer_entry {
 	struct slist_entry	entry;
 	union {
