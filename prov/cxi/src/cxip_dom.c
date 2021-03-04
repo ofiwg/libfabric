@@ -659,12 +659,36 @@ static int cxip_dom_ops_open(struct fid *fid, const char *ops_name,
 	return -FI_EINVAL;
 }
 
+static int cxip_domain_ops_set(struct fid *fid, const char *name,
+			       uint64_t flags, void *ops, void *context)
+{
+	struct cxip_domain *domain =
+		container_of(fid, struct cxip_domain,
+			     util_domain.domain_fid.fid);
+	struct fi_hmem_override_ops *hmem_ops;
+
+	if (strcmp(FI_SET_OPS_HMEM_OVERRIDE, name) == 0) {
+		hmem_ops = ops;
+
+		if (!hmem_ops->copy_from_hmem_iov ||
+		    !hmem_ops->copy_to_hmem_iov)
+			return -FI_EINVAL;
+
+		domain->hmem_ops = *hmem_ops;
+
+		return FI_SUCCESS;
+	}
+
+	return -FI_ENOSYS;
+}
+
 static struct fi_ops cxip_dom_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = cxip_dom_close,
 	.bind = cxip_dom_bind,
 	.control = cxip_dom_control,
 	.ops_open = cxip_dom_ops_open,
+	.ops_set = cxip_domain_ops_set,
 };
 
 static struct fi_ops_domain cxip_dom_ops = {
@@ -753,6 +777,9 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	fastlock_init(&cxi_domain->lock);
 	ofi_atomic_initialize32(&cxi_domain->ref, 0);
 	cxi_domain->fab = fab;
+
+	cxi_domain->hmem_ops.copy_from_hmem_iov = ofi_copy_from_hmem_iov;
+	cxi_domain->hmem_ops.copy_to_hmem_iov = ofi_copy_to_hmem_iov;
 
 	*dom = &cxi_domain->util_domain.domain_fid;
 

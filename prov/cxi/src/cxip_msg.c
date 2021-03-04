@@ -808,6 +808,7 @@ static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
 	struct iovec hmem_iov;
 	ssize_t ret;
 	struct cxip_req *parent_req = match_req;
+	struct cxip_domain *dom = match_req->recv.rxc->domain;
 
 	assert(match_req->type == CXIP_REQ_RECV);
 
@@ -870,8 +871,8 @@ static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
 	hmem_iov.iov_base = match_req->recv.recv_buf;
 	hmem_iov.iov_len = match_req->data_len;
 
-	ret = ofi_copy_to_hmem_iov(iface, device, &hmem_iov, 1, 0, oflow_va,
-				   oflow_bytes);
+	ret = cxip_copy_to_hmem_iov(dom, iface, device, &hmem_iov, 1, 0,
+				    oflow_va, oflow_bytes);
 	assert(ret == oflow_bytes);
 
 	if (oflow_req->type == CXIP_REQ_OFLOW)
@@ -3619,6 +3620,7 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 static ssize_t _cxip_send_eager(struct cxip_req *req)
 {
 	struct cxip_txc *txc = req->send.txc;
+	struct cxip_domain *dom = txc->domain;
 	struct cxip_md *send_md = NULL;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
@@ -3660,9 +3662,9 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 			hmem_iov.iov_base = (void *)req->send.buf;
 			hmem_iov.iov_len = req->send.len;
 
-			ret = ofi_copy_from_hmem_iov(req->send.ibuf,
-						     req->send.len, iface, 0,
-						     &hmem_iov, 1, 0);
+			ret = cxip_copy_from_hmem_iov(dom, req->send.ibuf,
+						      req->send.len, iface, 0,
+						      &hmem_iov, 1, 0);
 			assert(ret == req->send.len);
 
 			buf = req->send.ibuf;

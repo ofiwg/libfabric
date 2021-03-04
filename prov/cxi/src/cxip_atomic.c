@@ -363,6 +363,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		    bool triggered, uint64_t trig_thresh,
 		    struct cxip_cntr *trig_cntr, struct cxip_cntr *comp_cntr)
 {
+	struct cxip_domain *dom = txc->domain;
 	struct cxip_addr caddr;
 	struct cxip_req *req = NULL;
 	enum c_atomic_op opcode;
@@ -381,8 +382,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	int len;
 	ssize_t ret;
 	bool idc;
-	struct cxip_cmdq *cmdq =
-		triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
+	struct cxip_cmdq *cmdq = triggered ? dom->trig_cmdq : txc->tx_cmdq;
 	enum cxi_traffic_class_type tc_type;
 	enum fi_hmem_iface iface;
 	struct iovec hmem_iov;
@@ -554,8 +554,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		hmem_iov.iov_base = oper1;
 		hmem_iov.iov_len = len;
 
-		ret = ofi_copy_from_hmem_iov(tmp_oper, len, iface, 0, &hmem_iov,
-					     1, 0);
+		ret = cxip_copy_from_hmem_iov(dom, tmp_oper, len, iface, 0,
+					      &hmem_iov, 1, 0);
 		assert(ret == len);
 
 		tmp_oper[0] &= mask[0];
@@ -576,17 +576,17 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 				hmem_iov.iov_base = oper1;
 				hmem_iov.iov_len = len;
 
-				ret = ofi_copy_from_hmem_iov(req->amo.ibuf, len,
-							     iface, 0,
-							     &hmem_iov, 1, 0);
+				ret = cxip_copy_from_hmem_iov(dom,
+							      req->amo.ibuf,
+							      len, iface, 0,
+							      &hmem_iov, 1, 0);
 				assert(ret == len);
 			} else {
 				memcpy(req->amo.ibuf, oper1, len);
 			}
 		} else {
 			/* Map user buffer for DMA command. */
-			ret = cxip_map(txc->domain, oper1, len,
-				       &req->amo.oper1_md);
+			ret = cxip_map(dom, oper1, len, &req->amo.oper1_md);
 			if (ret) {
 				TXC_WARN(txc,
 					 "Failed to map operand buffer: %ld\n",
@@ -599,7 +599,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	/* Map result buffer for fetching AMOs. */
 	if (result) {
 		/* Map local buffer */
-		ret = cxip_map(txc->domain, result, len, &req->amo.result_md);
+		ret = cxip_map(dom, result, len, &req->amo.result_md);
 		if (ret) {
 			TXC_WARN(txc, "Failed to map result buffer: %ld\n",
 				 ret);
@@ -629,9 +629,10 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 				hmem_iov.iov_base = compare;
 				hmem_iov.iov_len = len;
 
-				ret = ofi_copy_from_hmem_iov(hmem_compare,
-							     len, iface, 0,
-							     &hmem_iov, 1, 0);
+				ret = cxip_copy_from_hmem_iov(dom,
+							      hmem_compare, len,
+							      iface, 0,
+							      &hmem_iov, 1, 0);
 				assert(ret == len);
 
 				compare = hmem_compare;
@@ -644,9 +645,10 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 				hmem_iov.iov_base = oper1;
 				hmem_iov.iov_len = len;
 
-				ret = ofi_copy_from_hmem_iov(hmem_oper1,
-							     len, iface, 0,
-							     &hmem_iov, 1, 0);
+				ret = cxip_copy_from_hmem_iov(dom,
+							      hmem_oper1, len,
+							      iface, 0,
+							      &hmem_iov, 1, 0);
 				assert(ret == len);
 
 				oper1 = hmem_oper1;

@@ -54,6 +54,45 @@ uint32_t cxit_mcast_id = 0;
 struct fid_av_set *cxit_av_set;
 struct fid_mc *cxit_mc;
 
+static ssize_t copy_from_hmem_iov(void *dest, size_t size,
+				 enum fi_hmem_iface iface, uint64_t device,
+				 const struct iovec *hmem_iov,
+				 size_t hmem_iov_count,
+				 uint64_t hmem_iov_offset)
+{
+	size_t cpy_size = MIN(size, hmem_iov->iov_len);
+
+	assert(iface == FI_HMEM_SYSTEM);
+	assert(hmem_iov_count == 1);
+	assert(hmem_iov_offset == 0);
+
+	memcpy(dest, hmem_iov->iov_base, cpy_size);
+
+	return cpy_size;
+}
+
+static ssize_t copy_to_hmem_iov(enum fi_hmem_iface iface, uint64_t device,
+				const struct iovec *hmem_iov,
+				size_t hmem_iov_count,
+				uint64_t hmem_iov_offset, const void *src,
+				size_t size)
+{
+	size_t cpy_size = MIN(size, hmem_iov->iov_len);
+
+	assert(iface == FI_HMEM_SYSTEM);
+	assert(hmem_iov_count == 1);
+	assert(hmem_iov_offset == 0);
+
+	memcpy(hmem_iov->iov_base, src, cpy_size);
+
+	return cpy_size;
+}
+
+struct fi_hmem_override_ops hmem_ops = {
+	.copy_from_hmem_iov = copy_from_hmem_iov,
+	.copy_to_hmem_iov = copy_to_hmem_iov,
+};
+
 void cxit_create_fabric_info(void)
 {
 	int ret;
@@ -108,6 +147,10 @@ void cxit_create_domain(void)
 	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_1, 0,
 			  (void **)&dom_ops, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_open_ops");
+
+	ret = fi_set_ops(&cxit_domain->fid, FI_SET_OPS_HMEM_OVERRIDE, 0,
+			 &hmem_ops, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_set_ops");
 }
 
 void cxit_destroy_domain(void)

@@ -123,6 +123,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			struct cxip_cntr *trig_cntr,
 			struct cxip_cntr *comp_cntr)
 {
+	struct cxip_domain *dom = txc->domain;
 	int ret;
 	struct cxip_req *req = NULL;
 	struct cxip_addr caddr;
@@ -132,8 +133,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	bool idc;
 	int idc_max_len;
 	bool unr = false; /* use unrestricted command? */
-	struct cxip_cmdq *cmdq =
-		triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
+	struct cxip_cmdq *cmdq = triggered ? dom->trig_cmdq : txc->tx_cmdq;
 	bool write = op == FI_OP_WRITE;
 	enum cxi_traffic_class_type tc_type;
 	void *hmem_buf = NULL;
@@ -213,17 +213,17 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 				hmem_iov.iov_base = (void *)buf;
 				hmem_iov.iov_len = len;
 
-				ret = ofi_copy_from_hmem_iov(req->rma.ibuf, len,
-							     iface, 0,
-							     &hmem_iov, 1, 0);
+				ret = cxip_copy_from_hmem_iov(dom,
+							      req->rma.ibuf,
+							      len, iface, 0,
+							      &hmem_iov, 1, 0);
 				assert(ret == len);
 			} else {
 				memcpy(req->rma.ibuf, buf, len);
 			}
 		} else {
 			/* Map user buffer for DMA command. */
-			ret = cxip_map(txc->domain, buf, len,
-				       &req->rma.local_md);
+			ret = cxip_map(dom, buf, len, &req->rma.local_md);
 			if (ret) {
 				TXC_WARN(txc, "Failed to map buffer: %d\n",
 					 ret);
@@ -255,8 +255,8 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			if (!hmem_buf)
 				goto md_unmap;
 
-			ret = ofi_copy_from_hmem_iov(hmem_buf, len, iface, 0,
-						     &hmem_iov, 1, 0);
+			ret = cxip_copy_from_hmem_iov(dom, hmem_buf, len, iface,
+						      0, &hmem_iov, 1, 0);
 			assert(ret == len);
 
 			idc_buf = hmem_buf;

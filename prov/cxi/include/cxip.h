@@ -521,7 +521,32 @@ struct cxip_domain {
 	struct dlist_entry txc_list;
 	struct dlist_entry cntr_list;
 	struct dlist_entry cq_list;
+
+	struct fi_hmem_override_ops hmem_ops;
 };
+
+static inline ssize_t
+cxip_copy_to_hmem_iov(struct cxip_domain *domain, enum fi_hmem_iface hmem_iface,
+		      uint64_t device, const struct iovec *hmem_iov,
+		      size_t hmem_iov_count, uint64_t hmem_iov_offset,
+		      const void *src, size_t size)
+{
+	return domain->hmem_ops.copy_to_hmem_iov(hmem_iface, device, hmem_iov,
+						 hmem_iov_count,
+						 hmem_iov_offset, src, size);
+}
+
+static inline ssize_t
+cxip_copy_from_hmem_iov(struct cxip_domain *domain, void *dest, size_t size,
+			enum fi_hmem_iface hmem_iface, uint64_t device,
+			const struct iovec *hmem_iov, size_t hmem_iov_count,
+			uint64_t hmem_iov_offset)
+{
+	return domain->hmem_ops.copy_from_hmem_iov(dest, size, hmem_iface,
+						   device, hmem_iov,
+						   hmem_iov_count,
+						   hmem_iov_offset);
+}
 
 /*
  *  Event Queue
