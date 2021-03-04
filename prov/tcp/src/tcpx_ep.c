@@ -452,7 +452,7 @@ static void tcpx_ep_cancel_rx(struct tcpx_ep *ep, void *context)
 	slist_foreach(&ep->rx_queue, cur, prev) {
 		xfer_entry = container_of(cur, struct tcpx_xfer_entry, entry);
 		if (xfer_entry->context == context) {
-			if (ep->cur_rx_entry == xfer_entry)
+			if (ep->cur_rx_entry != xfer_entry)
 				goto found;
 			break;
 		}
