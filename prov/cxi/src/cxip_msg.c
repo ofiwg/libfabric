@@ -548,6 +548,7 @@ static void oflow_buf_free(struct cxip_oflow_buf *oflow_buf)
 	ofi_atomic_dec32(&oflow_buf->rxc->oflow_bufs_in_use);
 
 	cxip_unmap(oflow_buf->md);
+	ofi_hmem_host_unregister(oflow_buf->buf);
 	free(oflow_buf->buf);
 	free(oflow_buf);
 }
@@ -1269,12 +1270,16 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 		goto free_oflow;
 	}
 
+	ret = ofi_hmem_host_register(oflow_buf->buf, rxc->oflow_buf_size);
+	if (ret)
+		goto free_buf;
+
 	/* Map overflow data buffer */
 	ret = cxip_map(dom, (void *)oflow_buf->buf, rxc->oflow_buf_size,
 		       &oflow_buf->md);
 	if (ret) {
 		RXC_WARN(rxc, "Failed to map oflow buffer: %d\n", ret);
-		goto free_buf;
+		goto free_unreg_buf;
 	}
 
 	/* Populate request */
@@ -1324,6 +1329,8 @@ oflow_req_free:
 	cxip_cq_req_free(req);
 oflow_unmap:
 	cxip_unmap(oflow_buf->md);
+free_unreg_buf:
+	ofi_hmem_host_unregister(oflow_buf->buf);
 free_buf:
 	free(oflow_buf->buf);
 free_oflow:

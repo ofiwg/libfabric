@@ -437,9 +437,13 @@ struct cxip_req_buf *cxip_req_buf_alloc(struct cxip_rxc *rxc)
 	if (!buf)
 		goto err;
 
-	ret = cxip_map(rxc->domain, buf->req_buf, rxc->req_buf_size, &buf->md);
+	ret = ofi_hmem_host_register(buf, req_buf_size);
 	if (ret)
 		goto err_free_buf;
+
+	ret = cxip_map(rxc->domain, buf->req_buf, rxc->req_buf_size, &buf->md);
+	if (ret)
+		goto err_unreg_buf;
 
 	buf->req = cxip_cq_req_alloc(rxc->recv_cq, true, buf);
 	if (!buf->req) {
@@ -464,6 +468,8 @@ struct cxip_req_buf *cxip_req_buf_alloc(struct cxip_rxc *rxc)
 
 err_unmap_buf:
 	cxip_unmap(buf->md);
+err_unreg_buf:
+	ofi_hmem_host_unregister(buf);
 err_free_buf:
 	free(buf);
 err:
@@ -493,6 +499,7 @@ void cxip_req_buf_free(struct cxip_req_buf *buf)
 
 	cxip_cq_req_free(buf->req);
 	cxip_unmap(buf->md);
+	ofi_hmem_host_unregister(buf);
 	free(buf);
 
 	ofi_atomic_dec32(&rxc->req_bufs_allocated);
