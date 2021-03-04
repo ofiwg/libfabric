@@ -38,7 +38,7 @@
 #include "ofi_hmem.h"
 #include "ofi.h"
 
-#ifdef HAVE_GDRCOPY
+#if HAVE_GDRCOPY
 
 #include <pthread.h>
 #include <gdrapi.h>
