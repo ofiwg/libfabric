@@ -756,6 +756,7 @@ struct cxip_fc_peer {
 	uint32_t dropped;
 	uint32_t pending_acks;
 	bool replayed;
+	unsigned int retry_count;
 };
 
 struct cxip_fc_drops {
@@ -767,6 +768,7 @@ struct cxip_fc_drops {
 	uint8_t txc_id;
 	uint8_t rxc_id;
 	uint16_t drops;
+	unsigned int retry_count;
 };
 
 /*

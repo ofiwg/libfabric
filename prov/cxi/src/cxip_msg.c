@@ -2157,6 +2157,10 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 	case C_EVENT_ACK:
 		switch (cxi_event_rc(event)) {
 		case C_RC_OK:
+			RXC_DBG(rxc,
+				"FC_RESUME to %#x:%u successfully sent: retry_count=%u\n",
+				fc_drops->nic_addr, fc_drops->pid,
+				fc_drops->retry_count);
 			free(fc_drops);
 			break;
 
@@ -2166,10 +2170,12 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		 * returned.
 		 */
 		case C_RC_ENTRY_NOT_FOUND:
+			fc_drops->retry_count++;
 			RXC_WARN(rxc,
-				 "%#x:%u dropped FC message. Delaying replay %d usecs\n",
+				 "%#x:%u dropped FC message: retry_delay_usecs=%d retry_count=%u\n",
 				 fc_drops->nic_addr, fc_drops->pid,
-				 cxip_env.fc_retry_usec_delay);
+				 cxip_env.fc_retry_usec_delay,
+				 fc_drops->retry_count);
 			usleep(cxip_env.fc_retry_usec_delay);
 			ret = cxip_ctrl_msg_send(req);
 			break;
@@ -3917,6 +3923,11 @@ int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
 	case C_EVENT_ACK:
 		switch (cxi_event_rc(event)) {
 		case C_RC_OK:
+			TXC_DBG(txc,
+				"FC_NOTIFY to %#x:%u successfully sent: retry_count=%u\n",
+				peer->caddr.nic, peer->caddr.pid,
+				peer->retry_count);
+
 			fastlock_acquire(&txc->lock);
 
 			/* Peer flow control structure can only be freed if
@@ -3934,10 +3945,12 @@ int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		 * returned.
 		 */
 		case C_RC_ENTRY_NOT_FOUND:
+			peer->retry_count++;
 			TXC_WARN(txc,
-				 "%#x:%u dropped FC message. Delaying replay %d usecs\n",
+				 "%#x:%u dropped FC message: retry_delay_usecs=%d retry_count=%u\n",
 				 peer->caddr.nic, peer->caddr.pid,
-				 cxip_env.fc_retry_usec_delay);
+				 cxip_env.fc_retry_usec_delay,
+				 peer->retry_count);
 			usleep(cxip_env.fc_retry_usec_delay);
 			return cxip_ctrl_msg_send(req);
 		default:
