@@ -2167,7 +2167,10 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		 */
 		case C_RC_ENTRY_NOT_FOUND:
 			RXC_WARN(rxc,
-				 "Target dropped flow control message... replaying message\n");
+				 "%#x:%u dropped FC message. Delaying replay %d usecs\n",
+				 fc_drops->nic_addr, fc_drops->pid,
+				 cxip_env.fc_retry_usec_delay);
+			usleep(cxip_env.fc_retry_usec_delay);
 			ret = cxip_ctrl_msg_send(req);
 			break;
 		default:
@@ -3932,7 +3935,10 @@ int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		 */
 		case C_RC_ENTRY_NOT_FOUND:
 			TXC_WARN(txc,
-				 "Target dropped flow control message... replaying message\n");
+				 "%#x:%u dropped FC message. Delaying replay %d usecs\n",
+				 peer->caddr.nic, peer->caddr.pid,
+				 cxip_env.fc_retry_usec_delay);
+			usleep(cxip_env.fc_retry_usec_delay);
 			return cxip_ctrl_msg_send(req);
 		default:
 			TXC_FATAL(txc, "Unexpected event rc: %d\n",

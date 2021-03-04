@@ -666,6 +666,11 @@ be sent into a single request buffer.
 Number of request buffers.
 Dynamically increasing and decreasing request buffer count is not
 currently supported.
+.TP
+.B \f[I]FI_CXI_FC_RETRY_USEC_DELAY\f[R]
+Number of micro-seconds to sleep before retrying a dropped side-band,
+flow control message.
+Setting to zero will disable any sleep.
 .PP
 Note: Use the fi_info utility to query provider environment variables:
 fi_info -p cxi -e

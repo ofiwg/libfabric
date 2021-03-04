@@ -219,6 +219,7 @@ struct cxip_environment cxip_env = {
 	.req_buf_size = CXIP_REQ_BUF_SIZE,
 	.req_buf_count = CXIP_REQ_BUF_COUNT,
 	.msg_offload = 1,
+	.fc_retry_usec_delay = 1000,
 };
 
 static void cxip_env_init(void)
@@ -381,6 +382,17 @@ static void cxip_env_init(void)
 			CXIP_WARN("Requested request buffer count to small. Setting to %lu\n",
 				  cxip_env.req_buf_count);
 		}
+	}
+
+	fi_param_define(&cxip_prov, "fc_retry_usec_delay", FI_PARAM_INT,
+			"Micro-second delay before retrying failed flow-control messages. Default: %d usecs",
+			cxip_env.fc_retry_usec_delay);
+	fi_param_get_int(&cxip_prov, "fc_retry_usec_delay",
+			 &cxip_env.fc_retry_usec_delay);
+	if (cxip_env.fc_retry_usec_delay < 0) {
+		cxip_env.fc_retry_usec_delay = 0;
+		CXIP_WARN("FC retry delay invalid. Setting to %d usecs\n",
+			  cxip_env.fc_retry_usec_delay);
 	}
 }
 

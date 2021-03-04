@@ -577,6 +577,10 @@ The CXI provider checks for the following environment variables:
 :   Number of request buffers. Dynamically increasing and decreasing request
     buffer count is not currently supported.
 
+*FI_CXI_FC_RETRY_USEC_DELAY*
+:   Number of micro-seconds to sleep before retrying a dropped side-band, flow
+    control message. Setting to zero will disable any sleep.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 

@@ -38,6 +38,7 @@
 #include <ofi_osd.h>
 #include <ofi_util.h>
 #include <ofi_mem.h>
+#include <unistd.h>
 
 #include "libcxi/libcxi.h"
 #include "cxip_faults.h"
@@ -205,6 +206,7 @@ struct cxip_environment {
 	size_t default_vni;
 
 	size_t eq_ack_batch_size;
+	int fc_retry_usec_delay;
 };
 
 extern struct cxip_environment cxip_env;
