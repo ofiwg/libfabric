@@ -581,6 +581,17 @@ The CXI provider checks for the following environment variables:
 :   Number of micro-seconds to sleep before retrying a dropped side-band, flow
     control message. Setting to zero will disable any sleep.
 
+*FI_UNIVERSE_SIZE*
+:   Defines the maximum number of processes that will be used by distribute
+    OFI application.
+
+*FI_CXI_CTRL_RX_EQ_MAX_SIZE*
+:   Max size of the receive event queue used for side-band/control messages.
+    Default receive event queue size is based on FI_UNIVERSE_SIZE. Increasing the
+    receive event queue size can help prevent side-band/control messages from
+    being dropped and retried but at the cost of additional memory usage. Size is
+    always aligned up to a 4KiB boundary.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 

@@ -368,6 +368,9 @@ static int cxip_ep_ctrl_eq_alloc(struct cxip_ep_obj *ep_obj, size_t len,
 	};
 	int ret;
 
+	/* Align up length to C_PAGE_SIZE boundary. */
+	len = (len + C_PAGE_SIZE) & ~C_PAGE_SIZE;
+
 	*eq_buf = aligned_alloc(C_PAGE_SIZE, len);
 	if (!eq_buf) {
 		ret = -FI_ENOMEM;
@@ -411,6 +414,8 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	};
 	const union c_event *event;
 	int ret;
+	size_t rx_eq_size = MIN(cxip_env.ctrl_rx_eq_max_size,
+				ofi_universe_size * 64);
 
 	ret = cxip_ep_ctrl_eq_alloc(ep_obj, 4 * C_PAGE_SIZE,
 				    &ep_obj->ctrl_tx_evtq_buf,
@@ -421,7 +426,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		goto err;
 	}
 
-	ret = cxip_ep_ctrl_eq_alloc(ep_obj, 4 * C_PAGE_SIZE,
+	ret = cxip_ep_ctrl_eq_alloc(ep_obj, rx_eq_size,
 				    &ep_obj->ctrl_tgt_evtq_buf,
 				    &ep_obj->ctrl_tgt_evtq_buf_md,
 				    &ep_obj->ctrl_tgt_evtq);

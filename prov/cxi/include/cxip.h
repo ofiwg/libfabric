@@ -207,6 +207,7 @@ struct cxip_environment {
 
 	size_t eq_ack_batch_size;
 	int fc_retry_usec_delay;
+	size_t ctrl_rx_eq_max_size;
 };
 
 extern struct cxip_environment cxip_env;

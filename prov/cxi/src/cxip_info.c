@@ -220,6 +220,7 @@ struct cxip_environment cxip_env = {
 	.req_buf_count = CXIP_REQ_BUF_COUNT,
 	.msg_offload = 1,
 	.fc_retry_usec_delay = 1000,
+	.ctrl_rx_eq_max_size = 67108864,
 };
 
 static void cxip_env_init(void)
@@ -394,6 +395,12 @@ static void cxip_env_init(void)
 		CXIP_WARN("FC retry delay invalid. Setting to %d usecs\n",
 			  cxip_env.fc_retry_usec_delay);
 	}
+
+	fi_param_define(&cxip_prov, "ctrl_rx_eq_max_size", FI_PARAM_SIZE_T,
+			"Control receive event queue max size. Values are aligned up to 4KiB. Default: %lu bytes",
+			cxip_env.ctrl_rx_eq_max_size);
+	fi_param_get_size_t(&cxip_prov, "ctrl_rx_eq_max_size",
+			    &cxip_env.ctrl_rx_eq_max_size);
 }
 
 /*
