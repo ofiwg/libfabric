@@ -284,6 +284,12 @@ struct fi_provider mlx_prov = {
 
 MLX_INI
 {
+	{ /* Drop rovider in case of MEP run */
+		char *env = getenv("FI_MLX_MULTI_EP");
+		if (env)
+			return NULL;
+	}
+
 	mlx_init_errcodes();
 	fi_param_define( &mlx_prov,
 			"config", FI_PARAM_STRING,
