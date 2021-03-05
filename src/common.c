@@ -1102,13 +1102,14 @@ static void ofi_pollfds_cleanup(struct ofi_pollfds *pfds)
 
 	for (i = 0; i < pfds->nfds; i++) {
 		while (pfds->fds[i].fd == INVALID_SOCKET) {
-			pfds->fds[i].fd = pfds->fds[pfds->nfds-1].fd;
-			pfds->fds[i].events = pfds->fds[pfds->nfds-1].events;
-			pfds->fds[i].revents = pfds->fds[pfds->nfds-1].revents;
-			pfds->context[i] = pfds->context[pfds->nfds-1];
 			pfds->nfds--;
 			if (i == pfds->nfds)
 				break;
+
+			pfds->fds[i].fd = pfds->fds[pfds->nfds].fd;
+			pfds->fds[i].events = pfds->fds[pfds->nfds].events;
+			pfds->fds[i].revents = pfds->fds[pfds->nfds].revents;
+			pfds->context[i] = pfds->context[pfds->nfds];
 		}
 	}
 }
@@ -1187,20 +1188,13 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds, void **contexts,
 		fastlock_release(&pfds->lock);
 
 		/* Index 0 is the internal signaling fd, skip it */
-		for (i = pfds->index; i < pfds->nfds && found < max_contexts; i++) {
-			if (pfds->fds[i].revents && i) {
+		for (i = 1; i < pfds->nfds && found < max_contexts; i++) {
+			if (pfds->fds[i].revents) {
 				contexts[found++] = pfds->context[i];
-				pfds->index = i;
-			}
-		}
-		for (i = 0; i < pfds->index && found < max_contexts; i++) {
-			if (pfds->fds[i].revents && i) {
-				contexts[found++] = pfds->context[i];
-				pfds->index = i;
 			}
 		}
 
-		if (timeout > 0)
+		if (!found && timeout > 0)
 			timeout -= (int) (ofi_gettime_ms() - start);
 
 	} while (timeout > 0 && !found);
