@@ -2353,6 +2353,8 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 	struct cxip_rxc *rxc = req->search.rxc;
 	int ret __attribute__((unused));
 
+	free(rxc->ule_offsets);
+
 	rxc->state = RXC_FLOW_CONTROL;
 
 	RXC_DBG(rxc, "UX onload complete (sw_ux_list_len: %d)\n",
@@ -2386,12 +2388,6 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_PUT_OVERFLOW:
 		assert(cxi_event_rc(event) == C_RC_OK);
 
-		/* TODO read ULE list before onloaded messages to find RPut
-		 * remote offset.
-		 */
-		if (event->tgt_long.rendezvous)
-			CXIP_FATAL("RPut onload not supported\n");
-
 		ux_send = calloc(1, sizeof(*ux_send));
 		if (!ux_send)
 			return -FI_EAGAIN;
@@ -2422,6 +2418,14 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 		} else {
 			ux_send->put_ev = *event;
 		}
+
+		/* Fixup event with the expected remote offset for an RGet. */
+		if (event->tgt_long.rlength) {
+			ux_send->put_ev.tgt_long.remote_offset =
+				rxc->ule_offsets[rxc->cur_ule_offsets] +
+				event->tgt_long.mlength;
+		}
+		rxc->cur_ule_offsets++;
 
 		dlist_insert_tail(&ux_send->rxc_entry, &rxc->sw_ux_list);
 		rxc->sw_ux_list_len++;
@@ -2456,16 +2460,40 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 {
 	struct cxip_req *req;
 	union c_cmdu cmd = {};
+	struct cxi_pte_status pte_status = {
+		.ule_count = 512
+	};
+	size_t cur_ule_count = 0;
 	int ret;
 
 	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL);
+
+	/* Get all the unexpected header remote offsets. */
+	rxc->ule_offsets = NULL;
+	rxc->cur_ule_offsets = 0;
+
+	do {
+		cur_ule_count = pte_status.ule_count;
+		rxc->ule_offsets =
+			reallocarray(rxc->ule_offsets, cur_ule_count,
+				     sizeof(*rxc->ule_offsets));
+		if (!rxc->ule_offsets) {
+			RXC_WARN(rxc, "Failed allocate to memory\n");
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+
+		pte_status.ule_offsets = (void *)rxc->ule_offsets;
+		ret = cxil_pte_status(rxc->rx_pte->pte, &pte_status);
+		assert(!ret);
+	} while (cur_ule_count < pte_status.ule_count);
 
 	/* Populate request */
 	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
 	if (!req) {
 		RXC_WARN(rxc, "Failed to allocate request\n");
 		ret = -FI_ENOMEM;
-		return ret;
+		goto err_free_onload_offset;
 	}
 	ofi_atomic_inc32(&rxc->orx_reqs);
 
@@ -2485,14 +2513,11 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 
 	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
-		RXC_WARN(rxc, "Failed to write Search command: %d\n", ret);
-
-		ofi_atomic_dec32(&rxc->orx_reqs);
-		cxip_cq_req_free(req);
-
 		fastlock_release(&rxc->rx_cmdq->lock);
 
-		return -FI_EAGAIN;
+		RXC_WARN(rxc, "Failed to write Search command: %d\n", ret);
+		ret = -FI_EAGAIN;
+		goto err_dec_free_cq_req;
 	}
 
 	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
@@ -2500,6 +2525,14 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	fastlock_release(&rxc->rx_cmdq->lock);
 
 	return FI_SUCCESS;
+
+err_dec_free_cq_req:
+	ofi_atomic_dec32(&rxc->orx_reqs);
+	cxip_cq_req_free(req);
+err_free_onload_offset:
+	free(rxc->ule_offsets);
+err:
+	return ret;
 }
 
 /*

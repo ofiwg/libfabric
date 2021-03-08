@@ -1041,6 +1041,14 @@ struct cxip_rxc {
 	struct dlist_entry sw_ux_list;
 	int sw_ux_list_len;
 
+	/* Array of 8-byte of unexpected headers remote offsets. */
+	uint64_t *ule_offsets;
+
+	/* Current remote offset to be processed. Incremented after processing
+	 * a search and delete put event.
+	 */
+	unsigned int cur_ule_offsets;
+
 	/* Software receive queue. User posted requests are queued here instead
 	 * of on hardware if the RXC is in software endpoint mode.
 	 */

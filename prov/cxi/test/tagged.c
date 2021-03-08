@@ -3523,6 +3523,129 @@ Test(tagged, fc_multi_recv, .timeout = 30)
 	free(recv_buf);
 }
 
+Test(tagged, fc_multi_recv_rdzv, .timeout = 10)
+{
+	int ret;
+	char *recv_buf;
+	char *send_buf;
+	int i;
+	uint64_t tag = 0xbeef;
+	struct fi_msg_tagged trmsg = {};
+	struct iovec riovec;
+	unsigned int send_events = 0;
+	unsigned int recv_events = 0;
+	struct fi_cq_tagged_entry cqe;
+	size_t min_mrecv = 0;
+	size_t opt_len = sizeof(size_t);
+	bool unlinked = false;
+
+	/* Transfer size needs to be large enough to trigger rendezvous. */
+	unsigned int xfer_len = 16384;
+
+	/* Needs to exceed available LEs. */
+	unsigned int num_xfers = 100;
+
+	ret = fi_setopt(&cxit_ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			&min_mrecv, opt_len);
+	cr_assert(ret == FI_SUCCESS);
+
+	recv_buf = calloc(num_xfers, xfer_len);
+	cr_assert(recv_buf);
+
+	send_buf = calloc(num_xfers, xfer_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < (num_xfers * xfer_len); i++)
+		send_buf[i] = (char)(rand() % 256);
+
+	/* Fire off all the unexpected sends expect 1. Last send will be sent
+	 * expectedly to verify that hardware has updates the manage local LE
+	 * start and length fields accordingly.
+	 */
+	for (i = 0; i < num_xfers - 1; i++) {
+		ret = fi_tsend(cxit_ep, &send_buf[i * xfer_len], xfer_len, NULL,
+			       cxit_ep_fi_addr, tag, NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* Append late multi-recv buffer. */
+	riovec.iov_base = recv_buf;
+	riovec.iov_len = num_xfers * xfer_len;
+	trmsg.msg_iov = &riovec;
+	trmsg.iov_count = 1;
+	trmsg.addr = cxit_ep_fi_addr;
+	trmsg.context = NULL;
+	trmsg.tag = tag;
+	ret = fi_trecvmsg(cxit_ep, &trmsg, FI_MULTI_RECV);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* Wait for all send events. Since this test can be run with or without
+	 * flow control, progressing the RX CQ may be required.
+	 */
+	while (send_events != (num_xfers - 1)) {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		cr_assert(ret == -FI_EAGAIN || ret == 1);
+		if (ret == 1)
+			send_events++;
+
+		/* Progress RXC. */
+		fi_cq_read(cxit_rx_cq, &cqe, 0);
+	}
+
+	/* Wait for all receive events. */
+	while (recv_events != (num_xfers - 1)) {
+		ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+		cr_assert(ret == -FI_EAGAIN || ret == 1);
+		if (ret == 1 && cqe.flags & FI_RECV)
+			recv_events++;
+	}
+
+	/* Make last send expected. This ensures that hardware and/or software
+	 * has correctly updated the LE start and length fields correctly.
+	 */
+	ret = fi_tsend(cxit_ep, &send_buf[(num_xfers - 1) * xfer_len], xfer_len,
+		       NULL, cxit_ep_fi_addr, tag, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* Wait for all send events. Since this test can be run with or without
+	 * flow control, progressing the RX CQ may be required.
+	 */
+	while (send_events != num_xfers) {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		cr_assert(ret == -FI_EAGAIN || ret == 1);
+		if (ret == 1)
+			send_events++;
+
+		/* Progress RXC. */
+		fi_cq_read(cxit_rx_cq, &cqe, 0);
+	}
+
+	/* Process the last receive event and the multi-receive event signaling
+	 * the provider is no longer using the buffer.
+	 */
+	while (recv_events != num_xfers && !unlinked) {
+		ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+		cr_assert(ret == -FI_EAGAIN || ret == 1);
+		if (ret == 1) {
+			if (cqe.flags & FI_RECV)
+				recv_events++;
+			if (cqe.flags & FI_MULTI_RECV)
+				unlinked = true;
+		}
+	}
+
+	/* Data integrity check. If hardware/software mismanaged the multi-recv
+	 * start and/or length fields on the expected send, data will be
+	 * corrupted.
+	 */
+	for (i = 0; i < (num_xfers * xfer_len); i++)
+		cr_assert_eq(send_buf[i], recv_buf[i],
+			     "Data miscompare: byte=%u", i);
+
+	free(send_buf);
+	free(recv_buf);
+}
+
 #define FC_TRANS 100
 
 static void *fc_sender(void *data)
