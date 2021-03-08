@@ -23,6 +23,7 @@ v1.12.0, Mon Mar 8, 2021
 - Support gdrcopy in addition to cudaMemcpy to avoid deadlocks
 - Properly mark if addresses support only local communication
 - Prevent providers from layering over each other non-optimally
+- Fix pollfds abstraction to fix possible use after free
 
 ## EFA
 - Added support for FI_DELIVERY_COMPLETE via an acknowledgment packet in the
@@ -57,7 +58,9 @@ v1.12.0, Mon Mar 8, 2021
 
 ## PSM3
 
-- New Intel provider optimized for verbs UD QPs
+- New core provider for psm3.x protocol over verbs UD interfaces, with
+  additional features over Intel E810 RoCEv2 capable NICs
+- See fi_psm3.7 man page for more details
 
 ## RxD
 
@@ -109,6 +112,7 @@ v1.12.0, Mon Mar 8, 2021
 - Handle FI_SYNC_ERR flag on AV insert
 - Improve destination IP address checks
 - Minor coding cleanups based on static code analysis
+- Fix possible use after free access in Rx progress handling
 
 ## TCP
 
