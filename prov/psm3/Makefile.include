@@ -31,9 +31,7 @@ chksum_srcs = $(_psm3_files)
 if HAVE_PSM3_SRC
 _psm3_cflags = -mavx2
 #include prov/psm3/psm3/Makefile.include
-_psm3_files += \
-	prov/psm3/src/psm3_revision.c
-chksum_srcs += \
+_nodist_psm3_files = \
 	prov/psm3/src/psm3_revision.c
 
 # builddir is for nodist config headers: See nodist_libpsm3i_la_SOURCES
@@ -298,6 +296,7 @@ endif HAVE_PSM3_SRC
 if HAVE_PSM3_DL
 pkglib_LTLIBRARIES += libpsm3-fi.la
 libpsm3_fi_la_SOURCES = $(_psm3_files) $(common_srcs)
+nodist_libpsm3_fi_la_SOURCES = $(_nodist_psm3_files)
 libpsm3_fi_la_CFLAGS = $(AM_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
 libpsm3_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(psm3_CPPFLAGS) $(_psm3_cppflags)
 libpsm3_fi_la_LDFLAGS = \
@@ -308,6 +307,7 @@ libpsm3_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_PSM3_DL
 noinst_LTLIBRARIES += libpsm3.la
 libpsm3_la_SOURCES = $(_psm3_files)
+nodist_libpsm3_la_SOURCES = $(_nodist_psm3_files)
 libpsm3_la_CFLAGS = $(src_libfabric_la_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
 libpsm3_la_CPPFLAGS = $(src_libfabric_la_CPPFLAGS) $(psm3_CPPFLAGS) $(_psm3_cppflags)
 libpsm3_la_LDFLAGS = $(psm3_LDFLAGS)
