@@ -82,6 +82,11 @@
 #include "opa_udebug.h"
 #include "opa_service.h"
 
+#ifndef PACK_SUFFIX
+/* XXX gcc only */
+#define PACK_SUFFIX __attribute__((packed))
+#endif
+
 #define HFI_TF_NFLOWS                       32
 
 // The sender uses an RDMA Write with Immediate.  The immediate data
