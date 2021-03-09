@@ -21,8 +21,8 @@ echo "running: ./cxitest --verbose --tap=cxitest.tap -j2 > $TEST_OUTPUT 2>&1"
 ./cxitest --verbose --tap=cxitest.tap -j2 > $TEST_OUTPUT 2>&1
 
 # Re-run messaging tests with RPut disabled
-echo "running: FI_CXI_RDZV_OFFLOAD=0 ./cxitest --verbose --filter=\"@(tagged|msg)/*\" --tap=cxitest-swrdzv.tap -j2 >> $TEST_OUTPUT 2>&1"
-FI_CXI_RDZV_OFFLOAD=0 ./cxitest --verbose --filter="@(tagged|msg)/*" --tap=cxitest-swrdzv.tap -j2 >> $TEST_OUTPUT 2>&1
+#echo "running: FI_CXI_RDZV_OFFLOAD=0 ./cxitest --verbose --filter=\"@(tagged|msg)/*\" --tap=cxitest-swrdzv.tap -j2 >> $TEST_OUTPUT 2>&1"
+#FI_CXI_RDZV_OFFLOAD=0 ./cxitest --verbose --filter="@(tagged|msg)/*" --tap=cxitest-swrdzv.tap -j2 >> $TEST_OUTPUT 2>&1
 
 # Run tests with RPut and SW Gets
 csrutil store csr get_ctrl get_en=0 > /dev/null
@@ -42,9 +42,9 @@ test="FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j2 -
 echo "running: $test"
 eval $test
 
-test="FI_CXI_RDZV_OFFLOAD=0 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j2 --filter=\"tagged_directed/*\" --tap=cxitest-sw-rdzv-tag-matching.tap >> $TEST_OUTPUT 2>&1"
-echo "running: $test"
-eval $test
+#test="FI_CXI_RDZV_OFFLOAD=0 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j2 --filter=\"tagged_directed/*\" --tap=cxitest-sw-rdzv-tag-matching.tap >> $TEST_OUTPUT 2>&1"
+#echo "running: $test"
+#eval $test
 
 test="FI_CXI_MSG_OFFLOAD=0 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j 1 --tap=cxitest-sw-ep-mode.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
