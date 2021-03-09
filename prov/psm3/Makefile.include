@@ -326,7 +326,8 @@ libpsm3.la: .libs/libpsm3_exp.o
 	@mv libpsm3i.la.bak libpsm3i.la
 	$(AM_V_CCLD)$(libpsm3_la_LINK) $(am_libpsm3_la_rpath) $(libpsm3_la_OBJECTS) $(libpsm3_la_LIBADD) $(LIBS); \
 	rm -f .libs/libpsm3.a libpsm3.a; \
-	ar cru .libs/libpsm3.a  .libs/libpsm3_exp.o
+	$(AR) cru .libs/libpsm3.a .libs/libpsm3_exp.o; \
+	$(RANLIB) .libs/libpsm3.a
 
 endif !HAVE_PSM3_DL
 
