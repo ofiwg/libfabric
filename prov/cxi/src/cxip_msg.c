@@ -2143,8 +2143,12 @@ int cxip_recv_reenable(struct cxip_rxc *rxc)
 
 	RXC_DBG(rxc, "Re-enabling PTE\n");
 
-	ret = cxip_rxc_msg_enable(rxc, total_drops);
-	assert(ret == FI_SUCCESS);
+	do {
+		ret = cxip_rxc_msg_enable(rxc, total_drops);
+	} while (ret == -FI_EAGAIN);
+
+	if (ret != FI_SUCCESS)
+		RXC_FATAL(rxc, "cxip_rxc_msg_enable failed: %d\n", ret);
 
 	return FI_SUCCESS;
 }
@@ -2595,8 +2599,12 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 
 		RXC_DBG(rxc, "Flow control detected\n");
 
-		ret = cxip_ux_onload(rxc);
-		assert(ret == FI_SUCCESS);
+		do {
+			ret = cxip_ux_onload(rxc);
+		} while (ret == -FI_EAGAIN);
+
+		if (ret != FI_SUCCESS)
+			RXC_FATAL(rxc, "cxip_ux_onload failed: %d\n", ret);
 
 		RXC_DBG(rxc, "Started onload\n");
 
