@@ -179,6 +179,7 @@ extern struct vrb_gl_data {
 	} msg;
 
 	bool	peer_mem_support;
+	bool	dmabuf_support;
 } vrb_gl_data;
 
 struct verbs_addr {
