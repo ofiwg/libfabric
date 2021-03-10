@@ -166,7 +166,7 @@ ifelse('
 		AS_IF([test $psm3_happy -eq 1], [
 			AC_CONFIG_FILES([prov/psm3/psm3/psm2_hal_inlines_i.h \
 		                 prov/psm3/psm3/psm2_hal_inlines_d.h \
-		                 prov/psm3/src/psm3_revision.c])
+		                 prov/psm3/src/psm3_revision.ci:prov/psm3/src/psm3_revision.c.in])
 		])
 	       ],[psm3_happy=0])
 

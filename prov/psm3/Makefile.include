@@ -278,18 +278,23 @@ chksum_srcs += \
 _psm3_LIBS = libpsm3i.la
 libpsm3_la_DEPENDENCIES = libpsm3i.la
 
-all-local:
+BUILT_SOURCES = prov/psm3/src/psm3_revision.c
+
+prov/psm3/src/psm3_revision.c: prov/psm3/src/psm3_revision.ci
 	@echo "Building src checksum..."; \
 	chksum=`cat $(chksum_srcs) | sha1sum | cut -d' ' -f 1`; \
+	if [ ! -f prov/psm3/src/psm3_revision.c ]; then \
+		cp prov/psm3/src/psm3_revision.ci prov/psm3/src/psm3_revision.c; \
+	fi; \
 	if ! grep -q $$chksum prov/psm3/src/psm3_revision.c 2>/dev/null; then \
 		sed -i "/define PSMX3_SRC_CHECKSUM/s/\".*\"/\"$$chksum\"/" prov/psm3/src/psm3_revision.c; \
 		echo "SRC checksum updated to $$chksum"; \
+		timestamp=`date`; \
+		sed -i "/define PSMX3_BUILD_TIMESTAMP/s/\".*\"/\"$$timestamp\"/" prov/psm3/src/psm3_revision.c; \
+		echo "Updated build timestamp: $$timestamp"; \
 	else \
 		echo "SRC checksum not changed: $$chksum"; \
-	fi; \
-	timestamp=`date`; \
-	sed -i "/define PSMX3_BUILD_TIMESTAMP/s/\".*\"/\"$$timestamp\"/" prov/psm3/src/psm3_revision.c; \
-	echo "Updated build timestamp: $$timestamp"
+	fi
 
 endif HAVE_PSM3_SRC
 
