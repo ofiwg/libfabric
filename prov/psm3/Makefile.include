@@ -29,7 +29,7 @@ _psm3_cppflags = \
 chksum_srcs = $(_psm3_files)
 
 if HAVE_PSM3_SRC
-_psm3_cflags = -mavx2
+_psm3_cflags =
 #include prov/psm3/psm3/Makefile.include
 _nodist_psm3_files = \
 	prov/psm3/src/psm3_revision.c

@@ -65,18 +65,22 @@ ifelse('
 		                 [psm3_happy=0])
 
 		AC_MSG_CHECKING([for -msse4.2 support])
+
+		dnl Strip other optflags to avoid conflicts when checking for instruction sets
+		FI_STRIP_OPTFLAGS($CFLAGS)
+		PSM3_STRIP_OPTFLAGS="$s_result"
+
 		save_CFLAGS=$CFLAGS
-		CFLAGS="$CFLAGS -msse4.2"
+		CFLAGS="$PSM3_STRIP_OPTFLAGS -msse4.2 -O0"
 		AC_LINK_IFELSE(
 			[AC_LANG_PROGRAM(
-				[#include <nmmintrin.h>],
-				[unsigned int crc = 0;
-				 crc = _mm_crc32_u32(crc, 0);
-				 return crc == 0;])
+				[[#include <nmmintrin.h>]],
+				[[unsigned int crc = 0;
+				  crc = _mm_crc32_u32(crc, 0);
+				  return crc == 0;]])
 			],[
 				AC_MSG_RESULT([yes])
-				psm3_crc_happy=1
-				ARCH_CFLAGS="-msse4.2"
+				PSM3_ARCH_CFLAGS="-msse4.2"
 			],[
 				psm3_happy=0
 				AC_MSG_RESULT([no])
@@ -86,22 +90,41 @@ ifelse('
 
 		AC_MSG_CHECKING([for -mavx support])
 		save_CFLAGS=$CFLAGS
-		CFLAGS="$CFLAGS -mavx"
+		CFLAGS="$PSM3_STRIP_OPTFLAGS -mavx -O0"
 		AC_LINK_IFELSE(
 			[AC_LANG_PROGRAM(
-				[#include <immintrin.h>],
-				[unsigned long long *vec_a = {1,2,3,4};
-				 __m256i *sp = (__m256i *)vec_a;
-				 __m256i vec = _mm256_load_si256(sp);
-				 return 0;])
+				[[#include <immintrin.h>]],
+				[[unsigned long long _a[4] = {1ULL,2ULL,3ULL,4ULL};
+				  __m256i vA = _mm256_loadu_si256((__m256i *)_a);
+				  __m256i vB;
+				  _mm256_store_si256(&vB, vA);
+				  return 0;]])
 			],[
 				AC_MSG_RESULT([yes])
-				psm3_256_happy=1
-				ARCH_CFLAGS="-mavx"
+				PSM3_ARCH_CFLAGS="-mavx"
 			],[
 				psm3_happy=0
 				AC_MSG_RESULT([no])
 				AC_MSG_NOTICE([psm3 requires minimum of avx instruction set to build])
+			])
+		CFLAGS=$save_CFLAGS
+
+		AC_MSG_CHECKING([for -mavx2 support])
+		save_CFLAGS=$CFLAGS
+		CFLAGS="$PSM3_STRIP_OPTFLAGS -mavx2 -O0"
+		AC_LINK_IFELSE(
+			[AC_LANG_PROGRAM(
+				[[#include <immintrin.h>]],
+				[[unsigned long long _a[4] = {1ULL,2ULL,3ULL,4ULL};
+				  __m256i vA = _mm256_loadu_si256((__m256i *)_a);
+				  __m256i vB = _mm256_add_epi64(vA, vA);
+				  (void)vB;
+				  return 0;]])
+			],[
+				AC_MSG_RESULT([yes])
+				PSM3_ARCH_CFLAGS="-mavx2"
+			],[
+				AC_MSG_RESULT([no])
 			])
 		CFLAGS=$save_CFLAGS
 
@@ -153,8 +176,11 @@ ifelse('
 					[AC_LANG_PROGRAM(
 						[[#include <sys/types.h>
 						  #include <stdint.h>
-						  #include <rdma/rv_user_ioctls.h>
-						]],[[struct rv_ring_header ring; ring.overflow_cnt=0;]])
+						  #include <rdma/rv_user_ioctls.h>]],
+						[[struct rv_ring_header ring;
+						  ring.overflow_cnt=0;
+						  (void)ring;
+						  return 0;]])
 					],[
 						AC_MSG_RESULT(yes)
 					],[
@@ -172,7 +198,7 @@ ifelse('
 
 	 AS_IF([test $psm3_happy -eq 1], [$1], [$2])
 
-	 psm3_CFLAGS="$ARCH_CFLAGS"
+	 psm3_CFLAGS="$PSM3_ARCH_CFLAGS"
 	 psm3_CPPFLAGS="$psm3_CPPFLAGS $psm3_rt_CPPFLAGS $psm3_dl_CPPFLAGS $psm3_numa_CPPFLAGS $psm3_ibv_CPPFLAGS"
 	 psm3_LDFLAGS="$psm3_LDFLAGS $psm3_rt_LDFLAGS $psm3_dl_LDFLAGS $psm3_numa_LDFLAGS $psm3_ibv_LDFLAGS"
 	 psm3_LIBS="$psm3_LIBS $psm3_rt_LIBS $psm3_dl_LIBS $psm3_numa_LIBS $psm3_ibv_LIBS"
