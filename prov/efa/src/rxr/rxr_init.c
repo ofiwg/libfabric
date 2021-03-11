@@ -268,6 +268,12 @@ void rxr_set_shm_hints(struct fi_info *shm_hints)
 	shm_hints->fabric_attr->name = strdup("shm");
 	shm_hints->fabric_attr->prov_name = strdup("shm");
 	shm_hints->ep_attr->type = FI_EP_RDM;
+
+#if HAVE_LIBCUDA
+	shm_hints->caps |= FI_HMEM;
+	shm_hints->domain_attr->mr_mode |= FI_MR_HMEM;
+#endif
+
 }
 
 /* Pass tx/rx attr that user specifies down to core provider */
