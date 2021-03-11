@@ -1100,7 +1100,7 @@ static int cxip_recv_onload_flow_control(struct cxip_rxc *rxc)
 	 * LE limit.
 	 */
 	if (rxc->state == RXC_FLOW_CONTROL) {
-		CXIP_FATAL(FC_SW_EP_MSG);
+		RXC_FATAL(rxc, FC_SW_EP_MSG);
 	} else if (rxc->state == RXC_ONLOAD_FLOW_CONTROL) {
 		fastlock_release(&rxc->lock);
 		return FI_SUCCESS;
@@ -2423,6 +2423,8 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 			ux_send->put_ev = *event;
 		}
 
+		req->search.onload_count++;
+
 		/* Fixup event with the expected remote offset for an RGet. */
 		if (event->tgt_long.rlength) {
 			ux_send->put_ev.tgt_long.remote_offset =
@@ -2438,6 +2440,9 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 
 		break;
 	case C_EVENT_SEARCH:
+		if (!req->search.onload_count)
+			RXC_FATAL(rxc, FC_SW_EP_MSG);
+
 		req->search.complete = true;
 
 		if (cxip_ux_is_onload_complete(req))

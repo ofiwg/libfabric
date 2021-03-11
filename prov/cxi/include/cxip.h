@@ -664,6 +664,7 @@ struct cxip_req_search {
 	struct cxip_rxc *rxc;
 	bool complete;
 	int puts_pending;
+	unsigned int onload_count;
 };
 
 struct cxip_req_coll {
