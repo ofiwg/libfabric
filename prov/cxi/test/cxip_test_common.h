@@ -36,10 +36,10 @@ extern uint64_t cxit_flags;
 extern int cxit_n_ifs;
 extern int cxit_ranks;
 extern int cxit_rank;
-uint32_t cxit_mcast_ref;
-uint32_t cxit_mcast_id;
-struct fid_av_set *cxit_av_set;
-struct fid_mc *cxit_mc;
+extern uint32_t cxit_mcast_ref;
+extern uint32_t cxit_mcast_id;
+extern struct fid_av_set *cxit_av_set;
+extern struct fid_mc *cxit_mc;
 extern FILE *cxit_mc_fifo;
 
 void cxit_create_fabric_info(void);
