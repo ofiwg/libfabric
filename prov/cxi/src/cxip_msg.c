@@ -2593,14 +2593,15 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 		/* Incorrect drop count was used. Another attempt will be made
 		 * when a peer sends a sideband drop message.
 		 */
-		if (rxc->state == RXC_FLOW_CONTROL) {
+		if (rxc->state == RXC_FLOW_CONTROL ||
+		    rxc->state == RXC_ONLOAD_FLOW_CONTROL) {
 			RXC_WARN(rxc,
 				 "Failed to reenable PtlTE while in flow control\n");
 			break;
 		}
 
+		/* Onloading only needs to occur once. */
 		assert(rxc->state == RXC_ENABLED ||
-		       rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
 		       rxc->state == RXC_PENDING_PTLTE_DISABLE);
 
 		rxc->state = RXC_ONLOAD_FLOW_CONTROL;
