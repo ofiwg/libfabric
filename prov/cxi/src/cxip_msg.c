@@ -479,7 +479,7 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 	uint32_t ev_init;
 	uint32_t ev_rdzv_id;
 	struct cxip_req *req;
-	struct cxip_rxc *rxc = mrecv_req->recv.rxc;
+	struct cxip_rxc *rxc __attribute__((unused)) = mrecv_req->recv.rxc;
 
 	assert(event->hdr.event_type == C_EVENT_REPLY ||
 	       event->hdr.event_type == C_EVENT_PUT ||
