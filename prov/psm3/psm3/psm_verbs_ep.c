@@ -59,7 +59,6 @@
 #include <sched.h>		/* cpu_set */
 #include <ctype.h>		/* isalpha */
 #include <netdb.h>
-#include <infiniband/ib.h> // for AF_IB
 #include <ifaddrs.h>
 #include <sys/socket.h>
 #include <netinet/in.h>

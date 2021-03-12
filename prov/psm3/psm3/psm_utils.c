@@ -59,7 +59,6 @@
 #include "psm_mq_internal.h"
 #include "ips_proto_params.h"
 #include <netinet/in.h>  // for sockaddr
-#include <infiniband/ib.h>  // for AF_IB structures
 #include <fnmatch.h>
 
 
@@ -417,7 +416,6 @@ const char *psmi_epaddr_get_name(psm2_epid_t epid)
 
 
 // superset of inet_ntop.  For AF_INET and AF_INET6 outputs address and port
-// for AF_IB outputs address sid and pkey
 const char *psmi_sockaddr_ntop(struct sockaddr* addr, char *dst, socklen_t size)
 {
 	if (! dst || size < PSM_ADDRSTRLEN) {
@@ -447,15 +445,6 @@ const char *psmi_sockaddr_ntop(struct sockaddr* addr, char *dst, socklen_t size)
 		// could also show scope_id and flowinfo
 		inet_ntop(AF_INET6,  &in_addr->sin6_addr, dst, size);
 		snprintf(dst+strlen(dst), size-strlen(dst), " %u", be16toh(in_addr->sin6_port));
-		return dst;
-	}
-	case AF_IB:
-	{
-		struct sockaddr_ib* ib_addr = ((struct sockaddr_ib*)addr);
-		// we show the GID sid and pkey.
-		// Could also output sid_mask and sib_scope_id
-		inet_ntop(AF_INET6, &ib_addr->sib_addr, dst, size);
-		snprintf(dst+strlen(dst), size-strlen(dst), " 0x%016"PRIx64" 0x%04"PRIx16, be64toh(ib_addr->sib_sid), be16toh(ib_addr->sib_pkey));
 		return dst;
 	}
 	default:
@@ -497,8 +486,6 @@ socklen_t psmi_sockaddr_len(struct sockaddr* addr)
 		return (sizeof(struct sockaddr_in));
 	case AF_INET6:
 		return (sizeof(struct sockaddr_in6));
-	case AF_IB:
-		return (sizeof(struct sockaddr_ib));
 	default:
 		// unknown
 		return 0;	// be conservative
