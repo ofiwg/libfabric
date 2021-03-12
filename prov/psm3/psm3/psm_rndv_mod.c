@@ -65,8 +65,6 @@
 #include <ctype.h>		/* isalpha */
 //#include <netdb.h>
 #include <infiniband/verbs.h>
-//#include <infiniband/ib.h>	// for AF_IB structures
-//#include <rdma/rdma_verbs.h>
 #include "psm_user.h"	// get psmi_calloc and free
 #include "psm_rndv_mod.h"
 
