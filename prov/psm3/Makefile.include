@@ -265,31 +265,32 @@ libpsm3i_la_DEPENDENCIES = \
 	libptl_self.la \
 	libpsm_hal_gen1.la
 
-EXTRA_DIST += \
+_psm3_extra_dist = \
 	prov/psm3/psm3/include/rbtree.c \
 	prov/psm3/psm3/psm_hal_gen1/psm_hal_gen1_spio.c \
 	prov/psm3/psm3/opa/opa_dwordcpy-x86_64-fast.S
+EXTRA_DIST += $(_psm3_extra_dist)
 
 chksum_srcs += \
 	$(libptl_am_la_SOURCES) $(libptl_ips_la_SOURCES) $(libptl_self_la_SOURCES) \
 	$(libuuid_la_SOURCES) $(libopa_la_SOURCES) $(libpsm_hal_gen1_la_SOURCES) \
-	$(libpsm3i_la_SOURCES) $(EXTRA_DIST)
+	$(libpsm3i_la_SOURCES) $(_psm3_extra_dist)
 
 _psm3_LIBS = libpsm3i.la
 libpsm3_la_DEPENDENCIES = libpsm3i.la
 
 all-local:
 	@echo "Building src checksum..."; \
-	chksum=`cat $(chksum_srcs) | sha1sum | cut -d' ' -f 1`; \
-	if ! grep -q $$chksum prov/psm3/src/psm3_revision.c 2>/dev/null; then \
-		sed -i "/define PSMX3_SRC_CHECKSUM/s/\".*\"/\"$$chksum\"/" prov/psm3/src/psm3_revision.c; \
+	chksum=`for file in $(chksum_srcs); do cat $(top_srcdir)/$$file; done | sha1sum | cut -d' ' -f 1`; \
+	if ! grep -q $$chksum $(top_builddir)/prov/psm3/src/psm3_revision.c 2>/dev/null; then \
+		sed -i "/define PSMX3_SRC_CHECKSUM/s/\".*\"/\"$$chksum\"/" $(top_builddir)/prov/psm3/src/psm3_revision.c; \
 		echo "SRC checksum updated to $$chksum"; \
+		timestamp=`date`; \
+		sed -i "/define PSMX3_BUILD_TIMESTAMP/s/\".*\"/\"$$timestamp\"/" $(top_builddir)/prov/psm3/src/psm3_revision.c; \
+		echo "Updated build timestamp: $$timestamp"; \
 	else \
 		echo "SRC checksum not changed: $$chksum"; \
-	fi; \
-	timestamp=`date`; \
-	sed -i "/define PSMX3_BUILD_TIMESTAMP/s/\".*\"/\"$$timestamp\"/" prov/psm3/src/psm3_revision.c; \
-	echo "Updated build timestamp: $$timestamp"
+	fi
 
 endif HAVE_PSM3_SRC
 
