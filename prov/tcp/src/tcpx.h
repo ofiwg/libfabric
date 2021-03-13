@@ -115,6 +115,7 @@ enum tcpx_op_code {
 /* not used TCPX_TRANSMIT_COMPLETE	(1 << 1) */
 #define TCPX_DELIVERY_COMPLETE	(1 << 2)
 #define TCPX_COMMIT_COMPLETE	(1 << 3)
+#define TCPX_TAGGED		(1 << 7)
 
 struct tcpx_base_hdr {
 	uint8_t			version;
@@ -127,9 +128,19 @@ struct tcpx_base_hdr {
 	uint64_t		size;
 };
 
+struct tcpx_tag_hdr {
+	struct tcpx_base_hdr	base_hdr;
+	uint64_t		tag;
+};
+
 struct tcpx_cq_data_hdr {
 	struct tcpx_base_hdr 	base_hdr;
 	uint64_t		cq_data;
+};
+
+struct tcpx_tag_data_hdr {
+	struct tcpx_cq_data_hdr	cq_data_hdr;
+	uint64_t		tag;
 };
 
 /* Maximum header is scatter RMA with CQ data */
@@ -248,6 +259,8 @@ struct tcpx_xfer_entry {
 	union {
 		struct tcpx_base_hdr	base_hdr;
 		struct tcpx_cq_data_hdr cq_data_hdr;
+		struct tcpx_tag_data_hdr tag_data_hdr;
+		struct tcpx_tag_hdr	tag_hdr;
 		uint8_t		       	max_hdr[TCPX_MAX_HDR + TCPX_MAX_INJECT];
 	} hdr;
 	size_t			iov_cnt;

@@ -41,6 +41,8 @@
 
 extern struct fi_ops_rma tcpx_rma_ops;
 extern struct fi_ops_msg tcpx_msg_ops;
+extern struct fi_ops_tagged tcpx_tagged_ops;
+
 
 void tcpx_hdr_none(struct tcpx_base_hdr *hdr)
 {
@@ -57,6 +59,11 @@ void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr)
 	hdr->size = ntohll(hdr->size);
 
 	if (hdr->flags & TCPX_REMOTE_CQ_DATA) {
+		*((uint64_t *)ptr) = ntohll(*((uint64_t *) ptr));
+		ptr += sizeof(uint64_t);
+	}
+
+	if (hdr->flags & TCPX_TAGGED) {
 		*((uint64_t *)ptr) = ntohll(*((uint64_t *) ptr));
 		ptr += sizeof(uint64_t);
 	}
@@ -706,6 +713,8 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->cm = &tcpx_cm_ops;
 	(*ep_fid)->msg = &tcpx_msg_ops;
 	(*ep_fid)->rma = &tcpx_rma_ops;
+	if (tcpx_dynamic_rbuf(ep))
+		(*ep_fid)->tagged = &tcpx_tagged_ops;
 
 	ep->start_op[ofi_op_msg] = tcpx_op_msg;
 	ep->start_op[ofi_op_tagged] = tcpx_op_invalid;
