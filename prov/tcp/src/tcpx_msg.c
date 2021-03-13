@@ -192,7 +192,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
 	data_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
-	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT_SZ));
+	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT));
 
 	offset = sizeof(tx_entry->hdr.base_hdr);
 
@@ -319,7 +319,7 @@ static ssize_t tcpx_inject(struct fid_ep *ep, const void *buf, size_t len,
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
-	assert(len <= TCPX_MAX_INJECT_SZ);
+	assert(len <= TCPX_MAX_INJECT);
 	tx_entry->hdr.base_hdr.size = len + sizeof(tx_entry->hdr.base_hdr);
 
 	offset = sizeof(tx_entry->hdr.base_hdr);
@@ -387,7 +387,7 @@ static ssize_t tcpx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
-	assert(len <= TCPX_MAX_INJECT_SZ);
+	assert(len <= TCPX_MAX_INJECT);
 
 	tx_entry->hdr.cq_data_hdr.base_hdr.flags = OFI_REMOTE_CQ_DATA;
 	tx_entry->hdr.cq_data_hdr.cq_data = data;
