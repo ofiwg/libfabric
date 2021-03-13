@@ -62,7 +62,7 @@ static void tcpx_process_tx_entry(struct tcpx_xfer_entry *tx_entry)
 				     tx_entry, -ret);
 	} else {
 		if (tx_entry->hdr.base_hdr.flags &
-		    (OFI_DELIVERY_COMPLETE | OFI_COMMIT_COMPLETE)) {
+		    (TCPX_DELIVERY_COMPLETE | TCPX_COMMIT_COMPLETE)) {
 			slist_insert_tail(&tx_entry->entry,
 					  &tx_entry->ep->tx_rsp_pend_queue);
 			return;
@@ -232,8 +232,7 @@ static void tcpx_pmem_commit(struct tcpx_xfer_entry *rx_entry)
 	if (!ofi_pmem_commit)
 		return ;
 
-	if (rx_entry->hdr.base_hdr.flags &
-	    OFI_REMOTE_CQ_DATA)
+	if (rx_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
 		offset = sizeof(rx_entry->hdr.base_hdr) + sizeof(uint64_t);
 	else
 		offset = sizeof(rx_entry->hdr.base_hdr);
@@ -268,9 +267,9 @@ static int tcpx_process_remote_write(struct tcpx_xfer_entry *rx_entry)
 		tcpx_xfer_entry_free(tcpx_cq, rx_entry);
 
 	} else if (rx_entry->hdr.base_hdr.flags &
-		  (OFI_DELIVERY_COMPLETE | OFI_COMMIT_COMPLETE)) {
+		  (TCPX_DELIVERY_COMPLETE | TCPX_COMMIT_COMPLETE)) {
 
-		if (rx_entry->hdr.base_hdr.flags & OFI_COMMIT_COMPLETE)
+		if (rx_entry->hdr.base_hdr.flags & TCPX_COMMIT_COMPLETE)
 			tcpx_pmem_commit(rx_entry);
 
 		if (tcpx_prepare_rx_write_resp(rx_entry))
@@ -315,8 +314,7 @@ static void tcpx_copy_rma_iov_to_msg_iov(struct tcpx_xfer_entry *xfer_entry)
 	size_t offset;
 	int i;
 
-	if (xfer_entry->hdr.base_hdr.flags &
-	    OFI_REMOTE_CQ_DATA)
+	if (xfer_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
 		offset = sizeof(xfer_entry->hdr.base_hdr) + sizeof(uint64_t);
 	else
 		offset = sizeof(xfer_entry->hdr.base_hdr);
@@ -371,7 +369,7 @@ static int tcpx_validate_rx_rma_data(struct tcpx_xfer_entry *rx_entry,
 	size_t offset;
 	int i, ret;
 
-	if (rx_entry->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA)
+	if (rx_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
 		offset = sizeof(rx_entry->hdr.base_hdr) + sizeof(uint64_t);
 	else
 		offset = sizeof(rx_entry->hdr.base_hdr);
@@ -479,7 +477,7 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 						      rx_entry->iov_cnt);
 	}
 
-	if (cur_rx_msg->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA)
+	if (cur_rx_msg->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
 		rx_entry->flags |= FI_REMOTE_CQ_DATA;
 
 	tcpx_rx_setup(tcpx_ep, rx_entry, tcpx_process_recv);
@@ -542,7 +540,7 @@ int tcpx_op_write(struct tcpx_ep *tcpx_ep)
 		return -FI_EAGAIN;
 
 	rx_entry->flags = 0;
-	if (tcpx_ep->cur_rx_msg.hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA)
+	if (tcpx_ep->cur_rx_msg.hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
 		rx_entry->flags = (FI_COMPLETION |
 				   FI_REMOTE_CQ_DATA | FI_REMOTE_WRITE);
 

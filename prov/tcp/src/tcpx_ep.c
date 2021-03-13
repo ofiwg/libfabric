@@ -56,7 +56,7 @@ void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr)
 	hdr->flags = ntohs(hdr->flags);
 	hdr->size = ntohll(hdr->size);
 
-	if (hdr->flags & OFI_REMOTE_CQ_DATA) {
+	if (hdr->flags & TCPX_REMOTE_CQ_DATA) {
 		*((uint64_t *)ptr) = ntohll(*((uint64_t *) ptr));
 		ptr += sizeof(uint64_t);
 	}

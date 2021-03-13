@@ -197,7 +197,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	offset = sizeof(tx_entry->hdr.base_hdr);
 
 	if (flags & FI_REMOTE_CQ_DATA) {
-		tx_entry->hdr.base_hdr.flags |= OFI_REMOTE_CQ_DATA;
+		tx_entry->hdr.base_hdr.flags |= TCPX_REMOTE_CQ_DATA;
 		cq_data = (uint64_t *)((uint8_t *) &tx_entry->hdr + offset);
 		*cq_data = msg->data;
 		offset += sizeof(msg->data);
@@ -225,7 +225,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    flags | FI_MSG | FI_SEND);
 
 	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		tx_entry->hdr.base_hdr.flags |= OFI_DELIVERY_COMPLETE;
+		tx_entry->hdr.base_hdr.flags |= TCPX_DELIVERY_COMPLETE;
 
 	tx_entry->ep = tcpx_ep;
 	tx_entry->context = msg->context;
@@ -299,7 +299,7 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov,
 
 	if (tcpx_ep->util_ep.tx_op_flags &
 	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		tx_entry->hdr.base_hdr.flags |= OFI_DELIVERY_COMPLETE;
+		tx_entry->hdr.base_hdr.flags |= TCPX_DELIVERY_COMPLETE;
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
 	return FI_SUCCESS;
@@ -350,7 +350,7 @@ static ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len,
 
 	tx_entry->hdr.cq_data_hdr.base_hdr.size =
 		len + sizeof(tx_entry->hdr.cq_data_hdr);
-	tx_entry->hdr.cq_data_hdr.base_hdr.flags = OFI_REMOTE_CQ_DATA;
+	tx_entry->hdr.cq_data_hdr.base_hdr.flags = TCPX_REMOTE_CQ_DATA;
 
 	tx_entry->hdr.cq_data_hdr.cq_data = data;
 
@@ -369,7 +369,7 @@ static ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len,
 
 	if (tcpx_ep->util_ep.tx_op_flags &
 	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		tx_entry->hdr.base_hdr.flags |= OFI_DELIVERY_COMPLETE;
+		tx_entry->hdr.base_hdr.flags |= TCPX_DELIVERY_COMPLETE;
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
 	return FI_SUCCESS;
@@ -389,7 +389,7 @@ static ssize_t tcpx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 
 	assert(len <= TCPX_MAX_INJECT);
 
-	tx_entry->hdr.cq_data_hdr.base_hdr.flags = OFI_REMOTE_CQ_DATA;
+	tx_entry->hdr.cq_data_hdr.base_hdr.flags = TCPX_REMOTE_CQ_DATA;
 	tx_entry->hdr.cq_data_hdr.cq_data = data;
 
 	tx_entry->hdr.base_hdr.size = len + sizeof(tx_entry->hdr.cq_data_hdr);
