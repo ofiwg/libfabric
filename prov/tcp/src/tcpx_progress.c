@@ -595,7 +595,7 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 
 	ep->cur_rx_msg.done_len += ret;
 	if (ep->cur_rx_msg.done_len >= sizeof(ep->cur_rx_msg.hdr.base_hdr)) {
-		if (ep->cur_rx_msg.hdr.base_hdr.payload_off > TCPX_MAX_HDR_SZ) {
+		if (ep->cur_rx_msg.hdr.base_hdr.payload_off > TCPX_MAX_HDR) {
 			FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 				"Payload offset is too large\n");
 			return -FI_EIO;

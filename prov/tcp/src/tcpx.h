@@ -67,7 +67,7 @@
 
 #define TCPX_MAX_CM_DATA_SIZE	(1 << 8)
 #define TCPX_IOV_LIMIT		(4)
-#define TCPX_MAX_INJECT_SZ	(64)
+#define TCPX_MAX_INJECT		(64)
 
 #define MAX_POLL_EVENTS		100
 
@@ -161,16 +161,14 @@ struct tcpx_cq_data_hdr {
 	uint64_t		cq_data;
 };
 
-#define TCPX_MAX_HDR_SZ (sizeof(struct tcpx_base_hdr) + 	\
-			 sizeof(uint64_t) +			\
-			 sizeof(struct ofi_rma_iov) *		\
-			 TCPX_IOV_LIMIT +			\
-			 TCPX_MAX_INJECT_SZ)
+/* Maximum header is scatter RMA with CQ data */
+#define TCPX_MAX_HDR (sizeof(struct tcpx_cq_data_hdr) + \
+		     sizeof(struct ofi_rma_iov) * TCPX_IOV_LIMIT)
 
 struct tcpx_cur_rx_msg {
 	union {
 		struct tcpx_base_hdr	base_hdr;
-		uint8_t		       	max_hdr[TCPX_MAX_HDR_SZ];
+		uint8_t			max_hdr[TCPX_MAX_HDR];
 	} hdr;
 	size_t			hdr_len;
 	size_t			done_len;
@@ -229,7 +227,7 @@ struct tcpx_xfer_entry {
 	union {
 		struct tcpx_base_hdr	base_hdr;
 		struct tcpx_cq_data_hdr cq_data_hdr;
-		uint8_t		       	max_hdr[TCPX_MAX_HDR_SZ];
+		uint8_t		       	max_hdr[TCPX_MAX_HDR + TCPX_MAX_INJECT];
 	} hdr;
 	size_t			iov_cnt;
 	struct iovec		iov[TCPX_IOV_LIMIT+1];
