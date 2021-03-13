@@ -111,7 +111,7 @@ static int tcpx_cq_close(struct fid *fid)
 }
 
 struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq,
-					      enum tcpx_xfer_op_codes type)
+					      enum tcpx_op_code type)
 {
 	struct tcpx_xfer_entry *xfer_entry;
 
@@ -158,7 +158,7 @@ void tcpx_cq_report_success(struct util_cq *cq,
 	len = xfer_entry->hdr.base_hdr.size -
 	      xfer_entry->hdr.base_hdr.payload_off;
 
-	if (xfer_entry->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA) {
+	if (xfer_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA) {
 		flags |= FI_REMOTE_CQ_DATA;
 		data = xfer_entry->hdr.cq_data_hdr.cq_data;
 	}
@@ -176,7 +176,7 @@ void tcpx_cq_report_error(struct util_cq *cq,
 	struct fi_cq_err_entry err_entry;
 	uint64_t data = 0;
 
-	if (xfer_entry->hdr.base_hdr.flags & OFI_REMOTE_CQ_DATA) {
+	if (xfer_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA) {
 		xfer_entry->flags |= FI_REMOTE_CQ_DATA;
 		data = xfer_entry->hdr.cq_data_hdr.cq_data;
 	}
