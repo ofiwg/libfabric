@@ -778,9 +778,9 @@ struct cxip_fc_peer {
 	struct cxip_addr caddr;
 	uint8_t rxc_id;
 	struct dlist_entry msg_queue;
-	uint32_t pending;
-	uint32_t dropped;
-	uint32_t pending_acks;
+	uint16_t pending;
+	uint16_t dropped;
+	uint16_t pending_acks;
 	bool replayed;
 	unsigned int retry_count;
 };
