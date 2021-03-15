@@ -1,0 +1,35 @@
+name: GitHub Action CI
+
+on:
+    pull_request:
+        # We don't need this to be run on all types of PR behavior
+        # See https://docs.github.com/en/actions/reference/events-that-trigger-workflows#pull_request
+        types:
+          - opened
+          - synchronize
+
+jobs:
+    ci:
+        name: The Nroff Elves
+        runs-on: ubuntu-latest
+        steps:
+          - name: Check out the code
+            uses: actions/checkout@v2
+
+          - name: Get the required packages
+            run: sudo apt install -y pandoc perl
+
+          - name: Build the nroff man pages
+            run: |
+              for file in `ls man/*.md`; do
+                perl config/md2nroff.pl --source=$file
+              done
+
+          - name: Make a git commit with the changes and push back to the PR branch
+            uses: EndBug/add-and-commit@v7
+            with:
+              add: man
+              author_name: OFIWG Bot
+              author_email: ofiwg@lists.openfabrics.org
+              message: Updated nroff-generated man pages
+              signoff: true
