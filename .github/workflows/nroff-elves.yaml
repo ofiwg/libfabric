@@ -15,8 +15,11 @@ jobs:
         steps:
           - name: Check out the code
             uses: actions/checkout@v2
-            with:
-              fetch-depth: 0
+
+          - name: Dump GitHub context
+            env:
+              GITHUB_CONTEXT: ${{ toJSON(github) }}
+            run: echo "$GITHUB_CONTEXT"
 
           - name: Get the required packages
             run: sudo apt install -y pandoc perl
