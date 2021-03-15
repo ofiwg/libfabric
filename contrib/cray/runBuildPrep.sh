@@ -21,6 +21,8 @@ echo "$0: --> TARGET_OS: '${TARGET_OS}'"
 
 ZYPPER_OPTS="--verbose --non-interactive"
 RPMS="cray-libcxi-devel"
+CUDA_RPMS="cuda-cudart-11-0 cuda-cudart-devel-11-0 cuda-driver-devel-11-0 cuda-nvcc-11-0"
+ROCR_RPMS="hsa-rocr-dev"
 
 URL_PREFIX="http://car.dev.cray.com/artifactory"
 URL_SUFFIX="${TARGET_OS}/${TARGET_ARCH}/${DEV_NAME}/${BRANCH_NAME}"
@@ -40,6 +42,19 @@ URL_SSHOT="${URL_PREFIX}/${PRODUCT}/SSHOT/${URL_SUFFIX}"
 URL_SSHOT_INT="${URL_PREFIX}/internal/SSHOT/${TARGET_OS}/${TARGET_ARCH}/"
 URL_SSHOT_INT+="predev/integration/"
 
+CUDA_URL="http://car.dev.cray.com/artifactory/nvidia-cuda/cuda/${TARGET_OS}/${TARGET_ARCH}/${DEV_NAME}/${BRANCH_NAME}/"
+
+if [[ ${TARGET_OS} == "sle15_sp2_cn" || ${TARGET_OS} == "sle15_sp2_ncn" ]]; then
+    with_rocm=1
+else
+    with_rocm=0
+fi
+
+# No ROCM SP1 support is available.
+if [[ $with_rocm -eq 1 ]]; then
+    ROCR_URL="https://arti.dev.cray.com/artifactory/cos-internal-third-party-generic-local/rocm/latest/${TARGET_OS}/${TARGET_ARCH}/${DEV_NAME}/${BRANCH_NAME}/"
+fi
+
 if command -v yum > /dev/null; then
     yum-config-manager --add-repo=$URL
     yum-config-manager --add-repo=$URL_SSHOT
@@ -53,6 +68,8 @@ elif command -v zypper > /dev/null; then
     zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 1 \
     	--name=${IYUM_REPO_NAME_1}_SSHOT $URL_SSHOT \
         ${IYUM_REPO_NAME_1}_SSHOT
+    zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 1 \
+       --name=cuda $CUDA_URL cuda
 
     if [[ $TARGET_OS =~ ncn$ ]]; then
         zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 10 \
@@ -65,6 +82,46 @@ elif command -v zypper > /dev/null; then
 
     zypper refresh
     zypper $ZYPPER_OPTS install $RPMS
+    zypper $ZYPPER_OPTS install $CUDA_RPMS
+
+    if [[ $with_rocm -eq 1 ]]; then
+        zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 1 \
+            --name=rocm $ROCR_URL rocm
+        zypper $ZYPPER_OPTS install $ROCR_RPMS
+    fi
 else
     "Unsupported package manager or package manager not found -- installing nothing"
+fi
+
+cuda_version=$(ls /usr/local | grep cuda | tr -d "\n")
+if [[ $cuda_version == "" ]]; then
+    echo "CUDA required but not found."
+    exit 1
+else
+    echo "Using $cuda_version"
+
+    # Convenient symlink which allows the libfabric build process to not have to
+    # call out a specific versioned CUDA directory.
+    ln -s /usr/local/$cuda_version /usr/local/cuda
+
+    # The CUDA device driver RPM provides a usable libcuda.so which is required
+    # by the libfabric autoconf checks. Since artifactory does not provide this
+    # RPM, the cuda-driver-devel-11-0 RPM is installed and provides a stub
+    # libcuda.so. But, this stub libcuda.so is installed into a non-lib path. A
+    # symlink is created to fix this.
+    ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/libcuda.so
+fi
+
+if [[ $with_rocm -eq 1 ]]; then
+    rocm_version=$(ls /opt | grep rocm | tr -d "\n")
+    if [[ $rocm_version == "" ]]; then
+        echo "ROCM required but not found."
+        exit 1
+    else
+        echo "Using $rocm_version"
+
+        # Convenient symlink which allows the libfabric build process to not
+        # have to call out a specific versioned ROCR directory.
+        ln -s /opt/$rocm_version /opt/rocm
+    fi
 fi
