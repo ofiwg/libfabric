@@ -19,7 +19,9 @@ jobs:
           - name: Dump GitHub context
             env:
               GITHUB_CONTEXT: ${{ toJSON(github) }}
-            run: echo "$GITHUB_CONTEXT"
+            run: |
+              echo "JMS: ${{ github.pull_request.head.repo.clone_url }} ${{ github.pull_request.head.ref }}"
+              echo "$GITHUB_CONTEXT"
 
           - name: Get the required packages
             run: sudo apt install -y pandoc perl
@@ -38,3 +40,4 @@ jobs:
               author_email: ofiwg@lists.openfabrics.org
               message: Updated nroff-generated man pages
               signoff: true
+              push: ${{ github.pull_request.head.repo.clone_url }} ${{ github.pull_request.head.ref }}
