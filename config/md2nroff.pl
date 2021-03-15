@@ -99,9 +99,9 @@ while ($pandoc_input =~ m/\[(.+?)\]\(.+?\)/) {
 }
 
 # Add the pandoc header
-$pandoc_input = "% $shortfile($section) Libfabric Programmer's Manual | #VERSION#
+$pandoc_input = "% $shortfile($section) Libfabric Programmer's Manual | \@VERSION\@
 % OpenFabrics
-% #DATE#\n\n$pandoc_input";
+% \@DATE\@\n\n$pandoc_input";
 
 # Generate the nroff output
 my ($fh, $temp_filename) = tempfile();
@@ -132,8 +132,8 @@ if (-r $target) {
     # compare and ignore if the date has changed.  Note that some
     # versions of pandoc render dates as xxxx\-xx\-xx, and others
     # render it as xxxx-xx-xx.  Handle both.
-    $target_nroff =~ s/\"\d\d\d\d\\\-\d\d\\\-\d\d\"/\"#DATE#\"/;
-    $target_nroff =~ s/\"\d\d\d\d\-\d\d\-\d\d\"/\"#DATE#\"/;
+    $target_nroff =~ s/\"\d\d\d\d\\\-\d\d\\\-\d\d\"/\"\\\@DATE\\\@\"/;
+    $target_nroff =~ s/\"\d\d\d\d\-\d\d\-\d\d\"/\"\\\@DATE\\\@\"/;
 
     $write_nroff = 0
         if ($pandoc_nroff eq $target_nroff);
@@ -144,7 +144,7 @@ if ($write_nroff) {
 
     # What's the date right now?
     my $now_string = strftime "%Y\\-%m\\-%d", localtime;
-    $pandoc_nroff =~ s/#DATE#/$now_string/g;
+    $pandoc_nroff =~ s/\\\@DATE\\\@/$now_string/g;
 
     # Make sure the target directory exists
     my $dirname = dirname($target);
