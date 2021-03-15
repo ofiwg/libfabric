@@ -42,4 +42,4 @@ jobs:
               author_email: ofiwg@lists.openfabrics.org
               message: Updated nroff-generated man pages
               signoff: true
-              push: ${{ github.event.pull_request.head.repo.clone_url }} ${{ github.event.pull_request.head.ref }}
+              push: ${{ github.event.pull_request.head.repo.clone_url }} ${{ github.event.pull_request.head.ref }} --set-upstream
