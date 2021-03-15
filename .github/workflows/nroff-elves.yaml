@@ -23,7 +23,13 @@ jobs:
               head_ref: ${{ github.event.pull_request.head.ref }}
             run: |
               echo "JMS: $clone_url, $head_ref"
+              echo "============================="
               echo "$GITHUB_CONTEXT"
+              echo "============================="
+              git remote -v
+              echo "============================="
+              git status
+              echo "============================="
 
           - name: Get the required packages
             run: sudo apt install -y pandoc perl
