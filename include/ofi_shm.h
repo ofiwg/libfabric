@@ -222,7 +222,8 @@ struct smr_region {
 	uint8_t		resv;
 	uint16_t	flags;
 	int		pid;
-	uint8_t		cma_cap;
+	uint8_t		cma_cap_peer;
+	uint8_t		cma_cap_self;
 	void		*base_addr;
 	fastlock_t	lock; /* lock for shm access
 				 Must hold smr->lock before tx/rx cq locks

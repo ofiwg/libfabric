@@ -332,8 +332,10 @@ void smr_ep_progress(struct util_ep *util_ep);
 static inline bool smr_cma_enabled(struct smr_ep *ep,
 				   struct smr_region *peer_smr)
 {
-	return ep->region->cma_cap == SMR_CMA_CAP_ON ||
-	       ep->region == peer_smr;
+	if (ep->region == peer_smr)
+		return ep->region->cma_cap_self == SMR_CMA_CAP_ON;
+	else
+		return ep->region->cma_cap_peer == SMR_CMA_CAP_ON;
 }
 
 static inline int smr_cma_loop(pid_t pid, struct iovec *local,
