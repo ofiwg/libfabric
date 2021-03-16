@@ -142,29 +142,46 @@ void tcpx_xfer_entry_free(struct tcpx_cq *tcpx_cq,
 	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
 }
 
+void tcpx_get_cq_info(struct tcpx_xfer_entry *entry, uint64_t *flags,
+		      uint64_t *data, uint64_t *tag)
+{
+	if (entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA) {
+		*data = entry->hdr.cq_data_hdr.cq_data;
+
+		if (entry->hdr.base_hdr.flags & TCPX_TAGGED) {
+			*flags |= FI_REMOTE_CQ_DATA | FI_TAGGED;
+			*tag = entry->hdr.tag_data_hdr.tag;
+		} else {
+			*flags |= FI_REMOTE_CQ_DATA;
+			*tag = 0;
+		}
+
+	} else if (entry->hdr.base_hdr.flags & TCPX_TAGGED) {
+		*flags |= FI_TAGGED;
+		*data = 0;
+		*tag = entry->hdr.tag_hdr.tag;
+	} else {
+		*data = 0;
+		*tag = 0;
+	}
+}
+
 void tcpx_cq_report_success(struct util_cq *cq,
 			    struct tcpx_xfer_entry *xfer_entry)
 {
-	uint64_t data = 0;
-	uint64_t flags = 0;
-	void *buf = NULL;
-	size_t len = 0;
+	uint64_t flags, data, tag;
+	size_t len;
 
 	flags = xfer_entry->flags;
-
 	if (!(flags & FI_COMPLETION))
 		return;
 
 	len = xfer_entry->hdr.base_hdr.size -
 	      xfer_entry->hdr.base_hdr.payload_off;
-
-	if (xfer_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA) {
-		flags |= FI_REMOTE_CQ_DATA;
-		data = xfer_entry->hdr.cq_data_hdr.cq_data;
-	}
+	tcpx_get_cq_info(xfer_entry, &flags, &data, &tag);
 
 	ofi_cq_write(cq, xfer_entry->context,
-		     flags, len, buf, data, 0);
+		     flags, len, NULL, data, tag);
 	if (cq->wait)
 		ofi_cq_signal(&cq->cq_fid);
 }
@@ -174,19 +191,14 @@ void tcpx_cq_report_error(struct util_cq *cq,
 			  int err)
 {
 	struct fi_cq_err_entry err_entry;
-	uint64_t data = 0;
 
-	if (xfer_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA) {
-		xfer_entry->flags |= FI_REMOTE_CQ_DATA;
-		data = xfer_entry->hdr.cq_data_hdr.cq_data;
-	}
+	err_entry.flags = xfer_entry->flags;
+	tcpx_get_cq_info(xfer_entry, &err_entry.flags, &err_entry.data,
+			 &err_entry.tag);
 
 	err_entry.op_context = xfer_entry->context;
-	err_entry.flags = xfer_entry->flags;
 	err_entry.len = 0;
 	err_entry.buf = NULL;
-	err_entry.data = data;
-	err_entry.tag = 0;
 	err_entry.olen = 0;
 	err_entry.err = err;
 	err_entry.prov_errno = ofi_sockerr();

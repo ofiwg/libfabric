@@ -331,7 +331,8 @@ void tcpx_cq_report_success(struct util_cq *cq,
 void tcpx_cq_report_error(struct util_cq *cq,
 			  struct tcpx_xfer_entry *xfer_entry,
 			  int err);
-
+void tcpx_get_cq_info(struct tcpx_xfer_entry *entry, uint64_t *flags,
+		      uint64_t *data, uint64_t *tag);
 
 ssize_t tcpx_recv_hdr(SOCKET sock, struct stage_buf *stage_buf,
 		      struct tcpx_cur_rx_msg *cur_rx_msg);

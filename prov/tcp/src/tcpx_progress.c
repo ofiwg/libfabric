@@ -112,6 +112,7 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 static int tcpx_update_rx_iov(struct tcpx_xfer_entry *rx_entry)
 {
 	struct fi_cq_data_entry cq_entry;
+	uint64_t tag;
 	int ret;
 
 	assert(tcpx_dynamic_rbuf(rx_entry->ep));
@@ -122,7 +123,7 @@ static int tcpx_update_rx_iov(struct tcpx_xfer_entry *rx_entry)
 			 rx_entry->hdr.base_hdr.payload_off) -
 			rx_entry->rem_len;
 	cq_entry.buf = rx_entry->mrecv_msg_start;
-	cq_entry.data = 0;
+	tcpx_get_cq_info(rx_entry, &cq_entry.flags, &cq_entry.data, &tag);
 
 	rx_entry->iov_cnt = TCPX_IOV_LIMIT;
 	ret = (int) tcpx_dynamic_rbuf(rx_entry->ep)->
@@ -477,9 +478,6 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 						      rx_entry->iov_cnt);
 	}
 
-	if (cur_rx_msg->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
-		rx_entry->flags |= FI_REMOTE_CQ_DATA;
-
 	tcpx_rx_setup(tcpx_ep, rx_entry, tcpx_process_recv);
 	return FI_SUCCESS;
 
@@ -541,8 +539,7 @@ int tcpx_op_write(struct tcpx_ep *tcpx_ep)
 
 	rx_entry->flags = 0;
 	if (tcpx_ep->cur_rx_msg.hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
-		rx_entry->flags = (FI_COMPLETION |
-				   FI_REMOTE_CQ_DATA | FI_REMOTE_WRITE);
+		rx_entry->flags = (FI_COMPLETION | FI_REMOTE_WRITE);
 
 	memcpy(&rx_entry->hdr, &tcpx_ep->cur_rx_msg.hdr,
 	       (size_t) tcpx_ep->cur_rx_msg.hdr.base_hdr.payload_off);
