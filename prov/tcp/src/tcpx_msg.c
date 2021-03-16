@@ -190,7 +190,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT));
 
 	if (flags & FI_REMOTE_CQ_DATA) {
-		tx_entry->hdr.base_hdr.flags |= TCPX_REMOTE_CQ_DATA;
+		tx_entry->hdr.base_hdr.flags = TCPX_REMOTE_CQ_DATA;
 		tx_entry->hdr.cq_data_hdr.cq_data = msg->data;
 		offset = sizeof(tx_entry->hdr.cq_data_hdr);
 	} else {
@@ -255,7 +255,7 @@ static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len,
 
 	if (tcpx_ep->util_ep.tx_op_flags &
 	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		tx_entry->hdr.base_hdr.flags |= OFI_DELIVERY_COMPLETE;
+		tx_entry->hdr.base_hdr.flags = OFI_DELIVERY_COMPLETE;
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
 	return FI_SUCCESS;
@@ -292,7 +292,7 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov,
 
 	if (tcpx_ep->util_ep.tx_op_flags &
 	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		tx_entry->hdr.base_hdr.flags |= TCPX_DELIVERY_COMPLETE;
+		tx_entry->hdr.base_hdr.flags = TCPX_DELIVERY_COMPLETE;
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
 	return FI_SUCCESS;
