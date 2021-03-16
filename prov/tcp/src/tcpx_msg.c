@@ -176,16 +176,12 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
 	struct tcpx_ep *tcpx_ep;
-	struct tcpx_cq *tcpx_cq;
 	struct tcpx_xfer_entry *tx_entry;
 	uint64_t data_len;
 	size_t offset;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
-	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
-			       util_cq);
-
-	tx_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_MSG_SEND);
+	tx_entry = tcpx_alloc_send_entry(tcpx_ep);
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
@@ -225,7 +221,6 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
 		tx_entry->hdr.base_hdr.flags |= TCPX_DELIVERY_COMPLETE;
 
-	tx_entry->ep = tcpx_ep;
 	tx_entry->context = msg->context;
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
