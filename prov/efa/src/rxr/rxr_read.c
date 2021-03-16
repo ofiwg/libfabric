@@ -205,6 +205,7 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, v
 		return NULL;
 	}
 
+	read_entry->type = RXR_READ_ENTRY;
 	read_entry->read_id = ofi_buf_index(read_entry);
 	read_entry->state = RXR_RDMA_ENTRY_CREATED;
 
@@ -621,7 +622,8 @@ int rxr_read_handle_error(struct rxr_ep *ep, struct rxr_read_entry *read_entry, 
 		ret = rxr_cq_handle_rx_error(ep, rx_entry, ret);
 	}
 
-	dlist_remove(&read_entry->pending_entry);
+	if (read_entry->state == RXR_RDMA_ENTRY_PENDING)
+		dlist_remove(&read_entry->pending_entry);
 	return ret;
 }
 

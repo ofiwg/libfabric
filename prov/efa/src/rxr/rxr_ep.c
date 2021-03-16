@@ -1252,6 +1252,14 @@ int rxr_ep_init(struct rxr_ep *ep)
 	if (ret)
 		goto err_free_rx_entry_pool;
 
+	ret = ofi_bufpool_create(&ep->rx_atomrsp_pool,
+				 ep->mtu_size,
+				 RXR_BUF_POOL_ALIGNMENT,
+				 RXR_MAX_RX_QUEUE_SIZE,
+				 rxr_env.atomrsp_pool_size, 0);
+	if (ret)
+		goto err_free_map_entry_pool;
+
 	/* create pkt pool for shm */
 	if (ep->use_shm) {
 		ret = ofi_bufpool_create(&ep->tx_pkt_shm_pool,
@@ -1260,7 +1268,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 					 shm_info->tx_attr->size,
 					 shm_info->tx_attr->size, 0);
 		if (ret)
-			goto err_free_map_entry_pool;
+			goto err_free_atomrsp_pool;
 
 		ret = ofi_bufpool_create(&ep->rx_pkt_shm_pool,
 					 entry_sz,
@@ -1298,6 +1306,9 @@ int rxr_ep_init(struct rxr_ep *ep)
 err_free_tx_pkt_shm_pool:
 	if (ep->tx_pkt_shm_pool)
 		ofi_bufpool_destroy(ep->tx_pkt_shm_pool);
+err_free_atomrsp_pool:
+	if (ep->rx_atomrsp_pool)
+		ofi_bufpool_destroy(ep->rx_atomrsp_pool);
 err_free_map_entry_pool:
 	if (ep->map_entry_pool)
 		ofi_bufpool_destroy(ep->map_entry_pool);
@@ -1631,6 +1642,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (OFI_UNLIKELY(ret))
 			goto read_err;
 
+		read_entry->state = RXR_RDMA_ENTRY_SUBMITTED;
 		dlist_remove(&read_entry->pending_entry);
 	}
 
