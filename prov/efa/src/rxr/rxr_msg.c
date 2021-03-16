@@ -176,8 +176,17 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 
 	if (peer->is_local) {
 		assert(rxr_ep->use_shm);
-		/* intra instance message */
-		if (tx_entry->total_len > max_rtm_data_size)
+		/* intra instance message
+		 *
+		 * Currently shm proivder does not support mixed memory type iov
+		 * (it will crash), which will happen is eager message protocol
+		 * is used for cuda buffer. An GitHub issue has been opened
+		 * regarding this
+		 *     https://github.com/ofiwg/libfabric/issues/6639
+		 * Before it is addressed, we use read message protocol for
+		 * all cuda messages
+		 */
+		if (tx_entry->total_len > max_rtm_data_size || efa_ep_is_cuda_mr(tx_entry->desc[0]))
 			/*
 			 * Read message support
 			 * FI_DELIVERY_COMPLETE implicitly.
