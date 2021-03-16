@@ -362,7 +362,7 @@ static struct ofi_prov *ofi_create_prov_entry(const char *prov_name)
 static void ofi_ordered_provs_init(void)
 {
 	char *ordered_prov_names[] = {
-		"psm3", "psm2", "psm", "efa", "usnic", "gni", "bgq", "verbs",
+		"efa", "psm3", "psm2", "psm", "usnic", "gni", "bgq", "verbs",
 		"netdir", "ofi_rxm", "ofi_rxd", "shm",
 		/* Initialize the socket based providers last of the
 		 * standard providers.  This will result in them being
