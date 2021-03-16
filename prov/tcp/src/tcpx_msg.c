@@ -179,8 +179,7 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	struct tcpx_cq *tcpx_cq;
 	struct tcpx_xfer_entry *tx_entry;
 	uint64_t data_len;
-	size_t offset = 0;
-	uint64_t *cq_data;
+	size_t offset;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
@@ -194,20 +193,19 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	data_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT));
 
-	offset = sizeof(tx_entry->hdr.base_hdr);
-
 	if (flags & FI_REMOTE_CQ_DATA) {
 		tx_entry->hdr.base_hdr.flags |= TCPX_REMOTE_CQ_DATA;
-		cq_data = (uint64_t *)((uint8_t *) &tx_entry->hdr + offset);
-		*cq_data = msg->data;
-		offset += sizeof(msg->data);
+		tx_entry->hdr.cq_data_hdr.cq_data = msg->data;
+		offset = sizeof(tx_entry->hdr.cq_data_hdr);
+	} else {
+		offset = sizeof(tx_entry->hdr.base_hdr);
 	}
 
 	tx_entry->hdr.base_hdr.payload_off = (uint8_t) offset;
 	tx_entry->hdr.base_hdr.size = offset + data_len;
 	if (flags & FI_INJECT) {
 		ofi_copy_iov_buf(msg->msg_iov, msg->iov_count, 0,
-				 (uint8_t *)&tx_entry->hdr + offset,
+				 (uint8_t *) &tx_entry->hdr + offset,
 				 data_len,
 				 OFI_COPY_IOV_TO_BUF);
 		tx_entry->iov_cnt = 1;
