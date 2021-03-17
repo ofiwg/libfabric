@@ -16,6 +16,11 @@ then
     TARGET_OS="sle15_cn"
 fi
 
+if [[ "${TARGET_OS}" = "centos_8" ]]
+then
+    TARGET_OS="centos_8_ncn"
+fi
+
 echo "$0: --> PRODUCT: '${PRODUCT}'"
 echo "$0: --> TARGET_OS: '${TARGET_OS}'"
 
@@ -40,9 +45,16 @@ URL_INT="${URL_PREFIX}/internal/${PROJECT}/${URL_SUFFIX}"
 URL_SSHOT="${URL_PREFIX}/${PRODUCT}/SSHOT/${URL_SUFFIX}"
 
 URL_SSHOT_INT="${URL_PREFIX}/internal/SSHOT/${TARGET_OS}/${TARGET_ARCH}/"
-URL_SSHOT_INT+="predev/integration/"
+URL_SSHOT_INT+="dev/master/"
 
 CUDA_URL="http://car.dev.cray.com/artifactory/nvidia-cuda/cuda/${TARGET_OS}/${TARGET_ARCH}/${DEV_NAME}/${BRANCH_NAME}/"
+
+if [[ ${TARGET_OS} != "centos_8_ncn" ]]; then
+    with_cuda=1
+else
+    with_cuda=0
+fi
+
 
 if [[ ${TARGET_OS} == "sle15_sp2_cn" || ${TARGET_OS} == "sle15_sp2_ncn" ]]; then
     with_rocm=1
@@ -57,7 +69,9 @@ fi
 
 if command -v yum > /dev/null; then
     yum-config-manager --add-repo=$URL
-    yum-config-manager --add-repo=$URL_SSHOT
+#    yum-config-manager --add-repo=$URL_SSHOT
+    yum-config-manager --add-repo=$URL_INT
+    yum-config-manager --add-repo=$URL_SSHOT_INT
 
     yum-config-manager --setopt=gpgcheck=0 --save
 
@@ -93,23 +107,26 @@ else
     "Unsupported package manager or package manager not found -- installing nothing"
 fi
 
-cuda_version=$(ls /usr/local | grep cuda | tr -d "\n")
-if [[ $cuda_version == "" ]]; then
-    echo "CUDA required but not found."
-    exit 1
-else
-    echo "Using $cuda_version"
+if [[ $with_cuda -eq 1 ]]; then
+    cuda_version=$(ls /usr/local | grep cuda | tr -d "\n")
+    if [[ $cuda_version == "" ]]; then
+        echo "CUDA required but not found."
+        exit 1
+    else
+        echo "Using $cuda_version"
 
-    # Convenient symlink which allows the libfabric build process to not have to
-    # call out a specific versioned CUDA directory.
-    ln -s /usr/local/$cuda_version /usr/local/cuda
+        # Convenient symlink which allows the libfabric build process to not
+        # have to call out a specific versioned CUDA directory.
+        ln -s /usr/local/$cuda_version /usr/local/cuda
 
-    # The CUDA device driver RPM provides a usable libcuda.so which is required
-    # by the libfabric autoconf checks. Since artifactory does not provide this
-    # RPM, the cuda-driver-devel-11-0 RPM is installed and provides a stub
-    # libcuda.so. But, this stub libcuda.so is installed into a non-lib path. A
-    # symlink is created to fix this.
-    ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/libcuda.so
+        # The CUDA device driver RPM provides a usable libcuda.so which is
+        # required by the libfabric autoconf checks. Since artifactory does not
+        # provide this RPM, the cuda-driver-devel-11-0 RPM is installed and
+        # provides a stub libcuda.so. But, this stub libcuda.so is installed
+        # into a non-lib path. A symlink is created to fix this.
+        ln -s /usr/local/cuda/lib64/stubs/libcuda.so \
+              /usr/local/cuda/lib64/libcuda.so
+    fi
 fi
 
 if [[ $with_rocm -eq 1 ]]; then
