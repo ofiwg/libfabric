@@ -312,6 +312,17 @@ void rxr_pkt_entry_append(struct rxr_pkt_entry *dst,
 	dst->next = src;
 }
 
+/**
+ * @brief send a packet using lower provider
+ *
+ * @param ep[in]        rxr end point
+ * @param pkt_entry[in] packet entry to be sent
+ * @param msg[in]       information regarding that the send operation, such as
+ *                      memory buffer, remote EP address and local descriptor.
+ *                      If the shm provider is to be used. Remote EP address
+ *                      and local descriptor must be prepared for shm usage.
+ * @param flags[in]     flags to be passed on to lower provider's send.
+ */
 static inline
 ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 			      const struct fi_msg *msg, uint64_t flags)
@@ -355,12 +366,17 @@ ssize_t rxr_pkt_entry_sendv(struct rxr_ep *ep,
 	struct rxr_peer *peer;
 
 	msg.msg_iov = iov;
+	msg.addr = addr;
 	msg.desc = desc;
 	msg.iov_count = count;
 	peer = rxr_ep_get_peer(ep, addr);
-	msg.addr = (peer->is_local) ? peer->shm_fiaddr : addr;
 	msg.context = pkt_entry;
 	msg.data = 0;
+
+	if (peer->is_local) {
+		msg.addr = peer->shm_fiaddr;
+		rxr_convert_desc_for_shm(msg.iov_count, msg.desc);
+	}
 
 	return rxr_pkt_entry_sendmsg(ep, pkt_entry, &msg, flags);
 }
