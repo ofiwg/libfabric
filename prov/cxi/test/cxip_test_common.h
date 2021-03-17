@@ -34,10 +34,6 @@ extern struct fid_av *cxit_av;
 extern char *cxit_node, *cxit_service;
 extern uint64_t cxit_flags;
 extern int cxit_n_ifs;
-extern int cxit_ranks;
-extern int cxit_rank;
-extern uint32_t cxit_mcast_ref;
-extern uint32_t cxit_mcast_id;
 extern struct fid_av_set *cxit_av_set;
 extern struct fid_mc *cxit_mc;
 extern FILE *cxit_mc_fifo;
@@ -87,10 +83,6 @@ void cxit_teardown_rma(void);
 #define cxit_teardown_tagged cxit_teardown_rma
 #define cxit_teardown_msg cxit_teardown_rma
 #define	cxit_teardown_enabled_ep cxit_teardown_rma
-void cxit_setup_distributed(void);
-void cxit_teardown_distributed(void);
-void cxit_setup_multicast(void);
-void cxit_teardown_multicast(void);
 int cxit_await_completion(struct fid_cq *cq, struct fi_cq_tagged_entry *cqe);
 void validate_tx_event(struct fi_cq_tagged_entry *cqe, uint64_t flags,
 		       void *context);
@@ -121,12 +113,5 @@ extern struct cxit_coll_mc_list cxit_coll_mc_list;
 
 void cxit_create_netsim_collective(int count);
 void cxit_destroy_netsim_collective(void);
-
-void cxit_LTU_barrier(void);
-void cxit_LTU_create_universe(void);
-void cxit_LTU_destroy_universe(void);
-void cxit_LTU_create_coll_mcast(int hwrootidx, int timeout, uint32_t *mcast_ref, uint32_t *mcast_id);
-void cxit_LTU_destroy_coll_mcast(uint32_t mcast_ref);
-double _print_delay(struct timespec *ts0, struct timespec *ts1, const char *func, const char *tag);
 
 #endif
