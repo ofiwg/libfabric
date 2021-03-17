@@ -58,6 +58,7 @@ static int vrb_create_ini_qp(struct vrb_xrc_ep *ep)
 	attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD;
 	attr_ex.pd = domain->pd;
 	attr_ex.qp_context = domain;
+	attr_ex.srq = NULL;
 
 	ret = rdma_create_qp_ex(ep->base_ep.id, &attr_ex);
 	if (ret) {
