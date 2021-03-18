@@ -111,19 +111,20 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 
 static int tcpx_update_rx_iov(struct tcpx_xfer_entry *rx_entry)
 {
-	struct fi_cq_data_entry cq_entry;
-	uint64_t tag;
+	struct ofi_cq_rbuf_entry cq_entry;
 	int ret;
 
 	assert(tcpx_dynamic_rbuf(rx_entry->ep));
 
+	cq_entry.ep_context = rx_entry->ep->util_ep.ep_fid.fid.context;
 	cq_entry.op_context = rx_entry->context;
-	cq_entry.flags = rx_entry->flags;
+	cq_entry.flags = 0;
 	cq_entry.len = (rx_entry->hdr.base_hdr.size -
 			 rx_entry->hdr.base_hdr.payload_off) -
 			rx_entry->rem_len;
 	cq_entry.buf = rx_entry->mrecv_msg_start;
-	tcpx_get_cq_info(rx_entry, &cq_entry.flags, &cq_entry.data, &tag);
+	tcpx_get_cq_info(rx_entry, &cq_entry.flags, &cq_entry.data,
+			 &cq_entry.tag);
 
 	rx_entry->iov_cnt = TCPX_IOV_LIMIT;
 	ret = (int) tcpx_dynamic_rbuf(rx_entry->ep)->

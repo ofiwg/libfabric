@@ -1570,7 +1570,7 @@ static int rxm_get_recv_entry(struct rxm_rx_buf *rx_buf)
  * receives in order.  If there are any unexpected messages outstanding, we
  * need to fail all matches until they have been read from the CQ.
  */
-ssize_t rxm_get_dyn_rbuf(struct fi_cq_data_entry *entry, struct iovec *iov,
+ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 			 size_t *count)
 {
 	struct rxm_rx_buf *rx_buf;
