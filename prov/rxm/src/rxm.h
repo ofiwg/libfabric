@@ -700,7 +700,7 @@ struct rxm_msg_eq_entry {
 #define RXM_CM_ENTRY_SZ (sizeof(struct fi_eq_cm_entry) + \
 			 sizeof(union rxm_cm_data))
 
-ssize_t rxm_get_dyn_rbuf(struct fi_cq_data_entry *entry, struct iovec *iov,
+ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 			 size_t *count);
 
 struct rxm_eager_ops {
