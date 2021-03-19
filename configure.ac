@@ -157,7 +157,7 @@ AC_ARG_WITH([dlopen],
 		       [dl-loadable provider support @<:@default=yes@:>@]),
 	)
 
-if test "$freebsd" == "0"; then
+if test "$freebsd" = "0"; then
 AS_IF([test x"$with_dlopen" != x"no"], [
 AC_CHECK_LIB(dl, dlopen, [],
     AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.]))
@@ -520,7 +520,7 @@ AC_ARG_ENABLE([cuda-dlopen],
         [Enable dlopen of CUDA libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test "$freebsd" == "0"], [
+        AS_IF([test "$freebsd" = "0"], [
             AC_CHECK_LIB(dl, dlopen, [],
                 [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
         ])
@@ -558,7 +558,7 @@ AC_ARG_ENABLE([memhooks-monitor],
 AC_DEFINE_UNQUOTED(ENABLE_MEMHOOKS_MONITOR, [$enable_memhooks],
 	[Define to 1 to enable memhooks memory monitor])
 
-AS_IF([test "$enable_memhooks" == "1"], [
+AS_IF([test "$enable_memhooks" = "1"], [
 	AC_CHECK_FUNCS([__curbrk __clear_cache])
 	AC_CHECK_HEADERS([linux/mman.h sys/syscall.h])
 	AC_CHECK_DECLS([__syscall], [], [], [#include <sys/syscall.h>])
@@ -602,13 +602,13 @@ AC_ARG_WITH([gdrcopy],
 			    and runtime libraries are installed.])],
 	    [], [])
 
-AS_IF([test -n "$with_gdrcopy" && test x"$with_gdrcopy" != x"no" && test "$have_libcuda" == "0"],
+AS_IF([test -n "$with_gdrcopy" && test x"$with_gdrcopy" != x"no" && test "$have_libcuda" = "0"],
 	[AC_MSG_ERROR([gdrcopy is requested but cuda is not requested or cuda runtime is not available.])],
 	[])
 
 have_gdrcopy=0
-AS_IF([test "$have_libcuda" == "1" && test x"$with_gdrcopy" != x"no"],
-	[AS_IF([test x"$with_gdrcopy" == x"yes"],[gdrcopy_dir=""],[gdrcopy_dir=$with_gdrcopy])
+AS_IF([test "$have_libcuda" = "1" && test x"$with_gdrcopy" != x"no"],
+	[AS_IF([test x"$with_gdrcopy" = x"yes"],[gdrcopy_dir=""],[gdrcopy_dir=$with_gdrcopy])
 	 FI_CHECK_PACKAGE([gdrcopy],
 			  [gdrapi.h],
 			  [gdrapi],
@@ -632,7 +632,7 @@ AC_ARG_ENABLE([gdrcopy-dlopen],
         [Enable dlopen of gdrcopy libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test "$freebsd" == "0"], [
+        AS_IF([test "$freebsd" = "0"], [
             AC_CHECK_LIB(dl, dlopen, [],
                 [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
         ])
@@ -657,7 +657,7 @@ AC_ARG_ENABLE([rocr-dlopen],
         [Enable dlopen of ROCR libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test "$freebsd" == "0"], [
+        AS_IF([test "$freebsd" = "0"], [
             AC_CHECK_LIB(dl, dlopen, [],
                 [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
         ])
@@ -739,7 +739,7 @@ fi
 
 for i in $PROVIDERS_TO_BUILD; do
 	v=${i}_dl
-	if test `eval echo \\$${v}` == "1"; then
+	if test `eval echo \\$${v}` = "1"; then
 		dso="$i ${dso}"
 	else
 		builtin="$i ${builtin}"
