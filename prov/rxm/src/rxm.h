@@ -251,7 +251,6 @@ union rxm_cm_data {
 };
 
 int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
-			  enum rxm_cmap_state state,
 			  struct rxm_cmap_handle **handle);
 struct rxm_cmap_handle *rxm_cmap_key2handle(struct rxm_cmap *cmap, uint64_t key);
 int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr);
