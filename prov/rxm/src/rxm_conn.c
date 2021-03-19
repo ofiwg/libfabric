@@ -568,23 +568,21 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 	ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Processing connreq from remote pep", addr);
 
-	if (fi_addr == FI_ADDR_NOTAVAIL)
+	if (fi_addr == FI_ADDR_NOTAVAIL) {
 		handle = rxm_cmap_get_handle_peer(cmap, addr);
-	else
-		handle = rxm_cmap_acquire_handle(cmap, fi_addr);
-
-	if (!handle) {
-		if (fi_addr == FI_ADDR_NOTAVAIL)
+		if (!handle)
 			ret = rxm_cmap_alloc_handle_peer(cmap, addr,
 							 RXM_CMAP_CONNREQ_RECV,
 							 &handle);
-		else
+	} else {
+		handle = rxm_cmap_acquire_handle(cmap, fi_addr);
+		if (!handle)
 			ret = rxm_cmap_alloc_handle(cmap, fi_addr,
 						    RXM_CMAP_CONNREQ_RECV,
 						    &handle);
-		if (ret)
-			goto unlock;
 	}
+	if (ret)
+		goto unlock;
 
 	switch (handle->state) {
 	case RXM_CMAP_CONNECTED:
