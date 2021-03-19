@@ -478,34 +478,45 @@ void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 	}
 }
 
+static int
+rxm_cmap_get_connreq_handle(struct rxm_cmap *cmap, void *addr,
+			    fi_addr_t *fi_addr, struct rxm_cmap_handle **handle)
+{
+	int ret = 0;
+	struct rxm_cmap_handle *new_handle = NULL;
+
+	*fi_addr = ofi_ip_av_get_fi_addr(cmap->av, addr);
+	ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL,
+			"processing connreq from remote pep", addr);
+
+	if (*fi_addr == FI_ADDR_NOTAVAIL) {
+		*handle = rxm_cmap_get_handle_peer(cmap, addr);
+		if (!(*handle))
+			ret = rxm_cmap_alloc_handle_peer(cmap, addr, &new_handle);
+	} else {
+		*handle = rxm_cmap_acquire_handle(cmap, *fi_addr);
+		if (!(*handle))
+			ret = rxm_cmap_alloc_handle(cmap, *fi_addr, &new_handle);
+	}
+
+	if (new_handle && !ret) {
+		*handle = new_handle;
+		RXM_CM_UPDATE_STATE(*handle, RXM_CMAP_CONNREQ_RECV);
+	}
+
+	return ret;
+}
+
 int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 			     struct rxm_cmap_handle **handle_ret,
 			     uint8_t *reject_reason)
 {
-	struct rxm_cmap_handle *handle;
-	int ret = 0, cmp;
-	fi_addr_t fi_addr = ofi_ip_av_get_fi_addr(cmap->av, addr);
+	struct rxm_cmap_handle *handle = NULL;
+	fi_addr_t fi_addr;
+	int ret;
+	int cmp;
 
-	ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Processing connreq from remote pep", addr);
-
-	if (fi_addr == FI_ADDR_NOTAVAIL) {
-		handle = rxm_cmap_get_handle_peer(cmap, addr);
-		if (!handle) {
-			ret = rxm_cmap_alloc_handle_peer(cmap, addr, &handle);
-			if (!ret)
-				RXM_CM_UPDATE_STATE(handle,
-						    RXM_CMAP_CONNREQ_RECV);
-		}
-	} else {
-		handle = rxm_cmap_acquire_handle(cmap, fi_addr);
-		if (!handle) {
-			ret = rxm_cmap_alloc_handle(cmap, fi_addr, &handle);
-			if (!ret)
-				RXM_CM_UPDATE_STATE(handle,
-						    RXM_CMAP_CONNREQ_RECV);
-		}
-	}
+	ret = rxm_cmap_get_connreq_handle(cmap, addr, &fi_addr, &handle);
 	if (ret)
 		return ret;
 

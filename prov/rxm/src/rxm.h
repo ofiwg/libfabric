@@ -170,9 +170,9 @@ extern char *rxm_cm_state_str[];
 	do {								\
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "[CM] handle: "	\
 		       "%p %s -> %s\n",	handle,				\
-		       rxm_cm_state_str[handle->state],			\
+		       rxm_cm_state_str[(handle)->state],		\
 		       rxm_cm_state_str[new_state]);			\
-		handle->state = new_state;				\
+		(handle)->state = new_state;				\
 	} while (0)
 
 struct rxm_cmap_handle {
