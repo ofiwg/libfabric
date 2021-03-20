@@ -441,17 +441,16 @@ static void tcpx_handle_msg_resp(struct tcpx_ep *ep)
 int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
-	struct tcpx_cur_rx_msg *cur_rx_msg = &tcpx_ep->cur_rx_msg;
+	struct tcpx_cur_rx_msg *msg = &tcpx_ep->cur_rx_msg;
 	size_t msg_len;
 	int ret;
 
-	if (cur_rx_msg->hdr.base_hdr.op_data == TCPX_OP_MSG_RESP) {
+	if (msg->hdr.base_hdr.op_data == TCPX_OP_MSG_RESP) {
 		tcpx_handle_msg_resp(tcpx_ep);
 		return -FI_EAGAIN;
 	}
 
-	msg_len = (tcpx_ep->cur_rx_msg.hdr.base_hdr.size -
-		   tcpx_ep->cur_rx_msg.hdr.base_hdr.payload_off);
+	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.payload_off);
 
 	if (tcpx_ep->srx_ctx) {
 		rx_entry = tcpx_srx_entry_alloc(tcpx_ep->srx_ctx, tcpx_ep);
@@ -465,23 +464,33 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 			return -FI_EAGAIN;
 	}
 
-	memcpy(&rx_entry->hdr, &tcpx_ep->cur_rx_msg.hdr,
-	       (size_t) tcpx_ep->cur_rx_msg.hdr.base_hdr.payload_off);
+	memcpy(&rx_entry->hdr, &msg->hdr,
+	       (size_t) msg->hdr.base_hdr.payload_off);
 	rx_entry->ep = tcpx_ep;
 	rx_entry->hdr.base_hdr.op_data = TCPX_OP_MSG_RECV;
 	rx_entry->mrecv_msg_start = rx_entry->iov[0].iov_base;
 
-	if (tcpx_dynamic_rbuf(tcpx_ep))
+	if (tcpx_dynamic_rbuf(tcpx_ep)) {
 		rx_entry->flags |= TCPX_NEED_DYN_RBUF;
 
-	ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt, msg_len);
-	if (ret) {
-		if (!tcpx_dynamic_rbuf(tcpx_ep))
+		if (msg->hdr.base_hdr.flags & TCPX_TAGGED) {
+			/* Raw message, no rxm header */
+			rx_entry->iov_cnt = 0;
+			rx_entry->rem_len = msg_len;
+		} else {
+			ret = ofi_truncate_iov(rx_entry->iov,
+					       &rx_entry->iov_cnt, msg_len);
+			if (ret) {
+				rx_entry->rem_len = msg_len -
+					    ofi_total_iov_len(rx_entry->iov,
+							rx_entry->iov_cnt);
+			}
+		}
+	} else {
+		ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt,
+				       msg_len);
+		if (ret)
 			goto truncate_err;
-
-		rx_entry->rem_len = msg_len -
-				    ofi_total_iov_len(rx_entry->iov,
-						      rx_entry->iov_cnt);
 	}
 
 	tcpx_rx_setup(tcpx_ep, rx_entry, tcpx_process_recv);
