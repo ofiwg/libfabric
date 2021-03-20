@@ -1499,32 +1499,29 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	}
 }
 
-static int rxm_get_recv_entry(struct rxm_rx_buf *rx_buf)
+static int rxm_get_recv_entry(struct rxm_rx_buf *rx_buf,
+			      struct ofi_cq_rbuf_entry *cq_entry)
 {
 	struct rxm_recv_match_attr match_attr;
+	struct rxm_cmap_handle *cm_handle;
 	struct rxm_recv_queue *recv_queue;
 	struct dlist_entry *entry;
 
 	assert(!rx_buf->recv_entry);
 	if (rx_buf->ep->rxm_info->caps & (FI_SOURCE | FI_DIRECTED_RECV)) {
-		if (rx_buf->ep->srx_ctx)
-			rx_buf->conn = rxm_key2conn(rx_buf->ep, rx_buf->
-						    pkt.ctrl_hdr.conn_id);
-		if (!rx_buf->conn)
-			return -FI_EOTHER;
-		match_attr.addr = rx_buf->conn->handle.fi_addr;
+		cm_handle = cq_entry->ep_context;
+		match_attr.addr = cm_handle->fi_addr;
 	} else {
 		match_attr.addr = FI_ADDR_UNSPEC;
 	}
 
 	match_attr.ignore = 0;
-	if (rx_buf->pkt.hdr.op == ofi_op_msg) {
+	if (cq_entry->flags & FI_TAGGED) {
+		match_attr.tag = cq_entry->tag;
+		recv_queue = &rx_buf->ep->trecv_queue;
+	} else {
 		match_attr.tag = 0;
 		recv_queue = &rx_buf->ep->recv_queue;
-	} else {
-		assert(rx_buf->pkt.hdr.op == ofi_op_tagged);
-		match_attr.tag = rx_buf->pkt.hdr.tag;
-		recv_queue = &rx_buf->ep->trecv_queue;
 	}
 
 	/* See comment with rxm_get_dyn_rbuf */
@@ -1545,6 +1542,23 @@ static int rxm_get_recv_entry(struct rxm_rx_buf *rx_buf)
 	}
 
 	return 0;
+}
+
+static void rxm_fake_rx_hdr(struct rxm_rx_buf *rx_buf,
+			    struct ofi_cq_rbuf_entry *entry)
+{
+	struct rxm_cmap_handle *cm_handle;
+
+	cm_handle = entry->ep_context;
+
+	OFI_DBG_SET(rx_buf->pkt.hdr.version, OFI_OP_VERSION);
+	OFI_DBG_SET(rx_buf->pkt.ctrl_hdr.version, RXM_CTRL_VERSION);
+	rx_buf->pkt.ctrl_hdr.type = rxm_ctrl_eager;
+	rx_buf->pkt.ctrl_hdr.conn_id = cm_handle->remote_key;
+	rx_buf->pkt.hdr.op = ofi_op_tagged;
+	rx_buf->pkt.hdr.tag = entry->tag;
+	rx_buf->pkt.hdr.size = entry->len;
+	rx_buf->pkt.hdr.flags = 0;
 }
 
 /*
@@ -1577,13 +1591,18 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 	int ret;
 
 	rx_buf = entry->op_context;
+	assert(!(rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV));
+
+	/* Messages tagged at the tcp layer do not carry an rxm header */
+	if (entry->flags & FI_TAGGED)
+		rxm_fake_rx_hdr(rx_buf, entry);
+
 	assert((rx_buf->pkt.hdr.version == OFI_OP_VERSION) &&
 		(rx_buf->pkt.ctrl_hdr.version == RXM_CTRL_VERSION));
-	assert(!(rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV));
 
 	switch (rx_buf->pkt.ctrl_hdr.type) {
 	case rxm_ctrl_eager:
-		ret = rxm_get_recv_entry(rx_buf);
+		ret = rxm_get_recv_entry(rx_buf, entry);
 		if (ret)
 			return ret;
 
@@ -1601,7 +1620,7 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 		/* find matching receive to maintain message ordering, but we
 		 * only need to receive rendezvous header to complete message
 		 */
-		ret = rxm_get_recv_entry(rx_buf);
+		ret = rxm_get_recv_entry(rx_buf, entry);
 		if (ret)
 			return ret;
 
