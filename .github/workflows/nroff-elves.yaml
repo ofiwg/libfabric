@@ -1,4 +1,4 @@
-name: GitHub Action CI
+name: GitHub Action Schedule
 
 # JMS Saving notes on 21 March 2021...
 #
@@ -30,7 +30,7 @@ on:
     - cron: '0,5,10,15,20,25,30,35,40,45,50,55 * * * *'
 
 jobs:
-    ci:
+    nroff-elves-scheduled:
         name: The Nroff Elves
         runs-on: ubuntu-latest
         steps:
