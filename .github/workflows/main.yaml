@@ -27,7 +27,7 @@ name: GitHub Action Schedule
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '0/5 * * * *'
   workflow_dispatch:
 
 jobs:
