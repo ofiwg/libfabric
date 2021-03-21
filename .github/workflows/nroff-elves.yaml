@@ -1,0 +1,68 @@
+name: GitHub Action CI
+
+# JMS Saving notes on 21 March 2021...
+#
+# tl;dr: I can't figure out a way to do this with github actions.
+#
+# Everything works great if you're within a single repo.  We can add a
+# commit to the branch and push it to github; no problem.  The problem
+# is with forks.  If you make a PR from a fork, the GITHUB_TOKEN you
+# is quite limited:
+#
+# - You have read-only access (can't push to base repo or to fork
+#   repo)
+# - You have no access to github action secrets of either repo
+# - You can use a deployment environment on the base repo, but you
+#   can't access the secrets in that deployment environment)
+# --> GHA secrets are really designed to work within a single repo.
+#
+# In short: I can't figure out a way to get a commit added to any
+# branch related to the PR.  There's no way to make artifacts
+# available, either.  And we'd really only want to generate them upon
+# merges, anyway (not every change of a PR).
+#
+# Also, a schedule/cron-based GHA will only run against the default
+# branch (e.g., it won't run against the release branches).  ...but
+# that might be ok...?
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+
+jobs:
+    ci:
+        name: The Nroff Elves
+        runs-on: ubuntu-latest
+        steps:
+          - name: Check out the code
+            uses: actions/checkout@v2
+
+          - name: Dump GitHub context
+            env:
+              GITHUB_CONTEXT: ${{ toJSON(github) }}
+            run: |
+              echo "============================="
+              echo "$GITHUB_CONTEXT"
+              echo "============================="
+              git remote -v
+              echo "============================="
+              git status
+              echo "============================="
+
+          - name: Get the required packages
+            run: sudo apt install -y pandoc perl
+
+          - name: Build the nroff man pages
+            run: |
+              for file in `ls man/*.md`; do
+                perl config/md2nroff.pl --source=$file
+              done
+
+          - name: Make a git commit with the changes and push back to the PR branch
+            uses: EndBug/add-and-commit@v7
+            with:
+              add: man
+              author_name: OFIWG Bot
+              author_email: ofiwg@lists.openfabrics.org
+              message: Updated nroff-generated man pages
+              signoff: true
