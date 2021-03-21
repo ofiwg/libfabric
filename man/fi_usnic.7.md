@@ -7,7 +7,7 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-fi_usnic \- The usNIC Fabric Provider
+fi_usnic \- The Cisco Cisco Cisco usNIC Fabric Provider
 
 # OVERVIEW
 
