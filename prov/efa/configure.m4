@@ -29,7 +29,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 		],
 		[efa_h_enable_poisoning=$enableval],
 		[efa_h_enable_poisoning=no])
-	AS_IF([test x"$efa_h_enable_poisoning" == x"yes"],
+	AS_IF([test x"$efa_h_enable_poisoning" = x"yes"],
 		[AC_DEFINE([ENABLE_EFA_POISONING], [1],
 			[EFA memory poisoning support for debugging])],
 		[])

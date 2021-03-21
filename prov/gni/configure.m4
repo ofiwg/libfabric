@@ -87,7 +87,7 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
                                  ],
                                  [ugni_lib_happy=0])
 
-               AS_IF([test x"$enable_ugni_static" == x"yes" && test $ugni_lib_happy -eq 1],
+               AS_IF([test x"$enable_ugni_static" = x"yes" && test $ugni_lib_happy -eq 1],
                      [gni_LDFLAGS=$(echo $gni_LDFLAGS | sed -e 's/lugni/l:libugni.a/')],[])
 
                FI_PKG_CHECK_MODULES_STATIC([CRAY_ALPS_LLI], [cray-alpslli],
