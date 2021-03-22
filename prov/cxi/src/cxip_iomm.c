@@ -35,6 +35,7 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	ret = cxil_map(dom->lni->lni, entry->info.iov.iov_base,
 		       entry->info.iov.iov_len, map_flags, NULL, &md->md);
 	if (ret) {
+		md->dom = NULL;
 		CXIP_WARN("cxil_map() failed: %d\n", ret);
 	} else {
 		/* If the md len is larger than the iov_len, the va and
@@ -61,6 +62,9 @@ static void cxip_do_unmap(struct ofi_mr_cache *cache,
 {
 	int ret;
 	struct cxip_md *md = (struct cxip_md *)entry->data;
+
+	if (!md || !md->dom)
+		return;
 
 	ret = cxil_unmap(md->md);
 	if (ret)
