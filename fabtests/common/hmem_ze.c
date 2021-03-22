@@ -36,7 +36,7 @@
 
 #include "hmem.h"
 
-#ifdef HAVE_LIBZE
+#if HAVE_LIBZE
 
 #include <level_zero/ze_api.h>
 
