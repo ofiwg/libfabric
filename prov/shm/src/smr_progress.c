@@ -133,8 +133,9 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 
 		src = pending->cmd.msg.hdr.op == ofi_op_atomic_compare ?
 		      tx_buf->buf : tx_buf->data;
-		pending->bytes_done = ofi_copy_to_iov(pending->iov, pending->iov_count,
-				       0, src, pending->cmd.msg.hdr.size);
+		pending->bytes_done = ofi_copy_to_hmem_iov(pending->iface, pending->device,
+							   pending->iov, pending->iov_count,
+							   0, src, pending->cmd.msg.hdr.size);
 
 		if (pending->bytes_done != pending->cmd.msg.hdr.size) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
