@@ -463,7 +463,7 @@ of these fields are the same for all CQ entry structure formats.
   was provided with an asynchronous operation.  The op_context field is
   valid for all completions that are associated with an asynchronous
   operation.
-  
+
   For completion events that are not associated with a posted operation,
   this field will be set to NULL.  This includes completions generated
   at the target in response to RMA write operations that carry CQ data
@@ -624,7 +624,7 @@ operation.  The following completion flags are defined.
   have FI_BUFFERED_RECV mode enabled.  When set to one, it indicates that
   the buffer referenced by the completion is limited by the
   FI_OPT_BUFFERED_LIMIT threshold, and additional message data must be
-  retrieved by the application using an FI_CLAIM operation.  
+  retrieved by the application using an FI_CLAIM operation.
 
 *FI_CLAIM*
 : See the 'Buffered Receives' section in `fi_msg`(3) for more details.
@@ -762,7 +762,209 @@ The operational flags for the described completion levels are defined below.
   that was originally requested has been met.  It is the completion
   of the fenced operation that guarantees that the additional
   semantics have been met.
- 
+
+The above completion semantics are defined with respect to the initiator
+of the operation.  The different semantics are useful for describing
+when the initiator may re-use a data buffer, and guarantees what state
+a transfer must reach prior to a completion being generated.  This
+allows applications to determine appropriate error handling in case
+of communication failures.
+
+# TARGET COMPLETION SEMANTICS
+
+The completion semantic at the target is used to determine when data
+at the target is visible to the peer application.  Visibility
+indicates that a memory read to the same address that was
+the target of a data transfer will return the results of the transfer.
+The target of a transfer can be identified by the initiator,
+as may be the case for RMA and atomic operations, or determined by
+the target, for example by providing a matching receive buffer.
+Global visibility indicates that the results are available regardless
+of where the memory read originates.  For example, the read could come
+from a process running on a host CPU, it may be accessed by subsequent
+data transfer over the fabric, or read from a peer device such as a GPU.
+
+In terms of completion semantics, visibility usually indicates that the
+transfer meets the FI_DELIVERY_COMPLETE requirements from the
+perspective of the target.  The target completion semantic may be, but
+is not necessarily, linked with the completion semantic specified by the
+initiator of the transfer.
+
+Often, target processes do not explicitly state a desired completion
+semantic and instead rely on the default semantic.  The
+default behavior is based on several factors, including:
+
+- whether a completion even is generated at the target
+- the type of transfer involved (e.g. msg vs RMA)
+- endpoint data and message ordering guarantees
+- properties of the targeted memory buffer
+- the initiator's specified completion semantic
+
+Broadly, target completion semantics are grouped
+based on whether or not the transfer generates a completion event
+at the target.  This includes writing a CQ entry or updating a completion
+counter.  In common use cases, transfers that use a message
+interface (FI_MSG or FI_TAGGED) typically generate target events, while
+transfers involving an RMA interface (FI_RMA or FI_ATOMIC) often do not.
+There are exceptions to both these cases, depending on endpoint to CQ
+and counter bindings and operational flags.  For example, RMA writes that
+carry remote CQ data will generate a completion event at the target,
+and are frequently used to convey visibility to the target application.
+The general guidelines for target side semantics are described below,
+followed by exceptions that modify that behavior.
+
+By default, completions generated at the target indicate that the
+transferred data is immediately available to be read from the target buffer.
+That is, the target sees FI_DELIVERY_COMPLETE (or better) semantics,
+even if the initiator requested lower semantics.
+For applications using only data buffers allocated from
+host memory, this is often sufficient.
+
+For operations that do not generate a completion event at the target,
+the visibility of the data at the target may need to be inferred
+based on subsequent operations that do generate target completions.
+Absent a target completion, when a completion of an
+operation is written at the initiator, the visibility semantic
+of the operation at the target aligns with the initiator completion
+semantic.  For instance, if an RMA operation completes at the initiator
+as either FI_INJECT_COMPLETE or FI_TRANSMIT_COMPLETE, the data visibility
+at the target is not guaranteed.
+
+One or more of the following mechanisms can be used by the target process to
+guarantee that the results of a data transfer that did not generate a
+completion at the target is now visible.  This list is not inclusive of
+all options, but defines common uses.  In the descriptions below, the first
+transfer does not result in a completion event at the target, but is
+eventually followed by a transfer which does.
+
+- If the endpoint guarantees message ordering between two transfers, the
+  target completion of a second transfer will indicate that the data from
+  the first transfer is available.  For example, if the endpoint supports
+  send after write ordering (FI_ORDER_SAW), then a receive completion
+  corresponding to the send will indicate that the write data is available.
+  This holds independent of the initiator's completion semantic for either
+  the write or send.  When ordering is guaranteed, the second transfer
+  can be queued with the provider immediately after queuing the first.
+
+- If the endpoint does not guarantee message ordering, the initiator must take
+  additional steps to ensure visibility.  If initiator requests
+  FI_DELIVERY_COMPLETE semantics for the first operation, the initiator can wait
+  for the operation to complete locally.  Once the completion has been
+  read, the target completion of a second transfer will indicate that the
+  first transfer's data is visible.
+
+- Alternatively, if message ordering is not guaranteed by the endpoint, the
+  initiator can use the FI_FENCE and FI_DELIVERY_COMPLETE flags on the second
+  data transfer to force the first transfers to meet the
+  FI_DELIVERY_COMPLETE semantics.  If the second transfer generates a
+  completion at the target, that will indicate that the data is visible.
+  Otherwise, a target completion for any transfer after the
+  fenced operation will indicate that the data is visible.
+
+The above semantics apply for transfers targeting traditional host memory
+buffers.  However, the behavior may differ when device memory and/or
+persistent memory is involved (FI_HMEM and FI_PMEM capability bits).  When
+heterogenous memory is involved, the concept of memory domains come into
+play.  Memory domains identify the physical separation of memory, which
+may or may not be accessible through the same virtual address space.  See
+the [`fi_mr`(3)](fi_mr.3.html) man page for further details on memory domains.
+
+Completion ordering and data visibility are only well-defined for transfers
+that target the same memory domain.  Applications need to be aware of
+ordering and visibility differences when transfers target different memory
+domains.  Additionally, applications also need to be concerned with the
+memory domain that completions themselves are written and if it differs
+from the memory domain targeted by a transfer.  In some situations,
+either the provider or application may need to call device specific APIs
+to synchronize or flush device memory caches in order to achieve the
+desired data visibility.
+
+When heterogenous memory is in use, the default target completion semantic
+for transfers that generate a completion at the target is still
+FI_DELIVERY_COMPLETE, however, applications should be aware that there
+may be a negative impact on overall performance for providers to meet
+this requirement.
+
+For example, a target process may be using a GPU to accelerate computations.
+A memory region mapping to memory on the GPU may be exposed to peers as
+either an RMA target or posted locally as a receive buffer.  In this case,
+the application is concerned with two memory domains -- system and GPU
+memory.  Completions are written to system memory.
+
+Continuing the example, a peer process sends a tagged message.  That message
+is matched with the receive buffer located in GPU memory.  The NIC copies
+the data from the network into the receive buffer and writes an entry into
+the completion queue.  Note that both memory domains were accessed as part
+of this transfer.  The message data was directed to the GPU memory, but the
+completion went to host memory.   Because separate memory domains may not be
+synchronized with each other, it is possible for the host CPU to see and process
+the completion entry before the transfer to the GPU memory is visible to either
+the host GPU or even software running on the GPU.  From the perspective
+of the *provider*, visibility of the completion does not imply visibility of
+data written to the GPU's memory domain.
+
+The default completion semantic at the target *application* for message
+operations is FI_DELIVERY_COMPLETE.  An anticipated provider implementation
+in this situation is for the provider software running on the host CPU to
+intercept the CQ entry, detect that the data landed in heterogenous memory,
+and perform the necessary device synchronization or flush operation
+before reporting the completion up to the application.  This ensures that
+the data is visible to CPU _and_ GPU software prior to the application
+processing the completion.
+
+In addition to the cost of provider software intercepting completions
+and checking if a transfer targeted heterogenous memory, device
+synchronization itself may impact performance.  As a result, applications
+can request a lower completion semantic when posting receives.  That
+indicates to the provider that the application will be responsible for
+handling any device specific flush operations that might be needed.
+See [`fi_msg`(3)](fi_msg.3.html) FLAGS.
+
+For data transfers that do not generate a completion at the target,
+such as RMA or atomics, it is the responsibility of the application
+to ensure that all target buffers meet the necessary visibility
+requirements of the application.  The previously mentioned bulleted
+methods for notifying the target that the data is visible may not
+be sufficient, as the provider software at the target could lack
+the context needed to ensure visibility.  This implies that the
+application may need to call device synchronization/flush APIs
+directly.
+
+For example, a peer application could perform several RMA writes
+that target GPU memory buffers.  If the provider offloads RMA
+operations into the NIC, the provider software at the target will
+be unaware that the RMA operations have occurred.  If the peer
+sends a message to the target application that indicates that the
+RMA operations are done, the application must ensure that the RMA data
+is visible to the host CPU or GPU prior to executing code that accesses
+the data.  The target completion of having received the sent message
+is not sufficient, even if send-after-write ordering is supported.
+
+Most target heterogenous memory completion semantics map to
+FI_TRANSMIT_COMPLETE or FI_DELIVERY_COMPLETE.  Persistent memory
+(FI_PMEM capability), however, is often used with FI_COMMIT_COMPLETE
+semantics.  Heterogenous completion concepts still apply.
+
+For transfers flagged by the initiator with FI_COMMIT_COMPLETE,
+a completion at the target indicates that the results are visible
+and durable.  For transfers targeting persistent memory, but using
+a different completion semantic at the initiator, the visibility
+at the target is similar to that described above.  Durability is
+only associated with transfers marked with FI_COMMIT_COMPLETE.
+
+For transfers targeting persistent memory that request
+FI_DELIVERY_COMPLETE, then a completion, at either the initiator or
+target, indicates that the data is visible.  Visibility at the
+target can be conveyed using one of the above describe mechanism --
+generating a target completion, sending a message from the initiator,
+etc.  Similarly, if the initiator requested FI_TRANSMIT_COMPLETE,
+then additional steps are needed to ensure visibility at the target.
+For example, the transfer can generate a completion at the target,
+which would indicate visibility, but not durability.  The initiator
+can also follow the transfer with another operation that forces
+visibility, such as using FI_FENCE in conjunction with
+FI_DELIVERY_COMPLETE.
+
 # NOTES
 
 A completion queue must be bound to at least one enabled endpoint before any

@@ -274,9 +274,14 @@ fi_sendmsg.
   generated when the source buffer(s) may be reused.
 
 *FI_TRANSMIT_COMPLETE*
-: Applies to fi_sendmsg.  Indicates that a completion should not be
-  generated until the operation has been successfully transmitted and
-  is no longer being tracked by the provider.
+: Applies to fi_sendmsg and fi_recvmsg.  For sends, indicates that a
+  completion should not be generated until the operation has been
+  successfully transmitted and is no longer being tracked by the provider.
+  For receive operations, indicates that a completion may be generated
+  as soon as the message has been processed by the local provider,
+  even if the message data may not be visible to all processing
+  elements.  See [`fi_cq`(3)](fi_cq.3.html) for target side completion
+  semantics.
 
 *FI_DELIVERY_COMPLETE*
 : Applies to fi_sendmsg.  Indicates that a completion should be

@@ -667,6 +667,46 @@ The follow flag may be specified to any memory registration call.
   specified if persistent completion semantics or persistent data transfers
   are required when accessing the registered region.
 
+# MEMORY DOMAINS
+
+Memory domains identify the physical separation of memory which
+may or may not be accessible through the same virtual address space.
+Traditionally, applications only dealt with a single memory domain,
+that of host memory tightly coupled with the system CPUs.  With
+the introduction of device and non-uniform memory subsystems,
+applications often need to be aware of which memory domain a particular
+virtual address maps to.
+
+As a general rule, separate physical devices can be considered to have
+their own memory domains.  For example, a NIC may have user accessible
+memory, and would be considered a separate memory domain from memory
+on a GPU.  Both the NIC and GPU memory domains are separate from host
+system memory.  Individual GPUs or computation accelerators may have
+distinct memory domains, or may be connected in such a way (e.g. a GPU
+specific fabric) that all GPUs would belong to the same memory domain.
+Unfortunately, identifying memory domains is specific to each
+system and its physical and/or virtual configuration.
+
+Understanding memory domains in heterogenous memory environments is
+important as it can impact data ordering and visibility as viewed
+by an application.  It is also important to understand which memory
+domain an application is most tightly coupled to.  In most cases,
+applications are tightly coupled to host memory.  However, an
+application running directly on a GPU or NIC may be more tightly
+coupled to memory associated with those devices.
+
+Memory regions are often associated with a single memory domain.
+The domain is often indicated by the fi_mr_attr iface and device
+fields.  Though it is possible for physical pages backing a virtual
+memory region to migrate between memory domains based on access patterns.
+For example, the physical pages referenced by a virtual address range
+could migrate between host memory and GPU memory, depending on which
+computational unit is actively using it.
+
+See the [`fi_endpoint`(3)](fi_endpoint.3.html) and [`fi_cq`(3)](fi_cq.3.html)
+man pages for addition discussion on message, data, and completion ordering
+semantics, including the impact of memory domains.
+
 # RETURN VALUES
 
 Returns 0 on success.  On error, a negative value corresponding to
