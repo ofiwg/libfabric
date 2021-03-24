@@ -316,6 +316,7 @@ libpsm3_la_LIBADD = $(psm3_LIBS) $(_psm3_LIBS)
 src_libfabric_la_LIBADD += libpsm3.la
 src_libfabric_la_DEPENDENCIES += libpsm3.la
 
+if HAVE_PSM2_SRC
 .libs/libpsm3_full.lo: $(libpsm3_la_OBJECTS) $(libpsm3_la_DEPENDENCIES) $(EXTRA_libpsm3_la_DEPENDENCIES)
 	@sed -i.bak "/dependency_libs/s/='.*'/=''/" libpsm3i.la
 	$(AM_V_CCLD)$(libpsm3_la_LINK) -r $(am_libpsm3_la_rpath) $(libpsm3_la_OBJECTS) libpsm3i.la
@@ -329,6 +330,7 @@ libpsm3.la: .libs/libpsm3_exp.o
 	rm -f .libs/libpsm3.a libpsm3.a; \
 	$(AR) cru .libs/libpsm3.a .libs/libpsm3_exp.o; \
 	$(RANLIB) .libs/libpsm3.a
+endif HAVE_PSM2_SRC
 
 endif !HAVE_PSM3_DL
 
