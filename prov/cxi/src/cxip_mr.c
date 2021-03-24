@@ -227,11 +227,11 @@ cleanup:
 /*
  * cxip_mr_opt_pte_cb() - Process optimized MR state change events.
  */
-void cxip_mr_opt_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
+void cxip_mr_opt_pte_cb(struct cxip_pte *pte, const union c_event *event)
 {
 	struct cxip_mr *mr = (struct cxip_mr *)pte->ctx;
 
-	switch (state) {
+	switch (pte->state) {
 	case C_PTLTE_ENABLED:
 		assert(mr->mr_state == CXIP_MR_DISABLED);
 		mr->mr_state = CXIP_MR_ENABLED;
@@ -239,7 +239,7 @@ void cxip_mr_opt_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 		CXIP_DBG("MR PTE enabled: %p\n", mr);
 		break;
 	default:
-		CXIP_WARN("Unexpected state received: %u\n", state);
+		CXIP_WARN("Unexpected state received: %u\n", pte->state);
 	}
 }
 

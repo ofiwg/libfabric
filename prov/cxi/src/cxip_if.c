@@ -621,7 +621,7 @@ int cxip_pte_map(struct cxip_pte *pte, uint64_t pid_idx, bool is_multicast)
 int cxip_pte_alloc_nomap(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 			 struct cxi_pt_alloc_opts *opts,
 			 void (*state_change_cb)(struct cxip_pte *pte,
-						 enum c_ptlte_state state),
+						 const union c_event *event),
 			 void *ctx, struct cxip_pte **pte)
 {
 	struct cxip_pte *new_pte;
@@ -668,7 +668,7 @@ int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 		   uint64_t pid_idx, bool is_multicast,
 		   struct cxi_pt_alloc_opts *opts,
 		   void (*state_change_cb)(struct cxip_pte *pte,
-					   enum c_ptlte_state state),
+					   const union c_event *event),
 		   void *ctx, struct cxip_pte **pte)
 {
 	int ret;
@@ -719,8 +719,7 @@ void cxip_pte_free(struct cxip_pte *pte)
  * cxip_pte_state_change() - Atomically update PTE state. Used during
  * STATE_CHANGE event processing.
  */
-int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
-			  enum c_ptlte_state new_state)
+int cxip_pte_state_change(struct cxip_if *dev_if, const union c_event *event)
 {
 	struct cxip_pte *pte;
 
@@ -728,10 +727,10 @@ int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
 
 	dlist_foreach_container(&dev_if->ptes,
 				struct cxip_pte, pte, pte_entry) {
-		if (pte->pte->ptn == pte_num) {
-			pte->state = new_state;
+		if (pte->pte->ptn == event->tgt_long.ptlte_index) {
+			pte->state = event->tgt_long.initiator.state_change.ptlte_state;
 			if (pte->state_change_cb)
-				pte->state_change_cb(pte, new_state);
+				pte->state_change_cb(pte, event);
 
 			fastlock_release(&dev_if->lock);
 			return FI_SUCCESS;

@@ -642,14 +642,14 @@ recv_unmap:
 
 /* PTE state-change callback.
  */
-static void _coll_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
+static void _coll_pte_cb(struct cxip_pte *pte, const union c_event *event)
 {
-	switch (state) {
+	switch (pte->state) {
 	case C_PTLTE_ENABLED:
 	case C_PTLTE_DISABLED:
 		break;
 	default:
-		CXIP_FATAL("Unexpected state received: %u\n", state);
+		CXIP_FATAL("Unexpected state received: %u\n", pte->state);
 	}
 }
 

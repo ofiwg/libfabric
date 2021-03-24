@@ -2549,14 +2549,14 @@ err:
 /*
  * cxip_recv_pte_cb() - Process receive PTE state change events.
  */
-void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
+void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 {
 	struct cxip_rxc *rxc = (struct cxip_rxc *)pte->ctx;
 	int ret __attribute__((unused));
 
 	fastlock_acquire(&rxc->lock);
 
-	switch (state) {
+	switch (pte->state) {
 	case C_PTLTE_ENABLED:
 		assert(rxc->state == RXC_FLOW_CONTROL ||
 		       rxc->state == RXC_DISABLED);
@@ -2626,7 +2626,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 		break;
 
 	default:
-		RXC_FATAL(rxc, "Unexpected state received: %u\n", state);
+		RXC_FATAL(rxc, "Unexpected state received: %u\n", pte->state);
 	}
 
 	fastlock_release(&rxc->lock);

@@ -435,7 +435,7 @@ struct cxip_pte {
 	unsigned int pte_map_count;
 
 	void (*state_change_cb)(struct cxip_pte *pte,
-				enum c_ptlte_state state);
+				const union c_event *event);
 	void *ctx;
 };
 
@@ -1575,17 +1575,16 @@ int cxip_pte_map(struct cxip_pte *pte, uint64_t pid_idx, bool is_multicast);
 int cxip_pte_alloc_nomap(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 			 struct cxi_pt_alloc_opts *opts,
 			 void (*state_change_cb)(struct cxip_pte *pte,
-						 enum c_ptlte_state state),
+						 const union c_event *event),
 			 void *ctx, struct cxip_pte **pte);
 int cxip_pte_alloc(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 		   uint64_t pid_idx, bool is_multicast,
 		   struct cxi_pt_alloc_opts *opts,
 		   void (*state_change_cb)(struct cxip_pte *pte,
-					   enum c_ptlte_state state),
+					   const union c_event *event),
 		   void *ctx, struct cxip_pte **pte);
 void cxip_pte_free(struct cxip_pte *pte);
-int cxip_pte_state_change(struct cxip_if *dev_if, uint32_t pte_num,
-			  enum c_ptlte_state new_state);
+int cxip_pte_state_change(struct cxip_if *dev_if, const union c_event *event);
 
 int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 		    struct cxi_cq_alloc_opts *cq_opts, uint16_t vni,
@@ -1633,7 +1632,7 @@ int cxip_recv_cancel(struct cxip_req *req);
 int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
 			  uint32_t nic_addr, uint32_t pid, uint8_t txc_id,
 			  uint16_t drops);
-void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state);
+void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event);
 void cxip_rxc_req_fini(struct cxip_rxc *rxc);
 int cxip_rxc_oflow_init(struct cxip_rxc *rxc);
 void cxip_rxc_oflow_fini(struct cxip_rxc *rxc);

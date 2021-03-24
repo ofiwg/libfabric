@@ -20,13 +20,13 @@
 /*
  * cxip_rdzv_pte_cb() - Process rendezvous source PTE state change events.
  */
-void cxip_rdzv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
+void cxip_rdzv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 {
-	switch (state) {
+	switch (pte->state) {
 	case C_PTLTE_ENABLED:
 		break;
 	default:
-		CXIP_FATAL("Unexpected state received: %u\n", state);
+		CXIP_FATAL("Unexpected state received: %u\n", pte->state);
 	}
 }
 

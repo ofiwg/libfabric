@@ -365,8 +365,6 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 					  const union c_event *event)
 {
 	struct cxip_req *req;
-	uint32_t pte_num;
-	enum c_ptlte_state pte_state;
 	int return_code;
 
 	switch (event->hdr.event_type) {
@@ -429,10 +427,7 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 		}
 		break;
 	case C_EVENT_STATE_CHANGE:
-		pte_num = event->tgt_long.ptlte_index;
-		pte_state = event->tgt_long.initiator.state_change.ptlte_state;
-
-		cxip_pte_state_change(cq->domain->iface, pte_num, pte_state);
+		cxip_pte_state_change(cq->domain->iface, event);
 
 		req = NULL;
 		break;
