@@ -1067,6 +1067,9 @@ struct cxip_rxc {
 
 	enum cxip_rxc_state state;
 	bool msg_offload;
+
+	/* RXC drop count used for FC accounting. */
+	int drop_count;
 };
 
 /* Request buffer structure. */

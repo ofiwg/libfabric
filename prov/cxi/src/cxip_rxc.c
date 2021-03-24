@@ -468,6 +468,7 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	rxc->oflow_bufs_max = cxip_env.oflow_buf_count;
 	rxc->req_buf_size = cxip_env.req_buf_size;
 	rxc->req_buf_count = cxip_env.req_buf_count;
+	rxc->drop_count = -1;
 
 	/* TODO make configurable */
 	rxc->min_multi_recv = CXIP_EP_MIN_MULTI_RECV;

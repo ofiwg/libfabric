@@ -2123,30 +2123,27 @@ int cxip_recv_cancel(struct cxip_req *req)
  */
 int cxip_recv_reenable(struct cxip_rxc *rxc)
 {
-	int total_drops = -1;
 	struct cxi_pte_status pte_status = {};
-	struct cxip_fc_drops *fc_drops;
 	int ret __attribute__((unused));
 
-	/* Check if we're ready to re-enable the RX queue */
-	dlist_foreach_container(&rxc->fc_drops, struct cxip_fc_drops,
-				fc_drops, rxc_entry) {
-		total_drops += fc_drops->drops;
+	if (rxc->drop_count == -1) {
+		RXC_DBG(rxc, "Waiting to process pending FC_NOTIFY messages\n");
+		return -FI_EAGAIN;
 	}
 
 	ret = cxil_pte_status(rxc->rx_pte->pte, &pte_status);
 	assert(!ret);
 
 	RXC_DBG(rxc, "Processed %d/%d drops\n",
-		total_drops + 1, pte_status.drop_count + 1);
+		rxc->drop_count + 1, pte_status.drop_count + 1);
 
-	if (total_drops != pte_status.drop_count)
+	if (rxc->drop_count != pte_status.drop_count)
 		return -FI_EAGAIN;
 
 	RXC_DBG(rxc, "Re-enabling PTE\n");
 
 	do {
-		ret = cxip_rxc_msg_enable(rxc, total_drops);
+		ret = cxip_rxc_msg_enable(rxc, rxc->drop_count);
 	} while (ret == -FI_EAGAIN);
 
 	if (ret != FI_SUCCESS)
@@ -2231,6 +2228,9 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
 		return -FI_ENOMEM;
 	}
 
+	/* TODO: Cleanup cxip_fc_drops fields. Many of the fields are redundant
+	 * with the req structure.
+	 */
 	fc_drops->rxc = rxc;
 	fc_drops->nic_addr = nic_addr;
 	fc_drops->pid = pid;
@@ -2255,6 +2255,8 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
 
 	RXC_DBG(rxc, "Processed drops: %d NIC: %#x TXC: %d RXC: %p\n", drops,
 		nic_addr, txc_id, rxc);
+
+	rxc->drop_count += drops;
 
 	/* Wait until search and delete completes before attempting to
 	 * re-enable.
@@ -2567,6 +2569,9 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 		 * successfully queued.
 		 */
 		if (rxc->state == RXC_FLOW_CONTROL) {
+			/* Reset RXC drop count. */
+			rxc->drop_count = -1;
+
 			/* Progress the control TX queues until all resume
 			 * control messages can be successfully queued.
 			 */
@@ -2605,6 +2610,12 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 		       rxc->state == RXC_PENDING_PTLTE_DISABLE);
 
 		rxc->state = RXC_ONLOAD_FLOW_CONTROL;
+
+		/* For software initiated state changes, drop count needs to
+		 * start at zero instead of -1. Add 1 to account for this.
+		 */
+		if (!event->tgt_long.initiator.state_change.sc_nic_auto)
+			rxc->drop_count++;
 
 		RXC_DBG(rxc, "Flow control detected\n");
 
