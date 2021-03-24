@@ -1085,7 +1085,7 @@ cxip_oflow_sink_cb(struct cxip_req *req, const union c_event *event)
 
 int cxip_rxc_eager_replenish(struct cxip_rxc *rxc);
 
-static int cxip_recv_onload_flow_control(struct cxip_rxc *rxc)
+static int cxip_recv_pending_ptlte_disable(struct cxip_rxc *rxc)
 {
 	int ret;
 
@@ -1093,7 +1093,8 @@ static int cxip_recv_onload_flow_control(struct cxip_rxc *rxc)
 
 	assert(rxc->state == RXC_ENABLED ||
 	       rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
-	       rxc->state == RXC_FLOW_CONTROL);
+	       rxc->state == RXC_FLOW_CONTROL ||
+	       rxc->state == RXC_PENDING_PTLTE_DISABLE);
 
 	/* Having flow control triggered while in flow control is a sign of LE
 	 * exhaustion. Software endpoint mode is required to scale past hardware
@@ -1101,7 +1102,8 @@ static int cxip_recv_onload_flow_control(struct cxip_rxc *rxc)
 	 */
 	if (rxc->state == RXC_FLOW_CONTROL) {
 		RXC_FATAL(rxc, FC_SW_EP_MSG);
-	} else if (rxc->state == RXC_ONLOAD_FLOW_CONTROL) {
+	} else if (rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
+		   rxc->state == RXC_PENDING_PTLTE_DISABLE) {
 		fastlock_release(&rxc->lock);
 		return FI_SUCCESS;
 	}
@@ -1109,7 +1111,7 @@ static int cxip_recv_onload_flow_control(struct cxip_rxc *rxc)
 	ret = cxip_pte_set_state(rxc->rx_pte, rxc->rx_cmdq, C_PTLTE_DISABLED,
 				 0);
 	if (ret == FI_SUCCESS)
-		rxc->state = RXC_ONLOAD_FLOW_CONTROL;
+		rxc->state = RXC_PENDING_PTLTE_DISABLE;
 
 	fastlock_release(&rxc->lock);
 
@@ -1166,7 +1168,7 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 			RXC_WARN(rxc,
 				 "Failed to append oflow buffer due to LE exhaustion\n");
 
-			ret = cxip_recv_onload_flow_control(rxc);
+			ret = cxip_recv_pending_ptlte_disable(rxc);
 			if (ret == FI_SUCCESS) {
 				/* Clean up dropped buffer */
 				ofi_atomic_dec32(&rxc->oflow_bufs_submitted);
@@ -1943,7 +1945,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		RXC_WARN(rxc,
 			 "Failed to append user buffer due to LE exhaustion\n");
 
-		ret = cxip_recv_onload_flow_control(rxc);
+		ret = cxip_recv_pending_ptlte_disable(rxc);
 		if (ret == FI_SUCCESS)
 			cxip_recv_req_dropped(req);
 
@@ -2598,7 +2600,8 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, enum c_ptlte_state state)
 		}
 
 		assert(rxc->state == RXC_ENABLED ||
-		       rxc->state == RXC_ONLOAD_FLOW_CONTROL);
+		       rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
+		       rxc->state == RXC_PENDING_PTLTE_DISABLE);
 
 		rxc->state = RXC_ONLOAD_FLOW_CONTROL;
 

@@ -944,6 +944,16 @@ enum cxip_rxc_state {
 	 */
 	RXC_ENABLED,
 
+	/* Software has encountered a condition which requires manual transition
+	 * of the PtlTE into disable. This state change occurs when a posted
+	 * receive could not be appended due to LE exhaustion.
+	 *
+	 * Validate state changes:
+	 * RXC_ONLOAD_FLOW_CONTROL: PtlTE disabled event has successfully been
+	 * received and onloading can begin.
+	 */
+	RXC_PENDING_PTLTE_DISABLE,
+
 	/* Flow control has occurred and the PtlTE is disabled. Software is
 	 * in the process of onloading the hardware unexpected headers to free
 	 * up LEs. User posted receives are matched against the software
