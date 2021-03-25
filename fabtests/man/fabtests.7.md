@@ -389,6 +389,9 @@ the list available for that test.
 *-F <address_format>
 : Specifies the address format.
 
+*-K
+: Fork a child process after initializing endpoint.
+
 *-b[=oob_port]*
 : Enables out-of-band (via sockets) address exchange and test
   synchronization.  A port for the out-of-band connection may be specified
