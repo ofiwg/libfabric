@@ -505,11 +505,14 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 	if (ret != FI_SUCCESS)
 		goto free_pte;
 
-	/* Number of TX credits is equal to the number of 64-byte event slots
-	 * in the EQ minus 1 for detecting full EQ.
+	/* Reserve 4 event queue slots to prevent EQ overrun.
+	 * 1. One slot for EQ status writeback
+	 * 2. One slot for default reserved_fc value
+	 * 3. One slot for EQ overrun detection.
+	 * 4. TODO: Determine why an additional slot needs to be reserved.
 	 */
-	ep_obj->ctrl_tx_credits = ((ep_obj->ctrl_tx_evtq->byte_size -
-				    C_EE_CFG_ECB_SIZE) / 64) - 1;
+	ep_obj->ctrl_tx_credits =
+		ep_obj->ctrl_tx_evtq->byte_size / C_EE_CFG_ECB_SIZE - 4;
 
 	CXIP_DBG("EP control initialized: %p\n", ep_obj);
 
