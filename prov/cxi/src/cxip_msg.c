@@ -37,7 +37,7 @@ static int cxip_recv_req_dropped(struct cxip_req *req);
 static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq);
 
 static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req);
-static void cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req);
+static int cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req);
 
 /*
  * match_put_event() - Find a matching event.
@@ -1482,6 +1482,7 @@ cxip_zbp_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_req *put_req;
 	union cxip_match_bits mb;
 	int event_rc;
+	int ret;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
@@ -1516,6 +1517,10 @@ cxip_zbp_cb(struct cxip_req *req, const union c_event *event)
 			TXC_DBG(txc, "ZBP received: %p rc: %s\n", put_req,
 				cxi_rc_to_str(event_rc));
 
+		ret = cxip_send_req_dequeue(put_req->send.txc, put_req);
+		if (ret != FI_SUCCESS)
+			return ret;
+
 		cxip_tx_id_free(txc->ep_obj, mb.tx_id);
 
 		/* The unexpected message has been matched. Generate a
@@ -1527,8 +1532,6 @@ cxip_zbp_cb(struct cxip_req *req, const union c_event *event)
 		 * counters.
 		 */
 		report_send_completion(put_req, true);
-
-		cxip_send_req_dequeue(put_req->send.txc, put_req);
 
 		ofi_atomic_dec32(&put_req->send.txc->otx_reqs);
 		cxip_cq_req_free(put_req);
@@ -3257,7 +3260,9 @@ static int cxip_send_long_cb(struct cxip_req *req, const union c_event *event)
 		 * allows flow-control recovery to be performed before
 		 * outstanding long Send operations have completed.
 		 */
-		cxip_send_req_dequeue(req->send.txc, req);
+		ret = cxip_send_req_dequeue(req->send.txc, req);
+		if (ret != FI_SUCCESS)
+			return ret;
 
 		/* The transaction is complete if:
 		 * 1. The Put failed
@@ -3625,6 +3630,24 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 	int match_complete = req->flags & FI_MATCH_COMPLETE;
 	int ret;
 
+	req->send.rc = cxi_init_event_rc(event);
+
+	/* If the message was dropped, mark the peer as disabled. Do not
+	 * generate a completion. Free associated resources. Do not free the
+	 * request (it will be used to replay the Send).
+	 */
+	if (req->send.rc == C_RC_PT_DISABLED) {
+		ret = cxip_send_req_dropped(req->send.txc, req);
+		if (ret != FI_SUCCESS)
+			ret = -FI_EAGAIN;
+
+		return ret;
+	}
+
+	ret = cxip_send_req_dequeue(req->send.txc, req);
+	if (ret != FI_SUCCESS)
+		return ret;
+
 	if (req->send.send_md) {
 		cxip_unmap(req->send.send_md);
 		req->send.send_md = NULL;
@@ -3634,8 +3657,6 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 		cxip_cq_ibuf_free(req->cq, req->send.ibuf);
 		req->send.ibuf = NULL;
 	}
-
-	req->send.rc = cxi_init_event_rc(event);
 
 	/* If MATCH_COMPLETE was requested and the the Put did not match a user
 	 * buffer, do not generate a completion event until the target notifies
@@ -3653,22 +3674,8 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 		cxip_tx_id_free(req->send.txc->ep_obj, req->send.tx_id);
 	}
 
-	/* If the message was dropped, mark the peer as disabled. Do not
-	 * generate a completion. Free associated resources. Do not free the
-	 * request (it will be used to replay the Send).
-	 */
-	if (req->send.rc == C_RC_PT_DISABLED) {
-		ret = cxip_send_req_dropped(req->send.txc, req);
-		if (ret != FI_SUCCESS)
-			ret = -FI_EAGAIN;
-
-		return ret;
-	}
-
 	/* If MATCH_COMPLETE was requested, software must manage counters. */
 	report_send_completion(req, match_complete);
-
-	cxip_send_req_dequeue(req->send.txc, req);
 
 	ofi_atomic_dec32(&req->send.txc->otx_reqs);
 	cxip_cq_req_free(req);
@@ -3952,13 +3959,17 @@ static int cxip_fc_peer_put(struct cxip_fc_peer *peer)
 {
 	int ret;
 
+	assert(peer->pending > 0);
+
 	/* Account for the completed Send */
 	if (!--peer->pending) {
 		peer->req.send.mb.drops = peer->dropped;
 
 		ret = cxip_ctrl_msg_send(&peer->req);
-		if (ret)
+		if (ret != FI_SUCCESS) {
+			peer->pending++;
 			return ret;
+		}
 
 		peer->pending_acks++;
 
@@ -4229,8 +4240,10 @@ static int cxip_send_req_queue(struct cxip_txc *txc, struct cxip_req *req)
  * Remove the Send requst from the ordered message queue. Update peer
  * flow-control state, if necessary.
  */
-static void cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req)
+static int cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req)
 {
+	int ret = FI_SUCCESS;
+
 	fastlock_acquire(&txc->lock);
 
 	if (req->send.fc_peer) {
@@ -4241,12 +4254,19 @@ static void cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req)
 			req->send.fc_peer->caddr.pid,
 			req->send.fc_peer->pending, req->send.fc_peer->dropped);
 
-		cxip_fc_peer_put(req->send.fc_peer);
+		ret = cxip_fc_peer_put(req->send.fc_peer);
+		if (ret != FI_SUCCESS)
+			goto out_unlock;
+
+		req->send.fc_peer = NULL;
 	}
 
 	dlist_remove(&req->send.txc_entry);
 
+out_unlock:
 	fastlock_release(&txc->lock);
+
+	return ret;
 }
 
 /*
