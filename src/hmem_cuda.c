@@ -300,6 +300,7 @@ static int cuda_hmem_verify_devices(void)
 int cuda_hmem_init(void)
 {
 	int ret;
+	int gdrcopy_ret;
 
 	ret = cuda_hmem_dl_init();
 	if (ret != FI_SUCCESS)
@@ -309,8 +310,8 @@ int cuda_hmem_init(void)
 	if (ret != FI_SUCCESS)
 		goto dl_cleanup;
 
-	ret = cuda_gdrcopy_hmem_init();
-	if (ret == FI_SUCCESS) {
+	gdrcopy_ret = cuda_gdrcopy_hmem_init();
+	if (gdrcopy_ret == FI_SUCCESS) {
 		hmem_cuda_use_gdrcopy = 1;
 		fi_param_define(NULL, "hmem_cuda_use_gdrcopy", FI_PARAM_BOOL,
 				"Use gdrcopy to copy data to/from GPU memory");
@@ -318,7 +319,7 @@ int cuda_hmem_init(void)
 				  &hmem_cuda_use_gdrcopy);
 	} else {
 		hmem_cuda_use_gdrcopy = 0;
-		if (ret != -FI_ENOSYS)
+		if (gdrcopy_ret != -FI_ENOSYS)
 			FI_WARN(&core_prov, FI_LOG_CORE,
 				"gdrcopy initialization failed! gdrcopy will not be used.\n");
 	}
@@ -334,7 +335,8 @@ dl_cleanup:
 int cuda_hmem_cleanup(void)
 {
 	cuda_hmem_dl_cleanup();
-	cuda_gdrcopy_hmem_cleanup();
+	if (hmem_cuda_use_gdrcopy)
+		cuda_gdrcopy_hmem_cleanup();
 	return FI_SUCCESS;
 }
 
