@@ -37,7 +37,7 @@
 #include "ofi_hmem.h"
 #include "ofi.h"
 
-#ifdef HAVE_LIBZE
+#if HAVE_LIBZE
 
 #include <dirent.h>
 #include <drm/i915_drm.h>
