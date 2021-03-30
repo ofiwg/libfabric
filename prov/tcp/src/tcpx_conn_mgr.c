@@ -130,7 +130,10 @@ static int tx_cm_data(SOCKET fd, uint8_t type, struct tcpx_cm_context *cm_ctx)
 	return FI_SUCCESS;
 }
 
-static int tcpx_ep_enable(struct tcpx_ep *ep)
+static int tcpx_ep_enable(struct tcpx_ep *ep,
+				   struct fi_eq_cm_entry *cm_entry,
+				   size_t cm_entry_sz)
+
 {
 	int ret = 0;
 
@@ -175,9 +178,14 @@ static int tcpx_ep_enable(struct tcpx_ep *ep)
 		}
 	}
 
-	/* TODO: Move writing CONNECTED event here */
+	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, cm_entry,
+				cm_entry_sz, 0);
+	if (ret < 0) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
+		return ret;
+	}
 
-	return ret;
+	return 0;
 unlock:
 	fastlock_release(&ep->lock);
 	return ret;
@@ -224,13 +232,9 @@ static void tcpx_cm_recv_resp(struct util_wait *wait,
 	ep->hdr_bswap = (cm_ctx->msg.hdr.conn_data == 1) ?
 			tcpx_hdr_none : tcpx_hdr_bswap;
 
-	ret = tcpx_ep_enable(ep);
+	ret = tcpx_ep_enable(ep, cm_entry,
+				sizeof(*cm_entry) + cm_ctx->cm_data_sz);
 	if (ret)
-		goto err2;
-
-	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, cm_entry,
-				sizeof(*cm_entry) + cm_ctx->cm_data_sz, 0);
-	if (ret < 0)
 		goto err2;
 
 	free(cm_entry);
@@ -279,12 +283,8 @@ static void tcpx_cm_send_resp(struct util_wait *wait,
 	}
 
 	cm_entry.fid =  cm_ctx->fid;
-	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED,
-				&cm_entry, sizeof(cm_entry), 0);
-	if (ret < 0)
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 
-	ret = tcpx_ep_enable(ep);
+	ret = tcpx_ep_enable(ep, &cm_entry, sizeof(cm_entry));
 	if (ret)
 		goto disable;
 
