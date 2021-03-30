@@ -146,7 +146,9 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	return 0;
 
 disable:
+	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_ep_disable(tcpx_ep, -ret);
+	fastlock_release(&tcpx_ep->lock);
 free:
 	free(cm_ctx);
 	return ret;
