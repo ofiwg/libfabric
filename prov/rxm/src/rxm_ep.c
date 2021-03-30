@@ -1559,6 +1559,62 @@ rxm_direct_send(struct rxm_ep *ep, struct rxm_conn *rxm_conn,
 	return ret;
 }
 
+static bool
+rxm_use_msg_tsend(struct rxm_ep *ep, size_t iov_count, uint8_t op)
+{
+	struct rxm_domain *domain;
+
+	domain = container_of(ep->util_ep.domain, struct rxm_domain,
+			      util_domain);
+
+	return domain->dyn_rbuf && (op == ofi_op_tagged) &&
+	       (iov_count <= ep->msg_info->tx_attr->iov_limit);
+}
+
+static ssize_t
+rxm_msg_tsend(struct rxm_ep *ep, struct rxm_conn *conn,
+	      struct rxm_tx_eager_buf *tx_buf,
+	      const struct iovec *iov, size_t count,
+	      uint64_t data, uint64_t tag)
+{
+	struct fi_msg_tagged msg;
+
+	assert(!(ep->msg_info->domain_attr->mr_mode & FI_MR_LOCAL));
+
+	if (count == 0) {
+		return !(tx_buf->flags & FI_REMOTE_CQ_DATA) ?
+			fi_tsend(conn->msg_ep, NULL, 0, NULL, 0, tag, tx_buf) :
+			fi_tsenddata(conn->msg_ep, NULL, 0, NULL, data, 0,
+				     tag, tx_buf);
+	}
+
+	if (count == 1) {
+		return !(tx_buf->flags & FI_REMOTE_CQ_DATA) ?
+			fi_tsend(conn->msg_ep, iov[0].iov_base, iov[0].iov_len,
+				 NULL, 0, tag, tx_buf) :
+			fi_tsenddata(conn->msg_ep, iov[0].iov_base,
+				     iov[0].iov_len, NULL, data, 0, tag,
+				     tx_buf);
+	}
+
+	if (!(tx_buf->flags & FI_REMOTE_CQ_DATA)) {
+		return fi_tsendv(conn->msg_ep, iov, NULL, count, 0, tag,
+				 tx_buf);
+	}
+
+	msg.addr = 0;
+	msg.context = tx_buf;
+	msg.data = data;
+	msg.desc = NULL;
+	msg.ignore = 0;
+	msg.iov_count = count;
+	msg.msg_iov = iov;
+	msg.tag = tag;
+
+	return fi_tsendmsg(conn->msg_ep, &msg, ep->msg_info->tx_attr->op_flags |
+			   FI_REMOTE_CQ_DATA);
+}
+
 static ssize_t
 rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       const struct iovec *iov, void **desc, size_t count,
@@ -1579,10 +1635,14 @@ rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	eager_buf->app_context = context;
 	eager_buf->flags = flags;
+	/* TODO: can we skip formatting hdr?  check CQ path */
 	rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
 				 flags, &eager_buf->pkt);
 
-	if (rxm_use_direct_send(rxm_ep, count, flags)) {
+	if (rxm_use_msg_tsend(rxm_ep, count, op)) {
+		ret = rxm_msg_tsend(rxm_ep, rxm_conn, eager_buf, iov, count,
+				    data, tag);
+	} else if (rxm_use_direct_send(rxm_ep, count, flags)) {
 		ret = rxm_direct_send(rxm_ep, rxm_conn, eager_buf,
 				      iov, desc, count);
 	} else {
