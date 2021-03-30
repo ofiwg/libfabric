@@ -39,24 +39,7 @@
 #include "ofi.h"
 #include "ofi_iov.h"
 
-struct ofi_hmem_ops {
-	bool initialized;
-	int (*init)(void);
-	int (*cleanup)(void);
-	int (*copy_to_hmem)(uint64_t device, void *dest, const void *src,
-			    size_t size);
-	int (*copy_from_hmem)(uint64_t device, void *dest, const void *src,
-			      size_t size);
-	bool (*is_addr_valid)(const void *addr);
-	int (*get_handle)(void *dev_buf, void **handle);
-	int (*open_handle)(void **handle, uint64_t device, void **ipc_ptr);
-	int (*close_handle)(void *ipc_ptr);
-	int (*host_register)(void *ptr, size_t size);
-	int (*host_unregister)(void *ptr);
-	int (*get_base_addr)(const void *ptr, void **base);
-};
-
-static struct ofi_hmem_ops hmem_ops[] = {
+struct ofi_hmem_ops hmem_ops[] = {
 	[FI_HMEM_SYSTEM] = {
 		.initialized = false,
 		.init = ofi_hmem_init_noop,
