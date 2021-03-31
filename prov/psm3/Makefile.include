@@ -29,7 +29,7 @@ _psm3_cppflags = \
 chksum_srcs = $(_psm3_files)
 
 if HAVE_PSM3_SRC
-_psm3_cflags = -mavx2
+_psm3_cflags =
 #include prov/psm3/psm3/Makefile.include
 _nodist_psm3_files = \
 	prov/psm3/src/psm3_revision.c
@@ -265,31 +265,32 @@ libpsm3i_la_DEPENDENCIES = \
 	libptl_self.la \
 	libpsm_hal_gen1.la
 
-EXTRA_DIST += \
+_psm3_extra_dist = \
 	prov/psm3/psm3/include/rbtree.c \
 	prov/psm3/psm3/psm_hal_gen1/psm_hal_gen1_spio.c \
 	prov/psm3/psm3/opa/opa_dwordcpy-x86_64-fast.S
+EXTRA_DIST += $(_psm3_extra_dist)
 
 chksum_srcs += \
 	$(libptl_am_la_SOURCES) $(libptl_ips_la_SOURCES) $(libptl_self_la_SOURCES) \
 	$(libuuid_la_SOURCES) $(libopa_la_SOURCES) $(libpsm_hal_gen1_la_SOURCES) \
-	$(libpsm3i_la_SOURCES) $(EXTRA_DIST)
+	$(libpsm3i_la_SOURCES) $(_psm3_extra_dist)
 
 _psm3_LIBS = libpsm3i.la
 libpsm3_la_DEPENDENCIES = libpsm3i.la
 
 all-local:
 	@echo "Building src checksum..."; \
-	chksum=`cat $(chksum_srcs) | sha1sum | cut -d' ' -f 1`; \
-	if ! grep -q $$chksum prov/psm3/src/psm3_revision.c 2>/dev/null; then \
-		sed -i "/define PSMX3_SRC_CHECKSUM/s/\".*\"/\"$$chksum\"/" prov/psm3/src/psm3_revision.c; \
+	chksum=`for file in $(chksum_srcs); do cat $(top_srcdir)/$$file; done | sha1sum | cut -d' ' -f 1`; \
+	if ! grep -q $$chksum $(top_builddir)/prov/psm3/src/psm3_revision.c 2>/dev/null; then \
+		sed -i "/define PSMX3_SRC_CHECKSUM/s/\".*\"/\"$$chksum\"/" $(top_builddir)/prov/psm3/src/psm3_revision.c; \
 		echo "SRC checksum updated to $$chksum"; \
+		timestamp=`date`; \
+		sed -i "/define PSMX3_BUILD_TIMESTAMP/s/\".*\"/\"$$timestamp\"/" $(top_builddir)/prov/psm3/src/psm3_revision.c; \
+		echo "Updated build timestamp: $$timestamp"; \
 	else \
 		echo "SRC checksum not changed: $$chksum"; \
-	fi; \
-	timestamp=`date`; \
-	sed -i "/define PSMX3_BUILD_TIMESTAMP/s/\".*\"/\"$$timestamp\"/" prov/psm3/src/psm3_revision.c; \
-	echo "Updated build timestamp: $$timestamp"
+	fi
 
 endif HAVE_PSM3_SRC
 
@@ -315,6 +316,7 @@ libpsm3_la_LIBADD = $(psm3_LIBS) $(_psm3_LIBS)
 src_libfabric_la_LIBADD += libpsm3.la
 src_libfabric_la_DEPENDENCIES += libpsm3.la
 
+if HAVE_PSM2_SRC
 .libs/libpsm3_full.lo: $(libpsm3_la_OBJECTS) $(libpsm3_la_DEPENDENCIES) $(EXTRA_libpsm3_la_DEPENDENCIES)
 	@sed -i.bak "/dependency_libs/s/='.*'/=''/" libpsm3i.la
 	$(AM_V_CCLD)$(libpsm3_la_LINK) -r $(am_libpsm3_la_rpath) $(libpsm3_la_OBJECTS) libpsm3i.la
@@ -326,7 +328,9 @@ libpsm3.la: .libs/libpsm3_exp.o
 	@mv libpsm3i.la.bak libpsm3i.la
 	$(AM_V_CCLD)$(libpsm3_la_LINK) $(am_libpsm3_la_rpath) $(libpsm3_la_OBJECTS) $(libpsm3_la_LIBADD) $(LIBS); \
 	rm -f .libs/libpsm3.a libpsm3.a; \
-	ar cru .libs/libpsm3.a  .libs/libpsm3_exp.o
+	$(AR) cru .libs/libpsm3.a .libs/libpsm3_exp.o; \
+	$(RANLIB) .libs/libpsm3.a
+endif HAVE_PSM2_SRC
 
 endif !HAVE_PSM3_DL
 

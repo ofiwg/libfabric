@@ -15,6 +15,7 @@ AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE([1.11 dist-bzip2 foreign -Wall -Werror subdir-objects parallel-tests tar-pax])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 m4_include(config/fi_check_package.m4)
+m4_include(config/fi_strip_optflags.m4)
 
 AC_CANONICAL_HOST
 
