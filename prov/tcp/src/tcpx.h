@@ -63,7 +63,7 @@
 #define _TCP_H_
 
 
-#define TCPX_MAX_INJECT		(64)
+#define TCPX_MAX_INJECT		128
 #define MAX_POLL_EVENTS		100
 #define TCPX_MIN_MULTI_RECV	16384
 #define TCPX_PORT_MAX_RANGE	(USHRT_MAX)
