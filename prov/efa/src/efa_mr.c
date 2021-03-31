@@ -151,7 +151,6 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct efa_mr *efa_mr;
 	struct ofi_mr_entry *entry;
 	int ret;
-	static const int EFA_MR_CACHE_FLUSH_CHECK = 512;
 
 	if (flags & OFI_MR_NOCACHE) {
 		ret = efa_mr_regattr(fid, attr, flags, mr_fid);
@@ -166,10 +165,6 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	domain = container_of(fid, struct efa_domain,
 			      util_domain.domain_fid.fid);
-
-	if (domain->cache->cached_cnt > 0 && domain->cache->cached_cnt % EFA_MR_CACHE_FLUSH_CHECK==0) {
-		ofi_mr_cache_flush(domain->cache, false);
-	}
 
 	ret = ofi_mr_cache_search(domain->cache, attr, &entry);
 	if (OFI_UNLIKELY(ret))
@@ -306,6 +301,9 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 
 	if (efa_mr->domain->ctx->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)
 		fi_ibv_access |= IBV_ACCESS_REMOTE_READ;
+
+	if (efa_mr->domain->cache)
+		ofi_mr_cache_flush(efa_mr->domain->cache, false);
 
 	efa_mr->ibv_mr = ibv_reg_mr(efa_mr->domain->ibv_pd, 
 				    (void *)mr_attr->mr_iov->iov_base,
