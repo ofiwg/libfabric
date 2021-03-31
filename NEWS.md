@@ -6,6 +6,33 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v1.12.1, Fri Apr 2, 2021
+========================
+
+## Core
+
+- Fix initialization checks for CUDA HMEM support
+- Fail if a memory monitor is requested but not available
+- Adjust priority of psm3 provider to prefer HW specific providers,
+  such as efa and psm2
+
+## EFA
+- Adjust timing clearing the deferred MR list to fix memory leak
+- Repost handshake packets on EAGAIN failure
+- Enable mr cache for CUDA memory
+- Support FI_HMEM and FI_LOCAL_COMM when used together
+- Skip using shm provider when FI_HMEM is requested
+
+## PSM3
+- Fix AVX2 configure check
+- Fix conflict with with-psm2-src build option to prevent duplicate
+  symbols
+- Fix checksum generation to support different builddir
+- Remove dependency on librdmacm header files
+- Use AR variable instead of calling ar directly in automake tools
+- Add missing PACK_SUFFIX to header
+
+
 v1.12.0, Mon Mar 8, 2021
 =========================
 
