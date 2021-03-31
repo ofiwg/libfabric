@@ -286,7 +286,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 		cmd.c_state.event_send_disable = 1;
 		cmd.c_state.index_ext = idx_ext;
-		cmd.c_state.eq = txc->send_cq->evtq->eqn;
+		cmd.c_state.eq = cxip_cq_tx_eqn(txc->send_cq);
 
 		if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
 			cmd.c_state.flush = 1;
@@ -362,7 +362,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		cmd.dfa = dfa;
 		cmd.remote_offset = addr;
 		cmd.request_len = len;
-		cmd.eq = txc->send_cq->evtq->eqn;
+		cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
 		cmd.user_ptr = (uint64_t)req;
 		cmd.match_bits = key;
 

@@ -80,14 +80,14 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	};
 
 	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, false, FI_TC_UNSPEC,
-			   rxc->recv_cq->evtq, &rxc->rx_cmdq);
+			   rxc->recv_cq->rx_eq.eq, &rxc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate RX CMDQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
 	}
 
 	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, true, FI_TC_UNSPEC,
-			   rxc->recv_cq->evtq, &rxc->tx_cmdq);
+			   rxc->recv_cq->rx_eq.eq, &rxc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
@@ -103,7 +103,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	}
 
 	ret = cxip_pte_alloc(rxc->ep_obj->if_dom[rxc->rx_id],
-			     rxc->recv_cq->evtq, CXIP_PTL_IDX_RXQ, false,
+			     rxc->recv_cq->rx_eq.eq, CXIP_PTL_IDX_RXQ, false,
 			     &pt_opts, cxip_recv_pte_cb, rxc, &rxc->rx_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate RX PTE: %d\n", ret);

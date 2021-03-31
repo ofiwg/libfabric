@@ -592,7 +592,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 	cmd.full_dma.command.opcode = C_CMD_GET;
 	cmd.full_dma.lac = req->recv.recv_md->md->lac;
 	cmd.full_dma.event_send_disable = 1;
-	cmd.full_dma.eq = rxc->recv_cq->evtq->eqn;
+	cmd.full_dma.eq = cxip_cq_tx_eqn(rxc->recv_cq);
 
 	mb.rdzv_lac = req->recv.rdzv_lac;
 	mb.rdzv_id_lo = req->recv.rdzv_id;
@@ -683,7 +683,7 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 
 	cmd.c_state.event_send_disable = 1;
 	cmd.c_state.index_ext = idx_ext;
-	cmd.c_state.eq = rxc->recv_cq->evtq->eqn;
+	cmd.c_state.eq = cxip_cq_tx_eqn(rxc->recv_cq);
 
 	fastlock_acquire(&rxc->tx_cmdq->lock);
 
@@ -3564,7 +3564,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	cmd.dfa = dfa;
 	cmd.local_addr = CXI_VA_TO_IOVA(send_md->md, req->send.buf);
 	cmd.request_len = req->send.len;
-	cmd.eq = txc->send_cq->evtq->eqn;
+	cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
 	cmd.user_ptr = (uint64_t)req;
 	cmd.initiator = cxip_msg_match_id(txc);
 	cmd.header_data = req->send.data;
@@ -3836,7 +3836,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 
 		cmd.c_state.event_send_disable = 1;
 		cmd.c_state.index_ext = idx_ext;
-		cmd.c_state.eq = txc->send_cq->evtq->eqn;
+		cmd.c_state.eq = cxip_cq_tx_eqn(txc->send_cq);
 		cmd.c_state.initiator = cxip_msg_match_id(txc);
 
 		/* If MATCH_COMPLETE was requested, software must manage
@@ -3886,7 +3886,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		cmd.remote_offset = 0;
 		cmd.local_addr = CXI_VA_TO_IOVA(send_md->md, req->send.buf);
 		cmd.request_len = req->send.len;
-		cmd.eq = txc->send_cq->evtq->eqn;
+		cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
 		cmd.user_ptr = (uint64_t)req;
 		cmd.initiator = cxip_msg_match_id(txc);
 		cmd.match_bits = mb.raw;

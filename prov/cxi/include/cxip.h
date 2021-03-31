@@ -796,6 +796,16 @@ struct cxip_fc_drops {
 	unsigned int retry_count;
 };
 
+/* Completion queue specific wrapper around CXI event queue. */
+struct cxip_cq_eq {
+	struct cxi_eq *eq;
+	void *buf;
+	size_t len;
+	struct cxi_md *md;
+	bool mmap;
+	unsigned int unacked_events;
+};
+
 /*
  * Completion Queue
  *
@@ -808,18 +818,18 @@ struct cxip_cq {
 	struct fi_cq_attr attr;
 	ofi_atomic32_t ref;
 
+	/* EQ used only for initiator events. */
+	struct cxip_cq_eq tx_eq;
+
+	/* EQ used only for target events. */
+	struct cxip_cq_eq rx_eq;
+
 	/* CXI specific fields. */
 	struct cxip_domain *domain;
 	struct cxip_ep_obj *ep_obj;
 	fastlock_t lock;
 	bool enabled;
-	struct cxi_eq *evtq;
-	unsigned int unacked_events;
 	unsigned int ack_batch_size;
-	bool mmap_buf;
-	void *evtq_buf;
-	size_t evtq_buf_len;
-	struct cxi_md *evtq_buf_md;
 	fastlock_t req_lock;
 	struct ofi_bufpool *req_pool;
 	struct indexer req_table;
@@ -830,6 +840,11 @@ struct cxip_cq {
 
 	struct dlist_entry dom_entry;
 };
+
+static inline uint16_t cxip_cq_tx_eqn(struct cxip_cq *cq)
+{
+	return cq->tx_eq.eq->eqn;
+}
 
 /*
  * Completion Counter

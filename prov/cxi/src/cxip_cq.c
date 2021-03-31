@@ -450,23 +450,13 @@ static struct cxip_req *cxip_cq_event_req(struct cxip_cq *cq,
 	return req;
 }
 
-/*
- * cxip_cq_progress() - Progress the CXI Completion Queue.
- *
- * Process events on the underlying Cassini event queue.
- */
-void cxip_cq_progress(struct cxip_cq *cq)
+static void cxip_cq_eq_progress(struct cxip_cq *cq, struct cxip_cq_eq *eq)
 {
 	const union c_event *event;
 	struct cxip_req *req;
 	int ret;
 
-	fastlock_acquire(&cq->lock);
-
-	if (!cq->enabled)
-		goto out;
-
-	while ((event = cxi_eq_peek_event(cq->evtq))) {
+	while ((event = cxi_eq_peek_event(eq->eq))) {
 		req = cxip_cq_event_req(cq, event);
 		if (req) {
 			ret = req->cb(req, event);
@@ -474,18 +464,33 @@ void cxip_cq_progress(struct cxip_cq *cq)
 				break;
 		}
 
-		/* Consume event. */
-		cxi_eq_next_event(cq->evtq);
+		cxi_eq_next_event(eq->eq);
 
-		cq->unacked_events++;
-		if (cq->unacked_events == cq->ack_batch_size) {
-			cxi_eq_ack_events(cq->evtq);
-			cq->unacked_events = 0;
+		eq->unacked_events++;
+		if (eq->unacked_events == cq->ack_batch_size) {
+			cxi_eq_ack_events(eq->eq);
+			eq->unacked_events = 0;
 		}
 	}
 
-	if (cxi_eq_get_drops(cq->evtq))
+	if (cxi_eq_get_drops(eq->eq))
 		CXIP_FATAL("Cassini Event Queue overflow detected.\n");
+}
+
+/*
+ * cxip_cq_progress() - Progress the CXI Completion Queue.
+ *
+ * Process events on the underlying Cassini event queue.
+ */
+void cxip_cq_progress(struct cxip_cq *cq)
+{
+	fastlock_acquire(&cq->lock);
+
+	if (!cq->enabled)
+		goto out;
+
+	cxip_cq_eq_progress(cq, &cq->tx_eq);
+	cxip_cq_eq_progress(cq, &cq->rx_eq);
 
 out:
 	fastlock_release(&cq->lock);
@@ -516,12 +521,101 @@ static const char *cxip_cq_strerror(struct fid_cq *cq, int prov_errno,
 	return cxi_rc_to_str(prov_errno);
 }
 
+static void cxip_cq_eq_fini(struct cxip_cq *cq, struct cxip_cq_eq *eq)
+{
+	cxil_destroy_evtq(eq->eq);
+
+	if (eq->md && eq->md != cq->domain->scalable_md.md)
+		cxil_unmap(eq->md);
+
+	if (eq->mmap)
+		munmap(eq->buf, eq->len);
+	else
+		free(eq->buf);
+}
+
+#define MAP_HUGE_2MB    (21 << MAP_HUGE_SHIFT)
+static int cxip_cq_eq_init(struct cxip_cq *cq, struct cxip_cq_eq *eq,
+			   size_t len)
+{
+	struct cxi_eq_attr eq_attr = {};
+	size_t eq_len;
+	bool eq_passthrough = false;
+	int ret;
+
+	assert(cq->domain->enabled);
+
+	/* Attempt to use 2 MiB hugepages. */
+	eq_len = roundup(len, 1U << 21);
+	eq->buf = mmap(NULL, eq_len, PROT_READ | PROT_WRITE, MAP_PRIVATE |
+		       MAP_ANONYMOUS | MAP_HUGETLB | MAP_HUGE_2MB, -1, 0);
+	if (eq->buf == MAP_FAILED) {
+		eq->mmap = false;
+		CXIP_DBG("Unable to map hugepage for EQ\n");
+
+		/* Fallback to aligned allocations. */
+		eq_len = roundup(len, C_PAGE_SIZE);
+		eq->buf = aligned_alloc(C_PAGE_SIZE, eq_len);
+		if (!eq->buf) {
+			CXIP_WARN("Unable to allocate EQ buffer\n");
+			return -FI_ENOMEM;
+		}
+	} else {
+		eq->mmap = true;
+
+		/* If a single hugepage is used, CXI_EQ_PASSTHROUGH can be
+		 * used.
+		 */
+		if (eq_len <= (1U << 21))
+			eq_passthrough = true;
+	}
+
+	/* Buffer has been allocated. Only map if needed. */
+	eq->len = eq_len;
+	if (eq_passthrough) {
+		eq->md = NULL;
+		eq_attr.flags |= CXI_EQ_PASSTHROUGH;
+	} else if (cq->domain->scalable_iomm) {
+		eq->md = cq->domain->scalable_md.md;
+	} else {
+		ret = cxil_map(cq->domain->lni->lni, eq->buf, eq->len,
+			       CXI_MAP_PIN | CXI_MAP_WRITE | CXI_MAP_IOVA_ALLOC,
+			       NULL, &eq->md);
+		if (ret) {
+			CXIP_WARN("Unable to map EQ buffer: %d\n", ret);
+			goto err_free_eq_buf;
+		}
+	}
+
+	eq_attr.queue = eq->buf;
+	eq_attr.queue_len = eq->len;
+	eq_attr.flags |= CXI_EQ_TGT_LONG | CXI_EQ_EC_DISABLE;
+	ret = cxil_alloc_evtq(cq->domain->lni->lni, eq->md, &eq_attr, NULL,
+			      NULL, &eq->eq);
+	if (ret) {
+		CXIP_WARN("Failed to allocated EQ: %d\n", ret);
+		goto err_unmap_eq_buf;
+	}
+
+	return FI_SUCCESS;
+
+err_unmap_eq_buf:
+	if (eq->md && eq->md != cq->domain->scalable_md.md)
+		cxil_unmap(eq->md);
+err_free_eq_buf:
+	if (eq->mmap)
+		munmap(eq->buf, eq->len);
+	else
+		free(eq->buf);
+
+	return ret;
+}
+
 /*
  * cxip_cq_enable() - Assign hardware resources to the CQ.
  */
 int cxip_cq_enable(struct cxip_cq *cxi_cq)
 {
-	struct cxi_eq_attr eq_attr = {};
 	struct ofi_bufpool_attr bp_attrs = {};
 	int ret = FI_SUCCESS;
 
@@ -531,46 +625,17 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 		goto unlock;
 
 	/* TODO set EQ size based on usage. */
-	cxi_cq->evtq_buf_len = 2*1024*1024;
-
-	cxi_cq->evtq_buf = mmap(NULL, cxi_cq->evtq_buf_len,
-				PROT_READ | PROT_WRITE,
-				MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
-				-1, 0);
-	if (cxi_cq->evtq_buf == MAP_FAILED) {
-		CXIP_DBG("Unable to map hugepage for EQ\n");
-
-		cxi_cq->evtq_buf = aligned_alloc(C_PAGE_SIZE,
-						 cxi_cq->evtq_buf_len);
-		if (!cxi_cq->evtq_buf) {
-			CXIP_WARN("Unable to allocate EQ buffer\n");
-			goto unlock;
-		}
-
-		ret = cxil_map(cxi_cq->domain->lni->lni,
-			       cxi_cq->evtq_buf, cxi_cq->evtq_buf_len,
-			       CXI_MAP_PIN | CXI_MAP_WRITE,
-			       NULL, &cxi_cq->evtq_buf_md);
-		if (ret) {
-			CXIP_WARN("Unable to MAP MR EVTQ buffer, ret: %d\n",
-				  ret);
-			goto free_evtq_buf;
-		}
-	} else {
-		cxi_cq->mmap_buf = true;
-		eq_attr.flags |= CXI_EQ_PASSTHROUGH;
+	ret = cxip_cq_eq_init(cxi_cq, &cxi_cq->tx_eq, 2 * 1024 * 1024);
+	if (ret) {
+		CXIP_WARN("Failed to initialize TX EQ: %d\n", ret);
+		goto unlock;
 	}
 
-	eq_attr.queue = cxi_cq->evtq_buf,
-	eq_attr.queue_len = cxi_cq->evtq_buf_len,
-	eq_attr.flags |= CXI_EQ_TGT_LONG | CXI_EQ_EC_DISABLE;
-
-	ret = cxil_alloc_evtq(cxi_cq->domain->lni->lni, cxi_cq->evtq_buf_md,
-			      &eq_attr, NULL, NULL, &cxi_cq->evtq);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Failed to allocate EQ, ret: %d\n", ret);
-		ret = -FI_EDOMAIN;
-		goto unmap_evtq_buf;
+	/* TODO set EQ size based on usage. */
+	ret = cxip_cq_eq_init(cxi_cq, &cxi_cq->rx_eq, 2 * 1024 * 1024);
+	if (ret) {
+		CXIP_WARN("Failed to initialize RX EQ: %d\n", ret);
+		goto err_tx_eq_fini;
 	}
 
 	bp_attrs.size = sizeof(struct cxip_req);
@@ -581,7 +646,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	ret = ofi_bufpool_create_attr(&bp_attrs, &cxi_cq->req_pool);
 	if (ret) {
 		ret = -FI_ENOMEM;
-		goto free_evtq;
+		goto err_rx_eq_fini;
 	}
 
 	memset(&cxi_cq->req_table, 0, sizeof(cxi_cq->req_table));
@@ -598,31 +663,24 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	ret = ofi_bufpool_create_attr(&bp_attrs, &cxi_cq->ibuf_pool);
 	if (ret) {
 		ret = -FI_ENOMEM;
-		goto free_req_pool;
+		goto err_free_req_pool;
 	}
 
 	cxi_cq->enabled = true;
-	fastlock_release(&cxi_cq->lock);
 	dlist_init(&cxi_cq->req_list);
 
-	CXIP_DBG("CQ enabled: %p (EQ: %d)\n", cxi_cq, cxi_cq->evtq->eqn);
+	fastlock_release(&cxi_cq->lock);
+
+	CXIP_DBG("CQ enabled: %p (TX_EQ:%d RX_EQ:%d)\n", cxi_cq,
+		 cxi_cq->tx_eq.eq->eqn, cxi_cq->rx_eq.eq->eqn);
 	return FI_SUCCESS;
 
-free_req_pool:
+err_free_req_pool:
 	ofi_bufpool_destroy(cxi_cq->req_pool);
-free_evtq:
-	cxil_destroy_evtq(cxi_cq->evtq);
-unmap_evtq_buf:
-	if (!cxi_cq->mmap_buf) {
-		ret = cxil_unmap(cxi_cq->evtq_buf_md);
-		if (ret)
-			CXIP_WARN("Failed to unmap evtq MD, ret: %d\n", ret);
-	}
-free_evtq_buf:
-	if (cxi_cq->mmap_buf)
-		munmap(cxi_cq->evtq_buf, cxi_cq->evtq_buf_len);
-	else
-		free(cxi_cq->evtq_buf);
+err_rx_eq_fini:
+	cxip_cq_eq_fini(cxi_cq, &cxi_cq->rx_eq);
+err_tx_eq_fini:
+	cxip_cq_eq_fini(cxi_cq, &cxi_cq->tx_eq);
 unlock:
 	fastlock_release(&cxi_cq->lock);
 
@@ -634,8 +692,6 @@ unlock:
  */
 static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 {
-	int ret;
-
 	fastlock_acquire(&cxi_cq->lock);
 
 	if (!cxi_cq->enabled)
@@ -647,19 +703,8 @@ static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 
 	ofi_bufpool_destroy(cxi_cq->req_pool);
 
-	ret = cxil_destroy_evtq(cxi_cq->evtq);
-	if (ret)
-		CXIP_WARN("Failed to free evtq, ret: %d\n", ret);
-
-	if (cxi_cq->mmap_buf) {
-		munmap(cxi_cq->evtq_buf, cxi_cq->evtq_buf_len);
-	} else {
-		ret = cxil_unmap(cxi_cq->evtq_buf_md);
-		if (ret)
-			CXIP_WARN("Failed to unmap evtq MD, ret: %d\n",
-				  ret);
-		free(cxi_cq->evtq_buf);
-	}
+	cxip_cq_eq_fini(cxi_cq, &cxi_cq->rx_eq);
+	cxip_cq_eq_fini(cxi_cq, &cxi_cq->tx_eq);
 
 	cxi_cq->enabled = false;
 

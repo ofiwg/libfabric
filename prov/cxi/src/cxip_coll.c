@@ -320,7 +320,7 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 	cmd.c_state.restricted = 1;
 	cmd.c_state.reduction = is_mcast;
 	cmd.c_state.index_ext = index_ext;
-	cmd.c_state.eq = ep_obj->coll.tx_cq->evtq->eqn;
+	cmd.c_state.eq = cxip_cq_tx_eqn(ep_obj->coll.tx_cq);
 	cmd.c_state.initiator = CXI_MATCH_ID(pid_bits, ep_obj->src_addr.pid,
 					     ep_obj->src_addr.nic);
 
@@ -1980,7 +1980,7 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	ofi_atomic_initialize32(&coll_pte->buf_cnt, 0);
 	ofi_atomic_initialize32(&coll_pte->buf_swap_cnt, 0);
 
-	ret = cxip_pte_alloc(ep_obj->if_dom[0], ep_obj->coll.rx_cq->evtq,
+	ret = cxip_pte_alloc(ep_obj->if_dom[0], ep_obj->coll.rx_cq->rx_eq.eq,
 			     pid_idx, is_multicast, &pt_opts, _coll_pte_cb,
 			     coll_pte, &coll_pte->pte);
 	if (ret)
