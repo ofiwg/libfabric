@@ -125,6 +125,11 @@ extern struct util_prov rxm_util_prov;
 extern struct fi_ops_rma rxm_ops_rma;
 extern struct fi_ops_atomic rxm_ops_atomic;
 
+enum {
+	RXM_MSG_RXTX_SIZE = 128,
+	RXM_MSG_SRX_SIZE = 4096
+};
+
 extern size_t rxm_msg_tx_size;
 extern size_t rxm_msg_rx_size;
 extern size_t rxm_cm_progress_interval;
