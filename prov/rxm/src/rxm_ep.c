@@ -1635,17 +1635,22 @@ rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	eager_buf->app_context = context;
 	eager_buf->flags = flags;
-	/* TODO: can we skip formatting hdr?  check CQ path */
-	rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
-				 flags, &eager_buf->pkt);
 
 	if (rxm_use_msg_tsend(rxm_ep, count, op)) {
+		/* hdr isn't sent, but op is accessed handling completion */
+		eager_buf->pkt.hdr.op = op;
 		ret = rxm_msg_tsend(rxm_ep, rxm_conn, eager_buf, iov, count,
 				    data, tag);
 	} else if (rxm_use_direct_send(rxm_ep, count, flags)) {
+		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
+					 flags, &eager_buf->pkt);
+
 		ret = rxm_direct_send(rxm_ep, rxm_conn, eager_buf,
 				      iov, desc, count);
 	} else {
+		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
+					 flags, &eager_buf->pkt);
+
 		iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
 		ret = ofi_copy_from_hmem_iov(eager_buf->pkt.data,
 					     eager_buf->pkt.hdr.size,
