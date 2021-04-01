@@ -1105,23 +1105,6 @@ void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 }
 
 static ssize_t
-rxm_ep_msg_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		       struct rxm_pkt *tx_pkt, size_t pkt_size,
-		       ofi_cntr_inc_func cntr_inc_func)
-{
-	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting inject with length: %zu"
-	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_pkt->hdr.tag);
-
-	assert((tx_pkt->hdr.flags & FI_REMOTE_CQ_DATA) || !tx_pkt->hdr.flags);
-	assert(pkt_size <= rxm_ep->inject_limit);
-
-	ssize_t ret = fi_inject(rxm_conn->msg_ep, tx_pkt, pkt_size, 0);
-	if (ret == -FI_EAGAIN)
-		rxm_ep_do_progress(&rxm_ep->util_ep);
-	return ret;
-}
-
-static ssize_t
 rxm_ep_msg_normal_send(struct rxm_conn *rxm_conn, struct rxm_pkt *tx_pkt,
 		       size_t pkt_size, void *desc, void *context)
 {
@@ -1215,17 +1198,22 @@ rxm_ep_rndv_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_WRITE_DATA_WAIT);
 		else
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_READ_DONE_WAIT);
-		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt,
-					     pkt_size, ofi_cntr_inc_noop);
+
+		ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
 	} else {
 		tx_buf->hdr.state = RXM_RNDV_TX;
 
 		ret = rxm_ep_msg_normal_send(rxm_conn, &tx_buf->pkt, pkt_size,
 					     tx_buf->hdr.desc, tx_buf);
 	}
-	if (ret)
+
+	if (ret) {
+		if (ret == -FI_EAGAIN)
+			rxm_ep_do_progress(&rxm_ep->util_ep);
 		goto err;
+	}
 	return FI_SUCCESS;
+
 err:
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 	       "Transmit for MSG provider failed\n");
@@ -1469,9 +1457,7 @@ rxm_ep_inject_send_fast(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
 		inject_pkt->hdr.size = len;
 		memcpy(inject_pkt->data, buf, len);
-		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, inject_pkt,
-					     pkt_size,
-					     rxm_ep->util_ep.tx_cntr_inc);
+		ret = fi_inject(rxm_conn->msg_ep, inject_pkt, pkt_size, 0);
 	} else {
 		ret = rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len,
 					    pkt_size, inject_pkt->hdr.data,
@@ -1506,9 +1492,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					 flags, &tx_buf->pkt);
 		memcpy(tx_buf->pkt.data, buf, len);
 
-		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt,
-					     pkt_size,
-					     rxm_ep->util_ep.tx_cntr_inc);
+		ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
 		ofi_buf_free(tx_buf);
 	} else {
 		ret = rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len,
