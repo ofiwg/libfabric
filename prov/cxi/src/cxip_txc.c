@@ -361,6 +361,7 @@ void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc)
 		if (cxip_is_trig_req(req)) {
 			ofi_atomic_dec32(&txc->otx_reqs);
 			cxip_unmap(req->send.send_md);
+			cxip_cq_put_tx_credit(req->cq);
 			cxip_cq_req_free(req);
 		}
 	}

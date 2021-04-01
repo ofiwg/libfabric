@@ -149,8 +149,6 @@
 #define	CXIP_COLL_MAX_TX_SIZE		32
 #define	CXIP_COLL_SEQNO_MASK		((1 << 10) - 1)
 
-#define CXIP_OTX_REQS_POLL_THRESH	256
-
 extern char cxip_prov_name[];
 extern struct fi_provider cxip_prov;
 extern struct util_prov cxip_util_prov;
@@ -607,6 +605,7 @@ struct cxip_req_recv {
 	uint32_t rdzv_initiator;	// Rendezvous initiator used of mrecvs
 	uint32_t rget_nic;
 	uint32_t rget_pid;
+	bool tx_credit_used;
 	bool canceled;			// Request canceled?
 	bool unlinked;
 	bool multi_recv;
@@ -707,6 +706,7 @@ struct cxip_req {
 	struct dlist_entry cq_entry;
 	void *req_ctx;
 	struct cxip_cq *cq;		// request CQ
+	bool cq_tx_credit;		// TX credit taken.
 	int req_id;			// fast lookup in index table
 	int (*cb)(struct cxip_req *req, const union c_event *evt);
 					// completion event callback
@@ -823,6 +823,9 @@ struct cxip_cq {
 
 	/* EQ used only for target events. */
 	struct cxip_cq_eq rx_eq;
+
+	/* Credits used to prevent TX EQ overrun. */
+	ofi_atomic32_t tx_credits;
 
 	/* CXI specific fields. */
 	struct cxip_domain *domain;
@@ -1684,6 +1687,8 @@ void cxip_rxc_free(struct cxip_rxc *rxc);
 int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);
 
+int cxip_cq_get_tx_credit(struct cxip_cq *cq);
+void cxip_cq_put_tx_credit(struct cxip_cq *cq);
 struct cxip_md *cxip_cq_ibuf_md(void *ibuf);
 void *cxip_cq_ibuf_alloc(struct cxip_cq *cq);
 void cxip_cq_ibuf_free(struct cxip_cq *cq, void *ibuf);

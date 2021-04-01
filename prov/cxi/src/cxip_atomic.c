@@ -268,6 +268,8 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 	int success_event = (req->flags & FI_COMPLETION);
 	struct cxip_txc *txc = req->amo.txc;
 
+	cxip_cq_put_tx_credit(txc->send_cq);
+
 	if (req->amo.result_md)
 		cxip_unmap(req->amo.result_md);
 
@@ -389,6 +391,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	char hmem_compare[16];
 	char hmem_oper1[16];
 	bool flush = flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE);
+	bool tx_credit = false;
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -463,15 +466,26 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	 * 4. Implementing Atomic Write in software (using a fetching swap)
 	 *
 	 * State is not tracked for non-fetching, inject-style transfers that
-	 * can be implemented with an IDC.
+	 * can be implemented with an IDC. Any tracked request needs a TX
+	 * credit.
 	 */
 	if (result || !idc || (flags & FI_COMPLETION) ||
 	    msg->op == FI_ATOMIC_WRITE) {
+		ret = cxip_cq_get_tx_credit(txc->send_cq);
+		if (ret != FI_SUCCESS) {
+			TXC_DBG(txc, "CQ TX credits exhausted\n");
+			return ret;
+		}
+		tx_credit = true;
+
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
+			ret = -FI_ENOMEM;
 			TXC_WARN(txc, "Failed to allocate request\n");
-			return -FI_ENOMEM;
+			goto return_tx_credit;
 		}
+
+		req->cq_tx_credit = true;
 
 		/* Values set here are passed back to the user through the CQ */
 		if (flags & FI_COMPLETION)
@@ -855,10 +869,6 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		oper1, msg->addr, msg->context);
 #endif
 
-	/* Do progress inline if there are a lot of outstanding operations. */
-	if (ofi_atomic_get32(&txc->otx_reqs) > CXIP_OTX_REQS_POLL_THRESH)
-		cxip_cq_progress(txc->send_cq);
-
 	return FI_SUCCESS;
 
 unlock_cmdq:
@@ -874,6 +884,9 @@ unmap_oper1:
 free_req:
 	if (req)
 		cxip_cq_req_free(req);
+return_tx_credit:
+	if (tx_credit)
+		cxip_cq_put_tx_credit(txc->send_cq);
 
 	return ret;
 }
