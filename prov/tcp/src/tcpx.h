@@ -62,17 +62,10 @@
 #ifndef _TCP_H_
 #define _TCP_H_
 
-#define TCPX_HDR_VERSION	3
-#define TCPX_CTRL_HDR_VERSION	3
 
-#define TCPX_MAX_CM_DATA_SIZE	(1 << 8)
-#define TCPX_IOV_LIMIT		(4)
-#define TCPX_MAX_INJECT_SZ	(64)
-
+#define TCPX_MAX_INJECT		128
 #define MAX_POLL_EVENTS		100
-
 #define TCPX_MIN_MULTI_RECV	16384
-
 #define TCPX_PORT_MAX_RANGE	(USHRT_MAX)
 
 extern struct fi_provider	tcpx_prov;
@@ -83,7 +76,29 @@ extern int			tcpx_nodelay;
 struct tcpx_xfer_entry;
 struct tcpx_ep;
 
-enum tcpx_xfer_op_codes {
+
+/*
+ * Wire protocol structures and definitions
+ */
+
+#define TCPX_CTRL_HDR_VERSION	3
+
+enum {
+	TCPX_MAX_CM_DATA_SIZE = (1 << 8)
+};
+
+struct tcpx_cm_msg {
+	struct ofi_ctrl_hdr hdr;
+	char data[TCPX_MAX_CM_DATA_SIZE];
+};
+
+#define TCPX_HDR_VERSION	3
+
+enum {
+	TCPX_IOV_LIMIT = 4
+};
+
+enum tcpx_op_code {
 	TCPX_OP_MSG_SEND,
 	TCPX_OP_MSG_RECV,
 	TCPX_OP_MSG_RESP,
@@ -95,6 +110,48 @@ enum tcpx_xfer_op_codes {
 	TCPX_OP_CODE_MAX,
 };
 
+/* Flags */
+#define TCPX_REMOTE_CQ_DATA	(1 << 0)
+/* not used TCPX_TRANSMIT_COMPLETE	(1 << 1) */
+#define TCPX_DELIVERY_COMPLETE	(1 << 2)
+#define TCPX_COMMIT_COMPLETE	(1 << 3)
+#define TCPX_TAGGED		(1 << 7)
+
+struct tcpx_base_hdr {
+	uint8_t			version;
+	uint8_t			op;
+	uint16_t		flags;
+	uint8_t			op_data;
+	uint8_t			rma_iov_cnt;
+	uint8_t			payload_off;
+	uint8_t			rsvd;
+	uint64_t		size;
+};
+
+struct tcpx_tag_hdr {
+	struct tcpx_base_hdr	base_hdr;
+	uint64_t		tag;
+};
+
+struct tcpx_cq_data_hdr {
+	struct tcpx_base_hdr 	base_hdr;
+	uint64_t		cq_data;
+};
+
+struct tcpx_tag_data_hdr {
+	struct tcpx_cq_data_hdr	cq_data_hdr;
+	uint64_t		tag;
+};
+
+/* Maximum header is scatter RMA with CQ data */
+#define TCPX_MAX_HDR (sizeof(struct tcpx_cq_data_hdr) + \
+		     sizeof(struct ofi_rma_iov) * TCPX_IOV_LIMIT)
+
+/*
+ * End wire protocol definitions
+ */
+
+
 enum tcpx_cm_state {
 	TCPX_CM_LISTENING,
 	TCPX_CM_CONNECTING,
@@ -103,11 +160,6 @@ enum tcpx_cm_state {
 	TCPX_CM_REQ_RVCD,
 	TCPX_CM_RESP_READY,
 	/* CM context is freed once connected */
-};
-
-struct tcpx_cm_msg {
-	struct ofi_ctrl_hdr hdr;
-	char data[TCPX_MAX_CM_DATA_SIZE];
 };
 
 struct tcpx_cm_context {
@@ -145,32 +197,10 @@ enum tcpx_state {
 	TCPX_DISCONNECTED,
 };
 
-struct tcpx_base_hdr {
-	uint8_t			version;
-	uint8_t			op;
-	uint16_t		flags;
-	uint8_t			op_data;
-	uint8_t			rma_iov_cnt;
-	uint8_t			payload_off;
-	uint8_t			rsvd;
-	uint64_t		size;
-};
-
-struct tcpx_cq_data_hdr {
-	struct tcpx_base_hdr 	base_hdr;
-	uint64_t		cq_data;
-};
-
-#define TCPX_MAX_HDR_SZ (sizeof(struct tcpx_base_hdr) + 	\
-			 sizeof(uint64_t) +			\
-			 sizeof(struct ofi_rma_iov) *		\
-			 TCPX_IOV_LIMIT +			\
-			 TCPX_MAX_INJECT_SZ)
-
 struct tcpx_cur_rx_msg {
 	union {
 		struct tcpx_base_hdr	base_hdr;
-		uint8_t		       	max_hdr[TCPX_MAX_HDR_SZ];
+		uint8_t			max_hdr[TCPX_MAX_HDR];
 	} hdr;
 	size_t			hdr_len;
 	size_t			done_len;
@@ -229,7 +259,9 @@ struct tcpx_xfer_entry {
 	union {
 		struct tcpx_base_hdr	base_hdr;
 		struct tcpx_cq_data_hdr cq_data_hdr;
-		uint8_t		       	max_hdr[TCPX_MAX_HDR_SZ];
+		struct tcpx_tag_data_hdr tag_data_hdr;
+		struct tcpx_tag_hdr	tag_hdr;
+		uint8_t		       	max_hdr[TCPX_MAX_HDR + TCPX_MAX_INJECT];
 	} hdr;
 	size_t			iov_cnt;
 	struct iovec		iov[TCPX_IOV_LIMIT+1];
@@ -256,7 +288,7 @@ static inline struct ofi_ops_dynamic_rbuf *tcpx_dynamic_rbuf(struct tcpx_ep *ep)
 
 struct tcpx_buf_pool {
 	struct ofi_bufpool	*pool;
-	enum tcpx_xfer_op_codes	op_type;
+	enum tcpx_op_code	op_type;
 };
 
 struct tcpx_cq {
@@ -299,7 +331,8 @@ void tcpx_cq_report_success(struct util_cq *cq,
 void tcpx_cq_report_error(struct util_cq *cq,
 			  struct tcpx_xfer_entry *xfer_entry,
 			  int err);
-
+void tcpx_get_cq_info(struct tcpx_xfer_entry *entry, uint64_t *flags,
+		      uint64_t *data, uint64_t *tag);
 
 ssize_t tcpx_recv_hdr(SOCKET sock, struct stage_buf *stage_buf,
 		      struct tcpx_cur_rx_msg *cur_rx_msg);
@@ -308,7 +341,7 @@ int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
 int tcpx_read_to_buffer(SOCKET sock, struct stage_buf *stage_buf);
 
 struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq,
-					      enum tcpx_xfer_op_codes type);
+					      enum tcpx_op_code type);
 struct tcpx_xfer_entry *tcpx_srx_entry_alloc(struct tcpx_rx_ctx *srx_ctx,
 					     struct tcpx_ep *ep);
 void tcpx_xfer_entry_free(struct tcpx_cq *tcpx_cq,

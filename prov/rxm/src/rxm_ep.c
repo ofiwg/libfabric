@@ -1105,23 +1105,6 @@ void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 }
 
 static ssize_t
-rxm_ep_msg_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		       struct rxm_pkt *tx_pkt, size_t pkt_size,
-		       ofi_cntr_inc_func cntr_inc_func)
-{
-	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Posting inject with length: %zu"
-	       " tag: 0x%" PRIx64 "\n", pkt_size, tx_pkt->hdr.tag);
-
-	assert((tx_pkt->hdr.flags & FI_REMOTE_CQ_DATA) || !tx_pkt->hdr.flags);
-	assert(pkt_size <= rxm_ep->inject_limit);
-
-	ssize_t ret = fi_inject(rxm_conn->msg_ep, tx_pkt, pkt_size, 0);
-	if (ret == -FI_EAGAIN)
-		rxm_ep_do_progress(&rxm_ep->util_ep);
-	return ret;
-}
-
-static ssize_t
 rxm_ep_msg_normal_send(struct rxm_conn *rxm_conn, struct rxm_pkt *tx_pkt,
 		       size_t pkt_size, void *desc, void *context)
 {
@@ -1215,17 +1198,22 @@ rxm_ep_rndv_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_WRITE_DATA_WAIT);
 		else
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_READ_DONE_WAIT);
-		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt,
-					     pkt_size, ofi_cntr_inc_noop);
+
+		ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
 	} else {
 		tx_buf->hdr.state = RXM_RNDV_TX;
 
 		ret = rxm_ep_msg_normal_send(rxm_conn, &tx_buf->pkt, pkt_size,
 					     tx_buf->hdr.desc, tx_buf);
 	}
-	if (ret)
+
+	if (ret) {
+		if (ret == -FI_EAGAIN)
+			rxm_ep_do_progress(&rxm_ep->util_ep);
 		goto err;
+	}
 	return FI_SUCCESS;
+
 err:
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 	       "Transmit for MSG provider failed\n");
@@ -1327,19 +1315,21 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep,
 }
 
 static ssize_t
-rxm_ep_sar_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		   void *context, uint8_t count, const struct iovec *iov,
-		   size_t data_len, size_t segs_cnt, uint64_t data,
-		   uint64_t flags, uint64_t tag, uint8_t op,
-		   enum fi_hmem_iface iface, uint64_t device)
+rxm_send_sar(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+	     const struct iovec *iov, void **desc, uint8_t count,
+	     void *context, uint64_t data, uint64_t flags, uint64_t tag,
+	     uint8_t op, size_t data_len, size_t segs_cnt)
 {
 	struct rxm_tx_sar_buf *tx_buf, *first_tx_buf;
 	size_t i, iov_offset = 0, remain_len = data_len;
-	ssize_t ret;
 	struct rxm_deferred_tx_entry *def_tx;
+	enum fi_hmem_iface iface;
+	uint64_t device;
 	uint64_t msg_id = 0;
+	ssize_t ret;
 
 	assert(segs_cnt >= 2);
+	iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
 
 	first_tx_buf = rxm_ep_sar_tx_prepare_segment(rxm_ep, rxm_conn, context,
 						     data_len, rxm_eager_limit,
@@ -1455,6 +1445,26 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return ret;
 }
 
+static bool
+rxm_use_msg_tinject(struct rxm_ep *ep, uint8_t op)
+{
+	struct rxm_domain *domain;
+
+	domain = container_of(ep->util_ep.domain, struct rxm_domain,
+			      util_domain);
+
+	return domain->dyn_rbuf && (op == ofi_op_tagged);
+}
+
+static ssize_t
+rxm_msg_tinject(struct fid_ep *msg_ep, const void *buf, size_t len,
+		bool cq_data, uint64_t data, uint64_t tag)
+{
+	return cq_data ?
+		fi_tinject(msg_ep, buf, len, 0, tag) :
+		fi_tinjectdata(msg_ep, buf, len, data, 0, tag);
+}
+
 static ssize_t
 rxm_ep_inject_send_fast(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			const void *buf, size_t len, struct rxm_pkt *inject_pkt)
@@ -1465,11 +1475,17 @@ rxm_ep_inject_send_fast(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
 	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
+		if (rxm_use_msg_tinject(rxm_ep, inject_pkt->hdr.op)) {
+			return rxm_msg_tinject(rxm_conn->msg_ep, buf, len,
+					       inject_pkt->hdr.flags &
+							FI_REMOTE_CQ_DATA,
+					       inject_pkt->hdr.data,
+					       inject_pkt->hdr.tag);
+		}
+
 		inject_pkt->hdr.size = len;
 		memcpy(inject_pkt->data, buf, len);
-		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, inject_pkt,
-					     pkt_size,
-					     rxm_ep->util_ep.tx_cntr_inc);
+		ret = fi_inject(rxm_conn->msg_ep, inject_pkt, pkt_size, 0);
 	} else {
 		ret = rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len,
 					    pkt_size, inject_pkt->hdr.data,
@@ -1491,30 +1507,32 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	if (pkt_size <= rxm_ep->inject_limit &&
-	    !rxm_ep->util_ep.tx_cntr) {
+	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
+		if (rxm_use_msg_tinject(rxm_ep, op)) {
+			return rxm_msg_tinject(rxm_conn->msg_ep, buf, len,
+					       flags & FI_REMOTE_CQ_DATA,
+					       data, tag);
+		}
+
 		tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (!tx_buf) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of eager inject buffers\n");
-			ret = -FI_EAGAIN;
-			goto unlock;
+			return -FI_EAGAIN;
 		}
+
 		rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag,
 					 flags, &tx_buf->pkt);
 		memcpy(tx_buf->pkt.data, buf, len);
 
-		ret = rxm_ep_msg_inject_send(rxm_ep, rxm_conn, &tx_buf->pkt,
-					     pkt_size,
-					     rxm_ep->util_ep.tx_cntr_inc);
+		ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
 		ofi_buf_free(tx_buf);
 	} else {
 		ret = rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len,
 					    pkt_size, data, flags, tag, op);
 	}
-unlock:
-	return ret;
 
+	return ret;
 }
 
 static bool
@@ -1557,18 +1575,128 @@ rxm_direct_send(struct rxm_ep *ep, struct rxm_conn *rxm_conn,
 	return ret;
 }
 
+static bool
+rxm_use_msg_tsend(struct rxm_ep *ep, size_t iov_count, uint8_t op)
+{
+	struct rxm_domain *domain;
+
+	domain = container_of(ep->util_ep.domain, struct rxm_domain,
+			      util_domain);
+
+	return domain->dyn_rbuf && (op == ofi_op_tagged) &&
+	       (iov_count <= ep->msg_info->tx_attr->iov_limit);
+}
+
 static ssize_t
-rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		   const struct iovec *iov, void **desc, size_t count,
-		   void *context, uint64_t data, uint64_t flags, uint64_t tag,
-		   uint8_t op)
+rxm_msg_tsend(struct rxm_ep *ep, struct rxm_conn *conn,
+	      struct rxm_tx_eager_buf *tx_buf,
+	      const struct iovec *iov, size_t count,
+	      uint64_t data, uint64_t tag)
+{
+	struct fi_msg_tagged msg;
+
+	assert(!(ep->msg_info->domain_attr->mr_mode & FI_MR_LOCAL));
+
+	if (count == 0) {
+		return !(tx_buf->flags & FI_REMOTE_CQ_DATA) ?
+			fi_tsend(conn->msg_ep, NULL, 0, NULL, 0, tag, tx_buf) :
+			fi_tsenddata(conn->msg_ep, NULL, 0, NULL, data, 0,
+				     tag, tx_buf);
+	}
+
+	if (count == 1) {
+		return !(tx_buf->flags & FI_REMOTE_CQ_DATA) ?
+			fi_tsend(conn->msg_ep, iov[0].iov_base, iov[0].iov_len,
+				 NULL, 0, tag, tx_buf) :
+			fi_tsenddata(conn->msg_ep, iov[0].iov_base,
+				     iov[0].iov_len, NULL, data, 0, tag,
+				     tx_buf);
+	}
+
+	if (!(tx_buf->flags & FI_REMOTE_CQ_DATA)) {
+		return fi_tsendv(conn->msg_ep, iov, NULL, count, 0, tag,
+				 tx_buf);
+	}
+
+	msg.addr = 0;
+	msg.context = tx_buf;
+	msg.data = data;
+	msg.desc = NULL;
+	msg.ignore = 0;
+	msg.iov_count = count;
+	msg.msg_iov = iov;
+	msg.tag = tag;
+
+	return fi_tsendmsg(conn->msg_ep, &msg, ep->msg_info->tx_attr->op_flags |
+			   FI_REMOTE_CQ_DATA);
+}
+
+static ssize_t
+rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+	       const struct iovec *iov, void **desc, size_t count,
+	       void *context, uint64_t data, uint64_t flags, uint64_t tag,
+	       uint8_t op, size_t data_len, size_t total_len)
 {
 	struct rxm_tx_eager_buf *eager_buf;
-	struct rxm_tx_rndv_buf *rndv_buf;
-	size_t data_len, total_len;
-	ssize_t ret;
 	enum fi_hmem_iface iface;
 	uint64_t device;
+	ssize_t ret;
+
+	eager_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
+	if (!eager_buf) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+			"Ran out of buffers from Eager buffer pool\n");
+		return -FI_EAGAIN;
+	}
+
+	eager_buf->app_context = context;
+	eager_buf->flags = flags;
+
+	if (rxm_use_msg_tsend(rxm_ep, count, op)) {
+		/* hdr isn't sent, but op is accessed handling completion */
+		eager_buf->pkt.hdr.op = op;
+		ret = rxm_msg_tsend(rxm_ep, rxm_conn, eager_buf, iov, count,
+				    data, tag);
+	} else if (rxm_use_direct_send(rxm_ep, count, flags)) {
+		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
+					 flags, &eager_buf->pkt);
+
+		ret = rxm_direct_send(rxm_ep, rxm_conn, eager_buf,
+				      iov, desc, count);
+	} else {
+		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
+					 flags, &eager_buf->pkt);
+
+		iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
+		ret = ofi_copy_from_hmem_iov(eager_buf->pkt.data,
+					     eager_buf->pkt.hdr.size,
+					     iface, device, iov, count, 0);
+		assert(ret == eager_buf->pkt.hdr.size);
+
+		ret = rxm_ep_msg_normal_send(rxm_conn, &eager_buf->pkt,
+					     total_len, eager_buf->hdr.desc,
+					     eager_buf);
+	}
+
+	if (ret) {
+		if (ret == -FI_EAGAIN)
+			rxm_ep_do_progress(&rxm_ep->util_ep);
+		ofi_buf_free(eager_buf);
+	}
+	return ret;
+}
+
+static ssize_t
+rxm_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		const struct iovec *iov, void **desc, size_t count,
+		void *context, uint64_t data, uint64_t flags, uint64_t tag,
+		uint8_t op)
+{
+	struct rxm_tx_rndv_buf *rndv_buf;
+	size_t data_len, total_len;
+	enum fi_hmem_iface iface;
+	uint64_t device;
+	ssize_t ret;
 
 	data_len = ofi_total_iov_len(iov, count);
 	total_len = sizeof(struct rxm_pkt) + data_len;
@@ -1578,47 +1706,17 @@ rxm_ep_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		(data_len > rxm_ep->rxm_info->tx_attr->inject_size)) ||
 	       (data_len <= rxm_ep->rxm_info->tx_attr->inject_size));
 
-	iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
-
 	if (data_len <= rxm_eager_limit) {
-		eager_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
-		if (!eager_buf) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Ran out of buffers from Eager buffer pool\n");
-			return -FI_EAGAIN;
-		}
-
-		eager_buf->app_context = context;
-		eager_buf->flags = flags;
-		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
-					 flags, &eager_buf->pkt);
-
-		if (rxm_use_direct_send(rxm_ep, count, flags)) {
-			ret = rxm_direct_send(rxm_ep, rxm_conn, eager_buf,
-					      iov, desc, count);
-		} else {
-			ret = ofi_copy_from_hmem_iov(eager_buf->pkt.data,
-						     eager_buf->pkt.hdr.size,
-						     iface, device, iov,
-						     count, 0);
-			assert(ret == eager_buf->pkt.hdr.size);
-
-			ret = rxm_ep_msg_normal_send(rxm_conn, &eager_buf->pkt,
-						     total_len,
-						     eager_buf->hdr.desc,
-						     eager_buf);
-		}
-		if (ret) {
-			if (ret == -FI_EAGAIN)
-				rxm_ep_do_progress(&rxm_ep->util_ep);
-			ofi_buf_free(eager_buf);
-		}
+		ret = rxm_send_eager(rxm_ep, rxm_conn, iov, desc, count,
+				     context, data, flags, tag, op,
+				     data_len, total_len);
 	} else if (data_len <= rxm_ep->sar_limit) {
-		ret = rxm_ep_sar_tx_send(rxm_ep, rxm_conn, context,
-					 count, iov, data_len,
-					 rxm_ep_sar_calc_segs_cnt(rxm_ep, data_len),
-					 data, flags, tag, op, iface, device);
+		ret = rxm_send_sar(rxm_ep, rxm_conn, iov, desc, (uint8_t) count,
+				   context, data, flags, tag, op, data_len,
+				   rxm_ep_sar_calc_segs_cnt(rxm_ep, data_len));
 	} else {
+		iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
+
 		ret = rxm_alloc_rndv_buf(rxm_ep, rxm_conn, context,
 					 (uint8_t) count, iov, desc,
 					 data_len, data, flags, tag, op,
@@ -1877,9 +1975,9 @@ rxm_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 	if (ret)
 		goto unlock;
 
-	ret = rxm_ep_send_common(rxm_ep, rxm_conn, msg->msg_iov, msg->desc,
-				 msg->iov_count, msg->context, msg->data,
-				 flags | rxm_ep->util_ep.tx_msg_flags, 0, ofi_op_msg);
+	ret = rxm_send_common(rxm_ep, rxm_conn, msg->msg_iov, msg->desc,
+			      msg->iov_count, msg->context, msg->data,
+			      flags | rxm_ep->util_ep.tx_msg_flags, 0, ofi_op_msg);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -1902,8 +2000,8 @@ static ssize_t rxm_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (ret)
 		goto unlock;
 
-	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context,
-				  0, rxm_ep->util_ep.tx_op_flags, 0, ofi_op_msg);
+	ret = rxm_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context,
+			      0, rxm_ep->util_ep.tx_op_flags, 0, ofi_op_msg);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -1923,8 +2021,8 @@ static ssize_t rxm_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	if (ret)
 		goto unlock;
 
-	ret = rxm_ep_send_common(rxm_ep, rxm_conn, iov, desc, count, context,
-				  0, rxm_ep->util_ep.tx_op_flags, 0, ofi_op_msg);
+	ret = rxm_send_common(rxm_ep, rxm_conn, iov, desc, count, context,
+			      0, rxm_ep->util_ep.tx_op_flags, 0, ofi_op_msg);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -1985,9 +2083,9 @@ static ssize_t rxm_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t le
 	if (ret)
 		goto unlock;
 
-	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, data,
-				 rxm_ep->util_ep.tx_op_flags | FI_REMOTE_CQ_DATA,
-				 0, ofi_op_msg);
+	ret = rxm_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, data,
+			      rxm_ep->util_ep.tx_op_flags | FI_REMOTE_CQ_DATA,
+			      0, ofi_op_msg);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2225,10 +2323,10 @@ rxm_ep_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	if (ret)
 		goto unlock;
 
-	ret = rxm_ep_send_common(rxm_ep, rxm_conn, msg->msg_iov, msg->desc,
-				  msg->iov_count, msg->context, msg->data,
-				  flags | rxm_ep->util_ep.tx_msg_flags, msg->tag,
-				  ofi_op_tagged);
+	ret = rxm_send_common(rxm_ep, rxm_conn, msg->msg_iov, msg->desc,
+			      msg->iov_count, msg->context, msg->data,
+			      flags | rxm_ep->util_ep.tx_msg_flags, msg->tag,
+			      ofi_op_tagged);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2252,8 +2350,8 @@ static ssize_t rxm_ep_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (ret)
 		goto unlock;
 
-	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, 0,
-				 rxm_ep->util_ep.tx_op_flags, tag, ofi_op_tagged);
+	ret = rxm_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, 0,
+			      rxm_ep->util_ep.tx_op_flags, tag, ofi_op_tagged);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2273,8 +2371,8 @@ static ssize_t rxm_ep_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	if (ret)
 		goto unlock;
 
-	ret = rxm_ep_send_common(rxm_ep, rxm_conn, iov, desc, count, context, 0,
-				 rxm_ep->util_ep.tx_op_flags, tag, ofi_op_tagged);
+	ret = rxm_send_common(rxm_ep, rxm_conn, iov, desc, count, context, 0,
+			      rxm_ep->util_ep.tx_op_flags, tag, ofi_op_tagged);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2337,9 +2435,9 @@ static ssize_t rxm_ep_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t l
 	if (ret)
 		goto unlock;
 
-	ret = rxm_ep_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, data,
-				 rxm_ep->util_ep.tx_op_flags | FI_REMOTE_CQ_DATA,
-				 tag, ofi_op_tagged);
+	ret = rxm_send_common(rxm_ep, rxm_conn, &iov, &desc, 1, context, data,
+			      rxm_ep->util_ep.tx_op_flags | FI_REMOTE_CQ_DATA,
+			tag, ofi_op_tagged);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
