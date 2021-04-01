@@ -2529,7 +2529,8 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	size_t cur_ule_count = 0;
 	int ret;
 
-	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL);
+	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
+	       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE);
 
 	/* Get all the unexpected header remote offsets. */
 	rxc->ule_offsets = NULL;
@@ -2662,11 +2663,23 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 
 		rxc->state = RXC_ONLOAD_FLOW_CONTROL;
 
-		/* For software initiated state changes, drop count needs to
-		 * start at zero instead of -1. Add 1 to account for this.
-		 */
-		if (!event->tgt_long.initiator.state_change.sc_nic_auto)
+		if (!event->tgt_long.initiator.state_change.sc_nic_auto) {
+			/* For software initiated state changes, drop count
+			 * needs to start at zero instead of -1. Add 1 to
+			 * account for this.
+			 */
 			rxc->drop_count++;
+			rxc->state = RXC_ONLOAD_FLOW_CONTROL;
+		} else if (event->tgt_long.initiator.state_change.sc_reason ==
+			   C_SC_FC_EQ_FULL) {
+			/* Flow control occurred due to no EQ space. */
+			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
+		} else {
+			/* Flow control occurred to either no LEs or unable to
+			 * match on overflow/request list.
+			 */
+			rxc->state = RXC_ONLOAD_FLOW_CONTROL;
+		}
 
 		RXC_DBG(rxc, "Flow control detected\n");
 
