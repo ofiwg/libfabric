@@ -1445,6 +1445,26 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return ret;
 }
 
+static bool
+rxm_use_msg_tinject(struct rxm_ep *ep, uint8_t op)
+{
+	struct rxm_domain *domain;
+
+	domain = container_of(ep->util_ep.domain, struct rxm_domain,
+			      util_domain);
+
+	return domain->dyn_rbuf && (op == ofi_op_tagged);
+}
+
+static ssize_t
+rxm_msg_tinject(struct fid_ep *msg_ep, const void *buf, size_t len,
+		bool cq_data, uint64_t data, uint64_t tag)
+{
+	return cq_data ?
+		fi_tinject(msg_ep, buf, len, 0, tag) :
+		fi_tinjectdata(msg_ep, buf, len, data, 0, tag);
+}
+
 static ssize_t
 rxm_ep_inject_send_fast(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			const void *buf, size_t len, struct rxm_pkt *inject_pkt)
@@ -1455,6 +1475,14 @@ rxm_ep_inject_send_fast(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
 	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
+		if (rxm_use_msg_tinject(rxm_ep, inject_pkt->hdr.op)) {
+			return rxm_msg_tinject(rxm_conn->msg_ep, buf, len,
+					       inject_pkt->hdr.flags &
+							FI_REMOTE_CQ_DATA,
+					       inject_pkt->hdr.data,
+					       inject_pkt->hdr.tag);
+		}
+
 		inject_pkt->hdr.size = len;
 		memcpy(inject_pkt->data, buf, len);
 		ret = fi_inject(rxm_conn->msg_ep, inject_pkt, pkt_size, 0);
@@ -1479,15 +1507,20 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	if (pkt_size <= rxm_ep->inject_limit &&
-	    !rxm_ep->util_ep.tx_cntr) {
+	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
+		if (rxm_use_msg_tinject(rxm_ep, op)) {
+			return rxm_msg_tinject(rxm_conn->msg_ep, buf, len,
+					       flags & FI_REMOTE_CQ_DATA,
+					       data, tag);
+		}
+
 		tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_INJECT);
 		if (!tx_buf) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of eager inject buffers\n");
-			ret = -FI_EAGAIN;
-			goto unlock;
+			return -FI_EAGAIN;
 		}
+
 		rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag,
 					 flags, &tx_buf->pkt);
 		memcpy(tx_buf->pkt.data, buf, len);
@@ -1498,9 +1531,8 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		ret = rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len,
 					    pkt_size, data, flags, tag, op);
 	}
-unlock:
-	return ret;
 
+	return ret;
 }
 
 static bool
