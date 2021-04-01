@@ -48,8 +48,8 @@
 			   FI_READ | FI_WRITE | FI_REMOTE_READ |	\
 			   FI_REMOTE_WRITE | FI_HMEM)
 
-size_t rxm_msg_tx_size		= 128;
-size_t rxm_msg_rx_size		= 128;
+size_t rxm_msg_tx_size;
+size_t rxm_msg_rx_size;
 size_t rxm_eager_limit		= 16384;
 size_t rxm_buffer_size		= 16384 + sizeof(struct rxm_pkt);
 
@@ -155,13 +155,18 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		FI_DBG(&rxm_prov, FI_LOG_FABRIC,
 		       "Requesting shared receive context from core provider\n");
 		core_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
+		core_info->rx_attr->size = rxm_msg_rx_size ?
+					   rxm_msg_rx_size : RXM_MSG_SRX_SIZE;
+	} else {
+		core_info->rx_attr->size = rxm_msg_rx_size ?
+					   rxm_msg_rx_size : RXM_MSG_RXTX_SIZE;
 	}
 
 	core_info->tx_attr->op_flags &= ~RXM_TX_OP_FLAGS;
-	core_info->tx_attr->size = rxm_msg_tx_size;
+	core_info->tx_attr->size = rxm_msg_tx_size ?
+				   rxm_msg_tx_size : RXM_MSG_RXTX_SIZE;
 
 	core_info->rx_attr->op_flags &= ~FI_MULTI_RECV;
-	core_info->rx_attr->size = rxm_msg_rx_size;
 
 	return 0;
 }
@@ -490,20 +495,18 @@ RXM_INI
 			"latency as a side-effect.");
 
 	fi_param_define(&rxm_prov, "tx_size", FI_PARAM_SIZE_T,
-			"Defines default tx context size (default: 65536).");
+			"Defines default tx context size (default: 16384).");
 
 	fi_param_define(&rxm_prov, "rx_size", FI_PARAM_SIZE_T,
-			"Defines default rx context size (default: 65536).");
+			"Defines default rx context size (default: 16384).");
 
 	fi_param_define(&rxm_prov, "msg_tx_size", FI_PARAM_SIZE_T,
 			"Defines FI_EP_MSG tx size that would be requested "
-			"(default: 128). Setting this to 0 would get default "
-			"value defined by the MSG provider.");
+			"(default: 128).");
 
 	fi_param_define(&rxm_prov, "msg_rx_size", FI_PARAM_SIZE_T,
-			"Defines FI_EP_MSG rx size that would be requested "
-			"(default: 128). Setting this to 0 would get default "
-			"value defined by the MSG provider.");
+			"Defines FI_EP_MSG rx or srx size that would be requested. "
+			"(default: 128, 4096 with srx");
 
 	fi_param_define(&rxm_prov, "cm_progress_interval", FI_PARAM_INT,
 			"Defines the number of microseconds to wait between "
