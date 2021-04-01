@@ -650,21 +650,23 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 {
 	struct ofi_bufpool_attr bp_attrs = {};
 	int ret = FI_SUCCESS;
+	size_t min_eq_size;
 
 	fastlock_acquire(&cxi_cq->lock);
 
 	if (cxi_cq->enabled)
 		goto unlock;
 
-	/* TODO set EQ size based on usage. */
-	ret = cxip_cq_eq_init(cxi_cq, &cxi_cq->tx_eq, 2 * 1024 * 1024);
+	min_eq_size = (cxi_cq->attr.size + cxi_cq->ack_batch_size) *
+		C_EE_CFG_ECB_SIZE;
+	ret = cxip_cq_eq_init(cxi_cq, &cxi_cq->tx_eq, min_eq_size);
 	if (ret) {
 		CXIP_WARN("Failed to initialize TX EQ: %d\n", ret);
 		goto unlock;
 	}
 
-	/* TODO set EQ size based on usage. */
-	ret = cxip_cq_eq_init(cxi_cq, &cxi_cq->rx_eq, 2 * 1024 * 1024);
+	min_eq_size = cxi_cq->attr.size * C_EE_CFG_ECB_SIZE;
+	ret = cxip_cq_eq_init(cxi_cq, &cxi_cq->rx_eq, min_eq_size);
 	if (ret) {
 		CXIP_WARN("Failed to initialize RX EQ: %d\n", ret);
 		goto err_tx_eq_fini;
@@ -785,7 +787,6 @@ static struct fi_ops cxip_cq_fi_ops = {
 };
 
 static struct fi_cq_attr cxip_cq_def_attr = {
-	.size = CXIP_CQ_DEF_SZ,
 	.flags = 0,
 	.format = FI_CQ_FORMAT_CONTEXT,
 	.wait_obj = FI_WAIT_NONE,
@@ -822,8 +823,11 @@ static int cxip_cq_verify_attr(struct fi_cq_attr *attr)
 		return -FI_ENOSYS;
 	}
 
+	/* Use environment variable to allow for dynamic setting of default CQ
+	 * size.
+	 */
 	if (!attr->size)
-		attr->size = cxip_cq_def_attr.size;
+		attr->size = cxip_env.default_cq_size;
 
 	return FI_SUCCESS;
 }
@@ -852,10 +856,14 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!cxi_cq)
 		return -FI_ENOMEM;
 
-	if (!attr)
+	if (!attr) {
 		cxi_cq->attr = cxip_cq_def_attr;
-	else
+		cxi_cq->attr.size = cxip_env.default_cq_size;
+	} else {
 		cxi_cq->attr = *attr;
+	}
+
+	assert(cxi_cq->attr.size > 0);
 
 	ret = ofi_cq_init(&cxip_prov, domain, &cxi_cq->attr, &cxi_cq->util_cq,
 			  cxip_util_cq_progress, context);

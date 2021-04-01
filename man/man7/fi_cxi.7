@@ -683,6 +683,11 @@ Increasing the receive event queue size can help prevent
 side-band/control messages from being dropped and retried but at the
 cost of additional memory usage.
 Size is always aligned up to a 4KiB boundary.
+.TP
+.B \f[I]FI_CXI_DEFAULT_CQ_SIZE\f[R]
+Change the provider default completion queue size.
+This may be useful for applications which rely on middleware, and
+middleware defaults the completion queue size to the provider default.
 .PP
 Note: Use the fi_info utility to query provider environment variables:
 fi_info -p cxi -e

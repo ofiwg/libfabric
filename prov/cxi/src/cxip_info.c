@@ -221,6 +221,7 @@ struct cxip_environment cxip_env = {
 	.msg_offload = 1,
 	.fc_retry_usec_delay = 1000,
 	.ctrl_rx_eq_max_size = 67108864,
+	.default_cq_size = CXIP_CQ_DEF_SZ,
 };
 
 static void cxip_env_init(void)
@@ -401,6 +402,17 @@ static void cxip_env_init(void)
 			cxip_env.ctrl_rx_eq_max_size);
 	fi_param_get_size_t(&cxip_prov, "ctrl_rx_eq_max_size",
 			    &cxip_env.ctrl_rx_eq_max_size);
+
+	fi_param_define(&cxip_prov, "default_cq_size", FI_PARAM_SIZE_T,
+			"Default provider completion queue size (default: %lu).",
+			cxip_env.default_cq_size);
+	fi_param_get_size_t(&cxip_prov, "default_cq_size",
+			    &cxip_env.default_cq_size);
+	if (cxip_env.default_cq_size == 0) {
+		cxip_env.default_cq_size = CXIP_CQ_DEF_SZ;
+		CXIP_WARN("Default CQ size invalid. Setting to %lu\n",
+			  cxip_env.default_cq_size);
+	}
 }
 
 /*

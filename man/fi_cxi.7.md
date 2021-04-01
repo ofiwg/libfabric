@@ -592,6 +592,11 @@ The CXI provider checks for the following environment variables:
     being dropped and retried but at the cost of additional memory usage. Size is
     always aligned up to a 4KiB boundary.
 
+*FI_CXI_DEFAULT_CQ_SIZE*
+:   Change the provider default completion queue size. This may be useful for
+    applications which rely on middleware, and middleware defaults the completion
+    queue size to the provider default.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 

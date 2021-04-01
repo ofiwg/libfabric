@@ -93,7 +93,7 @@
 
 #define CXIP_AMO_MAX_IOV		1
 #define CXIP_EQ_DEF_SZ			(1 << 8)
-#define CXIP_CQ_DEF_SZ			(1 << 8)
+#define CXIP_CQ_DEF_SZ			1024U
 #define CXIP_AV_DEF_SZ			(1 << 8)
 
 #define CXIP_PTE_IGNORE_DROPS		((1 << 24) - 1)
@@ -194,7 +194,7 @@ struct cxip_environment {
 	size_t req_buf_size;
 	size_t req_buf_count;
 	int msg_offload;
-
+	size_t default_cq_size;
 	int optimized_mrs;
 
 	enum cxip_llring_mode llring_mode;
