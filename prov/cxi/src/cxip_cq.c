@@ -549,30 +549,34 @@ static int cxip_cq_eq_init(struct cxip_cq *cq, struct cxip_cq_eq *eq,
 	assert(cq->domain->enabled);
 
 	/* Attempt to use 2 MiB hugepages. */
-	eq_len = roundup(len, 1U << 21);
-	eq->buf = mmap(NULL, eq_len, PROT_READ | PROT_WRITE, MAP_PRIVATE |
-		       MAP_ANONYMOUS | MAP_HUGETLB | MAP_HUGE_2MB, -1, 0);
-	if (eq->buf == MAP_FAILED) {
-		eq->mmap = false;
-		CXIP_DBG("Unable to map hugepage for EQ\n");
+	if (!cxip_env.disable_cq_hugetlb) {
+		eq_len = roundup(len, 1U << 21);
+		eq->buf = mmap(NULL, eq_len, PROT_READ | PROT_WRITE,
+			       MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB |
+			       MAP_HUGE_2MB, -1, 0);
+		if (eq->buf != MAP_FAILED) {
+			eq->mmap = true;
 
-		/* Fallback to aligned allocations. */
-		eq_len = roundup(len, C_PAGE_SIZE);
-		eq->buf = aligned_alloc(C_PAGE_SIZE, eq_len);
-		if (!eq->buf) {
-			CXIP_WARN("Unable to allocate EQ buffer\n");
-			return -FI_ENOMEM;
+			/* If a single hugepage is used, CXI_EQ_PASSTHROUGH can
+			 * be used.
+			 */
+			if (eq_len <= (1U << 21))
+				eq_passthrough = true;
+			goto mmap_success;
 		}
-	} else {
-		eq->mmap = true;
 
-		/* If a single hugepage is used, CXI_EQ_PASSTHROUGH can be
-		 * used.
-		 */
-		if (eq_len <= (1U << 21))
-			eq_passthrough = true;
+		CXIP_DBG("Unable to map hugepage for EQ\n");
 	}
 
+	eq->mmap = false;
+	eq_len = roundup(len, C_PAGE_SIZE);
+	eq->buf = aligned_alloc(C_PAGE_SIZE, eq_len);
+	if (!eq->buf) {
+		CXIP_WARN("Unable to allocate EQ buffer\n");
+		return -FI_ENOMEM;
+	}
+
+mmap_success:
 	/* Buffer has been allocated. Only map if needed. */
 	eq->len = eq_len;
 	if (eq_passthrough) {

@@ -222,6 +222,7 @@ struct cxip_environment cxip_env = {
 	.fc_retry_usec_delay = 1000,
 	.ctrl_rx_eq_max_size = 67108864,
 	.default_cq_size = CXIP_CQ_DEF_SZ,
+	.disable_cq_hugetlb = false,
 };
 
 static void cxip_env_init(void)
@@ -413,6 +414,12 @@ static void cxip_env_init(void)
 		CXIP_WARN("Default CQ size invalid. Setting to %lu\n",
 			  cxip_env.default_cq_size);
 	}
+
+	fi_param_define(&cxip_prov, "disable_cq_hugetlb", FI_PARAM_BOOL,
+			"Disable 2MiB hugetlb allocates for completion queues (default: %u).",
+			cxip_env.disable_cq_hugetlb);
+	fi_param_get_bool(&cxip_prov, "disable_cq_hugetlb",
+			  &cxip_env.disable_cq_hugetlb);
 }
 
 /*

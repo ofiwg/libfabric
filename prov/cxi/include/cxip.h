@@ -196,6 +196,7 @@ struct cxip_environment {
 	int msg_offload;
 	size_t default_cq_size;
 	int optimized_mrs;
+	int disable_cq_hugetlb;
 
 	enum cxip_llring_mode llring_mode;
 

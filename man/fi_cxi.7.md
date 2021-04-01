@@ -597,6 +597,12 @@ The CXI provider checks for the following environment variables:
     applications which rely on middleware, and middleware defaults the completion
     queue size to the provider default.
 
+*FI_CXI_DISABLE_CQ_HUGETLB*
+:   By default, the provider will attempt to allocate 2 MiB hugetlb pages for
+    provider event queues used to implement a libfabric completion queue.
+    Disabling hugetlb support will cause the provider to fallback to memory
+    allocators using host page sizes.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 

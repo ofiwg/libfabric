@@ -688,6 +688,13 @@ Size is always aligned up to a 4KiB boundary.
 Change the provider default completion queue size.
 This may be useful for applications which rely on middleware, and
 middleware defaults the completion queue size to the provider default.
+.TP
+.B \f[I]FI_CXI_DISABLE_CQ_HUGETLB\f[R]
+By default, the provider will attempt to allocate 2 MiB hugetlb pages
+for provider event queues used to implement a libfabric completion
+queue.
+Disabling hugetlb support will cause the provider to fallback to memory
+allocators using host page sizes.
 .PP
 Note: Use the fi_info utility to query provider environment variables:
 fi_info -p cxi -e
