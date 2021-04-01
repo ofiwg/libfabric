@@ -284,6 +284,11 @@ static int tcpx_buf_pools_create(struct tcpx_buf_pool *buf_pools)
 	for (i = 0; i < TCPX_OP_CODE_MAX; i++) {
 		buf_pools[i].op_type = i;
 
+		if (i == TCPX_OP_MSG_RECV || i == TCPX_OP_MSG_SEND)
+			attr.chunk_cnt = 1024;
+		else
+			attr.chunk_cnt = 64;
+
 		attr.context = &buf_pools[i];
 		ret = ofi_bufpool_create_attr(&attr, &buf_pools[i].pool);
 		if (ret) {
