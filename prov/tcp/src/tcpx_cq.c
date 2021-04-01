@@ -278,7 +278,7 @@ static int tcpx_buf_pools_create(struct tcpx_buf_pool *buf_pools)
 		.alignment = 16,
 		.chunk_cnt = 1024,
 		.init_fn = tcpx_buf_pool_init,
-		.flags = OFI_BUFPOOL_HUGEPAGES,
+		.flags = 0,
 	};
 
 	for (i = 0; i < TCPX_OP_CODE_MAX; i++) {
