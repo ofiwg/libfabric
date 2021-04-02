@@ -581,7 +581,8 @@ tcpx_tinject(struct fid_ep *fid_ep, const void *buf, size_t len,
 	tx_entry->hdr.base_hdr.payload_off = (uint8_t)
 					     sizeof(tx_entry->hdr.tag_hdr);
 
-	memcpy((uint8_t *) (&tx_entry->hdr.tag_hdr + 1), (uint8_t *) buf, len);
+	memcpy((uint8_t *) &tx_entry->hdr + sizeof(tx_entry->hdr.tag_hdr),
+	       (uint8_t *) buf, len);
 
 	tx_entry->iov[0].iov_base = (void *) &tx_entry->hdr;
 	tx_entry->iov[0].iov_len = len + sizeof(tx_entry->hdr.tag_hdr);
