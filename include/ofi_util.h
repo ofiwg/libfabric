@@ -153,9 +153,14 @@ struct ofi_common_locks {
 /*
  * Provider details
  */
+typedef int (*ofi_alter_info_t)(uint32_t version, const struct fi_info *src_info,
+				const struct fi_info *base_info,
+				struct fi_info *dest_info);
+
 struct util_prov {
 	const struct fi_provider	*prov;
 	const struct fi_info		*info;
+	ofi_alter_info_t		alter_defaults;
 	const int			flags;
 };
 
@@ -948,10 +953,6 @@ static inline int ofi_has_util_prefix(const char *str)
 {
 	return !strncasecmp(str, OFI_UTIL_PREFIX, strlen(OFI_UTIL_PREFIX));
 }
-
-typedef int (*ofi_alter_info_t)(uint32_t version, const struct fi_info *src_info,
-				const struct fi_info *base_info,
-				struct fi_info *dest_info);
 
 int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 		      uint64_t flags, const struct util_prov *util_prov,
