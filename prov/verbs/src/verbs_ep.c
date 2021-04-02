@@ -432,12 +432,12 @@ static int vrb_close_free_ep(struct vrb_ep *ep)
 	return 0;
 }
 
-/* Caller must hold eq:lock */
-static inline void vrb_ep_xrc_close(struct vrb_ep *ep)
+static void vrb_ep_xrc_close(struct vrb_ep *ep)
 {
 	struct vrb_xrc_ep *xrc_ep = container_of(ep, struct vrb_xrc_ep,
-						    base_ep);
+						 base_ep);
 
+	assert(fastlock_held(&ep->eq->lock));
 	if (xrc_ep->conn_setup)
 		vrb_free_xrc_conn_setup(xrc_ep, 0);
 
@@ -687,7 +687,6 @@ static int vrb_create_dgram_ep(struct vrb_domain *domain, struct vrb_ep *ep,
 	return 0;
 }
 
-/* vrb_srq_ep::xrc.prepost_lock must be held */
 FI_VERBS_XRC_ONLY
 static int vrb_process_xrc_preposted(struct vrb_srq_ep *srq_ep)
 {
@@ -695,6 +694,7 @@ static int vrb_process_xrc_preposted(struct vrb_srq_ep *srq_ep)
 	struct slist_entry *entry;
 	int ret;
 
+	assert(fastlock_held(&srq_ep->xrc.prepost_lock));
 	/* The pre-post SRQ function ops have been replaced so the
 	 * posting here results in adding the RX entries to the SRQ */
 	while (!slist_empty(&srq_ep->xrc.prepost_list)) {
@@ -1626,11 +1626,11 @@ static void vrb_cleanup_prepost_bufs(struct vrb_srq_ep *srq_ep)
 	}
 }
 
-/* Must hold the associated CQ lock cq::xrc.srq_list_lock */
 int vrb_xrc_close_srq(struct vrb_srq_ep *srq_ep)
 {
 	int ret;
 
+	assert(fastlock_held(&srq_ep->xrc.cq->xrc.srq_list_lock));
 	assert(srq_ep->domain->flags & VRB_USE_XRC);
 	if (!srq_ep->xrc.cq || !srq_ep->srq)
 		return FI_SUCCESS;
