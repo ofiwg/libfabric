@@ -213,11 +213,11 @@ static void tcpx_ep_flush_queue(struct slist *queue,
 	}
 }
 
-/* must hold ep->lock */
 static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 {
 	struct tcpx_cq *tcpx_cq;
 
+	assert(fastlock_held(&ep->lock));
 	tcpx_cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 	tcpx_ep_flush_queue(&ep->tx_queue, tcpx_cq);
 	tcpx_ep_flush_queue(&ep->rma_read_queue, tcpx_cq);
@@ -227,13 +227,13 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 	tcpx_ep_flush_queue(&ep->rx_queue, tcpx_cq);
 }
 
-/* must hold ep->lock */
 void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 {
 	struct util_wait_fd *wait;
 	struct fi_eq_cm_entry cm_entry = {0};
 	struct fi_eq_err_entry err_entry = {0};
 
+	assert(fastlock_held(&ep->lock));
 	switch (ep->state) {
 	case TCPX_RCVD_REQ:
 		break;
@@ -445,12 +445,13 @@ void tcpx_rx_entry_free(struct tcpx_xfer_entry *rx_entry)
 	}
 }
 
-/* Must hold ep->lock. */
 static void tcpx_ep_cancel_rx(struct tcpx_ep *ep, void *context)
 {
 	struct slist_entry *cur, *prev;
 	struct tcpx_xfer_entry *xfer_entry;
 	struct tcpx_cq *cq;
+
+	assert(fastlock_held(&ep->lock));
 
 	/* To cancel an active receive, we would need to flush the socket of
 	 * all data associated with that message.  Since some of that data

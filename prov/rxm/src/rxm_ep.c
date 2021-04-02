@@ -713,7 +713,7 @@ static struct fi_ops_ep rxm_ops_ep = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-/* Caller must hold recv_queue->lock */
+/* Caller must hold recv_queue->lock -- TODO which lock? */
 static struct rxm_rx_buf *
 rxm_get_unexp_msg(struct rxm_recv_queue *recv_queue, fi_addr_t addr,
 		  uint64_t tag, uint64_t ignore)

@@ -274,13 +274,11 @@ int ofi_verify_av_insert(struct util_av *av, uint64_t flags, void *context)
 	return 0;
 }
 
-/*
- * Must hold AV lock
- */
 int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 {
 	struct util_av_entry *entry = NULL;
 
+	assert(fastlock_held(&av->lock));
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
 	if (entry) {
 		if (fi_addr)
@@ -318,13 +316,11 @@ int ofi_av_elements_iter(struct util_av *av, ofi_av_apply_func apply, void *arg)
 	return 0;
 }
 
-/*
- * Must hold AV lock
- */
 int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 {
 	struct util_av_entry *av_entry;
 
+	assert(fastlock_held(&av->lock));
 	av_entry = ofi_bufpool_get_ibuf(av->av_entry_pool, fi_addr);
 	if (!av_entry)
 		return -FI_ENOENT;
