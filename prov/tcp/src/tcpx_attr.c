@@ -67,7 +67,7 @@ static struct fi_rx_attr tcpx_rx_attr = {
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = TCPX_MSG_ORDER,
 	.total_buffered_recv = 0,
-	.size = 1024,
+	.size = 8192,
 	.iov_limit = TCPX_IOV_LIMIT
 };
 
@@ -97,7 +97,7 @@ static struct fi_domain_attr tcpx_domain_attr = {
 	.ep_cnt = 8192,
 	.tx_ctx_cnt = 8192,
 	.rx_ctx_cnt = 8192,
-	.max_ep_srx_ctx = 128,
+	.max_ep_srx_ctx = 8192,
 	.max_ep_tx_ctx = 1,
 	.max_ep_rx_ctx = 1
 };
@@ -117,8 +117,26 @@ struct fi_info tcpx_info = {
 	.fabric_attr = &tcpx_fabric_attr
 };
 
+
+/* User hints will still override the modified dest_info attributes
+ * through ofi_alter_info
+ */
+static int
+tcpx_alter_defaults(uint32_t version, const struct fi_info *hints,
+		    const struct fi_info *base_info,
+		    struct fi_info *dest_info)
+{
+	dest_info->tx_attr->size = 256;
+	if (hints && hints->ep_attr &&
+	    hints->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT)
+		dest_info->rx_attr->size = 256;
+	return 0;
+}
+
+
 struct util_prov tcpx_util_prov = {
 	.prov = &tcpx_prov,
 	.info = &tcpx_info,
+	.alter_defaults = &tcpx_alter_defaults,
 	.flags = 0,
 };
