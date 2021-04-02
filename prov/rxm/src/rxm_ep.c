@@ -303,7 +303,7 @@ static int rxm_buf_pool_create(struct rxm_ep *rxm_ep, size_t size,
 		.free_fn	= rxm_buf_close,
 		.init_fn	= rxm_buf_init,
 		.context	= pool,
-		.flags		= OFI_BUFPOOL_NO_TRACK | OFI_BUFPOOL_HUGEPAGES,
+		.flags		= OFI_BUFPOOL_NO_TRACK,
 	};
 
 	pool->rxm_ep = rxm_ep;
@@ -380,7 +380,6 @@ static void rxm_recv_queue_close(struct rxm_recv_queue *recv_queue)
 
 static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 {
-	int ret, i;
 	size_t entry_sizes[] = {
 		[RXM_BUF_POOL_RX] = rxm_eager_limit +
 				    sizeof(struct rxm_rx_buf),
@@ -403,6 +402,8 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		[RXM_BUF_POOL_RMA] = rxm_eager_limit +
 				     sizeof(struct rxm_rma_buf),
 	};
+	size_t chunk_cnt, max_size;
+	int ret, i;
 
 	dlist_init(&rxm_ep->repost_ready_list);
 
@@ -416,12 +417,19 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		    (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE))
 			continue;
 
-		ret = rxm_buf_pool_create(rxm_ep, entry_sizes[i],
-					  (i == RXM_BUF_POOL_RX ||
-					   i == RXM_BUF_POOL_TX_ATOMIC) ? 0 :
-					  rxm_ep->rxm_info->tx_attr->size,
-					  1024,
-					  &rxm_ep->buf_pools[i], i);
+		if (i == RXM_BUF_POOL_TX || i == RXM_BUF_POOL_TX_SAR) {
+			chunk_cnt = 1024;
+			max_size = rxm_ep->rxm_info->tx_attr->size;
+		} else if (i == RXM_BUF_POOL_RX) {
+			chunk_cnt = 1024;
+			max_size = 0;
+		} else {
+			chunk_cnt = 64;
+			max_size = rxm_ep->rxm_info->tx_attr->size;
+		}
+
+		ret = rxm_buf_pool_create(rxm_ep, entry_sizes[i], max_size,
+					  chunk_cnt, &rxm_ep->buf_pools[i], i);
 		if (ret)
 			goto err;
 	}
