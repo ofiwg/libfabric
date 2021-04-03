@@ -240,7 +240,9 @@ static void tcpx_cm_recv_resp(struct util_wait *wait,
 err2:
 	free(cm_entry);
 err1:
+	fastlock_acquire(&ep->lock);
 	tcpx_ep_disable(ep, -ret);
+	fastlock_release(&ep->lock);
 	free(cm_ctx);
 }
 
@@ -293,7 +295,9 @@ static void tcpx_cm_send_resp(struct util_wait *wait,
 delfd:
 	ofi_wait_del_fd(wait, ep->sock);
 disable:
+	fastlock_acquire(&ep->lock);
 	tcpx_ep_disable(ep, -ret);
+	fastlock_release(&ep->lock);
 	free(cm_ctx);
 }
 
@@ -408,7 +412,9 @@ static void tcpx_cm_send_req(struct util_wait *wait,
 delfd:
 	ofi_wait_del_fd(wait, ep->sock);
 disable:
+	fastlock_acquire(&ep->lock);
 	tcpx_ep_disable(ep, -ret);
+	fastlock_release(&ep->lock);
 	free(cm_ctx);
 }
 
