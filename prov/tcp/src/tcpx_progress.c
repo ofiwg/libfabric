@@ -396,11 +396,11 @@ int tcpx_op_invalid(struct tcpx_ep *tcpx_ep)
 	return -FI_EINVAL;
 }
 
-/* Must hold ep lock */
 static struct tcpx_xfer_entry *tcpx_rx_entry_alloc(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
 
+	assert(fastlock_held(&ep->lock));
 	if (slist_empty(&ep->rx_queue))
 		return NULL;
 
@@ -630,11 +630,11 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 	return FI_SUCCESS;
 }
 
-/* Must hold ep lock */
 void tcpx_progress_rx(struct tcpx_ep *ep)
 {
 	int ret;
 
+	assert(fastlock_held(&ep->lock));
 	if (!ep->cur_rx_entry &&
 	    (ep->stage_buf.cur_pos == ep->stage_buf.bytes_avail)) {
 		ret = tcpx_read_to_buffer(ep->sock, &ep->stage_buf);
@@ -675,12 +675,12 @@ err:
 		tcpx_ep_disable(ep, 0);
 }
 
-/* Must hold ep lock */
 void tcpx_progress_tx(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *tx_entry;
 	struct slist_entry *entry;
 
+	assert(fastlock_held(&ep->lock));
 	if (!slist_empty(&ep->tx_queue)) {
 		entry = ep->tx_queue.head;
 		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);

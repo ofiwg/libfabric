@@ -226,12 +226,12 @@ vrb_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 	return cur ? cur : ret;
 }
 
-/* Must be called with CQ lock held. */
 int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 {
 	struct vrb_context *ctx;
 	int ret;
 
+	assert(fastlock_held(&cq->util_cq.cq_lock));
 	do {
 		ret = ibv_poll_cq(cq->cq, 1, wc);
 		if (ret <= 0)
@@ -263,11 +263,11 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 	return ret;
 }
 
-/* Must be called with CQ lock held. */
 int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc)
 {
 	struct vrb_wc_entry *wce;
 
+	assert(fastlock_held(&cq->util_cq.cq_lock));
 	wce = ofi_buf_alloc(cq->wce_pool);
 	if (!wce) {
 		FI_WARN(&vrb_prov, FI_LOG_CQ,
