@@ -478,7 +478,7 @@ struct rxm_rx_buf {
 	struct rxm_pkt pkt;
 };
 
-struct rxm_tx_bounce_buf {
+struct rxm_tx_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
 
@@ -499,7 +499,7 @@ struct rxm_tx_bounce_buf {
 		struct rxm_conn *conn;
 		size_t rndv_rma_index;
 		size_t rndv_rma_count;
-		struct rxm_tx_bounce_buf *done_buf;
+		struct rxm_tx_buf *done_buf;
 		struct rxm_rndv_hdr remote_hdr;
 	} write_rndv;
 
@@ -529,7 +529,7 @@ struct rxm_deferred_tx_entry {
 			size_t pkt_size;
 		} rndv_ack;
 		struct {
-			struct rxm_tx_bounce_buf *tx_buf;
+			struct rxm_tx_buf *tx_buf;
 		} rndv_done;
 		struct {
 			struct rxm_rx_buf *rx_buf;
@@ -537,12 +537,12 @@ struct rxm_deferred_tx_entry {
 			struct rxm_iov rxm_iov;
 		} rndv_read;
 		struct {
-			struct rxm_tx_bounce_buf *tx_buf;
+			struct rxm_tx_buf *tx_buf;
 			struct fi_rma_iov rma_iov;
 			struct rxm_iov rxm_iov;
 		} rndv_write;
 		struct {
-			struct rxm_tx_bounce_buf *cur_seg_tx_buf;
+			struct rxm_tx_buf *cur_seg_tx_buf;
 			struct {
 				struct iovec iov[RXM_IOV_LIMIT];
 				uint8_t count;
@@ -562,11 +562,11 @@ struct rxm_deferred_tx_entry {
 			uint64_t device;
 		} sar_seg;
 		struct {
-			struct rxm_tx_bounce_buf *tx_buf;
+			struct rxm_tx_buf *tx_buf;
 			ssize_t len;
 		} atomic_resp;
 		struct {
-			struct rxm_tx_bounce_buf *tx_buf;
+			struct rxm_tx_buf *tx_buf;
 		} credit_msg;
 	};
 };
@@ -593,7 +593,7 @@ struct rxm_recv_entry {
 	/* Used for Rendezvous protocol */
 	struct {
 		/* This is used to send RNDV ACK */
-		struct rxm_tx_bounce_buf *tx_buf;
+		struct rxm_tx_buf *tx_buf;
 	} rndv;
 };
 OFI_DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
@@ -635,7 +635,7 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 
 struct rxm_eager_ops {
 	void (*comp_tx)(struct rxm_ep *rxm_ep,
-			struct rxm_tx_bounce_buf *tx_eager_buf);
+			struct rxm_tx_buf *tx_eager_buf);
 	void (*handle_rx)(struct rxm_rx_buf *rx_buf);
 };
 
@@ -748,9 +748,9 @@ void rxm_ep_do_progress(struct util_ep *util_ep);
 void rxm_handle_eager(struct rxm_rx_buf *rx_buf);
 void rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf);
 void rxm_finish_eager_send(struct rxm_ep *rxm_ep,
-			   struct rxm_tx_bounce_buf *tx_eager_buf);
+			   struct rxm_tx_buf *tx_eager_buf);
 void rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep,
-				struct rxm_tx_bounce_buf *tx_eager_buf);
+				struct rxm_tx_buf *tx_eager_buf);
 
 int rxm_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep);
 
@@ -772,7 +772,7 @@ static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 
 static inline ssize_t
 rxm_atomic_send_respmsg(struct rxm_ep *rxm_ep, struct rxm_conn *conn,
-			struct rxm_tx_bounce_buf *resp_buf, ssize_t len)
+			struct rxm_tx_buf *resp_buf, ssize_t len)
 {
 	struct iovec iov = {
 		.iov_base = (void *) &resp_buf->pkt,

@@ -154,7 +154,7 @@ static void rxm_init_rx_buf(struct ofi_bufpool_region *region, void *buf)
 static void rxm_init_tx_buf(struct ofi_bufpool_region *region, void *buf)
 {
 	struct rxm_ep *ep = region->pool->attr.context;
-	struct rxm_tx_bounce_buf *tx_buf = buf;
+	struct rxm_tx_buf *tx_buf = buf;
 
 	tx_buf->hdr.desc = ep->msg_mr_local ?
 			   fi_mr_desc((struct fid_mr *) region->context) : NULL;
@@ -262,7 +262,7 @@ static int rxm_ep_create_pools(struct rxm_ep *rxm_ep)
 		return ret;
 	}
 
-	attr.size = rxm_eager_limit + sizeof(struct rxm_tx_bounce_buf);
+	attr.size = rxm_eager_limit + sizeof(struct rxm_tx_buf);
 	attr.init_fn = rxm_init_tx_buf;
 	ret = ofi_bufpool_create_attr(&attr, &rxm_ep->tx_pool);
 	if (ret) {
@@ -956,7 +956,7 @@ rxm_alloc_rndv_buf(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   void **desc, size_t data_len, uint64_t data,
 		   uint64_t flags, uint64_t tag, uint8_t op,
 		   enum fi_hmem_iface iface, uint64_t device,
-		   struct rxm_tx_bounce_buf **rndv_buf)
+		   struct rxm_tx_buf **rndv_buf)
 {
 	struct fid_mr *rxm_mr_msg_mr[RXM_IOV_LIMIT];
 	struct fid_mr **mr_iov;
@@ -1023,7 +1023,7 @@ err:
 
 static ssize_t
 rxm_ep_rndv_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		    struct rxm_tx_bounce_buf *tx_buf, size_t pkt_size)
+		    struct rxm_tx_buf *tx_buf, size_t pkt_size)
 {
 	ssize_t ret;
 
@@ -1064,14 +1064,14 @@ rxm_ep_sar_calc_segs_cnt(struct rxm_ep *rxm_ep, size_t data_len)
 	return (data_len + rxm_eager_limit - 1) / rxm_eager_limit;
 }
 
-static struct rxm_tx_bounce_buf *
+static struct rxm_tx_buf *
 rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			      void *app_context, size_t total_len,
 			      size_t seg_len, size_t seg_no, uint64_t data,
 			      uint64_t flags, uint64_t tag, uint8_t op,
 			      enum rxm_sar_seg_type seg_type, uint64_t *msg_id)
 {
-	struct rxm_tx_bounce_buf *tx_buf;
+	struct rxm_tx_buf *tx_buf;
 
 	tx_buf = ofi_buf_alloc(rxm_ep->tx_pool);
 	if (!tx_buf) {
@@ -1101,9 +1101,9 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 static void
 rxm_ep_sar_tx_cleanup(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		      struct rxm_tx_bounce_buf *tx_buf)
+		      struct rxm_tx_buf *tx_buf)
 {
-	struct rxm_tx_bounce_buf *first_tx_buf;
+	struct rxm_tx_buf *first_tx_buf;
 
 	first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->tx_pool,
 					    tx_buf->pkt.ctrl_hdr.msg_id);
@@ -1118,10 +1118,10 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep,
 		size_t seg_no, size_t segs_cnt, uint64_t data, uint64_t flags,
 		uint64_t tag, uint8_t op, const struct iovec *iov,
 		uint8_t count, size_t *iov_offset,
-		struct rxm_tx_bounce_buf **out_tx_buf,
+		struct rxm_tx_buf **out_tx_buf,
 		enum fi_hmem_iface iface, uint64_t device)
 {
-	struct rxm_tx_bounce_buf *tx_buf;
+	struct rxm_tx_buf *tx_buf;
 	enum rxm_sar_seg_type seg_type = RXM_SAR_SEG_MIDDLE;
 	ssize_t ret __attribute__((unused));
 
@@ -1157,7 +1157,7 @@ rxm_send_sar(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	     void *context, uint64_t data, uint64_t flags, uint64_t tag,
 	     uint8_t op, size_t data_len, size_t segs_cnt)
 {
-	struct rxm_tx_bounce_buf *tx_buf, *first_tx_buf;
+	struct rxm_tx_buf *tx_buf, *first_tx_buf;
 	size_t i, iov_offset = 0, remain_len = data_len;
 	struct rxm_deferred_tx_entry *def_tx;
 	enum fi_hmem_iface iface;
@@ -1247,7 +1247,7 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		      uint64_t data, uint64_t flags, uint64_t tag,
 		      uint8_t op)
 {
-	struct rxm_tx_bounce_buf *tx_buf;
+	struct rxm_tx_buf *tx_buf;
 	ssize_t ret;
 	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
 	const struct iovec iov = {
@@ -1341,7 +1341,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   const void *buf, size_t len, uint64_t data,
 		   uint64_t flags, uint64_t tag, uint8_t op)
 {
-	struct rxm_tx_bounce_buf *tx_buf;
+	struct rxm_tx_buf *tx_buf;
 	size_t pkt_size = sizeof(struct rxm_pkt) + len;
 	ssize_t ret;
 
@@ -1386,7 +1386,7 @@ rxm_use_direct_send(struct rxm_ep *ep, size_t iov_count, uint64_t flags)
 
 static ssize_t
 rxm_direct_send(struct rxm_ep *ep, struct rxm_conn *rxm_conn,
-		struct rxm_tx_bounce_buf *tx_buf,
+		struct rxm_tx_buf *tx_buf,
 		const struct iovec *iov, void **desc, size_t count)
 {
 	struct iovec send_iov[RXM_IOV_LIMIT];
@@ -1431,7 +1431,7 @@ rxm_use_msg_tsend(struct rxm_ep *ep, size_t iov_count, uint8_t op)
 
 static ssize_t
 rxm_msg_tsend(struct rxm_ep *ep, struct rxm_conn *conn,
-	      struct rxm_tx_bounce_buf *tx_buf,
+	      struct rxm_tx_buf *tx_buf,
 	      const struct iovec *iov, size_t count,
 	      uint64_t data, uint64_t tag)
 {
@@ -1479,7 +1479,7 @@ rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       void *context, uint64_t data, uint64_t flags, uint64_t tag,
 	       uint8_t op, size_t data_len, size_t total_len)
 {
-	struct rxm_tx_bounce_buf *eager_buf;
+	struct rxm_tx_buf *eager_buf;
 	enum fi_hmem_iface iface;
 	uint64_t device;
 	ssize_t ret;
@@ -1536,7 +1536,7 @@ rxm_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		void *context, uint64_t data, uint64_t flags, uint64_t tag,
 		uint8_t op)
 {
-	struct rxm_tx_bounce_buf *rndv_buf;
+	struct rxm_tx_buf *rndv_buf;
 	size_t data_len, total_len;
 	enum fi_hmem_iface iface;
 	uint64_t device;
@@ -1608,7 +1608,7 @@ static ssize_t
 rxm_ep_progress_sar_deferred_segments(struct rxm_deferred_tx_entry *def_tx_entry)
 {
 	ssize_t ret = 0;
-	struct rxm_tx_bounce_buf *tx_buf = def_tx_entry->sar_seg.cur_seg_tx_buf;
+	struct rxm_tx_buf *tx_buf = def_tx_entry->sar_seg.cur_seg_tx_buf;
 
 	if (tx_buf) {
 		ret = fi_send(def_tx_entry->rxm_conn->msg_ep, &tx_buf->pkt,
@@ -2924,7 +2924,7 @@ rxm_prepare_deferred_rndv_write(struct rxm_deferred_tx_entry **def_tx_entry,
 			       void *buf)
 {
 	uint8_t i;
-	struct rxm_tx_bounce_buf *tx_buf = buf;
+	struct rxm_tx_buf *tx_buf = buf;
 	struct rxm_ep *rxm_ep = tx_buf->write_rndv.conn->handle.cmap->ep;
 
 	*def_tx_entry = rxm_ep_alloc_deferred_tx_entry(rxm_ep, tx_buf->write_rndv.conn,
