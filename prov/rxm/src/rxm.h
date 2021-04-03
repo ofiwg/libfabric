@@ -443,13 +443,6 @@ struct rxm_iov {
 	uint8_t count;
 };
 
-enum rxm_buf_pool_type {
-	RXM_BUF_POOL_RX		= 0,
-	RXM_BUF_POOL_START	= RXM_BUF_POOL_RX,
-	RXM_BUF_POOL_TX,
-	RXM_BUF_POOL_MAX,
-};
-
 struct rxm_buf {
 	/* Must stay at top */
 	struct fi_context fi_context;
@@ -622,12 +615,6 @@ struct rxm_recv_queue {
 	dlist_func_t		*match_unexp;
 };
 
-struct rxm_buf_pool {
-	enum rxm_buf_pool_type type;
-	struct ofi_bufpool *pool;
-	struct rxm_ep *rxm_ep;
-};
-
 struct rxm_msg_eq_entry {
 	ssize_t			rd;
 	uint32_t		event;
@@ -690,7 +677,8 @@ struct rxm_ep {
 	size_t			inject_limit;
 	size_t			sar_limit;
 
-	struct rxm_buf_pool	*buf_pools;
+	struct ofi_bufpool	*rx_pool;
+	struct ofi_bufpool	*tx_pool;
 
 	struct dlist_entry	repost_ready_list;
 	struct dlist_entry	deferred_tx_conn_queue;
@@ -908,12 +896,6 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
 	pkt->hdr.tag = tag;
 	pkt->hdr.flags = (flags & FI_REMOTE_CQ_DATA);
 	pkt->hdr.data = data;
-}
-
-static inline void *
-rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
-{
-	return ofi_buf_alloc(rxm_ep->buf_pools[type].pool);
 }
 
 static inline void
