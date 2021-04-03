@@ -109,23 +109,22 @@ static int rxm_match_unexp_msg_tag_addr(struct dlist_entry *item, const void *ar
 
 static int rxm_buf_reg(struct ofi_bufpool_region *region)
 {
-	struct rxm_buf_pool *pool = region->pool->attr.context;
-	struct rxm_ep *rxm_ep = pool->rxm_ep;
+	struct rxm_ep *rxm_ep = region->pool->attr.context;
 	struct rxm_domain *rxm_domain;
 	int ret;
 	bool hmem_enabled = !!(rxm_ep->util_ep.caps & FI_HMEM);
 
 	if (hmem_enabled) {
 		ret = ofi_hmem_host_register(region->mem_region,
-					region->pool->region_size);
+					     region->pool->region_size);
 		if (ret != FI_SUCCESS)
 			return ret;
 	}
 
-	if (!pool->rxm_ep->msg_mr_local)
+	if (!rxm_ep->msg_mr_local)
 		return 0;
 
-	rxm_domain = container_of(pool->rxm_ep->util_ep.domain,
+	rxm_domain = container_of(rxm_ep->util_ep.domain,
 				  struct rxm_domain, util_domain);
 
 	ret = rxm_msg_mr_reg_internal(rxm_domain, region->mem_region,
@@ -142,99 +141,40 @@ static int rxm_buf_reg(struct ofi_bufpool_region *region)
 	return ret;
 }
 
-static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
+static void rxm_init_rx_buf(struct ofi_bufpool_region *region, void *buf)
 {
-	struct rxm_buf_pool *pool = region->pool->attr.context;
-	struct rxm_pkt *pkt;
-	struct rxm_rx_buf *rx_buf;
-	struct rxm_tx_bounce_buf *bounce_buf;
-	void *mr_desc;
-	uint8_t type;
+	struct rxm_ep *ep = region->pool->attr.context;
+	struct rxm_rx_buf *rx_buf = buf;
 
-	if (pool->rxm_ep->msg_mr_local) {
-		mr_desc = fi_mr_desc((struct fid_mr *) region->context);
-	} else {
-		mr_desc = NULL;
-	}
+	rx_buf->hdr.desc = ep->msg_mr_local ?
+			   fi_mr_desc((struct fid_mr *) region->context) : NULL;
+	rx_buf->ep = ep;
+}
 
-	switch (pool->type) {
-	case RXM_BUF_POOL_RX:
-		rx_buf = buf;
-		rx_buf->ep = pool->rxm_ep;
+static void rxm_init_tx_buf(struct ofi_bufpool_region *region, void *buf)
+{
+	struct rxm_ep *ep = region->pool->attr.context;
+	struct rxm_tx_bounce_buf *tx_buf = buf;
 
-		rx_buf->hdr.desc = mr_desc;
-		pkt = NULL;
-		type = rxm_ctrl_eager; /* This can be any value */
-		break;
-	case RXM_BUF_POOL_TX:
-		bounce_buf = buf;
-		bounce_buf->hdr.desc = mr_desc;
-		pkt = &bounce_buf->pkt;
-		type = rxm_ctrl_eager; /* set when removed from pool */
-		break;
-	default:
-		assert(0);
-		pkt = NULL;
-		break;
-	}
+	tx_buf->hdr.desc = ep->msg_mr_local ?
+			   fi_mr_desc((struct fid_mr *) region->context) : NULL;
 
-	if (pkt) {
-		pkt->ctrl_hdr.version = RXM_CTRL_VERSION;
-		pkt->hdr.version = OFI_OP_VERSION;
-		pkt->ctrl_hdr.type = type;
-	}
+	tx_buf->pkt.ctrl_hdr.version = RXM_CTRL_VERSION;
+	tx_buf->pkt.hdr.version = OFI_OP_VERSION;
 }
 
 static void rxm_buf_close(struct ofi_bufpool_region *region)
 {
-	struct rxm_buf_pool *pool = region->pool->attr.context;
-	struct rxm_ep *rxm_ep = pool->rxm_ep;
-	bool hmem_enabled = !!(rxm_ep->util_ep.caps & FI_HMEM);
+	struct rxm_ep *ep = region->pool->attr.context;
 
-	if (hmem_enabled)
+	if (ep->util_ep.caps & FI_HMEM)
 		ofi_hmem_host_unregister(region->mem_region);
 
-	if (rxm_ep->msg_mr_local) {
+	if (ep->msg_mr_local) {
 		/* We would get a (fid_mr *) in context but
 		 * it is safe to cast it into (fid *) */
 		fi_close(region->context);
 	}
-}
-
-static void rxm_buf_pool_destroy(struct rxm_buf_pool *pool)
-{
-	/* This indicates whether the pool is allocated or not */
-	if (pool->rxm_ep) {
-		ofi_bufpool_destroy(pool->pool);
-	}
-}
-
-static int rxm_buf_pool_create(struct rxm_ep *rxm_ep, size_t size,
-			       size_t max_cnt, size_t chunk_count,
-			       struct rxm_buf_pool *pool,
-			       enum rxm_buf_pool_type type)
-{
-	int ret;
-	struct ofi_bufpool_attr attr = {
-		.size		= size,
-		.alignment	= 16,
-		.max_cnt	= max_cnt,
-		.chunk_cnt	= chunk_count,
-		.alloc_fn	= rxm_buf_reg,
-		.free_fn	= rxm_buf_close,
-		.init_fn	= rxm_buf_init,
-		.context	= pool,
-		.flags		= OFI_BUFPOOL_NO_TRACK,
-	};
-
-	pool->rxm_ep = rxm_ep;
-	pool->type = type;
-	ret = ofi_bufpool_create_attr(&attr, &pool->pool);
-	if (ret)
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to create buf pool\n");
-
-	return ret;
 }
 
 static void rxm_recv_entry_init(struct rxm_recv_entry *entry, void *arg)
@@ -299,58 +239,44 @@ static void rxm_recv_queue_close(struct rxm_recv_queue *recv_queue)
 	// TODO cleanup recv_list and unexp msg list
 }
 
-static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
+static int rxm_ep_create_pools(struct rxm_ep *rxm_ep)
 {
-	size_t entry_sizes[] = {
-		[RXM_BUF_POOL_RX] = rxm_eager_limit +
-				    sizeof(struct rxm_rx_buf),
-		[RXM_BUF_POOL_TX] = rxm_eager_limit +
-				    sizeof(struct rxm_tx_bounce_buf),
-	};
-	size_t chunk_cnt, max_size;
-	int ret, i;
+	struct ofi_bufpool_attr attr = {0};
+	int ret;
 
 	dlist_init(&rxm_ep->repost_ready_list);
 
-	rxm_ep->buf_pools = calloc(1, RXM_BUF_POOL_MAX *
-				      sizeof(*rxm_ep->buf_pools));
-	if (!rxm_ep->buf_pools)
-		return -FI_ENOMEM;
+	attr.size = rxm_eager_limit + sizeof(struct rxm_rx_buf);
+	attr.alignment = 16;
+	attr.chunk_cnt = 1024;
+	attr.alloc_fn = rxm_buf_reg;
+	attr.free_fn = rxm_buf_close;
+	attr.init_fn = rxm_init_rx_buf;
+	attr.context = rxm_ep;
+	attr.flags = OFI_BUFPOOL_NO_TRACK;
 
-	for (i = RXM_BUF_POOL_START; i < RXM_BUF_POOL_MAX; i++) {
-		if (i == RXM_BUF_POOL_TX) {
-			chunk_cnt = 1024;
-			max_size = rxm_ep->rxm_info->tx_attr->size;
-		} else if (i == RXM_BUF_POOL_RX) {
-			chunk_cnt = 1024;
-			max_size = 0;
-		} else {
-			chunk_cnt = 64;
-			max_size = rxm_ep->rxm_info->tx_attr->size;
-		}
-
-		ret = rxm_buf_pool_create(rxm_ep, entry_sizes[i], max_size,
-					  chunk_cnt, &rxm_ep->buf_pools[i], i);
-		if (ret)
-			goto err;
+	ret = ofi_bufpool_create_attr(&attr, &rxm_ep->rx_pool);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to create rx buf pool\n");
+		return ret;
 	}
 
-	return FI_SUCCESS;
+	attr.size = rxm_eager_limit + sizeof(struct rxm_tx_bounce_buf);
+	attr.init_fn = rxm_init_tx_buf;
+	ret = ofi_bufpool_create_attr(&attr, &rxm_ep->tx_pool);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+			"Unable to create rx buf pool\n");
+		goto free_rx_pool;
+	}
 
-err:
-	while (--i >= RXM_BUF_POOL_START)
-		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
-	free(rxm_ep->buf_pools);
+	return 0;
+
+free_rx_pool:
+	ofi_bufpool_destroy(rxm_ep->rx_pool);
+	rxm_ep->rx_pool = NULL;
 	return ret;
-}
-
-static void rxm_ep_txrx_pool_destroy(struct rxm_ep *rxm_ep)
-{
-	size_t i;
-
-	for (i = RXM_BUF_POOL_START; i < RXM_BUF_POOL_MAX; i++)
-		rxm_buf_pool_destroy(&rxm_ep->buf_pools[i]);
-	free(rxm_ep->buf_pools);
 }
 
 static int rxm_multi_recv_pool_init(struct rxm_ep *rxm_ep)
@@ -398,21 +324,20 @@ err_recv_tag:
 	return ret;
 }
 
-static void rxm_ep_rx_queue_close(struct rxm_ep *rxm_ep)
-{
-	rxm_recv_queue_close(&rxm_ep->trecv_queue);
-	rxm_recv_queue_close(&rxm_ep->recv_queue);
-}
-
 /* It is safe to call this function, even if `rxm_ep_txrx_res_open`
  * has not yet been called */
 static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
 {
-	rxm_ep_rx_queue_close(rxm_ep);
+	rxm_recv_queue_close(&rxm_ep->trecv_queue);
+	rxm_recv_queue_close(&rxm_ep->recv_queue);
+
 	if (rxm_ep->multi_recv_pool)
 		ofi_bufpool_destroy(rxm_ep->multi_recv_pool);
-	if (rxm_ep->buf_pools)
-		rxm_ep_txrx_pool_destroy(rxm_ep);
+
+	if (rxm_ep->rx_pool)
+		ofi_bufpool_destroy(rxm_ep->rx_pool);
+	if (rxm_ep->tx_pool)
+		ofi_bufpool_destroy(rxm_ep->tx_pool);
 }
 
 static int rxm_setname(fid_t fid, void *addr, size_t addrlen)
@@ -561,7 +486,7 @@ static int rxm_ep_setopt(fid_t fid, int level, int optname,
 			rxm_ep->min_multi_recv_size);
 		break;
 	case FI_OPT_BUFFERED_MIN:
-		if (rxm_ep->buf_pools) {
+		if (rxm_ep->rx_pool) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Endpoint already enabled. Can't set opt now!\n");
 			ret = -FI_EOPBADSTATE;
@@ -579,7 +504,7 @@ static int rxm_ep_setopt(fid_t fid, int level, int optname,
 		}
 		break;
 	case FI_OPT_BUFFERED_LIMIT:
-		if (rxm_ep->buf_pools) {
+		if (rxm_ep->rx_pool) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Endpoint already enabled. Can't set opt now!\n");
 			ret = -FI_EOPBADSTATE;
@@ -1038,7 +963,7 @@ rxm_alloc_rndv_buf(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	size_t len, i;
 	ssize_t ret;
 
-	*rndv_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
+	*rndv_buf = ofi_buf_alloc(rxm_ep->tx_pool);
 	if (!*rndv_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from RNDV buffer pool\n");
@@ -1148,7 +1073,7 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	struct rxm_tx_bounce_buf *tx_buf;
 
-	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
+	tx_buf = ofi_buf_alloc(rxm_ep->tx_pool);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from SAR buffer pool\n");
@@ -1180,8 +1105,7 @@ rxm_ep_sar_tx_cleanup(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	struct rxm_tx_bounce_buf *first_tx_buf;
 
-	first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->
-					    buf_pools[RXM_BUF_POOL_TX].pool,
+	first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->tx_pool,
 					    tx_buf->pkt.ctrl_hdr.msg_id);
 	ofi_buf_free(first_tx_buf);
 	ofi_buf_free(tx_buf);
@@ -1331,7 +1255,7 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		.iov_len = len,
 	};
 
-	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
+	tx_buf = ofi_buf_alloc(rxm_ep->tx_pool);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from Eager buffer pool\n");
@@ -1430,7 +1354,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					       data, tag);
 		}
 
-		tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
+		tx_buf = ofi_buf_alloc(rxm_ep->tx_pool);
 		if (!tx_buf) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of eager inject buffers\n");
@@ -1560,7 +1484,7 @@ rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	uint64_t device;
 	ssize_t ret;
 
-	eager_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
+	eager_buf = ofi_buf_alloc(rxm_ep->tx_pool);
 	if (!eager_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from Eager buffer pool\n");
@@ -2763,7 +2687,7 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 {
 	int ret;
 
-	ret = rxm_ep_txrx_pool_create(rxm_ep);
+	ret = rxm_ep_create_pools(rxm_ep);
 	if (ret)
 		return ret;
 
@@ -2775,7 +2699,10 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 
 	return FI_SUCCESS;
 err:
-	rxm_ep_txrx_pool_destroy(rxm_ep);
+	ofi_bufpool_destroy(rxm_ep->rx_pool);
+	ofi_bufpool_destroy(rxm_ep->tx_pool);
+	rxm_ep->rx_pool = NULL;
+	rxm_ep->tx_pool = NULL;
 	return ret;
 }
 

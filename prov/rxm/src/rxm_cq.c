@@ -68,7 +68,7 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep, bool repost)
 {
 	struct rxm_rx_buf *rx_buf;
 
-	rx_buf = ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_RX].pool);
+	rx_buf = ofi_buf_alloc(rxm_ep->rx_pool);
 	if (!rx_buf)
 		return NULL;
 
@@ -236,9 +236,8 @@ static bool rxm_complete_sar(struct rxm_ep *rxm_ep,
 		ofi_buf_free(tx_buf);
 		break;
 	case RXM_SAR_SEG_LAST:
-		first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->
-					buf_pools[RXM_BUF_POOL_TX].pool,
-					tx_buf->pkt.ctrl_hdr.msg_id);
+		first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->tx_pool,
+						tx_buf->pkt.ctrl_hdr.msg_id);
 		ofi_buf_free(first_tx_buf);
 		ofi_buf_free(tx_buf);
 		return true;
@@ -309,7 +308,7 @@ static void rxm_rndv_handle_rd_done(struct rxm_ep *rxm_ep,
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got ACK for msg_id: 0x%" PRIx64 "\n",
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
-	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX].pool,
+	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->tx_pool,
 				      rx_buf->pkt.ctrl_hdr.msg_id);
 	assert(tx_buf->pkt.ctrl_hdr.msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
 
@@ -533,7 +532,7 @@ static ssize_t rxm_rndv_handle_wr_data(struct rxm_rx_buf *rx_buf)
 	size_t total_len, rma_len = 0;
 	struct rxm_rndv_hdr *rx_hdr = (struct rxm_rndv_hdr *) rx_buf->pkt.data;
 
-	tx_buf = ofi_bufpool_get_ibuf(rx_buf->ep->buf_pools[RXM_BUF_POOL_TX].pool,
+	tx_buf = ofi_bufpool_get_ibuf(rx_buf->ep->tx_pool,
 				      rx_buf->pkt.ctrl_hdr.msg_id);
 	total_len = tx_buf->pkt.hdr.size;
 
@@ -841,7 +840,7 @@ static void rxm_rndv_send_rd_done(struct rxm_rx_buf *rx_buf)
 
 	assert(rx_buf->conn);
 	assert(rx_buf->hdr.state == RXM_RNDV_READ);
-	buf = rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX);
+	buf = ofi_buf_alloc(rx_buf->ep->tx_pool);
 	if (!buf) {
 		ret = -FI_ENOMEM;
 		goto err;
@@ -895,7 +894,7 @@ rxm_rndv_send_wr_done(struct rxm_ep *rxm_ep, struct rxm_tx_bounce_buf *tx_buf)
 	ssize_t ret;
 
 	assert(tx_buf->hdr.state == RXM_RNDV_WRITE);
-	buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
+	buf = ofi_buf_alloc(rxm_ep->tx_pool);
 	if (!buf) {
 		ret = -FI_ENOMEM;
 		goto err;
@@ -948,7 +947,7 @@ ssize_t rxm_rndv_send_wr_data(struct rxm_rx_buf *rx_buf)
 
 	assert(rx_buf->conn);
 
-	buf = rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX);
+	buf = ofi_buf_alloc(rx_buf->ep->tx_pool);
 	if (!buf) {
 		ret = -FI_ENOMEM;
 		goto err;
@@ -1178,7 +1177,7 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	if (!rx_buf->conn)
 		return -FI_EOTHER;
 
-	resp_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
+	resp_buf = ofi_buf_alloc(rxm_ep->tx_pool);
 	if (!resp_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Unable to allocate from Atomic buffer pool\n");
@@ -1260,7 +1259,7 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 	uint64_t device;
 
 	resp_hdr = (struct rxm_atomic_resp_hdr *) rx_buf->pkt.data;
-	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX].pool,
+	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->tx_pool,
 				      rx_buf->pkt.ctrl_hdr.msg_id);
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "received atomic response: op: %" PRIu8
 	       " msg_id: 0x%" PRIx64 "\n", rx_buf->pkt.hdr.op,
