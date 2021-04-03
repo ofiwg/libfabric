@@ -384,18 +384,19 @@ static ssize_t rxm_send_credits(struct fid_ep *ep, size_t credits)
 		container_of(ep->fid.context, struct rxm_conn, handle);
 	struct rxm_ep *rxm_ep = rxm_conn->handle.cmap->ep;
 	struct rxm_deferred_tx_entry *def_tx_entry;
-	struct rxm_tx_base_buf *tx_buf;
+	struct rxm_tx_bounce_buf *tx_buf;
 	struct iovec iov;
 	struct fi_msg msg;
 	ssize_t ret;
 
-	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_CREDIT);
+	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from TX credit buffer pool.\n");
 		return -FI_ENOMEM;
 	}
 
+	tx_buf->hdr.state = RXM_CREDIT_TX;
 	rxm_ep_format_tx_buf_pkt(rxm_conn, 0, rxm_ctrl_credit, 0, 0, FI_SEND,
 				 &tx_buf->pkt);
 	tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_credit;
