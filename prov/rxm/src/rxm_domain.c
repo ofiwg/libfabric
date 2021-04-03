@@ -384,7 +384,7 @@ static ssize_t rxm_send_credits(struct fid_ep *ep, size_t credits)
 		container_of(ep->fid.context, struct rxm_conn, handle);
 	struct rxm_ep *rxm_ep = rxm_conn->handle.cmap->ep;
 	struct rxm_deferred_tx_entry *def_tx_entry;
-	struct rxm_tx_bounce_buf *tx_buf;
+	struct rxm_tx_buf *tx_buf;
 	struct iovec iov;
 	struct fi_msg msg;
 	ssize_t ret;

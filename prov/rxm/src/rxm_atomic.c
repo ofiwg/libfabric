@@ -38,7 +38,7 @@
 
 static void
 rxm_ep_format_atomic_pkt_hdr(struct rxm_conn *rxm_conn,
-		 struct rxm_tx_bounce_buf *tx_buf, size_t data_len,
+		 struct rxm_tx_buf *tx_buf, size_t data_len,
 		 uint32_t pkt_op, enum fi_datatype datatype,
 		 uint8_t atomic_op, uint64_t flags, uint64_t data,
 		 const struct fi_rma_ioc *rma_ioc, size_t rma_ioc_count)
@@ -61,7 +61,7 @@ rxm_ep_format_atomic_pkt_hdr(struct rxm_conn *rxm_conn,
 
 static inline int
 rxm_ep_send_atomic_req(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		       struct rxm_tx_bounce_buf *tx_buf, uint64_t len)
+		       struct rxm_tx_buf *tx_buf, uint64_t len)
 {
 	int ret;
 
@@ -94,7 +94,7 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		struct fi_ioc *resultv, void **result_desc,
 		size_t result_iov_count, uint32_t op, uint64_t flags)
 {
-	struct rxm_tx_bounce_buf *tx_buf;
+	struct rxm_tx_buf *tx_buf;
 	struct rxm_atomic_hdr *atomic_hdr;
 	struct iovec buf_iov[RXM_IOV_LIMIT];
 	struct iovec cmp_iov[RXM_IOV_LIMIT];

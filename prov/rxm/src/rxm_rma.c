@@ -37,7 +37,7 @@
 static ssize_t
 rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 		   void **desc, void **desc_storage, size_t iov_count,
-		   uint64_t access, struct rxm_tx_bounce_buf *rma_buf)
+		   uint64_t access, struct rxm_tx_buf *rma_buf)
 {
 	size_t i, ret;
 
@@ -67,7 +67,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 		  const struct fi_msg_rma *msg, uint64_t flags),
 		  uint64_t comp_flags)
 {
-	struct rxm_tx_bounce_buf *rma_buf;
+	struct rxm_tx_buf *rma_buf;
 	struct fi_msg_rma msg_rma = *msg;
 	struct rxm_conn *rxm_conn;
 	void *mr_desc[RXM_IOV_LIMIT] = { 0 };
@@ -182,7 +182,7 @@ static ssize_t rxm_ep_read(struct fid_ep *ep_fid, void *buf, size_t len,
 }
 
 static void
-rxm_ep_format_rma_msg(struct rxm_tx_bounce_buf *rma_buf,
+rxm_ep_format_rma_msg(struct rxm_tx_buf *rma_buf,
 		      const struct fi_msg_rma *orig_msg,
 		      struct iovec *rxm_iov, struct fi_msg_rma *rxm_msg)
 {
@@ -217,7 +217,7 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			      size_t total_size, const struct fi_msg_rma *msg,
 			      uint64_t flags)
 {
-	struct rxm_tx_bounce_buf *rma_buf;
+	struct rxm_tx_buf *rma_buf;
 	ssize_t ret;
 	struct iovec rxm_msg_iov = { 0 };
 	struct fi_msg_rma rxm_rma_msg = { 0 };
