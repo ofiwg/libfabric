@@ -447,9 +447,6 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_RX		= 0,
 	RXM_BUF_POOL_START	= RXM_BUF_POOL_RX,
 	RXM_BUF_POOL_TX,
-	RXM_BUF_POOL_TX_START	= RXM_BUF_POOL_TX,
-	RXM_BUF_POOL_TX_RNDV_REQ,
-	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_RNDV_REQ,
 	RXM_BUF_POOL_MAX,
 };
 
@@ -503,19 +500,6 @@ struct rxm_tx_bounce_buf {
 		struct rxm_iov atomic_result;
 	};
 
-	/* Must stay at bottom */
-	struct rxm_pkt pkt;
-};
-
-struct rxm_tx_rndv_buf {
-	/* Must stay at top */
-	struct rxm_buf hdr;
-
-	void *app_context;
-	uint64_t flags;
-	struct fid_mr *mr[RXM_IOV_LIMIT];
-	uint8_t count;
-
 	struct {
 		struct iovec iov[RXM_IOV_LIMIT];
 		void *desc[RXM_IOV_LIMIT];
@@ -552,7 +536,7 @@ struct rxm_deferred_tx_entry {
 			size_t pkt_size;
 		} rndv_ack;
 		struct {
-			struct rxm_tx_rndv_buf *tx_buf;
+			struct rxm_tx_bounce_buf *tx_buf;
 		} rndv_done;
 		struct {
 			struct rxm_rx_buf *rx_buf;
@@ -560,7 +544,7 @@ struct rxm_deferred_tx_entry {
 			struct rxm_iov rxm_iov;
 		} rndv_read;
 		struct {
-			struct rxm_tx_rndv_buf *tx_buf;
+			struct rxm_tx_bounce_buf *tx_buf;
 			struct fi_rma_iov rma_iov;
 			struct rxm_iov rxm_iov;
 		} rndv_write;
@@ -929,8 +913,6 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
 static inline void *
 rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
-	assert((type == RXM_BUF_POOL_TX) ||
-	       (type == RXM_BUF_POOL_TX_RNDV_REQ));
 	return ofi_buf_alloc(rxm_ep->buf_pools[type].pool);
 }
 

@@ -148,7 +148,6 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 	struct rxm_pkt *pkt;
 	struct rxm_rx_buf *rx_buf;
 	struct rxm_tx_bounce_buf *bounce_buf;
-	struct rxm_tx_rndv_buf *tx_rndv_buf;
 	void *mr_desc;
 	uint8_t type;
 
@@ -172,13 +171,6 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 		bounce_buf->hdr.desc = mr_desc;
 		pkt = &bounce_buf->pkt;
 		type = rxm_ctrl_eager; /* set when removed from pool */
-		break;
-	case RXM_BUF_POOL_TX_RNDV_REQ:
-		tx_rndv_buf = buf;
-
-		tx_rndv_buf->hdr.desc = mr_desc;
-		pkt = &tx_rndv_buf->pkt;
-		type = rxm_ctrl_rndv_req;
 		break;
 	default:
 		assert(0);
@@ -314,9 +306,6 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 				    sizeof(struct rxm_rx_buf),
 		[RXM_BUF_POOL_TX] = rxm_eager_limit +
 				    sizeof(struct rxm_tx_bounce_buf),
-		[RXM_BUF_POOL_TX_RNDV_REQ] = sizeof(struct rxm_rndv_hdr) +
-					 rxm_ep->buffered_min +
-					 sizeof(struct rxm_tx_rndv_buf),
 	};
 	size_t chunk_cnt, max_size;
 	int ret, i;
@@ -1042,34 +1031,35 @@ rxm_alloc_rndv_buf(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   void **desc, size_t data_len, uint64_t data,
 		   uint64_t flags, uint64_t tag, uint8_t op,
 		   enum fi_hmem_iface iface, uint64_t device,
-		   struct rxm_tx_rndv_buf **rndv_buf)
+		   struct rxm_tx_bounce_buf **rndv_buf)
 {
 	struct fid_mr *rxm_mr_msg_mr[RXM_IOV_LIMIT];
 	struct fid_mr **mr_iov;
 	size_t len, i;
 	ssize_t ret;
 
-	*rndv_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV_REQ);
+	*rndv_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 	if (!*rndv_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from RNDV buffer pool\n");
 		return -FI_EAGAIN;
 	}
 
+	(*rndv_buf)->pkt.ctrl_hdr.type = rxm_ctrl_rndv_req;
 	rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
 				 flags, &(*rndv_buf)->pkt);
 	(*rndv_buf)->pkt.ctrl_hdr.msg_id = ofi_buf_index(*rndv_buf);
 	(*rndv_buf)->app_context = context;
 	(*rndv_buf)->flags = flags;
-	(*rndv_buf)->count = count;
+	(*rndv_buf)->rma.count = count;
 
 	if (!rxm_ep->rdm_mr_local) {
-		ret = rxm_msg_mr_regv(rxm_ep, iov, (*rndv_buf)->count, data_len,
+		ret = rxm_msg_mr_regv(rxm_ep, iov, (*rndv_buf)->rma.count, data_len,
 				      rxm_ep->rndv_ops->tx_mr_access,
-				      (*rndv_buf)->mr);
+				      (*rndv_buf)->rma.mr);
 		if (ret)
 			goto err;
-		mr_iov = (*rndv_buf)->mr;
+		mr_iov = (*rndv_buf)->rma.mr;
 	} else {
 		for (i = 0; i < count; i++)
 			rxm_mr_msg_mr[i] = ((struct rxm_mr *) desc[i])->msg_mr;
@@ -1086,7 +1076,7 @@ rxm_alloc_rndv_buf(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	}
 
 	rxm_rndv_hdr_init(rxm_ep, &(*rndv_buf)->pkt.data, iov,
-			  (*rndv_buf)->count, mr_iov);
+			  (*rndv_buf)->rma.count, mr_iov);
 
 	len = sizeof(struct rxm_pkt) + sizeof(struct rxm_rndv_hdr);
 
@@ -1108,7 +1098,7 @@ err:
 
 static ssize_t
 rxm_ep_rndv_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		   struct rxm_tx_rndv_buf *tx_buf, size_t pkt_size)
+		    struct rxm_tx_bounce_buf *tx_buf, size_t pkt_size)
 {
 	ssize_t ret;
 
@@ -1138,7 +1128,7 @@ err:
 	FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 	       "Transmit for MSG provider failed\n");
 	if (!rxm_ep->rdm_mr_local)
-		rxm_msg_mr_closev(tx_buf->mr, tx_buf->count);
+		rxm_msg_mr_closev(tx_buf->rma.mr, tx_buf->rma.count);
 	ofi_buf_free(tx_buf);
 	return ret;
 }
@@ -1622,7 +1612,7 @@ rxm_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		void *context, uint64_t data, uint64_t flags, uint64_t tag,
 		uint8_t op)
 {
-	struct rxm_tx_rndv_buf *rndv_buf;
+	struct rxm_tx_bounce_buf *rndv_buf;
 	size_t data_len, total_len;
 	enum fi_hmem_iface iface;
 	uint64_t device;
@@ -3007,7 +2997,7 @@ rxm_prepare_deferred_rndv_write(struct rxm_deferred_tx_entry **def_tx_entry,
 			       void *buf)
 {
 	uint8_t i;
-	struct rxm_tx_rndv_buf *tx_buf = buf;
+	struct rxm_tx_bounce_buf *tx_buf = buf;
 	struct rxm_ep *rxm_ep = tx_buf->write_rndv.conn->handle.cmap->ep;
 
 	*def_tx_entry = rxm_ep_alloc_deferred_tx_entry(rxm_ep, tx_buf->write_rndv.conn,
