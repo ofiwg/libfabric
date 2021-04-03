@@ -37,7 +37,7 @@
 static ssize_t
 rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 		   void **desc, void **desc_storage, size_t iov_count,
-		   uint64_t access, struct rxm_rma_buf *rma_buf)
+		   uint64_t access, struct rxm_tx_bounce_buf *rma_buf)
 {
 	size_t i, ret;
 
@@ -46,13 +46,13 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 
 	if (!rxm_ep->rdm_mr_local) {
 		ret = rxm_msg_mr_regv(rxm_ep, msg_iov, iov_count, SIZE_MAX,
-				      access, rma_buf->mr.mr);
+				      access, rma_buf->rma.mr);
 		if (OFI_UNLIKELY(ret))
 			return ret;
 
 		for (i = 0; i < iov_count; i++)
-			desc_storage[i] = fi_mr_desc(rma_buf->mr.mr[i]);
-		rma_buf->mr.count = iov_count;
+			desc_storage[i] = fi_mr_desc(rma_buf->rma.mr[i]);
+		rma_buf->rma.count = iov_count;
 	} else {
 		for (i = 0; i < iov_count; i++)
 			desc_storage[i] =
@@ -67,7 +67,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 		  const struct fi_msg_rma *msg, uint64_t flags),
 		  uint64_t comp_flags)
 {
-	struct rxm_rma_buf *rma_buf;
+	struct rxm_tx_bounce_buf *rma_buf;
 	struct fi_msg_rma msg_rma = *msg;
 	struct rxm_conn *rxm_conn;
 	void *mr_desc[RXM_IOV_LIMIT] = { 0 };
@@ -81,12 +81,14 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 	if (OFI_UNLIKELY(ret))
 		goto unlock;
 
-	rma_buf = ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_RMA].pool);
+	rma_buf = ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_TX].pool);
 	if (!rma_buf) {
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}
 
+	rma_buf->hdr.state = RXM_RMA;
+	rma_buf->pkt.ctrl_hdr.type = rxm_ctrl_eager;
 	rma_buf->app_context = msg->context;
 	rma_buf->flags = flags;
 
@@ -104,7 +106,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 		goto unlock;
 
 	if ((rxm_ep->msg_mr_local) && (!rxm_ep->rdm_mr_local))
-		rxm_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
+		rxm_msg_mr_closev(rma_buf->rma.mr, rma_buf->rma.count);
 release:
 	ofi_buf_free(rma_buf);
 unlock:
@@ -180,7 +182,8 @@ static ssize_t rxm_ep_read(struct fid_ep *ep_fid, void *buf, size_t len,
 }
 
 static void
-rxm_ep_format_rma_msg(struct rxm_rma_buf *rma_buf, const struct fi_msg_rma *orig_msg,
+rxm_ep_format_rma_msg(struct rxm_tx_bounce_buf *rma_buf,
+		      const struct fi_msg_rma *orig_msg,
 		      struct iovec *rxm_iov, struct fi_msg_rma *rxm_msg)
 {
 	ssize_t ret __attribute__((unused));
@@ -214,17 +217,19 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			      size_t total_size, const struct fi_msg_rma *msg,
 			      uint64_t flags)
 {
-	struct rxm_rma_buf *rma_buf;
+	struct rxm_tx_bounce_buf *rma_buf;
 	ssize_t ret;
 	struct iovec rxm_msg_iov = { 0 };
 	struct fi_msg_rma rxm_rma_msg = { 0 };
 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
-	rma_buf = ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_RMA].pool);
+	rma_buf = ofi_buf_alloc(rxm_ep->buf_pools[RXM_BUF_POOL_TX].pool);
 	if (!rma_buf)
 		return -FI_EAGAIN;
 
+	rma_buf->hdr.state = RXM_RMA;
+	rma_buf->pkt.ctrl_hdr.type = rxm_ctrl_eager;
 	rma_buf->pkt.hdr.size = total_size;
 	rma_buf->app_context = msg->context;
 	rma_buf->flags = flags;
