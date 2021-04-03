@@ -38,14 +38,14 @@
 
 static void
 rxm_ep_format_atomic_pkt_hdr(struct rxm_conn *rxm_conn,
-		 struct rxm_tx_atomic_buf *tx_buf, size_t data_len,
+		 struct rxm_tx_bounce_buf *tx_buf, size_t data_len,
 		 uint32_t pkt_op, enum fi_datatype datatype,
 		 uint8_t atomic_op, uint64_t flags, uint64_t data,
 		 const struct fi_rma_ioc *rma_ioc, size_t rma_ioc_count)
 {
 	struct rxm_atomic_hdr *atomic_hdr;
 
-	atomic_hdr = (struct rxm_atomic_hdr *)tx_buf->pkt.data;
+	atomic_hdr = (struct rxm_atomic_hdr *) tx_buf->pkt.data;
 	rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, pkt_op, data, 0,
 				 flags, &tx_buf->pkt);
 	tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_atomic;
@@ -61,7 +61,7 @@ rxm_ep_format_atomic_pkt_hdr(struct rxm_conn *rxm_conn,
 
 static inline int
 rxm_ep_send_atomic_req(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		       struct rxm_tx_atomic_buf *tx_buf, uint64_t len)
+		       struct rxm_tx_bounce_buf *tx_buf, uint64_t len)
 {
 	int ret;
 
@@ -94,7 +94,7 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		struct fi_ioc *resultv, void **result_desc,
 		size_t result_iov_count, uint32_t op, uint64_t flags)
 {
-	struct rxm_tx_atomic_buf *tx_buf;
+	struct rxm_tx_bounce_buf *tx_buf;
 	struct rxm_atomic_hdr *atomic_hdr;
 	struct iovec buf_iov[RXM_IOV_LIMIT];
 	struct iovec cmp_iov[RXM_IOV_LIMIT];
@@ -155,7 +155,7 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		goto restore_credit;
 	}
 
-	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
+	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 	if (OFI_UNLIKELY(!tx_buf)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from Atomic buffer pool\n");
@@ -163,6 +163,7 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		goto restore_credit;
 	}
 
+	tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_atomic;
 	rxm_ep_format_atomic_pkt_hdr(rxm_conn, tx_buf, tot_len, op,
 				msg->datatype, msg->op, flags, msg->data,
 				msg->rma_iov, msg->rma_iov_count);
@@ -182,14 +183,14 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		assert(ret == cmp_len);
 	}
 
-	tx_buf->result_iov.count = result_iov_count;
+	tx_buf->atomic_result.count = result_iov_count;
 	if (resultv) {
-		ofi_ioc_to_iov(resultv, tx_buf->result_iov.iov,
+		ofi_ioc_to_iov(resultv, tx_buf->atomic_result.iov,
 			       result_iov_count, datatype_sz);
 
 		if (result_desc) {
 			for (i = 0; i < result_iov_count; i++)
-				tx_buf->result_iov.desc[i] = result_desc[i];
+				tx_buf->atomic_result.desc[i] = result_desc[i];
 		}
 	}
 

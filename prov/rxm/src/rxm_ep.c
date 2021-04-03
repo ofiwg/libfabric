@@ -151,7 +151,6 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 	struct rxm_tx_base_buf *tx_base_buf;
 	struct rxm_tx_bounce_buf *bounce_buf;
 	struct rxm_tx_rndv_buf *tx_rndv_buf;
-	struct rxm_tx_atomic_buf *tx_atomic_buf;
 	void *mr_desc;
 	uint8_t type;
 
@@ -198,13 +197,6 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 		tx_rndv_buf->hdr.desc = mr_desc;
 		pkt = &tx_rndv_buf->pkt;
 		type = rxm_ctrl_rndv_req;
-		break;
-	case RXM_BUF_POOL_TX_ATOMIC:
-		tx_atomic_buf = buf;
-
-		tx_atomic_buf->hdr.desc = mr_desc;
-		pkt = &tx_atomic_buf->pkt;
-		type = rxm_ctrl_atomic;
 		break;
 	case RXM_BUF_POOL_TX_RNDV_RD_DONE:
 		tx_base_buf = buf;
@@ -373,8 +365,6 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 					 sizeof(struct rxm_tx_rndv_buf),
 		[RXM_BUF_POOL_TX_RNDV_WR_DATA] = sizeof(struct rxm_rndv_hdr) +
 						   sizeof(struct rxm_tx_base_buf),
-		[RXM_BUF_POOL_TX_ATOMIC] = rxm_eager_limit +
-					 sizeof(struct rxm_tx_atomic_buf),
 		[RXM_BUF_POOL_TX_CREDIT] = sizeof(struct rxm_tx_base_buf),
 	};
 	size_t chunk_cnt, max_size;

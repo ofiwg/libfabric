@@ -453,7 +453,6 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_RNDV_WR_DONE,
 	RXM_BUF_POOL_TX_RNDV_REQ,
 	RXM_BUF_POOL_TX_RNDV_WR_DATA,
-	RXM_BUF_POOL_TX_ATOMIC,
 	RXM_BUF_POOL_TX_CREDIT,
 	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_CREDIT,
 	RXM_BUF_POOL_MAX,
@@ -509,10 +508,13 @@ struct rxm_tx_bounce_buf {
 	void *app_context;
 	uint64_t flags;
 
-	struct {
-		struct fid_mr *mr[RXM_IOV_LIMIT];
-		uint8_t count;
-	} rma;
+	union {
+		struct {
+			struct fid_mr *mr[RXM_IOV_LIMIT];
+			uint8_t count;
+		} rma;
+		struct rxm_iov atomic_result;
+	};
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -536,18 +538,6 @@ struct rxm_tx_rndv_buf {
 		struct rxm_tx_base_buf *done_buf;
 		struct rxm_rndv_hdr remote_hdr;
 	} write_rndv;
-
-	/* Must stay at bottom */
-	struct rxm_pkt pkt;
-};
-
-struct rxm_tx_atomic_buf {
-	/* Must stay at top */
-	struct rxm_buf hdr;
-
-	void *app_context;
-	uint64_t flags;
-	struct rxm_iov result_iov;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -608,7 +598,7 @@ struct rxm_deferred_tx_entry {
 			uint64_t device;
 		} sar_seg;
 		struct {
-			struct rxm_tx_atomic_buf *tx_buf;
+			struct rxm_tx_bounce_buf *tx_buf;
 			ssize_t len;
 		} atomic_resp;
 		struct {
@@ -823,7 +813,7 @@ static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 
 static inline ssize_t
 rxm_atomic_send_respmsg(struct rxm_ep *rxm_ep, struct rxm_conn *conn,
-			struct rxm_tx_atomic_buf *resp_buf, ssize_t len)
+			struct rxm_tx_bounce_buf *resp_buf, ssize_t len)
 {
 	struct iovec iov = {
 		.iov_base = (void *) &resp_buf->pkt,
@@ -958,7 +948,6 @@ rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	       (type == RXM_BUF_POOL_TX_RNDV_WR_DATA) ||
 	       (type == RXM_BUF_POOL_TX_RNDV_WR_DONE) ||
 	       (type == RXM_BUF_POOL_TX_RNDV_REQ) ||
-	       (type == RXM_BUF_POOL_TX_ATOMIC) ||
 	       (type == RXM_BUF_POOL_TX_CREDIT));
 	return ofi_buf_alloc(rxm_ep->buf_pools[type].pool);
 }

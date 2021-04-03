@@ -1010,7 +1010,7 @@ static void rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 }
 
 static void rxm_format_atomic_resp_pkt_hdr(struct rxm_conn *rxm_conn,
-					   struct rxm_tx_atomic_buf *tx_buf,
+					   struct rxm_tx_bounce_buf *tx_buf,
 					   size_t data_len, uint32_t pkt_op,
 					   enum fi_datatype datatype,
 					   uint8_t atomic_op)
@@ -1026,7 +1026,7 @@ static void rxm_format_atomic_resp_pkt_hdr(struct rxm_conn *rxm_conn,
 
 static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 				    struct rxm_rx_buf *rx_buf,
-				    struct rxm_tx_atomic_buf *resp_buf,
+				    struct rxm_tx_bounce_buf *resp_buf,
 				    ssize_t result_len, uint32_t status)
 {
 	struct rxm_deferred_tx_entry *def_tx_entry;
@@ -1162,7 +1162,7 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	uint64_t offset;
 	int i;
 	ssize_t ret = 0;
-	struct rxm_tx_atomic_buf *resp_buf;
+	struct rxm_tx_bounce_buf *resp_buf;
 	struct rxm_atomic_resp_hdr *resp_hdr;
 	struct rxm_domain *domain = container_of(rxm_ep->util_ep.domain,
 					 struct rxm_domain, util_domain);
@@ -1179,7 +1179,7 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	if (!rx_buf->conn)
 		return -FI_EOTHER;
 
-	resp_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_ATOMIC);
+	resp_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 	if (!resp_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Unable to allocate from Atomic buffer pool\n");
@@ -1188,6 +1188,7 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 		return -FI_EAGAIN;
 	}
 
+	resp_buf->pkt.ctrl_hdr.type = rxm_ctrl_atomic;
 	for (i = 0; i < rx_buf->pkt.hdr.atomic.ioc_count; i++) {
 		ret = ofi_mr_verify(&domain->util_domain.mr_map,
 				    req_hdr->rma_ioc[i].count * datatype_sz,
@@ -1250,7 +1251,7 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 				      struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_tx_atomic_buf *tx_buf;
+	struct rxm_tx_bounce_buf *tx_buf;
 	struct rxm_atomic_resp_hdr *resp_hdr;
 	struct util_cntr *cntr = NULL;
 	uint64_t len;
@@ -1260,14 +1261,14 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 	uint64_t device;
 
 	resp_hdr = (struct rxm_atomic_resp_hdr *) rx_buf->pkt.data;
-	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX_ATOMIC].pool,
+	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX].pool,
 				      rx_buf->pkt.ctrl_hdr.msg_id);
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "received atomic response: op: %" PRIu8
 	       " msg_id: 0x%" PRIx64 "\n", rx_buf->pkt.hdr.op,
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
-	iface = rxm_mr_desc_to_hmem_iface_dev(tx_buf->result_iov.desc,
-					      tx_buf->result_iov.count,
+	iface = rxm_mr_desc_to_hmem_iface_dev(tx_buf->atomic_result.desc,
+					      tx_buf->atomic_result.count,
 					      &device);
 
 	assert(!(rx_buf->comp_flags & ~(FI_RECV | FI_REMOTE_CQ_DATA)));
@@ -1280,16 +1281,16 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 		goto write_err;
 	}
 
-	len = ofi_total_iov_len(tx_buf->result_iov.iov,
-				tx_buf->result_iov.count);
+	len = ofi_total_iov_len(tx_buf->atomic_result.iov,
+				tx_buf->atomic_result.count);
 	if (ntohl(resp_hdr->result_len) != len) {
 		ret = -FI_EIO;
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "result size mismatch\n");
 		goto write_err;
 	}
 
-	copy_len = ofi_copy_to_hmem_iov(iface, device, tx_buf->result_iov.iov,
-				   tx_buf->result_iov.count, 0, resp_hdr->data,
+	copy_len = ofi_copy_to_hmem_iov(iface, device, tx_buf->atomic_result.iov,
+				   tx_buf->atomic_result.count, 0, resp_hdr->data,
 				   len);
 	if (copy_len != len) {
 		ret = -FI_EIO;
@@ -1364,7 +1365,6 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	struct rxm_tx_base_buf *tx_buf;
 	struct rxm_tx_bounce_buf *bounce_buf;
 	struct rxm_tx_rndv_buf *tx_rndv_buf;
-	struct rxm_tx_atomic_buf *tx_atomic_buf;
 
 	/* Remote write events may not consume a posted recv so op context
 	 * and hence state would be NULL */
@@ -1487,9 +1487,9 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		assert(comp->flags & FI_SEND);
 		return 0;
 	case RXM_ATOMIC_RESP_SENT:
-		tx_atomic_buf = comp->op_context;
+		bounce_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		ofi_buf_free(tx_atomic_buf);
+		ofi_buf_free(bounce_buf);
 		return 0;
 	default:
 		assert(0);
