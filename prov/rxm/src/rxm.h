@@ -455,8 +455,7 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_RNDV_WR_DATA,
 	RXM_BUF_POOL_TX_ATOMIC,
 	RXM_BUF_POOL_TX_CREDIT,
-	RXM_BUF_POOL_TX_SAR,
-	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_SAR,
+	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_CREDIT,
 	RXM_BUF_POOL_RMA,
 	RXM_BUF_POOL_MAX,
 };
@@ -504,18 +503,7 @@ struct rxm_tx_base_buf {
 	struct rxm_pkt pkt;
 };
 
-struct rxm_tx_eager_buf {
-	/* Must stay at top */
-	struct rxm_buf hdr;
-
-	void *app_context;
-	uint64_t flags;
-
-	/* Must stay at bottom */
-	struct rxm_pkt pkt;
-};
-
-struct rxm_tx_sar_buf {
+struct rxm_tx_bounce_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
 
@@ -611,7 +599,7 @@ struct rxm_deferred_tx_entry {
 			struct rxm_iov rxm_iov;
 		} rndv_write;
 		struct {
-			struct rxm_tx_sar_buf *cur_seg_tx_buf;
+			struct rxm_tx_bounce_buf *cur_seg_tx_buf;
 			struct {
 				struct iovec iov[RXM_IOV_LIMIT];
 				uint8_t count;
@@ -710,7 +698,7 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 
 struct rxm_eager_ops {
 	void (*comp_tx)(struct rxm_ep *rxm_ep,
-			struct rxm_tx_eager_buf *tx_eager_buf);
+			struct rxm_tx_bounce_buf *tx_eager_buf);
 	void (*handle_rx)(struct rxm_rx_buf *rx_buf);
 };
 
@@ -822,9 +810,9 @@ void rxm_ep_do_progress(struct util_ep *util_ep);
 void rxm_handle_eager(struct rxm_rx_buf *rx_buf);
 void rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf);
 void rxm_finish_eager_send(struct rxm_ep *rxm_ep,
-			   struct rxm_tx_eager_buf *tx_eager_buf);
+			   struct rxm_tx_bounce_buf *tx_eager_buf);
 void rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep,
-				struct rxm_tx_eager_buf *tx_eager_buf);
+				struct rxm_tx_bounce_buf *tx_eager_buf);
 
 int rxm_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep);
 
@@ -982,8 +970,7 @@ rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 	       (type == RXM_BUF_POOL_TX_RNDV_WR_DONE) ||
 	       (type == RXM_BUF_POOL_TX_RNDV_REQ) ||
 	       (type == RXM_BUF_POOL_TX_ATOMIC) ||
-	       (type == RXM_BUF_POOL_TX_CREDIT) ||
-	       (type == RXM_BUF_POOL_TX_SAR));
+	       (type == RXM_BUF_POOL_TX_CREDIT));
 	return ofi_buf_alloc(rxm_ep->buf_pools[type].pool);
 }
 
