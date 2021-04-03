@@ -122,8 +122,7 @@ static int rxm_buf_reg(struct ofi_bufpool_region *region)
 			return ret;
 	}
 
-	if ((pool->type == RXM_BUF_POOL_TX_INJECT) ||
-	    !pool->rxm_ep->msg_mr_local)
+	if (!pool->rxm_ep->msg_mr_local)
 		return 0;
 
 	rxm_domain = container_of(pool->rxm_ep->util_ep.domain,
@@ -148,14 +147,12 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 	struct rxm_buf_pool *pool = region->pool->attr.context;
 	struct rxm_pkt *pkt;
 	struct rxm_rx_buf *rx_buf;
-	struct rxm_tx_base_buf *tx_base_buf;
 	struct rxm_tx_bounce_buf *bounce_buf;
 	struct rxm_tx_rndv_buf *tx_rndv_buf;
 	void *mr_desc;
 	uint8_t type;
 
-	if ((pool->type != RXM_BUF_POOL_TX_INJECT) &&
-	    pool->rxm_ep->msg_mr_local) {
+	if (pool->rxm_ep->msg_mr_local) {
 		mr_desc = fi_mr_desc((struct fid_mr *) region->context);
 	} else {
 		mr_desc = NULL;
@@ -176,51 +173,12 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 		pkt = &bounce_buf->pkt;
 		type = rxm_ctrl_eager; /* set when removed from pool */
 		break;
-	case RXM_BUF_POOL_TX_INJECT:
-		tx_base_buf = buf;
-		tx_base_buf->hdr.state = RXM_INJECT_TX;
-
-		pkt = &tx_base_buf->pkt;
-		type = rxm_ctrl_eager;
-		break;
-	case RXM_BUF_POOL_TX_CREDIT:
-		tx_base_buf = buf;
-		tx_base_buf->hdr.state = RXM_CREDIT_TX;
-
-		tx_base_buf->hdr.desc = mr_desc;
-		pkt = &tx_base_buf->pkt;
-		type = rxm_ctrl_credit;
-		break;
 	case RXM_BUF_POOL_TX_RNDV_REQ:
 		tx_rndv_buf = buf;
 
 		tx_rndv_buf->hdr.desc = mr_desc;
 		pkt = &tx_rndv_buf->pkt;
 		type = rxm_ctrl_rndv_req;
-		break;
-	case RXM_BUF_POOL_TX_RNDV_RD_DONE:
-		tx_base_buf = buf;
-		tx_base_buf->pkt.hdr.op = ofi_op_msg;
-
-		tx_base_buf->hdr.desc = mr_desc;
-		pkt = &tx_base_buf->pkt;
-		type = rxm_ctrl_rndv_rd_done;
-		break;
-	case RXM_BUF_POOL_TX_RNDV_WR_DONE:
-		tx_base_buf = buf;
-		tx_base_buf->pkt.hdr.op = ofi_op_msg;
-
-		tx_base_buf->hdr.desc = mr_desc;
-		pkt = &tx_base_buf->pkt;
-		type = rxm_ctrl_rndv_wr_done;
-		break;
-	case RXM_BUF_POOL_TX_RNDV_WR_DATA:
-		tx_base_buf = buf;
-		tx_base_buf->pkt.hdr.op = ofi_op_msg;
-
-		tx_base_buf->hdr.desc = mr_desc;
-		pkt = &tx_base_buf->pkt;
-		type = rxm_ctrl_rndv_wr_data;
 		break;
 	default:
 		assert(0);
@@ -244,7 +202,7 @@ static void rxm_buf_close(struct ofi_bufpool_region *region)
 	if (hmem_enabled)
 		ofi_hmem_host_unregister(region->mem_region);
 
-	if ((rxm_ep->msg_mr_local) && (pool->type != RXM_BUF_POOL_TX_INJECT)) {
+	if (rxm_ep->msg_mr_local) {
 		/* We would get a (fid_mr *) in context but
 		 * it is safe to cast it into (fid *) */
 		fi_close(region->context);
@@ -356,16 +314,9 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 				    sizeof(struct rxm_rx_buf),
 		[RXM_BUF_POOL_TX] = rxm_eager_limit +
 				    sizeof(struct rxm_tx_bounce_buf),
-		[RXM_BUF_POOL_TX_INJECT] = rxm_ep->inject_limit +
-					   sizeof(struct rxm_tx_base_buf),
-		[RXM_BUF_POOL_TX_RNDV_RD_DONE] = sizeof(struct rxm_tx_base_buf),
-		[RXM_BUF_POOL_TX_RNDV_WR_DONE] = sizeof(struct rxm_tx_base_buf),
 		[RXM_BUF_POOL_TX_RNDV_REQ] = sizeof(struct rxm_rndv_hdr) +
 					 rxm_ep->buffered_min +
 					 sizeof(struct rxm_tx_rndv_buf),
-		[RXM_BUF_POOL_TX_RNDV_WR_DATA] = sizeof(struct rxm_rndv_hdr) +
-						   sizeof(struct rxm_tx_base_buf),
-		[RXM_BUF_POOL_TX_CREDIT] = sizeof(struct rxm_tx_base_buf),
 	};
 	size_t chunk_cnt, max_size;
 	int ret, i;
@@ -378,10 +329,6 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		return -FI_ENOMEM;
 
 	for (i = RXM_BUF_POOL_START; i < RXM_BUF_POOL_MAX; i++) {
-		if ((i == RXM_BUF_POOL_TX_INJECT) &&
-		    (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE))
-			continue;
-
 		if (i == RXM_BUF_POOL_TX) {
 			chunk_cnt = 1024;
 			max_size = rxm_ep->rxm_info->tx_attr->size;
@@ -1480,7 +1427,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		   const void *buf, size_t len, uint64_t data,
 		   uint64_t flags, uint64_t tag, uint8_t op)
 {
-	struct rxm_tx_base_buf *tx_buf;
+	struct rxm_tx_bounce_buf *tx_buf;
 	size_t pkt_size = sizeof(struct rxm_pkt) + len;
 	ssize_t ret;
 
@@ -1493,13 +1440,15 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					       data, tag);
 		}
 
-		tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_INJECT);
+		tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 		if (!tx_buf) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Ran out of eager inject buffers\n");
 			return -FI_EAGAIN;
 		}
 
+		tx_buf->hdr.state = RXM_INJECT_TX;
+		tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_eager;
 		rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag,
 					 flags, &tx_buf->pkt);
 		memcpy(tx_buf->pkt.data, buf, len);

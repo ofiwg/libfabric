@@ -837,20 +837,20 @@ static ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 static void rxm_rndv_send_rd_done(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_deferred_tx_entry *def_entry;
-	struct rxm_tx_base_buf *buf;
+	struct rxm_tx_bounce_buf *buf;
 	ssize_t ret;
 
 	assert(rx_buf->conn);
 	assert(rx_buf->hdr.state == RXM_RNDV_READ);
-	buf = rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_RNDV_RD_DONE);
+	buf = rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX);
 	if (!buf) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
 
 	rx_buf->recv_entry->rndv.tx_buf = buf;
-	assert(buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_rd_done);
 
+	buf->pkt.ctrl_hdr.type = rxm_ctrl_rndv_rd_done;
 	buf->pkt.ctrl_hdr.conn_id = rx_buf->conn->handle.remote_key;
 	buf->pkt.ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
 
@@ -892,19 +892,19 @@ static void
 rxm_rndv_send_wr_done(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_buf)
 {
 	struct rxm_deferred_tx_entry *def_entry;
-	struct rxm_tx_base_buf *buf;
+	struct rxm_tx_bounce_buf *buf;
 	ssize_t ret;
 
 	assert(tx_buf->hdr.state == RXM_RNDV_WRITE);
-	buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_RNDV_WR_DONE);
+	buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 	if (!buf) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
 
 	tx_buf->write_rndv.done_buf = buf;
-	assert(buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_wr_done);
 
+	buf->pkt.ctrl_hdr.type = rxm_ctrl_rndv_wr_done;
 	buf->pkt.ctrl_hdr.conn_id = tx_buf->pkt.ctrl_hdr.conn_id;
 	buf->pkt.ctrl_hdr.msg_id = tx_buf->pkt.ctrl_hdr.msg_id;
 
@@ -944,20 +944,20 @@ err:
 ssize_t rxm_rndv_send_wr_data(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_deferred_tx_entry *def_entry;
-	struct rxm_tx_base_buf *buf;
+	struct rxm_tx_bounce_buf *buf;
 	ssize_t ret;
 
 	assert(rx_buf->conn);
 
-	buf = rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX_RNDV_WR_DATA);
+	buf = rxm_tx_buf_alloc(rx_buf->ep, RXM_BUF_POOL_TX);
 	if (!buf) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
 
-	assert(buf->pkt.ctrl_hdr.type == rxm_ctrl_rndv_wr_data);
 	rx_buf->recv_entry->rndv.tx_buf = buf;
 
+	buf->pkt.ctrl_hdr.type = rxm_ctrl_rndv_wr_data;
 	buf->pkt.ctrl_hdr.conn_id = rx_buf->conn->handle.remote_key;
 	buf->pkt.ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
 	rxm_rndv_hdr_init(rx_buf->ep, buf->pkt.data,
@@ -1362,7 +1362,6 @@ void rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep,
 ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 {
 	struct rxm_rx_buf *rx_buf;
-	struct rxm_tx_base_buf *tx_buf;
 	struct rxm_tx_bounce_buf *bounce_buf;
 	struct rxm_tx_rndv_buf *tx_rndv_buf;
 
@@ -1380,9 +1379,9 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		ofi_buf_free(bounce_buf);
 		return 0;
 	case RXM_CREDIT_TX:
-		tx_buf = comp->op_context;
+		bounce_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		ofi_buf_free(tx_buf);
+		ofi_buf_free(bounce_buf);
 		return 0;
 	case RXM_INJECT_TX:
 		assert(0);
@@ -1714,7 +1713,6 @@ void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 
 void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 {
-	struct rxm_tx_base_buf *base_buf;
 	struct rxm_tx_bounce_buf *bounce_buf;
 	struct rxm_tx_rndv_buf *rndv_buf;
 	struct rxm_rx_buf *rx_buf;
@@ -1766,9 +1764,9 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 			return;
 		break;
 	case RXM_CREDIT_TX:
-		base_buf = err_entry.op_context;
+		bounce_buf = err_entry.op_context;
 		err_entry.op_context = 0;
-		err_entry.flags = ofi_tx_cq_flags(base_buf->pkt.hdr.op);
+		err_entry.flags = ofi_tx_cq_flags(bounce_buf->pkt.hdr.op);
 		break;
 	case RXM_RNDV_WRITE:
 		/* fall through */

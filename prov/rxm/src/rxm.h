@@ -448,13 +448,8 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_START	= RXM_BUF_POOL_RX,
 	RXM_BUF_POOL_TX,
 	RXM_BUF_POOL_TX_START	= RXM_BUF_POOL_TX,
-	RXM_BUF_POOL_TX_INJECT,
-	RXM_BUF_POOL_TX_RNDV_RD_DONE,
-	RXM_BUF_POOL_TX_RNDV_WR_DONE,
 	RXM_BUF_POOL_TX_RNDV_REQ,
-	RXM_BUF_POOL_TX_RNDV_WR_DATA,
-	RXM_BUF_POOL_TX_CREDIT,
-	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_CREDIT,
+	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_RNDV_REQ,
 	RXM_BUF_POOL_MAX,
 };
 
@@ -488,14 +483,6 @@ struct rxm_rx_buf {
 	struct rxm_rndv_hdr *remote_rndv_hdr;
 	size_t rndv_rma_index;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
-
-	/* Must stay at bottom */
-	struct rxm_pkt pkt;
-};
-
-struct rxm_tx_base_buf {
-	/* Must stay at top */
-	struct rxm_buf hdr;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -535,7 +522,7 @@ struct rxm_tx_rndv_buf {
 		struct rxm_conn *conn;
 		size_t rndv_rma_index;
 		size_t rndv_rma_count;
-		struct rxm_tx_base_buf *done_buf;
+		struct rxm_tx_bounce_buf *done_buf;
 		struct rxm_rndv_hdr remote_hdr;
 	} write_rndv;
 
@@ -602,7 +589,7 @@ struct rxm_deferred_tx_entry {
 			ssize_t len;
 		} atomic_resp;
 		struct {
-			struct rxm_tx_base_buf *tx_buf;
+			struct rxm_tx_bounce_buf *tx_buf;
 		} credit_msg;
 	};
 };
@@ -629,7 +616,7 @@ struct rxm_recv_entry {
 	/* Used for Rendezvous protocol */
 	struct {
 		/* This is used to send RNDV ACK */
-		struct rxm_tx_base_buf *tx_buf;
+		struct rxm_tx_bounce_buf *tx_buf;
 	} rndv;
 };
 OFI_DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
@@ -943,12 +930,7 @@ static inline void *
 rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
 {
 	assert((type == RXM_BUF_POOL_TX) ||
-	       (type == RXM_BUF_POOL_TX_INJECT) ||
-	       (type == RXM_BUF_POOL_TX_RNDV_RD_DONE) ||
-	       (type == RXM_BUF_POOL_TX_RNDV_WR_DATA) ||
-	       (type == RXM_BUF_POOL_TX_RNDV_WR_DONE) ||
-	       (type == RXM_BUF_POOL_TX_RNDV_REQ) ||
-	       (type == RXM_BUF_POOL_TX_CREDIT));
+	       (type == RXM_BUF_POOL_TX_RNDV_REQ));
 	return ofi_buf_alloc(rxm_ep->buf_pools[type].pool);
 }
 
