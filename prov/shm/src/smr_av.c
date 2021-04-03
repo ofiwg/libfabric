@@ -76,9 +76,12 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			ep_name = smr_no_prefix(addr);
 			ret = smr_map_add(&smr_prov, smr_av->smr_map,
 					  ep_name, &shm_id);
-			if (!ret)
+			if (!ret) {
+				fastlock_acquire(&util_av->lock);
 				ret = ofi_av_insert_addr(util_av, &shm_id,
 							 &util_addr);
+				fastlock_release(&util_av->lock);
+			}
 		} else {
 			FI_WARN(&smr_prov, FI_LOG_AV,
 				"AV insert failed. The maximum number of AV "
