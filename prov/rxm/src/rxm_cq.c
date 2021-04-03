@@ -192,7 +192,7 @@ rxm_cq_write_tx_comp(struct rxm_ep *rxm_ep, uint64_t comp_flags,
 	}
 }
 
-static void rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rma_buf,
+static void rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_tx_bounce_buf *rma_buf,
 			  uint64_t comp_flags)
 {
 	assert(((comp_flags & FI_WRITE) && !(comp_flags & FI_READ)) ||
@@ -208,7 +208,7 @@ static void rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rma_buf,
 
 	if (!(rma_buf->flags & FI_INJECT) && !rxm_ep->rdm_mr_local &&
 	    rxm_ep->msg_mr_local) {
-		rxm_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
+		rxm_msg_mr_closev(rma_buf->rma.mr, rma_buf->rma.count);
 	}
 
 	ofi_buf_free(rma_buf);
@@ -1365,7 +1365,6 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	struct rxm_tx_bounce_buf *bounce_buf;
 	struct rxm_tx_rndv_buf *tx_rndv_buf;
 	struct rxm_tx_atomic_buf *tx_atomic_buf;
-	struct rxm_rma_buf *rma_buf;
 
 	/* Remote write events may not consume a posted recv so op context
 	 * and hence state would be NULL */
@@ -1389,10 +1388,10 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		assert(0);
 		return 0;
 	case RXM_RMA:
-		rma_buf = comp->op_context;
+		bounce_buf = comp->op_context;
 		assert((comp->flags & (FI_WRITE | FI_RMA)) ||
 		       (comp->flags & (FI_READ | FI_RMA)));
-		rxm_finish_rma(rxm_ep, rma_buf, comp->flags);
+		rxm_finish_rma(rxm_ep, bounce_buf, comp->flags);
 		return 0;
 	case RXM_RX:
 		rx_buf = comp->op_context;
@@ -1719,7 +1718,6 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 	struct rxm_tx_bounce_buf *bounce_buf;
 	struct rxm_tx_rndv_buf *rndv_buf;
 	struct rxm_rx_buf *rx_buf;
-	struct rxm_rma_buf *rma_buf;
 	struct util_cq *cq;
 	struct util_cntr *cntr;
 	struct fi_cq_err_entry err_entry = {0};
@@ -1751,14 +1749,14 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		assert(0);
 		return;
 	case RXM_RMA:
-		rma_buf = err_entry.op_context;
-		err_entry.op_context = rma_buf->app_context;
+		bounce_buf = err_entry.op_context;
+		err_entry.op_context = bounce_buf->app_context;
 		/* err_entry.flags pass through from msg ep */
-		if (!(rma_buf->flags & FI_INJECT) && !rxm_ep->rdm_mr_local &&
+		if (!(bounce_buf->flags & FI_INJECT) && !rxm_ep->rdm_mr_local &&
 		    rxm_ep->msg_mr_local) {
-			rxm_msg_mr_closev(rma_buf->mr.mr, rma_buf->mr.count);
+			rxm_msg_mr_closev(bounce_buf->rma.mr, bounce_buf->rma.count);
 		}
-		ofi_buf_free(rma_buf);
+		ofi_buf_free(bounce_buf);
 		break;
 	case RXM_SAR_TX:
 		bounce_buf = err_entry.op_context;

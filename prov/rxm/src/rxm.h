@@ -456,7 +456,6 @@ enum rxm_buf_pool_type {
 	RXM_BUF_POOL_TX_ATOMIC,
 	RXM_BUF_POOL_TX_CREDIT,
 	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_CREDIT,
-	RXM_BUF_POOL_RMA,
 	RXM_BUF_POOL_MAX,
 };
 
@@ -510,6 +509,11 @@ struct rxm_tx_bounce_buf {
 	void *app_context;
 	uint64_t flags;
 
+	struct {
+		struct fid_mr *mr[RXM_IOV_LIMIT];
+		uint8_t count;
+	} rma;
+
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
 };
@@ -533,21 +537,6 @@ struct rxm_tx_rndv_buf {
 		struct rxm_rndv_hdr remote_hdr;
 	} write_rndv;
 
-	/* Must stay at bottom */
-	struct rxm_pkt pkt;
-};
-
-struct rxm_rma_buf {
-	/* Must stay at top */
-	struct rxm_buf hdr;
-
-	void *app_context;
-	uint64_t flags;
-
-	struct {
-		struct fid_mr *mr[RXM_IOV_LIMIT];
-		uint8_t count;
-	} mr;
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
 };
