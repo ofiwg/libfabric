@@ -149,8 +149,7 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 	struct rxm_pkt *pkt;
 	struct rxm_rx_buf *rx_buf;
 	struct rxm_tx_base_buf *tx_base_buf;
-	struct rxm_tx_eager_buf *tx_eager_buf;
-	struct rxm_tx_sar_buf *tx_sar_buf;
+	struct rxm_tx_bounce_buf *bounce_buf;
 	struct rxm_tx_rndv_buf *tx_rndv_buf;
 	struct rxm_tx_atomic_buf *tx_atomic_buf;
 	struct rxm_rma_buf *rma_buf;
@@ -174,12 +173,10 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 		type = rxm_ctrl_eager; /* This can be any value */
 		break;
 	case RXM_BUF_POOL_TX:
-		tx_eager_buf = buf;
-		tx_eager_buf->hdr.state = RXM_TX;
-
-		tx_eager_buf->hdr.desc = mr_desc;
-		pkt = &tx_eager_buf->pkt;
-		type = rxm_ctrl_eager;
+		bounce_buf = buf;
+		bounce_buf->hdr.desc = mr_desc;
+		pkt = &bounce_buf->pkt;
+		type = rxm_ctrl_eager; /* set when removed from pool */
 		break;
 	case RXM_BUF_POOL_TX_INJECT:
 		tx_base_buf = buf;
@@ -187,14 +184,6 @@ static void rxm_buf_init(struct ofi_bufpool_region *region, void *buf)
 
 		pkt = &tx_base_buf->pkt;
 		type = rxm_ctrl_eager;
-		break;
-	case RXM_BUF_POOL_TX_SAR:
-		tx_sar_buf = buf;
-		tx_sar_buf->hdr.state = RXM_SAR_TX;
-
-		tx_sar_buf->hdr.desc = mr_desc;
-		pkt = &tx_sar_buf->pkt;
-		type = rxm_ctrl_seg;
 		break;
 	case RXM_BUF_POOL_TX_CREDIT:
 		tx_base_buf = buf;
@@ -384,7 +373,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		[RXM_BUF_POOL_RX] = rxm_eager_limit +
 				    sizeof(struct rxm_rx_buf),
 		[RXM_BUF_POOL_TX] = rxm_eager_limit +
-				    sizeof(struct rxm_tx_eager_buf),
+				    sizeof(struct rxm_tx_bounce_buf),
 		[RXM_BUF_POOL_TX_INJECT] = rxm_ep->inject_limit +
 					   sizeof(struct rxm_tx_base_buf),
 		[RXM_BUF_POOL_TX_RNDV_RD_DONE] = sizeof(struct rxm_tx_base_buf),
@@ -396,8 +385,6 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 						   sizeof(struct rxm_tx_base_buf),
 		[RXM_BUF_POOL_TX_ATOMIC] = rxm_eager_limit +
 					 sizeof(struct rxm_tx_atomic_buf),
-		[RXM_BUF_POOL_TX_SAR] = rxm_eager_limit +
-					sizeof(struct rxm_tx_sar_buf),
 		[RXM_BUF_POOL_TX_CREDIT] = sizeof(struct rxm_tx_base_buf),
 		[RXM_BUF_POOL_RMA] = rxm_eager_limit +
 				     sizeof(struct rxm_rma_buf),
@@ -417,7 +404,7 @@ static int rxm_ep_txrx_pool_create(struct rxm_ep *rxm_ep)
 		    (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE))
 			continue;
 
-		if (i == RXM_BUF_POOL_TX || i == RXM_BUF_POOL_TX_SAR) {
+		if (i == RXM_BUF_POOL_TX) {
 			chunk_cnt = 1024;
 			max_size = rxm_ep->rxm_info->tx_attr->size;
 		} else if (i == RXM_BUF_POOL_RX) {
@@ -1237,21 +1224,24 @@ rxm_ep_sar_calc_segs_cnt(struct rxm_ep *rxm_ep, size_t data_len)
 	return (data_len + rxm_eager_limit - 1) / rxm_eager_limit;
 }
 
-static struct rxm_tx_sar_buf *
+static struct rxm_tx_bounce_buf *
 rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			      void *app_context, size_t total_len,
 			      size_t seg_len, size_t seg_no, uint64_t data,
 			      uint64_t flags, uint64_t tag, uint8_t op,
 			      enum rxm_sar_seg_type seg_type, uint64_t *msg_id)
 {
-	struct rxm_tx_sar_buf *tx_buf;
+	struct rxm_tx_bounce_buf *tx_buf;
 
-	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX_SAR);
+	tx_buf = rxm_tx_buf_alloc(rxm_ep, RXM_BUF_POOL_TX);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 			"Ran out of buffers from SAR buffer pool\n");
 		return NULL;
 	};
+
+	tx_buf->hdr.state = RXM_SAR_TX;
+	tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_seg;
 
 	rxm_ep_format_tx_buf_pkt(rxm_conn, total_len, op, data, tag, flags,
 				 &tx_buf->pkt);
@@ -1271,12 +1261,12 @@ rxm_ep_sar_tx_prepare_segment(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 static void
 rxm_ep_sar_tx_cleanup(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		      struct rxm_tx_sar_buf *tx_buf)
+		      struct rxm_tx_bounce_buf *tx_buf)
 {
-	struct rxm_tx_sar_buf *first_tx_buf;
+	struct rxm_tx_bounce_buf *first_tx_buf;
 
 	first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->
-					    buf_pools[RXM_BUF_POOL_TX_SAR].pool,
+					    buf_pools[RXM_BUF_POOL_TX].pool,
 					    tx_buf->pkt.ctrl_hdr.msg_id);
 	ofi_buf_free(first_tx_buf);
 	ofi_buf_free(tx_buf);
@@ -1289,10 +1279,10 @@ rxm_ep_sar_tx_prepare_and_send_segment(struct rxm_ep *rxm_ep,
 		size_t seg_no, size_t segs_cnt, uint64_t data, uint64_t flags,
 		uint64_t tag, uint8_t op, const struct iovec *iov,
 		uint8_t count, size_t *iov_offset,
-		struct rxm_tx_sar_buf **out_tx_buf,
+		struct rxm_tx_bounce_buf **out_tx_buf,
 		enum fi_hmem_iface iface, uint64_t device)
 {
-	struct rxm_tx_sar_buf *tx_buf;
+	struct rxm_tx_bounce_buf *tx_buf;
 	enum rxm_sar_seg_type seg_type = RXM_SAR_SEG_MIDDLE;
 	ssize_t ret __attribute__((unused));
 
@@ -1328,7 +1318,7 @@ rxm_send_sar(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	     void *context, uint64_t data, uint64_t flags, uint64_t tag,
 	     uint8_t op, size_t data_len, size_t segs_cnt)
 {
-	struct rxm_tx_sar_buf *tx_buf, *first_tx_buf;
+	struct rxm_tx_bounce_buf *tx_buf, *first_tx_buf;
 	size_t i, iov_offset = 0, remain_len = data_len;
 	struct rxm_deferred_tx_entry *def_tx;
 	enum fi_hmem_iface iface;
@@ -1418,7 +1408,7 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		      uint64_t data, uint64_t flags, uint64_t tag,
 		      uint8_t op)
 {
-	struct rxm_tx_eager_buf *tx_buf;
+	struct rxm_tx_bounce_buf *tx_buf;
 	ssize_t ret;
 	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
 	const struct iovec iov = {
@@ -1432,6 +1422,9 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 			"Ran out of buffers from Eager buffer pool\n");
 		return -FI_EAGAIN;
 	}
+
+	tx_buf->hdr.state = RXM_TX;
+	tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_eager;
 	/* This is needed so that we don't report bogus context in fi_cq_err_entry */
 	tx_buf->app_context = NULL;
 
@@ -1552,7 +1545,7 @@ rxm_use_direct_send(struct rxm_ep *ep, size_t iov_count, uint64_t flags)
 
 static ssize_t
 rxm_direct_send(struct rxm_ep *ep, struct rxm_conn *rxm_conn,
-		struct rxm_tx_eager_buf *tx_buf,
+		struct rxm_tx_bounce_buf *tx_buf,
 		const struct iovec *iov, void **desc, size_t count)
 {
 	struct iovec send_iov[RXM_IOV_LIMIT];
@@ -1597,7 +1590,7 @@ rxm_use_msg_tsend(struct rxm_ep *ep, size_t iov_count, uint8_t op)
 
 static ssize_t
 rxm_msg_tsend(struct rxm_ep *ep, struct rxm_conn *conn,
-	      struct rxm_tx_eager_buf *tx_buf,
+	      struct rxm_tx_bounce_buf *tx_buf,
 	      const struct iovec *iov, size_t count,
 	      uint64_t data, uint64_t tag)
 {
@@ -1645,7 +1638,7 @@ rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       void *context, uint64_t data, uint64_t flags, uint64_t tag,
 	       uint8_t op, size_t data_len, size_t total_len)
 {
-	struct rxm_tx_eager_buf *eager_buf;
+	struct rxm_tx_bounce_buf *eager_buf;
 	enum fi_hmem_iface iface;
 	uint64_t device;
 	ssize_t ret;
@@ -1657,6 +1650,8 @@ rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		return -FI_EAGAIN;
 	}
 
+	eager_buf->hdr.state = RXM_TX;
+	eager_buf->pkt.ctrl_hdr.type = rxm_ctrl_eager;
 	eager_buf->app_context = context;
 	eager_buf->flags = flags;
 
@@ -1772,7 +1767,7 @@ static ssize_t
 rxm_ep_progress_sar_deferred_segments(struct rxm_deferred_tx_entry *def_tx_entry)
 {
 	ssize_t ret = 0;
-	struct rxm_tx_sar_buf *tx_buf = def_tx_entry->sar_seg.cur_seg_tx_buf;
+	struct rxm_tx_bounce_buf *tx_buf = def_tx_entry->sar_seg.cur_seg_tx_buf;
 
 	if (tx_buf) {
 		ret = fi_send(def_tx_entry->rxm_conn->msg_ep, &tx_buf->pkt,

@@ -214,7 +214,7 @@ static void rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_rma_buf *rma_buf,
 	ofi_buf_free(rma_buf);
 }
 
-void rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_buf)
+void rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_bounce_buf *tx_buf)
 {
 	assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
 
@@ -224,9 +224,9 @@ void rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_eager_buf *tx_bu
 }
 
 static bool rxm_complete_sar(struct rxm_ep *rxm_ep,
-			     struct rxm_tx_sar_buf *tx_buf)
+			     struct rxm_tx_bounce_buf *tx_buf)
 {
-	struct rxm_tx_sar_buf *first_tx_buf;
+	struct rxm_tx_bounce_buf *first_tx_buf;
 
 	assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
 	switch (rxm_sar_get_seg_type(&tx_buf->pkt.ctrl_hdr)) {
@@ -237,7 +237,7 @@ static bool rxm_complete_sar(struct rxm_ep *rxm_ep,
 		break;
 	case RXM_SAR_SEG_LAST:
 		first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->
-					buf_pools[RXM_BUF_POOL_TX_SAR].pool,
+					buf_pools[RXM_BUF_POOL_TX].pool,
 					tx_buf->pkt.ctrl_hdr.msg_id);
 		ofi_buf_free(first_tx_buf);
 		ofi_buf_free(tx_buf);
@@ -248,7 +248,7 @@ static bool rxm_complete_sar(struct rxm_ep *rxm_ep,
 }
 
 static void rxm_handle_sar_comp(struct rxm_ep *rxm_ep,
-				struct rxm_tx_sar_buf *tx_buf)
+				struct rxm_tx_bounce_buf *tx_buf)
 {
 	void *app_context;
 	uint64_t comp_flags, tx_flags;
@@ -1348,7 +1348,7 @@ static ssize_t rxm_handle_credit(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_bu
 }
 
 void rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep,
-			       struct rxm_tx_eager_buf *tx_eager_buf)
+			       struct rxm_tx_bounce_buf *tx_eager_buf)
 {
 	if (tx_eager_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
 		ofi_coll_handle_xfer_comp(tx_eager_buf->pkt.hdr.tag,
@@ -1362,8 +1362,7 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 {
 	struct rxm_rx_buf *rx_buf;
 	struct rxm_tx_base_buf *tx_buf;
-	struct rxm_tx_sar_buf *tx_sar_buf;
-	struct rxm_tx_eager_buf *tx_eager_buf;
+	struct rxm_tx_bounce_buf *bounce_buf;
 	struct rxm_tx_rndv_buf *tx_rndv_buf;
 	struct rxm_tx_atomic_buf *tx_atomic_buf;
 	struct rxm_rma_buf *rma_buf;
@@ -1377,9 +1376,9 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 
 	switch (RXM_GET_PROTO_STATE(comp->op_context)) {
 	case RXM_TX:
-		tx_eager_buf = comp->op_context;
-		rxm_ep->eager_ops->comp_tx(rxm_ep, tx_eager_buf);
-		ofi_buf_free(tx_eager_buf);
+		bounce_buf = comp->op_context;
+		rxm_ep->eager_ops->comp_tx(rxm_ep, bounce_buf);
+		ofi_buf_free(bounce_buf);
 		return 0;
 	case RXM_CREDIT_TX:
 		tx_buf = comp->op_context;
@@ -1426,9 +1425,9 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 			return -FI_EINVAL;
 		}
 	case RXM_SAR_TX:
-		tx_sar_buf = comp->op_context;
+		bounce_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
-		rxm_handle_sar_comp(rxm_ep, tx_sar_buf);
+		rxm_handle_sar_comp(rxm_ep, bounce_buf);
 		return 0;
 	case RXM_RNDV_TX:
 		tx_rndv_buf = comp->op_context;
@@ -1717,8 +1716,7 @@ void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 {
 	struct rxm_tx_base_buf *base_buf;
-	struct rxm_tx_eager_buf *eager_buf;
-	struct rxm_tx_sar_buf *sar_buf;
+	struct rxm_tx_bounce_buf *bounce_buf;
 	struct rxm_tx_rndv_buf *rndv_buf;
 	struct rxm_rx_buf *rx_buf;
 	struct rxm_rma_buf *rma_buf;
@@ -1744,10 +1742,10 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 
 	switch (RXM_GET_PROTO_STATE(err_entry.op_context)) {
 	case RXM_TX:
-		eager_buf = err_entry.op_context;
-		err_entry.op_context = eager_buf->app_context;
-		err_entry.flags = ofi_tx_cq_flags(eager_buf->pkt.hdr.op);
-		ofi_buf_free(eager_buf);
+		bounce_buf = err_entry.op_context;
+		err_entry.op_context = bounce_buf->app_context;
+		err_entry.flags = ofi_tx_cq_flags(bounce_buf->pkt.hdr.op);
+		ofi_buf_free(bounce_buf);
 		break;
 	case RXM_INJECT_TX:
 		assert(0);
@@ -1763,10 +1761,10 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		ofi_buf_free(rma_buf);
 		break;
 	case RXM_SAR_TX:
-		sar_buf = err_entry.op_context;
-		err_entry.op_context = sar_buf->app_context;
-		err_entry.flags = ofi_tx_cq_flags(sar_buf->pkt.hdr.op);
-		if (!rxm_complete_sar(rxm_ep, sar_buf))
+		bounce_buf = err_entry.op_context;
+		err_entry.op_context = bounce_buf->app_context;
+		err_entry.flags = ofi_tx_cq_flags(bounce_buf->pkt.hdr.op);
+		if (!rxm_complete_sar(rxm_ep, bounce_buf))
 			return;
 		break;
 	case RXM_CREDIT_TX:
