@@ -281,13 +281,13 @@ static void rxm_rndv_rx_finish(struct rxm_rx_buf *rx_buf)
 }
 
 static void rxm_rndv_tx_finish(struct rxm_ep *rxm_ep,
-			       struct rxm_tx_rndv_buf *tx_buf)
+			       struct rxm_tx_bounce_buf *tx_buf)
 {
 	assert(ofi_tx_cq_flags(tx_buf->pkt.hdr.op) & FI_SEND);
 
 	RXM_UPDATE_STATE(FI_LOG_CQ, tx_buf, RXM_RNDV_FINISH);
 	if (!rxm_ep->rdm_mr_local)
-		rxm_msg_mr_closev(tx_buf->mr, tx_buf->count);
+		rxm_msg_mr_closev(tx_buf->rma.mr, tx_buf->rma.count);
 
 	rxm_cq_write_tx_comp(rxm_ep, ofi_tx_cq_flags(tx_buf->pkt.hdr.op),
 			     tx_buf->app_context, tx_buf->flags);
@@ -304,12 +304,12 @@ static void rxm_rndv_tx_finish(struct rxm_ep *rxm_ep,
 static void rxm_rndv_handle_rd_done(struct rxm_ep *rxm_ep,
 				    struct rxm_rx_buf *rx_buf)
 {
-	struct rxm_tx_rndv_buf *tx_buf;
+	struct rxm_tx_bounce_buf *tx_buf;
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Got ACK for msg_id: 0x%" PRIx64 "\n",
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
-	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX_RNDV_REQ].pool,
+	tx_buf = ofi_bufpool_get_ibuf(rxm_ep->buf_pools[RXM_BUF_POOL_TX].pool,
 				      rx_buf->pkt.ctrl_hdr.msg_id);
 	assert(tx_buf->pkt.ctrl_hdr.msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
 
@@ -529,13 +529,12 @@ static ssize_t rxm_rndv_handle_wr_data(struct rxm_rx_buf *rx_buf)
 {
 	int i;
 	ssize_t ret;
-	struct rxm_tx_rndv_buf *tx_buf;
+	struct rxm_tx_bounce_buf *tx_buf;
 	size_t total_len, rma_len = 0;
 	struct rxm_rndv_hdr *rx_hdr = (struct rxm_rndv_hdr *) rx_buf->pkt.data;
 
-	tx_buf = ofi_bufpool_get_ibuf(
-		rx_buf->ep->buf_pools[RXM_BUF_POOL_TX_RNDV_REQ].pool,
-		rx_buf->pkt.ctrl_hdr.msg_id);
+	tx_buf = ofi_bufpool_get_ibuf(rx_buf->ep->buf_pools[RXM_BUF_POOL_TX].pool,
+				      rx_buf->pkt.ctrl_hdr.msg_id);
 	total_len = tx_buf->pkt.hdr.size;
 
 	tx_buf->write_rndv.remote_hdr.count = rx_hdr->count;
@@ -555,7 +554,7 @@ static ssize_t rxm_rndv_handle_wr_data(struct rxm_rx_buf *rx_buf)
 
 	ret = rxm_rndv_xfer(rx_buf->ep, tx_buf->write_rndv.conn->msg_ep, rx_hdr,
 			    tx_buf->write_rndv.iov, tx_buf->write_rndv.desc,
-			    tx_buf->count, total_len, tx_buf);
+			    tx_buf->rma.count, total_len, tx_buf);
 
 	if (ret)
 		rxm_cq_write_error(rx_buf->ep->util_ep.rx_cq,
@@ -889,7 +888,7 @@ err:
 }
 
 static void
-rxm_rndv_send_wr_done(struct rxm_ep *rxm_ep, struct rxm_tx_rndv_buf *tx_buf)
+rxm_rndv_send_wr_done(struct rxm_ep *rxm_ep, struct rxm_tx_bounce_buf *tx_buf)
 {
 	struct rxm_deferred_tx_entry *def_entry;
 	struct rxm_tx_bounce_buf *buf;
@@ -1363,7 +1362,6 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 {
 	struct rxm_rx_buf *rx_buf;
 	struct rxm_tx_bounce_buf *bounce_buf;
-	struct rxm_tx_rndv_buf *tx_rndv_buf;
 
 	/* Remote write events may not consume a posted recv so op context
 	 * and hence state would be NULL */
@@ -1428,13 +1426,13 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		rxm_handle_sar_comp(rxm_ep, bounce_buf);
 		return 0;
 	case RXM_RNDV_TX:
-		tx_rndv_buf = comp->op_context;
+		bounce_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
 		if (rxm_ep->rndv_ops == &rxm_rndv_ops_write)
-			RXM_UPDATE_STATE(FI_LOG_CQ, tx_rndv_buf,
+			RXM_UPDATE_STATE(FI_LOG_CQ, bounce_buf,
 					 RXM_RNDV_WRITE_DATA_WAIT);
 		else
-			RXM_UPDATE_STATE(FI_LOG_CQ, tx_rndv_buf,
+			RXM_UPDATE_STATE(FI_LOG_CQ, bounce_buf,
 					 RXM_RNDV_READ_DONE_WAIT);
 		return 0;
 	case RXM_RNDV_READ_DONE_WAIT:
@@ -1450,13 +1448,13 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		rxm_rndv_send_rd_done(rx_buf);
 		return 0;
 	case RXM_RNDV_WRITE:
-		tx_rndv_buf = comp->op_context;
+		bounce_buf = comp->op_context;
 		assert(comp->flags & FI_WRITE);
-		if (++tx_rndv_buf->write_rndv.rndv_rma_index <
-		    tx_rndv_buf->write_rndv.rndv_rma_count)
+		if (++bounce_buf->write_rndv.rndv_rma_index <
+		    bounce_buf->write_rndv.rndv_rma_count)
 			return 0;
 
-		rxm_rndv_send_wr_done(rxm_ep, tx_rndv_buf);
+		rxm_rndv_send_wr_done(rxm_ep, bounce_buf);
 		return 0;
 	case RXM_RNDV_READ_DONE_SENT:
 		assert(comp->flags & FI_SEND);
@@ -1714,7 +1712,6 @@ void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err)
 void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 {
 	struct rxm_tx_bounce_buf *bounce_buf;
-	struct rxm_tx_rndv_buf *rndv_buf;
 	struct rxm_rx_buf *rx_buf;
 	struct util_cq *cq;
 	struct util_cntr *cntr;
@@ -1771,9 +1768,9 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 	case RXM_RNDV_WRITE:
 		/* fall through */
 	case RXM_RNDV_TX:
-		rndv_buf = err_entry.op_context;
-		err_entry.op_context = rndv_buf->app_context;
-		err_entry.flags = ofi_tx_cq_flags(rndv_buf->pkt.hdr.op);
+		bounce_buf = err_entry.op_context;
+		err_entry.op_context = bounce_buf->app_context;
+		err_entry.flags = ofi_tx_cq_flags(bounce_buf->pkt.hdr.op);
 		break;
 
 	/* Incoming application data error */
