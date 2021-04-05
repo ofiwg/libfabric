@@ -3610,11 +3610,19 @@ static void test_fc_multi_recv(size_t xfer_len, bool progress_before_post)
 			recv_events++;
 	}
 
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
 	/* Make last send expected. This ensures that hardware and/or software
 	 * has correctly updated the LE start and length fields correctly.
 	 */
-	ret = fi_tsend(cxit_ep, &send_buf[(num_xfers - 1) * xfer_len], xfer_len,
-		       NULL, cxit_ep_fi_addr, tag, NULL);
+	do {
+		ret = fi_tsend(cxit_ep, &send_buf[(num_xfers - 1) * xfer_len],
+			       xfer_len, NULL, cxit_ep_fi_addr, tag, NULL);
+	} while (ret == -FI_EAGAIN);
 	cr_assert(ret == FI_SUCCESS);
 
 	/* Wait for all send events. Since this test can be run with or without
@@ -3666,6 +3674,16 @@ Test(tagged, fc_multi_recv_rdzv_onload_ules, .timeout = 10)
 {
 	/* Transfer size needs to be large enough to trigger rendezvous. */
 	test_fc_multi_recv(16384, true);
+}
+
+Test(tagged, fc_no_eq_space_expected_multi_recv, .timeout = 10)
+{
+	test_fc_multi_recv(1, false);
+}
+
+Test(tagged, fc_no_eq_space_expected_multi_recv_onload_ules, .timeout = 10)
+{
+	test_fc_multi_recv(1, false);
 }
 
 #define FC_TRANS 100

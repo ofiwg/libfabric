@@ -28,7 +28,10 @@ fi_addr_t cxit_ep_fi_addr;
 struct fid_ep *cxit_sep;
 struct fi_eq_attr cxit_eq_attr = {};
 struct fid_eq *cxit_eq;
-struct fi_cq_attr cxit_tx_cq_attr = { .format = FI_CQ_FORMAT_TAGGED };
+struct fi_cq_attr cxit_tx_cq_attr = {
+	.format = FI_CQ_FORMAT_TAGGED,
+	.size = 16384
+};
 struct fi_cq_attr cxit_rx_cq_attr = { .format = FI_CQ_FORMAT_TAGGED };
 uint64_t cxit_eq_bind_flags = 0;
 uint64_t cxit_tx_cq_bind_flags = FI_TRANSMIT;
