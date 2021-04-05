@@ -3732,24 +3732,31 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	if (req->send.len) {
 		if (req->send.flags & FI_INJECT || (idc && txc->hmem)) {
 			/* Allocate an internal buffer to hold source data for
-			 * SW retry and/or a FI_HMEM bounce buffer.
+			 * SW retry and/or a FI_HMEM bounce buffer. If a send
+			 * request is being retried, ibuf may already be
+			 * allocated. No need to allocate new buffer.
 			 */
-			req->send.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
-			if (!req->send.ibuf)
-				return -FI_ENOSPC;
+			if (!req->send.ibuf) {
+				req->send.ibuf =
+					cxip_cq_ibuf_alloc(txc->send_cq);
+				if (!req->send.ibuf)
+					return -FI_ENOSPC;
 
-			if (txc->hmem)
-				iface = ofi_get_hmem_iface(req->send.buf);
-			else
-				iface = FI_HMEM_SYSTEM;
+				if (txc->hmem)
+					iface = ofi_get_hmem_iface(req->send.buf);
+				else
+					iface = FI_HMEM_SYSTEM;
 
-			hmem_iov.iov_base = (void *)req->send.buf;
-			hmem_iov.iov_len = req->send.len;
+				hmem_iov.iov_base = (void *)req->send.buf;
+				hmem_iov.iov_len = req->send.len;
 
-			ret = cxip_copy_from_hmem_iov(dom, req->send.ibuf,
-						      req->send.len, iface, 0,
-						      &hmem_iov, 1, 0);
-			assert(ret == req->send.len);
+				ret = cxip_copy_from_hmem_iov(dom,
+							      req->send.ibuf,
+							      req->send.len,
+							      iface, 0,
+							      &hmem_iov, 1, 0);
+				assert(ret == req->send.len);
+			}
 
 			buf = req->send.ibuf;
 		} else {
