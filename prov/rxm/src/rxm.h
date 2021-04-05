@@ -443,24 +443,6 @@ struct rxm_iov {
 	uint8_t count;
 };
 
-enum rxm_buf_pool_type {
-	RXM_BUF_POOL_RX		= 0,
-	RXM_BUF_POOL_START	= RXM_BUF_POOL_RX,
-	RXM_BUF_POOL_TX,
-	RXM_BUF_POOL_TX_START	= RXM_BUF_POOL_TX,
-	RXM_BUF_POOL_TX_INJECT,
-	RXM_BUF_POOL_TX_RNDV_RD_DONE,
-	RXM_BUF_POOL_TX_RNDV_WR_DONE,
-	RXM_BUF_POOL_TX_RNDV_REQ,
-	RXM_BUF_POOL_TX_RNDV_WR_DATA,
-	RXM_BUF_POOL_TX_ATOMIC,
-	RXM_BUF_POOL_TX_CREDIT,
-	RXM_BUF_POOL_TX_SAR,
-	RXM_BUF_POOL_TX_END	= RXM_BUF_POOL_TX_SAR,
-	RXM_BUF_POOL_RMA,
-	RXM_BUF_POOL_MAX,
-};
-
 struct rxm_buf {
 	/* Must stay at top */
 	struct fi_context fi_context;
@@ -496,44 +478,20 @@ struct rxm_rx_buf {
 	struct rxm_pkt pkt;
 };
 
-struct rxm_tx_base_buf {
-	/* Must stay at top */
-	struct rxm_buf hdr;
-
-	/* Must stay at bottom */
-	struct rxm_pkt pkt;
-};
-
-struct rxm_tx_eager_buf {
+struct rxm_tx_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
 
 	void *app_context;
 	uint64_t flags;
 
-	/* Must stay at bottom */
-	struct rxm_pkt pkt;
-};
-
-struct rxm_tx_sar_buf {
-	/* Must stay at top */
-	struct rxm_buf hdr;
-
-	void *app_context;
-	uint64_t flags;
-
-	/* Must stay at bottom */
-	struct rxm_pkt pkt;
-};
-
-struct rxm_tx_rndv_buf {
-	/* Must stay at top */
-	struct rxm_buf hdr;
-
-	void *app_context;
-	uint64_t flags;
-	struct fid_mr *mr[RXM_IOV_LIMIT];
-	uint8_t count;
+	union {
+		struct {
+			struct fid_mr *mr[RXM_IOV_LIMIT];
+			uint8_t count;
+		} rma;
+		struct rxm_iov atomic_result;
+	};
 
 	struct {
 		struct iovec iov[RXM_IOV_LIMIT];
@@ -541,36 +499,9 @@ struct rxm_tx_rndv_buf {
 		struct rxm_conn *conn;
 		size_t rndv_rma_index;
 		size_t rndv_rma_count;
-		struct rxm_tx_base_buf *done_buf;
+		struct rxm_tx_buf *done_buf;
 		struct rxm_rndv_hdr remote_hdr;
 	} write_rndv;
-
-	/* Must stay at bottom */
-	struct rxm_pkt pkt;
-};
-
-struct rxm_rma_buf {
-	/* Must stay at top */
-	struct rxm_buf hdr;
-
-	void *app_context;
-	uint64_t flags;
-
-	struct {
-		struct fid_mr *mr[RXM_IOV_LIMIT];
-		uint8_t count;
-	} mr;
-	/* Must stay at bottom */
-	struct rxm_pkt pkt;
-};
-
-struct rxm_tx_atomic_buf {
-	/* Must stay at top */
-	struct rxm_buf hdr;
-
-	void *app_context;
-	uint64_t flags;
-	struct rxm_iov result_iov;
 
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -598,7 +529,7 @@ struct rxm_deferred_tx_entry {
 			size_t pkt_size;
 		} rndv_ack;
 		struct {
-			struct rxm_tx_rndv_buf *tx_buf;
+			struct rxm_tx_buf *tx_buf;
 		} rndv_done;
 		struct {
 			struct rxm_rx_buf *rx_buf;
@@ -606,12 +537,12 @@ struct rxm_deferred_tx_entry {
 			struct rxm_iov rxm_iov;
 		} rndv_read;
 		struct {
-			struct rxm_tx_rndv_buf *tx_buf;
+			struct rxm_tx_buf *tx_buf;
 			struct fi_rma_iov rma_iov;
 			struct rxm_iov rxm_iov;
 		} rndv_write;
 		struct {
-			struct rxm_tx_sar_buf *cur_seg_tx_buf;
+			struct rxm_tx_buf *cur_seg_tx_buf;
 			struct {
 				struct iovec iov[RXM_IOV_LIMIT];
 				uint8_t count;
@@ -631,11 +562,11 @@ struct rxm_deferred_tx_entry {
 			uint64_t device;
 		} sar_seg;
 		struct {
-			struct rxm_tx_atomic_buf *tx_buf;
+			struct rxm_tx_buf *tx_buf;
 			ssize_t len;
 		} atomic_resp;
 		struct {
-			struct rxm_tx_base_buf *tx_buf;
+			struct rxm_tx_buf *tx_buf;
 		} credit_msg;
 	};
 };
@@ -662,7 +593,7 @@ struct rxm_recv_entry {
 	/* Used for Rendezvous protocol */
 	struct {
 		/* This is used to send RNDV ACK */
-		struct rxm_tx_base_buf *tx_buf;
+		struct rxm_tx_buf *tx_buf;
 	} rndv;
 };
 OFI_DECLARE_FREESTACK(struct rxm_recv_entry, rxm_recv_fs);
@@ -682,12 +613,6 @@ struct rxm_recv_queue {
 	size_t			dyn_rbuf_unexp_cnt;
 	dlist_func_t		*match_recv;
 	dlist_func_t		*match_unexp;
-};
-
-struct rxm_buf_pool {
-	enum rxm_buf_pool_type type;
-	struct ofi_bufpool *pool;
-	struct rxm_ep *rxm_ep;
 };
 
 struct rxm_msg_eq_entry {
@@ -710,7 +635,7 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 
 struct rxm_eager_ops {
 	void (*comp_tx)(struct rxm_ep *rxm_ep,
-			struct rxm_tx_eager_buf *tx_eager_buf);
+			struct rxm_tx_buf *tx_eager_buf);
 	void (*handle_rx)(struct rxm_rx_buf *rx_buf);
 };
 
@@ -752,7 +677,8 @@ struct rxm_ep {
 	size_t			inject_limit;
 	size_t			sar_limit;
 
-	struct rxm_buf_pool	*buf_pools;
+	struct ofi_bufpool	*rx_pool;
+	struct ofi_bufpool	*tx_pool;
 
 	struct dlist_entry	repost_ready_list;
 	struct dlist_entry	deferred_tx_conn_queue;
@@ -822,9 +748,9 @@ void rxm_ep_do_progress(struct util_ep *util_ep);
 void rxm_handle_eager(struct rxm_rx_buf *rx_buf);
 void rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf);
 void rxm_finish_eager_send(struct rxm_ep *rxm_ep,
-			   struct rxm_tx_eager_buf *tx_eager_buf);
+			   struct rxm_tx_buf *tx_eager_buf);
 void rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep,
-				struct rxm_tx_eager_buf *tx_eager_buf);
+				struct rxm_tx_buf *tx_eager_buf);
 
 int rxm_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep);
 
@@ -846,7 +772,7 @@ static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 
 static inline ssize_t
 rxm_atomic_send_respmsg(struct rxm_ep *rxm_ep, struct rxm_conn *conn,
-			struct rxm_tx_atomic_buf *resp_buf, ssize_t len)
+			struct rxm_tx_buf *resp_buf, ssize_t len)
 {
 	struct iovec iov = {
 		.iov_base = (void *) &resp_buf->pkt,
@@ -970,21 +896,6 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
 	pkt->hdr.tag = tag;
 	pkt->hdr.flags = (flags & FI_REMOTE_CQ_DATA);
 	pkt->hdr.data = data;
-}
-
-static inline void *
-rxm_tx_buf_alloc(struct rxm_ep *rxm_ep, enum rxm_buf_pool_type type)
-{
-	assert((type == RXM_BUF_POOL_TX) ||
-	       (type == RXM_BUF_POOL_TX_INJECT) ||
-	       (type == RXM_BUF_POOL_TX_RNDV_RD_DONE) ||
-	       (type == RXM_BUF_POOL_TX_RNDV_WR_DATA) ||
-	       (type == RXM_BUF_POOL_TX_RNDV_WR_DONE) ||
-	       (type == RXM_BUF_POOL_TX_RNDV_REQ) ||
-	       (type == RXM_BUF_POOL_TX_ATOMIC) ||
-	       (type == RXM_BUF_POOL_TX_CREDIT) ||
-	       (type == RXM_BUF_POOL_TX_SAR));
-	return ofi_buf_alloc(rxm_ep->buf_pools[type].pool);
 }
 
 static inline void
