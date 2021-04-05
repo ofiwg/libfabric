@@ -545,7 +545,8 @@ RXM_INI
 			"copying application buffers through bounce buffers "
 			"before passing them to the core provider.  This "
 			"feature targets small to medium size message "
-			"transfers over the tcp provider.  (default: false)");
+			"transfers over the tcp provider, and verbs provider "
+			"for some applications.  (default: true)");
 
 	rxm_init_infos();
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);

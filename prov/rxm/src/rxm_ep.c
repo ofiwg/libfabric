@@ -2620,7 +2620,7 @@ disable_sar:
 
 static void rxm_config_direct_send(struct rxm_ep *ep)
 {
-	int ret = 0;
+	int ret = 1;
 
 	if (ep->msg_mr_local == ep->rdm_mr_local)
 		fi_param_get_bool(&rxm_prov, "enable_direct_send", &ret);
