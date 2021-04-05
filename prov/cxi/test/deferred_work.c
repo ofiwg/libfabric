@@ -276,7 +276,7 @@ Test(deferred_work, flush_work)
 	rma.flags = FI_COMPLETION;
 
 	rma_work.triggering_cntr = cxit_send_cntr;
-	msg_work.completion_cntr = cxit_send_cntr;
+	rma_work.completion_cntr = cxit_send_cntr;
 	rma_work.op_type = FI_OP_READ;
 	rma_work.op.rma = &rma;
 
