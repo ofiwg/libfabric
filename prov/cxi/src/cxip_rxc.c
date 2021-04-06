@@ -48,6 +48,10 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 {
 	int ret;
 
+	if (rxc->state != RXC_ENABLED)
+		RXC_FATAL(rxc, "RXC in bad state to be disabled: state=%d\n",
+			  rxc->state);
+
 	rxc->state = RXC_DISABLED;
 
 	ret = cxip_pte_set_state_wait(rxc->rx_pte, rxc->rx_cmdq, rxc->recv_cq,
