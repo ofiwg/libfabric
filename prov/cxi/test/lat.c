@@ -77,6 +77,7 @@ TestSuite(latency, .init = cxit_setup_tagged, .fini = cxit_teardown_tagged,
 struct latency_params {
 	char *api;
 	void (*func)();
+	bool flush_send;
 };
 
 ParameterizedTestParameters(latency, basic)
@@ -87,42 +88,52 @@ ParameterizedTestParameters(latency, basic)
 		{
 			.api = "tsend (0-byte)",
 			.func = do_tsend_0,
+			.flush_send = false,
 		},
 		{
 			.api = "trecv (0-byte)",
 			.func = do_trecv_0,
+			.flush_send = false,
 		},
 		{
 			.api = "tsend (8-byte)",
 			.func = do_tsend_8,
+			.flush_send = false,
 		},
 		{
 			.api = "trecv (8-byte)",
 			.func = do_trecv_8,
+			.flush_send = false,
 		},
 		{
 			.api = "tsend (256-byte)",
 			.func = do_tsend_256,
+			.flush_send = false,
 		},
 		{
 			.api = "trecv (256-byte)",
 			.func = do_trecv_256,
+			.flush_send = false,
 		},
 		{
 			.api = "tsend_more (8b, no doorbell)",
 			.func = do_tsend_more_8,
+			.flush_send = true,
 		},
 		{
 			.api = "trecv_more (8b, no doorbell)",
 			.func = do_trecv_more_8,
+			.flush_send = false,
 		},
 		{
 			.api = "tsend_more (256b, no doorbell)",
 			.func = do_tsend_more_256,
+			.flush_send = true,
 		},
 		{
 			.api = "trecv_more (256b, no doorbell)",
 			.func = do_trecv_more_256,
+			.flush_send = false,
 		},
 	};
 
@@ -153,6 +164,13 @@ ParameterizedTest(struct latency_params *params, latency, basic)
 	end = ofi_gettime_ns();
 
 	printf("%s latency: %lu ns\n", params->api, (end - start) / loops);
+
+	/* Cleanup all outstanding more sends. */
+	if (params->flush_send) {
+		do_tsend_0();
+		sleep(1);
+		fi_cq_read(cxit_tx_cq, NULL, 0);
+	}
 
 	free(buf);
 }
