@@ -30,12 +30,13 @@ chksum_srcs = $(_psm3_files)
 
 if HAVE_PSM3_SRC
 _psm3_cflags =
-#include prov/psm3/psm3/Makefile.include
 _nodist_psm3_files = \
-	prov/psm3/src/psm3_revision.c
+	prov/psm3/src/psm3_revision.c \
+	prov/psm3/src/psm3_src_chksum.h
 
 # builddir is for nodist config headers: See nodist_libpsm3i_la_SOURCES
 _psm3_cppflags += \
+	-I$(top_builddir)/prov/psm3/src \
 	-I$(top_srcdir)/prov/psm3/psm3 \
 	-I$(top_builddir)/prov/psm3/psm3 \
 	-I$(top_srcdir)/prov/psm3/psm3/ptl_ips/ \
@@ -277,19 +278,16 @@ chksum_srcs += \
 	$(libpsm3i_la_SOURCES) $(_psm3_extra_dist)
 
 _psm3_LIBS = libpsm3i.la
-libpsm3_la_DEPENDENCIES = libpsm3i.la
+libpsm3_la_DEPENDENCIES = \
+	prov/psm3/src/psm3_src_chksum.h \
+	libpsm3i.la
 
-all-local:
-	@echo "Building src checksum..."; \
-	chksum=`for file in $(chksum_srcs); do cat $(top_srcdir)/$$file; done | sha1sum | cut -d' ' -f 1`; \
-	if ! grep -q $$chksum $(top_builddir)/prov/psm3/src/psm3_revision.c 2>/dev/null; then \
-		sed -i "/define PSMX3_SRC_CHECKSUM/s/\".*\"/\"$$chksum\"/" $(top_builddir)/prov/psm3/src/psm3_revision.c; \
-		echo "SRC checksum updated to $$chksum"; \
-		timestamp=`date`; \
-		sed -i "/define PSMX3_BUILD_TIMESTAMP/s/\".*\"/\"$$timestamp\"/" $(top_builddir)/prov/psm3/src/psm3_revision.c; \
-		echo "Updated build timestamp: $$timestamp"; \
-	else \
-		echo "SRC checksum not changed: $$chksum"; \
+CLEANFILES = prov/psm3/src/psm3_src_chksum.h
+prov/psm3/src/psm3_src_chksum.h: Makefile $(chksum_srcs)
+	@ chksum=`for file in $(chksum_srcs); do cat $(top_srcdir)/$$file; done | sha1sum | cut -d' ' -f 1`; \
+	if ! grep -q $$chksum prov/psm3/src/psm3_src_chksum.h 2>/dev/null; then \
+		echo "#define PSMX3_SRC_CHECKSUM \"$$chksum\"" > prov/psm3/src/psm3_src_chksum.h; \
+		echo "#define PSMX3_BUILD_TIMESTAMP \"`date`\"" >> prov/psm3/src/psm3_src_chksum.h; \
 	fi
 
 endif HAVE_PSM3_SRC

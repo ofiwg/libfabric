@@ -209,6 +209,11 @@ ifelse('
 	 AC_SUBST(PSM_HAL_CNT)
 	 AC_SUBST(PSM_HAL_INST)
 
+	 AC_SUBST(PSM3_IEFS_VERSION, [""])
+	 AC_SUBST(PSM3_BUILD_TIMESTAMP, ["<Unknown>"])
+	 AC_SUBST(PSM3_SRC_CHECKSUM, ["<Unknown>"])
+	 AC_SUBST(PSM3_GIT_HASH, ["<Unknown>"])
+
 ])
 
 AC_ARG_WITH([psm3-rv],
