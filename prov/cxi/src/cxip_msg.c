@@ -2918,6 +2918,9 @@ static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state,
 	struct cxip_rxc *rxc = req->recv.rxc;
 	int ret;
 
+	if (check_rxc_state && rxc->state != RXC_ENABLED)
+		return -FI_EAGAIN;
+
 	/* Try to match against onloaded Sends first. */
 	ret = cxip_recv_req_sw_matcher(req);
 	if (ret == FI_SUCCESS)
@@ -2926,9 +2929,6 @@ static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state,
 		return -FI_EAGAIN;
 	else if (ret != -FI_ENOMSG)
 		CXIP_FATAL("SW matching failed: %d\n", ret);
-
-	if (check_rxc_state && rxc->state != RXC_ENABLED)
-		return -FI_EAGAIN;
 
 	if (rxc->msg_offload) {
 		ret = _cxip_recv_req(req, restart_seq);
