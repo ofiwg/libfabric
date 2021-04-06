@@ -1093,6 +1093,7 @@ static int cxip_recv_pending_ptlte_disable(struct cxip_rxc *rxc)
 
 	assert(rxc->state == RXC_ENABLED ||
 	       rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
+	       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
 	       rxc->state == RXC_FLOW_CONTROL ||
 	       rxc->state == RXC_PENDING_PTLTE_DISABLE);
 
@@ -1103,6 +1104,7 @@ static int cxip_recv_pending_ptlte_disable(struct cxip_rxc *rxc)
 	if (rxc->state == RXC_FLOW_CONTROL) {
 		RXC_FATAL(rxc, FC_SW_EP_MSG);
 	} else if (rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
+		   rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
 		   rxc->state == RXC_PENDING_PTLTE_DISABLE) {
 		fastlock_release(&rxc->lock);
 		return FI_SUCCESS;
@@ -1964,6 +1966,12 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		return FI_SUCCESS;
 
 	case C_EVENT_PUT_OVERFLOW:
+		/* ULE freed. Update RXC state to signal that the RXC should
+		 * be reenabled.
+		 */
+		if (rxc->state == RXC_ONLOAD_FLOW_CONTROL)
+			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
+
 	case C_EVENT_PUT:
 		break;
 	default:
@@ -2364,6 +2372,8 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 	struct cxip_rxc *rxc = req->search.rxc;
 	int ret __attribute__((unused));
 
+	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE);
+
 	free(rxc->ule_offsets);
 
 	rxc->state = RXC_FLOW_CONTROL;
@@ -2393,7 +2403,8 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 
 	fastlock_acquire(&rxc->lock);
 
-	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL);
+	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
+	       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE);
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_PUT_OVERFLOW:
@@ -2430,7 +2441,10 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 			ux_send->put_ev = *event;
 		}
 
-		req->search.onload_count++;
+		/* ULE freed. Update RXC state to signal that the RXC should
+		 * be reenabled.
+		 */
+		rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
 
 		/* Fixup event with the expected remote offset for an RGet. */
 		if (event->tgt_long.rlength) {
@@ -2447,7 +2461,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 
 		break;
 	case C_EVENT_SEARCH:
-		if (!req->search.onload_count)
+		if (rxc->state == RXC_ONLOAD_FLOW_CONTROL)
 			RXC_FATAL(rxc, FC_SW_EP_MSG);
 
 		req->search.complete = true;
@@ -2602,7 +2616,8 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 		 * when a peer sends a sideband drop message.
 		 */
 		if (rxc->state == RXC_FLOW_CONTROL ||
-		    rxc->state == RXC_ONLOAD_FLOW_CONTROL) {
+		    rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
+		    rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE) {
 			RXC_WARN(rxc,
 				 "Failed to reenable PtlTE while in flow control\n");
 			break;

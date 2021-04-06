@@ -664,7 +664,6 @@ struct cxip_req_search {
 	struct cxip_rxc *rxc;
 	bool complete;
 	int puts_pending;
-	unsigned int onload_count;
 };
 
 struct cxip_req_coll {
@@ -962,9 +961,19 @@ enum cxip_rxc_state {
 	 * disabled.
 	 *
 	 * Validate state changes:
-	 * RXC_FLOW_CONTROL: Onloading of the unexpected headers has completed.
+	 * RXC_ONLOAD_FLOW_CONTROL_REENABLE: An unexpected list entry matched a
+	 * user posted receive or the search and delete command free a
+	 * unexpected list entry.
 	 */
 	RXC_ONLOAD_FLOW_CONTROL,
+
+	/* PtlTE is in the same state as RXC_ONLOAD_FLOW_CONTROL, but the RXC
+	 * should attempt to be reenabled.
+	 *
+	 * Validate state changes:
+	 * RXC_FLOW_CONTROL: Onloading of the unexpected headers has completed.
+	 */
+	RXC_ONLOAD_FLOW_CONTROL_REENABLE,
 
 	/* Software is performing sideband communication to recover the dropped
 	 * messages. User posted receives are matched against the software
