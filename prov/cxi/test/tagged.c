@@ -3523,7 +3523,7 @@ Test(tagged, fc_multi_recv, .timeout = 30)
 	free(recv_buf);
 }
 
-Test(tagged, fc_multi_recv_rdzv, .timeout = 10)
+static void test_fc_multi_recv(size_t xfer_len, bool progress_before_post)
 {
 	int ret;
 	char *recv_buf;
@@ -3538,9 +3538,6 @@ Test(tagged, fc_multi_recv_rdzv, .timeout = 10)
 	size_t min_mrecv = 0;
 	size_t opt_len = sizeof(size_t);
 	bool unlinked = false;
-
-	/* Transfer size needs to be large enough to trigger rendezvous. */
-	unsigned int xfer_len = 16384;
 
 	/* Needs to exceed available LEs. */
 	unsigned int num_xfers = 100;
@@ -3568,6 +3565,12 @@ Test(tagged, fc_multi_recv_rdzv, .timeout = 10)
 		cr_assert(ret == FI_SUCCESS);
 	}
 
+	/* Progress before post will cause all ULEs to be onloaded before the
+	 * append occurs.
+	 */
+	if (progress_before_post)
+		fi_cq_read(cxit_rx_cq, &cqe, 0);
+
 	/* Append late multi-recv buffer. */
 	riovec.iov_base = recv_buf;
 	riovec.iov_len = num_xfers * xfer_len;
@@ -3576,7 +3579,14 @@ Test(tagged, fc_multi_recv_rdzv, .timeout = 10)
 	trmsg.addr = cxit_ep_fi_addr;
 	trmsg.context = NULL;
 	trmsg.tag = tag;
-	ret = fi_trecvmsg(cxit_ep, &trmsg, FI_MULTI_RECV);
+
+	do {
+		ret = fi_trecvmsg(cxit_ep, &trmsg, FI_MULTI_RECV);
+		if (ret == -FI_EAGAIN) {
+			fi_cq_read(cxit_tx_cq, NULL, 0);
+			fi_cq_read(cxit_rx_cq, NULL, 0);
+		}
+	} while (ret == -FI_EAGAIN);
 	cr_assert(ret == FI_SUCCESS);
 
 	/* Wait for all send events. Since this test can be run with or without
@@ -3644,6 +3654,18 @@ Test(tagged, fc_multi_recv_rdzv, .timeout = 10)
 
 	free(send_buf);
 	free(recv_buf);
+}
+
+Test(tagged, fc_multi_recv_rdzv, .timeout = 10)
+{
+	/* Transfer size needs to be large enough to trigger rendezvous. */
+	test_fc_multi_recv(16384, false);
+}
+
+Test(tagged, fc_multi_recv_rdzv_onload_ules, .timeout = 10)
+{
+	/* Transfer size needs to be large enough to trigger rendezvous. */
+	test_fc_multi_recv(16384, true);
 }
 
 #define FC_TRANS 100
