@@ -42,8 +42,8 @@ fi
 # Run tests with constrained LE count
 MAX_ALLOC=`csrutil dump csr le_pools[63] |grep max_alloc |awk '{print $3}'`
 csrutil store csr le_pools[] max_alloc=10 > /dev/null
-echo "running; ./cxitest --verbose --filter=\"tagged/fc*\" --tap=cxitest-fc.tap -j2 >> $TEST_OUTPUT 2>&1"
-./cxitest --verbose --filter="tagged/fc*" --tap=cxitest-fc.tap -j2 >> $TEST_OUTPUT 2>&1
+echo "running; ./cxitest --verbose --filter=\"tagged/fc*\" --tap=cxitest-fc.tap -j1 >> $TEST_OUTPUT 2>&1"
+./cxitest --verbose --filter="tagged/fc*" --tap=cxitest-fc.tap -j1 >> $TEST_OUTPUT 2>&1
 cxitest_exit_status=$?
 csrutil store csr le_pools[] max_alloc=$MAX_ALLOC > /dev/null
 if [[ $cxitest_exit_status -ne 0 ]]; then
