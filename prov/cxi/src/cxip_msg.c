@@ -4291,8 +4291,11 @@ static int cxip_send_req_queue(struct cxip_txc *txc, struct cxip_req *req)
 		peer = cxip_fc_peer_lookup(txc, req->send.caddr,
 					   req->send.rxc_id);
 		if (peer) {
-			/* Peer is disabled */
+			/* Peer is disabled. Progress control EQs so future
+			 * cxip_send_req_queue() may succeed.
+			 */
 			fastlock_release(&txc->lock);
+			cxip_ep_ctrl_progress(txc->ep_obj);
 			return -FI_EAGAIN;
 		}
 	}
