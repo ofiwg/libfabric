@@ -1170,7 +1170,12 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 			RXC_WARN(rxc,
 				 "Failed to append oflow buffer due to LE exhaustion\n");
 
-			ret = cxip_recv_pending_ptlte_disable(rxc);
+			/* Drop the buffer if RXC is disabled. */
+			if (rxc->state != RXC_DISABLED)
+				ret = cxip_recv_pending_ptlte_disable(rxc);
+			else
+				ret = FI_SUCCESS;
+
 			if (ret == FI_SUCCESS) {
 				/* Clean up dropped buffer */
 				ofi_atomic_dec32(&rxc->oflow_bufs_submitted);
@@ -1950,9 +1955,17 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		RXC_WARN(rxc,
 			 "Failed to append user buffer due to LE exhaustion\n");
 
-		ret = cxip_recv_pending_ptlte_disable(rxc);
-		if (ret == FI_SUCCESS)
-			cxip_recv_req_dropped(req);
+		/* If endpoint has been disabled and an append fails, free the
+		 * user request without reporting any event.
+		 */
+		if (rxc->state == RXC_DISABLED) {
+			cxip_recv_req_free(req);
+			ret = FI_SUCCESS;
+		} else {
+			ret = cxip_recv_pending_ptlte_disable(rxc);
+			if (ret == FI_SUCCESS)
+				cxip_recv_req_dropped(req);
+		}
 
 		return ret;
 
