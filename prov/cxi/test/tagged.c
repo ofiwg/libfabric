@@ -3797,6 +3797,31 @@ Test(tagged, fc_mt)
 	pthread_attr_destroy(&attr);
 }
 
+/* Post a bunch of receives to cause append failures. */
+Test(tagged, fc_too_many_recv_early_close)
+{
+	void *recv_buf;
+	size_t recv_len = 1;
+	int i;
+	int ret;
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+
+	for (i = 0; i < 100; i++) {
+		ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
+			       FI_ADDR_UNSPEC, 0xa, 0, NULL);
+		assert(ret == FI_SUCCESS);
+	}
+
+	/* Early endpoint close. */
+	ret = fi_close(&cxit_ep->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close endpoint");
+	cxit_ep = NULL;
+
+	free(recv_buf);
+}
+
 #define RDZV_FC_ITERS 100
 #define RDZV_FC_BATCH 5
 

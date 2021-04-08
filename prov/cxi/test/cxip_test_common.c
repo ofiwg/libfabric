@@ -168,9 +168,11 @@ void cxit_destroy_ep(void)
 {
 	int ret;
 
-	ret = fi_close(&cxit_ep->fid);
-	cr_assert(ret == FI_SUCCESS, "fi_close endpoint");
-	cxit_ep = NULL;
+	if (cxit_ep != NULL) {
+		ret = fi_close(&cxit_ep->fid);
+		cr_assert(ret == FI_SUCCESS, "fi_close endpoint");
+		cxit_ep = NULL;
+	}
 }
 
 void cxit_create_sep(void)
