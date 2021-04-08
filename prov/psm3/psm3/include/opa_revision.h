@@ -56,7 +56,7 @@
 
 /* Those variables are defined in the _revision.c file
 which is dynamically generated during building of the library */
-extern char psmi_hfi_IFS_version[];
+extern char psmi_hfi_IEFS_version[];
 extern char psmi_hfi_build_timestamp[];
 extern char psmi_hfi_sources_checksum[];
 extern char psmi_hfi_git_checksum[];

@@ -579,7 +579,7 @@ update:
 	if (psmi_parse_identify()) {
                 Dl_info info_psm;
 		char ofed_delta[100] = "";
-		strcat(strcat(ofed_delta," built for IFS OFA DELTA "),psmi_hfi_IFS_version);
+		strcat(strcat(ofed_delta," built for IEFS OFA DELTA "),psmi_hfi_IEFS_version);
                 printf("%s %s PSM3 v%d.%d%s\n"
 		       "%s %s location %s\n"
 		       "%s %s build date %s\n"
@@ -591,7 +591,7 @@ update:
                        "%s %s Global Rank %d (%d total) Local Rank %d (%d total)\n"
 		       , hfi_get_mylabel(), hfi_ident_tag,
 		       PSM2_VERNO_MAJOR,PSM2_VERNO_MINOR,
-		       (strcmp(psmi_hfi_IFS_version,"") != 0) ? ofed_delta
+		       (strcmp(psmi_hfi_IEFS_version,"") != 0) ? ofed_delta
 #ifdef PSM_CUDA
 		       : "-cuda",
 #else
