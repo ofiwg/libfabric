@@ -53,6 +53,12 @@ The tcp provider check for the following enviroment variables -
   tcp provider for its passive endpoint creation. This is useful where
   only a range of ports are allowed by firewall for tcp connections.
 
+*FI_TCP_TX_SIZE*
+: Default tx context size (default: 256)
+
+*FI_TCP_RX_SIZE*
+: Default rx context size (default: 256)
+
 # LIMITATIONS
 
 The tcp provider is implemented over TCP sockets to emulate libfabric API.
