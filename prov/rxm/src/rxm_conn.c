@@ -582,7 +582,7 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 						    &handle);
 	}
 	if (ret)
-		goto unlock;
+		return ret;
 
 	switch (handle->state) {
 	case RXM_CMAP_CONNECTED:
@@ -617,7 +617,7 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 							  RXM_CMAP_CONNREQ_RECV,
 							  &handle);
 			if (ret)
-				goto unlock;
+				return ret;
 
 			assert(fi_addr != FI_ADDR_NOTAVAIL);
 			handle->fi_addr = fi_addr;
@@ -641,7 +641,7 @@ int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 		assert(0);
 		ret = -FI_EOPBADSTATE;
 	}
-unlock:
+
 	return ret;
 }
 
