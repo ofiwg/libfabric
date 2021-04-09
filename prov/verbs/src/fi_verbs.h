@@ -366,9 +366,8 @@ struct vrb_domain {
 
 	ssize_t		(*send_credits)(struct fid_ep *ep, uint64_t credits);
 
-	/* Indicates that MSG endpoints should use the XRC transport.
-	 * TODO: Move selection of XRC/RC to endpoint info from domain */
-	int				flags;
+	/* Domain use of specific extended H/W capabilities, e.g. XRC, ODP */
+	uint64_t			ext_flags;
 	struct {
 		int			xrcd_fd;
 		struct ibv_xrcd		*xrcd;

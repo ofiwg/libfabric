@@ -95,7 +95,7 @@ int vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *buf,
 	md->info.iov.iov_base = (void *) buf;
 	md->info.iov.iov_len = len;
 
-	if (md->domain->flags & VRB_USE_ODP && iface == FI_HMEM_SYSTEM)
+	if (md->domain->ext_flags & VRB_USE_ODP && iface == FI_HMEM_SYSTEM)
 		vrb_access |= VRB_ACCESS_ON_DEMAND;
 
 #if VERBS_HAVE_DMABUF_MR
