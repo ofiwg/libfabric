@@ -86,6 +86,12 @@ AC_ARG_ENABLE([direct],
 	[],
 	[enable_direct=no])
 
+AC_ARG_ENABLE([only],
+	[AS_HELP_STRING([--enable-only],
+		[Only build explicitly specified fabric providers])
+	],
+	[],
+	[enable_only=no])
 
 AC_ARG_ENABLE([atomics],
 	[AS_HELP_STRING([--enable-atomics],
