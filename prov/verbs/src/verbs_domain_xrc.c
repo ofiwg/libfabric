@@ -542,7 +542,7 @@ int vrb_domain_xrc_init(struct vrb_domain *domain)
 		domain->xrc.lock_acquire = ofi_fastlock_acquire;
 		domain->xrc.lock_release = ofi_fastlock_release;
 	}
-	domain->flags |= VRB_USE_XRC;
+	domain->ext_flags |= VRB_USE_XRC;
 	return FI_SUCCESS;
 
 rbmap_err:
