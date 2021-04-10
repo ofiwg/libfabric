@@ -1283,7 +1283,7 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		if (ret)
 			return ret;
 	} else {
-		ret = (int) ft_rx(ep, FT_MAX_CTRL_MSG);
+		ret = ft_get_rx_comp(rx_seq);
 		if (ret)
 			return ret;
 
@@ -1292,6 +1292,10 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		ret = ft_av_insert(av_ptr, (char *) rx_buf + ft_rx_prefix_size(),
 				   1, ((fi->domain_attr->av_type == FI_AV_TABLE) ?
 				       NULL : remote_addr), 0, NULL);
+		if (ret)
+			return ret;
+
+		ret = ft_post_rx(ep, rx_size, &rx_ctx);
 		if (ret)
 			return ret;
 
@@ -2087,8 +2091,8 @@ ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, void *ctx,
 	if (hints->caps & FI_TAGGED) {
 		op_tag = op_tag ? op_tag : rx_seq;
 		FT_POST(fi_trecv, ft_progress, rxcq, rx_seq, &rx_cq_cntr,
-			"receive", ep, op_buf, size, op_mr_desc, 0, op_tag,
-			0, ctx);
+			"receive", ep, op_buf, size, op_mr_desc,
+			remote_fi_addr, op_tag, 0, ctx);
 	} else {
 		FT_POST(fi_recv, ft_progress, rxcq, rx_seq, &rx_cq_cntr,
 			"receive", ep, op_buf, size, op_mr_desc, 0, ctx);
