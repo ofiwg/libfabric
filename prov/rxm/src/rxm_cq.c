@@ -1611,44 +1611,29 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 		}
 		break;
 	case rxm_ctrl_rndv_req:
-		/* find matching receive to maintain message ordering, but we
-		 * only need to receive rendezvous header to complete message
-		 */
+		/* Find matching receive to maintain message ordering. */
 		ret = rxm_get_recv_entry(rx_buf, entry);
 		if (ret)
 			return ret;
 
-		*count = 1;
-		iov[0].iov_base = &rx_buf->pkt + 1;
-		iov[0].iov_len = sizeof(struct rxm_rndv_hdr);
-		break;
+		/* fall through */
 	case rxm_ctrl_atomic:
-		*count = 1;
-		iov[0].iov_base = &rx_buf->pkt + 1;
-		iov[0].iov_len = sizeof(struct rxm_atomic_hdr);
-		break;
 	case rxm_ctrl_atomic_resp:
-		*count = 1;
-		iov[0].iov_base = &rx_buf->pkt + 1;
-		iov[0].iov_len = sizeof(struct rxm_atomic_resp_hdr);
-		break;
 	case rxm_ctrl_rndv_wr_data:
-		*count = 1;
-		iov[0].iov_base = &rx_buf->pkt + 1;
-		iov[0].iov_len = sizeof(struct rxm_rndv_hdr);
-		break;
 	case rxm_ctrl_rndv_wr_done:
 	case rxm_ctrl_rndv_rd_done:
 	case rxm_ctrl_credit:
-		*count = 0;
-		iov[0].iov_base = NULL;
-		iov[0].iov_len = 0;
+		*count = 1;
+		iov[0].iov_base = &rx_buf->pkt.data;
+		iov[0].iov_len = rxm_eager_limit;
 		break;
 	case rxm_ctrl_seg:
 	default:
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"Unexpected request for dynamic rbuf\n");
-		*count = 0;
+		*count = 1;
+		iov[0].iov_base = &rx_buf->pkt.data;
+		iov[0].iov_len = rxm_eager_limit;
 		break;
 	}
 
