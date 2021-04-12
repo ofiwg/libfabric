@@ -144,7 +144,6 @@ struct test_size_param test_size[] = {
 
 const unsigned int test_cnt = (sizeof test_size / sizeof test_size[0]);
 
-#define INTEG_SEED 7
 static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
 
@@ -3076,15 +3075,13 @@ int ft_parse_rma_opts(int op, char *optarg, struct fi_info *hints,
 void ft_fill_buf(void *buf, size_t size)
 {
 	char *msg_buf;
-	int msg_index;
-	static unsigned int iter = 0;
+	int msg_index = 0;
 	size_t i;
 
-	msg_index = ((iter++)*INTEG_SEED) % integ_alphabet_length;
-	msg_buf = (char *)buf;
+	msg_buf = (char *) buf;
 	for (i = 0; i < size; i++) {
-		msg_buf[i] = integ_alphabet[msg_index++];
-		if (msg_index >= integ_alphabet_length)
+		msg_buf[i] = integ_alphabet[msg_index];
+		if (++msg_index >= integ_alphabet_length)
 			msg_index = 0;
 	}
 }
@@ -3093,23 +3090,21 @@ int ft_check_buf(void *buf, size_t size)
 {
 	char *recv_data;
 	char c;
-	static unsigned int iter = 0;
-	int msg_index;
+	int msg_index = 0;
 	size_t i;
 
-	msg_index = ((iter++)*INTEG_SEED) % integ_alphabet_length;
 	recv_data = (char *)buf;
 
 	for (i = 0; i < size; i++) {
-		c = integ_alphabet[msg_index++];
-		if (msg_index >= integ_alphabet_length)
+		c = integ_alphabet[msg_index];
+		if (++msg_index >= integ_alphabet_length)
 			msg_index = 0;
 		if (c != recv_data[i])
 			break;
 	}
 	if (i != size) {
-		printf("Data error (%c!=%c) at iteration=%d "
-		       "size=%zu byte=%zu\n", c, recv_data[i], iter, size, i);
+		printf("Data check error (%c!=%c) at byte %zu for "
+		       "buffer size %zu\n", c, recv_data[i], i, size);
 		return -FI_EIO;
 	}
 
