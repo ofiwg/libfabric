@@ -1606,7 +1606,7 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 			       sizeof(*iov));
 		} else {
 			*count = 1;
-			iov[0].iov_base = &rx_buf->pkt + 1;
+			iov[0].iov_base = &rx_buf->pkt.data;
 			iov[0].iov_len = rxm_eager_limit;
 		}
 		break;
@@ -1619,22 +1619,22 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 			return ret;
 
 		*count = 1;
-		iov[0].iov_base = &rx_buf->pkt + 1;
+		iov[0].iov_base = &rx_buf->pkt.data;
 		iov[0].iov_len = sizeof(struct rxm_rndv_hdr);
 		break;
 	case rxm_ctrl_atomic:
 		*count = 1;
-		iov[0].iov_base = &rx_buf->pkt + 1;
+		iov[0].iov_base = &rx_buf->pkt.data;
 		iov[0].iov_len = sizeof(struct rxm_atomic_hdr);
 		break;
 	case rxm_ctrl_atomic_resp:
 		*count = 1;
-		iov[0].iov_base = &rx_buf->pkt + 1;
+		iov[0].iov_base = &rx_buf->pkt.data;
 		iov[0].iov_len = sizeof(struct rxm_atomic_resp_hdr);
 		break;
 	case rxm_ctrl_rndv_wr_data:
 		*count = 1;
-		iov[0].iov_base = &rx_buf->pkt + 1;
+		iov[0].iov_base = &rx_buf->pkt.data;
 		iov[0].iov_len = sizeof(struct rxm_rndv_hdr);
 		break;
 	case rxm_ctrl_rndv_wr_done:
