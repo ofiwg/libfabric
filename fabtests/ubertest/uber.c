@@ -446,7 +446,7 @@ static int ft_server_child()
 	}
 
 	printf("Ending test %d, result: %s\n", test_info.test_index,
-		fi_strerror(-ret));
+		fi_strerror(-result));
 
 	return result;
 }
@@ -518,9 +518,9 @@ static int ft_client_setup(struct fi_info *hints, struct fi_info *info)
 	ft_fw_update_info(&test_info, fabric_info);
 
 	ret = ft_open_res();
-	
+
 	return 0;
-	
+
 err:
 	ft_send_result(ret, info);
 	return ret;
@@ -579,7 +579,7 @@ static int ft_client_child(void)
 	fi_freeinfo(hints);
 	ft_cleanup();
 
-	return 0;
+	return result;
 
 err:
 	ft_send_result(ret, info);

@@ -3108,9 +3108,9 @@ int ft_check_buf(void *buf, size_t size)
 			break;
 	}
 	if (i != size) {
-		printf("Error at iteration=%d size=%zu byte=%zu\n",
-			iter, size, i);
-		return 1;
+		printf("Data error (%c!=%c) at iteration=%d "
+		       "size=%zu byte=%zu\n", c, recv_data[i], iter, size, i);
+		return -FI_EIO;
 	}
 
 	return 0;

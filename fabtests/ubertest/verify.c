@@ -163,7 +163,7 @@ int ft_verify_bufs()
 		compare_buf = (char *) ft_rx_ctrl.buf;
 	}
 
-	return ft_check_buf(compare_buf, compare_size) ? -FI_EIO : 0;
+	return ft_check_buf(compare_buf, compare_size);
 }
 
 void ft_verify_comp(void *buf)
