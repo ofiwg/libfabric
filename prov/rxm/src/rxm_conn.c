@@ -1294,23 +1294,17 @@ static ssize_t rxm_eq_sread(struct rxm_ep *rxm_ep, size_t len,
 			    struct rxm_msg_eq_entry *entry)
 {
 	ssize_t rd;
-	int once = 1;
 
-	do {
-		/* TODO convert this to poll + fi_eq_read so that we can grab
-		 * rxm_ep lock before reading the EQ. This is needed to avoid
-		 * processing events / error entries from closed MSG EPs. This
-		 * can be done only for non-Windows OSes as Windows doesn't
-		 * have poll for a generic file descriptor. */
-		rd = fi_eq_sread(rxm_ep->msg_eq, &entry->event, &entry->cm_entry,
-				 len, -1, 0);
-		if (rd >= 0)
-			return rd;
-		if (rd == -FI_EINTR && once) {
-			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "Ignoring EINTR\n");
-			once = 0;
-		}
-	} while (rd == -FI_EINTR);
+	/* TODO convert this to poll + fi_eq_read so that we can grab
+	 * rxm_ep lock before reading the EQ. This is needed to avoid
+	 * processing events / error entries from closed MSG EPs. This
+	 * can be done only for non-Windows OSes as Windows doesn't
+	 * have poll for a generic file descriptor.
+	 */
+	rd = fi_eq_sread(rxm_ep->msg_eq, &entry->event, &entry->cm_entry,
+			 len, -1, 0);
+	if (rd >= 0)
+		return rd;
 
 	if (rd != -FI_EAVAIL) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
@@ -1428,11 +1422,9 @@ static void *rxm_conn_atomic_progress(void *arg)
 			fds[1].revents = 0;
 
 			ret = poll(fds, 2, -1);
-			if (ret == -1 && errno != EINTR) {
+			if (ret == -1) {
 				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-					"Select error %s, closing CM thread\n",
-					strerror(errno));
-				goto out;
+					"Select error %s\n", strerror(errno));
 			}
 		}
 		rxm_conn_auto_progress_eq(ep, entry);
@@ -1441,7 +1433,6 @@ static void *rxm_conn_atomic_progress(void *arg)
 	}
 	ofi_ep_lock_release(&ep->util_ep);
 
-out:
 	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "Stopping auto progress thread\n");
 	return NULL;
 }
