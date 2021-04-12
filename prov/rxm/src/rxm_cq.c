@@ -1030,13 +1030,13 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 	struct rxm_deferred_tx_entry *def_tx_entry;
 	struct rxm_atomic_resp_hdr *atomic_hdr;
 	ssize_t ret;
-	ssize_t resp_len;
+	size_t data_len, tot_len;
 
-	resp_len = result_len + sizeof(struct rxm_atomic_resp_hdr) +
-		   sizeof(struct rxm_pkt);
+	data_len = result_len + sizeof(struct rxm_atomic_resp_hdr);
+	tot_len = data_len + sizeof(struct rxm_pkt);
 
 	resp_buf->hdr.state = RXM_ATOMIC_RESP_SENT;
-	rxm_format_atomic_resp_pkt_hdr(rx_buf->conn, resp_buf, resp_len,
+	rxm_format_atomic_resp_pkt_hdr(rx_buf->conn, resp_buf, data_len,
 				       rx_buf->pkt.hdr.op,
 				       rx_buf->pkt.hdr.atomic.datatype,
 				       rx_buf->pkt.hdr.atomic.op);
@@ -1046,14 +1046,14 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 	atomic_hdr->status = htonl(status);
 	atomic_hdr->result_len = htonl(result_len);
 
-	if (resp_len < rxm_ep->inject_limit) {
+	if (tot_len < rxm_ep->inject_limit) {
 		ret = fi_inject(rx_buf->conn->msg_ep, &resp_buf->pkt,
-				resp_len, 0);
+				tot_len, 0);
 		if (!ret)
 			ofi_buf_free(resp_buf);
 	} else {
 		ret = rxm_atomic_send_respmsg(rxm_ep, rx_buf->conn, resp_buf,
-					      resp_len);
+					      tot_len);
 	}
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
@@ -1070,7 +1070,7 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 			}
 
 			def_tx_entry->atomic_resp.tx_buf = resp_buf;
-			def_tx_entry->atomic_resp.len = resp_len;
+			def_tx_entry->atomic_resp.len = tot_len;
 			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
 			ret = 0;
 		}
