@@ -609,8 +609,9 @@ Note: Use the fi_info utility to query provider environment variables:
 # CXI EXTENSIONS
 
 The CXI provider supports various fabric-specific extensions. Extensions are
-accessed using the fi_open_ops function. Currently, extensions are only
-supported for CXI domains.
+accessed using the fi_open_ops function.
+
+## CXI Domain Extensions
 
 CXI domain extensions have been named *FI_CXI_DOM_OPS_1*. The flags parameter
 is ignored. The fi_open_ops function takes a `struct fi_cxi_dom_ops`. See an
@@ -635,6 +636,64 @@ The cntr_read extension is used to read hardware counter values. Valid values
 of the cntr argument are found in the Cassini-specific header file
 cassini_cntr_defs.h. Note that Counter accesses by applications may be
 rate-limited to 1HZ.
+
+## CXI Counter Extensions
+
+CXI counter extensions have been named *FI_CXI_COUNTER_OPS*. The flags parameter
+is ignored. The fi_open_ops function takes a `struct fi_cxi_cntr_ops`. See an
+example of usage below.
+
+```c
+struct fi_cxi_cntr_ops *cntr_ops;
+
+ret = fi_open_ops(&cntr->fid, FI_CXI_COUNTER_OPS, 0, (void **)&cntr_ops, NULL);
+```
+
+The following domain extensions are defined:
+
+```c
+struct fi_cxi_cntr_ops {
+	/* Set the counter writeback address to a client provided address. */
+	int (*set_wb_buffer)(struct fid *fid, const void *buf, size_t len);
+
+	/* Get the counter MMIO region. */
+	int (*get_mmio_addr)(struct fid *fid, void **addr, size_t *len);
+};
+```
+
+## CXI Counter Writeback Flag
+
+If a client is using the CXI counter extensions to define a counter writeback
+buffer, the CXI provider will not update the writeback buffer success or
+failure values for each hardware counter success or failure update. This can
+especially create issues when clients expect the completion of a deferred
+workqueue operation to generate a counter writeback. To support this, the flag
+*FI_CXI_CNTR_WB* can be used in conjunction with a deferred workqueue operation
+to force a writeback at the completion of the deferred workqueue operation. See
+an example of usage below.
+
+```c
+struct fi_op_rma rma = {
+  /* Signal to the provider the completion of the RMA should trigger a
+   * writeback.
+   */
+  .flags = FI_CXI_CNTR_WB,
+};
+
+struct fi_deferred_work rma_work = {
+  .op_type = FI_OP_READ,
+  .triggering_counter = cntr,
+  .completion_cntr = cntr,
+  .threshold = 1,
+  .op.rma = &rma,
+};
+
+ret = fi_control(&domain->fid, FI_QUEUE_WORK, &rma_work);
+```
+
+**Note:** Using *FI_CXI_CNTR_WB* will lead to additional hardware usage. To
+conserve hardware resources, it is recommended to only use the *FI_CXI_CNTR_WB*
+when a counter writeback is absolutely required.
 
 # FABTESTS
 

@@ -19,6 +19,125 @@
  */
 #define FI_CXI_UNRELIABLE (1ULL << 61)
 
+/*
+ * Used in conjunction with the deferred work queue API. If a deferred work
+ * queue operation has this flag set, the CXI provider will ensure a counter
+ * writeback occurs once the deferred work queue operation completes.
+ * Note: Addition hardware resources will be used to ensure a counter writeback
+ * occurs at the completion of the deferred work queue operation.
+ */
+#define FI_CXI_CNTR_WB (1ULL << 62)
+
+#define FI_CXI_COUNTER_OPS "cxi_counter_ops"
+
+struct fi_cxi_cntr_ops {
+	/* Set the counter writeback address to a client provided address. */
+	int (*set_wb_buffer)(struct fid *fid, const void *buf, size_t len);
+
+	/* Get the counter MMIO region. */
+	int (*get_mmio_addr)(struct fid *fid, void **addr, size_t *len);
+};
+
+/* Success values cannot exceed FI_CXI_CNTR_SUCCESS_MAX */
+#define FI_CXI_CNTR_SUCCESS_MAX ((1ULL << 48) - 1)
+
+/* Failure values cannot exceed FI_CXI_CNTR_FAILURE_MAX */
+#define FI_CXI_CNTR_FAILURE_MAX ((1ULL << 7) - 1)
+
+/* fi_cntr_read() equivalent but for the writeback buffer. */
+static inline uint64_t fi_cxi_cntr_wb_read(const void *wb_buf)
+{
+	return (*(uint64_t *)wb_buf) & FI_CXI_CNTR_SUCCESS_MAX;
+};
+
+/* fi_cntr_reader() equivalent but for the writeback buffer. */
+static inline uint64_t fi_cxi_cntr_wb_readerr(const void *wb_buf)
+{
+	return ((*(uint64_t *)wb_buf) >> 48) & FI_CXI_CNTR_FAILURE_MAX;
+};
+
+/* Generate a counter success value which can be polled on. */
+static inline int fi_cxi_gen_cntr_success(uint64_t value, uint64_t *cxi_value)
+{
+	if (value > FI_CXI_CNTR_SUCCESS_MAX)
+		return -FI_EINVAL;
+
+	*cxi_value = (1ULL << 63) | value;
+	return FI_SUCCESS;
+};
+
+/* fi_cntr_add() equivalent but for the MMIO region. */
+static inline int fi_cxi_cntr_add(void *cntr_mmio, uint64_t value)
+{
+	/* Success counter is only 48 bits wide. */
+	if (value > FI_CXI_CNTR_SUCCESS_MAX)
+		return -FI_EINVAL;
+
+	*((uint64_t *)cntr_mmio) = value;
+	return FI_SUCCESS;
+}
+
+/* fi_cntr_adderr() equivalent but for the MMIO region. */
+static inline int fi_cxi_cntr_adderr(void *cntr_mmio, uint64_t value)
+{
+	/* Error counter is only 7 bits wide. */
+	if (value > FI_CXI_CNTR_FAILURE_MAX)
+		return -FI_EINVAL;
+
+	*((uint64_t *)cntr_mmio + 8) = value;
+	return FI_SUCCESS;
+}
+
+/* fi_cntr_set() equivalent but for the MMIO region. */
+static inline int fi_cxi_cntr_set(void *cntr_mmio, uint64_t value)
+{
+	/* Only set of zero is supported through MMIO region. */
+	if (value > 0)
+		return -FI_EINVAL;
+
+	*((uint64_t *)cntr_mmio + 16) = 0;
+	return FI_SUCCESS;
+}
+
+/* fi_cntr_seterr() equivalent but for MMIO region. */
+static inline int fi_cxi_cntr_seterr(void *cntr_mmio, uint64_t value)
+{
+	/* Only set of zero is supported through MMIO region. */
+	if (value > 0)
+		return -FI_EINVAL;
+
+	*((uint64_t *)cntr_mmio + 24) = 0;
+	return FI_SUCCESS;
+}
+
+/* fi_cntr_add() equivalent but for the MMIO region. */
+static inline void *fi_cxi_get_cntr_add_addr(void *cntr_mmio)
+{
+	return cntr_mmio;
+}
+
+/* fi_cntr_adderr() equivalent but for the MMIO region. */
+static inline void *fi_cxi_get_cntr_adderr_addr(void *cntr_mmio)
+{
+	return (void *)((uint64_t *)cntr_mmio + 8);
+}
+
+/* fi_cntr_set() equivalent but for the MMIO region reset.
+ * NOTE: CXI does not support set to counter MMIO region. Only reset.
+ */
+static inline void *fi_cxi_get_cntr_reset_addr(void *cntr_mmio)
+{
+	return (void *)((uint64_t *)cntr_mmio + 16);
+}
+
+/* fi_cntr_seterr() equivalent but for MMIO region reset.
+ * NOTE: CXI does not support set to counter MMIO region. Only reset.
+ */
+static inline void *fi_cxi_get_cntr_reseterr_addr(void *cntr_mmio)
+{
+	return (void *)((uint64_t *)cntr_mmio + 24);
+}
+
 #define FI_CXI_DOM_OPS_1 "dom_ops_v1"
 
 struct fi_cxi_dom_ops {

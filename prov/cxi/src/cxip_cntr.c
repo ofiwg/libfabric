@@ -242,7 +242,7 @@ static int cxip_cntr_add(struct fid_cntr *fid_cntr, uint64_t value)
 {
 	struct cxip_cntr *cxi_cntr;
 
-	if (value > CXIP_CNTR_SUCCESS_MAX)
+	if (value > FI_CXI_CNTR_SUCCESS_MAX)
 		return -FI_EINVAL;
 
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
@@ -257,7 +257,7 @@ static int cxip_cntr_set(struct fid_cntr *fid_cntr, uint64_t value)
 {
 	struct cxip_cntr *cxi_cntr;
 
-	if (value > CXIP_CNTR_SUCCESS_MAX)
+	if (value > FI_CXI_CNTR_SUCCESS_MAX)
 		return -FI_EINVAL;
 
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
@@ -272,7 +272,7 @@ static int cxip_cntr_adderr(struct fid_cntr *fid_cntr, uint64_t value)
 {
 	struct cxip_cntr *cxi_cntr;
 
-	if (value > CXIP_CNTR_FAILURE_MAX)
+	if (value > FI_CXI_CNTR_FAILURE_MAX)
 		return -FI_EINVAL;
 
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
@@ -287,7 +287,7 @@ static int cxip_cntr_seterr(struct fid_cntr *fid_cntr, uint64_t value)
 {
 	struct cxip_cntr *cxi_cntr;
 
-	if (value > CXIP_CNTR_FAILURE_MAX)
+	if (value > FI_CXI_CNTR_FAILURE_MAX)
 		return -FI_EINVAL;
 
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);

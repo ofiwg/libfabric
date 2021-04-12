@@ -42,16 +42,16 @@ Test(cntr, mod)
 	cr_assert(ret == -FI_ENOSYS);
 
 	/* Test invalid values */
-	ret = fi_cntr_add(cxit_write_cntr, CXIP_CNTR_SUCCESS_MAX + 1);
+	ret = fi_cntr_add(cxit_write_cntr, FI_CXI_CNTR_SUCCESS_MAX + 1);
 	cr_assert(ret == -FI_EINVAL);
 
-	ret = fi_cntr_set(cxit_write_cntr, CXIP_CNTR_SUCCESS_MAX + 1);
+	ret = fi_cntr_set(cxit_write_cntr, FI_CXI_CNTR_SUCCESS_MAX + 1);
 	cr_assert(ret == -FI_EINVAL);
 
-	ret = fi_cntr_adderr(cxit_write_cntr, CXIP_CNTR_FAILURE_MAX + 1);
+	ret = fi_cntr_adderr(cxit_write_cntr, FI_CXI_CNTR_FAILURE_MAX + 1);
 	cr_assert(ret == -FI_EINVAL);
 
-	ret = fi_cntr_seterr(cxit_write_cntr, CXIP_CNTR_FAILURE_MAX + 1);
+	ret = fi_cntr_seterr(cxit_write_cntr, FI_CXI_CNTR_FAILURE_MAX + 1);
 	cr_assert(ret == -FI_EINVAL);
 
 	for (i = 0; i < 10; i++) {
