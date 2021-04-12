@@ -1606,7 +1606,7 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 			       sizeof(*iov));
 		} else {
 			*count = 1;
-			iov[0].iov_base = &rx_buf->pkt + 1;
+			iov[0].iov_base = &rx_buf->pkt.data;
 			iov[0].iov_len = rxm_eager_limit;
 		}
 		break;
