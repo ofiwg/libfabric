@@ -1397,7 +1397,7 @@ rxm_direct_send(struct rxm_ep *ep, struct rxm_conn *rxm_conn,
 
 	send_iov[0].iov_base = &tx_buf->pkt;
 	send_iov[0].iov_len = sizeof(tx_buf->pkt);
-	memcpy(send_iov + 1, iov, sizeof(*iov) * count);
+	memcpy(&send_iov[1], iov, sizeof(*iov) * count);
 
 	if (ep->msg_mr_local) {
 		send_desc[0] = tx_buf->hdr.desc;

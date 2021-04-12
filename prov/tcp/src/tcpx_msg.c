@@ -284,7 +284,7 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov,
 	tx_entry->iov[0].iov_base = (void *) &tx_entry->hdr;
 	tx_entry->iov[0].iov_len = sizeof(tx_entry->hdr.base_hdr);
 	tx_entry->iov_cnt = count + 1;
-	memcpy(&tx_entry->iov[1], &iov[0], count * sizeof(struct iovec));
+	memcpy(&tx_entry->iov[1], &iov[0], count * sizeof(*iov));
 
 	tx_entry->context = context;
 	tx_entry->flags = (tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
