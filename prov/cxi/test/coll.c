@@ -218,8 +218,8 @@ void _put_data(int count, int from_rank, int to_rank)
 				 struct cxip_coll_mc, mc_fid);
 
 	/* clear any prior values */
-	cxip_coll_reset_mc_ctrs(mc_obj_send);
-	cxip_coll_reset_mc_ctrs(mc_obj_recv);
+	cxip_coll_reset_mc_ctrs(&mc_obj_send->mc_fid);
+	cxip_coll_reset_mc_ctrs(&mc_obj_recv->mc_fid);
 
 	/* from_rank reduction */
 	reduction = &mc_obj_send->reduction[0];
@@ -234,7 +234,8 @@ void _put_data(int count, int from_rank, int to_rank)
 		for (j = 0; j < 6; j++)
 			buf->count[j] = i;
 		buf->pad = i;
-		ret = cxip_coll_send(reduction, to_rank, buf, sizeof(*buf));
+		ret = cxip_coll_send(reduction, to_rank, buf, sizeof(*buf),
+				     NULL);
 		cr_assert(ret == 0, "cxip_coll_send failed: %d\n", ret);
 
 		buf++;
@@ -287,7 +288,7 @@ Test(coll_put, put_bad_rank)
 			      struct cxip_coll_mc, mc_fid);
 	reduction = &mc_obj->reduction[0];
 
-	ret = cxip_coll_send(reduction, 3, &buf, sizeof(buf));
+	ret = cxip_coll_send(reduction, 3, &buf, sizeof(buf), NULL);
 	cr_assert(ret == -FI_EINVAL, "cxip_coll_set bad error = %d\n", ret);
 
 	cxit_destroy_netsim_collective();
@@ -362,15 +363,16 @@ void _put_red_pkt(int count)
 			      struct cxip_coll_mc, mc_fid);
 
 	/* clear counters */
-	cxip_coll_reset_mc_ctrs(mc_obj);
+	cxip_coll_reset_mc_ctrs(&mc_obj->mc_fid);
 
 	sendcnt = 0;
 	dataval = 0;
 	reduction = &mc_obj->reduction[0];
-	reduction->op_state = CXIP_COLL_STATE_NONE;
+	reduction->coll_state = CXIP_COLL_STATE_NONE;
 	for (i = 0; i < count; i++) {
 		ret = cxip_coll_send_red_pkt(reduction, 1, 0,
-					     &dataval, sizeof(uint64_t), false);
+					     &dataval, sizeof(uint64_t),
+					     0, false);
 		cr_assert(ret == FI_SUCCESS,
 			  "Packet send from root failed: %d\n", ret);
 
@@ -384,11 +386,11 @@ void _put_red_pkt(int count)
 	_progress_red_pkt(mc_obj->ep_obj->coll.rx_cq, sendcnt, &dataval);
 
 	cnt = ofi_atomic_get32(&mc_obj->send_cnt);
-	cr_assert(cnt == count, "Bad send counter on root: %d\n", cnt);
+	cr_assert(cnt == count, "Bad send counter on root: %d, exp %d\n", cnt, count);
 	cnt = ofi_atomic_get32(&mc_obj->recv_cnt);
-	cr_assert(cnt == count, "Bad recv counter on root: %d\n", cnt);
+	cr_assert(cnt == count, "Bad recv counter on root: %d, exp %d\n", cnt, count);
 	cnt = ofi_atomic_get32(&mc_obj->pkt_cnt);
-	cr_assert(cnt == count, "Bad pkt counter on root: %d\n", cnt);
+	cr_assert(cnt == count, "Bad pkt counter on root: %d, exp %d\n", cnt, count);
 
 	cxit_destroy_netsim_collective();
 }
@@ -424,8 +426,8 @@ Test(coll_put, put_red_pkt_distrib)
 	for (i = 0; i < 5; i++) {
 		mc_obj[i] = container_of(cxit_coll_mc_list.mc_fid[i],
 					 struct cxip_coll_mc, mc_fid);
-		mc_obj[i]->reduction[0].op_state = CXIP_COLL_STATE_NONE;
-		cxip_coll_reset_mc_ctrs(mc_obj[i]);
+		mc_obj[i]->reduction[0].coll_state = CXIP_COLL_STATE_NONE;
+		cxip_coll_reset_mc_ctrs(&mc_obj[i]->mc_fid);
 	}
 
 	data = 0;
@@ -433,7 +435,8 @@ Test(coll_put, put_red_pkt_distrib)
 
 	reduction = &mc_obj[0]->reduction[0];
 	ret = cxip_coll_send_red_pkt(reduction, 1, 0,
-				     &data, sizeof(uint64_t), false);
+				     &data, sizeof(uint64_t),
+				     0, false);
 	cr_assert(ret == FI_SUCCESS,
 		  "Packet send from root failed: %d\n", ret);
 	cnt = ofi_atomic_get32(&mc_obj[0]->send_cnt);
@@ -451,12 +454,13 @@ Test(coll_put, put_red_pkt_distrib)
 
 	/* Send data from leaf (!0) to root */
 	for (i = 0; i < 5; i++)
-		cxip_coll_reset_mc_ctrs(mc_obj[i]);
+		cxip_coll_reset_mc_ctrs(&mc_obj[i]->mc_fid);
 	for (i = 1; i < 5; i++) {
 		data = i;
 		reduction = &mc_obj[i]->reduction[0];
 		ret = cxip_coll_send_red_pkt(reduction, 1, 0,
-					     &data, sizeof(uint64_t), false);
+					     &data, sizeof(uint64_t),
+					     0, false);
 		cr_assert(ret == FI_SUCCESS,
 			  "Packet send from leaf[%d] failed: %d\n", i, ret);
 		cnt = ofi_atomic_get32(&mc_obj[i]->send_cnt);
@@ -525,25 +529,33 @@ ssize_t _allreduce(struct fid_ep *ep, const void *buf, size_t count,
 	return ret;
 }
 
-/* Poll rx and tx CQs until user context seen.
+/* Poll rx and tx CQs until specified user context is seen.
  *
- * If context == NULL, this polls to advance the state and returns.
+ * If context == NULL, this polls once to advance the state and returns.
+ *
+ * If context != NULL, this polls until that context is seen.
+ *
+ * Any context seen that isn't what we were looking for goes on the queue.
+ * A subsequent call will search the queue first.
  */
+static struct dlist_entry done_list;
+static int dlist_initialized;
+static int max_queue_depth;
+static int queue_depth;
+
 static void _reduce_wait(struct fid_cq *rx_cq, struct fid_cq *tx_cq,
 			 struct user_context *context)
 {
-	static struct dlist_entry done_list, *done;
-	static int initialized = 0;
-
+	struct dlist_entry *done;
 	struct fi_cq_data_entry entry;
 	struct fi_cq_err_entry err_entry;
 	struct user_context *ctx;
 	int ret;
 
 	/* initialize the static locals */
-	if (! initialized) {
+	if (! dlist_initialized) {
 		dlist_init(&done_list);
-		initialized = 1;
+		dlist_initialized = 1;
 	}
 
 	/* search for prior detection of context */
@@ -554,6 +566,7 @@ static void _reduce_wait(struct fid_cq *rx_cq, struct fid_cq *tx_cq,
 		}
 	}
 
+	/* search until context is found, or no more events */
 	do {
 		/* Wait for a tx CQ completion event */
 		do {
@@ -564,9 +577,10 @@ static void _reduce_wait(struct fid_cq *rx_cq, struct fid_cq *tx_cq,
 				continue;
 			/* read tx CQ to see a completion event */
 			ret = fi_cq_read(tx_cq, &entry, 1);
-			if (ret != -FI_EAGAIN || !context)
+			if (!(ret == -FI_EAGAIN && context))
 				break;
 		} while (true);
+
 		ctx = NULL;
 		if (ret == -FI_EAVAIL) {
 			/* tx CQ posted an error, copy to user context */
@@ -577,39 +591,53 @@ static void _reduce_wait(struct fid_cq *rx_cq, struct fid_cq *tx_cq,
 			ctx->hw_rc = err_entry.prov_errno;
 			cr_assert(err_entry.err != 0,
 				  "Failure with good return\n");
+			queue_depth--;
 		} else if (ret == 1) {
 			/* tx CQ posted a normal completion */
 			ctx = entry.op_context;
 			ctx->errcode = 0;
 			ctx->hw_rc = 0;
+			queue_depth--;
+		} else {
+			/* We should only see a 'no-event' error */
+			cr_assert(ret == -FI_EAGAIN, "Improper return %d\n", ret);
 		}
+
+		/* context we are looking for, NULL is allowed */
 		if (ctx == context)
 			return;
+
+		/* if we did see a ctx, record it  */
 		if (ctx)
 			dlist_insert_tail(&ctx->entry, &done_list);
+
 	} while (context);
 }
 
-/* Exercise the collective state machine.
+/* Exercise the collective state machine. This is a single-threaded test.
  *
- * This presumes NETSIM, and considers the size of the collective to be the
- * number of mc_objects in the cxit_coll_mc_list. The first node (zero) is
- * always the root node.
+ * We initiate the collective in sequence, beginning with 'start_node', and
+ * wrapping around. If start_node is zero, the root node initiates first,
+ * otherwise a leaf node initiates first.
  *
- * We initiate the collective in sequence, beginning with 'start'. If start is
- * zero, the root node initiates first, otherwise a leaf node initiates first.
+ * We perform 'count' reductions concurrently. When we hit the maximum of
+ * concurrent injections, the reduction attempt should return -FI_EAGAIN. When
+ * this happens, we poll to see if a completion has occurred, then try again.
+ * Since we don't know the order of completions, we wait for ANY completion,
+ * which is then saved in a queue. We can then (later) look for a specific
+ * completion, which searches the queue first.
  *
- * We inject an error by specifying a 'bad' node in the range of nodes. If bad
- * is outside the range (e.g. -1), no errors will be injected. The injection is
- * done by choosing to send the wrong reduction operation code for the bad node,
- * which causes the entire reduction to fail.
+ * We inject an error by specifying a 'bad' node in the range of nodes. If
+ * bad_node is outside the range (e.g. -1), no errors will be injected. The
+ * injection is done by choosing to send the wrong reduction operation code for
+ * the bad node, which causes the entire reduction to fail.
  *
  * We perform 'count' reductions to exercise the round-robin reduction ID
- * handling and blocking.
+ * handling and blocking. This should be tested for values > 8.
  *
  * We generate different results for each reduction.
  */
-void _reduce(int start, int bad, int count)
+void _reduce(int start_node, int bad_node, int count)
 {
 	struct cxip_ep_obj *ep_obj;
 	struct cxip_coll_mc **mc_obj;
@@ -617,9 +645,10 @@ void _reduce(int start, int bad, int count)
 	struct int_data **rslt;
 	struct int_data *data;
 	struct fid_cq *rx_cq, *tx_cq;
-	ssize_t size;
 	int nodes, first, last, base;
 	char label[128];
+	uint64_t result;
+	ssize_t size;
 	int i, ret;
 
 	count = MAX(count, 1);
@@ -628,9 +657,10 @@ void _reduce(int start, int bad, int count)
 	mc_obj = calloc(nodes, sizeof(**mc_obj));
 	rslt = calloc(nodes, sizeof(**rslt));
 	data = calloc(nodes, sizeof(*data));
-	start %= nodes;
+	start_node %= nodes;
 	snprintf(label, sizeof(label), "{%2d,%2d,%2d}",
-		 start, bad, count);
+		 start_node, bad_node, count);
+
 	ep_obj = NULL;
 	for (i = 0; i < nodes; i++) {
 		context[i] = calloc(count, sizeof(struct user_context));
@@ -646,36 +676,57 @@ void _reduce(int start, int bad, int count)
 		  "%s Did not find an endpoint object\n", label);
 	rx_cq = &ep_obj->coll.rx_cq->util_cq.cq_fid;
 	tx_cq = &ep_obj->coll.tx_cq->util_cq.cq_fid;
-	first = last = 0;
 
-	/* Issue all of the collectives */
+	/* Inject all of the collectives */
+	first = 0;
+	last = 0;
 	base = 1;
+	result = 0;
+
+	/* last advances to count */
 	while (last < count) {
-		uint64_t result = 0;
+
 		for (i = 0; i < nodes; i++) {
-			enum fi_op op = (start == bad) ? FI_BAND : FI_BOR;
+			enum fi_op op = (start_node == bad_node) ? FI_BAND : FI_BOR;
 			int red_id;
 
-			data[start].ival[0] = (base << start);
+			/* Each node contributes a bit */
+			data[start_node].ival[0] = (base << start_node);
+			result |= data[start_node].ival[0];
 			base <<= 1;
 			if (base > 16)
 				base = 1;
-			context[start][last].node = start;
-			context[start][last].seqno = last;
-			result |= data[start].ival[0];
-			do {
-				_reduce_wait(rx_cq, tx_cq, NULL);
-				size = _allreduce(cxit_ep, &data[start], 1,
-						  NULL, &rslt[start][last],
+			context[start_node][last].node = start_node;
+			context[start_node][last].seqno = last;
+
+			/* Reduce once, unless this returns -FI_EAGAIN. If it
+			 * does, wait for at least one reduction to complete,
+			 * and then try again. Keep trying until it works.
+			 */
+			while (true) {
+				size = _allreduce(cxit_ep, &data[start_node], 1,
+						  NULL, &rslt[start_node][last],
 						  NULL,
-						  (fi_addr_t)mc_obj[start],
+						  (fi_addr_t)mc_obj[start_node],
 						  FI_UINT64, op, 0,
-						  &context[start][last],
+						  &context[start_node][last],
 						  &red_id);
-			} while (size == -FI_EBUSY);
-			context[start][last].red_id = red_id;
-			start = (start + 1) % nodes;
+				if (size != -FI_EAGAIN) {
+					if (max_queue_depth < ++queue_depth)
+						max_queue_depth = queue_depth;
+					break;
+				}
+				_reduce_wait(rx_cq, tx_cq, NULL);
+			}
+
+			/* record reduction id used */
+			context[start_node][last].red_id = red_id;
+
+			/* rotate to the next node */
+			start_node = (start_node + 1) % nodes;
 		}
+
+		/* record the final expected result */
 		for (i = 0; i < nodes; i++)
 			context[i][last].expval = result;
 
@@ -684,13 +735,9 @@ void _reduce(int start, int bad, int count)
 		for (i = 1; i < nodes; i++)
 			if (context[0][last].red_id != context[i][last].red_id)
 				ret = -1;
-		if (ret) {
-			for (i = 0; i < nodes; i++)
-				printf("%s [%d, %d] red_id = %d\n",
-				       label, i, last,
-				       context[i][last].red_id);
+		if (ret)
 			cr_assert(true, "%s reduction ID mismatch\n", label);
-		}
+
 		last++;
 	}
 
@@ -698,23 +745,28 @@ void _reduce(int start, int bad, int count)
 	while (first < last) {
 		struct user_context *ctx;
 		int red_id0, errcode0, hw_rc0;
-		uint64_t actval0;
+		uint64_t expval, actval;
 
+		/* If there was a bad node, all reductions should fail */
+		hw_rc0 = (bad_node < 0) ? 0 : C_RC_AMO_INVAL_OP_ERROR;
 		for (i = 0; i < nodes; i++) {
 			_reduce_wait(rx_cq, tx_cq, &context[i][first]);
-			if (i == 0) {
-				red_id0 = context[i][first].red_id;
-				errcode0 = context[i][first].errcode;
-				hw_rc0 = context[i][first].hw_rc;
-				actval0 = rslt[i][first].ival[0];
-			}
 			ctx = &context[i][first];
+
+			/* Use the root values as definitive */
+			if (i == 0) {
+				red_id0 = ctx->red_id;
+				errcode0 = ctx->errcode;
+				expval = ctx->expval;
+			}
+			actval = rslt[i][first].ival[0];
+
 			if (ctx->node != i ||
 			    ctx->seqno != first  ||
 			    ctx->red_id != red_id0 ||
 			    ctx->errcode != errcode0 ||
 			    ctx->hw_rc != hw_rc0 ||
-			    (!errcode0 && ctx->expval != actval0)) {
+			    (!errcode0 && expval != actval)) {
 				printf("%s =====\n", label);
 				printf("  node    %3d, exp %3d\n",
 				       ctx->node, i);
@@ -727,13 +779,20 @@ void _reduce(int start, int bad, int count)
 				printf("  hw_rc   %3d, exp %3d\n",
 				       ctx->hw_rc, hw_rc0);
 				printf("  value   %08lx, exp %08lx\n",
-				       ctx->expval, actval0);
+				       actval, expval);
 				cr_assert(true, "%s context failure\n",
 					  label);
 			}
 		}
+
 		first++;
 	}
+
+	/* make sure we got them all */
+	cr_assert(dlist_empty(&done_list), "Pending contexts\n");
+	cr_assert(queue_depth == 0, "queue_depth = %d\n", queue_depth);
+	//printf("%s maximum queue depth = %d\n", label, max_queue_depth);
+
 	for (i = 0; i < nodes; i++) {
 		free(rslt[i]);
 		free(context[i]);
@@ -744,9 +803,9 @@ void _reduce(int start, int bad, int count)
 	free(mc_obj);
 }
 
-Test(coll_reduce, permute)
+Test(coll_reduce, concur1)
 {
-	printf("\n");
+	/* perform a single reduction */
 	cxit_create_netsim_collective(5);
 	_reduce(0, -1, 1);
 	_reduce(1, -1, 1);
@@ -756,18 +815,23 @@ Test(coll_reduce, permute)
 	_reduce(0, 0, 1);
 	_reduce(0, 1, 1);
 	_reduce(1, 0, 1);
+	_reduce(1, 1, 1);
 	cxit_destroy_netsim_collective();
 }
 
-Test(coll_reduce, concur)
+Test(coll_reduce, concurN)
 {
-	printf("\n");
+	/* perform recurrent reductions */
+	int concur = 29;
 	cxit_create_netsim_collective(5);
-	_reduce(0, -1, 29);
-	_reduce(0,  0, 29);
-	_reduce(0,  1, 29);
-	_reduce(1, -1, 29);
-	_reduce(1,  0, 29);
-	_reduce(1,  1, 29);
+	_reduce(0, -1, concur);
+	_reduce(1, -1, concur);
+	_reduce(2, -1, concur);
+	_reduce(3, -1, concur);
+	_reduce(4, -1, concur);
+	_reduce(0,  0, concur);
+	_reduce(0,  1, concur);
+	_reduce(1,  0, concur);
+	_reduce(1,  1, concur);
 	cxit_destroy_netsim_collective();
 }

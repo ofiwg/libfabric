@@ -1,3 +1,9 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0
+ *
+ * Copyright (c) 2018,2020-2021 Cray Inc. All rights reserved.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,9 +24,9 @@
 int cxit_ranks = 0;
 int cxit_rank = 0;
 
+int cxit_hwroot_rank = 0;
 uint32_t cxit_mcast_ref = 0;
 uint32_t cxit_mcast_id = 0;
-
 
 /**
  * Guarantee that LTU has been initialized only once. This should persist for
@@ -247,6 +253,7 @@ void cxit_LTU_create_universe(void)
 
 	ltu_pm_Job_size(&cxit_ranks);
 	ltu_pm_Rank(&cxit_rank);
+
 	if (cxit_ranks < 2) {
 		cr_skip_test("%d nodes insufficient to test collectives\n",
 			     cxit_ranks);
@@ -327,7 +334,14 @@ void cxit_LTU_create_coll_mcast(int hwroot_rank, int timeout,
 	}
 
 	/* Create the mcast address */
-	_get_mcast(model, hwroot_rank, timeout, mcast_ref, mcast_id);
+	cxit_hwroot_rank = hwroot_rank;
+	if (cxit_rank == cxit_hwroot_rank) {
+		clock_gettime(CLOCK_REALTIME, &ts0);
+		_get_mcast(model, hwroot_rank, timeout, mcast_ref, mcast_id);
+		clock_gettime(CLOCK_REALTIME, &ts1);
+		_print_delay(&ts0, &ts1,  __func__, "_get_mcast");
+		printf("created mcast address = %d\n", *mcast_id);
+	}
 
 	/* Rank zero broadcasts, other ranks receive */
 	clock_gettime(CLOCK_REALTIME, &ts0);
@@ -343,8 +357,14 @@ void cxit_LTU_create_coll_mcast(int hwroot_rank, int timeout,
  */
 void cxit_LTU_destroy_coll_mcast(uint32_t mcast_ref)
 {
+	struct timespec ts0, ts1;
 	cr_assert(ltu_init_count > 0, "Must cxit_LTU_create_universe()\n");
-	_del_mcast(mcast_ref);
+	if (cxit_rank == cxit_hwroot_rank) {
+		clock_gettime(CLOCK_REALTIME, &ts0);
+		_del_mcast(mcast_ref);
+		clock_gettime(CLOCK_REALTIME, &ts1);
+		_print_delay(&ts0, &ts1,  __func__, "_del_mcast");
+	}
 }
 
 /**
@@ -375,11 +395,6 @@ void cxit_teardown_distributed(void)
 	ltu_pm_Finalize();
 }
 
-/* Note: set these during rapid development to reuse existing multicast addr  */
-static int static_mcast_id = 0;
-static int static_mcast_ref = 0;
-static bool static_mcast_keep = false;
-
 void cxit_setup_multicast(void)
 {
 	struct cxip_coll_comm_key comm_key;
@@ -388,17 +403,9 @@ void cxit_setup_multicast(void)
 	int ret;
 
 	cxit_setup_distributed();
-	cr_skip_test("Environment not suitable for collectives\n");
 
-	if (!static_mcast_id) {
-		cxit_LTU_create_coll_mcast(STD_MCAST_ROOT, STD_MCAST_TIMEOUT,
-					   &cxit_mcast_ref, &cxit_mcast_id);
-	} else {
-		cxit_mcast_id = static_mcast_id;
-		cxit_mcast_ref = static_mcast_ref;
-	}
-	printf("MCAST_ID  = %d\n", cxit_mcast_id);
-	printf("MCAST_REF = %d\n", cxit_mcast_ref);
+	cxit_LTU_create_coll_mcast(STD_MCAST_ROOT, STD_MCAST_TIMEOUT,
+				   &cxit_mcast_ref, &cxit_mcast_id);
 
 	size = cxip_coll_init_mcast_comm_key(&comm_key, cxit_mcast_ref,
 					     cxit_mcast_id, STD_MCAST_ROOT);
@@ -419,9 +426,7 @@ void cxit_teardown_multicast(void)
 {
 	fi_close(&cxit_mc->fid);
 	fi_close(&cxit_av_set->fid);
-	if (!static_mcast_keep) {
-		cxit_LTU_destroy_coll_mcast(cxit_mcast_ref);
-	}
+	cxit_LTU_destroy_coll_mcast(cxit_mcast_ref);
 	cxit_LTU_barrier();
 	cxit_teardown_distributed();
 }

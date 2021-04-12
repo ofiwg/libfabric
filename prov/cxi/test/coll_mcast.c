@@ -51,20 +51,11 @@
 #include "cxip_test_common.h"
 #include "cxip_test_pmi.h"
 
-/* Simulated user context, specifically to return error codes */
+/* User context for _reduce_wait */
 struct user_context {
 	struct dlist_entry entry;
-	int node;		// reduction simulated node (MC object)
-	int seqno;		// reduction sequence number
-	int red_id;		// reduction ID
 	int errcode;		// reduction error code
 	int hw_rc;		// reduction hardware failure code
-	uint64_t expval;	// expected reduction value
-};
-
-/* Simulated user data type */
-struct int_data {
-	uint64_t ival[4];
 };
 
 /* Poll rx and tx CQs until user context seen.
@@ -153,38 +144,35 @@ Test(coll_mcast, barrier)
 	struct user_context context;
 	ssize_t ret;
 	double delay;
+	int count;
 
-	if (cxit_mcast_id <= 0)
-		cr_skip_test("No multicast address, skipping test\n");
-
-	clock_gettime(CLOCK_REALTIME, &ts0);
-	if (cxit_rank == 0) {
-		sleep(1);
+	printf("Starting the test with multicast addr %d\n", cxit_mcast_id);
+	if (cxit_mcast_id <= 0) {
+		printf("No multicast ID\n");
+		return;
 	}
-	ret = fi_barrier(cxit_ep, (fi_addr_t)cxit_mc, &context);
-	cr_assert_eq(ret, 0, "fi_barrier() initiated=%ld\n", ret);
 
-	_reduce_wait(cxit_rx_cq, cxit_tx_cq, &context);
-	clock_gettime(CLOCK_REALTIME, &ts1);
-	printf("=============================\n");
-	printf("completion rank %d of %d\n", cxit_rank, cxit_ranks);
-	delay = _print_delay(&ts0, &ts1, __func__, "barrier 1");
-	cr_assert(delay + 0.01 > 1.0);
+	/* restrict to red_id == 0 */
+	cxip_coll_limit_red_id(cxit_mc, 1);
 
-	clock_gettime(CLOCK_REALTIME, &ts0);
-	if (cxit_rank == 1) {
-		sleep(1);
+	for (count = 0; count < 3; count++) {
+		printf("doing a fabric barrier\n");
+		clock_gettime(CLOCK_REALTIME, &ts0);
+		if (cxit_rank == (count % cxit_ranks)) {
+			printf("The lion sleeps tonight in rank %d\n", cxit_rank);
+			sleep(1);
+		}
+		ret = fi_barrier(cxit_ep, (fi_addr_t)cxit_mc, &context);
+		cr_assert_eq(ret, 0, "fi_barrier() initiated=%ld\n", ret);
+
+		printf("Blocking on completion\n");
+		_reduce_wait(cxit_rx_cq, cxit_tx_cq, &context);
+		clock_gettime(CLOCK_REALTIME, &ts1);
+		printf("=============================\n");
+		printf("completion rank %d of %d\n", cxit_rank, cxit_ranks);
+		delay = _print_delay(&ts0, &ts1, __func__, "barrier 1");
+		cr_assert(delay + 0.01 > 1.0);
 	}
-	ret = fi_barrier(cxit_ep, (fi_addr_t)cxit_mc, &context);
-	cr_assert_eq(ret, 0, "fi_barrier() initiated=%ld\n", ret);
-
-	_reduce_wait(cxit_rx_cq, cxit_tx_cq, &context);
-	clock_gettime(CLOCK_REALTIME, &ts1);
-	printf("=============================\n");
-	printf("completion rank %d of %d\n", cxit_rank, cxit_ranks);
-	delay = _print_delay(&ts0, &ts1, __func__, "barrier 2");
-	cr_assert(delay + 0.01 > 1.0);
-	printf("barrier success\n");
 }
 
 static void _bcast(int root)
@@ -385,9 +373,6 @@ static void test_op(int dtyp, int op, union cxip_coll_data *data)
 	 * subsequent operation ONLY. The operation after that will use
 	 * Rosetta normally.
 	 */
-	cxip_coll_arm_disable_once();
-	fi_barrier(cxit_ep, (fi_addr_t)cxit_mc, &context);
-	_reduce_wait(cxit_rx_cq, cxit_tx_cq, &context);
 
 	/* Two trials of the same reduction. The first does not do Rosetta
 	 * reduction, so all reduction is done in software on the hwroot node.
@@ -443,7 +428,6 @@ Test(coll_mcast, reductions)
 	/* Perform randomized tests on UINT64 */
 	printf("Test: INT64 ops\n");
 	for (i = 0; i < 100; i++) {
-		continue;
 		for (j = 0; j < 4; j++)
 			_random64bit(&data.ival[j], RANDOM_UINT64, 0);
 		test_op(FI_UINT64, FI_SUM, &data);

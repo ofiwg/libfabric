@@ -11,8 +11,11 @@
 
 
 /****************************************************************************
- * Exported:
+ * Environment variables (provisional)
  *
+ * CXIP_COLL_USE_DMA_PUT=1 causes DMA Put to be used, instead of IDC Put
+ *
+ * CXIP_COLL_DUMP_PKT=1 causes all packets to be displayed to stdout
  */
 
 #include "config.h"
@@ -33,6 +36,16 @@
 
 #include "cxip.h"
 
+/* Undefine this to remove development code */
+#undef	DEVELOPER
+
+#ifdef DEVELOPER
+#define	IDX	reduction->mc_obj->mynode_index
+#define	PRT(fmt, ...)	printf("%d: %-16s " fmt, IDX, __func__, __VA_ARGS__)
+#else	/* not DEVELOPER */
+#define	PRT(fmt, ...)
+#endif	/* DEVELOPER */
+
 #define	MAGIC	0x1776
 
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, \
@@ -42,41 +55,10 @@
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, \
 		"COLL " __VA_ARGS__)
 
-static bool _coll_arm_disable = false;
-
 static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 				   struct cxip_coll_buf *buf);
 
 /****************************************************************************
- * Collective cookie structure.
- *
- * mcast_id is not necessary given one PTE per multicast address: all request
- * structures used for posting receive buffers will receive events from
- * only that multicast. If underlying drivers are changed to allow a single PTE
- * to be mapped to multiple multicast addresses, the mcast_id field will be
- * needed to disambiguate packets.
- *
- * red_id is needed to disambiguate packets delivered for different concurrent
- * reductions.
- *
- * retry is a control bit that can be invoked by the hw root node to initiate a
- * retransmission of the data from the leaves, if packets are lost.
- *
- * magic is a magic number used to identify this packet as a reduction packet.
- * The basic send/receive code can be used for other kinds of restricted IDC
- * packets.
- */
-union cxip_coll_cookie {
-	struct {
-		uint32_t mcast_id:13;
-		uint32_t red_id:3;
-		uint32_t magic: 15;
-		uint32_t retry: 1;
-	};
-	uint32_t raw;
-};
-
-/**
  * Reduction packet for Cassini:
  *
  *  +----------------------------------------------------------+
@@ -101,45 +83,191 @@ union cxip_coll_cookie {
  *  | rt_repsum_m    | Reproducible sum M value | 51  |  8 |
  *  | rt_repsum_ovfl | Reproducible sum M ovfl  | 59  |  2 |
  *  | rt_pad         | Pad to 64 bits           | 61  |  3 |
- *  --------------------------------------------------------
  *  | rt_cookie      | Cookie value             | 64  | 32 |
  *  --------------------------------------------------------
+ *
+ *  Note that this is a 12-byte object, and "network-defined order" means
+ *  big-endian for the entire 12-byte object. Thus, bytes must be swapped so
+ *  that the MSByte of rt_cookie appears at byte 0, and the LS 8 bits of
+ *  rt_seqno appear in byte 11.
  */
-// TODO move to cxi_prov_hw.h (?)
-struct red_pkt {
-	uint8_t pad[5];
-	union {
-		struct {
-			uint64_t seqno:10;
-			uint64_t arm:1;
-			uint64_t op:6;
-			uint64_t redcnt:20;
-			uint64_t resno:10;
-			uint64_t rc:4;
-			uint64_t repsum_m:8;
-			uint64_t repsum_ovfl:2;
-			uint64_t pad:3;
-		} hdr;
-		uint64_t redhdr;
-	};
-	uint32_t cookie;
-	union cxip_coll_data data;
+
+/**
+ * Collective cookie structure.
+ *
+ * mcast_id is not necessary given one PTE per multicast address: all request
+ * structures used for posting receive buffers will receive events from
+ * only that multicast. If underlying drivers are changed to allow a single PTE
+ * to be mapped to multiple multicast addresses, the mcast_id field will be
+ * needed to disambiguate packets.
+ *
+ * red_id is needed to disambiguate packets delivered for different concurrent
+ * reductions.
+ *
+ * retry is a control bit that can be invoked by the hw root node to initiate a
+ * retransmission of the data from the leaves, if packets are lost.
+ *
+ * magic is a magic number used to identify this packet as a reduction packet.
+ * The basic send/receive code can be used for other kinds of restricted IDC
+ * packets.
+ */
+struct cxip_coll_cookie {
+	uint32_t mcast_id:13;
+	uint32_t red_id:3;
+	uint32_t magic: 15;
+	uint32_t retry: 1;
+} __attribute((packed));
+
+/**
+ * Packed header bits and cookie from above.
+ */
+struct cxip_coll_hdr {
+        uint64_t seqno:10;
+        uint64_t arm:1;
+        uint64_t op:6;
+        uint64_t redcnt:20;
+        uint64_t resno:10;
+        uint64_t red_rc:4;
+        uint64_t repsum_m:8;
+        uint64_t repsum_ovfl:2;
+        uint64_t pad:3;
+        struct cxip_coll_cookie cookie;
 } __attribute__((packed));
 
-/* Reduction rt_rc values.
+/**
+ * The following structure is 49 bytes in size, and all of the fields align
+ * properly.
  */
-// TODO move to cxi_prov_hw.h (?)
-enum pkt_rc {
-	RC_SUCCESS = 0,
-	RC_FLT_INEXACT = 1,
-	RC_FLT_OVERFLOW = 3,
-	RC_FLT_INVALID = 4,
-	RC_REPSUM_INEXACT = 5,
-	RC_INT_OVERFLOW = 6,
-	RC_CONTR_OVERFLOW = 7,
-	RC_OP_MISMATCH = 8,
-};
+struct red_pkt {
+        uint8_t pad[5];
+        struct cxip_coll_hdr hdr;
+        union cxip_coll_data data;
+} __attribute__((packed));
 
+
+/**
+ * Swap byte order in an object of any size. Works for even or odd counts.
+ *
+ * @param ptr : pointer to a stream of bytes
+ * @param count : number of bytes to swap
+ */
+static inline void _swapbyteorder(void *ptr, int count)
+{
+	uint8_t *p1 = (uint8_t *)ptr;
+	uint8_t *p2 = p1 + count - 1;
+	uint8_t swp;
+	while (p1 < p2) {
+		swp = *p1;
+		*p1 = *p2;
+		*p2 = swp;
+		p1++;
+		p2--;
+	}
+}
+
+/**
+ * Reformat the packet to accommodate network-ordering (big-endian) Rosetta
+ * expectations, versus little-endian Intel processing.
+ *
+ * Note in particular that the header bytes are treated as a single 12-byte
+ * object, rather than an 8-byte followed by a 4-byte, i.e. the last byte of the
+ * cookie is the first byte of the data processed by Rosetta. Note also that
+ * there is a 5-byte pad at the beginning of the packet, not included in the
+ * byte-swapping.
+ *
+ * @param pkt : reduction packet
+ */
+static inline void _swappkt(struct red_pkt *pkt)
+{
+#if (BYTE_ORDER == LITTLE_ENDIAN)
+	int i;
+	_swapbyteorder(&pkt->hdr, sizeof(pkt->hdr));
+	for (i = 0; i < 4; i++)
+		_swapbyteorder(&pkt->data.ival[i], 8);
+#else
+#error "Unsupported processor byte ordering"
+#endif
+}
+
+#ifdef DEVELOPER
+/**
+ * Verificaton of the packet structure, normally disabled. Sizes and offsets
+ * cannot be checked at compile time.
+ */
+#define	FLDOFFSET(base, fld)	((uint8_t *)&base.fld - (uint8_t *)&base)
+static inline int check_red_pkt(void)
+{
+	static int checked;
+	struct red_pkt pkt;
+	uint64_t len, exp;
+	uint8_t *ptr;
+	int i, err = 0;
+
+	if (checked)
+		return 0;
+	checked = 1;
+
+	len = sizeof(pkt);
+	exp = 49;
+	if (len != exp) {
+		printf("sizeof(pkt) = %ld, exp %ld\n", len, exp);
+		err++;
+	}
+	len = sizeof(pkt.pad);
+	exp = 5;
+	if (len != exp) {
+		printf("sizeof(pkt.pad) = %ld, exp %ld\n", len, exp);
+		err++;
+	}
+	len = sizeof(pkt.hdr);
+	exp = 12;
+	if (len != exp) {
+		printf("sizeof(pkt.hdr) = %ld, exp %ld\n", len, exp);
+		err++;
+	}
+	len = sizeof(pkt.data);
+	exp = 32;
+	if (len != exp) {
+		printf("sizeof(pkt.data) = %ld, exp %ld\n", len, exp);
+		err++;
+	}
+	len = FLDOFFSET(pkt, hdr);
+	exp = 5;
+	if (len != exp) {
+		printf("offset(pkt.hdr) = %ld, exp %ld\n", len, exp);
+		err++;
+	}
+	len = FLDOFFSET(pkt, data);
+	exp = 17;
+	if (len != exp) {
+		printf("offset(pkt.data) = %ld, exp %ld\n", len, exp);
+		err++;
+	}
+
+	ptr = (uint8_t *)&pkt;
+	for (i = 0; i < sizeof(pkt); i++)
+		ptr[i] = i + 13;
+	_swappkt(&pkt);
+	_swappkt(&pkt);
+	for (i = 0; i < sizeof(pkt); i++)
+		if (ptr[i] != i + 13) {
+			printf("pkt[%d] = %d, exp %d\n", i, ptr[i], i + 13);
+			err++;
+		}
+
+	if (err)
+		printf("*** Structures are wrong, cannot continue ***\n");
+	else
+		printf("structures are properly aligned\n");
+	fflush(stdout);
+
+	return err;
+}
+#else	/* not DEVELOPER */
+static inline int check_red_pkt(void) { return 0; }
+#endif	/* DEVELOPER */
+
+#ifdef	DEVELOPER
 __attribute__((unused))
 static void _dump_red_data(const void *buf, const char *hdr)
 {
@@ -154,6 +282,9 @@ static void _dump_red_data(const void *buf, const char *hdr)
 __attribute__((unused))
 static void _dump_red_pkt(struct red_pkt *pkt, char *dir)
 {
+	if (!getenv("CXIP_COLL_DUMP_PKT"))	// TODO remove or make cxi env
+		return;
+
 	printf("---------------\n");
 	printf("Reduction packet (%s):\n", dir);
 	printf("  seqno       = %d\n", pkt->hdr.seqno);
@@ -161,33 +292,29 @@ static void _dump_red_pkt(struct red_pkt *pkt, char *dir)
 	printf("  op          = %d\n", pkt->hdr.op);
 	printf("  redcnt      = %d\n", pkt->hdr.redcnt);
 	printf("  resno       = %d\n", pkt->hdr.resno);
-	printf("  rc          = %d\n", pkt->hdr.rc);
+	printf("  red_rc      = %d\n", pkt->hdr.red_rc);
 	printf("  repsum_m    = %d\n", pkt->hdr.repsum_m);
 	printf("  repsum_ovfl = %d\n", pkt->hdr.repsum_ovfl);
-	printf("  cookie      = %08x\n", pkt->cookie);
+	printf("  cookie --\n");
+	printf("   .mcast_id  = %08x\n", pkt->hdr.cookie.mcast_id);
+	printf("   .red_id    = %08x\n", pkt->hdr.cookie.red_id);
+	printf("   .magic     = %08x\n", pkt->hdr.cookie.magic);
+	printf("   .retry     = %08x\n", pkt->hdr.cookie.retry);
 	_dump_red_data(pkt->data.databuf, NULL);
 	printf("---------------\n");
 	fflush(stdout);
 }
+#else	/* not DEVELOPER */
+__attribute__((unused))
+static void _dump_red_pkt(struct red_pkt *pkt, char *dir) {}
+#endif	/* DEVELOPER */
 
-static inline void _hton_red_pkt(struct red_pkt *pkt)
+
+/* Return true if this node is the hwroot node.
+ */
+static inline bool is_hw_root(struct cxip_coll_mc *mc_obj)
 {
-	int i;
-
-	pkt->redhdr = htobe64(pkt->redhdr);
-	pkt->cookie = htobe32(pkt->cookie);
-	for (i = 0; i < 4; i++)
-		pkt->data.ival[i] = htobe64(pkt->data.ival[i]);
-}
-
-static inline void _ntoh_red_pkt(struct red_pkt *pkt)
-{
-	int i;
-
-	pkt->redhdr = be64toh(pkt->redhdr);
-	pkt->cookie = be32toh(pkt->cookie);
-	for (i = 0; i < 4; i++)
-		pkt->data.ival[i] = be64toh(pkt->data.ival[i]);
+	return (mc_obj->hwroot_index == mc_obj->mynode_index);
 }
 
 /****************************************************************************
@@ -277,7 +404,10 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 }
 
 /**
- * Issue a restricted IDC Put to the destination address.
+ * Issue a restricted Put to the destination address.
+ *
+ * If md is NULL, this will perform an IDC Put, otherwise it will issue a DMA
+ * Put.
  *
  * Exported for unit testing.
  *
@@ -285,54 +415,87 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
  * @param av_set_idx - index of address in av_set
  * @param buffer - buffer containing data to send
  * @param buflen - byte count of data in buffer
+ * @param md - IOVA memory descriptor, or NULL
  *
  * @return int - return code
  */
 int cxip_coll_send(struct cxip_coll_reduction *reduction,
-		   int av_set_idx, const void *buffer, size_t buflen)
+		   int av_set_idx, const void *buffer, size_t buflen,
+		   struct cxi_md *md)
 {
+	union c_cmdu cmd = {};
+	struct cxip_coll_mc *mc_obj;
 	struct cxip_ep_obj *ep_obj;
 	struct cxip_cmdq *cmdq;
 	union c_fab_addr dfa;
 	uint8_t index_ext;
-	uint8_t pid_bits;
 	bool is_mcast;
 	int ret;
 
-	if (buflen && !buffer) {
+	if (!buffer) {
 		CXIP_INFO("no buffer\n");
 		return -FI_EINVAL;
 	}
 
-	ep_obj = reduction->mc_obj->ep_obj;
+	mc_obj = reduction->mc_obj;
+	ep_obj = mc_obj->ep_obj;
+	cmdq = ep_obj->coll.tx_cmdq;
 
 	ret = _gen_tx_dfa(reduction, av_set_idx, &dfa, &index_ext, &is_mcast);
 	if (ret)
 		return ret;
 
-	/* pid_bits needed to obtain initiator address */
-	pid_bits = ep_obj->domain->iface->dev->info.pid_bits;
-	cmdq = ep_obj->coll.tx_cmdq;
+	if (md) {
+		cmd.full_dma.command.opcode = C_CMD_PUT;
+		cmd.full_dma.event_send_disable = 1;
+		cmd.full_dma.event_success_disable = 1;
+		cmd.full_dma.restricted = 1;
+		cmd.full_dma.reduction = is_mcast;
+		cmd.full_dma.index_ext = index_ext;
+		cmd.full_dma.eq = cxip_cq_tx_eqn(ep_obj->coll.tx_cq);
+		cmd.full_dma.dfa = dfa;
+		cmd.full_dma.lac = md->lac;
+		cmd.full_dma.local_addr = CXI_VA_TO_IOVA(md, buffer);
+		cmd.full_dma.request_len = buflen;
 
-	union c_cmdu cmd = {};
-	cmd.c_state.event_send_disable = 1;
-	cmd.c_state.event_success_disable = 1;
-	cmd.c_state.restricted = 1;
-	cmd.c_state.reduction = is_mcast;
-	cmd.c_state.index_ext = index_ext;
-	cmd.c_state.eq = cxip_cq_tx_eqn(ep_obj->coll.tx_cq);
-	cmd.c_state.initiator = CXI_MATCH_ID(pid_bits, ep_obj->src_addr.pid,
-					     ep_obj->src_addr.nic);
+		fastlock_acquire(&cmdq->lock);
 
-	fastlock_acquire(&cmdq->lock);
-	ret = cxip_cmdq_emit_c_state(cmdq, &cmd.c_state);
-	if (ret)
-		goto err_unlock;
+		/* this uses cached values */
+		ret = cxip_txq_cp_set(cmdq, ep_obj->auth_key.vni,
+				      mc_obj->tc, mc_obj->tc_type);
+		if (ret)
+			goto err_unlock;
 
-	memset(&cmd.idc_put, 0, sizeof(cmd.idc_put));
-	cmd.idc_put.idc_header.dfa = dfa;
-	ret = cxi_cq_emit_idc_put(cmdq->dev_cmdq, &cmd.idc_put,
-				  buffer, buflen);
+		ret = cxi_cq_emit_dma(cmdq->dev_cmdq, &cmd.full_dma);
+	} else {
+		cmd.c_state.event_send_disable = 1;
+		cmd.c_state.event_success_disable = 1;
+		cmd.c_state.restricted = 1;
+		cmd.c_state.reduction = is_mcast;
+		cmd.c_state.index_ext = index_ext;
+		cmd.c_state.eq = cxip_cq_tx_eqn(ep_obj->coll.tx_cq);
+		cmd.c_state.initiator = CXI_MATCH_ID(
+			ep_obj->domain->iface->dev->info.pid_bits,
+			ep_obj->src_addr.pid, ep_obj->src_addr.nic);
+
+		fastlock_acquire(&cmdq->lock);
+
+		/* this uses cached values */
+		ret = cxip_txq_cp_set(cmdq, ep_obj->auth_key.vni,
+				      mc_obj->tc, mc_obj->tc_type);
+		if (ret)
+			goto err_unlock;
+
+		ret = cxip_cmdq_emit_c_state(cmdq, &cmd.c_state);
+		if (ret)
+			goto err_unlock;
+
+		memset(&cmd.idc_put, 0, sizeof(cmd.idc_put));
+		cmd.idc_put.idc_header.dfa = dfa;
+		ret = cxi_cq_emit_idc_put(cmdq->dev_cmdq, &cmd.idc_put,
+					  buffer, buflen);
+	}
+
 	if (ret) {
 		/* Return error according to Domain Resource Management
 		 */
@@ -368,8 +531,8 @@ static void _coll_rx_req_report(struct cxip_req *req)
 
 	/* Interpret results */
 	overflow = req->coll.hw_req_len - req->data_len;
-	if (req->coll.rc == C_RC_OK && req->coll.isred && !overflow) {
-		/* success */
+	if (req->coll.cxi_rc == C_RC_OK && req->coll.isred && !overflow) {
+		/* receive success */
 		if (req->flags & FI_COMPLETION) {
 			/* failure means progression is hung */
 			ret = cxip_cq_req_complete(req);
@@ -390,25 +553,26 @@ static void _coll_rx_req_report(struct cxip_req *req)
 		}
 	} else {
 		/* failure */
-		if (req->coll.rc != C_RC_OK) {
+		if (req->coll.cxi_rc != C_RC_OK) {
 			/* real network error of some sort */
 			err = FI_EIO;
 			CXIP_WARN("Request error: %p (err: %d, %s)\n",
-				  req, err, cxi_rc_to_str(req->coll.rc));
+				  req, err, cxi_rc_to_str(err));
 		} else if (overflow) {
 			/* can only happen on very large packet (> 64 bytes) */
 			err = FI_EMSGSIZE;
 			CXIP_WARN("Request truncated: %p (err: %d, %s)\n",
-				  req, err, cxi_rc_to_str(req->coll.rc));
+				  req, err, cxi_rc_to_str(err));
 		} else {
 			/* non-reduction packet */
 			err = FI_ENOMSG;
 			CXIP_INFO("Not reduction pkt: %p (err: %d, %s)\n",
-				  req, err, cxi_rc_to_str(req->coll.rc));
+				  req, err, cxi_rc_to_str(err));
 		}
 
 		/* failure means progression is hung */
-		ret = cxip_cq_req_error(req, overflow, err, req->coll.rc,
+		ret = cxip_cq_req_error(req, overflow, err,
+					req->coll.cxi_rc,
 					NULL, 0);
 		if (ret)
 			CXIP_FATAL("cxip_cq_req_error: %d\n", ret);
@@ -449,7 +613,6 @@ static void _coll_rx_progress(struct cxip_req *req,
 			      const union c_event *event)
 {
 	struct cxip_coll_mc *mc_obj;
-	union cxip_coll_cookie cookie;
 	struct cxip_coll_reduction *reduction;
 	struct red_pkt *pkt;
 
@@ -464,19 +627,21 @@ static void _coll_rx_progress(struct cxip_req *req,
 
 	/* If swap doesn't look like reduction packet, swap back */
 	pkt = (struct red_pkt *)req->buf;
-	_ntoh_red_pkt(pkt);
-	cookie.raw = pkt->cookie;
-	if (cookie.magic != MAGIC)
+	_swappkt(pkt);
+	if (pkt->hdr.cookie.magic != MAGIC)
 	{
-		CXIP_INFO("Bad coll MAGIC: %x\n", cookie.magic);
-		_hton_red_pkt(pkt);
+		CXIP_INFO("Bad coll MAGIC: %x\n", pkt->hdr.cookie.magic);
+		_swappkt(pkt);
 		return;
 	}
 
 	/* Treat as a reduction packet */
 	req->coll.isred = true;
 	ofi_atomic_inc32(&mc_obj->pkt_cnt);
-	reduction = &mc_obj->reduction[cookie.red_id];
+	reduction = &mc_obj->reduction[pkt->hdr.cookie.red_id];
+	PRT("pkt received redid %d seqno %d\n", reduction->red_id,
+	    pkt->hdr.seqno);
+	_dump_red_pkt(pkt, "recv");
 	_progress_coll(reduction, pkt);
 }
 
@@ -484,12 +649,12 @@ static void _coll_rx_progress(struct cxip_req *req,
  */
 static int _coll_recv_cb(struct cxip_req *req, const union c_event *event)
 {
-	req->coll.rc = cxi_tgt_event_rc(event);
+	req->coll.cxi_rc = cxi_tgt_event_rc(event);
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
 		/* Enabled */
-		if (req->coll.rc != C_RC_OK) {
-			CXIP_WARN("LINK error rc: %d\n", req->coll.rc);
+		if (req->coll.cxi_rc != C_RC_OK) {
+			CXIP_WARN("LINK error rc: %d\n", req->coll.cxi_rc);
 			break;
 		}
 		CXIP_DBG("LINK event seen\n");
@@ -497,18 +662,18 @@ static int _coll_recv_cb(struct cxip_req *req, const union c_event *event)
 		break;
 	case C_EVENT_UNLINK:
 		/* Normally disabled, errors only */
-		req->coll.rc = cxi_tgt_event_rc(event);
-		if (req->coll.rc != C_RC_OK) {
-			CXIP_WARN("UNLINK error rc: %d\n", req->coll.rc);
+		req->coll.cxi_rc = cxi_tgt_event_rc(event);
+		if (req->coll.cxi_rc != C_RC_OK) {
+			CXIP_WARN("UNLINK error rc: %d\n", req->coll.cxi_rc);
 			break;
 		}
 		CXIP_DBG("UNLINK event seen\n");
 		break;
 	case C_EVENT_PUT:
 		req->coll.isred = false;
-		req->coll.rc = cxi_tgt_event_rc(event);
-		if (req->coll.rc != C_RC_OK) {
-			CXIP_WARN("PUT error rc: %d\n", req->coll.rc);
+		req->coll.cxi_rc = cxi_tgt_event_rc(event);
+		if (req->coll.cxi_rc != C_RC_OK) {
+			CXIP_WARN("PUT error rc: %d\n", req->coll.cxi_rc);
 			break;
 		}
 		CXIP_DBG("PUT event seen\n");
@@ -522,9 +687,9 @@ static int _coll_recv_cb(struct cxip_req *req, const union c_event *event)
 		_coll_rx_req_report(req);
 		break;
 	default:
-		req->coll.rc = cxi_tgt_event_rc(event);
+		req->coll.cxi_rc = cxi_tgt_event_rc(event);
 		CXIP_WARN("Unexpected event type %d, rc: %d\n",
-			  event->hdr.event_type, req->coll.rc);
+			  event->hdr.event_type, req->coll.cxi_rc);
 		break;
 	}
 
@@ -880,29 +1045,6 @@ static int _post_join_complete(struct cxip_coll_mc *mc_obj, void *context)
  * Reduction packet management.
  */
 
-static inline bool is_hw_root(struct cxip_coll_mc *mc_obj)
-{
-	return (mc_obj->hwroot_index == mc_obj->mynode_index);
-}
-
-static inline int _advance_seqno(struct cxip_coll_reduction *reduction)
-{
-	reduction->seqno = (reduction->seqno + 1) & CXIP_COLL_SEQNO_MASK;
-	return reduction->seqno;
-}
-
-static inline uint64_t _generate_cookie(uint32_t mcast_id, uint32_t red_id,
-					bool retry)
-{
-	union cxip_coll_cookie cookie = {
-		.mcast_id = mcast_id,
-		.red_id = red_id,
-		.retry = retry,
-		.magic = MAGIC,
-	};
-	return cookie.raw;
-}
-
 static inline void _zcopy_pkt_data(void *tgt, const void *src, int len)
 {
 	if (tgt) {
@@ -927,7 +1069,10 @@ static ssize_t _send_pkt_as_root(struct cxip_coll_reduction *reduction,
 			continue;
 		ret = cxip_coll_send(reduction, i,
 				     reduction->tx_msg,
-				     sizeof(struct red_pkt));
+				     sizeof(struct red_pkt),
+				     reduction->mc_obj->reduction_md);
+		PRT("pkt sent tgt %d redid %d seqno %d ret %d\n",
+		    i, reduction->red_id, reduction->seqno, ret);
 		if (ret)
 			return ret;
 	}
@@ -942,7 +1087,11 @@ static inline ssize_t _send_pkt_as_leaf(struct cxip_coll_reduction *reduction,
 	int ret;
 
 	ret = cxip_coll_send(reduction, reduction->mc_obj->hwroot_index,
-			     reduction->tx_msg, sizeof(struct red_pkt));
+			     reduction->tx_msg, sizeof(struct red_pkt),
+			     reduction->mc_obj->reduction_md);
+	PRT("pkt sent tgt %d redid %d seqno %d ret %d\n",
+	    reduction->mc_obj->hwroot_index, reduction->red_id,
+	    reduction->seqno, ret);
 	return ret;
 }
 
@@ -953,7 +1102,8 @@ static inline ssize_t _send_pkt_mc(struct cxip_coll_reduction *reduction,
 {
 	return cxip_coll_send(reduction, 0,
 			      reduction->tx_msg,
-			      sizeof(struct red_pkt));
+			      sizeof(struct red_pkt),
+			      reduction->mc_obj->reduction_md);
 }
 
 /* Send packet from root or leaf node as appropriate.
@@ -974,14 +1124,43 @@ static inline ssize_t _send_pkt(struct cxip_coll_reduction *reduction,
 }
 
 /**
- * Called to prevent setting the ARM bit on a root packet. Self-clearing.
+ * Prevent setting the ARM bit on a root packet.
  *
- * This is used in testing to suppress Rosetta collective operations. It is of
- * no use in production.
+ * This is used in testing to suppress Rosetta collective operations, forcing
+ * all leaf packets to arrive at the root. It is of no use in production.
  */
-void cxip_coll_arm_disable_once(void)
+// TODO Remove for production
+int cxip_coll_arm_enable(struct fid_mc *mc, bool enable)
 {
-	_coll_arm_disable = true;
+	struct cxip_coll_mc *mc_obj = (struct cxip_coll_mc *)mc;
+	int old = mc_obj->arm_enable;
+
+	mc_obj->arm_enable = enable;
+
+	return old;
+}
+
+/**
+ * Limit the reduction ID values.
+ *
+ * Reduction ID values do round-robin over an adjustable range of values. This
+ * is useful in testing to force all reductions to use reduction id zero (set
+ * max_red_id to 1), but could be used in production to use only a subset of
+ * reduction IDs to limit fabric resource exhaustion when concurrent reductions
+ * are used.
+ *
+ * @param mc multicast object to limit
+ * @param max_red_id maximum number of reduction ID values to use
+ */
+void cxip_coll_limit_red_id(struct fid_mc *mc, int max_red_id)
+{
+	struct cxip_coll_mc *mc_obj = (struct cxip_coll_mc *)mc;
+
+	if (max_red_id < 1)
+		max_red_id = 1;
+	if (max_red_id > CXIP_COLL_MAX_CONCUR)
+		max_red_id = CXIP_COLL_MAX_CONCUR;
+	mc_obj->max_red_id = max_red_id;
 }
 
 /**
@@ -994,16 +1173,17 @@ void cxip_coll_arm_disable_once(void)
  * @param op - operation code
  * @param data - pointer to send buffer
  * @param len - length of send data in bytes
+ * @param red_rc - reduction return code
  * @param retry - retry flag
  *
  * @return int - return code
  */
 int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 			   size_t redcnt, int op, const void *data,
-			   int len, bool retry)
+			   int len, enum cxip_coll_rc red_rc, bool retry)
 {
 	struct red_pkt *pkt;
-	int seqno, arm, ret;
+	int ret, arm;
 
 	if (len > CXIP_COLL_MAX_TX_SIZE) {
 		CXIP_INFO("length too large: %d\n", len);
@@ -1012,24 +1192,28 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 
 	pkt = (struct red_pkt *)reduction->tx_msg;
 
+	memset(&pkt->hdr, 0, sizeof(pkt->hdr));
+	arm = 0;
 	if (is_hw_root(reduction->mc_obj)) {
-		seqno = _advance_seqno(reduction);
-		arm = (_coll_arm_disable) ? 0 : 1;
-		_coll_arm_disable = false;
-	} else {
-		seqno = reduction->seqno;
-		arm = 0;
+		/* Advance the sequence number */
+		reduction->seqno++;
+		reduction->seqno &= CXIP_COLL_SEQNO_MASK;
+		arm = reduction->mc_obj->arm_enable;
 	}
-	pkt->hdr.seqno = seqno;
-	pkt->hdr.resno = seqno;
-	pkt->hdr.arm = arm;
+
 	pkt->hdr.redcnt = redcnt;
+	pkt->hdr.arm = arm;
 	pkt->hdr.op = op;
-	pkt->cookie = _generate_cookie(reduction->mc_obj->mc_unique,
-				       reduction->red_id,
-				       retry);
+	pkt->hdr.red_rc = red_rc;
+	pkt->hdr.seqno = reduction->seqno;
+	pkt->hdr.resno = reduction->resno;
+	pkt->hdr.cookie.mcast_id = reduction->mc_obj->mc_unique;
+	pkt->hdr.cookie.red_id = reduction->red_id;
+	pkt->hdr.cookie.retry = retry;
+	pkt->hdr.cookie.magic = MAGIC;
 	_zcopy_pkt_data(pkt->data.databuf, data, len);
-	_hton_red_pkt(pkt);
+	_dump_red_pkt(pkt, "send");
+	_swappkt(pkt);
 
 	/* -FI_EAGAIN means HW queue is full, should self-clear */
 	do {
@@ -1228,21 +1412,46 @@ static int _nic_to_idx(struct cxip_av_set *av_set, uint32_t nic,
 	return -FI_EADDRNOTAVAIL;
 }
 
+static inline enum c_return_code _red_to_cxi_error(enum cxip_coll_rc red_rc)
+{
+	switch (red_rc) {
+	case CXIP_COLL_RC_SUCCESS:
+		return C_RC_OK;
+	case CXIP_COLL_RC_FLT_INEXACT:
+	case CXIP_COLL_RC_REPSUM_INEXACT:
+		return C_RC_AMO_FP_INEXACT;
+	case CXIP_COLL_RC_FLT_OVERFLOW:
+	case CXIP_COLL_RC_INT_OVERFLOW:
+		return C_RC_AMO_FP_OVERFLOW;
+	case CXIP_COLL_RC_FLT_INVALID:
+		return C_RC_AMO_FP_INVALID;
+	case CXIP_COLL_RC_CONTR_OVERFLOW:
+		return C_RC_AMO_LENGTH_ERROR;
+	case CXIP_COLL_RC_OP_MISMATCH:
+		return C_RC_AMO_INVAL_OP_ERROR;
+	default:
+		return C_RC_AMO_ALIGN_ERROR;
+	}
+}
+
 /* Post a reduction completion request to the collective TX CQ.
  */
-static void _post_coll_complete(struct cxip_coll_reduction *reduction)
+static void _post_coll_complete(struct cxip_coll_reduction *reduction, int err)
 {
 	struct cxip_req *req;
+	enum c_return_code cxi_rc;
 	int ret;
 
 	/* Indicates collective completion by writing to the endpoint TX CQ */
 	req = reduction->op_inject_req;
 	reduction->op_inject_req = NULL;
 	if (req) {
-		reduction->in_use = false;
-		if (reduction->red_rc) {
-			ret = cxip_cq_req_error(req, 0, FI_EIO,
-						reduction->red_rc, NULL, 0);
+		if (err != FI_SUCCESS) {
+			ret = cxip_cq_req_error(req, 0, err, 0, NULL, 0);
+		} else if (reduction->red_rc != CXIP_COLL_RC_SUCCESS) {
+			cxi_rc = _red_to_cxi_error(reduction->red_rc);
+			ret = cxip_cq_req_error(req, 0, FI_ENODATA, cxi_rc,
+						NULL, 0);
 		} else {
 			ret = cxip_cq_req_complete(req);
 		}
@@ -1255,10 +1464,10 @@ static void _post_coll_complete(struct cxip_coll_reduction *reduction)
 /* Record only the first of multiple errors.
  */
 static inline void _set_reduce_error(struct cxip_coll_reduction *reduction,
-				     enum pkt_rc rc)
+				     enum cxip_coll_rc red_rc)
 {
 	if (!reduction->red_rc)
-		reduction->red_rc = rc;
+		reduction->red_rc = red_rc;
 }
 
 /* Perform a reduction on the root in software.
@@ -1272,28 +1481,27 @@ static int _root_reduce(struct cxip_coll_reduction *reduction,
 	/* first packet to arrive (root or leaf) sets up the reduction */
 	red_data = (union cxip_coll_data *)reduction->red_data;
 	if (!reduction->red_init) {
-		_zcopy_pkt_data(reduction->red_data, pkt->data.databuf,
-				reduction->op_data_len);
+		memcpy(red_data, &pkt->data, CXIP_COLL_MAX_TX_SIZE);
 		reduction->red_op = pkt->hdr.op;
-		reduction->red_rc = pkt->hdr.rc;
+		reduction->red_rc = pkt->hdr.red_rc;
 		reduction->red_cnt = pkt->hdr.redcnt;
 		reduction->red_init = true;
 		goto out;
 	}
 
 	reduction->red_cnt += pkt->hdr.redcnt;
-	if (pkt->hdr.rc != RC_SUCCESS) {
-		_set_reduce_error(reduction, pkt->hdr.rc);
+	if (pkt->hdr.red_rc != CXIP_COLL_RC_SUCCESS) {
+		_set_reduce_error(reduction, pkt->hdr.red_rc);
 		goto out;
 	}
 
 	if (pkt->hdr.op != reduction->red_op) {
-		_set_reduce_error(reduction, RC_OP_MISMATCH);
+		_set_reduce_error(reduction, CXIP_COLL_RC_OP_MISMATCH);
 		goto out;
 	}
 
 	if (reduction->red_cnt > exp_count) {
-		_set_reduce_error(reduction, RC_CONTR_OVERFLOW);
+		_set_reduce_error(reduction, CXIP_COLL_RC_CONTR_OVERFLOW);
 		goto out;
 	}
 
@@ -1402,7 +1610,7 @@ out:
  * The Rosetta acceleration comes from the Arm Packet, which speculatively
  * arms the Rosetta tree for the NEXT operation. This persists until a
  * timeout expires. The timeout is specified when the multicast tree is created
- * by the Rosetta configuration service.
+ * by the Rosetta configuration service, and cannot be adusted.
  *
  * If the next collective operation occurs within the timeout, the leaf results
  * will be reduced in reduction engines by Rosetta as they move up the tree,
@@ -1412,36 +1620,45 @@ out:
  * partial results, and all subsequent results are passed directly to the next
  * Rosetta.
  *
+ * The first leaf contribution to reach a reduction engine establishes the
+ * reduction operation. All subsequent contributions must use the same
+ * operation, or Rosetta returns an error.
+ *
  * There are eight reduction_id values, which can be used to acquire and use
  * up to eight independent reduction engines (REs) at each upstream port of each
- * Rosetta switch.
+ * Rosetta switch in the collective tree.
  *
- * We use a round-robin selection of reduction id values.
- * Consider:
+ * We use a round-robin selection of reduction id values. Though reductions are
+ * generally in sync across all nodes, network lags create races where nodes
+ * could disagree whether the operation is complete, and therefore, what the
+ * next reduction ID should be.
  *
- *   MPI_Ireduce(..., &req0) // uses reduction id 0
- *   sleep(random)
- *   MPI_Ireduce(..., &req1) // uses reduction id 1
- *   sleep(random)
- *   MPI_Wait(..., &req0)
- *   MPI_Ireduce(..., &req3)
+ * In principle, if we knew when the application made a blocking call to wait
+ * for a specific completion, we would know that all nodes were in agreement
+ * about the completion. But we do not know that the application made a blocking
+ * call, only that it progressed the state.
  *
- * On all nodes, these calls must use the SAME reduction id for each reduction.
- * There is no libfabric syntax for specifying this on the reduction call, short
- * of having a separate multicast object for each reduction ID. In principle, we
- * know that req3 cannot begin on any node until it has verified that req0 has
- * completed on that node: thus, we could reuse reduction id 0.
+ * The default round-robin cycle is CXIP_COLL_MAX_CONCUR (= 8). This means that
+ * Rosetta will not start reducing packets until the ninth reduction, and it
+ * will lease and hold all eight reduction engines on the Rosetta upstream port
+ * for the duration of the application. This can be adjusted to a "friendlier"
+ * value by calling cxip_coll_limit_red_id() to limit the number of concurrent
+ * reductions.
  *
- * But we have no way of knowing in libfabric that MPI_Wait() was even called,
- * much less whether it was called on req0 or req1. With that knowledge, we
- * could safely re-use reduction id 0. Without that knowledge, we have to
- * continue to advance the reduction id.
+ * Ordering of requests and responses must the same on all nodes.
  *
- * We cannot rely upon our internal detection of req0 completion. Although this
- * is broadcast from the root to all leaves with a single write, there will be
- * delays in each Rosetta due to packet retransmission, so every leaf will
- * receive the completion packet at slightly different times, potentially
- * resulting in req3 using different reduction ID values.
+ * Ordering of requests is required of the application. If requests are ordered
+ * differently on different nodes, results are undefined, and it is considered
+ * an application error.
+ *
+ * Ordering of responses is guaranteed by the mc_obj->frst_red_id value, which
+ * is advanced after a response packet is received.
+ *
+ * The algorithm below handles the general case of reordered response packets,
+ * by forcing responses to occur in initiation-order.
+ *
+ * If a packet is dropped, it is up to the retry handler to initiate a retry or
+ * a failure for frst_red_id, allowing subsequent reductions to complete.
  */
 
 static inline bool _root_retry_required(struct cxip_coll_reduction *reduction)
@@ -1454,12 +1671,13 @@ static inline
 struct red_pkt * _copy_user_to_pkt(void *packet,
 				   struct cxip_coll_reduction *reduction)
 {
+	/* only root uses this */
 	struct red_pkt *rootpkt = (struct red_pkt *)packet;
 
 	rootpkt->hdr.redcnt = 1;
 	rootpkt->hdr.seqno = reduction->seqno;
-	rootpkt->hdr.resno = reduction->seqno;
-	rootpkt->hdr.rc = RC_SUCCESS;
+	rootpkt->hdr.resno = reduction->resno;
+	rootpkt->hdr.red_rc = CXIP_COLL_RC_SUCCESS;
 	rootpkt->hdr.op = reduction->op_code;
 	_zcopy_pkt_data(rootpkt->data.databuf, reduction->op_send_data,
 			reduction->op_data_len);
@@ -1493,11 +1711,12 @@ void _copy_result_to_user(struct cxip_coll_reduction *reduction)
 static void _progress_root(struct cxip_coll_reduction *reduction,
 			   struct red_pkt *pkt)
 {
+	struct cxip_coll_mc *mc_obj = reduction->mc_obj;
 	struct red_pkt *rootpkt = (struct red_pkt *)reduction->tx_msg;
 	ssize_t ret;
 
 	/* Drop packets until root is initialized. */
-	if (reduction->op_state == CXIP_COLL_STATE_NONE)
+	if (reduction->coll_state == CXIP_COLL_STATE_NONE)
 		return;
 
 	/* Initial state for root is BLOCKED. The root makes the transition from
@@ -1511,7 +1730,7 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 	} else {
 		/* Drop old packets */
 		if (pkt->hdr.resno != reduction->seqno) {
-			ofi_atomic_inc32(&reduction->mc_obj->seq_err_cnt);
+			ofi_atomic_inc32(&mc_obj->seq_err_cnt);
 			return;
 		}
 
@@ -1519,15 +1738,14 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 		if (_root_retry_required(reduction)) {
 			CXIP_DBG("RETRY collective packet\n");
 
-			/* empty retry packet auto-advances the seqno */
 			ret = cxip_coll_send_red_pkt(reduction, 0, 0, NULL, 0,
-						     true);
+						     CXIP_COLL_RC_SUCCESS, true);
 			if (ret) {
 				/* fatal send error, collectives broken */
 				CXIP_WARN("Collective send: %ld\n", ret);
-				reduction->red_rc = ret;
-				_post_coll_complete(reduction);
-				reduction->op_state = CXIP_COLL_STATE_NONE;
+				reduction->red_rc = 0;
+				_post_coll_complete(reduction, ret);
+				reduction->coll_state = CXIP_COLL_STATE_NONE;
 				return;
 			}
 
@@ -1538,42 +1756,51 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 	}
 
 	/* initialize or add to reduction */
-	ret = _root_reduce(reduction, pkt,
-			   reduction->mc_obj->av_set->fi_addr_cnt);
+	ret = _root_reduce(reduction, pkt, mc_obj->av_set->fi_addr_cnt);
 
 	/* return != 0 means more work to do, wait for new packets */
-	if (ret != 0)
-		return;
-
-	/* reduction->op_state = CXIP_COLL_STATE_READY, not necessary */
-	rootpkt->hdr.rc = reduction->red_rc;
-
-	/* copy reduction result to root user response buffer */
-	_copy_result_to_user(reduction);
-
-	/* send reduction result to leaves */
-	ret = cxip_coll_send_red_pkt(reduction,
-				     rootpkt->hdr.redcnt,
-				     reduction->op_code,
-				     reduction->op_rslt_data,
-				     reduction->op_data_len,
-				     false);
-	if (ret) {
-		/* fatal send error, leaves are hung */
-		CXIP_WARN("Collective send: %ld\n", ret);
-		reduction->red_rc = ret;
-		_post_coll_complete(reduction);
-		reduction->op_state = CXIP_COLL_STATE_NONE;
-		return;
+	if (ret == 0) {
+		rootpkt->hdr.red_rc = reduction->red_rc;
+		reduction->completed = true;
 	}
 
-	/* Done with reduction, will re-initialize on next use */
-	reduction->red_init = false;
+	/* Complete operations in injection order */
+	reduction = &mc_obj->reduction[mc_obj->frst_red_id];
+	while (reduction->in_use && reduction->completed) {
+		rootpkt = (struct red_pkt *)reduction->tx_msg;
 
-	/* Reduction completed on root */
-	_post_coll_complete(reduction);
+		/* copy reduction result to root user response buffer */
+		_copy_result_to_user(reduction);
 
-	/* reduction->op_state = CXIP_COLL_STATE_BLOCKED, not necessary */
+		/* send reduction result to leaves */
+		ret = cxip_coll_send_red_pkt(reduction, 1,
+					     reduction->op_code,
+					     reduction->op_rslt_data,
+					     reduction->op_data_len,
+					     reduction->red_rc,
+					     false);
+		if (ret) {
+			/* fatal send error, leaves are hung */
+			CXIP_WARN("Collective send: %ld\n", ret);
+			reduction->red_rc = 0;
+			_post_coll_complete(reduction, ret);
+			reduction->coll_state = CXIP_COLL_STATE_NONE;
+			break;
+		}
+
+		/* Done with reduction */
+		reduction->in_use = false;
+		reduction->completed = false;
+		reduction->red_init = false;
+
+		/* Reduction completed on root */
+		_post_coll_complete(reduction, FI_SUCCESS);
+
+		/* Advance to the next reduction */
+		mc_obj->frst_red_id++;
+		mc_obj->frst_red_id %= mc_obj->max_red_id;
+		reduction = &mc_obj->reduction[mc_obj->frst_red_id];
+	}
 }
 
 /* Leaf node state machine.
@@ -1583,10 +1810,10 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 static void _progress_leaf(struct cxip_coll_reduction *reduction,
 			   struct red_pkt *pkt)
 {
-	union cxip_coll_cookie cookie;
+	struct cxip_coll_mc *mc_obj = reduction->mc_obj;
 	int ret;
 
-	if (reduction->op_state == CXIP_COLL_STATE_NONE)
+	if (reduction->coll_state == CXIP_COLL_STATE_NONE)
 		return;
 
 	/* initial state for leaf is always READY */
@@ -1600,25 +1827,29 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 		ret = cxip_coll_send_red_pkt(reduction, 1,
 					     reduction->op_code,
 					     reduction->op_send_data,
-					     reduction->op_data_len, false);
+					     reduction->op_data_len,
+					     reduction->red_rc,
+					     false);
 		if (ret) {
 			/* fatal send error, root will time out and retry */
 			CXIP_WARN("Collective send: %d\n", ret);
 			return;
 		}
-		reduction->op_state = CXIP_COLL_STATE_BLOCKED;
 	} else {
 		/* Extract sequence number for next response */
 		reduction->seqno = pkt->hdr.seqno;
-		cookie.raw = pkt->cookie;
-		if (cookie.retry) {
+		reduction->resno = pkt->hdr.seqno;
+
+		/* Check for retry request */
+		if (pkt->hdr.cookie.retry) {
 			// TODO -- this needs to be expanded, see design
 			/* Send the previous packet with new seqno */
 			CXIP_DBG("leaf sending retry packet\n");
 			pkt = (struct red_pkt *)&reduction->tx_msg;
-			pkt->redhdr = be64toh(pkt->redhdr);
+			_swapbyteorder(&pkt->hdr, sizeof(pkt->hdr));
 			pkt->hdr.seqno = reduction->seqno;
-			pkt->redhdr = htobe64(pkt->redhdr);
+			pkt->hdr.resno = reduction->resno;
+			_swapbyteorder(&pkt->hdr, sizeof(pkt->hdr));
 			_send_pkt(reduction, true);
 			/* do not change state, wait for next ARM */
 			return;
@@ -1633,12 +1864,27 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 		 */
 
 		/* Capture final reduction data */
-		reduction->red_rc = pkt->hdr.rc;
+		reduction->red_rc = pkt->hdr.red_rc;
 		_copy_pkt_to_user(reduction, pkt);
 
-		/* Reduction completed on leaf */
-		_post_coll_complete(reduction);
-		reduction->op_state = CXIP_COLL_STATE_READY;
+		/* This reduction is finished */
+		reduction->completed = true;
+
+		/* Complete operations in injection order */
+		reduction = &mc_obj->reduction[mc_obj->frst_red_id];
+		while (reduction->in_use && reduction->completed) {
+			/* Done with reduction */
+			reduction->in_use = false;
+			reduction->completed = false;
+
+			/* Reduction completed on leaf */
+			_post_coll_complete(reduction, FI_SUCCESS);
+
+			/* Advance to the next reduction */
+			mc_obj->frst_red_id++;
+			mc_obj->frst_red_id %= mc_obj->max_red_id;
+			reduction = &mc_obj->reduction[mc_obj->frst_red_id];
+		}
 	}
 }
 
@@ -1654,6 +1900,13 @@ static void _progress_coll(struct cxip_coll_reduction *reduction,
 }
 
 /* Generic collective request injection.
+ *
+ * Injection order must be the same on all nodes, and cannot be subject to
+ * multithread race conditions that would potentially reorder the injection
+ * calls: this would be a major application error, and results are
+ * undefined. The application must ensure that any reduction initiation call
+ * returns status before any other reduction initiation be attempted. So this
+ * call can be considered process-atomic, and locks are not needed.
  */
 ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
 			 enum fi_datatype datatype, int cxi_opcode,
@@ -1661,7 +1914,7 @@ ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
 			 size_t op_count, void *context, int *reduction_id)
 {
 	struct cxip_coll_reduction *reduction;
-	int red_id;
+	struct cxip_req *req;
 	int size;
 
 	if (!mc_obj->is_joined)
@@ -1671,35 +1924,31 @@ ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
 	if (size < 0)
 		return size;
 
-	/* Acquire reduction ID */
-	fastlock_acquire(&mc_obj->lock);
-	red_id = mc_obj->next_red_id;
-	if (mc_obj->reduction[red_id].in_use) {
-		fastlock_release(&mc_obj->lock);
-		return -FI_EBUSY;
-	}
-	mc_obj->reduction[red_id].in_use = true;
+	reduction = &mc_obj->reduction[mc_obj->next_red_id];
+
+	if (reduction->in_use)
+		return -FI_EAGAIN;
+
+	req = cxip_cq_req_alloc(mc_obj->ep_obj->coll.tx_cq, 1, NULL);
+	if (!req)
+		return -FI_ENOMEM;
+
+	/* Advance to the next reduction id */
 	mc_obj->next_red_id++;
-	mc_obj->next_red_id &= 0x7;
-	fastlock_release(&mc_obj->lock);
+	mc_obj->next_red_id %= mc_obj->max_red_id;
 
 	/* Pass reduction parameters through the reduction structure */
-	reduction = &mc_obj->reduction[red_id];
+	reduction->in_use = true;
 	reduction->op_code = cxi_opcode;
 	reduction->op_send_data = op_send_data;
 	reduction->op_rslt_data = op_rslt_data;
 	reduction->op_data_len = size;
 	reduction->op_context = context;
-	reduction->op_inject_req = cxip_cq_req_alloc(mc_obj->ep_obj->coll.tx_cq,
-						     1, reduction);
-	if (! reduction->op_inject_req) {
-		reduction->in_use = false;
-		return -FI_ENOMEM;
-	}
+	reduction->op_inject_req = req;
 	reduction->op_inject_req->context = (uint64_t)context;
 
 	if (reduction_id)
-		*reduction_id = red_id;
+		*reduction_id = reduction->red_id;
 
 	_progress_coll(reduction, NULL);
 	return FI_SUCCESS;
@@ -1875,6 +2124,7 @@ static int _close_mc(struct fid *fid)
 	mc_obj->av_set->mc_obj = NULL;
 	ofi_atomic_dec32(&mc_obj->av_set->ref);
 	ofi_atomic_dec32(&mc_obj->ep_obj->coll.mc_count);
+	cxil_unmap(mc_obj->reduction_md);
 	free(mc_obj);
 
 	return FI_SUCCESS;
@@ -1899,13 +2149,13 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	};
 	struct cxip_coll_mc *mc_obj;
 	struct cxip_coll_pte *coll_pte;
+	struct cxip_cmdq *cmdq;
 	bool is_multicast;
 	uint32_t mc_unique;
 	uint64_t pid_idx;
 	unsigned int hwroot_idx;
 	unsigned int mynode_idx;
 	int red_id;
-	int state;
 	int ret;
 
 	/* remapping is not allowed */
@@ -1923,7 +2173,7 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 		}
 		is_multicast = true;
 		pid_idx = av_set->comm_key.mcast.mcast_id;
-		mc_unique = av_set->comm_key.mcast.mcast_ref;
+		mc_unique = av_set->comm_key.mcast.mcast_id;
 		hwroot_idx = av_set->comm_key.mcast.hwroot_idx;
 		ret = _nic_to_idx(av_set, ep_obj->src_addr.nic, &mynode_idx);
 		if (ret)
@@ -1975,6 +2225,18 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	if (!coll_pte)
 		goto free_mc_obj;
 
+	if (getenv("CXIP_COLL_USE_DMA_PUT")) {	// TODO move to cxi env
+		/* Map the entire reduction block, to minimize MD resources used */
+		/* EXPERIMENTAL */
+		ret = cxil_map(ep_obj->domain->lni->lni,
+			       mc_obj->reduction,
+			       sizeof(mc_obj->reduction),
+			       CXI_MAP_PIN  | CXI_MAP_READ | CXI_MAP_WRITE,
+			       NULL, &mc_obj->reduction_md);
+		if (ret)
+			goto free_coll_pte;
+	}
+
 	dlist_init(&coll_pte->buf_list);
 	coll_pte->ep_obj = ep_obj;
 	ofi_atomic_initialize32(&coll_pte->buf_cnt, 0);
@@ -1984,7 +2246,7 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 			     pid_idx, is_multicast, &pt_opts, _coll_pte_cb,
 			     coll_pte, &coll_pte->pte);
 	if (ret)
-		goto free_coll_pte;
+		goto free_coll_md;
 
 	ret = _coll_pte_enable(coll_pte, CXIP_PTE_IGNORE_DROPS);
 	if (ret)
@@ -2005,18 +2267,36 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	mc_obj->mc_unique = mc_unique;
 	mc_obj->hwroot_index = hwroot_idx;
 	mc_obj->mynode_index = mynode_idx;
+	mc_obj->max_red_id = CXIP_COLL_MAX_CONCUR;
+	mc_obj->arm_enable = true;
 	mc_obj->is_joined = true;
-	state = is_hw_root(mc_obj) ?
-		CXIP_COLL_STATE_BLOCKED :
-		CXIP_COLL_STATE_READY;
+	mc_obj->tc = CXI_TC_BEST_EFFORT;
+	if (is_hw_root(mc_obj)) {
+		mc_obj->tc_type = CXI_TC_TYPE_DEFAULT;
+	} else {
+		mc_obj->tc_type = is_netsim(ep_obj)?
+					    CXI_TC_TYPE_DEFAULT:
+					    CXI_TC_TYPE_COLL_LEAF;
+	}
+
+	/* Set this now to instantiate cmdq CP */
+	cmdq = ep_obj->coll.tx_cmdq;
+	fastlock_acquire(&cmdq->lock);
+	ret = cxip_txq_cp_set(cmdq, ep_obj->auth_key.vni,
+			      mc_obj->tc, mc_obj->tc_type);
+	fastlock_release(&cmdq->lock);
+	if (ret)
+		goto coll_pte_disable;
+
 	for (red_id = 0; red_id < CXIP_COLL_MAX_CONCUR; red_id++) {
 		struct cxip_coll_reduction *reduction;
 
 		reduction = &mc_obj->reduction[red_id];
-		reduction->op_state = state;
+		reduction->coll_state = CXIP_COLL_STATE_READY;
 		reduction->mc_obj = mc_obj;
 		reduction->red_id = red_id;
 		reduction->in_use = false;
+		reduction->completed = false;
 	}
 	fastlock_init(&mc_obj->lock);
 	ofi_atomic_initialize32(&mc_obj->send_cnt, 0);
@@ -2037,6 +2317,9 @@ coll_pte_disable:
 	_coll_pte_disable(coll_pte);
 coll_pte_destroy:
 	cxip_pte_free(coll_pte->pte);
+free_coll_md:
+	if (mc_obj->reduction_md)
+		cxil_unmap(mc_obj->reduction_md);
 free_coll_pte:
 	free(coll_pte);
 free_mc_obj:
@@ -2044,8 +2327,10 @@ free_mc_obj:
 	return ret;
 }
 
-void cxip_coll_reset_mc_ctrs(struct cxip_coll_mc *mc_obj)
+void cxip_coll_reset_mc_ctrs(struct fid_mc *mc)
 {
+	struct cxip_coll_mc *mc_obj = (struct cxip_coll_mc *)mc;
+
 	fastlock_acquire(&mc_obj->lock);
 	ofi_atomic_set32(&mc_obj->send_cnt, 0);
 	ofi_atomic_set32(&mc_obj->recv_cnt, 0);
@@ -2073,6 +2358,9 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	struct cxip_av_set *av_set;
 	struct cxip_coll_mc *mc_obj;
 	int ret;
+
+	if (check_red_pkt())
+		return -FI_EINVAL;
 
 	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
 	av_set = container_of(coll_av_set, struct cxip_av_set, av_set_fid);

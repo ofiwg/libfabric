@@ -672,7 +672,7 @@ struct cxip_req_coll {
 	uint32_t mrecv_space;
 	size_t hw_req_len;
 	bool isred;
-	int rc;
+	enum c_return_code cxi_rc;
 };
 
 enum cxip_req_type {
@@ -1477,6 +1477,21 @@ enum cxip_coll_state {
 	CXIP_COLL_STATE_BLOCKED,
 };
 
+/* Rosetta reduction engine error codes.
+ */
+enum cxip_coll_rc {
+	CXIP_COLL_RC_SUCCESS = 0,               // good
+	CXIP_COLL_RC_FLT_INEXACT = 1,           // result was rounded
+	CXIP_COLL_RC_FLT_OVERFLOW = 3,          // result too large to represent
+	CXIP_COLL_RC_FLT_INVALID = 4,           // operand was signalling NaN, or
+						//   two infinities subtracted
+	CXIP_COLL_RC_REPSUM_INEXACT = 5,        // reproducible sum was rounded
+	CXIP_COLL_RC_INT_OVERFLOW = 6,          // integer overflow
+	CXIP_COLL_RC_CONTR_OVERFLOW = 7,        // too many contributions seen
+	CXIP_COLL_RC_OP_MISMATCH = 8,           // different opcodes in same reduction
+	CXIP_COLL_RC_MAX = 9
+};
+
 struct cxip_coll_buf {
 	struct dlist_entry buf_entry;		// linked list of buffers
 	struct cxip_req *req;			// associated LINK request
@@ -1499,20 +1514,22 @@ struct cxip_coll_reduction {
 	struct cxip_coll_mc *mc_obj;		// parent mc_obj
 	uint32_t red_id;			// reduction id
 	uint16_t seqno;				// reduction sequence number
+	uint16_t resno;				// reduction result number
 	struct cxip_req *op_inject_req;		// active operation request
-	enum cxip_coll_state op_state;		// reduction state on node
+	enum cxip_coll_state coll_state;	// reduction state on node
 	int op_code;				// requested CXI operation
 	const void *op_send_data;		// user send buffer (may be NULL)
 	void *op_rslt_data;			// user recv buffer (may be NULL)
 	int op_data_len;			// bytes in send/recv buffers
 	void *op_context;			// caller's context
 	bool in_use;				// reduction is in-use
+	bool completed;				// reduction is completed
 
 	uint8_t red_data[CXIP_COLL_MAX_TX_SIZE];
 	bool red_init;				// set by first packet
 	int red_op;				// set by first packet
-	int red_rc;				// set by first error
 	int red_cnt;				// incremented by packet
+	enum cxip_coll_rc red_rc;		// set by first error
 
 	uint8_t tx_msg[64];			// static packet memory
 };
@@ -1525,14 +1542,20 @@ struct cxip_coll_mc {
 	bool is_joined;				// true if joined
 	unsigned int mynode_index;		// av_set index of this node
 	unsigned int hwroot_index;		// av_set index of hwroot node
-	int next_red_id;			// round-robin counter
 	uint32_t mc_unique;			// MC object id for cookie
+	int frst_red_id;			// first active red_id
+	int next_red_id;			// next available red_id
+	int max_red_id;				// limit total concurrency
+	bool arm_enable;			// arm-enable for root
+	enum cxi_traffic_class tc;		// traffic class
+	enum cxi_traffic_class_type tc_type;	// traffic class type
 	ofi_atomic32_t send_cnt;		// for diagnostics
 	ofi_atomic32_t recv_cnt;		// for diagnostics
 	ofi_atomic32_t pkt_cnt;			// for diagnostics
 	ofi_atomic32_t seq_err_cnt;		// for diagnostics
 	fastlock_t lock;
 
+	struct cxi_md *reduction_md;		// memory descriptor for DMA
 	struct cxip_coll_reduction reduction[CXIP_COLL_MAX_CONCUR];
 };
 
@@ -1738,13 +1761,12 @@ int cxip_coll_disable(struct cxip_ep_obj *ep_obj);
 int cxip_coll_close(struct cxip_ep_obj *ep_obj);
 void cxip_coll_populate_opcodes(void);
 int cxip_fi2cxi_opcode(int op, int datatype);
-void cxip_coll_reset_mc_ctrs(struct cxip_coll_mc *mc_obj);
-void cxip_coll_arm_disable_once(void);
 int cxip_coll_send(struct cxip_coll_reduction *reduction,
-		   int av_set_idx, const void *buffer, size_t buflen);
+		   int av_set_idx, const void *buffer, size_t buflen,
+		   struct cxi_md *md);
 int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 			   size_t redcnt, int op, const void *data, int len,
-			   bool retry);
+			   enum cxip_coll_rc red_rc, bool retry);
 ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
 			 enum fi_datatype datatype, int cxi_opcode,
 			 const void *op_send_data, void *op_rslt_data,
@@ -1766,6 +1788,10 @@ ssize_t cxip_allreduce(struct fid_ep *ep, const void *buf, size_t count, void *d
 int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 			 const struct fid_av_set *coll_av_set,
 			 uint64_t flags, struct fid_mc **mc, void *context);
+
+void cxip_coll_set_max_red_id(struct fid_mc *mc, int max_red_id);
+int cxip_coll_arm_enable(struct fid_mc *mc, bool enable);
+void cxip_coll_reset_mc_ctrs(struct fid_mc *mc);
 
 /*
  * cxip_fid_to_txc() - Return TXC from FID provided to a transmit API.
