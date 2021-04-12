@@ -119,9 +119,8 @@ static int tcpx_update_rx_iov(struct tcpx_xfer_entry *rx_entry)
 	cq_entry.ep_context = rx_entry->ep->util_ep.ep_fid.fid.context;
 	cq_entry.op_context = rx_entry->context;
 	cq_entry.flags = 0;
-	cq_entry.len = (rx_entry->hdr.base_hdr.size -
-			 rx_entry->hdr.base_hdr.payload_off) -
-			rx_entry->rem_len;
+	cq_entry.len = rx_entry->hdr.base_hdr.size -
+		       rx_entry->hdr.base_hdr.payload_off;
 	cq_entry.buf = rx_entry->mrecv_msg_start;
 	tcpx_get_cq_info(rx_entry, &cq_entry.flags, &cq_entry.data,
 			 &cq_entry.tag);
