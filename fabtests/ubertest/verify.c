@@ -35,7 +35,6 @@
 #include "ofi_atomic.h"
 #include "fabtest.h"
 
-static int alph_index = 0;
 static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
 
@@ -53,15 +52,15 @@ static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_a
 	} while (0)				\
 
 
-#define FT_FILL(dst,cnt,TYPE)				\
-	do {								\
-		int i;							\
-		TYPE *d = (dst);					\
-		for (i = 0; i < cnt; i++) {				\
-			d[i] = (TYPE) (integ_alphabet[alph_index++]);	\
-			if (alph_index >= integ_alphabet_length)	\
-				alph_index = 0;				\
-		}							\
+#define FT_FILL(dst,cnt,TYPE)					\
+	do {							\
+		int i, a = 0;					\
+		TYPE *d = (dst);				\
+		for (i = 0; i < cnt; i++) {			\
+			d[i] = (TYPE) (integ_alphabet[a]);	\
+			if (++a >= integ_alphabet_length)	\
+				a = 0;				\
+		}						\
 	} while (0)
 
 #define SWITCH_TYPES(type,FUNC,...)				\
@@ -163,7 +162,7 @@ int ft_verify_bufs()
 		compare_buf = (char *) ft_rx_ctrl.buf;
 	}
 
-	return ft_check_buf(compare_buf, compare_size) ? -FI_EIO : 0;
+	return ft_check_buf(compare_buf, compare_size);
 }
 
 void ft_verify_comp(void *buf)

@@ -105,7 +105,7 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	size_t datatype_sz = ofi_datatype_size(msg->datatype);
 	size_t buf_len = 0;
 	size_t cmp_len = 0;
-	size_t tot_len;
+	size_t data_len, tot_len;
 	ssize_t ret;
 	int i;
 
@@ -141,8 +141,8 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 							  &cmp_device);
 	}
 
-	tot_len = buf_len + cmp_len + sizeof(struct rxm_atomic_hdr) +
-			sizeof(struct rxm_pkt);
+	data_len = buf_len + cmp_len + sizeof(struct rxm_atomic_hdr);
+	tot_len = data_len + sizeof(struct rxm_pkt);
 
 	if (tot_len > rxm_buffer_size) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
@@ -163,8 +163,7 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		goto restore_credit;
 	}
 
-	tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_atomic;
-	rxm_ep_format_atomic_pkt_hdr(rxm_conn, tx_buf, tot_len, op,
+	rxm_ep_format_atomic_pkt_hdr(rxm_conn, tx_buf, data_len, op,
 				msg->datatype, msg->op, flags, msg->data,
 				msg->rma_iov, msg->rma_iov_count);
 	tx_buf->pkt.ctrl_hdr.msg_id = ofi_buf_index(tx_buf);
