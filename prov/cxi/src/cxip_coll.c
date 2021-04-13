@@ -2261,6 +2261,7 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	mc_obj->mc_fid.fid.fclass = FI_CLASS_MC;
 	mc_obj->mc_fid.fid.context = mc_obj;
 	mc_obj->mc_fid.fid.ops = &mc_ops;
+	mc_obj->mc_fid.fi_addr = (fi_addr_t)(uintptr_t)mc_obj;
 	mc_obj->coll_pte = coll_pte;
 	mc_obj->ep_obj = ep_obj;
 	mc_obj->av_set = av_set;

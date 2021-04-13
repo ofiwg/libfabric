@@ -224,14 +224,7 @@ int cxip_av_set_remove(struct fid_av_set *set, fi_addr_t addr)
 
 int cxip_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr)
 {
-	/* Gets MC object associated with AV set */
-	struct cxip_av_set *av_set;
-
-	av_set = container_of(set, struct cxip_av_set, av_set_fid);
-	if (!av_set->mc_obj)
-		return -FI_EINVAL;
-
-	*coll_addr = (uintptr_t)av_set->mc_obj;
+	*coll_addr = FI_ADDR_NOTAVAIL;
 	return FI_SUCCESS;
 }
 

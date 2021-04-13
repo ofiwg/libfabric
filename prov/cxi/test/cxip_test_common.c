@@ -401,6 +401,8 @@ static void _create_av_set(int count, int rank, struct fid_av_set **av_set_fid)
 void cxit_create_netsim_collective(int count)
 {
 	struct cxip_ep *ep;
+	fi_addr_t mc_addr;
+	fi_addr_t mc_ref;
 	uint32_t event;
 	int i, ret;
 
@@ -419,6 +421,10 @@ void cxit_create_netsim_collective(int count)
 					   0, &cxit_coll_mc_list.mc_fid[i],
 					   NULL);
 		cr_assert(ret == 0, "cxip_coll_enable failed: %d\n", ret);
+		mc_addr = fi_mc_addr(cxit_coll_mc_list.mc_fid[i]);
+		mc_ref = (fi_addr_t)(uintptr_t)cxit_coll_mc_list.mc_fid[i];
+		cr_assert(mc_addr == mc_ref, "mc_addr, exp %ld, saw %ld\n",
+			  mc_ref, mc_addr);
 
 		ep = container_of(cxit_ep, struct cxip_ep, ep);
 		do {
