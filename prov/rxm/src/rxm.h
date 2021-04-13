@@ -482,6 +482,7 @@ struct rxm_tx_buf {
 	/* Must stay at top */
 	struct rxm_buf hdr;
 
+	OFI_DBG_VAR(bool, user_tx)
 	void *app_context;
 	uint64_t flags;
 
@@ -506,6 +507,10 @@ struct rxm_tx_buf {
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
 };
+
+/* Used for application transmits, provides credit check */
+struct rxm_tx_buf *rxm_get_tx_buf(struct rxm_ep *ep);
+void rxm_free_rx_buf(struct rxm_ep *ep, struct rxm_tx_buf *buf);
 
 enum rxm_deferred_tx_entry_type {
 	RXM_DEFERRED_TX_RNDV_ACK,
@@ -663,7 +668,6 @@ struct rxm_ep {
 	uint64_t		msg_cq_last_poll;
 	struct fid_ep 		*srx_ctx;
 	size_t 			comp_per_progress;
-	ofi_atomic32_t		atomic_tx_credits;
 	int			cq_eq_fairness;
 
 	bool			msg_mr_local;
@@ -676,6 +680,7 @@ struct rxm_ep {
 	size_t			buffered_limit;
 	size_t			inject_limit;
 	size_t			sar_limit;
+	size_t			tx_credit;
 
 	struct ofi_bufpool	*rx_pool;
 	struct ofi_bufpool	*tx_pool;
