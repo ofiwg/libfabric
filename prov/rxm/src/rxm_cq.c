@@ -211,7 +211,7 @@ static void rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_tx_buf *rma_buf,
 		rxm_msg_mr_closev(rma_buf->rma.mr, rma_buf->rma.count);
 	}
 
-	ofi_buf_free(rma_buf);
+	rxm_free_rx_buf(rxm_ep, rma_buf);
 }
 
 void rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
@@ -233,13 +233,13 @@ static bool rxm_complete_sar(struct rxm_ep *rxm_ep,
 	case RXM_SAR_SEG_FIRST:
 		break;
 	case RXM_SAR_SEG_MIDDLE:
-		ofi_buf_free(tx_buf);
+		rxm_free_rx_buf(rxm_ep, tx_buf);
 		break;
 	case RXM_SAR_SEG_LAST:
 		first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->tx_pool,
 						tx_buf->pkt.ctrl_hdr.msg_id);
-		ofi_buf_free(first_tx_buf);
-		ofi_buf_free(tx_buf);
+		rxm_free_rx_buf(rxm_ep, first_tx_buf);
+		rxm_free_rx_buf(rxm_ep, tx_buf);
 		return true;
 	}
 
@@ -297,7 +297,7 @@ static void rxm_rndv_tx_finish(struct rxm_ep *rxm_ep,
 		tx_buf->write_rndv.done_buf = NULL;
 	}
 	ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
-	ofi_buf_free(tx_buf);
+	rxm_free_rx_buf(rxm_ep, tx_buf);
 }
 
 static void rxm_rndv_handle_rd_done(struct rxm_ep *rxm_ep,
@@ -1180,10 +1180,8 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	resp_buf = ofi_buf_alloc(rxm_ep->tx_pool);
 	if (!resp_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-			"Unable to allocate from Atomic buffer pool\n");
-		/* TODO: Should this be -FI_ENOMEM - how does it get
-		 * processed again */
-		return -FI_EAGAIN;
+			"Unable to allocate for atomic response\n");
+		return -FI_ENOMEM;
 	}
 
 	resp_buf->pkt.ctrl_hdr.type = rxm_ctrl_atomic;
@@ -1311,10 +1309,7 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 	}
 free:
 	rxm_rx_buf_free(rx_buf);
-	ofi_buf_free(tx_buf);
-	ofi_atomic_inc32(&rxm_ep->atomic_tx_credits);
-	assert(ofi_atomic_get32(&rxm_ep->atomic_tx_credits) <=
-	       rxm_ep->rxm_info->tx_attr->size);
+	rxm_free_rx_buf(rxm_ep, tx_buf);
 	return ret;
 
 write_err:
@@ -1373,7 +1368,7 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	case RXM_TX:
 		tx_buf = comp->op_context;
 		rxm_ep->eager_ops->comp_tx(rxm_ep, tx_buf);
-		ofi_buf_free(tx_buf);
+		rxm_free_rx_buf(rxm_ep, tx_buf);
 		return 0;
 	case RXM_CREDIT_TX:
 		tx_buf = comp->op_context;
@@ -1722,7 +1717,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		tx_buf = err_entry.op_context;
 		err_entry.op_context = tx_buf->app_context;
 		err_entry.flags = ofi_tx_cq_flags(tx_buf->pkt.hdr.op);
-		ofi_buf_free(tx_buf);
+		rxm_free_rx_buf(rxm_ep, tx_buf);
 		break;
 	case RXM_INJECT_TX:
 		assert(0);
@@ -1735,7 +1730,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		    rxm_ep->msg_mr_local) {
 			rxm_msg_mr_closev(tx_buf->rma.mr, tx_buf->rma.count);
 		}
-		ofi_buf_free(tx_buf);
+		rxm_free_rx_buf(rxm_ep, tx_buf);
 		break;
 	case RXM_SAR_TX:
 		tx_buf = err_entry.op_context;

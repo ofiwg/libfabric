@@ -81,7 +81,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 	if (OFI_UNLIKELY(ret))
 		goto unlock;
 
-	rma_buf = ofi_buf_alloc(rxm_ep->tx_pool);
+	rma_buf = rxm_get_tx_buf(rxm_ep);
 	if (!rma_buf) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -102,13 +102,13 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 	msg_rma.context = rma_buf;
 
 	ret = rma_msg(rxm_conn->msg_ep, &msg_rma, flags);
-	if (OFI_LIKELY(!ret))
+	if (!ret)
 		goto unlock;
 
 	if ((rxm_ep->msg_mr_local) && (!rxm_ep->rdm_mr_local))
 		rxm_msg_mr_closev(rma_buf->rma.mr, rma_buf->rma.count);
 release:
-	ofi_buf_free(rma_buf);
+	rxm_free_rx_buf(rxm_ep, rma_buf);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -224,7 +224,7 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
-	rma_buf = ofi_buf_alloc(rxm_ep->tx_pool);
+	rma_buf = rxm_get_tx_buf(rxm_ep);
 	if (!rma_buf)
 		return -FI_EAGAIN;
 
@@ -238,10 +238,10 @@ rxm_ep_rma_emulate_inject_msg(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	flags = (flags & ~FI_INJECT) | FI_COMPLETION;
 
 	ret = fi_writemsg(rxm_conn->msg_ep, &rxm_rma_msg, flags);
-	if (OFI_UNLIKELY(ret)) {
+	if (ret) {
 		if (ret == -FI_EAGAIN)
 			rxm_ep_do_progress(&rxm_ep->util_ep);
-		ofi_buf_free(rma_buf);
+		rxm_free_rx_buf(rxm_ep, rma_buf);
 	}
 	return ret;
 }
