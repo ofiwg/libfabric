@@ -667,6 +667,12 @@ The follow flag may be specified to any memory registration call.
   specified if persistent completion semantics or persistent data transfers
   are required when accessing the registered region.
 
+*FI_HMEM_DEVICE_ONLY*
+: This flag indicates that the memory is only accessible by a device. Which
+  device is specified by the fi_mr_attr fields iface and device. This refers
+  to memory regions that were allocated using a device API AllocDevice call
+  (as opposed to using the host allocation or unified/shared memory allocation). 
+
 # MEMORY DOMAINS
 
 Memory domains identify the physical separation of memory which
