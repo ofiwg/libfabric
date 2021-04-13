@@ -1380,7 +1380,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 static bool
 rxm_use_direct_send(struct rxm_ep *ep, size_t iov_count, uint64_t flags)
 {
-	return ep->enable_direct_send && !(flags & FI_INJECT) &&
+	return ep->enable_direct_send &&
 		(iov_count < ep->msg_info->tx_attr->iov_limit);
 }
 
@@ -2618,13 +2618,19 @@ disable_sar:
 	rxm_ep->sar_limit = rxm_eager_limit;
 }
 
+/* Direct send works with verbs, provided that msg_mr_local == rdm_mr_local.
+ * However, it fails consistently on HFI, with the receiving side getting
+ * corrupted data beyond the first iov.  Only enable if MR_LOCAL is not
+ * required (feature of tcp provider).
+ */
 static void rxm_config_direct_send(struct rxm_ep *ep)
 {
-	int ret = 0;
+	int ret = 1;
 
-	if (ep->msg_mr_local == ep->rdm_mr_local)
-		fi_param_get_bool(&rxm_prov, "enable_direct_send", &ret);
+	if (ep->msg_mr_local)
+		return;
 
+	fi_param_get_bool(&rxm_prov, "enable_direct_send", &ret);
 	ep->enable_direct_send = (ret != 0);
 }
 
