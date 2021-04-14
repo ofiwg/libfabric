@@ -1268,11 +1268,6 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	struct rxm_tx_buf *tx_buf;
 	ssize_t ret;
-	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
-	const struct iovec iov = {
-		.iov_base = (void *)buf,
-		.iov_len = len,
-	};
 
 	tx_buf = rxm_get_tx_buf(rxm_ep);
 	if (!tx_buf)
@@ -1280,16 +1275,13 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	tx_buf->hdr.state = RXM_TX;
 	tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_eager;
-	/* This is needed so that we don't report bogus context in fi_cq_err_entry */
+	/* avoid reporting bogus context in fi_cq_err_entry */
 	tx_buf->app_context = NULL;
-
-	rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag, flags, &tx_buf->pkt);
-
-	ret = ofi_copy_from_hmem_iov(tx_buf->pkt.data, len, iface, 0, &iov, 1,
-				     0);
-	assert(ret == len);
-
 	tx_buf->flags = flags;
+
+	rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag, flags,
+				 &tx_buf->pkt);
+	memcpy(tx_buf->pkt.data, buf, len);
 
 	ret = rxm_ep_msg_normal_send(rxm_conn, &tx_buf->pkt, pkt_size,
 				     tx_buf->hdr.desc, tx_buf);
