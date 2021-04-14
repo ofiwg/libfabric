@@ -1911,12 +1911,16 @@ static ssize_t rxm_ep_inject_fast(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
-		return ret;
+		goto unlock;
 
-	return rxm_ep_inject_send_fast(rxm_ep, rxm_conn, buf, len,
-				       rxm_conn->inject_pkt);
+	ret = rxm_ep_inject_send_fast(rxm_ep, rxm_conn, buf, len,
+				      rxm_conn->inject_pkt);
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 static ssize_t rxm_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -1974,14 +1978,18 @@ static ssize_t rxm_ep_injectdata_fast(struct fid_ep *ep_fid, const void *buf, si
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
-		return ret;
+		goto unlock;
 
 	rxm_conn->inject_data_pkt->hdr.data = data;
 
-	return rxm_ep_inject_send_fast(rxm_ep, rxm_conn, buf, len,
-				       rxm_conn->inject_data_pkt);
+	ret = rxm_ep_inject_send_fast(rxm_ep, rxm_conn, buf, len,
+				      rxm_conn->inject_data_pkt);
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 static struct fi_ops_msg rxm_ops_msg = {
@@ -2261,14 +2269,18 @@ static ssize_t rxm_ep_tinject_fast(struct fid_ep *ep_fid, const void *buf, size_
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
-		return ret;
+		goto unlock;
 
 	rxm_conn->tinject_pkt->hdr.tag = tag;
 
-	return rxm_ep_inject_send_fast(rxm_ep, rxm_conn, buf, len,
-				       rxm_conn->tinject_pkt);
+	ret = rxm_ep_inject_send_fast(rxm_ep, rxm_conn, buf, len,
+				      rxm_conn->tinject_pkt);
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 static ssize_t rxm_ep_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
@@ -2326,15 +2338,19 @@ static ssize_t rxm_ep_tinjectdata_fast(struct fid_ep *ep_fid, const void *buf, s
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
+	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
-		return ret;
+		goto unlock;
 
 	rxm_conn->tinject_data_pkt->hdr.tag = tag;
 	rxm_conn->tinject_data_pkt->hdr.data = data;
 
-	return rxm_ep_inject_send_fast(rxm_ep, rxm_conn, buf, len,
-				       rxm_conn->tinject_data_pkt);
+	ret = rxm_ep_inject_send_fast(rxm_ep, rxm_conn, buf, len,
+				      rxm_conn->tinject_data_pkt);
+unlock:
+	ofi_ep_lock_release(&rxm_ep->util_ep);
+	return ret;
 }
 
 static struct fi_ops_tagged rxm_ops_tagged = {
