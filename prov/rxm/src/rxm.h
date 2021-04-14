@@ -684,6 +684,7 @@ struct rxm_ep {
 
 	struct ofi_bufpool	*rx_pool;
 	struct ofi_bufpool	*tx_pool;
+	struct rxm_pkt		*inject_pkt;
 
 	struct dlist_entry	repost_ready_list;
 	struct dlist_entry	deferred_tx_conn_queue;
@@ -702,11 +703,6 @@ struct rxm_conn {
 	struct rxm_cmap_handle handle;
 
 	struct fid_ep *msg_ep;
-
-	struct rxm_pkt *inject_pkt;
-	struct rxm_pkt *inject_data_pkt;
-	struct rxm_pkt *tinject_pkt;
-	struct rxm_pkt *tinject_data_pkt;
 
 	struct dlist_entry deferred_conn_entry;
 	struct dlist_entry deferred_tx_queue;

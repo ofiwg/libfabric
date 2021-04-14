@@ -1052,9 +1052,11 @@ rxm_ep_rndv_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_TX);
 	if (pkt_size <= rxm_ep->inject_limit) {
 		if (rxm_ep->rndv_ops == &rxm_rndv_ops_write)
-			RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_WRITE_DATA_WAIT);
+			RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf,
+					 RXM_RNDV_WRITE_DATA_WAIT);
 		else
-			RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_READ_DONE_WAIT);
+			RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf,
+					 RXM_RNDV_READ_DONE_WAIT);
 
 		ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
 	} else {
@@ -1300,7 +1302,6 @@ rxm_use_msg_tinject(struct rxm_ep *ep, uint8_t op)
 
 	domain = container_of(ep->util_ep.domain, struct rxm_domain,
 			      util_domain);
-
 	return domain->dyn_rbuf && (op == ofi_op_tagged);
 }
 
@@ -1315,13 +1316,15 @@ rxm_msg_tinject(struct fid_ep *msg_ep, const void *buf, size_t len,
 
 static ssize_t
 rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		   const void *buf, size_t len, struct rxm_pkt *inject_pkt)
+		   const void *buf, size_t len)
 {
-	size_t pkt_size = sizeof(struct rxm_pkt) + len;
+	struct rxm_pkt *inject_pkt = rxm_ep->inject_pkt;
+	size_t pkt_size = sizeof(*inject_pkt) + len;
 	ssize_t ret;
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
+	inject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
 		if (rxm_use_msg_tinject(rxm_ep, inject_pkt->hdr.op)) {
 			return rxm_msg_tinject(rxm_conn->msg_ep, buf, len,
@@ -1849,8 +1852,12 @@ static ssize_t rxm_ep_inject(struct fid_ep *ep_fid, const void *buf,
 	if (ret)
 		goto unlock;
 
-	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len,
-				 rxm_conn->inject_pkt);
+	rxm_ep->inject_pkt->hdr.op = ofi_op_msg;
+	rxm_ep->inject_pkt->hdr.flags = 0;
+	rxm_ep->inject_pkt->hdr.tag = 0;
+	rxm_ep->inject_pkt->hdr.data = 0;
+
+	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -1896,10 +1903,12 @@ rxm_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (ret)
 		goto unlock;
 
-	rxm_conn->inject_data_pkt->hdr.data = data;
+	rxm_ep->inject_pkt->hdr.op = ofi_op_msg;
+	rxm_ep->inject_pkt->hdr.flags = FI_REMOTE_CQ_DATA;
+	rxm_ep->inject_pkt->hdr.tag = 0;
+	rxm_ep->inject_pkt->hdr.data = data;
 
-	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len,
-				 rxm_conn->inject_data_pkt);
+	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2155,10 +2164,12 @@ rxm_ep_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (ret)
 		goto unlock;
 
-	rxm_conn->tinject_pkt->hdr.tag = tag;
+	rxm_ep->inject_pkt->hdr.op = ofi_op_tagged;
+	rxm_ep->inject_pkt->hdr.flags = 0;
+	rxm_ep->inject_pkt->hdr.tag = tag;
+	rxm_ep->inject_pkt->hdr.data = 0;
 
-	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len,
-				 rxm_conn->tinject_pkt);
+	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2204,11 +2215,12 @@ rxm_ep_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (ret)
 		goto unlock;
 
-	rxm_conn->tinject_data_pkt->hdr.tag = tag;
-	rxm_conn->tinject_data_pkt->hdr.data = data;
+	rxm_ep->inject_pkt->hdr.op = ofi_op_tagged;
+	rxm_ep->inject_pkt->hdr.flags = FI_REMOTE_CQ_DATA;
+	rxm_ep->inject_pkt->hdr.tag = tag;
+	rxm_ep->inject_pkt->hdr.data = data;
 
-	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len,
-				 rxm_conn->tinject_data_pkt);
+	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2320,6 +2332,7 @@ static int rxm_ep_close(struct fid *fid)
 		}
 	}
 
+	free(rxm_ep->inject_pkt);
 	ofi_endpoint_close(&rxm_ep->util_ep);
 	fi_freeinfo(rxm_ep->rxm_info);
 	free(rxm_ep);
@@ -2551,14 +2564,11 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
 		"\t\t Completions per progress: MSG - %zu\n"
 	        "\t\t Buffered min: %zu\n"
 	        "\t\t Min multi recv size: %zu\n"
-	        "\t\t FI_EP_MSG provider inject size: %zu\n"
-	        "\t\t rxm inject size: %zu\n"
-		"\t\t Protocol limits: Eager: %zu, "
-				      "SAR: %zu\n",
+	        "\t\t inject size: %zu\n"
+		"\t\t Protocol limits: Eager: %zu, SAR: %zu\n",
 		rxm_ep->msg_mr_local, rxm_ep->rdm_mr_local,
 		rxm_ep->comp_per_progress, rxm_ep->buffered_min,
 		rxm_ep->min_multi_recv_size, rxm_ep->inject_limit,
-		rxm_ep->rxm_info->tx_attr->inject_size,
 		rxm_eager_limit, rxm_ep->sar_limit);
 }
 
@@ -2871,7 +2881,6 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 					&rxm_ep->util_ep, context,
 					&rxm_ep_progress);
 	}
-
 	if (ret)
 		goto err1;
 
@@ -2880,6 +2889,16 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err2;
 
 	rxm_ep_settings_init(rxm_ep);
+
+	rxm_ep->inject_pkt = calloc(1, sizeof(*rxm_ep->inject_pkt) +
+				       rxm_ep->inject_limit);
+	if (!rxm_ep->inject_pkt) {
+		ret = -FI_ENOMEM;
+		goto err2;
+	}
+	rxm_ep->inject_pkt->ctrl_hdr.version = RXM_CTRL_VERSION;
+	rxm_ep->inject_pkt->ctrl_hdr.type = rxm_ctrl_eager;
+	rxm_ep->inject_pkt->hdr.version = OFI_OP_VERSION;
 
 	*ep_fid = &rxm_ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &rxm_ep_fi_ops;

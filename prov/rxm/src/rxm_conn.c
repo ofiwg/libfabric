@@ -231,65 +231,6 @@ rxm_cmap_check_and_realloc_handles_table(struct rxm_cmap *cmap,
 	return 0;
 }
 
-static struct rxm_pkt *
-rxm_conn_inject_pkt_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-			  uint8_t op, uint64_t flags)
-{
-	struct rxm_pkt *inject_pkt;
-	int ret = ofi_memalign((void **) &inject_pkt, 16,
-			       rxm_ep->inject_limit + sizeof(*inject_pkt));
-
-	if (ret)
-		return NULL;
-
-	memset(inject_pkt, 0, rxm_ep->inject_limit + sizeof(*inject_pkt));
-	inject_pkt->ctrl_hdr.version = RXM_CTRL_VERSION;
-	inject_pkt->ctrl_hdr.type = rxm_ctrl_eager;
-	inject_pkt->hdr.version = OFI_OP_VERSION;
-	inject_pkt->hdr.op = op;
-	inject_pkt->hdr.flags = flags;
-
-	return inject_pkt;
-}
-
-static void rxm_conn_res_free(struct rxm_conn *rxm_conn)
-{
-	ofi_freealign(rxm_conn->inject_pkt);
-	rxm_conn->inject_pkt = NULL;
-	ofi_freealign(rxm_conn->inject_data_pkt);
-	rxm_conn->inject_data_pkt = NULL;
-	ofi_freealign(rxm_conn->tinject_pkt);
-	rxm_conn->tinject_pkt = NULL;
-	ofi_freealign(rxm_conn->tinject_data_pkt);
-	rxm_conn->tinject_data_pkt = NULL;
-}
-
-static int rxm_conn_res_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
-{
-	dlist_init(&rxm_conn->deferred_conn_entry);
-	dlist_init(&rxm_conn->deferred_tx_queue);
-	dlist_init(&rxm_conn->sar_rx_msg_list);
-	dlist_init(&rxm_conn->sar_deferred_rx_msg_list);
-
-	rxm_conn->inject_pkt = rxm_conn_inject_pkt_alloc(rxm_ep, rxm_conn,
-						ofi_op_msg, 0);
-	rxm_conn->inject_data_pkt = rxm_conn_inject_pkt_alloc(rxm_ep, rxm_conn,
-						ofi_op_msg, FI_REMOTE_CQ_DATA);
-	rxm_conn->tinject_pkt = rxm_conn_inject_pkt_alloc(rxm_ep, rxm_conn,
-						ofi_op_tagged, 0);
-	rxm_conn->tinject_data_pkt = rxm_conn_inject_pkt_alloc(rxm_ep, rxm_conn,
-						ofi_op_tagged, FI_REMOTE_CQ_DATA);
-
-	if (!rxm_conn->inject_pkt || !rxm_conn->inject_data_pkt ||
-	    !rxm_conn->tinject_pkt || !rxm_conn->tinject_data_pkt) {
-		rxm_conn_res_free(rxm_conn);
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to allocate "
-			"inject pkt for connection\n");
-		return -FI_ENOMEM;
-	}
-	return 0;
-}
-
 static void rxm_conn_close(struct rxm_cmap_handle *handle)
 {
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
@@ -330,7 +271,6 @@ static void rxm_conn_free(struct rxm_cmap_handle *handle)
 	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	rxm_conn_close(handle);
-	rxm_conn_res_free(rxm_conn);
 	free(rxm_conn);
 }
 
@@ -508,11 +448,6 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 		assert(handle->state == RXM_CMAP_CONNREQ_RECV);
 	}
 	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNECTED);
-
-	rxm_conn->inject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
-	rxm_conn->inject_data_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
-	rxm_conn->tinject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
-	rxm_conn->tinject_data_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 }
 
 void rxm_cmap_process_reject(struct rxm_cmap *cmap,
@@ -983,10 +918,10 @@ static struct rxm_cmap_handle *rxm_conn_alloc(struct rxm_cmap *cmap)
 	if (!rxm_conn)
 		return NULL;
 
-	if (rxm_conn_res_alloc(cmap->ep, rxm_conn)) {
-		free(rxm_conn);
-		return NULL;
-	}
+	dlist_init(&rxm_conn->deferred_conn_entry);
+	dlist_init(&rxm_conn->deferred_tx_queue);
+	dlist_init(&rxm_conn->sar_rx_msg_list);
+	dlist_init(&rxm_conn->sar_deferred_rx_msg_list);
 
 	return &rxm_conn->handle;
 }
