@@ -113,9 +113,11 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	}
 
 	/* One slot must be reserved to support hardware generated state change
-	 * events.
+	 * events. In addition, reserve enough EQ space for the worse case
+	 * scenario where the RX CQ is full and each command will return an
+	 * event.
 	 */
-	reserved_event_slots = 1;
+	reserved_event_slots = 1 + rxc->rx_cmdq->dev_cmdq->size;
 	ret = cxip_cq_adjust_rx_reserved_event_slots(rxc->recv_cq,
 						     reserved_event_slots,
 						     &adjusted_amount);

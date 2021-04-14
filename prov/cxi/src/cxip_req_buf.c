@@ -447,7 +447,7 @@ struct cxip_req_buf *cxip_req_buf_alloc(struct cxip_rxc *rxc)
 	if (ret)
 		goto err_unreg_buf;
 
-	buf->req = cxip_cq_req_alloc(rxc->recv_cq, true, buf);
+	buf->req = cxip_cq_req_alloc(rxc->recv_cq, true, buf, false);
 	if (!buf->req) {
 		ret = -FI_ENOMEM;
 		goto err_unmap_buf;

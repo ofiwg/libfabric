@@ -3873,7 +3873,7 @@ Test(tagged, fc_too_many_recv_early_close)
 	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
 	cr_assert(recv_buf);
 
-	for (i = 0; i < 100; i++) {
+	for (i = 0; i < 50; i++) {
 		ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
 			       FI_ADDR_UNSPEC, 0xa, 0, NULL);
 		assert(ret == FI_SUCCESS);

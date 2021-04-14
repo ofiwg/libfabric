@@ -834,6 +834,8 @@ struct cxip_cq {
 	fastlock_t req_lock;
 	struct ofi_bufpool *req_pool;
 	struct indexer req_table;
+	unsigned int req_table_progress_counter;
+	ofi_atomic32_t req_table_progress_counter_limit;
 	struct dlist_entry req_list;
 
 	struct ofi_bufpool *ibuf_pool;
@@ -1724,7 +1726,7 @@ int cxip_cq_req_error(struct cxip_req *req, size_t olen,
 		      int err, int prov_errno, void *err_data,
 		      size_t err_data_size);
 struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
-				   void *req_ctx);
+				   void *req_ctx, bool remap_progress);
 void cxip_cq_req_free(struct cxip_req *req);
 void cxip_cq_progress(struct cxip_cq *cq);
 int cxip_cq_enable(struct cxip_cq *cxi_cq);
