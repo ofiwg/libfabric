@@ -271,27 +271,21 @@ static int rxm_conn_res_alloc(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn)
 	dlist_init(&rxm_conn->sar_rx_msg_list);
 	dlist_init(&rxm_conn->sar_deferred_rx_msg_list);
 
-	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
-		rxm_conn->inject_pkt =
-			rxm_conn_inject_pkt_alloc(rxm_ep, rxm_conn,
-						  ofi_op_msg, 0);
-		rxm_conn->inject_data_pkt =
-			rxm_conn_inject_pkt_alloc(rxm_ep, rxm_conn,
-						  ofi_op_msg, FI_REMOTE_CQ_DATA);
-		rxm_conn->tinject_pkt =
-			rxm_conn_inject_pkt_alloc(rxm_ep, rxm_conn,
-						  ofi_op_tagged, 0);
-		rxm_conn->tinject_data_pkt =
-			rxm_conn_inject_pkt_alloc(rxm_ep, rxm_conn,
-						  ofi_op_tagged, FI_REMOTE_CQ_DATA);
+	rxm_conn->inject_pkt = rxm_conn_inject_pkt_alloc(rxm_ep, rxm_conn,
+						ofi_op_msg, 0);
+	rxm_conn->inject_data_pkt = rxm_conn_inject_pkt_alloc(rxm_ep, rxm_conn,
+						ofi_op_msg, FI_REMOTE_CQ_DATA);
+	rxm_conn->tinject_pkt = rxm_conn_inject_pkt_alloc(rxm_ep, rxm_conn,
+						ofi_op_tagged, 0);
+	rxm_conn->tinject_data_pkt = rxm_conn_inject_pkt_alloc(rxm_ep, rxm_conn,
+						ofi_op_tagged, FI_REMOTE_CQ_DATA);
 
-		if (!rxm_conn->inject_pkt || !rxm_conn->inject_data_pkt ||
-		    !rxm_conn->tinject_pkt || !rxm_conn->tinject_data_pkt) {
-			rxm_conn_res_free(rxm_conn);
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to allocate "
-				"inject pkt for connection\n");
-			return -FI_ENOMEM;
-		}
+	if (!rxm_conn->inject_pkt || !rxm_conn->inject_data_pkt ||
+	    !rxm_conn->tinject_pkt || !rxm_conn->tinject_data_pkt) {
+		rxm_conn_res_free(rxm_conn);
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to allocate "
+			"inject pkt for connection\n");
+		return -FI_ENOMEM;
 	}
 	return 0;
 }
@@ -515,13 +509,10 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 	}
 	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNECTED);
 
-	/* Set the remote key to the inject packets */
-	if (cmap->ep->util_ep.domain->threading != FI_THREAD_SAFE) {
-		rxm_conn->inject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
-		rxm_conn->inject_data_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
-		rxm_conn->tinject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
-		rxm_conn->tinject_data_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
-	}
+	rxm_conn->inject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
+	rxm_conn->inject_data_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
+	rxm_conn->tinject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
+	rxm_conn->tinject_data_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
 }
 
 void rxm_cmap_process_reject(struct rxm_cmap *cmap,

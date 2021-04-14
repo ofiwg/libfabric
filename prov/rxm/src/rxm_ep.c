@@ -1322,8 +1322,8 @@ rxm_msg_tinject(struct fid_ep *msg_ep, const void *buf, size_t len,
 }
 
 static ssize_t
-rxm_ep_inject_send_fast(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-			const void *buf, size_t len, struct rxm_pkt *inject_pkt)
+rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		   const void *buf, size_t len, struct rxm_pkt *inject_pkt)
 {
 	size_t pkt_size = sizeof(struct rxm_pkt) + len;
 	ssize_t ret;
@@ -1349,44 +1349,6 @@ rxm_ep_inject_send_fast(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					    inject_pkt->hdr.tag,
 					    inject_pkt->hdr.op);
 	}
-	return ret;
-}
-
-static ssize_t
-rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
-		   const void *buf, size_t len, uint64_t data,
-		   uint64_t flags, uint64_t tag, uint8_t op)
-{
-	struct rxm_tx_buf *tx_buf;
-	size_t pkt_size = sizeof(struct rxm_pkt) + len;
-	ssize_t ret;
-
-	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
-
-	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
-		if (rxm_use_msg_tinject(rxm_ep, op)) {
-			return rxm_msg_tinject(rxm_conn->msg_ep, buf, len,
-					       flags & FI_REMOTE_CQ_DATA,
-					       data, tag);
-		}
-
-		tx_buf = rxm_get_tx_buf(rxm_ep);
-		if (!tx_buf)
-			return -FI_EAGAIN;
-
-		tx_buf->hdr.state = RXM_INJECT_TX;
-		tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_eager;
-		rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag,
-					 flags, &tx_buf->pkt);
-		memcpy(tx_buf->pkt.data, buf, len);
-
-		ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
-		rxm_free_rx_buf(rxm_ep, tx_buf);
-	} else {
-		ret = rxm_ep_emulate_inject(rxm_ep, rxm_conn, buf, len,
-					    pkt_size, data, flags, tag, op);
-	}
-
 	return ret;
 }
 
@@ -1882,8 +1844,8 @@ unlock:
 	return ret;
 }
 
-static ssize_t rxm_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
-			     fi_addr_t dest_addr)
+static ssize_t rxm_ep_inject(struct fid_ep *ep_fid, const void *buf,
+			     size_t len, fi_addr_t dest_addr)
 {
 	struct rxm_conn *rxm_conn;
 	struct rxm_ep *rxm_ep;
@@ -1895,29 +1857,8 @@ static ssize_t rxm_ep_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	if (ret)
 		goto unlock;
 
-	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len, 0,
-				  rxm_ep->util_ep.inject_op_flags,
-				  0, ofi_op_msg);
-unlock:
-	ofi_ep_lock_release(&rxm_ep->util_ep);
-	return ret;
-}
-
-static ssize_t rxm_ep_inject_fast(struct fid_ep *ep_fid, const void *buf,
-				  size_t len, fi_addr_t dest_addr)
-{
-	struct rxm_conn *rxm_conn;
-	struct rxm_ep *rxm_ep;
-	ssize_t ret;
-
-	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
-	if (ret)
-		goto unlock;
-
-	ret = rxm_ep_inject_send_fast(rxm_ep, rxm_conn, buf, len,
-				      rxm_conn->inject_pkt);
+	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len,
+				 rxm_conn->inject_pkt);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -1949,29 +1890,9 @@ unlock:
 	return ret;
 }
 
-static ssize_t rxm_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
-				 uint64_t data, fi_addr_t dest_addr)
-{
-	struct rxm_conn *rxm_conn;
-	struct rxm_ep *rxm_ep;
-	ssize_t ret;
-
-	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
-	if (ret)
-		goto unlock;
-
-	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len, data,
-				  rxm_ep->util_ep.inject_op_flags |
-				  FI_REMOTE_CQ_DATA, 0, ofi_op_msg);
-unlock:
-	ofi_ep_lock_release(&rxm_ep->util_ep);
-	return ret;
-}
-
-static ssize_t rxm_ep_injectdata_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
-				      uint64_t data, fi_addr_t dest_addr)
+static ssize_t
+rxm_ep_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
+		  uint64_t data, fi_addr_t dest_addr)
 {
 	struct rxm_conn *rxm_conn;
 	struct rxm_ep *rxm_ep;
@@ -1985,8 +1906,8 @@ static ssize_t rxm_ep_injectdata_fast(struct fid_ep *ep_fid, const void *buf, si
 
 	rxm_conn->inject_data_pkt->hdr.data = data;
 
-	ret = rxm_ep_inject_send_fast(rxm_ep, rxm_conn, buf, len,
-				      rxm_conn->inject_data_pkt);
+	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len,
+				 rxm_conn->inject_data_pkt);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2005,18 +1926,6 @@ static struct fi_ops_msg rxm_ops_msg = {
 	.injectdata = rxm_ep_injectdata,
 };
 
-static struct fi_ops_msg rxm_ops_msg_thread_unsafe = {
-	.size = sizeof(struct fi_ops_msg),
-	.recv = rxm_ep_recv,
-	.recvv = rxm_ep_recvv,
-	.recvmsg = rxm_ep_recvmsg,
-	.send = rxm_ep_send,
-	.sendv = rxm_ep_sendv,
-	.sendmsg = rxm_ep_sendmsg,
-	.inject = rxm_ep_inject_fast,
-	.senddata = rxm_ep_senddata,
-	.injectdata = rxm_ep_injectdata_fast,
-};
 
 static ssize_t
 rxm_ep_post_trecv(struct rxm_ep *rxm_ep, const struct iovec *iov,
@@ -2240,29 +2149,9 @@ unlock:
 	return ret;
 }
 
-static ssize_t rxm_ep_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
-			      fi_addr_t dest_addr, uint64_t tag)
-{
-	struct rxm_conn *rxm_conn;
-	struct rxm_ep *rxm_ep;
-	ssize_t ret;
-
-	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
-	if (ret)
-		goto unlock;
-
-	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len, 0,
-				  rxm_ep->util_ep.inject_op_flags, tag,
-				  ofi_op_tagged);
-unlock:
-	ofi_ep_lock_release(&rxm_ep->util_ep);
-	return ret;
-}
-
-static ssize_t rxm_ep_tinject_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
-				   fi_addr_t dest_addr, uint64_t tag)
+static ssize_t
+rxm_ep_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
+	       fi_addr_t dest_addr, uint64_t tag)
 {
 	struct rxm_conn *rxm_conn;
 	struct rxm_ep *rxm_ep;
@@ -2276,8 +2165,8 @@ static ssize_t rxm_ep_tinject_fast(struct fid_ep *ep_fid, const void *buf, size_
 
 	rxm_conn->tinject_pkt->hdr.tag = tag;
 
-	ret = rxm_ep_inject_send_fast(rxm_ep, rxm_conn, buf, len,
-				      rxm_conn->tinject_pkt);
+	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len,
+				 rxm_conn->tinject_pkt);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2309,29 +2198,9 @@ unlock:
 	return ret;
 }
 
-static ssize_t rxm_ep_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
-				  uint64_t data, fi_addr_t dest_addr, uint64_t tag)
-{
-	struct rxm_conn *rxm_conn;
-	struct rxm_ep *rxm_ep;
-	ssize_t ret;
-
-	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
-	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
-	if (ret)
-		goto unlock;
-
-	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len, data,
-				  rxm_ep->util_ep.inject_op_flags |
-				  FI_REMOTE_CQ_DATA, tag, ofi_op_tagged);
-unlock:
-	ofi_ep_lock_release(&rxm_ep->util_ep);
-	return ret;
-}
-
-static ssize_t rxm_ep_tinjectdata_fast(struct fid_ep *ep_fid, const void *buf, size_t len,
-				       uint64_t data, fi_addr_t dest_addr, uint64_t tag)
+static ssize_t
+rxm_ep_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
+		   uint64_t data, fi_addr_t dest_addr, uint64_t tag)
 {
 	struct rxm_conn *rxm_conn;
 	struct rxm_ep *rxm_ep;
@@ -2346,8 +2215,8 @@ static ssize_t rxm_ep_tinjectdata_fast(struct fid_ep *ep_fid, const void *buf, s
 	rxm_conn->tinject_data_pkt->hdr.tag = tag;
 	rxm_conn->tinject_data_pkt->hdr.data = data;
 
-	ret = rxm_ep_inject_send_fast(rxm_ep, rxm_conn, buf, len,
-				      rxm_conn->tinject_data_pkt);
+	ret = rxm_ep_inject_send(rxm_ep, rxm_conn, buf, len,
+				 rxm_conn->tinject_data_pkt);
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);
 	return ret;
@@ -2364,19 +2233,6 @@ static struct fi_ops_tagged rxm_ops_tagged = {
 	.inject = rxm_ep_tinject,
 	.senddata = rxm_ep_tsenddata,
 	.injectdata = rxm_ep_tinjectdata,
-};
-
-static struct fi_ops_tagged rxm_ops_tagged_thread_unsafe = {
-	.size = sizeof(struct fi_ops_tagged),
-	.recv = rxm_ep_trecv,
-	.recvv = rxm_ep_trecvv,
-	.recvmsg = rxm_ep_trecvmsg,
-	.send = rxm_ep_tsend,
-	.sendv = rxm_ep_tsendv,
-	.sendmsg = rxm_ep_tsendmsg,
-	.inject = rxm_ep_tinject_fast,
-	.senddata = rxm_ep_tsenddata,
-	.injectdata = rxm_ep_tinjectdata_fast,
 };
 
 static struct fi_ops_collective rxm_ops_collective = {
@@ -3052,13 +2908,8 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		rxm_ep->rndv_ops = &rxm_rndv_ops_read;
 	dlist_init(&rxm_ep->rndv_wait_list);
 
-	if (rxm_ep->util_ep.domain->threading != FI_THREAD_SAFE) {
-		(*ep_fid)->msg = &rxm_ops_msg_thread_unsafe;
-		(*ep_fid)->tagged = &rxm_ops_tagged_thread_unsafe;
-	} else {
-		(*ep_fid)->msg = &rxm_ops_msg;
-		(*ep_fid)->tagged = &rxm_ops_tagged;
-	}
+	(*ep_fid)->msg = &rxm_ops_msg;
+	(*ep_fid)->tagged = &rxm_ops_tagged;
 	(*ep_fid)->rma = &rxm_ops_rma;
 
 	if (rxm_ep->rxm_info->caps & FI_ATOMIC)

@@ -703,7 +703,6 @@ struct rxm_conn {
 
 	struct fid_ep *msg_ep;
 
-	/* This is used only in non-FI_THREAD_SAFE case */
 	struct rxm_pkt *inject_pkt;
 	struct rxm_pkt *inject_data_pkt;
 	struct rxm_pkt *tinject_pkt;
