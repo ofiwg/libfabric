@@ -298,8 +298,6 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 	int ret = 0;
 	struct rxr_peer *peer;
 	struct rxr_ep *rxr_ep;
-	struct util_ep *util_ep;
-	struct dlist_entry *ep_list_entry;
 	fi_addr_t shm_fiaddr;
 	char smr_name[NAME_MAX];
 
@@ -325,36 +323,26 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 	av_entry->rdm_addr = *fi_addr;
 	av_entry->local_mapping = 0;
 
+	/* currently multiple EP bind to same av is not supported */
+	rxr_ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
+
 	if (av->used + 1 > av->count) {
 		ret = efa_av_resize(av, av->count * 2);
 		if (ret)
 			goto out;
-		dlist_foreach(&av->util_av.ep_list, ep_list_entry) {
-			util_ep = container_of(ep_list_entry, struct util_ep,
-					       av_entry);
-			rxr_ep = container_of(util_ep, struct rxr_ep, util_ep);
-			ret = efa_peer_resize(rxr_ep, av->used,
-					      av->count);
-			if (ret)
-				goto out;
-		}
+
+		ret = efa_peer_resize(rxr_ep, av->used, av->count);
+		if (ret)
+			goto out;
 	}
 
-	/*
-	 * Walk through all the EPs that bound to the AV,
-	 * update is_self flag corresponding peer structure
-	 */
-	dlist_foreach(&av->util_av.ep_list, ep_list_entry) {
-		util_ep = container_of(ep_list_entry, struct util_ep, av_entry);
-		rxr_ep = container_of(util_ep, struct rxr_ep, util_ep);
-		peer = rxr_ep_get_peer(rxr_ep, *fi_addr);
-		peer->efa_fiaddr = *fi_addr;
-		peer->is_self = efa_is_same_addr((struct efa_ep_addr *)rxr_ep->core_addr,
-						 addr);
-	}
+	peer = rxr_ep_get_peer(rxr_ep, *fi_addr);
+	peer->efa_fiaddr = *fi_addr;
+	peer->is_self = efa_is_same_addr((struct efa_ep_addr *)rxr_ep->core_addr,
+					 addr);
 
 	/* If peer is local, insert the address into shm provider's av */
-	if (rxr_env.enable_shm_transfer && efa_is_local_peer(av, addr)) {
+	if (rxr_ep->use_shm && efa_is_local_peer(av, addr)) {
 		if (av->shm_used >= rxr_env.shm_av_size) {
 			ret = -FI_ENOMEM;
 			EFA_WARN(FI_LOG_AV,
@@ -387,19 +375,9 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 		av_entry->shm_rdm_addr = shm_fiaddr;
 		av->shm_rdm_addr_map[shm_fiaddr] = av_entry->rdm_addr;
 
-		/*
-		 * Walk through all the EPs that bound to the AV,
-		 * update is_local flag and shm fi_addr_t in corresponding peer structure
-		 */
-		dlist_foreach(&av->util_av.ep_list, ep_list_entry) {
-			util_ep = container_of(ep_list_entry, struct util_ep, av_entry);
-			rxr_ep = container_of(util_ep, struct rxr_ep, util_ep);
-			if (rxr_ep->use_shm) {
-				peer = rxr_ep_get_peer(rxr_ep, *fi_addr);
-				peer->shm_fiaddr = shm_fiaddr;
-				peer->is_local = 1;
-			}
-		}
+		peer = rxr_ep_get_peer(rxr_ep, *fi_addr);
+		peer->shm_fiaddr = shm_fiaddr;
+		peer->is_local = 1;
 	}
 	ret = efa_av_insert_ah(av, addr, fi_addr,
 			       flags, context);
@@ -575,7 +553,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	struct util_av_entry *util_av_entry;
 	struct efa_av_entry *av_entry;
 	struct rxr_peer *peer;
-	struct dlist_entry *ep_list_entry;
+	struct rxr_ep *rxr_ep;
 
 	av = container_of(av_fid, struct efa_av, util_av.av_fid);
 	if (av->ep_type == FI_EP_DGRAM) {
@@ -588,6 +566,8 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		goto out;
 	}
 	fastlock_acquire(&av->util_av.lock);
+	/* currently multiple EP bind to same av is not supported */
+	rxr_ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
 	for (i = 0; i < count; i++) {
 		if (fi_addr[i] == FI_ADDR_NOTAVAIL ||
 		    fi_addr[i] > av->count) {
@@ -610,21 +590,17 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			goto release_lock;
 		}
 		av_entry = (struct efa_av_entry *)util_av_entry->data;
+		peer = rxr_ep_get_peer(rxr_ep, fi_addr[i]);
 
 		/* Check if the peer is in use if it is then return */
-		dlist_foreach(&av->util_av.ep_list, ep_list_entry) {
-			peer = efa_ep_get_peer(ep_list_entry, fi_addr[i]);
-			ret = efa_peer_in_use(peer);
-			if (ret)
-				goto release_lock;
-		}
+		ret = efa_peer_in_use(peer);
+		if (ret)
+			goto release_lock;
 
 		/* Only if the peer is not in use reset the peer */
-		dlist_foreach(&av->util_av.ep_list, ep_list_entry) {
-			peer = efa_ep_get_peer(ep_list_entry, fi_addr[i]);
-			if (peer->rx_init)
-				efa_peer_reset(peer);
-		}
+		if (peer->rx_init)
+			efa_peer_reset(peer);
+
 		ret = efa_av_remove_ah(&av->util_av.av_fid, &fi_addr[i], 1,
 				       flags);
 		if (ret)
