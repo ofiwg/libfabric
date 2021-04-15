@@ -2604,6 +2604,93 @@ err:
 	return ret;
 }
 
+static int cxip_flush_appends_cb(struct cxip_req *req,
+				 const union c_event *event)
+{
+	struct cxip_rxc *rxc = req->req_ctx;
+	int ret;
+
+	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
+	       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE);
+	assert(event->hdr.event_type == C_EVENT_SEARCH);
+	assert(cxi_event_rc(event) == C_RC_NO_MATCH);
+
+	fastlock_acquire(&rxc->lock);
+	ret = cxip_ux_onload(rxc);
+	fastlock_release(&rxc->lock);
+
+	if (ret == FI_SUCCESS) {
+		ofi_atomic_dec32(&rxc->orx_reqs);
+		cxip_cq_req_free(req);
+	}
+
+	return ret;
+}
+
+/*
+ * cxip_flush_appends() - Flush all user appends for a RXC.
+ *
+ * Before cxip_ux_onload() can be called, all user appends in the command queue
+ * must be flushed. If not, this can cause cxip_ux_onload() to read incorrect
+ * remote offsets from cxil_pte_status(). The flush is implemented by issuing
+ * a search command which will match zero ULEs. When the search event is
+ * processed, all pending user appends will have been processed. Since the RXC
+ * is not enabled, new appends cannot occur during this time.
+ *
+ * Caller must hold rxc->lock.
+ */
+static int cxip_flush_appends(struct cxip_rxc *rxc)
+{
+	struct cxip_req *req;
+	union c_cmdu cmd = {};
+	int ret;
+
+	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
+	       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE);
+
+	/* Populate request */
+	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc);
+	if (!req) {
+		RXC_WARN(rxc, "Failed to allocate request\n");
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+	ofi_atomic_inc32(&rxc->orx_reqs);
+
+	req->cb = cxip_flush_appends_cb;
+	req->type = CXIP_REQ_SEARCH;
+
+	/* Search command which should match nothing. */
+	cmd.command.opcode = C_CMD_TGT_SEARCH;
+	cmd.target.ptl_list = C_PTL_LIST_UNEXPECTED;
+	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
+	cmd.target.buffer_id = req->req_id;
+	cmd.target.match_bits = -1UL;
+	cmd.target.length = 0;
+
+	fastlock_acquire(&rxc->rx_cmdq->lock);
+
+	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
+	if (ret) {
+		fastlock_release(&rxc->rx_cmdq->lock);
+		RXC_WARN(rxc, "Failed to write Search command: %d\n", ret);
+		ret = -FI_EAGAIN;
+		goto err_dec_free_cq_req;
+	}
+
+	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
+
+	fastlock_release(&rxc->rx_cmdq->lock);
+
+	return FI_SUCCESS;
+
+err_dec_free_cq_req:
+	ofi_atomic_dec32(&rxc->orx_reqs);
+	cxip_cq_req_free(req);
+err:
+	return ret;
+}
+
 /*
  * cxip_recv_pte_cb() - Process receive PTE state change events.
  */
@@ -2689,11 +2776,11 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 		RXC_DBG(rxc, "Flow control detected\n");
 
 		do {
-			ret = cxip_ux_onload(rxc);
+			ret = cxip_flush_appends(rxc);
 		} while (ret == -FI_EAGAIN);
 
 		if (ret != FI_SUCCESS)
-			RXC_FATAL(rxc, "cxip_ux_onload failed: %d\n", ret);
+			RXC_FATAL(rxc, "cxip_flush_appends failed: %d\n", ret);
 
 		RXC_DBG(rxc, "Started onload\n");
 
