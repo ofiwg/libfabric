@@ -122,6 +122,9 @@ The *shm* provider checks for the following environment variables:
 *FI_SHM_RX_SIZE*
 : Maximum number of outstanding rx operations. Default 1024
 
+*FI_SHM_DISABLE_CMA*
+: Manually disables CMA. Default false
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),

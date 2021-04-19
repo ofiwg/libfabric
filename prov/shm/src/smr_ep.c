@@ -1038,11 +1038,13 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
-		if (ep->util_ep.caps & FI_HMEM) {
+		if (ep->util_ep.caps & FI_HMEM || smr_env.disable_cma) {
 			ep->region->cma_cap_peer = SMR_CMA_CAP_OFF;
 			ep->region->cma_cap_self = SMR_CMA_CAP_OFF;
-			if (ze_hmem_p2p_enabled())
-				smr_init_ipc_socket(ep);
+			if (ep->util_ep.caps & FI_HMEM) {
+				if (ze_hmem_p2p_enabled())
+					smr_init_ipc_socket(ep);
+			}
 		}
 
 		smr_exchange_all_peers(ep->region);
