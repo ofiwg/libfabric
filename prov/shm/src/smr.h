@@ -75,6 +75,7 @@ extern struct smr_env smr_env;
 extern struct fi_provider smr_prov;
 extern struct fi_info smr_info;
 extern struct util_prov smr_util_prov;
+extern int smr_global_ep_idx; //protected by the ep_list_lock
 
 int smr_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		void *context);
@@ -198,13 +199,10 @@ struct smr_queue {
 
 struct smr_fabric {
 	struct util_fabric	util_fabric;
-	int			dom_idx;
 };
 
 struct smr_domain {
 	struct util_domain	util_domain;
-	int			dom_idx;
-	int			ep_idx;
 	int			fast_rma;
 };
 
