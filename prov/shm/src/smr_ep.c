@@ -45,6 +45,7 @@ extern struct fi_ops_rma smr_rma_ops;
 extern struct fi_ops_atomic smr_atomic_ops;
 DEFINE_LIST(sock_name_list);
 pthread_mutex_t sock_list_lock = PTHREAD_MUTEX_INITIALIZER;
+int smr_global_ep_idx = 0;
 
 int smr_setname(fid_t fid, void *addr, size_t addrlen)
 {
@@ -937,7 +938,6 @@ out:
 
 static void smr_init_ipc_socket(struct smr_ep *ep)
 {
-	struct smr_domain *domain;
 	struct smr_sock_name *sock_name;
 	struct sockaddr_un sockaddr = {0};
 	int ret;
@@ -950,10 +950,8 @@ static void smr_init_ipc_socket(struct smr_ep *ep)
 	if (ep->sock_info->listen_sock < 0)
 		goto free;
 
-	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
 	snprintf(smr_sock_name(ep->region), SMR_SOCK_NAME_MAX,
-		 "%ld:%d:%d", (long) ep->region->pid, domain->dom_idx,
-		 ep->ep_idx);
+		 "%ld:%d", (long) ep->region->pid, ep->ep_idx);
 
 	sockaddr.sun_family = AF_UNIX;
 	snprintf(sockaddr.sun_path, SMR_SOCK_NAME_MAX,
@@ -1038,11 +1036,13 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
-		if (ep->util_ep.caps & FI_HMEM) {
+		if (ep->util_ep.caps & FI_HMEM || smr_env.disable_cma) {
 			ep->region->cma_cap_peer = SMR_CMA_CAP_OFF;
 			ep->region->cma_cap_self = SMR_CMA_CAP_OFF;
-			if (ze_hmem_p2p_enabled())
-				smr_init_ipc_socket(ep);
+			if (ep->util_ep.caps & FI_HMEM) {
+				if (ze_hmem_p2p_enabled())
+					smr_init_ipc_socket(ep);
+			}
 		}
 
 		smr_exchange_all_peers(ep->region);
@@ -1061,18 +1061,22 @@ static struct fi_ops smr_ep_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int smr_endpoint_name(char *name, char *addr, size_t addrlen,
-			     int dom_idx, int ep_idx)
+static int smr_endpoint_name(struct smr_ep *ep, char *name, char *addr,
+			     size_t addrlen)
 {
 	const char *start;
 	memset(name, 0, SMR_NAME_MAX);
 	if (!addr || addrlen > SMR_NAME_MAX)
 		return -FI_EINVAL;
 
+	pthread_mutex_lock(&ep_list_lock);
+	ep->ep_idx = smr_global_ep_idx++;
+	pthread_mutex_unlock(&ep_list_lock);
+
 	start = smr_no_prefix((const char *) addr);
-	if (strstr(addr, SMR_PREFIX) || dom_idx || ep_idx)
-		snprintf(name, SMR_NAME_MAX - 1, "%s:%d:%d:%d", start, getuid(),
-			 dom_idx, ep_idx);
+	if (strstr(addr, SMR_PREFIX))
+		snprintf(name, SMR_NAME_MAX - 1, "%s:%d:%d", start, getuid(),
+			 ep->ep_idx);
 	else
 		snprintf(name, SMR_NAME_MAX - 1, "%s", start);
 
@@ -1083,7 +1087,6 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
 	struct smr_ep *ep;
-	struct smr_domain *smr_domain;
 	int ret;
 	char name[SMR_NAME_MAX];
 
@@ -1091,13 +1094,7 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (!ep)
 		return -FI_ENOMEM;
 
-	smr_domain = container_of(domain, struct smr_domain, util_domain.domain_fid);
-
-	fastlock_acquire(&smr_domain->util_domain.lock);
-	ep->ep_idx = smr_domain->ep_idx++;
-	fastlock_release(&smr_domain->util_domain.lock);
-	ret = smr_endpoint_name(name, info->src_addr, info->src_addrlen,
-			        smr_domain->dom_idx, ep->ep_idx);
+	ret = smr_endpoint_name(ep, name, info->src_addr, info->src_addrlen);
 	if (ret)
 		goto err2;
 	ret = smr_setname(&ep->util_ep.ep_fid.fid, name, SMR_NAME_MAX);
