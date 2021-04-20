@@ -298,6 +298,7 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 	int ret = 0, err = 0;
 	struct rxr_peer *peer;
 	struct rxr_ep *rxr_ep;
+	fi_addr_t efa_fiaddr;
 	fi_addr_t shm_fiaddr;
 	char smr_name[NAME_MAX];
 	char raw_gid_str[INET6_ADDRSTRLEN];
@@ -312,6 +313,18 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 	EFA_INFO(FI_LOG_AV, "Inserting address GID[%s] QP[%u] QKEY[%u] to RDM AV ....\n",
 		 raw_gid_str, addr->qpn, addr->qkey);
 
+	/*
+	 * Check if this address already has been inserted, if so return that
+	 * fi_addr_t.
+	 */
+	efa_fiaddr = ofi_av_lookup_fi_addr_unsafe(&av->util_av, addr);
+	if (efa_fiaddr != FI_ADDR_NOTAVAIL) {
+		*fi_addr = efa_fiaddr;
+		EFA_INFO(FI_LOG_AV, "Found existing AV entry pointing to this address! fi_addr: %ld\n", *fi_addr);
+		ret = 0;
+		goto out;
+	}
+
 	ret = ofi_av_insert_addr(&av->util_av, addr, fi_addr);
 	if (ret) {
 		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n",
@@ -321,16 +334,6 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 
 	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool,
 					     *fi_addr);
-	/*
-	 * If the entry already exists then calling ofi_av_insert_addr would
-	 * increase the use_cnt by 1. For a new entry use_cnt will be 1, whereas
-	 * for a duplicate entry, use_cnt will be more that 1.
-	 */
-	if (ofi_atomic_get32(&util_av_entry->use_cnt) > 1) {
-		EFA_INFO(FI_LOG_AV, "Found exising AV entry correspond to this addres! fi_addr: %ld\n", *fi_addr);
-		goto out;
-	}
-
 	av_entry = (struct efa_av_entry *)util_av_entry->data;
 	av_entry->rdm_addr = *fi_addr;
 	av_entry->local_mapping = 0;
@@ -609,14 +612,6 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 						fi_addr[i]);
 		if (!util_av_entry) {
 			ret = -FI_ENOENT;
-			goto release_lock;
-		}
-		/*
-		 * If use_cnt is greater than 1, then just decrement
-		 * the count by 1, without removing the entry.
-		 */
-		if (ofi_atomic_get32(&util_av_entry->use_cnt) > 1) {
-			ret = ofi_av_remove_addr(&av->util_av, fi_addr[i]);
 			goto release_lock;
 		}
 		av_entry = (struct efa_av_entry *)util_av_entry->data;
