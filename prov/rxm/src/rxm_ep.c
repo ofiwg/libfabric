@@ -1275,10 +1275,8 @@ rxm_ep_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (!tx_buf)
 		return -FI_EAGAIN;
 
-	tx_buf->hdr.state = RXM_TX;
+	tx_buf->hdr.state = RXM_INJECT_TX;
 	tx_buf->pkt.ctrl_hdr.type = rxm_ctrl_eager;
-	/* avoid reporting bogus context in fi_cq_err_entry */
-	tx_buf->app_context = NULL;
 	tx_buf->flags = flags;
 
 	rxm_ep_format_tx_buf_pkt(rxm_conn, len, op, data, tag, flags,

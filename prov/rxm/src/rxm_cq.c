@@ -1350,7 +1350,7 @@ void rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep,
 	} else {
 		rxm_finish_eager_send(rxm_ep, tx_eager_buf);
 	}
-};
+}
 
 ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 {
@@ -1366,6 +1366,7 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 
 	switch (RXM_GET_PROTO_STATE(comp->op_context)) {
 	case RXM_TX:
+	case RXM_INJECT_TX:
 		tx_buf = comp->op_context;
 		rxm_ep->eager_ops->comp_tx(rxm_ep, tx_buf);
 		rxm_free_rx_buf(rxm_ep, tx_buf);
@@ -1374,9 +1375,6 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 		tx_buf = comp->op_context;
 		assert(comp->flags & FI_SEND);
 		ofi_buf_free(tx_buf);
-		return 0;
-	case RXM_INJECT_TX:
-		assert(0);
 		return 0;
 	case RXM_RMA:
 		tx_buf = comp->op_context;
@@ -1720,7 +1718,9 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		rxm_free_rx_buf(rxm_ep, tx_buf);
 		break;
 	case RXM_INJECT_TX:
-		assert(0);
+		rxm_free_rx_buf(rxm_ep, err_entry.op_context);
+		if (cntr)
+			rxm_cntr_incerr(cntr);
 		return;
 	case RXM_RMA:
 		tx_buf = err_entry.op_context;
