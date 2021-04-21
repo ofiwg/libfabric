@@ -529,9 +529,6 @@ struct rxr_ep {
 	/* per-version feature flag */
 	uint64_t features[RXR_NUM_PROTOCOL_VERSION];
 
-	/* per-peer information */
-	struct rdm_peer *peer;
-
 	/* bufpool for reorder buffer */
 	struct ofi_bufpool *robuf_pool;
 
@@ -711,11 +708,6 @@ static inline void rxr_copy_shm_cq_entry(struct fi_cq_tagged_entry *cq_tagged_en
 	cq_tagged_entry->data = shm_cq_entry->data;
 	cq_tagged_entry->tag = 0; // No tag for RMA;
 
-}
-static inline struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep,
-					       fi_addr_t addr)
-{
-	return &ep->peer[addr];
 }
 
 static inline void rxr_setup_msg(struct fi_msg *msg, const struct iovec *iov, void **desc,

@@ -124,24 +124,6 @@ static size_t efa_av_tbl_find_first_empty(struct efa_av *av, size_t hint)
 	return -1;
 }
 
-static int efa_peer_resize(struct rxr_ep *ep, size_t current_count,
-			   size_t new_count)
-{
-	void *p = realloc(&ep->peer[0], (new_count * sizeof(struct rdm_peer)));
-
-	if (p)
-		ep->peer = p;
-	else
-		return -FI_ENOMEM;
-#ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region((uint32_t *)&ep->peer[current_count], (new_count -
-			      current_count) * sizeof(struct rdm_peer));
-#endif
-	memset(&ep->peer[current_count], 0,
-		(new_count - current_count) * sizeof(struct rdm_peer));
-	return 0;
-}
-
 static int efa_av_resize(struct efa_av *av, size_t new_av_count)
 {
 	if (av->type == FI_AV_TABLE) {
@@ -340,6 +322,13 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 
 	/* currently multiple EP bind to same av is not supported */
 	rxr_ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
+	av_entry->rdm_peer = ofi_buf_alloc(av->rdm_peer_pool);
+
+	if (!av_entry->rdm_peer) {
+		ret = -FI_ENOMEM;
+		ofi_av_remove_addr(&av->util_av, *fi_addr);
+		goto out;
+	}
 
 	if (av->used + 1 > av->count) {
 		ret = efa_av_resize(av, av->count * 2);
@@ -348,16 +337,9 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 			ofi_av_remove_addr(&av->util_av, *fi_addr);
 			goto out;
 		}
-
-		ret = efa_peer_resize(rxr_ep, av->used, av->count);
-		if (ret) {
-			EFA_WARN(FI_LOG_AV, "EFA peer resize failed! ret=%d\n", ret);
-			ofi_av_remove_addr(&av->util_av, *fi_addr);
-			goto out;
-		}
 	}
 
-	peer = rxr_ep_get_peer(rxr_ep, *fi_addr);
+	peer = av_entry->rdm_peer;
 	peer->efa_fiaddr = *fi_addr;
 	peer->is_self = efa_is_same_addr((struct efa_ep_addr *)rxr_ep->core_addr,
 					 addr);
@@ -400,7 +382,6 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 		av_entry->shm_rdm_addr = shm_fiaddr;
 		av->shm_rdm_addr_map[shm_fiaddr] = av_entry->rdm_addr;
 
-		peer = rxr_ep_get_peer(rxr_ep, *fi_addr);
 		peer->shm_fiaddr = shm_fiaddr;
 		peer->is_local = 1;
 	}
@@ -641,8 +622,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		if (ret)
 			goto out;
 
-		if (peer->rx_init)
-			efa_peer_reset(peer);
+		efa_rdm_peer_release(peer);
 
 		/*
 		 * Clearing the 3 resources of an av entry:
@@ -681,6 +661,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 
 		if (ret)
 			goto out;
+
 	}
 
 out:
@@ -748,6 +729,8 @@ static int efa_av_close(struct fid *fid)
 			EFA_WARN(FI_LOG_AV, "Failed to close av: %s\n",
 				fi_strerror(ret));
 		}
+
+		ofi_bufpool_destroy(av->rdm_peer_pool);
 	}
 	free(av);
 	return err;
@@ -821,6 +804,11 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		if (fi_param_get_size_t(NULL, "universe_size",
 					&universe_size) == FI_SUCCESS)
 			attr->count = MAX(attr->count, universe_size);
+
+		ret = ofi_bufpool_create(&av->rdm_peer_pool, sizeof(struct rdm_peer),
+		                         EFA_DEF_POOL_ALIGNMENT, 0, attr->count, 0);
+		if (ret)
+			goto err;
 
 		util_attr.addrlen = EFA_EP_ADDR_LEN;
 		util_attr.context_len = sizeof(struct efa_av_entry) - EFA_EP_ADDR_LEN;

@@ -648,11 +648,43 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_
 	return 0;
 }
 
+/*
+ * @brief iterator function to free rdm_peer for address vectors still in the table
+ *        during AV close. It is usually used with ofi_av_elements_iter
+ *
+ * @param[in]	av	utility av
+ * @param[in]	data	the data pointer in util_av_entry, which is a pointer to efa_av_entry
+ * @param[in]	addr	fi address of the av entry
+ * @param[in]	arg	passed by  ofi_av_elements_iter, not used
+ * @return	0 is success
+ * 		negative error code on failure.
+ */
+static int efa_rdm_av_entry_cleanup(struct util_av *av, void *data,
+				    fi_addr_t addr, void *arg)
+{
+	struct efa_av_entry *efa_av_entry = (struct efa_av_entry *)data;
+	struct rdm_peer *peer = efa_av_entry->rdm_peer;
+
+	if (!peer)
+		return 0;
+
+	/*
+	 * TODO: Add support for wait/signal until all pending messages have
+	 * been sent/received so we do not attempt to complete a data transfer
+	 * or internal transfer after the EP is shutdown.
+	 */
+	if ((peer->flags & RXR_PEER_REQ_SENT) &&
+	    !(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
+		FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL, "Closing EP with unacked CONNREQs in flight\n");
+
+	efa_rdm_peer_release(peer);
+	efa_av_entry->rdm_peer = NULL;
+
+	return 0;
+}
+
 static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 {
-	size_t i = 0;
-	struct rdm_peer *peer;
-	struct efa_av *av;
 #if ENABLE_DEBUG
 	struct dlist_entry *tmp;
 	struct dlist_entry *entry;
@@ -660,32 +692,24 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_pkt_entry *pkt;
 #endif
+	int ret;
 
-	if (rxr_need_sas_ordering(rxr_ep)) {
-		av = container_of(rxr_ep->util_ep.av, struct efa_av, util_av);
-		for (i = 0; i < av->count; ++i) {
-			peer = rxr_ep_get_peer(rxr_ep, i);
-			if (peer->rx_init)
-				efa_free_robuf(peer);
-		}
-		if (rxr_ep->robuf_pool)
-			ofi_bufpool_destroy(rxr_ep->robuf_pool);
-	}
+	/*
+	 * Go free the rdm_peer structures since the endpoint is going down.
+	 * Note that there might be RX/TX entries that still have a pointer to
+	 * these peers, so we'll set those pointers to NULL later in this
+	 * function.
+	 */
+	ret = ofi_av_elements_iter(rxr_ep->util_ep.av,
+				   efa_rdm_av_entry_cleanup, NULL);
+	if (ret)
+		EFA_WARN(FI_LOG_AV, "Failed to free rdm_peers: %s\n",
+			fi_strerror(ret));
+
+	if (rxr_need_sas_ordering(rxr_ep) && rxr_ep->robuf_pool)
+		ofi_bufpool_destroy(rxr_ep->robuf_pool);
 
 #if ENABLE_DEBUG
-	av = container_of(rxr_ep->util_ep.av, struct efa_av, util_av);
-	for (i = 0; i < av->count; ++i) {
-		peer = rxr_ep_get_peer(rxr_ep, i);
-		/*
-		 * TODO: Add support for wait/signal until all pending messages
-		 * have been sent/received so the core does not attempt to
-		 * complete a data operation or an internal RxR transfer after
-		 * the EP is shutdown.
-		 */
-		if ((peer->flags & RXR_PEER_REQ_SENT) && !(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Closing EP with unacked CONNREQs in flight\n");
-	}
-
 	dlist_foreach(&rxr_ep->rx_unexp_list, entry) {
 		rx_entry = container_of(entry, struct rxr_rx_entry, entry);
 		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_pkt);
@@ -838,7 +862,6 @@ static int rxr_ep_close(struct fid *fid)
 		retv = ret;
 	}
 	rxr_ep_free_res(rxr_ep);
-	free(rxr_ep->peer);
 	free(rxr_ep);
 	return retv;
 }
@@ -874,11 +897,6 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		ret = fi_ep_bind(rxr_ep->rdm_ep, &av->util_av.av_fid.fid, flags);
 		if (ret)
 			return ret;
-
-		rxr_ep->peer = calloc(av->count,
-				      sizeof(struct rdm_peer));
-		if (!rxr_ep->peer)
-			return -FI_ENOMEM;
 
 		if (rxr_need_sas_ordering(rxr_ep)) {
 			ret = ofi_bufpool_create(&rxr_ep->robuf_pool,
