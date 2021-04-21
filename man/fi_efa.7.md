@@ -169,6 +169,9 @@ These OFI runtime parameters apply only to the RDM endpoint.
 *FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE*
 : The maximum size for inter EFA messages to be sent by using medium message protocol. Messages which can fit in one packet will be sent as eager message. Messages whose sizes are smaller than this value will be sent using medium message protocol. Other messages will be sent using CTS based long message protocol.
 
+*FI_EFA_FORK_SAFE*
+: Enable fork() support. This may have a small performance impact and should only be set when required. Applications that require to register regions backed by huge pages and also require fork support are not supported.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
