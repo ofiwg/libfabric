@@ -119,7 +119,7 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
 void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 
 #if ENABLE_DEBUG
 	dlist_remove(&pkt->dbg_entry);
@@ -166,7 +166,7 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 		return;
 
 	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED) {
-		struct rxr_peer *peer;
+		struct rdm_peer *peer;
 
 		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 
@@ -327,7 +327,7 @@ static inline
 ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 			      const struct fi_msg *msg, uint64_t flags)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	size_t ret;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
@@ -363,7 +363,7 @@ ssize_t rxr_pkt_entry_sendv(struct rxr_ep *ep,
 			    void **desc, size_t count, uint64_t flags)
 {
 	struct fi_msg msg;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 
 	msg.msg_iov = iov;
 	msg.addr = addr;
@@ -413,7 +413,7 @@ ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry,
 			     fi_addr_t addr)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 
 	/* currently only EOR packet is injected using shm ep */
 	peer = rxr_ep_get_peer(ep, addr);

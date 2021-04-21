@@ -290,7 +290,7 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_rx_entry *rx_entry;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	ssize_t err;
 	fi_addr_t addr;
 
@@ -435,7 +435,7 @@ ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_en
  * handshake packet within a certain period of time.
  */
 
-ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_peer *peer)
+ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rdm_peer *peer)
 {
 	ssize_t ret;
 
@@ -481,7 +481,7 @@ ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_pee
  * This function will return 0 if the eager rtw packet is successfully sent.
  */
 ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
-				  fi_addr_t addr, struct rxr_peer *peer)
+				  fi_addr_t addr, struct rdm_peer *peer)
 {
 	struct rxr_tx_entry *tx_entry;
 	ssize_t err;
@@ -669,7 +669,7 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
  */
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
 	case RXR_HANDSHAKE_PKT:
@@ -818,7 +818,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 				    struct fi_cq_data_entry *cq_entry,
 				    fi_addr_t src_addr)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct rxr_base_hdr *base_hdr;
 	struct rxr_pkt_entry *pkt_entry;
 

@@ -164,7 +164,7 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct fi_msg_rma msg;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	int i, err;
 
 	assert(tx_entry->op == ofi_op_write);
@@ -202,7 +202,7 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 {
 	int err, window, credits;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct rxr_rx_entry *rx_entry;
 	struct fi_msg msg = {0};
 
@@ -298,7 +298,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 {
 	ssize_t err;
 	struct rxr_ep *rxr_ep;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct rxr_tx_entry *tx_entry = NULL;
 	bool use_lower_ep_read;
 
@@ -405,7 +405,7 @@ ssize_t rxr_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 {
 	ssize_t err;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct efa_domain *efa_domain;
 	bool delivery_complete_requested;
 	int ctrl_type;
@@ -490,7 +490,7 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 			 uint64_t flags)
 {
 	ssize_t err;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct rxr_ep *rxr_ep;
 	struct rxr_tx_entry *tx_entry;
 

@@ -108,7 +108,7 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 			  struct rxr_pkt_entry *pkt_entry)
 {
 	char *opt_hdr;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct rxr_base_hdr *base_hdr;
 
 	/* init the base header */
@@ -269,7 +269,7 @@ size_t rxr_pkt_max_header_size(void)
 
 size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, addr);
 
@@ -1204,7 +1204,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	bool need_ordering;
 	int ret, msg_id;
 

@@ -127,7 +127,7 @@ static size_t efa_av_tbl_find_first_empty(struct efa_av *av, size_t hint)
 static int efa_peer_resize(struct rxr_ep *ep, size_t current_count,
 			   size_t new_count)
 {
-	void *p = realloc(&ep->peer[0], (new_count * sizeof(struct rxr_peer)));
+	void *p = realloc(&ep->peer[0], (new_count * sizeof(struct rdm_peer)));
 
 	if (p)
 		ep->peer = p;
@@ -135,10 +135,10 @@ static int efa_peer_resize(struct rxr_ep *ep, size_t current_count,
 		return -FI_ENOMEM;
 #ifdef ENABLE_EFA_POISONING
 	rxr_poison_mem_region((uint32_t *)&ep->peer[current_count], (new_count -
-			      current_count) * sizeof(struct rxr_peer));
+			      current_count) * sizeof(struct rdm_peer));
 #endif
 	memset(&ep->peer[current_count], 0,
-		(new_count - current_count) * sizeof(struct rxr_peer));
+		(new_count - current_count) * sizeof(struct rdm_peer));
 	return 0;
 }
 
@@ -296,7 +296,7 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 	struct efa_av_entry *av_entry;
 	struct util_av_entry *util_av_entry;
 	int ret = 0, err = 0;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct rxr_ep *rxr_ep;
 	fi_addr_t efa_fiaddr;
 	fi_addr_t shm_fiaddr;
@@ -613,7 +613,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	struct efa_av *av;
 	struct util_av_entry *util_av_entry;
 	struct efa_av_entry *av_entry;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct rxr_ep *rxr_ep;
 
 	av = container_of(av_fid, struct efa_av, util_av.av_fid);

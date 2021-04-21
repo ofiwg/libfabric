@@ -614,7 +614,7 @@ void rxr_prepare_desc_send(struct rxr_domain *rxr_domain,
 /* Generic send */
 int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	int pending;
 
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
@@ -651,7 +651,7 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_
 static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 {
 	size_t i = 0;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct efa_av *av;
 #if ENABLE_DEBUG
 	struct dlist_entry *tmp;
@@ -876,7 +876,7 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 
 		rxr_ep->peer = calloc(av->count,
-				      sizeof(struct rxr_peer));
+				      sizeof(struct rdm_peer));
 		if (!rxr_ep->peer)
 			return -FI_ENOMEM;
 
@@ -1526,13 +1526,13 @@ static inline void rxr_ep_check_available_data_bufs_timer(struct rxr_ep *ep)
 
 static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct dlist_entry *tmp;
 
 	if (OFI_LIKELY(dlist_empty(&ep->peer_backoff_list)))
 		return;
 
-	dlist_foreach_container_safe(&ep->peer_backoff_list, struct rxr_peer,
+	dlist_foreach_container_safe(&ep->peer_backoff_list, struct rdm_peer,
 				     peer, rnr_entry, tmp) {
 		peer->flags &= ~RXR_PEER_BACKED_OFF;
 		if (!rxr_peer_timeout_expired(ep, peer, ofi_gettime_us()))
@@ -1611,7 +1611,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_read_entry *read_entry;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct dlist_entry *tmp;
 	ssize_t ret;
 
@@ -1643,7 +1643,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	 * handshake send failed.
 	 */
 	dlist_foreach_container_safe(&ep->peer_queued_list,
-				     struct rxr_peer, peer,
+				     struct rdm_peer, peer,
 				     queued_entry, tmp) {
 
 		ret = rxr_pkt_post_handshake(ep, peer);

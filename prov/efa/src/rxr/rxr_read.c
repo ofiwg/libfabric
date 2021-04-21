@@ -343,7 +343,7 @@ int rxr_read_post_or_queue(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 
 int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct rxr_read_entry *read_entry;
 	int lower_ep_type;
 
@@ -430,7 +430,7 @@ int rxr_read_init_iov(struct rxr_ep *ep,
 {
 	int i, err;
 	struct fid_mr *mr;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 
@@ -489,7 +489,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 	struct fi_rma_iov rma_iov;
 	struct fi_msg_rma msg;
 	struct efa_ep *efa_ep;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	fi_addr_t shm_fiaddr = FI_ADDR_NOTAVAIL;
 
 	assert(read_entry->iov_count > 0);

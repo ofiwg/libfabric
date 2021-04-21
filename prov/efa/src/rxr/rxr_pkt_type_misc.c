@@ -73,7 +73,7 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
  * @param peer The peer to which the handshake packet is posted.
  * @return 0 on success, fi_errno on error.
  */
-ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rxr_peer *peer)
+ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rdm_peer *peer)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	fi_addr_t addr;
@@ -106,7 +106,7 @@ ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rxr_peer *peer)
  * @param peer The peer to which the handshake packet is posted.
  * @return Void.
  */
-void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep, struct rxr_peer *peer)
+void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep, struct rdm_peer *peer)
 {
 	ssize_t ret;
 
@@ -138,7 +138,7 @@ void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep, struct rxr_peer *peer)
 void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct rxr_handshake_hdr *handshake_pkt;
 
 	assert(pkt_entry->addr != FI_ADDR_NOTAVAIL);
@@ -159,7 +159,7 @@ void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 }
 
 /*  CTS packet related functions */
-void rxr_pkt_calc_cts_window_credits(struct rxr_ep *ep, struct rxr_peer *peer,
+void rxr_pkt_calc_cts_window_credits(struct rxr_ep *ep, struct rdm_peer *peer,
 				     uint64_t size, int request,
 				     int *window, int *credits)
 {
@@ -197,7 +197,7 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 {
 	int window = 0;
 	struct rxr_cts_hdr *cts_hdr;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	size_t bytes_left;
 
 	cts_hdr = (struct rxr_cts_hdr *)pkt_entry->pkt;
@@ -244,7 +244,7 @@ void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
 void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct rxr_cts_hdr *cts_pkt;
 	struct rxr_tx_entry *tx_entry;
 
@@ -404,7 +404,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_read_entry *read_entry;
 	struct rxr_rma_context_pkt *rma_context_pkt;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	int inject;
 	size_t data_size;
 	ssize_t ret;

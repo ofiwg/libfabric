@@ -423,7 +423,7 @@ bool efa_ep_support_rnr_retry_modify(struct fid_ep *ep_fid)
 }
 
 static inline
-bool efa_peer_support_rdma_read(struct rxr_peer *peer)
+bool efa_peer_support_rdma_read(struct rdm_peer *peer)
 {
 	/* RDMA READ is an extra feature defined in version 4 (the base version).
 	 * Because it is an extra feature, an EP will assume the peer does not support
@@ -434,7 +434,7 @@ bool efa_peer_support_rdma_read(struct rxr_peer *peer)
 }
 
 static inline
-bool rxr_peer_support_delivery_complete(struct rxr_peer *peer)
+bool rxr_peer_support_delivery_complete(struct rdm_peer *peer)
 {
 	/* FI_DELIVERY_COMPLETE is an extra feature defined
 	 * in version 4 (the base version).
@@ -447,7 +447,7 @@ bool rxr_peer_support_delivery_complete(struct rxr_peer *peer)
 }
 
 static inline
-bool efa_both_support_rdma_read(struct rxr_ep *ep, struct rxr_peer *peer)
+bool efa_both_support_rdma_read(struct rxr_ep *ep, struct rdm_peer *peer)
 {
 	if (!rxr_env.use_device_rdma)
 		return 0;
@@ -466,7 +466,7 @@ size_t efa_max_rdma_size(struct fid_ep *ep_fid)
 }
 
 static inline
-struct rxr_peer *efa_ep_get_peer(struct dlist_entry *ep_list_entry,
+struct rdm_peer *efa_ep_get_peer(struct dlist_entry *ep_list_entry,
 				 fi_addr_t addr)
 {
 	struct util_ep *util_ep;
@@ -479,7 +479,7 @@ struct rxr_peer *efa_ep_get_peer(struct dlist_entry *ep_list_entry,
 }
 
 static inline
-int efa_peer_in_use(struct rxr_peer *peer)
+int efa_peer_in_use(struct rdm_peer *peer)
 {
 	struct rxr_pkt_entry *pending_pkt;
 
@@ -493,20 +493,20 @@ int efa_peer_in_use(struct rxr_peer *peer)
 	return 0;
 }
 static inline
-void efa_free_robuf(struct rxr_peer *peer)
+void efa_free_robuf(struct rdm_peer *peer)
 {
 	ofi_recvwin_free(peer->robuf);
 	ofi_buf_free(peer->robuf);
 }
 
 static inline
-void efa_peer_reset(struct rxr_peer *peer)
+void efa_peer_reset(struct rdm_peer *peer)
 {
 	efa_free_robuf(peer);
 #ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region((uint32_t *)peer, sizeof(struct rxr_peer));
+	rxr_poison_mem_region((uint32_t *)peer, sizeof(struct rdm_peer));
 #endif
-	memset(peer, 0, sizeof(struct rxr_peer));
+	memset(peer, 0, sizeof(struct rdm_peer));
 	dlist_init(&peer->rnr_entry);
 }
 

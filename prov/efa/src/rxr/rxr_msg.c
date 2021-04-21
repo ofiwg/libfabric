@@ -62,7 +62,7 @@ static inline
 ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 {
 	int err, tagged;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	int pkt_type;
 	bool delivery_complete_requested;
 
@@ -122,7 +122,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	int tagged;
 	size_t max_rtm_data_size;
 	ssize_t err;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	bool delivery_complete_requested;
 	int ctrl_type;
 	struct efa_domain *efa_domain;
@@ -274,7 +274,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	struct rxr_ep *rxr_ep;
 	ssize_t err;
 	struct rxr_tx_entry *tx_entry;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 	       "iov_len: %lu tag: %lx op: %x flags: %lx\n",

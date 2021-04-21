@@ -121,7 +121,7 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 			       uint32_t op, uint64_t flags)
 {
 	struct rxr_tx_entry *tx_entry;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	bool delivery_complete_requested;
 	ssize_t err;
 	static int req_pkt_type_list[] = {
@@ -226,7 +226,7 @@ rxr_atomic_inject(struct fid_ep *ep,
 	struct fi_msg_atomic msg;
 
 	struct rxr_ep *rxr_ep;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
@@ -268,7 +268,7 @@ rxr_atomic_writemsg(struct fid_ep *ep,
 {
 	struct fi_msg_atomic shm_msg;
 	struct rxr_ep *rxr_ep;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct fi_rma_ioc rma_iov[RXR_IOV_LIMIT];
 	void *shm_desc[RXR_IOV_LIMIT];
 
@@ -340,7 +340,7 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 			uint64_t flags)
 {
 	struct rxr_ep *rxr_ep;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct fi_msg_atomic shm_msg;
 	struct fi_rma_ioc shm_rma_iov[RXR_IOV_LIMIT];
 	void *shm_desc[RXR_IOV_LIMIT];
@@ -422,7 +422,7 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 			uint64_t flags)
 {
 	struct rxr_ep *rxr_ep;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct fi_msg_atomic shm_msg;
 	struct fi_rma_ioc shm_rma_iov[RXR_IOV_LIMIT];
 	void *shm_desc[RXR_IOV_LIMIT];
