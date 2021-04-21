@@ -214,6 +214,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	int ret;
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
 		[FI_HMEM_SYSTEM] = memhooks_monitor,
+		[FI_HMEM_CUDA] = cuda_monitor,
 	};
 
 	fi = efa_get_efa_info(info->domain_attr->name);
