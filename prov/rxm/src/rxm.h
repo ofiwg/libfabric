@@ -166,18 +166,28 @@ enum rxm_cmap_state {
 
 extern char *rxm_cm_state_str[];
 
-#define RXM_CM_UPDATE_STATE(handle, new_state)				\
+#define RXM_CM_UPDATE_TX_STATE(handle, new_state)			\
 	do {								\
 		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "[CM] handle: "	\
-		       "%p %s -> %s\n",	handle,				\
-		       rxm_cm_state_str[(handle)->state],		\
+		       "TX %p %s -> %s\n",	handle,			\
+		       rxm_cm_state_str[(handle)->tx_state],		\
 		       rxm_cm_state_str[new_state]);			\
-		(handle)->state = new_state;				\
+		(handle)->tx_state = new_state;				\
+	} while (0)
+
+#define RXM_CM_UPDATE_RX_STATE(handle, new_state)			\
+	do {								\
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "[CM] handle: "	\
+		       "RX %p %s -> %s\n",	handle,			\
+		       rxm_cm_state_str[(handle)->rx_state],		\
+		       rxm_cm_state_str[new_state]);			\
+		(handle)->rx_state = new_state;				\
 	} while (0)
 
 struct rxm_cmap_handle {
 	struct rxm_cmap *cmap;
-	enum rxm_cmap_state state;
+	enum rxm_cmap_state tx_state;
+	enum rxm_cmap_state rx_state;
 	/* Unique identifier for a connection. Can be exchanged with a peer
 	 * during connection setup and can later be used in a message header
 	 * to identify the source of the message (Used for FI_SOURCE, RNDV

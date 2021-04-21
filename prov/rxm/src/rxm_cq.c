@@ -1815,7 +1815,7 @@ static int rxm_post_recv(struct rxm_rx_buf *rx_buf)
 		return 0;
 
 	if (ret != -FI_EAGAIN) {
-		level = (rx_buf->conn->handle.state == RXM_CMAP_SHUTDOWN) ?
+		level = (rx_buf->conn->handle.rx_state == RXM_CMAP_SHUTDOWN) ?
 			FI_LOG_DEBUG : FI_LOG_WARN;
 		FI_LOG(&rxm_prov, level, FI_LOG_EP_CTRL,
 		       "unable to post recv buf: %d\n", ret);
