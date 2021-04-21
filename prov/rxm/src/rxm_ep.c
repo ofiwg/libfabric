@@ -1049,7 +1049,6 @@ rxm_ep_rndv_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 {
 	ssize_t ret;
 
-	RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_TX);
 	if (pkt_size <= rxm_ep->inject_limit) {
 		if (rxm_ep->rndv_ops == &rxm_rndv_ops_write)
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf,
@@ -1060,17 +1059,14 @@ rxm_ep_rndv_tx_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 		ret = fi_inject(rxm_conn->msg_ep, &tx_buf->pkt, pkt_size, 0);
 	} else {
-		tx_buf->hdr.state = RXM_RNDV_TX;
-
+		RXM_UPDATE_STATE(FI_LOG_EP_DATA, tx_buf, RXM_RNDV_TX);
 		ret = rxm_ep_msg_normal_send(rxm_conn, &tx_buf->pkt, pkt_size,
 					     tx_buf->hdr.desc, tx_buf);
 	}
 
-	if (ret) {
-		if (ret == -FI_EAGAIN)
-			rxm_ep_do_progress(&rxm_ep->util_ep);
+	if (ret)
 		goto err;
-	}
+
 	return FI_SUCCESS;
 
 err:
