@@ -317,7 +317,6 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool,
 					     *fi_addr);
 	av_entry = (struct efa_av_entry *)util_av_entry->data;
-	av_entry->rdm_addr = *fi_addr;
 	av_entry->local_mapping = 0;
 
 	/* currently multiple EP bind to same av is not supported */
@@ -380,7 +379,7 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 		av->shm_used++;
 		av_entry->local_mapping = 1;
 		av_entry->shm_rdm_addr = shm_fiaddr;
-		av->shm_rdm_addr_map[shm_fiaddr] = av_entry->rdm_addr;
+		av->shm_rdm_addr_map[shm_fiaddr] = *fi_addr;
 
 		peer->shm_fiaddr = shm_fiaddr;
 		peer->is_local = 1;

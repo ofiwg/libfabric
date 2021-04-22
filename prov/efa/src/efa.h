@@ -296,7 +296,6 @@ struct efa_av {
 
 struct efa_av_entry {
 	uint8_t			ep_addr[EFA_EP_ADDR_LEN];
-	fi_addr_t		rdm_addr;
 	fi_addr_t		shm_rdm_addr;
 	bool			local_mapping;
 	struct rdm_peer		*rdm_peer;
