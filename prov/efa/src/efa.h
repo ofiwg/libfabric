@@ -485,6 +485,8 @@ int efa_peer_in_use(struct rdm_peer *peer)
 {
 	struct rxr_pkt_entry *pending_pkt;
 
+	if (ofi_atomic_get32(&peer->use_cnt) > 1)
+		return -FI_EBUSY;
 	if ((peer->tx_pending) || (peer->flags & RXR_PEER_IN_BACKOFF))
 		return -FI_EBUSY;
 	if (peer->rx_init) {

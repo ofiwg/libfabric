@@ -84,7 +84,6 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 {
 	rx_entry->type = RXR_RX_ENTRY;
 	rx_entry->rx_id = ofi_buf_index(rx_entry);
-	rx_entry->addr = msg->addr;
 	rx_entry->fi_flags = flags;
 	rx_entry->rxr_flags = 0;
 	rx_entry->bytes_received = 0;
@@ -96,8 +95,20 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 	rx_entry->ignore = ignore;
 	rx_entry->unexp_pkt = NULL;
 	rx_entry->rma_iov_count = 0;
-	dlist_init(&rx_entry->queued_pkts);
 
+	rx_entry->addr = msg->addr;
+	if (msg->addr == FI_ADDR_UNSPEC) {
+		/*
+		 * If msg->addr is not provided, rx_entry->peer will be set
+		 * after it is matched with a message.
+		 */
+		rx_entry->peer = NULL;
+	} else {
+		rx_entry->peer = rxr_ep_get_peer(ep, msg->addr);
+		ofi_atomic_inc32(&rx_entry->peer->use_cnt);
+	}
+
+	dlist_init(&rx_entry->queued_pkts);
 	memset(&rx_entry->cq_entry, 0, sizeof(rx_entry->cq_entry));
 
 	rx_entry->owner = ep->use_zcpy_rx ? RXR_RX_USER_BUF : RXR_RX_PROV_BUF;
@@ -392,6 +403,8 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	tx_entry->tx_id = ofi_buf_index(tx_entry);
 	tx_entry->state = RXR_TX_REQ;
 	tx_entry->addr = msg->addr;
+	tx_entry->peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	ofi_atomic_inc32(&tx_entry->peer->use_cnt);
 
 	tx_entry->send_flags = 0;
 	tx_entry->rxr_flags = 0;
@@ -497,6 +510,9 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 {
 	int i, err = 0;
+
+	assert(tx_entry->peer);
+	ofi_atomic_dec32(&tx_entry->peer->use_cnt);
 
 	for (i = 0; i < tx_entry->iov_count; i++) {
 		if (tx_entry->mr[i]) {
@@ -668,6 +684,9 @@ static int efa_rdm_av_entry_cleanup(struct util_av *av, void *data,
 	if (!peer)
 		return 0;
 
+	if (ofi_atomic_get32(&peer->use_cnt) > 1)
+		FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL, "Closing EP with pending messages in flight\n");
+
 	/*
 	 * TODO: Add support for wait/signal until all pending messages have
 	 * been sent/received so we do not attempt to complete a data transfer
@@ -694,20 +713,6 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 #endif
 	int ret;
 
-	/*
-	 * Go free the rdm_peer structures since the endpoint is going down.
-	 * Note that there might be RX/TX entries that still have a pointer to
-	 * these peers, so we'll set those pointers to NULL later in this
-	 * function.
-	 */
-	ret = ofi_av_elements_iter(rxr_ep->util_ep.av,
-				   efa_rdm_av_entry_cleanup, NULL);
-	if (ret)
-		EFA_WARN(FI_LOG_AV, "Failed to free rdm_peers: %s\n",
-			fi_strerror(ret));
-
-	if (rxr_need_sas_ordering(rxr_ep) && rxr_ep->robuf_pool)
-		ofi_bufpool_destroy(rxr_ep->robuf_pool);
 
 #if ENABLE_DEBUG
 	dlist_foreach(&rxr_ep->rx_unexp_list, entry) {
@@ -819,6 +824,18 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		if (rxr_ep->tx_pkt_shm_pool)
 			ofi_bufpool_destroy(rxr_ep->tx_pkt_shm_pool);
 	}
+
+	/* rdm_peer must be released after tx_entry_pool and rx_entry_pool
+	 * because rdm_peer refers tx_entry and rx_entry in its use_cnt
+	 */
+	ret = ofi_av_elements_iter(rxr_ep->util_ep.av,
+				   efa_rdm_av_entry_cleanup, NULL);
+	if (ret)
+		EFA_WARN(FI_LOG_AV, "Failed to free rdm_peers: %s\n",
+			fi_strerror(ret));
+
+	if (rxr_need_sas_ordering(rxr_ep) && rxr_ep->robuf_pool)
+		ofi_bufpool_destroy(rxr_ep->robuf_pool);
 }
 
 static int rxr_ep_close(struct fid *fid)

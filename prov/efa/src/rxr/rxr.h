@@ -319,6 +319,7 @@ struct rdm_peer {
 	int rnr_timeout_exp;		/* RNR timeout exponentation calc val */
 	struct dlist_entry rnr_entry;	/* linked to rxr_ep peer_backoff_list */
 	struct dlist_entry queued_entry; /* linked with peer_queued_list in rxr_ep */
+	ofi_atomic32_t use_cnt;		/* refcount */
 };
 
 struct rxr_queued_ctrl_info {
@@ -349,6 +350,7 @@ struct rxr_rx_entry {
 	enum rxr_x_entry_type type;
 
 	fi_addr_t addr;
+	struct rdm_peer *peer;
 
 	/*
 	 * freestack ids used to lookup rx_entry during pkt recv
@@ -435,6 +437,7 @@ struct rxr_tx_entry {
 
 	uint32_t op;
 	fi_addr_t addr;
+	struct rdm_peer *peer;
 
 	/*
 	 * freestack ids used to lookup tx_entry during ctrl pkt recv
@@ -777,6 +780,9 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry);
 static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 					struct rxr_rx_entry *rx_entry)
 {
+	if (rx_entry->peer)
+		ofi_atomic_dec32(&rx_entry->peer->use_cnt);
+
 #if ENABLE_DEBUG
 	dlist_remove(&rx_entry->rx_entry_entry);
 #endif

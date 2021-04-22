@@ -975,6 +975,13 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 
 	assert(rx_entry->state == RXR_RX_MATCHED);
 
+	if (rx_entry->addr == FI_ADDR_UNSPEC) {
+		assert(!rx_entry->peer);
+		rx_entry->addr = pkt_entry->addr;
+		rx_entry->peer = rxr_ep_get_peer(ep, rx_entry->addr);
+		ofi_atomic_inc32(&rx_entry->peer->use_cnt);
+	}
+
 	/* Adjust rx_entry->cq_entry.len as needed.
 	 * Initialy rx_entry->cq_entry.len is total recv buffer size.
 	 * rx_entry->total_len is from REQ packet and is total send buffer size.

@@ -498,6 +498,8 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 
 	tx_entry->total_len = 0;
 	tx_entry->addr = addr;
+	tx_entry->peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	ofi_atomic_inc32(&tx_entry->peer->use_cnt);
 	tx_entry->msg_id = -1;
 	tx_entry->cq_entry.flags = FI_RMA | FI_WRITE;
 	tx_entry->cq_entry.buf = NULL;

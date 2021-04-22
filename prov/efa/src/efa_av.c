@@ -323,13 +323,13 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 	/* currently multiple EP bind to same av is not supported */
 	rxr_ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
 	av_entry->rdm_peer = ofi_buf_alloc(av->rdm_peer_pool);
-
 	if (!av_entry->rdm_peer) {
 		ret = -FI_ENOMEM;
 		ofi_av_remove_addr(&av->util_av, *fi_addr);
 		goto out;
 	}
 
+	ofi_atomic_initialize32(&av_entry->rdm_peer->use_cnt, 1);
 	if (av->used + 1 > av->count) {
 		ret = efa_av_resize(av, av->count * 2);
 		if (ret) {
