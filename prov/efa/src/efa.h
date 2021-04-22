@@ -294,6 +294,7 @@ struct efa_av_entry {
 	fi_addr_t		shm_rdm_addr;
 	bool			local_mapping;
 	struct rdm_peer		*rdm_peer;
+	struct efa_conn		*efa_conn;
 };
 
 struct efa_ah_qpn {

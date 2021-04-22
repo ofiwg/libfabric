@@ -408,6 +408,11 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 	EFA_INFO(FI_LOG_AV, "Successfully inserted address GID[%s] QP[%u] QKEY[%u] to RDM AV. fi_addr: %ld\n",
 		 raw_gid_str, addr->qpn, addr->qkey, *fi_addr);
 
+	/*
+	 * TODO: once DGRAM endpoint is refactored to use util_av, allocate and
+	 * store efa_conn in efa_av_entry instead of updating this pointer.
+	 */
+	av_entry->efa_conn = av->conn_table[*fi_addr];
 out:
 	fastlock_release(&av->util_av.lock);
 	return ret;
