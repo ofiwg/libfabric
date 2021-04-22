@@ -261,6 +261,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	struct cxi_pt_alloc_opts opts = {};
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 	uint32_t le_flags;
+	uint64_t ib = 0;
 
 	if (mr->cntr) {
 		ret = cxip_cntr_enable(mr->cntr);
@@ -327,11 +328,17 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	if (mr->cntr)
 		le_flags |= C_LE_EVENT_CT_COMM;
 
+	/* When FI_FENCE is not requested, restricted operations can used PCIe
+	 * relaxed ordering.
+	 */
+	if (!(ep_obj->caps & FI_FENCE))
+		ib = 1;
+
 	ret = cxip_pte_append(mr->pte,
 			      mr->len ? CXI_VA_TO_IOVA(mr->md->md, mr->buf) : 0,
 			      mr->len, mr->len ? mr->md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, mr->req.req_id,
-			      mr->key, 0, CXI_MATCH_ID_ANY,
+			      0, ib, CXI_MATCH_ID_ANY,
 			      0, le_flags, mr->cntr, ep_obj->ctrl_tgq, true);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to write Append command: %d\n", ret);

@@ -670,6 +670,14 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 			fi_ptr->caps &= ~FI_SOURCE;
 			fi_ptr->rx_attr->caps &= ~FI_SOURCE;
 		}
+
+		/* Requesting FI_FENCE prevents the use PCIe RO for RMA. Do not
+		 * set FI_FENCE unless explicitly requested.
+		 */
+		if (hints->caps && !(hints->caps & FI_FENCE)) {
+			fi_ptr->caps &= ~FI_FENCE;
+			fi_ptr->tx_attr->caps &= ~FI_FENCE;
+		}
 	}
 
 	return FI_SUCCESS;

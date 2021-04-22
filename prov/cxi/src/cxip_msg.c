@@ -4578,6 +4578,9 @@ static ssize_t cxip_tsendmsg(struct fid_ep *ep,
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
+	if (flags & FI_FENCE && !(txc->attr.caps & FI_FENCE))
+		return -FI_EINVAL;
+
 	/* If selective completion is not requested, always generate
 	 * completions.
 	 */
@@ -4741,6 +4744,9 @@ static ssize_t cxip_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+		return -FI_EINVAL;
+
+	if (flags & FI_FENCE && !(txc->attr.caps & FI_FENCE))
 		return -FI_EINVAL;
 
 	/* If selective completion is not requested, always generate
