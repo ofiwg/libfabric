@@ -965,6 +965,9 @@ int ft_server_connect(void)
 	if (ret)
 		goto err;
 
+	if (ft_check_opts(FT_OPT_FORK_CHILD))
+		ft_fork_child();
+
 	return 0;
 
 err:
@@ -1023,6 +1026,9 @@ int ft_client_connect(void)
 	if (ret)
 		return ret;
 
+	if (ft_check_opts(FT_OPT_FORK_CHILD))
+		ft_fork_child();
+
 	return 0;
 }
 
@@ -1057,6 +1063,9 @@ int ft_init_fabric(void)
 	ret = ft_init_av();
 	if (ret)
 		return ret;
+
+	if (ft_check_opts(FT_OPT_FORK_CHILD))
+		ft_fork_child();
 
 	return 0;
 }
@@ -2610,6 +2619,21 @@ int ft_fork_and_pair(void)
 	return 0;
 }
 
+int ft_fork_child(void)
+{
+	ft_child_pid = fork();
+	if (ft_child_pid < 0) {
+		FT_PRINTERR("fork", ft_child_pid);
+		return -errno;
+	}
+
+	if (ft_child_pid == 0) {
+		exit(0);
+	}
+
+	return 0;
+}
+
 int ft_wait_child(void)
 {
 	int ret;
@@ -2830,6 +2854,7 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("", "fi_rdm_tagged_pingpong");
 	FT_PRINT_OPTS_USAGE("", "fi_rma_bw");
 	FT_PRINT_OPTS_USAGE("-M <mode>", "Disable mode bit from test");
+	FT_PRINT_OPTS_USAGE("-K", "fork a child process after initializing endpoint");
 	FT_PRINT_OPTS_USAGE("", "mr_local");
 	FT_PRINT_OPTS_USAGE("-a <address vector name>", "name of address vector");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
@@ -2940,6 +2965,9 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
 		break;
 	case 'H':
 		opts->options |= FT_OPT_ENABLE_HMEM;
+		break;
+	case 'K':
+		opts->options |= FT_OPT_FORK_CHILD;
 		break;
 	default:
 		/* let getopt handle unknown opts*/
