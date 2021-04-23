@@ -753,5 +753,13 @@ out:
 	if (opts.dst_addr)
 		fts_close(series);
 	ft_free();
+
+	if (results[FT_EIO])
+		ret = -FI_EIO;
+	else if (results[FT_ENOSYS])
+		ret = -FI_ENOSYS;
+	else if (results[FT_ENODATA])
+		ret = -FI_ENODATA;
+
 	return ft_exit_code(ret);
 }
