@@ -67,6 +67,7 @@
 #include <ofi_epoll.h>
 #include <ofi_list.h>
 #include <ofi_osd.h>
+#include <ofi_iov.h>
 #include <shared/ofi_str.h>
 
 struct fi_provider core_prov = {
@@ -1002,6 +1003,39 @@ int ofi_discard_socket(SOCKET sock, size_t len)
 		ret = ofi_recvall_socket(sock, &buf, 1);
 	return ret;
 }
+
+size_t ofi_byteq_readv(struct ofi_byteq *byteq, struct iovec *iov,
+		       size_t cnt, size_t offset)
+{
+	size_t avail, len;
+
+	avail = ofi_byteq_readable(byteq);
+	if (!avail)
+		return 0;
+
+	len = ofi_copy_iov_buf(iov, cnt, offset, &byteq->data[byteq->head],
+			       avail, OFI_COPY_BUF_TO_IOV);
+	if (len < avail) {
+		byteq->head += len;
+	} else {
+		byteq->head = 0;
+		byteq->tail = 0;
+	}
+	return len;
+}
+
+void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
+		      size_t cnt, size_t offset)
+{
+	size_t len;
+
+	assert(ofi_total_iov_len(iov, cnt) - offset <=
+	       ofi_byteq_writeable(byteq));
+	len = ofi_copy_iov_buf(iov, cnt, offset, &byteq->data[byteq->tail],
+			       ofi_byteq_writeable(byteq), OFI_COPY_IOV_TO_BUF);
+	byteq->tail += len;
+}
+
 
 
 int ofi_pollfds_create(struct ofi_pollfds **pfds)
