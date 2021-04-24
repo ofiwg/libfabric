@@ -549,12 +549,12 @@ function complex_test {
 		opts+=" -E"
 	fi
 
-	s_cmd="${BIN_PATH}${test_exe} -x $opts"
+	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} -x $opts"
 	FI_LOG_LEVEL=error ${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	s_pid=$!
 	sleep 1
 
-	c_cmd="${BIN_PATH}${test_exe} -u "${COMPLEX_CFG}" $S_INTERFACE $opts"
+	c_cmd="${BIN_PATH}${test_exe} ${C_ARGS} -u "${COMPLEX_CFG}" $S_INTERFACE $opts"
 	FI_LOG_LEVEL=error ${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
 	c_pid=$!
 
