@@ -221,6 +221,42 @@ static inline ssize_t ofi_byteq_send(struct ofi_byteq *byteq, SOCKET sock)
 
 
 /*
+ * Buffered socket - socket with send/receive staging buffers.
+ */
+struct ofi_bsock {
+	SOCKET sock;
+	struct ofi_byteq sq;
+	struct ofi_byteq rq;
+};
+
+static inline void
+ofi_bsock_init(struct ofi_bsock *bsock, ssize_t sbuf_size, ssize_t rbuf_size)
+{
+	bsock->sock = INVALID_SOCKET;
+	ofi_byteq_init(&bsock->sq, sbuf_size);
+	ofi_byteq_init(&bsock->rq, rbuf_size);
+}
+
+static inline size_t ofi_bsock_readable(struct ofi_bsock *bsock)
+{
+	return ofi_byteq_readable(&bsock->rq);
+}
+
+static inline size_t ofi_bsock_tosend(struct ofi_bsock *bsock)
+{
+	return ofi_byteq_readable(&bsock->sq);
+}
+
+ssize_t ofi_bsock_flush(struct ofi_bsock *bsock);
+ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t len);
+ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
+			size_t cnt);
+ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len);
+ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov,
+			size_t cnt);
+
+
+/*
  * Address utility functions
  */
 
