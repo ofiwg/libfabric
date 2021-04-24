@@ -146,10 +146,8 @@ int tcpx_recv_msg_data(struct tcpx_xfer_entry *rx_entry)
 
 	bytes_recvd = ofi_readv_socket(rx_entry->ep->sock, rx_entry->iov,
 				       rx_entry->iov_cnt);
-	if (bytes_recvd < 0)
-		return bytes_read ? -FI_EAGAIN : -ofi_sockerr();
-	else if (bytes_recvd == 0)
-		return -FI_ENOTCONN;
+	if (bytes_recvd <= 0)
+		return (bytes_recvd) ? -ofi_sockerr(): -FI_ENOTCONN;
 
 	ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, bytes_recvd);
 	return (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len) ?
