@@ -1036,6 +1036,184 @@ void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
 	byteq->tail += len;
 }
 
+static inline ssize_t ofi_bsock_send_byteq(struct ofi_bsock *bsock)
+{
+	ssize_t ret;
+
+	ret = ofi_byteq_send(&bsock->sq, bsock->sock);
+	if (ret < 0)
+		return ofi_sockerr() == EPIPE ?
+			-FI_ENOTCONN : -ofi_sockerr();
+	return ret;
+}
+
+ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t len)
+{
+	size_t avail;
+	ssize_t ret;
+
+	avail = ofi_byteq_readable(&bsock->sq);
+	if (avail) {
+		if (len < ofi_byteq_writeable(&bsock->sq)) {
+			ofi_byteq_write(&bsock->sq, buf, len);
+			ret = ofi_bsock_send_byteq(bsock);
+			return ret < 0 && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret) ?
+				ret : len;
+		}
+
+		ret = ofi_bsock_send_byteq(bsock);
+		if (ret < 0)
+			return ret;
+		if (ret < avail)
+			return -FI_EAGAIN;
+	}
+
+	assert(!ofi_byteq_readable(&bsock->sq));
+	ret = ofi_send_socket(bsock->sock, buf, len, MSG_NOSIGNAL);
+	if (ret < 0) {
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
+		    len < ofi_byteq_writeable(&bsock->sq)) {
+			ofi_byteq_write(&bsock->sq, buf, len);
+			return len;
+		}
+		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
+	}
+	return ret;
+}
+
+ssize_t
+ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov, size_t cnt)
+{
+	struct msghdr msg;
+	size_t avail, len;
+	ssize_t ret;
+
+	if (cnt == 1)
+		return ofi_bsock_send(bsock, iov[0].iov_base, iov[0].iov_len);
+
+	len = ofi_total_iov_len(iov, cnt);
+	avail = ofi_byteq_readable(&bsock->sq);
+	if (avail) {
+		if (len < ofi_byteq_writeable(&bsock->sq)) {
+			ofi_byteq_writev(&bsock->sq, iov, cnt, 0);
+			ret = ofi_bsock_send_byteq(bsock);
+			return ret < 0 && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret) ?
+				ret : len;
+		}
+
+		ret = ofi_bsock_send_byteq(bsock);
+		if (ret < 0)
+			return ret;
+		if (ret < avail)
+			return -FI_EAGAIN;
+	}
+
+	assert(!ofi_byteq_readable(&bsock->sq));
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+	msg.msg_flags = 0;
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
+	msg.msg_iov = (struct iovec *) iov;
+	msg.msg_iovlen = cnt;
+
+	ret = ofi_sendmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+	if (ret < 0) {
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
+		    len < ofi_byteq_writeable(&bsock->sq)) {
+			ofi_byteq_writev(&bsock->sq, iov, cnt, 0);
+			return len;
+		}
+		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
+	}
+	return ret;
+}
+
+ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len)
+{
+	size_t bytes;
+	ssize_t ret;
+
+	bytes = ofi_byteq_read(&bsock->rq, buf, len);
+	if (bytes) {
+		if (bytes == len)
+			return len;
+		buf = (char *) buf + bytes;
+		len -= bytes;
+	}
+
+	assert(!ofi_byteq_readable(&bsock->rq));
+	if (len < (OFI_BYTEQ_SIZE >> 1)) {
+		ret = ofi_byteq_recv(&bsock->rq, bsock->sock);
+		if (ret <= 0)
+			goto out;
+
+		bytes += ofi_byteq_read(&bsock->rq, buf, len);
+		return bytes;
+	}
+
+	ret = ofi_recv_socket(bsock->sock, buf, len, MSG_NOSIGNAL);
+	if (ret > 0)
+		return bytes + ret;
+
+out:
+	if (bytes)
+		return bytes;
+	return ret ? -ofi_sockerr(): -FI_ENOTCONN;
+}
+
+ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt)
+{
+	struct msghdr msg;
+	size_t len, bytes;
+	ssize_t ret;
+
+	if (cnt == 1)
+		return ofi_bsock_recv(bsock, iov[0].iov_base, iov[0].iov_len);
+
+	len = ofi_total_iov_len(iov, cnt);
+	if (ofi_byteq_readable(&bsock->rq)) {
+		bytes = ofi_byteq_readv(&bsock->rq, iov, cnt, 0);
+		if (bytes == len)
+			return len;
+
+		len -= bytes;
+	} else {
+		bytes = 0;
+	}
+
+	assert(!ofi_byteq_readable(&bsock->rq));
+	if (len < (OFI_BYTEQ_SIZE >> 1)) {
+		ret = ofi_byteq_recv(&bsock->rq, bsock->sock);
+		if (ret <= 0)
+			goto out;
+
+		bytes += ofi_byteq_readv(&bsock->rq, iov, cnt, bytes);
+		return bytes;
+	}
+
+	/* It's too difficult to adjust the iov without copying it, so return
+	 * what data we have.  The caller will consume the iov and retry.
+	 */
+	if (bytes)
+		return bytes;
+
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+	msg.msg_flags = 0;
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
+	msg.msg_iov = iov;
+	msg.msg_iovlen = cnt;
+
+	ret = ofi_recvmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+	if (ret > 0)
+		return ret;
+out:
+	if (bytes)
+		return bytes;
+	return ret ? -ofi_sockerr(): -FI_ENOTCONN;
+}
 
 
 int ofi_pollfds_create(struct ofi_pollfds **pfds)
