@@ -39,131 +39,45 @@
 
 int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry)
 {
-	ssize_t bytes_sent;
-	struct msghdr msg = {0};
+	ssize_t ret;
 
-	msg.msg_iov = tx_entry->iov;
-	msg.msg_iovlen = tx_entry->iov_cnt;
+	ret = ofi_bsock_sendv(&tx_entry->ep->bsock, tx_entry->iov,
+			      tx_entry->iov_cnt);
+	if (ret < 0)
+		return ret;
 
-	bytes_sent = ofi_sendmsg_tcp(tx_entry->ep->sock, &msg, MSG_NOSIGNAL);
-	if (bytes_sent < 0)
-		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
-
-	tx_entry->rem_len -= bytes_sent;
+	tx_entry->rem_len -= ret;
 	if (tx_entry->rem_len) {
-		ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt, bytes_sent);
+		ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt, ret);
 		return -FI_EAGAIN;
 	}
 	return FI_SUCCESS;
 }
 
-static ssize_t tcpx_read_from_buffer(struct stage_buf *stage_buf,
-				     uint8_t *buf, size_t len)
+ssize_t tcpx_recv_hdr(struct tcpx_ep *ep)
 {
-	size_t rem_size;
-	ssize_t ret;
+	size_t len;
+	void *buf;
 
-	assert(stage_buf->cur_pos < stage_buf->bytes_avail);
-	rem_size = stage_buf->bytes_avail - stage_buf->cur_pos;
-	ret = (rem_size >= len) ? len : rem_size;
-	memcpy(buf, &stage_buf->buf[stage_buf->cur_pos], ret);
-	stage_buf->cur_pos += ret;
-	return ret;
-}
+	buf = (uint8_t *) &ep->cur_rx_msg.hdr + ep->cur_rx_msg.done_len;
+	len = ep->cur_rx_msg.hdr_len - ep->cur_rx_msg.done_len;
 
-ssize_t tcpx_recv_hdr(SOCKET sock, struct stage_buf *stage_buf,
-		      struct tcpx_cur_rx_msg *cur_rx_msg)
-{
-	ssize_t bytes_recvd, bytes_read;
-	size_t rem_len;
-	void *rem_buf;
-
-	rem_buf = (uint8_t *) &cur_rx_msg->hdr + cur_rx_msg->done_len;
-	rem_len = cur_rx_msg->hdr_len - cur_rx_msg->done_len;
-
-	if (stage_buf->cur_pos < stage_buf->bytes_avail) {
-		bytes_read = tcpx_read_from_buffer(stage_buf, rem_buf, rem_len);
-		rem_len -= bytes_read;
-		if (!rem_len)
-			return bytes_read;
-
-		rem_buf = (char *) rem_buf + bytes_read;
-	} else {
-		bytes_read = 0;
-	}
-
-	bytes_recvd = ofi_recv_socket(sock, rem_buf, rem_len, 0);
-	if (bytes_recvd < 0)
-		return bytes_read ? bytes_read : -ofi_sockerr();
-	else if (bytes_recvd == 0)
-		return -FI_ENOTCONN;
-
-	return bytes_read + bytes_recvd;
-}
-
-static ssize_t tcpx_readv_from_buffer(struct stage_buf *stage_buf,
-				      struct iovec *iov,
-				      int iov_cnt)
-{
-	ssize_t ret = 0;
-	size_t bytes_read;
-	int i;
-
-	if (iov_cnt == 1)
-		return tcpx_read_from_buffer(stage_buf, iov[0].iov_base,
-					     iov[0].iov_len);
-
-	for (i = 0; i < iov_cnt; i++) {
-		bytes_read = tcpx_read_from_buffer(stage_buf, iov[i].iov_base,
-						   iov[i].iov_len);
-		ret += bytes_read;
-		if ((bytes_read < iov[i].iov_len) ||
-		    !(stage_buf->bytes_avail - stage_buf->cur_pos))
-			break;
-	}
-	return ret;
+	return ofi_bsock_recv(&ep->bsock, buf, len);
 }
 
 int tcpx_recv_msg_data(struct tcpx_xfer_entry *rx_entry)
 {
-	struct stage_buf *stage_buf;
-	ssize_t bytes_recvd, bytes_read;
+	ssize_t ret;
 
 	if (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len)
 		return FI_SUCCESS;
 
-	stage_buf = &rx_entry->ep->stage_buf;
-	if (stage_buf->cur_pos < stage_buf->bytes_avail) {
-		bytes_read = tcpx_readv_from_buffer(stage_buf,
-						    rx_entry->iov,
-						    rx_entry->iov_cnt);
-		ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, bytes_read);
-		if (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len)
-			return FI_SUCCESS;
-	} else {
-		bytes_read = 0;
-	}
+	ret = ofi_bsock_recvv(&rx_entry->ep->bsock, rx_entry->iov,
+			      rx_entry->iov_cnt);
+	if (ret < 0)
+		return ret;
 
-	bytes_recvd = ofi_readv_socket(rx_entry->ep->sock, rx_entry->iov,
-				       rx_entry->iov_cnt);
-	if (bytes_recvd <= 0)
-		return (bytes_recvd) ? -ofi_sockerr(): -FI_ENOTCONN;
-
-	ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, bytes_recvd);
+	ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, ret);
 	return (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len) ?
 		FI_SUCCESS : -FI_EAGAIN;
-}
-
-int tcpx_read_to_buffer(SOCKET sock, struct stage_buf *stage_buf)
-{
-	int bytes_recvd;
-
-	bytes_recvd = ofi_recv_socket(sock, stage_buf->buf,
-				      sizeof(stage_buf->buf), 0);
-	if (bytes_recvd <= 0)
-		return (bytes_recvd) ? -ofi_sockerr(): -FI_ENOTCONN;
-
-	stage_buf->bytes_avail = bytes_recvd;
-	stage_buf->cur_pos = 0;
-	return FI_SUCCESS;
 }
