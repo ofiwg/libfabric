@@ -118,6 +118,102 @@ static inline int ofi_sendall_socket(SOCKET sock, const void *buf, size_t len)
 int ofi_discard_socket(SOCKET sock, size_t len);
 
 /*
+ * Byte queue - streaming socket staging buffer
+ */
+enum {
+	OFI_BYTEQ_SIZE = 8192,
+};
+
+struct ofi_byteq {
+	unsigned int head;
+	unsigned int tail;
+	uint8_t data[OFI_BYTEQ_SIZE];
+};
+
+static inline void ofi_byteq_init(struct ofi_byteq *byteq)
+{
+	memset(byteq, 0, sizeof *byteq);
+}
+
+static inline size_t ofi_byteq_readable(struct ofi_byteq *byteq)
+{
+	return byteq->tail - byteq->head;
+}
+
+static inline size_t ofi_byteq_writeable(struct ofi_byteq *byteq)
+{
+	return OFI_BYTEQ_SIZE - byteq->tail;
+}
+
+static inline size_t
+ofi_byteq_read(struct ofi_byteq *byteq, void *buf, size_t len)
+{
+	size_t avail;
+
+	avail = ofi_byteq_readable(byteq);
+	if (!avail)
+		return 0;
+
+	if (len < avail) {
+		memcpy(buf, &byteq->data[byteq->head], len);
+		byteq->head += len;
+		return len;
+	}
+
+	memcpy(buf, &byteq->data[byteq->head], avail);
+	byteq->head = 0;
+	byteq->tail = 0;
+	return avail;
+}
+
+static inline void
+ofi_byteq_write(struct ofi_byteq *byteq, const void *buf, size_t len)
+{
+	assert(len <= ofi_byteq_writeable(byteq));
+	memcpy(&byteq->data[byteq->tail], buf, len);
+	byteq->tail += len;
+}
+
+void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
+		      size_t cnt, size_t offset);
+
+static inline ssize_t ofi_byteq_recv(struct ofi_byteq *byteq, SOCKET sock)
+{
+	size_t avail;
+	ssize_t ret;
+
+	avail = ofi_byteq_writeable(byteq);
+	assert(avail);
+	ret = ofi_recv_socket(sock, &byteq->data[byteq->tail], avail,
+			      MSG_NOSIGNAL);
+	if (ret > 0)
+		byteq->tail += ret;
+	return ret;
+}
+
+size_t ofi_byteq_readv(struct ofi_byteq *byteq, struct iovec *iov,
+			size_t cnt, size_t offset);
+
+static inline ssize_t ofi_byteq_send(struct ofi_byteq *byteq, SOCKET sock)
+{
+	size_t avail;
+	ssize_t ret;
+
+	avail = ofi_byteq_readable(byteq);
+	assert(avail);
+	ret = ofi_send_socket(sock, &byteq->data[byteq->head], avail,
+			      MSG_NOSIGNAL);
+	if (ret == avail) {
+		byteq->head = 0;
+		byteq->tail = 0;
+	} else if (ret > 0) {
+		byteq->head += ret;
+	}
+	return ret;
+}
+
+
+/*
  * Address utility functions
  */
 
