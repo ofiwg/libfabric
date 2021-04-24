@@ -598,7 +598,7 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 {
 	ssize_t ret;
 
-	ret = tcpx_recv_hdr(ep->sock, &ep->stage_buf, &ep->cur_rx_msg);
+	ret = tcpx_recv_hdr(ep);
 	if (ret < 0)
 		return (int) ret;
 
@@ -613,8 +613,7 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 						  base_hdr.payload_off;
 
 		if (ep->cur_rx_msg.hdr_len > ep->cur_rx_msg.done_len) {
-			ret = tcpx_recv_hdr(ep->sock, &ep->stage_buf,
-					    &ep->cur_rx_msg);
+			ret = tcpx_recv_hdr(ep);
 			if (ret < 0)
 				return (int) ret;
 
@@ -634,13 +633,6 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 	int ret;
 
 	assert(fastlock_held(&ep->lock));
-	if (!ep->cur_rx_entry &&
-	    (ep->stage_buf.cur_pos == ep->stage_buf.bytes_avail)) {
-		ret = tcpx_read_to_buffer(ep->sock, &ep->stage_buf);
-		if (ret)
-			goto err;
-	}
-
 	do {
 		if (!ep->cur_rx_entry) {
 			if (ep->cur_rx_msg.done_len < ep->cur_rx_msg.hdr_len) {
@@ -663,7 +655,7 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 		assert(ep->cur_rx_proc_fn);
 		ep->cur_rx_proc_fn(ep->cur_rx_entry);
 
-	} while (ep->stage_buf.cur_pos < ep->stage_buf.bytes_avail);
+	} while (ofi_bsock_readable(&ep->bsock));
 
 	return;
 err:
@@ -684,6 +676,8 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 		entry = ep->tx_queue.head;
 		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
 		tcpx_process_tx_entry(tx_entry);
+	} else {
+		ofi_bsock_flush(&ep->bsock);
 	}
 }
 
@@ -699,12 +693,12 @@ int tcpx_try_func(void *util_ep)
 			       struct util_wait_fd, util_wait);
 
 	fastlock_acquire(&ep->lock);
-	if (!slist_empty(&ep->tx_queue) && !ep->pollout_set) {
+	if (tcpx_tx_pending(ep) && !ep->pollout_set) {
 		ep->pollout_set = true;
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 (OFI_EPOLL_IN | OFI_EPOLL_OUT) : (POLLIN | POLLOUT);
 		goto epoll_mod;
-	} else if (slist_empty(&ep->tx_queue) && ep->pollout_set) {
+	} else if (!tcpx_tx_pending(ep) && ep->pollout_set) {
 		ep->pollout_set = false;
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 OFI_EPOLL_IN : POLLIN;
@@ -715,9 +709,9 @@ int tcpx_try_func(void *util_ep)
 
 epoll_mod:
 	ret = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
-	      ofi_epoll_mod(wait_fd->epoll_fd, ep->sock, events,
+	      ofi_epoll_mod(wait_fd->epoll_fd, ep->bsock.sock, events,
 			    &ep->util_ep.ep_fid.fid) :
-	      ofi_pollfds_mod(wait_fd->pollfds, ep->sock, events,
+	      ofi_pollfds_mod(wait_fd->pollfds, ep->bsock.sock, events,
 			      &ep->util_ep.ep_fid.fid);
 	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
@@ -729,13 +723,13 @@ epoll_mod:
 void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,
 			  struct tcpx_xfer_entry *tx_entry)
 {
-	int empty;
+	bool pending;
 	struct util_wait *wait = tcpx_ep->util_ep.tx_cq->wait;
 
-	empty = slist_empty(&tcpx_ep->tx_queue);
+	pending = tcpx_tx_pending(tcpx_ep);
 	slist_insert_tail(&tx_entry->entry, &tcpx_ep->tx_queue);
 
-	if (empty) {
+	if (!pending) {
 		tcpx_process_tx_entry(tx_entry);
 
 		if (!slist_empty(&tcpx_ep->tx_queue) && wait)
