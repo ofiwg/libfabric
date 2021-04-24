@@ -58,6 +58,7 @@
 #include <ofi_signal.h>
 #include <ofi_util.h>
 #include <ofi_proto.h>
+#include <ofi_net.h>
 
 #ifndef _TCP_H_
 #define _TCP_H_
@@ -216,19 +217,9 @@ struct tcpx_rx_ctx {
 
 typedef int (*tcpx_rx_process_fn_t)(struct tcpx_xfer_entry *rx_entry);
 
-enum {
-	STAGE_BUF_SIZE = 512
-};
-
-struct stage_buf {
-	uint8_t			buf[STAGE_BUF_SIZE];
-	size_t			bytes_avail;
-	size_t			cur_pos;
-};
-
 struct tcpx_ep {
 	struct util_ep		util_ep;
-	SOCKET			sock;
+	struct ofi_bsock	bsock;
 	struct tcpx_cur_rx_msg	cur_rx_msg;
 	struct tcpx_xfer_entry	*cur_rx_entry;
 	tcpx_rx_process_fn_t 	cur_rx_proc_fn;
@@ -243,7 +234,6 @@ struct tcpx_ep {
 	fastlock_t		lock;
 	int (*start_op[ofi_op_write + 1])(struct tcpx_ep *ep);
 	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
-	struct stage_buf	stage_buf;
 	size_t			min_multi_recv_size;
 	bool			pollout_set;
 };
@@ -334,11 +324,9 @@ void tcpx_cq_report_error(struct util_cq *cq,
 void tcpx_get_cq_info(struct tcpx_xfer_entry *entry, uint64_t *flags,
 		      uint64_t *data, uint64_t *tag);
 
-ssize_t tcpx_recv_hdr(SOCKET sock, struct stage_buf *stage_buf,
-		      struct tcpx_cur_rx_msg *cur_rx_msg);
+ssize_t tcpx_recv_hdr(struct tcpx_ep *ep);
 int tcpx_recv_msg_data(struct tcpx_xfer_entry *recv_entry);
 int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
-int tcpx_read_to_buffer(SOCKET sock, struct stage_buf *stage_buf);
 
 struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq,
 					      enum tcpx_op_code type);

@@ -156,7 +156,7 @@ static int tcpx_ep_enable(struct tcpx_ep *ep,
 
 	if (ep->util_ep.rx_cq) {
 		ret = ofi_wait_add_fd(ep->util_ep.rx_cq->wait,
-				      ep->sock, POLLIN, tcpx_try_func,
+				      ep->bsock.sock, POLLIN, tcpx_try_func,
 				      (void *) &ep->util_ep,
 				      &ep->util_ep.ep_fid.fid);
 		if (ret) {
@@ -168,7 +168,7 @@ static int tcpx_ep_enable(struct tcpx_ep *ep,
 
 	if (ep->util_ep.tx_cq) {
 		ret = ofi_wait_add_fd(ep->util_ep.tx_cq->wait,
-				      ep->sock, POLLIN, tcpx_try_func,
+				      ep->bsock.sock, POLLIN, tcpx_try_func,
 				      (void *) &ep->util_ep,
 				      &ep->util_ep.ep_fid.fid);
 		if (ret) {
@@ -202,7 +202,7 @@ static void tcpx_cm_recv_resp(struct util_wait *wait,
 	assert(cm_ctx->fid->fclass == FI_CLASS_EP);
 	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
-	ret = rx_cm_data(ep->sock, ofi_ctrl_connresp, cm_ctx);
+	ret = rx_cm_data(ep->bsock.sock, ofi_ctrl_connresp, cm_ctx);
 	if (ret) {
 		if (ret == -FI_EAGAIN)
 			return;
@@ -211,11 +211,11 @@ static void tcpx_cm_recv_resp(struct util_wait *wait,
 				FI_LOG_INFO : FI_LOG_WARN;
 		FI_LOG(&tcpx_prov, level, FI_LOG_EP_CTRL,
 			"Failed to receive connect response\n");
-		ofi_wait_del_fd(wait, ep->sock);
+		ofi_wait_del_fd(wait, ep->bsock.sock);
 		goto err1;
 	}
 
-	ret = ofi_wait_del_fd(wait, ep->sock);
+	ret = ofi_wait_del_fd(wait, ep->bsock.sock);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Could not remove fd from wait\n");
@@ -266,7 +266,7 @@ static void tcpx_cm_send_resp(struct util_wait *wait,
 	assert(cm_ctx->fid->fclass == FI_CLASS_EP);
 	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
-	ret = tx_cm_data(ep->sock, ofi_ctrl_connresp, cm_ctx);
+	ret = tx_cm_data(ep->bsock.sock, ofi_ctrl_connresp, cm_ctx);
 	if (ret) {
 		if (ret == -FI_EAGAIN)
 			return;
@@ -275,7 +275,7 @@ static void tcpx_cm_send_resp(struct util_wait *wait,
 		goto delfd;
 	}
 
-	ret = ofi_wait_del_fd(wait, ep->sock);
+	ret = ofi_wait_del_fd(wait, ep->bsock.sock);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Could not remove fd from wait\n");
@@ -293,7 +293,7 @@ static void tcpx_cm_send_resp(struct util_wait *wait,
 	return;
 
 delfd:
-	ofi_wait_del_fd(wait, ep->sock);
+	ofi_wait_del_fd(wait, ep->bsock.sock);
 disable:
 	fastlock_acquire(&ep->lock);
 	tcpx_ep_disable(ep, -ret);
@@ -382,18 +382,19 @@ static void tcpx_cm_send_req(struct util_wait *wait,
 	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
 	len = sizeof(status);
-	ret = getsockopt(ep->sock, SOL_SOCKET, SO_ERROR, (char *) &status, &len);
+	ret = getsockopt(ep->bsock.sock, SOL_SOCKET, SO_ERROR,
+			 (char *) &status, &len);
 	if (ret < 0 || status) {
 		ret = (ret < 0)? -ofi_sockerr() : -status;
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "connection failure\n");
 		goto delfd;
 	}
 
-	ret = tx_cm_data(ep->sock, ofi_ctrl_connreq, cm_ctx);
+	ret = tx_cm_data(ep->bsock.sock, ofi_ctrl_connreq, cm_ctx);
 	if (ret)
 		goto delfd;
 
-	ret = ofi_wait_del_fd(wait, ep->sock);
+	ret = ofi_wait_del_fd(wait, ep->bsock.sock);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Could not remove fd from wait: %s\n",
@@ -402,7 +403,7 @@ static void tcpx_cm_send_req(struct util_wait *wait,
 	}
 
 	cm_ctx->state = TCPX_CM_REQ_SENT;
-	ret = ofi_wait_add_fd(wait, ep->sock, POLLIN,
+	ret = ofi_wait_add_fd(wait, ep->bsock.sock, POLLIN,
 			      tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret)
 		goto disable;
@@ -410,7 +411,7 @@ static void tcpx_cm_send_req(struct util_wait *wait,
 	return;
 
 delfd:
-	ofi_wait_del_fd(wait, ep->sock);
+	ofi_wait_del_fd(wait, ep->bsock.sock);
 disable:
 	fastlock_acquire(&ep->lock);
 	tcpx_ep_disable(ep, -ret);
