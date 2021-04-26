@@ -157,10 +157,9 @@ retry:
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 			return ret;
 
-		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
-			"msg recv failed ret = %d (%s)\n", ret,
-			fi_strerror(-ret));
-		goto shutdown;
+		if (ret != -FI_ETRUNC)
+			goto shutdown;
+		assert(rx_entry->flags & TCPX_NEED_DYN_RBUF);
 	}
 
 	if (rx_entry->flags & TCPX_NEED_DYN_RBUF) {
@@ -169,7 +168,6 @@ retry:
 			goto shutdown;
 
 		rx_entry->flags &= ~TCPX_NEED_DYN_RBUF;
-		rx_entry->rem_len = 0;
 		goto retry;
 	}
 
@@ -183,6 +181,8 @@ retry:
 	return 0;
 
 shutdown:
+	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+		"msg recv failed ret = %d (%s)\n", ret, fi_strerror(-ret));
 	tcpx_ep_disable(rx_entry->ep, 0);
 	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	tcpx_rx_entry_free(rx_entry);
@@ -414,6 +414,8 @@ static void tcpx_rx_setup(struct tcpx_ep *ep, struct tcpx_xfer_entry *rx_entry,
 {
 	ep->cur_rx_entry = rx_entry;
 	ep->cur_rx_proc_fn = process_fn;
+	rx_entry->rem_len = ep->cur_rx_msg.hdr.base_hdr.size -
+			    ep->cur_rx_msg.hdr.base_hdr.payload_off;
 
 	/* Reset to receive next message */
 	ep->cur_rx_msg.hdr_len = sizeof(ep->cur_rx_msg.hdr.base_hdr);
@@ -476,15 +478,10 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 		if (msg->hdr.base_hdr.flags & TCPX_TAGGED) {
 			/* Raw message, no rxm header */
 			rx_entry->iov_cnt = 0;
-			rx_entry->rem_len = msg_len;
 		} else {
-			ret = ofi_truncate_iov(rx_entry->iov,
-					       &rx_entry->iov_cnt, msg_len);
-			if (ret) {
-				rx_entry->rem_len = msg_len -
-					    ofi_total_iov_len(rx_entry->iov,
-							rx_entry->iov_cnt);
-			}
+			/* Receiving only rxm header */
+			assert(msg_len >= ofi_total_iov_len(rx_entry->iov,
+							    rx_entry->iov_cnt));
 		}
 	} else {
 		ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt,
