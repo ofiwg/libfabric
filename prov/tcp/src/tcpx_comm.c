@@ -77,7 +77,13 @@ int tcpx_recv_msg_data(struct tcpx_xfer_entry *rx_entry)
 	if (ret < 0)
 		return ret;
 
-	ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, ret);
-	return (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len) ?
-		FI_SUCCESS : -FI_EAGAIN;
+	rx_entry->rem_len -= ret;
+	if (rx_entry->rem_len) {
+		ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, ret);
+		if (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len)
+			return -FI_ETRUNC;
+
+		return -FI_EAGAIN;
+	}
+	return FI_SUCCESS;
 }
