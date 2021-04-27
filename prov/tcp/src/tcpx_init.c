@@ -54,6 +54,9 @@ struct tcpx_port_range port_range = {
 
 int tcpx_nodelay = -1;
 
+int tcpx_staging_sbuf_size = 0; /* disable send buffering for now */
+int tcpx_prefetch_rbuf_size = OFI_BYTEQ_SIZE;
+
 
 static void tcpx_init_env(void)
 {
@@ -69,6 +72,18 @@ static void tcpx_init_env(void)
 	fi_param_define(&tcpx_prov, "nodelay", FI_PARAM_BOOL,
 			"overrides default TCP_NODELAY socket setting");
 	fi_param_get_bool(&tcpx_prov, "nodelay", &tcpx_nodelay);
+
+	fi_param_define(&tcpx_prov, "staging_sbuf_size", FI_PARAM_INT,
+			"size of buffer used to coalesce iovec's or "
+			"send requests before posting to the kernel, "
+			"set to 0 to disable");
+	fi_param_define(&tcpx_prov, "prefetch_rbuf_size", FI_PARAM_INT,
+			"size of buffer used to prefetch received data from "
+			"the kernel, set to 0 to disable");
+	fi_param_get_int(&tcpx_prov, "staging_sbuf_size",
+			 &tcpx_staging_sbuf_size);
+	fi_param_get_int(&tcpx_prov, "prefetch_rbuf_size",
+			 &tcpx_prefetch_rbuf_size);
 
 	fi_param_get_int(&tcpx_prov, "port_high_range", &port_range.high);
 	fi_param_get_int(&tcpx_prov, "port_low_range", &port_range.low);

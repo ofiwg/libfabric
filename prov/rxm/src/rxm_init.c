@@ -109,7 +109,7 @@ static bool rxm_use_srx(const struct fi_info *hints,
 	info = base_info ? base_info : hints;
 
 	return info && info->fabric_attr && info->fabric_attr->prov_name &&
-	       !strncasecmp(info->fabric_attr->prov_name, "tcp", 3);
+	       !strcasestr(info->fabric_attr->prov_name, "tcp");
 }
 
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
@@ -201,7 +201,12 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 					     sizeof(struct rxm_pkt);
 	}
 
-	info->tx_attr->size 		= base_info->tx_attr->size;
+	/* User hints will override the modified info attributes through
+	 * ofi_alter_info.  Set default sizes lower than supported maximums.
+	 */
+	info->tx_attr->size 		= MIN(base_info->tx_attr->size, 2048);
+	info->rx_attr->size 		= MIN(base_info->rx_attr->size, 2048);
+
 	info->tx_attr->iov_limit 	= MIN(base_info->tx_attr->iov_limit,
 					      core_info->tx_attr->iov_limit);
 	info->tx_attr->rma_iov_limit	= MIN(base_info->tx_attr->rma_iov_limit,
@@ -211,7 +216,6 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	info->rx_attr->mode		= info->rx_attr->mode & ~FI_RX_CQ_DATA;
 	info->rx_attr->msg_order 	= core_info->rx_attr->msg_order;
 	info->rx_attr->comp_order 	= base_info->rx_attr->comp_order;
-	info->rx_attr->size 		= base_info->rx_attr->size;
 	info->rx_attr->iov_limit 	= MIN(base_info->rx_attr->iov_limit,
 					      core_info->rx_attr->iov_limit);
 

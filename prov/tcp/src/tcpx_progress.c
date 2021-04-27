@@ -157,10 +157,9 @@ retry:
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 			return ret;
 
-		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
-			"msg recv failed ret = %d (%s)\n", ret,
-			fi_strerror(-ret));
-		goto shutdown;
+		if (ret != -FI_ETRUNC)
+			goto shutdown;
+		assert(rx_entry->flags & TCPX_NEED_DYN_RBUF);
 	}
 
 	if (rx_entry->flags & TCPX_NEED_DYN_RBUF) {
@@ -169,7 +168,6 @@ retry:
 			goto shutdown;
 
 		rx_entry->flags &= ~TCPX_NEED_DYN_RBUF;
-		rx_entry->rem_len = 0;
 		goto retry;
 	}
 
@@ -183,6 +181,8 @@ retry:
 	return 0;
 
 shutdown:
+	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+		"msg recv failed ret = %d (%s)\n", ret, fi_strerror(-ret));
 	tcpx_ep_disable(rx_entry->ep, 0);
 	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	tcpx_rx_entry_free(rx_entry);
@@ -414,27 +414,26 @@ static void tcpx_rx_setup(struct tcpx_ep *ep, struct tcpx_xfer_entry *rx_entry,
 {
 	ep->cur_rx_entry = rx_entry;
 	ep->cur_rx_proc_fn = process_fn;
+	rx_entry->rem_len = ep->cur_rx_msg.hdr.base_hdr.size -
+			    ep->cur_rx_msg.hdr.base_hdr.payload_off;
 
 	/* Reset to receive next message */
 	ep->cur_rx_msg.hdr_len = sizeof(ep->cur_rx_msg.hdr.base_hdr);
 	ep->cur_rx_msg.done_len = 0;
 }
 
-static void tcpx_handle_msg_resp(struct tcpx_ep *ep)
+static int tcpx_handle_resp(struct tcpx_xfer_entry *tx_entry)
 {
-	struct tcpx_xfer_entry *tx_entry;
+	struct tcpx_ep *ep;
 	struct tcpx_cq *cq;
 
-	assert(!slist_empty(&ep->tx_rsp_pend_queue));
-	tx_entry = container_of(ep->tx_rsp_pend_queue.head,
-				struct tcpx_xfer_entry, entry);
-
+	ep = tx_entry->ep;
 	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-	tcpx_cq_report_success(tx_entry->ep->util_ep.tx_cq, tx_entry);
+	tcpx_cq_report_success(ep->util_ep.tx_cq, tx_entry);
 
-	slist_remove_head(&tx_entry->ep->tx_rsp_pend_queue);
+	slist_remove_head(&ep->tx_rsp_pend_queue);
 	tcpx_xfer_entry_free(cq, tx_entry);
-	tcpx_rx_setup(ep, NULL, NULL);
+	return FI_SUCCESS;
 }
 
 int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
@@ -445,8 +444,12 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 	int ret;
 
 	if (msg->hdr.base_hdr.op_data == TCPX_OP_MSG_RESP) {
-		tcpx_handle_msg_resp(tcpx_ep);
-		return -FI_EAGAIN;
+		/* response matches with original send */
+		assert(!slist_empty(&tcpx_ep->tx_rsp_pend_queue));
+		rx_entry = container_of(tcpx_ep->tx_rsp_pend_queue.head,
+					struct tcpx_xfer_entry, entry);
+		tcpx_rx_setup(tcpx_ep, rx_entry, tcpx_handle_resp);
+		return FI_SUCCESS;
 	}
 
 	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.payload_off);
@@ -475,15 +478,10 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 		if (msg->hdr.base_hdr.flags & TCPX_TAGGED) {
 			/* Raw message, no rxm header */
 			rx_entry->iov_cnt = 0;
-			rx_entry->rem_len = msg_len;
 		} else {
-			ret = ofi_truncate_iov(rx_entry->iov,
-					       &rx_entry->iov_cnt, msg_len);
-			if (ret) {
-				rx_entry->rem_len = msg_len -
-					    ofi_total_iov_len(rx_entry->iov,
-							rx_entry->iov_cnt);
-			}
+			/* Receiving only rxm header */
+			assert(msg_len >= ofi_total_iov_len(rx_entry->iov,
+							    rx_entry->iov_cnt));
 		}
 	} else {
 		ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt,
@@ -598,7 +596,7 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 {
 	ssize_t ret;
 
-	ret = tcpx_recv_hdr(ep->sock, &ep->stage_buf, &ep->cur_rx_msg);
+	ret = tcpx_recv_hdr(ep);
 	if (ret < 0)
 		return (int) ret;
 
@@ -613,8 +611,7 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 						  base_hdr.payload_off;
 
 		if (ep->cur_rx_msg.hdr_len > ep->cur_rx_msg.done_len) {
-			ret = tcpx_recv_hdr(ep->sock, &ep->stage_buf,
-					    &ep->cur_rx_msg);
+			ret = tcpx_recv_hdr(ep);
 			if (ret < 0)
 				return (int) ret;
 
@@ -634,13 +631,6 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 	int ret;
 
 	assert(fastlock_held(&ep->lock));
-	if (!ep->cur_rx_entry &&
-	    (ep->stage_buf.cur_pos == ep->stage_buf.bytes_avail)) {
-		ret = tcpx_read_to_buffer(ep->sock, &ep->stage_buf);
-		if (ret)
-			goto err;
-	}
-
 	do {
 		if (!ep->cur_rx_entry) {
 			if (ep->cur_rx_msg.done_len < ep->cur_rx_msg.hdr_len) {
@@ -663,7 +653,7 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 		assert(ep->cur_rx_proc_fn);
 		ep->cur_rx_proc_fn(ep->cur_rx_entry);
 
-	} while (ep->stage_buf.cur_pos < ep->stage_buf.bytes_avail);
+	} while (ofi_bsock_readable(&ep->bsock));
 
 	return;
 err:
@@ -684,6 +674,8 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 		entry = ep->tx_queue.head;
 		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
 		tcpx_process_tx_entry(tx_entry);
+	} else {
+		ofi_bsock_flush(&ep->bsock);
 	}
 }
 
@@ -699,12 +691,12 @@ int tcpx_try_func(void *util_ep)
 			       struct util_wait_fd, util_wait);
 
 	fastlock_acquire(&ep->lock);
-	if (!slist_empty(&ep->tx_queue) && !ep->pollout_set) {
+	if (tcpx_tx_pending(ep) && !ep->pollout_set) {
 		ep->pollout_set = true;
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 (OFI_EPOLL_IN | OFI_EPOLL_OUT) : (POLLIN | POLLOUT);
 		goto epoll_mod;
-	} else if (slist_empty(&ep->tx_queue) && ep->pollout_set) {
+	} else if (!tcpx_tx_pending(ep) && ep->pollout_set) {
 		ep->pollout_set = false;
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 OFI_EPOLL_IN : POLLIN;
@@ -715,9 +707,9 @@ int tcpx_try_func(void *util_ep)
 
 epoll_mod:
 	ret = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
-	      ofi_epoll_mod(wait_fd->epoll_fd, ep->sock, events,
+	      ofi_epoll_mod(wait_fd->epoll_fd, ep->bsock.sock, events,
 			    &ep->util_ep.ep_fid.fid) :
-	      ofi_pollfds_mod(wait_fd->pollfds, ep->sock, events,
+	      ofi_pollfds_mod(wait_fd->pollfds, ep->bsock.sock, events,
 			      &ep->util_ep.ep_fid.fid);
 	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
@@ -729,13 +721,13 @@ epoll_mod:
 void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,
 			  struct tcpx_xfer_entry *tx_entry)
 {
-	int empty;
+	bool pending;
 	struct util_wait *wait = tcpx_ep->util_ep.tx_cq->wait;
 
-	empty = slist_empty(&tcpx_ep->tx_queue);
+	pending = tcpx_tx_pending(tcpx_ep);
 	slist_insert_tail(&tx_entry->entry, &tcpx_ep->tx_queue);
 
-	if (empty) {
+	if (!pending) {
 		tcpx_process_tx_entry(tx_entry);
 
 		if (!slist_empty(&tcpx_ep->tx_queue) && wait)

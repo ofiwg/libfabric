@@ -1492,8 +1492,8 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	}
 }
 
-static int rxm_get_recv_entry(struct rxm_rx_buf *rx_buf,
-			      struct ofi_cq_rbuf_entry *cq_entry)
+static void rxm_get_recv_entry(struct rxm_rx_buf *rx_buf,
+			       struct ofi_cq_rbuf_entry *cq_entry)
 {
 	struct rxm_recv_match_attr match_attr;
 	struct rxm_cmap_handle *cm_handle;
@@ -1533,8 +1533,6 @@ static int rxm_get_recv_entry(struct rxm_rx_buf *rx_buf,
 	} else {
 		recv_queue->dyn_rbuf_unexp_cnt++;
 	}
-
-	return 0;
 }
 
 static void rxm_fake_rx_hdr(struct rxm_rx_buf *rx_buf,
@@ -1581,7 +1579,6 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 			 size_t *count)
 {
 	struct rxm_rx_buf *rx_buf;
-	int ret;
 
 	rx_buf = entry->op_context;
 	assert(!(rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV));
@@ -1595,10 +1592,7 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 
 	switch (rx_buf->pkt.ctrl_hdr.type) {
 	case rxm_ctrl_eager:
-		ret = rxm_get_recv_entry(rx_buf, entry);
-		if (ret)
-			return ret;
-
+		rxm_get_recv_entry(rx_buf, entry);
 		if (rx_buf->recv_entry) {
 			*count = rx_buf->recv_entry->rxm_iov.count;
 			memcpy(iov, rx_buf->recv_entry->rxm_iov.iov, *count *
@@ -1611,9 +1605,7 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 		break;
 	case rxm_ctrl_rndv_req:
 		/* Find matching receive to maintain message ordering. */
-		ret = rxm_get_recv_entry(rx_buf, entry);
-		if (ret)
-			return ret;
+		rxm_get_recv_entry(rx_buf, entry);
 
 		/* fall through */
 	case rxm_ctrl_atomic:

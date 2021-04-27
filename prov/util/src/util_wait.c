@@ -406,6 +406,11 @@ static int util_wait_fd_run(struct fid_wait *wait_fid, int timeout)
 			return FI_SUCCESS;
 
 		if (ret < 0) {
+#if ENABLE_DEBUG
+			/* ignore interrupts in order to enable debugging */
+			if (ret == -FI_EINTR)
+				continue;
+#endif
 			FI_WARN(wait->util_wait.prov, FI_LOG_FABRIC,
 				"poll failed\n");
 			return ret;
