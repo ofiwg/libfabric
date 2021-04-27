@@ -424,17 +424,23 @@ static void tcpx_rx_setup(struct tcpx_ep *ep, struct tcpx_xfer_entry *rx_entry,
 	ep->cur_rx_msg.done_len = 0;
 }
 
-static int tcpx_handle_resp(struct tcpx_xfer_entry *tx_entry)
+static int tcpx_handle_resp(struct tcpx_ep *ep)
 {
-	struct tcpx_ep *ep;
+	struct tcpx_xfer_entry *tx_entry;
 	struct tcpx_cq *cq;
 
-	ep = tx_entry->ep;
+	if (ep->cur_rx_msg.hdr.base_hdr.size !=
+	    sizeof(ep->cur_rx_msg.hdr.base_hdr))
+		return -FI_EIO;
+
+	assert(!slist_empty(&ep->tx_rsp_pend_queue));
+	tx_entry = container_of(slist_remove_head(&ep->tx_rsp_pend_queue),
+				struct tcpx_xfer_entry, entry);
+
 	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 	tcpx_cq_report_success(ep->util_ep.tx_cq, tx_entry);
-
-	slist_remove_head(&ep->tx_rsp_pend_queue);
 	tcpx_xfer_entry_free(cq, tx_entry);
+	tcpx_reset_rx(ep);
 	return FI_SUCCESS;
 }
 
@@ -445,14 +451,8 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 	size_t msg_len;
 	int ret;
 
-	if (msg->hdr.base_hdr.op_data == TCPX_OP_MSG_RESP) {
-		/* response matches with original send */
-		assert(!slist_empty(&tcpx_ep->tx_rsp_pend_queue));
-		rx_entry = container_of(tcpx_ep->tx_rsp_pend_queue.head,
-					struct tcpx_xfer_entry, entry);
-		tcpx_rx_setup(tcpx_ep, rx_entry, tcpx_handle_resp);
-		return FI_SUCCESS;
-	}
+	if (msg->hdr.base_hdr.op_data == TCPX_OP_MSG_RESP)
+		return tcpx_handle_resp(tcpx_ep);
 
 	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.payload_off);
 
@@ -654,8 +654,11 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 			if (ret)
 				break;
 		}
-		assert(ep->cur_rx_proc_fn);
-		ep->cur_rx_proc_fn(ep->cur_rx_entry);
+
+		if (ep->cur_rx_entry) {
+			assert(ep->cur_rx_proc_fn);
+			ep->cur_rx_proc_fn(ep->cur_rx_entry);
+		}
 
 	} while (ofi_bsock_readable(&ep->bsock));
 
