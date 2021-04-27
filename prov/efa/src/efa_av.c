@@ -153,7 +153,8 @@ static int efa_av_resize(struct efa_av *av, size_t new_av_count)
 
 /* Inserts a single AH to AV. */
 static int efa_av_insert_ah(struct efa_av *av, struct efa_ep_addr *addr,
-				fi_addr_t *fi_addr, uint64_t flags, void *context)
+			    fi_addr_t *fi_addr, uint64_t flags, void *context,
+			    struct rdm_peer *rdm_peer)
 {
 	struct ibv_pd *ibv_pd = av->domain->ibv_pd;
 	struct ibv_ah_attr ah_attr = { 0 };
@@ -234,7 +235,13 @@ static int efa_av_insert_ah(struct efa_av *av, struct efa_ep_addr *addr,
 		}
 
 		memcpy(&reverse_av->key, &key, sizeof(key));
-		reverse_av->fi_addr = *fi_addr;
+		if (av->ep_type == FI_EP_RDM) {
+			reverse_av->fi_addr = *fi_addr;
+			reverse_av->rdm_peer = rdm_peer;
+		} else {
+			reverse_av->fi_addr = *fi_addr;
+			reverse_av->rdm_peer = NULL;
+		}
 		HASH_ADD(hh, av->reverse_av, key,
 			 sizeof(reverse_av->key), reverse_av);
 	}
@@ -386,7 +393,7 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 	}
 
 	ret = efa_av_insert_ah(av, addr, fi_addr,
-			       flags, context);
+			       flags, context, peer);
 	if (ret) {
 		EFA_WARN(FI_LOG_AV, "efa_av_insert_ah failed. Error message: %s\n",
 			 fi_strerror(ret));
@@ -459,7 +466,7 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 		for (i = 0; i < count; i++) {
 			addr_i = (struct efa_ep_addr *) ((uint8_t *)addr + i * EFA_EP_ADDR_LEN);
 			ret = efa_av_insert_ah(av, addr_i, &fi_addr_res,
-					     flags, context);
+					     flags, context, NULL);
 			if (ret)
 				break;
 			if (fi_addr)

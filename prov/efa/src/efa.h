@@ -310,6 +310,7 @@ struct efa_ah_qpn {
 struct efa_reverse_av {
 	struct efa_ah_qpn key;
 	fi_addr_t fi_addr;
+	struct rdm_peer *rdm_peer;
 	UT_hash_handle hh;
 };
 
