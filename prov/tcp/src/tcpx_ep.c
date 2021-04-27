@@ -440,6 +440,13 @@ static struct fi_ops_cm tcpx_cm_ops = {
 	.join = fi_no_join,
 };
 
+void tcpx_reset_rx(struct tcpx_ep *ep)
+{
+	ep->cur_rx_entry = NULL;
+	ep->cur_rx_msg.done_len = 0;
+	ep->cur_rx_msg.hdr_len = sizeof(ep->cur_rx_msg.hdr.base_hdr);
+}
+
 void tcpx_rx_entry_free(struct tcpx_xfer_entry *rx_entry)
 {
 	struct tcpx_cq *tcpx_cq;
