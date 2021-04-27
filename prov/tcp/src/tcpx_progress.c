@@ -81,6 +81,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 	if (!slist_empty(&ep->tx_queue)) {
 		ep->cur_tx_entry = container_of(slist_remove_head(&ep->tx_queue),
 						struct tcpx_xfer_entry, entry);
+		ep->hdr_bswap(&ep->cur_tx_entry->hdr.base_hdr);
 	} else {
 		ep->cur_tx_entry = NULL;
 	}
@@ -112,7 +113,6 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 	resp_entry->rem_len = sizeof(resp_entry->hdr.base_hdr);
 	resp_entry->ep = rx_entry->ep;
 
-	resp_entry->ep->hdr_bswap(&resp_entry->hdr.base_hdr);
 	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
 	tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
 
@@ -225,7 +225,6 @@ static int tcpx_prepare_rx_write_resp(struct tcpx_xfer_entry *rx_entry)
 	resp_entry->context = NULL;
 	resp_entry->rem_len = resp_entry->hdr.base_hdr.size;
 	resp_entry->ep = rx_entry->ep;
-	resp_entry->ep->hdr_bswap(&resp_entry->hdr.base_hdr);
 	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
 
 	tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
@@ -367,7 +366,6 @@ static int tcpx_prepare_rx_remote_read_resp(struct tcpx_xfer_entry *resp_entry)
 	resp_entry->context = NULL;
 	resp_entry->rem_len = resp_entry->hdr.base_hdr.size;
 
-	resp_entry->ep->hdr_bswap(&resp_entry->hdr.base_hdr);
 	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
 	resp_entry->ep->cur_rx_entry = NULL;
 	return FI_SUCCESS;
@@ -721,6 +719,7 @@ void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 
 	if (!ep->cur_tx_entry) {
 		ep->cur_tx_entry = tx_entry;
+		ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 		tcpx_progress_tx(ep);
 
 		if (!ep->cur_tx_entry && wait)

@@ -117,7 +117,6 @@ static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	tcpx_rma_read_send_entry_fill(send_entry, tcpx_ep, msg);
 	tcpx_rma_read_recv_entry_fill(recv_entry, tcpx_ep, msg, flags);
 
-	tcpx_ep->hdr_bswap(&send_entry->hdr.base_hdr);
 	fastlock_acquire(&tcpx_ep->lock);
 	slist_insert_tail(&recv_entry->entry, &tcpx_ep->rma_read_queue);
 	tcpx_tx_queue_insert(tcpx_ep, send_entry);
@@ -245,7 +244,6 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	send_entry->context = msg->context;
 	send_entry->rem_len = send_entry->hdr.base_hdr.size;
 
-	tcpx_ep->hdr_bswap(&send_entry->hdr.base_hdr);
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, send_entry);
 	fastlock_release(&tcpx_ep->lock);

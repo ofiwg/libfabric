@@ -227,8 +227,6 @@ static inline void tcpx_queue_send(struct tcpx_ep *ep,
 				   struct tcpx_xfer_entry *tx_entry)
 {
 	tx_entry->rem_len = tx_entry->hdr.base_hdr.size;
-	ep->hdr_bswap(&tx_entry->hdr.base_hdr);
-
 	fastlock_acquire(&ep->lock);
 	tcpx_tx_queue_insert(ep, tx_entry);
 	fastlock_release(&ep->lock);
