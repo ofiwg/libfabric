@@ -1446,10 +1446,55 @@ static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
 	}
 }
 
-static inline void rxr_ep_poll_cq(struct rxr_ep *ep,
-				  struct fid_cq *cq,
-				  size_t cqe_to_process,
-				  bool is_shm_cq)
+static inline void rdm_ep_poll_efa_cq(struct rxr_ep *ep,
+				      size_t cqe_to_process)
+{
+	struct fi_cq_data_entry cq_entry;
+	fi_addr_t src_addr;
+	ssize_t ret;
+	int i;
+
+	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(struct fi_cq_data_entry));
+
+	for (i = 0; i < cqe_to_process; i++) {
+		ret = fi_cq_readfrom(ep->rdm_cq, &cq_entry, 1, &src_addr);
+
+		if (ret == -FI_EAGAIN)
+			return;
+
+		if (OFI_UNLIKELY(ret < 0)) {
+			if (rxr_cq_handle_cq_error(ep, ret))
+				assert(0 &&
+				       "error writing error cq entry after reading from cq");
+			if (!ep->use_zcpy_rx)
+				rxr_ep_bulk_post_recv(ep);
+			return;
+		}
+
+		if (OFI_UNLIKELY(ret == 0))
+			return;
+
+		if (cq_entry.flags & (FI_SEND | FI_READ | FI_WRITE)) {
+#if ENABLE_DEBUG
+			ep->send_comps++;
+#endif
+			rxr_pkt_handle_send_completion(ep, cq_entry.op_context);
+		} else if (cq_entry.flags & (FI_RECV | FI_REMOTE_CQ_DATA)) {
+			rxr_pkt_handle_recv_completion(ep, &cq_entry, src_addr);
+#if ENABLE_DEBUG
+			ep->recv_comps++;
+#endif
+		} else {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"Unhandled cq type\n");
+			assert(0 && "Unhandled cq type");
+		}
+	}
+
+}
+
+static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
+				      size_t cqe_to_process)
 {
 	struct fi_cq_data_entry cq_entry;
 	fi_addr_t src_addr;
@@ -1463,7 +1508,7 @@ static inline void rxr_ep_poll_cq(struct rxr_ep *ep,
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	efa_av = efa_ep->av;
 	for (i = 0; i < cqe_to_process; i++) {
-		ret = fi_cq_readfrom(cq, &cq_entry, 1, &src_addr);
+		ret = fi_cq_readfrom(ep->shm_cq, &cq_entry, 1, &src_addr);
 
 		if (ret == -FI_EAGAIN)
 			return;
@@ -1478,26 +1523,18 @@ static inline void rxr_ep_poll_cq(struct rxr_ep *ep,
 		if (OFI_UNLIKELY(ret == 0))
 			return;
 
-		if (is_shm_cq && src_addr != FI_ADDR_UNSPEC) {
+		if (src_addr != FI_ADDR_UNSPEC) {
 			/* convert SHM address to EFA address */
 			assert(src_addr < EFA_SHM_MAX_AV_COUNT);
 			src_addr = efa_av->shm_rdm_addr_map[src_addr];
 		}
 
-		if (is_shm_cq && (cq_entry.flags & (FI_ATOMIC | FI_REMOTE_CQ_DATA))) {
+		if (cq_entry.flags & (FI_ATOMIC | FI_REMOTE_CQ_DATA)) {
 			rxr_cq_handle_shm_completion(ep, &cq_entry, src_addr);
 		} else if (cq_entry.flags & (FI_SEND | FI_READ | FI_WRITE)) {
-#if ENABLE_DEBUG
-			if (!is_shm_cq)
-				ep->send_comps++;
-#endif
 			rxr_pkt_handle_send_completion(ep, cq_entry.op_context);
 		} else if (cq_entry.flags & (FI_RECV | FI_REMOTE_CQ_DATA)) {
 			rxr_pkt_handle_recv_completion(ep, &cq_entry, src_addr);
-#if ENABLE_DEBUG
-			if (!is_shm_cq)
-				ep->recv_comps++;
-#endif
 		} else {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Unhandled cq type\n");
@@ -1521,11 +1558,11 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		rxr_ep_check_available_data_bufs_timer(ep);
 
 	// Poll the EFA completion queue
-	rxr_ep_poll_cq(ep, ep->rdm_cq, rxr_env.efa_cq_read_size, 0);
+	rdm_ep_poll_efa_cq(ep, rxr_env.efa_cq_read_size);
 
 	// Poll the SHM completion queue if enabled
 	if (ep->use_shm)
-		rxr_ep_poll_cq(ep, ep->shm_cq, rxr_env.shm_cq_read_size, 1);
+		rdm_ep_poll_shm_cq(ep, rxr_env.shm_cq_read_size);
 
 	if (!ep->use_zcpy_rx) {
 		ret = rxr_ep_bulk_post_recv(ep);
