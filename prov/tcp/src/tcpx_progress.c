@@ -312,6 +312,7 @@ static int tcpx_process_remote_read(struct tcpx_xfer_entry *rx_entry)
 
 	slist_remove_head(&rx_entry->ep->rma_read_queue);
 	tcpx_xfer_entry_free(cq, rx_entry);
+	tcpx_reset_rx(ep);
 	return ret;
 }
 
@@ -367,10 +368,6 @@ static void tcpx_rx_setup(struct tcpx_ep *ep, struct tcpx_xfer_entry *rx_entry,
 {
 	ep->cur_rx_entry = rx_entry;
 	ep->cur_rx_proc_fn = process_fn;
-
-	/* Reset to receive next message */
-	ep->cur_rx_msg.hdr_len = sizeof(ep->cur_rx_msg.hdr.base_hdr);
-	ep->cur_rx_msg.done_len = 0;
 }
 
 static int tcpx_handle_resp(struct tcpx_ep *ep)
@@ -498,7 +495,7 @@ int tcpx_op_read_req(struct tcpx_ep *ep)
 	resp->flags &= ~FI_COMPLETION;
 	resp->context = NULL;
 
-	tcpx_tx_queue_insert(resp->ep, resp);
+	tcpx_tx_queue_insert(ep, resp);
 	tcpx_reset_rx(ep);
 	return FI_SUCCESS;
 }
@@ -557,8 +554,7 @@ int tcpx_op_read_rsp(struct tcpx_ep *tcpx_ep)
 		return -FI_EINVAL;
 
 	entry = tcpx_ep->rma_read_queue.head;
-	rx_entry = container_of(entry, struct tcpx_xfer_entry,
-				entry);
+	rx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
 
 	memcpy(&rx_entry->hdr, &tcpx_ep->cur_rx_msg.hdr,
 	       (size_t) tcpx_ep->cur_rx_msg.hdr.base_hdr.payload_off);
