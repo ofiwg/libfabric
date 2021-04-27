@@ -88,7 +88,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 	}
 }
 
-static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
+static int tcpx_queue_msg_resp(struct tcpx_xfer_entry *rx_entry)
 {
 	struct tcpx_ep *ep;
 	struct tcpx_cq *cq;
@@ -99,7 +99,7 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 
 	resp = tcpx_xfer_entry_alloc(cq, TCPX_OP_MSG_RESP);
 	if (!resp)
-		return -FI_EAGAIN;
+		return -FI_ENOMEM;
 
 	resp->iov[0].iov_base = (void *) &resp->hdr;
 	resp->iov[0].iov_len = sizeof(resp->hdr.base_hdr);
@@ -114,9 +114,6 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 	resp->ep = ep;
 
 	tcpx_tx_queue_insert(ep, resp);
-	tcpx_cq_report_success(ep->util_ep.rx_cq, rx_entry);
-
-	tcpx_rx_entry_free(rx_entry);
 	return FI_SUCCESS;
 }
 
@@ -160,38 +157,42 @@ static int tcpx_update_rx_iov(struct tcpx_xfer_entry *rx_entry)
 
 static int tcpx_process_recv(struct tcpx_xfer_entry *rx_entry)
 {
+	struct tcpx_ep *ep;
 	int ret;
 
+	ep = rx_entry->ep;
 retry:
-	ret = tcpx_recv_msg_data(rx_entry->ep);
+	ret = tcpx_recv_msg_data(ep);
 	if (ret) {
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 			return ret;
 
 		if (ret != -FI_ETRUNC)
-			goto shutdown;
+			goto err;
 		assert(rx_entry->flags & TCPX_NEED_DYN_RBUF);
 	}
 
 	if (rx_entry->flags & TCPX_NEED_DYN_RBUF) {
 		ret = tcpx_update_rx_iov(rx_entry);
 		if (ret)
-			goto shutdown;
+			goto err;
 
 		rx_entry->flags &= ~TCPX_NEED_DYN_RBUF;
 		goto retry;
 	}
 
 	if (rx_entry->hdr.base_hdr.flags & OFI_DELIVERY_COMPLETE) {
-		if (tcpx_prepare_rx_entry_resp(rx_entry))
-			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_entry_resp;
-	} else {
-		tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
-		tcpx_rx_entry_free(rx_entry);
+		ret = tcpx_queue_msg_resp(rx_entry);
+		if (ret)
+			goto err;
 	}
+
+	tcpx_cq_report_success(ep->util_ep.rx_cq, rx_entry);
+	tcpx_rx_entry_free(rx_entry);
+	tcpx_reset_rx(ep);
 	return 0;
 
-shutdown:
+err:
 	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 		"msg recv failed ret = %d (%s)\n", ret, fi_strerror(-ret));
 	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
@@ -199,19 +200,18 @@ shutdown:
 	return ret;
 }
 
-static int tcpx_prepare_rx_write_resp(struct tcpx_xfer_entry *rx_entry)
+static int tcpx_queue_write_resp(struct tcpx_xfer_entry *rx_entry)
 {
 	struct tcpx_ep *ep;
-	struct tcpx_cq *rx_cq, *tx_cq;
+	struct tcpx_cq *cq;
 	struct tcpx_xfer_entry *resp;
 
 	ep = rx_entry->ep;
-	tx_cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-	rx_cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
+	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 
-	resp = tcpx_xfer_entry_alloc(tx_cq, TCPX_OP_MSG_RESP);
+	resp = tcpx_xfer_entry_alloc(cq, TCPX_OP_MSG_RESP);
 	if (!resp)
-		return -FI_EAGAIN;
+		return -FI_ENOMEM;
 
 	resp->iov[0].iov_base = (void *) &resp->hdr;
 	resp->iov[0].iov_len = sizeof(resp->hdr.base_hdr);
@@ -225,9 +225,6 @@ static int tcpx_prepare_rx_write_resp(struct tcpx_xfer_entry *rx_entry)
 	resp->context = NULL;
 	resp->ep = ep;
 	tcpx_tx_queue_insert(ep, resp);
-
-	tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
-	tcpx_xfer_entry_free(rx_cq, rx_entry);
 	return FI_SUCCESS;
 }
 
@@ -265,27 +262,30 @@ static int tcpx_process_remote_write(struct tcpx_xfer_entry *rx_entry)
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return ret;
 
+	ep = rx_entry->ep;
 	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
-			"remote write Failed ret = %d\n", ret);
+	if (ret)
+		goto err;
 
-		tcpx_cq_report_error(&cq->util_cq, rx_entry, -ret);
-		tcpx_xfer_entry_free(cq, rx_entry);
-
-	} else if (rx_entry->hdr.base_hdr.flags &
-		   (TCPX_DELIVERY_COMPLETE | TCPX_COMMIT_COMPLETE)) {
+	if (rx_entry->hdr.base_hdr.flags &
+	    (TCPX_DELIVERY_COMPLETE | TCPX_COMMIT_COMPLETE)) {
 
 		if (rx_entry->hdr.base_hdr.flags & TCPX_COMMIT_COMPLETE)
 			tcpx_pmem_commit(rx_entry);
 
-		if (tcpx_prepare_rx_write_resp(rx_entry))
-			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_write_resp;
-	} else {
-		tcpx_cq_report_success(&cq->util_cq, rx_entry);
-		tcpx_xfer_entry_free(cq, rx_entry);
+		ret = tcpx_queue_write_resp(rx_entry);
+		if (ret)
+			goto err;
 	}
 
+	tcpx_cq_report_success(ep->util_ep.rx_cq, rx_entry);
+	tcpx_xfer_entry_free(cq, rx_entry);
+	tcpx_reset_rx(ep);
+	return FI_SUCCESS;
+
+err:
+	FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "remote write failed %d\n", ret);
+	tcpx_xfer_entry_free(cq, rx_entry);
 	return ret;
 }
 
