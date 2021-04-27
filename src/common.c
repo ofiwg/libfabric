@@ -1009,6 +1009,9 @@ size_t ofi_byteq_readv(struct ofi_byteq *byteq, struct iovec *iov,
 {
 	size_t avail, len;
 
+	if (cnt == 1 && !offset)
+		return ofi_byteq_read(byteq, iov[0].iov_base, iov[0].iov_len);
+
 	avail = ofi_byteq_readable(byteq);
 	if (!avail)
 		return 0;
@@ -1025,15 +1028,22 @@ size_t ofi_byteq_readv(struct ofi_byteq *byteq, struct iovec *iov,
 }
 
 void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
-		      size_t cnt, size_t offset)
+		      size_t cnt)
 {
-	size_t len;
+	size_t i;
 
-	assert(ofi_total_iov_len(iov, cnt) - offset <=
-	       ofi_byteq_writeable(byteq));
-	len = ofi_copy_iov_buf(iov, cnt, offset, &byteq->data[byteq->tail],
-			       ofi_byteq_writeable(byteq), OFI_COPY_IOV_TO_BUF);
-	byteq->tail += len;
+	assert(ofi_total_iov_len(iov, cnt) <= ofi_byteq_writeable(byteq));
+
+	if (cnt == 1) {
+		ofi_byteq_write(byteq, iov[0].iov_base, iov[0].iov_len);
+		return;
+	}
+
+	for (i = 0; i < cnt; i++) {
+		memcpy(&byteq->data[byteq->tail], iov[i].iov_base,
+		       iov[i].iov_len);
+		byteq->tail += iov[i].iov_len;
+	}
 }
 
 
@@ -1098,7 +1108,7 @@ ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov, size_t cnt)
 	avail = ofi_bsock_tosend(bsock);
 	if (avail) {
 		if (len < ofi_byteq_writeable(&bsock->sq)) {
-			ofi_byteq_writev(&bsock->sq, iov, cnt, 0);
+			ofi_byteq_writev(&bsock->sq, iov, cnt);
 			ret = ofi_bsock_flush(bsock);
 			return ret ? ret : len;
 		}
@@ -1121,7 +1131,7 @@ ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov, size_t cnt)
 	if (ret < 0) {
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
 		    len < ofi_byteq_writeable(&bsock->sq)) {
-			ofi_byteq_writev(&bsock->sq, iov, cnt, 0);
+			ofi_byteq_writev(&bsock->sq, iov, cnt);
 			return len;
 		}
 		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
