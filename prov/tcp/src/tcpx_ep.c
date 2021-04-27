@@ -273,6 +273,7 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 		return;
 	}
 
+	tcpx_reset_rx(ep);
 	tcpx_ep_flush_all_queues(ep);
 
 	if (cm_err) {

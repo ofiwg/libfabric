@@ -61,6 +61,7 @@ ssize_t tcpx_recv_hdr(struct tcpx_ep *ep)
 	size_t len;
 	void *buf;
 
+	assert(!ep->cur_rx_entry);
 	buf = (uint8_t *) &ep->cur_rx_msg.hdr + ep->cur_rx_msg.done_len;
 	len = ep->cur_rx_msg.hdr_len - ep->cur_rx_msg.done_len;
 
