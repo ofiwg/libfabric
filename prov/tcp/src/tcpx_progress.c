@@ -315,26 +315,6 @@ static int tcpx_process_remote_read(struct tcpx_xfer_entry *rx_entry)
 	return ret;
 }
 
-static void tcpx_copy_rma_iov_to_msg_iov(struct tcpx_xfer_entry *xfer_entry)
-{
-	struct ofi_rma_iov *rma_iov;
-	size_t offset;
-	int i;
-
-	if (xfer_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
-		offset = sizeof(xfer_entry->hdr.base_hdr) + sizeof(uint64_t);
-	else
-		offset = sizeof(xfer_entry->hdr.base_hdr);
-
-	rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &xfer_entry->hdr + offset);
-
-	xfer_entry->iov_cnt = xfer_entry->hdr.base_hdr.rma_iov_cnt;
-	for ( i = 0 ; i < xfer_entry->hdr.base_hdr.rma_iov_cnt; i++ ) {
-		xfer_entry->iov[i].iov_base = (void *) rma_iov[i].addr;
-		xfer_entry->iov[i].iov_len = rma_iov[i].len;
-	}
-}
-
 static int tcpx_validate_rx_rma_data(struct tcpx_xfer_entry *rx_entry,
 				     uint64_t access)
 {
@@ -523,38 +503,47 @@ int tcpx_op_read_req(struct tcpx_ep *ep)
 	return FI_SUCCESS;
 }
 
-int tcpx_op_write(struct tcpx_ep *tcpx_ep)
+int tcpx_op_write(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
-	struct tcpx_cq *tcpx_cq;
-	int ret;
+	struct tcpx_cq *cq;
+	struct ofi_rma_iov *rma_iov;
+	int ret, i;
 
-	tcpx_cq = container_of(tcpx_ep->util_ep.rx_cq,
-			       struct tcpx_cq, util_cq);
-
-	rx_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_REMOTE_WRITE);
+	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
+	rx_entry = tcpx_xfer_entry_alloc(cq, TCPX_OP_REMOTE_WRITE);
 	if (!rx_entry)
 		return -FI_EAGAIN;
 
 	rx_entry->flags = 0;
-	if (tcpx_ep->cur_rx_msg.hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
+	if (ep->cur_rx_msg.hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
 		rx_entry->flags = (FI_COMPLETION | FI_REMOTE_WRITE);
 
-	memcpy(&rx_entry->hdr, &tcpx_ep->cur_rx_msg.hdr,
-	       (size_t) tcpx_ep->cur_rx_msg.hdr.base_hdr.payload_off);
+	memcpy(&rx_entry->hdr, &ep->cur_rx_msg.hdr,
+	       (size_t) ep->cur_rx_msg.hdr.base_hdr.payload_off);
 	rx_entry->hdr.base_hdr.op_data = TCPX_OP_REMOTE_WRITE;
-	rx_entry->ep = tcpx_ep;
+	rx_entry->ep = ep;
 
 	ret = tcpx_validate_rx_rma_data(rx_entry, FI_REMOTE_WRITE);
 	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
-			"invalid rma data\n");
-		tcpx_xfer_entry_free(tcpx_cq, rx_entry);
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "invalid rma data\n");
+		tcpx_xfer_entry_free(cq, rx_entry);
 		return ret;
 	}
 
-	tcpx_copy_rma_iov_to_msg_iov(rx_entry);
-	tcpx_rx_setup(tcpx_ep, rx_entry, tcpx_process_remote_write);
+	if (rx_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
+		rma_iov = (void *) (&rx_entry->hdr.cq_data_hdr + 1);
+	else
+		rma_iov = (void *) (&rx_entry->hdr.base_hdr + 1);
+
+	rx_entry->iov_cnt = rx_entry->hdr.base_hdr.rma_iov_cnt;
+	for (i = 0; i < rx_entry->hdr.base_hdr.rma_iov_cnt; i++) {
+		rx_entry->iov[i].iov_base = (void *) (uintptr_t)
+					      rma_iov[i].addr;
+		rx_entry->iov[i].iov_len = rma_iov[i].len;
+	}
+
+	tcpx_rx_setup(ep, rx_entry, tcpx_process_remote_write);
 	return FI_SUCCESS;
 
 }
