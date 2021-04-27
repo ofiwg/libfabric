@@ -1109,9 +1109,13 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 		dlist_remove(&handle->peer->entry);
 		free(handle->peer);
 		handle->peer = NULL;
-	} else {
-		cmap->handles_av[handle->fi_addr] = NULL;
 	}
+
+	if (handle->fi_addr != FI_ADDR_NOTAVAIL) {
+		cmap->handles_av[handle->fi_addr] = NULL;
+		handle->fi_addr = FI_ADDR_NOTAVAIL;
+	}
+
 	rxm_conn_free(handle);
 	return 0;
 }
