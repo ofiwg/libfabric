@@ -675,7 +675,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
 		tcpx_process_tx_entry(tx_entry);
 	} else {
-		ofi_bsock_flush(&ep->bsock);
+		(void) ofi_bsock_flush(&ep->bsock);
 	}
 }
 
