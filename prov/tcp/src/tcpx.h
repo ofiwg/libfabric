@@ -342,6 +342,7 @@ void tcpx_xfer_entry_free(struct tcpx_cq *tcpx_cq,
 void tcpx_srx_entry_free(struct tcpx_rx_ctx *srx_ctx,
 			 struct tcpx_xfer_entry *xfer_entry);
 void tcpx_rx_entry_free(struct tcpx_xfer_entry *rx_entry);
+void tcpx_reset_rx(struct tcpx_ep *ep);
 
 void tcpx_progress_tx(struct tcpx_ep *ep);
 void tcpx_progress_rx(struct tcpx_ep *ep);
