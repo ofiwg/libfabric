@@ -182,7 +182,7 @@ ofi_byteq_write(struct ofi_byteq *byteq, const void *buf, size_t len)
 }
 
 void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
-		      size_t cnt, size_t offset);
+		      size_t cnt);
 
 static inline ssize_t ofi_byteq_recv(struct ofi_byteq *byteq, SOCKET sock)
 {
@@ -199,7 +199,7 @@ static inline ssize_t ofi_byteq_recv(struct ofi_byteq *byteq, SOCKET sock)
 }
 
 size_t ofi_byteq_readv(struct ofi_byteq *byteq, struct iovec *iov,
-			size_t cnt, size_t offset);
+		       size_t cnt, size_t offset);
 
 static inline ssize_t ofi_byteq_send(struct ofi_byteq *byteq, SOCKET sock)
 {
