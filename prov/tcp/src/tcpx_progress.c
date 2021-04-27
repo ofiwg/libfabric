@@ -194,7 +194,6 @@ retry:
 shutdown:
 	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 		"msg recv failed ret = %d (%s)\n", ret, fi_strerror(-ret));
-	tcpx_ep_disable(rx_entry->ep, 0);
 	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	tcpx_rx_entry_free(rx_entry);
 	return ret;
@@ -270,7 +269,6 @@ static int tcpx_process_remote_write(struct tcpx_xfer_entry *rx_entry)
 			"remote write Failed ret = %d\n",
 			ret);
 
-		tcpx_ep_disable(rx_entry->ep, 0);
 		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 		tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
 				       struct tcpx_cq, util_cq);
@@ -305,7 +303,6 @@ static int tcpx_process_remote_read(struct tcpx_xfer_entry *rx_entry)
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"msg recv Failed ret = %d\n", ret);
-		tcpx_ep_disable(rx_entry->ep, 0);
 		tcpx_cq_report_error(rx_entry->ep->util_ep.tx_cq, rx_entry, -ret);
 	} else {
 		tcpx_cq_report_success(rx_entry->ep->util_ep.tx_cq, rx_entry);
@@ -635,7 +632,7 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 
 void tcpx_progress_rx(struct tcpx_ep *ep)
 {
-	int ret;
+	int ret = 0;
 
 	assert(fastlock_held(&ep->lock));
 	do {
@@ -643,31 +640,26 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 			if (ep->cur_rx_msg.done_len < ep->cur_rx_msg.hdr_len) {
 				ret = tcpx_get_next_rx_hdr(ep);
 				if (ret)
-					goto err;
+					break;
 			}
 
 			if (ep->cur_rx_msg.hdr.base_hdr.op >=
 			    ARRAY_SIZE(ep->start_op)) {
 				FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 					"Received invalid opcode\n");
-				ret = -FI_ENOTCONN; /* force shutdown */
-				goto err;
+				ret = -FI_EIO;
+				break;
 			}
 			ret = ep->start_op[ep->cur_rx_msg.hdr.base_hdr.op](ep);
 			if (ret)
-				goto err;
+				break;
 		}
 		assert(ep->cur_rx_proc_fn);
 		ep->cur_rx_proc_fn(ep->cur_rx_entry);
 
 	} while (ofi_bsock_readable(&ep->bsock));
 
-	return;
-err:
-	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-		return;
-
-	if (ret == -FI_ENOTCONN)
+	if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		tcpx_ep_disable(ep, 0);
 }
 
