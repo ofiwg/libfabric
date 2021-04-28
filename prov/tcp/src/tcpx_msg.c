@@ -226,7 +226,6 @@ static ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **des
 static inline void tcpx_queue_send(struct tcpx_ep *ep,
 				   struct tcpx_xfer_entry *tx_entry)
 {
-	tx_entry->rem_len = tx_entry->hdr.base_hdr.size;
 	fastlock_acquire(&ep->lock);
 	tcpx_tx_queue_insert(ep, tx_entry);
 	fastlock_release(&ep->lock);

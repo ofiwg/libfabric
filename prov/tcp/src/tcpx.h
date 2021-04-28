@@ -225,8 +225,10 @@ struct tcpx_ep {
 	struct ofi_bsock	bsock;
 	struct tcpx_cur_rx_msg	cur_rx_msg;
 	struct tcpx_xfer_entry	*cur_rx_entry;
+	size_t			rem_rx_len;
 	tcpx_rx_process_fn_t 	cur_rx_proc_fn;
 	struct tcpx_xfer_entry	*cur_tx_entry;
+	size_t			rem_tx_len;
 	struct dlist_entry	ep_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
@@ -262,7 +264,6 @@ struct tcpx_xfer_entry {
 	struct tcpx_ep		*ep;
 	uint64_t		flags;
 	void			*context;
-	uint64_t		rem_len;
 	void			*mrecv_msg_start;
 };
 
@@ -329,8 +330,8 @@ void tcpx_get_cq_info(struct tcpx_xfer_entry *entry, uint64_t *flags,
 		      uint64_t *data, uint64_t *tag);
 
 ssize_t tcpx_recv_hdr(struct tcpx_ep *ep);
-int tcpx_recv_msg_data(struct tcpx_xfer_entry *recv_entry);
-int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
+int tcpx_recv_msg_data(struct tcpx_ep *ep);
+int tcpx_send_msg(struct tcpx_ep *ep);
 
 struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq,
 					      enum tcpx_op_code type);
@@ -351,11 +352,6 @@ void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr);
 
 void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,
 			  struct tcpx_xfer_entry *tx_entry);
-
-static inline bool tcpx_tx_pending(struct tcpx_ep *ep)
-{
-	return !slist_empty(&ep->tx_queue) || ofi_bsock_tosend(&ep->bsock);
-}
 
 void tcpx_conn_mgr_run(struct util_eq *eq);
 int tcpx_eq_wait_try_func(void *arg);

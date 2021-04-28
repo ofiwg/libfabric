@@ -72,7 +72,6 @@ static void tcpx_rma_read_send_entry_fill(struct tcpx_xfer_entry *send_entry,
 	send_entry->iov[0].iov_len = offset;
 	send_entry->iov_cnt = 1;
 	send_entry->ep = tcpx_ep;
-	send_entry->rem_len = send_entry->hdr.base_hdr.size;
 }
 
 static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
@@ -242,7 +241,6 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 
 	send_entry->ep = tcpx_ep;
 	send_entry->context = msg->context;
-	send_entry->rem_len = send_entry->hdr.base_hdr.size;
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, send_entry);
@@ -374,9 +372,7 @@ static ssize_t tcpx_rma_inject_common(struct fid_ep *ep, const void *buf,
 
 	send_entry->hdr.base_hdr.size = offset;
 	send_entry->ep = tcpx_ep;
-	send_entry->rem_len = send_entry->hdr.base_hdr.size;
 
-	tcpx_ep->hdr_bswap(&send_entry->hdr.base_hdr);
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_tx_queue_insert(tcpx_ep, send_entry);
 	fastlock_release(&tcpx_ep->lock);
