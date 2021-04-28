@@ -90,31 +90,31 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 
 static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 {
-	struct tcpx_cq *tcpx_tx_cq;
-	struct tcpx_xfer_entry *resp_entry;
+	struct tcpx_ep *ep;
+	struct tcpx_cq *cq;
+	struct tcpx_xfer_entry *resp;
 
-	tcpx_tx_cq = container_of(rx_entry->ep->util_ep.tx_cq,
-			       struct tcpx_cq, util_cq);
+	ep = rx_entry->ep;
+	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 
-	resp_entry = tcpx_xfer_entry_alloc(tcpx_tx_cq, TCPX_OP_MSG_RESP);
-	if (!resp_entry)
+	resp = tcpx_xfer_entry_alloc(cq, TCPX_OP_MSG_RESP);
+	if (!resp)
 		return -FI_EAGAIN;
 
-	resp_entry->iov[0].iov_base = (void *) &resp_entry->hdr;
-	resp_entry->iov[0].iov_len = sizeof(resp_entry->hdr.base_hdr);
-	resp_entry->iov_cnt = 1;
+	resp->iov[0].iov_base = (void *) &resp->hdr;
+	resp->iov[0].iov_len = sizeof(resp->hdr.base_hdr);
+	resp->iov_cnt = 1;
 
-	resp_entry->hdr.base_hdr.op = ofi_op_msg;
-	resp_entry->hdr.base_hdr.size = sizeof(resp_entry->hdr.base_hdr);
-	resp_entry->hdr.base_hdr.payload_off =
-		(uint8_t)sizeof(resp_entry->hdr.base_hdr);
+	resp->hdr.base_hdr.op = ofi_op_msg;
+	resp->hdr.base_hdr.size = sizeof(resp->hdr.base_hdr);
+	resp->hdr.base_hdr.payload_off = (uint8_t) sizeof(resp->hdr.base_hdr);
 
-	resp_entry->flags = 0;
-	resp_entry->context = NULL;
-	resp_entry->ep = rx_entry->ep;
+	resp->flags = 0;
+	resp->context = NULL;
+	resp->ep = ep;
 
-	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
-	tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
+	tcpx_tx_queue_insert(ep, resp);
+	tcpx_cq_report_success(ep->util_ep.rx_cq, rx_entry);
 
 	tcpx_rx_entry_free(rx_entry);
 	return FI_SUCCESS;
@@ -201,34 +201,33 @@ shutdown:
 
 static int tcpx_prepare_rx_write_resp(struct tcpx_xfer_entry *rx_entry)
 {
-	struct tcpx_cq *tcpx_rx_cq, *tcpx_tx_cq;
-	struct tcpx_xfer_entry *resp_entry;
+	struct tcpx_ep *ep;
+	struct tcpx_cq *rx_cq, *tx_cq;
+	struct tcpx_xfer_entry *resp;
 
-	tcpx_tx_cq = container_of(rx_entry->ep->util_ep.tx_cq,
-				  struct tcpx_cq, util_cq);
+	ep = rx_entry->ep;
+	tx_cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
+	rx_cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
 
-	resp_entry = tcpx_xfer_entry_alloc(tcpx_tx_cq, TCPX_OP_MSG_RESP);
-	if (!resp_entry)
+	resp = tcpx_xfer_entry_alloc(tx_cq, TCPX_OP_MSG_RESP);
+	if (!resp)
 		return -FI_EAGAIN;
 
-	resp_entry->iov[0].iov_base = (void *) &resp_entry->hdr;
-	resp_entry->iov[0].iov_len = sizeof(resp_entry->hdr.base_hdr);
-	resp_entry->iov_cnt = 1;
+	resp->iov[0].iov_base = (void *) &resp->hdr;
+	resp->iov[0].iov_len = sizeof(resp->hdr.base_hdr);
+	resp->iov_cnt = 1;
 
-	resp_entry->hdr.base_hdr.op = ofi_op_msg;
-	resp_entry->hdr.base_hdr.size = sizeof(resp_entry->hdr.base_hdr);
-	resp_entry->hdr.base_hdr.payload_off = (uint8_t)
-						sizeof(resp_entry->hdr.base_hdr);
+	resp->hdr.base_hdr.op = ofi_op_msg;
+	resp->hdr.base_hdr.size = sizeof(resp->hdr.base_hdr);
+	resp->hdr.base_hdr.payload_off = (uint8_t) sizeof(resp->hdr.base_hdr);
 
-	resp_entry->flags &= ~FI_COMPLETION;
-	resp_entry->context = NULL;
-	resp_entry->ep = rx_entry->ep;
-	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
+	resp->flags &= ~FI_COMPLETION;
+	resp->context = NULL;
+	resp->ep = ep;
+	tcpx_tx_queue_insert(ep, resp);
 
 	tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
-	tcpx_rx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
-				  struct tcpx_cq, util_cq);
-	tcpx_xfer_entry_free(tcpx_rx_cq, rx_entry);
+	tcpx_xfer_entry_free(rx_cq, rx_entry);
 	return FI_SUCCESS;
 }
 
@@ -257,25 +256,25 @@ static void tcpx_pmem_commit(struct tcpx_xfer_entry *rx_entry)
 
 static int tcpx_process_remote_write(struct tcpx_xfer_entry *rx_entry)
 {
-	struct tcpx_cq *tcpx_cq;
-	int ret = FI_SUCCESS;
+	struct tcpx_ep *ep;
+	struct tcpx_cq *cq;
+	int ret;
 
-	ret = tcpx_recv_msg_data(rx_entry->ep);
+	ep = rx_entry->ep;
+	ret = tcpx_recv_msg_data(ep);
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return ret;
 
+	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
-			"remote write Failed ret = %d\n",
-			ret);
+			"remote write Failed ret = %d\n", ret);
 
-		tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
-		tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
-				       struct tcpx_cq, util_cq);
-		tcpx_xfer_entry_free(tcpx_cq, rx_entry);
+		tcpx_cq_report_error(&cq->util_cq, rx_entry, -ret);
+		tcpx_xfer_entry_free(cq, rx_entry);
 
 	} else if (rx_entry->hdr.base_hdr.flags &
-		  (TCPX_DELIVERY_COMPLETE | TCPX_COMMIT_COMPLETE)) {
+		   (TCPX_DELIVERY_COMPLETE | TCPX_COMMIT_COMPLETE)) {
 
 		if (rx_entry->hdr.base_hdr.flags & TCPX_COMMIT_COMPLETE)
 			tcpx_pmem_commit(rx_entry);
@@ -283,35 +282,36 @@ static int tcpx_process_remote_write(struct tcpx_xfer_entry *rx_entry)
 		if (tcpx_prepare_rx_write_resp(rx_entry))
 			rx_entry->ep->cur_rx_proc_fn = tcpx_prepare_rx_write_resp;
 	} else {
-		tcpx_cq_report_success(rx_entry->ep->util_ep.rx_cq, rx_entry);
-		tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
-				       struct tcpx_cq, util_cq);
-		tcpx_xfer_entry_free(tcpx_cq, rx_entry);
+		tcpx_cq_report_success(&cq->util_cq, rx_entry);
+		tcpx_xfer_entry_free(cq, rx_entry);
 	}
+
 	return ret;
 }
 
 static int tcpx_process_remote_read(struct tcpx_xfer_entry *rx_entry)
 {
-	struct tcpx_cq *tcpx_cq;
-	int ret = FI_SUCCESS;
+	struct tcpx_ep *ep;
+	struct tcpx_cq *cq;
+	int ret;
 
-	ret = tcpx_recv_msg_data(rx_entry->ep);
+	ep = rx_entry->ep;
+	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
+
+	ret = tcpx_recv_msg_data(ep);
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return ret;
 
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"msg recv Failed ret = %d\n", ret);
-		tcpx_cq_report_error(rx_entry->ep->util_ep.tx_cq, rx_entry, -ret);
+		tcpx_cq_report_error(&cq->util_cq, rx_entry, -ret);
 	} else {
-		tcpx_cq_report_success(rx_entry->ep->util_ep.tx_cq, rx_entry);
+		tcpx_cq_report_success(&cq->util_cq, rx_entry);
 	}
 
 	slist_remove_head(&rx_entry->ep->rma_read_queue);
-	tcpx_cq = container_of(rx_entry->ep->util_ep.tx_cq,
-			       struct tcpx_cq, util_cq);
-	tcpx_xfer_entry_free(tcpx_cq, rx_entry);
+	tcpx_xfer_entry_free(cq, rx_entry);
 	return ret;
 }
 
