@@ -1095,6 +1095,7 @@ struct cxip_rxc {
 
 	/* RXC drop count used for FC accounting. */
 	int drop_count;
+	bool hmem;
 };
 
 /* Request buffer structure. */
