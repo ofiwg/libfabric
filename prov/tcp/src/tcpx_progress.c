@@ -55,7 +55,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 		return;
 	}
 
-	ret = tcpx_send_msg(ep->cur_tx_entry);
+	ret = tcpx_send_msg(ep);
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return;
 
@@ -81,6 +81,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 	if (!slist_empty(&ep->tx_queue)) {
 		ep->cur_tx_entry = container_of(slist_remove_head(&ep->tx_queue),
 						struct tcpx_xfer_entry, entry);
+		ep->rem_tx_len = ep->cur_tx_entry->hdr.base_hdr.size;
 		ep->hdr_bswap(&ep->cur_tx_entry->hdr.base_hdr);
 	} else {
 		ep->cur_tx_entry = NULL;
@@ -110,7 +111,6 @@ static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
 
 	resp_entry->flags = 0;
 	resp_entry->context = NULL;
-	resp_entry->rem_len = sizeof(resp_entry->hdr.base_hdr);
 	resp_entry->ep = rx_entry->ep;
 
 	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
@@ -148,7 +148,7 @@ static int tcpx_update_rx_iov(struct tcpx_xfer_entry *rx_entry)
 
 	assert(rx_entry->iov_cnt <= TCPX_IOV_LIMIT);
 	ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt,
-				rx_entry->rem_len);
+			       rx_entry->ep->rem_rx_len);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 			"dynamically provided rbuf is too small\n");
@@ -163,7 +163,7 @@ static int tcpx_process_recv(struct tcpx_xfer_entry *rx_entry)
 	int ret;
 
 retry:
-	ret = tcpx_recv_msg_data(rx_entry);
+	ret = tcpx_recv_msg_data(rx_entry->ep);
 	if (ret) {
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 			return ret;
@@ -223,7 +223,6 @@ static int tcpx_prepare_rx_write_resp(struct tcpx_xfer_entry *rx_entry)
 
 	resp_entry->flags &= ~FI_COMPLETION;
 	resp_entry->context = NULL;
-	resp_entry->rem_len = resp_entry->hdr.base_hdr.size;
 	resp_entry->ep = rx_entry->ep;
 	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
 
@@ -262,7 +261,7 @@ static int tcpx_process_remote_write(struct tcpx_xfer_entry *rx_entry)
 	struct tcpx_cq *tcpx_cq;
 	int ret = FI_SUCCESS;
 
-	ret = tcpx_recv_msg_data(rx_entry);
+	ret = tcpx_recv_msg_data(rx_entry->ep);
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return ret;
 
@@ -299,7 +298,7 @@ static int tcpx_process_remote_read(struct tcpx_xfer_entry *rx_entry)
 	struct tcpx_cq *tcpx_cq;
 	int ret = FI_SUCCESS;
 
-	ret = tcpx_recv_msg_data(rx_entry);
+	ret = tcpx_recv_msg_data(rx_entry->ep);
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return ret;
 
@@ -364,7 +363,6 @@ static int tcpx_prepare_rx_remote_read_resp(struct tcpx_xfer_entry *resp_entry)
 
 	resp_entry->flags &= ~FI_COMPLETION;
 	resp_entry->context = NULL;
-	resp_entry->rem_len = resp_entry->hdr.base_hdr.size;
 
 	tcpx_tx_queue_insert(resp_entry->ep, resp_entry);
 	resp_entry->ep->cur_rx_entry = NULL;
@@ -423,8 +421,6 @@ static void tcpx_rx_setup(struct tcpx_ep *ep, struct tcpx_xfer_entry *rx_entry,
 {
 	ep->cur_rx_entry = rx_entry;
 	ep->cur_rx_proc_fn = process_fn;
-	rx_entry->rem_len = ep->cur_rx_msg.hdr.base_hdr.size -
-			    ep->cur_rx_msg.hdr.base_hdr.payload_off;
 
 	/* Reset to receive next message */
 	ep->cur_rx_msg.hdr_len = sizeof(ep->cur_rx_msg.hdr.base_hdr);
@@ -632,6 +628,8 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 		return -FI_EAGAIN;
 
 	ep->hdr_bswap(&ep->cur_rx_msg.hdr.base_hdr);
+	ep->rem_rx_len = ep->cur_rx_msg.hdr.base_hdr.size -
+			 ep->cur_rx_msg.hdr.base_hdr.payload_off;
 	return FI_SUCCESS;
 }
 
@@ -719,6 +717,7 @@ void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 
 	if (!ep->cur_tx_entry) {
 		ep->cur_tx_entry = tx_entry;
+		ep->rem_tx_len = tx_entry->hdr.base_hdr.size;
 		ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 		tcpx_progress_tx(ep);
 

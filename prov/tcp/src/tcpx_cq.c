@@ -135,7 +135,6 @@ void tcpx_xfer_entry_free(struct tcpx_cq *tcpx_cq,
 
 	xfer_entry->flags = 0;
 	xfer_entry->context = 0;
-	xfer_entry->rem_len = 0;
 
 	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
 	ofi_buf_free(xfer_entry);
