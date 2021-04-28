@@ -197,6 +197,7 @@ err:
 		"msg recv failed ret = %d (%s)\n", ret, fi_strerror(-ret));
 	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	tcpx_rx_entry_free(rx_entry);
+	tcpx_reset_rx(ep);
 	return ret;
 }
 
@@ -285,6 +286,7 @@ static int tcpx_process_remote_write(struct tcpx_ep *ep)
 err:
 	FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "remote write failed %d\n", ret);
 	tcpx_xfer_entry_free(cq, rx_entry);
+	tcpx_reset_rx(ep);
 	return ret;
 }
 
@@ -437,8 +439,7 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 truncate_err:
 	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 		"posted rx buffer size is not big enough\n");
-	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq,
-				rx_entry, -ret);
+	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	tcpx_rx_entry_free(rx_entry);
 	return ret;
 }
