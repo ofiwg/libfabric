@@ -76,7 +76,11 @@ void rxr_pkt_post_handshake(struct rxr_ep *ep,
 
 	assert(!(peer->flags & RXR_PEER_HANDSHAKE_SENT));
 
-	pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_efa_pool);
+	if (peer->is_local)
+		pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_shm_pool);
+	else
+		pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_efa_pool);
+
 	if (OFI_UNLIKELY(!pkt_entry))
 		return;
 
