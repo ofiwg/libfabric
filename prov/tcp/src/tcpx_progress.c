@@ -632,6 +632,11 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 		tcpx_ep_disable(ep, 0);
 }
 
+static bool tcpx_tx_pending(struct tcpx_ep *ep)
+{
+	return ep->cur_tx_entry || ofi_bsock_tosend(&ep->bsock);
+}
+
 int tcpx_try_func(void *util_ep)
 {
 	uint32_t events;
@@ -644,12 +649,12 @@ int tcpx_try_func(void *util_ep)
 			       struct util_wait_fd, util_wait);
 
 	fastlock_acquire(&ep->lock);
-	if (ep->cur_tx_entry && !ep->pollout_set) {
+	if (tcpx_tx_pending(ep) && !ep->pollout_set) {
 		ep->pollout_set = true;
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 (OFI_EPOLL_IN | OFI_EPOLL_OUT) : (POLLIN | POLLOUT);
 		goto epoll_mod;
-	} else if (!ep->cur_tx_entry && ep->pollout_set) {
+	} else if (!tcpx_tx_pending(ep) && ep->pollout_set) {
 		ep->pollout_set = false;
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 OFI_EPOLL_IN : POLLIN;
