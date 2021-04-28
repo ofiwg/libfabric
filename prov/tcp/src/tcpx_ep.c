@@ -216,16 +216,22 @@ static void tcpx_ep_flush_queue(struct slist *queue,
 
 static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 {
-	struct tcpx_cq *tcpx_cq;
+	struct tcpx_cq *cq;
 
 	assert(fastlock_held(&ep->lock));
-	tcpx_cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-	tcpx_ep_flush_queue(&ep->tx_queue, tcpx_cq);
-	tcpx_ep_flush_queue(&ep->rma_read_queue, tcpx_cq);
-	tcpx_ep_flush_queue(&ep->tx_rsp_pend_queue, tcpx_cq);
+	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
+	if (ep->cur_tx_entry) {
+		tcpx_cq_report_error(&cq->util_cq, ep->cur_tx_entry,
+				     FI_ECANCELED);
+		ep->cur_tx_entry = NULL;
+	}
 
-	tcpx_cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
-	tcpx_ep_flush_queue(&ep->rx_queue, tcpx_cq);
+	tcpx_ep_flush_queue(&ep->tx_queue, cq);
+	tcpx_ep_flush_queue(&ep->rma_read_queue, cq);
+	tcpx_ep_flush_queue(&ep->tx_rsp_pend_queue, cq);
+
+	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
+	tcpx_ep_flush_queue(&ep->rx_queue, cq);
 }
 
 void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)

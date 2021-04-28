@@ -43,36 +43,47 @@
 #include <ofi_iov.h>
 
 
-static void tcpx_process_tx_entry(struct tcpx_xfer_entry *tx_entry)
+void tcpx_progress_tx(struct tcpx_ep *ep)
 {
-	struct tcpx_cq *tcpx_cq;
+	struct tcpx_xfer_entry *tx_entry;
+	struct tcpx_cq *cq;
 	int ret;
 
-	ret = tcpx_send_msg(tx_entry);
+	assert(fastlock_held(&ep->lock));
+	if (!ep->cur_tx_entry) {
+		(void) ofi_bsock_flush(&ep->bsock);
+		return;
+	}
+
+	ret = tcpx_send_msg(ep->cur_tx_entry);
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return;
 
-	/* Keep this path below as a single pass path.*/
-	tx_entry->ep->hdr_bswap(&tx_entry->hdr.base_hdr);
-	slist_remove_head(&tx_entry->ep->tx_queue);
+	tx_entry = ep->cur_tx_entry;
+	ep->hdr_bswap(&tx_entry->hdr.base_hdr);
+	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
-		tcpx_cq_report_error(tx_entry->ep->util_ep.tx_cq,
-				     tx_entry, -ret);
+		tcpx_cq_report_error(&cq->util_cq, tx_entry, -ret);
+		tcpx_xfer_entry_free(cq, tx_entry);
 	} else {
 		if (tx_entry->hdr.base_hdr.flags &
 		    (TCPX_DELIVERY_COMPLETE | TCPX_COMMIT_COMPLETE)) {
 			slist_insert_tail(&tx_entry->entry,
-					  &tx_entry->ep->tx_rsp_pend_queue);
-			return;
+					  &ep->tx_rsp_pend_queue);
+		} else {
+			tcpx_cq_report_success(&cq->util_cq, tx_entry);
+			tcpx_xfer_entry_free(cq, tx_entry);
 		}
-		tcpx_cq_report_success(tx_entry->ep->util_ep.tx_cq, tx_entry);
 	}
 
-	tcpx_cq = container_of(tx_entry->ep->util_ep.tx_cq,
-			       struct tcpx_cq, util_cq);
-	tcpx_xfer_entry_free(tcpx_cq, tx_entry);
+	if (!slist_empty(&ep->tx_queue)) {
+		ep->cur_tx_entry = container_of(slist_remove_head(&ep->tx_queue),
+						struct tcpx_xfer_entry, entry);
+	} else {
+		ep->cur_tx_entry = NULL;
+	}
 }
 
 static int tcpx_prepare_rx_entry_resp(struct tcpx_xfer_entry *rx_entry)
@@ -664,21 +675,6 @@ err:
 		tcpx_ep_disable(ep, 0);
 }
 
-void tcpx_progress_tx(struct tcpx_ep *ep)
-{
-	struct tcpx_xfer_entry *tx_entry;
-	struct slist_entry *entry;
-
-	assert(fastlock_held(&ep->lock));
-	if (!slist_empty(&ep->tx_queue)) {
-		entry = ep->tx_queue.head;
-		tx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
-		tcpx_process_tx_entry(tx_entry);
-	} else {
-		(void) ofi_bsock_flush(&ep->bsock);
-	}
-}
-
 int tcpx_try_func(void *util_ep)
 {
 	uint32_t events;
@@ -691,12 +687,12 @@ int tcpx_try_func(void *util_ep)
 			       struct util_wait_fd, util_wait);
 
 	fastlock_acquire(&ep->lock);
-	if (tcpx_tx_pending(ep) && !ep->pollout_set) {
+	if (ep->cur_tx_entry && !ep->pollout_set) {
 		ep->pollout_set = true;
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 (OFI_EPOLL_IN | OFI_EPOLL_OUT) : (POLLIN | POLLOUT);
 		goto epoll_mod;
-	} else if (!tcpx_tx_pending(ep) && ep->pollout_set) {
+	} else if (!ep->cur_tx_entry && ep->pollout_set) {
 		ep->pollout_set = false;
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 OFI_EPOLL_IN : POLLIN;
@@ -718,19 +714,18 @@ epoll_mod:
 	return ret;
 }
 
-void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,
+void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 			  struct tcpx_xfer_entry *tx_entry)
 {
-	bool pending;
-	struct util_wait *wait = tcpx_ep->util_ep.tx_cq->wait;
+	struct util_wait *wait = ep->util_ep.tx_cq->wait;
 
-	pending = tcpx_tx_pending(tcpx_ep);
-	slist_insert_tail(&tx_entry->entry, &tcpx_ep->tx_queue);
+	if (!ep->cur_tx_entry) {
+		ep->cur_tx_entry = tx_entry;
+		tcpx_progress_tx(ep);
 
-	if (!pending) {
-		tcpx_process_tx_entry(tx_entry);
-
-		if (!slist_empty(&tcpx_ep->tx_queue) && wait)
+		if (!ep->cur_tx_entry && wait)
 			wait->signal(wait);
+	} else {
+		slist_insert_tail(&tx_entry->entry, &ep->tx_queue);
 	}
 }
