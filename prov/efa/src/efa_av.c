@@ -258,7 +258,17 @@ static int efa_av_insert_ah(struct efa_av *av, struct efa_ep_addr *addr,
 
 		memcpy(&reverse_av->key, &key, sizeof(key));
 		if (av->ep_type == FI_EP_RDM) {
-			reverse_av->fi_addr = *fi_addr;
+			/*
+			 * reverse_av uses ahn + qpn as key. RDM endpoint has
+			 * an extra field (QKey) in the raw address, so
+			 * reverse_av cannot be used to lookup address.
+			 * To look up address, one need to use the hash
+			 * table in util_av, which uses the full address as
+			 * key.
+			 * so set revert_av->fi_addr to FI_ADDR_NOTAVAIL
+			 * to avoid confusion.
+			 */
+			reverse_av->fi_addr = FI_ADDR_NOTAVAIL;
 			reverse_av->rdm_peer = rdm_peer;
 		} else {
 			reverse_av->fi_addr = *fi_addr;
