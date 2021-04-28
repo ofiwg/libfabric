@@ -218,15 +218,13 @@ struct tcpx_rx_ctx {
 	fastlock_t		lock;
 };
 
-typedef int (*tcpx_rx_process_fn_t)(struct tcpx_xfer_entry *rx_entry);
-
 struct tcpx_ep {
 	struct util_ep		util_ep;
 	struct ofi_bsock	bsock;
 	struct tcpx_cur_rx_msg	cur_rx_msg;
 	struct tcpx_xfer_entry	*cur_rx_entry;
 	size_t			rem_rx_len;
-	tcpx_rx_process_fn_t 	cur_rx_proc_fn;
+	int			(*rx_handler)(struct tcpx_ep *ep);
 	struct tcpx_xfer_entry	*cur_tx_entry;
 	size_t			rem_tx_len;
 	struct dlist_entry	ep_entry;
