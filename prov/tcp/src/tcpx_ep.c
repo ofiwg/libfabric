@@ -224,6 +224,7 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 		ep->hdr_bswap(&ep->cur_tx_entry->hdr.base_hdr);
 		tcpx_cq_report_error(&cq->util_cq, ep->cur_tx_entry,
 				     FI_ECANCELED);
+		tcpx_xfer_entry_free(cq, ep->cur_tx_entry);
 		ep->cur_tx_entry = NULL;
 	}
 
@@ -232,6 +233,12 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 	tcpx_ep_flush_queue(&ep->tx_rsp_pend_queue, cq);
 
 	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
+	if (ep->cur_rx_entry) {
+		tcpx_cq_report_error(&cq->util_cq, ep->cur_rx_entry,
+				     FI_ECANCELED);
+		tcpx_xfer_entry_free(cq, ep->cur_tx_entry);
+		tcpx_reset_rx(ep);
+	}
 	tcpx_ep_flush_queue(&ep->rx_queue, cq);
 }
 
@@ -273,7 +280,6 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 		return;
 	}
 
-	tcpx_reset_rx(ep);
 	tcpx_ep_flush_all_queues(ep);
 
 	if (cm_err) {
