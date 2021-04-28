@@ -226,6 +226,7 @@ struct tcpx_ep {
 	struct tcpx_cur_rx_msg	cur_rx_msg;
 	struct tcpx_xfer_entry	*cur_rx_entry;
 	tcpx_rx_process_fn_t 	cur_rx_proc_fn;
+	struct tcpx_xfer_entry	*cur_tx_entry;
 	struct dlist_entry	ep_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
