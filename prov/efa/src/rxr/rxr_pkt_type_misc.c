@@ -80,7 +80,10 @@ ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rxr_peer *peer)
 	ssize_t ret;
 
 	addr = peer->efa_fiaddr;
-	pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_efa_pool);
+	if (peer->is_local)
+		pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_shm_pool);
+	else
+		pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_efa_pool);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 
