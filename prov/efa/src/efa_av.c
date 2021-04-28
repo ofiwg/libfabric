@@ -88,6 +88,30 @@ static inline struct efa_conn *efa_av_map_addr_to_conn(struct efa_av *av, fi_add
 	return (struct efa_conn *)(void *)addr;
 }
 
+/**
+ * @brief find efa_conn struct using fi_addr
+ * The RDM endpoint uses util_av to store the fi_addr to raw addr map, thus the efa_conn
+ * structure need to be retrived util_av too.
+ *
+ * @param[in]	av	efa av
+ * @param[in]	addr	fi_addr
+ * @return	if address is valid, return pointer to efa_conn struct
+ * 		otherwise, return NULL
+ */
+static inline struct efa_conn *efa_rdm_av_addr_to_conn(struct efa_av *av, fi_addr_t addr)
+{
+	struct util_av_entry *util_av_entry;
+	struct efa_av_entry *av_entry;
+
+	if (OFI_UNLIKELY(addr == FI_ADDR_UNSPEC))
+		return NULL;
+
+	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool,
+	                                     addr);
+	av_entry = (struct efa_av_entry *)util_av_entry->data;
+	return av_entry->efa_conn;
+}
+
 fi_addr_t efa_ahn_qpn_to_addr(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 {
 	struct efa_reverse_av *reverse_av;
@@ -524,11 +548,11 @@ out:
 }
 
 static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
-
 			 void *addr, size_t *addrlen)
 {
 	struct efa_av *av = container_of(av_fid, struct efa_av, util_av.av_fid);
 	struct efa_conn *conn = NULL;
+	void *efa_addr;
 
 	if (av->type != FI_AV_MAP && av->type != FI_AV_TABLE)
 		return -FI_EINVAL;
@@ -536,6 +560,20 @@ static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 	if (fi_addr == FI_ADDR_NOTAVAIL)
 		return -FI_EINVAL;
 
+	/*
+	 * The RDM endpoint uses util_av, call that function instead for
+	 * lookup. DGRAM still has its own AV implementation and doesn't use
+	 * util_av.
+	 */
+	if (av->ep_type == FI_EP_RDM) {
+		efa_addr = ofi_av_get_addr(&av->util_av, fi_addr);
+		memcpy(addr, efa_addr, MIN(av->util_av.addrlen, *addrlen));
+		if (*addrlen > av->util_av.addrlen)
+			*addrlen = av->util_av.addrlen;
+		return 0;
+	}
+
+	assert(av->ep_type == FI_EP_DGRAM);
 	if (av->type == FI_AV_MAP) {
 		conn = (struct efa_conn *)fi_addr;
 	} else { /* (av->type == FI_AV_TABLE) */
@@ -548,7 +586,8 @@ static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 		return -FI_EINVAL;
 
 	memcpy(addr, (void *)&conn->ep_addr, MIN(sizeof(conn->ep_addr), *addrlen));
-	*addrlen = sizeof(conn->ep_addr);
+	if (*addrlen > sizeof(conn->ep_addr))
+		*addrlen = sizeof(conn->ep_addr);
 	return 0;
 }
 
@@ -910,7 +949,9 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		}
 	}
 
-	if (av->type == FI_AV_MAP)
+	if (av->ep_type == FI_EP_RDM)
+		av->addr_to_conn = efa_rdm_av_addr_to_conn;
+	else if (av->type == FI_AV_MAP)
 		av->addr_to_conn = efa_av_map_addr_to_conn;
 	else /* if (av->type == FI_AV_TABLE) */
 		av->addr_to_conn = efa_av_tbl_idx_to_conn;
