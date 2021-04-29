@@ -236,7 +236,7 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 	if (ep->cur_rx.entry) {
 		tcpx_cq_report_error(&cq->util_cq, ep->cur_rx.entry,
 				     FI_ECANCELED);
-		tcpx_xfer_entry_free(cq, ep->cur_tx.entry);
+		tcpx_xfer_entry_free(cq, ep->cur_rx.entry);
 		tcpx_reset_rx(ep);
 	}
 	tcpx_ep_flush_queue(&ep->rx_queue, cq);
