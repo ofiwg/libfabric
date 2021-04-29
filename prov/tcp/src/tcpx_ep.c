@@ -303,8 +303,7 @@ static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 	int ret;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
-
-	ofi_bsock_flush(&tcpx_ep->bsock);
+	(void) ofi_bsock_flush(&tcpx_ep->bsock);
 
 	ret = ofi_shutdown(tcpx_ep->bsock.sock, SHUT_RDWR);
 	if (ret && ofi_sockerr() != ENOTCONN) {
