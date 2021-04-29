@@ -65,8 +65,6 @@ int tcpx_recv_msg_data(struct tcpx_ep *ep)
 		return FI_SUCCESS;
 
 	rx_entry = ep->cur_rx.entry;
-	assert(ofi_total_iov_len(rx_entry->iov, rx_entry->iov_cnt) >=
-	       ep->cur_rx.data_left);
 	ret = ofi_bsock_recvv(&ep->bsock, rx_entry->iov, rx_entry->iov_cnt);
 	if (ret < 0)
 		return ret;
