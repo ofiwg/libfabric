@@ -639,7 +639,6 @@
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\tcp\src\tcpx_attr.c" />
-    <ClCompile Include="prov\tcp\src\tcpx_comm.c" />
     <ClCompile Include="prov\tcp\src\tcpx_conn_mgr.c" />
     <ClCompile Include="prov\tcp\src\tcpx_shared_ctx.c" />
     <ClCompile Include="prov\tcp\src\tcpx_cq.c" />
