@@ -38,6 +38,23 @@
 #define TCPX_DEF_CQ_SIZE (1024)
 
 
+/* If we have data queued in the prefetch buffer, we need to
+ * process it before blocking on poll.  Otherwise we may block
+ * waiting to receive data that's already been fetched.  We
+ * also need to progress receives in the case where we're waiting
+ * on the application to post a buffer to consume a receive
+ * that we've already read from the kernel.  If the message is
+ * of length 0, there's no additional data to read, so failing
+ * to progress can result in application hangs.  Finally,
+ * if we're expecting data, optimistically go look for it.
+ */
+static inline bool tcpx_rx_pending(struct tcpx_ep *ep)
+{
+	return ofi_bsock_readable(&ep->bsock) ||
+	       (ep->cur_rx.handler && !ep->cur_rx.entry) ||
+	       ep->cur_rx.data_left;
+}
+
 void tcpx_cq_progress(struct util_cq *cq)
 {
 	void *wait_contexts[MAX_POLL_EVENTS];
@@ -56,9 +73,10 @@ void tcpx_cq_progress(struct util_cq *cq)
 		ep = container_of(fid_entry->fid, struct tcpx_ep,
 				  util_ep.ep_fid.fid);
 		tcpx_try_func(&ep->util_ep);
+
 		fastlock_acquire(&ep->lock);
 		tcpx_progress_tx(ep);
-		if (ofi_bsock_readable(&ep->bsock))
+		if (tcpx_rx_pending(ep))
 			tcpx_progress_rx(ep);
 		fastlock_release(&ep->lock);
 	}
