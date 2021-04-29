@@ -286,6 +286,56 @@ Test(rma, writemsg)
 	do_writemsg(FI_FENCE);
 }
 
+void cxit_rma_setup_nofence(void)
+{
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = CXIP_EP_PRI_CAPS;
+	cxit_setup_rma();
+}
+
+/* Test RMA without FI_FENCE */
+Test(rma_nofence, nofence,
+     .init = cxit_rma_setup_nofence,
+     .fini = cxit_teardown_rma)
+{
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 0x1000;
+	int send_len = 8;
+	struct mem_region mem_window;
+	int key_val = RMA_WIN_KEY;
+	struct fi_msg_rma msg = {};
+	struct iovec iov[1];
+	struct fi_rma_iov rma[1];
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+
+	iov[0].iov_base = send_buf;
+	iov[0].iov_len = send_len;
+
+	rma[0].addr = 0;
+	rma[0].len = send_len;
+	rma[0].key = key_val;
+
+	msg.msg_iov = iov;
+	msg.iov_count = 1;
+	msg.rma_iov = rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+
+	ret = fi_writemsg(cxit_ep, &msg, FI_FENCE);
+	cr_assert(ret == -FI_EINVAL);
+
+	ret = fi_readmsg(cxit_ep, &msg, FI_FENCE);
+	cr_assert(ret == -FI_EINVAL);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}
+
 /* Test HRP Put */
 Test(rma_opt, hrp)
 {

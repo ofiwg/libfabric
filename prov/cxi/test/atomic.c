@@ -2325,6 +2325,57 @@ Test(atomic, fence)
 	_cxit_destroy_mr(&mr);
 }
 
+void cxit_amo_setup_nofence(void)
+{
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = CXIP_EP_PRI_CAPS;
+	cxit_setup_rma();
+}
+
+/* Test AMO without FI_FENCE */
+Test(atomic_nofence, nofence,
+     .init = cxit_amo_setup_nofence,
+     .fini = cxit_teardown_rma)
+{
+	struct mem_region mr;
+	uint64_t operand1;
+	uint64_t exp_remote;
+	uint64_t *rma;
+	int ret;
+	uint64_t key = 0xa;
+	struct fi_msg_atomic msg = {};
+	struct fi_ioc ioc;
+	struct fi_rma_ioc rma_ioc;
+
+	ioc.addr = &operand1;
+	ioc.count = 1;
+
+	rma_ioc.addr = 0;
+	rma_ioc.count = 1;
+	rma_ioc.key = key;
+
+	msg.msg_iov = &ioc;
+	msg.iov_count = 1;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.datatype = FI_UINT64;
+	msg.op = FI_SUM;
+
+	rma = _cxit_create_mr(&mr, key);
+	exp_remote = 0;
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_atomicmsg(cxit_ep, &msg, FI_FENCE);
+	cr_assert(ret == -FI_EINVAL);
+
+	_cxit_destroy_mr(&mr);
+}
+
 void cxit_setup_amo_opt(void)
 {
 	cxit_setup_getinfo();

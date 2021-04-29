@@ -668,6 +668,53 @@ Test(tagged, fence)
 	free(recv_buf);
 }
 
+void cxit_tagged_setup_nofence(void)
+{
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = CXIP_EP_PRI_CAPS;
+	cxit_setup_rma();
+}
+
+/* Test messaging without FI_FENCE */
+Test(tagged_nofence, nofence,
+     .init = cxit_tagged_setup_nofence,
+     .fini = cxit_teardown_rma)
+{
+	int ret;
+	uint8_t *send_buf;
+	int send_len = 64;
+	struct fi_msg_tagged smsg = {};
+	struct fi_msg msg = {};
+	struct iovec siovec;
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, C_PAGE_SIZE);
+	cr_assert(send_buf);
+
+	siovec.iov_base = send_buf;
+	siovec.iov_len = send_len;
+	smsg.msg_iov = &siovec;
+	smsg.iov_count = 1;
+	smsg.addr = cxit_ep_fi_addr;
+	smsg.tag = 0;
+	smsg.ignore = 0;
+	smsg.context = NULL;
+
+	ret = fi_tsendmsg(cxit_ep, &smsg, FI_FENCE);
+	cr_assert_eq(ret, -FI_EINVAL);
+
+	siovec.iov_base = send_buf;
+	siovec.iov_len = send_len;
+	msg.msg_iov = &siovec;
+	msg.iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.context = NULL;
+
+	ret = fi_sendmsg(cxit_ep, &msg, FI_FENCE);
+	cr_assert_eq(ret, -FI_EINVAL);
+
+	free(send_buf);
+}
+
 /* Test basic sendmsg/recvmsg with data */
 Test(tagged, msgping_wdata)
 {
