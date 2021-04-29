@@ -201,13 +201,16 @@ enum tcpx_state {
 	TCPX_DISCONNECTED,
 };
 
-struct tcpx_cur_rx_msg {
+struct tcpx_cur_rx {
 	union {
 		struct tcpx_base_hdr	base_hdr;
 		uint8_t			max_hdr[TCPX_MAX_HDR];
 	} hdr;
 	size_t			hdr_len;
-	size_t			done_len;
+	size_t			hdr_done;
+	size_t			data_left;
+	struct tcpx_xfer_entry	*entry;
+	int			(*handler)(struct tcpx_ep *ep);
 };
 
 struct tcpx_rx_ctx {
@@ -221,10 +224,7 @@ struct tcpx_rx_ctx {
 struct tcpx_ep {
 	struct util_ep		util_ep;
 	struct ofi_bsock	bsock;
-	struct tcpx_cur_rx_msg	cur_rx_msg;
-	struct tcpx_xfer_entry	*cur_rx_entry;
-	size_t			rem_rx_len;
-	int			(*rx_handler)(struct tcpx_ep *ep);
+	struct tcpx_cur_rx	cur_rx;
 	struct tcpx_xfer_entry	*cur_tx_entry;
 	size_t			rem_tx_len;
 	struct dlist_entry	ep_entry;
