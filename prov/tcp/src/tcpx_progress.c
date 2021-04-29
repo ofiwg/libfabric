@@ -109,7 +109,7 @@ static int tcpx_queue_msg_resp(struct tcpx_xfer_entry *rx_entry)
 	resp->hdr.base_hdr.size = sizeof(resp->hdr.base_hdr);
 	resp->hdr.base_hdr.payload_off = (uint8_t) sizeof(resp->hdr.base_hdr);
 
-	resp->flags = 0;
+	resp->flags = TCPX_INTERNAL_XFER;
 	resp->context = NULL;
 	resp->ep = ep;
 
@@ -222,7 +222,7 @@ static int tcpx_queue_write_resp(struct tcpx_xfer_entry *rx_entry)
 	resp->hdr.base_hdr.size = sizeof(resp->hdr.base_hdr);
 	resp->hdr.base_hdr.payload_off = (uint8_t) sizeof(resp->hdr.base_hdr);
 
-	resp->flags &= ~FI_COMPLETION;
+	resp->flags |= TCPX_INTERNAL_XFER;
 	resp->context = NULL;
 	resp->ep = ep;
 	tcpx_tx_queue_insert(ep, resp);
@@ -486,7 +486,7 @@ int tcpx_op_read_req(struct tcpx_ep *ep)
 	resp->hdr.base_hdr.op = ofi_op_read_rsp;
 	resp->hdr.base_hdr.payload_off = (uint8_t) sizeof(resp->hdr.base_hdr);
 
-	resp->flags &= ~FI_COMPLETION;
+	resp->flags |= TCPX_INTERNAL_XFER;
 	resp->context = NULL;
 
 	tcpx_tx_queue_insert(ep, resp);
@@ -509,6 +509,8 @@ int tcpx_op_write(struct tcpx_ep *ep)
 	rx_entry->flags = 0;
 	if (ep->cur_rx_msg.hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
 		rx_entry->flags = (FI_COMPLETION | FI_REMOTE_WRITE);
+	else
+		rx_entry->flags = TCPX_INTERNAL_XFER;
 
 	memcpy(&rx_entry->hdr, &ep->cur_rx_msg.hdr,
 	       (size_t) ep->cur_rx_msg.hdr.base_hdr.payload_off);
