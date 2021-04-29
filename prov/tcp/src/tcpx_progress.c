@@ -434,7 +434,7 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 
 	tcpx_ep->cur_rx.entry = rx_entry;
 	tcpx_ep->cur_rx.handler = tcpx_process_recv;
-	return FI_SUCCESS;
+	return tcpx_process_recv(tcpx_ep);
 
 truncate_err:
 	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
@@ -538,8 +538,7 @@ int tcpx_op_write(struct tcpx_ep *ep)
 
 	ep->cur_rx.entry = rx_entry;
 	ep->cur_rx.handler = tcpx_process_remote_write;
-	return FI_SUCCESS;
-
+	return tcpx_process_remote_write(ep);
 }
 
 int tcpx_op_read_rsp(struct tcpx_ep *tcpx_ep)
@@ -559,7 +558,7 @@ int tcpx_op_read_rsp(struct tcpx_ep *tcpx_ep)
 
 	tcpx_ep->cur_rx.entry = rx_entry;
 	tcpx_ep->cur_rx.handler = tcpx_process_remote_read;
-	return FI_SUCCESS;
+	return tcpx_process_remote_read(tcpx_ep);
 }
 
 static int tcpx_recv_hdr(struct tcpx_ep *ep)
