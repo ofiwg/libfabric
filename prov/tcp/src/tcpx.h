@@ -201,13 +201,21 @@ enum tcpx_state {
 	TCPX_DISCONNECTED,
 };
 
-struct tcpx_cur_rx_msg {
+struct tcpx_cur_rx {
 	union {
 		struct tcpx_base_hdr	base_hdr;
 		uint8_t			max_hdr[TCPX_MAX_HDR];
 	} hdr;
 	size_t			hdr_len;
-	size_t			done_len;
+	size_t			hdr_done;
+	size_t			data_left;
+	struct tcpx_xfer_entry	*entry;
+	int			(*handler)(struct tcpx_ep *ep);
+};
+
+struct tcpx_cur_tx {
+	size_t			data_left;
+	struct tcpx_xfer_entry	*entry;
 };
 
 struct tcpx_rx_ctx {
@@ -218,14 +226,12 @@ struct tcpx_rx_ctx {
 	fastlock_t		lock;
 };
 
-typedef int (*tcpx_rx_process_fn_t)(struct tcpx_xfer_entry *rx_entry);
-
 struct tcpx_ep {
 	struct util_ep		util_ep;
 	struct ofi_bsock	bsock;
-	struct tcpx_cur_rx_msg	cur_rx_msg;
-	struct tcpx_xfer_entry	*cur_rx_entry;
-	tcpx_rx_process_fn_t 	cur_rx_proc_fn;
+	struct tcpx_cur_rx	cur_rx;
+	struct tcpx_cur_tx	cur_tx;
+
 	struct dlist_entry	ep_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
@@ -245,6 +251,7 @@ struct tcpx_fabric {
 	struct util_fabric	util_fabric;
 };
 
+#define TCPX_INTERNAL_XFER	BIT_ULL(60)
 #define TCPX_NEED_DYN_RBUF 	BIT_ULL(61)
 
 struct tcpx_xfer_entry {
@@ -261,7 +268,6 @@ struct tcpx_xfer_entry {
 	struct tcpx_ep		*ep;
 	uint64_t		flags;
 	void			*context;
-	uint64_t		rem_len;
 	void			*mrecv_msg_start;
 };
 
@@ -327,9 +333,8 @@ void tcpx_cq_report_error(struct util_cq *cq,
 void tcpx_get_cq_info(struct tcpx_xfer_entry *entry, uint64_t *flags,
 		      uint64_t *data, uint64_t *tag);
 
-ssize_t tcpx_recv_hdr(struct tcpx_ep *ep);
-int tcpx_recv_msg_data(struct tcpx_xfer_entry *recv_entry);
-int tcpx_send_msg(struct tcpx_xfer_entry *tx_entry);
+int tcpx_recv_msg_data(struct tcpx_ep *ep);
+int tcpx_send_msg(struct tcpx_ep *ep);
 
 struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq,
 					      enum tcpx_op_code type);
@@ -340,6 +345,7 @@ void tcpx_xfer_entry_free(struct tcpx_cq *tcpx_cq,
 void tcpx_srx_entry_free(struct tcpx_rx_ctx *srx_ctx,
 			 struct tcpx_xfer_entry *xfer_entry);
 void tcpx_rx_entry_free(struct tcpx_xfer_entry *rx_entry);
+void tcpx_reset_rx(struct tcpx_ep *ep);
 
 void tcpx_progress_tx(struct tcpx_ep *ep);
 void tcpx_progress_rx(struct tcpx_ep *ep);
@@ -350,11 +356,6 @@ void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr);
 
 void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,
 			  struct tcpx_xfer_entry *tx_entry);
-
-static inline bool tcpx_tx_pending(struct tcpx_ep *ep)
-{
-	return !slist_empty(&ep->tx_queue) || ofi_bsock_tosend(&ep->bsock);
-}
 
 void tcpx_conn_mgr_run(struct util_eq *eq);
 int tcpx_eq_wait_try_func(void *arg);

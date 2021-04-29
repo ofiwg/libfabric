@@ -38,6 +38,23 @@
 #define TCPX_DEF_CQ_SIZE (1024)
 
 
+/* If we have data queued in the prefetch buffer, we need to
+ * process it before blocking on poll.  Otherwise we may block
+ * waiting to receive data that's already been fetched.  We
+ * also need to progress receives in the case where we're waiting
+ * on the application to post a buffer to consume a receive
+ * that we've already read from the kernel.  If the message is
+ * of length 0, there's no additional data to read, so failing
+ * to progress can result in application hangs.  Finally,
+ * if we're expecting data, optimistically go look for it.
+ */
+static inline bool tcpx_rx_pending(struct tcpx_ep *ep)
+{
+	return ofi_bsock_readable(&ep->bsock) ||
+	       (ep->cur_rx.handler && !ep->cur_rx.entry) ||
+	       ep->cur_rx.data_left;
+}
+
 void tcpx_cq_progress(struct util_cq *cq)
 {
 	void *wait_contexts[MAX_POLL_EVENTS];
@@ -56,9 +73,10 @@ void tcpx_cq_progress(struct util_cq *cq)
 		ep = container_of(fid_entry->fid, struct tcpx_ep,
 				  util_ep.ep_fid.fid);
 		tcpx_try_func(&ep->util_ep);
+
 		fastlock_acquire(&ep->lock);
 		tcpx_progress_tx(ep);
-		if (ofi_bsock_readable(&ep->bsock))
+		if (tcpx_rx_pending(ep))
 			tcpx_progress_rx(ep);
 		fastlock_release(&ep->lock);
 	}
@@ -128,14 +146,9 @@ struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq,
 void tcpx_xfer_entry_free(struct tcpx_cq *tcpx_cq,
 			  struct tcpx_xfer_entry *xfer_entry)
 {
-	if (xfer_entry->ep->cur_rx_entry == xfer_entry)
-		xfer_entry->ep->cur_rx_entry = NULL;
-
 	xfer_entry->hdr.base_hdr.flags = 0;
-
 	xfer_entry->flags = 0;
 	xfer_entry->context = 0;
-	xfer_entry->rem_len = 0;
 
 	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
 	ofi_buf_free(xfer_entry);
@@ -173,7 +186,7 @@ void tcpx_cq_report_success(struct util_cq *cq,
 	size_t len;
 
 	flags = xfer_entry->flags;
-	if (!(flags & FI_COMPLETION))
+	if (!(flags & FI_COMPLETION) || (flags & TCPX_INTERNAL_XFER))
 		return;
 
 	len = xfer_entry->hdr.base_hdr.size -
@@ -191,6 +204,9 @@ void tcpx_cq_report_error(struct util_cq *cq,
 			  int err)
 {
 	struct fi_cq_err_entry err_entry;
+
+	if (xfer_entry->flags & TCPX_INTERNAL_XFER)
+		return;
 
 	err_entry.flags = xfer_entry->flags;
 	tcpx_get_cq_info(xfer_entry, &err_entry.flags, &err_entry.data,
