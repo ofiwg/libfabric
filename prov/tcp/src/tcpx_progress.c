@@ -499,6 +499,7 @@ int tcpx_op_write(struct tcpx_ep *ep)
 	struct tcpx_xfer_entry *rx_entry;
 	struct tcpx_cq *cq;
 	struct ofi_rma_iov *rma_iov;
+	size_t offset;
 	int ret, i;
 
 	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
@@ -524,10 +525,10 @@ int tcpx_op_write(struct tcpx_ep *ep)
 		return ret;
 	}
 
-	if (rx_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
-		rma_iov = (void *) (&rx_entry->hdr.cq_data_hdr + 1);
-	else
-		rma_iov = (void *) (&rx_entry->hdr.base_hdr + 1);
+	offset = rx_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA ?
+		 sizeof(rx_entry->hdr.cq_data_hdr) :
+		 sizeof(rx_entry->hdr.base_hdr);
+	rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &rx_entry->hdr + offset);
 
 	rx_entry->iov_cnt = rx_entry->hdr.base_hdr.rma_iov_cnt;
 	for (i = 0; i < rx_entry->hdr.base_hdr.rma_iov_cnt; i++) {
