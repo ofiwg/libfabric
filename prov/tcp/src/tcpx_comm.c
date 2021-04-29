@@ -42,14 +42,14 @@ int tcpx_send_msg(struct tcpx_ep *ep)
 	struct tcpx_xfer_entry *tx_entry;
 	ssize_t ret;
 
-	assert(ep->cur_tx_entry);
-	tx_entry = ep->cur_tx_entry;
+	assert(ep->cur_tx.entry);
+	tx_entry = ep->cur_tx.entry;
 	ret = ofi_bsock_sendv(&ep->bsock, tx_entry->iov, tx_entry->iov_cnt);
 	if (ret < 0)
 		return ret;
 
-	ep->rem_tx_len -= ret;
-	if (ep->rem_tx_len) {
+	ep->cur_tx.data_left -= ret;
+	if (ep->cur_tx.data_left) {
 		ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt, ret);
 		return -FI_EAGAIN;
 	}

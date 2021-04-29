@@ -50,7 +50,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 	int ret;
 
 	assert(fastlock_held(&ep->lock));
-	if (!ep->cur_tx_entry) {
+	if (!ep->cur_tx.entry) {
 		(void) ofi_bsock_flush(&ep->bsock);
 		return;
 	}
@@ -59,7 +59,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return;
 
-	tx_entry = ep->cur_tx_entry;
+	tx_entry = ep->cur_tx.entry;
 	ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 
@@ -79,12 +79,12 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 	}
 
 	if (!slist_empty(&ep->tx_queue)) {
-		ep->cur_tx_entry = container_of(slist_remove_head(&ep->tx_queue),
+		ep->cur_tx.entry = container_of(slist_remove_head(&ep->tx_queue),
 						struct tcpx_xfer_entry, entry);
-		ep->rem_tx_len = ep->cur_tx_entry->hdr.base_hdr.size;
-		ep->hdr_bswap(&ep->cur_tx_entry->hdr.base_hdr);
+		ep->cur_tx.data_left = ep->cur_tx.entry->hdr.base_hdr.size;
+		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
 	} else {
-		ep->cur_tx_entry = NULL;
+		ep->cur_tx.entry = NULL;
 	}
 }
 
@@ -637,7 +637,7 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 
 static bool tcpx_tx_pending(struct tcpx_ep *ep)
 {
-	return ep->cur_tx_entry || ofi_bsock_tosend(&ep->bsock);
+	return ep->cur_tx.entry || ofi_bsock_tosend(&ep->bsock);
 }
 
 int tcpx_try_func(void *util_ep)
@@ -684,13 +684,13 @@ void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 {
 	struct util_wait *wait = ep->util_ep.tx_cq->wait;
 
-	if (!ep->cur_tx_entry) {
-		ep->cur_tx_entry = tx_entry;
-		ep->rem_tx_len = tx_entry->hdr.base_hdr.size;
+	if (!ep->cur_tx.entry) {
+		ep->cur_tx.entry = tx_entry;
+		ep->cur_tx.data_left = tx_entry->hdr.base_hdr.size;
 		ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 		tcpx_progress_tx(ep);
 
-		if (!ep->cur_tx_entry && wait)
+		if (!ep->cur_tx.entry && wait)
 			wait->signal(wait);
 	} else {
 		slist_insert_tail(&tx_entry->entry, &ep->tx_queue);

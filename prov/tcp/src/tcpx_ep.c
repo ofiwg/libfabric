@@ -220,12 +220,12 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 
 	assert(fastlock_held(&ep->lock));
 	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-	if (ep->cur_tx_entry) {
-		ep->hdr_bswap(&ep->cur_tx_entry->hdr.base_hdr);
-		tcpx_cq_report_error(&cq->util_cq, ep->cur_tx_entry,
+	if (ep->cur_tx.entry) {
+		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
+		tcpx_cq_report_error(&cq->util_cq, ep->cur_tx.entry,
 				     FI_ECANCELED);
-		tcpx_xfer_entry_free(cq, ep->cur_tx_entry);
-		ep->cur_tx_entry = NULL;
+		tcpx_xfer_entry_free(cq, ep->cur_tx.entry);
+		ep->cur_tx.entry = NULL;
 	}
 
 	tcpx_ep_flush_queue(&ep->tx_queue, cq);
@@ -236,7 +236,7 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 	if (ep->cur_rx.entry) {
 		tcpx_cq_report_error(&cq->util_cq, ep->cur_rx.entry,
 				     FI_ECANCELED);
-		tcpx_xfer_entry_free(cq, ep->cur_tx_entry);
+		tcpx_xfer_entry_free(cq, ep->cur_tx.entry);
 		tcpx_reset_rx(ep);
 	}
 	tcpx_ep_flush_queue(&ep->rx_queue, cq);

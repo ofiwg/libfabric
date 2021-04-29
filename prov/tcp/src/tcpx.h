@@ -213,6 +213,11 @@ struct tcpx_cur_rx {
 	int			(*handler)(struct tcpx_ep *ep);
 };
 
+struct tcpx_cur_tx {
+	size_t			data_left;
+	struct tcpx_xfer_entry	*entry;
+};
+
 struct tcpx_rx_ctx {
 	struct fid_ep		rx_fid;
 	struct slist		rx_queue;
@@ -225,8 +230,8 @@ struct tcpx_ep {
 	struct util_ep		util_ep;
 	struct ofi_bsock	bsock;
 	struct tcpx_cur_rx	cur_rx;
-	struct tcpx_xfer_entry	*cur_tx_entry;
-	size_t			rem_tx_len;
+	struct tcpx_cur_tx	cur_tx;
+
 	struct dlist_entry	ep_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
