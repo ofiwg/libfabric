@@ -59,8 +59,12 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	ssize_t ret;
 
 	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_efa_pool);
-	if (OFI_UNLIKELY(!pkt_entry))
-		return -FI_ENOMEM;
+	if (OFI_UNLIKELY(!pkt_entry)) {
+		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+		       "TX packets exhausted, current packets in flight %lu",
+		       rxr_ep->tx_pending);
+		return -FI_EAGAIN;
+	}
 
 	pkt_entry->x_entry = (void *)tx_entry;
 	pkt_entry->addr = tx_entry->addr;
