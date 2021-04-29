@@ -29,6 +29,7 @@
  */
 
 #include <assert.h>
+#include <fcntl.h>
 #include <netdb.h>
 #include <poll.h>
 #include <stdlib.h>
@@ -1772,6 +1773,14 @@ void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len)
 		opts->iterations = size_to_count(opts->transfer_size);
 }
 
+static void ft_force_progress(void)
+{
+	if (txcq)
+		fi_cq_read(txcq, NULL, 0);
+	if (rxcq)
+		fi_cq_read(rxcq, NULL, 0);
+}
+
 static int ft_progress(struct fid_cq *cq, uint64_t total, uint64_t *cq_cntr)
 {
 	struct fi_cq_err_entry comp;
@@ -3228,6 +3237,23 @@ out:
 	return ret;
 }
 
+int ft_sock_setup()
+{
+	int ret, op;
+
+	op = 1;
+	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
+			  (void *) &op, sizeof(op));
+	if (ret)
+		return ret;
+
+	ret = ft_fd_nonblock(sock);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 int ft_sock_connect(char *node, char *service)
 {
 	struct addrinfo *ai;
@@ -3246,16 +3272,15 @@ int ft_sock_connect(char *node, char *service)
 		goto free;
 	}
 
-	ret = 1;
-	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (void *) &ret, sizeof(ret));
-	if (ret)
-		perror("setsockopt");
-
 	ret = connect(sock, ai->ai_addr, ai->ai_addrlen);
 	if (ret) {
 		perror("connect");
 		close(sock);
 	}
+
+	ret = ft_sock_setup();
+	if (ret)
+		perror("sock_setup");
 
 free:
 	freeaddrinfo(ai);
@@ -3264,7 +3289,7 @@ free:
 
 int ft_sock_accept()
 {
-	int ret, op;
+	int ret;
 
 	sock = accept(listen_sock, NULL, 0);
         if (sock < 0) {
@@ -3273,48 +3298,54 @@ int ft_sock_accept()
 		return ret;
 	}
 
-	op = 1;
-	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
-			  (void *) &op, sizeof(op));
+	ret = ft_sock_setup();
 	if (ret)
-		perror("setsockopt");
+		perror("sock_setup");
 
 	return 0;
 }
 
 int ft_sock_send(int fd, void *msg, size_t len)
 {
-	int ret;
+	size_t sent;
+	ssize_t ret, err = 0;
 
-	ret = send(fd, msg, len, 0);
-	if (ret == len) {
-		return 0;
-	} else if (ret < 0) {
-		perror("send");
-		return -errno;
-	} else {
-		perror("send aborted");
-		return -FI_ECONNABORTED;
+	for (sent = 0; sent < len; ) {
+		ret = send(fd, ((char *) msg) + sent, len - sent, 0);
+		if (ret > 0) {
+			sent += ret;
+		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			ft_force_progress();
+		} else {
+			err = -errno;
+			break;
+		}
 	}
+
+	return err ? err: 0;
 }
 
 int ft_sock_recv(int fd, void *msg, size_t len)
 {
-	int ret;
+	size_t rcvd;
+	ssize_t ret, err = 0;
 
-	ret = recv(fd, msg, len, MSG_WAITALL);
-	if (ret == len) {
-		return 0;
-	} else if (ret == 0) {
-		return -FI_ENOTCONN;
-	} else if (ret < 0) {
-		FT_PRINTERR("ft_sock_recv", -errno);
-		perror("recv");
-		return -errno;
-	} else {
-		perror("recv aborted");
-		return -FI_ECONNABORTED;
+	for (rcvd = 0; rcvd < len; ) {
+		ret = recv(fd, ((char *) msg) + rcvd, len - rcvd, 0);
+		if (ret > 0) {
+			rcvd += ret;
+		} else if (ret == 0) {
+			err = -FI_ENOTCONN;
+			break;
+		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			ft_force_progress();
+		} else {
+			err = -errno;
+			break;
+		}
 	}
+
+	return err ? err: 0;
 }
 
 int ft_sock_sync(int value)
