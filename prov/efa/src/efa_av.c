@@ -272,15 +272,24 @@ err_invalid:
 	return err;
 }
 
-/*
- * Insert address translation in core av & in hash.
+/**
+ * @brief insert address into RDM AV.
+ * This function insert a raw addres to rdm end point's AV. DGRAM endpoint will
+ * call efa_av_insert_ah directly in its own AV implementation.
  *
  * If shm transfer is enabled and the addr comes from local peer,
  * 1. convert addr to format 'gid_qpn', which will be set as shm's ep name later.
  * 2. insert gid_qpn into shm's av
  * 3. store returned fi_addr from shm into the hash table
+ *
+ * @param[in]	av	address vector
+ * @param[in]	addr	raw address, in the format of gid:qpn:qkey
+ * @param[out]	fi_addr pointer the output fi address. This addres is used by fi_send
+ * @param[in]	flags	flags user passed to fi_av_insert.
+ * @param[in]	context	context user passed to fi_av_insert
+ * @return	0 on success, a negative error code on failure
  */
-int efa_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
+int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 			   fi_addr_t *fi_addr, uint64_t flags,
 			   void *context)
 {
@@ -433,10 +442,14 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	if (av->ep_type == FI_EP_RDM) {
 		for (i = 0; i < count; i++) {
 			addr_i = (struct efa_ep_addr *) ((uint8_t *)addr + i * EFA_EP_ADDR_LEN);
-			ret = efa_av_insert_addr(av, addr_i, &fi_addr_res,
-					flags, context);
-			if (ret)
+			ret = efa_rdm_av_insert_addr(av, addr_i, &fi_addr_res,
+			                             flags, context);
+			if (ret) {
+				EFA_WARN(FI_LOG_AV, "efa_rdm_av_insert_addr failed! ret=%d\n",
+					 ret);
 				break;
+			}
+
 			if (fi_addr)
 				fi_addr[i] = fi_addr_res;
 			success_cnt++;

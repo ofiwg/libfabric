@@ -804,8 +804,8 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-	ret = efa_av_insert_addr(efa_ep->av, (struct efa_ep_addr *)raw_addr,
-				 &rdm_addr, 0, NULL);
+	ret = efa_rdm_av_insert_addr(efa_ep->av, (struct efa_ep_addr *)raw_addr,
+	                             &rdm_addr, 0, NULL);
 	if (OFI_UNLIKELY(ret != 0)) {
 		efa_eq_write_error(&ep->util_ep, FI_EINVAL, ret);
 		return -1;
