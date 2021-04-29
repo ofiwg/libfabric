@@ -449,6 +449,7 @@ static struct fi_ops_cm tcpx_cm_ops = {
 
 void tcpx_reset_rx(struct tcpx_ep *ep)
 {
+	ep->cur_rx.handler = NULL;
 	ep->cur_rx.entry = NULL;
 	ep->cur_rx.hdr_done = 0;
 	ep->cur_rx.hdr_len = sizeof(ep->cur_rx.hdr.base_hdr);

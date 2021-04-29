@@ -562,17 +562,24 @@ int tcpx_op_read_rsp(struct tcpx_ep *tcpx_ep)
 	return FI_SUCCESS;
 }
 
-static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
+static int tcpx_recv_hdr(struct tcpx_ep *ep)
 {
+	size_t len;
+	void *buf;
 	ssize_t ret;
 
-	assert(!ep->cur_rx.data_left);
-	ret = tcpx_recv_hdr(ep);
+	assert(ep->cur_rx.hdr_done < ep->cur_rx.hdr_len);
+
+	buf = (uint8_t *) &ep->cur_rx.hdr + ep->cur_rx.hdr_done;
+	len = ep->cur_rx.hdr_len - ep->cur_rx.hdr_done;
+	ret = ofi_bsock_recv(&ep->bsock, buf, len);
 	if (ret < 0)
 		return (int) ret;
 
 	ep->cur_rx.hdr_done += ret;
-	if (ep->cur_rx.hdr_done >= sizeof(ep->cur_rx.hdr.base_hdr)) {
+	if (ep->cur_rx.hdr_done == sizeof(ep->cur_rx.hdr.base_hdr)) {
+		assert(ep->cur_rx.hdr_len == sizeof(ep->cur_rx.hdr.base_hdr));
+
 		if (ep->cur_rx.hdr.base_hdr.payload_off > TCPX_MAX_HDR) {
 			FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 				"Payload offset is too large\n");
@@ -580,56 +587,38 @@ static int tcpx_get_next_rx_hdr(struct tcpx_ep *ep)
 		}
 		ep->cur_rx.hdr_len = (size_t) ep->cur_rx.hdr.base_hdr.
 					      payload_off;
-
-		if (ep->cur_rx.hdr_len > ep->cur_rx.hdr_done) {
-			ret = tcpx_recv_hdr(ep);
-			if (ret < 0)
-				return (int) ret;
-
-			ep->cur_rx.hdr_done += ret;
-		}
 	}
 
 	if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len)
 		return -FI_EAGAIN;
 
 	ep->hdr_bswap(&ep->cur_rx.hdr.base_hdr);
+	if (ep->cur_rx.hdr.base_hdr.op >= ARRAY_SIZE(ep->start_op)) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+			"Received invalid opcode\n");
+		return -FI_EIO;
+	}
+
 	ep->cur_rx.data_left = ep->cur_rx.hdr.base_hdr.size -
 			       ep->cur_rx.hdr.base_hdr.payload_off;
-	return FI_SUCCESS;
+	ep->cur_rx.handler = ep->start_op[ep->cur_rx.hdr.base_hdr.op];
+
+	return ep->cur_rx.handler(ep);
 }
 
 void tcpx_progress_rx(struct tcpx_ep *ep)
 {
-	int ret = 0;
+	int ret;
 
 	assert(fastlock_held(&ep->lock));
 	do {
-		if (!ep->cur_rx.entry) {
-			if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
-				ret = tcpx_get_next_rx_hdr(ep);
-				if (ret)
-					break;
-			}
-
-			if (ep->cur_rx.hdr.base_hdr.op >=
-			    ARRAY_SIZE(ep->start_op)) {
-				FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
-					"Received invalid opcode\n");
-				ret = -FI_EIO;
-				break;
-			}
-			ret = ep->start_op[ep->cur_rx.hdr.base_hdr.op](ep);
-			if (ret)
-				break;
+		if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
+			ret = tcpx_recv_hdr(ep);
+		} else {
+			ret = ep->cur_rx.handler(ep);
 		}
 
-		if (ep->cur_rx.entry) {
-			assert(ep->cur_rx.handler);
-			ep->cur_rx.handler(ep);
-		}
-
-	} while (ofi_bsock_readable(&ep->bsock));
+	} while (!ret && ofi_bsock_readable(&ep->bsock));
 
 	if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		tcpx_ep_disable(ep, 0);

@@ -56,18 +56,6 @@ int tcpx_send_msg(struct tcpx_ep *ep)
 	return FI_SUCCESS;
 }
 
-ssize_t tcpx_recv_hdr(struct tcpx_ep *ep)
-{
-	size_t len;
-	void *buf;
-
-	assert(!ep->cur_rx.entry);
-	buf = (uint8_t *) &ep->cur_rx.hdr + ep->cur_rx.hdr_done;
-	len = ep->cur_rx.hdr_len - ep->cur_rx.hdr_done;
-
-	return ofi_bsock_recv(&ep->bsock, buf, len);
-}
-
 int tcpx_recv_msg_data(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;

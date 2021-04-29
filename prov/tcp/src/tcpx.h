@@ -333,7 +333,6 @@ void tcpx_cq_report_error(struct util_cq *cq,
 void tcpx_get_cq_info(struct tcpx_xfer_entry *entry, uint64_t *flags,
 		      uint64_t *data, uint64_t *tag);
 
-ssize_t tcpx_recv_hdr(struct tcpx_ep *ep);
 int tcpx_recv_msg_data(struct tcpx_ep *ep);
 int tcpx_send_msg(struct tcpx_ep *ep);
 
