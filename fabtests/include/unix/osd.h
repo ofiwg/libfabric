@@ -34,9 +34,25 @@
 #define _FABTESTS_UNIX_OSD_H_
 
 #include <complex.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 static inline int ft_startup(void)
 {
+	return 0;
+}
+
+static inline int ft_fd_nonblock(int fd)
+{
+	long flags;
+
+	flags = fcntl(fd, F_GETFL);
+	if (flags < 0)
+		return -errno;
+
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK))
+		return -errno;
+
 	return 0;
 }
 
