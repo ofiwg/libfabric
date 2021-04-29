@@ -454,7 +454,7 @@ int tcpx_op_read_req(struct tcpx_ep *ep)
 	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 	resp = tcpx_xfer_entry_alloc(cq, TCPX_OP_REMOTE_READ);
 	if (!resp)
-		return -FI_EAGAIN;
+		return -FI_ENOMEM;
 
 	memcpy(&resp->hdr, &ep->cur_rx.hdr,
 	       (size_t) ep->cur_rx.hdr.base_hdr.payload_off);
@@ -504,7 +504,7 @@ int tcpx_op_write(struct tcpx_ep *ep)
 	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
 	rx_entry = tcpx_xfer_entry_alloc(cq, TCPX_OP_REMOTE_WRITE);
 	if (!rx_entry)
-		return -FI_EAGAIN;
+		return -FI_ENOMEM;
 
 	rx_entry->flags = 0;
 	if (ep->cur_rx.hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
