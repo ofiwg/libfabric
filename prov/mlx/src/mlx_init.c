@@ -155,11 +155,20 @@ static int mlx_getinfo (
 	char *configfile_name = NULL;
 	int inject_thresh = -1;
 	mlx_descriptor.config = NULL;
-	size_t use_cache = 1;
+	char *tls = NULL;
+	const char const* tls_auto = "auto";
+	glob_t glob_buf;
 
-	if (mlx_do_extra_checks() != FI_SUCCESS) {
-		return -ENODATA;
+	/*
+	* check the existance of mlx infiniband device
+	*/
+	if (glob("/sys/class/infiniband/mlx[0-9]_[0-9]", 0, NULL, &glob_buf) != 0) {
+		FI_INFO(&mlx_prov, FI_LOG_CORE,
+			"no mlx device is found.\n");
+		status  = -FI_ENODEV;
+		goto out;
 	}
+	globfree(&glob_buf);
 
 	status = fi_param_get( &mlx_prov,
 				"inject_limit",
@@ -259,6 +268,7 @@ static int mlx_getinfo (
 	if (*info)
 		(*info)->addr_format = mlx_info.addr_format;
 
+out:
 	return status;
 }
 
