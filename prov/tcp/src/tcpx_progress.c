@@ -43,6 +43,49 @@
 #include <ofi_iov.h>
 
 
+static int tcpx_send_msg(struct tcpx_ep *ep)
+{
+	struct tcpx_xfer_entry *tx_entry;
+	ssize_t ret;
+
+	assert(ep->cur_tx.entry);
+	tx_entry = ep->cur_tx.entry;
+	ret = ofi_bsock_sendv(&ep->bsock, tx_entry->iov, tx_entry->iov_cnt);
+	if (ret < 0)
+		return ret;
+
+	ep->cur_tx.data_left -= ret;
+	if (ep->cur_tx.data_left) {
+		ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt, ret);
+		return -FI_EAGAIN;
+	}
+	return FI_SUCCESS;
+}
+
+static int tcpx_recv_msg_data(struct tcpx_ep *ep)
+{
+	struct tcpx_xfer_entry *rx_entry;
+	ssize_t ret;
+
+	if (!ep->cur_rx.data_left)
+		return FI_SUCCESS;
+
+	rx_entry = ep->cur_rx.entry;
+	ret = ofi_bsock_recvv(&ep->bsock, rx_entry->iov, rx_entry->iov_cnt);
+	if (ret < 0)
+		return ret;
+
+	ep->cur_rx.data_left -= ret;
+	if (!ep->cur_rx.data_left)
+		return FI_SUCCESS;
+
+	ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, ret);
+	if (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len)
+		return -FI_ETRUNC;
+
+	return -FI_EAGAIN;
+}
+
 void tcpx_progress_tx(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *tx_entry;
