@@ -233,8 +233,8 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 	tcpx_ep_flush_queue(&ep->tx_rsp_pend_queue, cq);
 
 	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
-	if (ep->cur_rx_entry) {
-		tcpx_cq_report_error(&cq->util_cq, ep->cur_rx_entry,
+	if (ep->cur_rx.entry) {
+		tcpx_cq_report_error(&cq->util_cq, ep->cur_rx.entry,
 				     FI_ECANCELED);
 		tcpx_xfer_entry_free(cq, ep->cur_tx_entry);
 		tcpx_reset_rx(ep);
@@ -449,9 +449,9 @@ static struct fi_ops_cm tcpx_cm_ops = {
 
 void tcpx_reset_rx(struct tcpx_ep *ep)
 {
-	ep->cur_rx_entry = NULL;
-	ep->cur_rx_msg.done_len = 0;
-	ep->cur_rx_msg.hdr_len = sizeof(ep->cur_rx_msg.hdr.base_hdr);
+	ep->cur_rx.entry = NULL;
+	ep->cur_rx.hdr_done = 0;
+	ep->cur_rx.hdr_len = sizeof(ep->cur_rx.hdr.base_hdr);
 }
 
 void tcpx_rx_entry_free(struct tcpx_xfer_entry *rx_entry)
@@ -486,7 +486,7 @@ static void tcpx_ep_cancel_rx(struct tcpx_ep *ep, void *context)
 	slist_foreach(&ep->rx_queue, cur, prev) {
 		xfer_entry = container_of(cur, struct tcpx_xfer_entry, entry);
 		if (xfer_entry->context == context) {
-			if (ep->cur_rx_entry != xfer_entry)
+			if (ep->cur_rx.entry != xfer_entry)
 				goto found;
 			break;
 		}
@@ -732,8 +732,8 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	slist_init(&ep->rma_read_queue);
 	slist_init(&ep->tx_rsp_pend_queue);
 
-	ep->cur_rx_msg.done_len = 0;
-	ep->cur_rx_msg.hdr_len = sizeof(ep->cur_rx_msg.hdr.base_hdr);
+	ep->cur_rx.hdr_done = 0;
+	ep->cur_rx.hdr_len = sizeof(ep->cur_rx.hdr.base_hdr);
 	ep->min_multi_recv_size = TCPX_MIN_MULTI_RECV;
 
 	*ep_fid = &ep->util_ep.ep_fid;

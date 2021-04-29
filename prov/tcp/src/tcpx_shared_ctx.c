@@ -41,8 +41,8 @@
 void tcpx_srx_entry_free(struct tcpx_rx_ctx *srx_ctx,
 			 struct tcpx_xfer_entry *xfer_entry)
 {
-	if (xfer_entry->ep->cur_rx_entry == xfer_entry)
-		xfer_entry->ep->cur_rx_entry = NULL;
+	if (xfer_entry->ep->cur_rx.entry == xfer_entry)
+		xfer_entry->ep->cur_rx.entry = NULL;
 
 	fastlock_acquire(&srx_ctx->lock);
 	ofi_buf_free(xfer_entry);

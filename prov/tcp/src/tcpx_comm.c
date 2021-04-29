@@ -61,9 +61,9 @@ ssize_t tcpx_recv_hdr(struct tcpx_ep *ep)
 	size_t len;
 	void *buf;
 
-	assert(!ep->cur_rx_entry);
-	buf = (uint8_t *) &ep->cur_rx_msg.hdr + ep->cur_rx_msg.done_len;
-	len = ep->cur_rx_msg.hdr_len - ep->cur_rx_msg.done_len;
+	assert(!ep->cur_rx.entry);
+	buf = (uint8_t *) &ep->cur_rx.hdr + ep->cur_rx.hdr_done;
+	len = ep->cur_rx.hdr_len - ep->cur_rx.hdr_done;
 
 	return ofi_bsock_recv(&ep->bsock, buf, len);
 }
@@ -73,18 +73,18 @@ int tcpx_recv_msg_data(struct tcpx_ep *ep)
 	struct tcpx_xfer_entry *rx_entry;
 	ssize_t ret;
 
-	if (!ep->rem_rx_len)
+	if (!ep->cur_rx.data_left)
 		return FI_SUCCESS;
 
-	rx_entry = ep->cur_rx_entry;
+	rx_entry = ep->cur_rx.entry;
 	assert(ofi_total_iov_len(rx_entry->iov, rx_entry->iov_cnt) >=
-	       ep->rem_rx_len);
+	       ep->cur_rx.data_left);
 	ret = ofi_bsock_recvv(&ep->bsock, rx_entry->iov, rx_entry->iov_cnt);
 	if (ret < 0)
 		return ret;
 
-	ep->rem_rx_len -= ret;
-	if (!ep->rem_rx_len)
+	ep->cur_rx.data_left -= ret;
+	if (!ep->cur_rx.data_left)
 		return FI_SUCCESS;
 
 	ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, ret);
