@@ -499,10 +499,10 @@ RXM_INI
 			"latency as a side-effect.");
 
 	fi_param_define(&rxm_prov, "tx_size", FI_PARAM_SIZE_T,
-			"Defines default tx context size (default: 16384).");
+			"Defines default tx context size (default: 2048).");
 
 	fi_param_define(&rxm_prov, "rx_size", FI_PARAM_SIZE_T,
-			"Defines default rx context size (default: 16384).");
+			"Defines default rx context size (default: 2048).");
 
 	fi_param_define(&rxm_prov, "msg_tx_size", FI_PARAM_SIZE_T,
 			"Defines FI_EP_MSG tx size that would be requested "
