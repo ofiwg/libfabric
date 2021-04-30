@@ -383,6 +383,10 @@ struct rxr_req_opt_cq_data_hdr {
 	int64_t cq_data;
 };
 
+struct rxr_req_opt_connid_hdr {
+	uint32_t connid; /* sender's connection ID */
+};
+
 #define RXR_REQ_OPT_HDR_ALIGNMENT 8
 #define RXR_REQ_OPT_RAW_ADDR_HDR_SIZE (((sizeof(struct rxr_req_opt_raw_addr_hdr) + EFA_EP_ADDR_LEN - 1)/RXR_REQ_OPT_HDR_ALIGNMENT + 1) * RXR_REQ_OPT_HDR_ALIGNMENT)
 
