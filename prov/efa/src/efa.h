@@ -569,6 +569,35 @@ bool rxr_peer_need_raw_addr_hdr(struct rdm_peer *peer)
 	return peer->extra_info[0] & RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
 }
 
+
+/**
+ * @brief determines whether a peer needs the endpoint to include
+ * connection ID (connid) in packet header.
+ *
+ * Connection ID is a 4 bytes random integer identifies an endpoint.
+ * Including connection ID in a packet's header allows peer to
+ * identify sender of the packet. It is necessary because device
+ * only report GID+QPN of a received packet, while multiple senders
+ * can have same GID+QPN.
+ *
+ * EFA uses qkey as connection ID.
+ *
+ * @params[in]	peer	pointer to rdm_peer
+ * @return	a boolean indicating whether the peer needs connection ID
+ */
+static inline
+bool rxr_peer_need_connid(struct rdm_peer *peer)
+{
+	/* "connid header" is an extra request defined
+	 * in version 4 (the base version).
+	 * Because it is an extra feature,
+	 * an EP will assume the peer does not need
+	 * connid before a handshake packet was received.
+	 */
+	return (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED) &&
+	       (peer->extra_info[0] & RXR_EXTRA_REQUEST_CONNID_HEADER);
+}
+
 static inline
 size_t efa_max_rdma_size(struct fid_ep *ep_fid)
 {

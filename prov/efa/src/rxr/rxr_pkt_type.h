@@ -115,6 +115,9 @@ struct rxr_base_hdr {
 	uint16_t flags;
 };
 
+/* indicate this packet has the sender connid */
+#define RXR_PKT_CONNID_HDR		BIT_ULL(15)
+
 #if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_base_hdr) == 4, "rxr_base_hdr check");
 #endif
