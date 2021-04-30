@@ -131,6 +131,12 @@ static long int sysconf(int name)
 
 int socketpair(int af, int type, int protocol, int socks[2]);
 
+static inline int ft_fd_nonblock(int fd)
+{
+	u_long argp = 1;
+	return ioctlsocket(fd, FIONBIO, &argp) ? -WSAGetLastError() : 0;
+}
+
 /* Bits in the fourth argument to `waitid'.  */
 #define WSTOPPED	2	/* Report stopped child (same as WUNTRACED). */
 #define WEXITED		4	/* Report dead child. */
