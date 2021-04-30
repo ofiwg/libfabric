@@ -55,7 +55,7 @@ struct tcpx_port_range port_range = {
 int tcpx_nodelay = -1;
 
 int tcpx_staging_sbuf_size = 0; /* disable send buffering for now */
-int tcpx_prefetch_rbuf_size = OFI_BYTEQ_SIZE;
+int tcpx_prefetch_rbuf_size = 0; /* disable prefetch buffer too! */
 
 
 static void tcpx_init_env(void)
