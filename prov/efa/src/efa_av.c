@@ -577,10 +577,38 @@ err_free_conn:
 	return ret;
 }
 
+static int efa_dgram_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
+			       size_t count, uint64_t flags)
+{
+	int err = 0;
+	size_t i;
+	struct efa_av *av;
+
+	av = container_of(av_fid, struct efa_av, util_av.av_fid);
+	for (i = 0; i < count; i++) {
+		err = efa_av_remove_ah(&av->util_av.av_fid, &fi_addr[i],
+				       1, flags);
+		if (err)
+			break;
+	}
+
+	if (i < count) {
+		/* something went wrong, so err cannot be zero */
+		assert(err);
+		if (av->util_av.eq) {
+			for (; i < count; ++i)
+				ofi_av_write_event(&av->util_av, i, FI_ECANCELED, NULL);
+		}
+	}
+
+	return err;
+}
+
 static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			 size_t count, uint64_t flags)
 {
 	int ret = 0;
+	int err;
 	size_t i;
 	struct efa_av *av;
 	struct util_av_entry *util_av_entry;
@@ -589,68 +617,83 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	struct rxr_ep *rxr_ep;
 
 	av = container_of(av_fid, struct efa_av, util_av.av_fid);
-	if (av->ep_type == FI_EP_DGRAM) {
-		for (i = 0; i < count; i++) {
-			ret = efa_av_remove_ah(&av->util_av.av_fid, &fi_addr[i],
-					       1, flags);
-			if (ret)
-				goto out;
-		}
-		goto out;
-	}
+	if (av->ep_type == FI_EP_DGRAM)
+		return efa_dgram_av_remove(av_fid, fi_addr, count, flags);
+
 	fastlock_acquire(&av->util_av.lock);
 	/* currently multiple EP bind to same av is not supported */
 	rxr_ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
 	for (i = 0; i < count; i++) {
-		if (fi_addr[i] == FI_ADDR_NOTAVAIL ||
-		    fi_addr[i] > av->count) {
+		if (fi_addr[i] == FI_ADDR_NOTAVAIL || fi_addr[i] > av->count) {
 			ret = -FI_ENOENT;
-			goto release_lock;
+			goto out;
 		}
-		util_av_entry = ofi_bufpool_get_ibuf(
-						av->util_av.av_entry_pool,
-						fi_addr[i]);
+
+		util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool, fi_addr[i]);
 		if (!util_av_entry) {
 			ret = -FI_ENOENT;
-			goto release_lock;
+			goto out;
 		}
-		av_entry = (struct efa_av_entry *)util_av_entry->data;
+
 		peer = rxr_ep_get_peer(rxr_ep, fi_addr[i]);
 
-		/* Check if the peer is in use if it is then return */
 		ret = efa_peer_in_use(peer);
 		if (ret)
-			goto release_lock;
+			goto out;
 
-		/* Only if the peer is not in use reset the peer */
 		if (peer->rx_init)
 			efa_peer_reset(peer);
 
-		ret = efa_av_remove_ah(&av->util_av.av_fid, &fi_addr[i], 1,
+		/*
+		 * Clearing the 3 resources of an av entry:
+		 *
+		 *     address handler (AH), shm_av_entry and util_av_entry.
+		 *
+		 * We will try our best to remove these resources. If releasing one
+		 * resource failed, we will not stop. Instead we save the error code
+		 * and continue to release other resources.
+		 */
+		av_entry = (struct efa_av_entry *)util_av_entry->data;
+		err = efa_av_remove_ah(&av->util_av.av_fid, &fi_addr[i], 1,
 				       flags);
-		if (ret)
-			goto release_lock;
-		/* remove an address from shm provider's av */
-		if (rxr_env.enable_shm_transfer && av_entry->local_mapping) {
-			ret = fi_av_remove(av->shm_rdm_av, &av_entry->shm_rdm_addr, 1, flags);
-			if (ret)
-				goto err_free_av_entry;
-
-			av->shm_used--;
-			assert(av_entry->shm_rdm_addr < rxr_env.shm_av_size);
-			av->shm_rdm_addr_map[av_entry->shm_rdm_addr] = FI_ADDR_UNSPEC;
+		if (err) {
+			EFA_WARN(FI_LOG_AV, "remote address handle failed! err=%d\n", err);
+			ret = err;
 		}
-		ret = ofi_av_remove_addr(&av->util_av, *fi_addr);
+
+		if (av_entry->local_mapping) {
+			err = fi_av_remove(av->shm_rdm_av, &av_entry->shm_rdm_addr, 1, flags);
+			if (err) {
+				EFA_WARN(FI_LOG_AV, "remove address from shm av failed! err=%d\n", err);
+				ret = err;
+			} else {
+				av->shm_used--;
+				assert(av_entry->shm_rdm_addr < rxr_env.shm_av_size);
+				av->shm_rdm_addr_map[av_entry->shm_rdm_addr] = FI_ADDR_UNSPEC;
+			}
+		}
+
+		err = ofi_av_remove_addr(&av->util_av, *fi_addr);
+		if (err) {
+			EFA_WARN(FI_LOG_AV, "remove address from utility av failed! err=%d\n", err);
+			ret = err;
+		}
+
 		if (ret)
-			goto err_free_av_entry;
+			goto out;
 	}
-	fastlock_release(&av->util_av.lock);
-	goto out;
-err_free_av_entry:
-	ofi_ibuf_free(util_av_entry);
-release_lock:
-	fastlock_release(&av->util_av.lock);
+
 out:
+	if (i < count) {
+		/* something went wrong, so ret cannot be zero */
+		assert(ret);
+		if (av->util_av.eq) {
+			for (; i < count; ++i)
+				ofi_av_write_event(&av->util_av, i, FI_ECANCELED, NULL);
+		}
+	}
+
+	fastlock_release(&av->util_av.lock);
 	return ret;
 }
 
