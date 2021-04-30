@@ -134,8 +134,7 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 			}
 
 			fastlock_acquire(&cmdq->lock);
-			ret = cxi_cq_emit_ct(cmdq->dev_cmdq,
-					     set ? C_CMD_CT_SET : C_CMD_CT_INC,
+			ret = cxi_cq_emit_ct(cmdq->dev_cmdq, C_CMD_CT_SET,
 					     &cmd);
 			if (ret) {
 				fastlock_release(&cmdq->lock);
@@ -146,8 +145,7 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 			fastlock_release(&cmdq->lock);
 
 			/* Set commands will trigger a write-back */
-			if (set)
-				cxi_cntr->wb_pending = true;
+			cxi_cntr->wb_pending = true;
 		}
 	}
 
