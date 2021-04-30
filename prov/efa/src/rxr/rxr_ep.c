@@ -958,6 +958,8 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
 		 */
 		ep->extra_info[0] |= RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
 	}
+
+	ep->extra_info[0] |= RXR_EXTRA_REQUEST_CONNID_HEADER;
 }
 
 static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)

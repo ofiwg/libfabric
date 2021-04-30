@@ -65,7 +65,8 @@ struct efa_ep_addr {
 #define RXR_EXTRA_FEATURE_RDMA_READ			BIT_ULL(0)
 #define RXR_EXTRA_FEATURE_DELIVERY_COMPLETE 		BIT_ULL(1)
 #define RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH	BIT_ULL(2)
-#define RXR_NUM_EXTRA_FEATURE_OR_REQUEST		3
+#define RXR_EXTRA_REQUEST_CONNID_HEADER			BIT_ULL(3)
+#define RXR_NUM_EXTRA_FEATURE_OR_REQUEST		4
 #define RXR_MAX_NUM_EXINFO	(256)
 
 /*
@@ -137,6 +138,19 @@ struct rxr_base_hdr {
 #if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_base_hdr) == 4, "rxr_base_hdr check");
 #endif
+
+/* Universal flags that can be applied on "rxr_base_hdr.flags".
+ *
+ * Universal flags start from the last bit and goes backwards.
+ * Because "rxr_base_hdr.flags" is a 16-bits integer, the
+ * last bit is the 15th bit.
+ * Other than universal flags, each packet type defines its
+ * own set of flags, which generally starts from the 0th bit
+ * in "rxr_base_hdr.flags".
+ */
+
+/* indicate this packet has the sender connid */
+#define RXR_PKT_CONNID_HDR		BIT_ULL(15)
 
 struct efa_rma_iov {
 	uint64_t		addr;
