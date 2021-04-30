@@ -347,6 +347,7 @@ void tcpx_reset_rx(struct tcpx_ep *ep);
 void tcpx_progress_tx(struct tcpx_ep *ep);
 void tcpx_progress_rx(struct tcpx_ep *ep);
 int tcpx_try_func(void *util_ep);
+int tcpx_mod_epoll(struct tcpx_ep *ep);
 
 void tcpx_hdr_none(struct tcpx_base_hdr *hdr);
 void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr);
