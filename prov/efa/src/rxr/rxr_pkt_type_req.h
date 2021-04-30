@@ -67,7 +67,6 @@
 #define RXR_REQ_TAGGED			BIT_ULL(3)
 #define RXR_REQ_RMA			BIT_ULL(4)
 #define RXR_REQ_ATOMIC			BIT_ULL(5)
-
 /*
  *     Extra Feature/Request Flags
  */
@@ -88,6 +87,10 @@ struct rxr_req_opt_raw_addr_hdr {
 
 struct rxr_req_opt_cq_data_hdr {
 	int64_t cq_data;
+};
+
+struct rxr_req_opt_connid_hdr {
+	uint32_t connid; /* sender's connection ID */
 };
 
 void *rxr_pkt_req_raw_addr(struct rxr_pkt_entry *pkt_entry);

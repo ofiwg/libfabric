@@ -127,6 +127,27 @@ static inline struct rxr_base_hdr *rxr_get_base_hdr(void *pkt)
 	return (struct rxr_base_hdr *)pkt;
 }
 
+uint32_t *rxr_pkt_req_connid_ptr(struct rxr_pkt_entry *pkt_entry);
+
+/**
+ * @brief return the pointer to connid in a packet
+ *
+ * @param[in]	pkt_entry	an packet entry
+ * @return	If the input has connid in header, return the pointer to connid
+ * 		Otherwise, return NULL
+ */
+static inline
+uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_base_hdr *base_hdr;
+
+	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	if (base_hdr->type >= RXR_REQ_PKT_BEGIN)
+		return rxr_pkt_req_connid_ptr(pkt_entry);
+
+	return NULL;
+}
+
 struct rxr_ep;
 struct rdm_peer;
 struct rxr_tx_entry;
