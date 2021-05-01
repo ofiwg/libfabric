@@ -684,6 +684,11 @@ int tcpx_try_func(void *util_ep)
 			       struct util_wait_fd, util_wait);
 
 	fastlock_acquire(&ep->lock);
+	if (ofi_bsock_readable(&ep->bsock)) {
+		ret = -FI_EAGAIN;
+		goto out;
+	}
+
 	if (tcpx_tx_pending(ep) && !ep->pollout_set) {
 		ep->pollout_set = true;
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
@@ -707,6 +712,7 @@ epoll_mod:
 	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 			"epoll modify failed\n");
+out:
 	fastlock_release(&ep->lock);
 	return ret;
 }
