@@ -69,6 +69,7 @@ struct ofi_pollfds {
 };
 
 int ofi_pollfds_create(struct ofi_pollfds **pfds);
+int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size);
 int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context);
 int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
@@ -77,6 +78,14 @@ int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd);
 int ofi_pollfds_wait(struct ofi_pollfds *pfds, void **contexts,
 		     int max_contexts, int timeout);
 void ofi_pollfds_close(struct ofi_pollfds *pfds);
+
+/* OS specific */
+void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
+			struct ofi_pollfds_work_item *item);
+int ofi_pollfds_do_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		       void *context);
+void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
+			struct ofi_pollfds_work_item *item);
 
 
 #ifdef HAVE_EPOLL
