@@ -485,7 +485,7 @@ struct ofi_ops_dynamic_rbuf rxm_dynamic_rbuf = {
 static void rxm_config_dyn_rbuf(struct rxm_domain *domain, struct fi_info *info,
 				struct fi_info *msg_info)
 {
-	int ret = 0;
+	int ret;
 
 	/* Collective support requires rxm generated and consumed messages.
 	 * Although we could update the code to handle receiving collective
@@ -496,20 +496,24 @@ static void rxm_config_dyn_rbuf(struct rxm_domain *domain, struct fi_info *info,
 	 */
 	if ((info->caps & FI_COLLECTIVE) ||
 	    ((info->caps & FI_HMEM) && !(msg_info->caps & FI_HMEM)))
-		return;
+		goto out;
 
+	ret = 1;
 	fi_param_get_bool(&rxm_prov, "enable_dyn_rbuf", &ret);
 	domain->dyn_rbuf = (ret != 0);
 	if (!domain->dyn_rbuf)
-		return;
+		goto out;
 
 	ret = fi_set_ops(&domain->msg_domain->fid, OFI_OPS_DYNAMIC_RBUF, 0,
 			 (void *) &rxm_dynamic_rbuf, NULL);
 	domain->dyn_rbuf = (ret == FI_SUCCESS);
 
-	if (domain->dyn_rbuf) {
+	if (domain->dyn_rbuf)
 		domain->rx_post_size = sizeof(struct rxm_pkt);
-	}
+
+out:
+	FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "dynamic receives: %d\n",
+	       domain->dyn_rbuf);
 }
 
 int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
