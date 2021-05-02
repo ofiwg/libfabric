@@ -1208,7 +1208,7 @@ vrb_eq_sread(struct fid_eq *eq_fid, uint32_t *event,
 		void *buf, size_t len, int timeout, uint64_t flags)
 {
 	struct vrb_eq *eq;
-	void *contexts;
+	struct ofi_epollfds_event fdevent;
 	ssize_t ret;
 
 	eq = container_of(eq_fid, struct vrb_eq, eq_fid.fid);
@@ -1218,12 +1218,12 @@ vrb_eq_sread(struct fid_eq *eq_fid, uint32_t *event,
 		if (ret && (ret != -FI_EAGAIN))
 			return ret;
 
-		ret = ofi_epoll_wait(eq->epollfd, &contexts, 1, timeout);
+		ret = ofi_epoll_wait(eq->epollfd, &fdevent, 1, timeout);
 		if (ret == 0)
 			return -FI_EAGAIN;
 		else if (ret < 0)
 			return -errno;
-	};
+	}
 }
 
 static const char *
