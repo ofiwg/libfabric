@@ -121,7 +121,7 @@ int ofi_discard_socket(SOCKET sock, size_t len);
  * Byte queue - streaming socket staging buffer
  */
 enum {
-	OFI_BYTEQ_SIZE = 8192,
+	OFI_BYTEQ_SIZE = 9000, /* Hard-coded max, good for 6 1500B buffers */
 };
 
 struct ofi_byteq {
