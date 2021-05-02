@@ -93,43 +93,48 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 	int ret;
 
 	assert(fastlock_held(&ep->lock));
-	if (!ep->cur_tx.entry) {
-		(void) ofi_bsock_flush(&ep->bsock);
-		return;
-	}
+	while (ep->cur_tx.entry) {
+		ret = tcpx_send_msg(ep);
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+			return;
 
-	ret = tcpx_send_msg(ep);
-	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-		return;
+		tx_entry = ep->cur_tx.entry;
+		ep->hdr_bswap(&tx_entry->hdr.base_hdr);
+		cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 
-	tx_entry = ep->cur_tx.entry;
-	ep->hdr_bswap(&tx_entry->hdr.base_hdr);
-	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
-		tcpx_cq_report_error(&cq->util_cq, tx_entry, -ret);
-		tcpx_xfer_entry_free(cq, tx_entry);
-	} else {
-		if (tx_entry->hdr.base_hdr.flags &
-		    (TCPX_DELIVERY_COMPLETE | TCPX_COMMIT_COMPLETE)) {
-			slist_insert_tail(&tx_entry->entry,
-					  &ep->tx_rsp_pend_queue);
-		} else {
-			tcpx_cq_report_success(&cq->util_cq, tx_entry);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
+			tcpx_cq_report_error(&cq->util_cq, tx_entry, -ret);
 			tcpx_xfer_entry_free(cq, tx_entry);
+		} else {
+			if (tx_entry->hdr.base_hdr.flags &
+			    (TCPX_DELIVERY_COMPLETE | TCPX_COMMIT_COMPLETE)) {
+				slist_insert_tail(&tx_entry->entry,
+						  &ep->tx_rsp_pend_queue);
+			} else {
+				tcpx_cq_report_success(&cq->util_cq, tx_entry);
+				tcpx_xfer_entry_free(cq, tx_entry);
+			}
+		}
+
+		if (!slist_empty(&ep->tx_queue)) {
+			ep->cur_tx.entry =
+				container_of(slist_remove_head(&ep->tx_queue),
+					     struct tcpx_xfer_entry, entry);
+			ep->cur_tx.data_left = ep->cur_tx.entry->
+					       hdr.base_hdr.size;
+			OFI_DBG_SET(ep->cur_tx.entry->hdr.base_hdr.id,
+				    ep->tx_id++);
+			ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
+		} else {
+			ep->cur_tx.entry = NULL;
 		}
 	}
 
-	if (!slist_empty(&ep->tx_queue)) {
-		ep->cur_tx.entry = container_of(slist_remove_head(&ep->tx_queue),
-						struct tcpx_xfer_entry, entry);
-		ep->cur_tx.data_left = ep->cur_tx.entry->hdr.base_hdr.size;
-		OFI_DBG_SET(ep->cur_tx.entry->hdr.base_hdr.id, ep->tx_id++);
-		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
-	} else {
-		ep->cur_tx.entry = NULL;
-	}
+	/* Buffered data is sent first by tcpx_send_msg, but if we don't
+	 * have other data to send, we need to try flushing any buffered data.
+	 */
+	(void) ofi_bsock_flush(&ep->bsock);
 }
 
 static int tcpx_queue_msg_resp(struct tcpx_xfer_entry *rx_entry)
