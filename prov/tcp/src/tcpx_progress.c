@@ -125,6 +125,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 		ep->cur_tx.entry = container_of(slist_remove_head(&ep->tx_queue),
 						struct tcpx_xfer_entry, entry);
 		ep->cur_tx.data_left = ep->cur_tx.entry->hdr.base_hdr.size;
+		OFI_DBG_SET(ep->cur_tx.entry->hdr.base_hdr.id, ep->tx_id++);
 		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
 	} else {
 		ep->cur_tx.entry = NULL;
@@ -636,6 +637,7 @@ static int tcpx_recv_hdr(struct tcpx_ep *ep)
 		return -FI_EAGAIN;
 
 	ep->hdr_bswap(&ep->cur_rx.hdr.base_hdr);
+	assert(ep->cur_rx.hdr.base_hdr.id == ep->rx_id++);
 	if (ep->cur_rx.hdr.base_hdr.op >= ARRAY_SIZE(ep->start_op)) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 			"Received invalid opcode\n");
@@ -730,6 +732,7 @@ void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 	if (!ep->cur_tx.entry) {
 		ep->cur_tx.entry = tx_entry;
 		ep->cur_tx.data_left = tx_entry->hdr.base_hdr.size;
+		OFI_DBG_SET(tx_entry->hdr.base_hdr.id, ep->tx_id++);
 		ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 		tcpx_progress_tx(ep);
 
