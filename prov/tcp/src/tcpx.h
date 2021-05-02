@@ -249,7 +249,8 @@ struct tcpx_ep {
 	int (*start_op[ofi_op_write + 1])(struct tcpx_ep *ep);
 	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
 	size_t			min_multi_recv_size;
-	bool			pollout_set;
+	bool			rx_pollout_set;
+	bool			tx_pollout_set;
 };
 
 struct tcpx_fabric {
@@ -352,7 +353,7 @@ void tcpx_reset_rx(struct tcpx_ep *ep);
 void tcpx_progress_tx(struct tcpx_ep *ep);
 void tcpx_progress_rx(struct tcpx_ep *ep);
 int tcpx_try_func(void *util_ep);
-int tcpx_mod_epoll(struct tcpx_ep *ep);
+int tcpx_mod_epoll(struct tcpx_ep *ep, struct util_cq *cq);
 
 void tcpx_hdr_none(struct tcpx_base_hdr *hdr);
 void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr);

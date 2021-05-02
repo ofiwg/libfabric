@@ -685,22 +685,28 @@ static bool tcpx_tx_pending(struct tcpx_ep *ep)
 	return ep->cur_tx.entry || ofi_bsock_tosend(&ep->bsock);
 }
 
-int tcpx_mod_epoll(struct tcpx_ep *ep)
+/* We may need to send data in response to received requests,
+ * such as delivery complete acks or RMA read responses.  So,
+ * even if this is the Rx CQ, we need to progress transmits
+ */
+int tcpx_mod_epoll(struct tcpx_ep *ep, struct util_cq *cq)
 {
 	struct util_wait_fd *wait_fd;
 	uint32_t events;
+	bool *pollout_set;
 	int ret;
 
 	assert(fastlock_held(&ep->lock));
-	wait_fd = container_of(ep->util_ep.tx_cq->wait,
-			       struct util_wait_fd, util_wait);
+	wait_fd = container_of(cq->wait, struct util_wait_fd, util_wait);
+	pollout_set = (cq == ep->util_ep.rx_cq) ?
+		      &ep->rx_pollout_set : &ep->tx_pollout_set;
 
-	if (tcpx_tx_pending(ep) && !ep->pollout_set) {
-		ep->pollout_set = true;
+	if (tcpx_tx_pending(ep) && !(*pollout_set)) {
+		*pollout_set = true;
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 (OFI_EPOLL_IN | OFI_EPOLL_OUT) : (POLLIN | POLLOUT);
-	} else if (!tcpx_tx_pending(ep) && ep->pollout_set) {
-		ep->pollout_set = false;
+	} else if (!tcpx_tx_pending(ep) && *pollout_set) {
+		*pollout_set = false;
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 OFI_EPOLL_IN : POLLIN;
 	} else {
@@ -729,7 +735,9 @@ int tcpx_try_func(void *util_ep)
 	if (ofi_bsock_readable(&ep->bsock)) {
 		ret = -FI_EAGAIN;
 	} else {
-		ret = tcpx_mod_epoll(ep);
+		ret = tcpx_mod_epoll(ep, ep->util_ep.rx_cq);
+		if (!ret)
+			ret = tcpx_mod_epoll(ep, ep->util_ep.tx_cq);
 	}
 	fastlock_release(&ep->lock);
 	return ret;
