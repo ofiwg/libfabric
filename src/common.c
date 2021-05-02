@@ -1389,8 +1389,9 @@ static void ofi_pollfds_process_work(struct ofi_pollfds *pfds)
 	}
 }
 
-int ofi_pollfds_wait(struct ofi_pollfds *pfds, void **contexts,
-		     int max_contexts, int timeout)
+int ofi_pollfds_wait(struct ofi_pollfds *pfds,
+		     struct ofi_epollfds_event *events,
+		     int maxevents, int timeout)
 {
 	int i, ret;
 	int found = 0;
@@ -1413,13 +1414,18 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds, void **contexts,
 			ofi_pollfds_process_work(pfds);
 		fastlock_release(&pfds->lock);
 
-		if (pfds->fds[0].revents)
+		if (pfds->fds[0].revents) {
 			fd_signal_reset(&pfds->signal);
+			ret--;
+		}
+
+		ret = MIN(maxevents, ret);
 
 		/* Index 0 is the internal signaling fd, skip it */
-		for (i = 1; i < pfds->nfds && found < max_contexts; i++) {
+		for (i = 1; i < pfds->nfds && found < ret; i++) {
 			if (pfds->fds[i].revents) {
-				contexts[found++] = pfds->context[i];
+				events[found].events = pfds->fds[i].revents;
+				events[found++].data.ptr = pfds->context[i];
 			}
 		}
 

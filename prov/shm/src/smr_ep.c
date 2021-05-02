@@ -774,7 +774,7 @@ static void *smr_start_listener(void *args)
 {
 	struct smr_ep *ep = (struct smr_ep *) args;
 	struct sockaddr_un sockaddr;
-	void *ctx[SMR_MAX_PEERS + 1];
+	struct ofi_epollfds_event events[SMR_MAX_PEERS + 1];
 	int i, ret, poll_fds, sock = -1;
 	int peer_fds[ZE_MAX_DEVICES];
 	socklen_t len;
@@ -782,7 +782,7 @@ static void *smr_start_listener(void *args)
 
 	ep->region->flags |= SMR_FLAG_IPC_SOCK;
 	while (1) {
-		poll_fds = ofi_epoll_wait(ep->sock_info->epollfd, ctx,
+		poll_fds = ofi_epoll_wait(ep->sock_info->epollfd, events,
 					  SMR_MAX_PEERS + 1, -1);
 
 		if (poll_fds < 0) {
@@ -792,7 +792,7 @@ static void *smr_start_listener(void *args)
 		}
 
 		for (i = 0; i < poll_fds; i++) {
-			if (!ctx[i])
+			if (!events[i].data.ptr)
 				goto out;
 
 			sock = accept(ep->sock_info->listen_sock,
