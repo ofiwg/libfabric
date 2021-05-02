@@ -600,3 +600,55 @@ ssize_t ofi_recvmsg_udp(SOCKET fd, struct msghdr *msg, int flags)
 	ret = WSARecvMsg(fd, msg, &bytes, NULL, NULL);
 	return ret ? ret : bytes;
 }
+
+
+void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
+			struct ofi_pollfds_work_item *item)
+{
+	if (pfds->nfds == pfds->size) {
+		if (ofi_pollfds_grow(pfds, pfds->size + 1))
+			return;
+	}
+
+	pfds->fds[pfds->nfds].fd = item->fd;
+	pfds->fds[pfds->nfds].events = item->events;
+	pfds->fds[pfds->nfds].revents = 0;
+	pfds->context[pfds->nfds] = item->context;
+	pfds->nfds++;
+}
+
+int ofi_pollfds_do_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		       void *context)
+{
+	int i;
+
+	/* 0 is signaling fd */
+	for (i = 1; i < pfds->nfds; i++) {
+		if (pfds->fds[i].fd == fd) {
+			pfds->fds[i].events = events;
+			pfds->context[i] = context;
+			return FI_SUCCESS;
+		}
+	}
+
+	return -FI_ENOENT;
+}
+
+void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
+			struct ofi_pollfds_work_item *item)
+{
+	int i;
+
+	for (i = 0; i < pfds->nfds; i++) {
+		if (pfds->fds[i].fd == item->fd) {
+			pfds->fds[i].fd = INVALID_SOCKET;
+
+			pfds->nfds--;
+			pfds->fds[i].fd = pfds->fds[pfds->nfds].fd;
+			pfds->fds[i].events = pfds->fds[pfds->nfds].events;
+			pfds->fds[i].revents = pfds->fds[pfds->nfds].revents;
+			pfds->context[i] = pfds->context[pfds->nfds];
+			break;
+		}
+	}
+}
