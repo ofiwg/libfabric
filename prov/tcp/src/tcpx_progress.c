@@ -619,6 +619,7 @@ static int tcpx_recv_hdr(struct tcpx_ep *ep)
 
 	assert(ep->cur_rx.hdr_done < ep->cur_rx.hdr_len);
 
+next_hdr:
 	buf = (uint8_t *) &ep->cur_rx.hdr + ep->cur_rx.hdr_done;
 	len = ep->cur_rx.hdr_len - ep->cur_rx.hdr_done;
 	ret = ofi_bsock_recv(&ep->bsock, buf, len);
@@ -636,6 +637,11 @@ static int tcpx_recv_hdr(struct tcpx_ep *ep)
 		}
 		ep->cur_rx.hdr_len = (size_t) ep->cur_rx.hdr.base_hdr.
 					      payload_off;
+		if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len)
+			goto next_hdr;
+
+	} else if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
+		return -FI_EAGAIN;
 	}
 
 	if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len)
