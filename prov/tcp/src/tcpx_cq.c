@@ -46,6 +46,7 @@ void tcpx_cq_progress(struct util_cq *cq)
 	struct dlist_entry *item;
 	struct tcpx_ep *ep;
 	struct fid *fid;
+	uint32_t inevent, outevent;
 	int nfds, i;
 
 	wait_fd = container_of(cq->wait, struct util_wait_fd, util_wait);
@@ -71,9 +72,17 @@ void tcpx_cq_progress(struct util_cq *cq)
 		fastlock_release(&ep->lock);
 	}
 
-	nfds = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
-	       ofi_epoll_wait(wait_fd->epoll_fd, events, MAX_POLL_EVENTS, 0) :
-	       ofi_pollfds_wait(wait_fd->pollfds, events, MAX_POLL_EVENTS, 0);
+	if (wait_fd->util_wait.wait_obj == FI_WAIT_FD) {
+		nfds = ofi_epoll_wait(wait_fd->epoll_fd, events,
+				      MAX_POLL_EVENTS, 0);
+		inevent = POLLIN;
+		outevent = POLLOUT;
+	} else {
+		nfds = ofi_pollfds_wait(wait_fd->pollfds, events,
+					MAX_POLL_EVENTS, 0);
+		inevent = OFI_EPOLL_IN;
+		outevent = OFI_EPOLL_OUT;
+	}
 	if (nfds <= 0)
 		goto unlock;
 
@@ -86,11 +95,10 @@ void tcpx_cq_progress(struct util_cq *cq)
 
 		ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
 		fastlock_acquire(&ep->lock);
-		/* TODO: modify epoll_wait to indicate which events were
-		 * signaled
-		 */
-		tcpx_progress_rx(ep);
-		tcpx_progress_tx(ep);
+		if (events[i].events & inevent)
+			tcpx_progress_rx(ep);
+		if (events[i].events & outevent)
+			tcpx_progress_tx(ep);
 		fastlock_release(&ep->lock);
 	}
 unlock:
