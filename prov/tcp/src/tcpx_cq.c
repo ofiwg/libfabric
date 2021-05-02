@@ -40,7 +40,7 @@
 
 void tcpx_cq_progress(struct util_cq *cq)
 {
-	void *wait_contexts[MAX_POLL_EVENTS];
+	struct ofi_epollfds_event events[MAX_POLL_EVENTS];
 	struct fid_list_entry *fid_entry;
 	struct util_wait_fd *wait_fd;
 	struct dlist_entry *item;
@@ -72,15 +72,13 @@ void tcpx_cq_progress(struct util_cq *cq)
 	}
 
 	nfds = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
-	       ofi_epoll_wait(wait_fd->epoll_fd, wait_contexts,
-			      MAX_POLL_EVENTS, 0) :
-	       ofi_pollfds_wait(wait_fd->pollfds, wait_contexts,
-				MAX_POLL_EVENTS, 0);
+	       ofi_epoll_wait(wait_fd->epoll_fd, events, MAX_POLL_EVENTS, 0) :
+	       ofi_pollfds_wait(wait_fd->pollfds, events, MAX_POLL_EVENTS, 0);
 	if (nfds <= 0)
 		goto unlock;
 
 	for (i = 0; i < nfds; i++) {
-		fid = wait_contexts[i];
+		fid = events[i].context;
 		if (fid->fclass != FI_CLASS_EP) {
 			fd_signal_reset(&wait_fd->signal);
 			continue;

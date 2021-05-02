@@ -44,6 +44,16 @@
 #include <ofi_list.h>
 #include <ofi_signal.h>
 
+
+/* castable with struct epoll_event */
+struct ofi_epollfds_event {
+	uint32_t events;
+	union {
+		void *context;
+		uint64_t u64; /* force sizing on 32-bit builds */
+	};
+} __attribute__ ((__packed__)); /* to align with epoll_event */
+
 enum ofi_pollfds_ctl {
 	POLLFDS_CTL_ADD,
 	POLLFDS_CTL_DEL,
@@ -74,8 +84,9 @@ int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
 int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context);
 int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd);
-int ofi_pollfds_wait(struct ofi_pollfds *pfds, void **contexts,
-		     int max_contexts, int timeout);
+int ofi_pollfds_wait(struct ofi_pollfds *pfds,
+		     struct ofi_epollfds_event *events,
+		     int maxevents, int timeout);
 void ofi_pollfds_close(struct ofi_pollfds *pfds);
 
 
@@ -121,19 +132,17 @@ static inline int ofi_epoll_del(int ep, int fd)
 	return epoll_ctl(ep, EPOLL_CTL_DEL, fd, NULL) ? -ofi_syserr() : 0;
 }
 
-static inline int ofi_epoll_wait(int ep, void **contexts, int max_contexts,
-                                int timeout)
+static inline int
+ofi_epoll_wait(int ep, struct ofi_epollfds_event *events,
+	       int maxevents, int timeout)
 {
-	struct epoll_event events[max_contexts];
 	int ret;
-	int i;
 
-	ret = epoll_wait(ep, events, max_contexts, timeout);
+	ret = epoll_wait(ep, (struct epoll_event *) events, maxevents,
+			 timeout);
 	if (ret == -1)
 		return -ofi_syserr();
 
-	for (i = 0; i < ret; i++)
-		contexts[i] = events[i].data.ptr;
 	return ret;
 }
 
