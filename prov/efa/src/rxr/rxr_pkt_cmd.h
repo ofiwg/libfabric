@@ -57,7 +57,7 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 				size_t data_size);
 
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep,
-				    struct fi_cq_data_entry *cq_entry);
+				    struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 				    struct fi_cq_data_entry *cq_entry,

@@ -1519,7 +1519,7 @@ static inline void rxr_ep_poll_cq(struct rxr_ep *ep,
 			if (!is_shm_cq)
 				ep->send_comps++;
 #endif
-			rxr_pkt_handle_send_completion(ep, &cq_entry);
+			rxr_pkt_handle_send_completion(ep, cq_entry.op_context);
 		} else if (cq_entry.flags & (FI_RECV | FI_REMOTE_CQ_DATA)) {
 			rxr_pkt_handle_recv_completion(ep, &cq_entry, src_addr);
 #if ENABLE_DEBUG
