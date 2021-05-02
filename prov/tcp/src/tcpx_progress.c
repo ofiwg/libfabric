@@ -685,26 +685,18 @@ static bool tcpx_tx_pending(struct tcpx_ep *ep)
 	return ep->cur_tx.entry || ofi_bsock_tosend(&ep->bsock);
 }
 
-int tcpx_mod_epoll(struct tcpx_ep *ep)
+static int tcpx_mod_epoll(struct tcpx_ep *ep, struct util_wait_fd *wait_fd)
 {
-	struct util_wait_fd *wait_fd;
 	uint32_t events;
 	int ret;
 
 	assert(fastlock_held(&ep->lock));
-	wait_fd = container_of(ep->util_ep.tx_cq->wait,
-			       struct util_wait_fd, util_wait);
-
-	if (tcpx_tx_pending(ep) && !ep->pollout_set) {
-		ep->pollout_set = true;
+	if (ep->pollout_set) {
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 (OFI_EPOLL_IN | OFI_EPOLL_OUT) : (POLLIN | POLLOUT);
-	} else if (!tcpx_tx_pending(ep) && ep->pollout_set) {
-		ep->pollout_set = false;
+	} else {
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 OFI_EPOLL_IN : POLLIN;
-	} else {
-		return FI_SUCCESS;
 	}
 
 	ret = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
@@ -719,6 +711,44 @@ int tcpx_mod_epoll(struct tcpx_ep *ep)
 	return ret;
 }
 
+/* We may need to send data in response to received requests,
+ * such as delivery complete acks or RMA read responses.  So,
+ * even if this is the Rx CQ, we need to progress transmits.
+ * We also need to keep the rx and tx epoll wait fd's in sync,
+ * such that we ask for POLLOUT on both or neither.  This is
+ * required in case they share the same wait set and underlying
+ * epoll fd.  So we only maintain a single pollout_set state
+ * variable rather than trying to track them independently.
+ * The latter does not work if the epoll fd behind the tx
+ * and rx CQs is the same fd.
+ */
+int tcpx_update_epoll(struct tcpx_ep *ep)
+{
+	struct util_wait_fd *rx_wait, *tx_wait;
+	int ret;
+
+	assert(fastlock_held(&ep->lock));
+	if ((tcpx_tx_pending(ep) && ep->pollout_set) ||
+	    (!tcpx_tx_pending(ep) && !ep->pollout_set))
+		return FI_SUCCESS;
+
+	rx_wait = ep->util_ep.rx_cq ?
+		  container_of(ep->util_ep.rx_cq->wait,
+		  	       struct util_wait_fd, util_wait) : NULL;
+	tx_wait = ep->util_ep.tx_cq ?
+		  container_of(ep->util_ep.tx_cq->wait,
+		  	       struct util_wait_fd, util_wait) : NULL;
+
+	ep->pollout_set = tcpx_tx_pending(ep);
+	ret = tcpx_mod_epoll(ep, rx_wait);
+	if (!ret && rx_wait != tx_wait)
+		ret = tcpx_mod_epoll(ep, tx_wait);
+
+	if (ret)
+		ep->pollout_set = false;
+	return ret;
+}
+
 int tcpx_try_func(void *util_ep)
 {
 	struct tcpx_ep *ep;
@@ -729,7 +759,7 @@ int tcpx_try_func(void *util_ep)
 	if (ofi_bsock_readable(&ep->bsock)) {
 		ret = -FI_EAGAIN;
 	} else {
-		ret = tcpx_mod_epoll(ep);
+		ret = tcpx_update_epoll(ep);
 	}
 	fastlock_release(&ep->lock);
 	return ret;
