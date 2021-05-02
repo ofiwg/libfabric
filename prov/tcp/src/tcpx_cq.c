@@ -67,7 +67,7 @@ void tcpx_cq_progress(struct util_cq *cq)
 		    (ep->cur_rx.handler && !ep->cur_rx.entry))
 			tcpx_progress_rx(ep);
 
-		(void) tcpx_mod_epoll(ep);
+		(void) tcpx_update_epoll(ep);
 		fastlock_release(&ep->lock);
 	}
 
