@@ -1228,6 +1228,35 @@ out:
 }
 
 
+static int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_fd)
+{
+	struct pollfd *fds;
+	void *contexts;
+	size_t size;
+
+	size = max_fd + 1;
+	if (size < pfds->size + 64)
+		size = pfds->size + 64;
+
+	fds = calloc(size, sizeof(*pfds->fds) + sizeof(*pfds->context));
+	if (!fds)
+		return -FI_ENOMEM;
+
+	contexts = fds + size;
+	if (pfds->size) {
+		memcpy(fds, pfds->fds, pfds->size * sizeof(*pfds->fds));
+		memcpy(contexts, pfds->context, pfds->size * sizeof(*pfds->context));
+		free(pfds->fds);
+	}
+
+	while (pfds->size < size)
+		fds[pfds->size++].fd = INVALID_SOCKET;
+
+	pfds->fds = fds;
+	pfds->context = contexts;
+	return FI_SUCCESS;
+}
+
 int ofi_pollfds_create(struct ofi_pollfds **pfds)
 {
 	int ret;
@@ -1236,14 +1265,9 @@ int ofi_pollfds_create(struct ofi_pollfds **pfds)
 	if (!*pfds)
 		return -FI_ENOMEM;
 
-	(*pfds)->size = 64;
-	(*pfds)->fds = calloc((*pfds)->size, sizeof(*(*pfds)->fds) +
-			    sizeof(*(*pfds)->context));
-	if (!(*pfds)->fds) {
-		ret = -FI_ENOMEM;
+	ret = ofi_pollfds_grow(*pfds, 63);
+	if (ret)
 		goto err1;
-	}
-	(*pfds)->context = (void *)((*pfds)->fds + (*pfds)->size);
 
 	ret = fd_signal_init(&(*pfds)->signal);
 	if (ret)
@@ -1311,15 +1335,12 @@ int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 {
 	struct slist_entry *entry;
 	struct ofi_pollfds_work_item *item;
-	int i;
 
 	fastlock_acquire(&pfds->lock);
-	for (i = 1; i < pfds->nfds; i++) {
-		if (pfds->fds[i].fd == fd) {
-			pfds->fds[i].events = events;
-			pfds->context[i] = context;
-			goto signal;
-		}
+	if ((fd < pfds->nfds) && (pfds->fds[fd].fd == fd)) {
+		pfds->fds[fd].events = events;
+		pfds->context[fd] = context;
+		goto signal;
 	}
 
 	/* fd may be queued for insertion */
@@ -1329,6 +1350,8 @@ int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		item = container_of(entry, struct ofi_pollfds_work_item, entry);
 		item->events = events;
 		item->context = context;
+	} else {
+		assert(0);
 	}
 
 signal:
@@ -1342,83 +1365,43 @@ int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd)
 	return ofi_pollfds_ctl(pfds, POLLFDS_CTL_DEL, fd, 0, NULL);
 }
 
-static int ofi_pollfds_array(struct ofi_pollfds *pfds)
-{
-	struct pollfd *fds;
-	void *contexts;
-
-	fds = calloc(pfds->size + 64,
-		     sizeof(*pfds->fds) + sizeof(*pfds->context));
-	if (!fds)
-		return -FI_ENOMEM;
-
-	pfds->size += 64;
-	contexts = fds + pfds->size;
-
-	memcpy(fds, pfds->fds, pfds->nfds * sizeof(*pfds->fds));
-	memcpy(contexts, pfds->context, pfds->nfds * sizeof(*pfds->context));
-	free(pfds->fds);
-	pfds->fds = fds;
-	pfds->context = contexts;
-	return FI_SUCCESS;
-}
-
-static void ofi_pollfds_cleanup(struct ofi_pollfds *pfds)
-{
-	int i;
-
-	for (i = 0; i < pfds->nfds; i++) {
-		while (pfds->fds[i].fd == INVALID_SOCKET) {
-			pfds->nfds--;
-			if (i == pfds->nfds)
-				break;
-
-			pfds->fds[i].fd = pfds->fds[pfds->nfds].fd;
-			pfds->fds[i].events = pfds->fds[pfds->nfds].events;
-			pfds->fds[i].revents = pfds->fds[pfds->nfds].revents;
-			pfds->context[i] = pfds->context[pfds->nfds];
-		}
-	}
-}
-
 static void ofi_pollfds_process_work(struct ofi_pollfds *pfds)
 {
 	struct slist_entry *entry;
 	struct ofi_pollfds_work_item *item;
-	int i;
+	int ret;
 
 	while (!slist_empty(&pfds->work_item_list)) {
-		if ((pfds->nfds == pfds->size) &&
-		    ofi_pollfds_array(pfds))
-			continue;
-
 		entry = slist_remove_head(&pfds->work_item_list);
 		item = container_of(entry, struct ofi_pollfds_work_item, entry);
 
 		switch (item->type) {
 		case POLLFDS_CTL_ADD:
-			pfds->fds[pfds->nfds].fd = item->fd;
-			pfds->fds[pfds->nfds].events = item->events;
-			pfds->fds[pfds->nfds].revents = 0;
-			pfds->context[pfds->nfds] = item->context;
-			pfds->nfds++;
+			if (item->fd >= pfds->size) {
+				ret = ofi_pollfds_grow(pfds, item->fd);
+				if (ret)
+					break;
+			}
+			pfds->fds[item->fd].fd = item->fd;
+			pfds->fds[item->fd].events = item->events;
+			pfds->fds[item->fd].revents = 0;
+			pfds->context[item->fd] = item->context;
+			if (item->fd >= pfds->nfds)
+				pfds->nfds = item->fd + 1;
 			break;
 		case POLLFDS_CTL_DEL:
-			for (i = 0; i < pfds->nfds; i++) {
-				if (pfds->fds[i].fd == item->fd) {
-					pfds->fds[i].fd = INVALID_SOCKET;
-					break;
-				}
+			pfds->fds[item->fd].fd = INVALID_SOCKET;
+			while (pfds->nfds && pfds->fds[pfds->nfds - 1].fd ==
+					     INVALID_SOCKET) {
+				pfds->nfds--;
 			}
 			break;
 		default:
 			assert(0);
-			goto out;
+			break;
 		}
 		free(item);
 	}
-out:
-	ofi_pollfds_cleanup(pfds);
 }
 
 int ofi_pollfds_wait(struct ofi_pollfds *pfds, void **contexts,
