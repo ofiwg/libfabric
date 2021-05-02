@@ -1288,10 +1288,31 @@ int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
 	return ofi_pollfds_ctl(pfds, POLLFDS_CTL_ADD, fd, events, context);
 }
 
+/* We're not changing the fds, just fields.  This is always 'racy' if
+ * the app modifies the events being monitored for an fd while another
+ * thread waits on the fds.  The other thread can always return before
+ * the modifications have been made.  The caller must be prepared to
+ * handle this, same as if epoll were used directly.
+ *
+ * Updating the events is a common case, so handle this immediately
+ * without the overhead of queuing a work item.
+ */
 int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context)
 {
-	return ofi_pollfds_ctl(pfds, POLLFDS_CTL_MOD, fd, events, context);
+	int i;
+
+	fastlock_acquire(&pfds->lock);
+	for (i = 1; i < pfds->nfds; i++) {
+		if (pfds->fds[i].fd == fd) {
+			pfds->fds[i].events = events;
+			pfds->context[i] = context;
+			break;
+		}
+	}
+	fd_signal_set(&pfds->signal);
+	fastlock_release(&pfds->lock);
+	return 0;
 }
 
 int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd)
@@ -1364,16 +1385,6 @@ static void ofi_pollfds_process_work(struct ofi_pollfds *pfds)
 			for (i = 0; i < pfds->nfds; i++) {
 				if (pfds->fds[i].fd == item->fd) {
 					pfds->fds[i].fd = INVALID_SOCKET;
-					break;
-				}
-			}
-			break;
-		case POLLFDS_CTL_MOD:
-			for (i = 0; i < pfds->nfds; i++) {
-				if (pfds->fds[i].fd == item->fd) {
-					pfds->fds[i].events = item->events;
-					pfds->fds[i].revents &= item->events;
-					pfds->context[i] = item->context;
 					break;
 				}
 			}
