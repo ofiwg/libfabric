@@ -25,6 +25,45 @@
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_CQ, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_CQ, __VA_ARGS__)
 
+int cxip_cq_adjust_rx_reserved_event_slots(struct cxip_cq *cq, int value,
+					   int *adjusted_amount)
+{
+	int max_reserved_event_slots;
+	int ret;
+
+	fastlock_acquire(&cq->lock);
+
+	if (!cq->enabled) {
+		ret = -FI_EINVAL;
+		goto unlock_out;
+	}
+
+	/* Only have the RX EQ can be reserved. The remaining EQ space is usable
+	 * by hardware for network related receive events.
+	 */
+	max_reserved_event_slots =
+			cq->rx_eq.eq->byte_size / C_EE_CFG_ECB_SIZE / 2;
+
+	/* TODO: Support growing EQ if the reserve event slots cannot be support
+	 * due to EQ queue size.
+	 */
+	if (value > 0)
+		value = MIN(value, max_reserved_event_slots - cq->reserved_fc);
+
+	ret = cxil_evtq_adjust_reserved_fc(cq->rx_eq.eq, value);
+	if (ret >= 0) {
+		cq->reserved_fc = ret;
+		if (adjusted_amount)
+			*adjusted_amount = value;
+		ret = FI_SUCCESS;
+	}
+
+unlock_out:
+	fastlock_release(&cq->lock);
+
+	return ret;
+}
+
 struct cxip_md *cxip_cq_ibuf_md(void *ibuf)
 {
 	return ofi_buf_hdr(ibuf)->region->context;
@@ -766,6 +805,8 @@ static int cxip_cq_close(struct fid *fid)
 	cq = container_of(fid, struct cxip_cq, util_cq.cq_fid.fid);
 	if (ofi_atomic_get32(&cq->ref))
 		return -FI_EBUSY;
+
+	assert(cq->reserved_fc == 0);
 
 	cxip_cq_disable(cq);
 

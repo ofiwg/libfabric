@@ -78,6 +78,8 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 		.is_matching = 1,
 		.en_flowctrl = 1,
 	};
+	int reserved_event_slots;
+	int adjusted_amount;
 
 	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, false, FI_TC_UNSPEC,
 			   rxc->recv_cq->rx_eq.eq, &rxc->rx_cmdq);
@@ -110,6 +112,23 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 		goto put_tx_cmdq;
 	}
 
+	/* One slot must be reserved to support hardware generated state change
+	 * events.
+	 */
+	reserved_event_slots = 1;
+	ret = cxip_cq_adjust_rx_reserved_event_slots(rxc->recv_cq,
+						     reserved_event_slots,
+						     &adjusted_amount);
+	if (ret < 0) {
+		CXIP_WARN("Unable to adjust RX reserved event slots: %d\n",
+			  ret);
+	} else {
+		if (adjusted_amount != reserved_event_slots)
+			CXIP_WARN("Unable to reserve all requested RX event slots: expected=%u reserved=%u",
+				  reserved_event_slots, adjusted_amount);
+		rxc->reserved_event_slots = adjusted_amount;
+	}
+
 	return FI_SUCCESS;
 
 put_tx_cmdq:
@@ -130,11 +149,17 @@ put_rx_cmdq:
  */
 static int rxc_msg_fini(struct cxip_rxc *rxc)
 {
+	int ret __attribute__((unused));
+
 	cxip_pte_free(rxc->rx_pte);
 
 	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, false);
 
 	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, true);
+
+	cxip_cq_adjust_rx_reserved_event_slots(rxc->recv_cq,
+					       -1 * rxc->reserved_event_slots,
+					       NULL);
 
 	return FI_SUCCESS;
 }

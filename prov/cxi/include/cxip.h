@@ -821,6 +821,7 @@ struct cxip_cq {
 
 	/* EQ used only for target events. */
 	struct cxip_cq_eq rx_eq;
+	unsigned int reserved_fc;
 
 	/* Credits used to prevent TX EQ overrun. */
 	ofi_atomic32_t tx_credits;
@@ -1024,6 +1025,7 @@ struct cxip_rxc {
 	struct cxip_rxc *srx;
 
 	struct cxip_cq *recv_cq;
+	unsigned int reserved_event_slots;
 	struct cxip_cntr *recv_cntr;
 
 	struct cxip_ep_obj *ep_obj;	// parent EP object
@@ -1729,6 +1731,8 @@ void cxip_cq_progress(struct cxip_cq *cq);
 int cxip_cq_enable(struct cxip_cq *cxi_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
+int cxip_cq_adjust_rx_reserved_event_slots(struct cxip_cq *cq, int value,
+					   int *adjusted_amount);
 void cxip_cq_flush_trig_reqs(struct cxip_cq *cq);
 
 void cxip_dom_cntr_disable(struct cxip_domain *dom);
