@@ -37,6 +37,7 @@
 #include <ofi_iov.h>
 #include "efa.h"
 #include "rxr.h"
+#include "rxr_msg.h"
 #include "rxr_rma.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_cntr.h"
@@ -204,16 +205,12 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 	int err, window, credits;
 	struct rdm_peer *peer;
 	struct rxr_rx_entry *rx_entry;
-	struct fi_msg msg = {0};
 
 	/* create a rx_entry to receve data
 	 * use ofi_op_msg for its op.
 	 * it does not write a rx completion.
 	 */
-	msg.msg_iov = tx_entry->iov;
-	msg.iov_count = tx_entry->iov_count;
-	msg.addr = tx_entry->addr;
-	rx_entry = rxr_ep_get_rx_entry(ep, &msg, 0, ~0, ofi_op_msg, 0);
+	rx_entry = rxr_ep_alloc_rx_entry(ep, tx_entry->addr, ofi_op_msg);
 	if (!rx_entry) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RX entries exhausted for read.\n");
@@ -230,8 +227,10 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 	assert(rx_entry);
 	rx_entry->tx_id = -1;
 	rx_entry->cq_entry.flags |= FI_READ;
-	rx_entry->total_len = rx_entry->cq_entry.len;
-
+	rx_entry->cq_entry.len = tx_entry->total_len;
+	rx_entry->total_len = tx_entry->total_len;
+	rx_entry->iov_count = tx_entry->iov_count;
+	memcpy(rx_entry->iov, tx_entry->iov, sizeof(*rx_entry->iov) * tx_entry->iov_count);
 	/*
 	 * there will not be a CTS for fi_read, we calculate CTS
 	 * window here, and send it via REQ.

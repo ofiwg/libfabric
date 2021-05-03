@@ -777,6 +777,9 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 
 void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry);
 
+struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep,
+					   fi_addr_t addr, uint32_t op);
+
 static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 					struct rxr_rx_entry *rx_entry)
 {

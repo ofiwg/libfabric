@@ -74,66 +74,57 @@ const char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, 
 	return ofi_straddr(buf, buflen, FI_ADDR_EFA, rxr_peer_raw_addr(ep, addr));
 }
 
-struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
-					  struct rxr_rx_entry *rx_entry,
-					  const struct fi_msg *msg,
-					  uint64_t tag,
-					  uint64_t ignore,
-					  uint32_t op,
-					  uint64_t flags)
+/**
+ * @brief allocate an rx entry for an operation
+ *
+ * @param ep[in]	end point
+ * @param addr[in]	fi address of the sender/requester.
+ * @param op[in]	operation type (ofi_op_msg/ofi_op_tagged/ofi_op_read/ofi_op_write/ofi_op_atomic_xxx)
+ * @return		if allocation succeeded, return pointer to rx_entry
+ * 			if allocation failed, return NULL
+ */
+struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, uint32_t op)
 {
+	struct rxr_rx_entry *rx_entry;
+
+	rx_entry = ofi_buf_alloc(ep->rx_entry_pool);
+	if (OFI_UNLIKELY(!rx_entry)) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "RX entries exhausted\n");
+		return NULL;
+	}
+
+#if ENABLE_DEBUG
+	dlist_insert_tail(&rx_entry->rx_entry_entry, &ep->rx_entry_list);
+#endif
 	rx_entry->type = RXR_RX_ENTRY;
 	rx_entry->rx_id = ofi_buf_index(rx_entry);
-	rx_entry->fi_flags = flags;
 	rx_entry->rxr_flags = 0;
 	rx_entry->bytes_received = 0;
 	rx_entry->bytes_copied = 0;
 	rx_entry->window = 0;
-	rx_entry->iov_count = msg->iov_count;
-	rx_entry->tag = tag;
-	rx_entry->op = op;
-	rx_entry->ignore = ignore;
 	rx_entry->unexp_pkt = NULL;
 	rx_entry->rma_iov_count = 0;
+	dlist_init(&rx_entry->queued_pkts);
 
-	rx_entry->addr = msg->addr;
-	if (msg->addr == FI_ADDR_UNSPEC) {
+	rx_entry->state = RXR_RX_INIT;
+	rx_entry->addr = addr;
+	if (addr != FI_ADDR_UNSPEC) {
+		rx_entry->peer = rxr_ep_get_peer(ep, addr);
+		ofi_atomic_inc32(&rx_entry->peer->use_cnt);
+	} else {
 		/*
 		 * If msg->addr is not provided, rx_entry->peer will be set
 		 * after it is matched with a message.
 		 */
+		assert(op == ofi_op_msg || op == ofi_op_tagged);
 		rx_entry->peer = NULL;
-	} else {
-		rx_entry->peer = rxr_ep_get_peer(ep, msg->addr);
-		ofi_atomic_inc32(&rx_entry->peer->use_cnt);
-	}
+	} 
 
-	dlist_init(&rx_entry->queued_pkts);
 	memset(&rx_entry->cq_entry, 0, sizeof(rx_entry->cq_entry));
-
-	rx_entry->owner = ep->use_zcpy_rx ? RXR_RX_USER_BUF : RXR_RX_PROV_BUF;
-
-	/* Handle case where we're allocating an unexpected rx_entry */
-	if (msg->msg_iov) {
-		memcpy(rx_entry->iov, msg->msg_iov, sizeof(*rx_entry->iov) * msg->iov_count);
-		rx_entry->cq_entry.len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
-		rx_entry->cq_entry.buf = msg->msg_iov[0].iov_base;
-	}
-
-	if (msg->desc)
-		memcpy(&rx_entry->desc[0], msg->desc, sizeof(*msg->desc) * msg->iov_count);
-	else
-		memset(&rx_entry->desc[0], 0, sizeof(rx_entry->desc));
-
-	rx_entry->cq_entry.op_context = msg->context;
-	rx_entry->cq_entry.tag = 0;
-	rx_entry->ignore = ~0;
-
+	rx_entry->op = op;
 	switch (op) {
 	case ofi_op_tagged:
 		rx_entry->cq_entry.flags = (FI_RECV | FI_MSG | FI_TAGGED);
-		rx_entry->cq_entry.tag = tag;
-		rx_entry->ignore = ignore;
 		break;
 	case ofi_op_msg:
 		rx_entry->cq_entry.flags = (FI_RECV | FI_MSG);
@@ -160,144 +151,6 @@ struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 	return rx_entry;
 }
 
-struct rxr_rx_entry *rxr_ep_get_rx_entry(struct rxr_ep *ep,
-					 const struct fi_msg *msg,
-					 uint64_t tag,
-					 uint64_t ignore,
-					 uint32_t op,
-					 uint64_t flags)
-{
-	struct rxr_rx_entry *rx_entry;
-
-	rx_entry = ofi_buf_alloc(ep->rx_entry_pool);
-	if (OFI_UNLIKELY(!rx_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "RX entries exhausted\n");
-		return NULL;
-	}
-
-#if ENABLE_DEBUG
-	dlist_insert_tail(&rx_entry->rx_entry_entry, &ep->rx_entry_list);
-#endif
-	rx_entry = rxr_ep_rx_entry_init(ep, rx_entry, msg, tag, ignore, op, flags);
-	rx_entry->state = RXR_RX_INIT;
-	rx_entry->op = op;
-	return rx_entry;
-}
-
-struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
-							    struct rxr_pkt_entry **pkt_entry_ptr)
-{
-	struct rxr_rx_entry *rx_entry;
-	struct rxr_pkt_entry *unexp_pkt_entry;
-	struct fi_msg msg = {0};
-
-	unexp_pkt_entry = rxr_pkt_get_unexp(ep, pkt_entry_ptr);
-	if (OFI_UNLIKELY(!unexp_pkt_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "packet entries exhausted.\n");
-		return NULL;
-	}
-
-	msg.addr = unexp_pkt_entry->addr;
-	rx_entry = rxr_ep_get_rx_entry(ep, &msg, 0, ~0, ofi_op_msg, 0);
-	if (OFI_UNLIKELY(!rx_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "RX entries exhausted.\n");
-		return NULL;
-	}
-
-	rx_entry->rxr_flags = 0;
-	rx_entry->state = RXR_RX_UNEXP;
-	rx_entry->unexp_pkt = unexp_pkt_entry;
-	rxr_pkt_rtm_init_rx_entry(unexp_pkt_entry, rx_entry);
-	dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_list);
-	return rx_entry;
-}
-
-struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
-							    struct rxr_pkt_entry **pkt_entry_ptr)
-{
-	uint64_t tag;
-	struct rxr_rx_entry *rx_entry;
-	struct rxr_pkt_entry *unexp_pkt_entry;
-	struct fi_msg msg = {0};
-
-	unexp_pkt_entry = rxr_pkt_get_unexp(ep, pkt_entry_ptr);
-	if (OFI_UNLIKELY(!unexp_pkt_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "packet entries exhausted.\n");
-		return NULL;
-	}
-
-	tag = rxr_pkt_rtm_tag(unexp_pkt_entry);
-	msg.addr = unexp_pkt_entry->addr;
-	rx_entry = rxr_ep_get_rx_entry(ep, &msg, tag, ~0, ofi_op_tagged, 0);
-	if (OFI_UNLIKELY(!rx_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "RX entries exhausted.\n");
-		return NULL;
-	}
-
-	rx_entry->rxr_flags = 0;
-	rx_entry->state = RXR_RX_UNEXP;
-	rx_entry->unexp_pkt = unexp_pkt_entry;
-	rxr_pkt_rtm_init_rx_entry(unexp_pkt_entry, rx_entry);
-	dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_tagged_list);
-	return rx_entry;
-}
-
-struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
-					   struct rxr_rx_entry *posted_entry,
-					   struct rxr_rx_entry *consumer_entry,
-					   struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_rx_entry *rx_entry;
-	size_t buf_len, consumed_len, data_len;
-	uint64_t tag;
-	struct fi_msg msg = {0};
-
-	assert(rxr_get_base_hdr(pkt_entry->pkt)->type >= RXR_REQ_PKT_BEGIN);
-	tag = 0;
-
-	if (!consumer_entry) {
-		msg.msg_iov = posted_entry->iov;
-		msg.iov_count = posted_entry->iov_count;
-		msg.addr = pkt_entry->addr;
-		rx_entry = rxr_ep_get_rx_entry(ep, &msg, tag, 0, ofi_op_msg,
-					       posted_entry->fi_flags);
-		if (OFI_UNLIKELY(!rx_entry))
-			return NULL;
-
-		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
-		       "Splitting into new multi_recv consumer rx_entry %d from rx_entry %d\n",
-		       rx_entry->rx_id,
-		       posted_entry->rx_id);
-	} else {
-		rx_entry = consumer_entry;
-		memcpy(rx_entry->iov, posted_entry->iov,
-		       sizeof(*posted_entry->iov) * posted_entry->iov_count);
-		rx_entry->iov_count = posted_entry->iov_count;
-	}
-
-	rxr_pkt_rtm_init_rx_entry(pkt_entry, rx_entry);
-	data_len = rx_entry->total_len;
-	buf_len = ofi_total_iov_len(rx_entry->iov,
-				    rx_entry->iov_count);
-	consumed_len = MIN(buf_len, data_len);
-
-	rx_entry->rxr_flags |= RXR_MULTI_RECV_CONSUMER;
-	rx_entry->total_len = data_len;
-	rx_entry->fi_flags |= FI_MULTI_RECV;
-	rx_entry->master_entry = posted_entry;
-	rx_entry->cq_entry.len = consumed_len;
-	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
-	rx_entry->cq_entry.op_context = posted_entry->cq_entry.op_context;
-	rx_entry->cq_entry.flags = (FI_RECV | FI_MSG);
-
-	ofi_consume_iov(posted_entry->iov, &posted_entry->iov_count,
-			consumed_len);
-
-	dlist_init(&rx_entry->multi_recv_entry);
-	dlist_insert_tail(&rx_entry->multi_recv_entry,
-			  &posted_entry->multi_recv_consumers);
-	return rx_entry;
-}
 
 /* Post buffers as undirected recv (FI_ADDR_UNSPEC) */
 int rxr_ep_post_buf(struct rxr_ep *ep, const struct fi_msg *posted_recv, uint64_t flags, enum rxr_lower_ep_type lower_ep_type)
@@ -684,8 +537,10 @@ static int efa_rdm_av_entry_cleanup(struct util_av *av, void *data,
 	if (!peer)
 		return 0;
 
-	if (ofi_atomic_get32(&peer->use_cnt) > 1)
-		FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL, "Closing EP with pending messages in flight\n");
+	if (ofi_atomic_get32(&peer->use_cnt) > 1) {
+		FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL, "Closing Peer with pending messages in flight\n");
+		return -FI_EBUSY;
+	}
 
 	/*
 	 * TODO: Add support for wait/signal until all pending messages have
