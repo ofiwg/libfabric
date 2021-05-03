@@ -295,20 +295,30 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 {
 	struct efa_av_entry *av_entry;
 	struct util_av_entry *util_av_entry;
-	int ret = 0;
+	int ret = 0, err = 0;
 	struct rxr_peer *peer;
 	struct rxr_ep *rxr_ep;
 	fi_addr_t shm_fiaddr;
 	char smr_name[NAME_MAX];
+	char raw_gid_str[INET6_ADDRSTRLEN];
 
 	fastlock_acquire(&av->util_av.lock);
-	ret = ofi_av_insert_addr(&av->util_av, addr, fi_addr);
+	memset(raw_gid_str, 0, sizeof(raw_gid_str));
+	if (!inet_ntop(AF_INET6, addr->raw, raw_gid_str, INET6_ADDRSTRLEN)) {
+		EFA_WARN(FI_LOG_AV, "cannot convert address to string. errno: %d", errno);
+		goto out;
+	}
 
+	EFA_INFO(FI_LOG_AV, "Inserting address GID[%s] QP[%u] QKEY[%u] to RDM AV ....\n",
+		 raw_gid_str, addr->qpn, addr->qkey);
+
+	ret = ofi_av_insert_addr(&av->util_av, addr, fi_addr);
 	if (ret) {
-		EFA_WARN(FI_LOG_AV, "Error in inserting address: %s\n",
+		EFA_WARN(FI_LOG_AV, "ofi_av_insert_addr failed! Error message: %s\n",
 			 fi_strerror(ret));
 		goto out;
 	}
+
 	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool,
 					     *fi_addr);
 	/*
@@ -316,8 +326,10 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 	 * increase the use_cnt by 1. For a new entry use_cnt will be 1, whereas
 	 * for a duplicate entry, use_cnt will be more that 1.
 	 */
-	if (ofi_atomic_get32(&util_av_entry->use_cnt) > 1)
-		goto find_out;
+	if (ofi_atomic_get32(&util_av_entry->use_cnt) > 1) {
+		EFA_INFO(FI_LOG_AV, "Found exising AV entry correspond to this addres! fi_addr: %ld\n", *fi_addr);
+		goto out;
+	}
 
 	av_entry = (struct efa_av_entry *)util_av_entry->data;
 	av_entry->rdm_addr = *fi_addr;
@@ -328,12 +340,18 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 
 	if (av->used + 1 > av->count) {
 		ret = efa_av_resize(av, av->count * 2);
-		if (ret)
+		if (ret) {
+			EFA_WARN(FI_LOG_AV, "EFA AV resize failed! ret=%d\n", ret);
+			ofi_av_remove_addr(&av->util_av, *fi_addr);
 			goto out;
+		}
 
 		ret = efa_peer_resize(rxr_ep, av->used, av->count);
-		if (ret)
+		if (ret) {
+			EFA_WARN(FI_LOG_AV, "EFA peer resize failed! ret=%d\n", ret);
+			ofi_av_remove_addr(&av->util_av, *fi_addr);
 			goto out;
+		}
 	}
 
 	peer = rxr_ep_get_peer(rxr_ep, *fi_addr);
@@ -346,28 +364,32 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 		if (av->shm_used >= rxr_env.shm_av_size) {
 			ret = -FI_ENOMEM;
 			EFA_WARN(FI_LOG_AV,
-				 "Max number of shm AV entry %d has been reached.\n",
+				 "Max number of shm AV entry (%d) has been reached.\n",
 				 rxr_env.shm_av_size);
-			goto err_free_av_entry;
+			ofi_av_remove_addr(&av->util_av, *fi_addr);
+			goto out;
+
 		}
 		ret = rxr_ep_efa_addr_to_str(addr, smr_name);
-		if (ret != FI_SUCCESS)
-			goto err_free_av_entry;
+		if (ret != FI_SUCCESS) {
+			EFA_WARN(FI_LOG_AV,
+				 "rxr_ep_efa_addr_to_str() failed! ret=%d\n", ret);
+			ofi_av_remove_addr(&av->util_av, *fi_addr);
+			goto out;
+		}
 
-		ret = fi_av_insert(av->shm_rdm_av, smr_name, 1, &shm_fiaddr,
-					flags, context);
+		ret = fi_av_insert(av->shm_rdm_av, smr_name, 1, &shm_fiaddr, flags, context);
 		if (OFI_UNLIKELY(ret != 1)) {
 			EFA_WARN(FI_LOG_AV,
 				 "Failed to insert address to shm provider's av: %s\n",
 				 fi_strerror(-ret));
-			goto err_free_av_entry;
-		} else {
-			ret = 0;
+			ofi_av_remove_addr(&av->util_av, *fi_addr);
+			goto out;
 		}
+
 		EFA_INFO(FI_LOG_AV,
-			"Insert %s to shm provider's av. addr = %" PRIu64
-			" rdm_fiaddr = %" PRIu64 " shm_rdm_fiaddr = %" PRIu64
-			"\n", smr_name, *(uint64_t *)addr, *fi_addr, shm_fiaddr);
+			"Successfully inserted %s to shm provider's av. efa_fiaddr: %ld shm_fiaddr = %ld\n",
+			smr_name, *fi_addr, shm_fiaddr);
 
 		assert(shm_fiaddr < rxr_env.shm_av_size);
 		av->shm_used++;
@@ -379,21 +401,29 @@ int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
 		peer->shm_fiaddr = shm_fiaddr;
 		peer->is_local = 1;
 	}
+
 	ret = efa_av_insert_ah(av, addr, fi_addr,
 			       flags, context);
 	if (ret) {
-		EFA_WARN(FI_LOG_AV, "Error in inserting address: %s\n",
+		EFA_WARN(FI_LOG_AV, "efa_av_insert_ah failed. Error message: %s\n",
 			 fi_strerror(ret));
-		goto err_free_av_entry;
+		err = ofi_av_remove_addr(&av->util_av, *fi_addr);
+		if (err)
+			EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed! err=%d\n",
+				 err);
+
+		if (rxr_ep->use_shm && efa_is_local_peer(av, addr)) {
+			err = fi_av_remove(av->shm_rdm_av, &peer->shm_fiaddr, 1, 0);
+			if (err)
+				EFA_WARN(FI_LOG_AV, "While processing previous failure, removing address from shm AV failed! err=%d\n",
+					 err);
+		}
+		goto out;
 	}
 
-find_out:
-	EFA_INFO(FI_LOG_AV,
-			"addr = %" PRIu64 " rdm_fiaddr =  %" PRIu64 "\n",
-			*(uint64_t *)addr, *fi_addr);
-	goto out;
-err_free_av_entry:
-	ofi_ibuf_free(util_av_entry);
+	EFA_INFO(FI_LOG_AV, "Successfully inserted address GID[%s] QP[%u] QKEY[%u] to RDM AV. fi_addr: %ld\n",
+		 raw_gid_str, addr->qpn, addr->qkey, *fi_addr);
+
 out:
 	fastlock_release(&av->util_av.lock);
 	return ret;
