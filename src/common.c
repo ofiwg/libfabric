@@ -1073,7 +1073,7 @@ ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t len)
 		if (len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_write(&bsock->sq, buf, len);
 			ret = ofi_bsock_flush(bsock);
-			return ret ? ret : len;
+			return !ret || ret == -FI_EAGAIN ? len : ret;
 		}
 
 		ret = ofi_bsock_flush(bsock);
@@ -1110,7 +1110,7 @@ ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov, size_t cnt)
 		if (len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_writev(&bsock->sq, iov, cnt);
 			ret = ofi_bsock_flush(bsock);
-			return ret ? ret : len;
+			return !ret || ret == -FI_EAGAIN ? len : ret;
 		}
 
 		ret = ofi_bsock_flush(bsock);
