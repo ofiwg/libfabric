@@ -128,7 +128,10 @@ struct tcpx_base_hdr {
 	uint8_t			op_data;
 	uint8_t			rma_iov_cnt;
 	uint8_t			payload_off;
-	uint8_t			rsvd;
+	union {
+		uint8_t		rsvd;
+		uint8_t		id; /* debug */
+	};
 	uint64_t		size;
 };
 
@@ -231,6 +234,8 @@ struct tcpx_ep {
 	struct ofi_bsock	bsock;
 	struct tcpx_cur_rx	cur_rx;
 	struct tcpx_cur_tx	cur_tx;
+	OFI_DBG_VAR(uint8_t, tx_id)
+	OFI_DBG_VAR(uint8_t, rx_id)
 
 	struct dlist_entry	ep_entry;
 	struct slist		rx_queue;
@@ -347,6 +352,7 @@ void tcpx_reset_rx(struct tcpx_ep *ep);
 void tcpx_progress_tx(struct tcpx_ep *ep);
 void tcpx_progress_rx(struct tcpx_ep *ep);
 int tcpx_try_func(void *util_ep);
+int tcpx_update_epoll(struct tcpx_ep *ep);
 
 void tcpx_hdr_none(struct tcpx_base_hdr *hdr);
 void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr);

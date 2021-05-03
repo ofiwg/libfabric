@@ -1395,6 +1395,11 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds, void **contexts,
 	int found = 0;
 	uint64_t start = (timeout >= 0) ? ofi_gettime_ms() : 0;
 
+	fastlock_acquire(&pfds->lock);
+	if (!slist_empty(&pfds->work_item_list))
+		ofi_pollfds_process_work(pfds);
+	fastlock_release(&pfds->lock);
+
 	do {
 		ret = poll(pfds->fds, pfds->nfds, timeout);
 		if (ret == SOCKET_ERROR)
@@ -1402,14 +1407,13 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds, void **contexts,
 		else if (ret == 0)
 			return 0;
 
-		if (pfds->fds[0].revents)
-			fd_signal_reset(&pfds->signal);
-
 		fastlock_acquire(&pfds->lock);
 		if (!slist_empty(&pfds->work_item_list))
 			ofi_pollfds_process_work(pfds);
-
 		fastlock_release(&pfds->lock);
+
+		if (pfds->fds[0].revents)
+			fd_signal_reset(&pfds->signal);
 
 		/* Index 0 is the internal signaling fd, skip it */
 		for (i = 1; i < pfds->nfds && found < max_contexts; i++) {

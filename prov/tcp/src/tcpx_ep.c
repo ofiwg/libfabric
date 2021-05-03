@@ -452,6 +452,7 @@ void tcpx_reset_rx(struct tcpx_ep *ep)
 	ep->cur_rx.entry = NULL;
 	ep->cur_rx.hdr_done = 0;
 	ep->cur_rx.hdr_len = sizeof(ep->cur_rx.hdr.base_hdr);
+	OFI_DBG_SET(ep->cur_rx.hdr.base_hdr.version, 0);
 }
 
 void tcpx_rx_entry_free(struct tcpx_xfer_entry *rx_entry)

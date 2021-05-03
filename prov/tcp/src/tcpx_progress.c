@@ -93,42 +93,48 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 	int ret;
 
 	assert(fastlock_held(&ep->lock));
-	if (!ep->cur_tx.entry) {
-		(void) ofi_bsock_flush(&ep->bsock);
-		return;
-	}
+	while (ep->cur_tx.entry) {
+		ret = tcpx_send_msg(ep);
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+			return;
 
-	ret = tcpx_send_msg(ep);
-	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-		return;
+		tx_entry = ep->cur_tx.entry;
+		ep->hdr_bswap(&tx_entry->hdr.base_hdr);
+		cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 
-	tx_entry = ep->cur_tx.entry;
-	ep->hdr_bswap(&tx_entry->hdr.base_hdr);
-	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
-		tcpx_cq_report_error(&cq->util_cq, tx_entry, -ret);
-		tcpx_xfer_entry_free(cq, tx_entry);
-	} else {
-		if (tx_entry->hdr.base_hdr.flags &
-		    (TCPX_DELIVERY_COMPLETE | TCPX_COMMIT_COMPLETE)) {
-			slist_insert_tail(&tx_entry->entry,
-					  &ep->tx_rsp_pend_queue);
-		} else {
-			tcpx_cq_report_success(&cq->util_cq, tx_entry);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
+			tcpx_cq_report_error(&cq->util_cq, tx_entry, -ret);
 			tcpx_xfer_entry_free(cq, tx_entry);
+		} else {
+			if (tx_entry->hdr.base_hdr.flags &
+			    (TCPX_DELIVERY_COMPLETE | TCPX_COMMIT_COMPLETE)) {
+				slist_insert_tail(&tx_entry->entry,
+						  &ep->tx_rsp_pend_queue);
+			} else {
+				tcpx_cq_report_success(&cq->util_cq, tx_entry);
+				tcpx_xfer_entry_free(cq, tx_entry);
+			}
+		}
+
+		if (!slist_empty(&ep->tx_queue)) {
+			ep->cur_tx.entry =
+				container_of(slist_remove_head(&ep->tx_queue),
+					     struct tcpx_xfer_entry, entry);
+			ep->cur_tx.data_left = ep->cur_tx.entry->
+					       hdr.base_hdr.size;
+			OFI_DBG_SET(ep->cur_tx.entry->hdr.base_hdr.id,
+				    ep->tx_id++);
+			ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
+		} else {
+			ep->cur_tx.entry = NULL;
 		}
 	}
 
-	if (!slist_empty(&ep->tx_queue)) {
-		ep->cur_tx.entry = container_of(slist_remove_head(&ep->tx_queue),
-						struct tcpx_xfer_entry, entry);
-		ep->cur_tx.data_left = ep->cur_tx.entry->hdr.base_hdr.size;
-		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
-	} else {
-		ep->cur_tx.entry = NULL;
-	}
+	/* Buffered data is sent first by tcpx_send_msg, but if we don't
+	 * have other data to send, we need to try flushing any buffered data.
+	 */
+	(void) ofi_bsock_flush(&ep->bsock);
 }
 
 static int tcpx_queue_msg_resp(struct tcpx_xfer_entry *rx_entry)
@@ -613,6 +619,7 @@ static int tcpx_recv_hdr(struct tcpx_ep *ep)
 
 	assert(ep->cur_rx.hdr_done < ep->cur_rx.hdr_len);
 
+next_hdr:
 	buf = (uint8_t *) &ep->cur_rx.hdr + ep->cur_rx.hdr_done;
 	len = ep->cur_rx.hdr_len - ep->cur_rx.hdr_done;
 	ret = ofi_bsock_recv(&ep->bsock, buf, len);
@@ -630,12 +637,18 @@ static int tcpx_recv_hdr(struct tcpx_ep *ep)
 		}
 		ep->cur_rx.hdr_len = (size_t) ep->cur_rx.hdr.base_hdr.
 					      payload_off;
+		if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len)
+			goto next_hdr;
+
+	} else if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
+		return -FI_EAGAIN;
 	}
 
 	if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len)
 		return -FI_EAGAIN;
 
 	ep->hdr_bswap(&ep->cur_rx.hdr.base_hdr);
+	assert(ep->cur_rx.hdr.base_hdr.id == ep->rx_id++);
 	if (ep->cur_rx.hdr.base_hdr.op >= ARRAY_SIZE(ep->start_op)) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 			"Received invalid opcode\n");
@@ -672,38 +685,20 @@ static bool tcpx_tx_pending(struct tcpx_ep *ep)
 	return ep->cur_tx.entry || ofi_bsock_tosend(&ep->bsock);
 }
 
-int tcpx_try_func(void *util_ep)
+static int tcpx_mod_epoll(struct tcpx_ep *ep, struct util_wait_fd *wait_fd)
 {
 	uint32_t events;
-	struct util_wait_fd *wait_fd;
-	struct tcpx_ep *ep;
 	int ret;
 
-	ep = container_of(util_ep, struct tcpx_ep, util_ep);
-	wait_fd = container_of(((struct util_ep *) util_ep)->tx_cq->wait,
-			       struct util_wait_fd, util_wait);
-
-	fastlock_acquire(&ep->lock);
-	if (ofi_bsock_readable(&ep->bsock)) {
-		ret = -FI_EAGAIN;
-		goto out;
-	}
-
-	if (tcpx_tx_pending(ep) && !ep->pollout_set) {
-		ep->pollout_set = true;
+	assert(fastlock_held(&ep->lock));
+	if (ep->pollout_set) {
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 (OFI_EPOLL_IN | OFI_EPOLL_OUT) : (POLLIN | POLLOUT);
-		goto epoll_mod;
-	} else if (!tcpx_tx_pending(ep) && ep->pollout_set) {
-		ep->pollout_set = false;
+	} else {
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 OFI_EPOLL_IN : POLLIN;
-		goto epoll_mod;
 	}
-	fastlock_release(&ep->lock);
-	return FI_SUCCESS;
 
-epoll_mod:
 	ret = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 	      ofi_epoll_mod(wait_fd->epoll_fd, ep->bsock.sock, events,
 			    &ep->util_ep.ep_fid.fid) :
@@ -712,7 +707,60 @@ epoll_mod:
 	if (ret)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 			"epoll modify failed\n");
-out:
+
+	return ret;
+}
+
+/* We may need to send data in response to received requests,
+ * such as delivery complete acks or RMA read responses.  So,
+ * even if this is the Rx CQ, we need to progress transmits.
+ * We also need to keep the rx and tx epoll wait fd's in sync,
+ * such that we ask for POLLOUT on both or neither.  This is
+ * required in case they share the same wait set and underlying
+ * epoll fd.  So we only maintain a single pollout_set state
+ * variable rather than trying to track them independently.
+ * The latter does not work if the epoll fd behind the tx
+ * and rx CQs is the same fd.
+ */
+int tcpx_update_epoll(struct tcpx_ep *ep)
+{
+	struct util_wait_fd *rx_wait, *tx_wait;
+	int ret;
+
+	assert(fastlock_held(&ep->lock));
+	if ((tcpx_tx_pending(ep) && ep->pollout_set) ||
+	    (!tcpx_tx_pending(ep) && !ep->pollout_set))
+		return FI_SUCCESS;
+
+	rx_wait = ep->util_ep.rx_cq ?
+		  container_of(ep->util_ep.rx_cq->wait,
+		  	       struct util_wait_fd, util_wait) : NULL;
+	tx_wait = ep->util_ep.tx_cq ?
+		  container_of(ep->util_ep.tx_cq->wait,
+		  	       struct util_wait_fd, util_wait) : NULL;
+
+	ep->pollout_set = tcpx_tx_pending(ep);
+	ret = tcpx_mod_epoll(ep, rx_wait);
+	if (!ret && rx_wait != tx_wait)
+		ret = tcpx_mod_epoll(ep, tx_wait);
+
+	if (ret)
+		ep->pollout_set = false;
+	return ret;
+}
+
+int tcpx_try_func(void *util_ep)
+{
+	struct tcpx_ep *ep;
+	int ret;
+
+	ep = container_of(util_ep, struct tcpx_ep, util_ep);
+	fastlock_acquire(&ep->lock);
+	if (ofi_bsock_readable(&ep->bsock)) {
+		ret = -FI_EAGAIN;
+	} else {
+		ret = tcpx_update_epoll(ep);
+	}
 	fastlock_release(&ep->lock);
 	return ret;
 }
@@ -725,6 +773,7 @@ void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 	if (!ep->cur_tx.entry) {
 		ep->cur_tx.entry = tx_entry;
 		ep->cur_tx.data_left = tx_entry->hdr.base_hdr.size;
+		OFI_DBG_SET(tx_entry->hdr.base_hdr.id, ep->tx_id++);
 		ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 		tcpx_progress_tx(ep);
 
