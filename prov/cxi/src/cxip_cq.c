@@ -497,6 +497,7 @@ static void cxip_cq_eq_progress(struct cxip_cq *cq, struct cxip_cq_eq *eq)
 	const union c_event *event;
 	struct cxip_req *req;
 	int ret;
+	unsigned int unacked_events = 0;
 
 	while ((event = cxi_eq_peek_event(eq->eq))) {
 		req = cxip_cq_event_req(cq, event);
@@ -508,12 +509,15 @@ static void cxip_cq_eq_progress(struct cxip_cq *cq, struct cxip_cq_eq *eq)
 
 		cxi_eq_next_event(eq->eq);
 
-		eq->unacked_events++;
-		if (eq->unacked_events == cq->ack_batch_size) {
+		unacked_events++;
+		if (unacked_events == cq->ack_batch_size) {
 			cxi_eq_ack_events(eq->eq);
-			eq->unacked_events = 0;
+			unacked_events = 0;
 		}
 	}
+
+	if (unacked_events)
+		cxi_eq_ack_events(eq->eq);
 
 	if (cxi_eq_get_drops(eq->eq))
 		CXIP_FATAL("Cassini Event Queue overflow detected.\n");

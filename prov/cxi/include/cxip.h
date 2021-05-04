@@ -801,7 +801,6 @@ struct cxip_cq_eq {
 	size_t len;
 	struct cxi_md *md;
 	bool mmap;
-	unsigned int unacked_events;
 };
 
 /*
