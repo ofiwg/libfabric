@@ -686,7 +686,6 @@ struct rxm_ep {
 	struct ofi_bufpool	*tx_pool;
 	struct rxm_pkt		*inject_pkt;
 
-	struct dlist_entry	repost_ready_list;
 	struct dlist_entry	deferred_tx_conn_queue;
 	struct dlist_entry	rndv_wait_list;
 
@@ -898,12 +897,14 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
 	pkt->hdr.data = data;
 }
 
+int rxm_post_recv(struct rxm_rx_buf *rx_buf);
+
 static inline void
 rxm_rx_buf_free(struct rxm_rx_buf *rx_buf)
 {
-	if (rx_buf->repost) {
-		dlist_insert_tail(&rx_buf->repost_entry,
-				  &rx_buf->ep->repost_ready_list);
+	/* Discard rx buffer if its msg_ep was closed */
+	if (rx_buf->repost && (rx_buf->ep->srx_ctx || rx_buf->conn->msg_ep)) {
+		rxm_post_recv(rx_buf);
 	} else {
 		ofi_buf_free(rx_buf);
 	}
