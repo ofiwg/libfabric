@@ -722,8 +722,25 @@ size_t rxr_pkt_rtm_total_len(struct rxr_pkt_entry *pkt_entry)
 	return 0;
 }
 
-void rxr_pkt_rtm_init_rx_entry(struct rxr_pkt_entry *pkt_entry,
-			       struct rxr_rx_entry *rx_entry)
+/*
+ * @brief Update rx_entry with the following information in RTM packet entry.
+ *            address:       this is necessary because original address in
+ *                           rx_entry can be FI_ADDR_UNSPEC
+ *            cq_entry.data: for FI_REMOTE_CQ_DATA
+ *            msg_id:        message id
+ *            total_len:     application might provide a buffer that is larger
+ *                           then incoming message size.
+ *            tag:           sender's tag can be different from receiver's tag
+ *                           becuase match only requires
+ *                           (sender_tag | ignore) == (receiver_tag | ignore)
+ *        This function is applied to both unexpected rx_entry (when they are
+ *        allocated) and expected rx_entry (when they are matched to a RTM)
+ *
+ * @param pkt_entry(input)  RTM packet entry
+ * @param rx_entry(input)   rx entry to be updated
+ */
+void rxr_pkt_rtm_update_rx_entry(struct rxr_pkt_entry *pkt_entry,
+				 struct rxr_rx_entry *rx_entry)
 {
 	struct rxr_base_hdr *base_hdr;
 
@@ -758,7 +775,7 @@ struct rxr_rx_entry *rxr_pkt_get_rtm_matched_rx_entry(struct rxr_ep *ep,
 			return NULL;
 		}
 	} else {
-		rxr_pkt_rtm_init_rx_entry(pkt_entry, rx_entry);
+		rxr_pkt_rtm_update_rx_entry(pkt_entry, rx_entry);
 	}
 
 	rx_entry->state = RXR_RX_MATCHED;

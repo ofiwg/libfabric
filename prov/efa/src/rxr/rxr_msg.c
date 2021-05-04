@@ -703,7 +703,7 @@ struct rxr_rx_entry *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 	rx_entry->rxr_flags = 0;
 	rx_entry->state = RXR_RX_UNEXP;
 	rx_entry->unexp_pkt = unexp_pkt_entry;
-	rxr_pkt_rtm_init_rx_entry(unexp_pkt_entry, rx_entry);
+	rxr_pkt_rtm_update_rx_entry(unexp_pkt_entry, rx_entry);
 	dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_list);
 	return rx_entry;
 }
@@ -728,7 +728,7 @@ struct rxr_rx_entry *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 	rx_entry->rxr_flags = 0;
 	rx_entry->state = RXR_RX_UNEXP;
 	rx_entry->unexp_pkt = unexp_pkt_entry;
-	rxr_pkt_rtm_init_rx_entry(unexp_pkt_entry, rx_entry);
+	rxr_pkt_rtm_update_rx_entry(unexp_pkt_entry, rx_entry);
 	dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_tagged_list);
 	return rx_entry;
 }
@@ -769,7 +769,7 @@ struct rxr_rx_entry *rxr_msg_split_rx_entry(struct rxr_ep *ep,
 		rx_entry->iov_count = posted_entry->iov_count;
 	}
 
-	rxr_pkt_rtm_init_rx_entry(pkt_entry, rx_entry);
+	rxr_pkt_rtm_update_rx_entry(pkt_entry, rx_entry);
 	data_len = rx_entry->total_len;
 	buf_len = ofi_total_iov_len(rx_entry->iov,
 				    rx_entry->iov_count);
