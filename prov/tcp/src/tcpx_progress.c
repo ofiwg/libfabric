@@ -146,7 +146,7 @@ static int tcpx_queue_msg_resp(struct tcpx_xfer_entry *rx_entry)
 	ep = rx_entry->ep;
 	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 
-	resp = tcpx_xfer_entry_alloc(cq, TCPX_OP_MSG_RESP);
+	resp = tcpx_xfer_entry_alloc(cq);
 	if (!resp)
 		return -FI_ENOMEM;
 
@@ -154,6 +154,8 @@ static int tcpx_queue_msg_resp(struct tcpx_xfer_entry *rx_entry)
 	resp->iov[0].iov_len = sizeof(resp->hdr.base_hdr);
 	resp->iov_cnt = 1;
 
+	resp->hdr.base_hdr.version = TCPX_HDR_VERSION;
+	resp->hdr.base_hdr.op_data = TCPX_OP_MSG_RESP;
 	resp->hdr.base_hdr.op = ofi_op_msg;
 	resp->hdr.base_hdr.size = sizeof(resp->hdr.base_hdr);
 	resp->hdr.base_hdr.payload_off = (uint8_t) sizeof(resp->hdr.base_hdr);
@@ -259,7 +261,7 @@ static int tcpx_queue_write_resp(struct tcpx_xfer_entry *rx_entry)
 	ep = rx_entry->ep;
 	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 
-	resp = tcpx_xfer_entry_alloc(cq, TCPX_OP_MSG_RESP);
+	resp = tcpx_xfer_entry_alloc(cq);
 	if (!resp)
 		return -FI_ENOMEM;
 
@@ -267,6 +269,8 @@ static int tcpx_queue_write_resp(struct tcpx_xfer_entry *rx_entry)
 	resp->iov[0].iov_len = sizeof(resp->hdr.base_hdr);
 	resp->iov_cnt = 1;
 
+	resp->hdr.base_hdr.version = TCPX_HDR_VERSION;
+	resp->hdr.base_hdr.op_data = TCPX_OP_MSG_RESP;
 	resp->hdr.base_hdr.op = ofi_op_msg;
 	resp->hdr.base_hdr.size = sizeof(resp->hdr.base_hdr);
 	resp->hdr.base_hdr.payload_off = (uint8_t) sizeof(resp->hdr.base_hdr);
@@ -460,7 +464,6 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 	memcpy(&rx_entry->hdr, &msg->hdr,
 	       (size_t) msg->hdr.base_hdr.payload_off);
 	rx_entry->ep = tcpx_ep;
-	rx_entry->hdr.base_hdr.op_data = TCPX_OP_MSG_RECV;
 	rx_entry->mrecv_msg_start = rx_entry->iov[0].iov_base;
 
 	if (tcpx_dynamic_rbuf(tcpx_ep)) {
@@ -501,13 +504,13 @@ int tcpx_op_read_req(struct tcpx_ep *ep)
 	int i, ret;
 
 	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-	resp = tcpx_xfer_entry_alloc(cq, TCPX_OP_REMOTE_READ);
+	resp = tcpx_xfer_entry_alloc(cq);
 	if (!resp)
 		return -FI_ENOMEM;
 
 	memcpy(&resp->hdr, &ep->cur_rx.hdr,
 	       (size_t) ep->cur_rx.hdr.base_hdr.payload_off);
-	resp->hdr.base_hdr.op_data = TCPX_OP_REMOTE_READ;
+	resp->hdr.base_hdr.op_data = 0;
 	resp->ep = ep;
 
 	ret = tcpx_validate_rx_rma_data(resp, FI_REMOTE_READ);
@@ -552,7 +555,7 @@ int tcpx_op_write(struct tcpx_ep *ep)
 	int ret, i;
 
 	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
-	rx_entry = tcpx_xfer_entry_alloc(cq, TCPX_OP_REMOTE_WRITE);
+	rx_entry = tcpx_xfer_entry_alloc(cq);
 	if (!rx_entry)
 		return -FI_ENOMEM;
 
@@ -564,7 +567,7 @@ int tcpx_op_write(struct tcpx_ep *ep)
 
 	memcpy(&rx_entry->hdr, &ep->cur_rx.hdr,
 	       (size_t) ep->cur_rx.hdr.base_hdr.payload_off);
-	rx_entry->hdr.base_hdr.op_data = TCPX_OP_REMOTE_WRITE;
+	rx_entry->hdr.base_hdr.op_data = 0;
 	rx_entry->ep = ep;
 
 	ret = tcpx_validate_rx_rma_data(rx_entry, FI_REMOTE_WRITE);
@@ -604,7 +607,7 @@ int tcpx_op_read_rsp(struct tcpx_ep *tcpx_ep)
 
 	memcpy(&rx_entry->hdr, &tcpx_ep->cur_rx.hdr,
 	       (size_t) tcpx_ep->cur_rx.hdr.base_hdr.payload_off);
-	rx_entry->hdr.base_hdr.op_data = TCPX_OP_READ_RSP;
+	rx_entry->hdr.base_hdr.op_data = 0;
 
 	tcpx_ep->cur_rx.entry = rx_entry;
 	tcpx_ep->cur_rx.handler = tcpx_process_remote_read;

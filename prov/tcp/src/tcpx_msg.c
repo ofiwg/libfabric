@@ -56,7 +56,7 @@ tcpx_alloc_recv_entry(struct tcpx_ep *tcpx_ep)
 
 	tcpx_cq = container_of(tcpx_ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
 
-	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_MSG_RECV);
+	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq);
 	if (recv_entry)
 		recv_entry->ep = tcpx_ep;
 
@@ -71,9 +71,13 @@ tcpx_alloc_send_entry(struct tcpx_ep *tcpx_ep)
 
 	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 
-	send_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_MSG_SEND);
-	if (send_entry)
+	send_entry = tcpx_xfer_entry_alloc(tcpx_cq);
+	if (send_entry) {
+		send_entry->hdr.base_hdr.version = TCPX_HDR_VERSION;
+		send_entry->hdr.base_hdr.op_data = 0;
+		send_entry->hdr.base_hdr.op = ofi_op_msg;
 		send_entry->ep = tcpx_ep;
+	}
 
 	return send_entry;
 }

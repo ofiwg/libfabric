@@ -102,16 +102,10 @@ enum {
 	TCPX_IOV_LIMIT = 4
 };
 
-enum tcpx_op_code {
-	TCPX_OP_MSG_SEND,
-	TCPX_OP_MSG_RECV,
-	TCPX_OP_MSG_RESP,
-	TCPX_OP_WRITE,
-	TCPX_OP_REMOTE_WRITE,
-	TCPX_OP_READ_REQ,
-	TCPX_OP_READ_RSP,
-	TCPX_OP_REMOTE_READ,
-	TCPX_OP_CODE_MAX,
+/* base_hdr::op_data */
+enum {
+	/* backward compatible value */
+	TCPX_OP_MSG_RESP = 2, /* indicates response message */
 };
 
 /* Flags */
@@ -290,15 +284,9 @@ static inline struct ofi_ops_dynamic_rbuf *tcpx_dynamic_rbuf(struct tcpx_ep *ep)
 	return domain->dynamic_rbuf;
 }
 
-struct tcpx_buf_pool {
-	struct ofi_bufpool	*pool;
-	enum tcpx_op_code	op_type;
-};
-
 struct tcpx_cq {
 	struct util_cq		util_cq;
-	/* buf_pools protected by util.cq_lock */
-	struct tcpx_buf_pool	buf_pools[TCPX_OP_CODE_MAX];
+	struct ofi_bufpool	*xfer_pool;
 };
 
 struct tcpx_eq {
@@ -338,8 +326,7 @@ void tcpx_cq_report_error(struct util_cq *cq,
 void tcpx_get_cq_info(struct tcpx_xfer_entry *entry, uint64_t *flags,
 		      uint64_t *data, uint64_t *tag);
 
-struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq,
-					      enum tcpx_op_code type);
+struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq);
 struct tcpx_xfer_entry *tcpx_srx_entry_alloc(struct tcpx_rx_ctx *srx_ctx,
 					     struct tcpx_ep *ep);
 void tcpx_xfer_entry_free(struct tcpx_cq *tcpx_cq,
