@@ -664,8 +664,8 @@ void rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 	if (rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
 		ofi_coll_handle_xfer_comp(rx_buf->pkt.hdr.tag,
 				rx_buf->recv_entry->context);
-		rxm_rx_buf_free(rx_buf);
 		rxm_recv_entry_release(rx_buf->recv_entry);
+		rxm_rx_buf_free(rx_buf);
 	} else {
 		rxm_finish_recv(rx_buf, done_len);
 	}
