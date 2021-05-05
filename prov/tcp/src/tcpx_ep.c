@@ -459,8 +459,6 @@ void tcpx_rx_entry_free(struct tcpx_xfer_entry *rx_entry)
 {
 	struct tcpx_cq *tcpx_cq;
 
-	assert(rx_entry->hdr.base_hdr.op_data == TCPX_OP_MSG_RECV);
-
 	if (rx_entry->ep->srx_ctx) {
 		tcpx_srx_entry_free(rx_entry->ep->srx_ctx, rx_entry);
 	} else {
