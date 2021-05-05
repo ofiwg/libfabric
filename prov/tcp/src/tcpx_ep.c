@@ -51,29 +51,16 @@ void tcpx_hdr_none(struct tcpx_base_hdr *hdr)
 
 void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr)
 {
-	struct ofi_rma_iov *rma_iov;
-	uint8_t *ptr = (uint8_t *)hdr + sizeof(*hdr);
-	int i;
+	uint64_t *cur;
+	int i, cnt;
 
 	hdr->flags = ntohs(hdr->flags);
 	hdr->size = ntohll(hdr->size);
 
-	if (hdr->flags & TCPX_REMOTE_CQ_DATA) {
-		*((uint64_t *)ptr) = ntohll(*((uint64_t *) ptr));
-		ptr += sizeof(uint64_t);
-	}
-
-	if (hdr->flags & TCPX_TAGGED) {
-		*((uint64_t *)ptr) = ntohll(*((uint64_t *) ptr));
-		ptr += sizeof(uint64_t);
-	}
-
-	rma_iov = (struct ofi_rma_iov *)ptr;
-	for ( i = 0; i < hdr->rma_iov_cnt; i++) {
-		rma_iov[i].addr = ntohll(rma_iov[i].addr);
-		rma_iov[i].len = ntohll(rma_iov[i].len);
-		rma_iov[i].key = ntohll(rma_iov[i].key);
-	}
+	cnt = (hdr->hdr_size - sizeof(*hdr)) >> 3;
+	cur = (uint64_t *) (hdr + 1);
+	for (i = 0; i < cnt; i++)
+		cur[i] = ntohll(cur[i]);
 }
 
 static int tcpx_setup_socket(SOCKET sock, struct fi_info *info)
