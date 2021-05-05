@@ -181,7 +181,7 @@ void tcpx_cq_report_success(struct util_cq *cq,
 		return;
 
 	len = xfer_entry->hdr.base_hdr.size -
-	      xfer_entry->hdr.base_hdr.payload_off;
+	      xfer_entry->hdr.base_hdr.hdr_size;
 	tcpx_get_cq_info(xfer_entry, &flags, &data, &tag);
 
 	ofi_cq_write(cq, xfer_entry->context,

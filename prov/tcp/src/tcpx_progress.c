@@ -158,7 +158,7 @@ static int tcpx_queue_msg_resp(struct tcpx_xfer_entry *rx_entry)
 	resp->hdr.base_hdr.op_data = TCPX_OP_MSG_RESP;
 	resp->hdr.base_hdr.op = ofi_op_msg;
 	resp->hdr.base_hdr.size = sizeof(resp->hdr.base_hdr);
-	resp->hdr.base_hdr.payload_off = (uint8_t) sizeof(resp->hdr.base_hdr);
+	resp->hdr.base_hdr.hdr_size = (uint8_t) sizeof(resp->hdr.base_hdr);
 
 	resp->flags = TCPX_INTERNAL_XFER;
 	resp->context = NULL;
@@ -179,7 +179,7 @@ static int tcpx_update_rx_iov(struct tcpx_xfer_entry *rx_entry)
 	cq_entry.op_context = rx_entry->context;
 	cq_entry.flags = 0;
 	cq_entry.len = rx_entry->hdr.base_hdr.size -
-		       rx_entry->hdr.base_hdr.payload_off;
+		       rx_entry->hdr.base_hdr.hdr_size;
 	cq_entry.buf = rx_entry->mrecv_msg_start;
 	tcpx_get_cq_info(rx_entry, &cq_entry.flags, &cq_entry.data,
 			 &cq_entry.tag);
@@ -273,7 +273,7 @@ static int tcpx_queue_write_resp(struct tcpx_xfer_entry *rx_entry)
 	resp->hdr.base_hdr.op_data = TCPX_OP_MSG_RESP;
 	resp->hdr.base_hdr.op = ofi_op_msg;
 	resp->hdr.base_hdr.size = sizeof(resp->hdr.base_hdr);
-	resp->hdr.base_hdr.payload_off = (uint8_t) sizeof(resp->hdr.base_hdr);
+	resp->hdr.base_hdr.hdr_size = (uint8_t) sizeof(resp->hdr.base_hdr);
 
 	resp->flags |= TCPX_INTERNAL_XFER;
 	resp->context = NULL;
@@ -447,7 +447,7 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 	if (msg->hdr.base_hdr.op_data == TCPX_OP_MSG_RESP)
 		return tcpx_handle_resp(tcpx_ep);
 
-	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.payload_off);
+	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.hdr_size);
 
 	if (tcpx_ep->srx_ctx) {
 		rx_entry = tcpx_srx_entry_alloc(tcpx_ep->srx_ctx, tcpx_ep);
@@ -462,7 +462,7 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 	}
 
 	memcpy(&rx_entry->hdr, &msg->hdr,
-	       (size_t) msg->hdr.base_hdr.payload_off);
+	       (size_t) msg->hdr.base_hdr.hdr_size);
 	rx_entry->ep = tcpx_ep;
 	rx_entry->mrecv_msg_start = rx_entry->iov[0].iov_base;
 
@@ -509,7 +509,7 @@ int tcpx_op_read_req(struct tcpx_ep *ep)
 		return -FI_ENOMEM;
 
 	memcpy(&resp->hdr, &ep->cur_rx.hdr,
-	       (size_t) ep->cur_rx.hdr.base_hdr.payload_off);
+	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
 	resp->hdr.base_hdr.op_data = 0;
 	resp->ep = ep;
 
@@ -536,7 +536,7 @@ int tcpx_op_read_req(struct tcpx_ep *ep)
 	}
 
 	resp->hdr.base_hdr.op = ofi_op_read_rsp;
-	resp->hdr.base_hdr.payload_off = (uint8_t) sizeof(resp->hdr.base_hdr);
+	resp->hdr.base_hdr.hdr_size = (uint8_t) sizeof(resp->hdr.base_hdr);
 
 	resp->flags |= TCPX_INTERNAL_XFER;
 	resp->context = NULL;
@@ -566,7 +566,7 @@ int tcpx_op_write(struct tcpx_ep *ep)
 		rx_entry->flags = TCPX_INTERNAL_XFER;
 
 	memcpy(&rx_entry->hdr, &ep->cur_rx.hdr,
-	       (size_t) ep->cur_rx.hdr.base_hdr.payload_off);
+	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
 	rx_entry->hdr.base_hdr.op_data = 0;
 	rx_entry->ep = ep;
 
@@ -606,7 +606,7 @@ int tcpx_op_read_rsp(struct tcpx_ep *tcpx_ep)
 	rx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
 
 	memcpy(&rx_entry->hdr, &tcpx_ep->cur_rx.hdr,
-	       (size_t) tcpx_ep->cur_rx.hdr.base_hdr.payload_off);
+	       (size_t) tcpx_ep->cur_rx.hdr.base_hdr.hdr_size);
 	rx_entry->hdr.base_hdr.op_data = 0;
 
 	tcpx_ep->cur_rx.entry = rx_entry;
@@ -633,13 +633,12 @@ next_hdr:
 	if (ep->cur_rx.hdr_done == sizeof(ep->cur_rx.hdr.base_hdr)) {
 		assert(ep->cur_rx.hdr_len == sizeof(ep->cur_rx.hdr.base_hdr));
 
-		if (ep->cur_rx.hdr.base_hdr.payload_off > TCPX_MAX_HDR) {
+		if (ep->cur_rx.hdr.base_hdr.hdr_size > TCPX_MAX_HDR) {
 			FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 				"Payload offset is too large\n");
 			return -FI_EIO;
 		}
-		ep->cur_rx.hdr_len = (size_t) ep->cur_rx.hdr.base_hdr.
-					      payload_off;
+		ep->cur_rx.hdr_len = (size_t) ep->cur_rx.hdr.base_hdr.hdr_size;
 		if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len)
 			goto next_hdr;
 
@@ -659,7 +658,7 @@ next_hdr:
 	}
 
 	ep->cur_rx.data_left = ep->cur_rx.hdr.base_hdr.size -
-			       ep->cur_rx.hdr.base_hdr.payload_off;
+			       ep->cur_rx.hdr.base_hdr.hdr_size;
 	ep->cur_rx.handler = ep->start_op[ep->cur_rx.hdr.base_hdr.op];
 
 	return ep->cur_rx.handler(ep);

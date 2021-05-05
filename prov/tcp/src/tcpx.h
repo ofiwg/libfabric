@@ -121,7 +121,7 @@ struct tcpx_base_hdr {
 	uint16_t		flags;
 	uint8_t			op_data;
 	uint8_t			rma_iov_cnt;
-	uint8_t			payload_off;
+	uint8_t			hdr_size;
 	union {
 		uint8_t		rsvd;
 		uint8_t		id; /* debug */
