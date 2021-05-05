@@ -64,7 +64,7 @@ rxm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 }
 
 static struct rxm_rx_buf *
-rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep, bool repost)
+rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep)
 {
 	struct rxm_rx_buf *rx_buf;
 
@@ -75,7 +75,7 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep, bool repost)
 	assert(rx_buf->ep == rxm_ep);
 	rx_buf->hdr.state = RXM_RX;
 	rx_buf->rx_ep = rx_ep;
-	rx_buf->repost = repost;
+	rx_buf->repost = true;
 
 	if (!rxm_ep->srx_ctx) {
 		rx_buf->conn = container_of(rx_ep->fid.context,
@@ -85,20 +85,20 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep, bool repost)
 	return rx_buf;
 }
 
-static void rxm_repost_new_rx(struct rxm_rx_buf *rx_buf)
+/* Processing on the current rx buffer is expected to be slow.
+ * Post a new buffer to take its place, and mark the current
+ * buffer to return to the free pool when finished.
+ */
+static void rxm_replace_rx_buf(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_rx_buf *new_rx_buf;
 
-	if (!rx_buf->repost)
-		return;
-
-	new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->rx_ep, true);
+	new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->rx_ep);
 	if (!new_rx_buf)
 		return;
 
 	rx_buf->repost = false;
-	dlist_insert_tail(&new_rx_buf->repost_entry,
-			  &new_rx_buf->ep->repost_ready_list);
+	rxm_post_recv(new_rx_buf);
 }
 
 static void rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
@@ -110,8 +110,7 @@ static void rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 	    rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) != RXM_SAR_SEG_FIRST) {
 		dlist_insert_tail(&rx_buf->unexp_msg.entry,
 				  &rx_buf->conn->sar_deferred_rx_msg_list);
-		/* repost a new buffer since SAR takes some time to complete */
-		rxm_repost_new_rx(rx_buf);
+		rxm_replace_rx_buf(rx_buf);
 	}
 
 	flags = (rx_buf->pkt.hdr.flags | ofi_rx_flags[rx_buf->pkt.hdr.op]);
@@ -573,10 +572,7 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 	int ret = 0, i;
 	size_t total_recv_len;
 
-	/* En-queue new rx buf to be posted ASAP so that we don't block any
-	 * incoming messages. RNDV processing can take a while.
-	 */
-	rxm_repost_new_rx(rx_buf);
+	rxm_replace_rx_buf(rx_buf);
 
 	if (!rx_buf->conn) {
 		assert(rx_buf->ep->srx_ctx);
@@ -664,8 +660,8 @@ void rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 	if (rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
 		ofi_coll_handle_xfer_comp(rx_buf->pkt.hdr.tag,
 				rx_buf->recv_entry->context);
-		rxm_rx_buf_free(rx_buf);
 		rxm_recv_entry_release(rx_buf->recv_entry);
+		rxm_rx_buf_free(rx_buf);
 	} else {
 		rxm_finish_recv(rx_buf, done_len);
 	}
@@ -759,11 +755,7 @@ rxm_match_rx_buf(struct rxm_rx_buf *rx_buf,
 
 	dlist_insert_tail(&rx_buf->unexp_msg.entry,
 			  &recv_queue->unexp_msg_list);
-
-	/* post a new buffer since we don't know when the unexpected buffer
-	 * will be consumed
-	 */
-	rxm_repost_new_rx(rx_buf);
+	rxm_replace_rx_buf(rx_buf);
 	return 0;
 }
 
@@ -1803,7 +1795,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 	}
 }
 
-static int rxm_post_recv(struct rxm_rx_buf *rx_buf)
+int rxm_post_recv(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_domain *domain;
 	int ret, level;
@@ -1837,7 +1829,7 @@ int rxm_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep)
 	size_t i;
 
 	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
-		rx_buf = rxm_rx_buf_alloc(rxm_ep, rx_ep, true);
+		rx_buf = rxm_rx_buf_alloc(rxm_ep, rx_ep);
 		if (!rx_buf)
 			return -FI_ENOMEM;
 
@@ -1856,27 +1848,9 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 	struct fi_cq_data_entry comp;
 	struct dlist_entry *conn_entry_tmp;
 	struct rxm_conn *rxm_conn;
-	struct rxm_rx_buf *buf;
-	ssize_t ret;
 	size_t comp_read = 0;
 	uint64_t timestamp;
-
-	while (!dlist_empty(&rxm_ep->repost_ready_list)) {
-		dlist_pop_front(&rxm_ep->repost_ready_list, struct rxm_rx_buf,
-				buf, repost_entry);
-
-		/* Discard rx buffer if its msg_ep was closed */
-		if (!rxm_ep->srx_ctx && !buf->conn->msg_ep) {
-			ofi_buf_free(&buf->hdr);
-			continue;
-		}
-
-		ret = rxm_post_recv(buf);
-		if (ret) {
-			if (ret == -FI_EAGAIN)
-				ofi_buf_free(&buf->hdr);
-		}
-	}
+	ssize_t ret;
 
 	do {
 		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);

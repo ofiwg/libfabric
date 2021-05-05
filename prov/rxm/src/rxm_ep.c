@@ -244,8 +244,6 @@ static int rxm_ep_create_pools(struct rxm_ep *rxm_ep)
 	struct ofi_bufpool_attr attr = {0};
 	int ret;
 
-	dlist_init(&rxm_ep->repost_ready_list);
-
 	attr.size = rxm_eager_limit + sizeof(struct rxm_rx_buf);
 	attr.alignment = 16;
 	attr.chunk_cnt = 1024;
