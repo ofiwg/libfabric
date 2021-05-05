@@ -87,7 +87,7 @@ tcpx_init_tx_sizes(struct tcpx_xfer_entry *tx_entry, size_t hdr_len,
 		   size_t data_len)
 {
 	tx_entry->hdr.base_hdr.size = hdr_len + data_len;
-	tx_entry->hdr.base_hdr.payload_off = (uint8_t) hdr_len;
+	tx_entry->hdr.base_hdr.hdr_size = (uint8_t) hdr_len;
 }
 
 static inline void
