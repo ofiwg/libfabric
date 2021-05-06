@@ -816,6 +816,84 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	return rdm_addr;
 }
 
+static inline
+void rxr_pkt_handle_zero_copy_recv_completion(struct rxr_ep *ep,
+					      struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_base_hdr *base_hdr;
+	size_t expected_hdr_size, received_hdr_size;
+	/*
+	 * in zero copy receive mode, EFA device must be the
+	 * only source of incoming packets. So shm communication
+	 * cannot be used, therefore peer must NOT be local
+	 */
+	assert(!rxr_ep_get_peer(ep, pkt_entry->addr)->is_local);
+	ep->posted_bufs_efa--;
+
+	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	if (base_hdr->type != RXR_EAGER_MSGRTM_PKT) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"invalid pkt type %d for zero copy receive mode\n",
+			rxr_get_base_hdr(pkt_entry->pkt)->type);
+		efa_eq_write_error(&ep->util_ep, FI_EIO, -FI_EIO);
+		return;
+	}
+
+	/*
+	 * In zero copy receive mode, we will not send handshake packet
+	 * back to peer. This is to ensure all packets we received have
+	 * the same header size. Because the packet header length from
+	 * a peer are different before and after the peer received the
+	 * handshake packet. Once a peer received a handshake, it will
+	 * stop including raw address in its packet header.
+	 */
+
+	/*
+	 * In zero copy receive mode, an RX entry was created in rxr_msg_generic_recv(),
+	 * the rx_entry was put in ep->rx_list, and ready to be matched.
+	 * At the same time, rxr_msg_generic_recv() posted a packet entry to receive
+	 * data, which is the one we are processing.
+	 * Calling rxr_pkt_get_msgrtm_rx_entry() should match that RX entry with this
+	 * paket entry, and return us a matched RX entry.
+	 */
+	rx_entry = rxr_pkt_get_msgrtm_rx_entry(ep, &pkt_entry);
+	assert(rx_entry && rx_entry->state == RXR_RX_MATCHED);
+	pkt_entry->x_entry = rx_entry;
+
+	/* data is already in user provided buffer, so no need to do memory
+	 * copy. However, we do need to make sure the packet header length
+	 * is correct. Otherwise, user will get wrong data
+	 */
+	assert(pkt_entry->type == RXR_PKT_ENTRY_USER);
+	expected_hdr_size = ep->msg_prefix_size - sizeof(struct rxr_pkt_entry);
+	received_hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	if (received_hdr_size != expected_hdr_size) {
+		/* if header size is wrong, the data in user buffer is not useful.
+		 * setting rx_entry->cq_entry.len here will cause an error cq entry
+		 * to be written to application.
+		 */
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"[Zero copy recv] Received a packet with wrong header size."
+			"Expected header size: %ld Received header size: %ld\n",
+			expected_hdr_size, received_hdr_size);
+		rx_entry->cq_entry.len = 0;
+	} else {
+		/* rx_entry->cq_entry.len should be the total buffer length, which is
+		 *     sizeof(struct rxr_pkt_entry) + pkt_header_size + data_size
+		 * Because
+		 *      pkt_entry->pkt_size = header size + data size.
+		 * We have the following:
+		 */
+		rx_entry->total_len = pkt_entry->pkt_size + sizeof(struct rxr_pkt_entry);
+		rx_entry->cq_entry.len = pkt_entry->pkt_size + sizeof(struct rxr_pkt_entry);
+	}
+
+	rxr_cq_write_rx_completion(ep, rx_entry);
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
+	rxr_release_rx_entry(ep, rx_entry);
+}
+
 void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 				    struct fi_cq_data_entry *cq_entry,
 				    fi_addr_t src_addr)
@@ -857,11 +935,14 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		pkt_entry->addr = src_addr;
 	}
 
-#if ENABLE_DEBUG
-	if (!ep->use_zcpy_rx) {
-		dlist_remove(&pkt_entry->dbg_entry);
-		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_pkt_list);
+	if (ep->use_zcpy_rx) {
+		rxr_pkt_handle_zero_copy_recv_completion(ep, pkt_entry);
+		return;
 	}
+
+#if ENABLE_DEBUG
+	dlist_remove(&pkt_entry->dbg_entry);
+	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_pkt_list);
 #ifdef ENABLE_RXR_PKT_DUMP
 	rxr_pkt_print("Received", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
 #endif
@@ -912,10 +993,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		rxr_pkt_handle_receipt_recv(ep, pkt_entry);
 		return;
 	case RXR_EAGER_MSGRTM_PKT:
-		if (ep->use_zcpy_rx && pkt_entry->type == RXR_PKT_ENTRY_USER)
-			rxr_pkt_handle_zcpy_recv(ep, pkt_entry);
-		else
-			rxr_pkt_handle_rtm_rta_recv(ep, pkt_entry);
+		rxr_pkt_handle_rtm_rta_recv(ep, pkt_entry);
 		return;
 	case RXR_EAGER_TAGRTM_PKT:
 	case RXR_DC_EAGER_MSGRTM_PKT:
