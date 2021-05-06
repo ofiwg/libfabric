@@ -48,36 +48,15 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-static inline struct tcpx_xfer_entry *
-tcpx_alloc_recv_entry(struct tcpx_ep *tcpx_ep)
-{
-	struct tcpx_xfer_entry *recv_entry;
-	struct tcpx_cq *tcpx_cq;
-
-	tcpx_cq = container_of(tcpx_ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
-
-	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq);
-	if (recv_entry)
-		recv_entry->ep = tcpx_ep;
-
-	return recv_entry;
-}
 
 static inline struct tcpx_xfer_entry *
-tcpx_alloc_send_entry(struct tcpx_ep *tcpx_ep)
+tcpx_alloc_send_entry(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *send_entry;
-	struct tcpx_cq *tcpx_cq;
 
-	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-
-	send_entry = tcpx_xfer_entry_alloc(tcpx_cq);
-	if (send_entry) {
-		send_entry->hdr.base_hdr.version = TCPX_HDR_VERSION;
-		send_entry->hdr.base_hdr.op_data = 0;
+	send_entry = tcpx_alloc_tx(ep);
+	if (send_entry)
 		send_entry->hdr.base_hdr.op = ofi_op_msg;
-		send_entry->ep = tcpx_ep;
-	}
 
 	return send_entry;
 }
@@ -162,7 +141,7 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
 
-	recv_entry = tcpx_alloc_recv_entry(tcpx_ep);
+	recv_entry = tcpx_alloc_rx(tcpx_ep);
 	if (!recv_entry)
 		return -FI_EAGAIN;
 
@@ -186,7 +165,7 @@ static ssize_t tcpx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 
-	recv_entry = tcpx_alloc_recv_entry(tcpx_ep);
+	recv_entry = tcpx_alloc_rx(tcpx_ep);
 	if (!recv_entry)
 		return -FI_EAGAIN;
 
@@ -212,7 +191,7 @@ static ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **des
 
 	assert(count <= TCPX_IOV_LIMIT);
 
-	recv_entry = tcpx_alloc_recv_entry(tcpx_ep);
+	recv_entry = tcpx_alloc_rx(tcpx_ep);
 	if (!recv_entry)
 		return -FI_EAGAIN;
 

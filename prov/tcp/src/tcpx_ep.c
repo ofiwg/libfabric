@@ -197,7 +197,7 @@ static void tcpx_ep_flush_queue(struct slist *queue,
 					  entry);
 		slist_remove_head(queue);
 		tcpx_cq_report_error(&tcpx_cq->util_cq, xfer_entry, FI_ECANCELED);
-		tcpx_xfer_entry_free(tcpx_cq, xfer_entry);
+		tcpx_free_xfer(tcpx_cq, xfer_entry);
 	}
 }
 
@@ -211,7 +211,7 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
 		tcpx_cq_report_error(&cq->util_cq, ep->cur_tx.entry,
 				     FI_ECANCELED);
-		tcpx_xfer_entry_free(cq, ep->cur_tx.entry);
+		tcpx_free_xfer(cq, ep->cur_tx.entry);
 		ep->cur_tx.entry = NULL;
 	}
 
@@ -223,7 +223,7 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 	if (ep->cur_rx.entry) {
 		tcpx_cq_report_error(&cq->util_cq, ep->cur_rx.entry,
 				     FI_ECANCELED);
-		tcpx_xfer_entry_free(cq, ep->cur_rx.entry);
+		tcpx_free_xfer(cq, ep->cur_rx.entry);
 		tcpx_reset_rx(ep);
 	}
 	tcpx_ep_flush_queue(&ep->rx_queue, cq);
@@ -442,19 +442,6 @@ void tcpx_reset_rx(struct tcpx_ep *ep)
 	OFI_DBG_SET(ep->cur_rx.hdr.base_hdr.version, 0);
 }
 
-void tcpx_rx_entry_free(struct tcpx_xfer_entry *rx_entry)
-{
-	struct tcpx_cq *tcpx_cq;
-
-	if (rx_entry->ep->srx_ctx) {
-		tcpx_srx_entry_free(rx_entry->ep->srx_ctx, rx_entry);
-	} else {
-		tcpx_cq = container_of(rx_entry->ep->util_ep.rx_cq,
-				       struct tcpx_cq, util_cq);
-		tcpx_xfer_entry_free(tcpx_cq, rx_entry);
-	}
-}
-
 static void tcpx_ep_cancel_rx(struct tcpx_ep *ep, void *context)
 {
 	struct slist_entry *cur, *prev;
@@ -485,7 +472,7 @@ found:
 
 	slist_remove(&ep->rx_queue, cur, prev);
 	tcpx_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
-	tcpx_xfer_entry_free(cq, xfer_entry);
+	tcpx_free_xfer(cq, xfer_entry);
 }
 
 /* We currently only support canceling receives, which is the common case.
