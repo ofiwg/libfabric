@@ -120,29 +120,6 @@ static int tcpx_cq_close(struct fid *fid)
 	return 0;
 }
 
-struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq)
-{
-	struct tcpx_xfer_entry *xfer_entry;
-
-	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
-	xfer_entry = ofi_buf_alloc(tcpx_cq->xfer_pool);
-	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
-
-	return xfer_entry;
-}
-
-void tcpx_xfer_entry_free(struct tcpx_cq *tcpx_cq,
-			  struct tcpx_xfer_entry *xfer_entry)
-{
-	xfer_entry->hdr.base_hdr.flags = 0;
-	xfer_entry->flags = 0;
-	xfer_entry->context = 0;
-
-	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
-	ofi_buf_free(xfer_entry);
-	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
-}
-
 void tcpx_get_cq_info(struct tcpx_xfer_entry *entry, uint64_t *flags,
 		      uint64_t *data, uint64_t *tag)
 {
