@@ -616,4 +616,7 @@ static inline bool efa_is_cache_available(struct efa_domain *efa_domain)
 	return efa_domain->cache;
 }
 
+#define RXR_REQ_OPT_HDR_ALIGNMENT 8
+#define RXR_REQ_OPT_RAW_ADDR_HDR_SIZE (((sizeof(struct rxr_req_opt_raw_addr_hdr) + EFA_EP_ADDR_LEN - 1)/RXR_REQ_OPT_HDR_ALIGNMENT + 1) * RXR_REQ_OPT_HDR_ALIGNMENT)
+
 #endif /* EFA_H */
