@@ -520,8 +520,8 @@ void tcpx_conn_mgr_run(struct util_eq *eq)
 {
 	struct util_wait_fd *wait_fd;
 	struct tcpx_eq *tcpx_eq;
-	void *wait_contexts[MAX_POLL_EVENTS];
-	int num_fds = 0, i;
+	struct ofi_epollfds_event events[MAX_POLL_EVENTS];
+	int count, i;
 
 	assert(eq->wait != NULL);
 
@@ -530,23 +530,19 @@ void tcpx_conn_mgr_run(struct util_eq *eq)
 
 	tcpx_eq = container_of(eq, struct tcpx_eq, util_eq);
 	fastlock_acquire(&tcpx_eq->close_lock);
-	num_fds = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
-		  ofi_epoll_wait(wait_fd->epoll_fd, wait_contexts,
-				 MAX_POLL_EVENTS, 0) :
-		  ofi_pollfds_wait(wait_fd->pollfds, wait_contexts,
-				   MAX_POLL_EVENTS, 0);
-	if (num_fds < 0) {
-		fastlock_release(&tcpx_eq->close_lock);
-		return;
-	}
+	count = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
+		ofi_epoll_wait(wait_fd->epoll_fd, events, MAX_POLL_EVENTS, 0) :
+		ofi_pollfds_wait(wait_fd->pollfds, events, MAX_POLL_EVENTS, 0);
+	if (count < 0)
+		goto unlock;
 
-	for ( i = 0; i < num_fds; i++) {
+	for (i = 0; i < count; i++) {
 		/* skip wake up signals */
-		if (&wait_fd->util_wait.wait_fid.fid == wait_contexts[i])
+		if (&wait_fd->util_wait.wait_fid.fid == events[i].data.ptr)
 			continue;
 
-		process_cm_ctx(eq->wait, (struct tcpx_cm_context *)
-			       wait_contexts[i]);
+		process_cm_ctx(eq->wait, events[i].data.ptr);
 	}
+unlock:
 	fastlock_release(&tcpx_eq->close_lock);
 }

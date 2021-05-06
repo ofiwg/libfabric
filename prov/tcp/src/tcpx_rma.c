@@ -59,6 +59,9 @@ static void tcpx_rma_read_send_entry_fill(struct tcpx_xfer_entry *send_entry,
 	offset = sizeof(send_entry->hdr.base_hdr);
 	rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &send_entry->hdr + offset);
 
+	send_entry->hdr.base_hdr.version = TCPX_HDR_VERSION;
+	send_entry->hdr.base_hdr.op = ofi_op_read_req;
+	send_entry->hdr.base_hdr.op_data = 0;
 	send_entry->hdr.base_hdr.rma_iov_cnt = msg->rma_iov_count;
 	memcpy(rma_iov, msg->rma_iov,
 	       msg->rma_iov_count * sizeof(msg->rma_iov[0]));
@@ -66,7 +69,7 @@ static void tcpx_rma_read_send_entry_fill(struct tcpx_xfer_entry *send_entry,
 	offset += (msg->rma_iov_count * sizeof(*rma_iov));
 
 	send_entry->hdr.base_hdr.size = offset;
-	send_entry->hdr.base_hdr.payload_off = (uint8_t)offset;
+	send_entry->hdr.base_hdr.hdr_size = (uint8_t) offset;
 
 	send_entry->iov[0].iov_base = (void *) &send_entry->hdr;
 	send_entry->iov[0].iov_len = offset;
@@ -104,11 +107,11 @@ static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
 	assert(msg->rma_iov_count <= TCPX_IOV_LIMIT);
 
-	send_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_READ_REQ);
+	send_entry = tcpx_xfer_entry_alloc(tcpx_cq);
 	if (!send_entry)
 		return -FI_EAGAIN;
 
-	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_READ_RSP);
+	recv_entry = tcpx_xfer_entry_alloc(tcpx_cq);
 	if (!recv_entry) {
 		tcpx_xfer_entry_free(tcpx_cq, send_entry);
 		return -FI_EAGAIN;
@@ -186,7 +189,7 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
 			       util_cq);
 
-	send_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_WRITE);
+	send_entry = tcpx_xfer_entry_alloc(tcpx_cq);
 	if (!send_entry)
 		return -FI_EAGAIN;
 
@@ -196,6 +199,10 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	data_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 
 	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT));
+
+	send_entry->hdr.base_hdr.version = TCPX_HDR_VERSION;
+	send_entry->hdr.base_hdr.op = ofi_op_write;
+	send_entry->hdr.base_hdr.op_data = 0;
 
 	if (flags & FI_REMOTE_CQ_DATA) {
 		send_entry->hdr.base_hdr.flags = TCPX_REMOTE_CQ_DATA;
@@ -212,7 +219,7 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 
 	offset += (send_entry->hdr.base_hdr.rma_iov_cnt * sizeof(*rma_iov));
 
-	send_entry->hdr.base_hdr.payload_off = (uint8_t)offset;
+	send_entry->hdr.base_hdr.hdr_size = (uint8_t) offset;
 	send_entry->hdr.base_hdr.size = data_len + offset;
 	if (flags & FI_INJECT) {
 		ofi_copy_iov_buf(msg->msg_iov, msg->iov_count, 0,
@@ -341,12 +348,16 @@ static ssize_t tcpx_rma_inject_common(struct fid_ep *ep, const void *buf,
 	tcpx_cq = container_of(tcpx_ep->util_ep.tx_cq, struct tcpx_cq,
 			       util_cq);
 
-	send_entry = tcpx_xfer_entry_alloc(tcpx_cq, TCPX_OP_WRITE);
+	send_entry = tcpx_xfer_entry_alloc(tcpx_cq);
 	if (!send_entry)
 		return -FI_EAGAIN;
 
 	assert(len <= TCPX_MAX_INJECT);
 	offset = sizeof(send_entry->hdr.base_hdr);
+
+	send_entry->hdr.base_hdr.version = TCPX_HDR_VERSION;
+	send_entry->hdr.base_hdr.op = ofi_op_write;
+	send_entry->hdr.base_hdr.op_data = 0;
 
 	if (flags & FI_REMOTE_CQ_DATA) {
 		send_entry->hdr.base_hdr.flags = TCPX_REMOTE_CQ_DATA;
@@ -362,7 +373,7 @@ static ssize_t tcpx_rma_inject_common(struct fid_ep *ep, const void *buf,
 	send_entry->hdr.base_hdr.rma_iov_cnt = 1;
 	offset += sizeof(*rma_iov);
 
-	send_entry->hdr.base_hdr.payload_off = (uint8_t)offset;
+	send_entry->hdr.base_hdr.hdr_size = (uint8_t) offset;
 	memcpy((uint8_t *)&send_entry->hdr + offset, (uint8_t *)buf, len);
 	offset += len;
 

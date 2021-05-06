@@ -40,12 +40,13 @@
 
 void tcpx_cq_progress(struct util_cq *cq)
 {
-	void *wait_contexts[MAX_POLL_EVENTS];
+	struct ofi_epollfds_event events[MAX_POLL_EVENTS];
 	struct fid_list_entry *fid_entry;
 	struct util_wait_fd *wait_fd;
 	struct dlist_entry *item;
 	struct tcpx_ep *ep;
 	struct fid *fid;
+	uint32_t inevent, outevent;
 	int nfds, i;
 
 	wait_fd = container_of(cq->wait, struct util_wait_fd, util_wait);
@@ -71,16 +72,22 @@ void tcpx_cq_progress(struct util_cq *cq)
 		fastlock_release(&ep->lock);
 	}
 
-	nfds = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
-	       ofi_epoll_wait(wait_fd->epoll_fd, wait_contexts,
-			      MAX_POLL_EVENTS, 0) :
-	       ofi_pollfds_wait(wait_fd->pollfds, wait_contexts,
-				MAX_POLL_EVENTS, 0);
+	if (wait_fd->util_wait.wait_obj == FI_WAIT_FD) {
+		nfds = ofi_epoll_wait(wait_fd->epoll_fd, events,
+				      MAX_POLL_EVENTS, 0);
+		inevent = POLLIN;
+		outevent = POLLOUT;
+	} else {
+		nfds = ofi_pollfds_wait(wait_fd->pollfds, events,
+					MAX_POLL_EVENTS, 0);
+		inevent = OFI_EPOLL_IN;
+		outevent = OFI_EPOLL_OUT;
+	}
 	if (nfds <= 0)
 		goto unlock;
 
 	for (i = 0; i < nfds; i++) {
-		fid = wait_contexts[i];
+		fid = events[i].data.ptr;
 		if (fid->fclass != FI_CLASS_EP) {
 			fd_signal_reset(&wait_fd->signal);
 			continue;
@@ -88,23 +95,14 @@ void tcpx_cq_progress(struct util_cq *cq)
 
 		ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
 		fastlock_acquire(&ep->lock);
-		/* TODO: modify epoll_wait to indicate which events were
-		 * signaled
-		 */
-		tcpx_progress_rx(ep);
-		tcpx_progress_tx(ep);
+		if (events[i].events & inevent)
+			tcpx_progress_rx(ep);
+		if (events[i].events & outevent)
+			tcpx_progress_tx(ep);
 		fastlock_release(&ep->lock);
 	}
 unlock:
 	cq->cq_fastlock_release(&cq->ep_list_lock);
-}
-
-static void tcpx_buf_pools_destroy(struct tcpx_buf_pool *buf_pools)
-{
-	int i;
-
-	for (i = 0; i < TCPX_OP_CODE_MAX; i++)
-		ofi_bufpool_destroy(buf_pools[i].pool);
 }
 
 static int tcpx_cq_close(struct fid *fid)
@@ -113,7 +111,7 @@ static int tcpx_cq_close(struct fid *fid)
 	struct tcpx_cq *tcpx_cq;
 
 	tcpx_cq = container_of(fid, struct tcpx_cq, util_cq.cq_fid.fid);
-	tcpx_buf_pools_destroy(tcpx_cq->buf_pools);
+	ofi_bufpool_destroy(tcpx_cq->xfer_pool);
 	ret = ofi_cq_cleanup(&tcpx_cq->util_cq);
 	if (ret)
 		return ret;
@@ -122,14 +120,13 @@ static int tcpx_cq_close(struct fid *fid)
 	return 0;
 }
 
-struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq,
-					      enum tcpx_op_code type)
+struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq)
 {
 	struct tcpx_xfer_entry *xfer_entry;
 
 	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
 	if (!ofi_cirque_isfull(tcpx_cq->util_cq.cirq))
-		xfer_entry = ofi_buf_alloc(tcpx_cq->buf_pools[type].pool);
+		xfer_entry = ofi_buf_alloc(tcpx_cq->xfer_pool);
 	else
 		xfer_entry = NULL;
 	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
@@ -184,7 +181,7 @@ void tcpx_cq_report_success(struct util_cq *cq,
 		return;
 
 	len = xfer_entry->hdr.base_hdr.size -
-	      xfer_entry->hdr.base_hdr.payload_off;
+	      xfer_entry->hdr.base_hdr.hdr_size;
 	tcpx_get_cq_info(xfer_entry, &flags, &data, &tag);
 
 	ofi_cq_write(cq, xfer_entry->context,
@@ -248,74 +245,6 @@ static struct fi_ops tcpx_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static void tcpx_buf_pool_init(struct ofi_bufpool_region *region, void *buf)
-{
-	struct tcpx_buf_pool *pool = region->pool->attr.context;
-	struct tcpx_xfer_entry *xfer_entry = buf;
-
-	xfer_entry->hdr.base_hdr.version = TCPX_HDR_VERSION;
-	xfer_entry->hdr.base_hdr.op_data = pool->op_type;
-
-	switch (pool->op_type) {
-	case TCPX_OP_MSG_RECV:
-	case TCPX_OP_MSG_SEND:
-	case TCPX_OP_MSG_RESP:
-		xfer_entry->hdr.base_hdr.op = ofi_op_msg;
-		break;
-	case TCPX_OP_WRITE:
-	case TCPX_OP_REMOTE_WRITE:
-		xfer_entry->hdr.base_hdr.op = ofi_op_write;
-		break;
-	case TCPX_OP_READ_REQ:
-		xfer_entry->hdr.base_hdr.op = ofi_op_read_req;
-		break;
-	case TCPX_OP_READ_RSP:
-		xfer_entry->hdr.base_hdr.op = ofi_op_read_rsp;
-		break;
-	case TCPX_OP_REMOTE_READ:
-		break;
-	default:
-		assert(0);
-		break;
-	}
-}
-
-static int tcpx_buf_pools_create(struct tcpx_buf_pool *buf_pools)
-{
-	int i, ret;
-	struct ofi_bufpool_attr attr = {
-		.size = sizeof(struct tcpx_xfer_entry),
-		.alignment = 16,
-		.chunk_cnt = 1024,
-		.init_fn = tcpx_buf_pool_init,
-		.flags = 0,
-	};
-
-	for (i = 0; i < TCPX_OP_CODE_MAX; i++) {
-		buf_pools[i].op_type = i;
-
-		if (i == TCPX_OP_MSG_RECV || i == TCPX_OP_MSG_SEND)
-			attr.chunk_cnt = 1024;
-		else
-			attr.chunk_cnt = 64;
-
-		attr.context = &buf_pools[i];
-		ret = ofi_bufpool_create_attr(&attr, &buf_pools[i].pool);
-		if (ret) {
-			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-				"Unable to create buf pool\n");
-			goto err;
-		}
-	}
-	return 0;
-
-err:
-	while (i--)
-		ofi_bufpool_destroy(buf_pools[i].pool);
-
-	return -ret;
-}
-
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
@@ -330,7 +259,9 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!attr->size)
 		attr->size = TCPX_DEF_CQ_SIZE;
 
-	ret = tcpx_buf_pools_create(tcpx_cq->buf_pools);
+	ret = ofi_bufpool_create(&tcpx_cq->xfer_pool,
+				 sizeof(struct tcpx_xfer_entry), 16, 0,
+				 1024, 0);
 	if (ret)
 		goto free_cq;
 
@@ -351,7 +282,7 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	return 0;
 
 destroy_pool:
-	tcpx_buf_pools_destroy(tcpx_cq->buf_pools);
+	ofi_bufpool_destroy(tcpx_cq->xfer_pool);
 free_cq:
 	free(tcpx_cq);
 	return ret;
