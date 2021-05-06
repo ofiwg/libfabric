@@ -36,11 +36,12 @@
 
 #include "ofi_iov.h"
 #include "ofi_hmem.h"
+#include "ofi_atom.h"
 #include "smr.h"
 
 
-static inline void smr_try_progress_to_sar(struct smr_sar_msg *sar_msg,
-				struct smr_resp *resp,
+static inline void smr_try_progress_to_sar(struct smr_region *smr,
+				struct smr_sar_msg *sar_msg, struct smr_resp *resp,
 				struct smr_cmd *cmd, enum fi_hmem_iface iface,
 				uint64_t device, struct iovec *iov,
 				size_t iov_count, size_t *bytes_done, int *next)
@@ -48,10 +49,11 @@ static inline void smr_try_progress_to_sar(struct smr_sar_msg *sar_msg,
 	while (*bytes_done < cmd->msg.hdr.size &&
 	       smr_copy_to_sar(sar_msg, resp, cmd, iface, device, iov,
 			       iov_count, bytes_done, next));
+	smr_signal(smr);
 }
 
-static inline void smr_try_progress_from_sar(struct smr_sar_msg *sar_msg,
-				struct smr_resp *resp,
+static inline void smr_try_progress_from_sar(struct smr_region *smr,
+				struct smr_sar_msg *sar_msg, struct smr_resp *resp,
 				struct smr_cmd *cmd, enum fi_hmem_iface iface,
 				uint64_t device, struct iovec *iov,
 				size_t iov_count, size_t *bytes_done, int *next)
@@ -59,6 +61,7 @@ static inline void smr_try_progress_from_sar(struct smr_sar_msg *sar_msg,
 	while (*bytes_done < cmd->msg.hdr.size &&
 	       smr_copy_from_sar(sar_msg, resp, cmd, iface, device, iov,
 				 iov_count, bytes_done, next));
+	smr_signal(smr);
 }
 
 static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
@@ -86,13 +89,13 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 			break;
 
 		if (pending->cmd.msg.hdr.op == ofi_op_read_req)
-			smr_try_progress_from_sar(sar_msg, resp,
+			smr_try_progress_from_sar(peer_smr, sar_msg, resp,
 					&pending->cmd, pending->iface,
 					pending->device, pending->iov,
 				        pending->iov_count, &pending->bytes_done,
 					&pending->next);
 		else
-			smr_try_progress_to_sar(sar_msg, resp,
+			smr_try_progress_to_sar(peer_smr, sar_msg, resp,
 					&pending->cmd, pending->iface,
 					pending->device, pending->iov,
 					pending->iov_count, &pending->bytes_done,
@@ -151,8 +154,10 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 	//Skip locking on transfers from self since we already have
 	//the ep->region->lock
 	if (peer_smr != ep->region) {
-		if (fastlock_tryacquire(&peer_smr->lock))
+		if (fastlock_tryacquire(&peer_smr->lock)) {
+			smr_signal(ep->region);
 			return -FI_EAGAIN;
+		}
 	}
 
 	peer_smr->cmd_cnt++;
@@ -276,6 +281,7 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 out:
 	//Status must be set last (signals peer: op done, valid resp entry)
 	resp->status = ret;
+	smr_signal(peer_smr);
 
 	return -ret;
 }
@@ -354,6 +360,7 @@ static int smr_progress_mmap(struct smr_cmd *cmd, struct iovec *iov,
 
 	//Status must be set last (signals peer: op done, valid resp entry)
 	resp->status = ret;
+	smr_signal(peer_smr);
 
 	return ret;
 }
@@ -378,10 +385,10 @@ static struct smr_sar_entry *smr_progress_sar(struct smr_cmd *cmd,
 	(void) ofi_truncate_iov(sar_iov, &iov_count, cmd->msg.hdr.size);
 
 	if (cmd->msg.hdr.op == ofi_op_read_req)
-		smr_try_progress_to_sar(sar_msg, resp, cmd, iface, device,
+		smr_try_progress_to_sar(peer_smr, sar_msg, resp, cmd, iface, device,
 					sar_iov, iov_count, total_len, &next);
 	else
-		smr_try_progress_from_sar(sar_msg, resp, cmd, iface, device,
+		smr_try_progress_from_sar(peer_smr, sar_msg, resp, cmd, iface, device,
 					  sar_iov, iov_count, total_len, &next);
 
 	if (*total_len == cmd->msg.hdr.size)
@@ -462,6 +469,7 @@ static int smr_progress_ipc(struct smr_cmd *cmd, enum fi_hmem_iface iface,
 out:
 	//Status must be set last (signals peer: op done, valid resp entry)
 	resp->status = ret;
+	smr_signal(peer_smr);
 
 	return -ret;
 }
@@ -799,6 +807,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 			peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 			resp = smr_get_ptr(peer_smr, cmd->msg.hdr.data);
 			resp->status = -err;
+			smr_signal(peer_smr);
 		} else {
 			ep->region->cmd_cnt++;
 		}
@@ -890,6 +899,7 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 		peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 		resp = smr_get_ptr(peer_smr, cmd->msg.hdr.data);
 		resp->status = -err;
+		smr_signal(peer_smr);
 	} else {
 		ep->region->cmd_cnt++;
 	}
@@ -948,6 +958,7 @@ static void smr_progress_cmd(struct smr_ep *ep)
 			ret = -FI_EINVAL;
 		}
 		if (ret) {
+			smr_signal(ep->region);
 			if (ret != -FI_EAGAIN) {
 				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 					"error processing command\n");
@@ -977,12 +988,12 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 		peer_smr = smr_peer_region(ep->region, sar_entry->cmd.msg.hdr.id);
 		resp = smr_get_ptr(peer_smr, sar_entry->cmd.msg.hdr.src_data);
 		if (sar_entry->cmd.msg.hdr.op == ofi_op_read_req)
-			smr_try_progress_to_sar(sar_msg, resp, &sar_entry->cmd,
+			smr_try_progress_to_sar(peer_smr, sar_msg, resp, &sar_entry->cmd,
 					sar_entry->iface, sar_entry->device,
 					sar_entry->iov, sar_entry->iov_count,
 					&sar_entry->bytes_done, &sar_entry->next);
 		else
-			smr_try_progress_from_sar(sar_msg, resp, &sar_entry->cmd,
+			smr_try_progress_from_sar(peer_smr, sar_msg, resp, &sar_entry->cmd,
 					sar_entry->iface, sar_entry->device,
 					sar_entry->iov, sar_entry->iov_count,
 					&sar_entry->bytes_done, &sar_entry->next);
@@ -1014,10 +1025,11 @@ void smr_ep_progress(struct util_ep *util_ep)
 
 	ep = container_of(util_ep, struct smr_ep, util_ep);
 
-	smr_progress_resp(ep);
-	smr_progress_cmd(ep);
-
-	smr_progress_sar_list(ep);
+	if (ofi_atomic_cas_bool32(&ep->region->signal, 1, 0)) {
+		smr_progress_resp(ep);
+		smr_progress_cmd(ep);
+		smr_progress_sar_list(ep);
+	}
 }
 
 int smr_progress_unexp_queue(struct smr_ep *ep, struct smr_rx_entry *entry,

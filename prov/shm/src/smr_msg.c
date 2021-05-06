@@ -256,6 +256,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 commit:
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
+	smr_signal(peer_smr);
 unlock_cq:
 	fastlock_release(&ep->util_ep.tx_cq->cq_lock);
 unlock_region:
@@ -347,6 +348,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
 	peer_smr->cmd_cnt--;
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
+	smr_signal(peer_smr);
 unlock:
 	fastlock_release(&peer_smr->lock);
 
