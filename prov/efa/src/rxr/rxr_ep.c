@@ -260,7 +260,6 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	tx_entry->bytes_acked = 0;
 	tx_entry->bytes_sent = 0;
 	tx_entry->window = 0;
-	tx_entry->total_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 	tx_entry->iov_count = msg->iov_count;
 	tx_entry->iov_index = 0;
 	tx_entry->iov_mr_start = 0;
@@ -275,16 +274,13 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	else
 		memset(tx_entry->desc, 0, sizeof(tx_entry->desc));
 
-	/*
-	 * The prefix is currently not used by the sender, but needs to be
-	 * accounted for when copying the payload into the bounce-buffer.
-	 */
-	if (ep->use_zcpy_rx) {
-		assert(tx_entry->iov[0].iov_len >= sizeof(struct rxr_pkt_entry) + sizeof(struct rxr_eager_msgrtm_hdr));
-		tx_entry->iov[0].iov_base = (char *)tx_entry->iov[0].iov_base
-					     + sizeof(struct rxr_pkt_entry)
-					     + sizeof(struct rxr_eager_msgrtm_hdr);
+	if (ep->msg_prefix_size > 0) {
+		assert(tx_entry->iov[0].iov_len >= ep->msg_prefix_size);
+		tx_entry->iov[0].iov_base = (char *)tx_entry->iov[0].iov_base + ep->msg_prefix_size;
+		tx_entry->iov[0].iov_len -= ep->msg_prefix_size;
 	}
+
+	tx_entry->total_len = ofi_total_iov_len(tx_entry->iov, tx_entry->iov_count);
 
 	/* set flags */
 	assert(ep->util_ep.tx_msg_flags == 0 ||
@@ -1883,6 +1879,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->core_msg_order = rdm_info->rx_attr->msg_order;
 	rxr_ep->core_inject_size = rdm_info->tx_attr->inject_size;
 	rxr_ep->max_msg_size = info->ep_attr->max_msg_size;
+	rxr_ep->msg_prefix_size = info->ep_attr->msg_prefix_size;
 	rxr_ep->max_proto_hdr_size = rxr_pkt_max_header_size();
 	rxr_ep->mtu_size = rdm_info->ep_attr->max_msg_size;
 	fi_freeinfo(rdm_info);

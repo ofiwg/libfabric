@@ -585,6 +585,9 @@ struct rxr_ep {
 	/* Application's maximum msg size hint */
 	size_t max_msg_size;
 
+	/* Applicaiton's message prefix size. */
+	size_t msg_prefix_size;
+
 	/* RxR protocol's max header size */
 	size_t max_proto_hdr_size;
 
