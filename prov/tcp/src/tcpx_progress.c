@@ -425,6 +425,7 @@ static struct tcpx_xfer_entry *tcpx_get_rx_entry(struct tcpx_ep *ep)
 		if (!slist_empty(&ep->rx_queue)) {
 			xfer = container_of(slist_remove_head(&ep->rx_queue),
 					    struct tcpx_xfer_entry, entry);
+			ep->rx_avail++;
 		} else {
 			xfer = NULL;
 		}
