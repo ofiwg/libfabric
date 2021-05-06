@@ -125,10 +125,7 @@ struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *tcpx_cq)
 	struct tcpx_xfer_entry *xfer_entry;
 
 	tcpx_cq->util_cq.cq_fastlock_acquire(&tcpx_cq->util_cq.cq_lock);
-	if (!ofi_cirque_isfull(tcpx_cq->util_cq.cirq))
-		xfer_entry = ofi_buf_alloc(tcpx_cq->xfer_pool);
-	else
-		xfer_entry = NULL;
+	xfer_entry = ofi_buf_alloc(tcpx_cq->xfer_pool);
 	tcpx_cq->util_cq.cq_fastlock_release(&tcpx_cq->util_cq.cq_lock);
 
 	return xfer_entry;
