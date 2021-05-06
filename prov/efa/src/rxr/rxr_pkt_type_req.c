@@ -138,9 +138,10 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 		struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
 
 		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
-		raw_addr_hdr->addr_len = ep->core_addrlen;
-		memcpy(raw_addr_hdr->raw_addr, ep->core_addr, raw_addr_hdr->addr_len);
-		opt_hdr += sizeof(*raw_addr_hdr) + raw_addr_hdr->addr_len;
+		raw_addr_hdr->addr_len = RXR_REQ_OPT_RAW_ADDR_HDR_SIZE - sizeof(struct rxr_req_opt_raw_addr_hdr);
+		assert(raw_addr_hdr->addr_len >= ep->core_addrlen);
+		memcpy(raw_addr_hdr->raw_addr, ep->core_addr, ep->core_addrlen);
+		opt_hdr += RXR_REQ_OPT_RAW_ADDR_HDR_SIZE;
 	}
 
 	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
