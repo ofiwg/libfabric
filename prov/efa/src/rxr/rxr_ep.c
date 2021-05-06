@@ -325,11 +325,13 @@ int rxr_ep_post_buf(struct rxr_ep *ep, const struct fi_msg *posted_recv, uint64_
 		msg.desc = &desc;
 		/*
 		 * Use the actual receive sizes from the application
-		 * rather than posting the full MTU size, like we do
-		 * when using the bufpool.
+		 * minus size of struct rxr_pkt_entry.
+		 * This is because we use the application buffer to
+		 * construct a pkt_entry, and use pkt_entry->pkt to
+		 * receive data.
 		 */
 		if (posted_recv) {
-			msg_iov.iov_len = posted_recv->msg_iov->iov_len;
+			msg_iov.iov_len = posted_recv->msg_iov->iov_len - sizeof(struct rxr_pkt_entry);
 			msg.data = posted_recv->data;
 			assert(msg_iov.iov_len <= ep->mtu_size);
 		}
