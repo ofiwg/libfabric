@@ -236,6 +236,7 @@ struct tcpx_ep {
 	struct slist		tx_queue;
 	struct slist		tx_rsp_pend_queue;
 	struct slist		rma_read_queue;
+	int			rx_avail;
 	struct tcpx_rx_ctx	*srx_ctx;
 	enum tcpx_state		state;
 	/* lock for protecting tx/rx queues, rma list, state*/
