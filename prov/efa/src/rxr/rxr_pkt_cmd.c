@@ -850,16 +850,11 @@ void rxr_pkt_handle_zero_copy_recv_completion(struct rxr_ep *ep,
 	 */
 
 	/*
-	 * In zero copy receive mode, an RX entry was created in rxr_msg_generic_recv(),
-	 * the rx_entry was put in ep->rx_list, and ready to be matched.
-	 * At the same time, rxr_msg_generic_recv() posted a packet entry to receive
-	 * data, which is the one we are processing.
-	 * Calling rxr_pkt_get_msgrtm_rx_entry() should match that RX entry with this
-	 * paket entry, and return us a matched RX entry.
+	 * In zero copy receive mode, rx_entry was created in rxr_msg_zero_copy_recv(),
+	 * and assigned to pkt_entry->x_entry
 	 */
-	rx_entry = rxr_pkt_get_msgrtm_rx_entry(ep, &pkt_entry);
+	rx_entry = pkt_entry->x_entry;
 	assert(rx_entry && rx_entry->state == RXR_RX_MATCHED);
-	pkt_entry->x_entry = rx_entry;
 
 	/* data is already in user provided buffer, so no need to do memory
 	 * copy. However, we do need to make sure the packet header length

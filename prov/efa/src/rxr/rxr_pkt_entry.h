@@ -115,9 +115,9 @@ struct rxr_ep;
 
 struct rxr_tx_entry;
 
-struct rxr_pkt_entry *rxr_pkt_entry_init_prefix(struct rxr_ep *ep,
-						const struct fi_msg *posted_buf,
-						struct ofi_bufpool *pkt_pool);
+struct rxr_pkt_entry *rxr_pkt_entry_from_iov(struct rxr_ep *ep,
+					     const struct iovec *iov,
+					     void *desc);
 
 struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
 					  struct ofi_bufpool *pkt_pool);

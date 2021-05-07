@@ -48,9 +48,18 @@
  *   General purpose utility functions
  */
 
-struct rxr_pkt_entry *rxr_pkt_entry_init_prefix(struct rxr_ep *ep,
-						const struct fi_msg *posted_buf,
-						struct ofi_bufpool *pkt_pool)
+/**
+ * @brief construct a packet entry from user supplied iov.
+ *
+ * @param[in] ep     endpoint
+ * @param[in] iov    user buffer
+ * @param[in] desc   memory descriptor
+ * @return a pointer to rxr_pkt_entry, pointing to the begining
+ *         of the user buffer
+ */
+struct rxr_pkt_entry *rxr_pkt_entry_from_iov(struct rxr_ep *ep,
+					     const struct iovec *iov,
+					     void *desc)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_mr *mr;
@@ -60,8 +69,8 @@ struct rxr_pkt_entry *rxr_pkt_entry_init_prefix(struct rxr_ep *ep,
 	 * fields, we can directly map the user-provided fi_msg address
 	 * as the pkt_entry, which will hold the metadata in the prefix.
 	 */
-	assert(posted_buf->msg_iov->iov_len >= sizeof(struct rxr_pkt_entry) + sizeof(struct rxr_eager_msgrtm_hdr));
-	pkt_entry = (struct rxr_pkt_entry *) posted_buf->msg_iov->iov_base;
+	assert(iov->iov_len >= ep->msg_prefix_size);
+	pkt_entry = (struct rxr_pkt_entry *) iov->iov_base;
 	if (!pkt_entry)
 		return NULL;
 
@@ -72,7 +81,7 @@ struct rxr_pkt_entry *rxr_pkt_entry_init_prefix(struct rxr_ep *ep,
 	 * completion.
 	 */
 	dlist_init(&pkt_entry->entry);
-	mr = (struct efa_mr *) posted_buf->desc[0];
+	mr = (struct efa_mr *)desc;
 	pkt_entry->mr = &mr->mr_fid;
 
 	pkt_entry->type = RXR_PKT_ENTRY_USER;

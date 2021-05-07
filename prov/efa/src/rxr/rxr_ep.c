@@ -167,7 +167,7 @@ int rxr_ep_post_buf(struct rxr_ep *ep, const struct fi_msg *posted_recv, uint64_
 		break;
 	case EFA_EP:
 		if (posted_recv)
-			rx_pkt_entry = rxr_pkt_entry_init_prefix(ep, posted_recv, ep->rx_pkt_efa_pool);
+			rx_pkt_entry = rxr_pkt_entry_from_iov(ep, &posted_recv->msg_iov[0], &posted_recv->desc[0]);
 		else
 			rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->rx_pkt_efa_pool);
 		break;

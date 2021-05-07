@@ -972,6 +972,63 @@ void rxr_msg_multi_recv_handle_completion(struct rxr_ep *ep,
 	rx_entry->cq_entry.flags |= FI_MULTI_RECV;
 }
 
+/**
+ * @brief zero copy receive mode's receive routine.
+ *
+ * zero copy receive uses application's buffer to receive data.
+ * This function construct a packet entry using application's buffer,
+ * and post it to device.
+ *
+ * @param[in]	ep	endpoint
+ * @param[in]	msg	fi_msg passed to fi_recv
+ * @param[in]	flags	flags passed to fi_recv
+ * @return	on success, return 0
+ * 		on failure, a negative error code is returned
+ */
+static
+ssize_t rxr_msg_zero_copy_recv(struct rxr_ep *ep, const struct fi_msg *msg,
+			       uint64_t flags)
+{
+	struct iovec recv_iov;
+	struct rxr_rx_entry *rx_entry;
+	struct rxr_pkt_entry *pkt_entry;
+	uint64_t tag = 0, ignore = ~0;
+	ssize_t ret;
+
+	rx_entry = rxr_msg_alloc_rx_entry(ep, msg, ofi_op_msg, flags,
+					  tag, ignore);
+
+	if (OFI_UNLIKELY(!rx_entry)) {
+		rxr_ep_progress_internal(ep);
+		return -FI_EAGAIN;
+	}
+
+	pkt_entry = rxr_pkt_entry_from_iov(ep, &msg->msg_iov[0], msg->desc[0]);
+	pkt_entry->x_entry = rx_entry;
+	rx_entry->state = RXR_RX_MATCHED;
+	/*
+	 * application buffer length is msg->msg_iov[0].iov_len,
+	 * the first part is used to construct a rxr_pkt_entry
+	 * object. This part is not used to receive data,
+	 * thus its size need to be subtracted when calculating
+	 * receiving buffer length.
+	 */
+	recv_iov.iov_base = pkt_entry->pkt;
+	recv_iov.iov_len = msg->msg_iov[0].iov_len - sizeof(struct rxr_pkt_entry);
+	assert(recv_iov.iov_len <= ep->mtu_size);
+	ret = fi_recv(ep->rdm_ep, recv_iov.iov_base, recv_iov.iov_len,
+		      msg->desc[0], FI_ADDR_UNSPEC, pkt_entry);
+	if (OFI_UNLIKELY(ret)) {
+		rxr_release_rx_entry(ep, rx_entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"failed to post buf %ld (%s)\n", -ret,
+			fi_strerror(-ret));
+	}
+
+	return ret;
+}
+
+
 /*
  *     create a rx entry and verify in unexpected message list
  *     else add to posted recv list
@@ -1015,6 +1072,11 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 		goto out;
 	}
 
+	if (rxr_ep->use_zcpy_rx) {
+		ret = rxr_msg_zero_copy_recv(rxr_ep, msg, flags);
+		goto out;
+	}
+
 	unexp_list = (op == ofi_op_tagged) ? &rxr_ep->rx_unexp_tagged_list :
 		     &rxr_ep->rx_unexp_list;
 
@@ -1023,7 +1085,7 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 	 * applicable to the zero-copy path where unexpected messages are not
 	 * applicable, since there's no tag or address to match against.
 	 */
-	if (!dlist_empty(unexp_list) && !rxr_ep->use_zcpy_rx) {
+	if (!dlist_empty(unexp_list)) {
 		ret = rxr_msg_proc_unexp_msg_list(rxr_ep, msg, tag,
 						  ignore, op, flags, NULL);
 
@@ -1044,9 +1106,6 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 		dlist_insert_tail(&rx_entry->entry, &rxr_ep->rx_tagged_list);
 	else
 		dlist_insert_tail(&rx_entry->entry, &rxr_ep->rx_list);
-
-	if (rxr_ep->use_zcpy_rx)
-		rxr_ep_post_buf(rxr_ep, msg, flags, EFA_EP);
 
 out:
 	fastlock_release(&rxr_ep->util_ep.lock);
