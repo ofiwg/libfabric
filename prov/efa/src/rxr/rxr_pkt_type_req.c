@@ -833,6 +833,7 @@ int rxr_pkt_rtm_match_trecv(struct dlist_entry *item, const void *arg)
 			     match_tag);
 }
 
+static
 struct rxr_rx_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 						 struct rxr_pkt_entry **pkt_entry_ptr)
 {
