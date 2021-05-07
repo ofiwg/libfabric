@@ -13,7 +13,7 @@
 #include "cxip_test_common.h"
 
 TestSuite(cntr, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
-	  .timeout = CXIT_DEFAULT_TIMEOUT);
+	  .timeout = 5);
 
 Test(cntr, mod)
 {
@@ -288,4 +288,358 @@ Test(cntr, ping)
 
 	free(send_buf);
 	free(recv_buf);
+}
+
+int wait_for_cnt(struct fid_cntr *cntr, int cnt,
+		 uint64_t (*cntr_read)(struct fid_cntr *cntr))
+{
+	uint64_t cntr_value;
+	time_t timeout = time(NULL) + 2;
+
+	while ((cntr_value = cntr_read(cntr)) != cnt) {
+		if (time(NULL) > timeout) {
+			printf("Timeout waiting for cnt:%d cntr_value:%lx\n",
+			       cnt, cntr_value);
+			return -1;
+		}
+		sched_yield();
+	}
+
+	return 0;
+}
+
+int wait_for_value(uint64_t compare_value, uint64_t *wb_buf)
+{
+	time_t timeout = time(NULL) + 2;
+
+	while (compare_value != *wb_buf) {
+		if (time(NULL) > timeout) {
+			printf("Timeout waiting for compare_value:%lx wb:%lx\n",
+			       compare_value, *wb_buf);
+			return -1;
+		}
+		sched_yield();
+	}
+
+	return 0;
+}
+
+void cntr_queue_work(struct fid_cntr *cntr, int threshold)
+{
+	int ret;
+	struct fi_op_cntr op_cntr = {};
+	struct fi_deferred_work cntr_wb_work = {};
+
+	op_cntr.cntr = cntr;
+	cntr_wb_work.op_type = FI_CXI_OP_CNTR_WB;
+	cntr_wb_work.triggering_cntr = cntr;
+	cntr_wb_work.threshold = threshold;
+	cntr_wb_work.op.cntr = &op_cntr;
+	ret = fi_control(&cxit_domain->fid, FI_QUEUE_WORK, &cntr_wb_work);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_control failed %d", ret);
+}
+
+Test(cntr, deferred_rma_wb)
+{
+	int ret;
+	uint8_t *send_buf;
+	struct mem_region mem_window;
+	struct iovec iov = {};
+	struct fi_rma_iov rma_iov = {};
+	struct fi_op_rma rma = {};
+	struct fi_deferred_work work = {};
+	struct fid_cntr *trig_cntr = cxit_write_cntr;
+
+	size_t xfer_size = 8;
+	uint64_t trig_thresh = 1;
+	uint64_t key = 0xbeef;
+
+	uint64_t cxi_value;
+	struct fi_cxi_cntr_ops *cntr_ops;
+	struct cxip_cntr *cxi_cntr;
+
+	ret = fi_open_ops(&trig_cntr->fid, FI_CXI_COUNTER_OPS, 0,
+			  (void **)&cntr_ops, NULL);
+	cr_assert(ret == FI_SUCCESS);
+	cxi_cntr = container_of(&trig_cntr->fid, struct cxip_cntr,
+				cntr_fid.fid);
+	cr_assert_not_null(cxi_cntr, "cxi_cntr is null");
+
+	send_buf = calloc(1, xfer_size);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(xfer_size, FI_REMOTE_WRITE | FI_REMOTE_READ, 0xa0, key,
+		  &mem_window);
+
+	iov.iov_base = send_buf;
+	iov.iov_len = xfer_size;
+
+	rma_iov.key = key;
+
+	rma.ep = cxit_ep;
+	rma.msg.msg_iov = &iov;
+	rma.msg.iov_count = 1;
+	rma.msg.addr = cxit_ep_fi_addr;
+	rma.msg.rma_iov = &rma_iov;
+	rma.msg.rma_iov_count = 1;
+	rma.flags = 0;
+
+	work.threshold = trig_thresh;
+	work.triggering_cntr = trig_cntr;
+	work.completion_cntr = trig_cntr;
+	work.op_type = FI_OP_READ;
+	work.op.rma = &rma;
+
+	ret = fi_control(&cxit_domain->fid, FI_QUEUE_WORK, &work);
+	cr_assert_eq(ret, FI_SUCCESS, "FI_QUEUE_WORK failed %d", ret);
+
+	cntr_queue_work(trig_cntr, trig_thresh + 1);
+
+	ret = fi_cntr_add(trig_cntr, work.threshold);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
+
+	ret = fi_cxi_gen_cntr_success(trig_thresh + 1, &cxi_value);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_value(cxi_value, (uint64_t *)cxi_cntr->wb);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}
+
+Test(cntr, op_cntr_wb1)
+{
+	int ret;
+	struct fid_cntr *cntr;
+	uint64_t trig_thresh = 1;
+	uint64_t cxi_value;
+	struct cxip_cntr *cxi_cntr;
+
+	ret = fi_cntr_open(cxit_domain, NULL, &cntr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	cxi_cntr = container_of(&cntr->fid, struct cxip_cntr, cntr_fid.fid);
+
+	cntr_queue_work(cntr, trig_thresh);
+
+	ret = fi_cntr_add(cntr, trig_thresh);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
+
+	ret = fi_cxi_gen_cntr_success(trig_thresh, &cxi_value);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_value(cxi_value, (uint64_t *)cxi_cntr->wb);
+
+	ret = fi_close(&cntr->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close cntr");
+}
+
+Test(cntr, op_cntr_wb2)
+{
+	int ret;
+	void *mmio_addr;
+	size_t mmio_len;
+	uint64_t cxi_value;
+	uint64_t threshold = 1;
+	struct fid_cntr *cntr;
+	struct cxip_cntr *cxi_cntr;
+	struct fi_cxi_cntr_ops *cntr_ops;
+	struct c_ct_writeback *wb_buf = NULL;
+	int wb_len = sizeof(*wb_buf);
+
+	ret = fi_cntr_open(cxit_domain, NULL, &cntr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_open_ops(&cntr->fid, FI_CXI_COUNTER_OPS, 0,
+			  (void **)&cntr_ops, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	cxi_cntr = container_of(&cntr->fid, struct cxip_cntr, cntr_fid.fid);
+
+	cntr_queue_work(cntr, threshold);
+	ret = fi_cntr_add(cntr, threshold);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
+
+	ret = cntr_ops->get_mmio_addr(&cntr->fid, &mmio_addr, &mmio_len);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_cxi_gen_cntr_success(threshold, &cxi_value);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_value(cxi_value, (uint64_t *)cxi_cntr->wb);
+	cr_assert(ret == 0);
+
+	cr_assert(fi_cxi_cntr_wb_read(cxi_cntr->wb) == threshold);
+
+	fi_cxi_cntr_set(mmio_addr, 0);
+	fi_cxi_gen_cntr_success(0, &cxi_value);
+	ret = wait_for_value(cxi_value, (uint64_t *)cxi_cntr->wb);
+	cr_assert(ret == 0);
+
+	threshold = 10;
+	cntr_queue_work(cntr, threshold);
+	ret = fi_cntr_add(cntr, threshold);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
+	ret = fi_cxi_gen_cntr_success(threshold, &cxi_value);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_value(cxi_value, (uint64_t *)cxi_cntr->wb);
+	cr_assert(ret == 0);
+
+	fi_cxi_cntr_set(mmio_addr, 0);
+	fi_cxi_gen_cntr_success(0, &cxi_value);
+	ret = wait_for_value(cxi_value, (uint64_t *)cxi_cntr->wb);
+	cr_assert(ret == 0);
+
+	/* Change to a new writeback buffer */
+	wb_buf = aligned_alloc(C_PAGE_SIZE, wb_len);
+	cr_assert_not_null(wb_buf, "wb_buf alloc failed");
+	ret = cntr_ops->set_wb_buffer(&cntr->fid, wb_buf, wb_len);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* Use the new wb buffer */
+	threshold = 20;
+	cntr_queue_work(cntr, threshold);
+	ret = fi_cntr_add(cntr, threshold);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
+	ret = fi_cxi_gen_cntr_success(threshold, &cxi_value);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_value(cxi_value, (uint64_t *)wb_buf);
+	cr_assert(ret == 0);
+
+	// Use instead of fi_cxi_cntr_set()
+	*(uint64_t*)(fi_cxi_get_cntr_reset_addr(mmio_addr)) = 0;
+	ret = wait_for_cnt(cntr, 0, fi_cntr_read);
+	cr_assert(ret == 0);
+
+	free(wb_buf);
+	ret = fi_close(&cntr->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close cntr");
+}
+
+Test(cntr, counter_ops)
+{
+	int ret;
+	int cnt;
+	uint64_t *addr;
+	uint64_t cxi_value;
+	struct fid_cntr *cntr;
+	struct fi_cxi_cntr_ops *cntr_ops;
+	struct cxip_cntr *cxi_cntr;
+
+	struct c_ct_writeback *wb_buf = NULL;
+	int wb_len = sizeof(*wb_buf);
+	void *mmio_addr;
+	size_t mmio_len;
+
+	ret = fi_cntr_open(cxit_domain, NULL, &cntr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_open_ops(&cntr->fid, FI_CXI_COUNTER_OPS, 0,
+			  (void **)&cntr_ops, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	cxi_cntr = container_of(&cntr->fid, struct cxip_cntr, cntr_fid.fid);
+
+	wb_buf = aligned_alloc(C_PAGE_SIZE, wb_len);
+	cr_assert_not_null(wb_buf, "wb_buf alloc failed");
+
+	ret = cntr_ops->set_wb_buffer(&cntr->fid, wb_buf, wb_len);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* enables counter */
+	ret = fi_cntr_set(cntr, 0);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_cnt(cntr, 0, fi_cntr_read);
+	cr_assert(ret == 0);
+
+	ret = cntr_ops->get_mmio_addr(&cntr->fid, &mmio_addr, &mmio_len);
+	cr_assert(ret == FI_SUCCESS);
+
+	cr_assert(fi_cxi_cntr_wb_read(cxi_cntr->wb) == 0);
+
+	cnt = 10;
+	ret = fi_cntr_add(cntr, cnt);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_cnt(cntr, cnt, fi_cntr_read);
+	cr_assert(ret == 0);
+	cr_assert(fi_cxi_cntr_wb_read(wb_buf) == cnt);
+
+	fi_cxi_cntr_set(mmio_addr, 0);
+	ret = wait_for_cnt(cntr, 0, fi_cntr_read);
+	cr_assert(ret == 0);
+	cr_assert(fi_cntr_read(cntr) == 0, "read:%ld", fi_cntr_read(cntr));
+
+	ret = fi_cxi_cntr_set(mmio_addr, 15);
+	cr_assert(ret != FI_SUCCESS, "fi_cxi_cntr_set should fail:%d", ret);
+
+	cnt = 5;
+	ret = fi_cntr_add(cntr, cnt);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_cnt(cntr, cnt, fi_cntr_read);
+	cr_assert(ret == 0);
+	cr_assert(fi_cxi_cntr_wb_read(wb_buf) == cnt);
+
+	fi_cxi_cntr_set(mmio_addr, 0);
+	ret = wait_for_cnt(cntr, 0, fi_cntr_read);
+	cr_assert(ret == 0);
+	cr_assert(fi_cntr_read(cntr) == 0, "read:%ld", fi_cntr_read(cntr));
+
+	fi_cxi_cntr_seterr(mmio_addr, 0);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_cnt(cntr, 0, fi_cntr_readerr);
+	cr_assert(ret == 0);
+
+	cnt = 1;
+	ret = fi_cxi_cntr_adderr(mmio_addr, cnt);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_cnt(cntr, cnt, fi_cntr_readerr);
+	cr_assert(ret == 0);
+	cr_assert(fi_cntr_readerr(cntr) == cnt);
+	cr_assert(fi_cxi_cntr_wb_readerr(wb_buf) == cnt);
+
+	fi_cxi_cntr_set(mmio_addr, 0);
+	cr_assert(ret == FI_SUCCESS);
+
+	fi_cxi_cntr_seterr(mmio_addr, 0);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_cnt(cntr, 0, fi_cntr_readerr);
+	cr_assert(ret == 0);
+
+	cnt = 50;
+	ret = fi_cxi_cntr_add(mmio_addr, cnt);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_cnt(cntr, cnt, fi_cntr_read);
+	cr_assert(ret == 0);
+	cr_assert(fi_cntr_read(cntr) == cnt, "cntr:%ld", fi_cntr_read(cntr));
+
+	fi_cxi_cntr_set(mmio_addr, 0);
+	cr_assert(ret == FI_SUCCESS);
+	ret = fi_cxi_gen_cntr_success(0, &cxi_value);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_value(cxi_value, (uint64_t *)wb_buf);
+	cr_assert(ret == 0);
+
+	// Use instead of fi_cxi_cntr_set()
+	*(uint64_t*)(fi_cxi_get_cntr_reset_addr(mmio_addr)) = 0;
+	ret = wait_for_cnt(cntr, 0, fi_cntr_read);
+	cr_assert(ret == 0);
+
+	cnt = 12;
+	*(uint64_t*)(fi_cxi_get_cntr_adderr_addr(mmio_addr)) = cnt;
+	/* Error transition from 0 causes a writeback */
+	while(fi_cxi_cntr_wb_readerr(wb_buf) != cnt)
+		sched_yield();
+
+	cr_assert(fi_cxi_cntr_wb_readerr(wb_buf) == cnt);
+
+	addr = fi_cxi_get_cntr_reseterr_addr(mmio_addr);
+	*addr = 0;
+	ret = fi_cxi_gen_cntr_success(0, &cxi_value);
+	cr_assert(ret == FI_SUCCESS);
+	ret = wait_for_value(cxi_value, (uint64_t *)wb_buf);
+	cr_assert(ret == FI_SUCCESS);
+
+	cr_assert(fi_cntr_readerr(cntr) == 0);
+
+	ret = fi_close(&cntr->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close cntr");
+
+	free(wb_buf);
 }

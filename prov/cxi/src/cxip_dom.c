@@ -349,13 +349,28 @@ static int cxip_dom_dwq_op_cntr(struct cxip_domain *dom,
 {
 	struct cxip_cntr *op_cntr;
 	int ret;
+	unsigned opcode;
 	struct c_ct_cmd cmd = {};
-	unsigned opcode = op == FI_OP_CNTR_SET ?
-		C_CMD_CT_TRIG_SET : C_CMD_CT_TRIG_INC;
 
 	/* Completion counter must be NULL. */
 	if (!cntr || !cntr->cntr || comp_cntr)
 		return -FI_EINVAL;
+
+	switch ((int)op) {
+	case FI_OP_CNTR_SET:
+		opcode = C_CMD_CT_TRIG_SET;
+		break;
+	case FI_OP_CNTR_ADD:
+		opcode = C_CMD_CT_TRIG_INC;
+		break;
+	case FI_CXI_OP_CNTR_WB:
+		opcode = C_CMD_CT_TRIG_EVENT;
+		cmd.eq = C_EQ_NONE;
+		break;
+	default:
+		CXIP_WARN("Invalid op %d\n", op);
+		return -FI_EINVAL;
+	}
 
 	op_cntr = container_of(cntr->cntr, struct cxip_cntr, cntr_fid);
 	ret = cxip_cntr_enable(op_cntr);
@@ -483,7 +498,7 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 			return ret;
 		}
 
-		switch (work->op_type) {
+		switch ((int)work->op_type) {
 		case FI_OP_SEND:
 			return cxip_dom_dwq_op_send(dom, work->op.msg,
 						    trig_cntr, comp_cntr,
@@ -533,6 +548,11 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 			return cxip_dom_dwq_op_cntr(dom, work->op.cntr,
 						    work->op_type, trig_cntr,
 						    comp_cntr, work->threshold);
+
+		case FI_CXI_OP_CNTR_WB:
+			return cxip_dom_dwq_op_cntr(dom, work->op.cntr,
+						    work->op_type, trig_cntr,
+						    NULL, work->threshold);
 
 		default:
 			CXIP_WARN("Invalid FI_QUEUE_WORK op %s\n",

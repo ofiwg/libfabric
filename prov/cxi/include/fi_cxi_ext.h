@@ -27,12 +27,16 @@
  * occurs at the completion of the deferred work queue operation.
  */
 #define FI_CXI_CNTR_WB (1ULL << 62)
-
 #define FI_CXI_COUNTER_OPS "cxi_counter_ops"
+
+/* TODO: when we upstream, we'll need to move this into fi_trigger.h */
+enum fi_cxi_op_type {
+	FI_CXI_OP_CNTR_WB = FI_OP_CNTR_ADD + 1,
+};
 
 struct fi_cxi_cntr_ops {
 	/* Set the counter writeback address to a client provided address. */
-	int (*set_wb_buffer)(struct fid *fid, const void *buf, size_t len);
+	int (*set_wb_buffer)(struct fid *fid, void *buf, size_t len);
 
 	/* Get the counter MMIO region. */
 	int (*get_mmio_addr)(struct fid *fid, void **addr, size_t *len);

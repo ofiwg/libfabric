@@ -869,7 +869,8 @@ struct cxip_cntr {
 	bool enabled;
 
 	struct cxi_ct *ct;
-	struct c_ct_writeback wb;
+	struct c_ct_writeback *wb;
+	struct c_ct_writeback lwb;
 	bool wb_pending;
 
 	struct dlist_entry dom_entry;

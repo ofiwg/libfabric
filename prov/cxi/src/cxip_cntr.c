@@ -178,8 +178,8 @@ static int cxip_cntr_get(struct cxip_cntr *cxi_cntr)
 	}
 
 	if (cxi_cntr->wb_pending) {
-		if (cxi_cntr->wb.ct_writeback) {
-			cxi_cntr->wb.ct_writeback = 0;
+		if (cxi_cntr->wb->ct_writeback) {
+			cxi_cntr->wb->ct_writeback = 0;
 			cxi_cntr->wb_pending = false;
 		}
 		fastlock_release(&cxi_cntr->lock);
@@ -218,7 +218,7 @@ static uint64_t cxip_cntr_read(struct fid_cntr *fid_cntr)
 
 	cxip_cntr_get(cxi_cntr);
 
-	return cxi_cntr->wb.ct_success;
+	return cxi_cntr->wb->ct_success;
 }
 
 /*
@@ -232,7 +232,7 @@ static uint64_t cxip_cntr_readerr(struct fid_cntr *fid_cntr)
 
 	cxip_cntr_get(cxi_cntr);
 
-	return cxi_cntr->wb.ct_failure;
+	return cxi_cntr->wb->ct_failure;
 }
 
 /*
@@ -358,8 +358,11 @@ int cxip_cntr_enable(struct cxip_cntr *cxi_cntr)
 	if (ret != FI_SUCCESS)
 		goto unlock;
 
+	if (!cxi_cntr->wb)
+		cxi_cntr->wb = &cxi_cntr->lwb;
+
 	ret = cxil_alloc_ct(cxi_cntr->domain->lni->lni,
-			    &cxi_cntr->wb, &cxi_cntr->ct);
+			    cxi_cntr->wb, &cxi_cntr->ct);
 	if (ret) {
 		CXIP_WARN("Failed to allocate CT, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
@@ -426,6 +429,63 @@ static int cxip_cntr_close(struct fid *fid)
 	return 0;
 }
 
+/* Set the counter writeback address to a client provided address. */
+int cxip_set_wb_buffer(struct fid *fid, void *buf, size_t len)
+{
+	int ret;
+	struct cxip_cntr *cntr;
+
+	if (!buf)
+		return -FI_EINVAL;
+
+	if (len < sizeof(struct c_ct_writeback))
+		return -FI_EINVAL;
+
+	cntr = container_of(fid, struct cxip_cntr, cntr_fid.fid);
+
+	if (cntr->wb) {
+		ret = cxil_ct_wb_update(cntr->ct, buf);
+		if (ret)
+			return ret;
+	}
+
+	cntr->wb = buf;
+
+	return FI_SUCCESS;
+}
+
+/* Get the counter MMIO region. */
+int cxip_get_mmio_addr(struct fid *fid, void **addr, size_t *len)
+{
+	struct cxip_cntr *cntr;
+
+	cntr = container_of(fid, struct cxip_cntr, cntr_fid.fid);
+
+	if (!cntr || !cntr->ct)
+		return -FI_EINVAL;
+
+	*addr = cntr->ct->doorbell;
+	*len = sizeof(cntr->ct->doorbell);
+
+	return FI_SUCCESS;
+}
+
+static struct fi_cxi_cntr_ops cxip_cntr_ext_ops = {
+	.set_wb_buffer = cxip_set_wb_buffer,
+	.get_mmio_addr = cxip_get_mmio_addr,
+};
+
+static int cxip_cntr_ops_open(struct fid *fid, const char *ops_name,
+			      uint64_t flags, void **ops, void *context)
+{
+	if (!strcmp(ops_name, FI_CXI_COUNTER_OPS)) {
+		*ops = &cxip_cntr_ext_ops;
+		return FI_SUCCESS;
+	}
+
+	return -FI_EINVAL;
+}
+
 static struct fi_ops_cntr cxip_cntr_ops = {
 	.size = sizeof(struct fi_ops_cntr),
 	.readerr = cxip_cntr_readerr,
@@ -442,7 +502,7 @@ static struct fi_ops cxip_cntr_fi_ops = {
 	.close = cxip_cntr_close,
 	.bind = fi_no_bind,
 	.control = cxip_cntr_control,
-	.ops_open = fi_no_ops_open,
+	.ops_open = cxip_cntr_ops_open,
 };
 
 /*
