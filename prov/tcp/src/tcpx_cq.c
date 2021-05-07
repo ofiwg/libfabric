@@ -65,8 +65,10 @@ void tcpx_cq_progress(struct util_cq *cq)
 		 * to progress can result in application hangs.
 		 */
 		if (ofi_bsock_readable(&ep->bsock) ||
-		    (ep->cur_rx.handler && !ep->cur_rx.entry))
+		    (ep->cur_rx.handler && !ep->cur_rx.entry)) {
+			assert(ep->state == TCPX_CONNECTED);
 			tcpx_progress_rx(ep);
+		}
 
 		(void) tcpx_update_epoll(ep);
 		fastlock_release(&ep->lock);
