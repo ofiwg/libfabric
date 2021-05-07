@@ -90,7 +90,7 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 		  bool err)
 {
 	struct c_ct_cmd cmd = {};
-	struct cxip_cmdq *cmdq = cxi_cntr->domain->trig_cmdq;
+	struct cxip_cmdq *cmdq;
 	int ret;
 
 	fastlock_acquire(&cxi_cntr->lock);
@@ -105,6 +105,8 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 
 		fastlock_acquire(&cxi_cntr->lock);
 	}
+
+	cmdq = cxi_cntr->domain->trig_cmdq;
 
 	if (!set) {
 		/* Doorbell supports counter increment */
