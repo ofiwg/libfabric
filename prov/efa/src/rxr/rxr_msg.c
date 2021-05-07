@@ -1019,6 +1019,8 @@ ssize_t rxr_msg_zero_copy_recv(struct rxr_ep *ep, const struct fi_msg *msg,
 	ret = fi_recv(ep->rdm_ep, recv_iov.iov_base, recv_iov.iov_len,
 		      msg->desc[0], FI_ADDR_UNSPEC, pkt_entry);
 	if (OFI_UNLIKELY(ret)) {
+		/* no need to call rxr_pkt_entry_release_rx because we do not own
+		 * the buffer */
 		rxr_release_rx_entry(ep, rx_entry);
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"failed to post buf %ld (%s)\n", -ret,

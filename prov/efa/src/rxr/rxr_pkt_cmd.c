@@ -885,8 +885,8 @@ void rxr_pkt_handle_zero_copy_recv_completion(struct rxr_ep *ep,
 	}
 
 	rxr_cq_write_rx_completion(ep, rx_entry);
-	rxr_pkt_entry_release_rx(ep, pkt_entry);
 	rxr_release_rx_entry(ep, rx_entry);
+	/* no need to call rxr_pkt_entry_release_rx because we do not own the buffer */
 }
 
 void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,

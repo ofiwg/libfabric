@@ -170,9 +170,7 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry)
 {
 	assert(pkt_entry->next == NULL);
-
-	if (ep->use_zcpy_rx && pkt_entry->type == RXR_PKT_ENTRY_USER)
-		return;
+	assert(pkt_entry->type != RXR_PKT_ENTRY_USER);
 
 	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED) {
 		struct rdm_peer *peer;
