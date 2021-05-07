@@ -326,14 +326,6 @@ void tcpx_cq_report_error(struct util_cq *cq,
 void tcpx_get_cq_info(struct tcpx_xfer_entry *entry, uint64_t *flags,
 		      uint64_t *data, uint64_t *tag);
 
-struct tcpx_xfer_entry *tcpx_xfer_entry_alloc(struct tcpx_cq *cq);
-struct tcpx_xfer_entry *tcpx_srx_entry_alloc(struct tcpx_rx_ctx *srx_ctx,
-					     struct tcpx_ep *ep);
-void tcpx_xfer_entry_free(struct tcpx_cq *tcpx_cq,
-			  struct tcpx_xfer_entry *xfer_entry);
-void tcpx_srx_entry_free(struct tcpx_rx_ctx *srx_ctx,
-			 struct tcpx_xfer_entry *xfer_entry);
-void tcpx_rx_entry_free(struct tcpx_xfer_entry *rx_entry);
 void tcpx_reset_rx(struct tcpx_ep *ep);
 
 void tcpx_progress_tx(struct tcpx_ep *ep);
@@ -357,5 +349,80 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep);
 int tcpx_op_read_req(struct tcpx_ep *tcpx_ep);
 int tcpx_op_write(struct tcpx_ep *tcpx_ep);
 int tcpx_op_read_rsp(struct tcpx_ep *tcpx_ep);
+
+
+static inline struct tcpx_xfer_entry *
+tcpx_alloc_xfer(struct tcpx_cq *cq)
+{
+	struct tcpx_xfer_entry *xfer;
+
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+	xfer = ofi_buf_alloc(cq->xfer_pool);
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+
+	return xfer;
+}
+
+static inline void
+tcpx_free_xfer(struct tcpx_cq *cq, struct tcpx_xfer_entry *xfer)
+{
+	xfer->hdr.base_hdr.flags = 0;
+	xfer->flags = 0;
+	xfer->context = 0;
+
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+	ofi_buf_free(xfer);
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+}
+
+static inline struct tcpx_xfer_entry *
+tcpx_alloc_rx(struct tcpx_ep *ep)
+{
+	struct tcpx_xfer_entry *xfer;
+	struct tcpx_cq *cq;
+
+	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
+	xfer = tcpx_alloc_xfer(cq);
+	if (xfer)
+		xfer->ep = ep;
+
+	return xfer;
+}
+
+static inline void
+tcpx_free_rx(struct tcpx_xfer_entry *xfer)
+{
+	struct tcpx_cq *cq;
+	struct tcpx_rx_ctx *srx;
+
+	if (xfer->ep->srx_ctx) {
+		srx = xfer->ep->srx_ctx;
+		fastlock_acquire(&srx->lock);
+		ofi_buf_free(xfer);
+		fastlock_release(&srx->lock);
+	} else {
+		cq = container_of(xfer->ep->util_ep.rx_cq,
+				  struct tcpx_cq, util_cq);
+		tcpx_free_xfer(cq, xfer);
+	}
+}
+
+static inline struct tcpx_xfer_entry *
+tcpx_alloc_tx(struct tcpx_ep *ep)
+{
+	struct tcpx_xfer_entry *xfer;
+	struct tcpx_cq *cq;
+
+	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
+
+	xfer = tcpx_alloc_xfer(cq);
+	if (xfer) {
+		xfer->hdr.base_hdr.version = TCPX_HDR_VERSION;
+		xfer->hdr.base_hdr.op_data = 0;
+		xfer->ep = ep;
+	}
+
+	return xfer;
+}
 
 #endif //_TCP_H_
