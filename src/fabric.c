@@ -858,6 +858,7 @@ void fi_ini(void)
 	ofi_register_provider(HOOK_PERF_INIT, NULL);
 	ofi_register_provider(HOOK_DEBUG_INIT, NULL);
 	ofi_register_provider(HOOK_HMEM_INIT, NULL);
+	ofi_register_provider(HOOK_DMABUF_PEER_MEM_INIT, NULL);
 	ofi_register_provider(HOOK_NOOP_INIT, NULL);
 
 	ofi_init = 1;

@@ -272,6 +272,17 @@ HOOK_HMEM_INI ;
 #  define HOOK_HMEM_INIT NULL
 #endif
 
+#if (HAVE_DMABUF_PEER_MEM) && (HAVE_DMABUF_PEER_MEM_DL)
+#  define HOOK_DMABUF_PEER_MEM_INI FI_EXT_INI
+#  define HOOK_DMABUF_PEER_MEM_INIT NULL
+#elif (HAVE_DMABUF_PEER_MEM)
+#  define HOOK_DMABUF_PEER_MEM_INI INI_SIG(fi_dmabuf_peer_mem_hook_ini)
+#  define HOOK_DMABUF_PEER_MEM_INIT fi_dmabuf_peer_mem_hook_ini()
+HOOK_DMABUF_PEER_MEM_INI ;
+#else
+#  define HOOK_DMABUF_PEER_MEM_INIT NULL
+#endif
+
 #  define HOOK_NOOP_INI INI_SIG(fi_hook_noop_ini)
 #  define HOOK_NOOP_INIT fi_hook_noop_ini()
 HOOK_NOOP_INI ;
