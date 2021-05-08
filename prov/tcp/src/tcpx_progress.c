@@ -117,18 +117,24 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 			}
 		}
 
-		if (!slist_empty(&ep->tx_queue)) {
-			ep->cur_tx.entry =
-				container_of(slist_remove_head(&ep->tx_queue),
+		if (!slist_empty(&ep->priority_queue)) {
+			ep->cur_tx.entry = container_of(slist_remove_head(
+							&ep->priority_queue),
 					     struct tcpx_xfer_entry, entry);
-			ep->cur_tx.data_left = ep->cur_tx.entry->
-					       hdr.base_hdr.size;
-			OFI_DBG_SET(ep->cur_tx.entry->hdr.base_hdr.id,
-				    ep->tx_id++);
-			ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
+			assert(ep->cur_tx.entry->flags & TCPX_INTERNAL_XFER);
+		} else if (!slist_empty(&ep->tx_queue)) {
+			ep->cur_tx.entry = container_of(slist_remove_head(
+							&ep->tx_queue),
+					     struct tcpx_xfer_entry, entry);
+			assert(!(ep->cur_tx.entry->flags & TCPX_INTERNAL_XFER));
 		} else {
 			ep->cur_tx.entry = NULL;
+			break;
 		}
+
+		ep->cur_tx.data_left = ep->cur_tx.entry->hdr.base_hdr.size;
+		OFI_DBG_SET(ep->cur_tx.entry->hdr.base_hdr.id, ep->tx_id++);
+		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
 	}
 
 	/* Buffered data is sent first by tcpx_send_msg, but if we don't
@@ -759,6 +765,8 @@ void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 
 		if (!ep->cur_tx.entry && wait)
 			wait->signal(wait);
+	} else if (tx_entry->flags & TCPX_INTERNAL_XFER) {
+		slist_insert_tail(&tx_entry->entry, &ep->priority_queue);
 	} else {
 		slist_insert_tail(&tx_entry->entry, &ep->tx_queue);
 	}

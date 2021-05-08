@@ -216,6 +216,7 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 	}
 
 	tcpx_ep_flush_queue(&ep->tx_queue, cq);
+	tcpx_ep_flush_queue(&ep->priority_queue, cq);
 	tcpx_ep_flush_queue(&ep->rma_read_queue, cq);
 	tcpx_ep_flush_queue(&ep->need_ack_queue, cq);
 
@@ -703,6 +704,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	slist_init(&ep->rx_queue);
 	slist_init(&ep->tx_queue);
+	slist_init(&ep->priority_queue);
 	slist_init(&ep->rma_read_queue);
 	slist_init(&ep->need_ack_queue);
 	if (info->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT)
