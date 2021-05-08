@@ -63,6 +63,32 @@ void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr)
 		cur[i] = ntohll(cur[i]);
 }
 
+#ifdef MSG_ZEROCOPY
+static void tcpx_set_zerocopy(SOCKET sock)
+{
+	int val = 1;
+
+	(void) setsockopt(sock, SOL_SOCKET, SO_ZEROCOPY, &val, sizeof(val));
+}
+
+static void tcpx_config_bsock(struct ofi_bsock *bsock)
+{
+	int ret, val = 0;
+	socklen_t len = sizeof(val);
+
+	ret = getsockopt(bsock->sock, SOL_SOCKET, SO_ZEROCOPY, &val, &len);
+	if (!ret && val) {
+		bsock->zerocopy_size = OFI_ZEROCOPY_SIZE;
+		FI_INFO(&tcpx_prov, FI_LOG_EP_CTRL,
+			"zero copy enabled for transfers > %zu\n",
+			bsock->zerocopy_size);
+	}
+}
+#else
+#define tcpx_set_zerocopy(sock)
+#define tcpx_config_bsock(bsock)
+#endif
+
 static int tcpx_setup_socket(SOCKET sock, struct fi_info *info)
 {
 	int ret, optval = 1;
@@ -219,6 +245,7 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 	tcpx_ep_flush_queue(&ep->priority_queue, cq);
 	tcpx_ep_flush_queue(&ep->rma_read_queue, cq);
 	tcpx_ep_flush_queue(&ep->need_ack_queue, cq);
+	tcpx_ep_flush_queue(&ep->async_queue, cq);
 
 	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
 	if (ep->cur_rx.entry) {
@@ -359,10 +386,10 @@ static int tcpx_pep_sock_create(struct tcpx_pep *pep)
 		return -FI_EIO;
 	}
 	ret = tcpx_setup_socket(pep->sock, pep->info);
-	if (ret) {
+	if (ret)
 		goto err;
-	}
 
+	tcpx_set_zerocopy(pep->sock);
 	ret = fi_fd_nonblock(pep->sock);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
@@ -696,6 +723,8 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		ret = tcpx_setup_socket(ep->bsock.sock, info);
 		if (ret)
 			goto err3;
+
+		tcpx_set_zerocopy(ep->bsock.sock);
 	}
 
 	ret = fastlock_init(&ep->lock);
@@ -707,12 +736,15 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	slist_init(&ep->priority_queue);
 	slist_init(&ep->rma_read_queue);
 	slist_init(&ep->need_ack_queue);
+	slist_init(&ep->async_queue);
+
 	if (info->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT)
 		ep->rx_avail = info->rx_attr->size;
 
 	ep->cur_rx.hdr_done = 0;
 	ep->cur_rx.hdr_len = sizeof(ep->cur_rx.hdr.base_hdr);
 	ep->min_multi_recv_size = TCPX_MIN_MULTI_RECV;
+	tcpx_config_bsock(&ep->bsock);
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &tcpx_ep_fi_ops;

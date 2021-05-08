@@ -238,6 +238,7 @@ struct tcpx_ep {
 	struct slist		tx_queue;
 	struct slist		priority_queue;
 	struct slist		need_ack_queue;
+	struct slist		async_queue;
 	struct slist		rma_read_queue;
 	int			rx_avail;
 	struct tcpx_rx_ctx	*srx_ctx;
@@ -258,6 +259,7 @@ struct tcpx_fabric {
 #define TCPX_NEED_ACK		BIT_ULL(59)
 #define TCPX_INTERNAL_XFER	BIT_ULL(60)
 #define TCPX_NEED_DYN_RBUF 	BIT_ULL(61)
+#define TCPX_ASYNC		BIT_ULL(62)
 
 struct tcpx_xfer_entry {
 	struct slist_entry	entry;
@@ -272,6 +274,7 @@ struct tcpx_xfer_entry {
 	struct iovec		iov[TCPX_IOV_LIMIT+1];
 	struct tcpx_ep		*ep;
 	uint64_t		flags;
+	uint32_t		async_index;
 	void			*context;
 	void			*mrecv_msg_start;
 };
@@ -336,6 +339,7 @@ void tcpx_reset_rx(struct tcpx_ep *ep);
 
 void tcpx_progress_tx(struct tcpx_ep *ep);
 void tcpx_progress_rx(struct tcpx_ep *ep);
+void tcpx_progress_async(struct tcpx_ep *ep);
 int tcpx_try_func(void *util_ep);
 int tcpx_update_epoll(struct tcpx_ep *ep);
 
@@ -448,6 +452,14 @@ tcpx_alloc_tx(struct tcpx_ep *ep)
 	}
 
 	return xfer;
+}
+
+static inline void
+tcpx_free_tx(struct tcpx_xfer_entry *xfer)
+{
+	struct tcpx_cq *cq;
+	cq = container_of(xfer->ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
+	tcpx_free_xfer(cq, xfer);
 }
 
 #endif //_TCP_H_

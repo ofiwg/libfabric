@@ -46,7 +46,7 @@ void tcpx_cq_progress(struct util_cq *cq)
 	struct dlist_entry *item;
 	struct tcpx_ep *ep;
 	struct fid *fid;
-	uint32_t inevent, outevent;
+	uint32_t inevent, outevent, errevent;
 	int nfds, i;
 
 	wait_fd = container_of(cq->wait, struct util_wait_fd, util_wait);
@@ -79,11 +79,13 @@ void tcpx_cq_progress(struct util_cq *cq)
 				      MAX_POLL_EVENTS, 0);
 		inevent = POLLIN;
 		outevent = POLLOUT;
+		errevent = POLLERR;
 	} else {
 		nfds = ofi_pollfds_wait(wait_fd->pollfds, events,
 					MAX_POLL_EVENTS, 0);
 		inevent = OFI_EPOLL_IN;
 		outevent = OFI_EPOLL_OUT;
+		errevent = OFI_EPOLL_ERR;
 	}
 	if (nfds <= 0)
 		goto unlock;
@@ -97,6 +99,8 @@ void tcpx_cq_progress(struct util_cq *cq)
 
 		ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
 		fastlock_acquire(&ep->lock);
+		if (events[i].events & errevent)
+			tcpx_progress_async(ep);
 		if (events[i].events & inevent)
 			tcpx_progress_rx(ep);
 		if (events[i].events & outevent)
