@@ -105,7 +105,7 @@ enum {
 /* base_hdr::op_data */
 enum {
 	/* backward compatible value */
-	TCPX_OP_MSG_RESP = 2, /* indicates response message */
+	TCPX_OP_ACK = 2, /* indicates ack message - should be a flag */
 };
 
 /* Flags */
@@ -234,7 +234,7 @@ struct tcpx_ep {
 	struct dlist_entry	ep_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
-	struct slist		tx_rsp_pend_queue;
+	struct slist		need_ack_queue;
 	struct slist		rma_read_queue;
 	int			rx_avail;
 	struct tcpx_rx_ctx	*srx_ctx;
