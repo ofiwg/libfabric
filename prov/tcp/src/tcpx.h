@@ -234,6 +234,7 @@ struct tcpx_ep {
 	struct dlist_entry	ep_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
+	struct slist		priority_queue;
 	struct slist		need_ack_queue;
 	struct slist		rma_read_queue;
 	int			rx_avail;
