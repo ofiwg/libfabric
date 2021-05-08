@@ -471,6 +471,7 @@ found:
 	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
 
 	slist_remove(&ep->rx_queue, cur, prev);
+	ep->rx_avail++;
 	tcpx_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
 	tcpx_free_xfer(cq, xfer_entry);
 }
@@ -704,6 +705,8 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	slist_init(&ep->tx_queue);
 	slist_init(&ep->rma_read_queue);
 	slist_init(&ep->tx_rsp_pend_queue);
+	if (info->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT)
+		ep->rx_avail = info->rx_attr->size;
 
 	ep->cur_rx.hdr_done = 0;
 	ep->cur_rx.hdr_len = sizeof(ep->cur_rx.hdr.base_hdr);

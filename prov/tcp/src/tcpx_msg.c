@@ -123,12 +123,19 @@ tcpx_init_tx_iov(struct tcpx_xfer_entry *tx_entry, size_t hdr_len,
 	}
 }
 
-static inline void tcpx_queue_recv(struct tcpx_ep *tcpx_ep,
+static inline bool tcpx_queue_recv(struct tcpx_ep *ep,
 				   struct tcpx_xfer_entry *recv_entry)
 {
-	fastlock_acquire(&tcpx_ep->lock);
-	slist_insert_tail(&recv_entry->entry, &tcpx_ep->rx_queue);
-	fastlock_release(&tcpx_ep->lock);
+	bool ret;
+
+	fastlock_acquire(&ep->lock);
+	ret = ep->rx_avail;
+	if (ret) {
+		slist_insert_tail(&recv_entry->entry, &ep->rx_queue);
+		ep->rx_avail--;
+	}
+	fastlock_release(&ep->lock);
+	return ret;
 }
 
 static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
@@ -153,7 +160,10 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			    FI_MSG | FI_RECV;
 	recv_entry->context = msg->context;
 
-	tcpx_queue_recv(tcpx_ep, recv_entry);
+	if (!tcpx_queue_recv(tcpx_ep, recv_entry)) {
+		tcpx_free_rx(recv_entry);
+		return -FI_EAGAIN;
+	}
 	return FI_SUCCESS;
 }
 
@@ -177,7 +187,10 @@ static ssize_t tcpx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			    FI_MSG | FI_RECV;
 	recv_entry->context = context;
 
-	tcpx_queue_recv(tcpx_ep, recv_entry);
+	if (!tcpx_queue_recv(tcpx_ep, recv_entry)) {
+		tcpx_free_rx(recv_entry);
+		return -FI_EAGAIN;
+	}
 	return FI_SUCCESS;
 }
 
@@ -202,7 +215,10 @@ static ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **des
 			    FI_MSG | FI_RECV;
 	recv_entry->context = context;
 
-	tcpx_queue_recv(tcpx_ep, recv_entry);
+	if (!tcpx_queue_recv(tcpx_ep, recv_entry)) {
+		tcpx_free_rx(recv_entry);
+		return -FI_EAGAIN;
+	}
 	return FI_SUCCESS;
 }
 
