@@ -249,7 +249,7 @@ extern int ft_socket_pair[2];
 extern int sock;
 extern int listen_sock;
 #define ADDR_OPTS "B:P:s:a:b::E::C:F:"
-#define FAB_OPTS "f:d:p:D:i:H:K"
+#define FAB_OPTS "f:d:p:D:i:HK"
 #define INFO_OPTS FAB_OPTS "e:M:"
 #define CS_OPTS ADDR_OPTS "I:QS:mc:t:w:l"
 #define NO_CQ_DATA 0
