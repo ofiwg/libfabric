@@ -248,9 +248,12 @@ static inline size_t ofi_bsock_tosend(struct ofi_bsock *bsock)
 }
 
 ssize_t ofi_bsock_flush(struct ofi_bsock *bsock);
-ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t len);
+/* For sends started asynchronously, the return value will be -EINPROGRESS,
+ * and len will be set to the number of bytes that were queued.
+ */
+ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len);
 ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
-			size_t cnt);
+			size_t cnt, size_t *len);
 ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len);
 ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov,
 			size_t cnt);
