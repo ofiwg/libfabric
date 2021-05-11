@@ -47,10 +47,12 @@ static int tcpx_send_msg(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *tx_entry;
 	ssize_t ret;
+	size_t len;
 
 	assert(ep->cur_tx.entry);
 	tx_entry = ep->cur_tx.entry;
-	ret = ofi_bsock_sendv(&ep->bsock, tx_entry->iov, tx_entry->iov_cnt);
+	ret = ofi_bsock_sendv(&ep->bsock, tx_entry->iov, tx_entry->iov_cnt,
+			      &len);
 	if (ret < 0)
 		return ret;
 
