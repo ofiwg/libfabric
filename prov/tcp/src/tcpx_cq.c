@@ -152,10 +152,11 @@ void tcpx_cq_report_success(struct util_cq *cq,
 	uint64_t flags, data, tag;
 	size_t len;
 
-	flags = xfer_entry->flags;
-	if (!(flags & FI_COMPLETION) || (flags & TCPX_INTERNAL_XFER))
+	if (!(xfer_entry->flags & FI_COMPLETION) ||
+	    (xfer_entry->flags & TCPX_INTERNAL_XFER))
 		return;
 
+	flags = xfer_entry->flags & ~TCPX_INTERNAL_MASK;
 	len = xfer_entry->hdr.base_hdr.size -
 	      xfer_entry->hdr.base_hdr.hdr_size;
 	tcpx_get_cq_info(xfer_entry, &flags, &data, &tag);
@@ -175,7 +176,7 @@ void tcpx_cq_report_error(struct util_cq *cq,
 	if (xfer_entry->flags & TCPX_INTERNAL_XFER)
 		return;
 
-	err_entry.flags = xfer_entry->flags;
+	err_entry.flags = xfer_entry->flags & ~TCPX_INTERNAL_MASK;
 	tcpx_get_cq_info(xfer_entry, &err_entry.flags, &err_entry.data,
 			 &err_entry.tag);
 
