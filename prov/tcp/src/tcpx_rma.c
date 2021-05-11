@@ -230,13 +230,7 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 
 	send_entry->flags = (tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			     flags | FI_RMA | FI_WRITE;
-
-	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		send_entry->hdr.base_hdr.flags |= TCPX_DELIVERY_COMPLETE;
-
-	if (flags & FI_COMMIT_COMPLETE)
-		send_entry->hdr.base_hdr.flags |= TCPX_COMMIT_COMPLETE;
-
+	tcpx_set_commit_flags(send_entry, flags);
 	send_entry->context = msg->context;
 
 	fastlock_acquire(&tcpx_ep->lock);

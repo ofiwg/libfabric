@@ -109,8 +109,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 			tcpx_cq_report_error(&cq->util_cq, tx_entry, -ret);
 			tcpx_free_xfer(cq, tx_entry);
 		} else {
-			if (tx_entry->hdr.base_hdr.flags &
-			    (TCPX_DELIVERY_COMPLETE | TCPX_COMMIT_COMPLETE)) {
+			if (tx_entry->flags & TCPX_NEED_ACK) {
 				slist_insert_tail(&tx_entry->entry,
 						  &ep->need_ack_queue);
 			} else {
@@ -240,7 +239,7 @@ retry:
 		goto retry;
 	}
 
-	if (rx_entry->hdr.base_hdr.flags & OFI_DELIVERY_COMPLETE) {
+	if (rx_entry->hdr.base_hdr.flags & TCPX_DELIVERY_COMPLETE) {
 		ret = tcpx_queue_ack(rx_entry);
 		if (ret)
 			goto err;
