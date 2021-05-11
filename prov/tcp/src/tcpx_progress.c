@@ -101,7 +101,6 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 			return;
 
 		tx_entry = ep->cur_tx.entry;
-		ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 		cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 
 		if (ret) {
