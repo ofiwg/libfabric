@@ -282,10 +282,6 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 		return err;
 	}
 
-	/* if send, tx_pkt_entry will be released while handle completion
-	 * if inject, there will not be completion, therefore tx_pkt_entry has to be
-	 * released here
-	 */
 	if (inject)
 		err = rxr_pkt_entry_inject(rxr_ep, pkt_entry, addr);
 	else if (pkt_entry->send->iov_count > 0)
@@ -303,8 +299,13 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 
 	peer->flags |= RXR_PEER_REQ_SENT;
 	rxr_pkt_handle_ctrl_sent(rxr_ep, pkt_entry);
+
+	/* If injection succeeded, packet should be considered as sent completed.
+	 * therefore call rxr_pkt_handle_send_completion().
+	 * rxr_pkt_handle_send_completion() will release pkt_entry
+	 */
 	if (inject)
-		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
+		rxr_pkt_handle_send_completion(rxr_ep, pkt_entry);
 
 	return 0;
 }
@@ -550,12 +551,9 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 /*
  *   Functions used to handle packet send completion
  */
-void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct fi_cq_data_entry *comp)
+void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_peer *peer;
-
-	pkt_entry = (struct rxr_pkt_entry *)comp->op_context;
 
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
 	case RXR_HANDSHAKE_PKT:
