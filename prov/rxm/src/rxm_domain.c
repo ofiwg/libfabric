@@ -485,7 +485,7 @@ struct ofi_ops_dynamic_rbuf rxm_dynamic_rbuf = {
 static void rxm_config_dyn_rbuf(struct rxm_domain *domain, struct fi_info *info,
 				struct fi_info *msg_info)
 {
-	int ret = 0;
+	int ret = 1;
 
 	/* Collective support requires rxm generated and consumed messages.
 	 * Although we could update the code to handle receiving collective
