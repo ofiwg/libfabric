@@ -767,7 +767,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 			"invalid control pkt type %d\n",
 			rxr_get_base_hdr(pkt_entry->pkt)->type);
 		assert(0 && "invalid control pkt type");
-		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		rxr_cq_handle_error(ep, FI_EIO, NULL);
 		return;
 	}
 
@@ -833,7 +833,8 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 			(int)pkt_entry->addr, base_hdr->type);
 
 		assert(0 && "invalid REQ packe type");
-		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 
@@ -877,13 +878,15 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Received a RTS packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated RTS pakcet received");
-		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	case RXR_RETIRED_CONNACK_PKT:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Received a CONNACK packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated CONNACK pakcet received");
-		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	case RXR_EOR_PKT:
 		rxr_pkt_handle_eor_recv(ep, pkt_entry);
@@ -953,7 +956,8 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 			"invalid control pkt type %d\n",
 			rxr_get_base_hdr(pkt_entry->pkt)->type);
 		assert(0 && "invalid control pkt type");
-		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 }

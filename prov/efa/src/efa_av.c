@@ -101,6 +101,28 @@ fi_addr_t efa_ahn_qpn_to_addr(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 	return OFI_LIKELY(!!reverse_av) ? reverse_av->fi_addr : FI_ADDR_NOTAVAIL;
 }
 
+/**
+ * @brief find rdm_peer by address handle number (ahn) and QP number (qpn)
+ *
+ * @param[in]	av	address vector
+ * @param[in]	ahn	address handle number
+ * @param[in]	qpn	QP number
+ * @return	On success, return pointer to rdm_peer
+ * 		If no such peer exist, return NULL
+ */
+struct rdm_peer *efa_ahn_qpn_to_peer(struct efa_av *av, uint16_t ahn, uint16_t qpn)
+{
+	struct efa_reverse_av *reverse_av;
+	struct efa_ah_qpn key = {
+		.ahn = ahn,
+		.qpn = qpn,
+	};
+
+	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av);
+
+	return OFI_LIKELY(!!reverse_av) ? reverse_av->rdm_peer : NULL;
+}
+
 static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
 {
 	struct efa_ep_addr all_zeros = {};

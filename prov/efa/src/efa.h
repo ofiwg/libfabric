@@ -383,6 +383,8 @@ void efa_cq_dec_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
 
 fi_addr_t efa_ahn_qpn_to_addr(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 
+struct rdm_peer *efa_ahn_qpn_to_peer(struct efa_av *av, uint16_t ahn, uint16_t qpn);
+
 struct fi_provider *init_lower_efa_prov();
 
 ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr);
