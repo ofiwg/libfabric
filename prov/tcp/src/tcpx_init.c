@@ -58,6 +58,8 @@ int tcpx_staging_sbuf_size = 9000;
 int tcpx_prefetch_rbuf_size = 9000;
 size_t tcpx_default_tx_size = 256;
 size_t tcpx_default_rx_size = 256;
+size_t tcpx_zerocopy_size = OFI_ZEROCOPY_SIZE;
+
 
 static void tcpx_init_env(void)
 {
@@ -92,10 +94,15 @@ static void tcpx_init_env(void)
 	fi_param_define(&tcpx_prov, "prefetch_rbuf_size", FI_PARAM_INT,
 			"size of buffer used to prefetch received data from "
 			"the kernel, set to 0 to disable");
+	fi_param_define(&tcpx_prov, "zerocopy_size", FI_PARAM_SIZE_T,
+			"lower threshold where zero copy transfers will be "
+			"used, if supported by the platform, set to -1 to "
+			"disable (default: %zu)", tcpx_zerocopy_size);
 	fi_param_get_int(&tcpx_prov, "staging_sbuf_size",
 			 &tcpx_staging_sbuf_size);
 	fi_param_get_int(&tcpx_prov, "prefetch_rbuf_size",
 			 &tcpx_prefetch_rbuf_size);
+	fi_param_get_size_t(&tcpx_prov, "zerocopy_size", &tcpx_zerocopy_size);
 
 	fi_param_get_int(&tcpx_prov, "port_high_range", &port_range.high);
 	fi_param_get_int(&tcpx_prov, "port_low_range", &port_range.low);

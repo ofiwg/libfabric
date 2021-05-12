@@ -78,7 +78,7 @@ static void tcpx_config_bsock(struct ofi_bsock *bsock)
 
 	ret = getsockopt(bsock->sock, SOL_SOCKET, SO_ZEROCOPY, &val, &len);
 	if (!ret && val) {
-		bsock->zerocopy_size = OFI_ZEROCOPY_SIZE;
+		bsock->zerocopy_size = tcpx_zerocopy_size;
 		FI_INFO(&tcpx_prov, FI_LOG_EP_CTRL,
 			"zero copy enabled for transfers > %zu\n",
 			bsock->zerocopy_size);
