@@ -541,7 +541,7 @@ RXM_INI
 			"This allows direct placement of received messages "
 			"into application buffers, bypassing RxM bounce "
 			"buffers.  This feature targets using tcp sockets "
-			"for the message transport.  (default: false)");
+			"for the message transport.  (default: true)");
 
 	fi_param_define(&rxm_prov, "enable_direct_send", FI_PARAM_BOOL,
 			"Enable support to pass application buffers directly "
