@@ -821,22 +821,16 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 }
 
 void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
-				    struct fi_cq_data_entry *cq_entry,
-				    fi_addr_t src_addr)
+				    struct rxr_pkt_entry *pkt_entry)
 {
 	struct rdm_peer *peer;
 	struct rxr_base_hdr *base_hdr;
-	struct rxr_pkt_entry *pkt_entry;
-
-	pkt_entry = (struct rxr_pkt_entry *)cq_entry->op_context;
-	pkt_entry->pkt_size = cq_entry->len;
-	assert(pkt_entry->pkt_size > 0);
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	if (base_hdr->type >= RXR_EXTRA_REQ_PKT_END) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Peer %d is requesting feature %d, which this EP does not support.\n",
-			(int)src_addr, base_hdr->type);
+			(int)pkt_entry->addr, base_hdr->type);
 
 		assert(0 && "invalid REQ packe type");
 		rxr_cq_handle_cq_error(ep, -FI_EIO);
@@ -854,12 +848,9 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		raw_addr = rxr_pkt_req_raw_addr(pkt_entry);
 		if (OFI_UNLIKELY(raw_addr != NULL))
 			pkt_entry->addr = rxr_pkt_insert_addr(ep, pkt_entry, raw_addr);
-		else
-			pkt_entry->addr = src_addr;
-	} else {
-		assert(src_addr != FI_ADDR_NOTAVAIL);
-		pkt_entry->addr = src_addr;
 	}
+
+	assert(pkt_entry->addr != FI_ADDR_NOTAVAIL);
 
 #if ENABLE_DEBUG
 	if (!ep->use_zcpy_rx) {
