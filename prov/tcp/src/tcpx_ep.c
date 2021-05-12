@@ -216,8 +216,9 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 	}
 
 	tcpx_ep_flush_queue(&ep->tx_queue, cq);
+	tcpx_ep_flush_queue(&ep->priority_queue, cq);
 	tcpx_ep_flush_queue(&ep->rma_read_queue, cq);
-	tcpx_ep_flush_queue(&ep->tx_rsp_pend_queue, cq);
+	tcpx_ep_flush_queue(&ep->need_ack_queue, cq);
 
 	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
 	if (ep->cur_rx.entry) {
@@ -703,8 +704,9 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	slist_init(&ep->rx_queue);
 	slist_init(&ep->tx_queue);
+	slist_init(&ep->priority_queue);
 	slist_init(&ep->rma_read_queue);
-	slist_init(&ep->tx_rsp_pend_queue);
+	slist_init(&ep->need_ack_queue);
 	if (info->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT)
 		ep->rx_avail = info->rx_attr->size;
 

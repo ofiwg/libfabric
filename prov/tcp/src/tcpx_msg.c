@@ -251,13 +251,9 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 	tcpx_init_tx_iov(tx_entry, hdr_len, msg->msg_iov, msg->iov_count);
-
 	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			    flags | FI_MSG | FI_SEND);
-
-	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		tx_entry->hdr.base_hdr.flags |= TCPX_DELIVERY_COMPLETE;
-
+	tcpx_set_ack_flags(tx_entry, flags);
 	tx_entry->context = msg->context;
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
@@ -277,14 +273,10 @@ static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len,
 		return -FI_EAGAIN;
 
 	tcpx_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.base_hdr), buf, len);
-
 	tx_entry->context = context;
 	tx_entry->flags = (tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_MSG | FI_SEND;
-
-	if (tcpx_ep->util_ep.tx_op_flags &
-	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		tx_entry->hdr.base_hdr.flags = OFI_DELIVERY_COMPLETE;
+	tcpx_set_ack_flags(tx_entry, tcpx_ep->util_ep.tx_op_flags);
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
 	return FI_SUCCESS;
@@ -304,14 +296,10 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov,
 		return -FI_EAGAIN;
 
 	tcpx_init_tx_iov(tx_entry, sizeof(tx_entry->hdr.base_hdr), iov, count);
-
 	tx_entry->context = context;
 	tx_entry->flags = (tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_MSG | FI_SEND;
-
-	if (tcpx_ep->util_ep.tx_op_flags &
-	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		tx_entry->hdr.base_hdr.flags = TCPX_DELIVERY_COMPLETE;
+	tcpx_set_ack_flags(tx_entry, tcpx_ep->util_ep.tx_op_flags);
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
 	return FI_SUCCESS;
@@ -358,14 +346,10 @@ static ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len,
 
 	tcpx_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.cq_data_hdr),
 			 buf, len);
-
 	tx_entry->context = context;
 	tx_entry->flags = (tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_MSG | FI_SEND;
-
-	if (tcpx_ep->util_ep.tx_op_flags &
-	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		tx_entry->hdr.base_hdr.flags |= TCPX_DELIVERY_COMPLETE;
+	tcpx_set_ack_flags(tx_entry, tcpx_ep->util_ep.tx_op_flags);
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
 	return FI_SUCCESS;
@@ -443,13 +427,9 @@ tcpx_tsendmsg(struct fid_ep *fid_ep, const struct fi_msg_tagged *msg,
 	}
 
 	tcpx_init_tx_iov(tx_entry, hdr_len, msg->msg_iov, msg->iov_count);
-
 	tx_entry->flags = ((ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			    flags | FI_TAGGED | FI_SEND);
-
-	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		tx_entry->hdr.base_hdr.flags |= TCPX_DELIVERY_COMPLETE;
-
+	tcpx_set_ack_flags(tx_entry, flags);
 	tx_entry->context = msg->context;
 
 	tcpx_queue_send(ep, tx_entry);
@@ -472,14 +452,10 @@ tcpx_tsend(struct fid_ep *fid_ep, const void *buf, size_t len,
 	tx_entry->hdr.tag_hdr.tag = tag;
 
 	tcpx_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.tag_hdr), buf, len);
-
 	tx_entry->context = context;
 	tx_entry->flags = (ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_TAGGED | FI_SEND;
-
-	if (ep->util_ep.tx_op_flags &
-	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		tx_entry->hdr.base_hdr.flags |= OFI_DELIVERY_COMPLETE;
+	tcpx_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
 	tcpx_queue_send(ep, tx_entry);
 	return FI_SUCCESS;
@@ -501,14 +477,10 @@ tcpx_tsendv(struct fid_ep *fid_ep, const struct iovec *iov, void **desc,
 	tx_entry->hdr.tag_hdr.tag = tag;
 
 	tcpx_init_tx_iov(tx_entry, sizeof(tx_entry->hdr.tag_hdr), iov, count);
-
 	tx_entry->context = context;
 	tx_entry->flags = (ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_TAGGED | FI_SEND;
-
-	if (ep->util_ep.tx_op_flags &
-	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		tx_entry->hdr.base_hdr.flags |= TCPX_DELIVERY_COMPLETE;
+	tcpx_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
 	tcpx_queue_send(ep, tx_entry);
 	return FI_SUCCESS;
@@ -556,14 +528,10 @@ tcpx_tsenddata(struct fid_ep *fid_ep, const void *buf, size_t len, void *desc,
 
 	tcpx_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.tag_data_hdr),
 			 buf, len);
-
 	tx_entry->context = context;
 	tx_entry->flags = (ep->util_ep.tx_op_flags & FI_COMPLETION) |
 			   FI_TAGGED | FI_SEND;
-
-	if (ep->util_ep.tx_op_flags &
-	    (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE))
-		tx_entry->hdr.base_hdr.flags |= TCPX_DELIVERY_COMPLETE;
+	tcpx_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
 	tcpx_queue_send(ep, tx_entry);
 	return FI_SUCCESS;

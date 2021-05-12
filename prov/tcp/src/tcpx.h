@@ -105,7 +105,7 @@ enum {
 /* base_hdr::op_data */
 enum {
 	/* backward compatible value */
-	TCPX_OP_MSG_RESP = 2, /* indicates response message */
+	TCPX_OP_ACK = 2, /* indicates ack message - should be a flag */
 };
 
 /* Flags */
@@ -234,7 +234,8 @@ struct tcpx_ep {
 	struct dlist_entry	ep_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
-	struct slist		tx_rsp_pend_queue;
+	struct slist		priority_queue;
+	struct slist		need_ack_queue;
 	struct slist		rma_read_queue;
 	int			rx_avail;
 	struct tcpx_rx_ctx	*srx_ctx;
@@ -251,6 +252,8 @@ struct tcpx_fabric {
 	struct util_fabric	util_fabric;
 };
 
+#define TCPX_INTERNAL_MASK	GENMASK_ULL(63, 59)
+#define TCPX_NEED_ACK		BIT_ULL(59)
 #define TCPX_INTERNAL_XFER	BIT_ULL(60)
 #define TCPX_NEED_DYN_RBUF 	BIT_ULL(61)
 
@@ -351,6 +354,25 @@ int tcpx_op_read_req(struct tcpx_ep *tcpx_ep);
 int tcpx_op_write(struct tcpx_ep *tcpx_ep);
 int tcpx_op_read_rsp(struct tcpx_ep *tcpx_ep);
 
+
+static inline void
+tcpx_set_ack_flags(struct tcpx_xfer_entry *xfer, uint64_t flags)
+{
+	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
+		xfer->hdr.base_hdr.flags |= TCPX_DELIVERY_COMPLETE;
+		xfer->flags |= TCPX_NEED_ACK;
+	}
+}
+
+static inline void
+tcpx_set_commit_flags(struct tcpx_xfer_entry *xfer, uint64_t flags)
+{
+	tcpx_set_ack_flags(xfer, flags);
+	if (flags & FI_COMMIT_COMPLETE) {
+		xfer->hdr.base_hdr.flags |= TCPX_COMMIT_COMPLETE;
+		xfer->flags |= TCPX_NEED_ACK;
+	}
+}
 
 static inline struct tcpx_xfer_entry *
 tcpx_alloc_xfer(struct tcpx_cq *cq)

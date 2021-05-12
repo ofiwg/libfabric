@@ -65,8 +65,10 @@ void tcpx_cq_progress(struct util_cq *cq)
 		 * to progress can result in application hangs.
 		 */
 		if (ofi_bsock_readable(&ep->bsock) ||
-		    (ep->cur_rx.handler && !ep->cur_rx.entry))
+		    (ep->cur_rx.handler && !ep->cur_rx.entry)) {
+			assert(ep->state == TCPX_CONNECTED);
 			tcpx_progress_rx(ep);
+		}
 
 		(void) tcpx_update_epoll(ep);
 		fastlock_release(&ep->lock);
@@ -150,13 +152,20 @@ void tcpx_cq_report_success(struct util_cq *cq,
 	uint64_t flags, data, tag;
 	size_t len;
 
-	flags = xfer_entry->flags;
-	if (!(flags & FI_COMPLETION) || (flags & TCPX_INTERNAL_XFER))
+	if (!(xfer_entry->flags & FI_COMPLETION) ||
+	    (xfer_entry->flags & TCPX_INTERNAL_XFER))
 		return;
 
-	len = xfer_entry->hdr.base_hdr.size -
-	      xfer_entry->hdr.base_hdr.hdr_size;
-	tcpx_get_cq_info(xfer_entry, &flags, &data, &tag);
+	flags = xfer_entry->flags & ~TCPX_INTERNAL_MASK;
+	if (flags & FI_RECV) {
+		len = xfer_entry->hdr.base_hdr.size -
+		      xfer_entry->hdr.base_hdr.hdr_size;
+		tcpx_get_cq_info(xfer_entry, &flags, &data, &tag);
+	} else {
+		len = 0;
+		data = 0;
+		tag = 0;
+	}
 
 	ofi_cq_write(cq, xfer_entry->context,
 		     flags, len, NULL, data, tag);
@@ -173,9 +182,14 @@ void tcpx_cq_report_error(struct util_cq *cq,
 	if (xfer_entry->flags & TCPX_INTERNAL_XFER)
 		return;
 
-	err_entry.flags = xfer_entry->flags;
-	tcpx_get_cq_info(xfer_entry, &err_entry.flags, &err_entry.data,
-			 &err_entry.tag);
+	err_entry.flags = xfer_entry->flags & ~TCPX_INTERNAL_MASK;
+	if (err_entry.flags & FI_RECV) {
+		tcpx_get_cq_info(xfer_entry, &err_entry.flags, &err_entry.data,
+				 &err_entry.tag);
+	} else {
+		err_entry.data = 0;
+		err_entry.tag = 0;
+	}
 
 	err_entry.op_context = xfer_entry->context;
 	err_entry.len = 0;
