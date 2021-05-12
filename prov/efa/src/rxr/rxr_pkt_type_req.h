@@ -431,8 +431,8 @@ void rxr_pkt_handle_read_rtm_send_completion(struct rxr_ep *ep,
 /*
  *   proc() functions for RTM packet types
  */
-void rxr_pkt_rtm_init_rx_entry(struct rxr_pkt_entry *pkt_entry,
-			       struct rxr_rx_entry *rx_entry);
+void rxr_pkt_rtm_update_rx_entry(struct rxr_pkt_entry *pkt_entry,
+				 struct rxr_rx_entry *rx_entry);
 
 /*         This function is called by both
  *            rxr_pkt_handle_rtm_recv() and

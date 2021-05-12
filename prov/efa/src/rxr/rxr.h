@@ -298,7 +298,7 @@ struct rxr_fabric {
 
 #define RXR_MAX_NUM_PROTOCOLS (RXR_MAX_PROTOCOL_VERSION - RXR_BASE_PROTOCOL_VERSION + 1)
 
-struct rxr_peer {
+struct rdm_peer {
 	bool tx_init;			/* tracks initialization of tx state */
 	bool rx_init;			/* tracks initialization of rx state */
 	bool is_self;			/* self flag */
@@ -319,6 +319,7 @@ struct rxr_peer {
 	int rnr_timeout_exp;		/* RNR timeout exponentation calc val */
 	struct dlist_entry rnr_entry;	/* linked to rxr_ep peer_backoff_list */
 	struct dlist_entry queued_entry; /* linked with peer_queued_list in rxr_ep */
+	ofi_atomic32_t use_cnt;		/* refcount */
 };
 
 struct rxr_queued_ctrl_info {
@@ -349,6 +350,7 @@ struct rxr_rx_entry {
 	enum rxr_x_entry_type type;
 
 	fi_addr_t addr;
+	struct rdm_peer *peer;
 
 	/*
 	 * freestack ids used to lookup rx_entry during pkt recv
@@ -435,6 +437,7 @@ struct rxr_tx_entry {
 
 	uint32_t op;
 	fi_addr_t addr;
+	struct rdm_peer *peer;
 
 	/*
 	 * freestack ids used to lookup tx_entry during ctrl pkt recv
@@ -528,9 +531,6 @@ struct rxr_ep {
 
 	/* per-version feature flag */
 	uint64_t features[RXR_NUM_PROTOCOL_VERSION];
-
-	/* per-peer information */
-	struct rxr_peer *peer;
 
 	/* bufpool for reorder buffer */
 	struct ofi_bufpool *robuf_pool;
@@ -712,11 +712,6 @@ static inline void rxr_copy_shm_cq_entry(struct fi_cq_tagged_entry *cq_tagged_en
 	cq_tagged_entry->tag = 0; // No tag for RMA;
 
 }
-static inline struct rxr_peer *rxr_ep_get_peer(struct rxr_ep *ep,
-					       fi_addr_t addr)
-{
-	return &ep->peer[addr];
-}
 
 static inline void rxr_setup_msg(struct fi_msg *msg, const struct iovec *iov, void **desc,
 				 size_t count, fi_addr_t addr, void *context, uint32_t data)
@@ -729,7 +724,7 @@ static inline void rxr_setup_msg(struct fi_msg *msg, const struct iovec *iov, vo
 	msg->data = data;
 }
 
-static inline void rxr_ep_peer_init_rx(struct rxr_ep *ep, struct rxr_peer *peer)
+static inline void rxr_ep_peer_init_rx(struct rxr_ep *ep, struct rdm_peer *peer)
 {
 	assert(!peer->rx_init);
 
@@ -741,7 +736,7 @@ static inline void rxr_ep_peer_init_rx(struct rxr_ep *ep, struct rxr_peer *peer)
 	peer->rx_init = 1;
 }
 
-static inline void rxr_ep_peer_init_tx(struct rxr_peer *peer)
+static inline void rxr_ep_peer_init_tx(struct rdm_peer *peer)
 {
 	assert(!peer->tx_init);
 	peer->tx_credits = rxr_env.tx_max_credits;
@@ -782,9 +777,15 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 
 void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry);
 
+struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep,
+					   fi_addr_t addr, uint32_t op);
+
 static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 					struct rxr_rx_entry *rx_entry)
 {
+	if (rx_entry->peer)
+		ofi_atomic_dec32(&rx_entry->peer->use_cnt);
+
 #if ENABLE_DEBUG
 	dlist_remove(&rx_entry->rx_entry_entry);
 #endif
@@ -809,7 +810,7 @@ static inline int rxr_match_tag(uint64_t tag, uint64_t ignore,
 }
 
 static inline void rxr_ep_inc_tx_pending(struct rxr_ep *ep,
-					 struct rxr_peer *peer)
+					 struct rdm_peer *peer)
 {
 	ep->tx_pending++;
 	peer->tx_pending++;
@@ -819,7 +820,7 @@ static inline void rxr_ep_inc_tx_pending(struct rxr_ep *ep,
 }
 
 static inline void rxr_ep_dec_tx_pending(struct rxr_ep *ep,
-					 struct rxr_peer *peer,
+					 struct rdm_peer *peer,
 					 int failed)
 {
 	ep->tx_pending--;
@@ -934,11 +935,11 @@ void rxr_cq_handle_shm_completion(struct rxr_ep *ep,
 				  fi_addr_t src_addr);
 
 int rxr_cq_reorder_msg(struct rxr_ep *ep,
-		       struct rxr_peer *peer,
+		       struct rdm_peer *peer,
 		       struct rxr_pkt_entry *pkt_entry);
 
 void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
-					  struct rxr_peer *peer);
+					  struct rdm_peer *peer);
 
 void rxr_cq_handle_shm_rma_write_data(struct rxr_ep *ep,
 				      struct fi_cq_data_entry *shm_comp,
@@ -1016,7 +1017,7 @@ static inline void rxr_rm_tx_cq_check(struct rxr_ep *ep, struct util_cq *tx_cq)
 }
 
 static inline bool rxr_peer_timeout_expired(struct rxr_ep *ep,
-					    struct rxr_peer *peer,
+					    struct rdm_peer *peer,
 					    uint64_t ts)
 {
 	return (ts >= (peer->rnr_ts + MIN(rxr_env.max_timeout,

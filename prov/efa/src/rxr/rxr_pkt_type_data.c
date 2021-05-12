@@ -270,7 +270,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 		       char *data, size_t seg_offset,
 		       size_t seg_size)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	bool all_received = 0;
 	ssize_t err;
 

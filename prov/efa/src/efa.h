@@ -83,6 +83,7 @@
 #define EFA_EP_TYPE_IS_RDM(_info) \
 	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_RDM))
 
+#define EFA_DEF_POOL_ALIGNMENT (8)
 #define EFA_MEM_ALIGNMENT (64)
 
 #define EFA_DEF_CQ_SIZE 1024
@@ -273,6 +274,7 @@ struct efa_av {
 	fi_addr_t		shm_rdm_addr_map[EFA_SHM_MAX_AV_COUNT];
 	struct efa_domain       *domain;
 	struct efa_ep           *ep;
+	struct ofi_bufpool	*rdm_peer_pool;
 	size_t			used;
 	size_t			next;
 	size_t			shm_used;
@@ -291,6 +293,8 @@ struct efa_av_entry {
 	fi_addr_t		rdm_addr;
 	fi_addr_t		shm_rdm_addr;
 	bool			local_mapping;
+	struct rdm_peer		*rdm_peer;
+	struct efa_conn		*efa_conn;
 };
 
 struct efa_ah_qpn {
@@ -363,8 +367,8 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
 
 /* AV sub-functions */
-int efa_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
-		       fi_addr_t *fi_addr, uint64_t flags, void *context);
+int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
+		           fi_addr_t *fi_addr, uint64_t flags, void *context);
 
 /* Caller must hold cq->inner_lock. */
 void efa_cq_inc_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
@@ -423,7 +427,7 @@ bool efa_ep_support_rnr_retry_modify(struct fid_ep *ep_fid)
 }
 
 static inline
-bool efa_peer_support_rdma_read(struct rxr_peer *peer)
+bool efa_peer_support_rdma_read(struct rdm_peer *peer)
 {
 	/* RDMA READ is an extra feature defined in version 4 (the base version).
 	 * Because it is an extra feature, an EP will assume the peer does not support
@@ -434,7 +438,7 @@ bool efa_peer_support_rdma_read(struct rxr_peer *peer)
 }
 
 static inline
-bool rxr_peer_support_delivery_complete(struct rxr_peer *peer)
+bool rxr_peer_support_delivery_complete(struct rdm_peer *peer)
 {
 	/* FI_DELIVERY_COMPLETE is an extra feature defined
 	 * in version 4 (the base version).
@@ -447,7 +451,7 @@ bool rxr_peer_support_delivery_complete(struct rxr_peer *peer)
 }
 
 static inline
-bool efa_both_support_rdma_read(struct rxr_ep *ep, struct rxr_peer *peer)
+bool efa_both_support_rdma_read(struct rxr_ep *ep, struct rdm_peer *peer)
 {
 	if (!rxr_env.use_device_rdma)
 		return 0;
@@ -466,23 +470,23 @@ size_t efa_max_rdma_size(struct fid_ep *ep_fid)
 }
 
 static inline
-struct rxr_peer *efa_ep_get_peer(struct dlist_entry *ep_list_entry,
-				 fi_addr_t addr)
+struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 {
-	struct util_ep *util_ep;
-	struct rxr_ep *rxr_ep;
-
-	util_ep = container_of(ep_list_entry, struct util_ep,
-			       av_entry);
-	rxr_ep = container_of(util_ep, struct rxr_ep, util_ep);
-	return rxr_ep_get_peer(rxr_ep, addr);
+	struct util_av_entry *util_av_entry;
+	struct efa_av_entry *av_entry;
+	util_av_entry = ofi_bufpool_get_ibuf(ep->util_ep.av->av_entry_pool,
+	                                     addr);
+	av_entry = (struct efa_av_entry *)util_av_entry->data;
+	return av_entry->rdm_peer;
 }
 
 static inline
-int efa_peer_in_use(struct rxr_peer *peer)
+int efa_peer_in_use(struct rdm_peer *peer)
 {
 	struct rxr_pkt_entry *pending_pkt;
 
+	if (ofi_atomic_get32(&peer->use_cnt) > 1)
+		return -FI_EBUSY;
 	if ((peer->tx_pending) || (peer->flags & RXR_PEER_IN_BACKOFF))
 		return -FI_EBUSY;
 	if (peer->rx_init) {
@@ -492,22 +496,32 @@ int efa_peer_in_use(struct rxr_peer *peer)
 	}
 	return 0;
 }
+
 static inline
-void efa_free_robuf(struct rxr_peer *peer)
+void efa_free_robuf(struct rdm_peer *peer)
 {
+	if (!peer->robuf)
+		return;
 	ofi_recvwin_free(peer->robuf);
 	ofi_buf_free(peer->robuf);
 }
 
 static inline
-void efa_peer_reset(struct rxr_peer *peer)
+void efa_rdm_peer_reset(struct rdm_peer *peer)
 {
 	efa_free_robuf(peer);
+	memset(peer, 0, sizeof(struct rdm_peer));
 #ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region((uint32_t *)peer, sizeof(struct rxr_peer));
+	rxr_poison_mem_region((uint32_t *)peer, sizeof(struct rdm_peer));
 #endif
-	memset(peer, 0, sizeof(struct rxr_peer));
 	dlist_init(&peer->rnr_entry);
+}
+
+static inline
+void efa_rdm_peer_release(struct rdm_peer *peer)
+{
+	efa_rdm_peer_reset(peer);
+	ofi_buf_free(peer);
 }
 
 static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)

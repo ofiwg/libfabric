@@ -238,7 +238,7 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 				    struct dlist_entry *list,
 				    struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 
@@ -306,7 +306,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_read_entry *read_entry;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	ssize_t ret;
 
 	memset(&err_entry, 0, sizeof(err_entry));
@@ -593,7 +593,7 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 }
 
 int rxr_cq_reorder_msg(struct rxr_ep *ep,
-		       struct rxr_peer *peer,
+		       struct rdm_peer *peer,
 		       struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_pkt_entry *ooo_entry;
@@ -652,7 +652,7 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 }
 
 void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
-					  struct rxr_peer *peer)
+					  struct rdm_peer *peer)
 {
 	struct rxr_pkt_entry *pending_pkt;
 	int ret = 0;
@@ -804,7 +804,7 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 
 void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 
 	if (tx_entry->state == RXR_TX_SEND)
 		dlist_remove(&tx_entry->entry);

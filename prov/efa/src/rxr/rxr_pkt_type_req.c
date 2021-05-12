@@ -108,7 +108,7 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 			  struct rxr_pkt_entry *pkt_entry)
 {
 	char *opt_hdr;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct rxr_base_hdr *base_hdr;
 
 	/* init the base header */
@@ -269,7 +269,7 @@ size_t rxr_pkt_max_header_size(void)
 
 size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, addr);
 
@@ -722,8 +722,25 @@ size_t rxr_pkt_rtm_total_len(struct rxr_pkt_entry *pkt_entry)
 	return 0;
 }
 
-void rxr_pkt_rtm_init_rx_entry(struct rxr_pkt_entry *pkt_entry,
-			       struct rxr_rx_entry *rx_entry)
+/*
+ * @brief Update rx_entry with the following information in RTM packet entry.
+ *            address:       this is necessary because original address in
+ *                           rx_entry can be FI_ADDR_UNSPEC
+ *            cq_entry.data: for FI_REMOTE_CQ_DATA
+ *            msg_id:        message id
+ *            total_len:     application might provide a buffer that is larger
+ *                           then incoming message size.
+ *            tag:           sender's tag can be different from receiver's tag
+ *                           becuase match only requires
+ *                           (sender_tag | ignore) == (receiver_tag | ignore)
+ *        This function is applied to both unexpected rx_entry (when they are
+ *        allocated) and expected rx_entry (when they are matched to a RTM)
+ *
+ * @param pkt_entry(input)  RTM packet entry
+ * @param rx_entry(input)   rx entry to be updated
+ */
+void rxr_pkt_rtm_update_rx_entry(struct rxr_pkt_entry *pkt_entry,
+				 struct rxr_rx_entry *rx_entry)
 {
 	struct rxr_base_hdr *base_hdr;
 
@@ -750,8 +767,7 @@ struct rxr_rx_entry *rxr_pkt_get_rtm_matched_rx_entry(struct rxr_ep *ep,
 	assert(match);
 	rx_entry = container_of(match, struct rxr_rx_entry, entry);
 	if (rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED) {
-		rx_entry = rxr_ep_split_rx_entry(ep, rx_entry,
-						 NULL, pkt_entry);
+		rx_entry = rxr_msg_split_rx_entry(ep, rx_entry, NULL, pkt_entry);
 		if (OFI_UNLIKELY(!rx_entry)) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"RX entries exhausted.\n");
@@ -759,7 +775,7 @@ struct rxr_rx_entry *rxr_pkt_get_rtm_matched_rx_entry(struct rxr_ep *ep,
 			return NULL;
 		}
 	} else {
-		rxr_pkt_rtm_init_rx_entry(pkt_entry, rx_entry);
+		rxr_pkt_rtm_update_rx_entry(pkt_entry, rx_entry);
 	}
 
 	rx_entry->state = RXR_RX_MATCHED;
@@ -834,10 +850,10 @@ struct rxr_rx_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 	                               *pkt_entry_ptr);
 	if (OFI_UNLIKELY(!match)) {
 		/*
-		 * rxr_ep_alloc_unexp_rx_entry_for_msgrtm() might release pkt_entry,
+		 * rxr_msg_alloc_unexp_rx_entry_for_msgrtm() might release pkt_entry,
 		 * thus we have to use pkt_entry_ptr here
 		 */
-		rx_entry = rxr_ep_alloc_unexp_rx_entry_for_msgrtm(ep, pkt_entry_ptr);
+		rx_entry = rxr_msg_alloc_unexp_rx_entry_for_msgrtm(ep, pkt_entry_ptr);
 		if (OFI_UNLIKELY(!rx_entry)) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"RX entries exhausted.\n");
@@ -875,10 +891,10 @@ struct rxr_rx_entry *rxr_pkt_get_tagrtm_rx_entry(struct rxr_ep *ep,
 	                               *pkt_entry_ptr);
 	if (OFI_UNLIKELY(!match)) {
 		/*
-		 * rxr_ep_alloc_unexp_rx_entry_for_tagrtm() might release pkt_entry,
+		 * rxr_msg_alloc_unexp_rx_entry_for_tagrtm() might release pkt_entry,
 		 * thus we have to use pkt_entry_ptr here
 		 */
-		rx_entry = rxr_ep_alloc_unexp_rx_entry_for_tagrtm(ep, pkt_entry_ptr);
+		rx_entry = rxr_msg_alloc_unexp_rx_entry_for_tagrtm(ep, pkt_entry_ptr);
 		if (OFI_UNLIKELY(!rx_entry)) {
 			efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
 			return NULL;
@@ -974,6 +990,12 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	ssize_t ret;
 
 	assert(rx_entry->state == RXR_RX_MATCHED);
+
+	if (!rx_entry->peer) {
+		rx_entry->addr = pkt_entry->addr;
+		rx_entry->peer = rxr_ep_get_peer(ep, rx_entry->addr);
+		ofi_atomic_inc32(&rx_entry->peer->use_cnt);
+	}
 
 	/* Adjust rx_entry->cq_entry.len as needed.
 	 * Initialy rx_entry->cq_entry.len is total recv buffer size.
@@ -1204,7 +1226,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	bool need_ordering;
 	int ret, msg_id;
 
@@ -1505,10 +1527,8 @@ struct rxr_rx_entry *rxr_pkt_alloc_rtw_rx_entry(struct rxr_ep *ep,
 {
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_base_hdr *base_hdr;
-	struct fi_msg msg = {0};
 
-	msg.addr = pkt_entry->addr;
-	rx_entry = rxr_ep_get_rx_entry(ep, &msg, 0, ~0, ofi_op_write, 0);
+	rx_entry = rxr_ep_alloc_rx_entry(ep, pkt_entry->addr, ofi_op_write);
 	if (OFI_UNLIKELY(!rx_entry))
 		return NULL;
 
@@ -1834,10 +1854,8 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
 	ssize_t err;
-	struct fi_msg msg = {0};
 
-	msg.addr = pkt_entry->addr;
-	rx_entry = rxr_ep_get_rx_entry(ep, &msg, 0, ~0, ofi_op_read_rsp, 0);
+	rx_entry = rxr_ep_alloc_rx_entry(ep, pkt_entry->addr, ofi_op_read_rsp);
 	if (OFI_UNLIKELY(!rx_entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RX entries exhausted.\n");
@@ -2013,10 +2031,8 @@ struct rxr_rx_entry *rxr_pkt_alloc_rta_rx_entry(struct rxr_ep *ep, struct rxr_pk
 {
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_rta_hdr *rta_hdr;
-	struct fi_msg msg = {0};
 
-	msg.addr = pkt_entry->addr;
-	rx_entry = rxr_ep_get_rx_entry(ep, &msg, 0, ~0, op, 0);
+	rx_entry = rxr_ep_alloc_rx_entry(ep, pkt_entry->addr, op);
 	if (OFI_UNLIKELY(!rx_entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RX entries exhausted.\n");

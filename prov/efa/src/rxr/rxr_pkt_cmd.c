@@ -290,7 +290,7 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_rx_entry *rx_entry;
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	ssize_t err;
 	fi_addr_t addr;
 
@@ -435,7 +435,7 @@ ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_en
  * handshake packet within a certain period of time.
  */
 
-ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_peer *peer)
+ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rdm_peer *peer)
 {
 	ssize_t ret;
 
@@ -481,7 +481,7 @@ ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rxr_pee
  * This function will return 0 if the eager rtw packet is successfully sent.
  */
 ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
-				  fi_addr_t addr, struct rxr_peer *peer)
+				  fi_addr_t addr, struct rdm_peer *peer)
 {
 	struct rxr_tx_entry *tx_entry;
 	ssize_t err;
@@ -498,6 +498,8 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 
 	tx_entry->total_len = 0;
 	tx_entry->addr = addr;
+	tx_entry->peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	ofi_atomic_inc32(&tx_entry->peer->use_cnt);
 	tx_entry->msg_id = -1;
 	tx_entry->cq_entry.flags = FI_RMA | FI_WRITE;
 	tx_entry->cq_entry.buf = NULL;
@@ -669,7 +671,7 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
  */
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
 	case RXR_HANDSHAKE_PKT:
@@ -804,8 +806,8 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-	ret = efa_av_insert_addr(efa_ep->av, (struct efa_ep_addr *)raw_addr,
-				 &rdm_addr, 0, NULL);
+	ret = efa_rdm_av_insert_addr(efa_ep->av, (struct efa_ep_addr *)raw_addr,
+	                             &rdm_addr, 0, NULL);
 	if (OFI_UNLIKELY(ret != 0)) {
 		efa_eq_write_error(&ep->util_ep, FI_EINVAL, ret);
 		return -1;
@@ -818,7 +820,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 				    struct fi_cq_data_entry *cq_entry,
 				    fi_addr_t src_addr)
 {
-	struct rxr_peer *peer;
+	struct rdm_peer *peer;
 	struct rxr_base_hdr *base_hdr;
 	struct rxr_pkt_entry *pkt_entry;
 
