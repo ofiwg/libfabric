@@ -8,8 +8,7 @@ AM_CPPFLAGS += \
 	-I$(top_srcdir)/prov/cxi/include \
 	-I$(top_srcdir)/prov/cxi \
 	-I$(srcdir)/../cxi-driver/include \
-	-I$(srcdir)/../cassini-headers/install/include \
-	-D__user=
+	-I$(srcdir)/../cassini-headers/install/include
 
 _cxi_files = \
 	prov/cxi/src/cxip_if.c \
