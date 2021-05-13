@@ -138,6 +138,8 @@ functional_tests=(
 	"fi_bw -e rdm -v -T 1"
 	"fi_bw -e rdm -v -T 1 -U"
 	"fi_bw -e msg -v -T 1"
+	"fi_rdm_multi_client -C 10 -I 5"
+	"fi_rdm_multi_client -C 10 -I 5 -U"
 )
 
 short_tests=(
