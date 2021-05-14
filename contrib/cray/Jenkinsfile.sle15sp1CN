@@ -1,6 +1,6 @@
 @Library('dst-shared@master') _
 sle15sp1CN {
-    timeout = 5
+    timeout = 30
     buildExternal = "true"
     product = 'shasta-premium'
     buildPrepScript = "contrib/cray/runBuildPrep.sh"

@@ -1,6 +1,6 @@
 @Library('dst-shared@master') _
 centos8 {
-    timeout = 5
+    timeout = 30
     buildExternal = "true"
     product = 'shasta-premium'
     buildPrepScript = "contrib/cray/runBuildPrep.sh"
