@@ -282,16 +282,13 @@ struct efa_av {
 	struct efa_ep           *ep;
 	struct ofi_bufpool	*rdm_peer_pool;
 	size_t			used;
-	size_t			next;
 	size_t			shm_used;
 	enum fi_av_type		type;
 	efa_addr_to_conn_func	addr_to_conn;
 	struct efa_reverse_av	*reverse_av;
 	struct util_av		util_av;
-	size_t			count;
 	enum fi_ep_type         ep_type;
-	/* Used only for FI_AV_TABLE */
-	struct efa_conn         **conn_table;
+	struct ofi_bufpool      *conn_pool;
 };
 
 struct efa_av_entry {
@@ -311,6 +308,7 @@ struct efa_reverse_av {
 	struct efa_ah_qpn key;
 	fi_addr_t fi_addr;
 	struct rdm_peer *rdm_peer;
+	struct efa_conn *conn;
 	UT_hash_handle hh;
 };
 
