@@ -367,8 +367,8 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
 
 /* AV sub-functions */
-int efa_rdm_av_insert_addr(struct efa_av *av, struct efa_ep_addr *addr,
-		           fi_addr_t *fi_addr, uint64_t flags, void *context);
+int efa_rdm_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
+		          fi_addr_t *fi_addr, uint64_t flags, void *context);
 
 /* Caller must hold cq->inner_lock. */
 void efa_cq_inc_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
