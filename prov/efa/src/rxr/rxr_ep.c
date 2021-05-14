@@ -532,7 +532,7 @@ static int efa_rdm_av_entry_cleanup(struct util_av *av, void *data,
 				    fi_addr_t addr, void *arg)
 {
 	struct efa_av_entry *efa_av_entry = (struct efa_av_entry *)data;
-	struct rdm_peer *peer = efa_av_entry->rdm_peer;
+	struct rdm_peer *peer = &efa_av_entry->conn->rdm_peer;
 
 	if (!peer)
 		return 0;
@@ -551,8 +551,7 @@ static int efa_rdm_av_entry_cleanup(struct util_av *av, void *data,
 	    !(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
 		FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL, "Closing EP with unacked CONNREQs in flight\n");
 
-	efa_rdm_peer_release(peer);
-	efa_av_entry->rdm_peer = NULL;
+	efa_rdm_peer_reset(peer);
 
 	return 0;
 }

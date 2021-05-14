@@ -138,6 +138,8 @@ struct efa_ah {
 struct efa_conn {
 	struct efa_ah		ah;
 	struct efa_ep_addr	ep_addr;
+	fi_addr_t		fi_addr;
+	struct rdm_peer		rdm_peer;
 };
 
 /*
@@ -280,7 +282,6 @@ struct efa_av {
 	fi_addr_t		shm_rdm_addr_map[EFA_SHM_MAX_AV_COUNT];
 	struct efa_domain       *domain;
 	struct efa_ep           *ep;
-	struct ofi_bufpool	*rdm_peer_pool;
 	size_t			used;
 	size_t			shm_used;
 	enum fi_av_type		type;
@@ -293,10 +294,7 @@ struct efa_av {
 
 struct efa_av_entry {
 	uint8_t			ep_addr[EFA_EP_ADDR_LEN];
-	fi_addr_t		shm_rdm_addr;
-	bool			local_mapping;
-	struct rdm_peer		*rdm_peer;
-	struct efa_conn		*efa_conn;
+	struct efa_conn		*conn;
 };
 
 struct efa_ah_qpn {
@@ -306,8 +304,6 @@ struct efa_ah_qpn {
 
 struct efa_reverse_av {
 	struct efa_ah_qpn key;
-	fi_addr_t fi_addr;
-	struct rdm_peer *rdm_peer;
 	struct efa_conn *conn;
 	UT_hash_handle hh;
 };
@@ -504,7 +500,7 @@ struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 	util_av_entry = ofi_bufpool_get_ibuf(ep->util_ep.av->av_entry_pool,
 	                                     addr);
 	av_entry = (struct efa_av_entry *)util_av_entry->data;
-	return av_entry->rdm_peer;
+	return &av_entry->conn->rdm_peer;
 }
 
 static inline
@@ -542,13 +538,6 @@ void efa_rdm_peer_reset(struct rdm_peer *peer)
 	rxr_poison_mem_region((uint32_t *)peer, sizeof(struct rdm_peer));
 #endif
 	dlist_init(&peer->rnr_entry);
-}
-
-static inline
-void efa_rdm_peer_release(struct rdm_peer *peer)
-{
-	efa_rdm_peer_reset(peer);
-	ofi_buf_free(peer);
 }
 
 static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)
