@@ -91,6 +91,12 @@
 #define EFA_MR_SUPPORTED_PERMISSIONS (FI_SEND | FI_RECV | FI_REMOTE_READ)
 
 /*
+ * Setting ibv_qp_attr.rnr_retry to this number when modifying qp
+ * to cause firmware to retry indefininetly.
+ */
+#define EFA_RNR_INFINITE_RETRY 7
+
+/*
  * Multiplier to give some room in the device memory registration limits
  * to allow processes added to a running job to bootstrap.
  */
@@ -424,6 +430,27 @@ bool efa_ep_support_rnr_retry_modify(struct fid_ep *ep_fid)
 #else
 	return false;
 #endif
+}
+
+/**
+ * @brief return whether this endpoint should write error cq entry for RNR.
+ *
+ * For an endpoint to write RNR completion, two conditions must be met:
+ *
+ * First, the end point must be able to receive RNR completion from rdma-core,
+ * which means rnr_etry must be less then EFA_RNR_INFINITE_RETRY.
+ *
+ * Second, the app need to request this feature when opening endpoint
+ * (by setting info->domain_attr->resource_mgmt to FI_RM_DISABLED).
+ * The setting was saved as rxr_ep->handle_resource_management.
+ *
+ * @param[in]	ep	endpoint
+ */
+static inline
+bool rxr_ep_should_write_rnr_completion(struct rxr_ep *ep)
+{
+	return (rxr_env.rnr_retry < EFA_RNR_INFINITE_RETRY) &&
+		(ep->handle_resource_management == FI_RM_DISABLED);
 }
 
 static inline
