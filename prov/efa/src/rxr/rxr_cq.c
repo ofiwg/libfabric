@@ -470,11 +470,14 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 
 		rxr_rm_rx_cq_check(ep, rx_cq);
 
-		if (OFI_UNLIKELY(ret))
+		if (OFI_UNLIKELY(ret)) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"Unable to write recv error cq: %s\n",
 				fi_strerror(-ret));
+			return;
+		}
 
+		rx_entry->fi_flags |= RXR_NO_COMPLETION;
 		efa_cntr_report_error(&ep->util_ep, rx_entry->cq_entry.flags);
 		return;
 	}
@@ -517,6 +520,8 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 				assert(0 && "failed to write err cq entry");
 			return;
 		}
+
+		rx_entry->fi_flags |= RXR_NO_COMPLETION;
 	}
 
 	efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
@@ -804,6 +809,7 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 	}
 
 	efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
+	tx_entry->fi_flags |= RXR_NO_COMPLETION;
 	return;
 }
 
