@@ -68,7 +68,7 @@ enum {
 
 static int results[FT_MAX_RESULT];
 static char *filename = NULL;
-
+static char *domain_name = NULL;
 
 static int ft_nullstr(char *str)
 {
@@ -374,6 +374,8 @@ static int ft_server_setup(struct fi_info *hints, struct fi_info *info)
 	}
 
 	ft_fw_convert_info(hints, &test_info);
+	if (domain_name)
+		hints->domain_attr->name = domain_name;
 
 	ret = fi_getinfo(FT_FIVERSION, ft_strptr(test_info.node),
 			 ft_strptr(test_info.service), FI_SOURCE, hints, &info);
@@ -501,6 +503,8 @@ static int ft_client_setup(struct fi_info *hints, struct fi_info *info)
 		goto err;
 
 	ft_fw_convert_info(hints, &test_info);
+	if (domain_name)
+		hints->domain_attr->name = domain_name;
 
 	ft_show_test_info();
 
@@ -649,6 +653,7 @@ static void ft_fw_usage(char *program)
 	FT_PRINT_OPTS_USAGE("-B <src_port>", "non default source port number");
 	FT_PRINT_OPTS_USAGE("-P <dst_port>", "non default destination port number "
 		"(config file service parameter will override this)");
+	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
 }
 
 void ft_free()
@@ -663,7 +668,7 @@ int main(int argc, char **argv)
 	opts = INIT_OPTS;
 	int ret, op;
 
-	while ((op = getopt(argc, argv, "u:q:xy:z:hf" ADDR_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "u:q:xy:z:hfd:" ADDR_OPTS)) != -1) {
 		switch (op) {
 		case 'u':
 			filename = strdup(optarg);
@@ -682,6 +687,9 @@ int main(int argc, char **argv)
 			break;
 		case 'f':
 			do_fork = 1;
+			break;
+		case 'd':
+			domain_name = strdup(optarg);
 			break;
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
@@ -745,5 +753,13 @@ out:
 	if (opts.dst_addr)
 		fts_close(series);
 	ft_free();
+
+	if (results[FT_EIO])
+		ret = -FI_EIO;
+	else if (results[FT_ENOSYS])
+		ret = -FI_ENOSYS;
+	else if (results[FT_ENODATA])
+		ret = -FI_ENODATA;
+
 	return ft_exit_code(ret);
 }
