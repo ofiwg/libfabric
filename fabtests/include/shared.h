@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2017 Intel Corporation.  All rights reserved.
  * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2021 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -260,6 +261,7 @@ extern char default_port[8];
 	{	.options = FT_OPT_RX_CQ | FT_OPT_TX_CQ, \
 		.iterations = 1000, \
 		.warmup_iterations = 10, \
+		.num_connections = 1, \
 		.transfer_size = 1024, \
 		.window_size = 64, \
 		.av_size = 1, \
@@ -369,6 +371,8 @@ int ft_open_fabric_res();
 int ft_getinfo(struct fi_info *hints, struct fi_info **info);
 int ft_init_fabric();
 int ft_init_oob();
+int ft_close_oob();
+int ft_reset_oob();
 int ft_start_server();
 int ft_server_connect();
 int ft_client_connect();
