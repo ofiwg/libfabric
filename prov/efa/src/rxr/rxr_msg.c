@@ -135,7 +135,10 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	tagged = (tx_entry->op == ofi_op_tagged);
 	assert(tagged == 0 || tagged == 1);
 
-	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
+	if (tx_entry->fi_flags & FI_INJECT)
+		delivery_complete_requested = false;
+	else
+		delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
 
 	if (delivery_complete_requested && !(peer->is_local)) {
