@@ -144,6 +144,10 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 	rxr_poison_mem_region((uint32_t *)pkt, ep->tx_pkt_pool_entry_sz);
 #endif
 	pkt->state = RXR_PKT_ENTRY_FREE;
+	if (pkt->send) {
+		free(pkt->send);
+		pkt->send = NULL;
+	}
 	ofi_buf_free(pkt);
 }
 

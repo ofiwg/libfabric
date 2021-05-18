@@ -147,6 +147,7 @@ ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
 	size_t i = 0;
 	size_t len = 0;
 
+	size_t j;
 	ssize_t ret;
 
 	orig_iov_index = tx_entry->iov_index;
@@ -205,6 +206,14 @@ ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
 		remaining_len -= len;
 		i++;
 	}
+
+	pkt_entry->send = malloc(sizeof(struct rxr_pkt_sendv));
+	for (j = 0; j < i; j++) {
+		memcpy(&pkt_entry->send->iov[j], &iov[j], sizeof(struct iovec));
+		pkt_entry->send->desc[j] = desc[j];
+	}
+	pkt_entry->send->iov_count = i;
+
 	data_pkt->hdr.seg_size = (uint16_t)payload_size;
 	pkt_entry->pkt_size = payload_size + RXR_DATA_HDR_SIZE;
 	pkt_entry->x_entry = tx_entry;
