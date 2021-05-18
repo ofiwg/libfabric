@@ -1502,7 +1502,7 @@ static void rxm_get_recv_entry(struct rxm_rx_buf *rx_buf,
 
 	match_attr.ignore = 0;
 	if (rx_buf->pkt.hdr.op == ofi_op_tagged) {
-		match_attr.tag = cq_entry->tag;
+		match_attr.tag = rx_buf->pkt.hdr.tag;
 		recv_queue = &rx_buf->ep->trecv_queue;
 	} else {
 		match_attr.tag = 0;
