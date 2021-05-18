@@ -1828,6 +1828,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->tx_size = info->tx_attr->size;
 	rxr_ep->rx_iov_limit = info->rx_attr->iov_limit;
 	rxr_ep->tx_iov_limit = info->tx_attr->iov_limit;
+	rxr_ep->inject_size = info->tx_attr->inject_size;
 	rxr_ep->max_outstanding_tx = rdm_info->tx_attr->size;
 	rxr_ep->core_rx_size = rdm_info->rx_attr->size;
 	rxr_ep->core_iov_limit = rdm_info->tx_attr->iov_limit;
