@@ -340,6 +340,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 {
 	uint64_t atomic_ordering;
 	uint64_t max_atomic_size;
+	uint64_t min_pkt_size;
 
 	info->caps = rxr_info.caps;
 	info->mode = rxr_info.mode;
@@ -349,8 +350,19 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	*info->ep_attr = *rxr_info.ep_attr;
 	*info->domain_attr = *rxr_info.domain_attr;
 
-	/* TODO: update inject_size when we implement inject */
-	info->tx_attr->inject_size = 0;
+	/*
+	 * The requirement for inject is: upon return, the user buffer can be reused immediately.
+	 *
+	 * For EFA, inject is implement as: construct a packet entry, copy user data to packet entry
+	 * then send the packet entry. Therefore the maximum inject size is
+	 *    pkt_entry_size - maximum_header_size.
+	 */
+	if (rxr_env.enable_shm_transfer)
+		min_pkt_size = MIN(core_info->ep_attr->max_msg_size, rxr_env.shm_max_medium_size);
+	else
+		min_pkt_size = core_info->ep_attr->max_msg_size;
+
+	info->tx_attr->inject_size = min_pkt_size - rxr_pkt_max_header_size();
 	rxr_info.tx_attr->inject_size = info->tx_attr->inject_size;
 
 	info->addr_format = core_info->addr_format;
