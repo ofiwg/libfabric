@@ -76,8 +76,7 @@ ssize_t rxr_pkt_send_data(struct rxr_ep *ep,
 	pkt_entry->pkt_size = copied_size + sizeof(struct rxr_data_hdr);
 	pkt_entry->addr = tx_entry->addr;
 
-	return rxr_pkt_entry_send_with_flags(ep, pkt_entry, pkt_entry->addr,
-					     tx_entry->send_flags);
+	return rxr_pkt_entry_send(ep, pkt_entry, tx_entry->send_flags);
 }
 
 /*
@@ -214,9 +213,7 @@ ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 	       "Sending an iov count, %zu with payload size: %lu.\n",
 	       i, payload_size);
-	ret = rxr_pkt_entry_sendv(ep, pkt_entry, tx_entry->addr,
-				  (const struct iovec *)iov,
-				  desc, i, tx_entry->send_flags);
+	ret = rxr_pkt_entry_send(ep, pkt_entry, tx_entry->send_flags);
 	if (OFI_UNLIKELY(ret)) {
 		/* Reset tx_entry iov pointer on send failure. */
 		tx_entry->iov_index = orig_iov_index;

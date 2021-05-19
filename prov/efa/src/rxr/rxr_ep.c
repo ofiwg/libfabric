@@ -1497,7 +1497,7 @@ static inline int rxr_ep_send_queued_pkts(struct rxr_ep *ep,
 			dlist_remove(&pkt_entry->entry);
 			continue;
 		}
-		ret = rxr_pkt_entry_send(ep, pkt_entry, pkt_entry->addr);
+		ret = rxr_pkt_entry_send(ep, pkt_entry, 0);
 		if (ret)
 			return ret;
 		dlist_remove(&pkt_entry->entry);

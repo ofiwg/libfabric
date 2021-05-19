@@ -346,51 +346,45 @@ ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	return ret;
 }
 
-ssize_t rxr_pkt_entry_sendv(struct rxr_ep *ep,
-			    struct rxr_pkt_entry *pkt_entry,
-			    fi_addr_t addr, const struct iovec *iov,
-			    void **desc, size_t count, uint64_t flags)
+/**
+ * @brief Construct a fi_msg object with the information stored in pkt_entry,
+ * and send it out
+ *
+ * @param[in] ep	rxr endpoint
+ * @param[in] pkt_entry	packet entry used to construct the fi_msg object
+ * @param[in] flags	flags to be applied to lower provider's send operation
+ * @return		0 on success
+ * 			On error, a negative value corresponding to fabric errno
+ *
+ */
+ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
+			   uint64_t flags)
 {
+	struct iovec iov;
+	void *desc;
 	struct fi_msg msg;
 	struct rxr_peer *peer;
 
-	msg.msg_iov = iov;
-	msg.desc = desc;
-	msg.iov_count = count;
-	peer = rxr_ep_get_peer(ep, addr);
-	msg.addr = (peer->is_local) ? peer->shm_fiaddr : addr;
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+
+	if (pkt_entry->send && pkt_entry->send->iov_count > 0) {
+		msg.msg_iov = pkt_entry->send->iov;
+		msg.iov_count = pkt_entry->send->iov_count;
+		msg.desc = pkt_entry->send->desc;
+	} else {
+		iov.iov_base = rxr_pkt_start(pkt_entry);
+		iov.iov_len = pkt_entry->pkt_size;
+		desc = peer->is_local ? NULL : fi_mr_desc(pkt_entry->mr);
+		msg.msg_iov = &iov;
+		msg.iov_count = 1;
+		msg.desc = &desc;
+	}
+
+	msg.addr = pkt_entry->addr;
 	msg.context = pkt_entry;
 	msg.data = 0;
 
 	return rxr_pkt_entry_sendmsg(ep, pkt_entry, &msg, flags);
-}
-
-/* rxr_pkt_start currently expects data pkt right after pkt hdr */
-ssize_t rxr_pkt_entry_send_with_flags(struct rxr_ep *ep,
-				      struct rxr_pkt_entry *pkt_entry,
-				      fi_addr_t addr, uint64_t flags)
-{
-	struct iovec iov;
-	void *desc;
-
-	iov.iov_base = rxr_pkt_start(pkt_entry);
-	iov.iov_len = pkt_entry->pkt_size;
-
-	if (rxr_ep_get_peer(ep, addr)->is_local) {
-		assert(ep->use_shm);
-		desc = NULL;
-	} else {
-		desc = fi_mr_desc(pkt_entry->mr);
-	}
-
-	return rxr_pkt_entry_sendv(ep, pkt_entry, addr, &iov, &desc, 1, flags);
-}
-
-ssize_t rxr_pkt_entry_send(struct rxr_ep *ep,
-			   struct rxr_pkt_entry *pkt_entry,
-			   fi_addr_t addr)
-{
-	return rxr_pkt_entry_send_with_flags(ep, pkt_entry, addr, 0);
 }
 
 ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,

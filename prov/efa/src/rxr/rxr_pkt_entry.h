@@ -139,18 +139,8 @@ struct rxr_pkt_entry *rxr_pkt_entry_clone(struct rxr_ep *ep,
 struct rxr_pkt_entry *rxr_pkt_get_unexp(struct rxr_ep *ep,
 					struct rxr_pkt_entry **pkt_entry_ptr);
 
-ssize_t rxr_pkt_entry_send_with_flags(struct rxr_ep *ep,
-				      struct rxr_pkt_entry *pkt_entry,
-				      fi_addr_t addr, uint64_t flags);
-
-ssize_t rxr_pkt_entry_sendv(struct rxr_ep *ep,
-			    struct rxr_pkt_entry *pkt_entry,
-			    fi_addr_t addr, const struct iovec *iov,
-			    void **desc, size_t count, uint64_t flags);
-
 ssize_t rxr_pkt_entry_send(struct rxr_ep *ep,
-			   struct rxr_pkt_entry *pkt_entry,
-			   fi_addr_t addr);
+			   struct rxr_pkt_entry *pkt_entry, uint64_t flags);
 
 ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry,
