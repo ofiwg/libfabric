@@ -113,6 +113,7 @@ enum {
 	FT_OPT_SERVER_PERSIST	= 1 << 16,
 	FT_OPT_ENABLE_HMEM	= 1 << 17,
 	FT_OPT_USE_DEVICE	= 1 << 18,
+	FT_OPT_FORK_CHILD	= 1 << 19,
 	FT_OPT_OOB_CTRL		= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
 };
 
@@ -243,7 +244,7 @@ extern int ft_socket_pair[2];
 extern int sock;
 extern int listen_sock;
 #define ADDR_OPTS "B:P:s:a:b::E::C:F:"
-#define FAB_OPTS "f:d:p:D:i:H"
+#define FAB_OPTS "f:d:p:D:i:HK"
 #define INFO_OPTS FAB_OPTS "e:M:"
 #define CS_OPTS ADDR_OPTS "I:S:mc:t:w:l"
 #define NO_CQ_DATA 0
@@ -430,6 +431,7 @@ static inline bool ft_check_prefix_forced(struct fi_info *info,
 int ft_sync(void);
 int ft_sync_pair(int status);
 int ft_fork_and_pair(void);
+int ft_fork_child(void);
 int ft_wait_child(void);
 int ft_finalize(void);
 int ft_finalize_ep(struct fid_ep *ep);
