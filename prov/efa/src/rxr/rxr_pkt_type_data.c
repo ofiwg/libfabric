@@ -207,7 +207,13 @@ ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
 		i++;
 	}
 
-	pkt_entry->send = malloc(sizeof(struct rxr_pkt_sendv));
+	pkt_entry->send = ofi_buf_alloc(ep->pkt_sendv_pool);
+	if (!pkt_entry->send) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_DATA,
+			"Unable to allocate rxr_pkt_sendv from pkt_sendv_pool\n");
+		return -FI_EAGAIN;
+	}
+
 	for (j = 0; j < i; j++) {
 		memcpy(&pkt_entry->send->iov[j], &iov[j], sizeof(struct iovec));
 		pkt_entry->send->desc[j] = desc[j];

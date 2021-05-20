@@ -764,6 +764,9 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	if (rxr_ep->tx_pkt_efa_pool)
 		ofi_bufpool_destroy(rxr_ep->tx_pkt_efa_pool);
 
+	if (rxr_ep->pkt_sendv_pool)
+		ofi_bufpool_destroy(rxr_ep->pkt_sendv_pool);
+
 	if (rxr_ep->use_shm) {
 		if (rxr_ep->rx_pkt_shm_pool)
 			ofi_bufpool_destroy(rxr_ep->rx_pkt_shm_pool);
@@ -1342,6 +1345,14 @@ int rxr_ep_init(struct rxr_ep *ep)
 	if (ret)
 		goto err_free;
 
+	ret = ofi_bufpool_create(&ep->pkt_sendv_pool,
+				 sizeof(struct rxr_pkt_sendv),
+				 RXR_BUF_POOL_ALIGNMENT,
+				 rxr_get_tx_pool_chunk_cnt(ep),
+				 rxr_get_tx_pool_chunk_cnt(ep), 0);
+	if (ret)
+		goto err_free;
+
 	/* create pkt pool for shm */
 	if (ep->use_shm) {
 		ret = ofi_bufpool_create(&ep->tx_pkt_shm_pool,
@@ -1389,6 +1400,9 @@ int rxr_ep_init(struct rxr_ep *ep)
 err_free:
 	if (ep->tx_pkt_shm_pool)
 		ofi_bufpool_destroy(ep->tx_pkt_shm_pool);
+
+	if (ep->pkt_sendv_pool)
+		ofi_bufpool_destroy(ep->pkt_sendv_pool);
 
 	if (ep->rx_atomrsp_pool)
 		ofi_bufpool_destroy(ep->rx_atomrsp_pool);

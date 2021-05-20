@@ -145,7 +145,7 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 #endif
 	pkt->state = RXR_PKT_ENTRY_FREE;
 	if (pkt->send) {
-		free(pkt->send);
+		ofi_buf_free(pkt->send);
 		pkt->send = NULL;
 	}
 	ofi_buf_free(pkt);
