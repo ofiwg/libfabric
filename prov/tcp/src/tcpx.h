@@ -76,6 +76,8 @@ extern struct tcpx_port_range	port_range;
 extern int tcpx_nodelay;
 extern int tcpx_staging_sbuf_size;
 extern int tcpx_prefetch_rbuf_size;
+extern size_t tcpx_default_tx_size;
+extern size_t tcpx_default_rx_size;
 
 struct tcpx_xfer_entry;
 struct tcpx_ep;
