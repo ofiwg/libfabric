@@ -470,11 +470,14 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 
 		rxr_rm_rx_cq_check(ep, rx_cq);
 
-		if (OFI_UNLIKELY(ret))
+		if (OFI_UNLIKELY(ret)) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"Unable to write recv error cq: %s\n",
 				fi_strerror(-ret));
+			return;
+		}
 
+		rx_entry->fi_flags |= RXR_NO_COMPLETION;
 		efa_cntr_report_error(&ep->util_ep, rx_entry->cq_entry.flags);
 		return;
 	}
@@ -517,6 +520,8 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 				assert(0 && "failed to write err cq entry");
 			return;
 		}
+
+		rx_entry->fi_flags |= RXR_NO_COMPLETION;
 	}
 
 	efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
@@ -569,13 +574,12 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, rx_entry->rma_loc_tx_id);
 		assert(tx_entry->state == RXR_TX_WAIT_READ_FINISH);
 		if (tx_entry->fi_flags & FI_COMPLETION) {
-			/* Note write_tx_completion() will release tx_entry */
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
 			efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
-			rxr_release_tx_entry(ep, tx_entry);
 		}
 
+		rxr_release_tx_entry(ep, tx_entry);
 		/*
 		 * do not call rxr_release_rx_entry here because
 		 * caller will release
@@ -751,7 +755,14 @@ bool rxr_cq_need_tx_completion(struct rxr_ep *ep,
 	       tx_entry->fi_flags & FI_COMPLETION;
 }
 
-
+/**
+ * @brief write a cq entry for an tx operation (send/read/write) if application wants it.
+ *        Sometimes application does not want to receive a cq entry for an tx
+ *        operation.
+ *
+ * @param[in]	ep		end point
+ * @param[in]	tx_entry	tx entry that contains information of the TX operation
+ */
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 				struct rxr_tx_entry *tx_entry)
 {
@@ -798,7 +809,7 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 	}
 
 	efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
-	rxr_release_tx_entry(ep, tx_entry);
+	tx_entry->fi_flags |= RXR_NO_COMPLETION;
 	return;
 }
 
@@ -814,30 +825,31 @@ void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entr
 
 	if (tx_entry->cq_entry.flags & FI_READ) {
 		/*
-		 * this must be on remote side
-		 * see explaination on rxr_cq_handle_rx_completion
+		 * This is on responder side of an emulated read operation.
+		 * In this case, we do not write any completion.
+		 * The TX entry is allocated for emulated read, so no need to write tx completion.
+		 * EFA does not support FI_RMA_EVENT, so no need to write rx completion.
 		 */
 		struct rxr_rx_entry *rx_entry = NULL;
 
 		rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, tx_entry->rma_loc_rx_id);
 		assert(rx_entry);
 		assert(rx_entry->state == RXR_RX_WAIT_READ_FINISH);
-
 		rxr_release_rx_entry(ep, rx_entry);
-		/* just release tx, do not write completion */
-		rxr_release_tx_entry(ep, tx_entry);
 	} else if (tx_entry->cq_entry.flags & FI_WRITE) {
 		if (tx_entry->fi_flags & FI_COMPLETION) {
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
 			if (!(tx_entry->fi_flags & RXR_NO_COUNTER))
 				efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
-			rxr_release_tx_entry(ep, tx_entry);
 		}
+
 	} else {
 		assert(tx_entry->cq_entry.flags & FI_SEND);
 		rxr_cq_write_tx_completion(ep, tx_entry);
 	}
+
+	rxr_release_tx_entry(ep, tx_entry);
 }
 
 static int rxr_cq_close(struct fid *fid)

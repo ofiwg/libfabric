@@ -236,6 +236,17 @@ struct rxr_env {
 	size_t efa_min_read_msg_size;
 	size_t efa_min_read_write_size;
 	size_t efa_read_segment_size;
+	/* If first attempt to send a packet failed,
+	 * this value controls how many times firmware
+	 * retries the send before it report an RNR error
+	 * (via rdma-core error cq entry).
+	 *
+	 * The valid number is from
+	 *      0 (no retry)
+	 * to
+	 *      EFA_RNR_INFINITY_RETRY (retry infinitely)
+	 */
+	int rnr_retry;
 };
 
 enum rxr_lower_ep_type {

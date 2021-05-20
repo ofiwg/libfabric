@@ -422,6 +422,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			tx_entry = read_entry->context;
 			assert(tx_entry && tx_entry->cq_entry.flags & FI_READ);
 			rxr_cq_write_tx_completion(ep, tx_entry);
+			rxr_release_tx_entry(ep, tx_entry);
 		} else if (read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY) {
 			rx_entry = read_entry->context;
 			if (rx_entry->op == ofi_op_msg || rx_entry->op == ofi_op_tagged) {
@@ -473,12 +474,12 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 	switch (rma_context_pkt->context_type) {
 	case RXR_WRITE_CONTEXT:
 		tx_entry = (struct rxr_tx_entry *)context_pkt_entry->x_entry;
-		if (tx_entry->fi_flags & FI_COMPLETION) {
+		if (tx_entry->fi_flags & FI_COMPLETION)
 			rxr_cq_write_tx_completion(ep, tx_entry);
-		} else {
+		else
 			efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
-			rxr_release_tx_entry(ep, tx_entry);
-		}
+
+		rxr_release_tx_entry(ep, tx_entry);
 		break;
 	case RXR_READ_CONTEXT:
 		rxr_pkt_handle_rma_read_completion(ep, context_pkt_entry);
@@ -538,6 +539,7 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 	/* pre-post buf used here, so can NOT track back to tx_entry with x_entry */
 	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, eor_hdr->tx_id);
 	rxr_cq_write_tx_completion(ep, tx_entry);
+	rxr_release_tx_entry(ep, tx_entry);
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
@@ -636,14 +638,12 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 			0, atomrsp_pkt->data,
 			atomrsp_hdr->seg_size);
 
-	if (tx_entry->fi_flags & FI_COMPLETION) {
-		/* Note write_tx_completion() will release tx_entry */
+	if (tx_entry->fi_flags & FI_COMPLETION)
 		rxr_cq_write_tx_completion(ep, tx_entry);
-	} else {
+	else
 		efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
-		rxr_release_tx_entry(ep, tx_entry);
-	}
 
+	rxr_release_tx_entry(ep, tx_entry);
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
