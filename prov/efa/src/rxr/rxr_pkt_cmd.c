@@ -312,7 +312,17 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	if (!pkt_entry)
 		return -FI_EAGAIN;
 
-	pkt_entry->send = malloc(sizeof(struct rxr_pkt_sendv));
+	/*
+	 * The allocated pkt_entry->send will be released when releasing the
+	 * pkt_entry, because pkt_entry could be queued and re-send later
+	 */
+	pkt_entry->send = ofi_buf_alloc(rxr_ep->pkt_sendv_pool);
+	if (!pkt_entry->send) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Unable to allocate rxr_pkt_sendv from pkt_sendv_pool\n");
+		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
+		return -FI_EAGAIN;
+	}
 	pkt_entry->send->iov_count = 0;
 
 	/*
