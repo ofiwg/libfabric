@@ -44,6 +44,10 @@
 #include <netinet/in.h>
 #include <ifaddrs.h>
 
+#ifdef HAVE_LIBURING
+#include <liburing.h>
+#endif
+
 #include <ofi_osd.h>
 #include <ofi_list.h>
 
@@ -92,6 +96,177 @@ static inline uint64_t ntohll(uint64_t x) { return x; }
 #endif
 #endif
 
+/*
+ * io_uring
+ */
+enum ofi_uring_state {
+	OFI_URING_IDLE = 0,
+	OFI_URING_BUSY = 1,
+	OFI_URING_DONE = 2,
+};
+
+#ifdef HAVE_LIBURING
+typedef struct io_uring_sqe ofi_uring_sqe_t;
+#else
+typedef void ofi_uring_sqe_t;
+#endif
+
+struct ofi_uring;
+typedef ofi_uring_sqe_t* (*ofi_uring_get_sqe_func)(void *arg);
+
+struct ofi_uring {
+#ifdef HAVE_LIBURING
+	struct io_uring ring;
+	bool initialized;
+
+	ofi_uring_get_sqe_func get_sqe_func;
+	void *get_sqe_arg;
+
+	/* Credits for the uring */
+	size_t credits;
+	/* Number of SQEs waiting for submission */
+	int to_submit;
+#endif
+};
+
+struct ofi_uring_ctx {
+#ifdef HAVE_LIBURING
+	/* Back pointer to the uring structure */
+	struct ofi_uring *uring;
+
+	/* io_uring requires msghdr to remain valid until we receive
+	 * the corresponding CQE. We cannot save it on the stack! */
+	struct msghdr msg;
+	int res;
+	enum ofi_uring_state state;
+#endif
+};
+
+#ifdef HAVE_LIBURING
+static inline int
+ofi_uring_init(struct ofi_uring *uring, size_t nents,
+		ofi_uring_get_sqe_func get_sqe_func, void *get_sqe_arg)
+{
+	struct io_uring_params uring_params;
+	int ret;
+
+	assert(get_sqe_func);
+
+	memset(&uring_params, 0, sizeof(uring_params));
+
+	ret = io_uring_queue_init_params(nents, &uring->ring, &uring_params);
+	if (ret)
+		return errno;
+
+	/* Make sure that FAST POLL is supported. With FAST_POLL, we don't have
+	 * to poll a socket for ready data as the CQE will be generated at the moment
+	 * there is data ready. */
+	if ((uring_params.features & IORING_FEAT_FAST_POLL) == 0) {
+		io_uring_queue_exit(&uring->ring);
+		return -FI_ENOSYS;
+	}
+
+	uring->get_sqe_func = get_sqe_func;
+	uring->get_sqe_arg = get_sqe_arg;
+	uring->initialized = true;
+	uring->credits = nents;
+	uring->to_submit = 0;
+
+	return 0;
+}
+
+static inline void
+ofi_uring_exit(struct ofi_uring *uring)
+{
+	if (uring->initialized) {
+		io_uring_queue_exit(&uring->ring);
+		uring->initialized = false;
+	}
+}
+
+static inline void
+ofi_uring_ctx_init(struct ofi_uring_ctx *uctx, struct ofi_uring *uring)
+{
+	uctx->uring = uring;
+	uctx->state = OFI_URING_IDLE;
+}
+
+static inline bool ofi_uring_initialized(struct ofi_uring *uring)
+{
+	return uring && uring->initialized;
+}
+
+static inline bool ofi_uring_ctx_initialized(struct ofi_uring_ctx *uctx)
+{
+	return uctx && ofi_uring_initialized(uctx->uring);
+}
+
+static inline enum ofi_uring_state ofi_uring_ctx_state(struct ofi_uring_ctx *uctx)
+{
+	return uctx->state;
+}
+
+ssize_t ofi_uring_send(SOCKET sock, struct ofi_uring_ctx *uctx, const void *buf, size_t len);
+ssize_t ofi_uring_sendv(SOCKET sock, struct ofi_uring_ctx *uctx, const struct iovec *iov,
+			size_t cnt);
+ssize_t ofi_uring_recv(SOCKET sock, struct ofi_uring_ctx *uctx, void *buf, size_t len);
+ssize_t ofi_uring_recvv(SOCKET sock, struct ofi_uring_ctx *uctx, struct iovec *iov,
+			size_t cnt);
+bool ofi_uring_cancel(struct ofi_uring_ctx *uctx, struct ofi_uring_ctx *uctx_to_cancel);
+void ofi_uring_progress(struct ofi_uring *uring);
+
+static inline void ofi_uring_submit(struct ofi_uring *uring)
+{
+	if (uring->to_submit) {
+		/* One single call would submit all our pending SQEs */
+		io_uring_submit(&uring->ring);
+		uring->to_submit = 0;
+	}
+}
+
+static inline struct io_uring_sqe *ofi_uring_get_sqe(struct ofi_uring *uring)
+{
+	struct io_uring_sqe *sqe;
+
+	if (!uring->credits)
+		return NULL;
+
+	sqe = io_uring_get_sqe(&uring->ring);
+	assert(sqe != NULL);
+	uring->to_submit++;
+	uring->credits--;
+	return sqe;
+}
+
+static inline int
+ofi_uring_fd(struct ofi_uring *uring)
+{
+    return uring->ring.ring_fd;
+}
+#else
+#define ofi_uring_init(uring, nents, func, arg) -FI_ENOSYS
+#define ofi_uring_exit(uring)
+static inline bool ofi_uring_initialized(struct ofi_uring *uring)
+{
+	(void)uring;
+	return false;
+}
+static inline bool ofi_uring_ctx_initialized(struct ofi_uring_ctx *uctx)
+{
+	(void)uctx;
+	return false;
+}
+#define ofi_uring_ctx_state(uctx) OFI_URING_IDLE
+#define ofi_uring_send(sock, uctx, buf, len) -FI_ENOSYS
+#define ofi_uring_sendv(sock, uctx, iov, cnt) -FI_ENOSYS
+#define ofi_uring_recv(sock, uctx, buf, len) -FI_ENOSYS
+#define ofi_uring_recvv(sock, uctx, iov, cnt) -FI_ENOSYS
+#define ofi_uring_cancel(uctx, uctx_to_cancel) true
+#define ofi_uring_progress(uring)
+#define ofi_uring_submit(uring)
+#define ofi_uring_fd(uring) -1
+#define ofi_uring_get_sqe(uring) NULL
+#endif
 
 static inline int ofi_recvall_socket(SOCKET sock, void *buf, size_t len)
 {
@@ -184,15 +359,20 @@ ofi_byteq_write(struct ofi_byteq *byteq, const void *buf, size_t len)
 void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
 		      size_t cnt);
 
-static inline ssize_t ofi_byteq_recv(struct ofi_byteq *byteq, SOCKET sock)
+static inline ssize_t ofi_byteq_recv(struct ofi_byteq *byteq, SOCKET sock,
+		      struct ofi_uring_ctx *uctx)
 {
 	size_t avail;
 	ssize_t ret;
 
 	avail = ofi_byteq_writeable(byteq);
 	assert(avail);
-	ret = ofi_recv_socket(sock, &byteq->data[byteq->tail], avail,
-			      MSG_NOSIGNAL);
+	if (ofi_uring_ctx_initialized(uctx))
+		ret = ofi_uring_recv(sock, uctx, &byteq->data[byteq->tail], avail);
+	else
+		ret = ofi_recv_socket(sock, &byteq->data[byteq->tail], avail,
+				      MSG_NOSIGNAL);
+
 	if (ret > 0)
 		byteq->tail += ret;
 	return ret;
@@ -201,15 +381,20 @@ static inline ssize_t ofi_byteq_recv(struct ofi_byteq *byteq, SOCKET sock)
 size_t ofi_byteq_readv(struct ofi_byteq *byteq, struct iovec *iov,
 		       size_t cnt, size_t offset);
 
-static inline ssize_t ofi_byteq_send(struct ofi_byteq *byteq, SOCKET sock)
+static inline ssize_t ofi_byteq_send(struct ofi_byteq *byteq, SOCKET sock,
+		struct ofi_uring_ctx *uctx)
 {
 	size_t avail;
 	ssize_t ret;
 
 	avail = ofi_byteq_readable(byteq);
 	assert(avail);
-	ret = ofi_send_socket(sock, &byteq->data[byteq->head], avail,
-			      MSG_NOSIGNAL);
+	if (ofi_uring_ctx_initialized(uctx))
+		ret = ofi_uring_send(sock, uctx, &byteq->data[byteq->head], avail);
+	else
+		ret = ofi_send_socket(sock, &byteq->data[byteq->head], avail,
+				      MSG_NOSIGNAL);
+
 	if (ret == avail) {
 		byteq->head = 0;
 		byteq->tail = 0;
@@ -227,6 +412,12 @@ struct ofi_bsock {
 	SOCKET sock;
 	struct ofi_byteq sq;
 	struct ofi_byteq rq;
+
+	struct ofi_uring_ctx su_ctx;
+	struct ofi_uring_ctx ru_ctx;
+
+	struct ofi_uring_ctx su_cancel_ctx;
+	struct ofi_uring_ctx ru_cancel_ctx;
 };
 
 static inline void
@@ -257,6 +448,31 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len);
 ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov,
 			size_t cnt);
+bool ofi_bsock_cancel_tx(struct ofi_bsock *bsock);
+bool ofi_bsock_cancel_rx(struct ofi_bsock *bsock);
+
+#ifdef HAVE_LIBURING
+static inline void
+ofi_bsock_uring_init(struct ofi_bsock *bsock, struct ofi_uring *uring)
+{
+	ofi_uring_ctx_init(&bsock->su_ctx, uring);
+	ofi_uring_ctx_init(&bsock->ru_ctx, uring);
+	ofi_uring_ctx_init(&bsock->su_cancel_ctx, uring);
+	ofi_uring_ctx_init(&bsock->ru_cancel_ctx, uring);
+}
+
+static inline void
+ofi_bsock_uring_destroy(struct ofi_bsock *bsock)
+{
+	ofi_uring_ctx_init(&bsock->su_ctx, NULL);
+	ofi_uring_ctx_init(&bsock->ru_ctx, NULL);
+	ofi_uring_ctx_init(&bsock->su_cancel_ctx, NULL);
+	ofi_uring_ctx_init(&bsock->ru_cancel_ctx, NULL);
+}
+#else
+#define ofi_bsock_uring_init(bsock, uring)
+#define ofi_bsock_uring_destroy(bsock)
+#endif
 
 
 /*

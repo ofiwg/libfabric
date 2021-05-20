@@ -207,7 +207,7 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 
 	assert(fastlock_held(&ep->lock));
 	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-	if (ep->cur_tx.entry) {
+	if (ep->cur_tx.entry && ofi_bsock_cancel_tx(&ep->bsock)) {
 		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
 		tcpx_cq_report_error(&cq->util_cq, ep->cur_tx.entry,
 				     FI_ECANCELED);
@@ -221,7 +221,7 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 	tcpx_ep_flush_queue(&ep->need_ack_queue, cq);
 
 	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
-	if (ep->cur_rx.entry) {
+	if (ep->cur_rx.entry && ofi_bsock_cancel_rx(&ep->bsock)) {
 		tcpx_cq_report_error(&cq->util_cq, ep->cur_rx.entry,
 				     FI_ECANCELED);
 		tcpx_free_xfer(cq, ep->cur_rx.entry);
@@ -498,8 +498,11 @@ static int tcpx_ep_close(struct fid *fid)
 {
 	struct tcpx_ep *ep;
 	struct tcpx_eq *eq;
+	struct tcpx_domain *domain;
 
 	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
+	domain = container_of(ep->util_ep.domain, struct tcpx_domain,
+			      util_domain);
 	eq = ep->util_ep.eq ?
 	     container_of(ep->util_ep.eq, struct tcpx_eq, util_eq) : NULL;
 
@@ -507,11 +510,19 @@ static int tcpx_ep_close(struct fid *fid)
 	if (eq)
 		fastlock_acquire(&eq->close_lock);
 
-	if (ep->util_ep.rx_cq)
+	if (ep->util_ep.rx_cq) {
 		ofi_wait_del_fd(ep->util_ep.rx_cq->wait, ep->bsock.sock);
+		if (ofi_uring_initialized(&domain->uring)) {
+			ofi_wait_del_fd(ep->util_ep.rx_cq->wait, ofi_uring_fd(&domain->uring));
+		}
+	}
 
-	if (ep->util_ep.tx_cq)
+	if (ep->util_ep.tx_cq) {
 		ofi_wait_del_fd(ep->util_ep.tx_cq->wait, ep->bsock.sock);
+		if (ofi_uring_initialized(&domain->uring)) {
+			ofi_wait_del_fd(ep->util_ep.tx_cq->wait, ofi_uring_fd(&domain->uring));
+		}
+	}
 
 	if (ep->util_ep.eq && ep->util_ep.eq->wait)
 		ofi_wait_del_fd(ep->util_ep.eq->wait, ep->bsock.sock);
@@ -530,6 +541,7 @@ static int tcpx_ep_close(struct fid *fid)
 		ofi_eq_remove_fid_events(ep->util_ep.eq,
 					 &ep->util_ep.ep_fid.fid);
 	}
+	ofi_bsock_uring_destroy(&ep->bsock);
 	ofi_close_socket(ep->bsock.sock);
 	ofi_endpoint_close(&ep->util_ep);
 	fastlock_destroy(&ep->lock);
@@ -652,6 +664,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 {
 	struct tcpx_ep *ep;
 	struct tcpx_pep *pep;
+	struct tcpx_domain *tcpx_domain;
 	struct tcpx_conn_handle *handle;
 	int ret;
 
@@ -665,7 +678,8 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err1;
 
 	ofi_bsock_init(&ep->bsock, tcpx_staging_sbuf_size,
-		       tcpx_prefetch_rbuf_size);
+				tcpx_prefetch_rbuf_size);
+
 	if (info->handle) {
 		if (((fid_t) info->handle)->fclass == FI_CLASS_PEP) {
 			pep = container_of(info->handle, struct tcpx_pep,
@@ -701,6 +715,12 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ret = fastlock_init(&ep->lock);
 	if (ret)
 		goto err3;
+
+	tcpx_domain = container_of(ep->util_ep.domain, struct tcpx_domain,
+		      util_domain);
+
+	if (ofi_uring_initialized(&tcpx_domain->uring))
+		ofi_bsock_uring_init(&ep->bsock, &tcpx_domain->uring);
 
 	slist_init(&ep->rx_queue);
 	slist_init(&ep->tx_queue);

@@ -103,6 +103,14 @@ static int util_domain_init(struct util_domain *domain,
 {
 	ofi_atomic_initialize32(&domain->ref, 0);
 	fastlock_init(&domain->lock);
+	if (domain->threading == FI_THREAD_COMPLETION ||
+	    (domain->threading == FI_THREAD_DOMAIN)) {
+		domain->lock_acquire = ofi_fastlock_acquire_noop;
+		domain->lock_release = ofi_fastlock_release_noop;
+	} else {
+		domain->lock_acquire = ofi_fastlock_acquire;
+		domain->lock_release = ofi_fastlock_release;
+	}
 	domain->info_domain_caps = info->caps | info->domain_attr->caps;
 	domain->info_domain_mode = info->mode | info->domain_attr->mode;
 	domain->mr_mode = info->domain_attr->mr_mode;

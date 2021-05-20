@@ -147,6 +147,9 @@ static int tcpx_domain_close(fid_t fid)
 	tcpx_domain = container_of(fid, struct tcpx_domain,
 				   util_domain.domain_fid.fid);
 
+	if (ofi_uring_initialized(&tcpx_domain->uring))
+		ofi_uring_exit(&tcpx_domain->uring);
+
 	ret = ofi_domain_close(&tcpx_domain->util_domain);
 	if (ret)
 		return ret;
@@ -188,7 +191,14 @@ int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	ret = ofi_domain_init(fabric, info, &tcpx_domain->util_domain, context);
 	if (ret)
-		goto err;
+		goto err1;
+
+	if (tcpx_uring) {
+		ret = ofi_uring_init(&tcpx_domain->uring, TCPX_URING_ENTRIES,
+				tcpx_domain_uring_get_sqe_func, tcpx_domain);
+		if (ret)
+			goto err2;
+	}
 
 	*domain = &tcpx_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &tcpx_domain_fi_ops;
@@ -196,7 +206,42 @@ int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	(*domain)->mr = &tcpx_domain_fi_ops_mr;
 
 	return FI_SUCCESS;
-err:
+err2:
+	ofi_domain_close(&tcpx_domain->util_domain);
+err1:
 	free(tcpx_domain);
 	return ret;
 }
+
+void tcpx_domain_uring_progress(struct tcpx_domain *domain)
+{
+	if (ofi_uring_initialized(&domain->uring)) {
+		domain->util_domain.lock_acquire(&domain->util_domain.lock);
+		ofi_uring_progress(&domain->uring);
+		domain->util_domain.lock_release(&domain->util_domain.lock);
+	}
+}
+
+void tcpx_domain_uring_submit(struct tcpx_domain *domain)
+{
+	if (ofi_uring_initialized(&domain->uring)) {
+		domain->util_domain.lock_acquire(&domain->util_domain.lock);
+		ofi_uring_submit(&domain->uring);
+		domain->util_domain.lock_release(&domain->util_domain.lock);
+	}
+}
+
+ofi_uring_sqe_t *tcpx_domain_uring_get_sqe_func(void *arg)
+{
+	struct tcpx_domain *domain = (struct tcpx_domain *)arg;
+	ofi_uring_sqe_t *sqe = NULL;
+
+	if (ofi_uring_initialized(&domain->uring)) {
+		domain->util_domain.lock_acquire(&domain->util_domain.lock);
+		sqe = ofi_uring_get_sqe(&domain->uring);
+		domain->util_domain.lock_release(&domain->util_domain.lock);
+		assert(sqe != NULL);
+	}
+	return sqe;
+}
+

@@ -45,11 +45,16 @@ void tcpx_cq_progress(struct util_cq *cq)
 	struct util_wait_fd *wait_fd;
 	struct dlist_entry *item;
 	struct tcpx_ep *ep;
+	struct tcpx_domain *domain;
 	struct fid *fid;
 	uint32_t inevent, outevent;
 	int nfds, i;
 
 	wait_fd = container_of(cq->wait, struct util_wait_fd, util_wait);
+	domain = container_of(cq->domain, struct tcpx_domain,
+		      util_domain);
+
+	tcpx_domain_uring_progress(domain);
 
 	cq->cq_fastlock_acquire(&cq->ep_list_lock);
 	dlist_foreach(&cq->ep_list, item) {
@@ -58,6 +63,12 @@ void tcpx_cq_progress(struct util_cq *cq)
 				  util_ep.ep_fid.fid);
 
 		fastlock_acquire(&ep->lock);
+
+		if (ofi_uring_ctx_state(&ep->bsock.su_ctx) == OFI_URING_DONE)
+			tcpx_progress_tx(ep);
+		if (ofi_uring_ctx_state(&ep->bsock.ru_ctx) == OFI_URING_DONE)
+			tcpx_progress_rx(ep);
+
 		/* We need to progress receives in the case where we're waiting
 		 * on the application to post a buffer to consume a receive
 		 * that we've already read from the kernel.  If the message is
@@ -101,10 +112,16 @@ void tcpx_cq_progress(struct util_cq *cq)
 			tcpx_progress_rx(ep);
 		if (events[i].events & outevent)
 			tcpx_progress_tx(ep);
+
+		/* We need to update epoll as we might have polled our ring already and
+		 * we don't monitor socket's POLLIN event anymore */
+		(void) tcpx_update_epoll(ep);
 		fastlock_release(&ep->lock);
 	}
 unlock:
 	cq->cq_fastlock_release(&cq->ep_list_lock);
+
+	tcpx_domain_uring_submit(domain);
 }
 
 static int tcpx_cq_close(struct fid *fid)

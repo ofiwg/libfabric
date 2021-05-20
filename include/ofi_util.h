@@ -200,6 +200,8 @@ struct util_domain {
 	struct util_fabric	*fabric;
 	struct util_eq		*eq;
 	fastlock_t		lock;
+	ofi_fastlock_acquire_t	lock_acquire;
+	ofi_fastlock_release_t	lock_release;
 	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 
@@ -218,6 +220,16 @@ int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 		     struct util_domain *domain, void *context);
 int ofi_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
 int ofi_domain_close(struct util_domain *domain);
+
+static inline void ofi_domain_lock_acquire(struct util_domain *domain)
+{
+	domain->lock_acquire(&domain->lock);
+}
+
+static inline void ofi_domain_lock_release(struct util_domain *domain)
+{
+	domain->lock_release(&domain->lock);
+}
 
 static const uint64_t ofi_rx_mr_flags[] = {
 	[ofi_op_msg] = FI_RECV,

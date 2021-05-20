@@ -56,6 +56,7 @@ int tcpx_nodelay = -1;
 
 int tcpx_staging_sbuf_size = 9000;
 int tcpx_prefetch_rbuf_size = 9000;
+int tcpx_uring = 0;
 
 
 static void tcpx_init_env(void)
@@ -84,6 +85,11 @@ static void tcpx_init_env(void)
 			 &tcpx_staging_sbuf_size);
 	fi_param_get_int(&tcpx_prov, "prefetch_rbuf_size",
 			 &tcpx_prefetch_rbuf_size);
+
+	fi_param_define(&tcpx_prov, "uring", FI_PARAM_INT,
+			"Enable uring support, set to 1 to enable");
+	fi_param_get_int(&tcpx_prov, "uring",
+			 &tcpx_uring);
 
 	fi_param_get_int(&tcpx_prov, "port_high_range", &port_range.high);
 	fi_param_get_int(&tcpx_prov, "port_low_range", &port_range.low);

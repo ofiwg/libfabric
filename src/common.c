@@ -1054,7 +1054,7 @@ ssize_t ofi_bsock_flush(struct ofi_bsock *bsock)
 	if (!ofi_bsock_tosend(bsock))
 		return 0;
 
-	ret = ofi_byteq_send(&bsock->sq, bsock->sock);
+	ret = ofi_byteq_send(&bsock->sq, bsock->sock, &bsock->su_ctx);
 	if (ret < 0) {
 		return ofi_sockerr() == EPIPE ?
 			-FI_ENOTCONN : -ofi_sockerr();
@@ -1082,7 +1082,11 @@ ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
 	}
 
 	assert(!ofi_bsock_tosend(bsock));
-	ret = ofi_send_socket(bsock->sock, buf, *len, MSG_NOSIGNAL);
+	if (ofi_uring_ctx_initialized(&bsock->su_ctx))
+		ret = ofi_uring_send(bsock->sock, &bsock->su_ctx, buf, *len);
+	else
+		ret = ofi_send_socket(bsock->sock, buf, *len, MSG_NOSIGNAL);
+
 	if (ret < 0) {
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
 		    *len < ofi_byteq_writeable(&bsock->sq)) {
@@ -1122,15 +1126,20 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 	}
 
 	assert(!ofi_bsock_tosend(bsock));
-	msg.msg_control = NULL;
-	msg.msg_controllen = 0;
-	msg.msg_flags = 0;
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-	msg.msg_iov = (struct iovec *) iov;
-	msg.msg_iovlen = cnt;
+	if (ofi_uring_ctx_initialized(&bsock->su_ctx)) {
+		ret = ofi_uring_sendv(bsock->sock, &bsock->su_ctx, iov, cnt);
+	} else {
+		msg.msg_control = NULL;
+		msg.msg_controllen = 0;
+		msg.msg_flags = 0;
+		msg.msg_name = NULL;
+		msg.msg_namelen = 0;
+		msg.msg_iov = (struct iovec *) iov;
+		msg.msg_iovlen = cnt;
 
-	ret = ofi_sendmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+		ret = ofi_sendmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+	}
+
 	if (ret < 0) {
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
 		    *len < ofi_byteq_writeable(&bsock->sq)) {
@@ -1158,7 +1167,7 @@ ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len)
 
 	assert(!ofi_bsock_readable(bsock));
 	if (len < (bsock->rq.size >> 1)) {
-		ret = ofi_byteq_recv(&bsock->rq, bsock->sock);
+		ret = ofi_byteq_recv(&bsock->rq, bsock->sock, &bsock->ru_ctx);
 		if (ret <= 0)
 			goto out;
 
@@ -1167,7 +1176,11 @@ ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len)
 		return bytes;
 	}
 
-	ret = ofi_recv_socket(bsock->sock, buf, len, MSG_NOSIGNAL);
+	if (ofi_uring_ctx_initialized(&bsock->ru_ctx))
+		ret = ofi_uring_recv(bsock->sock, &bsock->ru_ctx, buf, len);
+	else
+		ret = ofi_recv_socket(bsock->sock, buf, len, MSG_NOSIGNAL);
+
 	if (ret > 0)
 		return bytes + ret;
 
@@ -1199,7 +1212,7 @@ ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt)
 
 	assert(!ofi_bsock_readable(bsock));
 	if (len < (bsock->rq.size >> 1)) {
-		ret = ofi_byteq_recv(&bsock->rq, bsock->sock);
+		ret = ofi_byteq_recv(&bsock->rq, bsock->sock, &bsock->ru_ctx);
 		if (ret <= 0)
 			goto out;
 
@@ -1214,23 +1227,215 @@ ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt)
 	if (bytes)
 		return bytes;
 
-	msg.msg_control = NULL;
-	msg.msg_controllen = 0;
-	msg.msg_flags = 0;
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-	msg.msg_iov = iov;
-	msg.msg_iovlen = cnt;
+	if (ofi_uring_ctx_initialized(&bsock->ru_ctx)) {
+		ret = ofi_uring_recvv(bsock->sock, &bsock->ru_ctx, iov, cnt);
+	} else {
+		msg.msg_control = NULL;
+		msg.msg_controllen = 0;
+		msg.msg_flags = 0;
+		msg.msg_name = NULL;
+		msg.msg_namelen = 0;
+		msg.msg_iov = iov;
+		msg.msg_iovlen = cnt;
 
-	ret = ofi_recvmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+		ret = ofi_recvmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+	}
+
 	if (ret > 0)
 		return ret;
+
 out:
 	if (bytes)
 		return bytes;
 	return ret ? -ofi_sockerr(): -FI_ENOTCONN;
 }
 
+bool ofi_bsock_cancel_tx(struct ofi_bsock *bsock)
+{
+	return ofi_uring_cancel(&bsock->su_cancel_ctx,
+			&bsock->su_ctx);
+}
+
+bool ofi_bsock_cancel_rx(struct ofi_bsock *bsock)
+{
+	return ofi_uring_cancel(&bsock->ru_cancel_ctx,
+			&bsock->ru_ctx);
+}
+
+#ifdef HAVE_LIBURING
+ssize_t ofi_uring_complete(struct ofi_uring_ctx *uctx)
+{
+	assert(uctx->state == OFI_URING_DONE);
+
+	uctx->state = OFI_URING_IDLE;
+
+	if (uctx->res < 0) {
+		errno = -uctx->res;
+		return -1;
+	}
+	return uctx->res;
+}
+
+void ofi_uring_progress(struct ofi_uring *uring)
+{
+	struct ofi_uring_ctx *uctx;
+	struct io_uring_cqe *cqe;
+
+	while (io_uring_peek_cqe(&uring->ring, &cqe) == 0) {
+		uctx = (struct ofi_uring_ctx *) cqe->user_data;
+		assert(uctx->uring == uring);
+		assert(uctx->state == OFI_URING_BUSY);
+
+		uctx->state = OFI_URING_DONE;
+		uctx->res = cqe->res;
+
+		io_uring_cqe_seen(&uring->ring, cqe);
+		uring->credits++;
+	}
+}
+
+ssize_t ofi_uring_send(SOCKET sock, struct ofi_uring_ctx *uctx,
+		const void *buf, size_t len)
+{
+	struct io_uring_sqe *sqe;
+
+	if (uctx->state == OFI_URING_BUSY)
+		return 0;
+
+	if (uctx->state == OFI_URING_DONE)
+		return ofi_uring_complete(uctx);
+
+	sqe = uctx->uring->get_sqe_func(uctx->uring->get_sqe_arg);
+	if (!sqe)
+		return 0;
+
+	io_uring_prep_send(sqe, sock, buf, len, 0);
+	io_uring_sqe_set_data(sqe, uctx);
+
+	uctx->state = OFI_URING_BUSY;
+
+	return 0;
+}
+
+ssize_t ofi_uring_sendv(SOCKET sock, struct ofi_uring_ctx *uctx,
+		const struct iovec *iov, size_t cnt)
+{
+	struct io_uring_sqe *sqe;
+
+	if (cnt == 1)
+		return ofi_uring_send(sock, uctx, iov[0].iov_base, iov[0].iov_len);
+
+	if (uctx->state == OFI_URING_BUSY)
+		return 0;
+
+	if (uctx->state == OFI_URING_DONE)
+		return ofi_uring_complete(uctx);
+
+	sqe = uctx->uring->get_sqe_func(uctx->uring->get_sqe_arg);
+	if (!sqe)
+		return 0;
+
+	uctx->msg.msg_control = NULL;
+	uctx->msg.msg_controllen = 0;
+	uctx->msg.msg_flags = 0;
+	uctx->msg.msg_name = NULL;
+	uctx->msg.msg_namelen = 0;
+	uctx->msg.msg_iov = (struct iovec *) iov;
+	uctx->msg.msg_iovlen = cnt;
+
+	io_uring_prep_sendmsg(sqe, sock, &uctx->msg, 0);
+	io_uring_sqe_set_data(sqe, uctx);
+
+	uctx->state = OFI_URING_BUSY;
+
+	return 0;
+}
+
+ssize_t ofi_uring_recv(SOCKET sock, struct ofi_uring_ctx *uctx,
+		void *buf, size_t len)
+{
+	struct io_uring_sqe *sqe;
+
+	if (uctx->state == OFI_URING_BUSY)
+		goto eagain;
+
+	if (uctx->state == OFI_URING_DONE)
+		return ofi_uring_complete(uctx);
+
+	sqe = uctx->uring->get_sqe_func(uctx->uring->get_sqe_arg);
+	if (!sqe)
+		goto eagain;
+
+	io_uring_prep_recv(sqe, sock, buf, len, 0);
+	io_uring_sqe_set_data(sqe, uctx);
+
+	uctx->state = OFI_URING_BUSY;
+
+eagain:
+	errno = EAGAIN;
+	return -1;
+}
+
+ssize_t ofi_uring_recvv(SOCKET sock, struct ofi_uring_ctx *uctx, struct iovec *iov, size_t cnt)
+{
+	struct io_uring_sqe *sqe;
+
+	if (cnt == 1)
+		return ofi_uring_recv(sock, uctx, iov[0].iov_base, iov[0].iov_len);
+
+	if (uctx->state == OFI_URING_BUSY)
+		goto eagain;
+
+	if (uctx->state == OFI_URING_DONE)
+		return ofi_uring_complete(uctx);
+
+	uctx->msg.msg_control = NULL;
+	uctx->msg.msg_controllen = 0;
+	uctx->msg.msg_flags = 0;
+	uctx->msg.msg_name = NULL;
+	uctx->msg.msg_namelen = 0;
+	uctx->msg.msg_iov = iov;
+	uctx->msg.msg_iovlen = cnt;
+
+	sqe = uctx->uring->get_sqe_func(uctx->uring->get_sqe_arg);
+	if (!sqe)
+		goto eagain;
+
+	io_uring_prep_sendmsg(sqe, sock, &uctx->msg, 0);
+	io_uring_sqe_set_data(sqe, uctx);
+
+	uctx->state = OFI_URING_BUSY;
+
+eagain:
+	errno = EAGAIN;
+	return -1;
+}
+
+bool ofi_uring_cancel(struct ofi_uring_ctx *uctx,
+		struct ofi_uring_ctx *uctx_to_cancel)
+{
+	struct io_uring_sqe *sqe;
+
+	/* ctx to cancel is already idle */
+	if (uctx_to_cancel->state == OFI_URING_IDLE)
+		return true;
+
+	/* Context already canceled: need to wait for the CQE */
+	if (uctx->state != OFI_URING_IDLE)
+		return false;
+
+	/* Send a cancel request. We set user_data to NULL so the
+	 * CQE polling function know it was a cancel request. */
+	sqe = uctx->uring->get_sqe_func(uctx->uring->get_sqe_arg);
+	if (!sqe)
+		return false;
+
+	io_uring_prep_cancel(sqe, uctx, 0);
+	io_uring_sqe_set_data(sqe, uctx_to_cancel);
+
+	return false;
+}
+#endif
 
 int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 {

@@ -17,12 +17,12 @@ _tcp_files = \
 if HAVE_TCP_DL
 pkglib_LTLIBRARIES += libtcp-fi.la
 libtcp_fi_la_SOURCES = $(_tcp_files) $(common_srcs)
-libtcp_fi_la_LIBADD = $(linkback) $(tcp_shm_LIBS)
+libtcp_fi_la_LIBADD = $(linkback) $(tcp_shm_LIBS) $(uring_LIBS)
 libtcp_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
 libtcp_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_TCP_DL
 src_libfabric_la_SOURCES += $(_tcp_files)
-src_libfabric_la_LIBADD += $(tcp_shm_LIBS)
+src_libfabric_la_LIBADD += $(tcp_shm_LIBS) $(uring_LIBS)
 endif !HAVE_TCP_DL
 
 prov_install_man_pages += man/man7/fi_tcp.7
