@@ -312,6 +312,7 @@ struct rdm_peer {
 	fi_addr_t efa_fiaddr;		/* fi_addr_t addr from efa provider */
 	fi_addr_t shm_fiaddr;		/* fi_addr_t addr from shm provider */
 	struct rxr_robuf robuf;		/* tracks expected msg_id on rx */
+	uint32_t prev_qkey;		/* each peer has unique gid+qpn. the qkey can change */
 	uint32_t next_msg_id;		/* sender's view of msg_id */
 	uint32_t flags;
 	uint32_t maxproto;		/* maximum supported protocol version by this peer */
