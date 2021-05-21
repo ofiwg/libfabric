@@ -144,7 +144,7 @@
 #define	CXIP_COLL_MIN_RX_SIZE		4096
 #define	CXIP_COLL_MIN_FREE		64
 #define	CXIP_COLL_MAX_TX_SIZE		32
-#define	CXIP_COLL_SEQNO_MASK		((1 << 10) - 1)
+#define	CXIP_COLL_MAX_SEQNO		(1 << 10)
 
 extern char cxip_prov_name[];
 extern struct fi_provider cxip_prov;
@@ -1476,21 +1476,21 @@ struct cxip_av_set {
 enum cxip_coll_state {
 	CXIP_COLL_STATE_NONE,
 	CXIP_COLL_STATE_READY,
-	CXIP_COLL_STATE_BLOCKED,
+	CXIP_COLL_STATE_FAULT,
 };
 
 /* Rosetta reduction engine error codes.
  */
 enum cxip_coll_rc {
-	CXIP_COLL_RC_SUCCESS = 0,               // good
-	CXIP_COLL_RC_FLT_INEXACT = 1,           // result was rounded
-	CXIP_COLL_RC_FLT_OVERFLOW = 3,          // result too large to represent
-	CXIP_COLL_RC_FLT_INVALID = 4,           // operand was signalling NaN, or
-						//   two infinities subtracted
-	CXIP_COLL_RC_REPSUM_INEXACT = 5,        // reproducible sum was rounded
-	CXIP_COLL_RC_INT_OVERFLOW = 6,          // integer overflow
-	CXIP_COLL_RC_CONTR_OVERFLOW = 7,        // too many contributions seen
-	CXIP_COLL_RC_OP_MISMATCH = 8,           // different opcodes in same reduction
+	CXIP_COLL_RC_SUCCESS = 0,		// good
+	CXIP_COLL_RC_FLT_INEXACT = 1,		// result was rounded
+	CXIP_COLL_RC_FLT_OVERFLOW = 3,		// result too large to represent
+	CXIP_COLL_RC_FLT_INVALID = 4,           // operand was signalling NaN,
+						//   or infinities subtracted
+	CXIP_COLL_RC_REPSUM_INEXACT = 5,	// reproducible sum was rounded
+	CXIP_COLL_RC_INT_OVERFLOW = 6,		// integer overflow
+	CXIP_COLL_RC_CONTR_OVERFLOW = 7,	// too many contributions seen
+	CXIP_COLL_RC_OP_MISMATCH = 8,		// conflicting opcodes
 	CXIP_COLL_RC_MAX = 9
 };
 
@@ -1520,19 +1520,18 @@ struct cxip_coll_reduction {
 	struct cxip_req *op_inject_req;		// active operation request
 	enum cxip_coll_state coll_state;	// reduction state on node
 	int op_code;				// requested CXI operation
-	const void *op_send_data;		// user send buffer (may be NULL)
-	void *op_rslt_data;			// user recv buffer (may be NULL)
+	const void *op_send_data;		// user send buffer (or NULL)
+	void *op_rslt_data;			// user recv buffer (or NULL)
 	int op_data_len;			// bytes in send/recv buffers
 	void *op_context;			// caller's context
 	bool in_use;				// reduction is in-use
 	bool completed;				// reduction is completed
-
 	uint8_t red_data[CXIP_COLL_MAX_TX_SIZE];
-	bool red_init;				// set by first packet
-	int red_op;				// set by first packet
+	bool red_init;				// set by first rcvd pkt
+	int red_op;				// set by first rcvd pkt
 	int red_cnt;				// incremented by packet
 	enum cxip_coll_rc red_rc;		// set by first error
-
+	struct timespec armtime;		// timestamp at last arm
 	uint8_t tx_msg[64];			// static packet memory
 };
 
@@ -1545,9 +1544,11 @@ struct cxip_coll_mc {
 	unsigned int mynode_index;		// av_set index of this node
 	unsigned int hwroot_index;		// av_set index of hwroot node
 	uint32_t mc_unique;			// MC object id for cookie
-	int frst_red_id;			// first active red_id
+	int tail_red_id;			// tail active red_id
 	int next_red_id;			// next available red_id
 	int max_red_id;				// limit total concurrency
+	struct timespec timeout;		// state machine timeout
+	int seqno;				// rolling seqno for packets
 	bool arm_enable;			// arm-enable for root
 	enum cxi_traffic_class tc;		// traffic class
 	enum cxi_traffic_class_type tc_type;	// traffic class type
@@ -1769,8 +1770,8 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 		   int av_set_idx, const void *buffer, size_t buflen,
 		   struct cxi_md *md);
 int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
-			   size_t redcnt, int op, const void *data, int len,
-			   enum cxip_coll_rc red_rc, bool retry);
+			   int arm, size_t redcnt, int op, const void *data,
+			   int len, enum cxip_coll_rc red_rc, bool retry);
 ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
 			 enum fi_datatype datatype, int cxi_opcode,
 			 const void *op_send_data, void *op_rslt_data,

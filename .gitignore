@@ -1,6 +1,7 @@
 .libs
 .deps
 .dirstamp
+.vscode
 *.o
 *.lo
 *.la
@@ -41,6 +42,7 @@ config.log
 config.lt
 config.status
 configure
+install
 libtool
 
 libfabric.spec

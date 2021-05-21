@@ -41,12 +41,12 @@
 
 #ifdef DEVELOPER
 #define	IDX	reduction->mc_obj->mynode_index
-#define	PRT(fmt, ...)	printf("%d: %-16s " fmt, IDX, __func__, __VA_ARGS__)
+#define	PRT(fmt, ...)	printf("%d: %-16s " fmt, IDX, __func__, ## __VA_ARGS__)
 #else	/* not DEVELOPER */
 #define	PRT(fmt, ...)
 #endif	/* DEVELOPER */
 
-#define	MAGIC	0x1776
+#define	MAGIC		0x1776
 
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, \
 		"COLL " __VA_ARGS__)
@@ -104,12 +104,12 @@ static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
  * red_id is needed to disambiguate packets delivered for different concurrent
  * reductions.
  *
- * retry is a control bit that can be invoked by the hw root node to initiate a
- * retransmission of the data from the leaves, if packets are lost.
- *
  * magic is a magic number used to identify this packet as a reduction packet.
  * The basic send/receive code can be used for other kinds of restricted IDC
  * packets.
+ *
+ * retry is a control bit that can be invoked by the hw root node to initiate a
+ * retransmission of the data from the leaves, if packets are lost.
  */
 struct cxip_coll_cookie {
 	uint32_t mcast_id:13;
@@ -763,7 +763,7 @@ static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 	 *   - returned to user in completion event
 	 * uint64_t context;	// operation context
 	 * uint64_t flags;	// operation flags
-	 * uint64_t data_len;   // received data length
+	 * uint64_t data_len;	// received data length
 	 * uint64_t buf;	// receive buf offset
 	 * uint64_t data;	// receive REMOTE_CQ_DATA
 	 * uint64_t tag;	// receive tag value on matching interface
@@ -1163,27 +1163,12 @@ void cxip_coll_limit_red_id(struct fid_mc *mc, int max_red_id)
 	mc_obj->max_red_id = max_red_id;
 }
 
-/**
- * Send a reduction packet.
- *
- * Exported for unit testing.
- *
- * @param reduction - reduction object pointer
- * @param redcnt - reduction count needed
- * @param op - operation code
- * @param data - pointer to send buffer
- * @param len - length of send data in bytes
- * @param red_rc - reduction return code
- * @param retry - retry flag
- *
- * @return int - return code
- */
 int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
-			   size_t redcnt, int op, const void *data,
+			   int arm, size_t redcnt, int op, const void *data,
 			   int len, enum cxip_coll_rc red_rc, bool retry)
 {
 	struct red_pkt *pkt;
-	int ret, arm;
+	int ret;
 
 	if (len > CXIP_COLL_MAX_TX_SIZE) {
 		CXIP_INFO("length too large: %d\n", len);
@@ -1193,14 +1178,6 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 	pkt = (struct red_pkt *)reduction->tx_msg;
 
 	memset(&pkt->hdr, 0, sizeof(pkt->hdr));
-	arm = 0;
-	if (is_hw_root(reduction->mc_obj)) {
-		/* Advance the sequence number */
-		reduction->seqno++;
-		reduction->seqno &= CXIP_COLL_SEQNO_MASK;
-		arm = reduction->mc_obj->arm_enable;
-	}
-
 	pkt->hdr.redcnt = redcnt;
 	pkt->hdr.arm = arm;
 	pkt->hdr.op = op;
@@ -1620,6 +1597,12 @@ out:
  * partial results, and all subsequent results are passed directly to the next
  * Rosetta.
  *
+ * The timeout is set to 20.2 seconds (the maximum allowed) for the egress port
+ * attached to the NIC, so any collective that completes within 20 seconds will
+ * see only one packet, with N pre-reduced contributions, where N is the number
+ * of leaf nodes. In expected use-cases, the reduction cycles will be sub-second
+ * or perhaps sub-millisecond.
+ *
  * The first leaf contribution to reach a reduction engine establishes the
  * reduction operation. All subsequent contributions must use the same
  * operation, or Rosetta returns an error.
@@ -1628,43 +1611,84 @@ out:
  * up to eight independent reduction engines (REs) at each upstream port of each
  * Rosetta switch in the collective tree.
  *
- * We use a round-robin selection of reduction id values. Though reductions are
- * generally in sync across all nodes, network lags create races where nodes
- * could disagree whether the operation is complete, and therefore, what the
- * next reduction ID should be.
+ * We use a round-robin selection of reduction id values. There is a small race
+ * condition among the leaf nodes as the result is distributed from the root. If
+ * another reduction were to be initiated during this race, the leaf nodes would
+ * be in disagreement as to which reduction IDs were free for the new reduction.
+ * To avoid this, we use a deterministic algorithm (round-robin) so that the
+ * "next" reduction id is always predetermined for each reduction.
  *
- * In principle, if we knew when the application made a blocking call to wait
- * for a specific completion, we would know that all nodes were in agreement
- * about the completion. But we do not know that the application made a blocking
- * call, only that it progressed the state.
- *
- * The default round-robin cycle is CXIP_COLL_MAX_CONCUR (= 8). This means that
- * Rosetta will not start reducing packets until the ninth reduction, and it
- * will lease and hold all eight reduction engines on the Rosetta upstream port
- * for the duration of the application. This can be adjusted to a "friendlier"
- * value by calling cxip_coll_limit_red_id() to limit the number of concurrent
- * reductions.
- *
- * Ordering of requests and responses must the same on all nodes.
+ * Ordering of requests and responses will the same on all nodes.
  *
  * Ordering of requests is required of the application. If requests are ordered
  * differently on different nodes, results are undefined, and it is considered
  * an application error.
  *
- * Ordering of responses is guaranteed by the mc_obj->frst_red_id value, which
- * is advanced after a response packet is received.
+ * Ordering of responses is guaranteed by the mc_obj->tail_red_id value, which
+ * is advanced after the reduction completes.
  *
  * The algorithm below handles the general case of reordered response packets,
  * by forcing responses to occur in initiation-order.
  *
  * If a packet is dropped, it is up to the retry handler to initiate a retry or
- * a failure for frst_red_id, allowing subsequent reductions to complete.
+ * a failure for tail_red_id, allowing subsequent reductions to complete.
  */
 
-static inline bool _root_retry_required(struct cxip_coll_reduction *reduction)
+/* modular increment */
+#define	INCMOD(val, mod)	do { val = (val + 1) % mod; } while (0)
+
+/* MONOTONIC timestamp operations */
+static inline
+void tsget(struct timespec *ts0)
 {
-	// TODO
-	return false;
+	clock_gettime(CLOCK_MONOTONIC, ts0);
+}
+
+static inline
+void tsdiff(struct timespec *ts1, const struct timespec *ts0)
+{
+	ts1->tv_sec -= ts0->tv_sec;
+	ts1->tv_nsec -= ts0->tv_nsec;
+	if (ts1->tv_nsec < 0) {
+		ts1->tv_sec--;
+		ts1->tv_nsec += 1000000000L;
+	}
+}
+
+static inline
+int tscomp(const struct timespec *ts1, const struct timespec *ts0)
+{
+	if (ts1->tv_sec > ts0->tv_sec)
+		return 1;
+	if (ts1->tv_sec < ts0->tv_sec)
+		return -1;
+	if (ts1->tv_nsec > ts0->tv_nsec)
+		return 1;
+	if (ts1->tv_nsec < ts0->tv_nsec)
+		return -1;
+	return 0;
+}
+
+static inline
+bool tszero(const struct timespec *ts0)
+{
+	return (!ts0->tv_sec && !ts0->tv_nsec);
+}
+
+static inline
+bool _is_red_init(struct cxip_coll_reduction *reduction)
+{
+	return !tszero(&reduction->armtime);
+}
+
+static inline
+bool _is_red_timed_out(struct cxip_coll_reduction *reduction)
+{
+	struct timespec tsnow;
+
+	tsget(&tsnow);
+	tsdiff(&tsnow, &reduction->armtime);
+	return (tscomp(&tsnow, &reduction->mc_obj->timeout) >= 0);
 }
 
 static inline
@@ -1716,13 +1740,8 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 	ssize_t ret;
 
 	/* Drop packets until root is initialized. */
-	if (reduction->coll_state == CXIP_COLL_STATE_NONE)
+	if (reduction->coll_state != CXIP_COLL_STATE_READY)
 		return;
-
-	/* Initial state for root is BLOCKED. The root makes the transition from
-	 * BLOCKED to READY to BLOCKED in a single pass through this code, so we
-	 * do not set or check the state.
-	 */
 
 	if (!pkt) {
 		/* 'Receive' data packet with initial root data */
@@ -1734,20 +1753,24 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 			return;
 		}
 
-		/* process a retry request from CQ polling */
-		if (_root_retry_required(reduction)) {
+		/* If a retry is needed */
+		if (_is_red_timed_out(reduction)) {
 			CXIP_DBG("RETRY collective packet\n");
 
-			ret = cxip_coll_send_red_pkt(reduction, 0, 0, NULL, 0,
-						     CXIP_COLL_RC_SUCCESS, true);
+			reduction->seqno = mc_obj->seqno;
+			ret = cxip_coll_send_red_pkt(
+				reduction, mc_obj->arm_enable,
+				0, 0, NULL, 0, 0, true);
 			if (ret) {
 				/* fatal send error, collectives broken */
 				CXIP_WARN("Collective send: %ld\n", ret);
-				reduction->red_rc = 0;
+				reduction->red_rc = 0;	// TODO error code?
 				_post_coll_complete(reduction, ret);
-				reduction->coll_state = CXIP_COLL_STATE_NONE;
+				reduction->coll_state = CXIP_COLL_STATE_FAULT;
 				return;
 			}
+			INCMOD(mc_obj->seqno, CXIP_COLL_MAX_SEQNO);
+			tsget(&reduction->armtime);
 
 			/* start reduction over */
 			reduction->red_init = false;
@@ -1757,23 +1780,24 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 
 	/* initialize or add to reduction */
 	ret = _root_reduce(reduction, pkt, mc_obj->av_set->fi_addr_cnt);
-
-	/* return != 0 means more work to do, wait for new packets */
 	if (ret == 0) {
+		/* reduction completed on root */
 		rootpkt->hdr.red_rc = reduction->red_rc;
 		reduction->completed = true;
 	}
 
 	/* Complete operations in injection order */
-	reduction = &mc_obj->reduction[mc_obj->frst_red_id];
+	reduction = &mc_obj->reduction[mc_obj->tail_red_id];
 	while (reduction->in_use && reduction->completed) {
-		rootpkt = (struct red_pkt *)reduction->tx_msg;
 
 		/* copy reduction result to root user response buffer */
 		_copy_result_to_user(reduction);
 
 		/* send reduction result to leaves */
-		ret = cxip_coll_send_red_pkt(reduction, 1,
+		reduction->seqno = mc_obj->seqno;
+		ret = cxip_coll_send_red_pkt(reduction,
+					     mc_obj->arm_enable,
+					     reduction->red_cnt,
 					     reduction->op_code,
 					     reduction->op_rslt_data,
 					     reduction->op_data_len,
@@ -1782,24 +1806,23 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 		if (ret) {
 			/* fatal send error, leaves are hung */
 			CXIP_WARN("Collective send: %ld\n", ret);
-			reduction->red_rc = 0;
+			reduction->red_rc = 0;	// TODO error code?
 			_post_coll_complete(reduction, ret);
-			reduction->coll_state = CXIP_COLL_STATE_NONE;
+			reduction->coll_state = CXIP_COLL_STATE_FAULT;
 			break;
 		}
+		INCMOD(mc_obj->seqno, CXIP_COLL_MAX_SEQNO);
+		tsget(&reduction->armtime);
 
-		/* Done with reduction */
+		/* Reduction completed on root */
 		reduction->in_use = false;
 		reduction->completed = false;
 		reduction->red_init = false;
-
-		/* Reduction completed on root */
 		_post_coll_complete(reduction, FI_SUCCESS);
 
 		/* Advance to the next reduction */
-		mc_obj->frst_red_id++;
-		mc_obj->frst_red_id %= mc_obj->max_red_id;
-		reduction = &mc_obj->reduction[mc_obj->frst_red_id];
+		INCMOD(mc_obj->tail_red_id, mc_obj->max_red_id);
+		reduction = &mc_obj->reduction[mc_obj->tail_red_id];
 	}
 }
 
@@ -1813,18 +1836,14 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 	struct cxip_coll_mc *mc_obj = reduction->mc_obj;
 	int ret;
 
-	if (reduction->coll_state == CXIP_COLL_STATE_NONE)
+	if (reduction->coll_state != CXIP_COLL_STATE_READY)
 		return;
 
 	/* initial state for leaf is always READY */
 
 	if (!pkt) {
-		/* Application called a collective operation. We can't get here
-		 * if reduction channel isn't in the READY state, because
-		 * it would not have been possible to acquire a reduction
-		 * channel. So no state check is required.
-		 */
-		ret = cxip_coll_send_red_pkt(reduction, 1,
+		/* Send leaf data to root */
+		ret = cxip_coll_send_red_pkt(reduction, false, 1,
 					     reduction->op_code,
 					     reduction->op_send_data,
 					     reduction->op_data_len,
@@ -1839,6 +1858,9 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 		/* Extract sequence number for next response */
 		reduction->seqno = pkt->hdr.seqno;
 		reduction->resno = pkt->hdr.seqno;
+
+		/* Any packet from root re-arms the reduction */
+		tsget(&reduction->armtime);
 
 		/* Check for retry request */
 		if (pkt->hdr.cookie.retry) {
@@ -1855,35 +1877,28 @@ static void _progress_leaf(struct cxip_coll_reduction *reduction,
 			return;
 		}
 
-		/* We can't get to here unless we are in the BLOCKED state. The
-		 * root node can send unsolicited RETRY packets, but it cannot
-		 * send unsolicited non-RETRY packets. A solicited packet means
-		 * that all of the leaf nodes have sent data, including this
-		 * one, meaning we must be in the BLOCKED state. So no state
-		 * check is required.
-		 */
+		/* Not a retry, no redcnt: just drop arming packet */
+		if (pkt->hdr.redcnt == 0)
+			return;
 
 		/* Capture final reduction data */
 		reduction->red_rc = pkt->hdr.red_rc;
 		_copy_pkt_to_user(reduction, pkt);
 
-		/* This reduction is finished */
+		/* Reduction completed on leaf */
 		reduction->completed = true;
 
 		/* Complete operations in injection order */
-		reduction = &mc_obj->reduction[mc_obj->frst_red_id];
+		reduction = &mc_obj->reduction[mc_obj->tail_red_id];
 		while (reduction->in_use && reduction->completed) {
-			/* Done with reduction */
+			/* Reduction completed on leaf */
 			reduction->in_use = false;
 			reduction->completed = false;
-
-			/* Reduction completed on leaf */
 			_post_coll_complete(reduction, FI_SUCCESS);
 
 			/* Advance to the next reduction */
-			mc_obj->frst_red_id++;
-			mc_obj->frst_red_id %= mc_obj->max_red_id;
-			reduction = &mc_obj->reduction[mc_obj->frst_red_id];
+			INCMOD(mc_obj->tail_red_id, mc_obj->max_red_id);
+			reduction = &mc_obj->reduction[mc_obj->tail_red_id];
 		}
 	}
 }
@@ -1915,7 +1930,7 @@ ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
 {
 	struct cxip_coll_reduction *reduction;
 	struct cxip_req *req;
-	int size;
+	int size, ret;
 
 	if (!mc_obj->is_joined)
 		return -FI_EOPBADSTATE;
@@ -1925,17 +1940,34 @@ ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
 		return size;
 
 	reduction = &mc_obj->reduction[mc_obj->next_red_id];
-
 	if (reduction->in_use)
 		return -FI_EAGAIN;
+
+	if (! _is_red_init(reduction)) {
+		/* leaf has to wait for arm packet */
+		if (!is_hw_root(mc_obj))
+			return -FI_EAGAIN;
+
+		/* root node arm no-op: redcnt == 0, retry == false */
+		reduction->seqno = mc_obj->seqno;
+		ret = cxip_coll_send_red_pkt(
+			reduction, mc_obj->arm_enable,
+			0, 0, NULL, 0, 0, false);
+		if (ret) {
+			PRT("send failure\n");
+			return ret;
+		}
+		/* timer restarted, initialized */
+		tsget(&reduction->armtime);
+		/* root can continue now */
+	}
 
 	req = cxip_cq_req_alloc(mc_obj->ep_obj->coll.tx_cq, 1, NULL, false);
 	if (!req)
 		return -FI_ENOMEM;
 
 	/* Advance to the next reduction id */
-	mc_obj->next_red_id++;
-	mc_obj->next_red_id %= mc_obj->max_red_id;
+	INCMOD(mc_obj->next_red_id, mc_obj->max_red_id);
 
 	/* Pass reduction parameters through the reduction structure */
 	reduction->in_use = true;
@@ -2271,6 +2303,8 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	mc_obj->max_red_id = CXIP_COLL_MAX_CONCUR;
 	mc_obj->arm_enable = true;
 	mc_obj->is_joined = true;
+	mc_obj->timeout.tv_sec = 20;
+	mc_obj->timeout.tv_nsec = 0;
 	mc_obj->tc = CXI_TC_BEST_EFFORT;
 	if (is_hw_root(mc_obj)) {
 		mc_obj->tc_type = CXI_TC_TYPE_DEFAULT;
@@ -2386,7 +2420,6 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		return ret;
 
 	*mc = &mc_obj->mc_fid;
-
 	return FI_SUCCESS;
 }
 
