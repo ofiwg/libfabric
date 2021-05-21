@@ -89,7 +89,7 @@ ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rdm_peer *peer)
 
 	rxr_pkt_init_handshake(ep, pkt_entry, addr);
 
-	ret = rxr_pkt_entry_send(ep, pkt_entry, addr);
+	ret = rxr_pkt_entry_send(ep, pkt_entry, 0);
 	if (OFI_UNLIKELY(ret)) {
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
 	}

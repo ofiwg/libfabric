@@ -286,7 +286,6 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 			       int ctrl_type, bool inject)
 {
-	struct rxr_pkt_sendv send;
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_rx_entry *rx_entry;
@@ -313,8 +312,18 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	if (!pkt_entry)
 		return -FI_EAGAIN;
 
-	send.iov_count = 0;
-	pkt_entry->send = &send;
+	/*
+	 * The allocated pkt_entry->send will be released when releasing the
+	 * pkt_entry, because pkt_entry could be queued and re-send later
+	 */
+	pkt_entry->send = ofi_buf_alloc(rxr_ep->pkt_sendv_pool);
+	if (!pkt_entry->send) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Unable to allocate rxr_pkt_sendv from pkt_sendv_pool\n");
+		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
+		return -FI_EAGAIN;
+	}
+	pkt_entry->send->iov_count = 0;
 
 	/*
 	 * rxr_pkt_init_ctrl will set pkt_entry->send if it want to use multi iov
@@ -327,14 +336,9 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 
 	if (inject)
 		err = rxr_pkt_entry_inject(rxr_ep, pkt_entry, addr);
-	else if (pkt_entry->send->iov_count > 0)
-		err = rxr_pkt_entry_sendv(rxr_ep, pkt_entry, addr,
-					  pkt_entry->send->iov, pkt_entry->send->desc,
-					  pkt_entry->send->iov_count, 0);
 	else
-		err = rxr_pkt_entry_send(rxr_ep, pkt_entry, addr);
+		err = rxr_pkt_entry_send(rxr_ep, pkt_entry, 0);
 
-	pkt_entry->send = NULL;
 	if (OFI_UNLIKELY(err)) {
 		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
 		return err;

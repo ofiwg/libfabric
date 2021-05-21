@@ -606,6 +606,12 @@ struct rxr_ep {
 	struct ofi_bufpool *rx_pkt_efa_pool;
 
 	/*
+	 * buffer pool for rxr_pkt_sendv struct, which is used
+	 * to store iovec related information
+	 */
+	struct ofi_bufpool *pkt_sendv_pool;
+
+	/*
 	 * buffer pool for send & recv for shm as mtu size is different from
 	 * the one of efa, and do not require local memory registration
 	 */
