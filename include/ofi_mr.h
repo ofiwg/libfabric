@@ -327,6 +327,30 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru);
 
 int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 			struct ofi_mr_entry **entry);
+
+enum ofi_mr_cache_status{
+	OFI_MR_CACHE_STATUS_NORMAL                = 0,
+	OFI_MR_CACHE_STATUS_EXCEEDS_COUNT         = (1 << 0),
+	OFI_MR_CACHE_STATUS_EXCEEDS_SIZE          = (1 << 1),
+	OFI_MR_CACHE_STATUS_FLUSH_ENTRIES_WAITING = (1 << 2),
+};
+
+static inline unsigned int ofi_mr_cache_status_evaluate(struct ofi_mr_cache * cache)
+{
+	/* mm_lock mutex must be held during this call */
+
+	unsigned int	result = OFI_MR_CACHE_STATUS_NORMAL;
+
+	if (cache->cached_cnt  > cache_params.max_cnt)
+		result |= OFI_MR_CACHE_STATUS_EXCEEDS_COUNT;
+	if (cache->cached_size > cache_params.max_size)	
+		result |= OFI_MR_CACHE_STATUS_EXCEEDS_SIZE;
+	if (!dlist_empty(&cache->flush_list))		
+		result |= OFI_MR_CACHE_STATUS_FLUSH_ENTRIES_WAITING;
+
+	return result;
+}
+
 /**
  * Given an attr (with an iov range), if the iov range is already registered,
  * return the corresponding ofi_mr_entry. Otherwise, return NULL.

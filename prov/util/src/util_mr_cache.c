@@ -315,8 +315,8 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 	do {
 		pthread_mutex_lock(&mm_lock);
 
-		if ((cache->cached_cnt >= cache_params.max_cnt) ||
-		    (cache->cached_size >= cache_params.max_size)) {
+		if (ofi_mr_cache_status_evaluate(cache) != 
+		    OFI_MR_CACHE_STATUS_NORMAL) {
 			pthread_mutex_unlock(&mm_lock);
 			ofi_mr_cache_flush(cache, true);
 			pthread_mutex_lock(&mm_lock);
