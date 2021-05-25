@@ -247,6 +247,14 @@ void *ofi_av_get_addr(struct util_av *av, fi_addr_t fi_addr)
 	return entry->data;
 }
 
+void *ofi_av_addr_context(struct util_av *av, fi_addr_t fi_addr)
+{
+	void *addr;
+
+	addr = ofi_av_get_addr(av, fi_addr);
+	return (char *) addr + av->context_offset;
+}
+
 int ofi_verify_av_insert(struct util_av *av, uint64_t flags, void *context)
 {
 	if (av->flags & FI_EVENT) {
