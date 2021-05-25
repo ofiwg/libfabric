@@ -72,8 +72,8 @@ int fi_mr_unmap_key(struct fid_domain *domain, uint64_t key);
 
 int fi_mr_bind(struct fid_mr *mr, struct fid *bfid, uint64_t flags);
 
-int fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov, size, count,
-    uint64_t flags)
+int fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov,
+    size_t count, uint64_t flags);
 
 int fi_mr_enable(struct fid_mr *mr);
 ```
@@ -671,7 +671,7 @@ The follow flag may be specified to any memory registration call.
 : This flag indicates that the memory is only accessible by a device. Which
   device is specified by the fi_mr_attr fields iface and device. This refers
   to memory regions that were allocated using a device API AllocDevice call
-  (as opposed to using the host allocation or unified/shared memory allocation). 
+  (as opposed to using the host allocation or unified/shared memory allocation).
 
 # MEMORY DOMAINS
 
