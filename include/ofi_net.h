@@ -371,6 +371,21 @@ static inline int ofi_translate_addr_format(int family)
 	}
 }
 
+static inline size_t ofi_sizeof_addr_format(int format)
+{
+	switch (format) {
+	case FI_SOCKADDR_IN:
+		return sizeof(struct sockaddr_in);
+	case FI_SOCKADDR_IN6:
+		return sizeof(struct sockaddr_in6);
+	case FI_SOCKADDR_IB:
+		return sizeof(struct ofi_sockaddr_ib);
+	default:
+		FI_WARN(&core_prov, FI_LOG_CORE, "Unsupported address format\n");
+		return 0;
+	}
+}
+
 uint16_t ofi_get_sa_family(const struct fi_info *info);
 
 static inline bool ofi_sin_is_any_addr(const struct sockaddr *sa)
