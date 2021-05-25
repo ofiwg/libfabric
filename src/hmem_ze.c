@@ -40,8 +40,6 @@
 #if HAVE_LIBZE
 
 #include <dirent.h>
-#include <drm/i915_drm.h>
-#include <sys/ioctl.h>
 #include <level_zero/ze_api.h>
 
 static ze_context_handle_t context;
@@ -67,6 +65,10 @@ static const ze_command_list_desc_t cl_desc = {
 	.commandQueueGroupOrdinal	= 0,
 	.flags				= 0,
 };
+
+#if HAVE_DRM
+#include <drm/i915_drm.h>
+#include <sys/ioctl.h>
 
 static int ze_hmem_init_fds(void)
 {
@@ -102,6 +104,83 @@ static int ze_hmem_init_fds(void)
 	}
 	return FI_SUCCESS;
 }
+
+int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
+			      void **handle)
+{
+	struct drm_prime_handle open_fd = {0, 0, 0};
+	ze_ipc_mem_handle_t ze_handle;
+	int ret;
+
+	ret = ze_hmem_get_handle(dev_buf, (void **) &ze_handle);
+	if (ret)
+		return ret;
+
+	memcpy(ze_fd, &ze_handle, sizeof(*ze_fd));
+	memcpy(&open_fd.fd, &ze_handle, sizeof(open_fd.fd));
+	ret = ioctl(dev_fd, DRM_IOCTL_PRIME_FD_TO_HANDLE, &open_fd);
+	if (ret) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"ioctl call failed on get, err %d\n", errno);
+		return -FI_EINVAL;
+	}
+
+	*(int *) handle = open_fd.handle;
+	return FI_SUCCESS;
+}
+
+int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
+			       uint64_t device, void **ipc_ptr)
+{
+	struct drm_prime_handle open_fd = {0, 0, 0};
+	ze_ipc_mem_handle_t ze_handle;
+	int ret;
+
+	open_fd.flags = DRM_CLOEXEC | DRM_RDWR;
+	open_fd.handle = *(int *) handle;
+
+	ret = ioctl(dev_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &open_fd);
+	if (ret) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"ioctl call failed on open, err %d\n", errno);
+		return -FI_EINVAL;
+	}
+
+	*ze_fd = open_fd.fd;
+	memset(&ze_handle, 0, sizeof(ze_handle));
+	memcpy(&ze_handle, &open_fd.fd, sizeof(open_fd.fd));
+	return ze_hmem_open_handle((void **) &ze_handle, device, ipc_ptr);
+}
+
+bool ze_hmem_p2p_enabled(void)
+{
+	return p2p_enabled;
+}
+
+#else
+
+static int ze_hmem_init_fds(void)
+{
+	return FI_SUCCESS;
+}
+
+int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
+			      void **handle)
+{
+	return -FI_ENOSYS;
+}
+int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
+			       uint64_t device, void **ipc_ptr)
+{
+	return -FI_ENOSYS;
+}
+
+bool ze_hmem_p2p_enabled(void)
+{
+	return false;
+}
+
+#endif //HAVE_DRM
 
 int ze_hmem_init(void)
 {
@@ -265,53 +344,6 @@ int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr)
 	return FI_SUCCESS;
 }
 
-int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
-			      void **handle)
-{
-	struct drm_prime_handle open_fd = {0, 0, 0};
-	ze_ipc_mem_handle_t ze_handle;
-	int ret;
-
-	ret = ze_hmem_get_handle(dev_buf, (void **) &ze_handle);
-	if (ret)
-		return ret;
-
-	memcpy(ze_fd, &ze_handle, sizeof(*ze_fd));
-	memcpy(&open_fd.fd, &ze_handle, sizeof(open_fd.fd));
-	ret = ioctl(dev_fd, DRM_IOCTL_PRIME_FD_TO_HANDLE, &open_fd);
-	if (ret) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"ioctl call failed on get, err %d\n", errno);
-		return -FI_EINVAL;
-	}
-
-	*(int *) handle = open_fd.handle;
-	return FI_SUCCESS;
-}
-
-int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
-			       uint64_t device, void **ipc_ptr)
-{
-	struct drm_prime_handle open_fd = {0, 0, 0};
-	ze_ipc_mem_handle_t ze_handle;
-	int ret;
-
-	open_fd.flags = DRM_CLOEXEC | DRM_RDWR;
-	open_fd.handle = *(int *) handle;
-
-	ret = ioctl(dev_fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &open_fd);
-	if (ret) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"ioctl call failed on open, err %d\n", errno);
-		return -FI_EINVAL;
-	}
-
-	*ze_fd = open_fd.fd;
-	memset(&ze_handle, 0, sizeof(ze_handle));
-	memcpy(&ze_handle, &open_fd.fd, sizeof(open_fd.fd));
-	return ze_hmem_open_handle((void **) &ze_handle, device, ipc_ptr);
-}
-
 int ze_hmem_close_handle(void *ipc_ptr)
 {
 	ze_result_t ze_ret;
@@ -324,11 +356,6 @@ int ze_hmem_close_handle(void *ipc_ptr)
 	}
 
 	return FI_SUCCESS;
-}
-
-bool ze_hmem_p2p_enabled(void)
-{
-	return p2p_enabled;
 }
 
 int ze_hmem_get_base_addr(const void *ptr, void **base)
