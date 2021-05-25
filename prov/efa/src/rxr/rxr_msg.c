@@ -664,8 +664,6 @@ struct rxr_rx_entry *rxr_msg_alloc_rx_entry(struct rxr_ep *ep,
 		rx_entry->ignore = ignore;
 	}
 
-	rx_entry->owner = ep->use_zcpy_rx ? RXR_RX_USER_BUF : RXR_RX_PROV_BUF;
-
 	/* Handle case where we're allocating an unexpected rx_entry */
 	rx_entry->iov_count = msg->iov_count;
 	if (rx_entry->iov_count) {
