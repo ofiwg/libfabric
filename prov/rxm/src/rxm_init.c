@@ -109,7 +109,7 @@ static bool rxm_use_srx(const struct fi_info *hints,
 	info = base_info ? base_info : hints;
 
 	return info && info->fabric_attr && info->fabric_attr->prov_name &&
-	       !strcasestr(info->fabric_attr->prov_name, "tcp");
+	       strcasestr(info->fabric_attr->prov_name, "tcp");
 }
 
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
