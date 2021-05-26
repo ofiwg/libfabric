@@ -146,7 +146,7 @@ static inline int fastlock_held(fastlock_t *lock)
 #  define fastlock_acquire(lock) fastlock_acquire_(lock)
 #  define fastlock_tryacquire(lock) fastlock_tryacquire_(lock)
 #  define fastlock_release(lock) fastlock_release_(lock)
-#  define fastlock_held(lock)
+#  define fastlock_held(lock) true
 
 #endif
 

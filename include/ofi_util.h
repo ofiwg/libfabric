@@ -335,6 +335,12 @@ static inline void ofi_ep_lock_release(struct util_ep *ep)
 	ep->lock_release(&ep->lock);
 }
 
+static inline bool ofi_ep_lock_held(struct util_ep *ep)
+{
+	return (ep->lock_acquire == ofi_fastlock_acquire_noop) ||
+		fastlock_held(&ep->lock);
+}
+
 static inline void ofi_ep_tx_cntr_inc(struct util_ep *ep)
 {
 	ep->tx_cntr_inc(ep->tx_cntr);
