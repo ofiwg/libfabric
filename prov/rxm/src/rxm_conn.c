@@ -436,14 +436,11 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 			      struct rxm_cmap_handle *handle,
 			      union rxm_cm_data *cm_data)
 {
-	struct rxm_conn *rxm_conn = container_of(handle, struct rxm_conn, handle);
-
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 	       "processing FI_CONNECTED event for handle: %p\n", handle);
 	if (cm_data) {
 		assert(handle->state == RXM_CMAP_CONNREQ_SENT);
 		handle->remote_key = cm_data->accept.server_conn_id;
-		rxm_conn->rndv_tx_credits = cm_data->accept.rx_size;
 	} else {
 		assert(handle->state == RXM_CMAP_CONNREQ_RECV);
 	}
@@ -1029,8 +1026,6 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	rxm_conn = container_of(handle, struct rxm_conn, handle);
 
 	rxm_conn->handle.remote_key = remote_cm_data->connect.client_conn_id;
-	rxm_conn->rndv_tx_credits = remote_cm_data->connect.rx_size;
-	assert(rxm_conn->rndv_tx_credits);
 
 	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn, handle);
 	if (ret)
