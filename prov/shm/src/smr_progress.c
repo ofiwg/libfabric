@@ -432,7 +432,10 @@ static int smr_progress_ipc(struct smr_cmd *cmd, enum fi_hmem_iface iface,
 	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 	resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
 
-	if (iface == FI_HMEM_ZE) {
+	//TODO disable IPC if more than 1 interface is initialized
+	assert(iface == cmd->msg.data.ipc_info.iface || iface == FI_HMEM_SYSTEM);
+
+	if (cmd->msg.data.ipc_info.iface == FI_HMEM_ZE) {
 		id = cmd->msg.hdr.id;
 		ipc_device = cmd->msg.data.ipc_info.device;
 		fd = ep->sock_info->peers[id].device_fds[ipc_device];
@@ -440,7 +443,7 @@ static int smr_progress_ipc(struct smr_cmd *cmd, enum fi_hmem_iface iface,
 				(void **) &cmd->msg.data.ipc_info.fd_handle,
 				&ipc_fd, ipc_device, &base);
 	} else {
-		ret = ofi_hmem_open_handle(iface,
+		ret = ofi_hmem_open_handle(cmd->msg.data.ipc_info.iface,
 				(void **) &cmd->msg.data.ipc_info.ipc_handle,
 				device, &base);
 	}
@@ -448,24 +451,24 @@ static int smr_progress_ipc(struct smr_cmd *cmd, enum fi_hmem_iface iface,
 		goto out;
 
 	ptr = base;
-	if (iface == FI_HMEM_ZE)
+	if (cmd->msg.data.ipc_info.iface == FI_HMEM_ZE)
 		ptr = (char *) ptr + (uintptr_t) cmd->msg.data.ipc_info.offset;
 
 	if (cmd->msg.hdr.op == ofi_op_read_req) {
 		*total_len = ofi_copy_from_hmem_iov(ptr, cmd->msg.hdr.size,
-						    iface, device, iov,
-						    iov_count, 0);
+						    cmd->msg.data.ipc_info.iface,
+						    device, iov, iov_count, 0);
 	} else {
-		*total_len = ofi_copy_to_hmem_iov(iface, device, iov,
-						  iov_count, 0, ptr,
+		*total_len = ofi_copy_to_hmem_iov(cmd->msg.data.ipc_info.iface,
+						  device, iov, iov_count, 0, ptr,
 						  cmd->msg.hdr.size);
 	}
 	if (!ret)
 		*total_len = cmd->msg.hdr.size;
 
-	if (iface == FI_HMEM_ZE)
+	if (cmd->msg.data.ipc_info.iface == FI_HMEM_ZE)
 		close(ipc_fd);
-	ret = ofi_hmem_close_handle(iface, base);
+	ret = ofi_hmem_close_handle(cmd->msg.data.ipc_info.iface, base);
 out:
 	//Status must be set last (signals peer: op done, valid resp entry)
 	resp->status = ret;
