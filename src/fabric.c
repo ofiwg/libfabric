@@ -68,6 +68,56 @@ extern struct ofi_common_locks common_locks;
 
 static struct fi_filter prov_filter;
 
+
+static struct ofi_prov *ofi_alloc_prov(const char *prov_name)
+{
+	struct ofi_prov *prov;
+
+	prov = calloc(sizeof *prov, 1);
+	if (!prov)
+		return NULL;
+
+	prov->prov_name = strdup(prov_name);
+	if (!prov->prov_name) {
+		free(prov);
+		return NULL;
+	}
+
+	return prov;
+}
+
+static void ofi_cleanup_prov(struct fi_provider *provider, void *dlhandle)
+{
+	if (provider) {
+		fi_param_undefine(provider);
+		if (provider->cleanup)
+			provider->cleanup();
+	}
+
+#ifdef HAVE_LIBDL
+	if (dlhandle)
+		dlclose(dlhandle);
+#else
+	OFI_UNUSED(dlhandle);
+#endif
+}
+
+static void ofi_free_prov(struct ofi_prov *prov)
+{
+	ofi_cleanup_prov(prov->provider, prov->dlhandle);
+	free(prov->prov_name);
+	free(prov);
+}
+
+static void ofi_insert_prov(struct ofi_prov *prov)
+{
+	if (prov_tail)
+		prov_tail->next = prov;
+	else
+		prov_head = prov;
+	prov_tail = prov;
+}
+
 static int ofi_find_name(char **names, const char *name)
 {
 	int i;
@@ -310,50 +360,6 @@ struct fi_provider *ofi_get_hook(const char *name)
 	return provider;
 }
 
-static void cleanup_provider(struct fi_provider *provider, void *dlhandle)
-{
-	OFI_UNUSED(dlhandle);
-
-	if (provider) {
-		fi_param_undefine(provider);
-
-		if (provider->cleanup)
-			provider->cleanup();
-	}
-
-#ifdef HAVE_LIBDL
-	if (dlhandle)
-		dlclose(dlhandle);
-#endif
-}
-
-static struct ofi_prov *ofi_create_prov_entry(const char *prov_name)
-{
-	struct ofi_prov *prov = NULL;
-	prov = calloc(sizeof *prov, 1);
-	if (!prov) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Not enough memory to allocate provider registry\n");
-		return NULL;
-	}
-
-	prov->prov_name = strdup(prov_name);
-	if (!prov->prov_name) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to init pre-registered provider name\n");
-		free(prov);
-		return NULL;
-	}
-	if (prov_tail)
-		prov_tail->next = prov;
-	else
-		prov_head = prov;
-	prov_tail = prov;
-
-	prov->hidden = false;
-
-	return prov;
-}
 
 /* This is the default order that providers will be reported when a provider
  * is available.  Initialize the socket(s) provider last.  This will result in
@@ -378,10 +384,16 @@ static void ofi_ordered_provs_init(void)
 		 */
 		"ofi_hook_perf", "ofi_hook_debug", "ofi_hook_noop",
 	};
-	int num_provs = sizeof(ordered_prov_names)/sizeof(ordered_prov_names[0]), i;
+	struct ofi_prov *prov;
+	int num_provs, i;
 
-	for (i = 0; i < num_provs; i++)
-		ofi_create_prov_entry(ordered_prov_names[i]);
+	num_provs = sizeof(ordered_prov_names) / sizeof(ordered_prov_names[0]);
+
+	for (i = 0; i < num_provs; i++) {
+		prov = ofi_alloc_prov(ordered_prov_names[i]);
+		if (prov)
+			ofi_insert_prov(prov);
+	}
 }
 
 static void ofi_set_prov_type(struct fi_prov_context *ctx,
@@ -480,11 +492,12 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 			"an older %s provider was already loaded; "
 			"keeping this one and ignoring the older one\n",
 			provider->name);
-		cleanup_provider(prov->provider, prov->dlhandle);
+		ofi_cleanup_prov(prov->provider, prov->dlhandle);
 	} else {
-		prov = ofi_create_prov_entry(provider->name);
+		prov = ofi_alloc_prov(provider->name);
 		if (!prov)
 			goto cleanup;
+		ofi_insert_prov(prov);
 	}
 
 	if (hidden)
@@ -496,7 +509,7 @@ update_prov_registry:
 	return;
 
 cleanup:
-	cleanup_provider(provider, dlhandle);
+	ofi_cleanup_prov(provider, dlhandle);
 }
 
 #ifdef HAVE_LIBDL
@@ -758,9 +771,7 @@ FI_DESTRUCTOR(fi_fini(void))
 	while (prov_head) {
 		prov = prov_head;
 		prov_head = prov->next;
-		cleanup_provider(prov->provider, prov->dlhandle);
-		free(prov->prov_name);
-		free(prov);
+		ofi_free_prov(prov);
 	}
 
 	ofi_free_filter(&prov_filter);
