@@ -1472,8 +1472,6 @@ static inline void rxr_ep_poll_cq(struct rxr_ep *ep,
 			if (rxr_cq_handle_cq_error(ep, ret))
 				assert(0 &&
 				       "error writing error cq entry after reading from cq");
-			if (!ep->use_zcpy_rx)
-				rxr_ep_bulk_post_recv(ep);
 			return;
 		}
 
