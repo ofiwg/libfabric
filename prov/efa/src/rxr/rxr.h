@@ -554,6 +554,7 @@ struct rxr_ep {
 	size_t mtu_size;
 	size_t rx_iov_limit;
 	size_t tx_iov_limit;
+	size_t inject_size;
 
 	/* core's capabilities */
 	uint64_t core_caps;
