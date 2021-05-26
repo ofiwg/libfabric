@@ -116,7 +116,7 @@ class Fabtest(Test):
             opts = "{} -c {} ".format(opts, self.client)
             opts += "-N "
             
-        if not re.match(".*sockets|udp|tcp.*", self.core_prov):
+        if not re.match(".*sockets|udp.*", self.core_prov):
             opts = "{} -t all ".format(opts)
 
         efile = self.get_exclude_file()
