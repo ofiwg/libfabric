@@ -505,6 +505,10 @@ function set_cfg_file {
 	local parent=$UTIL
 	local name=$CORE
 
+	if [[ ! -z "$COMPLEX_CFG" ]]; then
+		return
+	fi
+
 	if [ -z $UTIL ]; then
 		parent=$CORE
 		name=$1
@@ -532,9 +536,9 @@ function complex_test {
 	local end_time
 	local test_time
 
-	is_excluded "$test" && return
+	set_cfg_file $config
 	if [[ -z "$COMPLEX_CFG" ]]; then
-		set_cfg_file $config
+		is_excluded "$test" && return
 	fi
 
 	start_time=$(date '+%s')
