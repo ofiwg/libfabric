@@ -182,6 +182,12 @@ static inline enum fi_hmem_iface smr_get_mr_hmem_iface(struct util_domain *domai
 	return ((struct ofi_mr *) *desc)->iface;
 }
 
+static inline uint64_t smr_get_mr_flags(void **desc)
+{
+	assert(desc && *desc);
+	return ((struct ofi_mr *) *desc)->flags;
+}
+
 struct smr_unexp_msg {
 	struct dlist_entry entry;
 	struct smr_cmd cmd;
