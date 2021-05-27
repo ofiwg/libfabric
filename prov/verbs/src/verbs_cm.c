@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2018-2021 System Fabric Works, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -280,8 +281,7 @@ vrb_msg_xrc_ep_reject(struct vrb_connreq *connreq,
 	if (ret)
 		return ret;
 
-	vrb_set_xrc_cm_data(cm_data, connreq->xrc.is_reciprocal,
-			       connreq->xrc.conn_tag, connreq->xrc.port, 0, 0);
+	vrb_set_xrc_cm_data(cm_data, connreq->xrc.port, 0, 0);
 	ret = rdma_reject(connreq->id, cm_data,
 			  (uint8_t) paramlen) ? -errno : 0;
 	free(cm_data);
@@ -376,6 +376,7 @@ vrb_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 	int ret;
 	struct vrb_cm_data_hdr *cm_hdr;
 
+	assert(addr);
 	ret = vrb_msg_xrc_cm_common_verify(xrc_ep, paramlen);
 	if (ret)
 		return ret;
@@ -388,32 +389,41 @@ vrb_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 	paramlen += sizeof(*cm_hdr);
 
 	ret = vrb_msg_alloc_xrc_params(&adjusted_param, cm_hdr, &paramlen);
-	if (ret) {
-		free(cm_hdr);
-		return ret;
-	}
+	if (ret)
+		goto free_hdr;
 
 	xrc_ep->conn_setup = calloc(1, sizeof(*xrc_ep->conn_setup));
 	if (!xrc_ep->conn_setup) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "Unable to allocate connection setup memory\n");
-		free(adjusted_param);
-		free(cm_hdr);
-		return -FI_ENOMEM;
+		ret = -FI_ENOMEM;
+		goto free_param;
 	}
-	xrc_ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
 
 	fastlock_acquire(&xrc_ep->base_ep.eq->lock);
-	ret = vrb_connect_xrc(xrc_ep, NULL, 0, adjusted_param, paramlen);
+	/* Endpoint may have been created on passive side, fix addresses */
+	ofi_addr_set_port(_ep->info_attr.src_addr, 0);
+	free(_ep->info_attr.dest_addr);
+	_ep->info_attr.dest_addr = mem_dup(addr, _ep->info_attr.dest_addrlen);
+	if (!_ep->info_attr.dest_addr) {
+		fastlock_release(&xrc_ep->base_ep.eq->lock);
+		VERBS_WARN(FI_LOG_EP_CTRL,
+			   "Unable to allocate dest addr memory\n");
+		ret = -FI_ENOMEM;
+		goto free_param;
+	}
+	ret = vrb_connect_xrc(xrc_ep, NULL, adjusted_param, paramlen);
 	fastlock_release(&xrc_ep->base_ep.eq->lock);
 
+free_param:
 	free(adjusted_param);
+free_hdr:
 	free(cm_hdr);
 	return ret;
 }
 
-static int
-vrb_msg_xrc_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
+int vrb_msg_xrc_ep_simplex_accept(struct fid_ep *ep, struct fi_info *info,
+				  const void *param, size_t paramlen)
 {
 	void *adjusted_param;
 	struct vrb_ep *_ep =
@@ -436,7 +446,7 @@ vrb_msg_xrc_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 		return ret;
 
 	fastlock_acquire(&xrc_ep->base_ep.eq->lock);
-	ret = vrb_accept_xrc(xrc_ep, 0, adjusted_param, paramlen);
+	ret = vrb_accept_xrc(xrc_ep, info, adjusted_param, paramlen);
 	fastlock_release(&xrc_ep->base_ep.eq->lock);
 
 	free(adjusted_param);
@@ -450,7 +460,7 @@ struct fi_ops_cm vrb_msg_xrc_ep_cm_ops = {
 	.getpeer = vrb_msg_ep_getpeer,
 	.connect = vrb_msg_xrc_ep_connect,
 	.listen = fi_no_listen,
-	.accept = vrb_msg_xrc_ep_accept,
+	.accept = fi_no_accept,
 	.reject = fi_no_reject,
 	.shutdown = vrb_msg_ep_shutdown,
 	.join = fi_no_join,

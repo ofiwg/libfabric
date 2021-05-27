@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2021 System Fabric Works, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -132,12 +133,12 @@ struct rxm_cmap_handle *rxm_cmap_key2handle(struct rxm_cmap *cmap, uint64_t key)
 
 static void rxm_cmap_init_handle(struct rxm_cmap_handle *handle,
 				  struct rxm_cmap *cmap,
-				  enum rxm_cmap_state state,
 				  fi_addr_t fi_addr,
 				  struct rxm_cmap_peer *peer)
 {
 	handle->cmap = cmap;
-	RXM_CM_UPDATE_STATE(handle, state);
+	RXM_CM_UPDATE_TX_STATE(handle, RXM_CMAP_IDLE);
+	RXM_CM_UPDATE_RX_STATE(handle, RXM_CMAP_IDLE);
 	rxm_cmap_set_key(handle);
 	handle->fi_addr = fi_addr;
 	handle->peer = peer;
@@ -160,7 +161,8 @@ static int rxm_cmap_del_handle(struct rxm_cmap_handle *handle)
 	       "marking connection handle: %p for deletion\n", handle);
 	rxm_cmap_clear_key(handle);
 
-	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_SHUTDOWN);
+	RXM_CM_UPDATE_TX_STATE(handle, RXM_CMAP_SHUTDOWN);
+	RXM_CM_UPDATE_RX_STATE(handle, RXM_CMAP_SHUTDOWN);
 
 	/* Signal CM thread to delete the handle. This is required
 	 * so that the CM thread handles any pending events for this
@@ -184,19 +186,22 @@ ssize_t rxm_get_conn(struct rxm_ep *rxm_ep, fi_addr_t addr,
 	assert(rxm_ep->util_ep.tx_cq);
 	handle = rxm_cmap_acquire_handle(rxm_ep->cmap, addr);
 	if (!handle) {
-		ret = rxm_cmap_alloc_handle(rxm_ep->cmap, addr,
-					    RXM_CMAP_IDLE, &handle);
+		ret = rxm_cmap_alloc_handle(rxm_ep->cmap, addr, &handle);
 		if (ret)
 			return ret;
 	}
 
 	*rxm_conn = container_of(handle, struct rxm_conn, handle);
 
-	if (handle->state != RXM_CMAP_CONNECTED) {
+	if (handle->tx_state != RXM_CMAP_CONNECTED) {
 		ret = rxm_cmap_connect(rxm_ep, addr, handle);
 		if (ret)
 			return ret;
 	}
+
+	/* For simplex transports wait for peer to connect back */
+	if (handle->cmap->simplex && handle->rx_state != RXM_CMAP_CONNECTED)
+		return -FI_EAGAIN;
 
 	if (!dlist_empty(&(*rxm_conn)->deferred_tx_queue)) {
 		rxm_ep_do_progress(&rxm_ep->util_ep);
@@ -275,7 +280,6 @@ static void rxm_conn_free(struct rxm_cmap_handle *handle)
 }
 
 int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
-			  enum rxm_cmap_state state,
 			  struct rxm_cmap_handle **handle)
 {
 	int ret;
@@ -294,13 +298,12 @@ int rxm_cmap_alloc_handle(struct rxm_cmap *cmap, fi_addr_t fi_addr,
 		return ret;
 	}
 
-	rxm_cmap_init_handle(*handle, cmap, state, fi_addr, NULL);
+	rxm_cmap_init_handle(*handle, cmap, fi_addr, NULL);
 	cmap->handles_av[fi_addr] = *handle;
 	return 0;
 }
 
 static int rxm_cmap_alloc_handle_peer(struct rxm_cmap *cmap, void *addr,
-				       enum rxm_cmap_state state,
 				       struct rxm_cmap_handle **handle)
 {
 	struct rxm_cmap_peer *peer;
@@ -319,7 +322,7 @@ static int rxm_cmap_alloc_handle_peer(struct rxm_cmap *cmap, void *addr,
 			"Allocated handle for addr", addr);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "handle: %p\n", *handle);
 
-	rxm_cmap_init_handle(*handle, cmap, state, FI_ADDR_NOTAVAIL, peer);
+	rxm_cmap_init_handle(*handle, cmap, FI_ADDR_NOTAVAIL, peer);
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Adding handle to peer list\n");
 	peer->handle = *handle;
 	memcpy(peer->addr, addr, cmap->av->addrlen);
@@ -404,8 +407,7 @@ int rxm_cmap_update(struct rxm_cmap *cmap, const void *addr, fi_addr_t fi_addr)
 
 	handle = rxm_cmap_get_handle_peer(cmap, addr);
 	if (!handle) {
-		ret = rxm_cmap_alloc_handle(cmap, fi_addr,
-					    RXM_CMAP_IDLE, &handle);
+		ret = rxm_cmap_alloc_handle(cmap, fi_addr, &handle);
 		return ret;
 	}
 	ret = rxm_cmap_move_handle(handle, fi_addr);
@@ -421,10 +423,12 @@ void rxm_cmap_process_shutdown(struct rxm_cmap *cmap,
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 		"Processing shutdown for handle: %p\n", handle);
-	if (handle->state > RXM_CMAP_SHUTDOWN) {
+	if (handle->tx_state > RXM_CMAP_SHUTDOWN ||
+	    handle->rx_state > RXM_CMAP_SHUTDOWN) {
 		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
 			"Invalid handle on shutdown event\n");
-	} else if (handle->state != RXM_CMAP_SHUTDOWN) {
+	} else if (handle->tx_state != RXM_CMAP_SHUTDOWN &&
+		   handle->rx_state != RXM_CMAP_SHUTDOWN) {
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Got remote shutdown\n");
 		rxm_cmap_del_handle(handle);
 	} else {
@@ -441,13 +445,18 @@ void rxm_cmap_process_connect(struct rxm_cmap *cmap,
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 	       "processing FI_CONNECTED event for handle: %p\n", handle);
 	if (cm_data) {
-		assert(handle->state == RXM_CMAP_CONNREQ_SENT);
+		assert(handle->tx_state == RXM_CMAP_CONNREQ_SENT);
 		handle->remote_key = cm_data->accept.server_conn_id;
 		rxm_conn->rndv_tx_credits = cm_data->accept.rx_size;
+		RXM_CM_UPDATE_TX_STATE(handle, RXM_CMAP_CONNECTED);
+		if (!cmap->simplex)
+			RXM_CM_UPDATE_RX_STATE(handle, RXM_CMAP_CONNECTED);
 	} else {
-		assert(handle->state == RXM_CMAP_CONNREQ_RECV);
+		assert(handle->rx_state == RXM_CMAP_CONNREQ_RECV);
+		RXM_CM_UPDATE_RX_STATE(handle, RXM_CMAP_CONNECTED);
+		if (!cmap->simplex)
+			RXM_CM_UPDATE_TX_STATE(handle, RXM_CMAP_CONNECTED);
 	}
-	RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNECTED);
 }
 
 void rxm_cmap_process_reject(struct rxm_cmap *cmap,
@@ -456,117 +465,108 @@ void rxm_cmap_process_reject(struct rxm_cmap *cmap,
 {
 	FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 		"Processing reject for handle: %p\n", handle);
-	switch (handle->state) {
-	case RXM_CMAP_CONNREQ_RECV:
-	case RXM_CMAP_CONNECTED:
-		/* Handle is being re-used for incoming connection request */
-		break;
-	case RXM_CMAP_CONNREQ_SENT:
+
+	if (handle->tx_state == RXM_CMAP_CONNREQ_SENT) {
 		if (reject_reason == RXM_CMAP_REJECT_GENUINE) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
 			       "Deleting connection handle\n");
 			rxm_cmap_del_handle(handle);
 		} else {
-			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-			       "Connection handle is being re-used. Close the connection\n");
+			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL, "Connection "
+			       "handle is being re-used. Close connection\n");
 			rxm_conn_close(handle);
 		}
-		break;
-	case RXM_CMAP_SHUTDOWN:
-		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Connection handle already being deleted\n");
-		break;
-	default:
-		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL, "Invalid cmap state: "
-			"%d when receiving connection reject\n", handle->state);
-		assert(0);
 	}
+}
+
+static int
+rxm_cmap_get_connreq_handle(struct rxm_cmap *cmap, void *addr,
+			    fi_addr_t *fi_addr, struct rxm_cmap_handle **handle)
+{
+	int ret = 0;
+	struct rxm_cmap_handle *new_handle = NULL;
+
+	*fi_addr = ofi_ip_av_get_fi_addr(cmap->av, addr);
+	ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL,
+			"processing connreq from remote pep", addr);
+
+	if (*fi_addr == FI_ADDR_NOTAVAIL) {
+		*handle = rxm_cmap_get_handle_peer(cmap, addr);
+		if (!(*handle))
+			ret = rxm_cmap_alloc_handle_peer(cmap, addr, &new_handle);
+	} else {
+		*handle = rxm_cmap_acquire_handle(cmap, *fi_addr);
+		if (!(*handle))
+			ret = rxm_cmap_alloc_handle(cmap, *fi_addr, &new_handle);
+	}
+
+	if (new_handle && !ret)
+		*handle = new_handle;
+	return ret;
 }
 
 int rxm_cmap_process_connreq(struct rxm_cmap *cmap, void *addr,
 			     struct rxm_cmap_handle **handle_ret,
 			     uint8_t *reject_reason)
 {
-	struct rxm_cmap_handle *handle;
-	int ret = 0, cmp;
-	fi_addr_t fi_addr = ofi_ip_av_get_fi_addr(cmap->av, addr);
+	struct rxm_cmap_handle *handle = NULL;
+	fi_addr_t fi_addr;
+	int ret;
+	int cmp;
 
-	ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Processing connreq from remote pep", addr);
-
-	if (fi_addr == FI_ADDR_NOTAVAIL) {
-		handle = rxm_cmap_get_handle_peer(cmap, addr);
-		if (!handle)
-			ret = rxm_cmap_alloc_handle_peer(cmap, addr,
-							 RXM_CMAP_CONNREQ_RECV,
-							 &handle);
-	} else {
-		handle = rxm_cmap_acquire_handle(cmap, fi_addr);
-		if (!handle)
-			ret = rxm_cmap_alloc_handle(cmap, fi_addr,
-						    RXM_CMAP_CONNREQ_RECV,
-						    &handle);
-	}
+	ret = rxm_cmap_get_connreq_handle(cmap, addr, &fi_addr, &handle);
 	if (ret)
 		return ret;
 
-	switch (handle->state) {
-	case RXM_CMAP_CONNECTED:
+	if (handle->rx_state != RXM_CMAP_IDLE) {
 		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-			"Connection already present.\n");
-		ret = -FI_EALREADY;
-		break;
-	case RXM_CMAP_CONNREQ_SENT:
+		       "Connect request for non-idle RX state\n");
+		return -FI_EALREADY;
+	}
+
+	if (cmap->simplex)
+		goto done;
+
+	if (handle->tx_state != RXM_CMAP_IDLE &&
+	    handle->tx_state != RXM_CMAP_CONNREQ_SENT) {
+		FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
+		       "Handle TX state not idle or in progress\n");
+		return -FI_EALREADY;
+	}
+
+	/* Handle duplex simultaneous connections */
+	if (handle->tx_state == RXM_CMAP_CONNREQ_SENT) {
 		ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL, "local_name",
 				cmap->attr.name);
 		ofi_straddr_dbg(cmap->av->prov, FI_LOG_EP_CTRL, "remote_name",
 				addr);
 
 		cmp = ofi_addr_cmp(cmap->av->prov, addr, cmap->attr.name);
-
 		if (cmp < 0) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-				"Remote name lower than local name.\n");
+			       "Remote name lower than local name.\n");
 			*reject_reason = RXM_CMAP_REJECT_SIMULT_CONN;
-			ret = -FI_EALREADY;
-			break;
+			return -FI_EALREADY;
 		} else if (cmp > 0) {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-				"Re-using handle: %p to accept remote "
-				"connection\n", handle);
-			*reject_reason = RXM_CMAP_REJECT_GENUINE;
+			       "Re-using handle: %p to accept remote "
+			       "connection\n", handle);
 			rxm_conn_close(handle);
 		} else {
 			FI_DBG(cmap->av->prov, FI_LOG_EP_CTRL,
-				"Endpoint connects to itself\n");
-			ret = rxm_cmap_alloc_handle_peer(cmap, addr,
-							  RXM_CMAP_CONNREQ_RECV,
-							  &handle);
+			       "Endpoint connects to itself\n");
+			ret = rxm_cmap_alloc_handle_peer(cmap, addr, &handle);
 			if (ret)
 				return ret;
 
 			assert(fi_addr != FI_ADDR_NOTAVAIL);
 			handle->fi_addr = fi_addr;
 		}
-		/* Fall through */
-	case RXM_CMAP_IDLE:
-		RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNREQ_RECV);
-		/* Fall through */
-	case RXM_CMAP_CONNREQ_RECV:
-		*handle_ret = handle;
-		break;
-	case RXM_CMAP_SHUTDOWN:
-		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL, "handle :%p marked for "
-			"deletion / shutdown, reject connection\n", handle);
-		*reject_reason = RXM_CMAP_REJECT_GENUINE;
-		ret = -FI_EOPBADSTATE;
-		break;
-	default:
-		FI_WARN(cmap->av->prov, FI_LOG_EP_CTRL,
-		       "invalid handle state: %d\n", handle->state);
-		assert(0);
-		ret = -FI_EOPBADSTATE;
 	}
+
+done:
+	RXM_CM_UPDATE_RX_STATE(handle, RXM_CMAP_CONNREQ_RECV);
+	*handle_ret = handle;
 
 	return ret;
 }
@@ -604,36 +604,46 @@ int rxm_cmap_connect(struct rxm_ep *rxm_ep, fi_addr_t fi_addr,
 {
 	int ret = FI_SUCCESS;
 
-	switch (handle->state) {
-	case RXM_CMAP_IDLE:
-		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "initiating MSG_EP connect "
-		       "for fi_addr: %" PRIu64 "\n", fi_addr);
-		ret = rxm_conn_connect(rxm_ep, handle,
-				       ofi_av_get_addr(rxm_ep->cmap->av, fi_addr));
+	/* Duplex transport passive side is accepting peer connection */
+	if (!rxm_ep->cmap->simplex && handle->rx_state != RXM_CMAP_IDLE) {
+		ret = -FI_EAGAIN;
+		goto progress;
+	}
+
+	if (handle->tx_state == RXM_CMAP_IDLE) {
+		if (rxm_ep->cmap->simplex && fi_addr == FI_ADDR_NOTAVAIL) {
+			/* Making a simplex connection back to an EP where the
+			 * peer address is not in the AV */
+			if (!handle->peer) {
+				FI_WARN(rxm_ep->cmap->av->prov, FI_LOG_EP_CTRL,
+					"no peer address for connect\n");
+				return -FI_EOPBADSTATE;
+			}
+			ret = rxm_conn_connect(rxm_ep, handle,
+					       handle->peer->addr);
+		} else {
+			FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "initiating MSG_EP "
+			       "connect for fi_addr: %" PRIu64 "\n", fi_addr);
+			ret = rxm_conn_connect(rxm_ep, handle,
+					       ofi_av_get_addr(rxm_ep->cmap->av,
+							       fi_addr));
+		}
 		if (ret) {
 			if (ret == -FI_ECONNREFUSED)
 				return -FI_EAGAIN;
 
 			rxm_cmap_del_handle(handle);
 		} else {
-			RXM_CM_UPDATE_STATE(handle, RXM_CMAP_CONNREQ_SENT);
+			RXM_CM_UPDATE_TX_STATE(handle, RXM_CMAP_CONNREQ_SENT);
 			ret = -FI_EAGAIN;
 		}
-		break;
-	case RXM_CMAP_CONNREQ_SENT:
-	case RXM_CMAP_CONNREQ_RECV:
-	case RXM_CMAP_SHUTDOWN:
+	} else {
 		ret = -FI_EAGAIN;
-		break;
-	default:
-		FI_WARN(rxm_ep->cmap->av->prov, FI_LOG_EP_CTRL,
-			"Invalid cmap handle state\n");
-		assert(0);
-		ret = -FI_EOPBADSTATE;
 	}
+
+progress:
 	if (ret == -FI_EAGAIN)
 		rxm_msg_eq_progress(rxm_ep);
-
 	return ret;
 }
 
@@ -707,10 +717,23 @@ int rxm_cmap_bind_to_av(struct rxm_cmap *cmap, struct util_av *av)
 	return ofi_av_elements_iter(av, rxm_cmap_update_addr, (void *)cmap);
 }
 
+static int rxm_no_simplex_cm_accept(struct fid_ep *ep, struct fi_info *info,
+				    const void *param, size_t paramlen)
+{
+	return -FI_ENOSYS;
+}
+
+struct ofi_ops_simplex_cm rxm_no_ops_simplex_cm = {
+	.accept = rxm_no_simplex_cm_accept,
+};
+
 int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
 {
 	struct rxm_cmap *cmap;
 	struct util_ep *ep = &rxm_ep->util_ep;
+	struct ofi_ops_simplex_cm *simplex_cm_ops;
+	struct rxm_domain *rxm_domain = container_of(rxm_ep->util_ep.domain,
+						struct rxm_domain, util_domain);
 	int ret;
 
 	cmap = calloc(1, sizeof *cmap);
@@ -738,8 +761,20 @@ int rxm_cmap_alloc(struct rxm_ep *rxm_ep, struct rxm_cmap_attr *attr)
 	ofi_key_idx_init(&cmap->key_idx, RXM_CMAP_IDX_BITS);
 
 	dlist_init(&cmap->peer_list);
-
 	rxm_ep->cmap = cmap;
+
+	/* Allow installation of simplex specific CM operations if required by
+	 * message provider */
+	cmap->simplex_cm_ops = &rxm_no_ops_simplex_cm;
+	ret = fi_open_ops(&rxm_domain->msg_domain->fid, OFI_OPS_SIMPLEX_CM,
+			  0, (void **) &simplex_cm_ops, NULL);
+	if (!ret) {
+		FI_DBG(ep->av->prov, FI_LOG_EP_CTRL,
+		       "cmap using simplex message endpoint\n");
+		cmap->simplex_cm_ops = simplex_cm_ops;
+		cmap->simplex = true;
+	}
+	assert(cmap->simplex_cm_ops);
 
 	if (ep->domain->data_progress == FI_PROGRESS_AUTO || force_auto_progress) {
 
@@ -1020,9 +1055,8 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	memcpy(&remote_pep_addr, msg_info->dest_addr, msg_info->dest_addrlen);
 	ofi_addr_set_port((struct sockaddr *)&remote_pep_addr,
 			  remote_cm_data->connect.port);
-
-	ret = rxm_cmap_process_connreq(rxm_ep->cmap, &remote_pep_addr,
-				       &handle, &reject_cm_data.reject.reason);
+	ret = rxm_cmap_process_connreq(rxm_ep->cmap, &remote_pep_addr, &handle,
+				       &reject_cm_data.reject.reason);
 	if (ret)
 		goto err1;
 
@@ -1032,15 +1066,35 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 	rxm_conn->rndv_tx_credits = remote_cm_data->connect.rx_size;
 	assert(rxm_conn->rndv_tx_credits);
 
-	ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn, handle);
-	if (ret)
-		goto err2;
+	/* Simplex message EP may already exist */
+	if (!rxm_conn->msg_ep) {
+		ret = rxm_msg_ep_open(rxm_ep, msg_info, rxm_conn, handle);
+		if (ret)
+			goto err2;
+	}
 
 	cm_data.accept.server_conn_id = rxm_conn->handle.key;
 	cm_data.accept.rx_size = rxm_conn_get_rx_size(rxm_ep, msg_info);
 
-	ret = fi_accept(rxm_conn->msg_ep, &cm_data.accept.server_conn_id,
-			sizeof(cm_data.accept));
+	if (rxm_ep->cmap->simplex) {
+		/* Force simplex connections to initiate connection back
+		 * to the originator of connection request */
+		ret = rxm_check_duplex_conn(handle);
+		if (ret && ret != -FI_EAGAIN) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Simplex reverse connect failed\n");
+			goto err2;
+		}
+
+		ret = rxm_ep->cmap->simplex_cm_ops->accept(rxm_conn->msg_ep,
+						   msg_info,
+						   &cm_data.accept.server_conn_id,
+						   sizeof(cm_data.accept));
+	 } else {
+		ret = fi_accept(rxm_conn->msg_ep, &cm_data.accept.server_conn_id,
+				sizeof(cm_data.accept));
+	 }
+
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 			"Unable to accept incoming connection\n");
@@ -1093,7 +1147,8 @@ static int rxm_conn_handle_notify(struct fi_eq_entry *eq_entry)
 		return -FI_EOTHER;
 
 	handle = eq_entry->context;
-	assert(handle->state == RXM_CMAP_SHUTDOWN);
+	assert(handle->rx_state == RXM_CMAP_SHUTDOWN &&
+	       handle->tx_state == RXM_CMAP_SHUTDOWN);
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "freeing handle: %p\n", handle);
 	cmap = handle->cmap;
 
@@ -1429,9 +1484,13 @@ rxm_conn_connect(struct rxm_ep *ep, struct rxm_cmap_handle *handle,
 		return -FI_ENOMEM;
 	}
 
-	ret = rxm_msg_ep_open(ep, ep->msg_info, rxm_conn, &rxm_conn->handle);
-	if (ret)
-		return ret;
+	/* Simplex message EP may already exist */
+	if (!rxm_conn->msg_ep) {
+		ret = rxm_msg_ep_open(ep, ep->msg_info, rxm_conn,
+				      &rxm_conn->handle);
+		if (ret)
+			return ret;
+	}
 
 	/* We have to send passive endpoint's address to the server since the
 	 * address from which connection request would be sent would have a
@@ -1442,8 +1501,8 @@ rxm_conn_connect(struct rxm_ep *ep, struct rxm_cmap_handle *handle,
 
 	cm_data.connect.rx_size = rxm_conn_get_rx_size(ep, ep->msg_info);
 
-	ret = fi_connect(rxm_conn->msg_ep, ep->msg_info->dest_addr,
-			 &cm_data, sizeof(cm_data));
+	ret = fi_connect(rxm_conn->msg_ep, ep->msg_info->dest_addr, &cm_data,
+			 sizeof(cm_data));
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to connect msg_ep\n");
 		goto err;
@@ -1475,7 +1534,7 @@ static int rxm_conn_signal(struct rxm_ep *ep, void *context,
 
 int rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 {
-	struct rxm_cmap_attr attr;
+	struct rxm_cmap_attr attr = { 0 };
 	int ret;
 	size_t len = rxm_ep->util_ep.av->addrlen;
 	void *name = calloc(1, len);
@@ -1494,7 +1553,6 @@ int rxm_conn_cmap_alloc(struct rxm_ep *rxm_ep)
 		goto fn;
 	}
 	ofi_straddr_dbg(&rxm_prov, FI_LOG_EP_CTRL, "local_name", name);
-
 	attr.name		= name;
 
 	ret = rxm_cmap_alloc(rxm_ep, &attr);

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018-2019 Cray Inc. All rights reserved.
- * Copyright (c) 2018-2019 System Fabric Works, Inc. All rights reserved.
+ * Copyright (c) 2018-2021 System Fabric Works, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -42,8 +42,8 @@ struct vrb_ini_conn_key {
 	struct vrb_cq	*tx_cq;
 };
 
-static int vrb_process_ini_conn(struct vrb_xrc_ep *ep,int reciprocal,
-				   void *param, size_t paramlen);
+static int vrb_process_ini_conn(struct vrb_xrc_ep *ep, void *param,
+				size_t paramlen);
 
 static int vrb_create_ini_qp(struct vrb_xrc_ep *ep)
 {
@@ -149,7 +149,6 @@ void _vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
 
 	/* remove from pending or active connection list */
 	dlist_remove(&ep->ini_conn_entry);
-	ep->conn_state = VRB_XRC_UNCONNECTED;
 	ini_conn = ep->ini_conn;
 	ep->ini_conn = NULL;
 	ep->base_ep.ibv_qp = NULL;
@@ -191,30 +190,15 @@ void vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
 	domain->xrc.lock_release(&domain->xrc.ini_lock);
 }
 
-void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, int reciprocal,
-			      void *conn_param, size_t conn_paramlen)
+void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, void *conn_param,
+			      size_t conn_paramlen)
 {
 	assert(fastlock_held(&vrb_ep_to_domain(&ep->base_ep)->xrc.ini_lock));
-
-	ep->conn_setup->pending_recip = reciprocal;
 	ep->conn_setup->pending_paramlen = MIN(conn_paramlen,
 				sizeof(ep->conn_setup->pending_param));
 	memcpy(ep->conn_setup->pending_param, conn_param,
 	       ep->conn_setup->pending_paramlen);
 	dlist_insert_tail(&ep->ini_conn_entry, &ep->ini_conn->pending_list);
-}
-
-/* Caller must hold domain:eq:lock */
-static void vrb_create_shutdown_event(struct vrb_xrc_ep *ep)
-{
-	struct fi_eq_cm_entry entry = {
-		.fid = &ep->base_ep.util_ep.ep_fid.fid,
-	};
-	struct vrb_eq_entry *eq_entry;
-
-	eq_entry = vrb_eq_alloc_entry(FI_SHUTDOWN, &entry, sizeof(entry));
-	if (eq_entry)
-		dlistfd_insert_tail(&eq_entry->item, &ep->base_ep.eq->list_head);
 }
 
 /* Caller must hold domain:xrc.ini_lock */
@@ -290,9 +274,8 @@ void vrb_sched_ini_conn(struct vrb_ini_shared_conn *ini_conn)
 				rdma_get_peer_addr(ep->base_ep.id));
 
 		ep->base_ep.ibv_qp = ep->ini_conn->ini_qp;
-		ret = vrb_process_ini_conn(ep, ep->conn_setup->pending_recip,
-					      ep->conn_setup->pending_param,
-					      ep->conn_setup->pending_paramlen);
+		ret = vrb_process_ini_conn(ep, ep->conn_setup->pending_param,
+					   ep->conn_setup->pending_paramlen);
 err:
 		if (ret) {
 			ep->ini_conn->state = last_state;
@@ -300,27 +283,23 @@ err:
 
 			/* We need to let the application know that the
 			 * connect request has failed. */
-			vrb_create_shutdown_event(ep);
+			if (vrb_create_xrc_cm_event(ep, FI_SHUTDOWN))
+				VERBS_WARN(FI_LOG_EP_CTRL, "Unable to create FI_SHUTDOWN\n");
 			break;
 		}
 	}
 }
 
 /* Caller must hold domain:xrc:eq:lock */
-int vrb_process_ini_conn(struct vrb_xrc_ep *ep,int reciprocal,
-			    void *param, size_t paramlen)
+int vrb_process_ini_conn(struct vrb_xrc_ep *ep, void *param, size_t paramlen)
 {
 	struct vrb_xrc_cm_data *cm_data = param;
 	int ret;
 
 	assert(ep->base_ep.ibv_qp);
 
-	vrb_set_xrc_cm_data(cm_data, reciprocal, reciprocal ?
-			       ep->conn_setup->remote_conn_tag :
-			       ep->conn_setup->conn_tag,
-			       ep->base_ep.eq->xrc.pep_port,
-			       ep->ini_conn->tgt_qpn, ep->srqn);
-
+        vrb_set_xrc_cm_data(cm_data, ep->base_ep.eq->xrc.pep_port,
+			    ep->ini_conn->tgt_qpn, 0);
 	ep->base_ep.conn_param.private_data = cm_data;
 	ep->base_ep.conn_param.private_data_len = paramlen;
 	ep->base_ep.conn_param.responder_resources = RDMA_MAX_RESP_RES;
@@ -334,17 +313,12 @@ int vrb_process_ini_conn(struct vrb_xrc_ep *ep,int reciprocal,
 		ep->base_ep.conn_param.qp_num =
 				ep->ini_conn->ini_qp->qp_num;
 
-	assert(ep->conn_state == VRB_XRC_UNCONNECTED ||
-	       ep->conn_state == VRB_XRC_ORIG_CONNECTED);
-	vrb_next_xrc_conn_state(ep);
-
 	ret = rdma_resolve_route(ep->base_ep.id, VERBS_RESOLVE_TIMEOUT);
 	if (ret) {
 		ret = -errno;
 		VERBS_WARN(FI_LOG_EP_CTRL,
 			   "rdma_resolve_route failed %s (%d)\n",
 			   strerror(-ret), -ret);
-		vrb_prev_xrc_conn_state(ep);
 	}
 
 	return ret;

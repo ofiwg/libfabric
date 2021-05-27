@@ -76,15 +76,27 @@ struct ofi_ops_flow_ctrl vrb_ops_flow_ctrl = {
 	.set_send_handler = vrb_set_credit_handler,
 };
 
+struct ofi_ops_simplex_cm vrb_ops_simplex_cm = {
+	.accept = vrb_msg_xrc_ep_simplex_accept,
+};
+
 static int
 vrb_domain_ops_open(struct fid *fid, const char *name, uint64_t flags,
 		    void **ops, void *context)
 {
+	struct vrb_domain *domain = container_of(fid, struct vrb_domain,
+						 util_domain.domain_fid.fid);
+
 	if (flags)
 		return -FI_EBADFLAGS;
 
 	if (!strcasecmp(name, OFI_OPS_FLOW_CTRL)) {
 		*ops = &vrb_ops_flow_ctrl;
+		return 0;
+	}
+	if (!strcasecmp(name, OFI_OPS_SIMPLEX_CM) &&
+	    (domain->ext_flags & VRB_USE_XRC)) {
+		*ops = &vrb_ops_simplex_cm;
 		return 0;
 	}
 
