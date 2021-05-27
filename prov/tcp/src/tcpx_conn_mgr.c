@@ -337,6 +337,7 @@ static void tcpx_cm_recv_req(struct util_wait *wait,
 		goto err2;
 
 	len = cm_entry->info->dest_addrlen = handle->pep->info->src_addrlen;
+	free(cm_entry->info->dest_addr);
 	cm_entry->info->dest_addr = malloc(len);
 	if (!cm_entry->info->dest_addr)
 		goto err3;
