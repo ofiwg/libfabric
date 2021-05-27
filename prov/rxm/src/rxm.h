@@ -707,8 +707,6 @@ struct rxm_conn {
 	struct dlist_entry deferred_tx_queue;
 	struct dlist_entry sar_rx_msg_list;
 	struct dlist_entry sar_deferred_rx_msg_list;
-
-	uint32_t rndv_tx_credits;
 };
 
 extern struct fi_provider rxm_prov;

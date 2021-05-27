@@ -395,6 +395,7 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 			port_save = ofi_addr_get_port(ai->ai_addr);
 			freeaddrinfo(ai);
 			service = NULL;
+			flags &= ~FI_SOURCE;
 		} else {
 			port_save = ofi_addr_get_port(hints->src_addr);
 			ofi_addr_set_port(hints->src_addr, 0);
