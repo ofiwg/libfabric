@@ -60,8 +60,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep,
 				    struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
-				    struct fi_cq_data_entry *cq_entry,
-				    fi_addr_t src_addr);
+				    struct rxr_pkt_entry *pkt_entry);
 
 ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rdm_peer *peer);
 

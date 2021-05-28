@@ -1168,8 +1168,8 @@ ssize_t rxr_pkt_proc_rtm_rta(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Unknown packet type ID: %d\n",
 		       base_hdr->type);
-		if (rxr_cq_handle_cq_error(ep, -FI_EINVAL))
-			assert(0 && "failed to write err cq entry");
+		rxr_cq_handle_error(ep, -FI_EINVAL, NULL);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 	}
 
 	return -FI_EINVAL;

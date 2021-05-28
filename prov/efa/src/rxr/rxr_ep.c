@@ -64,7 +64,7 @@ struct efa_ep_addr *rxr_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	efa_av = efa_ep->av;
-	efa_conn = efa_av->conn_table[(int)addr];
+	efa_conn = efa_av->addr_to_conn(efa_av, addr);
 
 	return &efa_conn->ep_addr;
 }
@@ -532,7 +532,7 @@ static int efa_rdm_av_entry_cleanup(struct util_av *av, void *data,
 				    fi_addr_t addr, void *arg)
 {
 	struct efa_av_entry *efa_av_entry = (struct efa_av_entry *)data;
-	struct rdm_peer *peer = efa_av_entry->rdm_peer;
+	struct rdm_peer *peer = &efa_av_entry->conn->rdm_peer;
 
 	if (!peer)
 		return 0;
@@ -551,8 +551,7 @@ static int efa_rdm_av_entry_cleanup(struct util_av *av, void *data,
 	    !(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
 		FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL, "Closing EP with unacked CONNREQs in flight\n");
 
-	efa_rdm_peer_release(peer);
-	efa_av_entry->rdm_peer = NULL;
+	efa_rdm_peer_reset(peer);
 
 	return 0;
 }
@@ -1446,12 +1445,99 @@ static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
 	}
 }
 
-static inline void rxr_ep_poll_cq(struct rxr_ep *ep,
-				  struct fid_cq *cq,
-				  size_t cqe_to_process,
-				  bool is_shm_cq)
+/**
+ * @brief poll rdma-core cq and process the cq entry
+ *
+ * @param[in]	ep		end point
+ * @param[in]	cqe_to_process	max number of cq entry to poll and process
+ */
+static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
+				      size_t cqe_to_process)
+{
+	struct ibv_wc ibv_wc;
+	struct efa_cq *efa_cq;
+	struct efa_av *efa_av;
+	struct efa_ep *efa_ep;
+	struct rdm_peer *peer;
+	struct rxr_pkt_entry *pkt_entry;
+	ssize_t ret;
+	int i;
+
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	efa_av = efa_ep->av;
+	efa_cq = container_of(ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
+	for (i = 0; i < cqe_to_process; i++) {
+		ret = ibv_poll_cq(efa_cq->ibv_cq, 1, &ibv_wc);
+
+		if (ret == 0)
+			return;
+
+		if (OFI_UNLIKELY(ret < 0 || ibv_wc.status)) {
+			if (ret < 0) {
+				rxr_cq_handle_error(ep, -ret, NULL);
+			} else {
+				pkt_entry = (void *)(uintptr_t)ibv_wc.wr_id;
+				rxr_cq_handle_error(ep, ibv_wc.status, pkt_entry);
+			}
+
+			return;
+		}
+
+		pkt_entry = (void *)(uintptr_t)ibv_wc.wr_id;
+
+		switch (ibv_wc.opcode) {
+		case IBV_WC_SEND:
+#if ENABLE_DEBUG
+			ep->send_comps++;
+#endif
+			rxr_pkt_handle_send_completion(ep, pkt_entry);
+			break;
+		case IBV_WC_RECV:
+			peer = efa_ahn_qpn_to_peer(efa_av, ibv_wc.slid, ibv_wc.src_qp);
+			pkt_entry->addr = peer ? peer->efa_fiaddr : FI_ADDR_NOTAVAIL;
+			pkt_entry->pkt_size = ibv_wc.byte_len;
+			assert(pkt_entry->pkt_size > 0);
+			rxr_pkt_handle_recv_completion(ep, pkt_entry);
+#if ENABLE_DEBUG
+			ep->recv_comps++;
+#endif
+			break;
+		default:
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"Unhandled cq type\n");
+			assert(0 && "Unhandled cq type");
+		}
+	}
+}
+
+static inline
+void rdm_ep_poll_shm_err_cq(struct fid_cq *shm_cq, struct fi_cq_err_entry *cq_err_entry)
+{
+	int ret;
+
+	ret = fi_cq_readerr(shm_cq, cq_err_entry, 0);
+	if (ret == 1)
+		return;
+
+	if (ret < 0) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "encountered error when fi_cq_readerr: %s\n",
+			fi_strerror(-ret));
+		cq_err_entry->err = -ret;
+		cq_err_entry->prov_errno = -ret;
+		return;
+	}
+
+	FI_WARN(&rxr_prov, FI_LOG_CQ, "fi_cq_readerr got expected return: %d\n", ret);
+	cq_err_entry->err = FI_EIO;
+	cq_err_entry->prov_errno = FI_EIO;
+}
+
+static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
+				      size_t cqe_to_process)
 {
 	struct fi_cq_data_entry cq_entry;
+	struct fi_cq_err_entry cq_err_entry = { 0 };
+	struct rxr_pkt_entry *pkt_entry;
 	fi_addr_t src_addr;
 	ssize_t ret;
 	struct efa_ep *efa_ep;
@@ -1463,41 +1549,41 @@ static inline void rxr_ep_poll_cq(struct rxr_ep *ep,
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	efa_av = efa_ep->av;
 	for (i = 0; i < cqe_to_process; i++) {
-		ret = fi_cq_readfrom(cq, &cq_entry, 1, &src_addr);
+		ret = fi_cq_readfrom(ep->shm_cq, &cq_entry, 1, &src_addr);
 
 		if (ret == -FI_EAGAIN)
 			return;
 
 		if (OFI_UNLIKELY(ret < 0)) {
-			if (rxr_cq_handle_cq_error(ep, ret))
-				assert(0 &&
-				       "error writing error cq entry after reading from cq");
+			if (ret == -FI_EAVAIL) {
+				rdm_ep_poll_shm_err_cq(ep->shm_cq, &cq_err_entry);
+				rxr_cq_handle_error(ep, cq_err_entry.prov_errno, cq_err_entry.op_context);
+			} else {
+				rxr_cq_handle_error(ep, -ret, NULL);
+			}
+
 			return;
 		}
 
 		if (OFI_UNLIKELY(ret == 0))
 			return;
 
-		if (is_shm_cq && src_addr != FI_ADDR_UNSPEC) {
+		pkt_entry = cq_entry.op_context;
+		if (src_addr != FI_ADDR_UNSPEC) {
 			/* convert SHM address to EFA address */
 			assert(src_addr < EFA_SHM_MAX_AV_COUNT);
 			src_addr = efa_av->shm_rdm_addr_map[src_addr];
 		}
 
-		if (is_shm_cq && (cq_entry.flags & (FI_ATOMIC | FI_REMOTE_CQ_DATA))) {
+		if (cq_entry.flags & (FI_ATOMIC | FI_REMOTE_CQ_DATA)) {
 			rxr_cq_handle_shm_completion(ep, &cq_entry, src_addr);
 		} else if (cq_entry.flags & (FI_SEND | FI_READ | FI_WRITE)) {
-#if ENABLE_DEBUG
-			if (!is_shm_cq)
-				ep->send_comps++;
-#endif
-			rxr_pkt_handle_send_completion(ep, cq_entry.op_context);
+			rxr_pkt_handle_send_completion(ep, pkt_entry);
 		} else if (cq_entry.flags & (FI_RECV | FI_REMOTE_CQ_DATA)) {
-			rxr_pkt_handle_recv_completion(ep, &cq_entry, src_addr);
-#if ENABLE_DEBUG
-			if (!is_shm_cq)
-				ep->recv_comps++;
-#endif
+			pkt_entry->addr = src_addr;
+			pkt_entry->pkt_size = cq_entry.len;
+			assert(pkt_entry->pkt_size > 0);
+			rxr_pkt_handle_recv_completion(ep, pkt_entry);
 		} else {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Unhandled cq type\n");
@@ -1521,17 +1607,17 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		rxr_ep_check_available_data_bufs_timer(ep);
 
 	// Poll the EFA completion queue
-	rxr_ep_poll_cq(ep, ep->rdm_cq, rxr_env.efa_cq_read_size, 0);
+	rdm_ep_poll_ibv_cq(ep, rxr_env.efa_cq_read_size);
 
 	// Poll the SHM completion queue if enabled
 	if (ep->use_shm)
-		rxr_ep_poll_cq(ep, ep->shm_cq, rxr_env.shm_cq_read_size, 1);
+		rdm_ep_poll_shm_cq(ep, rxr_env.shm_cq_read_size);
 
 	if (!ep->use_zcpy_rx) {
 		ret = rxr_ep_bulk_post_recv(ep);
 
 		if (OFI_UNLIKELY(ret)) {
-			if (rxr_cq_handle_cq_error(ep, ret))
+			if (rxr_cq_handle_error(ep, ret, NULL))
 				assert(0 &&
 				       "error writing error cq entry after failed post recv");
 			return;

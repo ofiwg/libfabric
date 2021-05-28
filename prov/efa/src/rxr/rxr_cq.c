@@ -299,55 +299,16 @@ queue_pkt:
 	dlist_insert_tail(&pkt_entry->entry, list);
 }
 
-int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
+int rxr_cq_handle_error(struct rxr_ep *ep, ssize_t prov_errno, struct rxr_pkt_entry *pkt_entry)
 {
-	struct fi_cq_err_entry err_entry;
-	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_read_entry *read_entry;
 	struct rdm_peer *peer;
 	ssize_t ret;
 
-	memset(&err_entry, 0, sizeof(err_entry));
-
-	/*
-	 * If the cq_read failed with another error besides -FI_EAVAIL or
-	 * the cq_readerr fails we don't know if this is an rx or tx error.
-	 * We'll write an error eq entry to the event queue instead.
-	 */
-
-	err_entry.err = FI_EIO;
-	err_entry.prov_errno = (int)err;
-
-	if (err != -FI_EAVAIL) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "fi_cq_read: %s\n",
-			fi_strerror(-err));
-		goto write_err;
-	}
-
-	ret = fi_cq_readerr(ep->rdm_cq, &err_entry, 0);
-	if (ret != 1) {
-		if (ret < 0) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "fi_cq_readerr: %s\n",
-				fi_strerror(-ret));
-			err_entry.prov_errno = ret;
-		} else {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
-				"fi_cq_readerr unexpected size %zu expected %zu\n",
-				ret, sizeof(err_entry));
-			err_entry.prov_errno = -FI_EIO;
-		}
-		goto write_err;
-	}
-
-	if (err_entry.err != -FI_EAGAIN)
-		OFI_CQ_STRERROR(&rxr_prov, FI_LOG_WARN, FI_LOG_CQ, ep->rdm_cq,
-				&err_entry);
-
-	pkt_entry = (struct rxr_pkt_entry *)err_entry.op_context;
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-
+	if (!pkt_entry)
+		goto write_eq_err;
 	/*
 	 * A handshake send could fail at the core provider if the peer endpoint
 	 * is shutdown soon after it receives a send completion for the REQ
@@ -355,21 +316,13 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 	 * that happens, so just squelch this error entry and move on without
 	 * writing an error completion or event to the application.
 	 */
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	if (rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_HANDSHAKE_PKT) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Squelching error CQE for RXR_HANDSHAKE_PKT\n");
-		/*
-		 * HANDSHAKE packets do not have an associated rx/tx entry. Use
-		 * the flags instead to determine if this is a send or recv.
-		 */
-		if (err_entry.flags & FI_SEND) {
-			rxr_ep_dec_tx_pending(ep, peer, 1);
-			rxr_pkt_entry_release_tx(ep, pkt_entry);
-		} else if (err_entry.flags & FI_RECV) {
-			rxr_pkt_entry_release_rx(ep, pkt_entry);
-		} else {
-			assert(0 && "unknown err_entry flags in HANDSHAKE packet");
-		}
+		assert(peer);
+		rxr_ep_dec_tx_pending(ep, peer, 1);
+		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		return 0;
 	}
 
@@ -380,7 +333,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		 * we will write to the eq instead.
 		 */
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		goto write_err;
+		goto write_eq_err;
 	}
 
 	/*
@@ -392,10 +345,9 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		rxr_ep_dec_tx_pending(ep, peer, 1);
 	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
 		tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
-		if (err_entry.prov_errno != IBV_WC_RNR_RETRY_EXC_ERR ||
+		if (prov_errno != IBV_WC_RNR_RETRY_EXC_ERR ||
 		    ep->handle_resource_management != FI_RM_ENABLED) {
-			ret = rxr_cq_handle_tx_error(ep, tx_entry,
-						     err_entry.prov_errno);
+			ret = rxr_cq_handle_tx_error(ep, tx_entry, prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 			return ret;
 		}
@@ -414,10 +366,9 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		return 0;
 	} else if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_RX_ENTRY) {
 		rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
-		if (err_entry.prov_errno != IBV_WC_RNR_RETRY_EXC_ERR ||
+		if (prov_errno != IBV_WC_RNR_RETRY_EXC_ERR ||
 		    ep->handle_resource_management != FI_RM_ENABLED) {
-			ret = rxr_cq_handle_rx_error(ep, rx_entry,
-						     err_entry.prov_errno);
+			ret = rxr_cq_handle_rx_error(ep, rx_entry, prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 			return ret;
 		}
@@ -433,7 +384,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		/* read requests is not expected to get RNR, so we call
 		 * rxr_read_handle_error() to handle general error here.
 		 */
-		ret = rxr_read_handle_error(ep, read_entry, err_entry.prov_errno);
+		ret = rxr_read_handle_error(ep, read_entry, prov_errno);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		return ret;
 	}
@@ -442,8 +393,8 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 		"%s unknown x_entry state %d\n",
 		__func__, RXR_GET_X_ENTRY_TYPE(pkt_entry));
 	assert(0 && "unknown x_entry state");
-write_err:
-	efa_eq_write_error(&ep->util_ep, err_entry.err, err_entry.prov_errno);
+write_eq_err:
+	efa_eq_write_error(&ep->util_ep, prov_errno, prov_errno);
 	return 0;
 }
 

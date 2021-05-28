@@ -767,7 +767,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 			"invalid control pkt type %d\n",
 			rxr_get_base_hdr(pkt_entry->pkt)->type);
 		assert(0 && "invalid control pkt type");
-		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		rxr_cq_handle_error(ep, FI_EIO, NULL);
 		return;
 	}
 
@@ -810,8 +810,8 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-	ret = efa_rdm_av_insert_addr(efa_ep->av, (struct efa_ep_addr *)raw_addr,
-	                             &rdm_addr, 0, NULL);
+	ret = efa_rdm_av_insert_one(efa_ep->av, (struct efa_ep_addr *)raw_addr,
+	                            &rdm_addr, 0, NULL);
 	if (OFI_UNLIKELY(ret != 0)) {
 		efa_eq_write_error(&ep->util_ep, FI_EINVAL, ret);
 		return -1;
@@ -821,25 +821,20 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 }
 
 void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
-				    struct fi_cq_data_entry *cq_entry,
-				    fi_addr_t src_addr)
+				    struct rxr_pkt_entry *pkt_entry)
 {
 	struct rdm_peer *peer;
 	struct rxr_base_hdr *base_hdr;
-	struct rxr_pkt_entry *pkt_entry;
-
-	pkt_entry = (struct rxr_pkt_entry *)cq_entry->op_context;
-	pkt_entry->pkt_size = cq_entry->len;
-	assert(pkt_entry->pkt_size > 0);
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	if (base_hdr->type >= RXR_EXTRA_REQ_PKT_END) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Peer %d is requesting feature %d, which this EP does not support.\n",
-			(int)src_addr, base_hdr->type);
+			(int)pkt_entry->addr, base_hdr->type);
 
 		assert(0 && "invalid REQ packe type");
-		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 
@@ -854,12 +849,9 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		raw_addr = rxr_pkt_req_raw_addr(pkt_entry);
 		if (OFI_UNLIKELY(raw_addr != NULL))
 			pkt_entry->addr = rxr_pkt_insert_addr(ep, pkt_entry, raw_addr);
-		else
-			pkt_entry->addr = src_addr;
-	} else {
-		assert(src_addr != FI_ADDR_NOTAVAIL);
-		pkt_entry->addr = src_addr;
 	}
+
+	assert(pkt_entry->addr != FI_ADDR_NOTAVAIL);
 
 #if ENABLE_DEBUG
 	if (!ep->use_zcpy_rx) {
@@ -886,13 +878,15 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Received a RTS packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated RTS pakcet received");
-		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	case RXR_RETIRED_CONNACK_PKT:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Received a CONNACK packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated CONNACK pakcet received");
-		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	case RXR_EOR_PKT:
 		rxr_pkt_handle_eor_recv(ep, pkt_entry);
@@ -962,7 +956,8 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 			"invalid control pkt type %d\n",
 			rxr_get_base_hdr(pkt_entry->pkt)->type);
 		assert(0 && "invalid control pkt type");
-		rxr_cq_handle_cq_error(ep, -FI_EIO);
+		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 }
