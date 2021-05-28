@@ -49,10 +49,12 @@
 #include "ofi_prov.h"
 #include "ofi_perf.h"
 #include "ofi_hmem.h"
+#include "rdma/fi_ext.h"
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
 #endif
+
 
 struct ofi_prov {
 	struct ofi_prov		*next;

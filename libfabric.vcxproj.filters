@@ -563,6 +563,9 @@
     <ClInclude Include="include\rdma\fi_errno.h">
       <Filter>Header Files\rdma</Filter>
     </ClInclude>
+    <ClInclude Include="include\rdma\fi_ext.h">
+      <Filter>Header Files\rdma</Filter>
+    </ClInclude>
     <ClInclude Include="include\rdma\fi_rma.h">
       <Filter>Header Files\rdma</Filter>
     </ClInclude>

@@ -18,12 +18,14 @@ fi_log_enabled / fi_log
 fi_open / fi_close
 : Open a named library object
 
+fi_export_fid / fi_import_fid
+: Share a fabric object between different providers or resources
+
 # SYNOPSIS
 
 ```c
 #include <rdma/fabric.h>
 #include <rdma/prov/fi_prov.h>
-#include <rdma/prov/fi_log.h>
 
 struct fi_provider* fi_prov_ini(void);
 
@@ -31,28 +33,48 @@ int fi_param_define(const struct fi_provider *provider, const char *param_name,
 	enum fi_param_type type, const char *help_string_fmt, ...);
 
 int fi_param_get_str(struct fi_provider *provider, const char *param_name,
-    char **value);
+	char **value);
 
 int fi_param_get_int(struct fi_provider *provider, const char *param_name,
-    int *value);
+	int *value);
 
 int fi_param_get_bool(struct fi_provider *provider, const char *param_name,
-    int *value);
+	int *value);
 
 int fi_param_get_size_t(struct fi_provider *provider, const char *param_name,
-    size_t *value);
+	size_t *value);
+```
+
+```c
+#include <rdma/fabric.h>
+#include <rdma/prov/fi_prov.h>
+#include <rdma/prov/fi_log.h>
 
 int fi_log_enabled(const struct fi_provider *prov, enum fi_log_level level,
-    enum fi_log_subsys subsys);
+	enum fi_log_subsys subsys);
 
 void fi_log(const struct fi_provider *prov, enum fi_log_level level,
-    enum fi_log_subsys subsys, const char *func, int line,
-    const char *fmt, ...);
+	enum fi_log_subsys subsys, const char *func, int line,
+	const char *fmt, ...);
+```
+
+```c
+#include <rdma/fabric.h>
 
 int fi_open(uint32_t version, const char *name, void *attr,
-    size_t attr_len, uint64_t flags, struct fid **fid, void *context);
+	size_t attr_len, uint64_t flags, struct fid **fid, void *context);
 
 int fi_close(struct fid *fid);
+```
+
+```c
+#include <rdma/fabric.h>
+#include <rdma/fi_ext.h>
+
+int fi_export_fid(struct fid *fid, uint64_t flags,
+	struct fid **expfid, void *context);
+
+int fi_import_fid(struct fid *fid, struct fid *expfid, uint64_t flags);
 ```
 
 # ARGUMENTS
@@ -132,6 +154,21 @@ of the service or resource to which they correspond.
 : The mr_cache object references the internal memory registration cache
   used by the different providers.  Additional information on the cache
   is available in the `fi_mr(3)` man page.
+
+## fi_export_fid / fi_import_fid
+
+Generally, fabric objects are allocated and managed entirely by a single
+provider.  Typically only the application facing software interfaces of
+a fabric object are defined, for example, the message or tagged operations
+of an endpoint.  The fi_export_fid and fi_import_fid calls provide a
+a mechanism by which provider facing APIs may be accessed.  This allows
+the creation of fid objects that are shareable between providers, or
+for library plug-in services.  The ability to export a shareable object
+is object and provider implementation dependent.
+
+Shareable fids typically contain at least 3 main components: a
+base fid, a set of exporter defined ops, and a set of importer defined
+ops.
 
 # NOTES
 
