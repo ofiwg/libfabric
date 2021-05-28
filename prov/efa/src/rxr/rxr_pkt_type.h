@@ -127,26 +127,7 @@ static inline struct rxr_base_hdr *rxr_get_base_hdr(void *pkt)
 	return (struct rxr_base_hdr *)pkt;
 }
 
-uint32_t *rxr_pkt_req_connid_ptr(struct rxr_pkt_entry *pkt_entry);
-
-/**
- * @brief return the pointer to connid in a packet
- *
- * @param[in]	pkt_entry	an packet entry
- * @return	If the input has connid in header, return the pointer to connid
- * 		Otherwise, return NULL
- */
-static inline
-uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_base_hdr *base_hdr;
-
-	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
-	if (base_hdr->type >= RXR_REQ_PKT_BEGIN)
-		return rxr_pkt_req_connid_ptr(pkt_entry);
-
-	return NULL;
-}
+uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry);
 
 struct rxr_ep;
 struct rdm_peer;
@@ -212,7 +193,10 @@ struct rxr_cts_hdr {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint8_t pad[4];
+	union {
+		uint32_t connid; /* sender connection ID, set when RXR_PKT_CONNID_HDR is on */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes */
+	};
 	uint32_t send_id; /* ID of the send opertaion on sender side */
 	uint32_t recv_id; /* ID of the receive operatin on receive side */
 	uint64_t recv_length; /* number of bytes receiver is ready to receive */
@@ -222,9 +206,8 @@ struct rxr_cts_hdr {
 static_assert(sizeof(struct rxr_cts_hdr) == 24, "rxr_cts_hdr check");
 #endif
 
-/* this flag is to indicated the CTS is the response of a RTR packet */
+/* this flag is to indicate the CTS is the response of a RTR packet */
 #define RXR_CTS_READ_REQ		BIT_ULL(7)
-#define RXR_CTS_HDR_SIZE		(sizeof(struct rxr_cts_hdr))
 
 static inline
 struct rxr_cts_hdr *rxr_get_cts_hdr(void *pkt)

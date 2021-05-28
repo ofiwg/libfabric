@@ -240,6 +240,14 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 					&window, &rx_entry->credit_cts);
 	cts_hdr->recv_length = window;
 	pkt_entry->pkt_size = sizeof(struct rxr_cts_hdr);
+
+	/*
+	 * always set connid header. If the peer does not need it,
+	 * it will be ignored.
+	 */
+	cts_hdr->flags |= RXR_PKT_CONNID_HDR;
+	cts_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = (void *)rx_entry;
 	return 0;
