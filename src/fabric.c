@@ -1250,6 +1250,15 @@ uint32_t DEFAULT_SYMVER_PRE(fi_version)(void)
 }
 DEFAULT_SYMVER(fi_version_, fi_version, FABRIC_1.0);
 
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+int DEFAULT_SYMVER_PRE(fi_open)(uint32_t version, const char *name,
+		void *attr, size_t attr_len, uint64_t flags,
+		struct fid **fid, void *context)
+{
+	return -FI_ENOSYS;
+}
+CURRENT_SYMVER(fi_open_, fi_open);
+
 static const char *const errstr[] = {
 	[FI_EOTHER - FI_ERRNO_OFFSET] = "Unspecified error",
 	[FI_ETOOSMALL - FI_ERRNO_OFFSET] = "Provided buffer is too small",

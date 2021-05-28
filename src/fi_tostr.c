@@ -842,7 +842,7 @@ char *DEFAULT_SYMVER_PRE(fi_tostr_r)(char *buf, size_t len,
 	}
 	return buf;
 }
-CURRENT_SYMVER(fi_tostr_r_, fi_tostr_r);
+DEFAULT_SYMVER(fi_tostr_r_, fi_tostr_r, FABRIC_1.4);
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)

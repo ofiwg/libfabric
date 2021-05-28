@@ -15,6 +15,9 @@ fi_param_define / fi_param_get
 fi_log_enabled / fi_log
 : Control and output debug logging information.
 
+fi_open / fi_close
+: Open a named library object
+
 # SYNOPSIS
 
 ```c
@@ -45,12 +48,33 @@ int fi_log_enabled(const struct fi_provider *prov, enum fi_log_level level,
 void fi_log(const struct fi_provider *prov, enum fi_log_level level,
     enum fi_log_subsys subsys, const char *func, int line,
     const char *fmt, ...);
+
+int fi_open(uint32_t version, const char *name, void *attr,
+    size_t attr_len, uint64_t flags, struct fid **fid, void *context);
+
+int fi_close(struct fid *fid);
 ```
 
 # ARGUMENTS
 
 *provider*
 : Reference to the provider.
+
+*version*
+: API version requested by application.
+
+*name*
+: Well-known name of the library object to open.
+
+*attr*
+: Optional attributes of object to open.
+
+*attr_len*
+: Size of any attribute structure passed to fi_open.  Should be 0
+  if no attributes are give.
+
+*fid*
+: Returned fabric identifier for opened object.
 
 # DESCRIPTION
 
@@ -69,6 +93,10 @@ as specified by environment variable.  Additionally, external
 providers must be named with the suffix "-fi.so" at the end of
 the name.
 
+Named objects are special purpose resources which are accessible directly
+to applications.  They may be used to enhance or modify the behavior of
+library core.  For details, see the fi_open call below.
+
 ## fi_prov_ini
 
 This entry point must be defined by external providers.  On loading,
@@ -84,6 +112,26 @@ TODO
 ## fi_log_enabled / fi_log
 
 TODO
+
+## fi_open
+
+Open a library resource using a well-known name.  This feature allows
+applications and providers a mechanism which can be used to modify or
+enhance core library services and behavior.  The details are specific
+based on the requested object name.  Most applications will not need
+this level of control.
+
+The library API version known to the application should be provided
+through the version parameter.  The use of attributes is object dependent.
+If required, attributes should be provided through the attr parameter,
+with attr_len set to the size of the referenced attribute structure.
+The following is a list of published names, along with descriptions
+of the service or resource to which they correspond.
+
+*mr_cache*
+: The mr_cache object references the internal memory registration cache
+  used by the different providers.  Additional information on the cache
+  is available in the `fi_mr(3)` man page.
 
 # NOTES
 
@@ -138,3 +186,4 @@ fabric errno is returned. Fabric errno values are defined in
 
 [`fabric`(7)](fabric.7.html),
 [`fi_getinfo`(3)](fi_getinfo.3.html)
+[`fi_mr`(3)](fi_mr.3.html),
