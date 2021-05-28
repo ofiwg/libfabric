@@ -341,6 +341,15 @@ struct rxr_handshake_hdr {
 static_assert(sizeof(struct rxr_handshake_hdr) == 8, "rxr_handshake_hdr check");
 #endif
 
+struct rxr_handshake_opt_connid_hdr {
+	uint32_t connid;
+	uint32_t padding; /* padding to 8 bytes boundary */
+};
+
+#if defined(static_assert) && defined(__x86_64__)
+static_assert(sizeof(struct rxr_handshake_opt_connid_hdr) == 8, "rxr_handshake_opt_connid_hdr check");
+#endif
+
 /* @brief header format of RECEIPT packet */
 struct rxr_receipt_hdr {
 	uint8_t type;

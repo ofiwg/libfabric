@@ -56,6 +56,20 @@ struct rxr_handshake_hdr *rxr_get_handshake_hdr(void *pkt)
 	return (struct rxr_handshake_hdr *)pkt;
 }
 
+static inline
+struct rxr_handshake_opt_connid_hdr *rxr_get_handshake_opt_connid_hdr(void *pkt)
+{
+	struct rxr_handshake_hdr *handshake_hdr;
+	size_t base_hdr_size;
+
+	handshake_hdr = (struct rxr_handshake_hdr *)pkt;
+	assert(handshake_hdr->type == RXR_HANDSHAKE_PKT);
+	assert(handshake_hdr->flags & RXR_PKT_CONNID_HDR);
+	base_hdr_size = sizeof(struct rxr_handshake_hdr) +
+			(handshake_hdr->nextra_p3 - 3) * sizeof(uint64_t);
+	return (struct rxr_handshake_opt_connid_hdr *)((char *)pkt + base_hdr_size);
+}
+
 ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 			       struct rxr_pkt_entry *pkt_entry,
 			       fi_addr_t addr);

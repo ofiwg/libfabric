@@ -53,6 +53,7 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 {
 	int nex;
 	struct rxr_handshake_hdr *handshake_hdr;
+	struct rxr_handshake_opt_connid_hdr *connid_hdr;
 
 	handshake_hdr = (struct rxr_handshake_hdr *)pkt_entry->pkt;
 	handshake_hdr->type = RXR_HANDSHAKE_PKT;
@@ -66,8 +67,17 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 	 */
 	handshake_hdr->nextra_p3 = nex + 3;
 	memcpy(handshake_hdr->extra_info, ep->extra_info, nex * sizeof(uint64_t));
-
 	pkt_entry->pkt_size = sizeof(struct rxr_handshake_hdr) + nex * sizeof(uint64_t);
+
+	/*
+	 * Always include connid at the end of a handshake packet.
+	 * If peer cannot make use of connid, the connid will be ignored.
+	 */
+	connid_hdr = (struct rxr_handshake_opt_connid_hdr *)(pkt_entry->pkt + pkt_entry->pkt_size);
+	connid_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+	handshake_hdr->flags |= RXR_PKT_CONNID_HDR;
+	pkt_entry->pkt_size += sizeof(struct rxr_handshake_opt_connid_hdr);
+
 	pkt_entry->addr = addr;
 	return 0;
 }
