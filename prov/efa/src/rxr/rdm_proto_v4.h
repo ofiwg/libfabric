@@ -178,7 +178,10 @@ struct rxr_cts_hdr {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint8_t pad[4];
+	union {
+		uint32_t connid; /* sender connection ID, set when RXR_PKT_CONNID_HDR is on */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes */
+	};
 	uint32_t send_id; /* ID of the send opertaion on sender side */
 	uint32_t recv_id; /* ID of the receive operatin on receive side */
 	uint64_t recv_length; /* number of bytes receiver is ready to receive */
