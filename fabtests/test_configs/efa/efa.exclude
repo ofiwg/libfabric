@@ -96,3 +96,6 @@ dgram_bw
 
 # Multinode tests failing with an unsupported address format
 multinode
+
+# Remove this once the av bug fix is merged.
+rdm_multi_client
