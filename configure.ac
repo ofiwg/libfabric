@@ -556,8 +556,9 @@ AS_IF([test x"$with_ze" != x"no"],
        LIBS="$LIBS $ze_LIBS"],
       [])
 
+have_drm=0
 AS_IF([test "$have_ze" = "1"],
-      [AC_CHECK_HEADER(drm/i915_drm.h, [], [have_ze=0])]
+      [AC_CHECK_HEADER(drm/i915_drm.h, [have_drm=1], [])]
       [])
 
 AS_IF([test x"$with_ze" != x"no" && test -n "$with_ze" && test "$have_ze" = "0" ],
@@ -565,6 +566,7 @@ AS_IF([test x"$with_ze" != x"no" && test -n "$with_ze" && test "$have_ze" = "0" 
 	[])
 
 AC_DEFINE_UNQUOTED([HAVE_LIBZE], [$have_ze], [ZE support])
+AC_DEFINE_UNQUOTED([HAVE_DRM], [$have_drm], [i915 DRM header])
 
 enable_memhooks=1
 AC_ARG_ENABLE([memhooks-monitor],
