@@ -66,6 +66,38 @@ fi_import_fid(struct fid *fid, struct fid *expfid, uint64_t flags)
 }
 
 
+/*
+ * System memory monitor import extension:
+ * To use, open mr_cache fid and import.
+ */
+
+struct fid_mem_monitor;
+
+struct fi_ops_mem_monitor {
+	size_t	size;
+	int	(*start)(struct fid_mem_monitor *monitor);
+	void	(*stop)(struct fid_mem_monitor *monitor);
+	int	(*subscribe)(struct fid_mem_monitor *monitor,
+			const void *addr, size_t len);
+	void	(*unsubscribe)(struct fid_mem_monitor *monitor,
+			const void *addr, size_t len);
+	bool	(*valid)(struct fid_mem_monitor *monitor,
+			const void *addr, size_t len);
+};
+
+struct fi_ops_mem_notify {
+	size_t	size;
+	void	(*notify)(struct fid_mem_monitor *monitor, const void *addr,
+			size_t len);
+};
+
+struct fid_mem_monitor {
+	struct fid fid;
+	struct fi_ops_mem_monitor *export_ops;
+	struct fi_ops_mem_notify *import_ops;
+};
+
+
 #ifdef __cplusplus
 }
 #endif
