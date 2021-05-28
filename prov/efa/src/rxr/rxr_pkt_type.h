@@ -156,6 +156,11 @@ struct rxr_handshake_hdr {
 static_assert(sizeof(struct rxr_handshake_hdr) == 8, "rxr_handshake_hdr check");
 #endif
 
+struct rxr_handshake_opt_connid_hdr {
+	uint32_t connid;
+	uint32_t padding; /* padding to 8 bytes boundary */
+};
+
 static inline
 struct rxr_handshake_hdr *rxr_get_handshake_hdr(void *pkt)
 {
