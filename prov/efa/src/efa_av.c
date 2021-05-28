@@ -358,6 +358,7 @@ int efa_rdm_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 	memset(raw_gid_str, 0, sizeof(raw_gid_str));
 	if (!inet_ntop(AF_INET6, addr->raw, raw_gid_str, INET6_ADDRSTRLEN)) {
 		EFA_WARN(FI_LOG_AV, "cannot convert address to string. errno: %d", errno);
+		ret = -FI_EINVAL;
 		goto out;
 	}
 
