@@ -62,6 +62,12 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
 			: NULL;
 	}
 
+	if (base_hdr->type == RXR_DATA_PKT) {
+		return (base_hdr->flags & RXR_PKT_CONNID_HDR)
+			? &(rxr_get_data_hdr(pkt_entry->pkt)->connid_hdr->connid)
+			: NULL;
+	}
+
 	if (base_hdr->type == RXR_HANDSHAKE_PKT) {
 		struct rxr_handshake_hdr *handshake_hdr;
 		char *opt_hdr;
@@ -176,7 +182,7 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
 	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
 
 	if (pkt_type == RXR_DATA_PKT)
-		return pkt_entry->pkt_size - sizeof(struct rxr_data_hdr);
+		return rxr_get_data_hdr(pkt_entry->pkt)->seg_length;
 
 	if (pkt_type == RXR_READRSP_PKT)
 		return pkt_entry->pkt_size - sizeof(struct rxr_readrsp_hdr);

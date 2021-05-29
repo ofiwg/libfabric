@@ -36,8 +36,6 @@
 
 #include "rxr.h"
 
-ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry);
-
 ssize_t rxr_pkt_post_ctrl(struct rxr_ep *ep, int entry_type, void *x_entry,
 			  int ctrl_type, bool inject);
 
@@ -70,7 +68,7 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 #if ENABLE_DEBUG
 void rxr_pkt_print(char *prefix,
 		   struct rxr_ep *ep,
-		   struct rxr_base_hdr *hdr);
+		   struct rxr_pkt_entry *pkt_entry);
 #endif
 
 #endif

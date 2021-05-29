@@ -247,6 +247,11 @@ void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
  *
  * In emulated read, requester is receiver, and responder is sender.
  */
+struct rxr_data_opt_connid_hdr {
+	uint32_t connid;
+	uint32_t padding;
+};
+
 struct rxr_data_hdr {
 	uint8_t type;
 	uint8_t version;
@@ -255,24 +260,25 @@ struct rxr_data_hdr {
 	uint32_t recv_id; /* ID of the receive operation on receiver */
 	uint64_t seg_length;
 	uint64_t seg_offset;
+	struct rxr_data_opt_connid_hdr connid_hdr[0]; /* optional connid header, present when RXR_PKT_CONNID_HDR is on */
 };
 
 #if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_data_hdr) == 24, "rxr_data_hdr check");
 #endif
 
-#define RXR_DATA_HDR_SIZE		(sizeof(struct rxr_data_hdr))
-
-struct rxr_data_pkt {
-	struct rxr_data_hdr hdr;
-	char data[];
-};
-
 static inline
-struct rxr_data_pkt *rxr_get_data_pkt(void *pkt)
+struct rxr_data_hdr *rxr_get_data_hdr(void *pkt)
 {
-	return (struct rxr_data_pkt *)pkt;
+	return (struct rxr_data_hdr *)pkt;
 }
+
+int rxr_pkt_init_data(struct rxr_ep *ep,
+		      struct rxr_tx_entry *tx_entry,
+		      struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_data_sent(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_proc_data(struct rxr_ep *ep,
 		       struct rxr_rx_entry *rx_entry,

@@ -50,59 +50,6 @@
  */
 
 /*
- *  Functions used to post a packet
- */
-ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
-			  struct rxr_tx_entry *tx_entry)
-{
-	struct rxr_pkt_entry *pkt_entry;
-	struct rxr_data_pkt *data_pkt;
-	ssize_t ret;
-
-	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
-	if (OFI_UNLIKELY(!pkt_entry)) {
-		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
-		       "TX packets exhausted, current tx ops in flight %lu",
-		       rxr_ep->efa_outstanding_tx_ops);
-		return -FI_EAGAIN;
-	}
-
-	pkt_entry->x_entry = (void *)tx_entry;
-	pkt_entry->addr = tx_entry->addr;
-
-	data_pkt = (struct rxr_data_pkt *)pkt_entry->pkt;
-
-	data_pkt->hdr.type = RXR_DATA_PKT;
-	data_pkt->hdr.version = RXR_PROTOCOL_VERSION;
-	data_pkt->hdr.flags = 0;
-
-	data_pkt->hdr.recv_id = tx_entry->rx_id;
-
-	/*
-	 * Data packets are sent in order so using bytes_sent is okay here.
-	 */
-	data_pkt->hdr.seg_offset = tx_entry->bytes_sent;
-	data_pkt->hdr.seg_length = MIN(tx_entry->total_len - tx_entry->bytes_sent,
-				       rxr_ep->mtu_size - sizeof(struct rxr_data_hdr));
-	data_pkt->hdr.seg_length = MIN(data_pkt->hdr.seg_length, tx_entry->window);
-
-	rxr_pkt_init_data_from_tx_entry(rxr_ep, pkt_entry, sizeof(struct rxr_data_hdr),
-					tx_entry, tx_entry->bytes_sent, data_pkt->hdr.seg_length);
-
-	ret = rxr_pkt_entry_send(rxr_ep, pkt_entry, tx_entry->send_flags);
-	if (OFI_UNLIKELY(ret)) {
-		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
-		return ret;
-	}
-
-	tx_entry->bytes_sent += data_pkt->hdr.seg_length;
-	tx_entry->window -= data_pkt->hdr.seg_length;
-	assert(data_pkt->hdr.seg_length > 0);
-	assert(tx_entry->window >= 0);
-	return ret;
-}
-
-/*
  *   rxr_pkt_init_ctrl() uses init functions declared in rxr_pkt_type.h
  */
 static
@@ -202,6 +149,9 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 	case RXR_DC_WRITE_RTA_PKT:
 		ret = rxr_pkt_init_dc_write_rta(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
+	case RXR_DATA_PKT:
+		ret = rxr_pkt_init_data(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
 	default:
 		ret = -FI_EINVAL;
 		assert(0 && "unknown pkt type to init");
@@ -278,6 +228,9 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 	case RXR_DC_EAGER_MSGRTM_PKT:
 	case RXR_DC_EAGER_TAGRTM_PKT:
 	case RXR_DC_EAGER_RTW_PKT:
+		break;
+	case RXR_DATA_PKT:
+		rxr_pkt_handle_data_sent(rxr_ep, pkt_entry);
 		break;
 	default:
 		assert(0 && "Unknown packet type to handle sent");
@@ -1137,42 +1090,60 @@ void rxr_pkt_print_cts(char *prefix, struct rxr_cts_hdr *cts_hdr)
 }
 
 static
-void rxr_pkt_print_data(char *prefix, struct rxr_data_pkt *data_pkt)
+void rxr_pkt_print_data(char *prefix, struct rxr_pkt_entry *pkt_entry)
 {
+	struct rxr_data_hdr *data_hdr;
 	char str[RXR_PKT_DUMP_DATA_LEN * 4];
-	size_t str_len = RXR_PKT_DUMP_DATA_LEN * 4, l;
+	size_t str_len = RXR_PKT_DUMP_DATA_LEN * 4, l, hdr_size;
+	uint8_t *data;
 	int i;
 
 	str[str_len - 1] = '\0';
+
+	data_hdr = rxr_get_data_hdr(pkt_entry->pkt);
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 	       "%s RxR DATA packet -  version: %" PRIu8
 	       " flags: %x rx_id: %" PRIu32
 	       " seg_size: %"	     PRIu64
 	       " seg_offset: %"	     PRIu64
-	       "\n", prefix, data_pkt->hdr.version, data_pkt->hdr.flags,
-	       data_pkt->hdr.recv_id, data_pkt->hdr.seg_length,
-	       data_pkt->hdr.seg_offset);
+	       "\n", prefix, data_hdr->version, data_hdr->flags,
+	       data_hdr->recv_id, data_hdr->seg_length,
+	       data_hdr->seg_offset);
+
+	hdr_size = sizeof(struct rxr_data_hdr);
+	if (data_hdr->flags & RXR_PKT_CONNID_HDR) {
+		hdr_size += sizeof(struct rxr_data_opt_connid_hdr);
+		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+		       "sender_connid: %d\n",
+		       data_hdr->connid_hdr->connid);
+	}
+
+	data = (uint8_t *)pkt_entry->pkt + hdr_size;
 
 	l = snprintf(str, str_len, ("\tdata:    "));
-	for (i = 0; i < MIN(data_pkt->hdr.seg_length, RXR_PKT_DUMP_DATA_LEN);
+	for (i = 0; i < MIN(data_hdr->seg_length, RXR_PKT_DUMP_DATA_LEN);
 	     i++)
 		l += snprintf(str + l, str_len - l, "%02x ",
-			      ((uint8_t *)data_pkt->data)[i]);
+			      data[i]);
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA, "%s\n", str);
 }
 
-void rxr_pkt_print(char *prefix, struct rxr_ep *ep, struct rxr_base_hdr *hdr)
+void rxr_pkt_print(char *prefix, struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
+	struct rxr_base_hdr *hdr;
+
+	hdr = rxr_get_base_hdr(pkt_entry->pkt);
+
 	switch (hdr->type) {
 	case RXR_HANDSHAKE_PKT:
-		rxr_pkt_print_handshake(prefix, (struct rxr_handshake_hdr *)hdr);
+		rxr_pkt_print_handshake(prefix, rxr_get_handshake_hdr(pkt_entry->pkt));
 		break;
 	case RXR_CTS_PKT:
-		rxr_pkt_print_cts(prefix, (struct rxr_cts_hdr *)hdr);
+		rxr_pkt_print_cts(prefix, rxr_get_cts_hdr(pkt_entry->pkt));
 		break;
 	case RXR_DATA_PKT:
-		rxr_pkt_print_data(prefix, (struct rxr_data_pkt *)hdr);
+		rxr_pkt_print_data(prefix, pkt_entry);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid ctl pkt type %d\n",
