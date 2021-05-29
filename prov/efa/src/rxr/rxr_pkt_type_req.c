@@ -370,81 +370,6 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
  *
  *     init() functions
  */
-
-/**
- * @brief set up data in a REQ packet using tx_entry information.
- *        Depend on the tx_entry, this function can either copy data to packet entry, or point
- *        pkt_entry->iov to applicaiton buffer.
- *        It requires the packet header to be set.
- *
- * @param[in]		ep		end point.
- * @param[in,out]	pkt_entry	packet entry. Header must have been set when the function is called
- * @param[in]		tx_entry	This function will use iov, iov_count and desc of tx_entry
- * @param[in]		data_offset	offset of the data to be set up. In reference to tx_entry->total_len.
- * @param[in]		data_size	length of the data to be set up. In reference to tx_entry->total_len.
- * @return		no return
- */
-static inline
-void rxr_pkt_req_data_from_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
-			      struct rxr_tx_entry *tx_entry, size_t data_offset,
-			      size_t data_size)
-{
-	int tx_iov_index;
-	size_t tx_iov_offset;
-	char *data;
-	size_t hdr_size, copied;
-	struct efa_mr *desc;
-
-	assert(pkt_entry->send);
-	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
-	assert(hdr_size > 0);
-	if (data_size == 0) {
-		pkt_entry->send->iov_count = 0;
-		pkt_entry->pkt_size = hdr_size;
-		return;
-	}
-
-	rxr_locate_iov_pos(tx_entry->iov, tx_entry->iov_count, data_offset,
-			   &tx_iov_index, &tx_iov_offset);
-	desc = tx_entry->desc[0];
-	assert(tx_iov_index < tx_entry->iov_count);
-	assert(tx_iov_offset < tx_entry->iov[tx_iov_index].iov_len);
-
-	/*
-	 * Copy can be avoid if:
-	 * 1. user provided memory descriptor, or lower provider does not need memory descriptor
-	 * 2. data to be send is in 1 iov, because device only support 2 iov, and we use
-	 *    1st iov for header.
-	 */
-	if ((!pkt_entry->mr || tx_entry->desc[tx_iov_index]) &&
-	    (tx_iov_offset + data_size < tx_entry->iov[tx_iov_index].iov_len)) {
-
-		assert(ep->core_iov_limit >= 2);
-		pkt_entry->send->iov[0].iov_base = pkt_entry->pkt;
-		pkt_entry->send->iov[0].iov_len = hdr_size;
-		pkt_entry->send->desc[0] = pkt_entry->mr ? fi_mr_desc(pkt_entry->mr) : NULL;
-
-		pkt_entry->send->iov[1].iov_base = (char *)tx_entry->iov[tx_iov_index].iov_base + tx_iov_offset;
-		pkt_entry->send->iov[1].iov_len = data_size;
-		pkt_entry->send->desc[1] = tx_entry->desc[tx_iov_index];
-		pkt_entry->send->iov_count = 2;
-		pkt_entry->pkt_size = hdr_size + data_size;
-		return;
-	}
-
-	data = (char *)pkt_entry->pkt + hdr_size;
-	copied = ofi_copy_from_hmem_iov(data,
-					data_size,
-					desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-					desc ? desc->peer.device.reserved : 0,
-					tx_entry->iov,
-					tx_entry->iov_count,
-					data_offset);
-	assert(copied == data_size);
-	pkt_entry->send->iov_count = 0;
-	pkt_entry->pkt_size = hdr_size + copied;
-}
-
 static inline
 void rxr_pkt_init_rtm(struct rxr_ep *ep,
 		      struct rxr_tx_entry *tx_entry,
@@ -461,8 +386,8 @@ void rxr_pkt_init_rtm(struct rxr_ep *ep,
 
 	data_size = MIN(tx_entry->total_len - data_offset,
 			ep->mtu_size - rxr_pkt_req_hdr_size(pkt_entry));
-	rxr_pkt_req_data_from_tx(ep, pkt_entry, tx_entry, data_offset, data_size);
-	pkt_entry->x_entry = tx_entry;
+	rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, rxr_pkt_req_hdr_size(pkt_entry),
+					tx_entry, data_offset, data_size);
 }
 
 ssize_t rxr_pkt_init_eager_msgrtm(struct rxr_ep *ep,
@@ -1432,7 +1357,6 @@ void rxr_pkt_init_rtw_data(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
 			   struct efa_rma_iov *rma_iov)
 {
-	char *data;
 	size_t hdr_size;
 	size_t data_size;
 	int i;
@@ -1444,12 +1368,8 @@ void rxr_pkt_init_rtw_data(struct rxr_ep *ep,
 	}
 
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
-	data = (char *)pkt_entry->pkt + hdr_size;
-	data_size = ofi_copy_from_iov(data, ep->mtu_size - hdr_size,
-				      tx_entry->iov, tx_entry->iov_count, 0);
-
-	pkt_entry->pkt_size = hdr_size + data_size;
-	pkt_entry->x_entry = tx_entry;
+	data_size = MIN(ep->mtu_size - hdr_size, tx_entry->total_len);
+	rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, hdr_size, tx_entry, 0, data_size);
 }
 
 ssize_t rxr_pkt_init_eager_rtw(struct rxr_ep *ep,

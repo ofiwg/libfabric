@@ -129,6 +129,12 @@ static inline struct rxr_base_hdr *rxr_get_base_hdr(void *pkt)
 
 uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry);
 
+void rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
+				     struct rxr_pkt_entry *pkt_entry,
+				     size_t hdr_size,
+				     struct rxr_tx_entry *tx_entry,
+				     size_t data_offset, size_t data_size);
+
 struct rxr_ep;
 struct rdm_peer;
 struct rxr_tx_entry;
@@ -275,14 +281,6 @@ struct rxr_data_pkt *rxr_get_data_pkt(void *pkt)
 {
 	return (struct rxr_data_pkt *)pkt;
 }
-
-ssize_t rxr_pkt_send_data(struct rxr_ep *ep,
-			  struct rxr_tx_entry *tx_entry,
-			  struct rxr_pkt_entry *pkt_entry);
-
-ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
-			       struct rxr_tx_entry *tx_entry,
-			       struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_proc_data(struct rxr_ep *ep,
 		       struct rxr_rx_entry *rx_entry,
