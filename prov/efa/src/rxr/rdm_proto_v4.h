@@ -245,7 +245,10 @@ struct rxr_readrsp_hdr {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint32_t padding;
+	union {
+		uint32_t connid; /* sender connection ID, set when RXR_PKT_CONNID_HDR is on */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes boundary */
+	};
 	uint32_t recv_id; /* ID of the receive operation on the read requester, from rtr packet */
 	uint32_t send_id; /* ID of the send operation on the read responder, will be included in CTS packet */
 	uint64_t seg_length;

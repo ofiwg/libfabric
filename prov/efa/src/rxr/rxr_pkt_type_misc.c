@@ -319,21 +319,21 @@ int rxr_pkt_init_readrsp(struct rxr_ep *ep,
 			 struct rxr_tx_entry *tx_entry,
 			 struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_readrsp_pkt *readrsp_pkt;
 	struct rxr_readrsp_hdr *readrsp_hdr;
 
-	readrsp_pkt = (struct rxr_readrsp_pkt *)pkt_entry->pkt;
-	readrsp_hdr = &readrsp_pkt->hdr;
+	readrsp_hdr = rxr_get_readrsp_hdr(pkt_entry->pkt);
 	readrsp_hdr->type = RXR_READRSP_PKT;
 	readrsp_hdr->version = RXR_PROTOCOL_VERSION;
 	readrsp_hdr->flags = 0;
 	readrsp_hdr->send_id = tx_entry->tx_id;
 	readrsp_hdr->recv_id = tx_entry->rx_id;
+	readrsp_hdr->flags |= RXR_PKT_CONNID_HDR;
+	readrsp_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
 	readrsp_hdr->seg_length = MIN(ep->mtu_size - sizeof(struct rxr_readrsp_hdr),
 				      tx_entry->total_len);
+
 	pkt_entry->addr = tx_entry->addr;
-	pkt_entry->x_entry = tx_entry;
-	rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, sizeof(struct rxr_readrsp_hdr),
+	rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, sizeof(struct rxr_readrsp_hdr), 
 					tx_entry, 0, readrsp_hdr->seg_length);
 	return 0;
 }
