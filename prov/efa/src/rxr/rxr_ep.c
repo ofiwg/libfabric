@@ -105,7 +105,7 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 	if (addr != FI_ADDR_UNSPEC) {
 		rx_entry->peer = rxr_ep_get_peer(ep, addr);
 		assert(rx_entry->peer);
-		ofi_atomic_inc32(&rx_entry->peer->use_cnt);
+		dlist_insert_tail(&rx_entry->peer_entry, &rx_entry->peer->rx_entry_list);
 	} else {
 		/*
 		 * If msg->addr is not provided, rx_entry->peer will be set
@@ -347,7 +347,7 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	tx_entry->addr = msg->addr;
 	tx_entry->peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(tx_entry->peer);
-	ofi_atomic_inc32(&tx_entry->peer->use_cnt);
+	dlist_insert_tail(&tx_entry->peer_entry, &tx_entry->peer->tx_entry_list);
 
 	tx_entry->send_flags = 0;
 	tx_entry->rxr_flags = 0;
@@ -453,7 +453,7 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	struct rxr_pkt_entry *pkt_entry;
 
 	assert(tx_entry->peer);
-	ofi_atomic_dec32(&tx_entry->peer->use_cnt);
+	dlist_remove(&tx_entry->peer_entry);
 
 	for (i = 0; i < tx_entry->iov_count; i++) {
 		if (tx_entry->mr[i]) {

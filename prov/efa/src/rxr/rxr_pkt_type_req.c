@@ -1077,7 +1077,7 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 		rx_entry->addr = pkt_entry->addr;
 		rx_entry->peer = rxr_ep_get_peer(ep, rx_entry->addr);
 		assert(rx_entry->peer);
-		ofi_atomic_inc32(&rx_entry->peer->use_cnt);
+		dlist_insert_tail(&rx_entry->peer_entry, &rx_entry->peer->rx_entry_list);
 	}
 
 	/* Adjust rx_entry->cq_entry.len as needed.

@@ -337,7 +337,8 @@ struct rdm_peer {
 	struct dlist_entry handshake_queued_entry; /* linked with rxr_ep->handshake_queued_peer_list */
 	struct dlist_entry rx_unexp_list; /* a list of unexpected untagged rx_entry for this peer */
 	struct dlist_entry rx_unexp_tagged_list; /* a list of unexpected tagged rx_entry for this peer */
-	ofi_atomic32_t use_cnt;		/* refcount */
+	struct dlist_entry tx_entry_list; /* a list of tx_entry related to this peer */
+	struct dlist_entry rx_entry_list; /* a list of rx_entry relased to this peer */
 };
 
 struct rxr_queued_ctrl_info {
@@ -442,6 +443,8 @@ struct rxr_rx_entry {
 	struct rxr_pkt_entry *unexp_pkt;
 	char *atomrsp_data;
 
+	/* linked with rx_entry_list in rdm_peer */
+	struct dlist_entry peer_entry;
 #if ENABLE_DEBUG
 	/* linked with rx_pending_list in rxr_ep */
 	struct dlist_entry rx_pending_entry;
@@ -514,6 +517,9 @@ struct rxr_tx_entry {
 
 	/* Queued packets due to TX queue full or RNR backoff */
 	struct dlist_entry queued_pkts;
+
+	/* peer_entry is linked with tx_entry_list in rdm_peer */
+	struct dlist_entry peer_entry;
 
 #if ENABLE_DEBUG
 	/* linked with tx_entry_list in rxr_ep */
@@ -797,7 +803,7 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 	struct dlist_entry *tmp;
 
 	if (rx_entry->peer)
-		ofi_atomic_dec32(&rx_entry->peer->use_cnt);
+		dlist_remove(&rx_entry->peer_entry);
 
 #if ENABLE_DEBUG
 	dlist_remove(&rx_entry->rx_entry_entry);

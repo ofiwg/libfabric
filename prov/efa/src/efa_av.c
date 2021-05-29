@@ -75,6 +75,78 @@ static bool efa_is_same_addr(struct efa_ep_addr *lhs, struct efa_ep_addr *rhs)
 }
 
 /**
+ * @brief initialize a rdm peer
+ *
+ * @param[in,out]	peer	rdm peer
+ * @param[in]		ep	rdm endpoint
+ * @param[in]		conn	efa conn object
+ */
+static inline
+void efa_rdm_peer_init(struct rdm_peer *peer, struct rxr_ep *ep, struct efa_conn *conn)
+{
+	memset(peer, 0, sizeof(struct rdm_peer));
+
+	peer->efa_fiaddr = conn->fi_addr;
+	peer->is_self = efa_is_same_addr((struct efa_ep_addr *)ep->core_addr,
+					 conn->ep_addr);
+
+	ofi_recvwin_buf_alloc(&peer->robuf, rxr_env.recvwin_size);
+	peer->rx_credits = rxr_env.rx_window_size;
+	peer->tx_credits = rxr_env.tx_max_credits;
+	dlist_init(&peer->rx_unexp_list);
+	dlist_init(&peer->rx_unexp_tagged_list);
+	dlist_init(&peer->tx_entry_list);
+	dlist_init(&peer->rx_entry_list);
+}
+
+/**
+ * @brief clear resources accociated with a peer
+ *
+ * release reorder buffer, tx_entry list and rx_entry list of a peer
+ *
+ * @param[in,out]	peer 	rdm peer
+ */
+void efa_rdm_peer_clear(struct rxr_ep *ep, struct rdm_peer *peer)
+{
+	struct dlist_entry *tmp;
+	struct rxr_tx_entry *tx_entry;
+	struct rxr_rx_entry *rx_entry;
+	/*
+	 * TODO: Add support for wait/signal until all pending messages have
+	 * been sent/received so we do not attempt to complete a data transfer
+	 * or internal transfer after the EP is shutdown.
+	 */
+	if ((peer->flags & RXR_PEER_REQ_SENT) &&
+	    !(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
+		FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL, "Closing EP with unacked CONNREQs in flight\n");
+
+	if (peer->robuf.pending)
+		ofi_recvwin_free(&peer->robuf);
+
+	dlist_foreach_container_safe(&peer->tx_entry_list,
+				     struct rxr_tx_entry,
+				     tx_entry, peer_entry, tmp) {
+		rxr_release_tx_entry(ep, tx_entry);
+	}
+
+	dlist_foreach_container_safe(&peer->rx_entry_list,
+				     struct rxr_rx_entry,
+				     rx_entry, peer_entry, tmp) {
+		rxr_release_rx_entry(ep, rx_entry);
+	}
+
+	if (peer->flags & RXR_PEER_HANDSHAKE_QUEUED)
+		dlist_remove(&peer->handshake_queued_entry);
+
+	if (peer->flags & RXR_PEER_IN_BACKOFF)
+		dlist_remove(&peer->rnr_backoff_entry);
+
+#ifdef ENABLE_EFA_POISONING
+	rxr_poison_mem_region((uint32_t *)peer, sizeof(struct rdm_peer));
+#endif
+}
+
+/**
  * @brief find efa_conn struct using fi_addr
  *
  * @param[in]	av	efa av
@@ -263,17 +335,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 	rxr_ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
 
 	peer = &conn->rdm_peer;
-	memset(peer, 0, sizeof(struct rdm_peer));
-	ofi_atomic_initialize32(&peer->use_cnt, 1);
-	peer->efa_fiaddr = conn->fi_addr;
-	peer->is_self = efa_is_same_addr((struct efa_ep_addr *)rxr_ep->core_addr,
-					 conn->ep_addr);
-
-	ofi_recvwin_buf_alloc(&peer->robuf, rxr_env.recvwin_size);
-	peer->rx_credits = rxr_env.rx_window_size;
-	peer->tx_credits = rxr_env.tx_max_credits;
-	dlist_init(&peer->rx_unexp_list);
-	dlist_init(&peer->rx_unexp_tagged_list);
+	efa_rdm_peer_init(peer, rxr_ep, conn);
 
 	/* If peer is local, insert the address into shm provider's av */
 	if (rxr_ep->use_shm && efa_is_local_peer(av, conn->ep_addr)) {
@@ -325,6 +387,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 {
 	int err;
 	struct rdm_peer *peer;
+	struct rxr_ep *ep;
 
 	assert(av->ep_type == FI_EP_RDM);
 
@@ -342,9 +405,10 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 
 	/*
 	 * We need peer->shm_fiaddr to remove shm address from shm av table,
-	 * so efa_rdm_peer_reset must be after removing shm av table.
+	 * so efa_rdm_peer_clear must be after removing shm av table.
 	 */
-	efa_rdm_peer_clear(peer);
+	ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
+	efa_rdm_peer_clear(ep, peer);
 }
 
 /**
