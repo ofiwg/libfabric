@@ -504,7 +504,7 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 	tx_entry->addr = addr;
 	tx_entry->peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(tx_entry->peer);
-	ofi_atomic_inc32(&tx_entry->peer->use_cnt);
+	dlist_insert_tail(&tx_entry->peer_entry, &tx_entry->peer->tx_entry_list);
 	tx_entry->msg_id = -1;
 	tx_entry->cq_entry.flags = FI_RMA | FI_WRITE;
 	tx_entry->cq_entry.buf = NULL;
