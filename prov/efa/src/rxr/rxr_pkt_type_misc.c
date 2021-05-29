@@ -536,6 +536,8 @@ int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struct rx
 	eor_hdr->flags = 0;
 	eor_hdr->send_id = rx_entry->tx_id;
 	eor_hdr->recv_id = rx_entry->rx_id;
+	eor_hdr->flags |= RXR_PKT_CONNID_HDR;
+	eor_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
 	pkt_entry->pkt_size = sizeof(struct rxr_eor_hdr);
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = rx_entry;

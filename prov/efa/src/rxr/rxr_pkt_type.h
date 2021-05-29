@@ -395,10 +395,14 @@ struct rxr_eor_hdr {
 	/* end of rxr_base_hdr */
 	uint32_t send_id; /* ID of the send operation on sender */
 	uint32_t recv_id; /* ID of the receive operation on receiver */
+	union {
+		uint32_t connid; /* sender connection ID, optional, set whne RXR_PKT_CONNID_HDR is on */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes boundary */
+	};
 };
 
 #if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_eor_hdr) == 12, "rxr_eor_hdr check");
+static_assert(sizeof(struct rxr_eor_hdr) == 16, "rxr_eor_hdr check");
 #endif
 
 static inline
