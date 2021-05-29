@@ -74,6 +74,12 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
 			: NULL;
 	}
 
+	if (base_hdr->type == RXR_EOR_PKT) {
+		return (base_hdr->flags & RXR_PKT_CONNID_HDR)
+			? &rxr_get_eor_hdr(pkt_entry->pkt)->connid
+			: NULL;
+	}
+
 	if (base_hdr->type == RXR_HANDSHAKE_PKT) {
 		return (base_hdr->flags & RXR_PKT_CONNID_HDR)
 			? &(rxr_get_handshake_opt_connid_hdr(pkt_entry->pkt)->connid)
