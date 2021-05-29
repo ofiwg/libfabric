@@ -101,12 +101,18 @@ void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
 void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 
-/* DATA packet related functions */
 static inline
-struct rxr_data_pkt *rxr_get_data_pkt(void *pkt)
+struct rxr_data_hdr *rxr_get_data_hdr(void *pkt)
 {
-	return (struct rxr_data_pkt *)pkt;
+	return (struct rxr_data_hdr *)pkt;
 }
+
+int rxr_pkt_init_data(struct rxr_ep *ep,
+		      struct rxr_tx_entry *tx_entry,
+		      struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_data_sent(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_proc_data(struct rxr_ep *ep,
 		       struct rxr_rx_entry *rx_entry,

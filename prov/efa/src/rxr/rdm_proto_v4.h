@@ -194,6 +194,15 @@ static_assert(sizeof(struct rxr_cts_hdr) == 24, "rxr_cts_hdr check");
 /* this flag is to indicated the CTS is the response of a RTR packet */
 #define RXR_CTS_READ_REQ		BIT_ULL(7)
 
+
+/*
+ * @brief optional connid header for DATA packet
+ */
+struct rxr_data_opt_connid_hdr {
+	uint32_t connid;
+	uint32_t padding;
+};
+
 /*
  * @brief header format of DATA packet header (Packet Type ID 4)
  *
@@ -217,11 +226,8 @@ struct rxr_data_hdr {
 	uint32_t recv_id; /* ID of the receive operation on receiver */
 	uint64_t seg_length;
 	uint64_t seg_offset;
-};
-
-struct rxr_data_pkt {
-	struct rxr_data_hdr hdr;
-	char data[];
+	/* optional connid header, present when RXR_PKT_CONNID_HDR is on */
+	struct rxr_data_opt_connid_hdr connid_hdr[0];
 };
 
 #if defined(static_assert) && defined(__x86_64__)

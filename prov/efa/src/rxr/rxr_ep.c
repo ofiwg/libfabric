@@ -2073,7 +2073,8 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			if (peer->flags & RXR_PEER_IN_BACKOFF)
 				break;
 
-			ret = rxr_pkt_post_data(ep, tx_entry);
+			ret = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry,
+						RXR_DATA_PKT, false);
 			if (OFI_UNLIKELY(ret)) {
 				tx_entry->send_flags &= ~FI_MORE;
 				if (ret == -FI_EAGAIN)
@@ -2260,7 +2261,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (rxr_ep->mtu_size > RXR_MTU_MAX_LIMIT)
 		rxr_ep->mtu_size = RXR_MTU_MAX_LIMIT;
 
-	rxr_ep->max_data_payload_size = rxr_ep->mtu_size - sizeof(struct rxr_data_hdr);
+	rxr_ep->max_data_payload_size = rxr_ep->mtu_size - sizeof(struct rxr_data_hdr) - sizeof(struct rxr_data_opt_connid_hdr);
 	rxr_ep->min_multi_recv_size = rxr_ep->mtu_size - rxr_ep->max_proto_hdr_size;
 
 	if (rxr_env.tx_queue_size > 0 &&
