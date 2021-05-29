@@ -587,6 +587,8 @@ int rxr_pkt_init_receipt(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 	receipt_hdr->flags = 0;
 	receipt_hdr->tx_id = rx_entry->tx_id;
 	receipt_hdr->msg_id = rx_entry->msg_id;
+	receipt_hdr->flags |= RXR_PKT_CONNID_HDR;
+	receipt_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
 
 	pkt_entry->pkt_size = sizeof(struct rxr_receipt_hdr);
 	pkt_entry->addr = rx_entry->addr;

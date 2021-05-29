@@ -358,7 +358,10 @@ struct rxr_receipt_hdr {
 	/* end of rxr_base_hdr */
 	uint32_t tx_id;
 	uint32_t msg_id;
-	int32_t padding;
+	union {
+		uint32_t connid; /* sender connection ID, set when RXR_PKT_CONNID_HDR is on */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes */
+	};
 };
 
 /*
