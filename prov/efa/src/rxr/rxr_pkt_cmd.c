@@ -81,18 +81,19 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	 * Data packets are sent in order so using bytes_sent is okay here.
 	 */
 	data_pkt->hdr.seg_offset = tx_entry->bytes_sent;
+	data_pkt->hdr.seg_length = MIN(tx_entry->total_len - tx_entry->bytes_sent,
+				       rxr_ep->max_data_payload_size);
+	data_pkt->hdr.seg_length = MIN(data_pkt->hdr.seg_length, tx_entry->window);
 
-	if (tx_entry->desc[0])
-		ret = rxr_pkt_send_data_desc(rxr_ep, tx_entry, pkt_entry);
-	else
-		ret = rxr_pkt_send_data(rxr_ep, tx_entry, pkt_entry);
+	rxr_pkt_init_data_from_tx_entry(rxr_ep, pkt_entry, sizeof(struct rxr_data_hdr),
+					tx_entry, tx_entry->bytes_sent, data_pkt->hdr.seg_length);
 
+	ret = rxr_pkt_entry_send(rxr_ep, pkt_entry, tx_entry->send_flags);
 	if (OFI_UNLIKELY(ret)) {
 		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
 		return ret;
 	}
 
-	data_pkt = rxr_get_data_pkt(pkt_entry->pkt);
 	tx_entry->bytes_sent += data_pkt->hdr.seg_length;
 	tx_entry->window -= data_pkt->hdr.seg_length;
 	assert(data_pkt->hdr.seg_length > 0);
@@ -312,19 +313,6 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 
 	if (!pkt_entry)
 		return -FI_EAGAIN;
-
-	/*
-	 * The allocated pkt_entry->send will be released when releasing the
-	 * pkt_entry, because pkt_entry could be queued and re-send later
-	 */
-	pkt_entry->send = ofi_buf_alloc(rxr_ep->pkt_sendv_pool);
-	if (!pkt_entry->send) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-			"Unable to allocate rxr_pkt_sendv from pkt_sendv_pool\n");
-		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
-		return -FI_EAGAIN;
-	}
-	pkt_entry->send->iov_count = 0;
 
 	/*
 	 * rxr_pkt_init_ctrl will set pkt_entry->send if it want to use multi iov

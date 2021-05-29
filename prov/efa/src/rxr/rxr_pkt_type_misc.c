@@ -320,7 +320,6 @@ int rxr_pkt_init_readrsp(struct rxr_ep *ep,
 {
 	struct rxr_readrsp_pkt *readrsp_pkt;
 	struct rxr_readrsp_hdr *readrsp_hdr;
-	size_t mtu = ep->mtu_size;
 
 	readrsp_pkt = (struct rxr_readrsp_pkt *)pkt_entry->pkt;
 	readrsp_hdr = &readrsp_pkt->hdr;
@@ -329,13 +328,12 @@ int rxr_pkt_init_readrsp(struct rxr_ep *ep,
 	readrsp_hdr->flags = 0;
 	readrsp_hdr->send_id = tx_entry->tx_id;
 	readrsp_hdr->recv_id = tx_entry->rx_id;
-	readrsp_hdr->seg_length = ofi_copy_from_iov(readrsp_pkt->data,
-						    mtu - sizeof(struct rxr_readrsp_hdr),
-						    tx_entry->iov,
-						    tx_entry->iov_count, 0);
-	pkt_entry->pkt_size = sizeof(struct rxr_readrsp_hdr) + readrsp_hdr->seg_length;
+	readrsp_hdr->seg_length = MIN(ep->mtu_size - sizeof(struct rxr_readrsp_hdr),
+				      tx_entry->total_len);
 	pkt_entry->addr = tx_entry->addr;
 	pkt_entry->x_entry = tx_entry;
+	rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, sizeof(struct rxr_readrsp_hdr),
+					tx_entry, 0, readrsp_hdr->seg_length);
 	return 0;
 }
 
