@@ -69,9 +69,7 @@ fi
 
 if command -v yum > /dev/null; then
     yum-config-manager --add-repo=$URL
-#    yum-config-manager --add-repo=$URL_SSHOT
-    yum-config-manager --add-repo=$URL_INT
-    yum-config-manager --add-repo=$URL_SSHOT_INT
+    yum-config-manager --add-repo=$URL_SSHOT
 
     yum-config-manager --setopt=gpgcheck=0 --save
 
@@ -84,15 +82,6 @@ elif command -v zypper > /dev/null; then
         ${IYUM_REPO_NAME_1}_SSHOT
     zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 1 \
        --name=cuda $CUDA_URL cuda
-
-    if [[ $TARGET_OS =~ ncn$ ]]; then
-        zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 10 \
-            --name=${IYUM_REPO_NAME_1}_internal $URL_INT \
-            ${IYUM_REPO_NAME_1}_internal
-        zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 10 \
-            --name=${IYUM_REPO_NAME_1}_SSHOT_internal $URL_SSHOT_INT \
-            ${IYUM_REPO_NAME_1}_SSHOT_internal
-    fi
 
     zypper refresh
     zypper $ZYPPER_OPTS install $RPMS
