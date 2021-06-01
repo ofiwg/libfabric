@@ -50,8 +50,10 @@
 
 size_t rxm_msg_tx_size;
 size_t rxm_msg_rx_size;
-size_t rxm_eager_limit		= 16384;
-size_t rxm_buffer_size		= 16384 + sizeof(struct rxm_pkt);
+
+size_t rxm_buffer_size = 16384;
+size_t rxm_eager_limit;
+size_t rxm_packet_size;
 
 int force_auto_progress		= 0;
 int rxm_use_write_rndv		= 0;
@@ -250,33 +252,35 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 static void rxm_init_infos(void)
 {
 	struct fi_info *cur;
-	size_t eager_limit, tx_size = 0, rx_size = 0;
+	size_t buf_size, tx_size = 0, rx_size = 0;
 
 	/* Historically, 'buffer_size' was the name given for the eager message
 	 * size.  Maintain the name for backwards compatability.
 	 */
-	if (!fi_param_get_size_t(&rxm_prov, "buffer_size", &eager_limit)) {
+	if (!fi_param_get_size_t(&rxm_prov, "buffer_size", &buf_size)) {
 		/* We need enough space to carry extra headers */
-		if (eager_limit < sizeof(struct rxm_rndv_hdr) ||
-		    eager_limit < sizeof(struct rxm_atomic_hdr)) {
+		if (buf_size < sizeof(struct rxm_rndv_hdr) ||
+		    buf_size < sizeof(struct rxm_atomic_hdr)) {
 			FI_WARN(&rxm_prov, FI_LOG_CORE,
 				"Requested buffer size too small\n");
-			eager_limit = MAX(sizeof(struct rxm_rndv_hdr),
-					 sizeof(struct rxm_atomic_hdr));
+			buf_size = MAX(sizeof(struct rxm_rndv_hdr),
+				       sizeof(struct rxm_atomic_hdr));
 		}
 
-		rxm_eager_limit = eager_limit;
-		if (rxm_eager_limit > INT32_MAX)
-			rxm_eager_limit = INT32_MAX;
+		if (buf_size > INT32_MAX)
+			buf_size = INT32_MAX;
 
-		rxm_buffer_size = rxm_eager_limit + sizeof(struct rxm_pkt);
+		rxm_buffer_size = buf_size;
 	}
+
+	rxm_eager_limit = rxm_buffer_size;
+	rxm_packet_size = sizeof(struct rxm_pkt) + rxm_buffer_size;
 
 	fi_param_get_size_t(&rxm_prov, "tx_size", &tx_size);
 	fi_param_get_size_t(&rxm_prov, "rx_size", &rx_size);
 
 	for (cur = (struct fi_info *) rxm_util_prov.info; cur; cur = cur->next) {
-		cur->tx_attr->inject_size = rxm_eager_limit;
+		cur->tx_attr->inject_size = rxm_buffer_size;
 		if (tx_size)
 			cur->tx_attr->size = tx_size;
 		if (rx_size)

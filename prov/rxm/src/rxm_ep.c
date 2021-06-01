@@ -244,7 +244,7 @@ static int rxm_ep_create_pools(struct rxm_ep *rxm_ep)
 	struct ofi_bufpool_attr attr = {0};
 	int ret;
 
-	attr.size = rxm_eager_limit + sizeof(struct rxm_rx_buf);
+	attr.size = rxm_buffer_size + sizeof(struct rxm_rx_buf);
 	attr.alignment = 16;
 	attr.chunk_cnt = 1024;
 	attr.alloc_fn = rxm_buf_reg;
@@ -260,7 +260,7 @@ static int rxm_ep_create_pools(struct rxm_ep *rxm_ep)
 		return ret;
 	}
 
-	attr.size = rxm_eager_limit + sizeof(struct rxm_tx_buf);
+	attr.size = rxm_buffer_size + sizeof(struct rxm_tx_buf);
 	attr.init_fn = rxm_init_tx_buf;
 	ret = ofi_bufpool_create_attr(&attr, &rxm_ep->tx_pool);
 	if (ret) {
@@ -1079,7 +1079,7 @@ err:
 static size_t
 rxm_ep_sar_calc_segs_cnt(struct rxm_ep *rxm_ep, size_t data_len)
 {
-	return (data_len + rxm_eager_limit - 1) / rxm_eager_limit;
+	return (data_len + rxm_buffer_size - 1) / rxm_buffer_size;
 }
 
 static struct rxm_tx_buf *
@@ -1184,17 +1184,17 @@ rxm_send_sar(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
 
 	first_tx_buf = rxm_ep_sar_tx_prepare_segment(rxm_ep, rxm_conn, context,
-						     data_len, rxm_eager_limit,
+						     data_len, rxm_buffer_size,
 						     0, data, flags, tag, op,
 						     RXM_SAR_SEG_FIRST, &msg_id);
 	if (!first_tx_buf)
 		return -FI_EAGAIN;
 
-	ret = ofi_copy_from_hmem_iov(first_tx_buf->pkt.data, rxm_eager_limit,
+	ret = ofi_copy_from_hmem_iov(first_tx_buf->pkt.data, rxm_buffer_size,
 				     iface, device, iov, count, iov_offset);
-	assert(ret == rxm_eager_limit);
+	assert(ret == rxm_buffer_size);
 
-	iov_offset += rxm_eager_limit;
+	iov_offset += rxm_buffer_size;
 
 	ret = fi_send(rxm_conn->msg_ep, &first_tx_buf->pkt,
 		      sizeof(struct rxm_pkt) + first_tx_buf->pkt.ctrl_hdr.seg_size,
@@ -1206,20 +1206,20 @@ rxm_send_sar(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		return ret;
 	}
 
-	remain_len -= rxm_eager_limit;
+	remain_len -= rxm_buffer_size;
 
 	for (i = 1; i < segs_cnt; i++) {
 		ret = rxm_ep_sar_tx_prepare_and_send_segment(
-					rxm_ep, rxm_conn, context, data_len, remain_len,
-					msg_id, rxm_eager_limit, i, segs_cnt, data,
-					flags, tag, op, iov, count, &iov_offset, &tx_buf,
-					iface, device);
+				rxm_ep, rxm_conn, context, data_len, remain_len,
+				msg_id, rxm_buffer_size, i, segs_cnt, data,
+				flags, tag, op, iov, count, &iov_offset, &tx_buf,
+				iface, device);
 		if (ret) {
 			if (ret == -FI_EAGAIN)
 				goto defer;
 			goto free;
 		}
-		remain_len -= rxm_eager_limit;
+		remain_len -= rxm_buffer_size;
 	}
 
 	return 0;
@@ -1582,7 +1582,7 @@ rxm_ep_progress_sar_deferred_segments(struct rxm_deferred_tx_entry *def_tx_entry
 		}
 
 		def_tx_entry->sar_seg.next_seg_no++;
-		def_tx_entry->sar_seg.remain_len -= rxm_eager_limit;
+		def_tx_entry->sar_seg.remain_len -= rxm_buffer_size;
 
 		if (def_tx_entry->sar_seg.next_seg_no ==
 		    def_tx_entry->sar_seg.segs_cnt) {
@@ -1599,7 +1599,7 @@ rxm_ep_progress_sar_deferred_segments(struct rxm_deferred_tx_entry *def_tx_entry
 				def_tx_entry->sar_seg.app_context,
 				def_tx_entry->sar_seg.total_len,
 				def_tx_entry->sar_seg.remain_len,
-				def_tx_entry->sar_seg.msg_id, rxm_eager_limit,
+				def_tx_entry->sar_seg.msg_id, rxm_buffer_size,
 				def_tx_entry->sar_seg.next_seg_no,
 				def_tx_entry->sar_seg.segs_cnt,
 				def_tx_entry->sar_seg.payload.data,
@@ -1621,7 +1621,7 @@ rxm_ep_progress_sar_deferred_segments(struct rxm_deferred_tx_entry *def_tx_entry
 			return ret;
 		}
 		def_tx_entry->sar_seg.next_seg_no++;
-		def_tx_entry->sar_seg.remain_len -= rxm_eager_limit;
+		def_tx_entry->sar_seg.remain_len -= rxm_buffer_size;
 	}
 
 	return 0;
@@ -2466,7 +2466,7 @@ static void rxm_ep_sar_init(struct rxm_ep *rxm_ep)
 	size_t param;
 
 	/* SAR segment size is capped at 64k. */
-	if (rxm_eager_limit > UINT16_MAX)
+	if (rxm_buffer_size > UINT16_MAX)
 		goto disable_sar;
 
 	domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
@@ -2539,13 +2539,13 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
 		rxm_ep->buffered_min = MIN((rxm_ep->inject_limit -
 					    (sizeof(struct rxm_pkt) +
 					     sizeof(struct rxm_rndv_hdr))),
-					   rxm_eager_limit);
+					   rxm_buffer_size);
 
 	assert(!rxm_ep->min_multi_recv_size);
-	rxm_ep->min_multi_recv_size = rxm_eager_limit;
+	rxm_ep->min_multi_recv_size = rxm_buffer_size;
 
 	assert(!rxm_ep->buffered_limit);
-	rxm_ep->buffered_limit = rxm_eager_limit;
+	rxm_ep->buffered_limit = rxm_buffer_size;
 
 	rxm_ep_sar_init(rxm_ep);
 	rxm_config_direct_send(rxm_ep);

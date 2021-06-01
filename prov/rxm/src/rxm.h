@@ -66,6 +66,7 @@
 
 extern size_t rxm_eager_limit;
 extern size_t rxm_buffer_size;
+extern size_t rxm_packet_size;
 
 #define RXM_SAR_TX_ERROR	UINT64_MAX
 #define RXM_SAR_RX_INIT		UINT64_MAX
@@ -763,8 +764,8 @@ void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 
 static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 {
-	assert(rxm_eager_limit >= sizeof(struct rxm_atomic_hdr));
-	return rxm_eager_limit - sizeof(struct rxm_atomic_hdr);
+	assert(rxm_buffer_size >= sizeof(struct rxm_atomic_hdr));
+	return rxm_buffer_size - sizeof(struct rxm_atomic_hdr);
 }
 
 static inline ssize_t
