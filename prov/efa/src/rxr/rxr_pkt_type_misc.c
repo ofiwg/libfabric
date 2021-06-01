@@ -36,6 +36,7 @@
 #include "rxr_msg.h"
 #include "rxr_cntr.h"
 #include "rxr_pkt_cmd.h"
+#include "rxr_pkt_type_base.h"
 #include "rxr_read.h"
 
 /* This file define functons for the following packet type:

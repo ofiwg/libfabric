@@ -35,6 +35,7 @@
 #include "rxr.h"
 #include "rxr_msg.h"
 #include "rxr_pkt_cmd.h"
+#include "rxr_pkt_type_base.h"
 
 void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 					 struct rxr_pkt_entry *pkt_entry)
@@ -103,17 +104,17 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 		ep->available_data_bufs++;
 
 #if ENABLE_DEBUG
-	/* rx_entry can be released by rxr_pkt_copy_to_rx
+	/* rx_entry can be released by rxr_pkt_copy_data_to_rx_entry
 	 * so the call to dlist_remove must happen before
-	 * call to rxr_copy_to_rx
+	 * call to rxr_copy_data_to_rx_entry
 	 */
 	if (all_received) {
 		dlist_remove(&rx_entry->rx_pending_entry);
 		ep->rx_pending--;
 	}
 #endif
-	err = rxr_pkt_copy_to_rx(ep, rx_entry, seg_offset,
-				 pkt_entry, data, seg_size);
+	err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, seg_offset,
+					    pkt_entry, data, seg_size);
 	if (err) {
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
