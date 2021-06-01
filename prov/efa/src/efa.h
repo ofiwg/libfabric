@@ -142,7 +142,7 @@ struct efa_ah {
 
 struct efa_conn {
 	struct efa_ah		*ah;
-	struct efa_ep_addr	ep_addr;
+	struct efa_ep_addr	*ep_addr;
 	/* for FI_AV_TABLE, fi_addr is same as util_av_fi_addr,
 	 * for FI_AV_MAP, fi_addr is pointer to efa_conn; */
 	fi_addr_t		fi_addr;
@@ -594,7 +594,7 @@ struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 	util_av_entry = ofi_bufpool_get_ibuf(ep->util_ep.av->av_entry_pool,
 	                                     addr);
 	av_entry = (struct efa_av_entry *)util_av_entry->data;
-	return &av_entry->conn.rdm_peer;
+	return av_entry->conn.ep_addr ? &av_entry->conn.rdm_peer : NULL;
 }
 
 static inline
