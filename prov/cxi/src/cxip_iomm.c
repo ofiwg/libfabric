@@ -162,10 +162,11 @@ int cxip_iomm_init(struct cxip_domain *dom)
 	 */
 	if (scalable) {
 		ret = cxip_scalable_iomm_init(dom);
-		if (ret)
+		if (ret) {
 			CXIP_WARN("cxip_scalable_iomm_init() returned: %d\n",
 				  ret);
 			return ret;
+		}
 	}
 
 	if (!scalable || dom->hmem) {
