@@ -37,6 +37,7 @@
 #include "rxr_rma.h"
 #include "rxr_msg.h"
 #include "rxr_pkt_cmd.h"
+#include "rxr_pkt_type_base.h"
 #include "rxr_read.h"
 
 /*
@@ -978,20 +979,20 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 			offset = rxr_get_medium_rtm_base_hdr(cur->pkt)->seg_offset;
 		data_size = cur->pkt_size - hdr_size;
 
-		/* rxr_pkt_copy_to_rx() can release rx_entry, so
+		/* rxr_pkt_copy_data_to_rx_entry() can release rx_entry, so
 		 * bytes_received must be calculated before it.
 		 */
 		rx_entry->bytes_received += data_size;
 		if (rx_entry->total_len == rx_entry->bytes_received)
 			rxr_pkt_rx_map_remove(ep, cur, rx_entry);
 
-		/* rxr_pkt_copy_to_rx() will release cur, so
+		/* rxr_pkt_copy_data_to_rx_entry() will release cur, so
 		 * cur->next must be copied out before it.
 		 */
 		nxt = cur->next;
 		cur->next = NULL;
 
-		err = rxr_pkt_copy_to_rx(ep, rx_entry, offset, cur, data, data_size);
+		err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, offset, cur, data, data_size);
 		if (err) {
 			rxr_pkt_entry_release_rx(ep, cur);
 			ret = err;
@@ -1030,10 +1031,10 @@ ssize_t rxr_pkt_proc_matched_eager_rtm(struct rxr_ep *ep,
 		data_size = pkt_entry->pkt_size - hdr_size;
 
 		/*
-		 * On success, rxr_pkt_copy_to_rx will write rx completion,
+		 * On success, rxr_pkt_copy_data_to_rx_entry will write rx completion,
 		 * release pkt_entry and rx_entry
 		 */
-		err = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
+		err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
 		if (err)
 			rxr_pkt_entry_release_rx(ep, pkt_entry);
 
@@ -1138,7 +1139,7 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	data_size = pkt_entry->pkt_size - hdr_size;
 
 	rx_entry->bytes_received += data_size;
-	ret = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
+	ret = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
 #if ENABLE_DEBUG
 	dlist_insert_tail(&rx_entry->rx_pending_entry, &ep->rx_pending_list);
 	ep->rx_pending++;
@@ -1608,7 +1609,7 @@ void rxr_pkt_proc_eager_rtw(struct rxr_ep *ep,
 			rx_entry->iov[0].iov_len);
 		err = FI_EINVAL;
 	} else {
-		err = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
+		err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
 	}
 
 	if (err) {
@@ -1719,7 +1720,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 			rx_entry->iov[0].iov_len);
 		err = FI_EINVAL;
 	} else {
-		err = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
+		err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
 	}
 
 	if (err) {
