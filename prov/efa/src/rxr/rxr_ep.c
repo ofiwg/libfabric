@@ -65,8 +65,7 @@ struct efa_ep_addr *rxr_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	efa_av = efa_ep->av;
 	efa_conn = efa_av_addr_to_conn(efa_av, addr);
-
-	return &efa_conn->ep_addr;
+	return efa_conn ? efa_conn->ep_addr : NULL;
 }
 
 const char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen)
