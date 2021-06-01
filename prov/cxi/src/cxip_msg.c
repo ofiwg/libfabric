@@ -3852,7 +3852,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		.le_type = CXIP_LE_TYPE_RX
 	};
 	int idc;
-	ssize_t ret __attribute__((unused));
+	ssize_t ret;
 	int match_complete = req->send.flags & FI_MATCH_COMPLETE;
 	int tx_id;
 	struct cxip_cmdq *cmdq =
