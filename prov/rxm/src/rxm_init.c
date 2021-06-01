@@ -250,22 +250,22 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 static void rxm_init_infos(void)
 {
 	struct fi_info *cur;
-	size_t eager_size, tx_size = 0, rx_size = 0;
+	size_t eager_limit, tx_size = 0, rx_size = 0;
 
 	/* Historically, 'buffer_size' was the name given for the eager message
 	 * size.  Maintain the name for backwards compatability.
 	 */
-	if (!fi_param_get_size_t(&rxm_prov, "buffer_size", &eager_size)) {
+	if (!fi_param_get_size_t(&rxm_prov, "buffer_size", &eager_limit)) {
 		/* We need enough space to carry extra headers */
-		if (eager_size < sizeof(struct rxm_rndv_hdr) ||
-		    eager_size < sizeof(struct rxm_atomic_hdr)) {
+		if (eager_limit < sizeof(struct rxm_rndv_hdr) ||
+		    eager_limit < sizeof(struct rxm_atomic_hdr)) {
 			FI_WARN(&rxm_prov, FI_LOG_CORE,
 				"Requested buffer size too small\n");
-			eager_size = MAX(sizeof(struct rxm_rndv_hdr),
+			eager_limit = MAX(sizeof(struct rxm_rndv_hdr),
 					 sizeof(struct rxm_atomic_hdr));
 		}
 
-		rxm_eager_limit = eager_size;
+		rxm_eager_limit = eager_limit;
 		if (rxm_eager_limit > INT32_MAX)
 			rxm_eager_limit = INT32_MAX;
 

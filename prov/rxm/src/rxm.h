@@ -234,7 +234,7 @@ union rxm_cm_data {
 		uint8_t op_version;
 		uint16_t port;
 		uint8_t padding[2];
-		uint32_t eager_size;
+		uint32_t eager_limit;
 		uint32_t rx_size;
 		uint64_t client_conn_id;
 	} connect;
