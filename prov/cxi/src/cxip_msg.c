@@ -3854,7 +3854,6 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	int idc;
 	ssize_t ret;
 	int match_complete = req->send.flags & FI_MATCH_COMPLETE;
-	int tx_id;
 	struct cxip_cmdq *cmdq =
 		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
 	const void *buf = NULL;
@@ -3925,9 +3924,12 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 
 	/* Allocate a TX ID if match completion guarantees are required */
 	if (match_complete) {
+		int tx_id;
+
 		tx_id = cxip_tx_id_alloc(txc->ep_obj, req);
 		if (tx_id < 0) {
-			TXC_WARN(txc, "Failed to allocate TX ID: %ld\n", ret);
+			TXC_WARN(txc, "Failed to allocate TX ID: %d\n", tx_id);
+			ret = tx_id;
 			goto err_unmap;
 		}
 
