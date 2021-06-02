@@ -47,6 +47,10 @@ Provider parameters:
 
 
 General parameters:
+-b
+    Build binary packages only
+    By default, build binary and source packages
+
 -n
     Do nothing, useful with -v option. If used with -v option,
     it will just print what would have been done.
