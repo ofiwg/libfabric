@@ -475,6 +475,7 @@ struct rxm_rx_buf {
 	size_t rndv_rma_index;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 
+	void *data;
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
 };

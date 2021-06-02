@@ -149,6 +149,7 @@ static void rxm_init_rx_buf(struct ofi_bufpool_region *region, void *buf)
 	rx_buf->hdr.desc = ep->msg_mr_local ?
 			   fi_mr_desc((struct fid_mr *) region->context) : NULL;
 	rx_buf->ep = ep;
+	rx_buf->data = &rx_buf->pkt.data;
 }
 
 static void rxm_init_tx_buf(struct ofi_bufpool_region *region, void *buf)

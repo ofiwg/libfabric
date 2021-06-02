@@ -635,7 +635,7 @@ void rxm_handle_eager(struct rxm_rx_buf *rx_buf)
 	done_len = ofi_copy_to_hmem_iov(iface, device,
 					rx_buf->recv_entry->rxm_iov.iov,
 					rx_buf->recv_entry->rxm_iov.count, 0,
-					rx_buf->pkt.data, rx_buf->pkt.hdr.size);
+					rx_buf->data, rx_buf->pkt.hdr.size);
 	assert(done_len == rx_buf->pkt.hdr.size);
 
 	rxm_finish_recv(rx_buf, done_len);
@@ -654,7 +654,7 @@ void rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 	done_len = ofi_copy_to_hmem_iov(iface, device,
 					rx_buf->recv_entry->rxm_iov.iov,
 					rx_buf->recv_entry->rxm_iov.count, 0,
-					rx_buf->pkt.data, rx_buf->pkt.hdr.size);
+					rx_buf->data, rx_buf->pkt.hdr.size);
 	assert(done_len == rx_buf->pkt.hdr.size);
 
 	if (rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
@@ -1591,7 +1591,7 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 			       sizeof(*iov));
 		} else {
 			*count = 1;
-			iov[0].iov_base = &rx_buf->pkt.data;
+			iov[0].iov_base = rx_buf->data;
 			iov[0].iov_len = rxm_buffer_size;
 		}
 		break;
