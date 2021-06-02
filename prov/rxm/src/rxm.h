@@ -474,6 +474,7 @@ struct rxm_rx_buf {
 	size_t rndv_rma_index;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 
+	/* Only differs from pkt.data for unexpected messages */
 	void *data;
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
@@ -903,6 +904,11 @@ int rxm_post_recv(struct rxm_rx_buf *rx_buf);
 static inline void
 rxm_rx_buf_free(struct rxm_rx_buf *rx_buf)
 {
+	if (rx_buf->data != rx_buf->pkt.data) {
+		free(rx_buf->data);
+		rx_buf->data = &rx_buf->pkt.data;
+	}
+
 	/* Discard rx buffer if its msg_ep was closed */
 	if (rx_buf->repost && (rx_buf->ep->srx_ctx || rx_buf->conn->msg_ep)) {
 		rxm_post_recv(rx_buf);
