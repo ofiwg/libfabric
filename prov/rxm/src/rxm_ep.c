@@ -2461,43 +2461,36 @@ err:
 	return ret;
 }
 
-static void rxm_ep_sar_init(struct rxm_ep *rxm_ep)
+static void rxm_ep_init_proto(struct rxm_ep *ep)
 {
 	struct rxm_domain *domain;
 	size_t param;
 
-	/* SAR segment size is capped at 64k. */
-	if (rxm_buffer_size > UINT16_MAX)
-		goto disable_sar;
-
-	domain = container_of(rxm_ep->util_ep.domain, struct rxm_domain,
+	domain = container_of(ep->util_ep.domain, struct rxm_domain,
 			      util_domain);
-	if (domain->dyn_rbuf) {
-		FI_INFO(&rxm_prov, FI_LOG_CORE, "Dynamic receive buffer "
-			"enabled, disabling SAR protocol\n");
-		goto disable_sar;
+
+	if (ep->enable_direct_send && domain->dyn_rbuf) {
+		if (!fi_param_get_size_t(&rxm_prov, "eager_limit", &param))
+			ep->eager_limit = param;
 	}
 
-	rxm_ep->eager_limit = rxm_buffer_size;
+	if (ep->eager_limit < rxm_buffer_size)
+		ep->eager_limit = rxm_buffer_size;
+
+	/* SAR segment size is capped at 64k. */
+	if (domain->dyn_rbuf || ep->eager_limit > UINT16_MAX) {
+		ep->sar_limit = ep->eager_limit;
+		return;
+	}
 
 	if (!fi_param_get_size_t(&rxm_prov, "sar_limit", &param)) {
-		if (param <= rxm_ep->eager_limit) {
-			FI_WARN(&rxm_prov, FI_LOG_CORE,
-				"Requested SAR limit (%zd) less or equal to "
-				"eager limit (%zd) - disabling.",
-				param, rxm_ep->eager_limit);
-			goto disable_sar;
-		}
-
-		rxm_ep->sar_limit = param;
+		if (param <= ep->eager_limit)
+			ep->sar_limit = ep->eager_limit;
+		else
+			ep->sar_limit = param;
 	} else {
-		rxm_ep->sar_limit = rxm_ep->eager_limit * 8;
+		ep->sar_limit = ep->eager_limit * 8;
 	}
-
-	return;
-
-disable_sar:
-	rxm_ep->sar_limit = rxm_ep->eager_limit;
 }
 
 /* Direct send works with verbs, provided that msg_mr_local == rdm_mr_local.
@@ -2550,8 +2543,8 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
 	assert(!rxm_ep->buffered_limit);
 	rxm_ep->buffered_limit = rxm_buffer_size;
 
-	rxm_ep_sar_init(rxm_ep);
 	rxm_config_direct_send(rxm_ep);
+	rxm_ep_init_proto(rxm_ep);
 
  	FI_INFO(&rxm_prov, FI_LOG_CORE,
 		"Settings:\n"
