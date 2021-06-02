@@ -1510,7 +1510,7 @@ rxm_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		(data_len > rxm_ep->rxm_info->tx_attr->inject_size)) ||
 	       (data_len <= rxm_ep->rxm_info->tx_attr->inject_size));
 
-	if (data_len <= rxm_eager_limit) {
+	if (data_len <= rxm_ep->eager_limit) {
 		ret = rxm_send_eager(rxm_ep, rxm_conn, iov, desc, count,
 				     context, data, flags, tag, op,
 				     data_len, total_len);
@@ -2478,24 +2478,26 @@ static void rxm_ep_sar_init(struct rxm_ep *rxm_ep)
 		goto disable_sar;
 	}
 
+	rxm_ep->eager_limit = rxm_buffer_size;
+
 	if (!fi_param_get_size_t(&rxm_prov, "sar_limit", &param)) {
-		if (param <= rxm_eager_limit) {
+		if (param <= rxm_ep->eager_limit) {
 			FI_WARN(&rxm_prov, FI_LOG_CORE,
 				"Requested SAR limit (%zd) less or equal to "
 				"eager limit (%zd) - disabling.",
-				param, rxm_eager_limit);
+				param, rxm_ep->eager_limit);
 			goto disable_sar;
 		}
 
 		rxm_ep->sar_limit = param;
 	} else {
-		rxm_ep->sar_limit = rxm_eager_limit * 8;
+		rxm_ep->sar_limit = rxm_ep->eager_limit * 8;
 	}
 
 	return;
 
 disable_sar:
-	rxm_ep->sar_limit = rxm_eager_limit;
+	rxm_ep->sar_limit = rxm_ep->eager_limit;
 }
 
 /* Direct send works with verbs, provided that msg_mr_local == rdm_mr_local.
@@ -2562,7 +2564,7 @@ static void rxm_ep_settings_init(struct rxm_ep *rxm_ep)
 		rxm_ep->msg_mr_local, rxm_ep->rdm_mr_local,
 		rxm_ep->comp_per_progress, rxm_ep->buffered_min,
 		rxm_ep->min_multi_recv_size, rxm_ep->inject_limit,
-		rxm_eager_limit, rxm_ep->sar_limit);
+		rxm_ep->eager_limit, rxm_ep->sar_limit);
 }
 
 static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)

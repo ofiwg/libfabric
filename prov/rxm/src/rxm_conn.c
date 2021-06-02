@@ -992,7 +992,7 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 			.endianness = ofi_detect_endianness(),
 			.ctrl_version = RXM_CTRL_VERSION,
 			.op_version = RXM_OP_VERSION,
-			.eager_limit = rxm_eager_limit,
+			.eager_limit = rxm_ep->eager_limit,
 		},
 	};
 	union rxm_cm_data reject_cm_data = {
@@ -1407,7 +1407,7 @@ rxm_conn_connect(struct rxm_ep *ep, struct rxm_cmap_handle *handle,
 			.ctrl_version = RXM_CTRL_VERSION,
 			.op_version = RXM_OP_VERSION,
 			.endianness = ofi_detect_endianness(),
-			.eager_limit = rxm_eager_limit,
+			.eager_limit = ep->eager_limit,
 		},
 	};
 

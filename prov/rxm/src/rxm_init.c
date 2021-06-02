@@ -52,7 +52,6 @@ size_t rxm_msg_tx_size;
 size_t rxm_msg_rx_size;
 
 size_t rxm_buffer_size = 16384;
-size_t rxm_eager_limit;
 size_t rxm_packet_size;
 
 int force_auto_progress		= 0;
@@ -273,7 +272,6 @@ static void rxm_init_infos(void)
 		rxm_buffer_size = buf_size;
 	}
 
-	rxm_eager_limit = rxm_buffer_size;
 	rxm_packet_size = sizeof(struct rxm_pkt) + rxm_buffer_size;
 
 	fi_param_get_size_t(&rxm_prov, "tx_size", &tx_size);

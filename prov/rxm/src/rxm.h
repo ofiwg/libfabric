@@ -64,7 +64,6 @@
 #define RXM_OP_VERSION		3
 #define RXM_CTRL_VERSION	4
 
-extern size_t rxm_eager_limit;
 extern size_t rxm_buffer_size;
 extern size_t rxm_packet_size;
 
@@ -681,6 +680,8 @@ struct rxm_ep {
 	size_t			buffered_min;
 	size_t			buffered_limit;
 	size_t			inject_limit;
+
+	size_t			eager_limit;
 	size_t			sar_limit;
 	size_t			tx_credit;
 
