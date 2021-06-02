@@ -297,7 +297,7 @@ struct ofi_mr_cache {
 
 	struct ofi_mr_storage		storage;
 	struct dlist_entry		lru_list;
-	struct dlist_entry		flush_list;
+	struct dlist_entry		dead_region_list;
 	pthread_mutex_t 		lock;
 
 	size_t				cached_cnt;
@@ -327,6 +327,7 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru);
 
 int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 			struct ofi_mr_entry **entry);
+
 /**
  * Given an attr (with an iov range), if the iov range is already registered,
  * return the corresponding ofi_mr_entry. Otherwise, return NULL.
