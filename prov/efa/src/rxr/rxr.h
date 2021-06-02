@@ -311,7 +311,7 @@ struct rdm_peer {
 	bool is_local;			/* local/remote peer flag */
 	fi_addr_t efa_fiaddr;		/* fi_addr_t addr from efa provider */
 	fi_addr_t shm_fiaddr;		/* fi_addr_t addr from shm provider */
-	struct rxr_robuf *robuf;	/* tracks expected msg_id on rx */
+	struct rxr_robuf robuf;		/* tracks expected msg_id on rx */
 	uint32_t next_msg_id;		/* sender's view of msg_id */
 	uint32_t flags;
 	uint32_t maxproto;		/* maximum supported protocol version by this peer */
@@ -537,9 +537,6 @@ struct rxr_ep {
 	/* per-version feature flag */
 	uint64_t features[RXR_NUM_PROTOCOL_VERSION];
 
-	/* bufpool for reorder buffer */
-	struct ofi_bufpool *robuf_pool;
-
 	/* core provider fid */
 	struct fid_ep *rdm_ep;
 	struct fid_cq *rdm_cq;
@@ -740,10 +737,7 @@ static inline void rxr_ep_peer_init_rx(struct rxr_ep *ep, struct rdm_peer *peer)
 {
 	assert(!peer->rx_init);
 
-	peer->robuf = ofi_buf_alloc(ep->robuf_pool);
-	assert(peer->robuf);
-	peer->robuf = ofi_recvwin_buf_alloc(peer->robuf,
-					    rxr_env.recvwin_size);
+	ofi_recvwin_buf_alloc(&peer->robuf, rxr_env.recvwin_size);
 	peer->rx_credits = rxr_env.rx_window_size;
 	peer->rx_init = 1;
 }

@@ -333,6 +333,8 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 
 	efa_ah_release(av, conn->ah);
 
+	efa_rdm_peer_reset(&conn->rdm_peer);
+
 	inet_ntop(AF_INET6, conn->ep_addr.raw, gidstr, INET6_ADDRSTRLEN);
 	EFA_INFO(FI_LOG_AV, "efa_conn released! conn[%p] GID[%s] QP[%u]\n",
 		 conn, gidstr, conn->ep_addr.qpn);
