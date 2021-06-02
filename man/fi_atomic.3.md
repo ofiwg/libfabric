@@ -190,6 +190,12 @@ provider implementation constraints.
 *FI_UINT64*
 : Unsigned 64-bit integer.
 
+*FI_INT128*
+: Signed 128-bit integer.
+
+*FI_UINT128*
+: Unsigned 128-bit integer.
+
 *FI_FLOAT*
 : A single-precision floating point value (IEEE 754).
 
@@ -660,6 +666,11 @@ are required if the results of two atomic operations to the same memory
 buffers are to reflect the second operation acting on the results of the
 first.  See [`fi_endpoint`(3)](fi_endpoint.3.html) for further details
 and message size restrictions.
+
+For providers that perform atomics in software (*e.g.* shm), the
+availability of FI_INT128/FI_UINT128 atomics depends on building the
+provider with a compiler and libraries that support 128-bit integers
+and atomics.
 
 # SEE ALSO
 

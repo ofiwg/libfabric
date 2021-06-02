@@ -221,6 +221,18 @@
  * Macros create atomic functions for each operation for each datatype
  *********************************************************************/
 
+/* Handle presence/absence of compiler support for 128-bit integers. */
+#ifdef HAVE___INT128
+#define OFI_DEF_V2_INT(ATOMICTYPE, FUNCNAME, op)			\
+	OFI_DEF_##ATOMICTYPE##_##FUNCNAME(op, __int128)			\
+	OFI_DEF_##ATOMICTYPE##_##FUNCNAME(op, __uint128)
+#else
+/* Stub out type-definitions. */
+#define OFI_DEF_V2_INT(ATOMICTYPE, FUNCNAME, op)			\
+	OFI_DEF_NOOP_##FUNCNAME						\
+	OFI_DEF_NOOP_##FUNCNAME
+#endif
+
 /*
  * Define all handlers in order to populate the dispatch table correctly.
  *
@@ -243,7 +255,8 @@
 	OFI_DEF_##ATOMICTYPE##_COMPLEX_##FUNCNAME(op ##_COMPLEX, float)	\
 	OFI_DEF_##ATOMICTYPE##_COMPLEX_##FUNCNAME(op ##_COMPLEX, double)\
 	OFI_DEF_##ATOMICTYPE##_##FUNCNAME(op, long_double)		\
-	OFI_DEF_##ATOMICTYPE##_COMPLEX_##FUNCNAME(op ##_COMPLEX, long_double)
+	OFI_DEF_##ATOMICTYPE##_COMPLEX_##FUNCNAME(op ##_COMPLEX, long_double) \
+	OFI_DEF_V2_INT(ATOMICTYPE, FUNCNAME, op)
 
 #define OFI_DEFINE_REALNO_HANDLERS(ATOMICTYPE, FUNCNAME, op)		\
 	OFI_DEF_##ATOMICTYPE##_##FUNCNAME(op, int8_t)			\
@@ -259,7 +272,8 @@
 	OFI_DEF_NOOP_##FUNCNAME						\
 	OFI_DEF_NOOP_##FUNCNAME						\
 	OFI_DEF_##ATOMICTYPE##_##FUNCNAME(op, long_double)		\
-	OFI_DEF_NOOP_##FUNCNAME
+	OFI_DEF_NOOP_##FUNCNAME						\
+	OFI_DEF_V2_INT(ATOMICTYPE, FUNCNAME, op)
 
 #define OFI_DEFINE_INT_HANDLERS(ATOMICTYPE, FUNCNAME, op)		\
 	OFI_DEF_##ATOMICTYPE##_##FUNCNAME(op, int8_t)			\
@@ -275,8 +289,8 @@
 	OFI_DEF_NOOP_##FUNCNAME						\
 	OFI_DEF_NOOP_##FUNCNAME						\
 	OFI_DEF_NOOP_##FUNCNAME						\
-	OFI_DEF_NOOP_##FUNCNAME
-
+	OFI_DEF_NOOP_##FUNCNAME						\
+	OFI_DEF_V2_INT(ATOMICTYPE, FUNCNAME, op)
 
 /**********************
  * Write dispatch table
@@ -294,7 +308,19 @@ OFI_DEFINE_ALL_HANDLERS(WRITE, FUNC, OFI_OP_LXOR)
 OFI_DEFINE_INT_HANDLERS(WRITE, FUNC, OFI_OP_BXOR)
 OFI_DEFINE_ALL_HANDLERS(WRITE, FUNC, OFI_OP_WRITE)
 
-void (*ofi_atomic_write_handlers[OFI_WRITE_OP_CNT][FI_DATATYPE_LAST])
+/* 5 per line to be easily counted by inspection. */
+#define OFI_OP_NOT_SUPPORTED(op)		\
+	NULL, NULL, NULL, NULL, NULL,		\
+	NULL, NULL, NULL, NULL, NULL,		\
+	NULL, NULL, NULL, NULL, NULL,		\
+	NULL
+
+/* As documentation for the above.*/
+#ifdef static_assert
+static_assert(FI_DATATYPE_LAST_V2 == 16, "check macros");
+#endif
+
+void (*ofi_atomic_write_handlers[OFI_WRITE_OP_CNT][FI_DATATYPE_LAST_V2])
 	(void *dst, const void *src, size_t cnt) =
 {
 	{ OFI_DEFINE_REALNO_HANDLERS(WRITE, NAME, OFI_OP_MIN) },
@@ -307,8 +333,7 @@ void (*ofi_atomic_write_handlers[OFI_WRITE_OP_CNT][FI_DATATYPE_LAST])
 	{ OFI_DEFINE_INT_HANDLERS(WRITE, NAME, OFI_OP_BAND) },
 	{ OFI_DEFINE_ALL_HANDLERS(WRITE, NAME, OFI_OP_LXOR) },
 	{ OFI_DEFINE_INT_HANDLERS(WRITE, NAME, OFI_OP_BXOR) },
-	 /* no-op: FI_ATOMIC_READ */
-	{ NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL},
+	{ OFI_OP_NOT_SUPPORTED(FI_ATOMIC_READ) },
 	{ OFI_DEFINE_ALL_HANDLERS(WRITE, NAME, OFI_OP_WRITE) },
 };
 
@@ -330,7 +355,7 @@ OFI_DEFINE_INT_HANDLERS(READWRITE, FUNC, OFI_OP_BXOR)
 OFI_DEFINE_ALL_HANDLERS(READ, FUNC, OFI_OP_READ)
 OFI_DEFINE_ALL_HANDLERS(READWRITE, FUNC, OFI_OP_WRITE)
 
-void (*ofi_atomic_readwrite_handlers[OFI_READWRITE_OP_CNT][FI_DATATYPE_LAST])
+void (*ofi_atomic_readwrite_handlers[OFI_READWRITE_OP_CNT][FI_DATATYPE_LAST_V2])
 	(void *dst, const void *src, void *res, size_t cnt) =
 {
 	{ OFI_DEFINE_REALNO_HANDLERS(READWRITE, NAME, OFI_OP_MIN) },
@@ -360,7 +385,7 @@ OFI_DEFINE_REALNO_HANDLERS(CSWAP, FUNC, OFI_OP_CSWAP_GE)
 OFI_DEFINE_REALNO_HANDLERS(CSWAP, FUNC, OFI_OP_CSWAP_GT)
 OFI_DEFINE_INT_HANDLERS(CSWAP, FUNC, OFI_OP_MSWAP)
 
-void (*ofi_atomic_swap_handlers[OFI_SWAP_OP_CNT][FI_DATATYPE_LAST])
+void (*ofi_atomic_swap_handlers[OFI_SWAP_OP_CNT][FI_DATATYPE_LAST_V2])
 	(void *dst, const void *src, const void *cmp, void *res, size_t cnt) =
 {
 	{ OFI_DEFINE_ALL_HANDLERS(CSWAP, NAME, OFI_OP_CSWAP_EQ) },

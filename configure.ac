@@ -324,6 +324,33 @@ AS_IF([test x"$enable_atomics" != x"no"],
 ])
 unset LIBS_save
 
+dnl Check for 128-bit atomic support
+AC_CHECK_TYPE([__int128],
+	[AC_DEFINE(HAVE___INT128, 1, [Set to 1 to use 128-bit ints])])
+AS_IF([test x"$enable_atomics" != x"no" &&
+       test "$ac_cv_type___int128" == "yes"],
+    AC_MSG_CHECKING(compiler support for built-in memory model aware 128-bit atomics)
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdint.h>]],
+        [[__int128 d;
+         __int128 s;
+         __int128 c;
+         __int128 r;
+          r = __atomic_fetch_add(&d, s, __ATOMIC_SEQ_CST);
+          __atomic_load(&d, &r, __ATOMIC_SEQ_CST);
+          __atomic_exchange(&d, &s, &r, __ATOMIC_SEQ_CST);
+          __atomic_compare_exchange(&d, &c, &s, 0, __ATOMIC_SEQ_CST,
+	  			    __ATOMIC_SEQ_CST);
+	 return 0;
+        ]])],
+        [
+            AC_MSG_RESULT(yes)
+            AC_DEFINE(HAVE_BUILTIN_MM_128_ATOMICS, 1, [Set to 1 to use built-in intrinsics memory model aware 128-bit atomics])
+        ],
+        [
+            AC_MSG_RESULT(no)
+        ]),
+)
+
 dnl Check for gcc cpuid intrinsics
 AC_MSG_CHECKING(compiler support for cpuid)
 AC_TRY_LINK([

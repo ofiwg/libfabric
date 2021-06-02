@@ -112,6 +112,14 @@ static enum fi_datatype get_fi_datatype(char *op)
 		return FI_INT64;
 	else if (!strcmp(op, "uint64"))
 		return FI_UINT64;
+#ifdef HAVE___INT128
+	else if (!strcmp(op, "int128"))
+		return FI_INT128;
+	else if (!strcmp(op, "uint128"))
+		return FI_UINT128;
+#endif
+	else if (!strcmp(op, "float"))
+		return FI_FLOAT;
 	else if (!strcmp(op, "float"))
 		return FI_FLOAT;
 	else if (!strcmp(op, "double"))
@@ -126,7 +134,7 @@ static enum fi_datatype get_fi_datatype(char *op)
 		return FI_LONG_DOUBLE_COMPLEX;
 	else {
 		fprintf(stderr, "Not a valid atomic operation\n");
-		return FI_DATATYPE_LAST;
+		return FI_DATATYPE_LAST_V2;
 	}
 }
 
@@ -140,8 +148,11 @@ static void print_opts_usage(char *name)
 	FT_PRINT_OPTS_USAGE("", "cswap_ge|cswap_gt|mswap (default: all)");
 	/* Atomic datatype */
 	FT_PRINT_OPTS_USAGE("-z <datatype>", "atomic datatype: int8|uint8|int16|uint16|");
-	FT_PRINT_OPTS_USAGE("", "int32|uint32|int64|uint64|float|double|"
-				"float_complex|double_complex|");
+	FT_PRINT_OPTS_USAGE("", "int32|uint32|int64|uint64|"
+#ifdef HAVE___INT128
+			    "int128|uint128|"
+#endif
+			    "float|double|float_complex|double_complex|");
 	FT_PRINT_OPTS_USAGE("", "long_double|long_double_complex (default: all)");
 }
 
@@ -177,7 +188,7 @@ static inline int handle_atomic_ ## type ## _op(int run_all_datatypes,		\
 	int ret = FI_SUCCESS;							\
 										\
 	if (run_all_datatypes) {						\
-		for (datatype = 0; datatype < FI_DATATYPE_LAST; datatype++) {	\
+		for (datatype = 0; datatype < FI_DATATYPE_LAST_V2; datatype++) {\
 			ret = check_ ## type ## _atomic_op(ep, op_type,		\
 							   datatype, count);	\
 			if (ret == -FI_ENOSYS || ret == -FI_EOPNOTSUPP) {	\
@@ -518,7 +529,7 @@ int main(int argc, char **argv)
 			} else {
 				run_all_datatypes = 0;
 				datatype = get_fi_datatype(optarg);
-				if (datatype == FI_DATATYPE_LAST) {
+				if (datatype == FI_DATATYPE_LAST_V2) {
 					print_opts_usage(argv[0]);
 					return EXIT_FAILURE;
 				}

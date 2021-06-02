@@ -224,6 +224,7 @@ real_man_pages = \
         man/man1/fi_info.1 \
         man/man1/fi_pingpong.1 \
         man/man1/fi_strerror.1 \
+        man/man3/fi_atomic.3 \
         man/man3/fi_av.3 \
         man/man3/fi_av_set.3 \
         man/man3/fi_cm.3 \
@@ -256,7 +257,6 @@ dummy_man_pages = \
         man/man3/fi_allgather.3 \
         man/man3/fi_allreduce.3 \
         man/man3/fi_alltoall.3 \
-        man/man3/fi_atomic.3 \
         man/man3/fi_atomic_valid.3 \
         man/man3/fi_atomicmsg.3 \
         man/man3/fi_atomicv.3 \

@@ -312,7 +312,8 @@ The following keys and respective key values may be used in the config file.
 
 *datatype*
 : For FT_CAP_ATOMIC: FI_INT8, FI_UINT8, FI_INT16, FI_UINT16, FI_INT32,
-  FI_UINT32, FI_INT64, FI_UINT64, FI_FLOAT, FI_DOUBLE, FI_FLOAT_COMPLEX,
+  FI_UINT32, FI_INT64, FI_UINT64, FI_INT128, FI_UINT128,
+  FI_FLOAT, FI_DOUBLE, FI_FLOAT_COMPLEX,
   FI_DOUBLE_COMPLEX, FI_LONG_DOUBLE, FI_LONG_DOUBLE_COMPLEX
 
 *msg_flags - values OR'ed together*
@@ -520,3 +521,13 @@ This will run all fabtests using
 	- print test output for all the tests
 
 For detailed usage options: runfabtests.sh -h
+
+# NOTES
+
+To test FI_INT128/FI_UINT128 atomics, fabtests must be built with a compiler
+that supports 128-bit integers.
+
+For providers that perform atomics in software (*e.g.* shm), the
+availability of FI_INT128/FI_UINT128 atomics depends on building the
+provider with a compiler and libraries that support 128-bit integers
+and atomics.

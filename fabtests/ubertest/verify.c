@@ -63,6 +63,12 @@ static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_a
 		}						\
 	} while (0)
 
+/*
+ * While the provider may perform int128 ops just fine without compiler
+ * support for them, this code cannot verify them without compiler
+ * support.
+ */
+
 #define SWITCH_TYPES(type,FUNC,...)				\
 	switch (type) {						\
 	case FI_INT8:	FUNC(__VA_ARGS__,int8_t); break;	\
@@ -73,6 +79,8 @@ static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_a
 	case FI_UINT32: FUNC(__VA_ARGS__,uint32_t); break;	\
 	case FI_INT64:	FUNC(__VA_ARGS__,int64_t); break;	\
 	case FI_UINT64: FUNC(__VA_ARGS__,uint64_t); break;	\
+	case FI_INT128:	FUNC(__VA_ARGS__,__int128); break;	\
+	case FI_UINT128:FUNC(__VA_ARGS__,__uint128); break;	\
 	case FI_FLOAT:	FUNC(__VA_ARGS__,float); break;		\
 	case FI_DOUBLE:	FUNC(__VA_ARGS__,double); break;	\
 	case FI_LONG_DOUBLE: FUNC(__VA_ARGS__,long_double); break;		\
