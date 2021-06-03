@@ -133,7 +133,7 @@ static void util_mr_uncache_entry(struct ofi_mr_cache *cache,
 
 	if (entry->use_cnt == 0) {
 		dlist_remove(&entry->list_entry);
-		dlist_insert_tail(&entry->list_entry, &cache->flush_list);
+		dlist_insert_tail(&entry->list_entry, &cache->dead_region_list);
 	} else {
 		cache->uncached_cnt++;
 		cache->uncached_size += entry->info.iov.iov_len;
@@ -180,46 +180,46 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 		util_mr_uncache_entry(cache, entry);
 }
 
+/* Function to remove dead regions and prune MR Cache size.     */
+/* Returns true if dead region removal or pruning was required. */
+
 bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru)
 {
+	struct dlist_entry free_list;
 	struct ofi_mr_entry *entry;
+	bool entries_freed;
+
+	dlist_init(&free_list);
 
 	pthread_mutex_lock(&mm_lock);
-	while (!dlist_empty(&cache->flush_list)) {
-		dlist_pop_front(&cache->flush_list, struct ofi_mr_entry,
-				entry, list_entry);
-		FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
-		       entry->info.iov.iov_base, entry->info.iov.iov_len);
-		pthread_mutex_unlock(&mm_lock);
 
-		util_mr_free_entry(cache, entry);
-		pthread_mutex_lock(&mm_lock);
-	}
+	dlist_splice_tail(&free_list, &cache->dead_region_list);
 
-	if (!flush_lru || dlist_empty(&cache->lru_list)) {
-		pthread_mutex_unlock(&mm_lock);
-		return false;
-	}
+	if (flush_lru) {
+		while (!dlist_empty(&cache->lru_list) &&
+		       ((cache->cached_cnt >= cache_params.max_cnt) ||
+			(cache->cached_size >= cache_params.max_size))) {	
+			dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
+					entry, list_entry);
+			dlist_init(&entry->list_entry);
+			util_mr_uncache_entry_storage(cache, entry);
+			dlist_insert_tail(&entry->list_entry, &free_list);
+		}
+	} 
 
-	do {
-		dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
-				entry, list_entry);
-		dlist_init(&entry->list_entry);
-		FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
-		       entry->info.iov.iov_base, entry->info.iov.iov_len);
-
-		util_mr_uncache_entry_storage(cache, entry);
-		pthread_mutex_unlock(&mm_lock);
-
-		util_mr_free_entry(cache, entry);
-		pthread_mutex_lock(&mm_lock);
-
-	} while (!dlist_empty(&cache->lru_list) &&
-		 ((cache->cached_cnt >= cache_params.max_cnt) ||
-		  (cache->cached_size >= cache_params.max_size)));
 	pthread_mutex_unlock(&mm_lock);
 
-	return true;
+	entries_freed = !dlist_empty(&free_list);
+
+	while(!dlist_empty(&free_list)) {
+		dlist_pop_front(&free_list, struct ofi_mr_entry,
+				entry, list_entry);
+		FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
+			entry->info.iov.iov_base, entry->info.iov.iov_len);	
+		util_mr_free_entry(cache, entry);
+	}
+
+	return entries_freed;
 }
 
 void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
@@ -343,7 +343,8 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 		pthread_mutex_lock(&mm_lock);
 
 		if ((cache->cached_cnt >= cache_params.max_cnt) ||
-		    (cache->cached_size >= cache_params.max_size)) {
+		    (cache->cached_size >= cache_params.max_size) ||
+		    (!dlist_empty(&cache->dead_region_list))) {
 			pthread_mutex_unlock(&mm_lock);
 			ofi_mr_cache_flush(cache, true);
 			pthread_mutex_lock(&mm_lock);
@@ -492,7 +493,7 @@ int ofi_mr_cache_init(struct util_domain *domain,
 
 	pthread_mutex_init(&cache->lock, NULL);
 	dlist_init(&cache->lru_list);
-	dlist_init(&cache->flush_list);
+	dlist_init(&cache->dead_region_list);
 	cache->cached_cnt = 0;
 	cache->cached_size = 0;
 	cache->uncached_cnt = 0;
