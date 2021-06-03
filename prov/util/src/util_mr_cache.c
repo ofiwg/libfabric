@@ -41,6 +41,7 @@
 #include <ofi_mr.h>
 #include <ofi_list.h>
 #include <ofi_tree.h>
+#include <ofi_enosys.h>
 
 
 struct ofi_mr_cache_params cache_params = {
@@ -525,4 +526,53 @@ destroy:
 	pthread_mutex_destroy(&cache->lock);
 	cache->domain = NULL;
 	return ret;
+}
+
+
+
+static int ofi_close_cache_fid(struct fid *fid)
+{
+	free(fid);
+	return 0;
+}
+
+static int ofi_bind_cache_fid(struct fid *fid, struct fid *bfid,
+			      uint64_t flags)
+{
+	if (flags || bfid->fclass != FI_CLASS_MEM_MONITOR)
+		return -FI_EINVAL;
+
+	return ofi_monitor_import(bfid);
+}
+
+static struct fi_ops ofi_mr_cache_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = ofi_close_cache_fid,
+	.bind = ofi_bind_cache_fid,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+	.tostr = fi_no_tostr,
+	.ops_set = fi_no_ops_set,
+};
+
+int ofi_open_mr_cache(uint32_t version, void *attr, size_t attr_len,
+		      uint64_t flags, struct fid **fid, void *context)
+{
+	struct fid *cache_fid;
+
+	if (FI_VERSION_LT(version, FI_VERSION(1, 13)) || attr_len)
+		return -FI_EINVAL;
+
+	if (flags)
+		return -FI_EBADFLAGS;
+
+	cache_fid = calloc(1, sizeof(*cache_fid));
+	if (!cache_fid)
+		return -FI_ENOMEM;
+
+	cache_fid->fclass = FI_CLASS_MR_CACHE;
+	cache_fid->context = context;
+	cache_fid->ops = &ofi_mr_cache_ops;
+	*fid = cache_fid;
+	return 0;
 }
