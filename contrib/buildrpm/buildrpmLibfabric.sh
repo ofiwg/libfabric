@@ -51,6 +51,7 @@ create_modulefile=""
 unpack_spec=""
 verbose=""
 verboseoption=""
+build_binary_only=""
 st=""
 version=""
 modulepath=""
@@ -116,6 +117,9 @@ usage="Usage: $0 [-i provider_name] [-e provider_name]
              exclude 'provider_name' provider support from the build
 
  General options:
+  -b         build binary packages only
+               {default: build binary and source packages}
+
   -n         no op, do nothing (useful with -v option)
 
   -o         install under /opt/libfabric/_VERSION_
@@ -163,8 +167,10 @@ usage="Usage: $0 [-i provider_name] [-e provider_name]
 # parse args
 ############
 export arguments="$@"
-while getopts DP:M:V:nolmi:e:dc:r:svh flag; do
+while getopts DP:M:V:nolmi:e:dc:r:svhb flag; do
     case "$flag" in
+      b) build_binary_only="true"
+         ;;
       n) noop="true"
          ;;
       o) install_in_opt="true"
@@ -335,7 +341,14 @@ if [[ -z "$verbose" ]]; then
 else
   build_opt="-v"
 fi
-cmd="rpmbuild $build_opt -bb $specfile $rpmbuild_options \
+
+if [[ -n "$build_binary_only" ]] ; then
+    rpmbuild_flag="-bb"
+else
+    rpmbuild_flag="-ba"
+fi
+
+cmd="rpmbuild $build_opt $rpmbuild_flag $specfile $rpmbuild_options \
   --define '_topdir $rpmbuilddir' \
   --define '_sourcedir $rpmbuilddir/SOURCES' \
   --define '_rpmdir $rpmbuilddir/RPMS' \
