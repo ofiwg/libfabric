@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017 Cray Inc. All rights reserved.
- * Copyright (c) 2017-2019 Intel Inc. All rights reserved.
+ * Copyright (c) 2017-2021 Intel Inc. All rights reserved.
  * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
  *                         All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
@@ -34,9 +34,13 @@
  * SOFTWARE.
  */
 
-#include <ofi_mr.h>
 #include <unistd.h>
-#include "ofi_hmem.h"
+
+#include <ofi_mr.h>
+#include <ofi_hmem.h>
+#include <ofi_enosys.h>
+#include <rdma/fi_ext.h>
+
 
 pthread_mutex_t mm_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_rwlock_t mm_list_rwlock = PTHREAD_RWLOCK_INITIALIZER;
@@ -554,3 +558,152 @@ static void ofi_uffd_stop(struct ofi_mem_monitor *monitor)
 }
 
 #endif /* HAVE_UFFD_MONITOR */
+
+
+static void ofi_import_monitor_init(struct ofi_mem_monitor *monitor);
+static void ofi_import_monitor_cleanup(struct ofi_mem_monitor *monitor);
+static int ofi_import_monitor_start(struct ofi_mem_monitor *monitor);
+static void ofi_import_monitor_stop(struct ofi_mem_monitor *monitor);
+static int ofi_import_monitor_subscribe(struct ofi_mem_monitor *notifier,
+					const void *addr, size_t len,
+					union ofi_mr_hmem_info *hmem_info);
+static void ofi_import_monitor_unsubscribe(struct ofi_mem_monitor *notifier,
+					   const void *addr, size_t len,
+					   union ofi_mr_hmem_info *hmem_info);
+static bool ofi_import_monitor_valid(struct ofi_mem_monitor *notifier,
+				     const void *addr, size_t len,
+				     union ofi_mr_hmem_info *hmem_info);
+
+struct ofi_import_monitor {
+	struct ofi_mem_monitor monitor;
+	struct fid_mem_monitor *impfid;
+};
+
+static struct ofi_import_monitor impmon = {
+	.monitor.iface = FI_HMEM_SYSTEM,
+	.monitor.init = ofi_import_monitor_init,
+	.monitor.cleanup = ofi_import_monitor_cleanup,
+	.monitor.start = ofi_import_monitor_start,
+	.monitor.stop = ofi_import_monitor_stop,
+	.monitor.subscribe = ofi_import_monitor_subscribe,
+	.monitor.unsubscribe = ofi_import_monitor_unsubscribe,
+	.monitor.valid = ofi_import_monitor_valid,
+};
+
+struct ofi_mem_monitor *import_monitor = &impmon.monitor;
+
+static void ofi_import_monitor_init(struct ofi_mem_monitor *monitor)
+{
+	impmon.impfid = NULL;
+	ofi_monitor_init(monitor);
+}
+
+static void ofi_import_monitor_cleanup(struct ofi_mem_monitor *monitor)
+{
+	assert(!impmon.impfid);
+	ofi_monitor_cleanup(monitor);
+}
+
+static int ofi_import_monitor_start(struct ofi_mem_monitor *monitor)
+{
+	if (!impmon.impfid)
+		return -FI_ENOSYS;
+
+	return impmon.impfid->expops->start(impmon.impfid);
+}
+
+static void ofi_import_monitor_stop(struct ofi_mem_monitor *monitor)
+{
+	assert(impmon.impfid);
+	impmon.impfid->expops->stop(impmon.impfid);
+}
+
+static int ofi_import_monitor_subscribe(struct ofi_mem_monitor *notifier,
+					const void *addr, size_t len,
+					union ofi_mr_hmem_info *hmem_info)
+{
+	assert(impmon.impfid);
+	return impmon.impfid->expops->subscribe(impmon.impfid, addr, len);
+}
+
+static void ofi_import_monitor_unsubscribe(struct ofi_mem_monitor *notifier,
+					   const void *addr, size_t len,
+					   union ofi_mr_hmem_info *hmem_info)
+{
+	assert(impmon.impfid);
+	return impmon.impfid->expops->unsubscribe(impmon.impfid, addr, len);
+}
+
+static bool ofi_import_monitor_valid(struct ofi_mem_monitor *notifier,
+				     const void *addr, size_t len,
+				     union ofi_mr_hmem_info *hmem_info)
+{
+	assert(impmon.impfid);
+	return impmon.impfid->expops->valid(impmon.impfid, addr, len);
+}
+
+static void ofi_import_monitor_notify(struct fid_mem_monitor *monitor,
+				      const void *addr, size_t len)
+{
+	assert(monitor->fid.context == &impmon);
+	pthread_rwlock_rdlock(&mm_list_rwlock);
+	pthread_mutex_lock(&mm_lock);
+	ofi_monitor_notify(&impmon.monitor, addr, len);
+	pthread_mutex_unlock(&mm_lock);
+	pthread_rwlock_unlock(&mm_list_rwlock);
+}
+
+static int ofi_close_import(struct fid *fid)
+{
+	impmon.impfid = NULL;
+	return 0;
+}
+
+static struct fi_ops_mem_notify import_ops = {
+	.size = sizeof(struct fi_ops_mem_notify),
+	.notify = ofi_import_monitor_notify,
+};
+
+static struct fi_ops impfid_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = ofi_close_import,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+	.tostr = fi_no_tostr,
+	.ops_set = fi_no_ops_set,
+};
+
+int ofi_monitor_import(struct fid *fid)
+{
+	struct fid_mem_monitor *impfid;
+
+	if (fid->fclass != FI_CLASS_MEM_MONITOR)
+		return -FI_ENOSYS;
+
+	if (impmon.impfid) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"imported monitor already exists\n");
+		return -FI_EBUSY;
+	}
+
+	if (default_monitor && !dlist_empty(&default_monitor->list)) {
+		FI_WARN(&core_prov, FI_LOG_MR,
+			"cannot replace active monitor\n");
+		return -FI_EBUSY;
+	}
+
+	impfid = container_of(fid, struct fid_mem_monitor, fid);
+	if (impfid->expops->size < sizeof(struct fi_ops_mem_monitor))
+		return -FI_EINVAL;
+
+	impmon.impfid = impfid;
+	impfid->fid.context = &impmon;
+	impfid->fid.ops = &impfid_ops;
+	impfid->impops = &import_ops;
+
+	FI_INFO(&core_prov, FI_LOG_MR,
+		"setting imported memory monitor as default\n");
+	default_monitor = &impmon.monitor;
+	return 0;
+}

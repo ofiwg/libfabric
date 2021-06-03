@@ -520,6 +520,8 @@ enum {
 	FI_CLASS_MC,
 	FI_CLASS_NIC,
 	FI_CLASS_AV_SET,
+	FI_CLASS_MR_CACHE,
+	FI_CLASS_MEM_MONITOR,
 };
 
 struct fi_eq_attr;

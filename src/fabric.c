@@ -1257,6 +1257,10 @@ int DEFAULT_SYMVER_PRE(fi_open)(uint32_t version, const char *name,
 		void *attr, size_t attr_len, uint64_t flags,
 		struct fid **fid, void *context)
 {
+	if (!strcasecmp("mr_cache", name))
+		return ofi_open_mr_cache(version, attr, attr_len,
+					 flags, fid, context);
+
 	return -FI_ENOSYS;
 }
 CURRENT_SYMVER(fi_open_, fi_open);
