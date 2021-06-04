@@ -311,6 +311,12 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache);
 
 void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t len);
 
+static inline bool ofi_mr_cache_full(struct ofi_mr_cache *cache)
+{
+	return (cache->cached_cnt >= cache_params.max_cnt) ||
+	       (cache->cached_size >= cache_params.max_size);
+}
+
 bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru);
 
 int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,

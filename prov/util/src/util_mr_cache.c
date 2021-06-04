@@ -180,9 +180,9 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 		util_mr_uncache_entry(cache, entry);
 }
 
-/* Function to remove dead regions and prune MR Cache size.     */
-/* Returns true if dead region removal or pruning was required. */
-
+/* Function to remove dead regions and prune MR cache size.
+ * Returns true if any entries were flushed from the cache.
+ */
 bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru)
 {
 	struct dlist_entry free_list;
@@ -202,8 +202,7 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru)
 		util_mr_uncache_entry_storage(cache, entry);
 		dlist_insert_tail(&entry->list_entry, &free_list);
 
-		flush_lru = (cache->cached_cnt >= cache_params.max_cnt) ||
-			    (cache->cached_size >= cache_params.max_size);
+		flush_lru = ofi_mr_cache_full(cache);
 	}
 
 	pthread_mutex_unlock(&mm_lock);
@@ -284,8 +283,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 		goto unlock;
 	}
 
-	if ((cache->cached_cnt >= cache_params.max_cnt) ||
-	    (cache->cached_size >= cache_params.max_size)) {
+	if (ofi_mr_cache_full(cache)) {
 		cache->uncached_cnt++;
 		cache->uncached_size += info->iov.iov_len;
 	} else {
@@ -320,9 +318,11 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 			struct ofi_mr_entry **entry)
 {
 	struct ofi_mr_info info;
+	struct ofi_mem_monitor *monitor;
+	bool flush_lru;
 	int ret;
-	struct ofi_mem_monitor *monitor = cache->monitors[attr->iface];
 
+	monitor = cache->monitors[attr->iface];
 	if (!monitor) {
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"MR cache disabled for %s memory\n",
@@ -340,12 +340,10 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 
 	do {
 		pthread_mutex_lock(&mm_lock);
-
-		if ((cache->cached_cnt >= cache_params.max_cnt) ||
-		    (cache->cached_size >= cache_params.max_size) ||
-		    (!dlist_empty(&cache->dead_region_list))) {
+		flush_lru = ofi_mr_cache_full(cache);
+		if (flush_lru || !dlist_empty(&cache->dead_region_list)) {
 			pthread_mutex_unlock(&mm_lock);
-			ofi_mr_cache_flush(cache, true);
+			ofi_mr_cache_flush(cache, flush_lru);
 			pthread_mutex_lock(&mm_lock);
 		}
 
