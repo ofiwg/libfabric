@@ -49,6 +49,7 @@
 
 #include <inttypes.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -1082,7 +1083,17 @@ ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
 	}
 
 	assert(!ofi_bsock_tosend(bsock));
-	ret = ofi_send_socket(bsock->sock, buf, *len, MSG_NOSIGNAL);
+	if (*len > bsock->zerocopy_size) {
+		ret = ofi_send_socket(bsock->sock, buf, *len,
+				      MSG_NOSIGNAL | OFI_ZEROCOPY);
+		if (ret >= 0) {
+			bsock->async_index++;
+			*len = ret;
+			return -FI_EINPROGRESS;
+		}
+	} else {
+		ret = ofi_send_socket(bsock->sock, buf, *len, MSG_NOSIGNAL);
+	}
 	if (ret < 0) {
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
 		    *len < ofi_byteq_writeable(&bsock->sq)) {
@@ -1130,7 +1141,17 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 	msg.msg_iov = (struct iovec *) iov;
 	msg.msg_iovlen = cnt;
 
-	ret = ofi_sendmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+	if (*len > bsock->zerocopy_size) {
+		ret = ofi_sendmsg_tcp(bsock->sock, &msg,
+				      MSG_NOSIGNAL | OFI_ZEROCOPY);
+		if (ret >= 0) {
+			bsock->async_index++;
+			*len = ret;
+			return -FI_EINPROGRESS;
+		}
+	} else {
+		ret = ofi_sendmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+	}
 	if (ret < 0) {
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
 		    *len < ofi_byteq_writeable(&bsock->sq)) {
@@ -1231,6 +1252,59 @@ out:
 	return ret ? -ofi_sockerr(): -FI_ENOTCONN;
 }
 
+#ifdef MSG_ZEROCOPY
+uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
+			      struct ofi_bsock *bsock)
+{
+	struct msghdr msg = {};
+	struct sock_extended_err *serr;
+	struct cmsghdr *cmsg;
+	/* x2 is arbitrary but avoids truncation */
+	uint8_t ctrl[CMSG_SPACE(sizeof(*serr) * 2)];
+	int ret;
+
+	msg.msg_control = &ctrl;
+	msg.msg_controllen = sizeof(ctrl);
+	ret = recvmsg(bsock->sock, &msg, MSG_ERRQUEUE);
+	if (ret < 0) {
+		FI_WARN(prov, FI_LOG_EP_DATA,
+			"Error reading MSG_ERRQUEUE (%s)\n", strerror(errno));
+		goto disable;
+	}
+
+	assert(!(msg.msg_flags & MSG_CTRUNC));
+	cmsg = CMSG_FIRSTHDR(&msg);
+	if ((cmsg->cmsg_level != SOL_IP && cmsg->cmsg_type != IP_RECVERR) &&
+	    (cmsg->cmsg_level != SOL_IPV6 && cmsg->cmsg_type != IPV6_RECVERR)) {
+		FI_WARN(prov, FI_LOG_EP_DATA,
+			"Unexpected cmsg level (!IP) or type (!RECVERR)\n");
+		goto disable;
+	}
+
+	serr = (void *) CMSG_DATA(cmsg);
+	if ((serr->ee_origin != SO_EE_ORIGIN_ZEROCOPY) || serr->ee_errno) {
+		FI_WARN(prov, FI_LOG_EP_DATA,
+			"Unexpected sock err origin or errno\n");
+		goto disable;
+	}
+
+	bsock->done_index = serr->ee_data;
+	if (serr->ee_code & SO_EE_CODE_ZEROCOPY_COPIED) {
+		FI_WARN(prov, FI_LOG_EP_DATA,
+			"Zerocopy data was copied\n");
+disable:
+		FI_WARN(prov, FI_LOG_EP_DATA, "disabling zerocopy\n");
+		bsock->zerocopy_size = SIZE_MAX;
+	}
+	return bsock->done_index;
+}
+#else
+uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
+			      struct ofi_bsock *bsock)
+{
+	return 0;
+}
+#endif
 
 int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 {

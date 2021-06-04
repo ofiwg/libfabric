@@ -107,6 +107,7 @@ void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
 
 #define OFI_EPOLL_IN  EPOLLIN
 #define OFI_EPOLL_OUT EPOLLOUT
+#define OFI_EPOLL_ERR EPOLLERR
 
 typedef int ofi_epoll_t;
 #define OFI_EPOLL_INVALID -1
@@ -167,6 +168,7 @@ static inline void ofi_epoll_close(int ep)
 
 #define OFI_EPOLL_IN  POLLIN
 #define OFI_EPOLL_OUT POLLOUT
+#define OFI_EPOLL_ERR POLLERR
 
 typedef struct ofi_pollfds *ofi_epoll_t;
 #define OFI_EPOLL_INVALID NULL

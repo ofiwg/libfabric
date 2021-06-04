@@ -53,12 +53,23 @@ static int tcpx_send_msg(struct tcpx_ep *ep)
 	tx_entry = ep->cur_tx.entry;
 	ret = ofi_bsock_sendv(&ep->bsock, tx_entry->iov, tx_entry->iov_cnt,
 			      &len);
-	if (ret < 0)
+	if (ret < 0 && ret != -FI_EINPROGRESS)
 		return ret;
 
-	ep->cur_tx.data_left -= ret;
+	if (ret == -FI_EINPROGRESS) {
+		/* If a transfer generated multiple async sends, we only
+		 * need to track the last async index to know when the entire
+		 * transfer has completed.
+		 */
+		tx_entry->async_index = ep->bsock.async_index;
+		tx_entry->flags |= TCPX_ASYNC;
+	} else {
+		len = ret;
+	}
+
+	ep->cur_tx.data_left -= len;
 	if (ep->cur_tx.data_left) {
-		ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt, ret);
+		ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt, len);
 		return -FI_EAGAIN;
 	}
 	return FI_SUCCESS;
@@ -107,14 +118,20 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 			FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
 			tcpx_cq_report_error(&cq->util_cq, tx_entry, -ret);
 			tcpx_free_xfer(cq, tx_entry);
+		} else if (tx_entry->flags & TCPX_NEED_ACK) {
+			/* A SW ack guarantees the peer received the data, so
+			 * we can skip the async completion.
+			 */
+			slist_insert_tail(&tx_entry->entry,
+					  &ep->need_ack_queue);
+		} else if ((tx_entry->flags & TCPX_ASYNC) &&
+			   (ofi_val32_gt(tx_entry->async_index,
+					 ep->bsock.done_index))) {
+			slist_insert_tail(&tx_entry->entry,
+						&ep->async_queue);
 		} else {
-			if (tx_entry->flags & TCPX_NEED_ACK) {
-				slist_insert_tail(&tx_entry->entry,
-						  &ep->need_ack_queue);
-			} else {
-				tcpx_cq_report_success(&cq->util_cq, tx_entry);
-				tcpx_free_xfer(cq, tx_entry);
-			}
+			tcpx_cq_report_success(&cq->util_cq, tx_entry);
+			tcpx_free_xfer(cq, tx_entry);
 		}
 
 		if (!slist_empty(&ep->priority_queue)) {
@@ -664,6 +681,24 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 
 	if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		tcpx_ep_disable(ep, 0);
+}
+
+void tcpx_progress_async(struct tcpx_ep *ep)
+{
+	struct tcpx_xfer_entry *xfer;
+	uint32_t done;
+
+	done = ofi_bsock_async_done(&tcpx_prov, &ep->bsock);
+	while (!slist_empty(&ep->async_queue)) {
+		xfer = container_of(ep->async_queue.head,
+				    struct tcpx_xfer_entry, entry);
+		if (ofi_val32_gt(xfer->async_index, done))
+			break;
+
+		slist_remove_head(&ep->async_queue);
+		tcpx_cq_report_success(ep->util_ep.tx_cq, xfer);
+		tcpx_free_tx(xfer);
+	}
 }
 
 static bool tcpx_tx_pending(struct tcpx_ep *ep)

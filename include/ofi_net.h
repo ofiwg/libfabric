@@ -92,6 +92,14 @@ static inline uint64_t ntohll(uint64_t x) { return x; }
 #endif
 #endif
 
+#ifdef MSG_ZEROCOPY
+#define OFI_ZEROCOPY MSG_ZEROCOPY
+#define OFI_ZEROCOPY_SIZE 9000 /* arbitrary based on documentation */
+#else
+#define OFI_ZEROCOPY 0
+#define OFI_ZEROCOPY_SIZE SIZE_MAX
+#endif
+
 
 static inline int ofi_recvall_socket(SOCKET sock, void *buf, size_t len)
 {
@@ -227,6 +235,9 @@ struct ofi_bsock {
 	SOCKET sock;
 	struct ofi_byteq sq;
 	struct ofi_byteq rq;
+	size_t zerocopy_size;
+	uint32_t async_index;
+	uint32_t done_index;
 };
 
 static inline void
@@ -235,6 +246,11 @@ ofi_bsock_init(struct ofi_bsock *bsock, ssize_t sbuf_size, ssize_t rbuf_size)
 	bsock->sock = INVALID_SOCKET;
 	ofi_byteq_init(&bsock->sq, sbuf_size);
 	ofi_byteq_init(&bsock->rq, rbuf_size);
+	bsock->zerocopy_size = SIZE_MAX;
+
+	/* first async op will wrap back to 0 as the starting index */
+	bsock->async_index = UINT32_MAX;
+	bsock->done_index = UINT32_MAX;
 }
 
 static inline size_t ofi_bsock_readable(struct ofi_bsock *bsock)
@@ -257,6 +273,8 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len);
 ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov,
 			size_t cnt);
+uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
+			      struct ofi_bsock *bsock);
 
 
 /*
