@@ -195,17 +195,16 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru)
 
 	dlist_splice_tail(&free_list, &cache->dead_region_list);
 
-	if (flush_lru) {
-		while (!dlist_empty(&cache->lru_list) &&
-		       ((cache->cached_cnt >= cache_params.max_cnt) ||
-			(cache->cached_size >= cache_params.max_size))) {	
-			dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
-					entry, list_entry);
-			dlist_init(&entry->list_entry);
-			util_mr_uncache_entry_storage(cache, entry);
-			dlist_insert_tail(&entry->list_entry, &free_list);
-		}
-	} 
+	while (flush_lru && !dlist_empty(&cache->lru_list)) {
+		dlist_pop_front(&cache->lru_list, struct ofi_mr_entry,
+				entry, list_entry);
+		dlist_init(&entry->list_entry);
+		util_mr_uncache_entry_storage(cache, entry);
+		dlist_insert_tail(&entry->list_entry, &free_list);
+
+		flush_lru = (cache->cached_cnt >= cache_params.max_cnt) ||
+			    (cache->cached_size >= cache_params.max_size);
+	}
 
 	pthread_mutex_unlock(&mm_lock);
 
@@ -215,7 +214,7 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru)
 		dlist_pop_front(&free_list, struct ofi_mr_entry,
 				entry, list_entry);
 		FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
-			entry->info.iov.iov_base, entry->info.iov.iov_len);	
+			entry->info.iov.iov_base, entry->info.iov.iov_len);
 		util_mr_free_entry(cache, entry);
 	}
 
