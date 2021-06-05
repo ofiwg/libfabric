@@ -180,6 +180,9 @@ enum rxm_cm_state {
 	RXM_CM_CONNECTED,
 };
 
+enum {
+	RXM_CONN_INDEXED = BIT(0),
+};
 
 /* There will be at most 1 peer address per AV entry.  There
  * may be addresses that have not been inserted into the local
@@ -214,6 +217,7 @@ struct rxm_conn {
 	 * the peer_addr.
 	 */
 	int remote_index;
+	uint8_t flags;
 
 	struct dlist_entry deferred_entry;
 	struct dlist_entry deferred_tx_queue;
