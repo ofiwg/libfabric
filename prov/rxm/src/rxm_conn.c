@@ -266,8 +266,10 @@ static void rxm_free_conn(struct rxm_conn *conn)
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "free conn %p\n", conn);
 	assert(ofi_ep_lock_held(&conn->ep->util_ep));
 
+	if (conn->flags & RXM_CONN_INDEXED)
+		ofi_idm_clear(&conn->ep->conn_idx_map, conn->peer->index);
+
 	conn->peer->refcnt--;
-	ofi_idm_clear(&conn->ep->conn_idx_map, conn->peer->index);
 	ofi_buf_free(conn);
 }
 
@@ -295,29 +297,21 @@ void rxm_freeall_conns(struct rxm_ep *ep)
 }
 
 static struct rxm_conn *
-rxm_add_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
+rxm_alloc_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
 {
 	struct rxm_conn *conn;
 	struct rxm_av *av;
 
 	assert(ofi_ep_lock_held(&ep->util_ep));
-	conn = ofi_idm_lookup(&ep->conn_idx_map, peer->index);
-	if (conn)
-		return conn;
-
 	av = container_of(ep->util_ep.av, struct rxm_av, util_av);
 	conn = ofi_buf_alloc(av->conn_pool);
 	if (!conn)
 		return NULL;
 
-	if (ofi_idm_set(&ep->conn_idx_map, peer->index, conn) < 0) {
-		ofi_buf_free(conn);
-		return NULL;
-	}
-
 	conn->ep = ep;
 	conn->state = RXM_CM_IDLE;
 	conn->remote_index = -1;
+	conn->flags = 0;
 	dlist_init(&conn->deferred_entry);
 	dlist_init(&conn->deferred_tx_queue);
 	dlist_init(&conn->deferred_sar_msgs);
@@ -327,6 +321,29 @@ rxm_add_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
 	peer->refcnt++;
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "allocated conn %p\n", conn);
+	return conn;
+}
+
+static struct rxm_conn *
+rxm_add_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
+{
+	struct rxm_conn *conn;
+
+	assert(ofi_ep_lock_held(&ep->util_ep));
+	conn = ofi_idm_lookup(&ep->conn_idx_map, peer->index);
+	if (conn)
+		return conn;
+
+	conn = rxm_alloc_conn(ep, peer);
+	if (!conn)
+		return NULL;
+
+	if (ofi_idm_set(&ep->conn_idx_map, peer->index, conn) < 0) {
+		rxm_free_conn(conn);
+		return NULL;
+	}
+
+	conn->flags |= RXM_CONN_INDEXED;
 	return conn;
 }
 
@@ -521,7 +538,8 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 			/* accept peer's request */
 			rxm_close_conn(conn);
 		} else {
-			/* FIXME: handle connection from self */
+			/* connecting to ourself, create loopback conn */
+			conn = rxm_alloc_conn(ep, peer);
 			break;
 		}
 		break;
