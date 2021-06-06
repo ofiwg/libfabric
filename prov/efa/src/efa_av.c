@@ -155,6 +155,93 @@ static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
 }
 
 /**
+ * @brief allocate an ibv_ah object from GID.
+ * This function use a hash map to store GID to ibv_ah map,
+ * and re-use ibv_ah for same GID
+ *
+ * @param[in]	av	address vector
+ * @param[in]	gid	GID
+ */
+static
+struct efa_ah *efa_ah_alloc(struct efa_av *av, const uint8_t *gid)
+{
+	struct ibv_pd *ibv_pd = av->domain->ibv_pd;
+	struct efa_ah *efa_ah;
+	struct ibv_ah_attr ibv_ah_attr = { 0 };
+	struct efadv_ah_attr efa_ah_attr = { 0 };
+	int err;
+
+	efa_ah = NULL;
+	HASH_FIND(hh, av->ah_map, gid, EFA_GID_LEN, efa_ah);
+	if (efa_ah) {
+		efa_ah->refcnt += 1;
+		return efa_ah;
+	}
+
+	efa_ah = malloc(sizeof(struct efa_ah));
+	if (!efa_ah) {
+		errno = FI_ENOMEM;
+		EFA_WARN(FI_LOG_AV, "cannot allocate memory for efa_ah");
+		return NULL;
+	}
+
+	ibv_ah_attr.port_num = 1;
+	ibv_ah_attr.is_global = 1;
+	memcpy(ibv_ah_attr.grh.dgid.raw, gid, EFA_GID_LEN);
+	efa_ah->ibv_ah = ibv_create_ah(ibv_pd, &ibv_ah_attr);
+	if (!efa_ah->ibv_ah) {
+		EFA_WARN(FI_LOG_AV, "ibv_create_ah failed! errno: %d\n", errno);
+		goto err_free_efa_ah;
+	}
+
+	err = efadv_query_ah(efa_ah->ibv_ah, &efa_ah_attr, sizeof(efa_ah_attr));
+	if (err) {
+		errno = err;
+		EFA_WARN(FI_LOG_AV, "efadv_query_ah failed! err: %d\n", err);
+		goto err_destroy_ibv_ah;
+	}
+
+	efa_ah->refcnt = 1;
+	efa_ah->ahn = efa_ah_attr.ahn;
+	memcpy(efa_ah->gid, gid, EFA_GID_LEN);
+	HASH_ADD(hh, av->ah_map, gid, EFA_GID_LEN, efa_ah);
+	return efa_ah;
+
+err_destroy_ibv_ah:
+	ibv_destroy_ah(efa_ah->ibv_ah);
+err_free_efa_ah:
+	free(efa_ah);
+	return NULL;
+}
+
+/**
+ * @brief release an efa_ah object
+ *
+ * @param[in]	av	address vector
+ * @param[in]	ah	efa_ah object pointer
+ */
+static
+void efa_ah_release(struct efa_av *av, struct efa_ah *ah)
+{
+	int err;
+#if ENABLE_DEBUG
+	struct efa_ah *tmp;
+
+	HASH_FIND(hh, av->ah_map, ah->gid, EFA_GID_LEN, tmp);
+	assert(tmp == ah);
+#endif
+	assert(ah->refcnt > 0);
+	ah->refcnt -= 1;
+	if (ah->refcnt == 0) {
+		HASH_DEL(av->ah_map, ah);
+		err = ibv_destroy_ah(ah->ibv_ah);
+		if (err)
+			EFA_WARN(FI_LOG_AV, "ibv_destroy_ah failed! err=%d\n", err);
+		free(ah);
+	}
+}
+
+/**
  * @brief allocate an efa_conn object
  *
  * @param[in]	av		efa address vector
@@ -168,13 +255,9 @@ static
 struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 				uint64_t flags, void *context)
 {
-	struct ibv_pd *ibv_pd = av->domain->ibv_pd;
-	struct ibv_ah_attr ibv_ah_attr = { 0 };
-	struct efadv_ah_attr efa_ah_attr = { 0 };
 	struct efa_reverse_av *reverse_av;
 	struct efa_ah_qpn key;
 	struct efa_conn *conn;
-	int err;
 
 	if (flags & FI_SYNC_ERR)
 		memset(context, 0, sizeof(int));
@@ -192,24 +275,14 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		return NULL;
 	}
 
-	ibv_ah_attr.port_num = 1;
-	ibv_ah_attr.is_global = 1;
-	memcpy(ibv_ah_attr.grh.dgid.raw, raw_addr->raw, sizeof(raw_addr->raw));
-	conn->ah.ibv_ah = ibv_create_ah(ibv_pd, &ibv_ah_attr);
-	if (!conn->ah.ibv_ah) {
-		errno = FI_EINVAL;
+	memcpy((void *)&conn->ep_addr, raw_addr, sizeof(*raw_addr));
+
+	conn->ah = efa_ah_alloc(av, raw_addr->raw);
+	if (!conn->ah) {
 		goto err_free_conn;
 	}
 
-	memcpy((void *)&conn->ep_addr, raw_addr, sizeof(*raw_addr));
-	err = -efadv_query_ah(conn->ah.ibv_ah, &efa_ah_attr, sizeof(efa_ah_attr));
-	if (err) {
-		errno = err;
-		goto err_destroy_ah;
-	}
-
-	conn->ah.ahn = efa_ah_attr.ahn;
-	key.ahn = conn->ah.ahn;
+	key.ahn = conn->ah->ahn;
 	key.qpn = raw_addr->qpn;
 	/* This is correct since the same address should be mapped to the same ah. */
 	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av);
@@ -231,7 +304,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	return conn;
 
 err_destroy_ah:
-	ibv_destroy_ah(conn->ah.ibv_ah);
+	efa_ah_release(av, conn->ah);
 err_free_conn:
 	ofi_ibuf_free(conn);
 	return NULL;
@@ -249,9 +322,8 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 	struct efa_reverse_av *reverse_av_entry;
 	struct efa_ah_qpn key;
 	char gidstr[INET6_ADDRSTRLEN];
-	int err;
 
-	key.ahn = conn->ah.ahn;
+	key.ahn = conn->ah->ahn;
 	key.qpn = conn->ep_addr.qpn;
 	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av_entry);
 	if (reverse_av_entry) {
@@ -259,17 +331,13 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 		free(reverse_av_entry);
 	}
 
-	err = -ibv_destroy_ah(conn->ah.ibv_ah);
-	if (err) {
-		EFA_WARN(FI_LOG_AV, "ibv_destroy_ah failed! err: %d\n", err);
-		goto out;
-	}
+	efa_ah_release(av, conn->ah);
 
 	inet_ntop(AF_INET6, conn->ep_addr.raw, gidstr, INET6_ADDRSTRLEN);
 	EFA_INFO(FI_LOG_AV, "efa_conn released! conn[%p] GID[%s] QP[%u]\n",
 		 conn, gidstr, conn->ep_addr.qpn);
 	av->used--;
-out:
+
 	ofi_ibuf_free(conn);
 }
 

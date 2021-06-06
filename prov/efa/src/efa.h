@@ -120,8 +120,10 @@ struct efa_fabric {
 	struct util_fabric	util_fabric;
 };
 
+#define EFA_GID_LEN	16
+
 struct efa_ep_addr {
-	uint8_t			raw[16];
+	uint8_t			raw[EFA_GID_LEN];
 	uint16_t		qpn;
 	uint16_t		pad;
 	uint32_t		qkey;
@@ -131,12 +133,15 @@ struct efa_ep_addr {
 #define EFA_EP_ADDR_LEN sizeof(struct efa_ep_addr)
 
 struct efa_ah {
-	struct ibv_ah	*ibv_ah;
-	uint16_t	ahn;
+	uint8_t		gid[EFA_GID_LEN]; /* efa device GID */
+	struct ibv_ah	*ibv_ah; /* created by ibv_create_ah() using GID */
+	uint16_t	ahn; /* adress handle number */
+	int		refcnt; /* reference counter. Multiple efa_conn can share an efa_ah */
+	UT_hash_handle	hh; /* hash map handle, link all efa_ah with efa_ep->ah_map */
 };
 
 struct efa_conn {
-	struct efa_ah		ah;
+	struct efa_ah		*ah;
 	struct efa_ep_addr	ep_addr;
 	fi_addr_t		fi_addr;
 	struct rdm_peer		rdm_peer;
@@ -287,6 +292,7 @@ struct efa_av {
 	enum fi_av_type		type;
 	efa_addr_to_conn_func	addr_to_conn;
 	struct efa_reverse_av	*reverse_av;
+	struct efa_ah		*ah_map;
 	struct util_av		util_av;
 	enum fi_ep_type         ep_type;
 	struct ofi_bufpool      *conn_pool;

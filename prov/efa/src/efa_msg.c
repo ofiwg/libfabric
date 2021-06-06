@@ -330,7 +330,7 @@ static ssize_t efa_post_send(struct efa_ep *ep, const struct fi_msg *msg, uint64
 
 	wr->opcode = IBV_WR_SEND;
 	wr->wr_id = (uintptr_t)msg->context;
-	wr->wr.ud.ah = conn->ah.ibv_ah;
+	wr->wr.ud.ah = conn->ah->ibv_ah;
 	wr->wr.ud.remote_qpn = conn->ep_addr.qpn;
 	wr->wr.ud.remote_qkey = conn->ep_addr.qkey;
 
