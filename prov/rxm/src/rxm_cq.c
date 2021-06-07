@@ -92,13 +92,16 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep)
 static void rxm_replace_rx_buf(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_rx_buf *new_rx_buf;
+	int ret;
 
 	new_rx_buf = rxm_rx_buf_alloc(rx_buf->ep, rx_buf->rx_ep);
 	if (!new_rx_buf)
 		return;
 
 	rx_buf->repost = false;
-	rxm_post_recv(new_rx_buf);
+	ret = rxm_post_recv(new_rx_buf);
+	if (ret)
+		ofi_buf_free(new_rx_buf);
 }
 
 static void rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
