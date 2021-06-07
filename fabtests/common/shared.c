@@ -700,10 +700,27 @@ static int ft_init(void)
 	return ft_hmem_init(opts.iface);
 }
 
+int ft_sock_setup(int sock)
+{
+	int ret, op;
+
+	op = 1;
+	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
+			  (void *) &op, sizeof(op));
+	if (ret)
+		return ret;
+
+	ret = ft_fd_nonblock(sock);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 int ft_init_oob(void)
 {
-	int ret, op, err;
 	struct addrinfo *ai = NULL;
+	int ret;
 
 	if (!(opts.options & FT_OPT_OOB_CTRL) || oob_sock != -1)
 		return 0;
@@ -725,7 +742,6 @@ int ft_init_oob(void)
 
 		close(listen_sock);
 	} else {
-
 		ret = getaddrinfo(opts.dst_addr, opts.oob_port, NULL, &ai);
 		if (ret) {
 			perror("getaddrinfo");
@@ -748,11 +764,7 @@ int ft_init_oob(void)
 		sleep(1);
 	}
 
-	op = 1;
-	err = setsockopt(oob_sock, IPPROTO_TCP, TCP_NODELAY,
-			 (void *) &op, sizeof(op));
-	if (err)
-		perror("setsockopt"); /* non-fatal error */
+	ret = ft_sock_setup(oob_sock);
 
 free:
 	if (ai)
@@ -3265,23 +3277,6 @@ out:
 	return ret;
 }
 
-int ft_sock_setup()
-{
-	int ret, op;
-
-	op = 1;
-	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
-			  (void *) &op, sizeof(op));
-	if (ret)
-		return ret;
-
-	ret = ft_fd_nonblock(sock);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-
 int ft_sock_connect(char *node, char *service)
 {
 	struct addrinfo *ai;
@@ -3304,12 +3299,10 @@ int ft_sock_connect(char *node, char *service)
 	if (ret) {
 		perror("connect");
 		close(sock);
+		goto free;
 	}
 
-	ret = ft_sock_setup();
-	if (ret)
-		perror("sock_setup");
-
+	ret = ft_sock_setup(sock);
 free:
 	freeaddrinfo(ai);
 	return ret;
@@ -3326,11 +3319,8 @@ int ft_sock_accept()
 		return ret;
 	}
 
-	ret = ft_sock_setup();
-	if (ret)
-		perror("sock_setup");
-
-	return 0;
+	ret = ft_sock_setup(sock);
+	return ret;
 }
 
 int ft_sock_send(int fd, void *msg, size_t len)
