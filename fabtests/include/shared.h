@@ -538,6 +538,18 @@ void ft_free_string_array(char **s);
 		}						\
 	} while (0)
 
+#ifdef HAVE___INT128
+typedef unsigned __int128 __uint128;
+#else
+/* Just for datatype_size table[] in shared.c. */
+typedef struct { int64_t  i64[2]; } __int128;
+typedef __int128 __uint128;
+#endif
+
+#ifdef static_assert
+static_assert(sizeof(__int128) == 16, "Paranoia");
+#endif
+
 #ifdef __cplusplus
 }
 #endif

@@ -61,11 +61,11 @@ typedef long double complex ofi_complex_long_double;
 #define ofi_atomic_isswap_op(op) \
 	(op >= OFI_SWAP_OP_START && op < OFI_SWAP_OP_LAST)
 
-extern void (*ofi_atomic_write_handlers[OFI_WRITE_OP_CNT][FI_DATATYPE_LAST])
+extern void (*ofi_atomic_write_handlers[OFI_WRITE_OP_CNT][FI_DATATYPE_LAST_V2])
 			(void *dst, const void *src, size_t cnt);
-extern void (*ofi_atomic_readwrite_handlers[OFI_READWRITE_OP_CNT][FI_DATATYPE_LAST])
+extern void (*ofi_atomic_readwrite_handlers[OFI_READWRITE_OP_CNT][FI_DATATYPE_LAST_V2])
 			(void *dst, const void *src, void *res, size_t cnt);
-extern void (*ofi_atomic_swap_handlers[OFI_SWAP_OP_CNT][FI_DATATYPE_LAST])
+extern void (*ofi_atomic_swap_handlers[OFI_SWAP_OP_CNT][FI_DATATYPE_LAST_V2])
 			(void *dst, const void *src, const void *cmp,
 			 void *res, size_t cnt);
 

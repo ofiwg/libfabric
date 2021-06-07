@@ -631,6 +631,8 @@ static void ofi_tostr_atomic_type(char *buf, size_t len, enum fi_datatype type)
 	CASEENUMSTRN(FI_DOUBLE_COMPLEX, len);
 	CASEENUMSTRN(FI_LONG_DOUBLE, len);
 	CASEENUMSTRN(FI_LONG_DOUBLE_COMPLEX, len);
+	CASEENUMSTRN(FI_INT128, len);
+	CASEENUMSTRN(FI_UINT128, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;

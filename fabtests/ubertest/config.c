@@ -173,7 +173,7 @@ static struct key_t keys[] = {
 		.str = "datatype",
 		.offset = offsetof(struct ft_set, datatype),
 		.val_type = VAL_NUM,
-		.val_size = sizeof(((struct ft_set *)0)->datatype) / FI_DATATYPE_LAST,
+		.val_size = sizeof(((struct ft_set *)0)->datatype) / FI_DATATYPE_LAST_V2,
 	},
 	{
 		.str = "mode",
@@ -340,6 +340,11 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_UINT32, enum fi_datatype, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_INT64, enum fi_datatype, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_UINT64, enum fi_datatype, buf);
+                /* Disable 128-bit tests if there is no compiler support. */
+#ifdef HAVE___INT128
+		TEST_ENUM_SET_N_RETURN(str, len, FI_INT128, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_UINT128, enum fi_datatype, buf);
+#endif
 		TEST_ENUM_SET_N_RETURN(str, len, FI_FLOAT, enum fi_datatype, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_DOUBLE, enum fi_datatype, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_FLOAT_COMPLEX, enum fi_datatype, buf);

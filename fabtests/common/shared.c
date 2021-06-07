@@ -1761,11 +1761,13 @@ static const size_t datatype_size_table[] = {
 	[FI_DOUBLE_COMPLEX] = sizeof(OFI_COMPLEX(double)),
 	[FI_LONG_DOUBLE]    = sizeof(long double),
 	[FI_LONG_DOUBLE_COMPLEX] = sizeof(OFI_COMPLEX(long_double)),
+	[FI_INT128] = sizeof(__int128),
+	[FI_UINT128] = sizeof(__uint128),
 };
 
 size_t datatype_to_size(enum fi_datatype datatype)
 {
-	if (datatype >= FI_DATATYPE_LAST)
+	if (datatype >= FI_DATATYPE_LAST_V2)
 		return 0;
 
 	return datatype_size_table[datatype];
