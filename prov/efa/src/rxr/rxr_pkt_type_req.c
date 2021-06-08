@@ -1592,10 +1592,6 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	rx_entry->addr = pkt_entry->addr;
 	rx_entry->bytes_received = 0;
 	rx_entry->bytes_copied = 0;
-	rx_entry->cq_entry.flags |= (FI_RMA | FI_READ);
-	rx_entry->cq_entry.len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
-	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
-	rx_entry->total_len = rx_entry->cq_entry.len;
 
 	rtr_hdr = (struct rxr_rtr_hdr *)pkt_entry->pkt;
 	rx_entry->rma_initiator_rx_id = rtr_hdr->read_req_rx_id;
@@ -1610,6 +1606,11 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
+
+	rx_entry->cq_entry.flags |= (FI_RMA | FI_READ);
+	rx_entry->cq_entry.len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
+	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
+	rx_entry->total_len = rx_entry->cq_entry.len;
 
 	tx_entry = rxr_rma_alloc_readrsp_tx_entry(ep, rx_entry);
 	if (OFI_UNLIKELY(!tx_entry)) {
