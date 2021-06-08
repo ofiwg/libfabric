@@ -56,7 +56,7 @@ static const size_t ofi_datatype_size_table[] = {
 
 size_t ofi_datatype_size(enum fi_datatype datatype)
 {
-	if (datatype >= sizeof(ofi_datatype_size_table)) {
+	if (datatype >= ARRAY_SIZE(ofi_datatype_size_table)) {
 		errno = FI_EINVAL;
 		return 0;
 	}
