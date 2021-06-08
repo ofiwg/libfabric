@@ -625,8 +625,6 @@ int efa_rdm_av_remove_one(struct efa_av *av, fi_addr_t fi_addr, uint64_t flags)
 	if (ret)
 		return ret;
 
-	efa_rdm_peer_reset(peer);
-
 	/*
 	 * Clearing the 3 resources of an av entry:
 	 *
@@ -647,6 +645,13 @@ int efa_rdm_av_remove_one(struct efa_av *av, fi_addr_t fi_addr, uint64_t flags)
 			av->shm_rdm_addr_map[peer->shm_fiaddr] = FI_ADDR_UNSPEC;
 		}
 	}
+
+	/*
+	 * We still need the information stored in peer strcuture to
+	 * properly remove shm address from av table, so doing peer reset
+	 * after the remove
+	 */
+	efa_rdm_peer_reset(peer);
 
 	efa_conn_release(av, av_entry->conn);
 
