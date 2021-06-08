@@ -190,6 +190,12 @@ provider implementation constraints.
 *FI_UINT64*
 : Unsigned 64-bit integer.
 
+*FI_INT128*
+: Signed 128-bit integer.
+
+*FI_UINT128*
+: Unsigned 128-bit integer.
+
 *FI_FLOAT*
 : A single-precision floating point value (IEEE 754).
 
