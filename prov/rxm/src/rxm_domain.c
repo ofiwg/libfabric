@@ -548,7 +548,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	rxm_domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
 
 	rxm_domain->max_atomic_size = rxm_ep_max_atomic_size(info);
-	rxm_domain->rx_post_size = rxm_buffer_size;
+	rxm_domain->rx_post_size = rxm_packet_size;
 
 	*domain = &rxm_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &rxm_domain_fi_ops;

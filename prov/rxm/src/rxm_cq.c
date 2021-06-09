@@ -638,7 +638,7 @@ void rxm_handle_eager(struct rxm_rx_buf *rx_buf)
 	done_len = ofi_copy_to_hmem_iov(iface, device,
 					rx_buf->recv_entry->rxm_iov.iov,
 					rx_buf->recv_entry->rxm_iov.count, 0,
-					rx_buf->pkt.data, rx_buf->pkt.hdr.size);
+					rx_buf->data, rx_buf->pkt.hdr.size);
 	assert(done_len == rx_buf->pkt.hdr.size);
 
 	rxm_finish_recv(rx_buf, done_len);
@@ -657,7 +657,7 @@ void rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 	done_len = ofi_copy_to_hmem_iov(iface, device,
 					rx_buf->recv_entry->rxm_iov.iov,
 					rx_buf->recv_entry->rxm_iov.count, 0,
-					rx_buf->pkt.data, rx_buf->pkt.hdr.size);
+					rx_buf->data, rx_buf->pkt.hdr.size);
 	assert(done_len == rx_buf->pkt.hdr.size);
 
 	if (rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
@@ -1547,6 +1547,28 @@ static void rxm_fake_rx_hdr(struct rxm_rx_buf *rx_buf,
 	rx_buf->pkt.hdr.flags = 0;
 }
 
+static ssize_t
+rxm_get_dyn_unexp(struct rxm_rx_buf *rx_buf, struct iovec *iov, size_t *count)
+{
+	*count = 1;
+
+	if (rx_buf->pkt.hdr.size > rxm_buffer_size) {
+		rx_buf->data = malloc(rx_buf->pkt.hdr.size);
+		if (!rx_buf->data)
+			goto trunc;
+	}
+
+	iov[0].iov_base = rx_buf->data;
+	iov[0].iov_len = rx_buf->pkt.hdr.size;
+	return 0;
+
+trunc:
+	rx_buf->data = &rx_buf->pkt.data;
+	iov[0].iov_base = rx_buf->data;
+	iov[0].iov_len = rxm_buffer_size;
+	return -FI_ETRUNC;
+}
+
 /*
  * Dynamic receive buffer callback from fi_cq_read(msg cq).
  * We're holding the ep lock.
@@ -1593,9 +1615,7 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 			memcpy(iov, rx_buf->recv_entry->rxm_iov.iov, *count *
 			       sizeof(*iov));
 		} else {
-			*count = 1;
-			iov[0].iov_base = &rx_buf->pkt.data;
-			iov[0].iov_len = rxm_eager_limit;
+			rxm_get_dyn_unexp(rx_buf, iov, count);
 		}
 		break;
 	case rxm_ctrl_rndv_req:
@@ -1611,7 +1631,7 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 	case rxm_ctrl_credit:
 		*count = 1;
 		iov[0].iov_base = &rx_buf->pkt.data;
-		iov[0].iov_len = rxm_eager_limit;
+		iov[0].iov_len = rxm_buffer_size;
 		break;
 	case rxm_ctrl_seg:
 	default:
@@ -1619,7 +1639,7 @@ ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 			"Unexpected request for dynamic rbuf\n");
 		*count = 1;
 		iov[0].iov_base = &rx_buf->pkt.data;
-		iov[0].iov_len = rxm_eager_limit;
+		iov[0].iov_len = rxm_buffer_size;
 		break;
 	}
 

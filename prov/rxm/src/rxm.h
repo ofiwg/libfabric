@@ -64,8 +64,8 @@
 #define RXM_OP_VERSION		3
 #define RXM_CTRL_VERSION	4
 
-extern size_t rxm_eager_limit;
 extern size_t rxm_buffer_size;
+extern size_t rxm_packet_size;
 
 #define RXM_SAR_TX_ERROR	UINT64_MAX
 #define RXM_SAR_RX_INIT		UINT64_MAX
@@ -234,7 +234,7 @@ union rxm_cm_data {
 		uint8_t op_version;
 		uint16_t port;
 		uint8_t padding[2];
-		uint32_t eager_size;
+		uint32_t eager_limit;
 		uint32_t rx_size;
 		uint64_t client_conn_id;
 	} connect;
@@ -474,6 +474,8 @@ struct rxm_rx_buf {
 	size_t rndv_rma_index;
 	struct fid_mr *mr[RXM_IOV_LIMIT];
 
+	/* Only differs from pkt.data for unexpected messages */
+	void *data;
 	/* Must stay at bottom */
 	struct rxm_pkt pkt;
 };
@@ -679,6 +681,8 @@ struct rxm_ep {
 	size_t			buffered_min;
 	size_t			buffered_limit;
 	size_t			inject_limit;
+
+	size_t			eager_limit;
 	size_t			sar_limit;
 	size_t			tx_credit;
 
@@ -763,8 +767,8 @@ void rxm_rndv_hdr_init(struct rxm_ep *rxm_ep, void *buf,
 
 static inline size_t rxm_ep_max_atomic_size(struct fi_info *info)
 {
-	assert(rxm_eager_limit >= sizeof(struct rxm_atomic_hdr));
-	return rxm_eager_limit - sizeof(struct rxm_atomic_hdr);
+	assert(rxm_buffer_size >= sizeof(struct rxm_atomic_hdr));
+	return rxm_buffer_size - sizeof(struct rxm_atomic_hdr);
 }
 
 static inline ssize_t
@@ -900,6 +904,11 @@ int rxm_post_recv(struct rxm_rx_buf *rx_buf);
 static inline void
 rxm_rx_buf_free(struct rxm_rx_buf *rx_buf)
 {
+	if (rx_buf->data != rx_buf->pkt.data) {
+		free(rx_buf->data);
+		rx_buf->data = &rx_buf->pkt.data;
+	}
+
 	/* Discard rx buffer if its msg_ep was closed */
 	if (rx_buf->repost && (rx_buf->ep->srx_ctx || rx_buf->conn->msg_ep)) {
 		rxm_post_recv(rx_buf);

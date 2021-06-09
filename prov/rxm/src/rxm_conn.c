@@ -957,11 +957,12 @@ rxm_conn_verify_cm_data(union rxm_cm_data *remote_cm_data,
 			remote_cm_data->connect.op_version);
 		goto err;
 	}
-	if (remote_cm_data->connect.eager_size != local_cm_data->connect.eager_size) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "cm data eager_size mismatch "
+	if (remote_cm_data->connect.eager_limit !=
+	    local_cm_data->connect.eager_limit) {
+		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "cm data eager_limit mismatch "
 			"(local: %" PRIu32 ", remote:  %" PRIu32 ")\n",
-			local_cm_data->connect.eager_size,
-			remote_cm_data->connect.eager_size);
+			local_cm_data->connect.eager_limit,
+			remote_cm_data->connect.eager_limit);
 		goto err;
 	}
 	return FI_SUCCESS;
@@ -991,7 +992,7 @@ rxm_msg_process_connreq(struct rxm_ep *rxm_ep, struct fi_info *msg_info,
 			.endianness = ofi_detect_endianness(),
 			.ctrl_version = RXM_CTRL_VERSION,
 			.op_version = RXM_OP_VERSION,
-			.eager_size = rxm_eager_limit,
+			.eager_limit = rxm_ep->eager_limit,
 		},
 	};
 	union rxm_cm_data reject_cm_data = {
@@ -1406,11 +1407,11 @@ rxm_conn_connect(struct rxm_ep *ep, struct rxm_cmap_handle *handle,
 			.ctrl_version = RXM_CTRL_VERSION,
 			.op_version = RXM_OP_VERSION,
 			.endianness = ofi_detect_endianness(),
-			.eager_size = rxm_eager_limit,
+			.eager_limit = ep->eager_limit,
 		},
 	};
 
-	assert(sizeof(uint32_t) == sizeof(cm_data.connect.eager_size));
+	assert(sizeof(uint32_t) == sizeof(cm_data.connect.eager_limit));
 	assert(sizeof(uint32_t) == sizeof(cm_data.connect.rx_size));
 	assert(ep->msg_info->rx_attr->size <= (uint32_t) -1);
 

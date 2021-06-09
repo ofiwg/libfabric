@@ -50,8 +50,9 @@
 
 size_t rxm_msg_tx_size;
 size_t rxm_msg_rx_size;
-size_t rxm_eager_limit		= 16384;
-size_t rxm_buffer_size		= 16384 + sizeof(struct rxm_pkt);
+
+size_t rxm_buffer_size = 16384;
+size_t rxm_packet_size;
 
 int force_auto_progress		= 0;
 int rxm_use_write_rndv		= 0;
@@ -250,33 +251,34 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 static void rxm_init_infos(void)
 {
 	struct fi_info *cur;
-	size_t eager_size, tx_size = 0, rx_size = 0;
+	size_t buf_size, tx_size = 0, rx_size = 0;
 
 	/* Historically, 'buffer_size' was the name given for the eager message
 	 * size.  Maintain the name for backwards compatability.
 	 */
-	if (!fi_param_get_size_t(&rxm_prov, "buffer_size", &eager_size)) {
+	if (!fi_param_get_size_t(&rxm_prov, "buffer_size", &buf_size)) {
 		/* We need enough space to carry extra headers */
-		if (eager_size < sizeof(struct rxm_rndv_hdr) ||
-		    eager_size < sizeof(struct rxm_atomic_hdr)) {
+		if (buf_size < sizeof(struct rxm_rndv_hdr) ||
+		    buf_size < sizeof(struct rxm_atomic_hdr)) {
 			FI_WARN(&rxm_prov, FI_LOG_CORE,
 				"Requested buffer size too small\n");
-			eager_size = MAX(sizeof(struct rxm_rndv_hdr),
-					 sizeof(struct rxm_atomic_hdr));
+			buf_size = MAX(sizeof(struct rxm_rndv_hdr),
+				       sizeof(struct rxm_atomic_hdr));
 		}
 
-		rxm_eager_limit = eager_size;
-		if (rxm_eager_limit > INT32_MAX)
-			rxm_eager_limit = INT32_MAX;
+		if (buf_size > INT32_MAX)
+			buf_size = INT32_MAX;
 
-		rxm_buffer_size = rxm_eager_limit + sizeof(struct rxm_pkt);
+		rxm_buffer_size = buf_size;
 	}
+
+	rxm_packet_size = sizeof(struct rxm_pkt) + rxm_buffer_size;
 
 	fi_param_get_size_t(&rxm_prov, "tx_size", &tx_size);
 	fi_param_get_size_t(&rxm_prov, "rx_size", &rx_size);
 
 	for (cur = (struct fi_info *) rxm_util_prov.info; cur; cur = cur->next) {
-		cur->tx_attr->inject_size = rxm_eager_limit;
+		cur->tx_attr->inject_size = rxm_buffer_size;
 		if (tx_size)
 			cur->tx_attr->size = tx_size;
 		if (rx_size)
@@ -467,16 +469,23 @@ static void rxm_get_def_wait(void)
 RXM_INI
 {
 	fi_param_define(&rxm_prov, "buffer_size", FI_PARAM_SIZE_T,
-			"Defines the transmit buffer size / inject size "
-			"(default: 16 KB). Eager protocol would be used to "
-			"transmit messages of size less than eager limit "
-			"(FI_OFI_RXM_BUFFER_SIZE - RxM header size (%zu B)). "
-			"Any message whose size is greater than eager limit would"
-			" be transmitted via rendezvous or SAR "
-			"(Segmentation And Reassembly) protocol depending on "
-			"the value of FI_OFI_RXM_SAR_LIMIT). Also, transmit data "
-			" would be copied up to eager limit.",
-			sizeof(struct rxm_pkt));
+			"Defines the allocated buffer size used for bounce "
+			"buffers, including buffers posted at the receive side "
+			"to handle unexpected messages.  This value "
+			"corresponds to the rxm inject limit, and is also "
+			"typically used as the eager message size. "
+			"(default %zu)", rxm_buffer_size);
+
+	fi_param_define(&rxm_prov, "eager_limit", FI_PARAM_SIZE_T,
+			"Specifies the maximum size transfer that the eager "
+			"protocol will be used.  For transfers smaller than "
+			"this limit, data may be copied into a bounce "
+			"buffer on the transmit side and received into "
+			"bounce buffer at the receiver.  The eager_limit must "
+			"be equal to the buffer_size when using rxm over "
+			"verbs, but may differ in the case of tcp."
+			"(default: %zu)", rxm_buffer_size);
+			/* rxm_buffer_size is correct here */
 
 	fi_param_define(&rxm_prov, "comp_per_progress", FI_PARAM_INT,
 			"Defines the maximum number of MSG provider CQ entries "
@@ -484,13 +493,14 @@ RXM_INI
 			"(RxM CQ read).");
 
 	fi_param_define(&rxm_prov, "sar_limit", FI_PARAM_SIZE_T,
-			"Set this environment variable to enable and control "
-			"RxM SAR (Segmentation And Reassembly) protocol "
-			"(default: 128 KB). This value should be set greater than "
-			" eager limit (FI_OFI_RXM_BUFFER_SIZE - RxM protocol "
-			"header size (%zu B)) for SAR to take effect. Messages "
-			"of size greater than this would be transmitted via "
-			"rendezvous protocol.", sizeof(struct rxm_pkt));
+			"Specifies the maximum size transfer that the SAR "
+			"Segmentation And Reassembly) protocol "
+			"For transfers smaller than SAR, data may be copied "
+			"into multiple bounce buffers on the transmit side "
+			"and received into bounce buffers at the receiver. "
+			"The sar_limit value must be greater than the "
+			"eager_limit to take effect.  (default %zu).",
+			rxm_buffer_size * 8);
 
 	fi_param_define(&rxm_prov, "use_srx", FI_PARAM_BOOL,
 			"Set this environment variable to control the RxM "
