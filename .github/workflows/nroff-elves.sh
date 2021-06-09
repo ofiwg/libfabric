@@ -28,6 +28,10 @@ fi
 # Extract the PR number.
 echo JMS GITHUB_TOKEN is: $GITHUB_TOKEN
 git push --set-upstream origin $branch_name
+
+echo JMS: git branch/tracking
+git branch -vv
+
 url=`hub pull-request -m 'Update nroff-generated man pages'`
 pr_num=`echo $url | cut -d/ -f7`
 
