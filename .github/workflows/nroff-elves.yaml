@@ -1,6 +1,11 @@
 name: GitHub Action Schedule
 
 on:
+  pull_request:
+    types:
+      - opened
+      - synchronized
+      - edited
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:
