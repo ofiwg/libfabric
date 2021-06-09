@@ -10,7 +10,7 @@ git config --global user.name "OFIWG Bot"
 git config --global user.email "ofiwg@lists.openfabrics.org"
 
 branch_name=pr/update-nroff-generated-man-pages
-# JMS debug
+# JMS debug.
 branch_name=$branch_name-$$
 git checkout -b $branch_name
 
