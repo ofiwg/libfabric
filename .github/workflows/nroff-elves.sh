@@ -25,7 +25,7 @@ fi
 # Yes, we committed something.  Push the branch and make a PR.
 # Extract the PR number.
 git push --set-upstream origin $branch_name
-url=`hub pull-request -m 'Update nroff-generated man pages'`
+url=`hub pull-request -b $BASE_REF -m 'Update nroff-generated man pages'`
 pr_num=`echo $url | cut -d/ -f7`
 
 # Wait for the required "DCO" CI to complete
