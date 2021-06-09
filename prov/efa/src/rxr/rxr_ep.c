@@ -92,18 +92,13 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "RX entries exhausted\n");
 		return NULL;
 	}
+	memset(rx_entry, 0, sizeof(struct rxr_rx_entry));
 
 #if ENABLE_DEBUG
 	dlist_insert_tail(&rx_entry->rx_entry_entry, &ep->rx_entry_list);
 #endif
 	rx_entry->type = RXR_RX_ENTRY;
 	rx_entry->rx_id = ofi_buf_index(rx_entry);
-	rx_entry->rxr_flags = 0;
-	rx_entry->bytes_received = 0;
-	rx_entry->bytes_copied = 0;
-	rx_entry->window = 0;
-	rx_entry->unexp_pkt = NULL;
-	rx_entry->rma_iov_count = 0;
 	dlist_init(&rx_entry->queued_pkts);
 
 	rx_entry->state = RXR_RX_INIT;
@@ -120,7 +115,6 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 		rx_entry->peer = NULL;
 	} 
 
-	memset(&rx_entry->cq_entry, 0, sizeof(rx_entry->cq_entry));
 	rx_entry->op = op;
 	switch (op) {
 	case ofi_op_tagged:
