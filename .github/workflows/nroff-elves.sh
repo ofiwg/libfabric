@@ -10,6 +10,8 @@ git config --global user.name "OFIWG Bot"
 git config --global user.email "ofiwg@lists.openfabrics.org"
 
 branch_name=pr/update-nroff-generated-man-pages
+# JMS debug
+branch_name=$branch_name-$$
 git checkout -b $branch_name
 
 set +e
@@ -24,6 +26,7 @@ fi
 
 # Yes, we committed something.  Push the branch and make a PR.
 # Extract the PR number.
+echo JMS GITHUB_TOKEN is: $GITHUB_TOKEN
 git push --set-upstream origin $branch_name
 url=`hub pull-request -m 'Update nroff-generated man pages'`
 pr_num=`echo $url | cut -d/ -f7`
