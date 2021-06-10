@@ -317,7 +317,10 @@ ssize_t rxr_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 
 	rxr_setup_msg(&msg, &iov, NULL, 1, dest_addr, NULL, 0);
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
-	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_msgrtm_hdr));
+	if (len > rxr_ep->inject_size) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
+		return -FI_EINVAL;
+	}
 
 	return rxr_msg_generic_send(ep, &msg, 0, ofi_op_msg,
 				    rxr_tx_flags(rxr_ep) | RXR_NO_COMPLETION | FI_INJECT);
@@ -337,12 +340,11 @@ ssize_t rxr_msg_injectdata(struct fid_ep *ep, const void *buf,
 
 	rxr_setup_msg(&msg, &iov, NULL, 1, dest_addr, NULL, data);
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
-	/*
-	 * We advertise the largest possible inject size with no cq data or
-	 * source address. This means that we may end up not using the core
-	 * providers inject for this send.
-	 */
-	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_msgrtm_hdr));
+	if (len > rxr_ep->inject_size) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
+		return -FI_EINVAL;
+	}
+
 	return rxr_msg_generic_send(ep, &msg, 0, ofi_op_msg,
 				    rxr_tx_flags(rxr_ep) | RXR_NO_COMPLETION |
 				    FI_REMOTE_CQ_DATA | FI_INJECT);
@@ -424,7 +426,10 @@ ssize_t rxr_msg_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	rxr_setup_msg(&msg, &iov, NULL, 1, dest_addr, NULL, 0);
 	rxr_ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
-	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_tagrtm_hdr));
+	if (len > rxr_ep->inject_size) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
+		return -FI_EINVAL;
+	}
 
 	return rxr_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
 				    rxr_tx_flags(rxr_ep) | RXR_NO_COMPLETION | FI_INJECT);
@@ -443,12 +448,10 @@ ssize_t rxr_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	rxr_setup_msg(&msg, &iov, NULL, 1, dest_addr, NULL, data);
 	rxr_ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
-	/*
-	 * We advertise the largest possible inject size with no cq data or
-	 * source address. This means that we may end up not using the core
-	 * providers inject for this send.
-	 */
-	assert(len <= rxr_ep->core_inject_size - sizeof(struct rxr_eager_tagrtm_hdr));
+	if (len > rxr_ep->inject_size) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
+		return -FI_EINVAL;
+	}
 
 	return rxr_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
 				    rxr_tx_flags(rxr_ep) | RXR_NO_COMPLETION |
