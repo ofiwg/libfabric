@@ -9,7 +9,7 @@ done
 git config --global user.name "OFIWG Bot"
 git config --global user.email "ofiwg@lists.openfabrics.org"
 
-branch_name=pr/update-nroff-generated-man-pages
+branch_name=pr/update-nroff-generated-man-pages-$$
 git checkout -b $branch_name
 
 set +e
@@ -24,7 +24,18 @@ fi
 
 # Yes, we committed something.  Push the branch and make a PR.
 # Extract the PR number.
-git push --set-upstream origin $branch_name
+set +e
+echo JMS git info
+git remote -vv
+sleep 1
+find .git/refs/remotes -type f
+cat .git/refs/remotes/origin/HEAD
+git symbolic-ref refs/remotes/origin/HEAD
+set -e
+
+if test -z "$BASE_REF"; then
+    BASE_REF=main
+fi
 url=`hub pull-request -b $BASE_REF -m 'Update nroff-generated man pages'`
 pr_num=`echo $url | cut -d/ -f7`
 

@@ -1,8 +1,9 @@
 name: GitHub Action Schedule
 
 on:
+  pull_request:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -10,6 +11,14 @@ jobs:
         name: The Nroff Elves
         runs-on: ubuntu-latest
         steps:
+          - name: Debug
+            env:
+              data: ${{ toJSON(github) }}
+            run: echo "$data"
+
+          - name: Debug base ref
+            run: echo ${{ github.base_ref }}
+
           - name: Check out the git repo
             uses: actions/checkout@v2
 
