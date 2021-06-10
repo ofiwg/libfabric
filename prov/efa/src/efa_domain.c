@@ -269,6 +269,14 @@ static int efa_mr_cache_init(struct efa_domain *domain, struct fi_info *info)
 	};
 	int ret;
 
+	/* If FI_MR_CACHE_MONITOR env is set, this check will override our
+	 * default monitor with the user specified monitor which is stored
+	 * as default_monitor
+	 */
+	if (cache_params.monitor) {
+		memory_monitors[FI_HMEM_SYSTEM] = default_monitor;
+	}
+
 	domain->cache = (struct ofi_mr_cache *)calloc(1, sizeof(struct ofi_mr_cache));
 	if (!domain->cache)
 		return -FI_ENOMEM;
