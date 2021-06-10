@@ -261,6 +261,7 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 		tcpx_reset_rx(ep);
 	}
 	tcpx_ep_flush_queue(&ep->rx_queue, cq);
+	ofi_bsock_discard(&ep->bsock);
 }
 
 void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
@@ -268,6 +269,7 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 	struct util_wait_fd *wait;
 	struct fi_eq_cm_entry cm_entry = {0};
 	struct fi_eq_err_entry err_entry = {0};
+	int ret;
 
 	assert(fastlock_held(&ep->lock));
 	switch (ep->state) {
@@ -301,6 +303,10 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 		return;
 	}
 
+	ret = ofi_shutdown(ep->bsock.sock, SHUT_RDWR);
+	if (ret && ofi_sockerr() != ENOTCONN)
+		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA, "shutdown failed\n");
+
 	tcpx_ep_flush_all_queues(ep);
 
 	if (cm_err) {
@@ -321,15 +327,9 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 static int tcpx_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 {
 	struct tcpx_ep *tcpx_ep;
-	int ret;
 
 	tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
 	(void) ofi_bsock_flush(&tcpx_ep->bsock);
-
-	ret = ofi_shutdown(tcpx_ep->bsock.sock, SHUT_RDWR);
-	if (ret && ofi_sockerr() != ENOTCONN) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA, "ep shutdown unsuccessful\n");
-	}
 
 	fastlock_acquire(&tcpx_ep->lock);
 	tcpx_ep_disable(tcpx_ep, 0);

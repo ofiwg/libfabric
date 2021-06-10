@@ -150,6 +150,12 @@ static inline void ofi_byteq_init(struct ofi_byteq *byteq, ssize_t size)
 		byteq->size = 0;
 }
 
+static inline void ofi_byteq_discard(struct ofi_byteq *byteq)
+{
+	byteq->head = 0;
+	byteq->tail = 0;
+}
+
 static inline size_t ofi_byteq_readable(struct ofi_byteq *byteq)
 {
 	return byteq->tail - byteq->head;
@@ -251,6 +257,12 @@ ofi_bsock_init(struct ofi_bsock *bsock, ssize_t sbuf_size, ssize_t rbuf_size)
 	/* first async op will wrap back to 0 as the starting index */
 	bsock->async_index = UINT32_MAX;
 	bsock->done_index = UINT32_MAX;
+}
+
+static inline void ofi_bsock_discard(struct ofi_bsock *bsock)
+{
+	ofi_byteq_discard(&bsock->rq);
+	ofi_byteq_discard(&bsock->sq);
 }
 
 static inline size_t ofi_bsock_readable(struct ofi_bsock *bsock)
