@@ -20,4 +20,4 @@ jobs:
             run: .github/workflows/nroff-elves.sh
             env:
               GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              BASE_REF: ${{ github.base_ref }}
+              BASE_REF: ${{ github.event.repository.default_branch }}
