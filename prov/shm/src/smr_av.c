@@ -73,6 +73,7 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 
 	for (i = 0; i < count; i++, addr = (char *) addr + strlen(addr) + 1) {
 		if (smr_av->used < SMR_MAX_PEERS) {
+			util_addr = FI_ADDR_NOTAVAIL;
 			ep_name = smr_no_prefix(addr);
 			ret = smr_map_add(&smr_prov, smr_av->smr_map,
 					  ep_name, &shm_id);
@@ -86,7 +87,6 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			FI_WARN(&smr_prov, FI_LOG_AV,
 				"AV insert failed. The maximum number of AV "
 				"entries shm supported has been reached.\n");
-			util_addr = FI_ADDR_NOTAVAIL;
 			ret = -FI_ENOMEM;
 		}
 
