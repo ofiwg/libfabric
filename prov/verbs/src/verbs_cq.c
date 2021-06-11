@@ -568,6 +568,7 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	size_t size;
 	int ret;
 	struct fi_cq_attr tmp_attr = *attr;
+	int comp_vector = 0;
 
 	cq = calloc(1, sizeof(*cq));
 	if (!cq)
@@ -592,6 +593,19 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	default:
 		ret = -FI_ENOSYS;
 		goto err4;
+	}
+
+	if (attr->flags & FI_AFFINITY) {
+		if (attr->signaling_vector < 0 ||
+		    attr->signaling_vector > domain->verbs->num_comp_vectors)  {
+
+			VERBS_WARN(FI_LOG_CQ,
+				   "Invalid value for the CQ attribute signaling_vector: %d\n",
+				   attr->signaling_vector);
+			ret = -FI_EINVAL;
+			goto err4;
+		}
+		comp_vector = attr->signaling_vector;
 	}
 
 	if (cq->wait_obj != FI_WAIT_NONE) {
@@ -629,7 +643,7 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	 * num_qp_per_cq = ibv_device_attr->max_cqe / (qp_send_wr + qp_recv_wr)
 	 */
 	cq->cq = ibv_create_cq(domain->verbs, size, cq, cq->channel,
-			       attr->signaling_vector);
+			       comp_vector);
 	if (!cq->cq) {
 		ret = -errno;
 		VERBS_WARN(FI_LOG_CQ, "Unable to create verbs CQ\n");
