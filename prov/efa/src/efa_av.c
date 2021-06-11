@@ -106,11 +106,11 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr)
 fi_addr_t efa_ahn_qpn_to_addr(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 {
 	struct efa_reverse_av *reverse_av;
-	struct efa_ah_qpn key = {
-		.ahn = ahn,
-		.qpn = qpn,
-	};
+	struct efa_ah_qpn key;
 
+	memset(&key, 0, sizeof(key));
+	key.ahn = ahn;
+	key.qpn = qpn;
 	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av);
 
 	return OFI_LIKELY(!!reverse_av) ? reverse_av->conn->fi_addr : FI_ADDR_NOTAVAIL;
@@ -128,11 +128,11 @@ fi_addr_t efa_ahn_qpn_to_addr(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 struct rdm_peer *efa_ahn_qpn_to_peer(struct efa_av *av, uint16_t ahn, uint16_t qpn)
 {
 	struct efa_reverse_av *reverse_av;
-	struct efa_ah_qpn key = {
-		.ahn = ahn,
-		.qpn = qpn,
-	};
+	struct efa_ah_qpn key;
 
+	memset(&key, 0, sizeof(key));
+	key.ahn = ahn;
+	key.qpn = qpn;
 	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av);
 
 	return OFI_LIKELY(!!reverse_av) ? &reverse_av->conn->rdm_peer : NULL;
@@ -402,6 +402,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		}
 	}
 
+	memset(&key, 0, sizeof(key));
 	key.ahn = conn->ah->ahn;
 	key.qpn = raw_addr->qpn;
 	reverse_av_entry = NULL;
@@ -468,6 +469,7 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 	if (av->ep_type == FI_EP_RDM)
 		efa_conn_rdm_deinit(av, conn);
 
+	memset(&key, 0, sizeof(key));
 	key.ahn = conn->ah->ahn;
 	key.qpn = conn->ep_addr.qpn;
 	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av_entry);
