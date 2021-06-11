@@ -354,16 +354,33 @@ static struct fi_ops_av rxd_av_ops = {
 static int rxd_av_close(struct fid *fid)
 {
 	struct rxd_av *av;
+	struct ofi_rbnode *node;
+	fi_addr_t dg_addr, rxd_addr;
 	int ret;
 
-
 	av = container_of(fid, struct rxd_av, util_av.av_fid);
-	ret = fi_close(&av->dg_av->fid);
+
+	ret = ofi_av_close(&av->util_av);
 	if (ret)
 		return ret;
 
+	while ((node = ofi_rbmap_get_root(&av->rbmap))) {
+		rxd_addr = (fi_addr_t) node->data;
+		dg_addr = (intptr_t)ofi_idx_lookup(&av->rxdaddr_dg_idx,
+						   rxd_addr);
+
+		ret = fi_av_remove(av->dg_av, &dg_addr, 1, 0);
+		if (ret)
+			FI_WARN(&rxd_prov, FI_LOG_AV,
+				"failed to remove dg addr: %d (%s)\n",
+				-ret, fi_strerror(-ret));
+
+		ofi_idx_remove_ordered(&(av->rxdaddr_dg_idx), rxd_addr);
+		ofi_rbmap_delete(&av->rbmap, node);
+	}
 	ofi_rbmap_cleanup(&av->rbmap);
-	ret = ofi_av_close(&av->util_av);
+
+	ret = fi_close(&av->dg_av->fid);
 	if (ret)
 		return ret;
 
