@@ -483,14 +483,6 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
 
 	/*
-	 * Init tx state for this peer. The rx state and reorder buffers will be
-	 * initialized on the first recv so as to not allocate resources unless
-	 * necessary.
-	 */
-	if (!peer->tx_init)
-		rxr_ep_peer_init_tx(peer);
-
-	/*
 	 * Divy up available credits to outstanding transfers and request the
 	 * minimum of that and the amount required to finish the current long
 	 * message.

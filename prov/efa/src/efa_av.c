@@ -268,6 +268,10 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 	peer->is_self = efa_is_same_addr((struct efa_ep_addr *)rxr_ep->core_addr,
 					 &conn->ep_addr);
 
+	ofi_recvwin_buf_alloc(&peer->robuf, rxr_env.recvwin_size);
+	peer->rx_credits = rxr_env.rx_window_size;
+	peer->tx_credits = rxr_env.tx_max_credits;
+
 	/* If peer is local, insert the address into shm provider's av */
 	if (rxr_ep->use_shm && efa_is_local_peer(av, &conn->ep_addr)) {
 		if (av->shm_used >= rxr_env.shm_av_size) {

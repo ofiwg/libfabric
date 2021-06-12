@@ -573,11 +573,11 @@ int efa_peer_in_use(struct rdm_peer *peer)
 		return -FI_EBUSY;
 	if ((peer->tx_pending) || (peer->flags & RXR_PEER_IN_BACKOFF))
 		return -FI_EBUSY;
-	if (peer->rx_init) {
-		pending_pkt = *ofi_recvwin_peek((&peer->robuf));
-		if (pending_pkt && pending_pkt->pkt)
-			return -FI_EBUSY;
-	}
+
+	pending_pkt = *ofi_recvwin_peek((&peer->robuf));
+	if (pending_pkt)
+		return -FI_EBUSY;
+
 	return 0;
 }
 
