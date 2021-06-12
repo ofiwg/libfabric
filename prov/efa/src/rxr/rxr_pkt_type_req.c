@@ -1286,7 +1286,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Invalid msg_id: %" PRIu32
 			" robuf->exp_msg_id: %" PRIu32 "\n",
-		       msg_id, peer->robuf->exp_msg_id);
+		       msg_id, peer->robuf.exp_msg_id);
 		efa_eq_write_error(&ep->util_ep, FI_EIO, ret);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
@@ -1315,7 +1315,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 	if (OFI_UNLIKELY(ret))
 		return;
 
-	ofi_recvwin_slide(peer->robuf);
+	ofi_recvwin_slide((&peer->robuf));
 	/* process pending items in reorder buff */
 	rxr_cq_proc_pending_items_in_recvwin(ep, peer);
 }

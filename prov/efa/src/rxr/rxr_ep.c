@@ -64,7 +64,7 @@ struct efa_ep_addr *rxr_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	efa_av = efa_ep->av;
-	efa_conn = efa_av->addr_to_conn(efa_av, addr);
+	efa_conn = efa_av_addr_to_conn(efa_av, addr);
 
 	return &efa_conn->ep_addr;
 }
@@ -511,45 +511,6 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_
 	return 0;
 }
 
-/*
- * @brief iterator function to free rdm_peer for address vectors still in the table
- *        during AV close. It is usually used with ofi_av_elements_iter
- *
- * @param[in]	av	utility av
- * @param[in]	data	the data pointer in util_av_entry, which is a pointer to efa_av_entry
- * @param[in]	addr	fi address of the av entry
- * @param[in]	arg	passed by  ofi_av_elements_iter, not used
- * @return	0 is success
- * 		negative error code on failure.
- */
-static int efa_rdm_av_entry_cleanup(struct util_av *av, void *data,
-				    fi_addr_t addr, void *arg)
-{
-	struct efa_av_entry *efa_av_entry = (struct efa_av_entry *)data;
-	struct rdm_peer *peer = &efa_av_entry->conn->rdm_peer;
-
-	if (!peer)
-		return 0;
-
-	if (ofi_atomic_get32(&peer->use_cnt) > 1) {
-		FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL, "Closing Peer with pending messages in flight\n");
-		return -FI_EBUSY;
-	}
-
-	/*
-	 * TODO: Add support for wait/signal until all pending messages have
-	 * been sent/received so we do not attempt to complete a data transfer
-	 * or internal transfer after the EP is shutdown.
-	 */
-	if ((peer->flags & RXR_PEER_REQ_SENT) &&
-	    !(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
-		FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL, "Closing EP with unacked CONNREQs in flight\n");
-
-	efa_rdm_peer_reset(peer);
-
-	return 0;
-}
-
 static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 {
 #if ENABLE_DEBUG
@@ -559,8 +520,6 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_pkt_entry *pkt;
 #endif
-	int ret;
-
 
 #if ENABLE_DEBUG
 	dlist_foreach(&rxr_ep->rx_unexp_list, entry) {
@@ -675,18 +634,6 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		if (rxr_ep->tx_pkt_shm_pool)
 			ofi_bufpool_destroy(rxr_ep->tx_pkt_shm_pool);
 	}
-
-	/* rdm_peer must be released after tx_entry_pool and rx_entry_pool
-	 * because rdm_peer refers tx_entry and rx_entry in its use_cnt
-	 */
-	ret = ofi_av_elements_iter(rxr_ep->util_ep.av,
-				   efa_rdm_av_entry_cleanup, NULL);
-	if (ret)
-		EFA_WARN(FI_LOG_AV, "Failed to free rdm_peers: %s\n",
-			fi_strerror(ret));
-
-	if (rxr_need_sas_ordering(rxr_ep) && rxr_ep->robuf_pool)
-		ofi_bufpool_destroy(rxr_ep->robuf_pool);
 }
 
 static int rxr_ep_close(struct fid *fid)
@@ -765,14 +712,6 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		ret = fi_ep_bind(rxr_ep->rdm_ep, &av->util_av.av_fid.fid, flags);
 		if (ret)
 			return ret;
-
-		if (rxr_need_sas_ordering(rxr_ep)) {
-			ret = ofi_bufpool_create(&rxr_ep->robuf_pool,
-						 sizeof(struct rxr_robuf), 16,
-						 0, 0, 0);
-			if (ret)
-				return ret;
-		}
 
 		/* Bind shm provider endpoint & shm av */
 		if (rxr_ep->use_shm) {

@@ -315,7 +315,7 @@ static ssize_t efa_post_send(struct efa_ep *ep, const struct fi_msg *msg, uint64
 
 	memset(ewr, 0, sizeof(*ewr) + sizeof(*ewr->sge) * msg->iov_count);
 	wr = &ewr->wr;
-	conn = ep->av->addr_to_conn(ep->av, msg->addr);
+	conn = efa_av_addr_to_conn(ep->av, msg->addr);
 
 	ret = efa_post_send_validate(ep, msg, conn, flags, &len);
 	if (OFI_UNLIKELY(ret)) {
@@ -330,7 +330,7 @@ static ssize_t efa_post_send(struct efa_ep *ep, const struct fi_msg *msg, uint64
 
 	wr->opcode = IBV_WR_SEND;
 	wr->wr_id = (uintptr_t)msg->context;
-	wr->wr.ud.ah = conn->ah.ibv_ah;
+	wr->wr.ud.ah = conn->ah->ibv_ah;
 	wr->wr.ud.remote_qpn = conn->ep_addr.qpn;
 	wr->wr.ud.remote_qkey = conn->ep_addr.qkey;
 

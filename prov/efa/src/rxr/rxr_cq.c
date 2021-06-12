@@ -553,6 +553,7 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 {
 	struct rxr_pkt_entry *ooo_entry;
 	struct rxr_pkt_entry *cur_ooo_entry;
+	struct rxr_robuf *robuf;
 	uint32_t msg_id;
 
 	assert(rxr_get_base_hdr(pkt_entry->pkt)->type >= RXR_REQ_PKT_BEGIN);
@@ -565,16 +566,17 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 	if (!peer->rx_init)
 		rxr_ep_peer_init_rx(ep, peer);
 
+	robuf = &peer->robuf;
 #if ENABLE_DEBUG
-	if (msg_id != ofi_recvwin_next_exp_id(peer->robuf))
+	if (msg_id != ofi_recvwin_next_exp_id(robuf))
 		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
 		       "msg OOO msg_id: %" PRIu32 " expected: %"
 		       PRIu32 "\n", msg_id,
-		       ofi_recvwin_next_exp_id(peer->robuf));
+		       ofi_recvwin_next_exp_id(robuf));
 #endif
-	if (ofi_recvwin_is_exp(peer->robuf, msg_id))
+	if (ofi_recvwin_is_exp(robuf, msg_id))
 		return 0;
-	else if (!ofi_recvwin_id_valid(peer->robuf, msg_id))
+	else if (!ofi_recvwin_id_valid(robuf, msg_id))
 		return -FI_EALREADY;
 
 	if (OFI_LIKELY(rxr_env.rx_copy_ooo)) {
@@ -590,7 +592,7 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 		ooo_entry = pkt_entry;
 	}
 
-	cur_ooo_entry = *ofi_recvwin_get_msg(peer->robuf, msg_id);
+	cur_ooo_entry = *ofi_recvwin_get_msg(robuf, msg_id);
 	if (cur_ooo_entry) {
 		assert(rxr_get_base_hdr(cur_ooo_entry->pkt)->type == RXR_MEDIUM_MSGRTM_PKT ||
 		       rxr_get_base_hdr(cur_ooo_entry->pkt)->type == RXR_MEDIUM_TAGRTM_PKT ||
@@ -600,7 +602,7 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 		assert(rxr_pkt_rtm_total_len(cur_ooo_entry) == rxr_pkt_rtm_total_len(ooo_entry));
 		rxr_pkt_entry_append(cur_ooo_entry, ooo_entry);
 	} else {
-		ofi_recvwin_queue_msg(peer->robuf, &ooo_entry, msg_id);
+		ofi_recvwin_queue_msg(robuf, &ooo_entry, msg_id);
 	}
 
 	return 1;
@@ -614,7 +616,7 @@ void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
 	uint32_t msg_id;
 
 	while (1) {
-		pending_pkt = *ofi_recvwin_peek(peer->robuf);
+		pending_pkt = *ofi_recvwin_peek((&peer->robuf));
 		if (!pending_pkt || !pending_pkt->pkt)
 			return;
 
@@ -623,7 +625,7 @@ void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
 		       "Processing msg_id %d from robuf\n", msg_id);
 		/* rxr_pkt_proc_rtm_rta will write error cq entry if needed */
 		ret = rxr_pkt_proc_rtm_rta(ep, pending_pkt);
-		*ofi_recvwin_get_next_msg(peer->robuf) = NULL;
+		*ofi_recvwin_get_next_msg((&peer->robuf)) = NULL;
 		if (OFI_UNLIKELY(ret)) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"Error processing msg_id %d from robuf: %s\n",
