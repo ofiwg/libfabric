@@ -689,8 +689,14 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 
 	peer_smr = smr_peer_region(ep->region, idx);
 
+	if (peer_smr->pid != (int) cmd->msg.hdr.data) {
+		//TODO track and update/complete in error any transfers
+		//to or from old mapping
+		munmap(peer_smr, peer_smr->total_size);
+		smr_map_to_region(&smr_prov, &ep->region->map->peers[idx]);
+		peer_smr = smr_peer_region(ep->region, idx);
+	}
 	smr_peer_data(peer_smr)[cmd->msg.hdr.id].addr.id = idx;
-
 	smr_peer_data(ep->region)[idx].addr.id = cmd->msg.hdr.id;
 
 	smr_freestack_push(smr_inject_pool(ep->region), tx_buf);

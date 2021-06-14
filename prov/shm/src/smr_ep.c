@@ -200,6 +200,7 @@ static void smr_send_name(struct smr_ep *ep, int64_t id)
 
 	cmd->msg.hdr.op = SMR_OP_MAX + ofi_ctrl_connreq;
 	cmd->msg.hdr.id = id;
+	cmd->msg.hdr.data = ep->region->pid;
 
 	tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
 	cmd->msg.hdr.src_data = smr_get_offset(peer_smr, tx_buf);
