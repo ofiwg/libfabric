@@ -635,6 +635,12 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 		goto free_if_domains;
 	}
 
+	ret = cxip_zbcoll_init(ep_obj);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("cxip_zbcoll_init returned: %d\n", ret);
+		goto free_ep_ctrl;
+	}
+
 	CXIP_DBG("EP assigned NIC: %#x VNI: %u PID: %u\n",
 		 ep_obj->src_addr.nic,
 		 ep_obj->auth_key.vni,
@@ -645,6 +651,9 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 	fastlock_release(&ep_obj->lock);
 
 	return FI_SUCCESS;
+
+free_ep_ctrl:
+	cxip_ep_ctrl_fini(ep_obj);
 
 free_if_domains:
 	for (i--; i >= 0; i--)
@@ -1100,6 +1109,7 @@ static void cxip_ep_disable(struct cxip_ep *cxi_ep)
 
 	if (cxi_ep->ep_obj->enabled) {
 		cxip_coll_disable(cxi_ep->ep_obj);
+		cxip_zbcoll_fini(cxi_ep->ep_obj);
 		cxip_ep_ctrl_fini(cxi_ep->ep_obj);
 
 		for (i = 0; i < cxi_ep->ep_obj->pids; i++)

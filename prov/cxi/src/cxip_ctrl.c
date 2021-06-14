@@ -53,8 +53,8 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 
 			break;
 		case CXIP_CTRL_MSG_ZB_DATA:
-			ret = cxip_zb_coll_recv(req->ep_obj,
-						nic_addr, pid, mb);
+			ret = cxip_zbcoll_recv(req->ep_obj,
+						nic_addr, pid, mb.raw);
 			assert(ret == FI_SUCCESS);
 			break;
 		default:
@@ -81,7 +81,7 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
  */
 int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 {
-	struct cxip_cmdq *txq = req->ep_obj->ctrl_txq;
+	struct cxip_cmdq *txq;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
 	uint32_t pid_bits;
@@ -89,6 +89,7 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 	uint32_t match_id;
 	int ret;
 
+	txq = req->ep_obj->ctrl_txq;
 	pid_bits = req->ep_obj->domain->iface->dev->info.pid_bits;
 	cxi_build_dfa(req->send.nic_addr, req->send.pid, pid_bits,
 		      CXIP_PTL_IDX_CTRL, &dfa, &idx_ext);

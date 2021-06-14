@@ -199,6 +199,7 @@ struct cxip_environment {
 	size_t default_cq_size;
 	int optimized_mrs;
 	int disable_cq_hugetlb;
+	int zbcoll_radix;
 
 	enum cxip_llring_mode llring_mode;
 
@@ -346,26 +347,18 @@ union cxip_match_bits {
 	};
 	/* Control LE match bit format for zbcollectives */
 	struct {
-		uint64_t zb_seqno      : 8;
-		uint64_t zb_initialize : 1;
-		uint64_t zb_datavalid  : 1;
-		uint64_t zb_data       :50;
+		uint64_t zb_data       :61;
+		uint64_t zb_pad        : 3;
 		/* shares ctrl_le_type == CXIP_CTRL_LE_TYPE_CTRL_MSG
 		 * shares ctrl_msg_type == CXIP_CTRL_MSG_ZB_BCAST
 		 */
 	};
 	struct {
 		uint64_t mr_key       : 63;
+		uint64_t mr_pad       : 1;
 		/* shares ctrl_le_type == CXIP_CTRL_LE_TYPE_MR */
 	};
 	uint64_t raw;
-};
-
-/* zero-buffer collective state structure */
-#define CXIP_ZBCOLL_MAX_RADIX   4
-
-struct cxip_zb_coll_state {
-	uint32_t dummy;
 };
 
 /* libcxi Wrapper Structures */
@@ -970,6 +963,31 @@ struct cxip_oflow_buf {
 };
 
 /*
+ * Zero-buffer collectives context.
+ */
+struct cxip_zbcoll_state {
+	uint64_t *dataptr;
+	uint64_t dataval;
+	uint32_t nid;
+	uint32_t pid;
+	uint32_t num_relatives;
+	uint32_t *relatives;
+	uint32_t contribs;
+	int error;
+	bool running;
+	bool complete;
+	ofi_atomic32_t err_count;
+	ofi_atomic32_t ack_count;
+	ofi_atomic32_t rcv_count;
+};
+
+struct cxip_zbcoll_obj {
+	bool disable;
+	uint32_t count;
+	struct cxip_zbcoll_state *state;
+};
+
+/*
  * Collectives context.
  *
  * Support structure.
@@ -1331,7 +1349,7 @@ struct cxip_ep_obj {
 
 	/* collectives support */
 	struct cxip_ep_coll_obj coll;
-	struct cxip_zb_coll_state zb_coll;
+	struct cxip_zbcoll_obj zbcoll;
 
 	struct indexer rdzv_ids;
 	fastlock_t rdzv_id_lock;
@@ -1698,17 +1716,23 @@ int cxip_delete_mcast(const char *server, long reqid, bool verbose);
 int cxip_progress_mcast(int *reqid, int *mcast_id, int *root_idx);
 
 /* Perform zero-buffer collectives */
-int cxip_zb_coll_send(struct cxip_zb_coll_state *zbcoll, uint32_t dstnid,
-		      union cxip_match_bits mb);
+void cxip_tree_rowcol(int radix, int nodeidx, int *row, int *col, int *siz);
+void cxip_tree_nodeidx(int radix, int row, int col, int *nodeidx);
+int cxip_tree_relatives(int radix, int nodeidx, int maxnodes, int *rels);
 
-int cxip_zb_coll_recv(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
-		      uint32_t init_pid, const union cxip_match_bits mb);
-int cxip_zb_coll_config(struct fid_ep *ep, int num_nids, uint32_t *nids,
-			int radix);
-int cxip_zb_coll_init(struct fid_ep *ep);
-int cxip_zb_coll_barrier(struct fid_ep *ep);
-int cxip_zb_coll_bcast(struct fid_ep *ep, uint64_t data);
-void cxip_zb_coll_progress(struct fid_ep *ep);
+int cxip_zbcoll_send(struct cxip_ep_obj *ep_obj, uint32_t srcnid,
+		     uint32_t dstnid, uint64_t mb);
+void cxip_zbcoll_reset_counters(struct fid_ep *ep);
+int cxip_zbcoll_config(struct fid_ep *ep, int num_nids, uint32_t *nids,
+			bool sim);
+int cxip_zbcoll_recv(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
+		      uint32_t init_pid, uint64_t mbv);
+int cxip_zbcoll_bcast(struct fid_ep *ep, uint64_t *dataptr);
+int cxip_zbcoll_barrier(struct fid_ep *ep);
+int cxip_zbcoll_progress(struct fid_ep *ep);
+
+void cxip_zbcoll_fini(struct cxip_ep_obj *ep_obj);
+int cxip_zbcoll_init(struct cxip_ep_obj *ep_obj);
 
 /*
  * CNTR/CQ wait object file list element

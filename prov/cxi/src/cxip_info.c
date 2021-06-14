@@ -223,6 +223,7 @@ struct cxip_environment cxip_env = {
 	.ctrl_rx_eq_max_size = 67108864,
 	.default_cq_size = CXIP_CQ_DEF_SZ,
 	.disable_cq_hugetlb = false,
+	.zbcoll_radix = 2,
 };
 
 static void cxip_env_init(void)
@@ -323,6 +324,15 @@ static void cxip_env_init(void)
 		else
 			CXIP_WARN("Unrecognized llring_mode: %s\n",
 				  param_str);
+	}
+
+	fi_param_define(&cxip_prov, "zbcoll_radix", FI_PARAM_INT,
+			"Set radix of the zero-byte barrier tree.");
+	fi_param_get_int(&cxip_prov, "zbcoll_radix", &cxip_env.zbcoll_radix);
+	if (cxip_env.zbcoll_radix < 2) {
+		CXIP_WARN("Invalid zbcoll_radix=%d, reset to 2\n",
+			  cxip_env.zbcoll_radix);
+		cxip_env.zbcoll_radix = 2;
 	}
 
 	fi_param_define(&cxip_prov, "cq_policy", FI_PARAM_STRING,
