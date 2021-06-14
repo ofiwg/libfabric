@@ -314,6 +314,7 @@ enum cxip_ctrl_le_type {
 enum cxip_ctrl_msg_type {
 	CXIP_CTRL_MSG_FC_NOTIFY = 0,
 	CXIP_CTRL_MSG_FC_RESUME,
+	CXIP_CTRL_MSG_ZB_DATA,
 };
 
 union cxip_match_bits {
@@ -333,21 +334,38 @@ union cxip_match_bits {
 	struct {
 		uint64_t rdzv_id_lo : CXIP_RDZV_ID_WIDTH;
 	};
-	/* Control LE match bit format */
+	/* Control LE match bit format for notify/resume */
 	struct {
 		uint64_t txc_id       : 8;
 		uint64_t rxc_id       : 8;
 		uint64_t drops        : 16;
-		uint64_t pad1         : 30;
+		uint64_t pad1         : 29;
+		uint64_t ctrl_msg_type: 2;
 		uint64_t ctrl_le_type : 1;
-		uint64_t ctrl_msg_type: 1;
+	};
+	/* Control LE match bit format for zbcollectives */
+	struct {
+		uint64_t zb_seqno      : 8;
+		uint64_t zb_initialize : 1;
+		uint64_t zb_datavalid  : 1;
+		uint64_t zb_data       :50;
+		/* shares ctrl_le_type == CXIP_CTRL_LE_TYPE_CTRL_MSG
+		 * shares ctrl_msg_type == CXIP_CTRL_MSG_ZB_BCAST
+		 */
 	};
 	struct {
 		uint64_t mr_key       : 63;
+		/* shares ctrl_le_type == CXIP_CTRL_LE_TYPE_MR */
 	};
 	uint64_t raw;
 };
 
+/* zero-buffer collective state structure */
+#define CXIP_ZBCOLL_MAX_RADIX   4
+
+struct cxip_zb_coll_state {
+	uint32_t dummy;
+};
 
 /* libcxi Wrapper Structures */
 
@@ -1278,6 +1296,7 @@ struct cxip_ep_obj {
 
 	/* collectives support */
 	struct cxip_ep_coll_obj coll;
+	struct cxip_zb_coll_state zb_coll;
 
 	struct indexer rdzv_ids;
 	fastlock_t rdzv_id_lock;
@@ -1642,6 +1661,19 @@ int cxip_request_mcast(const char *server, const char *cfg_path,
 		       bool verbose);
 int cxip_delete_mcast(const char *server, long reqid, bool verbose);
 int cxip_progress_mcast(int *reqid, int *mcast_id, int *root_idx);
+
+/* Perform zero-buffer collectives */
+int cxip_zb_coll_send(struct cxip_zb_coll_state *zbcoll, uint32_t dstnid,
+		      union cxip_match_bits mb);
+
+int cxip_zb_coll_recv(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
+		      uint32_t init_pid, const union cxip_match_bits mb);
+int cxip_zb_coll_config(struct fid_ep *ep, int num_nids, uint32_t *nids,
+			int radix);
+int cxip_zb_coll_init(struct fid_ep *ep);
+int cxip_zb_coll_barrier(struct fid_ep *ep);
+int cxip_zb_coll_bcast(struct fid_ep *ep, uint64_t data);
+void cxip_zb_coll_progress(struct fid_ep *ep);
 
 /*
  * CNTR/CQ wait object file list element

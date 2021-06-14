@@ -52,6 +52,11 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 			assert(ret == FI_SUCCESS);
 
 			break;
+		case CXIP_CTRL_MSG_ZB_DATA:
+			ret = cxip_zb_coll_recv(req->ep_obj,
+						nic_addr, pid, mb);
+			assert(ret == FI_SUCCESS);
+			break;
 		default:
 			CXIP_FATAL("Unexpected msg type: %d\n",
 				   mb.ctrl_msg_type);
