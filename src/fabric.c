@@ -62,7 +62,13 @@ struct ofi_prov {
 	bool			hidden;
 };
 
+enum ofi_prov_order {
+	OFI_PROV_ORDER_VERSION,
+	OFI_PROV_ORDER_REGISTER,
+};
+
 static struct ofi_prov *prov_head, *prov_tail;
+static enum ofi_prov_order prov_order = OFI_PROV_ORDER_VERSION;
 int ofi_init = 0;
 extern struct ofi_common_locks common_locks;
 
@@ -125,7 +131,8 @@ static void ofi_insert_prov(struct ofi_prov *prov)
 	for (prev = NULL, cur = prov_head; cur; prev = cur, cur = cur->next) {
 		if ((strlen(prov->prov_name) == strlen(cur->prov_name)) &&
 		    !strcasecmp(prov->prov_name, cur->prov_name)) {
-			if (FI_VERSION_LT(cur->provider->version,
+			if ((prov_order == OFI_PROV_ORDER_VERSION) &&
+			    FI_VERSION_LT(cur->provider->version,
 					  prov->provider->version)) {
 				cur->hidden = true;
 				prov->next = cur;
@@ -611,7 +618,7 @@ static void ofi_reg_dl_prov(const char *lib)
 
 static void ofi_ini_dir(const char *dir)
 {
-	int n = 0;
+	int n;
 	char *lib;
 	struct dirent **liblist = NULL;
 
@@ -637,8 +644,8 @@ libdl_done:
 	free(liblist);
 }
 
-/* Search standard system library paths (i.e. LD_LIBRARY_PATH) for known DL provider
- * libraries.
+/* Search standard system library paths (i.e. LD_LIBRARY_PATH) for DLLs for
+ * known providers.
  */
 static void ofi_find_prov_libs(void)
 {
@@ -648,7 +655,6 @@ static void ofi_find_prov_libs(void)
 	char* short_prov_name;
 
 	for (prov = prov_head; prov; prov = prov->next) {
-
 		if (!prov->prov_name)
 			continue;
 
@@ -669,6 +675,55 @@ static void ofi_find_prov_libs(void)
 		free(lib);
 	}
 }
+
+static void ofi_load_dl_prov(void)
+{
+	char **dirs;
+	char *provdir = NULL;
+	void *dlhandle;
+	int i;
+
+	/* If dlopen fails, assume static linking and return */
+	dlhandle = dlopen(NULL, RTLD_NOW);
+	if (!dlhandle)
+		return;
+	dlclose(dlhandle);
+
+	fi_param_define(NULL, "provider_path", FI_PARAM_STRING,
+			"Search for providers in specific path.  Path is "
+			"specified similar to dir1:dir2:dir3.  If the path "
+			"starts with @, loaded providers are given preference "
+			"based on discovery order, rather than version. "
+			"(default: " PROVDLDIR ")");
+
+	fi_param_get_str(NULL, "provider_path", &provdir);
+	if (!provdir || !strlen(provdir)) {
+		ofi_find_prov_libs();
+		dirs = ofi_split_and_alloc(PROVDLDIR, ":", NULL);
+	} else if (provdir[0] == '@') {
+		prov_order = OFI_PROV_ORDER_REGISTER;
+		if (strlen(provdir) == 1)
+			dirs = ofi_split_and_alloc(PROVDLDIR, ":", NULL);
+		else
+			dirs = ofi_split_and_alloc(&provdir[1], ":", NULL);
+	} else {
+		dirs = ofi_split_and_alloc(provdir, ":", NULL);
+	}
+
+	if (dirs) {
+		for (i = 0; dirs[i]; i++)
+			ofi_ini_dir(dirs[i]);
+
+		ofi_free_string_array(dirs);
+	}
+}
+
+#else /* HAVE_LIBDL */
+
+static void ofi_load_dl_prov(void)
+{
+}
+
 #endif
 
 void fi_ini(void)
@@ -707,37 +762,7 @@ void fi_ini(void)
 	fi_param_get_str(NULL, "provider", &param_val);
 	ofi_create_filter(&prov_filter, param_val);
 
-#ifdef HAVE_LIBDL
-	int n = 0;
-	char **dirs;
-	char *provdir = NULL;
-	void *dlhandle;
-
-	/* If dlopen fails, assume static linking and just return
-	   without error */
-	dlhandle = dlopen(NULL, RTLD_NOW);
-	if (dlhandle == NULL) {
-		goto libdl_done;
-	}
-	dlclose(dlhandle);
-
-	fi_param_define(NULL, "provider_path", FI_PARAM_STRING,
-			"Search for providers in specific path (default: "
-			PROVDLDIR ")");
-	fi_param_get_str(NULL, "provider_path", &provdir);
-	if (!provdir) {
-		provdir = PROVDLDIR;
-		ofi_find_prov_libs();
-	}
-	dirs = ofi_split_and_alloc(provdir, ":", NULL);
-	if (dirs) {
-		for (n = 0; dirs[n]; ++n) {
-			ofi_ini_dir(dirs[n]);
-		}
-		ofi_free_string_array(dirs);
-	}
-libdl_done:
-#endif
+	ofi_load_dl_prov();
 
 	ofi_register_provider(PSM3_INIT, NULL);
 	ofi_register_provider(PSM2_INIT, NULL);
