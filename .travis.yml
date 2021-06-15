@@ -35,18 +35,13 @@ addons:
             - abi-compliance-checker
             - abi-dumper
     coverity_scan:
-      project:
-        name: "ofiwg/libfabric"
-        description: "Libfabric project coverity scans"
-      notification_email: sean.hefty@intel.com
-      build_command_prepend: "./autogen.sh; ./configure"
-      build_command: "make -j2"
-      # It might be overkill to run a full scan across the compiler test matrix
-      # for every PR to master. The coverity addon can not selectively run for
-      # certain OSes or compilers. Once a couple runs succeed, change this to a
-      # coverity-scan branch that we push to on-demand during releases or as
-      # needed..
-      branch_pattern: master
+        project:
+            name: "ofiwg/libfabric"
+            description: "Libfabric project coverity scans"
+        notification_email: sean.hefty@intel.com
+        build_command_prepend: "./autogen.sh; ./configure --enable-efa=$RDMA_CORE_PATH --enable-psm2 --enable-psm3=$RDMA_CORE_PATH --enable-usnic --enable-verbs=$RDMA_CORE_PATH"
+        build_command: "make -j2"
+        branch_pattern: master
 
 env:
     global:
