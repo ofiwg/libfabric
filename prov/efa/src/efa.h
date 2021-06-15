@@ -558,6 +558,10 @@ struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 {
 	struct util_av_entry *util_av_entry;
 	struct efa_av_entry *av_entry;
+
+	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
+		return NULL;
+
 	util_av_entry = ofi_bufpool_get_ibuf(ep->util_ep.av->av_entry_pool,
 	                                     addr);
 	av_entry = (struct efa_av_entry *)util_av_entry->data;
