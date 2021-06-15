@@ -758,6 +758,9 @@ void rxr_ep_set_features(struct rxr_ep *ep)
 		ep->features[0] |= RXR_REQ_FEATURE_RDMA_READ;
 
 	ep->features[0] |= RXR_REQ_FEATURE_DELIVERY_COMPLETE;
+
+	if (ep->use_zcpy_rx)
+		ep->features[0] |= RXR_REQ_FEATURE_ZERO_COPY_RECEIVE;
 }
 
 static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
