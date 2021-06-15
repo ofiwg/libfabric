@@ -144,6 +144,7 @@ void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 	assert(pkt_entry->addr != FI_ADDR_NOTAVAIL);
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
 	assert(!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED));
 
 	handshake_pkt = (struct rxr_handshake_hdr *)pkt_entry->pkt;
@@ -213,6 +214,7 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 
 	bytes_left = rx_entry->total_len - rx_entry->bytes_received;
 	peer = rxr_ep_get_peer(ep, rx_entry->addr);
+	assert(peer);
 	rxr_pkt_calc_cts_window_credits(ep, peer, bytes_left,
 					rx_entry->credit_request,
 					&window, &rx_entry->credit_cts);
@@ -260,8 +262,10 @@ void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 	/* Return any excess tx_credits that were borrowed for the request */
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	tx_entry->credit_allocated = ofi_div_ceil(cts_pkt->window, ep->max_data_payload_size);
-	if (tx_entry->credit_allocated < tx_entry->credit_request)
+	if (tx_entry->credit_allocated < tx_entry->credit_request) {
+		assert(peer);
 		peer->tx_credits += tx_entry->credit_request - tx_entry->credit_allocated;
+	}
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 
@@ -456,6 +460,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 		ep->tx_pending--;
 	} else {
 		peer = rxr_ep_get_peer(ep, context_pkt_entry->addr);
+		assert(peer);
 		if (!peer->is_local)
 			rxr_ep_dec_tx_pending(ep, peer, 0);
 	}

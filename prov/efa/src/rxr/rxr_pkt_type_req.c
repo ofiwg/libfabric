@@ -118,6 +118,7 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 	base_hdr->flags = 0;
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	assert(peer);
 
 	if (OFI_UNLIKELY(!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))) {
 		/*
@@ -272,6 +273,7 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
 	struct rdm_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, addr);
+	assert(peer);
 
 	if (peer->is_local) {
 		assert(ep->use_shm);
@@ -994,6 +996,7 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	if (!rx_entry->peer) {
 		rx_entry->addr = pkt_entry->addr;
 		rx_entry->peer = rxr_ep_get_peer(ep, rx_entry->addr);
+		assert(rx_entry->peer);
 		ofi_atomic_inc32(&rx_entry->peer->use_cnt);
 	}
 
@@ -1256,6 +1259,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 
 	need_ordering = false;
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
 
 	if (!peer->is_local) {
 		/*

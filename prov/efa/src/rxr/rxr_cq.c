@@ -241,6 +241,7 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 	struct rdm_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
 
 	/*
 	 * Queue the packet if it has not been retransmitted yet.
@@ -317,10 +318,10 @@ int rxr_cq_handle_error(struct rxr_ep *ep, ssize_t prov_errno, struct rxr_pkt_en
 	 * writing an error completion or event to the application.
 	 */
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
 	if (rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_HANDSHAKE_PKT) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Squelching error CQE for RXR_HANDSHAKE_PKT\n");
-		assert(peer);
 		rxr_ep_dec_tx_pending(ep, peer, 1);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		return 0;
@@ -774,6 +775,7 @@ void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entr
 		dlist_remove(&tx_entry->entry);
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	assert(peer);
 	peer->tx_credits += tx_entry->credit_allocated;
 
 	if (tx_entry->cq_entry.flags & FI_READ) {

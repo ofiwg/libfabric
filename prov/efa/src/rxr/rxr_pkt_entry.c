@@ -130,6 +130,7 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 	 */
 	if (OFI_UNLIKELY(pkt->state == RXR_PKT_ENTRY_RNR_RETRANSMIT)) {
 		peer = rxr_ep_get_peer(ep, pkt->addr);
+		assert(peer);
 		peer->rnr_queued_pkt_cnt--;
 		peer->timeout_interval = 0;
 		peer->rnr_timeout_exp = 0;
@@ -173,6 +174,7 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 		struct rdm_peer *peer;
 
 		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+		assert(peer);
 
 		if (peer->is_local)
 			ep->rx_bufs_shm_to_post++;
@@ -334,11 +336,13 @@ ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	struct rdm_peer *peer;
 	size_t ret;
 
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(ep->tx_pending <= ep->max_outstanding_tx);
 
 	if (ep->tx_pending == ep->max_outstanding_tx)
 		return -FI_EAGAIN;
+
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
 
 	if (peer->flags & RXR_PEER_IN_BACKOFF)
 		return -FI_EAGAIN;
@@ -381,6 +385,7 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	struct rdm_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
 
 	if (pkt_entry->send && pkt_entry->send->iov_count > 0) {
 		msg.msg_iov = pkt_entry->send->iov;
@@ -415,6 +420,7 @@ ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,
 
 	/* currently only EOR packet is injected using shm ep */
 	peer = rxr_ep_get_peer(ep, addr);
+	assert(peer);
 
 	assert(ep->use_shm && peer->is_local);
 	return fi_inject(ep->shm_ep, rxr_pkt_start(pkt_entry), pkt_entry->pkt_size,

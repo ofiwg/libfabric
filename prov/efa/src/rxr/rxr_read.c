@@ -353,6 +353,7 @@ int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, int entry_type, void *
 		assert(entry_type == RXR_RX_ENTRY);
 		peer = rxr_ep_get_peer(ep, ((struct rxr_rx_entry *)x_entry)->addr);
 	}
+	assert(peer);
 
 	lower_ep_type = (peer->is_local) ? SHM_EP : EFA_EP;
 	read_entry = rxr_read_alloc_entry(ep, entry_type, x_entry, lower_ep_type);
@@ -449,6 +450,7 @@ int rxr_read_init_iov(struct rxr_ep *ep,
 		if (!tx_entry->mr[0]) {
 			for (i = 0; i < tx_entry->iov_count; ++i) {
 				assert(!tx_entry->mr[i]);
+				assert(peer);
 
 				if (peer->is_local)
 					err = efa_mr_reg_shm(rxr_ep_domain(ep)->rdm_domain,
@@ -511,8 +513,10 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 
 	peer = rxr_ep_get_peer(ep, read_entry->addr);
 
-	if (read_entry->lower_ep_type == SHM_EP)
+	if (read_entry->lower_ep_type == SHM_EP) {
+		assert(peer);
 		shm_fiaddr = peer->shm_fiaddr;
+	}
 
 	max_read_size = (read_entry->lower_ep_type == EFA_EP) ?
 				efa_max_rdma_size(ep->rdm_ep) : SIZE_MAX;
@@ -596,6 +600,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 			/* read from self, no peer */
 			ep->tx_pending++;
 		} else if (read_entry->lower_ep_type == EFA_EP) {
+			assert(peer);
 			rxr_ep_inc_tx_pending(ep, peer);
 		}
 

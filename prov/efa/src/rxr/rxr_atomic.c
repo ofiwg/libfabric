@@ -140,6 +140,7 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 	}
 
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
+	assert(peer);
 
 	if (peer->flags & RXR_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;
@@ -230,6 +231,7 @@ rxr_atomic_inject(struct fid_ep *ep,
 
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
+	assert(peer);
 	if (peer->is_local) {
 		assert(rxr_ep->use_shm);
 		if (!(shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR))
@@ -278,6 +280,7 @@ rxr_atomic_writemsg(struct fid_ep *ep,
 
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
+	assert(peer);
 	if (peer->is_local) {
 		assert(rxr_ep->use_shm);
 		rxr_atomic_init_shm_msg(&shm_msg, msg, rma_iov, shm_desc);
@@ -352,6 +355,7 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
+	assert(peer);
 	if (peer->is_local) {
 		assert(rxr_ep->use_shm);
 		rxr_atomic_init_shm_msg(&shm_msg, msg, shm_rma_iov, shm_desc);
@@ -435,6 +439,7 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
+	assert(peer);
 	if (peer->is_local) {
 		assert(rxr_ep->use_shm);
 		rxr_atomic_init_shm_msg(&shm_msg, msg, shm_rma_iov, shm_desc);

@@ -87,6 +87,7 @@ ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	 * from the receiver, so here we call rxr_pkt_wait_handshake().
 	 */
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+	assert(peer);
 
 	err = rxr_pkt_wait_handshake(rxr_ep, tx_entry->addr, peer);
 	if (OFI_UNLIKELY(err)) {
@@ -140,6 +141,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	else
 		delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+	assert(peer);
 
 	if (delivery_complete_requested && !(peer->is_local)) {
 		tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
@@ -296,6 +298,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
+	assert(peer);
 
 	if (peer->flags & RXR_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;
