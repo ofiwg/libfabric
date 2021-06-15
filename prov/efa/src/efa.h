@@ -544,6 +544,35 @@ bool efa_both_support_rdma_read(struct rxr_ep *ep, struct rdm_peer *peer)
 	       (peer->is_self || efa_peer_support_rdma_read(peer));
 }
 
+/**
+ * @brief determines whether a peer needs the endpoint to include
+ * raw address int the req packet header.
+ *
+ * There are two cases a peer need the raw address in REQ packet header:
+ *
+ * 1. the initial packets to a peer should include the raw address,
+ * because the peer might not have ep's address in its address vector
+ * causing the peer to be unable to send packet back. Normally, after
+ * an endpoint received a hanshake packet from a peer, it can stop
+ * including raw address in packet header.
+ *
+ * 2. If the peer is in zero copy receive mode, endpoint will include the
+ * raw address in the header even afer received handshake from a header. This
+ * is because zero copy receive requires the packet header size to remain
+ * the same.
+ *
+ * @params[in]	peer	pointer to rdm_peer
+ * @return	a boolean indicating whether the peer needs the raw address header
+ */
+static inline
+bool rxr_peer_need_raw_addr_hdr(struct rdm_peer *peer)
+{
+	if (OFI_UNLIKELY(!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)))
+		return true;
+
+	return peer->features[0] & RXR_REQ_FEATURE_ZERO_COPY_RECEIVE;
+}
+
 static inline
 size_t efa_max_rdma_size(struct fid_ep *ep_fid)
 {
@@ -618,5 +647,14 @@ static inline bool efa_is_cache_available(struct efa_domain *efa_domain)
 
 #define RXR_REQ_OPT_HDR_ALIGNMENT 8
 #define RXR_REQ_OPT_RAW_ADDR_HDR_SIZE (((sizeof(struct rxr_req_opt_raw_addr_hdr) + EFA_EP_ADDR_LEN - 1)/RXR_REQ_OPT_HDR_ALIGNMENT + 1) * RXR_REQ_OPT_HDR_ALIGNMENT)
+
+/*
+ * Per libfabric standard, the prefix must be a multiple of 8, hence the static assert
+ */
+#define RXR_MSG_PREFIX_SIZE (sizeof(struct rxr_pkt_entry) + sizeof(struct rxr_eager_msgrtm_hdr) + RXR_REQ_OPT_RAW_ADDR_HDR_SIZE)
+
+#if defined(static_assert) && defined(__x86_64__)
+static_assert(RXR_MSG_PREFIX_SIZE % 8 == 0, "message prefix size alignment check");
+#endif
 
 #endif /* EFA_H */

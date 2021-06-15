@@ -492,14 +492,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 			info->mode |= FI_MSG_PREFIX;
 			info->tx_attr->mode |= FI_MSG_PREFIX;
 			info->rx_attr->mode |= FI_MSG_PREFIX;
-
-			/*
-			 * The prefix needs to be a multiple of 8. The pkt_entry
-			 * is already at 64 bytes (128 with debug).
-			 */
-			info->ep_attr->msg_prefix_size =  sizeof(struct rxr_pkt_entry)
-							  + sizeof(struct rxr_eager_msgrtm_hdr);
-			assert(!(info->ep_attr->msg_prefix_size % 8));
+			info->ep_attr->msg_prefix_size = RXR_MSG_PREFIX_SIZE;
 			FI_INFO(&rxr_prov, FI_LOG_CORE,
 				"FI_MSG_PREFIX size = %ld\n", info->ep_attr->msg_prefix_size);
 		}

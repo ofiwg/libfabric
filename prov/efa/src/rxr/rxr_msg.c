@@ -203,20 +203,6 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry, ctrl_type + tagged, 0);
 	}
 
-	if (rxr_ep->use_zcpy_rx) {
-		/*
-		 * The application can not deal with varying packet header sizes
-		 * before and after receiving a handshake. Forcing a handshake
-		 * here so we can always use the smallest eager msg packet
-		 * header size to determine the msg_prefix_size.
-		 */
-		err = rxr_pkt_wait_handshake(rxr_ep, tx_entry->addr, peer);
-		if (OFI_UNLIKELY(err))
-			return err;
-
-		assert(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED);
-	}
-
 	if (efa_ep_is_cuda_mr(tx_entry->desc[0])) {
 		return rxr_msg_post_cuda_rtm(rxr_ep, tx_entry);
 	}

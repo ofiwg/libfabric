@@ -120,7 +120,7 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(peer);
 
-	if (OFI_UNLIKELY(!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))) {
+	if (rxr_peer_need_raw_addr_hdr(peer)) {
 		/*
 		 * This is the first communication with this peer on this
 		 * endpoint, so send the core's address for this EP in the REQ
