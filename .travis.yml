@@ -41,7 +41,7 @@ addons:
         notification_email: sean.hefty@intel.com
         build_command_prepend: "./autogen.sh; ./configure --enable-efa=$RDMA_CORE_PATH --enable-psm2 --enable-psm3=$RDMA_CORE_PATH --enable-usnic --enable-verbs=$RDMA_CORE_PATH"
         build_command: "make -j2"
-        branch_pattern: master
+        branch_pattern: main
 
 env:
     global:
