@@ -546,7 +546,7 @@ void smr_format_sar(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t devi
 	sar_msg->sar[0].status = SMR_SAR_FREE;
 	sar_msg->sar[1].status = SMR_SAR_FREE;
 	if (cmd->msg.hdr.op != ofi_op_read_req)
-		smr_copy_to_sar(sar_msg, NULL, cmd, iface, device ,iov, count,
+		smr_copy_to_sar(sar_msg, resp, cmd, iface, device ,iov, count,
 				&pending->bytes_done, &pending->next);
 }
 
@@ -765,7 +765,7 @@ static int smr_recvmsg_fd(int sock, int64_t *peer_id, int *fds, int nfds)
 	cmsg = CMSG_FIRSTHDR(&msg);
 	assert(cmsg && cmsg->cmsg_len == CMSG_LEN(ctrl_size) &&
 	       cmsg->cmsg_level == SOL_SOCKET &&
-	       cmsg->cmsg_type == SCM_RIGHTS);
+	       cmsg->cmsg_type == SCM_RIGHTS && CMSG_DATA(cmsg));
 	memcpy(fds, CMSG_DATA(cmsg), ctrl_size);
 out:
 	free(ctrl_buf);
