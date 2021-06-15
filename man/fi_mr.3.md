@@ -800,6 +800,13 @@ configure registration caches.
   are: 0 or 1. Note that the ROCR memory monitor requires a ROCR version with
   unified virtual addressing enabled.
 
+More direct access to the internal registration cache is possible through the
+fi_open() call, using the "mr_cache" service name.  Once opened, custom
+memory monitors may be installed.  A memory monitor is a component of the cache
+responsible for detecting changes in virtual to physical address mappings.
+Some level of control over the cache is possible through the above mentioned
+environment variables.
+
 # SEE ALSO
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),

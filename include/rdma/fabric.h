@@ -520,6 +520,8 @@ enum {
 	FI_CLASS_MC,
 	FI_CLASS_NIC,
 	FI_CLASS_AV_SET,
+	FI_CLASS_MR_CACHE,
+	FI_CLASS_MEM_MONITOR,
 };
 
 struct fi_eq_attr;
@@ -578,7 +580,10 @@ struct fid_fabric {
 	uint32_t		api_version;
 };
 
-int fi_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context);
+int fi_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+	      void *context);
+int fi_open(uint32_t version, const char *name, void *attr, size_t attr_len,
+	    uint64_t flags, struct fid **fid, void *context);
 
 struct fid_nic {
 	struct fid		fid;
@@ -642,6 +647,7 @@ enum {
 	FI_GETWAITOBJ,		/*enum fi_wait_obj * */
 	FI_GET_VAL,		/* struct fi_fid_var */
 	FI_SET_VAL,		/* struct fi_fid_var */
+	FI_EXPORT_FID,		/* struct fi_fid_export */
 };
 
 static inline int fi_control(struct fid *fid, int command, void *arg)

@@ -196,6 +196,7 @@ rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fi_collective.h \
 	$(top_srcdir)/include/rdma/fi_domain.h \
 	$(top_srcdir)/include/rdma/fi_eq.h \
+	$(top_srcdir)/include/rdma/fi_ext.h \
 	$(top_srcdir)/include/rdma/fi_rma.h \
 	$(top_srcdir)/include/rdma/fi_endpoint.h \
 	$(top_srcdir)/include/rdma/fi_errno.h \
@@ -237,6 +238,7 @@ real_man_pages = \
         man/man3/fi_errno.3 \
         man/man3/fi_eq.3 \
         man/man3/fi_fabric.3 \
+        man/man3/fi_provider.3 \
         man/man3/fi_getinfo.3 \
         man/man3/fi_mr.3 \
         man/man3/fi_msg.3 \

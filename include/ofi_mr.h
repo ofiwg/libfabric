@@ -50,6 +50,10 @@
 #include <ofi_tree.h>
 #include <ofi_hmem.h>
 
+
+int ofi_open_mr_cache(uint32_t version, void *attr, size_t attr_len,
+		      uint64_t flags, struct fid **fid, void *context);
+
 struct ofi_mr_info {
 	struct iovec iov;
 	enum fi_hmem_iface iface;
@@ -151,6 +155,8 @@ void ofi_monitor_init(struct ofi_mem_monitor *monitor);
 void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor);
 void ofi_monitors_init(void);
 void ofi_monitors_cleanup(void);
+int ofi_monitor_import(struct fid *fid);
+
 int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 			   struct ofi_mr_cache *cache);
 void ofi_monitors_del_cache(struct ofi_mr_cache *cache);
@@ -191,8 +197,8 @@ struct ofi_memhooks {
 extern struct ofi_mem_monitor *memhooks_monitor;
 
 extern struct ofi_mem_monitor *cuda_monitor;
-
 extern struct ofi_mem_monitor *rocr_monitor;
+extern struct ofi_mem_monitor *import_monitor;
 
 /*
  * Used to store registered memory regions into a lookup map.  This

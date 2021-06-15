@@ -49,10 +49,12 @@
 #include "ofi_prov.h"
 #include "ofi_perf.h"
 #include "ofi_hmem.h"
+#include "rdma/fi_ext.h"
 
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
 #endif
+
 
 struct ofi_prov {
 	struct ofi_prov		*next;
@@ -1274,6 +1276,19 @@ uint32_t DEFAULT_SYMVER_PRE(fi_version)(void)
 	return FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION);
 }
 DEFAULT_SYMVER(fi_version_, fi_version, FABRIC_1.0);
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+int DEFAULT_SYMVER_PRE(fi_open)(uint32_t version, const char *name,
+		void *attr, size_t attr_len, uint64_t flags,
+		struct fid **fid, void *context)
+{
+	if (!strcasecmp("mr_cache", name))
+		return ofi_open_mr_cache(version, attr, attr_len,
+					 flags, fid, context);
+
+	return -FI_ENOSYS;
+}
+CURRENT_SYMVER(fi_open_, fi_open);
 
 static const char *const errstr[] = {
 	[FI_EOTHER - FI_ERRNO_OFFSET] = "Unspecified error",
