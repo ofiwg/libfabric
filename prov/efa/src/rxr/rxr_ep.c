@@ -146,9 +146,86 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 	return rx_entry;
 }
 
+/**
+ * @brief post user provided receiving buffer to device
+ *
+ * @param[in]	ep		endpint
+ * @param[in]	rx_entry	rx_entry that contain user buffer information
+ * @param[in]	flags		user supplied flags passed to fi_recv
+ */
+int rxr_ep_post_user_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, uint64_t flags)
+{
+	struct rxr_pkt_entry *pkt_entry;
+	struct efa_mr *mr;
+	struct iovec msg_iov;
+	struct fi_msg msg = {0};
+	int err;
 
-/* Post buffers as undirected recv (FI_ADDR_UNSPEC) */
-int rxr_ep_post_buf(struct rxr_ep *ep, const struct fi_msg *posted_recv, uint64_t flags, enum rxr_lower_ep_type lower_ep_type)
+	assert(rx_entry->iov_count == 1);
+	assert(rx_entry->iov[0].iov_len >= ep->msg_prefix_size);
+	pkt_entry = (struct rxr_pkt_entry *)rx_entry->iov[0].iov_base;
+	assert(pkt_entry);
+
+	/*
+	 * The ownership of the prefix buffer lies with the application, do not
+	 * put it on the dbg list for cleanup during shutdown or poison it. The
+	 * provider loses jurisdiction over it soon after writing the rx
+	 * completion.
+	 */
+	dlist_init(&pkt_entry->entry);
+	mr = (struct efa_mr *)rx_entry->desc[0];
+	pkt_entry->mr = &mr->mr_fid;
+	pkt_entry->type = RXR_PKT_ENTRY_USER;
+	pkt_entry->state = RXR_PKT_ENTRY_IN_USE;
+	pkt_entry->next = NULL;
+	/*
+	 * The actual receiving buffer size (pkt_size) is
+	 *    rx_entry->total_len - sizeof(struct rxr_pkt_entry)
+	 * because the first part of user buffer was used to
+	 * construct pkt_entry. The actual receiving buffer
+	 * posted to device starts from pkt_entry->pkt.
+	 */
+	pkt_entry->pkt_size = rx_entry->iov[0].iov_len - sizeof(struct rxr_pkt_entry);
+
+	pkt_entry->x_entry = rx_entry;
+	rx_entry->state = RXR_RX_MATCHED;
+
+	msg_iov.iov_base = pkt_entry->pkt;
+	msg_iov.iov_len = pkt_entry->pkt_size;
+	assert(msg_iov.iov_len <= ep->mtu_size);
+
+	msg.iov_count = 1;
+	msg.msg_iov = &msg_iov;
+	msg.desc = rx_entry->desc;
+	msg.addr = FI_ADDR_UNSPEC;
+	msg.context = pkt_entry;
+	msg.data = 0;
+
+	err = fi_recvmsg(ep->rdm_ep, &msg, flags);
+	if (OFI_UNLIKELY(err)) {
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"failed to post user supplied buffer %d (%s)\n", -err,
+			fi_strerror(-err));
+		return err;
+	}
+
+	ep->posted_bufs_efa++;
+	return 0;
+}
+
+/**
+ * @brief post an internal receive buffer to lower endpoint
+ *
+ * The buffer was posted as undirected recv, (address was set to FI_ADDR_UNSPEC)
+ *
+ * @param[in]	ep		endpoint
+ * @param[in]	flags		flags passed to lower provider, can have FI_MORE
+ * @param[in]	lower_ep_type	lower endpoint type, can be either SHM_EP or EFA_EP
+ * @return	On success, return 0
+ * 		On failure, return a negative error code.
+ */
+int rxr_ep_post_prov_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lower_ep_type)
 {
 	struct fi_msg msg = {0};
 	struct iovec msg_iov;
@@ -161,10 +238,7 @@ int rxr_ep_post_buf(struct rxr_ep *ep, const struct fi_msg *posted_recv, uint64_
 		rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->rx_pkt_shm_pool);
 		break;
 	case EFA_EP:
-		if (posted_recv)
-			rx_pkt_entry = rxr_pkt_entry_init_prefix(ep, posted_recv, ep->rx_pkt_efa_pool);
-		else
-			rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->rx_pkt_efa_pool);
+		rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->rx_pkt_efa_pool);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -204,24 +278,11 @@ int rxr_ep_post_buf(struct rxr_ep *ep, const struct fi_msg *posted_recv, uint64_
 		break;
 	case EFA_EP:
 #if ENABLE_DEBUG
-		if (rx_pkt_entry->type != RXR_PKT_ENTRY_USER)
-			dlist_insert_tail(&rx_pkt_entry->dbg_entry,
-					  &ep->rx_posted_buf_list);
+		dlist_insert_tail(&rx_pkt_entry->dbg_entry,
+				  &ep->rx_posted_buf_list);
 #endif
 		desc = fi_mr_desc(rx_pkt_entry->mr);
 		msg.desc = &desc;
-		/*
-		 * Use the actual receive sizes from the application
-		 * minus size of struct rxr_pkt_entry.
-		 * This is because we use the application buffer to
-		 * construct a pkt_entry, and use pkt_entry->pkt to
-		 * receive data.
-		 */
-		if (posted_recv) {
-			msg_iov.iov_len = posted_recv->msg_iov->iov_len - sizeof(struct rxr_pkt_entry);
-			msg.data = posted_recv->data;
-			assert(msg_iov.iov_len <= ep->mtu_size);
-		}
 		ret = fi_recvmsg(ep->rdm_ep, &msg, flags);
 		if (OFI_UNLIKELY(ret)) {
 			rxr_pkt_entry_release_rx(ep, rx_pkt_entry);
@@ -797,7 +858,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 			if (i == rx_size - 1)
 				flags = 0;
 
-			ret = rxr_ep_post_buf(ep, NULL, flags, EFA_EP);
+			ret = rxr_ep_post_prov_buf(ep, flags, EFA_EP);
 
 			if (ret)
 				goto out;
@@ -835,7 +896,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 				if (i == shm_rx_size - 1)
 					flags = 0;
 
-				ret = rxr_ep_post_buf(ep, NULL, flags, SHM_EP);
+				ret = rxr_ep_post_prov_buf(ep, flags, SHM_EP);
 
 				if (ret)
 					goto out;
@@ -1306,7 +1367,7 @@ static inline int rxr_ep_bulk_post_recv(struct rxr_ep *ep)
 	while (ep->rx_bufs_efa_to_post) {
 		if (ep->rx_bufs_efa_to_post == 1)
 			flags = 0;
-		ret = rxr_ep_post_buf(ep, NULL, flags, EFA_EP);
+		ret = rxr_ep_post_prov_buf(ep, flags, EFA_EP);
 		if (OFI_LIKELY(!ret))
 			ep->rx_bufs_efa_to_post--;
 		else
@@ -1317,7 +1378,7 @@ static inline int rxr_ep_bulk_post_recv(struct rxr_ep *ep)
 	while (ep->use_shm && ep->rx_bufs_shm_to_post) {
 		if (ep->rx_bufs_shm_to_post == 1)
 			flags = 0;
-		ret = rxr_ep_post_buf(ep, NULL, flags, SHM_EP);
+		ret = rxr_ep_post_prov_buf(ep, flags, SHM_EP);
 		if (OFI_LIKELY(!ret))
 			ep->rx_bufs_shm_to_post--;
 		else

@@ -886,8 +886,9 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 /* EP sub-functions */
 void rxr_ep_progress(struct util_ep *util_ep);
 void rxr_ep_progress_internal(struct rxr_ep *rxr_ep);
-int rxr_ep_post_buf(struct rxr_ep *ep, const struct fi_msg *posted_recv,
-		    uint64_t flags, enum rxr_lower_ep_type lower_ep);
+
+int rxr_ep_post_user_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+			 uint64_t flags);
 
 int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
 				 struct rxr_tx_entry *tx_entry);

@@ -1047,13 +1047,14 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 		goto out;
 	}
 
-	if (op == ofi_op_tagged)
+	if (op == ofi_op_tagged) {
 		dlist_insert_tail(&rx_entry->entry, &rxr_ep->rx_tagged_list);
-	else
+	} else {
 		dlist_insert_tail(&rx_entry->entry, &rxr_ep->rx_list);
+	}
 
 	if (rxr_ep->use_zcpy_rx)
-		rxr_ep_post_buf(rxr_ep, msg, flags, EFA_EP);
+		rxr_ep_post_user_buf(rxr_ep, rx_entry, flags);
 
 out:
 	fastlock_release(&rxr_ep->util_ep.lock);
