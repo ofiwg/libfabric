@@ -1090,7 +1090,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 	if (rxr_env.rx_copy_ooo) {
 		ret = ofi_bufpool_create(&ep->rx_ooo_pkt_pool, entry_sz,
 					 RXR_BUF_POOL_ALIGNMENT, 0,
-					 rxr_env.recvwin_size, 0);
+					 rxr_env.ooo_pool_chunk_size, 0);
 
 		if (ret)
 			goto err_free;
