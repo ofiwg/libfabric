@@ -488,9 +488,8 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 			return ret;
 	}
 
-	peer = rxr_ep_get_peer(ep, read_entry->addr);
-
 	if (read_entry->lower_ep_type == SHM_EP) {
+		peer = rxr_ep_get_peer(ep, read_entry->addr);
 		assert(peer);
 		shm_fiaddr = peer->shm_fiaddr;
 	}
@@ -577,6 +576,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 			/* read from self, no peer */
 			ep->tx_pending++;
 		} else if (read_entry->lower_ep_type == EFA_EP) {
+			peer = rxr_ep_get_peer(ep, read_entry->addr);
 			assert(peer);
 			rxr_ep_inc_tx_pending(ep, peer);
 		}
