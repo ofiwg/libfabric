@@ -105,6 +105,7 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 	rx_entry->addr = addr;
 	if (addr != FI_ADDR_UNSPEC) {
 		rx_entry->peer = rxr_ep_get_peer(ep, addr);
+		assert(rx_entry->peer);
 		ofi_atomic_inc32(&rx_entry->peer->use_cnt);
 	} else {
 		/*
@@ -251,6 +252,7 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	tx_entry->state = RXR_TX_REQ;
 	tx_entry->addr = msg->addr;
 	tx_entry->peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	assert(tx_entry->peer);
 	ofi_atomic_inc32(&tx_entry->peer->use_cnt);
 
 	tx_entry->send_flags = 0;
@@ -481,6 +483,7 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_
 	int pending;
 
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+	assert(peer);
 
 	/*
 	 * Init tx state for this peer. The rx state and reorder buffers will be
@@ -1583,6 +1586,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 				     struct rxr_rx_entry,
 				     rx_entry, queued_entry, tmp) {
 		peer = rxr_ep_get_peer(ep, rx_entry->addr);
+		assert(peer);
 
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			continue;
@@ -1614,6 +1618,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 				     struct rxr_tx_entry,
 				     tx_entry, queued_entry, tmp) {
 		peer = rxr_ep_get_peer(ep, tx_entry->addr);
+		assert(peer);
 
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			continue;
@@ -1658,6 +1663,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	dlist_foreach_container(&ep->tx_pending_list, struct rxr_tx_entry,
 				tx_entry, entry) {
 		peer = rxr_ep_get_peer(ep, tx_entry->addr);
+		assert(peer);
 
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			continue;
@@ -1697,6 +1703,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	dlist_foreach_container_safe(&ep->read_pending_list, struct rxr_read_entry,
 				     read_entry, pending_entry, tmp) {
 		peer = rxr_ep_get_peer(ep, read_entry->addr);
+		assert(peer);
 
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			continue;
