@@ -198,6 +198,7 @@ struct rxr_env {
 	int shm_av_size;
 	int shm_max_medium_size;
 	int recvwin_size;
+	int ooo_pool_chunk_size;
 	int readcopy_pool_size;
 	int atomrsp_pool_size;
 	int cq_size;
