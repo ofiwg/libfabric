@@ -153,7 +153,7 @@ fi_param_define(), -FI_ENOENT will be returned and the value of
 (*value) is unchanged.
 
 If the value in the environment is not valid for the parameter type,
--FI_EINVAL will be returned.
+-FI_EINVAL will be returned and the value of (*value) is unchanged.
 
 ## fi_log_enabled / fi_log
 
