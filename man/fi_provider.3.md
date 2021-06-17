@@ -127,9 +127,33 @@ fi_provider structure.  Additional interactions between the libfabric
 core and the provider will be through the interfaces defined by that
 struct.
 
-## fi_param_define / fi_param_get
+## fi_param_define
 
-TODO
+Defines a configuration parameter for use by a specified provider. The
+help_string and param_name arguments must be non-NULL, help_string
+must additionally be non-empty. They are copied internally and may be
+freed after calling fi_param_define.
+
+## fi_param_get
+
+Gets the value of a configuration parameter previously defined using
+fi_param_define(). The value comes from the environment variable name of
+the form FI_<provider_name>_<param_name>, all converted to upper case.
+
+If the parameter was previously defined and the user set a value,
+FI_SUCCESS is returned and (*value) points to the retrieved
+value.
+
+If the parameter name was previously defined, but the user did
+not set a value, -FI_ENODATA is returned and the value of (*value)
+is unchanged.
+
+If the parameter name was not previously defined via
+fi_param_define(), -FI_ENOENT will be returned and the value of
+(*value) is unchanged.
+
+If the value in the environment is not valid for the parameter type,
+-FI_EINVAL will be returned.
 
 ## fi_log_enabled / fi_log
 
