@@ -217,13 +217,6 @@ struct smr_domain {
 
 #define SMR_ZE_SOCK_PATH	"/dev/shm/ze_"
 
-static inline const char *smr_no_prefix(const char *addr)
-{
-	char *start;
-
-	return (start = strstr(addr, "://")) ? start + 3 : addr;
-}
-
 #define SMR_RMA_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS |	\
 		       OFI_ORDER_WAR_SET | OFI_ORDER_WAW_SET | FI_ORDER_WAS |	\
 		       FI_ORDER_SAR | FI_ORDER_SAW)

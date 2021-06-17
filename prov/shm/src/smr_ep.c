@@ -205,8 +205,8 @@ static void smr_send_name(struct smr_ep *ep, int64_t id)
 	tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
 	cmd->msg.hdr.src_data = smr_get_offset(peer_smr, tx_buf);
 
-	cmd->msg.hdr.size = strlen(smr_name(ep->region)) + 1;
-	memcpy(tx_buf->data, smr_name(ep->region), cmd->msg.hdr.size);
+	cmd->msg.hdr.size = strlen(ep->name) + 1;
+	memcpy(tx_buf->data, ep->name, cmd->msg.hdr.size);
 
 	smr_peer_data(ep->region)[id].name_sent = 1;
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
@@ -1031,7 +1031,7 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (!ep->util_ep.av)
 			return -FI_ENOAV;
 
-		attr.name = ep->name;
+		attr.name = smr_no_prefix(ep->name);
 		attr.rx_count = ep->rx_size;
 		attr.tx_count = ep->tx_size;
 		ret = smr_create(&smr_prov, av->smr_map, &attr, &ep->region);
@@ -1066,7 +1066,6 @@ static struct fi_ops smr_ep_fi_ops = {
 static int smr_endpoint_name(struct smr_ep *ep, char *name, char *addr,
 			     size_t addrlen)
 {
-	const char *start;
 	memset(name, 0, SMR_NAME_MAX);
 	if (!addr || addrlen > SMR_NAME_MAX)
 		return -FI_EINVAL;
@@ -1075,12 +1074,11 @@ static int smr_endpoint_name(struct smr_ep *ep, char *name, char *addr,
 	ep->ep_idx = smr_global_ep_idx++;
 	pthread_mutex_unlock(&ep_list_lock);
 
-	start = smr_no_prefix((const char *) addr);
 	if (strstr(addr, SMR_PREFIX))
-		snprintf(name, SMR_NAME_MAX - 1, "%s:%d:%d", start, getuid(),
+		snprintf(name, SMR_NAME_MAX - 1, "%s:%d:%d", addr, getuid(),
 			 ep->ep_idx);
 	else
-		snprintf(name, SMR_NAME_MAX - 1, "%s", start);
+		snprintf(name, SMR_NAME_MAX - 1, "%s", addr);
 
 	return 0;
 }
