@@ -486,14 +486,6 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_
 	assert(peer);
 
 	/*
-	 * Init tx state for this peer. The rx state and reorder buffers will be
-	 * initialized on the first recv so as to not allocate resources unless
-	 * necessary.
-	 */
-	if (!peer->tx_init)
-		rxr_ep_peer_init_tx(peer);
-
-	/*
 	 * Divy up available credits to outstanding transfers and request the
 	 * minimum of that and the amount required to finish the current long
 	 * message.
@@ -1044,14 +1036,10 @@ static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
 	return ofi_bufpool_create_attr(&attr, buf_pool);
 }
 
-/** @brief Initializes the endpoint and allocates the packet pools.
+/** @brief Initializes the endpoint.
  *
- * This function allocates the various packet pools for the EFA and SHM
+ * This function allocates the various buffer pools for the EFA and SHM
  * provider and does other endpoint initialization.
- *
- * Note that ofi_bufpool_create currently does lazy allocation, so memory is
- * not allocated here. Memory will be allocated the first time the pool is
- * used.
  *
  * @param ep rxr_ep struct to initialize.
  * @return 0 on success, fi_errno on error.
@@ -1092,15 +1080,31 @@ int rxr_ep_init(struct rxr_ep *ep)
 
 		if (ret)
 			goto err_free;
+
+		ret = ofi_bufpool_grow(ep->rx_unexp_pkt_pool);
+		if (ret) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"cannot allocate memory for unexpected packet pool. error: %s\n",
+				strerror(-ret));
+			goto err_free;
+		}
 	}
 
 	if (rxr_env.rx_copy_ooo) {
 		ret = ofi_bufpool_create(&ep->rx_ooo_pkt_pool, entry_sz,
 					 RXR_BUF_POOL_ALIGNMENT, 0,
-					 rxr_env.recvwin_size, 0);
+					 rxr_env.ooo_pool_chunk_size, 0);
 
 		if (ret)
 			goto err_free;
+
+		ret = ofi_bufpool_grow(ep->rx_ooo_pkt_pool);
+		if (ret) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"cannot allocate memory for out-of-order packet pool. error: %s\n",
+				strerror(-ret));
+			goto err_free;
+		}
 	}
 
 	if ((rxr_env.rx_copy_unexp || rxr_env.rx_copy_ooo) &&

@@ -217,6 +217,7 @@ struct rxr_env {
 	int shm_av_size;
 	int shm_max_medium_size;
 	int recvwin_size;
+	int ooo_pool_chunk_size;
 	int readcopy_pool_size;
 	int atomrsp_pool_size;
 	int cq_size;
@@ -305,8 +306,6 @@ struct rxr_fabric {
 #define RXR_MAX_NUM_PROTOCOLS (RXR_MAX_PROTOCOL_VERSION - RXR_BASE_PROTOCOL_VERSION + 1)
 
 struct rdm_peer {
-	bool tx_init;			/* tracks initialization of tx state */
-	bool rx_init;			/* tracks initialization of rx state */
 	bool is_self;			/* self flag */
 	bool is_local;			/* local/remote peer flag */
 	fi_addr_t efa_fiaddr;		/* fi_addr_t addr from efa provider */
@@ -732,22 +731,6 @@ static inline void rxr_setup_msg(struct fi_msg *msg, const struct iovec *iov, vo
 	msg->addr = addr;
 	msg->context = context;
 	msg->data = data;
-}
-
-static inline void rxr_ep_peer_init_rx(struct rxr_ep *ep, struct rdm_peer *peer)
-{
-	assert(!peer->rx_init);
-
-	ofi_recvwin_buf_alloc(&peer->robuf, rxr_env.recvwin_size);
-	peer->rx_credits = rxr_env.rx_window_size;
-	peer->rx_init = 1;
-}
-
-static inline void rxr_ep_peer_init_tx(struct rdm_peer *peer)
-{
-	assert(!peer->tx_init);
-	peer->tx_credits = rxr_env.tx_max_credits;
-	peer->tx_init = 1;
 }
 
 struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep);

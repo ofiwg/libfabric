@@ -560,12 +560,6 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 	assert(rxr_get_base_hdr(pkt_entry->pkt)->type >= RXR_REQ_PKT_BEGIN);
 
 	msg_id = rxr_pkt_msg_id(pkt_entry);
-	/*
-	 * TODO: Initialize peer state  at the time of AV insertion
-	 * where duplicate detection is available.
-	 */
-	if (!peer->rx_init)
-		rxr_ep_peer_init_rx(ep, peer);
 
 	robuf = &peer->robuf;
 #if ENABLE_DEBUG
