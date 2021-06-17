@@ -844,6 +844,20 @@ struct rxr_rx_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 	dlist_func_t *match_func;
 	int pkt_type;
 
+	if ((*pkt_entry_ptr)->type == RXR_PKT_ENTRY_USER) {
+		/* If a pkt_entry is constructred from user supplied buffer,
+		 * the endpoint must be in zero copy receive mode.
+		 */
+		assert(ep->use_zcpy_rx);
+		/* In this mode, an rx_entry is always created together
+		 * with this pkt_entry, and pkt_entry->x_entry is pointing
+		 * to it. Thus we can skip the matching process, and return
+		 * pkt_entry->x_entry right away.
+		 */
+		assert((*pkt_entry_ptr)->x_entry);
+		return (*pkt_entry_ptr)->x_entry;
+	}
+
 	if (ep->util_ep.caps & FI_DIRECTED_RECV)
 		match_func = &rxr_pkt_rtm_match_recv;
 	else
