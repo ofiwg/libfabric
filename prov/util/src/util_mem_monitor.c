@@ -60,6 +60,7 @@ struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
 struct ofi_mem_monitor *default_monitor;
 struct ofi_mem_monitor *default_cuda_monitor;
 struct ofi_mem_monitor *default_rocr_monitor;
+struct ofi_mem_monitor *default_ze_monitor;
 
 static size_t ofi_default_cache_size(void)
 {
@@ -97,6 +98,7 @@ void ofi_monitors_init(void)
 	memhooks_monitor->init(memhooks_monitor);
 	cuda_monitor->init(cuda_monitor);
 	rocr_monitor->init(rocr_monitor);
+	ze_monitor->init(ze_monitor);
 
 #if HAVE_MEMHOOKS_MONITOR
         default_monitor = memhooks_monitor;
@@ -133,6 +135,9 @@ void ofi_monitors_init(void)
 	fi_param_define(NULL, "mr_rocr_cache_monitor_enabled", FI_PARAM_BOOL,
 			"Enable or disable the ROCR cache memory monitor. "
 			"Monitor is enabled by default.");
+	fi_param_define(NULL, "mr_ze_cache_monitor_enabled", FI_PARAM_BOOL,
+			"Enable or disable the ZE cache memory monitor. "
+			"Monitor is enabled by default.");
 
 	fi_param_get_size_t(NULL, "mr_cache_max_size", &cache_params.max_size);
 	fi_param_get_size_t(NULL, "mr_cache_max_count", &cache_params.max_cnt);
@@ -141,6 +146,8 @@ void ofi_monitors_init(void)
 			  &cache_params.cuda_monitor_enabled);
 	fi_param_get_bool(NULL, "mr_rocr_cache_monitor_enabled",
 			  &cache_params.rocr_monitor_enabled);
+	fi_param_get_bool(NULL, "mr_ze_cache_monitor_enabled",
+			  &cache_params.ze_monitor_enabled);
 
 	if (!cache_params.max_size)
 		cache_params.max_size = ofi_default_cache_size();
@@ -174,6 +181,11 @@ void ofi_monitors_init(void)
 		default_rocr_monitor = rocr_monitor;
 	else
 		default_rocr_monitor = NULL;
+
+	if (cache_params.ze_monitor_enabled)
+		default_ze_monitor = ze_monitor;
+	else
+		default_ze_monitor = NULL;
 }
 
 void ofi_monitors_cleanup(void)
@@ -182,6 +194,7 @@ void ofi_monitors_cleanup(void)
 	memhooks_monitor->cleanup(memhooks_monitor);
 	cuda_monitor->cleanup(cuda_monitor);
 	rocr_monitor->cleanup(rocr_monitor);
+	ze_monitor->cleanup(ze_monitor);
 }
 
 /* Monitors array must be of size OFI_HMEM_MAX. */
