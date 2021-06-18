@@ -203,20 +203,6 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry, ctrl_type + tagged, 0);
 	}
 
-	if (rxr_ep->use_zcpy_rx) {
-		/*
-		 * The application can not deal with varying packet header sizes
-		 * before and after receiving a handshake. Forcing a handshake
-		 * here so we can always use the smallest eager msg packet
-		 * header size to determine the msg_prefix_size.
-		 */
-		err = rxr_pkt_wait_handshake(rxr_ep, tx_entry->addr, peer);
-		if (OFI_UNLIKELY(err))
-			return err;
-
-		assert(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED);
-	}
-
 	if (efa_ep_is_cuda_mr(tx_entry->desc[0])) {
 		return rxr_msg_post_cuda_rtm(rxr_ep, tx_entry);
 	}
@@ -1039,12 +1025,7 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 	unexp_list = (op == ofi_op_tagged) ? &rxr_ep->rx_unexp_tagged_list :
 		     &rxr_ep->rx_unexp_list;
 
-	/*
-	 * Attempt to match against stashed unexpected messages. This is not
-	 * applicable to the zero-copy path where unexpected messages are not
-	 * applicable, since there's no tag or address to match against.
-	 */
-	if (!dlist_empty(unexp_list) && !rxr_ep->use_zcpy_rx) {
+	if (!dlist_empty(unexp_list)) {
 		ret = rxr_msg_proc_unexp_msg_list(rxr_ep, msg, tag,
 						  ignore, op, flags, NULL);
 
@@ -1061,13 +1042,13 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 		goto out;
 	}
 
-	if (op == ofi_op_tagged)
+	if (rxr_ep->use_zcpy_rx) {
+		rxr_ep_post_user_buf(rxr_ep, rx_entry, flags);
+	} else if (op == ofi_op_tagged) {
 		dlist_insert_tail(&rx_entry->entry, &rxr_ep->rx_tagged_list);
-	else
+	} else {
 		dlist_insert_tail(&rx_entry->entry, &rxr_ep->rx_list);
-
-	if (rxr_ep->use_zcpy_rx)
-		rxr_ep_post_buf(rxr_ep, msg, flags, EFA_EP);
+	}
 
 out:
 	fastlock_release(&rxr_ep->util_ep.lock);

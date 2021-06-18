@@ -120,7 +120,7 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(peer);
 
-	if (OFI_UNLIKELY(!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))) {
+	if (rxr_peer_need_raw_addr_hdr(peer)) {
 		/*
 		 * This is the first communication with this peer on this
 		 * endpoint, so send the core's address for this EP in the REQ
@@ -139,9 +139,10 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 		struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
 
 		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
-		raw_addr_hdr->addr_len = ep->core_addrlen;
-		memcpy(raw_addr_hdr->raw_addr, ep->core_addr, raw_addr_hdr->addr_len);
-		opt_hdr += sizeof(*raw_addr_hdr) + raw_addr_hdr->addr_len;
+		raw_addr_hdr->addr_len = RXR_REQ_OPT_RAW_ADDR_HDR_SIZE - sizeof(struct rxr_req_opt_raw_addr_hdr);
+		assert(raw_addr_hdr->addr_len >= ep->core_addrlen);
+		memcpy(raw_addr_hdr->raw_addr, ep->core_addr, ep->core_addrlen);
+		opt_hdr += RXR_REQ_OPT_RAW_ADDR_HDR_SIZE;
 	}
 
 	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
@@ -843,6 +844,20 @@ struct rxr_rx_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 	dlist_func_t *match_func;
 	int pkt_type;
 
+	if ((*pkt_entry_ptr)->type == RXR_PKT_ENTRY_USER) {
+		/* If a pkt_entry is constructred from user supplied buffer,
+		 * the endpoint must be in zero copy receive mode.
+		 */
+		assert(ep->use_zcpy_rx);
+		/* In this mode, an rx_entry is always created together
+		 * with this pkt_entry, and pkt_entry->x_entry is pointing
+		 * to it. Thus we can skip the matching process, and return
+		 * pkt_entry->x_entry right away.
+		 */
+		assert((*pkt_entry_ptr)->x_entry);
+		return (*pkt_entry_ptr)->x_entry;
+	}
+
 	if (ep->util_ep.caps & FI_DIRECTED_RECV)
 		match_func = &rxr_pkt_rtm_match_recv;
 	else
@@ -982,6 +997,71 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 	return ret;
 }
 
+/**
+ * @brief process a matched eager rtm packet entry
+ *
+ * For an eager message, it will write rx completion,
+ * release packet entry and rx_entry.
+ *
+ * @param[in]	ep		endpoint
+ * @param[in]	rx_entry	RX entry
+ * @param[in]	pkt_entry	packet entry
+ * @return	On success, return 0
+ * 		On failure, return libfabric error code
+ */
+ssize_t rxr_pkt_proc_matched_eager_rtm(struct rxr_ep *ep,
+				       struct rxr_rx_entry *rx_entry,
+				       struct rxr_pkt_entry *pkt_entry)
+{
+	int err;
+	char *data;
+	size_t hdr_size, data_size;
+
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+
+	if (pkt_entry->type != RXR_PKT_ENTRY_USER) {
+		data = (char *)pkt_entry->pkt + hdr_size;
+		data_size = pkt_entry->pkt_size - hdr_size;
+
+		/*
+		 * On success, rxr_pkt_copy_to_rx will write rx completion,
+		 * release pkt_entry and rx_entry
+		 */
+		err = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
+		if (err)
+			rxr_pkt_entry_release_rx(ep, pkt_entry);
+
+		return err;
+	}
+
+	/* In this case, data is already in user provided buffer, so no need
+	 * to copy. However, we do need to make sure the packet header length
+	 * is correct. Otherwise, user will get wrong data.
+	 *
+	 * The expected header size is
+	 * 	ep->msg_prefix_size - sizeof(struct rxr_pkt_entry)
+	 * because we used the first sizeof(struct rxr_pkt_entry) to construct
+	 * a pkt_entry.
+	 */
+	if (hdr_size != ep->msg_prefix_size - sizeof(struct rxr_pkt_entry)) {
+		/* if header size is wrong, the data in user buffer is not useful.
+		 * setting rx_entry->cq_entry.len here will cause an error cq entry
+		 * to be written to application.
+		 */
+		rx_entry->cq_entry.len = 0;
+	} else {
+		assert(rx_entry->cq_entry.buf == pkt_entry->pkt - sizeof(struct rxr_pkt_entry));
+		rx_entry->cq_entry.len = pkt_entry->pkt_size + sizeof(struct rxr_pkt_entry);
+	}
+
+	rxr_cq_write_rx_completion(ep, rx_entry);
+	rxr_release_rx_entry(ep, rx_entry);
+
+	/* no need to release packet entry because it is
+	 * constructed using user supplied buffer */
+	return 0;
+}
+
 ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 				 struct rxr_rx_entry *rx_entry,
 				 struct rxr_pkt_entry *pkt_entry)
@@ -1040,35 +1120,27 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	    pkt_type == RXR_DC_MEDIUM_TAGRTM_PKT)
 		return rxr_pkt_proc_matched_medium_rtm(ep, rx_entry, pkt_entry);
 
+	if (pkt_type == RXR_EAGER_MSGRTM_PKT ||
+	    pkt_type == RXR_EAGER_TAGRTM_PKT ||
+	    pkt_type == RXR_DC_EAGER_MSGRTM_PKT ||
+	    pkt_type == RXR_DC_EAGER_TAGRTM_PKT) {
+		return rxr_pkt_proc_matched_eager_rtm(ep, rx_entry, pkt_entry);
+	}
+
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 	data = (char *)pkt_entry->pkt + hdr_size;
 	data_size = pkt_entry->pkt_size - hdr_size;
 
 	rx_entry->bytes_received += data_size;
 	ret = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
-	if (ret) {
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		return ret;
-	}
-
-	if (pkt_type == RXR_EAGER_MSGRTM_PKT ||
-	    pkt_type == RXR_EAGER_TAGRTM_PKT ||
-	    pkt_type == RXR_DC_EAGER_MSGRTM_PKT ||
-	    pkt_type == RXR_DC_EAGER_TAGRTM_PKT) {
-		ret = 0;
-	} else {
-		/*
-		 * long message protocol
-		 */
 #if ENABLE_DEBUG
-		dlist_insert_tail(&rx_entry->rx_pending_entry, &ep->rx_pending_list);
-		ep->rx_pending++;
+	dlist_insert_tail(&rx_entry->rx_pending_entry, &ep->rx_pending_list);
+	ep->rx_pending++;
 #endif
-		rx_entry->state = RXR_RX_RECV;
-		/* we have noticed using the default value achieve better bandwidth */
-		rx_entry->credit_request = rxr_env.tx_min_credits;
-		ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
-	}
+	rx_entry->state = RXR_RX_RECV;
+	/* we have noticed using the default value achieve better bandwidth */
+	rx_entry->credit_request = rxr_env.tx_min_credits;
+	ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
 
 	return ret;
 }
@@ -1176,53 +1248,6 @@ ssize_t rxr_pkt_proc_rtm_rta(struct rxr_ep *ep,
 	}
 
 	return -FI_EINVAL;
-}
-
-void rxr_pkt_handle_zcpy_recv(struct rxr_ep *ep,
-			      struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_rx_entry *rx_entry;
-
-	struct rxr_base_hdr *base_hdr __attribute__((unused));
-	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
-	assert(base_hdr->type >= RXR_BASELINE_REQ_PKT_BEGIN);
-	assert(base_hdr->type != RXR_MEDIUM_MSGRTM_PKT);
-	assert(base_hdr->type != RXR_MEDIUM_TAGRTM_PKT);
-	assert(base_hdr->type != RXR_DC_MEDIUM_MSGRTM_PKT);
-	assert(base_hdr->type != RXR_DC_MEDIUM_MSGRTM_PKT);
-	assert(pkt_entry->type == RXR_PKT_ENTRY_USER);
-
-	rx_entry = rxr_pkt_get_msgrtm_rx_entry(ep, &pkt_entry);
-	if (OFI_UNLIKELY(!rx_entry)) {
-		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		return;
-	}
-	pkt_entry->x_entry = rx_entry;
-	if (rx_entry->state != RXR_RX_MATCHED)
-		return;
-
-	/*
-	 * The incoming receive will always get matched to the first posted
-	 * rx_entry available, so this is a constant cost. No real tag or
-	 * address matching happens.
-	 */
-	assert(rx_entry->state == RXR_RX_MATCHED);
-
-	/*
-	 * Adjust rx_entry->cq_entry.len as needed.
-	 * Initialy rx_entry->cq_entry.len is total recv buffer size.
-	 * rx_entry->total_len is from REQ packet and is total send buffer size.
-	 * if send buffer size < recv buffer size, we adjust value of rx_entry->cq_entry.len
-	 * if send buffer size > recv buffer size, we have a truncated message and will
-	 * write error CQ entry.
-	 */
-	if (rx_entry->cq_entry.len > rx_entry->total_len)
-		rx_entry->cq_entry.len = rx_entry->total_len;
-
-	rxr_cq_write_rx_completion(ep, rx_entry);
-	rxr_pkt_entry_release_rx(ep, pkt_entry);
-	rxr_release_rx_entry(ep, rx_entry);
 }
 
 void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,

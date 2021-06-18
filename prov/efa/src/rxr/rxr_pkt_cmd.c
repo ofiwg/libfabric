@@ -823,60 +823,17 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	return rdm_addr;
 }
 
-void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
-				    struct rxr_pkt_entry *pkt_entry)
+/**
+ * @brief process a received packet
+ *
+ * @param[in]	ep		endpoint
+ * @param[in]	pkt_entry	received packet entry
+ */
+void rxr_pkt_proc_received(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	struct rdm_peer *peer;
 	struct rxr_base_hdr *base_hdr;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
-	if (base_hdr->type >= RXR_EXTRA_REQ_PKT_END) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"Peer %d is requesting feature %d, which this EP does not support.\n",
-			(int)pkt_entry->addr, base_hdr->type);
-
-		assert(0 && "invalid REQ packe type");
-		rxr_cq_handle_error(ep, FI_EIO, NULL);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		return;
-	}
-
-	if (base_hdr->type >= RXR_REQ_PKT_BEGIN) {
-		/*
-		 * as long as the REQ packet contain raw address
-		 * we will need to call insert because it might be a new
-		 * EP with new Q-Key.
-		 */
-		void *raw_addr;
-
-		raw_addr = rxr_pkt_req_raw_addr(pkt_entry);
-		if (OFI_UNLIKELY(raw_addr != NULL))
-			pkt_entry->addr = rxr_pkt_insert_addr(ep, pkt_entry, raw_addr);
-	}
-
-	assert(pkt_entry->addr != FI_ADDR_NOTAVAIL);
-
-#if ENABLE_DEBUG
-	if (!ep->use_zcpy_rx) {
-		dlist_remove(&pkt_entry->dbg_entry);
-		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_pkt_list);
-	}
-#ifdef ENABLE_RXR_PKT_DUMP
-	rxr_pkt_print("Received", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
-#endif
-#endif
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	assert(peer);
-	if (!(peer->flags & RXR_PEER_HANDSHAKE_SENT_OR_QUEUED))
-		rxr_pkt_post_handshake_or_queue(ep, peer);
-
-	if (peer->is_local) {
-		assert(ep->use_shm);
-		ep->posted_bufs_shm--;
-	} else {
-		ep->posted_bufs_efa--;
-	}
-
 	switch (base_hdr->type) {
 	case RXR_RETIRED_RTS_PKT:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
@@ -914,11 +871,6 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		rxr_pkt_handle_receipt_recv(ep, pkt_entry);
 		return;
 	case RXR_EAGER_MSGRTM_PKT:
-		if (ep->use_zcpy_rx && pkt_entry->type == RXR_PKT_ENTRY_USER)
-			rxr_pkt_handle_zcpy_recv(ep, pkt_entry);
-		else
-			rxr_pkt_handle_rtm_rta_recv(ep, pkt_entry);
-		return;
 	case RXR_EAGER_TAGRTM_PKT:
 	case RXR_DC_EAGER_MSGRTM_PKT:
 	case RXR_DC_EAGER_TAGRTM_PKT:
@@ -963,6 +915,77 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		rxr_cq_handle_error(ep, FI_EIO, NULL);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
+	}
+}
+
+void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
+				    struct rxr_pkt_entry *pkt_entry)
+{
+	int pkt_type;
+	struct rdm_peer *peer;
+	struct rxr_base_hdr *base_hdr;
+	struct rxr_rx_entry *zcpy_rx_entry = NULL;
+
+	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	pkt_type = base_hdr->type;
+	if (pkt_type >= RXR_EXTRA_REQ_PKT_END) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"Peer %d is requesting feature %d, which this EP does not support.\n",
+			(int)pkt_entry->addr, base_hdr->type);
+
+		assert(0 && "invalid REQ packe type");
+		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
+	}
+
+	if (pkt_type >= RXR_REQ_PKT_BEGIN) {
+		/*
+		 * as long as the REQ packet contain raw address
+		 * we will need to call insert because it might be a new
+		 * EP with new Q-Key.
+		 */
+		void *raw_addr;
+
+		raw_addr = rxr_pkt_req_raw_addr(pkt_entry);
+		if (OFI_UNLIKELY(raw_addr != NULL))
+			pkt_entry->addr = rxr_pkt_insert_addr(ep, pkt_entry, raw_addr);
+	}
+
+	assert(pkt_entry->addr != FI_ADDR_NOTAVAIL);
+
+#if ENABLE_DEBUG
+	if (!ep->use_zcpy_rx) {
+		dlist_remove(&pkt_entry->dbg_entry);
+		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_pkt_list);
+	}
+#ifdef ENABLE_RXR_PKT_DUMP
+	rxr_pkt_print("Received", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
+#endif
+#endif
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
+	if (!(peer->flags & RXR_PEER_HANDSHAKE_SENT_OR_QUEUED))
+		rxr_pkt_post_handshake_or_queue(ep, peer);
+
+	if (peer->is_local) {
+		assert(ep->use_shm);
+		ep->posted_bufs_shm--;
+	} else {
+		ep->posted_bufs_efa--;
+	}
+
+	if (pkt_entry->type == RXR_PKT_ENTRY_USER) {
+		assert(pkt_entry->x_entry);
+		zcpy_rx_entry = pkt_entry->x_entry;
+	}
+
+	rxr_pkt_proc_received(ep, pkt_entry);
+
+	if (zcpy_rx_entry && pkt_type != RXR_EAGER_MSGRTM_PKT) {
+		/* user buffer was not matched with a message,
+		 * therefore reposting the buffer */
+		rxr_ep_post_user_buf(ep, zcpy_rx_entry, 0);
 	}
 }
 
