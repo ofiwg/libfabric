@@ -1287,7 +1287,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 	dlist_init(&ep->tx_pending_list);
 	dlist_init(&ep->read_pending_list);
 	dlist_init(&ep->peer_backoff_list);
-	dlist_init(&ep->peer_queued_list);
+	dlist_init(&ep->handshake_queued_peer_list);
 #if ENABLE_DEBUG
 	dlist_init(&ep->rx_pending_list);
 	dlist_init(&ep->rx_pkt_list);
@@ -1673,17 +1673,22 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	 * Resend handshake packet for any peers where the first
 	 * handshake send failed.
 	 */
-	dlist_foreach_container_safe(&ep->peer_queued_list,
+	dlist_foreach_container_safe(&ep->handshake_queued_peer_list,
 				     struct rdm_peer, peer,
-				     queued_entry, tmp) {
+				     handshake_queued_entry, tmp) {
+		if (peer->flags & RXR_PEER_IN_BACKOFF)
+			continue;
 
 		ret = rxr_pkt_post_handshake(ep, peer);
 		if (ret == -FI_EAGAIN)
 			break;
+
 		if (OFI_UNLIKELY(ret))
 			goto handshake_err;
 
-		dlist_remove(&peer->queued_entry);
+		dlist_remove(&peer->handshake_queued_entry);
+		peer->flags &= ~RXR_PEER_HANDSHAKE_QUEUED;
+		peer->flags |= RXR_PEER_HANDSHAKE_SENT;
 	}
 
 	/*

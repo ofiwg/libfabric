@@ -965,8 +965,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 #endif
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
-	if (!(peer->flags & RXR_PEER_HANDSHAKE_SENT_OR_QUEUED))
-		rxr_pkt_post_handshake_or_queue(ep, peer);
+	rxr_pkt_post_handshake_or_queue(ep, peer);
 
 	if (peer->is_local) {
 		assert(ep->use_shm);
