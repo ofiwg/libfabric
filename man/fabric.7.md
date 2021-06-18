@@ -350,14 +350,24 @@ expanded the following structure.
 
 ## ABI 1.3
 
-The 1.3 ABI is also the current ABI version.  All libfabric releases
-starting at 1.9 export this ABI.
+The 1.3 ABI version was exported by libfabric versions 1.9, 1.10, and
+1.11.  Added new fields to the following attributes:
 
 *fi_domain_attr*
 : Added tclass
 
 *fi_tx_attr*
 : Added tclass
+
+## ABI 1.4
+
+The 1.4 ABI version was exported by libfabric 1.12.  Added fi_tostr_r, a
+thread-safe (re-entrant) version of fi_tostr.
+
+## ABI 1.5
+
+ABI version starting with libfabric 1.13.  Added new fi_open API
+call.
 
 # SEE ALSO
 
