@@ -800,6 +800,12 @@ configure registration caches.
   are: 0 or 1. Note that the ROCR memory monitor requires a ROCR version with
   unified virtual addressing enabled.
 
+*FI_MR_ZE_CACHE_MONITOR_ENABLED*
+: The ZE cache monitor is responsible for detecting ZE device memory
+  (FI_HMEM_ZE) changes made between the device virtual addresses used by an
+  application and the underlying device physical pages. Valid monitor options
+  are: 0 or 1.
+
 More direct access to the internal registration cache is possible through the
 fi_open() call, using the "mr_cache" service name.  Once opened, custom
 memory monitors may be installed.  A memory monitor is a component of the cache

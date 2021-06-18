@@ -76,6 +76,7 @@ common_srcs =				\
 	prov/util/src/util_mr_cache.c	\
 	prov/util/src/cuda_mem_monitor.c \
 	prov/util/src/rocr_mem_monitor.c \
+	prov/util/src/ze_mem_monitor.c \
 	prov/util/src/util_coll.c
 
 

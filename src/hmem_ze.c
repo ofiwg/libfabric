@@ -301,17 +301,15 @@ err:
 bool ze_is_addr_valid(const void *addr)
 {
 	ze_result_t ze_ret;
-	ze_memory_allocation_properties_t mem_prop;
+	ze_memory_allocation_properties_t mem_props;
 	ze_device_handle_t device;
-	int i;
 
-	for (i = 0; i < num_devices; i++) {
-		ze_ret = zeMemGetAllocProperties(context, addr, &mem_prop,
-						 &device);
-		if (!ze_ret && mem_prop.type == ZE_MEMORY_TYPE_DEVICE)
-			return true;
-	}
-	return false;
+	mem_props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
+	mem_props.pNext = NULL;
+	ze_ret = zeMemGetAllocProperties(context, addr, &mem_props,
+					 &device);
+
+	return (!ze_ret && mem_props.type == ZE_MEMORY_TYPE_DEVICE);
 }
 
 int ze_hmem_get_handle(void *dev_buf, void **handle)
@@ -369,6 +367,25 @@ int ze_hmem_get_base_addr(const void *ptr, void **base)
 			"Could not get base addr\n");
 		return -FI_EINVAL;
 	}
+	return FI_SUCCESS;
+}
+
+int ze_hmem_get_id(const void *ptr, uint64_t *id)
+{
+	ze_result_t ze_ret;
+	ze_memory_allocation_properties_t mem_props;
+	ze_device_handle_t device;
+
+	mem_props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
+	mem_props.pNext = NULL;
+	ze_ret = zeMemGetAllocProperties(context, ptr, &mem_props, &device);
+	if (ze_ret || mem_props.type == ZE_MEMORY_TYPE_UNKNOWN) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Could not get memory id\n");
+		return -FI_EINVAL;
+	}
+
+	*id = mem_props.id;
 	return FI_SUCCESS;
 }
 
@@ -433,6 +450,11 @@ bool ze_hmem_p2p_enabled(void)
 }
 
 int ze_hmem_get_base_addr(const void *ptr, void **base)
+{
+	return -FI_ENOSYS;
+}
+
+int ze_hmem_get_id(const void *ptr, uint64_t *id)
 {
 	return -FI_ENOSYS;
 }
