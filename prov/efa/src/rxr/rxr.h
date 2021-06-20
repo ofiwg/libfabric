@@ -804,10 +804,23 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry);
 static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 					struct rxr_rx_entry *rx_entry)
 {
+	struct rxr_pkt_entry *pkt_entry;
+	struct dlist_entry *tmp;
+
 #if ENABLE_DEBUG
 	dlist_remove(&rx_entry->rx_entry_entry);
 #endif
-	assert(dlist_empty(&rx_entry->queued_pkts));
+	if (!dlist_empty(&rx_entry->queued_pkts)) {
+		dlist_foreach_container_safe(&rx_entry->queued_pkts,
+					     struct rxr_pkt_entry,
+					     pkt_entry, entry, tmp) {
+			rxr_pkt_entry_release_tx(ep, pkt_entry);
+		}
+		dlist_remove(&rx_entry->queued_entry);
+	} else if (rx_entry->state == RXR_RX_QUEUED_CTRL) {
+		dlist_remove(&rx_entry->queued_entry);
+	}
+
 #ifdef ENABLE_EFA_POISONING
 	rxr_poison_mem_region((uint32_t *)rx_entry,
 			      sizeof(struct rxr_rx_entry));
