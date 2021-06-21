@@ -123,6 +123,15 @@ static ssize_t efa_post_recv_validate(struct efa_ep *ep, const struct fi_msg *ms
 	return 0;
 }
 
+/**
+ * @brief post receive buffer to EFA device via ibv_post_recv
+ *
+ * @param[in]	ep	endpoint
+ * @param[in]	msg	libfabric message
+ * @param[in]	flags	libfabric flags, currently only FI_MORE is supported.
+ * @reutrn	On Success, return 0
+ * 		On failure, return negative libfabric error code
+ */
 static ssize_t efa_post_recv(struct efa_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
 	struct efa_mr *efa_mr;
@@ -170,6 +179,13 @@ static ssize_t efa_post_recv(struct efa_ep *ep, const struct fi_msg *msg, uint64
 		return 0;
 
 	err = ibv_post_recv(qp->ibv_qp, ep->recv_more_wr_head.next, &bad_wr);
+	if (OFI_UNLIKELY(err)) {
+		/* On failure, ibv_post_recv() return positive errno.
+		 * Meanwhile, this function return a negative errno.
+		 * So, we do the conversion here.
+		 */
+		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
+	}
 
 	free_recv_wr_list(ep->recv_more_wr_head.next);
 	ep->recv_more_wr_tail = &ep->recv_more_wr_head;
