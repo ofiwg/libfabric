@@ -871,6 +871,9 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	if (pkt_type == RXR_MEDIUM_MSGRTM_PKT || pkt_type == RXR_MEDIUM_TAGRTM_PKT)
 		return rxr_pkt_proc_matched_medium_rtm(ep, rx_entry, pkt_entry);
 
+	if (pkt_type == RXR_LONG_MSGRTM_PKT || pkt_type == RXR_LONG_TAGRTM_PKT)
+		rx_entry->tx_id = rxr_get_long_rtm_base_hdr(pkt_entry->pkt)->tx_id;
+
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 	data = (char *)pkt_entry->pkt + hdr_size;
 	data_size = pkt_entry->pkt_size - hdr_size;
@@ -893,7 +896,6 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 		ep->rx_pending++;
 #endif
 		rx_entry->state = RXR_RX_RECV;
-		rx_entry->tx_id = rxr_get_long_rtm_base_hdr(pkt_entry->pkt)->tx_id;
 		/* we have noticed using the default value achieve better bandwidth */
 		rx_entry->credit_request = rxr_env.tx_min_credits;
 		ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
