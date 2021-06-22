@@ -1214,14 +1214,10 @@ static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
 	return ofi_bufpool_create_attr(&attr, buf_pool);
 }
 
-/** @brief Initializes the endpoint and allocates the packet pools.
+/** @brief Initializes the endpoint.
  *
- * This function allocates the various packet pools for the EFA and SHM
+ * This function allocates the various buffer pools for the EFA and SHM
  * provider and does other endpoint initialization.
- *
- * Note that ofi_bufpool_create currently does lazy allocation, so memory is
- * not allocated here. Memory will be allocated the first time the pool is
- * used.
  *
  * @param ep rxr_ep struct to initialize.
  * @return 0 on success, fi_errno on error.
@@ -1262,15 +1258,31 @@ int rxr_ep_init(struct rxr_ep *ep)
 
 		if (ret)
 			goto err_free;
+
+		ret = ofi_bufpool_grow(ep->rx_unexp_pkt_pool);
+		if (ret) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"cannot allocate memory for unexpected packet pool. error: %s\n",
+				strerror(-ret));
+			goto err_free;
+		}
 	}
 
 	if (rxr_env.rx_copy_ooo) {
 		ret = ofi_bufpool_create(&ep->rx_ooo_pkt_pool, entry_sz,
 					 RXR_BUF_POOL_ALIGNMENT, 0,
-					 rxr_env.recvwin_size, 0);
+					 rxr_env.ooo_pool_chunk_size, 0);
 
 		if (ret)
 			goto err_free;
+
+		ret = ofi_bufpool_grow(ep->rx_ooo_pkt_pool);
+		if (ret) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"cannot allocate memory for out-of-order packet pool. error: %s\n",
+				strerror(-ret));
+			goto err_free;
+		}
 	}
 
 	if ((rxr_env.rx_copy_unexp || rxr_env.rx_copy_ooo) &&
@@ -1693,6 +1705,15 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			break;
 		if (OFI_UNLIKELY(ret))
 			goto rx_err;
+
+		/* it can happen that rxr_pkt_post_ctrl() released rx_entry
+		 * (if the packet type is EOR and inject is used). In
+		 * that case rx_entry's state has been set to RXR_RX_FREE and
+		 * it has been removed from ep->rx_queued_entry_list, so nothing
+		 * is left to do.
+		 */
+		if (rx_entry->state == RXR_RX_FREE)
+			continue;
 
 		dlist_remove(&rx_entry->queued_entry);
 		rx_entry->state = RXR_RX_RECV;
