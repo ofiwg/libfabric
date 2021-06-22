@@ -184,8 +184,10 @@ static int mr_key_test()
 		tx_buf = (char *)mr_res_array[i].buf;
 
 		if (opts.dst_addr) {
-			ft_fill_buf(mr_res_array[i].buf,
-					opts.transfer_size);
+			ret = ft_fill_buf(mr_res_array[i].buf,
+					  opts.transfer_size);
+			if (ret)
+				return ret;
 
 			if (verbose)
 				printf("write to host's key %lx\n",
@@ -231,8 +233,10 @@ static int mr_key_test()
 					return ret;
 			}
 
-			ft_fill_buf(mr_res_array[i].buf,
-					opts.transfer_size);
+			ret = ft_fill_buf(mr_res_array[i].buf,
+					  opts.transfer_size);
+			if (ret)
+				return ret;
 
 			if (verbose)
 				printf("write to client's key %lx\n",

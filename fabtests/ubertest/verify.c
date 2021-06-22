@@ -84,6 +84,7 @@ static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_a
 
 int ft_sync_fill_bufs(size_t size)
 {
+	int ret;
 	ft_sock_sync(0);
 
 	if (test_info.caps & FI_ATOMIC) {
@@ -94,9 +95,14 @@ int ft_sync_fill_bufs(size_t size)
 		memcpy(ft_atom_ctrl.orig_buf, ft_mr_ctrl.buf, size);
 		memcpy(ft_tx_ctrl.cpy_buf, ft_tx_ctrl.buf, size);
 	} else if (is_read_func(test_info.class_function)) {
-		ft_fill_buf(ft_mr_ctrl.buf, size);
+		ret = ft_fill_buf(ft_mr_ctrl.buf, size);
+		if (ret)
+			return ret;
 	} else {
-		ft_fill_buf(ft_tx_ctrl.buf, size);
+		ret = ft_fill_buf(ft_tx_ctrl.buf, size);
+		if (ret)
+			return ret;
+
 		memcpy(ft_tx_ctrl.cpy_buf, ft_tx_ctrl.buf, size);
 	}
 
