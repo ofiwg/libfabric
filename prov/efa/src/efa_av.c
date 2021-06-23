@@ -271,6 +271,8 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 	ofi_recvwin_buf_alloc(&peer->robuf, rxr_env.recvwin_size);
 	peer->rx_credits = rxr_env.rx_window_size;
 	peer->tx_credits = rxr_env.tx_max_credits;
+	dlist_init(&peer->rx_unexp_list);
+	dlist_init(&peer->rx_unexp_tagged_list);
 
 	/* If peer is local, insert the address into shm provider's av */
 	if (rxr_ep->use_shm && efa_is_local_peer(av, &conn->ep_addr)) {
