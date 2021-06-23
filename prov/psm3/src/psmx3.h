@@ -85,17 +85,22 @@ extern "C" {
 
 extern struct fi_provider psmx3_prov;
 
+#ifdef PSM_CUDA
+#define PSM3_FI_HMEM FI_HMEM
+#else
+#define PSM3_FI_HMEM 0
+#endif
 
 #define PSMX3_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_COMPLETION | \
 			 FI_TRIGGER | FI_INJECT_COMPLETE | \
 			 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)
 
 #define PSMX3_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | OFI_TX_RMA_CAPS | FI_ATOMICS | \
-		       FI_NAMED_RX_CTX | FI_TRIGGER)
+		       FI_NAMED_RX_CTX | FI_TRIGGER | PSM3_FI_HMEM)
 #define PSMX3_RX_CAPS (FI_SOURCE | FI_SOURCE_ERR | FI_RMA_EVENT | OFI_RX_MSG_CAPS | \
 		       FI_TAGGED | OFI_RX_RMA_CAPS | FI_ATOMICS | FI_DIRECTED_RECV | \
-		       FI_MULTI_RECV | FI_TRIGGER)
-#define PSMX3_DOM_CAPS	(FI_SHARED_AV | FI_LOCAL_COMM | FI_REMOTE_COMM)
+		       FI_MULTI_RECV | FI_TRIGGER | PSM3_FI_HMEM)
+#define PSMX3_DOM_CAPS	(FI_SHARED_AV | FI_LOCAL_COMM | FI_REMOTE_COMM | PSM3_FI_HMEM)
 #define PSMX3_CAPS (PSMX3_TX_CAPS | PSMX3_RX_CAPS | PSMX3_DOM_CAPS)
 
 #define PSMX3_RMA_TX_CAPS (PSMX3_TX_CAPS & ~(FI_TAGGED | FI_MSG | FI_SEND))
@@ -104,7 +109,7 @@ extern struct fi_provider psmx3_prov;
 #define PSMX3_RMA_CAPS (PSMX3_RMA_TX_CAPS | PSMX3_RMA_RX_CAPS | PSMX3_DOM_CAPS)
 
 #define PSMX3_SUB_CAPS	(FI_SEND | FI_RECV | FI_READ | FI_WRITE | \
-			 FI_REMOTE_READ | FI_REMOTE_WRITE)
+			 FI_REMOTE_READ | FI_REMOTE_WRITE | PSM3_FI_HMEM)
 
 #define PSMX3_ALL_TRX_CTXT	((void *)-1)
 #define PSMX3_MAX_MSG_SIZE	((0x1ULL << 32) - 1)
@@ -938,7 +943,6 @@ void	psmx3_alter_prov_info(uint32_t api_version, const struct fi_info *hints,
 			      struct fi_info *info);
 
 void	psmx3_init_tag_layout(struct fi_info *info);
-int	psmx3_get_round_robin_unit(int idx);
 
 int	psmx3_fabric(struct fi_fabric_attr *attr,
 		     struct fid_fabric **fabric, void *context);

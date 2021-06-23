@@ -6,7 +6,7 @@ dnl
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.60])
-AC_INIT([libpsm3-fi], [1.11.2], [ofiwg@lists.openfabrics.org])
+AC_INIT([libpsm3-fi], m4_normalize(m4_esyscmd([sed 's/_/./g' VERSION])))
 AC_CONFIG_SRCDIR([src/psmx3.h])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
@@ -14,6 +14,7 @@ AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE([1.11 dist-bzip2 foreign -Wall -Werror subdir-objects parallel-tests tar-pax])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([no])])
 dnl --- m4_include(config/fi_check_package.m4)
+m4_include(config/fi_strip_optflags.m4)
 AC_DEFINE([HAVE_PSM3], [1], [Build libfabric PSM3 provider])
 AC_DEFINE([HAVE_PSM3_DL], [1], [Build libfabric PSM3 provider])
 
@@ -94,7 +95,7 @@ AS_IF([test x$with_psm3_rv = xno],
 		AS_IF([test "$psm3_rv_old_header" -eq 1],
 		      [CPPFLAGS="$CPPFLAGS -DHAVE_OLD_RV_HEADER"])
 	      ])
-	AS_IF([test "$psm3_rv_happy" -eq 1], [
+	AS_IF([test "$psm3_rv_happy" -eq 1 ], [
 		AC_MSG_CHECKING([for RV support for ring.overflow_cnt])
 		AC_COMPILE_IFELSE(
 			[AC_LANG_PROGRAM(
@@ -142,6 +143,7 @@ AS_IF([test "x$enable_psm_src" == "xyes"],
 	AC_SEARCH_LIBS([shm_open], [rt], [], [AC_MSG_ERROR([unable to find shm_open() in librt])])
 	AC_SEARCH_LIBS([dlopen], [dl], [], [AC_MSG_ERROR([unable to find dlopen() in libdl])])
 	AC_SEARCH_LIBS([numa_node_of_cpu], [numa], [], [AC_MSG_ERROR([unable to find numa_node_of_cpu() in libnuma])])
+	AC_SEARCH_LIBS([uuid_parse], [uuid], [], [AC_MSG_ERROR([unable to find uuid_parse() in libuuid])])
 	AS_IF([test "x$enable_psm_ud" == "xyes"],
 	      [AC_SEARCH_LIBS([ibv_get_device_list], [ibverbs], [],
 			      [AC_MSG_ERROR([unable to find ibv_get_device_list() in libibverbs])])
@@ -171,8 +173,6 @@ AS_IF([test "x$enable_psm_src" == "xyes"],
 	AS_IF([test ! -z "$PSM_PERF"], [CPPFLAGS="$CPPFLAGS -DRDPMC_PERF_FRAMEWORK"], [])
 	AS_IF([test ! -z "$PSM_HEAP_DEBUG"], [CPPFLAGS="$CPPFLAGS -DPSM_HEAP_DEBUG"], [])
 	AS_IF([test ! -z "$PSM_PROFILE"], [CPPFLAGS="$CPPFLAGS -DPSM_PROFILE"], [])
-	AS_IF([test ! -z "$PSM_CPPFLAGS"], [CPPFLAGS="$CPPFLAGS $PSM_CPPFLAGS"], [])
-	AS_IF([test ! -z "$PSM_CFLAGS"], [CFLAGS="$CFLAGS $PSM_CFLAGS"], [])
       ])
 
 AM_CONDITIONAL([HAVE_PSM3_ADDITIONAL_GLOBALS], [test ! -z "$PSM2_ADDITIONAL_GLOBALS"], [])
@@ -656,11 +656,14 @@ AC_DEFINE_UNQUOTED([HAVE_LIBCUDA], [$have_libcuda], [Whether we have CUDA runtim
 if test $have_libcuda -eq 1; then
 	cuda_CPPFLAGS="$cuda_CPPFLAGS -DPSM_CUDA -DNVIDIA_GPU_DIRECT"
 fi
+AC_DEFINE_UNQUOTED([PSM3_CUDA], [$have_libcuda], [Whether we have CUDA runtime or not])
 
 CPPFLAGS="$CPPFLAGS $cuda_CPPFLAGS"
 LDFLAGS="$LDFLAGS $cuda_LDFLAGS"
 LIBS="$LIBS $cuda_LIBS"
 
+AS_IF([test ! -z "$PSM_CPPFLAGS"], [CPPFLAGS="$CPPFLAGS $PSM_CPPFLAGS"], [])
+AS_IF([test ! -z "$PSM_CFLAGS"], [CFLAGS="$CFLAGS $PSM_CFLAGS"], [])
 dnl Provider-specific checks
 dnl FI_PROVIDER_INIT
 dnl FI_PROVIDER_SETUP([psm3])
@@ -675,10 +678,29 @@ AM_COND_IF([HAVE_PSM3_SRC],
 	   [
 		IFS_VERSION="${RELEASE_TAG:-$(git describe --dirty --always --abbrev=8 --broken --tags 2>/dev/null \
 			|| git describe --dirty --always --abbrev=8 --broken 2>/dev/null || echo 'unknown commit')}"
+		IFS_VERSION=${IFS_VERSION//./_}
 		GIT_HASH="$(git log --oneline --format='%H' -1)"
+		RPM_RELEASE=$(cut -d'_' -f5 <<<"${IFS_VERSION}")
+		RELEASE_VER=$(cut -d'_' -f1-4 <<<"${IFS_VERSION}" | sed 's/_/./g')
+		AS_IF([test x"${RELEASE_VER}" = x"${PACKAGE_VERSION}"], [], [
+			AC_MSG_NOTICE([Release Tag does not match VERSION file])
+			AC_MSG_NOTICE([${RELEASE_VER} != ${PACKAGE_VERSION}])
+			RPM_RELEASE=999
+		])
+		PSM3_PROV_VER_MAJOR=$(cut -d'.' -f1 <<<"${PACKAGE_VERSION}")
+		PSM3_PROV_VER_MINOR=$(cut -d'.' -f2 <<<"${PACKAGE_VERSION}")
+		PSM3_PROV_VER_MAINT=$(cut -d'.' -f3 <<<"${PACKAGE_VERSION}")
+		PSM3_PROV_VER_PATCH=$(cut -d'.' -f4 <<<"${PACKAGE_VERSION}")
 	   ])
+AS_IF([test $have_libcuda -eq 1], [RPM_RELEASE=${RPM_RELEASE}cuda])
+
 AC_SUBST(IFS_VERSION)
 AC_SUBST(GIT_HASH)
+AC_SUBST(RPM_RELEASE)
+AC_SUBST(PSM3_PROV_VER_MAJOR)
+AC_SUBST(PSM3_PROV_VER_MINOR)
+AC_SUBST(PSM3_PROV_VER_MAINT)
+AC_SUBST(PSM3_PROV_VER_PATCH)
 dnl Set during Make.
 dnl AC_SUBST(BUILD_TIMESTAMP)
 dnl AC_SUBST(SRC_CHECKSUM)

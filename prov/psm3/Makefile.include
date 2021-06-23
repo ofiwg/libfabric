@@ -29,7 +29,7 @@ _psm3_cppflags = \
 chksum_srcs = $(_psm3_files)
 
 if HAVE_PSM3_SRC
-_psm3_cflags =
+_psm3_cflags = $(psm3_ARCH_CFLAGS)
 _nodist_psm3_files = \
 	prov/psm3/src/psm3_revision.c \
 	prov/psm3/src/psm3_src_chksum.h
@@ -46,7 +46,7 @@ _psm3_cppflags += \
 	-I$(top_srcdir)/prov/psm3/psm3/opa \
 	-D_GNU_SOURCE=1
 
-noinst_LTLIBRARIES += libopa.la libuuid.la \
+noinst_LTLIBRARIES += libopa.la \
 	libptl_am.la libptl_ips.la libptl_self.la \
 	libpsm_hal_gen1.la libpsm3i.la
 
@@ -124,20 +124,6 @@ libptl_self_la_CPPFLAGS = \
 	-I$(top_srcdir)/prov/psm3/psm3/ptl_self/ \
 	$(AM_CPPFLAGS) $(psm3_CPPFLAGS) $(_psm3_cppflags)
 libptl_self_la_CFLAGS = \
-	$(AM_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
-
-libuuid_la_SOURCES = \
-	prov/psm3/psm3/libuuid/pack.c \
-	prov/psm3/psm3/libuuid/parse.c \
-	prov/psm3/psm3/libuuid/psm_uuid.c \
-	prov/psm3/psm3/libuuid/psm_uuid.h \
-	prov/psm3/psm3/libuuid/unpack.c \
-	prov/psm3/psm3/libuuid/unparse.c
-#   prov/psm3/psm3/libuuid/compare.c    # Omitted as it is not needed to build lib
-libuuid_la_CPPFLAGS = \
-	-I$(top_srcdir)/prov/psm3/psm3/libuuid/ \
-	$(AM_CPPFLAGS) $(psm3_CPPFLAGS) $(_psm3_cppflags)
-libuuid_la_CFLAGS = \
 	$(AM_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
 
 libopa_la_SOURCES = \
@@ -252,7 +238,6 @@ nodist_libpsm3i_la_SOURCES = \
 
 libpsm3i_la_LIBADD = \
 	libopa.la \
-	libuuid.la \
 	libptl_am.la \
 	libptl_ips.la \
 	libptl_self.la \
@@ -260,7 +245,6 @@ libpsm3i_la_LIBADD = \
 
 libpsm3i_la_DEPENDENCIES = \
 	libopa.la \
-	libuuid.la \
 	libptl_am.la \
 	libptl_ips.la \
 	libptl_self.la \
@@ -274,7 +258,7 @@ EXTRA_DIST += $(_psm3_extra_dist)
 
 chksum_srcs += \
 	$(libptl_am_la_SOURCES) $(libptl_ips_la_SOURCES) $(libptl_self_la_SOURCES) \
-	$(libuuid_la_SOURCES) $(libopa_la_SOURCES) $(libpsm_hal_gen1_la_SOURCES) \
+	$(libopa_la_SOURCES) $(libpsm_hal_gen1_la_SOURCES) \
 	$(libpsm3i_la_SOURCES) $(_psm3_extra_dist)
 
 _psm3_LIBS = libpsm3i.la
@@ -297,7 +281,7 @@ if HAVE_PSM3_DL
 pkglib_LTLIBRARIES += libpsm3-fi.la
 libpsm3_fi_la_SOURCES = $(_psm3_files) $(common_srcs)
 nodist_libpsm3_fi_la_SOURCES = $(_nodist_psm3_files)
-libpsm3_fi_la_CFLAGS = $(AM_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
+libpsm3_fi_la_CFLAGS = $(AM_CFLAGS) $(psm3_CFLAGS)
 libpsm3_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(psm3_CPPFLAGS) $(_psm3_cppflags)
 libpsm3_fi_la_LDFLAGS = \
 	-module -avoid-version -shared -export-dynamic \
@@ -308,7 +292,7 @@ else !HAVE_PSM3_DL
 noinst_LTLIBRARIES += libpsm3.la
 libpsm3_la_SOURCES = $(_psm3_files)
 nodist_libpsm3_la_SOURCES = $(_nodist_psm3_files)
-libpsm3_la_CFLAGS = $(src_libfabric_la_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
+libpsm3_la_CFLAGS = $(src_libfabric_la_CFLAGS) $(psm3_CFLAGS)
 libpsm3_la_CPPFLAGS = $(src_libfabric_la_CPPFLAGS) $(psm3_CPPFLAGS) $(_psm3_cppflags)
 libpsm3_la_LDFLAGS = $(psm3_LDFLAGS)
 libpsm3_la_LIBADD = $(psm3_LIBS) $(_psm3_LIBS)
