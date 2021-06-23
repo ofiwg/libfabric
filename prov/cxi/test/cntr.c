@@ -294,7 +294,7 @@ int wait_for_cnt(struct fid_cntr *cntr, int cnt,
 		 uint64_t (*cntr_read)(struct fid_cntr *cntr))
 {
 	uint64_t cntr_value;
-	time_t timeout = time(NULL) + 2;
+	time_t timeout = time(NULL) + 3;
 
 	while ((cntr_value = cntr_read(cntr)) != cnt) {
 		if (time(NULL) > timeout) {
@@ -324,22 +324,7 @@ int wait_for_value(uint64_t compare_value, uint64_t *wb_buf)
 	return 0;
 }
 
-void cntr_queue_work(struct fid_cntr *cntr, int threshold)
-{
-	int ret;
-	struct fi_op_cntr op_cntr = {};
-	struct fi_deferred_work cntr_wb_work = {};
-
-	op_cntr.cntr = cntr;
-	cntr_wb_work.op_type = FI_CXI_OP_CNTR_WB;
-	cntr_wb_work.triggering_cntr = cntr;
-	cntr_wb_work.threshold = threshold;
-	cntr_wb_work.op.cntr = &op_cntr;
-	ret = fi_control(&cxit_domain->fid, FI_QUEUE_WORK, &cntr_wb_work);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_control failed %d", ret);
-}
-
-Test(cntr, deferred_rma_wb)
+static void deferred_rma_test(enum fi_op_type op)
 {
 	int ret;
 	uint8_t *send_buf;
@@ -382,18 +367,16 @@ Test(cntr, deferred_rma_wb)
 	rma.msg.addr = cxit_ep_fi_addr;
 	rma.msg.rma_iov = &rma_iov;
 	rma.msg.rma_iov_count = 1;
-	rma.flags = 0;
+	rma.flags = FI_CXI_CNTR_WB;
 
 	work.threshold = trig_thresh;
 	work.triggering_cntr = trig_cntr;
 	work.completion_cntr = trig_cntr;
-	work.op_type = FI_OP_READ;
+	work.op_type = op;
 	work.op.rma = &rma;
 
 	ret = fi_control(&cxit_domain->fid, FI_QUEUE_WORK, &work);
 	cr_assert_eq(ret, FI_SUCCESS, "FI_QUEUE_WORK failed %d", ret);
-
-	cntr_queue_work(trig_cntr, trig_thresh + 1);
 
 	ret = fi_cntr_add(trig_cntr, work.threshold);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
@@ -404,6 +387,16 @@ Test(cntr, deferred_rma_wb)
 
 	mr_destroy(&mem_window);
 	free(send_buf);
+}
+
+Test(cntr, deferred_wb_rma_write)
+{
+	deferred_rma_test(FI_OP_WRITE);
+}
+
+Test(cntr, deferred_wb_rma_read)
+{
+	deferred_rma_test(FI_OP_READ);
 }
 
 Test(cntr, op_cntr_wb1)
@@ -419,10 +412,10 @@ Test(cntr, op_cntr_wb1)
 
 	cxi_cntr = container_of(&cntr->fid, struct cxip_cntr, cntr_fid.fid);
 
-	cntr_queue_work(cntr, trig_thresh);
-
 	ret = fi_cntr_add(cntr, trig_thresh);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
+
+	fi_cntr_read(cntr);
 
 	ret = fi_cxi_gen_cntr_success(trig_thresh, &cxi_value);
 	cr_assert(ret == FI_SUCCESS);
@@ -454,7 +447,6 @@ Test(cntr, op_cntr_wb2)
 
 	cxi_cntr = container_of(&cntr->fid, struct cxip_cntr, cntr_fid.fid);
 
-	cntr_queue_work(cntr, threshold);
 	ret = fi_cntr_add(cntr, threshold);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
 
@@ -463,6 +455,7 @@ Test(cntr, op_cntr_wb2)
 
 	ret = fi_cxi_gen_cntr_success(threshold, &cxi_value);
 	cr_assert(ret == FI_SUCCESS);
+	fi_cntr_read(cntr);
 	ret = wait_for_value(cxi_value, (uint64_t *)cxi_cntr->wb);
 	cr_assert(ret == 0);
 
@@ -474,12 +467,11 @@ Test(cntr, op_cntr_wb2)
 	cr_assert(ret == 0);
 
 	threshold = 10;
-	cntr_queue_work(cntr, threshold);
 	ret = fi_cntr_add(cntr, threshold);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
 	ret = fi_cxi_gen_cntr_success(threshold, &cxi_value);
 	cr_assert(ret == FI_SUCCESS);
-	ret = wait_for_value(cxi_value, (uint64_t *)cxi_cntr->wb);
+	ret = wait_for_cnt(cntr, threshold, fi_cntr_read);
 	cr_assert(ret == 0);
 
 	fi_cxi_cntr_set(mmio_addr, 0);
@@ -495,12 +487,11 @@ Test(cntr, op_cntr_wb2)
 
 	/* Use the new wb buffer */
 	threshold = 20;
-	cntr_queue_work(cntr, threshold);
 	ret = fi_cntr_add(cntr, threshold);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_add failed %d", ret);
 	ret = fi_cxi_gen_cntr_success(threshold, &cxi_value);
 	cr_assert(ret == FI_SUCCESS);
-	ret = wait_for_value(cxi_value, (uint64_t *)wb_buf);
+	ret = wait_for_cnt(cntr, threshold, fi_cntr_read);
 	cr_assert(ret == 0);
 
 	// Use instead of fi_cxi_cntr_set()

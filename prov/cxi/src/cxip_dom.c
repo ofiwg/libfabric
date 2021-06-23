@@ -345,7 +345,8 @@ static int cxip_dom_dwq_op_cntr(struct cxip_domain *dom,
 				struct fi_op_cntr *cntr, enum fi_op_type op,
 				struct cxip_cntr *trig_cntr,
 				struct cxip_cntr *comp_cntr,
-				uint64_t trig_thresh)
+				uint64_t trig_thresh,
+				bool cntr_wb)
 {
 	struct cxip_cntr *op_cntr;
 	int ret;
@@ -356,20 +357,12 @@ static int cxip_dom_dwq_op_cntr(struct cxip_domain *dom,
 	if (!cntr || !cntr->cntr || comp_cntr)
 		return -FI_EINVAL;
 
-	switch ((int)op) {
-	case FI_OP_CNTR_SET:
-		opcode = C_CMD_CT_TRIG_SET;
-		break;
-	case FI_OP_CNTR_ADD:
-		opcode = C_CMD_CT_TRIG_INC;
-		break;
-	case FI_CXI_OP_CNTR_WB:
+	if (cntr_wb) {
 		opcode = C_CMD_CT_TRIG_EVENT;
 		cmd.eq = C_EQ_NONE;
-		break;
-	default:
-		CXIP_WARN("Invalid op %d\n", op);
-		return -FI_EINVAL;
+	} else {
+		opcode = op == FI_OP_CNTR_SET ?
+			C_CMD_CT_TRIG_SET : C_CMD_CT_TRIG_INC;
 	}
 
 	op_cntr = container_of(cntr->cntr, struct cxip_cntr, cntr_fid);
@@ -466,6 +459,7 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 	struct cxip_cntr *trig_cntr;
 	struct cxip_cntr *comp_cntr;
 	struct cxip_cq *cq;
+	bool queue_wb_work = false;
 	int ret;
 
 	dom = container_of(fid, struct cxip_domain, util_domain.domain_fid.fid);
@@ -498,67 +492,106 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 			return ret;
 		}
 
-		switch ((int)work->op_type) {
+		switch (work->op_type) {
 		case FI_OP_SEND:
-			return cxip_dom_dwq_op_send(dom, work->op.msg,
-						    trig_cntr, comp_cntr,
-						    work->threshold);
+			if (work->op.msg->flags & FI_CXI_CNTR_WB)
+				queue_wb_work = true;
+			ret = cxip_dom_dwq_op_send(dom, work->op.msg,
+						   trig_cntr, comp_cntr,
+						   work->threshold);
+			break;
 
 		case FI_OP_TSEND:
-			return cxip_dom_dwq_op_tsend(dom, work->op.tagged,
-						     trig_cntr, comp_cntr,
-						     work->threshold);
-
-		case FI_OP_RECV:
-			return cxip_dom_dwq_op_recv(dom, work->op.msg,
+			if (work->op.tagged->flags & FI_CXI_CNTR_WB)
+				queue_wb_work = true;
+			ret = cxip_dom_dwq_op_tsend(dom, work->op.tagged,
 						    trig_cntr, comp_cntr,
 						    work->threshold);
+			break;
+
+		case FI_OP_RECV:
+			if (work->op.msg->flags & FI_CXI_CNTR_WB)
+				queue_wb_work = true;
+			ret = cxip_dom_dwq_op_recv(dom, work->op.msg,
+						   trig_cntr, comp_cntr,
+						   work->threshold);
+			break;
 
 		case FI_OP_TRECV:
-			return cxip_dom_dwq_op_trecv(dom, work->op.tagged,
-						     trig_cntr, comp_cntr,
-						     work->threshold);
+			if (work->op.tagged->flags & FI_CXI_CNTR_WB)
+				queue_wb_work = true;
+			ret = cxip_dom_dwq_op_trecv(dom, work->op.tagged,
+						    trig_cntr, comp_cntr,
+						    work->threshold);
+			break;
 
 		case FI_OP_READ:
 		case FI_OP_WRITE:
-			return cxip_dom_dwq_op_rma(dom, work->op.rma,
-						   work->op_type, trig_cntr,
-						   comp_cntr, work->threshold);
+			if (work->op.rma->flags & FI_CXI_CNTR_WB)
+				queue_wb_work = true;
+			ret = cxip_dom_dwq_op_rma(dom, work->op.rma,
+						  work->op_type, trig_cntr,
+						  comp_cntr, work->threshold);
+			break;
 
 		case FI_OP_ATOMIC:
-			return cxip_dom_dwq_op_atomic(dom, work->op.atomic,
-						      trig_cntr, comp_cntr,
-						      work->threshold);
+			if (work->op.atomic->flags & FI_CXI_CNTR_WB)
+				queue_wb_work = true;
+			ret = cxip_dom_dwq_op_atomic(dom, work->op.atomic,
+						     trig_cntr, comp_cntr,
+						     work->threshold);
+			break;
 
 		case FI_OP_FETCH_ATOMIC:
-			return cxip_dom_dwq_op_fetch_atomic(dom,
-							    work->op.fetch_atomic,
-							    trig_cntr,
-							    comp_cntr,
-							    work->threshold);
+			if (work->op.fetch_atomic->flags & FI_CXI_CNTR_WB)
+				queue_wb_work = true;
+			ret = cxip_dom_dwq_op_fetch_atomic(dom,
+							   work->op.fetch_atomic,
+							   trig_cntr,
+							   comp_cntr,
+							   work->threshold);
+			break;
 
 		case FI_OP_COMPARE_ATOMIC:
-			return cxip_dom_dwq_op_comp_atomic(dom,
-							   work->op.compare_atomic,
-							   trig_cntr, comp_cntr,
-							   work->threshold);
+			if (work->op.compare_atomic->flags & FI_CXI_CNTR_WB)
+				queue_wb_work = true;
+			ret = cxip_dom_dwq_op_comp_atomic(dom,
+							  work->op.compare_atomic,
+							  trig_cntr, comp_cntr,
+							  work->threshold);
+			break;
 
 		case FI_OP_CNTR_SET:
 		case FI_OP_CNTR_ADD:
 			return cxip_dom_dwq_op_cntr(dom, work->op.cntr,
 						    work->op_type, trig_cntr,
-						    comp_cntr, work->threshold);
-
-		case FI_CXI_OP_CNTR_WB:
-			return cxip_dom_dwq_op_cntr(dom, work->op.cntr,
-						    work->op_type, trig_cntr,
-						    NULL, work->threshold);
+						    comp_cntr, work->threshold,
+						    false);
 
 		default:
 			CXIP_WARN("Invalid FI_QUEUE_WORK op %s\n",
 				  fi_tostr(&work->op_type, FI_TYPE_OP_TYPE));
 			return -FI_EINVAL;
 		}
+
+		if (ret)
+			return ret;
+
+		if (queue_wb_work) {
+			struct fi_op_cntr op_cntr = {
+				.cntr = &trig_cntr->cntr_fid,
+			};
+
+			/* no op_type needed for counter writeback */
+			ret = cxip_dom_dwq_op_cntr(dom, &op_cntr, 0,
+						   trig_cntr, NULL,
+						   work->threshold + 1, true);
+			/* TODO: If cxip_dom_dwq_op_cntr fails we need to
+			 * cancel the above work queue.
+			 */
+		}
+
+		return ret;
 
 	case FI_FLUSH_WORK:
 		fastlock_acquire(&dom->lock);
