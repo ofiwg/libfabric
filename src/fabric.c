@@ -750,19 +750,32 @@ void fi_ini(void)
 
 	fi_param_define(NULL, "provider", FI_PARAM_STRING,
 			"Only use specified provider (default: all available)");
-	fi_param_define(NULL, "fork_unsafe", FI_PARAM_BOOL,
-			"Whether use of fork() may be unsafe for some providers"
-			" (default: no). Setting this to yes could improve"
-			" performance at the expense of making fork() potentially"
-			" unsafe");
-	fi_param_define(NULL, "universe_size", FI_PARAM_SIZE_T,
-			"Defines the maximum number of processes that will be"
-			" used by distribute OFI application. The provider uses"
-			" this to optimize resource allocations"
-			" (default: provider specific)");
-	fi_param_get_size_t(NULL, "universe_size", &ofi_universe_size);
 	fi_param_get_str(NULL, "provider", &param_val);
 	ofi_create_filter(&prov_filter, param_val);
+
+	fi_param_define(NULL, "fork_unsafe", FI_PARAM_BOOL,
+			"Whether use of fork() may be unsafe for some providers "
+			"(default: no). Setting this to yes could improve "
+			"performance at the expense of making fork() potentially "
+			"unsafe");
+	fi_param_define(NULL, "universe_size", FI_PARAM_SIZE_T,
+			"Defines the maximum number of processes that will be "
+			"used by distribute OFI application. The provider uses "
+			"this to optimize resource allocations "
+			"(default: provider specific)");
+	fi_param_get_size_t(NULL, "universe_size", &ofi_universe_size);
+
+	fi_param_define(NULL, "poll_fairness", FI_PARAM_INT,
+			"This counter value controls calling poll() on a list "
+			"of sockets and file descriptors and is most relevant "
+			"when using the tcp provider with the pollfd wait "
+			"object.  The pollfd abstraction maintains a list of "
+			"active or hot fd's that it monitors.  This variable "
+			"controls the number of times that the active fd's "
+			"list is checked relative to the full set of fd's "
+			"being monitored.  A value of 0 disables the active "
+			"list.  Default (%d)", ofi_poll_fairness);
+	fi_param_get_int(NULL, "poll_fairness", &ofi_poll_fairness);
 
 	ofi_load_dl_prov();
 

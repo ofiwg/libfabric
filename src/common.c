@@ -83,12 +83,7 @@ struct ofi_common_locks common_locks = {
 };
 
 size_t ofi_universe_size = 1024;
-
-#if defined _WIN32
 int ofi_poll_fairness = 0; /* see comments ofi_pollfds_hotties */
-#else
-int ofi_poll_fairness = 0;
-#endif
 
 
 int fi_poll_fd(int fd, int timeout)
