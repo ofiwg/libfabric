@@ -310,20 +310,31 @@ int rxr_cq_handle_error(struct rxr_ep *ep, ssize_t prov_errno, struct rxr_pkt_en
 
 	if (!pkt_entry)
 		goto write_eq_err;
-	/*
-	 * A handshake send could fail at the core provider if the peer endpoint
-	 * is shutdown soon after it receives a send completion for the REQ
-	 * packet that included src_address. The handshake itself is irrelevant if
-	 * that happens, so just squelch this error entry and move on without
-	 * writing an error completion or event to the application.
-	 */
+
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
 	if (rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_HANDSHAKE_PKT) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"Squelching error CQE for RXR_HANDSHAKE_PKT\n");
 		rxr_ep_dec_tx_pending(ep, peer, 1);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR) {
+			/* Add peer to handshake_queued_peer_list for retry later
+			 * in progress engine.
+			 */
+			assert(!(peer->flags & RXR_PEER_HANDSHAKE_QUEUED));
+			peer->flags |= RXR_PEER_HANDSHAKE_QUEUED;
+			dlist_insert_tail(&peer->handshake_queued_entry,
+					  &ep->handshake_queued_peer_list);
+		} else if (prov_errno != IBV_WC_REM_INV_RD_REQ_ERR) {
+			/* If prov_errno is IBV_WC_REM_INV_RD_REQ_ERR, the peer has been destroyed.
+			 * Which is normal, as peer does not always need a handshake packet perform
+			 * its duty. (For example, if a peer just want to sent 1 message to the ep, it
+			 * does not need handshake.)
+			 * In this case, it is safe to ignore this error completion. In all other cases,
+			 * we write an eq entry because there is no application operation associated
+			 * with handshake.
+			 */
+			efa_eq_write_error(&ep->util_ep, FI_EIO, prov_errno);
+		}
 		return 0;
 	}
 
