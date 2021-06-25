@@ -45,6 +45,7 @@ common_srcs = \
 	shared/hmem.c \
 	shared/hmem_rocr.c \
 	shared/hmem_cuda.c \
+	shared/hmem_cuda_gdrcopy.c \
 	shared/hmem_ze.c \
 	shared/common.c \
 	shared/enosys.c \
@@ -80,6 +81,7 @@ common_srcs = \
 	util/src/rocr_mem_monitor.c
 
 if MACOS
+common_srcs += shared/osx/osd.c
 common_srcs += shared/unix/osd.c
 common_srcs += inc/osx/osd.h
 common_srcs += inc/unix/osd.h
@@ -190,7 +192,7 @@ src_libpsm3_fi_la_LDFLAGS += \
 
 chksum_srcs = $(src_libpsm3_fi_la_SOURCES)
 if HAVE_PSM3_SRC
-src_libpsm3_fi_la_SOURCES += src/psm3_revision.c
+nodist_src_libpsm3_fi_la_SOURCES += src/psm3_revision.c
 
 include psm3/Makefile.include
 src_libpsm3_fi_la_LIBADD += libpsm2.la
@@ -201,7 +203,7 @@ src_libpsm3_fi_la_LDFLAGS += -lpsm2
 endif !HAVE_PSM3_SRC
 
 if !EMBEDDED
-src_libpsm3_fi_la_LDFLAGS += -version-info 15:2:14
+src_libpsm3_fi_la_LDFLAGS += -version-info 16:1:15
 endif
 
 prov_install_man_pages = man/man7/fi_psm3.7
@@ -213,7 +215,8 @@ man_MANS = $(prov_install_man_pages)
 EXTRA_DIST += \
         libpsm3-fi.spec.in \
         config/distscript.pl \
-        $(prov_dist_man_pages)
+        $(prov_dist_man_pages) \
+        VERSION
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libpsm3-fi.pc

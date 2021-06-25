@@ -115,7 +115,6 @@ static struct fi_domain_attr psmx3_domain_attr = {
 
 static struct fi_fabric_attr psmx3_fabric_attr = {
 	.name			= PSMX3_FABRIC_NAME,
-	.prov_version		= OFI_VERSION_DEF_PROV,
 };
 
 static struct fi_info psmx3_prov_info = {
@@ -358,6 +357,7 @@ int psmx3_init_prov_info(const struct fi_info *hints, struct fi_info **info)
 	}
 
 alloc_info:
+	psmx3_prov_info.fabric_attr->prov_version = get_psm3_provider_version();
 	info_out = NULL;
 	if (!hints || !(hints->caps & (FI_TAGGED | FI_MSG))) {
 		info_new = psmx3_dupinfo(&psmx3_prov_info);

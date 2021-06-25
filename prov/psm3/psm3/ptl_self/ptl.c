@@ -143,7 +143,7 @@ self_mq_isend(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags_user,
 	    return PSM2_NO_MEMORY;
 
 #ifdef PSM_CUDA
-	if (PSMI_IS_CUDA_ENABLED && PSMI_IS_CUDA_MEM(ubuf)) {
+	if (len && PSMI_IS_CUDA_ENABLED && PSMI_IS_CUDA_MEM(ubuf)) {
 		psmi_cuda_set_attr_sync_memops(ubuf);
 		send_req->is_buf_gpu_mem = 1;
 	} else
@@ -294,6 +294,7 @@ self_connect(ptl_t *ptl_gen,
 			continue;
 
 		if (array_of_epid[i] == ptl->epid) {
+			_HFI_CONNDBG("connect self\n");
 			array_of_epaddr[i] = ptl->epaddr;
 			array_of_epaddr[i]->ptlctl = ptl->ctl;
 			array_of_epaddr[i]->epid = ptl->epid;
@@ -328,6 +329,7 @@ self_disconnect(ptl_t *ptl_gen, int force, int numep,
 			continue;
 
 		if (array_of_epaddr[i] == ptl->epaddr) {
+			_HFI_CONNDBG("disconnect self\n");
 			psmi_epid_remove(ptl->ep, ptl->epid);
 			array_of_errors[i] = PSM2_OK;
 		}
