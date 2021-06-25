@@ -888,7 +888,7 @@ ips_proto_init(const psmi_context_t *context, const ptl_t *ptl,
 
 		psmi_getenv("PSM3_CUDA_PREFETCH_LIMIT",
 			    "How many RDMA windows to prefetch at RTS time(default is 2)",
-			    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT_FLAGS,
+			    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT_FLAGS,
 			    (union psmi_envvar_val)CUDA_WINDOW_PREFETCH_DEFAULT,
 			    &env_prefetch_limit);
 		proto->cuda_prefetch_limit = env_prefetch_limit.e_uint;

@@ -801,6 +801,7 @@ ips_proto_mq_isend(psm2_mq_t mq, psm2_epaddr_t mepaddr, uint32_t flags_user,
 		scb->ips_lrh.hdr_data.u32w1 = len;
 		ips_scb_copy_tag(scb->ips_lrh.tag, tag->tag);
 		const void * user_buffer = ubuf;
+		int used_send_dma = 0;
 #ifdef PSM_CUDA
 		if (req->is_buf_gpu_mem) {
 			// TBD USER_BUF_GPU only useful for RTS
@@ -827,6 +828,7 @@ ips_proto_mq_isend(psm2_mq_t mq, psm2_epaddr_t mepaddr, uint32_t flags_user,
 					req->rts_peer = (psm2_epaddr_t) ipsaddr;
 					ips_scb_cb(scb) = ips_proto_mq_eager_complete;
 					ips_scb_cb_param(scb) = req;
+					used_send_dma = 1;
 					proto->strat_stats.short_gdr_isend++;
 					proto->strat_stats.short_gdr_isend_bytes += len;
 				} else
@@ -851,6 +853,7 @@ ips_proto_mq_isend(psm2_mq_t mq, psm2_epaddr_t mepaddr, uint32_t flags_user,
 				req->rts_peer = (psm2_epaddr_t) ipsaddr;
 				ips_scb_cb(scb) = ips_proto_mq_eager_complete;
 				ips_scb_cb_param(scb) = req;
+				used_send_dma = 1;
 				proto->strat_stats.short_dma_cpu_isend++;
 				proto->strat_stats.short_dma_cpu_isend_bytes += len;
 			} else
@@ -898,11 +901,18 @@ ips_proto_mq_isend(psm2_mq_t mq, psm2_epaddr_t mepaddr, uint32_t flags_user,
 		 * 'scb' to be changed, when this scb is done, the
 		 * address is set to NULL when scb is put back to
 		 * scb pool. Even if the same scb is re-used, it
-		 * is not possible to set to this 'buf' address.
+		 * is not possible to set to this 'buf' address
+		 * because the app has not yet had a chance to start
+		 * another IO.  TBD - possible odd scenario if app
+		 * had this IO started in middle of a buffer which it also
+		 * had a multi-packet eager IO working on, then could see
+		 * same user_buffer from two IOs here.
 		 */
-		if (req->mr) {
+		if (used_send_dma) {
 			// noop, callback already setup
 		} else
+		// TBD - could avoid this if/else code by always marking
+		// callback above, but may be less efficient for msgrate
 		if (ips_scb_buffer(scb) == (void *)user_buffer) {
 			/* continue to send from user buffer */
 			ips_scb_cb(scb) = ips_proto_mq_eager_complete;
@@ -1189,7 +1199,12 @@ ips_proto_mq_send(psm2_mq_t mq, psm2_epaddr_t mepaddr, uint32_t flags,
 		 * 'scb' to be changed, when this scb is done, the
 		 * address is set to NULL when scb is put back to
 		 * scb pool. Even if the same scb is re-used, it
-		 * is not possible to set to this 'ubuf' address.
+		 * is not possible to set to this 'ubuf' address
+		 * because the app has not yet had a chance to start
+		 * another IO.  TBD - possible odd scenario if app
+		 * had this IO started in middle of a buffer which it also
+		 * had a multi-packet eager IO working on, then could see
+		 * same user_buffer from two IOs here.
 		 */
 		if (ips_scb_buffer(scb) == (void *)user_buffer) {
 			if ((ips_scb_flags(scb) & IPS_SEND_FLAG_SEND_MR) ||
