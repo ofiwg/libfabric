@@ -452,7 +452,8 @@ static void rxm_get_def_wait(void)
 	fi_param_define(&rxm_prov, "def_tcp_wait_obj", FI_PARAM_STRING,
 			"See def_wait_obj for description.  If set, this "
 			"overrides the def_wait_obj when running over the "
-			"tcp provider.");
+			"tcp provider.  See def_wait_obj for valid values. "
+			"(default: UNSPEC, tcp provider will select).");
 
 	fi_param_get_str(&rxm_prov, "def_wait_obj", &wait_str);
 	if (wait_str && !strcasecmp(wait_str, "pollfd"))
