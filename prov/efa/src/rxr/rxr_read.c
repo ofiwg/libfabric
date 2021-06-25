@@ -401,6 +401,7 @@ int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 	assert(pkt_entry->x_entry == rx_entry);
 	assert(rx_entry->desc && efa_ep_is_cuda_mr(rx_entry->desc[0]));
 	read_entry->iov_count = rx_entry->iov_count;
+	memset(read_entry->mr, 0, sizeof(*read_entry->mr) * read_entry->iov_count);
 	memcpy(read_entry->iov, rx_entry->iov, rx_entry->iov_count * sizeof(struct iovec));
 	rxr_read_copy_desc(EFA_EP, rx_entry->iov_count, rx_entry->desc, read_entry->mr_desc);
 	ofi_consume_iov_desc(read_entry->iov, read_entry->mr_desc, &read_entry->iov_count, data_offset);
