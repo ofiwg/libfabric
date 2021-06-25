@@ -17,7 +17,16 @@ v1.13.0, Fri Jul 2, 2021
 
 - TODO
 
-## PSM4
+## PSM3
+
+- Added CUDA Support, GPU Direct through RV kernel module.
+- Changed PSM3 Provider Version to match IEFS version.
+- Expanded Multi-Rail support.
+- Enhanced debug logging.
+- Removed internal copy of libuuid, added as linked lib.
+- Various Bug Fixes.
+
+## PSM2
 
 - TODO
 
