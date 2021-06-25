@@ -265,7 +265,7 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 		break;
 	case RXR_SHORT_RTR_PKT:
 	case RXR_LONG_RTR_PKT:
-		rxr_pkt_handle_rtr_sent(rxr_ep, pkt_entry);
+		/* nothing can be done when RTR packets are sent */
 		break;
 	case RXR_WRITE_RTA_PKT:
 	case RXR_DC_WRITE_RTA_PKT:
@@ -404,8 +404,7 @@ ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_en
 		} else {
 			assert(entry_type == RXR_RX_ENTRY);
 			rx_entry = (struct rxr_rx_entry *)x_entry;
-			assert(rx_entry->state != RXR_RX_QUEUED_CTRL ||
-			       rx_entry->state != RXR_RX_QUEUED_CTS_RNR);
+			assert(rx_entry->state != RXR_RX_QUEUED_CTRL);
 			rx_entry->state = RXR_RX_QUEUED_CTRL;
 			rx_entry->queued_ctrl.type = ctrl_type;
 			rx_entry->queued_ctrl.inject = inject;
@@ -965,8 +964,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 #endif
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
-	if (!(peer->flags & RXR_PEER_HANDSHAKE_SENT_OR_QUEUED))
-		rxr_pkt_post_handshake_or_queue(ep, peer);
+	rxr_pkt_post_handshake_or_queue(ep, peer);
 
 	if (peer->is_local) {
 		assert(ep->use_shm);

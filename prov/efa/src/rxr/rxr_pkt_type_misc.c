@@ -98,41 +98,53 @@ ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rdm_peer *peer)
 
 /** @brief Post a handshake packet to a peer.
  *
- * Note that if FI_EAGAIN is returned from the post of the handshake
- * packet, the peer will be added into queue_peer_list for retry
- * later. For other errors, we will hard fail.
+ * This function ensures an endpoint post one and only one handshake
+ * to a peer.
  *
- * @param ep The endpoint on which the handshake packet is sent out.
- * @param peer The peer to which the handshake packet is posted.
- * @return Void.
+ * For a peer that the endpoint has not attempted to send handshake,
+ * it will send a handshake packet.
+ *
+ * If the send succeeded, RXR_PEER_HANDSHAKE_SENT flag will be set to peer->flags.
+ *
+ * If the send encountered FI_EAGAIN failure, the peer will be added to
+ * rxr_ep->handshake_queued_peer_list. The handshake will be resend later
+ * by the progress engine.
+ *
+ * If the send encountered other failure, an EQ entry will be written.
+ *
+ * To ensure only one handshake is send to a peer, the function will not send
+ * packet to a peer whose peer->flags has either RXR_PEER_HANDSHAKE_SENT or
+ * RXR_PEER_HANDSHAKE_QUEUED.
+ *
+ * @param[in]	ep	The endpoint on which the handshake packet is sent out.
+ * @param[in]	peer	The peer to which the handshake packet is posted.
+ * @return 	void.
  */
 void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep, struct rdm_peer *peer)
 {
-	ssize_t ret;
+	ssize_t err;
 
-	assert(!(peer->flags & RXR_PEER_HANDSHAKE_SENT_OR_QUEUED));
+	if (peer->flags & (RXR_PEER_HANDSHAKE_SENT | RXR_PEER_HANDSHAKE_QUEUED))
+		return;
 
-	ret = rxr_pkt_post_handshake(ep, peer);
-	if (OFI_UNLIKELY(ret)) {
-		if (ret == -FI_EAGAIN) {
-			/* add peer to peer_queued_list for retry later */
-			dlist_insert_tail(&peer->queued_entry,
-					  &ep->peer_queued_list);
-		} else {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-				"Failed to post HANDSHAKE to peer %ld: %s\n",
-				peer->efa_fiaddr, fi_strerror(-ret));
-			assert(0 && "Failed to post HANDSHAKE to peer");
-			efa_eq_write_error(&ep->util_ep, FI_EIO, -ret);
-		}
+	err = rxr_pkt_post_handshake(ep, peer);
+	if (OFI_UNLIKELY(err == -FI_EAGAIN)) {
+		/* add peer to handshake_queued_peer_list for retry later */
+		peer->flags |= RXR_PEER_HANDSHAKE_QUEUED;
+		dlist_insert_tail(&peer->handshake_queued_entry,
+				  &ep->handshake_queued_peer_list);
+		return;
 	}
-	/*
-	 * If rxr_pkt_post_handshake returns success or FI_EAGAIN,
-	 * set the flag to RXR_PEER_HANDSHAKE_SENT_OR_QUEUED to
-	 * avoid posting handshake packet multiple times to the
-	 * same peer.
-	 */
-	peer->flags |= RXR_PEER_HANDSHAKE_SENT_OR_QUEUED;
+
+	if (OFI_UNLIKELY(err)) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Failed to post HANDSHAKE to peer %ld: %s\n",
+			peer->efa_fiaddr, fi_strerror(-err));
+		efa_eq_write_error(&ep->util_ep, FI_EIO, -err);
+		return;
+	}
+
+	peer->flags |= RXR_PEER_HANDSHAKE_SENT;
 }
 
 void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,

@@ -269,10 +269,6 @@ enum rxr_tx_comm_type {
 	RXR_TX_QUEUED_CTRL,	/* tx_entry was unable to send ctrl packet */
 	RXR_TX_QUEUED_REQ_RNR,  /* tx_entry RNR sending REQ packet */
 	RXR_TX_QUEUED_DATA_RNR,	/* tx_entry RNR sending data packets */
-	RXR_TX_WAIT_READ_FINISH, /* tx_entry (on initiating EP) wait
-				  * for rx_entry to finish receiving
-				  * (FI_READ only)
-				  */
 };
 
 enum rxr_rx_comm_type {
@@ -281,18 +277,24 @@ enum rxr_rx_comm_type {
 	RXR_RX_UNEXP,		/* rx_entry unexp msg waiting for post recv */
 	RXR_RX_MATCHED,		/* rx_entry matched with RTM */
 	RXR_RX_RECV,		/* rx_entry large msg recv data pkts */
-	RXR_RX_QUEUED_CTRL,	/* rx_entry was unable to send ctrl packet */
-	RXR_RX_QUEUED_EOR,	/* rx_entry was unable to send EOR over shm */
-	RXR_RX_QUEUED_CTS_RNR,	/* rx_entry RNR sending CTS */
+	RXR_RX_QUEUED_CTRL,	/* rx_entry encountered error when sending control
+				   it is in rxr_ep->rx_queued_entry_list, progress
+				   engine will resend the ctrl packet */
 	RXR_RX_WAIT_READ_FINISH, /* rx_entry wait for send to finish, FI_READ */
 	RXR_RX_WAIT_ATOMRSP_SENT, /* rx_entry wait for atomrsp packet sent completion */
 };
 
 #define RXR_PEER_REQ_SENT BIT_ULL(0) /* sent a REQ to the peer, peer should send a handshake back */
-#define RXR_PEER_HANDSHAKE_SENT_OR_QUEUED BIT_ULL(1)
+#define RXR_PEER_HANDSHAKE_SENT BIT_ULL(1) /* a handshake packet has been sent to a peer */
 #define RXR_PEER_HANDSHAKE_RECEIVED BIT_ULL(2)
 #define RXR_PEER_IN_BACKOFF BIT_ULL(3) /* peer is in backoff, not allowed to send */
 #define RXR_PEER_BACKED_OFF BIT_ULL(4) /* peer backoff was increased during this loop of the progress engine */
+/*
+ * FI_EAGAIN error was encountered when sending handsahke to this peer,
+ * the peer was put in rxr_ep->handshake_queued_peer_list.
+ * Progress engine will retry sending handshake.
+ */
+#define RXR_PEER_HANDSHAKE_QUEUED      BIT_ULL(5)
 
 struct rxr_fabric {
 	struct util_fabric util_fabric;
@@ -324,7 +326,7 @@ struct rdm_peer {
 	int timeout_interval;		/* initial RNR timeout value */
 	int rnr_timeout_exp;		/* RNR timeout exponentation calc val */
 	struct dlist_entry rnr_entry;	/* linked to rxr_ep peer_backoff_list */
-	struct dlist_entry queued_entry; /* linked with peer_queued_list in rxr_ep */
+	struct dlist_entry handshake_queued_entry; /* linked with rxr_ep->handshake_queued_peer_list */
 	struct dlist_entry rx_unexp_list; /* a list of unexpected untagged rx_entry for this peer */
 	struct dlist_entry rx_unexp_tagged_list; /* a list of unexpected tagged rx_entry for this peer */
 	ofi_atomic32_t use_cnt;		/* refcount */
@@ -670,7 +672,7 @@ struct rxr_ep {
 	/* rxr_peer entries that are in backoff due to RNR */
 	struct dlist_entry peer_backoff_list;
 	/* rxr_peer entries that will retry posting handshake pkt */
-	struct dlist_entry peer_queued_list;
+	struct dlist_entry handshake_queued_peer_list;
 
 #if ENABLE_DEBUG
 	/* rx_entries waiting for data to arrive (large messages) */
