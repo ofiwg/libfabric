@@ -107,8 +107,6 @@ int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 #endif
 		break;
 	case RXR_RX_QUEUED_CTRL:
-	case RXR_RX_QUEUED_CTS_RNR:
-	case RXR_RX_QUEUED_EOR:
 		dlist_remove(&rx_entry->queued_entry);
 		break;
 	default:
@@ -385,11 +383,16 @@ int rxr_cq_handle_error(struct rxr_ep *ep, ssize_t prov_errno, struct rxr_pkt_en
 			return ret;
 		}
 		rxr_cq_queue_pkt(ep, &rx_entry->queued_pkts, pkt_entry);
-		if (rx_entry->state == RXR_RX_RECV) {
-			rx_entry->state = RXR_RX_QUEUED_CTS_RNR;
-			dlist_insert_tail(&rx_entry->queued_entry,
-					  &ep->rx_entry_queued_list);
-		}
+		/*
+		 * rx_entry send one ctrl packet at a time, so if we
+		 * received RNR for the packet, the rx_entry must not
+		 * be in ep's rx_queued_entry_list, thus cannot
+		 * be in QUEUED_CTRL state
+		 */
+		assert(rx_entry->state != RXR_RX_QUEUED_CTRL);
+		rx_entry->state = RXR_RX_QUEUED_CTRL;
+		dlist_insert_tail(&rx_entry->queued_entry,
+				  &ep->rx_entry_queued_list);
 		return 0;
 	} else if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_READ_ENTRY) {
 		read_entry = (struct rxr_read_entry *)pkt_entry->x_entry;

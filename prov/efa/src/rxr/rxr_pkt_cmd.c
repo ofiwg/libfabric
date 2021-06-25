@@ -404,8 +404,7 @@ ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_en
 		} else {
 			assert(entry_type == RXR_RX_ENTRY);
 			rx_entry = (struct rxr_rx_entry *)x_entry;
-			assert(rx_entry->state != RXR_RX_QUEUED_CTRL ||
-			       rx_entry->state != RXR_RX_QUEUED_CTS_RNR);
+			assert(rx_entry->state != RXR_RX_QUEUED_CTRL);
 			rx_entry->state = RXR_RX_QUEUED_CTRL;
 			rx_entry->queued_ctrl.type = ctrl_type;
 			rx_entry->queued_ctrl.inject = inject;

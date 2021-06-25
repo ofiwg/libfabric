@@ -1702,14 +1702,19 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			continue;
-
-		if (rx_entry->state == RXR_RX_QUEUED_CTRL) {
-			/*
-			 * We should only have one packet pending at a time for
-			 * rx_entry. Either the send failed due to RNR or the
-			 * rx_entry is queued but not both.
-			 */
-			assert(dlist_empty(&rx_entry->queued_pkts));
+		/*
+		 * rx_entry only send one ctrl packet at a time. The
+		 * ctrl packet can be CTS, EOR, RECEIPT.
+		 *
+		 * Either the send failed due to EAGAIN, in which case
+		 * rx_entry->queued_ctrl will be set.
+		 *
+		 * or the send succeeded, but an error completion was got
+		 * due to RNR, in which case rx_entry->queued_pkts will
+		 * has packets in it.
+		 */
+		assert(rx_entry->state == RXR_RX_QUEUED_CTRL);
+		if (dlist_empty(&rx_entry->queued_pkts)) {
 			ret = rxr_pkt_post_ctrl(ep, RXR_RX_ENTRY, rx_entry,
 						rx_entry->queued_ctrl.type,
 						rx_entry->queued_ctrl.inject);
@@ -1732,6 +1737,12 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			continue;
 
 		dlist_remove(&rx_entry->queued_entry);
+		/*
+		 * For CTS packet, the state need to be RXR_RX_RECV.
+		 * For EOR/RECEIPT, all data has been received, so any state
+		 * other than RXR_RX_QUEUED_CTRL should work.
+		 * In all, we set the state to RXR_RX_RECV
+		 */
 		rx_entry->state = RXR_RX_RECV;
 	}
 
