@@ -169,6 +169,7 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 
 	assert(tx_entry->op == ofi_op_write);
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+	assert(peer);
 	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_shm_pool);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
@@ -268,6 +269,7 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_SHORT_RTR_PKT, 0);
 	} else {
 		peer = rxr_ep_get_peer(ep, tx_entry->addr);
+		assert(peer);
 
 		rxr_pkt_calc_cts_window_credits(ep, peer,
 						tx_entry->total_len,
@@ -317,6 +319,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	}
 
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
+	assert(peer);
 
 	if (peer->flags & RXR_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;
@@ -414,6 +417,7 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 				  util_domain.domain_fid);
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	assert(peer);
 
 	if (peer->is_local)
 		return rxr_rma_post_shm_write(ep, tx_entry);
@@ -504,6 +508,7 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 	fastlock_acquire(&rxr_ep->util_ep.lock);
 
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
+	assert(peer);
 
 	if (peer->flags & RXR_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;

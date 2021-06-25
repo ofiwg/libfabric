@@ -594,6 +594,7 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_
 	int pending;
 
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+	assert(peer);
 
 	/*
 	 * Init tx state for this peer. The rx state and reorder buffers will be
@@ -641,6 +642,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		av = container_of(rxr_ep->util_ep.av, struct efa_av, util_av);
 		for (i = 0; i < av->count; ++i) {
 			peer = rxr_ep_get_peer(rxr_ep, i);
+			assert(peer);
 			if (peer->rx_init)
 				efa_free_robuf(peer);
 		}
@@ -652,6 +654,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	av = container_of(rxr_ep->util_ep.av, struct efa_av, util_av);
 	for (i = 0; i < av->count; ++i) {
 		peer = rxr_ep_get_peer(rxr_ep, i);
+		assert(peer);
 		/*
 		 * TODO: Add support for wait/signal until all pending messages
 		 * have been sent/received so the core does not attempt to
@@ -884,8 +887,10 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 				 */
 				for (i = 0; i < av->count; i++) {
 					first_ep_peer = rxr_ep_get_peer(rxr_first_ep, i);
+					assert(first_ep_peer);
 					if (first_ep_peer->is_local) {
 						peer = rxr_ep_get_peer(rxr_ep, i);
+						assert(peer);
 						peer->shm_fiaddr = first_ep_peer->shm_fiaddr;
 						peer->is_local = 1;
 					}
@@ -1683,6 +1688,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 				     struct rxr_rx_entry,
 				     rx_entry, queued_entry, tmp) {
 		peer = rxr_ep_get_peer(ep, rx_entry->addr);
+		assert(peer);
 
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			continue;
@@ -1723,6 +1729,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 				     struct rxr_tx_entry,
 				     tx_entry, queued_entry, tmp) {
 		peer = rxr_ep_get_peer(ep, tx_entry->addr);
+		assert(peer);
 
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			continue;
@@ -1767,6 +1774,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	dlist_foreach_container(&ep->tx_pending_list, struct rxr_tx_entry,
 				tx_entry, entry) {
 		peer = rxr_ep_get_peer(ep, tx_entry->addr);
+		assert(peer);
 
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			continue;
@@ -1806,6 +1814,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	dlist_foreach_container_safe(&ep->read_pending_list, struct rxr_read_entry,
 				     read_entry, pending_entry, tmp) {
 		peer = rxr_ep_get_peer(ep, read_entry->addr);
+		assert(peer);
 
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			continue;

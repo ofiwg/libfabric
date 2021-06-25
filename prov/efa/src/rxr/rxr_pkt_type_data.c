@@ -296,6 +296,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 	all_received = (rx_entry->bytes_received == rx_entry->total_len);
 
 	peer = rxr_ep_get_peer(ep, rx_entry->addr);
+	assert(peer);
 	peer->rx_credits += ofi_div_ceil(seg_size, ep->max_data_payload_size);
 
 	rx_entry->window -= seg_size;

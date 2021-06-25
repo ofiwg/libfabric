@@ -241,6 +241,7 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 	struct rxr_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
 
 	/*
 	 * Queue the packet if it has not been retransmitted yet.
@@ -347,6 +348,7 @@ int rxr_cq_handle_cq_error(struct rxr_ep *ep, ssize_t err)
 
 	pkt_entry = (struct rxr_pkt_entry *)err_entry.op_context;
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
 
 	/*
 	 * A handshake send could fail at the core provider if the peer endpoint
@@ -821,6 +823,7 @@ void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entr
 		dlist_remove(&tx_entry->entry);
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	assert(peer);
 	peer->tx_credits += tx_entry->credit_allocated;
 
 	if (tx_entry->cq_entry.flags & FI_READ) {

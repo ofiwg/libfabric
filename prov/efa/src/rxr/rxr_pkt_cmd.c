@@ -302,6 +302,7 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	}
 
 	peer = rxr_ep_get_peer(rxr_ep, addr);
+	assert(peer);
 	if (peer->is_local) {
 		assert(rxr_ep->use_shm);
 		pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_shm_pool);
@@ -770,6 +771,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 	}
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
 	if (!peer->is_local)
 		rxr_ep_dec_tx_pending(ep, peer, 0);
 	rxr_pkt_entry_release_tx(ep, pkt_entry);
@@ -869,6 +871,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 #endif
 #endif
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
 	if (!(peer->flags & RXR_PEER_HANDSHAKE_SENT_OR_QUEUED))
 		rxr_pkt_post_handshake_or_queue(ep, peer);
 

@@ -213,6 +213,7 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 
 	bytes_left = rx_entry->total_len - rx_entry->bytes_received;
 	peer = rxr_ep_get_peer(ep, rx_entry->addr);
+	assert(peer);
 	rxr_pkt_calc_cts_window_credits(ep, peer, bytes_left,
 					rx_entry->credit_request,
 					&window, &rx_entry->credit_cts);
@@ -260,8 +261,10 @@ void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 	/* Return any excess tx_credits that were borrowed for the request */
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	tx_entry->credit_allocated = ofi_div_ceil(cts_pkt->window, ep->max_data_payload_size);
-	if (tx_entry->credit_allocated < tx_entry->credit_request)
+	if (tx_entry->credit_allocated < tx_entry->credit_request) {
+		assert(peer);
 		peer->tx_credits += tx_entry->credit_request - tx_entry->credit_allocated;
+	}
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 
@@ -405,6 +408,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	struct rxr_read_entry *read_entry;
 	struct rxr_rma_context_pkt *rma_context_pkt;
 	struct rxr_peer *peer;
+	enum rxr_read_context_type read_context_type;
 	int inject;
 	size_t data_size;
 	ssize_t ret;
@@ -416,6 +420,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	read_entry = (struct rxr_read_entry *)context_pkt_entry->x_entry;
 	read_entry->bytes_finished += rma_context_pkt->seg_size;
 	assert(read_entry->bytes_finished <= read_entry->total_len);
+	read_context_type = read_entry->context_type;
 
 	if (read_entry->bytes_finished == read_entry->total_len) {
 		if (read_entry->context_type == RXR_READ_CONTEXT_TX_ENTRY) {
@@ -451,11 +456,12 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 		rxr_read_release_entry(ep, read_entry);
 	}
 
-	if (read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY) {
+	if (read_context_type == RXR_READ_CONTEXT_PKT_ENTRY) {
 		assert(context_pkt_entry->addr == FI_ADDR_NOTAVAIL);
 		ep->tx_pending--;
 	} else {
 		peer = rxr_ep_get_peer(ep, context_pkt_entry->addr);
+		assert(peer);
 		if (!peer->is_local)
 			rxr_ep_dec_tx_pending(ep, peer, 0);
 	}

@@ -499,6 +499,9 @@ struct rxr_peer *efa_ep_get_peer(struct dlist_entry *ep_list_entry,
 	struct util_ep *util_ep;
 	struct rxr_ep *rxr_ep;
 
+	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
+		return NULL;
+
 	util_ep = container_of(ep_list_entry, struct util_ep,
 			       av_entry);
 	rxr_ep = container_of(util_ep, struct rxr_ep, util_ep);
