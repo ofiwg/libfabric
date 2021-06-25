@@ -325,6 +325,8 @@ struct rdm_peer {
 	int rnr_timeout_exp;		/* RNR timeout exponentation calc val */
 	struct dlist_entry rnr_entry;	/* linked to rxr_ep peer_backoff_list */
 	struct dlist_entry queued_entry; /* linked with peer_queued_list in rxr_ep */
+	struct dlist_entry rx_unexp_list; /* a list of unexpected untagged rx_entry for this peer */
+	struct dlist_entry rx_unexp_tagged_list; /* a list of unexpected tagged rx_entry for this peer */
 	ofi_atomic32_t use_cnt;		/* refcount */
 };
 
@@ -407,6 +409,8 @@ struct rxr_rx_entry {
 
 	/* entry is linked with rx entry lists in rxr_ep */
 	struct dlist_entry entry;
+
+	struct dlist_entry peer_unexp_entry; /* linked to peer->rx_unexp_list or peer->rx_unexp_tagged_list */
 
 	/* queued_entry is linked with rx_queued_ctrl_list in rxr_ep */
 	struct dlist_entry queued_entry;
