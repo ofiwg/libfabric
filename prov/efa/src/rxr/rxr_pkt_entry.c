@@ -401,6 +401,7 @@ struct rxr_rx_entry *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
 	struct rxr_pkt_rx_map *entry = NULL;
 	struct rxr_pkt_rx_key key;
 
+	memset(&key, 0, sizeof(key));
 	key.msg_id = rxr_pkt_msg_id(pkt_entry);
 	key.addr = pkt_entry->addr;
 	HASH_FIND(hh, ep->pkt_rx_map, &key, sizeof(struct rxr_pkt_rx_key), entry);
@@ -421,6 +422,7 @@ void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 		return;
 	}
 
+	memset(&entry->key, 0, sizeof(entry->key));
 	entry->key.msg_id = rxr_pkt_msg_id(pkt_entry);
 	entry->key.addr = pkt_entry->addr;
 
@@ -444,6 +446,7 @@ void rxr_pkt_rx_map_remove(struct rxr_ep *ep,
 	struct rxr_pkt_rx_map *entry;
 	struct rxr_pkt_rx_key key;
 
+	memset(&key, 0, sizeof(key));
 	key.msg_id = rxr_pkt_msg_id(pkt_entry);
 	key.addr = pkt_entry->addr;
 
