@@ -265,7 +265,7 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 		break;
 	case RXR_SHORT_RTR_PKT:
 	case RXR_LONG_RTR_PKT:
-		rxr_pkt_handle_rtr_sent(rxr_ep, pkt_entry);
+		/* nothing can be done when RTR packets are sent */
 		break;
 	case RXR_WRITE_RTA_PKT:
 	case RXR_DC_WRITE_RTA_PKT:

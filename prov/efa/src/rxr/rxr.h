@@ -269,10 +269,6 @@ enum rxr_tx_comm_type {
 	RXR_TX_QUEUED_CTRL,	/* tx_entry was unable to send ctrl packet */
 	RXR_TX_QUEUED_REQ_RNR,  /* tx_entry RNR sending REQ packet */
 	RXR_TX_QUEUED_DATA_RNR,	/* tx_entry RNR sending data packets */
-	RXR_TX_WAIT_READ_FINISH, /* tx_entry (on initiating EP) wait
-				  * for rx_entry to finish receiving
-				  * (FI_READ only)
-				  */
 };
 
 enum rxr_rx_comm_type {

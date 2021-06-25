@@ -1848,19 +1848,6 @@ ssize_t rxr_pkt_init_long_rtr(struct rxr_ep *ep,
 }
 
 /*
- *     handle_sent() functions for RTR packet types
- */
-void rxr_pkt_handle_rtr_sent(struct rxr_ep *ep,
-			     struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_tx_entry *tx_entry;
-
-	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
-	tx_entry->bytes_sent = 0;
-	tx_entry->state = RXR_TX_WAIT_READ_FINISH;
-}
-
-/*
  *     handle_send_completion() funciton for RTR packet
  */
 void rxr_pkt_handle_rtr_send_completion(struct rxr_ep *ep,

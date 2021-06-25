@@ -192,8 +192,6 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	case RXR_TX_QUEUED_DATA_RNR:
 		dlist_remove(&tx_entry->queued_entry);
 		break;
-	case RXR_TX_WAIT_READ_FINISH:
-		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "tx_entry unknown state %d\n",
 			tx_entry->state);
@@ -538,7 +536,7 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		 *     2. call rxr_cq_write_tx_completion()
 		 */
 		tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, rx_entry->rma_loc_tx_id);
-		assert(tx_entry->state == RXR_TX_WAIT_READ_FINISH);
+		assert(tx_entry->state == RXR_TX_REQ);
 		if (tx_entry->fi_flags & FI_COMPLETION) {
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
