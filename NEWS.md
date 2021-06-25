@@ -11,43 +11,162 @@ v1.13.0, Fri Jul 2, 2021
 
 ## Core
 
-- TODO
+- Fix behavior of fi_param_get parsing an invalid boolean value
+- Add new APIs to open, export, and import specialized fid's
+- Define ability to import a monitor into the registration cache
+- Add API support for INT128/UINT128 atomics
+- Fix incorrect check for provider name in getinfo filtering path
+- Allow core providers to return default attributes which are lower then
+  maximum supported attributes in getinfo call
+- Add option prefer external providers (in order discovered) over internal
+  providers, regardless of provider version
+- Separate Ze (level-0) and DRM dependencies
+- Always maintain a list of all discovered providers
+- Fix incorrect CUDA warnings
+- Fix bug in cuda init/cleanup checking for gdrcopy support
+- Shift order providers are called from in fi_getinfo, move psm2 ahead of
+  psm3 and efa ahead of psmX
 
 ## EFA
 
 - TODO
 
-## PSM4
+## PSM3
 
-- TODO
+- Added CUDA Support, GPU Direct through RV kernel module
+- Changed PSM3 Provider Version to match IEFS version
+- Expanded Multi-Rail support
+- Enhanced debug logging
+- Removed internal copy of libuuid, added as linked lib
+- Various Bug Fixes
 
 ## RxD
 
- TODO
+- Fix peer connection and address cleanup
+- Maintain peer connection after AV removal to send ACKs
 
 ## RxM
 
-- TODO
+- Fix rx buffer leak in error case
+- Dynamically allocate buffer space for large unexpected messages
+- Separate the eager protocol size from allocated receive buffers
+  to reduce memory footprint
+- Make eager limit a per ep value, rather than global for all peers
+- Separate definitions and use of buffer, eager, and packet sizes
+- Fix calling fi_getinfo to the msg provider with FI_SOURCE set but
+  null parameters
+- General code cleanups, simplifications, and optimizations
+- Fix retrieving tag from dynamic receive buffer path
+- Enable dynamic receive buffer path over tcp by default
+- Use correct check to select between tagged and untagged rx queues
+- Repost rx buffers immediately to fix situation where applications can hang
+- Update help text for several environment variables
+- Fix use_srx check to enable srx by default layering over tcp provider
+- Reduce default tx/rx sizes to shrink memory footprint
+- Fix leaving stale peer entries in the AV
+- Handle error completions from the msg provider properly, and avoid passing
+  internal transfers up to the application
+- Reduce memory footprint by combining inject packets into one
+- Reduce inject copy overhead by using memcpy instead of hmem copy routines
+- Restrict the number of outstanding user transfers to prevent memory
+  overflow
+- Enable direct send feature by default for the tcp provider
+- Fix initialization of atomic headers
+- Only ignore interrupts in wait calls (e.g. poll) in debug builds, otherwise
+  return control to the caller
+- Combine and simplify internal buffer pools to reduce memory footprint
+- Remove request for huge pages for internal buffer pools
+- Add optimized tagged message path over tcp provider, removing need for
+  rxm header overhead
+- Several optimizations around supporting rxm over tcp provider
 
 ## SHM
 
-- TODO
+- Use signal to reduce lock contention between processes
+- Fix communication with a peer that was restarted
+- Code cleanup to handle issues reported by coverity
+- Add check that IPC protocol is accessing device only memory
+- Fix interface selection used for IPC transfers
+- Change address to use a global ep index to support apps that open
+  multiple fabrics
+- Add environment variable to disable CMA transfers, to handle environments
+  where CMA checks may succeed, but CMA may not be usable
+- Add missing lock in ofi_av_insert_addr
+- Add support for GPU memory in inject operations.
 
 ## Sockets
 
-- TODO
+- Fix possible ring buffer overflow calculating atomic lengths
+- Use correct address length (IPv6 vs 4) walking through address array
 
 ## TCP
 
-- TODO
+- Add send side coalescing buffer to improve small message handling
+- Add receive side prefetch buffer to reduce kernel transitions
+- Fix initializing the mr_iov_limit domain attribute
+- Add support for zero copy transfers, with configurable threshold settings.
+  Disable zero copy by default due to negative impact on overall performance
+- Add environment variable overrides for default tx/rx sizes
+- Simplify and optimize handling of protocol headers
+- Add a priority transmit queue for internally generated messages (e.g. ACKs)
+- Check that the endpoint state is valid before attempting to drive progress
+  on the underlying socket
+- Limit the number of outstanding transmit and receive operations that a
+  user may post to an ep
+- Remove limitations on allocating internally generated messages to prevent
+  application hangs
+- Combine multiple internal buffer pools to one to reduce memory footprint
+- Optimize socket progress based on signaled events
+- Optimize pollfd abstraction to replace linear searches with direct indexing
+- Update both rx and tx cq's socket poll list to prevent application hangs
+- Optimize reading in extra headers to reduce loop overhead
+- Continue progressing transmit data until socket is full to reduce progress
+  overhead
+- Add msg id field to protocol headers (debug only) for protocol debugging
+- Drive rx progress when there's an unmatched 0-byte received message to
+  avoid application hangs
+- Avoid kernel transitions that are likely to do not work (return EAGAIN)
+- Fail try_wait call if there's data already queued in user space prefetch
+  buffers to avoid possible hangs
+- Fix possible access to freed tx entry
+- Optimize socket receive calls in progress function to skip progress loop
+  and immediately handle a received header.  This also fixes an application
+  hang handling 0-byte messages
+- Broad code cleanups, rework, and simplifications aimed at reducing
+  overhead and improving code stability
+- Improve handling of socket disconnect or fatal protocol errors
+- Fix reporting failures of internal messages to the user
+- Disable endpoints on fatal protocol errors
+- Validate response messages are what is expected
+- Simplify and align transmit, receive, and response handling to improve code
+  maintainability and simplify related data structures
+- Copy small messages through a coalescing buffer to avoid passing SGL to
+  the kernel
+- Fix race handling a disconnected event during the CM handshake
+- Report default attributes that are lower than the supported maximums
+- Remove use of huge pages, which aren't needed by tcp, to reserve them for
+  the user
+- Increase default inject size to be larger than the rxm header
+- Add tagged message protocol header for sending tagged messages using the
+  tcp headers only
+- Separate definition of maximum header size from maximum inject size
 
 ## Util
 
-- TODO
+- Added lock validation checks to debug builds
+- Fix MR cache flush LRU behavior
+- Always remove dead memory regions from the MR cache immediately
+- Update buffer pools to handle an alignment of 0
+- Fail memory registration calls for HMEM if the interface isn't available
+- Pass through failures when a requested memory monitor fails to start
+- Always process deferred work list from pollfd wait abstraction
 
 ## Verbs
 
-- TODO
+- Fixed checks setting CQ signaling vector
+- Internal code cleanups and clarifications
+- Fixed XRC MOFED 5.2 incompatibility
+- Add dmabuf MR support for GPU P2P transfers
 
 v1.12.1, Thu Apr 1, 2021
 ========================
