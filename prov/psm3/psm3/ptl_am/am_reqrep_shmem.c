@@ -2601,14 +2601,14 @@ amsh_init(psm2_ep_t ep, ptl_t *ptl_gen, ptl_ctl_t *ctl)
 	union psmi_envvar_val env_memcache_enabled;
 	psmi_getenv("PSM3_CUDA_MEMCACHE_ENABLED",
 		    "PSM cuda ipc memhandle cache enabled (default is enabled)",
-		     PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
+		     PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 		     (union psmi_envvar_val)
 		      1, &env_memcache_enabled);
 	if (PSMI_IS_CUDA_ENABLED && env_memcache_enabled.e_uint) {
 		union psmi_envvar_val env_memcache_size;
 		psmi_getenv("PSM3_CUDA_MEMCACHE_SIZE",
 			    "Size of the cuda ipc memhandle cache ",
-			    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
+			    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 			    (union psmi_envvar_val)
 			    CUDA_MEMHANDLE_CACHE_SIZE, &env_memcache_size);
 		if ((err = am_cuda_memhandle_cache_init(env_memcache_size.e_uint) != PSM2_OK))

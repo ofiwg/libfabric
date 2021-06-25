@@ -463,7 +463,9 @@ ips_protoexp_tid_get_from_token(struct ips_protoexp *protoexp,
 	    !(protoexp->proto->flags & IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV)) ||
 	    ((req->is_buf_gpu_mem &&
 	     (protoexp->proto->flags & IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV) &&
-	     length > gpudirect_recv_limit))) {
+	     (length > gpudirect_recv_limit
+		|| length & 0x03 || (uintptr_t)buf & 0x03
+ 		)))) {
 		getreq->cuda_hostbuf_used = 1;
 		getreq->tidgr_cuda_bytesdone = 0;
 		STAILQ_INIT(&getreq->pend_cudabuf);
@@ -2191,11 +2193,9 @@ ips_tid_pendtids_timer_callback(struct psmi_timer *timer, uint64_t current)
 #endif
 
 #ifdef PSM_CUDA
-	if (!(((struct ips_protoexp *)timer->context)->proto->flags
-		& IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV) ||
-		((((struct ips_protoexp *)timer->context)->proto->flags &
-		   IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV) &&
-		   gpudirect_recv_limit < UINT_MAX)) {
+	if (
+	    1	/* due to unaligned recv using hostbuf, must always do this */
+	) {
 		/* Before processing pending TID requests, first try to free up
 		 * any CUDA host buffers that are now idle. */
 		struct ips_tid_get_cudapend *cphead =

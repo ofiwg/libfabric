@@ -359,14 +359,14 @@ int psmi_cuda_initialize()
 	union psmi_envvar_val env_enable_gdr_copy;
 	psmi_getenv("PSM3_GDRCOPY",
 				"Enable (set envvar to 1) for gdr copy support in PSM (Enabled by default)",
-				PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
+				PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
 				(union psmi_envvar_val)1, &env_enable_gdr_copy);
 	is_gdr_copy_enabled = env_enable_gdr_copy.e_int;
 
 	union psmi_envvar_val env_cuda_thresh_rndv;
 	psmi_getenv("PSM3_CUDA_THRESH_RNDV",
 				"RNDV protocol is used for GPU send message sizes greater than the threshold",
-				PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
+				PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
 				(union psmi_envvar_val)CUDA_THRESH_RNDV, &env_cuda_thresh_rndv);
 	cuda_thresh_rndv = env_cuda_thresh_rndv.e_int;
 
