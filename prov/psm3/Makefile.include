@@ -36,9 +36,8 @@ _nodist_psm3_files = \
 
 # builddir is for nodist config headers: See nodist_libpsm3i_la_SOURCES
 _psm3_cppflags += \
-	-I$(top_builddir)/prov/psm3/src \
+	-I$(top_srcdir)/prov/psm3/src \
 	-I$(top_srcdir)/prov/psm3/psm3 \
-	-I$(top_builddir)/prov/psm3/psm3 \
 	-I$(top_srcdir)/prov/psm3/psm3/ptl_ips/ \
 	-I$(top_srcdir)/prov/psm3/psm3/include/ \
 	-I$(top_srcdir)/prov/psm3/psm3/include/linux-i386/ \
