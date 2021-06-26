@@ -210,6 +210,13 @@ struct smr_ep_name {
 	struct dlist_entry entry;
 };
 
+static inline const char *smr_no_prefix(const char *addr)
+{
+	char *start;
+
+	return (start = strstr(addr, "://")) ? start + 3 : addr;
+}
+
 struct smr_peer {
 	struct smr_addr		peer;
 	fi_addr_t		fiaddr;

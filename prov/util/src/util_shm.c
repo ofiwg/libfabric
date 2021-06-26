@@ -352,10 +352,10 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 	size_t size;
 	int fd, ret = 0;
 	struct dlist_entry *entry;
+	const char *name = smr_no_prefix(peer_buf->peer.name);
 
 	pthread_mutex_lock(&ep_list_lock);
-	entry = dlist_find_first_match(&ep_name_list, smr_match_name,
-				       peer_buf->peer.name);
+	entry = dlist_find_first_match(&ep_name_list, smr_match_name, name);
 	if (entry) {
 		peer_buf->region = container_of(entry, struct smr_ep_name,
 						entry)->region;
@@ -364,7 +364,7 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 	}
 	pthread_mutex_unlock(&ep_list_lock);
 
-	fd = shm_open(peer_buf->peer.name, O_RDWR, S_IRUSR | S_IWUSR);
+	fd = shm_open(name, O_RDWR, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
 		FI_WARN_ONCE(prov, FI_LOG_AV, "shm_open error\n");
 		return -errno;
@@ -489,7 +489,7 @@ void smr_map_del(struct smr_map *map, int64_t id)
 
 	pthread_mutex_lock(&ep_list_lock);
 	entry = dlist_find_first_match(&ep_name_list, smr_match_name,
-				       map->peers[id].peer.name);
+				       smr_no_prefix(map->peers[id].peer.name));
 	pthread_mutex_unlock(&ep_list_lock);
 
 	fastlock_acquire(&map->lock);
