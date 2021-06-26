@@ -438,7 +438,6 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		goto err_release;
 	}
 
-	memset(&reverse_av_entry->key, 0, sizeof(reverse_av_entry->key));
 	memcpy(&reverse_av_entry->key, &key, sizeof(key));
 	reverse_av_entry->conn = conn;
 	HASH_ADD(hh, av->reverse_av, key,
