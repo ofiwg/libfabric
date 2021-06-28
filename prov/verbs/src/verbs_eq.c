@@ -921,9 +921,7 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 		if (cma_event->id->qp &&
 		    cma_event->id->qp->context->device->transport_type !=
 		    IBV_TRANSPORT_IWARP) {
-			ret = vrb_set_rnr_timer(cma_event->id->qp);
-			if (ret)
-				goto ack;
+			vrb_set_rnr_timer(cma_event->id->qp);
 		}
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
 		if (vrb_is_xrc_ep(ep)) {
