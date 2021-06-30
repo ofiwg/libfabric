@@ -8,6 +8,9 @@ jobs:
         os:
           - ubuntu-18.04
           - ubuntu-20.04
+        cc:
+          - gcc
+          - clang
       fail-fast: false
     steps:
       - name: Install dependencies (Linux OS)
@@ -51,7 +54,8 @@ jobs:
                                             --enable-tcp \
                                             --enable-udp \
                                             --enable-usnic \
-                                            --enable-verbs=${RDMA_CORE_PATH}
+                                            --enable-verbs=${RDMA_CORE_PATH} \
+                                            CC=${{ matrix.cc }}
           make -j 4; make install
           $PWD/install/bin/fi_info -l
   macos:
