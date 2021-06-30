@@ -1,0 +1,54 @@
+name: CUDA Build Checks
+on: [push, pull_request]
+jobs:
+  cuda-linux:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Install dependencies (Linux OS)
+        run: |
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+          sudo mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+          sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub
+          sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/ /"
+          sudo apt-get update
+          sudo apt-get install -y abi-compliance-checker \
+                                  abi-dumper \
+                                  build-essential \
+                                  cuda \
+                                  debhelper \
+                                  dh-systemd \
+                                  fakeroot \
+                                  gcc \
+                                  git \
+                                  libnl-3-200 libnl-3-dev libnl-route-3-200 libnl-route-3-dev \
+                                  libnuma-dev \
+                                  libudev-dev \
+                                  uuid-dev \
+                                  make \
+                                  ninja-build \
+                                  pandoc \
+                                  pkg-config \
+                                  python \
+                                  rpm \
+                                  sparse \
+                                  valgrind \
+                                  wget
+      - uses: actions/checkout@v2
+      - name: Build Check
+        run: |
+          git clone --depth 1 -b v34.1 https://github.com/linux-rdma/rdma-core.git
+          pushd rdma-core; bash build.sh; popd
+          export RDMA_CORE_PATH="rdma-core/build"
+          export LD_LIBRARY_PATH="$RDMA_CORE_PATH/lib:$LD_LIBRARY_PATH"
+          ./autogen.sh
+          ./configure --prefix=$PWD/install \
+                      --with-cuda=/usr/local/cuda \
+                      --enable-efa=${RDMA_CORE_PATH} \
+                      --enable-psm3=${RDMA_CORE_PATH} \
+                      --enable-rxd \
+                      --enable-rxm \
+                      --enable-shm \
+                      --enable-verbs=${RDMA_CORE_PATH}
+          make -j 4; make install
+          $PWD/install/bin/fi_info -l
+
