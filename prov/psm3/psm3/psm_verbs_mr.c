@@ -114,7 +114,7 @@ struct psm2_mr_cache_map_pl {
 // cl_map_item_t and cl_qmap_t structures
 #define RBTREE_MI_PL  struct psm2_verbs_mr
 #define RBTREE_MAP_PL struct psm2_mr_cache_map_pl
-#include "rbtree.h"
+#include "psm3_rbtree.h"
 
 struct psm2_mr_cache {
 	uint32_t max_entries;
@@ -201,7 +201,7 @@ static int mr_cache_key_cmp(const struct psm2_verbs_mr *a,
 #define RBTREE_ASSERT                     psmi_assert
 #define RBTREE_MAP_COUNT(PAYLOAD_PTR)     ((PAYLOAD_PTR)->nelems)
 #define RBTREE_NO_EMIT_IPS_CL_QMAP_PREDECESSOR
-#include "rbtree.c"
+#include "psm3_rbtree.c"
 
 // TBD - move to a utility macro header
 // taken fron IbAccess imath.h and imath.c
