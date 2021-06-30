@@ -13,12 +13,27 @@ jobs:
       - name: Install dependencies (Linux OS)
         run: |
           sudo apt-get update
-          sudo apt-get install -y abi-compliance-checker abi-dumper \
-                                  build-essential debhelper dh-systemd \
-                                  fakeroot gcc git libnl-3-200 libnl-3-dev \
-                                  libnl-route-3-200 libnl-route-3-dev libnuma-dev \
-                                  libudev-dev make ninja-build pandoc \
-                                  pkg-config python rpm sparse valgrind wget
+          sudo apt-get install -y abi-compliance-checker \
+                                  abi-dumper \
+                                  build-essential \
+                                  debhelper \
+                                  dh-systemd \
+                                  fakeroot \
+                                  gcc \
+                                  git \
+                                  libnl-3-200 libnl-3-dev libnl-route-3-200 libnl-route-3-dev \
+                                  libnuma-dev \
+                                  libudev-dev \
+                                  uuid-dev \
+                                  make \
+                                  ninja-build \
+                                  pandoc \
+                                  pkg-config \
+                                  python \
+                                  rpm \
+                                  sparse \
+                                  valgrind \
+                                  wget
       - uses: actions/checkout@v2
       - name: Build Check
         run: |
@@ -27,13 +42,16 @@ jobs:
           export RDMA_CORE_PATH="rdma-core/build"
           export LD_LIBRARY_PATH="$RDMA_CORE_PATH/lib:$LD_LIBRARY_PATH"
           ./autogen.sh
-          ./configure --prefix=$PWD/install --enable-usnic \
-                                            --enable-verbs=${RDMA_CORE_PATH} \
-                                            --enable-efa=${RDMA_CORE_PATH} \
+          ./configure --prefix=$PWD/install --enable-efa=${RDMA_CORE_PATH} \
+                                            --enable-mrail \
+                                            --enable-psm3=${RDMA_CORE_PATH} \
+                                            --enable-rxd \
+                                            --enable-rxm \
                                             --enable-shm \
                                             --enable-tcp \
-                                            --enable-rxm \
-                                            --enable-rxd
+                                            --enable-udp \
+                                            --enable-usnic \
+                                            --enable-verbs=${RDMA_CORE_PATH}
           make -j 4; make install
           $PWD/install/bin/fi_info -l
   macos:
