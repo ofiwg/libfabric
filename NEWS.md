@@ -29,7 +29,33 @@ v1.13.0, Fri Jul 2, 2021
 
 ## EFA
 
-- TODO
+- Minor code optimizations and bug fixed
+- Add support for fi_inject for RDM messages
+- Improve handling of RNR NACKs from NIC
+- Improve handling of zero copy receive case, especially when sender does not
+  post receive buffer
+- Numerous RMA read bug fixes
+- Add unexpected receive queue for each peer
+- Fixed issue releasing rx entries
+- Decrease the initial size of the out-of-order packeet pool allocation size
+  to reduce the common-case memory footprint
+- Handle FI_ADDR_NOTAVAIL in rxr_ep_get_peer
+- Identify and handle QP reuse
+- Use the memory monitor specified by the user
+- Replace provider code with common code in select places
+- Update efa_av_lookup to return correct address
+- Update rdm endpoint directly poll cq from ibv_cq
+- Avoid possible duplicate completions
+- Add reference counting for peer tracking
+- Fix EFA usage of util AV causing incorrect refcounting
+- Do not allow endpoints to share address vectors
+- Improve fork support; users can set the FI_EFA_FORK_SAFE environment variable
+  for applications which call fork()
+- Adjust the timing of clearing deferred memory registration list
+- Do not use eager protocol for cuda message and local peer
+- Fixes for shm support
+- Enable MR cache for CUDA
+- Disable shm when application requests FI_HMEM
 
 ## PSM3
 
