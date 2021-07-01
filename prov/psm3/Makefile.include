@@ -23,8 +23,7 @@ _psm3_files = \
 	prov/psm3/src/psmx3_wait.c
 
 _psm3_cppflags = \
-	-I$(top_srcdir)/prov/psm3 \
-	-I$(top_srcdir)/prov/psm3/include
+	-I$(top_srcdir)/prov/psm3
 
 chksum_srcs = $(_psm3_files)
 
@@ -38,9 +37,9 @@ _nodist_psm3_files = \
 _psm3_cppflags += \
 	-I$(top_srcdir)/prov/psm3/src \
 	-I$(top_srcdir)/prov/psm3/psm3 \
-	-I$(top_srcdir)/prov/psm3/psm3/ptl_ips/ \
-	-I$(top_srcdir)/prov/psm3/psm3/include/ \
-	-I$(top_srcdir)/prov/psm3/psm3/include/linux-i386/ \
+	-I$(top_srcdir)/prov/psm3/psm3/ptl_ips \
+	-I$(top_srcdir)/prov/psm3/psm3/include \
+	-I$(top_srcdir)/prov/psm3/psm3/include/linux-i386 \
 	-I$(top_srcdir)/prov/psm3/psm3/mpspawn \
 	-I$(top_srcdir)/prov/psm3/psm3/opa \
 	-I$(top_builddir)/prov/psm3/psm3 \
@@ -147,7 +146,7 @@ prov_psm3_psm3_libopa_la_SOURCES = \
 	prov/psm3/psm3/include/opa_udebug.h \
 	prov/psm3/psm3/include/opa_user.h \
 	prov/psm3/psm3/include/psm2_mock_testing.h \
-	prov/psm3/psm3/include/rbtree.h \
+	prov/psm3/psm3/include/psm3_rbtree.h \
 	prov/psm3/psm3/include/linux-i386/bit_ops.h \
 	prov/psm3/psm3/include/linux-i386/sysdep.h \
 	prov/psm3/psm3/mpspawn/mpspawn_stats.h
@@ -255,7 +254,7 @@ prov_psm3_psm3_libpsm3i_la_DEPENDENCIES = \
 	prov/psm3/psm3/libpsm_hal_gen1.la
 
 _psm3_extra_dist = \
-	prov/psm3/psm3/include/rbtree.c \
+	prov/psm3/psm3/include/psm3_rbtree.c \
 	prov/psm3/psm3/psm_hal_gen1/psm_hal_gen1_spio.c \
 	prov/psm3/psm3/opa/opa_dwordcpy-x86_64-fast.S
 EXTRA_DIST += $(_psm3_extra_dist)
