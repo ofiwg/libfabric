@@ -6,7 +6,7 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
-v1.13.0, Fri Jul 2, 2021
+v1.13.0, Thu Jul 1, 2021
 ========================
 
 ## Core
