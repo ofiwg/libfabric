@@ -22,7 +22,7 @@ class Test:
         self.buildno = buildno
         self.testname = testname
         self.core_prov = core_prov
-        self.util_prov = "ofi_{}".format(util_prov) if util_prov != None else "" 
+        self.util_prov = "ofi_{}".format(util_prov) if util_prov != None else ""
         self.fabric = fabric
         self.hosts = hosts
         self.ofi_build_mode = ofi_build_mode
@@ -30,11 +30,11 @@ class Test:
         if (len(hosts) == 2):
             self.server = hosts[0]
             self.client = hosts[1]
-       
+
         self.nw_interface = ci_site_config.interface_map[self.fabric]
         self.libfab_installpath = "{}/{}/{}/{}".format(ci_site_config.install_dir,
                                   self.jobname, self.buildno, self.ofi_build_mode)
- 
+
         self.env = [("FI_VERBS_MR_CACHE_ENABLE", "1"),\
                     ("FI_VERBS_INLINE_SIZE", "256")] \
                     if self.core_prov == "verbs" else []
@@ -44,106 +44,106 @@ class FiInfoTest(Test):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                      hosts, ofi_build_mode, util_prov)
-     
-        self.fi_info_testpath =  "{}/bin".format(self.libfab_installpath) 
-     
+
+        self.fi_info_testpath =  "{}/bin".format(self.libfab_installpath)
+
     @property
     def cmd(self):
         return "{}/fi_info ".format(self.fi_info_testpath)
 
     @property
-    def options(self):       
+    def options(self):
         if (self.util_prov):
             opts  = "-f -p {};{}".format(self.core_prov, self.util_prov)
         else:
             opts = "-f -p {}".format(self.core_prov)
-        
-        return opts 
-    
+
+        return opts
+
     def execute_cmd(self):
         command = self.cmd + self.options
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd)         
-     
+        common.run_command(outputcmd)
+
 
 class Fabtest(Test):
-    
+
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  hosts, ofi_build_mode, util_prov=None):
-        
+
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          hosts, ofi_build_mode, util_prov)
-        self.fabtestpath = "{}/bin".format(self.libfab_installpath) 
+        self.fabtestpath = "{}/bin".format(self.libfab_installpath)
         self.fabtestconfigpath = "{}/share/fabtests".format(self.libfab_installpath)
     def get_exclude_file(self):
         path = self.libfab_installpath
         efile_path = "{}/share/fabtests/test_configs".format(path)
 
         prov = self.util_prov if self.util_prov else self.core_prov
-        efile_old = "{path}/{prov}/{prov}.exclude".format(path=efile_path, 
+        efile_old = "{path}/{prov}/{prov}.exclude".format(path=efile_path,
                       prov=prov)
-        
+
         if self.util_prov:
             efile = "{path}/{util_prov}/{core_prov}/exclude".format(path=efile_path,
                       util_prov=self.util_prov, core_prov=self.core_prov)
         else:
             efile = "{path}/{prov}/exclude".format(path=efile_path,
                       prov=self.core_prov)
-           
+
         if os.path.isfile(efile):
             return efile
         elif os.path.isfile(efile_old):
             return efile_old
         else:
             print("Exclude file: {} not found!".format(efile))
-            return None  
+            return None
 
-    @property    
-    def cmd(self):    
+    @property
+    def cmd(self):
         return "{}/runfabtests.sh ".format(self.fabtestpath)
-     
+
     @property
     def options(self):
         opts = "-T 300 -vvv -p {} -S ".format(self.fabtestpath)
         if (self.core_prov == "verbs" and self.nw_interface):
-            opts = "{} -s {} ".format(opts, common.get_node_name(self.server, 
+            opts = "{} -s {} ".format(opts, common.get_node_name(self.server,
                     self.nw_interface)) # include common.py
-            opts = "{} -c {} ".format(opts, common.get_node_name(self.client, 
+            opts = "{} -c {} ".format(opts, common.get_node_name(self.client,
                     self.nw_interface)) # from common.py
-       
+
         if (self.core_prov == "shm"):
             opts = "{} -s {} ".format(opts, self.server)
             opts = "{} -c {} ".format(opts, self.client)
             opts += "-N "
-            
+
         if not re.match(".*sockets|udp.*", self.core_prov):
             opts = "{} -t all ".format(opts)
 
         efile = self.get_exclude_file()
         if efile:
             opts = "{} -R ".format(opts)
-            opts = "{} -f {} ".format(opts, efile)  
-        
+            opts = "{} -f {} ".format(opts, efile)
+
         for key,val in self.env:
-            opts = "{options} -E {key}={value} ".format(options = opts, 
+            opts = "{options} -E {key}={value} ".format(options = opts,
                     key=key, value=val)
-    
+
         if self.util_prov:
-            opts = "{options} {core};{util} ".format(options=opts, 
+            opts = "{options} {core};{util} ".format(options=opts,
                     core=self.core_prov, util=self.util_prov)
         else:
             opts = "{options} {core} ".format(options=opts,
                     core=self.core_prov)
-        
+
         if (self.core_prov == "shm"):
             opts += "{} {} ".format(self.server, self.server)
         else:
             opts += "{} {} ".format(self.server, self.client)
-             
+
         return opts
-   
+
     @property
-    def execute_condn(self):     
+    def execute_condn(self):
         return True if (self.core_prov != 'shm' or \
                         self.ofi_build_mode == 'dbg') else False
 
@@ -158,13 +158,13 @@ class Fabtest(Test):
 class ShmemTest(Test):
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  hosts, ofi_build_mode, util_prov=None):
-        
+
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          hosts, ofi_build_mode, util_prov)
-     
+
         #self.n - number of hosts * number of processes per host
-        self.n = 4 
-        # self.ppn - number of processes per node. 
+        self.n = 4
+        # self.ppn - number of processes per node.
         self.ppn = 2
         self.shmem_dir = "{}/shmem".format(self.libfab_installpath)
 
@@ -174,13 +174,13 @@ class ShmemTest(Test):
         return "{}/run_shmem.sh ".format(ci_site_config.mpi_testpath)
 
     def options(self, shmem_testname):
-       
+
         if self.util_prov:
-            prov = "{core};{util} ".format(core=self.core_prov, 
+            prov = "{core};{util} ".format(core=self.core_prov,
                     util=self.util_prov)
         else:
             prov = self.core_prov
- 
+
         opts = "-n {n} -hosts {server},{client} -shmem_dir={shmemdir} \
                 -libfabric_path={path}/lib -prov '{provider}' -test {test} \
                 -server {server} -inf {inf}" \
@@ -196,70 +196,70 @@ class ShmemTest(Test):
                         (self.core_prov == "psm2" or \
                         self.core_prov == "sockets")) \
                     else False
-            
+
     def execute_cmd(self, shmem_testname):
-        command = self.cmd + self.options(shmem_testname) 
+        command = self.cmd + self.options(shmem_testname)
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd)        
-    
+        common.run_command(outputcmd)
+
 
 class MpiTests(Test):
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  mpitype, hosts, ofi_build_mode, util_prov=None):
-       
-        super().__init__(jobname, buildno, testname, core_prov, 
+
+        super().__init__(jobname, buildno, testname, core_prov,
                          fabric, hosts, ofi_build_mode, util_prov)
         self.mpi = mpitype
 
     @property
     def cmd(self):
         if (self.mpi == "impi" or self.mpi == "mpich"):
-            self.testpath = ci_site_config.mpi_testpath 
+            self.testpath = ci_site_config.mpi_testpath
             return "{}/run_{}.sh ".format(self.testpath,self.mpi)
         elif(self.mpi =="ompi"):
             self.testpath = "{}/ompi/bin".format(self.libfab_installpath)
-            return "{}/mpirun ".format(self.testpath)      
-    
+            return "{}/mpirun ".format(self.testpath)
+
     @property
     def options(self):
-        opts = [] 
+        opts = []
         if (self.mpi == "impi" or self.mpi == "mpich"):
             opts = "-n {} -ppn {} -hosts {},{} ".format(self.n,self.ppn,
                     self.server,self.client)
-                
+
             if (self.mpi == "impi"):
-                opts = "{} -mpi_root={} ".format(opts, 
+                opts = "{} -mpi_root={} ".format(opts,
                         ci_site_config.impi_root)
             else:
-                opts = "{} -mpi_root={}/mpich".format(opts, 
+                opts = "{} -mpi_root={}/mpich".format(opts,
                         self.libfab_installpath)
-            
-            opts = "{} -libfabric_path={}/lib ".format(opts, 
+
+            opts = "{} -libfabric_path={}/lib ".format(opts,
                     self.libfab_installpath)
-            
+
             if self.util_prov:
-                opts = "{options} -prov {core};{util} ".format(options=opts, 
+                opts = "{options} -prov {core};{util} ".format(options=opts,
                         core=self.core_prov, util=self.util_prov)
             else:
                 opts = "{} -prov {} ".format(opts, self.core_prov)
 
             for key, val in self.env:
                 opts = "{} -genv {} {} ".format(opts, key, val)
-            
+
         elif (self.mpi == "ompi"):
             opts = "-np {} ".format(self.n)
             hosts = ",".join([":".join([host,str(self.ppn)]) \
                     for host in self.hosts])
-            
+
             opts = "{} --host {} ".format(opts, hosts)
-            
+
             if self.util_prov:
-                opts = "{} --mca mtl_ofi_provider_include {};{} ".format(opts, 
+                opts = "{} --mca mtl_ofi_provider_include {};{} ".format(opts,
                         self.core_prov,self.util_prov)
             else:
-                opts = "{} --mca mtl_ofi_provider_include {} ".format(opts, 
+                opts = "{} --mca mtl_ofi_provider_include {} ".format(opts,
                         self.core_prov)
- 
+
             opts += "--mca orte_base_help_aggregate 0 "
             opts += "--mca mtl ofi --mca pml cm -tag-output "
             for key,val in self.env:
@@ -269,7 +269,7 @@ class MpiTests(Test):
     @property
     def mpi_gen_execute_condn(self):
         #Skip MPI tests for udp, verbs(core) providers.
-        # we would still have MPI tests runnning for 
+        # we would still have MPI tests runnning for
         # verbs-rxd and verbs-rxm providers
         return True if (self.core_prov != "udp" and \
                         self.core_prov != "shm" and \
@@ -279,15 +279,15 @@ class MpiTests(Test):
 
 # IMBtests serves as an abstract class for different
 # types of intel MPI benchmarks. Currently we have
-# the mpi1 and rma tests enabled which are encapsulated 
-# in the IMB_mpi1 and IMB_rma classes below. 
+# the mpi1 and rma tests enabled which are encapsulated
+# in the IMB_mpi1 and IMB_rma classes below.
 
 class IMBtests(ABC):
     """
-    This is an abstract class for IMB tests. 
-    currently IMB-MPI1 and IMB-RMA tests are 
+    This is an abstract class for IMB tests.
+    currently IMB-MPI1 and IMB-RMA tests are
     supported. In future there could be more.
-    All abstract  methods must be implemented. 
+    All abstract  methods must be implemented.
     """
 
     @property
@@ -301,9 +301,9 @@ class IMBtests(ABC):
         pass
 
 class IMBmpi1(IMBtests):
-    
+
     def __init__(self):
-        self.additional_tests = [ 
+        self.additional_tests = [
                                    "Biband",
                                    "Uniband",
                                    "PingPongAnySource",
@@ -332,9 +332,9 @@ class IMBrma(IMBtests):
     @property
     def execute_condn(self):
         return True if (self.core_prov != "verbs") else False
- 
+
 # MpiTestIMB class inherits from the MPITests class.
-# It uses the same options method and class variables as all MPI tests. 
+# It uses the same options method and class variables as all MPI tests.
 # It creates IMB_xxx test objects for each kind of IMB test.
 class MpiTestIMB(MpiTests):
 
@@ -342,18 +342,18 @@ class MpiTestIMB(MpiTests):
                  mpitype, hosts, ofi_build_mode, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          mpitype, hosts, ofi_build_mode, util_prov)
-       
+
         self.n = 4
         self.ppn = 1
         self.mpi1 = IMBmpi1()
-        self.rma = IMBrma(self.core_prov) 
+        self.rma = IMBrma(self.core_prov)
 
     @property
     def execute_condn(self):
         return True if (self.mpi == "impi") else False
-       
+
     def execute_cmd(self):
-        command = self.cmd + self.options 
+        command = self.cmd + self.options
         if(self.mpi1.execute_condn):
             outputcmd = shlex.split(command +  self.mpi1.imb_cmd)
             common.run_command(outputcmd)
@@ -362,8 +362,8 @@ class MpiTestIMB(MpiTests):
             common.run_command(outputcmd)
 
 class MpichTestSuite(MpiTests):
-    
-    def __init__(self, jobname, buildno, testname, core_prov, fabric, 
+
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
 		     mpitype, hosts, ofi_build_mode, util_prov=None):
             super().__init__(jobname, buildno, testname, core_prov, fabric,
 			     mpitype,  hosts, ofi_build_mode, util_prov)
@@ -372,14 +372,14 @@ class MpichTestSuite(MpiTests):
             self.pwd = os.getcwd()
 
     def testgroup(self, testgroupname):
-        
+
         testpath = "{}/{}".format(self.mpichsuitepath, testgroupname)
         tests = []
         with open("{}/testlist".format(testpath)) as file:
             for line in file:
                 if(line[0] != '#' and  line[0] != '\n'):
                     tests.append((line.rstrip('\n')).split(' '))
-	
+
         return tests
 
     def options(self, nprocs, timeout=None):
@@ -411,7 +411,7 @@ class MpichTestSuite(MpiTests):
     def execute_condn(self):
         return True if (self.mpi == 'impi' and  self.core_prov != 'psm2' \
                         and self.core_prov != 'sockets') else False
- 
+
     def execute_cmd(self, testgroupname):
         print("Running Tests: " + testgroupname)
         tests = []
@@ -432,52 +432,15 @@ class MpichTestSuite(MpiTests):
             common.run_command(outputcmd)
         os.chdir(self.pwd)
 
-class MpiTestStress(MpiTests):
-     
-    def __init__(self, jobname, buildno, testname, core_prov, fabric, 
-                 mpitype, hosts, ofi_build_mode, util_prov=None):
-        super().__init__(jobname, buildno, testname, core_prov, fabric, 
-                         mpitype,  hosts, ofi_build_mode, util_prov)
-        
-         
-        if((self.core_prov == "verbs" or self.core_prov =="psm2")):
-            self.n = 16
-            self.ppn = 8
-        else:
-            self.n = 4
-            self.ppn = 2
-      
-    @property
-    def stress_cmd(self):
-        return "{}/{}/stress/mpi_stress -dcr".format(self.libfab_installpath, self.mpi)
 
-    @property
-    def execute_condn(self):
-        # Todo : run stress test for ompi with libfabirc-dbg builds if it works
-        # in Jenkins for buildbot these ompi did not build with libfabric-dbg 
-
-        # Due to an mpich issue when the correct mpich options are enabled during
-        # mpich builds, sttress test is failing. disabling mpich + stress tests
-        # untill the mpich team fixes the issue. 
-        return True if ((self.job_cadence  == 'daily') and \
-                       (self.mpi != 'ompi' or \
-                        self.ofi_build_mode != 'dbg')) else  False
-    
-    def execute_cmd(self):
-        command = self.cmd + self.options + self.stress_cmd
-        outputcmd = shlex.split(command)
-        common.run_command(outputcmd) 
-
-         
-      
 class MpiTestOSU(MpiTests):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  mpitype, hosts, ofi_build_mode, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          mpitype, hosts, ofi_build_mode, util_prov)
-        
-        self.n = 4 
+
+        self.n = 4
         self.ppn = 2
         self.two_proc_tests = {'osu_latency',
                                'osu_bibw',
@@ -494,10 +457,10 @@ class MpiTestOSU(MpiTests):
                               }
 
         self.osu_mpi_path = "{}/{}/osu/libexec/osu-micro-benchmarks/mpi/". \
-                            format(self.libfab_installpath,mpitype) 
-    
+                            format(self.libfab_installpath,mpitype)
+
     @property
-    def execute_condn(self): 
+    def execute_condn(self):
         # sockets and psm2 have some issues with OSU benchmark testing.
         return True if ((self.job_cadence  == 'daily') and \
                         (self.mpi != "ompi" or \
@@ -505,7 +468,7 @@ class MpiTestOSU(MpiTests):
                          self.core_prov != "psm2" and \
                          self.ofi_build_mode!="dbg"))) \
                     else False
-    
+
     def execute_cmd(self):
         assert(self.osu_mpi_path)
         p = re.compile('osu_put*')
@@ -523,6 +486,6 @@ class MpiTestOSU(MpiTests):
                     osu_cmd = os.path.join(root, test)
                     command = launcher + osu_cmd
                     outputcmd = shlex.split(command)
-                    common.run_command(outputcmd) 
+                    common.run_command(outputcmd)
 
 
