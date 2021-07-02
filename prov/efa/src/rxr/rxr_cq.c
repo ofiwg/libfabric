@@ -275,16 +275,12 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 		       pkt_entry->addr, peer->timeout_interval,
 		       peer->rnr_queued_pkt_cnt);
 	} else {
-		/* Only backoff once per peer per progress thread loop. */
-		if (!(peer->flags & RXR_PEER_BACKED_OFF)) {
-			peer->flags |= RXR_PEER_BACKED_OFF;
-			peer->rnr_timeout_exp++;
-			FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
-			       "increasing backoff for peer: %" PRIu64
-			       " rnr_timeout_exp: %d rnr_queued_pkts: %d\n",
-			       pkt_entry->addr, peer->rnr_timeout_exp,
-			       peer->rnr_queued_pkt_cnt);
-		}
+		peer->rnr_timeout_exp++;
+		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+		       "increasing backoff for peer: %" PRIu64
+		       " rnr_timeout_exp: %d rnr_queued_pkts: %d\n",
+		       pkt_entry->addr, peer->rnr_timeout_exp,
+		       peer->rnr_queued_pkt_cnt);
 	}
 	dlist_insert_tail(&peer->rnr_entry,
 			  &ep->peer_backoff_list);
