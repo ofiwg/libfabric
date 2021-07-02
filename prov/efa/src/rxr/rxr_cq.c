@@ -240,15 +240,14 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
  * To quantify how long a peer stay in backoff mode, two parameters
  * are defined:
  *
- *    rnr_ts (ts is timestamp) and timeout_interval.
+ *    rnr_backoff_begin_ts (ts is timestamp) and rnr_backoff_wait_time.
  *
  * A peer stays in backoff mode until:
  *
- * current_timestamp >= (rnr_ts + timeout_interval),
+ * current_timestamp >= (rnr_backoff_begin_ts + rnr_backoff_wait_time),
  *
- * with one exception: a peer can got out of backoff mode early
- * if a packet send completion to this peer was reported
- * by the device.
+ * with one exception: a peer can got out of backoff mode early if a
+ * packet's send completion to this peer was reported by the device.
  *
  * Specifically, the implementation of RNR backoff is:
  *
@@ -299,41 +298,41 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 	 * need to be in backoff mode.
 	 *
 	 * If the peer is already in backoff mode, we just need to update the
-	 * RNR backoff begin time (peer->rnr_ts).
+	 * RNR backoff begin time.
 	 *
-	 * Otherwise, we need to put it in backoff mode and set up backoff
-	 * begin time (peer->rnr_ts) and wait time (peer->timeout_interval).
+	 * Otherwise, we need to put the peer in backoff mode and set up backoff
+	 * begin time and wait time.
 	 */
 	if (peer->flags & RXR_PEER_IN_BACKOFF) {
-		peer->rnr_ts = ofi_gettime_us();
+		peer->rnr_backoff_begin_ts = ofi_gettime_us();
 		return;
 	}
 
 	peer->flags |= RXR_PEER_IN_BACKOFF;
-	dlist_insert_tail(&peer->rnr_entry,
+	dlist_insert_tail(&peer->rnr_backoff_entry,
 			  &ep->peer_backoff_list);
 
-	peer->rnr_ts = ofi_gettime_us();
-	if (!peer->timeout_interval) {
-		if (rxr_env.timeout_interval)
-			peer->timeout_interval = rxr_env.timeout_interval;
+	peer->rnr_backoff_begin_ts = ofi_gettime_us();
+	if (peer->rnr_backoff_wait_time == 0) {
+		if (rxr_env.rnr_backoff_initial_wait_time > 0)
+			peer->rnr_backoff_wait_time = rxr_env.rnr_backoff_initial_wait_time;
 		else
-			peer->timeout_interval = MAX(RXR_RAND_MIN_TIMEOUT,
-						     rand() %
-						     RXR_RAND_MAX_TIMEOUT);
+			peer->rnr_backoff_wait_time = MAX(RXR_RAND_MIN_TIMEOUT,
+							  rand() %
+							  RXR_RAND_MAX_TIMEOUT);
 
 		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 		       "initializing backoff timeout for peer: %" PRIu64
-		       " timeout: %d rnr_queued_pkts: %d\n",
-		       pkt_entry->addr, peer->timeout_interval,
+		       " timeout: %ld rnr_queued_pkts: %d\n",
+		       pkt_entry->addr, peer->rnr_backoff_wait_time,
 		       peer->rnr_queued_pkt_cnt);
 	} else {
-		peer->timeout_interval = MIN(rxr_env.max_timeout,
-					     2 * peer->timeout_interval);
+		peer->rnr_backoff_wait_time = MIN(peer->rnr_backoff_wait_time * 2,
+						  rxr_env.rnr_backoff_wait_time_cap);
 		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
-		       "increasing backoff for peer: %" PRIu64
-		       "to %d rnr_queued_pkts: %d\n",
-		       pkt_entry->addr, peer->timeout_interval,
+		       "increasing backoff timeout for peer: %" PRIu64
+		       "to %ld rnr_queued_pkts: %d\n",
+		       pkt_entry->addr, peer->rnr_backoff_wait_time,
 		       peer->rnr_queued_pkt_cnt);
 	}
 }

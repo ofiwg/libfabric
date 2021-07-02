@@ -624,7 +624,7 @@ void efa_rdm_peer_clear(struct rdm_peer *peer)
 		dlist_remove(&peer->handshake_queued_entry);
 
 	if (peer->flags & RXR_PEER_IN_BACKOFF)
-		dlist_remove(&peer->rnr_entry);
+		dlist_remove(&peer->rnr_backoff_entry);
 
 	memset(peer, 0, sizeof(struct rdm_peer));
 #ifdef ENABLE_EFA_POISONING
