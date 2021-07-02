@@ -343,7 +343,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 	 * We need peer->shm_fiaddr to remove shm address from shm av table,
 	 * so efa_rdm_peer_reset must be after removing shm av table.
 	 */
-	efa_rdm_peer_reset(peer);
+	efa_rdm_peer_clear(peer);
 }
 
 /**
