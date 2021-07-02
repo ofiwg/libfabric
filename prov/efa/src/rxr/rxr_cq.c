@@ -227,8 +227,51 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	return ofi_cq_write_error(util_cq, &err_entry);
 }
 
-/*
- * Queue a packet on the appropriate list when an RNR error is received.
+/* @brief Queue a packet that encountered RNR error and setup RNR backoff
+ *
+ * We uses an exponential backoff strategy to handle RNR errors.
+ *
+ * `Backoff` means if a peer encountered RNR, an endpoint will
+ * wait a period of time before sending packets to the peer again
+ *
+ * `Exponential` means the more RNR encountered, the longer the
+ * backoff wait time will be.
+ *
+ * To quantify how long a peer stay in backoff mode, two parameters
+ * are defined:
+ *
+ *    rnr_ts (ts is timestamp) and timeout_interval.
+ *
+ * A peer stays in backoff mode until:
+ *
+ * current_timestamp >= (rnr_ts + timeout_interval),
+ *
+ * with one exception: a peer can got out of backoff mode early
+ * if a packet send completion to this peer was reported
+ * by the device.
+ *
+ * Specifically, the implementation of RNR backoff is:
+ *
+ * For a peer, the first time RNR is encountered, the packet will
+ * be resent immediately.
+ *
+ * The second time RNR is encountered, the endpoint will put the
+ * peer in backoff mode, and initialize rnr_backoff_begin_timestamp
+ * and rnr_backoff_wait_time.
+ *
+ * The 3rd and following time RNR is encounter, the RNR will be handled
+ * like this:
+ *
+ *     If peer is already in backoff mode, rnr_backoff_begin_ts
+ *     will be updated
+ *
+ *     Otherwise, peer will be put in backoff mode again,
+ *     rnr_backoff_begin_ts will be updated and rnr_backoff_wait_time
+ *     will be doubled until it reached maximum wait time.
+ *
+ * @param[in]	ep		endpoint
+ * @param[in]	list		queued RNR packet list
+ * @param[in]	pkt_entry	packet entry that encounter RNR
  */
 static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 				    struct dlist_entry *list,
@@ -236,30 +279,41 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 {
 	struct rdm_peer *peer;
 
+#if ENABLE_DEBUG
+	dlist_remove(&pkt_entry->dbg_entry);
+#endif
+	dlist_insert_tail(&pkt_entry->entry, list);
+
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
-
-	/*
-	 * Queue the packet if it has not been retransmitted yet.
-	 */
 	if (pkt_entry->state != RXR_PKT_ENTRY_RNR_RETRANSMIT) {
+		/* This is the first time this packet encountered RNR,
+		 * we are NOT going to put the peer in backoff mode just yet.
+		 */
 		pkt_entry->state = RXR_PKT_ENTRY_RNR_RETRANSMIT;
 		peer->rnr_queued_pkt_cnt++;
-		goto queue_pkt;
+		return;
 	}
 
-	/*
-	 * Otherwise, increase the backoff if the peer is already not in
-	 * backoff. Reset the timer when starting backoff or if another RNR for
-	 * a retransmitted packet is received while waiting for the timer to
-	 * expire.
+	/* This packet has encountered RNR multiple times, therefore the peer
+	 * need to be in backoff mode.
+	 *
+	 * If the peer is already in backoff mode, we just need to update the
+	 * RNR backoff begin time (peer->rnr_ts).
+	 *
+	 * Otherwise, we need to put it in backoff mode and set up backoff
+	 * begin time (peer->rnr_ts) and wait time (peer->timeout_interval).
 	 */
-	peer->rnr_ts = ofi_gettime_us();
-	if (peer->flags & RXR_PEER_IN_BACKOFF)
-		goto queue_pkt;
+	if (peer->flags & RXR_PEER_IN_BACKOFF) {
+		peer->rnr_ts = ofi_gettime_us();
+		return;
+	}
 
 	peer->flags |= RXR_PEER_IN_BACKOFF;
+	dlist_insert_tail(&peer->rnr_entry,
+			  &ep->peer_backoff_list);
 
+	peer->rnr_ts = ofi_gettime_us();
 	if (!peer->timeout_interval) {
 		if (rxr_env.timeout_interval)
 			peer->timeout_interval = rxr_env.timeout_interval;
@@ -282,14 +336,6 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 		       pkt_entry->addr, peer->timeout_interval,
 		       peer->rnr_queued_pkt_cnt);
 	}
-	dlist_insert_tail(&peer->rnr_entry,
-			  &ep->peer_backoff_list);
-
-queue_pkt:
-#if ENABLE_DEBUG
-	dlist_remove(&pkt_entry->dbg_entry);
-#endif
-	dlist_insert_tail(&pkt_entry->entry, list);
 }
 
 int rxr_cq_handle_error(struct rxr_ep *ep, ssize_t prov_errno, struct rxr_pkt_entry *pkt_entry)
