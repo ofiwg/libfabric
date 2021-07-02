@@ -1489,7 +1489,6 @@ static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
 
 	dlist_foreach_container_safe(&ep->peer_backoff_list, struct rdm_peer,
 				     peer, rnr_entry, tmp) {
-		peer->flags &= ~RXR_PEER_BACKED_OFF;
 		if (!rxr_peer_timeout_expired(ep, peer, ofi_gettime_us()))
 			continue;
 		peer->flags &= ~RXR_PEER_IN_BACKOFF;

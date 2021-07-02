@@ -288,7 +288,6 @@ enum rxr_rx_comm_type {
 #define RXR_PEER_HANDSHAKE_SENT BIT_ULL(1) /* a handshake packet has been sent to a peer */
 #define RXR_PEER_HANDSHAKE_RECEIVED BIT_ULL(2)
 #define RXR_PEER_IN_BACKOFF BIT_ULL(3) /* peer is in backoff, not allowed to send */
-#define RXR_PEER_BACKED_OFF BIT_ULL(4) /* peer backoff was increased during this loop of the progress engine */
 /*
  * FI_EAGAIN error was encountered when sending handsahke to this peer,
  * the peer was put in rxr_ep->handshake_queued_peer_list.
