@@ -92,9 +92,7 @@ rxr_rma_alloc_readrsp_tx_entry(struct rxr_ep *rxr_ep,
 	}
 
 	assert(tx_entry);
-#if ENABLE_DEBUG
-	dlist_insert_tail(&tx_entry->tx_entry_entry, &rxr_ep->tx_entry_list);
-#endif
+	dlist_insert_tail(&tx_entry->ep_entry, &rxr_ep->tx_entry_list);
 
 	msg.msg_iov = rx_entry->iov;
 	msg.iov_count = rx_entry->iov_count;
@@ -155,9 +153,7 @@ rxr_rma_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	memcpy(tx_entry->rma_iov, msg_rma->rma_iov,
 	       sizeof(struct fi_rma_iov) * msg_rma->rma_iov_count);
 
-#if ENABLE_DEBUG
-	dlist_insert_tail(&tx_entry->tx_entry_entry, &rxr_ep->tx_entry_list);
-#endif
+	dlist_insert_tail(&tx_entry->ep_entry, &rxr_ep->tx_entry_list);
 	return tx_entry;
 }
 

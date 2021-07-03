@@ -525,9 +525,7 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 	tx_entry->iov_offset = 0;
 	tx_entry->fi_flags = RXR_NO_COMPLETION | RXR_NO_COUNTER;
 
-#if ENABLE_DEBUG
-	dlist_insert_tail(&tx_entry->tx_entry_entry, &ep->tx_entry_list);
-#endif
+	dlist_insert_tail(&tx_entry->ep_entry, &ep->tx_entry_list);
 
 	err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0);
 
