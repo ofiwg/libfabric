@@ -450,6 +450,8 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 {
 	int i, err = 0;
+	struct dlist_entry *tmp;
+	struct rxr_pkt_entry *pkt_entry;
 
 	assert(tx_entry->peer);
 	ofi_atomic_dec32(&tx_entry->peer->use_cnt);
@@ -469,7 +471,12 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 #if ENABLE_DEBUG
 	dlist_remove(&tx_entry->tx_entry_entry);
 #endif
-	assert(dlist_empty(&tx_entry->queued_pkts));
+	dlist_foreach_container_safe(&tx_entry->queued_pkts,
+				     struct rxr_pkt_entry,
+				     pkt_entry, entry, tmp) {
+		rxr_pkt_entry_release_tx(ep, pkt_entry);
+	}
+
 #ifdef ENABLE_EFA_POISONING
 	rxr_poison_mem_region((uint32_t *)tx_entry,
 			      sizeof(struct rxr_tx_entry));
