@@ -966,6 +966,121 @@ void rxr_pkt_proc_received(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	}
 }
 
+/**
+ * @brief update a packet entry's address using info in packet header
+ *
+ * This function update a packet entry's addr using raw address
+ * and connid in header.
+ *
+ * It handles the following cases:
+ *
+ * First, a REQ packet has raw address in its header. In this case, the function
+ * uses the raw address to determine:
+ *
+ *     1. The REQ packet is from a destroyed peer (raw address's connid matches
+ *        a previous connid). In this case, the function set pkt_entry->addr to
+ *        FI_ADDR_NOTAVAIL, so it will be ignored.
+ *
+ *     2. The REQ packet is from current peer (raw address match current connid).
+ *        In this case, the function does nothing.
+ *
+ *     3. The REQ packet is from a newly created peer (raw address does not match
+ *        any connid in record). In this case, the function insert the raw address
+ *        to AV, and update pkt_entry->addr to the result.
+ *
+ * Second, any non-REQ packet whose "addr" is FI_ADDR_NOTAVAIL. This means that
+ * the peer's address has been removed from AV. In this case, the function will
+ * print a warning.
+ *
+ * Finally, any packet that has connid in its header. If the connid does not match
+ * peer's connid, it would mean the packet is from a destroyed peer, (see section
+ * 4.4 of protocol v4 doc for an example of how that can happen). In this case,
+ * the function set "pkt_entry->addr" to FI_ADDR_NOTAVAIL
+ *
+ * @param[in]		ep		endpoint
+ * @param[in,out]	pkt_entry	received packet entry, pkt_entry->addr will be updated
+ * 					upon return.
+ * @return	no return value.
+ */
+static inline
+void rxr_pkt_update_addr_by_hdr(struct rxr_ep *ep,
+				struct rxr_pkt_entry *pkt_entry)
+{
+	uint32_t *connid;
+	struct rdm_peer *peer;
+	struct efa_ep_addr *peer_addr; /* current peer address */
+	struct efa_ep_addr *sender_addr; /* peer address in packet header */
+
+	if (rxr_get_base_hdr(pkt_entry->pkt)->type >= RXR_REQ_PKT_BEGIN &&
+	    rxr_pkt_req_raw_addr(pkt_entry)) {
+		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+		peer_addr = rxr_peer_raw_addr(ep, pkt_entry->addr);
+
+		sender_addr = rxr_pkt_req_raw_addr(pkt_entry);
+		assert(sender_addr);
+		if (peer && sender_addr->qkey == peer->prev_qkey) {
+			/* In this case, we know for sure this packet is from a destroyed peer,
+			 * setting pkt_entry->addr to FI_ADDR_NOTAVAIL will ensure it will be ignored.
+			 */
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "Received a packet from a destroyed peer!\n"
+				"packet sender qkey: %d matches peer->prev_qkey: %d."
+				"The packet will be ignored.\n",
+				sender_addr->qkey, peer->prev_qkey);
+			pkt_entry->addr = FI_ADDR_NOTAVAIL;
+			return;
+		}
+
+		if (!peer || sender_addr->qkey != peer_addr->qkey) {
+			/* If peer is NULL, pkt_entry->addr must be FI_ADDR_NOTAVAIL, which means
+			 * this packet is from a newly created peer and we have never received from this GID+QPN before.
+			 *
+			 * If peer is not NULL and qkey does not match, this packet is also from a newly created peer,
+			 * but the old peer with same GID+QPN has been destroyed.
+			 *
+			 * Either way, the new address need to be inserted to address vector, and
+			 * pkt_entry->addr need to be updated.
+			 */
+			pkt_entry->addr = rxr_pkt_insert_addr(ep, pkt_entry, sender_addr);
+		}
+
+		return;
+	}
+
+	/*
+	 * Receiving a non-req packets or req packets without raw address header from a peer means the endpoint had prior
+	 * commuincation with the peer
+	 */
+	if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
+		/* If the endpoint had prior communication with the peer, but pkt_entry->addr is FI_ADDR_NOTAVAIL,
+		 * it means application called fi_av_remove() to remove the peer from address vector.
+		 * Removing the peer means application does not want to receive data from this peer any more,
+		 * thus this packet should be ignored.
+		 */
+		connid = rxr_pkt_connid_ptr(pkt_entry);
+
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"Received a packet from a removed peer! pkt_type: %d connid_id: %d."
+			"The packet will be ignored\n",
+			rxr_get_base_hdr(pkt_entry->pkt)->type, connid ? *connid : -1);
+		return;
+	}
+
+	peer_addr = rxr_peer_raw_addr(ep, pkt_entry->addr);
+	assert(peer_addr);
+
+	connid = rxr_pkt_connid_ptr(pkt_entry);
+	if (connid && *connid != peer_addr->qkey) {
+		/*
+		 * If the endpoint had prior commuication with the peer, and the connid does not match,
+		 * the packet must from a destroyed peer thus should be ignored.
+		 */
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "Received a packet from a destroyed peer!\n"
+			"packet sender connid: %d currrent peer qkey: %d. The packet will be ignored\n",
+			*connid, peer_addr->qkey);
+		pkt_entry->addr = FI_ADDR_NOTAVAIL;
+	}
+}
+
 void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 				    struct rxr_pkt_entry *pkt_entry)
 {
@@ -973,6 +1088,13 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	struct rdm_peer *peer;
 	struct rxr_base_hdr *base_hdr;
 	struct rxr_rx_entry *zcpy_rx_entry = NULL;
+
+	rxr_pkt_update_addr_by_hdr(ep, pkt_entry);
+
+	if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
+	}
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	pkt_type = base_hdr->type;
@@ -983,38 +1105,6 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 
 		assert(0 && "invalid REQ packe type");
 		efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EIO);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		return;
-	}
-
-	if (pkt_type >= RXR_REQ_PKT_BEGIN && rxr_pkt_req_raw_addr(pkt_entry)) {
-		/*
-		 * A REQ packet with raw address in its header could always
-		 * be the 1st packet we receive from a peer, even if we already
-		 * have the address in AV.
-		 *
-		 * This is because the peer might be a newly created one,
-		 * with the same GID+QPN as an old peer (though a different Q-Key),
-		 * therefore lower provider thinks it is the older peer.
-		 *
-		 * Therefore, we alwyas need to call rxr_pkt_insert_addr() for
-		 * such a packet. rxr_pkt_insert_addr() will insert the address
-		 * to AV if it is indeed new.
-		 */
-		void *raw_addr;
-
-		raw_addr = rxr_pkt_req_raw_addr(pkt_entry);
-		assert(raw_addr);
-		pkt_entry->addr = rxr_pkt_insert_addr(ep, pkt_entry, raw_addr);
-	} else if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
-		/*
-		 * Receiving a non-REQ packet or a REQ packet without raw address means
-		 * we had prior communication with the peer. For such a packet,
-		 * the only possiblity for its pkt_entry->addr to be FI_ADDR_NOTAVAIL
-		 * is application called fi_av_remove() to remove the address
-		 * from AV. In this case, this packet should be ignored.
-		 */
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Warning: ignoring a received packet from a removed address\n");
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
