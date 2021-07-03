@@ -69,7 +69,7 @@ struct rxr_env rxr_env = {
 	.rx_iov_limit = 0,
 	.rx_copy_unexp = 1,
 	.rx_copy_ooo = 1,
-	.max_timeout = RXR_DEF_RNR_MAX_TIMEOUT,
+	.max_timeout = RXR_DEFAULT_RNR_BACKOFF_TIMEOUT_CAP,
 	.timeout_interval = 0, /* 0 is random timeout */
 	.efa_cq_read_size = 50,
 	.shm_cq_read_size = 50,
@@ -118,6 +118,9 @@ static void rxr_init_env(void)
 	fi_param_get_bool(&rxr_prov, "rx_copy_ooo",
 			  &rxr_env.rx_copy_ooo);
 	fi_param_get_int(&rxr_prov, "max_timeout", &rxr_env.max_timeout);
+	if (rxr_env.max_timeout > RXR_MAX_RNR_BACKOFF_TIMEOUT_CAP)
+		rxr_env.max_timeout = RXR_MAX_RNR_BACKOFF_TIMEOUT_CAP;
+
 	fi_param_get_int(&rxr_prov, "timeout_interval",
 			 &rxr_env.timeout_interval);
 	fi_param_get_size_t(&rxr_prov, "efa_cq_read_size",
