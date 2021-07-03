@@ -446,11 +446,12 @@ struct rxr_rx_entry {
 
 	/* linked with rx_entry_list in rdm_peer */
 	struct dlist_entry peer_entry;
+
+	/* linked with rx_entry_list in rxr_ep */
+	struct dlist_entry ep_entry;
 #if ENABLE_DEBUG
 	/* linked with rx_pending_list in rxr_ep */
 	struct dlist_entry rx_pending_entry;
-	/* linked with rx_entry_list in rxr_ep */
-	struct dlist_entry rx_entry_entry;
 #endif
 };
 
@@ -522,10 +523,8 @@ struct rxr_tx_entry {
 	/* peer_entry is linked with tx_entry_list in rdm_peer */
 	struct dlist_entry peer_entry;
 
-#if ENABLE_DEBUG
 	/* linked with tx_entry_list in rxr_ep */
-	struct dlist_entry tx_entry_entry;
-#endif
+	struct dlist_entry ep_entry;
 };
 
 #define RXR_GET_X_ENTRY_TYPE(pkt_entry)	\
@@ -701,16 +700,16 @@ struct rxr_ep {
 	/* tx packets waiting for send completion */
 	struct dlist_entry tx_pkt_list;
 
-	/* track allocated rx_entries and tx_entries for endpoint cleanup */
-	struct dlist_entry rx_entry_list;
-	struct dlist_entry tx_entry_list;
-
 	size_t efa_total_posted_tx_ops;
 	size_t shm_total_posted_tx_ops;
 	size_t send_comps;
 	size_t failed_send_comps;
 	size_t recv_comps;
 #endif
+	/* track allocated rx_entries and tx_entries for endpoint cleanup */
+	struct dlist_entry rx_entry_list;
+	struct dlist_entry tx_entry_list;
+
 	/* number of posted buffer for shm */
 	size_t posted_bufs_shm;
 	size_t rx_bufs_shm_to_post;
@@ -806,9 +805,8 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 	if (rx_entry->peer)
 		dlist_remove(&rx_entry->peer_entry);
 
-#if ENABLE_DEBUG
-	dlist_remove(&rx_entry->rx_entry_entry);
-#endif
+	dlist_remove(&rx_entry->ep_entry);
+
 	if (!dlist_empty(&rx_entry->queued_pkts)) {
 		dlist_foreach_container_safe(&rx_entry->queued_pkts,
 					     struct rxr_pkt_entry,

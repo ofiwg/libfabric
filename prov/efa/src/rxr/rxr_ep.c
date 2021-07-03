@@ -93,9 +93,7 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 	}
 	memset(rx_entry, 0, sizeof(struct rxr_rx_entry));
 
-#if ENABLE_DEBUG
-	dlist_insert_tail(&rx_entry->rx_entry_entry, &ep->rx_entry_list);
-#endif
+	dlist_insert_tail(&rx_entry->ep_entry, &ep->rx_entry_list);
 	rx_entry->type = RXR_RX_ENTRY;
 	rx_entry->rx_id = ofi_buf_index(rx_entry);
 	dlist_init(&rx_entry->queued_pkts);
@@ -440,9 +438,7 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 		tx_entry->tag = tag;
 	}
 
-#if ENABLE_DEBUG
-	dlist_insert_tail(&tx_entry->tx_entry_entry, &rxr_ep->tx_entry_list);
-#endif
+	dlist_insert_tail(&tx_entry->ep_entry, &rxr_ep->tx_entry_list);
 	return tx_entry;
 }
 
@@ -467,9 +463,8 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 		}
 	}
 
-#if ENABLE_DEBUG
-	dlist_remove(&tx_entry->tx_entry_entry);
-#endif
+	dlist_remove(&tx_entry->ep_entry);
+
 	dlist_foreach_container_safe(&tx_entry->queued_pkts,
 				     struct rxr_pkt_entry,
 				     pkt_entry, entry, tmp) {
@@ -605,75 +600,96 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_
 
 static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 {
-#if ENABLE_DEBUG
-	struct dlist_entry *tmp;
-	struct dlist_entry *entry;
+	struct dlist_entry *entry, *tmp;
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
+#if ENABLE_DEBUG
 	struct rxr_pkt_entry *pkt;
 #endif
 
-#if ENABLE_DEBUG
-	dlist_foreach(&rxr_ep->rx_unexp_list, entry) {
+	dlist_foreach_safe(&rxr_ep->rx_unexp_list, entry, tmp) {
 		rx_entry = container_of(entry, struct rxr_rx_entry, entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with unmatched unexpected rx_entry: %p pkt_entry %p\n",
+			rx_entry, rx_entry->unexp_pkt);
 		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_pkt);
+		rxr_release_rx_entry(rxr_ep, rx_entry);
 	}
 
-	dlist_foreach(&rxr_ep->rx_unexp_tagged_list, entry) {
+	dlist_foreach_safe(&rxr_ep->rx_unexp_tagged_list, entry, tmp) {
 		rx_entry = container_of(entry, struct rxr_rx_entry, entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with unmatched unexpected tagged rx_entry: %p pkt_entry %p\n",
+			rx_entry, rx_entry->unexp_pkt);
 		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_pkt);
+		rxr_release_rx_entry(rxr_ep, rx_entry);
 	}
 
-	dlist_foreach(&rxr_ep->rx_entry_queued_list, entry) {
+	dlist_foreach_safe(&rxr_ep->rx_entry_queued_list, entry, tmp) {
 		rx_entry = container_of(entry, struct rxr_rx_entry,
 					queued_entry);
-		dlist_foreach_container_safe(&rx_entry->queued_pkts,
-					     struct rxr_pkt_entry,
-					     pkt, entry, tmp)
-			rxr_pkt_entry_release_tx(rxr_ep, pkt);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with queued rx_entry: %p\n",
+			rx_entry);
+		rxr_release_rx_entry(rxr_ep, rx_entry);
 	}
 
-	dlist_foreach(&rxr_ep->tx_entry_queued_list, entry) {
+	dlist_foreach_safe(&rxr_ep->tx_entry_queued_list, entry, tmp) {
 		tx_entry = container_of(entry, struct rxr_tx_entry,
 					queued_entry);
-		dlist_foreach_container_safe(&tx_entry->queued_pkts,
-					     struct rxr_pkt_entry,
-					     pkt, entry, tmp)
-			rxr_pkt_entry_release_tx(rxr_ep, pkt);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with queued tx_entry: %p\n",
+			tx_entry);
+		rxr_release_tx_entry(rxr_ep, tx_entry);
 	}
 
-	dlist_foreach_safe(&rxr_ep->rx_pkt_list, entry, tmp) {
-		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-		rxr_pkt_entry_release_rx(rxr_ep, pkt);
-	}
-
+#if ENABLE_DEBUG
 	dlist_foreach_safe(&rxr_ep->rx_posted_buf_list, entry, tmp) {
 		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
 		ofi_buf_free(pkt);
 	}
 
-	dlist_foreach_safe(&rxr_ep->tx_pkt_list, entry, tmp) {
-		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-		rxr_pkt_entry_release_tx(rxr_ep, pkt);
-	}
-
-	dlist_foreach_safe(&rxr_ep->rx_entry_list, entry, tmp) {
-		rx_entry = container_of(entry, struct rxr_rx_entry,
-					rx_entry_entry);
-		rxr_release_rx_entry(rxr_ep, rx_entry);
-	}
-	dlist_foreach_safe(&rxr_ep->tx_entry_list, entry, tmp) {
-		tx_entry = container_of(entry, struct rxr_tx_entry,
-					tx_entry_entry);
-		rxr_release_tx_entry(rxr_ep, tx_entry);
-	}
 	if (rxr_ep->use_shm) {
 		dlist_foreach_safe(&rxr_ep->rx_posted_buf_shm_list, entry, tmp) {
 			pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
 			ofi_buf_free(pkt);
 		}
 	}
+
+	dlist_foreach_safe(&rxr_ep->rx_pkt_list, entry, tmp) {
+		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with unreleased RX pkt_entry: %p\n",
+			pkt);
+		rxr_pkt_entry_release_rx(rxr_ep, pkt);
+	}
+
+	dlist_foreach_safe(&rxr_ep->tx_pkt_list, entry, tmp) {
+		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with unreleased TX pkt_entry: %p\n",
+			pkt);
+		rxr_pkt_entry_release_tx(rxr_ep, pkt);
+	}
 #endif
+
+	dlist_foreach_safe(&rxr_ep->rx_entry_list, entry, tmp) {
+		rx_entry = container_of(entry, struct rxr_rx_entry,
+					ep_entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with unreleased rx_entry: %p\n",
+			rx_entry);
+		rxr_release_rx_entry(rxr_ep, rx_entry);
+	}
+
+	dlist_foreach_safe(&rxr_ep->tx_entry_list, entry, tmp) {
+		tx_entry = container_of(entry, struct rxr_tx_entry,
+					ep_entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with unreleased tx_entry: %p\n",
+			tx_entry);
+		rxr_release_tx_entry(rxr_ep, tx_entry);
+	}
 
 	if (rxr_ep->rx_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->rx_entry_pool);
@@ -1264,9 +1280,10 @@ int rxr_ep_init(struct rxr_ep *ep)
 	dlist_init(&ep->rx_pending_list);
 	dlist_init(&ep->rx_pkt_list);
 	dlist_init(&ep->tx_pkt_list);
+#endif
 	dlist_init(&ep->rx_entry_list);
 	dlist_init(&ep->tx_entry_list);
-#endif
+
 	/* Initialize pkt to rx map */
 	ep->pkt_rx_map = NULL;
 	return 0;
