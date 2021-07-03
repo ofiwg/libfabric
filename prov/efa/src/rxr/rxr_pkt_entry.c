@@ -98,7 +98,6 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 		assert(peer);
 		peer->rnr_queued_pkt_cnt--;
 		peer->timeout_interval = 0;
-		peer->rnr_timeout_exp = 0;
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			dlist_remove(&peer->rnr_entry);
 		peer->flags &= ~RXR_PEER_IN_BACKOFF;

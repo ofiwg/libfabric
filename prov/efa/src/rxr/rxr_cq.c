@@ -268,18 +268,18 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 						     rand() %
 						     RXR_RAND_MAX_TIMEOUT);
 
-		peer->rnr_timeout_exp = 1;
 		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 		       "initializing backoff timeout for peer: %" PRIu64
 		       " timeout: %d rnr_queued_pkts: %d\n",
 		       pkt_entry->addr, peer->timeout_interval,
 		       peer->rnr_queued_pkt_cnt);
 	} else {
-		peer->rnr_timeout_exp++;
+		peer->timeout_interval = MIN(rxr_env.max_timeout,
+					     2 * peer->timeout_interval);
 		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 		       "increasing backoff for peer: %" PRIu64
-		       " rnr_timeout_exp: %d rnr_queued_pkts: %d\n",
-		       pkt_entry->addr, peer->rnr_timeout_exp,
+		       "to %d rnr_queued_pkts: %d\n",
+		       pkt_entry->addr, peer->timeout_interval,
 		       peer->rnr_queued_pkt_cnt);
 	}
 	dlist_insert_tail(&peer->rnr_entry,
