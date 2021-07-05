@@ -924,10 +924,11 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 int rxr_ep_efa_addr_to_str(const void *addr, char *temp_name);
 
 /* CQ sub-functions */
-int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
-			   ssize_t prov_errno);
-int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
-			   ssize_t prov_errno);
+void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+			   int err, int prov_errno);
+
+void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
+			   int err, int prov_errno);
 
 void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
 			  struct dlist_entry *list,

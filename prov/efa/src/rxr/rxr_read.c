@@ -311,7 +311,7 @@ void rxr_read_release_entry(struct rxr_ep *ep, struct rxr_read_entry *read_entry
 			err = fi_close((struct fid *)read_entry->mr[i]);
 			if (err) {
 				FI_WARN(&rxr_prov, FI_LOG_MR, "Unable to close mr\n");
-				rxr_read_handle_error(ep, read_entry, err);
+				rxr_read_write_error(ep, read_entry, -err, -err);
 			}
 		}
 	}
@@ -628,22 +628,22 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 	return 0;
 }
 
-int rxr_read_handle_error(struct rxr_ep *ep, struct rxr_read_entry *read_entry, int ret)
+void rxr_read_write_error(struct rxr_ep *ep, struct rxr_read_entry *read_entry,
+			  int err, int prov_errno)
 {
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_rx_entry *rx_entry;
 
 	if (read_entry->context_type == RXR_READ_CONTEXT_TX_ENTRY) {
 		tx_entry = read_entry->context;
-		ret = rxr_cq_handle_tx_error(ep, tx_entry, ret);
+		rxr_cq_write_tx_error(ep, tx_entry, err, prov_errno);
 	} else {
 		assert(read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY);
 		rx_entry = read_entry->context;
-		ret = rxr_cq_handle_rx_error(ep, rx_entry, ret);
+		rxr_cq_write_rx_error(ep, rx_entry, err, prov_errno);
 	}
 
 	if (read_entry->state == RXR_RDMA_ENTRY_PENDING)
 		dlist_remove(&read_entry->pending_entry);
-	return ret;
 }
 

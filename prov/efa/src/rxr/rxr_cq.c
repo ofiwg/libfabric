@@ -67,32 +67,42 @@ static const char *rxr_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	return str;
 }
 
-/*
- * Teardown rx_entry and write an error cq entry. With our current protocol we
- * will only encounter an RX error when sending a queued REQ or CTS packet or
- * if we are sending a CTS message. Because of this, the sender will not send
- * any additional data packets if the receiver encounters an error. If there is
- * a scenario in the future where the sender will continue to send data packets
- * we need to prevent rx_id mismatch. Ideally, we should add a NACK message and
- * tear down both RX and TX entires although whatever caused the error may
- * prevent that.
+/**
+ * @brief handle error happened to an RX (receive) operation
+ *
+ * This function will write an error cq entry to notify application the rx
+ * operation failed. If write failed, it will write an eq entry.
+ *
+ * It will also release resources owned by the RX entry, such as unexpected
+ * packet entry, because the RX operation is aborted.
+ *
+ * It will remove the rx_entry from queued rx_entry list for the same reason.
+ *
+ * It will NOT release the rx_entry because it is still possible to receive
+ * packet for this rx_entry.
  *
  * TODO: add a NACK message to tear down state on sender side
+ *
+ * @param[in]	ep		endpoint
+ * @param[in]	rx_entry	rx_entry that contains information of the tx operation
+ * @param[in]	err		positive libfabric error code
+ * @param[in]	prov_errno	positive provider specific error code
  */
-int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
-			   ssize_t prov_errno)
+void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+			   int err, int prov_errno)
 {
 	struct fi_cq_err_entry err_entry;
 	struct util_cq *util_cq;
 	struct dlist_entry *tmp;
 	struct rxr_pkt_entry *pkt_entry;
+	int write_cq_err;
 
 	memset(&err_entry, 0, sizeof(err_entry));
 
 	util_cq = ep->util_ep.rx_cq;
 
-	err_entry.err = FI_EIO;
-	err_entry.prov_errno = (int)prov_errno;
+	err_entry.err = err;
+	err_entry.prov_errno = prov_errno;
 
 	switch (rx_entry->state) {
 	case RXR_RX_INIT:
@@ -138,7 +148,7 @@ int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 	rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 
         FI_WARN(&rxr_prov, FI_LOG_CQ,
-		"rxr_cq_handle_rx_error: err: %d, prov_err: %s (%d)\n",
+		"rxr_cq_write_rx_error: err: %d, prov_err: %s (%d)\n",
 		err_entry.err, fi_strerror(-err_entry.prov_errno),
 		err_entry.prov_errno);
 
@@ -150,35 +160,50 @@ int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 	//rxr_release_rx_entry(ep, rx_entry);
 
 	efa_cntr_report_error(&ep->util_ep, err_entry.flags);
-	return ofi_cq_write_error(util_cq, &err_entry);
+	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
+	if (write_cq_err) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"Error writing error cq entry when handling RX error");
+		efa_eq_write_error(&ep->util_ep, err, prov_errno);
+	}
 }
 
-/*
- * Teardown tx_entry and write an error cq entry. With our current protocol the
- * receiver will only send a CTS once the window is exhausted, meaning that all
- * data packets for that window will have been received successfully. This
- * means that the receiver will not send any CTS packets if the sender
- * encounters and error sending data packets. If that changes in the future we
- * will need to be careful to prevent tx_id mismatch.
+/**
+ * @brief write error CQ entry for a TX operation.
+ *
+ * This function write an error cq entry for a TX operation, if writing
+ * CQ error entry failed, it will write eq entry.
+ *
+ * If also remote the TX entry from ep->tx_queued_list and ep->tx_pending_list
+ * if the tx_entry is on it.
+ *
+ * It does NOT release tx entry because it is still possible to receive
+ * send completion for this TX entry
  *
  * TODO: add NACK message to tear down receive side state
+ *
+ * @param[in]	ep		endpoint
+ * @param[in]	tx_entry	tx_entry that contains information of the tx operation
+ * @param[in]	err		positive libfabric error code
+ * @param[in]	prov_errno	positive EFA provider specific error code
  */
-int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
-			   ssize_t prov_errno)
+void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
+			   int err, int prov_errno)
 {
 	struct fi_cq_err_entry err_entry;
 	struct util_cq *util_cq;
 	uint32_t api_version;
 	struct dlist_entry *tmp;
 	struct rxr_pkt_entry *pkt_entry;
+	int write_cq_err;
 
 	memset(&err_entry, 0, sizeof(err_entry));
 
 	util_cq = ep->util_ep.tx_cq;
 	api_version = util_cq->domain->fabric->fabric_fid.api_version;
 
-	err_entry.err = FI_EIO;
-	err_entry.prov_errno = (int)prov_errno;
+	err_entry.err = err;
+	err_entry.prov_errno = prov_errno;
 
 	switch (tx_entry->state) {
 	case RXR_TX_REQ:
@@ -212,7 +237,7 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 		err_entry.err_data_size = 0;
 
 	FI_WARN(&rxr_prov, FI_LOG_CQ,
-		"rxr_cq_handle_tx_error: err: %d, prov_err: %s (%d)\n",
+		"rxr_cq_write_tx_error: err: %d, prov_err: %s (%d)\n",
 		err_entry.err, fi_strerror(-err_entry.prov_errno),
 		err_entry.prov_errno);
 
@@ -224,7 +249,12 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	//rxr_release_tx_entry(ep, tx_entry);
 
 	efa_cntr_report_error(&ep->util_ep, tx_entry->cq_entry.flags);
-	return ofi_cq_write_error(util_cq, &err_entry);
+	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
+	if (write_cq_err) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"Error writing error cq entry when handling TX error");
+		efa_eq_write_error(&ep->util_ep, err, prov_errno);
+	}
 }
 
 /* @brief Queue a packet that encountered RNR error and setup RNR backoff
@@ -406,8 +436,7 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"Unable to write recv completion: %s\n",
 				fi_strerror(-ret));
-			if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
-				assert(0 && "failed to write err cq entry");
+			rxr_cq_write_rx_error(ep, rx_entry, -ret, -ret);
 			return;
 		}
 
@@ -688,8 +717,7 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"Unable to write send completion: %s\n",
 				fi_strerror(-ret));
-			if (rxr_cq_handle_tx_error(ep, tx_entry, ret))
-				assert(0 && "failed to write err cq entry");
+			rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
 			return;
 		}
 	}

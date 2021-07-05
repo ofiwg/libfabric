@@ -713,7 +713,6 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	struct rdm_peer *peer;
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_rx_entry *rx_entry;
-	int write_cq_err;
 
 	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL ||
 	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
@@ -779,9 +778,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 						  &ep->tx_entry_queued_list);
 			}
 		} else {
-			write_cq_err = rxr_cq_handle_tx_error(ep, pkt_entry->x_entry, err);
-			if (write_cq_err)
-				efa_eq_write_error(&ep->util_ep, err, prov_errno);
+			rxr_cq_write_tx_error(ep, pkt_entry->x_entry, err, prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		}
 
@@ -811,9 +808,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 					  &ep->rx_entry_queued_list);
 
 		} else {
-			write_cq_err = rxr_cq_handle_rx_error(ep, pkt_entry->x_entry, err);
-			if (write_cq_err)
-				efa_eq_write_error(&ep->util_ep, err, prov_errno);
+			rxr_cq_write_rx_error(ep, pkt_entry->x_entry, err, prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		}
 
@@ -823,9 +818,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_READ_ENTRY) {
 		/* read will not encounter RNR */
 		assert(prov_errno != IBV_WC_RNR_RETRY_EXC_ERR);
-		write_cq_err = rxr_read_handle_error(ep, pkt_entry->x_entry, err);
-		if (write_cq_err)
-			efa_eq_write_error(&ep->util_ep, err, prov_errno);
+		rxr_read_write_error(ep, pkt_entry->x_entry, err, prov_errno);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		return;
 	}
@@ -966,8 +959,6 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
  */
 void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
 {
-	int write_cq_error;
-
 	if (!pkt_entry->x_entry) {
 		efa_eq_write_error(&ep->util_ep, err, prov_errno);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
@@ -975,13 +966,9 @@ void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	}
 
 	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
-		write_cq_error = rxr_cq_handle_tx_error(ep, pkt_entry->x_entry, err);
-		if (write_cq_error)
-			efa_eq_write_error(&ep->util_ep, err, prov_errno);
+		rxr_cq_write_tx_error(ep, pkt_entry->x_entry, err, prov_errno);
 	} else if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_RX_ENTRY) {
-		write_cq_error = rxr_cq_handle_rx_error(ep, pkt_entry->x_entry, err);
-		if (write_cq_error)
-			efa_eq_write_error(&ep->util_ep, err, prov_errno);
+		rxr_cq_write_rx_error(ep, pkt_entry->x_entry, err, prov_errno);
 	} else {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 		"%s unknown x_entry type %d\n",
