@@ -1101,7 +1101,7 @@ static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
  */
 int rxr_ep_init(struct rxr_ep *ep)
 {
-	size_t entry_sz;
+	size_t entry_sz, sendv_pool_size;
 	int hp_pool_flag;
 	int ret;
 
@@ -1210,11 +1210,14 @@ int rxr_ep_init(struct rxr_ep *ep)
 	if (ret)
 		goto err_free;
 
+	sendv_pool_size = rxr_get_tx_pool_chunk_cnt(ep);
+	if (ep->use_shm)
+		sendv_pool_size += shm_info->tx_attr->size;
 	ret = ofi_bufpool_create(&ep->pkt_sendv_pool,
 				 sizeof(struct rxr_pkt_sendv),
 				 RXR_BUF_POOL_ALIGNMENT,
-				 rxr_get_tx_pool_chunk_cnt(ep),
-				 rxr_get_tx_pool_chunk_cnt(ep), 0);
+				 sendv_pool_size,
+				 sendv_pool_size, 0);
 	if (ret)
 		goto err_free;
 
