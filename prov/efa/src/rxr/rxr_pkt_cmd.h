@@ -56,8 +56,16 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 				struct rxr_pkt_entry *pkt_entry,
 				size_t data_size);
 
+void rxr_pkt_handle_send_error(struct rxr_ep *ep,
+			       struct rxr_pkt_entry *pkt_entry,
+			       int err, int prov_errno);
+
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep,
 				    struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_recv_error(struct rxr_ep *ep,
+			       struct rxr_pkt_entry *pkt_entry,
+			       int err, int prov_errno);
 
 void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 				    struct rxr_pkt_entry *pkt_entry);

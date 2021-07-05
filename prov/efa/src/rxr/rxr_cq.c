@@ -272,9 +272,9 @@ int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
  * @param[in]	list		queued RNR packet list
  * @param[in]	pkt_entry	packet entry that encounter RNR
  */
-static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
-				    struct dlist_entry *list,
-				    struct rxr_pkt_entry *pkt_entry)
+void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
+			  struct dlist_entry *list,
+			  struct rxr_pkt_entry *pkt_entry)
 {
 	struct rdm_peer *peer;
 
@@ -335,152 +335,6 @@ static inline void rxr_cq_queue_pkt(struct rxr_ep *ep,
 		       pkt_entry->addr, peer->rnr_backoff_wait_time,
 		       peer->rnr_queued_pkt_cnt);
 	}
-}
-
-int rxr_cq_handle_error(struct rxr_ep *ep, ssize_t prov_errno, struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_rx_entry *rx_entry;
-	struct rxr_tx_entry *tx_entry;
-	struct rxr_read_entry *read_entry;
-	struct rdm_peer *peer;
-	ssize_t ret;
-
-	if (!pkt_entry)
-		goto write_eq_err;
-
-#if ENABLE_DEBUG
-	if (pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL)
-		ep->failed_send_comps++;
-#endif
-
-	if (rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_HANDSHAKE_PKT) {
-		assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL ||
-		       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
-		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-		rxr_ep_dec_tx_op_counter(ep, pkt_entry);
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
-		if (!peer) {
-			/*
-			 * peer could be NULL in the following 2 scenarios:
-			 * 1. a new peer with same gid+qpn was inserted to av, thus the peer was remove.
-			 * 2. application removed the peer's address from av.
-			 * Either way, we need to ignore this error completion.
-			 */
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "ignoring send error completion of a handshake packet to a removed peer.\n");
-			return 0;
-		}
-
-		if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR) {
-			/* Add peer to handshake_queued_peer_list for retry later
-			 * in progress engine.
-			 */
-			assert(!(peer->flags & RXR_PEER_HANDSHAKE_QUEUED));
-			peer->flags |= RXR_PEER_HANDSHAKE_QUEUED;
-			dlist_insert_tail(&peer->handshake_queued_entry,
-					  &ep->handshake_queued_peer_list);
-		} else if (prov_errno != IBV_WC_REM_INV_RD_REQ_ERR) {
-			/* If prov_errno is IBV_WC_REM_INV_RD_REQ_ERR, the peer has been destroyed.
-			 * Which is normal, as peer does not always need a handshake packet perform
-			 * its duty. (For example, if a peer just want to sent 1 message to the ep, it
-			 * does not need handshake.)
-			 * In this case, it is safe to ignore this error completion. In all other cases,
-			 * we write an eq entry because there is no application operation associated
-			 * with handshake.
-			 */
-			efa_eq_write_error(&ep->util_ep, FI_EIO, prov_errno);
-		}
-		return 0;
-	}
-
-	if (!pkt_entry->x_entry) {
-		/*
-		 * A NULL x_entry means this is a recv posted buf pkt_entry.
-		 * Since we don't have any context besides the error code,
-		 * we will write to the eq instead.
-		 */
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		goto write_eq_err;
-	}
-
-	/*
-	 * If x_entry is set this rx or tx entry error is for a sent
-	 * packet. Decrement the tx_pending counter and fall through to
-	 * the rx or tx entry handlers.
-	 */
-	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL ||
-	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
-
-	rxr_ep_dec_tx_op_counter(ep, pkt_entry);
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	if (!peer) {
-		/*
-		 * peer could be NULL in the following 2 scenarios:
-		 * 1. a new peer with same gid+qpn was inserted to av, thus the peer was remove.
-		 * 2. application removed the peer's address from av.
-		 * Either way, we need to ignore this error completion.
-		 */
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "ignoring send error completion of a packet to a removed peer.\n");
-		return 0;
-	}
-
-	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
-		tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
-		if (prov_errno != IBV_WC_RNR_RETRY_EXC_ERR ||
-		    ep->handle_resource_management != FI_RM_ENABLED) {
-			ret = rxr_cq_handle_tx_error(ep, tx_entry, prov_errno);
-			rxr_pkt_entry_release_tx(ep, pkt_entry);
-			return ret;
-		}
-
-		rxr_cq_queue_pkt(ep, &tx_entry->queued_pkts, pkt_entry);
-		if (tx_entry->state == RXR_TX_SEND) {
-			dlist_remove(&tx_entry->entry);
-			tx_entry->state = RXR_TX_QUEUED_DATA_RNR;
-			dlist_insert_tail(&tx_entry->queued_entry,
-					  &ep->tx_entry_queued_list);
-		} else if (tx_entry->state == RXR_TX_REQ) {
-			tx_entry->state = RXR_TX_QUEUED_REQ_RNR;
-			dlist_insert_tail(&tx_entry->queued_entry,
-					  &ep->tx_entry_queued_list);
-		}
-		return 0;
-	} else if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_RX_ENTRY) {
-		rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
-		if (prov_errno != IBV_WC_RNR_RETRY_EXC_ERR ||
-		    ep->handle_resource_management != FI_RM_ENABLED) {
-			ret = rxr_cq_handle_rx_error(ep, rx_entry, prov_errno);
-			rxr_pkt_entry_release_tx(ep, pkt_entry);
-			return ret;
-		}
-		rxr_cq_queue_pkt(ep, &rx_entry->queued_pkts, pkt_entry);
-		/*
-		 * rx_entry send one ctrl packet at a time, so if we
-		 * received RNR for the packet, the rx_entry must not
-		 * be in ep's rx_queued_entry_list, thus cannot
-		 * be in QUEUED_CTRL state
-		 */
-		assert(rx_entry->state != RXR_RX_QUEUED_CTRL);
-		rx_entry->state = RXR_RX_QUEUED_CTRL;
-		dlist_insert_tail(&rx_entry->queued_entry,
-				  &ep->rx_entry_queued_list);
-		return 0;
-	} else if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_READ_ENTRY) {
-		read_entry = (struct rxr_read_entry *)pkt_entry->x_entry;
-		/* read requests is not expected to get RNR, so we call
-		 * rxr_read_handle_error() to handle general error here.
-		 */
-		ret = rxr_read_handle_error(ep, read_entry, prov_errno);
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
-		return ret;
-	}
-
-	FI_WARN(&rxr_prov, FI_LOG_CQ,
-		"%s unknown x_entry state %d\n",
-		__func__, RXR_GET_X_ENTRY_TYPE(pkt_entry));
-	assert(0 && "unknown x_entry state");
-write_eq_err:
-	efa_eq_write_error(&ep->util_ep, prov_errno, prov_errno);
-	return 0;
 }
 
 void rxr_cq_write_rx_completion(struct rxr_ep *ep,
