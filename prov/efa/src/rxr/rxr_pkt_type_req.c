@@ -1243,7 +1243,7 @@ ssize_t rxr_pkt_proc_rtm_rta(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Unknown packet type ID: %d\n",
 		       base_hdr->type);
-		rxr_cq_handle_error(ep, -FI_EINVAL, NULL);
+		efa_eq_write_error(&ep->util_ep, FI_EINVAL, FI_EINVAL);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 	}
 

@@ -1447,10 +1447,7 @@ void rxr_ep_progress_post_prov_buf(struct rxr_ep *ep)
 
 err_exit:
 
-	if (rxr_cq_handle_error(ep, err, NULL)) {
-		assert(0 &&
-		       "error writing error cq entry after failed post recv");
-	}
+	efa_eq_write_error(&ep->util_ep, err, err);
 }
 
 static inline int rxr_ep_send_queued_pkts(struct rxr_ep *ep,
@@ -1522,7 +1519,7 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 	struct rdm_peer *peer;
 	struct rxr_pkt_entry *pkt_entry;
 	ssize_t ret;
-	int i;
+	int i, err, prov_errno;
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	efa_av = efa_ep->av;
@@ -1535,10 +1532,21 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 
 		if (OFI_UNLIKELY(ret < 0 || ibv_wc.status)) {
 			if (ret < 0) {
-				rxr_cq_handle_error(ep, -ret, NULL);
+				efa_eq_write_error(&ep->util_ep, -ret, -ret);
+				return;
+			}
+
+			pkt_entry = (void *)(uintptr_t)ibv_wc.wr_id;
+			err = ibv_wc.status;
+			prov_errno = ibv_wc.status;
+			if (ibv_wc.opcode == IBV_WC_SEND) {
+#if ENABLE_DEBUG
+				ep->failed_send_comps++;
+#endif
+				rxr_pkt_handle_send_error(ep, pkt_entry, err, prov_errno);
 			} else {
-				pkt_entry = (void *)(uintptr_t)ibv_wc.wr_id;
-				rxr_cq_handle_error(ep, ibv_wc.status, pkt_entry);
+				assert(ibv_wc.opcode == IBV_WC_RECV);
+				rxr_pkt_handle_recv_error(ep, pkt_entry, err, prov_errno);
 			}
 
 			return;
@@ -1616,11 +1624,20 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 			return;
 
 		if (OFI_UNLIKELY(ret < 0)) {
-			if (ret == -FI_EAVAIL) {
-				rdm_ep_poll_shm_err_cq(ep->shm_cq, &cq_err_entry);
-				rxr_cq_handle_error(ep, cq_err_entry.prov_errno, cq_err_entry.op_context);
+			if (ret != -FI_EAVAIL) {
+				efa_eq_write_error(&ep->util_ep, -ret, -ret);
+				return;
+			}
+
+			rdm_ep_poll_shm_err_cq(ep->shm_cq, &cq_err_entry);
+			if (cq_err_entry.flags & (FI_SEND | FI_READ | FI_WRITE)) {
+				assert(cq_entry.op_context);
+				rxr_pkt_handle_send_error(ep, cq_entry.op_context, cq_err_entry.err, cq_err_entry.prov_errno);
+			} else if (cq_err_entry.flags & FI_RECV) {
+				assert(cq_entry.op_context);
+				rxr_pkt_handle_recv_error(ep, cq_entry.op_context, cq_err_entry.err, cq_err_entry.prov_errno);
 			} else {
-				rxr_cq_handle_error(ep, -ret, NULL);
+				efa_eq_write_error(&ep->util_ep, cq_err_entry.err, cq_err_entry.prov_errno);
 			}
 
 			return;

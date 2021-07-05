@@ -927,8 +927,10 @@ int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 			   ssize_t prov_errno);
 int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 			   ssize_t prov_errno);
-int rxr_cq_handle_error(struct rxr_ep *ep, ssize_t prov_errno,
-			struct rxr_pkt_entry *pkt_entry);
+
+void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
+			  struct dlist_entry *list,
+			  struct rxr_pkt_entry *pkt_entry);
 
 void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 				struct rxr_rx_entry *rx_entry);
