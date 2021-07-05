@@ -317,7 +317,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 				 pkt_entry, data, seg_size);
 	if (err) {
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		rxr_cq_handle_rx_error(ep, rx_entry, err);
+		rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
 	}
 
 	if (all_received)
@@ -328,7 +328,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 		err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
 		if (err) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ, "post CTS packet failed!\n");
-			rxr_cq_handle_rx_error(ep, rx_entry, err);
+			rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
 		}
 	}
 }

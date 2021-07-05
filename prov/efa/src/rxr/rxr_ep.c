@@ -1709,8 +1709,13 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (ret == -FI_EAGAIN)
 			break;
 
-		if (OFI_UNLIKELY(ret))
-			goto handshake_err;
+		if (OFI_UNLIKELY(ret)) {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"Failed to post HANDSHAKE to peer %ld: %s\n",
+				peer->efa_fiaddr, fi_strerror(-ret));
+			efa_eq_write_error(&ep->util_ep, FI_EIO, -ret);
+			return;
+		}
 
 		dlist_remove(&peer->handshake_queued_entry);
 		peer->flags &= ~RXR_PEER_HANDSHAKE_QUEUED;
@@ -1750,8 +1755,11 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 
 		if (ret == -FI_EAGAIN)
 			break;
-		if (OFI_UNLIKELY(ret))
-			goto rx_err;
+
+		if (OFI_UNLIKELY(ret)) {
+			rxr_cq_write_rx_error(ep, rx_entry, -ret, -ret);
+			return;
+		}
 
 		/* it can happen that rxr_pkt_post_ctrl() released rx_entry
 		 * (if the packet type is EOR and inject is used). In
@@ -1790,8 +1798,10 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		ret = rxr_ep_send_queued_pkts(ep, &tx_entry->queued_pkts);
 		if (ret == -FI_EAGAIN)
 			break;
-		if (OFI_UNLIKELY(ret))
-			goto tx_err;
+		if (OFI_UNLIKELY(ret)) {
+			rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
+			return;
+		}
 
 		if (tx_entry->state == RXR_TX_QUEUED_CTRL) {
 			ret = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry,
@@ -1799,8 +1809,11 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 						tx_entry->queued_ctrl.inject);
 			if (ret == -FI_EAGAIN)
 				break;
-			if (OFI_UNLIKELY(ret))
-				goto tx_err;
+
+			if (OFI_UNLIKELY(ret)) {
+				rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
+				return;
+			}
 		}
 
 		dlist_remove(&tx_entry->queued_entry);
@@ -1850,7 +1863,9 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 				tx_entry->send_flags &= ~FI_MORE;
 				if (ret == -FI_EAGAIN)
 					goto out;
-				goto tx_err;
+
+				rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
+				return;
 			}
 		}
 	}
@@ -1877,8 +1892,10 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (ret == -FI_EAGAIN)
 			break;
 
-		if (OFI_UNLIKELY(ret))
-			goto read_err;
+		if (OFI_UNLIKELY(ret)) {
+			rxr_read_write_error(ep, read_entry, -ret, -ret);
+			return;
+		}
 
 		read_entry->state = RXR_RDMA_ENTRY_SUBMITTED;
 		dlist_remove(&read_entry->pending_entry);
@@ -1889,33 +1906,9 @@ out:
 	if (efa_ep->xmit_more_wr_tail != &efa_ep->xmit_more_wr_head) {
 		ret = efa_post_flush(efa_ep, &bad_wr);
 		if (OFI_UNLIKELY(ret))
-			goto tx_err;
+			efa_eq_write_error(&ep->util_ep, -ret, -ret);
 	}
 
-	return;
-rx_err:
-	if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
-		assert(0 &&
-		       "error writing error cq entry when handling RX error");
-	return;
-tx_err:
-	if (rxr_cq_handle_tx_error(ep, tx_entry, ret))
-		assert(0 &&
-		       "error writing error cq entry when handling TX error");
-	return;
-
-read_err:
-	if (rxr_read_handle_error(ep, read_entry, ret))
-		assert(0 &&
-		       "error writing err cq entry while handling RDMA error");
-	return;
-
-handshake_err:
-	FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-		"Failed to post HANDSHAKE to peer %ld: %s\n",
-		peer->efa_fiaddr, fi_strerror(-ret));
-	assert(0 && "Failed to post HANDSHAKE to peer");
-	efa_eq_write_error(&ep->util_ep, FI_EIO, -ret);
 	return;
 }
 
