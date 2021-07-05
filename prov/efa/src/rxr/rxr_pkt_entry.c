@@ -71,7 +71,7 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
 	pkt_entry->type = RXR_PKT_ENTRY_POSTED;
 	pkt_entry->state = RXR_PKT_ENTRY_IN_USE;
 	pkt_entry->next = NULL;
-
+	pkt_entry->x_entry = NULL;
 	return pkt_entry;
 }
 
