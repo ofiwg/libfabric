@@ -111,8 +111,11 @@ static int do_transfers(void)
 	}
 
 	for (i = 0; i < num_eps; i++) {
-		if (ft_check_opts(FT_OPT_VERIFY_DATA))
-			ft_fill_buf(send_bufs[i], opts.transfer_size);
+		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+			ret = ft_fill_buf(send_bufs[i], opts.transfer_size);
+			if (ret)
+				return ret;
+		}
 
 		tx_buf = send_bufs[i];
 		ret = ft_post_tx(eps[i], remote_addr[i], opts.transfer_size, NO_CQ_DATA, &send_ctx[i]);

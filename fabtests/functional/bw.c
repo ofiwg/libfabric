@@ -38,9 +38,14 @@ int sleep_time = 0;
 
 static ssize_t post_one_tx(struct ft_context *msg)
 {
-	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE))
-		ft_fill_buf(msg->buf + ft_tx_prefix_size(),
-			    opts.transfer_size);
+	ssize_t ret;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+		ret = ft_fill_buf(msg->buf + ft_tx_prefix_size(),
+				  opts.transfer_size);
+		if (ret)
+			return ret;
+	}
 
 	return ft_post_tx_buf(ep, remote_fi_addr, opts.transfer_size,
 			      NO_CQ_DATA, &msg->context, msg->buf,

@@ -150,7 +150,10 @@ static int server_reject(size_t paramlen)
 		return ret;
 
 	/* Data will appear in error event generated on remote end. */
-	ft_fill_buf(cm_data, paramlen);
+	ret = ft_fill_buf(cm_data, paramlen);
+	if (ret)
+		return ret;
+
 	ret = fi_reject(pep, fi->handle, cm_data, paramlen);
 	if (ret)
 		FT_PRINTERR("fi_reject", ret);
@@ -187,7 +190,9 @@ static int server_accept(size_t paramlen)
 		goto err;
 	}
 	/* Data will appear on accept event on remote end. */
-	ft_fill_buf(cm_data, paramlen);
+	ret = ft_fill_buf(cm_data, paramlen);
+	if (ret)
+		return ret;
 
 	/* Accept the incoming connection. Also transitions endpoint to active
 	 * state.
@@ -254,7 +259,11 @@ static int server(size_t paramlen)
 
 static int client_connect(size_t paramlen)
 {
-	ft_fill_buf(cm_data, paramlen);
+	int ret;
+
+	ret = ft_fill_buf(cm_data, paramlen);
+	if (ret)
+		return ret;
 
 	/* Connect to server */
 	return fi_connect(ep, fi->dest_addr, cm_data, paramlen);
