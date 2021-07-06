@@ -680,17 +680,17 @@ AM_COND_IF([HAVE_PSM3_SRC],
 			|| git describe --dirty --always --abbrev=8 --broken 2>/dev/null || echo 'unknown commit')}"
 		IFS_VERSION=${IFS_VERSION//./_}
 		GIT_HASH="$(git log --oneline --format='%H' -1)"
-		RPM_RELEASE=$(cut -d'_' -f5 <<<"${IFS_VERSION}")
-		RELEASE_VER=$(cut -d'_' -f1-4 <<<"${IFS_VERSION}" | sed 's/_/./g')
+		RPM_RELEASE=$(echo "${IFS_VERSION}" | cut -d'_' -f5)
+		RELEASE_VER=$(echo "${IFS_VERSION}" | cut -d'_' -f1-4 | sed 's/_/./g')
 		AS_IF([test x"${RELEASE_VER}" = x"${PACKAGE_VERSION}"], [], [
 			AC_MSG_NOTICE([Release Tag does not match VERSION file])
 			AC_MSG_NOTICE([${RELEASE_VER} != ${PACKAGE_VERSION}])
 			RPM_RELEASE=999
 		])
-		PSM3_PROV_VER_MAJOR=$(cut -d'.' -f1 <<<"${PACKAGE_VERSION}")
-		PSM3_PROV_VER_MINOR=$(cut -d'.' -f2 <<<"${PACKAGE_VERSION}")
-		PSM3_PROV_VER_MAINT=$(cut -d'.' -f3 <<<"${PACKAGE_VERSION}")
-		PSM3_PROV_VER_PATCH=$(cut -d'.' -f4 <<<"${PACKAGE_VERSION}")
+		PSM3_PROV_VER_MAJOR=$(echo "${PACKAGE_VERSION}" | cut -d'.' -f1)
+		PSM3_PROV_VER_MINOR=$(echo "${PACKAGE_VERSION}" | cut -d'.' -f2)
+		PSM3_PROV_VER_MAINT=$(echo "${PACKAGE_VERSION}" | cut -d'.' -f3)
+		PSM3_PROV_VER_PATCH=$(echo "${PACKAGE_VERSION}" | cut -d'.' -f4)
 	   ])
 AS_IF([test $have_libcuda -eq 1], [RPM_RELEASE=${RPM_RELEASE}cuda])
 
