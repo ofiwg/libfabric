@@ -380,9 +380,8 @@ static struct fi_ops_mr rxm_domain_mr_ops = {
 
 static ssize_t rxm_send_credits(struct fid_ep *ep, size_t credits)
 {
-	struct rxm_conn *rxm_conn =
-		container_of(ep->fid.context, struct rxm_conn, handle);
-	struct rxm_ep *rxm_ep = rxm_conn->handle.cmap->ep;
+	struct rxm_conn *rxm_conn = ep->fid.context;
+	struct rxm_ep *rxm_ep = rxm_conn->ep;
 	struct rxm_deferred_tx_entry *def_tx_entry;
 	struct rxm_tx_buf *tx_buf;
 	struct iovec iov;
@@ -403,7 +402,7 @@ static ssize_t rxm_send_credits(struct fid_ep *ep, size_t credits)
 	tx_buf->pkt.ctrl_hdr.msg_id = ofi_buf_index(tx_buf);
 	tx_buf->pkt.ctrl_hdr.ctrl_data = credits;
 
-	if (rxm_conn->handle.state != RXM_CMAP_CONNECTED)
+	if (rxm_conn->state != RXM_CM_CONNECTED)
 		goto defer;
 
 	iov.iov_base = &tx_buf->pkt;
@@ -428,7 +427,7 @@ defer:
 	}
 
 	def_tx_entry->credit_msg.tx_buf = tx_buf;
-	rxm_ep_enqueue_deferred_tx_queue_priority(def_tx_entry);
+	rxm_queue_deferred_tx(def_tx_entry, OFI_LIST_HEAD);
 	return FI_SUCCESS;
 }
 

@@ -766,6 +766,8 @@ int ofi_ip_av_create_flags(struct fid_domain *domain_fid, struct fi_av_attr *att
 
 void *ofi_av_get_addr(struct util_av *av, fi_addr_t fi_addr);
 #define ofi_ip_av_get_addr ofi_av_get_addr
+void *ofi_av_addr_context(struct util_av *av, fi_addr_t fi_addr);
+
 fi_addr_t ofi_ip_av_get_fi_addr(struct util_av *av, const void *addr);
 
 int ofi_get_addr(uint32_t *addr_format, uint64_t flags,

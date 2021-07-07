@@ -236,6 +236,7 @@ static void rxm_recv_queue_close(struct rxm_recv_queue *recv_queue)
 	/* It indicates that the recv_queue were allocated */
 	if (recv_queue->fs) {
 		rxm_recv_fs_free(recv_queue->fs);
+		recv_queue->fs = NULL;
 	}
 	// TODO cleanup recv_list and unexp msg list
 }
@@ -325,18 +326,23 @@ err_recv_tag:
 
 /* It is safe to call this function, even if `rxm_ep_txrx_res_open`
  * has not yet been called */
-static void rxm_ep_txrx_res_close(struct rxm_ep *rxm_ep)
+static void rxm_ep_txrx_res_close(struct rxm_ep *ep)
 {
-	rxm_recv_queue_close(&rxm_ep->trecv_queue);
-	rxm_recv_queue_close(&rxm_ep->recv_queue);
+	rxm_recv_queue_close(&ep->trecv_queue);
+	rxm_recv_queue_close(&ep->recv_queue);
 
-	if (rxm_ep->multi_recv_pool)
-		ofi_bufpool_destroy(rxm_ep->multi_recv_pool);
-
-	if (rxm_ep->rx_pool)
-		ofi_bufpool_destroy(rxm_ep->rx_pool);
-	if (rxm_ep->tx_pool)
-		ofi_bufpool_destroy(rxm_ep->tx_pool);
+	if (ep->multi_recv_pool) {
+		ofi_bufpool_destroy(ep->multi_recv_pool);
+		ep->multi_recv_pool = NULL;
+	}
+	if (ep->rx_pool) {
+		ofi_bufpool_destroy(ep->rx_pool);
+		ep->rx_pool = NULL;
+	}
+	if (ep->tx_pool) {
+		ofi_bufpool_destroy(ep->tx_pool);
+		ep->tx_pool = NULL;
+	}
 }
 
 static int rxm_setname(fid_t fid, void *addr, size_t addrlen)
@@ -594,8 +600,8 @@ static int rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
 			continue;
 
 		if (!rx_buf->conn) {
-			rx_buf->conn = rxm_key2conn(rx_buf->ep,
-							rx_buf->pkt.ctrl_hdr.conn_id);
+			rx_buf->conn = ofi_idm_at(&rx_buf->ep->conn_idx_map,
+					(int) rx_buf->pkt.ctrl_hdr.conn_id);
 		}
 		if (recv_entry->sar.conn != rx_buf->conn)
 			continue;
@@ -1253,7 +1259,7 @@ defer:
 	def_tx->sar_seg.msg_id = msg_id;
 	def_tx->sar_seg.iface = iface;
 	def_tx->sar_seg.device = device;
-	rxm_ep_enqueue_deferred_tx_queue(def_tx);
+	rxm_queue_deferred_tx(def_tx, OFI_LIST_TAIL);
 	return 0;
 }
 
@@ -1317,7 +1323,7 @@ rxm_ep_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	inject_pkt->ctrl_hdr.conn_id = rxm_conn->handle.remote_key;
+	inject_pkt->ctrl_hdr.conn_id = rxm_conn->remote_index;
 	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
 		if (rxm_use_msg_tinject(rxm_ep, inject_pkt->hdr.op)) {
 			return rxm_msg_tinject(rxm_conn->msg_ep, buf, len,
@@ -1636,7 +1642,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 	struct fi_msg msg;
 	ssize_t ret = 0;
 
-	if (rxm_conn->handle.state != RXM_CMAP_CONNECTED)
+	if (rxm_conn->state != RXM_CM_CONNECTED)
 		return;
 
 	while (!dlist_empty(&rxm_conn->deferred_tx_queue) && !ret) {
@@ -1761,7 +1767,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			break;
 		}
 
-		rxm_ep_dequeue_deferred_tx_queue(def_tx_entry);
+		rxm_dequeue_deferred_tx(def_tx_entry);
 		free(def_tx_entry);
 	}
 }
@@ -2260,76 +2266,76 @@ static struct fi_ops_collective rxm_ops_collective_none = {
 	.msg = fi_coll_no_msg,
 };
 
-static int rxm_ep_msg_res_close(struct rxm_ep *rxm_ep)
+
+static int rxm_listener_close(struct rxm_ep *ep)
 {
-	int ret = 0;
+	int ret;
 
-	if (rxm_ep->srx_ctx) {
-		ret = fi_close(&rxm_ep->srx_ctx->fid);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, \
-				"Unable to close msg shared ctx\n");
-		}
-	}
-
-	fi_freeinfo(rxm_ep->msg_info);
-	return ret;
-}
-
-static int rxm_listener_close(struct rxm_ep *rxm_ep)
-{
-	int ret, retv = 0;
-
-	if (rxm_ep->msg_pep) {
-		ret = fi_close(&rxm_ep->msg_pep->fid);
+	if (ep->msg_pep) {
+		ret = fi_close(&ep->msg_pep->fid);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"Unable to close msg pep\n");
-			retv = ret;
+			return ret;
 		}
+		ep->msg_pep = NULL;
 	}
-	if (rxm_ep->msg_eq) {
-		ret = fi_close(&rxm_ep->msg_eq->fid);
+
+	if (ep->msg_eq) {
+		ret = fi_close(&ep->msg_eq->fid);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"Unable to close msg EQ\n");
-			retv = ret;
+			return ret;
 		}
+		ep->msg_eq = NULL;
 	}
-	return retv;
+	return 0;
 }
 
 static int rxm_ep_close(struct fid *fid)
 {
-	int ret, retv = 0;
-	struct rxm_ep *rxm_ep;
+	struct rxm_ep *ep;
+	int ret;
 
-	rxm_ep = container_of(fid, struct rxm_ep, util_ep.ep_fid.fid);
-	if (rxm_ep->cmap)
-		rxm_cmap_free(rxm_ep->cmap);
+	ep = container_of(fid, struct rxm_ep, util_ep.ep_fid.fid);
 
-	ret = rxm_listener_close(rxm_ep);
+	/* Stop listener thread to halt event processing before closing all
+	 * connections.
+	 */
+	rxm_stop_listen(ep);
+	rxm_freeall_conns(ep);
+	ret = rxm_listener_close(ep);
 	if (ret)
-		retv = ret;
+		return ret;
 
-	rxm_ep_txrx_res_close(rxm_ep);
-	ret = rxm_ep_msg_res_close(rxm_ep);
-	if (ret)
-		retv = ret;
-
-	if (rxm_ep->msg_cq) {
-		ret = fi_close(&rxm_ep->msg_cq->fid);
+	rxm_ep_txrx_res_close(ep);
+	if (ep->srx_ctx) {
+		ret = fi_close(&ep->srx_ctx->fid);
 		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to close msg CQ\n");
-			retv = ret;
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, \
+				"Unable to close msg shared ctx\n");
+			return ret;
 		}
+		ep->srx_ctx = NULL;
 	}
 
-	free(rxm_ep->inject_pkt);
-	ofi_endpoint_close(&rxm_ep->util_ep);
-	fi_freeinfo(rxm_ep->rxm_info);
-	free(rxm_ep);
-	return retv;
+	if (ep->msg_cq) {
+		ret = fi_close(&ep->msg_cq->fid);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to close msg CQ\n");
+			return ret;
+		}
+		ep->msg_cq = NULL;
+	}
+
+	free(ep->inject_pkt);
+	ofi_endpoint_close(&ep->util_ep);
+	fi_freeinfo(ep->msg_info);
+	fi_freeinfo(ep->rxm_info);
+	free(ep);
+	return 0;
 }
 
 static int rxm_ep_trywait_cq(void *arg)
@@ -2373,6 +2379,12 @@ static int rxm_ep_wait_fd_add(struct rxm_ep *rxm_ep, struct util_wait *wait)
 
 	return ofi_wait_add_fid(wait, &rxm_ep->msg_eq->fid, POLLIN,
 				rxm_ep_trywait_eq);
+}
+
+static bool rxm_needs_atomic_progress(const struct fi_info *info)
+{
+	return (info->caps & FI_ATOMIC) && info->domain_attr &&
+		info->domain_attr->data_progress == FI_PROGRESS_AUTO;
 }
 
 static int rxm_msg_cq_fd_needed(struct rxm_ep *rxm_ep)
@@ -2568,7 +2580,7 @@ static int rxm_ep_txrx_res_open(struct rxm_ep *rxm_ep)
 	if (ret)
 		return ret;
 
-	dlist_init(&rxm_ep->deferred_tx_conn_queue);
+	dlist_init(&rxm_ep->deferred_queue);
 
 	ret = rxm_ep_rx_queue_init(rxm_ep);
 	if (ret)
@@ -2628,23 +2640,13 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		 * and then progressing both MSG EQ and MSG CQ once the latter
 		 * is opened) */
 		assert(!(rxm_ep->rxm_info->caps & FI_ATOMIC) ||
-		       !rxm_ep->cmap || !rxm_ep->cmap->cm_thread);
+		       !rxm_ep->cm_thread);
 
 		ret = rxm_ep_msg_cq_open(rxm_ep);
 		if (ret)
 			return ret;
 
-		/* fi_listen should be called before cmap alloc as cmap alloc
-		 * calls fi_getname on pep which would succeed only if fi_listen
-		 * was called first */
-		ret = fi_listen(rxm_ep->msg_pep);
-		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"unable to set msg PEP to listen state\n");
-			return ret;
-		}
-
-		ret = rxm_conn_cmap_alloc(rxm_ep);
+		ret = rxm_start_listen(rxm_ep);
 		if (ret)
 			return ret;
 
@@ -2658,19 +2660,17 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 
 		if (rxm_ep->srx_ctx) {
 			ret = rxm_prepost_recv(rxm_ep, rxm_ep->srx_ctx);
-			if (ret) {
-				rxm_cmap_free(rxm_ep->cmap);
-				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-					"unable to prepost recv bufs\n");
+			if (ret)
 				goto err;
-			}
 		}
 		break;
 	default:
 		return -FI_ENOSYS;
 	}
 	return 0;
+
 err:
+	/* TODO: cleanup all allocated resources on error */
 	rxm_ep_txrx_res_close(rxm_ep);
 	return ret;
 }
@@ -2802,7 +2802,7 @@ rxm_prepare_deferred_rndv_write(struct rxm_deferred_tx_entry **def_tx_entry,
 {
 	uint8_t i;
 	struct rxm_tx_buf *tx_buf = buf;
-	struct rxm_ep *rxm_ep = tx_buf->write_rndv.conn->handle.cmap->ep;
+	struct rxm_ep *rxm_ep = tx_buf->write_rndv.conn->ep;
 
 	*def_tx_entry = rxm_ep_alloc_deferred_tx_entry(rxm_ep, tx_buf->write_rndv.conn,
 						       RXM_DEFERRED_TX_RNDV_WRITE);
