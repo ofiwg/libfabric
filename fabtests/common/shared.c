@@ -2,6 +2,7 @@
  * Copyright (c) 2013-2018 Intel Corporation.  All rights reserved.
  * Copyright (c) 2016 Cray Inc.  All rights reserved.
  * Copyright (c) 2014-2017, Cisco Systems, Inc. All rights reserved.
+ * Copyright (c) 2021 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under the BSD license below:
  *
@@ -772,6 +773,10 @@ free:
 	return ret;
 }
 
+/*
+ * Handles a persistent server communicating with multiple clients,
+ * one at a time, in sequence.
+ */
 int ft_accept_next_client() {
 	int ret;
 
@@ -782,7 +787,46 @@ int ft_accept_next_client() {
 			return ret;
 	}
 
+	/* Clients may be separate processes, so re-initialize any OOB setup. */
+	if (opts.options & FT_OPT_OOB_ADDR_EXCH) {
+		ret = ft_reset_oob();
+		if (ret)
+			return ret;
+	}
 	return ft_init_av();
+}
+
+/*
+ * Re-initialize the OOB setup.
+ */
+int ft_reset_oob()
+{
+	int ret;
+	ret = ft_close_oob();
+	if (ret) {
+		FT_PRINTERR("ft_close_oob", ret);
+		return ret;
+	}
+	ret = ft_init_oob();
+	if (ret) {
+		FT_PRINTERR("ft_init_oob", ret);
+		return ret;
+	}
+	return 0;
+}
+
+int ft_close_oob()
+{
+	int ret;
+	if (oob_sock == -1)
+		return 0;
+	ret = close(oob_sock);
+	if (ret) {
+		FT_PRINTERR("close", errno);
+		return ret;
+	}
+	oob_sock = -1;
+	return 0;
 }
 
 int ft_getinfo(struct fi_info *hints, struct fi_info **info)

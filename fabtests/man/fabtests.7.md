@@ -148,6 +148,10 @@ features of libfabric.
   A sleep time on the receiving side can be enabled in order to allow
   the sender to get ahead of the receiver.
 
+*fi_rdm_multi_client*
+: Tests a persistent server communicating with multiple clients, one at a
+  time, in sequence.
+
 # Benchmarks
 
 The client and the server exchange messages in either a ping-pong manner,
