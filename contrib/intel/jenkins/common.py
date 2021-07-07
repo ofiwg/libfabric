@@ -25,17 +25,16 @@ def run_command(command):
 
 Prov = collections.namedtuple('Prov', 'core util')
 prov_list = [
-
-   Prov("psm3", None),
-   Prov("psm2", None),
-   Prov("verbs", None),
-   Prov("verbs", "rxd"),
-   Prov("verbs", "rxm"),
-   Prov("sockets", None),
-   Prov("tcp", None),
-   Prov("udp", None),
-   Prov("udp", "rxd"),
-   Prov("shm", None),
+    Prov("psm3", None),
+    Prov("psm2", None),
+    Prov("verbs", None),
+    Prov("verbs", "rxd"),
+    Prov("verbs", "rxm"),
+    Prov("sockets", None),
+    Prov("tcp", None),
+    Prov("udp", None),
+    Prov("udp", "rxd"),
+    Prov("shm", None),
 ]
 enabled_prov_list = [
     "psm2",
@@ -56,4 +55,4 @@ disabled_prov_list = [
     'bgq'
     'mrail'
 ]
-     
+
