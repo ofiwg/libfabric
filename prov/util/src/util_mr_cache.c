@@ -48,6 +48,7 @@ struct ofi_mr_cache_params cache_params = {
 	.max_cnt = 1024,
 	.cuda_monitor_enabled = true,
 	.rocr_monitor_enabled = true,
+	.ze_monitor_enabled = true,
 };
 
 static int util_mr_find_within(struct ofi_rbmap *map, void *key, void *data)

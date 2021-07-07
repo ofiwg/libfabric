@@ -283,6 +283,7 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 		[FI_HMEM_SYSTEM] = default_monitor,
 		[FI_HMEM_CUDA] = default_cuda_monitor,
 		[FI_HMEM_ROCR] = default_rocr_monitor,
+		[FI_HMEM_ZE] = default_ze_monitor,
 	};
 	enum fi_hmem_iface iface;
 	struct vrb_domain *_domain;
