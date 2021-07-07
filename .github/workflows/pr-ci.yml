@@ -1,5 +1,41 @@
-name: OS Matrix Build Checks
+name: Build Checks
 on: [push, pull_request]
+env:
+  APT_PACKAGES: >-
+    abi-compliance-checker
+    abi-dumper
+    build-essential
+    debhelper
+    dh-systemd
+    fakeroot
+    gcc
+    git
+    libnl-3-200 libnl-3-dev libnl-route-3-200 libnl-route-3-dev
+    libnuma-dev
+    libudev-dev
+    uuid-dev
+    make
+    ninja-build
+    pandoc
+    pkg-config
+    python
+    rpm
+    sparse
+    valgrind
+    wget
+  OFI_PROVIDER_FLAGS: >-
+    --enable-efa=rdma-core/build
+    --enable-mrail
+    --enable-psm3=rdma-core/build
+    --enable-rxd
+    --enable-rxm
+    --enable-shm
+    --enable-tcp
+    --enable-udp
+    --enable-usnic
+    --enable-verbs=rdma-core/build
+  RDMA_CORE_PATH: 'rdma-core/build'
+  RDMA_CORE_VERSION: v34.1
 jobs:
   linux:
     runs-on: '${{ matrix.os }}'
@@ -13,51 +49,55 @@ jobs:
           - clang
       fail-fast: false
     steps:
-      - name: Install dependencies (Linux OS)
+      - name: Install dependencies (Linux)
         run: |
           sudo apt-get update
-          sudo apt-get install -y abi-compliance-checker \
-                                  abi-dumper \
-                                  build-essential \
-                                  debhelper \
-                                  dh-systemd \
-                                  fakeroot \
-                                  gcc \
-                                  git \
-                                  libnl-3-200 libnl-3-dev libnl-route-3-200 libnl-route-3-dev \
-                                  libnuma-dev \
-                                  libudev-dev \
-                                  uuid-dev \
-                                  make \
-                                  ninja-build \
-                                  pandoc \
-                                  pkg-config \
-                                  python \
-                                  rpm \
-                                  sparse \
-                                  valgrind \
-                                  wget
+          sudo apt-get install -y ${{ env.APT_PACKAGES }}
       - uses: actions/checkout@v2
       - name: Build Check
         run: |
-          git clone --depth 1 -b v34.1 https://github.com/linux-rdma/rdma-core.git
+          set -x
+          git clone --depth 1 -b ${{ env.RDMA_CORE_VERSION }} https://github.com/linux-rdma/rdma-core.git
           pushd rdma-core; bash build.sh; popd
-          export RDMA_CORE_PATH="rdma-core/build"
-          export LD_LIBRARY_PATH="$RDMA_CORE_PATH/lib:$LD_LIBRARY_PATH"
+          export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
           ./autogen.sh
-          ./configure --prefix=$PWD/install --enable-efa=${RDMA_CORE_PATH} \
-                                            --enable-mrail \
-                                            --enable-psm3=${RDMA_CORE_PATH} \
-                                            --enable-rxd \
-                                            --enable-rxm \
-                                            --enable-shm \
-                                            --enable-tcp \
-                                            --enable-udp \
-                                            --enable-usnic \
-                                            --enable-verbs=${RDMA_CORE_PATH} \
-                                            CC=${{ matrix.cc }}
-          make -j 4; make install
+          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} CC=${{ matrix.cc }}
+          make -j 2; make install
           $PWD/install/bin/fi_info -l
+  hmem:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Install dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ env.APT_PACKAGES }}
+      - name: Install CUDA
+        run: |
+          sudo apt-get install -y nvidia-cuda-toolkit
+      - name: Install ROCm
+        run: |
+          echo "Installing ROCm SDK"
+          # TODO: Install ROCm dependencies and add --with-rocm to build in next step
+      - name: Install Xe
+        run: |
+          echo "Installing Ze SDK"
+          # TODO: Install Ze dependencies and add --with-ze to build in next step
+      - uses: actions/checkout@v2
+      - name: HMEM Checks
+        run: |
+          set -x
+          # We could use 'upload-artifact' and persist the rdma-core build
+          # across jobs, but this is just as quick.
+          git clone --depth 1 -b ${{ env.RDMA_CORE_VERSION }} https://github.com/linux-rdma/rdma-core.git
+          pushd rdma-core; bash build.sh; popd
+          export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
+          ./autogen.sh
+          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} \
+                                            --with-cuda=/usr/local/cuda \
+                                            CC=${{ matrix.cc }}
+          make -j 2; make install
+          $PWD/install/bin/fi_info -l
+          $PWD/install/bin/fi_info -c FI_HMEM
   macos:
     runs-on: macos-10.15
     steps:
@@ -70,5 +110,5 @@ jobs:
         run: |
           ./autogen.sh
           ./configure --prefix=$PWD/install
-          make -j 4; make install
+          make -j 2; make install
           $PWD/install/bin/fi_info -l
