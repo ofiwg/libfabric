@@ -23,36 +23,25 @@ def run_command(command):
         sys.exit(p.returncode)
 
 
-Prov = collections.namedtuple('Prov', 'core util')
+Prov = collections.namedtuple('Prov', 'name enable force_dl')
 prov_list = [
-    Prov("psm3", None),
-    Prov("psm2", None),
-    Prov("verbs", None),
-    Prov("verbs", "rxd"),
-    Prov("verbs", "rxm"),
-    Prov("sockets", None),
-    Prov("tcp", None),
-    Prov("udp", None),
-    Prov("udp", "rxd"),
-    Prov("shm", None),
-]
-enabled_prov_list = [
-    "psm3",
-    "psm2",
-    "verbs",
-    "tcp",
-    "sockets",
-    "udp",
-    "shm"
-]
-disabled_prov_list = [
-    'usnic',
-    'psm',
-    'efa',
-    'perf',
-    'rstream',
-    'hook_debug',
-    'bgq'
-    'mrail'
+    Prov("bgq",        False, False),
+    Prov("efa",        False, False),
+    Prov("gni",        False, False),
+    Prov("hook_debug", False, False),
+    Prov("mrail",      False, False),
+    Prov("perf",       False, False),
+    Prov("psm",        False, False),
+    Prov("psm2",       True,  True ),
+    Prov("psm3",       True,  False),
+    Prov("rstream",    False, False),
+    Prov("rxd",        True,  False),
+    Prov("rxm",        True,  False),
+    Prov("shm",        True,  False),
+    Prov("sockets",    True,  False),
+    Prov("tcp",        True,  False),
+    Prov("udp",        True,  False),
+    Prov("usnic",      False, False),
+    Prov("verbs",      True,  False),
 ]
 

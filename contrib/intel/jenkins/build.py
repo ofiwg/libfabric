@@ -25,20 +25,22 @@ def build_libfabric(libfab_install_path, mode):
     elif (mode == 'dl'):
         enable_prov_val='dl'
 
-    for prov in common.enabled_prov_list:
-        config_cmd.append('--enable-{}={}'.format(prov, enable_prov_val))
-    for prov in common.disabled_prov_list:
-        config_cmd.append('--enable-{}=no'.format(prov))
+    for prov in common.prov_list:
+        if prov.enable:
+            if prov.force_dl:
+                config_cmd.append('--enable-{}=dl'.format(prov.name))
+            else:
+                config_cmd.append('--enable-{}={}'.format(prov.name, enable_prov_val))
+        else:
+            config_cmd.append('--disable-{}'.format(prov.name))
 
     config_cmd.append('--with-psm2-src={}/opa-psm2-lib'.format(workspace))
-
 
     common.run_command(['./autogen.sh'])
     common.run_command(shlex.split(" ".join(config_cmd)))
     common.run_command(['make','clean'])
     common.run_command(['make'])
     common.run_command(['make','install'])
-
 
 def build_fabtests(libfab_install_path, mode):
 
