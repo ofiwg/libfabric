@@ -97,11 +97,11 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 		peer = rxr_ep_get_peer(ep, pkt->addr);
 		assert(peer);
 		peer->rnr_queued_pkt_cnt--;
-		peer->timeout_interval = 0;
-		peer->rnr_timeout_exp = 0;
-		if (peer->flags & RXR_PEER_IN_BACKOFF)
-			dlist_remove(&peer->rnr_entry);
-		peer->flags &= ~RXR_PEER_IN_BACKOFF;
+		peer->rnr_backoff_wait_time = 0;
+		if (peer->flags & RXR_PEER_IN_BACKOFF) {
+			dlist_remove(&peer->rnr_backoff_entry);
+			peer->flags &= ~RXR_PEER_IN_BACKOFF;
+		}
 		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 		       "reset backoff timer for peer: %" PRIu64 "\n",
 		       pkt->addr);

@@ -102,8 +102,17 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 #define RXR_DEF_CQ_SIZE			(8192)
 #define RXR_REMOTE_CQ_DATA_LEN		(8)
 
-/* maximum timeout for RNR backoff (microseconds) */
-#define RXR_DEF_RNR_MAX_TIMEOUT		(1000000)
+/* the default value for rxr_env.rnr_backoff_wait_time_cap */
+#define RXR_DEFAULT_RNR_BACKOFF_WAIT_TIME_CAP	(1000000)
+
+/*
+ * the maximum value for rxr_env.rnr_backoff_wait_time_cap
+ * Because the backoff wait time is multiplied by 2 when
+ * RNR is encountered, its value must be < INT_MAX/2.
+ * Therefore, its cap must be < INT_MAX/2 too.
+ */
+#define RXR_MAX_RNR_BACKOFF_WAIT_TIME_CAP	(INT_MAX/2 - 1)
+
 /* bounds for random RNR backoff timeout */
 #define RXR_RAND_MIN_TIMEOUT		(40)
 #define RXR_RAND_MAX_TIMEOUT		(120)
@@ -229,8 +238,8 @@ struct rxr_env {
 	size_t rx_iov_limit;
 	int rx_copy_unexp;
 	int rx_copy_ooo;
-	int max_timeout;
-	int timeout_interval;
+	int rnr_backoff_wait_time_cap; /* unit is us */
+	int rnr_backoff_initial_wait_time; /* unit is us */
 	size_t efa_cq_read_size;
 	size_t shm_cq_read_size;
 	size_t efa_max_medium_msg_size;
@@ -288,7 +297,6 @@ enum rxr_rx_comm_type {
 #define RXR_PEER_HANDSHAKE_SENT BIT_ULL(1) /* a handshake packet has been sent to a peer */
 #define RXR_PEER_HANDSHAKE_RECEIVED BIT_ULL(2)
 #define RXR_PEER_IN_BACKOFF BIT_ULL(3) /* peer is in backoff, not allowed to send */
-#define RXR_PEER_BACKED_OFF BIT_ULL(4) /* peer backoff was increased during this loop of the progress engine */
 /*
  * FI_EAGAIN error was encountered when sending handsahke to this peer,
  * the peer was put in rxr_ep->handshake_queued_peer_list.
@@ -321,11 +329,10 @@ struct rdm_peer {
 	size_t tx_pending;		/* tracks pending tx ops to this peer */
 	uint16_t tx_credits;		/* available send credits */
 	uint16_t rx_credits;		/* available credits to allocate */
-	uint64_t rnr_ts;		/* timestamp for RNR backoff tracking */
+	uint64_t rnr_backoff_begin_ts;	/* timestamp for RNR backoff period begin */
+	uint64_t rnr_backoff_wait_time;	/* how long the RNR backoff period last */
 	int rnr_queued_pkt_cnt;		/* queued RNR packet count */
-	int timeout_interval;		/* initial RNR timeout value */
-	int rnr_timeout_exp;		/* RNR timeout exponentation calc val */
-	struct dlist_entry rnr_entry;	/* linked to rxr_ep peer_backoff_list */
+	struct dlist_entry rnr_backoff_entry;	/* linked to rxr_ep peer_backoff_list */
 	struct dlist_entry handshake_queued_entry; /* linked with rxr_ep->handshake_queued_peer_list */
 	struct dlist_entry rx_unexp_list; /* a list of unexpected untagged rx_entry for this peer */
 	struct dlist_entry rx_unexp_tagged_list; /* a list of unexpected tagged rx_entry for this peer */
@@ -1028,15 +1035,6 @@ static inline void rxr_rm_tx_cq_check(struct rxr_ep *ep, struct util_cq *tx_cq)
 	else
 		ep->rm_full &= ~RXR_RM_TX_CQ_FULL;
 	fastlock_release(&tx_cq->cq_lock);
-}
-
-static inline bool rxr_peer_timeout_expired(struct rxr_ep *ep,
-					    struct rdm_peer *peer,
-					    uint64_t ts)
-{
-	return (ts >= (peer->rnr_ts + MIN(rxr_env.max_timeout,
-					  peer->timeout_interval *
-					  (1 << peer->rnr_timeout_exp))));
 }
 
 /* Performance counter declarations */
