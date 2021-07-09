@@ -2153,7 +2153,9 @@ static int run_pingpong_dgram(struct ct_pingpong *ct)
 	/* Post an extra receive to avoid lacking a posted receive in the
 	 * finalize.
 	 */
-	ret = fi_recv(ct->ep, ct->rx_buf, ct->rx_size, fi_mr_desc(ct->mr), 0,
+	ret = fi_recv(ct->ep, ct->rx_buf,
+		      MAX(ct->rx_size, PP_MAX_CTRL_MSG) +  ct->rx_prefix_size,
+		      fi_mr_desc(ct->mr), 0,
 		      ct->rx_ctx_ptr);
 	if (ret)
 		return ret;
