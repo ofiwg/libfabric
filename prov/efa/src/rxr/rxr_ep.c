@@ -175,7 +175,7 @@ int rxr_ep_post_user_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, uint6
 	dlist_init(&pkt_entry->entry);
 	mr = (struct efa_mr *)rx_entry->desc[0];
 	pkt_entry->mr = &mr->mr_fid;
-	pkt_entry->type = RXR_PKT_ENTRY_USER;
+	pkt_entry->alloc_type = RXR_PKT_FROM_USER_BUFFER;
 	pkt_entry->state = RXR_PKT_ENTRY_IN_USE;
 	pkt_entry->next = NULL;
 	/*
@@ -235,10 +235,10 @@ int rxr_ep_post_prov_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_ty
 
 	switch (lower_ep_type) {
 	case SHM_EP:
-		rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->rx_pkt_shm_pool);
+		rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->shm_rx_pkt_pool, RXR_PKT_FROM_SHM_RX_POOL);
 		break;
 	case EFA_EP:
-		rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->rx_pkt_efa_pool);
+		rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -699,21 +699,21 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	if (rxr_ep->rx_unexp_pkt_pool)
 		ofi_bufpool_destroy(rxr_ep->rx_unexp_pkt_pool);
 
-	if (rxr_ep->rx_pkt_efa_pool)
-		ofi_bufpool_destroy(rxr_ep->rx_pkt_efa_pool);
+	if (rxr_ep->efa_rx_pkt_pool)
+		ofi_bufpool_destroy(rxr_ep->efa_rx_pkt_pool);
 
-	if (rxr_ep->tx_pkt_efa_pool)
-		ofi_bufpool_destroy(rxr_ep->tx_pkt_efa_pool);
+	if (rxr_ep->efa_tx_pkt_pool)
+		ofi_bufpool_destroy(rxr_ep->efa_tx_pkt_pool);
 
 	if (rxr_ep->pkt_sendv_pool)
 		ofi_bufpool_destroy(rxr_ep->pkt_sendv_pool);
 
 	if (rxr_ep->use_shm) {
-		if (rxr_ep->rx_pkt_shm_pool)
-			ofi_bufpool_destroy(rxr_ep->rx_pkt_shm_pool);
+		if (rxr_ep->shm_rx_pkt_pool)
+			ofi_bufpool_destroy(rxr_ep->shm_rx_pkt_pool);
 
-		if (rxr_ep->tx_pkt_shm_pool)
-			ofi_bufpool_destroy(rxr_ep->tx_pkt_shm_pool);
+		if (rxr_ep->shm_tx_pkt_pool)
+			ofi_bufpool_destroy(rxr_ep->shm_tx_pkt_pool);
 	}
 }
 
@@ -1118,13 +1118,13 @@ int rxr_ep_init(struct rxr_ep *ep)
 
 	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_tx_pool_chunk_cnt(ep),
 				  hp_pool_flag,
-				  &ep->tx_pkt_efa_pool);
+				  &ep->efa_tx_pkt_pool);
 	if (ret)
 		goto err_free;
 
 	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_rx_pool_chunk_cnt(ep),
 				  hp_pool_flag,
-				  &ep->rx_pkt_efa_pool);
+				  &ep->efa_rx_pkt_pool);
 	if (ret)
 		goto err_free;
 
@@ -1223,7 +1223,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 
 	/* create pkt pool for shm */
 	if (ep->use_shm) {
-		ret = ofi_bufpool_create(&ep->tx_pkt_shm_pool,
+		ret = ofi_bufpool_create(&ep->shm_tx_pkt_pool,
 					 entry_sz,
 					 RXR_BUF_POOL_ALIGNMENT,
 					 shm_info->tx_attr->size,
@@ -1231,7 +1231,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 		if (ret)
 			goto err_free;
 
-		ret = ofi_bufpool_create(&ep->rx_pkt_shm_pool,
+		ret = ofi_bufpool_create(&ep->shm_rx_pkt_pool,
 					 entry_sz,
 					 RXR_BUF_POOL_ALIGNMENT,
 					 shm_info->rx_attr->size,
@@ -1266,8 +1266,8 @@ int rxr_ep_init(struct rxr_ep *ep)
 	return 0;
 
 err_free:
-	if (ep->tx_pkt_shm_pool)
-		ofi_bufpool_destroy(ep->tx_pkt_shm_pool);
+	if (ep->shm_tx_pkt_pool)
+		ofi_bufpool_destroy(ep->shm_tx_pkt_pool);
 
 	if (ep->pkt_sendv_pool)
 		ofi_bufpool_destroy(ep->pkt_sendv_pool);
@@ -1299,11 +1299,11 @@ err_free:
 	if (rxr_env.rx_copy_unexp && ep->rx_unexp_pkt_pool)
 		ofi_bufpool_destroy(ep->rx_unexp_pkt_pool);
 
-	if (ep->rx_pkt_efa_pool)
-		ofi_bufpool_destroy(ep->rx_pkt_efa_pool);
+	if (ep->efa_rx_pkt_pool)
+		ofi_bufpool_destroy(ep->efa_rx_pkt_pool);
 
-	if (ep->tx_pkt_efa_pool)
-		ofi_bufpool_destroy(ep->tx_pkt_efa_pool);
+	if (ep->efa_tx_pkt_pool)
+		ofi_bufpool_destroy(ep->efa_tx_pkt_pool);
 
 	return ret;
 }
@@ -1339,8 +1339,8 @@ struct fi_ops_cm rxr_ep_cm = {
 
 /*
  * @brief explicitly allocate a chunk of memory for 5 packet pools on RX side:
- *     efa's receive packet pool (rx_pkt_efa_pool)
- *     shm's receive packet pool (rx_pkt_shm_pool)
+ *     efa's receive packet pool (efa_rx_pkt_pool)
+ *     shm's receive packet pool (shm_rx_pkt_pool)
  *     unexpected packet pool (rx_unexp_pkt_pool),
  *     out-of-order packet pool (rx_ooo_pkt_pool), and
  *     local read-copy packet pool (rx_readcopy_pkt_pool).
@@ -1353,8 +1353,8 @@ int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
 {
 	int err;
 
-	assert(ep->rx_pkt_efa_pool);
-	err = ofi_bufpool_grow(ep->rx_pkt_efa_pool);
+	assert(ep->efa_rx_pkt_pool);
+	err = ofi_bufpool_grow(ep->efa_rx_pkt_pool);
 	if (err) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"cannot allocate memory for EFA's RX packet pool. error: %s\n",
@@ -1363,8 +1363,8 @@ int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
 	}
 
 	if (ep->use_shm) {
-		assert(ep->rx_pkt_shm_pool);
-		err = ofi_bufpool_grow(ep->rx_pkt_shm_pool);
+		assert(ep->shm_rx_pkt_pool);
+		err = ofi_bufpool_grow(ep->shm_rx_pkt_pool);
 		if (err) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"cannot allocate memory for SHM's RX packet pool. error: %s\n",
