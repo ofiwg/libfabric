@@ -81,9 +81,9 @@ ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rdm_peer *peer)
 
 	addr = peer->efa_fiaddr;
 	if (peer->is_local)
-		pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_shm_pool);
+		pkt_entry = rxr_pkt_entry_alloc(ep, ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
 	else
-		pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_efa_pool);
+		pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 

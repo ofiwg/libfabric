@@ -58,7 +58,7 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	struct rxr_data_pkt *data_pkt;
 	ssize_t ret;
 
-	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_efa_pool);
+	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry)) {
 		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 		       "TX packets exhausted, current packets in flight %lu",
@@ -305,9 +305,9 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	assert(peer);
 	if (peer->is_local) {
 		assert(rxr_ep->use_shm);
-		pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_shm_pool);
+		pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
 	} else {
-		pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_efa_pool);
+		pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
 	}
 
 	if (!pkt_entry)
@@ -973,7 +973,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		ep->posted_bufs_efa--;
 	}
 
-	if (pkt_entry->type == RXR_PKT_ENTRY_USER) {
+	if (pkt_entry->alloc_type == RXR_PKT_FROM_USER_BUFFER) {
 		assert(pkt_entry->x_entry);
 		zcpy_rx_entry = pkt_entry->x_entry;
 	}

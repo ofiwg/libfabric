@@ -610,8 +610,8 @@ struct rxr_ep {
 	size_t min_multi_recv_size;
 
 	/* buffer pool for send & recv */
-	struct ofi_bufpool *tx_pkt_efa_pool;
-	struct ofi_bufpool *rx_pkt_efa_pool;
+	struct ofi_bufpool *efa_tx_pkt_pool;
+	struct ofi_bufpool *efa_rx_pkt_pool;
 
 	/*
 	 * buffer pool for rxr_pkt_sendv struct, which is used
@@ -623,8 +623,8 @@ struct rxr_ep {
 	 * buffer pool for send & recv for shm as mtu size is different from
 	 * the one of efa, and do not require local memory registration
 	 */
-	struct ofi_bufpool *tx_pkt_shm_pool;
-	struct ofi_bufpool *rx_pkt_shm_pool;
+	struct ofi_bufpool *shm_tx_pkt_pool;
+	struct ofi_bufpool *shm_rx_pkt_pool;
 
 	/* staging area for unexpected and out-of-order packets */
 	struct ofi_bufpool *rx_unexp_pkt_pool;
