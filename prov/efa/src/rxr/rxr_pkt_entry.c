@@ -292,9 +292,8 @@ ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	struct rdm_peer *peer;
 	size_t ret;
 
-	assert(ep->tx_pending <= ep->max_outstanding_tx);
-
-	if (ep->tx_pending == ep->max_outstanding_tx)
+	if (pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL &&
+	    ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 		return -FI_EAGAIN;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
@@ -314,11 +313,13 @@ ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 		ret = fi_sendmsg(ep->shm_ep, msg, flags);
 	} else {
 		ret = fi_sendmsg(ep->rdm_ep, msg, flags);
-		if (OFI_LIKELY(!ret))
-			rxr_ep_inc_tx_pending(ep, peer);
 	}
 
-	return ret;
+	if (OFI_UNLIKELY(ret))
+		return ret;
+
+	rxr_ep_inc_tx_op_counter(ep, pkt_entry);
+	return 0;
 }
 
 /**

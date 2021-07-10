@@ -578,7 +578,7 @@ void rxr_prepare_desc_send(struct rxr_domain *rxr_domain,
 int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 {
 	struct rdm_peer *peer;
-	int pending;
+	int outstanding;
 
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
 	assert(peer);
@@ -588,8 +588,8 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_
 	 * minimum of that and the amount required to finish the current long
 	 * message.
 	 */
-	pending = peer->tx_pending + 1;
-	tx_entry->credit_request = MIN(ofi_div_ceil(peer->tx_credits, pending),
+	outstanding = peer->efa_outstanding_tx_ops + 1;
+	tx_entry->credit_request = MIN(ofi_div_ceil(peer->tx_credits, outstanding),
 				       ofi_div_ceil(tx_entry->total_len,
 						    rxr_ep->max_data_payload_size));
 	tx_entry->credit_request = MAX(tx_entry->credit_request,
@@ -1816,14 +1816,14 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			continue;
 
 		while (tx_entry->window > 0) {
-			if (ep->max_outstanding_tx - ep->tx_pending <= 1 ||
+			if (ep->efa_max_outstanding_tx_ops - ep->efa_outstanding_tx_ops <= 1 ||
 			    tx_entry->window <= ep->max_data_payload_size)
 				tx_entry->send_flags &= ~FI_MORE;
 			/*
 			 * The core's TX queue is full so we can't do any
 			 * additional work.
 			 */
-			if (ep->tx_pending == ep->max_outstanding_tx)
+			if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 				goto out;
 
 			if (peer->flags & RXR_PEER_IN_BACKOFF)
@@ -1854,7 +1854,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		 * The core's TX queue is full so we can't do any
 		 * additional work.
 		 */
-		if (ep->tx_pending == ep->max_outstanding_tx)
+		if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 			goto out;
 
 		ret = rxr_read_post(ep, read_entry);
@@ -2009,7 +2009,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->rx_iov_limit = info->rx_attr->iov_limit;
 	rxr_ep->tx_iov_limit = info->tx_attr->iov_limit;
 	rxr_ep->inject_size = info->tx_attr->inject_size;
-	rxr_ep->max_outstanding_tx = rdm_info->tx_attr->size;
+	rxr_ep->efa_max_outstanding_tx_ops = rdm_info->tx_attr->size;
 	rxr_ep->core_rx_size = rdm_info->rx_attr->size;
 	rxr_ep->core_iov_limit = rdm_info->tx_attr->iov_limit;
 	rxr_ep->core_caps = rdm_info->caps;
@@ -2040,8 +2040,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->min_multi_recv_size = rxr_ep->mtu_size - rxr_ep->max_proto_hdr_size;
 
 	if (rxr_env.tx_queue_size > 0 &&
-	    rxr_env.tx_queue_size < rxr_ep->max_outstanding_tx)
-		rxr_ep->max_outstanding_tx = rxr_env.tx_queue_size;
+	    rxr_env.tx_queue_size < rxr_ep->efa_max_outstanding_tx_ops)
+		rxr_ep->efa_max_outstanding_tx_ops = rxr_env.tx_queue_size;
 
 
 	rxr_ep->use_zcpy_rx = rxr_ep_use_zcpy_rx(rxr_ep, info);
@@ -2053,7 +2053,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		rxr_ep->handle_resource_management);
 
 #if ENABLE_DEBUG
-	rxr_ep->sends = 0;
+	rxr_ep->efa_total_posted_tx_ops = 0;
+	rxr_ep->shm_total_posted_tx_ops = 0;
 	rxr_ep->send_comps = 0;
 	rxr_ep->failed_send_comps = 0;
 	rxr_ep->recv_comps = 0;
@@ -2063,7 +2064,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->rx_bufs_shm_to_post = 0;
 	rxr_ep->posted_bufs_efa = 0;
 	rxr_ep->rx_bufs_efa_to_post = 0;
-	rxr_ep->tx_pending = 0;
+	rxr_ep->efa_outstanding_tx_ops = 0;
+	rxr_ep->shm_outstanding_tx_ops = 0;
 	rxr_ep->available_data_bufs_ts = 0;
 
 	ret = fi_cq_open(rxr_domain->rdm_domain, &cq_attr,
@@ -2139,3 +2141,96 @@ err_free_ep:
 	free(rxr_ep);
 	return ret;
 }
+
+/**
+ * @brief increase the tx_op counter in an endpoint
+ *
+ * This function is called to update the tx_op counter
+ * in an endpoint after a TX operation has been successfully
+ * posted to the device (EFA or SHM).
+ *
+ * Both send and read are considered TX operation.
+ *
+ * The tx_op counters used to prevent over posting the device
+ * and used in flow control. They are also usefull for debugging.
+ *
+ * @param[in,out]	ep		endpoint
+ * @param[in]		pkt_entry	TX pkt_entry, which contains
+ * 					the info of the TX op.
+ */
+void rxr_ep_inc_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	struct rdm_peer *peer;
+
+	/*
+	 * peer can be NULL when the pkt_entry is a RMA_CONTEXT_PKT,
+	 * and the RMA is a local read toward the endpoint itself
+	 */
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+
+	if (pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL) {
+		ep->efa_outstanding_tx_ops++;
+		if (peer)
+			peer->efa_outstanding_tx_ops++;
+#if ENABLE_DEBUG
+		ep->efa_total_posted_tx_ops++;
+#endif
+	} else {
+		assert(pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
+		ep->shm_outstanding_tx_ops++;
+		if (peer)
+			peer->shm_outstanding_tx_ops++;
+#if ENABLE_DEBUG
+		ep->shm_total_posted_tx_ops++;
+#endif
+	}
+}
+
+/**
+ * @brief decrease the tx_op counter in an endpoint
+ *
+ * This function is called to update the tx_op counter
+ * in an endpoint after a TX operation is completed.
+ * Both send and read are considered TX operation.
+ *
+ * One may ask why this function is not integrated
+ * into rxr_pkt_entry_relase_tx()?
+ *
+ * The reason is the action of decrease tx_op counter
+ * is not tied to releasing a TX pkt_entry.
+ *
+ * Sometimes we need to decreate the tx_op counter
+ * without releasing a TX pkt_entry. For example,
+ * we handle a TX pkt_entry encountered RNR. We need
+ * to decrease the tx_op counter and queue the packet.
+ *
+ * Sometimes we need release TX pkt_entry without
+ * decreasing the tx_op counter. For example, when
+ * rxr_pkt_post_ctrl() failed to post a pkt entry.
+ *
+ * @param[in,out]	ep		endpoint
+ * @param[in]		pkt_entry	TX pkt_entry, which contains
+ * 					the info of the TX op
+ */
+void rxr_ep_dec_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	struct rdm_peer *peer;
+
+	/*
+	 * peer can be NULL when the pkt_entry is a RMA_CONTEXT_PKT,
+	 * and the RMA is a local read toward the endpoint itself
+	 */
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+
+	if (pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL) {
+		ep->efa_outstanding_tx_ops--;
+		if (peer)
+			peer->efa_outstanding_tx_ops--;
+	} else {
+		assert(pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
+		ep->shm_outstanding_tx_ops--;
+		if (peer)
+			peer->shm_outstanding_tx_ops--;
+	}
+}
+

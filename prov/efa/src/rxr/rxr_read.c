@@ -539,7 +539,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 
 	while (read_entry->bytes_submitted < read_entry->total_len) {
 
-		if (ep->tx_pending == ep->max_outstanding_tx)
+		if (read_entry->lower_ep_type == EFA_EP && ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 			return -FI_EAGAIN;
 
 		assert(iov_idx < read_entry->iov_count);
@@ -596,15 +596,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 			return ret;
 		}
 
-		if (read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY) {
-			assert(read_entry->lower_ep_type == EFA_EP);
-			/* read from self, no peer */
-			ep->tx_pending++;
-		} else if (read_entry->lower_ep_type == EFA_EP) {
-			peer = rxr_ep_get_peer(ep, read_entry->addr);
-			assert(peer);
-			rxr_ep_inc_tx_pending(ep, peer);
-		}
+		rxr_ep_inc_tx_op_counter(ep, pkt_entry);
 
 		read_entry->bytes_submitted += iov.iov_len;
 
