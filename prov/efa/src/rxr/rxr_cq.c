@@ -348,11 +348,18 @@ int rxr_cq_handle_error(struct rxr_ep *ep, ssize_t prov_errno, struct rxr_pkt_en
 	if (!pkt_entry)
 		goto write_eq_err;
 
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	assert(peer);
+#if ENABLE_DEBUG
+	if (pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL)
+		ep->failed_send_comps++;
+#endif
+
 	if (rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_HANDSHAKE_PKT) {
-		rxr_ep_dec_tx_pending(ep, peer, 1);
+		assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL ||
+		       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
+		rxr_ep_dec_tx_op_counter(ep, pkt_entry);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+		assert(peer);
 		if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR) {
 			/* Add peer to handshake_queued_peer_list for retry later
 			 * in progress engine.
@@ -390,8 +397,10 @@ int rxr_cq_handle_error(struct rxr_ep *ep, ssize_t prov_errno, struct rxr_pkt_en
 	 * packet. Decrement the tx_pending counter and fall through to
 	 * the rx or tx entry handlers.
 	 */
-	if (!peer->is_local)
-		rxr_ep_dec_tx_pending(ep, peer, 1);
+	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL ||
+	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
+
+	rxr_ep_dec_tx_op_counter(ep, pkt_entry);
 	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
 		tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 		if (prov_errno != IBV_WC_RNR_RETRY_EXC_ERR ||

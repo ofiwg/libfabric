@@ -598,7 +598,8 @@ int efa_peer_in_use(struct rdm_peer *peer)
 
 	if (ofi_atomic_get32(&peer->use_cnt) > 1)
 		return -FI_EBUSY;
-	if ((peer->tx_pending) || (peer->flags & RXR_PEER_IN_BACKOFF))
+
+	if ((peer->efa_outstanding_tx_ops > 0) || (peer->flags & RXR_PEER_IN_BACKOFF))
 		return -FI_EBUSY;
 
 	pending_pkt = *ofi_recvwin_peek((&peer->robuf));

@@ -327,7 +327,8 @@ struct rdm_peer {
 	uint32_t flags;
 	uint32_t maxproto;		/* maximum supported protocol version by this peer */
 	uint64_t features[RXR_MAX_NUM_PROTOCOLS]; /* the feature flag for each version */
-	size_t tx_pending;		/* tracks pending tx ops to this peer */
+	size_t efa_outstanding_tx_ops;	/* tracks outstanding tx ops to this peer on EFA device */
+	size_t shm_outstanding_tx_ops;  /* tracks outstanding tx ops to this peer on SHM */
 	uint16_t tx_credits;		/* available send credits */
 	uint16_t rx_credits;		/* available credits to allocate */
 	uint64_t rnr_backoff_begin_ts;	/* timestamp for RNR backoff period begin */
@@ -583,7 +584,7 @@ struct rxr_ep {
 
 	/* rx/tx queue size of core provider */
 	size_t core_rx_size;
-	size_t max_outstanding_tx;
+	size_t efa_max_outstanding_tx_ops;
 	size_t core_inject_size;
 	size_t max_data_payload_size;
 
@@ -698,7 +699,8 @@ struct rxr_ep {
 	struct dlist_entry rx_entry_list;
 	struct dlist_entry tx_entry_list;
 
-	size_t sends;
+	size_t efa_total_posted_tx_ops;
+	size_t shm_total_posted_tx_ops;
 	size_t send_comps;
 	size_t failed_send_comps;
 	size_t recv_comps;
@@ -715,8 +717,10 @@ struct rxr_ep {
 	/* Timestamp of when available_data_bufs was exhausted. */
 	uint64_t available_data_bufs_ts;
 
-	/* number of outstanding sends */
-	size_t tx_pending;
+	/* number of outstanding tx ops on efa device */
+	size_t efa_outstanding_tx_ops;
+	/* number of outstanding tx ops on shm */
+	size_t shm_outstanding_tx_ops;
 };
 
 #define rxr_rx_flags(rxr_ep) ((rxr_ep)->util_ep.rx_op_flags)
@@ -829,27 +833,9 @@ static inline int rxr_match_tag(uint64_t tag, uint64_t ignore,
 	return ((tag | ignore) == (match_tag | ignore));
 }
 
-static inline void rxr_ep_inc_tx_pending(struct rxr_ep *ep,
-					 struct rdm_peer *peer)
-{
-	ep->tx_pending++;
-	peer->tx_pending++;
-#if ENABLE_DEBUG
-	ep->sends++;
-#endif
-}
+void rxr_ep_inc_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
-static inline void rxr_ep_dec_tx_pending(struct rxr_ep *ep,
-					 struct rdm_peer *peer,
-					 int failed)
-{
-	ep->tx_pending--;
-	peer->tx_pending--;
-#if ENABLE_DEBUG
-	if (failed)
-		ep->failed_send_comps++;
-#endif
-}
+void rxr_ep_dec_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
 static inline size_t rxr_get_rx_pool_chunk_cnt(struct rxr_ep *ep)
 {
@@ -858,7 +844,7 @@ static inline size_t rxr_get_rx_pool_chunk_cnt(struct rxr_ep *ep)
 
 static inline size_t rxr_get_tx_pool_chunk_cnt(struct rxr_ep *ep)
 {
-	return MIN(ep->max_outstanding_tx, ep->tx_size);
+	return MIN(ep->efa_max_outstanding_tx_ops, ep->tx_size);
 }
 
 static inline int rxr_need_sas_ordering(struct rxr_ep *ep)
