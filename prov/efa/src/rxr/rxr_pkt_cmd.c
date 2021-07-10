@@ -676,6 +676,22 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
  */
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
+	struct rdm_peer *peer;
+
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	if (!peer) {
+		/*
+		 * peer could be NULL in the following 2 scenarios:
+		 * 1. a new peer with same gid+qpn was inserted to av, thus the peer was remove.
+		 * 2. application removed the peer's address from av.
+		 * Either way, we need to ignore this error completion.
+		 */
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "ignoring send completion of a packet to a removed peer.\n");
+		rxr_ep_dec_tx_op_counter(ep, pkt_entry);
+		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		return;
+	}
+
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
 	case RXR_HANDSHAKE_PKT:
 		break;

@@ -2292,8 +2292,13 @@ void rxr_ep_dec_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	struct rdm_peer *peer;
 
 	/*
-	 * peer can be NULL when the pkt_entry is a RMA_CONTEXT_PKT,
-	 * and the RMA is a local read toward the endpoint itself
+	 * peer can be NULL when:
+	 *
+	 * 1. the pkt_entry is a RMA_CONTEXT_PKT, and the RMA op is a local read
+	 *    toward the endpoint itself.
+	 * 2. peer's address has been removed from address vector. Either because
+	 *    a new peer has the same GID+QPN was inserted to address, or because
+	 *    application removed the peer from address vector.
 	 */
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 

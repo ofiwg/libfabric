@@ -357,9 +357,19 @@ int rxr_cq_handle_error(struct rxr_ep *ep, ssize_t prov_errno, struct rxr_pkt_en
 		assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL ||
 		       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
 		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-		assert(peer);
 		rxr_ep_dec_tx_op_counter(ep, pkt_entry);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		if (!peer) {
+			/*
+			 * peer could be NULL in the following 2 scenarios:
+			 * 1. a new peer with same gid+qpn was inserted to av, thus the peer was remove.
+			 * 2. application removed the peer's address from av.
+			 * Either way, we need to ignore this error completion.
+			 */
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "ignoring send error completion of a handshake packet to a removed peer.\n");
+			return 0;
+		}
+
 		if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR) {
 			/* Add peer to handshake_queued_peer_list for retry later
 			 * in progress engine.
@@ -401,6 +411,18 @@ int rxr_cq_handle_error(struct rxr_ep *ep, ssize_t prov_errno, struct rxr_pkt_en
 	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
 
 	rxr_ep_dec_tx_op_counter(ep, pkt_entry);
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	if (!peer) {
+		/*
+		 * peer could be NULL in the following 2 scenarios:
+		 * 1. a new peer with same gid+qpn was inserted to av, thus the peer was remove.
+		 * 2. application removed the peer's address from av.
+		 * Either way, we need to ignore this error completion.
+		 */
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "ignoring send error completion of a packet to a removed peer.\n");
+		return 0;
+	}
+
 	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
 		tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 		if (prov_errno != IBV_WC_RNR_RETRY_EXC_ERR ||
