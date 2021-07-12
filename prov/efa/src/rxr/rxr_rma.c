@@ -171,7 +171,7 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	assert(tx_entry->op == ofi_op_write);
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
 	assert(peer);
-	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->tx_pkt_shm_pool);
+	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 

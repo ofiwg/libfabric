@@ -844,7 +844,7 @@ struct rxr_rx_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 	dlist_func_t *match_func;
 	int pkt_type;
 
-	if ((*pkt_entry_ptr)->type == RXR_PKT_ENTRY_USER) {
+	if ((*pkt_entry_ptr)->alloc_type == RXR_PKT_FROM_USER_BUFFER) {
 		/* If a pkt_entry is constructred from user supplied buffer,
 		 * the endpoint must be in zero copy receive mode.
 		 */
@@ -1019,7 +1019,7 @@ ssize_t rxr_pkt_proc_matched_eager_rtm(struct rxr_ep *ep,
 
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 
-	if (pkt_entry->type != RXR_PKT_ENTRY_USER) {
+	if (pkt_entry->alloc_type != RXR_PKT_FROM_USER_BUFFER) {
 		data = (char *)pkt_entry->pkt + hdr_size;
 		data_size = pkt_entry->pkt_size - hdr_size;
 

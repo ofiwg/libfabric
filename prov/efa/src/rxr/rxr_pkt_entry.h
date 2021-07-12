@@ -43,13 +43,16 @@ enum rxr_pkt_entry_state {
 	RXR_PKT_ENTRY_RNR_RETRANSMIT,
 };
 
-/* pkt_entry types for rx pkts */
-enum rxr_pkt_entry_type {
-	RXR_PKT_ENTRY_POSTED = 1,   /* entries that are posted to the device from the RX bufpool */
-	RXR_PKT_ENTRY_UNEXP,        /* entries used to stage unexpected msgs */
-	RXR_PKT_ENTRY_OOO,	    /* entries used to stage out-of-order RTM or RTA */
-	RXR_PKT_ENTRY_USER,	    /* entries backed by user-provided msg prefix (FI_MSG_PREFIX)*/
-	RXR_PKT_ENTRY_READ_COPY,    /* entries used to stage copy by read */
+/* pkt_entry_alloc_type indicate where the packet entry is allocated from */
+enum rxr_pkt_entry_alloc_type {
+	RXR_PKT_FROM_EFA_TX_POOL = 1, /* packet is allcoated from ep->efa_tx_pkt_pool */
+	RXR_PKT_FROM_EFA_RX_POOL,     /* packet is allocated from ep->efa_rx_pkt_pool */
+	RXR_PKT_FROM_SHM_TX_POOL,     /* packet is allocated from ep->shm_tx_pkt_pool */
+	RXR_PKT_FROM_SHM_RX_POOL,     /* packet is allocated from ep->shm_rx_pkt_pool */
+	RXR_PKT_FROM_UNEXP_POOL,      /* packet is allocated from ep->rx_unexp_pkt_pool */
+	RXR_PKT_FROM_OOO_POOL,	      /* packet is allocated from ep->rx_ooo_pkt_pool */
+	RXR_PKT_FROM_USER_BUFFER,     /* packet is from user proivded buffer */
+	RXR_PKT_FROM_READ_COPY_POOL,  /* packet is allocated from ep->rx_readcopy_pkt_pool */
 };
 
 struct rxr_pkt_sendv {
@@ -76,7 +79,7 @@ struct rxr_pkt_entry {
 
 	struct fid_mr *mr;
 	fi_addr_t addr;
-	enum rxr_pkt_entry_type type;
+	enum rxr_pkt_entry_alloc_type alloc_type; /* where the memory of this packet entry reside */
 	enum rxr_pkt_entry_state state;
 
 	/*
@@ -120,7 +123,8 @@ struct rxr_pkt_entry *rxr_pkt_entry_init_prefix(struct rxr_ep *ep,
 						struct ofi_bufpool *pkt_pool);
 
 struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
-					  struct ofi_bufpool *pkt_pool);
+					  struct ofi_bufpool *pkt_pool,
+					  enum rxr_pkt_entry_alloc_type alloc_type);
 
 void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);
@@ -133,8 +137,8 @@ void rxr_pkt_entry_append(struct rxr_pkt_entry *dst,
 
 struct rxr_pkt_entry *rxr_pkt_entry_clone(struct rxr_ep *ep,
 					  struct ofi_bufpool *pkt_pool,
-					  struct rxr_pkt_entry *src,
-					  int new_entry_type);
+					  enum rxr_pkt_entry_alloc_type alloc_type,
+					  struct rxr_pkt_entry *src);
 
 struct rxr_pkt_entry *rxr_pkt_get_unexp(struct rxr_ep *ep,
 					struct rxr_pkt_entry **pkt_entry_ptr);

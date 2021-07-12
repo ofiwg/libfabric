@@ -48,7 +48,8 @@
  *   General purpose utility functions
  */
 struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
-					  struct ofi_bufpool *pkt_pool)
+					  struct ofi_bufpool *pkt_pool,
+					  enum rxr_pkt_entry_alloc_type alloc_type)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	void *mr = NULL;
@@ -68,10 +69,10 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
 #ifdef ENABLE_EFA_POISONING
 	memset(pkt_entry->pkt, 0, ep->mtu_size);
 #endif
-	pkt_entry->type = RXR_PKT_ENTRY_POSTED;
+	pkt_entry->alloc_type = alloc_type;
 	pkt_entry->state = RXR_PKT_ENTRY_IN_USE;
 	pkt_entry->next = NULL;
-
+	pkt_entry->x_entry = NULL;
 	return pkt_entry;
 }
 
@@ -132,22 +133,14 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 {
 	assert(pkt_entry->next == NULL);
 
-	if (ep->use_zcpy_rx && pkt_entry->type == RXR_PKT_ENTRY_USER)
+	if (ep->use_zcpy_rx && pkt_entry->alloc_type == RXR_PKT_FROM_USER_BUFFER)
 		return;
 
-	if (pkt_entry->type == RXR_PKT_ENTRY_POSTED) {
-		struct rdm_peer *peer;
-
-		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-		assert(peer);
-
-		if (peer->is_local)
-			ep->rx_bufs_shm_to_post++;
-		else
-			ep->rx_bufs_efa_to_post++;
-	}
-
-	if (pkt_entry->type == RXR_PKT_ENTRY_READ_COPY) {
+	if (pkt_entry->alloc_type == RXR_PKT_FROM_EFA_RX_POOL) {
+		ep->rx_bufs_efa_to_post++;
+	} else if (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_RX_POOL) {
+		ep->rx_bufs_shm_to_post++;
+	} else if (pkt_entry->alloc_type == RXR_PKT_FROM_READ_COPY_POOL) {
 		assert(ep->rx_readcopy_pkt_pool_used > 0);
 		ep->rx_readcopy_pkt_pool_used--;
 	}
@@ -165,12 +158,11 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 
 void rxr_pkt_entry_copy(struct rxr_ep *ep,
 			struct rxr_pkt_entry *dest,
-			struct rxr_pkt_entry *src,
-			int new_entry_type)
+			struct rxr_pkt_entry *src)
 {
 	FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
-	       "Copying packet out of posted buffer! src_entry_type: %d new_entry_type: %d\n",
-		src->type, new_entry_type);
+	       "Copying packet out of posted buffer! src_entry_alloc_type: %d desc_entry_alloc_type: %d\n",
+		src->alloc_type, dest->alloc_type);
 	dlist_init(&dest->entry);
 #if ENABLE_DEBUG
 	dlist_init(&dest->dbg_entry);
@@ -182,7 +174,6 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 	dest->x_entry = src->x_entry;
 	dest->pkt_size = src->pkt_size;
 	dest->addr = src->addr;
-	dest->type = new_entry_type;
 	dest->state = RXR_PKT_ENTRY_IN_USE;
 	dest->next = NULL;
 	memcpy(dest->pkt, src->pkt, ep->mtu_size);
@@ -197,8 +188,8 @@ struct rxr_pkt_entry *rxr_pkt_get_unexp(struct rxr_ep *ep,
 {
 	struct rxr_pkt_entry *unexp_pkt_entry;
 
-	if (rxr_env.rx_copy_unexp && (*pkt_entry_ptr)->type == RXR_PKT_ENTRY_POSTED) {
-		unexp_pkt_entry = rxr_pkt_entry_clone(ep, ep->rx_unexp_pkt_pool, *pkt_entry_ptr, RXR_PKT_ENTRY_UNEXP);
+	if (rxr_env.rx_copy_unexp && (*pkt_entry_ptr)->alloc_type == RXR_PKT_FROM_EFA_RX_POOL) {
+		unexp_pkt_entry = rxr_pkt_entry_clone(ep, ep->rx_unexp_pkt_pool, RXR_PKT_FROM_UNEXP_POOL, *pkt_entry_ptr);
 		if (OFI_UNLIKELY(!unexp_pkt_entry)) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Unable to allocate rx_pkt_entry for unexp msg\n");
@@ -218,8 +209,8 @@ void rxr_pkt_entry_release_cloned(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_e
 	struct rxr_pkt_entry *next;
 
 	while (pkt_entry) {
-		assert(pkt_entry->type == RXR_PKT_ENTRY_OOO  ||
-		       pkt_entry->type == RXR_PKT_ENTRY_UNEXP);
+		assert(pkt_entry->alloc_type == RXR_PKT_FROM_OOO_POOL ||
+		       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL);
 #ifdef ENABLE_EFA_POISONING
 		rxr_poison_mem_region((uint32_t *)pkt_entry, ep->tx_pkt_pool_entry_sz);
 #endif
@@ -232,38 +223,38 @@ void rxr_pkt_entry_release_cloned(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_e
 
 struct rxr_pkt_entry *rxr_pkt_entry_clone(struct rxr_ep *ep,
 					  struct ofi_bufpool *pkt_pool,
-					  struct rxr_pkt_entry *src,
-					  int new_entry_type)
+					  enum rxr_pkt_entry_alloc_type alloc_type,
+					  struct rxr_pkt_entry *src)
 {
 	struct rxr_pkt_entry *root = NULL;
 	struct rxr_pkt_entry *dst;
 
 	assert(src);
-	assert(new_entry_type == RXR_PKT_ENTRY_OOO ||
-	       new_entry_type == RXR_PKT_ENTRY_UNEXP ||
-	       new_entry_type == RXR_PKT_ENTRY_READ_COPY);
+	assert(alloc_type == RXR_PKT_FROM_OOO_POOL ||
+	       alloc_type == RXR_PKT_FROM_UNEXP_POOL ||
+	       alloc_type == RXR_PKT_FROM_READ_COPY_POOL);
 
-	dst = rxr_pkt_entry_alloc(ep, pkt_pool);
+	dst = rxr_pkt_entry_alloc(ep, pkt_pool, alloc_type);
 	if (!dst)
 		return NULL;
 
-	if (new_entry_type == RXR_PKT_ENTRY_READ_COPY) {
+	if (alloc_type == RXR_PKT_FROM_READ_COPY_POOL) {
 		assert(pkt_pool == ep->rx_readcopy_pkt_pool);
 		ep->rx_readcopy_pkt_pool_used++;
 		ep->rx_readcopy_pkt_pool_max_used = MAX(ep->rx_readcopy_pkt_pool_used,
 							ep->rx_readcopy_pkt_pool_max_used);
 	}
 
-	rxr_pkt_entry_copy(ep, dst, src, new_entry_type);
+	rxr_pkt_entry_copy(ep, dst, src);
 	root = dst;
 	while (src->next) {
-		dst->next = rxr_pkt_entry_alloc(ep, pkt_pool);
+		dst->next = rxr_pkt_entry_alloc(ep, pkt_pool, alloc_type);
 		if (!dst->next) {
 			rxr_pkt_entry_release_cloned(ep, root);
 			return NULL;
 		}
 
-		rxr_pkt_entry_copy(ep, dst->next, src->next, new_entry_type);
+		rxr_pkt_entry_copy(ep, dst->next, src->next);
 		src = src->next;
 		dst = dst->next;
 	}
@@ -301,9 +292,8 @@ ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	struct rdm_peer *peer;
 	size_t ret;
 
-	assert(ep->tx_pending <= ep->max_outstanding_tx);
-
-	if (ep->tx_pending == ep->max_outstanding_tx)
+	if (pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL &&
+	    ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 		return -FI_EAGAIN;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
@@ -323,11 +313,13 @@ ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 		ret = fi_sendmsg(ep->shm_ep, msg, flags);
 	} else {
 		ret = fi_sendmsg(ep->rdm_ep, msg, flags);
-		if (OFI_LIKELY(!ret))
-			rxr_ep_inc_tx_pending(ep, peer);
 	}
 
-	return ret;
+	if (OFI_UNLIKELY(ret))
+		return ret;
+
+	rxr_ep_inc_tx_op_counter(ep, pkt_entry);
+	return 0;
 }
 
 /**

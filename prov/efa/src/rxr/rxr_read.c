@@ -110,14 +110,15 @@ ssize_t rxr_read_prepare_pkt_entry_mr(struct rxr_ep *ep, struct rxr_read_entry *
 	}
 
 	/* only ooo and unexp packet entry's memory is not registered with device */
-	assert(pkt_entry->type == RXR_PKT_ENTRY_OOO ||
-	       pkt_entry->type == RXR_PKT_ENTRY_UNEXP);
+	assert(pkt_entry->alloc_type == RXR_PKT_FROM_OOO_POOL ||
+	       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL);
 
 	pkt_offset = (char *)read_entry->rma_iov[0].addr - (char *)pkt_entry->pkt;
 	assert(pkt_offset > sizeof(struct rxr_base_hdr));
 
 	pkt_entry_copy = rxr_pkt_entry_clone(ep, ep->rx_readcopy_pkt_pool,
-					     pkt_entry, RXR_PKT_ENTRY_READ_COPY);
+					     RXR_PKT_FROM_READ_COPY_POOL,
+					     pkt_entry);
 	if (!pkt_entry_copy) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"readcopy pkt pool exhausted! Set FI_EFA_READCOPY_POOL_SIZE to a higher value!");
@@ -538,7 +539,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 
 	while (read_entry->bytes_submitted < read_entry->total_len) {
 
-		if (ep->tx_pending == ep->max_outstanding_tx)
+		if (read_entry->lower_ep_type == EFA_EP && ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 			return -FI_EAGAIN;
 
 		assert(iov_idx < read_entry->iov_count);
@@ -563,9 +564,9 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 		 * we had to use a pkt_entry as context too
 		 */
 		if (read_entry->lower_ep_type == SHM_EP)
-			pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_shm_pool);
+			pkt_entry = rxr_pkt_entry_alloc(ep, ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
 		else
-			pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_efa_pool);
+			pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
@@ -595,15 +596,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 			return ret;
 		}
 
-		if (read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY) {
-			assert(read_entry->lower_ep_type == EFA_EP);
-			/* read from self, no peer */
-			ep->tx_pending++;
-		} else if (read_entry->lower_ep_type == EFA_EP) {
-			peer = rxr_ep_get_peer(ep, read_entry->addr);
-			assert(peer);
-			rxr_ep_inc_tx_pending(ep, peer);
-		}
+		rxr_ep_inc_tx_op_counter(ep, pkt_entry);
 
 		read_entry->bytes_submitted += iov.iov_len;
 
