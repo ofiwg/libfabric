@@ -6,4 +6,5 @@ centos8 {
     buildPrepScript = "contrib/cray/runBuildPrep.sh"
     rpmBuildScript = "contrib/cray/cray_rpmbuild.sh"
     masterBranch = "integration"
+    receive_triggers = ["libcxi-centos-built"]
 }

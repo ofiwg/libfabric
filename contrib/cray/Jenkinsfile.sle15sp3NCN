@@ -1,5 +1,5 @@
 @Library('dst-shared@master') _
-sle15sp2NCN {
+sle15sp3NCN {
     timeout = 60
     buildExternal = "true"
     product = 'shasta-premium'

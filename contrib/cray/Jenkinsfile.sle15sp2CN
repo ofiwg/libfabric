@@ -1,9 +1,10 @@
 @Library('dst-shared@master') _
 sle15sp2CN {
-    timeout = 30
+    timeout = 60
     buildExternal = "true"
     product = 'shasta-premium'
     buildPrepScript = "contrib/cray/runBuildPrep.sh"
     rpmBuildScript = "contrib/cray/cray_rpmbuild.sh"
     masterBranch = "integration"
+    receive_triggers = ["libcxi-built"]
 }

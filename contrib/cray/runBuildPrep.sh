@@ -26,7 +26,7 @@ echo "$0: --> TARGET_OS: '${TARGET_OS}'"
 
 ZYPPER_OPTS="--verbose --non-interactive"
 RPMS="cray-libcxi-devel"
-CUDA_RPMS="cuda-cudart-11-0 cuda-cudart-devel-11-0 cuda-driver-devel-11-0 cuda-nvcc-11-0"
+CUDA_RPMS="nvhpc-2021"
 ROCR_RPMS="hsa-rocr-dev"
 
 URL_PREFIX="http://car.dev.cray.com/artifactory"
@@ -36,6 +36,8 @@ URL_SUFFIX="${TARGET_OS}/${TARGET_ARCH}/${DEV_NAME}/${BRANCH_NAME}"
 # URL+="${PRODUCT}/${PROJECT}/${TARGET_OS}/${TARGET_ARCH}/"
 # URL+="${DEV_NAME}/${BRANCH_NAME}/"
 URL="${URL_PREFIX}/${PRODUCT}/${PROJECT}/${URL_SUFFIX}"
+
+URL_HOSTSW="${URL_PREFIX}/slingshot-host-software/${PROJECT}/${URL_SUFFIX}"
 
 URL_INT="${URL_PREFIX}/internal/${PROJECT}/${URL_SUFFIX}"
 
@@ -47,7 +49,7 @@ URL_SSHOT="${URL_PREFIX}/${PRODUCT}/SSHOT/${URL_SUFFIX}"
 URL_SSHOT_INT="${URL_PREFIX}/internal/SSHOT/${TARGET_OS}/${TARGET_ARCH}/"
 URL_SSHOT_INT+="dev/master/"
 
-CUDA_URL="http://car.dev.cray.com/artifactory/nvidia-cuda/cuda/${TARGET_OS}/${TARGET_ARCH}/${DEV_NAME}/${BRANCH_NAME}/"
+CUDA_URL="https://arti.dev.cray.com/artifactory/cos-internal-third-party-generic-local/nvidia_hpc_sdk/${TARGET_OS}/${TARGET_ARCH}/${DEV_NAME}/${BRANCH_NAME}/"
 
 if [[ ${TARGET_OS} != "centos_8_ncn" ]]; then
     with_cuda=1
@@ -56,7 +58,7 @@ else
 fi
 
 
-if [[ ${TARGET_OS} == "sle15_sp2_cn" || ${TARGET_OS} == "sle15_sp2_ncn" ]]; then
+if [[ ${TARGET_OS} == "sle15_sp2_cn" || ${TARGET_OS} == "sle15_sp2_ncn" || ${TARGET_OS} == "sle15_sp3_ncn" || ${TARGET_OS} == "sle15_sp3_cn" ]]; then
     with_rocm=1
 else
     with_rocm=0
@@ -69,6 +71,7 @@ fi
 
 if command -v yum > /dev/null; then
     yum-config-manager --add-repo=$URL
+    yum-config-manager --add-repo=$URL_HOSTSW
     yum-config-manager --add-repo=$URL_SSHOT
 
     yum-config-manager --setopt=gpgcheck=0 --save
@@ -77,6 +80,8 @@ if command -v yum > /dev/null; then
 elif command -v zypper > /dev/null; then
     zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 1 \
     	--name=$IYUM_REPO_NAME_1 $URL $IYUM_REPO_NAME_1
+    zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 1 \
+        --name=$IYUM_REPO_NAME_1 $URL_HOSTSW ${IYUM_REPO_NAME_1}_HOSTSW
     zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 1 \
     	--name=${IYUM_REPO_NAME_1}_SSHOT $URL_SSHOT \
         ${IYUM_REPO_NAME_1}_SSHOT
@@ -96,17 +101,21 @@ else
     "Unsupported package manager or package manager not found -- installing nothing"
 fi
 
+set -x
+
 if [[ $with_cuda -eq 1 ]]; then
-    cuda_version=$(ls /usr/local | grep cuda | tr -d "\n")
-    if [[ $cuda_version == "" ]]; then
+    nvhpc_sdk_versions=($(ls -1 /opt/nvidia/hpc_sdk/Linux_x86_64/ | sort -rn))
+    nvhpc_sdk_version=${nvhpc_sdk_versions[0]}
+    nvhpc_cuda_path=/opt/nvidia/hpc_sdk/Linux_x86_64/$nvhpc_sdk_version/cuda
+    if [[ $nvhpc_sdk_version == "" ]]; then
         echo "CUDA required but not found."
         exit 1
     else
-        echo "Using $cuda_version"
+        echo "Using $nvhpc_sdk_version at $nvhpc_cuda_path"
 
         # Convenient symlink which allows the libfabric build process to not
         # have to call out a specific versioned CUDA directory.
-        ln -s /usr/local/$cuda_version /usr/local/cuda
+        ln -s $nvhpc_cuda_path /usr/local/cuda
 
         # The CUDA device driver RPM provides a usable libcuda.so which is
         # required by the libfabric autoconf checks. Since artifactory does not
@@ -124,7 +133,7 @@ if [[ $with_rocm -eq 1 ]]; then
         echo "ROCM required but not found."
         exit 1
     else
-        echo "Using $rocm_version"
+        echo "Using ROCM $rocm_version"
 
         # Convenient symlink which allows the libfabric build process to not
         # have to call out a specific versioned ROCR directory.
