@@ -356,10 +356,10 @@ int rxr_cq_handle_error(struct rxr_ep *ep, ssize_t prov_errno, struct rxr_pkt_en
 	if (rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_HANDSHAKE_PKT) {
 		assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL ||
 		       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
-		rxr_ep_dec_tx_op_counter(ep, pkt_entry);
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 		assert(peer);
+		rxr_ep_dec_tx_op_counter(ep, pkt_entry);
+		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR) {
 			/* Add peer to handshake_queued_peer_list for retry later
 			 * in progress engine.
