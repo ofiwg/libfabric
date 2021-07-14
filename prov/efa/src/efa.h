@@ -512,7 +512,7 @@ bool efa_peer_support_rdma_read(struct rdm_peer *peer)
 	 * it before a handshake packet was received.
 	 */
 	return (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED) &&
-	       (peer->features[0] & RXR_REQ_FEATURE_RDMA_READ);
+	       (peer->exinfo[0] & RXR_EXTRA_FEATURE_RDMA_READ);
 }
 
 static inline
@@ -525,7 +525,7 @@ bool rxr_peer_support_delivery_complete(struct rdm_peer *peer)
 	 * it before a handshake packet was received.
 	 */
 	return (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED) &&
-	       (peer->features[0] & RXR_REQ_FEATURE_DELIVERY_COMPLETE);
+	       (peer->exinfo[0] & RXR_EXTRA_FEATURE_DELIVERY_COMPLETE);
 }
 
 static inline
@@ -564,7 +564,7 @@ bool rxr_peer_need_raw_addr_hdr(struct rdm_peer *peer)
 	if (OFI_UNLIKELY(!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)))
 		return true;
 
-	return peer->features[0] & RXR_REQ_FEATURE_ZERO_COPY_RECEIVE;
+	return peer->exinfo[0] & RXR_EXTRA_FEATURE_ZERO_COPY_RECEIVE;
 }
 
 static inline

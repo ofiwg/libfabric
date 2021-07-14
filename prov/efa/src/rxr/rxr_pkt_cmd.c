@@ -72,7 +72,7 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	data_pkt = (struct rxr_data_pkt *)pkt_entry->pkt;
 
 	data_pkt->hdr.type = RXR_DATA_PKT;
-	data_pkt->hdr.version = RXR_BASE_PROTOCOL_VERSION;
+	data_pkt->hdr.version = RXR_PROTOCOL_VERSION;
 	data_pkt->hdr.flags = 0;
 
 	data_pkt->hdr.rx_id = tx_entry->rx_id;
@@ -987,7 +987,7 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	struct rxr_base_hdr *base_hdr;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
-	if (base_hdr->version < RXR_BASE_PROTOCOL_VERSION) {
+	if (base_hdr->version < RXR_PROTOCOL_VERSION) {
 		char host_gid[ep->core_addrlen * 3];
 		int length = 0;
 
@@ -997,11 +997,11 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Host %s received a packet with invalid protocol version %d.\n"
 			"This host can only support protocol version %d and above.\n",
-			host_gid, base_hdr->version, RXR_BASE_PROTOCOL_VERSION);
+			host_gid, base_hdr->version, RXR_PROTOCOL_VERSION);
 		efa_eq_write_error(&ep->util_ep, FI_EIO, -FI_EINVAL);
 		fprintf(stderr, "Host %s received a packet with invalid protocol version %d.\n"
 			"This host can only support protocol version %d and above. %s:%d\n",
-			host_gid, base_hdr->version, RXR_BASE_PROTOCOL_VERSION, __FILE__, __LINE__);
+			host_gid, base_hdr->version, RXR_PROTOCOL_VERSION, __FILE__, __LINE__);
 		abort();
 	}
 
@@ -1220,8 +1220,8 @@ void rxr_pkt_print_handshake(char *prefix,
 	       handshake_hdr->flags);
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
-	       "%s RxR HANDSHAKE packet, maxproto: %d\n",
-	       prefix, handshake_hdr->maxproto);
+	       "%s RxR HANDSHAKE packet, nex_p3: %d\n",
+	       prefix, handshake_hdr->nex_p3);
 }
 
 static
