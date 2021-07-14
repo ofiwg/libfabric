@@ -75,6 +75,78 @@ static bool efa_is_same_addr(struct efa_ep_addr *lhs, struct efa_ep_addr *rhs)
 }
 
 /**
+ * @brief initialize a rdm peer
+ *
+ * @param[in,out]	peer	rdm peer
+ * @param[in]		ep	rdm endpoint
+ * @param[in]		conn	efa conn object
+ */
+static inline
+void efa_rdm_peer_init(struct rdm_peer *peer, struct rxr_ep *ep, struct efa_conn *conn)
+{
+	memset(peer, 0, sizeof(struct rdm_peer));
+
+	peer->efa_fiaddr = conn->fi_addr;
+	peer->is_self = efa_is_same_addr((struct efa_ep_addr *)ep->core_addr,
+					 conn->ep_addr);
+
+	ofi_recvwin_buf_alloc(&peer->robuf, rxr_env.recvwin_size);
+	peer->rx_credits = rxr_env.rx_window_size;
+	peer->tx_credits = rxr_env.tx_max_credits;
+	dlist_init(&peer->rx_unexp_list);
+	dlist_init(&peer->rx_unexp_tagged_list);
+	dlist_init(&peer->tx_entry_list);
+	dlist_init(&peer->rx_entry_list);
+}
+
+/**
+ * @brief clear resources accociated with a peer
+ *
+ * release reorder buffer, tx_entry list and rx_entry list of a peer
+ *
+ * @param[in,out]	peer 	rdm peer
+ */
+void efa_rdm_peer_clear(struct rxr_ep *ep, struct rdm_peer *peer)
+{
+	struct dlist_entry *tmp;
+	struct rxr_tx_entry *tx_entry;
+	struct rxr_rx_entry *rx_entry;
+	/*
+	 * TODO: Add support for wait/signal until all pending messages have
+	 * been sent/received so we do not attempt to complete a data transfer
+	 * or internal transfer after the EP is shutdown.
+	 */
+	if ((peer->flags & RXR_PEER_REQ_SENT) &&
+	    !(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
+		FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL, "Closing EP with unacked CONNREQs in flight\n");
+
+	if (peer->robuf.pending)
+		ofi_recvwin_free(&peer->robuf);
+
+	dlist_foreach_container_safe(&peer->tx_entry_list,
+				     struct rxr_tx_entry,
+				     tx_entry, peer_entry, tmp) {
+		rxr_release_tx_entry(ep, tx_entry);
+	}
+
+	dlist_foreach_container_safe(&peer->rx_entry_list,
+				     struct rxr_rx_entry,
+				     rx_entry, peer_entry, tmp) {
+		rxr_release_rx_entry(ep, rx_entry);
+	}
+
+	if (peer->flags & RXR_PEER_HANDSHAKE_QUEUED)
+		dlist_remove(&peer->handshake_queued_entry);
+
+	if (peer->flags & RXR_PEER_IN_BACKOFF)
+		dlist_remove(&peer->rnr_backoff_entry);
+
+#ifdef ENABLE_EFA_POISONING
+	rxr_poison_mem_region((uint32_t *)peer, sizeof(struct rdm_peer));
+#endif
+}
+
+/**
  * @brief find efa_conn struct using fi_addr
  *
  * @param[in]	av	efa av
@@ -100,7 +172,7 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr)
 		return NULL;
 
 	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
-	return &efa_av_entry->conn;
+	return efa_av_entry->conn.ep_addr ? &efa_av_entry->conn : NULL;
 }
 
 fi_addr_t efa_ahn_qpn_to_addr(struct efa_av *av, uint16_t ahn, uint16_t qpn)
@@ -257,25 +329,16 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 	struct rdm_peer *peer;
 
 	assert(av->ep_type == FI_EP_RDM);
+	assert(conn->ep_addr);
 
 	/* currently multiple EP bind to same av is not supported */
 	rxr_ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
 
 	peer = &conn->rdm_peer;
-	memset(peer, 0, sizeof(struct rdm_peer));
-	ofi_atomic_initialize32(&peer->use_cnt, 1);
-	peer->efa_fiaddr = conn->fi_addr;
-	peer->is_self = efa_is_same_addr((struct efa_ep_addr *)rxr_ep->core_addr,
-					 &conn->ep_addr);
-
-	ofi_recvwin_buf_alloc(&peer->robuf, rxr_env.recvwin_size);
-	peer->rx_credits = rxr_env.rx_window_size;
-	peer->tx_credits = rxr_env.tx_max_credits;
-	dlist_init(&peer->rx_unexp_list);
-	dlist_init(&peer->rx_unexp_tagged_list);
+	efa_rdm_peer_init(peer, rxr_ep, conn);
 
 	/* If peer is local, insert the address into shm provider's av */
-	if (rxr_ep->use_shm && efa_is_local_peer(av, &conn->ep_addr)) {
+	if (rxr_ep->use_shm && efa_is_local_peer(av, conn->ep_addr)) {
 		if (av->shm_used >= rxr_env.shm_av_size) {
 			EFA_WARN(FI_LOG_AV,
 				 "Max number of shm AV entry (%d) has been reached.\n",
@@ -283,7 +346,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 			return -FI_ENOMEM;
 		}
 
-		err = rxr_ep_efa_addr_to_str(&conn->ep_addr, smr_name);
+		err = rxr_ep_efa_addr_to_str(conn->ep_addr, smr_name);
 		if (err != FI_SUCCESS) {
 			EFA_WARN(FI_LOG_AV,
 				 "rxr_ep_efa_addr_to_str() failed! err=%d\n", err);
@@ -324,6 +387,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 {
 	int err;
 	struct rdm_peer *peer;
+	struct rxr_ep *ep;
 
 	assert(av->ep_type == FI_EP_RDM);
 
@@ -341,9 +405,10 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 
 	/*
 	 * We need peer->shm_fiaddr to remove shm address from shm av table,
-	 * so efa_rdm_peer_reset must be after removing shm av table.
+	 * so efa_rdm_peer_clear must be after removing shm av table.
 	 */
-	efa_rdm_peer_clear(peer);
+	ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
+	efa_rdm_peer_clear(ep, peer);
 }
 
 /**
@@ -388,10 +453,11 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool,
 					     util_av_fi_addr);
 	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
+	assert(efa_is_same_addr(raw_addr, (struct efa_ep_addr *)efa_av_entry->ep_addr));
+
 	conn = &efa_av_entry->conn;
 	memset(conn, 0, sizeof(*conn));
-
-	memcpy(&conn->ep_addr, raw_addr, sizeof(*raw_addr));
+	conn->ep_addr = (struct efa_ep_addr *)efa_av_entry->ep_addr;
 	assert(av->type == FI_AV_MAP || av->type == FI_AV_TABLE);
 	conn->fi_addr = (av->type == FI_AV_MAP) ? (uintptr_t)(void *)conn : util_av_fi_addr;
 	conn->util_av_fi_addr = util_av_fi_addr;
@@ -422,12 +488,12 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		 */
 		prev_conn = reverse_av_entry->conn;
 		assert(prev_conn);
-		assert(memcmp(prev_conn->ep_addr.raw, conn->ep_addr.raw, EFA_GID_LEN)==0);
-		assert(prev_conn->ep_addr.qpn == conn->ep_addr.qpn);
-		assert(prev_conn->ep_addr.qkey != conn->ep_addr.qkey);
+		assert(memcmp(prev_conn->ep_addr->raw, conn->ep_addr->raw, EFA_GID_LEN)==0);
+		assert(prev_conn->ep_addr->qpn == conn->ep_addr->qpn);
+		assert(prev_conn->ep_addr->qkey != conn->ep_addr->qkey);
 		EFA_WARN(FI_LOG_AV, "QP reuse detected! Previous qkey: %d Current qkey: %d\n",
-			 prev_conn->ep_addr.qkey, conn->ep_addr.qkey);
-		conn->rdm_peer.prev_qkey = prev_conn->ep_addr.qkey;
+			 prev_conn->ep_addr->qkey, conn->ep_addr->qkey);
+		conn->rdm_peer.prev_qkey = prev_conn->ep_addr->qkey;
 		efa_conn_release(av, prev_conn);
 	}
 
@@ -451,10 +517,12 @@ err_release:
 	if (conn->ah)
 		efa_ah_release(av, conn->ah);
 
+	conn->ep_addr = NULL;
 	err = ofi_av_remove_addr(&av->util_av, util_av_fi_addr);
 	if (err)
 		EFA_WARN(FI_LOG_AV, "While processing previous failure, ofi_av_remove_addr failed! err=%d\n",
 			 err);
+
 	return NULL;
 }
 
@@ -469,6 +537,8 @@ static
 void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 {
 	struct efa_reverse_av *reverse_av_entry;
+	struct util_av_entry *util_av_entry;
+	struct efa_av_entry *efa_av_entry;
 	struct efa_ah_qpn key;
 	char gidstr[INET6_ADDRSTRLEN];
 
@@ -477,7 +547,7 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 
 	memset(&key, 0, sizeof(key));
 	key.ahn = conn->ah->ahn;
-	key.qpn = conn->ep_addr.qpn;
+	key.qpn = conn->ep_addr->qpn;
 	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av_entry);
 	assert(reverse_av_entry);
 	HASH_DEL(av->reverse_av, reverse_av_entry);
@@ -485,11 +555,19 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 
 	efa_ah_release(av, conn->ah);
 
+	util_av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool, conn->util_av_fi_addr);
+	assert(util_av_entry);
+	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
+
 	ofi_av_remove_addr(&av->util_av, conn->util_av_fi_addr);
 
-	inet_ntop(AF_INET6, conn->ep_addr.raw, gidstr, INET6_ADDRSTRLEN);
+	inet_ntop(AF_INET6, conn->ep_addr->raw, gidstr, INET6_ADDRSTRLEN);
 	EFA_INFO(FI_LOG_AV, "efa_conn released! conn[%p] GID[%s] QP[%u]\n",
-		 conn, gidstr, conn->ep_addr.qpn);
+		 conn, gidstr, conn->ep_addr->qpn);
+
+	conn->ep_addr = NULL;
+	memset(efa_av_entry->ep_addr, 0, EFA_EP_ADDR_LEN);
+
 	av->used--;
 }
 
@@ -621,9 +699,9 @@ static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 	if (!conn)
 		return -FI_EINVAL;
 
-	memcpy(addr, (void *)&conn->ep_addr, MIN(sizeof(conn->ep_addr), *addrlen));
-	if (*addrlen > sizeof(conn->ep_addr))
-		*addrlen = sizeof(conn->ep_addr);
+	memcpy(addr, (void *)conn->ep_addr, MIN(EFA_EP_ADDR_LEN, *addrlen));
+	if (*addrlen > EFA_EP_ADDR_LEN)
+		*addrlen = EFA_EP_ADDR_LEN;
 	return 0;
 }
 

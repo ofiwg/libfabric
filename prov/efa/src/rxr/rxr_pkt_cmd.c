@@ -504,7 +504,7 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 	tx_entry->addr = addr;
 	tx_entry->peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(tx_entry->peer);
-	ofi_atomic_inc32(&tx_entry->peer->use_cnt);
+	dlist_insert_tail(&tx_entry->peer_entry, &tx_entry->peer->tx_entry_list);
 	tx_entry->msg_id = -1;
 	tx_entry->cq_entry.flags = FI_RMA | FI_WRITE;
 	tx_entry->cq_entry.buf = NULL;
@@ -525,9 +525,7 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 	tx_entry->iov_offset = 0;
 	tx_entry->fi_flags = RXR_NO_COMPLETION | RXR_NO_COUNTER;
 
-#if ENABLE_DEBUG
-	dlist_insert_tail(&tx_entry->tx_entry_entry, &ep->tx_entry_list);
-#endif
+	dlist_insert_tail(&tx_entry->ep_entry, &ep->tx_entry_list);
 
 	err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0);
 
@@ -671,11 +669,184 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 	}
 }
 
-/*
- *   Functions used to handle packet send completion
+/**
+ * @brief handle the a packet that encountered error completion while sending
+ *
+ * Depend on the packet type and error type, the error are handled differently.
+ *
+ * If the packet is associated with an user initialized TX operation:
+ * (TX means send,read or write; such packets include all REQ packets and DATA):
+ *
+ *    If the error is Receiver Not Ready (RNR). there are two cases:
+ *
+ *         If user wants to manager RNR by itself (FI_RM_DISABLED),
+ *         an error CQ entry will be written.
+ *
+ *         Otherwise, the packet will be queued and resnt by progress engine.
+ *
+ *    For other type of error, an error CQ entry is written.
+ *
+ * If the packet is associated with an user initialized recv operiaton,
+ * (such packets include EOR, CTS):
+ *
+ *      If the error is RNR, the packet is queued and resent by progress
+ *      engine. No CQ entry is written.
+ *
+ *      For other types of error, an error CQ entry is written.
+ *
+ * If the packet is not associated with an user operation (such packet include
+ * HANDSHAKE):
+ *
+ *      If the error is RNR, the packet is queued and resent by progress engine.
+ *
+ *      For othre types of error, an error EQ entry is written.
+ *
+ * @param[in]	ep		endpoint
+ * @param[in]	pkt_entry	pkt entry
+ * @param[in]	err		libfabric error code
+ * @param[in]	prov_errno	provider specific error code
  */
+void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
+{
+	struct rdm_peer *peer;
+	struct rxr_tx_entry *tx_entry;
+	struct rxr_rx_entry *rx_entry;
+
+	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL ||
+	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
+
+	rxr_ep_dec_tx_op_counter(ep, pkt_entry);
+
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	if (!peer) {
+		/*
+		 * If peer is NULL, it means the peer has been removed from AV.
+		 * In this case, ignore this error completion.
+		 */
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "ignoring send error completion of a packet to a removed peer.\n");
+		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		return;
+	}
+
+	if (!pkt_entry->x_entry) {
+		/* only handshake packet is not associated with any TX/RX operation */
+		assert(rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_HANDSHAKE_PKT);
+		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR) {
+			/*
+			 * handshake should always be queued for RNR
+			 */
+			assert(!(peer->flags & RXR_PEER_HANDSHAKE_QUEUED));
+			peer->flags |= RXR_PEER_HANDSHAKE_QUEUED;
+			dlist_insert_tail(&peer->handshake_queued_entry,
+					  &ep->handshake_queued_peer_list);
+		} else if (prov_errno != IBV_WC_REM_INV_RD_REQ_ERR) {
+			/* If prov_errno is IBV_WC_REM_INV_RD_REQ_ERR, the peer has been destroyed.
+			 * Which is normal, as peer does not always need a handshake packet perform
+			 * its duty. (For example, if a peer just want to sent 1 message to the ep, it
+			 * does not need handshake.)
+			 * In this case, it is safe to ignore this error completion.
+			 * In all other cases, we write an eq entry because there is no application
+			 * operation associated with handshake.
+			 */
+			efa_eq_write_error(&ep->util_ep, err, prov_errno);
+		}
+		return;
+	}
+
+	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
+		tx_entry = pkt_entry->x_entry;
+		if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR &&
+		    ep->handle_resource_management == FI_RM_ENABLED) {
+			/*
+			 * This packet is assoiciated with a send operation,
+			 * (such packets include all REQ, DATA)
+			 * thus shoud be queued for RNR only if
+			 * application want EFA to manager resource.
+			 */
+			rxr_cq_queue_rnr_pkt(ep, &tx_entry->queued_pkts, pkt_entry);
+			if (tx_entry->state == RXR_TX_SEND) {
+				dlist_remove(&tx_entry->entry);
+				tx_entry->state = RXR_TX_QUEUED_DATA_RNR;
+				dlist_insert_tail(&tx_entry->queued_entry,
+						  &ep->tx_entry_queued_list);
+			} else if (tx_entry->state == RXR_TX_REQ) {
+				tx_entry->state = RXR_TX_QUEUED_REQ_RNR;
+				dlist_insert_tail(&tx_entry->queued_entry,
+						  &ep->tx_entry_queued_list);
+			}
+		} else {
+			rxr_cq_write_tx_error(ep, pkt_entry->x_entry, err, prov_errno);
+			rxr_pkt_entry_release_tx(ep, pkt_entry);
+		}
+
+		return;
+	}
+
+	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_RX_ENTRY) {
+		rx_entry = pkt_entry->x_entry;
+		if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR) {
+			/*
+			 * This packet is associated with a recv operation,
+			 * (such packets include CTS and EOR)
+			 * thus should always be queued for RNR.
+			 * This is regardless value of ep->handle_resource_management,
+			 * because resource management is only applied to send operation.
+			 */
+			rxr_cq_queue_rnr_pkt(ep, &rx_entry->queued_pkts, pkt_entry);
+			/*
+			 * rx_entry send one ctrl packet at a time, so if we
+			 * received RNR for the packet, the rx_entry must not
+			 * be in ep's rx_queued_entry_list, thus cannot
+			 * be in QUEUED_CTRL state
+			 */
+			assert(rx_entry->state != RXR_RX_QUEUED_CTRL);
+			rx_entry->state = RXR_RX_QUEUED_CTRL;
+			dlist_insert_tail(&rx_entry->queued_entry,
+					  &ep->rx_entry_queued_list);
+
+		} else {
+			rxr_cq_write_rx_error(ep, pkt_entry->x_entry, err, prov_errno);
+			rxr_pkt_entry_release_tx(ep, pkt_entry);
+		}
+
+		return;
+	}
+
+	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_READ_ENTRY) {
+		/* read will not encounter RNR */
+		assert(prov_errno != IBV_WC_RNR_RETRY_EXC_ERR);
+		rxr_read_write_error(ep, pkt_entry->x_entry, err, prov_errno);
+		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		return;
+	}
+
+	FI_WARN(&rxr_prov, FI_LOG_CQ,
+		"%s unknown x_entry type %d\n",
+		__func__, RXR_GET_X_ENTRY_TYPE(pkt_entry));
+	assert(0 && "unknown x_entry state");
+	efa_eq_write_error(&ep->util_ep, err, prov_errno);
+	rxr_pkt_entry_release_tx(ep, pkt_entry);
+}
+
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
+	struct rdm_peer *peer;
+
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	if (!peer) {
+		/*
+		 * peer could be NULL in the following 2 scenarios:
+		 * 1. a new peer with same gid+qpn was inserted to av, thus the peer was remove.
+		 * 2. application removed the peer's address from av.
+		 * Either way, we need to ignore this error completion.
+		 */
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "ignoring send completion of a packet to a removed peer.\n");
+		rxr_ep_dec_tx_op_counter(ep, pkt_entry);
+		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		return;
+	}
+
 	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
 	case RXR_HANDSHAKE_PKT:
 		break;
@@ -766,7 +937,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 			"invalid control pkt type %d\n",
 			rxr_get_base_hdr(pkt_entry->pkt)->type);
 		assert(0 && "invalid control pkt type");
-		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EIO);
 		return;
 	}
 
@@ -774,9 +945,39 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 	rxr_pkt_entry_release_tx(ep, pkt_entry);
 }
 
-/*
- *  Functions used to handle packet receive completion
+/**
+ * @brief handle the a packet that encountered error completion while receiving
+ *
+ * This function will write error cq or eq entry, then release the packet entry.
+ *
+ * @param[in]	ep		endpoint
+ * @param[in]	pkt_entry	pkt entry
+ * @param[in]	err		libfabric error code
+ * @param[in]	prov_errno	provider specific error code
  */
+void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
+{
+	if (!pkt_entry->x_entry) {
+		efa_eq_write_error(&ep->util_ep, err, prov_errno);
+		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		return;
+	}
+
+	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
+		rxr_cq_write_tx_error(ep, pkt_entry->x_entry, err, prov_errno);
+	} else if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_RX_ENTRY) {
+		rxr_cq_write_rx_error(ep, pkt_entry->x_entry, err, prov_errno);
+	} else {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		"%s unknown x_entry type %d\n",
+			__func__, RXR_GET_X_ENTRY_TYPE(pkt_entry));
+		assert(0 && "unknown x_entry state");
+		efa_eq_write_error(&ep->util_ep, err, prov_errno);
+	}
+
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
+}
+
 static
 fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, void *raw_addr)
 {
@@ -833,14 +1034,14 @@ void rxr_pkt_proc_received(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Received a RTS packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated RTS pakcet received");
-		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EIO);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	case RXR_RETIRED_CONNACK_PKT:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Received a CONNACK packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated CONNACK pakcet received");
-		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EIO);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	case RXR_EOR_PKT:
@@ -906,7 +1107,7 @@ void rxr_pkt_proc_received(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 			"invalid control pkt type %d\n",
 			rxr_get_base_hdr(pkt_entry->pkt)->type);
 		assert(0 && "invalid control pkt type");
-		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EIO);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
@@ -928,7 +1129,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 			(int)pkt_entry->addr, base_hdr->type);
 
 		assert(0 && "invalid REQ packe type");
-		rxr_cq_handle_error(ep, FI_EIO, NULL);
+		efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EIO);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}

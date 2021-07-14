@@ -337,7 +337,8 @@ struct rdm_peer {
 	struct dlist_entry handshake_queued_entry; /* linked with rxr_ep->handshake_queued_peer_list */
 	struct dlist_entry rx_unexp_list; /* a list of unexpected untagged rx_entry for this peer */
 	struct dlist_entry rx_unexp_tagged_list; /* a list of unexpected tagged rx_entry for this peer */
-	ofi_atomic32_t use_cnt;		/* refcount */
+	struct dlist_entry tx_entry_list; /* a list of tx_entry related to this peer */
+	struct dlist_entry rx_entry_list; /* a list of rx_entry relased to this peer */
 };
 
 struct rxr_queued_ctrl_info {
@@ -442,11 +443,14 @@ struct rxr_rx_entry {
 	struct rxr_pkt_entry *unexp_pkt;
 	char *atomrsp_data;
 
+	/* linked with rx_entry_list in rdm_peer */
+	struct dlist_entry peer_entry;
+
+	/* linked with rx_entry_list in rxr_ep */
+	struct dlist_entry ep_entry;
 #if ENABLE_DEBUG
 	/* linked with rx_pending_list in rxr_ep */
 	struct dlist_entry rx_pending_entry;
-	/* linked with rx_entry_list in rxr_ep */
-	struct dlist_entry rx_entry_entry;
 #endif
 };
 
@@ -515,10 +519,11 @@ struct rxr_tx_entry {
 	/* Queued packets due to TX queue full or RNR backoff */
 	struct dlist_entry queued_pkts;
 
-#if ENABLE_DEBUG
+	/* peer_entry is linked with tx_entry_list in rdm_peer */
+	struct dlist_entry peer_entry;
+
 	/* linked with tx_entry_list in rxr_ep */
-	struct dlist_entry tx_entry_entry;
-#endif
+	struct dlist_entry ep_entry;
 };
 
 #define RXR_GET_X_ENTRY_TYPE(pkt_entry)	\
@@ -694,16 +699,16 @@ struct rxr_ep {
 	/* tx packets waiting for send completion */
 	struct dlist_entry tx_pkt_list;
 
-	/* track allocated rx_entries and tx_entries for endpoint cleanup */
-	struct dlist_entry rx_entry_list;
-	struct dlist_entry tx_entry_list;
-
 	size_t efa_total_posted_tx_ops;
 	size_t shm_total_posted_tx_ops;
 	size_t send_comps;
 	size_t failed_send_comps;
 	size_t recv_comps;
 #endif
+	/* track allocated rx_entries and tx_entries for endpoint cleanup */
+	struct dlist_entry rx_entry_list;
+	struct dlist_entry tx_entry_list;
+
 	/* number of posted buffer for shm */
 	size_t posted_bufs_shm;
 	size_t rx_bufs_shm_to_post;
@@ -797,11 +802,10 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 	struct dlist_entry *tmp;
 
 	if (rx_entry->peer)
-		ofi_atomic_dec32(&rx_entry->peer->use_cnt);
+		dlist_remove(&rx_entry->peer_entry);
 
-#if ENABLE_DEBUG
-	dlist_remove(&rx_entry->rx_entry_entry);
-#endif
+	dlist_remove(&rx_entry->ep_entry);
+
 	if (!dlist_empty(&rx_entry->queued_pkts)) {
 		dlist_foreach_container_safe(&rx_entry->queued_pkts,
 					     struct rxr_pkt_entry,
@@ -917,12 +921,15 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 int rxr_ep_efa_addr_to_str(const void *addr, char *temp_name);
 
 /* CQ sub-functions */
-int rxr_cq_handle_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
-			   ssize_t prov_errno);
-int rxr_cq_handle_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
-			   ssize_t prov_errno);
-int rxr_cq_handle_error(struct rxr_ep *ep, ssize_t prov_errno,
-			struct rxr_pkt_entry *pkt_entry);
+void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+			   int err, int prov_errno);
+
+void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
+			   int err, int prov_errno);
+
+void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
+			  struct dlist_entry *list,
+			  struct rxr_pkt_entry *pkt_entry);
 
 void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 				struct rxr_rx_entry *rx_entry);

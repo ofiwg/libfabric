@@ -142,7 +142,7 @@ struct efa_ah {
 
 struct efa_conn {
 	struct efa_ah		*ah;
-	struct efa_ep_addr	ep_addr;
+	struct efa_ep_addr	*ep_addr;
 	/* for FI_AV_TABLE, fi_addr is same as util_av_fi_addr,
 	 * for FI_AV_MAP, fi_addr is pointer to efa_conn; */
 	fi_addr_t		fi_addr;
@@ -594,7 +594,7 @@ struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 	util_av_entry = ofi_bufpool_get_ibuf(ep->util_ep.av->av_entry_pool,
 	                                     addr);
 	av_entry = (struct efa_av_entry *)util_av_entry->data;
-	return &av_entry->conn.rdm_peer;
+	return av_entry->conn.ep_addr ? &av_entry->conn.rdm_peer : NULL;
 }
 
 static inline
@@ -602,7 +602,7 @@ int efa_peer_in_use(struct rdm_peer *peer)
 {
 	struct rxr_pkt_entry *pending_pkt;
 
-	if (ofi_atomic_get32(&peer->use_cnt) > 1)
+	if (!dlist_empty(&peer->tx_entry_list) || !dlist_empty(&peer->rx_entry_list))
 		return -FI_EBUSY;
 
 	if ((peer->efa_outstanding_tx_ops > 0) || (peer->flags & RXR_PEER_IN_BACKOFF))
@@ -613,24 +613,6 @@ int efa_peer_in_use(struct rdm_peer *peer)
 		return -FI_EBUSY;
 
 	return 0;
-}
-
-static inline
-void efa_rdm_peer_clear(struct rdm_peer *peer)
-{
-	if (peer->robuf.pending)
-		ofi_recvwin_free(&peer->robuf);
-
-	if (peer->flags & RXR_PEER_HANDSHAKE_QUEUED)
-		dlist_remove(&peer->handshake_queued_entry);
-
-	if (peer->flags & RXR_PEER_IN_BACKOFF)
-		dlist_remove(&peer->rnr_backoff_entry);
-
-	memset(peer, 0, sizeof(struct rdm_peer));
-#ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region((uint32_t *)peer, sizeof(struct rdm_peer));
-#endif
 }
 
 static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)

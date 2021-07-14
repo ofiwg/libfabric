@@ -65,8 +65,7 @@ struct efa_ep_addr *rxr_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	efa_av = efa_ep->av;
 	efa_conn = efa_av_addr_to_conn(efa_av, addr);
-
-	return &efa_conn->ep_addr;
+	return efa_conn ? efa_conn->ep_addr : NULL;
 }
 
 const char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen)
@@ -94,9 +93,7 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 	}
 	memset(rx_entry, 0, sizeof(struct rxr_rx_entry));
 
-#if ENABLE_DEBUG
-	dlist_insert_tail(&rx_entry->rx_entry_entry, &ep->rx_entry_list);
-#endif
+	dlist_insert_tail(&rx_entry->ep_entry, &ep->rx_entry_list);
 	rx_entry->type = RXR_RX_ENTRY;
 	rx_entry->rx_id = ofi_buf_index(rx_entry);
 	dlist_init(&rx_entry->queued_pkts);
@@ -106,7 +103,7 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 	if (addr != FI_ADDR_UNSPEC) {
 		rx_entry->peer = rxr_ep_get_peer(ep, addr);
 		assert(rx_entry->peer);
-		ofi_atomic_inc32(&rx_entry->peer->use_cnt);
+		dlist_insert_tail(&rx_entry->peer_entry, &rx_entry->peer->rx_entry_list);
 	} else {
 		/*
 		 * If msg->addr is not provided, rx_entry->peer will be set
@@ -348,7 +345,7 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	tx_entry->addr = msg->addr;
 	tx_entry->peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(tx_entry->peer);
-	ofi_atomic_inc32(&tx_entry->peer->use_cnt);
+	dlist_insert_tail(&tx_entry->peer_entry, &tx_entry->peer->tx_entry_list);
 
 	tx_entry->send_flags = 0;
 	tx_entry->rxr_flags = 0;
@@ -441,9 +438,7 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 		tx_entry->tag = tag;
 	}
 
-#if ENABLE_DEBUG
-	dlist_insert_tail(&tx_entry->tx_entry_entry, &rxr_ep->tx_entry_list);
-#endif
+	dlist_insert_tail(&tx_entry->ep_entry, &rxr_ep->tx_entry_list);
 	return tx_entry;
 }
 
@@ -454,7 +449,7 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	struct rxr_pkt_entry *pkt_entry;
 
 	assert(tx_entry->peer);
-	ofi_atomic_dec32(&tx_entry->peer->use_cnt);
+	dlist_remove(&tx_entry->peer_entry);
 
 	for (i = 0; i < tx_entry->iov_count; i++) {
 		if (tx_entry->mr[i]) {
@@ -468,9 +463,8 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 		}
 	}
 
-#if ENABLE_DEBUG
-	dlist_remove(&tx_entry->tx_entry_entry);
-#endif
+	dlist_remove(&tx_entry->ep_entry);
+
 	dlist_foreach_container_safe(&tx_entry->queued_pkts,
 				     struct rxr_pkt_entry,
 				     pkt_entry, entry, tmp) {
@@ -606,75 +600,96 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_
 
 static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 {
-#if ENABLE_DEBUG
-	struct dlist_entry *tmp;
-	struct dlist_entry *entry;
+	struct dlist_entry *entry, *tmp;
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
+#if ENABLE_DEBUG
 	struct rxr_pkt_entry *pkt;
 #endif
 
-#if ENABLE_DEBUG
-	dlist_foreach(&rxr_ep->rx_unexp_list, entry) {
+	dlist_foreach_safe(&rxr_ep->rx_unexp_list, entry, tmp) {
 		rx_entry = container_of(entry, struct rxr_rx_entry, entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with unmatched unexpected rx_entry: %p pkt_entry %p\n",
+			rx_entry, rx_entry->unexp_pkt);
 		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_pkt);
+		rxr_release_rx_entry(rxr_ep, rx_entry);
 	}
 
-	dlist_foreach(&rxr_ep->rx_unexp_tagged_list, entry) {
+	dlist_foreach_safe(&rxr_ep->rx_unexp_tagged_list, entry, tmp) {
 		rx_entry = container_of(entry, struct rxr_rx_entry, entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with unmatched unexpected tagged rx_entry: %p pkt_entry %p\n",
+			rx_entry, rx_entry->unexp_pkt);
 		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_pkt);
+		rxr_release_rx_entry(rxr_ep, rx_entry);
 	}
 
-	dlist_foreach(&rxr_ep->rx_entry_queued_list, entry) {
+	dlist_foreach_safe(&rxr_ep->rx_entry_queued_list, entry, tmp) {
 		rx_entry = container_of(entry, struct rxr_rx_entry,
 					queued_entry);
-		dlist_foreach_container_safe(&rx_entry->queued_pkts,
-					     struct rxr_pkt_entry,
-					     pkt, entry, tmp)
-			rxr_pkt_entry_release_tx(rxr_ep, pkt);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with queued rx_entry: %p\n",
+			rx_entry);
+		rxr_release_rx_entry(rxr_ep, rx_entry);
 	}
 
-	dlist_foreach(&rxr_ep->tx_entry_queued_list, entry) {
+	dlist_foreach_safe(&rxr_ep->tx_entry_queued_list, entry, tmp) {
 		tx_entry = container_of(entry, struct rxr_tx_entry,
 					queued_entry);
-		dlist_foreach_container_safe(&tx_entry->queued_pkts,
-					     struct rxr_pkt_entry,
-					     pkt, entry, tmp)
-			rxr_pkt_entry_release_tx(rxr_ep, pkt);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with queued tx_entry: %p\n",
+			tx_entry);
+		rxr_release_tx_entry(rxr_ep, tx_entry);
 	}
 
-	dlist_foreach_safe(&rxr_ep->rx_pkt_list, entry, tmp) {
-		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-		rxr_pkt_entry_release_rx(rxr_ep, pkt);
-	}
-
+#if ENABLE_DEBUG
 	dlist_foreach_safe(&rxr_ep->rx_posted_buf_list, entry, tmp) {
 		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
 		ofi_buf_free(pkt);
 	}
 
-	dlist_foreach_safe(&rxr_ep->tx_pkt_list, entry, tmp) {
-		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-		rxr_pkt_entry_release_tx(rxr_ep, pkt);
-	}
-
-	dlist_foreach_safe(&rxr_ep->rx_entry_list, entry, tmp) {
-		rx_entry = container_of(entry, struct rxr_rx_entry,
-					rx_entry_entry);
-		rxr_release_rx_entry(rxr_ep, rx_entry);
-	}
-	dlist_foreach_safe(&rxr_ep->tx_entry_list, entry, tmp) {
-		tx_entry = container_of(entry, struct rxr_tx_entry,
-					tx_entry_entry);
-		rxr_release_tx_entry(rxr_ep, tx_entry);
-	}
 	if (rxr_ep->use_shm) {
 		dlist_foreach_safe(&rxr_ep->rx_posted_buf_shm_list, entry, tmp) {
 			pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
 			ofi_buf_free(pkt);
 		}
 	}
+
+	dlist_foreach_safe(&rxr_ep->rx_pkt_list, entry, tmp) {
+		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with unreleased RX pkt_entry: %p\n",
+			pkt);
+		rxr_pkt_entry_release_rx(rxr_ep, pkt);
+	}
+
+	dlist_foreach_safe(&rxr_ep->tx_pkt_list, entry, tmp) {
+		pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with unreleased TX pkt_entry: %p\n",
+			pkt);
+		rxr_pkt_entry_release_tx(rxr_ep, pkt);
+	}
 #endif
+
+	dlist_foreach_safe(&rxr_ep->rx_entry_list, entry, tmp) {
+		rx_entry = container_of(entry, struct rxr_rx_entry,
+					ep_entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with unreleased rx_entry: %p\n",
+			rx_entry);
+		rxr_release_rx_entry(rxr_ep, rx_entry);
+	}
+
+	dlist_foreach_safe(&rxr_ep->tx_entry_list, entry, tmp) {
+		tx_entry = container_of(entry, struct rxr_tx_entry,
+					ep_entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with unreleased tx_entry: %p\n",
+			tx_entry);
+		rxr_release_tx_entry(rxr_ep, tx_entry);
+	}
 
 	if (rxr_ep->rx_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->rx_entry_pool);
@@ -1302,9 +1317,10 @@ int rxr_ep_init(struct rxr_ep *ep)
 	dlist_init(&ep->rx_pending_list);
 	dlist_init(&ep->rx_pkt_list);
 	dlist_init(&ep->tx_pkt_list);
+#endif
 	dlist_init(&ep->rx_entry_list);
 	dlist_init(&ep->tx_entry_list);
-#endif
+
 	/* Initialize pkt to rx map */
 	ep->pkt_rx_map = NULL;
 	return 0;
@@ -1448,10 +1464,7 @@ void rxr_ep_progress_post_prov_buf(struct rxr_ep *ep)
 
 err_exit:
 
-	if (rxr_cq_handle_error(ep, err, NULL)) {
-		assert(0 &&
-		       "error writing error cq entry after failed post recv");
-	}
+	efa_eq_write_error(&ep->util_ep, err, err);
 }
 
 static inline int rxr_ep_send_queued_pkts(struct rxr_ep *ep,
@@ -1523,7 +1536,7 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 	struct rdm_peer *peer;
 	struct rxr_pkt_entry *pkt_entry;
 	ssize_t ret;
-	int i;
+	int i, err, prov_errno;
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	efa_av = efa_ep->av;
@@ -1536,10 +1549,21 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 
 		if (OFI_UNLIKELY(ret < 0 || ibv_wc.status)) {
 			if (ret < 0) {
-				rxr_cq_handle_error(ep, -ret, NULL);
+				efa_eq_write_error(&ep->util_ep, -ret, -ret);
+				return;
+			}
+
+			pkt_entry = (void *)(uintptr_t)ibv_wc.wr_id;
+			err = ibv_wc.status;
+			prov_errno = ibv_wc.status;
+			if (ibv_wc.opcode == IBV_WC_SEND) {
+#if ENABLE_DEBUG
+				ep->failed_send_comps++;
+#endif
+				rxr_pkt_handle_send_error(ep, pkt_entry, err, prov_errno);
 			} else {
-				pkt_entry = (void *)(uintptr_t)ibv_wc.wr_id;
-				rxr_cq_handle_error(ep, ibv_wc.status, pkt_entry);
+				assert(ibv_wc.opcode == IBV_WC_RECV);
+				rxr_pkt_handle_recv_error(ep, pkt_entry, err, prov_errno);
 			}
 
 			return;
@@ -1617,11 +1641,20 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 			return;
 
 		if (OFI_UNLIKELY(ret < 0)) {
-			if (ret == -FI_EAVAIL) {
-				rdm_ep_poll_shm_err_cq(ep->shm_cq, &cq_err_entry);
-				rxr_cq_handle_error(ep, cq_err_entry.prov_errno, cq_err_entry.op_context);
+			if (ret != -FI_EAVAIL) {
+				efa_eq_write_error(&ep->util_ep, -ret, -ret);
+				return;
+			}
+
+			rdm_ep_poll_shm_err_cq(ep->shm_cq, &cq_err_entry);
+			if (cq_err_entry.flags & (FI_SEND | FI_READ | FI_WRITE)) {
+				assert(cq_entry.op_context);
+				rxr_pkt_handle_send_error(ep, cq_entry.op_context, cq_err_entry.err, cq_err_entry.prov_errno);
+			} else if (cq_err_entry.flags & FI_RECV) {
+				assert(cq_entry.op_context);
+				rxr_pkt_handle_recv_error(ep, cq_entry.op_context, cq_err_entry.err, cq_err_entry.prov_errno);
 			} else {
-				rxr_cq_handle_error(ep, -ret, NULL);
+				efa_eq_write_error(&ep->util_ep, cq_err_entry.err, cq_err_entry.prov_errno);
 			}
 
 			return;
@@ -1693,8 +1726,13 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (ret == -FI_EAGAIN)
 			break;
 
-		if (OFI_UNLIKELY(ret))
-			goto handshake_err;
+		if (OFI_UNLIKELY(ret)) {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"Failed to post HANDSHAKE to peer %ld: %s\n",
+				peer->efa_fiaddr, fi_strerror(-ret));
+			efa_eq_write_error(&ep->util_ep, FI_EIO, -ret);
+			return;
+		}
 
 		dlist_remove(&peer->handshake_queued_entry);
 		peer->flags &= ~RXR_PEER_HANDSHAKE_QUEUED;
@@ -1734,8 +1772,11 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 
 		if (ret == -FI_EAGAIN)
 			break;
-		if (OFI_UNLIKELY(ret))
-			goto rx_err;
+
+		if (OFI_UNLIKELY(ret)) {
+			rxr_cq_write_rx_error(ep, rx_entry, -ret, -ret);
+			return;
+		}
 
 		/* it can happen that rxr_pkt_post_ctrl() released rx_entry
 		 * (if the packet type is EOR and inject is used). In
@@ -1774,8 +1815,10 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		ret = rxr_ep_send_queued_pkts(ep, &tx_entry->queued_pkts);
 		if (ret == -FI_EAGAIN)
 			break;
-		if (OFI_UNLIKELY(ret))
-			goto tx_err;
+		if (OFI_UNLIKELY(ret)) {
+			rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
+			return;
+		}
 
 		if (tx_entry->state == RXR_TX_QUEUED_CTRL) {
 			ret = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry,
@@ -1783,8 +1826,11 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 						tx_entry->queued_ctrl.inject);
 			if (ret == -FI_EAGAIN)
 				break;
-			if (OFI_UNLIKELY(ret))
-				goto tx_err;
+
+			if (OFI_UNLIKELY(ret)) {
+				rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
+				return;
+			}
 		}
 
 		dlist_remove(&tx_entry->queued_entry);
@@ -1834,7 +1880,9 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 				tx_entry->send_flags &= ~FI_MORE;
 				if (ret == -FI_EAGAIN)
 					goto out;
-				goto tx_err;
+
+				rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
+				return;
 			}
 		}
 	}
@@ -1861,8 +1909,10 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (ret == -FI_EAGAIN)
 			break;
 
-		if (OFI_UNLIKELY(ret))
-			goto read_err;
+		if (OFI_UNLIKELY(ret)) {
+			rxr_read_write_error(ep, read_entry, -ret, -ret);
+			return;
+		}
 
 		read_entry->state = RXR_RDMA_ENTRY_SUBMITTED;
 		dlist_remove(&read_entry->pending_entry);
@@ -1873,33 +1923,9 @@ out:
 	if (efa_ep->xmit_more_wr_tail != &efa_ep->xmit_more_wr_head) {
 		ret = efa_post_flush(efa_ep, &bad_wr);
 		if (OFI_UNLIKELY(ret))
-			goto tx_err;
+			efa_eq_write_error(&ep->util_ep, -ret, -ret);
 	}
 
-	return;
-rx_err:
-	if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
-		assert(0 &&
-		       "error writing error cq entry when handling RX error");
-	return;
-tx_err:
-	if (rxr_cq_handle_tx_error(ep, tx_entry, ret))
-		assert(0 &&
-		       "error writing error cq entry when handling TX error");
-	return;
-
-read_err:
-	if (rxr_read_handle_error(ep, read_entry, ret))
-		assert(0 &&
-		       "error writing err cq entry while handling RDMA error");
-	return;
-
-handshake_err:
-	FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-		"Failed to post HANDSHAKE to peer %ld: %s\n",
-		peer->efa_fiaddr, fi_strerror(-ret));
-	assert(0 && "Failed to post HANDSHAKE to peer");
-	efa_eq_write_error(&ep->util_ep, FI_EIO, -ret);
 	return;
 }
 
@@ -2217,8 +2243,13 @@ void rxr_ep_dec_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	struct rdm_peer *peer;
 
 	/*
-	 * peer can be NULL when the pkt_entry is a RMA_CONTEXT_PKT,
-	 * and the RMA is a local read toward the endpoint itself
+	 * peer can be NULL when:
+	 *
+	 * 1. the pkt_entry is a RMA_CONTEXT_PKT, and the RMA op is a local read
+	 *    toward the endpoint itself.
+	 * 2. peer's address has been removed from address vector. Either because
+	 *    a new peer has the same GID+QPN was inserted to address, or because
+	 *    application removed the peer from address vector.
 	 */
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 

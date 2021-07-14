@@ -83,9 +83,8 @@ rxr_atomic_alloc_tx_entry(struct rxr_ep *rxr_ep,
 		return NULL;
 	}
 
-#if ENABLE_DEBUG
-	dlist_insert_tail(&tx_entry->tx_entry_entry, &rxr_ep->tx_entry_list);
-#endif
+	dlist_insert_tail(&tx_entry->ep_entry, &rxr_ep->tx_entry_list);
+
 	ofi_ioc_to_iov(msg_atomic->msg_iov, iov, msg_atomic->iov_count, datatype_size);
 	msg.addr = msg_atomic->addr;
 	msg.msg_iov = iov;
