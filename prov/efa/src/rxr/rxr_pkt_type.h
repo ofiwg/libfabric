@@ -139,8 +139,12 @@ struct rxr_handshake_hdr {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint32_t maxproto;
-	uint64_t features[0];
+	/* nextra_p3 is number of members in extra_info plus 3.
+	 * The "p3" part was introduced for backward compatibility.
+	 * See protocol v4 document section 2.1 for detail.
+	 */
+	uint32_t nextra_p3;
+	uint64_t extra_info[0];
 };
 
 #if defined(static_assert) && defined(__x86_64__)
