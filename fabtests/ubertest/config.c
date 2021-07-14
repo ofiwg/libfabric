@@ -32,7 +32,6 @@
 #include "fabtest.h"
 #include "jsmn.h"
 
-
 #define FT_CAP_MSG	FI_MSG | FI_SEND | FI_RECV
 #define FT_CAP_TAGGED	FI_TAGGED | FI_SEND | FI_RECV
 #define FT_CAP_RMA	FI_RMA | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
@@ -173,7 +172,7 @@ static struct key_t keys[] = {
 		.str = "datatype",
 		.offset = offsetof(struct ft_set, datatype),
 		.val_type = VAL_NUM,
-		.val_size = sizeof(((struct ft_set *)0)->datatype) / FI_DATATYPE_LAST,
+		.val_size = sizeof(((struct ft_set *)0)->datatype) / OFI_DATATYPE_CNT,
 	},
 	{
 		.str = "mode",
@@ -340,6 +339,8 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_UINT32, enum fi_datatype, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_INT64, enum fi_datatype, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_UINT64, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_INT128, enum fi_datatype, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_UINT128, enum fi_datatype, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_FLOAT, enum fi_datatype, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_DOUBLE, enum fi_datatype, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_FLOAT_COMPLEX, enum fi_datatype, buf);

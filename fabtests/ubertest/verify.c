@@ -63,6 +63,20 @@ static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_a
 		}						\
 	} while (0)
 
+#ifdef  HAVE___INT128
+
+/* If __int128 supported, things just work. */
+#define FT_FILL_INT128(...)	FT_FILL(__VA_ARGS__)
+#define CHECK_LOCAL_INT128(...)	CHECK_LOCAL(__VA_ARGS__)
+
+#else
+
+/* If __int128, we're not going to fill/verify. */
+#define FT_FILL_INT128(...)
+#define CHECK_LOCAL_INT128(...)
+
+#endif
+
 #define SWITCH_TYPES(type,FUNC,...)				\
 	switch (type) {						\
 	case FI_INT8:	FUNC(__VA_ARGS__,int8_t); break;	\
@@ -73,6 +87,8 @@ static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_a
 	case FI_UINT32: FUNC(__VA_ARGS__,uint32_t); break;	\
 	case FI_INT64:	FUNC(__VA_ARGS__,int64_t); break;	\
 	case FI_UINT64: FUNC(__VA_ARGS__,uint64_t); break;	\
+	case FI_INT128:	FUNC##_INT128(__VA_ARGS__,ofi_int128_t); break;	\
+	case FI_UINT128: FUNC##_INT128(__VA_ARGS__,ofi_uint128_t); break; \
 	case FI_FLOAT:	FUNC(__VA_ARGS__,float); break;		\
 	case FI_DOUBLE:	FUNC(__VA_ARGS__,double); break;	\
 	case FI_LONG_DOUBLE: FUNC(__VA_ARGS__,long_double); break;		\
@@ -121,6 +137,7 @@ static int verify_atomic(void)
 
 	dst = ft_atom_ctrl.orig_buf;
 	src = ft_tx_ctrl.cpy_buf;
+
 	cmp = ft_atom_ctrl.comp_buf;
 	tmp = ft_rx_ctrl.buf;
 	res = ft_atom_ctrl.res_buf;
@@ -128,6 +145,21 @@ static int verify_atomic(void)
 	type = ft_atom_ctrl.datatype;
 	op = ft_atom_ctrl.op;
 	count = ft_atom_ctrl.count;
+
+	/*
+	 * If we don't have the test function, return > 0 to indicate
+	 * verification is unsupported.
+	 */
+	if (is_compare_func(test_info.class_function)) {
+		if (!ofi_atomic_swap_handler(op, type))
+			return 1;
+	} else if (is_fetch_func(test_info.class_function)) {
+		if (!ofi_atomic_readwrite_handler(op, type))
+			return 1;
+	} else {
+		if (!ofi_atomic_write_handler(op, type))
+			return 1;
+	}
 
 	if (is_fetch_func(test_info.class_function) ||
 	    is_compare_func(test_info.class_function)) {
@@ -137,11 +169,11 @@ static int verify_atomic(void)
 	}
 
 	if (is_compare_func(test_info.class_function)) {
-		ofi_atomic_swap_handler(op, type, dst, src, cmp, tmp, count);
+		ofi_atomic_swap_op(op, type, dst, src, cmp, tmp, count);
 	} else if (is_fetch_func(test_info.class_function)) {
-		ofi_atomic_readwrite_handler(op, type, dst, src, tmp, count);
+		ofi_atomic_readwrite_op(op, type, dst, src, tmp, count);
 	} else {
-		ofi_atomic_write_handler(op, type, dst, src, count);
+		ofi_atomic_write_op(op, type, dst, src, count);
 	}
 
 	SWITCH_TYPES(type, CHECK_LOCAL, dst, ft_mr_ctrl.buf, count, ret);
