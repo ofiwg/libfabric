@@ -314,7 +314,10 @@ struct rxr_atomrsp_hdr {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint32_t padding;
+	union {
+		uint32_t connid; /* sender connid. set when RXR_PKT_CONNID_HDR is on in flags */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes boundary */
+	};
 	uint32_t reserved;
 	uint32_t recv_id;
 	uint64_t seg_length;
