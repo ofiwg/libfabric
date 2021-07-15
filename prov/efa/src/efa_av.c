@@ -728,6 +728,31 @@ static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 	return 0;
 }
 
+/*
+ * @brief remove a set of addresses from AV and release its resources
+ *
+ * This function implements fi_av_remove() for EFA provider.
+ *
+ * Note that even after an address was removed from AV, it is still
+ * possible to get TX and RX completion for the address. Per libfabric
+ * standard, these completions should be ignored.
+ *
+ * To help TX completion handler to identify such a TX completion,
+ * when removing an address, all its outstanding TX packet's addr
+ * was set to FI_ADDR_NOTAVAIL. The TX completion handler will
+ * ignore TX packet whose address is FI_ADDR_NOTAVAIL.
+ *
+ * Meanwhile, lower provider  will set a packet's address to
+ * FI_ADDR_NOTAVAIL from it is from a removed address. RX completion
+ * handler will ignore such packets.
+ *
+ * @param[in]	av_fid	fid of AV (address vector)
+ * @param[in]	fi_addr pointer to an array of libfabric addresses
+ * @param[in]	counter	number of libfabric addresses in the array
+ * @param[in]	flags	flags
+ * @return	0 if all addresses have been removed successfully,
+ * 		negative libfabric error code if error was encoutnered.
+ */
 static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			 size_t count, uint64_t flags)
 {
@@ -748,11 +773,6 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		conn = efa_av_addr_to_conn(av, fi_addr[i]);
 		if (!conn) {
 			err = -FI_EINVAL;
-			break;
-		}
-
-		if (av->ep_type == FI_EP_RDM && efa_peer_in_use(&conn->rdm_peer)) {
-			err = -FI_EBUSY;
 			break;
 		}
 
