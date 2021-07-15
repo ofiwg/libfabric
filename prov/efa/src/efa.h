@@ -597,24 +597,6 @@ struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 	return av_entry->conn.ep_addr ? &av_entry->conn.rdm_peer : NULL;
 }
 
-static inline
-int efa_peer_in_use(struct rdm_peer *peer)
-{
-	struct rxr_pkt_entry *pending_pkt;
-
-	if (!dlist_empty(&peer->tx_entry_list) || !dlist_empty(&peer->rx_entry_list))
-		return -FI_EBUSY;
-
-	if ((peer->efa_outstanding_tx_ops > 0) || (peer->flags & RXR_PEER_IN_BACKOFF))
-		return -FI_EBUSY;
-
-	pending_pkt = *ofi_recvwin_peek((&peer->robuf));
-	if (pending_pkt)
-		return -FI_EBUSY;
-
-	return 0;
-}
-
 static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)
 {
 	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA): false;
