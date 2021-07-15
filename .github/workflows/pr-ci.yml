@@ -64,6 +64,12 @@ jobs:
           ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} CC=${{ matrix.cc }}
           make -j 2; make install
           $PWD/install/bin/fi_info -l
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: config.log
+          path: config.log
   hmem:
     runs-on: ubuntu-20.04
     steps:
@@ -102,6 +108,12 @@ jobs:
           make -j 2; make install
           $PWD/install/bin/fi_info -l
           $PWD/install/bin/fi_info -c FI_HMEM
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: config.log
+          path: config.log
   macos:
     runs-on: macos-10.15
     steps:
@@ -116,3 +128,9 @@ jobs:
           ./configure --prefix=$PWD/install
           make -j 2; make install
           $PWD/install/bin/fi_info -l
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: config.log
+          path: config.log
