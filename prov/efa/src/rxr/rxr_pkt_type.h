@@ -430,7 +430,10 @@ struct rxr_atomrsp_hdr {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint32_t padding;
+	union {
+		uint32_t connid; /* sender connid. set when RXR_PKT_CONNID_HDR is on in flags */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes boundary */
+	};
 	uint32_t reserved;
 	uint32_t recv_id;
 	uint64_t seg_length;
@@ -440,14 +443,13 @@ struct rxr_atomrsp_hdr {
 static_assert(sizeof(struct rxr_atomrsp_hdr) == 24, "rxr_atomrsp_hdr check");
 #endif
 
-#define RXR_ATOMRSP_HDR_SIZE	(sizeof(struct rxr_atomrsp_hdr))
-
 struct rxr_atomrsp_pkt {
 	struct rxr_atomrsp_hdr hdr;
 	char data[];
 };
 
-static inline struct rxr_atomrsp_hdr *rxr_get_atomrsp_hdr(void *pkt)
+static inline
+struct rxr_atomrsp_hdr *rxr_get_atomrsp_hdr(void *pkt)
 {
 	return (struct rxr_atomrsp_hdr *)pkt;
 }

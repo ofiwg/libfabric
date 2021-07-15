@@ -623,24 +623,27 @@ void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
 int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 			 struct rxr_pkt_entry *pkt_entry)
 {
+	struct rxr_atomrsp_pkt *atomrsp_pkt;
 	struct rxr_atomrsp_hdr *atomrsp_hdr;
 
 	assert(rx_entry->atomrsp_data);
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = rx_entry;
 
-	atomrsp_hdr = (struct rxr_atomrsp_hdr *)pkt_entry->pkt;
+	atomrsp_pkt = (struct rxr_atomrsp_pkt *)pkt_entry->pkt;
+	atomrsp_hdr = &atomrsp_pkt->hdr;
 	atomrsp_hdr->type = RXR_ATOMRSP_PKT;
 	atomrsp_hdr->version = RXR_PROTOCOL_VERSION;
 	atomrsp_hdr->flags = 0;
 	atomrsp_hdr->recv_id = rx_entry->tx_id;
 	atomrsp_hdr->seg_length = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
-
-	assert(RXR_ATOMRSP_HDR_SIZE + atomrsp_hdr->seg_length < ep->mtu_size);
+	atomrsp_hdr->flags |= RXR_PKT_CONNID_HDR;
+	atomrsp_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+	assert(sizeof(struct rxr_atomrsp_hdr) + atomrsp_hdr->seg_length < ep->mtu_size);
 
 	/* rx_entry->atomrsp_data was filled in rxr_pkt_handle_req_recv() */
-	memcpy((char*)pkt_entry->pkt + RXR_ATOMRSP_HDR_SIZE, rx_entry->atomrsp_data, atomrsp_hdr->seg_length);
-	pkt_entry->pkt_size = RXR_ATOMRSP_HDR_SIZE + atomrsp_hdr->seg_length;
+	memcpy(atomrsp_pkt->data, rx_entry->atomrsp_data, atomrsp_hdr->seg_length);
+	pkt_entry->pkt_size = sizeof(struct rxr_atomrsp_hdr) + atomrsp_hdr->seg_length;
 	return 0;
 }
 
