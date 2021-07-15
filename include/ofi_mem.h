@@ -433,6 +433,20 @@ static inline size_t ofi_buf_index(void *buf)
 	return ofi_buf_hdr(buf)->index;
 }
 
+#if ENABLE_DEBUG
+
+static inline size_t ofi_bufpool_region_use_cnt(struct ofi_bufpool *pool, size_t index)
+{
+	void *buf;
+
+	buf = pool->region_table[(size_t)(index / pool->attr.chunk_cnt)]->
+		mem_region + (index % pool->attr.chunk_cnt) * pool->entry_size;
+
+	return ofi_buf_region(buf)->use_cnt;
+}
+
+#endif
+
 static inline void *ofi_bufpool_get_ibuf(struct ofi_bufpool *pool, size_t index)
 {
 	void *buf;
