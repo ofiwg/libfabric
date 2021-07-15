@@ -179,6 +179,35 @@ ssize_t rxr_read_mr_reg(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 	return 0;
 }
 
+/**
+ * @brief convert descriptor from application for lower provider to use
+ *
+ * Each provider define its descriptors format. The descriptor provided
+ * by application is in EFA provider format.
+ * This function convert it to descriptors for lower provider according
+ * to lower provider type. It also handle the case application does not
+ * provider descriptors.
+ *
+ * @param lower_ep_type[in] lower efa type, can be EFA_EP or SHM_EP.
+ * @param numdesc[in]       number of descriptors in the array
+ * @param desc_in[in]       descriptors provided by application
+ * @param desc_out[out]     descriptors for lower provider.
+ */
+static inline
+void rxr_read_copy_desc(enum rxr_lower_ep_type lower_ep_type,
+			int numdesc, void **desc_in, void **desc_out)
+{
+	if (!desc_in) {
+		memset(desc_out, 0, numdesc * sizeof(void *));
+		return;
+	}
+
+	memcpy(desc_out, desc_in, numdesc * sizeof(void *));
+	if (lower_ep_type == SHM_EP) {
+		rxr_convert_desc_for_shm(numdesc, desc_out);
+	}
+}
+
 /* rxr_read_alloc_entry allocates a read entry.
  * It is called by rxr_read_post_or_queue().
  * Input:
@@ -229,10 +258,7 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, v
 		total_rma_iov_len = ofi_total_rma_iov_len(tx_entry->rma_iov, tx_entry->rma_iov_count);
 		read_entry->total_len = MIN(total_iov_len, total_rma_iov_len);
 
-		if (tx_entry->desc) {
-			memcpy(read_entry->mr_desc, tx_entry->desc,
-			       read_entry->iov_count * sizeof(void *));
-		}
+		rxr_read_copy_desc(lower_ep_type, read_entry->iov_count, tx_entry->desc, read_entry->mr_desc);
 
 	} else {
 		rx_entry = (struct rxr_rx_entry *)x_entry;
@@ -255,10 +281,7 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, v
 		total_rma_iov_len = ofi_total_rma_iov_len(rx_entry->rma_iov, rx_entry->rma_iov_count);
 		read_entry->total_len = MIN(total_iov_len, total_rma_iov_len);
 
-		if (rx_entry->desc) {
-			memcpy(read_entry->mr_desc, rx_entry->desc,
-			       read_entry->iov_count * sizeof(void *));
-		}
+		rxr_read_copy_desc(lower_ep_type, read_entry->iov_count, rx_entry->desc, read_entry->mr_desc);
 	}
 
 	memset(read_entry->mr, 0, read_entry->iov_count * sizeof(struct fid_mr *));
@@ -379,7 +402,7 @@ int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 	assert(rx_entry->desc && efa_ep_is_cuda_mr(rx_entry->desc[0]));
 	read_entry->iov_count = rx_entry->iov_count;
 	memcpy(read_entry->iov, rx_entry->iov, rx_entry->iov_count * sizeof(struct iovec));
-	memcpy(read_entry->mr_desc, rx_entry->desc, rx_entry->iov_count * sizeof(void *));
+	rxr_read_copy_desc(EFA_EP, rx_entry->iov_count, rx_entry->desc, read_entry->mr_desc);
 	ofi_consume_iov_desc(read_entry->iov, read_entry->mr_desc, &read_entry->iov_count, data_offset);
 	if (read_entry->iov_count == 0) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,

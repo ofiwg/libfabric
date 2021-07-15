@@ -887,6 +887,8 @@ int rxr_ep_tx_init_mr_desc(struct rxr_domain *rxr_domain,
 			   struct rxr_tx_entry *tx_entry,
 			   int mr_iov_start, uint64_t access);
 
+void rxr_convert_desc_for_shm(int numdesc, void **desc);
+
 void rxr_prepare_desc_send(struct rxr_domain *rxr_domain,
 			   struct rxr_tx_entry *tx_entry);
 
