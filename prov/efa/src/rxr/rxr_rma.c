@@ -189,6 +189,8 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	msg.rma_iov_count = tx_entry->rma_iov_count;
 	msg.context = pkt_entry;
 	msg.data = tx_entry->cq_entry.data;
+	msg.desc = tx_entry->desc;
+	rxr_convert_desc_for_shm(msg.iov_count, tx_entry->desc);
 
 	err = fi_writemsg(rxr_ep->shm_ep, &msg, tx_entry->fi_flags);
 	if (err)
