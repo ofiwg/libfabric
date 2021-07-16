@@ -440,7 +440,6 @@ static inline void *ofi_bufpool_get_ibuf(struct ofi_bufpool *pool, size_t index)
 	buf = pool->region_table[(size_t)(index / pool->attr.chunk_cnt)]->
 		mem_region + (index % pool->attr.chunk_cnt) * pool->entry_size;
 
-	assert(ofi_buf_region(buf)->use_cnt);
 	return buf;
 }
 
