@@ -93,6 +93,7 @@ void efa_rdm_peer_init(struct rdm_peer *peer, struct rxr_ep *ep, struct efa_conn
 	ofi_recvwin_buf_alloc(&peer->robuf, rxr_env.recvwin_size);
 	peer->rx_credits = rxr_env.rx_window_size;
 	peer->tx_credits = rxr_env.tx_max_credits;
+	dlist_init(&peer->outstanding_tx_pkts);
 	dlist_init(&peer->rx_unexp_list);
 	dlist_init(&peer->rx_unexp_tagged_list);
 	dlist_init(&peer->tx_entry_list);
@@ -111,6 +112,7 @@ void efa_rdm_peer_clear(struct rxr_ep *ep, struct rdm_peer *peer)
 	struct dlist_entry *tmp;
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_rx_entry *rx_entry;
+	struct rxr_pkt_entry *pkt_entry;
 	/*
 	 * TODO: Add support for wait/signal until all pending messages have
 	 * been sent/received so we do not attempt to complete a data transfer
@@ -122,6 +124,18 @@ void efa_rdm_peer_clear(struct rxr_ep *ep, struct rdm_peer *peer)
 
 	if (peer->robuf.pending)
 		ofi_recvwin_free(&peer->robuf);
+
+	/* we cannot release outstanding TX packets because device
+	 * will report completion of these packets later. Setting
+	 * the address to FI_ADDR_NOTAVAIL, so rxr_ep_get_peer()
+	 * will return NULL for the address, so the completion will
+	 * be ignored.
+	 */
+	dlist_foreach_container(&peer->outstanding_tx_pkts,
+				struct rxr_pkt_entry,
+				pkt_entry, entry) {
+		pkt_entry->addr = FI_ADDR_NOTAVAIL;
+	}
 
 	dlist_foreach_container_safe(&peer->tx_entry_list,
 				     struct rxr_tx_entry,

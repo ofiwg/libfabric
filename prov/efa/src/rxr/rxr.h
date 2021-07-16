@@ -328,6 +328,7 @@ struct rdm_peer {
 	uint64_t features[RXR_MAX_NUM_PROTOCOLS]; /* the feature flag for each version */
 	size_t efa_outstanding_tx_ops;	/* tracks outstanding tx ops to this peer on EFA device */
 	size_t shm_outstanding_tx_ops;  /* tracks outstanding tx ops to this peer on SHM */
+	struct dlist_entry outstanding_tx_pkts; /* a list of outstanding tx pkts to the peer */
 	uint16_t tx_credits;		/* available send credits */
 	uint16_t rx_credits;		/* available credits to allocate */
 	uint64_t rnr_backoff_begin_ts;	/* timestamp for RNR backoff period begin */
@@ -836,9 +837,9 @@ static inline int rxr_match_tag(uint64_t tag, uint64_t ignore,
 	return ((tag | ignore) == (match_tag | ignore));
 }
 
-void rxr_ep_inc_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
-void rxr_ep_dec_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
 static inline size_t rxr_get_rx_pool_chunk_cnt(struct rxr_ep *ep)
 {

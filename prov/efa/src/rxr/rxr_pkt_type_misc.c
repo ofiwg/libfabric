@@ -465,7 +465,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 		rxr_read_release_entry(ep, read_entry);
 	}
 
-	rxr_ep_dec_tx_op_counter(ep, context_pkt_entry);
+	rxr_ep_record_tx_op_completed(ep, context_pkt_entry);
 }
 
 void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
