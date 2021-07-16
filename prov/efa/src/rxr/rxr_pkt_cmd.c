@@ -715,7 +715,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL ||
 	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
 
-	rxr_ep_dec_tx_op_counter(ep, pkt_entry);
+	rxr_ep_record_tx_op_completed(ep, pkt_entry);
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	if (!peer) {
@@ -842,7 +842,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 		 * Either way, we need to ignore this error completion.
 		 */
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "ignoring send completion of a packet to a removed peer.\n");
-		rxr_ep_dec_tx_op_counter(ep, pkt_entry);
+		rxr_ep_record_tx_op_completed(ep, pkt_entry);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		return;
 	}
@@ -941,7 +941,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 		return;
 	}
 
-	rxr_ep_dec_tx_op_counter(ep, pkt_entry);
+	rxr_ep_record_tx_op_completed(ep, pkt_entry);
 	rxr_pkt_entry_release_tx(ep, pkt_entry);
 }
 
