@@ -504,6 +504,30 @@ int rxr_ep_tx_init_mr_desc(struct rxr_domain *rxr_domain,
 	return ret;
 }
 
+/**
+ * @brief convert EFA descriptors to shm descriptors.
+ *
+ * Each provider defines its descriptors format. The descriptor for
+ * EFA provider is of struct efa_mr *, which shm provider cannot
+ * understand. This function convert EFA descriptors to descriptors
+ * shm can use.
+ *
+ * @param numdesc[in]       number of descriptors in the array
+ * @param desc[in,out]      descriptors input is EFA descriptor, output
+ *                          is shm descriptor.
+ */
+void rxr_convert_desc_for_shm(int numdesc, void **desc)
+{
+	int i;
+	struct efa_mr *efa_mr;
+
+	for (i = 0; i < numdesc; ++i) {
+		efa_mr = desc[i];
+		if (efa_mr)
+			desc[i] = fi_mr_desc(efa_mr->shm_mr);
+	}
+}
+
 void rxr_prepare_desc_send(struct rxr_domain *rxr_domain,
 			   struct rxr_tx_entry *tx_entry)
 {
