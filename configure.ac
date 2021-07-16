@@ -578,9 +578,10 @@ AC_ARG_ENABLE([ze-dlopen],
     ],
     [enable_ze_dlopen=no])
 
-CPPFLAGS="$CPPFLAGS $ze_CPPFLAGS"
-LDFLAGS="$LDFLAGS $ze_LDFLAGS"
 AS_IF([test x"$enable_ze_dlopen" != x"yes"], [LIBS="$LIBS $ze_LIBS"])
+AS_IF([test "$have_ze" = "1" && test x"$with_ze" != x"yes"],
+      [CPPFLAGS="$CPPFLAGS $ze_CPPFLAGS"
+       LDFLAGS="$LDFLAGS $ze_LDFLAGS"])
 
 enable_memhooks=1
 AC_ARG_ENABLE([memhooks-monitor],
