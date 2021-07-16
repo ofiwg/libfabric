@@ -454,7 +454,12 @@ function cs_test {
 	wait $c_pid
 	c_ret=$?
 
-	[[ c_ret -ne 0 ]] && kill -9 $s_pid 2> /dev/null
+	if [[ $c_ret -ne 0 ]] && ps -p $s_pid > /dev/null; then
+	    if [[ $STRICT_MODE -eq 0 ]]; then
+	        sleep 2
+	    fi
+	    kill -9 $s_pid 2> /dev/null
+	fi
 
 	wait $s_pid
 	s_ret=$?
@@ -609,8 +614,13 @@ function multinode_test {
 		wait $pid
 		c_ret=($?)||$c_ret
 	done
-	
-	[[ c_ret -ne 0 ]] && kill -9 $s_pid 2> /dev/null
+
+	if [[ $c_ret -ne 0 ]] && ps -p $s_pid > /dev/null; then
+	    if [[ $STRICT_MODE -eq 0 ]]; then
+	        sleep 2
+	    fi
+	    kill -9 $s_pid 2> /dev/null
+	fi
 
 	wait $s_pid
 	s_ret=$?
