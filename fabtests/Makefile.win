@@ -35,7 +35,7 @@ outdir = $(output_root)$(arch)\release-v142
 CFLAGS = $(CFLAGS) /O2 /MT
 !endif
 
-basedeps = common\hmem.c common\shared.c common\jsmn.c \
+basedeps = common\hmem.c common\shared.c \
 	common\windows\getopt.c common\windows\osd.c \
 	common\hmem_cuda.c common\hmem_rocr.c common\hmem_ze.c
 
