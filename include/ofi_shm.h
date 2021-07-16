@@ -123,7 +123,7 @@ struct smr_msg_hdr {
 			uint8_t	atomic_op;
 		};
 	};
-};
+} __attribute__ ((aligned(16)));
 
 #define SMR_MSG_DATA_LEN	(SMR_CMD_SIZE - sizeof(struct smr_msg_hdr))
 #define SMR_COMP_DATA_LEN	(SMR_MSG_DATA_LEN / 2)
