@@ -34,6 +34,7 @@
 #include <rdma/fi_errno.h>
 
 #include <ofi_prov.h>
+#include <ofi_shm.h>
 #include "rxr.h"
 #include "efa.h"
 #include "ofi_hmem.h"
@@ -159,34 +160,44 @@ static void rxr_init_env(void)
 	}
 }
 
-/*
- * Stringify the void *addr to a string smr_name formatted as `gid_qpn`, which
- * will be used to insert into shm provider's AV. Then shm uses smr_name as
- * ep_name to create the shared memory region.
+/* @brief convert raw address to an unique shm endpoint name (smr_name)
  *
- * The IPv6 address length is 46, but the max supported name length for shm is 32.
- * The string `gid_qpn` could be truncated during snprintf.
- * The current way works because the IPv6 addresses starting with FE in hexadecimals represent
- * link local IPv6 addresses, which has reserved first 64 bits (FE80::/64).
- * e.g., fe80:0000:0000:0000:0436:29ff:fe8e:ceaa -> fe80::436:29ff:fe8e:ceaa
- * And the length of string `gid_qpn` (fe80::436:29ff:fe8e:ceaa_***) will not exceed 32.
- * If the address is NOT link local, we need to think another reasonable way to
- * generate the string.
+ * Note even though all shm endpoints are on same instance. But because
+ * one instance can have multiple EFA device, it is still necessary
+ * to include GID on the name.
+ *
+ * a smr name consist of the following 4 parts:
+ *
+ *    GID:   ipv6 address from inet_ntop
+ *    QPN:   %04x format
+ *    QKEY:  %08x format
+ *    UID:   %04x format
+ *
+ * each part is connected via an underscore.
+ *
+ * The following is an example:
+ *
+ *    fe80::4a5:28ff:fe98:e500_0001_12918366_03e8
+ *
+ * @param[in]	ptr		pointer to raw address (struct efa_ep_addr)
+ * @param[out]	smr_name	an unique name for shm ep
+ * @return	0 on success.
+ * 		negative error code on failure.
  */
-int rxr_ep_efa_addr_to_str(const void *addr, char *smr_name)
+int rxr_raw_addr_to_smr_name(void *ptr, char *smr_name)
 {
-	char gid[INET6_ADDRSTRLEN] = { 0 };
-	uint16_t qpn;
+	struct efa_ep_addr *raw_addr;
+	char gidstr[INET6_ADDRSTRLEN] = { 0 };
 	int ret;
 
-	if (!inet_ntop(AF_INET6, ((struct efa_ep_addr *)addr)->raw, gid, INET6_ADDRSTRLEN)) {
-		printf("Failed to get current EFA's GID, errno: %d\n", errno);
-		return 0;
+	raw_addr = (struct efa_ep_addr *)ptr;
+	if (!inet_ntop(AF_INET6, raw_addr->raw, gidstr, INET6_ADDRSTRLEN)) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "Failed to convert GID to string errno: %d\n", errno);
+		return -errno;
 	}
-	qpn = ((struct efa_ep_addr *)addr)->qpn;
 
-	ret = snprintf(smr_name, NAME_MAX, "%ld_%s_%d", (size_t) getuid(), gid, qpn);
-
+	ret = snprintf(smr_name, SMR_NAME_MAX, "%s_%04x_%08x_%04x",
+		       gidstr, raw_addr->qpn, raw_addr->qkey, getuid());
 	return (ret <= 0) ? ret : FI_SUCCESS;
 }
 
