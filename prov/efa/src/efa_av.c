@@ -125,6 +125,14 @@ void efa_rdm_peer_clear(struct rxr_ep *ep, struct rdm_peer *peer)
 	if (peer->robuf.pending)
 		ofi_recvwin_free(&peer->robuf);
 
+	if (!ep) {
+		/* ep is NULL means the endpoint has been closed.
+		 * In this case there is no need to proceed because
+		 * all the tx_entry, rx_entry, pkt_entry has been released.
+		 */
+		return;
+	}
+
 	/* we cannot release outstanding TX packets because device
 	 * will report completion of these packets later. Setting
 	 * the address to FI_ADDR_NOTAVAIL, so rxr_ep_get_peer()
@@ -346,6 +354,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 	assert(conn->ep_addr);
 
 	/* currently multiple EP bind to same av is not supported */
+	assert(!dlist_empty(&av->util_av.ep_list));
 	rxr_ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
 
 	peer = &conn->rdm_peer;
@@ -421,7 +430,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 	 * We need peer->shm_fiaddr to remove shm address from shm av table,
 	 * so efa_rdm_peer_clear must be after removing shm av table.
 	 */
-	ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
+	ep = dlist_empty(&av->util_av.ep_list) ? NULL : container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
 	efa_rdm_peer_clear(ep, peer);
 }
 
