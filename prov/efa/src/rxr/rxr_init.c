@@ -135,10 +135,27 @@ static void rxr_init_env(void)
 			    &rxr_env.efa_min_read_write_size);
 	fi_param_get_size_t(&rxr_prov, "inter_read_segment_size",
 			    &rxr_env.efa_read_segment_size);
-	fi_param_get_bool(&rxr_prov, "fork_safe", &fork_safe);
 
-	if (fork_safe || getenv("RDMAV_FORK_SAFE") || getenv("IBV_FORK_SAFE"))
-		efa_fork_status = EFA_FORK_SUPPORT_ON;
+	/* Initialize EFA's fork support flag based on the environment and
+	 * system support. */
+	efa_fork_status = EFA_FORK_SUPPORT_OFF;
+
+#if HAVE_IBV_IS_FORK_INITIALIZED == 1
+	if (ibv_is_fork_initialized() == IBV_FORK_UNNEEDED)
+		efa_fork_status = EFA_FORK_SUPPORT_UNNEEDED;
+#endif
+
+	if (efa_fork_status != EFA_FORK_SUPPORT_UNNEEDED) {
+		fi_param_get_bool(&rxr_prov, "fork_safe", &fork_safe);
+
+		/*
+		 * Check if any environment variables which would trigger
+		 * libibverbs' fork support are set. These variables are
+		 * defined by ibv_fork_init(3).
+		 */
+		if (fork_safe || getenv("RDMAV_FORK_SAFE") || getenv("IBV_FORK_SAFE"))
+			efa_fork_status = EFA_FORK_SUPPORT_ON;
+	}
 }
 
 /*
@@ -829,7 +846,8 @@ EFA_INI
 	fi_param_define(&rxr_prov, "inter_read_segment_size", FI_PARAM_INT,
 			"Calls to RDMA read is segmented using this value.");
 	fi_param_define(&rxr_prov, "fork_safe", FI_PARAM_BOOL,
-			"Enables fork support and disables internal usage of huge pages. (Default: false)");
+			"Enables fork support and disables internal usage of huge pages. Has no effect on kernels which set copy-on-fork for registered pages, generally 5.13 and later. (Default: false)");
+
 	rxr_init_env();
 
 #if HAVE_EFA_DL
