@@ -622,7 +622,7 @@ Test(av, shmem_zero_size)
 	struct util_shm shm;
 	void *ptr;
 	int ret;
-	char name[64];
+	char name[64] = {};
 
 	ret = ofi_shm_map(&shm, name, 0, 0, &ptr);
 	cr_assert(ret == -FI_EINVAL, "create shmem RW size 0 = %d", ret);
