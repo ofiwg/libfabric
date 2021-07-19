@@ -84,6 +84,21 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	      ])
 	CPPFLAGS=$save_CPPFLAGS
 
+	dnl Check for ibv_is_fork_initialized() in libibverbs
+	have_ibv_is_fork_initialized=0
+	AS_IF([test $efa_happy -eq 1],
+		[AC_CHECK_DECL([ibv_is_fork_initialized],
+			[have_ibv_is_fork_initialized=1],
+			[],
+			[[#include <infiniband/verbs.h>]])
+		])
+
+	AC_DEFINE_UNQUOTED([HAVE_IBV_IS_FORK_INITIALIZED],
+		[$have_ibv_is_fork_initialized],
+		[Define to 1 if libibverbs has ibv_is_fork_initialized])
+
+	AS_IF([test "$enable_efa" = "no"], [efa_happy=0])
+
 	AS_IF([test $efa_happy -eq 1 ], [$1], [$2])
 
 	efa_CPPFLAGS="$efa_ibverbs_CPPFLAGS $efadv_CPPFLAGS"

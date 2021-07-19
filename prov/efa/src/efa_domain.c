@@ -141,21 +141,35 @@ static int efa_open_device_by_name(struct efa_domain *domain, const char *name)
 	return ret;
 }
 
-/* @brief Check if rdma-core fork support is enabled
+/* @brief Check if rdma-core fork support is enabled and prevent fork
+ * support from being enabled later.
  *
- * Register a temporary buffer and call ibv_fork_init() to determine if fork
- * support is enabled.
+ * Register a temporary buffer and call ibv_fork_init() to determine
+ * if fork support is enabled. Registering a buffer prevents future
+ * calls to ibv_fork_init() from completing successfully.
  *
  * This relies on internal behavior in rdma-core and is a temporary workaround.
  *
  * @param domain_fid domain fid so we can register memory
- * @return 0 if fork support is not enabled, 1 if it is.
+ * @return 1 if fork support is enabled, 0 otherwise
  */
 static int efa_check_fork_enabled(struct fid_domain *domain_fid)
 {
 	struct fid_mr *mr;
 	char *buf;
 	int ret;
+
+	/* If ibv_is_fork_initialized is availble, check if the function
+	 * can exit early.
+	 */
+#if HAVE_IBV_IS_FORK_INITIALIZED == 1
+	enum ibv_fork_status fork_status = ibv_is_fork_initialized();
+
+	/* If fork support is enabled or unneeded, return. */
+	if (fork_status != IBV_FORK_DISABLED)
+		return fork_status == IBV_FORK_ENABLED;
+
+#endif /* HAVE_IBV_IS_FORK_INITIALIZED */
 
 	buf = malloc(ofi_get_page_size());
 	if (!buf)
@@ -237,9 +251,13 @@ void efa_atfork_callback()
 		"other system errors.\n"
 		"\n"
 		"For the Libfabric EFA provider to work safely when fork()\n"
-		"is called please set the following environment variable:\n"
+		"is called please do one of the following:\n"
+		"1) Set the environment variable:\n"
 		"          FI_EFA_FORK_SAFE=1\n"
 		"and verify you are using rdma-core v31.1 or later.\n"
+		"\n"
+		"OR\n"
+		"2) Use Linux Kernel 5.13+ with rdma-core v35.0+\n"
 		"\n"
 		"Please note that enabling fork support may cause a\n"
 		"small performance impact.\n"
