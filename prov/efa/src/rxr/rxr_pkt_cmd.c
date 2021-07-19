@@ -1134,17 +1134,36 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		return;
 	}
 
-	if (pkt_type >= RXR_REQ_PKT_BEGIN) {
+	if (pkt_type >= RXR_REQ_PKT_BEGIN && rxr_pkt_req_raw_addr(pkt_entry)) {
 		/*
-		 * as long as the REQ packet contain raw address
-		 * we will need to call insert because it might be a new
-		 * EP with new Q-Key.
+		 * A REQ packet with raw address in its header could always
+		 * be the 1st packet we receive from a peer, even if we already
+		 * have the address in AV.
+		 *
+		 * This is because the peer might be a newly created one,
+		 * with the same GID+QPN as an old peer (though a different Q-Key),
+		 * therefore lower provider thinks it is the older peer.
+		 *
+		 * Therefore, we alwyas need to call rxr_pkt_insert_addr() for
+		 * such a packet. rxr_pkt_insert_addr() will insert the address
+		 * to AV if it is indeed new.
 		 */
 		void *raw_addr;
 
 		raw_addr = rxr_pkt_req_raw_addr(pkt_entry);
-		if (OFI_UNLIKELY(raw_addr != NULL))
-			pkt_entry->addr = rxr_pkt_insert_addr(ep, pkt_entry, raw_addr);
+		assert(raw_addr);
+		pkt_entry->addr = rxr_pkt_insert_addr(ep, pkt_entry, raw_addr);
+	} else if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
+		/*
+		 * Receiving a non-REQ packet or a REQ packet without raw address means
+		 * we had prior communication with the peer. For such a packet,
+		 * the only possiblity for its pkt_entry->addr to be FI_ADDR_NOTAVAIL
+		 * is application called fi_av_remove() to remove the address
+		 * from AV. In this case, this packet should be ignored.
+		 */
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "Warning: ignoring a received packet from a removed address\n");
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
 	}
 
 	assert(pkt_entry->addr != FI_ADDR_NOTAVAIL);
