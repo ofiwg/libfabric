@@ -5,6 +5,7 @@
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  * Copyright (c) 2018-2020 Cray Inc. All rights reserved.
+ * Copyright (c) 2021 Hewlett Packard Enterprise Development LP
  */
 
 #ifndef _CXIP_PROV_H_
@@ -14,6 +15,7 @@
 #include "config.h"
 
 #include <pthread.h>
+#include <json-c/json.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
@@ -1584,6 +1586,59 @@ union cxip_coll_data {
 		uint64_t fmaxidx;
 	} fminmax;
 } __attribute__((packed));
+
+/* Our asynchronous handle for requests. This is created when the CURL request
+ * is dispatched, updated as progressed, returned to the user when the request
+ * completes, and must be explicitly freed.
+ */
+struct cxip_curl_handle {
+	long status;		// HTTP status, 0 for no server, -1 busy
+	const char *endpoint;	// HTTP server endpoint address
+	const char *request;	// HTTP request data
+	const char *response;	// HTTP response data, NULL until complete
+	void *recv;		// opaque
+	void *headers;		// opaque
+};
+
+/* Low-level global lock, initialized in cxip_info.c */
+extern fastlock_t global_lock;
+
+/* Low-level CURL POST/DELETE async wrappers */
+enum curl_ops {
+	CURL_GET,
+	CURL_PUT,
+	CURL_POST,
+	CURL_PATCH,
+	CURL_DELETE,
+	CURL_MAX
+};
+void cxip_curl_init(void);
+void cxip_curl_term(void);
+const char *cxip_curl_opname(enum curl_ops op);
+int cxip_curl_perform(const char *server, const char *request,
+		      size_t rsp_init_size, enum curl_ops op, bool verbose);
+int cxip_curl_progress(struct cxip_curl_handle **handle);
+void cxip_curl_free(struct cxip_curl_handle *handle);
+
+static inline void single_to_double_quote(char *str)
+{
+	do {if (*str == '\'') *str = '"';} while (*(++str));
+}
+enum json_type cxip_json_obj(const char *desc, struct json_object *jobj,
+			     struct json_object **jval);
+int cxip_json_bool(const char *desc, struct json_object *jobj, bool *val);
+int cxip_json_int(const char *desc, struct json_object *jobj, int *val);
+int cxip_json_int64(const char *desc, struct json_object *jobj, int64_t *val);
+int cxip_json_double(const char *desc, struct json_object *jobj, double *val);
+int cxip_json_string(const char *desc, struct json_object *jobj,
+		     const char **val);
+
+/* Acquire or delete a multicast address */
+int cxip_request_mcast(const char *server, const char *cfg_path,
+		       unsigned int mcast_id, unsigned int root_port_idx,
+		       bool verbose);
+int cxip_delete_mcast(const char *server, long reqid, bool verbose);
+int cxip_progress_mcast(int *reqid, int *mcast_id, int *root_idx);
 
 /*
  * CNTR/CQ wait object file list element

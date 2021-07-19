@@ -14,6 +14,7 @@ _cxi_files = \
 	prov/cxi/src/cxip_if.c \
 	prov/cxi/src/cxip_fabric.c \
 	prov/cxi/src/cxip_coll.c \
+	prov/cxi/src/cxip_curl.c \
 	prov/cxi/src/cxip_dom.c \
 	prov/cxi/src/cxip_ep.c \
 	prov/cxi/src/cxip_txc.c \
@@ -41,7 +42,19 @@ _cxi_headers = \
 rdmainclude_HEADERS += \
 	prov/cxi/include/fi_cxi_ext.h
 
+_cxi_libs = \
+	-lcurl -ljson-c -lm
+
 if HAVE_CRITERION
+
+bin_PROGRAMS += prov/cxi/test/curltest
+prov_cxi_test_curltest_SOURCES = \
+	prov/cxi/test/curl.c
+prov_cxi_test_curltest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
+	$(cxitest_CPPFLAGS) $(PTHREAD_CFLAGS)
+prov_cxi_test_curltest_LDFLAGS = $(cxitest_LDFLAGS) -static
+prov_cxi_test_curltest_LDADD =  $(cxitest_LIBS) $(linkback) $(PTHREAD_LIBS)
+
 bin_PROGRAMS += prov/cxi/test/cxitest
 nodist_prov_cxi_test_cxitest_SOURCES = \
 	prov/cxi/test/cxip_test_common.c \
@@ -89,14 +102,14 @@ if HAVE_CXI_DL
 pkglib_LTLIBRARIES += libcxi-fi.la
 libcxi_fi_la_SOURCES = $(_cxi_files) $(_cxi_headers) $(common_srcs)
 libcxi_fi_la_CPPFLAGS = $(cxi_CPPFLAGS)
-libcxi_fi_la_LIBADD = $(linkback) $(cxi_LIBS) -lm
+libcxi_fi_la_LIBADD = $(linkback) $(cxi_LIBS) $(_cxi_libs)
 libcxi_fi_la_LDFLAGS = $(cxi_LDFLAGS) \
 	-module -avoid-version -shared -export-dynamic
 libcxi_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_CXI_DL
 src_libfabric_la_SOURCES += $(_cxi_files) $(_cxi_headers)
 src_libfabric_la_CPPFLAGS += $(cxi_CPPFLAGS)
-src_libfabric_la_LIBADD += $(cxi_LIBS) -lm
+src_libfabric_la_LIBADD += $(cxi_LIBS) $(_cxi_libs)
 src_libfabric_la_LDFLAGS += $(cxi_LDFLAGS)
 endif !HAVE_CXI_DL
 

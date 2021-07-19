@@ -26,6 +26,11 @@ ZYPPER_OPTS="--verbose --non-interactive"
 RPMS="cray-libcxi-devel"
 CUDA_RPMS="nvhpc-2021"
 ROCR_RPMS="hsa-rocr-dev"
+if [[ ${TARGET_OS} =~ ^centos ]]; then
+    RPMS+=" libcurl-devel json-c-devel"
+else
+    RPMS+=" libcurl-devel libjson-c-devel"
+fi
 
 URL_PREFIX="http://car.dev.cray.com/artifactory"
 URL_SUFFIX="${TARGET_OS}/${TARGET_ARCH}/${DEV_NAME}/${BRANCH_NAME}"
