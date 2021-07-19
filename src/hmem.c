@@ -1,6 +1,7 @@
 /*
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  * (C) Copyright 2020-2021 Intel Corporation. All rights reserved.
+ * (C) Copyright 2021 Amazon.com, Inc. or its affiliates.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -61,13 +62,13 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.copy_to_hmem = cuda_copy_to_dev,
 		.copy_from_hmem = cuda_copy_from_dev,
 		.is_addr_valid = cuda_is_addr_valid,
-		.get_handle = ofi_hmem_no_get_handle,
-		.open_handle = ofi_hmem_no_open_handle,
-		.close_handle = ofi_hmem_no_close_handle,
+		.get_handle = cuda_get_handle,
+		.open_handle = cuda_open_handle,
+		.close_handle = cuda_close_handle,
 		.host_register = cuda_host_register,
 		.host_unregister = cuda_host_unregister,
 		.get_base_addr = ofi_hmem_no_base_addr,
-		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
+		.is_ipc_enabled = cuda_is_ipc_enabled,
 	},
 	[FI_HMEM_ROCR] = {
 		.initialized = false,

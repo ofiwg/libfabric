@@ -127,6 +127,10 @@ int cuda_host_register(void *ptr, size_t size);
 int cuda_host_unregister(void *ptr);
 int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
 int cuda_dev_unregister(uint64_t handle);
+int cuda_get_handle(void *dev_buf, void **handle);
+int cuda_open_handle(void **handle, uint64_t device, void **ipc_ptr);
+int cuda_close_handle(void *ipc_ptr);
+bool cuda_is_ipc_enabled(void);
 
 void cuda_gdrcopy_to_dev(uint64_t handle, void *dev,
 			 const void *host, size_t size);
