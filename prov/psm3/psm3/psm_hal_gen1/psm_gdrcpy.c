@@ -90,11 +90,12 @@ gdr_convert_gpu_to_host_addr(int gdr_fd, unsigned long buf,
 	_HFI_VDBG("buf=%p size=%zu pageaddr=%p pagelen=%"PRIu64" flags=0x%x ep=%p\n",
 		(void *)buf, size, (void *)pageaddr, pagelen, flags, ep);
 #ifdef RNDV_MOD
-	host_addr_buf = __psm2_rv_pin_and_mmap(psmi_opened_endpoint->verbs_ep.rv, pageaddr, pagelen, IBV_ACCESS_IS_GPU_ADDR);
+	ep = ep->mctxt_master;
+	host_addr_buf = __psm2_rv_pin_and_mmap(ep->verbs_ep.rv, pageaddr, pagelen, IBV_ACCESS_IS_GPU_ADDR);
 	if_pf (! host_addr_buf) {
 		if (errno == ENOMEM) {
-			if (psm2_verbs_evict_some(psmi_opened_endpoint, pagelen, IBV_ACCESS_IS_GPU_ADDR) >= 0)
-				host_addr_buf = __psm2_rv_pin_and_mmap(psmi_opened_endpoint->verbs_ep.rv, pageaddr, pagelen, IBV_ACCESS_IS_GPU_ADDR);
+			if (psm2_verbs_evict_some(ep, pagelen, IBV_ACCESS_IS_GPU_ADDR) > 0)
+				host_addr_buf = __psm2_rv_pin_and_mmap(ep->verbs_ep.rv, pageaddr, pagelen, IBV_ACCESS_IS_GPU_ADDR);
 		}
 		if_pf (! host_addr_buf)
 			return NULL;

@@ -154,7 +154,7 @@ extern psm2_mr_cache_t psm2_verbs_alloc_mr_cache(psm2_ep_t ep,
 extern int psm2_verbs_mr_cache_allows_user_mr(psm2_mr_cache_t cache);
 
 #ifdef PSM_CUDA
-extern int psm2_verbs_evict_some(psm2_ep_t ep, uint64_t length, int access);
+extern int64_t psm2_verbs_evict_some(psm2_ep_t ep, uint64_t length, int access);
 #endif
 
 // pd can be the verbs_ep.pd or NULL to use the RV module's kernel pd

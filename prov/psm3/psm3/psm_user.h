@@ -646,6 +646,7 @@ _psmi_is_gdr_copy_enabled())
 #define PSMI_IS_GDR_COPY_ENABLED _psmi_is_gdr_copy_enabled()
 
 #define PSMI_IS_CUDA_MEM(p) _psmi_is_cuda_mem(p)
+extern void psm2_get_gpu_bars(void);
 
 struct ips_cuda_hostbuf {
 	STAILQ_ENTRY(ips_cuda_hostbuf) req_next;

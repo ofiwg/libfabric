@@ -514,12 +514,12 @@ psm2_mr_cache_t psm2_verbs_alloc_mr_cache(psm2_ep_t ep,
 		// TBD - could make this a warning and set limit_inuse_bytes=0
 		// then depend on transfers queuing and retrying until
 		// reg_mr cache space is available
-		if (ep->rv_mr_cache_size*MEGABYTE < pri_size) {
+		if ((uint64_t)ep->rv_mr_cache_size*MEGABYTE < pri_size) {
 			_HFI_ERROR("PSM3_RV_MR_CACHE_SIZE=%u too small, require >= %"PRIu64"\n",
 				ep->rv_mr_cache_size, (pri_size + MEGABYTE-1)/MEGABYTE);
 			return NULL;
 		}
-		cache->limit_inuse_bytes = ep->rv_mr_cache_size*MEGABYTE - pri_size;
+		cache->limit_inuse_bytes = (uint64_t)ep->rv_mr_cache_size*MEGABYTE - pri_size;
 #ifdef PSM_CUDA
 		if (PSMI_IS_CUDA_ENABLED) {
 			// For GPU, due to GdrCopy, we can't undersize cache.
@@ -528,12 +528,21 @@ psm2_mr_cache_t psm2_verbs_alloc_mr_cache(psm2_ep_t ep,
 			// retrying indefinitely.  If we want to allow undersize
 			// GPU cache, we need to have gdrcopy pin/mmap failures
 			// also invoke progress functions to release MRs
-			if (ep->rv_gpu_cache_size*MEGABYTE < gpu_pri_size) {
+			if (__psm2_min_gpu_bar_size()) {
+				uint64_t max_recommend = __psm2_min_gpu_bar_size() - 32*MEGABYTE;
+				if ((uint64_t)ep->rv_gpu_cache_size*MEGABYTE >= max_recommend) {
+					_HFI_INFO("Warning: PSM3_RV_GPU_CACHE_SIZE=%u too large for smallest GPU's BAR size of %"PRIu64" (< %"PRIu64" total of endpoint-rail-qp recommended)\n",
+						ep->rv_gpu_cache_size,
+						(__psm2_min_gpu_bar_size() + MEGABYTE-1)/MEGABYTE,
+						max_recommend/MEGABYTE);
+				}
+			}
+			if ((uint64_t)ep->rv_gpu_cache_size*MEGABYTE < gpu_pri_size) {
 				_HFI_ERROR("PSM3_RV_GPU_CACHE_SIZE=%u too small, require >= %"PRIu64"\n",
 					ep->rv_gpu_cache_size, (gpu_pri_size + MEGABYTE-1)/MEGABYTE);
 				return NULL;
 			}
-			cache->limit_gpu_inuse_bytes = ep->rv_gpu_cache_size*MEGABYTE - gpu_pri_size;
+			cache->limit_gpu_inuse_bytes = (uint64_t)ep->rv_gpu_cache_size*MEGABYTE - gpu_pri_size;
 		}
 		_HFI_MMDBG("CPU cache %u GPU cache %u\n", ep->rv_mr_cache_size, ep->rv_gpu_cache_size);
 #endif
@@ -796,51 +805,129 @@ static inline int have_space(psm2_mr_cache_t cache, uint64_t length, int access)
 // it's multi-rail/mult-QP EPs.
 // When it hits the last rail of the last user opened EP, it goes back to
 // the 1st rail of the 1st user opened EP.
+// caller must hold creation_lock
 static psm2_ep_t next_ep(psm2_ep_t ep)
 {
-	//mctxt_next is the circular list of rails/QPs in a given user EP
-	//mctxt_master is the 1st in the list, when we get back to the 1st
-	//go to the next user EP
-	ep = ep->mctxt_next;
-	if (ep->mctxt_master != ep)
-		return ep;
-	//user_ep_next is a linked list of user opened EPs.  End of list is NULL
-	//when hit end of list, go back to 1st (psmi_opened_endpoint)
-	//for each user opened EP, the entry on this list is the 1st rail within
-	//the EP
-	ep = ep->user_ep_next;
-	if (ep)
-		return ep;
+       //mctxt_next is the circular list of rails/QPs in a given user EP
+       //mctxt_master is the 1st in the list, when we get back to the 1st
+       //go to the next user EP
+       ep = ep->mctxt_next;
+       if (ep->mctxt_master != ep)
+               return ep;
+       //user_ep_next is a linked list of user opened EPs.  End of list is NULL
+       //when hit end of list, go back to 1st (psmi_opened_endpoint)
+       //for each user opened EP, the entry on this list is the 1st rail within
+       //the EP
+       ep = ep->user_ep_next;
+       if (ep)
+               return ep;
+       else
+               return psmi_opened_endpoint;
+}
+
+// determine if ep is still valid (can't dereference or trust ep given)
+// caller must hold creation_lock
+static int valid_ep(psm2_ep_t ep)
+{
+	psm2_ep_t e1 = psmi_opened_endpoint;
+
+	while (e1) {	// user opened ep's - linear list ending in NULL
+		psm2_ep_t e2 = e1;
+		//check mtcxt list (multi-rail within user opened ep)
+		do {
+			if (e2 == ep)
+				return 1;
+			e2 = e2->mctxt_next;
+		} while (e2 != e1);	// circular list
+		e1 = e1->user_ep_next;
+	}
+	return 0;	// not found
+}
+
+// advance ep to the next.  However it's possible ep is stale and
+// now closed/freed, so make sure it's good.  good_ep is at least one
+// known good_ep and lets us avoid search some of the time (or if only 1 EP)
+// caller must hold creation_lock
+static psm2_ep_t next_valid_ep(psm2_ep_t ep, psm2_ep_t good_ep)
+{
+	if (ep == good_ep || valid_ep(ep))
+		return next_ep(ep);
 	else
-		return psmi_opened_endpoint;
+		return good_ep;
 }
 
 /*
  * Evict some space in given cache (only GPU needs this)
- * We evict first from the ep we failed to pin memory in, but then we
- * rotate among all eps for eviction if additional attempts fail.
  * If nvidia_p2p_get_pages reports out of BAR space (perhaps prematurely),
- * we need to evict from other EPs too
- * length - amount attempted in pin which just failed
+ * we need to evict from other EPs too.
+ * So we rotate among all eps (rails or QPs) in our user opened EP for eviction.
+ * length - amount attempted in pin/register which just failed
  * access - indicates if IS_GPU_ADDR or not (rest ignored)
  * returns:
- * 	0 if some evicted
+ * 	>0 bytes evicted if some evicted
  * 	-1 if nothing evicted (errno == ENOENT means nothing evictable found)
  * 	ENOENT also used when access is not for GPU
+ * The caller will have the progress_lock, we need the creation_lock
+ * to walk the list of EPs outside our own MQ.  However creation_lock
+ * is above the progress_lock in lock heirarchy, so we use a LOCK_TRY
+ * to avoid deadlock in the rare case where another thread
+ * has creation_lock and is trying to get progress_lock (such as during
+ * open_ep, close_ep or rcvthread).
  */
-int psm2_verbs_evict_some(psm2_ep_t ep, uint64_t length, int access)
+int64_t psm2_verbs_evict_some(psm2_ep_t ep, uint64_t length, int access)
 {
-	static psm2_ep_t last_evict_ep;
+	static __thread psm2_ep_t last_evict_ep;	// among all eps
+	static __thread psm2_ep_t last_evict_myuser_ep;	// in my user ep
+	int64_t evicted = 0;
+	int ret;
 
 	if (! (access & IBV_ACCESS_IS_GPU_ADDR)) {
 		errno = ENOENT;
 		return -1;	// only need evictions on GPU addresses
 	}
-	if (ep == last_evict_ep)
-		ep = next_ep(ep);
-	else
+	if (! last_evict_ep) {	// first call only
 		last_evict_ep = ep;
-	return __psm2_rv_evict_gpu_amount(ep->verbs_ep.rv, max(gpu_cache_evict, length), 0);
+		last_evict_myuser_ep = ep;
+	}
+	// 1st try to evict from 1st rail/QP in our opened EP (gdrcopy and MRs)
+	ret = __psm2_rv_evict_gpu_amount(ep->mctxt_master->verbs_ep.rv, max(gpu_cache_evict, length), 0);
+	if (ret > 0)
+		evicted = ret;
+
+	// next rotate among other rails/QPs in our opened ep (MRs)
+	last_evict_myuser_ep = last_evict_myuser_ep->mctxt_next;
+	if (last_evict_myuser_ep != ep->mctxt_master) {
+		ret = __psm2_rv_evict_gpu_amount(last_evict_myuser_ep->verbs_ep.rv, max(gpu_cache_evict, length), 0);
+		if (ret > 0)
+			evicted += ret;
+	}
+	if (evicted >= length)
+		return evicted;
+
+	// now try other opened EPs
+	if (PSMI_LOCK_TRY(psmi_creation_lock))
+		goto done;
+	// last_evict_ep could point to an ep which has since been closed/freed
+ 	last_evict_ep = next_valid_ep(last_evict_ep, ep);
+	if (last_evict_ep->mctxt_master != ep->mctxt_master) {
+		if (!PSMI_LOCK_TRY(last_evict_ep->mq->progress_lock)) {
+			ret = __psm2_rv_evict_gpu_amount(last_evict_ep->verbs_ep.rv, max(gpu_cache_evict, length), 0);
+			PSMI_UNLOCK(last_evict_ep->mq->progress_lock);
+			if (ret > 0)
+				evicted += ret;
+		}
+	} else {
+		ret = __psm2_rv_evict_gpu_amount(last_evict_ep->verbs_ep.rv, max(gpu_cache_evict, length), 0);
+		if (ret > 0 )
+			evicted += ret;
+	}
+	PSMI_UNLOCK(psmi_creation_lock);
+done:
+	if (! evicted) {
+		errno = ENOENT;
+		return -1;
+	}
+	return evicted;
 }
 #endif
 #endif
