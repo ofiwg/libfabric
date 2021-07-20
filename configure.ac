@@ -550,10 +550,7 @@ AS_IF([test x"$with_ze" != x"no"],
 			[$with_ze],
 			[],
 			[have_ze=1],
-			[], [])
-       CPPFLAGS="$CPPFLAGS $ze_CPPFLAGS"
-       LDFLAGS="$LDFLAGS $ze_LDFLAGS"
-       LIBS="$LIBS $ze_LIBS"],
+			[], [])],
       [])
 
 have_drm=0
@@ -567,6 +564,23 @@ AS_IF([test x"$with_ze" != x"no" && test -n "$with_ze" && test "$have_ze" = "0" 
 
 AC_DEFINE_UNQUOTED([HAVE_LIBZE], [$have_ze], [ZE support])
 AC_DEFINE_UNQUOTED([HAVE_DRM], [$have_drm], [i915 DRM header])
+
+AC_ARG_ENABLE([ze-dlopen],
+    [AS_HELP_STRING([--enable-ze-dlopen],
+        [Enable dlopen of ZE libraries @<:@default=no@:>@])
+    ],
+    [
+        AS_IF([test "$freebsd" = "0"], [
+            AC_CHECK_LIB(dl, dlopen, [],
+                [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+        ])
+        AC_DEFINE([ENABLE_ZE_DLOPEN], [1], [dlopen ZE libraries])
+    ],
+    [enable_ze_dlopen=no])
+
+CPPFLAGS="$CPPFLAGS $ze_CPPFLAGS"
+LDFLAGS="$LDFLAGS $ze_LDFLAGS"
+AS_IF([test x"$enable_ze_dlopen" != x"yes"], [LIBS="$LIBS $ze_LIBS"])
 
 enable_memhooks=1
 AC_ARG_ENABLE([memhooks-monitor],
