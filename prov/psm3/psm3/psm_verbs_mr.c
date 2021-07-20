@@ -1146,6 +1146,7 @@ void psm2_verbs_free_mr_cache(psm2_mr_cache_t cache)
 			if (mrc->refcount) {
 				_HFI_ERROR("unreleased MR in psm2_verbs_free_mr_cache addr %p len %"PRIu64" access 0x%x\n",
 					mrc->addr, mrc->length, mrc->access);
+				return; // leak the rest, let process exit cleanup
 			}
 			mrc->refcount = 0;
 			cl_map_item_t *p_item = container_of(mrc, cl_map_item_t, payload);
