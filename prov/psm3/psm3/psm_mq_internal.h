@@ -569,13 +569,14 @@ int psmi_mq_handle_outoforder(psm2_mq_t mq, psm2_mq_req_t req);
 
 // perform the actual copy for a recv matching a sysbuf.  We copy from a sysbuf
 // (req->req_data.buf) to the actual user buffer (buf) and keep statistics.
+// is_buf_gpu_mem indicates if buf is a gpu buffer
 // len - recv buffer size posted, we use this for any GDR copy pinning so
 // 	can get future cache hits on other size messages in same buffer
 // not needed - msglen - negotiated total message size
 // copysz - actual amount to copy (<= msglen)
 #ifdef PSM_CUDA
-void psmi_mq_recv_copy(psm2_mq_t mq, psm2_mq_req_t req, void *buf,
-                                uint32_t len, uint32_t copysz);
+void psmi_mq_recv_copy(psm2_mq_t mq, psm2_mq_req_t req, uint8_t is_buf_gpu_mem,
+                                void *buf, uint32_t len, uint32_t copysz);
 #else
 PSMI_ALWAYS_INLINE(
 void psmi_mq_recv_copy(psm2_mq_t mq, psm2_mq_req_t req, void *buf,
