@@ -450,6 +450,7 @@ ips_ptl_mq_rndv(struct ips_proto *proto, psm2_mq_req_t req,
 		ips_scb_buffer(scb) = (void *)buf;
 		ips_scb_length(scb) = len;
 		req->send_msgoff = len;
+		req->mq->stats.tx_rndv_bytes += len;
 	} else {
 		ips_scb_length(scb) = 0;
 		req->send_msgoff = 0;
@@ -990,6 +991,10 @@ do_rendezvous:
 		}
 #endif
 
+		mq->stats.tx_num++;
+		mq->stats.tx_rndv_num++;
+		// we count tx_rndv_bytes as we get CTS
+
 		err = ips_ptl_mq_rndv(proto, req, ipsaddr, ubuf, len);
 		*req_o = req;
 		return err;
@@ -1344,6 +1349,10 @@ do_rendezvous:
 		}
 #endif
 
+		mq->stats.tx_num++;
+		mq->stats.tx_rndv_num++;
+		// we count tx_rndv_bytes as we get CTS
+
 		err = ips_ptl_mq_rndv(proto, req, ipsaddr, ubuf, len);
 		if (err != PSM2_OK)
 			return err;
@@ -1383,6 +1392,8 @@ ips_proto_mq_rts_match_callback(psm2_mq_req_t req, int was_posted)
 	_HFI_MMDBG("rts_match_callback\n");
 	// while matching RTS we set both recv and send msglen to min of the two
 	psmi_assert(req->req_data.recv_msglen == req->req_data.send_msglen);
+	req->mq->stats.rx_user_num++;
+	req->mq->stats.rx_user_bytes += req->req_data.recv_msglen;
 #ifdef PSM_CUDA
 	/* Cases where we do not use TIDs:
 	 * 0) Received full message as payload to RTS, CTS is just an ack
@@ -1425,17 +1436,20 @@ ips_proto_mq_rts_match_callback(psm2_mq_req_t req, int was_posted)
 			ips_epaddr_connected((ips_epaddr_t *) epaddr),
 			epaddr, proto->protoexp != NULL);
 
+		if (req->recv_msgoff < req->req_data.recv_msglen) {
+			// RTS did not have the message as payload
 #ifdef PSM_CUDA
-		if (req->is_buf_gpu_mem) {
-			proto->strat_stats.rndv_long_gpu_recv++;
-			proto->strat_stats.rndv_long_gpu_recv_bytes += req->req_data.recv_msglen;
-		} else {
+			if (req->is_buf_gpu_mem) {
+				proto->strat_stats.rndv_long_gpu_recv++;
+				proto->strat_stats.rndv_long_gpu_recv_bytes += req->req_data.recv_msglen;
+			} else {
 #endif
-			proto->strat_stats.rndv_long_cpu_recv++;
-			proto->strat_stats.rndv_long_cpu_recv_bytes += req->req_data.recv_msglen;
+				proto->strat_stats.rndv_long_cpu_recv++;
+				proto->strat_stats.rndv_long_cpu_recv_bytes += req->req_data.recv_msglen;
 #ifdef PSM_CUDA
+			}
+#endif
 		}
-#endif
 		if (ips_proto_mq_push_cts_req(proto, req) != PSM2_OK) {
 			struct ips_pend_sends *pends = &proto->pend_sends;
 			struct ips_pend_sreq *sreq =
@@ -1800,6 +1814,7 @@ ips_proto_mq_handle_cts(struct ips_recvhdrq_event *rcv_ev)
 		/* ptl_req_ptr will be set to each tidsendc */
 		if (req->ptl_req_ptr == NULL) {
 			req->req_data.send_msglen = p_hdr->data[1].u32w1;
+			req->mq->stats.tx_rndv_bytes += req->req_data.send_msglen;
 		}
 		psmi_assert(req->req_data.send_msglen == p_hdr->data[1].u32w1);
 
@@ -1846,10 +1861,11 @@ ips_proto_mq_handle_cts(struct ips_recvhdrq_event *rcv_ev)
 // TBD - should cleanup from pin as needed
 			/* already sent enough bytes, may truncate so using >= */
 			/* RTS payload is only used for CPU memory */
-			proto->strat_stats.rndv_long_copy_cpu_send++;
-			proto->strat_stats.rndv_long_copy_cpu_send_bytes += req->req_data.send_msglen;
+			proto->strat_stats.rndv_rts_copy_cpu_send++;
+			proto->strat_stats.rndv_rts_copy_cpu_send_bytes += req->req_data.send_msglen;
 			ips_proto_mq_rv_complete(req);
 		} else {
+			req->mq->stats.tx_rndv_bytes += (req->req_data.send_msglen - req->send_msgoff);
 #ifdef RNDV_MOD
 			// If we have an MR due to incorrect prediction of RDMA
 			// release it if can't be used for send DMA or don't
@@ -1956,6 +1972,7 @@ ips_proto_mq_handle_rts(struct ips_recvhdrq_event *rcv_ev)
 				    (psm2_epaddr_t) &ipsaddr->msgctl->
 				    master_epaddr,
 				    (psm2_mq_tag_t *) p_hdr->tag,
+				    &rcv_ev->proto->strat_stats,
 				    p_hdr->data[1].u32w1, payload, paylen,
 				    msgorder, ips_proto_mq_rts_match_callback,
 				    &req);
@@ -2244,26 +2261,37 @@ ips_proto_mq_handle_eager(struct ips_recvhdrq_event *rcv_ev)
 		 * error is caught below.
 		 */
 		if (req) {
+			//u32w0 is offset - only cnt recv msgs on 1st pkt in msg
 #ifdef PSM_CUDA
 			int use_gdrcopy = 0;
 			if (!req->is_buf_gpu_mem) {
-				rcv_ev->proto->strat_stats.eager_cpu_recv++;
-				rcv_ev->proto->strat_stats.eager_cpu_recv_bytes +=  req->req_data.send_msglen;
+				if (req->state == MQ_STATE_UNEXP) {
+					if (p_hdr->data[1].u32w0<4) rcv_ev->proto->strat_stats.eager_sysbuf_recv++;
+					rcv_ev->proto->strat_stats.eager_sysbuf_recv_bytes += paylen;
+				} else {
+					if (p_hdr->data[1].u32w0<4) rcv_ev->proto->strat_stats.eager_cpu_recv++;
+					rcv_ev->proto->strat_stats.eager_cpu_recv_bytes += paylen;
+				}
 			} else if (PSMI_USE_GDR_COPY_RECV(paylen)) {
 				use_gdrcopy = 1;
-				rcv_ev->proto->strat_stats.eager_gdrcopy_recv++;
-				rcv_ev->proto->strat_stats.eager_gdrcopy_recv_bytes +=  req->req_data.send_msglen;
+				if (p_hdr->data[1].u32w0<4) rcv_ev->proto->strat_stats.eager_gdrcopy_recv++;
+				rcv_ev->proto->strat_stats.eager_gdrcopy_recv_bytes += paylen;
 			} else {
-				rcv_ev->proto->strat_stats.eager_cuCopy_recv++;
-				rcv_ev->proto->strat_stats.eager_cuCopy_recv_bytes +=  req->req_data.send_msglen;
+				if (p_hdr->data[1].u32w0<4) rcv_ev->proto->strat_stats.eager_cuCopy_recv++;
+				rcv_ev->proto->strat_stats.eager_cuCopy_recv_bytes += paylen;
 			}
 			psmi_mq_handle_data(mq, req,
 				p_hdr->data[1].u32w0, payload, paylen,
 				use_gdrcopy,
 				rcv_ev->proto->ep);
 #else
-			rcv_ev->proto->strat_stats.eager_cpu_recv++;
-			rcv_ev->proto->strat_stats.eager_cpu_recv_bytes +=  req->req_data.send_msglen;
+			if (req->state == MQ_STATE_UNEXP) {
+				if (p_hdr->data[1].u32w0<4) rcv_ev->proto->strat_stats.eager_sysbuf_recv++;
+				rcv_ev->proto->strat_stats.eager_sysbuf_recv_bytes += paylen;
+			} else {
+				if (p_hdr->data[1].u32w0<4) rcv_ev->proto->strat_stats.eager_cpu_recv++;
+				rcv_ev->proto->strat_stats.eager_cpu_recv_bytes += paylen;
+			}
 			psmi_mq_handle_data(mq, req,
 				p_hdr->data[1].u32w0, payload, paylen);
 #endif // PSM_CUDA
@@ -2422,19 +2450,19 @@ ips_proto_mq_handle_data(struct ips_recvhdrq_event *rcv_ev)
 				req->req_data.buf = buf;
 				psmi_copy_tiny_fn = mq_copy_tiny_host_mem;
 				proto->strat_stats.rndv_long_gdr_recv++;
-				proto->strat_stats.rndv_long_gdr_recv_bytes += req->req_data.recv_msglen;
+				proto->strat_stats.rndv_long_gdr_recv_bytes += paylen;
 			} else {
 				proto->strat_stats.rndv_long_cuCopy_recv++;
-				proto->strat_stats.rndv_long_cuCopy_recv_bytes += req->req_data.recv_msglen;
+				proto->strat_stats.rndv_long_cuCopy_recv_bytes += paylen;
 			}
 		} else if (PSMI_USE_GDR_COPY_RECV(paylen)) {
 			// let mq_handle_data do the conversion
 			use_gdrcopy = 1;
-			proto->strat_stats.rndv_long_gdr_recv++;
-			proto->strat_stats.rndv_long_gdr_recv_bytes += req->req_data.recv_msglen;
+			//proto->strat_stats.rndv_long_gdr_recv++;
+			proto->strat_stats.rndv_long_gdr_recv_bytes += paylen;
 		} else {
-			proto->strat_stats.rndv_long_cuCopy_recv++;
-			proto->strat_stats.rndv_long_cuCopy_recv_bytes += req->req_data.recv_msglen;
+			if (p_hdr->data[1].u32w0 < 4) proto->strat_stats.rndv_long_cuCopy_recv++;
+			proto->strat_stats.rndv_long_cuCopy_recv_bytes += paylen;
 		}
 	}
 #endif

@@ -556,6 +556,7 @@ int psmi_mq_handle_data(psm2_mq_t mq, psm2_mq_req_t req,
 #endif
 			);
 int psmi_mq_handle_rts(psm2_mq_t mq, psm2_epaddr_t src, psm2_mq_tag_t *tag,
+		       struct ptl_strategy_stats *stats,
 		       uint32_t msglen, const void *payload, uint32_t paylen,
 		       int msgorder, mq_rts_callback_fn_t cb,
 		       psm2_mq_req_t *req_o);
@@ -631,19 +632,5 @@ psm_mq_unexpected_callback_fn_t
 psmi_mq_register_unexpected_callback(psm2_mq_t mq,
 				     psm_mq_unexpected_callback_fn_t fn);
 #endif
-
-PSMI_ALWAYS_INLINE(void psmi_mq_stats_rts_account(psm2_mq_req_t req))
-{
-	psm2_mq_t mq = req->mq;
-	if (MQE_TYPE_IS_SEND(req->type)) {
-		mq->stats.tx_num++;
-		mq->stats.tx_rndv_num++;
-		mq->stats.tx_rndv_bytes += req->req_data.send_msglen;
-	} else {
-		mq->stats.rx_user_num++;
-		mq->stats.rx_user_bytes += req->req_data.recv_msglen;
-	}
-	return;
-}
 
 #endif
