@@ -93,6 +93,7 @@ void efa_rdm_peer_init(struct rdm_peer *peer, struct rxr_ep *ep, struct efa_conn
 	ofi_recvwin_buf_alloc(&peer->robuf, rxr_env.recvwin_size);
 	peer->rx_credits = rxr_env.rx_window_size;
 	peer->tx_credits = rxr_env.tx_max_credits;
+	dlist_init(&peer->outstanding_tx_pkts);
 	dlist_init(&peer->rx_unexp_list);
 	dlist_init(&peer->rx_unexp_tagged_list);
 	dlist_init(&peer->tx_entry_list);
@@ -111,6 +112,7 @@ void efa_rdm_peer_clear(struct rxr_ep *ep, struct rdm_peer *peer)
 	struct dlist_entry *tmp;
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_rx_entry *rx_entry;
+	struct rxr_pkt_entry *pkt_entry;
 	/*
 	 * TODO: Add support for wait/signal until all pending messages have
 	 * been sent/received so we do not attempt to complete a data transfer
@@ -122,6 +124,26 @@ void efa_rdm_peer_clear(struct rxr_ep *ep, struct rdm_peer *peer)
 
 	if (peer->robuf.pending)
 		ofi_recvwin_free(&peer->robuf);
+
+	if (!ep) {
+		/* ep is NULL means the endpoint has been closed.
+		 * In this case there is no need to proceed because
+		 * all the tx_entry, rx_entry, pkt_entry has been released.
+		 */
+		return;
+	}
+
+	/* we cannot release outstanding TX packets because device
+	 * will report completion of these packets later. Setting
+	 * the address to FI_ADDR_NOTAVAIL, so rxr_ep_get_peer()
+	 * will return NULL for the address, so the completion will
+	 * be ignored.
+	 */
+	dlist_foreach_container(&peer->outstanding_tx_pkts,
+				struct rxr_pkt_entry,
+				pkt_entry, entry) {
+		pkt_entry->addr = FI_ADDR_NOTAVAIL;
+	}
 
 	dlist_foreach_container_safe(&peer->tx_entry_list,
 				     struct rxr_tx_entry,
@@ -332,6 +354,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 	assert(conn->ep_addr);
 
 	/* currently multiple EP bind to same av is not supported */
+	assert(!dlist_empty(&av->util_av.ep_list));
 	rxr_ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
 
 	peer = &conn->rdm_peer;
@@ -407,7 +430,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 	 * We need peer->shm_fiaddr to remove shm address from shm av table,
 	 * so efa_rdm_peer_clear must be after removing shm av table.
 	 */
-	ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
+	ep = dlist_empty(&av->util_av.ep_list) ? NULL : container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
 	efa_rdm_peer_clear(ep, peer);
 }
 
@@ -705,6 +728,31 @@ static int efa_av_lookup(struct fid_av *av_fid, fi_addr_t fi_addr,
 	return 0;
 }
 
+/*
+ * @brief remove a set of addresses from AV and release its resources
+ *
+ * This function implements fi_av_remove() for EFA provider.
+ *
+ * Note that even after an address was removed from AV, it is still
+ * possible to get TX and RX completion for the address. Per libfabric
+ * standard, these completions should be ignored.
+ *
+ * To help TX completion handler to identify such a TX completion,
+ * when removing an address, all its outstanding TX packet's addr
+ * was set to FI_ADDR_NOTAVAIL. The TX completion handler will
+ * ignore TX packet whose address is FI_ADDR_NOTAVAIL.
+ *
+ * Meanwhile, lower provider  will set a packet's address to
+ * FI_ADDR_NOTAVAIL from it is from a removed address. RX completion
+ * handler will ignore such packets.
+ *
+ * @param[in]	av_fid	fid of AV (address vector)
+ * @param[in]	fi_addr pointer to an array of libfabric addresses
+ * @param[in]	counter	number of libfabric addresses in the array
+ * @param[in]	flags	flags
+ * @return	0 if all addresses have been removed successfully,
+ * 		negative libfabric error code if error was encoutnered.
+ */
 static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			 size_t count, uint64_t flags)
 {
@@ -725,11 +773,6 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		conn = efa_av_addr_to_conn(av, fi_addr[i]);
 		if (!conn) {
 			err = -FI_EINVAL;
-			break;
-		}
-
-		if (av->ep_type == FI_EP_RDM && efa_peer_in_use(&conn->rdm_peer)) {
-			err = -FI_EBUSY;
 			break;
 		}
 

@@ -596,7 +596,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 			return ret;
 		}
 
-		rxr_ep_inc_tx_op_counter(ep, pkt_entry);
+		rxr_ep_record_tx_op_submitted(ep, pkt_entry);
 
 		read_entry->bytes_submitted += iov.iov_len;
 

@@ -1480,10 +1480,22 @@ static inline int rxr_ep_send_queued_pkts(struct rxr_ep *ep,
 			dlist_remove(&pkt_entry->entry);
 			continue;
 		}
-		ret = rxr_pkt_entry_send(ep, pkt_entry, 0);
-		if (ret)
-			return ret;
+
+		/* If send succeeded, pkt_entry->entry will be added
+		 * to peer->outstanding_tx_pkts. Therefore, it must
+		 * be removed from the list before send.
+		 */
 		dlist_remove(&pkt_entry->entry);
+
+		ret = rxr_pkt_entry_send(ep, pkt_entry, 0);
+		if (ret) {
+			if (ret == -FI_EAGAIN) {
+				/* add the pkt back to pkts, so it can be resent again */
+				dlist_insert_tail(&pkt_entry->entry, pkts);
+			}
+
+			return ret;
+		}
 	}
 	return 0;
 }
@@ -2169,22 +2181,30 @@ err_free_ep:
 }
 
 /**
- * @brief increase the tx_op counter in an endpoint
+ * @brief record the event that a TX op has been submitted
  *
- * This function is called to update the tx_op counter
- * in an endpoint after a TX operation has been successfully
- * posted to the device (EFA or SHM).
+ * This function is called after a TX operation has been posted
+ * successfully. It will:
+ *
+ *  1. increase the outstanding tx_op counter in endpoint and
+ *     in the peer structure.
+ *
+ *  2. add the TX packet to peer's outstanding TX packet list.
  *
  * Both send and read are considered TX operation.
  *
  * The tx_op counters used to prevent over posting the device
  * and used in flow control. They are also usefull for debugging.
  *
+ * Peer's outstanding TX packet list is used when removing a peer
+ * to invalidate address of these packets, so that the completion
+ * of these packet is ignored.
+ *
  * @param[in,out]	ep		endpoint
  * @param[in]		pkt_entry	TX pkt_entry, which contains
  * 					the info of the TX op.
  */
-void rxr_ep_inc_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rdm_peer *peer;
 
@@ -2193,6 +2213,8 @@ void rxr_ep_inc_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	 * and the RMA is a local read toward the endpoint itself
 	 */
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	if (peer)
+		dlist_insert_tail(&pkt_entry->entry, &peer->outstanding_tx_pkts);
 
 	if (pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL) {
 		ep->efa_outstanding_tx_ops++;
@@ -2213,10 +2235,17 @@ void rxr_ep_inc_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 }
 
 /**
- * @brief decrease the tx_op counter in an endpoint
+ * @brief record the event that an TX op is completed
  *
- * This function is called to update the tx_op counter
- * in an endpoint after a TX operation is completed.
+ * This function is called when the completion of
+ * a TX operation is received. It will
+ *
+ * 1. decrease the outstanding tx_op counter in the endpoint
+ *    and in the peer.
+ *
+ * 2. remove the TX packet from peer's outstanding
+ *    TX packet list.
+ *
  * Both send and read are considered TX operation.
  *
  * One may ask why this function is not integrated
@@ -2238,7 +2267,7 @@ void rxr_ep_inc_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
  * @param[in]		pkt_entry	TX pkt_entry, which contains
  * 					the info of the TX op
  */
-void rxr_ep_dec_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rdm_peer *peer;
 
@@ -2252,6 +2281,8 @@ void rxr_ep_dec_tx_op_counter(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	 *    application removed the peer from address vector.
 	 */
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	if (peer)
+		dlist_remove(&pkt_entry->entry);
 
 	if (pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL) {
 		ep->efa_outstanding_tx_ops--;

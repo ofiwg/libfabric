@@ -67,8 +67,13 @@ struct rxr_pkt_sendv {
 	void *desc[2];
 };
 
+/* rxr_pkt_entry is used both for sending data to a peer and for receiving dat from a peer.
+ */
 struct rxr_pkt_entry {
-	/* for rx/tx_entry queued_pkts list */
+	/* entry is used for sending only.
+	 * It is either linked peer->outstanding_tx_pkts (after a packet has been successfully sent, but it get a completion),
+	 * or linked to tx_rx_entry->queued_pkts (after it encountered RNR error completion).
+	 */
 	struct dlist_entry entry;
 #if ENABLE_DEBUG
 	/* for tx/rx debug list or posted buf list */
@@ -78,6 +83,24 @@ struct rxr_pkt_entry {
 	size_t pkt_size;
 
 	struct fid_mr *mr;
+	/* `addr` is used for both sending data and receiving data.
+	 *
+	 * When sending a packet, `addr` will be provided by application and it cannot be FI_ADDR_NOTAVAIL.
+	 * However, after a packet is sent, application can remove a peer by calling fi_av_remove().
+	 * When removing the peering, `addr` will be set to FI_ADDR_NOTAVAIL. Later, when device report
+	 * completion for such a TX packet, the TX completion will be ignored.
+	 *
+	 * When receiving a packet, lower device will set `addr`. If the sender's address is not in
+	 * address vector (AV), `lower device will set `addr` to FI_ADDR_NOTAVAIL. This can happen in
+	 * two scenarios:
+	 *
+	 * 1. there has been no prior communication with the peer. In this case, the packet should have
+	 *    peer's raw address in the header, and progress engien will insert the raw address into
+	 *    addres vector, and update `addr`.
+	 *
+	 * 2. this packet is from a peer whose address has been removed from AV. In this case, the
+	 *    recived packet will be ignored because all resources associated with peer has been released.
+	 */
 	fi_addr_t addr;
 	enum rxr_pkt_entry_alloc_type alloc_type; /* where the memory of this packet entry reside */
 	enum rxr_pkt_entry_state state;

@@ -318,7 +318,7 @@ ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	if (OFI_UNLIKELY(ret))
 		return ret;
 
-	rxr_ep_inc_tx_op_counter(ep, pkt_entry);
+	rxr_ep_record_tx_op_submitted(ep, pkt_entry);
 	return 0;
 }
 
