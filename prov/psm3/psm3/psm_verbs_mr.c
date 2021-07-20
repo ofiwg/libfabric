@@ -353,9 +353,9 @@ static uint64_t mr_cache_rv_gpu_size(void *context)
 		return cache->rv_gpu_stats.stat; \
     }
 
-CACHE_RV_GPU_STAT_FUNC(mr_cache_rv_gpu_size_reg, max_cache_size_reg/MEGABYTE)
-CACHE_RV_GPU_STAT_FUNC(mr_cache_rv_gpu_size_mmap, max_cache_size_mmap/MEGABYTE)
-CACHE_RV_GPU_STAT_FUNC(mr_cache_rv_gpu_size_both, max_cache_size_both/MEGABYTE)
+CACHE_RV_GPU_STAT_FUNC(mr_cache_rv_gpu_size_reg, cache_size_reg/MEGABYTE)
+CACHE_RV_GPU_STAT_FUNC(mr_cache_rv_gpu_size_mmap, cache_size_mmap/MEGABYTE)
+CACHE_RV_GPU_STAT_FUNC(mr_cache_rv_gpu_size_both, cache_size_both/MEGABYTE)
 CACHE_RV_GPU_STAT_FUNC(mr_cache_rv_gpu_max_size, max_cache_size/MEGABYTE)
 CACHE_RV_GPU_STAT_FUNC(mr_cache_rv_gpu_max_size_reg, max_cache_size_reg/MEGABYTE)
 CACHE_RV_GPU_STAT_FUNC(mr_cache_rv_gpu_max_size_mmap, max_cache_size_mmap/MEGABYTE)

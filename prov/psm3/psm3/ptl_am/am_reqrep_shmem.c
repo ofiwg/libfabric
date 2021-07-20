@@ -2054,7 +2054,7 @@ amsh_mq_rndv(ptl_t *ptl, psm2_mq_t mq, psm2_mq_req_t req,
 	mq->stats.tx_num++;
 	mq->stats.tx_shm_num++;
 	mq->stats.tx_rndv_num++;
-	mq->stats.tx_rndv_bytes += len;
+	// tx_rndv_bytes tabulated when get CTS
 
 	return err;
 }
@@ -2112,6 +2112,7 @@ amsh_mq_send_inner_eager(psm2_mq_t mq, psm2_mq_req_t req, psm2_epaddr_t epaddr,
 
 	mq->stats.tx_num++;
 	mq->stats.tx_shm_num++;
+	mq->stats.tx_shm_bytes += len;
 	mq->stats.tx_eager_num++;
 	mq->stats.tx_eager_bytes += len;
 
