@@ -1023,8 +1023,12 @@ static int efa_init_info(const struct fi_info **all_infos)
 		return ret;
 
 	ctx_list = efa_device_get_context_list(&num_devices);
-	if (!num_devices)
+	if (!num_devices) {
+		if (ctx_list) {
+			free(ctx_list);
+		}
 		return -FI_ENODEV;
+	}
 
 	*all_infos = NULL;
 	for (i = 0; i < num_devices; i++) {
