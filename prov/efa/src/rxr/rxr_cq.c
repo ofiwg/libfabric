@@ -598,7 +598,7 @@ void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
 
 	while (1) {
 		pending_pkt = *ofi_recvwin_peek((&peer->robuf));
-		if (!pending_pkt || !pending_pkt->pkt)
+		if (!pending_pkt)
 			return;
 
 		msg_id = rxr_pkt_msg_id(pending_pkt);
