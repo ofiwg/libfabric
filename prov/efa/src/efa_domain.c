@@ -158,6 +158,7 @@ static int efa_check_fork_enabled(struct fid_domain *domain_fid)
 	struct fid_mr *mr;
 	char *buf;
 	int ret;
+	long page_size;
 
 	/* If ibv_is_fork_initialized is availble, check if the function
 	 * can exit early.
@@ -171,11 +172,18 @@ static int efa_check_fork_enabled(struct fid_domain *domain_fid)
 
 #endif /* HAVE_IBV_IS_FORK_INITIALIZED */
 
-	buf = malloc(ofi_get_page_size());
+	page_size = ofi_get_page_size();
+	if (page_size <= 0) {
+		EFA_WARN(FI_LOG_DOMAIN, "Unable to determine page size %ld\n",
+			 page_size);
+		return -FI_EINVAL;
+	}
+
+	buf = malloc(page_size);
 	if (!buf)
 		return -FI_ENOMEM;
 
-	ret = fi_mr_reg(domain_fid, buf, ofi_get_page_size(),
+	ret = fi_mr_reg(domain_fid, buf, page_size,
 			FI_SEND, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		free(buf);
