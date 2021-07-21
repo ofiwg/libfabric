@@ -365,7 +365,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	const struct fi_info *fi;
 	size_t qp_table_size;
 	bool app_mr_local;
-	int ret;
+	int ret, err;
 
 	fi = efa_get_efa_info(info->domain_attr->name);
 	if (!fi)
@@ -498,7 +498,11 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 err_free_info:
 	fi_freeinfo(domain->info);
 err_close_domain:
-	ofi_domain_close(&domain->util_domain);
+	err = ofi_domain_close(&domain->util_domain);
+	if (err) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			   "ofi_domain_close fails: %d", err);
+	}
 err_free_qp_table:
 	free(domain->qp_table);
 err_free_domain:
