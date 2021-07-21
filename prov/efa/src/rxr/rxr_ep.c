@@ -942,7 +942,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 			fi_setname(&ep->shm_ep->fid, shm_ep_name, sizeof(shm_ep_name));
 			ret = fi_enable(ep->shm_ep);
 			if (ret)
-				return ret;
+				goto out;
 		}
 
 out:
