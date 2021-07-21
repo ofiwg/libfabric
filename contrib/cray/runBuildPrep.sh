@@ -6,10 +6,8 @@ DEV_NAME="dev"
 BRANCH_NAME="master"
 IYUM_REPO_NAME_1="os-networking-team"
 
-if [[ "${PRODUCT}" = "" ]]
-then
-    PRODUCT="shasta-premium"
-fi
+
+PRODUCT="slingshot-host-software"
 
 if [[ "${TARGET_OS}" = "" ]]
 then
