@@ -2030,6 +2030,9 @@ int rxr_pkt_proc_write_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	op = rta_hdr->atomic_op;
 	dt = rta_hdr->atomic_datatype;
 	dtsize = ofi_datatype_size(dt);
+	if (OFI_UNLIKELY(!dtsize)) {
+		return -errno;
+	}
 
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 	data = (char *)pkt_entry->pkt + hdr_size;
@@ -2156,6 +2159,9 @@ int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	op = rx_entry->atomic_hdr.atomic_op;
  	dt = rx_entry->atomic_hdr.datatype;	
 	dtsize = ofi_datatype_size(rx_entry->atomic_hdr.datatype);
+	if (OFI_UNLIKELY(!dtsize)) {
+		return -errno;
+	}
 
 	data = (char *)pkt_entry->pkt + rxr_pkt_req_hdr_size(pkt_entry);
 
@@ -2194,7 +2200,13 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	rx_entry->tx_id = rxr_get_rta_hdr(pkt_entry->pkt)->recv_id;
 	op = rx_entry->atomic_hdr.atomic_op;
 	dt = rx_entry->atomic_hdr.datatype;
-       	dtsize = ofi_datatype_size(rx_entry->atomic_hdr.datatype);
+	dtsize = ofi_datatype_size(rx_entry->atomic_hdr.datatype);
+	if (OFI_UNLIKELY(!dtsize)) {
+		efa_eq_write_error(&ep->util_ep, FI_EINVAL, -errno);
+		rxr_release_rx_entry(ep, rx_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return -errno;
+	}
 
 	src_data = (char *)pkt_entry->pkt + rxr_pkt_req_hdr_size(pkt_entry);
 	cmp_data = src_data + rx_entry->total_len;
