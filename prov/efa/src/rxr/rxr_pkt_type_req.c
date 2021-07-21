@@ -1133,6 +1133,9 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 
 	rx_entry->bytes_received += data_size;
 	ret = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
+	if (ret) {
+		return ret;
+	}
 #if ENABLE_DEBUG
 	dlist_insert_tail(&rx_entry->rx_pending_entry, &ep->rx_pending_list);
 	ep->rx_pending++;

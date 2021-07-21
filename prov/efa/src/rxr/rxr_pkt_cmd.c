@@ -201,8 +201,8 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 		ret = rxr_pkt_init_dc_write_rta(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
 	default:
-		ret = -FI_EINVAL;
 		assert(0 && "unknown pkt type to init");
+		ret = -FI_EINVAL;
 		break;
 	}
 
