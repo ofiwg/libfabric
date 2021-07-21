@@ -64,6 +64,12 @@ jobs:
           ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} CC=${{ matrix.cc }}
           make -j 2; make install
           $PWD/install/bin/fi_info -l
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: config.log
+          path: config.log
   hmem:
     runs-on: ubuntu-20.04
     steps:
@@ -78,10 +84,14 @@ jobs:
         run: |
           echo "Installing ROCm SDK"
           # TODO: Install ROCm dependencies and add --with-rocm to build in next step
-      - name: Install Xe
+      - name: Install Ze
         run: |
           echo "Installing Ze SDK"
-          # TODO: Install Ze dependencies and add --with-ze to build in next step
+          sudo apt-get install -y gpg-agent wget
+          wget -qO - https://repositories.intel.com/graphics/intel-graphics.key | sudo apt-key add -
+          sudo apt-add-repository 'deb [arch=amd64] https://repositories.intel.com/graphics/ubuntu focal main'
+          sudo apt-get update
+          sudo apt-get install -y level-zero level-zero-dev
       - uses: actions/checkout@v2
       - name: HMEM Checks
         run: |
@@ -93,11 +103,17 @@ jobs:
           export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
           ./autogen.sh
           ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} \
-                                            --with-cuda=/usr/local/cuda \
+                                            --with-cuda=/usr/local/cuda --with-ze \
                                             CC=${{ matrix.cc }}
           make -j 2; make install
           $PWD/install/bin/fi_info -l
           $PWD/install/bin/fi_info -c FI_HMEM
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: config.log
+          path: config.log
   macos:
     runs-on: macos-10.15
     steps:
@@ -112,3 +128,9 @@ jobs:
           ./configure --prefix=$PWD/install
           make -j 2; make install
           $PWD/install/bin/fi_info -l
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: config.log
+          path: config.log
