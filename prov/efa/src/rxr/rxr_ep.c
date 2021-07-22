@@ -240,6 +240,9 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lowe
 		rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
 		break;
 	default:
+		/* Coverity will complain about this being a dead code segment,
+		 * but it is useful for future proofing.
+		 */
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"invalid lower EP type %d\n", lower_ep_type);
 		assert(0 && "invalid lower EP type\n");
