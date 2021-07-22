@@ -103,6 +103,7 @@ struct ofi_hmem_ops {
 	int (*host_register)(void *ptr, size_t size);
 	int (*host_unregister)(void *ptr);
 	int (*get_base_addr)(const void *ptr, void **base);
+	bool (*is_ipc_enabled)(void);
 };
 
 extern struct ofi_hmem_ops hmem_ops[];
@@ -200,6 +201,11 @@ static inline int ofi_hmem_no_base_addr(const void *ptr, void **base)
 	return -FI_ENOSYS;
 }
 
+static inline bool ofi_hmem_no_is_ipc_enabled(void)
+{
+	return false;
+}
+
 ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,
 			       enum fi_hmem_iface hmem_iface, uint64_t device,
 			       const struct iovec *hmem_iov,
@@ -222,5 +228,6 @@ void ofi_hmem_cleanup(void);
 enum fi_hmem_iface ofi_get_hmem_iface(const void *addr);
 int ofi_hmem_host_register(void *ptr, size_t size);
 int ofi_hmem_host_unregister(void *ptr);
+bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface);
 
 #endif /* _OFI_HMEM_H_ */

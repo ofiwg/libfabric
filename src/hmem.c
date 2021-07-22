@@ -52,6 +52,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.host_register = ofi_hmem_register_noop,
 		.host_unregister = ofi_hmem_host_unregister_noop,
 		.get_base_addr = ofi_hmem_no_base_addr,
+		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
 	},
 	[FI_HMEM_CUDA] = {
 		.initialized = false,
@@ -66,6 +67,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.host_register = cuda_host_register,
 		.host_unregister = cuda_host_unregister,
 		.get_base_addr = ofi_hmem_no_base_addr,
+		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
 	},
 	[FI_HMEM_ROCR] = {
 		.initialized = false,
@@ -80,6 +82,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.host_register = rocr_host_register,
 		.host_unregister = rocr_host_unregister,
 		.get_base_addr = ofi_hmem_no_base_addr,
+		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
 	},
 	[FI_HMEM_ZE] = {
 		.initialized = false,
@@ -94,6 +97,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.host_register = ofi_hmem_register_noop,
 		.host_unregister = ofi_hmem_host_unregister_noop,
 		.get_base_addr = ze_hmem_get_base_addr,
+		.is_ipc_enabled = ze_hmem_p2p_enabled,
 	},
 };
 
@@ -299,4 +303,9 @@ err:
 		fi_strerror(-ret));
 
 	return ret;
+}
+
+bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface)
+{
+	return hmem_ops[iface].is_ipc_enabled();
 }
