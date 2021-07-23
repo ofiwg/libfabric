@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2021 Intel Corporation. All rights reserved
+ * (C) Copyright 2021 Amazon.com, Inc. or its affiliates.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -103,6 +104,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	uint16_t comp_flags;
 	ssize_t ret = 0;
 	size_t total_len;
+	bool use_ipc;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 	assert(rma_count <= SMR_IOV_LIMIT);
@@ -147,12 +149,17 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 
 	total_len = ofi_total_iov_len(iov, iov_count);
 
+	/* Do not inline/inject if IPC is available so device to device
+	 * transfer may occur if possible. */
+	use_ipc = ofi_hmem_is_ipc_enabled(iface) && (iov_count == 1) &&
+		  desc && (smr_get_mr_flags(desc) & FI_HMEM_DEVICE_ONLY);
+
 	smr_generic_format(cmd, peer_id, op, 0, data, op_flags);
 	if (total_len <= SMR_MSG_DATA_LEN && op == ofi_op_write &&
-	    !(op_flags & FI_DELIVERY_COMPLETE)) {
+	    !(op_flags & FI_DELIVERY_COMPLETE) && !use_ipc) {
 		smr_format_inline(cmd, iface, device, iov, iov_count);
 	} else if (total_len <= SMR_INJECT_SIZE &&
-		   !(op_flags & FI_DELIVERY_COMPLETE)) {
+		   !(op_flags & FI_DELIVERY_COMPLETE) && !use_ipc) {
 		tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
 		smr_format_inject(cmd, iface, device, iov, iov_count, peer_smr, tx_buf);
 		if (op == ofi_op_read_req) {
@@ -181,13 +188,14 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 			smr_format_iov(cmd, iov, iov_count, total_len, ep->region,
 				       resp);
 		} else {
-			if (iface == FI_HMEM_ZE &&
-			    (smr_get_mr_flags(desc) & FI_HMEM_DEVICE_ONLY) &&
-			    iov_count == 1 &&
+			if (use_ipc && iface == FI_HMEM_ZE &&
 			    smr_ze_ipc_enabled(ep->region, peer_smr)) {
 				ret = smr_format_ze_ipc(ep, id, cmd, iov,
 					device, total_len, ep->region,
 					resp, pend);
+			} else if (use_ipc && iface != FI_HMEM_ZE) {
+				ret = smr_format_ipc(cmd, iov[0].iov_base, total_len,
+						     ep->region, resp, iface);
 			} else if (total_len <= smr_env.sar_threshold ||
 			    iface != FI_HMEM_SYSTEM) {
 				if (!peer_smr->sar_cnt) {
