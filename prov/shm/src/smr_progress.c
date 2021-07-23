@@ -452,12 +452,16 @@ static int smr_progress_ipc(struct smr_cmd *cmd, enum fi_hmem_iface iface,
 						  iov_count, 0, ptr,
 						  cmd->msg.hdr.size);
 	}
-	if (!ret)
-		*total_len = cmd->msg.hdr.size;
 
 	if (iface == FI_HMEM_ZE)
 		close(ipc_fd);
-	ret = ofi_hmem_close_handle(iface, base);
+
+	/* Truncation error takes precedence over close_handle error */
+	ret = ofi_hmem_close_handle(cmd->msg.data.ipc_info.iface, base);
+
+	if (*total_len != cmd->msg.hdr.size)
+		ret = (*total_len < 0) ? ((int) *total_len) : -FI_ETRUNC;
+
 out:
 	//Status must be set last (signals peer: op done, valid resp entry)
 	resp->status = ret;
