@@ -243,7 +243,7 @@ breaking backward compatibility.
 Handshake sub-protocol serves two purposes in protocol v4.
 
 First, it is used to exchange two endpoints' capability information, which allows to introduce
-changes to protocol v4 without break backward compatibility. (section 2.1)
+changes to protocol v4 without breaking backward compatibility. (section 2.1)
 
 Second, it is used to adjust the behavior of including EFA raw address in REQ packet header
 (section 2.2)
@@ -294,7 +294,6 @@ Table: 2.1 a list of extra features/requests
 | 0  | RDMA read based data transfer    | extra feature | libfabric 1.10.0 | Section 4.1 |
 | 1  | delivery complete                | extra feature | libfabric 1.12.0 | Section 4.2 |
 | 2  | keep packet header length constant | extra request | libfabric 1.13.0 | Section 4.3 |
-| 3  | sender connection id in packet header  | extra request | libfabric 1.14.0 | Section 4.4 |
 
 How does protocol v4 maintain backward compatibility when extra features/requests are introduced?
 
@@ -308,7 +307,7 @@ feature/request status. Its workflow is:
    extra/feature request status. Therefore, it can only use the baseline features to
    communicate with a peer, which means it will send REQ packets (section 3.1) to the peer
    to initialize a communication.
-2. Upon receiving the 1st REQ packet from a peer, an endpoint will send back a handshake
+2. Upon receiving the 1st packet from a peer, an endpoint must send back a handshake
    packet, which contains the endpoint's capability information.
 3. Upon receiving the handshake packet, an endpoint will know the peer's extra feature/request
    status.
@@ -328,12 +327,11 @@ the endpoint can start using the extra feature. Otherwise, one of the following 
    but the peer is using libfabric 1.10), the requester need to return an error to the
    application (section 4.2)
 
-Regarding extra request, if an endpoint can support an extra request the peer has, it
-should comply the request. Otherwise, it can ignore the request. Peer should be do
+Regarding extra request, if an endpoint can support an extra request the peer has requested,
+it should comply the request. Otherwise, it can ignore the request. Peer should be do
 one of the following:
 
-- a. carry on the communication without using the extra request. (see section 4.4
-     for example)
+- a. carry on the communication without using the extra request.
 
 - b. abort the communication and return an error to application. (see section 4.3
      for example)
@@ -366,7 +364,7 @@ The field `extra_info` is an array of 8 byte integers, which stores the capabili
 
 As mentioned before, each extra feature/request was assigned an ID when it was introduced to protocol v4.
 When constructing the handshake packet, for each extra feature it supports (or an extra request it want to impose),
-an endpoint need to toggle on a corresponding bit in the `` array. Specifically, if an endpoint supports
+an endpoint need to toggle on a corresponding bit in the `extra_info` array. Specifically, if an endpoint supports
 the extra feature with ID `i` (or want to impose extra request with ID `i`), it needs to toggle on the
 No. `i%64` bit of the No. `i/64` member of the `extra_info` array.
 
@@ -448,7 +446,7 @@ For example, it is normal that a HANDSHAKE packet encounter an send error
 because peer has already been closed, because application might just send
 1 message and close the endpoint.
 
-It is also possible to close an endpoint when there are on-the-fly HANDSHAKE
+It is also possible to close an endpoint when there are inflight HANDSHAKE
 packet, because the application might just want to receive 1 message, then
 close the endpoint. However, the action of receiving a message, will cause
 a HANDSHAKE packet to be sent.
@@ -491,7 +489,7 @@ the same set of flags, which is listed in table 3.1:
 Table: 3.1 a list of REQ packet flags
 
 | Bit Id | Value | Name | meaning |
-|-|-|-|
+|-|-|-|-|
 |  0     | 0x1    | REQ_OPT_RAW_ADDR_HDR | This REQ packet has the optional raw address header |
 |  1     | 0x2    | REQ_OPT_CQ_DATA_HDR  | This REQ packet has the optional CQ data header |
 |  2     | 0x4    | REQ_MSG              | This REQ packet is used by two-sided communication |
@@ -501,7 +499,7 @@ Table: 3.1 a list of REQ packet flags
 
 **REQ optional headers** contain additional information needed by the receiver of the REQ packets.
 As mentioned earlier, the existence of optional header in a REQ packet is indicated by bits in the `flags`
-field of the base header. There are currently 3 REQ optional headers defined:
+field of the base header. There are currently 2 REQ optional headers defined:
 
 1. the raw address header, which has the following format:
 
@@ -949,6 +947,10 @@ Here, the LONGCTS_RTR packet serves the same functionality of the first CTS pack
 is: when the endpoint is preparing the LONGCTS_RTR, it already knows it is going to receive some data, thus it should calculate
 how many bytes it is ready to receive using the flow control algorithm, and put the number in the packet.
 
+The short RTR protocol can only be used if the read buffer can fit in one READRSP packet, so the maximum size of a short emulated
+read protocol is (MTU size - READRSP header size). For messages whose size is larger, the emulated long-CTS read protocol has
+to be used.
+
 #### emulated atomic protocols
 
 This section describes the 3 emulated atomic protocols: emulated write atomic, emulate fetch atomic and emulated compare atomic.
@@ -957,7 +959,7 @@ The workflow of emulated write atomic is illustrated in the following diagram:
 
 ![atomic_write](atomic_write.png)
 
-It is similar to emulated eager write sub-protol, expect an WRITE_RTA packet was
+It is similar to emulated eager write sub-protocol, expect an WRITE_RTA packet was
 sent. Table 3.13 lists the binary structure of an WRITE_RTA packet's mandatory
 header:
 
@@ -987,7 +989,7 @@ The workflows of emulated fetch/compare atomic are the same, as illustrated in t
 
 Comparing to write atomic, the differences are:
 
-first, an FETCH_RTA/COMPARE_RTA is used to initiate the communication.
+First, an FETCH_RTA/COMPARE_RTA is used to initiate the communication.
 second, that responder will send an ATOMRSP (atomic response) packet back.
 
 The binary format of FETCH_RTA and COMPARE_RTA are the same.
@@ -1068,7 +1070,7 @@ sender buffer.
 
 In long-read message sub-protocol, sender need to construct an `read_iov`, which is
 an array of `efa_rma_iov` of application's send buffer. The `read_iov` is used
-as the appliction data in the LONGREAD_RTM packet.
+as the application data in the LONGREAD_RTM packet.
 
 The binary format of a LONGREAD_RTM packet's mandatory header is listed in table 4.1
 
@@ -1129,17 +1131,17 @@ The workflow is similar to that of long-read message sub-protocol. One key diffe
 a LONGREAD_RTW packet is used to initiate the communication. The binary format of the LONGREAD_RTW
 packet mandatory header is listed in table 4.3.
 
-Table: 4.3 the format of a LONGREAD_RTM packet's mandatory header
+Table: 4.3 the format of a LONGREAD_RTW packet's mandatory header
 
 | Name | Length (bytes) | type | C language type | Note |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
-| `rma_iov_count`  | 4 | integer | `uint32_t` | message ID |
+| `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov on the responder |
 | `msg_length`     | 8 | integer | `uint64_t` | total length of the message |
 | `send_id`        | 4 | integer | `uint32_t` | ID of the receive operation  |
-| `read_iov_count` | 4 | integer | `uint32_t` | number of iov to read |
+| `read_iov_count` | 4 | integer | `uint32_t` | number of iov on requester (to be read by responder) |
 | `rma_iov`        | `rma_iov_count` * 24 | array | `efa_rma_iov[]` | write iov information |
 
 One thing worth noting is the existence of both `rma_iov_count` and `read_iov_count`.
