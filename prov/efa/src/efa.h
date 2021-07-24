@@ -381,12 +381,6 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry, uin
 /*
  * ON will avoid using huge pages for bounce buffers, so that the libibverbs
  * fork support can be used safely.
- *
- * UNNEEDED is currently not used but will be set when rdma-core adds a verb to
- * check this state. Fork support will become irrelevant once the kernel copies
- * pages into the fork, leaving the pinned pages intact.
- *
- * See https://github.com/linux-rdma/rdma-core/pull/883 for more information.
  */
 enum efa_fork_support_status {
 	EFA_FORK_SUPPORT_OFF = 0,
