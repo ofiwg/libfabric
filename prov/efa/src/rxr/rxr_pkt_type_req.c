@@ -240,7 +240,7 @@ int64_t rxr_pkt_req_cq_data(struct rxr_pkt_entry *pkt_entry)
 size_t rxr_pkt_req_max_header_size(int pkt_type)
 {
 	int max_hdr_size = REQ_INF_LIST[pkt_type].base_hdr_size
-		+ sizeof(struct rxr_req_opt_raw_addr_hdr) + RXR_MAX_NAME_LENGTH
+		+ RXR_REQ_OPT_RAW_ADDR_HDR_SIZE
 		+ sizeof(struct rxr_req_opt_cq_data_hdr);
 
 	if (pkt_type == RXR_EAGER_RTW_PKT ||
