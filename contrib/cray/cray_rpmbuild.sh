@@ -11,7 +11,7 @@ function cleanup {
 
 trap cleanup EXIT
 
-if [[ "${TARGET_OS}" == "sle15_sp2_cn" || "${TARGET_OS}" == "sle15_sp2_ncn" ]]; then
+if [[ "${TARGET_OS}" == "sle15_sp2_cn" || "${TARGET_OS}" == "sle15_sp2_ncn" || "${TARGET_OS}" == "sle15_sp3_cn" || "${TARGET_OS}" == "sle15_sp3_ncn" ]]; then
 	ROCM_CONFIG="-c --with-rocr=/opt/rocm \
 -c --enable-rocr-dlopen"
 else
