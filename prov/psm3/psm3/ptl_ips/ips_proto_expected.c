@@ -1882,6 +1882,10 @@ psm2_error_t ips_tid_send_exp(struct ips_tid_send_desc *tidsendc)
 			}
 			psmi_cuda_run_prefetcher(protoexp, tidsendc);
 		}
+		/* Clean Up tidsendc ref's to split cuda hostbufs when no longer needed */
+		tidsendc->cuda_num_buf = 0;
+		tidsendc->cuda_hostbuf[0] = NULL;
+		tidsendc->cuda_hostbuf[1] = NULL;
 	}
 #endif
 	err = ips_tid_issue_rdma_write(tidsendc);
