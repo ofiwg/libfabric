@@ -2914,6 +2914,8 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (rxm_ep->rxm_info->caps & FI_ATOMIC)
 		(*ep_fid)->atomic = &rxm_ops_atomic;
 
+	dlist_init(&rxm_ep->loopback_list);
+
 	return 0;
 err2:
 	ofi_endpoint_close(&rxm_ep->util_ep);

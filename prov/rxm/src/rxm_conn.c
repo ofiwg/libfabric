@@ -87,6 +87,7 @@ static void rxm_close_conn(struct rxm_conn *conn)
 	}
 	fi_close(&conn->msg_ep->fid);
 	rxm_flush_msg_cq(conn->ep);
+	dlist_remove_init(&conn->loopback_entry);
 	conn->msg_ep = NULL;
 	conn->state = RXM_CM_IDLE;
 }
@@ -276,6 +277,7 @@ static void rxm_free_conn(struct rxm_conn *conn)
 void rxm_freeall_conns(struct rxm_ep *ep)
 {
 	struct rxm_conn *conn;
+	struct dlist_entry *tmp;
 	struct rxm_av *av;
 	int i;
 
@@ -290,6 +292,12 @@ void rxm_freeall_conns(struct rxm_ep *ep)
 
 		if (conn->state != RXM_CM_IDLE)
 			rxm_close_conn(conn);
+		rxm_free_conn(conn);
+	}
+
+	dlist_foreach_container_safe(&ep->loopback_list, struct rxm_conn,
+				     conn, loopback_entry, tmp) {
+		rxm_close_conn(conn);
 		rxm_free_conn(conn);
 	}
 
@@ -316,6 +324,7 @@ rxm_alloc_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
 	dlist_init(&conn->deferred_tx_queue);
 	dlist_init(&conn->deferred_sar_msgs);
 	dlist_init(&conn->deferred_sar_segments);
+	dlist_init(&conn->loopback_entry);
 
 	conn->peer = peer;
 	peer->refcnt++;
@@ -540,6 +549,10 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 		} else {
 			/* connecting to ourself, create loopback conn */
 			conn = rxm_alloc_conn(ep, peer);
+			if (!conn)
+				goto remove;
+
+			dlist_insert_tail(&conn->loopback_entry, &ep->loopback_list);
 			break;
 		}
 		break;
