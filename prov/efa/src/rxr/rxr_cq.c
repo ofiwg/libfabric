@@ -538,8 +538,23 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 #endif
 	if (ofi_recvwin_is_exp(robuf, msg_id))
 		return 0;
-	else if (!ofi_recvwin_id_valid(robuf, msg_id))
-		return -FI_EALREADY;
+	else if (!ofi_recvwin_id_valid(robuf, msg_id)) {
+		if (ofi_recvwin_id_processed(robuf, msg_id)) {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			       "Error: message id has already been processed. received: %" PRIu32 " expected: %"
+			       PRIu32 "\n", msg_id, ofi_recvwin_next_exp_id(robuf));
+			return -FI_EALREADY;
+		} else {
+			fprintf(stderr,
+				"Current receive window size (%d) is too small to hold incoming messages.\n"
+				"As a result, you application cannot proceed.\n"
+				"Receive window size can be increased by setting the environment variable:\n"
+				"              FI_EFA_RECVWIN_SIZE\n"
+				"\n"
+				"Your job will now abort.\n\n", rxr_env.recvwin_size);
+			abort();
+		}
+	}
 
 	if (OFI_LIKELY(rxr_env.rx_copy_ooo)) {
 		assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_RX_POOL);
