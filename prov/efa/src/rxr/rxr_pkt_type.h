@@ -169,8 +169,19 @@ void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep,
 void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry);
 /*
- *  CTS packet data structures and functions.
- *  Definition of the functions is in rxr_pkt_type_misc.c
+ * @breif format of CTS packet header
+ *
+ * CTS is used in long-CTS sub-protocols for flow control.
+ *
+ * It is sent from receiver to sender, and contains number of bytes
+ * receiver is ready to receive.
+ *
+ * long-CTS is used not only by two-sided communication but also
+ * by emulated write and emulated read protocols.
+ *
+ * In emulated write, requester is sender, and responder is receiver.
+ *
+ * In emulated read, requester is receiver, and responder is sender.
  */
 struct rxr_cts_hdr {
 	uint8_t type;
@@ -178,10 +189,9 @@ struct rxr_cts_hdr {
 	uint16_t flags;
 	/* end of rxr_base_hdr */
 	uint8_t pad[4];
-	/* TODO: need to add msg_id -> tx_id/rx_id mapping */
-	uint32_t tx_id;
-	uint32_t rx_id;
-	uint64_t window;
+	uint32_t send_id; /* ID of the send opertaion on sender side */
+	uint32_t recv_id; /* ID of the receive operatin on receive side */
+	uint64_t recv_length; /* number of bytes receiver is ready to receive */
 };
 
 #if defined(static_assert) && defined(__x86_64__)
@@ -213,17 +223,27 @@ void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 
 /*
- *  DATA packet data structures and functions
- *  Definition of the functions is in rxr_pkt_data.c
+ * @brief format of DATA packet header.
+ *
+ * DATA is used in long-CTS sub-protocols.
+ *
+ * It is sent from sender to receiver, and contains a segment
+ * of application data.
+ *
+ * long-CTS is used not only by two-sided communication but also
+ * by emulated write and emulated read protocols.
+ *
+ * In emulated write, requester is sender, and responder is receiver.
+ *
+ * In emulated read, requester is receiver, and responder is sender.
  */
 struct rxr_data_hdr {
 	uint8_t type;
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	/* TODO: need to add msg_id -> tx_id/rx_id mapping */
-	uint32_t rx_id;
-	uint64_t seg_size;
+	uint32_t recv_id; /* ID of the receive operation on receiver */
+	uint64_t seg_length;
 	uint64_t seg_offset;
 };
 
@@ -342,17 +362,25 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry);
 
 /*
- *  EOR packet, used to acknowledge the sender that large message
- *  copy has been finished.
- *  Implementaion of the functions are in rxr_pkt_misc.c
+ * @brief format of the EOR packet.
+ *
+ * EOR packet is used in long-read sub-protocols.
+ *
+ * It is sent from receiver to sender, to notify
+ * the finish of data transfer.
+ *
+ * long-read is used not only by two-sided communication but also
+ * by emulated write.
+ *
+ * In emulated write, requester is sender, and responder is receiver.
  */
 struct rxr_eor_hdr {
 	uint8_t type;
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint32_t tx_id;
-	uint32_t rx_id;
+	uint32_t send_id; /* ID of the send operation on sender */
+	uint32_t recv_id; /* ID of the receive operation on receiver */
 };
 
 #if defined(static_assert) && defined(__x86_64__)

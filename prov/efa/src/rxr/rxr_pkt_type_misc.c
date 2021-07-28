@@ -229,8 +229,8 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 	if (rx_entry->cq_entry.flags & FI_READ)
 		cts_hdr->flags |= RXR_CTS_READ_REQ;
 
-	cts_hdr->tx_id = rx_entry->tx_id;
-	cts_hdr->rx_id = rx_entry->rx_id;
+	cts_hdr->send_id = rx_entry->tx_id;
+	cts_hdr->recv_id = rx_entry->rx_id;
 
 	bytes_left = rx_entry->total_len - rx_entry->bytes_received;
 	peer = rxr_ep_get_peer(ep, rx_entry->addr);
@@ -238,7 +238,7 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 	rxr_pkt_calc_cts_window_credits(ep, peer, bytes_left,
 					rx_entry->credit_request,
 					&window, &rx_entry->credit_cts);
-	cts_hdr->window = window;
+	cts_hdr->recv_length = window;
 	pkt_entry->pkt_size = sizeof(struct rxr_cts_hdr);
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = (void *)rx_entry;
@@ -251,7 +251,7 @@ void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
 	struct rxr_rx_entry *rx_entry;
 
 	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
-	rx_entry->window = rxr_get_cts_hdr(pkt_entry->pkt)->window;
+	rx_entry->window = rxr_get_cts_hdr(pkt_entry->pkt)->recv_length;
 	ep->available_data_bufs -= rx_entry->credit_cts;
 
 	/*
@@ -272,16 +272,16 @@ void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 
 	cts_pkt = (struct rxr_cts_hdr *)pkt_entry->pkt;
 	if (cts_pkt->flags & RXR_CTS_READ_REQ)
-		tx_entry = ofi_bufpool_get_ibuf(ep->readrsp_tx_entry_pool, cts_pkt->tx_id);
+		tx_entry = ofi_bufpool_get_ibuf(ep->readrsp_tx_entry_pool, cts_pkt->send_id);
 	else
-		tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, cts_pkt->tx_id);
+		tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, cts_pkt->send_id);
 
-	tx_entry->rx_id = cts_pkt->rx_id;
-	tx_entry->window = cts_pkt->window;
+	tx_entry->rx_id = cts_pkt->recv_id;
+	tx_entry->window = cts_pkt->recv_length;
 
 	/* Return any excess tx_credits that were borrowed for the request */
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
-	tx_entry->credit_allocated = ofi_div_ceil(cts_pkt->window, ep->max_data_payload_size);
+	tx_entry->credit_allocated = ofi_div_ceil(cts_pkt->recv_length, ep->max_data_payload_size);
 	if (tx_entry->credit_allocated < tx_entry->credit_request) {
 		assert(peer);
 		peer->tx_credits += tx_entry->credit_request - tx_entry->credit_allocated;
@@ -517,8 +517,8 @@ int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struct rx
 	eor_hdr->type = RXR_EOR_PKT;
 	eor_hdr->version = RXR_PROTOCOL_VERSION;
 	eor_hdr->flags = 0;
-	eor_hdr->tx_id = rx_entry->tx_id;
-	eor_hdr->rx_id = rx_entry->rx_id;
+	eor_hdr->send_id = rx_entry->tx_id;
+	eor_hdr->recv_id = rx_entry->rx_id;
 	pkt_entry->pkt_size = sizeof(struct rxr_eor_hdr);
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = rx_entry;
@@ -535,7 +535,7 @@ void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
 	struct rxr_rx_entry *rx_entry;
 
 	rx_entry = pkt_entry->x_entry;
-	assert(rx_entry && rx_entry->rx_id == rxr_get_eor_hdr(pkt_entry->pkt)->rx_id);
+	assert(rx_entry && rx_entry->rx_id == rxr_get_eor_hdr(pkt_entry->pkt)->recv_id);
 	rxr_release_rx_entry(ep, rx_entry);
 }
 
@@ -552,7 +552,7 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 	eor_hdr = (struct rxr_eor_hdr *)pkt_entry->pkt;
 
 	/* pre-post buf used here, so can NOT track back to tx_entry with x_entry */
-	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, eor_hdr->tx_id);
+	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, eor_hdr->send_id);
 	rxr_cq_write_tx_completion(ep, tx_entry);
 	rxr_release_tx_entry(ep, tx_entry);
 	rxr_pkt_entry_release_rx(ep, pkt_entry);

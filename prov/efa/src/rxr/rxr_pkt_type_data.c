@@ -62,7 +62,7 @@ ssize_t rxr_pkt_send_data(struct rxr_ep *ep,
 	payload_size = MIN(payload_size, tx_entry->window);
 
 	data_pkt = (struct rxr_data_pkt *)pkt_entry->pkt;
-	data_pkt->hdr.seg_size = payload_size;
+	data_pkt->hdr.seg_length = payload_size;
 
 	copied_size = ofi_copy_from_hmem_iov(data_pkt->data,
 					     payload_size,
@@ -220,7 +220,7 @@ ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
 	}
 	pkt_entry->send->iov_count = i;
 
-	data_pkt->hdr.seg_size = (uint16_t)payload_size;
+	data_pkt->hdr.seg_length = (uint16_t)payload_size;
 	pkt_entry->pkt_size = payload_size + RXR_DATA_HDR_SIZE;
 	pkt_entry->x_entry = tx_entry;
 	pkt_entry->addr = tx_entry->addr;
@@ -244,7 +244,7 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_acked +=
-		rxr_get_data_pkt(pkt_entry->pkt)->hdr.seg_size;
+		rxr_get_data_pkt(pkt_entry->pkt)->hdr.seg_length;
 
 	if (tx_entry->total_len == tx_entry->bytes_acked) {
 		if (!(tx_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED))
@@ -342,12 +342,12 @@ void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
 	data_pkt = (struct rxr_data_pkt *)pkt_entry->pkt;
 
 	rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool,
-					data_pkt->hdr.rx_id);
+					data_pkt->hdr.recv_id);
 
 	rxr_pkt_proc_data(ep, rx_entry,
 			  pkt_entry,
 			  data_pkt->data,
 			  data_pkt->hdr.seg_offset,
-			  data_pkt->hdr.seg_size);
+			  data_pkt->hdr.seg_length);
 }
 

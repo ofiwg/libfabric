@@ -75,7 +75,7 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	data_pkt->hdr.version = RXR_PROTOCOL_VERSION;
 	data_pkt->hdr.flags = 0;
 
-	data_pkt->hdr.rx_id = tx_entry->rx_id;
+	data_pkt->hdr.recv_id = tx_entry->rx_id;
 
 	/*
 	 * Data packets are sent in order so using bytes_sent is okay here.
@@ -93,9 +93,9 @@ ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
 	}
 
 	data_pkt = rxr_get_data_pkt(pkt_entry->pkt);
-	tx_entry->bytes_sent += data_pkt->hdr.seg_size;
-	tx_entry->window -= data_pkt->hdr.seg_size;
-	assert(data_pkt->hdr.seg_size > 0);
+	tx_entry->bytes_sent += data_pkt->hdr.seg_length;
+	tx_entry->window -= data_pkt->hdr.seg_length;
+	assert(data_pkt->hdr.seg_length > 0);
 	assert(tx_entry->window >= 0);
 	return ret;
 }
@@ -1234,7 +1234,7 @@ void rxr_pkt_print_cts(char *prefix, struct rxr_cts_hdr *cts_hdr)
 	       " rx_id: %"	   PRIu32
 	       " window: %"	   PRIu64
 	       "\n", prefix, cts_hdr->version, cts_hdr->flags,
-	       cts_hdr->tx_id, cts_hdr->rx_id, cts_hdr->window);
+	       cts_hdr->send_id, cts_hdr->recv_id, cts_hdr->recv_length);
 }
 
 static
@@ -1252,11 +1252,11 @@ void rxr_pkt_print_data(char *prefix, struct rxr_data_pkt *data_pkt)
 	       " seg_size: %"	     PRIu64
 	       " seg_offset: %"	     PRIu64
 	       "\n", prefix, data_pkt->hdr.version, data_pkt->hdr.flags,
-	       data_pkt->hdr.rx_id, data_pkt->hdr.seg_size,
+	       data_pkt->hdr.recv_id, data_pkt->hdr.seg_length,
 	       data_pkt->hdr.seg_offset);
 
 	l = snprintf(str, str_len, ("\tdata:    "));
-	for (i = 0; i < MIN(data_pkt->hdr.seg_size, RXR_PKT_DUMP_DATA_LEN);
+	for (i = 0; i < MIN(data_pkt->hdr.seg_length, RXR_PKT_DUMP_DATA_LEN);
 	     i++)
 		l += snprintf(str + l, str_len - l, "%02x ",
 			      ((uint8_t *)data_pkt->data)[i]);
