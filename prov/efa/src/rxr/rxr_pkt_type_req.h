@@ -681,11 +681,8 @@ void rxr_pkt_handle_rtr_send_completion(struct rxr_ep *ep,
 void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 
-/* Structs and functions for RTW packet types
- * There are 2 atomic protocols
- *         write atomic protocol and, 
- *         read/compare atomic protocol and
- * Each protocol correspond to a packet type
+/* @brief rxr_rta_hdr are shared by 4 types of RTA:
+ *    WRITE_RTA, FETCH_RTA, COMPARE_RTA and DC_WRTIE_RTA
  */
 struct rxr_rta_hdr {
 	uint8_t type;
@@ -696,8 +693,20 @@ struct rxr_rta_hdr {
 	uint32_t rma_iov_count;
 	uint32_t atomic_datatype;
 	uint32_t atomic_op;
-	uint32_t tx_id;
-	struct fi_rma_iov rma_iov[0];
+	union {
+		/* padding is used by WRITE_RTA, align to 8 bytes */
+		uint32_t padding;
+		/* recv_id is used by FETCH_RTA and COMPARE_RTA. It is the ID of the receive operation on atomic requester,
+		 * it will be included in ATOMRSP packet header.
+		 */
+		uint32_t recv_id;
+		/* send_id is used by DC_WRITE_RTA. It is ID of the send operation on the atomic requester.
+		 * It will be included in RECEIPT packet header.
+		 */
+		uint32_t send_id;
+	};
+
+	struct efa_rma_iov rma_iov[0];
 };
 
 static inline

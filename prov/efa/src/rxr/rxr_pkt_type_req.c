@@ -1927,7 +1927,7 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 ssize_t rxr_pkt_init_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 			 int pkt_type, struct rxr_pkt_entry *pkt_entry)
 {
-	struct fi_rma_iov *rma_iov;
+	struct efa_rma_iov *rma_iov;
 	struct rxr_rta_hdr *rta_hdr;
 	char *data;
 	size_t hdr_size, data_size;
@@ -1938,7 +1938,6 @@ ssize_t rxr_pkt_init_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	rta_hdr->rma_iov_count = tx_entry->rma_iov_count;
 	rta_hdr->atomic_datatype = tx_entry->atomic_hdr.datatype;
 	rta_hdr->atomic_op = tx_entry->atomic_hdr.atomic_op;
-	rta_hdr->tx_id = tx_entry->tx_id;
 	rxr_pkt_init_req_hdr(ep, tx_entry, pkt_type, pkt_entry);
 	rta_hdr->flags |= RXR_REQ_ATOMIC;
 	rma_iov = rta_hdr->rma_iov;
@@ -1969,14 +1968,22 @@ ssize_t rxr_pkt_init_dc_write_rta(struct rxr_ep *ep,
 				  struct rxr_tx_entry *tx_entry,
 				  struct rxr_pkt_entry *pkt_entry)
 {
+	struct rxr_rta_hdr *rta_hdr;
+
 	rxr_pkt_init_rta(ep, tx_entry, RXR_DC_WRITE_RTA_PKT, pkt_entry);
+	rta_hdr = rxr_get_rta_hdr(pkt_entry->pkt);
+	rta_hdr->send_id = tx_entry->tx_id;
 	return 0;
 }
 
 ssize_t rxr_pkt_init_fetch_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 			      struct rxr_pkt_entry *pkt_entry)
 {
+	struct rxr_rta_hdr *rta_hdr;
+
 	rxr_pkt_init_rta(ep, tx_entry, RXR_FETCH_RTA_PKT, pkt_entry);
+	rta_hdr = rxr_get_rta_hdr(pkt_entry->pkt);
+	rta_hdr->recv_id = tx_entry->tx_id;
 	return 0;
 }
 
@@ -1985,9 +1992,11 @@ ssize_t rxr_pkt_init_compare_rta(struct rxr_ep *ep, struct rxr_tx_entry *tx_entr
 {
 	char *data;
 	size_t data_size;
+	struct rxr_rta_hdr *rta_hdr;
 
 	rxr_pkt_init_rta(ep, tx_entry, RXR_COMPARE_RTA_PKT, pkt_entry);
-
+	rta_hdr = rxr_get_rta_hdr(pkt_entry->pkt);
+	rta_hdr->recv_id = tx_entry->tx_id;
 	/* rxr_pkt_init_rta() will copy data from tx_entry->iov to pkt entry
 	 * the following append the data to be compared
 	 */
@@ -2063,7 +2072,6 @@ struct rxr_rx_entry *rxr_pkt_alloc_rta_rx_entry(struct rxr_ep *ep, struct rxr_pk
 	rx_entry->iov_count = rta_hdr->rma_iov_count;
 	rxr_rma_verified_copy_iov(ep, rta_hdr->rma_iov, rx_entry->iov_count,
 				  FI_REMOTE_READ, rx_entry->iov, rx_entry->desc);
-	rx_entry->tx_id = rta_hdr->tx_id;
 	rx_entry->total_len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 	/*
 	 * prepare a buffer to hold response data.
@@ -2104,7 +2112,7 @@ int rxr_pkt_proc_dc_write_rta(struct rxr_ep *ep,
 	}
 
 	rta_hdr = (struct rxr_rta_hdr *)pkt_entry->pkt;
-	rx_entry->tx_id = rta_hdr->tx_id;
+	rx_entry->tx_id = rta_hdr->send_id;
 	rx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 
 	ret = rxr_pkt_proc_write_rta(ep, pkt_entry);
@@ -2144,6 +2152,7 @@ int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 		return -FI_ENOBUFS;
 	}
 
+	rx_entry->tx_id = rxr_get_rta_hdr(pkt_entry->pkt)->recv_id;
 	op = rx_entry->atomic_hdr.atomic_op;
  	dt = rx_entry->atomic_hdr.datatype;	
 	dtsize = ofi_datatype_size(rx_entry->atomic_hdr.datatype);
@@ -2182,6 +2191,7 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 		return -FI_ENOBUFS;
 	}
 
+	rx_entry->tx_id = rxr_get_rta_hdr(pkt_entry->pkt)->recv_id;
 	op = rx_entry->atomic_hdr.atomic_op;
 	dt = rx_entry->atomic_hdr.datatype;
        	dtsize = ofi_datatype_size(rx_entry->atomic_hdr.datatype);
