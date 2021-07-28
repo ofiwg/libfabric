@@ -414,10 +414,10 @@ struct rxr_atomrsp_hdr {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint8_t pad[4];
-	uint32_t rx_id;
-	uint32_t tx_id;
-	uint64_t seg_size;
+	uint32_t padding;
+	uint32_t reserved;
+	uint32_t recv_id;
+	uint64_t seg_length;
 };
 
 #if defined(static_assert) && defined(__x86_64__)
