@@ -503,7 +503,7 @@ struct rxr_eager_rtw_hdr {
 	uint16_t flags;
 	/* end of rxr_base_hdr */
 	uint32_t rma_iov_count;
-	struct fi_rma_iov rma_iov[0];
+	struct efa_rma_iov rma_iov[0];
 };
 
 struct rxr_dc_eager_rtw_hdr {
@@ -513,7 +513,7 @@ struct rxr_dc_eager_rtw_hdr {
 	/* end of rxr_base_hdr */
 	uint32_t rma_iov_count;
 	/* end of rxr_rtw_base_hdr */
-	uint32_t tx_id;
+	uint32_t send_id;
 	uint32_t padding;
 	struct efa_rma_iov rma_iov[0];
 };
@@ -530,10 +530,10 @@ struct rxr_longcts_rtw_hdr {
 	uint16_t flags;
 	/* end of rxr_base_hdr */
 	uint32_t rma_iov_count;
-	uint64_t data_len;
-	uint32_t tx_id;
+	uint64_t msg_length;
+	uint32_t send_id;
 	uint32_t credit_request;
-	struct fi_rma_iov rma_iov[0];
+	struct efa_rma_iov rma_iov[0];
 };
 
 struct rxr_longread_rtw_hdr {
@@ -542,10 +542,10 @@ struct rxr_longread_rtw_hdr {
 	uint16_t flags;
 	/* end of rxr_base_hdr */
 	uint32_t rma_iov_count;
-	uint64_t data_len;
-	uint32_t tx_id;
+	uint64_t msg_length;
+	uint32_t send_id;
 	uint32_t read_iov_count;
-	struct fi_rma_iov rma_iov[0];
+	struct efa_rma_iov rma_iov[0];
 };
 
 /*
