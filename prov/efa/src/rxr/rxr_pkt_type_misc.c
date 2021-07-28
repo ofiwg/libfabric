@@ -611,15 +611,14 @@ int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 	atomrsp_hdr->type = RXR_ATOMRSP_PKT;
 	atomrsp_hdr->version = RXR_PROTOCOL_VERSION;
 	atomrsp_hdr->flags = 0;
-	atomrsp_hdr->tx_id = rx_entry->tx_id;
-	atomrsp_hdr->rx_id = rx_entry->rx_id;
-	atomrsp_hdr->seg_size = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
+	atomrsp_hdr->recv_id = rx_entry->tx_id;
+	atomrsp_hdr->seg_length = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 
-	assert(RXR_ATOMRSP_HDR_SIZE + atomrsp_hdr->seg_size < ep->mtu_size);
+	assert(RXR_ATOMRSP_HDR_SIZE + atomrsp_hdr->seg_length < ep->mtu_size);
 
 	/* rx_entry->atomrsp_data was filled in rxr_pkt_handle_req_recv() */
-	memcpy((char*)pkt_entry->pkt + RXR_ATOMRSP_HDR_SIZE, rx_entry->atomrsp_data, atomrsp_hdr->seg_size);
-	pkt_entry->pkt_size = RXR_ATOMRSP_HDR_SIZE + atomrsp_hdr->seg_size;
+	memcpy((char*)pkt_entry->pkt + RXR_ATOMRSP_HDR_SIZE, rx_entry->atomrsp_data, atomrsp_hdr->seg_length);
+	pkt_entry->pkt_size = RXR_ATOMRSP_HDR_SIZE + atomrsp_hdr->seg_length;
 	return 0;
 }
 
@@ -646,12 +645,12 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 
 	atomrsp_pkt = (struct rxr_atomrsp_pkt *)pkt_entry->pkt;
 	atomrsp_hdr = &atomrsp_pkt->hdr;
-	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, atomrsp_hdr->tx_id);
+	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, atomrsp_hdr->recv_id);
 
 	ofi_copy_to_iov(tx_entry->atomic_ex.resp_iov,
 			tx_entry->atomic_ex.resp_iov_count,
 			0, atomrsp_pkt->data,
-			atomrsp_hdr->seg_size);
+			atomrsp_hdr->seg_length);
 
 	if (tx_entry->fi_flags & FI_COMPLETION)
 		rxr_cq_write_tx_completion(ep, tx_entry);
