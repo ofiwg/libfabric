@@ -556,6 +556,7 @@ int psmi_mq_handle_data(psm2_mq_t mq, psm2_mq_req_t req,
 #endif
 			);
 int psmi_mq_handle_rts(psm2_mq_t mq, psm2_epaddr_t src, psm2_mq_tag_t *tag,
+		       struct ptl_strategy_stats *stats,
 		       uint32_t msglen, const void *payload, uint32_t paylen,
 		       int msgorder, mq_rts_callback_fn_t cb,
 		       psm2_mq_req_t *req_o);
@@ -568,13 +569,14 @@ int psmi_mq_handle_outoforder(psm2_mq_t mq, psm2_mq_req_t req);
 
 // perform the actual copy for a recv matching a sysbuf.  We copy from a sysbuf
 // (req->req_data.buf) to the actual user buffer (buf) and keep statistics.
+// is_buf_gpu_mem indicates if buf is a gpu buffer
 // len - recv buffer size posted, we use this for any GDR copy pinning so
 // 	can get future cache hits on other size messages in same buffer
 // not needed - msglen - negotiated total message size
 // copysz - actual amount to copy (<= msglen)
 #ifdef PSM_CUDA
-void psmi_mq_recv_copy(psm2_mq_t mq, psm2_mq_req_t req, void *buf,
-                                uint32_t len, uint32_t copysz);
+void psmi_mq_recv_copy(psm2_mq_t mq, psm2_mq_req_t req, uint8_t is_buf_gpu_mem,
+                                void *buf, uint32_t len, uint32_t copysz);
 #else
 PSMI_ALWAYS_INLINE(
 void psmi_mq_recv_copy(psm2_mq_t mq, psm2_mq_req_t req, void *buf,
@@ -631,19 +633,5 @@ psm_mq_unexpected_callback_fn_t
 psmi_mq_register_unexpected_callback(psm2_mq_t mq,
 				     psm_mq_unexpected_callback_fn_t fn);
 #endif
-
-PSMI_ALWAYS_INLINE(void psmi_mq_stats_rts_account(psm2_mq_req_t req))
-{
-	psm2_mq_t mq = req->mq;
-	if (MQE_TYPE_IS_SEND(req->type)) {
-		mq->stats.tx_num++;
-		mq->stats.tx_rndv_num++;
-		mq->stats.tx_rndv_bytes += req->req_data.send_msglen;
-	} else {
-		mq->stats.rx_user_num++;
-		mq->stats.rx_user_bytes += req->req_data.recv_msglen;
-	}
-	return;
-}
 
 #endif

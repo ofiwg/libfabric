@@ -170,6 +170,8 @@ static inline uint16_t psm2_rv_get_gpu_user_minor_bldtime_version(void)
 {
 	return RV_GPU_ABI_VER_MINOR;
 }
+
+extern uint64_t __psm2_min_gpu_bar_size(void);
 #endif
 
 extern psm2_rv_t __psm2_rv_open(const char *devname, struct local_info *loc_info);
@@ -214,18 +216,18 @@ extern int __psm2_rv_dereg_mem(psm2_rv_t rv, psm2_rv_mr_t mr);
 extern void * __psm2_rv_pin_and_mmap(psm2_rv_t rv, uintptr_t pageaddr,
 			uint64_t pagelen, int access);
 
-extern int __psm2_rv_evict_exact(psm2_rv_t rv, void *addr,
+extern int64_t __psm2_rv_evict_exact(psm2_rv_t rv, void *addr,
 			uint64_t length, int access);
 
-extern int __psm2_rv_evict_range(psm2_rv_t rv, void *addr, uint64_t length);
+extern int64_t __psm2_rv_evict_range(psm2_rv_t rv, void *addr, uint64_t length);
 
-extern int __psm2_rv_evict_amount(psm2_rv_t rv, uint64_t bytes, uint32_t count);
+extern int64_t __psm2_rv_evict_amount(psm2_rv_t rv, uint64_t bytes, uint32_t count);
 
 #ifdef PSM_CUDA
-extern int __psm2_rv_evict_gpu_range(psm2_rv_t rv, uintptr_t addr,
+extern int64_t __psm2_rv_evict_gpu_range(psm2_rv_t rv, uintptr_t addr,
 			uint64_t length);
 
-extern int __psm2_rv_evict_gpu_amount(psm2_rv_t rv, uint64_t bytes,
+extern int64_t __psm2_rv_evict_gpu_amount(psm2_rv_t rv, uint64_t bytes,
 			uint32_t count);
 #endif
 
