@@ -633,7 +633,7 @@ void rxr_pkt_handle_longread_rtw_recv(struct rxr_ep *ep,
  */
 
 /*
- *     Header structs
+ * rxr_rtr_hdr is used by both SHORT_RTR and LONGCTS_RTR
  */
 struct rxr_rtr_hdr {
 	uint8_t type;
@@ -641,10 +641,10 @@ struct rxr_rtr_hdr {
 	uint16_t flags;
 	/* end of rxr_base_hdr */
 	uint32_t rma_iov_count;
-	uint64_t data_len;
-	uint32_t read_req_rx_id;
-	uint32_t read_req_window;
-	struct fi_rma_iov rma_iov[0];
+	uint64_t msg_length;
+	uint32_t recv_id; /* ID of the receive operation of the read requester, will be included in DATA/READRSP header */
+	uint32_t recv_length; /* number of bytes that the read requester is ready to receive */
+	struct efa_rma_iov rma_iov[0];
 };
 
 static inline

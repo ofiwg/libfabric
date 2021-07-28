@@ -286,18 +286,20 @@ void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);
 
 /*
- *  READRSP packet data structures and functions
- *  The definition of functions are in rxr_pkt_type_misc.c
+ *  @brief READRSP packet header
+ *
+ *  READRSP is sent from read responder to read requester, and it contains
+ *  application data.
  */
 struct rxr_readrsp_hdr {
 	uint8_t type;
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint8_t pad[4];
-	uint32_t rx_id;
-	uint32_t tx_id;
-	uint64_t seg_size;
+	uint32_t padding;
+	uint32_t recv_id; /* ID of the receive operation on the read requester, from rtr packet */
+	uint32_t send_id; /* ID of the send operation on the read responder, will be included in CTS packet */
+	uint64_t seg_length;
 };
 
 static inline struct rxr_readrsp_hdr *rxr_get_readrsp_hdr(void *pkt)

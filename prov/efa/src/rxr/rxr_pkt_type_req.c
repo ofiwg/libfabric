@@ -1813,9 +1813,9 @@ void rxr_pkt_init_rtr(struct rxr_ep *ep,
 	rtr_hdr = (struct rxr_rtr_hdr *)pkt_entry->pkt;
 	rtr_hdr->rma_iov_count = tx_entry->rma_iov_count;
 	rxr_pkt_init_req_hdr(ep, tx_entry, pkt_type, pkt_entry);
-	rtr_hdr->data_len = tx_entry->total_len;
-	rtr_hdr->read_req_rx_id = tx_entry->rma_loc_rx_id;
-	rtr_hdr->read_req_window = window;
+	rtr_hdr->msg_length = tx_entry->total_len;
+	rtr_hdr->recv_id = tx_entry->rma_loc_rx_id;
+	rtr_hdr->recv_length = window;
 	for (i = 0; i < tx_entry->rma_iov_count; ++i) {
 		rtr_hdr->rma_iov[i].addr = tx_entry->rma_iov[i].addr;
 		rtr_hdr->rma_iov[i].len = tx_entry->rma_iov[i].len;
@@ -1880,8 +1880,8 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	rx_entry->bytes_copied = 0;
 
 	rtr_hdr = (struct rxr_rtr_hdr *)pkt_entry->pkt;
-	rx_entry->rma_initiator_rx_id = rtr_hdr->read_req_rx_id;
-	rx_entry->window = rtr_hdr->read_req_window;
+	rx_entry->rma_initiator_rx_id = rtr_hdr->recv_id;
+	rx_entry->window = rtr_hdr->recv_length;
 	rx_entry->iov_count = rtr_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtr_hdr->rma_iov, rtr_hdr->rma_iov_count,
 					FI_REMOTE_READ, rx_entry->iov, rx_entry->desc);
