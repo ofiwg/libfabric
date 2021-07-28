@@ -342,7 +342,7 @@ static ssize_t efa_post_send(struct efa_ep *ep, const struct fi_msg *msg, uint64
 
 	efa_post_send_sgl(ep, msg, ewr);
 
-	if (flags & FI_INJECT)
+	if (len <= ep->domain->ctx->inline_buf_size)
 		wr->send_flags |= IBV_SEND_INLINE;
 
 	wr->opcode = IBV_WR_SEND;
