@@ -188,7 +188,7 @@ struct rxr_dc_eager_rtm_base_hdr {
 	uint8_t version;
 	uint16_t flags;
 	uint32_t msg_id;
-	uint32_t tx_id;
+	uint32_t send_id;
 	uint32_t padding;
 };
 
@@ -221,16 +221,16 @@ struct rxr_dc_eager_tagrtm_hdr *rxr_get_dc_eager_tagrtm_hdr(void *pkt)
 
 struct rxr_medium_rtm_base_hdr {
 	struct rxr_rtm_base_hdr hdr;
-	uint64_t data_len;
-	uint64_t offset;
+	uint64_t msg_length;
+	uint64_t seg_offset;
 };
 
 struct rxr_dc_medium_rtm_base_hdr {
 	struct rxr_rtm_base_hdr hdr;
-	uint32_t tx_id;
+	uint32_t send_id;
 	uint32_t padding;
-	uint64_t data_len;
-	uint64_t offset;
+	uint64_t msg_length;
+	uint64_t seg_offset;
 };
 
 struct rxr_medium_msgrtm_hdr {
@@ -277,8 +277,8 @@ struct rxr_dc_medium_tagrtm_hdr *rxr_get_dc_medium_tagrtm_hdr(void *pkt)
 
 struct rxr_longcts_rtm_base_hdr {
 	struct rxr_rtm_base_hdr hdr;
-	uint64_t data_len;
-	uint32_t tx_id;
+	uint64_t msg_length;
+	uint32_t send_id;
 	uint32_t credit_request;
 };
 
@@ -297,10 +297,19 @@ struct rxr_longcts_tagrtm_hdr {
 	uint64_t tag;
 };
 
+struct rxr_dc_longcts_msgrtm_hdr {
+	struct rxr_longcts_rtm_base_hdr hdr;
+};
+
+struct rxr_dc_longcts_tagrtm_hdr {
+	struct rxr_longcts_rtm_base_hdr hdr;
+	uint64_t tag;
+};
+
 struct rxr_longread_rtm_base_hdr {
 	struct rxr_rtm_base_hdr hdr;
-	uint64_t data_len;
-	uint32_t tx_id;
+	uint64_t msg_length;
+	uint32_t send_id;
 	uint32_t read_iov_count;
 };
 
