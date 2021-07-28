@@ -888,8 +888,14 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
 
 	ep->extra_info[0] |= RXR_EXTRA_FEATURE_DELIVERY_COMPLETE;
 
-	if (ep->use_zcpy_rx)
-		ep->extra_info[0] |= RXR_EXTRA_FEATURE_ZERO_COPY_RECEIVE;
+	if (ep->use_zcpy_rx) {
+		/*
+		 * zero copy receive requires the packet header length remains
+		 * constant, so the application receive buffer is match with
+		 * incoming application data.
+		 */
+		ep->extra_info[0] |= RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
+	}
 }
 
 static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)

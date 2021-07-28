@@ -550,9 +550,11 @@ bool efa_both_support_rdma_read(struct rxr_ep *ep, struct rdm_peer *peer)
  * an endpoint received a hanshake packet from a peer, it can stop
  * including raw address in packet header.
  *
- * 2. If the peer is in zero copy receive mode, endpoint will include the
- * raw address in the header even afer received handshake from a header. This
- * is because zero copy receive requires the packet header size to remain
+ * 2. If the peer requested to keep the header length constant through
+ * out the communiciton, endpoint will include the raw address in the
+ * header even afer received handshake from a header to conform to the
+ * request. Usually, peer has this request because they are in zero
+ * copy receive mode, which requires the packet header size to remain
  * the same.
  *
  * @params[in]	peer	pointer to rdm_peer
@@ -564,7 +566,7 @@ bool rxr_peer_need_raw_addr_hdr(struct rdm_peer *peer)
 	if (OFI_UNLIKELY(!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)))
 		return true;
 
-	return peer->extra_info[0] & RXR_EXTRA_FEATURE_ZERO_COPY_RECEIVE;
+	return peer->extra_info[0] & RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
 }
 
 static inline
