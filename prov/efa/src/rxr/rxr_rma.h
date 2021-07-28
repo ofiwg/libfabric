@@ -39,7 +39,7 @@
 
 #include <rdma/fi_rma.h>
 
-int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct fi_rma_iov *rma,
+int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct efa_rma_iov *rma,
 			      size_t count, uint32_t flags,
 			      struct iovec *iov, void **desc);
 
