@@ -309,13 +309,13 @@ int rxr_pkt_init_readrsp(struct rxr_ep *ep,
 	readrsp_hdr->type = RXR_READRSP_PKT;
 	readrsp_hdr->version = RXR_PROTOCOL_VERSION;
 	readrsp_hdr->flags = 0;
-	readrsp_hdr->tx_id = tx_entry->tx_id;
-	readrsp_hdr->rx_id = tx_entry->rx_id;
-	readrsp_hdr->seg_size = ofi_copy_from_iov(readrsp_pkt->data,
-						  mtu - RXR_READRSP_HDR_SIZE,
-						  tx_entry->iov,
-						  tx_entry->iov_count, 0);
-	pkt_entry->pkt_size = RXR_READRSP_HDR_SIZE + readrsp_hdr->seg_size;
+	readrsp_hdr->send_id = tx_entry->tx_id;
+	readrsp_hdr->recv_id = tx_entry->rx_id;
+	readrsp_hdr->seg_length = ofi_copy_from_iov(readrsp_pkt->data,
+						    mtu - RXR_READRSP_HDR_SIZE,
+						    tx_entry->iov,
+						    tx_entry->iov_count, 0);
+	pkt_entry->pkt_size = RXR_READRSP_HDR_SIZE + readrsp_hdr->seg_length;
 	pkt_entry->addr = tx_entry->addr;
 	pkt_entry->x_entry = tx_entry;
 	return 0;
@@ -332,7 +332,7 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 				  util_domain.domain_fid);
 
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
-	data_len = rxr_get_readrsp_hdr(pkt_entry->pkt)->seg_size;
+	data_len = rxr_get_readrsp_hdr(pkt_entry->pkt)->seg_length;
 	tx_entry->bytes_sent += data_len;
 	tx_entry->window -= data_len;
 	assert(tx_entry->window >= 0);
@@ -358,7 +358,7 @@ void rxr_pkt_handle_readrsp_send_completion(struct rxr_ep *ep,
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	assert(tx_entry->cq_entry.flags & FI_READ);
 
-	tx_entry->bytes_acked += readrsp_hdr->seg_size;
+	tx_entry->bytes_acked += readrsp_hdr->seg_length;
 	if (tx_entry->total_len == tx_entry->bytes_acked)
 		rxr_cq_handle_tx_completion(ep, tx_entry);
 }
@@ -372,12 +372,12 @@ void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
 
 	readrsp_pkt = (struct rxr_readrsp_pkt *)pkt_entry->pkt;
 	readrsp_hdr = &readrsp_pkt->hdr;
-	rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, readrsp_hdr->rx_id);
+	rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, readrsp_hdr->recv_id);
 	assert(rx_entry->cq_entry.flags & FI_READ);
-	rx_entry->tx_id = readrsp_hdr->tx_id;
+	rx_entry->tx_id = readrsp_hdr->send_id;
 	rxr_pkt_proc_data(ep, rx_entry, pkt_entry,
 			  readrsp_pkt->data,
-			  0, readrsp_hdr->seg_size);
+			  0, readrsp_hdr->seg_length);
 }
 
 /*  RMA_CONTEXT packet functions
