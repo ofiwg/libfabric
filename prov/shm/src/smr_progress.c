@@ -69,6 +69,7 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 	struct smr_inject_buf *tx_buf = NULL;
 	struct smr_sar_msg *sar_msg = NULL;
 	uint8_t *src;
+	ssize_t hmem_copy_ret;
 
 	peer_smr = smr_peer_region(ep->region, pending->peer_id);
 
@@ -104,19 +105,24 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 			break;
 		if (pending->cmd.msg.hdr.op == ofi_op_read_req) {
 			if (!*err) {
-				pending->bytes_done =
+				hmem_copy_ret =
 					ofi_copy_to_hmem_iov(pending->iface,
 							     pending->device,
 							     pending->iov,
 							     pending->iov_count,
 							     0, pending->map_ptr,
 							     pending->cmd.msg.hdr.size);
-				if (pending->bytes_done != pending->cmd.msg.hdr.size) {
+				if (hmem_copy_ret < 0) {
+					FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+						"Copy from mmapped file failed with code %d\n",
+						(int)(-hmem_copy_ret));
+					*err = hmem_copy_ret;
+				} else if (hmem_copy_ret != pending->cmd.msg.hdr.size) {
 					FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 						"Incomplete copy from mmapped file\n");
-					*err = (pending->bytes_done < 0)
-						? ((int) pending->bytes_done)
-						: -FI_ETRUNC;
+					*err = -FI_ETRUNC;
+				} else {
+					pending->bytes_done = (size_t) hmem_copy_ret;
 				}
 			}
 			munmap(pending->map_ptr, pending->cmd.msg.hdr.size);
@@ -135,14 +141,21 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 
 		src = pending->cmd.msg.hdr.op == ofi_op_atomic_compare ?
 		      tx_buf->buf : tx_buf->data;
-		pending->bytes_done = ofi_copy_to_iov(pending->iov, pending->iov_count,
-				       0, src, pending->cmd.msg.hdr.size);
+		hmem_copy_ret  = ofi_copy_to_hmem_iov(pending->iface, pending->device,
+						      pending->iov, pending->iov_count,
+						      0, src, pending->cmd.msg.hdr.size);
 
-		if (pending->bytes_done != pending->cmd.msg.hdr.size) {
+		if (hmem_copy_ret < 0) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"RMA read/fetch failed with code %d\n",
+				(int)(-hmem_copy_ret));
+			*err = hmem_copy_ret;
+		} else if (hmem_copy_ret != pending->cmd.msg.hdr.size) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"Incomplete rma read/fetch buffer copied\n");
-			*err = (pending->bytes_done < 0)
-				? ((int) pending->bytes_done) : -FI_ETRUNC;
+			*err = -FI_ETRUNC;
+		} else {
+			pending->bytes_done = (size_t) hmem_copy_ret;
 		}
 		break;
 	default:
@@ -209,13 +222,23 @@ static int smr_progress_inline(struct smr_cmd *cmd, enum fi_hmem_iface iface,
 			       uint64_t device, struct iovec *iov,
 			       size_t iov_count, size_t *total_len)
 {
-	*total_len = ofi_copy_to_hmem_iov(iface, device, iov, iov_count, 0,
-					  cmd->msg.data.msg, cmd->msg.hdr.size);
-	if (*total_len != cmd->msg.hdr.size) {
+	ssize_t hmem_copy_ret;
+
+	hmem_copy_ret = ofi_copy_to_hmem_iov(iface, device, iov, iov_count, 0,
+					     cmd->msg.data.msg, cmd->msg.hdr.size);
+	if (hmem_copy_ret < 0) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"recv truncated");
-		return (*total_len < 0) ? ((int) *total_len) : -FI_ETRUNC;
+			"inline recv failed with code %d\n",
+			(int)(-hmem_copy_ret));
+		return hmem_copy_ret;
+	} else if (hmem_copy_ret != cmd->msg.hdr.size) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"inline recv truncated\n");
+		return -FI_ETRUNC;
 	}
+
+	*total_len = hmem_copy_ret;
+
 	return FI_SUCCESS;
 }
 
@@ -226,6 +249,7 @@ static int smr_progress_inject(struct smr_cmd *cmd, enum fi_hmem_iface iface,
 {
 	struct smr_inject_buf *tx_buf;
 	size_t inj_offset;
+	ssize_t hmem_copy_ret;
 
 	inj_offset = (size_t) cmd->msg.hdr.src_data;
 	tx_buf = smr_get_ptr(ep->region, inj_offset);
@@ -236,19 +260,29 @@ static int smr_progress_inject(struct smr_cmd *cmd, enum fi_hmem_iface iface,
 	}
 
 	if (cmd->msg.hdr.op == ofi_op_read_req) {
-		*total_len = ofi_copy_from_hmem_iov(tx_buf->data, cmd->msg.hdr.size,
-						    iface, device, iov, iov_count, 0);
+		hmem_copy_ret = ofi_copy_from_hmem_iov(tx_buf->data,
+						       cmd->msg.hdr.size,
+						       iface, device, iov,
+						       iov_count, 0);
 	} else {
-		*total_len = ofi_copy_to_hmem_iov(iface, device, iov, iov_count, 0,
-						  tx_buf->data, cmd->msg.hdr.size);
+		hmem_copy_ret = ofi_copy_to_hmem_iov(iface, device, iov,
+						     iov_count, 0, tx_buf->data,
+						     cmd->msg.hdr.size);
 		smr_freestack_push(smr_inject_pool(ep->region), tx_buf);
 	}
 
-	if (*total_len != cmd->msg.hdr.size) {
+	if (hmem_copy_ret < 0) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"recv truncated");
-		return (*total_len < 0) ? ((int) *total_len) : -FI_ETRUNC;
+			"inject recv failed with code %d\n",
+			(int)(-hmem_copy_ret));
+		return hmem_copy_ret;
+	} else if (hmem_copy_ret != cmd->msg.hdr.size) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"inject recv truncated\n");
+		return -FI_ETRUNC;
 	}
+
+	*total_len = hmem_copy_ret;
 
 	return FI_SUCCESS;
 }
@@ -291,6 +325,7 @@ static int smr_mmap_peer_copy(struct smr_ep *ep, struct smr_cmd *cmd,
 	void *mapped_ptr;
 	int fd, num;
 	int ret = 0;
+	ssize_t hmem_copy_ret;
 
 	num = smr_mmap_name(shm_name,
 			ep->region->map->peers[cmd->msg.hdr.id].peer.name,
@@ -315,30 +350,28 @@ static int smr_mmap_peer_copy(struct smr_ep *ep, struct smr_cmd *cmd,
 	}
 
 	if (cmd->msg.hdr.op == ofi_op_read_req) {
-		*total_len = ofi_copy_from_hmem_iov(mapped_ptr,
+		hmem_copy_ret = ofi_copy_from_hmem_iov(mapped_ptr,
 						    cmd->msg.hdr.size, iface,
 						    device, iov, iov_count, 0);
-		if (*total_len != cmd->msg.hdr.size) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"mmap iov copy in error\n");
-			ret = (*total_len < 0)
-				? ((int) *total_len) : -FI_ETRUNC;
-			goto munmap;
-		}
 	} else {
-		*total_len = ofi_copy_to_hmem_iov(iface, device, iov,
+		hmem_copy_ret = ofi_copy_to_hmem_iov(iface, device, iov,
 						  iov_count, 0, mapped_ptr,
 						  cmd->msg.hdr.size);
-		if (*total_len != cmd->msg.hdr.size) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"mmap iov copy out error\n");
-			ret = (*total_len < 0)
-				? ((int) *total_len) : -FI_ETRUNC;
-			goto munmap;
-		}
 	}
 
-munmap:
+	if (hmem_copy_ret < 0) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"mmap copy iov failed with code %d\n",
+			(int)(-hmem_copy_ret));
+		ret = hmem_copy_ret;
+	} else if (hmem_copy_ret != cmd->msg.hdr.size) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"mmap copy iov truncated\n");
+		ret = -FI_ETRUNC;
+	}
+
+	*total_len = hmem_copy_ret;
+
 	munmap(mapped_ptr, cmd->msg.hdr.size);
 unlink_close:
 	shm_unlink(shm_name);
