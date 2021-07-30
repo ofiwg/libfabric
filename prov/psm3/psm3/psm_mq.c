@@ -759,6 +759,10 @@ PSMI_API_DECL(psm2_mq_send)
  * that the provided request has been matched, and begins copying message data
  * that has already arrived to the user's buffer.  Any remaining data is copied
  * by PSM polling until the message is complete.
+ * Caller has initialized req->is_buf_gpu_mem and req->user_gpu_buffer
+ * consistently with buf/len which represent the application buffer
+ * but req->req_data.buf and req->req_data.len still point to the sysbuf
+ * where data was landed.
  */
 static psm2_error_t
 psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
@@ -774,7 +778,11 @@ psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 	case MQ_STATE_COMPLETE:
 		if (req->req_data.buf != NULL) {	/* 0-byte messages don't alloc a sysbuf */
 			msglen = mq_set_msglen(req, len, req->req_data.send_msglen);
-			psmi_mq_recv_copy(mq, req, buf, len, msglen);
+			psmi_mq_recv_copy(mq, req,
+#ifdef PSM_CUDA
+					req->is_buf_gpu_mem,
+#endif
+					buf, len, msglen);
 			psmi_mq_sysbuf_free(mq, req->req_data.buf);
 #ifdef PSM_CUDA
 		} else {
@@ -792,7 +800,11 @@ psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 		 * any more than copysz.  After that, swap system with user buffer
 		 */
 		req->recv_msgoff = min(req->recv_msgoff, msglen);
-		psmi_mq_recv_copy(mq, req, buf, len, req->recv_msgoff);
+		psmi_mq_recv_copy(mq, req,
+#ifdef PSM_CUDA
+				req->is_buf_gpu_mem,
+#endif
+				buf, len, req->recv_msgoff);
 		psmi_mq_sysbuf_free(mq, req->req_data.buf);
 
 		req->state = MQ_STATE_MATCHED;
@@ -807,7 +819,11 @@ psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 		 */
 		req->recv_msgoff = min(req->recv_msgoff, msglen);
 		if (req->send_msgoff) {	// only have sysbuf if RTS w/payload
-			psmi_mq_recv_copy(mq, req, buf, len, req->recv_msgoff);
+			psmi_mq_recv_copy(mq, req,
+#ifdef PSM_CUDA
+					req->is_buf_gpu_mem,
+#endif
+					buf, len, req->recv_msgoff);
 			psmi_mq_sysbuf_free(mq, req->req_data.buf);
 		}
 
@@ -1485,20 +1501,22 @@ psm2_error_t psmi_mq_initstats(psm2_mq_t mq, psm2_epid_t epid)
 		PSMI_STATS_DECLU64("Unexpected_count_recv", &mq->stats.rx_sys_num),
 		PSMI_STATS_DECLU64("Unexpected_bytes_recv", &mq->stats.rx_sys_bytes),
 		PSMI_STATS_DECLU64("shm_count_sent", &mq->stats.tx_shm_num),
+		PSMI_STATS_DECLU64("shm_bytes_sent", &mq->stats.tx_shm_bytes),
 		PSMI_STATS_DECLU64("shm_count_recv", &mq->stats.rx_shm_num),
-		PSMI_STATS_DECLU64("sysbuf_count", &mq->stats.rx_sysbuf_num),
-		PSMI_STATS_DECLU64("sysbuf_bytes", &mq->stats.rx_sysbuf_bytes),
+		PSMI_STATS_DECLU64("shm_bytes_recv", &mq->stats.rx_shm_bytes),
+		PSMI_STATS_DECLU64("sysbuf_count_recv", &mq->stats.rx_sysbuf_num),
+		PSMI_STATS_DECLU64("sysbuf_bytes_recv", &mq->stats.rx_sysbuf_bytes),
 #ifdef PSM_CUDA
 		PSMI_STATS_DECLU64("Eager_cpu_count_sent", &mq->stats.tx_eager_cpu_num),
 		PSMI_STATS_DECLU64("Eager_cpu_bytes_sent", &mq->stats.tx_eager_cpu_bytes),
 		PSMI_STATS_DECLU64("Eager_gpu_count_sent", &mq->stats.tx_eager_gpu_num),
 		PSMI_STATS_DECLU64("Eager_gpu_bytes_sent", &mq->stats.tx_eager_gpu_bytes),
-		PSMI_STATS_DECLU64("sysbuf_cpu_count", &mq->stats.rx_sysbuf_cpu_num),
-		PSMI_STATS_DECLU64("sysbuf_cpu_bytes", &mq->stats.rx_sysbuf_cpu_bytes),
-		PSMI_STATS_DECLU64("sysbuf_gdrcopy_count", &mq->stats.rx_sysbuf_gdrcopy_num),
-		PSMI_STATS_DECLU64("sysbuf_gdrcopy_bytes", &mq->stats.rx_sysbuf_gdrcopy_bytes),
-		PSMI_STATS_DECLU64("sysbuf_cuCopy_count", &mq->stats.rx_sysbuf_cuCopy_num),
-		PSMI_STATS_DECLU64("sysbuf_cuCopy_bytes", &mq->stats.rx_sysbuf_cuCopy_bytes),
+		PSMI_STATS_DECLU64("sysbuf_cpu_count_recv", &mq->stats.rx_sysbuf_cpu_num),
+		PSMI_STATS_DECLU64("sysbuf_cpu_bytes_recv", &mq->stats.rx_sysbuf_cpu_bytes),
+		PSMI_STATS_DECLU64("sysbuf_gdrcopy_count_recv", &mq->stats.rx_sysbuf_gdrcopy_num),
+		PSMI_STATS_DECLU64("sysbuf_gdrcopy_bytes_recv", &mq->stats.rx_sysbuf_gdrcopy_bytes),
+		PSMI_STATS_DECLU64("sysbuf_cuCopy_count_recv", &mq->stats.rx_sysbuf_cuCopy_num),
+		PSMI_STATS_DECLU64("sysbuf_cuCopy_bytes_recv", &mq->stats.rx_sysbuf_cuCopy_bytes),
 #endif
 	};
 

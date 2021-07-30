@@ -63,7 +63,7 @@
 #endif
 
 /* not reported yet, so just track in a global so can pass a pointer to
- * psmi_mq_handle_envelope
+ * psmi_mq_handle_envelope and psmi_mq_handle_rts
  */
 static struct ptl_strategy_stats strat_stats;
 
@@ -175,6 +175,11 @@ send_cts:
 		psmi_amsh_short_request((struct ptl *)ptl, epaddr, mq_handler_rtsmatch_hidx,
 					args, 5, NULL, 0, 0);
 
+	req->mq->stats.rx_user_num++;
+	req->mq->stats.rx_user_bytes += req->req_data.recv_msglen;
+	req->mq->stats.rx_shm_num++;
+	req->mq->stats.rx_shm_bytes += req->req_data.recv_msglen;
+
 	/* 0-byte completion or we used kassist */
 	if (pid || cma_succeed ||
 		req->req_data.recv_msglen == 0 || cuda_ipc_send_completion == 1) {
@@ -223,6 +228,10 @@ psmi_am_mq_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 		/* for eager matching */
 		req->ptl_req_ptr = (void *)tok->tok.epaddr_incoming;
 		req->msg_seqnum = 0;	/* using seqnum 0 */
+		req->mq->stats.rx_shm_num++;
+		// close enough, may not yet be matched,
+		//  don't know recv buf_len, so assume no truncation
+		req->mq->stats.rx_shm_bytes += msglen;
 		break;
 	default:{
 			void *sreq = (void *)(uintptr_t) args[3].u64w0;
@@ -230,7 +239,7 @@ psmi_am_mq_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			psmi_assert(narg == 5);
 			psmi_assert_always(opcode == MQ_MSG_LONGRTS);
 			rc = psmi_mq_handle_rts(tok->mq, tok->tok.epaddr_incoming,
-						&tag, msglen, NULL, 0, 1,
+						&tag, &strat_stats, msglen, NULL, 0, 1,
 						ptl_handle_rtsmatch, &req);
 
 			req->rts_peer = tok->tok.epaddr_incoming;
@@ -296,6 +305,8 @@ psmi_am_mq_handler_rtsmatch(void *toki, psm2_amarg_t *args, int narg, void *buf,
 	 */
 	if (sreq->cuda_ipc_handle_attached) {
 		sreq->cuda_ipc_handle_attached = 0;
+		sreq->mq->stats.tx_shm_bytes += sreq->req_data.send_msglen;
+		sreq->mq->stats.tx_rndv_bytes += sreq->req_data.send_msglen;
 		psmi_mq_handle_rts_complete(sreq);
 		return;
 	}
@@ -341,6 +352,8 @@ no_kassist:
 					     1, sreq->req_data.buf, msglen, dest, 0);
 		}
 	}
+	sreq->mq->stats.tx_shm_bytes += sreq->req_data.send_msglen;
+	sreq->mq->stats.tx_rndv_bytes += sreq->req_data.send_msglen;
 	psmi_mq_handle_rts_complete(sreq);
 }
 

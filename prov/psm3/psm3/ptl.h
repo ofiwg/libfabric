@@ -158,6 +158,8 @@ struct ptl_strategy_stats {
 
 	uint64_t tiny_cpu_recv;
 	uint64_t tiny_cpu_recv_bytes;
+	uint64_t tiny_sysbuf_recv;	/* to unexpected Q sysbuf */ /* incl 0 byte */
+	uint64_t tiny_sysbuf_recv_bytes;
 #ifdef PSM_CUDA
 	uint64_t tiny_gdrcopy_recv;
 	uint64_t tiny_gdrcopy_recv_bytes;
@@ -193,6 +195,8 @@ struct ptl_strategy_stats {
 
 	uint64_t short_cpu_recv;
 	uint64_t short_cpu_recv_bytes;
+	uint64_t short_sysbuf_recv;	/* to unexpected Q sysbuf */
+	uint64_t short_sysbuf_recv_bytes;
 #ifdef PSM_CUDA
 	uint64_t short_gdrcopy_recv;
 	uint64_t short_gdrcopy_recv_bytes;
@@ -204,6 +208,8 @@ struct ptl_strategy_stats {
 	uint64_t eager_copy_cpu_isend_bytes;
 	uint64_t eager_dma_cpu_isend;
 	uint64_t eager_dma_cpu_isend_bytes;
+	uint64_t eager_sysbuf_recv;	/* to unexpected Q sysbuf */
+	uint64_t eager_sysbuf_recv_bytes;
 #ifdef PSM_CUDA
 	uint64_t eager_cuCopy_isend;
 	uint64_t eager_cuCopy_isend_bytes;
@@ -221,12 +227,12 @@ struct ptl_strategy_stats {
 	uint64_t eager_gdr_send_bytes;
 #endif
 
-	uint64_t eager_cpu_recv;	/* packet count */
+	uint64_t eager_cpu_recv;
 	uint64_t eager_cpu_recv_bytes;
 #ifdef PSM_CUDA
-	uint64_t eager_gdrcopy_recv;	/* packet count */
+	uint64_t eager_gdrcopy_recv;
 	uint64_t eager_gdrcopy_recv_bytes;
-	uint64_t eager_cuCopy_recv;	/* packet count */
+	uint64_t eager_cuCopy_recv;
 	uint64_t eager_cuCopy_recv_bytes;
 #endif
 
@@ -243,30 +249,45 @@ struct ptl_strategy_stats {
 	uint64_t rndv_gpu_send_bytes;
 #endif
 
+	/* Payload in RTS for small sync send */
+	uint64_t rndv_rts_cpu_recv;
+	uint64_t rndv_rts_cpu_recv_bytes;
+	uint64_t rndv_rts_sysbuf_recv;
+	uint64_t rndv_rts_sysbuf_recv_bytes;
+#ifdef PSM_CUDA
+	uint64_t rndv_rts_cuCopy_recv;
+	uint64_t rndv_rts_cuCopy_recv_bytes;
+#endif
+
+	/* Payload in RTS approach used by sender */
+	/* this approach uses a LONG DATA CTS, but sends no more data */
+	uint64_t rndv_rts_copy_cpu_send;	/* per CTS  (1 per RTS) */
+	uint64_t rndv_rts_copy_cpu_send_bytes;
+
 	/* LONG DATA approach selected by receiver */
 	uint64_t rndv_long_cpu_recv;	/* per RTS */
 	uint64_t rndv_long_cpu_recv_bytes;
 	uint64_t rndv_long_gpu_recv;	/* per RTS */
 	uint64_t rndv_long_gpu_recv_bytes;
 #ifdef PSM_CUDA
-	uint64_t rndv_long_cuCopy_recv;	/* packet count */
+	uint64_t rndv_long_cuCopy_recv;
 	uint64_t rndv_long_cuCopy_recv_bytes;
-	uint64_t rndv_long_gdr_recv;	/* packet count */
+	uint64_t rndv_long_gdr_recv;
 	uint64_t rndv_long_gdr_recv_bytes;
 #endif
 
 	/* LONG DATA approach used by sender after LONG selected by receiver */
 	/* LONG DATA only uses 1 CTS per RTS */
-	uint64_t rndv_long_copy_cpu_send;	/* per CTS */
+	uint64_t rndv_long_copy_cpu_send;	/* per CTS  (1 per RTS) */
 	uint64_t rndv_long_copy_cpu_send_bytes;
-	uint64_t rndv_long_dma_cpu_send;	/* per CTS */
+	uint64_t rndv_long_dma_cpu_send;	/* per CTS  (1 per RTS) */
 	uint64_t rndv_long_dma_cpu_send_bytes;
 #ifdef PSM_CUDA
-	uint64_t rndv_long_cuCopy_send;	/* per CTS */
+	uint64_t rndv_long_cuCopy_send;	/* per CTS  (1 per RTS) */
 	uint64_t rndv_long_cuCopy_send_bytes;
-	uint64_t rndv_long_gdrcopy_send;	/* per CTS */
+	uint64_t rndv_long_gdrcopy_send;	/* per CTS  (1 per RTS) */
 	uint64_t rndv_long_gdrcopy_send_bytes;
-	uint64_t rndv_long_gdr_send;	/* per CTS */	/* SDMA */
+	uint64_t rndv_long_gdr_send;	/* per CTS  (1 per RTS) */ /* SDMA */
 	uint64_t rndv_long_gdr_send_bytes;		/* SDMA */
 #endif
 

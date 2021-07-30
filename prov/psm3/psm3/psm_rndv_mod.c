@@ -98,6 +98,130 @@ struct irdma_mem_reg_req {
 //#define my_calloc(nmemb, size) (psmi_calloc(PSMI_EP_NONE, NETWORK_BUFFERS, (nmemb), (size)))
 #define my_free(p) (psmi_free(p))
 
+#ifdef PSM_CUDA
+static int gpu_pin_check;	// PSM3_GPU_PIN_CHECK
+static uint64_t *gpu_bars;
+static int num_gpu_bars = 0;
+static uint64_t min_gpu_bar_size;
+
+// The second BAR address is where the GPU will map GPUDirect memory.
+// The beginning of this BAR is reserved for non-GPUDirect uses.
+// However, it has been observed that in some multi-process
+// pinning failures, HED-2035, the nvidia_p2p_get_pages can foul up
+// it's IOMMU after which the next successful pin will incorrectly
+// return the 1st physical address of the BAR for the pinned pages.
+// In this case it will report this same physical address for other GPU virtual
+// addresses and cause RDMA to use the wrong memory.
+// As a workaround, we gather the Region 1 BAR address start for each
+// GPU and if we see this address returned as the phys_addr of a mmapped
+// GPUDirect Copy or the iova of a GPU MR we fail the job before it can
+// corrupt any more application data.
+static uint64_t get_nvidia_bar_addr(int domain, int bus, int slot)
+{
+	char sysfs[100];
+	int ret;
+	FILE *f;
+	unsigned long long start_addr, end_addr, bar_size;
+
+	ret = snprintf(sysfs, sizeof(sysfs),
+		"/sys/class/pci_bus/%04x:%02x/device/%04x:%02x:%02x.0/resource",
+		domain, bus, domain, bus, slot);
+	psmi_assert_always(ret < sizeof(sysfs));
+	f = fopen(sysfs, "r");
+	if (! f) {
+		if (gpu_pin_check) {
+			_HFI_ERROR("Unable to open %s for GPU BAR Address: %s\n",
+				sysfs, strerror(errno));
+			psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+				"Unable to get GPU BAR address\n");
+		}
+		return 0;
+	}
+	// for each BAR region, start, end and flags are listed in hex
+	// nVidia uses the 2nd BAR region (aka Region #1) to map peer to peer
+	// accesses into it's potentially larger GPU local memory space
+	ret = fscanf(f, "%*x %*x %*x %llx %llx", &start_addr, &end_addr);
+	if (ret != 2) {
+		if (gpu_pin_check) {
+			_HFI_ERROR("Unable to get GPU BAR Address from %s: %s\n",
+				sysfs, strerror(errno));
+			psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+				"Unable to get GPU BAR address\n");
+		}
+		fclose(f);
+		return 0;
+	}
+	fclose(f);
+
+	bar_size = (end_addr - start_addr) + 1;
+	_HFI_DBG("GPU BAR Addr from %s is 0x%llx - 0x%llx (size 0x%llx)\n", sysfs, start_addr, end_addr, bar_size);
+	if (! min_gpu_bar_size || bar_size < min_gpu_bar_size)
+		min_gpu_bar_size = bar_size;
+	return start_addr;
+}
+
+void psm2_get_gpu_bars(void)
+{
+	int num_devices, dev;
+	union psmi_envvar_val env;
+
+	psmi_getenv("PSM3_GPU_PIN_CHECK",
+			"Enable sanity check of physical addresses mapped into GPU BAR space (Enabled by default)",
+			PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
+			(union psmi_envvar_val)1, &env);
+	gpu_pin_check = env.e_int;
+
+	PSMI_CUDA_CALL(cuDeviceGetCount, &num_devices);
+	gpu_bars = psmi_calloc(PSMI_EP_NONE, UNDEFINED, num_devices, sizeof(gpu_bars[0]));
+	if (! gpu_bars)
+		return;	// psmi_calloc will have exited for Out of Memory
+
+	if (gpu_pin_check)
+		num_gpu_bars = num_devices;
+
+	for (dev = 0; dev < num_devices; dev++) {
+		CUdevice device;
+		int domain, bus, slot;
+
+		PSMI_CUDA_CALL(cuDeviceGet, &device, dev);
+		PSMI_CUDA_CALL(cuDeviceGetAttribute,
+				&domain,
+				CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID,
+				device);
+		PSMI_CUDA_CALL(cuDeviceGetAttribute,
+				&bus,
+				CU_DEVICE_ATTRIBUTE_PCI_BUS_ID,
+				device);
+		PSMI_CUDA_CALL(cuDeviceGetAttribute,
+				&slot,
+				CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID,
+				device);
+		gpu_bars[dev] = get_nvidia_bar_addr(domain, bus, slot);
+	}
+}
+
+static psm2_error_t psm2_check_phys_addr(uint64_t phys_addr)
+{
+	int i;
+	for (i=0; i < num_gpu_bars; i++) {
+		if (phys_addr == gpu_bars[i]) {
+			_HFI_ERROR("Incorrect Physical Address (0x%"PRIx64") returned by nVidia driver.  PSM3 exiting to avoid data corruption.  Job may be rerun with PSM3_GPUDIRECT=0 to avoid this issue.\n",
+				phys_addr);
+			psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+				"Incorrect Physical Address returned by nVidia driver\n");
+			psmi_assert_always(0);
+			return PSM2_INTERNAL_ERR;
+		}
+	}
+	return PSM2_OK;
+}
+
+uint64_t __psm2_min_gpu_bar_size(void)
+{
+	return min_gpu_bar_size;
+}
+#endif
+
 static int rv_map_event_ring(psm2_rv_t rv, struct rv_event_ring* ring,
 				int entries, int offset)
 {
@@ -768,6 +892,14 @@ psm2_rv_mr_t __psm2_rv_reg_mem(psm2_rv_t rv, int cmd_fd_int, struct ibv_pd *pd,
 		save_errno = errno;
 		goto fail;
 	}
+#ifdef PSM_CUDA
+	if ((access & IBV_ACCESS_IS_GPU_ADDR)
+		&& PSM2_OK != psm2_check_phys_addr(mparams.out.iova)) {
+		(void)__psm2_rv_dereg_mem(rv, mr);
+		errno = EFAULT;
+		return NULL;
+	}
+#endif
 	mr->addr = (uint64_t)addr;
 	mr->length = length;
 	mr->access = access;
@@ -835,6 +967,11 @@ void * __psm2_rv_pin_and_mmap(psm2_rv_t rv, uintptr_t pageaddr,
 	if ((ret = ioctl(rv->fd, RV_IOCTL_GPU_PIN_MMAP, &params)) != 0)
 		return NULL;
 
+	if (PSM2_OK != psm2_check_phys_addr(params.out.phys_addr)) {
+		(void)__psm2_rv_evict_exact(rv, (void*)pageaddr, pagelen, access);
+		errno = EFAULT;
+		return NULL;
+	}
 	// return mapped host address or NULL with errno set
 	return (void*)(uintptr_t)params.out.host_buf_addr;
 }
@@ -845,9 +982,9 @@ void * __psm2_rv_pin_and_mmap(psm2_rv_t rv, uintptr_t pageaddr,
 // this will remove from the cache the matching entry if it's
 // refcount is 0.  In the case of reg_mem, a matching call
 // to dereg_mem is required for this to be able to evict the entry
-// return 0 on success or -1 with errno
+// return number of bytes evicted (> 0) on success or -1 with errno
 // Reports ENOENT if entry not found in cache (may already be evicted)
-int __psm2_rv_evict_exact(psm2_rv_t rv, void *addr, uint64_t length, int access)
+int64_t __psm2_rv_evict_exact(psm2_rv_t rv, void *addr, uint64_t length, int access)
 {
 #ifdef RV_IOCTL_EVICT
 	struct rv_evict_params params;
@@ -880,9 +1017,9 @@ int __psm2_rv_evict_exact(psm2_rv_t rv, void *addr, uint64_t length, int access)
 // addresses between addr and addr+length-1 inclusive if it's
 // refcount is 0.  In the case of reg_mem, a matching call
 // to dereg_mem is required for this to be able to evict the entry
-// return 0 on success or -1 with errno
+// return number of bytes evicted (> 0) on success or -1 with errno
 // Reports ENOENT if no matching entries found in cache (may already be evicted)
-int __psm2_rv_evict_range(psm2_rv_t rv, void *addr, uint64_t length)
+int64_t __psm2_rv_evict_range(psm2_rv_t rv, void *addr, uint64_t length)
 {
 #ifdef RV_IOCTL_EVICT
 	struct rv_evict_params params;
@@ -915,9 +1052,9 @@ int __psm2_rv_evict_range(psm2_rv_t rv, void *addr, uint64_t length)
 // addresses between addr and addr+length-1 inclusive if it's
 // refcount is 0.  In the case of reg_mem, a matching call
 // to dereg_mem is required for this to be able to evict the entry
-// return 0 on success or -1 with errno
+// return number of bytes evicted (> 0) on success or -1 with errno
 // Reports ENOENT if no matching entries found in cache (may already be evicted)
-int __psm2_rv_evict_gpu_range(psm2_rv_t rv, uintptr_t addr, uint64_t length)
+int64_t __psm2_rv_evict_gpu_range(psm2_rv_t rv, uintptr_t addr, uint64_t length)
 {
 #ifdef RV_IOCTL_EVICT
 	struct rv_evict_params params;
@@ -950,9 +1087,9 @@ int __psm2_rv_evict_gpu_range(psm2_rv_t rv, uintptr_t addr, uint64_t length)
 // Only entries with a refcount of 0 are removed.
 // In the case of reg_mem, a matching call
 // to dereg_mem is required for this to be able to evict the entry
-// return 0 on success or -1 with errno
+// return number of bytes evicted (> 0) on success or -1 with errno
 // Reports ENOENT if no entries could be evicted
-int __psm2_rv_evict_amount(psm2_rv_t rv, uint64_t bytes, uint32_t count)
+int64_t __psm2_rv_evict_amount(psm2_rv_t rv, uint64_t bytes, uint32_t count)
 {
 #ifdef RV_IOCTL_EVICT
 	struct rv_evict_params params;
@@ -985,9 +1122,9 @@ int __psm2_rv_evict_amount(psm2_rv_t rv, uint64_t bytes, uint32_t count)
 // Only entries with a refcount of 0 are removed.
 // In the case of reg_mem, a matching call
 // to dereg_mem is required for this to be able to evict the entry
-// return 0 on success or -1 with errno
+// return number of bytes evicted (> 0) on success or -1 with errno
 // Reports ENOENT if no entries could be evicted
-int __psm2_rv_evict_gpu_amount(psm2_rv_t rv, uint64_t bytes, uint32_t count)
+int64_t __psm2_rv_evict_gpu_amount(psm2_rv_t rv, uint64_t bytes, uint32_t count)
 {
 #ifdef RV_IOCTL_EVICT
 	struct rv_evict_params params;

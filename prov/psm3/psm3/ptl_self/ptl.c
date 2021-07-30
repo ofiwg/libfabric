@@ -68,6 +68,11 @@ struct ptl_self {
 	ptl_ctl_t *ctl;
 } __attribute__((aligned(16)));
 
+/* not reported yet, so just track in a global so can pass a pointer to
+ * psmi_mq_handle_envelope and psmi_mq_handle_rts
+ */
+static struct ptl_strategy_stats strat_stats;
+
 static
 psm2_error_t
 ptl_handle_rtsmatch(psm2_mq_req_t recv_req, int was_posted)
@@ -79,12 +84,14 @@ ptl_handle_rtsmatch(psm2_mq_req_t recv_req, int was_posted)
 			       recv_req->req_data.recv_msglen);
 	}
 
+	recv_req->mq->stats.rx_user_num++;
+	recv_req->mq->stats.rx_user_bytes += recv_req->req_data.recv_msglen;
 	psmi_mq_handle_rts_complete(recv_req);
 
+	send_req->mq->stats.tx_rndv_bytes += send_req->req_data.send_msglen;
 	/* If the send is already marked complete, that's because it was internally
 	 * buffered. */
 	if (send_req->state == MQ_STATE_COMPLETE) {
-		psmi_mq_stats_rts_account(send_req);
 		if (send_req->req_data.buf != NULL && send_req->req_data.send_msglen > 0)
 			psmi_mq_sysbuf_free(send_req->mq, send_req->req_data.buf);
 		/* req was left "live" even though the sender was told that the
@@ -150,7 +157,10 @@ self_mq_isend(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags_user,
 		send_req->is_buf_gpu_mem = 0;
 #endif
 
-	rc = psmi_mq_handle_rts(mq, epaddr, tag,
+	mq->stats.tx_num++;
+	mq->stats.tx_rndv_num++;
+
+	rc = psmi_mq_handle_rts(mq, epaddr, tag, &strat_stats,
 				len, NULL, 0, 1,
 				ptl_handle_rtsmatch, &recv_req);
 	send_req->req_data.tag = *tag;

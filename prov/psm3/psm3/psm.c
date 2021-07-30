@@ -356,6 +356,9 @@ int psmi_cuda_initialize()
 
 	PSMI_CUDA_CALL(cuInit, 0);
 
+#ifdef RNDV_MOD
+	psm2_get_gpu_bars();
+#endif
 	union psmi_envvar_val env_enable_gdr_copy;
 	psmi_getenv("PSM3_GDRCOPY",
 				"Enable (set envvar to 1) for gdr copy support in PSM (Enabled by default)",
