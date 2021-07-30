@@ -1876,6 +1876,30 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			continue;
 
+		/*
+		 * Do not send DATA packet until we received HANDSHAKE packet from the peer,
+		 * this is because endpoint does not know whether peer need connid in header
+		 * until it get the HANDSHAKE packet.
+		 *
+		 * We only do this for DATA packet because other types of packets always
+		 * has connid in there packet header. If peer does not make use of the connid,
+		 * the connid can be safely ignored.
+		 *
+		 * DATA packet is different because for DATA packet connid is an optional
+		 * header inserted between the mandatory header and the application data.
+		 * Therefore if peer does not use/understand connid, it will take connid
+		 * as applicaiton data thus cause data corruption.
+		 *
+		 * This will not cause deadlock because peer will send a HANDSHAKE packet
+		 * back upon receiving 1st packet from the endpoint, and in all 3 sub0protocols
+		 * (long-CTS message, emulated long-CTS write and emulated long-CTS read)
+		 * where DATA packet is used, endpoint will send other types of packet to
+		 * peer before sending DATA packets. The workflow of the 3 sub-protocol
+		 * can be found in protocol v4 document chapter 3.
+		 */
+		if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
+			continue;
+
 		if (tx_entry->window > 0)
 			tx_entry->send_flags |= FI_MORE;
 		else
