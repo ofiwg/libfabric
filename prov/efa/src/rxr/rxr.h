@@ -710,13 +710,24 @@ struct rxr_ep {
 	struct dlist_entry rx_entry_list;
 	struct dlist_entry tx_entry_list;
 
-	/* number of posted buffer for shm */
-	size_t posted_bufs_shm;
-	size_t rx_bufs_shm_to_post;
-
-	/* number of posted buffers */
-	size_t posted_bufs_efa;
-	size_t rx_bufs_efa_to_post;
+	/*
+	 * number of posted RX packets for shm
+	 */
+	size_t shm_rx_pkts_posted;
+	/*
+	 * number of RX packets to be posted by progress engine for shm.
+	 * It exists because posting RX packets by bulk is more efficient.
+	 */
+	size_t shm_rx_pkts_to_post;
+	/*
+	 * number of posted RX packets for EFA device
+	 */
+	size_t efa_rx_pkts_posted;
+	/*
+	 * Number of RX packets to be posted by progress engine for EFA device.
+	 * It exists because posting RX packets by bulk is more efficient.
+	 */
+	size_t efa_rx_pkts_to_post;
 	/* number of buffers available for large messages */
 	size_t available_data_bufs;
 	/* Timestamp of when available_data_bufs was exhausted. */
@@ -887,8 +898,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 void rxr_ep_progress(struct util_ep *util_ep);
 void rxr_ep_progress_internal(struct rxr_ep *rxr_ep);
 
-int rxr_ep_post_user_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
-			 uint64_t flags);
+int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+			      uint64_t flags);
 
 int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
 				 struct rxr_tx_entry *tx_entry);

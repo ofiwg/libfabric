@@ -1183,9 +1183,9 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 
 	if (peer->is_local) {
 		assert(ep->use_shm);
-		ep->posted_bufs_shm--;
+		ep->shm_rx_pkts_posted--;
 	} else {
-		ep->posted_bufs_efa--;
+		ep->efa_rx_pkts_posted--;
 	}
 
 	if (pkt_entry->alloc_type == RXR_PKT_FROM_USER_BUFFER) {
@@ -1198,7 +1198,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	if (zcpy_rx_entry && pkt_type != RXR_EAGER_MSGRTM_PKT) {
 		/* user buffer was not matched with a message,
 		 * therefore reposting the buffer */
-		rxr_ep_post_user_buf(ep, zcpy_rx_entry, 0);
+		rxr_ep_post_user_recv_buf(ep, zcpy_rx_entry, 0);
 	}
 }
 

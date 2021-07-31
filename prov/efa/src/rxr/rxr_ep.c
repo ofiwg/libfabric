@@ -144,13 +144,15 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 }
 
 /**
- * @brief post user provided receiving buffer to the device
+ * @brief post user provided receiving buffer to the device.
+ *
+ * The user receive buffer was converted to an RX packet, then posted to the device.
  *
  * @param[in]	ep		endpint
  * @param[in]	rx_entry	rx_entry that contain user buffer information
  * @param[in]	flags		user supplied flags passed to fi_recv
  */
-int rxr_ep_post_user_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, uint64_t flags)
+int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, uint64_t flags)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_mr *mr;
@@ -207,7 +209,7 @@ int rxr_ep_post_user_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, uint6
 		return err;
 	}
 
-	ep->posted_bufs_efa++;
+	ep->efa_rx_pkts_posted++;
 	return 0;
 }
 
@@ -222,7 +224,7 @@ int rxr_ep_post_user_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, uint6
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
-int rxr_ep_post_prov_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lower_ep_type)
+int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lower_ep_type)
 {
 	struct fi_msg msg = {0};
 	struct iovec msg_iov;
@@ -271,7 +273,7 @@ int rxr_ep_post_prov_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_ty
 				fi_strerror(-ret));
 			return ret;
 		}
-		ep->posted_bufs_shm++;
+		ep->shm_rx_pkts_posted++;
 		break;
 	case EFA_EP:
 #if ENABLE_DEBUG
@@ -288,7 +290,7 @@ int rxr_ep_post_prov_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_ty
 				fi_strerror(-ret));
 			return ret;
 		}
-		ep->posted_bufs_efa++;
+		ep->efa_rx_pkts_posted++;
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -312,8 +314,8 @@ int rxr_ep_post_prov_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_ty
  * 		On failure, return negative libfabric error code
  */
 static inline
-ssize_t rxr_ep_bulk_post_prov_buf(struct rxr_ep *ep, int nrecv,
-				  enum rxr_lower_ep_type lower_ep_type)
+ssize_t rxr_ep_bulk_post_internal_rx_pkts(struct rxr_ep *ep, int nrecv,
+					  enum rxr_lower_ep_type lower_ep_type)
 {
 	int i;
 	ssize_t err;
@@ -324,14 +326,13 @@ ssize_t rxr_ep_bulk_post_prov_buf(struct rxr_ep *ep, int nrecv,
 		if (i == nrecv - 1)
 			flags = 0;
 
-		err = rxr_ep_post_prov_buf(ep, flags, lower_ep_type);
+		err = rxr_ep_post_internal_rx_pkt(ep, flags, lower_ep_type);
 		if (OFI_UNLIKELY(err))
 			return err;
 	}
 
 	return 0;
 }
-
 
 void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 		       const struct fi_msg *msg, uint32_t op, uint64_t flags)
@@ -1439,7 +1440,7 @@ int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
  * right away.
  *
  * Instead, we increase counter
- *      ep->rx_bufs_efa/shm_to_post
+ *      ep->efa/shm_rx_pkts_to_post
  * by one.
  *
  * Later, progress engine calls this function to
@@ -1453,7 +1454,7 @@ int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
  * param[in]	ep	endpoint
  */
 static inline
-void rxr_ep_progress_post_prov_buf(struct rxr_ep *ep)
+void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
 {
 	int err;
 
@@ -1469,14 +1470,14 @@ void rxr_ep_progress_post_prov_buf(struct rxr_ep *ep)
 		 * repost internal buffers to maximize the chance
 		 * user buffer is used to receive data.
 		 */
-		if (ep->posted_bufs_efa == 0 && ep->rx_bufs_efa_to_post == 0) {
-			ep->rx_bufs_efa_to_post = 1;
-		} else if (ep->posted_bufs_efa > 0 && ep->rx_bufs_efa_to_post > 0){
-			ep->rx_bufs_efa_to_post = 0;
+		if (ep->efa_rx_pkts_posted == 0 && ep->efa_rx_pkts_to_post == 0) {
+			ep->efa_rx_pkts_to_post = 1;
+		} else if (ep->efa_rx_pkts_posted > 0 && ep->efa_rx_pkts_to_post > 0){
+			ep->efa_rx_pkts_to_post = 0;
 		}
 	} else {
-		if (ep->posted_bufs_efa == 0 && ep->rx_bufs_efa_to_post == 0) {
-			/* Both posted_bufs_efa and rx_bufs_efa_to_post equal to 0 means
+		if (ep->efa_rx_pkts_posted == 0 && ep->efa_rx_pkts_to_post == 0) {
+			/* Both efa_rx_pkts_posted and efa_rx_pkts_to_post equal to 0 means
 			 * this is the first call of the progress engine on this endpoint.
 			 *
 			 * In this case, we explictly allocate the 1st chunk of memory
@@ -1512,28 +1513,28 @@ void rxr_ep_progress_post_prov_buf(struct rxr_ep *ep)
 			if (err)
 				goto err_exit;
 
-			ep->rx_bufs_efa_to_post = rxr_get_rx_pool_chunk_cnt(ep);
+			ep->efa_rx_pkts_to_post = rxr_get_rx_pool_chunk_cnt(ep);
 			ep->available_data_bufs = rxr_get_rx_pool_chunk_cnt(ep);
 
 			if (ep->use_shm) {
-				assert(ep->posted_bufs_shm == 0 && ep->rx_bufs_shm_to_post == 0);
-				ep->rx_bufs_shm_to_post = shm_info->rx_attr->size;
+				assert(ep->shm_rx_pkts_posted == 0 && ep->shm_rx_pkts_to_post == 0);
+				ep->shm_rx_pkts_to_post = shm_info->rx_attr->size;
 			}
 		}
 	}
 
-	err = rxr_ep_bulk_post_prov_buf(ep, ep->rx_bufs_efa_to_post, EFA_EP);
+	err = rxr_ep_bulk_post_internal_rx_pkts(ep, ep->efa_rx_pkts_to_post, EFA_EP);
 	if (err)
 		goto err_exit;
 
-	ep->rx_bufs_efa_to_post = 0;
+	ep->efa_rx_pkts_to_post = 0;
 
 	if (ep->use_shm) {
-		err = rxr_ep_bulk_post_prov_buf(ep, ep->rx_bufs_shm_to_post, SHM_EP);
+		err = rxr_ep_bulk_post_internal_rx_pkts(ep, ep->shm_rx_pkts_to_post, SHM_EP);
 		if (err)
 			goto err_exit;
 
-		ep->rx_bufs_shm_to_post = 0;
+		ep->shm_rx_pkts_to_post = 0;
 	}
 
 	return;
@@ -1796,7 +1797,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	if (ep->use_shm)
 		rdm_ep_poll_shm_cq(ep, rxr_env.shm_cq_read_size);
 
-	rxr_ep_progress_post_prov_buf(ep);
+	rxr_ep_progress_post_internal_rx_pkts(ep);
 
 	rxr_ep_check_peer_backoff_timer(ep);
 
@@ -2174,10 +2175,10 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->recv_comps = 0;
 #endif
 
-	rxr_ep->posted_bufs_shm = 0;
-	rxr_ep->rx_bufs_shm_to_post = 0;
-	rxr_ep->posted_bufs_efa = 0;
-	rxr_ep->rx_bufs_efa_to_post = 0;
+	rxr_ep->shm_rx_pkts_posted = 0;
+	rxr_ep->shm_rx_pkts_to_post = 0;
+	rxr_ep->efa_rx_pkts_posted = 0;
+	rxr_ep->efa_rx_pkts_to_post = 0;
 	rxr_ep->efa_outstanding_tx_ops = 0;
 	rxr_ep->shm_outstanding_tx_ops = 0;
 	rxr_ep->available_data_bufs_ts = 0;

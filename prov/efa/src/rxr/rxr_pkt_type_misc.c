@@ -195,7 +195,7 @@ void rxr_pkt_calc_cts_window_credits(struct rxr_ep *ep, struct rdm_peer *peer,
 	 * number of credits are allocated to the transfer so the sender can
 	 * make progress.
 	 */
-	*credits = MIN(MIN(ep->available_data_bufs, ep->posted_bufs_efa),
+	*credits = MIN(MIN(ep->available_data_bufs, ep->efa_rx_pkts_posted),
 		       peer->rx_credits);
 	*credits = MIN(request, *credits);
 	*credits = MAX(*credits, rxr_env.tx_min_credits);
