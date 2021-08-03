@@ -144,13 +144,15 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 }
 
 /**
- * @brief post user provided receiving buffer to the device
+ * @brief post user provided receiving buffer to the device.
+ *
+ * The user receive buffer was converted to an RX packet, then posted to the device.
  *
  * @param[in]	ep		endpint
  * @param[in]	rx_entry	rx_entry that contain user buffer information
  * @param[in]	flags		user supplied flags passed to fi_recv
  */
-int rxr_ep_post_user_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, uint64_t flags)
+int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, uint64_t flags)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_mr *mr;
@@ -207,7 +209,7 @@ int rxr_ep_post_user_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, uint6
 		return err;
 	}
 
-	ep->posted_bufs_efa++;
+	ep->efa_rx_pkts_posted++;
 	return 0;
 }
 
@@ -222,7 +224,7 @@ int rxr_ep_post_user_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, uint6
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
-int rxr_ep_post_prov_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lower_ep_type)
+int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lower_ep_type)
 {
 	struct fi_msg msg = {0};
 	struct iovec msg_iov;
@@ -271,7 +273,7 @@ int rxr_ep_post_prov_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_ty
 				fi_strerror(-ret));
 			return ret;
 		}
-		ep->posted_bufs_shm++;
+		ep->shm_rx_pkts_posted++;
 		break;
 	case EFA_EP:
 #if ENABLE_DEBUG
@@ -288,7 +290,7 @@ int rxr_ep_post_prov_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_ty
 				fi_strerror(-ret));
 			return ret;
 		}
-		ep->posted_bufs_efa++;
+		ep->efa_rx_pkts_posted++;
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -312,8 +314,8 @@ int rxr_ep_post_prov_buf(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_ty
  * 		On failure, return negative libfabric error code
  */
 static inline
-ssize_t rxr_ep_bulk_post_prov_buf(struct rxr_ep *ep, int nrecv,
-				  enum rxr_lower_ep_type lower_ep_type)
+ssize_t rxr_ep_bulk_post_internal_rx_pkts(struct rxr_ep *ep, int nrecv,
+					  enum rxr_lower_ep_type lower_ep_type)
 {
 	int i;
 	ssize_t err;
@@ -324,14 +326,13 @@ ssize_t rxr_ep_bulk_post_prov_buf(struct rxr_ep *ep, int nrecv,
 		if (i == nrecv - 1)
 			flags = 0;
 
-		err = rxr_ep_post_prov_buf(ep, flags, lower_ep_type);
+		err = rxr_ep_post_internal_rx_pkt(ep, flags, lower_ep_type);
 		if (OFI_UNLIKELY(err))
 			return err;
 	}
 
 	return 0;
 }
-
 
 void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 		       const struct fi_msg *msg, uint32_t op, uint64_t flags)
@@ -871,7 +872,6 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	ssize_t ret;
 	struct rxr_ep *ep;
-	size_t shm_rx_size;
 	char shm_ep_name[NAME_MAX];
 
 	switch (command) {
@@ -886,13 +886,6 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		fastlock_acquire(&ep->util_ep.lock);
 
 		rxr_ep_set_features(ep);
-
-		if (!ep->use_zcpy_rx) {
-			ret = rxr_ep_bulk_post_prov_buf(ep, rxr_get_rx_pool_chunk_cnt(ep), EFA_EP);
-			if (OFI_UNLIKELY(ret))
-				goto out;
-			ep->available_data_bufs = rxr_get_rx_pool_chunk_cnt(ep);
-		}
 
 		ep->core_addrlen = RXR_MAX_NAME_LENGTH;
 		ret = fi_getname(&ep->rdm_ep->fid,
@@ -915,14 +908,9 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 				goto out;
 
 			fi_setname(&ep->shm_ep->fid, shm_ep_name, sizeof(shm_ep_name));
-			shm_rx_size = shm_info->rx_attr->size;
 			ret = fi_enable(ep->shm_ep);
 			if (ret)
 				return ret;
-
-			ret = rxr_ep_bulk_post_prov_buf(ep, shm_rx_size, SHM_EP);
-			if (OFI_UNLIKELY(ret))
-				goto out;
 		}
 
 out:
@@ -1170,14 +1158,6 @@ int rxr_ep_init(struct rxr_ep *ep)
 
 		if (ret)
 			goto err_free;
-
-		ret = ofi_bufpool_grow(ep->rx_unexp_pkt_pool);
-		if (ret) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
-				"cannot allocate memory for unexpected packet pool. error: %s\n",
-				strerror(-ret));
-			goto err_free;
-		}
 	}
 
 	if (rxr_env.rx_copy_ooo) {
@@ -1188,13 +1168,6 @@ int rxr_ep_init(struct rxr_ep *ep)
 		if (ret)
 			goto err_free;
 
-		ret = ofi_bufpool_grow(ep->rx_ooo_pkt_pool);
-		if (ret) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
-				"cannot allocate memory for out-of-order packet pool. error: %s\n",
-				strerror(-ret));
-			goto err_free;
-		}
 	}
 
 	if ((rxr_env.rx_copy_unexp || rxr_env.rx_copy_ooo) &&
@@ -1208,15 +1181,6 @@ int rxr_ep_init(struct rxr_ep *ep)
 
 		if (ret)
 			goto err_free;
-
-		ret = ofi_bufpool_grow(ep->rx_readcopy_pkt_pool);
-		if (ret) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
-				"cannot allocate and register memory for readcopy packet pool. error: %s\n",
-				strerror(-ret));
-			goto err_free;
-		}
-
 		ep->rx_readcopy_pkt_pool_used = 0;
 		ep->rx_readcopy_pkt_pool_max_used = 0;
 	}
@@ -1397,6 +1361,73 @@ struct fi_ops_cm rxr_ep_cm = {
 	.join = fi_no_join,
 };
 
+/*
+ * @brief explicitly allocate a chunk of memory for 5 packet pools on RX side:
+ *     efa's receive packet pool (efa_rx_pkt_pool)
+ *     shm's receive packet pool (shm_rx_pkt_pool)
+ *     unexpected packet pool (rx_unexp_pkt_pool),
+ *     out-of-order packet pool (rx_ooo_pkt_pool), and
+ *     local read-copy packet pool (rx_readcopy_pkt_pool).
+ *
+ * @param ep[in]	endpoint
+ * @return		On success, return 0
+ * 			On failure, return a negative error code.
+ */
+int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
+{
+	int err;
+
+	assert(ep->efa_rx_pkt_pool);
+	err = ofi_bufpool_grow(ep->efa_rx_pkt_pool);
+	if (err) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"cannot allocate memory for EFA's RX packet pool. error: %s\n",
+			strerror(-err));
+		return err;
+	}
+
+	if (ep->use_shm) {
+		assert(ep->shm_rx_pkt_pool);
+		err = ofi_bufpool_grow(ep->shm_rx_pkt_pool);
+		if (err) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"cannot allocate memory for SHM's RX packet pool. error: %s\n",
+				strerror(-err));
+			return err;
+		}
+	}
+
+	assert(ep->rx_unexp_pkt_pool);
+	err = ofi_bufpool_grow(ep->rx_unexp_pkt_pool);
+	if (err) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"cannot allocate memory for unexpected packet pool. error: %s\n",
+			strerror(-err));
+		return err;
+	}
+
+	assert(ep->rx_ooo_pkt_pool);
+	err = ofi_bufpool_grow(ep->rx_ooo_pkt_pool);
+	if (err) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"cannot allocate memory for out-of-order packet pool. error: %s\n",
+			strerror(-err));
+		return err;
+	}
+
+	if (ep->rx_readcopy_pkt_pool) {
+		err = ofi_bufpool_grow(ep->rx_readcopy_pkt_pool);
+		if (err) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"cannot allocate and register memory for readcopy packet pool. error: %s\n",
+				strerror(-err));
+			return err;
+		}
+	}
+
+	return 0;
+}
+
 /**
  * @brief post internal receive buffers for progress engine.
  *
@@ -1409,7 +1440,7 @@ struct fi_ops_cm rxr_ep_cm = {
  * right away.
  *
  * Instead, we increase counter
- *      ep->rx_bufs_efa/shm_to_post
+ *      ep->efa/shm_rx_pkts_to_post
  * by one.
  *
  * Later, progress engine calls this function to
@@ -1423,7 +1454,7 @@ struct fi_ops_cm rxr_ep_cm = {
  * param[in]	ep	endpoint
  */
 static inline
-void rxr_ep_progress_post_prov_buf(struct rxr_ep *ep)
+void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
 {
 	int err;
 
@@ -1439,25 +1470,71 @@ void rxr_ep_progress_post_prov_buf(struct rxr_ep *ep)
 		 * repost internal buffers to maximize the chance
 		 * user buffer is used to receive data.
 		 */
-		if (ep->posted_bufs_efa == 0 && ep->rx_bufs_efa_to_post == 0) {
-			ep->rx_bufs_efa_to_post = 1;
-		} else if (ep->posted_bufs_efa > 0 && ep->rx_bufs_efa_to_post > 0){
-			ep->rx_bufs_efa_to_post = 0;
+		if (ep->efa_rx_pkts_posted == 0 && ep->efa_rx_pkts_to_post == 0) {
+			ep->efa_rx_pkts_to_post = 1;
+		} else if (ep->efa_rx_pkts_posted > 0 && ep->efa_rx_pkts_to_post > 0){
+			ep->efa_rx_pkts_to_post = 0;
+		}
+	} else {
+		if (ep->efa_rx_pkts_posted == 0 && ep->efa_rx_pkts_to_post == 0) {
+			/* Both efa_rx_pkts_posted and efa_rx_pkts_to_post equal to 0 means
+			 * this is the first call of the progress engine on this endpoint.
+			 *
+			 * In this case, we explictly allocate the 1st chunk of memory
+			 * for unexp/ooo/readcopy RX packet pool.
+			 *
+			 * The reason to explicitly allocate the memory for RX packet
+			 * pool is to improve efficiency.
+			 *
+			 * Without explicit memory allocation, a pkt pools's memory
+			 * is allocated when 1st packet is allocated from it.
+			 * During the computation, different processes got their 1st
+			 * unexp/ooo/read-copy packet at different time. Therefore,
+			 * if we do not explicitly allocate memory at the beginning,
+			 * memory will be allocated at different time.
+			 *
+			 * When one process is allocating memory, other processes
+			 * have to wait. When each process allocate memory at different
+			 * time, the accumulated waiting time became significant.
+			 *
+			 * By explicitly allocating memory at 1st call to progress
+			 * engine, the memory allocation is parallelized.
+			 * (This assumes the 1st call to the progress engine on
+			 * all processes happen at roughly the same time, which
+			 * is a valid assumption according to our knowledge of
+			 * the workflow of most application)
+			 *
+			 * The memory was not allocated during endpoint initialization
+			 * because some applications will initialize some endpoints
+			 * but never uses it, thus allocating memory initialization
+			 * causes waste.
+			 */
+			err = rxr_ep_grow_rx_pkt_pools(ep);
+			if (err)
+				goto err_exit;
+
+			ep->efa_rx_pkts_to_post = rxr_get_rx_pool_chunk_cnt(ep);
+			ep->available_data_bufs = rxr_get_rx_pool_chunk_cnt(ep);
+
+			if (ep->use_shm) {
+				assert(ep->shm_rx_pkts_posted == 0 && ep->shm_rx_pkts_to_post == 0);
+				ep->shm_rx_pkts_to_post = shm_info->rx_attr->size;
+			}
 		}
 	}
 
-	err = rxr_ep_bulk_post_prov_buf(ep, ep->rx_bufs_efa_to_post, EFA_EP);
+	err = rxr_ep_bulk_post_internal_rx_pkts(ep, ep->efa_rx_pkts_to_post, EFA_EP);
 	if (err)
 		goto err_exit;
 
-	ep->rx_bufs_efa_to_post = 0;
+	ep->efa_rx_pkts_to_post = 0;
 
 	if (ep->use_shm) {
-		err = rxr_ep_bulk_post_prov_buf(ep, ep->rx_bufs_shm_to_post, SHM_EP);
+		err = rxr_ep_bulk_post_internal_rx_pkts(ep, ep->shm_rx_pkts_to_post, SHM_EP);
 		if (err)
 			goto err_exit;
 
-		ep->rx_bufs_shm_to_post = 0;
+		ep->shm_rx_pkts_to_post = 0;
 	}
 
 	return;
@@ -1720,7 +1797,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	if (ep->use_shm)
 		rdm_ep_poll_shm_cq(ep, rxr_env.shm_cq_read_size);
 
-	rxr_ep_progress_post_prov_buf(ep);
+	rxr_ep_progress_post_internal_rx_pkts(ep);
 
 	rxr_ep_check_peer_backoff_timer(ep);
 
@@ -2098,10 +2175,10 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->recv_comps = 0;
 #endif
 
-	rxr_ep->posted_bufs_shm = 0;
-	rxr_ep->rx_bufs_shm_to_post = 0;
-	rxr_ep->posted_bufs_efa = 0;
-	rxr_ep->rx_bufs_efa_to_post = 0;
+	rxr_ep->shm_rx_pkts_posted = 0;
+	rxr_ep->shm_rx_pkts_to_post = 0;
+	rxr_ep->efa_rx_pkts_posted = 0;
+	rxr_ep->efa_rx_pkts_to_post = 0;
 	rxr_ep->efa_outstanding_tx_ops = 0;
 	rxr_ep->shm_outstanding_tx_ops = 0;
 	rxr_ep->available_data_bufs_ts = 0;

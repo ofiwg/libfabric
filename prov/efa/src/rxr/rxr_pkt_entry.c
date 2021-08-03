@@ -137,9 +137,9 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 		return;
 
 	if (pkt_entry->alloc_type == RXR_PKT_FROM_EFA_RX_POOL) {
-		ep->rx_bufs_efa_to_post++;
+		ep->efa_rx_pkts_to_post++;
 	} else if (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_RX_POOL) {
-		ep->rx_bufs_shm_to_post++;
+		ep->shm_rx_pkts_to_post++;
 	} else if (pkt_entry->alloc_type == RXR_PKT_FROM_READ_COPY_POOL) {
 		assert(ep->rx_readcopy_pkt_pool_used > 0);
 		ep->rx_readcopy_pkt_pool_used--;
