@@ -57,6 +57,7 @@ struct rxr_env rxr_env = {
 	.shm_max_medium_size = 4096,
 	.recvwin_size = RXR_RECVWIN_SIZE,
 	.ooo_pool_chunk_size = 64,
+	.unexp_pool_chunk_size = 1024,
 	.readcopy_pool_size = 256,
 	.atomrsp_pool_size = 1024,
 	.cq_size = RXR_DEF_CQ_SIZE,
