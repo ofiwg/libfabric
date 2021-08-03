@@ -611,7 +611,7 @@ void rxm_process_shutdown(struct rxm_conn *conn)
 
 static void rxm_handle_error(struct rxm_ep *ep)
 {
-	struct fi_eq_err_entry entry;
+	struct fi_eq_err_entry entry = {0};
 	ssize_t ret;
 
 	assert(ofi_ep_lock_held(&ep->util_ep));
