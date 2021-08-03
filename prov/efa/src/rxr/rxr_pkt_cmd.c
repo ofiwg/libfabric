@@ -757,7 +757,14 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
 		tx_entry = pkt_entry->x_entry;
 		if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR &&
-		    ep->handle_resource_management == FI_RM_ENABLED) {
+		    ep->handle_resource_management == FI_RM_DISABLED) {
+			/*
+			 * Write an error to the application for RNR when
+			 * resource management is disabled.
+			 */
+			rxr_cq_write_tx_error(ep, pkt_entry->x_entry, FI_ENORX, 0);
+			rxr_pkt_entry_release_tx(ep, pkt_entry);
+		} if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR) {
 			/*
 			 * This packet is assoiciated with a send operation,
 			 * (such packets include all REQ, DATA)
