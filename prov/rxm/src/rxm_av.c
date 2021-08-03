@@ -37,7 +37,7 @@
 
 static int rxm_addr_compare(struct ofi_rbmap *map, void *key, void *data)
 {
-	return memcmp(data, key,
+	return memcmp(&((struct rxm_peer_addr *) data)->addr, key,
 		container_of(map, struct rxm_av, addr_map)->util_av.addrlen);
 }
 

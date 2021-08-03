@@ -223,6 +223,7 @@ struct rxm_conn {
 	struct dlist_entry deferred_tx_queue;
 	struct dlist_entry deferred_sar_msgs;
 	struct dlist_entry deferred_sar_segments;
+	struct dlist_entry loopback_entry;
 };
 
 void rxm_freeall_conns(struct rxm_ep *ep);
@@ -623,6 +624,7 @@ struct rxm_ep {
 	struct fi_info 		*msg_info;
 
 	struct index_map	conn_idx_map;
+	struct dlist_entry	loopback_list;
 	union ofi_sock_ip	addr;
 
 	pthread_t		cm_thread;
