@@ -104,9 +104,8 @@ int rxd_info_to_rxd(uint32_t version, const struct fi_info *core_info,
 	*info->rx_attr = *rxd_info.rx_attr;
 	*info->ep_attr = *rxd_info.ep_attr;
 	*info->domain_attr = *rxd_info.domain_attr;
-	info->domain_attr->caps = ofi_pick_core_flags(rxd_info.domain_attr->caps,
-						core_info->domain_attr->caps,
-						FI_LOCAL_COMM | FI_REMOTE_COMM);
+	info->domain_attr->caps = rxd_info.domain_attr->caps &
+				  core_info->domain_attr->caps;
 	if (core_info->nic) {
 		info->nic = ofi_nic_dup(core_info->nic);
 		if (!info->nic)
