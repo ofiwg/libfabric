@@ -446,8 +446,10 @@ transfer operation.
   seen by the initiator of a request.  For FI_EP_DGRAM endpoints, if the target EP
   queues are unable to accept incoming messages, received messages will
   be dropped.  For reliable endpoints, if RM is disabled, the transmit
-  operation will complete in error.  If RM is enabled, the provider will
-  internally retry the operation.
+  operation will complete in error. A provider may choose to return an error
+  completion with the error code FI_ENORX for that transmit operation so that
+  it can be retried. If RM is enabled, the provider will internally retry the
+  operation.
 
 *Rx Buffer Overrun*
 : This refers to buffers posted to receive incoming tagged or untagged messages,
