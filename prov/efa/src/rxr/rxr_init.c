@@ -57,6 +57,7 @@ struct rxr_env rxr_env = {
 	.shm_max_medium_size = 4096,
 	.recvwin_size = RXR_RECVWIN_SIZE,
 	.ooo_pool_chunk_size = 64,
+	.unexp_pool_chunk_size = 1024,
 	.readcopy_pool_size = 256,
 	.atomrsp_pool_size = 1024,
 	.cq_size = RXR_DEF_CQ_SIZE,
@@ -76,12 +77,7 @@ struct rxr_env rxr_env = {
 	.efa_min_read_msg_size = 1048576,
 	.efa_min_read_write_size = 65536,
 	.efa_read_segment_size = 1073741824,
-	/*
-	 * There's still hanging issue when disabling RNR firmware infinite
-	 * retry. Just reset RNR firmware retry to EFA_RNR_INFINITE_RETRY
-	 * to be safe, while we are working on a fix.
-	 */
-	.rnr_retry = EFA_RNR_INFINITE_RETRY,
+	.rnr_retry = 3, /* Setting this value to EFA_RNR_INFINITE_RETRY makes the firmware retry indefinitey */
 };
 
 /* @brief Read and store the FI_EFA_* environment variables.
