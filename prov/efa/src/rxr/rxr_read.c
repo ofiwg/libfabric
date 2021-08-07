@@ -588,6 +588,8 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 			efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 			msg.addr = read_entry->addr;
 			self_comm = (read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY);
+			if (self_comm)
+				pkt_entry->flags |= RXR_PKT_ENTRY_LOCAL_READ;
 			ret = efa_rma_post_read(efa_ep, &msg, 0, self_comm);
 		}
 

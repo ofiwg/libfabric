@@ -38,6 +38,7 @@
 
 #define RXR_PKT_ENTRY_IN_USE		BIT_ULL(0)
 #define RXR_PKT_ENTRY_RNR_RETRANSMIT	BIT_ULL(1)
+#define RXR_PKT_ENTRY_LOCAL_READ	BIT_ULL(2) /* this packet entry is used as context of a local read operation */
 
 /* pkt_entry_alloc_type indicate where the packet entry is allocated from */
 enum rxr_pkt_entry_alloc_type {

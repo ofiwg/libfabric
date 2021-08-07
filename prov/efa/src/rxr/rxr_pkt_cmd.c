@@ -831,16 +831,15 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 
 void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	struct rdm_peer *peer;
-
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	if (!peer) {
-		/*
-		 * peer could be NULL in the following 2 scenarios:
-		 * 1. a new peer with same gid+qpn was inserted to av, thus the peer was remove.
-		 * 2. application removed the peer's address from av.
-		 * Either way, we need to ignore this error completion.
-		 */
+	/*
+	 * For a send completion, pkt_entry->addr can be FI_ADDR_NOTAVAIL in 3 situations:
+	 * 1. the pkt_entry is used for a local read operation
+	 * 2. a new peer with same gid+qpn was inserted to av, thus the peer was removed from AV.
+	 * 3. application removed the peer's address from av.
+	 * In 1, we should proceed. For 2 and 3, the send completion should be ignored.
+	 */
+	if (pkt_entry->addr == FI_ADDR_NOTAVAIL &&
+	    !(pkt_entry->flags & RXR_PKT_ENTRY_LOCAL_READ)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "ignoring send completion of a packet to a removed peer.\n");
 		rxr_ep_record_tx_op_completed(ep, pkt_entry);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
