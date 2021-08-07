@@ -175,7 +175,7 @@ int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, 
 	mr = (struct efa_mr *)rx_entry->desc[0];
 	pkt_entry->mr = &mr->mr_fid;
 	pkt_entry->alloc_type = RXR_PKT_FROM_USER_BUFFER;
-	pkt_entry->state = RXR_PKT_ENTRY_IN_USE;
+	pkt_entry->flags = RXR_PKT_ENTRY_IN_USE;
 	pkt_entry->next = NULL;
 	/*
 	 * The actual receiving buffer size (pkt_size) is
