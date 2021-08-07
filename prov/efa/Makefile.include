@@ -69,7 +69,8 @@ _efa_headers = \
 	prov/efa/src/rxr/rxr_pkt_type_req.h \
 	prov/efa/src/rxr/rxr_pkt_cmd.h \
 	prov/efa/src/rxr/rxr_read.h \
-	prov/efa/src/rxr/rxr_atomic.h
+	prov/efa/src/rxr/rxr_atomic.h \
+	prov/efa/src/rxr/rdm_proto_v4.h
 
 efa_CPPFLAGS += \
 	-I$(top_srcdir)/prov/efa/src/ \

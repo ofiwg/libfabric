@@ -34,59 +34,11 @@
 #ifndef _RXR_PKT_TYPE_REQ_H
 #define _RXR_PKT_TYPE_REQ_H
 
-/*
- * This file contain REQ packet type related struct and functions
- * REQ packets can be classifed into 4 categories:
- *    RTM (Request To Message) is used by message
- *    RTW (Request To Write) is used by RMA write
- *    RTR (Request To Read) is used by RMA read
- *    RTA (Request To Atomic) is used by Atomic
- *
- * For each REQ packet type need to have the following:
- *
- *     1. a header struct
- *     2. an init() function called by rxr_pkt_init_ctrl()
- *     3. a handle_sent() function called by rxr_pkt_post_ctrl()
- *     4. a handle_send_completion() function called by
- *               rxr_pkt_handle_send_completion()
- *     5. a proc() function called by
- *               rxr_pkt_proc_req()
- *
- * Some req packet types are so similar that they can share
- * some functions.
- */
+#define RXR_MSG_PREFIX_SIZE (sizeof(struct rxr_pkt_entry) + sizeof(struct rxr_eager_msgrtm_hdr) + RXR_REQ_OPT_RAW_ADDR_HDR_SIZE)
 
-/*
- * Utilities shared by all REQ packets
- *
- *     Packet Header Flags
- */
-#define RXR_REQ_OPT_RAW_ADDR_HDR	BIT_ULL(0)
-#define RXR_REQ_OPT_CQ_DATA_HDR		BIT_ULL(1)
-#define RXR_REQ_MSG			BIT_ULL(2)
-#define RXR_REQ_TAGGED			BIT_ULL(3)
-#define RXR_REQ_RMA			BIT_ULL(4)
-#define RXR_REQ_ATOMIC			BIT_ULL(5)
-
-/*
- *     Extra Feature/Request Flags
- */
-#define RXR_EXTRA_FEATURE_RDMA_READ		BIT_ULL(0)
-#define RXR_EXTRA_FEATURE_DELIVERY_COMPLETE 	BIT_ULL(1)
-#define RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH	BIT_ULL(2)
-#define RXR_NUM_EXTRA_FEATURE_OR_REQUEST		3
-/*
- *     Utility struct and functions for
- *             REQ packet types
- */
-struct rxr_req_opt_raw_addr_hdr {
-	uint32_t addr_len;
-	char raw_addr[0];
-};
-
-struct rxr_req_opt_cq_data_hdr {
-	int64_t cq_data;
-};
+#if defined(static_assert) && defined(__x86_64__)
+static_assert(RXR_MSG_PREFIX_SIZE % 8 == 0, "message prefix size alignment check");
+#endif
 
 void *rxr_pkt_req_raw_addr(struct rxr_pkt_entry *pkt_entry);
 
@@ -101,28 +53,6 @@ size_t rxr_pkt_req_max_header_size(int pkt_type);
 size_t rxr_pkt_max_header_size(void);
 
 size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type);
-
-/*
- * Structs and funcitons for RTM (Message) packet types
- * There are 4 message protocols
- *         Eager message protocol,
- *         Medium message protocol,
- *         Long message protocol,
- *         Read message protocol (message by read)
- * Each protocol employes two packet types: non-tagged and tagged.
- * Thus altogether there are 8 RTM packet types.
- */
-
-/*
- *   Utility structs and functions shared by all
- *   RTM packet types
- */
-struct rxr_rtm_base_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	uint32_t msg_id;
-};
 
 static inline
 struct rxr_rtm_base_hdr *rxr_get_rtm_base_hdr(void *pkt)
@@ -171,36 +101,11 @@ void rxr_pkt_rtm_settag(struct rxr_pkt_entry *pkt_entry, uint64_t tag)
 	*tagptr = tag;
 }
 
-/*
- *   Header structs for each REQ packe type
- */
-struct rxr_eager_msgrtm_hdr {
-	struct rxr_rtm_base_hdr hdr;
-};
-
-struct rxr_eager_tagrtm_hdr {
-	struct rxr_rtm_base_hdr hdr;
-	uint64_t tag;
-};
-
-struct rxr_dc_eager_rtm_base_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	uint32_t msg_id;
-	uint32_t send_id;
-	uint32_t padding;
-};
-
 static inline
 struct rxr_dc_eager_rtm_base_hdr *rxr_get_dc_eager_rtm_base_hdr(void *pkt)
 {
 	return (struct rxr_dc_eager_rtm_base_hdr *)pkt;
 }
-
-struct rxr_dc_eager_msgrtm_hdr {
-	struct rxr_dc_eager_rtm_base_hdr hdr;
-};
 
 static inline
 struct rxr_dc_eager_msgrtm_hdr *rxr_get_dc_eager_msgrtm_hdr(void *pkt)
@@ -208,48 +113,11 @@ struct rxr_dc_eager_msgrtm_hdr *rxr_get_dc_eager_msgrtm_hdr(void *pkt)
 	return (struct rxr_dc_eager_msgrtm_hdr *)pkt;
 }
 
-struct rxr_dc_eager_tagrtm_hdr {
-	struct rxr_dc_eager_rtm_base_hdr hdr;
-	uint64_t tag;
-};
-
 static inline
 struct rxr_dc_eager_tagrtm_hdr *rxr_get_dc_eager_tagrtm_hdr(void *pkt)
 {
 	return (struct rxr_dc_eager_tagrtm_hdr *)pkt;
 }
-
-struct rxr_medium_rtm_base_hdr {
-	struct rxr_rtm_base_hdr hdr;
-	uint64_t msg_length;
-	uint64_t seg_offset;
-};
-
-struct rxr_dc_medium_rtm_base_hdr {
-	struct rxr_rtm_base_hdr hdr;
-	uint32_t send_id;
-	uint32_t padding;
-	uint64_t msg_length;
-	uint64_t seg_offset;
-};
-
-struct rxr_medium_msgrtm_hdr {
-	struct rxr_medium_rtm_base_hdr hdr;
-};
-
-struct rxr_dc_medium_msgrtm_hdr {
-	struct rxr_dc_medium_rtm_base_hdr hdr;
-};
-
-struct rxr_medium_tagrtm_hdr {
-	struct rxr_medium_rtm_base_hdr hdr;
-	uint64_t tag;
-};
-
-struct rxr_dc_medium_tagrtm_hdr {
-	struct rxr_dc_medium_rtm_base_hdr hdr;
-	uint64_t tag;
-};
 
 static inline
 struct rxr_medium_rtm_base_hdr *rxr_get_medium_rtm_base_hdr(void *pkt)
@@ -275,58 +143,17 @@ struct rxr_dc_medium_tagrtm_hdr *rxr_get_dc_medium_tagrtm_hdr(void *pkt)
 	return (struct rxr_dc_medium_tagrtm_hdr *)pkt;
 }
 
-struct rxr_longcts_rtm_base_hdr {
-	struct rxr_rtm_base_hdr hdr;
-	uint64_t msg_length;
-	uint32_t send_id;
-	uint32_t credit_request;
-};
-
 static inline
 struct rxr_longcts_rtm_base_hdr *rxr_get_longcts_rtm_base_hdr(void *pkt)
 {
 	return (struct rxr_longcts_rtm_base_hdr *)pkt;
 }
 
-struct rxr_longcts_msgrtm_hdr {
-	struct rxr_longcts_rtm_base_hdr hdr;
-};
-
-struct rxr_longcts_tagrtm_hdr {
-	struct rxr_longcts_rtm_base_hdr hdr;
-	uint64_t tag;
-};
-
-struct rxr_dc_longcts_msgrtm_hdr {
-	struct rxr_longcts_rtm_base_hdr hdr;
-};
-
-struct rxr_dc_longcts_tagrtm_hdr {
-	struct rxr_longcts_rtm_base_hdr hdr;
-	uint64_t tag;
-};
-
-struct rxr_longread_rtm_base_hdr {
-	struct rxr_rtm_base_hdr hdr;
-	uint64_t msg_length;
-	uint32_t send_id;
-	uint32_t read_iov_count;
-};
-
 static inline
 struct rxr_longread_rtm_base_hdr *rxr_get_longread_rtm_base_hdr(void *pkt)
 {
 	return (struct rxr_longread_rtm_base_hdr *)pkt;
 }
-
-struct rxr_longread_msgrtm_hdr {
-	struct rxr_longread_rtm_base_hdr hdr;
-};
-
-struct rxr_longread_tagrtm_hdr {
-	struct rxr_longread_rtm_base_hdr hdr;
-	uint64_t tag;
-};
 
 static inline
 int rxr_longread_rtm_pkt_type(int op)
@@ -336,9 +163,6 @@ int rxr_longread_rtm_pkt_type(int op)
 				     : RXR_LONGREAD_MSGRTM_PKT;
 }
 
-/*
- *  init() functions for RTM packets
- */
 ssize_t rxr_pkt_init_eager_msgrtm(struct rxr_ep *ep,
 				  struct rxr_tx_entry *tx_entry,
 				  struct rxr_pkt_entry *pkt_entry);
@@ -394,9 +218,7 @@ ssize_t rxr_pkt_init_longread_msgrtm(struct rxr_ep *ep,
 ssize_t rxr_pkt_init_longread_tagrtm(struct rxr_ep *ep,
 				 struct rxr_tx_entry *tx_entry,
 				 struct rxr_pkt_entry *pkt_entry);
-/*
- *   handle_sent() functions for RTM packets
- */
+
 static inline
 void rxr_pkt_handle_eager_rtm_sent(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry)
@@ -417,9 +239,6 @@ void rxr_pkt_handle_longread_rtm_sent(struct rxr_ep *ep,
 {
 }
 
-/*
- *   handle_send_completion() functions for RTM packet types
- */
 void rxr_pkt_handle_eager_rtm_send_completion(struct rxr_ep *ep,
 					      struct rxr_pkt_entry *pkt_entry);
 
@@ -438,9 +257,6 @@ void rxr_pkt_handle_longread_rtm_send_completion(struct rxr_ep *ep,
 {
 }
 
-/*
- *   proc() functions for RTM packet types
- */
 void rxr_pkt_rtm_update_rx_entry(struct rxr_pkt_entry *pkt_entry,
 				 struct rxr_rx_entry *rx_entry);
 
@@ -466,57 +282,11 @@ void rxr_pkt_handle_zcpy_recv(struct rxr_ep *ep,
 void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry);
 
-/* Structs and functions for RTW packet types
- * There are 3 write protocols
- *         Eager write protocol,
- *         Long write protocol and
- *         Read write protocol (write by read)
- * Each protocol correspond to a packet type
- */
-
-/*
- *     Header structs
- */
-struct rxr_rtw_base_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	uint32_t rma_iov_count;
-};
-
 static inline
 struct rxr_rtw_base_hdr *rxr_get_rtw_base_hdr(void *pkt)
 {
 	return (struct rxr_rtw_base_hdr *)pkt;
 }
-
-struct efa_rma_iov {
-	uint64_t		addr;
-	size_t			len;
-	uint64_t		key;
-};
-
-struct rxr_eager_rtw_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	uint32_t rma_iov_count;
-	struct efa_rma_iov rma_iov[0];
-};
-
-struct rxr_dc_eager_rtw_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	uint32_t rma_iov_count;
-	/* end of rxr_rtw_base_hdr */
-	uint32_t send_id;
-	uint32_t padding;
-	struct efa_rma_iov rma_iov[0];
-};
 
 static inline
 struct rxr_dc_eager_rtw_hdr *rxr_get_dc_eager_rtw_hdr(void *pkt)
@@ -524,33 +294,6 @@ struct rxr_dc_eager_rtw_hdr *rxr_get_dc_eager_rtw_hdr(void *pkt)
 	return (struct rxr_dc_eager_rtw_hdr *)pkt;
 }
 
-struct rxr_longcts_rtw_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	uint32_t rma_iov_count;
-	uint64_t msg_length;
-	uint32_t send_id;
-	uint32_t credit_request;
-	struct efa_rma_iov rma_iov[0];
-};
-
-struct rxr_longread_rtw_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	uint32_t rma_iov_count;
-	uint64_t msg_length;
-	uint32_t send_id;
-	uint32_t read_iov_count;
-	struct efa_rma_iov rma_iov[0];
-};
-
-/*
- *     init() functions for each RTW packet types
- */
 ssize_t rxr_pkt_init_eager_rtw(struct rxr_ep *ep,
 			       struct rxr_tx_entry *tx_entry,
 			       struct rxr_pkt_entry *pkt_entry);
@@ -571,9 +314,6 @@ ssize_t rxr_pkt_init_dc_longcts_rtw(struct rxr_ep *ep,
 				 struct rxr_tx_entry *tx_entry,
 				 struct rxr_pkt_entry *pkt_entry);
 
-/*
- *     handle_sent() functions
- */
 static inline
 void rxr_pkt_handle_eager_rtw_sent(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry)
@@ -591,9 +331,6 @@ void rxr_pkt_handle_longread_rtw_sent(struct rxr_ep *ep,
 {
 }
 
-/*
- *     handle_send_completion() functions
- */
 void rxr_pkt_handle_eager_rtw_send_completion(struct rxr_ep *ep,
 					      struct rxr_pkt_entry *pkt_entry);
 
@@ -609,9 +346,6 @@ void rxr_pkt_handle_longread_rtw_send_completion(struct rxr_ep *ep,
 {
 }
 
-/*
- *     handle_recv() functions
- */
 void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry);
 
@@ -623,39 +357,12 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 
 void rxr_pkt_handle_longread_rtw_recv(struct rxr_ep *ep,
 				  struct rxr_pkt_entry *pkt_entry);
-
-/* Structs and functions for RTR packet types
- * There are 3 read protocols
- *         Short protocol,
- *         Long read protocol and
- *         RDMA read protocol
- * Each protocol correspond to a packet type
- */
-
-/*
- * rxr_rtr_hdr is used by both SHORT_RTR and LONGCTS_RTR
- */
-struct rxr_rtr_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of rxr_base_hdr */
-	uint32_t rma_iov_count;
-	uint64_t msg_length;
-	uint32_t recv_id; /* ID of the receive operation of the read requester, will be included in DATA/READRSP header */
-	uint32_t recv_length; /* number of bytes that the read requester is ready to receive */
-	struct efa_rma_iov rma_iov[0];
-};
-
 static inline
 struct rxr_rtr_hdr *rxr_get_rtr_hdr(void *pkt)
 {
 	return (struct rxr_rtr_hdr *)pkt;
 }
 
-/*
- *     init() functions for each RTW packet types
- */
 ssize_t rxr_pkt_init_short_rtr(struct rxr_ep *ep,
 			       struct rxr_tx_entry *tx_entry,
 			       struct rxr_pkt_entry *pkt_entry);
@@ -664,50 +371,13 @@ ssize_t rxr_pkt_init_longcts_rtr(struct rxr_ep *ep,
 			      struct rxr_tx_entry *tx_entry,
 			      struct rxr_pkt_entry *pkt_entry);
 
-/*
- *     handle_sent() functions
- */
 void rxr_pkt_handle_rtr_sent(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 
-/*
- *     handle_send_completion() functions
- */
 void rxr_pkt_handle_rtr_send_completion(struct rxr_ep *ep,
 					struct rxr_pkt_entry *pkt_entry);
-/*
- *     handle_recv() functions
- */
 void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
-
-/* @brief rxr_rta_hdr are shared by 4 types of RTA:
- *    WRITE_RTA, FETCH_RTA, COMPARE_RTA and DC_WRTIE_RTA
- */
-struct rxr_rta_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	uint32_t msg_id;
-	/* end of rtm_base_hdr, atomic packet need msg_id for reordering */
-	uint32_t rma_iov_count;
-	uint32_t atomic_datatype;
-	uint32_t atomic_op;
-	union {
-		/* padding is used by WRITE_RTA, align to 8 bytes */
-		uint32_t padding;
-		/* recv_id is used by FETCH_RTA and COMPARE_RTA. It is the ID of the receive operation on atomic requester,
-		 * it will be included in ATOMRSP packet header.
-		 */
-		uint32_t recv_id;
-		/* send_id is used by DC_WRITE_RTA. It is ID of the send operation on the atomic requester.
-		 * It will be included in RECEIPT packet header.
-		 */
-		uint32_t send_id;
-	};
-
-	struct efa_rma_iov rma_iov[0];
-};
 
 static inline
 struct rxr_rta_hdr *rxr_get_rta_hdr(void *pkt)
@@ -751,4 +421,5 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_rta_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+
 #endif

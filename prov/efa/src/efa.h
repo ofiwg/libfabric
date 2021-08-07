@@ -120,18 +120,6 @@ struct efa_fabric {
 	struct util_fabric	util_fabric;
 };
 
-#define EFA_GID_LEN	16
-
-struct efa_ep_addr {
-	uint8_t			raw[EFA_GID_LEN];
-	uint16_t		qpn;
-	uint16_t		pad;
-	uint32_t		qkey;
-	struct efa_ep_addr	*next;
-};
-
-#define EFA_EP_ADDR_LEN sizeof(struct efa_ep_addr)
-
 struct efa_ah {
 	uint8_t		gid[EFA_GID_LEN]; /* efa device GID */
 	struct ibv_ah	*ibv_ah; /* created by ibv_create_ah() using GID */
@@ -610,17 +598,5 @@ static inline bool efa_is_cache_available(struct efa_domain *efa_domain)
 {
 	return efa_domain->cache;
 }
-
-#define RXR_REQ_OPT_HDR_ALIGNMENT 8
-#define RXR_REQ_OPT_RAW_ADDR_HDR_SIZE (((sizeof(struct rxr_req_opt_raw_addr_hdr) + EFA_EP_ADDR_LEN - 1)/RXR_REQ_OPT_HDR_ALIGNMENT + 1) * RXR_REQ_OPT_HDR_ALIGNMENT)
-
-/*
- * Per libfabric standard, the prefix must be a multiple of 8, hence the static assert
- */
-#define RXR_MSG_PREFIX_SIZE (sizeof(struct rxr_pkt_entry) + sizeof(struct rxr_eager_msgrtm_hdr) + RXR_REQ_OPT_RAW_ADDR_HDR_SIZE)
-
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(RXR_MSG_PREFIX_SIZE % 8 == 0, "message prefix size alignment check");
-#endif
 
 #endif /* EFA_H */

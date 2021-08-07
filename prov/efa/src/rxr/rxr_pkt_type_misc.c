@@ -312,10 +312,10 @@ int rxr_pkt_init_readrsp(struct rxr_ep *ep,
 	readrsp_hdr->send_id = tx_entry->tx_id;
 	readrsp_hdr->recv_id = tx_entry->rx_id;
 	readrsp_hdr->seg_length = ofi_copy_from_iov(readrsp_pkt->data,
-						    mtu - RXR_READRSP_HDR_SIZE,
+						    mtu - sizeof(struct rxr_readrsp_hdr),
 						    tx_entry->iov,
 						    tx_entry->iov_count, 0);
-	pkt_entry->pkt_size = RXR_READRSP_HDR_SIZE + readrsp_hdr->seg_length;
+	pkt_entry->pkt_size = sizeof(struct rxr_readrsp_hdr) + readrsp_hdr->seg_length;
 	pkt_entry->addr = tx_entry->addr;
 	pkt_entry->x_entry = tx_entry;
 	return 0;
@@ -614,11 +614,11 @@ int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 	atomrsp_hdr->recv_id = rx_entry->tx_id;
 	atomrsp_hdr->seg_length = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 
-	assert(RXR_ATOMRSP_HDR_SIZE + atomrsp_hdr->seg_length < ep->mtu_size);
+	assert(sizeof(struct rxr_atomrsp_hdr) + atomrsp_hdr->seg_length < ep->mtu_size);
 
 	/* rx_entry->atomrsp_data was filled in rxr_pkt_handle_req_recv() */
-	memcpy((char*)pkt_entry->pkt + RXR_ATOMRSP_HDR_SIZE, rx_entry->atomrsp_data, atomrsp_hdr->seg_length);
-	pkt_entry->pkt_size = RXR_ATOMRSP_HDR_SIZE + atomrsp_hdr->seg_length;
+	memcpy((char*)pkt_entry->pkt + sizeof(struct rxr_atomrsp_hdr), rx_entry->atomrsp_data, atomrsp_hdr->seg_length);
+	pkt_entry->pkt_size = sizeof(struct rxr_atomrsp_hdr) + atomrsp_hdr->seg_length;
 	return 0;
 }
 

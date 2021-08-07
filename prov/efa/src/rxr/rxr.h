@@ -66,9 +66,6 @@
 #include "rxr_pkt_entry.h"
 #include "rxr_pkt_type.h"
 
-#define RXR_PROTOCOL_VERSION	(4)
-#define RXR_MAX_NUM_EXINFO	(256)
-
 #define RXR_FI_VERSION		OFI_VERSION_LATEST
 
 #define RXR_IOV_LIMIT		(4)

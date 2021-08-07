@@ -221,7 +221,7 @@ ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
 	pkt_entry->send->iov_count = i;
 
 	data_pkt->hdr.seg_length = (uint16_t)payload_size;
-	pkt_entry->pkt_size = payload_size + RXR_DATA_HDR_SIZE;
+	pkt_entry->pkt_size = payload_size + sizeof(struct rxr_data_hdr);
 	pkt_entry->x_entry = tx_entry;
 	pkt_entry->addr = tx_entry->addr;
 
