@@ -81,9 +81,9 @@ ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rdm_peer *peer)
 
 	addr = peer->efa_fiaddr;
 	if (peer->is_local)
-		pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_shm_pool);
+		pkt_entry = rxr_pkt_entry_alloc(ep, ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
 	else
-		pkt_entry = rxr_pkt_entry_alloc(ep, ep->tx_pkt_efa_pool);
+		pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 
@@ -420,8 +420,6 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_read_entry *read_entry;
 	struct rxr_rma_context_pkt *rma_context_pkt;
-	enum rxr_read_context_type read_context_type;
-	struct rdm_peer *peer;
 	int inject;
 	size_t data_size;
 	ssize_t ret;
@@ -433,7 +431,6 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	read_entry = (struct rxr_read_entry *)context_pkt_entry->x_entry;
 	read_entry->bytes_finished += rma_context_pkt->seg_size;
 	assert(read_entry->bytes_finished <= read_entry->total_len);
-	read_context_type = read_entry->context_type;
 
 	if (read_entry->bytes_finished == read_entry->total_len) {
 		if (read_entry->context_type == RXR_READ_CONTEXT_TX_ENTRY) {
@@ -454,8 +451,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			inject = (read_entry->lower_ep_type == SHM_EP);
 			ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_EOR_PKT, inject);
 			if (OFI_UNLIKELY(ret)) {
-				if (rxr_cq_handle_rx_error(ep, rx_entry, ret))
-					assert(0 && "failed to write err cq entry");
+				rxr_cq_write_rx_error(ep, rx_entry, -ret, -ret);
 				rxr_release_rx_entry(ep, rx_entry);
 			}
 		} else {
@@ -469,15 +465,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 		rxr_read_release_entry(ep, read_entry);
 	}
 
-	if (read_context_type == RXR_READ_CONTEXT_PKT_ENTRY) {
-		assert(context_pkt_entry->addr == FI_ADDR_NOTAVAIL);
-		ep->tx_pending--;
-	} else {
-		peer = rxr_ep_get_peer(ep, context_pkt_entry->addr);
-		assert(peer);
-		if (!peer->is_local)
-			rxr_ep_dec_tx_pending(ep, peer, 0);
-	}
+	rxr_ep_record_tx_op_completed(ep, context_pkt_entry);
 }
 
 void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,

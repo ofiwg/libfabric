@@ -844,7 +844,7 @@ struct rxr_rx_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 	dlist_func_t *match_func;
 	int pkt_type;
 
-	if ((*pkt_entry_ptr)->type == RXR_PKT_ENTRY_USER) {
+	if ((*pkt_entry_ptr)->alloc_type == RXR_PKT_FROM_USER_BUFFER) {
 		/* If a pkt_entry is constructred from user supplied buffer,
 		 * the endpoint must be in zero copy receive mode.
 		 */
@@ -1019,7 +1019,7 @@ ssize_t rxr_pkt_proc_matched_eager_rtm(struct rxr_ep *ep,
 
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
 
-	if (pkt_entry->type != RXR_PKT_ENTRY_USER) {
+	if (pkt_entry->alloc_type != RXR_PKT_FROM_USER_BUFFER) {
 		data = (char *)pkt_entry->pkt + hdr_size;
 		data_size = pkt_entry->pkt_size - hdr_size;
 
@@ -1077,7 +1077,7 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 		rx_entry->addr = pkt_entry->addr;
 		rx_entry->peer = rxr_ep_get_peer(ep, rx_entry->addr);
 		assert(rx_entry->peer);
-		ofi_atomic_inc32(&rx_entry->peer->use_cnt);
+		dlist_insert_tail(&rx_entry->peer_entry, &rx_entry->peer->rx_entry_list);
 	}
 
 	/* Adjust rx_entry->cq_entry.len as needed.
@@ -1161,10 +1161,7 @@ ssize_t rxr_pkt_proc_msgrtm(struct rxr_ep *ep,
 	if (rx_entry->state == RXR_RX_MATCHED) {
 		err = rxr_pkt_proc_matched_rtm(ep, rx_entry, pkt_entry);
 		if (OFI_UNLIKELY(err)) {
-			if (rxr_cq_handle_rx_error(ep, rx_entry, err)) {
-				assert(0 && "cannot write cq error entry");
-				efa_eq_write_error(&ep->util_ep, -err, err);
-			}
+			rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
 			rxr_pkt_entry_release_rx(ep, pkt_entry);
 			rxr_release_rx_entry(ep, rx_entry);
 			return err;
@@ -1190,10 +1187,7 @@ ssize_t rxr_pkt_proc_tagrtm(struct rxr_ep *ep,
 	if (rx_entry->state == RXR_RX_MATCHED) {
 		err = rxr_pkt_proc_matched_rtm(ep, rx_entry, pkt_entry);
 		if (OFI_UNLIKELY(err)) {
-			if (rxr_cq_handle_rx_error(ep, rx_entry, err)) {
-				assert(0 && "cannot write error cq entry");
-				efa_eq_write_error(&ep->util_ep, -err, err);
-			}
+			rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
 			rxr_pkt_entry_release_rx(ep, pkt_entry);
 			rxr_release_rx_entry(ep, rx_entry);
 			return err;
@@ -1243,7 +1237,7 @@ ssize_t rxr_pkt_proc_rtm_rta(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Unknown packet type ID: %d\n",
 		       base_hdr->type);
-		rxr_cq_handle_error(ep, -FI_EINVAL, NULL);
+		efa_eq_write_error(&ep->util_ep, FI_EINVAL, FI_EINVAL);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 	}
 
@@ -1743,7 +1737,7 @@ void rxr_pkt_handle_long_rtw_recv(struct rxr_ep *ep,
 	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Cannot post CTS packet\n");
-		rxr_cq_handle_rx_error(ep, rx_entry, err);
+		rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
 		rxr_release_rx_entry(ep, rx_entry);
 	}
 }
@@ -2128,8 +2122,7 @@ int rxr_pkt_proc_dc_write_rta(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Posting of receipt packet failed! err=%s\n",
 			fi_strerror(err));
-		if (rxr_cq_handle_rx_error(ep, rx_entry, err))
-			assert(0 && "Cannot handle rx error");
+		rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
 		return err;
 	}
 
@@ -2166,10 +2159,8 @@ int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	}
 
 	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_ATOMRSP_PKT, 0);
-	if (OFI_UNLIKELY(err)) {
-		if (rxr_cq_handle_rx_error(ep, rx_entry, err))
-			assert(0 && "Cannot handle rx error");
-	}
+	if (OFI_UNLIKELY(err))
+		rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 	return 0;
