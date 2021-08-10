@@ -36,12 +36,9 @@
 
 #include <ofi_list.h>
 
-/* pkt_entry state for retransmit tracking */
-enum rxr_pkt_entry_state {
-	RXR_PKT_ENTRY_FREE = 0,
-	RXR_PKT_ENTRY_IN_USE,
-	RXR_PKT_ENTRY_RNR_RETRANSMIT,
-};
+#define RXR_PKT_ENTRY_IN_USE		BIT_ULL(0)
+#define RXR_PKT_ENTRY_RNR_RETRANSMIT	BIT_ULL(1)
+#define RXR_PKT_ENTRY_LOCAL_READ	BIT_ULL(2) /* this packet entry is used as context of a local read operation */
 
 /* pkt_entry_alloc_type indicate where the packet entry is allocated from */
 enum rxr_pkt_entry_alloc_type {
@@ -103,7 +100,7 @@ struct rxr_pkt_entry {
 	 */
 	fi_addr_t addr;
 	enum rxr_pkt_entry_alloc_type alloc_type; /* where the memory of this packet entry reside */
-	enum rxr_pkt_entry_state state;
+	uint32_t flags;
 
 	/*
 	 * next is used on receiving end.

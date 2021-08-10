@@ -315,11 +315,11 @@ void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
-	if (pkt_entry->state != RXR_PKT_ENTRY_RNR_RETRANSMIT) {
+	if (!(pkt_entry->flags & RXR_PKT_ENTRY_RNR_RETRANSMIT)) {
 		/* This is the first time this packet encountered RNR,
 		 * we are NOT going to put the peer in backoff mode just yet.
 		 */
-		pkt_entry->state = RXR_PKT_ENTRY_RNR_RETRANSMIT;
+		pkt_entry->flags |= RXR_PKT_ENTRY_RNR_RETRANSMIT;
 		peer->rnr_queued_pkt_cnt++;
 		return;
 	}
