@@ -156,19 +156,87 @@ static int mlx_getinfo (
 	int inject_thresh = -1;
 	mlx_descriptor.config = NULL;
 	char *tls = NULL;
-	const char const* tls_auto = "auto";
-	glob_t glob_buf;
+	char *devices = NULL;
+	const char const* auto_val = "auto";
+	int speed_gbps = 0;
 
 	/*
 	* check the existance of mlx infiniband device
 	*/
-	if (glob("/sys/class/infiniband/mlx[0-9]_[0-9]", 0, NULL, &glob_buf) != 0) {
-		FI_INFO(&mlx_prov, FI_LOG_CORE,
-			"no mlx device is found.\n");
-		status  = -FI_ENODEV;
-		goto out;
+	status = fi_param_get(&mlx_prov, "devices", &devices);
+	if (status != FI_SUCCESS) {
+		devices = auto_val;
 	}
-	globfree(&glob_buf);
+
+	if (strncmp(devices, auto_val, strlen(auto_val)) != 0) {
+		setenv("UCX_NET_DEVICES", devices, 0);
+	} else {
+		char sysfs_path[1024] = { 0 };
+		DIR *devices_dir = NULL;
+		FILE *fd = NULL;
+		int mlx_device_found = 0;
+
+		devices_dir = opendir("/sys/class/infiniband");
+		if (devices_dir) {
+			struct dirent *dir;
+			while ((dir = readdir(devices_dir)) != NULL) {
+				if (!strcmp(dir->d_name, ".") || !strcmp(dir->d_name, "..")) {
+					continue;
+				}
+				/* check vendors of each device, if at least one Mellanox found provider can be used */
+				snprintf(sysfs_path, sizeof(sysfs_path), "/sys/class/infiniband/%s/device/vendor",
+						dir->d_name);
+				fd = fopen(sysfs_path, "r");
+				if (fd) {
+					char *line = NULL;
+					size_t len = 0;
+					int vendor = 0;
+					if (getline(&line, &len, fd) != -1) {
+						if (sscanf(line, "%x", &vendor) == 1) {
+							if (vendor == MLX_VENDOR_ID) {
+								mlx_device_found = 1;
+							}
+						}
+					}
+					fclose(fd);
+
+					if (mlx_device_found) {
+						FI_INFO( &mlx_prov, FI_LOG_CORE,
+							"primary detected device: %s \n", dir->d_name);
+
+						/* identify device speed */
+						FILE *fd_speed = NULL;
+						snprintf(sysfs_path, sizeof(sysfs_path),
+							 "/sys/class/infiniband/%s/ports/1/rate", dir->d_name);
+
+						fd_speed = fopen(sysfs_path, "r");
+						if (fd_speed) {
+							char *line = NULL;
+							size_t len = 0;
+							int speed = 0;
+							if (getline(&line, &len, fd_speed) != -1) {
+								if (sscanf(line, "%d", &speed) == 1) {
+									if (speed > 0) {
+										speed_gbps = speed;
+									}
+								}
+							}
+							fclose(fd_speed);
+						}
+						break;
+					}
+				}
+			}
+			closedir(devices_dir);
+		}
+
+		if (!mlx_device_found) {
+			FI_INFO(&mlx_prov, FI_LOG_CORE,
+				"no mlx device is found.\n");
+			status  = -FI_ENODEV;
+			goto out;
+        }
+	}
 
 	status = fi_param_get( &mlx_prov,
 				"inject_limit",
@@ -187,10 +255,10 @@ static int mlx_getinfo (
 
 	status = fi_param_get( &mlx_prov, "tls", &tls);
 	if (status != FI_SUCCESS) {
-		tls = tls_auto;
+		tls = auto_val;
 	}
 
-	if ((strncmp(tls, tls_auto, strlen(tls_auto)) != 0)
+	if ((strncmp(tls, auto_val, strlen(auto_val)) != 0)
 		&& (getenv("UCX_TLS") == NULL)) {
 		setenv("UCX_TLS", tls, 0);
 	}
@@ -268,6 +336,12 @@ static int mlx_getinfo (
 	if (*info)
 		(*info)->addr_format = mlx_info.addr_format;
 
+	if (*info) {
+		(*info)->nic = ofi_nic_dup(NULL);
+		if ((*info)->nic) {
+			(*info)->nic->link_attr->speed = (size_t) speed_gbps * 1000 * 1000 * 1000;
+		}
+	}
 out:
 	return status;
 }
