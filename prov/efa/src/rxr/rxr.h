@@ -920,7 +920,7 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 					   struct rxr_rx_entry *posted_entry,
 					   struct rxr_rx_entry *consumer_entry,
 					   struct rxr_pkt_entry *pkt_entry);
-int rxr_ep_efa_addr_to_str(const void *addr, char *temp_name);
+int rxr_raw_addr_to_smr_name(void *addr, char *smr_name);
 
 /* CQ sub-functions */
 void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,

@@ -70,7 +70,7 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
 	memset(pkt_entry->pkt, 0, ep->mtu_size);
 #endif
 	pkt_entry->alloc_type = alloc_type;
-	pkt_entry->state = RXR_PKT_ENTRY_IN_USE;
+	pkt_entry->flags = RXR_PKT_ENTRY_IN_USE;
 	pkt_entry->next = NULL;
 	pkt_entry->x_entry = NULL;
 	return pkt_entry;
@@ -94,7 +94,7 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 	 * Decrement rnr_queued_pkts counter and reset backoff for this peer if
 	 * we get a send completion for a retransmitted packet.
 	 */
-	if (OFI_UNLIKELY(pkt->state == RXR_PKT_ENTRY_RNR_RETRANSMIT)) {
+	if (OFI_UNLIKELY(pkt->flags & RXR_PKT_ENTRY_RNR_RETRANSMIT)) {
 		peer = rxr_ep_get_peer(ep, pkt->addr);
 		assert(peer);
 		peer->rnr_queued_pkt_cnt--;
@@ -114,7 +114,7 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 #ifdef ENABLE_EFA_POISONING
 	rxr_poison_mem_region((uint32_t *)pkt, ep->tx_pkt_pool_entry_sz);
 #endif
-	pkt->state = RXR_PKT_ENTRY_FREE;
+	pkt->flags = 0;
 	ofi_buf_free(pkt);
 }
 
@@ -152,7 +152,7 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 	/* the same pool size is used for all types of rx pkt_entries */
 	rxr_poison_mem_region((uint32_t *)pkt_entry, ep->rx_pkt_pool_entry_sz);
 #endif
-	pkt_entry->state = RXR_PKT_ENTRY_FREE;
+	pkt_entry->flags = 0;
 	ofi_buf_free(pkt_entry);
 }
 
@@ -174,7 +174,7 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 	dest->x_entry = src->x_entry;
 	dest->pkt_size = src->pkt_size;
 	dest->addr = src->addr;
-	dest->state = RXR_PKT_ENTRY_IN_USE;
+	dest->flags = RXR_PKT_ENTRY_IN_USE;
 	dest->next = NULL;
 	memcpy(dest->pkt, src->pkt, ep->mtu_size);
 }
@@ -214,7 +214,7 @@ void rxr_pkt_entry_release_cloned(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_e
 #ifdef ENABLE_EFA_POISONING
 		rxr_poison_mem_region((uint32_t *)pkt_entry, ep->tx_pkt_pool_entry_sz);
 #endif
-		pkt_entry->state = RXR_PKT_ENTRY_FREE;
+		pkt_entry->flags = 0;
 		ofi_buf_free(pkt_entry);
 		next = pkt_entry->next;
 		pkt_entry = next;
