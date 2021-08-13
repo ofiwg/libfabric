@@ -6,6 +6,77 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v1.13.1, Fri Aug 20, 2021
+=========================
+
+## Core
+
+- Fix ZE check in configure
+- Enable loading ZE library with dlopen()
+- Add IPv6 support to fi_pingpong
+- Fix the call to fi_recv in fi_pingpong
+
+## EFA
+
+- Include qkey in smr name
+- Do not ignore send completion for a local read operation
+- Convert pkt_entry->state to pkt_entry->flags
+- Detect recvwin overflow and print an error message
+- Add function ofi_recvwin_id_processed()
+- Let efa_av_remove() remove peer with resources
+- Ignore received packets from a remove address
+- Check for and handle empty util_av->ep_list in efa_av
+- Invalidate peer's outstanding TX packets' address when removing peer
+- Extend the scope of deep cleaning resources in rxr_ep_free_res()
+- Eefactor error handling functions for x_entry
+- Only write RNR error completion for send operation
+- Ignore TX completion to a removed peer.
+- Release peer's tx_entry and rx_entry when removing peer
+- Make efa_conn->ep_addr a pointer and use it to identify removed peer
+- Mix the using of released packet in rxr_cq_handler_error()
+- Refactor tx ops counter updating
+- Make rxr_release_tx_entry() release queued pkts
+- Rename rxr_pkt_entry->type to rxr_pkt_entry->alloc_type
+- Initialize rxr_pkt_entry->x_entry to NULL
+- Fix ep->pkt_sendv_pool size
+- Add rnr_backoff prefix to variables related to RNR backoff
+- Refactor rxr_cq_queue_pkt()
+- Eliminate rnr_timeout_exp in rdm_peer
+- Eliminate the flag RXR_PEER_BACKED_OFF
+- Adjust unexpected packet pool chunk size
+- Defer memory allocation to 1st call to progress engine
+- Enable RNR support
+- Remove peer from backoff peer list in efa_rdm_peer_reset()
+- Make rxr_pkt_req_max_header_size use RXR_REQ_OPT_RAW_ADDR_HDR_SIZE
+- Use ibv_is_fork_initialized in EFA fork support
+
+## PSM3
+
+- Update Versions
+- Clean ref's to split cuda hostbufs when no longer needed
+- Fix issue when running gpudirect on gpu with small bar size
+- Fix issues with debug statistics
+- Fix issue with unreleased MR in cache
+
+## SHM
+
+- Fix unsigned comparison introduced in #6948
+- Use hmem iov copies in mmap progression
+- Correct return values in smr_progress.c
+- Fix smr_progress_ipc error handling
+
+## Util
+
+- Do not set impmon.impfid to NULL on monitor init
+- Initialize the import monitor
+- Add memory monitor for ZE
+
+## Fabtests
+
+- Use dlopen to load ZE library
+- Bug fixes related to IPv6 address format
+- Do not immediately kill server process
+
 v1.13.0, Thu Jul 1, 2021
 ========================
 
