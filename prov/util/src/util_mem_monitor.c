@@ -99,6 +99,7 @@ void ofi_monitors_init(void)
 	cuda_monitor->init(cuda_monitor);
 	rocr_monitor->init(rocr_monitor);
 	ze_monitor->init(ze_monitor);
+	import_monitor->init(import_monitor);
 
 #if HAVE_MEMHOOKS_MONITOR
         default_monitor = memhooks_monitor;
@@ -195,6 +196,7 @@ void ofi_monitors_cleanup(void)
 	cuda_monitor->cleanup(cuda_monitor);
 	rocr_monitor->cleanup(rocr_monitor);
 	ze_monitor->cleanup(ze_monitor);
+	import_monitor->cleanup(import_monitor);
 }
 
 /* Monitors array must be of size OFI_HMEM_MAX. */
