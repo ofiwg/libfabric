@@ -125,6 +125,7 @@ enum {
 	FT_OPT_SRX		= 1 << 21,
 	FT_OPT_STX		= 1 << 22,
 	FT_OPT_SKIP_ADDR_EXCH	= 1 << 23,
+	FT_OPT_PERF	= 1 << 24,
 	FT_OPT_OOB_CTRL		= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
 };
 

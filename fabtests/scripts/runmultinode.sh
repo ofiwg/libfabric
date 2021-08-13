@@ -40,16 +40,17 @@ done
 
 if $help ; then
 	echo "Run the multinode test suite on the nodes provided for many procceses" 
+	echo "multinode tests are run in performance mode"
 	echo "Options"
-	echo "\t -h,--hosts list of host names to run thests on"
-	echo "\t -n,--processes-per-node number of processes to be run on each node.\
-					Total number of fi_mulinode tests run will be n*number of hosts"
-	echo "\t -p,--provider libfabric provider to run the multinode tests on"
-	echo "\t -C,--cabability multinode cabability to use (rma or default: msg)"
-	echo "\t -I,-- iterations number of iterations for the multinode test \
+	echo "\t-h,--hosts list of host names to run thests on"
+	echo "\t-n,--processes-per-node number of processes to be run on each node.\
+				Total number of fi_mulinode tests run will be n*number of hosts"
+	echo "\t-p,--provider libfabric provider to run the multinode tests on"
+	echo "\t-C,--cabability multinode cabability to use (rma or default: msg)"
+	echo "\t-I,-- iterations number of iterations for the multinode test \
 				to run each pattern on"
-	echo "\t --cleanup end straggling processes. Does not rerun tests"
-	echo "\t --help show this message"
+	echo "\t--cleanup end straggling processes. Does not rerun tests"
+	echo "\t--help show this message"
 	exit 1
 fi
 		
@@ -59,7 +60,7 @@ server=${hosts[0]}
 start_server=0
 output="multinode_server_$ranks.out"
 
-cmd="fi_multinode -n $ranks -s $server -p '$provider' -C $capability -I $iterations"
+cmd="fi_multinode -n $ranks -s $server -p '$provider' -C $capability -I $iterations -T"
 echo $cmd
 
 if ! $cleanup ; then
