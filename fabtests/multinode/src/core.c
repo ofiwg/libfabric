@@ -45,9 +45,10 @@
 #include <rdma/fi_cm.h>
 #include <rdma/fi_trigger.h>
 
-#include <core.h>
-#include <pattern.h>
 #include <shared.h>
+#include "core.h"
+#include "pattern.h"
+#include "timing.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -58,6 +59,8 @@ char *tx_barrier;
 char *rx_barrier;
 struct fid_mr *mr_barrier;
 struct fi_context2 *barrier_tx_ctx, *barrier_rx_ctx;
+
+struct multi_timer *timers;
 
 struct pattern_ops *pattern;
 struct multinode_xfer_state state;
@@ -160,8 +163,8 @@ static int multi_setup_fabric(int argc, char **argv)
 	}
 
 	for (i = 0; i < pm_job.num_ranks; i++) {
-		ret = fi_av_insert(av, (char*)pm_job.names + i * pm_job.name_len, 1,
-			   &pm_job.fi_addrs[i], 0, NULL);
+		ret = fi_av_insert(av, (char *)pm_job.names + i * pm_job.name_len, 
+				   1, &pm_job.fi_addrs[i], 0, NULL);
 		if (ret != 1) {
 			FT_ERR("unable to insert all addresses into AV table\n");
 			ret = -1;
@@ -211,7 +214,7 @@ int multi_msg_recv()
 		if (ret < 0)
 			return ret;
 
-		offset = state.recvs_posted % opts.window_size ;
+		offset = state.recvs_posted % opts.window_size;
 		assert(rx_ctx_arr[offset].state == OP_DONE);
 
 		ret = ft_post_rx_buf(ep, opts.transfer_size,
@@ -244,6 +247,9 @@ int multi_msg_send()
 
 		offset = state.sends_posted % opts.window_size;
 		assert(tx_ctx_arr[offset].state == OP_DONE);
+		if (ft_check_opts(FT_OPT_PERF))
+			multi_timer_start(&timers[timer_index(state.iter,
+							    state.cur_target)]);
 
 		dest = pm_job.fi_addrs[state.cur_target];
 		ret = ft_post_tx_buf(ep, dest, opts.transfer_size,
@@ -305,6 +311,10 @@ int multi_rma_write()
 		        pm_job.my_rank, state.cur_target,
 		        (size_t) tx_seq, pattern->name);
 
+		if (ft_check_opts(FT_OPT_PERF))
+			multi_timer_start(&timers[timer_index(state.iter,
+							    state.cur_target)]);
+
 		while (1) {
 			ret = fi_write(ep,
 				tx_buf + tx_size * state.cur_target,
@@ -364,8 +374,8 @@ int send_recv_barrier(int sync)
 
 	for (i = 0; i < pm_job.num_ranks; i++) {
 		ret = ft_post_rx_buf(ep, opts.transfer_size,
-			     &barrier_rx_ctx[i],
-			     rx_buf, mr_desc, 0);
+			     	     &barrier_rx_ctx[i],
+			     	     rx_buf, mr_desc, 0);
 		if (ret)
 			return ret;
 	}
@@ -402,11 +412,14 @@ static inline void multi_init_state()
 
 static int multi_run_test()
 {
-	int ret;
-	int iter;
+	int ret, i;
 
-	for (iter = 0; iter < opts.iterations; iter++) {
+	for (state.iter = 0; state.iter < opts.iterations; state.iter++) {
 		multi_init_state();
+		for (i = 0; i < pm_job.num_ranks && ft_check_opts(FT_OPT_PERF); i++)
+			multi_timer_init(&timers[timer_index(state.iter, i)], 
+					 pm_job.my_rank);
+
 		while (!state.all_completions_done ||
 				!state.all_recvs_posted ||
 				!state.all_sends_posted) {
@@ -423,15 +436,20 @@ static int multi_run_test()
 				return ret;
 		}
 
-		ret = send_recv_barrier(iter);
+		for (i = 0; i < pm_job.num_ranks && ft_check_opts(FT_OPT_PERF); i++)
+			multi_timer_stop(&timers[state.iter * pm_job.num_ranks + i]);
+
+		ret = send_recv_barrier(state.iter);
 		if (ret)
 			return ret;
+
 	}
 	return 0;
 }
 
 static void pm_job_free_res()
 {
+	free(timers);
 	free(pm_job.names);
 	free(pm_job.fi_addrs);
 	free(pm_job.multi_iovs);
@@ -447,7 +465,6 @@ int multinode_run_tests(int argc, char **argv)
 	int ret = FI_SUCCESS;
 	int i;
 
-
 	barrier_tx_ctx = malloc(sizeof(*barrier_tx_ctx) * pm_job.num_ranks);
 	if (!barrier_tx_ctx)
 		return -FI_ENOMEM;
@@ -460,18 +477,30 @@ int multinode_run_tests(int argc, char **argv)
 	if (ret)
 		return ret;
 
+	if (ft_check_opts(FT_OPT_PERF))
+		timers = calloc(opts.iterations * pm_job.num_ranks, sizeof(*timers));
+
 	for (i = 0; i < NUM_TESTS && !ret; i++) {
 		printf("starting %s... ", patterns[i].name);
 		pattern = &patterns[i];
+
 		ret = multi_run_test();
-		if (ret)
+		if (ret) {
 			printf("failed\n");
-		else
-			printf("passed\n");
+			goto out;
+		}
+		printf("passed\n");
+
+		if (ft_check_opts(FT_OPT_PERF)) {
+			ret = multi_timer_analyze(timers, opts.iterations * 
+							  pm_job.num_ranks);
+			if (ret)
+				goto out;
+		}
 
 		fflush(stdout);
 	}
-
+out:
 	pm_job_free_res();
 	ft_free_res();
 	return ft_exit_code(ret);

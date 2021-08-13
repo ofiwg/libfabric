@@ -104,6 +104,11 @@ static int mesh_next(int *cur)
 
 struct pattern_ops patterns[] = {
 	{
+		.name = "full_mesh",
+		.next_source = mesh_next,
+		.next_target = mesh_next,
+	},
+	{
 		.name = "ring",
 		.next_source = ring_next,
 		.next_target = ring_current,
@@ -117,11 +122,6 @@ struct pattern_ops patterns[] = {
 		.name = "broadcast",
 		.next_source = broadcast_gather_current,
 		.next_target = broadcast_gather_next,
-	},
-	{
-		.name = "full_mesh",
-		.next_source = mesh_next,
-		.next_target = mesh_next,
 	},
 };
 

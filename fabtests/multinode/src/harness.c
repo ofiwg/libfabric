@@ -57,7 +57,7 @@ static int parse_caps(char* caps)
 	}
 }
 
-static inline ssize_t socket_send(int sock, void *buf, size_t len, int flags)
+ssize_t socket_send(int sock, void *buf, size_t len, int flags)
 {
 	ssize_t ret;
 	size_t m = 0;
@@ -74,7 +74,7 @@ static inline ssize_t socket_send(int sock, void *buf, size_t len, int flags)
 	return len;
 }
 
-static inline int socket_recv(int sock, void *buf, size_t len, int flags)
+int socket_recv(int sock, void *buf, size_t len, int flags)
 {
 	ssize_t ret;
 	size_t m = 0;
@@ -303,7 +303,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((c = getopt(argc, argv, "n:C:h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((c = getopt(argc, argv, "n:C:Th" CS_OPTS INFO_OPTS)) != -1) {
 		switch (c) {
 		default:
 			ft_parse_addr_opts(c, optarg, &opts);
@@ -315,6 +315,9 @@ int main(int argc, char **argv)
 			break;
 		case 'C':
 			pm_job.transfer_method = parse_caps(optarg);
+			break;
+		case 'T':
+			opts.options |= FT_OPT_PERF;
 			break;
 		case '?':
 		case 'h':

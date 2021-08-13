@@ -180,7 +180,7 @@ $(outdir)\getinfo_test.exe: {unit}getinfo_test.c $(basedeps) {unit}common.c
 $(outdir)\mr_test.exe: {unit}mr_test.c $(basedeps) {unit}common.c
 
 
-$(outdir)\multinode.exe: {multinode\src}harness.c $(basedeps) {multinode\src}core.c {multinode\src}pattern.c
+$(outdir)\multinode.exe: {multinode\src}harness.c $(basedeps) {multinode\src}core.c {multinode\src}pattern.c {multinode\src}timing.c
 	if not exist $(@D) mkdir $(@D)
 	$(CC) /Fe$@ $** $(baseincludes) $(CFLAGS) $(libs)
 
