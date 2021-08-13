@@ -151,12 +151,10 @@ AC_ARG_WITH([ze],
 		  [CPPFLAGS="-I$withval/include $CPPFLAGS"
 		   LDFLAGS="-L$withval/$lib $LDFLAGS"]))
 
-dnl Checks for ZE libraries
+dnl Checks for ZE support. Require fabtests to dlopen ZE libraries
 have_ze=0
 AS_IF([test x"$with_ze" != x"no"],
-      [AC_CHECK_LIB([ze_loader], zeInit,
-		    AC_CHECK_HEADER([level_zero/ze_api.h],
-				    [have_ze=1]))])
+      [AC_CHECK_HEADER([level_zero/ze_api.h], [have_ze=1])])
 
 AS_IF([test x"$with_ze" != x"no" && test -n "$with_ze" && test "$have_ze" = "0" ],
 	[AC_MSG_ERROR([ZE support requested but ZE runtime not available.])],
