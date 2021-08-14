@@ -609,7 +609,6 @@ struct ofi_mem_monitor *import_monitor = &impmon.monitor;
 
 static void ofi_import_monitor_init(struct ofi_mem_monitor *monitor)
 {
-	impmon.impfid = NULL;
 	ofi_monitor_init(monitor);
 }
 
