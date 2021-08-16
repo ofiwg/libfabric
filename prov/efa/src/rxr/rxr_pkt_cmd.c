@@ -407,8 +407,8 @@ ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_en
 			rx_entry->state = RXR_RX_QUEUED_CTRL;
 			rx_entry->queued_ctrl.type = ctrl_type;
 			rx_entry->queued_ctrl.inject = inject;
-			dlist_insert_tail(&rx_entry->queued_entry,
-					  &ep->rx_entry_queued_list);
+			dlist_insert_tail(&rx_entry->queued_ctrl_entry,
+					  &ep->rx_entry_queued_ctrl_list);
 		}
 
 		err = 0;
@@ -799,13 +799,13 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 			/*
 			 * rx_entry send one ctrl packet at a time, so if we
 			 * received RNR for the packet, the rx_entry must not
-			 * be in ep's rx_queued_entry_list, thus cannot
-			 * be in QUEUED_CTRL state
+			 * be in ep's rx_queued_entry_rnr_list, thus cannot
+			 * have the QUEUED_RNR flag
 			 */
-			assert(rx_entry->state != RXR_RX_QUEUED_CTRL);
-			rx_entry->state = RXR_RX_QUEUED_CTRL;
-			dlist_insert_tail(&rx_entry->queued_entry,
-					  &ep->rx_entry_queued_list);
+			assert(!(rx_entry->rxr_flags & RXR_RX_ENTRY_QUEUED_RNR));
+			rx_entry->rxr_flags |= RXR_RX_ENTRY_QUEUED_RNR;
+			dlist_insert_tail(&rx_entry->queued_rnr_entry,
+					  &ep->rx_entry_queued_rnr_list);
 
 		} else {
 			rxr_cq_write_rx_error(ep, pkt_entry->x_entry, err, prov_errno);
