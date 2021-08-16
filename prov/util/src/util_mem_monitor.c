@@ -614,7 +614,6 @@ static void ofi_import_monitor_init(struct ofi_mem_monitor *monitor)
 
 static void ofi_import_monitor_cleanup(struct ofi_mem_monitor *monitor)
 {
-	assert(!impmon.impfid);
 	ofi_monitor_cleanup(monitor);
 }
 
