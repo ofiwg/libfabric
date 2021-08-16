@@ -101,14 +101,6 @@ void ofi_monitors_init(void)
 	ze_monitor->init(ze_monitor);
 	import_monitor->init(import_monitor);
 
-#if HAVE_MEMHOOKS_MONITOR
-        default_monitor = memhooks_monitor;
-#elif HAVE_UFFD_MONITOR
-        default_monitor = uffd_monitor;
-#else
-        default_monitor = NULL;
-#endif
-
 	fi_param_define(NULL, "mr_cache_max_size", FI_PARAM_SIZE_T,
 			"Defines the total number of bytes for all memory"
 			" regions that may be tracked by the MR cache."
@@ -152,6 +144,20 @@ void ofi_monitors_init(void)
 
 	if (!cache_params.max_size)
 		cache_params.max_size = ofi_default_cache_size();
+
+	/*
+	 * At this time, the import monitor could have set the default monitor,
+	 * do not override
+	 */
+	if (!default_monitor) {
+#if HAVE_MEMHOOKS_MONITOR
+		default_monitor = memhooks_monitor;
+#elif HAVE_UFFD_MONITOR
+		default_monitor = uffd_monitor;
+#else
+		default_monitor = NULL;
+#endif
+	}
 
 	if (cache_params.monitor != NULL) {
 		if (!strcmp(cache_params.monitor, "userfaultfd")) {
