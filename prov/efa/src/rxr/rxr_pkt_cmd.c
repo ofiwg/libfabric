@@ -394,13 +394,12 @@ ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_en
 	if (err == -FI_EAGAIN) {
 		if (entry_type == RXR_TX_ENTRY) {
 			tx_entry = (struct rxr_tx_entry *)x_entry;
-			assert(tx_entry->state != RXR_TX_QUEUED_CTRL ||
-			       tx_entry->state != RXR_TX_QUEUED_REQ_RNR);
+			assert(!(tx_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR));
 			tx_entry->state = RXR_TX_QUEUED_CTRL;
 			tx_entry->queued_ctrl.type = ctrl_type;
 			tx_entry->queued_ctrl.inject = inject;
-			dlist_insert_tail(&tx_entry->queued_entry,
-					  &ep->tx_entry_queued_list);
+			dlist_insert_tail(&tx_entry->queued_ctrl_entry,
+					  &ep->tx_entry_queued_ctrl_list);
 		} else {
 			assert(entry_type == RXR_RX_ENTRY);
 			rx_entry = (struct rxr_rx_entry *)x_entry;
@@ -524,6 +523,7 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 	tx_entry->iov_mr_start = 0;
 	tx_entry->iov_offset = 0;
 	tx_entry->fi_flags = RXR_NO_COMPLETION | RXR_NO_COUNTER;
+	tx_entry->rxr_flags = 0;
 
 	dlist_insert_tail(&tx_entry->ep_entry, &ep->tx_entry_list);
 
@@ -772,15 +772,10 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 			 * application want EFA to manager resource.
 			 */
 			rxr_cq_queue_rnr_pkt(ep, &tx_entry->queued_pkts, pkt_entry);
-			if (tx_entry->state == RXR_TX_SEND) {
-				dlist_remove(&tx_entry->entry);
-				tx_entry->state = RXR_TX_QUEUED_DATA_RNR;
-				dlist_insert_tail(&tx_entry->queued_entry,
-						  &ep->tx_entry_queued_list);
-			} else if (tx_entry->state == RXR_TX_REQ) {
-				tx_entry->state = RXR_TX_QUEUED_REQ_RNR;
-				dlist_insert_tail(&tx_entry->queued_entry,
-						  &ep->tx_entry_queued_list);
+			if (!(tx_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR)) {
+				tx_entry->rxr_flags |= RXR_TX_ENTRY_QUEUED_RNR;
+				dlist_insert_tail(&tx_entry->queued_rnr_entry,
+						  &ep->tx_entry_queued_rnr_list);
 			}
 		} else {
 			rxr_cq_write_tx_error(ep, pkt_entry->x_entry, err, prov_errno);
