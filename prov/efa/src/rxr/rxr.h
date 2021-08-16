@@ -186,6 +186,8 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 
 #define RXR_TX_ENTRY_QUEUED_RNR BIT_ULL(9)
 
+#define RXR_RX_ENTRY_QUEUED_RNR BIT_ULL(9)
+
 /*
  * OFI flags
  * The 64-bit flag field is used as follows:
@@ -425,8 +427,11 @@ struct rxr_rx_entry {
 
 	struct dlist_entry peer_unexp_entry; /* linked to peer->rx_unexp_list or peer->rx_unexp_tagged_list */
 
-	/* queued_entry is linked with rx_queued_ctrl_list in rxr_ep */
-	struct dlist_entry queued_entry;
+	/* queued_ctrl_entry is linked with rx_queued_ctrl_list in rxr_ep */
+	struct dlist_entry queued_ctrl_entry;
+
+	/* queued_rnr_entry is linked with rx_queued_rnr_list in rxr_ep */
+	struct dlist_entry queued_rnr_entry;
 
 	/* Queued packets due to TX queue full or RNR backoff */
 	struct dlist_entry queued_pkts;
@@ -683,8 +688,10 @@ struct rxr_ep {
 	struct dlist_entry tx_entry_queued_ctrl_list;
 	/* tx entries with queued rnr packets */
 	struct dlist_entry tx_entry_queued_rnr_list;
-	/* rx entries with queued messages */
-	struct dlist_entry rx_entry_queued_list;
+	/* rx entries with queued ctrl packets */
+	struct dlist_entry rx_entry_queued_ctrl_list;
+	/* rx entries with queued rnr packets */
+	struct dlist_entry rx_entry_queued_rnr_list;
 	/* tx_entries with data to be sent (large messages) */
 	struct dlist_entry tx_pending_list;
 	/* read entries with data to be read */
@@ -819,9 +826,9 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 					     pkt_entry, entry, tmp) {
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		}
-		dlist_remove(&rx_entry->queued_entry);
+		dlist_remove(&rx_entry->queued_rnr_entry);
 	} else if (rx_entry->state == RXR_RX_QUEUED_CTRL) {
-		dlist_remove(&rx_entry->queued_entry);
+		dlist_remove(&rx_entry->queued_ctrl_entry);
 	}
 
 #ifdef ENABLE_EFA_POISONING

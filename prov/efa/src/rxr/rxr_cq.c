@@ -117,7 +117,7 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 #endif
 		break;
 	case RXR_RX_QUEUED_CTRL:
-		dlist_remove(&rx_entry->queued_entry);
+		dlist_remove(&rx_entry->queued_ctrl_entry);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "rx_entry unknown state %d\n",
@@ -125,10 +125,13 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 		assert(0 && "rx_entry unknown state");
 	}
 
-	dlist_foreach_container_safe(&rx_entry->queued_pkts,
-				     struct rxr_pkt_entry,
-				     pkt_entry, entry, tmp)
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
+	if (rx_entry->rxr_flags & RXR_RX_ENTRY_QUEUED_RNR) {
+		dlist_foreach_container_safe(&rx_entry->queued_pkts,
+					     struct rxr_pkt_entry,
+					     pkt_entry, entry, tmp)
+			rxr_pkt_entry_release_tx(ep, pkt_entry);
+		dlist_remove(&rx_entry->queued_rnr_entry);
+	}
 
 	if (rx_entry->unexp_pkt) {
 		rxr_pkt_entry_release_rx(ep, rx_entry->unexp_pkt);
