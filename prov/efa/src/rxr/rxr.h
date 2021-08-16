@@ -184,6 +184,8 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
  */
 #define RXR_LONGCTS_PROTOCOL BIT_ULL(8)
 
+#define RXR_TX_ENTRY_QUEUED_RNR BIT_ULL(9)
+
 /*
  * OFI flags
  * The 64-bit flag field is used as follows:
@@ -277,8 +279,6 @@ enum rxr_tx_comm_type {
 	RXR_TX_SEND,		/* tx_entry sending data in progress */
 	RXR_TX_QUEUED_SHM_RMA,	/* tx_entry was unable to send RMA operations over shm provider */
 	RXR_TX_QUEUED_CTRL,	/* tx_entry was unable to send ctrl packet */
-	RXR_TX_QUEUED_REQ_RNR,  /* tx_entry RNR sending REQ packet */
-	RXR_TX_QUEUED_DATA_RNR,	/* tx_entry RNR sending data packets */
 };
 
 enum rxr_rx_comm_type {
@@ -515,8 +515,11 @@ struct rxr_tx_entry {
 	/* entry is linked with tx_pending_list in rxr_ep */
 	struct dlist_entry entry;
 
-	/* queued_entry is linked with tx_queued_ctrl_list in rxr_ep */
-	struct dlist_entry queued_entry;
+	/* queued_ctrl_entry is linked with tx_queued_ctrl_list in rxr_ep */
+	struct dlist_entry queued_ctrl_entry;
+
+	/* queued_rnr_entry is linked with tx_queued_rnr_list in rxr_ep */
+	struct dlist_entry queued_rnr_entry;
 
 	/* Queued packets due to TX queue full or RNR backoff */
 	struct dlist_entry queued_pkts;
@@ -676,8 +679,10 @@ struct rxr_ep {
 	struct dlist_entry rx_posted_buf_list;
 	/* list of pre-posted recv buffers for shm */
 	struct dlist_entry rx_posted_buf_shm_list;
-	/* tx entries with queued messages */
-	struct dlist_entry tx_entry_queued_list;
+	/* tx entries with queued ctrl packets */
+	struct dlist_entry tx_entry_queued_ctrl_list;
+	/* tx entries with queued rnr packets */
+	struct dlist_entry tx_entry_queued_rnr_list;
 	/* rx entries with queued messages */
 	struct dlist_entry rx_entry_queued_list;
 	/* tx_entries with data to be sent (large messages) */
