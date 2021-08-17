@@ -298,7 +298,7 @@ static int rxr_info_to_core(uint32_t version, const struct fi_info *rxr_info,
 }
 
 /* Explicitly set all necessary bits before calling shm provider's getinfo function */
-void rxr_set_shm_hints(struct fi_info *shm_hints)
+static void rxr_set_shm_hints(const struct fi_info *app_hints, struct fi_info *shm_hints)
 {
 	shm_hints->caps = FI_MSG | FI_TAGGED | FI_RECV | FI_SEND | FI_READ
 			   | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
@@ -312,11 +312,17 @@ void rxr_set_shm_hints(struct fi_info *shm_hints)
 	shm_hints->fabric_attr->prov_name = strdup("shm");
 	shm_hints->ep_attr->type = FI_EP_RDM;
 
-#if HAVE_LIBCUDA
-	shm_hints->caps |= FI_HMEM;
-	shm_hints->domain_attr->mr_mode |= FI_MR_HMEM;
-#endif
-
+	/*
+	 * We validate whether FI_HMEM is supported before this function is
+	 * called, so it's safe to check for this via the app hints directly.
+	 * We should combine this and the earlier FI_HMEM validation when we
+	 * clean up the getinfo path. That's not possible at the moment as we
+	 * only have one SHM info for the entire provider which isn't right.
+	 */
+	if (app_hints && (app_hints->caps & FI_HMEM)) {
+		shm_hints->caps |= FI_HMEM;
+		shm_hints->domain_attr->mr_mode |= FI_MR_HMEM;
+	}
 }
 
 /* Pass tx/rx attr that user specifies down to core provider */
@@ -725,7 +731,7 @@ dgram_info:
 	if (!ret && rxr_env.enable_shm_transfer && !shm_info) {
 		shm_info = NULL;
 		shm_hints = fi_allocinfo();
-		rxr_set_shm_hints(shm_hints);
+		rxr_set_shm_hints(hints, shm_hints);
 		ret = fi_getinfo(FI_VERSION(1, 8), NULL, NULL,
 		                 OFI_GETINFO_HIDDEN, shm_hints, &shm_info);
 		fi_freeinfo(shm_hints);
