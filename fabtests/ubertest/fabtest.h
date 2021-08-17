@@ -86,12 +86,14 @@ struct ft_xcontrol {
 	size_t			max_credits;
 	fi_addr_t		addr;
 	uint64_t		tag;
+	uint64_t		check_tag;
 	uint8_t			seqno;
 	uint64_t		total_comp;
 	enum fi_cq_format	cq_format;
 	uint64_t		remote_cq_data;
 	struct fi_context	*ctx;
 	int			curr_ctx;
+	int			check_ctx;
 };
 
 struct ft_atomic_control {
@@ -149,6 +151,7 @@ enum {
 	FT_MAX_FLAGS		= 64,
 	FT_MAX_PROGRESS		= 3,
 	FT_MAX_THREADING	= 6,
+	FT_MAX_CQ_FORMAT	= 4,
 };
 
 enum ft_comp_type {
@@ -255,6 +258,7 @@ struct ft_set {
 	uint64_t 		tx_cq_bind_flags[FT_MAX_FLAGS];
 	uint64_t 		rx_op_flags[FT_MAX_FLAGS];
 	uint64_t 		tx_op_flags[FT_MAX_FLAGS];
+	enum fi_cq_format	cq_format[FT_MAX_CQ_FORMAT];
 };
 
 struct ft_series {
@@ -277,6 +281,7 @@ struct ft_series {
 	int			cur_class;
 	int			cur_progress;
 	int			cur_threading;
+	int			cur_cq_format;
 };
 
 struct ft_info {
@@ -310,6 +315,7 @@ struct ft_info {
 	uint64_t 		tx_cq_bind_flags;
 	uint64_t 		rx_op_flags;
 	uint64_t 		tx_op_flags;
+	enum fi_cq_format	cq_format;
 };
 
 

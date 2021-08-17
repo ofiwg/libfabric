@@ -67,7 +67,7 @@ static int ft_init_rx_control(void)
 	if (ret)
 		return ret;
 
-	ft_rx_ctrl.cq_format = FI_CQ_FORMAT_DATA;
+	ft_rx_ctrl.cq_format = test_info.cq_format;
 	ft_rx_ctrl.addr = FI_ADDR_UNSPEC;
 
 	ft_rx_ctrl.msg_size = ft_ctrl.size_array[ft_ctrl.size_cnt - 1];
