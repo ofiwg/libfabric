@@ -117,7 +117,7 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 #endif
 		break;
 	case RXR_RX_QUEUED_CTRL:
-		dlist_remove(&rx_entry->queued_entry);
+		dlist_remove(&rx_entry->queued_ctrl_entry);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "rx_entry unknown state %d\n",
@@ -125,10 +125,13 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 		assert(0 && "rx_entry unknown state");
 	}
 
-	dlist_foreach_container_safe(&rx_entry->queued_pkts,
-				     struct rxr_pkt_entry,
-				     pkt_entry, entry, tmp)
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
+	if (rx_entry->rxr_flags & RXR_RX_ENTRY_QUEUED_RNR) {
+		dlist_foreach_container_safe(&rx_entry->queued_pkts,
+					     struct rxr_pkt_entry,
+					     pkt_entry, entry, tmp)
+			rxr_pkt_entry_release_tx(ep, pkt_entry);
+		dlist_remove(&rx_entry->queued_rnr_entry);
+	}
 
 	if (rx_entry->unexp_pkt) {
 		rxr_pkt_entry_release_rx(ep, rx_entry->unexp_pkt);
@@ -213,15 +216,16 @@ void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 		break;
 	case RXR_TX_QUEUED_CTRL:
 	case RXR_TX_QUEUED_SHM_RMA:
-	case RXR_TX_QUEUED_REQ_RNR:
-	case RXR_TX_QUEUED_DATA_RNR:
-		dlist_remove(&tx_entry->queued_entry);
+		dlist_remove(&tx_entry->queued_ctrl_entry);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "tx_entry unknown state %d\n",
 			tx_entry->state);
 		assert(0 && "tx_entry unknown state");
 	}
+
+	if (tx_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR)
+		dlist_remove(&tx_entry->queued_rnr_entry);
 
 	dlist_foreach_container_safe(&tx_entry->queued_pkts,
 				     struct rxr_pkt_entry,

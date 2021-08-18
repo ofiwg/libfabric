@@ -471,6 +471,12 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
 	}
 
+	if (tx_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR)
+		dlist_remove(&tx_entry->queued_rnr_entry);
+
+	if (tx_entry->state == RXR_TX_QUEUED_CTRL)
+		dlist_remove(&tx_entry->queued_ctrl_entry);
+
 #ifdef ENABLE_EFA_POISONING
 	rxr_poison_mem_region((uint32_t *)tx_entry,
 			      sizeof(struct rxr_tx_entry));
@@ -625,20 +631,38 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		rxr_release_rx_entry(rxr_ep, rx_entry);
 	}
 
-	dlist_foreach_safe(&rxr_ep->rx_entry_queued_list, entry, tmp) {
+	dlist_foreach_safe(&rxr_ep->rx_entry_queued_rnr_list, entry, tmp) {
 		rx_entry = container_of(entry, struct rxr_rx_entry,
-					queued_entry);
+					queued_rnr_entry);
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-			"Closing ep with queued rx_entry: %p\n",
+			"Closing ep with queued rnr rx_entry: %p\n",
 			rx_entry);
 		rxr_release_rx_entry(rxr_ep, rx_entry);
 	}
 
-	dlist_foreach_safe(&rxr_ep->tx_entry_queued_list, entry, tmp) {
-		tx_entry = container_of(entry, struct rxr_tx_entry,
-					queued_entry);
+	dlist_foreach_safe(&rxr_ep->rx_entry_queued_ctrl_list, entry, tmp) {
+		rx_entry = container_of(entry, struct rxr_rx_entry,
+					queued_ctrl_entry);
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-			"Closing ep with queued tx_entry: %p\n",
+			"Closing ep with queued ctrl rx_entry: %p\n",
+			rx_entry);
+		rxr_release_rx_entry(rxr_ep, rx_entry);
+	}
+
+	dlist_foreach_safe(&rxr_ep->tx_entry_queued_rnr_list, entry, tmp) {
+		tx_entry = container_of(entry, struct rxr_tx_entry,
+					queued_rnr_entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with queued rnr tx_entry: %p\n",
+			tx_entry);
+		rxr_release_tx_entry(rxr_ep, tx_entry);
+	}
+
+	dlist_foreach_safe(&rxr_ep->tx_entry_queued_ctrl_list, entry, tmp) {
+		tx_entry = container_of(entry, struct rxr_tx_entry,
+					queued_ctrl_entry);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Closing ep with queued ctrl tx_entry: %p\n",
 			tx_entry);
 		rxr_release_tx_entry(rxr_ep, tx_entry);
 	}
@@ -1269,8 +1293,10 @@ int rxr_ep_init(struct rxr_ep *ep)
 	dlist_init(&ep->rx_tagged_list);
 	dlist_init(&ep->rx_unexp_tagged_list);
 	dlist_init(&ep->rx_posted_buf_list);
-	dlist_init(&ep->rx_entry_queued_list);
-	dlist_init(&ep->tx_entry_queued_list);
+	dlist_init(&ep->rx_entry_queued_rnr_list);
+	dlist_init(&ep->rx_entry_queued_ctrl_list);
+	dlist_init(&ep->tx_entry_queued_rnr_list);
+	dlist_init(&ep->tx_entry_queued_ctrl_list);
 	dlist_init(&ep->tx_pending_list);
 	dlist_init(&ep->read_pending_list);
 	dlist_init(&ep->peer_backoff_list);
@@ -1829,9 +1855,34 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	/*
 	 * Send any queued ctrl packets.
 	 */
-	dlist_foreach_container_safe(&ep->rx_entry_queued_list,
+	dlist_foreach_container_safe(&ep->rx_entry_queued_rnr_list,
 				     struct rxr_rx_entry,
-				     rx_entry, queued_entry, tmp) {
+				     rx_entry, queued_rnr_entry, tmp) {
+		peer = rxr_ep_get_peer(ep, rx_entry->addr);
+		assert(peer);
+
+		if (peer->flags & RXR_PEER_IN_BACKOFF)
+			continue;
+
+		assert(rx_entry->rxr_flags & RXR_RX_ENTRY_QUEUED_RNR);
+		assert(!dlist_empty(&rx_entry->queued_pkts));
+		ret = rxr_ep_send_queued_pkts(ep, &rx_entry->queued_pkts);
+
+		if (ret == -FI_EAGAIN)
+			break;
+
+		if (OFI_UNLIKELY(ret)) {
+			rxr_cq_write_rx_error(ep, rx_entry, -ret, -ret);
+			return;
+		}
+
+		dlist_remove(&rx_entry->queued_rnr_entry);
+		rx_entry->rxr_flags &= ~RXR_RX_ENTRY_QUEUED_RNR;
+	}
+
+	dlist_foreach_container_safe(&ep->rx_entry_queued_ctrl_list,
+				     struct rxr_rx_entry,
+				     rx_entry, queued_ctrl_entry, tmp) {
 		peer = rxr_ep_get_peer(ep, rx_entry->addr);
 		assert(peer);
 
@@ -1840,23 +1891,11 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		/*
 		 * rx_entry only send one ctrl packet at a time. The
 		 * ctrl packet can be CTS, EOR, RECEIPT.
-		 *
-		 * Either the send failed due to EAGAIN, in which case
-		 * rx_entry->queued_ctrl will be set.
-		 *
-		 * or the send succeeded, but an error completion was got
-		 * due to RNR, in which case rx_entry->queued_pkts will
-		 * has packets in it.
 		 */
 		assert(rx_entry->state == RXR_RX_QUEUED_CTRL);
-		if (dlist_empty(&rx_entry->queued_pkts)) {
-			ret = rxr_pkt_post_ctrl(ep, RXR_RX_ENTRY, rx_entry,
-						rx_entry->queued_ctrl.type,
-						rx_entry->queued_ctrl.inject);
-		} else {
-			ret = rxr_ep_send_queued_pkts(ep, &rx_entry->queued_pkts);
-		}
-
+		ret = rxr_pkt_post_ctrl(ep, RXR_RX_ENTRY, rx_entry,
+					rx_entry->queued_ctrl.type,
+					rx_entry->queued_ctrl.inject);
 		if (ret == -FI_EAGAIN)
 			break;
 
@@ -1874,7 +1913,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (rx_entry->state == RXR_RX_FREE)
 			continue;
 
-		dlist_remove(&rx_entry->queued_entry);
+		dlist_remove(&rx_entry->queued_ctrl_entry);
 		/*
 		 * For CTS packet, the state need to be RXR_RX_RECV.
 		 * For EOR/RECEIPT, all data has been received, so any state
@@ -1884,52 +1923,54 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		rx_entry->state = RXR_RX_RECV;
 	}
 
-	dlist_foreach_container_safe(&ep->tx_entry_queued_list,
+	dlist_foreach_container_safe(&ep->tx_entry_queued_rnr_list,
 				     struct rxr_tx_entry,
-				     tx_entry, queued_entry, tmp) {
+				     tx_entry, queued_rnr_entry, tmp) {
 		peer = rxr_ep_get_peer(ep, tx_entry->addr);
 		assert(peer);
 
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			continue;
 
-		/*
-		 * It is possible to receive an RNR after we queue this
-		 * tx_entry if we run out of resources in the medium message
-		 * protocol. Ensure all queued packets are posted before
-		 * continuing to post additional control messages.
-		 */
+		assert(tx_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR);
 		ret = rxr_ep_send_queued_pkts(ep, &tx_entry->queued_pkts);
 		if (ret == -FI_EAGAIN)
 			break;
+
 		if (OFI_UNLIKELY(ret)) {
 			rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
 			return;
 		}
 
-		if (tx_entry->state == RXR_TX_QUEUED_CTRL) {
-			ret = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry,
-						tx_entry->queued_ctrl.type,
-						tx_entry->queued_ctrl.inject);
-			if (ret == -FI_EAGAIN)
-				break;
+		dlist_remove(&tx_entry->queued_rnr_entry);
+		tx_entry->rxr_flags &= ~RXR_TX_ENTRY_QUEUED_RNR;
+	}
 
-			if (OFI_UNLIKELY(ret)) {
-				rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
-				return;
-			}
+	dlist_foreach_container_safe(&ep->tx_entry_queued_ctrl_list,
+				     struct rxr_tx_entry,
+				     tx_entry, queued_ctrl_entry, tmp) {
+		peer = rxr_ep_get_peer(ep, tx_entry->addr);
+		assert(peer);
+
+		if (peer->flags & RXR_PEER_IN_BACKOFF)
+			continue;
+
+		assert(tx_entry->state == RXR_TX_QUEUED_CTRL);
+
+		ret = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry,
+					tx_entry->queued_ctrl.type,
+					tx_entry->queued_ctrl.inject);
+		if (ret == -FI_EAGAIN)
+			break;
+
+		if (OFI_UNLIKELY(ret)) {
+			rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
+			return;
 		}
 
-		dlist_remove(&tx_entry->queued_entry);
-
-		if (tx_entry->state == RXR_TX_QUEUED_REQ_RNR ||
-		    tx_entry->state == RXR_TX_QUEUED_CTRL) {
+		dlist_remove(&tx_entry->queued_ctrl_entry);
+		if (tx_entry->state == RXR_TX_QUEUED_CTRL)
 			tx_entry->state = RXR_TX_REQ;
-		} else if (tx_entry->state == RXR_TX_QUEUED_DATA_RNR) {
-			tx_entry->state = RXR_TX_SEND;
-			dlist_insert_tail(&tx_entry->entry,
-					  &ep->tx_pending_list);
-		}
 	}
 
 	/*
