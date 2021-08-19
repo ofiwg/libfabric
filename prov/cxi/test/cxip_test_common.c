@@ -639,6 +639,19 @@ void validate_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
 	cr_assert(cqe->tag == tag, "Invalid CQE tag");
 }
 
+void validate_rx_event_mask(struct fi_cq_tagged_entry *cqe, void *context,
+			    size_t len, uint64_t flags, void *buf,
+			    uint64_t data, uint64_t tag, uint64_t ignore)
+{
+	cr_assert(cqe->op_context == context, "CQE Context mismatch");
+	cr_assert(cqe->len == len, "Invalid CQE length");
+	cr_assert(cqe->flags == flags, "CQE flags mismatch");
+	cr_assert(cqe->buf == buf, "Invalid CQE address (%p %p)",
+		  cqe->buf, buf);
+	cr_assert(cqe->data == data, "Invalid CQE data");
+	cr_assert(((cqe->tag & ~ignore) == (tag & ~ignore)), "Invalid CQE tag");
+}
+
 void validate_multi_recv_rx_event(struct fi_cq_tagged_entry *cqe, void
 				  *context, size_t len, uint64_t flags,
 				  uint64_t data, uint64_t tag)

@@ -940,6 +940,231 @@ Test(tagged, ux_ping)
 	free(recv_buf);
 }
 
+/* Issue a fi_trecvmsg with FI_PEEK and validate result */
+ssize_t try_peek(fi_addr_t addr, uint64_t tag, uint64_t ignore,
+		 ssize_t len, void *context)
+{
+	struct fi_msg_tagged tmsg = {
+		.msg_iov = NULL,
+		.iov_count = 0,
+		.addr = addr,
+		.tag = tag,
+		.ignore = ignore,
+		.context = context,
+		.data = 0
+	};
+	struct fi_cq_tagged_entry cqe = {};
+	struct fi_cq_err_entry err_cqe = {};
+	fi_addr_t from;
+	ssize_t ret;
+
+	ret = fi_trecvmsg(cxit_ep, &tmsg, FI_PEEK);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &cqe, 1, &from);
+		if (ret == 1) {
+			validate_rx_event_mask(&cqe, context, len,
+					       FI_TAGGED | FI_RECV, NULL, 0,
+					       tag, ignore);
+			cr_assert_eq(from, cxit_ep_fi_addr,
+				     "Invalid source address");
+			ret = FI_SUCCESS;
+			break;
+		} else if (ret == -FI_EAVAIL) {
+			ret = fi_cq_readerr(cxit_rx_cq, &err_cqe, 0);
+			cr_assert_eq(ret, 1);
+
+			cr_assert(err_cqe.err == ENOMSG, "Bad CQE error %d",
+				  err_cqe.err);
+			cr_assert(err_cqe.buf == 0, "Invalid buffer");
+			cr_assert(err_cqe.olen == 0, "Invalid length");
+			cr_assert(err_cqe.tag == tag, "Invalid tag");
+			cr_assert(err_cqe.err == FI_ENOMSG,
+				  "Invalid error code %d", err_cqe.err);
+			ret = err_cqe.err;
+			break;
+		}
+	} while (ret == -FI_EAGAIN);
+
+	return ret;
+}
+
+#define PEEK_TAG_BASE		0x0000a000
+#define PEEK_MSG_LEN		64
+#define PEEK_NUM_MSG		4
+#define PEEK_NUM_FAKE_ADDRS	3
+
+/* Test fi_trecvmsg using FI_PEEK flag to search unexpected message list.
+ * Additional message sizes will be tested within the multitudes tests.
+ */
+Test(tagged, ux_peek)
+{
+	ssize_t ret;
+	uint8_t *rx_buf;
+	uint8_t *tx_buf;
+	ssize_t	rx_len = PEEK_MSG_LEN;
+	ssize_t tx_len = PEEK_MSG_LEN;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_context rx_context[PEEK_NUM_MSG];
+	struct fi_context tx_context[PEEK_NUM_MSG];
+	struct fi_msg_tagged tmsg = {};
+	struct iovec iovec;
+	fi_addr_t from;
+	int i, tx_comp;
+	struct cxip_addr fake_ep_addrs[PEEK_NUM_FAKE_ADDRS];
+
+	/* Add fake AV entries to test peek for non-matching valid address */
+	for (i = 0; i < PEEK_NUM_FAKE_ADDRS; i++) {
+		fake_ep_addrs[i].nic = i + 0x41c;
+		fake_ep_addrs[i].pid = i + 0x21;
+	}
+	ret = fi_av_insert(cxit_av, (void *)fake_ep_addrs,
+			   PEEK_NUM_FAKE_ADDRS, NULL, 0, NULL);
+	cr_assert(ret == PEEK_NUM_FAKE_ADDRS);
+
+	rx_buf = aligned_alloc(C_PAGE_SIZE, rx_len * PEEK_NUM_MSG);
+	cr_assert(rx_buf);
+	memset(rx_buf, 0, rx_len * PEEK_NUM_MSG);
+
+	tx_buf = aligned_alloc(C_PAGE_SIZE, tx_len * PEEK_NUM_MSG);
+	cr_assert(tx_buf);
+
+	/* Send messages to build the unexpected list */
+	for (i = 0; i < PEEK_NUM_MSG; i++) {
+		memset(&tx_buf[i * tx_len], 0xa0 + i, tx_len);
+		iovec.iov_base = &tx_buf[i * tx_len];
+		iovec.iov_len = tx_len;
+
+		tmsg.msg_iov = &iovec;
+		tmsg.iov_count = 1;
+		tmsg.addr = cxit_ep_fi_addr;
+		tmsg.tag = PEEK_TAG_BASE + i;
+		tmsg.ignore = 0;
+		tmsg.context = &tx_context[i];
+
+		ret = fi_tsendmsg(cxit_ep, &tmsg, FI_COMPLETION);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsendmsg failed %" PRId64,
+			     ret);
+	}
+
+	sleep(1);
+
+	/* Force onloading of UX entries if operating in SW EP mode */
+	fi_cq_read(cxit_rx_cq, &cqe, 0);
+
+	/* Any address with bad tag and no context */
+	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + PEEK_NUM_MSG + 1, 0,
+		       tx_len, NULL);
+	cr_assert_eq(ret, FI_ENOMSG, "Peek with invalid tag");
+
+	/* Any address with bad tag with context */
+	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + PEEK_NUM_MSG + 1, 0,
+		       tx_len, &rx_context[0]);
+	cr_assert_eq(ret, FI_ENOMSG, "Peek with invalid tag");
+
+	/* Non matching valid source address with valid tag */
+	ret = try_peek(3, PEEK_TAG_BASE, 0, tx_len, NULL);
+	cr_assert_eq(ret, FI_ENOMSG, "Peek with wrong match address");
+
+	/* Invalid address with valid tag */
+	ret = try_peek(cxit_ep_fi_addr + 7, PEEK_TAG_BASE, 0, tx_len, NULL);
+	cr_assert_eq(ret, -FI_EINVAL, "Peek with bad address");
+
+	/* Valid with any address and valid tag */
+	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + 1, 0, tx_len, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "Peek with invalid tag");
+
+	/* Valid with expected address and valid tag */
+	ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + 1, 0, tx_len, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "Peek with bad address");
+
+	/* Valid with any address and good tag when masked correctly */
+	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + 0x20002,
+		       0x0FFF0000UL, tx_len, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "Peek tag ignore bits failed");
+
+	/* Valid with expected address and good tag when masked correctly */
+	ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + 0x20002,
+		       0x0FFF0000UL, tx_len, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "Peek tag ignore bits failed");
+
+	/* Verify peek of all sends */
+	for (i = 0; i < PEEK_NUM_MSG; i++) {
+		ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + i, 0,
+			       tx_len, &rx_context[i]);
+		cr_assert_eq(ret, FI_SUCCESS, "Peek valid tag not found");
+	}
+
+	/* Verify peek of all sends in reverse order */
+	for (i = PEEK_NUM_MSG - 1; i >= 0; i--) {
+		ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + i, 0,
+			       tx_len, &rx_context[i]);
+		cr_assert_eq(ret, FI_SUCCESS, "Peek valid tag not found");
+	}
+
+	/* Receive all unexpected sends */
+	for (i = 0; i < PEEK_NUM_MSG; i++) {
+		iovec.iov_base = &rx_buf[i * rx_len];
+		iovec.iov_len = rx_len;
+
+		tmsg.msg_iov = &iovec;
+		tmsg.iov_count = 1;
+		tmsg.addr = cxit_ep_fi_addr;
+		tmsg.tag = PEEK_TAG_BASE + i;
+		tmsg.ignore = 0;
+		tmsg.context = &rx_context[i];
+
+		ret = fi_trecvmsg(cxit_ep, &tmsg, 0);
+		cr_assert_eq(ret, FI_SUCCESS,
+			     "fi_trecvmsg failed %" PRId64, ret);
+
+		/* Wait for async event indicating data has been received */
+		do {
+			ret = fi_cq_readfrom(cxit_rx_cq, &cqe, 1, &from);
+		} while (ret == -FI_EAGAIN);
+
+		cr_assert(ret == 1);
+		cr_assert_eq(from, cxit_ep_fi_addr, "Invalid source address");
+		validate_rx_event(&cqe, &rx_context[i], rx_len,
+				  FI_TAGGED | FI_RECV, NULL, 0,
+				  PEEK_TAG_BASE + i);
+	}
+
+	/* Verify received data */
+	for (i = 0; i < PEEK_NUM_MSG; i++) {
+		ret = memcmp(&tx_buf[i * tx_len], &rx_buf[i * rx_len], tx_len);
+		cr_assert_eq(ret, 0, "RX buffer data mismatch for msg %d", i);
+	}
+
+	/* Verify received messages have been removed from unexpected list */
+	for (i = 0; i < PEEK_NUM_MSG; i++) {
+		ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + i, 0,
+			       tx_len, &rx_context[i]);
+		cr_assert_eq(ret, FI_ENOMSG,
+			     "Peek after receive did not fail %" PRId64, ret);
+	}
+
+	/* Wait for TX async events to complete, and validate */
+	tx_comp = 0;
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		if (ret == 1) {
+			validate_tx_event(&cqe, FI_TAGGED | FI_SEND,
+					  &tx_context[tx_comp]);
+			tx_comp++;
+		}
+		cr_assert(ret == 1 || ret == -FI_EAGAIN,
+			  "Bad fi_cq_read return %" PRId64, ret);
+	} while (tx_comp < PEEK_NUM_MSG);
+	cr_assert_eq(tx_comp, PEEK_NUM_MSG,
+		     "Peek tsendmsg only %d TX completions read", tx_comp);
+
+	free(rx_buf);
+	free(tx_buf);
+}
+
 /* Test DIRECTED_RECV send/recv */
 void directed_recv(bool logical)
 {
@@ -1421,6 +1646,15 @@ Test(tagged, multitudes_sw_rdzv, .timeout=60)
 
 	sleep(1);
 
+	/* Force onloading of UX entries if operating in SW EP mode */
+	fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+
+	/* Peek for each tag on UX list */
+	for (size_t rx_io = 0; rx_io < NUM_IOS; rx_io++) {
+		ret = try_peek(FI_ADDR_UNSPEC, rx_io, 0, buf_len, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "peek of UX message failed");
+	}
+
 	/* Issue the Receives */
 	for (size_t rx_io = 0; rx_io < NUM_IOS; rx_io++) {
 		rx_args[rx_io].len = buf_len;
@@ -1467,6 +1701,7 @@ Test(tagged, multitudes_sw_rdzv, .timeout=60)
 struct multitudes_params {
 	size_t length;
 	size_t num_ios;
+	bool peek;
 };
 
 /* This is a parameterized test to execute an arbitrary set of tagged send/recv
@@ -1477,7 +1712,9 @@ struct multitudes_params {
  * The test will first execute the fi_tsend() for `num_ios` number of buffers.
  * A background thread is launched to start processing the Cassini events for
  * the Send operations. The test will then pause for 1 second. After the pause,
- * The test will execute the fi_trecv() to receive the buffers that were
+ * the test will optionally use fi_trecvmsg() to FI_PEEK the unexpected list
+ * and verify the send messages are on the unexpected list. Then the
+ * test will execute the fi_trecv() to receive the buffers that were
  * previously sent. Another background thread is then launched to process the
  * receive events. When all send and receive operations have completed, the
  * threads exit and the results are compared to ensure the expected data was
@@ -1494,13 +1731,17 @@ ParameterizedTestParameters(tagged, multitudes)
 
 	static struct multitudes_params params[] = {
 		{.length = 1024,	/* Eager */
-		 .num_ios = 10},
+		 .num_ios = 10,
+		 .peek = true},
 		{.length = 2 * 1024,	/* Eager */
-		 .num_ios = 15},
+		 .num_ios = 15,
+		 .peek = true},
 		{.length = 4 * 1024,	/* Rendezvous */
-		 .num_ios = 12},
+		 .num_ios = 12,
+		 .peek = true},
 		{.length = 128 * 1024,	/* Rendezvous */
-		 .num_ios = 25},
+		 .num_ios = 25,
+		 .peek = true},
 	};
 
 	param_sz = ARRAY_SIZE(params);
@@ -1568,6 +1809,18 @@ ParameterizedTest(struct multitudes_params *param, tagged, multitudes, .timeout=
 	cr_assert_eq(ret, 0, "Send thread create failed %d", ret);
 
 	sleep(1);
+
+	/* Force onloading of UX entries if operating in SW EP mode */
+	fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+
+	/* Optional peek to see if all send tags are found on ux list */
+	if (param->peek) {
+		for (size_t rx_io = 0; rx_io < param->num_ios; rx_io++) {
+			ret = try_peek(FI_ADDR_UNSPEC, rx_io, 0, buf_len, NULL);
+			cr_assert_eq(ret, FI_SUCCESS,
+				     "peek of UX message failed");
+		}
+	}
 
 	/* Issue the Receives */
 	for (size_t rx_io = 0; rx_io < param->num_ios; rx_io++) {

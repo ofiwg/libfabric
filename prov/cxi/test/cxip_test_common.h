@@ -89,6 +89,9 @@ void validate_tx_event(struct fi_cq_tagged_entry *cqe, uint64_t flags,
 void validate_rx_event(struct fi_cq_tagged_entry *cqe, void *context,
 		       size_t len, uint64_t flags, void *buf, uint64_t data,
 		       uint64_t tag);
+void validate_rx_event_mask(struct fi_cq_tagged_entry *cqe, void *context,
+			    size_t len, uint64_t flags, void *buf,
+			    uint64_t data, uint64_t tag, uint64_t ignore);
 void validate_multi_recv_rx_event(struct fi_cq_tagged_entry *cqe,
 				  void *context, size_t len, uint64_t flags,
 				  uint64_t data, uint64_t tag);
