@@ -6,7 +6,8 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
-v1.13.1, Fri Aug 20, 2021
+
+v1.13.1, Fri Aug 25, 2021
 =========================
 
 ## Core
@@ -18,6 +19,9 @@ v1.13.1, Fri Aug 20, 2021
 
 ## EFA
 
+- Split ep->rx_entry_queued_list into two lists
+- Split ep->tx_entry_queued_list into two lists
+- Only set FI_HMEM hint for SHM getinfo when requested
 - Include qkey in smr name
 - Do not ignore send completion for a local read operation
 - Convert pkt_entry->state to pkt_entry->flags
@@ -67,6 +71,7 @@ v1.13.1, Fri Aug 20, 2021
 
 ## Util
 
+- Do not override default monitor if already set
 - Do not set impmon.impfid to NULL on monitor init
 - Initialize the import monitor
 - Add memory monitor for ZE
