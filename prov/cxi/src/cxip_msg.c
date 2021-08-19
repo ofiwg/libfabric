@@ -273,6 +273,11 @@ static void recv_req_report(struct cxip_req *req)
 			err = FI_EMSGSIZE;
 			RXC_DBG(rxc, "Request truncated: %p (err: %d)\n", req,
 				err);
+		} else if (req->recv.flags & FI_PEEK) {
+			req->data_len = 0;
+			err = FI_ENOMSG;
+			RXC_DBG(rxc, "Peek request not found: %p (err: %d)\n",
+				req, err);
 		} else {
 			err = FI_EIO;
 			RXC_WARN(rxc, "Request error: %p (err: %d, %s)\n", req,
@@ -310,7 +315,8 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 
 	assert(event->hdr.event_type == C_EVENT_PUT ||
 	       event->hdr.event_type == C_EVENT_PUT_OVERFLOW ||
-	       event->hdr.event_type == C_EVENT_RENDEZVOUS);
+	       event->hdr.event_type == C_EVENT_RENDEZVOUS ||
+	       event->hdr.event_type == C_EVENT_SEARCH);
 
 	/* Rendezvous events contain the wrong match bits and do not provide
 	 * initiator context for symmetric AVs.
@@ -2824,12 +2830,107 @@ static bool init_match(struct cxip_rxc *rxc, uint32_t init, uint32_t match_id)
 }
 
 /*
- * cxip_recv_sw_match() - Progress the SW Receive match.
+ * recv_req_peek_complete - FI_PEEK operation completed
+ *
+ * TODO: We will ultimately add FI_CLAIM logic to this function.
+ */
+static void recv_req_peek_complete(struct cxip_req *req)
+{
+	/* If no peek match we need to return original tag */
+	if (req->recv.rc != C_RC_OK)
+		req->tag = req->recv.tag;
+
+	/* Avoid truncation processing, peek does not receive data */
+	req->data_len = req->recv.rlen;
+
+	recv_req_report(req);
+	cxip_recv_req_free(req);
+}
+
+/*
+ * cxip_ux_peek_cb() - Process UX list SEARCH command events.
+ */
+static int cxip_ux_peek_cb(struct cxip_req *req, const union c_event *event)
+{
+	struct cxip_rxc *rxc = req->req_ctx;
+
+	assert(req->recv.flags & FI_PEEK);
+
+	switch (event->hdr.event_type) {
+	case C_EVENT_SEARCH:
+		/* Will receive event for only first match or failure */
+		if (cxi_event_rc(event) == C_RC_OK) {
+			RXC_DBG(rxc, "Peek UX search req: %p matched\n", req);
+			recv_req_tgt_event(req, event);
+		} else {
+			RXC_DBG(rxc, "Peek UX search req: %p no match\n", req);
+		}
+
+		recv_req_peek_complete(req);
+		break;
+	default:
+		RXC_FATAL(rxc, "Unexpected event type: %d\n",
+			  event->hdr.event_type);
+	}
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_ux_peek() - Issue a SEARCH command to peek for a matching send
+ * on the RXC offloaded unexpected message list.
+ *
+ * Caller must hold rxc->lock.
+ */
+static int cxip_ux_peek(struct cxip_req *req)
+{
+	struct cxip_rxc *rxc = req->req_ctx;
+	union c_cmdu cmd = {};
+	union cxip_match_bits mb;
+	uint32_t cmd_flags = C_LE_USE_ONCE;
+	int ret;
+
+	assert(req->recv.flags & FI_PEEK);
+
+	req->cb = cxip_ux_peek_cb;
+
+	mb.tag = req->recv.tag;
+	mb.tagged = 1;
+	cmd.command.opcode = C_CMD_TGT_SEARCH;
+	cmd.target.ptl_list = C_PTL_LIST_UNEXPECTED;
+	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
+	cmd.target.buffer_id = req->req_id;
+	cmd.target.length = -1U;
+	cmd.target.ignore_bits = req->recv.ignore;
+	cmd.target.match_bits =  mb.raw;
+	cmd.target.match_id = req->recv.match_id;
+	cxi_target_cmd_setopts(&cmd.target, cmd_flags);
+
+	RXC_DBG(rxc, "Peek UX search req: %p mb.raw: 0x%" PRIx64 " match_id: 0x%x ignore: 0x%" PRIx64 "\n",
+		req, mb.raw, req->recv.match_id, req->recv.ignore);
+
+	fastlock_acquire(&rxc->rx_cmdq->lock);
+	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
+	if (ret) {
+		fastlock_release(&rxc->rx_cmdq->lock);
+
+		RXC_WARN(rxc, "Failed to write Search command: %d\n", ret);
+		return -FI_EAGAIN;
+	}
+
+	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
+	fastlock_release(&rxc->rx_cmdq->lock);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_recv_sw_matched() - Progress the SW Receive match.
  *
  * Progress the operation which matched in SW.
  */
-static int cxip_recv_sw_match(struct cxip_req *req,
-			      struct cxip_ux_send *ux_send)
+static int cxip_recv_sw_matched(struct cxip_req *req,
+				struct cxip_ux_send *ux_send)
 {
 	int ret;
 	uint64_t mrecv_start;
@@ -2906,10 +3007,9 @@ static int cxip_recv_sw_match(struct cxip_req *req,
 	return ret;
 }
 
-static int cxip_recv_sw_matcher(struct cxip_rxc *rxc, struct cxip_req *req,
-				struct cxip_ux_send *ux)
+static bool cxip_match_recv_sw(struct cxip_rxc *rxc, struct cxip_req *req,
+			       struct cxip_ux_send *ux)
 {
-	int ret = -FI_ENOMSG;
 	union cxip_match_bits ux_mb;
 	uint32_t ux_init;
 
@@ -2917,16 +3017,27 @@ static int cxip_recv_sw_matcher(struct cxip_rxc *rxc, struct cxip_req *req,
 	ux_init = ux->put_ev.tgt_long.initiator.initiator.process;
 
 	if (req->recv.tagged != ux_mb.tagged)
-		return -FI_ENOMSG;
+		return false;
 
 	if (ux_mb.tagged &&
 	    !tag_match(ux_mb.tag, req->recv.tag, req->recv.ignore))
-		return -FI_ENOMSG;
+		return false;
 
 	if (!init_match(rxc, ux_init, req->recv.match_id))
+		return false;
+
+	return true;
+}
+
+static int cxip_recv_sw_matcher(struct cxip_rxc *rxc, struct cxip_req *req,
+				struct cxip_ux_send *ux)
+{
+	int ret;
+
+	if (!cxip_match_recv_sw(rxc, req, ux))
 		return -FI_ENOMSG;
 
-	ret = cxip_recv_sw_match(req, ux);
+	ret = cxip_recv_sw_matched(req, ux);
 	if (ret == -FI_EAGAIN)
 		return -FI_EAGAIN;
 
@@ -3039,6 +3150,46 @@ static int cxip_recv_req_dropped(struct cxip_req *req)
 	fastlock_release(&rxc->lock);
 
 	return FI_SUCCESS;
+}
+
+/*
+ * cxip_recv_req_peek() - Peek for matching unexpected message on RXC.
+ *
+ * Examine onloaded UX sends, if not found there and HW offload is enabled,
+ * initiate check of HW UX list. In either case the operation will not
+ * consume the UX send, but only report the results of the peek to the CQ.
+ *
+ * Caller must hold the RXC lock.
+ */
+static int cxip_recv_req_peek(struct cxip_req *req, bool check_rxc_state)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+	struct cxip_ux_send *ux_send;
+	struct dlist_entry *tmp;
+	int ret;
+
+	if (check_rxc_state && rxc->state != RXC_ENABLED)
+		return -FI_EAGAIN;
+
+	/* Attempt to match the onloaded UX list first */
+	dlist_foreach_container_safe(&rxc->sw_ux_list, struct cxip_ux_send,
+				     ux_send, rxc_entry, tmp) {
+		if (cxip_match_recv_sw(rxc, req, ux_send)) {
+			recv_req_tgt_event(req, &ux_send->put_ev);
+			recv_req_peek_complete(req);
+			return FI_SUCCESS;
+		}
+	}
+
+	if (rxc->msg_offload) {
+		ret = cxip_ux_peek(req);
+	} else {
+		req->recv.rc = C_RC_NO_MATCH;
+		recv_req_peek_complete(req);
+		ret = FI_SUCCESS;
+	}
+
+	return ret;
 }
 
 /*
@@ -3225,24 +3376,35 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	req->recv.tagged = tagged;
 	req->recv.multi_recv = (flags & FI_MULTI_RECV ? true : false);
 
+	if (!(req->recv.flags & FI_PEEK)) {
+		fastlock_acquire(&rxc->lock);
+		ret = cxip_recv_req_queue(req, true, false);
+		fastlock_release(&rxc->lock);
+
+		/* Match made in software? */
+		if (ret == -FI_EALREADY)
+			return FI_SUCCESS;
+
+		/* RXC busy (onloading Sends or full CQ)? */
+		if (ret != FI_SUCCESS)
+			goto err_free_request;
+
+		RXC_DBG(rxc,
+			"req: %p buf: %p len: %lu src_addr: %ld tag(%c):"
+			" 0x%lx ignore: 0x%lx context: %p\n",
+			req, buf, len, src_addr, tagged ? '*' : '-', tag,
+			ignore, context);
+
+		return FI_SUCCESS;
+	}
+
+	/* FI_PEEK */
 	fastlock_acquire(&rxc->lock);
-	ret = cxip_recv_req_queue(req, true, false);
+	ret = cxip_recv_req_peek(req, true);
 	fastlock_release(&rxc->lock);
 
-	/* Match made in software? */
-	if (ret == -FI_EALREADY)
-		return FI_SUCCESS;
-
-	/* RXC busy (onloading Sends or full CQ)? */
-	if (ret != FI_SUCCESS)
-		goto err_free_request;
-
-	RXC_DBG(rxc,
-		"req: %p buf: %p len: %lu src_addr: %ld tag(%c): 0x%lx ignore: 0x%lx context: %p\n",
-		req, buf, len, src_addr, tagged ? '*' : '-', tag, ignore,
-		context);
-
-	return FI_SUCCESS;
+	if (ret == FI_SUCCESS)
+		return ret;
 
 err_free_request:
 	cxip_recv_req_free(req);
@@ -4600,13 +4762,10 @@ static ssize_t cxip_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 {
 	struct cxip_rxc *rxc;
 
-	if (!msg || !msg->msg_iov || msg->iov_count != 1)
-		return -FI_EINVAL;
-
-	if (flags & ~CXIP_RX_OP_FLAGS)
+	if (flags & ~(CXIP_RX_OP_FLAGS | FI_PEEK | FI_CLAIM))
 		return -FI_EBADFLAGS;
 
-	if (cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
+	if (!msg || cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	/* If selective completion is not requested, always generate
@@ -4615,11 +4774,26 @@ static ssize_t cxip_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	if (!rxc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return cxip_recv_common(rxc, msg->msg_iov[0].iov_base,
-				msg->msg_iov[0].iov_len,
-				msg->desc ? msg->desc[0] : NULL, msg->addr,
-				msg->tag, msg->ignore, msg->context, flags,
-				true, NULL);
+	if (!(flags & (FI_PEEK | FI_CLAIM))) {
+		if (!msg->msg_iov || msg->iov_count != 1)
+			return -FI_EINVAL;
+
+		return cxip_recv_common(rxc, msg->msg_iov[0].iov_base,
+					msg->msg_iov[0].iov_len, msg->desc ?
+					msg->desc[0] : NULL, msg->addr,
+					msg->tag, msg->ignore, msg->context,
+					flags, true, NULL);
+	}
+
+	/* Let the consumer know that FI_CLAIM flag is not yet supported */
+	if (flags & FI_CLAIM) {
+		RXC_WARN(rxc, "FI_CLAIM not supported\n");
+		return -FI_ENOSYS;
+	}
+
+	/* FI_PEEK does not post a recv or return message payload */
+	return cxip_recv_common(rxc, NULL, 0UL, NULL, msg->addr, msg->tag,
+				msg->ignore, msg->context, flags, true, NULL);
 }
 
 static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
