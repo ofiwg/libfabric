@@ -281,6 +281,7 @@ application, with the -e or --env command line option.
 
 # NOTES
 
+## System Calls
 Because libfabric is designed to provide applications direct access to
 fabric hardware, there are limits on how libfabric resources may be used
 in conjunction with system calls.  These limitations are notable for
@@ -296,6 +297,25 @@ portability across providers.
   network.  For example, data buffers that have been registered with a
   fabric domain may not be available in a child process because of copy
   on write restrictions.
+
+## CUDA deadlock
+In some cases, calls to `cudaMemcpy` within libfabric may result in a
+deadlock. This typically occurs when a CUDA kernel blocks until a
+`cudaMemcpy` on the host completes.  To avoid this deadlock,
+`cudaMemcpy` may be disabled by setting
+`FI_HMEM_CUDA_ENABLE_XFER=0`. If this environment variable is set and
+there is a call to `cudaMemcpy` with libfabric, a warning will be
+emitted and no copy will occur. Note that not all providers support
+this option.
+
+Another mechanism which can be used to avoid deadlock is Nvidia's
+gdrcopy. Using gdrcopy requires an external library and kernel module
+available at https://github.com/NVIDIA/gdrcopy. Libfabric must be
+configured with gdrcopy support using the `--with-gdrcopy` option, and
+be run with `FI_HMEM_CUDA_USE_GDRCOPY=1`. This may be used in
+conjunction with the above option to provide a method for copying
+to/from CUDA device memory when `cudaMemcpy` cannot be used. Again,
+this may not be supported by all providers.
 
 # ABI CHANGES
 

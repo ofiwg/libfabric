@@ -80,7 +80,8 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 	case smr_src_iov:
 		break;
 	case smr_src_ipc:
-		close(pending->fd);
+		if (pending->iface == FI_HMEM_ZE)
+			close(pending->fd);
 		break;
 	case smr_src_sar:
 		sar_msg = smr_get_ptr(peer_smr, pending->cmd.msg.data.sar);
