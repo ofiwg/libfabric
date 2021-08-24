@@ -3081,6 +3081,10 @@ int cxip_recv_ux_sw_matcher(struct cxip_ux_send *ux)
 				     recv.rxc_entry, tmp) {
 		ret = cxip_recv_sw_matcher(rxc, req, ux);
 
+		/* Unexpected message found match but unable to progress */
+		if (ret == -FI_EAGAIN)
+			return ret;
+
 		/* Unexpected message found a match. */
 		if (ret == FI_SUCCESS || ret == -FI_EINPROGRESS)
 			return FI_SUCCESS;
