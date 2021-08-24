@@ -75,21 +75,21 @@
 #define RXR_EAGER_TAGRTM_PKT		65
 #define RXR_MEDIUM_MSGRTM_PKT		66
 #define RXR_MEDIUM_TAGRTM_PKT		67
-#define RXR_LONG_MSGRTM_PKT		68
-#define RXR_LONG_TAGRTM_PKT		69
+#define RXR_LONGCTS_MSGRTM_PKT		68
+#define RXR_LONGCTS_TAGRTM_PKT		69
 #define RXR_EAGER_RTW_PKT		70
-#define RXR_LONG_RTW_PKT		71
+#define RXR_LONGCTS_RTW_PKT		71
 #define RXR_SHORT_RTR_PKT		72
-#define RXR_LONG_RTR_PKT		73
+#define RXR_LONGCTS_RTR_PKT		73
 #define RXR_WRITE_RTA_PKT		74
 #define RXR_FETCH_RTA_PKT		75
 #define RXR_COMPARE_RTA_PKT		76
 #define RXR_BASELINE_REQ_PKT_END	77
 
 #define RXR_EXTRA_REQ_PKT_BEGIN		128
-#define RXR_READ_MSGRTM_PKT		128
-#define RXR_READ_TAGRTM_PKT		129
-#define RXR_READ_RTW_PKT		130
+#define RXR_LONGREAD_MSGRTM_PKT		128
+#define RXR_LONGREAD_TAGRTM_PKT		129
+#define RXR_LONGREAD_RTW_PKT		130
 #define RXR_READ_RTR_PKT		131
 
 #define RXR_DC_REQ_PKT_BEGIN		132
@@ -97,10 +97,10 @@
 #define RXR_DC_EAGER_TAGRTM_PKT 	134
 #define RXR_DC_MEDIUM_MSGRTM_PKT 	135
 #define RXR_DC_MEDIUM_TAGRTM_PKT 	136
-#define RXR_DC_LONG_MSGRTM_PKT  	137
-#define RXR_DC_LONG_TAGRTM_PKT  	138
+#define RXR_DC_LONGCTS_MSGRTM_PKT  	137
+#define RXR_DC_LONGCTS_TAGRTM_PKT  	138
 #define RXR_DC_EAGER_RTW_PKT    	139
-#define RXR_DC_LONG_RTW_PKT     	140
+#define RXR_DC_LONGCTS_RTW_PKT     	140
 #define RXR_DC_WRITE_RTA_PKT    	141
 #define RXR_DC_REQ_PKT_END		142
 #define RXR_EXTRA_REQ_PKT_END   	142
@@ -139,8 +139,12 @@ struct rxr_handshake_hdr {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint32_t maxproto;
-	uint64_t features[0];
+	/* nextra_p3 is number of members in extra_info plus 3.
+	 * The "p3" part was introduced for backward compatibility.
+	 * See protocol v4 document section 2.1 for detail.
+	 */
+	uint32_t nextra_p3;
+	uint64_t extra_info[0];
 };
 
 #if defined(static_assert) && defined(__x86_64__)
@@ -165,8 +169,19 @@ void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep,
 void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry);
 /*
- *  CTS packet data structures and functions.
- *  Definition of the functions is in rxr_pkt_type_misc.c
+ * @breif format of CTS packet header
+ *
+ * CTS is used in long-CTS sub-protocols for flow control.
+ *
+ * It is sent from receiver to sender, and contains number of bytes
+ * receiver is ready to receive.
+ *
+ * long-CTS is used not only by two-sided communication but also
+ * by emulated write and emulated read protocols.
+ *
+ * In emulated write, requester is sender, and responder is receiver.
+ *
+ * In emulated read, requester is receiver, and responder is sender.
  */
 struct rxr_cts_hdr {
 	uint8_t type;
@@ -174,10 +189,9 @@ struct rxr_cts_hdr {
 	uint16_t flags;
 	/* end of rxr_base_hdr */
 	uint8_t pad[4];
-	/* TODO: need to add msg_id -> tx_id/rx_id mapping */
-	uint32_t tx_id;
-	uint32_t rx_id;
-	uint64_t window;
+	uint32_t send_id; /* ID of the send opertaion on sender side */
+	uint32_t recv_id; /* ID of the receive operatin on receive side */
+	uint64_t recv_length; /* number of bytes receiver is ready to receive */
 };
 
 #if defined(static_assert) && defined(__x86_64__)
@@ -209,17 +223,27 @@ void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 
 /*
- *  DATA packet data structures and functions
- *  Definition of the functions is in rxr_pkt_data.c
+ * @brief format of DATA packet header.
+ *
+ * DATA is used in long-CTS sub-protocols.
+ *
+ * It is sent from sender to receiver, and contains a segment
+ * of application data.
+ *
+ * long-CTS is used not only by two-sided communication but also
+ * by emulated write and emulated read protocols.
+ *
+ * In emulated write, requester is sender, and responder is receiver.
+ *
+ * In emulated read, requester is receiver, and responder is sender.
  */
 struct rxr_data_hdr {
 	uint8_t type;
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	/* TODO: need to add msg_id -> tx_id/rx_id mapping */
-	uint32_t rx_id;
-	uint64_t seg_size;
+	uint32_t recv_id; /* ID of the receive operation on receiver */
+	uint64_t seg_length;
 	uint64_t seg_offset;
 };
 
@@ -262,18 +286,20 @@ void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);
 
 /*
- *  READRSP packet data structures and functions
- *  The definition of functions are in rxr_pkt_type_misc.c
+ *  @brief READRSP packet header
+ *
+ *  READRSP is sent from read responder to read requester, and it contains
+ *  application data.
  */
 struct rxr_readrsp_hdr {
 	uint8_t type;
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint8_t pad[4];
-	uint32_t rx_id;
-	uint32_t tx_id;
-	uint64_t seg_size;
+	uint32_t padding;
+	uint32_t recv_id; /* ID of the receive operation on the read requester, from rtr packet */
+	uint32_t send_id; /* ID of the send operation on the read responder, will be included in CTS packet */
+	uint64_t seg_length;
 };
 
 static inline struct rxr_readrsp_hdr *rxr_get_readrsp_hdr(void *pkt)
@@ -338,17 +364,25 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry);
 
 /*
- *  EOR packet, used to acknowledge the sender that large message
- *  copy has been finished.
- *  Implementaion of the functions are in rxr_pkt_misc.c
+ * @brief format of the EOR packet.
+ *
+ * EOR packet is used in long-read sub-protocols.
+ *
+ * It is sent from receiver to sender, to notify
+ * the finish of data transfer.
+ *
+ * long-read is used not only by two-sided communication but also
+ * by emulated write.
+ *
+ * In emulated write, requester is sender, and responder is receiver.
  */
 struct rxr_eor_hdr {
 	uint8_t type;
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint32_t tx_id;
-	uint32_t rx_id;
+	uint32_t send_id; /* ID of the send operation on sender */
+	uint32_t recv_id; /* ID of the receive operation on receiver */
 };
 
 #if defined(static_assert) && defined(__x86_64__)
@@ -380,10 +414,10 @@ struct rxr_atomrsp_hdr {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint8_t pad[4];
-	uint32_t rx_id;
-	uint32_t tx_id;
-	uint64_t seg_size;
+	uint32_t padding;
+	uint32_t reserved;
+	uint32_t recv_id;
+	uint64_t seg_length;
 };
 
 #if defined(static_assert) && defined(__x86_64__)

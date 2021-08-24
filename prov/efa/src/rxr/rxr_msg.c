@@ -67,7 +67,7 @@ ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	bool delivery_complete_requested;
 
 	assert(RXR_EAGER_MSGRTM_PKT + 1 == RXR_EAGER_TAGRTM_PKT);
-	assert(RXR_READ_MSGRTM_PKT + 1 == RXR_READ_TAGRTM_PKT);
+	assert(RXR_LONGREAD_MSGRTM_PKT + 1 == RXR_LONGREAD_TAGRTM_PKT);
 	assert(RXR_DC_EAGER_MSGRTM_PKT + 1 == RXR_DC_EAGER_TAGRTM_PKT);
 
 	tagged = (tx_entry->op == ofi_op_tagged);
@@ -102,7 +102,7 @@ ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	}
 
 	return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-				 RXR_READ_MSGRTM_PKT + tagged, 0);
+				 RXR_LONGREAD_MSGRTM_PKT + tagged, 0);
 }
 
 ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
@@ -112,13 +112,13 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	 * always the correspondent message rtm packet type id + 1, thus the assertion here.
 	 */
 	assert(RXR_EAGER_MSGRTM_PKT + 1 == RXR_EAGER_TAGRTM_PKT);
-	assert(RXR_READ_MSGRTM_PKT + 1 == RXR_READ_TAGRTM_PKT);
-	assert(RXR_LONG_MSGRTM_PKT + 1 == RXR_LONG_TAGRTM_PKT);
+	assert(RXR_LONGREAD_MSGRTM_PKT + 1 == RXR_LONGREAD_TAGRTM_PKT);
+	assert(RXR_LONGCTS_MSGRTM_PKT + 1 == RXR_LONGCTS_TAGRTM_PKT);
 	assert(RXR_MEDIUM_MSGRTM_PKT + 1 == RXR_MEDIUM_TAGRTM_PKT);
 
 	assert(RXR_DC_EAGER_MSGRTM_PKT + 1 == RXR_DC_EAGER_TAGRTM_PKT);
 	assert(RXR_DC_MEDIUM_MSGRTM_PKT + 1 == RXR_DC_MEDIUM_TAGRTM_PKT);
-	assert(RXR_DC_LONG_MSGRTM_PKT + 1 == RXR_DC_LONG_TAGRTM_PKT);
+	assert(RXR_DC_LONGCTS_MSGRTM_PKT + 1 == RXR_DC_LONGCTS_TAGRTM_PKT);
 
 	int tagged;
 	size_t max_rtm_data_size;
@@ -196,7 +196,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 			 * Read message support
 			 * FI_DELIVERY_COMPLETE implicitly.
 			 */
-			ctrl_type = RXR_READ_MSGRTM_PKT;
+			ctrl_type = RXR_LONGREAD_MSGRTM_PKT;
 		else
 			ctrl_type = delivery_complete_requested ? RXR_DC_EAGER_MSGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
 
@@ -238,7 +238,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	    (tx_entry->desc[0] || efa_is_cache_available(efa_domain))) {
 		/* Read message support FI_DELIVERY_COMPLETE implicitly. */
 		err = rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					RXR_READ_MSGRTM_PKT + tagged, 0);
+					RXR_LONGREAD_MSGRTM_PKT + tagged, 0);
 
 		if (err != -FI_ENOMEM)
 			return err;
@@ -253,7 +253,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	if (OFI_UNLIKELY(err))
 		return err;
 
-	ctrl_type = delivery_complete_requested ? RXR_DC_LONG_MSGRTM_PKT : RXR_LONG_MSGRTM_PKT;
+	ctrl_type = delivery_complete_requested ? RXR_DC_LONGCTS_MSGRTM_PKT : RXR_LONGCTS_MSGRTM_PKT;
 	tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
 	return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
 				 ctrl_type + tagged, 0);

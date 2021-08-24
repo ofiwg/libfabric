@@ -878,18 +878,24 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 }
 
 static
-void rxr_ep_set_features(struct rxr_ep *ep)
+void rxr_ep_set_extra_info(struct rxr_ep *ep)
 {
-	memset(ep->features, 0, sizeof(ep->features));
+	memset(ep->extra_info, 0, sizeof(ep->extra_info));
 
 	/* RDMA read is an extra feature defined in protocol version 4 (the base version) */
 	if (efa_ep_support_rdma_read(ep->rdm_ep))
-		ep->features[0] |= RXR_REQ_FEATURE_RDMA_READ;
+		ep->extra_info[0] |= RXR_EXTRA_FEATURE_RDMA_READ;
 
-	ep->features[0] |= RXR_REQ_FEATURE_DELIVERY_COMPLETE;
+	ep->extra_info[0] |= RXR_EXTRA_FEATURE_DELIVERY_COMPLETE;
 
-	if (ep->use_zcpy_rx)
-		ep->features[0] |= RXR_REQ_FEATURE_ZERO_COPY_RECEIVE;
+	if (ep->use_zcpy_rx) {
+		/*
+		 * zero copy receive requires the packet header length remains
+		 * constant, so the application receive buffer is match with
+		 * incoming application data.
+		 */
+		ep->extra_info[0] |= RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
+	}
 }
 
 static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
@@ -909,7 +915,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 
 		fastlock_acquire(&ep->util_ep.lock);
 
-		rxr_ep_set_features(ep);
+		rxr_ep_set_extra_info(ep);
 
 		ep->core_addrlen = RXR_MAX_NAME_LENGTH;
 		ret = fi_getname(&ep->rdm_ep->fid,

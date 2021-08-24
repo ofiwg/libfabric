@@ -66,14 +66,8 @@
 #include "rxr_pkt_entry.h"
 #include "rxr_pkt_type.h"
 
-/*
- * EFA support interoperability between protocol version 4 and above,
- * and version 4 is considered the base version.
- */
-#define RXR_BASE_PROTOCOL_VERSION	(4)
-#define RXR_CUR_PROTOCOL_VERSION	(4)
-#define RXR_NUM_PROTOCOL_VERSION	(RXR_CUR_PROTOCOL_VERSION - RXR_BASE_PROTOCOL_VERSION + 1)
-#define RXR_MAX_PROTOCOL_VERSION	(100)
+#define RXR_PROTOCOL_VERSION	(4)
+#define RXR_MAX_NUM_EXINFO	(256)
 
 #define RXR_FI_VERSION		OFI_VERSION_LATEST
 
@@ -316,8 +310,6 @@ struct rxr_fabric {
 #endif
 };
 
-#define RXR_MAX_NUM_PROTOCOLS (RXR_MAX_PROTOCOL_VERSION - RXR_BASE_PROTOCOL_VERSION + 1)
-
 struct rdm_peer {
 	bool is_self;			/* self flag */
 	bool is_local;			/* local/remote peer flag */
@@ -327,8 +319,8 @@ struct rdm_peer {
 	uint32_t prev_qkey;		/* each peer has unique gid+qpn. the qkey can change */
 	uint32_t next_msg_id;		/* sender's view of msg_id */
 	uint32_t flags;
-	uint32_t maxproto;		/* maximum supported protocol version by this peer */
-	uint64_t features[RXR_MAX_NUM_PROTOCOLS]; /* the feature flag for each version */
+	uint32_t nextra_p3;		/* number of members in extra_info plus 3 */
+	uint64_t extra_info[RXR_MAX_NUM_EXINFO]; /* the feature/request flag for each version */
 	size_t efa_outstanding_tx_ops;	/* tracks outstanding tx ops to this peer on EFA device */
 	size_t shm_outstanding_tx_ops;  /* tracks outstanding tx ops to this peer on SHM */
 	struct dlist_entry outstanding_tx_pkts; /* a list of outstanding tx pkts to the peer */
@@ -563,8 +555,8 @@ struct rxr_ep {
 	uint8_t core_addr[RXR_MAX_NAME_LENGTH];
 	size_t core_addrlen;
 
-	/* per-version feature flag */
-	uint64_t features[RXR_NUM_PROTOCOL_VERSION];
+	/* per-version extra feature/request flag */
+	uint64_t extra_info[RXR_MAX_NUM_EXINFO];
 
 	/* core provider fid */
 	struct fid_ep *rdm_ep;
