@@ -2,7 +2,7 @@
 centos8 {
     timeout = 30
     buildExternal = "true"
-    product = 'internal,shasta-premium'
+    product = 'internal'
     buildPrepScript = "contrib/cray/runBuildPrep.sh"
     rpmBuildScript = "contrib/cray/cray_rpmbuild.sh"
     masterBranch = "integration"

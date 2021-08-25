@@ -2,7 +2,7 @@
 sle15sp2NCN {
     timeout = 60
     buildExternal = "true"
-    product = 'internal,shasta-premium'
+    product = 'internal'
     buildPrepScript = "contrib/cray/runBuildPrep.sh"
     rpmBuildScript = "contrib/cray/cray_rpmbuild.sh"
     masterBranch = "integration"
