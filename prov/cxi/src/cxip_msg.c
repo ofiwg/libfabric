@@ -4762,7 +4762,8 @@ static ssize_t cxip_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 {
 	struct cxip_rxc *rxc;
 
-	if (flags & ~(CXIP_RX_OP_FLAGS | FI_PEEK | FI_CLAIM))
+	if (flags & ~(CXIP_RX_OP_FLAGS | CXIP_RX_IGNORE_OP_FLAGS |
+		      FI_PEEK | FI_CLAIM))
 		return -FI_EBADFLAGS;
 
 	if (!msg || cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
@@ -4946,7 +4947,7 @@ static ssize_t cxip_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
-	if (flags & ~CXIP_RX_OP_FLAGS)
+	if (flags & ~(CXIP_RX_OP_FLAGS | CXIP_RX_IGNORE_OP_FLAGS))
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)

@@ -83,6 +83,9 @@
 #define CXIP_RX_OP_FLAGS		(FI_COMPLETION | \
 					 FI_MULTI_RECV | \
 					 FI_MORE)
+/* Invalid OP flags for RX that can be silently ignored */
+#define CXIP_RX_IGNORE_OP_FLAGS		(FI_REMOTE_CQ_DATA | \
+					 FI_INJECT)
 #define CXIP_WRITEMSG_ALLOWED_FLAGS	(FI_INJECT | \
 					 FI_COMPLETION | \
 					 FI_MORE | \
