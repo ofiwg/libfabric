@@ -65,4 +65,4 @@ v1.13.1](https://github.com/ofiwg/libfabric/releases/tag/v1.13.1).
   * [fi_strerror(1)](fi_strerror.1.html)
 
 * Fabtests
- * [fabtests(7)](fabtests.7.html)
+  * [fabtests(7)](fabtests.7.html)
