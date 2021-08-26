@@ -47,7 +47,7 @@ GPU memory.
 
 CFLAGS that might be useful:
 
-* `RXR_PERF_ENABLED`: enable the perf hooks to determine cycle/instruction count
+* `EFA_PERF_ENABLED`: enable the perf hooks to determine cycle/instruction count
 for functions in the send/receive/completion paths. See fi_hook(7) and the
 Linux perf documentation for more information.
 * `ENABLE_RXR_PKT_DUMP`: turn on packet dump prints, very verbose. These

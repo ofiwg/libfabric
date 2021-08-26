@@ -297,15 +297,7 @@ enum rxr_rx_comm_type {
  * Progress engine will retry sending handshake.
  */
 #define RXR_PEER_HANDSHAKE_QUEUED      BIT_ULL(5)
-
-struct rxr_fabric {
-	struct util_fabric util_fabric;
-	struct fid_fabric *lower_fabric;
-	struct fid_fabric *shm_fabric;
-#ifdef RXR_PERF_ENABLED
-	struct ofi_perfset perf_set;
-#endif
-};
+#define RXR_MAX_NUM_PROTOCOLS (RXR_MAX_PROTOCOL_VERSION - RXR_BASE_PROTOCOL_VERSION + 1)
 
 struct rdm_peer {
 	bool is_self;			/* self flag */
@@ -887,8 +879,6 @@ int rxr_get_lower_rdm_info(uint32_t version, const char *node, const char *servi
 			   uint64_t flags, const struct util_prov *util_prov,
 			   const struct fi_info *util_hints,
 			   struct fi_info **core_info);
-int rxr_fabric(struct fi_fabric_attr *attr,
-	       struct fid_fabric **fabric, void *context);
 int rxr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		    struct fid_domain **dom, void *context);
 int rxr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -1044,38 +1034,4 @@ static inline void rxr_rm_tx_cq_check(struct rxr_ep *ep, struct util_cq *tx_cq)
 	fastlock_release(&tx_cq->cq_lock);
 }
 
-/* Performance counter declarations */
-#ifdef RXR_PERF_ENABLED
-#define RXR_PERF_FOREACH(DECL)	\
-	DECL(perf_rxr_tx),	\
-	DECL(perf_rxr_recv),	\
-	DECL(rxr_perf_size)	\
-
-enum rxr_perf_counters {
-	RXR_PERF_FOREACH(OFI_ENUM_VAL)
-};
-
-extern const char *rxr_perf_counters_str[];
-
-static inline void rxr_perfset_start(struct rxr_ep *ep, size_t index)
-{
-	struct rxr_domain *domain = rxr_ep_domain(ep);
-	struct rxr_fabric *fabric = container_of(domain->util_domain.fabric,
-						 struct rxr_fabric,
-						 util_fabric);
-	ofi_perfset_start(&fabric->perf_set, index);
-}
-
-static inline void rxr_perfset_end(struct rxr_ep *ep, size_t index)
-{
-	struct rxr_domain *domain = rxr_ep_domain(ep);
-	struct rxr_fabric *fabric = container_of(domain->util_domain.fabric,
-						 struct rxr_fabric,
-						 util_fabric);
-	ofi_perfset_end(&fabric->perf_set, index);
-}
-#else
-#define rxr_perfset_start(ep, index) do {} while (0)
-#define rxr_perfset_end(ep, index) do {} while (0)
-#endif
 #endif

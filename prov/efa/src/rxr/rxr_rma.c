@@ -307,7 +307,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	assert(msg->iov_count <= rxr_ep->tx_iov_limit);
 
-	rxr_perfset_start(rxr_ep, perf_rxr_tx);
+	efa_perfset_start(rxr_ep, perf_efa_tx);
 	fastlock_acquire(&rxr_ep->util_ep.lock);
 
 	if (OFI_UNLIKELY(is_tx_res_full(rxr_ep))) {
@@ -361,7 +361,7 @@ out:
 		rxr_release_tx_entry(rxr_ep, tx_entry);
 
 	fastlock_release(&rxr_ep->util_ep.lock);
-	rxr_perfset_end(rxr_ep, perf_rxr_tx);
+	efa_perfset_end(rxr_ep, perf_efa_tx);
 	return err;
 }
 
@@ -501,7 +501,7 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	assert(msg->iov_count <= rxr_ep->tx_iov_limit);
 
-	rxr_perfset_start(rxr_ep, perf_rxr_tx);
+	efa_perfset_start(rxr_ep, perf_efa_tx);
 	fastlock_acquire(&rxr_ep->util_ep.lock);
 
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
@@ -525,7 +525,7 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 	}
 out:
 	fastlock_release(&rxr_ep->util_ep.lock);
-	rxr_perfset_end(rxr_ep, perf_rxr_tx);
+	efa_perfset_end(rxr_ep, perf_efa_tx);
 	return err;
 }
 
