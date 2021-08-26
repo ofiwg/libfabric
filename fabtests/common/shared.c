@@ -685,7 +685,7 @@ int ft_alloc_active_res(struct fi_info *fi)
 	return 0;
 }
 
-static int ft_init(void)
+int ft_init(void)
 {
 	tx_seq = 0;
 	rx_seq = 0;
