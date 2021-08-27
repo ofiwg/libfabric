@@ -165,6 +165,9 @@ struct hook_domain {
 	ssize_t (*base_credit_handler)(struct fid_ep *ep_fid, size_t credits);
 };
 
+int hook_domain_init(struct fid_fabric *fabric, struct fi_info *info,
+		     struct fid_domain **domain, void *context,
+		     struct hook_domain *dom);
 int hook_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **domain, void *context);
 
