@@ -171,9 +171,10 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			av = cq->domain->qp_table[wc.ibv_wc.qp_num &
 			     cq->domain->qp_table_sz_m1]->ep->av;
 
-			src_addr[i] = efa_ahn_qpn_to_addr(av,
-							  wc.ibv_wc.slid,
-							  wc.ibv_wc.src_qp);
+			src_addr[i] = efa_av_reverse_lookup(av,
+							    wc.ibv_wc.slid,
+							    wc.ibv_wc.src_qp,
+							    EFA_CONNID_NOTAVAIL);
 		}
 		cq->read_entry(&wc, i, buf);
 	}

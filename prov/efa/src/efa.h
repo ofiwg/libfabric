@@ -124,6 +124,8 @@ struct efa_fabric {
 #endif
 };
 
+#define EFA_CONNID_NOTAVAIL (-1)
+
 struct efa_ah {
 	uint8_t		gid[EFA_GID_LEN]; /* efa device GID */
 	struct ibv_ah	*ibv_ah; /* created by ibv_create_ah() using GID */
@@ -348,13 +350,14 @@ struct efa_av_entry {
 	struct efa_conn		conn;
 };
 
-struct efa_ah_qpn {
+struct efa_reverse_av_key {
 	uint16_t ahn;
 	uint16_t qpn;
+	uint32_t connid;
 };
 
 struct efa_reverse_av {
-	struct efa_ah_qpn key;
+	struct efa_reverse_av_key key;
 	struct efa_conn *conn;
 	UT_hash_handle hh;
 };
@@ -433,9 +436,7 @@ void efa_cq_inc_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
 /* Caller must hold cq->inner_lock. */
 void efa_cq_dec_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
 
-fi_addr_t efa_ahn_qpn_to_addr(struct efa_av *av, uint16_t ahn, uint16_t qpn);
-
-struct rdm_peer *efa_ahn_qpn_to_peer(struct efa_av *av, uint16_t ahn, uint16_t qpn);
+fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn, uint32_t connid);
 
 int efa_init_prov(void);
 

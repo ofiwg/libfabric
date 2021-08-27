@@ -43,6 +43,7 @@
 #include "rxr_msg.h"
 #include "rxr_rma.h"
 #include "rxr_pkt_cmd.h"
+#include "rxr_pkt_type_base.h"
 #include "rxr_read.h"
 #include "rxr_atomic.h"
 
@@ -1714,10 +1715,10 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 				      size_t cqe_to_process)
 {
 	struct ibv_wc ibv_wc;
+	uint32_t *connid;
 	struct efa_cq *efa_cq;
 	struct efa_av *efa_av;
 	struct efa_ep *efa_ep;
-	struct rdm_peer *peer;
 	struct rxr_pkt_entry *pkt_entry;
 	ssize_t ret;
 	int i, err, prov_errno;
@@ -1763,8 +1764,14 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 			rxr_pkt_handle_send_completion(ep, pkt_entry);
 			break;
 		case IBV_WC_RECV:
-			peer = efa_ahn_qpn_to_peer(efa_av, ibv_wc.slid, ibv_wc.src_qp);
-			pkt_entry->addr = peer ? peer->efa_fiaddr : FI_ADDR_NOTAVAIL;
+			connid = rxr_pkt_connid_ptr(pkt_entry);
+			if (!connid) {
+				FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "No connid in packet header");
+				rxr_pkt_handle_recv_error(ep, pkt_entry, FI_EINVAL, FI_EINVAL);
+				break;
+			}
+
+			pkt_entry->addr = efa_av_reverse_lookup(efa_av, ibv_wc.slid, ibv_wc.src_qp, *connid);
 			pkt_entry->pkt_size = ibv_wc.byte_len;
 			assert(pkt_entry->pkt_size > 0);
 			rxr_pkt_handle_recv_completion(ep, pkt_entry);

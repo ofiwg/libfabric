@@ -198,39 +198,28 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr)
 	return efa_av_entry->conn.ep_addr ? &efa_av_entry->conn : NULL;
 }
 
-fi_addr_t efa_ahn_qpn_to_addr(struct efa_av *av, uint16_t ahn, uint16_t qpn)
-{
-	struct efa_reverse_av *reverse_av;
-	struct efa_ah_qpn key;
-
-	memset(&key, 0, sizeof(key));
-	key.ahn = ahn;
-	key.qpn = qpn;
-	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av);
-
-	return OFI_LIKELY(!!reverse_av) ? reverse_av->conn->fi_addr : FI_ADDR_NOTAVAIL;
-}
-
 /**
- * @brief find rdm_peer by address handle number (ahn) and QP number (qpn)
+ * @brief find fi_addr by address handle number (ahn), QP number (qpn) and connid
  *
  * @param[in]	av	address vector
  * @param[in]	ahn	address handle number
  * @param[in]	qpn	QP number
+ * @param[in]   connid	connection ID.
  * @return	On success, return pointer to rdm_peer
- * 		If no such peer exist, return NULL
+ * 		If no such peer exist, return FI_ADDR_NOTAVAIL
  */
-struct rdm_peer *efa_ahn_qpn_to_peer(struct efa_av *av, uint16_t ahn, uint16_t qpn)
+fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn, uint32_t connid)
 {
-	struct efa_reverse_av *reverse_av;
-	struct efa_ah_qpn key;
+	struct efa_reverse_av *reverse_av_entry;
+	struct efa_reverse_av_key key;
 
 	memset(&key, 0, sizeof(key));
 	key.ahn = ahn;
 	key.qpn = qpn;
-	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av);
+	key.connid = connid;
+	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av_entry);
 
-	return OFI_LIKELY(!!reverse_av) ? &reverse_av->conn->rdm_peer : NULL;
+	return OFI_LIKELY(!!reverse_av_entry) ? reverse_av_entry->conn->fi_addr : FI_ADDR_NOTAVAIL;
 }
 
 static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
@@ -455,7 +444,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	struct efa_av_entry *efa_av_entry = NULL;
 	struct efa_conn *conn, *prev_conn;
 	fi_addr_t util_av_fi_addr;
-	struct efa_ah_qpn key;
+	struct efa_reverse_av_key key;
 	int err;
 
 	if (flags & FI_SYNC_ERR)
@@ -501,25 +490,15 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	memset(&key, 0, sizeof(key));
 	key.ahn = conn->ah->ahn;
 	key.qpn = raw_addr->qpn;
-	reverse_av_entry = NULL;
-	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av_entry);
-	if (reverse_av_entry) {
-		/*
-		 * If we found an existing entry in reverse_av, the peer must
-		 * have the same GID and qpn, but different qkey, which means
-		 * the old peer has been destroyed. so we have to release the
-		 * corresponding efa_conn object
-		 */
-		prev_conn = reverse_av_entry->conn;
-		assert(prev_conn);
-		assert(memcmp(prev_conn->ep_addr->raw, conn->ep_addr->raw, EFA_GID_LEN)==0);
-		assert(prev_conn->ep_addr->qpn == conn->ep_addr->qpn);
-		assert(prev_conn->ep_addr->qkey != conn->ep_addr->qkey);
-		EFA_WARN(FI_LOG_AV, "QP reuse detected! Previous qkey: %d Current qkey: %d\n",
-			 prev_conn->ep_addr->qkey, conn->ep_addr->qkey);
-		conn->rdm_peer.prev_qkey = prev_conn->ep_addr->qkey;
-		efa_conn_release(av, prev_conn);
-	}
+	/*
+	 * reverse_av is used to search for fi_addr for a received
+	 * packet.
+	 * rdma-core reports AHN and QPN for each received packet, but
+	 * does not report CONNID.
+	 * For RDM endpoint, all packets have connid in their header.
+	 * Therefore, we can include CONNID in reverse AV for RDM endpoint.
+	 */
+	key.connid = (av->ep_type == FI_EP_RDM) ? raw_addr->qkey : EFA_CONNID_NOTAVAIL;
 
 	reverse_av_entry = malloc(sizeof(*reverse_av_entry));
 	if (!reverse_av_entry) {
@@ -563,7 +542,7 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 	struct efa_reverse_av *reverse_av_entry;
 	struct util_av_entry *util_av_entry;
 	struct efa_av_entry *efa_av_entry;
-	struct efa_ah_qpn key;
+	struct efa_reverse_av_key key;
 	char gidstr[INET6_ADDRSTRLEN];
 
 	if (av->ep_type == FI_EP_RDM)
@@ -572,6 +551,7 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 	memset(&key, 0, sizeof(key));
 	key.ahn = conn->ah->ahn;
 	key.qpn = conn->ep_addr->qpn;
+	key.connid = conn->ep_addr->qkey;
 	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av_entry);
 	assert(reverse_av_entry);
 	HASH_DEL(av->reverse_av, reverse_av_entry);
