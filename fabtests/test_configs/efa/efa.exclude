@@ -38,9 +38,6 @@
 # Exclude cq_data test until fi_pool/fi_wait is supported
 cq_data
 
-# Exclude all rdm prefix tests
-rdm.* -k
-
 multi_mr
 rdm_rma_trigger
 
