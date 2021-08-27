@@ -948,7 +948,7 @@ ssize_t rxr_pkt_proc_matched_longread_rtm(struct rxr_ep *ep,
 	/* truncate rx_entry->iov to save memory registration pages because we
 	 * need to do memory registration for the receiving buffer.
 	 */
-	ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_count, rx_entry->total_len);
+	ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_count, rx_entry->total_len + ep->msg_prefix_size);
 	return rxr_read_post_remote_read_or_queue(ep, RXR_RX_ENTRY, rx_entry);
 }
 
