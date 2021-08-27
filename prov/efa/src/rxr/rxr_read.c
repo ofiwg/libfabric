@@ -527,12 +527,17 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 				 read_entry->bytes_submitted,
 				 &iov_idx, &iov_offset);
 	assert(ret == 0);
+	if (ret) {
+		return ret;
+	}
 
 	ret = rxr_locate_rma_iov_pos(read_entry->rma_iov, read_entry->rma_iov_count,
 				     read_entry->bytes_submitted,
 				     &rma_iov_idx, &rma_iov_offset);
 	assert(ret == 0);
-
+	if (ret) {
+		return ret;
+	}
 	total_iov_len = ofi_total_iov_len(read_entry->iov, read_entry->iov_count);
 	total_rma_iov_len = ofi_total_rma_iov_len(read_entry->rma_iov, read_entry->rma_iov_count);
 	assert(read_entry->total_len == MIN(total_iov_len, total_rma_iov_len));

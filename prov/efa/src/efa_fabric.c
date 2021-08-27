@@ -1023,17 +1023,23 @@ static int efa_init_info(const struct fi_info **all_infos)
 		return ret;
 
 	ctx_list = efa_device_get_context_list(&num_devices);
-	if (!num_devices)
+	if (!num_devices) {
+		if (ctx_list) {
+			free(ctx_list);
+		}
 		return -FI_ENODEV;
+	}
 
 	*all_infos = NULL;
 	for (i = 0; i < num_devices; i++) {
 		ret = efa_alloc_info(ctx_list[i], &fi, &efa_rdm_domain);
 		if (!ret) {
-			if (!*all_infos)
+			if (!*all_infos) {
 				*all_infos = fi;
-			else
+			} else {
+				assert(tail);
 				tail->next = fi;
+			}
 			tail = fi;
 			ret = efa_alloc_info(ctx_list[i], &fi, &efa_dgrm_domain);
 			if (!ret) {

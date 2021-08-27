@@ -75,7 +75,12 @@ rxr_atomic_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	struct rxr_tx_entry *tx_entry;
 	struct fi_msg msg;
 	struct iovec iov[RXR_IOV_LIMIT];
-	size_t datatype_size = ofi_datatype_size(msg_atomic->datatype);
+	size_t datatype_size;
+
+	datatype_size = ofi_datatype_size(msg_atomic->datatype);
+	if (OFI_UNLIKELY(!datatype_size)) {
+		return NULL;
+	}
 
 	tx_entry = ofi_buf_alloc(rxr_ep->tx_entry_pool);
 	if (OFI_UNLIKELY(!tx_entry)) {
@@ -347,7 +352,12 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 	struct fi_rma_ioc shm_rma_iov[RXR_IOV_LIMIT];
 	void *shm_desc[RXR_IOV_LIMIT];
 	struct rxr_atomic_ex atomic_ex;
-	size_t datatype_size = ofi_datatype_size(msg->datatype);
+	size_t datatype_size;
+
+	datatype_size = ofi_datatype_size(msg->datatype);
+	if (OFI_UNLIKELY(!datatype_size)) {
+		return -errno;
+	}
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA, "%s total_len=%ld atomic_op=%d\n", __func__,
 	       ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), msg->op);
@@ -430,7 +440,12 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 	struct fi_rma_ioc shm_rma_iov[RXR_IOV_LIMIT];
 	void *shm_desc[RXR_IOV_LIMIT];
 	struct rxr_atomic_ex atomic_ex;
-	size_t datatype_size = ofi_datatype_size(msg->datatype);
+	size_t datatype_size;
+
+	datatype_size = ofi_datatype_size(msg->datatype);
+	if (OFI_UNLIKELY(!datatype_size)) {
+		return -errno;
+	}
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 	       "%s: iov_len: %lu flags: %lx\n",
@@ -543,6 +558,9 @@ int rxr_query_atomic(struct fid_domain *domain,
 		max_atomic_size /= 2;
 
 	attr->size = ofi_datatype_size(datatype);
+	if (OFI_UNLIKELY(!attr->size)) {
+		return -errno;
+	}
 	attr->count = max_atomic_size / attr->size;
 	return 0;
 }

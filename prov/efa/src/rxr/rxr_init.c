@@ -383,6 +383,10 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	uint64_t max_atomic_size;
 	uint64_t min_pkt_size;
 
+	if (!core_info) {
+		return -FI_EINVAL;
+	}
+
 	info->caps = rxr_info.caps;
 	info->mode = rxr_info.mode;
 
@@ -417,7 +421,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	 * cap). The logic for device-specific checks pertaining to HMEM comes
 	 * further along this path.
 	 */
-	if ((core_info && !(core_info->caps & FI_HMEM)) || !hints) {
+	if (!(core_info->caps & FI_HMEM) || !hints) {
 		info->caps &= ~FI_HMEM;
 	}
 

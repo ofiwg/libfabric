@@ -158,6 +158,7 @@ static int efa_check_fork_enabled(struct fid_domain *domain_fid)
 	struct fid_mr *mr;
 	char *buf;
 	int ret;
+	long page_size;
 
 	/* If ibv_is_fork_initialized is availble, check if the function
 	 * can exit early.
@@ -171,11 +172,18 @@ static int efa_check_fork_enabled(struct fid_domain *domain_fid)
 
 #endif /* HAVE_IBV_IS_FORK_INITIALIZED */
 
-	buf = malloc(ofi_get_page_size());
+	page_size = ofi_get_page_size();
+	if (page_size <= 0) {
+		EFA_WARN(FI_LOG_DOMAIN, "Unable to determine page size %ld\n",
+			 page_size);
+		return -FI_EINVAL;
+	}
+
+	buf = malloc(page_size);
 	if (!buf)
 		return -FI_ENOMEM;
 
-	ret = fi_mr_reg(domain_fid, buf, ofi_get_page_size(),
+	ret = fi_mr_reg(domain_fid, buf, page_size,
 			FI_SEND, 0, 0, 0, &mr, NULL);
 	if (ret) {
 		free(buf);
@@ -357,7 +365,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	const struct fi_info *fi;
 	size_t qp_table_size;
 	bool app_mr_local;
-	int ret;
+	int ret, err;
 
 	fi = efa_get_efa_info(info->domain_attr->name);
 	if (!fi)
@@ -490,7 +498,11 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 err_free_info:
 	fi_freeinfo(domain->info);
 err_close_domain:
-	ofi_domain_close(&domain->util_domain);
+	err = ofi_domain_close(&domain->util_domain);
+	if (err) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			   "ofi_domain_close fails: %d", err);
+	}
 err_free_qp_table:
 	free(domain->qp_table);
 err_free_domain:
