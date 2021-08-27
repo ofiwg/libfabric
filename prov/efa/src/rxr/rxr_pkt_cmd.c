@@ -610,7 +610,7 @@ ssize_t rxr_pkt_copy_to_rx(struct rxr_ep *ep,
 	    rx_entry->cq_entry.len > data_offset && data_size > 0) {
 		bytes_copied = ofi_copy_to_iov(rx_entry->iov,
 					       rx_entry->iov_count,
-					       data_offset,
+					       data_offset + ep->msg_prefix_size,
 					       data,
 					       data_size);
 		if (bytes_copied != MIN(data_size, rx_entry->cq_entry.len - data_offset)) {

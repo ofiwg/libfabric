@@ -415,7 +415,7 @@ int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 	}
 
 	assert(efa_ep_is_cuda_mr(read_entry->mr_desc[0]));
-	err = ofi_truncate_iov(read_entry->iov, &read_entry->iov_count, data_size);
+	err = ofi_truncate_iov(read_entry->iov, &read_entry->iov_count, data_size + ep->msg_prefix_size);
 	if (err) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"data_offset %ld data_size %ld out of range\n",
@@ -524,7 +524,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 	assert(max_read_size > 0);
 
 	ret = rxr_locate_iov_pos(read_entry->iov, read_entry->iov_count,
-				 read_entry->bytes_submitted,
+				 read_entry->bytes_submitted + ep->msg_prefix_size,
 				 &iov_idx, &iov_offset);
 	assert(ret == 0);
 
