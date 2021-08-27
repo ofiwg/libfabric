@@ -2,105 +2,108 @@
 
 ## 0. Overview
 
-This document describes version 4 of EFA RDM communication protocol (protocol v4),
+This document describes version 4 of the Elastic Fabric Adapter (EFA) Reliable Datagram (RDM) communication protocol (protocol v4),
 which is adopted by libfabric EFA provider's RDM endpoint since libfabric 1.10.0 release.
 
 The purpose of this document is to provide a definition of the protocol that is
 not tied to a specific implementation. It is useful to distinguish protocol and
-implementation, because protocol change can cause backward compatibility issue,
-therefore needs to be handled with extra care.
+implementation since protocol change can cause backward compatibility issues
+and needs to be handled with extra care.
 
 It is organized as the following:
 
-Chapter 1 "Basics" introduces some basic facts/concepts of EFA RDM protocol, including:
+Chapter 1 "Basics" introduces some basic facts/concepts of the EFA RDM protocol, including:
 
- * Section 1.1 Why is EFA RDM protocol needed?
+ * Section 1.1 Why is the EFA RDM protocol needed?
 
- * Section 1.2 A list of features/sub-protocols.
+ * Section 1.2 A list of features/subprotocols.
 
- * Section 1.3 packet, packet base header and a list of packet types.
+ * Section 1.3 Packet, packet base header, and a list of packet types.
 
-Chapter 2 "Handshake sub-protocol" describes the handshake sub-protocol, including:
+ * Section 1.4 The raw address
 
- * Section 2.1 "Handshake sub-protocol and backward compatibility" describes how to introduce
-   backward compatible changes to protocol v4, and how handshake sub-protocol is used to
+Chapter 2 "Handshake subprotocol" describes the handshake subprotocol, including:
+
+ * Section 2.1 "Handshake subprotocol and backward compatibility" describes how to introduce
+   backward compatible changes to protocol v4, and how the handshake subprotocol is used to
    facilitate the process.
 
- * Section 2.2 "Handshake sub-protocol and raw address exchange" describes how handshake sub-protocol
+ * Section 2.2 "Handshake subprotocol and raw address exchange" describes how handshake subprotocol
    impacts the behavior of including raw address in packet header.
 
- * Section 2.3 "Implementation tips" include tips when implementing handshake sub-protocol.
+ * Section 2.3 "Implementation tips" include tips when implementing handshake subprotocol.
 
-Chapter 3 "baseline features" describes the baseline features of protocol v4.
+Chapter 3 "Baseline features" describes the baseline features of protocol v4.
 
  *  Section 3.1 "REQ packets" introduces the binary format of REQ packets, which all baseline features
     use to initialize the communication.
 
  *  Section 3.2 "baseline features for two-sided communications" describe 3 two-sided communication baseline features:
 
-    - eager message transfer,
-    - medium message transfer and
-    - long-cts message transfer.
+    - eager message transfer
+    - medium message transfer
+    - long-cts message transfer
 
  *  Section 3.3 "baseline features for one-sided communications" describe 7 one-sided communication baseline features:
 
-    - emulated eager write,
-    - emulated long-cts write,
-    - emulated short read,
-    - emulated long-cts read,
-    - emulated write atomic,
-    - emulated fetch atomic and
-    - emulated compare atomic.
+    - emulated eager write
+    - emulated long-cts write
+    - emulated short read
+    - emulated long-cts read
+    - emulated write atomic
+    - emulated fetch atomic
+    - emulated compare atomic
 
 Chapter 4 "extra features/requests" describes the extra features/requests defined in version 4.
 
- *  Section 4.1 describe the extra feature: RDMA read based message transfer.
+ *  Section 4.1 describes the extra feature: RDMA read based message transfer.
 
- *  Section 4.2 describe the extra feature: delivery complete.
+ *  Section 4.2 describes the extra feature: delivery complete.
 
- *  Section 4.3 describe the extra request: constant header length.
+ *  Section 4.3 describes the extra request: constant header length.
 
  *  Section 4.4 describe the extra request: connid (connection ID) header.
 
-Chapter 5 "what's not covered?" describe the contents that are intentionally left out of
+Chapter 5 "What's not covered?" describes the contents that are intentionally left out of
 this document because they are considered "implementation details".
 
 ## 1. Basics
 
-EFA RDM communication protocol is for two lifabric endpoints to use EFA device to communication
-with each other.
+The EFA RDM communication protocol is for two lifabric endpoints to use an EFA device to
+communicate with each other.
 
-### 1.1 Why is EFA RDM communication protocol needed?
+### 1.1 Why is the EFA RDM communication protocol needed?
 
-The reason we need a EFA RDM communication protocol is to support features that
-EFA device does not directly support. Currently, EFA device supports the following
-two types of communications:
+The reason we need an EFA RDM communication protocol is to support features that the
+EFA device does not directly support. Currently, the EFA device supports the following
+two types of communication:
 
- 1. send/receive a message up to EFA device's Maximum Transmission Unit (MTU) size.
+ 1. send/receive a message up to the EFA device's Maximum Transmission Unit (MTU) size.
  2. RDMA read of a memory buffer up to 1GB (if both endpoints' software stacks support RDMA read).
 
-Moreover, for send/receive, EFA device does not guarantee ordered delivery, e.g. when sender
-sends multiple messages to a receiver, the receiver may receive the packets in an order different
-from how they are sent.
+Additionally, for send/receive, the EFA device does not guarantee ordered delivery; e.g. when a
+sender sends multiple messages to a receiver, the receiver may receive the packets in an order
+different from how they were sent.
 
-Protocol v4 defines how two endpoints can use EFA device's capability to achieve:
+Protocol v4 defines how two endpoints can use the EFA device's capability to achieve:
 
- * send/receive up to 2^64-1 bytes,
- * read up to 2^64-1 bytes,
- * write up to 2^64-1 bytes,
- * atomics up to MTU size.
+ * send/receive up to 2^64-1 bytes
+ * read up to 2^64-1 bytes
+ * write up to 2^64-1 bytes
+ * atomics up to MTU size
 
-Moreover, protocol v4 provide mechanisms to meet extra requirements of application, which EFA device
-does not support, such as ordered send/receive (`FI_ORDER_SAS`) and delivery complete (DC).
+Moreover, protocol v4 provides mechanisms to meet extra requirements of an application, which the
+EFA device does not support in hardware, such as ordered send/receive (`FI_ORDER_SAS`) and
+delivery complete (DC).
 
-### 1.2 a list of sub-protocols
+### 1.2 A list of subprotocols
 
-To meet application's specific needs, protocol v4 defines a set of sub-protocols for
+To meet an application's specific needs, protocol v4 defines a set of subprotocols
 as listed in table 1.1:
 
-Table: 1.1 a list of sub-protocols
+Table: 1.1 A list of subprotocols
 
-| Sub Protocol Name             | Used For  | Definition in |
+| Sub Protocol Name             | Used For  | Defined in |
 |-|-|-|
 | Eager message                 | Two sided | Section 3.2   |
 | Medium message                | Two sided | Section 3.2   |
@@ -122,31 +125,31 @@ Table: 1.1 a list of sub-protocols
 | Emulated compare atomic       | One sided | Section 3.3   |
 | Handshake                     | Backward compatibility | Chapter 2 |
 
-### 1.3 packet, packet base header and a list of packets
+### 1.3 Packet, packet base header and a list of packets
 
-All the sub-protocols (except the Direct Read protocol) use packet(s) to exchange
+All the subprotocols (except the Direct Read protocol) use packet(s) to exchange
 information between two endpoints.
 
-A packet is a message that does not exceed MTU size, and is exchanged between
-two endpoints using EFA device's send/receive capability.
+A packet is a message that does not exceed MTU size and is exchanged between
+two endpoints using the EFA device's send/receive capability.
 
-Protocol v4 defines a set of packet types. They can be split into two category:
+Protocol v4 defines a set of packet types. They can be split into two categories:
 REQ packet types and non-REQ packet types.
 
-A REQ packet was the 1st packet sender/requester send to the receiver/responder
-in the workflow of a sub-protocol. Each sub-protocol is unique, thus each
-sub-protocol defines its own REQ packet type.
+A REQ packet is the 1st packet the sender/requester sends to the receiver/responder
+in the workflow of a subprotocol. Each subprotocol is unique, thus each
+subprotocol defines its own REQ packet type.
 
-A non-REQ packet is used to by some sub-protocols to transfer additional
+A non-REQ packet is used by some subprotocols to transfer additional
 information that is not covered in the REQ packet.
 
 To distinguish various types of packets sent/received between two endpoints,
 each packet type was assigned an unique packet type ID. Table 1.2 lists
-all the packet types in protocol v4 and sub-protocol(s) that used it:
+all the packet types in protocol v4 and subprotocol(s) that use it:
 
-Table: 1.2 a list of packet type IDs
+Table: 1.2 A list of packet type IDs
 
-| Packet Type ID  | Nick Name         | Full Name                 | Category | Used by                       |
+| Packet Type ID  | Nickname          | Full Name                 | Category | Used by                       |
 |-|-|-|-|-|
 | 1               | RTS               | Request To Send           | non-REQ  | Deprecated                    |
 | 2               | CONNACK           | CONNection ACKnowlegement | non-REQ  | Deprecated                    |
@@ -186,12 +189,12 @@ Table: 1.2 a list of packet type IDs
 | 140             | DC_LONGCTS_RTW    | DC long-CTS Request To Write              | REQ  | DC emulated long-CTS write |
 | 141             | DC_WRITE_RTA      | DC Write Request To Atomic                | REQ  | DC emulated write atomic |
 
-The packet type ID is included in the 4 bytes EFA RDM base header, which every packet must be started
+The packet type ID is included in the 4 byte EFA RDM base header, which every packet must start
 with. The format of the EFA RDM base header is listed in table 1.3:
 
-Table: 1.3 format of EFA RDM base header
+Table: 1.3 Format of the EFA RDM base header
 
-| Name | Length (bytes) | type | C language type |
+| Name | Length (bytes) | Type | C language type |
 |-|-|-|-|
 | `type`    | 1 | integer | `uint8_t` |
 | `version` | 1 | integer | `uint8_t` |
@@ -206,7 +209,7 @@ to indicate the existence of optional header(s) in the packet header. Each packe
 
 Protocol v4 define the following universal flag, which every packet type should use:
 
-Table: 1.4 a list of universal flags
+Table: 1.4 A list of universal flags
 
 | Bit ID | Value | Name | Description | Used by |
 |-|-|-|-|
@@ -217,26 +220,26 @@ would be different for each packet type.
 
 Other then the universal flags, each packet type defines its own flags.
 
-The format of each packet type is introduced in the sections where the sub-protocols are introduced.
+The format of each packet type is introduced in the sections where the subprotocols are introduced.
 
-### 1.4 raw address
+### 1.4 The raw address
 
-raw address is the ID of an EFA RDM endpoint.
+The raw address is the ID of an EFA RDM endpoint.
 
-To send message to an EFA endpoint, one need to know the endpoint's raw address. It the call
-`fi_av_insert` to insert the raw address to its address vector. `fi_av_insert` will return a libfabric
-internal address, the internal address is used to send message.
+To send a message to an EFA endpoint, the sender needs to know the remote endpoint's raw address.
+The sender will call `fi_av_insert` to insert the raw address to the sender's address vector.
+`fi_av_insert` will return a libfabric internal address, which is used to send the message.
 (see [fi_av](https://ofiwg.github.io/libfabric/v1.1.1/man/fi_av.3.html) for more details)
 
-Interestingly, to receive message from an EFA endpoint, one does not need to know the endpoint's
-raw address. See section 2.3 for more discussion on this topic.
+Interestingly, to receive a message from an EFA endpoint, the receiver does not need to know
+the sender's raw address. See section 2.2 for more discussion on this topic.
 
-Each provider defines its address format, the raw address of EFA RDM endpoint uses the
-format in the following table 1.5.
+Each provider defines its own address format. The raw address of the EFA RDM endpoint uses the
+format described in the following table 1.5.
 
-Table: 1.5 binary format of EFA RDM raw address
+Table: 1.5 Binary format of the EFA RDM raw address
 
-| Name | Lengths (bytes) | type | C language type | Notes |
+| Name | Lengths (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `gid`  | 16 | array   | `uint8_t[16]` | ipv6 format |
 | `qpn`  |  2 | integer | `uint16_t`    | queue pair number |
@@ -246,24 +249,24 @@ Table: 1.5 binary format of EFA RDM raw address
 
 The field `connid` warrants extra explanation: it is a 4-byte random integer generated
 during endpoint initialization, which can be used to identify the endpoint. When protocol v4
-was initially introduced, the field `connid` was named `qkey`, which is a concept of
-EFA device. Later it is realized that this is in fact a connection ID, which we happen
-to use a EFA device's Q-Key.
+was initially introduced, the field `connid` was named `qkey`, which is a concept of the
+EFA device. This is used as a connection ID, which we happen to use the EFA device's
+Q-Key for.
 
 Currently, the raw address of EFA is 32 bytes, but it can be expanded in the future without
 breaking backward compatibility.
 
-## 2. Handshake sub-protocol
+## 2. Handshake subprotocol
 
-Handshake sub-protocol serves two purposes in protocol v4.
+The handshake subprotocol serves two purposes in protocol v4:
 
-First, it is used to exchange two endpoints' capability information, which allows to introduce
+First, it is used to exchange two endpoints' capability information, which allows us to introduce
 changes to protocol v4 without breaking backward compatibility. (section 2.1)
 
-Second, it is used to adjust the behavior of including EFA raw address in REQ packet header
+Second, it is used to adjust the behavior of including the EFA raw address in a REQ packet header
 (section 2.2)
 
-### 2.1 Handshake sub-protocol and backward compatibility
+### 2.1 Handshake subprotocol and backward compatibility
 
 The biggest problem when designing a communication protocol is how to maintain backward compatibility
 when introducing changes to the protocol. Imagine the following scenario: there are endpoints that are
@@ -273,7 +276,7 @@ the existing endpoints still be able to communicate with endpoints that have ado
 To tackle this issue, protocol v4 first introduced the concepts of "feature" and "request".
 
 - A feature is a functionality that an endpoint can support. Typically, a feature
-is the support of  a set of sub-protocols.
+is the support of  a set of subprotocols.
 
 - A request is an expectation an endpoint has on its peer. Typically, a request is
 for its peer to include some extra information in packet header.
@@ -316,7 +319,7 @@ How does protocol v4 maintain backward compatibility when extra features/request
 First, protocol v4 states that endpoint's support of an extra feature/request is optional,
 therefore cannot be assumed.
 
-Second, protocol v4 defines the handshake sub-protocol for two endpoint to exchange its extra
+Second, protocol v4 defines the handshake subprotocol for two endpoint to exchange its extra
 feature/request status. Its workflow is:
 
 1. If an endpoint has never communicated with a peer, it does not know the peer's
@@ -358,13 +361,13 @@ If receiver is in zero copy receive mode, it will have the the extra request
 for sender to ignore the request, and send packets with different header length.
 It is receiver's responsibility to react accordingly. (section 4.3)
 
-This concludes the workflow of the handshake sub-protocol.
+This concludes the workflow of the handshake subprotocol.
 
 The binary format of a HANDSHAKE packet is listed in table 2.2.
 
 Table: 2.2 binary format of the HANDSHAKE packet
 
-| Name      | Length (bytes) | type | C language type |
+| Name      | Length (bytes) | Type | C language type |
 |-|-|-|-|
 | `type`    | 1 | integer | `uint8_t`  |
 | `version` | 1 | integer | `uint8_t`  |
@@ -393,7 +396,7 @@ If an endpoint wants to impose the "constant header length" extra request it nee
 in `extra_info[0]`. (section 4.3)
 
 Note, the field `extra_info` was named `features` when protocol v4 was initially introduced, at that time we
-only planned for extra features. Later, we discovered that the handshake sub-protocol can also be used to pass
+only planned for extra features. Later, we discovered that the handshake subprotocol can also be used to pass
 additional request information, thus introduced the concept of "extra request" and renamed this field `extra_info`.
 
 `nextra_p3` is number of `extra_info` flags of the endpoint plus 3. The "plus 3" is for historical reasons.
@@ -420,9 +423,9 @@ These two fields were introduced with the extra request "connid in header". They
 therefore an implemenation is not required to set them. (section 4.4 for more details) If an implementation
 does set the connid, the implementation needs to toggle on the CONNID_HDR flag in `flags` (table 1.4).
 
-### 2.2 handshake sub-protocol and raw address exchange
+### 2.2 Handshake subprotocol and raw address exchange
 
-Another functionality of the handshake sub-protocol is to adjust behavior of including raw address in packet header.
+Another functionality of the handshake subprotocol is to adjust behavior of including raw address in packet header.
 
 Currently, if an endpoint is communicating with a peer for the first time, it will include its raw address
 in the REQ packets it sends.
@@ -452,9 +455,9 @@ This insertion only need to happen once, for the next packets from the endpoint,
 to report AHN. Therefore, it is desirable to have a mechanism for an endpoint to stop including raw address
 in packet header to reduce packet header length.
 
-As it turns out, the handshake sub-protocol is the perfect mechanism for that.
+As it turns out, the handshake subprotocol is the perfect mechanism for that.
 
-In handshake sub-protocol, an endpoint will send a HANDSHAKE packet upon receiving 1st REQ packet from
+In handshake subprotocol, an endpoint will send a HANDSHAKE packet upon receiving 1st REQ packet from
 a peer. At that point, the peer's raw address must have been inserted to its address book.
 
 If an endpoint received a HANDSHAKE packet from a peer, the peer must know the endpoint's address, therefore
@@ -465,57 +468,57 @@ This concludes the discussion of the workflow.
 
 ### 2.3 Implementation tips
 
-When implementing the handshake sub-protocol, keep in mind that the application
-does not know the existence of a HANDSHAKE packet, therefore will not wait
+When implementing the handshake subprotocol, keep in mind that the application
+does not know the existence of a HANDSHAKE packet and therefore will not wait
 for its completion.
 
-For example, it is normal that a HANDSHAKE packet encounter an send error
-because peer has already been closed, because application might just send
+For example, it is normal that a HANDSHAKE packet encounters a send error
+because the peer has already been closed since the application might just send
 1 message and close the endpoint.
 
 It is also possible to close an endpoint when there are inflight HANDSHAKE
-packet, because the application might just want to receive 1 message, then
+packets, because the application might just want to receive 1 message, then
 close the endpoint. However, the action of receiving a message, will cause
 a HANDSHAKE packet to be sent.
 
 ## 3. Baseline features
 
 This part describes the 10 baseline features in protocol v4, which uses only the send/receive
-functionality of EFA device, and should be supported by any endpoint that implements protocol v4.
+functionality of EFA device and should be supported by any endpoint that implements protocol v4.
 
 ### 3.1 REQ packet types
 
-Before getting into details of each baseline feature, we give a general introduction to
-the REQ packet types, which all these baseline features use to initialize the communication.
+Before getting into the details of each baseline feature, we give a general introduction to
+the REQ packet types, which the baseline features use to initialize the communication.
 
-REQ packets is not one but a category of packet types. In this chapter, 10 REQ packet types will be
+REQ packets is a category of packet types. In this chapter, 10 REQ packet types will be
 covered, as each baseline feature has its own REQ packet type.
 
-According to the type of communications it is used for, REQ packet types can be further divided into
+According to the type of communication it is used for, REQ packet types can be further divided into
 4 categories:
 
-RTM (Request To Message) is used by message sub-protocols (for two-sided communication). RTM can be
+RTM (Request To Message) is used by message subprotocols (for two-sided communication). RTM can be
 further divided into MSGRTM and TAGRTM. TAGRTM is used when application calls libfabric's tagged
 send/receive API (such as `fi_tsend` and `fi_trecv`), MSGRTM is used by the non-tagged send/receive
 API (such as `fi_send` and `fi_recv`).
 
-RTW (Request To Write) is used by emulated write sub-protocols.
+RTW (Request To Write) is used by emulated write subprotocols.
 
-RTR (Request To Read) is used by emulated read sub-protocols.
+RTR (Request To Read) is used by emulated read subprotocols.
 
-RTA (Request To Atomic) is used by emulated atomic sub-protocols.
+RTA (Request To Atomic) is used by emulated atomic subprotocols.
 
 Regardless, all REQ packets are consisted of 3 parts: REQ mandatory header, REQ optional header and
 application data (optional).
 
 **REQ mandatory header** is unique for each individual REQ packet type. However, they all must start with
-the same 4 bytes EFA RDM base header (section 1.3). Recall that a base header is consisted with 3 fields:
+the same 4 bytes EFA RDM base header (section 1.3). Recall that a base header consists of 3 fields:
 `type`, `version` and `flags`. Among them, `flags` warrants more discussion here, as all REQ packets share
 the same set of flags, which is listed in table 3.1:
 
-Table: 3.1 a list of REQ packet flags
+Table: 3.1 A list of REQ packet flags
 
-| Bit Id | Value | Name | meaning |
+| Bit Id | Value | Name | Meaning |
 |-|-|-|-|
 |  0     | 0x1    | REQ_OPT_RAW_ADDR_HDR | This REQ packet has the optional raw address header |
 |  1     | 0x2    | REQ_OPT_CQ_DATA_HDR  | This REQ packet has the optional CQ data header |
@@ -531,63 +534,63 @@ Note, the CONNID_HDR flag is an universal flag (table 1.4), and is listed here f
 As mentioned earlier, the existence of optional header in a REQ packet is indicated by bits in the `flags`
 field of the base header. There are currently 3 REQ optional headers defined:
 
-1. the raw address header, which has the following format:
+1. The raw address header, which has the following format:
 
-Table: 3.2 format of REQ optional raw address header
+Table: 3.2 Format of the REQ optional raw address header
 
-| Field | type    | Length | C type |
+| Field | Type    | Length | C language type |
 |-|-|-|-|
 | `size`  | integer | 4      | `uint32` |
 | `addr`  | array   | `size` | `uint8[]` |
 
-As can be seen, the optional raw address is consisted of two fields `size` and `addr`. The field `size` describes
+As can be seen, the optional raw address consists of two fields `size` and `addr`. The field `size` describes the
 number of bytes in the `addr` array. The field `addr` contains the raw address. The `size` field is necessary because
 the raw address format of EFA can be expanded in the future.
 
-As mentioned before, an endpoint will include raw address in REQ packet before it receives a handshake packet back
-from a peer. This is because the peer might not have the endpoint's raw address in its address vector, thus cannot
-communicate with the endpoint.
+As mentioned before, an endpoint will include raw address in REQ packets before it receives a handshake packet back
+from a peer. This is because the peer might not have the endpoint's raw address in its address vector, thus being
+unable to communicate with the endpoint.
 
-2. the CQ data header, which is an 8 byte integer. CQ data header is used when application called libfabric's
-CQ data send/write API (such as `fi_senddata`, `fi_tsenddata` and `fi_writedata`), which will include an extra
-data in the RX completion entry written to application.
+2. The CQ data header, which is an 8 byte integer. The CQ data header is used when an application calls libfabric's
+CQ data send/write API (such as `fi_senddata`, `fi_tsenddata` and `fi_writedata`), which will include extra data
+in the RX completion entry written to application.
 
-3. the connid (connection ID) header, which is a 4 byte integer. It is used when peer has the "connid header"
+3. The connid (connection ID) header, which is a 4 byte integer. It is used when peer has the "connid header"
 extra request, and the endpoint can support it. More information about this header in section 4.4.
 
-Note, it is possible to have multiple optional REQ headers in one REQ packets. In this case, the order they appear
-in the REQ packets must be the same as their bit appear in the `flags` field. e.g. the raw address header
-must precede the CQ data header, and the CQ data header must precede the connid header.
+Note, it is possible to have multiple optional REQ headers in one REQ packet. In this case, the order they appear
+in the REQ packets must be the same as the order their  bit appears in the `flags` field. E.g. the raw address
+header must precede the CQ data header, and the CQ data header must precede the connid header.
 
 **Application data** follows immediately after the optional header. Note that not all REQ packet types contain
 application data. For example, the RTR (Request To Read) packet type does not contain application data.
 
-### 3.2 baseline features for two-sided communication
+### 3.2 Baseline features for two-sided communication
 
-This section describes the 3 baseline features for two sided communication: eager message, medium message, long-CTS message.
-Each of them correspond to the same named sub-protocol. When describing a sub-protocol, we always follow
-the same structure: workflow, packet format and implementation tips.
+This section describes the 3 baseline features for two sided communication: eager message, medium message, and
+long-CTS message.` Each of them corresponds to the same named subprotocol. When describing a subprotocol, we
+always follow the same structure: workflow, packet format, and implementation tips.
 
-#### Eager message feature/sub-protocol
+#### Eager message feature/subprotocol
 
-Eager message feature/sub-protocol is used when application's send buffer is small enough to be fit in one packet.
+Eager message feature/subprotocol is used when the application's send buffer is small enough to fit in one packet.
 This protocol works in the following order:
 
-1. On sender side, application call libfabric's send API, providing a send buffer.
-2. On receiver side, application call libfabric's receive API, providing a receive buffer.
-3. Sender sends an EAGER_RTM (EAGER_MSGRTM or EAGER_TAGRTM) packet, which contains the application's data.
-4. Upon receiving the packet, receiver will process the received packet, and make sure the received
-   data is in application's receive buffer.
+1. On sender side, the application calls libfabric's send API and provides a send buffer.
+2. On receiver side, the application calls libfabric's receive API and provides a receive buffer.
+3. Sender sends an EAGER_RTM (EAGER_MSGRTM or EAGER_TAGRTM) packet which contains the application's data.
+4. Upon receiving the packet, the receiver will process the received packet and make sure the received
+   data is in the application's receive buffer.
 
-The following diagram illustrate the workflow:
+The following diagram illustrates the workflow:
 
 ![eager message](message_eager.png)
 
 The mandatory header of an EAGER_RTM packet is described in table 3.3:
 
-Table: 3.3 format of an EAGER_RTM packet
+Table: 3.3 Format of the EAGER_RTM packet
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`      | 1 | integer | `uint8_t`  | part of base header |
 | `version`   | 1 | integer | `uint8_t`  | part of base header|
@@ -596,55 +599,54 @@ Table: 3.3 format of an EAGER_RTM packet
 | `tag`       | 8 | integer | `uint64_t` | for eager TAGRTM only |
 
 The field `msg_id` records the sending order of all RTM packets between two endpoint.
-Receiver can use it to re-order the received RTM packet from the endpoint.
+Receiver can use it to re-order the received RTM packets from the endpoint.
 
-When implementing the eager message sub-protocol, there are a few points worth attention:
+When implementing the eager message subprotocol, there are a few points worth mentioning:
 
-1. Noticing that `msg_id` is 4 bytes integer, which means its maximum value is 4,294,967,295.
-After it reaches the maximum value, next message's `msg_id` will became 0. This "wrap around" of
+1. Notice that `msg_id` is a 4 byte integer, therefore its maximum value is 4,294,967,295.
+After it reaches the maximum value, the next message's `msg_id` will became 0. This "wrap around" of
 message id can happen when two endpoints communicate for an extended period of time. Implementation
 must be able to handle it.
 
-2. receiver can either use application buffer to receive data directly (such an implementation is called zero copy receive),
-or it can use a bounce buffer to temporarily hold the application data and copy the data to application's receive buffer
-later. The difficulty of implementing zero copy receive is that EFA device does not guarantee ordered delivery (see Part 0),
-therefore if application want ordered send (`FI_ORDER_SAS`), using a bounce buffer might be the only choice.
+2. Receiver can either use the application buffer to receive data directly (such an implementation is called zero copy receive),
+or it can use a bounce buffer to temporarily hold the application data and copy the data to the application's receive buffer
+later. The difficulty of implementing zero copy receive is that the EFA device does not guarantee ordered delivery (see section
+1.1). Therefore, if the application wants ordered send (`FI_ORDER_SAS`), using a bounce buffer may be the only choice.
 
-3. if a bounce buffer is to be used to receive packets, the receiver need to be able to handle an "unexpected message", which
-is the eager RTM packet arrived before application called libfabric's receive API.
+3. If a bounce buffer is to be used to receive packets, the receiver needs to be able to handle an "unexpected message", which
+occurs when the eager RTM packet arrives before the application calls libfabric's receive API.
 
-4. if application does not require ordered send, it would be possible to use application's receive buffer to receive data
-directly. In this case, receiver might need the sender to keep the packet header length constant through out the communication.
-The extra request "constant header length" is designed for this use case, see chapter 4.3 for more discussion on this topic.
+4. If the application does not require ordered send, it would be possible to use the application's receive buffer to receive
+data directly. In this case, the receiver might need the sender to keep the packet header length constant throughout the
+communication. The extra request "constant header length" is designed for this use case - see section 4.3 for more discussion
+on this topic.
 
 5. One might notice that there is no application data length in the header, so how can the receiver of an eager RTM packet
-   know how many application data is in the packet? The answer is to use the following formula:
+   know how many application bytes are in the packet? The answer is to use the following formula:
 
         application_data_length = total_packet_size - RTM mandatory header length - REQ optional header length
 
-   total packet size is reported by EFA device when a packet is received. REQ optional header length can be derived from
-   the `flags` field in the base header. The choice of not including data length in the header is because eager messages
-   are most sensitive to header length, and we want its header to be as compact as possible.
+   total_packet_size is reported by the EFA device when a packet is received.  The REQ optional header length can be derived
+   from the `flags` field in the base header. The choice of not including data length in the header is to keep the header
+   length as compact as possible, since eager messagers are sensitive to header length.
 
-#### Medium message feature/sub-protocol
+#### Medium message feature/subprotocol
 
-Medium message protocol split application data into multiple MEDIUM_RTM (either MEDIUM_MSGRTM or
-MEDIUM_TAGRTM) packets, and sender will try send them at once.
+The medium message protocol has the sender split application data into multiple MEDIUM_RTM (either
+MEDIUM_MSGRTM or MEDIUM_TAGRTM) packets which the sender will attempt to send all at once.
 
-In principal, medium message sub-protocol can be used on messages of any size. However, it is not
-recommended to use medium message sub-protocol for long messages, because it does not have flow
-control thus can overwhelm the receiver and cause network congestion. The exact size boundary for
-medium message protocol to be used is up to the implementation to decide.
+In principal, the medium message subprotocol can be used on messages of any size. However, it is
+not recommended to use the medium message subprotocol for long messages because it does not include
+flow control and thus can overwhelm the receiver, causing network congestion.  The exact size threshold
+for the medium message protocol to be used is up to the implementation to decide.
 
 The following diagram illustrates its workflow:
 
 ![medium message](message_medium.png)
 
-Table 3.4 describe the binary structure of a MEDIUM_RTM packet's mandatory header:
+Table: 3.4 Format of the MEDIUM_RTM packet's mandatory header
 
-Table: 3.4 the format of a MEDIUM_RTM packet's mandatory header
-
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`        | 1 | integer | `uint8_t`  | part of base header |
 | `version`     | 1 | integer | `uint8_t`  | part of base header|
@@ -654,70 +656,71 @@ Table: 3.4 the format of a MEDIUM_RTM packet's mandatory header
 | `seg_offset` | 8 | integer | `uint64_t` | application data offset |
 | `tag`         | 8 | integer | `uint64_t  | for medium TAGRTM only |
 
-Most of the fields have been introduced before, and their meaning does not change.
-The two new fields are `seg_length` and `seg_offset`. (`seg` means segment, which
+Most of the fields have been introduced and have the same function. The two
+new fields are `seg_length` and `seg_offset`. (`seg` means segment, which
 refers to the segment of data in the packet)
 
-`seg_length` is the length of data segment in the medium RTM packet.
+`seg_length` is the length of the data segment in the medium RTM packet.
 
-`seg_offset` is the offset of data segment in the original send buffer.
+`seg_offset` is the offset of the data segment in the original send buffer.
 
-`seg_offset` seems redundant at the first glance, as it can be deduced
-from the `seg_length` of other packets.
-
-However, because EFA device does not guarantee ordered delivery, thus
-the MEDIUM_RTM packets of same message can arrive in different order.
-Therefore, the recipent of MEDIUM_RTM packets need `seg_offset` to
-put the data in the correct location in the receive buffer.
+`seg_offset` seems redundant at first glance, as it can be deduced from the
+`seg_length` of other packets. However, because the EFA device does not
+guarantee ordered delivery, the MEDIUM_RTM packets of same message can
+arrive in a different order. Therefore, the recipent of MEDIUM_RTM packets
+needs `seg_offset` to put the data in the correct location in the receive
+buffer.
 
 When implementing the medium message protocol, please keep in mind
-that because EFA device has a limited TX queue (e.g. it can only send
-limited number of packets at a time), it is possible when
-sending multiple medium RTM packets, some of them were sent successfully,
-others were not sent due to temporary out of resource. Implementation needs
+that because the EFA device has a limited TX queue (e.g. it can only send
+a limited number of packets at a time), it is possible when sending multiple
+medium RTM packets for some packets to be sent successfully and others to
+not be sent due to temporarily being out of reseources. Implementation needs
 to be able to handle this case.
 
-Note, this "partial send" situation is unique to medium message sub-protocol
-because medium message sub-protocol is the only one that sends multiple
-REQ packets. In all other protocol, only 1 REQ packet was sent to initialize
-the communication, if the REQ failed to send, the whole communication is
-cancelled.
+Note, this "partial send" situation is unique to the medium message
+subprotocol because the medium message subprotocol is the only one that
+sends multiple REQ packets. In all other protocols, only 1 REQ packet is
+sent to initialize the communication, and if the REQ fails to send, the
+whole communication is cancelled.
 
-#### Long-CTS message feature/sub-protocol
+#### Long-CTS message feature/subprotocol
 
-Long-CTS message protocol is designed for long messages, because it supports flow control.
+The long-CTS message protocol is designed for long messages because it supports
+flow control.
 
 
-In long-CTS message protocol, the sender will send a LONGCTS_RTM (either LONGCTS_MSGRTM or LONGCTS_TAGRTM)
-packet to the receiver.
+In the long-CTS message protocol, the sender will send a LONGCTS_RTM (either
+LONGCTS_MSGRTM or LONGCTS_TAGRTM) packet to the receiver. Upon receiving the
+LONGCTS_RTM, the receiver will match it with an application's call to
+libfabric's receive API. The receiver will then calculate how many bytes of
+data it can handle and include that information in a CTS packet it sends back
+to the sender.
 
-Upon receiving the LONGCTS_RTM, receiver will match it with an application's call to
-libfabric's receive API. Receiver will then calculate how many data it can handle,
-and include that information in a CTS packet it sends back to the sender.
+Upon receiving the CTS packet, the sender will send multiple DATA packets
+according to the information in the CTS packet.
 
-Upon receiving the CTS packet, sender will send multiple DATA packets according to
-information in the CTS packet.
+After receiving all the DATA packets it was expecting, the receiver will
+recalculate how many bytes it can handle and send another CTS packet to the
+sender.
 
-After receiving all the DATA packets it was expecting, receiver will calculate and
-send a CTS packet again.
+The above process repeats until all data has been sent/received.
 
-The above process repeat until all data has been sent/received.
-
-The workflow of long-CTS protocol is demonstrated in the following diagram:
+The workflow of the long-CTS protocol is demonstrated in the following diagram:
 
 ![long-CTS message](message_longcts.png)
 
-There 3 packet types involved in the long-CTS message sub-protocol: LONGCTS_RTM, CTS
-and DATA.
+There are 3 packet types involved in the long-CTS message subprotocol:
+LONGCTS_RTM, CTS and DATA.
 
-A LONGCTS_RTM packet, like any REQ packet, is consisted with 3 parts: LONGCTS RTM mandatory
-header, REQ optional header and application data.
+A LONGCTS_RTM packet, like any REQ packet, consists of 3 parts:
+LONGCTS RTM mandatory header, REQ optional header, and application data.
 
 The format of the LONGCTS_RTM mandatory header is listed in table 3.5:
 
-Table: 3.5 The format of a LONGCTS_RTM packet's mandatory header
+Table: 3.5 Format of the LONGCTS_RTM packet's mandatory header
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
@@ -728,41 +731,42 @@ Table: 3.5 The format of a LONGCTS_RTM packet's mandatory header
 | `credit_request` | 4 | integer | `uint64_t` | number of data packets preferred to send |
 | `tag`            | 8 | integer | `uint64_t` | for LONGCTS TAGRTM only |
 
-There are 3 fields that is new:
+There are 3 fields that are new:
 
 `msg_length` is the length of the whole application message.
 
-`send_id` is an ID the sending endpoint assigned to the send operation, and receive should include
-`send_id` in CTS packet. An endpoint will have multiple send operations at the same time, thus
-when processing a CTS packet from a receive, it needs a way to locate the send operation the
-CTS packet is referring to.
+`send_id` is an ID the sending endpoint assigned to the send operation, and the receiver should
+include the `send_id` in subsequent CTS packets. An endpoint will have multiple send operations
+at the same time. Thus, when processing a CTS packet from a receiver, the sender needs a way to
+locate the send operation the CTS packet is referring to.
 
-Admittedly, the introduction of `send_id` is not absolute necessary, because receiver could have
-included `msg_id` in CTS header, and sender should be able to locate the send operation using
-the combination of receiver's address and message ID. However, that approach would require
-the sending endpoint set up a map between (address + `msg_id`) and send operation, and look up the map every time
-it received a CTS packet. We considered that approach too burdensome for an endpoint to implement
-and decided to introduce a 4 byte `send_id` in LONGCTS_RTM header to eliminate the cost.
+Admittedly, the introduction of `send_id` is not absolute necessary because the receiver could
+have included `msg_id` in the CTS header, and the sender should be able to locate the send
+operation using the combination of the receiver's address and message ID. However, that approach
+would require the sending endpoint to set up a map between (address + `msg_id`) and send
+operation and a map look up for every received CTS packet. We considered that approach too
+burdensome for an endpoint to implement and decided to introduce a 4 byte `send_id` in
+LONGCTS_RTM header instead.
 
 Another note about `send_id` is that it can be reused between messages. Because `send_id` is used to
-distinguish on-the-fly TX operations, so a send operation may have the same `send_id` as a previous
+distinguish on-the-fly TX operations, a send operation may have the same `send_id` as a previous
 one that has already finished.
 
-The field `send_id` was named `tx_id` when the protocol was initially introduced. It is renamed
-because the new name is clearer.
+The field `send_id` was named `tx_id` when the protocol was initially introduced. It was renamed
+for clarity.
 
-The field `credit_request` is how many DATA packets the sender wish to receive from the receiver,
-the receiver will try to honor the request, but is not obligated to. However, receiver must allow
-the sender to send at least 1 DATA packet back, to keep the communication moving forward.
+The field `credit_request` is how many DATA packets the sender wishes to send to the receiver.
+The receiver will try to honor the request, but it is not obligated to. However, the receiver must
+allow the sender to send at least 1 DATA packet, to keep the communication moving forward.
 
 Besides the LONGCTS_RTM packet, there are two other packet types used by the long-CTS message protocol:
 CTS and DATA.
 
-The binary format of a CTS packet is listed in table 3.6:
+The binary format of a CTS (Clear to Send) packet is listed in table 3.6:
 
-Table: 3.6 the binary format a CTS packet
+Table: 3.6 Format a CTS packet
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
@@ -774,7 +778,7 @@ Table: 3.6 the binary format a CTS packet
 
 The 3 new fields in the header are `multiuse`, `recv_id` and `recv_length`.
 
-The field `multiuse` is 4 byte integer. As the name indicates, it is a multi-purpose field.
+The field `multiuse` is a 4 byte integer. As the name indicates, it is a multi-purpose field.
 Its exact usage is determined by the the `flags` field.
 
 If the CONNID_HDR universal flag is toggled in `flags`, this field is the sender's connection ID (connid).
@@ -788,24 +792,24 @@ connid. Because "connid header" is an extra request, an endpoint is not obligate
 In practice, if an endpoint is using libfabric 1.10 to 1.13, it uses this field as padding.
 If an endpoint is using libfabric 1.14 and above, it uses this field to store `connid`.
 
-The field `recv_id` is similar to `send_id` introduced earlier, but for an on-going receive operation.
-Sender should include `recv_id` in the DATA packet.
+The field `recv_id` is similar to `send_id` introduced earlier but for an on-going receive operation.
+The sender should include `recv_id` in the DATA packet.
 
 The field `recv_length` is the number of bytes receiver is ready to receive for this operation,
-it must be > 0 to make the communication going forward.
+it must be > 0 to make the communication move forward.
 
-CTS packet header has 1 flag `CTS_EMULATED_READ` that can be set in `flags` field. This flags
-indicates the CTS packet is used by long-CTS emulated read protocol.
-The Bit ID for this flag is 7, and its value is 0x80.
+The CTS packet header has 1 flag `CTS_EMULATED_READ` that can be set in the `flags` field. This flag
+indicates the CTS packet is used by the long-CTS emulated read protocol.  The Bit ID for this flag
+is 7, and its value is 0x80.
 
-CTS packet does not contain application data.
+The CTS packet does not contain application data.
 
 A DATA packet is consisted of two parts: DATA packet header and application data.
 Table 3.7 shows the binary format of DATA packet header:
 
-Table: 3.7 the binary format of DATA packet header
+Table: 3.7 Format of the DATA packet header
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
@@ -813,254 +817,254 @@ Table: 3.7 the binary format of DATA packet header
 | `recv_id`        | 4 | integer | `uint32_t` | `recv_id` from the CTS packet |
 | `seg_length`     | 8 | integer | `uint32_t` | length of the application data in the packet |
 | `seg_offset`     | 8 | integer | `uint64_t` | offset of the application data in the packet |
-| `connid`         | 4 | integer | `uint32_t` | sender connection id, optional, |
+| `connid`         | 4 | integer | `uint32_t` | sender connection id, optional |
 | `padding`        | 4 | integer | `uint32_t` | padding for connid, optional |
 
-The last two fields `connid` and `padding` was introduced with the extra request "connid in header".
-They are optional, which means an implemenation was not required to include them in the DATA of the
-data packet. If an implementation does include them in DATA packet header, the implementation need
-to toggle on the CONNID_DHR flag in `flags` field (table 1.4).
+The last two fields `connid` and `padding` was introduced with the extra request "connid header".
+They are optional, which means an implemenation is not required to include them in the DATA of the
+data packet. If an implementation does include them in the DATA packet header, the implementation
+needs to toggle on the CONNID_DHR flag in the `flags` field (Table 1.4).
 
 When implementing the long-CTS protocol, please keep in mind that although each implementation is allowed
-to choose its own flow control algorithm. They must allow some data to be sent in each CTS packet, e.g
-the `recv_length` field in CTS packet must be > 0. This is to avoid infinite loop.
+to choose its own flow control algorithm, they must allow some data to be sent in each CTS packet, e.g
+the `recv_length` field in CTS packet must be > 0. This is to avoid an infinite loop.
 
-### 3.3 baseline features for one-sided communication
+### 3.3 Baseline features for one-sided communication
 
-This section explain the 7 baseline features for one-sided communication. These features/sub-procotols
-emulate one-sided operation by using send/receive functionality of the device. The 7 features are:
+This section explains the 7 baseline features for one-sided communication. These features/sub-procotols
+emulate one-sided operations by using the send/receive functionality of the device. The 7 features are:
 emulated eager write, emulated long-CTS write, emulated short read, emulated long-CTS read, emulated write
-atomic, emulated fetch atomic and emulated compare atomic.
+atomic, emulated fetch atomic, and emulated compare atomic.
 
-Before getting into details of each feature, we want to discuss some topics related to one-sided operation.
+Before getting into the details of each feature, we will discuss some topics related to one-sided operation.
 
-There are 3 types of one-sided operations: write, read and atomic.
+There are 3 types of one-sided operations: write, read, and atomic.
 
 Like in two-sided communcation, there are also two endpoints involved in one-sided communcation.
-However, only on one side will application call libfabric's one-sided API (such as `fi_write`,
-`fi_read` and `fi_atomic`). In protocol v4, this side is called requester.
+However, only on one side will the application call libfabric's one-sided API (such as `fi_write`,
+`fi_read` and `fi_atomic`). In protocol v4, this side is called the requester.
 
-On the other side (which is called responder), application does not make calls to lifabric API call,
-but the EFA provider requires application to keep the progress engine running on responder
-to facilitate the communication. This is because EFA provider only support `FI_PROGRESS_MANUAL`.
+On the other side (which is called the responder), the application does not make calls to 
+lifabric's API, but the EFA provider requires the application to keep the progress engine running
+to facilitate the communication. This is because the EFA provider only supports `FI_PROGRESS_MANUAL`.
 
 Generally, in one-sided communication, only on the requester side will lifabric write a completion
-to notify the application that an one-sided communication is finished. Only exception to this
-rule is when application added the `FI_REMOTE_CQ_DATA` flag when calling libfabric's write API,
-in this case, the provider is required to write an CQ entry on responder with the CQ data in it.
+to notify the application that a one-sided communication is finished. The only exception to this
+rule is when the application added the `FI_REMOTE_CQ_DATA` flag when calling libfabric's write API.
+In this case, the provider is required to write a CQ entry on the responder with the CQ data in it.
 
-(In fact, there is another exception to this rule: which is if a provider claims support for
-the `FI_RMA_EVENT` capability, the provider will need to write CQ entry for any one-sided operation
-on the responder. However, this exception does not apply to EFA provider because the EFA provider
-does not support the `FI_RMA_EVENT` capability.)
+(In fact, there is another exception to this rule: which is if a provider claims support for the
+`FI_RMA_EVENT` capability. The provider will need to write a CQ entry for any one-sided operation
+on the responder. However, this exception does not apply to the EFA provider because the EFA
+provider does not support the `FI_RMA_EVENT` capability.)
 
 One key difference between one-sided and two-sided communication is that: in one-sided communication, the
 requester must know the remote buffer's information when submitting the request.
 
-In protocol v4, because one-sided operations are emulated, the remote buffer's information are stored
-in REQ packet header. For that, protocol v4 defines a data type `efa_rma_iov`, which is used by
-all REQ packets for one-side communication.
+In protocol v4, because one-sided operations are emulated, the remote buffer's information is stored
+in the REQ packet header. For that, protocol v4 defines a data type `efa_rma_iov`, which is used by
+all REQ packets for one-sided communication.
 
-A `efa_rma_iov` struct is consisted of 3 members: `addr`, `len` and `key`. Each member is a 8 byte integer.
+An `efa_rma_iov` struct consists of 3 members: `addr`, `len`, and `key`. Each member is an 8 byte integer.
 `addr` is the remote buffer address, `len` is the remote buffer length, and `key` is the memory registration
 key for the remote buffer, which is provided by the responder through prior communication.
 
-Another difference is that one-sided operation does not support tag matching, thus each one-sided
-sub-protocol only needs to define 1 REQ packet type.
+Another difference is that one-sided operations do not support tag matching, thus each one-sided
+subprotocol only needs to define 1 REQ packet type.
 
-#### emulated eager write feature/sub-protocol
+#### Emulated eager write feature/subprotocol
 
-Emulated eager write sub-protocol is used when the buffer size is small enough to fit in one
+The emulated eager write subprotocol is used when the buffer size is small enough to fit in one
 packet.
 
 The workflow of the emulated eager write protocol is shown in the following diagram:
 
 ![eager write](write_eager.png)
 
-Emulated eager write protocol is similar to eager message protocol, except an EAGER_RTW
-is used to initiate the communication. Like other REQ packets, an eager RTW packet is consisted of eager RTW mandatory header,
-REQ optional header and application data. The binary format of EAGER_RTW mandatory header is listed
-in table 3.8:
+The emulated eager write protocol is similar to the eager message protocol, except an EAGER_RTW
+is used to initiate the communication. Like other REQ packets, an eager RTW packet consists
+of an eager RTW mandatory header, REQ optional header, and application data. The binary format
+of the EAGER_RTW mandatory header is listed in table 3.8:
 
-Table: 3.8 the binary format of EAGER_RTW packet's mandatory header
+Table: 3.8 Format of the EAGER_RTW packet's mandatory header
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
-| `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov structure |
+| `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov structures |
 | `rma_iov`        | `rma_iov_count` * 24 | array of `efa_rma_iov` | `efa_rma_iov[]` | remote buffer information |
 
-One thing worth noting is that there is no `msg_id` in the eager RTW header, because EFA provider does not support
-ordered write operation.
+One thing worth noting is that there is no `msg_id` in the eager RTW header because the EFA provider
+does not support ordered write operation.
 
-#### emulated long-CTS write feature/sub-protocol
+#### Emulated long-CTS write feature/subprotocol
 
-emulated long-CTS write sub-protocol is used when the buffer size is too big to fit in one packet.
+The emulated long-CTS write subprotocol is used when the buffer size is too big to fit in one packet.
 
-The workflow of emulated long-CTS write general follow the long-CTS message sub-protocol, as illustrated
-in the following diagram:
+The workflow of the emulated long-CTS write generally follows the long-CTS message subprotocol, as
+illustrated in the following diagram:
 
 ![emulated long-CTS write](write_longcts.png)
 
-The main difference between the two protocol is that the LONGCTS_RTW packet is used instead of the
-LONGCTS_RTM packet. The binary format of LONGCTS_RTW packet's mandatory header is listed in table 3.9:
+The main difference between the two protocols is that the LONGCTS_RTW packet is used instead of the
+LONGCTS_RTM packet. The binary format of the LONGCTS_RTW packet's mandatory header is listed in table 3.9:
 
-Table: 3.9 the format of LONGCTS_RTW packet's mandatory header
+Table: 3.9 Format of the LONGCTS_RTW packet's mandatory header
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
-| `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov structure |
+| `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov structures |
 | `msg_length`     | 8 | integer | `uint64_t` | total length of the application buffer |
 | `send_id`        | 4 | integer | `uint32_t` | ID of send operation |
 | `credit_request` | 4 | integer | `uint32_t` | number of packets requester is ready to send |
 | `rma_iov`        | `rma_iov_count` * 24 | array of `efa_rma_iov` | `efa_rma_iov[]` | remote buffer information |
 
 All fields have been described before, but some explanation is warranted for the `send_id` field. It is not
-named `write_id` because this protocol is using send/receive to emulated write, therefore it is implied that
+named `write_id` because this protocol is using send/receive to emulate write, therefore it is implied that
 the requester is treating this communication as a send operation internally, and this communication is subject
-to same flow control as a long-CTS message communication does.
+to the same flow control as a long-CTS message communication.
 
-#### emulated read features/sub-protocols
+#### Emulated read features/subprotocols
 
-This section describes two emulated read sub-protocols: emulated short read and emulated long-CTS read. Both
-sub-protocols use send/receive to emulate read. The interesting part is, in an emulated read communication,
+This section describes two emulated read subprotocols: emulated short read and emulated long-CTS read. Both
+subprotocols use send/receive to emulate read. The interesting part is, in an emulated read communication,
 the responder is the sender and the requester is the receiver.
 
 The workflow of emulated short read protocol is illustrated in the following diagram:
 
 ![emulated short read](read_short.png)
 
-As can be seen, in this protocol, the requester send a short RTR packet to the responder and the responder send
+As can be seen, in this protocol, the requester sends a short RTR packet to the responder and the responder sends
 a READRSP packet back to the requester.
 
 The binary format of a SHORT_RTR mandatory header is listed in the table 3.10:
 
-Table: 3.10 the format of a SHORT_RTR packet's mandatory header
+Table: 3.10 Format of the SHORT_RTR packet's mandatory header
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
-| `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov structure |
+| `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov structures |
 | `msg_length`     | 8 | integer | `uint64_t` | total length of the application buffer |
 | `recv_id`        | 4 | integer | `uint32_t` | ID of the receive operation, to be included in READRSP packet |
 | `padding`	   | 4 | integer | `uint32_t` | alignment for 8 bytes |
 | `rma_iov`        | `rma_iov_count` * 24 | array of `efa_rma_iov` | `efa_rma_iov[]` | remote buffer information |
 
-Among the fields, the `recv_id` is most interesting. As mentioned before, in an emulated read protocol, the requester is the
-receiver, so it is necessary to include `recv_id` in the request. The responder needs to include this `recv_id` in
+Among the fields, the `recv_id` is the most interesting. As mentioned before, in an emulated read protocol, the requester
+is the receiver, so it is necessary to include `recv_id` in the request. The responder needs to include this `recv_id` in
 the READRSP packet, for the requester to properly process it.
 
 A READRSP (READ ReSPonse) packet consists of two parts: READRSP header and application data. The binary format
 of the READRSP header is in table 3.11:
 
-Table: 3.11 the format of a READRSP packet's header
+Table: 3.11 Format of the READRSP packet's header
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
 | `multiuse(padding/connid)`         | 4 | integer | `uint32_t` | `connid` if CONNID_HDR flag is set, otherwise `padding` |
 | `send_id`        | 4 | integer | `uint64_t` | ID of the send operation, to be included in the CTS header |
-| `recv_id`        | 4 | integer | `uint32_t` | ID of the receive operation  |
+| `recv_id`        | 4 | integer | `uint32_t` | ID of the receive operation|
 | `recv_length`    | 8 | integer | `uint64_t` | length of the application data in the packet |
 
 The field `multiuse` has been introduced before when introducing the CTS packet (table 3.6).
-It is a multi-purpose field, which can be used to store `connid` or as a padding
-space, depend on whether the CONNID_HDR universal flag is toggled in `flags`. See section 4.4
-for more information about the field `connid`.
+It is a multi-purpose field, which can be used to store `connid` or as a padding space, depending
+on whether the CONNID_HDR universal flag is toggled in `flags`. See section 4.4 for more
+information about the field `connid.
 
-The workflow of the emulated long-CTS read sub-protocol is illustrated in the following diagram:
+The workflow of the emulated long-CTS read subprotocol is illustrated in the following diagram:
 
 ![emulated long-CTS read](read_longcts.png)
 
-The protocol started by the requester send a LONGCTS_RTR packet. After that, the workflow generally follow that of the
-long-CTS message sub-protocol, except the responder is the sender and the requester is the receiver.
+The protocol started by the requester sends a LONGCTS_RTR packet. After that, the workflow generally follow that of the
+long-CTS message subprotocol, except the responder is the sender and the requester is the receiver.
 
 The mandatory header of LONGCTS_RTR packet is listed in table 3.12:
 
-Table: 3.12 the format of a LONGCTS_RTR packet's mandatory header
+Table: 3.12 Format of the LONGCTS_RTR packet's mandatory header
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
-| `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov structure |
+| `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov structures |
 | `msg_length`     | 8 | integer | `uint64_t` | total length of the application buffer |
 | `recv_id`        | 4 | integer | `uint32_t` | ID of the receive operation, to be included in READRSP packet |
 | `recv_length`	   | 4 | integer | `uint32_t` | Number of bytes the responder is ready to receive |
 | `rma_iov`        | `rma_iov_count` * 24 | array of `efa_rma_iov` | `efa_rma_iov[]` | remote buffer information |
 
 The only difference between LONGCTS_RTR and SHORT_RTR is the field `padding` in SHORT_RTR is replaced by the field `recv_length`.
-Here, the LONGCTS_RTR packet serves the same functionality of the first CTS packet in long-CTS message sub-protocol. The reason
-is: when the endpoint is preparing the LONGCTS_RTR, it already knows it is going to receive some data, thus it should calculate
-how many bytes it is ready to receive using the flow control algorithm, and put the number in the packet.
+Here, the LONGCTS_RTR packet serves the same functionality af the first CTS packet in the long-CTS message subprotocol. The
+reason is: when the endpoint is preparing the LONGCTS_RTR, it already knows it is going to receive some data, thus it should
+calculate how many bytes it is ready to receive using the flow control algorithm and put that number in the packet.
 
 The short RTR protocol can only be used if the read buffer can fit in one READRSP packet, so the maximum size of a short emulated
 read protocol is (MTU size - READRSP header size). For messages whose size is larger, the emulated long-CTS read protocol has
 to be used.
 
-#### emulated atomic protocols
+#### Emulated atomic protocols
 
-This section describes the 3 emulated atomic protocols: emulated write atomic, emulate fetch atomic and emulated compare atomic.
+This section describes the 3 emulated atomic protocols: emulated write atomic, emulate fetch atomic, and emulated compare atomic.
 
 The workflow of emulated write atomic is illustrated in the following diagram:
 
 ![atomic_write](atomic_write.png)
 
-It is similar to emulated eager write sub-protocol, except an WRITE_RTA packet was
+It is similar to the emulated eager write subprotocol, except a WRITE_RTA packet was
 sent. Table 3.13 lists the binary structure of an WRITE_RTA packet's mandatory
 header:
 
-Table: 3.13 the format of an WRITE_RTA packet's mandatory header
+Table: 3.13 Format of the WRITE_RTA packet's mandatory header
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
 | `msg_id`         | 4 | integer | `uint32_t` | message ID |
-| `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov structure |
+| `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov structures |
 | `atomic_datatype`| 4 | integer | `uint32_t` | atomic data type |
 | `atomic_op`      | 4 | integer | `uint32_t` | atomic operation ID |
 | `pad`            | 4 | integer | `uint32_t` | atomic operation ID |
 | `rma_iov`        | `rma_iov_count` * 24 | array of `efa_rma_iov` | `efa_rma_iov[]` | remote buffer information |
 
-The two new fields introduced are `atomic_datatype` and `atomic_op`. There are atomic data type and atomic operations
-defined in libfabric standard. A list of atomic datatypes can be find in libfabric [fi_atomic](https://ofiwg.github.io/libfabric/v1.4.0/man/fi_atomic.3.html) man page.
+The two new fields introduced are `atomic_datatype` and `atomic_op`. There are atomic data type sand atomic operations
+defined in the libfabric standard. A list of atomic datatypes can be found in the libfabric [fi_atomic](https://ofiwg.github.io/libfabric/v1.4.0/man/fi_atomic.3.html) man page.
 
-The field `msg_id` is provided as message ID. It is used to implement ordered atomic operations, which is supported by libfabric EFA provider,
-and is required by some application such as MPICH.
+The field `msg_id` provides the message ID. It is used to implement ordered atomic operations, which is supported by
+the libfabric EFA provider and is required by some applications such as MPICH.
 
 The workflows of emulated fetch/compare atomic are the same, as illustrated in the following diagram:
 
 ![atomic_fetch_compare](atomic_fetch_compare.png)
 
-Comparing to write atomic, the differences are:
+Compared to write atomic, the differences are:
 
-First, an FETCH_RTA/COMPARE_RTA is used to initiate the communication.
-second, that responder will send an ATOMRSP (atomic response) packet back.
+First, a FETCH_RTA/COMPARE_RTA is used to initiate the communication.
+Second, that responder will send an ATOMRSP (atomic response) packet back.
 
 The binary format of FETCH_RTA and COMPARE_RTA are the same.
-Table 3.14 shows the format of mandatory header of a FETCH_RTA/COMPARE_RTA packet:
+Table 3.14 shows the binary format of the mandatory header of a FETCH_RTA/COMPARE_RTA packet:
 
-Table: 3.14 the format of an FETCH_RTA/COMPARE_RTA packet's mandatory header
+Table: 3.14 Format of the FETCH_RTA/COMPARE_RTA packet's mandatory header
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
 | `msg_id`         | 4 | integer | `uint32_t` | message ID |
-| `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov structure |
+| `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov structures |
 | `atomic_datatype`| 4 | integer | `uint32_t` | atomic data type |
 | `atomic_op`      | 4 | integer | `uint32_t` | atomic operation ID |
 | `recv_id`        | 4 | integer | `uint32_t` | ID of the receive operation on the requester side |
@@ -1073,16 +1077,16 @@ First, The value of `atomic_op` is different between FETCH_RTA and COMPARE_RTA.
 Second, the application data part of a COMPARE_RTA packet contains two segments of data: `buf` and `compare`.
 (see [fi_atomic](https://ofiwg.github.io/libfabric/v1.4.0/man/fi_atomic.3.html))
 
-The difference between an WRITE_RTA and an FETCH_RTA/COMPARE_RTA is that the field `pad` was replaced by `recv_id`.
-Because we are using send/receive to emulate a fetch/compare atomic operation. The requester is going to receive
-data from the responder, the field `recv_id` is the ID of the receive operation the requester side, which is to
-be included in the header of ATOMRSP packet.
+The difference between a WRITE_RTA and a FETCH_RTA/COMPARE_RTA is that the field `pad` was replaced by `recv_id` because
+we are using send/receive to emulate a fetch/compare atomic operation. As the requester is going to receive
+data from the responder, the field `recv_id` is the ID of the receive operation on the requester side, which is to
+be included in the header of the ATOMRSP packet.
 
-An ATOMRSP packet is consisted of two parts: header and application data. Table 3.15 shows the format of the header of an ATOMRSP packet:
+An ATOMRSP packet consists of two parts: header and application data. Table 3.15 shows the format of the header of an ATOMRSP packet:
 
-Table: 3.15 the binary format of an ATOMRSP packet header.
+Table: 3.15 Format of the ATOMRSP packet's header.
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
@@ -1093,8 +1097,8 @@ Table: 3.15 the binary format of an ATOMRSP packet header.
 | `seg_length`     | 8 | integer | `uint64_t` | length of the application data in the packet |
 
 The field `multiuse` has been introduced before when introducing the CTS packet (table 3.6).
-It is a multi-purpose field, which can be used to store `connid` or as a padding
-space, depend on whether the CONNID_HDR universal flag is togged in `flags`. See section 4.4
+It is a multi-purpose field which can be used to store `connid` or as a padding
+space, depending on whether the CONNID_HDR universal flag is toggled in `flags`. See section 4.4
 for more information about the field `connid`.
 
 ## 4. Extra features and requests
@@ -1108,16 +1112,16 @@ with protocol v4, when libfabric 1.10 was released. It was assigned ID 0.
 
 It is defined as an extra feature because there is a set of requirements (firmware,
 EFA kernel module and rdma-core) to be met before an endpoint can use the RDMA
-read capability, therefore an endpoint cannot assume the other party support RDMA read.
+read capability, therefore an endpoint cannot assume the other party supports RDMA read.
 
-The "RDMA read" extra feature corresponds to the following sub-protocols:
-long-read message, emulated long-read write, direct read.
+The "RDMA read" extra feature corresponds to the following subprotocols:
+long-read message, emulated long-read write, and direct read.
 
-#### Long-read message sub-protocol
+#### Long-read message subprotocol
 
-The long-read message sub-protocol uses RDMA read to implement two-sided communication.
+The long-read message subprotocol uses RDMA read to implement two-sided communication.
 
-The work flow of long-read message sub-protocol is illustrated in the following diagram:
+The work flow of the long-read message subprotocol is illustrated in the following diagram:
 
 ![long-read message](message_longread.png)
 
@@ -1125,20 +1129,21 @@ There are two packet types involved in this protocol: LONGREAD_RTM and EOR (End 
 
 LONGREAD_RTM is sent by the sender to initiate the communication.
 
-Like all REQ packets, a LONGREAD_RTM consists of 3 parts: mandatory header, REQ optional
-header and the application data. However, the application data part of a LONGREAD_RTM is
-special: it is not the data in the application's send buffer, but information of the
-sender buffer.
+Like all REQ packets, a LONGREAD_RTM consists of 3 parts: the mandatory header, the REQ
+optional header, and the application data. However, the application data part of a
+LONGREAD_RTM is special: it is not the data in the application's send buffer.
+Instead, it is the information of the sender buffer.
 
-In long-read message sub-protocol, sender need to construct an `read_iov`, which is
-an array of `efa_rma_iov` of application's send buffer. The `read_iov` is used
-as the application data in the LONGREAD_RTM packet.
+In the long-read message subprotocol, the sender needs to construct a `read_iov`, which is
+an array of `efa_rma_iov` of the application's send buffer. The `read_iov` is used
+as the application data in the LONGREAD_RTM packet. These packets are generally
+small as they are only ferrying buffer pointer and lengths to the remote side.
 
 The binary format of a LONGREAD_RTM packet's mandatory header is listed in table 4.1
 
-Table: 4.1 the binary format of a LONGREAD_RTM packet's mandatory header
+Table: 4.1 Format of the LONGREAD_RTM packet's mandatory header
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
@@ -1148,32 +1153,35 @@ Table: 4.1 the binary format of a LONGREAD_RTM packet's mandatory header
 | `send_id`        | 4 | integer | `uint32_t` | ID of the receive operation  |
 | `read_iov_count` | 4 | integer | `uint32_t` | number of iov to read |
 
-Noticing the new field `read_iov_count`, which is number of `struct efa_rma_iov` in `read_iov`.
+Notice the new field `read_iov_count`, which is the number of `struct efa_rma_iov` in `read_iov`.
 
-To construct `read_iov`, sender need to make sure the send buffer is registered with EFA device and fill
-the registration key in `read_iov`.
+To construct `read_iov`, the sender needs to make sure that the send buffer is registered with the
+EFA device and fills in the registration key in `read_iov`.
 
 There are two ways to achieve that:
 
-First, if the buffer has already been registered with device, application will provide
-a memory descriptor along with the sender buffer, registration key can be extracted from the descriptor;
+First, if the buffer has already been registered with the device, the application will provide
+a memory descriptor along with the send buffer. The registration key can be extracted from this
+descriptor.
 
-Second, if the buffer has not been registered with EFA device, sender need to register the buffer,
-and can get the key from the registration. Note because memory registration is a limited resource,
-it is possible for memory registration to fail and sender need to be able to handle the case.
+Second, if the buffer has not been registered with the EFA device, the sender needs to register
+the buffer in-line and can retrieve the key from the registrtion. Note, because memory registration
+is a limited resource, it is possible for memory registration to fail and the sender needs to be
+able to handle this case.
 
-Upon receiving a long-read RTM, the receiver will use RDMA read to copy data from application's
-send buffer to application's receive buffer (avoiding copy). That is why this protocol is
-sometime referred as zero-copy.
+Upon receiving a long-read RTM, the receiver will use RDMA read to read data from the
+application's send buffer (sender) to the application's receive buffer
+(receiver) - which will avoid copies into the receiver's posted bounce buffer
+pool. That is why this subprotocol is sometimes referred to as zero-copy.
 
-After all read is finished, the receiver will send an EOR packet to the sender to notify it
-the work is done.
+After all reads are finished, the receiver will send an EOR packet to the requester to notify it
+that the work has completed.
 
 The binary format of the EOR packet is listed in table 4.2
 
-Table: 4.2 the format of an EOR packet
+Table: 4.2 Format of the EOR packet
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
@@ -1183,25 +1191,26 @@ Table: 4.2 the format of an EOR packet
 | `multiuse(connid/padding)`  | 4 | integer | `uint32_t` | `connid` if CONNID_HDR is set, otherwise `padding` |
 
 The field `multiuse` has been introduced before when introducing the CTS packet (table 3.6).
-It is a multi-purpose field, which can be used to store `connid` or as a padding
-space, depend on whether the CONNID_HDR universal flag is togged in `flags`. See section 4.4
+It is a multi-purpose field which can be used to store `connid` or as a padding
+space, depending on whether the CONNID_HDR universal flag is toggled in `flags`. See section 4.4
 for more information about the field `connid`.
 
-#### emulated long-read write sub-protocol
+#### Emulated long-read write subprotocol
 
-The emulated long-read write sub-protocol uses RDMA read to emulate an write operation.
+The emulated long-read write subprotocol uses RDMA read to emulate a write operation.
 
 The workflow of this protocol is illustrated in the following diagram:
 
 ![long-read write](write_longread.png)
 
-The workflow is similar to that of long-read message sub-protocol. One key difference is that
-a LONGREAD_RTW packet is used to initiate the communication. The binary format of the LONGREAD_RTW
-packet mandatory header is listed in table 4.3.
+The workflow is similar to that of the long-read message subprotocol. Some key differences are that
+a LONGREAD_RTW packet is used to initiate the communication and the receiver side does not receive a
+completion event by default. The binary format of the LONGREAD_RTW packet mandatory header is listed
+in table 4.3.
 
-Table: 4.3 the format of a LONGREAD_RTW packet's mandatory header
+Table: 4.3 Format of the LONGREAD_RTW packet's mandatory header
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
@@ -1214,73 +1223,74 @@ Table: 4.3 the format of a LONGREAD_RTW packet's mandatory header
 
 One thing worth noting is the existence of both `rma_iov_count` and `read_iov_count`.
 
-Though both have been explained before, this is the first time they appear in same header, so it might
-be helpful to revisit them.
+Though both have been explained before, this is the first time they appear in
+the same header, so we will revisit them.
 
-The field `rma_iov_count` (and  `rma_iov`) are provided by application, which application called libfabric's write API.
-They contain information of the target buffer (of write) on the responder side.
+The field `rma_iov_count` (and  `rma_iov`) is provided by the application, when the application called
+libfabric's write API. This contains information of the target buffer (of write) on the responder side.
 
 The field `read_iov_count` (and a `read_iov`) is constructed by the write requester,
 which contains information of the source buffer (of write) on the requester side.
-The `read_iov` is not part of the mandatory header, because it is considered
+The `read_iov` is not part of the mandatory header because it is considered as
 application data, which is located right after the REQ optional header.
 
-#### direct read sub-protocol
+#### Direct read subprotocol
 
-Direct read sub-protocol is the simplest sub-protocol in protocol v4. It does not involve a REQ packet.
-The workflow is just for read requester keep using RDMA read on the responder. For this protocol, it is
-not necessary that responder keep progress engine running.
+The direct read subprotocol is the simplest subprotocol in protocol v4. It does not involve a REQ packet.
+The workflow is just for the read requester keep using RDMA read on the responder. For this protocol, it is
+not necessary for the responder to keep the progress engine running.
 
-### 4.2 delivery complete
+### 4.2 Delivery complete
 
-The extra feature "delivery complete" was introduced with libfabric 1.12.0, and was assigned ID 1.
+The extra feature "delivery complete" was introduced with libfabric 1.12.0 and was assigned ID 1.
 
-Delivery complete is a requirement application can impose on an endpoint when opening the endpoint.
-It requires that when application gets the send/write completion, the application data must have
-been delivered to application's target buffer.
+Delivery complete is a requirement the application can impose on an endpoint when opening the endpoint.
+It requires that when application receives the send/write completion, the application data must have
+been delivered to the application's receiving target buffer.
 
-The reason it is implemented as an extra feature is because, not all sub-protocols in the baseline
-features support delivery complete. Specifically, the following 6 sub-protocols do NOT:
+The reason it is implemented as an extra feature is because not all subprotocols in the baseline
+features support delivery complete. Specifically, the following 6 subprotocols do NOT:
 
-* eager message,
-* medium message,
-* long-CTS message,
-* eager write,
-* long-CTS write and
-* write atomic.
+* eager message
+* medium message
+* long-CTS message
+* eager write
+* long-CTS write
+* write atomic
 
-These sub-protocols are designed to support a weaker completion model: transmit complete.
+These subprotocols are designed to support a weaker completion model: transmit complete.
 Transmit complete requires that when the send/write completion was written, the data has been transmitted
 to the receiver/responder.
 
-The difference between transmit complete and delivery complete is transmit complete indicate
-that data has arrived at A buffer on the receive/responder, but the buffer is not necessary the application's
-target buffer. buffer. In fact, because of the limitation of the EFA device (no ordering guarantee) and the nature
-of the communications (emulated write), for some protocols, the implementation have to use a temporary
-buffer to receive data, and copy the data to application buffer later, and the time difference can be indefinite.
+The difference between transmit complete and delivery complete is that transmit complete indicates
+that data has arrived at a buffer on the receiver/responder, but the buffer is not necessarily the application's
+target buffer. In fact, because of the limitation of the EFA device (no ordering guarantee) and the nature
+of the communications (emulated write) for some protocols, the implementation needs to use a temporary
+buffer to receive data and copy the data to application buffer at a later point, where the time difference
+can be indefinite.
 
 The "delivery complete" extra feature was introduced to support applications with such requirements.
-It comes with 6 sub-protocols:
+It comes with 6 subprotocols:
 
-* DC eager message,
-* DC medium message,
-* DC long-CTS message,
-* DC eager write,
-* DC long-CTS write and
-* DC write atomic.
+* DC eager message
+* DC medium message
+* DC long-CTS message
+* DC eager write
+* DC long-CTS write
+* DC write atomic
 
-The workflow of these sub-protocols are same to that of there non-DC counterpart, with 3 differences changes:
+The workflow of these subprotocols are the same as that of their non-DC counterparts, with 3 differences:
 
-First, each DC capable sub-protocol defines its own REQ packet type.
+First, each DC capable subprotocol defines its own REQ packet type.
 
-Second, after data was delivered to application buffer, the receiver/responder will send a RECEIPT
+Second, after data is delivered to the application buffer, the receiver/responder will send a RECEIPT
 packet back to the sender/requester.
 
-Third, sender/responder will not write completion until it received the RECEIPT packet.
+Third, the sender/responder will not write a completion until it receives the RECEIPT packet.
 
-The binary format of a RECEIPT packet is as the following:
+The binary format of a RECEIPT packet is as follows:
 
-| Name | Length (bytes) | type | C language type | Note |
+| Name | Length (bytes) | Type | C language type | Notes |
 |-|-|-|-|-|
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
@@ -1290,46 +1300,46 @@ The binary format of a RECEIPT packet is as the following:
 | `multiuse(connid/padding)`  | 4 | integer | `uint32_t` | `connid` if CONNID_HDR is set in `flags`, otherwise `padding` |
 
 The field `multiuse` has been introduced before when introducing the CTS packet (table 3.6).
-It is a multi-purpose field, which can be used to store `connid` or as a padding
-space, depend on whether the CONNID_HDR universal flag is togged in `flags`. See section 4.4
+It is a multi-purpose field which can be used to store `connid` or as a padding
+space, depending on whether the CONNID_HDR universal flag is toggled in `flags`. See section 4.4
 for more information about the field `connid`.
 
-### 4.3 keep packet header length constant (constant header length) and zero-copy receive
+### 4.3 Keep packet header length constant (constant header length) and zero-copy receive
 
-The extra request "keep packet header length constant" (constant header length) was introduced in libfabric 1.13.0
-release, and was assigned the ID 2.
+The extra request "keep packet header length constant" (constant header length) was introduced in the libfabric 1.13.0
+release and was assigned the ID 2.
 
-This extra request would be useful if endpoint want to implement the "zero copy receive" optimization.
+This extra request would be useful if an endpoint wants to implement the "zero copy receive" optimization.
 
-As can be seen from previous discussion, because EFA device does not support ordered delivery, an endpoint
-usually needs to use a temporary buffer to receive incoming packets, and copy data to application's receive buffer
-later. However, if an application has the following set of requirement:
+As can be seen from previous discussions, because the EFA device does not support ordered delivery, an endpoint
+usually needs to use a temporary buffer to receive incoming packets and copy data to the application's receive
+buffer at a later time. However, if an application has the following set of requirements:
 
-   1. does not need ordered send/receive (`FI_ORDER_SAS`).
-   2. only send/receive eager messages.
-   3. does not use tagged send.
-   4. does not require FI_DIRECTED_RECV (the ability to receive only from certain address).
+   1. Does not need ordered send/receive (`FI_ORDER_SAS`)
+   2. Only sends/receives eager messages
+   3. Does not use tagged send
+   4. Does not require FI_DIRECTED_RECV (the ability to receive only from certain addresses)
 
-it should be possible to receive data directly using application buffer directly. Because under such condition,
-receiver does not have special requirement on the data it is going to receive, thus will accept any message from
-the sender.
+it should be possible to receive data directly using the application buffer since, under such conditions, the
+receiver does not have special requirements on the data it is going to receive, and it will thus accept any
+message from the sender.
 
-However, there is one more hurdle to overcome in implementing "zero copy receive", which is the packet header
+However, there is one more hurdle to overcome in implementing "zero copy receive" - the packet header
 length.
 
 Under the condition that endpoints "will only send eager messages" and "do not use tag matching", a sender will
-send data in an EAGER_MSGRTM packet. An EAGER_MSGRTM packet is consisted of packet header and application data.
-However, we cannot put packet header in application's receive buffer. Therefore, for "zero copy receive" to work,
-the receiver need to:
+send data in an EAGER_MSGRTM packet. An EAGER_MSGRTM packet consists of the packet header and application data.
+However, we cannot put the packet header in the application's receive buffer. Therefore, for "zero copy receive"
+to work, the receiver needs to:
 
-   a. be able to estimate the packer header length of an incoming EAGER_MSGRTM packet, and the
-   b. the packet header length of EAGER_MSGRTM cannot change throughout the communication.
+   a. Be able to estimate the packer header length of an incoming EAGER_MSGRTM packet
+   b. The packet header length of the EAGER_MSGRTM cannot change throughout the communication
 
 However, there is no guarantee in the base protocol that the packet header length of EAGER_MSGRTM will not
 change.
 
-In fact, because of the existance of the handshake sub-protocol, the packet header length of an EAGER_MSGRTM
-will definitely change. Recall handshake sub-protocol's workflow is:
+In fact, because of the existance of the handshake subprotocol, the packet header length of an EAGER_MSGRTM
+will definitely change. Recall that the handshake subprotocol's workflow is:
 
 Before receiving handshake packet, an endpoint will always include the optional raw address header in REQ packets.
 
@@ -1337,84 +1347,80 @@ After receiving handshake packet, an endpoint will stop including the optional r
 
 The extra feature "keep packet header length constant" (constant header length) is designed to solve this problem.
 
-When an endpoint toggle on this extra request, its peer will try to satisfy it by keep the header length constant.
-Exactly how to achieve that is up to the implementation to decide, the easiest way to do that is to keep including
-raw address header in the EAGER_MSGRTM even after receiving the handshake packet.
+When an endpoint toggles on this extra request, its peer will try to satisfy it by keeping the header length
+constant.  Exactly how to achieve that is up to the implementation to decide.  The easiest way to do so is to keep
+including the raw address header in the EAGER_MSGRTM even after receiving the handshake packet.
 
 Note, because this is an extra request, an endpoint cannot assume its peer will comply with the request. Therefore,
-the receiving endpoint must be able to handle the situation that a received packet does not have the expected header length.
+the receiving endpoint must be able to handle the situation that a received packet does not have the expected header
+length.
 
 In that case, implementation will have two choices:
 
-1. write a truncated error completion entry
-2. move the application data to right place.
+1. Write a truncated error completion entry
+2. Move the application data to the right place
 
-Note this extra request was initially introduced as an extra feature named "zero copy receive", but it is later realized
-that is not an feature because the peer does not do anything different. Rather, it is an expectation the receiving
-endpoint has for the sender. Therefore, it was re-interpreted as an extra request named "constant header length".
-This re-interpretation does not change the implementation, thus does not cause backward incompatibility.
+Note, this extra request was initially introduced as an extra feature named "zero copy receive", but later it was realized
+that this is not an feature because the peer does not do anything different.  Rather, it is an expectation that the
+receiving endpoint has for the sender. Therefore, it was re-interpreted as an extra request named "constant header length".
+This re-interpretation does not change the implementation, and thus, it does not cause backward incompatibility.
 
-### 4.4 have connection ID in packet header (connid header)
+### 4.4 Have connection ID in packet header (connid header)
 
-The "have connection ID in packet header" extra request was introduced with libfabric 1.14.0 release, and was
+The "have connection ID in packet header" extra request was introduced with the libfabric 1.14.0 release and was
 assigned the ID 3.
 
 This extra feature is designed to solve the "QP collision" problem, which is commonly experienced in
-client-server type of application.
+client-server types of application.
 
-The "QP collision" problem arise from fact that the EFA device uses the Device ID (GID)
-+ QP number (QPN) as the unique
-identifier of a peer. Recall that raw address of EFA endpoint is consisted of 3 parts:
-GID + QPN + Connection ID (CONNID). EFA device only recognizes GID and QPN.
-The connection ID was generated by the endpoint itself during its initialization.
+The "QP collision" problem arose from the fact that the EFA device uses the Device ID (GID) + QP number (QPN)
+as the unique identifier of a peer. Recall that the raw address of the EFA endpoint consistsd of 3 parts:
+GID + QPN + Connection ID (CONNID). The EFA device only recognizes GID and QPN.  The connection ID was generated
+by the endpoint itself during its initialization.
 
 Because of that, it is possible for an endpoint to receive packets from a destroyed QP, which was used
 by a previous process that used the same QPN. As can be seen throughout the document, each packet in the
-EFA RDM communication protocol is not indepenedent. The correct processing of a packet need prior knowledge.
+EFA RDM communication protocol is not independent. The correct processing of a packet needs prior knowledge.
 
-For example, there is a `recv_id` in the header of a DATA packet (section 3.2), which assumes
-the receiver to maintain a list of receive operations and can find the operation correspond to
+For example, there is a `recv_id` in the header of a DATA packet (section 3.2) which assumes that
+the receiver maintains a list of receive operations and can find the operation corresponding to
 the message using `recv_id`.
 
-To solve this problem, receiver need to know the full address of the sender. As shown in table
-1.5, EFA's full address consists of: GID, QPN and CONNID. Currently, EFA device will report
-Address Handle Number (AHN) and QPN of a received packet. Because GID can be obtained from AHN,
+To solve this problem, the receiver needs to know the full address of the sender. As shown in table
+1.5, EFA's full address consists of: GID, QPN and CONNID. Currently, the EFA device will report the
+Address Handle Number (AHN) and QPN of a received packet. Because the GID can be obtained from AHN,
 the only unknown part is CONNID.
 
-The extra request "connid header" was introduced to address the issue. An endpoint can flag
-the bit correspond to 
-Also because this is an extra request, an endpoint cannot assume that the peer support it, thus need to be able
-to handle the case that incoming packets does not have sender connection ID in it. It is up to the
-implementation to decide whether in this case the endpoint should abort the communication or continue without
-using the extra request.
+The extra request "connid header" was introduced to address the issue. Also because this is an extra request,
+an endpoint cannot assume that the peer supports it, thus the endpoint needs to be able to handle the case 
+that incoming packets do not have the sender connection ID in it. It is up to the implementation to decide
+whether the endpoint should abort the communication or continue without using the extra request in this case.
 
-A universal flag CONNID_HDR (table 1.4) was designated for CONNID in packet header. An implementation is not required to
-set connid. However, when it does include connid in packet header, it need to toggle on the CONNID_HDR flag in
-the `flags` field of the base header. The exact location of connid is different for each packet type.
+A universal flag, CONNID_HDR (Table 1.4), was designated for CONNID in the packet header. An implementation is
+not required to set connid. However, when it does include connid in the packet header, it needs to toggle on
+the CONNID_HDR flag in the `flags` field of the base header. The exact location of connid is different for
+each packet type.
 
 ## 5. What's not covered?
 
-The purpose of this document is to define the communication protocol, therefore it is intentionally written
+The purpose of this document is to define the communication protocol. Therefore, it is intentionally written
 as "implementation neutral". It should be possible to rewrite a libfabric EFA provider from scratch by
 following this document, and the newly written EFA provider should be able to interoperate with any
-libfabric EFA provider since libfabric 1.10.0.
+libfabric EFA provider implementation since libfabric 1.10.0.
 
-Because of this, in various places, the document provides tips about how to implementation certain
-aspects of the protocol, but did not give specific instruction about what implementation should do.
+Because of this, in various places, the document provides tips on how to implement certain aspects
+of the protocol while not giving specific instruction about what an implementation should do.
 
-There are a few things that this document consider as implementation specific thus does not cover.
+There are a few things that this document considers as implementation specific and is not covered.
 
-For example, this document does not specify the selection logic of various protocols. For example, there are
-three message sub-protocols medium message, long-CTS message and long-read message that can be used for
-long message (it is not recommended), and an implementation can choose switch point without breaking
-protocol.
+For example, this document does not specify the selection logic of various protocols. There are
+three message subprotocols (medium message, long-CTS message, and long-read message) that can be used for
+long messages, and an implementation can choose an appropriate switch point without breaking protocol.
 
-On similar note, this document does not describe the shared memory (SHM) implementation of EFA provider, which is an optimization technique
-an endpoint can use to speed up intra-instance communication. The idea is that if two endpoints are on
-same instance, and opened by same user, they can use the SHM mechanism on the instance to communicate,
-which has higher bandwidth and lower latency.
-
-It is not covered in this document because EFA device is not used, and because two endpoints are opened
-on same instance by the same user, they should be using the same libfabric library, so the concern of backward
-compatibility does not apply to this case.
-
+On a similar note, this document does not describe the shared memory (SHM) implementation of the EFA provider,
+which is an optimization technique an endpoint can use to speed up intra-instance communication. The idea
+is that if two endpoints are on same instance and opened by same user, they can use the SHM mechanism on the
+instance to communicate, taking advantage of shared memory's higher bandwidth and lower latency. It is not
+covered in this document because the EFA device is not used. Also, because two endpoints are opened
+on the same instance by the same user, they should be using the same libfabric library, thus negating any
+concerns of backward compatibility in this case.
