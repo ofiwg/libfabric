@@ -8,7 +8,7 @@
 The Open Fabrics Interfaces (OFI) is a framework focused on exporting fabric
 communication services to applications.
 
-See [the OFI web site](http://libfabric.org) for more details, including a
+See [the OFI website](http://libfabric.org) for more details, including a
 description and overview of the project, and detailed documentation of the
 Libfabric APIs.
 
@@ -18,8 +18,8 @@ On OS X, the latest release of Libfabric can be installed using the
 [Homebrew](https://github.com/Homebrew/homebrew) package manager using the
 following command:
 
-```
-$ brew install libfabric
+```bash
+brew install libfabric
 ```
 
 Libfabric pre-built binaries may be available from other sources, such as Linux
@@ -40,14 +40,14 @@ Libfabric currently supports GNU/Linux, Free BSD, and OS X.
 
 ### Configure options
 
-The `configure` script has many built in options (see `./configure --help`).
+The `configure` script has many built-in options (see `./configure --help`).
 Some useful options are:
 
 ```
 --prefix=<directory>
 ```
 
-By default `make install` will place the files in the `/usr` tree.
+By default, `make install` will place the files in the `/usr` tree.
 The `--prefix` option specifies that Libfabric files should be installed into
 the tree specified by named `<directory>`. The executables will be located at
 `<directory>/bin`.
@@ -56,7 +56,7 @@ the tree specified by named `<directory>`. The executables will be located at
 --with-valgrind=<directory>
 ```
 
-Directory where valgrind is installed. If valgrind is found, then valgrind
+Directory where Valgrind is installed. If Valgrind is found, then Valgrind
 annotations are enabled. This may incur a performance penalty.
 
 ```
@@ -95,17 +95,17 @@ This enables or disables the provider named `<provider>`. Valid options are:
 
 Consider the following example:
 
-```
+```bash
 $ ./configure --prefix=/opt/libfabric --disable-sockets && make -j 32 && sudo make install
 ```
 This will tell Libfabric to disable the `sockets` provider, and install
 Libfabric in the `/opt/libfabric` tree. All other providers will be enabled if
-possible and all debug features will be disabled.
+possible, and all debug features will be disabled.
 
 Alternatively:
 
-```
-$ ./configure --prefix=/opt/libfabric --enable-debug --enable-psm=dl && make -j 32 && sudo make install
+```bash
+./configure --prefix=/opt/libfabric --enable-debug --enable-psm=dl && make -j 32 && sudo make install
 ```
 
 This will tell Libfabric to enable the `psm` provider as a loadable library,
@@ -116,12 +116,11 @@ tree. All other providers will be enabled if possible.
 ## Validate installation
 
 The fi_info utility can be used to validate the libfabric and provider
-installation, as well as provide details about provider support and available
+installation and provide details about provider support and available
 interfaces.  See `fi_info(1)` man page for details on using the fi_info
 utility.  fi_info is installed as part of the libfabric package.
 
 A more comprehensive test package is available via the fabtests package.
-
 
 ## Providers
 
@@ -130,7 +129,7 @@ A more comprehensive test package is available via the fabtests package.
 ***
 
 The `gni` provider runs on Cray XC (TM) systems utilizing the user-space
-Generic Network Interface (`uGNI`) which provides low-level access to
+Generic Network Interface (`uGNI`), which provides low-level access to
 the Aries interconnect.  The Aries interconnect is designed for
 low-latency one-sided messaging and also includes direct hardware
 support for common atomic operations and optimized collectives.
@@ -151,7 +150,7 @@ functions that are optimized for MPI implementations.  PSM also has limited
 Active Message support, which is not officially published but is quite stable
 and well documented in the source code (part of the OFED release). The `psm`
 provider makes use of both the tag-matching message queue functions and the
-Active Message functions to support a variety of Libfabric data transfer APIs,
+Active Message functions to support various Libfabric data transfer APIs,
 including tagged message queue, message queue, RMA, and atomic
 operations.
 
@@ -200,7 +199,7 @@ See [`fi_rxm`(7)](https://ofiwg.github.io/libfabric/master/man/fi_rxm.7.html) fo
 The sockets provider has been deprecated in favor of the tcp, udp, and
 utility providers, which provide improved performance and stability.
 
-The `sockets` provider is a general purpose provider that can be used on any
+The `sockets` provider is a general-purpose provider that can be used on any
 system that supports TCP sockets.  The provider is not intended to provide
 performance improvements over regular TCP sockets, but rather to allow
 developers to write, test, and debug application code even on platforms
@@ -213,15 +212,14 @@ See the `fi_sockets(7)` man page for more details.
 
 ***
 
-The tcp provider is an optimized socket based provider that supports
+The TCP provider is an optimized socket-based provider that supports
 reliable connected endpoints.  It is intended to be used directly by
 apps that need MSG endpoint support, or in conjunction with the rxm
-provider for apps that need RDM endpoints.  The tcp provider targets
+provider for apps that need RDM endpoints.  The TCP provider targets
 replacing the sockets provider for applications using standard
 networking hardware.
 
 See the `fi_tcp(7)` man page for more details.
-
 
 ### udp
 
@@ -229,7 +227,7 @@ See the `fi_tcp(7)` man page for more details.
 
 The `udp` provider is a basic provider that can be used on any system that
 supports UDP sockets.  The provider is not intended to provide performance
-improvements over regular UDP sockets, but rather to allow application and
+improvements over regular UDP sockets, but rather allow applications and
 provider developers to write, test, and debug their code.  The `udp` provider
 forms the foundation of a utility provider that enables the implementation of
 Libfabric features over any hardware.
@@ -262,7 +260,7 @@ See the `fi_usnic(7)` man page for more details.
 --with-libnl=<directory>
 ```
 
-If specified, look for libnl support. If it is not found then the `usnic`
+If specified, look for libnl support. If it is not found, then the `usnic`
 provider will not be built. If `<directory>` is specified, then check in the
 directory and check for `libnl` version 3. If version 3 is not found, then
 check for version 1. If no `<directory>` argument is specified, then this
@@ -273,8 +271,8 @@ option is redundant with `--with-usnic`.
 ***
 
 The verbs provider enables applications using OFI to be run over any verbs
-hardware (Infiniband, iWarp, etc). It uses the Linux Verbs API for network
-transport and provides a translation of OFI calls to appropriate verbs API calls.
+hardware (Infiniband, iWarp, etc.). It uses the Linux Verbs API for network
+transport and translates OFI calls to appropriate verbs API calls.
 It uses librdmacm for communication management and libibverbs for other control
 and data transfer operations.
 
@@ -296,7 +294,7 @@ The `bgq` provider is a native provider that directly utilizes the hardware
 interfaces of the Blue Gene/Q system to implement aspects of the libfabric
 interface to fully support MPICH3 CH4.
 
-See the `fi_bgq(7)` man page for more details
+See the `fi_bgq(7)` man page for more details.
 
 #### Dependencies
 
@@ -322,14 +320,14 @@ If specified, set the memory registration mode (default is FI_MR_BASIC).
 
 ***
 
-The Network Direct provider enables applications using OFI to be run over
-any verbs hardware (Infiniband, iWarp and etc). It uses the Microsoft Network
+The Network Direct provider enables applications using OFI to run over
+any verbs hardware (Infiniband, iWarp, etc.). It uses the Microsoft Network
 Direct SPI for network transport and provides a translation of OFI calls to
 appropriate Network Direct API calls.
-The Network Direct providers allows to OFI-based applications utilize
+The Network Direct providers enables OFI-based applications to utilize
 zero-copy data transfers between applications, kernel-bypass I/O generation and
 one-sided data transfer operations on Microsoft Windows OS.
-An application is able to use OFI with Network Direct provider enabled on
+An application can use OFI with the Network Direct provider enabled on
 Windows OS to expose the capabilities of the networking devices if the hardware
 vendors of the devices implemented the Network Direct service provider interface
 (SPI) for their hardware.
@@ -372,10 +370,10 @@ See [`fi_efa`(7)](https://ofiwg.github.io/libfabric/master/man/fi_efa.7.html) fo
 
 ## WINDOWS Instructions
 
-Even though windows isn't fully supported yet it is possible to compile and link your library.
+Even though Windows isn't fully supported yet, it is possible to compile and link your library.
 
-- 1. first you need the NetDirect provider:
-  Network Direct SDK/DDK may be obtained as a nuget package (preferred) from:
+- 1. first, you need the NetDirect provider:
+  Network Direct SDK/DDK may be obtained as a NuGet package (preferred) from:
 
   https://www.nuget.org/packages/NetworkDirect
 
@@ -396,11 +394,11 @@ Even though windows isn't fully supported yet it is possible to compile and link
       5-6: Debug/Release v141 (VS 2017 tool set)
       7-8: Debug/Release v142 (VS 2019 tool set)
 
-  make sure you choose the correct target fitting your compiler.
-  By default the library will be compiled to `<libfabricroot>\x64\<yourconfigchoice>`
+  Make sure you choose the correct target fitting your compiler.
+  By default, the library will be compiled to `<libfabricroot>\x64\<yourconfigchoice>`
 
 - 3. linking your library
-  - right click your project and select properties.
+  - right-click your project and select properties.
   - choose C/C++ > General and add `<libfabricroot>\include` to "Additional include Directories"
   - choose Linker > Input and add `<libfabricroot>\x64\<yourconfigchoice>\libfabric.lib` to "Additional Dependencies"
-  - depending on what you are building you may also need to copy `libfabric.dll` into the targetfolder of your own project.
+  - depending on what you are building, you may also need to copy `libfabric.dll` into the target folder of your project.
