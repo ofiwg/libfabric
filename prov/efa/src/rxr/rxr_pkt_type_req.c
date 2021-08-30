@@ -335,7 +335,7 @@ void rxr_pkt_req_data_from_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	 *    1st iov for header.
 	 */
 	if ((!pkt_entry->mr || tx_entry->desc[tx_iov_index]) &&
-	    (tx_iov_offset + data_size < tx_entry->iov[tx_iov_index].iov_len)) {
+	    (tx_iov_offset + data_size <= tx_entry->iov[tx_iov_index].iov_len)) {
 
 		assert(ep->core_iov_limit >= 2);
 		pkt_entry->send->iov[0].iov_base = pkt_entry->pkt;
