@@ -789,7 +789,7 @@ struct fi_provider rxr_prov = {
 	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = rxr_getinfo,
-	.fabric = rxr_fabric,
+	.fabric = efa_fabric,
 	.cleanup = rxr_fini
 };
 

@@ -275,7 +275,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	assert(msg->iov_count <= rxr_ep->tx_iov_limit);
 
-	rxr_perfset_start(rxr_ep, perf_rxr_tx);
+	efa_perfset_start(rxr_ep, perf_efa_tx);
 	fastlock_acquire(&rxr_ep->util_ep.lock);
 
 	if (OFI_UNLIKELY(is_tx_res_full(rxr_ep))) {
@@ -310,7 +310,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 
 out:
 	fastlock_release(&rxr_ep->util_ep.lock);
-	rxr_perfset_end(rxr_ep, perf_rxr_tx);
+	efa_perfset_end(rxr_ep, perf_efa_tx);
 	return err;
 }
 
@@ -1041,7 +1041,7 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 
 	assert(msg->iov_count <= rxr_ep->rx_iov_limit);
 
-	rxr_perfset_start(rxr_ep, perf_rxr_recv);
+	efa_perfset_start(rxr_ep, perf_efa_recv);
 
 	assert(rxr_ep->util_ep.rx_msg_flags == 0 || rxr_ep->util_ep.rx_msg_flags == FI_COMPLETION);
 	rx_op_flags = rxr_ep->util_ep.rx_op_flags;
@@ -1093,7 +1093,7 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 out:
 	fastlock_release(&rxr_ep->util_ep.lock);
 
-	rxr_perfset_end(rxr_ep, perf_rxr_recv);
+	efa_perfset_end(rxr_ep, perf_efa_recv);
 	return ret;
 }
 

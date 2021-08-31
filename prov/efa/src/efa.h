@@ -118,6 +118,10 @@ extern struct util_prov efa_util_prov;
 
 struct efa_fabric {
 	struct util_fabric	util_fabric;
+	struct fid_fabric *shm_fabric;
+#ifdef EFA_PERF_ENABLED
+	struct ofi_perfset perf_set;
+#endif
 };
 
 struct efa_ah {
@@ -412,6 +416,8 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		struct fid_av **av_fid, void *context);
 int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
+int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
+	       void *context);
 
 /* AV sub-functions */
 int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
@@ -598,5 +604,52 @@ static inline bool efa_is_cache_available(struct efa_domain *efa_domain)
 {
 	return efa_domain->cache;
 }
+
+#define RXR_REQ_OPT_HDR_ALIGNMENT 8
+#define RXR_REQ_OPT_RAW_ADDR_HDR_SIZE (((sizeof(struct rxr_req_opt_raw_addr_hdr) + EFA_EP_ADDR_LEN - 1)/RXR_REQ_OPT_HDR_ALIGNMENT + 1) * RXR_REQ_OPT_HDR_ALIGNMENT)
+
+/*
+ * Per libfabric standard, the prefix must be a multiple of 8, hence the static assert
+ */
+#define RXR_MSG_PREFIX_SIZE (sizeof(struct rxr_pkt_entry) + sizeof(struct rxr_eager_msgrtm_hdr) + RXR_REQ_OPT_RAW_ADDR_HDR_SIZE)
+
+#if defined(static_assert) && defined(__x86_64__)
+static_assert(RXR_MSG_PREFIX_SIZE % 8 == 0, "message prefix size alignment check");
+#endif
+
+/* Performance counter declarations */
+#ifdef EFA_PERF_ENABLED
+#define EFA_PERF_FOREACH(DECL)	\
+	DECL(perf_efa_tx),	\
+	DECL(perf_efa_recv),	\
+	DECL(efa_perf_size)	\
+
+enum efa_perf_counters {
+	EFA_PERF_FOREACH(OFI_ENUM_VAL)
+};
+
+extern const char *efa_perf_counters_str[];
+
+static inline void efa_perfset_start(struct rxr_ep *ep, size_t index)
+{
+	struct rxr_domain *domain = rxr_ep_domain(ep);
+	struct efa_fabric *fabric = container_of(domain->util_domain.fabric,
+						 struct efa_fabric,
+						 util_fabric);
+	ofi_perfset_start(&fabric->perf_set, index);
+}
+
+static inline void efa_perfset_end(struct rxr_ep *ep, size_t index)
+{
+	struct rxr_domain *domain = rxr_ep_domain(ep);
+	struct efa_fabric *fabric = container_of(domain->util_domain.fabric,
+						 struct efa_fabric,
+						 util_fabric);
+	ofi_perfset_end(&fabric->perf_set, index);
+}
+#else
+#define efa_perfset_start(ep, index) do {} while (0)
+#define efa_perfset_end(ep, index) do {} while (0)
+#endif
 
 #endif /* EFA_H */

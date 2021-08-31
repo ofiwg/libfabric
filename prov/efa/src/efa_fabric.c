@@ -80,6 +80,12 @@
 
 #define EFA_DEF_MR_CACHE_ENABLE 1
 
+#ifdef EFA_PERF_ENABLED
+const char *efa_perf_counters_str[] = {
+	EFA_PERF_FOREACH(OFI_STR)
+};
+#endif
+
 int efa_mr_cache_enable		= EFA_DEF_MR_CACHE_ENABLE;
 size_t efa_mr_max_cached_count;
 size_t efa_mr_max_cached_size;
@@ -920,14 +926,33 @@ out:
 
 static int efa_fabric_close(fid_t fid)
 {
-	struct efa_fabric *fab;
+	struct efa_fabric *efa_fabric;
 	int ret;
 
-	fab = container_of(fid, struct efa_fabric, util_fabric.fabric_fid.fid);
-	ret = ofi_fabric_close(&fab->util_fabric);
-	if (ret)
+	efa_fabric = container_of(fid, struct efa_fabric, util_fabric.fabric_fid.fid);
+	ret = ofi_fabric_close(&efa_fabric->util_fabric);
+	if (ret) {
+		FI_WARN(&rxr_prov, FI_LOG_FABRIC,
+			"Unable to close fabric: %s\n",
+			fi_strerror(-ret));
 		return ret;
-	free(fab);
+	}
+
+	if (rxr_env.enable_shm_transfer) {
+		ret = fi_close(&efa_fabric->shm_fabric->fid);
+		if (ret) {
+			FI_WARN(&rxr_prov, FI_LOG_FABRIC,
+				"Unable to close fabric: %s\n",
+				fi_strerror(-ret));
+			return ret;
+		}
+	}
+
+#ifdef EFA_PERF_ENABLED
+	ofi_perfset_log(&efa_fabric->perf_set, efa_perf_counters_str);
+	ofi_perfset_close(&efa_fabric->perf_set);
+#endif
+	free(efa_fabric);
 
 	return 0;
 }
@@ -942,7 +967,11 @@ static struct fi_ops efa_fi_ops = {
 
 static struct fi_ops_fabric efa_ops_fabric = {
 	.size = sizeof(struct fi_ops_fabric),
-	.domain = efa_domain_open,
+	/*
+	 * The reason we use rxr_domain_open() here is because it actually handles
+	 * both RDM and DGRAM.
+	 */
+	.domain = rxr_domain_open,
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = ofi_eq_create,
 	.wait_open = ofi_wait_fd_open,
@@ -953,31 +982,63 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	       void *context)
 {
 	const struct fi_info *info;
-	struct efa_fabric *fab;
-	int ret = 0;
+	struct efa_fabric *efa_fabric;
+	int ret = 0, retv;
 
-	fab = calloc(1, sizeof(*fab));
-	if (!fab)
+	efa_fabric = calloc(1, sizeof(*efa_fabric));
+	if (!efa_fabric)
 		return -FI_ENOMEM;
 
 	for (info = efa_util_prov.info; info; info = info->next) {
 		ret = ofi_fabric_init(&efa_prov, info->fabric_attr, attr,
-				      &fab->util_fabric, context);
+				      &efa_fabric->util_fabric, context);
 		if (ret != -FI_ENODATA)
 			break;
 	}
-	if (ret) {
-		free(fab);
-		return ret;
+
+	if (ret)
+		goto err_free_fabric;
+
+	/* Open shm provider's fabric domain */
+	if (rxr_env.enable_shm_transfer) {
+		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
+		ret = fi_fabric(shm_info->fabric_attr,
+				    &efa_fabric->shm_fabric, context);
+		if (ret)
+			goto err_close_util_fabric;
 	}
 
-	*fabric_fid = &fab->util_fabric.fabric_fid;
+
+#ifdef EFA_PERF_ENABLED
+	ret = ofi_perfset_create(&rxr_prov, &efa_fabric->perf_set,
+				 efa_perf_size, perf_domain, perf_cntr,
+				 perf_flags);
+
+	if (ret)
+		FI_WARN(&rxr_prov, FI_LOG_FABRIC,
+			"Error initializing EFA perfset: %s\n",
+			fi_strerror(-ret));
+#endif
+
+
+	*fabric_fid = &efa_fabric->util_fabric.fabric_fid;
 	(*fabric_fid)->fid.fclass = FI_CLASS_FABRIC;
 	(*fabric_fid)->fid.ops = &efa_fi_ops;
 	(*fabric_fid)->ops = &efa_ops_fabric;
 	(*fabric_fid)->api_version = attr->api_version;
 
 	return 0;
+
+err_close_util_fabric:
+	retv = ofi_fabric_close(&efa_fabric->util_fabric);
+	if (retv)
+		FI_WARN(&rxr_prov, FI_LOG_FABRIC,
+			"Unable to close fabric: %s\n",
+			fi_strerror(-retv));
+err_free_fabric:
+	free(efa_fabric);
+
+	return ret;
 }
 
 static void fi_efa_fini(void)
