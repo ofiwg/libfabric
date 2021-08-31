@@ -442,7 +442,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	struct efa_reverse_av *reverse_av_entry = NULL;
 	struct util_av_entry *util_av_entry = NULL;
 	struct efa_av_entry *efa_av_entry = NULL;
-	struct efa_conn *conn, *prev_conn;
+	struct efa_conn *conn;
 	fi_addr_t util_av_fi_addr;
 	struct efa_reverse_av_key key;
 	int err;
@@ -490,16 +490,13 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	memset(&key, 0, sizeof(key));
 	key.ahn = conn->ah->ahn;
 	key.qpn = raw_addr->qpn;
-	/*
-	 * reverse_av is used to search for fi_addr for a received
-	 * packet.
-	 * rdma-core reports AHN and QPN for each received packet, but
-	 * does not report CONNID.
-	 * For RDM endpoint, all packets have connid in their header.
-	 * Therefore, we can include CONNID in reverse AV for RDM endpoint.
-	 */
-	key.connid = (av->ep_type == FI_EP_RDM) ? raw_addr->qkey : EFA_CONNID_NOTAVAIL;
-
+	assert(av->ep_type == FI_EP_RDM || raw_addr->qkey == EFA_DGRAM_CONNID);
+	key.connid = raw_addr->qkey;
+#if ENABLE_DEBUG
+	reverse_av_entry = NULL;
+	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av_entry);
+	assert(!reverse_av_entry);
+#endif
 	reverse_av_entry = malloc(sizeof(*reverse_av_entry));
 	if (!reverse_av_entry) {
 		errno = FI_ENOMEM;
@@ -592,6 +589,9 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 	char raw_gid_str[INET6_ADDRSTRLEN];
 	fi_addr_t efa_fiaddr;
 	int ret = 0;
+
+	if (av->ep_type == FI_EP_DGRAM)
+		addr->qkey = EFA_DGRAM_CONNID;
 
 	fastlock_acquire(&av->util_av.lock);
 	memset(raw_gid_str, 0, sizeof(raw_gid_str));

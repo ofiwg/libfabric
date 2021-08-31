@@ -124,7 +124,6 @@ struct efa_fabric {
 #endif
 };
 
-#define EFA_CONNID_NOTAVAIL (-1)
 
 struct efa_ah {
 	uint8_t		gid[EFA_GID_LEN]; /* efa device GID */
@@ -355,6 +354,8 @@ struct efa_reverse_av_key {
 	uint16_t qpn;
 	uint32_t connid;
 };
+
+#define EFA_DGRAM_CONNID (0x0)
 
 struct efa_reverse_av {
 	struct efa_reverse_av_key key;

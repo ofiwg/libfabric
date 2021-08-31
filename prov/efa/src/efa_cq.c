@@ -174,7 +174,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			src_addr[i] = efa_av_reverse_lookup(av,
 							    wc.ibv_wc.slid,
 							    wc.ibv_wc.src_qp,
-							    EFA_CONNID_NOTAVAIL);
+							    EFA_DGRAM_CONNID);
 		}
 		cq->read_entry(&wc, i, buf);
 	}
