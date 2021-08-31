@@ -418,6 +418,9 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
 int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	       void *context);
+int efa_getinfo(uint32_t version, const char *node, const char *service,
+		uint64_t flags, const struct fi_info *hints, struct fi_info **info);
+void efa_finalize_prov(void);
 
 /* AV sub-functions */
 int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
@@ -434,7 +437,7 @@ fi_addr_t efa_ahn_qpn_to_addr(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 
 struct rdm_peer *efa_ahn_qpn_to_peer(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 
-struct fi_provider *init_lower_efa_prov();
+int efa_init_prov(void);
 
 ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr);
 
