@@ -226,6 +226,7 @@ int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
 int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr);
 int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *ptr,
 			   void **base);
+bool ofi_hmem_is_initialized(enum fi_hmem_iface iface);
 
 void ofi_hmem_init(void);
 void ofi_hmem_cleanup(void);

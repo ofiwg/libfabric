@@ -234,7 +234,7 @@ int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 	for (iface = FI_HMEM_SYSTEM; iface < OFI_HMEM_MAX; iface++) {
 		cache->monitors[iface] = NULL;
 
-		if (!hmem_ops[iface].initialized)
+		if (!ofi_hmem_is_initialized(iface))
 			continue;
 
 		monitor = monitors[iface];
