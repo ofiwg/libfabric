@@ -113,10 +113,11 @@ static int run_client(int client_id, bool address_reuse)
 	static size_t size = sizeof(name);
 	int ret;
 
-	tx_seq = 0;
-	rx_seq = 0;
-	tx_cq_cntr = 0;
-	rx_cq_cntr = 0;
+	ret = ft_init();
+	if (ret) {
+		FT_PRINTERR("ft_init", -ret);
+		return ret;
+	}
 
 	ret = ft_init_oob();
 	if (ret) {

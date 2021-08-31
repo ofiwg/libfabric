@@ -366,6 +366,7 @@ static inline int ft_use_size(int index, int enable_flags)
 		}							\
 	} while (0)
 
+int ft_init();
 int ft_alloc_bufs();
 int ft_open_fabric_res();
 int ft_getinfo(struct fi_info *hints, struct fi_info **info);
