@@ -41,7 +41,6 @@
 
 struct fi_info *shm_info;
 
-struct fi_provider *lower_efa_prov;
 struct efa_ep_addr *local_efa_addr;
 
 
@@ -573,17 +572,16 @@ int rxr_get_lower_rdm_info(uint32_t version, const char *node,
 	if (ret)
 		return ret;
 
-	ret = lower_efa_prov->getinfo(version, node, service, flags,
-				      core_hints, core_info);
+	ret = efa_getinfo(version, node, service, flags, core_hints, core_info);
 	fi_freeinfo(core_hints);
 	return ret;
 }
 
 /*
- * Call getinfo on lower efa provider to get all locally qualified fi_info
+ * Call efa_getinfo() to get all locally qualified fi_info
  * structure, then store the corresponding efa nic GIDs
  */
-int rxr_get_local_gids(struct fi_provider *lower_efa_prov)
+int rxr_get_local_gids(void)
 {
 	struct fi_info *core_info, *cur;
 	struct efa_ep_addr *cur_efa_addr;
@@ -592,7 +590,7 @@ int rxr_get_local_gids(struct fi_provider *lower_efa_prov)
 	cur_efa_addr = local_efa_addr = NULL;
 	core_info = cur = NULL;
 
-	ret = lower_efa_prov->getinfo(rxr_prov.fi_version, NULL, NULL, 0, NULL, &core_info);
+	ret = efa_getinfo(rxr_prov.fi_version, NULL, NULL, 0, NULL, &core_info);
 	if (ret)
 		return ret;
 
@@ -632,8 +630,7 @@ static int rxr_dgram_getinfo(uint32_t version, const char *node,
 
 	core_info = NULL;
 
-	ret = lower_efa_prov->getinfo(version, node, service,
-				      flags, hints, &core_info);
+	ret = efa_getinfo(version, node, service, flags, hints, &core_info);
 
 	if (ret)
 		return ret;
@@ -763,8 +760,7 @@ static void rxr_fini(void)
 {
 	struct efa_ep_addr *cur;
 
-	if (lower_efa_prov)
-		lower_efa_prov->cleanup();
+	efa_finalize_prov();
 
 	if (rxr_env.enable_shm_transfer) {
 		/* Cleanup all local efa nic GIDs */
@@ -871,11 +867,10 @@ EFA_INI
 	ofi_monitors_init();
 #endif
 
-	lower_efa_prov = init_lower_efa_prov();
-	if (!lower_efa_prov)
+	if (efa_init_prov())
 		return NULL;
 
-	if (rxr_env.enable_shm_transfer && rxr_get_local_gids(lower_efa_prov))
+	if (rxr_env.enable_shm_transfer && rxr_get_local_gids())
 		return NULL;
 
 	return &rxr_prov;

@@ -1041,7 +1041,7 @@ err_free_fabric:
 	return ret;
 }
 
-static void fi_efa_fini(void)
+void efa_finalize_prov(void)
 {
 	struct efa_context **ctx_list;
 	int num_devices;
@@ -1063,7 +1063,7 @@ struct fi_provider efa_prov = {
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = efa_getinfo,
 	.fabric = efa_fabric,
-	.cleanup = fi_efa_fini
+	.cleanup = efa_finalize_prov
 };
 
 struct util_prov efa_util_prov = {
@@ -1120,10 +1120,7 @@ static int efa_init_info(const struct fi_info **all_infos)
 	return retv;
 }
 
-struct fi_provider *init_lower_efa_prov()
+int efa_init_prov(void)
 {
-	if (efa_init_info(&efa_util_prov.info))
-		return NULL;
-
-	return &efa_prov;
+	return efa_init_info(&efa_util_prov.info);
 }

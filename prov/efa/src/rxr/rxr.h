@@ -201,7 +201,6 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 
 extern struct fi_info *shm_info;
 
-extern struct fi_provider *lower_efa_prov;
 extern struct fi_provider rxr_prov;
 extern struct fi_info rxr_info;
 extern struct rxr_env rxr_env;
