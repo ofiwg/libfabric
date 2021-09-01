@@ -60,6 +60,8 @@ Chapter 4 "extra features/requests" describes the extra features/requests define
 
  *  Section 4.3 describe the extra request: constant header length.
 
+ *  Section 4.4 describe the extra request: connid (connection ID) header.
+
 Chapter 5 "what's not covered?" describe the contents that are intentionally left out of
 this document because they are considered "implementation details".
 
@@ -202,6 +204,19 @@ In the table, `type` is the packet type ID.
 `flags` is a set of flags each packet type uses to customize its behavior. Typically, it is used
 to indicate the existence of optional header(s) in the packet header. Each packet type defines its own flags.
 
+Protocol v4 define the following universal flag, which every packet type should use:
+
+Table: 1.4 a list of universal flags
+
+| Bit ID | Value | Name | Description | Used by |
+|-|-|-|-|
+| 15     | 0x8000 | CONNID_HDR | This packet has "connid" in header | extra request "connid header" (section 4.4) |
+
+Note, the flag `CONNID_HDR` only indicate the presence of connid in the header. The exact location of connid
+would be different for each packet type.
+
+Other then the universal flags, each packet type defines its own flags.
+
 The format of each packet type is introduced in the sections where the sub-protocols are introduced.
 
 ### 1.4 raw address
@@ -294,6 +309,7 @@ Table: 2.1 a list of extra features/requests
 | 0  | RDMA read based data transfer    | extra feature | libfabric 1.10.0 | Section 4.1 |
 | 1  | delivery complete                | extra feature | libfabric 1.12.0 | Section 4.2 |
 | 2  | keep packet header length constant | extra request | libfabric 1.13.0 | Section 4.3 |
+| 3  | sender connection id in packet header  | extra request | libfabric 1.14.0 | Section 4.4 |
 
 How does protocol v4 maintain backward compatibility when extra features/requests are introduced?
 
@@ -355,6 +371,8 @@ Table: 2.2 binary format of the HANDSHAKE packet
 | `flags`   | 2 | integer | `uint16_t` |
 | `nextra_p3`  | 4 | integer | `uint32_t` |
 | `extra_info`  | `8 * (nextra_p3 - 3)` | integer array | `uint64_t[]` |
+| `connid`  | 4 | integer | sender connection ID, optional, present when the CONNID_HDR flag is on `flags` |
+| `padding` | 4 | integer | padding for `connid`, optional, present when the CONNID_HDR flag is on `flags` |
 
 The first 4 bytes (3 fields: `type`, `version`, `flags`) is the EFA RDM base header (section 1.3).
 
@@ -392,6 +410,15 @@ For example, if an endpoint support a feature defined in version 5, what version
 the base header? Given that the sole purpose of the field `maxproto` is to provide a way to calculate
 how many members the `extra_info` array has, the protocol would be much easier to understand if we re-interpret
 the field `maxproto` as `nextra_p3` and allow protocol v4 to have more than 64 extra feature/requests.
+
+After `extra_info`, there are two optional field `connid` and `padding`:
+
+`connid` is the sender's connection ID (4 bytes), `padding` is a 4 byte space to make the packet to align
+to 8 bytes boundary.
+
+These two fields were introduced with the extra request "connid in header". They are optional,
+therefore an implemenation is not required to set them. (section 4.4 for more details) If an implementation
+does set the connid, the implementation needs to toggle on the CONNID_HDR flag in `flags` (table 1.4).
 
 ### 2.2 handshake sub-protocol and raw address exchange
 
@@ -496,10 +523,13 @@ Table: 3.1 a list of REQ packet flags
 |  3     | 0x8    | REQ_TAGGED           | This REQ packet is used by tagged two-sided communication |
 |  4     | 0x10   | REQ_RMA              | This REQ packet is used by an emulated RMA (read or write) communication |
 |  5     | 0x20   | REQ_ATOMIC           | This REQ packet is used by an emulated atomic (write,fetch or compare) communication |
+| 15     | 0x8000 | CONNID_HDR           | This REQ packet has the optional connid header |
+
+Note, the CONNID_HDR flag is an universal flag (table 1.4), and is listed here for completeness.
 
 **REQ optional headers** contain additional information needed by the receiver of the REQ packets.
 As mentioned earlier, the existence of optional header in a REQ packet is indicated by bits in the `flags`
-field of the base header. There are currently 2 REQ optional headers defined:
+field of the base header. There are currently 3 REQ optional headers defined:
 
 1. the raw address header, which has the following format:
 
@@ -522,9 +552,12 @@ communicate with the endpoint.
 CQ data send/write API (such as `fi_senddata`, `fi_tsenddata` and `fi_writedata`), which will include an extra
 data in the RX completion entry written to application.
 
+3. the connid (connection ID) header, which is a 4 byte integer. It is used when peer has the "connid header"
+extra request, and the endpoint can support it. More information about this header in section 4.4.
+
 Note, it is possible to have multiple optional REQ headers in one REQ packets. In this case, the order they appear
 in the REQ packets must be the same as their bit appear in the `flags` field. e.g. the raw address header
-must precede the CQ data header.
+must precede the CQ data header, and the CQ data header must precede the connid header.
 
 **Application data** follows immediately after the optional header. Note that not all REQ packet types contain
 application data. For example, the RTR (Request To Read) packet type does not contain application data.
@@ -734,14 +767,26 @@ Table: 3.6 the binary format a CTS packet
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
-| `padding`        | 4 | integer | `uint32_t` | padding space to 8 bytes boundary |
+| `multiuse(connid/padding)`  | 4 | integer | `uint32_t` | `connid` if CONNID_HDR flag is set, otherwise `padding` |
 | `send_id`        | 4 | integer | `uint32_t` | send id from LONGCTS_RTM |
 | `recv_id`        | 4 | integer | `uint32_t` | receive id to be used in DATA packet |
 | `recv_length`    | 8 | integer | `uint64_t` | number of bytes the receiver is ready to receive |
 
-The 3 new fields in the header are `padding`, `recv_id` and `recv_length`.
+The 3 new fields in the header are `multiuse`, `recv_id` and `recv_length`.
 
-The field `padding` is 4 bytes padding space to align at 8 bytes boundary.
+The field `multiuse` is 4 byte integer. As the name indicates, it is a multi-purpose field.
+Its exact usage is determined by the the `flags` field.
+
+If the CONNID_HDR universal flag is toggled in `flags`, this field is the sender's connection ID (connid).
+Otherwise, it is a padding space.
+
+An implementation is free to choose how to use this field.
+
+Note, when protocol v4 was originally introduced. This field was simply a 4-bytes padding space.
+Later, when we introduce the "connid header" extra feature, we re-purposed this field to to store
+connid. Because "connid header" is an extra request, an endpoint is not obligated to comply.
+In practice, if an endpoint is using libfabric 1.10 to 1.13, it uses this field as padding.
+If an endpoint is using libfabric 1.14 and above, it uses this field to store `connid`.
 
 The field `recv_id` is similar to `send_id` introduced earlier, but for an on-going receive operation.
 Sender should include `recv_id` in the DATA packet.
@@ -768,6 +813,13 @@ Table: 3.7 the binary format of DATA packet header
 | `recv_id`        | 4 | integer | `uint32_t` | `recv_id` from the CTS packet |
 | `seg_length`     | 8 | integer | `uint32_t` | length of the application data in the packet |
 | `seg_offset`     | 8 | integer | `uint64_t` | offset of the application data in the packet |
+| `connid`         | 4 | integer | `uint32_t` | sender connection id, optional, |
+| `padding`        | 4 | integer | `uint32_t` | padding for connid, optional |
+
+The last two fields `connid` and `padding` was introduced with the extra request "connid in header".
+They are optional, which means an implemenation was not required to include them in the DATA of the
+data packet. If an implementation does include them in DATA packet header, the implementation need
+to toggle on the CONNID_DHR flag in `flags` field (table 1.4).
 
 When implementing the long-CTS protocol, please keep in mind that although each implementation is allowed
 to choose its own flow control algorithm. They must allow some data to be sent in each CTS packet, e.g
@@ -915,10 +967,15 @@ Table: 3.11 the format of a READRSP packet's header
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
-| `padding`        | 4 | integer | `uint32_t` | padding to 8 bytes boundary |
+| `multiuse(padding/connid)`         | 4 | integer | `uint32_t` | `connid` if CONNID_HDR flag is set, otherwise `padding` |
 | `send_id`        | 4 | integer | `uint64_t` | ID of the send operation, to be included in the CTS header |
 | `recv_id`        | 4 | integer | `uint32_t` | ID of the receive operation  |
 | `recv_length`    | 8 | integer | `uint64_t` | length of the application data in the packet |
+
+The field `multiuse` has been introduced before when introducing the CTS packet (table 3.6).
+It is a multi-purpose field, which can be used to store `connid` or as a padding
+space, depend on whether the CONNID_HDR universal flag is toggled in `flags`. See section 4.4
+for more information about the field `connid`.
 
 The workflow of the emulated long-CTS read sub-protocol is illustrated in the following diagram:
 
@@ -959,7 +1016,7 @@ The workflow of emulated write atomic is illustrated in the following diagram:
 
 ![atomic_write](atomic_write.png)
 
-It is similar to emulated eager write sub-protocol, expect an WRITE_RTA packet was
+It is similar to emulated eager write sub-protocol, except an WRITE_RTA packet was
 sent. Table 3.13 lists the binary structure of an WRITE_RTA packet's mandatory
 header:
 
@@ -1030,10 +1087,15 @@ Table: 3.15 the binary format of an ATOMRSP packet header.
 | `type`           | 1 | integer | `uint8_t`  | part of base header |
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
-| `padding`        | 4 | integer | `uint32_t` | padding space to 8 bytes boundary |
+| `multiuse(connid/padding)` | 4 | integer | `uint32_t` | `connid` if CONNID_HDR is set, otherwise `padding` |
 | `reserved`       | 4 | integer | `uint32_t` | reserved for future use |
 | `recv_id`        | 4 | integer | `uint32_t` | ID of the receive operation on the requester side |
 | `seg_length`     | 8 | integer | `uint64_t` | length of the application data in the packet |
+
+The field `multiuse` has been introduced before when introducing the CTS packet (table 3.6).
+It is a multi-purpose field, which can be used to store `connid` or as a padding
+space, depend on whether the CONNID_HDR universal flag is togged in `flags`. See section 4.4
+for more information about the field `connid`.
 
 ## 4. Extra features and requests
 
@@ -1118,6 +1180,12 @@ Table: 4.2 the format of an EOR packet
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
 | `send_id`        | 4 | integer | `uint32_t` | ID of the send operation |
 | `recv_id`        | 4 | integer | `uint32_t` | ID of the receive operation |
+| `multiuse(connid/padding)`  | 4 | integer | `uint32_t` | `connid` if CONNID_HDR is set, otherwise `padding` |
+
+The field `multiuse` has been introduced before when introducing the CTS packet (table 3.6).
+It is a multi-purpose field, which can be used to store `connid` or as a padding
+space, depend on whether the CONNID_HDR universal flag is togged in `flags`. See section 4.4
+for more information about the field `connid`.
 
 #### emulated long-read write sub-protocol
 
@@ -1219,7 +1287,12 @@ The binary format of a RECEIPT packet is as the following:
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
 | `send_id`        | 4 | integer | `uint32_t` | ID of the send operation |
 | `msg_id`         | 4 | integer | `uint32_t` | message ID |
-| `padding`        | 4 | integer | `uint32_t` | padding space to 8 bytes boundary |
+| `multiuse(connid/padding)`  | 4 | integer | `uint32_t` | `connid` if CONNID_HDR is set in `flags`, otherwise `padding` |
+
+The field `multiuse` has been introduced before when introducing the CTS packet (table 3.6).
+It is a multi-purpose field, which can be used to store `connid` or as a padding
+space, depend on whether the CONNID_HDR universal flag is togged in `flags`. See section 4.4
+for more information about the field `connid`.
 
 ### 4.3 keep packet header length constant (constant header length) and zero-copy receive
 
@@ -1280,6 +1353,44 @@ Note this extra request was initially introduced as an extra feature named "zero
 that is not an feature because the peer does not do anything different. Rather, it is an expectation the receiving
 endpoint has for the sender. Therefore, it was re-interpreted as an extra request named "constant header length".
 This re-interpretation does not change the implementation, thus does not cause backward incompatibility.
+
+### 4.4 have connection ID in packet header (connid header)
+
+The "have connection ID in packet header" extra request was introduced with libfabric 1.14.0 release, and was
+assigned the ID 3.
+
+This extra feature is designed to solve the "QP collision" problem, which is commonly experienced in
+client-server type of application.
+
+The "QP collision" problem arise from fact that the EFA device uses the Device ID (GID)
++ QP number (QPN) as the unique
+identifier of a peer. Recall that raw address of EFA endpoint is consisted of 3 parts:
+GID + QPN + Connection ID (CONNID). EFA device only recognizes GID and QPN.
+The connection ID was generated by the endpoint itself during its initialization.
+
+Because of that, it is possible for an endpoint to receive packets from a destroyed QP, which was used
+by a previous process that used the same QPN. As can be seen throughout the document, each packet in the
+EFA RDM communication protocol is not indepenedent. The correct processing of a packet need prior knowledge.
+
+For example, there is a `recv_id` in the header of a DATA packet (section 3.2), which assumes
+the receiver to maintain a list of receive operations and can find the operation correspond to
+the message using `recv_id`.
+
+To solve this problem, receiver need to know the full address of the sender. As shown in table
+1.5, EFA's full address consists of: GID, QPN and CONNID. Currently, EFA device will report
+Address Handle Number (AHN) and QPN of a received packet. Because GID can be obtained from AHN,
+the only unknown part is CONNID.
+
+The extra request "connid header" was introduced to address the issue. An endpoint can flag
+the bit correspond to 
+Also because this is an extra request, an endpoint cannot assume that the peer support it, thus need to be able
+to handle the case that incoming packets does not have sender connection ID in it. It is up to the
+implementation to decide whether in this case the endpoint should abort the communication or continue without
+using the extra request.
+
+A universal flag CONNID_HDR (table 1.4) was designated for CONNID in packet header. An implementation is not required to
+set connid. However, when it does include connid in packet header, it need to toggle on the CONNID_HDR flag in
+the `flags` field of the base header. The exact location of connid is different for each packet type.
 
 ## 5. What's not covered?
 
