@@ -46,10 +46,11 @@ static ze_context_handle_t context;
 static ze_device_handle_t devices[ZE_MAX_DEVICES];
 static ze_command_queue_handle_t cmd_queue[ZE_MAX_DEVICES];
 static int num_devices = 0;
+static int ordinals[ZE_MAX_DEVICES];
 static int dev_fds[ZE_MAX_DEVICES];
 static bool p2p_enabled = false;
 
-static const ze_command_queue_desc_t cq_desc = {
+static ze_command_queue_desc_t cq_desc = {
 	.stype		= ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
 	.pNext		= NULL,
 	.ordinal	= 0,
@@ -59,7 +60,7 @@ static const ze_command_queue_desc_t cq_desc = {
 	.priority	= ZE_COMMAND_QUEUE_PRIORITY_NORMAL,
 };
 
-static const ze_command_list_desc_t cl_desc = {
+static ze_command_list_desc_t cl_desc = {
 	.stype				= ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC,
 	.pNext				= NULL,
 	.commandQueueGroupOrdinal	= 0,
@@ -73,6 +74,9 @@ struct libze_ops {
 	ze_result_t (*zeDeviceGet)(ze_driver_handle_t hDriver,
 				   uint32_t *pCount,
 				   ze_device_handle_t *phDevices);
+	ze_result_t (*zeDeviceGetCommandQueueGroupProperties)(ze_device_handle_t hDevice,
+			uint32_t *pCount,
+			ze_command_queue_group_properties_t *pCommandQueueGroupProperties);
 	ze_result_t (*zeDeviceCanAccessPeer)(ze_device_handle_t hDevice,
 					     ze_device_handle_t hPeerDevice,
 					     ze_bool_t *value);
@@ -134,6 +138,7 @@ static struct libze_ops libze_ops = {
 	.zeInit = zeInit,
 	.zeDriverGet = zeDriverGet,
 	.zeDeviceGet = zeDeviceGet,
+	.zeDeviceGetCommandQueueGroupProperties = zeDeviceGetCommandQueueGroupProperties,
 	.zeDeviceCanAccessPeer = zeDeviceCanAccessPeer,
 	.zeContextCreate = zeContextCreate,
 	.zeContextDestroy = zeContextDestroy,
@@ -167,6 +172,14 @@ ze_result_t ofi_zeDeviceGet(ze_driver_handle_t hDriver, uint32_t *pCount,
 			    ze_device_handle_t *phDevices)
 {
 	return (*libze_ops.zeDeviceGet)(hDriver, pCount, phDevices);
+}
+
+ze_result_t ofi_zeDeviceGetCommandQueueGroupProperties(ze_device_handle_t hDevice,
+	       uint32_t *pCount,
+	       ze_command_queue_group_properties_t *pCommandQueueGroupProperties)
+{
+	return (*libze_ops.zeDeviceGetCommandQueueGroupProperties)(hDevice,
+					pCount, pCommandQueueGroupProperties);
 }
 
 ze_result_t ofi_zeDeviceCanAccessPeer(ze_device_handle_t hDevice,
@@ -428,6 +441,14 @@ static int ze_hmem_dl_init(void)
 		goto err_dlclose;
 	}
 
+	libze_ops.zeDeviceGetCommandQueueGroupProperties = dlsym(libze_handle,
+				"zeDeviceGetCommandQueueGroupProperties");
+	if (!libze_ops.zeDeviceGetCommandQueueGroupProperties) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find zeDeviceGetCommandQueueGroupProperties\n");
+		goto err_dlclose;
+	}
+
 	libze_ops.zeDeviceCanAccessPeer = dlsym(libze_handle, "zeDeviceCanAccessPeer");
 	if (!libze_ops.zeDeviceCanAccessPeer) {
 		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find zeDeviceCanAccessPeer\n");
@@ -544,6 +565,41 @@ static void ze_hmem_dl_cleanup(void)
 #endif
 }
 
+static int ze_hmem_find_copy_only_engine(int device_num, int *ordinal)
+{
+	ze_result_t ze_ret;
+	uint32_t cq_grp_count = 0;
+	ze_command_queue_group_properties_t *cq_grp_props;
+	int i;
+
+	ze_ret = ofi_zeDeviceGetCommandQueueGroupProperties(devices[device_num],
+							    &cq_grp_count, NULL);
+	if (ze_ret)
+		goto out;
+
+	cq_grp_props = calloc(cq_grp_count, sizeof(*cq_grp_props));
+
+	ze_ret = ofi_zeDeviceGetCommandQueueGroupProperties(devices[device_num],
+							    &cq_grp_count,
+							    cq_grp_props);
+	if (ze_ret)
+		goto out;
+
+	for (i = 0; i < cq_grp_count; i++) {
+		if (cq_grp_props[i].flags &
+		    ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY &&
+		    !(cq_grp_props[i].flags &
+		      ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE)) {
+			break;
+		}
+	}
+
+out:
+	free(cq_grp_props);
+	*ordinal = i == cq_grp_count ? 0 : i;
+	return ze_ret;
+}
+
 int ze_hmem_init(void)
 {
 	ze_driver_handle_t driver;
@@ -588,6 +644,12 @@ int ze_hmem_init(void)
 		goto err;
 
 	for (num_devices = 0; num_devices < count; num_devices++) {
+		ze_ret = ze_hmem_find_copy_only_engine(num_devices,
+						       &ordinals[num_devices]);
+		if (ze_ret)
+			goto err;
+
+		cq_desc.ordinal = ordinals[num_devices];
 		ze_ret = ofi_zeCommandQueueCreate(context,
 						  devices[num_devices],
 						  &cq_desc,
@@ -642,6 +704,7 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
 	ze_result_t ze_ret;
 	int dev_id = (int) device;
 
+	cl_desc.commandQueueGroupOrdinal = ordinals[dev_id];
 	ze_ret = ofi_zeCommandListCreate(context, devices[dev_id], &cl_desc,
 					 &cmd_list);
 	if (ze_ret)
