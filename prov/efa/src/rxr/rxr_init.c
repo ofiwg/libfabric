@@ -406,7 +406,12 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	else
 		min_pkt_size = core_info->ep_attr->max_msg_size;
 
-	info->tx_attr->inject_size = min_pkt_size - rxr_pkt_max_header_size();
+	if (min_pkt_size < rxr_pkt_max_header_size()) {
+		info->tx_attr->inject_size = 0;
+	} else {
+		info->tx_attr->inject_size = min_pkt_size - rxr_pkt_max_header_size();
+	}
+
 	rxr_info.tx_attr->inject_size = info->tx_attr->inject_size;
 
 	info->addr_format = core_info->addr_format;
