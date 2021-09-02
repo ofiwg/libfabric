@@ -393,7 +393,7 @@ the base header? Given that the sole purpose of the field `maxproto` is to provi
 how many members the `extra_info` array has, the protocol would be much easier to understand if we re-interpret
 the field `maxproto` as `nextra_p3` and allow protocol v4 to have more than 64 extra feature/requests.
 
-### 3.2 handshake sub-protocol and raw address exchange
+### 2.2 handshake sub-protocol and raw address exchange
 
 Another functionality of the handshake sub-protocol is to adjust behavior of including raw address in packet header.
 
