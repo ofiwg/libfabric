@@ -1056,6 +1056,7 @@ static void cxip_query_if_list(struct slist *if_list)
 
 	slist_init(if_list);
 
+	/* The cxi_dev_list is freed in the provider IF destructor */
 	ret = cxil_get_device_list(&cxi_dev_list);
 	if (ret) {
 		CXIP_WARN("cxil_get_device_list failed\n");
@@ -1064,13 +1065,11 @@ static void cxip_query_if_list(struct slist *if_list)
 
 	if (cxi_dev_list->count == 0) {
 		CXIP_DBG("No IFs found\n");
-		cxil_free_device_list(cxi_dev_list);
 		return;
 	}
 
 	if (cxi_dev_list->info[0].min_free_shift) {
 		CXIP_WARN("Non-zero min_free_shift not supported\n");
-		cxil_free_device_list(cxi_dev_list);
 		return;
 	}
 
@@ -1154,7 +1153,7 @@ void cxip_if_init(void)
 }
 
 /*
- * cxip_if_init() - The provider IF destructor.  Tears down IF data.
+ * cxip_if_fini() - The provider IF destructor.  Tears down IF data.
  */
 void cxip_if_fini(void)
 {
