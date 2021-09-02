@@ -243,7 +243,8 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 			fi_strerror(-ret));
 		ret = err;
 	}
-	if (rxr_env.enable_shm_transfer && efa_mr->shm_mr) {
+	if (efa_mr->shm_mr) {
+		assert(rxr_env.enable_shm_transfer);
 		err = fi_close(&efa_mr->shm_mr->fid);
 		if (err) {
 			EFA_WARN(FI_LOG_MR,
@@ -339,10 +340,11 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 			mr_attr->mr_iov->iov_len);
 		return ret;
 	}
-	if (efa_mr->domain->shm_domain && rxr_env.enable_shm_transfer) {
+	if (efa_mr->domain->shm_domain) {
 		/* We need to add FI_REMOTE_READ to allow for Read implemented
 		* message protocols.
 		*/
+		assert(rxr_env.enable_shm_transfer);
 		original_access = mr_attr->access;
 		mr_attr->access |= FI_REMOTE_READ;
 		ret = fi_mr_regattr(efa_mr->domain->shm_domain, attr,
