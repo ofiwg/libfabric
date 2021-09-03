@@ -402,6 +402,14 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	if (!msg)
 		return -FI_EINVAL;
 
+	/* Work around for silent drops at the target for non-fetching
+	 * FI_UNIT32 atomic operations when using FI_CXI_HRP. Force
+	 * switching out of HRP if necessary.
+	 */
+	if ((flags & FI_CXI_HRP) && req_type == CXIP_RQ_AMO &&
+	    msg->datatype == FI_UINT32)
+		flags &= ~FI_CXI_HRP;
+
 	/* Restricted AMOs must target optimized MRs without target events */
 	if (flags & FI_CXI_UNRELIABLE &&
 	    (!cxip_mr_key_opt(key) || txc->ep_obj->caps & FI_RMA_EVENT))
