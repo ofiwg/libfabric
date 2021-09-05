@@ -95,7 +95,6 @@ static void rxr_init_env(void)
 	fi_param_get_int(&rxr_prov, "use_zcpy_rx", &rxr_env.use_zcpy_rx);
 	fi_param_get_int(&rxr_prov, "zcpy_rx_seed", &rxr_env.zcpy_rx_seed);
 	fi_param_get_int(&rxr_prov, "shm_av_size", &rxr_env.shm_av_size);
-	fi_param_get_int(&rxr_prov, "shm_max_medium_size", &rxr_env.shm_max_medium_size);
 	fi_param_get_int(&rxr_prov, "recvwin_size", &rxr_env.recvwin_size);
 	fi_param_get_int(&rxr_prov, "readcopy_pool_size", &rxr_env.readcopy_pool_size);
 	fi_param_get_int(&rxr_prov, "cq_size", &rxr_env.cq_size);
@@ -814,8 +813,6 @@ EFA_INI
 			"Defines the number of bounce-buffers the provider will prepost during EP initialization.  (Default: 0)");
 	fi_param_define(&rxr_prov, "shm_av_size", FI_PARAM_INT,
 			"Defines the maximum number of entries in SHM provider's address vector (Default 128).");
-	fi_param_define(&rxr_prov, "shm_max_medium_size", FI_PARAM_INT,
-			"Defines the switch point between small/medium message and large message. The message larger than this switch point will be transferred with large message protocol (Default 4096).");
 	fi_param_define(&rxr_prov, "recvwin_size", FI_PARAM_INT,
 			"Defines the size of sliding receive window. (Default: 16384)");
 	fi_param_define(&rxr_prov, "readcopy_pool_size", FI_PARAM_INT,
