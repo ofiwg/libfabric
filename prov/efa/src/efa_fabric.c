@@ -746,7 +746,7 @@ static int efa_alloc_info(struct efa_context *ctx, struct fi_info **info,
 	fi->domain_attr->name = malloc(name_len + 1);
 	if (!fi->domain_attr->name) {
 		ret = -FI_ENOMEM;
-		goto err_free_fab_name;
+		goto err_free_info;
 	}
 
 	snprintf(fi->domain_attr->name, name_len + 1, "%s%s",
@@ -757,24 +757,18 @@ static int efa_alloc_info(struct efa_context *ctx, struct fi_info **info,
 	fi->src_addr = calloc(1, EFA_EP_ADDR_LEN);
 	if (!fi->src_addr) {
 		ret = -FI_ENOMEM;
-		goto err_free_dom_name;
+		goto err_free_info;
 	}
 	fi->src_addrlen = EFA_EP_ADDR_LEN;
 	ret = efa_get_addr(ctx, fi->src_addr);
 	if (ret)
-		goto err_free_src;
+		goto err_free_info;
 
 	fi->domain_attr->av_type = FI_AV_TABLE;
 
 	*info = fi;
 	return 0;
 
-err_free_src:
-	free(fi->src_addr);
-err_free_dom_name:
-	free(fi->domain_attr->name);
-err_free_fab_name:
-	free(fi->fabric_attr->name);
 err_free_info:
 	fi_freeinfo(fi);
 	return ret;
