@@ -381,7 +381,7 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 	if (!peer->pid) {
 		FI_WARN(prov, FI_LOG_AV, "peer not initialized\n");
 		munmap(peer, sizeof(*peer));
-		ret = -FI_EAGAIN;
+		ret = -FI_ENOENT;
 		goto out;
 	}
 
