@@ -1369,6 +1369,11 @@ static int pp_alloc_active_res(struct ct_pingpong *ct, struct fi_info *fi)
 {
 	int ret;
 
+	if (fi->tx_attr->mode & FI_MSG_PREFIX)
+		ct->tx_prefix_size = fi->ep_attr->msg_prefix_size;
+	if (fi->rx_attr->mode & FI_MSG_PREFIX)
+		ct->rx_prefix_size = fi->ep_attr->msg_prefix_size;
+
 	ret = pp_alloc_msgs(ct);
 	if (ret)
 		return ret;
@@ -1403,11 +1408,6 @@ static int pp_alloc_active_res(struct ct_pingpong *ct, struct fi_info *fi)
 			return ret;
 		}
 	}
-
-	if (fi->tx_attr->mode & FI_MSG_PREFIX)
-		ct->tx_prefix_size = fi->ep_attr->msg_prefix_size;
-	if (fi->rx_attr->mode & FI_MSG_PREFIX)
-		ct->rx_prefix_size = fi->ep_attr->msg_prefix_size;
 
 	ret = fi_endpoint(ct->domain, fi, &(ct->ep), NULL);
 	if (ret) {
