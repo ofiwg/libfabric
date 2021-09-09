@@ -24,6 +24,33 @@ Test(domain, simple)
 	cxit_destroy_domain();
 }
 
+/* Test use of topology ops */
+Test(domain, topology)
+{
+	unsigned int group_num, switch_num, port_num;
+	int ret;
+
+	cxit_create_domain();
+	cr_assert(cxit_domain != NULL);
+	ret = dom_ops->topology(&cxit_domain->fid, &group_num, &switch_num,
+				&port_num);
+	cr_assert_eq(ret, FI_SUCCESS, "topology failed: %d\n", ret);
+
+	ret = dom_ops->topology(&cxit_domain->fid, NULL, &switch_num,
+				&port_num);
+	cr_assert_eq(ret, FI_SUCCESS, "null group topology failed: %d\n", ret);
+
+	ret = dom_ops->topology(&cxit_domain->fid, &group_num, NULL,
+				&port_num);
+	cr_assert_eq(ret, FI_SUCCESS, "null switch topology failed: %d\n", ret);
+
+	ret = dom_ops->topology(&cxit_domain->fid, &group_num, &switch_num,
+				NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "null port topology failed: %d\n", ret);
+
+	cxit_destroy_domain();
+}
+
 TestSuite(domain_cntrs, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
@@ -40,4 +67,3 @@ Test(domain_cntrs, cntr_read)
 
 	printf("LPE_SUCCESS_CNTR: %lu\n", value);
 }
-
