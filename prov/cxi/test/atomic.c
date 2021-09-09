@@ -2604,3 +2604,114 @@ Test(atomic, std_mr_inject)
 
 	_cxit_destroy_mr(&mr);
 }
+
+/* Test NETCASSINI-2794 32bit non-fetch AMO with HRP work-around */
+Test(amo_opt, netcassini_2794)
+{
+	struct mem_region mr;
+	struct fi_cq_tagged_entry cqe;
+	union {
+		uint32_t	_32bit;
+		uint64_t	_64bit;
+	} operand, exp_remote, *rma;
+	int ret;
+	uint64_t key = 0xa;
+	struct fi_msg_atomic msg = {};
+	struct fi_ioc ioc;
+	struct fi_rma_ioc rma_ioc;
+	struct cxip_ep *cxi_ep;
+
+	/* HRP not supported in netsim */
+	cxi_ep = container_of(cxit_ep, struct cxip_ep, ep);
+	if (is_netsim(cxi_ep->ep_obj))
+		return;
+
+	ioc.addr = &operand;
+	ioc.count = 1;
+
+	rma_ioc.addr = 0;
+	rma_ioc.count = 1;
+	rma_ioc.key = key;
+
+	msg.msg_iov = &ioc;
+	msg.iov_count = 1;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.datatype = FI_UINT64;
+	msg.op = FI_SUM;
+
+	rma = _cxit_create_mr(&mr, key);
+
+	/* Use 64-bit to make sure we are using a HRP communication profile */
+	exp_remote._64bit = 0;
+	cr_assert_eq(rma->_64bit, exp_remote._64bit,
+		     "Result = %" PRId64 ", expected = %" PRId64,
+		     rma->_64bit, exp_remote._64bit);
+
+	operand._64bit = 1UL;
+	exp_remote._64bit += operand._64bit;
+
+	ret = fi_atomicmsg(cxit_ep, &msg, FI_CXI_UNRELIABLE | FI_CXI_HRP);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+
+	/* wait a second to check the operation was performed. The HRP response
+	 * returns before the request hits the NIC. Validate data and that
+	 * CQ configured for HRP.
+	 */
+	usleep(1000);
+	cr_assert_eq(rma->_64bit, exp_remote._64bit,
+		     "Result = %" PRId64 ", expected = %" PRId64,
+		     rma->_64bit, exp_remote._64bit);
+
+	/* Validate work around to keep from silently dropping 32-bit
+	 * unsigned non-fetching atomic operations. The work around
+	 * forces switching out on HRP communications profile.
+	 */
+	rma->_32bit = 0;
+	exp_remote._32bit = 0;
+	msg.datatype = FI_UINT32;
+
+	operand._32bit = 1;
+	exp_remote._32bit += operand._32bit;
+
+	ret = fi_atomicmsg(cxit_ep, &msg, FI_CXI_UNRELIABLE | FI_CXI_HRP);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+
+	/* wait a second to check the operation was performed, and validate
+	 * data.
+	 */
+	usleep(1000);
+	cr_assert_eq(rma->_32bit, exp_remote._32bit,
+		     "Result = %d, expected = %d",
+		     rma->_32bit, exp_remote._32bit);
+
+	/* Perform successive 32-bit unsigned non-fetching atomic, no
+	 * communication profile change would be required.
+	 */
+	exp_remote._32bit += operand._32bit;
+	ret = fi_atomicmsg(cxit_ep, &msg, 0);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_WRITE, NULL);
+
+	/* wait a second to check the operation was performed, and
+	 * validate data.
+	 */
+	usleep(1000);
+	cr_assert_eq(rma->_32bit, exp_remote._32bit,
+		     "Result = %d, expected = %d",
+		     rma->_32bit, exp_remote._32bit);
+
+	_cxit_destroy_mr(&mr);
+}
