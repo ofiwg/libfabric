@@ -544,6 +544,33 @@ struct cxip_domain {
 	struct fi_hmem_override_ops hmem_ops;
 };
 
+/* This structure implies knowledge about the breakdown of the NIC address,
+ * which is taken from the AMA, that the provider does not know in a flexible
+ * way. However, the domain fi_open_ops() API includes a topology function
+ * that requires knowledge of the address breakdown into topology components.
+ * TODO: Research a less restricted way to get this information.
+ */
+#define CXIP_ADDR_PORT_BITS 6
+#define CXIP_ADDR_SWITCH_BITS 5
+#define CXIP_ADDR_GROUP_BITS 9
+#define CXIP_ADDR_FATTREE_PORT_BITS 6
+#define CXIP_ADDR_FATTREE_SWITCH_BITS 14
+
+struct cxip_topo_addr {
+	union {
+		uint32_t addr;
+		struct {
+			uint32_t port_num:CXIP_ADDR_PORT_BITS;
+			uint32_t switch_num:CXIP_ADDR_SWITCH_BITS;
+			uint32_t group_num:CXIP_ADDR_GROUP_BITS;
+		} dragonfly;
+		struct {
+			uint32_t port_num:CXIP_ADDR_FATTREE_PORT_BITS;
+			uint32_t switch_num:CXIP_ADDR_FATTREE_SWITCH_BITS;
+		} fat_tree;
+	};
+};
+
 static inline ssize_t
 cxip_copy_to_hmem_iov(struct cxip_domain *domain, enum fi_hmem_iface hmem_iface,
 		      uint64_t device, const struct iovec *hmem_iov,

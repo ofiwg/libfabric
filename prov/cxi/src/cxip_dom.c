@@ -697,14 +697,43 @@ static int cxip_domain_cntr_read(struct fid *fid, unsigned int cntr,
 	return ret ? -FI_EINVAL : FI_SUCCESS;
 }
 
+static int cxip_domain_topology(struct fid *fid, unsigned int *group_id,
+				unsigned int *switch_id, unsigned int *port_id)
+{
+	struct cxip_domain *dom;
+	struct cxip_topo_addr topo;
+
+	if (fid->fclass != FI_CLASS_DOMAIN) {
+		CXIP_WARN("Invalid FID: %p\n", fid);
+		return -FI_EINVAL;
+	}
+
+	dom = container_of(fid, struct cxip_domain,
+			   util_domain.domain_fid.fid);
+	topo.addr = dom->nic_addr;
+
+	/* Only a dragonfly topology is supported at this time */
+	if (group_id)
+		*group_id = topo.dragonfly.group_num;
+	if (switch_id)
+		*switch_id = topo.dragonfly.switch_num;
+	if (port_id)
+		*port_id = topo.dragonfly.port_num;
+
+	return FI_SUCCESS;
+}
+
 static struct fi_cxi_dom_ops cxip_dom_ops_ext = {
 	.cntr_read = cxip_domain_cntr_read,
+	.topology = cxip_domain_topology,
 };
 
 static int cxip_dom_ops_open(struct fid *fid, const char *ops_name,
 			     uint64_t flags, void **ops, void *context)
 {
-	if (!strcmp(ops_name, FI_CXI_DOM_OPS_1)) {
+	/* v2 only appended a new function */
+	if (!strcmp(ops_name, FI_CXI_DOM_OPS_1) ||
+	    !strcmp(ops_name, FI_CXI_DOM_OPS_2)) {
 		*ops = &cxip_dom_ops_ext;
 		return FI_SUCCESS;
 	}

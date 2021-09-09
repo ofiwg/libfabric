@@ -138,10 +138,14 @@ static inline void *fi_cxi_get_cntr_reseterr_addr(void *cntr_mmio)
 }
 
 #define FI_CXI_DOM_OPS_1 "dom_ops_v1"
+#define FI_CXI_DOM_OPS_2 "dom_ops_v2"
 
+/* v1 and v2 can use the same struct since v2 only appended a routine */
 struct fi_cxi_dom_ops {
 	int (*cntr_read)(struct fid *fid, unsigned int cntr, uint64_t *value,
 		      struct timespec *ts);
+	int (*topology)(struct fid *fid, unsigned int *group_id,
+			unsigned int *switch_id, unsigned int *port_id);
 };
 
 /*

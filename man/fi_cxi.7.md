@@ -620,7 +620,7 @@ example of usage below:
 ```c
 struct fi_cxi_dom_ops *dom_ops;
 
-ret = fi_open_ops(&domain->fid, FI_CXI_DOM_OPS_1, 0, (void **)&dom_ops, NULL);
+ret = fi_open_ops(&domain->fid, FI_CXI_DOM_OPS_2, 0, (void **)&dom_ops, NULL);
 ```
 
 The following domain extensions are defined:
@@ -629,6 +629,8 @@ The following domain extensions are defined:
 struct fi_cxi_dom_ops {
 	int (*cntr_read)(struct fid *fid, unsigned int cntr, uint64_t *value,
 		      struct timespec *ts);
+	int (*topology)(struct fid *fid, unsigned int *group_id,
+	              unsigned int *switch_id, unsigned int *port_id);
 };
 ```
 
@@ -636,6 +638,9 @@ The cntr_read extension is used to read hardware counter values. Valid values
 of the cntr argument are found in the Cassini-specific header file
 cassini_cntr_defs.h. Note that Counter accesses by applications may be
 rate-limited to 1HZ.
+
+The topology extension is used to return CXI NIC address topology information
+for the domain. Currently only a dragonfly fabric topology is reported.
 
 ## CXI Counter Extensions
 
