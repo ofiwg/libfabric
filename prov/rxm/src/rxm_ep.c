@@ -2747,12 +2747,6 @@ static int rxm_open_core_res(struct rxm_ep *ep)
 	if (ret)
 		goto err2;
 
-	/* Zero out the port as we will create multiple MSG EPs for a
-	 * single RXM EP, and we don't want address conflicts.
-	 */
-	if (ep->msg_info->src_addr)
-		ofi_addr_set_port(ep->msg_info->src_addr, 0);
-
 	return 0;
 err2:
 	if (ep->srx_ctx) {
