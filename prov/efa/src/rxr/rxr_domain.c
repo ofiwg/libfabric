@@ -190,10 +190,9 @@ int rxr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 				  	util_domain.domain_fid);
 
 	/* Open shm provider's access domain */
-	if (rxr_env.enable_shm_transfer) {
-		efa_fabric = container_of(fabric, struct efa_fabric,
-					util_fabric.fabric_fid);
-
+	efa_fabric = container_of(fabric, struct efa_fabric,
+							  util_fabric.fabric_fid);
+	if (efa_fabric->shm_fabric) {
 		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
 		ret = fi_domain(efa_fabric->shm_fabric, shm_info,
 				&efa_domain->shm_domain, context);
@@ -229,7 +228,7 @@ int rxr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	return 0;
 
 err_close_shm_domain:
-	if (rxr_env.enable_shm_transfer) {
+	if (efa_domain->shm_domain) {
 		retv = fi_close(&efa_domain->shm_domain->fid);
 		if (retv)
 			FI_WARN(&rxr_prov, FI_LOG_DOMAIN,

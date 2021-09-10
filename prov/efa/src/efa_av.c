@@ -840,8 +840,8 @@ static int efa_av_close(struct fid *fid)
 	}
 
 	if (av->ep_type == FI_EP_RDM) {
-		if (rxr_env.enable_shm_transfer && av->shm_rdm_av &&
-		    &av->shm_rdm_av->fid) {
+		if (av->shm_rdm_av) {
+			assert(rxr_env.enable_shm_transfer);
 			ret = fi_close(&av->shm_rdm_av->fid);
 			if (ret) {
 				err = ret;
@@ -939,7 +939,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		av->ep_type = FI_EP_RDM;
 
 		av_attr = *attr;
-		if (rxr_env.enable_shm_transfer) {
+		if (efa_domain->fab && efa_domain->fab->shm_fabric) {
 			/*
 			 * shm av supports maximum 256 entries
 			 * Reset the count to 128 to reduce memory footprint and satisfy

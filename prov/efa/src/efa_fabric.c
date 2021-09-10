@@ -932,7 +932,7 @@ static int efa_fabric_close(fid_t fid)
 		return ret;
 	}
 
-	if (rxr_env.enable_shm_transfer) {
+	if (efa_fabric->shm_fabric) {
 		ret = fi_close(&efa_fabric->shm_fabric->fid);
 		if (ret) {
 			FI_WARN(&rxr_prov, FI_LOG_FABRIC,
@@ -1000,6 +1000,8 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 				    &efa_fabric->shm_fabric, context);
 		if (ret)
 			goto err_close_util_fabric;
+	} else {
+		efa_fabric->shm_fabric = NULL;
 	}
 
 
