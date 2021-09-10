@@ -731,6 +731,17 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 			goto err3;
 
 		tcpx_set_zerocopy(ep->bsock.sock);
+
+		if (info->src_addr && (!ofi_is_any_addr(info->src_addr) ||
+					ofi_addr_get_port(info->src_addr))) {
+			ret = bind(ep->bsock.sock, info->src_addr,
+				(socklen_t) info->src_addrlen);
+			if (ret) {
+				FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "bind failed\n");
+				ret = -ofi_sockerr();
+				goto err3;
+			}
+		}
 	}
 
 	ret = fastlock_init(&ep->lock);
