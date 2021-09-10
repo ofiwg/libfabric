@@ -29,7 +29,7 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 		if (!dom->odp)
 			map_flags |= CXI_MAP_PIN;
 	} else {
-		map_flags |= CXI_MAP_DEVICE | CXI_MAP_PIN;
+		map_flags |= CXI_MAP_DEVICE;
 	}
 
 	ret = cxil_map(dom->lni->lni, entry->info.iov.iov_base,

@@ -377,7 +377,7 @@ static int cxip_ep_ctrl_eq_alloc(struct cxip_ep_obj *ep_obj, size_t len,
 	}
 
 	ret = cxil_map(ep_obj->domain->lni->lni, *eq_buf, len,
-		       CXI_MAP_PIN | CXI_MAP_WRITE, NULL, eq_md);
+		       CXIP_EQ_MAP_FLAGS, NULL, eq_md);
 	if (ret)
 		goto err_free_eq_buf;
 

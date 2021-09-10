@@ -652,8 +652,7 @@ mmap_success:
 		eq->md = cq->domain->scalable_md.md;
 	} else {
 		ret = cxil_map(cq->domain->lni->lni, eq->buf, eq->len,
-			       CXI_MAP_PIN | CXI_MAP_WRITE | CXI_MAP_IOVA_ALLOC,
-			       NULL, &eq->md);
+			       CXIP_EQ_MAP_FLAGS, NULL, &eq->md);
 		if (ret) {
 			CXIP_WARN("Unable to map EQ buffer: %d\n", ret);
 			goto err_free_eq_buf;

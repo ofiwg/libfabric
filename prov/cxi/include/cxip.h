@@ -606,6 +606,9 @@ struct cxip_eq {
 	struct fi_eq_attr attr;
 };
 
+#define CXIP_EQ_MAP_FLAGS \
+	(CXI_MAP_WRITE | CXI_MAP_PIN | CXI_MAP_IOVA_ALLOC)
+
 /*
  * RMA request
  *
