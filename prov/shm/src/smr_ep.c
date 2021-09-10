@@ -386,7 +386,7 @@ int smr_format_ze_ipc(struct smr_ep *ep, int64_t id, struct smr_cmd *cmd,
 	if (ep->sock_info->peers[id].state != SMR_CMAP_SUCCESS)
 		return -FI_EAGAIN;
 
-	ret = ze_hmem_get_base_addr(iov[0].iov_base, &base);
+	ret = ze_hmem_get_base_addr(iov[0].iov_base, &base, NULL);
 	if (ret)
 		return ret;
 

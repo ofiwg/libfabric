@@ -104,7 +104,7 @@ struct ofi_hmem_ops {
 	int (*close_handle)(void *ipc_ptr);
 	int (*host_register)(void *ptr, size_t size);
 	int (*host_unregister)(void *ptr);
-	int (*get_base_addr)(const void *ptr, void **base);
+	int (*get_base_addr)(const void *ptr, void **base, size_t *size);
 	bool (*is_ipc_enabled)(void);
 };
 
@@ -156,7 +156,7 @@ int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
 			       uint64_t device, void **ipc_ptr);
 int ze_hmem_close_handle(void *ipc_ptr);
 bool ze_hmem_p2p_enabled(void);
-int ze_hmem_get_base_addr(const void *ptr, void **base);
+int ze_hmem_get_base_addr(const void *ptr, void **base, size_t *size);
 int ze_hmem_get_id(const void *ptr, uint64_t *id);
 int *ze_hmem_get_dev_fds(int *nfds);
 
@@ -202,7 +202,7 @@ static inline int ofi_hmem_host_unregister_noop(void *ptr)
 	return FI_SUCCESS;
 }
 
-static inline int ofi_hmem_no_base_addr(const void *ptr, void **base)
+static inline int ofi_hmem_no_base_addr(const void *ptr, void **base, size_t *size)
 {
 	return -FI_ENOSYS;
 }
@@ -232,7 +232,7 @@ int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
 			 uint64_t device, void **ipc_ptr);
 int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr);
 int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *ptr,
-			   void **base);
+			   void **base, size_t *size);
 bool ofi_hmem_is_initialized(enum fi_hmem_iface iface);
 
 void ofi_hmem_init(void);

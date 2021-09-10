@@ -198,9 +198,9 @@ int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr)
 }
 
 int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *ptr,
-			   void **base)
+			   void **base, size_t *size)
 {
-	return hmem_ops[iface].get_base_addr(ptr, base);
+	return hmem_ops[iface].get_base_addr(ptr, base, size);
 }
 
 bool ofi_hmem_is_initialized(enum fi_hmem_iface iface)
