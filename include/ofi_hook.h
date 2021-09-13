@@ -232,6 +232,7 @@ struct hook_cq {
 	struct fid_cq *hcq;
 	struct hook_domain *domain;
 	void *context;
+	enum fi_cq_format format;
 };
 
 int hook_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
