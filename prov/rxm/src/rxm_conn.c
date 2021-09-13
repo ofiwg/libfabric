@@ -830,6 +830,23 @@ int rxm_start_listen(struct rxm_ep *ep)
 		return ret;
 	}
 
+	/* Update src_addr that will be used for active endpoints.
+	 * Zero out the port to avoid address conflicts, as we will
+	 * create multiple msg ep's for a single rdm ep.
+	 */
+	if (ep->msg_info->src_addr) {
+		free(ep->msg_info->src_addr);
+		ep->msg_info->src_addr = NULL;
+		ep->msg_info->src_addrlen = 0;
+	}
+
+	ep->msg_info->src_addr = mem_dup(&ep->addr, addr_len);
+	if (!ep->msg_info->src_addr)
+		return -FI_ENOMEM;
+
+	ep->msg_info->src_addrlen = addr_len;
+	ofi_addr_set_port(ep->msg_info->src_addr, 0);
+
 	if (ep->util_ep.domain->data_progress == FI_PROGRESS_AUTO ||
 	    force_auto_progress) {
 
