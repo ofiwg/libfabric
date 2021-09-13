@@ -47,49 +47,38 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
 	struct rxr_base_hdr *base_hdr;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+
 	if (base_hdr->type >= RXR_REQ_PKT_BEGIN)
 		return rxr_pkt_req_connid_ptr(pkt_entry);
 
-	if (base_hdr->type == RXR_CTS_PKT) {
-		return (base_hdr->flags & RXR_PKT_CONNID_HDR)
-			? &(rxr_get_cts_hdr(pkt_entry->pkt)->connid)
-			: NULL;
-	}
+	if (!(base_hdr->flags & RXR_PKT_CONNID_HDR))
+		return NULL;
 
-	if (base_hdr->type == RXR_RECEIPT_PKT) {
-		return (base_hdr->flags & RXR_PKT_CONNID_HDR)
-			? &rxr_get_receipt_hdr(pkt_entry->pkt)->connid
-			: NULL;
-	}
+	switch (base_hdr->type) {
+	case RXR_CTS_PKT:
+		return &(rxr_get_cts_hdr(pkt_entry->pkt)->connid);
 
-	if (base_hdr->type == RXR_DATA_PKT) {
-		return (base_hdr->flags & RXR_PKT_CONNID_HDR)
-			? &(rxr_get_data_hdr(pkt_entry->pkt)->connid_hdr->connid)
-			: NULL;
-	}
+	case RXR_RECEIPT_PKT:
+		return &(rxr_get_receipt_hdr(pkt_entry->pkt)->connid);
 
-	if (base_hdr->type == RXR_READRSP_PKT) {
-		return (base_hdr->flags & RXR_PKT_CONNID_HDR)
-			? &(rxr_get_readrsp_hdr(pkt_entry->pkt)->connid)
-			: NULL;
-	}
+	case RXR_DATA_PKT:
+		return &(rxr_get_data_hdr(pkt_entry->pkt)->connid_hdr->connid);
 
-	if (base_hdr->type == RXR_ATOMRSP_PKT) {
-		return (base_hdr->flags & RXR_PKT_CONNID_HDR)
-			? &(rxr_get_atomrsp_hdr(pkt_entry->pkt)->connid)
-			: NULL;
-	}
+	case RXR_READRSP_PKT:
+		return &(rxr_get_readrsp_hdr(pkt_entry->pkt)->connid);
 
-	if (base_hdr->type == RXR_EOR_PKT) {
-		return (base_hdr->flags & RXR_PKT_CONNID_HDR)
-			? &rxr_get_eor_hdr(pkt_entry->pkt)->connid
-			: NULL;
-	}
+	case RXR_ATOMRSP_PKT:
+		return &(rxr_get_atomrsp_hdr(pkt_entry->pkt)->connid);
 
-	if (base_hdr->type == RXR_HANDSHAKE_PKT) {
-		return (base_hdr->flags & RXR_PKT_CONNID_HDR)
-			? &(rxr_get_handshake_opt_connid_hdr(pkt_entry->pkt)->connid)
-			: NULL;
+	case RXR_EOR_PKT:
+		return &rxr_get_eor_hdr(pkt_entry->pkt)->connid;
+
+	case RXR_HANDSHAKE_PKT:
+		return &(rxr_get_handshake_opt_connid_hdr(pkt_entry->pkt)->connid);
+
+	default:
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "unknown packet type: %d\n", base_hdr->type);
+		assert(0 && "Unknown packet type");
 	}
 
 	return NULL;
