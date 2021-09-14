@@ -199,6 +199,32 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr)
 }
 
 /**
+ * @brief find connid by address handle number (ahn) and QP number (qpn)
+ *
+ * This function is used when a received packet does not not connid
+ * in its header (which means the packet is from a peer that is using
+ * an older version of libfabric that does not support the "connid
+ * header" extra request)
+ *
+ * @param[in]	av	address vector
+ * @param[in]	ahn	address handle number
+ * @param[in]	qpn	QP number
+ * @return	On success, return the pointer to connid
+ * 		If no such connid exist, return NULL
+ */
+uint32_t *efa_av_lookup_latest_connid(struct efa_av *av, uint16_t ahn, uint16_t qpn)
+{
+	struct efa_connid_map *connid_map_entry;
+	struct efa_connid_map_key key;
+
+	memset(&key, 0, sizeof(key));
+	key.ahn = ahn;
+	key.qpn = qpn;
+	HASH_FIND(hh, av->connid_map, &key, sizeof(key), connid_map_entry);
+
+	return OFI_LIKELY(!!connid_map_entry) ? &(connid_map_entry->connid) : NULL;
+}
+/**
  * @brief find fi_addr by address handle number (ahn), QP number (qpn) and connid
  *
  * @param[in]	av	address vector
@@ -424,6 +450,88 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 	efa_rdm_peer_clear(ep, peer);
 }
 
+/*
+ * @brief update av->connid_map when inserting an new address to AV
+ *
+ * @param[in,out]	av		efa AV
+ * @param[in]		raw_addr	raw address
+ * @param[in]		conn		efa_conn object
+ * @return		On success, return 0.
+ * 			Otherwise, return a negative libfabric error code
+ */
+static
+int efa_av_update_connid_map(struct efa_av *av, struct efa_ep_addr *raw_addr,
+			      struct efa_conn *conn)
+{
+	struct efa_connid_map *connid_map_entry = NULL;
+	struct efa_connid_map_key connid_map_key;
+
+	assert(av->ep_type == FI_EP_RDM);
+
+	memset(&connid_map_key, 0, sizeof(connid_map_key));
+	connid_map_key.ahn = conn->ah->ahn;
+	connid_map_key.qpn = raw_addr->qpn;
+
+	connid_map_entry = NULL;
+	HASH_FIND(hh, av->connid_map, &connid_map_key, sizeof(connid_map_key), connid_map_entry);
+	if (connid_map_entry) {
+		connid_map_entry->connid = raw_addr->qkey;
+		return 0;
+	}
+
+	connid_map_entry = malloc(sizeof(*connid_map_entry));
+	if (!connid_map_entry) {
+		FI_WARN(&rxr_prov, FI_LOG_AV, "Cannot allocate memory for connid_map entry");
+		return -FI_ENOMEM;
+	}
+
+	memcpy(&connid_map_entry->key, &connid_map_key, sizeof(connid_map_key));
+	connid_map_entry->connid = raw_addr->qkey;
+	HASH_ADD(hh, av->connid_map, key,
+		 sizeof(connid_map_entry->key),
+		 connid_map_entry);
+	return 0;
+}
+
+/*
+ * @brief update av->reverse when inserting an new address to AV
+ *
+ * @param[in,out]	av		efa AV
+ * @param[in]		raw_addr	raw address
+ * @param[in]		conn		efa_conn object
+ * @return		On success, return 0.
+ * 			Otherwise, return a negative libfabric error code
+ */
+static
+int efa_av_update_reverse_av(struct efa_av *av, struct efa_ep_addr *raw_addr,
+			     struct efa_conn *conn)
+{
+	struct efa_reverse_av *reverse_av_entry = NULL;
+	struct efa_reverse_av_key reverse_av_key;
+
+	assert(av->ep_type == FI_EP_RDM || raw_addr->qkey == EFA_DGRAM_CONNID);
+
+	memset(&reverse_av_key, 0, sizeof(reverse_av_key));
+	reverse_av_key.ahn = conn->ah->ahn;
+	reverse_av_key.qpn = raw_addr->qpn;
+	reverse_av_key.connid = raw_addr->qkey;
+#if ENABLE_DEBUG
+	reverse_av_entry = NULL;
+	HASH_FIND(hh, av->reverse_av, &reverse_av_key, sizeof(reverse_av_key), reverse_av_entry);
+	assert(!reverse_av_entry);
+#endif
+	reverse_av_entry = malloc(sizeof(*reverse_av_entry));
+	if (!reverse_av_entry)
+		return -FI_ENOMEM;
+
+	memcpy(&reverse_av_entry->key, &reverse_av_key, sizeof(reverse_av_key));
+	reverse_av_entry->conn = conn;
+	HASH_ADD(hh, av->reverse_av, key,
+		 sizeof(reverse_av_entry->key),
+		 reverse_av_entry);
+	return 0;
+}
+
 /**
  * @brief allocate an efa_conn object
  * caller of this function must obtain av->util_av.lock
@@ -439,12 +547,10 @@ static
 struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 				uint64_t flags, void *context)
 {
-	struct efa_reverse_av *reverse_av_entry = NULL;
 	struct util_av_entry *util_av_entry = NULL;
 	struct efa_av_entry *efa_av_entry = NULL;
 	struct efa_conn *conn;
 	fi_addr_t util_av_fi_addr;
-	struct efa_reverse_av_key key;
 	int err;
 
 	if (flags & FI_SYNC_ERR)
@@ -487,28 +593,20 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		}
 	}
 
-	memset(&key, 0, sizeof(key));
-	key.ahn = conn->ah->ahn;
-	key.qpn = raw_addr->qpn;
-	assert(av->ep_type == FI_EP_RDM || raw_addr->qkey == EFA_DGRAM_CONNID);
-	key.connid = raw_addr->qkey;
-#if ENABLE_DEBUG
-	reverse_av_entry = NULL;
-	HASH_FIND(hh, av->reverse_av, &key, sizeof(key), reverse_av_entry);
-	assert(!reverse_av_entry);
-#endif
-	reverse_av_entry = malloc(sizeof(*reverse_av_entry));
-	if (!reverse_av_entry) {
-		errno = FI_ENOMEM;
-		efa_conn_rdm_deinit(av, conn);
+	err = efa_av_update_reverse_av(av, raw_addr, conn);
+	if (err) {
+		if (av->ep_type == FI_EP_RDM)
+			efa_conn_rdm_deinit(av, conn);
 		goto err_release;
 	}
 
-	memcpy(&reverse_av_entry->key, &key, sizeof(key));
-	reverse_av_entry->conn = conn;
-	HASH_ADD(hh, av->reverse_av, key,
-		 sizeof(reverse_av_entry->key),
-		 reverse_av_entry);
+	if (av->ep_type == FI_EP_RDM) {
+		err = efa_av_update_connid_map(av, raw_addr, conn);
+		if (err) {
+			efa_conn_rdm_deinit(av, conn);
+			goto err_release;
+		}
+	}
 
 	av->used++;
 	return conn;
@@ -802,6 +900,19 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 	fastlock_release(&av->util_av.lock);
 }
 
+static void efa_av_close_connid_map(struct efa_av *av)
+{
+	struct efa_connid_map *connid_map_entry, *tmp;
+
+	fastlock_acquire(&av->util_av.lock);
+
+	HASH_ITER(hh, av->connid_map, connid_map_entry, tmp) {
+		free(connid_map_entry);
+	}
+
+	fastlock_release(&av->util_av.lock);
+}
+
 static int efa_av_close(struct fid *fid)
 {
 	struct efa_av *av;
@@ -809,6 +920,8 @@ static int efa_av_close(struct fid *fid)
 	int err = 0;
 
 	av = container_of(fid, struct efa_av, util_av.av_fid.fid);
+
+	efa_av_close_connid_map(av);
 
 	efa_av_close_reverse_av(av);
 

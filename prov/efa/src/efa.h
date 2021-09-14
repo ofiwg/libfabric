@@ -338,6 +338,12 @@ struct efa_av {
 	size_t			used;
 	size_t			shm_used;
 	enum fi_av_type		type;
+	/* connid_map is a map from (ahn + qpn) to latest connid.
+	 * it is used when a peer does not support the "connid header"
+	 * extra request
+	 */
+	struct efa_connid_map   *connid_map;
+	/* reverse_av is a map from (ahn + qpn + connid) to efa_conn */
 	struct efa_reverse_av	*reverse_av;
 	struct efa_ah		*ah_map;
 	struct util_av		util_av;
@@ -347,6 +353,18 @@ struct efa_av {
 struct efa_av_entry {
 	uint8_t			ep_addr[EFA_EP_ADDR_LEN];
 	struct efa_conn		conn;
+};
+
+struct efa_connid_map_key {
+	uint16_t ahn;
+	uint16_t qpn;
+	uint32_t connid;
+};
+
+struct efa_connid_map {
+	struct efa_connid_map_key key;
+	uint32_t connid;
+	UT_hash_handle hh;
 };
 
 struct efa_reverse_av_key {
@@ -436,6 +454,8 @@ struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr);
 void efa_cq_inc_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
 /* Caller must hold cq->inner_lock. */
 void efa_cq_dec_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
+
+uint32_t *efa_av_lookup_latest_connid(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 
 fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn, uint32_t connid);
 

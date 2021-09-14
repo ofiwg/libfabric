@@ -1766,9 +1766,19 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 		case IBV_WC_RECV:
 			connid = rxr_pkt_connid_ptr(pkt_entry);
 			if (!connid) {
-				FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "No connid in packet header");
-				rxr_pkt_handle_recv_error(ep, pkt_entry, FI_EINVAL, FI_EINVAL);
-				break;
+				FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL,
+					     "An incoming packet does have connection ID in its header.\n"
+					     "This means the peer is using an older version of libfabric.\n"
+					     "The communication can continue but it is encouraged to use\n"
+					     "a newer version of libfabric\n");
+
+				connid = efa_av_lookup_latest_connid(efa_av, ibv_wc.slid, ibv_wc.src_qp);
+				/* We should always be able to find latest connid for a given ahn+qpn,
+				 * therefore an assertion is used here.
+				 */
+				if (!connid)
+					FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Cannot find latest connid in connid map!");
+				assert(connid);
 			}
 
 			pkt_entry->addr = efa_av_reverse_lookup(efa_av, ibv_wc.slid, ibv_wc.src_qp, *connid);
