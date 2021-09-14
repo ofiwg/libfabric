@@ -116,7 +116,7 @@ struct cxip_coll_cookie {
 	uint32_t red_id:3;
 	uint32_t magic: 15;
 	uint32_t retry: 1;
-} __attribute((packed));
+} __attribute__((__packed));           /* size  4b */
 
 /**
  * Packed header bits and cookie from above.
@@ -132,17 +132,17 @@ struct cxip_coll_hdr {
         uint64_t repsum_ovfl:2;
         uint64_t pad:3;
         struct cxip_coll_cookie cookie;
-} __attribute__((packed));
+} __attribute__((__packed));		/* size 12b */
 
 /**
  * The following structure is 49 bytes in size, and all of the fields align
  * properly.
  */
 struct red_pkt {
-        uint8_t pad[5];
-        struct cxip_coll_hdr hdr;
-        union cxip_coll_data data;
-} __attribute__((packed));
+	uint8_t pad[5];			/* size  5b offset  0b */
+	struct cxip_coll_hdr hdr;	/* size 12b offset  5b */
+	union cxip_coll_data data;	/* size 32b offset 17b */
+} __attribute__((__packed));		/* size 49b */
 
 
 /**
