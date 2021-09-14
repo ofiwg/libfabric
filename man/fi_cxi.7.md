@@ -735,7 +735,7 @@ current capabilities.
 # ERRATA
 
 * Fetch and compare type AMOs with FI_DELIVERY_COMPLETE or FI_MATCH_COMPLETE
-  completion semantics are not supported.
+  completion semantics are not supported with FI_RMA_EVENT.
 
 # SEE ALSO
 

@@ -2127,6 +2127,85 @@ Test(atomic, rem_cntr)
 	_cxit_destroy_mr(&mr);
 }
 
+/* Test simple operations: AMO SUM UINT64_T, FAMO SUM UINT64_T, and CAMO SWAP_NE
+ * UINT64_T. If this doesn't work, nothing else will.
+ */
+TestSuite(atomic_flush, .init = cxit_setup_rma_disable_fi_rma_event,
+	  .fini = cxit_teardown_rma, .disabled = AMO_DISABLED,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
+
+/* Perform a fetching AMO with flush at target. */
+Test(atomic_flush, fetch_flush)
+{
+	struct mem_region mr;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t operand1;
+	uint64_t fetch_remote = 4;
+	uint64_t exp_remote = fetch_remote;
+	uint64_t *rma;
+	int ret;
+	struct fi_msg_atomic msg = {};
+	struct fi_ioc ioc;
+	struct fi_rma_ioc rma_ioc;
+	uint64_t result = 0;
+	struct fi_ioc result_ioc = { .count = 1, .addr = &result };
+	int count = 0;
+	uint64_t flushes_start;
+	uint64_t flushes_end;
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
+				 &flushes_start, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
+	rma = _cxit_create_mr(&mr, RMA_WIN_KEY);
+	*rma = fetch_remote;
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+
+	ioc.addr = &operand1;
+	ioc.count = 1;
+
+	rma_ioc.addr = 0;
+	rma_ioc.count = 1;
+	rma_ioc.key = RMA_WIN_KEY;
+
+	msg.msg_iov = &ioc;
+	msg.iov_count = 1;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.datatype = FI_UINT64;
+	msg.op = FI_SUM;
+
+	operand1 = 1;
+	exp_remote += operand1;
+	ret = fi_fetch_atomicmsg(cxit_ep, &msg, &result_ioc, NULL, 1,
+				 FI_DELIVERY_COMPLETE);
+	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
+	count++;
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
+	cr_assert_eq(*rma, exp_remote,
+		     "Result = %ld, expected = %ld",
+		     *rma, exp_remote);
+	cr_assert_eq(result, fetch_remote,
+		     "Result = %ld, expected = %ld",
+		     result, fetch_remote);
+
+	_cxit_destroy_mr(&mr);
+
+	sleep(1);
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
+				 &flushes_end, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+	cr_assert(flushes_end > flushes_start);
+}
+
 /* Perform an AMO that uses a flushing ZBR at the target. */
 Test(atomic, flush)
 {
@@ -2142,8 +2221,6 @@ Test(atomic, flush)
 	int count = 0;
 	uint64_t flushes_start;
 	uint64_t flushes_end;
-	struct fi_ioc compare_ioc = { .count = 1, .addr = &compare_ioc };
-	struct fi_ioc result_ioc = { .count = 1, .addr = &result_ioc };
 
 	ret = dom_ops->cntr_read(&cxit_domain->fid,
 				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
@@ -2192,15 +2269,6 @@ Test(atomic, flush)
 				 &flushes_end, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 	cr_assert(flushes_end > flushes_start);
-
-	/* Test FAMO with flush (invalid due to errata) */
-	ret = fi_fetch_atomicmsg(cxit_ep, &msg, &result_ioc, NULL, 1,
-				 FI_DELIVERY_COMPLETE);
-	cr_assert_eq(ret, -FI_EOPNOTSUPP, "Return code  = %d", ret);
-
-	ret = fi_compare_atomicmsg(cxit_ep, &msg, &compare_ioc, NULL, 1,
-				   &result_ioc, NULL, 1, FI_DELIVERY_COMPLETE);
-	cr_assert_eq(ret, -FI_EOPNOTSUPP, "Return code  = %d", ret);
 }
 
 /* Test AMO FI_MORE */

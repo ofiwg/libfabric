@@ -268,6 +268,43 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 	int success_event = (req->flags & FI_COMPLETION);
 	struct cxip_txc *txc = req->amo.txc;
 
+	/* Fetching AMO with flush requires two events. Only once two events are
+	 * processed can the user-generated completion queue event be
+	 * generated. In addition, since multiple initiator events are
+	 * generated and zero assumptions can be made about the event order,
+	 * counters cannot be incremented until both events are processed.
+	 * This means that software must modify the counter (i/e it cannot be
+	 * offloaded to hardware).
+	 */
+	if (req->amo.fetching_amo_flush) {
+		req->amo.fetching_amo_flush_event_count++;
+
+		if (event->hdr.event_type != C_EVENT_PUT)
+			req->amo.fetching_amo_flush_event_rc =
+				cxi_init_event_rc(event);
+
+		if (req->amo.fetching_amo_flush_event_count != 2)
+			return FI_SUCCESS;
+
+		event_rc = req->amo.fetching_amo_flush_event_rc;
+
+		if (req->amo.fetching_amo_flush_cntr) {
+			if (event_rc == C_RC_OK)
+				ret = cxip_cntr_mod(req->amo.fetching_amo_flush_cntr,
+						    1, false, false);
+			else
+				ret = cxip_cntr_mod(req->amo.fetching_amo_flush_cntr,
+						    1, false, true);
+
+			if (ret != FI_SUCCESS) {
+				req->amo.fetching_amo_flush_event_count--;
+				return ret;
+			}
+		}
+	} else {
+		event_rc = cxi_init_event_rc(event);
+	}
+
 	cxip_cq_put_tx_credit(txc->send_cq);
 
 	if (req->amo.result_md)
@@ -281,7 +318,6 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 
 	req->flags &= (FI_ATOMIC | FI_READ | FI_WRITE);
 
-	event_rc = cxi_init_event_rc(event);
 	if (event_rc == C_RC_OK) {
 		if (success_event) {
 			ret = cxip_cq_req_complete(req);
@@ -392,6 +428,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	char hmem_oper1[16];
 	bool flush = flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE);
 	bool tx_credit = false;
+	bool fetching_amo_flush = false;
+	bool restricted;
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -418,6 +456,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	if (flags & FI_CXI_HRP && !(flags & FI_CXI_UNRELIABLE))
 		return -FI_EINVAL;
 
+	restricted = !!(flags & FI_CXI_UNRELIABLE);
+
 	switch (req_type) {
 	case CXIP_RQ_AMO_SWAP:
 		/* Must have a valid compare address */
@@ -426,9 +466,22 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		compare = comparev[0].addr;
 		/* FALLTHRU */
 	case CXIP_RQ_AMO_FETCH:
-		/* Errata 3184: FAMO with flush returns wrong value. */
-		if (flush)
-			return -FI_EOPNOTSUPP;
+		if (flush) {
+			fetching_amo_flush = true;
+			restricted = false;
+			flush = false;
+
+			/* Since fetching AMO with flush results in two
+			 * commands, if FI_RMA_EVENT is enabled, this would
+			 * results in two remote MR counter increments. Thus,
+			 * this functionality cannot be supported.
+			 */
+			if (txc->ep_obj->caps & FI_RMA_EVENT) {
+				TXC_WARN(txc,
+					 "Fetching AMO with FI_DELIEVERY_COMPLETE not supported with FI_RMA_EVENT");
+				return -FI_EINVAL;
+			}
+		}
 
 		/* Must have a valid result address */
 		if (!_vector_valid(result_count, resultv))
@@ -478,7 +531,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	 * credit.
 	 */
 	if (result || !idc || (flags & FI_COMPLETION) ||
-	    msg->op == FI_ATOMIC_WRITE) {
+	    msg->op == FI_ATOMIC_WRITE || fetching_amo_flush) {
 		ret = cxip_cq_get_tx_credit(txc->send_cq);
 		if (ret != FI_SUCCESS) {
 			TXC_DBG(txc, "CQ TX credits exhausted\n");
@@ -511,6 +564,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		req->amo.txc = txc;
 		req->amo.oper1_md = NULL;
 		req->amo.result_md = NULL;
+		req->amo.fetching_amo_flush = fetching_amo_flush;
 		req->type = CXIP_REQ_AMO;
 		req->trig_cntr = trig_cntr;
 	}
@@ -695,6 +749,16 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		}
 	}
 
+	/* Fetching AMO with FI_DELIVERY_COMPLETE requires two commands. Ensure
+	 * there is enough space. At worse at least 16x 32-byte slots are
+	 * needed.
+	 */
+	if (fetching_amo_flush && __cxi_cq_free_slots(cmdq->dev_cmdq) < 16) {
+		TXC_DBG(txc, "No space for FAMO with FI_DELIVERY_COMPLETE\n");
+		ret = -FI_EAGAIN;
+		goto unlock_cmdq;
+	}
+
 	/* Build AMO command descriptor and write command. */
 	if (idc) {
 		if (result)
@@ -704,7 +768,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		cmd.c_state.index_ext = idx_ext;
 		cmd.c_state.eq = cxip_cq_tx_eqn(txc->send_cq);
 
-		if (flags & FI_CXI_UNRELIABLE)
+		if (restricted)
 			cmd.c_state.restricted = 1;
 
 		if (req) {
@@ -721,20 +785,25 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			cmd.c_state.event_success_disable = 1;
 		}
 
-		if (req_type == CXIP_RQ_AMO) {
-			if (txc->write_cntr) {
-				cmd.c_state.event_ct_ack = 1;
-				cmd.c_state.ct = txc->write_cntr->ct->ctn;
-			}
-		} else {
-			if (txc->read_cntr) {
-				cmd.c_state.event_ct_reply = 1;
-				cmd.c_state.ct = txc->read_cntr->ct->ctn;
+		/* Fetching AMO with flushes requires a trailing zero-byte put
+		 * with flush.
+		 */
+		if (!fetching_amo_flush) {
+			if (flush)
+				cmd.c_state.flush = 1;
+
+			if (req_type == CXIP_RQ_AMO) {
+				if (txc->write_cntr) {
+					cmd.c_state.event_ct_ack = 1;
+					cmd.c_state.ct = txc->write_cntr->ct->ctn;
+				}
+			} else {
+				if (txc->read_cntr) {
+					cmd.c_state.event_ct_reply = 1;
+					cmd.c_state.ct = txc->read_cntr->ct->ctn;
+				}
 			}
 		}
-
-		if (flush)
-			cmd.c_state.flush = 1;
 
 		ret = cxip_cmdq_emit_c_state(cmdq, &cmd.c_state);
 		if (ret) {
@@ -811,26 +880,31 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		if (compare)
 			memcpy(&cmd.op2_word1, compare, len);
 
-		if (flush)
-			cmd.flush = 1;
+		/* Fetching AMO with flushes requires a trailing zero-byte put
+		 * with flush.
+		 */
+		if (!fetching_amo_flush) {
+			if (flush)
+				cmd.flush = 1;
 
-		if (req_type == CXIP_RQ_AMO) {
-			cntr = triggered ? comp_cntr : txc->write_cntr;
+			if (req_type == CXIP_RQ_AMO) {
+				cntr = triggered ? comp_cntr : txc->write_cntr;
 
-			if (cntr) {
-				cmd.event_ct_ack = 1;
-				cmd.ct = cntr->ct->ctn;
-			}
-		} else {
-			cntr = triggered ? comp_cntr : txc->read_cntr;
+				if (cntr) {
+					cmd.event_ct_ack = 1;
+					cmd.ct = cntr->ct->ctn;
+				}
+			} else {
+				cntr = triggered ? comp_cntr : txc->read_cntr;
 
-			if (cntr) {
-				cmd.event_ct_reply = 1;
-				cmd.ct = cntr->ct->ctn;
+				if (cntr) {
+					cmd.event_ct_reply = 1;
+					cmd.ct = cntr->ct->ctn;
+				}
 			}
 		}
 
-		if (flags & FI_CXI_UNRELIABLE)
+		if (restricted)
 			cmd.restricted = 1;
 
 		if (triggered) {
@@ -854,6 +928,42 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			ret = -FI_EAGAIN;
 			goto unlock_cmdq;
 		}
+	}
+
+	/* Fetching AMOs with FI_DELIVERY_COMPLETE requires a trailing zero-byte
+	 * put flush.
+	 */
+	if (fetching_amo_flush) {
+		struct c_full_dma_cmd flush_cmd = {};
+
+		if (req_type == CXIP_RQ_AMO)
+			req->amo.fetching_amo_flush_cntr = txc->write_cntr;
+		else
+			req->amo.fetching_amo_flush_cntr = txc->read_cntr;
+
+		flush_cmd.command.opcode = C_CMD_PUT;
+		flush_cmd.index_ext = idx_ext;
+		flush_cmd.event_send_disable = 1;
+		flush_cmd.dfa = dfa;
+		flush_cmd.remote_offset = off;
+		flush_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+		flush_cmd.user_ptr = (uint64_t)req;
+		flush_cmd.match_bits = key;
+		flush_cmd.flush = 1;
+
+		if (triggered) {
+			const struct c_ct_cmd ct_cmd = {
+				.trig_ct = trig_cntr->ct->ctn,
+				.threshold = trig_thresh,
+			};
+
+			ret = cxi_cq_emit_trig_full_dma(cmdq->dev_cmdq, &ct_cmd,
+							&flush_cmd);
+		} else {
+			ret = cxi_cq_emit_dma(cmdq->dev_cmdq, &flush_cmd);
+		}
+
+		assert(ret == 0);
 	}
 
 	cxip_txq_ring(cmdq, flags & FI_MORE, triggered,

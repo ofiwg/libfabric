@@ -629,6 +629,10 @@ struct cxip_req_amo {
 	bool tmp_result;
 	bool tmp_oper1;
 	void *ibuf;
+	bool fetching_amo_flush;
+	uint8_t fetching_amo_flush_event_count;
+	unsigned int fetching_amo_flush_event_rc;
+	struct cxip_cntr *fetching_amo_flush_cntr;
 };
 
 struct cxip_req_recv {
