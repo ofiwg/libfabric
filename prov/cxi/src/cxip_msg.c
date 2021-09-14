@@ -2886,7 +2886,8 @@ static int cxip_ux_peek(struct cxip_req *req)
 {
 	struct cxip_rxc *rxc = req->req_ctx;
 	union c_cmdu cmd = {};
-	union cxip_match_bits mb;
+	union cxip_match_bits mb = {};
+	union cxip_match_bits ib = {};
 	uint32_t cmd_flags = C_LE_USE_ONCE;
 	int ret;
 
@@ -2896,12 +2897,17 @@ static int cxip_ux_peek(struct cxip_req *req)
 
 	mb.tag = req->recv.tag;
 	mb.tagged = 1;
+	ib.tx_id = ~0;
+	ib.match_comp = ~0;
+	ib.le_type = ~0;
+	ib.tag = req->recv.ignore;
+
 	cmd.command.opcode = C_CMD_TGT_SEARCH;
 	cmd.target.ptl_list = C_PTL_LIST_UNEXPECTED;
 	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
 	cmd.target.buffer_id = req->req_id;
 	cmd.target.length = -1U;
-	cmd.target.ignore_bits = req->recv.ignore;
+	cmd.target.ignore_bits = ib.raw;
 	cmd.target.match_bits =  mb.raw;
 	cmd.target.match_id = req->recv.match_id;
 	cxi_target_cmd_setopts(&cmd.target, cmd_flags);
