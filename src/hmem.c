@@ -201,6 +201,11 @@ int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *ptr,
 	return hmem_ops[iface].get_base_addr(ptr, base);
 }
 
+bool ofi_hmem_is_initialized(enum fi_hmem_iface iface)
+{
+	return hmem_ops[iface].initialized;
+}
+
 void ofi_hmem_init(void)
 {
 	int iface, ret;
@@ -228,7 +233,7 @@ void ofi_hmem_cleanup(void)
 	enum fi_hmem_iface iface;
 
 	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
-		if (hmem_ops[iface].initialized)
+		if (ofi_hmem_is_initialized(iface))
 			hmem_ops[iface].cleanup();
 	}
 }
@@ -243,7 +248,7 @@ enum fi_hmem_iface ofi_get_hmem_iface(const void *addr)
 	 */
 	for (iface = ARRAY_SIZE(hmem_ops) - 1; iface > FI_HMEM_SYSTEM;
 	     iface--) {
-		if (hmem_ops[iface].initialized &&
+		if (ofi_hmem_is_initialized(iface) &&
 		    hmem_ops[iface].is_addr_valid(addr))
 			return iface;
 	}
@@ -256,7 +261,7 @@ int ofi_hmem_host_register(void *ptr, size_t size)
 	int iface, ret;
 
 	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
-		if (!hmem_ops[iface].initialized)
+		if (!ofi_hmem_is_initialized(iface))
 			continue;
 
 		ret = hmem_ops[iface].host_register(ptr, size);
@@ -273,7 +278,7 @@ err:
 		fi_strerror(-ret));
 
 	for (iface--; iface >= 0; iface--) {
-		if (!hmem_ops[iface].initialized)
+		if (!ofi_hmem_is_initialized(iface))
 			continue;
 
 		hmem_ops[iface].host_unregister(ptr);
@@ -287,7 +292,7 @@ int ofi_hmem_host_unregister(void *ptr)
 	int iface, ret;
 
 	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
-		if (!hmem_ops[iface].initialized)
+		if (!ofi_hmem_is_initialized(iface))
 			continue;
 
 		ret = hmem_ops[iface].host_unregister(ptr);
