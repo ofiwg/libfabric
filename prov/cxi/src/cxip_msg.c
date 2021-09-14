@@ -221,7 +221,7 @@ static void recv_req_report(struct cxip_req *req)
 	if (req->recv.tx_credit_used)
 		cxip_cq_put_tx_credit(rxc->recv_cq);
 
-	req->flags &= (FI_MSG | FI_TAGGED | FI_RECV);
+	req->flags &= (FI_MSG | FI_TAGGED | FI_RECV | FI_REMOTE_CQ_DATA);
 
 	if (req->recv.parent) {
 		struct cxip_req *parent = req->recv.parent;
@@ -324,6 +324,9 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 	if (event->hdr.event_type != C_EVENT_RENDEZVOUS) {
 		req->tag = mb.tag;
 		req->recv.initiator = init;
+
+		if (mb.cq_data)
+			req->flags |= FI_REMOTE_CQ_DATA;
 	}
 
 	/* remote_offset is not provided in Overflow events. */
@@ -1286,6 +1289,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	union cxip_match_bits ib = {
 		.tag = ~0,
 		.tx_id = ~0,
+		.cq_data = 1,
 		.tagged = 1,
 		.match_comp = 1,
 	};
@@ -1446,6 +1450,7 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 	union cxip_match_bits ib = {
 		.tag = ~0,
 		.tx_id = ~0,
+		.cq_data = 1,
 		.tagged = 1,
 		.match_comp = 1,
 	};
@@ -1595,6 +1600,7 @@ int cxip_txc_zbp_init(struct cxip_txc *txc)
 	union cxip_match_bits ib = {
 		.tag = ~0,
 		.tx_id = ~0,
+		.cq_data = 1,
 		.tagged = 1,
 		.match_comp = 1,
 	};
@@ -2898,6 +2904,7 @@ static int cxip_ux_peek(struct cxip_req *req)
 	mb.tag = req->recv.tag;
 	mb.tagged = 1;
 	ib.tx_id = ~0;
+	ib.cq_data = ~0;
 	ib.match_comp = ~0;
 	ib.le_type = ~0;
 	ib.tag = req->recv.ignore;
@@ -3256,6 +3263,7 @@ static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq)
 	union cxip_match_bits ib = {
 		.tx_id = ~0,
 		.match_comp = 1,
+		.cq_data = 1,
 		.le_type = ~0,
 	};
 	int ret;
@@ -3850,6 +3858,9 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 		put_mb.tag = req->send.tag;
 	}
 
+	if (req->send.flags & FI_REMOTE_CQ_DATA)
+		put_mb.cq_data = 1;
+
 	req->send.rdzv_id = rdzv_id;
 	req->cb = cxip_send_long_cb;
 	req->send.long_send_events = 0;
@@ -4094,6 +4105,9 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		mb.tag = req->send.tag;
 	}
 
+	if (req->send.flags & FI_REMOTE_CQ_DATA)
+		mb.cq_data = 1;
+
 	/* Allocate a TX ID if match completion guarantees are required */
 	if (match_complete) {
 		int tx_id;
@@ -4101,7 +4115,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		tx_id = cxip_tx_id_alloc(txc->ep_obj, req);
 		if (tx_id < 0) {
 			TXC_WARN(txc, "Failed to allocate TX ID: %d\n", tx_id);
-			ret = tx_id;
+			ret = -FI_EAGAIN;
 			goto err_unmap;
 		}
 
@@ -4890,8 +4904,8 @@ static ssize_t cxip_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 		return -FI_EINVAL;
 
 	return cxip_send_common(txc, buf, len, desc, data, dest_addr, tag,
-				context, txc->attr.op_flags, true, false, 0,
-				NULL, NULL);
+				context, txc->attr.op_flags | FI_REMOTE_CQ_DATA,
+				true, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
@@ -4904,7 +4918,8 @@ static ssize_t cxip_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 		return -FI_EINVAL;
 
 	return cxip_send_common(txc, buf, len, NULL, data, dest_addr, tag, NULL,
-				FI_INJECT, true, false, 0, NULL, NULL);
+				FI_INJECT | FI_REMOTE_CQ_DATA, true, false, 0,
+				NULL, NULL);
 }
 
 struct fi_ops_tagged cxip_ep_tagged_ops = {
@@ -5058,8 +5073,8 @@ static ssize_t cxip_senddata(struct fid_ep *ep, const void *buf, size_t len,
 		return -FI_EINVAL;
 
 	return cxip_send_common(txc, buf, len, desc, data, dest_addr, 0,
-				context, txc->attr.op_flags, false, false, 0,
-				NULL, NULL);
+				context, txc->attr.op_flags | FI_REMOTE_CQ_DATA,
+				false, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_injectdata(struct fid_ep *ep, const void *buf, size_t len,
@@ -5071,7 +5086,8 @@ static ssize_t cxip_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 		return -FI_EINVAL;
 
 	return cxip_send_common(txc, buf, len, NULL, data, dest_addr, 0, NULL,
-				FI_INJECT, false, false, 0, NULL, NULL);
+				FI_INJECT | FI_REMOTE_CQ_DATA, false, false, 0,
+				NULL, NULL);
 }
 
 struct fi_ops_msg cxip_ep_msg_ops = {

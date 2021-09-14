@@ -245,8 +245,9 @@ Test(tagged, pingdata)
 	} while (ret == -FI_EAGAIN);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
-	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
-			  data, 0);
+	validate_rx_event(&rx_cqe, NULL, send_len,
+			  FI_TAGGED | FI_RECV | FI_REMOTE_CQ_DATA,
+			  NULL, data, 0);
 	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
 	/* Wait for async event indicating data has been sent */
@@ -378,8 +379,9 @@ Test(tagged, injectdata_ping)
 	} while (ret == -FI_EAGAIN);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
-	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
-			  data, 0);
+	validate_rx_event(&rx_cqe, NULL, send_len,
+			  FI_TAGGED | FI_RECV | FI_REMOTE_CQ_DATA,
+			  NULL, data, 0);
 	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
 	/* Validate sent data */
@@ -767,7 +769,7 @@ Test(tagged, msgping_wdata)
 	smsg.context = NULL;
 	smsg.data = data;
 
-	ret = fi_tsendmsg(cxit_ep, &smsg, 0);
+	ret = fi_tsendmsg(cxit_ep, &smsg, FI_REMOTE_CQ_DATA);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_tsendmsg failed %d", ret);
 
 	/* Wait for async event indicating data has been received */
@@ -776,7 +778,8 @@ Test(tagged, msgping_wdata)
 	} while (ret == -FI_EAGAIN);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
-	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
+	validate_rx_event(&rx_cqe, NULL, send_len,
+			  FI_TAGGED | FI_RECV | FI_REMOTE_CQ_DATA, NULL,
 			  data, 0);
 	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
@@ -2010,13 +2013,15 @@ void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 		cr_assert(err_cqe.op_context == NULL,
 			  "Error RX CQE Context mismatch");
 		cr_assert(err_cqe.flags ==
-			  ((tagged ? FI_TAGGED : FI_MSG) | FI_RECV),
+			  ((tagged ? FI_TAGGED : FI_MSG) | FI_RECV |
+			   (wdata ? FI_REMOTE_CQ_DATA : 0UL)),
 			  "Error RX CQE flags mismatch");
 		cr_assert(err_cqe.len == recv_len,
 			  "Invalid Error RX CQE length, got: %ld exp: %ld",
 			  err_cqe.len, recv_len);
 		cr_assert(err_cqe.buf == 0, "Invalid Error RX CQE address");
-		cr_assert(err_cqe.data == data, "Invalid Error RX CQE data");
+		cr_assert(err_cqe.data == (wdata ? data : 0UL),
+			  "Invalid Error RX CQE data");
 		cr_assert(err_cqe.tag == send_tag, "Invalid Error RX CQE tag");
 		cr_assert(err_cqe.olen == (send_len - recv_len),
 			  "Invalid Error RX CQE olen, got: %ld exp: %ld",
@@ -2030,8 +2035,9 @@ void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 		recved_len = err_cqe.len;
 	} else {
 		validate_rx_event(&rx_cqe, NULL, send_len,
-				  (tagged ? FI_TAGGED : FI_MSG) | FI_RECV,
-				  NULL, data, send_tag);
+				  (tagged ? FI_TAGGED : FI_MSG) | FI_RECV
+				  | (wdata ? FI_REMOTE_CQ_DATA : 0UL),
+				  NULL, wdata ? data : 0UL, send_tag);
 		cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 		recved_len = rx_cqe.len;
 	}
@@ -4327,8 +4333,10 @@ Test(tagged, NC2192)
 	cr_assert(ret == FI_SUCCESS);
 
 	for (i = 0; i < sends; i++) {
-		ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
-			       cxit_ep_fi_addr, 1, NULL);
+		do {
+			ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
+				       cxit_ep_fi_addr, 1, NULL);
+		} while (ret == -FI_EAGAIN);
 		cr_assert(ret == FI_SUCCESS);
 	}
 

@@ -130,7 +130,7 @@ Test(msg, pingdata)
 
 	/* Validate RX event fields */
 	cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
-	cr_assert(rx_cqe.flags == (FI_MSG | FI_RECV),
+	cr_assert(rx_cqe.flags == (FI_MSG | FI_RECV | FI_REMOTE_CQ_DATA),
 		  "RX CQE flags mismatch");
 	cr_assert(rx_cqe.len == send_len, "Invalid RX CQE length");
 	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
@@ -259,8 +259,8 @@ Test(msg, injectdata_ping)
 	} while (ret == -FI_EAGAIN);
 	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
 
-	validate_rx_event(&rx_cqe, NULL, send_len, FI_MSG | FI_RECV, NULL,
-			  data, 0);
+	validate_rx_event(&rx_cqe, NULL, send_len,
+			  FI_MSG | FI_RECV | FI_REMOTE_CQ_DATA, NULL, data, 0);
 	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
 
 	/* Validate sent data */
@@ -495,7 +495,7 @@ Test(msg, msgping_wdata)
 	smsg.context = NULL;
 	smsg.data = data;
 
-	ret = fi_sendmsg(cxit_ep, &smsg, 0);
+	ret = fi_sendmsg(cxit_ep, &smsg, FI_REMOTE_CQ_DATA);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
 
 	/* Wait for async event indicating data has been received */
@@ -506,7 +506,7 @@ Test(msg, msgping_wdata)
 
 	/* Validate RX event fields */
 	cr_assert(rx_cqe.op_context == NULL, "RX CQE Context mismatch");
-	cr_assert(rx_cqe.flags == (FI_MSG | FI_RECV),
+	cr_assert(rx_cqe.flags == (FI_MSG | FI_RECV | FI_REMOTE_CQ_DATA),
 		  "RX CQE flags mismatch");
 	cr_assert(rx_cqe.len == send_len, "Invalid RX CQE length");
 	cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");

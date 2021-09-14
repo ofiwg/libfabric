@@ -387,6 +387,7 @@ int cxip_req_buf_link(struct cxip_req_buf *buf)
 	union cxip_match_bits ib = {
 		.tag = ~0,
 		.tx_id = ~0,
+		.cq_data = 1,
 		.tagged = 1,
 		.match_comp = 1,
 	};

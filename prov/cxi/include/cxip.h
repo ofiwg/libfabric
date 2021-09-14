@@ -291,8 +291,8 @@ static inline int cxip_mr_key_to_ptl_idx(int key, bool write)
 
 /* Messaging Match Bit layout */
 #define CXIP_TAG_WIDTH		48
-#define CXIP_RDZV_ID_WIDTH	8
-#define CXIP_TX_ID_WIDTH	12
+#define CXIP_RDZV_ID_WIDTH	7
+#define CXIP_TX_ID_WIDTH	11
 #define CXIP_TAG_MASK		((1UL << CXIP_TAG_WIDTH) - 1)
 
 /* Define several types of LEs */
@@ -321,6 +321,7 @@ union cxip_match_bits {
 	struct {
 		uint64_t tag        : CXIP_TAG_WIDTH; /* User tag value */
 		uint64_t tx_id      : CXIP_TX_ID_WIDTH; /* Prov. tracked ID */
+		uint64_t cq_data    : 1;  /* Header data is valid */
 		uint64_t tagged     : 1;  /* Tagged API */
 		uint64_t match_comp : 1;  /* Notify initiator on match */
 		uint64_t le_type    : 2;
