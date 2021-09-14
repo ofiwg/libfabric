@@ -86,6 +86,12 @@ static void rxr_init_env(void)
 {
 	int fork_safe = 0;
 
+	if (getenv("FI_EFA_SHM_MAX_MEDIUM_SIZE")) {
+		fprintf(stderr,
+			"FI_EFA_SHM_MAX_MEDIUM_SIZE env variable detected! The use of this variable has been deprecated and as such execution cannot proceed.\n");
+		abort();
+	};
+
 	fi_param_get_int(&rxr_prov, "rx_window_size", &rxr_env.rx_window_size);
 	fi_param_get_int(&rxr_prov, "tx_max_credits", &rxr_env.tx_max_credits);
 	fi_param_get_int(&rxr_prov, "tx_min_credits", &rxr_env.tx_min_credits);
