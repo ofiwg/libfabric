@@ -173,6 +173,9 @@ struct tcpx_cm_context {
 	struct tcpx_cm_msg	msg;
 };
 
+struct tcpx_cm_context *tcpx_alloc_cm_ctx(fid_t fid, enum tcpx_cm_state state);
+void tcpx_free_cm_ctx(struct tcpx_cm_context *cm_ctx);
+
 struct tcpx_port_range {
 	int high;
 	int low;
@@ -244,6 +247,8 @@ struct tcpx_ep {
 	int			rx_avail;
 	struct tcpx_rx_ctx	*srx_ctx;
 	enum tcpx_state		state;
+	struct tcpx_cm_context	*cm_ctx;
+
 	/* lock for protecting tx/rx queues, rma list, state*/
 	fastlock_t		lock;
 	int (*start_op[ofi_op_write + 1])(struct tcpx_ep *ep);
