@@ -1811,9 +1811,6 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	struct dlist_entry *tmp;
 	ssize_t ret;
 
-	if (!ep->use_zcpy_rx)
-		rxr_ep_check_available_data_bufs_timer(ep);
-
 	// Poll the EFA completion queue
 	rdm_ep_poll_ibv_cq(ep, rxr_env.efa_cq_read_size);
 
@@ -1825,6 +1822,8 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 
 	rxr_ep_check_peer_backoff_timer(ep);
 
+	if (!ep->use_zcpy_rx)
+		rxr_ep_check_available_data_bufs_timer(ep);
 	/*
 	 * Resend handshake packet for any peers where the first
 	 * handshake send failed.
