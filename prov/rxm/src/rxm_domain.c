@@ -37,6 +37,7 @@
 
 #include <ofi_util.h>
 #include <ofi_coll.h>
+#include <ofi_hook.h>
 #include "rxm.h"
 
 int rxm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
@@ -380,14 +381,19 @@ static struct fi_ops_mr rxm_domain_mr_ops = {
 
 static ssize_t rxm_send_credits(struct fid_ep *ep, size_t credits)
 {
-	struct rxm_conn *rxm_conn = ep->fid.context;
-	struct rxm_ep *rxm_ep = rxm_conn->ep;
+	struct rxm_conn *rxm_conn;
+	struct rxm_ep *rxm_ep;
 	struct rxm_deferred_tx_entry *def_tx_entry;
 	struct rxm_tx_buf *tx_buf;
 	struct iovec iov;
 	struct fi_msg msg;
 	ssize_t ret;
 
+	if (is_hook_fid((fid_t)ep->fid.context))
+		ep = (struct fid_ep *)ep->fid.context;
+
+	rxm_conn = ep->fid.context;
+	rxm_ep = rxm_conn->ep;
 	tx_buf = ofi_buf_alloc(rxm_ep->tx_pool);
 	if (!tx_buf) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA,

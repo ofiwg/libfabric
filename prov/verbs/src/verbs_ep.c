@@ -43,6 +43,9 @@ void vrb_add_credits(struct fid_ep *ep_fid, size_t credits)
 	struct vrb_ep *ep;
 	struct util_cq *cq;
 
+	if (is_hook_fid((fid_t)ep_fid))
+		ep_fid = (struct fid_ep *)hook_to_hfid((fid_t)ep_fid);
+
 	ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
 	cq = ep->util_ep.tx_cq;
 

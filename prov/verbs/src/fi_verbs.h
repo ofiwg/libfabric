@@ -76,6 +76,7 @@
 #include "ofi_indexer.h"
 #include "ofi_iov.h"
 #include "ofi_hmem.h"
+#include "ofi_hook.h"
 
 #include "ofi_verbs_priv.h"
 

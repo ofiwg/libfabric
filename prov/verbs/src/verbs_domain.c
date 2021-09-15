@@ -39,10 +39,14 @@
 #include <malloc.h>
 
 
-
 static void vrb_set_threshold(struct fid_ep *ep_fid, size_t threshold)
 {
-	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
+	struct vrb_ep *ep;
+
+	if (is_hook_fid((fid_t)ep_fid))
+		ep_fid = (struct fid_ep *)hook_to_hfid((fid_t)ep_fid);
+
+	ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
 	ep->threshold = threshold;
 }
 
@@ -51,6 +55,10 @@ static void vrb_set_credit_handler(struct fid_domain *domain_fid,
 {
 	struct vrb_domain *domain;
 
+	if (is_hook_fid((fid_t)domain_fid))
+		domain_fid =
+			(struct fid_domain *)hook_to_hfid((fid_t)domain_fid);
+
 	domain = container_of(domain_fid, struct vrb_domain,
 			      util_domain.domain_fid.fid);
 	domain->send_credits = credit_handler;
@@ -58,7 +66,12 @@ static void vrb_set_credit_handler(struct fid_domain *domain_fid,
 
 static int vrb_enable_ep_flow_ctrl(struct fid_ep *ep_fid)
 {
-	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
+	struct vrb_ep *ep;
+
+	if (is_hook_fid((fid_t)ep_fid))
+		ep_fid = (struct fid_ep *)hook_to_hfid((fid_t)ep_fid);
+
+	ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
 	// only enable if we are not using SRQ
 	if (!ep->srq_ep && ep->ibv_qp && ep->ibv_qp->qp_type == IBV_QPT_RC) {
 		ep->peer_rq_credits = 1;

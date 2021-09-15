@@ -73,6 +73,11 @@ extern struct fi_ops hook_fid_ops;
 struct fid *hook_to_hfid(const struct fid *fid);
 struct fid_wait *hook_to_hwait(const struct fid_wait *wait);
 
+static inline bool is_hook_fid(const struct fid *fid)
+{
+        return (fid->ops == &hook_fid_ops);
+}
+
 /*
  * TODO
  * comment from GitHub PR #5052:
