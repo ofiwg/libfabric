@@ -34,7 +34,10 @@
 #include <string.h>
 
 #include "tcpx.h"
+
 extern struct fi_ops_msg tcpx_srx_msg_ops;
+extern struct fi_ops_tagged tcpx_srx_tag_ops;
+
 
 static int tcpx_srx_ctx_close(struct fid *fid)
 {
@@ -47,6 +50,12 @@ static int tcpx_srx_ctx_close(struct fid *fid)
 
 	while (!slist_empty(&srx_ctx->rx_queue)) {
 		entry = slist_remove_head(&srx_ctx->rx_queue);
+		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
+		ofi_buf_free(xfer_entry);
+	}
+
+	while (!slist_empty(&srx_ctx->tag_queue)) {
+		entry = slist_remove_head(&srx_ctx->tag_queue);
 		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
 		ofi_buf_free(xfer_entry);
 	}
@@ -80,7 +89,9 @@ static int tcpx_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
 	srx_ctx->rx_fid.fid.ops = &fi_ops_srx_ctx;
 
 	srx_ctx->rx_fid.msg = &tcpx_srx_msg_ops;
+	srx_ctx->rx_fid.tagged = &tcpx_srx_tag_ops;
 	slist_init(&srx_ctx->rx_queue);
+	slist_init(&srx_ctx->tag_queue);
 
 	ret = fastlock_init(&srx_ctx->lock);
 	if (ret)
@@ -92,6 +103,8 @@ static int tcpx_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
 	if (ret)
 		goto err2;
 
+	srx_ctx->match_tag_rx = (attr->caps & FI_DIRECTED_RECV) ?
+				tcpx_match_tag_addr : tcpx_match_tag;
 	srx_ctx->op_flags = attr->op_flags;
 	*rx_ep = &srx_ctx->rx_fid;
 	return FI_SUCCESS;
