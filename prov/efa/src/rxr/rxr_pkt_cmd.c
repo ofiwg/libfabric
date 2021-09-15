@@ -631,6 +631,8 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 	struct rxr_rx_entry *rx_entry;
 	ssize_t ret;
 
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
+
 	rx_entry = pkt_entry->x_entry;
 	assert(rx_entry);
 	rx_entry->bytes_copied += data_size;
@@ -653,7 +655,7 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 						     rx_entry);
 				return;
 			}
-			rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
+			rxr_cq_handle_rx_completion(ep, rx_entry);
 			rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 			/* rx_entry will be released
 			 * when sender receives the
@@ -661,11 +663,9 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 			 */
 			return;
 		}
-		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
+		rxr_cq_handle_rx_completion(ep, rx_entry);
 		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 		rxr_release_rx_entry(ep, rx_entry);
-	} else {
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
 	}
 }
 
