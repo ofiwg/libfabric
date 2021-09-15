@@ -82,6 +82,14 @@ No support for counters for the DGRAM endpoint.
 
 No support for inject.
 
+# PROVIDER SPECIFIC ENDPOINT LEVEL OPTION
+
+*FI_OPT_EFA_RNR_RETRY*
+: Defines the number of RNR retry. The application can use it to reset RNR retry
+  counter via the call to fi_setopt. Note that this option must be set before
+  the endpoint is enabled. Otherwise, the call will fail. Also note that this
+  option only applies to RDM endpoint.
+
 # RUNTIME PARAMETERS
 
 *FI_EFA_TX_SIZE*

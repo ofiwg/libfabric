@@ -49,6 +49,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
+#include <rdma/fi_ext.h>
 
 #include <ofi.h>
 #include <ofi_iov.h>
