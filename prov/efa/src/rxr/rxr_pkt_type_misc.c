@@ -589,6 +589,8 @@ void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
 	struct rxr_rx_entry *rx_entry;
 
 	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
+	rxr_cq_handle_rx_completion(ep, rx_entry);
+	rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 	rxr_release_rx_entry(ep, rx_entry);
 }
 

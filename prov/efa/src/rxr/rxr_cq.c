@@ -455,6 +455,14 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 {
 	struct rxr_tx_entry *tx_entry = NULL;
 
+	if (rx_entry->cq_entry.flags & FI_ATOMIC) {
+		/*
+		 * must be on the responder side of an atomic operation.
+		 * atomic does not support REMOTE_CQ_DATA, so nothing to do.
+		 */
+		return;
+	}
+
 	if (rx_entry->cq_entry.flags & FI_WRITE) {
 		/*
 		 * must be on the remote side, notify cq if REMOTE_CQ_DATA is on

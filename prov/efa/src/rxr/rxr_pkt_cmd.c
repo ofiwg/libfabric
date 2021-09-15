@@ -655,11 +655,10 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 						     rx_entry);
 				return;
 			}
-			rxr_cq_handle_rx_completion(ep, rx_entry);
-			rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
-			/* rx_entry will be released
-			 * when sender receives the
-			 * receipt packet.
+			/* rx completion will be written when
+			 * we received the send completion of
+			 * the receipt packet. RX entry will be
+			 * released after that.
 			 */
 			return;
 		}
