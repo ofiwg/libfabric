@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2021 Intel Corporation. All rights reserved.
+ * Copyright (c) 2021 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,6 +42,24 @@
 extern "C" {
 #endif
 
+/*
+ * Each provider can define provider-specific values by
+ * choosing an unique 11-bit (since the most significant
+ * bit must be 1) provider-specific code to avoid
+ * overlapping with other providers. E.g.,
+ *
+ * #define FI_PROV_SPECIFIC_XXX    (FI_PROV_SPECIFIC | 0xabc << 20)
+ * enum {
+ *        FI_PROV_XXX_VALUE        (1U | FI_PROV_SPECIFIC_XXX)
+ * }
+ */
+
+#define FI_PROV_SPECIFIC_EFA   (FI_PROV_SPECIFIC | 0xefa << 20)
+
+/* EFA options */
+enum {
+       FI_OPT_EFA_RNR_RETRY = (1U | FI_PROV_SPECIFIC_EFA),
+};
 
 struct fi_fid_export {
 	struct fid **fid;
