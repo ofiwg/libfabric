@@ -938,7 +938,6 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 				struct rxr_rx_entry *rx_entry);
 
 void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
-				 struct rxr_pkt_entry *pkt_entry,
 				 struct rxr_rx_entry *rx_entry);
 
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
