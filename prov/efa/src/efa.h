@@ -309,6 +309,7 @@ struct efa_ep {
 	struct efa_cq		*scq;
 	struct efa_av		*av;
 	struct fi_info		*info;
+	size_t			rnr_retry;
 	void			*src_addr;
 	struct ibv_send_wr	xmit_more_wr_head;
 	struct ibv_send_wr	*xmit_more_wr_tail;
