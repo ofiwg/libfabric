@@ -33,6 +33,7 @@
 #ifndef FI_EXT_H
 #define FI_EXT_H
 
+#include <stdbool.h>
 #include <rdma/fabric.h>
 
 
