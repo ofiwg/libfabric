@@ -635,6 +635,8 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 	assert(rx_entry);
 	rx_entry->bytes_copied += data_size;
 
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
+
 	if (rx_entry->total_len == rx_entry->bytes_copied) {
 		if (rx_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED) {
 			ret = rxr_pkt_post_ctrl_or_queue(ep,
@@ -653,7 +655,7 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 						     rx_entry);
 				return;
 			}
-			rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
+			rxr_cq_handle_rx_completion(ep, rx_entry);
 			rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 			/* rx_entry will be released
 			 * when sender receives the
@@ -661,11 +663,9 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 			 */
 			return;
 		}
-		rxr_cq_handle_rx_completion(ep, pkt_entry, rx_entry);
+		rxr_cq_handle_rx_completion(ep, rx_entry);
 		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 		rxr_release_rx_entry(ep, rx_entry);
-	} else {
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
 	}
 }
 

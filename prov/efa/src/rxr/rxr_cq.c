@@ -451,7 +451,6 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 }
 
 void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
-				 struct rxr_pkt_entry *pkt_entry,
 				 struct rxr_rx_entry *rx_entry)
 {
 	struct rxr_tx_entry *tx_entry = NULL;
@@ -463,7 +462,6 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
 			rxr_cq_write_rx_completion(ep, rx_entry);
 
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 
@@ -507,7 +505,6 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		 * do not call rxr_release_rx_entry here because
 		 * caller will release
 		 */
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 
@@ -515,7 +512,6 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		rxr_msg_multi_recv_handle_completion(ep, rx_entry);
 
 	rxr_cq_write_rx_completion(ep, rx_entry);
-	rxr_pkt_entry_release_rx(ep, pkt_entry);
 	return;
 }
 
