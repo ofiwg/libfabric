@@ -1111,14 +1111,29 @@ static ssize_t rxr_ep_cancel(fid_t fid_ep, void *context)
 static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 			 size_t *optlen)
 {
-	struct rxr_ep *rxr_ep = container_of(fid, struct rxr_ep,
-					     util_ep.ep_fid.fid);
+	struct rxr_ep *rxr_ep;
+	struct efa_ep *efa_ep;
 
-	if (level != FI_OPT_ENDPOINT || optname != FI_OPT_MIN_MULTI_RECV)
+	rxr_ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
+	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+
+	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
 
-	*(size_t *)optval = rxr_ep->min_multi_recv_size;
-	*optlen = sizeof(size_t);
+	switch (optname) {
+	case FI_OPT_MIN_MULTI_RECV:
+		*(size_t *)optval = rxr_ep->min_multi_recv_size;
+		*optlen = sizeof(size_t);
+		break;
+	case FI_OPT_EFA_RNR_RETRY:
+		*(size_t *)optval = efa_ep->rnr_retry;
+		*optlen = sizeof(size_t);
+		break;
+	default:
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Unknown endpoint option %s\n", __func__);
+		return -FI_ENOPROTOOPT;
+	}
 
 	return FI_SUCCESS;
 }
@@ -1126,16 +1141,46 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 static int rxr_ep_setopt(fid_t fid, int level, int optname,
 			 const void *optval, size_t optlen)
 {
-	struct rxr_ep *rxr_ep = container_of(fid, struct rxr_ep,
-					     util_ep.ep_fid.fid);
+	struct rxr_ep *rxr_ep;
+	struct efa_ep *efa_ep;
 
-	if (level != FI_OPT_ENDPOINT || optname != FI_OPT_MIN_MULTI_RECV)
+	rxr_ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
+	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+
+	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
 
 	if (optlen < sizeof(size_t))
 		return -FI_EINVAL;
 
-	rxr_ep->min_multi_recv_size = *(size_t *)optval;
+	switch (optname) {
+	case FI_OPT_MIN_MULTI_RECV:
+		rxr_ep->min_multi_recv_size = *(size_t *)optval;
+		break;
+	case FI_OPT_EFA_RNR_RETRY:
+		/*
+		 * Application is required to call to fi_setopt before EP
+		 * enabled. If it's calling to fi_setopt after EP enabled,
+		 * fail the call.
+		 *
+		 * efa_ep->qp will be NULL before EP enabled, use it to check
+		 * if the call to fi_setopt is before or after EP enabled for
+		 * convience, instead of calling to ibv_query_qp
+		 */
+		if (!efa_ep->qp) {
+			efa_ep->rnr_retry = *(size_t *)optval;
+		} else {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"The option FI_OPT_EFA_RNR_RETRY is required \
+				to be set before EP enabled %s\n", __func__);
+			return -FI_EINVAL;
+		}
+		break;
+	default:
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"Unknown endpoint option %s\n", __func__);
+		return -FI_ENOPROTOOPT;
+	}
 
 	return FI_SUCCESS;
 }
