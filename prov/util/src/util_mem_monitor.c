@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2017 Cray Inc. All rights reserved.
  * Copyright (c) 2017-2021 Intel Inc. All rights reserved.
- * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2021 Amazon.com, Inc. or its affiliates.
  *                         All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
@@ -43,6 +43,7 @@
 
 
 pthread_mutex_t mm_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mm_state_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_rwlock_t mm_list_rwlock = PTHREAD_RWLOCK_INITIALIZER;
 
 static int ofi_uffd_start(struct ofi_mem_monitor *monitor);
@@ -78,15 +79,86 @@ static size_t ofi_default_cache_size(void)
 	return cache_size;
 }
 
+/**
+ * We needed additional locking to run the start/stop functions
+ * without holding the rwlock. This allows us to have memory
+ * related functions in start/stop without deadlocking. We queue
+ * up a list of monitors before handling their start/stop functions
+ * all within this function. Due to having to release the rwlock
+ * before we enter this function, we need to further ensure thread
+ * safety by adding a state system.
+ *
+ * The state system has 4 expected states, IDLE, STARTING, RUNNING,
+ * and STOPPING.
+ *
+ * We expect states to move without any races from:
+ * IDLE -> STARTING
+ * STARTING -> RUNNING
+ * RUNNING -> STOPPING
+ * STOPPING -> IDLE
+ *
+ * In the case of races, we can also expect:
+ * STOPPING -> RUNNING
+ * STARTING -> RUNNING
+ *
+ * We only execute any behavior in this update function when the
+ * state is either STARTING or STOPPING.
+ *
+ * Discussion on this can be found at #7003 and #7063
+ *
+ */
+static int ofi_monitors_update(struct ofi_mem_monitor **monitors)
+{
+	int ret = 0;
+	enum fi_hmem_iface iface;
+	struct ofi_mem_monitor *monitor;
+
+	assert(monitors);
+
+	pthread_mutex_lock(&mm_state_lock);
+	for (iface = 0; iface < OFI_HMEM_MAX; iface++) {
+		monitor = monitors[iface];
+		if (monitor == NULL)
+			continue;
+
+		assert(monitor->state != FI_MM_STATE_UNSPEC);
+		switch (monitor->state) {
+		case FI_MM_STATE_STARTING:
+			ret = monitor->start(monitor);
+			if (ret) {
+				monitor->state = FI_MM_STATE_IDLE;
+				FI_WARN(&core_prov, FI_LOG_MR,
+					"Failed to start %s memory monitor: %s\n",
+					fi_tostr(&iface, FI_TYPE_HMEM_IFACE), fi_strerror(-ret));
+
+				goto out;
+			}
+			monitor->state = FI_MM_STATE_RUNNING;
+			break;
+		case FI_MM_STATE_STOPPING:
+			monitor->stop(monitor);
+			monitor->state = FI_MM_STATE_IDLE;
+			break;
+		default:
+			break;
+		}
+	}
+out:
+	pthread_mutex_unlock(&mm_state_lock);
+	return ret;
+}
+
 
 void ofi_monitor_init(struct ofi_mem_monitor *monitor)
 {
 	dlist_init(&monitor->list);
+	monitor->state = FI_MM_STATE_IDLE;
 }
 
 void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor)
 {
 	assert(dlist_empty(&monitor->list));
+	assert(monitor->state == FI_MM_STATE_IDLE);
 }
 
 /*
@@ -209,6 +281,7 @@ void ofi_monitors_cleanup(void)
 int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 			   struct ofi_mr_cache *cache)
 {
+	struct ofi_mem_monitor *start_list[OFI_HMEM_MAX];
 	int ret = 0;
 	enum fi_hmem_iface iface;
 	struct ofi_mem_monitor *monitor;
@@ -233,7 +306,7 @@ int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 
 	for (iface = FI_HMEM_SYSTEM; iface < OFI_HMEM_MAX; iface++) {
 		cache->monitors[iface] = NULL;
-
+		start_list[iface] = NULL;
 		if (!hmem_ops[iface].initialized)
 			continue;
 
@@ -246,9 +319,14 @@ int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 		}
 
 		if (dlist_empty(&monitor->list)) {
-			ret = monitor->start(monitor);
-			if (ret)
-				goto err;
+			pthread_mutex_lock(&mm_state_lock);
+			start_list[iface] = monitor;
+			/* See comment above ofi_monitors_update for details */
+			if (monitor->state == FI_MM_STATE_IDLE)
+				monitor->state = FI_MM_STATE_STARTING;
+			else if (monitor->state == FI_MM_STATE_STOPPING)
+				monitor->state = FI_MM_STATE_RUNNING;
+			pthread_mutex_unlock(&mm_state_lock);
 		}
 
 		success_count++;
@@ -257,21 +335,21 @@ int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 				  &monitor->list);
 	}
 	pthread_rwlock_unlock(&mm_list_rwlock);
+
+	ret = ofi_monitors_update(start_list);
+	if (ret)
+		goto err;
+
 	return success_count ? FI_SUCCESS : -FI_ENOSYS;
 
 err:
-	pthread_rwlock_unlock(&mm_list_rwlock);
-
-	FI_WARN(&core_prov, FI_LOG_MR,
-		"Failed to start %s memory monitor: %s\n",
-		fi_tostr(&iface, FI_TYPE_HMEM_IFACE), fi_strerror(-ret));
 	ofi_monitors_del_cache(cache);
-
 	return ret;
 }
 
 void ofi_monitors_del_cache(struct ofi_mr_cache *cache)
 {
+	struct ofi_mem_monitor *stop_list[OFI_HMEM_MAX];
 	struct ofi_mem_monitor *monitor;
 	enum fi_hmem_iface iface;
 	int ret;
@@ -288,19 +366,32 @@ void ofi_monitors_del_cache(struct ofi_mr_cache *cache)
 	} while (ret);
 
 	for (iface = 0; iface < OFI_HMEM_MAX; iface++) {
+		stop_list[iface] = NULL;
 		monitor = cache->monitors[iface];
 		if (!monitor)
 			continue;
 
 		dlist_remove(&cache->notify_entries[iface]);
 
-		if (dlist_empty(&monitor->list))
-			monitor->stop(monitor);
+		if (dlist_empty(&monitor->list)) {
+			pthread_mutex_lock(&mm_state_lock);
+			stop_list[iface] = monitor;
+			/* See comment above ofi_monitors_update for details */
+			if (monitor->state == FI_MM_STATE_RUNNING)
+				monitor->state = FI_MM_STATE_STOPPING;
+			else if (monitor->state == FI_MM_STATE_STARTING)
+				monitor->state = FI_MM_STATE_RUNNING;
+			pthread_mutex_unlock(&mm_state_lock);
+		}
 
 		cache->monitors[iface] = NULL;
 	}
 
 	pthread_rwlock_unlock(&mm_list_rwlock);
+
+
+	ofi_monitors_update(stop_list);
+	return;
 }
 
 /* Must be called with locks in place like following
