@@ -37,6 +37,7 @@
 #include "rxr_cntr.h"
 #include "rxr_read.h"
 #include "rxr_pkt_cmd.h"
+#include "rxr_pkt_type_base.h"
 
 /* Handshake wait timeout in microseconds */
 #define RXR_HANDSHAKE_WAIT_TIMEOUT 1000000
@@ -47,58 +48,6 @@
  *          handing recv completion.
  *          dump (for debug only)
  */
-
-/*
- *  Functions used to post a packet
- */
-ssize_t rxr_pkt_post_data(struct rxr_ep *rxr_ep,
-			  struct rxr_tx_entry *tx_entry)
-{
-	struct rxr_pkt_entry *pkt_entry;
-	struct rxr_data_pkt *data_pkt;
-	ssize_t ret;
-
-	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
-	if (OFI_UNLIKELY(!pkt_entry)) {
-		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
-		       "TX packets exhausted, current tx ops in flight %lu",
-		       rxr_ep->efa_outstanding_tx_ops);
-		return -FI_EAGAIN;
-	}
-
-	pkt_entry->x_entry = (void *)tx_entry;
-	pkt_entry->addr = tx_entry->addr;
-
-	data_pkt = (struct rxr_data_pkt *)pkt_entry->pkt;
-
-	data_pkt->hdr.type = RXR_DATA_PKT;
-	data_pkt->hdr.version = RXR_PROTOCOL_VERSION;
-	data_pkt->hdr.flags = 0;
-
-	data_pkt->hdr.recv_id = tx_entry->rx_id;
-
-	/*
-	 * Data packets are sent in order so using bytes_sent is okay here.
-	 */
-	data_pkt->hdr.seg_offset = tx_entry->bytes_sent;
-
-	if (tx_entry->desc[0])
-		ret = rxr_pkt_send_data_desc(rxr_ep, tx_entry, pkt_entry);
-	else
-		ret = rxr_pkt_send_data(rxr_ep, tx_entry, pkt_entry);
-
-	if (OFI_UNLIKELY(ret)) {
-		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
-		return ret;
-	}
-
-	data_pkt = rxr_get_data_pkt(pkt_entry->pkt);
-	tx_entry->bytes_sent += data_pkt->hdr.seg_length;
-	tx_entry->window -= data_pkt->hdr.seg_length;
-	assert(data_pkt->hdr.seg_length > 0);
-	assert(tx_entry->window >= 0);
-	return ret;
-}
 
 /*
  *   rxr_pkt_init_ctrl() uses init functions declared in rxr_pkt_type.h
@@ -200,6 +149,9 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 	case RXR_DC_WRITE_RTA_PKT:
 		ret = rxr_pkt_init_dc_write_rta(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
+	case RXR_DATA_PKT:
+		ret = rxr_pkt_init_data(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
 	default:
 		assert(0 && "unknown pkt type to init");
 		ret = -FI_EINVAL;
@@ -277,6 +229,9 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 	case RXR_DC_EAGER_TAGRTM_PKT:
 	case RXR_DC_EAGER_RTW_PKT:
 		break;
+	case RXR_DATA_PKT:
+		rxr_pkt_handle_data_sent(rxr_ep, pkt_entry);
+		break;
 	default:
 		assert(0 && "Unknown packet type to handle sent");
 		break;
@@ -312,19 +267,6 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 
 	if (!pkt_entry)
 		return -FI_EAGAIN;
-
-	/*
-	 * The allocated pkt_entry->send will be released when releasing the
-	 * pkt_entry, because pkt_entry could be queued and re-send later
-	 */
-	pkt_entry->send = ofi_buf_alloc(rxr_ep->pkt_sendv_pool);
-	if (!pkt_entry->send) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-			"Unable to allocate rxr_pkt_sendv from pkt_sendv_pool\n");
-		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
-		return -FI_EAGAIN;
-	}
-	pkt_entry->send->iov_count = 0;
 
 	/*
 	 * rxr_pkt_init_ctrl will set pkt_entry->send if it want to use multi iov
@@ -532,95 +474,6 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 	if (OFI_UNLIKELY(err))
 		return err;
 
-	return 0;
-}
-
-/* return the data size in a packet entry */
-size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
-{
-	int pkt_type;
-
-	assert(pkt_entry);
-	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
-
-	if (pkt_type == RXR_DATA_PKT)
-		return pkt_entry->pkt_size - sizeof(struct rxr_data_hdr);
-
-	if (pkt_type == RXR_READRSP_PKT)
-		return pkt_entry->pkt_size - sizeof(struct rxr_readrsp_hdr);
-
-	if (pkt_type >= RXR_REQ_PKT_BEGIN) {
-		assert(pkt_type == RXR_EAGER_MSGRTM_PKT || pkt_type == RXR_EAGER_TAGRTM_PKT ||
-		       pkt_type == RXR_MEDIUM_MSGRTM_PKT || pkt_type == RXR_MEDIUM_TAGRTM_PKT ||
-		       pkt_type == RXR_LONGCTS_MSGRTM_PKT || pkt_type == RXR_LONGCTS_TAGRTM_PKT ||
-		       pkt_type == RXR_EAGER_RTW_PKT ||
-		       pkt_type == RXR_LONGCTS_RTW_PKT ||
-		       pkt_type == RXR_DC_EAGER_MSGRTM_PKT ||
-		       pkt_type == RXR_DC_EAGER_TAGRTM_PKT ||
-		       pkt_type == RXR_DC_MEDIUM_MSGRTM_PKT ||
-		       pkt_type == RXR_DC_MEDIUM_TAGRTM_PKT ||
-		       pkt_type == RXR_DC_LONGCTS_MSGRTM_PKT ||
-		       pkt_type == RXR_DC_LONGCTS_TAGRTM_PKT ||
-		       pkt_type == RXR_DC_EAGER_RTW_PKT ||
-		       pkt_type == RXR_DC_LONGCTS_RTW_PKT);
-
-		return pkt_entry->pkt_size - rxr_pkt_req_hdr_size(pkt_entry);
-	}
-
-	/* other packet type does not contain data, thus return 0
-	 */
-	return 0;
-}
-
-/*
- * rxr_pkt_copy_to_rx() copy data to receiving buffer then
- * update counter in rx_entry.
- *
- * If receiving buffer is on GPU memory, it will post a
- * read request, otherwise it will copy data.
- *
- * If all data has been copied to receiving buffer,
- * it will write rx completion and release rx_entry.
- *
- * Return value and states:
- *
- *    On success, return 0 and release pkt_entry
- *    On failure, return error code
- */
-ssize_t rxr_pkt_copy_to_rx(struct rxr_ep *ep,
-			   struct rxr_rx_entry *rx_entry,
-			   size_t data_offset,
-			   struct rxr_pkt_entry *pkt_entry,
-			   char *data, size_t data_size)
-{
-	ssize_t err, bytes_copied;
-
-	pkt_entry->x_entry = rx_entry;
-
-	if (data_size > 0 && efa_ep_is_cuda_mr(rx_entry->desc[0])) {
-		err = rxr_read_post_local_read_or_queue(ep, rx_entry, data_offset,
-							pkt_entry, data, data_size);
-		if (err)
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "cannot post read to copy data\n");
-
-		return err;
-	}
-
-	if (OFI_LIKELY(!(rx_entry->rxr_flags & RXR_RECV_CANCEL)) &&
-	    rx_entry->cq_entry.len > data_offset && data_size > 0) {
-		bytes_copied = ofi_copy_to_iov(rx_entry->iov,
-					       rx_entry->iov_count,
-					       data_offset + ep->msg_prefix_size,
-					       data,
-					       data_size);
-		if (bytes_copied != MIN(data_size, rx_entry->cq_entry.len - data_offset)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
-				bytes_copied);
-			return -FI_EINVAL;
-		}
-	}
-
-	rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
 	return 0;
 }
 
@@ -1134,37 +987,29 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
+	
+	if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
+		if (pkt_type >= RXR_REQ_PKT_BEGIN && rxr_pkt_req_raw_addr(pkt_entry)) {
+			/*
+			 * We have not communicated with this peer before.
+			 * rxr_pkt_insert_addr() will insert the address to address vector,
+			 * and pkt_entry->addr should be updated accordingly.
+			 */
+			void *raw_addr;
 
-	if (pkt_type >= RXR_REQ_PKT_BEGIN && rxr_pkt_req_raw_addr(pkt_entry)) {
-		/*
-		 * A REQ packet with raw address in its header could always
-		 * be the 1st packet we receive from a peer, even if we already
-		 * have the address in AV.
-		 *
-		 * This is because the peer might be a newly created one,
-		 * with the same GID+QPN as an old peer (though a different Q-Key),
-		 * therefore lower provider thinks it is the older peer.
-		 *
-		 * Therefore, we alwyas need to call rxr_pkt_insert_addr() for
-		 * such a packet. rxr_pkt_insert_addr() will insert the address
-		 * to AV if it is indeed new.
-		 */
-		void *raw_addr;
-
-		raw_addr = rxr_pkt_req_raw_addr(pkt_entry);
-		assert(raw_addr);
-		pkt_entry->addr = rxr_pkt_insert_addr(ep, pkt_entry, raw_addr);
-	} else if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
-		/*
-		 * Receiving a non-REQ packet or a REQ packet without raw address means
-		 * we had prior communication with the peer. For such a packet,
-		 * the only possiblity for its pkt_entry->addr to be FI_ADDR_NOTAVAIL
-		 * is application called fi_av_remove() to remove the address
-		 * from AV. In this case, this packet should be ignored.
-		 */
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Warning: ignoring a received packet from a removed address\n");
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		return;
+			raw_addr = rxr_pkt_req_raw_addr(pkt_entry);
+			assert(raw_addr);
+			pkt_entry->addr = rxr_pkt_insert_addr(ep, pkt_entry, raw_addr);
+		} else {
+			/*
+			 * We had prior communication with the peer.
+			 * Application called fi_av_remove() to remove the address
+			 * from address vector. In this case, this packet should be ignored.
+			 */
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "Warning: ignoring a received packet from a removed address\n");
+			rxr_pkt_entry_release_rx(ep, pkt_entry);
+			return;
+		}
 	}
 
 	assert(pkt_entry->addr != FI_ADDR_NOTAVAIL);
@@ -1238,42 +1083,60 @@ void rxr_pkt_print_cts(char *prefix, struct rxr_cts_hdr *cts_hdr)
 }
 
 static
-void rxr_pkt_print_data(char *prefix, struct rxr_data_pkt *data_pkt)
+void rxr_pkt_print_data(char *prefix, struct rxr_pkt_entry *pkt_entry)
 {
+	struct rxr_data_hdr *data_hdr;
 	char str[RXR_PKT_DUMP_DATA_LEN * 4];
-	size_t str_len = RXR_PKT_DUMP_DATA_LEN * 4, l;
+	size_t str_len = RXR_PKT_DUMP_DATA_LEN * 4, l, hdr_size;
+	uint8_t *data;
 	int i;
 
 	str[str_len - 1] = '\0';
+
+	data_hdr = rxr_get_data_hdr(pkt_entry->pkt);
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 	       "%s RxR DATA packet -  version: %" PRIu8
 	       " flags: %x rx_id: %" PRIu32
 	       " seg_size: %"	     PRIu64
 	       " seg_offset: %"	     PRIu64
-	       "\n", prefix, data_pkt->hdr.version, data_pkt->hdr.flags,
-	       data_pkt->hdr.recv_id, data_pkt->hdr.seg_length,
-	       data_pkt->hdr.seg_offset);
+	       "\n", prefix, data_hdr->version, data_hdr->flags,
+	       data_hdr->recv_id, data_hdr->seg_length,
+	       data_hdr->seg_offset);
+
+	hdr_size = sizeof(struct rxr_data_hdr);
+	if (data_hdr->flags & RXR_PKT_CONNID_HDR) {
+		hdr_size += sizeof(struct rxr_data_opt_connid_hdr);
+		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+		       "sender_connid: %d\n",
+		       data_hdr->connid_hdr->connid);
+	}
+
+	data = (uint8_t *)pkt_entry->pkt + hdr_size;
 
 	l = snprintf(str, str_len, ("\tdata:    "));
-	for (i = 0; i < MIN(data_pkt->hdr.seg_length, RXR_PKT_DUMP_DATA_LEN);
+	for (i = 0; i < MIN(data_hdr->seg_length, RXR_PKT_DUMP_DATA_LEN);
 	     i++)
 		l += snprintf(str + l, str_len - l, "%02x ",
-			      ((uint8_t *)data_pkt->data)[i]);
+			      data[i]);
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA, "%s\n", str);
 }
 
-void rxr_pkt_print(char *prefix, struct rxr_ep *ep, struct rxr_base_hdr *hdr)
+void rxr_pkt_print(char *prefix, struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
+	struct rxr_base_hdr *hdr;
+
+	hdr = rxr_get_base_hdr(pkt_entry->pkt);
+
 	switch (hdr->type) {
 	case RXR_HANDSHAKE_PKT:
-		rxr_pkt_print_handshake(prefix, (struct rxr_handshake_hdr *)hdr);
+		rxr_pkt_print_handshake(prefix, rxr_get_handshake_hdr(pkt_entry->pkt));
 		break;
 	case RXR_CTS_PKT:
-		rxr_pkt_print_cts(prefix, (struct rxr_cts_hdr *)hdr);
+		rxr_pkt_print_cts(prefix, rxr_get_cts_hdr(pkt_entry->pkt));
 		break;
 	case RXR_DATA_PKT:
-		rxr_pkt_print_data(prefix, (struct rxr_data_pkt *)hdr);
+		rxr_pkt_print_data(prefix, pkt_entry);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid ctl pkt type %d\n",

@@ -54,6 +54,20 @@ struct rxr_handshake_hdr *rxr_get_handshake_hdr(void *pkt)
 	return (struct rxr_handshake_hdr *)pkt;
 }
 
+static inline
+struct rxr_handshake_opt_connid_hdr *rxr_get_handshake_opt_connid_hdr(void *pkt)
+{
+	struct rxr_handshake_hdr *handshake_hdr;
+	size_t base_hdr_size;
+
+	handshake_hdr = (struct rxr_handshake_hdr *)pkt;
+	assert(handshake_hdr->type == RXR_HANDSHAKE_PKT);
+	assert(handshake_hdr->flags & RXR_PKT_CONNID_HDR);
+	base_hdr_size = sizeof(struct rxr_handshake_hdr) +
+			(handshake_hdr->nextra_p3 - 3) * sizeof(uint64_t);
+	return (struct rxr_handshake_opt_connid_hdr *)((char *)pkt + base_hdr_size);
+}
+
 ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 			       struct rxr_pkt_entry *pkt_entry,
 			       fi_addr_t addr);
@@ -87,20 +101,18 @@ void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
 void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 
-/* DATA packet related functions */
 static inline
-struct rxr_data_pkt *rxr_get_data_pkt(void *pkt)
+struct rxr_data_hdr *rxr_get_data_hdr(void *pkt)
 {
-	return (struct rxr_data_pkt *)pkt;
+	return (struct rxr_data_hdr *)pkt;
 }
 
-ssize_t rxr_pkt_send_data(struct rxr_ep *ep,
-			  struct rxr_tx_entry *tx_entry,
-			  struct rxr_pkt_entry *pkt_entry);
+int rxr_pkt_init_data(struct rxr_ep *ep,
+		      struct rxr_tx_entry *tx_entry,
+		      struct rxr_pkt_entry *pkt_entry);
 
-ssize_t rxr_pkt_send_data_desc(struct rxr_ep *ep,
-			       struct rxr_tx_entry *tx_entry,
-			       struct rxr_pkt_entry *pkt_entry);
+void rxr_pkt_handle_data_sent(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_proc_data(struct rxr_ep *ep,
 		       struct rxr_rx_entry *rx_entry,

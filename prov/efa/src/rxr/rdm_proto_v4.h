@@ -65,7 +65,8 @@ struct efa_ep_addr {
 #define RXR_EXTRA_FEATURE_RDMA_READ			BIT_ULL(0)
 #define RXR_EXTRA_FEATURE_DELIVERY_COMPLETE 		BIT_ULL(1)
 #define RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH	BIT_ULL(2)
-#define RXR_NUM_EXTRA_FEATURE_OR_REQUEST		3
+#define RXR_EXTRA_REQUEST_CONNID_HEADER			BIT_ULL(3)
+#define RXR_NUM_EXTRA_FEATURE_OR_REQUEST		4
 #define RXR_MAX_NUM_EXINFO	(256)
 
 /*
@@ -138,6 +139,19 @@ struct rxr_base_hdr {
 static_assert(sizeof(struct rxr_base_hdr) == 4, "rxr_base_hdr check");
 #endif
 
+/* Universal flags that can be applied on "rxr_base_hdr.flags".
+ *
+ * Universal flags start from the last bit and goes backwards.
+ * Because "rxr_base_hdr.flags" is a 16-bits integer, the
+ * last bit is the 15th bit.
+ * Other than universal flags, each packet type defines its
+ * own set of flags, which generally starts from the 0th bit
+ * in "rxr_base_hdr.flags".
+ */
+
+/* indicate this packet has the sender connid */
+#define RXR_PKT_CONNID_HDR		BIT_ULL(15)
+
 struct efa_rma_iov {
 	uint64_t		addr;
 	size_t			len;
@@ -164,7 +178,10 @@ struct rxr_cts_hdr {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint8_t pad[4];
+	union {
+		uint32_t connid; /* sender connection ID, set when RXR_PKT_CONNID_HDR is on */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes */
+	};
 	uint32_t send_id; /* ID of the send opertaion on sender side */
 	uint32_t recv_id; /* ID of the receive operatin on receive side */
 	uint64_t recv_length; /* number of bytes receiver is ready to receive */
@@ -176,6 +193,15 @@ static_assert(sizeof(struct rxr_cts_hdr) == 24, "rxr_cts_hdr check");
 
 /* this flag is to indicated the CTS is the response of a RTR packet */
 #define RXR_CTS_READ_REQ		BIT_ULL(7)
+
+
+/*
+ * @brief optional connid header for DATA packet
+ */
+struct rxr_data_opt_connid_hdr {
+	uint32_t connid;
+	uint32_t padding;
+};
 
 /*
  * @brief header format of DATA packet header (Packet Type ID 4)
@@ -200,11 +226,8 @@ struct rxr_data_hdr {
 	uint32_t recv_id; /* ID of the receive operation on receiver */
 	uint64_t seg_length;
 	uint64_t seg_offset;
-};
-
-struct rxr_data_pkt {
-	struct rxr_data_hdr hdr;
-	char data[];
+	/* optional connid header, present when RXR_PKT_CONNID_HDR is on */
+	struct rxr_data_opt_connid_hdr connid_hdr[0];
 };
 
 #if defined(static_assert) && defined(__x86_64__)
@@ -222,7 +245,10 @@ struct rxr_readrsp_hdr {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint32_t padding;
+	union {
+		uint32_t connid; /* sender connection ID, set when RXR_PKT_CONNID_HDR is on */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes boundary */
+	};
 	uint32_t recv_id; /* ID of the receive operation on the read requester, from rtr packet */
 	uint32_t send_id; /* ID of the send operation on the read responder, will be included in CTS packet */
 	uint64_t seg_length;
@@ -266,10 +292,14 @@ struct rxr_eor_hdr {
 	/* end of rxr_base_hdr */
 	uint32_t send_id; /* ID of the send operation on sender */
 	uint32_t recv_id; /* ID of the receive operation on receiver */
+	union {
+		uint32_t connid; /* sender connection ID, optional, set whne RXR_PKT_CONNID_HDR is on */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes boundary */
+	};
 };
 
 #if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_eor_hdr) == 12, "rxr_eor_hdr check");
+static_assert(sizeof(struct rxr_eor_hdr) == 16, "rxr_eor_hdr check");
 #endif
 
 /**
@@ -284,7 +314,10 @@ struct rxr_atomrsp_hdr {
 	uint8_t version;
 	uint16_t flags;
 	/* end of rxr_base_hdr */
-	uint32_t padding;
+	union {
+		uint32_t connid; /* sender connid. set when RXR_PKT_CONNID_HDR is on in flags */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes boundary */
+	};
 	uint32_t reserved;
 	uint32_t recv_id;
 	uint64_t seg_length;
@@ -324,6 +357,15 @@ struct rxr_handshake_hdr {
 static_assert(sizeof(struct rxr_handshake_hdr) == 8, "rxr_handshake_hdr check");
 #endif
 
+struct rxr_handshake_opt_connid_hdr {
+	uint32_t connid;
+	uint32_t padding; /* padding to 8 bytes boundary */
+};
+
+#if defined(static_assert) && defined(__x86_64__)
+static_assert(sizeof(struct rxr_handshake_opt_connid_hdr) == 8, "rxr_handshake_opt_connid_hdr check");
+#endif
+
 /* @brief header format of RECEIPT packet */
 struct rxr_receipt_hdr {
 	uint8_t type;
@@ -332,7 +374,10 @@ struct rxr_receipt_hdr {
 	/* end of rxr_base_hdr */
 	uint32_t tx_id;
 	uint32_t msg_id;
-	int32_t padding;
+	union {
+		uint32_t connid; /* sender connection ID, set when RXR_PKT_CONNID_HDR is on */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes */
+	};
 };
 
 /*
@@ -367,6 +412,10 @@ struct rxr_req_opt_raw_addr_hdr {
 
 struct rxr_req_opt_cq_data_hdr {
 	int64_t cq_data;
+};
+
+struct rxr_req_opt_connid_hdr {
+	uint32_t connid; /* sender's connection ID */
 };
 
 #define RXR_REQ_OPT_HDR_ALIGNMENT 8

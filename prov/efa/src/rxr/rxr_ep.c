@@ -43,6 +43,7 @@
 #include "rxr_msg.h"
 #include "rxr_rma.h"
 #include "rxr_pkt_cmd.h"
+#include "rxr_pkt_type_base.h"
 #include "rxr_read.h"
 #include "rxr_atomic.h"
 
@@ -958,6 +959,8 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
 		 */
 		ep->extra_info[0] |= RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
 	}
+
+	ep->extra_info[0] |= RXR_EXTRA_REQUEST_CONNID_HEADER;
 }
 
 static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
@@ -1757,10 +1760,10 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 				      size_t cqe_to_process)
 {
 	struct ibv_wc ibv_wc;
+	uint32_t *connid;
 	struct efa_cq *efa_cq;
 	struct efa_av *efa_av;
 	struct efa_ep *efa_ep;
-	struct rdm_peer *peer;
 	struct rxr_pkt_entry *pkt_entry;
 	ssize_t ret;
 	int i, err, prov_errno;
@@ -1806,8 +1809,24 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 			rxr_pkt_handle_send_completion(ep, pkt_entry);
 			break;
 		case IBV_WC_RECV:
-			peer = efa_ahn_qpn_to_peer(efa_av, ibv_wc.slid, ibv_wc.src_qp);
-			pkt_entry->addr = peer ? peer->efa_fiaddr : FI_ADDR_NOTAVAIL;
+			connid = rxr_pkt_connid_ptr(pkt_entry);
+			if (!connid) {
+				FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL,
+					     "An incoming packet does have connection ID in its header.\n"
+					     "This means the peer is using an older version of libfabric.\n"
+					     "The communication can continue but it is encouraged to use\n"
+					     "a newer version of libfabric\n");
+
+				connid = efa_av_lookup_latest_connid(efa_av, ibv_wc.slid, ibv_wc.src_qp);
+				/* We should always be able to find latest connid for a given ahn+qpn,
+				 * therefore an assertion is used here.
+				 */
+				if (!connid)
+					FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Cannot find latest connid in connid map!");
+				assert(connid);
+			}
+
+			pkt_entry->addr = efa_av_reverse_lookup(efa_av, ibv_wc.slid, ibv_wc.src_qp, *connid);
 			pkt_entry->pkt_size = ibv_wc.byte_len;
 			assert(pkt_entry->pkt_size > 0);
 			rxr_pkt_handle_recv_completion(ep, pkt_entry);
@@ -2097,6 +2116,30 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			continue;
 
+		/*
+		 * Do not send DATA packet until we received HANDSHAKE packet from the peer,
+		 * this is because endpoint does not know whether peer need connid in header
+		 * until it get the HANDSHAKE packet.
+		 *
+		 * We only do this for DATA packet because other types of packets always
+		 * has connid in there packet header. If peer does not make use of the connid,
+		 * the connid can be safely ignored.
+		 *
+		 * DATA packet is different because for DATA packet connid is an optional
+		 * header inserted between the mandatory header and the application data.
+		 * Therefore if peer does not use/understand connid, it will take connid
+		 * as application data thus cause data corruption.
+		 *
+		 * This will not cause deadlock because peer will send a HANDSHAKE packet
+		 * back upon receiving 1st packet from the endpoint, and in all 3 sub0protocols
+		 * (long-CTS message, emulated long-CTS write and emulated long-CTS read)
+		 * where DATA packet is used, endpoint will send other types of packet to
+		 * peer before sending DATA packets. The workflow of the 3 sub-protocol
+		 * can be found in protocol v4 document chapter 3.
+		 */
+		if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
+			continue;
+
 		if (tx_entry->window > 0)
 			tx_entry->send_flags |= FI_MORE;
 		else
@@ -2116,7 +2159,8 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			if (peer->flags & RXR_PEER_IN_BACKOFF)
 				break;
 
-			ret = rxr_pkt_post_data(ep, tx_entry);
+			ret = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry,
+						RXR_DATA_PKT, false);
 			if (OFI_UNLIKELY(ret)) {
 				tx_entry->send_flags &= ~FI_MORE;
 				if (ret == -FI_EAGAIN)
@@ -2303,7 +2347,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (rxr_ep->mtu_size > RXR_MTU_MAX_LIMIT)
 		rxr_ep->mtu_size = RXR_MTU_MAX_LIMIT;
 
-	rxr_ep->max_data_payload_size = rxr_ep->mtu_size - sizeof(struct rxr_data_hdr);
+	rxr_ep->max_data_payload_size = rxr_ep->mtu_size - sizeof(struct rxr_data_hdr) - sizeof(struct rxr_data_opt_connid_hdr);
 	rxr_ep->min_multi_recv_size = rxr_ep->mtu_size - rxr_ep->max_proto_hdr_size;
 
 	if (rxr_env.tx_queue_size > 0 &&

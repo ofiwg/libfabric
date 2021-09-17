@@ -37,6 +37,7 @@
 #include "rxr_rma.h"
 #include "rxr_msg.h"
 #include "rxr_pkt_cmd.h"
+#include "rxr_pkt_type_base.h"
 #include "rxr_read.h"
 
 /*
@@ -127,6 +128,18 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 		 * so the remote side can insert it into its address vector.
 		 */
 		base_hdr->flags |= RXR_REQ_OPT_RAW_ADDR_HDR;
+	} else if (rxr_peer_need_connid(peer)) {
+		/*
+		 * After receiving handshake packet, we will know the peer's capability.
+		 *
+		 * If the peer need connid, we will include the optional connid
+		 * header in the req packet header.The peer will use it
+		 * to verify my identity.
+		 *
+		 * This logic means that a req packet cannot have both
+		 * the optional raw address header and the optional connid header.
+		 */
+		base_hdr->flags |= RXR_PKT_CONNID_HDR;
 	}
 
 	if (tx_entry->fi_flags & FI_REMOTE_CQ_DATA) {
@@ -153,7 +166,16 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 		opt_hdr += sizeof(*cq_data_hdr);
 	}
 
+	if (base_hdr->flags & RXR_PKT_CONNID_HDR) {
+		struct rxr_req_opt_connid_hdr *connid_hdr;
+
+		connid_hdr = (struct rxr_req_opt_connid_hdr *)opt_hdr;
+		connid_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+		opt_hdr += sizeof(*connid_hdr);
+	}
+
 	pkt_entry->addr = tx_entry->addr;
+	assert(opt_hdr - pkt_entry->pkt == rxr_pkt_req_hdr_size(pkt_entry));
 }
 
 size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry)
@@ -183,6 +205,13 @@ size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry)
 	return hdr_size;
 }
 
+/**
+ * @brief return the optional raw addr header pointer in a req packet
+ *
+ * @param[in]	pkt_entry	an REQ packet entry
+ * @return	If the input has the optional raw addres header, return the pointer to it.
+ *		Otherwise, return NULL
+ */
 void *rxr_pkt_req_raw_addr(struct rxr_pkt_entry *pkt_entry)
 {
 	char *opt_hdr;
@@ -192,8 +221,48 @@ void *rxr_pkt_req_raw_addr(struct rxr_pkt_entry *pkt_entry)
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	opt_hdr = (char *)pkt_entry->pkt + rxr_pkt_req_base_hdr_size(pkt_entry);
 	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
+		/* For req packet, the optional connid header and the optional
+		 * raw address header are mutually exclusive.
+		 */
+		assert(!(base_hdr->flags & RXR_PKT_CONNID_HDR));
 		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
 		return raw_addr_hdr->raw_addr;
+	}
+
+	return NULL;
+}
+
+/**
+ * @brief return the pointer to connid in a req packet
+ *
+ * @param[in]	pkt_entry	an REQ packet entry
+ * @return	If the input has the optional connid header, return the pointer to connid
+ * 		Otherwise, return NULL
+ */
+uint32_t *rxr_pkt_req_connid_ptr(struct rxr_pkt_entry *pkt_entry)
+{
+	char *opt_hdr;
+	struct rxr_base_hdr *base_hdr;
+	struct rxr_req_opt_connid_hdr *connid_hdr;
+
+	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	opt_hdr = (char *)pkt_entry->pkt + rxr_pkt_req_base_hdr_size(pkt_entry);
+
+	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
+		struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
+		struct efa_ep_addr *raw_addr;
+
+		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
+		raw_addr = (struct efa_ep_addr *)raw_addr_hdr->raw_addr;
+		return &raw_addr->qkey;
+	}
+
+	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR)
+		opt_hdr += sizeof(struct rxr_req_opt_cq_data_hdr);
+
+	if (base_hdr->flags & RXR_PKT_CONNID_HDR) {
+		connid_hdr = (struct rxr_req_opt_connid_hdr *)opt_hdr;
+		return &connid_hdr->connid;
 	}
 
 	return NULL;
@@ -207,13 +276,24 @@ size_t rxr_pkt_req_hdr_size(struct rxr_pkt_entry *pkt_entry)
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	opt_hdr = (char *)pkt_entry->pkt + rxr_pkt_req_base_hdr_size(pkt_entry);
+
+	/*
+	 * It is not possible to have both optional raw addr header and optional
+	 * connid header in a packet header.
+	 */
 	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
+		assert(!(base_hdr->flags & RXR_PKT_CONNID_HDR));
 		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
 		opt_hdr += sizeof(struct rxr_req_opt_raw_addr_hdr) + raw_addr_hdr->addr_len;
 	}
 
 	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR)
 		opt_hdr += sizeof(struct rxr_req_opt_cq_data_hdr);
+
+	if (base_hdr->flags & RXR_PKT_CONNID_HDR) {
+		assert(!(base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR));
+		opt_hdr += sizeof(struct rxr_req_opt_connid_hdr);
+	}
 
 	return opt_hdr - (char *)pkt_entry->pkt;
 }
@@ -239,6 +319,13 @@ int64_t rxr_pkt_req_cq_data(struct rxr_pkt_entry *pkt_entry)
 
 size_t rxr_pkt_req_max_header_size(int pkt_type)
 {
+	/* max_hdr_size does not include optional connid hdr length because
+	 * it is impossible to have both optional connid hdr and opt_raw_addr_hdr
+	 * in the header, and length of opt raw addr hdr is larger than
+	 * connid hdr (which is confirmed by the following assertion).
+	 */
+	assert(RXR_REQ_OPT_RAW_ADDR_HDR_SIZE >= sizeof(struct rxr_req_opt_connid_hdr));
+
 	int max_hdr_size = REQ_INF_LIST[pkt_type].base_hdr_size
 		+ RXR_REQ_OPT_RAW_ADDR_HDR_SIZE
 		+ sizeof(struct rxr_req_opt_cq_data_hdr);
@@ -289,81 +376,6 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
  *
  *     init() functions
  */
-
-/**
- * @brief set up data in a REQ packet using tx_entry information.
- *        Depend on the tx_entry, this function can either copy data to packet entry, or point
- *        pkt_entry->iov to applicaiton buffer.
- *        It requires the packet header to be set.
- *
- * @param[in]		ep		end point.
- * @param[in,out]	pkt_entry	packet entry. Header must have been set when the function is called
- * @param[in]		tx_entry	This function will use iov, iov_count and desc of tx_entry
- * @param[in]		data_offset	offset of the data to be set up. In reference to tx_entry->total_len.
- * @param[in]		data_size	length of the data to be set up. In reference to tx_entry->total_len.
- * @return		no return
- */
-static inline
-void rxr_pkt_req_data_from_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
-			      struct rxr_tx_entry *tx_entry, size_t data_offset,
-			      size_t data_size)
-{
-	int tx_iov_index;
-	size_t tx_iov_offset;
-	char *data;
-	size_t hdr_size, copied;
-	struct efa_mr *desc;
-
-	assert(pkt_entry->send);
-	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
-	assert(hdr_size > 0);
-	if (data_size == 0) {
-		pkt_entry->send->iov_count = 0;
-		pkt_entry->pkt_size = hdr_size;
-		return;
-	}
-
-	rxr_locate_iov_pos(tx_entry->iov, tx_entry->iov_count, data_offset,
-			   &tx_iov_index, &tx_iov_offset);
-	desc = tx_entry->desc[0];
-	assert(tx_iov_index < tx_entry->iov_count);
-	assert(tx_iov_offset < tx_entry->iov[tx_iov_index].iov_len);
-
-	/*
-	 * Copy can be avoid if:
-	 * 1. user provided memory descriptor, or lower provider does not need memory descriptor
-	 * 2. data to be send is in 1 iov, because device only support 2 iov, and we use
-	 *    1st iov for header.
-	 */
-	if ((!pkt_entry->mr || tx_entry->desc[tx_iov_index]) &&
-	    (tx_iov_offset + data_size <= tx_entry->iov[tx_iov_index].iov_len)) {
-
-		assert(ep->core_iov_limit >= 2);
-		pkt_entry->send->iov[0].iov_base = pkt_entry->pkt;
-		pkt_entry->send->iov[0].iov_len = hdr_size;
-		pkt_entry->send->desc[0] = pkt_entry->mr ? fi_mr_desc(pkt_entry->mr) : NULL;
-
-		pkt_entry->send->iov[1].iov_base = (char *)tx_entry->iov[tx_iov_index].iov_base + tx_iov_offset;
-		pkt_entry->send->iov[1].iov_len = data_size;
-		pkt_entry->send->desc[1] = tx_entry->desc[tx_iov_index];
-		pkt_entry->send->iov_count = 2;
-		pkt_entry->pkt_size = hdr_size + data_size;
-		return;
-	}
-
-	data = (char *)pkt_entry->pkt + hdr_size;
-	copied = ofi_copy_from_hmem_iov(data,
-					data_size,
-					desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-					desc ? desc->peer.device.reserved : 0,
-					tx_entry->iov,
-					tx_entry->iov_count,
-					data_offset);
-	assert(copied == data_size);
-	pkt_entry->send->iov_count = 0;
-	pkt_entry->pkt_size = hdr_size + copied;
-}
-
 static inline
 void rxr_pkt_init_rtm(struct rxr_ep *ep,
 		      struct rxr_tx_entry *tx_entry,
@@ -380,8 +392,8 @@ void rxr_pkt_init_rtm(struct rxr_ep *ep,
 
 	data_size = MIN(tx_entry->total_len - data_offset,
 			ep->mtu_size - rxr_pkt_req_hdr_size(pkt_entry));
-	rxr_pkt_req_data_from_tx(ep, pkt_entry, tx_entry, data_offset, data_size);
-	pkt_entry->x_entry = tx_entry;
+	rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, rxr_pkt_req_hdr_size(pkt_entry),
+					tx_entry, data_offset, data_size);
 }
 
 ssize_t rxr_pkt_init_eager_msgrtm(struct rxr_ep *ep,
@@ -972,20 +984,20 @@ ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
 			offset = rxr_get_medium_rtm_base_hdr(cur->pkt)->seg_offset;
 		data_size = cur->pkt_size - hdr_size;
 
-		/* rxr_pkt_copy_to_rx() can release rx_entry, so
+		/* rxr_pkt_copy_data_to_rx_entry() can release rx_entry, so
 		 * bytes_received must be calculated before it.
 		 */
 		rx_entry->bytes_received += data_size;
 		if (rx_entry->total_len == rx_entry->bytes_received)
 			rxr_pkt_rx_map_remove(ep, cur, rx_entry);
 
-		/* rxr_pkt_copy_to_rx() will release cur, so
+		/* rxr_pkt_copy_data_to_rx_entry() will release cur, so
 		 * cur->next must be copied out before it.
 		 */
 		nxt = cur->next;
 		cur->next = NULL;
 
-		err = rxr_pkt_copy_to_rx(ep, rx_entry, offset, cur, data, data_size);
+		err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, offset, cur, data, data_size);
 		if (err) {
 			rxr_pkt_entry_release_rx(ep, cur);
 			ret = err;
@@ -1024,10 +1036,10 @@ ssize_t rxr_pkt_proc_matched_eager_rtm(struct rxr_ep *ep,
 		data_size = pkt_entry->pkt_size - hdr_size;
 
 		/*
-		 * On success, rxr_pkt_copy_to_rx will write rx completion,
+		 * On success, rxr_pkt_copy_data_to_rx_entry will write rx completion,
 		 * release pkt_entry and rx_entry
 		 */
-		err = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
+		err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
 		if (err)
 			rxr_pkt_entry_release_rx(ep, pkt_entry);
 
@@ -1132,7 +1144,7 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	data_size = pkt_entry->pkt_size - hdr_size;
 
 	rx_entry->bytes_received += data_size;
-	ret = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
+	ret = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
 	if (ret) {
 		return ret;
 	}
@@ -1354,7 +1366,6 @@ void rxr_pkt_init_rtw_data(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
 			   struct efa_rma_iov *rma_iov)
 {
-	char *data;
 	size_t hdr_size;
 	size_t data_size;
 	int i;
@@ -1366,12 +1377,8 @@ void rxr_pkt_init_rtw_data(struct rxr_ep *ep,
 	}
 
 	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
-	data = (char *)pkt_entry->pkt + hdr_size;
-	data_size = ofi_copy_from_iov(data, ep->mtu_size - hdr_size,
-				      tx_entry->iov, tx_entry->iov_count, 0);
-
-	pkt_entry->pkt_size = hdr_size + data_size;
-	pkt_entry->x_entry = tx_entry;
+	data_size = MIN(ep->mtu_size - hdr_size, tx_entry->total_len);
+	rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, hdr_size, tx_entry, 0, data_size);
 }
 
 ssize_t rxr_pkt_init_eager_rtw(struct rxr_ep *ep,
@@ -1610,7 +1617,7 @@ void rxr_pkt_proc_eager_rtw(struct rxr_ep *ep,
 			rx_entry->iov[0].iov_len);
 		err = FI_EINVAL;
 	} else {
-		err = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
+		err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
 	}
 
 	if (err) {
@@ -1721,7 +1728,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 			rx_entry->iov[0].iov_len);
 		err = FI_EINVAL;
 	} else {
-		err = rxr_pkt_copy_to_rx(ep, rx_entry, 0, pkt_entry, data, data_size);
+		err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
 	}
 
 	if (err) {

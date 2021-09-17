@@ -38,7 +38,7 @@
 #include <infiniband/efadv.h>
 #define EFA_CQ_PROGRESS_ENTRIES 500
 
-static int efa_generate_qkey()
+static int efa_generate_rdm_connid()
 {
 	struct timeval tv;
 	struct timezone tz;
@@ -153,7 +153,7 @@ static int efa_ep_create_qp_ex(struct efa_ep *ep,
 	}
 
 	qp->ibv_qp_ex = ibv_qp_to_qp_ex(qp->ibv_qp);
-	qp->qkey = efa_generate_qkey();
+	qp->qkey = (init_attr_ex->qp_type == IBV_QPT_UD) ? EFA_DGRAM_CONNID: efa_generate_rdm_connid();
 	err = efa_ep_modify_qp_rst2rts(ep, qp);
 	if (err)
 		goto err_destroy_qp;

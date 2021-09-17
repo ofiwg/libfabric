@@ -124,6 +124,7 @@ struct efa_fabric {
 #endif
 };
 
+
 struct efa_ah {
 	uint8_t		gid[EFA_GID_LEN]; /* efa device GID */
 	struct ibv_ah	*ibv_ah; /* created by ibv_create_ah() using GID */
@@ -338,6 +339,12 @@ struct efa_av {
 	size_t			used;
 	size_t			shm_used;
 	enum fi_av_type		type;
+	/* connid_map is a map from (ahn + qpn) to latest connid.
+	 * it is used when a peer does not support the "connid header"
+	 * extra request
+	 */
+	struct efa_connid_map   *connid_map;
+	/* reverse_av is a map from (ahn + qpn + connid) to efa_conn */
 	struct efa_reverse_av	*reverse_av;
 	struct efa_ah		*ah_map;
 	struct util_av		util_av;
@@ -349,13 +356,28 @@ struct efa_av_entry {
 	struct efa_conn		conn;
 };
 
-struct efa_ah_qpn {
+struct efa_connid_map_key {
 	uint16_t ahn;
 	uint16_t qpn;
+	uint32_t connid;
 };
 
+struct efa_connid_map {
+	struct efa_connid_map_key key;
+	uint32_t connid;
+	UT_hash_handle hh;
+};
+
+struct efa_reverse_av_key {
+	uint16_t ahn;
+	uint16_t qpn;
+	uint32_t connid;
+};
+
+#define EFA_DGRAM_CONNID (0x0)
+
 struct efa_reverse_av {
-	struct efa_ah_qpn key;
+	struct efa_reverse_av_key key;
 	struct efa_conn *conn;
 	UT_hash_handle hh;
 };
@@ -434,9 +456,9 @@ void efa_cq_inc_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
 /* Caller must hold cq->inner_lock. */
 void efa_cq_dec_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
 
-fi_addr_t efa_ahn_qpn_to_addr(struct efa_av *av, uint16_t ahn, uint16_t qpn);
+uint32_t *efa_av_lookup_latest_connid(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 
-struct rdm_peer *efa_ahn_qpn_to_peer(struct efa_av *av, uint16_t ahn, uint16_t qpn);
+fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn, uint32_t connid);
 
 int efa_init_prov(void);
 
@@ -565,6 +587,29 @@ bool rxr_peer_need_raw_addr_hdr(struct rdm_peer *peer)
 		return true;
 
 	return peer->extra_info[0] & RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
+}
+
+
+/**
+ * @brief determines whether a peer needs the endpoint to include
+ * connection ID (connid) in packet header.
+ *
+ * Connection ID is a 4 bytes random integer identifies an endpoint.
+ * Including connection ID in a packet's header allows peer to
+ * identify sender of the packet. It is necessary because device
+ * only report GID+QPN of a received packet, while QPN may be reused
+ * accross device endpoint teardown and initialization.
+ *
+ * EFA uses qkey as connection ID.
+ *
+ * @params[in]	peer	pointer to rdm_peer
+ * @return	a boolean indicating whether the peer needs connection ID
+ */
+static inline
+bool rxr_peer_need_connid(struct rdm_peer *peer)
+{
+	return (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED) &&
+	       (peer->extra_info[0] & RXR_EXTRA_REQUEST_CONNID_HEADER);
 }
 
 static inline

@@ -36,6 +36,7 @@
 #include "rxr_msg.h"
 #include "rxr_cntr.h"
 #include "rxr_pkt_cmd.h"
+#include "rxr_pkt_type_base.h"
 #include "rxr_read.h"
 
 /* This file define functons for the following packet type:
@@ -53,6 +54,7 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 {
 	int nex;
 	struct rxr_handshake_hdr *handshake_hdr;
+	struct rxr_handshake_opt_connid_hdr *connid_hdr;
 
 	handshake_hdr = (struct rxr_handshake_hdr *)pkt_entry->pkt;
 	handshake_hdr->type = RXR_HANDSHAKE_PKT;
@@ -66,8 +68,17 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 	 */
 	handshake_hdr->nextra_p3 = nex + 3;
 	memcpy(handshake_hdr->extra_info, ep->extra_info, nex * sizeof(uint64_t));
-
 	pkt_entry->pkt_size = sizeof(struct rxr_handshake_hdr) + nex * sizeof(uint64_t);
+
+	/*
+	 * Always include connid at the end of a handshake packet.
+	 * If peer cannot make use of connid, the connid will be ignored.
+	 */
+	connid_hdr = (struct rxr_handshake_opt_connid_hdr *)(pkt_entry->pkt + pkt_entry->pkt_size);
+	connid_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+	handshake_hdr->flags |= RXR_PKT_CONNID_HDR;
+	pkt_entry->pkt_size += sizeof(struct rxr_handshake_opt_connid_hdr);
+
 	pkt_entry->addr = addr;
 	return 0;
 }
@@ -240,6 +251,14 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 					&window, &rx_entry->credit_cts);
 	cts_hdr->recv_length = window;
 	pkt_entry->pkt_size = sizeof(struct rxr_cts_hdr);
+
+	/*
+	 * always set connid header. If the peer does not need it,
+	 * it will be ignored.
+	 */
+	cts_hdr->flags |= RXR_PKT_CONNID_HDR;
+	cts_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = (void *)rx_entry;
 	return 0;
@@ -300,24 +319,22 @@ int rxr_pkt_init_readrsp(struct rxr_ep *ep,
 			 struct rxr_tx_entry *tx_entry,
 			 struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_readrsp_pkt *readrsp_pkt;
 	struct rxr_readrsp_hdr *readrsp_hdr;
-	size_t mtu = ep->mtu_size;
 
-	readrsp_pkt = (struct rxr_readrsp_pkt *)pkt_entry->pkt;
-	readrsp_hdr = &readrsp_pkt->hdr;
+	readrsp_hdr = rxr_get_readrsp_hdr(pkt_entry->pkt);
 	readrsp_hdr->type = RXR_READRSP_PKT;
 	readrsp_hdr->version = RXR_PROTOCOL_VERSION;
 	readrsp_hdr->flags = 0;
 	readrsp_hdr->send_id = tx_entry->tx_id;
 	readrsp_hdr->recv_id = tx_entry->rx_id;
-	readrsp_hdr->seg_length = ofi_copy_from_iov(readrsp_pkt->data,
-						    mtu - sizeof(struct rxr_readrsp_hdr),
-						    tx_entry->iov,
-						    tx_entry->iov_count, 0);
-	pkt_entry->pkt_size = sizeof(struct rxr_readrsp_hdr) + readrsp_hdr->seg_length;
+	readrsp_hdr->flags |= RXR_PKT_CONNID_HDR;
+	readrsp_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+	readrsp_hdr->seg_length = MIN(ep->mtu_size - sizeof(struct rxr_readrsp_hdr),
+				      tx_entry->total_len);
+
 	pkt_entry->addr = tx_entry->addr;
-	pkt_entry->x_entry = tx_entry;
+	rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, sizeof(struct rxr_readrsp_hdr), 
+					tx_entry, 0, readrsp_hdr->seg_length);
 	return 0;
 }
 
@@ -519,6 +536,8 @@ int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struct rx
 	eor_hdr->flags = 0;
 	eor_hdr->send_id = rx_entry->tx_id;
 	eor_hdr->recv_id = rx_entry->rx_id;
+	eor_hdr->flags |= RXR_PKT_CONNID_HDR;
+	eor_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
 	pkt_entry->pkt_size = sizeof(struct rxr_eor_hdr);
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = rx_entry;
@@ -570,6 +589,8 @@ int rxr_pkt_init_receipt(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 	receipt_hdr->flags = 0;
 	receipt_hdr->tx_id = rx_entry->tx_id;
 	receipt_hdr->msg_id = rx_entry->msg_id;
+	receipt_hdr->flags |= RXR_PKT_CONNID_HDR;
+	receipt_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
 
 	pkt_entry->pkt_size = sizeof(struct rxr_receipt_hdr);
 	pkt_entry->addr = rx_entry->addr;
@@ -601,23 +622,25 @@ void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
 int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 			 struct rxr_pkt_entry *pkt_entry)
 {
+	struct rxr_atomrsp_pkt *atomrsp_pkt;
 	struct rxr_atomrsp_hdr *atomrsp_hdr;
 
 	assert(rx_entry->atomrsp_data);
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = rx_entry;
 
-	atomrsp_hdr = (struct rxr_atomrsp_hdr *)pkt_entry->pkt;
+	atomrsp_pkt = (struct rxr_atomrsp_pkt *)pkt_entry->pkt;
+	atomrsp_hdr = &atomrsp_pkt->hdr;
 	atomrsp_hdr->type = RXR_ATOMRSP_PKT;
 	atomrsp_hdr->version = RXR_PROTOCOL_VERSION;
 	atomrsp_hdr->flags = 0;
 	atomrsp_hdr->recv_id = rx_entry->tx_id;
 	atomrsp_hdr->seg_length = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
-
+	atomrsp_hdr->flags |= RXR_PKT_CONNID_HDR;
+	atomrsp_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
 	assert(sizeof(struct rxr_atomrsp_hdr) + atomrsp_hdr->seg_length < ep->mtu_size);
-
 	/* rx_entry->atomrsp_data was filled in rxr_pkt_handle_req_recv() */
-	memcpy((char*)pkt_entry->pkt + sizeof(struct rxr_atomrsp_hdr), rx_entry->atomrsp_data, atomrsp_hdr->seg_length);
+	memcpy(atomrsp_pkt->data, rx_entry->atomrsp_data, atomrsp_hdr->seg_length);
 	pkt_entry->pkt_size = sizeof(struct rxr_atomrsp_hdr) + atomrsp_hdr->seg_length;
 	return 0;
 }
