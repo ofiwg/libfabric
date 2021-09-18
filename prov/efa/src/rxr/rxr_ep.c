@@ -809,7 +809,7 @@ int rxr_ep_wait_send(struct rxr_ep *rxr_ep, int max_wait_time)
 		rxr_ep_progress_internal(rxr_ep);
 	}
 
-	finished = rxr_ep_has_unfinished_send(rxr_ep);
+	finished = !rxr_ep_has_unfinished_send(rxr_ep);
 	fastlock_release(&rxr_ep->util_ep.lock);
 
 	return finished ? 0 : -FI_ETIMEDOUT;
