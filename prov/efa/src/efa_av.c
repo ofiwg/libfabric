@@ -36,7 +36,6 @@
 #include <stdio.h>
 
 #include <infiniband/efadv.h>
-#include <ofi_shm.h>
 #include <ofi_enosys.h>
 
 #include "efa.h"
@@ -347,7 +346,7 @@ static
 int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 {
 	int err, ret;
-	char smr_name[SMR_NAME_MAX];
+	char smr_name[EFA_SHM_NAME_MAX];
 	struct rxr_ep *rxr_ep;
 	struct rdm_peer *peer;
 
