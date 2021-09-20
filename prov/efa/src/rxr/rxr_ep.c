@@ -37,7 +37,6 @@
 #include "ofi.h"
 #include <ofi_util.h>
 #include <ofi_iov.h>
-#include <ofi_shm.h>
 #include "rxr.h"
 #include "efa.h"
 #include "rxr_msg.h"
@@ -967,7 +966,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	ssize_t ret;
 	struct rxr_ep *ep;
-	char shm_ep_name[SMR_NAME_MAX];
+	char shm_ep_name[EFA_SHM_NAME_MAX];
 
 	switch (command) {
 	case FI_ENABLE:
