@@ -527,6 +527,10 @@ The following values may be specified.
 : Indicates that memory registration occurs on allocated data buffers, and
   physical pages must back all virtual addresses being registered.
 
+*FI_MR_COLLECTIVE*
+: Requires data buffers passed to collective operations be explicitly
+  registered for collective operations using the FI_COLLECTIVE flag.
+
 *FI_MR_ENDPOINT*
 : Memory registration occurs at the endpoint level, rather than domain.
 

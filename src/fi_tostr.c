@@ -464,6 +464,7 @@ static void ofi_tostr_mr_mode(char *buf, size_t len, int mr_mode)
 	IFFLAGSTRN(mr_mode, FI_MR_RMA_EVENT, len);
 	IFFLAGSTRN(mr_mode, FI_MR_ENDPOINT, len);
 	IFFLAGSTRN(mr_mode, FI_MR_HMEM, len);
+	IFFLAGSTRN(mr_mode, FI_MR_COLLECTIVE, len);
 
 	ofi_remove_comma(buf);
 }
