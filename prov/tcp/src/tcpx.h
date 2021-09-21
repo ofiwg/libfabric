@@ -213,6 +213,9 @@ enum tcpx_state {
 struct tcpx_cur_rx {
 	union {
 		struct tcpx_base_hdr	base_hdr;
+		struct tcpx_cq_data_hdr cq_data_hdr;
+		struct tcpx_tag_data_hdr tag_data_hdr;
+		struct tcpx_tag_hdr	tag_hdr;
 		uint8_t			max_hdr[TCPX_MAX_HDR];
 	} hdr;
 	size_t			hdr_len;

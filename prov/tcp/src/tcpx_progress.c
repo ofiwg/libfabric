@@ -474,6 +474,45 @@ truncate_err:
 	return ret;
 }
 
+int tcpx_op_tagged(struct tcpx_ep *ep)
+{
+	struct tcpx_xfer_entry *rx_entry;
+	struct tcpx_cur_rx *msg = &ep->cur_rx;
+	size_t msg_len;
+	uint64_t tag;
+	int ret;
+
+	assert(ep->srx_ctx && !tcpx_dynamic_rbuf(ep));
+	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.hdr_size);
+
+	tag = (msg->hdr.base_hdr.flags & FI_REMOTE_CQ_DATA) ?
+	      msg->hdr.tag_data_hdr.tag : msg->hdr.tag_hdr.tag;
+
+	rx_entry = ep->srx_ctx->match_tag_rx(ep->srx_ctx, ep, tag);
+	if (!rx_entry)
+		return -FI_EAGAIN;
+
+	rx_entry->cq_flags |= tcpx_rx_completion_flag(ep, 0);
+	memcpy(&rx_entry->hdr, &msg->hdr,
+	       (size_t) msg->hdr.base_hdr.hdr_size);
+	rx_entry->ep = ep;
+
+	ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt, msg_len);
+	if (ret)
+		goto truncate_err;
+
+	ep->cur_rx.entry = rx_entry;
+	ep->cur_rx.handler = tcpx_process_recv;
+	return tcpx_process_recv(ep);
+
+truncate_err:
+	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+		"posted rx buffer size is not big enough\n");
+	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
+	tcpx_free_rx(rx_entry);
+	return ret;
+}
+
 int tcpx_op_read_req(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *resp;
