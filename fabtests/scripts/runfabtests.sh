@@ -61,6 +61,7 @@ declare FORK=0
 declare OOB=0
 declare C_ARGS=""
 declare S_ARGS=""
+declare PROVIDER_TESTS=0
 
 declare cur_excludes=""
 declare file_excludes=""
@@ -235,6 +236,10 @@ multinode_tests=(
 	"fi_multinode -C msg"
 	"fi_multinode -C rma"
 	"fi_multinode_coll"
+)
+
+prov_efa_tests=( \
+	"FI_EFA_ENABLE_SHM_TRANSFER=0 fi_efa_ep_rnr_retry -R 0"
 )
 
 function errcho {
@@ -692,6 +697,12 @@ function multinode_test {
 	fi
 }
 
+function prov_efa_test {
+	for test in "${prov_efa_tests[@]}"; do
+		cs_test "$test"
+	done
+}
+
 function set_core_util {
 	prov_arr=$(echo $PROV | tr ";" " ")
 	CORE=""
@@ -777,6 +788,10 @@ function main {
 	esac
 	done
 
+	if [[ $PROVIDER_TESTS -eq 1 ]]; then
+		prov_${PROV}_test
+	fi
+
 	total=$(( $pass_count + $fail_count ))
 
 	print_border
@@ -825,10 +840,11 @@ function usage {
 	errcho -e " -C\tAdditional client test arguments: Parameters to pass to client fabtests"
 	errcho -e " -L\tAdditional server test arguments: Parameters to pass to server fabtests"
 	errcho -e " -b\tenable out-of-band address exchange over the default port"
+	errcho -e " -P\tRun provider specific tests"
 	exit 1
 }
 
-while getopts ":vt:p:g:e:f:c:s:u:T:C:L:NRSbkE:" opt; do
+while getopts ":vt:p:g:e:f:c:s:u:T:C:L:NRSbkPE:" opt; do
 case ${opt} in
 	t) TEST_TYPE=$OPTARG
 	;;
@@ -852,6 +868,8 @@ case ${opt} in
 	T) TIMEOUT_VAL=${OPTARG}
 	;;
 	N) SKIP_NEG+=1
+	;;
+	P) PROVIDER_TESTS=1
 	;;
 	R)
 	;;
