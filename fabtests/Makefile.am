@@ -445,6 +445,7 @@ nroff:
             perl $(top_srcdir)/config/md2nroff.pl --source=$(top_srcdir)/$$source.md; \
         done
 
+include prov/efa/Makefile.include
 
 man_MANS = $(real_man_pages) $(dummy_man_pages)
 
