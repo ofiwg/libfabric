@@ -419,7 +419,8 @@ static void tcpx_cm_send_req(struct util_wait *wait,
 			 (char *) &status, &len);
 	if (ret < 0 || status) {
 		ret = (ret < 0)? -ofi_sockerr() : -status;
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "connection failure\n");
+		FI_WARN_SPARSE(&tcpx_prov, FI_LOG_EP_CTRL,
+				"connection failure (sockerr %d)\n", ret);
 		goto delfd;
 	}
 
