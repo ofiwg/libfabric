@@ -34,7 +34,6 @@
 #include <rdma/fi_errno.h>
 
 #include <ofi_prov.h>
-#include <ofi_shm.h>
 #include "rxr.h"
 #include "efa.h"
 #include "ofi_hmem.h"
@@ -200,9 +199,15 @@ int rxr_raw_addr_to_smr_name(void *ptr, char *smr_name)
 		return -errno;
 	}
 
-	ret = snprintf(smr_name, SMR_NAME_MAX, "%s_%04x_%08x_%04x",
+	ret = snprintf(smr_name, EFA_SHM_NAME_MAX, "%s_%04x_%08x_%04x",
 		       gidstr, raw_addr->qpn, raw_addr->qkey, getuid());
-	return (ret <= 0) ? ret : FI_SUCCESS;
+	if (ret <= 0)
+		return ret;
+
+	if (ret >= EFA_SHM_NAME_MAX)
+		return -FI_EINVAL;
+
+	return FI_SUCCESS;
 }
 
 void rxr_info_to_core_mr_modes(uint32_t version,
