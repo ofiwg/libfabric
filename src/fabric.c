@@ -1288,7 +1288,7 @@ int DEFAULT_SYMVER_PRE(fi_open)(uint32_t version, const char *name,
 
 	return -FI_ENOSYS;
 }
-CURRENT_SYMVER(fi_open_, fi_open);
+DEFAULT_SYMVER(fi_open_, fi_open, FABRIC_1.5);
 
 static const char *const errstr[] = {
 	[FI_EOTHER - FI_ERRNO_OFFSET] = "Unspecified error",
