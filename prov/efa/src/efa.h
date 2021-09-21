@@ -108,6 +108,8 @@
  * Specific flags and attributes for shm provider
  */
 #define EFA_SHM_MAX_AV_COUNT       (256)
+/* maximum name length for shm endpoint */
+#define EFA_SHM_NAME_MAX	   (256)
 
 extern int efa_mr_cache_enable;
 extern size_t efa_mr_max_cached_count;
