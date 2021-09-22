@@ -389,6 +389,10 @@ thread-safe (re-entrant) version of fi_tostr.
 ABI version starting with libfabric 1.13.  Added new fi_open API
 call.
 
+## ABI 1.6
+
+ABI version starting with libfabric 1.14.  Added fi_log_ready for providers.
+
 # SEE ALSO
 
 [`fi_info`(1)](fi_info.1.html),

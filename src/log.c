@@ -78,6 +78,7 @@ enum {
 	 ((uint64_t) (1 << (subsys + FI_LOG_SUBSYS_OFFSET))) | \
 	 ((uint64_t) (1 << level)))
 
+static int log_interval = 2000;
 uint64_t log_mask;
 struct fi_filter prov_log_filter;
 
@@ -102,6 +103,11 @@ void fi_log_init(void)
 	struct fi_filter subsys_filter;
 	int level, i;
 	char *levelstr = NULL, *provstr = NULL, *subsysstr = NULL;
+
+	fi_param_define(NULL, "log_interval", FI_PARAM_INT,
+			"Delay in ms between rate limited log messages "
+			"(default 2000)");
+	fi_param_get_int(NULL, "log_interval", &log_interval);
 
 	fi_param_define(NULL, "log_level", FI_PARAM_STRING,
 			"Specify logging level: warn, trace, info, debug (default: warn)");
@@ -144,6 +150,24 @@ int DEFAULT_SYMVER_PRE(fi_log_enabled)(const struct fi_provider *prov,
 		FI_LOG_TAG(ctx->disable_logging, level, subsys));
 }
 DEFAULT_SYMVER(fi_log_enabled_, fi_log_enabled, FABRIC_1.0);
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+int DEFAULT_SYMVER_PRE(fi_log_ready)(const struct fi_provider *prov,
+		enum fi_log_level level, enum fi_log_subsys subsys,
+		uint64_t *showtime)
+{
+	uint64_t cur;
+
+	if (fi_log_enabled(prov, level, subsys)) {
+		cur = ofi_gettime_ms();
+		if (cur >= *showtime) {
+			*showtime = cur + (uint64_t) log_interval;
+			return true;
+		}
+	}
+	return false;
+}
+CURRENT_SYMVER(fi_log_ready_, fi_log_ready);
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void DEFAULT_SYMVER_PRE(fi_log)(const struct fi_provider *prov, enum fi_log_level level,

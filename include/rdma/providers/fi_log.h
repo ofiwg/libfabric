@@ -68,6 +68,8 @@ enum fi_log_level {
 
 int fi_log_enabled(const struct fi_provider *prov, enum fi_log_level level,
 		   enum fi_log_subsys subsys);
+int fi_log_ready(const struct fi_provider *prov, enum fi_log_level level,
+		 enum fi_log_subsys subsys, uint64_t *showtime);
 void fi_log(const struct fi_provider *prov, enum fi_log_level level,
 	    enum fi_log_subsys subsys, const char *func, int line,
 	    const char *fmt, ...) __attribute__ ((__format__ (__printf__, 6, 7)));
@@ -82,8 +84,21 @@ void fi_log(const struct fi_provider *prov, enum fi_log_level level,
 		}							\
 	} while (0)
 
+#define FI_LOG_SPARSE(prov, level, subsystem, ...)			\
+	do {								\
+		static uint64_t showtime;				\
+		if (fi_log_ready(prov, level, subsystem, &showtime)) {	\
+			int saved_errno = errno;			\
+			fi_log(prov, level, subsystem,			\
+				__func__, __LINE__, __VA_ARGS__);	\
+			errno = saved_errno;				\
+		}							\
+	} while (0)
+
 #define FI_WARN(prov, subsystem, ...)					\
 	FI_LOG(prov, FI_LOG_WARN, subsystem, __VA_ARGS__)
+#define FI_WARN_SPARSE(prov, subsystem, ...)				\
+	FI_LOG_SPARSE(prov, FI_LOG_WARN, subsystem, __VA_ARGS__)
 
 #define FI_TRACE(prov, subsystem, ...)					\
 	FI_LOG(prov, FI_LOG_TRACE, subsystem, __VA_ARGS__)

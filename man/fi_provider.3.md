@@ -12,7 +12,7 @@ fi_prov_ini \- External provider entry point
 fi_param_define / fi_param_get
 : Register and retrieve environment variables with the libfabric core
 
-fi_log_enabled / fi_log
+fi_log_enabled / fi_log_ready / fi_log
 : Control and output debug logging information.
 
 fi_open / fi_close
@@ -52,6 +52,9 @@ int fi_param_get_size_t(struct fi_provider *provider, const char *param_name,
 
 int fi_log_enabled(const struct fi_provider *prov, enum fi_log_level level,
 	enum fi_log_subsys subsys);
+
+int fi_log_ready(const struct fi_provider *prov, enum fi_log_level level,
+	enum fi_log_subsys subsys, uint64_t *showtime);
 
 void fi_log(const struct fi_provider *prov, enum fi_log_level level,
 	enum fi_log_subsys subsys, const char *func, int line,
@@ -155,9 +158,11 @@ fi_param_define(), -FI_ENOENT will be returned and the value of
 If the value in the environment is not valid for the parameter type,
 -FI_EINVAL will be returned and the value of (*value) is unchanged.
 
-## fi_log_enabled / fi_log
+## fi_log_enabled / fi_log_ready / fi_log
 
-TODO
+These functions control debug and informational logging output.
+Providers typically access these functions through the FI_LOG and
+related macros in fi_log.h and do not call these function directly.
 
 ## fi_open
 
