@@ -246,6 +246,19 @@ provider.  Example test configurations are at test_configs.
   values and 2 having 3 possible values, ubertest will execute 576 total
   iterations of each test.
 
+# EFA provider specific tests
+
+Beyond libfabric defined functionalities, EFA provider defines its
+specific features/functionalities. These EFA provider specific fabtests
+show users how to correctly use them.
+
+*fi_efa_ep_rnr_retry*
+: Tests modifying the RNR retry count (rnr_retry) via fi_setopt, and
+  then runs a simple program to test if the error cq entry (with error
+  FI_ENORX) can be written to application, if RNR happens.
+  Use `-R` option to specify RNR retry count. The valid values are 0-7,
+  where 7 indicates infinite retry on firmware.
+
 ### Config file options
 
 The following keys and respective key values may be used in the config file.

@@ -437,7 +437,8 @@ dummy_man_pages = \
 	man/man1/fi_mr_test.1 \
 	man/man1/fi_bw.1 \
 	man/man1/fi_rdm_multi_client.1 \
-	man/man1/fi_ubertest.1
+	man/man1/fi_ubertest.1 \
+	man/man1/fi_efa_ep_rnr_retry.1
 
 nroff:
 	@for file in $(real_man_pages); do \
