@@ -158,7 +158,9 @@ extern struct fi_ops_atomic rxm_ops_atomic;
 
 enum {
 	RXM_MSG_RXTX_SIZE = 128,
-	RXM_MSG_SRX_SIZE = 4096
+	RXM_MSG_SRX_SIZE = 4096,
+	RXM_RX_SIZE = 65536,
+	RXM_TX_SIZE = 16384,
 };
 
 extern size_t rxm_msg_tx_size;

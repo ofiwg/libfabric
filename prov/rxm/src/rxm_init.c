@@ -50,6 +50,8 @@
 
 size_t rxm_msg_tx_size;
 size_t rxm_msg_rx_size;
+size_t rxm_def_rx_size = 2048;
+size_t rxm_def_tx_size = 2048;
 
 size_t rxm_buffer_size = 16384;
 size_t rxm_packet_size;
@@ -205,8 +207,8 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	/* User hints will override the modified info attributes through
 	 * ofi_alter_info.  Set default sizes lower than supported maximums.
 	 */
-	info->tx_attr->size 		= MIN(base_info->tx_attr->size, 2048);
-	info->rx_attr->size 		= MIN(base_info->rx_attr->size, 2048);
+	info->tx_attr->size = MIN(base_info->tx_attr->size, rxm_def_tx_size);
+	info->rx_attr->size = MIN(base_info->rx_attr->size, rxm_def_rx_size);
 
 	info->tx_attr->iov_limit 	= MIN(base_info->tx_attr->iov_limit,
 					      core_info->tx_attr->iov_limit);
@@ -276,6 +278,10 @@ static void rxm_init_infos(void)
 
 	fi_param_get_size_t(&rxm_prov, "tx_size", &tx_size);
 	fi_param_get_size_t(&rxm_prov, "rx_size", &rx_size);
+	if (tx_size)
+		rxm_def_tx_size = tx_size;
+	if (rx_size)
+		rxm_def_rx_size = rx_size;
 
 	for (cur = (struct fi_info *) rxm_util_prov.info; cur; cur = cur->next) {
 		cur->tx_attr->inject_size = rxm_buffer_size;
