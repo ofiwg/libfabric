@@ -67,7 +67,7 @@ static struct fi_rx_attr tcpx_rx_attr = {
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = TCPX_MSG_ORDER,
 	.total_buffered_recv = 0,
-	.size = 8192,
+	.size = 65536,
 	.iov_limit = TCPX_IOV_LIMIT
 };
 
