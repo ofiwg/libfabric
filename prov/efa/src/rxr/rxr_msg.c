@@ -77,7 +77,7 @@ ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	if (tx_entry->total_len == 0) {
 		pkt_type = delivery_complete_requested ? RXR_DC_EAGER_MSGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
 		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					 pkt_type + tagged, 0);
+					 pkt_type + tagged, 0, 0);
 	}
 
 	/* Currently cuda data must be sent using read message protocol.
@@ -102,7 +102,7 @@ ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	}
 
 	return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-				 RXR_LONGREAD_MSGRTM_PKT + tagged, 0);
+				 RXR_LONGREAD_MSGRTM_PKT + tagged, 0, 0);
 }
 
 ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
@@ -200,7 +200,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		else
 			ctrl_type = delivery_complete_requested ? RXR_DC_EAGER_MSGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
 
-		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry, ctrl_type + tagged, 0);
+		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry, ctrl_type + tagged, 0, 0);
 	}
 
 	if (efa_ep_is_cuda_mr(tx_entry->desc[0])) {
@@ -212,7 +212,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		ctrl_type = (delivery_complete_requested) ?
 			RXR_DC_EAGER_MSGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
 		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					 ctrl_type + tagged, 0);
+					 ctrl_type + tagged, 0, 0);
 	}
 
 	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size) {
@@ -238,7 +238,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	    (tx_entry->desc[0] || efa_is_cache_available(efa_domain))) {
 		/* Read message support FI_DELIVERY_COMPLETE implicitly. */
 		err = rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					RXR_LONGREAD_MSGRTM_PKT + tagged, 0);
+					RXR_LONGREAD_MSGRTM_PKT + tagged, 0, 0);
 
 		if (err != -FI_ENOMEM)
 			return err;
@@ -256,7 +256,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	ctrl_type = delivery_complete_requested ? RXR_DC_LONGCTS_MSGRTM_PKT : RXR_LONGCTS_MSGRTM_PKT;
 	tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
 	return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-				 ctrl_type + tagged, 0);
+				 ctrl_type + tagged, 0, 0);
 }
 
 ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,

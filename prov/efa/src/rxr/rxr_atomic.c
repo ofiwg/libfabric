@@ -196,6 +196,7 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 		err = rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY,
 					tx_entry,
 					RXR_DC_WRITE_RTA_PKT,
+					0,
 					0);
 	} else {
 		/*
@@ -206,6 +207,7 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 		err = rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY,
 					tx_entry,
 					req_pkt_type_list[op],
+					0,
 					0);
 	}
 

@@ -263,7 +263,7 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 	tx_entry->rma_loc_rx_id = rx_entry->rx_id;
 
 	if (tx_entry->total_len < ep->mtu_size - sizeof(struct rxr_readrsp_hdr)) {
-		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_SHORT_RTR_PKT, 0);
+		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_SHORT_RTR_PKT, 0, 0);
 	} else {
 		peer = rxr_ep_get_peer(ep, tx_entry->addr);
 		assert(peer);
@@ -277,7 +277,7 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 		rx_entry->window = window;
 		rx_entry->credit_cts = credits;
 		tx_entry->rma_window = rx_entry->window;
-		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_LONGCTS_RTR_PKT, 0);
+		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_LONGCTS_RTR_PKT, 0, 0);
 	}
 
 	if (OFI_UNLIKELY(err)) {
@@ -459,13 +459,13 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	if (tx_entry->total_len < max_rtm_data_size) {
 		ctrl_type = delivery_complete_requested ?
 			RXR_DC_EAGER_RTW_PKT : RXR_EAGER_RTW_PKT;
-		return rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, ctrl_type, 0);
+		return rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, ctrl_type, 0, 0);
 	}
 
 	if (tx_entry->total_len >= rxr_env.efa_min_read_write_size &&
 	    efa_both_support_rdma_read(ep, peer) &&
 	    (tx_entry->desc[0] || efa_is_cache_available(efa_domain))) {
-		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_LONGREAD_RTW_PKT, 0);
+		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_LONGREAD_RTW_PKT, 0, 0);
 		if (err != -FI_ENOMEM)
 			return err;
 		/*
@@ -481,7 +481,7 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	ctrl_type = delivery_complete_requested ?
 		RXR_DC_LONGCTS_RTW_PKT : RXR_LONGCTS_RTW_PKT;
 	tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
-	return rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, ctrl_type, 0);
+	return rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, ctrl_type, 0, 0);
 }
 
 ssize_t rxr_rma_writemsg(struct fid_ep *ep,

@@ -351,7 +351,6 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	assert(tx_entry->peer);
 	dlist_insert_tail(&tx_entry->peer_entry, &tx_entry->peer->tx_entry_list);
 
-	tx_entry->send_flags = 0;
 	tx_entry->rxr_flags = 0;
 	tx_entry->bytes_acked = 0;
 	tx_entry->bytes_sent = 0;
@@ -1942,6 +1941,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	struct rdm_peer *peer;
 	struct dlist_entry *tmp;
 	ssize_t ret;
+	uint64_t flags;
 
 	// Poll the EFA completion queue
 	rdm_ep_poll_ibv_cq(ep, rxr_env.efa_cq_read_size);
@@ -2026,7 +2026,8 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		assert(rx_entry->state == RXR_RX_QUEUED_CTRL);
 		ret = rxr_pkt_post_ctrl(ep, RXR_RX_ENTRY, rx_entry,
 					rx_entry->queued_ctrl.type,
-					rx_entry->queued_ctrl.inject);
+					rx_entry->queued_ctrl.inject,
+					0);
 		if (ret == -FI_EAGAIN)
 			break;
 
@@ -2090,7 +2091,8 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 
 		ret = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry,
 					tx_entry->queued_ctrl.type,
-					tx_entry->queued_ctrl.inject);
+					tx_entry->queued_ctrl.inject,
+					0);
 		if (ret == -FI_EAGAIN)
 			break;
 
@@ -2139,15 +2141,11 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
 			continue;
 
-		if (tx_entry->window > 0)
-			tx_entry->send_flags |= FI_MORE;
-		else
-			continue;
-
 		while (tx_entry->window > 0) {
+			flags = FI_MORE;
 			if (ep->efa_max_outstanding_tx_ops - ep->efa_outstanding_tx_ops <= 1 ||
 			    tx_entry->window <= ep->max_data_payload_size)
-				tx_entry->send_flags &= ~FI_MORE;
+				flags = 0;
 			/*
 			 * The core's TX queue is full so we can't do any
 			 * additional work.
@@ -2159,9 +2157,8 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 				break;
 
 			ret = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry,
-						RXR_DATA_PKT, false);
+						RXR_DATA_PKT, false, flags);
 			if (OFI_UNLIKELY(ret)) {
-				tx_entry->send_flags &= ~FI_MORE;
 				if (ret == -FI_EAGAIN)
 					goto out;
 

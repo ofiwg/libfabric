@@ -37,7 +37,7 @@
 #include "rxr.h"
 
 ssize_t rxr_pkt_post_ctrl(struct rxr_ep *ep, int entry_type, void *x_entry,
-			  int ctrl_type, bool inject);
+			  int ctrl_type, bool inject, uint64_t flags);
 
 ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry,
 				   int ctrl_type, bool inject);

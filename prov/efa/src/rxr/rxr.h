@@ -474,7 +474,6 @@ struct rxr_tx_entry {
 	uint64_t fi_flags;
 	uint64_t rxr_flags;
 
-	uint64_t send_flags;
 	size_t iov_count;
 	size_t iov_index;
 	size_t iov_offset;
