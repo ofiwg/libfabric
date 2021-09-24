@@ -36,7 +36,7 @@ int cxip_cq_adjust_reserved_fc_event_slots(struct cxip_cq *cq, int value)
 		goto unlock_out;
 	}
 
-	ret = cxil_evtq_adjust_reserved_fc(cq->rx_eq.eq, value);
+	ret = cxil_evtq_adjust_reserved_fc(cq->eq.eq, value);
 	if (ret >= 0)
 		ret = 0;
 
@@ -533,8 +533,7 @@ void cxip_cq_progress(struct cxip_cq *cq)
 	if (!cq->enabled)
 		goto out;
 
-	cxip_cq_eq_progress(cq, &cq->tx_eq);
-	cxip_cq_eq_progress(cq, &cq->rx_eq);
+	cxip_cq_eq_progress(cq, &cq->eq);
 
 out:
 	fastlock_release(&cq->lock);
@@ -676,17 +675,10 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 
 	min_eq_size = (cxi_cq->attr.size + cxi_cq->ack_batch_size) *
 		C_EE_CFG_ECB_SIZE;
-	ret = cxip_cq_eq_init(cxi_cq, &cxi_cq->tx_eq, min_eq_size, 0);
+	ret = cxip_cq_eq_init(cxi_cq, &cxi_cq->eq, min_eq_size, 0);
 	if (ret) {
 		CXIP_WARN("Failed to initialize TX EQ: %d\n", ret);
 		goto unlock;
-	}
-
-	min_eq_size = cxi_cq->attr.size * C_EE_CFG_ECB_SIZE;
-	ret = cxip_cq_eq_init(cxi_cq, &cxi_cq->rx_eq, min_eq_size, 0);
-	if (ret) {
-		CXIP_WARN("Failed to initialize RX EQ: %d\n", ret);
-		goto err_tx_eq_fini;
 	}
 
 	bp_attrs.size = sizeof(struct cxip_req);
@@ -697,7 +689,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	ret = ofi_bufpool_create_attr(&bp_attrs, &cxi_cq->req_pool);
 	if (ret) {
 		ret = -FI_ENOMEM;
-		goto err_rx_eq_fini;
+		goto err_eq_fini;
 	}
 
 	memset(&cxi_cq->req_table, 0, sizeof(cxi_cq->req_table));
@@ -721,16 +713,13 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	dlist_init(&cxi_cq->req_list);
 	fastlock_release(&cxi_cq->lock);
 
-	CXIP_DBG("CQ enabled: %p (TX_EQ:%d RX_EQ:%d)\n", cxi_cq,
-		 cxi_cq->tx_eq.eq->eqn, cxi_cq->rx_eq.eq->eqn);
+	CXIP_DBG("CQ enabled: %p (EQ:%d)\n", cxi_cq, cxi_cq->eq.eq->eqn);
 	return FI_SUCCESS;
 
 err_free_req_pool:
 	ofi_bufpool_destroy(cxi_cq->req_pool);
-err_rx_eq_fini:
-	cxip_cq_eq_fini(cxi_cq, &cxi_cq->rx_eq);
-err_tx_eq_fini:
-	cxip_cq_eq_fini(cxi_cq, &cxi_cq->tx_eq);
+err_eq_fini:
+	cxip_cq_eq_fini(cxi_cq, &cxi_cq->eq);
 unlock:
 	fastlock_release(&cxi_cq->lock);
 
@@ -753,8 +742,7 @@ static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 
 	ofi_bufpool_destroy(cxi_cq->req_pool);
 
-	cxip_cq_eq_fini(cxi_cq, &cxi_cq->rx_eq);
-	cxip_cq_eq_fini(cxi_cq, &cxi_cq->tx_eq);
+	cxip_cq_eq_fini(cxi_cq, &cxi_cq->eq);
 
 	cxi_cq->enabled = false;
 

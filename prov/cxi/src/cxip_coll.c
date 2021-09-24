@@ -2274,7 +2274,7 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	ofi_atomic_initialize32(&coll_pte->buf_cnt, 0);
 	ofi_atomic_initialize32(&coll_pte->buf_swap_cnt, 0);
 
-	ret = cxip_pte_alloc(ep_obj->if_dom[0], ep_obj->coll.rx_cq->rx_eq.eq,
+	ret = cxip_pte_alloc(ep_obj->if_dom[0], ep_obj->coll.rx_cq->eq.eq,
 			     pid_idx, is_multicast, &pt_opts, _coll_pte_cb,
 			     coll_pte, &coll_pte->pte);
 	if (ret)

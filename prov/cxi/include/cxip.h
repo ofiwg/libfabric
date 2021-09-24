@@ -871,11 +871,8 @@ struct cxip_cq {
 	struct fi_cq_attr attr;
 	ofi_atomic32_t ref;
 
-	/* EQ used only for initiator events. */
-	struct cxip_cq_eq tx_eq;
-
-	/* EQ used only for target events. */
-	struct cxip_cq_eq rx_eq;
+	/* Wrapper for hardware EQ. */
+	struct cxip_cq_eq eq;
 
 	/* CXI specific fields. */
 	struct cxip_domain *domain;
@@ -898,7 +895,7 @@ struct cxip_cq {
 
 static inline uint16_t cxip_cq_tx_eqn(struct cxip_cq *cq)
 {
-	return cq->tx_eq.eq->eqn;
+	return cq->eq.eq->eqn;
 }
 
 /*

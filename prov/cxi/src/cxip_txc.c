@@ -46,7 +46,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 
 	/* Allocate TGQ for posting source data */
 	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, false, FI_TC_UNSPEC,
-			   txc->send_cq->rx_eq.eq, &txc->rx_cmdq);
+			   txc->send_cq->eq.eq, &txc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate TGQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
@@ -59,7 +59,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 
 	/* Reserve the Rendezvous Send PTE */
 	ret = cxip_pte_alloc(txc->ep_obj->if_dom[txc->tx_id],
-			     txc->send_cq->rx_eq.eq,
+			     txc->send_cq->eq.eq,
 			     txc->domain->iface->dev->info.rdzv_get_idx,
 			     false, &pt_opts, cxip_rdzv_pte_cb, txc,
 			     &txc->rdzv_pte);
@@ -166,7 +166,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	}
 
 	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, true, txc->tclass,
-			   txc->send_cq->rx_eq.eq, &txc->tx_cmdq);
+			   txc->send_cq->eq.eq, &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
