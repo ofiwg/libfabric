@@ -62,6 +62,8 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 	return ret;
 }
 
+#define RXC_RESERVED_FC_SLOTS 1
+
 /*
  * rxc_msg_init() - Initialize an RX context for messaging.
  *
@@ -78,8 +80,6 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 		.is_matching = 1,
 		.en_flowctrl = 1,
 	};
-	int reserved_event_slots;
-	int adjusted_amount;
 
 	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, false, FI_TC_UNSPEC,
 			   rxc->recv_cq->rx_eq.eq, &rxc->rx_cmdq);
@@ -113,26 +113,20 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	}
 
 	/* One slot must be reserved to support hardware generated state change
-	 * events. In addition, reserve enough EQ space for the worse case
-	 * scenario where the RX CQ is full and each command will return an
-	 * event.
+	 * events.
 	 */
-	reserved_event_slots = 1 + rxc->rx_cmdq->dev_cmdq->size;
-	ret = cxip_cq_adjust_rx_reserved_event_slots(rxc->recv_cq,
-						     reserved_event_slots,
-						     &adjusted_amount);
-	if (ret < 0) {
+	ret = cxip_cq_adjust_reserved_fc_event_slots(rxc->recv_cq,
+						     RXC_RESERVED_FC_SLOTS);
+	if (ret) {
 		CXIP_WARN("Unable to adjust RX reserved event slots: %d\n",
 			  ret);
-	} else {
-		if (adjusted_amount != reserved_event_slots)
-			CXIP_WARN("Unable to reserve all requested RX event slots: expected=%u reserved=%u",
-				  reserved_event_slots, adjusted_amount);
-		rxc->reserved_event_slots = adjusted_amount;
+		goto free_pte;
 	}
 
 	return FI_SUCCESS;
 
+free_pte:
+	cxip_pte_free(rxc->rx_pte);
 put_tx_cmdq:
 	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, true);
 put_rx_cmdq:
@@ -159,9 +153,8 @@ static int rxc_msg_fini(struct cxip_rxc *rxc)
 
 	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, true);
 
-	cxip_cq_adjust_rx_reserved_event_slots(rxc->recv_cq,
-					       -1 * rxc->reserved_event_slots,
-					       NULL);
+	cxip_cq_adjust_reserved_fc_event_slots(rxc->recv_cq,
+					       -1 * RXC_RESERVED_FC_SLOTS);
 
 	return FI_SUCCESS;
 }
