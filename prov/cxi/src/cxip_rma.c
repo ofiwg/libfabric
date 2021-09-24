@@ -69,8 +69,6 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 	int success_event = (req->flags & FI_COMPLETION);
 	struct cxip_txc *txc = req->rma.txc;
 
-	cxip_cq_put_tx_credit(txc->send_cq);
-
 	req->flags &= (FI_RMA | FI_READ | FI_WRITE);
 
 	if (req->rma.local_md)
@@ -142,7 +140,6 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	const void *idc_buf = buf;
 	enum fi_hmem_iface iface;
 	struct iovec hmem_iov;
-	bool tx_credit = false;
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -182,21 +179,11 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	 * credit.
 	 */
 	if (!idc || (flags & FI_COMPLETION)) {
-		ret = cxip_cq_get_tx_credit(txc->send_cq);
-		if (ret != FI_SUCCESS) {
-			TXC_DBG(txc, "CQ TX credits exhausted\n");
-			return ret;
-		}
-		tx_credit = true;
-
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc, false);
 		if (!req) {
-			ret = -FI_ENOMEM;
 			TXC_WARN(txc, "Failed to allocate request\n");
-			goto return_tx_credit;
+			return -FI_ENOMEM;
 		}
-
-		req->cq_tx_credit = true;
 
 		/* Populate request */
 		if (flags & FI_COMPLETION)
@@ -455,9 +442,6 @@ md_unmap:
 req_free:
 	if (req)
 		cxip_cq_req_free(req);
-return_tx_credit:
-	if (tx_credit)
-		cxip_cq_put_tx_credit(txc->send_cq);
 
 	return ret;
 }

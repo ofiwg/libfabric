@@ -237,9 +237,6 @@ void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
 					  req->type);
 			}
 
-			if (req->cq_tx_credit)
-				cxip_cq_put_tx_credit(req->cq);
-
 			ofi_atomic_dec32(&txc->otx_reqs);
 			cxip_cq_req_free_no_lock(req);
 		}
@@ -683,35 +680,6 @@ err_free_eq_buf:
 	return ret;
 }
 
-int cxip_cq_get_tx_credit(struct cxip_cq *cq)
-{
-	int32_t compare;
-
-	/* Instrumented atomic decrement if positive. */
-	do {
-		compare = ofi_atomic_get32(&cq->tx_credits);
-		if (compare <= 0) {
-			/* Attempt to return credits if exhausted. */
-			cxip_cq_progress(cq);
-			return -FI_EAGAIN;
-		}
-
-	} while (!ofi_atomic_cas_bool_weak32(&cq->tx_credits, compare,
-					     compare - 1));
-
-	return FI_SUCCESS;
-}
-
-void cxip_cq_put_tx_credit(struct cxip_cq *cq)
-{
-	ofi_atomic_inc32(&cq->tx_credits);
-}
-
-static int32_t cxip_cq_calc_tx_credits(struct cxip_cq *cq)
-{
-	return cq->tx_eq.len / C_EE_CFG_ECB_SIZE - 5 - cq->ack_batch_size;
-}
-
 /*
  * cxip_cq_enable() - Assign hardware resources to the CQ.
  */
@@ -771,9 +739,6 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 
 	cxi_cq->enabled = true;
 	dlist_init(&cxi_cq->req_list);
-	ofi_atomic_initialize32(&cxi_cq->tx_credits,
-				cxip_cq_calc_tx_credits(cxi_cq));
-
 	fastlock_release(&cxi_cq->lock);
 
 	CXIP_DBG("CQ enabled: %p (TX_EQ:%d RX_EQ:%d)\n", cxi_cq,
@@ -801,9 +766,6 @@ static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 
 	if (!cxi_cq->enabled)
 		goto unlock;
-
-	assert(ofi_atomic_get32(&cxi_cq->tx_credits) ==
-	       cxip_cq_calc_tx_credits(cxi_cq));
 
 	ofi_idx_reset(&cxi_cq->req_table);
 

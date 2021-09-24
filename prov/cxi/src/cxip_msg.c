@@ -218,9 +218,6 @@ static void recv_req_report(struct cxip_req *req)
 	int success_event = (req->flags & FI_COMPLETION);
 	struct cxip_rxc *rxc = req->recv.rxc;
 
-	if (req->recv.tx_credit_used)
-		cxip_cq_put_tx_credit(rxc->recv_cq);
-
 	req->flags &= (FI_MSG | FI_TAGGED | FI_RECV | FI_REMOTE_CQ_DATA);
 
 	if (req->recv.parent) {
@@ -601,12 +598,6 @@ static int issue_rdzv_get(struct cxip_req *req)
 	int ret;
 	union c_fab_addr dfa;
 
-	ret = cxip_cq_get_tx_credit(rxc->recv_cq);
-	if (ret != FI_SUCCESS) {
-		RXC_DBG(rxc, "CQ TX credits exhausted\n");
-		return ret;
-	}
-
 	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.full_dma.command.opcode = C_CMD_GET;
 	cmd.full_dma.lac = req->recv.recv_md->md->lac;
@@ -639,14 +630,11 @@ static int issue_rdzv_get(struct cxip_req *req)
 	/* Issue Rendezvous Get command */
 	ret = cxi_cq_emit_dma_f(rxc->tx_cmdq->dev_cmdq, &cmd.full_dma);
 	if (ret) {
-		cxip_cq_put_tx_credit(rxc->recv_cq);
 		RXC_DBG(rxc, "Failed to queue GET command: %d\n", ret);
 
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}
-
-	req->recv.tx_credit_used = true;
 
 	cxi_cq_ring(rxc->tx_cmdq->dev_cmdq);
 
@@ -698,12 +686,6 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 	union c_cmdu cmd = {};
 	int ret;
 
-	ret = cxip_cq_get_tx_credit(rxc->recv_cq);
-	if (ret != FI_SUCCESS) {
-		RXC_DBG(rxc, "CQ TX credits exhausted\n");
-		goto err;
-	}
-
 	event_mb.raw = event->tgt_long.match_bits;
 	mb.tx_id = event_mb.tx_id;
 
@@ -718,7 +700,7 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 	ret = cxip_cmdq_emit_c_state(rxc->tx_cmdq, &cmd.c_state);
 	if (ret) {
 		RXC_DBG(rxc, "Failed to issue C_STATE command: %d\n", ret);
-		goto err_unlock_return_credit;
+		goto err_unlock;
 	}
 
 	memset(&cmd.idc_msg, 0, sizeof(cmd.idc_msg));
@@ -735,10 +717,9 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 		/* Return error according to Domain Resource Management
 		 */
 		ret = -FI_EAGAIN;
-		goto err_unlock_return_credit;
+		goto err_unlock;
 	}
 
-	req->recv.tx_credit_used = true;
 	req->cb = cxip_notify_match_cb;
 
 	cxi_cq_ring(rxc->tx_cmdq->dev_cmdq);
@@ -749,10 +730,9 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 
 	return FI_SUCCESS;
 
-err_unlock_return_credit:
+err_unlock:
 	fastlock_release(&rxc->tx_cmdq->lock);
-	cxip_cq_put_tx_credit(rxc->recv_cq);
-err:
+
 	return ret;
 }
 
@@ -3482,8 +3462,6 @@ static void report_send_completion(struct cxip_req *req, bool sw_cntr)
 	int success_event = (req->flags & FI_COMPLETION);
 	struct cxip_txc *txc = req->send.txc;
 
-	cxip_cq_put_tx_credit(txc->send_cq);
-
 	req->flags &= (FI_MSG | FI_TAGGED | FI_SEND);
 
 	if (req->send.rc == C_RC_OK) {
@@ -4660,24 +4638,16 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 		return -FI_EMSGSIZE;
 	}
 
-	ret = cxip_cq_get_tx_credit(txc->send_cq);
-	if (ret != FI_SUCCESS) {
-		TXC_DBG(txc, "CQ TX credits exhausted\n");
-		return ret;
-	}
-
 	req = cxip_cq_req_alloc(txc->send_cq, false, txc, false);
 	if (!req) {
-		ret = -FI_ENOMEM;
 		TXC_WARN(txc, "Failed to allocate request\n");
-		goto return_tx_credit;
+		return -FI_ENOMEM;
 	}
 	ofi_atomic_inc32(&txc->otx_reqs);
 
 	req->triggered = triggered;
 	req->trig_thresh = trig_thresh;
 	req->trig_cntr = trig_cntr;
-	req->cq_tx_credit = true;
 
 	/* Save Send parameters to replay */
 	req->type = CXIP_REQ_SEND;
@@ -4741,8 +4711,6 @@ req_dequeue:
 req_free:
 	ofi_atomic_dec32(&txc->otx_reqs);
 	cxip_cq_req_free(req);
-return_tx_credit:
-	cxip_cq_put_tx_credit(txc->send_cq);
 
 	return ret;
 }

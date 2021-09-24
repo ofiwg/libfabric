@@ -305,8 +305,6 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 		event_rc = cxi_init_event_rc(event);
 	}
 
-	cxip_cq_put_tx_credit(txc->send_cq);
-
 	if (req->amo.result_md)
 		cxip_unmap(req->amo.result_md);
 
@@ -427,7 +425,6 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	char hmem_compare[16];
 	char hmem_oper1[16];
 	bool flush = flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE);
-	bool tx_credit = false;
 	bool fetching_amo_flush = false;
 	bool restricted;
 
@@ -532,21 +529,11 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	 */
 	if (result || !idc || (flags & FI_COMPLETION) ||
 	    msg->op == FI_ATOMIC_WRITE || fetching_amo_flush) {
-		ret = cxip_cq_get_tx_credit(txc->send_cq);
-		if (ret != FI_SUCCESS) {
-			TXC_DBG(txc, "CQ TX credits exhausted\n");
-			return ret;
-		}
-		tx_credit = true;
-
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc, false);
 		if (!req) {
-			ret = -FI_ENOMEM;
 			TXC_WARN(txc, "Failed to allocate request\n");
-			goto return_tx_credit;
+			return -FI_ENOMEM;
 		}
-
-		req->cq_tx_credit = true;
 
 		/* Values set here are passed back to the user through the CQ */
 		if (flags & FI_COMPLETION)
@@ -1002,9 +989,6 @@ unmap_oper1:
 free_req:
 	if (req)
 		cxip_cq_req_free(req);
-return_tx_credit:
-	if (tx_credit)
-		cxip_cq_put_tx_credit(txc->send_cq);
 
 	return ret;
 }
