@@ -277,6 +277,10 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 		return err;
 	}
 
+	/* If the send (or inject) succeeded, the function rxr_pkt_entry_send
+	 * (or rxr_pkt_entry_inject) will increase the counter in rxr_ep that
+	 * tracks number of outstanding TX ops.
+	 */
 	if (inject)
 		err = rxr_pkt_entry_inject(rxr_ep, pkt_entry, addr);
 	else
@@ -292,7 +296,8 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 
 	/* If injection succeeded, packet should be considered as sent completed.
 	 * therefore call rxr_pkt_handle_send_completion().
-	 * rxr_pkt_handle_send_completion() will release pkt_entry
+	 * rxr_pkt_handle_send_completion() will release pkt_entry and decrease
+	 * the counter in rxr_ep that tracks number of outstanding TX ops.
 	 */
 	if (inject)
 		rxr_pkt_handle_send_completion(rxr_ep, pkt_entry);
