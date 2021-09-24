@@ -427,6 +427,7 @@ static int rxm_getinfo(uint32_t version, const char *node, const char *service,
 static void rxm_fini(void)
 {
 #if HAVE_RXM_DL
+	ofi_hmem_fini();
 	ofi_mem_fini();
 #endif
 }
@@ -584,6 +585,7 @@ RXM_INI
 
 #if HAVE_RXM_DL
 	ofi_mem_init();
+	ofi_hmem_init();
 #endif
 
 	return &rxm_prov;
