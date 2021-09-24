@@ -236,7 +236,7 @@ static struct cxip_req *cxip_amo_inject_req(struct cxip_txc *txc)
 	if (!txc->amo_inject_req) {
 		struct cxip_req *req;
 
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc, false);
+		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req)
 			return NULL;
 
@@ -529,7 +529,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	 */
 	if (result || !idc || (flags & FI_COMPLETION) ||
 	    msg->op == FI_ATOMIC_WRITE || fetching_amo_flush) {
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc, false);
+		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
 			TXC_WARN(txc, "Failed to allocate request\n");
 			return -FI_ENOMEM;

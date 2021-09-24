@@ -149,7 +149,7 @@ static struct cxip_req *cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf,
 	struct cxip_md *recv_md = NULL;
 	int ret;
 
-	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc, true);
+	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc);
 	if (!req) {
 		RXC_WARN(rxc, "Failed to allocate recv request\n");
 		goto err;
@@ -454,7 +454,7 @@ static struct cxip_req *mrecv_req_dup(struct cxip_req *mrecv_req)
 	struct cxip_rxc *rxc = mrecv_req->recv.rxc;
 	struct cxip_req *req;
 
-	req = cxip_cq_req_alloc(rxc->recv_cq, 0, rxc, false);
+	req = cxip_cq_req_alloc(rxc->recv_cq, 0, rxc);
 	if (!req)
 		return NULL;
 
@@ -1307,7 +1307,7 @@ static int eager_buf_add(struct cxip_rxc *rxc)
 	}
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL, false);
+	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
 	if (!req) {
 		RXC_WARN(rxc, "Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -1436,7 +1436,7 @@ static int cxip_rxc_sink_init(struct cxip_rxc *rxc)
 	};
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL, false);
+	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
 	if (!req) {
 		RXC_WARN(rxc, "Failed to allocate UX request\n");
 		return -FI_ENOMEM;
@@ -1586,7 +1586,7 @@ int cxip_txc_zbp_init(struct cxip_txc *txc)
 	};
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(txc->send_cq, 1, NULL, false);
+	req = cxip_cq_req_alloc(txc->send_cq, 1, NULL);
 	if (!req) {
 		TXC_WARN(txc, "Failed to allocate request\n");
 		return -FI_ENOMEM;
@@ -2550,7 +2550,7 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	} while (cur_ule_count < pte_status.ule_count);
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL, false);
+	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
 	if (!req) {
 		RXC_WARN(rxc, "Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -2641,7 +2641,7 @@ static int cxip_flush_appends(struct cxip_rxc *rxc)
 	       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE);
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc, false);
+	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc);
 	if (!req) {
 		RXC_WARN(rxc, "Failed to allocate request\n");
 		ret = -FI_ENOMEM;
@@ -3686,7 +3686,7 @@ static int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
 		goto unlock;
 	}
 
-	req = cxip_cq_req_alloc(txc->send_cq, 1, NULL, false);
+	req = cxip_cq_req_alloc(txc->send_cq, 1, NULL);
 	if (!req) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -4638,7 +4638,7 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 		return -FI_EMSGSIZE;
 	}
 
-	req = cxip_cq_req_alloc(txc->send_cq, false, txc, false);
+	req = cxip_cq_req_alloc(txc->send_cq, false, txc);
 	if (!req) {
 		TXC_WARN(txc, "Failed to allocate request\n");
 		return -FI_ENOMEM;

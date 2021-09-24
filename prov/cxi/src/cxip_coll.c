@@ -752,7 +752,7 @@ static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 	 * - req->discard to false
 	 * - Inserts into the cq->req_list
 	 */
-	req = cxip_cq_req_alloc(coll_pte->ep_obj->coll.rx_cq, 1, buf, false);
+	req = cxip_cq_req_alloc(coll_pte->ep_obj->coll.rx_cq, 1, buf);
 	if (!req) {
 		ret = -FI_ENOMEM;
 		goto recv_unmap;
@@ -1962,7 +1962,7 @@ ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
 		/* root can continue now */
 	}
 
-	req = cxip_cq_req_alloc(mc_obj->ep_obj->coll.tx_cq, 1, NULL, false);
+	req = cxip_cq_req_alloc(mc_obj->ep_obj->coll.tx_cq, 1, NULL);
 	if (!req)
 		return -FI_ENOMEM;
 

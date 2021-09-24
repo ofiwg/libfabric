@@ -150,9 +150,6 @@ static void cxip_cq_req_free_no_lock(struct cxip_req *req)
 			&req->cq->req_table, req->req_id);
 		if (table_req != req)
 			CXIP_WARN("Failed to unmap request: %p\n", req);
-
-		if (req->cq->req_table_progress_counter)
-			req->cq->req_table_progress_counter--;
 	}
 
 	ofi_buf_free(req);
@@ -328,17 +325,11 @@ static struct cxip_req *cxip_cq_req_find(struct cxip_cq *cq, int id)
  *
  * If remap is set, allocate a 16-bit request ID and map it to the new
  * request.
- *
- * If remap_progress is set, once the number of outstanding progresses
- * reach a certain thershold, an internal CQ progress will occur. This requires
- * the user to NOT be holding any locks which could be taken in
- * cxip_cq_progress().
  */
 struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
-				   void *req_ctx, bool remap_progress)
+				   void *req_ctx)
 {
 	struct cxip_req *req;
-	bool progress = false;
 
 	fastlock_acquire(&cq->req_lock);
 
@@ -362,17 +353,6 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
 			req = NULL;
 			goto out;
 		}
-
-		/* When req_table_count crosses rx_reserved_slots boundaries,
-		 * progress the CQ to help cleanup reserved slots.
-		 */
-		cq->req_table_progress_counter++;
-		if (cq->req_table_progress_counter >=
-		    ofi_atomic_get32(&cq->req_table_progress_counter_limit) &&
-		    remap_progress) {
-			cq->req_table_progress_counter = 0;
-			progress = true;
-		}
 	} else {
 		req->req_id = -1;
 	}
@@ -385,9 +365,6 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
 
 out:
 	fastlock_release(&cq->req_lock);
-
-	if (progress)
-		cxip_cq_progress(cq);
 
 	return req;
 }
@@ -877,7 +854,6 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	cxi_cq->domain = cxi_dom;
 	cxi_cq->ack_batch_size = cxip_env.eq_ack_batch_size;
 	ofi_atomic_initialize32(&cxi_cq->ref, 0);
-	ofi_atomic_initialize32(&cxi_cq->req_table_progress_counter_limit, 0);
 	fastlock_init(&cxi_cq->lock);
 	fastlock_init(&cxi_cq->req_lock);
 	fastlock_init(&cxi_cq->ibuf_lock);
