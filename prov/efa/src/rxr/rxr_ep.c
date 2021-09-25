@@ -1395,8 +1395,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 		ret = ofi_bufpool_create(&ep->shm_rx_pkt_pool,
 					 entry_sz,
 					 RXR_BUF_POOL_ALIGNMENT,
-					 shm_info->rx_attr->size,
-					 shm_info->rx_attr->size, 0);
+					 0, shm_info->rx_attr->size, 0);
 		if (ret)
 			goto err_free;
 

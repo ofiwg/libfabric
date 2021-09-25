@@ -180,16 +180,33 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 }
 
 /*
- * Create a new rx_entry for an unexpected message. Store the packet for later
- * processing and put the rx_entry on the appropriate unexpected list.
+ * Handle copying or updating the metadata for an unexpected packet.
+ *
+ * Packets from the EFA RX pool will be copied into a separate buffer not
+ * registered with the device (if this option is enabled) so that we can repost
+ * the registered buffer again to keep the EFA RX queue full. Packets from the
+ * SHM RX pool will not be copied, but we will increment the counter here to
+ * allocate and post another SHM RX buffer, which may grow the SHM RX pool.
+ *
+ * @param[in]     ep  the end point
+ * @param[in,out] pkt_entry_ptr unexpected packet, if this packet is copied to
+ *                a new memory region this pointer will be updated.
+ *
+ * @return	  struct rxr_pkt_entry of the updated or copied packet, NULL on
+ * 		  allocation failure.
  */
 struct rxr_pkt_entry *rxr_pkt_get_unexp(struct rxr_ep *ep,
 					struct rxr_pkt_entry **pkt_entry_ptr)
 {
 	struct rxr_pkt_entry *unexp_pkt_entry;
+	enum rxr_pkt_entry_alloc_type pkt_type;
 
-	if (rxr_env.rx_copy_unexp && (*pkt_entry_ptr)->alloc_type == RXR_PKT_FROM_EFA_RX_POOL) {
-		unexp_pkt_entry = rxr_pkt_entry_clone(ep, ep->rx_unexp_pkt_pool, RXR_PKT_FROM_UNEXP_POOL, *pkt_entry_ptr);
+	pkt_type = (*pkt_entry_ptr)->alloc_type;
+
+	if (rxr_env.rx_copy_unexp && (pkt_type == RXR_PKT_FROM_EFA_RX_POOL)) {
+		unexp_pkt_entry = rxr_pkt_entry_clone(ep, ep->rx_unexp_pkt_pool,
+						      RXR_PKT_FROM_UNEXP_POOL,
+						      *pkt_entry_ptr);
 		if (OFI_UNLIKELY(!unexp_pkt_entry)) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Unable to allocate rx_pkt_entry for unexp msg\n");
@@ -199,6 +216,16 @@ struct rxr_pkt_entry *rxr_pkt_get_unexp(struct rxr_ep *ep,
 		*pkt_entry_ptr = unexp_pkt_entry;
 	} else {
 		unexp_pkt_entry = *pkt_entry_ptr;
+	}
+
+	/*
+	 * Increment the counter now to allocate and post another receive
+	 * buffer to SHM; changing the type prevents incrementing the counter
+	 * again when this unexpected message is matched and eventually freed.
+	 */
+	if (pkt_type == RXR_PKT_FROM_SHM_RX_POOL) {
+		unexp_pkt_entry->alloc_type = RXR_PKT_FROM_SHM_RX_POOL_UNEXP;
+		ep->shm_rx_pkts_to_post++;
 	}
 
 	return unexp_pkt_entry;
