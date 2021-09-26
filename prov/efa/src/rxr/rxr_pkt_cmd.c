@@ -238,8 +238,21 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 	}
 }
 
+/**
+ * @brief post a single control packet.
+ *
+ *
+ * @param[in]   rxr_ep          endpoint
+ * @param[in]   entry_type      type of x_entry, allowed values: RXR_TX_ENTRY, RXR_RX_ENTRY
+ * @param[in]   x_entry         x_entry pointer
+ * @param[in]   ctrl_type       type of control packet
+ * @param[in]   inject          send control packet via inject or not.
+ * @param[in]   flags           additional flags to apply for fi_sendmsg.
+ *                              currently only accepted flags is FI_MORE.
+ * @return      On success return 0, otherwise return a negative error code
+ */
 ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
-			       int ctrl_type, bool inject)
+			       int ctrl_type, bool inject, uint64_t flags)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_tx_entry *tx_entry;
@@ -281,10 +294,17 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	 * (or rxr_pkt_entry_inject) will increase the counter in rxr_ep that
 	 * tracks number of outstanding TX ops.
 	 */
-	if (inject)
+	if (inject) {
+		/*
+		 * Currently, the only accepted flags is FI_MORE, which is not
+		 * compatible with inject. Add an additional check here to make
+		 * sure flags is set by the caller correctly.
+		 */
+		assert(!flags);
 		err = rxr_pkt_entry_inject(rxr_ep, pkt_entry, addr);
+	}
 	else
-		err = rxr_pkt_entry_send(rxr_ep, pkt_entry, 0);
+		err = rxr_pkt_entry_send(rxr_ep, pkt_entry, flags);
 
 	if (OFI_UNLIKELY(err)) {
 		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
@@ -305,8 +325,21 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	return 0;
 }
 
+/**
+ * @brief post control packets.
+ *
+ *
+ * @param[in]   rxr_ep          endpoint
+ * @param[in]   entry_type      type of x_entry, allowed values: RXR_TX_ENTRY, RXR_RX_ENTRY
+ * @param[in]   x_entry         x_entry pointer
+ * @param[in]   ctrl_type       type of control packet
+ * @param[in]   inject          send control packet via inject or not.
+ * @param[in]   flags           additional flags to apply for fi_sendmsg.
+ *                              currently only accepted flags is FI_MORE.
+ * @return      On success return 0, otherwise return a negative error code
+ */
 ssize_t rxr_pkt_post_ctrl(struct rxr_ep *ep, int entry_type, void *x_entry,
-			  int ctrl_type, bool inject)
+			  int ctrl_type, bool inject, uint64_t flags)
 {
 	ssize_t err;
 	struct rxr_tx_entry *tx_entry;
@@ -320,7 +353,7 @@ ssize_t rxr_pkt_post_ctrl(struct rxr_ep *ep, int entry_type, void *x_entry,
 
 		tx_entry = (struct rxr_tx_entry *)x_entry;
 		while (tx_entry->bytes_sent < tx_entry->total_len) {
-			err = rxr_pkt_post_ctrl_once(ep, RXR_TX_ENTRY, x_entry, ctrl_type, 0);
+			err = rxr_pkt_post_ctrl_once(ep, RXR_TX_ENTRY, x_entry, ctrl_type, 0, flags);
 			if (OFI_UNLIKELY(err))
 				return err;
 		}
@@ -328,7 +361,7 @@ ssize_t rxr_pkt_post_ctrl(struct rxr_ep *ep, int entry_type, void *x_entry,
 		return 0;
 	}
 
-	return rxr_pkt_post_ctrl_once(ep, entry_type, x_entry, ctrl_type, inject);
+	return rxr_pkt_post_ctrl_once(ep, entry_type, x_entry, ctrl_type, inject, flags);
 }
 
 ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry, int ctrl_type, bool inject)
@@ -337,7 +370,7 @@ ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_en
 	struct rxr_tx_entry *tx_entry;
 	struct rxr_rx_entry *rx_entry;
 
-	err = rxr_pkt_post_ctrl(ep, entry_type, x_entry, ctrl_type, inject);
+	err = rxr_pkt_post_ctrl(ep, entry_type, x_entry, ctrl_type, inject, 0);
 	if (err == -FI_EAGAIN) {
 		if (entry_type == RXR_TX_ENTRY) {
 			tx_entry = (struct rxr_tx_entry *)x_entry;
@@ -460,7 +493,6 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 	tx_entry->op = ofi_op_write;
 	tx_entry->state = RXR_TX_REQ;
 
-	tx_entry->send_flags = 0;
 	tx_entry->bytes_acked = 0;
 	tx_entry->bytes_sent = 0;
 	tx_entry->window = 0;
@@ -474,7 +506,7 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 
 	dlist_insert_tail(&tx_entry->ep_entry, &ep->tx_entry_list);
 
-	err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0);
+	err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0, 0);
 
 	if (OFI_UNLIKELY(err))
 		return err;
