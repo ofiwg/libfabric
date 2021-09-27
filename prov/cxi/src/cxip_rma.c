@@ -264,6 +264,12 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		}
 	}
 
+	if (cxip_cq_saturated(txc->send_cq)) {
+		TXC_DBG(txc, "CQ saturated\n");
+		ret = -FI_EAGAIN;
+		goto ibuf_free;
+	}
+
 	/* Issue command */
 	fastlock_acquire(&cmdq->lock);
 
@@ -432,6 +438,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 unlock_op:
 	fastlock_release(&txc->tx_cmdq->lock);
+ibuf_free:
 	if (hmem_buf)
 		cxip_cq_ibuf_free(txc->send_cq, hmem_buf);
 md_unmap:

@@ -216,6 +216,7 @@ struct cxip_environment {
 	int fc_retry_usec_delay;
 	size_t ctrl_rx_eq_max_size;
 	char *device_name;
+	size_t cq_fill_percent;
 };
 
 extern struct cxip_environment cxip_env;
@@ -857,6 +858,8 @@ struct cxip_cq_eq {
 	struct cxi_md *md;
 	bool mmap;
 	unsigned int unacked_events;
+	struct c_eq_status prev_eq_status;
+	bool eq_saturated;
 };
 
 /*
@@ -1858,6 +1861,7 @@ void cxip_rxc_free(struct cxip_rxc *rxc);
 int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);
 
+bool cxip_cq_saturated(struct cxip_cq *cq);
 struct cxip_md *cxip_cq_ibuf_md(void *ibuf);
 void *cxip_cq_ibuf_alloc(struct cxip_cq *cq);
 void cxip_cq_ibuf_free(struct cxip_cq *cq, void *ibuf);

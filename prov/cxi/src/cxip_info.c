@@ -274,6 +274,7 @@ struct cxip_environment cxip_env = {
 	.default_cq_size = CXIP_CQ_DEF_SZ,
 	.disable_cq_hugetlb = false,
 	.zbcoll_radix = 2,
+	.cq_fill_percent = 50,
 };
 
 static void cxip_env_init(void)
@@ -493,6 +494,19 @@ static void cxip_env_init(void)
 			cxip_env.disable_cq_hugetlb);
 	fi_param_get_bool(&cxip_prov, "disable_cq_hugetlb",
 			  &cxip_env.disable_cq_hugetlb);
+
+	fi_param_define(&cxip_prov, "cq_fill_percent", FI_PARAM_SIZE_T,
+			"Fill percent of underlying hardware event queue used to determine when completion queue is saturated (default: %lu).",
+			cxip_env.cq_fill_percent);
+	fi_param_get_size_t(&cxip_prov, "cq_fill_percent",
+			    &cxip_env.cq_fill_percent);
+
+	if (cxip_env.cq_fill_percent < 1 ||
+	    cxip_env.cq_fill_percent > 100) {
+		cxip_env.cq_fill_percent = 50;
+		CXIP_WARN("CQ fill percent invalid. Setting to %lu.\n",
+			  cxip_env.cq_fill_percent);
+	}
 }
 
 /*

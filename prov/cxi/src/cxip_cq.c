@@ -25,6 +25,30 @@
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_CQ, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_CQ, __VA_ARGS__)
 
+bool cxip_cq_saturated(struct cxip_cq *cq)
+{
+	if (cq->eq.eq_saturated)
+		return true;
+
+	/* Hardware will automatically update the EQ status writeback area,
+	 * which includes a timestamp, once the EQ reaches a certain fill
+	 * percentage. The EQ status timestamp is compare against cached
+	 * versions of the previous EQ status timestamp to determine if new
+	 * writebacks have occurred. Each time a new writeback occurs, the EQ
+	 * is treated as saturated.
+	 *
+	 * Note that the previous EQ status is always updated when the
+	 * corresponding OFI completion queue is progressed.
+	 */
+	if (cq->eq.eq->status->timestamp_sec > cq->eq.prev_eq_status.timestamp_sec ||
+	    cq->eq.eq->status->timestamp_ns > cq->eq.prev_eq_status.timestamp_ns) {
+		cq->eq.eq_saturated = true;
+		return true;
+	}
+
+	return false;
+}
+
 int cxip_cq_adjust_reserved_fc_event_slots(struct cxip_cq *cq, int value)
 {
 	int ret;
@@ -477,6 +501,11 @@ static void cxip_cq_eq_progress(struct cxip_cq *cq, struct cxip_cq_eq *eq)
 	struct cxip_req *req;
 	int ret;
 
+	/* The EQ status needs to be cached on each poll to be able to properly
+	 * determine if the OFI completion queue is saturated.
+	 */
+	eq->prev_eq_status = *eq->eq->status;
+
 	while ((event = cxi_eq_peek_event(eq->eq))) {
 		req = cxip_cq_event_req(cq, event);
 		if (req) {
@@ -496,6 +525,8 @@ static void cxip_cq_eq_progress(struct cxip_cq *cq, struct cxip_cq_eq *eq)
 
 	if (cxi_eq_get_drops(eq->eq))
 		CXIP_FATAL("Cassini Event Queue overflow detected.\n");
+
+	eq->eq_saturated = false;
 }
 
 /*
@@ -611,6 +642,14 @@ mmap_success:
 			goto err_free_eq_buf;
 		}
 	}
+
+	/* Once the EQ is at CQ fill percentaged full, a status event is
+	 * generated. When a status event occurs, the CXIP CQ is considered
+	 * saturated until the CXI EQ is drained.
+	 */
+	eq_attr.status_thresh_base = cxip_env.cq_fill_percent;
+	eq_attr.status_thresh_delta = 0;
+	eq_attr.status_thresh_count = 1;
 
 	eq_attr.queue = eq->buf;
 	eq_attr.queue_len = eq->len;

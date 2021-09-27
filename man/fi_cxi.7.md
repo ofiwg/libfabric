@@ -607,6 +607,12 @@ The CXI provider checks for the following environment variables:
 :   Restrict CXI provider to specific CXI devices. Format is a comma separated
     list of CXI devices (e.g. cxi0,cxi1).
 
+*FI_CXI_CQ_FILL_PERCENT*
+:   Fill percent of underlying hardware event queue used to determine when
+    completion queue is saturated. A saturated completion queue results in the
+    provider returning -FI_EAGAIN for data transfer and other related libfabric
+    operations.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 

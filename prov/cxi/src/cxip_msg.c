@@ -625,6 +625,11 @@ static int issue_rdzv_get(struct cxip_req *req)
 						 req->recv.recv_buf);
 	cmd.full_dma.local_addr += req->recv.rdzv_mlen;
 
+	if (cxip_cq_saturated(rxc->recv_cq)) {
+		RXC_DBG(rxc, "CQ saturated\n");
+		return -FI_EAGAIN;
+	}
+
 	fastlock_acquire(&rxc->tx_cmdq->lock);
 
 	/* Issue Rendezvous Get command */
@@ -694,6 +699,11 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 	cmd.c_state.event_send_disable = 1;
 	cmd.c_state.index_ext = idx_ext;
 	cmd.c_state.eq = cxip_cq_tx_eqn(rxc->recv_cq);
+
+	if (cxip_cq_saturated(rxc->recv_cq)) {
+		RXC_DBG(rxc, "CQ saturated\n");
+		return -FI_EAGAIN;
+	}
 
 	fastlock_acquire(&rxc->tx_cmdq->lock);
 
@@ -2570,6 +2580,12 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	cmd.target.ignore_bits = -1UL;
 	cmd.target.match_id = CXI_MATCH_ID_ANY;
 
+	if (cxip_cq_saturated(rxc->recv_cq)) {
+		RXC_DBG(rxc, "CQ saturated\n");
+		ret = -FI_EAGAIN;
+		goto err_dec_free_cq_req;
+	}
+
 	fastlock_acquire(&rxc->rx_cmdq->lock);
 
 	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
@@ -2659,6 +2675,12 @@ static int cxip_flush_appends(struct cxip_rxc *rxc)
 	cmd.target.buffer_id = req->req_id;
 	cmd.target.match_bits = -1UL;
 	cmd.target.length = 0;
+
+	if (cxip_cq_saturated(rxc->recv_cq)) {
+		RXC_DBG(rxc, "CQ saturated\n");
+		ret = -FI_EAGAIN;
+		goto err_dec_free_cq_req;
+	}
 
 	fastlock_acquire(&rxc->rx_cmdq->lock);
 
@@ -2898,6 +2920,11 @@ static int cxip_ux_peek(struct cxip_req *req)
 	cmd.target.match_bits =  mb.raw;
 	cmd.target.match_id = req->recv.match_id;
 	cxi_target_cmd_setopts(&cmd.target, cmd_flags);
+
+	if (cxip_cq_saturated(rxc->recv_cq)) {
+		RXC_DBG(rxc, "CQ saturated\n");
+		return -FI_EAGAIN;
+	}
 
 	RXC_DBG(rxc, "Peek UX search req: %p mb.raw: 0x%" PRIx64 " match_id: 0x%x ignore: 0x%" PRIx64 "\n",
 		req, mb.raw, req->recv.match_id, req->recv.ignore);
@@ -3858,6 +3885,12 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	cmd.header_data = req->send.data;
 	cmd.remote_offset = CXI_VA_TO_IOVA(send_md->md, req->send.buf);
 
+	if (cxip_cq_saturated(txc->send_cq)) {
+		TXC_DBG(txc, "CQ saturated\n");
+		ret = -FI_EAGAIN;
+		goto err_free_rdzv_id;
+	}
+
 	fastlock_acquire(&cmdq->lock);
 
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
@@ -3929,6 +3962,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 
 err_unlock:
 	fastlock_release(&cmdq->lock);
+err_free_rdzv_id:
 	cxip_rdzv_id_free(txc->ep_obj, rdzv_id);
 err_unmap:
 	cxip_unmap(send_md);
@@ -4105,6 +4139,12 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 
 	req->cb = cxip_send_eager_cb;
 
+	if (cxip_cq_saturated(txc->send_cq)) {
+		TXC_DBG(txc, "CQ saturated\n");
+		ret = -FI_EAGAIN;
+		goto err_free_tx_id;
+	}
+
 	/* Submit command */
 	fastlock_acquire(&cmdq->lock);
 
@@ -4229,6 +4269,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 
 err_unlock:
 	fastlock_release(&cmdq->lock);
+err_free_tx_id:
 	if (match_complete)
 		cxip_tx_id_free(txc->ep_obj, req->send.tx_id);
 err_unmap:

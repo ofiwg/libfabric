@@ -445,6 +445,11 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 	if (ret)
 		return ret;
 
+	if (cxip_cq_saturated(ep_obj->coll.tx_cq)) {
+		CXIP_DBG("CQ saturated\n");
+		return -FI_EAGAIN;
+	}
+
 	if (md) {
 		cmd.full_dma.command.opcode = C_CMD_PUT;
 		cmd.full_dma.event_send_disable = 1;

@@ -719,6 +719,12 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		}
 	}
 
+	if (cxip_cq_saturated(txc->send_cq)) {
+		TXC_DBG(txc, "CQ saturated\n");
+		ret = -FI_EAGAIN;
+		goto unmap_result;
+	}
+
 	fastlock_acquire(&cmdq->lock);
 
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
@@ -978,7 +984,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 
 unlock_cmdq:
 	fastlock_release(&txc->tx_cmdq->lock);
-
+unmap_result:
 	if (result)
 		cxip_unmap(req->amo.result_md);
 unmap_oper1:
