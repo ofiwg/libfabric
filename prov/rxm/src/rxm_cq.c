@@ -1540,7 +1540,7 @@ static void rxm_fake_rx_hdr(struct rxm_rx_buf *rx_buf,
 	OFI_DBG_SET(rx_buf->pkt.hdr.version, OFI_OP_VERSION);
 	OFI_DBG_SET(rx_buf->pkt.ctrl_hdr.version, RXM_CTRL_VERSION);
 	rx_buf->pkt.ctrl_hdr.type = rxm_ctrl_eager;
-	rx_buf->pkt.ctrl_hdr.conn_id = cm_handle->remote_key;
+	rx_buf->pkt.ctrl_hdr.conn_id = cm_handle->key;
 	rx_buf->pkt.hdr.op = ofi_op_tagged;
 	rx_buf->pkt.hdr.tag = entry->tag;
 	rx_buf->pkt.hdr.size = entry->len;
