@@ -53,6 +53,7 @@ struct tcpx_cm_context *tcpx_alloc_cm_ctx(fid_t fid, enum tcpx_cm_state state)
 	if (fid && fid->fclass == FI_CLASS_EP) {
 		ep = container_of(cm_ctx->hfid, struct tcpx_ep,
 				  util_ep.ep_fid.fid);
+		assert(!ep->fid);
 		ep->cm_ctx = cm_ctx;
 	}
 	cm_ctx->state = state;
