@@ -35,6 +35,16 @@
 #include "rxm.h"
 
 
+size_t rxm_av_max_peers(struct rxm_av *av)
+{
+	size_t cnt;
+
+	fastlock_acquire(&av->util_av.lock);
+	cnt = av->peer_pool->entry_cnt;
+	fastlock_release(&av->util_av.lock);
+	return cnt;
+}
+
 static int rxm_addr_compare(struct ofi_rbmap *map, void *key, void *data)
 {
 	return memcmp(&((struct rxm_peer_addr *) data)->addr, key,
