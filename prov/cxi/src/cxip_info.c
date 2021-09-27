@@ -202,7 +202,7 @@ static int cxip_info_init(void)
 
 struct cxip_environment cxip_env = {
 	.odp = false,
-	.ats = true,
+	.ats = false,
 	.ats_mlock_mode = CXIP_ATS_MLOCK_ALL,
 	.rdzv_offload = true,
 	.fc_recovery = true,
