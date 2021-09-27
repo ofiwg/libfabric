@@ -269,6 +269,8 @@ struct rxm_domain {
 int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		struct fid_av **fid_av, void *context);
 size_t rxm_av_max_peers(struct rxm_av *av);
+struct rxm_conn *rxm_av_alloc_conn(struct rxm_av *av);
+void rxm_av_free_conn(struct rxm_conn *conn);
 
 struct rxm_mr {
 	struct fid_mr mr_fid;

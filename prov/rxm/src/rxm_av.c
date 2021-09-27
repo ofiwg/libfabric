@@ -45,6 +45,24 @@ size_t rxm_av_max_peers(struct rxm_av *av)
 	return cnt;
 }
 
+struct rxm_conn *rxm_av_alloc_conn(struct rxm_av *av)
+{
+	struct rxm_conn *conn;
+	fastlock_acquire(&av->util_av.lock);
+	conn = ofi_buf_alloc(av->conn_pool);
+	fastlock_release(&av->util_av.lock);
+	return conn;
+}
+
+void rxm_av_free_conn(struct rxm_conn *conn)
+{
+	struct rxm_av *av;
+	av = container_of(conn->ep->util_ep.av, struct rxm_av, util_av);
+	fastlock_acquire(&av->util_av.lock);
+	ofi_buf_free(conn);
+	fastlock_release(&av->util_av.lock);
+}
+
 static int rxm_addr_compare(struct ofi_rbmap *map, void *key, void *data)
 {
 	return memcmp(&((struct rxm_peer_addr *) data)->addr, key,
