@@ -330,7 +330,7 @@ rxm_alloc_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
 	dlist_init(&conn->loopback_entry);
 
 	conn->peer = peer;
-	peer->refcnt++;
+	rxm_ref_peer(peer);
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "allocated conn %p\n", conn);
 	return conn;

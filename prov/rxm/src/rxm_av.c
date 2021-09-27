@@ -131,6 +131,13 @@ void rxm_put_peer(struct rxm_peer_addr *peer)
 	fastlock_release(&av->util_av.lock);
 }
 
+void rxm_ref_peer(struct rxm_peer_addr *peer)
+{
+	fastlock_acquire(&peer->av->util_av.lock);
+	peer->refcnt++;
+	fastlock_release(&peer->av->util_av.lock);
+}
+
 static void
 rxm_set_av_context(struct rxm_av *av, fi_addr_t fi_addr,
 		   struct rxm_peer_addr *peer)
