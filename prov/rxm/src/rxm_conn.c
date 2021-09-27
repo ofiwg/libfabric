@@ -270,7 +270,7 @@ static void rxm_free_conn(struct rxm_conn *conn)
 	if (conn->flags & RXM_CONN_INDEXED)
 		ofi_idm_clear(&conn->ep->conn_idx_map, conn->peer->index);
 
-	conn->peer->refcnt--;
+	rxm_put_peer(conn->peer);
 	ofi_buf_free(conn);
 }
 
