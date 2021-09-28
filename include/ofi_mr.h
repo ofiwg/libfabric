@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017-2019 Intel Corporation, Inc. All rights reserved.
- * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2021 Amazon.com, Inc. or its affiliates.
  *                         All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
@@ -127,9 +127,18 @@ union ofi_mr_hmem_info {
 	uint64_t ze_id;
 };
 
+enum fi_mm_state {
+	FI_MM_STATE_UNSPEC = 0,
+	FI_MM_STATE_IDLE,
+	FI_MM_STATE_STARTING,
+	FI_MM_STATE_RUNNING,
+	FI_MM_STATE_STOPPING,
+};
+
 struct ofi_mem_monitor {
 	struct dlist_entry		list;
 	enum fi_hmem_iface		iface;
+	enum fi_mm_state                state;
 
 	void (*init)(struct ofi_mem_monitor *monitor);
 	void (*cleanup)(struct ofi_mem_monitor *monitor);
