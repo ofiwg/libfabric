@@ -166,7 +166,13 @@ enum tcpx_cm_state {
 	/* CM context is freed once connected */
 };
 
+#define OFI_PROV_SPECIFIC_TCP (0x7cb << 16)
+enum {
+	TCPX_CLASS_CM = OFI_PROV_SPECIFIC_TCP,
+};
+
 struct tcpx_cm_context {
+	struct fid		fid;
 	struct fid		*hfid;
 	enum tcpx_cm_state	state;
 	size_t			cm_data_sz;
