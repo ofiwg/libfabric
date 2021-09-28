@@ -270,8 +270,8 @@ static void rxm_free_conn(struct rxm_conn *conn)
 	if (conn->flags & RXM_CONN_INDEXED)
 		ofi_idm_clear(&conn->ep->conn_idx_map, conn->peer->index);
 
-	conn->peer->refcnt--;
-	ofi_buf_free(conn);
+	rxm_put_peer(conn->peer);
+	rxm_av_free_conn(conn);
 }
 
 void rxm_freeall_conns(struct rxm_ep *ep)
@@ -279,13 +279,16 @@ void rxm_freeall_conns(struct rxm_ep *ep)
 	struct rxm_conn *conn;
 	struct dlist_entry *tmp;
 	struct rxm_av *av;
-	int i;
+	int i, cnt;
 
 	av = container_of(ep->util_ep.av, struct rxm_av, util_av);
 	ofi_ep_lock_acquire(&ep->util_ep);
 
-	/* We can't have more connections than known peers */
-	for (i = 0; i < av->peer_pool->entry_cnt; i++) {
+	/* We can't have more connections than the current number of
+	 * possible peers.
+	 */
+	cnt = (int) rxm_av_max_peers(av);
+	for (i = 0; i < cnt; i++) {
 		conn = ofi_idm_lookup(&ep->conn_idx_map, i);
 		if (!conn)
 			continue;
@@ -312,7 +315,7 @@ rxm_alloc_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
 
 	assert(ofi_ep_lock_held(&ep->util_ep));
 	av = container_of(ep->util_ep.av, struct rxm_av, util_av);
-	conn = ofi_buf_alloc(av->conn_pool);
+	conn = rxm_av_alloc_conn(av);
 	if (!conn)
 		return NULL;
 
@@ -327,7 +330,7 @@ rxm_alloc_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
 	dlist_init(&conn->loopback_entry);
 
 	conn->peer = peer;
-	peer->refcnt++;
+	rxm_ref_peer(peer);
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "allocated conn %p\n", conn);
 	return conn;

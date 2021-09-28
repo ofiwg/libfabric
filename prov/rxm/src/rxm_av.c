@@ -35,6 +35,34 @@
 #include "rxm.h"
 
 
+size_t rxm_av_max_peers(struct rxm_av *av)
+{
+	size_t cnt;
+
+	fastlock_acquire(&av->util_av.lock);
+	cnt = av->peer_pool->entry_cnt;
+	fastlock_release(&av->util_av.lock);
+	return cnt;
+}
+
+struct rxm_conn *rxm_av_alloc_conn(struct rxm_av *av)
+{
+	struct rxm_conn *conn;
+	fastlock_acquire(&av->util_av.lock);
+	conn = ofi_buf_alloc(av->conn_pool);
+	fastlock_release(&av->util_av.lock);
+	return conn;
+}
+
+void rxm_av_free_conn(struct rxm_conn *conn)
+{
+	struct rxm_av *av;
+	av = container_of(conn->ep->util_ep.av, struct rxm_av, util_av);
+	fastlock_acquire(&av->util_av.lock);
+	ofi_buf_free(conn);
+	fastlock_release(&av->util_av.lock);
+}
+
 static int rxm_addr_compare(struct ofi_rbmap *map, void *key, void *data)
 {
 	return memcmp(&((struct rxm_peer_addr *) data)->addr, key,
@@ -46,6 +74,7 @@ rxm_alloc_peer(struct rxm_av *av, const void *addr)
 {
 	struct rxm_peer_addr *peer;
 
+	assert(fastlock_held(&av->util_av.lock));
 	peer = ofi_ibuf_alloc(av->peer_pool);
 	if (!peer)
 		return NULL;
@@ -66,6 +95,7 @@ rxm_alloc_peer(struct rxm_av *av, const void *addr)
 
 static void rxm_free_peer(struct rxm_peer_addr *peer)
 {
+	assert(fastlock_held(&peer->av->util_av.lock));
 	assert(!peer->refcnt);
 	ofi_rbmap_delete(&peer->av->addr_map, peer->node);
 	ofi_ibuf_free(peer);
@@ -99,6 +129,13 @@ void rxm_put_peer(struct rxm_peer_addr *peer)
 	if (--peer->refcnt == 0)
 		rxm_free_peer(peer);
 	fastlock_release(&av->util_av.lock);
+}
+
+void rxm_ref_peer(struct rxm_peer_addr *peer)
+{
+	fastlock_acquire(&peer->av->util_av.lock);
+	peer->refcnt++;
+	fastlock_release(&peer->av->util_av.lock);
 }
 
 static void
