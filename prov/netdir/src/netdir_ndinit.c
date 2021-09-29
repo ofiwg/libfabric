@@ -36,7 +36,7 @@
 #include <guiddef.h>
 
 #include <ws2spi.h>
-#include <cassert>
+#include <assert.h>
 #include "ndspi.h"
 
 #include "netdir.h"
