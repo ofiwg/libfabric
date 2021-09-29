@@ -290,17 +290,73 @@ void efa_atfork_callback()
 static int efa_mr_cache_init(struct efa_domain *domain, struct fi_info *info)
 {
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
-		[FI_HMEM_SYSTEM] = uffd_monitor,
+		[FI_HMEM_SYSTEM] = default_monitor,
 		[FI_HMEM_CUDA] = cuda_monitor,
 	};
 	int ret;
 
-	/* If FI_MR_CACHE_MONITOR env is set, this check will override our
-	 * default monitor with the user specified monitor which is stored
-	 * as default_monitor
+	/* Both Open MPI (and possibly other MPI implementations) and
+	 * Libfabric use the same live binary patching to enable memory
+	 * monitoring, but the patching technique only allows a single
+	 * "winning" patch.  The Libfabric memhooks monitor will not
+	 * overwrite a previous patch, but instead return
+	 * -FI_EALREADY.  There are three cases of concern, and in all
+	 * but one of them, we can avoid changing the default monitor.
+	 *
+	 * (1) Upper layer does not patch, such as Open MPI 4.0 and
+	 * earlier.  In this case, the default monitor will be used,
+	 * as the default monitor is either not the memhooks monitor
+	 * (because the user specified a different monitor) or the
+	 * default monitor is the memhooks monitor, but we were able
+	 * to install the patches.  We will use the default monitor in
+	 * this case.
+	 *
+	 * (2) Upper layer does patch, but does not export a memory
+	 * monitor, such as Open MPI 4.1.0 and 4.1.1.  In this case,
+	 * if the default memory monitor is not memhooks, we will use
+	 * the default monitor.  If the default monitor is memhooks,
+	 * the patch will fail to apply, and we will change the
+	 * requested monitor to UFFD to avoid a broken configuration.
+	 * If the user explicitly requested memhooks, we will return
+	 * an error, as we can not satisfy that request.
+	 *
+	 * (3) Upper layer does patch and exports a memory monitor,
+	 * such as Open MPI 4.1.2 and later.  In this case, the
+	 * default monitor will have been changed from the memhooks
+	 * monitor to the imported monitor, so we will use the
+	 * imported monitor.
+	 *
+	 * The only known cases in which we will not use the default
+	 * monitor are Open MPI 4.1.0/4.1.1.
+	 *
+	 * It is possible that this could be better handled at the
+	 * mem_monitor level in Libfabric, but so far we have not
+	 * reached agreement on how that would work.
 	 */
-	if (cache_params.monitor) {
-		memory_monitors[FI_HMEM_SYSTEM] = default_monitor;
+	if (default_monitor == memhooks_monitor) {
+		ret = memhooks_monitor->start(memhooks_monitor);
+		if (ret == -FI_EALREADY) {
+			if (cache_params.monitor) {
+				EFA_WARN(FI_LOG_DOMAIN,
+					 "Memhooks monitor requested via FI_MR_CACHE_MONITOR, but memhooks failed to\n"
+					 "install.  No working monitor availale.\n");
+				return -FI_ENOSYS;
+			}
+			EFA_INFO(FI_LOG_DOMAIN,
+				 "Detected potential memhooks monitor conflict. Switching to UFFD.\n");
+			memory_monitors[FI_HMEM_SYSTEM] = uffd_monitor;
+		}
+	} else if (default_monitor == NULL) {
+		/* TODO: Fail if we don't find a system monitor.  This
+		 * is a debatable decision, as the VERBS provider
+		 * falls back to a no-cache mode in this case.  We
+		 * fail the domain creation because the rest of the MR
+		 * code hasn't been audited to deal with a NULL
+		 * monitor.
+		 */
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "No default SYSTEM monitor available.\n");
+		return -FI_ENOSYS;
 	}
 
 	domain->cache = (struct ofi_mr_cache *)calloc(1, sizeof(struct ofi_mr_cache));
