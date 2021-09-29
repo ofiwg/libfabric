@@ -77,10 +77,8 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep)
 	rx_buf->rx_ep = rx_ep;
 	rx_buf->repost = true;
 
-	if (!rxm_ep->srx_ctx) {
-		rx_buf->conn = container_of(rx_ep->fid.context,
-					    struct rxm_conn, handle);
-	}
+	if (!rxm_ep->srx_ctx)
+		rx_buf->conn = rx_ep->fid.context;
 
 	return rx_buf;
 }
@@ -112,7 +110,7 @@ static void rxm_finish_buf_recv(struct rxm_rx_buf *rx_buf)
 	if ((rx_buf->pkt.ctrl_hdr.type == rxm_ctrl_seg) &&
 	    rxm_sar_get_seg_type(&rx_buf->pkt.ctrl_hdr) != RXM_SAR_SEG_FIRST) {
 		dlist_insert_tail(&rx_buf->unexp_msg.entry,
-				  &rx_buf->conn->sar_deferred_rx_msg_list);
+				  &rx_buf->conn->deferred_sar_segments);
 		rxm_replace_rx_buf(rx_buf);
 	}
 
@@ -411,15 +409,15 @@ static void rxm_process_seg_data(struct rxm_rx_buf *rx_buf, int *done)
 	} else {
 		if (rx_buf->recv_entry->sar.msg_id == RXM_SAR_RX_INIT) {
 			if (!rx_buf->conn) {
-				rx_buf->conn = rxm_key2conn(rx_buf->ep,
-							    rx_buf->pkt.ctrl_hdr.conn_id);
+				rx_buf->conn = ofi_idm_at(&rx_buf->ep->conn_idx_map,
+						(int) rx_buf->pkt.ctrl_hdr.conn_id);
 			}
 
 			rx_buf->recv_entry->sar.conn = rx_buf->conn;
 			rx_buf->recv_entry->sar.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
 
 			dlist_insert_tail(&rx_buf->recv_entry->sar.entry,
-					  &rx_buf->conn->sar_rx_msg_list);
+					  &rx_buf->conn->deferred_sar_msgs);
 		}
 
 		/* The RX buffer can be reposted for further re-use */
@@ -446,7 +444,7 @@ static void rxm_handle_seg_data(struct rxm_rx_buf *rx_buf)
 	conn = rx_buf->conn;
 	msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
 
-	dlist_foreach_container_safe(&conn->sar_deferred_rx_msg_list,
+	dlist_foreach_container_safe(&conn->deferred_sar_segments,
 				     struct rxm_rx_buf, rx_buf,
 				     unexp_msg.entry, entry) {
 		if (!rxm_rx_buf_match_msg_id(&rx_buf->unexp_msg.entry, &msg_id))
@@ -495,7 +493,7 @@ static ssize_t rxm_rndv_xfer(struct rxm_ep *rxm_ep, struct fid_ep *msg_ep,
 
 				if (ret)
 					break;
-				rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+				rxm_queue_deferred_tx(def_tx_entry, OFI_LIST_TAIL);
 				continue;
 			}
 			break;
@@ -579,8 +577,8 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 
 	if (!rx_buf->conn) {
 		assert(rx_buf->ep->srx_ctx);
-		rx_buf->conn = rxm_key2conn(rx_buf->ep,
-					    rx_buf->pkt.ctrl_hdr.conn_id);
+		rx_buf->conn = ofi_idm_at(&rx_buf->ep->conn_idx_map,
+					  (int) rx_buf->pkt.ctrl_hdr.conn_id);
 		if (!rx_buf->conn)
 			return -FI_EOTHER;
 	}
@@ -770,11 +768,11 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 
 	if (rx_buf->ep->rxm_info->caps & (FI_SOURCE | FI_DIRECTED_RECV)) {
 		if (rx_buf->ep->srx_ctx)
-			rx_buf->conn = rxm_key2conn(rx_buf->ep, rx_buf->
-						    pkt.ctrl_hdr.conn_id);
+			rx_buf->conn = ofi_idm_at(&rx_buf->ep->conn_idx_map,
+					(int) rx_buf->pkt.ctrl_hdr.conn_id);
 		if (!rx_buf->conn)
 			return -FI_EOTHER;
-		match_attr.addr = rx_buf->conn->handle.fi_addr;
+		match_attr.addr = rx_buf->conn->peer->fi_addr;
 	}
 
 	if (rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) {
@@ -812,15 +810,15 @@ static ssize_t rxm_sar_handle_segment(struct rxm_rx_buf *rx_buf)
 {
 	struct dlist_entry *sar_entry;
 
-	rx_buf->conn = rxm_key2conn(rx_buf->ep,
-				    rx_buf->pkt.ctrl_hdr.conn_id);
+	rx_buf->conn = ofi_idm_at(&rx_buf->ep->conn_idx_map,
+				  (int) rx_buf->pkt.ctrl_hdr.conn_id);
 	if (!rx_buf->conn)
 		return -FI_EOTHER;
 
 	FI_DBG(&rxm_prov, FI_LOG_CQ,
 	       "Got incoming recv with msg_id: 0x%" PRIx64 " for conn - %p\n",
 	       rx_buf->pkt.ctrl_hdr.msg_id, rx_buf->conn);
-	sar_entry = dlist_find_first_match(&rx_buf->conn->sar_rx_msg_list,
+	sar_entry = dlist_find_first_match(&rx_buf->conn->deferred_sar_msgs,
 					   rxm_sar_match_msg_id,
 					   &rx_buf->pkt.ctrl_hdr.msg_id);
 	if (!sar_entry)
@@ -849,7 +847,7 @@ static void rxm_rndv_send_rd_done(struct rxm_rx_buf *rx_buf)
 	rx_buf->recv_entry->rndv.tx_buf = buf;
 
 	buf->pkt.ctrl_hdr.type = rxm_ctrl_rndv_rd_done;
-	buf->pkt.ctrl_hdr.conn_id = rx_buf->conn->handle.remote_key;
+	buf->pkt.ctrl_hdr.conn_id = rx_buf->conn->remote_index;
 	buf->pkt.ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
 
 	ret = fi_send(rx_buf->conn->msg_ep, &buf->pkt, sizeof(buf->pkt),
@@ -862,7 +860,7 @@ static void rxm_rndv_send_rd_done(struct rxm_rx_buf *rx_buf)
 			if (def_entry) {
 				def_entry->rndv_ack.rx_buf = rx_buf;
 				def_entry->rndv_ack.pkt_size = sizeof(rx_buf->pkt);
-				rxm_ep_enqueue_deferred_tx_queue(def_entry);
+				rxm_queue_deferred_tx(def_entry, OFI_LIST_TAIL);
 				return;
 			}
 		}
@@ -915,7 +913,7 @@ rxm_rndv_send_wr_done(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
 						RXM_DEFERRED_TX_RNDV_DONE);
 			if (def_entry) {
 				def_entry->rndv_done.tx_buf = tx_buf;
-				rxm_ep_enqueue_deferred_tx_queue(def_entry);
+				rxm_queue_deferred_tx(def_entry, OFI_LIST_TAIL);
 				return;
 			}
 		}
@@ -956,7 +954,7 @@ ssize_t rxm_rndv_send_wr_data(struct rxm_rx_buf *rx_buf)
 	rx_buf->recv_entry->rndv.tx_buf = buf;
 
 	buf->pkt.ctrl_hdr.type = rxm_ctrl_rndv_wr_data;
-	buf->pkt.ctrl_hdr.conn_id = rx_buf->conn->handle.remote_key;
+	buf->pkt.ctrl_hdr.conn_id = rx_buf->conn->remote_index;
 	buf->pkt.ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
 	rxm_rndv_hdr_init(rx_buf->ep, buf->pkt.data,
 			  rx_buf->recv_entry->rxm_iov.iov,
@@ -974,7 +972,7 @@ ssize_t rxm_rndv_send_wr_data(struct rxm_rx_buf *rx_buf)
 				def_entry->rndv_ack.pkt_size =
 						sizeof(buf->pkt) +
 						sizeof(struct rxm_rndv_hdr);
-				rxm_ep_enqueue_deferred_tx_queue(def_entry);
+				rxm_queue_deferred_tx(def_entry, OFI_LIST_TAIL);
 				return 0;
 			}
 		}
@@ -1040,7 +1038,7 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 				       rx_buf->pkt.hdr.op,
 				       rx_buf->pkt.hdr.atomic.datatype,
 				       rx_buf->pkt.hdr.atomic.op);
-	resp_buf->pkt.ctrl_hdr.conn_id = rx_buf->conn->handle.remote_key;
+	resp_buf->pkt.ctrl_hdr.conn_id = rx_buf->conn->remote_index;
 	resp_buf->pkt.ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
 	atomic_hdr = (struct rxm_atomic_resp_hdr *) resp_buf->pkt.data;
 	atomic_hdr->status = htonl(status);
@@ -1071,7 +1069,7 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 
 			def_tx_entry->atomic_resp.tx_buf = resp_buf;
 			def_tx_entry->atomic_resp.len = tot_len;
-			rxm_ep_enqueue_deferred_tx_queue(def_tx_entry);
+			rxm_queue_deferred_tx(def_tx_entry, OFI_LIST_TAIL);
 			ret = 0;
 		}
 	}
@@ -1172,8 +1170,8 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	       op == ofi_op_atomic_compare);
 
 	if (rx_buf->ep->srx_ctx)
-		rx_buf->conn = rxm_key2conn(rx_buf->ep,
-					    rx_buf->pkt.ctrl_hdr.conn_id);
+		rx_buf->conn = ofi_idm_at(&rx_buf->ep->conn_idx_map,
+					  (int) rx_buf->pkt.ctrl_hdr.conn_id);
 	if (!rx_buf->conn)
 		return -FI_EOTHER;
 
@@ -1491,14 +1489,14 @@ static void rxm_get_recv_entry(struct rxm_rx_buf *rx_buf,
 			       struct ofi_cq_rbuf_entry *cq_entry)
 {
 	struct rxm_recv_match_attr match_attr;
-	struct rxm_cmap_handle *cm_handle;
+	struct rxm_conn *conn;
 	struct rxm_recv_queue *recv_queue;
 	struct dlist_entry *entry;
 
 	assert(!rx_buf->recv_entry);
 	if (rx_buf->ep->rxm_info->caps & (FI_SOURCE | FI_DIRECTED_RECV)) {
-		cm_handle = cq_entry->ep_context;
-		match_attr.addr = cm_handle->fi_addr;
+		conn = cq_entry->ep_context;
+		match_attr.addr = conn->peer->fi_addr;
 	} else {
 		match_attr.addr = FI_ADDR_UNSPEC;
 	}
@@ -1533,14 +1531,14 @@ static void rxm_get_recv_entry(struct rxm_rx_buf *rx_buf,
 static void rxm_fake_rx_hdr(struct rxm_rx_buf *rx_buf,
 			    struct ofi_cq_rbuf_entry *entry)
 {
-	struct rxm_cmap_handle *cm_handle;
+	struct rxm_conn *conn;
 
-	cm_handle = entry->ep_context;
+	conn = entry->ep_context;
 
 	OFI_DBG_SET(rx_buf->pkt.hdr.version, OFI_OP_VERSION);
 	OFI_DBG_SET(rx_buf->pkt.ctrl_hdr.version, RXM_CTRL_VERSION);
 	rx_buf->pkt.ctrl_hdr.type = rxm_ctrl_eager;
-	rx_buf->pkt.ctrl_hdr.conn_id = cm_handle->key;
+	rx_buf->pkt.ctrl_hdr.conn_id = conn->peer->index;
 	rx_buf->pkt.hdr.op = ofi_op_tagged;
 	rx_buf->pkt.hdr.tag = entry->tag;
 	rx_buf->pkt.hdr.size = entry->len;
@@ -1821,7 +1819,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 int rxm_post_recv(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_domain *domain;
-	int ret, level;
+	int ret;
 
 	if (rx_buf->ep->srx_ctx)
 		rx_buf->conn = NULL;
@@ -1837,9 +1835,7 @@ int rxm_post_recv(struct rxm_rx_buf *rx_buf)
 		return 0;
 
 	if (ret != -FI_EAGAIN) {
-		level = (rx_buf->conn->handle.state == RXM_CMAP_SHUTDOWN) ?
-			FI_LOG_DEBUG : FI_LOG_WARN;
-		FI_LOG(&rxm_prov, level, FI_LOG_EP_CTRL,
+		FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
 		       "unable to post recv buf: %d\n", ret);
 	}
 	return ret;
@@ -1899,15 +1895,15 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 			if (timestamp - rxm_ep->msg_cq_last_poll >
 				rxm_cm_progress_interval) {
 				rxm_ep->msg_cq_last_poll = timestamp;
-				rxm_msg_eq_progress(rxm_ep);
+				rxm_conn_progress(rxm_ep);
 			}
 		}
 	} while ((ret > 0) && (++comp_read < rxm_ep->comp_per_progress));
 
-	if (!dlist_empty(&rxm_ep->deferred_tx_conn_queue)) {
-		dlist_foreach_container_safe(&rxm_ep->deferred_tx_conn_queue,
+	if (!dlist_empty(&rxm_ep->deferred_queue)) {
+		dlist_foreach_container_safe(&rxm_ep->deferred_queue,
 					     struct rxm_conn, rxm_conn,
-					     deferred_conn_entry, conn_entry_tmp) {
+					     deferred_entry, conn_entry_tmp) {
 			rxm_ep_progress_deferred_queue(rxm_ep, rxm_conn);
 		}
 	}
