@@ -728,6 +728,28 @@ static void ofi_load_dl_prov(void)
 
 #endif
 
+void fi_fini(void)
+{
+	struct ofi_prov *prov;
+
+	if (!ofi_init)
+		return;
+
+	while (prov_head) {
+		prov = prov_head;
+		prov_head = prov->next;
+		ofi_free_prov(prov);
+	}
+
+	ofi_free_filter(&prov_filter);
+	ofi_monitors_cleanup();
+	ofi_hmem_cleanup();
+	ofi_mem_fini();
+	fi_log_fini();
+	fi_param_fini();
+	ofi_osd_fini();
+}
+
 void fi_ini(void)
 {
 	char *param_val = NULL;
@@ -789,31 +811,10 @@ void fi_ini(void)
 	ofi_register_provider(HOOK_NOOP_INIT, NULL);
 
 	ofi_init = 1;
+	atexit(fi_fini);
 
 unlock:
 	pthread_mutex_unlock(&common_locks.ini_lock);
-}
-
-FI_DESTRUCTOR(fi_fini(void))
-{
-	struct ofi_prov *prov;
-
-	if (!ofi_init)
-		return;
-
-	while (prov_head) {
-		prov = prov_head;
-		prov_head = prov->next;
-		ofi_free_prov(prov);
-	}
-
-	ofi_free_filter(&prov_filter);
-	ofi_monitors_cleanup();
-	ofi_hmem_cleanup();
-	ofi_mem_fini();
-	fi_log_fini();
-	fi_param_fini();
-	ofi_osd_fini();
 }
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
