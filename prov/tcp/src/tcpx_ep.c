@@ -140,7 +140,7 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 	    (paramlen > TCPX_MAX_CM_DATA_SIZE) || (tcpx_ep->state != TCPX_IDLE))
 		return -FI_EINVAL;
 
-	cm_ctx = calloc(1, sizeof(*cm_ctx));
+	cm_ctx = tcpx_alloc_cm_ctx(&ep->fid, TCPX_CM_CONNECTING);
 	if (!cm_ctx) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"cannot allocate memory \n");
@@ -156,16 +156,13 @@ static int tcpx_ep_connect(struct fid_ep *ep, const void *addr,
 		goto free;
 	}
 
-	cm_ctx->fid = &tcpx_ep->util_ep.ep_fid.fid;
-	cm_ctx->state = TCPX_CM_CONNECTING;
-
 	if (paramlen) {
 		cm_ctx->cm_data_sz = paramlen;
 		memcpy(cm_ctx->msg.data, param, paramlen);
 	}
 
 	ret = ofi_wait_add_fd(tcpx_ep->util_ep.eq->wait, tcpx_ep->bsock.sock,
-			      POLLOUT, tcpx_eq_wait_try_func, NULL,cm_ctx);
+			      POLLOUT, tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret)
 		goto disable;
 
@@ -176,7 +173,7 @@ disable:
 	tcpx_ep_disable(tcpx_ep, -ret);
 	fastlock_release(&tcpx_ep->lock);
 free:
-	free(cm_ctx);
+	tcpx_free_cm_ctx(cm_ctx);
 	return ret;
 }
 
@@ -190,7 +187,8 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	    tcpx_ep->state != TCPX_RCVD_REQ)
 		return -FI_EINVAL;
 
-	cm_ctx = calloc(1, sizeof(*cm_ctx));
+	cm_ctx = tcpx_alloc_cm_ctx(&tcpx_ep->util_ep.ep_fid.fid,
+				   TCPX_CM_RESP_READY);
 	if (!cm_ctx) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"cannot allocate memory \n");
@@ -198,8 +196,7 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	}
 
 	tcpx_ep->state = TCPX_ACCEPTING;
-	cm_ctx->fid = &tcpx_ep->util_ep.ep_fid.fid;
-	cm_ctx->state = TCPX_CM_RESP_READY;
+
 	if (paramlen) {
 		cm_ctx->cm_data_sz = paramlen;
 		memcpy(cm_ctx->msg.data, param, paramlen);
@@ -214,7 +211,7 @@ static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 
 free:
 	tcpx_ep->state = TCPX_RCVD_REQ;
-	free(cm_ctx);
+	tcpx_free_cm_ctx(cm_ctx);
 	return ret;
 }
 
@@ -551,6 +548,9 @@ static int tcpx_ep_close(struct fid *fid)
 
 	if (eq)
 		fastlock_release(&eq->close_lock);
+
+	if (ep->cm_ctx)
+		tcpx_free_cm_ctx(ep->cm_ctx);
 
 	/* Lock not technically needed, since we're freeing the EP.  But it's
 	 * harmless to acquire and silences static code analysis tools.

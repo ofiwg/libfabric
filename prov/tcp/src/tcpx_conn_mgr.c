@@ -39,6 +39,38 @@
 #include <ofi_util.h>
 
 
+struct tcpx_cm_context *tcpx_alloc_cm_ctx(fid_t fid, enum tcpx_cm_state state)
+{
+	struct tcpx_cm_context *cm_ctx;
+	struct tcpx_ep *ep;
+
+	cm_ctx = calloc(1, sizeof(*cm_ctx));
+	if (!cm_ctx)
+		return cm_ctx;
+
+	cm_ctx->fid = fid;
+	if (fid && fid->fclass == FI_CLASS_EP) {
+		ep = container_of(cm_ctx->fid, struct tcpx_ep,
+				  util_ep.ep_fid.fid);
+		ep->cm_ctx = cm_ctx;
+	}
+	cm_ctx->state = state;
+	return cm_ctx;
+}
+
+void tcpx_free_cm_ctx(struct tcpx_cm_context *cm_ctx)
+{
+	struct tcpx_ep *ep;
+
+	if (cm_ctx->fid && cm_ctx->fid->fclass == FI_CLASS_EP) {
+		ep = container_of(cm_ctx->fid, struct tcpx_ep,
+				  util_ep.ep_fid.fid);
+		ep->cm_ctx = NULL;
+	}
+
+	free(cm_ctx);
+}
+
 /* The underlying socket has the POLLIN event set.  The entire
  * CM message should be readable, as it fits within a single MTU
  * and is the first data transferred over the socket.
@@ -233,12 +265,12 @@ static void tcpx_cm_recv_resp(struct util_wait *wait,
 			tcpx_hdr_none : tcpx_hdr_bswap;
 
 	ret = tcpx_ep_enable(ep, cm_entry,
-				sizeof(*cm_entry) + cm_ctx->cm_data_sz);
+			     sizeof(*cm_entry) + cm_ctx->cm_data_sz);
 	if (ret)
 		goto err2;
 
 	free(cm_entry);
-	free(cm_ctx);
+	tcpx_free_cm_ctx(cm_ctx);
 	return;
 
 err2:
@@ -247,7 +279,7 @@ err1:
 	fastlock_acquire(&ep->lock);
 	tcpx_ep_disable(ep, -ret);
 	fastlock_release(&ep->lock);
-	free(cm_ctx);
+	tcpx_free_cm_ctx(cm_ctx);
 }
 
 int tcpx_eq_wait_try_func(void *arg)
@@ -289,7 +321,7 @@ static void tcpx_cm_send_resp(struct util_wait *wait,
 		goto disable;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Connection Accept Successful\n");
-	free(cm_ctx);
+	tcpx_free_cm_ctx(cm_ctx);
 	return;
 
 delfd:
@@ -298,7 +330,7 @@ disable:
 	fastlock_acquire(&ep->lock);
 	tcpx_ep_disable(ep, -ret);
 	fastlock_release(&ep->lock);
-	free(cm_ctx);
+	tcpx_free_cm_ctx(cm_ctx);
 }
 
 static void tcpx_cm_recv_req(struct util_wait *wait,
@@ -360,7 +392,7 @@ static void tcpx_cm_recv_req(struct util_wait *wait,
 	}
 
 	free(cm_entry);
-	free(cm_ctx);
+	tcpx_free_cm_ctx(cm_ctx);
 	return;
 err3:
 	fi_freeinfo(cm_entry->info);
@@ -368,7 +400,7 @@ err2:
 	free(cm_entry);
 err1:
 	ofi_close_socket(handle->sock);
-	free(cm_ctx);
+	tcpx_free_cm_ctx(cm_ctx);
 	free(handle);
 }
 
@@ -417,7 +449,7 @@ disable:
 	fastlock_acquire(&ep->lock);
 	tcpx_ep_disable(ep, -ret);
 	fastlock_release(&ep->lock);
-	free(cm_ctx);
+	tcpx_free_cm_ctx(cm_ctx);
 }
 
 static void tcpx_accept(struct util_wait *wait,
@@ -449,15 +481,13 @@ static void tcpx_accept(struct util_wait *wait,
 		goto err1;
 	}
 
-	rx_req_cm_ctx = calloc(1, sizeof(*rx_req_cm_ctx));
+	rx_req_cm_ctx = tcpx_alloc_cm_ctx(&handle->handle, TCPX_CM_WAIT_REQ);
 	if (!rx_req_cm_ctx)
 		goto err2;
 
 	handle->sock = sock;
 	handle->handle.fclass = FI_CLASS_CONNREQ;
 	handle->pep = pep;
-	rx_req_cm_ctx->fid = &handle->handle;
-	rx_req_cm_ctx->state = TCPX_CM_WAIT_REQ;
 
 	ret = ofi_wait_add_fd(wait, sock, POLLIN,
 			      tcpx_eq_wait_try_func,
