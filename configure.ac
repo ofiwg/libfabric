@@ -332,7 +332,7 @@ AC_CHECK_TYPE([__int128],
 	[AC_DEFINE(HAVE___INT128, 1, [Set to 1 to use 128-bit ints])])
 
 dnl Check for 128-bit integer built-in atomic support
-AS_IF([test "$have_mm_atomics" -eq 1 && test "$ac_cv_type___int128" == "yes"],
+AS_IF([test "$have_mm_atomics" -eq 1 -a "$ac_cv_type___int128" = "yes"],
     AC_MSG_CHECKING(compiler support for built-in memory model aware 128-bit atomics)
     AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdint.h>]],
         [[__int128 d;
