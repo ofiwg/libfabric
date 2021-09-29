@@ -537,7 +537,7 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 		break;
 	case RXM_CM_CONNECTING:
 		/* simultaneous connections */
-		cmp = ofi_addr_cmp(&rxm_prov, &peer_addr.sa, &peer->addr.sa);
+		cmp = ofi_addr_cmp(&rxm_prov, &peer_addr.sa, &ep->addr.sa);
 		if (cmp < 0) {
 			/* let our request finish */
 			rxm_reject_connreq(ep, cm_entry,
@@ -558,9 +558,7 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 		break;
 	case RXM_CM_ACCEPTING:
 	case RXM_CM_CONNECTED:
-		/* peer reset and lost previous connection state */
-		rxm_close_conn(conn);
-		break;
+		goto put;
 	default:
 		assert(0);
 		break;
