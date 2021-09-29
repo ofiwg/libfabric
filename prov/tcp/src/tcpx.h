@@ -253,7 +253,11 @@ struct tcpx_ep {
 	int			rx_avail;
 	struct tcpx_rx_ctx	*srx_ctx;
 	enum tcpx_state		state;
-	struct tcpx_cm_context	*cm_ctx;
+	union {
+		struct fid		*fid;
+		struct tcpx_cm_context	*cm_ctx;
+		struct tcpx_conn_handle *handle;
+	};
 
 	/* lock for protecting tx/rx queues, rma list, state*/
 	fastlock_t		lock;
