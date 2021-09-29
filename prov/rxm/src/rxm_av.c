@@ -37,7 +37,8 @@
 
 static int rxm_addr_compare(struct ofi_rbmap *map, void *key, void *data)
 {
-	return memcmp(data, key, sizeof(union ofi_sock_ip));
+	return memcmp(data, key,
+		container_of(map, struct rxm_av, addr_map)->util_av.addrlen);
 }
 
 static struct rxm_peer_addr *
@@ -55,7 +56,7 @@ rxm_alloc_peer(struct rxm_av *av, const void *addr)
 	peer->refcnt = 1;
 	memcpy(&peer->addr, addr, av->util_av.addrlen);
 
-	if (ofi_rbmap_insert(&av->addr_map, peer, &peer->addr, &peer->node)) {
+	if (ofi_rbmap_insert(&av->addr_map, &peer->addr, peer, &peer->node)) {
 		ofi_ibuf_free(peer);
 		peer = NULL;
 	}
