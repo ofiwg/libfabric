@@ -996,6 +996,7 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		goto err2;
 	}
 
+	_pep->cm_ctx.fid.fclass = TCPX_CLASS_CM;
 	_pep->cm_ctx.hfid = &_pep->util_pep.pep_fid.fid;
 	_pep->cm_ctx.state = TCPX_CM_LISTENING;
 	_pep->cm_ctx.cm_data_sz = 0;

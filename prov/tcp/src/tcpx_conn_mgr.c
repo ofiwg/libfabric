@@ -46,8 +46,9 @@ struct tcpx_cm_context *tcpx_alloc_cm_ctx(fid_t fid, enum tcpx_cm_state state)
 
 	cm_ctx = calloc(1, sizeof(*cm_ctx));
 	if (!cm_ctx)
-		return cm_ctx;
+		return NULL;
 
+	cm_ctx->fid.fclass = TCPX_CLASS_CM;
 	cm_ctx->hfid = fid;
 	if (fid && fid->fclass == FI_CLASS_EP) {
 		ep = container_of(cm_ctx->hfid, struct tcpx_ep,
@@ -62,6 +63,7 @@ void tcpx_free_cm_ctx(struct tcpx_cm_context *cm_ctx)
 {
 	struct tcpx_ep *ep;
 
+	assert(cm_ctx->fid.fclass == TCPX_CLASS_CM);
 	if (cm_ctx->hfid && cm_ctx->hfid->fclass == FI_CLASS_EP) {
 		ep = container_of(cm_ctx->hfid, struct tcpx_ep,
 				  util_ep.ep_fid.fid);
@@ -542,15 +544,11 @@ static void process_cm_ctx(struct util_wait *wait,
 	}
 }
 
-/* The implementation assumes that the EQ does not share a wait set with
- * a CQ.  This is true for internally created wait sets, but not if the
- * application manages the wait set.  To fix, we need to distinguish
- * whether the wait_context references a fid or tcpx_cm_context.
- */
 void tcpx_conn_mgr_run(struct util_eq *eq)
 {
 	struct util_wait_fd *wait_fd;
 	struct tcpx_eq *tcpx_eq;
+	struct fid *fid;
 	struct ofi_epollfds_event events[MAX_POLL_EVENTS];
 	int count, i;
 
@@ -572,7 +570,9 @@ void tcpx_conn_mgr_run(struct util_eq *eq)
 		if (&wait_fd->util_wait.wait_fid.fid == events[i].data.ptr)
 			continue;
 
-		process_cm_ctx(eq->wait, events[i].data.ptr);
+		fid = events[i].data.ptr;
+		if (fid->fclass == TCPX_CLASS_CM)
+			process_cm_ctx(eq->wait, events[i].data.ptr);
 	}
 unlock:
 	fastlock_release(&tcpx_eq->close_lock);
