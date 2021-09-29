@@ -1892,8 +1892,11 @@ ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx)
 {
 	ssize_t ret;
 
-	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE))
-		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+		ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
+		if (ret)
+			return ret;
+	}
 
 	ret = ft_post_tx(ep, fi_addr, size, NO_CQ_DATA, ctx);
 	if (ret)
@@ -1923,8 +1926,11 @@ ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
 {
 	ssize_t ret;
 
-	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE))
-		ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
+	if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE)) {
+		ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(), size);
+		if (ret)
+			return ret;
+	}
 
 	ret = ft_post_inject(ep, fi_addr, size);
 	if (ret)
@@ -3121,18 +3127,36 @@ int ft_parse_rma_opts(int op, char *optarg, struct fi_info *hints,
 	return 0;
 }
 
-void ft_fill_buf(void *buf, size_t size)
+int ft_fill_buf(void *buf, size_t size)
 {
 	char *msg_buf;
 	int msg_index = 0;
 	size_t i;
+	int ret = 0;
 
-	msg_buf = (char *) buf;
+	if (opts.iface != FI_HMEM_SYSTEM) {
+		msg_buf = malloc(size);
+		if (!msg_buf)
+			return -FI_ENOMEM;
+	} else {
+		msg_buf = (char *) buf;
+	}
+
 	for (i = 0; i < size; i++) {
 		msg_buf[i] = integ_alphabet[msg_index];
 		if (++msg_index >= integ_alphabet_length)
 			msg_index = 0;
 	}
+
+	if (opts.iface != FI_HMEM_SYSTEM) {
+		ret = ft_hmem_copy_to(opts.iface, opts.device, buf, msg_buf, size);
+		if (ret)
+			goto out;
+	}
+out:
+	if (opts.iface != FI_HMEM_SYSTEM)
+		free(msg_buf);
+	return ret;
 }
 
 int ft_check_buf(void *buf, size_t size)
@@ -3141,8 +3165,20 @@ int ft_check_buf(void *buf, size_t size)
 	char c;
 	int msg_index = 0;
 	size_t i;
+	int ret = 0;
 
-	recv_data = (char *)buf;
+	if (opts.iface != FI_HMEM_SYSTEM) {
+		recv_data = malloc(size);
+		if (!recv_data)
+			return -FI_ENOMEM;
+	
+		ret = ft_hmem_copy_from(opts.iface, opts.device,
+					recv_data, buf, size);
+		if (ret)
+			goto out;
+	} else {
+		recv_data = (char *)buf;
+	}
 
 	for (i = 0; i < size; i++) {
 		c = integ_alphabet[msg_index];
@@ -3154,10 +3190,13 @@ int ft_check_buf(void *buf, size_t size)
 	if (i != size) {
 		printf("Data check error (%c!=%c) at byte %zu for "
 		       "buffer size %zu\n", c, recv_data[i], i, size);
-		return -FI_EIO;
+		ret = -FI_EIO;
 	}
 
-	return 0;
+out:
+	if (opts.iface != FI_HMEM_SYSTEM)
+		free(recv_data);
+	return ret;
 }
 
 uint64_t ft_init_cq_data(struct fi_info *info)

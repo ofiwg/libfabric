@@ -44,8 +44,11 @@ static int send_msg(int sendmsg, size_t size)
 	int ret;
 	ft_tag = 0xabcd;
 
-	if (ft_check_opts(FT_OPT_VERIFY_DATA))
-		ft_fill_buf(tx_buf, size);
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_fill_buf(tx_buf, size);
+		if (ret)
+			return ret;
+	}
 
 	if (sendmsg) {
 		ret = ft_sendmsg(ep, remote_fi_addr, size,

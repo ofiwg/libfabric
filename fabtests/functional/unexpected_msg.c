@@ -132,9 +132,12 @@ static int run_test_loop(void)
 	for (i = 0; i < num_iters; i++) {
 		for (j = 0; j < concurrent_msgs; j++) {
 			op_buf = get_tx_buf(j);
-			if (ft_check_opts(FT_OPT_VERIFY_DATA))
-				ft_fill_buf(op_buf + ft_tx_prefix_size(),
-					    opts.transfer_size);
+			if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+				ret = ft_fill_buf(op_buf + ft_tx_prefix_size(),
+						  opts.transfer_size);
+				if (ret)
+					return ret;
+			}
 
 			ret = ft_post_tx_buf(ep, remote_fi_addr,
 					     opts.transfer_size,
