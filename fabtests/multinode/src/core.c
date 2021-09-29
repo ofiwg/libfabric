@@ -82,7 +82,7 @@ static int multi_setup_fabric(int argc, char **argv)
 	char my_name[FT_MAX_CTRL_MSG];
 	size_t len;
 	int i, ret;
-	struct fi_rma_iov *remote = malloc(sizeof(*remote));
+	struct fi_rma_iov remote;
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->mode = FI_CONTEXT;
@@ -176,14 +176,14 @@ static int multi_setup_fabric(int argc, char **argv)
 	}
 
 	if (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR)
-		remote->addr = (uintptr_t) rx_buf;
+		remote.addr = (uintptr_t) rx_buf;
 	else
-		remote->addr = 0;
+		remote.addr = 0;
 
-	remote->key = fi_mr_key(mr);
-	remote->len = rx_size;
+	remote.key = fi_mr_key(mr);
+	remote.len = rx_size;
 
-	ret = pm_allgather(remote, pm_job.multi_iovs, sizeof(*remote));
+	ret = pm_allgather(&remote, pm_job.multi_iovs, sizeof(remote));
 	if (ret) {
 		FT_ERR("error exchanging rma_iovs\n");
 		goto err;
