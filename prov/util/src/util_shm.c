@@ -162,7 +162,8 @@ static int smr_retry_map(const char *name, int *fd)
 	if (old_shm == MAP_FAILED)
 		goto err;
 
-	if (old_shm->version > SMR_VERSION) {
+        /* No backwards compatibility for now. */
+	if (old_shm->version != SMR_VERSION) {
 		munmap(old_shm, sizeof(*old_shm));
 		goto err;
 	}

@@ -52,7 +52,7 @@ extern "C" {
 #endif
 
 
-#define SMR_VERSION	1
+#define SMR_VERSION	2
 
 #ifdef HAVE_ATOMICS
 #define SMR_FLAG_ATOMIC	(1 << 0)
