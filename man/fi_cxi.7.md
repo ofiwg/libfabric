@@ -603,6 +603,10 @@ The CXI provider checks for the following environment variables:
     Disabling hugetlb support will cause the provider to fallback to memory
     allocators using host page sizes.
 
+*FI_CXI_DEVICE_NAME*
+:   Restrict CXI provider to specific CXI devices. Format is a comma separated
+    list of CXI devices (e.g. cxi0,cxi1).
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 

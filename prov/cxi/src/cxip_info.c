@@ -200,6 +200,56 @@ static int cxip_info_init(void)
 	return ret;
 }
 
+static bool cxip_env_validate_device_token(const char *device_token)
+{
+	unsigned int device_index;
+	unsigned int device_strlen;
+
+	/* Only allow for device tokens of cxi0 - cxi99. */
+	device_strlen = strlen(device_token);
+	if (device_strlen != 4 && device_strlen != 5)
+		return false;
+
+	/* Ensure device token is of cxi## format. */
+	if (sscanf(device_token, "cxi%u", &device_index) != 1)
+		return false;
+
+	/* Ensure that a device string length of 5 chars is only true if the
+	 * device index is greater than 9.
+	 */
+	if (device_strlen == 5 && device_index < 10)
+		return false;
+
+	return true;
+}
+
+static int cxip_env_validate_device_name(const char *device_name)
+{
+	const char *device_token;
+	char *device_name_copy;
+	int ret = FI_SUCCESS;
+
+	device_name_copy = malloc(strlen(device_name) + 1);
+	if (!device_name_copy)
+		return -FI_ENOMEM;
+
+	strcpy(device_name_copy, device_name);
+
+	device_token = strtok(device_name_copy, ",");
+	while (device_token != NULL) {
+		if (!cxip_env_validate_device_token(device_token)) {
+			ret = -FI_EINVAL;
+			break;
+		}
+
+		device_token = strtok(NULL, ",");
+	}
+
+	free(device_name_copy);
+
+	return ret;
+}
+
 struct cxip_environment cxip_env = {
 	.odp = false,
 	.ats = false,
@@ -230,6 +280,7 @@ static void cxip_env_init(void)
 {
 	char *param_str = NULL;
 	size_t min_free;
+	int ret;
 
 	fi_param_define(&cxip_prov, "odp", FI_PARAM_BOOL,
 			"Enables on-demand paging.");
@@ -251,6 +302,19 @@ static void cxip_env_init(void)
 		else
 			CXIP_WARN("Unrecognized ats_mlock_mode: %s\n",
 				  param_str);
+	}
+
+	fi_param_define(&cxip_prov, "device_name", FI_PARAM_STRING,
+			"Restrict CXI provider to specific CXI devices. Format is a comma separated list of CXI devices (e.g. cxi0,cxi1).");
+	fi_param_get_str(&cxip_prov, "device_name", &cxip_env.device_name);
+
+	if (cxip_env.device_name) {
+		ret = cxip_env_validate_device_name(cxip_env.device_name);
+		if (ret) {
+			CXIP_WARN("Failed to validate device name: name=%s rc=%d. Ignoring device name.\n",
+				  cxip_env.device_name, ret);
+			cxip_env.device_name = NULL;
+		}
 	}
 
 	fi_param_define(&cxip_prov, "rdzv_offload", FI_PARAM_BOOL,
@@ -436,9 +500,9 @@ static void cxip_env_init(void)
  */
 CXI_INI
 {
-	cxip_if_init();
-
 	cxip_env_init();
+
+	cxip_if_init();
 
 	cxip_info_init();
 

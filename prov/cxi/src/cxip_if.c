@@ -1074,6 +1074,12 @@ static void cxip_query_if_list(struct slist *if_list)
 	}
 
 	for (i = 0; i < cxi_dev_list->count; i++) {
+		/* Ignore cxi devices not included in device name string. */
+		if (cxip_env.device_name &&
+		    (strstr(cxip_env.device_name,
+			    cxi_dev_list->info[i].device_name) == NULL))
+			continue;
+
 		if (!getenv("CXIP_SKIP_RH_CHECK") &&
 		    cxi_dev_list->info[i].device_platform == C_PLATFORM_ASIC &&
 		    !cxil_rh_running(&cxi_dev_list->info[i])) {

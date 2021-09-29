@@ -52,7 +52,7 @@ if [[ $cxitest_exit_status -ne 0 ]]; then
 fi
 
 # Verify tag matching with rendezvous
-test="FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j2 --filter=\"tagged_directed/*\" --tap=cxitest-hw-rdzv-tag-matching.tap >> $TEST_OUTPUT 2>&1"
+test="FI_CXI_DEVICE_NAME=cxi1,cxi0 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j2 --filter=\"tagged_directed/*\" --tap=cxitest-hw-rdzv-tag-matching.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
@@ -77,6 +77,14 @@ echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
     echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
+test="FI_CXI_DEVICE_NAME=cxi1 ../../../util/fi_info"
+echo "running: $test"
+eval $test
+if [[ $? -eq 0 ]]; then
+    echo "fi_info incorrectly returned fi_info"
     exit 1
 fi
 
