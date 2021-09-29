@@ -7,6 +7,10 @@ version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
 
+v1.13.2, Fri Oct 8, 2021
+========================
+
+
 v1.13.1, Tue Aug 24, 2021
 =========================
 
