@@ -167,7 +167,7 @@ enum tcpx_cm_state {
 };
 
 struct tcpx_cm_context {
-	fid_t			fid;
+	struct fid		*hfid;
 	enum tcpx_cm_state	state;
 	size_t			cm_data_sz;
 	struct tcpx_cm_msg	msg;
