@@ -155,11 +155,11 @@ size_t ofi_datatype_size(enum fi_datatype datatype)
 #define OFI_OP_READ_COMPLEX		OFI_OP_READ
 #define OFI_OP_WRITE_COMPLEX		OFI_OP_WRITE
 
-#if defined(HAVE_BUILTIN_MM_INT128_ATOMICS) || defined(HAVE___INT128)
+#if defined(HAVE_BUILTIN_MM_INT128_ATOMICS)
 
 /*
- * If the compiler supports 128-bit integer types, then existing macros
- * will just work.
+ * If the compiler supports 128-bit integer types and atomics,
+ *  then existing macros will just work.
  */
 #define OFI_DEF_WRITE_INT128_NAME(op, type)	OFI_DEF_WRITE_NAME(op, type)
 #define OFI_DEF_WRITE_INT128_FUNC(op, type)	OFI_DEF_WRITE_FUNC(op, type)
@@ -192,7 +192,7 @@ size_t ofi_datatype_size(enum fi_datatype datatype)
 #define OFI_DEF_CSWAPEXT_CMP_INT128_FUNC(op, type)	\
 	OFI_DEF_CSWAPEXT_CMP_FUNC(op, type)
 
-#else /* HAVE_BUILTIN_MM_INT128_ATOMICS || HAVE___INT128 */
+#else /* HAVE_BUILTIN_MM_INT128_ATOMICS */
 
 /* Otherwise, we support only nothing */
 
@@ -219,7 +219,7 @@ size_t ofi_datatype_size(enum fi_datatype datatype)
 #define OFI_DEF_CSWAPEXT_CMP_INT128_NAME(op, type) NULL,
 #define OFI_DEF_CSWAPEXT_CMP_INT128_FUNC(op, type)
 
-#endif /* HAVE_BUILTIN_MM_INT128_ATOMICS || HAVE___INT128 */
+#endif /* HAVE_BUILTIN_MM_INT128_ATOMICS */
 
 /********************************
  * ATOMIC TYPE function templates
@@ -695,7 +695,7 @@ size_t ofi_datatype_size(enum fi_datatype datatype)
 		for (i = 0; i < cnt; i++) {				\
 			temp_c = c[i];					\
 			temp_s = s[i];					\
-			op(type, d[i], temp_s, temp_c);			\
+			(void) op(type, d[i], temp_s, temp_c);		\
 			/* If d[i] != temp_c then d[i] -> temp_c */	\
 			r[i] = temp_c;					\
 		}							\
