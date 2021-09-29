@@ -1159,7 +1159,12 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 						goto err1;
 				}
 			} else {
+				/* ep now owns this rdma cm id, prevent trying to access
+				 * it outside of ep operations to avoid possible use-after-
+				 * free bugs in case the ep is closed
+				 */
 				ep->id = connreq->id;
+				connreq->id = NULL;
 				ep->ibv_qp = ep->id->qp;
 				ep->id->context = &ep->util_ep.ep_fid.fid;
 			}
