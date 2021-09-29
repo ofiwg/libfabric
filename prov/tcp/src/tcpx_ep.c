@@ -709,7 +709,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		} else {
 			ep->state = TCPX_RCVD_REQ;
 			handle = container_of(info->handle,
-					      struct tcpx_conn_handle, handle);
+					      struct tcpx_conn_handle, fid);
 			ep->bsock.sock = handle->sock;
 			ep->hdr_bswap = handle->endian_match ?
 					tcpx_hdr_none : tcpx_hdr_bswap;
@@ -895,10 +895,10 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 			   const void *param, size_t paramlen)
 {
 	struct tcpx_cm_msg msg;
-	struct tcpx_conn_handle *tcpx_handle;
+	struct tcpx_conn_handle *conn_handle;
 	int ret;
 
-	tcpx_handle = container_of(handle, struct tcpx_conn_handle, handle);
+	conn_handle = container_of(handle, struct tcpx_conn_handle, fid);
 
 	memset(&msg.hdr, 0, sizeof(msg.hdr));
 	msg.hdr.version = TCPX_CTRL_HDR_VERSION;
@@ -907,18 +907,18 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 	if (paramlen)
 		memcpy(&msg.data, param, paramlen);
 
-	ret = ofi_send_socket(tcpx_handle->sock, &msg,
+	ret = ofi_send_socket(conn_handle->sock, &msg,
 			      sizeof(msg.hdr) + paramlen, MSG_NOSIGNAL);
 	if (ret != sizeof(msg.hdr) + paramlen)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"sending of reject message failed\n");
 
-	ofi_shutdown(tcpx_handle->sock, SHUT_RDWR);
-	ret = ofi_close_socket(tcpx_handle->sock);
+	ofi_shutdown(conn_handle->sock, SHUT_RDWR);
+	ret = ofi_close_socket(conn_handle->sock);
 	if (ret)
 		return ret;
 
-	free(tcpx_handle);
+	free(conn_handle);
 	return FI_SUCCESS;
 }
 

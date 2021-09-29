@@ -342,7 +342,7 @@ static void tcpx_cm_recv_req(struct util_wait *wait,
 	int ret;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Server receive connect request\n");
-	handle  = container_of(cm_ctx->hfid, struct tcpx_conn_handle, handle);
+	handle  = container_of(cm_ctx->hfid, struct tcpx_conn_handle, fid);
 
 	ret = rx_cm_data(handle->sock, ofi_ctrl_connreq, cm_ctx);
 	if (ret) {
@@ -379,7 +379,7 @@ static void tcpx_cm_recv_req(struct util_wait *wait,
 		goto err3;
 
 	handle->endian_match = (cm_ctx->msg.hdr.conn_data == 1);
-	cm_entry->info->handle = &handle->handle;
+	cm_entry->info->handle = &handle->fid;
 	memcpy(cm_entry->data, cm_ctx->msg.data, cm_ctx->cm_data_sz);
 	cm_ctx->state = TCPX_CM_REQ_RVCD;
 
@@ -481,12 +481,12 @@ static void tcpx_accept(struct util_wait *wait,
 		goto err1;
 	}
 
-	rx_req_cm_ctx = tcpx_alloc_cm_ctx(&handle->handle, TCPX_CM_WAIT_REQ);
+	rx_req_cm_ctx = tcpx_alloc_cm_ctx(&handle->fid, TCPX_CM_WAIT_REQ);
 	if (!rx_req_cm_ctx)
 		goto err2;
 
 	handle->sock = sock;
-	handle->handle.fclass = FI_CLASS_CONNREQ;
+	handle->fid.fclass = FI_CLASS_CONNREQ;
 	handle->pep = pep;
 
 	ret = ofi_wait_add_fd(wait, sock, POLLIN,

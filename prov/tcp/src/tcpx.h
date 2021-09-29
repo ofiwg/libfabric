@@ -182,7 +182,7 @@ struct tcpx_port_range {
 };
 
 struct tcpx_conn_handle {
-	struct fid		handle;
+	struct fid		fid;
 	struct tcpx_pep		*pep;
 	SOCKET			sock;
 	bool			endian_match;
