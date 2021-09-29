@@ -46,6 +46,7 @@ rxm_alloc_peer(struct rxm_av *av, const void *addr)
 {
 	struct rxm_peer_addr *peer;
 
+	assert(fastlock_held(&av->util_av.lock));
 	peer = ofi_ibuf_alloc(av->peer_pool);
 	if (!peer)
 		return NULL;
@@ -66,6 +67,7 @@ rxm_alloc_peer(struct rxm_av *av, const void *addr)
 
 static void rxm_free_peer(struct rxm_peer_addr *peer)
 {
+	assert(fastlock_held(&peer->av->util_av.lock));
 	assert(!peer->refcnt);
 	ofi_rbmap_delete(&peer->av->addr_map, peer->node);
 	ofi_ibuf_free(peer);
