@@ -624,7 +624,7 @@ static void ofi_ini_dir(const char *dir)
 	char *lib;
 	struct dirent **liblist = NULL;
 
-	n = scandir(dir, &liblist, lib_filter, NULL);
+	n = scandir(dir, &liblist, lib_filter, alphasort);
 	if (n < 0)
 		goto libdl_done;
 
