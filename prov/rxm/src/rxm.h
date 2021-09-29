@@ -270,6 +270,7 @@ struct rxm_domain {
 
 int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		struct fid_av **fid_av, void *context);
+size_t rxm_av_max_peers(struct rxm_av *av);
 
 struct rxm_mr {
 	struct fid_mr mr_fid;

@@ -279,13 +279,16 @@ void rxm_freeall_conns(struct rxm_ep *ep)
 	struct rxm_conn *conn;
 	struct dlist_entry *tmp;
 	struct rxm_av *av;
-	int i;
+	int i, cnt;
 
 	av = container_of(ep->util_ep.av, struct rxm_av, util_av);
 	ofi_ep_lock_acquire(&ep->util_ep);
 
-	/* We can't have more connections than known peers */
-	for (i = 0; i < av->peer_pool->entry_cnt; i++) {
+	/* We can't have more connections than the current number of
+	 * possible peers.
+	 */
+	cnt = (int) rxm_av_max_peers(av);
+	for (i = 0; i < cnt; i++) {
 		conn = ofi_idm_lookup(&ep->conn_idx_map, i);
 		if (!conn)
 			continue;
