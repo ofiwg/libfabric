@@ -266,6 +266,8 @@ static int cxip_req_buf_process_put_event(struct cxip_req_buf *buf,
 	int ret = FI_SUCCESS;
 	struct cxip_rxc *rxc = buf->rxc;
 
+	assert(event->tgt_long.mlength >= CXIP_REQ_BUF_HEADER_MIN_SIZE);
+
 	fastlock_acquire(&rxc->lock);
 
 	ux = cxip_req_buf_ux_alloc(buf, event);
@@ -375,8 +377,7 @@ int cxip_req_buf_link(struct cxip_req_buf *buf)
 			    C_LE_UNRESTRICTED_BODY_RO | C_LE_OP_PUT |
 			    C_LE_UNRESTRICTED_END_RO | C_LE_EVENT_LINK_DISABLE |
 			    C_LE_EVENT_UNLINK_DISABLE;
-	size_t min_free = sizeof(struct c_port_fab_hdr) +
-		sizeof(struct c_port_unrestricted_hdr) + rxc->rdzv_threshold +
+	size_t min_free = CXIP_REQ_BUF_HEADER_MAX_SIZE + rxc->rdzv_threshold +
 		rxc->rdzv_get_min;
 	int ret;
 

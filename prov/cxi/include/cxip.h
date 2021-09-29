@@ -151,6 +151,11 @@
 #define	CXIP_COLL_MAX_TX_SIZE		32
 #define	CXIP_COLL_MAX_SEQNO		(1 << 10)
 
+#define CXIP_REQ_BUF_HEADER_MAX_SIZE (sizeof(struct c_port_fab_hdr) + \
+	sizeof(struct c_port_unrestricted_hdr))
+#define CXIP_REQ_BUF_HEADER_MIN_SIZE (sizeof(struct c_port_fab_hdr) + \
+	sizeof(struct c_port_small_msg_hdr))
+
 extern char cxip_prov_name[];
 extern struct fi_provider cxip_prov;
 extern struct util_prov cxip_util_prov;

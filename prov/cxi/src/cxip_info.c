@@ -379,9 +379,8 @@ static void cxip_env_init(void)
 	fi_param_get_size_t(&cxip_prov, "req_buf_count",
 			    &cxip_env.req_buf_count);
 
-	if (cxip_env.msg_offload) {
-		min_free = sizeof(struct c_port_fab_hdr) +
-			sizeof(struct c_port_unrestricted_hdr) +
+	if (!cxip_env.msg_offload) {
+		min_free = CXIP_REQ_BUF_HEADER_MAX_SIZE +
 			cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
 
 		if (cxip_env.req_buf_size < min_free) {
