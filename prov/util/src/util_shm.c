@@ -351,8 +351,10 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 	struct smr_region *peer;
 	size_t size;
 	int fd, ret = 0;
+	struct stat sts;
 	struct dlist_entry *entry;
 	const char *name = smr_no_prefix(peer_buf->peer.name);
+	char tmp[NAME_MAX];
 
 	pthread_mutex_lock(&ep_list_lock);
 	entry = dlist_find_first_match(&ep_name_list, smr_match_name, name);
@@ -368,6 +370,18 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 	if (fd < 0) {
 		FI_WARN_ONCE(prov, FI_LOG_AV, "shm_open error\n");
 		return -errno;
+	}
+
+	memset(tmp, 0, sizeof(tmp));
+	snprintf(tmp, sizeof(tmp), "/dev/shm/%s", name);
+	if (stat(tmp, &sts) == -1) {
+		ret = -errno;
+		goto out;
+	}
+
+	if (sts.st_size < sizeof(*peer)) {
+		ret = -FI_ENOENT;
+		goto out;
 	}
 
 	peer = mmap(NULL, sizeof(*peer), PROT_READ | PROT_WRITE,
