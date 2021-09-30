@@ -177,40 +177,44 @@ free:
 	return ret;
 }
 
-static int tcpx_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
+static int
+tcpx_ep_accept(struct fid_ep *fid_ep, const void *param, size_t paramlen)
 {
-	struct tcpx_ep *tcpx_ep = container_of(ep, struct tcpx_ep, util_ep.ep_fid);
+	struct tcpx_ep *ep = container_of(fid_ep, struct tcpx_ep, util_ep.ep_fid);
 	struct tcpx_cm_context *cm_ctx;
+	struct tcpx_conn_handle *handle;
 	int ret;
 
-	if (tcpx_ep->bsock.sock == INVALID_SOCKET ||
-	    tcpx_ep->state != TCPX_RCVD_REQ)
+	handle = ep->handle;
+	if (ep->bsock.sock == INVALID_SOCKET || ep->state != TCPX_RCVD_REQ ||
+	    !handle || (handle->fid.fclass != FI_CLASS_CONNREQ))
 		return -FI_EINVAL;
 
-	cm_ctx = tcpx_alloc_cm_ctx(&tcpx_ep->util_ep.ep_fid.fid,
-				   TCPX_CM_RESP_READY);
+	ep->handle = NULL;
+	cm_ctx = tcpx_alloc_cm_ctx(&ep->util_ep.ep_fid.fid, TCPX_CM_RESP_READY);
 	if (!cm_ctx) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"cannot allocate memory \n");
 		return -FI_ENOMEM;
 	}
 
-	tcpx_ep->state = TCPX_ACCEPTING;
+	ep->state = TCPX_ACCEPTING;
 
 	if (paramlen) {
 		cm_ctx->cm_data_sz = paramlen;
 		memcpy(cm_ctx->msg.data, param, paramlen);
 	}
 
-	ret = ofi_wait_add_fd(tcpx_ep->util_ep.eq->wait, tcpx_ep->bsock.sock,
+	ret = ofi_wait_add_fd(ep->util_ep.eq->wait, ep->bsock.sock,
 			      POLLOUT, tcpx_eq_wait_try_func, NULL, cm_ctx);
 	if (ret)
 		goto free;
 
+	free(handle);
 	return 0;
 
 free:
-	tcpx_ep->state = TCPX_RCVD_REQ;
+	ep->state = TCPX_RCVD_REQ;
 	tcpx_free_cm_ctx(cm_ctx);
 	return ret;
 }
@@ -549,7 +553,7 @@ static int tcpx_ep_close(struct fid *fid)
 	if (eq)
 		fastlock_release(&eq->close_lock);
 
-	if (ep->cm_ctx)
+	if (ep->fid && ep->fid->fclass == TCPX_CLASS_CM)
 		tcpx_free_cm_ctx(ep->cm_ctx);
 
 	/* Lock not technically needed, since we're freeing the EP.  But it's
@@ -709,11 +713,16 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		} else {
 			ep->state = TCPX_RCVD_REQ;
 			handle = container_of(info->handle,
-					      struct tcpx_conn_handle, handle);
+					      struct tcpx_conn_handle, fid);
+			/* EP now owns socket */
 			ep->bsock.sock = handle->sock;
+			handle->sock = INVALID_SOCKET;
 			ep->hdr_bswap = handle->endian_match ?
 					tcpx_hdr_none : tcpx_hdr_bswap;
-			free(handle);
+			/* Save handle, but we only free if user calls accept.
+			 * Otherwise, user will call reject, which will free it.
+			 */
+			ep->handle = handle;
 
 			ret = tcpx_setup_socket(ep->bsock.sock, info);
 			if (ret)
@@ -891,14 +900,17 @@ static int tcpx_pep_listen(struct fid_pep *pep)
 	return ret;
 }
 
-static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
+static int tcpx_pep_reject(struct fid_pep *pep, fid_t fid_handle,
 			   const void *param, size_t paramlen)
 {
 	struct tcpx_cm_msg msg;
-	struct tcpx_conn_handle *tcpx_handle;
+	struct tcpx_conn_handle *handle;
 	int ret;
 
-	tcpx_handle = container_of(handle, struct tcpx_conn_handle, handle);
+	handle = container_of(fid_handle, struct tcpx_conn_handle, fid);
+	/* If we created an endpoint, it owns the socket */
+	if (handle->sock == INVALID_SOCKET)
+		goto free;
 
 	memset(&msg.hdr, 0, sizeof(msg.hdr));
 	msg.hdr.version = TCPX_CTRL_HDR_VERSION;
@@ -907,18 +919,19 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t handle,
 	if (paramlen)
 		memcpy(&msg.data, param, paramlen);
 
-	ret = ofi_send_socket(tcpx_handle->sock, &msg,
+	ret = ofi_send_socket(handle->sock, &msg,
 			      sizeof(msg.hdr) + paramlen, MSG_NOSIGNAL);
 	if (ret != sizeof(msg.hdr) + paramlen)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"sending of reject message failed\n");
 
-	ofi_shutdown(tcpx_handle->sock, SHUT_RDWR);
-	ret = ofi_close_socket(tcpx_handle->sock);
+	ofi_shutdown(handle->sock, SHUT_RDWR);
+	ret = ofi_close_socket(handle->sock);
 	if (ret)
 		return ret;
 
-	free(tcpx_handle);
+free:
+	free(handle);
 	return FI_SUCCESS;
 }
 
@@ -996,7 +1009,8 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		goto err2;
 	}
 
-	_pep->cm_ctx.fid = &_pep->util_pep.pep_fid.fid;
+	_pep->cm_ctx.fid.fclass = TCPX_CLASS_CM;
+	_pep->cm_ctx.hfid = &_pep->util_pep.pep_fid.fid;
 	_pep->cm_ctx.state = TCPX_CM_LISTENING;
 	_pep->cm_ctx.cm_data_sz = 0;
 	_pep->sock = INVALID_SOCKET;

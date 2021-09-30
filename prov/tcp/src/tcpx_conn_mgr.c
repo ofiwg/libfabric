@@ -46,12 +46,14 @@ struct tcpx_cm_context *tcpx_alloc_cm_ctx(fid_t fid, enum tcpx_cm_state state)
 
 	cm_ctx = calloc(1, sizeof(*cm_ctx));
 	if (!cm_ctx)
-		return cm_ctx;
+		return NULL;
 
-	cm_ctx->fid = fid;
+	cm_ctx->fid.fclass = TCPX_CLASS_CM;
+	cm_ctx->hfid = fid;
 	if (fid && fid->fclass == FI_CLASS_EP) {
-		ep = container_of(cm_ctx->fid, struct tcpx_ep,
+		ep = container_of(cm_ctx->hfid, struct tcpx_ep,
 				  util_ep.ep_fid.fid);
+		assert(!ep->fid);
 		ep->cm_ctx = cm_ctx;
 	}
 	cm_ctx->state = state;
@@ -62,8 +64,9 @@ void tcpx_free_cm_ctx(struct tcpx_cm_context *cm_ctx)
 {
 	struct tcpx_ep *ep;
 
-	if (cm_ctx->fid && cm_ctx->fid->fclass == FI_CLASS_EP) {
-		ep = container_of(cm_ctx->fid, struct tcpx_ep,
+	assert(cm_ctx->fid.fclass == TCPX_CLASS_CM);
+	if (cm_ctx->hfid && cm_ctx->hfid->fclass == FI_CLASS_EP) {
+		ep = container_of(cm_ctx->hfid, struct tcpx_ep,
 				  util_ep.ep_fid.fid);
 		ep->cm_ctx = NULL;
 	}
@@ -231,8 +234,8 @@ static void tcpx_cm_recv_resp(struct util_wait *wait,
 	int ret;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Handling accept from server\n");
-	assert(cm_ctx->fid->fclass == FI_CLASS_EP);
-	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
+	assert(cm_ctx->hfid->fclass == FI_CLASS_EP);
+	ep = container_of(cm_ctx->hfid, struct tcpx_ep, util_ep.ep_fid.fid);
 
 	ret = rx_cm_data(ep->bsock.sock, ofi_ctrl_connresp, cm_ctx);
 	if (ret) {
@@ -258,7 +261,7 @@ static void tcpx_cm_recv_resp(struct util_wait *wait,
 	if (!cm_entry)
 		goto err1;
 
-	cm_entry->fid = cm_ctx->fid;
+	cm_entry->fid = cm_ctx->hfid;
 	memcpy(cm_entry->data, cm_ctx->msg.data, cm_ctx->cm_data_sz);
 
 	ep->hdr_bswap = (cm_ctx->msg.hdr.conn_data == 1) ?
@@ -295,8 +298,8 @@ static void tcpx_cm_send_resp(struct util_wait *wait,
 	int ret;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Send connect (accept) response\n");
-	assert(cm_ctx->fid->fclass == FI_CLASS_EP);
-	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
+	assert(cm_ctx->hfid->fclass == FI_CLASS_EP);
+	ep = container_of(cm_ctx->hfid, struct tcpx_ep, util_ep.ep_fid.fid);
 
 	ret = tx_cm_data(ep->bsock.sock, ofi_ctrl_connresp, cm_ctx);
 	if (ret) {
@@ -314,7 +317,7 @@ static void tcpx_cm_send_resp(struct util_wait *wait,
 		goto disable;
 	}
 
-	cm_entry.fid =  cm_ctx->fid;
+	cm_entry.fid = cm_ctx->hfid;
 
 	ret = tcpx_ep_enable(ep, &cm_entry, sizeof(cm_entry));
 	if (ret)
@@ -342,7 +345,7 @@ static void tcpx_cm_recv_req(struct util_wait *wait,
 	int ret;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Server receive connect request\n");
-	handle  = container_of(cm_ctx->fid, struct tcpx_conn_handle, handle);
+	handle  = container_of(cm_ctx->hfid, struct tcpx_conn_handle, fid);
 
 	ret = rx_cm_data(handle->sock, ofi_ctrl_connreq, cm_ctx);
 	if (ret) {
@@ -379,7 +382,7 @@ static void tcpx_cm_recv_req(struct util_wait *wait,
 		goto err3;
 
 	handle->endian_match = (cm_ctx->msg.hdr.conn_data == 1);
-	cm_entry->info->handle = &handle->handle;
+	cm_entry->info->handle = &handle->fid;
 	memcpy(cm_entry->data, cm_ctx->msg.data, cm_ctx->cm_data_sz);
 	cm_ctx->state = TCPX_CM_REQ_RVCD;
 
@@ -412,7 +415,7 @@ static void tcpx_cm_send_req(struct util_wait *wait,
 	int status, ret = FI_SUCCESS;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "client send connreq\n");
-	ep = container_of(cm_ctx->fid, struct tcpx_ep, util_ep.ep_fid.fid);
+	ep = container_of(cm_ctx->hfid, struct tcpx_ep, util_ep.ep_fid.fid);
 
 	len = sizeof(status);
 	ret = getsockopt(ep->bsock.sock, SOL_SOCKET, SO_ERROR,
@@ -463,8 +466,8 @@ static void tcpx_accept(struct util_wait *wait,
 	int ret;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "accepting connection\n");
-	assert(cm_ctx->fid->fclass == FI_CLASS_PEP);
-	pep = container_of(cm_ctx->fid, struct tcpx_pep, util_pep.pep_fid.fid);
+	assert(cm_ctx->hfid->fclass == FI_CLASS_PEP);
+	pep = container_of(cm_ctx->hfid, struct tcpx_pep, util_pep.pep_fid.fid);
 
 	sock = accept(pep->sock, NULL, 0);
 	if (sock < 0) {
@@ -482,12 +485,12 @@ static void tcpx_accept(struct util_wait *wait,
 		goto err1;
 	}
 
-	rx_req_cm_ctx = tcpx_alloc_cm_ctx(&handle->handle, TCPX_CM_WAIT_REQ);
+	rx_req_cm_ctx = tcpx_alloc_cm_ctx(&handle->fid, TCPX_CM_WAIT_REQ);
 	if (!rx_req_cm_ctx)
 		goto err2;
 
 	handle->sock = sock;
-	handle->handle.fclass = FI_CLASS_CONNREQ;
+	handle->fid.fclass = FI_CLASS_CONNREQ;
 	handle->pep = pep;
 
 	ret = ofi_wait_add_fd(wait, sock, POLLIN,
@@ -510,30 +513,30 @@ static void process_cm_ctx(struct util_wait *wait,
 {
 	switch (cm_ctx->state) {
 	case TCPX_CM_LISTENING:
-		assert(cm_ctx->fid->fclass == FI_CLASS_PEP);
+		assert(cm_ctx->hfid->fclass == FI_CLASS_PEP);
 		tcpx_accept(wait, cm_ctx);
 		break;
 	case TCPX_CM_CONNECTING:
-		assert((cm_ctx->fid->fclass == FI_CLASS_EP) &&
-		       (container_of(cm_ctx->fid, struct tcpx_ep,
+		assert((cm_ctx->hfid->fclass == FI_CLASS_EP) &&
+		       (container_of(cm_ctx->hfid, struct tcpx_ep,
 				     util_ep.ep_fid.fid)->state ==
 							  TCPX_CONNECTING));
 		tcpx_cm_send_req(wait, cm_ctx);
 		break;
 	case TCPX_CM_WAIT_REQ:
-		assert(cm_ctx->fid->fclass == FI_CLASS_CONNREQ);
+		assert(cm_ctx->hfid->fclass == FI_CLASS_CONNREQ);
 		tcpx_cm_recv_req(wait, cm_ctx);
 		break;
 	case TCPX_CM_RESP_READY:
-		assert((cm_ctx->fid->fclass == FI_CLASS_EP) &&
-		       (container_of(cm_ctx->fid, struct tcpx_ep,
+		assert((cm_ctx->hfid->fclass == FI_CLASS_EP) &&
+		       (container_of(cm_ctx->hfid, struct tcpx_ep,
 				     util_ep.ep_fid.fid)->state ==
 							  TCPX_ACCEPTING));
 		tcpx_cm_send_resp(wait, cm_ctx);
 		break;
 	case TCPX_CM_REQ_SENT:
-		assert((cm_ctx->fid->fclass == FI_CLASS_EP) &&
-		       (container_of(cm_ctx->fid, struct tcpx_ep,
+		assert((cm_ctx->hfid->fclass == FI_CLASS_EP) &&
+		       (container_of(cm_ctx->hfid, struct tcpx_ep,
 				     util_ep.ep_fid.fid)->state ==
 							  TCPX_CONNECTING));
 		tcpx_cm_recv_resp(wait, cm_ctx);
@@ -543,15 +546,11 @@ static void process_cm_ctx(struct util_wait *wait,
 	}
 }
 
-/* The implementation assumes that the EQ does not share a wait set with
- * a CQ.  This is true for internally created wait sets, but not if the
- * application manages the wait set.  To fix, we need to distinguish
- * whether the wait_context references a fid or tcpx_cm_context.
- */
 void tcpx_conn_mgr_run(struct util_eq *eq)
 {
 	struct util_wait_fd *wait_fd;
 	struct tcpx_eq *tcpx_eq;
+	struct fid *fid;
 	struct ofi_epollfds_event events[MAX_POLL_EVENTS];
 	int count, i;
 
@@ -573,7 +572,9 @@ void tcpx_conn_mgr_run(struct util_eq *eq)
 		if (&wait_fd->util_wait.wait_fid.fid == events[i].data.ptr)
 			continue;
 
-		process_cm_ctx(eq->wait, events[i].data.ptr);
+		fid = events[i].data.ptr;
+		if (fid->fclass == TCPX_CLASS_CM)
+			process_cm_ctx(eq->wait, events[i].data.ptr);
 	}
 unlock:
 	fastlock_release(&tcpx_eq->close_lock);

@@ -166,8 +166,14 @@ enum tcpx_cm_state {
 	/* CM context is freed once connected */
 };
 
+#define OFI_PROV_SPECIFIC_TCP (0x7cb << 16)
+enum {
+	TCPX_CLASS_CM = OFI_PROV_SPECIFIC_TCP,
+};
+
 struct tcpx_cm_context {
-	fid_t			fid;
+	struct fid		fid;
+	struct fid		*hfid;
 	enum tcpx_cm_state	state;
 	size_t			cm_data_sz;
 	struct tcpx_cm_msg	msg;
@@ -182,7 +188,7 @@ struct tcpx_port_range {
 };
 
 struct tcpx_conn_handle {
-	struct fid		handle;
+	struct fid		fid;
 	struct tcpx_pep		*pep;
 	SOCKET			sock;
 	bool			endian_match;
@@ -247,7 +253,11 @@ struct tcpx_ep {
 	int			rx_avail;
 	struct tcpx_rx_ctx	*srx_ctx;
 	enum tcpx_state		state;
-	struct tcpx_cm_context	*cm_ctx;
+	union {
+		struct fid		*fid;
+		struct tcpx_cm_context	*cm_ctx;
+		struct tcpx_conn_handle *handle;
+	};
 
 	/* lock for protecting tx/rx queues, rma list, state*/
 	fastlock_t		lock;
