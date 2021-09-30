@@ -124,6 +124,11 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 			 */
 			slist_insert_tail(&tx_entry->entry,
 					  &ep->need_ack_queue);
+		} else if (tx_entry->flags & TCPX_NEED_RESP) {
+			// discard send but enable receive for completeion
+			assert(tx_entry->resp_entry);
+			tx_entry->resp_entry->flags &= ~TCPX_INTERNAL_XFER;
+			tcpx_free_xfer(cq, tx_entry);
 		} else if ((tx_entry->flags & TCPX_ASYNC) &&
 			   (ofi_val32_gt(tx_entry->async_index,
 					 ep->bsock.done_index))) {
