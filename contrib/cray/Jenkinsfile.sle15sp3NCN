@@ -6,5 +6,5 @@ sle15sp3NCN {
     buildPrepScript = "contrib/cray/runBuildPrep.sh"
     rpmBuildScript = "contrib/cray/cray_rpmbuild.sh"
     masterBranch = "integration"
-    receive_triggers = ["libcxi-built"]
+    recv_triggers = ["libcxi-built"]
 }
