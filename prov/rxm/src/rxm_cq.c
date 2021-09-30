@@ -1889,9 +1889,11 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 				rxm_cq_write_error_all(rxm_ep, ret);
 		}
 
-		if (ret == -FI_EAGAIN || --rxm_ep->cq_eq_fairness <= 0) {
+		if (ret == -FI_EAGAIN || rxm_ep->connecting_cnt ||
+		    --rxm_ep->cq_eq_fairness <= 0) {
 			rxm_ep->cq_eq_fairness = rxm_cq_eq_fairness;
-			if (rxm_cm_progress_interval) {
+			if (rxm_ep->connecting_cnt == 0 &&
+			    rxm_cm_progress_interval) {
 				timestamp = ofi_gettime_us();
 				if (timestamp - rxm_ep->msg_cq_last_poll >
 				    rxm_cm_progress_interval) {

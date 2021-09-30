@@ -629,6 +629,7 @@ struct rxm_ep {
 	struct fi_info 		*rxm_info;
 	struct fi_info 		*msg_info;
 
+	int			connecting_cnt;
 	struct index_map	conn_idx_map;
 	struct dlist_entry	loopback_list;
 	union ofi_sock_ip	addr;
