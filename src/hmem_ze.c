@@ -467,12 +467,6 @@ static int ze_hmem_dl_init(void)
 		goto err_dlclose;
 	}
 
-	libze_ops.zeContextDestroy = dlsym(libze_handle, "zeContextDestroy");
-	if (!libze_ops.zeContextDestroy) {
-		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find zeContextDestroy\n");
-		goto err_dlclose;
-	}
-
 	libze_ops.zeCommandQueueCreate = dlsym(libze_handle, "zeCommandQueueCreate");
 	if (!libze_ops.zeCommandQueueCreate) {
 		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find zeCommandQueueCreate\n");
@@ -569,8 +563,8 @@ static int ze_hmem_find_copy_only_engine(int device_num, int *ordinal)
 {
 	ze_result_t ze_ret;
 	uint32_t cq_grp_count = 0;
-	ze_command_queue_group_properties_t *cq_grp_props;
-	int i;
+	ze_command_queue_group_properties_t *cq_grp_props = NULL;
+	int i = 0;
 
 	ze_ret = ofi_zeDeviceGetCommandQueueGroupProperties(devices[device_num],
 							    &cq_grp_count, NULL);
