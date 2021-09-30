@@ -43,22 +43,26 @@ extern "C" {
 #endif
 
 /*
- * Each provider can define provider-specific values by
- * choosing an unique 11-bit (since the most significant
- * bit must be 1) provider-specific code to avoid
- * overlapping with other providers. E.g.,
+ * Each provider needs to define an unique 12-bit provider
+ * specific code to avoid overlapping with other providers,
+ * then bit left shift the code 16 bits. Note that the
+ * highest 4 bits are not touched, so they are still left
+ * to 0. The lowest 16 bits can be used to define provider
+ * specific values. E.g.,
  *
- * #define FI_PROV_SPECIFIC_XXX    (FI_PROV_SPECIFIC | 0xabc << 20)
+ * define FI_PROV_SPECIFIC_XXX    (0xabc << 16)
+ *
  * enum {
- *        FI_PROV_XXX_VALUE        (1U | FI_PROV_SPECIFIC_XXX)
+ *        FI_PROV_XXX_FOO = -(FI_PROV_SPECIFIC_XXX),
+ *        FI_PROV_XXX_BAR,
  * }
  */
 
-#define FI_PROV_SPECIFIC_EFA   (FI_PROV_SPECIFIC | 0xefa << 20)
+#define FI_PROV_SPECIFIC_EFA   (0xefa << 16)
 
-/* EFA options */
+/* negative options are provider specific */
 enum {
-       FI_OPT_EFA_RNR_RETRY = (1U | FI_PROV_SPECIFIC_EFA),
+       FI_OPT_EFA_RNR_RETRY = -FI_PROV_SPECIFIC_EFA,
 };
 
 struct fi_fid_export {
