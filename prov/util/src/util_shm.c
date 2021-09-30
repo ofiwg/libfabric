@@ -106,7 +106,8 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 	tx_size = roundup_power_of_two(tx_count);
 	rx_size = roundup_power_of_two(rx_count);
 
-	cmd_queue_offset = sizeof(struct smr_region);
+	/* Align cmd_queue offset to 128-bit boundary. */
+	cmd_queue_offset = ofi_get_aligned_size(sizeof(struct smr_region), 16);
 	resp_queue_offset = cmd_queue_offset + sizeof(struct smr_cmd_queue) +
 			    sizeof(struct smr_cmd) * rx_size;
 	inject_pool_offset = resp_queue_offset + sizeof(struct smr_resp_queue) +
@@ -161,7 +162,8 @@ static int smr_retry_map(const char *name, int *fd)
 	if (old_shm == MAP_FAILED)
 		goto err;
 
-	if (old_shm->version > SMR_VERSION) {
+        /* No backwards compatibility for now. */
+	if (old_shm->version != SMR_VERSION) {
 		munmap(old_shm, sizeof(*old_shm));
 		goto err;
 	}
