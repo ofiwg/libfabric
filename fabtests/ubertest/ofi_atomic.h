@@ -61,21 +61,27 @@ typedef long double complex ofi_complex_long_double;
 #define ofi_atomic_isswap_op(op) \
 	(op >= OFI_SWAP_OP_START && op < OFI_SWAP_OP_LAST)
 
-extern void (*ofi_atomic_write_handlers[OFI_WRITE_OP_CNT][FI_DATATYPE_LAST])
+extern void (*ofi_atomic_write_handlers[OFI_WRITE_OP_CNT][OFI_DATATYPE_CNT])
 			(void *dst, const void *src, size_t cnt);
-extern void (*ofi_atomic_readwrite_handlers[OFI_READWRITE_OP_CNT][FI_DATATYPE_LAST])
+extern void (*ofi_atomic_readwrite_handlers[OFI_READWRITE_OP_CNT][OFI_DATATYPE_CNT])
 			(void *dst, const void *src, void *res, size_t cnt);
-extern void (*ofi_atomic_swap_handlers[OFI_SWAP_OP_CNT][FI_DATATYPE_LAST])
+extern void (*ofi_atomic_swap_handlers[OFI_SWAP_OP_CNT][OFI_DATATYPE_CNT])
 			(void *dst, const void *src, const void *cmp,
 			 void *res, size_t cnt);
 
-#define ofi_atomic_write_handler(op, datatype, dst, src, cnt) \
-	ofi_atomic_write_handlers[op][datatype](dst, src, cnt)
-#define ofi_atomic_readwrite_handler(op, datatype, dst, src, res, cnt) \
-	ofi_atomic_readwrite_handlers[op][datatype](dst, src, res, cnt)
-#define ofi_atomic_swap_handler(op, datatype, dst, src, cmp, res, cnt) \
-	ofi_atomic_swap_handlers[op - OFI_SWAP_OP_START][datatype](dst, src, \
-								cmp, res, cnt)
+#define ofi_atomic_write_handler(op, datatype)				\
+	ofi_atomic_write_handlers[op][datatype]
+#define ofi_atomic_readwrite_handler(op, datatype)			\
+	ofi_atomic_readwrite_handlers[op][datatype]
+#define ofi_atomic_swap_handler(op, datatype)				\
+	ofi_atomic_swap_handlers[op - OFI_SWAP_OP_START][datatype]
+
+#define ofi_atomic_write_op(op, datatype, dst, src, cnt)		\
+	ofi_atomic_write_handler(op, datatype)(dst, src, cnt)
+#define ofi_atomic_readwrite_op(op, datatype, dst, src, res, cnt)	\
+	ofi_atomic_readwrite_handler(op, datatype)(dst, src, res, cnt)
+#define ofi_atomic_swap_op(op, datatype, dst, src, cmp, res, cnt)	\
+	ofi_atomic_swap_handler(op, datatype)(dst, src, cmp, res, cnt)
 
 #define OFI_DEF_COMPLEX_OPS(type)				\
 static inline int ofi_complex_eq_## type			\

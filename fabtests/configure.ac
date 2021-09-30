@@ -178,6 +178,10 @@ AC_CHECK_FUNC([epoll_create1], [have_epoll=1], [have_epoll=0])
 AC_DEFINE_UNQUOTED([HAVE_EPOLL], [$have_epoll],
 		   [Defined to 1 if Linux epoll is available])
 
+dnl Check for 128-bit integer support
+AC_CHECK_TYPE([__int128],
+	[AC_DEFINE(HAVE___INT128, 1, [Set to 1 to use 128-bit ints])])
+
 AC_CONFIG_FILES([Makefile fabtests.spec])
 
 AC_OUTPUT

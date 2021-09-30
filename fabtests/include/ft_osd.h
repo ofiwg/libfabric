@@ -45,4 +45,11 @@
 #include <unix/osd.h>
 #endif
 
+#define OFI_DATATYPE_CNT	(FI_UINT128 + 1)
+
+#ifdef HAVE___INT128
+typedef __int128 ofi_int128_t;
+typedef unsigned __int128 ofi_uint128_t;
+#endif
+
 #endif /* _FT_OSD_H_ */

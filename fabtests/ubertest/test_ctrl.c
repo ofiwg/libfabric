@@ -862,8 +862,12 @@ static int ft_unit_atomic(void)
 			return ret;
 
 		ret = ft_verify_bufs();
-		if (ret)
-			fail = -FI_EIO;
+		if (ret) {
+			if (ret < 0)
+				fail = -FI_EIO;
+			else
+				fail = 1;
+		}
 	}
 
 	ret = ft_check_verify_cnt();
@@ -947,12 +951,19 @@ static int ft_run_unit(void)
 
 		ret = ft_unit();
 		if (ret) {
-			if (ret != -FI_EIO)
-				return ret;
-			fail = -FI_EIO;
+			if (ret < 0) {
+				if (ret != -FI_EIO)
+					return ret;
+				fail = -FI_EIO;
+			} else if (!fail)
+				fail = ret;
 		}
 	}
-	if (fail)
+	if (fail > 0) {
+		printf("unit test UNVERIFIED\n");
+		/* Allow testing to continue. */
+		fail = 0;
+	} else if (fail < 0)
 		printf("unit test FAILED\n");
 	else
 		printf("unit test PASSED\n");
