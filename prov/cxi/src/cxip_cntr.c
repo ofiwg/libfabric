@@ -19,6 +19,123 @@
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_DATA, __VA_ARGS__)
 
+static int cxip_cntr_copy_ct_writeback(struct cxip_cntr *cntr,
+				       struct c_ct_writeback *wb_copy)
+{
+	const struct iovec hmem_iov = {
+		.iov_base = cntr->wb,
+		.iov_len = sizeof(*cntr->wb),
+	};
+	ssize_t ret;
+
+	ret = cxip_copy_from_hmem_iov(cntr->domain, wb_copy, sizeof(*wb_copy),
+				      cntr->wb_iface, 0, &hmem_iov, 1, 0);
+	if (ret < 0) {
+		return ret;
+	} else if (ret != sizeof(*wb_copy)) {
+		CXIP_WARN("Short device copy: expected=%lu got=%lu\n",
+			  sizeof(*wb_copy), ret);
+		return -FI_EIO;
+	}
+	return FI_SUCCESS;
+}
+
+static int cxip_cntr_get_ct_error(struct cxip_cntr *cntr, uint64_t *error)
+{
+	struct c_ct_writeback wb_copy;
+	int ret;
+
+	/* Only can reference the ct_failure field directly if dealing with
+	 * system memory. Device memory requires a memcpy of the contents into
+	 * system memory.
+	 */
+	if (cntr->wb_iface == FI_HMEM_SYSTEM) {
+		*error = cntr->wb->ct_failure;
+		return FI_SUCCESS;
+	}
+
+	ret = cxip_cntr_copy_ct_writeback(cntr, &wb_copy);
+	if (ret)
+		return ret;
+
+	*error = wb_copy.ct_failure;
+	return FI_SUCCESS;
+}
+
+static int cxip_cntr_get_ct_success(struct cxip_cntr *cntr, uint64_t *success)
+{
+	struct c_ct_writeback wb_copy;
+	int ret;
+
+	/* Only can reference the ct_success field directly if dealing with
+	 * system memory. Device memory requires a memcpy of the contents into
+	 * system memory.
+	 */
+	if (cntr->wb_iface == FI_HMEM_SYSTEM) {
+		*success = cntr->wb->ct_success;
+		return FI_SUCCESS;
+	}
+
+	ret = cxip_cntr_copy_ct_writeback(cntr, &wb_copy);
+	if (ret)
+		return ret;
+
+	*success = wb_copy.ct_success;
+	return FI_SUCCESS;
+}
+
+#define CT_WRITEBACK_OFFSET 7U
+
+static int cxip_cntr_clear_ct_writeback(struct cxip_cntr *cntr)
+{
+	struct iovec hmem_iov;
+	ssize_t ret;
+	uint8_t ct_writeback;
+
+	/* Only can reference the ct_success field directly if dealing with
+	 * system memory. Device memory requires a memcpy of the contents into
+	 * device memory.
+	 */
+	if (cntr->wb_iface == FI_HMEM_SYSTEM) {
+		cntr->wb->ct_writeback = 0;
+		return FI_SUCCESS;
+	}
+
+	/* Only write to ct_writeback byte. */
+	ct_writeback = 0;
+	hmem_iov.iov_base = (char *)cntr->wb + CT_WRITEBACK_OFFSET;
+	hmem_iov.iov_len = 1;
+
+	ret = cxip_copy_to_hmem_iov(cntr->domain, cntr->wb_iface, 0, &hmem_iov,
+				    1, 0, &ct_writeback, 1);
+	if (ret < 0) {
+		return ret;
+	} else if (ret != 1) {
+		CXIP_WARN("Short device copy: expected=%u got=%lu\n", 1, ret);
+		return -FI_EIO;
+	}
+	return FI_SUCCESS;
+}
+
+static int cxip_cntr_get_ct_writeback(struct cxip_cntr *cntr)
+{
+	struct c_ct_writeback wb_copy;
+	int ret;
+
+	/* Only can reference the ct_writeback field directly if dealing with
+	 * system memory. Device memory requires a memcpy of the contents into
+	 * system memory.
+	 */
+	if (cntr->wb_iface == FI_HMEM_SYSTEM)
+		return cntr->wb->ct_writeback;
+
+	ret = cxip_cntr_copy_ct_writeback(cntr, &wb_copy);
+	if (ret)
+		return ret;
+
+	return wb_copy.ct_writeback;
+}
+
 static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 {
 	struct cxi_cq_alloc_opts cq_opts = {};
@@ -178,8 +295,22 @@ static int cxip_cntr_get(struct cxip_cntr *cxi_cntr)
 	}
 
 	if (cxi_cntr->wb_pending) {
-		if (cxi_cntr->wb->ct_writeback) {
-			cxi_cntr->wb->ct_writeback = 0;
+		ret = cxip_cntr_get_ct_writeback(cxi_cntr);
+		if (ret < 0) {
+			CXIP_WARN("Failed to read counter writeback: rc=%d\n",
+				  ret);
+			return ret;
+		}
+
+		if (ret) {
+			ret = cxip_cntr_clear_ct_writeback(cxi_cntr);
+			if (ret) {
+				fastlock_release(&cxi_cntr->lock);
+				CXIP_WARN("Failed to clear counter writeback bit: rc=%d\n",
+					  ret);
+				return ret;
+			}
+
 			cxi_cntr->wb_pending = false;
 		}
 		fastlock_release(&cxi_cntr->lock);
@@ -213,12 +344,19 @@ static int cxip_cntr_get(struct cxip_cntr *cxi_cntr)
 static uint64_t cxip_cntr_read(struct fid_cntr *fid_cntr)
 {
 	struct cxip_cntr *cxi_cntr;
+	uint64_t success = 0;
+	int ret;
 
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
 
 	cxip_cntr_get(cxi_cntr);
 
-	return cxi_cntr->wb->ct_success;
+	/* TODO: Fall back to reading register on error? */
+	ret = cxip_cntr_get_ct_success(cxi_cntr, &success);
+	if (ret != FI_SUCCESS)
+		CXIP_WARN("Failed to read counter success: rc=%d\n", ret);
+
+	return success;
 }
 
 /*
@@ -227,12 +365,19 @@ static uint64_t cxip_cntr_read(struct fid_cntr *fid_cntr)
 static uint64_t cxip_cntr_readerr(struct fid_cntr *fid_cntr)
 {
 	struct cxip_cntr *cxi_cntr;
+	uint64_t error = 0;
+	int ret;
 
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
 
 	cxip_cntr_get(cxi_cntr);
 
-	return cxi_cntr->wb->ct_failure;
+	/* TODO: Fall back to reading register on error? */
+	ret = cxip_cntr_get_ct_error(cxi_cntr, &error);
+	if (ret != FI_SUCCESS)
+		CXIP_WARN("Failed to read counter error: rc=%d\n", ret);
+
+	return error;
 }
 
 /*
@@ -358,8 +503,10 @@ int cxip_cntr_enable(struct cxip_cntr *cxi_cntr)
 	if (ret != FI_SUCCESS)
 		goto unlock;
 
-	if (!cxi_cntr->wb)
+	if (!cxi_cntr->wb) {
 		cxi_cntr->wb = &cxi_cntr->lwb;
+		cxi_cntr->wb_iface = FI_HMEM_SYSTEM;
+	}
 
 	ret = cxil_alloc_ct(cxi_cntr->domain->lni->lni,
 			    cxi_cntr->wb, &cxi_cntr->ct);
@@ -450,6 +597,7 @@ int cxip_set_wb_buffer(struct fid *fid, void *buf, size_t len)
 	}
 
 	cntr->wb = buf;
+	cntr->wb_iface = ofi_get_hmem_iface(buf);
 
 	return FI_SUCCESS;
 }
