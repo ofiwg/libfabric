@@ -473,23 +473,34 @@ err_free_nic:
 
 #if HAVE_LIBCUDA
 /*
- * efa_get_gdr_support() check if GPUDirect RDMA is supported by
- * reading from sysfs file "class/infiniband/<device_name>/gdr"
- * and set content of gdr_support accordingly.
+ * efa_get_gdr_support() checks if the provider can support GPUDirect RDMA. It
+ * checks whether the hmem initialization succeeded and also reads from the EFA
+ * driver sysfs file "class/infiniband/<device_name>/gdr" to verify the EFA
+ * driver was able to successfully load p2p device support.
+ *
+ * TODO: the gdr sysfs file does not necessarily mean a specific p2p transfer
+ * will succeed, more work is needed here.
  *
  * Return value:
- *   return 1 if sysfs file exist and has 1 in it.
- *   return 0 if sysfs file does not exist or has 0 in it.
- *   return a negatie value if error happened.
+ *   return 1 if gdr is supported
+ *   return 0 if it is not
+ *   return a negative value on error
  */
-static int efa_get_gdr_support(char *device_name)
+static int efa_get_gdr_support(struct efa_context *efa_context)
 {
 	static const int MAX_GDR_SUPPORT_STRLEN = 8;
 	char *gdr_path = NULL;
 	char gdr_support_str[MAX_GDR_SUPPORT_STRLEN];
 	int ret, read_len;
 
-	ret = asprintf(&gdr_path, "class/infiniband/%s/device/gdr", device_name);
+	if (!ofi_hmem_is_initialized(FI_HMEM_CUDA)) {
+		EFA_WARN(FI_LOG_MR,
+		         "FI_HMEM_CUDA is not initialized\n");
+		return 0;
+	}
+
+	ret = asprintf(&gdr_path, "class/infiniband/%s/device/gdr",
+		       efa_context->ibv_ctx->device->name);
 	if (ret < 0) {
 		EFA_INFO_ERRNO(FI_LOG_FABRIC, "asprintf to build sysfs file name failed", ret);
 		goto out;
@@ -514,6 +525,7 @@ static int efa_get_gdr_support(char *device_name)
 
 	read_len = MIN(ret, MAX_GDR_SUPPORT_STRLEN);
 	ret = (0 == strncmp(gdr_support_str, "1", read_len));
+
 out:
 	free(gdr_path);
 	return ret;
@@ -568,7 +580,7 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 
 #if HAVE_LIBCUDA
 	if (info->ep_attr->type == FI_EP_RDM) {
-		ret = efa_get_gdr_support(ctx->ibv_ctx->device->name);
+		ret = efa_get_gdr_support(ctx);
 		if (ret < 0) {
 			EFA_WARN(FI_LOG_FABRIC, "get gdr support failed!\n");
 			return ret;

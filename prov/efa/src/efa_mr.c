@@ -57,6 +57,58 @@ static struct fi_ops efa_mr_cache_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+/*
+ * @brief Validate HMEM attributes and populate efa_mr struct
+ *
+ * Check if FI_HMEM is enabled for the domain, validate whether the specific
+ * device type requested is currently supported by the provider, and update the
+ * efa_mr structure based on the attributes requested by the user.
+ *
+ * @params[in]	efa_mr	efa_mr structure to be updated
+ * @params[in]	attr	fi_mr_attr from the user's registration call
+ *
+ * @return FI_SUCCESS or negative FI error code
+ */
+static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
+                             const struct fi_mr_attr *attr)
+{
+	if (attr->iface == FI_HMEM_SYSTEM) {
+		efa_mr->peer.iface = FI_HMEM_SYSTEM;
+		return FI_SUCCESS;
+	} else if (efa_mr->domain->util_domain.info_domain_caps & FI_HMEM) {
+		/*
+		 * Skipping the domain type check above is okay here since
+		 * util_domain is at the beginning of both efa_domain and
+		 * rxr_domain.
+		 */
+		if (ofi_hmem_is_initialized(attr->iface)) {
+			efa_mr->peer.iface = attr->iface;
+		} else {
+			EFA_WARN(FI_LOG_MR,
+				 "FI_HMEM is not initialized for device type %d\n",
+				 attr->iface);
+			return -FI_ENOSYS;
+		}
+	} else {
+		/*
+		 * It's possible that attr->iface is not initialized when
+		 * FI_HMEM is off, so this can't be a fatal error. Print a
+		 * warning in case this value is not FI_HMEM_SYSTEM for
+		 * whatever reason.
+		 */
+		FI_WARN_ONCE(&efa_prov, FI_LOG_MR,
+		             "FI_HMEM support is disabled, assuming FI_HMEM_SYSTEM not type: %d.\n",
+		             attr->iface);
+		efa_mr->peer.iface = FI_HMEM_SYSTEM;
+	}
+
+	if (efa_mr->peer.iface == FI_HMEM_CUDA)
+		efa_mr->peer.device.cuda = attr->device.cuda;
+
+	return FI_SUCCESS;
+}
+
+
 int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 			   struct ofi_mr_entry *entry)
 {
@@ -173,12 +225,9 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	efa_mr = (struct efa_mr *)entry->data;
 	efa_mr->entry = entry;
 
-	if (domain->util_domain.info_domain_caps & FI_HMEM)
-		efa_mr->peer.iface = attr->iface;
-	else
-		efa_mr->peer.iface = FI_HMEM_SYSTEM;
-	if (efa_mr->peer.iface == FI_HMEM_CUDA)
-		efa_mr->peer.device.cuda = attr->device.cuda;
+	ret = efa_mr_hmem_setup(efa_mr, attr);
+	if (ret)
+		return ret;
 
 	*mr_fid = &efa_mr->mr_fid;
 	return 0;
@@ -256,7 +305,6 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 }
 
 static int efa_mr_close(fid_t fid)
-
 {
 	struct efa_mr *efa_mr;
 	int ret;
@@ -289,6 +337,10 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 	int fi_ibv_access = 0;
 	int ret = 0;
 
+	ret = efa_mr_hmem_setup(efa_mr, mr_attr);
+	if (ret)
+		return ret;
+
 	/* To support Emulated RMA path, if the access is not supported
 	 * by EFA, modify it to FI_SEND | FI_RECV
 	 */
@@ -317,16 +369,6 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 
 	efa_mr->mr_fid.mem_desc = efa_mr;
 	efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
-	/*
-	 * Skipping the domain type check is okay here since util_domain is at
-	 * the beginning of efa_domain and rxr_domain.
-	 */
-	if (efa_mr->domain->util_domain.info_domain_caps & FI_HMEM)
-		efa_mr->peer.iface = mr_attr->iface;
-	else
-		efa_mr->peer.iface = FI_HMEM_SYSTEM;
-	if (efa_mr->peer.iface == FI_HMEM_CUDA)
-		efa_mr->peer.device.cuda = mr_attr->device.cuda;
 	assert(efa_mr->mr_fid.key != FI_KEY_NOTAVAIL);
 
 	mr_attr->requested_key = efa_mr->mr_fid.key;
