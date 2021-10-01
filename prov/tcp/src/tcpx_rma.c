@@ -50,6 +50,7 @@
 #include <netdb.h>
 
 static void tcpx_rma_read_send_entry_fill(struct tcpx_xfer_entry *send_entry,
+					  struct tcpx_xfer_entry *recv_entry,
 					  struct tcpx_ep *tcpx_ep,
 					  const struct fi_msg_rma *msg)
 {
@@ -72,6 +73,9 @@ static void tcpx_rma_read_send_entry_fill(struct tcpx_xfer_entry *send_entry,
 	send_entry->iov[0].iov_base = (void *) &send_entry->hdr;
 	send_entry->iov[0].iov_len = offset;
 	send_entry->iov_cnt = 1;
+	send_entry->context = msg->context;
+	send_entry->flags = TCPX_NEED_RESP;
+	send_entry->resp_entry = recv_entry;
 }
 
 static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
@@ -86,7 +90,7 @@ static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
 	recv_entry->ep = tcpx_ep;
 	recv_entry->context = msg->context;
 	recv_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
-			     flags | FI_RMA | FI_READ);
+			     flags | FI_RMA | FI_READ) | TCPX_INTERNAL_XFER;
 }
 
 static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
@@ -113,7 +117,7 @@ static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 		tcpx_free_xfer(tcpx_cq, send_entry);
 		return -FI_EAGAIN;
 	}
-	tcpx_rma_read_send_entry_fill(send_entry, tcpx_ep, msg);
+	tcpx_rma_read_send_entry_fill(send_entry, recv_entry, tcpx_ep, msg);
 	tcpx_rma_read_recv_entry_fill(recv_entry, tcpx_ep, msg, flags);
 
 	fastlock_acquire(&tcpx_ep->lock);
