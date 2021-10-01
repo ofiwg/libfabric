@@ -271,7 +271,8 @@ struct tcpx_fabric {
 	struct util_fabric	util_fabric;
 };
 
-#define TCPX_INTERNAL_MASK	GENMASK_ULL(63, 59)
+#define TCPX_INTERNAL_MASK	GENMASK_ULL(63, 58)
+#define TCPX_NEED_RESP		BIT_ULL(58)
 #define TCPX_NEED_ACK		BIT_ULL(59)
 #define TCPX_INTERNAL_XFER	BIT_ULL(60)
 #define TCPX_NEED_DYN_RBUF 	BIT_ULL(61)
@@ -293,6 +294,9 @@ struct tcpx_xfer_entry {
 	uint32_t		async_index;
 	void			*context;
 	void			*mrecv_msg_start;
+	// for RMA read requests, we need a way to track the request response
+	// so that we don't propagate multiple completions for the same operation
+	struct tcpx_xfer_entry  *resp_entry;
 };
 
 struct tcpx_domain {
