@@ -42,7 +42,7 @@
 
 #include <criterion/criterion.h>
 #include <criterion/parameterized.h>
-#include <ltu_utils_pm.h>
+#include <pmi_utils.h>
 #include <fenv.h>
 
 #include <ofi.h>

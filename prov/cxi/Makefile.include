@@ -46,6 +46,23 @@ rdmainclude_HEADERS += \
 _cxi_libs = \
 	-lcurl -ljson-c -lm
 
+if HAVE_PMI
+# Stand-alone srun  tests for hardware testing environment
+bin_PROGRAMS += prov/cxi/test/distributed/test_pmi
+nodist_prov_cxi_test_distributed_test_pmi_SOURCES = \
+	prov/cxi/test/distributed/test_pmi.c \
+	prov/cxi/test/pmi_utils.c
+prov_cxi_test_distributed_test_pmi_CPPFLAGS = \
+	$(AM_CPPFLAGS) $(cxi_CPPFLAGS) $(PTHREAD_CFLAGS) \
+	-DUSE_PMI2 -DUSE_CRAY_PMI \
+	-I/opt/cray/pe/pmi/default/include \
+	-L/opt/cray/pe/pmi/default/lib
+prov_cxi_test_distributed_test_pmi_LDFLAGS = \
+	$(cxitest_LDFLAGS) -static
+prov_cxi_test_distributed_test_pmi_LDADD = \
+	$(cxitest_LIBS) $(linkback) $(PTHREAD_LIBS) -lpmi2
+endif HAVE_PMI
+
 if HAVE_CRITERION
 
 # curltest is not expected to exist outside devel env
@@ -89,13 +106,14 @@ TESTS += prov/cxi/test/cxitest
 
 if HAVE_PMI
 
-nodist_prov_cxi_test_cxitest_SOURCES += \
-	prov/cxi/test/ltu_utils_pm.c \
-	prov/cxi/test/cxip_test_pmi.c \
-	prov/cxi/test/coll_mcast.c
+#nodist_prov_cxi_test_cxitest_SOURCES += \
+#	prov/cxi/test/pmi_utils.c \
+#	prov/cxi/test/cxip_test_pmi.c \
+#	prov/cxi/test/coll_mcast.c
 
-prov_cxi_test_cxitest_CPPFLAGS += -DUSE_PMI
-prov_cxi_test_cxitest_LDADD += -lpmi
+#prov_cxi_test_cxitest_CPPFLAGS += -DUSE_PMI2 -DUSE_CRAY_PMI
+#prov_cxi_test_cxitest_CPPFLAGS += -I /opt/cray/pe/pmi/default/include
+#prov_cxi_test_cxitest_LDADD += -lpmi2
 
 endif HAVE_PMI
 

@@ -13,7 +13,7 @@
 #include <sys/stat.h>
 
 #include <criterion/criterion.h>
-#include <ltu_utils_pm.h>
+#include <pmi_utils.h>
 
 #include "cxip_test_common.h"
 

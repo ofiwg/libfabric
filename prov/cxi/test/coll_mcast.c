@@ -42,7 +42,7 @@
 
 #include <criterion/criterion.h>
 #include <criterion/parameterized.h>
-#include <ltu_utils_pm.h>
+#include <pmi_utils.h>
 #include <fenv.h>
 
 #include <ofi.h>
@@ -380,7 +380,7 @@ static void test_op(int dtyp, int op, union cxip_coll_data *data)
 	 * behavior is that the results match. If the don't match, further
 	 * analysis is required to decide which is wrong, if not both.
 	 *
-	 * The ltu_pm_Barrier() is intended to avoid a scrum at the Rosetta RE
+	 * The pmi_Barrier() is intended to avoid a scrum at the Rosetta RE
 	 * for non-associative operations. It ensures the order in which sends
 	 * are executed, and -- if there is only one Rosetta -- the order in
 	 * which the Rosetta operations are performed. This ordering will not
@@ -388,7 +388,7 @@ static void test_op(int dtyp, int op, union cxip_coll_data *data)
 	 */
 	for (trial = 0; trial < 2; trial++) {
 		for (r = 0; r < cxit_ranks; r++) {
-			ltu_pm_Barrier();
+			pmi_Barrier();
 			if (r == cxit_rank) {
 				ret = fi_allreduce(cxit_ep,
 						   (void *)data, 4, NULL,

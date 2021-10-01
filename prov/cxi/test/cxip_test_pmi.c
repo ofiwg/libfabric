@@ -13,7 +13,7 @@
 #include <sys/stat.h>
 
 #include <criterion/criterion.h>
-#include <ltu_utils_pm.h>
+#include <pmi_utils.h>
 
 #include "cxip_test_common.h"
 #include "cxip_test_pmi.h"
@@ -251,8 +251,8 @@ void cxit_LTU_create_universe(void)
 	cr_assert(ltu_init_count == 0, "May gather universe only once\n");
 	ltu_init_count = 1;
 
-	ltu_pm_Job_size(&cxit_ranks);
-	ltu_pm_Rank(&cxit_rank);
+	pmi_GetNumRanks(&cxit_ranks);
+	pmi_GetRank(&cxit_rank);
 
 	if (cxit_ranks < 2) {
 		cr_skip_test("%d nodes insufficient to test collectives\n",
@@ -260,19 +260,18 @@ void cxit_LTU_create_universe(void)
 	}
 	printf("Running as rank %d of %d\n", cxit_rank, cxit_ranks);
 
-
 	/* Wait for all nodes to get to this point */
 	clock_gettime(CLOCK_REALTIME, &ts0);
-	ltu_pm_Barrier();
+	pmi_Barrier();
 	clock_gettime(CLOCK_REALTIME, &ts1);
-	_print_delay(&ts0, &ts1,  __func__, "ltu_pm_Barrier");
+	_print_delay(&ts0, &ts1,  __func__, "pmi_Barrier");
 
 	/* Share NIC addresses */
 	all_addrs = calloc(cxit_ranks, sizeof(cxit_ep_addr));
 	clock_gettime(CLOCK_REALTIME, &ts0);
-	ltu_pm_Allgather(&cxit_ep_addr.raw, sizeof(cxit_ep_addr.raw), all_addrs);
+	pmi_Allgather(&cxit_ep_addr.raw, sizeof(cxit_ep_addr.raw), all_addrs);
 	clock_gettime(CLOCK_REALTIME, &ts1);
-	_print_delay(&ts0, &ts1,  __func__, "ltu_pm_Allgather");
+	_print_delay(&ts0, &ts1,  __func__, "pmi_Allgather");
 
 	cr_assert(all_addrs[cxit_rank].raw == cxit_ep_addr.raw);
 
@@ -345,9 +344,9 @@ void cxit_LTU_create_coll_mcast(int hwroot_rank, int timeout,
 
 	/* Rank zero broadcasts, other ranks receive */
 	clock_gettime(CLOCK_REALTIME, &ts0);
-	ltu_pm_Bcast(mcast_id, sizeof(*mcast_id));
+	pmi_Bcast(0, mcast_id, sizeof(*mcast_id));
 	clock_gettime(CLOCK_REALTIME, &ts1);
-	_print_delay(&ts0, &ts1,  __func__, "ltu_pm_Bcast");
+	_print_delay(&ts0, &ts1,  __func__, "pmi_Bcast");
 }
 
 /**
@@ -376,14 +375,14 @@ void cxit_LTU_barrier(void)
 
 	cr_assert(ltu_init_count > 0, "Must cxit_LTU_create_universe()\n");
 	clock_gettime(CLOCK_REALTIME, &ts0);
-	ltu_pm_Barrier();
+	pmi_Barrier();
 	clock_gettime(CLOCK_REALTIME, &ts1);
-	_print_delay(&ts0, &ts1,  __func__, "ltu_pm_Barrier");
+	_print_delay(&ts0, &ts1,  __func__, "pmi_Barrier");
 }
 
 void cxit_setup_distributed(void)
 {
-	ltu_pm_Init(NULL, NULL);
+	pmi_Init(NULL, NULL, NULL);
 	cxit_setup_enabled_ep();
 	cxit_LTU_create_universe();
 }
@@ -392,7 +391,7 @@ void cxit_teardown_distributed(void)
 {
 	cxit_LTU_destroy_universe();
 	cxit_teardown_enabled_ep();
-	ltu_pm_Finalize();
+	pmi_Finalize();
 }
 
 void cxit_setup_multicast(void)
