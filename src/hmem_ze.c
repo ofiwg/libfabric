@@ -594,6 +594,45 @@ out:
 	return ze_ret;
 }
 
+/*
+ * Some L0 calls may segfault when called from a "destructor" if any
+ * HMEM-capable DL provider is enabled due to premature unloading of GPU
+ * specific L0 library. Before a permanent fix is available, don't make
+ * L0 calls insider a "destructor".
+ */
+static int ze_hmem_cleanup_internal(int fini_workaround)
+{
+	int i, ret = FI_SUCCESS;
+
+	for (i = 0; i < num_devices; i++) {
+		if (!fini_workaround) {
+			if (cmd_queue[i] &&
+			    ofi_zeCommandQueueDestroy(cmd_queue[i])) {
+				FI_WARN(&core_prov, FI_LOG_CORE,
+					"Failed to destroy ZE cmd_queue\n");
+				ret = -FI_EINVAL;
+			}
+		}
+		if (dev_fds[i] != -1) {
+			close(dev_fds[i]);
+			dev_fds[i] = -1;
+		}
+	}
+
+	if (!fini_workaround) {
+		if (ofi_zeContextDestroy(context))
+			ret = -FI_EINVAL;
+	}
+
+	ze_hmem_dl_cleanup();
+	return ret;
+}
+
+int ze_hmem_cleanup(void)
+{
+	return ze_hmem_cleanup_internal(1);
+}
+
 int ze_hmem_init(void)
 {
 	ze_driver_handle_t driver;
@@ -662,34 +701,11 @@ int ze_hmem_init(void)
 	return FI_SUCCESS;
 
 err:
-	(void) ze_hmem_cleanup();
+	(void) ze_hmem_cleanup_internal(0);
 	FI_WARN(&core_prov, FI_LOG_CORE,
 		"Failed to initialize ZE driver resources\n");
 
 	return -FI_EIO;
-}
-
-int ze_hmem_cleanup(void)
-{
-	int i, ret = FI_SUCCESS;
-
-	for (i = 0; i < num_devices; i++) {
-		if (cmd_queue[i] && ofi_zeCommandQueueDestroy(cmd_queue[i])) {
-			FI_WARN(&core_prov, FI_LOG_CORE,
-				"Failed to destroy ZE cmd_queue\n");
-			ret = -FI_EINVAL;
-		}
-		if (dev_fds[i] != -1) {
-			close(dev_fds[i]);
-			dev_fds[i] = -1;
-		}
-	}
-
-	if (ofi_zeContextDestroy(context))
-		ret = -FI_EINVAL;
-
-	ze_hmem_dl_cleanup();
-	return ret;
 }
 
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
