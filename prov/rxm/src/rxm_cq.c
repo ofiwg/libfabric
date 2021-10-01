@@ -1891,11 +1891,15 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 
 		if (ret == -FI_EAGAIN || --rxm_ep->cq_eq_fairness <= 0) {
 			rxm_ep->cq_eq_fairness = rxm_cq_eq_fairness;
-			timestamp = ofi_gettime_us();
-			if (timestamp - rxm_ep->msg_cq_last_poll >
-				rxm_cm_progress_interval) {
-				rxm_ep->msg_cq_last_poll = timestamp;
-				rxm_conn_progress(rxm_ep);
+			if (rxm_cm_progress_interval) {
+				timestamp = ofi_gettime_us();
+				if (timestamp - rxm_ep->msg_cq_last_poll >
+				    rxm_cm_progress_interval) {
+					rxm_ep->msg_cq_last_poll = timestamp;
+					rxm_conn_progress(rxm_ep);
+				}
+			} else {
+					rxm_conn_progress(rxm_ep);
 			}
 		}
 	} while ((ret > 0) && (++comp_read < rxm_ep->comp_per_progress));
