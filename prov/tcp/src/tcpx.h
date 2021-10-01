@@ -271,7 +271,7 @@ struct tcpx_fabric {
 	struct util_fabric	util_fabric;
 };
 
-#define TCPX_INTERNAL_MASK	GENMASK_ULL(63, 58)
+#define TCPX_INTERNAL_MASK	(GENMASK_ULL(63, 58) | FI_COMPLETION)
 #define TCPX_NEED_RESP		BIT_ULL(58)
 #define TCPX_NEED_ACK		BIT_ULL(59)
 #define TCPX_INTERNAL_XFER	BIT_ULL(60)
