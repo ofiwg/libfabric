@@ -418,8 +418,7 @@ static int ft_sync_msg_needed(void)
 
 static int ft_check_verify_cnt()
 {
-	if (test_info.msg_flags == FI_REMOTE_CQ_DATA &&
-	    ft_ctrl.verify_cnt != ft_ctrl.xfer_iter)
+	if (ft_generates_rx_comp() && ft_ctrl.verify_cnt != ft_ctrl.xfer_iter)
 		return -FI_EIO;
 	return 0;
 }
