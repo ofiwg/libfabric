@@ -254,8 +254,8 @@ struct cxip_environment cxip_env = {
 	.odp = false,
 	.ats = false,
 	.ats_mlock_mode = CXIP_ATS_MLOCK_ALL,
+	.rx_match_mode = CXIP_PTLTE_DEFAULT_MODE,
 	.rdzv_offload = true,
-	.fc_recovery = true,
 	.rdzv_threshold = CXIP_RDZV_THRESHOLD,
 	.rdzv_get_min = 2049, /* Avoid single packet Gets */
 	.rdzv_eager_size = CXIP_RDZV_THRESHOLD,
@@ -303,6 +303,7 @@ static void cxip_env_init(void)
 		else
 			CXIP_WARN("Unrecognized ats_mlock_mode: %s\n",
 				  param_str);
+		param_str = NULL;
 	}
 
 	fi_param_define(&cxip_prov, "device_name", FI_PARAM_STRING,
@@ -318,13 +319,33 @@ static void cxip_env_init(void)
 		}
 	}
 
+	fi_param_define(&cxip_prov, "rx_match_mode", FI_PARAM_STRING,
+			"Sets RX message match mode (hardware | software | hybrid).");
+	fi_param_get_str(&cxip_prov, "rx_match_mode", &param_str);
+
+	if (param_str) {
+		if (!strcasecmp(param_str, "hardware")) {
+			cxip_env.rx_match_mode = CXIP_PTLTE_HARDWARE_MODE;
+			cxip_env.msg_offload = true;
+		} else if (!strcmp(param_str, "software")) {
+			cxip_env.rx_match_mode = CXIP_PTLTE_SOFTWARE_MODE;
+			cxip_env.msg_offload = false;
+		} else if (!strcmp(param_str, "hybrid")) {
+			cxip_env.rx_match_mode = CXIP_PTLTE_HYBRID_MODE;
+			cxip_env.msg_offload = true;
+		} else {
+			CXIP_WARN("Unrecognized rx_match_mode: %s\n",
+				  param_str);
+			cxip_env.rx_match_mode = CXIP_PTLTE_HARDWARE_MODE;
+			cxip_env.msg_offload = true;
+		}
+
+		param_str = NULL;
+	}
+
 	fi_param_define(&cxip_prov, "rdzv_offload", FI_PARAM_BOOL,
 			"Enables offloaded rendezvous messaging protocol.");
 	fi_param_get_bool(&cxip_prov, "rdzv_offload", &cxip_env.rdzv_offload);
-
-	fi_param_define(&cxip_prov, "fc_recovery", FI_PARAM_BOOL,
-			"Enables message flow control recovery.");
-	fi_param_get_bool(&cxip_prov, "fc_recovery", &cxip_env.fc_recovery);
 
 	fi_param_define(&cxip_prov, "rdzv_threshold", FI_PARAM_SIZE_T,
 			"Message size threshold for rendezvous protocol.");
@@ -389,6 +410,8 @@ static void cxip_env_init(void)
 		else
 			CXIP_WARN("Unrecognized llring_mode: %s\n",
 				  param_str);
+
+		param_str = NULL;
 	}
 
 	fi_param_define(&cxip_prov, "zbcoll_radix", FI_PARAM_INT,
@@ -416,6 +439,8 @@ static void cxip_env_init(void)
 		else
 			CXIP_WARN("Unrecognized cq_policy: %s\n",
 				  param_str);
+
+		param_str = NULL;
 	}
 
 	fi_param_define(&cxip_prov, "default_vni", FI_PARAM_SIZE_T,
@@ -431,10 +456,6 @@ static void cxip_env_init(void)
 	if (!cxip_env.eq_ack_batch_size)
 		cxip_env.eq_ack_batch_size = 1;
 
-	fi_param_define(&cxip_prov, "msg_offload", FI_PARAM_BOOL,
-			"Enable or disable hardware message matching.");
-	fi_param_get_bool(&cxip_prov, "msg_offload", &cxip_env.msg_offload);
-
 	fi_param_define(&cxip_prov, "req_buf_size", FI_PARAM_SIZE_T,
 			"Size of request buffer.");
 	fi_param_get_size_t(&cxip_prov, "req_buf_size", &cxip_env.req_buf_size);
@@ -443,6 +464,18 @@ static void cxip_env_init(void)
 			"Number of request buffer.");
 	fi_param_get_size_t(&cxip_prov, "req_buf_count",
 			    &cxip_env.req_buf_count);
+
+	/* Any RX context message matching mode other than hardware requires
+	 * that rendezvous processing is offloaded. We let the rendezvous
+	 * setting override the message matching setting. Primarily this
+	 * would be done to support the long eager protocol.
+	 */
+	if (!cxip_env.rdzv_offload &&
+	    cxip_env.rx_match_mode != CXIP_PTLTE_HARDWARE_MODE) {
+		CXIP_WARN("Onloaded rendezvous forced hardware match mode\n");
+		cxip_env.rx_match_mode = CXIP_PTLTE_HARDWARE_MODE;
+		cxip_env.msg_offload = true;
+	}
 
 	if (!cxip_env.msg_offload) {
 		min_free = CXIP_REQ_BUF_HEADER_MAX_SIZE +

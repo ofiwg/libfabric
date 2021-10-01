@@ -259,8 +259,11 @@ Due to a hardware matching limitation, a SEP that supports messaging (*FI_MSG* o
 The CXI provider supports both tagged (*FI_TAGGED*) and untagged (*FI_MSG*)
 two-sided messaging interfaces. In the normal case, message matching is
 performed by hardware. In certain low resource conditions, the responsibility to
-perform message matching may be transferred to software. This is transparently
-handled by the provider.
+perform message matching may be transferred to software. Specification
+of the receive message matching mode in the environment (*FI_CXI_RX_MATCH_MODE*)
+controls the initial matching mode and whether hardware matching can transparently
+onload matching to software where a hybrid of hardware and software
+matching is done.
 
 If a Send operation arrives at a node where there is no matching Receive
 operation posted, it is considered unexpected. Unexpected messages are
@@ -298,8 +301,21 @@ arrives unexpectedly, the message header is saved and the entire payload is
 dropped. Later, when the message is matched to a Receive operation, the entire
 payload is pulled from the source using an RDMA Get operation.
 
-The rendezvous protcol is controlled using the *FI_CXI_RDZV_OFFLOAD* environment
-variable. The provider uses the offloaded rendezvous protocol by default.
+The rendezvous protocol is controlled using the *FI_CXI_RDZV_OFFLOAD*
+environment variable. The provider uses the offloaded rendezvous protocol
+by default.
+
+Message flow-control is triggered when hardware message matching resources
+become exhausted. Messages may be dropped and retransmitted in order to
+recover; impacting performance significantly. Programs should be careful to avoid
+posting large numbers of unmatched receive operations and to minimize the
+number of outstanding unexpected messages to prevent message flow-control.
+If message matching is configured to support a hybrid mode, when resources
+are exhausted hardware and software share matching responsibility.
+
+To help avoid this condition, increase Overflow buffer space using environment
+variables *FI_CXI_OFLOW_\** and software EP match and hybrid modes
+Request buffer space using the variables *FI_CXI_REQ_\**.
 
 ## Message Ordering
 
@@ -504,23 +520,14 @@ The CXI provider checks for the following environment variables:
     physical memory.  Ignored when ODP is disabled.
 
 *FI_CXI_RDZV_OFFLOAD*
-:   Enables offloaded rendezvous messaging protocol.
+:   Controls the offload of the rendezvous messaging protocol, defaults to
+    offloaded rendezvous protocol. Selecting the eager rendezvous protocol
+    by disabling offload requires that message offload is enabled and will
+    override the setting of *FI_CXI_MSG_OFFLOAD* and disable the fallback to
+    software managed EP mode when hardware resources are low.
 
 *FI_CXI_RDZV_THRESHOLD*
 :   Message size threshold for rendezvous protocol.
-
-*FI_CXI_FC_RECOVERY*
-:   Enables message flow-control recovery. Message flow-control
-    is triggered when hardware message matching resources become exhausted.
-    Messages may be dropped and retransmitted in order to recover. This impacts
-    performance significantly.
-
-    Programs should be careful to avoid using large numbers of unmatched
-    receive operations and unexpected messages to prevent message flow-control.
-    To help avoid this condition, increase Overflow buffer space using
-    environment variables *FI_CXI_OFLOW_\**.
-
-    Flow control recovery is enabled by default.
 
 *FI_CXI_RDZV_GET_MIN*
 :   Minimum rendezvous Get payload size. A Send with length less than or equal
@@ -562,12 +569,24 @@ The CXI provider checks for the following environment variables:
     Batching ACKs amortizes the cost of event acknowledgement over multiple
     network operations.
 
-*FI_CXI_MSG_OFFLOAD*
-:   Enable or disable message matching offload. If disabled, the provider will
-    perform the message matching. All incoming unmatched messages are written
-    into a request buffer. The environment variables FI_CXI_REQ_BUF_SIZE and
-    FI_CXI_REQ_BUF_COUNT are used to control the size and number of request
-    buffers posted to handle incoming unmatched messages.
+*FI_CXI_RX_MATCH_MODE*
+:   Specify the receive message matching mode to be utilized.
+
+    *"hardware"* - Message matching is fully offloaded, if resources become
+    exhausted flow control will be performed.
+
+    *"software"* - Message matching is fully onloaded.
+
+    *"hybrid"* - Message matching begins fully offloaded, if resources become
+    exhuasted hardware will transition message matching to a hybrid of
+    hardware and software matching.
+
+    For both *"hybrid"* and *"software"* modes, rendezvous processing must be
+    offloaded, and care should be taken to minimize the threshold for rendezvous
+    processing (i.e. *FI_CXI_RDZV_THRESHOLD* + *FI_CXI_RDZV_GET_MIN*). The
+    environment variables *FI_CXI_REQ_BUF_SIZE* and *FI_CXI_REQ_BUF_COUNT*
+    are used to control the size and number of request buffers posted to handle
+    incoming unmatched messages.
 
 *FI_CXI_REQ_BUF_SIZE*
 :   Size of request buffers. Increasing the request buffer size allows for more

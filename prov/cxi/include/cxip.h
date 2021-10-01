@@ -184,6 +184,13 @@ enum cxip_llring_mode {
 	CXIP_LLRING_ALWAYS,
 };
 
+enum cxip_ep_ptle_mode {
+	CXIP_PTLTE_HARDWARE_MODE,
+	CXIP_PTLTE_DEFAULT_MODE = CXIP_PTLTE_HARDWARE_MODE,
+	CXIP_PTLTE_SOFTWARE_MODE,
+	CXIP_PTLTE_HYBRID_MODE,
+};
+
 struct cxip_environment {
 	/* Translation */
 	int odp;
@@ -191,8 +198,9 @@ struct cxip_environment {
 	enum cxip_ats_mlock_mode ats_mlock_mode;
 
 	/* Messaging */
+	enum cxip_ep_ptle_mode rx_match_mode;
+	int msg_offload;
 	int rdzv_offload;
-	int fc_recovery;
 	size_t rdzv_threshold;
 	size_t rdzv_get_min;
 	size_t rdzv_eager_size;
@@ -200,7 +208,6 @@ struct cxip_environment {
 	size_t oflow_buf_count;
 	size_t req_buf_size;
 	size_t req_buf_count;
-	int msg_offload;
 	size_t default_cq_size;
 	int optimized_mrs;
 	int disable_cq_hugetlb;
@@ -220,6 +227,13 @@ struct cxip_environment {
 };
 
 extern struct cxip_environment cxip_env;
+
+static inline bool cxip_software_pte_allowed(void)
+{
+	return (cxip_env.rdzv_offload &&
+		(cxip_env.rx_match_mode == CXIP_PTLTE_SOFTWARE_MODE ||
+		 cxip_env.rx_match_mode == CXIP_PTLTE_HYBRID_MODE));
+}
 
 /*
  * The CXI Provider Address format.

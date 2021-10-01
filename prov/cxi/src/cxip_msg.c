@@ -19,12 +19,6 @@
 
 #include "cxip.h"
 
-#define FC_MSG "Message flow-control triggered.\n\n" \
-"Flow-control recovery is disabled. To avoid this condition, increase\n" \
-"Overflow buffer space using environment variables FI_CXI_OFLOW_*. To\n" \
-"enable flow-control recovery (experimental), set environment variable\n" \
-"FI_CXI_FC_RECOVERY=1.\n\n"
-
 #define FC_SW_EP_MSG "Flow control triggered due to failure to append LE. "\
 "Software endpoint mode required.\n"
 
@@ -3149,9 +3143,6 @@ static int cxip_recv_req_dropped(struct cxip_req *req)
 	struct cxip_rxc *rxc = req->recv.rxc;
 	int ret __attribute__((unused));
 
-	if (!cxip_env.fc_recovery)
-		CXIP_FATAL(FC_MSG);
-
 	fastlock_acquire(&rxc->lock);
 
 	assert(dlist_empty(&req->recv.rxc_entry));
@@ -4513,9 +4504,6 @@ static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req)
 {
 	struct cxip_fc_peer *peer;
 	int ret;
-
-	if (!cxip_env.fc_recovery)
-		CXIP_FATAL(FC_MSG);
 
 	fastlock_acquire(&txc->lock);
 
