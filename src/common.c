@@ -1473,7 +1473,7 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 {
 	int i, ret;
 	int found = 0;
-	uint64_t start = (timeout >= 0) ? ofi_gettime_ms() : 0;
+	uint64_t start = (timeout > 0) ? ofi_gettime_ms() : 0;
 
 	fastlock_acquire(&pfds->lock);
 	if (!slist_empty(&pfds->work_item_list))
