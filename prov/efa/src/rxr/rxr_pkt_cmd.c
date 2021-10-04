@@ -646,26 +646,27 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 
 	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
 		tx_entry = pkt_entry->x_entry;
-		if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR &&
-		    ep->handle_resource_management == FI_RM_DISABLED) {
-			/*
-			 * Write an error to the application for RNR when
-			 * resource management is disabled.
-			 */
-			rxr_cq_write_tx_error(ep, pkt_entry->x_entry, FI_ENORX, 0);
-			rxr_pkt_entry_release_tx(ep, pkt_entry);
-		} if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR) {
-			/*
-			 * This packet is assoiciated with a send operation,
-			 * (such packets include all REQ, DATA)
-			 * thus shoud be queued for RNR only if
-			 * application want EFA to manager resource.
-			 */
-			rxr_cq_queue_rnr_pkt(ep, &tx_entry->queued_pkts, pkt_entry);
-			if (!(tx_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR)) {
-				tx_entry->rxr_flags |= RXR_TX_ENTRY_QUEUED_RNR;
-				dlist_insert_tail(&tx_entry->queued_rnr_entry,
-						  &ep->tx_entry_queued_rnr_list);
+		if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR) {
+			if (ep->handle_resource_management == FI_RM_DISABLED) {
+				/*
+				 * Write an error to the application for RNR when
+				 * resource management is disabled.
+				 */
+				rxr_cq_write_tx_error(ep, pkt_entry->x_entry, FI_ENORX, 0);
+				rxr_pkt_entry_release_tx(ep, pkt_entry);
+			} else {
+				/*
+				 * This packet is associated with a send operation,
+				 * (such packets include all REQ, DATA)
+				 * thus shoud be queued for RNR only if
+				 * application wants EFA to manager resource.
+				 */
+				rxr_cq_queue_rnr_pkt(ep, &tx_entry->queued_pkts, pkt_entry);
+				if (!(tx_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR)) {
+					tx_entry->rxr_flags |= RXR_TX_ENTRY_QUEUED_RNR;
+					dlist_insert_tail(&tx_entry->queued_rnr_entry,
+							  &ep->tx_entry_queued_rnr_list);
+				}
 			}
 		} else {
 			rxr_cq_write_tx_error(ep, pkt_entry->x_entry, err, prov_errno);
