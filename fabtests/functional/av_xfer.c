@@ -109,9 +109,9 @@ static int av_removal_test(void)
 		}
 	}
 
-	fprintf(stdout, "PASS\n");
 	(void) ft_sync();
 out:
+	fprintf(stdout, "%s\n", ret ? "FAIL" : "PASS");
 	ft_free_res();
 	return ret;
 }
@@ -127,7 +127,7 @@ static int av_reinsert_test(void)
 
 	ret = ft_init_fabric();
 	if (ret)
-		return ret;
+		goto out;
 
 	if (opts.dst_addr) {
 		ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
@@ -171,9 +171,9 @@ static int av_reinsert_test(void)
 		}
 	}
 
-	fprintf(stdout, "PASS\n");
 	(void) ft_sync();
 out:
+	fprintf(stdout, "%s\n", ret ? "FAIL" : "PASS");
 	ft_free_res();
 	return ret;
 }
