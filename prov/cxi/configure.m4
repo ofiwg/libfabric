@@ -24,7 +24,7 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 
 	AS_IF([test "$with_criterion" != ""],
 		[cxitest_CPPFLAGS="-I$with_criterion/include"
-		cxitest_LDFLAGS="-L$with_criterion/lib -Wl,-rpath=$(realpath $with_criterion/lib)"
+		cxitest_LDFLAGS="-L$with_criterion/lib64 -Wl,-rpath=$(realpath $with_criterion/lib64)"
 		cxitest_LIBS="-lcriterion"
 		have_criterion=true])
 
