@@ -920,7 +920,6 @@ struct cxip_cntr {
 	struct c_ct_writeback *wb;
 	enum fi_hmem_iface wb_iface;
 	struct c_ct_writeback lwb;
-	bool wb_pending;
 
 	struct dlist_entry dom_entry;
 };

@@ -210,8 +210,6 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 	struct cxip_cmdq *cmdq;
 	int ret;
 
-	fastlock_acquire(&cxi_cntr->lock);
-
 	if (!set) {
 		/* Doorbell supports counter increment */
 		if (err)
@@ -225,9 +223,6 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 				cxi_ct_reset_failure(cxi_cntr->ct);
 			else
 				cxi_ct_reset_success(cxi_cntr->ct);
-
-			/* Doorbell reset triggers a write-back */
-			cxi_cntr->wb_pending = true;
 		} else {
 			memset(&cmd, 0, sizeof(cmd));
 			cmdq = cxi_cntr->domain->trig_cmdq;
@@ -247,20 +242,53 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 					     &cmd);
 			if (ret) {
 				fastlock_release(&cmdq->lock);
-				fastlock_release(&cxi_cntr->lock);
 				return -FI_EAGAIN;
 			}
 			cxi_cq_ring(cmdq->dev_cmdq);
 			fastlock_release(&cmdq->lock);
-
-			/* Set commands will trigger a write-back */
-			cxi_cntr->wb_pending = true;
 		}
 	}
 
-	fastlock_release(&cxi_cntr->lock);
+	return FI_SUCCESS;
+}
+
+static int cxip_cntr_issue_ct_get(struct cxip_cntr *cntr, bool *issue_ct_get)
+{
+	int ret;
+
+	/* The calling thread which changes CT writeback bit from 1 to 0 must
+	 * issue a CT get command.
+	 */
+	fastlock_acquire(&cntr->lock);
+
+	ret = cxip_cntr_get_ct_writeback(cntr);
+	if (ret < 0) {
+		CXIP_WARN("Failed to read counter writeback: rc=%d\n", ret);
+		goto err_unlock;
+	}
+
+	if (ret) {
+		ret = cxip_cntr_clear_ct_writeback(cntr);
+		if (ret) {
+			CXIP_WARN("Failed to clear counter writeback bit: rc=%d\n",
+				  ret);
+			goto err_unlock;
+		}
+
+		*issue_ct_get = true;
+	} else {
+		*issue_ct_get = false;
+	}
+
+	fastlock_release(&cntr->lock);
 
 	return FI_SUCCESS;
+
+err_unlock:
+	fastlock_release(&cntr->lock);
+
+	*issue_ct_get = false;
+	return ret;
 }
 
 /*
@@ -270,36 +298,27 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
  * scheduling multiple write-backs at once. The counter value will appear in
  * memory a small amount of time later.
  */
-static int cxip_cntr_get(struct cxip_cntr *cxi_cntr)
+static int cxip_cntr_get(struct cxip_cntr *cxi_cntr, bool force)
 {
-	struct c_ct_cmd cmd = {};
-	struct cxip_cmdq *cmdq = cxi_cntr->domain->trig_cmdq;
+	struct c_ct_cmd cmd;
+	struct cxip_cmdq *cmdq;
 	int ret;
+	bool issue_ct_get;
 
-	fastlock_acquire(&cxi_cntr->lock);
-
-	if (cxi_cntr->wb_pending) {
-		ret = cxip_cntr_get_ct_writeback(cxi_cntr);
-		if (ret < 0) {
-			CXIP_WARN("Failed to read counter writeback: rc=%d\n",
+	if (!force) {
+		ret = cxip_cntr_issue_ct_get(cxi_cntr, &issue_ct_get);
+		if (ret) {
+			CXIP_WARN("cxip_cntr_issue_ct_get() error: rc=%d\n",
 				  ret);
 			return ret;
 		}
 
-		if (ret) {
-			ret = cxip_cntr_clear_ct_writeback(cxi_cntr);
-			if (ret) {
-				fastlock_release(&cxi_cntr->lock);
-				CXIP_WARN("Failed to clear counter writeback bit: rc=%d\n",
-					  ret);
-				return ret;
-			}
-
-			cxi_cntr->wb_pending = false;
-		}
-		fastlock_release(&cxi_cntr->lock);
-		return FI_SUCCESS;
+		if (!issue_ct_get)
+			return FI_SUCCESS;
 	}
+
+	memset(&cmd, 0, sizeof(cmd));
+	cmdq = cxi_cntr->domain->trig_cmdq;
 
 	/* Request a write-back */
 	cmd.ct = cxi_cntr->ct->ctn;
@@ -308,16 +327,10 @@ static int cxip_cntr_get(struct cxip_cntr *cxi_cntr)
 	ret = cxi_cq_emit_ct(cmdq->dev_cmdq, C_CMD_CT_GET, &cmd);
 	if (ret) {
 		fastlock_release(&cmdq->lock);
-		fastlock_release(&cxi_cntr->lock);
 		return -FI_EAGAIN;
 	}
 	cxi_cq_ring(cmdq->dev_cmdq);
 	fastlock_release(&cmdq->lock);
-
-	/* Only schedule one write-back at a time */
-	cxi_cntr->wb_pending = true;
-
-	fastlock_release(&cxi_cntr->lock);
 
 	return FI_SUCCESS;
 }
@@ -333,7 +346,7 @@ static uint64_t cxip_cntr_read(struct fid_cntr *fid_cntr)
 
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
 
-	cxip_cntr_get(cxi_cntr);
+	cxip_cntr_get(cxi_cntr, false);
 
 	/* TODO: Fall back to reading register on error? */
 	ret = cxip_cntr_get_ct_success(cxi_cntr, &success);
@@ -354,7 +367,7 @@ static uint64_t cxip_cntr_readerr(struct fid_cntr *fid_cntr)
 
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
 
-	cxip_cntr_get(cxi_cntr);
+	cxip_cntr_get(cxi_cntr, false);
 
 	/* TODO: Fall back to reading register on error? */
 	ret = cxip_cntr_get_ct_error(cxi_cntr, &error);
@@ -550,7 +563,12 @@ int cxip_set_wb_buffer(struct fid *fid, void *buf, size_t len)
 	cntr->wb = buf;
 	cntr->wb_iface = ofi_get_hmem_iface(buf);
 
-	return FI_SUCCESS;
+	/* Force a counter writeback into the user's provider buffer. */
+	do {
+		ret = cxip_cntr_get(cntr, true);
+	} while (ret == -FI_EAGAIN);
+
+	return ret;
 }
 
 /* Get the counter MMIO region. */
