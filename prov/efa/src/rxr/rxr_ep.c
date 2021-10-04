@@ -1536,22 +1536,26 @@ int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
 		}
 	}
 
-	assert(ep->rx_unexp_pkt_pool);
-	err = ofi_bufpool_grow(ep->rx_unexp_pkt_pool);
-	if (err) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"cannot allocate memory for unexpected packet pool. error: %s\n",
-			strerror(-err));
-		return err;
+	if (ep->rx_unexp_pkt_pool) {
+		assert(ep->rx_unexp_pkt_pool);
+		err = ofi_bufpool_grow(ep->rx_unexp_pkt_pool);
+		if (err) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"cannot allocate memory for unexpected packet pool. error: %s\n",
+				strerror(-err));
+			return err;
+		}
 	}
 
-	assert(ep->rx_ooo_pkt_pool);
-	err = ofi_bufpool_grow(ep->rx_ooo_pkt_pool);
-	if (err) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"cannot allocate memory for out-of-order packet pool. error: %s\n",
-			strerror(-err));
-		return err;
+	if (ep->rx_ooo_pkt_pool) {
+		assert(ep->rx_ooo_pkt_pool);
+		err = ofi_bufpool_grow(ep->rx_ooo_pkt_pool);
+		if (err) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"cannot allocate memory for out-of-order packet pool. error: %s\n",
+				strerror(-err));
+			return err;
+		}
 	}
 
 	if (ep->rx_readcopy_pkt_pool) {
