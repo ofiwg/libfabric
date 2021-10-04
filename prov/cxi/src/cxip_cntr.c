@@ -554,11 +554,9 @@ int cxip_set_wb_buffer(struct fid *fid, void *buf, size_t len)
 
 	cntr = container_of(fid, struct cxip_cntr, cntr_fid.fid);
 
-	if (cntr->wb) {
-		ret = cxil_ct_wb_update(cntr->ct, buf);
-		if (ret)
-			return ret;
-	}
+	ret = cxil_ct_wb_update(cntr->ct, buf);
+	if (ret)
+		return ret;
 
 	cntr->wb = buf;
 	cntr->wb_iface = ofi_get_hmem_iface(buf);
