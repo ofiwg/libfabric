@@ -289,16 +289,6 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 		return -FI_ENOCQ;
 	}
 
-	if (rxc->recv_cntr) {
-		ret = cxip_cntr_enable(rxc->recv_cntr);
-		if (ret != FI_SUCCESS) {
-			CXIP_WARN("cxip_cntr_enable(FI_RECV) returned: %d\n",
-				  ret);
-			fastlock_release(&rxc->lock);
-			return ret;
-		}
-	}
-
 	ret = cxip_cq_enable(rxc->recv_cq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_cq_enable returned: %d\n", ret);

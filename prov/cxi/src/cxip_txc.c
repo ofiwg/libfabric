@@ -138,33 +138,6 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		goto unlock;
 	}
 
-	if (txc->send_cntr) {
-		ret = cxip_cntr_enable(txc->send_cntr);
-		if (ret != FI_SUCCESS) {
-			CXIP_WARN("cxip_cntr_enable(FI_SEND) returned: %d\n",
-				  ret);
-			goto unlock;
-		}
-	}
-
-	if (txc->write_cntr) {
-		ret = cxip_cntr_enable(txc->write_cntr);
-		if (ret != FI_SUCCESS) {
-			CXIP_WARN("cxip_cntr_enable(FI_WRITE) returned: %d\n",
-				  ret);
-			goto unlock;
-		}
-	}
-
-	if (txc->read_cntr) {
-		ret = cxip_cntr_enable(txc->read_cntr);
-		if (ret != FI_SUCCESS) {
-			CXIP_WARN("cxip_cntr_enable(FI_READ) returned: %d\n",
-				  ret);
-			goto unlock;
-		}
-	}
-
 	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, true, txc->tclass,
 			   txc->send_cq->eq.eq, &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {

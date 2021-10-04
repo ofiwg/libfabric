@@ -206,24 +206,11 @@ const struct fi_cntr_attr cxip_cntr_attr = {
 int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 		  bool err)
 {
-	struct c_ct_cmd cmd = {};
+	struct c_ct_cmd cmd;
 	struct cxip_cmdq *cmdq;
 	int ret;
 
 	fastlock_acquire(&cxi_cntr->lock);
-
-	/* Modifications are invalid before a counter is in use */
-	if (!cxi_cntr->enabled) {
-		fastlock_release(&cxi_cntr->lock);
-
-		ret = cxip_cntr_enable(cxi_cntr);
-		if (ret != FI_SUCCESS)
-			return -FI_EOPBADSTATE;
-
-		fastlock_acquire(&cxi_cntr->lock);
-	}
-
-	cmdq = cxi_cntr->domain->trig_cmdq;
 
 	if (!set) {
 		/* Doorbell supports counter increment */
@@ -242,6 +229,9 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 			/* Doorbell reset triggers a write-back */
 			cxi_cntr->wb_pending = true;
 		} else {
+			memset(&cmd, 0, sizeof(cmd));
+			cmdq = cxi_cntr->domain->trig_cmdq;
+
 			/* Use CQ to set a specific counter value */
 			cmd.ct = cxi_cntr->ct->ctn;
 			if (err) {
@@ -287,12 +277,6 @@ static int cxip_cntr_get(struct cxip_cntr *cxi_cntr)
 	int ret;
 
 	fastlock_acquire(&cxi_cntr->lock);
-
-	/* Get is a NOP when counter is not in use */
-	if (!cxi_cntr->enabled) {
-		fastlock_release(&cxi_cntr->lock);
-		return -FI_EOPBADSTATE;
-	}
 
 	if (cxi_cntr->wb_pending) {
 		ret = cxip_cntr_get_ct_writeback(cxi_cntr);
@@ -488,71 +472,33 @@ static int cxip_cntr_control(struct fid *fid, int command, void *arg)
 /*
  * cxip_cntr_enable() - Assign hardware resources to the Counter.
  */
-int cxip_cntr_enable(struct cxip_cntr *cxi_cntr)
+static int cxip_cntr_enable(struct cxip_cntr *cxi_cntr)
 {
 	int ret;
 
-	fastlock_acquire(&cxi_cntr->lock);
-
-	if (cxi_cntr->enabled) {
-		ret = FI_SUCCESS;
-		goto unlock;
-	}
-
 	ret = cxip_dom_cntr_enable(cxi_cntr->domain);
 	if (ret != FI_SUCCESS)
-		goto unlock;
+		return ret;
 
-	if (!cxi_cntr->wb) {
-		cxi_cntr->wb = &cxi_cntr->lwb;
-		cxi_cntr->wb_iface = FI_HMEM_SYSTEM;
-	}
+	cxi_cntr->wb = &cxi_cntr->lwb;
+	cxi_cntr->wb_iface = FI_HMEM_SYSTEM;
 
 	ret = cxil_alloc_ct(cxi_cntr->domain->lni->lni,
 			    cxi_cntr->wb, &cxi_cntr->ct);
 	if (ret) {
 		CXIP_WARN("Failed to allocate CT, ret: %d\n", ret);
-		ret = -FI_EDOMAIN;
-		goto unlock;
+		return -FI_EDOMAIN;
 	}
 
-	cxi_cntr->enabled = true;
+	/* Zero the success and failure values. In addition, this will force a
+	 * writeback into the writeback buffer.
+	 */
+	cxi_ct_reset_failure(cxi_cntr->ct);
+	cxi_ct_reset_success(cxi_cntr->ct);
 
-	CXIP_DBG("Counter enabled: %p (CT: %d)\n",
-		 cxi_cntr, cxi_cntr->ct->ctn);
-
-	fastlock_release(&cxi_cntr->lock);
+	CXIP_DBG("Counter enabled: %p (CT: %d)\n", cxi_cntr, cxi_cntr->ct->ctn);
 
 	return FI_SUCCESS;
-
-unlock:
-	fastlock_release(&cxi_cntr->lock);
-
-	return ret;
-}
-
-/*
- * cxip_cntr_disable() - Release hardware resources from the Counter.
- */
-static void cxip_cntr_disable(struct cxip_cntr *cxi_cntr)
-{
-	int ret;
-
-	fastlock_acquire(&cxi_cntr->lock);
-
-	if (!cxi_cntr->enabled)
-		goto unlock;
-
-	ret = cxil_destroy_ct(cxi_cntr->ct);
-	if (ret)
-		CXIP_WARN("Failed to free CT, ret: %d\n", ret);
-
-	cxi_cntr->enabled = false;
-
-	CXIP_DBG("Counter disabled: %p\n", cxi_cntr);
-
-unlock:
-	fastlock_release(&cxi_cntr->lock);
 }
 
 /*
@@ -561,12 +507,17 @@ unlock:
 static int cxip_cntr_close(struct fid *fid)
 {
 	struct cxip_cntr *cntr;
+	int ret;
 
 	cntr = container_of(fid, struct cxip_cntr, cntr_fid.fid);
 	if (ofi_atomic_get32(&cntr->ref))
 		return -FI_EBUSY;
 
-	cxip_cntr_disable(cntr);
+	ret = cxil_destroy_ct(cntr->ct);
+	if (ret)
+		CXIP_WARN("Failed to free CT, ret: %d\n", ret);
+	else
+		CXIP_DBG("Counter disabled: %p\n", cntr);
 
 	fastlock_destroy(&cntr->lock);
 
@@ -706,11 +657,20 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	_cntr->cntr_fid.fid.context = context;
 	_cntr->cntr_fid.fid.ops = &cxip_cntr_fi_ops;
 	_cntr->cntr_fid.ops = &cxip_cntr_ops;
-
 	_cntr->domain = dom;
-	*cntr = &_cntr->cntr_fid;
+
+	ret = cxip_cntr_enable(_cntr);
+	if (ret)
+		goto err_free_cntr;
 
 	cxip_domain_add_cntr(dom, _cntr);
 
+	*cntr = &_cntr->cntr_fid;
+
 	return FI_SUCCESS;
+
+err_free_cntr:
+	free(_cntr);
+
+	return ret;
 }

@@ -109,14 +109,6 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 	uint32_t le_flags;
 
-	if (mr->cntr) {
-		ret = cxip_cntr_enable(mr->cntr);
-		if (ret != FI_SUCCESS) {
-			CXIP_WARN("cxip_cntr_enable() returned: %d\n", ret);
-			return ret;
-		}
-	}
-
 	fastlock_acquire(&ep_obj->lock);
 	buffer_id = ofi_idx_insert(&ep_obj->req_ids, &mr->req);
 	if (buffer_id < 0 || buffer_id >= CXIP_BUFFER_ID_MAX) {
@@ -262,14 +254,6 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 	uint32_t le_flags;
 	uint64_t ib = 0;
-
-	if (mr->cntr) {
-		ret = cxip_cntr_enable(mr->cntr);
-		if (ret != FI_SUCCESS) {
-			CXIP_WARN("cxip_cntr_enable() returned: %d\n", ret);
-			return ret;
-		}
-	}
 
 	fastlock_acquire(&ep_obj->lock);
 	buffer_id = ofi_idx_insert(&ep_obj->req_ids, &mr->req);

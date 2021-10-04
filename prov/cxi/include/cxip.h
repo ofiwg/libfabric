@@ -915,7 +915,6 @@ struct cxip_cntr {
 	struct fid_wait *wait;
 
 	fastlock_t lock;
-	bool enabled;
 
 	struct cxi_ct *ct;
 	struct c_ct_writeback *wb;
@@ -1887,7 +1886,6 @@ void cxip_cq_flush_trig_reqs(struct cxip_cq *cq);
 void cxip_dom_cntr_disable(struct cxip_domain *dom);
 int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 		  bool err);
-int cxip_cntr_enable(struct cxip_cntr *cxi_cntr);
 int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr, void *context);
 

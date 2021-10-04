@@ -366,11 +366,6 @@ static int cxip_dom_dwq_op_cntr(struct cxip_domain *dom,
 	}
 
 	op_cntr = container_of(cntr->cntr, struct cxip_cntr, cntr_fid);
-	ret = cxip_cntr_enable(op_cntr);
-	if (ret) {
-		CXIP_WARN("Failed to enable operation counter\n");
-		return ret;
-	}
 
 	cmd.trig_ct = trig_cntr->ct->ctn;
 	cmd.threshold = trig_thresh;
@@ -476,21 +471,6 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 				     struct cxip_cntr, cntr_fid) : NULL;
 		trig_cntr = container_of(work->triggering_cntr,
 					 struct cxip_cntr, cntr_fid);
-
-		/* Ensure all counters are enabled before being used. */
-		if (comp_cntr) {
-			ret = cxip_cntr_enable(comp_cntr);
-			if (ret) {
-				CXIP_WARN("Failed to enable completion counter\n");
-				return ret;
-			}
-		}
-
-		ret = cxip_cntr_enable(trig_cntr);
-		if (ret) {
-			CXIP_WARN("Failed to enable trigger counter\n");
-			return ret;
-		}
 
 		switch (work->op_type) {
 		case FI_OP_SEND:
