@@ -793,44 +793,28 @@ bool rxr_ep_has_unfinished_send(struct rxr_ep *rxr_ep)
  * complete.
  *
  * @param[in]	rxr_ep		endpoint
- * @param[in]	max_wait_time	maximum wait time in second
- * @return 	Return 0 on success.
- * 		Return -FI_ETIMEDOUT, if maximum wait time has been reached.
+ * @return 	no return
  */
-static
-int rxr_ep_wait_send(struct rxr_ep *rxr_ep, int max_wait_time)
+static inline
+void rxr_ep_wait_send(struct rxr_ep *rxr_ep)
 {
-	uint64_t begin_time;
-	uint64_t max_wait_time_us = max_wait_time * 1000000;
-	bool finished;
-
 	fastlock_acquire(&rxr_ep->util_ep.lock);
 
-	begin_time = ofi_gettime_us();
-	while (rxr_ep_has_unfinished_send(rxr_ep) &&
-	       (ofi_gettime_us() - begin_time < max_wait_time_us)) {
+	while (rxr_ep_has_unfinished_send(rxr_ep)) {
 		rxr_ep_progress_internal(rxr_ep);
 	}
 
-	finished = !rxr_ep_has_unfinished_send(rxr_ep);
 	fastlock_release(&rxr_ep->util_ep.lock);
-
-	return finished ? 0 : -FI_ETIMEDOUT;
 }
 
 static int rxr_ep_close(struct fid *fid)
 {
 	int ret, retv = 0;
-	int finish_send_timeout = 10; // seconds
 	struct rxr_ep *rxr_ep;
 
 	rxr_ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
 
-	ret = rxr_ep_wait_send(rxr_ep, finish_send_timeout);
-	if (ret == -FI_ETIMEDOUT) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to finish queued/inflight send in %d seconds\n",
-			finish_send_timeout);
-	}
+	rxr_ep_wait_send(rxr_ep);
 
 	ret = fi_close(&rxr_ep->rdm_ep->fid);
 	if (ret) {
