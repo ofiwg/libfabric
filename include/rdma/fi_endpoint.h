@@ -66,6 +66,18 @@ enum {
 	FI_OPT_RECV_BUF_SIZE,
 	FI_OPT_TX_SIZE,
 	FI_OPT_RX_SIZE,
+	FI_OPT_FI_HMEM_P2P,		/* int */
+};
+
+/*
+ * Parameters for FI_OPT_HMEM_P2P to allow endpoint control over peer to peer
+ * support and FI_HMEM.
+ */
+enum {
+	FI_HMEM_P2P_ENABLED,	/* Provider decides when to use P2P, default. */
+	FI_HMEM_P2P_REQUIRED,	/* Must use P2P for all transfers */
+	FI_HMEM_P2P_PREFERRED,	/* Should use P2P for all transfers if available */
+	FI_HMEM_P2P_DISABLED	/* Do not use P2P */
 };
 
 struct fi_ops_ep {
