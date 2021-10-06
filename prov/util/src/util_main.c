@@ -353,6 +353,18 @@ static void util_getinfo_ifs(const struct util_prov *prov,
 			cur->addr_format = addr_format;
 		}
 		util_set_netif_names(cur, addr_entry);
+#ifdef I_MPI
+		/* save NIC speed from addr_entry */
+		if (cur->nic) {
+			cur->nic->link_attr->speed = addr_entry->speed * 1000 * 1000;
+		}
+		else {
+			cur->nic = ofi_nic_dup(NULL);
+			if (cur->nic) {
+				cur->nic->link_attr->speed = addr_entry->speed * 1000 * 1000;
+			}
+		}
+#endif /* I_MPI */
 	}
 
 	ofi_free_list_of_addr(&addr_list);
