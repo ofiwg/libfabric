@@ -176,7 +176,8 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 	dest->addr = src->addr;
 	dest->flags = RXR_PKT_ENTRY_IN_USE;
 	dest->next = NULL;
-	memcpy(dest->pkt, src->pkt, ep->mtu_size);
+	assert(src->pkt_size > 0);
+	memcpy(dest->pkt, src->pkt, src->pkt_size);
 }
 
 /*
