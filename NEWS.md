@@ -7,9 +7,64 @@ version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
 
-v1.13.2, Fri Oct 8, 2021
+v1.13.2, Fri Oct 15, 2021
 ========================
 
+## Core
+
+- Provide work-around for segfault in Ze destructor using DL provider
+- Minor code fixes supporting Ze
+- Use copy only engine when accessing GPUs through Ze
+- Sort DL providers to ensure consistent load ordering
+- Update hooking providers to handle fi_open_ops calls to avoid crashes
+- Replace cassert with assert.h to avoid C++ headers in C code
+- Enhance serialization for memory monitors to handle external monitors
+
+## EFA
+
+## SHM
+
+- Fix possible sigbus error
+- Handle errors if peer is not yet initialized
+
+## TCP
+
+- Fix RMA read request error completion handling
+- Avoid possible use after free in reject path
+- Remove restriction where EQs and CQs may not share wait sets
+- Increase max supported rx size
+- Fix possible memory leak of CM context structure in error cases
+- Set source address for active EPs to ensure correct address is used
+- Fix memory leak of dest address in CM requests
+
+## RxM
+
+- Improve connection handling responsiveness to fix application stalls
+- Add missing locks around AV data structures
+- Add missing hmem initialization for DL builds
+- Do not ignore user specified rx/tx sizes
+- Fix source address reported to peer
+- Fix possible use of uninitialized memory handling CQ errors
+- Fix address comparison to remove duplicate connections
+- Reworked CM code to fix several possible crash scenarios
+- Fix setting the conn_id when generated 'fake' tagged headers
+
+## Util
+
+- Fix setting of CQ completion flags
+
+## Verbs
+
+- Work-around compilation error with Intel compiler 2018.3.222
+- Avoid possible user after free issue accessing rdma cm id in error cases
+
+## Fabtests
+
+- Add missing prints to fi_av_xfer to report failures
+- Fix memory leak in fi_multinode test
+- Add device validation for hmem tests
+- Update fi_info hints mode field based on user options
+- Fix use of incorrect message prefix sized in fi_pingpong test
 
 v1.13.1, Tue Aug 24, 2021
 =========================
