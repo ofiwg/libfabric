@@ -1114,6 +1114,10 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*(size_t *)optval = efa_ep->rnr_retry;
 		*optlen = sizeof(size_t);
 		break;
+	case FI_OPT_FI_HMEM_P2P:
+		*(int *)optval = efa_ep->hmem_p2p_opt;
+		*optlen = sizeof(int);
+		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Unknown endpoint option %s\n", __func__);
@@ -1128,6 +1132,7 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 {
 	struct rxr_ep *rxr_ep;
 	struct efa_ep *efa_ep;
+	int intval;
 
 	rxr_ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
 	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
@@ -1161,6 +1166,23 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 			return -FI_EINVAL;
 		}
 		break;
+	case FI_OPT_FI_HMEM_P2P:
+		intval = *(int *)optval;
+		switch (intval) {
+		case FI_HMEM_P2P_REQUIRED:
+			efa_ep->hmem_p2p_opt = intval;
+			if (!efa_ep->domain->hmem_info[FI_HMEM_CUDA].initialized ||
+			    !efa_ep->domain->hmem_info[FI_HMEM_CUDA].p2p_supported)
+				return -FI_ENOSYS;
+			break;
+		case FI_HMEM_P2P_ENABLED:
+		case FI_HMEM_P2P_DISABLED:
+		case FI_HMEM_P2P_PREFERRED:
+			efa_ep->hmem_p2p_opt = intval;
+			break;
+		default:
+			return -FI_EINVAL;
+		}
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Unknown endpoint option %s\n", __func__);

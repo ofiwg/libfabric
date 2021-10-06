@@ -341,6 +341,11 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 		use_lower_ep_read = true;
 	}
 
+	/*
+	 * Not going to check efa_ep->hmem_p2p_opt here, if the remote side
+	 * gave us a valid MR we should just honor the request even if p2p is
+	 * disabled.
+	 */
 	if (use_lower_ep_read) {
 		err = rxr_read_post_remote_read_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry);
 		if (OFI_UNLIKELY(err == -FI_ENOBUFS)) {

@@ -871,7 +871,8 @@ EFA_INI
 			"Calls to RDMA read is segmented using this value.");
 	fi_param_define(&rxr_prov, "fork_safe", FI_PARAM_BOOL,
 			"Enables fork support and disables internal usage of huge pages. Has no effect on kernels which set copy-on-fork for registered pages, generally 5.13 and later. (Default: false)");
-
+	fi_param_define(&rxr_prov, "hmem_p2p_opt", FI_PARAM_INT,
+			"Change FI_OPT_FI_HMEM_P2P via environment variable instead of setopt. This option has no default, the provider will decide whether to use peer to peer if this variable is not set. This variable will be overriden if an application calls setopt with option FI_OPT_FI_HMEM_P2P.");
 	rxr_init_env();
 
 #if HAVE_EFA_DL

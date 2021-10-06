@@ -438,6 +438,13 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	domain->cache = NULL;
 
+	if ((domain->info->caps & FI_HMEM) &&
+	    ofi_hmem_is_initialized(FI_HMEM_CUDA)) {
+		domain->hmem_info[FI_HMEM_CUDA].initialized = true;
+		/* TODO: register a cuda page here instead */
+		domain->hmem_info[FI_HMEM_CUDA].p2p_supported = true;
+	}
+
 	/*
 	 * Call ibv_fork_init if the user asked for fork support.
 	 */

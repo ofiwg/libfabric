@@ -628,6 +628,7 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 	struct efa_domain *domain;
 	const struct fi_info *fi;
 	struct efa_ep *ep;
+	int p2p_opt = 0;
 	int ret;
 
 	domain = container_of(domain_fid, struct efa_domain,
@@ -700,6 +701,35 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 			goto err_recv_wr_destroy;
 		}
 		memcpy(ep->src_addr, info->src_addr, info->src_addrlen);
+	}
+
+	if (ep->domain->hmem_info[FI_HMEM_CUDA].initialized) {
+		/*
+		 * If user does not set the environment variable, set the
+		 * default to required. NCCL plugin requires p2p, but does not
+		 * call setopt for this option in older versions.
+		 *
+		 * Note that setopt will override the environment variable.
+		 */
+		ep->hmem_p2p_opt = FI_HMEM_P2P_REQUIRED;
+
+		ret = fi_param_get_int(&rxr_prov, "hmem_p2p_opt", &p2p_opt);
+		if (ret == FI_SUCCESS) {
+			if (p2p_opt == FI_HMEM_P2P_ENABLED ||
+			    p2p_opt == FI_HMEM_P2P_REQUIRED ||
+			    p2p_opt == FI_HMEM_P2P_PREFERRED ||
+			    p2p_opt == FI_HMEM_P2P_DISABLED) {
+				ep->hmem_p2p_opt = p2p_opt;
+			} else {
+				ret = -FI_EINVAL;
+				goto err_recv_wr_destroy;
+			}
+		} else if (ret != -FI_ENODATA) {
+			goto err_recv_wr_destroy;
+		}
+	} else {
+		/* no hmem devices, disable p2p */
+		ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
 	}
 
 	*ep_fid = &ep->util_ep.ep_fid;
