@@ -741,6 +741,21 @@ ofi_tostr_hmem_iface(char *buf, size_t len, enum fi_hmem_iface iface)
 	}
 }
 
+static void
+ofi_tostr_cq_format(char *buf, size_t len, enum fi_cq_format cq_format)
+{
+	switch (cq_format) {
+	CASEENUMSTRN(FI_CQ_FORMAT_UNSPEC, len);
+	CASEENUMSTRN(FI_CQ_FORMAT_CONTEXT, len);
+	CASEENUMSTRN(FI_CQ_FORMAT_MSG, len);
+	CASEENUMSTRN(FI_CQ_FORMAT_DATA, len);
+	CASEENUMSTRN(FI_CQ_FORMAT_TAGGED, len);
+	default:
+		ofi_strncatf(buf, len, "Unknown");
+		break;
+	}
+}
+
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 char *DEFAULT_SYMVER_PRE(fi_tostr_r)(char *buf, size_t len,
 				     const void *data, enum fi_type datatype)
@@ -837,6 +852,9 @@ char *DEFAULT_SYMVER_PRE(fi_tostr_r)(char *buf, size_t len,
 		break;
 	case FI_TYPE_HMEM_IFACE:
 		ofi_tostr_hmem_iface(buf, len, *enumval);
+		break;
+	case FI_TYPE_CQ_FORMAT:
+		ofi_tostr_cq_format(buf, len, *enumval);
 		break;
 	default:
 		ofi_strncatf(buf, len, "Unknown type");

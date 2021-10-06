@@ -727,6 +727,7 @@ enum fi_type {
 	FI_TYPE_FID,
 	FI_TYPE_COLLECTIVE_OP,
 	FI_TYPE_HMEM_IFACE,
+	FI_TYPE_CQ_FORMAT,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);
