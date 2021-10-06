@@ -289,10 +289,10 @@ static int ofi_patch_function(struct ofi_intercept *intercept)
 static bool ofi_is_function_patched(struct ofi_intercept *intercept)
 {
 	return (
-		(*(unsigned short*)(intercept->orig_func + 0) == 0xbb49) &&
-		(*(unsigned char* )(intercept->orig_func +10) == 0x41  ) &&
-		(*(unsigned char* )(intercept->orig_func +11) == 0xff  ) &&
-		(*(unsigned char* )(intercept->orig_func +12) == 0xe3  )
+		(*(unsigned short*)((uintptr_t)intercept->orig_func + 0) == 0xbb49) &&
+		(*(unsigned char* )((uintptr_t)intercept->orig_func +10) == 0x41  ) &&
+		(*(unsigned char* )((uintptr_t)intercept->orig_func +11) == 0xff  ) &&
+		(*(unsigned char* )((uintptr_t)intercept->orig_func +12) == 0xe3  )
 	);
 }
 #elif defined(__aarch64__)
