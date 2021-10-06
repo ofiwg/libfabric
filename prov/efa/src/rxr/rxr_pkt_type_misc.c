@@ -320,6 +320,7 @@ int rxr_pkt_init_readrsp(struct rxr_ep *ep,
 			 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_readrsp_hdr *readrsp_hdr;
+	int ret;
 
 	readrsp_hdr = rxr_get_readrsp_hdr(pkt_entry->pkt);
 	readrsp_hdr->type = RXR_READRSP_PKT;
@@ -333,9 +334,9 @@ int rxr_pkt_init_readrsp(struct rxr_ep *ep,
 				      tx_entry->total_len);
 
 	pkt_entry->addr = tx_entry->addr;
-	rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, sizeof(struct rxr_readrsp_hdr), 
-					tx_entry, 0, readrsp_hdr->seg_length);
-	return 0;
+	ret = rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, sizeof(struct rxr_readrsp_hdr),
+					      tx_entry, 0, readrsp_hdr->seg_length);
+	return ret;
 }
 
 void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)

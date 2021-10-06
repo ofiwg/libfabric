@@ -96,14 +96,14 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
  * @param[in]		tx_entry	This function will use iov, iov_count and desc of tx_entry
  * @param[in]		data_offset	offset of the data to be set up. In reference to tx_entry->total_len.
  * @param[in]		data_size	length of the data to be set up. In reference to tx_entry->total_len.
- * @return		no return
+ * @return		0 on success, negative FI code on error
  */
-void rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
-				     struct rxr_pkt_entry *pkt_entry,
-				     size_t hdr_size,
-				     struct rxr_tx_entry *tx_entry,
-				     size_t data_offset,
-				     size_t data_size)
+int rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
+				    struct rxr_pkt_entry *pkt_entry,
+				    size_t hdr_size,
+				    struct rxr_tx_entry *tx_entry,
+				    size_t data_offset,
+				    size_t data_size)
 {
 	int tx_iov_index;
 	char *data;
@@ -118,14 +118,16 @@ void rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
 	 * pkt_entry->send should be allocated successfully
 	 */
 	pkt_entry->send = ofi_buf_alloc(ep->pkt_sendv_pool);
-	if (!pkt_entry->send)
+	if (!pkt_entry->send) {
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "allocate pkt_entry->send failed\n");
-	assert(pkt_entry->send);
+		assert(pkt_entry->send);
+		return -FI_ENOMEM;
+	}
 
 	if (data_size == 0) {
 		pkt_entry->send->iov_count = 0;
 		pkt_entry->pkt_size = hdr_size;
-		return;
+		return 0;
 	}
 
 	rxr_locate_iov_pos(tx_entry->iov, tx_entry->iov_count, data_offset,
@@ -154,7 +156,7 @@ void rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
 		pkt_entry->send->desc[1] = tx_entry->desc[tx_iov_index];
 		pkt_entry->send->iov_count = 2;
 		pkt_entry->pkt_size = hdr_size + data_size;
-		return;
+		return 0;
 	}
 
 	data = pkt_entry->pkt + hdr_size;
@@ -168,6 +170,7 @@ void rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
 	assert(copied == data_size);
 	pkt_entry->send->iov_count = 0;
 	pkt_entry->pkt_size = hdr_size + copied;
+	return 0;
 }
 
 /* @brief return the data size in a packet entry
