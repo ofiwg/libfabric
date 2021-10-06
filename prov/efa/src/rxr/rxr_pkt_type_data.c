@@ -44,6 +44,7 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 	struct rxr_data_hdr *data_hdr;
 	struct rdm_peer *peer;
 	size_t hdr_size;
+	int ret;
 
 	data_hdr = rxr_get_data_hdr(pkt_entry->pkt);
 	data_hdr->type = RXR_DATA_PKT;
@@ -67,13 +68,14 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 	data_hdr->seg_length = MIN(tx_entry->total_len - tx_entry->bytes_sent,
 				   ep->max_data_payload_size);
 	data_hdr->seg_length = MIN(data_hdr->seg_length, tx_entry->window);
-	rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, hdr_size,
-					tx_entry, tx_entry->bytes_sent, data_hdr->seg_length);
+	ret = rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, hdr_size,
+					      tx_entry, tx_entry->bytes_sent,
+					      data_hdr->seg_length);
 
 	pkt_entry->x_entry = (void *)tx_entry;
 	pkt_entry->addr = tx_entry->addr;
 
-	return 0;
+	return ret;
 }
 
 void rxr_pkt_handle_data_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
