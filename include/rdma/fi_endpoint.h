@@ -66,6 +66,7 @@ enum {
 	FI_OPT_RECV_BUF_SIZE,
 	FI_OPT_TX_SIZE,
 	FI_OPT_RX_SIZE,
+	FI_OPT_XPU_TRIGGER,		/* struct fi_trigger_xpu */
 };
 
 struct fi_ops_ep {
