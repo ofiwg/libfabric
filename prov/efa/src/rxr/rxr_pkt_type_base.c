@@ -254,13 +254,15 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 				      char *data, size_t data_size)
 {
 	struct efa_ep *efa_ep;
+	struct efa_mr *desc;
 	ssize_t bytes_copied;
 	int ret;
 
 	pkt_entry->x_entry = rx_entry;
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	desc = rx_entry->desc[0];
 
-	ret = efa_ep_use_p2p(efa_ep, rx_entry->desc[0]);
+	ret = efa_ep_use_p2p(efa_ep, desc);
 	if (ret < 0)
 		return ret;
 	if (ret == 1 && data_size > 0 && efa_ep_is_cuda_mr(rx_entry->desc[0])) {
@@ -272,20 +274,23 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 		return ret;
 	}
 
-	if (OFI_LIKELY(!(rx_entry->rxr_flags & RXR_RECV_CANCEL)) &&
-	    rx_entry->cq_entry.len > data_offset && data_size > 0) {
-		bytes_copied = ofi_copy_to_iov(rx_entry->iov,
-					       rx_entry->iov_count,
-					       data_offset + ep->msg_prefix_size,
-					       data,
-					       data_size);
-		if (bytes_copied != MIN(data_size, rx_entry->cq_entry.len - data_offset)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
-				bytes_copied);
-			return -FI_EIO;
-		}
+	if (OFI_UNLIKELY((rx_entry->rxr_flags & RXR_RECV_CANCEL)) ||
+	    data_offset >= rx_entry->cq_entry.len || data_size == 0)
+		goto out;
+
+	bytes_copied = ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+					    desc ? desc->peer.device.reserved : 0,
+					    rx_entry->iov, rx_entry->iov_count,
+					    data_offset + ep->msg_prefix_size,
+					    data, data_size);
+
+	if (bytes_copied != MIN(data_size, rx_entry->cq_entry.len - data_offset)) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
+			bytes_copied);
+		return -FI_EIO;
 	}
 
+out:
 	rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
 	return 0;
 }
