@@ -208,6 +208,7 @@ struct cxip_environment {
 	size_t oflow_buf_count;
 	size_t req_buf_size;
 	size_t req_buf_count;
+	int msg_lossless;
 	size_t default_cq_size;
 	int optimized_mrs;
 	int disable_cq_hugetlb;

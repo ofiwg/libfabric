@@ -596,6 +596,13 @@ The CXI provider checks for the following environment variables:
 :   Number of request buffers. Dynamically increasing and decreasing request
     buffer count is not currently supported.
 
+*FI_CXI_MSG_LOSSLESS*
+:   Enable or disable lossless receive matching. If hardware resources are
+    exhausted, hardware will pause the associated traffic class until a
+    overflow buffer (hardware match mode) or request buffer (software match
+    mode or hybrid match mode) is posted. This is considered experimental and
+    defaults to disabled.
+
 *FI_CXI_FC_RETRY_USEC_DELAY*
 :   Number of micro-seconds to sleep before retrying a dropped side-band, flow
     control message. Setting to zero will disable any sleep.

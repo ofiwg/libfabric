@@ -79,6 +79,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 		.use_long_event = 1,
 		.is_matching = 1,
 		.en_flowctrl = 1,
+		.lossless = cxip_env.msg_lossless,
 	};
 
 	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, false, FI_TC_UNSPEC,

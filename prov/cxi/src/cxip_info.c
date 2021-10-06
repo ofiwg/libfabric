@@ -269,6 +269,7 @@ struct cxip_environment cxip_env = {
 	.req_buf_size = CXIP_REQ_BUF_SIZE,
 	.req_buf_count = CXIP_REQ_BUF_COUNT,
 	.msg_offload = 1,
+	.msg_lossless = 0,
 	.fc_retry_usec_delay = 1000,
 	.ctrl_rx_eq_max_size = 67108864,
 	.default_cq_size = CXIP_CQ_DEF_SZ,
@@ -455,6 +456,10 @@ static void cxip_env_init(void)
 
 	if (!cxip_env.eq_ack_batch_size)
 		cxip_env.eq_ack_batch_size = 1;
+
+	fi_param_define(&cxip_prov, "msg_lossless", FI_PARAM_BOOL,
+			"Enable/Disable lossless message matching.");
+	fi_param_get_bool(&cxip_prov, "msg_lossless", &cxip_env.msg_lossless);
 
 	fi_param_define(&cxip_prov, "req_buf_size", FI_PARAM_SIZE_T,
 			"Size of request buffer.");
