@@ -566,10 +566,12 @@ int tcpx_op_write(struct tcpx_ep *ep)
 		return -FI_ENOMEM;
 
 	rx_entry->flags = 0;
-	if (ep->cur_rx.hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
-		rx_entry->flags = (FI_COMPLETION | FI_REMOTE_WRITE);
-	else
+	if (ep->cur_rx.hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA) {
+		rx_entry->flags = (FI_COMPLETION | FI_REMOTE_WRITE |
+				   FI_REMOTE_CQ_DATA);
+	} else {
 		rx_entry->flags = TCPX_INTERNAL_XFER;
+	}
 
 	memcpy(&rx_entry->hdr, &ep->cur_rx.hdr,
 	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
