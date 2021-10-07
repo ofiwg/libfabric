@@ -305,21 +305,27 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 		return -FI_EDOMAIN;
 	}
 
-	if (!rxc->msg_offload) {
-		state = C_PTLTE_SOFTWARE_MANAGED;
-		ret = cxip_rxc_req_buf_init(rxc);
-	} else {
+	if (rxc->msg_offload) {
 		state = C_PTLTE_ENABLED;
 		ret = cxip_rxc_oflow_init(rxc);
+		if (ret != FI_SUCCESS)
+			goto err_msg_fini;
+	} else {
+		state = C_PTLTE_SOFTWARE_MANAGED;
 	}
-	if (ret != FI_SUCCESS)
-		goto err_msg_fini;
+
+	/* If starting in or able to transition to software managed */
+	if (cxip_software_pte_allowed()) {
+		ret = cxip_rxc_req_buf_init(rxc);
+		if (ret != FI_SUCCESS)
+			goto err_oflow_buf_fini;
+	}
 
 	/* Start accepting Puts. */
 	ret = cxip_pte_set_state(rxc->rx_pte, rxc->rx_cmdq, state, 0);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_pte_set_state returned: %d\n", ret);
-		goto err_oflow_req_buf_fini;
+		goto err_req_buf_fini;
 	}
 
 	/* Wait for PTE state change */
@@ -334,10 +340,12 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 
 	return FI_SUCCESS;
 
-err_oflow_req_buf_fini:
-	if (!rxc->msg_offload)
+err_req_buf_fini:
+	if (cxip_software_pte_allowed())
 		cxip_rxc_req_buf_fini(rxc);
-	else
+
+err_oflow_buf_fini:
+	if (rxc->msg_offload)
 		cxip_rxc_oflow_fini(rxc);
 err_msg_fini:
 	tmp = rxc_msg_fini(rxc);
@@ -425,9 +433,10 @@ static void rxc_disable(struct cxip_rxc *rxc)
 
 		rxc_cleanup(rxc);
 
-		if (!rxc->msg_offload)
+		if (cxip_software_pte_allowed())
 			cxip_rxc_req_buf_fini(rxc);
-		else
+
+		if (cxip_env.msg_offload)
 			cxip_rxc_oflow_fini(rxc);
 
 		/* Free hardware resources. */
