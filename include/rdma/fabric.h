@@ -239,6 +239,7 @@ enum fi_mr_mode {
 #define FI_MR_RMA_EVENT		(1 << 8)
 #define FI_MR_ENDPOINT		(1 << 9)
 #define FI_MR_HMEM		(1 << 10)
+#define FI_MR_COLLECTIVE	(1 << 11)
 
 enum fi_progress {
 	FI_PROGRESS_UNSPEC,
