@@ -165,6 +165,11 @@ void tcpx_cq_report_success(struct util_cq *cq,
 		len = xfer_entry->hdr.base_hdr.size -
 		      xfer_entry->hdr.base_hdr.hdr_size;
 		tcpx_get_cq_info(xfer_entry, &flags, &data, &tag);
+	} else if ((flags & (FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA)) ==
+		   (FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA)) {
+		len = 0;
+		tag = 0;
+		data = xfer_entry->hdr.cq_data_hdr.cq_data;
 	} else {
 		len = 0;
 		data = 0;
@@ -190,6 +195,10 @@ void tcpx_cq_report_error(struct util_cq *cq,
 	if (err_entry.flags & FI_RECV) {
 		tcpx_get_cq_info(xfer_entry, &err_entry.flags, &err_entry.data,
 				 &err_entry.tag);
+	} else if ((err_entry.flags & (FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA)) ==
+		   (FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA)) {
+		err_entry.tag = 0;
+		err_entry.data = xfer_entry->hdr.cq_data_hdr.cq_data;
 	} else {
 		err_entry.data = 0;
 		err_entry.tag = 0;
