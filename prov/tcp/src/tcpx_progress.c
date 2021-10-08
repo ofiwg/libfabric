@@ -62,7 +62,7 @@ static int tcpx_send_msg(struct tcpx_ep *ep)
 		 * transfer has completed.
 		 */
 		tx_entry->async_index = ep->bsock.async_index;
-		tx_entry->flags |= TCPX_ASYNC;
+		tx_entry->ctrl_flags |= TCPX_ASYNC;
 	} else {
 		len = ret;
 	}
@@ -118,18 +118,18 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 			FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
 			tcpx_cq_report_error(&cq->util_cq, tx_entry, -ret);
 			tcpx_free_xfer(cq, tx_entry);
-		} else if (tx_entry->flags & TCPX_NEED_ACK) {
+		} else if (tx_entry->ctrl_flags & TCPX_NEED_ACK) {
 			/* A SW ack guarantees the peer received the data, so
 			 * we can skip the async completion.
 			 */
 			slist_insert_tail(&tx_entry->entry,
 					  &ep->need_ack_queue);
-		} else if (tx_entry->flags & TCPX_NEED_RESP) {
+		} else if (tx_entry->ctrl_flags & TCPX_NEED_RESP) {
 			// discard send but enable receive for completeion
 			assert(tx_entry->resp_entry);
-			tx_entry->resp_entry->flags &= ~TCPX_INTERNAL_XFER;
+			tx_entry->resp_entry->ctrl_flags &= ~TCPX_INTERNAL_XFER;
 			tcpx_free_xfer(cq, tx_entry);
-		} else if ((tx_entry->flags & TCPX_ASYNC) &&
+		} else if ((tx_entry->ctrl_flags & TCPX_ASYNC) &&
 			   (ofi_val32_gt(tx_entry->async_index,
 					 ep->bsock.done_index))) {
 			slist_insert_tail(&tx_entry->entry,
@@ -143,12 +143,12 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 			ep->cur_tx.entry = container_of(slist_remove_head(
 							&ep->priority_queue),
 					     struct tcpx_xfer_entry, entry);
-			assert(ep->cur_tx.entry->flags & TCPX_INTERNAL_XFER);
+			assert(ep->cur_tx.entry->ctrl_flags & TCPX_INTERNAL_XFER);
 		} else if (!slist_empty(&ep->tx_queue)) {
 			ep->cur_tx.entry = container_of(slist_remove_head(
 							&ep->tx_queue),
 					     struct tcpx_xfer_entry, entry);
-			assert(!(ep->cur_tx.entry->flags & TCPX_INTERNAL_XFER));
+			assert(!(ep->cur_tx.entry->ctrl_flags & TCPX_INTERNAL_XFER));
 		} else {
 			ep->cur_tx.entry = NULL;
 			break;
@@ -188,7 +188,7 @@ static int tcpx_queue_ack(struct tcpx_xfer_entry *rx_entry)
 	resp->hdr.base_hdr.size = sizeof(resp->hdr.base_hdr);
 	resp->hdr.base_hdr.hdr_size = (uint8_t) sizeof(resp->hdr.base_hdr);
 
-	resp->flags = TCPX_INTERNAL_XFER;
+	resp->ctrl_flags = TCPX_INTERNAL_XFER;
 	resp->context = NULL;
 	resp->ep = ep;
 
@@ -248,15 +248,15 @@ retry:
 
 		if (ret != -FI_ETRUNC)
 			goto err;
-		assert(rx_entry->flags & TCPX_NEED_DYN_RBUF);
+		assert(rx_entry->ctrl_flags & TCPX_NEED_DYN_RBUF);
 	}
 
-	if (rx_entry->flags & TCPX_NEED_DYN_RBUF) {
+	if (rx_entry->ctrl_flags & TCPX_NEED_DYN_RBUF) {
 		ret = tcpx_update_rx_iov(rx_entry);
 		if (ret)
 			goto err;
 
-		rx_entry->flags &= ~TCPX_NEED_DYN_RBUF;
+		rx_entry->ctrl_flags &= ~TCPX_NEED_DYN_RBUF;
 		goto retry;
 	}
 
@@ -473,7 +473,7 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 	rx_entry->mrecv_msg_start = rx_entry->iov[0].iov_base;
 
 	if (tcpx_dynamic_rbuf(tcpx_ep)) {
-		rx_entry->flags |= TCPX_NEED_DYN_RBUF;
+		rx_entry->ctrl_flags = TCPX_NEED_DYN_RBUF;
 
 		if (msg->hdr.base_hdr.flags & TCPX_TAGGED) {
 			/* Raw message, no rxm header */
@@ -544,7 +544,7 @@ int tcpx_op_read_req(struct tcpx_ep *ep)
 	resp->hdr.base_hdr.op = ofi_op_read_rsp;
 	resp->hdr.base_hdr.hdr_size = (uint8_t) sizeof(resp->hdr.base_hdr);
 
-	resp->flags |= TCPX_INTERNAL_XFER;
+	resp->ctrl_flags = TCPX_INTERNAL_XFER;
 	resp->context = NULL;
 
 	tcpx_tx_queue_insert(ep, resp);
@@ -570,7 +570,7 @@ int tcpx_op_write(struct tcpx_ep *ep)
 		rx_entry->flags = (FI_COMPLETION | FI_REMOTE_WRITE |
 				   FI_REMOTE_CQ_DATA);
 	} else {
-		rx_entry->flags = TCPX_INTERNAL_XFER;
+		rx_entry->ctrl_flags = TCPX_INTERNAL_XFER;
 	}
 
 	memcpy(&rx_entry->hdr, &ep->cur_rx.hdr,
@@ -807,7 +807,7 @@ void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 
 		if (!ep->cur_tx.entry && wait)
 			wait->signal(wait);
-	} else if (tx_entry->flags & TCPX_INTERNAL_XFER) {
+	} else if (tx_entry->ctrl_flags & TCPX_INTERNAL_XFER) {
 		slist_insert_tail(&tx_entry->entry, &ep->priority_queue);
 	} else {
 		slist_insert_tail(&tx_entry->entry, &ep->tx_queue);

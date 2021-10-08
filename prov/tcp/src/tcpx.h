@@ -271,12 +271,12 @@ struct tcpx_fabric {
 	struct util_fabric	util_fabric;
 };
 
-#define TCPX_INTERNAL_MASK	(GENMASK_ULL(63, 58) | FI_COMPLETION)
-#define TCPX_NEED_RESP		BIT_ULL(58)
-#define TCPX_NEED_ACK		BIT_ULL(59)
-#define TCPX_INTERNAL_XFER	BIT_ULL(60)
-#define TCPX_NEED_DYN_RBUF 	BIT_ULL(61)
-#define TCPX_ASYNC		BIT_ULL(62)
+
+#define TCPX_NEED_RESP		BIT(1)
+#define TCPX_NEED_ACK		BIT(2)
+#define TCPX_INTERNAL_XFER	BIT(3)
+#define TCPX_NEED_DYN_RBUF 	BIT(4)
+#define TCPX_ASYNC		BIT(5)
 
 struct tcpx_xfer_entry {
 	struct slist_entry	entry;
@@ -291,6 +291,7 @@ struct tcpx_xfer_entry {
 	struct iovec		iov[TCPX_IOV_LIMIT+1];
 	struct tcpx_ep		*ep;
 	uint64_t		flags;
+	uint32_t		ctrl_flags;
 	uint32_t		async_index;
 	void			*context;
 	void			*mrecv_msg_start;
@@ -386,7 +387,7 @@ tcpx_set_ack_flags(struct tcpx_xfer_entry *xfer, uint64_t flags)
 {
 	if (flags & (FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)) {
 		xfer->hdr.base_hdr.flags |= TCPX_DELIVERY_COMPLETE;
-		xfer->flags |= TCPX_NEED_ACK;
+		xfer->ctrl_flags |= TCPX_NEED_ACK;
 	}
 }
 
@@ -396,7 +397,7 @@ tcpx_set_commit_flags(struct tcpx_xfer_entry *xfer, uint64_t flags)
 	tcpx_set_ack_flags(xfer, flags);
 	if (flags & FI_COMMIT_COMPLETE) {
 		xfer->hdr.base_hdr.flags |= TCPX_COMMIT_COMPLETE;
-		xfer->flags |= TCPX_NEED_ACK;
+		xfer->ctrl_flags |= TCPX_NEED_ACK;
 	}
 }
 
@@ -417,6 +418,7 @@ tcpx_free_xfer(struct tcpx_cq *cq, struct tcpx_xfer_entry *xfer)
 {
 	xfer->hdr.base_hdr.flags = 0;
 	xfer->flags = 0;
+	xfer->ctrl_flags = 0;
 	xfer->context = 0;
 
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
