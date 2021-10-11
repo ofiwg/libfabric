@@ -290,7 +290,7 @@ struct tcpx_xfer_entry {
 	size_t			iov_cnt;
 	struct iovec		iov[TCPX_IOV_LIMIT+1];
 	struct tcpx_ep		*ep;
-	uint64_t		flags;
+	uint64_t		cq_flags;
 	uint32_t		ctrl_flags;
 	uint32_t		async_index;
 	void			*context;
@@ -401,6 +401,24 @@ tcpx_set_commit_flags(struct tcpx_xfer_entry *xfer, uint64_t flags)
 	}
 }
 
+static inline uint64_t
+tcpx_tx_completion_flag(struct tcpx_ep *ep, uint64_t op_flags)
+{
+	/* Generate a completion if op flags indicate or we generate
+	 * completions by default
+	 */
+	return (ep->util_ep.tx_op_flags | op_flags) & FI_COMPLETION;
+}
+
+static inline uint64_t
+tcpx_rx_completion_flag(struct tcpx_ep *ep, uint64_t op_flags)
+{
+	/* Generate a completion if op flags indicate or we generate
+	 * completions by default
+	 */
+	return (ep->util_ep.rx_op_flags | op_flags) & FI_COMPLETION;
+}
+
 static inline struct tcpx_xfer_entry *
 tcpx_alloc_xfer(struct tcpx_cq *cq)
 {
@@ -417,7 +435,7 @@ static inline void
 tcpx_free_xfer(struct tcpx_cq *cq, struct tcpx_xfer_entry *xfer)
 {
 	xfer->hdr.base_hdr.flags = 0;
-	xfer->flags = 0;
+	xfer->cq_flags = 0;
 	xfer->ctrl_flags = 0;
 	xfer->context = 0;
 

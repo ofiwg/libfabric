@@ -156,17 +156,17 @@ void tcpx_cq_report_success(struct util_cq *cq,
 	uint64_t flags, data, tag;
 	size_t len;
 
-	if (!(xfer_entry->flags & FI_COMPLETION) ||
+	if (!(xfer_entry->cq_flags & FI_COMPLETION) ||
 	    (xfer_entry->ctrl_flags & TCPX_INTERNAL_XFER))
 		return;
 
-	flags = xfer_entry->flags & ~FI_COMPLETION;
+	flags = xfer_entry->cq_flags & ~FI_COMPLETION;
 	if (flags & FI_RECV) {
 		len = xfer_entry->hdr.base_hdr.size -
 		      xfer_entry->hdr.base_hdr.hdr_size;
 		tcpx_get_cq_info(xfer_entry, &flags, &data, &tag);
-	} else if ((flags & (FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA)) ==
-		   (FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA)) {
+	} else if (flags & FI_REMOTE_CQ_DATA) {
+		assert(flags & FI_REMOTE_WRITE);
 		len = 0;
 		tag = 0;
 		data = xfer_entry->hdr.cq_data_hdr.cq_data;
@@ -191,12 +191,12 @@ void tcpx_cq_report_error(struct util_cq *cq,
 	if (xfer_entry->ctrl_flags & TCPX_INTERNAL_XFER)
 		return;
 
-	err_entry.flags = xfer_entry->flags & ~FI_COMPLETION;
+	err_entry.flags = xfer_entry->cq_flags & ~FI_COMPLETION;
 	if (err_entry.flags & FI_RECV) {
 		tcpx_get_cq_info(xfer_entry, &err_entry.flags, &err_entry.data,
 				 &err_entry.tag);
-	} else if ((err_entry.flags & (FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA)) ==
-		   (FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA)) {
+	} else if (err_entry.flags & FI_REMOTE_CQ_DATA) {
+		assert(err_entry.flags & FI_REMOTE_WRITE);
 		err_entry.tag = 0;
 		err_entry.data = xfer_entry->hdr.cq_data_hdr.cq_data;
 	} else {

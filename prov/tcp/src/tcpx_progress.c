@@ -412,7 +412,7 @@ static struct tcpx_xfer_entry *tcpx_get_rx_entry(struct tcpx_ep *ep)
 		if (!slist_empty(&srx->rx_queue)) {
 			xfer = container_of(slist_remove_head(&srx->rx_queue),
 					    struct tcpx_xfer_entry, entry);
-			xfer->flags |= ep->util_ep.rx_op_flags & FI_COMPLETION;
+			xfer->cq_flags |= tcpx_rx_completion_flag(ep, 0);
 		} else {
 			xfer = NULL;
 		}
@@ -565,10 +565,9 @@ int tcpx_op_write(struct tcpx_ep *ep)
 	if (!rx_entry)
 		return -FI_ENOMEM;
 
-	rx_entry->flags = 0;
 	if (ep->cur_rx.hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA) {
-		rx_entry->flags = (FI_COMPLETION | FI_REMOTE_WRITE |
-				   FI_REMOTE_CQ_DATA);
+		rx_entry->cq_flags = (FI_COMPLETION | FI_REMOTE_WRITE |
+				      FI_REMOTE_CQ_DATA);
 	} else {
 		rx_entry->ctrl_flags = TCPX_INTERNAL_XFER;
 	}

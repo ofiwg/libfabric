@@ -56,7 +56,7 @@ static ssize_t tcpx_srx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		goto unlock;
 	}
 
-	recv_entry->flags = flags | FI_MSG | FI_RECV;
+	recv_entry->cq_flags = FI_MSG | FI_RECV;
 	recv_entry->context = msg->context;
 	recv_entry->iov_cnt = msg->iov_count;
 	memcpy(&recv_entry->iov[0], msg->msg_iov,
@@ -84,7 +84,7 @@ static ssize_t tcpx_srx_recv(struct fid_ep *ep, void *buf, size_t len, void *des
 		goto unlock;
 	}
 
-	recv_entry->flags = FI_MSG | FI_RECV;
+	recv_entry->cq_flags = FI_MSG | FI_RECV;
 	recv_entry->context = context;
 	recv_entry->iov_cnt = 1;
 	recv_entry->iov[0].iov_base = buf;
@@ -113,7 +113,7 @@ static ssize_t tcpx_srx_recvv(struct fid_ep *ep, const struct iovec *iov, void *
 		goto unlock;
 	}
 
-	recv_entry->flags = FI_MSG | FI_RECV;
+	recv_entry->cq_flags = FI_MSG | FI_RECV;
 	recv_entry->context = context;
 	recv_entry->iov_cnt = count;
 	memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
