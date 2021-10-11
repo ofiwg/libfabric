@@ -368,34 +368,6 @@ static int tcpx_process_remote_read(struct tcpx_ep *ep)
 	return ret;
 }
 
-static int tcpx_validate_rx_rma_data(struct tcpx_xfer_entry *rx_entry,
-				     uint64_t access)
-{
-	struct ofi_mr_map *map = &rx_entry->ep->util_ep.domain->mr_map;
-	struct ofi_rma_iov *rma_iov;
-	size_t offset;
-	int i, ret;
-
-	if (rx_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
-		offset = sizeof(rx_entry->hdr.base_hdr) + sizeof(uint64_t);
-	else
-		offset = sizeof(rx_entry->hdr.base_hdr);
-
-	rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &rx_entry->hdr + offset);
-
-	for ( i = 0 ; i < rx_entry->hdr.base_hdr.rma_iov_cnt ; i++) {
-		ret = ofi_mr_verify(map, rma_iov[i].len,
-				    (uintptr_t *)&rma_iov[i].addr,
-				    rma_iov[i].key, access);
-		if (ret) {
-			FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
-			       "invalid rma iov received\n");
-			return -FI_EINVAL;
-		}
-	}
-	return FI_SUCCESS;
-}
-
 int tcpx_op_invalid(struct tcpx_ep *tcpx_ep)
 {
 	return -FI_EINVAL;
@@ -519,13 +491,6 @@ int tcpx_op_read_req(struct tcpx_ep *ep)
 	resp->hdr.base_hdr.op_data = 0;
 	resp->ep = ep;
 
-	ret = tcpx_validate_rx_rma_data(resp, FI_REMOTE_READ);
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "invalid rma data\n");
-		tcpx_free_xfer(cq, resp);
-		return ret;
-	}
-
 	resp->iov[0].iov_base = (void *) &resp->hdr;
 	resp->iov[0].iov_len = sizeof(resp->hdr.base_hdr);
 
@@ -535,6 +500,16 @@ int tcpx_op_read_req(struct tcpx_ep *ep)
 	resp->iov_cnt = 1 + resp->hdr.base_hdr.rma_iov_cnt;
 	resp->hdr.base_hdr.size = resp->iov[0].iov_len;
 	for (i = 0; i < resp->hdr.base_hdr.rma_iov_cnt; i++) {
+		ret = ofi_mr_verify(&ep->util_ep.domain->mr_map, rma_iov[i].len,
+				    (uintptr_t *) &rma_iov[i].addr,
+				    rma_iov[i].key, FI_REMOTE_READ);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+			       "invalid rma iov received\n");
+			tcpx_free_xfer(cq, resp);
+			return ret;
+		}
+
 		resp->iov[i + 1].iov_base = (void *) (uintptr_t)
 					    rma_iov[i].addr;
 		resp->iov[i + 1].iov_len = rma_iov[i].len;
@@ -557,7 +532,6 @@ int tcpx_op_write(struct tcpx_ep *ep)
 	struct tcpx_xfer_entry *rx_entry;
 	struct tcpx_cq *cq;
 	struct ofi_rma_iov *rma_iov;
-	size_t offset;
 	int ret, i;
 
 	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
@@ -568,8 +542,12 @@ int tcpx_op_write(struct tcpx_ep *ep)
 	if (ep->cur_rx.hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA) {
 		rx_entry->cq_flags = (FI_COMPLETION | FI_REMOTE_WRITE |
 				      FI_REMOTE_CQ_DATA);
+		rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &rx_entry->hdr +
+			   sizeof(rx_entry->hdr.cq_data_hdr));
 	} else {
 		rx_entry->ctrl_flags = TCPX_INTERNAL_XFER;
+		rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &rx_entry->hdr +
+			  sizeof(rx_entry->hdr.base_hdr));
 	}
 
 	memcpy(&rx_entry->hdr, &ep->cur_rx.hdr,
@@ -577,20 +555,17 @@ int tcpx_op_write(struct tcpx_ep *ep)
 	rx_entry->hdr.base_hdr.op_data = 0;
 	rx_entry->ep = ep;
 
-	ret = tcpx_validate_rx_rma_data(rx_entry, FI_REMOTE_WRITE);
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "invalid rma data\n");
-		tcpx_free_xfer(cq, rx_entry);
-		return ret;
-	}
-
-	offset = rx_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA ?
-		 sizeof(rx_entry->hdr.cq_data_hdr) :
-		 sizeof(rx_entry->hdr.base_hdr);
-	rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &rx_entry->hdr + offset);
-
 	rx_entry->iov_cnt = rx_entry->hdr.base_hdr.rma_iov_cnt;
 	for (i = 0; i < rx_entry->hdr.base_hdr.rma_iov_cnt; i++) {
+		ret = ofi_mr_verify(&ep->util_ep.domain->mr_map, rma_iov[i].len,
+				    (uintptr_t *) &rma_iov[i].addr,
+				    rma_iov[i].key, FI_REMOTE_WRITE);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+			       "invalid rma iov received\n");
+			tcpx_free_xfer(cq, rx_entry);
+			return ret;
+		}
 		rx_entry->iov[i].iov_base = (void *) (uintptr_t)
 					      rma_iov[i].addr;
 		rx_entry->iov[i].iov_len = rma_iov[i].len;
