@@ -253,7 +253,14 @@ static int all_gather_test_run()
 	}
 
 	result = malloc(pm_job.num_ranks * sizeof(*expect_result));
+	if (!result)
+		return -FI_ENOMEM;
 	expect_result = malloc(pm_job.num_ranks * sizeof(*expect_result));
+	if (!expect_result) {
+		free(result);
+		return -FI_ENOMEM;
+	}
+
 	for (i = 0; i < pm_job.num_ranks; i++) {
 		expect_result[i] = i;
 	}
