@@ -233,7 +233,7 @@ static int sum_all_reduce_test_run()
 
 static int all_gather_test_run()
 {
-	int err;
+	int ret;
 	uint64_t done_flag;
 	uint64_t *result;
 	uint64_t *expect_result;
@@ -245,11 +245,11 @@ static int all_gather_test_run()
 	attr.op = FI_NOOP;
 	attr.datatype = FI_UINT64;
 	attr.mode = 0;
-	err = fi_query_collective(domain, FI_ALLGATHER, &attr, 0);
-	if (err) {
-		FT_DEBUG("SUM AllReduce collective not supported: %d (%s)\n", err,
-			 fi_strerror(err));
-		return err;
+	ret = fi_query_collective(domain, FI_ALLGATHER, &attr, 0);
+	if (ret) {
+		FT_DEBUG("SUM AllReduce collective not supported: %d (%s)\n", ret,
+			 fi_strerror(ret));
+		return ret;
 	}
 
 	result = malloc(pm_job.num_ranks * sizeof(*expect_result));
@@ -259,36 +259,37 @@ static int all_gather_test_run()
 	}
 
 	coll_addr = fi_mc_addr(coll_mc);
-	err = fi_allgather(ep, &data, count, NULL, result, NULL, coll_addr, FI_UINT64, 0,
+	ret = fi_allgather(ep, &data, count, NULL, result, NULL, coll_addr, FI_UINT64, 0,
 			   &done_flag);
-	if (err) {
-		FT_DEBUG("collective allreduce failed: %d (%s)\n", err, fi_strerror(err));
-		goto errout;
+	if (ret) {
+		FT_DEBUG("collective allreduce failed: %d (%s)\n", ret, fi_strerror(ret));
+		goto out;
 	}
 
-	err = wait_for_comp(&done_flag);
-	if (err)
-		goto errout;
+	ret = wait_for_comp(&done_flag);
+	if (ret)
+		goto out;
 
 	for (i = 0; i < pm_job.num_ranks; i++) {
 		if ((expect_result[i]) != result[i]) {
 			FT_DEBUG("allgather failed; expect[%ld]: %ld, actual[%ld]: %ld\n",
 				 i, expect_result[i], i, result[i]);
-			err = -1;
-			goto errout;
+			ret = -1;
+			goto out;
 		}
 	}
-	return FI_SUCCESS;
 
-errout:
+	ret = FI_SUCCESS;
+
+out:
 	free(expect_result);
 	free(result);
-	return err;
+	return ret;
 }
 
 static int scatter_test_run()
 {
-	int err;
+	int ret;
 	uint64_t done_flag;
 	uint64_t result;
 	uint64_t *data;
@@ -300,11 +301,11 @@ static int scatter_test_run()
 	attr.op = FI_NOOP;
 	attr.datatype = FI_UINT64;
 	attr.mode = 0;
-	err = fi_query_collective(domain, FI_SCATTER, &attr, 0);
-	if (err) {
-		FT_DEBUG("Scatter collective not supported: %d (%s)\n", err,
-			 fi_strerror(err));
-		return err;
+	ret = fi_query_collective(domain, FI_SCATTER, &attr, 0);
+	if (ret) {
+		FT_DEBUG("Scatter collective not supported: %d (%s)\n", ret,
+			 fi_strerror(ret));
+		return ret;
 	}
 
 	data = malloc(data_size);
@@ -317,32 +318,33 @@ static int scatter_test_run()
 
 	coll_addr = fi_mc_addr(coll_mc);
 	if (pm_job.my_rank == root)
-		err = fi_scatter(ep, data, 1, NULL, &result, NULL, coll_addr, root,
+		ret = fi_scatter(ep, data, 1, NULL, &result, NULL, coll_addr, root,
 				 FI_UINT64, 0, &done_flag);
 	else
-		err = fi_scatter(ep, NULL, 1, NULL, &result, NULL, coll_addr, root,
+		ret = fi_scatter(ep, NULL, 1, NULL, &result, NULL, coll_addr, root,
 				 FI_UINT64, 0, &done_flag);
 
-	if (err) {
-		FT_DEBUG("collective scatter failed: %d (%s)\n", err, fi_strerror(err));
-		goto errout;
+	if (ret) {
+		FT_DEBUG("collective scatter failed: %d (%s)\n", ret, fi_strerror(ret));
+		goto out;
 	}
 
-	err = wait_for_comp(&done_flag);
-	if (err)
-		goto errout;
+	ret = wait_for_comp(&done_flag);
+	if (ret)
+		goto out;
 
 	if (data[pm_job.my_rank] != result) {
 		FT_DEBUG("scatter failed; expect: %ld, actual: %ld\n",
 			 data[pm_job.my_rank], result);
-		err = -1;
-		goto errout;
+		ret = -1;
+		goto out;
 	}
-	return FI_SUCCESS;
 
-errout:
+	ret = FI_SUCCESS;
+
+out:
 	free(data);
-	return err;
+	return ret;
 }
 
 static int broadcast_test_run()
