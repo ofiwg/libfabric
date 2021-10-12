@@ -195,6 +195,14 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 			} else if (use_ipc && iface != FI_HMEM_ZE) {
 				ret = smr_format_ipc(cmd, iov[0].iov_base, total_len,
 						     ep->region, resp, iface);
+				if (ret) {
+					FI_WARN_ONCE(&smr_prov, FI_LOG_EP_CTRL,
+						     "unable to use IPC for RMA, fallback to using SAR\n");
+					ret = smr_format_sar(cmd, iface, device, iov,
+							     iov_count, total_len,
+							     ep->region, peer_smr, id,
+							     pend, resp);
+				}
 			} else if (total_len <= smr_env.sar_threshold ||
 			    iface != FI_HMEM_SYSTEM) {
 				ret = smr_format_sar(cmd, iface, device, iov,
