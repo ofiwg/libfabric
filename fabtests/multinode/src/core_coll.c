@@ -379,8 +379,10 @@ static int broadcast_test_run()
 		return -FI_ENOMEM;
 
 	data = malloc(data_cnt * sizeof(*data));
-	if (!data)
+	if (!data) {
+		free(result);
 		return -FI_ENOMEM;
+	}
 
 	for (i = 0; i < pm_job.num_ranks; ++i) {
 		data[i] = pm_job.num_ranks - 1 - i;
