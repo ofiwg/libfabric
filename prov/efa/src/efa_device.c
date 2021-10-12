@@ -90,8 +90,12 @@ int efa_device_init(void)
 	fastlock_init(&pd_list_lock);
 
 	device_list = ibv_get_device_list(&dev_cnt);
-	if (dev_cnt <= 0)
-		return -ENODEV;
+	if (device_list == NULL)
+		return -ENOMEM;
+	if (dev_cnt <= 0) {
+		ret = -ENODEV;
+		goto err_free_dev_list;
+	}
 
 	ctx_list = calloc(dev_cnt, sizeof(*ctx_list));
 	if (!ctx_list) {
