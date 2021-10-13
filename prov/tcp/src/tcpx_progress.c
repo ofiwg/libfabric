@@ -368,7 +368,7 @@ static int tcpx_process_remote_read(struct tcpx_ep *ep)
 	return ret;
 }
 
-int tcpx_op_invalid(struct tcpx_ep *tcpx_ep)
+int tcpx_op_invalid(struct tcpx_ep *ep)
 {
 	return -FI_EINVAL;
 }
@@ -423,28 +423,28 @@ static int tcpx_handle_ack(struct tcpx_ep *ep)
 	return FI_SUCCESS;
 }
 
-int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
+int tcpx_op_msg(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
-	struct tcpx_cur_rx *msg = &tcpx_ep->cur_rx;
+	struct tcpx_cur_rx *msg = &ep->cur_rx;
 	size_t msg_len;
 	int ret;
 
 	if (msg->hdr.base_hdr.op_data == TCPX_OP_ACK)
-		return tcpx_handle_ack(tcpx_ep);
+		return tcpx_handle_ack(ep);
 
 	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.hdr_size);
 
-	rx_entry = tcpx_get_rx_entry(tcpx_ep);
+	rx_entry = tcpx_get_rx_entry(ep);
 	if (!rx_entry)
 		return -FI_EAGAIN;
 
 	memcpy(&rx_entry->hdr, &msg->hdr,
 	       (size_t) msg->hdr.base_hdr.hdr_size);
-	rx_entry->ep = tcpx_ep;
+	rx_entry->ep = ep;
 	rx_entry->mrecv_msg_start = rx_entry->iov[0].iov_base;
 
-	if (tcpx_dynamic_rbuf(tcpx_ep)) {
+	if (tcpx_dynamic_rbuf(ep)) {
 		rx_entry->ctrl_flags = TCPX_NEED_DYN_RBUF;
 
 		if (msg->hdr.base_hdr.flags & TCPX_TAGGED) {
@@ -462,9 +462,9 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 			goto truncate_err;
 	}
 
-	tcpx_ep->cur_rx.entry = rx_entry;
-	tcpx_ep->cur_rx.handler = tcpx_process_recv;
-	return tcpx_process_recv(tcpx_ep);
+	ep->cur_rx.entry = rx_entry;
+	ep->cur_rx.handler = tcpx_process_recv;
+	return tcpx_process_recv(ep);
 
 truncate_err:
 	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
@@ -576,24 +576,24 @@ int tcpx_op_write(struct tcpx_ep *ep)
 	return tcpx_process_remote_write(ep);
 }
 
-int tcpx_op_read_rsp(struct tcpx_ep *tcpx_ep)
+int tcpx_op_read_rsp(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
 	struct slist_entry *entry;
 
-	if (slist_empty(&tcpx_ep->rma_read_queue))
+	if (slist_empty(&ep->rma_read_queue))
 		return -FI_EINVAL;
 
-	entry = tcpx_ep->rma_read_queue.head;
+	entry = ep->rma_read_queue.head;
 	rx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
 
-	memcpy(&rx_entry->hdr, &tcpx_ep->cur_rx.hdr,
-	       (size_t) tcpx_ep->cur_rx.hdr.base_hdr.hdr_size);
+	memcpy(&rx_entry->hdr, &ep->cur_rx.hdr,
+	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
 	rx_entry->hdr.base_hdr.op_data = 0;
 
-	tcpx_ep->cur_rx.entry = rx_entry;
-	tcpx_ep->cur_rx.handler = tcpx_process_remote_read;
-	return tcpx_process_remote_read(tcpx_ep);
+	ep->cur_rx.entry = rx_entry;
+	ep->cur_rx.handler = tcpx_process_remote_read;
+	return tcpx_process_remote_read(ep);
 }
 
 static int tcpx_recv_hdr(struct tcpx_ep *ep)

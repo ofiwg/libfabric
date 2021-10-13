@@ -39,14 +39,15 @@
 #include <ofi_iov.h>
 
 
-static ssize_t tcpx_srx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
-				uint64_t flags)
+static ssize_t
+tcpx_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
+		 uint64_t flags)
 {
 	struct tcpx_xfer_entry *recv_entry;
 	struct tcpx_rx_ctx *srx_ctx;
 	ssize_t ret = FI_SUCCESS;
 
-	srx_ctx = container_of(ep, struct tcpx_rx_ctx, rx_fid);
+	srx_ctx = container_of(ep_fid, struct tcpx_rx_ctx, rx_fid);
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
 
 	fastlock_acquire(&srx_ctx->lock);
@@ -68,14 +69,15 @@ unlock:
 	return ret;
 }
 
-static ssize_t tcpx_srx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
-			     fi_addr_t src_addr, void *context)
+static ssize_t
+tcpx_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
+	      fi_addr_t src_addr, void *context)
 {
 	struct tcpx_xfer_entry *recv_entry;
 	struct tcpx_rx_ctx *srx_ctx;
 	ssize_t ret = FI_SUCCESS;
 
-	srx_ctx = container_of(ep, struct tcpx_rx_ctx, rx_fid);
+	srx_ctx = container_of(ep_fid, struct tcpx_rx_ctx, rx_fid);
 
 	fastlock_acquire(&srx_ctx->lock);
 	recv_entry = ofi_buf_alloc(srx_ctx->buf_pool);
@@ -96,14 +98,15 @@ unlock:
 	return ret;
 }
 
-static ssize_t tcpx_srx_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-			      size_t count, fi_addr_t src_addr, void *context)
+static ssize_t
+tcpx_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+	       size_t count, fi_addr_t src_addr, void *context)
 {
 	struct tcpx_xfer_entry *recv_entry;
 	struct tcpx_rx_ctx *srx_ctx;
 	ssize_t ret = FI_SUCCESS;
 
-	srx_ctx = container_of(ep, struct tcpx_rx_ctx, rx_fid);
+	srx_ctx = container_of(ep_fid, struct tcpx_rx_ctx, rx_fid);
 	assert(count <= TCPX_IOV_LIMIT);
 
 	fastlock_acquire(&srx_ctx->lock);
