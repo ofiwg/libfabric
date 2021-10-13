@@ -798,8 +798,10 @@ FI_DESTRUCTOR(fi_fini(void))
 {
 	struct ofi_prov *prov;
 
+	pthread_mutex_lock(&common_locks.ini_lock);
+
 	if (!ofi_init)
-		return;
+		goto unlock;
 
 	while (prov_head) {
 		prov = prov_head;
@@ -814,6 +816,11 @@ FI_DESTRUCTOR(fi_fini(void))
 	fi_log_fini();
 	fi_param_fini();
 	ofi_osd_fini();
+
+	ofi_init = 0;
+
+unlock:
+	pthread_mutex_unlock(&common_locks.ini_lock);
 }
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
@@ -1009,8 +1016,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 	enum fi_log_level level;
 	int ret;
 
-	if (!ofi_init)
-		fi_ini();
+	fi_ini();
 
 	if (FI_VERSION_LT(fi_version(), version)) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
@@ -1240,8 +1246,7 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 	if (!attr || !attr->prov_name || !attr->name)
 		return -FI_EINVAL;
 
-	if (!ofi_init)
-		fi_ini();
+	fi_ini();
 
 	top_name = strrchr(attr->prov_name, OFI_NAME_DELIM);
 	if (top_name)
