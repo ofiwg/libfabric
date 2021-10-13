@@ -961,7 +961,13 @@ ssize_t try_peek(fi_addr_t addr, uint64_t tag, uint64_t ignore,
 	fi_addr_t from;
 	ssize_t ret;
 
-	ret = fi_trecvmsg(cxit_ep, &tmsg, FI_PEEK);
+	do {
+		ret = fi_trecvmsg(cxit_ep, &tmsg, FI_PEEK);
+		if (ret == -FI_EAGAIN) {
+			fi_cq_read(cxit_tx_cq, NULL, 0);
+			fi_cq_read(cxit_rx_cq, NULL, 0);
+		}
+	} while (ret == -FI_EAGAIN);
 	if (ret != FI_SUCCESS)
 		return ret;
 
@@ -1728,31 +1734,7 @@ struct multitudes_params {
  * data path to be used. Larger than 2kiB buffers will use the SW Rendezvous
  * data path to be used.
  */
-ParameterizedTestParameters(tagged, multitudes)
-{
-	size_t param_sz;
-
-	static struct multitudes_params params[] = {
-		{.length = 1024,	/* Eager */
-		 .num_ios = 10,
-		 .peek = true},
-		{.length = 2 * 1024,	/* Eager */
-		 .num_ios = 15,
-		 .peek = true},
-		{.length = 4 * 1024,	/* Rendezvous */
-		 .num_ios = 12,
-		 .peek = true},
-		{.length = 128 * 1024,	/* Rendezvous */
-		 .num_ios = 25,
-		 .peek = true},
-	};
-
-	param_sz = ARRAY_SIZE(params);
-	return cr_make_param_array(struct multitudes_params, params,
-				   param_sz);
-}
-
-ParameterizedTest(struct multitudes_params *param, tagged, multitudes, .timeout=60)
+void do_multitudes(struct multitudes_params *param)
 {
 	int ret;
 	size_t buf_len = param->length;
@@ -1799,9 +1781,16 @@ ParameterizedTest(struct multitudes_params *param, tagged, multitudes, .timeout=
 		for (size_t i = 0; i < buf_len; i++)
 			tx_args[tx_io].buf[i] = i + 0xa0 + tx_io;
 
-		ret = fi_tsend(cxit_ep, tx_args[tx_io].buf, tx_args[tx_io].len,
-			       NULL, cxit_ep_fi_addr, tx_args[tx_io].tag,
-			       NULL);
+		do {
+			ret = fi_tsend(cxit_ep, tx_args[tx_io].buf,
+				       tx_args[tx_io].len, NULL,
+				       cxit_ep_fi_addr, tx_args[tx_io].tag,
+				       NULL);
+			if (ret == -FI_EAGAIN) {
+				fi_cq_read(cxit_tx_cq, NULL, 0);
+				fi_cq_read(cxit_rx_cq, NULL, 0);
+			}
+		} while (ret == -FI_EAGAIN);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend %ld: unexpected ret %d",
 			     tx_io, ret);
 	}
@@ -1833,9 +1822,14 @@ ParameterizedTest(struct multitudes_params *param, tagged, multitudes, .timeout=
 		cr_assert_not_null(rx_args[rx_io].buf);
 		memset(rx_args[rx_io].buf, 0, buf_len);
 
-		ret = fi_trecv(cxit_ep, rx_args[rx_io].buf, rx_args[rx_io].len,
-			       NULL, FI_ADDR_UNSPEC, rx_args[rx_io].tag,
-			       0, NULL);
+		do {
+			ret = fi_trecv(cxit_ep, rx_args[rx_io].buf,
+				       rx_args[rx_io].len, NULL,
+				       FI_ADDR_UNSPEC, rx_args[rx_io].tag,
+				       0, NULL);
+			if (ret == -FI_EAGAIN)
+				fi_cq_read(cxit_rx_cq, NULL, 0);
+		} while (ret == -FI_EAGAIN);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_trecv %ld: unexpected ret %d",
 			     rx_io, ret);
 	}
@@ -1854,6 +1848,220 @@ ParameterizedTest(struct multitudes_params *param, tagged, multitudes, .timeout=
 
 	/* Validate results */
 	for (size_t io = 0; io < param->num_ios; io++) {
+		/* Validate sent data */
+		cr_expect_arr_eq(rx_args[io].buf, tx_args[io].buf, buf_len);
+
+		validate_tx_event(&tx_cqe[io], FI_TAGGED | FI_SEND, NULL);
+
+		validate_rx_event(&rx_cqe[io], NULL, buf_len,
+				  FI_TAGGED | FI_RECV, NULL,
+				  0, tx_args[rx_cqe[io].tag].tag);
+
+		free(tx_args[io].buf);
+		free(rx_args[io].buf);
+	}
+
+	pthread_attr_destroy(&attr);
+	free(rx_cqe);
+	free(tx_cqe);
+	free(tx_args);
+	free(rx_args);
+}
+
+ParameterizedTestParameters(tagged, multitudes)
+{
+	size_t param_sz;
+
+	static struct multitudes_params params[] = {
+		{.length = 1024,	/* Eager */
+		 .num_ios = 10,
+		 .peek = true},
+		{.length = 2 * 1024,	/* Eager */
+		 .num_ios = 15,
+		 .peek = true},
+		{.length = 4 * 1024,	/* Rendezvous */
+		 .num_ios = 12,
+		 .peek = true},
+		{.length = 128 * 1024,	/* Rendezvous */
+		 .num_ios = 25,
+		 .peek = true},
+	};
+
+	param_sz = ARRAY_SIZE(params);
+	return cr_make_param_array(struct multitudes_params, params,
+				   param_sz);
+}
+
+ParameterizedTest(struct multitudes_params *param, tagged, multitudes, .timeout=60)
+{
+	do_multitudes(param);
+}
+
+/* Use multitudes test to force transition from hardware
+ * matching to software matching. LE_POOL resources should
+ * be set to 60.
+ */
+ParameterizedTestParameters(tagged, hw2sw_multitudes)
+{
+	size_t param_sz;
+
+	static struct multitudes_params params[] = {
+		{.length = 1024,	/* Eager */
+		 .num_ios = 100,
+		 .peek = true},
+		{.length = 2 * 2048,	/* Rendezvous */
+		 .num_ios = 100,
+		 .peek = true},
+		{.length = 8 * 2048,	/* Rendezvous */
+		 .num_ios = 100,
+		 .peek = true},
+	};
+
+	param_sz = ARRAY_SIZE(params);
+	return cr_make_param_array(struct multitudes_params, params,
+				   param_sz);
+}
+
+/* This test will only require HW to SW matching transition if the
+ * LE pool resources have been limited (60) and if running in HW offloaded
+ * mode with RDZV offloaded and the eager long protocol is not used.
+ */
+ParameterizedTest(struct multitudes_params *param, tagged, hw2sw_multitudes,
+		.timeout=60, .disabled=false)
+{
+	do_multitudes(param);
+}
+
+/* This will only test hybrid matching transition when LE resources
+ * are restricted to no more than 60.
+ */
+Test(tagged, hw2sw_hybrid_matching, .timeout=60)
+{
+	int ret;
+	size_t buf_len = 4096;
+	struct fi_cq_tagged_entry *rx_cqe;
+	struct fi_cq_tagged_entry *tx_cqe;
+	struct tagged_thread_args *tx_args;
+	struct tagged_thread_args *rx_args;
+	pthread_t tx_thread;
+	pthread_t rx_thread;
+	pthread_attr_t attr;
+	struct tagged_event_args tx_evt_args = {
+		.cq = cxit_tx_cq,
+		.io_num = 100,
+	};
+	struct tagged_event_args rx_evt_args = {
+		.cq = cxit_rx_cq,
+		.io_num = 100,
+	};
+
+	tx_cqe = calloc(100, sizeof(struct fi_cq_tagged_entry));
+	cr_assert_not_null(tx_cqe);
+
+	rx_cqe = calloc(100, sizeof(struct fi_cq_tagged_entry));
+	cr_assert_not_null(rx_cqe);
+
+	tx_args = calloc(100, sizeof(struct tagged_thread_args));
+	cr_assert_not_null(tx_args);
+
+	rx_args = calloc(100, sizeof(struct tagged_thread_args));
+	cr_assert_not_null(rx_args);
+
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+	tx_evt_args.cqe = tx_cqe;
+	rx_evt_args.cqe = rx_cqe;
+
+	/* Issue 25 receives for tags 25-49 to pre-load priority list */
+	for (size_t rx_io = 25; rx_io < 50; rx_io++) {
+		rx_args[rx_io].len = buf_len;
+		rx_args[rx_io].tag = rx_io;
+		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		cr_assert_not_null(rx_args[rx_io].buf);
+		memset(rx_args[rx_io].buf, 0, buf_len);
+
+		do {
+			ret = fi_trecv(cxit_ep, rx_args[rx_io].buf,
+				       rx_args[rx_io].len, NULL,
+				       FI_ADDR_UNSPEC, rx_args[rx_io].tag,
+				       0, NULL);
+			if (ret == -FI_EAGAIN)
+				fi_cq_read(cxit_rx_cq, NULL, 0);
+		} while (ret == -FI_EAGAIN);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_trecv %ld: unexpected ret %d",
+			     rx_io, ret);
+	}
+
+	/* Start processing Receive events */
+	ret = pthread_create(&rx_thread, &attr, tagged_evt_worker,
+			     (void *)&rx_evt_args);
+	cr_assert_eq(ret, 0, "Receive thread create failed %d", ret);
+
+	/* Issue all of the Sends exhausting resources */
+	for (size_t tx_io = 0; tx_io < 100; tx_io++) {
+		tx_args[tx_io].len = buf_len;
+		tx_args[tx_io].tag = tx_io;
+		tx_args[tx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		cr_assert_not_null(tx_args[tx_io].buf);
+		for (size_t i = 0; i < buf_len; i++)
+			tx_args[tx_io].buf[i] = i + 0xa0 + tx_io;
+
+		do {
+			ret = fi_tsend(cxit_ep, tx_args[tx_io].buf,
+				       tx_args[tx_io].len, NULL,
+				       cxit_ep_fi_addr, tx_args[tx_io].tag,
+				       NULL);
+			if (ret == -FI_EAGAIN) {
+				fi_cq_read(cxit_tx_cq, NULL, 0);
+				fi_cq_read(cxit_rx_cq, NULL, 0);
+			}
+		} while (ret == -FI_EAGAIN);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend %ld: unexpected ret %d",
+			     tx_io, ret);
+	}
+
+	/* Start processing Send events */
+	ret = pthread_create(&tx_thread, &attr, tagged_evt_worker,
+				(void *)&tx_evt_args);
+	cr_assert_eq(ret, 0, "Send thread create failed %d", ret);
+
+	sleep(1);
+
+	/* Force onloading of UX entries if operating in SW EP mode */
+	fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+
+	/* Issue the remainder of the receives */
+	for (size_t rx_io = 0; rx_io < 100; rx_io++) {
+		if (rx_io >= 25 && rx_io < 50)
+			continue;
+		rx_args[rx_io].len = buf_len;
+		rx_args[rx_io].tag = rx_io;
+		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		cr_assert_not_null(rx_args[rx_io].buf);
+		memset(rx_args[rx_io].buf, 0, buf_len);
+
+		do {
+			ret = fi_trecv(cxit_ep, rx_args[rx_io].buf,
+				       rx_args[rx_io].len, NULL,
+				       FI_ADDR_UNSPEC, rx_args[rx_io].tag,
+				       0, NULL);
+			if (ret == -FI_EAGAIN)
+				fi_cq_read(cxit_rx_cq, NULL, 0);
+		} while (ret == -FI_EAGAIN);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_trecv %ld: unexpected ret %d",
+			     rx_io, ret);
+	}
+
+	/* Wait for the RX/TX event threads to complete */
+	ret = pthread_join(tx_thread, NULL);
+	cr_assert_eq(ret, 0, "Send thread join failed %d", ret);
+
+	ret = pthread_join(rx_thread, NULL);
+	cr_assert_eq(ret, 0, "Recv thread join failed %d", ret);
+
+	/* Validate results */
+	for (size_t io = 0; io < 100; io++) {
 		/* Validate sent data */
 		cr_expect_arr_eq(rx_args[io].buf, tx_args[io].buf, buf_len);
 
@@ -4140,8 +4348,14 @@ Test(tagged, fc_too_many_recv_early_close)
 	cr_assert(recv_buf);
 
 	for (i = 0; i < 50; i++) {
-		ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
-			       FI_ADDR_UNSPEC, 0xa, 0, NULL);
+		do {
+			ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
+				       FI_ADDR_UNSPEC, 0xa, 0, NULL);
+			/* Just progress */
+			if (ret == -FI_EAGAIN)
+				fi_cq_read(cxit_rx_cq, NULL, 0);
+		} while (ret == -FI_EAGAIN);
+
 		assert(ret == FI_SUCCESS);
 	}
 
@@ -4343,11 +4557,23 @@ Test(tagged, NC2192)
 		do {
 			ret = fi_tsend(cxit_ep, send_buf, send_len, NULL,
 				       cxit_ep_fi_addr, 1, NULL);
+			/* progress */
+			if (ret == -FI_EAGAIN) {
+				fi_cq_read(cxit_tx_cq, &tx_cqe, 0);
+				fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+			}
 		} while (ret == -FI_EAGAIN);
 		cr_assert(ret == FI_SUCCESS);
 	}
 
+
+	/* Force processing in software mode */
+	fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+
 	for (i = 0; i < sends + 1; i++) {
+		fi_cq_read(cxit_tx_cq, &tx_cqe, 0);
+		fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+
 		ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
 		cr_assert(ret == 1);
 
@@ -4355,8 +4581,15 @@ Test(tagged, NC2192)
 	}
 
 	for (i = 0; i < sends; i++) {
-		ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
-			       FI_ADDR_UNSPEC, 1, 0, NULL);
+		do {
+			ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
+				       FI_ADDR_UNSPEC, 1, 0, NULL);
+			/* progress */
+			if (ret == -FI_EAGAIN) {
+				fi_cq_read(cxit_tx_cq, &tx_cqe, 0);
+				fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+			}
+		} while (ret == -FI_EAGAIN);
 		cr_assert(ret == FI_SUCCESS);
 	}
 
@@ -4373,8 +4606,14 @@ Test(tagged, NC2192)
 	}
 
 	/* Match the 1 byte Send */
-	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
-		       FI_ADDR_UNSPEC, 0, 0, NULL);
+	do {
+		ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
+			       FI_ADDR_UNSPEC, 0, 0, NULL);
+		/* progress */
+		if (ret == -FI_EAGAIN)
+			fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+
+	} while (ret == -FI_EAGAIN);
 	cr_assert(ret == FI_SUCCESS);
 
 	do {

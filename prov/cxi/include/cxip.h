@@ -106,7 +106,8 @@
 #define CXIP_OFLOW_BUF_SIZE		(2*1024*1024)
 #define CXIP_OFLOW_BUF_COUNT		3
 #define CXIP_REQ_BUF_SIZE		(2*1024*1024)
-#define CXIP_REQ_BUF_COUNT		3
+#define CXIP_REQ_BUF_MIN_POSTED		3
+#define CXIP_REQ_BUF_MAX_COUNT		10
 #define CXIP_UX_BUFFER_SIZE		(CXIP_OFLOW_BUF_COUNT * \
 					 CXIP_OFLOW_BUF_SIZE)
 
@@ -201,13 +202,16 @@ struct cxip_environment {
 	enum cxip_ep_ptle_mode rx_match_mode;
 	int msg_offload;
 	int rdzv_offload;
+	int hybrid_preemptive;
+	int hybrid_recv_preemptive;
 	size_t rdzv_threshold;
 	size_t rdzv_get_min;
 	size_t rdzv_eager_size;
 	size_t oflow_buf_size;
 	size_t oflow_buf_count;
 	size_t req_buf_size;
-	size_t req_buf_count;
+	size_t req_buf_min_posted;
+	size_t req_buf_max_count;
 	int msg_lossless;
 	size_t default_cq_size;
 	int optimized_mrs;
@@ -690,6 +694,7 @@ struct cxip_req_recv {
 	uint32_t rdzv_initiator;	// Rendezvous initiator used of mrecvs
 	uint32_t rget_nic;
 	uint32_t rget_pid;
+	bool software_list;		// Appended to HW or SW
 	bool canceled;			// Request canceled?
 	bool unlinked;
 	bool multi_recv;
@@ -1047,6 +1052,8 @@ enum cxip_rxc_state {
 	 *
 	 * Validate state changes:
 	 * RXC_ENABLED: User has successfully enabled the RXC.
+	 * RXC_ENABLED_SOFTWARE: User has successfully enabled the RXC
+	 * in a software only RX matching mode.
 	 */
 	RXC_DISABLED = 0,
 
@@ -1056,18 +1063,68 @@ enum cxip_rxc_state {
 	 *
 	 * Validate state changes:
 	 * RXC_ONLOAD_FLOW_CONTROL: Two scenarios can cause this state change.
-	 * 	1. Hardware fails to allocate an LE for an unexpected message.
-	 * 	Hardware automatically transitions the PtlTE from Enabled to
-	 * 	Disabled.
-	 * 	2. Hardware fails to allocate an LE during an append. The PtlTE
-	 * 	remains in the Enabled state but appends to the priority list
-	 * 	are disabled. Software needs to manually disable the PtlTE.
+	 *    1. Hardware fails to allocate an LE for an unexpected message,
+	 *    or a priority list LE append fails. Hardware automatically
+	 *    transitions the PtlTE from Enabled to Disabled.
+	 *    2. Hardware fails to allocate an LE during an overflow list
+	 *    append. The PtlTE remains in the Enabled state but appends to
+	 *    the overflow list are disabled. Software manually disables
+	 *    the PtlTE.
+	 *    3. Hardware fails to successfully match on the overflow list or
+	 *    the overflow buffer is full. Hardware automatically transitions
+	 *    the PtlTE from Enabled to Disabled.
+	 * RXC_PENDING_PTLTE_SOFTWARE_MANAGED: If the provider is configured
+	 * to run in "hybrid" RX match mode and hardware fails to allocate an
+	 * LE for an overflow list or priority list append. Hardware will
+	 * automatically transition the PtlTE from Enabled to Software Managed.
 	 */
 	RXC_ENABLED,
 
+	/* Hardware has initiated an automated transition from hardware
+	 * to software managed PtlTE matching due to resource load.
+	 *
+	 * Software is onloading the hardware unexpected list while creating
+	 * a pending unexpected list from entries received on the PtlTE
+	 * request list. Any in flight appends will fail and be added to
+	 * a receive replay list, further attempts to post receive operations
+	 * will return -FI_EAGAIN. When onloading completes, the pending
+	 * UX list is appended to the onloaded UX list and then failed appends
+	 * are replayed prior to enabling the posting of receive operations.
+	 *
+	 * Validate state changes:
+	 * RXC_ENABLED_SOFTWARE: The HW to SW transition completes and software
+	 * managed endpoint PtlTE matching is operating.
+	 */
+	RXC_PENDING_PTLTE_SOFTWARE_MANAGED,
+
+	/* Executing as a software managed PtlTE either due to hybrid
+	 * transition from hardware or initial startup in software
+	 * RX matching mode.
+	 *
+	 * Validate state changes:
+	 * RXC_PENDING_PTLTE_HARDWARE: TODO: When able, software may
+	 * initiate a transition from software managed mode back to
+	 * fully offloaded operation.
+	 * RXC_FLOW_CONTROL: Hardware was unable to match on the request
+	 * list and Disabled the PtlTE initiating flow control.
+	 */
+	RXC_ENABLED_SOFTWARE,
+
+	/* TODO: Hybrid RX match mode PtlTE is transitioning from software
+	 * managed operation back to fully offloaded operation.
+	 *
+	 * Validate state changes:
+	 * RXC_ENABLED: Hybrid software managed PtlTE successfully
+	 * transitions back to fully offloaded operation.
+	 * RXC_ENABLED_SOFTWARE: Hybrid software managed PtlTE was
+	 * not able to transition to fully offloaded operation.
+	 */
+	RXC_PENDING_PTLTE_HARDWARE,
+
 	/* Software has encountered a condition which requires manual transition
 	 * of the PtlTE into disable. This state change occurs when a posted
-	 * receive could not be appended due to LE exhaustion.
+	 * receive could not be appended due to LE exhaustion and software
+	 * managed EP PtlTE operation has been disabled or is not possible.
 	 *
 	 * Validate state changes:
 	 * RXC_ONLOAD_FLOW_CONTROL: PtlTE disabled event has successfully been
@@ -1090,7 +1147,7 @@ enum cxip_rxc_state {
 	RXC_ONLOAD_FLOW_CONTROL,
 
 	/* PtlTE is in the same state as RXC_ONLOAD_FLOW_CONTROL, but the RXC
-	 * should attempt to be reenabled.
+	 * should attempt to be re-enabled.
 	 *
 	 * Validate state changes:
 	 * RXC_FLOW_CONTROL: Onloading of the unexpected headers has completed.
@@ -1110,7 +1167,10 @@ enum cxip_rxc_state {
 	 *
 	 * Validate state changes:
 	 * RXC_ENABLED: Sideband communication is complete and PtlTE is
-	 * successfully reenabled.
+	 * successfully re-enabled.
+	 * RXC_ENABLED_SOFTWARE: Executing in hybrid or software mode,
+	 * and sideband communication is completed; the PtlTE was
+	 * successfully transitioned to software managed operation.
 	 */
 	RXC_FLOW_CONTROL,
 };
@@ -1146,6 +1206,7 @@ struct cxip_rxc {
 	struct cxip_cmdq *tx_cmdq;	// TX CMDQ for Message Gets
 
 	ofi_atomic32_t orx_reqs;	// outstanding receive requests
+	unsigned int recv_appends;
 
 	int min_multi_recv;
 	int rdzv_threshold;
@@ -1169,10 +1230,17 @@ struct cxip_rxc {
 	 */
 	struct dlist_entry consumed_req_bufs;
 
+	/*
+	 * List of available buffers for which an append failed or have
+	 * have been removed but not yet released.
+	 */
+	struct dlist_entry free_req_bufs;
+
 	ofi_atomic32_t req_bufs_linked;
 	ofi_atomic32_t req_bufs_allocated;
 	size_t req_buf_size;
-	size_t req_buf_count;
+	size_t req_buf_max_count;
+	size_t req_buf_min_posted;
 
 	/* Long eager send handling */
 	ofi_atomic32_t sink_le_linked;
@@ -1181,7 +1249,9 @@ struct cxip_rxc {
 	struct dlist_entry fc_drops;
 	struct dlist_entry replay_queue;
 	struct dlist_entry sw_ux_list;
+	struct dlist_entry sw_pending_ux_list;
 	int sw_ux_list_len;
+	int sw_pending_ux_list_len;
 
 	/* Array of 8-byte of unexpected headers remote offsets. */
 	uint64_t *ule_offsets;
@@ -1197,6 +1267,7 @@ struct cxip_rxc {
 	struct dlist_entry sw_recv_queue;
 
 	enum cxip_rxc_state state;
+	enum cxip_rxc_state prev_state;
 	bool msg_offload;
 
 	/* RXC drop count used for FC accounting. */
@@ -1244,9 +1315,10 @@ struct cxip_req_buf {
 
 void cxip_req_buf_ux_free(struct cxip_ux_send *ux);
 int cxip_req_buf_unlink(struct cxip_req_buf *buf);
-int cxip_req_buf_link(struct cxip_req_buf *buf);
+int cxip_req_buf_link(struct cxip_req_buf *buf, bool seq_restart);
 struct cxip_req_buf *cxip_req_buf_alloc(struct cxip_rxc *rxc);
 void cxip_req_buf_free(struct cxip_req_buf *buf);
+int cxip_req_buf_replenish(struct cxip_rxc *rxc, bool seq_restart);
 
 #define CXIP_RDZV_IDS	(1 << CXIP_RDZV_ID_WIDTH)
 #define CXIP_TX_IDS	(1 << CXIP_TX_ID_WIDTH)

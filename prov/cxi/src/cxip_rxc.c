@@ -29,8 +29,17 @@
 int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count)
 {
 	int ret;
+	enum c_ptlte_state new_state;
 
-	ret = cxip_pte_set_state(rxc->rx_pte, rxc->rx_cmdq, C_PTLTE_ENABLED,
+	/* If hybrid endpoints are enabled, then flow control will transition
+	 * to software; otherwise it will attempt to re-enable hardware mode.
+	 */
+	if (cxip_software_pte_allowed())
+		new_state = C_PTLTE_SOFTWARE_MANAGED;
+	else
+		new_state = C_PTLTE_ENABLED;
+
+	ret = cxip_pte_set_state(rxc->rx_pte, rxc->rx_cmdq, new_state,
 				 drop_count);
 
 	return ret;
@@ -48,16 +57,21 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 {
 	int ret;
 
-	if (rxc->state != RXC_ENABLED)
+	if (rxc->state != RXC_ENABLED &&
+	    rxc->state != RXC_ENABLED_SOFTWARE)
 		RXC_FATAL(rxc, "RXC in bad state to be disabled: state=%d\n",
 			  rxc->state);
 
 	rxc->state = RXC_DISABLED;
 
+	fastlock_release(&rxc->lock);
+
 	ret = cxip_pte_set_state_wait(rxc->rx_pte, rxc->rx_cmdq, rxc->recv_cq,
 				      C_PTLTE_DISABLED, 0);
 	if (ret == FI_SUCCESS)
 		CXIP_DBG("RXC PtlTE disabled: %p\n", rxc);
+
+	fastlock_acquire(&rxc->lock);
 
 	return ret;
 }
@@ -171,14 +185,35 @@ static void cxip_rxc_free_ux_entries(struct cxip_rxc *rxc)
 	dlist_foreach_container_safe(&rxc->sw_ux_list, struct cxip_ux_send,
 				     ux_send, rxc_entry, tmp) {
 		dlist_remove(&ux_send->rxc_entry);
-		if (ux_send->req->type == CXIP_REQ_RBUF) {
+		if (ux_send->req->type == CXIP_REQ_RBUF)
 			cxip_req_buf_ux_free(ux_send);
-		} else {
+		else
 			free(ux_send);
-			rxc->sw_ux_list_len--;
-		}
+
+		rxc->sw_ux_list_len--;
 	}
+
+	if (rxc->sw_ux_list_len != 0)
+		CXIP_WARN("sw_ux_list_len %d != 0\n", rxc->sw_ux_list_len);
 	assert(rxc->sw_ux_list_len == 0);
+
+	/* Free any pending UX entries waiting from the request list */
+	dlist_foreach_container_safe(&rxc->sw_pending_ux_list,
+				     struct cxip_ux_send, ux_send,
+				     rxc_entry, tmp) {
+		dlist_remove(&ux_send->rxc_entry);
+		if (ux_send->req->type == CXIP_REQ_RBUF)
+			cxip_req_buf_ux_free(ux_send);
+		else
+			free(ux_send);
+
+		rxc->sw_pending_ux_list_len--;
+	}
+
+	if (rxc->sw_pending_ux_list_len != 0)
+		CXIP_WARN("sw_pending_ux_list_len %d != 0\n",
+			  rxc->sw_pending_ux_list_len);
+	assert(rxc->sw_pending_ux_list_len == 0);
 }
 
 static void cxip_rxc_req_buf_dlist_free(struct dlist_entry *head)
@@ -203,7 +238,7 @@ static int cxip_rxc_req_buf_init(struct cxip_rxc *rxc)
 
 	dlist_init(&tmp_req_buf_list);
 
-	for (i = 0; i < rxc->req_buf_count; i++) {
+	for (i = 0; i < rxc->req_buf_min_posted; i++) {
 		buf = cxip_req_buf_alloc(rxc);
 		if (!buf) {
 			ret = -FI_ENOMEM;
@@ -218,7 +253,7 @@ static int cxip_rxc_req_buf_init(struct cxip_rxc *rxc)
 	 */
 	dlist_foreach_container_safe(&tmp_req_buf_list, struct cxip_req_buf,
 				     buf, req_buf_entry, tmp) {
-		ret = cxip_req_buf_link(buf);
+		ret = cxip_req_buf_link(buf, false);
 		if (ret != FI_SUCCESS)
 			CXIP_FATAL("Failed to link request buffer: %d\n", ret);
 	}
@@ -255,6 +290,7 @@ static void cxip_rxc_req_buf_fini(struct cxip_rxc *rxc)
 
 	cxip_rxc_req_buf_dlist_free(&rxc->active_req_bufs);
 	cxip_rxc_req_buf_dlist_free(&rxc->consumed_req_bufs);
+	cxip_rxc_req_buf_dlist_free(&rxc->free_req_bufs);
 
 	assert(ofi_atomic_get32(&rxc->req_bufs_allocated) == 0);
 }
@@ -305,27 +341,29 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 		return -FI_EDOMAIN;
 	}
 
+	/* If starting in or able to transition to software managed
+	 * PtlTE, append request list entries first.
+	 */
+	if (cxip_software_pte_allowed()) {
+		ret = cxip_rxc_req_buf_init(rxc);
+		if (ret != FI_SUCCESS)
+			goto err_msg_fini;
+	}
+
 	if (rxc->msg_offload) {
 		state = C_PTLTE_ENABLED;
 		ret = cxip_rxc_oflow_init(rxc);
 		if (ret != FI_SUCCESS)
-			goto err_msg_fini;
+			goto err_req_buf_fini;
 	} else {
 		state = C_PTLTE_SOFTWARE_MANAGED;
-	}
-
-	/* If starting in or able to transition to software managed */
-	if (cxip_software_pte_allowed()) {
-		ret = cxip_rxc_req_buf_init(rxc);
-		if (ret != FI_SUCCESS)
-			goto err_oflow_buf_fini;
 	}
 
 	/* Start accepting Puts. */
 	ret = cxip_pte_set_state(rxc->rx_pte, rxc->rx_cmdq, state, 0);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_pte_set_state returned: %d\n", ret);
-		goto err_req_buf_fini;
+		goto err_oflow_buf_fini;
 	}
 
 	/* Wait for PTE state change */
@@ -340,13 +378,14 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 
 	return FI_SUCCESS;
 
+err_oflow_buf_fini:
+	if (rxc->msg_offload)
+		cxip_rxc_oflow_fini(rxc);
+
 err_req_buf_fini:
 	if (cxip_software_pte_allowed())
 		cxip_rxc_req_buf_fini(rxc);
 
-err_oflow_buf_fini:
-	if (rxc->msg_offload)
-		cxip_rxc_oflow_fini(rxc);
 err_msg_fini:
 	tmp = rxc_msg_fini(rxc);
 	if (tmp != FI_SUCCESS)
@@ -421,13 +460,13 @@ static void rxc_disable(struct cxip_rxc *rxc)
 		return;
 	}
 
-	fastlock_release(&rxc->lock);
-
 	if (ofi_recv_allowed(rxc->attr.caps)) {
 		/* Stop accepting Puts. */
 		ret = rxc_msg_disable(rxc);
 		if (ret != FI_SUCCESS)
 			CXIP_WARN("rxc_msg_disable returned: %d\n", ret);
+
+		fastlock_release(&rxc->lock);
 
 		cxip_rxc_free_ux_entries(rxc);
 
@@ -443,6 +482,8 @@ static void rxc_disable(struct cxip_rxc *rxc)
 		ret = rxc_msg_fini(rxc);
 		if (ret != FI_SUCCESS)
 			CXIP_WARN("rxc_msg_fini returned: %d\n", ret);
+	} else {
+		fastlock_release(&rxc->lock);
 	}
 }
 
@@ -480,9 +521,11 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	dlist_init(&rxc->replay_queue);
 	dlist_init(&rxc->sw_ux_list);
 	dlist_init(&rxc->sw_recv_queue);
+	dlist_init(&rxc->sw_pending_ux_list);
 
 	dlist_init(&rxc->active_req_bufs);
 	dlist_init(&rxc->consumed_req_bufs);
+	dlist_init(&rxc->free_req_bufs);
 	ofi_atomic_initialize32(&rxc->req_bufs_linked, 0);
 	ofi_atomic_initialize32(&rxc->req_bufs_allocated, 0);
 
@@ -491,7 +534,8 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	rxc->oflow_buf_size = cxip_env.oflow_buf_size;
 	rxc->oflow_bufs_max = cxip_env.oflow_buf_count;
 	rxc->req_buf_size = cxip_env.req_buf_size;
-	rxc->req_buf_count = cxip_env.req_buf_count;
+	rxc->req_buf_max_count = cxip_env.req_buf_max_count;
+	rxc->req_buf_min_posted = cxip_env.req_buf_min_posted;
 	rxc->drop_count = -1;
 
 	/* TODO make configurable */

@@ -267,9 +267,12 @@ struct cxip_environment cxip_env = {
 	.default_vni = 10,
 	.eq_ack_batch_size = 32,
 	.req_buf_size = CXIP_REQ_BUF_SIZE,
-	.req_buf_count = CXIP_REQ_BUF_COUNT,
+	.req_buf_min_posted = CXIP_REQ_BUF_MIN_POSTED,
+	.req_buf_max_count = CXIP_REQ_BUF_MAX_COUNT,
 	.msg_offload = 1,
 	.msg_lossless = 0,
+	.hybrid_preemptive = 0,
+	.hybrid_recv_preemptive = 0,
 	.fc_retry_usec_delay = 1000,
 	.ctrl_rx_eq_max_size = 67108864,
 	.default_cq_size = CXIP_CQ_DEF_SZ,
@@ -465,10 +468,15 @@ static void cxip_env_init(void)
 			"Size of request buffer.");
 	fi_param_get_size_t(&cxip_prov, "req_buf_size", &cxip_env.req_buf_size);
 
-	fi_param_define(&cxip_prov, "req_buf_count", FI_PARAM_SIZE_T,
-			"Number of request buffer.");
-	fi_param_get_size_t(&cxip_prov, "req_buf_count",
-			    &cxip_env.req_buf_count);
+	fi_param_define(&cxip_prov, "req_buf_min_posted", FI_PARAM_SIZE_T,
+			"Minimum number of request buffer posted.");
+	fi_param_get_size_t(&cxip_prov, "req_buf_min_posted",
+			    &cxip_env.req_buf_min_posted);
+
+	fi_param_define(&cxip_prov, "req_buf_max_count", FI_PARAM_SIZE_T,
+			"Maximum number of request buffer allocated.");
+	fi_param_get_size_t(&cxip_prov, "req_buf_max_count",
+			    &cxip_env.req_buf_max_count);
 
 	/* Any RX context message matching mode other than hardware requires
 	 * that rendezvous processing is offloaded. We let the rendezvous
@@ -482,7 +490,31 @@ static void cxip_env_init(void)
 		cxip_env.msg_offload = true;
 	}
 
-	if (!cxip_env.msg_offload) {
+	/* Parameters to tailor hybrid hardware to software transitions
+	 * that are initiated by software.
+	 */
+	fi_param_define(&cxip_prov, "hybrid_preemptive", FI_PARAM_BOOL,
+			"Enable/Disable low LE preemptive UX transitions.");
+	fi_param_get_bool(&cxip_prov, "hybrid_preemptive",
+			  &cxip_env.hybrid_preemptive);
+	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
+	    cxip_env.hybrid_preemptive) {
+		cxip_env.hybrid_preemptive = false;
+		CXIP_WARN("Not in hybrid mode, ignoring preemptive\n");
+	}
+
+	fi_param_define(&cxip_prov, "hybrid_recv_preemptive", FI_PARAM_BOOL,
+			"Enable/Disable low LE preemptive recv transitions.");
+	fi_param_get_bool(&cxip_prov, "hybrid_recv_preemptive",
+			  &cxip_env.hybrid_recv_preemptive);
+
+	if (cxip_env.rx_match_mode != CXIP_PTLTE_HYBRID_MODE &&
+	    cxip_env.hybrid_recv_preemptive) {
+		CXIP_WARN("Not in hybrid mode, ignore LE  recv preemptive\n");
+		cxip_env.hybrid_recv_preemptive = 0;
+	}
+
+	if (cxip_software_pte_allowed()) {
 		min_free = CXIP_REQ_BUF_HEADER_MAX_SIZE +
 			cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
 
@@ -492,10 +524,17 @@ static void cxip_env_init(void)
 				  cxip_env.req_buf_size);
 		}
 
-		if (cxip_env.req_buf_count < 2) {
-			cxip_env.req_buf_count = 2;
-			CXIP_WARN("Requested request buffer count to small. Setting to %lu\n",
-				  cxip_env.req_buf_count);
+		if (cxip_env.req_buf_min_posted < 2) {
+			cxip_env.req_buf_min_posted = 2;
+			CXIP_WARN("Adjusted request buffer min posted to %lu\n",
+				  cxip_env.req_buf_min_posted);
+		}
+
+		if (cxip_env.req_buf_max_count < cxip_env.req_buf_min_posted) {
+			cxip_env.req_buf_max_count =
+					cxip_env.req_buf_min_posted;
+			CXIP_WARN("Adjusted request buffer max count to %lu\n",
+				  cxip_env.req_buf_max_count);
 		}
 	}
 

@@ -66,7 +66,7 @@ static void cxip_req_buf_put(struct cxip_req_buf *buf, bool repost)
 			  refcount);
 	} else if (refcount == 0 && repost) {
 		do {
-			ret = cxip_req_buf_link(buf);
+			ret = cxip_req_buf_link(buf, false);
 		} while (ret == -FI_EAGAIN);
 
 		if (ret != FI_SUCCESS)
@@ -124,10 +124,8 @@ static void _cxip_req_buf_ux_free(struct cxip_ux_send *ux, bool repost)
 
 	cxip_req_buf_put(buf, repost);
 	free(ux);
-	buf->rxc->sw_ux_list_len--;
 
-	RXC_DBG(buf->rxc, "rbuf=%p ux=%p ux_list_len=%u\n", buf, ux,
-		buf->rxc->sw_ux_list_len);
+	RXC_DBG(buf->rxc, "rbuf=%p ux=%p\n", buf, ux);
 }
 
 void cxip_req_buf_ux_free(struct cxip_ux_send *ux)
@@ -147,16 +145,14 @@ static struct cxip_ux_send *cxip_req_buf_ux_alloc(struct cxip_req_buf *buf,
 	ux->put_ev = *event;
 	ux->req = buf->req;
 	dlist_init(&ux->rxc_entry);
-
 	cxip_req_buf_get(buf);
-	buf->rxc->sw_ux_list_len++;
 
-	RXC_DBG(buf->rxc, "rbuf=%p ux=%p ux_list_len=%u\n", buf, ux,
-		buf->rxc->sw_ux_list_len);
+	RXC_DBG(buf->rxc, "rbuf=%p ux=%p\n", buf, ux);
 
 	return ux;
 }
 
+/* Caller must hold rxc->lock */
 static int cxip_req_buf_process_ux(struct cxip_req_buf *buf,
 				   struct cxip_ux_send *ux)
 {
@@ -188,6 +184,27 @@ static int cxip_req_buf_process_ux(struct cxip_req_buf *buf,
 	ux->put_ev.tgt_long.remote_offset = remote_offset +
 		ux->put_ev.tgt_long.mlength;
 
+	/* If making a transition from hardware to software managed
+	 * PTLTE, queue request list entries to be appended to
+	 * onloaded unexpected list; the software receive list is empty.
+	 *
+	 * Note: For FC to software transitions, onloading is complete
+	 * once flow control has completed. The check for RXC_FLOW_CONTROL
+	 * handles any potential race between hardware enabling the PtlTE
+	 * and software handling the PtlTE state change event.
+	 */
+	if (rxc->state != RXC_ENABLED_SOFTWARE &&
+	    rxc->state != RXC_FLOW_CONTROL) {
+		dlist_insert_tail(&ux->rxc_entry, &rxc->sw_pending_ux_list);
+		rxc->sw_pending_ux_list_len++;
+
+		RXC_DBG(buf->rxc, "rbuf=%p ux=%p sw_pending_ux_list_len=%u\n",
+			buf, ux, buf->rxc->sw_pending_ux_list_len);
+		goto check_unlinked;
+	}
+
+	rxc->sw_ux_list_len++;
+
 	ret = cxip_recv_ux_sw_matcher(ux);
 	switch (ret) {
 	/* Unexpected message needs to be processed again. Put event fields
@@ -197,6 +214,8 @@ static int cxip_req_buf_process_ux(struct cxip_req_buf *buf,
 		ux->put_ev.tgt_long.mlength += header_length;
 		ux->put_ev.tgt_long.start -= header_length;
 		buf->cur_offset -= ux->put_ev.tgt_long.mlength;
+
+		rxc->sw_ux_list_len--;
 		return -FI_EAGAIN;
 
 	/* Unexpected message failed to match a user posted request. Need to
@@ -204,6 +223,9 @@ static int cxip_req_buf_process_ux(struct cxip_req_buf *buf,
 	 */
 	case -FI_ENOMSG:
 		dlist_insert_tail(&ux->rxc_entry, &rxc->sw_ux_list);
+
+		RXC_DBG(buf->rxc, "rbuf=%p ux=%p sw_ux_list_len=%u\n",
+			buf, ux, buf->rxc->sw_ux_list_len);
 		break;
 
 	/* Unexpected message successfully matched a user posted request. */
@@ -215,6 +237,7 @@ static int cxip_req_buf_process_ux(struct cxip_req_buf *buf,
 			  ret);
 	}
 
+check_unlinked:
 	/* Once unexpected send has been accepted, complete processing of the
 	 * unlink.
 	 */
@@ -224,6 +247,11 @@ static int cxip_req_buf_process_ux(struct cxip_req_buf *buf,
 
 		RXC_DBG(rxc, "rbuf=%p rxc_rbuf_linked=%u\n", buf,
 			ofi_atomic_get32(&rxc->req_bufs_linked));
+
+		/* Replenish to keep minimum linked */
+		ret = cxip_req_buf_replenish(rxc, false);
+		if (ret)
+			RXC_WARN(rxc, "Request replenish failed: %d\n", ret);
 	}
 
 	RXC_DBG(rxc, "rbuf=%p processed ux_send=%p\n", buf, ux);
@@ -272,6 +300,7 @@ static int cxip_req_buf_process_put_event(struct cxip_req_buf *buf,
 
 	ux = cxip_req_buf_ux_alloc(buf, event);
 	if (!ux) {
+		RXC_WARN(rxc, "Memory allocation error\n");
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}
@@ -319,7 +348,7 @@ static int cxip_req_buf_process_put_event(struct cxip_req_buf *buf,
 		 */
 		dlist_insert_tail(&ux->rxc_entry, &buf->pending_ux_list);
 
-		RXC_DBG(rxc, "rbuf=%p pending ux_send=%p\n", buf, ux);
+		RXC_DBG(rxc, "rbuf=%p pend ux_send=%p\n", buf, ux);
 	}
 
 unlock:
@@ -334,9 +363,22 @@ static int cxip_req_buf_cb(struct cxip_req *req, const union c_event *event)
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
+		RXC_WARN(buf->rxc, "Request LINK error %d\n",
+			 cxi_event_rc(event));
+
 		assert(cxi_event_rc(event) == C_RC_NO_SPACE);
-		RXC_FATAL(buf->rxc,
-			  "Failed to link request buffer due to zero HW LEs available\n");
+		cxip_req_buf_put(buf, false);
+		ofi_atomic_dec32(&buf->rxc->req_bufs_linked);
+
+		/* We are running out of LE resources, do not
+		 * repost immediately.
+		 */
+		assert(ofi_atomic_get32(&buf->refcount) == 0);
+		dlist_remove(&buf->req_buf_entry);
+		dlist_insert_tail(&buf->req_buf_entry,
+				  &buf->rxc->free_req_bufs);
+
+		return FI_SUCCESS;
 
 	case C_EVENT_UNLINK:
 		assert(!event->tgt_long.auto_unlinked);
@@ -370,7 +412,7 @@ int cxip_req_buf_unlink(struct cxip_req_buf *buf)
 	return ret;
 }
 
-int cxip_req_buf_link(struct cxip_req_buf *buf)
+int cxip_req_buf_link(struct cxip_req_buf *buf, bool seq_restart)
 {
 	struct cxip_rxc *rxc = buf->rxc;
 	uint32_t le_flags = C_LE_MANAGE_LOCAL | C_LE_NO_TRUNCATE |
@@ -392,6 +434,9 @@ int cxip_req_buf_link(struct cxip_req_buf *buf)
 		.tagged = 1,
 		.match_comp = 1,
 	};
+
+	if (seq_restart)
+		le_flags |= C_LE_RESTART_SEQ;
 
 	/* Reset request buffer stats used to know when the buffer is consumed.
 	 */
@@ -512,4 +557,69 @@ void cxip_req_buf_free(struct cxip_req_buf *buf)
 
 	RXC_DBG(rxc, "rbuf=%p rxc_rbuf_cnt=%u\n", buf,
 		ofi_atomic_get32(&rxc->req_bufs_allocated));
+}
+
+/*
+ * cxip_req_buf_replenish() - Replenish RXC request list eager buffers.
+ *
+ * Caller must hold rxc->rx_lock.
+ */
+int cxip_req_buf_replenish(struct cxip_rxc *rxc, bool seq_restart)
+{
+	struct cxip_req_buf *buf;
+	struct dlist_entry *tmp;
+	int bufs_added = 0;
+	int ret = FI_SUCCESS;
+
+	if (rxc->msg_offload)
+		return FI_SUCCESS;
+
+	/* Append any buffers that failed to be previously
+	 * appended, then replenish up to the minimum that
+	 * should be posted.
+	 */
+	dlist_foreach_container_safe(&rxc->free_req_bufs, struct cxip_req_buf,
+				     buf, req_buf_entry, tmp) {
+
+		RXC_DBG(rxc, "Append previous link error req buf entry %p\n",
+			buf);
+
+		/* Link call removes from list */
+		ret = cxip_req_buf_link(buf, !bufs_added);
+		if (ret)
+			RXC_WARN(rxc, "Request append failure %d\n", ret);
+
+		bufs_added++;
+	}
+
+	while ((ofi_atomic_get32(&rxc->req_bufs_linked) <
+		rxc->req_buf_min_posted) &&
+	       (ofi_atomic_get32(&rxc->req_bufs_allocated) <
+		rxc->req_buf_max_count)) {
+
+		RXC_DBG(rxc, "Allocate new req buf entry %p\n", buf);
+
+		buf = cxip_req_buf_alloc(rxc);
+		if (!buf) {
+			RXC_WARN(rxc, "Memory allocation err\n");
+			return -FI_ENOMEM;
+		}
+
+		RXC_DBG(rxc, "Link req buf entry %p\n", buf);
+
+		ret = cxip_req_buf_link(buf, !bufs_added);
+		if (ret) {
+			RXC_WARN(rxc, "Request append failure %d\n", ret);
+			dlist_insert_tail(&buf->req_buf_entry,
+					  &rxc->free_req_bufs);
+			break;
+		}
+		bufs_added++;
+	}
+
+	RXC_DBG(rxc, "req_bufs_allocated=%u, req_bufs_linked=%u\n",
+		ofi_atomic_get32(&rxc->req_bufs_allocated),
+		ofi_atomic_get32(&rxc->req_bufs_linked));
+
+	return ret;
 }

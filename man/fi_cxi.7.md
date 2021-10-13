@@ -261,9 +261,9 @@ two-sided messaging interfaces. In the normal case, message matching is
 performed by hardware. In certain low resource conditions, the responsibility to
 perform message matching may be transferred to software. Specification
 of the receive message matching mode in the environment (*FI_CXI_RX_MATCH_MODE*)
-controls the initial matching mode and whether hardware matching can transparently
-onload matching to software where a hybrid of hardware and software
-matching is done.
+controls the initial matching mode and whether hardware matching can
+transparently transition matching to software where a hybrid of hardware
+and software receive matching is done.
 
 If a Send operation arrives at a node where there is no matching Receive
 operation posted, it is considered unexpected. Unexpected messages are
@@ -274,7 +274,7 @@ should take care to avoid excessive use of unexpected messages by pre-posting
 Receive operations. An unexpected message ties up hardware and memory resources
 until it is matched with a user buffer.
 
-The CXI provider implements several message protocols internally. Message
+The CXI provider implements several message protocols internally. A message
 protocol is selected based on payload length. Short messages are transferred
 using the eager protocol. In the eager protocol, the entire message payload is
 sent along with the message header. If an eager message arrives unexpectedly,
@@ -310,8 +310,9 @@ become exhausted. Messages may be dropped and retransmitted in order to
 recover; impacting performance significantly. Programs should be careful to avoid
 posting large numbers of unmatched receive operations and to minimize the
 number of outstanding unexpected messages to prevent message flow-control.
-If message matching is configured to support a hybrid mode, when resources
-are exhausted hardware and software share matching responsibility.
+If the RX message matching mode is configured to support hybrid mode, when
+resources are exhausted, hardware will transition to hybrid operation where
+hardware and software share matching responsibility.
 
 To help avoid this condition, increase Overflow buffer space using environment
 variables *FI_CXI_OFLOW_\** and software EP match and hybrid modes
@@ -523,7 +524,7 @@ The CXI provider checks for the following environment variables:
 :   Controls the offload of the rendezvous messaging protocol, defaults to
     offloaded rendezvous protocol. Selecting the eager rendezvous protocol
     by disabling offload requires that message offload is enabled and will
-    override the setting of *FI_CXI_MSG_OFFLOAD* and disable the fallback to
+    override the setting of *FI_CXI_RX_MATCH_MODE* and disable the fallback to
     software managed EP mode when hardware resources are low.
 
 *FI_CXI_RDZV_THRESHOLD*
@@ -571,30 +572,49 @@ The CXI provider checks for the following environment variables:
 
 *FI_CXI_RX_MATCH_MODE*
 :   Specify the receive message matching mode to be utilized.
+    *FI_CXI_RX_MATCH_MODE=*hardware | software | hybrid
 
-    *"hardware"* - Message matching is fully offloaded, if resources become
-    exhausted flow control will be performed.
+    *hardware* - Message matching is fully offloaded, if resources become
+    exhausted flow control will be performed and existing unexpected message
+    headers will be onloaded to free resources.
 
-    *"software"* - Message matching is fully onloaded.
+    *software* - Message matching is fully onloaded.
 
-    *"hybrid"* - Message matching begins fully offloaded, if resources become
+    *hybrid* - Message matching begins fully offloaded, if resources become
     exhuasted hardware will transition message matching to a hybrid of
     hardware and software matching.
 
     For both *"hybrid"* and *"software"* modes, rendezvous processing must be
     offloaded, and care should be taken to minimize the threshold for rendezvous
     processing (i.e. *FI_CXI_RDZV_THRESHOLD* + *FI_CXI_RDZV_GET_MIN*). The
-    environment variables *FI_CXI_REQ_BUF_SIZE* and *FI_CXI_REQ_BUF_COUNT*
-    are used to control the size and number of request buffers posted to handle
-    incoming unmatched messages.
+    environment variables *FI_CXI_REQ_BUF_SIZE* and *FI_CXI_REQ_BUF_MIN_POSTED*
+    are used to control the size and number of the eager request buffers
+    posted to handle incoming unmatched messages.
+
+*FI_CXI_HYBRID_PREEMPTIVE*
+    When in hybrid mode, this variable can be used to enable preemptive
+    transitions to software matching. This is useful at scale for poorly
+    written applications with a large number of unexpected messages
+    where reserved resources may be insufficient to prevent to prevent
+    starvation of software request list match entries. Default is 0, disabled.
+
+*FI_CXI_HYBRID_RECV_PREEMPTIVE*
+    When in hybrid mode, this variable can be used to enable preemptive
+    transitions to software matching. This is useful at scale for poorly
+    written applications with a large number of unmatched posted receives
+    where reserved resources may be insufficient to prevent starvation of
+    software request list match entries. Default is 0, disabled.
 
 *FI_CXI_REQ_BUF_SIZE*
 :   Size of request buffers. Increasing the request buffer size allows for more
     unmatched messages to be sent into a single request buffer.
 
-*FI_CXI_REQ_BUF_COUNT*
-:   Number of request buffers. Dynamically increasing and decreasing request
-    buffer count is not currently supported.
+*FI_CXI_REQ_BUF_MIN_POSTED*
+:   The minimum number of request buffers that should be posted.
+
+*FI_CXI_REQ_BUF_MAX_COUNT*
+:   The maximum number of request buffers that can be allocated. Experimental,
+    currently ignored.
 
 *FI_CXI_MSG_LOSSLESS*
 :   Enable or disable lossless receive matching. If hardware resources are
