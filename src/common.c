@@ -1915,7 +1915,7 @@ static void ofi_tostr_bus_attr(char *buf, size_t len,
 	ofi_strncatf(buf, len, "%sfi_bus_attr:\n", prefix);
 
 	prefix = TAB TAB TAB;
-	ofi_strncatf(buf, len, "%sfi_bus_type: ", prefix);
+	ofi_strncatf(buf, len, "%sbus_type: ", prefix);
 	ofi_tostr_bus_type(buf, len, attr->bus_type);
 	ofi_strncatf(buf, len, "\n");
 
@@ -1961,7 +1961,7 @@ int ofi_nic_tostr(const struct fid *fid_nic, char *buf, size_t len)
 	const struct fid_nic *nic = (const struct fid_nic*) fid_nic;
 
 	assert(fid_nic->fclass == FI_CLASS_NIC);
-	ofi_strncatf(buf, len, "%sfid_nic:\n", TAB);
+	ofi_strncatf(buf, len, "%snic:\n", TAB);
 
 	ofi_tostr_device_attr(buf, len, nic->device_attr);
 	ofi_tostr_bus_attr(buf, len, nic->bus_attr);

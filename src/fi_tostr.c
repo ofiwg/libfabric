@@ -347,6 +347,7 @@ ofi_tostr_tx_attr(char *buf, size_t len, const struct fi_tx_attr *attr,
 		     attr->iov_limit);
 	ofi_strncatf(buf, len, "%s%srma_iov_limit: %zu\n", prefix, TAB,
 		     attr->rma_iov_limit);
+	ofi_strncatf(buf, len, "%s%stclass: 0x%x\n", prefix, TAB, attr->tclass);
 }
 
 static void
@@ -560,6 +561,7 @@ ofi_tostr_domain_attr(char *buf, size_t len, const struct fi_domain_attr *attr,
 	ofi_strncatf(buf, len, "%s%smax_err_data: %zu\n", prefix, TAB,
 		     attr->max_err_data);
 	ofi_strncatf(buf, len, "%s%smr_cnt: %zu\n", prefix, TAB, attr->mr_cnt);
+	ofi_strncatf(buf, len, "%s%stclass: 0x%x\n", prefix, TAB, attr->tclass);
 }
 
 static void
@@ -612,7 +614,7 @@ static void ofi_tostr_info(char *buf, size_t len, const struct fi_info *info)
 	ofi_tostr_ep_attr(buf, len, info->ep_attr, TAB);
 	ofi_tostr_domain_attr(buf, len, info->domain_attr, TAB);
 	ofi_tostr_fabric_attr(buf, len, info->fabric_attr, TAB);
-	ofi_tostr_fid(TAB "nic_fid: ", buf, len, &info->nic->fid);
+	ofi_tostr_fid(TAB "nic: ", buf, len, &info->nic->fid);
 }
 
 static void ofi_tostr_atomic_type(char *buf, size_t len, enum fi_datatype type)
