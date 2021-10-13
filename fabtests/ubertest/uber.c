@@ -188,6 +188,7 @@ static void ft_print_comp(struct ft_info *test)
 	printf(", rx: ");
 	ft_print_comp_flag(test->rx_cq_bind_flags, test->rx_op_flags);
 	printf(", ");
+	printf("[%s], ", fi_tostr(&test_info.cq_format, FI_TYPE_CQ_FORMAT));
 }
 
 static void ft_show_test_info(void)

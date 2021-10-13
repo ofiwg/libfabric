@@ -205,15 +205,44 @@ int ft_verify_bufs()
 
 void ft_verify_comp(void *buf)
 {
-	struct fi_cq_data_entry *comp;
+	struct fi_cq_err_entry *comp = (struct fi_cq_err_entry *) buf;
 
-	if (ft_rx_ctrl.cq_format != FI_CQ_FORMAT_DATA)
+	switch (ft_rx_ctrl.cq_format) {
+	case FI_CQ_FORMAT_TAGGED:
+		if ((test_info.test_class & FI_TAGGED) &&
+		    (comp->tag != ft_tx_ctrl.check_tag++))
+			return;
+		/* fall through */
+	case FI_CQ_FORMAT_DATA:
+		if (test_info.msg_flags & FI_REMOTE_CQ_DATA ||
+		    is_data_func(test_info.class_function)) {
+			if (!(comp->flags & FI_REMOTE_CQ_DATA))
+				return;
+			comp->flags &= ~FI_REMOTE_CQ_DATA;
+			if (comp->data != ft_tx_ctrl.remote_cq_data)
+				return;
+		}
+		/* fall through */
+	case FI_CQ_FORMAT_MSG:
+		if (((test_info.test_class & FI_MSG) &&
+		    (comp->flags != (FI_MSG | FI_RECV))) ||
+		    ((test_info.test_class & FI_TAGGED) &&
+		    (comp->flags != (FI_TAGGED | FI_RECV))))
+			return;
+		if ((test_info.test_class & (FI_MSG | FI_TAGGED)) &&
+		    (comp->len != ft_tx_ctrl.msg_size))
+			return;
+		/* fall through */
+	case FI_CQ_FORMAT_CONTEXT:
+		if (test_info.test_class & (FI_MSG | FI_TAGGED)) {
+			ft_rx_ctrl.check_ctx = (++ft_rx_ctrl.check_ctx >=
+			    ft_rx_ctrl.max_credits) ? 0 : ft_rx_ctrl.check_ctx;
+			if (comp->op_context != &(ft_rx_ctrl.ctx[ft_rx_ctrl.check_ctx]))
+				return;
+		}
+		break;
+	default:
 		return;
-
-	comp = (struct fi_cq_data_entry *) buf;
-
-	if (comp->flags & FI_REMOTE_CQ_DATA) {
-		if (comp->data == ft_tx_ctrl.remote_cq_data)
-			ft_ctrl.verify_cnt++;
 	}
+	ft_ctrl.verify_cnt++;
 }

@@ -67,7 +67,7 @@ static int ft_init_rx_control(void)
 	if (ret)
 		return ret;
 
-	ft_rx_ctrl.cq_format = FI_CQ_FORMAT_DATA;
+	ft_rx_ctrl.cq_format = test_info.cq_format;
 	ft_rx_ctrl.addr = FI_ADDR_UNSPEC;
 
 	ft_rx_ctrl.msg_size = ft_ctrl.size_array[ft_ctrl.size_cnt - 1];
@@ -418,8 +418,7 @@ static int ft_sync_msg_needed(void)
 
 static int ft_check_verify_cnt()
 {
-	if (test_info.msg_flags == FI_REMOTE_CQ_DATA &&
-	    ft_ctrl.verify_cnt != ft_ctrl.xfer_iter)
+	if (ft_generates_rx_comp() && ft_ctrl.verify_cnt != ft_ctrl.xfer_iter)
 		return -FI_EIO;
 	return 0;
 }
