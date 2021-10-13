@@ -520,6 +520,25 @@ The following option levels and option names and parameters are defined.
   that applications that want to override the default MIN_MULTI_RECV
   value set this option before enabling the corresponding endpoint.
 
+- *FI_OPT_FI_HMEM_P2P - int*
+: Defines how the provider should handle peer to peer FI_HMEM transfers for
+  this endpoint. By default, the provider will chose whether to use peer to peer
+  support based on the type of transfer (FI_HMEM_P2P_ENABLED). Valid values
+  defined in fi_endpoint.h are:
+	* FI_HMEM_P2P_ENABLED: Peer to peer support may be used by the provider
+	  to handle FI_HMEM transfers, and which transfers are initiated using
+	  peer to peer is subject to the provider implementation.
+	* FI_HMEM_P2P_REQUIRED: Peer to peer support must be used for
+	  transfers, transfers that cannot be performed using p2p will be
+	  reported as failing.
+	* FI_HMEM_P2P_PREFERRED: Peer to peer support should be used by the
+	  provider for all transfers if available, but the provider may choose
+	  to copy the data to initiate the transfer if peer to peer support is
+	  unavailable.
+	* FI_HMEM_P2P_DISABLED: Peer to peer support should not be used.
+: fi_setopt() will return -FI_EOPNOTSUPP if the mode requested cannot be supported
+  by the provider.
+
 ## fi_tc_dscp_set
 
 This call converts a DSCP defined value into a libfabric traffic class value.
