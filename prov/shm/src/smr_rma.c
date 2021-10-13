@@ -93,7 +93,6 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	struct smr_domain *domain;
 	struct smr_region *peer_smr;
 	struct smr_inject_buf *tx_buf;
-	struct smr_sar_msg *sar;
 	struct smr_resp *resp;
 	struct smr_cmd *cmd;
 	struct smr_tx_entry *pend;
@@ -198,17 +197,10 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 						     ep->region, resp, iface);
 			} else if (total_len <= smr_env.sar_threshold ||
 			    iface != FI_HMEM_SYSTEM) {
-				if (!peer_smr->sar_cnt) {
-					ret = -FI_EAGAIN;
-				} else {
-					sar = smr_freestack_pop(smr_sar_pool(peer_smr));
-					smr_format_sar(cmd, iface, device, iov,
-						       iov_count, total_len,
-						       ep->region, peer_smr, sar,
-						       pend, resp);
-					peer_smr->sar_cnt--;
-					smr_peer_data(ep->region)[id].sar_status = 1;
-				}
+				ret = smr_format_sar(cmd, iface, device, iov,
+						     iov_count, total_len,
+						     ep->region, peer_smr, id,
+						     pend, resp);
 			} else {
 				ret = smr_format_mmap(ep, cmd, iov, iov_count,
 						      total_len, pend, resp);

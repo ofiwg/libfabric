@@ -543,12 +543,18 @@ size_t smr_copy_from_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
 	return *bytes_done - start;
 }
 
-void smr_format_sar(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t device,
-		    const struct iovec *iov, size_t count,
-		    size_t total_len, struct smr_region *smr,
-		    struct smr_region *peer_smr, struct smr_sar_msg *sar_msg,
-		    struct smr_tx_entry *pending, struct smr_resp *resp)
+int smr_format_sar(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t device,
+		   const struct iovec *iov, size_t count,
+		   size_t total_len, struct smr_region *smr,
+		   struct smr_region *peer_smr, int64_t id,
+		   struct smr_tx_entry *pending, struct smr_resp *resp)
 {
+	struct smr_sar_msg *sar_msg;
+
+	if (!peer_smr->sar_cnt)
+		return -FI_EAGAIN;
+
+	sar_msg = smr_freestack_pop(smr_sar_pool(peer_smr));
 	cmd->msg.hdr.op_src = smr_src_sar;
 	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
 	cmd->msg.data.sar = smr_get_offset(peer_smr, sar_msg);
@@ -561,6 +567,11 @@ void smr_format_sar(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t devi
 	if (cmd->msg.hdr.op != ofi_op_read_req)
 		smr_copy_to_sar(sar_msg, resp, cmd, iface, device ,iov, count,
 				&pending->bytes_done, &pending->next);
+
+	peer_smr->sar_cnt--;
+	smr_peer_data(smr)[id].sar_status = SMR_SAR_READY;
+
+	return 0;
 }
 
 static void smr_cleanup_epoll(struct smr_sock_info *sock_info)
