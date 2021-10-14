@@ -900,16 +900,13 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 		err = -FI_EINVAL;
 	}
 
-	if (cmd->msg.hdr.op_flags & SMR_REMOTE_CQ_DATA) {
-		ret = smr_complete_rx(ep, (void *) cmd->msg.hdr.msg_id,
-				      cmd->msg.hdr.op, cmd->msg.hdr.op_flags,
-				      total_len, iov_count ? iov[0].iov_base :
-				      NULL, cmd->msg.hdr.id, 0,
-				      cmd->msg.hdr.data, err);
-		if (ret) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"unable to process rx completion\n");
-		}
+	ret = smr_complete_rx(ep, (void *) cmd->msg.hdr.msg_id,
+			      cmd->msg.hdr.op, cmd->msg.hdr.op_flags,
+			      total_len, iov_count ? iov[0].iov_base : NULL,
+			      cmd->msg.hdr.id, 0, cmd->msg.hdr.data, err);
+	if (ret) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+		"unable to process rx completion\n");
 	}
 
 	return ret;
