@@ -393,6 +393,7 @@ int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 
 int tcpx_op_invalid(struct tcpx_ep *ep);
 int tcpx_op_msg(struct tcpx_ep *ep);
+int tcpx_op_tagged(struct tcpx_ep *ep);
 int tcpx_op_read_req(struct tcpx_ep *ep);
 int tcpx_op_write(struct tcpx_ep *ep);
 int tcpx_op_read_rsp(struct tcpx_ep *ep);

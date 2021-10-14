@@ -61,6 +61,20 @@ tcpx_alloc_send(struct tcpx_ep *ep)
 	return send_entry;
 }
 
+/* When dynamic receive buffers are enabled, receive buffer matching
+ * is handled by the upper layer (rxm).  The tcp provider is only
+ * carrying the tag to reduce header overhead.  The transport operation
+ * is still op_msg at the tcp provider.  This is needed for backwards
+ * compatibility.
+ *
+ * If dynamic receive buffers are disabled, then tagged messages are
+ * being handled entirely by the tcp provider.  We use the op_tagged
+ * protocol for this, which allows distinguishing between the two
+ * cases at the receiver.
+ *
+ * We assume the peer is configured similar to the local side, which
+ * is all we can check.
+ */
 static inline struct tcpx_xfer_entry *
 tcpx_alloc_tsend(struct tcpx_ep *ep)
 {
@@ -68,8 +82,13 @@ tcpx_alloc_tsend(struct tcpx_ep *ep)
 
 	send_entry = tcpx_alloc_tx(ep);
 	if (send_entry) {
-		send_entry->hdr.base_hdr.op = ofi_op_msg;
-		send_entry->hdr.base_hdr.flags = TCPX_TAGGED;
+		if (tcpx_dynamic_rbuf(ep)) {
+			send_entry->hdr.base_hdr.op = ofi_op_msg;
+			send_entry->hdr.base_hdr.flags = TCPX_TAGGED;
+		} else {
+			assert(ep->srx_ctx);
+			send_entry->hdr.base_hdr.op = ofi_op_tagged;
+		}
 	}
 
 	return send_entry;
