@@ -366,6 +366,7 @@ static int ft_reg_mr(void *buf, size_t size, uint64_t access,
 	struct fi_mr_attr attr = {0};
 	struct iovec iov = {0};
 	int ret;
+	uint64_t flags;
 
 	if (((!(fi->domain_attr->mr_mode & FI_MR_LOCAL) &&
 	      !(opts.options & FT_OPT_USE_DEVICE)) ||
@@ -392,7 +393,8 @@ static int ft_reg_mr(void *buf, size_t size, uint64_t access,
 		break;
 	}
 
-	ret = fi_mr_regattr(domain, &attr, 0, mr);
+	flags = (opts.iface) ? FI_HMEM_DEVICE_ONLY : 0;
+	ret = fi_mr_regattr(domain, &attr, flags, mr);
 	if (ret)
 		return ret;
 
