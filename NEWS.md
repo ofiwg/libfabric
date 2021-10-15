@@ -22,6 +22,15 @@ v1.13.2, Fri Oct 15, 2021
 
 ## EFA
 
+- Limit memcpy in packet processing to only copy valid data
+- Removed maximum wait time sending packet to avoid silent drops
+- Fix unconditionally growing buffer pools that should not grow
+- Handle possible large backlog of unexpected messages via SHM
+- Update Tx counter for inject operations
+- Allow in flight sends to finish when closing endpoint
+- Fix handing of prefix size when receiving data
+- Removed unnecessary data copy
+
 ## SHM
 
 - Fix possible sigbus error
@@ -29,6 +38,7 @@ v1.13.2, Fri Oct 15, 2021
 
 ## TCP
 
+- Fix reporting RMA write CQ data
 - Fix RMA read request error completion handling
 - Avoid possible use after free in reject path
 - Remove restriction where EQs and CQs may not share wait sets
@@ -51,6 +61,7 @@ v1.13.2, Fri Oct 15, 2021
 
 ## Util
 
+- Fix AV set to use non-zero starting address
 - Fix setting of CQ completion flags
 
 ## Verbs
