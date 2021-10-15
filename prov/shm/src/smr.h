@@ -332,11 +332,11 @@ int smr_format_ipc(struct smr_cmd *cmd, void *ptr,
 int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
 		    const struct iovec *iov, size_t count, size_t total_len,
 		    struct smr_tx_entry *pend, struct smr_resp *resp);
-void smr_format_sar(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t deivce,
-		    const struct iovec *iov, size_t count,
-		    size_t total_len, struct smr_region *smr,
-		    struct smr_region *peer_smr, struct smr_sar_msg *sar_msg,
-		    struct smr_tx_entry *pending, struct smr_resp *resp);
+int smr_format_sar(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t deivce,
+		   const struct iovec *iov, size_t count,
+		   size_t total_len, struct smr_region *smr,
+		   struct smr_region *peer_smr, int64_t id,
+		   struct smr_tx_entry *pending, struct smr_resp *resp);
 size_t smr_copy_to_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
 		       struct smr_cmd *cmd, enum fi_hmem_iface,
 		       uint64_t device, const struct iovec *iov, size_t count,

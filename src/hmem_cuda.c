@@ -440,10 +440,6 @@ int cuda_hmem_init(void)
 	int ret;
 	int gdrcopy_ret;
 	bool cuda_enable_xfer;
-	int devices, dev_id, orig_dev_id;
-	void *ptr;
-	cudaIpcMemHandle_t handle;
-	cudaError_t err;
 
 	fi_param_define(NULL, "hmem_cuda_use_gdrcopy", FI_PARAM_BOOL,
 			"Use gdrcopy to copy data to/from CUDA GPU memory. "
@@ -490,58 +486,7 @@ int cuda_hmem_init(void)
 	 */
 	cuda_ipc_enabled = !hmem_cuda_use_gdrcopy && cuda_enable_xfer;
 
-	ret = FI_SUCCESS;
-
-	/*
-	 * If IPC may be enabled, loop over each device and ensure it
-	 * supports IPC. If any device lacks IPC support, set
-	 * cuda_ipc_enabled to false.
-	 */
-	if (cuda_ipc_enabled) {
-		cuda_ops.cudaGetDevice(&orig_dev_id);
-		cuda_ops.cudaGetDeviceCount(&devices);
-		for (dev_id = 0; dev_id < devices; ++dev_id) {
-
-			cuda_ops.cudaSetDevice(dev_id);
-
-			/* CUDA runtime and driver APIs do not expose IPC support
-			 * directly in the device properties, so try using IPC and
-			 * see if it errors out. Checking if unified memory is
-			 * supported is not sufficient as Tegra devices support
-			 * unified memory, but not IPC.
-			 */
-
-			err = cuda_ops.cudaMalloc(&ptr, 1);
-			if (err != cudaSuccess) {
-				FI_INFO(&core_prov, FI_LOG_CORE,
-					"Could not allocate memory on CUDA device %d\n",
-					dev_id);
-				cuda_ipc_enabled = false;
-				ret = -FI_EINVAL;
-				break;
-			}
-
-			err = cuda_ops.cudaIpcGetMemHandle(&handle, ptr);
-			cuda_ops.cudaFree(&ptr);
-
-			if (err != cudaSuccess) {
-				FI_INFO(&core_prov, FI_LOG_CORE,
-					"Could not get IPC handle on CUDA device %d,"
-					"disabling CUDA IPC\n",
-					dev_id);
-				cuda_ipc_enabled = false;
-				ret = -FI_EINVAL;
-				break;
-			}
-		}
-
-		cuda_ops.cudaSetDevice(orig_dev_id);
-
-		if (ret != FI_SUCCESS)
-			goto dl_cleanup;
-	}
-
-	return ret;
+	return FI_SUCCESS;
 
 dl_cleanup:
 	cuda_hmem_dl_cleanup();
