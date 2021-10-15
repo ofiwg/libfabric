@@ -988,8 +988,7 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_EINVAL;
 	}
 
-	ret = ofi_check_info(&tcpx_util_prov, tcpx_util_prov.info,
-			     fabric->api_version, info);
+	ret = ofi_prov_check_info(&tcpx_util_prov, fabric->api_version, info);
 	if (ret)
 		return ret;
 
