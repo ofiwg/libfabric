@@ -1095,6 +1095,7 @@ static int util_av_set_close(struct fid *fid)
 	if (ofi_atomic_get32(&av_set->ref) > 0)
 		return -FI_EBUSY;
 
+	free(av_set->fi_addr_array);
 	free(av_set);
 
 	return FI_SUCCESS;
