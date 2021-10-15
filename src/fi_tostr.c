@@ -418,10 +418,16 @@ ofi_tostr_ep_attr(char *buf, size_t len, const struct fi_ep_attr *attr,
 	ofi_strncatf(buf, len, "%s%smem_tag_format: 0x%016llx\n", prefix, TAB,
 		     attr->mem_tag_format);
 
-	ofi_strncatf(buf, len, "%s%stx_ctx_cnt: %zu\n", prefix, TAB,
-		     attr->tx_ctx_cnt);
-	ofi_strncatf(buf, len, "%s%srx_ctx_cnt: %zu\n", prefix, TAB,
-		     attr->rx_ctx_cnt);
+	ofi_strncatf(buf, len, "%s%stx_ctx_cnt: ", prefix, TAB);
+	if (attr->tx_ctx_cnt == FI_SHARED_CONTEXT)
+		ofi_strncatf(buf, len, "FI_SHARED_CONTEXT\n");
+	else
+		ofi_strncatf(buf, len, "%zu\n", attr->tx_ctx_cnt);
+	ofi_strncatf(buf, len, "%s%srx_ctx_cnt: ", prefix, TAB);
+	if (attr->rx_ctx_cnt == FI_SHARED_CONTEXT)
+		ofi_strncatf(buf, len, "FI_SHARED_CONTEXT\n");
+	else
+		ofi_strncatf(buf, len, "%zu\n", attr->rx_ctx_cnt);
 
 	ofi_strncatf(buf, len, "%s%sauth_key_size: %zu\n", prefix, TAB,
 		     attr->auth_key_size);
