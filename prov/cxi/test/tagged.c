@@ -3866,8 +3866,15 @@ static void test_fc_multi_recv(size_t xfer_len, bool progress_before_post)
 	 * start and length fields accordingly.
 	 */
 	for (i = 0; i < num_xfers - 1; i++) {
-		ret = fi_tsend(cxit_ep, &send_buf[i * xfer_len], xfer_len, NULL,
-			       cxit_ep_fi_addr, tag, NULL);
+		do {
+			ret = fi_tsend(cxit_ep, &send_buf[i * xfer_len],
+				       xfer_len, NULL, cxit_ep_fi_addr,
+				       tag, NULL);
+			if (ret == -FI_EAGAIN) {
+				fi_cq_read(cxit_rx_cq, &cqe, 0);
+				fi_cq_read(cxit_tx_cq, &cqe, 0);
+			}
+		} while (ret == -FI_EAGAIN);
 		cr_assert(ret == FI_SUCCESS);
 	}
 

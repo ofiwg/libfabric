@@ -2580,12 +2580,6 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	cmd.target.ignore_bits = -1UL;
 	cmd.target.match_id = CXI_MATCH_ID_ANY;
 
-	if (cxip_cq_saturated(rxc->recv_cq)) {
-		RXC_DBG(rxc, "CQ saturated\n");
-		ret = -FI_EAGAIN;
-		goto err_dec_free_cq_req;
-	}
-
 	fastlock_acquire(&rxc->rx_cmdq->lock);
 
 	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
@@ -2675,12 +2669,6 @@ static int cxip_flush_appends(struct cxip_rxc *rxc)
 	cmd.target.buffer_id = req->req_id;
 	cmd.target.match_bits = -1UL;
 	cmd.target.length = 0;
-
-	if (cxip_cq_saturated(rxc->recv_cq)) {
-		RXC_DBG(rxc, "CQ saturated\n");
-		ret = -FI_EAGAIN;
-		goto err_dec_free_cq_req;
-	}
 
 	fastlock_acquire(&rxc->rx_cmdq->lock);
 

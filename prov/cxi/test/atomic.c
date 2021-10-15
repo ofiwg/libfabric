@@ -1508,9 +1508,13 @@ Test(atomic, amo_cleanup)
 
 	/* Send 8 bytes from send buffer data to RMA window 0 */
 	for (i = 0; i < writes; i++) {
-		ret = fi_atomic(cxit_ep, &operand1, 1, 0,
-				cxit_ep_fi_addr, 0, RMA_WIN_KEY,
-				FI_UINT64, FI_SUM, NULL);
+		do {
+			ret = fi_atomic(cxit_ep, &operand1, 1, 0,
+					cxit_ep_fi_addr, 0, RMA_WIN_KEY,
+					FI_UINT64, FI_SUM, NULL);
+			if (ret == -FI_EAGAIN)
+				fi_cq_read(cxit_tx_cq, NULL, 0);
+		} while (ret == -FI_EAGAIN);
 		cr_assert(ret == FI_SUCCESS);
 	}
 

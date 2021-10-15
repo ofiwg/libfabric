@@ -499,7 +499,7 @@ static void cxip_cq_eq_progress(struct cxip_cq *cq, struct cxip_cq_eq *eq)
 {
 	const union c_event *event;
 	struct cxip_req *req;
-	int ret;
+	int ret = FI_SUCCESS;
 
 	/* The EQ status needs to be cached on each poll to be able to properly
 	 * determine if the OFI completion queue is saturated.
@@ -526,7 +526,8 @@ static void cxip_cq_eq_progress(struct cxip_cq *cq, struct cxip_cq_eq *eq)
 	if (cxi_eq_get_drops(eq->eq))
 		CXIP_FATAL("Cassini Event Queue overflow detected.\n");
 
-	eq->eq_saturated = false;
+	if (ret == FI_SUCCESS)
+		eq->eq_saturated = false;
 }
 
 /*
