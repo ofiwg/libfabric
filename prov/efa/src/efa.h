@@ -341,13 +341,12 @@ struct efa_av {
 	size_t			used;
 	size_t			shm_used;
 	enum fi_av_type		type;
-	/* connid_map is a map from (ahn + qpn) to latest connid.
-	 * it is used when a peer does not support the "connid header"
-	 * extra request
+	/* cur_reverse_av is a map from (ahn + qpn) to current (latest) efa_conn.
+	 * prv_reverse_av is a map from (ahn + qpn + connid) to all previous efa_conns.
+	 * cur_revsere_av is faster to search because its key's size is smaller
 	 */
-	struct efa_connid_map   *connid_map;
-	/* reverse_av is a map from (ahn + qpn + connid) to efa_conn */
-	struct efa_reverse_av	*reverse_av;
+	struct efa_cur_reverse_av *cur_reverse_av;
+	struct efa_prv_reverse_av *prv_reverse_av;
 	struct efa_ah		*ah_map;
 	struct util_av		util_av;
 	enum fi_ep_type         ep_type;
@@ -358,31 +357,30 @@ struct efa_av_entry {
 	struct efa_conn		conn;
 };
 
-struct efa_connid_map_key {
+struct efa_cur_reverse_av_key {
 	uint16_t ahn;
 	uint16_t qpn;
-	uint32_t connid;
 };
 
-struct efa_connid_map {
-	struct efa_connid_map_key key;
-	uint32_t connid;
-	UT_hash_handle hh;
-};
-
-struct efa_reverse_av_key {
-	uint16_t ahn;
-	uint16_t qpn;
-	uint32_t connid;
-};
-
-#define EFA_DGRAM_CONNID (0x0)
-
-struct efa_reverse_av {
-	struct efa_reverse_av_key key;
+struct efa_cur_reverse_av {
+	struct efa_cur_reverse_av_key key;
 	struct efa_conn *conn;
 	UT_hash_handle hh;
 };
+
+struct efa_prv_reverse_av_key {
+	uint16_t ahn;
+	uint16_t qpn;
+	uint32_t connid;
+};
+
+struct efa_prv_reverse_av {
+	struct efa_prv_reverse_av_key key;
+	struct efa_conn *conn;
+	UT_hash_handle hh;
+};
+
+#define EFA_DGRAM_CONNID (0x0)
 
 struct efa_ep_domain {
 	char		*suffix;
@@ -458,9 +456,9 @@ void efa_cq_inc_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
 /* Caller must hold cq->inner_lock. */
 void efa_cq_dec_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
 
-uint32_t *efa_av_lookup_latest_connid(struct efa_av *av, uint16_t ahn, uint16_t qpn);
+fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qpn, struct rxr_pkt_entry *pkt_entry);
 
-fi_addr_t efa_av_reverse_lookup(struct efa_av *av, uint16_t ahn, uint16_t qpn, uint32_t connid);
+fi_addr_t efa_av_reverse_lookup_dgram(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 
 int efa_init_prov(void);
 
