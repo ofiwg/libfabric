@@ -2903,7 +2903,8 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	(*ep_fid)->msg = &rxm_ops_msg;
 	(*ep_fid)->tagged = &rxm_ops_tagged;
-	(*ep_fid)->rma = &rxm_ops_rma;
+	(*ep_fid)->rma = rxm_passthru_info(info) ?
+			 &rxm_rma_thru_ops : &rxm_rma_ops;
 
 	if (rxm_ep->rxm_info->caps & FI_ATOMIC)
 		(*ep_fid)->atomic = &rxm_ops_atomic;
