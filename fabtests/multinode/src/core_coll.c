@@ -545,7 +545,7 @@ static int multinode_setup_fabric(int argc, char **argv)
 	if (err)
 		return err;
 
-	err = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	err = ft_enable_ep(ep);
 	if (err)
 		return err;
 

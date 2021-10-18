@@ -1153,9 +1153,7 @@ int ft_init_alias_ep(uint64_t flags)
 	return 0;
 }
 
-int ft_enable_ep(struct fid_ep *ep, struct fid_eq *eq, struct fid_av *av,
-		 struct fid_cq *txcq, struct fid_cq *rxcq,
-		 struct fid_cntr *txcntr, struct fid_cntr *rxcntr)
+int ft_enable_ep(struct fid_ep *ep)
 {
 	uint64_t flags;
 	int ret;
@@ -1218,7 +1216,7 @@ int ft_enable_ep_recv(void)
 {
 	int ret;
 
-	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	ret = ft_enable_ep(ep);
 	if (ret)
 		return ret;
 
@@ -3220,7 +3218,7 @@ int ft_check_buf(void *buf, size_t size)
 		recv_data = malloc(size);
 		if (!recv_data)
 			return -FI_ENOMEM;
-	
+
 		ret = ft_hmem_copy_from(opts.iface, opts.device,
 					recv_data, buf, size);
 		if (ret)
