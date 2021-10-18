@@ -62,7 +62,7 @@ static int tcpx_send_msg(struct tcpx_ep *ep)
 		 * transfer has completed.
 		 */
 		tx_entry->async_index = ep->bsock.async_index;
-		tx_entry->flags |= TCPX_ASYNC;
+		tx_entry->ctrl_flags |= TCPX_ASYNC;
 	} else {
 		len = ret;
 	}
@@ -118,18 +118,18 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 			FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
 			tcpx_cq_report_error(&cq->util_cq, tx_entry, -ret);
 			tcpx_free_xfer(cq, tx_entry);
-		} else if (tx_entry->flags & TCPX_NEED_ACK) {
+		} else if (tx_entry->ctrl_flags & TCPX_NEED_ACK) {
 			/* A SW ack guarantees the peer received the data, so
 			 * we can skip the async completion.
 			 */
 			slist_insert_tail(&tx_entry->entry,
 					  &ep->need_ack_queue);
-		} else if (tx_entry->flags & TCPX_NEED_RESP) {
+		} else if (tx_entry->ctrl_flags & TCPX_NEED_RESP) {
 			// discard send but enable receive for completeion
 			assert(tx_entry->resp_entry);
-			tx_entry->resp_entry->flags &= ~TCPX_INTERNAL_XFER;
+			tx_entry->resp_entry->ctrl_flags &= ~TCPX_INTERNAL_XFER;
 			tcpx_free_xfer(cq, tx_entry);
-		} else if ((tx_entry->flags & TCPX_ASYNC) &&
+		} else if ((tx_entry->ctrl_flags & TCPX_ASYNC) &&
 			   (ofi_val32_gt(tx_entry->async_index,
 					 ep->bsock.done_index))) {
 			slist_insert_tail(&tx_entry->entry,
@@ -143,12 +143,12 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 			ep->cur_tx.entry = container_of(slist_remove_head(
 							&ep->priority_queue),
 					     struct tcpx_xfer_entry, entry);
-			assert(ep->cur_tx.entry->flags & TCPX_INTERNAL_XFER);
+			assert(ep->cur_tx.entry->ctrl_flags & TCPX_INTERNAL_XFER);
 		} else if (!slist_empty(&ep->tx_queue)) {
 			ep->cur_tx.entry = container_of(slist_remove_head(
 							&ep->tx_queue),
 					     struct tcpx_xfer_entry, entry);
-			assert(!(ep->cur_tx.entry->flags & TCPX_INTERNAL_XFER));
+			assert(!(ep->cur_tx.entry->ctrl_flags & TCPX_INTERNAL_XFER));
 		} else {
 			ep->cur_tx.entry = NULL;
 			break;
@@ -188,7 +188,7 @@ static int tcpx_queue_ack(struct tcpx_xfer_entry *rx_entry)
 	resp->hdr.base_hdr.size = sizeof(resp->hdr.base_hdr);
 	resp->hdr.base_hdr.hdr_size = (uint8_t) sizeof(resp->hdr.base_hdr);
 
-	resp->flags = TCPX_INTERNAL_XFER;
+	resp->ctrl_flags = TCPX_INTERNAL_XFER;
 	resp->context = NULL;
 	resp->ep = ep;
 
@@ -248,15 +248,15 @@ retry:
 
 		if (ret != -FI_ETRUNC)
 			goto err;
-		assert(rx_entry->flags & TCPX_NEED_DYN_RBUF);
+		assert(rx_entry->ctrl_flags & TCPX_NEED_DYN_RBUF);
 	}
 
-	if (rx_entry->flags & TCPX_NEED_DYN_RBUF) {
+	if (rx_entry->ctrl_flags & TCPX_NEED_DYN_RBUF) {
 		ret = tcpx_update_rx_iov(rx_entry);
 		if (ret)
 			goto err;
 
-		rx_entry->flags &= ~TCPX_NEED_DYN_RBUF;
+		rx_entry->ctrl_flags &= ~TCPX_NEED_DYN_RBUF;
 		goto retry;
 	}
 
@@ -368,34 +368,6 @@ static int tcpx_process_remote_read(struct tcpx_ep *ep)
 	return ret;
 }
 
-static int tcpx_validate_rx_rma_data(struct tcpx_xfer_entry *rx_entry,
-				     uint64_t access)
-{
-	struct ofi_mr_map *map = &rx_entry->ep->util_ep.domain->mr_map;
-	struct ofi_rma_iov *rma_iov;
-	size_t offset;
-	int i, ret;
-
-	if (rx_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA)
-		offset = sizeof(rx_entry->hdr.base_hdr) + sizeof(uint64_t);
-	else
-		offset = sizeof(rx_entry->hdr.base_hdr);
-
-	rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &rx_entry->hdr + offset);
-
-	for ( i = 0 ; i < rx_entry->hdr.base_hdr.rma_iov_cnt ; i++) {
-		ret = ofi_mr_verify(map, rma_iov[i].len,
-				    (uintptr_t *)&rma_iov[i].addr,
-				    rma_iov[i].key, access);
-		if (ret) {
-			FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
-			       "invalid rma iov received\n");
-			return -FI_EINVAL;
-		}
-	}
-	return FI_SUCCESS;
-}
-
 int tcpx_op_invalid(struct tcpx_ep *tcpx_ep)
 {
 	return -FI_EINVAL;
@@ -412,7 +384,7 @@ static struct tcpx_xfer_entry *tcpx_get_rx_entry(struct tcpx_ep *ep)
 		if (!slist_empty(&srx->rx_queue)) {
 			xfer = container_of(slist_remove_head(&srx->rx_queue),
 					    struct tcpx_xfer_entry, entry);
-			xfer->flags |= ep->util_ep.rx_op_flags & FI_COMPLETION;
+			xfer->cq_flags |= tcpx_rx_completion_flag(ep, 0);
 		} else {
 			xfer = NULL;
 		}
@@ -473,7 +445,7 @@ int tcpx_op_msg(struct tcpx_ep *tcpx_ep)
 	rx_entry->mrecv_msg_start = rx_entry->iov[0].iov_base;
 
 	if (tcpx_dynamic_rbuf(tcpx_ep)) {
-		rx_entry->flags |= TCPX_NEED_DYN_RBUF;
+		rx_entry->ctrl_flags = TCPX_NEED_DYN_RBUF;
 
 		if (msg->hdr.base_hdr.flags & TCPX_TAGGED) {
 			/* Raw message, no rxm header */
@@ -519,13 +491,6 @@ int tcpx_op_read_req(struct tcpx_ep *ep)
 	resp->hdr.base_hdr.op_data = 0;
 	resp->ep = ep;
 
-	ret = tcpx_validate_rx_rma_data(resp, FI_REMOTE_READ);
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "invalid rma data\n");
-		tcpx_free_xfer(cq, resp);
-		return ret;
-	}
-
 	resp->iov[0].iov_base = (void *) &resp->hdr;
 	resp->iov[0].iov_len = sizeof(resp->hdr.base_hdr);
 
@@ -535,6 +500,16 @@ int tcpx_op_read_req(struct tcpx_ep *ep)
 	resp->iov_cnt = 1 + resp->hdr.base_hdr.rma_iov_cnt;
 	resp->hdr.base_hdr.size = resp->iov[0].iov_len;
 	for (i = 0; i < resp->hdr.base_hdr.rma_iov_cnt; i++) {
+		ret = ofi_mr_verify(&ep->util_ep.domain->mr_map, rma_iov[i].len,
+				    (uintptr_t *) &rma_iov[i].addr,
+				    rma_iov[i].key, FI_REMOTE_READ);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+			       "invalid rma iov received\n");
+			tcpx_free_xfer(cq, resp);
+			return ret;
+		}
+
 		resp->iov[i + 1].iov_base = (void *) (uintptr_t)
 					    rma_iov[i].addr;
 		resp->iov[i + 1].iov_len = rma_iov[i].len;
@@ -544,7 +519,7 @@ int tcpx_op_read_req(struct tcpx_ep *ep)
 	resp->hdr.base_hdr.op = ofi_op_read_rsp;
 	resp->hdr.base_hdr.hdr_size = (uint8_t) sizeof(resp->hdr.base_hdr);
 
-	resp->flags |= TCPX_INTERNAL_XFER;
+	resp->ctrl_flags = TCPX_INTERNAL_XFER;
 	resp->context = NULL;
 
 	tcpx_tx_queue_insert(ep, resp);
@@ -557,7 +532,6 @@ int tcpx_op_write(struct tcpx_ep *ep)
 	struct tcpx_xfer_entry *rx_entry;
 	struct tcpx_cq *cq;
 	struct ofi_rma_iov *rma_iov;
-	size_t offset;
 	int ret, i;
 
 	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
@@ -565,12 +539,15 @@ int tcpx_op_write(struct tcpx_ep *ep)
 	if (!rx_entry)
 		return -FI_ENOMEM;
 
-	rx_entry->flags = 0;
 	if (ep->cur_rx.hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA) {
-		rx_entry->flags = (FI_COMPLETION | FI_REMOTE_WRITE |
-				   FI_REMOTE_CQ_DATA);
+		rx_entry->cq_flags = (FI_COMPLETION | FI_REMOTE_WRITE |
+				      FI_REMOTE_CQ_DATA);
+		rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &rx_entry->hdr +
+			   sizeof(rx_entry->hdr.cq_data_hdr));
 	} else {
-		rx_entry->flags = TCPX_INTERNAL_XFER;
+		rx_entry->ctrl_flags = TCPX_INTERNAL_XFER;
+		rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &rx_entry->hdr +
+			  sizeof(rx_entry->hdr.base_hdr));
 	}
 
 	memcpy(&rx_entry->hdr, &ep->cur_rx.hdr,
@@ -578,20 +555,17 @@ int tcpx_op_write(struct tcpx_ep *ep)
 	rx_entry->hdr.base_hdr.op_data = 0;
 	rx_entry->ep = ep;
 
-	ret = tcpx_validate_rx_rma_data(rx_entry, FI_REMOTE_WRITE);
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "invalid rma data\n");
-		tcpx_free_xfer(cq, rx_entry);
-		return ret;
-	}
-
-	offset = rx_entry->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA ?
-		 sizeof(rx_entry->hdr.cq_data_hdr) :
-		 sizeof(rx_entry->hdr.base_hdr);
-	rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &rx_entry->hdr + offset);
-
 	rx_entry->iov_cnt = rx_entry->hdr.base_hdr.rma_iov_cnt;
 	for (i = 0; i < rx_entry->hdr.base_hdr.rma_iov_cnt; i++) {
+		ret = ofi_mr_verify(&ep->util_ep.domain->mr_map, rma_iov[i].len,
+				    (uintptr_t *) &rma_iov[i].addr,
+				    rma_iov[i].key, FI_REMOTE_WRITE);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
+			       "invalid rma iov received\n");
+			tcpx_free_xfer(cq, rx_entry);
+			return ret;
+		}
 		rx_entry->iov[i].iov_base = (void *) (uintptr_t)
 					      rma_iov[i].addr;
 		rx_entry->iov[i].iov_len = rma_iov[i].len;
@@ -807,7 +781,7 @@ void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 
 		if (!ep->cur_tx.entry && wait)
 			wait->signal(wait);
-	} else if (tx_entry->flags & TCPX_INTERNAL_XFER) {
+	} else if (tx_entry->ctrl_flags & TCPX_INTERNAL_XFER) {
 		slist_insert_tail(&tx_entry->entry, &ep->priority_queue);
 	} else {
 		slist_insert_tail(&tx_entry->entry, &ep->tx_queue);

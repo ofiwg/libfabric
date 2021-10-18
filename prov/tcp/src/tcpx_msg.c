@@ -156,8 +156,8 @@ static ssize_t tcpx_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	memcpy(&recv_entry->iov[0], &msg->msg_iov[0],
 	       msg->iov_count * sizeof(struct iovec));
 
-	recv_entry->flags = tcpx_ep->util_ep.rx_msg_flags | flags |
-			    FI_MSG | FI_RECV;
+	recv_entry->cq_flags = tcpx_rx_completion_flag(tcpx_ep, flags) |
+			       FI_MSG | FI_RECV;
 	recv_entry->context = msg->context;
 
 	if (!tcpx_queue_recv(tcpx_ep, recv_entry)) {
@@ -183,8 +183,8 @@ static ssize_t tcpx_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
 
-	recv_entry->flags = (tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION) |
-			    FI_MSG | FI_RECV;
+	recv_entry->cq_flags = tcpx_rx_completion_flag(tcpx_ep, 0) |
+			       FI_MSG | FI_RECV;
 	recv_entry->context = context;
 
 	if (!tcpx_queue_recv(tcpx_ep, recv_entry)) {
@@ -211,8 +211,8 @@ static ssize_t tcpx_recvv(struct fid_ep *ep, const struct iovec *iov, void **des
 	recv_entry->iov_cnt = count;
 	memcpy(recv_entry->iov, iov, count * sizeof(*iov));
 
-	recv_entry->flags = (tcpx_ep->util_ep.rx_op_flags & FI_COMPLETION) |
-			    FI_MSG | FI_RECV;
+	recv_entry->cq_flags = tcpx_rx_completion_flag(tcpx_ep, 0) |
+			       FI_MSG | FI_RECV;
 	recv_entry->context = context;
 
 	if (!tcpx_queue_recv(tcpx_ep, recv_entry)) {
@@ -251,8 +251,8 @@ static ssize_t tcpx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 	tcpx_init_tx_iov(tx_entry, hdr_len, msg->msg_iov, msg->iov_count);
-	tx_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
-			    flags | FI_MSG | FI_SEND);
+	tx_entry->cq_flags = tcpx_tx_completion_flag(tcpx_ep, flags) |
+			     FI_MSG | FI_SEND;
 	tcpx_set_ack_flags(tx_entry, flags);
 	tx_entry->context = msg->context;
 
@@ -274,8 +274,8 @@ static ssize_t tcpx_send(struct fid_ep *ep, const void *buf, size_t len,
 
 	tcpx_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.base_hdr), buf, len);
 	tx_entry->context = context;
-	tx_entry->flags = (tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
-			   FI_MSG | FI_SEND;
+	tx_entry->cq_flags = tcpx_tx_completion_flag(tcpx_ep, 0) |
+			     FI_MSG | FI_SEND;
 	tcpx_set_ack_flags(tx_entry, tcpx_ep->util_ep.tx_op_flags);
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
@@ -297,8 +297,8 @@ static ssize_t tcpx_sendv(struct fid_ep *ep, const struct iovec *iov,
 
 	tcpx_init_tx_iov(tx_entry, sizeof(tx_entry->hdr.base_hdr), iov, count);
 	tx_entry->context = context;
-	tx_entry->flags = (tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
-			   FI_MSG | FI_SEND;
+	tx_entry->cq_flags = tcpx_tx_completion_flag(tcpx_ep, 0) |
+			     FI_MSG | FI_SEND;
 	tcpx_set_ack_flags(tx_entry, tcpx_ep->util_ep.tx_op_flags);
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
@@ -320,7 +320,7 @@ static ssize_t tcpx_inject(struct fid_ep *ep, const void *buf, size_t len,
 
 	tcpx_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.base_hdr), buf, len);
 
-	tx_entry->flags = FI_MSG | FI_SEND;
+	tx_entry->cq_flags = FI_MSG | FI_SEND; /* set in case of error */
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
 	return FI_SUCCESS;
@@ -347,8 +347,8 @@ static ssize_t tcpx_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	tcpx_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.cq_data_hdr),
 			 buf, len);
 	tx_entry->context = context;
-	tx_entry->flags = (tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
-			   FI_MSG | FI_SEND;
+	tx_entry->cq_flags = tcpx_tx_completion_flag(tcpx_ep, 0) |
+			     FI_MSG | FI_SEND;
 	tcpx_set_ack_flags(tx_entry, tcpx_ep->util_ep.tx_op_flags);
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
@@ -373,7 +373,7 @@ static ssize_t tcpx_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 	tcpx_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.cq_data_hdr),
 			    buf, len);
 
-	tx_entry->flags = FI_MSG | FI_SEND;
+	tx_entry->cq_flags = FI_MSG | FI_SEND; /* set in case of error */
 
 	tcpx_queue_send(tcpx_ep, tx_entry);
 	return FI_SUCCESS;
@@ -427,8 +427,8 @@ tcpx_tsendmsg(struct fid_ep *fid_ep, const struct fi_msg_tagged *msg,
 	}
 
 	tcpx_init_tx_iov(tx_entry, hdr_len, msg->msg_iov, msg->iov_count);
-	tx_entry->flags = ((ep->util_ep.tx_op_flags & FI_COMPLETION) |
-			    flags | FI_TAGGED | FI_SEND);
+	tx_entry->cq_flags = tcpx_tx_completion_flag(ep, flags) |
+			     FI_TAGGED | FI_SEND;
 	tcpx_set_ack_flags(tx_entry, flags);
 	tx_entry->context = msg->context;
 
@@ -453,8 +453,8 @@ tcpx_tsend(struct fid_ep *fid_ep, const void *buf, size_t len,
 
 	tcpx_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.tag_hdr), buf, len);
 	tx_entry->context = context;
-	tx_entry->flags = (ep->util_ep.tx_op_flags & FI_COMPLETION) |
-			   FI_TAGGED | FI_SEND;
+	tx_entry->cq_flags = tcpx_tx_completion_flag(ep, 0) |
+			     FI_TAGGED | FI_SEND;
 	tcpx_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
 	tcpx_queue_send(ep, tx_entry);
@@ -478,8 +478,8 @@ tcpx_tsendv(struct fid_ep *fid_ep, const struct iovec *iov, void **desc,
 
 	tcpx_init_tx_iov(tx_entry, sizeof(tx_entry->hdr.tag_hdr), iov, count);
 	tx_entry->context = context;
-	tx_entry->flags = (ep->util_ep.tx_op_flags & FI_COMPLETION) |
-			   FI_TAGGED | FI_SEND;
+	tx_entry->cq_flags = tcpx_tx_completion_flag(ep, 0) |
+			     FI_TAGGED | FI_SEND;
 	tcpx_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
 	tcpx_queue_send(ep, tx_entry);
@@ -504,7 +504,7 @@ tcpx_tinject(struct fid_ep *fid_ep, const void *buf, size_t len,
 
 	tcpx_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.tag_hdr), buf, len);
 
-	tx_entry->flags = FI_TAGGED | FI_SEND;
+	tx_entry->cq_flags = FI_TAGGED | FI_SEND; /* set in case of error */
 
 	tcpx_queue_send(ep, tx_entry);
 	return FI_SUCCESS;
@@ -529,8 +529,8 @@ tcpx_tsenddata(struct fid_ep *fid_ep, const void *buf, size_t len, void *desc,
 	tcpx_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.tag_data_hdr),
 			 buf, len);
 	tx_entry->context = context;
-	tx_entry->flags = (ep->util_ep.tx_op_flags & FI_COMPLETION) |
-			   FI_TAGGED | FI_SEND;
+	tx_entry->cq_flags = tcpx_tx_completion_flag(ep, 0) |
+			     FI_TAGGED | FI_SEND;
 	tcpx_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
 	tcpx_queue_send(ep, tx_entry);
@@ -557,7 +557,7 @@ tcpx_tinjectdata(struct fid_ep *fid_ep, const void *buf, size_t len,
 	tcpx_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.tag_data_hdr),
 			    buf, len);
 
-	tx_entry->flags = FI_TAGGED | FI_SEND;
+	tx_entry->cq_flags = FI_TAGGED | FI_SEND; /* set in case of error */
 
 	tcpx_queue_send(ep, tx_entry);
 	return FI_SUCCESS;

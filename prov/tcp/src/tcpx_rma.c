@@ -74,7 +74,7 @@ static void tcpx_rma_read_send_entry_fill(struct tcpx_xfer_entry *send_entry,
 	send_entry->iov[0].iov_len = offset;
 	send_entry->iov_cnt = 1;
 	send_entry->context = msg->context;
-	send_entry->flags = TCPX_NEED_RESP;
+	send_entry->ctrl_flags = TCPX_NEED_RESP;
 	send_entry->resp_entry = recv_entry;
 }
 
@@ -89,8 +89,9 @@ static void tcpx_rma_read_recv_entry_fill(struct tcpx_xfer_entry *recv_entry,
 	recv_entry->iov_cnt = msg->iov_count;
 	recv_entry->ep = tcpx_ep;
 	recv_entry->context = msg->context;
-	recv_entry->flags = ((tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
-			     flags | FI_RMA | FI_READ) | TCPX_INTERNAL_XFER;
+	recv_entry->cq_flags = tcpx_tx_completion_flag(tcpx_ep, flags) |
+			       FI_RMA | FI_READ;
+	recv_entry->ctrl_flags = TCPX_INTERNAL_XFER;
 }
 
 static ssize_t tcpx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
@@ -232,8 +233,8 @@ static ssize_t tcpx_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg
 	send_entry->iov[0].iov_base = (void *) &send_entry->hdr;
 	send_entry->iov[0].iov_len = offset;
 
-	send_entry->flags = (tcpx_ep->util_ep.tx_op_flags & FI_COMPLETION) |
-			     flags | FI_RMA | FI_WRITE;
+	send_entry->cq_flags = tcpx_tx_completion_flag(tcpx_ep, flags) |
+			       FI_RMA | FI_WRITE;
 	tcpx_set_commit_flags(send_entry, flags);
 	send_entry->context = msg->context;
 
