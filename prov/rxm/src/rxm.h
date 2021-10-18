@@ -177,6 +177,7 @@ extern size_t rxm_msg_tx_size;
 extern size_t rxm_msg_rx_size;
 extern size_t rxm_cm_progress_interval;
 extern size_t rxm_cq_eq_fairness;
+extern int rxm_passthru;
 extern int force_auto_progress;
 extern int rxm_use_write_rndv;
 extern enum fi_wait_obj def_wait_obj, def_tcp_wait_obj;

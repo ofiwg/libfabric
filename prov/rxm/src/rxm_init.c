@@ -56,8 +56,9 @@ size_t rxm_def_tx_size = 2048;
 size_t rxm_buffer_size = 16384;
 size_t rxm_packet_size;
 
-int force_auto_progress		= 0;
-int rxm_use_write_rndv		= 0;
+int rxm_passthru = 0; /* disable by default, need to analyze performance */
+int force_auto_progress;
+int rxm_use_write_rndv;
 enum fi_wait_obj def_wait_obj = FI_WAIT_FD, def_tcp_wait_obj = FI_WAIT_UNSPEC;
 
 char *rxm_proto_state_str[] = {
@@ -202,8 +203,11 @@ rxm_info_thru_core(uint32_t version, const struct fi_info *hints,
 int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 		     const struct fi_info *base_info, struct fi_info *core_info)
 {
-	if (rxm_passthru_info(base_info))
+	if (rxm_passthru_info(base_info)) {
+		if (!rxm_passthru)
+			return -FI_ENODATA;
 		return rxm_info_thru_core(version, hints, base_info, core_info);
+	}
 
 	rxm_info_to_core_mr_modes(version, hints, core_info);
 
@@ -707,6 +711,15 @@ RXM_INI
 			"before passing them to the core provider.  This "
 			"feature targets small to medium size message "
 			"transfers over the tcp provider.  (default: true)");
+
+	fi_param_define(&rxm_prov, "disable_passthru", FI_PARAM_BOOL,
+			"Disables passthru optimization.  Pass thru allows "
+			"rxm to pass all data transfer calls directly to the "
+			"core provider, which eliminates the rxm protocol and "
+			"related overhead.  Pass thru is an optimized path "
+			"to the tcp provider, depending on the capabilities "
+			"requested by the application.");
+	fi_param_get_bool(&rxm_prov, "disable_passthru", &rxm_passthru);
 
 	rxm_init_infos();
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);
