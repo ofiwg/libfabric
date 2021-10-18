@@ -381,6 +381,49 @@ static struct fi_ops_mr rxm_domain_mr_ops = {
 	.regattr = rxm_mr_regattr,
 };
 
+static int
+rxm_mr_regattr_thru(struct fid *fid, const struct fi_mr_attr *attr,
+		    uint64_t flags, struct fid_mr **mr)
+{
+	struct rxm_domain *domain;
+
+	domain = container_of(fid, struct rxm_domain,
+			      util_domain.domain_fid.fid);
+	return fi_mr_regattr(domain->msg_domain, attr, flags, mr);
+}
+
+static int
+rxm_mr_regv_thru(struct fid *fid, const struct iovec *iov, size_t count,
+		 uint64_t access, uint64_t offset, uint64_t requested_key,
+		 uint64_t flags, struct fid_mr **mr, void *context)
+{
+	struct rxm_domain *domain;
+
+	domain = container_of(fid, struct rxm_domain,
+			      util_domain.domain_fid.fid);
+	return fi_mr_regv(domain->msg_domain, iov, count, access, offset,
+			 requested_key, flags, mr, context);
+}
+
+static int rxm_mr_reg_thru(struct fid *fid, const void *buf, size_t len,
+		      uint64_t access, uint64_t offset, uint64_t requested_key,
+		      uint64_t flags, struct fid_mr **mr, void *context)
+{
+	struct rxm_domain *domain;
+
+	domain = container_of(fid, struct rxm_domain,
+			      util_domain.domain_fid.fid);
+	return fi_mr_reg(domain->msg_domain, buf, len, access, offset,
+			 requested_key, flags, mr, context);
+}
+
+static struct fi_ops_mr rxm_domain_mr_thru_ops = {
+	.size = sizeof(struct fi_ops_mr),
+	.reg = rxm_mr_reg_thru,
+	.regv = rxm_mr_regv_thru,
+	.regattr = rxm_mr_regattr_thru,
+};
+
 static ssize_t rxm_send_credits(struct fid_ep *ep, size_t credits)
 {
 	struct rxm_conn *rxm_conn = ep->fid.context;
@@ -496,7 +539,7 @@ static void rxm_config_dyn_rbuf(struct rxm_domain *domain, struct fi_info *info,
 	 * We also can't pass through HMEM buffers, unless the lower layer
 	 * can handle them.
 	 */
-	if ((info->caps & FI_COLLECTIVE) ||
+	if (domain->passthru || (info->caps & FI_COLLECTIVE) ||
 	    ((info->caps & FI_HMEM) && !(msg_info->caps & FI_HMEM)))
 		return;
 
@@ -554,8 +597,6 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	*domain = &rxm_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &rxm_domain_fi_ops;
-	/* Replace MR ops set by ofi_domain_init() */
-	(*domain)->mr = &rxm_domain_mr_ops;
 	(*domain)->ops = &rxm_domain_ops;
 
 	ret = ofi_bufpool_create(&rxm_domain->amo_bufpool,
@@ -564,6 +605,12 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err3;
 
 	fastlock_init(&rxm_domain->amo_bufpool_lock);
+
+	rxm_domain->passthru = rxm_passthru_info(info);
+	if (rxm_domain->passthru)
+		(*domain)->mr = &rxm_domain_mr_thru_ops;
+	else
+		(*domain)->mr = &rxm_domain_mr_ops;
 
 	ret = rxm_config_flow_ctrl(rxm_domain);
 	if (ret)

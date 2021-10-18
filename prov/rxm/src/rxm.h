@@ -245,6 +245,7 @@ struct rxm_domain {
 	size_t rx_post_size;
 	uint64_t mr_key;
 	bool dyn_rbuf;
+	bool passthru;
 	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
 	struct ofi_bufpool *amo_bufpool;
 	fastlock_t amo_bufpool_lock;
