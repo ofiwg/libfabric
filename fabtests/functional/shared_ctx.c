@@ -548,7 +548,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt_long(argc, argv, "h" ADDR_OPTS INFO_OPTS,
+	while ((op = getopt_long(argc, argv, "h" ADDR_OPTS INFO_OPTS API_OPTS,
 				 long_options, &option_index)) != -1) {
 		switch (op) {
 		case FT_EP_CNT:
@@ -562,6 +562,7 @@ int main(int argc, char **argv)
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
+			ft_parse_api_opts(op, optarg, hints, &opts);
 			break;
 		case '?':
 		case 'h':
@@ -580,7 +581,8 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->caps = FI_MSG;
+	if (!(hints->caps & FI_TAGGED))
+		hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 

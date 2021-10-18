@@ -3161,27 +3161,31 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 	}
 }
 
-int ft_parse_rma_opts(int op, char *optarg, struct fi_info *hints,
+int ft_parse_api_opts(int op, char *optarg, struct fi_info *hints,
 		      struct ft_opts *opts)
 {
 	switch (op) {
 	case 'o':
-		if (!strcmp(optarg, "read")) {
+		if (!strcasecmp(optarg, "read")) {
 			hints->caps |= FI_READ | FI_REMOTE_READ;
 			opts->rma_op = FT_RMA_READ;
-		} else if (!strcmp(optarg, "writedata")) {
+		} else if (!strcasecmp(optarg, "writedata")) {
 			hints->caps |= FI_WRITE | FI_REMOTE_WRITE;
 			hints->mode |= FI_RX_CQ_DATA;
 			hints->domain_attr->cq_data_size = 4;
 			opts->rma_op = FT_RMA_WRITEDATA;
 			cq_attr.format = FI_CQ_FORMAT_DATA;
-		} else if (!strcmp(optarg, "write")) {
+		} else if (!strcasecmp(optarg, "write")) {
 			hints->caps |= FI_WRITE | FI_REMOTE_WRITE;
 			opts->rma_op = FT_RMA_WRITE;
+		} else if (!strcasecmp(optarg, "msg")) {
+			hints->caps |= FI_MSG;
+		} else if (!strcasecmp(optarg, "tagged")) {
+			hints->caps |= FI_TAGGED;
 		} else {
-			fprintf(stderr, "Invalid operation type: \"%s\". Usage:\n"
-					"-o <op>\trma op type: read|write|writedata "
-				       "(default:write)\n", optarg);
+			fprintf(stderr, "Invalid operation type: \"%s\"."
+				"Usage:\n-o <op>\top: "
+				"read|write|writedata|msg|tagged\n", optarg);
 			return EXIT_FAILURE;
 		}
 		break;
