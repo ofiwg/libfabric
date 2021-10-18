@@ -62,6 +62,8 @@ struct fid_pep *pep;
 struct fid_ep *ep, *alias_ep;
 struct fid_cq *txcq, *rxcq;
 struct fid_cntr *txcntr, *rxcntr;
+struct fid_ep *srx;
+struct fid_stx *stx;
 struct fid_mr *mr;
 void *mr_desc = NULL;
 struct fid_av *av;
@@ -540,6 +542,42 @@ static int ft_alloc_msgs(void)
 	return 0;
 }
 
+int ft_open_domain_res(void)
+{
+	int ret;
+
+	ret = fi_domain(fabric, fi, &domain, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_domain", ret);
+		return ret;
+	}
+
+	if (opts.options & FT_OPT_DOMAIN_EQ) {
+		ret = fi_domain_bind(domain, &eq->fid, 0);
+		if (ret) {
+			FT_PRINTERR("fi_domain_bind", ret);
+			return ret;
+		}
+	}
+
+	if (opts.options & FT_OPT_STX) {
+		ret = fi_stx_context(domain, fi->tx_attr, &stx, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_stx_context", ret);
+			return ret;
+		}
+	}
+
+	if (opts.options & FT_OPT_SRX) {
+		ret = fi_srx_context(domain, fi->rx_attr, &srx, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_srx_context", ret);
+			return ret;
+		}
+	}
+	return 0;
+}
+
 int ft_open_fabric_res(void)
 {
 	int ret;
@@ -556,21 +594,7 @@ int ft_open_fabric_res(void)
 		return ret;
 	}
 
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_domain", ret);
-		return ret;
-	}
-
-	if (opts.options & FT_OPT_DOMAIN_EQ) {
-		ret = fi_domain_bind(domain, &eq->fid, 0);
-		if (ret) {
-			FT_PRINTERR("fi_domain_bind", ret);
-			return ret;
-		}
-	}
-
-	return 0;
+	return ft_open_domain_res();
 }
 
 int ft_alloc_ep_res(struct fi_info *fi)
@@ -998,19 +1022,9 @@ int ft_server_connect(void)
 	if (ret)
 		goto err;
 
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_domain", ret);
+	ret = ft_open_domain_res();
+	if (ret)
 		goto err;
-	}
-
-	if (opts.options & FT_OPT_DOMAIN_EQ) {
-		ret = fi_domain_bind(domain, &eq->fid, 0);
-		if (ret) {
-			FT_PRINTERR("fi_domain_bind", ret);
-			return ret;
-		}
-	}
 
 	ret = ft_alloc_active_res(fi);
 	if (ret)
@@ -1163,6 +1177,8 @@ int ft_enable_ep(struct fid_ep *ep)
 		FT_EP_BIND(ep, eq, 0);
 
 	FT_EP_BIND(ep, av, 0);
+	FT_EP_BIND(ep, stx, 0);
+	FT_EP_BIND(ep, srx, 0);
 
 	flags = FI_TRANSMIT;
 	if (!(opts.options & FT_OPT_TX_CQ))
@@ -1621,6 +1637,8 @@ static void ft_close_fids(void)
 	if (mr != &no_mr)
 		FT_CLOSE_FID(mr);
 	FT_CLOSE_FID(av);
+	FT_CLOSE_FID(srx);
+	FT_CLOSE_FID(stx);
 	FT_CLOSE_FID(domain);
 	FT_CLOSE_FID(eq);
 	FT_CLOSE_FID(waitset);

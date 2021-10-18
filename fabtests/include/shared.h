@@ -120,6 +120,8 @@ enum {
 	FT_OPT_USE_DEVICE	= 1 << 18,
 	FT_OPT_DOMAIN_EQ	= 1 << 19,
 	FT_OPT_FORK_CHILD	= 1 << 20,
+	FT_OPT_SRX		= 1 << 21,
+	FT_OPT_STX		= 1 << 22,
 	FT_OPT_OOB_CTRL		= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
 };
 
@@ -192,6 +194,8 @@ extern struct fid_pep *pep;
 extern struct fid_ep *ep, *alias_ep;
 extern struct fid_cq *txcq, *rxcq;
 extern struct fid_cntr *txcntr, *rxcntr;
+extern struct fid_ep *srx;
+extern struct fid_stx *stx;
 extern struct fid_mr *mr, no_mr;
 extern void *mr_desc;
 extern struct fid_av *av;
@@ -369,6 +373,7 @@ static inline int ft_use_size(int index, int enable_flags)
 int ft_init();
 int ft_alloc_bufs();
 int ft_open_fabric_res();
+int ft_open_domain_res();
 int ft_getinfo(struct fi_info *hints, struct fi_info **info);
 int ft_init_fabric();
 int ft_init_oob();
