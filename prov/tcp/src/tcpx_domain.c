@@ -66,7 +66,7 @@ static struct fi_ops fi_ops_srx_ctx = {
 };
 
 static int tcpx_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
-		 struct fid_ep **rx_ep, void *context)
+			struct fid_ep **rx_ep, void *context)
 {
 	struct tcpx_rx_ctx *srx_ctx;
 	int ret = FI_SUCCESS;
@@ -141,17 +141,17 @@ static int tcpx_set_ops(struct fid *fid, const char *name,
 
 static int tcpx_domain_close(fid_t fid)
 {
-	struct tcpx_domain *tcpx_domain;
+	struct tcpx_domain *domain;
 	int ret;
 
-	tcpx_domain = container_of(fid, struct tcpx_domain,
-				   util_domain.domain_fid.fid);
+	domain = container_of(fid, struct tcpx_domain,
+			      util_domain.domain_fid.fid);
 
-	ret = ofi_domain_close(&tcpx_domain->util_domain);
+	ret = ofi_domain_close(&domain->util_domain);
 	if (ret)
 		return ret;
 
-	free(tcpx_domain);
+	free(domain);
 	return FI_SUCCESS;
 }
 
@@ -173,30 +173,30 @@ static struct fi_ops_mr tcpx_domain_fi_ops_mr = {
 };
 
 int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-		     struct fid_domain **domain, void *context)
+		     struct fid_domain **domain_fid, void *context)
 {
-	struct tcpx_domain *tcpx_domain;
+	struct tcpx_domain *domain;
 	int ret;
 
 	ret = ofi_prov_check_info(&tcpx_util_prov, fabric->api_version, info);
 	if (ret)
 		return ret;
 
-	tcpx_domain = calloc(1, sizeof(*tcpx_domain));
-	if (!tcpx_domain)
+	domain = calloc(1, sizeof(*domain));
+	if (!domain)
 		return -FI_ENOMEM;
 
-	ret = ofi_domain_init(fabric, info, &tcpx_domain->util_domain, context);
+	ret = ofi_domain_init(fabric, info, &domain->util_domain, context);
 	if (ret)
 		goto err;
 
-	*domain = &tcpx_domain->util_domain.domain_fid;
-	(*domain)->fid.ops = &tcpx_domain_fi_ops;
-	(*domain)->ops = &tcpx_domain_ops;
-	(*domain)->mr = &tcpx_domain_fi_ops_mr;
+	domain->util_domain.domain_fid.fid.ops = &tcpx_domain_fi_ops;
+	domain->util_domain.domain_fid.ops = &tcpx_domain_ops;
+	domain->util_domain.domain_fid.mr = &tcpx_domain_fi_ops_mr;
+	*domain_fid = &domain->util_domain.domain_fid;
 
 	return FI_SUCCESS;
 err:
-	free(tcpx_domain);
+	free(domain);
 	return ret;
 }

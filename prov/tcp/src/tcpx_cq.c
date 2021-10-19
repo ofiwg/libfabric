@@ -114,15 +114,15 @@ unlock:
 static int tcpx_cq_close(struct fid *fid)
 {
 	int ret;
-	struct tcpx_cq *tcpx_cq;
+	struct tcpx_cq *cq;
 
-	tcpx_cq = container_of(fid, struct tcpx_cq, util_cq.cq_fid.fid);
-	ofi_bufpool_destroy(tcpx_cq->xfer_pool);
-	ret = ofi_cq_cleanup(&tcpx_cq->util_cq);
+	cq = container_of(fid, struct tcpx_cq, util_cq.cq_fid.fid);
+	ofi_bufpool_destroy(cq->xfer_pool);
+	ret = ofi_cq_cleanup(&cq->util_cq);
 	if (ret)
 		return ret;
 
-	free(tcpx_cq);
+	free(cq);
 	return 0;
 }
 
@@ -249,18 +249,18 @@ static struct fi_ops tcpx_cq_fi_ops = {
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
-	struct tcpx_cq *tcpx_cq;
+	struct tcpx_cq *cq;
 	struct fi_cq_attr cq_attr;
 	int ret;
 
-	tcpx_cq = calloc(1, sizeof(*tcpx_cq));
-	if (!tcpx_cq)
+	cq = calloc(1, sizeof(*cq));
+	if (!cq)
 		return -FI_ENOMEM;
 
 	if (!attr->size)
 		attr->size = TCPX_DEF_CQ_SIZE;
 
-	ret = ofi_bufpool_create(&tcpx_cq->xfer_pool,
+	ret = ofi_bufpool_create(&cq->xfer_pool,
 				 sizeof(struct tcpx_xfer_entry), 16, 0,
 				 1024, 0);
 	if (ret)
@@ -273,18 +273,18 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		attr = &cq_attr;
 	}
 
-	ret = ofi_cq_init(&tcpx_prov, domain, attr, &tcpx_cq->util_cq,
+	ret = ofi_cq_init(&tcpx_prov, domain, attr, &cq->util_cq,
 			  &tcpx_cq_progress, context);
 	if (ret)
 		goto destroy_pool;
 
-	*cq_fid = &tcpx_cq->util_cq.cq_fid;
+	*cq_fid = &cq->util_cq.cq_fid;
 	(*cq_fid)->fid.ops = &tcpx_cq_fi_ops;
 	return 0;
 
 destroy_pool:
-	ofi_bufpool_destroy(tcpx_cq->xfer_pool);
+	ofi_bufpool_destroy(cq->xfer_pool);
 free_cq:
-	free(tcpx_cq);
+	free(cq);
 	return ret;
 }

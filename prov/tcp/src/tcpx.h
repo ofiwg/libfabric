@@ -367,7 +367,7 @@ int tcpx_update_epoll(struct tcpx_ep *ep);
 void tcpx_hdr_none(struct tcpx_base_hdr *hdr);
 void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr);
 
-void tcpx_tx_queue_insert(struct tcpx_ep *tcpx_ep,
+void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 			  struct tcpx_xfer_entry *tx_entry);
 
 void tcpx_conn_mgr_run(struct util_eq *eq);
@@ -375,11 +375,11 @@ int tcpx_eq_wait_try_func(void *arg);
 int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		   struct fid_eq **eq_fid, void *context);
 
-int tcpx_op_invalid(struct tcpx_ep *tcpx_ep);
-int tcpx_op_msg(struct tcpx_ep *tcpx_ep);
-int tcpx_op_read_req(struct tcpx_ep *tcpx_ep);
-int tcpx_op_write(struct tcpx_ep *tcpx_ep);
-int tcpx_op_read_rsp(struct tcpx_ep *tcpx_ep);
+int tcpx_op_invalid(struct tcpx_ep *ep);
+int tcpx_op_msg(struct tcpx_ep *ep);
+int tcpx_op_read_req(struct tcpx_ep *ep);
+int tcpx_op_write(struct tcpx_ep *ep);
+int tcpx_op_read_rsp(struct tcpx_ep *ep);
 
 
 static inline void

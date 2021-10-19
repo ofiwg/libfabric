@@ -546,21 +546,19 @@ static void process_cm_ctx(struct util_wait *wait,
 	}
 }
 
-void tcpx_conn_mgr_run(struct util_eq *eq)
+void tcpx_conn_mgr_run(struct util_eq *util_eq)
 {
 	struct util_wait_fd *wait_fd;
-	struct tcpx_eq *tcpx_eq;
+	struct tcpx_eq *eq;
 	struct fid *fid;
 	struct ofi_epollfds_event events[MAX_POLL_EVENTS];
 	int count, i;
 
-	assert(eq->wait != NULL);
+	assert(util_eq->wait != NULL);
+	wait_fd = container_of(util_eq->wait, struct util_wait_fd, util_wait);
 
-	wait_fd = container_of(eq->wait, struct util_wait_fd,
-			       util_wait);
-
-	tcpx_eq = container_of(eq, struct tcpx_eq, util_eq);
-	fastlock_acquire(&tcpx_eq->close_lock);
+	eq = container_of(util_eq, struct tcpx_eq, util_eq);
+	fastlock_acquire(&eq->close_lock);
 	count = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 		ofi_epoll_wait(wait_fd->epoll_fd, events, MAX_POLL_EVENTS, 0) :
 		ofi_pollfds_wait(wait_fd->pollfds, events, MAX_POLL_EVENTS, 0);
@@ -574,8 +572,8 @@ void tcpx_conn_mgr_run(struct util_eq *eq)
 
 		fid = events[i].data.ptr;
 		if (fid->fclass == TCPX_CLASS_CM)
-			process_cm_ctx(eq->wait, events[i].data.ptr);
+			process_cm_ctx(util_eq->wait, events[i].data.ptr);
 	}
 unlock:
-	fastlock_release(&tcpx_eq->close_lock);
+	fastlock_release(&eq->close_lock);
 }
