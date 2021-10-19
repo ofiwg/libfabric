@@ -293,6 +293,18 @@ tcpx_match_tag_addr(struct tcpx_rx_ctx *srx, struct tcpx_ep *ep, uint64_t tag)
 	return NULL;
 }
 
+int tcpx_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+{
+	struct tcpx_rx_ctx *srx;
+
+	if (flags != FI_RECV || bfid->fclass != FI_CLASS_CQ)
+		return -FI_EINVAL;
+
+	srx = container_of(fid, struct tcpx_rx_ctx, rx_fid.fid);
+	srx->cq = container_of(bfid, struct tcpx_cq, util_cq.cq_fid.fid);
+	ofi_atomic_inc32(&srx->cq->util_cq.ref);
+	return FI_SUCCESS;
+}
 
 static int tcpx_srx_close(struct fid *fid)
 {
@@ -305,15 +317,25 @@ static int tcpx_srx_close(struct fid *fid)
 	while (!slist_empty(&srx->rx_queue)) {
 		entry = slist_remove_head(&srx->rx_queue);
 		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
+		if (srx->cq) {
+			tcpx_cq_report_error(&srx->cq->util_cq, xfer_entry,
+					      FI_ECANCELED);
+		}
 		ofi_buf_free(xfer_entry);
 	}
 
 	while (!slist_empty(&srx->tag_queue)) {
 		entry = slist_remove_head(&srx->tag_queue);
 		xfer_entry = container_of(entry, struct tcpx_xfer_entry, entry);
+		if (srx->cq) {
+			tcpx_cq_report_error(&srx->cq->util_cq, xfer_entry,
+					      FI_ECANCELED);
+		}
 		ofi_buf_free(xfer_entry);
 	}
 
+	if (srx->cq)
+		ofi_atomic_dec32(&srx->cq->util_cq.ref);
 	ofi_bufpool_destroy(srx->buf_pool);
 	fastlock_destroy(&srx->lock);
 	free(srx);
@@ -323,7 +345,7 @@ static int tcpx_srx_close(struct fid *fid)
 static struct fi_ops fi_ops_srx = {
 	.size = sizeof(struct fi_ops),
 	.close = tcpx_srx_close,
-	.bind = fi_no_bind,
+	.bind = tcpx_srx_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };

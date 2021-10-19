@@ -232,6 +232,7 @@ struct tcpx_cur_tx {
 
 struct tcpx_rx_ctx {
 	struct fid_ep		rx_fid;
+	struct tcpx_cq		*cq;
 	struct slist		rx_queue;
 	struct slist		tag_queue;
 	struct tcpx_xfer_entry	*(*match_tag_rx)(struct tcpx_rx_ctx *srx,
