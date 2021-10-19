@@ -110,8 +110,6 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 #define RXR_RAND_MAX_TIMEOUT		(120)
 
 /* bounds for flow control */
-#define RXR_DEF_MAX_RX_WINDOW		(128)
-#define RXR_DEF_MAX_TX_CREDITS		(64)
 #define RXR_DEF_MIN_TX_CREDITS		(32)
 
 /*
@@ -209,9 +207,7 @@ extern struct fi_fabric_attr rxr_fabric_attr;
 extern struct util_prov rxr_util_prov;
 
 struct rxr_env {
-	int rx_window_size;
 	int tx_min_credits;
-	int tx_max_credits;
 	int tx_queue_size;
 	int use_device_rdma;
 	int use_zcpy_rx;
@@ -313,8 +309,6 @@ struct rdm_peer {
 	size_t efa_outstanding_tx_ops;	/* tracks outstanding tx ops to this peer on EFA device */
 	size_t shm_outstanding_tx_ops;  /* tracks outstanding tx ops to this peer on SHM */
 	struct dlist_entry outstanding_tx_pkts; /* a list of outstanding tx pkts to the peer */
-	uint16_t tx_credits;		/* available send credits */
-	uint16_t rx_credits;		/* available credits to allocate */
 	uint64_t rnr_backoff_begin_ts;	/* timestamp for RNR backoff period begin */
 	uint64_t rnr_backoff_wait_time;	/* how long the RNR backoff period last */
 	int rnr_queued_pkt_cnt;		/* queued RNR packet count */
@@ -380,8 +374,6 @@ struct rxr_rx_entry {
 	uint64_t bytes_copied;
 	uint64_t bytes_queued;
 	int64_t window;
-	uint16_t credit_request;
-	int credit_cts;
 
 	uint64_t total_len;
 
@@ -464,8 +456,6 @@ struct rxr_tx_entry {
 	uint64_t bytes_acked;
 	uint64_t bytes_sent;
 	int64_t window;
-	uint16_t credit_request;
-	uint16_t credit_allocated;
 
 	uint64_t total_len;
 
@@ -738,10 +728,6 @@ struct rxr_ep {
 	 * It exists because posting RX packets by bulk is more efficient.
 	 */
 	size_t efa_rx_pkts_to_post;
-	/* number of buffers available for large messages */
-	size_t available_data_bufs;
-	/* Timestamp of when available_data_bufs was exhausted. */
-	uint64_t available_data_bufs_ts;
 
 	/* number of outstanding tx ops on efa device */
 	size_t efa_outstanding_tx_ops;
@@ -911,9 +897,6 @@ void rxr_ep_progress_internal(struct rxr_ep *rxr_ep);
 
 int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 			      uint64_t flags);
-
-int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
-				 struct rxr_tx_entry *tx_entry);
 
 int rxr_ep_determine_rdma_support(struct rxr_ep *ep, fi_addr_t addr,
 				  struct rdm_peer *peer);

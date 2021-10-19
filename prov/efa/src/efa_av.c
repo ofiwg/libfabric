@@ -92,8 +92,6 @@ void efa_rdm_peer_init(struct rdm_peer *peer, struct rxr_ep *ep, struct efa_conn
 					 conn->ep_addr);
 
 	ofi_recvwin_buf_alloc(&peer->robuf, rxr_env.recvwin_size);
-	peer->rx_credits = rxr_env.rx_window_size;
-	peer->tx_credits = rxr_env.tx_max_credits;
 	dlist_init(&peer->outstanding_tx_pkts);
 	dlist_init(&peer->rx_unexp_list);
 	dlist_init(&peer->rx_unexp_tagged_list);

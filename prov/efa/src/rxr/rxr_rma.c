@@ -204,8 +204,7 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 /* rma_read functions */
 ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 {
-	int err, window, credits;
-	struct rdm_peer *peer;
+	int err;
 	struct rxr_rx_entry *rx_entry;
 
 	/* create a rx_entry to receve data
@@ -239,16 +238,6 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 	 * meanwhile set rx_entry->state to RXR_RX_RECV so that
 	 * this rx_entry is ready to receive.
 	 */
-
-	/* But if there is no available buffer, we do not even proceed.
-	 * call rxr_ep_progress_internal() might release some buffer
-	 */
-	if (ep->available_data_bufs == 0) {
-		rxr_release_rx_entry(ep, rx_entry);
-		rxr_ep_progress_internal(ep);
-		return -FI_EAGAIN;
-	}
-
 	rx_entry->state = RXR_RX_RECV;
 	/* rma_loc_tx_id is used in rxr_cq_handle_rx_completion()
 	 * to locate the tx_entry for tx completion.
@@ -270,17 +259,8 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 	if (tx_entry->total_len < ep->mtu_size - sizeof(struct rxr_readrsp_hdr)) {
 		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_SHORT_RTR_PKT, 0, 0);
 	} else {
-		peer = rxr_ep_get_peer(ep, tx_entry->addr);
-		assert(peer);
-
-		rxr_pkt_calc_cts_window_credits(ep, peer,
-						tx_entry->total_len,
-						tx_entry->credit_request,
-						&window,
-						&credits);
-
-		rx_entry->window = window;
-		rx_entry->credit_cts = credits;
+		rx_entry->window = MIN(tx_entry->total_len,
+				       rxr_env.tx_min_credits * ep->max_data_payload_size);
 		tx_entry->rma_window = rx_entry->window;
 		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_LONGCTS_RTR_PKT, 0, 0);
 	}
@@ -370,10 +350,6 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 			goto out;
 		}
 	} else {
-		err = rxr_ep_set_tx_credit_request(rxr_ep, tx_entry);
-		if (OFI_UNLIKELY(err))
-			goto out;
-
 		err = rxr_rma_post_efa_emulated_read(rxr_ep, tx_entry);
 	}
 
@@ -512,10 +488,6 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 		 * message protocol
 		 */
 	}
-
-	err = rxr_ep_set_tx_credit_request(ep, tx_entry);
-	if (OFI_UNLIKELY(err))
-		return err;
 
 	ctrl_type = delivery_complete_requested ?
 		RXR_DC_LONGCTS_RTW_PKT : RXR_LONGCTS_RTW_PKT;

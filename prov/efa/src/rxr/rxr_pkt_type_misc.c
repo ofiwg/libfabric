@@ -191,45 +191,11 @@ void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 }
 
 /*  CTS packet related functions */
-void rxr_pkt_calc_cts_window_credits(struct rxr_ep *ep, struct rdm_peer *peer,
-				     uint64_t size, int request,
-				     int *window, int *credits)
-{
-	struct efa_av *av;
-	int num_peers;
-
-	/*
-	 * Adjust the peer credit pool based on the current AV size, which could
-	 * have grown since the time this peer was initialized.
-	 */
-	av = rxr_ep_av(ep);
-	num_peers = av->used - 1;
-	if (num_peers && ofi_div_ceil(rxr_env.rx_window_size, num_peers) < peer->rx_credits)
-		peer->rx_credits = ofi_div_ceil(peer->rx_credits, num_peers);
-
-	/*
-	 * Allocate credits for this transfer based on the request, the number
-	 * of available data buffers, and the number of outstanding peers this
-	 * endpoint is actively tracking in the AV. Also ensure that a minimum
-	 * number of credits are allocated to the transfer so the sender can
-	 * make progress.
-	 */
-	*credits = MIN(MIN(ep->available_data_bufs, ep->efa_rx_pkts_posted),
-		       peer->rx_credits);
-	*credits = MIN(request, *credits);
-	*credits = MAX(*credits, rxr_env.tx_min_credits);
-	*window = MIN(size, *credits * ep->max_data_payload_size);
-	if (peer->rx_credits > ofi_div_ceil(*window, ep->max_data_payload_size))
-		peer->rx_credits -= ofi_div_ceil(*window, ep->max_data_payload_size);
-}
-
 ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 			 struct rxr_rx_entry *rx_entry,
 			 struct rxr_pkt_entry *pkt_entry)
 {
-	int window = 0;
 	struct rxr_cts_hdr *cts_hdr;
-	struct rdm_peer *peer;
 	size_t bytes_left;
 
 	cts_hdr = (struct rxr_cts_hdr *)pkt_entry->pkt;
@@ -244,12 +210,7 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 	cts_hdr->recv_id = rx_entry->rx_id;
 
 	bytes_left = rx_entry->total_len - rx_entry->bytes_received;
-	peer = rxr_ep_get_peer(ep, rx_entry->addr);
-	assert(peer);
-	rxr_pkt_calc_cts_window_credits(ep, peer, bytes_left,
-					rx_entry->credit_request,
-					&window, &rx_entry->credit_cts);
-	cts_hdr->recv_length = window;
+	cts_hdr->recv_length = MIN(bytes_left, rxr_env.tx_min_credits * ep->max_data_payload_size);
 	pkt_entry->pkt_size = sizeof(struct rxr_cts_hdr);
 
 	/*
@@ -271,21 +232,11 @@ void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
 
 	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
 	rx_entry->window = rxr_get_cts_hdr(pkt_entry->pkt)->recv_length;
-	ep->available_data_bufs -= rx_entry->credit_cts;
-
-	/*
-	 * Set a timer if available_bufs is exhausted. We may encounter a
-	 * scenario where a peer has stopped responding so we need a fallback
-	 * to replenish the credits.
-	 */
-	if (OFI_UNLIKELY(ep->available_data_bufs == 0))
-		ep->available_data_bufs_ts = ofi_gettime_us();
 }
 
 void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry)
 {
-	struct rdm_peer *peer;
 	struct rxr_cts_hdr *cts_pkt;
 	struct rxr_tx_entry *tx_entry;
 
@@ -297,14 +248,6 @@ void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 
 	tx_entry->rx_id = cts_pkt->recv_id;
 	tx_entry->window = cts_pkt->recv_length;
-
-	/* Return any excess tx_credits that were borrowed for the request */
-	peer = rxr_ep_get_peer(ep, tx_entry->addr);
-	tx_entry->credit_allocated = ofi_div_ceil(cts_pkt->recv_length, ep->max_data_payload_size);
-	if (tx_entry->credit_allocated < tx_entry->credit_request) {
-		assert(peer);
-		peer->tx_credits += tx_entry->credit_request - tx_entry->credit_allocated;
-	}
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 

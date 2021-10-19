@@ -606,7 +606,7 @@ int rxr_pkt_init_longcts_rtm(struct rxr_ep *ep,
 	rtm_hdr = rxr_get_longcts_rtm_base_hdr(pkt_entry->pkt);
 	rtm_hdr->msg_length = tx_entry->total_len;
 	rtm_hdr->send_id = tx_entry->tx_id;
-	rtm_hdr->credit_request = tx_entry->credit_request;
+	rtm_hdr->credit_request = rxr_env.tx_min_credits;
 	return 0;
 }
 
@@ -1251,8 +1251,6 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	ep->rx_pending++;
 #endif
 	rx_entry->state = RXR_RX_RECV;
-	/* we have noticed using the default value achieve better bandwidth */
-	rx_entry->credit_request = rxr_env.tx_min_credits;
 	ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
 
 	return ret;
@@ -1502,7 +1500,7 @@ static inline void rxr_pkt_init_longcts_rtw_hdr(struct rxr_ep *ep,
 	rtw_hdr->rma_iov_count = tx_entry->rma_iov_count;
 	rtw_hdr->msg_length = tx_entry->total_len;
 	rtw_hdr->send_id = tx_entry->tx_id;
-	rtw_hdr->credit_request = tx_entry->credit_request;
+	rtw_hdr->credit_request = rxr_env.tx_min_credits;
 	rxr_pkt_init_req_hdr(ep, tx_entry, pkt_type, pkt_entry);
 }
 
@@ -1820,7 +1818,6 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 #endif
 	rx_entry->state = RXR_RX_RECV;
 	rx_entry->tx_id = tx_id;
-	rx_entry->credit_request = rxr_env.tx_min_credits;
 	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Cannot post CTS packet\n");
