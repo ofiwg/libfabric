@@ -140,6 +140,20 @@ static struct fi_ops_msg tcpx_srx_msg_ops = {
 	.injectdata = fi_no_msg_injectdata,
 };
 
+static ssize_t
+tcpx_srx_peek(struct tcpx_rx_ctx *srx, const struct fi_msg_tagged *msg,
+	      uint64_t flags)
+{
+	struct fi_cq_err_entry err_entry = {0};
+
+	err_entry.op_context = msg->context;
+	err_entry.flags = FI_RECV | FI_TAGGED;
+	err_entry.tag = msg->tag;
+	err_entry.err = FI_ENOMSG;
+
+	ofi_cq_write_error(&srx->cq->util_cq, &err_entry);
+	return FI_SUCCESS;
+}
 
 static ssize_t
 tcpx_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
@@ -151,6 +165,9 @@ tcpx_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	srx = container_of(ep_fid, struct tcpx_rx_ctx, rx_fid);
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
+
+	if (flags & FI_PEEK)
+		return tcpx_srx_peek(srx, msg, flags);
 
 	fastlock_acquire(&srx->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
