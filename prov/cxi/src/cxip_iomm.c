@@ -22,6 +22,19 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 
 	dom = container_of(cache, struct cxip_domain, iomm);
 
+	/* Prefer the ATS (scalable MD) whenever possible
+	 *
+	 * TODO: ATS (scalable MD) can only support CPU page sizes and should be
+	 * avoided for non-standard page sizes.
+	 */
+	if (dom->scalable_iomm && entry->info.iface == FI_HMEM_SYSTEM) {
+		md->md = dom->scalable_md.md;
+		md->dom = dom;
+		md->info = entry->info;
+
+		return FI_SUCCESS;
+	}
+
 	if (entry->info.iface == FI_HMEM_SYSTEM) {
 		if (dom->ats)
 			map_flags |= CXI_MAP_ATS;
@@ -63,21 +76,21 @@ static void cxip_do_unmap(struct ofi_mr_cache *cache,
 	int ret;
 	struct cxip_md *md = (struct cxip_md *)entry->data;
 
-	if (!md || !md->dom)
-		return;
+	if (md->md) {
+		/* Unmap is a no-op if the scalable MD is used. */
+		if (md->dom->scalable_md.md)
+			return;
 
-	ret = cxil_unmap(md->md);
-	if (ret)
-		CXIP_WARN("cxil_unmap failed: %d\n", ret);
+		ret = cxil_unmap(md->md);
+		if (ret)
+			CXIP_WARN("cxil_unmap failed: %d\n", ret);
+	}
 }
 
 static int cxip_scalable_iomm_init(struct cxip_domain *dom)
 {
 	int ret;
 	uint32_t map_flags = (CXI_MAP_READ | CXI_MAP_WRITE | CXI_MAP_ATS);
-
-	/* Create ATS MD to cover all addresses. */
-	fastlock_acquire(&dom->iomm_lock);
 
 	ret = cxil_map(dom->lni->lni, 0, -1, map_flags, NULL,
 		       &dom->scalable_md.md);
@@ -99,8 +112,6 @@ static int cxip_scalable_iomm_init(struct cxip_domain *dom)
 	} else {
 		ret = -FI_ENOSYS;
 	}
-
-	fastlock_release(&dom->iomm_lock);
 
 	return ret;
 }
@@ -130,6 +141,40 @@ static int cxip_ats_check(struct cxip_domain *dom)
 	return 0;
 }
 
+static void cxip_iomm_set_rocr_dev_mem_only(struct cxip_domain *dom)
+{
+	int dev_hmem_count = 0;
+	bool rocr_support = false;
+	int i;
+
+	if (!dom->hmem) {
+		dom->rocr_dev_mem_only = false;
+		return;
+	}
+
+	for (i = 0; i < OFI_HMEM_MAX; i++) {
+		if (i == FI_HMEM_SYSTEM)
+			continue;
+
+		if (hmem_ops[i].initialized) {
+			dev_hmem_count++;
+
+			if (i == FI_HMEM_ROCR)
+				rocr_support = true;
+		}
+	}
+
+	/* If FI_HMEM_ROCR is the ONLY device supported by libfabric and the
+	 * core ROCR memory monitor is used, cxip_map can be optimized to avoid
+	 * pointer queries.
+	 */
+	if (dev_hmem_count == 1 && rocr_support &&
+	    default_rocr_monitor == rocr_monitor)
+		dom->rocr_dev_mem_only = true;
+	else
+		dom->rocr_dev_mem_only = false;
+}
+
 /*
  * cxip_iomm_init() - Initialize domain IO memory map.
  */
@@ -142,8 +187,6 @@ int cxip_iomm_init(struct cxip_domain *dom)
 	};
 	int ret;
 	bool scalable;
-
-	fastlock_init(&dom->iomm_lock);
 
 	/* Check if ATS is supported */
 	if (cxip_env.ats && cxip_ats_check(dom))
@@ -183,6 +226,8 @@ int cxip_iomm_init(struct cxip_domain *dom)
 		}
 	}
 
+	cxip_iomm_set_rocr_dev_mem_only(dom);
+
 	return FI_SUCCESS;
 }
 
@@ -191,8 +236,6 @@ int cxip_iomm_init(struct cxip_domain *dom)
  */
 void cxip_iomm_fini(struct cxip_domain *dom)
 {
-	fastlock_destroy(&dom->iomm_lock);
-
 	if (dom->scalable_iomm)
 		cxip_scalable_iomm_fini(dom);
 
@@ -218,11 +261,10 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	};
 	struct ofi_mr_entry *entry;
 
-	/* Always need to query memory type if HMEM support is enabled. */
-	if (dom->hmem)
-		attr.iface = ofi_get_hmem_iface(buf);
-
-	if (dom->scalable_iomm && attr.iface == FI_HMEM_SYSTEM) {
+	/* TODO: ATS (scalable MD) can only support CPU page sizes and should be
+	 * avoided for non-standard page sizes.
+	 */
+	if (dom->scalable_iomm && !dom->hmem) {
 		*md = &dom->scalable_md;
 		return FI_SUCCESS;
 	}
@@ -232,21 +274,38 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	 */
 	buf_adj = FLOOR(buf, C_PAGE_SIZE);
 	iov.iov_base = (void *)buf_adj;
-
 	buf_adj = (unsigned long)buf - buf_adj;
 	iov.iov_len = CEILING(len + buf_adj, C_PAGE_SIZE);
 
-	fastlock_acquire(&dom->iomm_lock);
+	/* Since the MR cache find operates on virtual addresses and all device
+	 * memory must support a unified virtual address space with system
+	 * memory, the buffer pointer query can be avoided completely if the
+	 * corresponding entry is in the cache.
+	 */
+	if (dom->rocr_dev_mem_only) {
+		entry = ofi_mr_cache_find(&dom->iomm, &attr);
+		if (entry) {
+			*md = (struct cxip_md *)entry->data;
+			return FI_SUCCESS;
+		}
+	}
+
+	/* Since the MR cache search will allocate a new entry, the MR iface
+	 * attribute must be defined for the proper MR cache memory monitor to
+	 * be selected.
+	 */
+	if (dom->hmem)
+		attr.iface = ofi_get_hmem_iface(buf);
+
 	ret = ofi_mr_cache_search(&dom->iomm, &attr, &entry);
 	if (ret) {
-		CXIP_DBG("Failed to acquire mapping (%p, %lu): %d\n",
-			 buf, len, ret);
-	} else {
-		*md = (struct cxip_md *)entry->data;
+		CXIP_WARN("Failed to acquire mapping (%p, %lu): %d\n",
+			  buf, len, ret);
+		return ret;
 	}
-	fastlock_release(&dom->iomm_lock);
 
-	return ret;
+	*md = (struct cxip_md *)entry->data;
+	return FI_SUCCESS;
 }
 
 /*
@@ -264,7 +323,5 @@ void cxip_unmap(struct cxip_md *md)
 	if (md == &md->dom->scalable_md)
 		return;
 
-	fastlock_acquire(&md->dom->iomm_lock);
 	ofi_mr_cache_delete(&md->dom->iomm, entry);
-	fastlock_release(&md->dom->iomm_lock);
 }

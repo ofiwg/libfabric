@@ -524,7 +524,6 @@ struct cxip_domain {
 
 	/* Translation cache */
 	struct ofi_mr_cache iomm;
-	fastlock_t iomm_lock;
 	bool odp;
 	bool ats;
 	bool hmem;
@@ -532,6 +531,7 @@ struct cxip_domain {
 	/* ATS translation support */
 	struct cxip_md scalable_md;
 	bool scalable_iomm;
+	bool rocr_dev_mem_only;
 
 	/* Domain state */
 	bool enabled;
