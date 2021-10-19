@@ -243,11 +243,8 @@ struct tcpx_rx_ctx {
 	fastlock_t		lock;
 };
 
-struct tcpx_xfer_entry *
-tcpx_match_tag_addr(struct tcpx_rx_ctx *srx, struct tcpx_ep *ep, uint64_t tag);
-struct tcpx_xfer_entry *
-tcpx_match_tag(struct tcpx_rx_ctx *srx, struct tcpx_ep *ep, uint64_t tag);
-
+int tcpx_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
+		     struct fid_ep **rx_ep, void *context);
 
 struct tcpx_ep {
 	struct util_ep		util_ep;
