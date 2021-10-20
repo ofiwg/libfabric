@@ -47,20 +47,35 @@ _cxi_libs = \
 	-lcurl -ljson-c -lm
 
 if HAVE_PMI
-# Stand-alone srun  tests for hardware testing environment
-bin_PROGRAMS += prov/cxi/test/distributed/test_pmi
-nodist_prov_cxi_test_distributed_test_pmi_SOURCES = \
-	prov/cxi/test/distributed/test_pmi.c \
-	prov/cxi/test/pmi_utils.c
-prov_cxi_test_distributed_test_pmi_CPPFLAGS = \
-	$(AM_CPPFLAGS) $(cxi_CPPFLAGS) $(PTHREAD_CFLAGS) \
+
+# Code used by all PMI-based tests
+noinst_LTLIBRARIES += prov/cxi/lib/libfrmwk.la
+prov_cxi_lib_libfrmwk_la_SOURCES = \
+	prov/cxi/include/pmi_utils.h \
+	prov/cxi/include/pmi_frmwk.h \
+	prov/cxi/test/distributed/pmi_utils.c \
+	prov/cxi/test/distributed/pmi_frmwk.c
+prov_cxi_lib_libfrmwk_la_CPPFLAGS = \
+	$(AM_CPPFLAGS) $(cxi_CPPFLAGS) $(PTHREAD_FLAGS) \
 	-DUSE_PMI2 -DUSE_CRAY_PMI \
 	-I/opt/cray/pe/pmi/default/include \
 	-L/opt/cray/pe/pmi/default/lib
-prov_cxi_test_distributed_test_pmi_LDFLAGS = \
-	$(cxitest_LDFLAGS) -static
-prov_cxi_test_distributed_test_pmi_LDADD = \
-	$(cxitest_LIBS) $(linkback) $(PTHREAD_LIBS) -lpmi2
+prov_cxi_lib_libfrmwk_la_LIBADD = -lpmi2
+
+# Stand-alone srun  tests for hardware testing environment
+bin_PROGRAMS += prov/cxi/test/distributed/test_pmi
+prov_cxi_test_distributed_test_pmi_SOURCES = \
+	prov/cxi/test/distributed/test_pmi.c
+prov_cxi_test_distributed_test_pmi_LDFLAGS = -static
+prov_cxi_test_distributed_test_pmi_LDADD = prov/cxi/lib/libfrmwk.la
+
+bin_PROGRAMS += prov/cxi/test/distributed/test_frmwk
+prov_cxi_test_distributed_test_frmwk_SOURCES = \
+	prov/cxi/test/distributed/test_frmwk.c
+prov_cxi_test_distributed_test_frmwk_LDFLAGS = -static
+prov_cxi_test_distributed_test_frmwk_LDADD = prov/cxi/lib/libfrmwk.la \
+	$(linkback) $(PTHREAD_LIBS)
+
 endif HAVE_PMI
 
 if HAVE_CRITERION

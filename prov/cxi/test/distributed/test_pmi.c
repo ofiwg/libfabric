@@ -1,9 +1,5 @@
 /*
- * SPDX-License-Identifier: GPL-2.0
- *
- * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
- * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
- * Copyright (c) 2021 Cray Inc. All rights reserved.
+ * (c) Copyright 2021 Hewlett Packard Enterprise Development LP
  */
 
 #include <stdarg.h>
