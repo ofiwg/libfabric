@@ -593,6 +593,15 @@ cxip_domain_copy_from_hmem(struct cxip_domain *domain, void *dest,
 		.iov_len = size,
 	};
 
+	/* ROCR memory can be accessed via load/store. If the memcpy size is
+	 * less than or equal to an IDC, do direct load/store to avoid expensive
+	 * pointer query.
+	 */
+	if (domain->rocr_dev_mem_only && size <= C_MAX_IDC_PAYLOAD_RES) {
+		memcpy(dest, hmem_src, size);
+		return size;
+	}
+
 	if (!hmem_iface_valid)
 		hmem_iface = ofi_get_hmem_iface(hmem_src);
 
