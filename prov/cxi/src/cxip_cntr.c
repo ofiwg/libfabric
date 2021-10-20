@@ -22,14 +22,11 @@
 static int cxip_cntr_copy_ct_writeback(struct cxip_cntr *cntr,
 				       struct c_ct_writeback *wb_copy)
 {
-	const struct iovec hmem_iov = {
-		.iov_base = cntr->wb,
-		.iov_len = sizeof(*cntr->wb),
-	};
 	ssize_t ret;
 
-	ret = cxip_copy_from_hmem_iov(cntr->domain, wb_copy, sizeof(*wb_copy),
-				      cntr->wb_iface, 0, &hmem_iov, 1, 0);
+	ret = cxip_domain_copy_from_hmem(cntr->domain, wb_copy, cntr->wb,
+					 sizeof(*cntr->wb), cntr->wb_iface,
+					 true);
 	if (ret < 0) {
 		return ret;
 	} else if (ret != sizeof(*wb_copy)) {

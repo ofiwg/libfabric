@@ -584,15 +584,20 @@ cxip_copy_to_hmem_iov(struct cxip_domain *domain, enum fi_hmem_iface hmem_iface,
 }
 
 static inline ssize_t
-cxip_copy_from_hmem_iov(struct cxip_domain *domain, void *dest, size_t size,
-			enum fi_hmem_iface hmem_iface, uint64_t device,
-			const struct iovec *hmem_iov, size_t hmem_iov_count,
-			uint64_t hmem_iov_offset)
+cxip_domain_copy_from_hmem(struct cxip_domain *domain, void *dest,
+			   const void *hmem_src, size_t size,
+			   enum fi_hmem_iface hmem_iface, bool hmem_iface_valid)
 {
-	return domain->hmem_ops.copy_from_hmem_iov(dest, size, hmem_iface,
-						   device, hmem_iov,
-						   hmem_iov_count,
-						   hmem_iov_offset);
+	struct iovec hmem_iov = {
+		.iov_base = (void *)hmem_src,
+		.iov_len = size,
+	};
+
+	if (!hmem_iface_valid)
+		hmem_iface = ofi_get_hmem_iface(hmem_src);
+
+	return domain->hmem_ops.copy_from_hmem_iov(dest, size, hmem_iface, 0,
+						   &hmem_iov, 1, 0);
 }
 
 /*
@@ -1285,6 +1290,14 @@ struct cxip_txc {
 
 	struct dlist_entry dom_entry;
 };
+
+static inline ssize_t
+cxip_txc_copy_from_hmem(struct cxip_txc *txc, void *dest, const void *hmem_src,
+			size_t size)
+{
+	return cxip_domain_copy_from_hmem(txc->domain, dest, hmem_src, size,
+					  FI_HMEM_SYSTEM, !txc->hmem);
+}
 
 void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc);
 

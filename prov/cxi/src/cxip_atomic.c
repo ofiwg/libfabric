@@ -420,8 +420,6 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	bool idc;
 	struct cxip_cmdq *cmdq = triggered ? dom->trig_cmdq : txc->tx_cmdq;
 	enum cxi_traffic_class_type tc_type;
-	enum fi_hmem_iface iface;
-	struct iovec hmem_iov;
 	char hmem_compare[16];
 	char hmem_oper1[16];
 	bool flush = flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE);
@@ -609,16 +607,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		uint64_t *mask = compare;
 		uint64_t *tmp_oper = (uint64_t *)&req->amo.oper1;
 
-		if (txc->hmem)
-			iface = ofi_get_hmem_iface(oper1);
-		else
-			iface = FI_HMEM_SYSTEM;
-
-		hmem_iov.iov_base = oper1;
-		hmem_iov.iov_len = len;
-
-		ret = cxip_copy_from_hmem_iov(dom, tmp_oper, len, iface, 0,
-					      &hmem_iov, 1, 0);
+		ret = cxip_txc_copy_from_hmem(txc, tmp_oper, oper1, len);
 		assert(ret == len);
 
 		tmp_oper[0] &= mask[0];
@@ -634,19 +623,9 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			if (!req->amo.ibuf)
 				goto free_req;
 
-			if (txc->hmem) {
-				iface = ofi_get_hmem_iface(oper1);
-				hmem_iov.iov_base = oper1;
-				hmem_iov.iov_len = len;
-
-				ret = cxip_copy_from_hmem_iov(dom,
-							      req->amo.ibuf,
-							      len, iface, 0,
-							      &hmem_iov, 1, 0);
-				assert(ret == len);
-			} else {
-				memcpy(req->amo.ibuf, oper1, len);
-			}
+			ret = cxip_txc_copy_from_hmem(txc, req->amo.ibuf, oper1,
+						      len);
+			assert(ret == len);
 		} else {
 			/* Map user buffer for DMA command. */
 			ret = cxip_map(dom, oper1, len, &req->amo.oper1_md);
@@ -687,35 +666,19 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	 */
 	if (txc->hmem) {
 		if (compare) {
-			iface = ofi_get_hmem_iface(compare);
-			if (iface != FI_HMEM_SYSTEM) {
-				hmem_iov.iov_base = compare;
-				hmem_iov.iov_len = len;
+			ret = cxip_txc_copy_from_hmem(txc, hmem_compare,
+						      compare, len);
+			assert(ret == len);
 
-				ret = cxip_copy_from_hmem_iov(dom,
-							      hmem_compare, len,
-							      iface, 0,
-							      &hmem_iov, 1, 0);
-				assert(ret == len);
-
-				compare = hmem_compare;
-			}
+			compare = hmem_compare;
 		}
 
 		if (idc && msg->op != FI_MSWAP) {
-			iface = ofi_get_hmem_iface(oper1);
-			if (iface != FI_HMEM_SYSTEM) {
-				hmem_iov.iov_base = oper1;
-				hmem_iov.iov_len = len;
+			ret = cxip_txc_copy_from_hmem(txc, hmem_oper1,
+						      oper1, len);
+			assert(ret == len);
 
-				ret = cxip_copy_from_hmem_iov(dom,
-							      hmem_oper1, len,
-							      iface, 0,
-							      &hmem_iov, 1, 0);
-				assert(ret == len);
-
-				oper1 = hmem_oper1;
-			}
+			oper1 = hmem_oper1;
 		}
 	}
 

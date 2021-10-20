@@ -4039,7 +4039,6 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 static ssize_t _cxip_send_eager(struct cxip_req *req)
 {
 	struct cxip_txc *txc = req->send.txc;
-	struct cxip_domain *dom = txc->domain;
 	struct cxip_md *send_md = NULL;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
@@ -4053,8 +4052,6 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
 	const void *buf = NULL;
 	bool trig = req->triggered;
-	enum fi_hmem_iface iface;
-	struct iovec hmem_iov;
 
 	/* Always use IDCs when the payload fits */
 	idc = (req->send.len <= CXIP_INJECT_SIZE) && !trig;
@@ -4076,19 +4073,10 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 				if (!req->send.ibuf)
 					return -FI_ENOSPC;
 
-				if (txc->hmem)
-					iface = ofi_get_hmem_iface(req->send.buf);
-				else
-					iface = FI_HMEM_SYSTEM;
-
-				hmem_iov.iov_base = (void *)req->send.buf;
-				hmem_iov.iov_len = req->send.len;
-
-				ret = cxip_copy_from_hmem_iov(dom,
+				ret = cxip_txc_copy_from_hmem(txc,
 							      req->send.ibuf,
-							      req->send.len,
-							      iface, 0,
-							      &hmem_iov, 1, 0);
+							      req->send.buf,
+							      req->send.len);
 				assert(ret == req->send.len);
 			}
 

@@ -138,8 +138,6 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	enum cxi_traffic_class_type tc_type;
 	void *hmem_buf = NULL;
 	const void *idc_buf = buf;
-	enum fi_hmem_iface iface;
-	struct iovec hmem_iov;
 
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
@@ -209,19 +207,9 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			if (!req->rma.ibuf)
 				goto req_free;
 
-			if (txc->hmem) {
-				iface = ofi_get_hmem_iface(buf);
-				hmem_iov.iov_base = (void *)buf;
-				hmem_iov.iov_len = len;
-
-				ret = cxip_copy_from_hmem_iov(dom,
-							      req->rma.ibuf,
-							      len, iface, 0,
-							      &hmem_iov, 1, 0);
-				assert(ret == len);
-			} else {
-				memcpy(req->rma.ibuf, buf, len);
-			}
+			ret = cxip_txc_copy_from_hmem(txc, req->rma.ibuf, buf,
+						      len);
+			assert(ret == len);
 		} else {
 			/* Map user buffer for DMA command. */
 			ret = cxip_map(dom, buf, len, &req->rma.local_md);
@@ -247,21 +235,12 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 	/* HMEM bounce buffer is required for IDCs and to non-system memory. */
 	if (txc->hmem && idc) {
-		iface = ofi_get_hmem_iface(buf);
+		hmem_buf = cxip_cq_ibuf_alloc(txc->send_cq);
+		if (!hmem_buf)
+			goto md_unmap;
 
-		if (iface != FI_HMEM_SYSTEM) {
-			hmem_iov.iov_base = (void *)buf;
-			hmem_iov.iov_len = len;
-			hmem_buf = cxip_cq_ibuf_alloc(txc->send_cq);
-			if (!hmem_buf)
-				goto md_unmap;
-
-			ret = cxip_copy_from_hmem_iov(dom, hmem_buf, len, iface,
-						      0, &hmem_iov, 1, 0);
-			assert(ret == len);
-
-			idc_buf = hmem_buf;
-		}
+		ret = cxip_txc_copy_from_hmem(txc, hmem_buf, buf, len);
+		assert(ret == len);
 	}
 
 	if (cxip_cq_saturated(txc->send_cq)) {
