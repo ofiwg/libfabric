@@ -99,7 +99,7 @@ int vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *buf,
 		vrb_access |= VRB_ACCESS_ON_DEMAND;
 
 #if VERBS_HAVE_DMABUF_MR
-	if (iface == FI_HMEM_ZE)
+	if (iface == FI_HMEM_ZE && vrb_gl_data.dmabuf_support)
 		md->mr = vrb_mr_ibv_reg_dmabuf_mr(md->domain->pd, buf, len,
 					          vrb_access);
 	else
