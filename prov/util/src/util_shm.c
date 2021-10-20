@@ -356,7 +356,7 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 	struct stat sts;
 	struct dlist_entry *entry;
 	const char *name = smr_no_prefix(peer_buf->peer.name);
-	char tmp[NAME_MAX];
+	char tmp[SMR_PATH_MAX];
 
 	pthread_mutex_lock(&ep_list_lock);
 	entry = dlist_find_first_match(&ep_name_list, smr_match_name, name);
@@ -375,7 +375,7 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 	}
 
 	memset(tmp, 0, sizeof(tmp));
-	snprintf(tmp, sizeof(tmp), "/dev/shm/%s", name);
+	snprintf(tmp, sizeof(tmp), "%s%s", SMR_DIR, name);
 	if (stat(tmp, &sts) == -1) {
 		ret = -errno;
 		goto out;
