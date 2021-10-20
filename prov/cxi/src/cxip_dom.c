@@ -375,8 +375,10 @@ static int cxip_dom_dwq_op_cntr(struct cxip_domain *dom,
 
 	fastlock_acquire(&dom->trig_cmdq->lock);
 	ret = cxi_cq_emit_ct(dom->trig_cmdq->dev_cmdq, opcode, &cmd);
-	/* TODO: Handle this assert. */
-	assert(!ret);
+	if (ret) {
+		/* TODO: Handle this assert. */
+		assert(!ret);
+	}
 	cxi_cq_ring(dom->trig_cmdq->dev_cmdq);
 	fastlock_release(&dom->trig_cmdq->lock);
 
