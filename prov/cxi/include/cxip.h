@@ -1937,7 +1937,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 			 const struct fid_av_set *coll_av_set,
 			 uint64_t flags, struct fid_mc **mc, void *context);
 
-void cxip_coll_set_max_red_id(struct fid_mc *mc, int max_red_id);
+void cxip_coll_limit_red_id(struct fid_mc *mc, int max_red_id);
 int cxip_coll_arm_enable(struct fid_mc *mc, bool enable);
 void cxip_coll_reset_mc_ctrs(struct fid_mc *mc);
 
