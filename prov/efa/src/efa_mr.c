@@ -278,12 +278,16 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 	int err;
 
 	efa_domain = efa_mr->domain;
+	if (!efa_mr->ibv_mr)
+		return 0;
+
 	err = -ibv_dereg_mr(efa_mr->ibv_mr);
 	if (err) {
 		EFA_WARN(FI_LOG_MR,
 			"Unable to deregister memory registration\n");
 		ret = err;
 	}
+
 	err = ofi_mr_map_remove(&efa_domain->util_domain.mr_map,
 				efa_mr->mr_fid.key);
 	if (err) {
@@ -358,6 +362,23 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 	if (efa_mr->domain->cache)
 		ofi_mr_cache_flush(efa_mr->domain->cache, false);
 
+	efa_mr->mr_fid.mem_desc = efa_mr;
+
+	/*
+	 * Skip registering the buffer with the device if p2p support is
+	 * unavailable. We still need the app to provide a descriptor for the copy
+	 * functions.
+	 */
+	if (efa_mr->peer.iface != FI_HMEM_SYSTEM) {
+		if (!efa_mr->domain->hmem_info[efa_mr->peer.iface].initialized)
+			return -FI_ENOSYS;
+		if (!efa_mr->domain->hmem_info[efa_mr->peer.iface].p2p_supported) {
+			//XXX: efa + shm key??
+			efa_mr->mr_fid.key = FI_KEY_NOTAVAIL;
+			return 0;
+		}
+	}
+
 	efa_mr->ibv_mr = ibv_reg_mr(efa_mr->domain->ibv_pd, 
 				    (void *)mr_attr->mr_iov->iov_base,
 				    mr_attr->mr_iov->iov_len, fi_ibv_access);
@@ -367,7 +388,6 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 		return -errno;
 	}
 
-	efa_mr->mr_fid.mem_desc = efa_mr;
 	efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	assert(efa_mr->mr_fid.key != FI_KEY_NOTAVAIL);
 
