@@ -139,6 +139,16 @@ static cudaError_t ofi_cudaGetDeviceCount(int *count)
 	return cuda_ops.cudaGetDeviceCount(count);
 }
 
+cudaError_t ofi_cudaMalloc(void **ptr, size_t size)
+{
+	return cuda_ops.cudaMalloc(ptr, size);
+}
+
+cudaError_t ofi_cudaFree(void *ptr)
+{
+	return cuda_ops.cudaFree(ptr);
+}
+
 int cuda_copy_to_dev(uint64_t device, void *dst, const void *src, size_t size)
 {
 	if (hmem_cuda_use_gdrcopy) {
