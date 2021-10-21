@@ -239,7 +239,7 @@ multinode_tests=(
 )
 
 prov_efa_tests=( \
-	"FI_EFA_ENABLE_SHM_TRANSFER=0 fi_efa_ep_rnr_retry -R 0"
+	"fi_efa_ep_rnr_retry -R 0"
 )
 
 function errcho {
