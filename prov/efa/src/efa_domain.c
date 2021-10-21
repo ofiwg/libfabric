@@ -338,6 +338,77 @@ static int efa_mr_cache_init(struct efa_domain *domain, struct fi_info *info)
 	return 0;
 }
 
+/*
+ * efa_check_hmem_support determines whether an HMEM device is initialized, and
+ * whether the provider may support p2p transfers for that device. This state is
+ * used later when determining how to initiate an HMEM transfer.
+ *
+ * @param domain efa_domain to run the check/store state
+ * @return 0 on success, negative value on an unexpected error
+ */
+static int efa_check_hmem_support(struct efa_domain *domain)
+{
+	if (!(domain->info->caps & FI_HMEM))
+		return 0;
+
+#if HAVE_LIBCUDA
+	cudaError_t cuda_ret;
+	void *ptr = NULL;
+	struct ibv_mr *ibv_mr;
+	int ibv_access = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
+	int ret;
+
+	if (!ofi_hmem_is_initialized(FI_HMEM_CUDA)) {
+		EFA_WARN(FI_LOG_DOMAIN,
+		         "FI_HMEM_CUDA is not initialized\n");
+		return 0;
+	}
+
+	domain->hmem_info[FI_HMEM_CUDA].initialized = true;
+
+	if (!efa_device_support_rdma_read()) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "RDMA is not available, FI_HMEM transfers that require peer to peer support will fail.\n");
+		return 0;
+	}
+
+	if (!rxr_env.use_device_rdma) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			"RDMA is turned off, FI_HMEM transfers that require peer to peer support will fail. You can turn on RDMA support by setting the environment variable FI_EFA_USE_DEVICE_RDMA to 1.\n");
+		return 0;
+	}
+
+	cuda_ret = ofi_cudaMalloc(&ptr, 8192);
+	if (cuda_ret != cudaSuccess) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Failed to allocate CUDA buffer: %s\n",
+			 ofi_cudaGetErrorString(cuda_ret));
+		return -FI_ENOMEM;
+	}
+
+	ibv_mr = ibv_reg_mr(domain->ibv_pd, ptr, 8192, ibv_access);
+	if (!ibv_mr) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Failed to register CUDA buffer with the EFA device, FI_HMEM transfers that require peer to peer support will fail.\n");
+		ofi_cudaFree(ptr);
+		return 0;
+	}
+
+	ret = ibv_dereg_mr(ibv_mr);
+	ofi_cudaFree(ptr);
+	if (ret) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Failed to deregister CUDA buffer: %s\n",
+			 fi_strerror(-ret));
+		return ret;
+	}
+
+	domain->hmem_info[FI_HMEM_CUDA].p2p_supported = true;
+#endif
+
+	return 0;
+}
+
 /* @brief Allocate a domain, open the device, and set it up based on the hints.
  *
  * This function creates a domain and uses the info struct to configure the
@@ -438,11 +509,14 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	domain->cache = NULL;
 
-	if ((domain->info->caps & FI_HMEM) &&
-	    ofi_hmem_is_initialized(FI_HMEM_CUDA)) {
-		domain->hmem_info[FI_HMEM_CUDA].initialized = true;
-		/* TODO: register a cuda page here instead */
-		domain->hmem_info[FI_HMEM_CUDA].p2p_supported = true;
+	if (EFA_EP_TYPE_IS_RDM(info)) {
+		ret = efa_check_hmem_support(domain);
+		if (ret) {
+			EFA_WARN(FI_LOG_DOMAIN,
+				 "efa_check_hmem_support failed: %s\n",
+				 fi_strerror(-ret));
+			goto err_free_info;
+		}
 	}
 
 	/*
