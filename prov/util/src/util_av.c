@@ -48,6 +48,7 @@
 #include <ifaddrs.h>
 #endif
 
+#include <ofi_coll.h>
 #include <ofi_util.h>
 
 
@@ -398,6 +399,18 @@ static void util_av_close(struct util_av *av)
 {
 	HASH_CLEAR(hh, av->hash);
 	ofi_bufpool_destroy(av->av_entry_pool);
+
+	// Free memory allocated by util_coll_av_init
+	// the first time ofi_av_set is called on this av
+	if (av->coll_mc != NULL) {
+		if (ofi_atomic_dec32(&av->coll_mc->av_set->ref) == 0) {
+			free(av->coll_mc->av_set->fi_addr_array);
+			fastlock_destroy(&av->coll_mc->av_set->lock);
+			free(av->coll_mc->av_set);
+		}
+		free(av->coll_mc);
+		av->coll_mc = NULL;
+	}
 }
 
 int ofi_av_close_lightweight(struct util_av *av)
