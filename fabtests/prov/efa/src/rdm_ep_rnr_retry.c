@@ -226,6 +226,13 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG;
+	/*
+	 * RNR error is generated from EFA device, so disable shm transfer by
+	 * setting FI_REMOTE_COMM and unsetting FI_LOCAL_COMM in order to ensure
+	 * EFA device is being used when running this test on a single node.
+	 */
+	hints->caps |= FI_REMOTE_COMM;
+	hints->caps &= ~FI_LOCAL_COMM;
 	hints->mode |= FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	/*
