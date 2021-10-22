@@ -520,7 +520,7 @@ The following option levels and option names and parameters are defined.
   that applications that want to override the default MIN_MULTI_RECV
   value set this option before enabling the corresponding endpoint.
 
-- *FI_OPT_FI_HMEM_P2P - int*
+- *FI_OPT_FI_HMEM_P2P - size_t *
 : Defines how the provider should handle peer to peer FI_HMEM transfers for
   this endpoint. By default, the provider will chose whether to use peer to peer
   support based on the type of transfer (FI_HMEM_P2P_ENABLED). Valid values

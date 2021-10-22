@@ -66,7 +66,7 @@ enum {
 	FI_OPT_RECV_BUF_SIZE,
 	FI_OPT_TX_SIZE,
 	FI_OPT_RX_SIZE,
-	FI_OPT_FI_HMEM_P2P,		/* int */
+	FI_OPT_FI_HMEM_P2P,		/* size_t */
 };
 
 /*
