@@ -131,12 +131,16 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 	efa_mr->mr_fid.fid.context = NULL;
 
 	attr.mr_iov = &entry->info.iov;
+	/* ofi_mr_info only stores one iov */
 	attr.iov_count = 1;
 	attr.access = access;
 	attr.offset = 0;
 	attr.requested_key = 0;
 	attr.context = NULL;
-	attr.iface = FI_HMEM_SYSTEM;
+	attr.iface = entry->info.iface;
+
+	if (attr.iface == FI_HMEM_CUDA)
+		attr.device.cuda = entry->info.device;
 
 	ret = efa_mr_reg_impl(efa_mr, 0, (void *)&attr);
 	return ret;
