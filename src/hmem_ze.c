@@ -714,6 +714,12 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
 	ze_result_t ze_ret;
 	int dev_id = (int) device;
 
+	/* Host memory allocated via ZE */
+	if (dev_id < 0) {
+		memcpy(dst, src, size);
+		return 0;
+	}
+
 	cl_desc.commandQueueGroupOrdinal = ordinals[dev_id];
 	ze_ret = ofi_zeCommandListCreate(context, devices[dev_id], &cl_desc,
 					 &cmd_list);
@@ -773,8 +779,12 @@ int ze_hmem_get_handle(void *dev_buf, void **handle)
 int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr)
 {
 	ze_result_t ze_ret;
+	int dev_id = (int) device;
 
-	ze_ret = ofi_zeMemOpenIpcHandle(context, devices[device],
+	/* only device memory is supported */
+	assert(dev_id >= 0);
+
+	ze_ret = ofi_zeMemOpenIpcHandle(context, devices[dev_id],
 					*((ze_ipc_mem_handle_t *) handle),
 					0, ipc_ptr);
 	if (ze_ret) {
