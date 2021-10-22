@@ -1783,21 +1783,21 @@ union cxip_coll_data {
 	} fminmax;
 } __attribute__((packed));
 
-/* Our asynchronous handle for requests. This is created when the CURL request
- * is dispatched, updated as progressed, returned to the user when the request
- * completes, and must be explicitly freed.
- */
+/* Our asynchronous handle for requests */
+struct cxip_curl_handle;
+
+typedef void (*curlcomplete_t)(struct cxip_curl_handle *);
+
 struct cxip_curl_handle {
 	long status;		// HTTP status, 0 for no server, -1 busy
 	const char *endpoint;	// HTTP server endpoint address
 	const char *request;	// HTTP request data
 	const char *response;	// HTTP response data, NULL until complete
+	curlcomplete_t usrfunc;	// user completion function
+	const void *usrptr;	// user data pointer
 	void *recv;		// opaque
 	void *headers;		// opaque
 };
-
-/* Low-level global lock, initialized in cxip_info.c */
-extern fastlock_t global_lock;
 
 /* Low-level CURL POST/DELETE async wrappers */
 enum curl_ops {
@@ -1808,12 +1808,13 @@ enum curl_ops {
 	CURL_DELETE,
 	CURL_MAX
 };
-void cxip_curl_init(void);
-void cxip_curl_term(void);
+int cxip_curl_init(void);
+void cxip_curl_fini(void);
 const char *cxip_curl_opname(enum curl_ops op);
 int cxip_curl_perform(const char *server, const char *request,
-		      size_t rsp_init_size, enum curl_ops op, bool verbose);
-int cxip_curl_progress(struct cxip_curl_handle **handle);
+		      size_t rsp_init_size, enum curl_ops op, bool verbose,
+		      curlcomplete_t usrfunc, void *usrptr);
+int cxip_curl_progress(struct cxip_curl_handle **handleptr);
 void cxip_curl_free(struct cxip_curl_handle *handle);
 
 static inline void single_to_double_quote(char *str)
@@ -1830,10 +1831,11 @@ int cxip_json_string(const char *desc, struct json_object *jobj,
 		     const char **val);
 
 /* Acquire or delete a multicast address */
-int cxip_request_mcast(const char *server, const char *cfg_path,
+int cxip_request_mcast(const char *endpoint, const char *cfg_path,
 		       unsigned int mcast_id, unsigned int root_port_idx,
-		       bool verbose);
-int cxip_delete_mcast(const char *server, long reqid, bool verbose);
+		       bool verbose, curlcomplete_t usrfunc, void *usrptr);
+int cxip_delete_mcast(const char *server, long reqid, bool verbose,
+		      curlcomplete_t usrfunc, void *usrptr);
 int cxip_progress_mcast(int *reqid, int *mcast_id, int *root_idx);
 
 /* Perform zero-buffer collectives */

@@ -22,11 +22,8 @@
 #define	CHUNK_SIZE	4096
 #define	CHUNK_MASK	(CHUNK_SIZE-1)
 
-static CURLM *cxip_curlm = NULL;
-
 /**
  * Expandable buffer that can receive data in arbitrary-sized chunks.
- *
  */
 struct curl_buffer {
 	char *buffer;
@@ -114,31 +111,49 @@ static size_t write_callback(void *curl_rcvd, size_t size, size_t nmemb,
 	return sz;
 }
 
-/**
- * Globally initialize this module.
+/*
+ * The CURL library must be explicitly initialized. It is application-global,
+ * and the initialization is not thread-safe, according to the documentation. We
+ * do not protect this call, because it is running under CXI_INIT (see
+ * cxip_info.c), which is single-threaded. The curl_global_init() call can be
+ * issued multiple times (non-concurrently) and has the same end result as
+ * calling it once.
  */
-void cxip_curl_init(void)
+static CURLM *cxip_curlm = NULL;
+
+/**
+ * Initialize CURL globally for the application, enabling multi-curl
+ * (concurrent calls).
+ */
+int cxip_curl_init(void)
 {
+	int ret = FI_SUCCESS;
 	CURLcode res;
 
-	res = curl_global_init(CURL_GLOBAL_DEFAULT);
-	if (res == CURLE_OK) {
-		cxip_curlm = curl_multi_init();
-		if (! cxip_curlm)
-			curl_global_cleanup();
+	if (!cxip_curlm) {
+		res = curl_global_init(CURL_GLOBAL_DEFAULT);
+		if (res == CURLE_OK) {
+			cxip_curlm = curl_multi_init();
+			if (!cxip_curlm) {
+				curl_global_cleanup();
+				ret = -FI_EINVAL;
+			}
+		} else
+			ret = -FI_EINVAL;
 	}
+	return ret;
 }
 
 /**
  * Globally terminate this module.
  */
-void cxip_curl_term(void)
+void cxip_curl_fini(void)
 {
 	if (cxip_curlm) {
 		curl_multi_cleanup(cxip_curlm);
+		curl_global_cleanup();
 		cxip_curlm = NULL;
 	}
-	curl_global_cleanup();
 }
 
 /**
@@ -160,45 +175,73 @@ const char *cxip_curl_opname(enum curl_ops op)
 }
 
 /**
+ * Free a handle created by cxip_curl_perform().
+ *
+ * @param handle : handle created by cxip_curl_perform()
+ */
+void cxip_curl_free(struct cxip_curl_handle *handle)
+{
+	free((void *)handle->endpoint);
+	free((void *)handle->request);
+	/* do not directly free handle->response (== handle->recv->buffer) */
+	free_curl_buffer((struct curl_buffer *)handle->recv);
+	free(handle);
+}
+
+/**
  * Dispatch a CURL request.
  *
  * This is a general-purpose CURL multi (async) JSON format curl request.
  *
- * Note that this only dispatches the request. cxip_curl_progress() must be
- * called to progress the dispatched operations and retrieve data.
+ * Note that this function only dispatches the request. cxip_curl_progress()
+ * must be called to progress the dispatched operations and retrieve data.
+ *
+ * The usrfunc is called in cxip_curl_progress() when the request completes,
+ * and receives the handle as its sole argument. The handle also contains an
+ * arbitrary usrptr supplied by the caller.
+ *
+ * There are no "normal" REST errors from this call. REST errors are instead
+ * returned on attempts to progress the dispatched operation.
  *
  * @param endpoint      : HTTP server endpoint address
  * @param request       : JSON-formatted request
  * @param rsp_init_size : initial size of response buffer (can be 0)
  * @param op            : curl operation
  * @param verbose       : use to display sent HTTP headers
+ * @param userfunc      : user-defined completion function
+ * @param usrptr	: user-defined data pointer
  *
  * @return int          : 0 on success, -1 on failure
  */
-int cxip_curl_perform(const char *endpoint, const char *request,
-		      size_t rsp_init_size, enum curl_ops op, bool verbose)
+int cxip_curl_perform(const char *endpoint,
+		      const char *request, size_t rsp_init_size,
+		      enum curl_ops op, bool verbose,
+		      curlcomplete_t usrfunc, void *usrptr)
 {
-	struct cxip_curl_handle *h;
+	struct cxip_curl_handle *handle;
 	struct curl_slist *headers;
 	CURLMcode mres;
 	CURL *curl;
 	int running;
 
-	h = calloc(1, sizeof(*h));
-	if (!h)
+	handle = calloc(1, sizeof(*handle));
+	if (!handle)
 		goto done;
 
 	/* libcurl is fussy about NULL requests */
-	h->endpoint = strdup(endpoint);
-	if (!h->endpoint)
+	handle->endpoint = strdup(endpoint);
+	if (!handle->endpoint)
 		goto done;
-	h->request = strdup(request ? request : "");
-	if (!h->request)
+	handle->request = strdup(request ? request : "");
+	if (!handle->request)
 		goto done;
-	h->response = NULL;
-	h->recv = (void *)init_curl_buffer(rsp_init_size);
-	if (!h->recv)
+	handle->response = NULL;
+	handle->recv = (void *)init_curl_buffer(rsp_init_size);
+	if (!handle->recv)
 		goto done;
+	/* add user completion function and pointer */
+	handle->usrfunc = usrfunc;
+	handle->usrptr = usrptr;
 
 	curl = curl_easy_init();
 	if (!curl) {
@@ -212,21 +255,21 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 	headers = curl_slist_append(headers, "Accept: application/json");
 	headers = curl_slist_append(headers, "Content-Type: application/json");
 	headers = curl_slist_append(headers, "charset: utf-8");
-	h->headers = (void *)headers;
+	handle->headers = (void *)headers;
 
-	curl_easy_setopt(curl, CURLOPT_URL, h->endpoint);
+	curl_easy_setopt(curl, CURLOPT_URL, handle->endpoint);
 	if (op == CURL_GET) {
 		curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
 	} else {
 		curl_easy_setopt(curl, CURLOPT_POST, 1L);
-		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, h->request);
+		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, handle->request);
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE,
-				 strlen(h->request));
+				 strlen(handle->request));
 	}
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, h->recv);
-	curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *)h);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, handle->recv);
+	curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *)handle);
 	curl_easy_setopt(curl, CURLOPT_VERBOSE, verbose);
 	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, cxip_curl_opname(op));
 
@@ -241,34 +284,55 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 
 done:
 	CXIP_WARN("cxip_curl_perform() failed\n");
-	cxip_curl_free(h);
+	cxip_curl_free(handle);
 	return -1;
 }
 
 /**
  * Progress the CURL requests.
  *
- * This progresses concurrent CURL requests, and returns the count of
- * http operations still running, or -1 on an error. It signals completion
- * of a single operation by returning a non-NULL handle.
+ * This progresses concurrent CURL requests, and returns the following:
+ *   0		indicates an operation completed
+ *  -FI_EAGAIN	indicates operations are pending, none completed
+ *  -FI_ENODATA indicates no operations are pending
+ *  -errorcode  a fatal error
  *
- * Repeated calls will return additional completions.
+ * Repeated calls will return additional completions, until there are no more
+ * pending and -FI_ENODATA is returned.
  *
- * Call cxip_curl_free() on the handle to recover resources.
+ * Note that a CURL request should succeed if the server is not reachable. It
+ * will return a 'status' value of 0, which is an invalid HTTP status, and
+ * indicates that it could not connect to a server.
  *
- * The handle contains the following public fields:
+ * For unit testing, it is useful for the test to be able to inspect the handle
+ * directly, and it can be obtained by specifying a non-null handleptr value. If
+ * handleptr is supplied, the caller is responsible for calling cxip_curl_free()
+ * on the returned handle. In normal usage, handleptr is NULL, and this routine
+ * will clean up the handle when the operation.
+ *
+ * The user should provide a callback routine to examine the final state of the
+ * CURL request, as well as any data it returns: see cxip_curl_perform(). This
+ * function is called after completion of the request, but before the handle is
+ * destroyed.
+ *
+ * The callback routine has full access to the handle, as well as its own data
+ * area, available as handle->usrptr, and its content can be freely modified
+ * by the usrfunc. The handle itself should be treated as read-only.
+ *
+ * The handle contains the following documented fields:
  *
  * - status   = HTTP status of the op, or 0 if the endpoint could not be reached
  * - endpoint = copy of the endpoint address supplied for the post
  * - request  = copy of the JSON request data supplied for the post
  * - response = pointer to the JSON response returned by the endpoint
+ * - usrptr  = arbitrary user pointer supplied during CURL request
  *
- * @param handle   : returned handle, NULL if nothing to process
- *
- * @return int     : count of running + unprocessed results
+ * @param handleptr : if not NULL, returns the request handle
+ * @return int      : return code, see above
  */
-int cxip_curl_progress(struct cxip_curl_handle **handle)
+int cxip_curl_progress(struct cxip_curl_handle **handleptr)
 {
+	struct cxip_curl_handle *handle;
 	struct CURLMsg *msg;
 	CURLMcode mres;
 	CURLcode res;
@@ -277,31 +341,32 @@ int cxip_curl_progress(struct cxip_curl_handle **handle)
 	long status;
 	struct curl_buffer *recv;
 
-	*handle = NULL;
+	handle = NULL;
 
 	/* running returns the number of curls running */
 	mres = curl_multi_perform(cxip_curlm, &running);
 	if (mres != CURLM_OK) {
 		CXIP_WARN("curl_multi_perform() failed: %s\n",
 			  curl_multi_strerror(mres));
-		running = -1;
-		goto done;
+		return -FI_EOTHER;
 	}
 
 	/* messages returns the number of additional curls finished */
 	msg = curl_multi_info_read(cxip_curlm, &messages);
-	if (!msg || msg->msg != CURLMSG_DONE)
-		goto done;
+	if (!msg || msg->msg != CURLMSG_DONE) {
+		return (running) ? -FI_EAGAIN : -FI_ENODATA;
+	}
 
 	/* retrieve our handle from the private pointer */
 	res = curl_easy_getinfo(msg->easy_handle,
-				CURLINFO_PRIVATE, (char **)handle);
+				CURLINFO_PRIVATE, (char **)&handle);
 	if (res != CURLE_OK) {
 		CXIP_WARN("curl_easy_getinfo(%s) failed: %s\n",
 			"CURLINFO_PRIVATE",
 			curl_easy_strerror(res));
-		goto done;
+		return -FI_EOTHER;
 	}
+	/* handle is now valid, must be freed */
 
 	/* retrieve the status code, should not fail */
 	res = curl_easy_getinfo(msg->easy_handle,
@@ -310,36 +375,31 @@ int cxip_curl_progress(struct cxip_curl_handle **handle)
 		CXIP_WARN("curl_easy_getinfo(%s) failed: %s\n",
 			"CURLINFO_RESPONSE_CODE",
 			curl_easy_strerror(res));
-		/* continue, (*handle)->status should show zero */
+		/* continue, handle->status should show zero */
 	}
 
 	/* we can recover resources now */
-	curl_slist_free_all((struct curl_slist *)(*handle)->headers);
+	curl_slist_free_all((struct curl_slist *)handle->headers);
 	curl_easy_cleanup(msg->easy_handle);
-	(*handle)->headers = NULL;
+	handle->headers = NULL;
 
 	/* make sure response string is terminated */
-	recv = (struct curl_buffer *)(*handle)->recv;
+	recv = (struct curl_buffer *)handle->recv;
 	recv->buffer[recv->offset] = 0;
-	(*handle)->response = recv->buffer;
-	(*handle)->status = status;
+	handle->response = recv->buffer;
+	handle->status = status;
 
-done:
-	return running + messages;
-}
+	/* call the user function */
+	if (handle->usrfunc)
+		handle->usrfunc(handle);
 
-/**
- * Free a handle returned by fi_curl_progress().
- *
- * @param handle : handle returned by cxip_curl_progress
- */
-void cxip_curl_free(struct cxip_curl_handle *handle)
-{
-	free((void *)handle->endpoint);
-	free((void *)handle->request);
-	/* do not directly free handle->response (== handle->recv->buffer) */
-	free_curl_buffer((struct curl_buffer *)handle->recv);
-	free(handle);
+	/* return the handle, or free it */
+	if (handleptr) {
+		*handleptr = handle;
+	} else {
+		cxip_curl_free(handle);
+	}
+	return FI_SUCCESS;
 }
 
 /**
@@ -564,6 +624,7 @@ static char *delete_mcast_req(int id)
  *
  * @return int     : 0 success, -1 response is empty, -2 bad JSON
  */
+__attribute__((unused))
 static int mcast_parse(const char *response, int *reqid, int *mcast_id,
 		       int *root_idx)
 {
@@ -608,12 +669,14 @@ static int mcast_parse(const char *response, int *reqid, int *mcast_id,
  * @param mcast_id      : requested address, or 0 for allocated
  * @param root_port_idx : requested root node index
  * @param verbose       : visibility of posted request
+ * @param userfunc      : user-defined completion function
+ * @param usrptr	: user-defined data pointer
  *
  * @return int          : 0 on success, <0 on error
  */
 int cxip_request_mcast(const char *endpoint, const char *cfg_path,
 		       unsigned int mcast_id, unsigned int root_port_idx,
-		       bool verbose)
+		       bool verbose, curlcomplete_t usrfunc, void *usrptr)
 {
 	char *request;
 	int ret = -1;
@@ -621,8 +684,7 @@ int cxip_request_mcast(const char *endpoint, const char *cfg_path,
 	request = request_mcast_req(cfg_path, mcast_id, root_port_idx);
 	if (request) {
 		ret = cxip_curl_perform(endpoint, request, 0, CURL_POST,
-					verbose);
-		free(request);
+					verbose, usrfunc, usrptr);
 	}
 	return ret;
 }
@@ -630,13 +692,16 @@ int cxip_request_mcast(const char *endpoint, const char *cfg_path,
 /**
  * Perform a CURL request to delete a multicast address.
  *
- * @param endpoint     : server endpoint URL
- * @param reqid        : issued reqid from prior creation request
- * @param verbose      : visibility of posted request
+ * @param endpoint	: server endpoint URL
+ * @param reqid		: issued reqid from prior creation request
+ * @param verbose	: visibility of posted request
+ * @param userfunc      : user-defined completion function
+ * @param usrptr	: user-defined data pointer
  *
- * @return int         : 0 on success, <0 on error
+ * @return int		: 0 on success, <0 on error
  */
-int cxip_delete_mcast(const char *endpoint, long reqid, bool verbose)
+int cxip_delete_mcast(const char *endpoint, long reqid, bool verbose,
+		      curlcomplete_t usrfunc, void *usrptr)
 {
 	char *request;
 	int ret = -1;
@@ -644,51 +709,7 @@ int cxip_delete_mcast(const char *endpoint, long reqid, bool verbose)
 	request = delete_mcast_req(reqid);
 	if (request) {
 		ret = cxip_curl_perform(endpoint, request, 0, CURL_DELETE,
-					verbose);
-		free(request);
+					verbose, usrfunc, usrptr);
 	}
 	return ret;
-}
-
-/**
- * Poll for completion of posted CURL requests.
- *
- * This returns -1 if post has not yet completed.
- *
- * This returns 0 if the server could not be reached.
- *
- * This otherwise returns the HTTP return code for the request.
- *   200 is a successful delete
- *   201 is a successful creation
- *
- * Other values represent other server-originated HTTP return codes.
- *
- * @param reqid        : server request identifier to use in DELETE
- * @param mcast_id     : server multicast address
- * @param root_idx     : server root node index
- *
- * @return int         : return code, see above
- */
-int cxip_progress_mcast(int *reqid, int *mcast_id, int *root_idx)
-{
-	struct cxip_curl_handle *handle;
-	long ret;
-
-	ret = cxip_curl_progress(&handle);
-	if (handle) {
-		ret = handle->status;
-		if (ret == 200) {
-			// delete succeeded
-		} else if (ret == 201) {
-			// post succeeded
-			mcast_parse(handle->response, reqid, mcast_id, root_idx);
-		} else if (ret != 0) {
-			CXIP_WARN("Server error %ld\n", ret);
-		} else {
-			CXIP_WARN("Unable to connect with %s\n",
-				handle->endpoint);
-		}
-		cxip_curl_free(handle);
-	}
-	return (int)ret;
 }

@@ -208,7 +208,22 @@ int auto_test_cxip_json(void)
 }
 
 /**
- * @brief Exercise the json value parser.
+ * @brief Simple completion callback.
+ *
+ * This expects an (int) usrptr to be registered with the CURL initiation,
+ * and simply increments it every time a CURL operation completes.
+ *
+ * @param handle : CURL operation handle
+ */
+static void complete(struct cxip_curl_handle *handle)
+{
+	int *counter = (int *)handle->usrptr;
+
+	(*counter)++;
+}
+
+/**
+ * @brief Exercise the CURL code.
  *
  * The flask_testsrv.py code must be running to perform this test. It will
  * pass with a warning message if the server is not found.
@@ -222,23 +237,40 @@ int auto_test_cxip_curl(void)
 	json_object *json_obj;
 	int op, ret;
 	char tag[256];
+	int counter;
 
 	/* confirm that the server is running : status is 0 if no server */
-	ret = cxip_curl_perform(serverpath, NULL, 0, CURL_GET, 0);
+	ret = cxip_curl_perform(serverpath, NULL, 0, CURL_GET, false,
+				complete, &counter);
 	do {
 		ret = cxip_curl_progress(&handle);
-	} while (ret > 0 && !handle);
-	if (!handle || !handle->status) {
+	} while (ret == -FI_EAGAIN);
+	if (ret) {
+		fprintf(stderr, "cxip_curl_perform() returned %s\n",
+			fi_strerror(-ret));
+		return ret;
+	}
+	if (!handle) {
+		fprintf(stderr, "cxip_curl_perform() returned no handle\n");
+		return -1;
+	}
+	if (handle->status == 0) {
 		fprintf(stderr, "SERVER at %s is not running\n", serverpath);
+		cxip_curl_free(handle);
 		return 0;
 	}
+	cxip_curl_free(handle);
 
 	/* Walk through all of the test-supported operations */
 	for (op = CURL_GET; op < CURL_MAX; op++) {
 		const char *opname = cxip_curl_opname(op);
 		bool reordered = false;
 		int nextseqid = 0;
+		int seqid;
 		int i, err = 0;
+
+		/* reset the callback counter to zero on every opcode */
+		counter = 0;
 
 		if (verbose)
 			printf("\nOperation %s\n", cxip_curl_opname(op));
@@ -247,41 +279,53 @@ int auto_test_cxip_curl(void)
 		tmark(&t0);
 		for (i = 0; i < parallel; i++) {
 			sprintf(tag, "{\"seqid\": %d}", i);
-			ret = cxip_curl_perform(serverpath, tag, 0, op, false);
+			ret = cxip_curl_perform(serverpath, tag, 0, op, false,
+						complete, &counter);
 			if (ret != 0)
-				fprintf(stderr, "cxip_curl_perform(%d) = %d\n",
-				 	i, ret);
+				fprintf(stderr, "cxip_curl_perform(%d) = %s\n",
+				 	i, fi_strerror(ret));
 		}
 		tmeas(&t0);
 
-		/* Wait for all to finish.
-		 * Each call to cxip_curl_progress returns the number of
-		 * operations unprocessed, and zero or one handle for a
-		 * completed process.
-		 */
+		/* Wait for all initiated operations to finish */
 		tmark(&t1);
-		do {
+		while (i-- > 0) {
 			do {
+				sched_yield();
 				ret = cxip_curl_progress(&handle);
-			} while (ret > 0 && !handle);
-			i--;
+			} while (ret == -FI_EAGAIN);
+			if (ret) {
+				/* should not happen, as we are counting */
+				fprintf(stderr, "cxip_curl_progress() %s\n",
+					fi_strerror(-ret));
+				err++;
+				continue;
+			}
+			if (!handle) {
+				/* should NEVER happen with good return */
+				fprintf(stderr,
+					"cxip_curl_progress() no handle\n");
+				err++;
+				continue;
+			}
 			if (handle->status != 200) {
+				/* our test server should generate 200 */
 				fprintf(stderr, "status=%ld\n", handle->status);
 				err++;
-				continue;
+				goto free_handle;
 			}
 			if (!handle->response) {
-				fprintf(stderr, "no response\n");
+				/* CURL should not return a NULL response */
+				fprintf(stderr, "NULL response\n");
 				err++;
-				continue;
+				goto free_handle;
 			}
 
-			/* Test server returns:
+			/* Test server should return:
 			 * {
 			 *    "operation": <GET, POST, ...>,
 			 *    "data": {"seqid": <seqid>}
 			 * }
-			 * except for GET, which cannot supply data.
 			 */
 			const char *str;
 			json_obj = json_tokener_parse(handle->response);
@@ -289,50 +333,72 @@ int auto_test_cxip_curl(void)
 				fprintf(stderr, "%s: JSON unparseable\n",
 					opname);
 				err++;
-				continue;
+				goto free_handle;
 			}
 
-			/* Should not see a different operation on server */
-			if (cxip_json_string("operation", json_obj, &str) ||
-			    strcmp(str, opname)) {
-				fprintf(stderr, "%s exp %s\n", str, opname);
+			if (cxip_json_string("operation", json_obj, &str)) {
+				fprintf(stderr, "no 'operation' field\n");
 				err++;
-				continue;
+				goto free_json;
 			}
 
-			/* Check to see if server reordered responses */
-			if (op != CURL_GET) {
-				int seqid;
-				if (cxip_json_int("data.seqid",
-						  json_obj, &seqid)) {
-					failtest(return 1,
-						 "%s saw no seqid\n", opname);
-					err++;
-					continue;
-				}
-				if (seqid != nextseqid++)
-					reordered = true;
+			if (strcmp(str, opname)) {
+				fprintf(stderr, "op=%s exp %s\n", str, opname);
+				err++;
+				goto free_json;
 			}
+
+			/* For GET, seqid is is meaningless */
+			if (op == CURL_GET)
+				goto free_json;
+
+			if (cxip_json_int("data.seqid", json_obj, &seqid)) {
+				fprintf(stderr, "op=%s no seqid\n", opname);
+				err++;
+				goto free_json;
+			}
+
+			/* This confirms that CURL does not order responses */
+			if (seqid != nextseqid)
+				reordered = true;
+free_json:
 			json_object_put(json_obj);
-
+free_handle:
 			cxip_curl_free(handle);
-		} while (ret > 0);
+			nextseqid++;
+		}
 		tmeas(&t1);
+
+		/* Should be no strays */
+		ret = cxip_curl_progress(&handle);
+		if (ret != -FI_ENODATA) {
+			fprintf(stderr, "op=%s stray handles\n", opname);
+			err++;
+		}
+
+		/* Callback counter should match number of calls */
+		if (counter != parallel) {
+			fprintf(stderr, "op=%s count=%d, exp %d\n",
+				opname, counter, parallel);
+			err++;
+		}
 
 		if (verbose) {
 			printf("  iterations(%d)\n", parallel);
-			printf("  incomplete(%d)\n", i);
+			printf("  counter   (%d)\n", counter);
 			printf("  reordered (%s)\n", reordered ? "true" : "false");
 			printf("  errors    (%d)\n", err);
 			printf("  issue     (%ld.%09lds)\n", t0.tv_sec, t0.tv_nsec);
 			printf("  response  (%ld.%09lds)\n", t1.tv_sec, t1.tv_nsec);
 		}
+
 		if (err)
 			failtest(return 1, "FAILED CURL tests\n");
 	}
-
 	if (verbose)
-		printf("\nPASSED CURL tests\n");
+		printf("\n");
+
+	printf("PASSED CURL tests\n");
 	return 0;
 }
 
@@ -364,15 +430,16 @@ int do_test(void)
 	}
 
 	tmark(&t0);
-	ret = cxip_curl_perform(serverpath, data, 0, op, verbose);
+	ret = cxip_curl_perform(serverpath, data, 0, op, verbose, 0, 0);
 	if (ret) {
 		fprintf(stderr, "cxip_curl_perform() returned %d\n", ret);
 		return ret;
 	}
 
 	do {
+		sched_yield();
 		ret = cxip_curl_progress(&handle);
-	} while (ret > 0 && !handle);
+	} while (ret == -FI_EAGAIN);
 	tmeas(&t0);
 
 	if (ret)
@@ -390,8 +457,6 @@ int do_test(void)
 	printf("status   = %ld\n", handle->status);
 	printf("request------------\n%s\n", handle->request);
 	printf("response-----------\n%s\n", handle->response);
-
-	cxip_curl_free(handle);
 
 	return 0;
 }
@@ -464,7 +529,10 @@ int main(int argc, char **argv) {
 
 	snprintf(serverpath, sizeof(serverpath), "%s%s", server, endpoint);
 
-	cxip_curl_init();
+	if (cxip_curl_init()) {
+		fprintf(stderr, "CURL could not be initialized\n");
+		return ret;
+	}
 
 	if (autotest) {
 		ret = auto_test_cxip_json() |
@@ -473,6 +541,6 @@ int main(int argc, char **argv) {
 		ret = do_test();
 	}
 
-	cxip_curl_term();
+	cxip_curl_fini();
 	return ret;
 }
