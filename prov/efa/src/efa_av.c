@@ -384,6 +384,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 {
 	int err, ret;
 	char smr_name[EFA_SHM_NAME_MAX];
+	size_t smr_name_len;
 	struct rxr_ep *rxr_ep;
 	struct rdm_peer *peer;
 
@@ -406,7 +407,8 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 			return -FI_ENOMEM;
 		}
 
-		err = rxr_raw_addr_to_smr_name(conn->ep_addr, smr_name);
+		smr_name_len = EFA_SHM_NAME_MAX;
+		err = rxr_raw_addr_to_smr_name(conn->ep_addr, smr_name, &smr_name_len);
 		if (err != FI_SUCCESS) {
 			EFA_WARN(FI_LOG_AV,
 				 "rxr_ep_efa_addr_to_str() failed! err=%d\n", err);
