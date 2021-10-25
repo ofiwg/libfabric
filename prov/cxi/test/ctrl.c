@@ -14,11 +14,13 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
+#define	trc CXIP_TRACE
+
 TestSuite(ctrl, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /**
- * Test reversibility of N <-> (r,c), error conditions
+ * @brief Test reversibility of N <-> (r,c), error conditions
  *
  * For a range of radix values, select a node number (N), convert to
  * a (row,column) pair, and then convert back to node number. These
@@ -53,7 +55,7 @@ Test(ctrl, radix_tree_reversible)
 }
 
 /**
- * Test parent/child mapping.
+ * @brief Test parent/child mapping.
  *
  * For a range of radix values, generate the relatives in the tree (one
  * parent, multiple children), and confirm that these relatives have the
@@ -63,8 +65,9 @@ Test(ctrl, radix_tree_reversible)
  */
 Test(ctrl, radix_tree_mapping)
 {
-	int radix, nodes, N, M, *rels;
-	int count, parent, child, i;
+	int *rels, parent, child;
+	int radix, nodes, N, M;
+	int count, i;
 
 	/* Test radix zero case */
 	M = cxip_tree_relatives(0, 0, 0, NULL);
@@ -73,7 +76,7 @@ Test(ctrl, radix_tree_mapping)
 	/* Test expected pattern of parent/child indices */
 	for (radix = 1; radix < 8; radix++) {
 		/* only needs radix+1, but for test, provide extra space */
-		rels = calloc(radix+2, sizeof(int));
+		rels = calloc(radix+2, sizeof(*rels));
 		for (nodes = 0; nodes < 256; nodes++) {
 			count = 0;
 			parent = -1;
@@ -108,196 +111,14 @@ Test(ctrl, radix_tree_mapping)
 	}
 }
 
-/**
- * @brief Test the valid and invalid configurations.
- *
- */
-Test(ctrl, zb_config)
-{
-	struct cxip_ep *cxip_ep;
-	struct cxip_zbcoll_obj *zb;
-	uint32_t nids[] = {2, 3, 4, 5};
-	int numnids = sizeof(nids)/sizeof(uint32_t);
-	int ret;
-
-	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
-	zb = &cxip_ep->ep_obj->zbcoll;
-
-	/* cannot specify numnids > 0 with nids == NULL */
-	ret = cxip_zbcoll_config(cxit_ep, numnids, NULL, false);
-	cr_assert(ret == -FI_EINVAL, "numnids && !nids, ret=%d\n", ret);
-
-	/* test case, do not generate a tree */
-	ret = cxip_zbcoll_config(cxit_ep, 0, NULL, false);
-	cr_assert(ret == 0, "!numnids, ret=%d\n", ret);
-	cr_assert(zb->count == 1, "!numnids, cnt=%d\n", zb->count);
-
-	/* request simulation */
-	ret = cxip_zbcoll_config(cxit_ep, numnids, nids, true);
-	cr_assert(ret == 0, "sim1, ret=%d\n", ret);
-	cr_assert(zb->count == numnids, "sim1, cnt=%d\n", zb->count);
-
-	/* resize simulation */
-	ret = cxip_zbcoll_config(cxit_ep, numnids-1, nids, true);
-	cr_assert(ret == 0, "sim2, ret=%d\n", ret);
-	cr_assert(zb->count == numnids-1, "sim2, cnt=%d\n", zb->count);
-
-	/* exercise real setup failure, real addr not in list */
-	ret = cxip_zbcoll_config(cxit_ep, numnids-1, nids, false);
-	cr_assert(ret == -FI_EADDRNOTAVAIL, "fail, ret=%d\n", ret);
-	cr_assert(zb->count == numnids-1, "fail, cnt=%d\n", zb->count);
-
-	/* exercise real setup success, real addr is in list */
-	nids[1] = cxip_ep->ep_obj->src_addr.nic;
-	ret = cxip_zbcoll_config(cxit_ep, numnids, nids, false);
-	cr_assert(ret == 0, "good, ret=%d\n", ret);
-	cr_assert(zb->count == 1, "good, cnt=%d\n", zb->count);
-}
-
-/**
- * Send a single packet using a pure-send (self to self) configuration.
- */
-Test(ctrl, zb_send0)
-{
-	struct cxip_ep *cxip_ep;
-	struct cxip_zbcoll_obj *zb;
-	struct cxip_zbcoll_state *zbs;
-	union cxip_match_bits mb = {.raw = 0};
-	uint32_t mynid;
-	uint32_t err, ack, rcv, cnt;
-	int ret;
-
-	cr_assert(sizeof(union cxip_match_bits) == 8);
-
-	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
-	zb = &cxip_ep->ep_obj->zbcoll;
-	zb->disable = true;
-
-	/* Send-to-self configuration */
-	ret = cxip_zbcoll_config(cxit_ep, 0, NULL, false);
-	cr_assert(ret == 0);
-	cr_assert(zb->count == 1, "zb->count = %d, != %d\n",
-		  zb->count, 1);
-
-	/* Legitimate send to self */
-	cxip_zbcoll_reset_counters(cxit_ep);
-	mynid = cxip_ep->ep_obj->src_addr.nic;
-	cxip_zbcoll_send(cxip_ep->ep_obj, mynid, mynid, mb.raw);
-	zbs = &zb->state[0];
-	cnt = 0;
-	do {
-		usleep(10);
-		cxip_ep_ctrl_progress(cxip_ep->ep_obj);
-		err = ofi_atomic_get32(&zbs->err_count);
-		ack = ofi_atomic_get32(&zbs->ack_count);
-		rcv = ofi_atomic_get32(&zbs->rcv_count);
-		ret = (err || (ack && rcv));
-		cnt++;
-	} while (!ret && cnt < 1000);
-	cr_assert(cnt < 1000, "repeat count = %d\n", cnt);
-	cr_assert(err == 0, "err = %d, != 0\n", err);
-	cr_assert(ack == 1, "ack = %d, != 1\n", ack);
-	cr_assert(rcv == 1, "rcv = %d, != 1\n", rcv);
-
-	/* Invalid send to non-existent address */
-	cxip_zbcoll_reset_counters(cxit_ep);
-	mynid = cxip_ep->ep_obj->src_addr.nic + 1;
-	cxip_zbcoll_send(cxip_ep->ep_obj, mynid, mynid, mb.raw);
-	zbs = &zb->state[0];
-	cnt = 0;
-	do {
-		usleep(10);
-		cxip_ep_ctrl_progress(cxip_ep->ep_obj);
-		err = ofi_atomic_get32(&zbs->err_count);
-		ack = ofi_atomic_get32(&zbs->ack_count);
-		rcv = ofi_atomic_get32(&zbs->rcv_count);
-		ret = (err || (ack && rcv));
-		cnt++;
-	} while (!ret && cnt < 1000);
-	cr_assert(cnt >= 1000, "repeat count = %d\n", cnt);
-	cr_assert(err == 0, "err = %d, != 0\n", err);
-	cr_assert(ack == 0, "ack = %d, != 0\n", ack);
-	cr_assert(rcv == 0, "rcv = %d, != 0\n", rcv);
-}
-
-/* Send a single packet from src to dst in NETSIM simulation */
-static void _sendN(struct cxip_ep_obj *ep_obj,
-		   int num_nids, uint32_t *nids, int srcidx, int dstidx)
-{
-	struct cxip_zbcoll_obj *zb = &ep_obj->zbcoll;
-	union cxip_match_bits mb = {.zb_data=1234};
-	int i, ret, cnt, err, ack, rcv;
-
-	/* send to dstidx simulated address */
-	zb->disable = true;
-	cxip_zbcoll_reset_counters(cxit_ep);
-	cxip_zbcoll_send(ep_obj, nids[srcidx], nids[dstidx], mb.raw);
-
-	/* wait for errors, or completion */
-	cnt = 0;
-	do {
-		usleep(10);
-		cxip_ep_ctrl_progress(ep_obj);
-		err = ofi_atomic_get32(&zb->state[srcidx].err_count) +
-		      ofi_atomic_get32(&zb->state[dstidx].err_count);
-		ack = ofi_atomic_get32(&zb->state[srcidx].ack_count);
-		rcv = ofi_atomic_get32(&zb->state[dstidx].rcv_count);
-		ret = (err || (ack && rcv));
-		cnt++;
-	} while (!ret && cnt < 1000);
-	cr_assert(cnt < 1000, "repeat count = %d\n", cnt);
-	cr_assert(err == 0, "err = %d, != 0\n", err);
-	cr_assert(ack == 1, "ack = %d, != 1\n", ack);
-	cr_assert(rcv == 1, "rcv = %d, != 1\n", rcv);
-
-	/* make sure no bleed-over into other states */
-	for (i = 0; i < num_nids; i++) {
-		if (i == srcidx || i == dstidx)
-			continue;
-		err = ofi_atomic_get32(&zb->state[i].err_count);
-		ack = ofi_atomic_get32(&zb->state[i].ack_count);
-		rcv = ofi_atomic_get32(&zb->state[i].rcv_count);
-		cr_assert(err == 0, "uninvolved[%d] err = %d\n", i, err);
-		cr_assert(ack == 0, "uninvolved[%d] ack = %d\n", i, ack);
-		cr_assert(rcv == 0, "uninvolved[%d] rcv = %d\n", i, rcv);
-	}
-	zb->disable = false;
-}
-
-#define	NUM_NIDS(nids)	sizeof(nids)/sizeof(uint32_t)
-
-/* Send packet from every src to every dst in simulation */
-Test(ctrl, zb_sendN)
-{
-	struct cxip_ep *cxip_ep;
-	struct cxip_zbcoll_obj *zb;
-	int srcidx, dstidx, ret;
-
-	uint32_t nids[] = {10, 11, 12, 13};
-	int num_nids = NUM_NIDS(nids);
-
-	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
-	zb = &cxip_ep->ep_obj->zbcoll;
-	zb->disable = true;
-
-	ret = cxip_zbcoll_config(cxit_ep, num_nids, nids, true);
-	cr_assert(ret == 0);
-	cr_assert(zb->count == num_nids,
-		  "zb->count = %d, != %d\n", zb->count, num_nids);
-
-	for (srcidx = 0; srcidx < num_nids; srcidx++)
-		for (dstidx = 0; dstidx < num_nids; dstidx++)
-			_sendN(cxip_ep->ep_obj, num_nids, nids, srcidx, dstidx);
-	zb->disable = false;
-}
-
+/* Utility to show the node relatives */
 __attribute__((unused))
 static void dumpmap(struct cxip_zbcoll_obj *zb)
 {
 	int i, j;
 
 	printf("MAP=======\n");
-	for (i = 0; i < zb->count; i++) {
+	for (i = 0; i < zb->simcount; i++) {
 		printf("%2d:", i);
 		for (j = 0; j < zb->state[i].num_relatives; j++)
 			printf(" %2d", zb->state[i].relatives[j]);
@@ -306,109 +127,588 @@ static void dumpmap(struct cxip_zbcoll_obj *zb)
 	printf("\n");
 }
 
-static int _await_complete(struct cxip_ep *cxip_ep, int num_nids)
+/* generate simulated addresses for testing in this module */
+static int _generate_sim_addrs(struct cxip_ep_obj *ep_obj, int size,
+			       fi_addr_t **fiaddrp)
 {
-	struct cxip_zbcoll_obj *zb;
-	struct cxip_zbcoll_state *zbs;
-	int i, rep;
+	struct cxip_addr *caddrs;
+	fi_addr_t *fiaddrs;
+ 	int i, ret;
 
-	zb = &cxip_ep->ep_obj->zbcoll;
-	for (rep = 0; rep < 1000; rep++) {
-		cxip_ep_ctrl_progress(cxip_ep->ep_obj);
-		for (i = 0; i < num_nids; i++) {
-			zbs = &zb->state[i];
-			if (! zbs->complete)
-				break;
-		}
-		if (i >= num_nids)
-			return 0;
-		usleep(1000);
+	if (fiaddrp)
+		*fiaddrp = NULL;
+	if (size < 1)
+		return -FI_EINVAL;
+
+	ret = -FI_ENOMEM;
+	caddrs = calloc(size, sizeof(*caddrs));
+	fiaddrs = calloc(size, sizeof(*fiaddrs));
+	if (!caddrs || !fiaddrs)
+		goto cleanup;
+
+	/* Prepare simulated addresses */
+	for (i = 0; i < size; i++) {
+		caddrs[i].nic = i;
+		caddrs[i].pid = ep_obj->src_addr.pid;
 	}
-	return -1;
+
+	/* Register these with the av */	ret = fi_av_insert(&ep_obj->av->av_fid, caddrs, size, fiaddrs,
+			   0L, NULL);
+	if (ret < 1)
+		goto cleanup;
+
+	/* returning */
+	if (fiaddrp) {
+		*fiaddrp = fiaddrs;
+		fiaddrs = NULL;
+	}
+	ret = FI_SUCCESS;
+cleanup:
+	free(fiaddrs);
+	free(caddrs);
+	return ret;
 }
 
-/* Test barrier in simulation */
+/**
+ * @brief Test the valid and invalid cxip_zbcoll_obj configurations.
+ */
+Test(ctrl, zb_config)
+{
+	struct cxip_ep *cxip_ep;
+	struct cxip_ep_obj *ep_obj;
+	struct cxip_zbcoll_obj *zb;
+	fi_addr_t *fiaddrs;
+	int ret;
+
+	int num_addrs = 5;
+
+	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
+	ep_obj = cxip_ep->ep_obj;
+
+	trc("Generating addresses\n");
+	ret = _generate_sim_addrs(ep_obj, num_addrs, &fiaddrs);
+	cr_assert(!ret, "out of memory\n");
+	cr_assert(fiaddrs, "no fi_addrs\n");
+
+	/* cannot specify num_addrs > 0 with addrs == NULL */
+	trc("case: null\n");
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, false, &zb);
+	cr_assert(ret == -FI_EINVAL,
+		  "illegal config: num_addrs && !addrs, ret=%d\n", ret);
+	cxip_zbcoll_free(zb);
+
+	/* test case, do not generate a tree */
+	trc("case: no tree\n");
+	ret = cxip_zbcoll_alloc(ep_obj, 0, NULL, false, &zb);
+	cr_assert(ret == 0,
+		  "no tree: ret=%d\n", ret);
+	cr_assert(zb->simcount == 1,
+		  "no tree: simcnt=%d\n", zb->simcount);
+	cxip_zbcoll_free(zb);
+
+	/* request simulation */
+	trc("case: simulated\n");
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, true, &zb);
+	cr_assert(ret == 0,
+		  "sim tree 4: ret=%d\n", ret);
+	cr_assert(zb->simcount == num_addrs,
+		  "sim tree 4: cnt=%d\n", zb->simcount);
+	cxip_zbcoll_free(zb);
+
+	/* resize simulation */
+	trc("case: resize simulation\n");
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs-1, fiaddrs, true, &zb);
+	cr_assert(ret == 0,
+		  "sim tree 3: ret=%d\n", ret);
+	cr_assert(zb->simcount == num_addrs-1,
+		  "sim tree 3: cnt=%d\n", zb->simcount);
+	cxip_zbcoll_free(zb);
+
+	/* exercise real setup success, ensure real addr is in list */
+	trc("case: real addresses success\n");
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, false, &zb);
+	cr_assert(ret == 0,
+		  "real tree, in list: ret=%d\n", ret);
+	cr_assert(zb->simcount == 1,
+		  "real tree, in list: simcnt=%d\n", zb->simcount);
+	cxip_zbcoll_free(zb);
+
+	/* exercise real setup failure, ensure real addr not in list */
+	trc("case: real addresses failure\n");
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs-1, &fiaddrs[1], false, &zb);
+	cr_assert(ret == -FI_EADDRNOTAVAIL,
+		  "real tree, not in list: ret=%d\n", ret);
+	cxip_zbcoll_free(zb);
+
+	free(fiaddrs);
+}
+
+/**
+ * @brief Send a single packet using a self to self send-only configuration.
+ */
+Test(ctrl, zb_send0)
+{
+	struct cxip_ep *cxip_ep;
+	struct cxip_ep_obj *ep_obj;
+	struct cxip_zbcoll_obj *zb;
+	union cxip_match_bits mb = {.raw = 0};
+	uint32_t dsc, err, ack, rcv, cnt;
+	int ret;
+
+	fi_addr_t *fiaddrs;
+	int num_addrs = 2;
+
+	cr_assert(sizeof(union cxip_match_bits) == 8);
+
+	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
+	ep_obj = cxip_ep->ep_obj;
+	ret = _generate_sim_addrs(ep_obj, num_addrs, &fiaddrs);
+	cr_assert(!ret, "out of memory\n");
+
+	/* Set up the send-only zbcoll */
+	ret = cxip_zbcoll_alloc(ep_obj, 1, fiaddrs, false, &zb);
+	cr_assert(ret == 0);
+	cr_assert(zb != NULL);
+	cr_assert(zb->simcount == 1);
+	cr_assert(zb->state != NULL);
+
+	/* Test that if disabled, getgroup is no-op */
+	ep_obj->zbcoll.disable = true;
+	ret = cxip_zbcoll_getgroup(zb);
+	cr_assert(ret == 0);
+
+	/* Legitimate send to self */
+	cxip_zbcoll_reset_counters(ep_obj);
+	cxip_zbcoll_send(zb, 0, 0, mb.raw);
+	cnt = 0;
+	do {
+		usleep(1);
+		cxip_zbcoll_progress(ep_obj);
+		cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
+		ret = (dsc || err || (ack && rcv));
+		cnt++;
+	} while (!ret && cnt < 1000);
+	cr_assert(cnt < 1000, "repeat count = %d >= %d\n", cnt, 1000);
+	cr_assert(dsc == 0, "dsc = %d, != 0\n", dsc);
+	cr_assert(err == 0, "err = %d, != 0\n", err);
+	cr_assert(ack == 1, "ack = %d, != 1\n", ack);
+	cr_assert(rcv == 1, "rcv = %d, != 1\n", rcv);
+
+	/* Invalid send to out-of-range address index */
+	cxip_zbcoll_reset_counters(ep_obj);
+	cxip_zbcoll_send(zb, 0, num_addrs, mb.raw);
+	cnt = 0;
+	do {
+		usleep(1);
+		cxip_zbcoll_progress(ep_obj);
+		cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
+		ret = (err || dsc || (ack && rcv));
+		cnt++;
+	} while (!ret && cnt < 1000);
+	cr_assert(cnt < 1000, "repeat count = %d < %d\n", cnt, 1000);
+	cr_assert(dsc == 0, "dsc = %d, != 0\n", dsc);
+	cr_assert(err == 1, "err = %d, != 1\n", err);
+	cr_assert(ack == 0, "ack = %d, != 0\n", ack);
+	cr_assert(rcv == 0, "rcv = %d, != 0\n", rcv);
+
+	cxip_zbcoll_free(zb);
+	free(fiaddrs);
+}
+
+/* utility to send from src to dst */
+static void _send(struct cxip_zbcoll_obj *zb, int srcidx, int dstidx)
+{
+	struct cxip_ep_obj *ep_obj;
+	union cxip_match_bits mb = {.zb_data=0};
+	int ret, cnt;
+	uint32_t dsc, err, ack, rcv;
+
+	/* send to dstidx simulated address */
+	ep_obj = zb->ep_obj;
+	cxip_zbcoll_reset_counters(ep_obj);
+	cxip_zbcoll_send(zb, srcidx, dstidx, mb.raw);
+
+	/* wait for errors, or completion */
+	cnt = 0;
+	do {
+		usleep(1);
+		cxip_zbcoll_progress(ep_obj);
+		cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
+		ret = (err || dsc || (ack && rcv));
+		cnt++;
+	} while (!ret && cnt < 1000);
+	cr_assert(cnt < 1000, "repeat count = %d\n", cnt);
+
+	cr_assert(dsc == 0, "dsc = %d, != 0\n", dsc);
+	cr_assert(err == 0, "err = %d, != 0\n", err);
+	cr_assert(ack == 1, "ack = %d, != 1\n", ack);
+	cr_assert(rcv == 1, "rcv = %d, != 1\n", rcv);
+}
+
+/**
+ * @brief Send a single packet from each src to dst in NETSIM simulation.
+ *
+ * Scales as O(N^2), so don't go nuts on the number of addrs.
+ */
+Test(ctrl, zb_sendN)
+{
+	struct cxip_ep *cxip_ep;
+	struct cxip_ep_obj *ep_obj;
+	struct cxip_zbcoll_obj *zb;
+	int srcidx, dstidx, ret;
+
+	fi_addr_t *fiaddrs;
+	int num_addrs = 5;
+
+	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
+	ep_obj = cxip_ep->ep_obj;
+
+	ret = _generate_sim_addrs(ep_obj, num_addrs, &fiaddrs);
+	cr_assert(!ret, "out of memory\n");
+
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, true, &zb);
+	cr_assert(ret == 0);
+	cr_assert(zb != NULL);
+	cr_assert(zb->simcount == num_addrs);
+	cr_assert(zb->state != NULL);
+
+	/* Test that if disabled, getgroup is no-op */
+	ep_obj->zbcoll.disable = true;
+	ret = cxip_zbcoll_getgroup(zb);
+	cr_assert(ret == 0);
+
+	for (srcidx = 0; srcidx < num_addrs; srcidx++)
+		for (dstidx = 0; dstidx < num_addrs; dstidx++)
+			_send(zb, srcidx, dstidx);
+	cxip_zbcoll_free(zb);
+	free(fiaddrs);
+}
+
+/* Utility to wait until a collective has completed */
+static int _await_complete(struct cxip_zbcoll_obj *zb)
+{
+	uint32_t rep;
+
+	/* We only wait for 1 sec */
+	for (rep = 0; rep < 10000; rep++) {
+		usleep(100);
+		cxip_zbcoll_progress(zb->ep_obj);
+		if (!zb->busy || zb->error)
+			break;
+	}
+	return zb->error;
+}
+
+void _shuffle_array32(uint32_t *array, size_t size)
+{
+	uint32_t i, j, t;
+
+	for (i = 0; i < size-1; i++) {
+		j = i + rand() / (RAND_MAX / (size - i) + 1);
+		t = array[j];
+		array[j] = array[i];
+		array[i] = t;
+	}
+}
+
+/* create a randomized shuffle array */
+void _addr_shuffle(struct cxip_zbcoll_obj *zb, bool shuffle)
+{
+	struct timespec tv;
+	int i;
+
+	clock_gettime(CLOCK_MONOTONIC, &tv);
+	srand((unsigned int)tv.tv_nsec);
+	free(zb->shuffle);
+	zb->shuffle = calloc(zb->simcount, sizeof(uint32_t));
+	for (i = 0; i < zb->simcount; i++)
+		zb->shuffle[i] = i;
+	if (shuffle)
+		_shuffle_array32(zb->shuffle, zb->simcount);
+}
+
+/*****************************************************************/
+/**
+ * @brief Test simulated getgroup.
+ *
+ * This exercises the basic broad operation, the user callback, and the
+ * non-concurrency lockout.
+ *
+ * This is simulated in a single thread, so it tests only a single barrier
+ * across multiple addrs. It randomizes the nid processing order, and performs
+ * multiple barriers to uncover any ordering issues.
+ */
+
+struct getgroup_data {
+	int count;
+};
+static void getgroup_func(struct cxip_zbcoll_obj *zb, void *usrptr)
+{
+	struct getgroup_data *data = (struct getgroup_data *)usrptr;
+	data->count++;
+}
+Test(ctrl, zb_getgroup)
+{
+	struct cxip_ep *cxip_ep;
+	struct cxip_ep_obj *ep_obj;
+	struct cxip_zbcoll_obj **zb;
+	struct getgroup_data zbd;
+	int i, ret;
+	uint32_t dsc, err, ack, rcv;
+	fi_addr_t *fiaddrs;
+	int num_addrs = 9;	// arbitrary
+	int num_zb = 43;	// limit for simulation
+	int cnt = 0;
+
+	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
+	ep_obj = cxip_ep->ep_obj;
+
+	ret = _generate_sim_addrs(ep_obj, num_addrs, &fiaddrs);
+	cr_assert(!ret, "addrs out of memory\n");
+
+	zb = calloc(num_zb, sizeof(struct cxip_zbcoll_obj *));
+	cr_assert(zb, "zb out of memory\n");
+
+	memset(&zbd, 0, sizeof(zbd));
+
+	for (i = 0; i < num_zb; i++) {
+		/* Verify multiple allocations */
+		ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs,
+					true, &zb[i]);
+		cr_assert(ret == 0);
+		cr_assert(zb[i]->simcount == num_addrs,
+			"zb->simcount = %d, != %d\n",
+			zb[i]->simcount, num_addrs);
+		/* Initialize the address shuffling */
+		_addr_shuffle(zb[i], false);
+		/* Test getgroup operation */
+		cxip_zbcoll_push_cb(zb[i], getgroup_func, &zbd);
+		ret = cxip_zbcoll_getgroup(zb[i]);
+		cr_assert(ret == FI_SUCCESS, "%d getgroup = %s\n",
+			  i, fi_strerror(-ret));
+		/* Test getgroup non-concurrency */
+		ret = cxip_zbcoll_getgroup(zb[i]);
+		cr_assert(ret == -FI_EAGAIN, "%d getgroup = %s\n",
+			  i, fi_strerror(-ret));
+		/* Poll until complete */
+		ret = _await_complete(zb[i]);
+		cr_assert(ret == FI_SUCCESS, "%d getgroup = %s\n",
+			  i, fi_strerror(-ret));
+		/* Check user callback completion count result */
+		cr_assert(zbd.count == i+1, "%d zbdcount = %d\n",
+			  i, zbd.count);
+		/* Confirm expected grpid */
+		cr_assert(zb[i]->grpid == i, "%d grpid = %d\n",
+			  i, zb[i]->grpid);
+
+		cnt += 2 * (num_addrs - 1);
+	}
+
+	/* Free item [0] and try again */
+	i = 0;
+	cxip_zbcoll_free(zb[i]);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, true, &zb[i]);
+	cr_assert(ret == FI_SUCCESS);
+	ret = cxip_zbcoll_getgroup(zb[i]);
+	cr_assert(ret == FI_SUCCESS, "retry %d getgroup = %s\n",
+		  i, fi_strerror(-ret));
+	ret = cxip_zbcoll_getgroup(zb[i]);
+	cr_assert(ret == -FI_EAGAIN, "retry %d getgroup = %s\n",
+		  i, fi_strerror(-ret));
+	ret = _await_complete(zb[i]);
+	cr_assert(ret == FI_SUCCESS, "retry %d getgroup = %s\n",
+		  i, fi_strerror(-ret));
+	cr_assert(zb[i]->grpid == i,
+			"%d grpid = %d\n", i, zb[i]->grpid);
+	cnt += 2 * (num_addrs - 1);
+
+	cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
+	cr_assert(dsc == 0 && err == 0,
+		  "FAILED dsc=%d err=%d ack=%d rcv=%d cnt=%d\n",
+		  dsc, err, ack, rcv, cnt);
+	/* cleanup */
+	for (i = 0; i < num_zb; i++)
+		cxip_zbcoll_free(zb[i]);
+	free(zb);
+	free(fiaddrs);
+}
+
+/*****************************************************************/
+/**
+ * @brief Test simulated barrier.
+ *
+ * This exercises the basic broad operation, the user callback, and the
+ * non-concurrency lockout.
+ *
+ * This is done in a single thread, so it tests only a single barrier across
+ * multiple addrs. It randomizes the nid processing order, and performs multiple
+ * barriers to uncover any ordering issues.
+ */
+struct barrier_data {
+	int count;
+};
+static void barrier_func(struct cxip_zbcoll_obj *zb, void *usrptr)
+{
+	struct barrier_data *data = (struct barrier_data *)usrptr;
+
+	/* increment the user completion count */
+	data->count++;
+}
+
 Test(ctrl, zb_barrier)
 {
 	struct cxip_ep *cxip_ep;
+	struct cxip_ep_obj *ep_obj;
 	struct cxip_zbcoll_obj *zb;
-	int i, rep, ret;
+	struct barrier_data zbd;
+	int rep, ret;
 
-	uint32_t nids[] = {10, 11, 12, 13, 14, 15, 16, 17};
-	int num_nids = NUM_NIDS(nids);
+	fi_addr_t *fiaddrs;
+	int num_addrs = 9;
 
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
-	zb = &cxip_ep->ep_obj->zbcoll;
+	ep_obj = cxip_ep->ep_obj;
 
-	ret = cxip_zbcoll_config(cxit_ep, num_nids, nids, true);
+	ret = _generate_sim_addrs(ep_obj, num_addrs, &fiaddrs);
+	cr_assert(!ret, "out of memory\n");
+
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, true, &zb);
 	cr_assert(ret == 0);
-	cr_assert(zb->count == num_nids,
-		  "zb->count = %d, != %d\rep", zb->count, num_nids);
+	cr_assert(zb->simcount == num_addrs,
+		  "zb->simcount = %d, != %d\n", zb->simcount, num_addrs);
+	/* Initialize the addresses */
+	_addr_shuffle(zb, false);
 
-	/* Do this test twice */
-	for (rep = 0; rep < 2; rep++) {
-		/* Issue num_nids Barrier operations */
-		for (i = 0; i < num_nids; i++) {
-			ret = cxip_zbcoll_barrier(cxit_ep);
-			cr_assert(ret == 0, "%d barrier[%d] = %d\n",
-				  rep, i, ret);
-		}
-		/* Allow this time to complete */
-		ret = _await_complete(cxip_ep, num_nids);
-		cr_assert(ret == FI_SUCCESS, "%d barrier = %d\n",
-			  rep, ret);
-		/* Try to issue another barrier -- should fail */
-		ret = cxip_zbcoll_barrier(cxit_ep);
-		cr_assert(ret == -FI_EAGAIN, "%d barrier = %d\n",
-			  rep, ret);
-		/* Officially progress */
-		ret = cxip_zbcoll_progress(cxit_ep);
-		cr_assert(ret == FI_SUCCESS, "%d barrier = %d\n",
-			  rep, ret);
+	/* Acquire a group id */
+	ret = cxip_zbcoll_getgroup(zb);
+	cr_assert(ret == 0, "getgroup = %d\n", ret);
+	ret = _await_complete(zb);
+	cr_assert(ret == 0, "getgroup done = %d\n", ret);
+
+	memset(&zbd, 0, sizeof(zbd));
+	for (rep = 0; rep < 20; rep++) {
+		/* Shuffle the addresses */
+		_addr_shuffle(zb, true);
+		/* Perform a barrier */
+		cxip_zbcoll_push_cb(zb, barrier_func, &zbd);
+		ret = cxip_zbcoll_barrier(zb);
+		cr_assert(ret == 0, "%d barrier = %s\n",
+			  rep, fi_strerror(-ret));
+		/* Try again immediately, should show BUSY */
+		cxip_zbcoll_push_cb(zb, barrier_func, &zbd);
+		ret = cxip_zbcoll_barrier(zb);
+		cr_assert(ret == -FI_EAGAIN, "%d barrier = %s\n",
+			  rep, fi_strerror(-ret));
+		/* Poll until complete */
+		ret = _await_complete(zb);
+		cr_assert(ret == FI_SUCCESS, "%d barrier = %s\n",
+			  rep, fi_strerror(-ret));
 	}
+	/* Confirm completion count */
+	cr_assert(zbd.count == rep);
+
+	uint32_t dsc, err, ack, rcv;
+	cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
+	cr_assert(dsc == 0 && err == 0,
+		  "FAILED dsc=%d err=%d ack=%d rcv=%d\n",
+		  dsc, err, ack, rcv);
+
+	cxip_zbcoll_free(zb);
+	free(fiaddrs);
+}
+
+/*****************************************************************/
+/**
+ * @brief Perform a simulated broadcast.
+ *
+ * This exercises the basic broad operation, the user callback, and the
+ * non-concurrency lockout. The user callback captures all of the results and
+ * ensures they all match the broadcast value.
+ *
+ * This is done in a single thread, so it tests only a single bcast across
+ * multiple addrs. It randomizes the nid processing order, and performs multiple
+ * barriers to uncover any ordering issues.
+ */
+struct bcast_data {
+	uint64_t *data;
+	int count;
+};
+
+static void bcast_func(struct cxip_zbcoll_obj *zb, void *usrptr)
+{
+	struct bcast_data *data = (struct bcast_data *)usrptr;
+	int i;
+
+	for (i = 0; i < zb->simcount; i++)
+		data->data[i] = *zb->state[i].dataptr;
+	data->count++;
 }
 
 /* Test bcast in simulation */
-Test(ctrl, zb_bcast)
+Test(ctrl, zb_broadcast)
 {
 	struct cxip_ep *cxip_ep;
+	struct cxip_ep_obj *ep_obj;
 	struct cxip_zbcoll_obj *zb;
+	struct bcast_data zbd;
 	int i, rep, ret;
+	uint64_t data;
 
-	uint32_t nids[] = {10, 11, 12, 13, 14, 15, 16, 17};
-	uint64_t data[NUM_NIDS(nids)];
-	int num_nids = NUM_NIDS(nids);
+	fi_addr_t *fiaddrs;
+	int num_addrs = 25;
 
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
-	zb = &cxip_ep->ep_obj->zbcoll;
+	ep_obj = cxip_ep->ep_obj;
 
-	ret = cxip_zbcoll_config(cxit_ep, num_nids, nids, true);
+	ret = _generate_sim_addrs(ep_obj, num_addrs, &fiaddrs);
+	cr_assert(!ret, "out of memory\n");
+
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, true, &zb);
 	cr_assert(ret == 0);
-	cr_assert(zb->count == num_nids,
-		  "zb->count = %d, != %d\n", zb->count, num_nids);
+	cr_assert(zb->simcount == num_addrs,
+		  "zb->simcount = %d, != %d\n", zb->simcount, num_addrs);
+	_addr_shuffle(zb, false);
 
-	for (rep = 0; rep < 2; rep++) {
-		memset(data, 0, sizeof(data));
-		data[0] = (rand() & ((1 << 29) - 1)) | (1 << 28);
-		for (i = 0; i < num_nids; i++) {
-			ret = cxip_zbcoll_bcast(cxit_ep, &data[i]);
-			cr_assert(ret == 0, "%d bcast[%d] = %d\n",
-				  rep, i, ret);
-		}
-		/* Allow this to complete */
-		ret = _await_complete(cxip_ep, num_nids);
-		cr_assert(ret == FI_SUCCESS, "%d barrier = %d\n",
-			  rep, ret);
-		/* Try to issue another barrier -- should fail */
-		ret = cxip_zbcoll_bcast(cxit_ep, &data[0]);
-		cr_assert(ret == -FI_EAGAIN, "%d bcast = %d\n",
-			  rep, ret);
-		/* Officially progress */
-		ret = cxip_zbcoll_progress(cxit_ep);
-		cr_assert(ret == FI_SUCCESS, "%d bcast = %d\n",
-			  rep, ret);
-		for (i = 0; i < num_nids; i++)
-			cr_assert(data[0] == data[i],
-				  "%d ret data[%d] = %ld\n", rep, i, data[i]);
+	/* Acquire a group id */
+	ret = cxip_zbcoll_getgroup(zb);
+	cr_assert(ret == 0, "getgroup = %d\n", ret);
+	ret = _await_complete(zb);
+	cr_assert(ret == 0, "getgroup done = %d\n", ret);
+
+	memset(&zbd, 0, sizeof(zbd));
+	zbd.data = calloc(num_addrs, sizeof(uint64_t));
+	for (rep = 0; rep < 20; rep++) {
+		_addr_shuffle(zb, true);
+		memset(zbd.data, -1, num_addrs*sizeof(uint64_t));
+		/* Perform a broadcast */
+		data = (rand() & ((1 << 29) - 1)) | (1 << 28);
+		cxip_zbcoll_push_cb(zb, bcast_func, &zbd);
+		ret = cxip_zbcoll_broadcast(zb, &data);
+		cr_assert(ret == 0, "%d bcast = %s\n",
+			  rep, fi_strerror(-ret));
+		/* Try again immediately, should fail */
+		cxip_zbcoll_push_cb(zb, bcast_func, &zbd);
+		ret = cxip_zbcoll_broadcast(zb, &data);
+		cr_assert(ret == -FI_EAGAIN, "%d bcast = %s\n",
+			  rep, fi_strerror(-ret));
+		/* Poll until complete */
+		ret = _await_complete(zb);
+		cr_assert(ret == FI_SUCCESS, "%d bcast = %s\n",
+			  rep, fi_strerror(-ret));
+		/* Validate the data */
+		for (i = 0; i < num_addrs; i++)
+			cr_assert(zbd.data[i] == data, "[%d] %ld != %ld\n",
+				  i, zbd.data[i], data);
 	}
+	cr_assert(zbd.count == rep);
+
+	uint32_t dsc, err, ack, rcv;
+	cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
+	cr_assert(dsc == 0 && err == 0,
+		  "FAILED dsc=%d err=%d ack=%d rcv=%d\n",
+		  dsc, err, ack, rcv);
+
+	free(zbd.data);
+	cxip_zbcoll_free(zb);
+	free(fiaddrs);
 }

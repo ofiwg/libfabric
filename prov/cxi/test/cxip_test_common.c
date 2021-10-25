@@ -953,4 +953,3 @@ void mr_destroy(struct mem_region *mr)
 	fi_close(&mr->mr->fid);
 	free(mr->mem);
 }
-

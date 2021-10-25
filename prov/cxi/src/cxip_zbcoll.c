@@ -26,14 +26,58 @@
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-#ifdef	_do_trace_
-#define _trc_(...) printf(__VA_ARGS__)
-#else
-#define _trc_(...)
-#endif
+#define	trc CXIP_TRACE
+
+/* see data packing structures below */
+#define	ZB_MAP_BITS	54
+#define	ZB_GRPID_BITS	6
+#define	ZB_SIM_BITS	5
+#define	ZB_NEG_BIT	(ZB_MAP_BITS - 1)
+
+static int zbdata_send_cb(struct cxip_ctrl_req *req,
+			  const union c_event *event);
 
 /****************************************************************************
- * Point-to-point multicast broadcast for cxip_join_collective() use.
+ * OVERVIEW
+ *
+ * There are two related components in this file.
+ * - An abstract radix tree constructor
+ * - A collective implemention built on the Zero-Buffer Put control channel.
+ *
+ * The basic operational flow is as follows:
+ * - cxip_zbcoll_init() prepares the system for zbcoll collectives.
+ * - cxip_zbcoll_alloc() allocates and configures a collective structure.
+ * - cxip_zbcoll_getgroup() negotiates a collective identifier (one time).
+ * - cxip_zbcoll_barrier() performs a barrier (can be repeated).
+ * - cxip_zbcoll_broadcast() performs a broadcast (can be repeated).
+ * - cxip_zbcoll_progress() progresses getgroup/barrier/broadcast.
+ * - cxip_zbcoll_free() releases the collective structure and identifier.
+ * - cxip_zbcoll_fini() releases all collectives and cleans up.
+ *
+ * Any number of collective structures can be created, spanning the same, or
+ * different node-sets.
+ *
+ * To enable the structure, it must acquire a group identifier using the
+ * getgroup operation, which is itself a collective operation. Getgroup is
+ * serialized over the endpoint, and acquires one of 53 possible group
+ * identifiers. It will fail with -FI_BUSY if all 53 identifiers are in use. You
+ * cannot enable another structure until a prior structure is freed.
+ *
+ * Each enabled structure can be used concurrently with any other enabled
+ * structures. Collective operations are serialized over the enabled structure.
+ * An attempt to start a new collective operation on an enabled structure that
+ * is already performing a collective operation will return -FI_EAGAIN.
+ *
+ * The getgroup, barrier, and broadcast functions support a callback stack that
+ * allows caller-defined callback functions to be stacked for execution upon
+ * completion of a collective. The callback can initiate a new collective on the
+ * same object.
+ *
+ * Note that this is NOT a general-purpose collective implementation.
+ */
+
+/****************************************************************************
+ * ABSTRACT RADIX TREE
  *
  * We lay out all of the node indices (0..maxnodes-1) in layers, as follows:
  *
@@ -62,8 +106,8 @@
  *
  * The parent of any node is in the row above it, and the children are in the
  * row below it. The width of any row is (RADIX ^ row), so for every node, there
- * can be up to RADIX children, and one parent, with exception of the root node
- * (no parent).
+ * can be up to RADIX children, and one parent, with the exception of the root
+ * node (no parent).
  */
 
 /**
@@ -132,17 +176,17 @@ void cxip_tree_nodeidx(int radix, int row, int col, int *nodeidx)
  * The parent position [0] will always be populated, but with -1 if the node is
  * the root node.
  *
- * Only valid child positions [1..RADIX] will be populated.
+ * Only valid child positions in [1..RADIX] will be populated.
  *
  * This returns the total number of positions populated.
  *
  * If radix < 1, there can be no relatives, and this returns 0.
  *
  * @param radix    : radix of tree
- * @param nodeidx  : node to find relatives for
+ * @param nodeidx  : index of node to find relatives for
  * @param maxnodes : maximum valid node indices available
- * @param rels     : relatives array
- * @return int return number of valid relatives found
+ * @param rels     : relative index array
+ * @return int : number of valid relatives found
  */
 int cxip_tree_relatives(int radix, int nodeidx, int maxnodes, int *rels)
 {
@@ -169,113 +213,529 @@ int cxip_tree_relatives(int radix, int nodeidx, int maxnodes, int *rels)
 	return idx;
 }
 
-/**
- * @brief Destroy the zbcoll structure.
+/****************************************************************************
+ * @brief Zero-buffer collectives.
  *
- * @param ep_obj : endpoint
+ * ZB collectives are intended for implementation of the fi_join_collective()
+ * function.
+ *
+ * The ep_obj has a container structure of type cxip_ep_zbcoll_obj, which
+ * maintains endpoint-global state for all zb collectives. We refer to this as
+ * the zbcoll object, and it is an extension of the endpoint itself.
+ *
+ * The zbcoll object contains up to ZB_NEG_BIT dynamic zb objects, each
+ * representing a collective group.
+ *
+ * Each zb object contains one or more state structures. These are purely for
+ * doing single-endpoint bench testing. Production code will use only one state
+ * for the NID.
+ *
+ * Each zb object contains a callback stack, which can be used to execute a
+ * sequence of user-defined operations that chain automatically. The next
+ * callback on the stack is triggered by completion of the previous callback.
+ *
+ * Diagnostic counters are maintained:
+ *
+ * - ack_count == successful sends
+ * - err_count == failed sends
+ * - rcv_count == successful receives
+ * - dsc_count == discarded receives
  */
-void cxip_zbcoll_fini(struct cxip_ep_obj *ep_obj)
+
+static inline void _setbit(uint64_t *mask, int bit)
 {
-	struct cxip_zbcoll_obj *zbcoll;
-	int i;
+	*mask |= (1ULL << bit);
+}
+
+static inline void _clrbit(uint64_t *mask, int bit)
+{
+	*mask &= ~(1ULL << bit);
+}
+
+void cxip_zbcoll_get_counters(struct cxip_ep_obj *ep_obj, uint32_t *dsc,
+			      uint32_t *err, uint32_t *ack, uint32_t *rcv)
+{
+	struct cxip_ep_zbcoll_obj *zbcoll;
 
 	zbcoll = &ep_obj->zbcoll;
-	for (i = 0; i < zbcoll->count; i++)
-		free(zbcoll->state[i].relatives);
-	free(zbcoll->state);
-	zbcoll->count = 0;
-	zbcoll->state = NULL;
+	if (dsc)
+		*dsc = ofi_atomic_get32(&zbcoll->dsc_count);
+	if (err)
+		*err = ofi_atomic_get32(&zbcoll->err_count);
+	if (ack)
+		*ack = ofi_atomic_get32(&zbcoll->ack_count);
+	if (rcv)
+		*rcv = ofi_atomic_get32(&zbcoll->rcv_count);
 }
 
 /**
- * @brief Initialize the zbcoll
+ * @brief Free zbcoll object.
  *
- * @param ep_obj : endpoint object
- * @return int FI_SUCCESS
+ * This also releases the group identifier associated with this zbcoll object.
+ *
+ * @param zb : zb object to free
  */
-int cxip_zbcoll_init(struct cxip_ep_obj *ep_obj)
+void cxip_zbcoll_free(struct cxip_zbcoll_obj *zb)
 {
-	ep_obj->zbcoll.count = 0;
-	ep_obj->zbcoll.state = NULL;
+	int i;
+
+	if (!zb)
+		return;
+
+	cxip_zbcoll_rlsgroup(zb);
+	if (zb->state) {
+		for (i = 0; i < zb->simcount; i++)
+			free(zb->state[i].relatives);
+	}
+	free(zb->caddrs);
+	free(zb->state);
+	free(zb->shuffle);
+	free(zb);
+}
+
+/* configure the zbcoll object */
+static int _state_config(struct cxip_zbcoll_obj *zb, int simcount, int grp_rank)
+{
+	struct cxip_zbcoll_state *zbs;
+	int radix, n;
+
+	radix = cxip_env.zbcoll_radix;
+
+	zb->simcount = simcount;
+	zb->state = calloc(simcount, sizeof(*zbs));
+	if (!zb->state)
+		goto nomem;
+
+	free(zb->shuffle);
+	zb->shuffle = NULL;
+
+	for (n = 0; n < simcount; n++) {
+		zbs = &zb->state[n];
+		zbs->zb = zb;
+
+		/* do not create relatives if no addrs */
+		if (!zb->num_caddrs)
+			continue;
+
+		/* if simulating, override grp_rank with each state index */
+		if (simcount > 1)
+			grp_rank = n;
+
+		/* create space for relatives */
+		zbs->grp_rank = grp_rank;
+		zbs->relatives = calloc(radix + 1, sizeof(*zbs->relatives));
+		if (!zbs->relatives)
+			goto fail;
+
+		/* This produces indices in an abstract tree */
+		zbs->num_relatives =
+			cxip_tree_relatives(radix, grp_rank, zb->num_caddrs,
+					    zbs->relatives);
+	}
+	return FI_SUCCESS;
+fail:
+	for (n = 0; n < simcount; n++) {
+		zbs = &zb->state[n];
+		free(zbs->relatives);
+	}
+nomem:
+	free(zb->state);
+	zb->state = NULL;
+	return -FI_ENOMEM;
+}
+
+/* sort out the various configuration cases */
+static int _zbcoll_config(struct cxip_zbcoll_obj *zb, int num_addrs,
+			  fi_addr_t *fiaddrs, bool sim)
+{
+	int grp_rank, i, ret;
+
+	if (num_addrs && !fiaddrs) {
+		CXIP_WARN("Non-zero addr count with NULL addr pointer\n");
+		return -FI_EINVAL;
+	}
+
+	/* do a lookup on all of the fiaddrs */
+	if (num_addrs) {
+		zb->num_caddrs = num_addrs;
+		zb->caddrs = calloc(num_addrs, sizeof(*zb->caddrs));
+		if (!zb->caddrs)
+			return -FI_ENOMEM;
+		for (i = 0; i < num_addrs; i++) {
+			ret = _cxip_av_lookup(zb->ep_obj->av, fiaddrs[i],
+					      &zb->caddrs[i]);
+			if (ret) {
+				CXIP_WARN("Lookup on fiaddr=%ld failed]n",
+					  fiaddrs[i]);
+				return -FI_EINVAL;
+			}
+		}
+	}
+
+	/* find the index of the source address in the address list */
+	for (grp_rank = 0; !sim && grp_rank < num_addrs; grp_rank++)
+		if (CXIP_ADDR_EQUAL(zb->caddrs[grp_rank], zb->ep_obj->src_addr))
+			break;
+
+	if (!num_addrs) {
+		/* test case: no nics, send-to-self only */
+		ret = _state_config(zb, 1, grp_rank);
+	} else if (sim && num_addrs <= (1 << ZB_SIM_BITS)) {
+		/* simulation: create a state for each item in addrs[] */
+		ret = _state_config(zb, num_addrs, grp_rank);
+	} else if (sim) {
+		CXIP_WARN("Simulation maximum size = %d\n", (1 << ZB_SIM_BITS));
+		ret = -FI_EADDRNOTAVAIL;
+	} else if (grp_rank < num_addrs) {
+		/* we want to participate as addrs[src_idx] == myaddr */
+		ret = _state_config(zb, 1, grp_rank);
+	} else {
+		CXIP_WARN("Endpoint addr not in addrs[]\n");
+		ret = -FI_EADDRNOTAVAIL;
+	}
+	return ret;
+}
+
+/**
+ * @brief Allocate and configure a zbcoll object.
+ *
+ * The zb object represents a radix tree through multiple nics that can perform
+ * sequential synchronizing collectives. It can be reused.
+ *
+ * This supports several test modes.
+ *
+ * If num_nics == 0, the zb object can only be used to test cxip_zbcoll_send(),
+ * to exercise a send-to-self using the ctrl channel, and will work with NETSIM.
+ *
+ * If sim is true, this can be used to perform a simulated collective on a
+ * single node, and will work with NETSIM. num_nics is limited to 2^ZB_SIM_BITS
+ * simulated endpoints.
+ *
+ * Otherwise this will be used to perform real collectives over the group
+ * specified by the specified nics. The self-address of the node calling this
+ * must be a member of this set, or the function will return -FI_EADDRNOTAVAIL
+ * and *zbp will return NULL.
+ *
+ * nid[0] is defined as the collective root nid.
+ *
+ * @param zbcoll   : endpoint zbcoll object
+ * @param num_nics : number of nics in the list
+ * @param nics     : fabric nic addresses
+ * @param sim      : true if nics are simulated
+ * @param zbp      : returned zb object
+ * @return int : FI_SUCCESS or error value
+ */
+int cxip_zbcoll_alloc(struct cxip_ep_obj *ep_obj,
+		      int num_addrs, fi_addr_t *fiaddrs, bool sim,
+		      struct cxip_zbcoll_obj **zbp)
+{
+	struct cxip_zbcoll_obj *zb;
+	int ret;
+
+	if (!zbp)
+		return -FI_EINVAL;
+
+	/* allocate the zbcoll object */
+	*zbp = NULL;
+	zb = calloc(1, sizeof(*zb));
+	if (!zb)
+		return -FI_ENOMEM;
+	zb->ep_obj = ep_obj;
+	zb->grpid = ZB_NEG_BIT;
+
+	/* configure the zbcoll object */
+	ret = _zbcoll_config(zb, num_addrs, fiaddrs, sim);
+	if (ret) {
+		cxip_zbcoll_free(zb);
+		CXIP_WARN("Failed to configure zbcoll object = %s\n",
+			  fi_strerror(-ret));
+		return ret;
+	}
+
+	/* return the zbcoll object */
+	*zbp = zb;
 	return FI_SUCCESS;
 }
 
 /**
- * @brief Simulation testing: packs pseudo src/dst into mb.zb_data.
+ * Data packing structures.
  *
- * Note that when using NETSIM for testing, zb_data payloads are functionally
- * limited to 29 bits. Any additional bits will be discarded.
+ * This defines the specific bit meanings in the 64-bit zb put packet. Bit
+ * mapping could be modified, see considerations below.
  *
- * Production code limits the zb_data payloads to 61 bits.
+ * Considerations for the (production) network field:
  *
- * Only 13 bits are needed for a multicast address value.
+ * - dat MUST hold a multicast address and hardware root data
+ * - grpid size limits the number of concurrent zbcoll operations
+ * - sim requires only one bit and applies only to devel testing
+ * - pad is fixed by the control channel implementation
+ *
+ * Implementation of the negotiation operation requires that dat contain a
+ * bitmap. The choice of 54 allows for 54 grpid values (0-53), which will fit
+ * into a 6-bit grpid value. This is a large number for concurrencies. The grpid
+ * field could be reduced to 5 bits, offering only 32 concurrent operations. The
+ * map bits should then be reduced to 32, which would free up 23 bits for other
+ * information during negotiation, should extra bits be required.
+ *
+ * For broadcast, the full dat field is available for multicast information. The
+ * multicast address is currently 13 bits. Future revisions of Rosetta may
+ * increase this. The remaining bits can be used for a representation of the
+ * root node. A full caddr would require 32 bits, while using a 32-bit index
+ * into the fi_av_set would allow for a collective spanning up to 4 billion
+ * endpoints. This allows the multicast address to expand by another 9 bits, for
+ * a total of 22 bits, or 4 million multicast addresses.
+ *
+ * Considerations for the simulation fields:
+ *
+ * - src and dst must have the same number of bits
+ * - src/dst bits constrain the size of the simulated zbcoll tree
+ * - multi-NID simulations are not likely to be supported
  */
 union packer {
 	struct {
-		uint64_t dat: 29;
-		uint64_t src: 16;
-		uint64_t dst: 16;
-	} __attribute__((packed));
+		uint64_t dat: (ZB_MAP_BITS - 2*ZB_SIM_BITS);
+		uint64_t src: ZB_SIM_BITS;
+		uint64_t dst: ZB_SIM_BITS;
+		uint64_t grpid: ZB_GRPID_BITS;
+		uint64_t sim: 1;
+		uint64_t pad: 3;
+	} sim __attribute__((__packed__));
+	struct {
+		uint64_t dat: ZB_MAP_BITS;
+		uint64_t grpid: ZB_GRPID_BITS;
+		uint64_t sim: 1;
+		uint64_t pad: 3;
+	} net __attribute__((__packed__));
 	uint64_t raw;
 };
 
-/* Pack testing data */
-static inline uint64_t zbpack(int src, int dst, uint64_t dat)
+
+/* pack data */
+static inline uint64_t zbpack(int sim, int src, int dst, int grpid,
+			      uint64_t dat)
 {
 	union packer x = {.raw = 0};
-	x.src = src;
-	x.dst = dst;
-	x.dat = dat;
+	if (sim) {
+		x.sim.sim = 1;
+		x.sim.src = src;
+		x.sim.dst = dst;
+		x.sim.grpid = grpid;
+		x.sim.dat = dat;
+	} else {
+		x.sim.sim = 0;
+		x.net.grpid = grpid;
+		x.net.dat = dat;
+	}
 	return x.raw;
 }
 
-/* Unpack testing data */
-static inline void zbunpack(uint64_t data, int *src, int *dst, uint64_t *dat)
+/* unpack data */
+static inline int zbunpack(uint64_t data, int *src, int *dst, int *grpid,
+			   uint64_t *dat)
 {
-	union packer x = {.raw = 0};
-	x.raw = data;
-	*src = x.src;
-	*dst = x.dst;
-	*dat = x.dat;
+	union packer x = {.raw = data};
+	if (x.sim.sim) {
+		*src = x.sim.src;
+		*dst = x.sim.dst;
+		*grpid = x.sim.grpid;
+		*dat = x.sim.dat;
+	} else {
+		*src = 0;
+		*dst = 0;
+		*grpid = x.net.grpid;
+		*dat = x.net.dat;
+	}
+	return x.sim.sim;
 }
 
-/* Mark a collective operation done, prep for next */
+/**
+ * zbcoll state machine.
+ *
+ * The zbcollectives are intended to perform necessary synchronization among all
+ * NIDs participating in a fi_join_collective() operation. Every join will have
+ * its own set of NIDs, which may overlap with the NIDs used in another
+ * concurrently-executing fi_join_collective(). Thus, every NID may be
+ * participating simultaneously in a different number of join operations.
+ *
+ * Every process (NID) in the collective sits somewhere in a radix tree, with
+ * one parent as relative[0] (except for the root), and up to RADIX-1 children
+ * at relative[1,...].
+ *
+ * The collective follows a two-stage data flow, first from children toward the
+ * root (upstream), then from root toward the children (downstream).
+ *
+ * Processes (NIDs) must wait for all children to report before forwarding their
+ * own contribution toward the root. When the children of the root all report,
+ * the root reflects the result back to its children, and completes. As each
+ * child receives from its parent, it propagates the result to its children, and
+ * completes.
+ *
+ * Packets are unrestricted, and thus receive confirmation ACK messages from the
+ * hardware, or NAK and retry if delivery fails.
+ *
+ * The leaf (childless) NIDs contribute immediately and send the zb->dataval
+ * data upstream. Each parent collects data from its children and bitwise-ANDs
+ * the data with its own zb->dataval. When all children have reported to the
+ * root, the root sends *zb->dataval downstream, and the children simply
+ * propagate the data to the leaves. This fixed behavior covers all our
+ * use-cases.
+ *
+ * For the barrier operation, zb->dataptr is set to NULL, and both it and
+ * zb->dataval are ignored.
+ *
+ * For the broadcast operation, zb->dataptr is a caller-supplied pointer,
+ * containing the data to be broadcast on the root and unspecified on the other
+ * NIDs, and zb->dataval is ignored.
+ *
+ * Both barrier and broadcast must be preceded by a getgroup operation, to
+ * obtain a grpid value for the uninitialized zb object.
+ *
+ * For the getgroup operation, zb->dataval is a copy of the endpoint zbcoll
+ * grpmsk, which has a bit set to 1 for every grpid that is available for that
+ * NID. NIDs may have different grpmsk values. All of these masks are passed
+ * upstream through zb->dataval in a bitwise-AND reduction. When it reaches the
+ * root, the set bits in zb->dataval are the grpid values still available across
+ * all of the NIDs in the group. Because zb->dataptr is set to &zb->dataval,
+ * downstream propagation automatically distributes this bitmask back to all of
+ * the other NIDs. The negotiated group id is the lowest numbered bit still set,
+ * and every NID computes this from the bitmask.
+ *
+ * It is possible for all group ID values to be exhausted. In this case, the
+ * getgroup operation will report -FI_EBUSY, and the caller should retry until a
+ * join operation completes, releasing one of the group ID values. If zb
+ * collective objects are never released, new operations will be blocked
+ * indefinitely.
+ *
+ * Getgroup operations are always serialized across the entire endpoint.
+ * Attempting a second getgroup on any (new) zb object before the first has
+ * completed will return -FI_EAGAIN. This is required to prevent race conditions
+ * that would issue the same group id to multiple zbcoll objects.
+ *
+ * We are externally guaranteed that all fi_join_collective() operations will
+ * observe proper collective ordering. Specifically, if any two joins share two
+ * or more NIDs, those joins will be initiated in the same order on all shared
+ * NIDs (possibly interspersed with other joins for unrelated groups). This
+ * behavior is necessary to ensure that all NIDs in a group obtain the same
+ * grpid value.
+ */
+
+/* send a zbcoll packet -- wrapper for cxip_ctrl_msg_send() */
+static void zbsend(struct cxip_ep_obj *ep_obj, uint32_t dstnic, uint32_t dstpid,
+		   uint64_t mbv)
+{
+	struct cxip_ep_zbcoll_obj *zbcoll;
+	struct cxip_ctrl_req *req;
+	int ret;
+
+	zbcoll = &ep_obj->zbcoll;
+
+	req = calloc(1, sizeof(*req));
+	if (!req) {
+		CXIP_WARN("%s failed request allocation\n", __func__);
+		ofi_atomic_inc32(&zbcoll->err_count);
+		return;
+	}
+
+	req->ep_obj = ep_obj;
+	req->cb = zbdata_send_cb;
+	req->send.nic_addr = dstnic;
+	req->send.pid = dstpid;
+	req->send.mb.raw = mbv;
+	req->send.mb.ctrl_le_type = CXIP_CTRL_LE_TYPE_CTRL_MSG;
+	req->send.mb.ctrl_msg_type = CXIP_CTRL_MSG_ZB_DATA;
+
+	/* If we can't send, collective cannot complete, just spin */
+	do {
+		ret =  cxip_ctrl_msg_send(req);
+		if (ret == -FI_EAGAIN)
+			cxip_ep_ctrl_progress(ep_obj);
+	} while (ret == -FI_EAGAIN);
+	if (ret) {
+		CXIP_WARN("%s failed CTRL message send\n", __func__);
+		ofi_atomic_inc32(&zbcoll->err_count);
+	}
+}
+
+/* reject a getgroup request from a non-group entity */
+static void reject(struct cxip_ep_obj *ep_obj, int dstnic, int dstpid,
+		   int sim, int src, int dst, int grpid)
+{
+	union cxip_match_bits mb;
+
+	mb.raw = zbpack(sim, dst, src, grpid, 0);
+	zbsend(ep_obj, dstnic, dstpid, mb.raw);
+}
+
+/**
+ * @brief Send a zero-buffer collective packet.
+ *
+ * Creates a request packet that must be freed (or retried) in callback.
+ *
+ * This can physically send ONLY from endpoint source address, but the src
+ * address can be provided for simulation.
+ *
+ * Only the lower bits of the 64-bit payload will be delivered, depending on the
+ * specific packing model. Upper control bits will be overwritten as necessary.
+ *
+ * @param zb      : indexed zb structure
+ * @param srcidx  : source address index (ignored unless simulating)
+ * @param dstidx  : destination address index (required)
+ * @param payload : packet value to send
+ */
+void cxip_zbcoll_send(struct cxip_zbcoll_obj *zb, int srcidx, int dstidx,
+		      uint64_t payload)
+{
+	union cxip_match_bits mb = {.raw = 0};
+	struct cxip_addr dstaddr;
+
+	/* resolve NETSIM testcase */
+	trc("SND %04x->%04x %016lx\n", srcidx, dstidx, payload);
+	if (zb->simcount > 1) {
+		if (dstidx >= zb->simcount) {
+			ofi_atomic_inc32(&zb->ep_obj->zbcoll.err_count);
+			return;
+		}
+		/* alter the data to pass srcaddr/dstaddr */
+		mb.zb_data = zbpack(1, srcidx, dstidx, zb->grpid, payload);
+		dstaddr = zb->ep_obj->src_addr;
+	} else {
+		/* srcidx, dstaddr are discarded in zbpack() */
+		if (dstidx >= zb->num_caddrs) {
+			ofi_atomic_inc32(&zb->ep_obj->zbcoll.err_count);
+			return;
+		}
+		mb.zb_data = zbpack(0, 0, 0, zb->grpid, payload);
+		dstaddr = zb->caddrs[dstidx];
+	}
+	zbsend(zb->ep_obj, dstaddr.nic, dstaddr.pid, mb.raw);
+}
+
+/* mark a collective operation done, pop the callback */
 static inline void zbdone(struct cxip_zbcoll_state *zbs)
 {
+	struct cxip_zbcoll_obj *zb = zbs->zb;
 	zbs->contribs = 0;
-	zbs->complete = true;
+	if (zb->busy && !--zb->busy)
+		cxip_zbcoll_pop_cb(zb);
 }
 
-/* Mark a collective operation failure */
+/* mark a collective send failure and end the collective */
 static void zbsend_fail(struct cxip_zbcoll_state *zbs,
 			struct cxip_ctrl_req *req, int ret)
 {
-	ofi_atomic_inc32(&zbs->err_count);
-	zbs->error = ret;
+	struct cxip_ep_zbcoll_obj *zbcoll;
+
+	zbcoll = &zbs->zb->ep_obj->zbcoll;
+	ofi_atomic_inc32(&zbcoll->err_count);
+	zbs->zb->error = ret;
 	zbdone(zbs);
 	free(req);
-}
-
-/* Send a zbcoll packet robustly, with failure handling */
-static int zbsend(struct cxip_zbcoll_state *zbs, struct cxip_ctrl_req *req)
-{
-	int ret;
-
-	do {
-		sched_yield();
-		ret = cxip_ctrl_msg_send(req);
-	} while (ret == -FI_EAGAIN);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Send failure, ret = %d\n", ret);
-		zbsend_fail(zbs, req, ret);
-	}
-	return ret;
 }
 
 /* root has no parent */
 static inline bool isroot(struct cxip_zbcoll_state *zbs)
 {
-	return (zbs->relatives[0] == (uint32_t)-1);
+	return (zbs->relatives[0] < 0);
 }
 
 /* receive is complete when all contributors have spoken */
@@ -285,37 +745,40 @@ static inline bool rcvcomplete(struct cxip_zbcoll_state *zbs)
 }
 
 /* send upstream to the parent */
-static void zbsend_up(struct cxip_ep_obj *ep_obj,
-		      struct cxip_zbcoll_state *zbs,
+static void zbsend_up(struct cxip_zbcoll_state *zbs,
 		      uint64_t mbv)
 {
 	union cxip_match_bits mb = {.raw = mbv};
-	_trc_("%d->%d: %10s %10s %d/%d\n",
-		zbs->nid, zbs->relatives[0], "", __func__,
+	int sim, src, dst, grpid;
+	uint64_t dat;
+
+	trc("%04x->%04x: %-10s %-10s %d/%d\n",
+		zbs->grp_rank, zbs->relatives[0], "", __func__,
 		zbs->contribs, zbs->num_relatives);
-	cxip_zbcoll_send(ep_obj, zbs->nid, zbs->relatives[0], mb.raw);
+	sim = zbunpack(mb.raw, &src, &dst, &grpid, &dat);
+	dat &= zbs->dataval;
+	zbpack(sim, src, dst, grpid, dat);
+	cxip_zbcoll_send(zbs->zb, zbs->grp_rank, zbs->relatives[0], mb.raw);
 }
 
 /* send downstream to all of the children */
-static void zbsend_dn(struct cxip_ep_obj *ep_obj,
-		      struct cxip_zbcoll_state *zbs,
+static void zbsend_dn(struct cxip_zbcoll_state *zbs,
 		      uint64_t mbv)
 {
 	union cxip_match_bits mb = {.raw = mbv};
 	int relidx;
 
- 	 for (relidx = 1; relidx < zbs->num_relatives; relidx++) {
-		_trc_("%d->%d: %10s %10s\n",
-			zbs->nid, zbs->relatives[relidx], __func__, "");
-		cxip_zbcoll_send(ep_obj, zbs->nid,
-				 zbs->relatives[relidx], mb.raw);
+ 	for (relidx = 1; relidx < zbs->num_relatives; relidx++) {
+		trc("%04x->%04x: %-10s %-10s\n",
+			zbs->grp_rank, zbs->relatives[relidx],
+			__func__, "");
+		cxip_zbcoll_send(zbs->zb,
+			zbs->grp_rank, zbs->relatives[relidx], mb.raw);
 	}
 }
 
-/* advance the upstream collective engine */
-static void advance_up(struct cxip_ep_obj *ep_obj,
-		       struct cxip_zbcoll_state *zbs,
-		       uint64_t mbv)
+/* advance the collective engine */
+static void advance(struct cxip_zbcoll_state *zbs, uint64_t mbv)
 {
 	union cxip_match_bits mb = {.raw = mbv};
 
@@ -323,14 +786,153 @@ static void advance_up(struct cxip_ep_obj *ep_obj,
 		return;
 
 	if (isroot(zbs)) {
-		/* The root always reflects down */
-		mb.zb_data = zbs->dataval;
-		zbsend_dn(ep_obj, zbs, mb.raw);
+		/* The root always reflects bcast data down */
+		mb.zb_data = (zbs->dataptr) ? (*zbs->dataptr) : 0;
+		zbsend_dn(zbs, mb.raw);
 		zbdone(zbs);
 	} else {
 		/* completed children send up */
-		zbsend_up(ep_obj, zbs, mbv);
+		zbsend_up(zbs, mbv);
 	}
+}
+
+/**
+ * @brief zbcoll message receive callback.
+ *
+ * This is called by the cxip_ctrl handler when a ZB collective packet is
+ * received. This is "installed" at ep initialization, so it can begin receiving
+ * packets before a zb object has been allocated to receive the data. Races are
+ * handled by issuing a rejection packet back to the sender, which results in a
+ * retry.
+ *
+ * Caller does not handle error returns gracefully. Handle all errors, and
+ * return FI_SUCCESS.
+ *
+ * @param ep_obj    : endpoint
+ * @param init_nic  : received (actual) initiator NIC
+ * @param init_pid  : received (actual) initiator PID
+ * @param mbv       : received match bits
+ * @return int : FI_SUCCESS (formal return)
+ */
+int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
+			uint32_t init_pid, uint64_t mbv)
+{
+	struct cxip_ep_zbcoll_obj *zbcoll;
+	struct cxip_zbcoll_obj *zb;
+	struct cxip_zbcoll_state *zbs;
+	int sim, src, dst, grpid;
+	uint32_t inic, ipid;
+	uint64_t dat;
+	union cxip_match_bits mb = {.raw = mbv};
+	int relidx;
+
+	zbcoll = &ep_obj->zbcoll;
+	sim = zbunpack(mbv, &src, &dst, &grpid, &dat);
+	/* determine the initiator to use */
+	if (sim) {
+		inic = src;
+		ipid = ep_obj->src_addr.pid;
+	} else {
+		inic = init_nic;
+		ipid = init_pid;
+	}
+	trc("RCV INI=%04x PID=%04x sim=%d %d->%d grp=%d dat=%016lx\n",
+	    inic, ipid, sim, src, dst, grpid, dat);
+
+	/* discard if grpid is explicitly invalid (bad packet) */
+	if (grpid > ZB_NEG_BIT) {
+		CXIP_WARN("Invalid group ID value = %d\n", grpid);
+		trc("Invalid group ID value = %d\n", grpid);
+		ofi_atomic_inc32(&zbcoll->dsc_count);
+		return FI_SUCCESS;
+	}
+	/* low-level packet test */
+	if (zbcoll->disable) {
+		/* Attempting a low-level test */
+		ofi_atomic_inc32(&zbcoll->rcv_count);
+		return FI_SUCCESS;
+	}
+	/* resolve the zb object */
+	zb = zbcoll->grptbl[grpid];
+	if (!zb) {
+		if (grpid == ZB_NEG_BIT) {
+			/* someone else is negotiating, we aren't ready */
+			reject(ep_obj, init_nic, init_pid,
+			       sim, dst, src, grpid);
+		} else {
+			/* illegal, attempting collective without grpid */
+			trc("discard: collective with no grpid\n");
+			ofi_atomic_inc32(&zbcoll->dsc_count);
+		}
+		return FI_SUCCESS;
+	}
+	/* reject bad state indices */
+	if (src >= zb->simcount || dst >= zb->simcount) {
+		CXIP_WARN("Bad simulation: src=%d dst=%d max=%d\n",
+			  src, dst, zb->simcount);
+		trc("discard: simsrc=%d simdst=%d\n", src, dst);
+		ofi_atomic_inc32(&zbcoll->dsc_count);
+		return FI_SUCCESS;
+	}
+	/* set the state object, and modify initiator for simulation */
+	zbs = &zb->state[dst];
+	/* raw send test case, we are done */
+	if (!zbs->num_relatives) {
+		CXIP_DBG("ZBCOLL no relatives: test case\n");
+		return FI_SUCCESS;
+	}
+	/* determine which relative this came from */
+	for (relidx = 0; relidx < zbs->num_relatives; relidx++) {
+		if (inic == zb->caddrs[zbs->relatives[relidx]].nic &&
+		    ipid == zb->caddrs[zbs->relatives[relidx]].pid)
+			break;
+	}
+	if (relidx == zbs->num_relatives) {
+		/* not a relative, reject or discard */
+		if (grpid == ZB_NEG_BIT) {
+			trc("getgroup: src not a relative\n");
+			reject(ep_obj, init_nic, init_pid,
+			       sim, dst, src, grpid);
+		} else {
+			trc("discard: src not a relative\n");
+			ofi_atomic_inc32(&zbcoll->dsc_count);
+		}
+		return FI_SUCCESS;
+	}
+	/* data received, increment the counter */
+	ofi_atomic_inc32(&zbcoll->rcv_count);
+
+	/* advance the state */
+	if (relidx == 0) {
+		/* downstream recv from parent */
+
+		/* copy the data to the user pointer, if any */
+		if (zbs->dataptr)
+			*zbs->dataptr = dat;
+
+		trc("%04x<-%04x: %-10s %-10s %d/%d (%016lx)\n",
+			zbs->grp_rank, zbs->relatives[0], "dn_recvd", "",
+			zbs->contribs, zbs->num_relatives, dat);
+
+		/* send downstream to children */
+		zbsend_dn(zbs, mb.raw);
+		zbdone(zbs);
+	} else {
+		/* upstream recv from child */
+
+		/* bitwise-AND the upstream data value */
+		zbs->dataval &= mb.raw;
+
+		/* upstream packets contribute */
+		zbs->contribs += 1;
+		trc("%04x<-%04x: %-10s %-10s %d/%d\n",
+			zbs->grp_rank, inic, "", "up_recvd", zbs->contribs,
+			zbs->num_relatives);
+
+		/* send upstream to parent */
+		advance(zbs, mb.raw);
+	}
+	return FI_SUCCESS;
 }
 
 /**
@@ -338,52 +940,83 @@ static void advance_up(struct cxip_ep_obj *ep_obj,
  *
  * The request must be retried, or freed.
  *
- * NETSIM will simply drop packets sent to non-existent addresses, which
- * leaks the request packet. Real networks monitor the hardware with the retry
- * handler, and will perform automatic retries before giving up. This will then
- * be called with an ACK failure response.
+ * NETSIM will simply drop packets sent to non-existent addresses, which leaks
+ * the request packet.
  *
- * Libfabric caller does not handle error returns, handle them here.
+ * Caller does not handle error returns gracefully. Handle all errors, and
+ * return FI_SUCCESS.
  *
  * @param req   : original request
  * @param event : CXI driver event
- * @return int FI_SUCCESS
+ * @return int  : FI_SUCCESS (formal return)
  */
 static int zbdata_send_cb(struct cxip_ctrl_req *req, const union c_event *event)
 {
+	struct cxip_ep_zbcoll_obj *zbcoll;
+	struct cxip_zbcoll_obj *zb;
 	struct cxip_zbcoll_state *zbs;
+	int src, dst, grpid;
+	int sim __attribute__((unused));
+	uint64_t dat;
+	int ret;
 
-	/* resolve NETSIM testcase -- find state pointer */
-	if (req->ep_obj->zbcoll.count > 1) {
-		int src, dst;
-		uint64_t dat;
-		zbunpack(req->send.mb.zb_data, &src, &dst, &dat);
-		zbs = &req->ep_obj->zbcoll.state[src];
-	} else {
-		zbs = req->ep_obj->zbcoll.state;
+	sim = zbunpack(req->send.mb.zb_data, &src, &dst, &grpid, &dat);
+	trc("ACK sim=%d %d->%d grp=%d dat=%016lx\n",
+	    sim, src, dst, grpid, dat);
+	zbcoll = &req->ep_obj->zbcoll;
+	if (grpid > ZB_NEG_BIT) {
+		/* ill-formed packet, discard with no regrets */
+		CXIP_WARN("Invalid group ID value = %d\n", grpid);
+		goto discard;
 	}
+	zb = zbcoll->grptbl[grpid];
+	if (!zb) {
+		/* Low-level testing */
+		if (zbcoll->disable) {
+			ofi_atomic_inc32(&zbcoll->ack_count);
+			goto done;
+		}
+		/* ACK is late on negotiation */
+		if (grpid == ZB_NEG_BIT) {
+			ofi_atomic_inc32(&zbcoll->ack_count);
+			goto done;
+		}
+		/* ACK is late */
+		CXIP_WARN("ACK src=%d dst=%d grp=%d\n", src, dst, grpid);
+		goto discard;
+	}
+	if (src >= zb->simcount || dst >= zb->simcount) {
+		/* ill-formed packet, discard with no regrets */
+		CXIP_WARN("Bad simulation: src=%d dst=%d max=%d\n",
+			  src, dst, zb->simcount);
+		goto discard;
+	}
+	zbs = &zb->state[dst];
 
+	ret = FI_SUCCESS;
 	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
 		switch (cxi_event_rc(event)) {
 		case C_RC_OK:
-			ofi_atomic_inc32(&zbs->ack_count);
+			ofi_atomic_inc32(&zbcoll->ack_count);
 			free(req);
 			break;
 		case C_RC_ENTRY_NOT_FOUND:
 			/* likely a target queue is full, retry */
 			CXIP_WARN("Target dropped packet, retry\n");
-			zbsend(zbs, req);
+			usleep(cxip_env.fc_retry_usec_delay);
+			ret = cxip_ctrl_msg_send(req);
 			break;
 		case C_RC_PTLTE_NOT_FOUND:
 			/* may be a race during setup, retry */
 			CXIP_WARN("Target connection failed, retry\n");
-			zbsend(zbs, req);
+			usleep(cxip_env.fc_retry_usec_delay);
+			ret = cxip_ctrl_msg_send(req);
 			break;
 		default:
 			CXIP_WARN("ACK return code = %d, failed\n",
 				  cxi_event_rc(event));
-			zbsend_fail(zbs, req, -FI_EIO);
+			ret = -FI_EIO;
 			break;
 		}
 		break;
@@ -391,335 +1024,214 @@ static int zbdata_send_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		/* fail the send */
 		CXIP_WARN("%s: Unexpected event type: %s\n",
 		       	 __func__, cxi_event_to_str(event));
-		zbsend_fail(zbs, req, -FI_EIO);
+		ret = -FI_EIO;
+		break;
 	}
+	if (ret != FI_SUCCESS)
+		zbsend_fail(zbs, req, ret);
+
+	return FI_SUCCESS;
+discard:
+	ofi_atomic_inc32(&zbcoll->err_count);
+done:
+	free(req);
 	return FI_SUCCESS;
 }
 
 /**
- * @brief Send a zero-buffer collective packet.
+ * @brief Push callback and data onto stack for a zb object.
  *
- * Creates a request packet that must be freed (or retried) in callback.
- *
- * @param ep_obj : endpoint
- * @param srcnid : source address (ignored unless simulating)
- * @param dstnid : destination address
- * @param mb     : packet to send
+ * @param zb      : zb object
+ * @param usrfunc : user-defined callback function
+ * @param usrptr  : user-defined callback data
  */
-int cxip_zbcoll_send(struct cxip_ep_obj *ep_obj, uint32_t srcnid,
-		     uint32_t dstnid, uint64_t mbv)
+int cxip_zbcoll_push_cb(struct cxip_zbcoll_obj *zb,
+			 zbcomplete_t usrfunc, void *usrptr)
 {
-	struct cxip_zbcoll_state *zbs;
-	union cxip_match_bits mb = {.raw = mbv};
-	struct cxip_ctrl_req *req;
+	struct cxip_zbcoll_stack *stk;
 
-	/* resolve NETSIM testcase */
-	if (ep_obj->zbcoll.count > 1) {
-		int srcidx, dstidx;
-		/* find destination state index */
-		for (dstidx = 0; dstidx < ep_obj->zbcoll.count; dstidx++)
-			if (ep_obj->zbcoll.state[dstidx].nid == dstnid)
-				break;
-		/* find source state index */
-		for (srcidx = 0; srcidx < ep_obj->zbcoll.count; srcidx++)
-			if (ep_obj->zbcoll.state[srcidx].nid == srcnid)
-				break;
-		/* alter the data to pass srcidx/dstidx */
-		mb.zb_data = zbpack(srcidx, dstidx, mb.zb_data);
-
-		/* replace destination with self for this test */
-		dstnid = ep_obj->src_addr.nic;
-
-		zbs = &ep_obj->zbcoll.state[srcidx];
-	} else {
-		zbs = &ep_obj->zbcoll.state[0];
-	}
-
-	req = calloc(1, sizeof(*req));
-	if (! req) {
-		CXIP_WARN("%s failed request allocation\n", __func__);
-		ofi_atomic_inc32(&zbs->err_count);
+	stk = calloc(1, sizeof(*stk));
+	if (!stk)
 		return -FI_ENOMEM;
-	}
-	req->ep_obj = ep_obj;
-	req->cb = zbdata_send_cb;
-	req->send.nic_addr = dstnid;
-	req->send.pid = ep_obj->src_addr.pid;
-	req->send.mb.raw = mb.raw;
-	req->send.mb.ctrl_le_type = CXIP_CTRL_LE_TYPE_CTRL_MSG;
-	req->send.mb.ctrl_msg_type = CXIP_CTRL_MSG_ZB_DATA;
-
-	return zbsend(zbs, req);
+	stk->cbstack = zb->cbstack;	// save old stack pointer
+	stk->usrfunc = usrfunc;
+	stk->usrptr = usrptr;
+	zb->cbstack = stk;		// replace stack pointer
+	return FI_SUCCESS;
 }
 
 /**
- * @brief zbcoll message receive callback.
+ * @brief Pop and execute callback function for a zb object.
  *
- * This is called when a ZB collective packet is received. This does the full
- * processing of the packet, including forwarding it up and downstream.
+ * Callback functions should examine the zb->error flag and take appropriate
+ * corrective action if it is not FI_SUCCESS.
  *
- * Caller does not handle error returns gracefully, handle them here.
- *
- * @param ep_obj    : endpoint
- * @param init_nic  : received initiator NIC
- * @param init_pid  : received initiator PID
- * @param mbv       : received match bits
- * @return int FI_SUCCESS
+ * @param zb : zb object
  */
-int cxip_zbcoll_recv(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
-		      uint32_t init_pid, uint64_t mbv)
+void cxip_zbcoll_pop_cb(struct cxip_zbcoll_obj *zb)
 {
-	struct cxip_zbcoll_state *zbs;
-	union cxip_match_bits mb = {.raw = mbv};
-	uint64_t dataval;
-	int relidx;
+	struct cxip_zbcoll_stack *stk;
+	zbcomplete_t usrfunc;
+	void *usrptr;
 
-	/* resolve NETSIM testcase */
-	if (ep_obj->zbcoll.count > 1) {
-		int src, dst;
-		uint64_t dat;
-
-		zbunpack(mb.zb_data, &src, &dst, &dat);
-		init_nic = ep_obj->zbcoll.state[src].nid;
-		zbs = &ep_obj->zbcoll.state[dst];
-		dataval = dat;		// 29 bits
-	} else {
-		zbs = &ep_obj->zbcoll.state[0];
-		dataval = mb.zb_data;	// 61 bits
-	}
-
-	/* Reject if this isn't our pid */
-	if (ep_obj->src_addr.pid != init_pid) {
-		CXIP_WARN("ZBCOLL bad pid, saw %d, exp %d\n",
-			  init_pid, ep_obj->src_addr.pid);
-		return -1;
-	}
-
-	/* Data received, increment the counter */
-	ofi_atomic_inc32(&zbs->rcv_count);
-
-	/* Raw send test case, we are done */
-	if (! zbs->num_relatives) {
-		CXIP_DBG("ZBCOLL no relatives: test case\n");
-		return 0;
-	}
-
-	/* State machine can be disabled for testing */
-	if (ep_obj->zbcoll.disable) {
-		CXIP_DBG("ZBCOLL state machine disabled\n");
-		return 0;
-	}
-
-	/* Check to see if this came from a relative */
-	for (relidx = 0; relidx < zbs->num_relatives; relidx++)
-		if (zbs->relatives[relidx] == init_nic)
-			break;
-	if (relidx >= zbs->num_relatives) {
-		CXIP_WARN("ZBCOLL initiator %08x not a relative\n",
-			  init_nic);
-		ofi_atomic_inc32(&zbs->err_count);
-		return 0;
-	}
-
-	if (relidx == 0) {
-		/* downstream recv from parent */
-
-		/* Copy the data to the user pointer, if any */
-		if (zbs->dataptr)
-			*zbs->dataptr = dataval;
-
-		_trc_("%d<-%d: %10s %10s %d/%d (%ld)\n",
-			zbs->nid, zbs->relatives[0], "dn_recvd", "",
-			zbs->contribs, zbs->num_relatives, dataval);
-
-		/* Send downstream to children */
-		zbsend_dn(ep_obj, zbs, mb.raw);
-		zbdone(zbs);
-	} else {
-		/* upstream recv from child */
-
-		/* upstream packets contribute */
-		zbs->contribs += 1;
-		_trc_("%d<-x: %10s %10s %d/%d\n",
-			zbs->nid, "", "up_recvd", zbs->contribs,
-			zbs->num_relatives);
-
-		/* if all contributions received, process this */
-		advance_up(ep_obj, zbs, mb.raw);
-	}
-	return 0;
+	/* nothing more to do */
+	if (!zb->cbstack)
+		return;
+	/* pop the next callback and execute */
+	stk = zb->cbstack;		// get old stack pointer
+	usrfunc = stk->usrfunc;
+	usrptr = stk->usrptr;
+	zb->cbstack = stk->cbstack;	// replace stack pointer
+	free(stk);
+	usrfunc(zb, usrptr);
 }
 
 /**
- * @brief Perform the counter reset for all states.
+ * @brief Return the maximum group ID for concurrent zbcoll operations.
  *
- * @param zbcoll   : zbcoll structure
+ * Maximum slots are ZB_NEG_BIT+1, with one reserved for negotiation.
+ *
+ * @param sim  : true if nics are simulated
+ * @return int maximum group ID value
  */
-static void state_reset_counters(struct cxip_zbcoll_obj *zbcoll)
+int cxip_zbcoll_max_grps(bool sim)
 {
-	struct cxip_zbcoll_state *zbs;
-	int n;
-
-	for (n = 0; n < zbcoll->count; n++) {
-		zbs = &zbcoll->state[n];
-		ofi_atomic_initialize32(&zbs->err_count, 0);
-		ofi_atomic_initialize32(&zbs->ack_count, 0);
-		ofi_atomic_initialize32(&zbs->rcv_count, 0);
-	}
+	return (!sim) ? ZB_NEG_BIT : ZB_NEG_BIT - 2*ZB_SIM_BITS;
 }
 
-/**
- * @brief Perform the zbcoll configuration.
- *
- * This creates at least one zbcoll state.
- *
- * The nids[] map is used to create the "relatives" of this node, i.e. which
- * node is the parent, and which nodes are the children.
- *
- * For production, it creates only one state, which applies to this node.
- *
- * For testing, it creates num_nids states, one for each simulated node. This
- * allows bench-testing of the model by encoding the src/dst addresses in the
- * zero-buffer data (at the expense of payload bits), and 'sending' data to
- * the different states, using the actual mynid address to send the data to
- * itself.
- *
- * @param zbcoll    : zbcoll structure
- * @param count     : number of state structures to create, >= 1
- * @param mynid     : the hardware NID
- * @param mypid     : the hardware PID
- * @param num_nids  : the number of entries in nids[]
- * @param nids      : the array of nids
- */
-static void state_config(struct cxip_zbcoll_obj *zbcoll, int count,
-		         uint32_t mynid, uint32_t mypid,
-		         int num_nids, uint32_t *nids)
+/* callback function for completion of getgroup collective */
+static void _getgroup_done(struct cxip_zbcoll_obj *zb, void *usrptr)
 {
-	struct cxip_zbcoll_state *zbs;
-	int relidx, n;
+	struct cxip_ep_zbcoll_obj *zbcoll;
+	uint64_t v;
+	int grpid;
 
-	zbcoll->count = count;
-	zbcoll->state = calloc(zbcoll->count,
-				sizeof(struct cxip_zbcoll_state));
-	state_reset_counters(zbcoll);
-	for (n = 0; n < zbcoll->count; n++) {
-		zbs = &zbcoll->state[n];
-		zbs->nid = (nids) ? nids[n] : mynid;
-		zbs->pid = mypid;
-		zbs->contribs = 0;
-		zbs->error = FI_SUCCESS;
-		zbs->running = false;
-		zbs->complete = false;
-		zbs->relatives = NULL;
-		if (!num_nids || !nids)
-			continue;
+	zbcoll = &zb->ep_obj->zbcoll;
 
-		zbs->relatives =
-			calloc(cxip_env.zbcoll_radix + 1, sizeof(uint32_t));
-		zbs->num_relatives =
-			cxip_tree_relatives(cxip_env.zbcoll_radix, n, num_nids,
-						(int *)zbs->relatives);
-		for (relidx = 0; relidx < zbs->num_relatives; relidx++)
-			if (zbs->relatives[relidx] != (uint32_t)-1)
-				zbs->relatives[relidx] =
-					nids[zbs->relatives[relidx]];
-	}
-}
-
-/**
- * @brief Reset the endpoint counters.
- *
- * @param ep : endpoint
- */
-void cxip_zbcoll_reset_counters(struct fid_ep *ep)
-{
-	struct cxip_ep *cxip_ep;
-
-	cxip_ep = container_of(ep, struct cxip_ep, ep.fid);
-	state_reset_counters(&cxip_ep->ep_obj->zbcoll);
-}
-
-/* sort compare */
-static int _nidcmp(const void *v1, const void *v2)
-{
-	const uint32_t *nid1 = (uint32_t *)v1;
-	const uint32_t *nid2 = (uint32_t *)v2;
-
-	if (*nid1 < *nid2)
-		return -1;
-	if (*nid1 > *nid2)
-		return 1;
-	return 0;
-}
-
-/**
- * @brief Allow user to configure they zbcoll system.
- *
- * Normally, this should specify nids[0:num_nids-1] as actual NID addresses in
- * fabric, which comprise the zbcoll reduction group, and myidx == -1.
- *
- * There is a test case where 0 <= myidx < num_nids, which can be used (only)
- * with NETSIM. This supports sending from nids[myidx] to any nid in nids[],
- * including itself. This is simulated by creating num_nids state structures,
- * each associated with the corresponding simulated nids[] addresses, and using
- * the src address for this simulated NIC as the packet destination.
- *
- * @param ep       : endpoint
- * @param num_nids : number of network addresses to configure
- * @param nids     : array of network addresses to configure
- * @param sim      : true to perform single-node simulation
- * @return int     :
- */
-int cxip_zbcoll_config(struct fid_ep *ep, int num_nids, uint32_t *nids,
-			bool sim)
-{
-	struct cxip_ep *cxip_ep;
-	struct cxip_ep_obj *ep_obj;
-	struct cxip_zbcoll_obj *zbcoll;
-	uint32_t mynid;
-	uint32_t mypid;
-	int N;
-
-	cxip_ep = container_of(ep, struct cxip_ep, ep.fid);
-	ep_obj = cxip_ep->ep_obj;
-
-	if (num_nids && !nids) {
-		CXIP_WARN("Non-zero NID count with NULL NID pointer\n");
-		return -FI_EINVAL;
-	}
-
-	zbcoll = &ep_obj->zbcoll;
-
-	// TODO: determine if this is necessary
-	/* Sort these to ensure they are in the same order on all nodes */
-	if (nids && num_nids)
-		qsort(nids, num_nids, sizeof(uint32_t), _nidcmp);
-
-	/* Determine if my actual address is in the NIC list */
-	mypid = ep_obj->src_addr.pid;
-	mynid = ep_obj->src_addr.nic;
-	for (N = 0; N < num_nids; N++)
-		if (mynid == nids[N])
+	/* find the LSBit in returned data */
+	for (grpid = 0, v= 1ULL; grpid <= ZB_NEG_BIT; grpid++, v<<=1)
+		if (v & zb->state[0].dataval)
 			break;
 
-	if (!num_nids) {
-		/* Test case: no nids, send-to-self only */
-		cxip_zbcoll_fini(ep_obj);
-		state_config(zbcoll, 1, mynid, mypid, 0, NULL);
-	} else if (sim) {
-		/* Simulation: create a state for each item in nids[] */
-		cxip_zbcoll_fini(ep_obj);
-		state_config(zbcoll, num_nids, mynid, mypid, num_nids, nids);
-	} else if (N < num_nids) {
-		/* We want to participate as nids[N] == my real address */
-		cxip_zbcoll_fini(ep_obj);
-		state_config(zbcoll, 1, mynid, mypid, num_nids, nids);
-	} else {
-		/* This endpoint address is not included in the nids[] list */
-		CXIP_WARN("NIC %08x is not a participant in group\n", mynid);
+	/* manage a rejection due to a transient race condition */
+	if (grpid > ZB_NEG_BIT) {
+		/* race condition reported */
+		zbcoll->grptbl[ZB_NEG_BIT] = NULL;
+		zb->error = -FI_EAGAIN;
+		return;
+	}
+
+	/* manage failure due to all grpid values in-use */
+	if (grpid == ZB_NEG_BIT) {
+		/* no group IDs available */
+		zbcoll->grptbl[ZB_NEG_BIT] = NULL;
+		zb->error = -FI_EBUSY;
+		return;
+	}
+
+	/* we found our group ID */
+	fastlock_acquire(&zbcoll->lock);
+	zb->grpid = grpid;
+	zbcoll->grptbl[grpid] = zb;
+	_clrbit(&zbcoll->grpmsk, grpid);
+	zbcoll->grptbl[ZB_NEG_BIT] = NULL;
+	fastlock_release(&zbcoll->lock);
+
+	zb->error = FI_SUCCESS;
+
+	/* chain to the next callback */
+	cxip_zbcoll_pop_cb(zb);
+}
+
+/**
+ * @brief Negotiate a group id among participants.
+ *
+ * Note that -FI_EAGAIN is self-clearing with progression, and indicates that
+ * another negotiation is already in progress for a different group. To preserve
+ * negotiation ordering, any call to this function must be repeated until it
+ * stops returning -FI_EAGAIN, before attempting a different negotiation.
+ *
+ * @param zb : zbcoll structure
+ * @return int : FI_SUCCESS or error value
+ */
+int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb)
+{
+	struct cxip_ep_zbcoll_obj *zbcoll;
+	struct cxip_zbcoll_state *zbs;
+	union cxip_match_bits mb = {.raw = 0};
+	int i, n, ret;
+
+	zbcoll = &zb->ep_obj->zbcoll;
+	if (zbcoll->disable) {
+		CXIP_DBG("ZBCOLL disabled\n");
+		return FI_SUCCESS;
+	}
+
+	/* function could be called by non-participating nodes */
+	if (!zb)
 		return -FI_EADDRNOTAVAIL;
+
+	/* check for malformed object */
+	if (zb->grpid > ZB_NEG_BIT)
+		return -FI_EINVAL;
+
+	/* getgroup operations must be serialized */
+	ret = FI_SUCCESS;
+	fastlock_acquire(&zbcoll->lock);
+	if (!zbcoll->grptbl[ZB_NEG_BIT])
+		zbcoll->grptbl[ZB_NEG_BIT] = zb;
+	else
+		ret = -FI_EAGAIN;
+	fastlock_release(&zbcoll->lock);
+	if (ret)
+		return ret;
+
+	/* completion handler -- execution precedes existing handlers */
+	ret = cxip_zbcoll_push_cb(zb, _getgroup_done, NULL);
+	if (ret) {
+		/* stop negotiating, inherently atomic */
+		zbcoll->grptbl[ZB_NEG_BIT] = NULL;
+		return ret;
+	}
+
+	/* Loop is for testing. Production has simcount == 1. The shuffle array
+	 * allows the test to process simulated nics out-of-order, to probe
+	 * for problems based on sequencing of operations.
+	 */
+	zb->error = FI_SUCCESS;
+	zb->busy = zb->simcount;
+	for (i = 0; i < zb->simcount; i++) {
+		n = (zb->simcount > 1 && zb->shuffle) ? zb->shuffle[i] : i;
+		zbs = &zb->state[n];
+		zbs->dataval = zbcoll->grpmsk;
+		zbs->dataptr = &zbs->dataval;
+		zbs->contribs++;
+		/* if terminal leaf node, will send up immediately */
+		mb.zb_data = zbcoll->grpmsk;
+		advance(zbs, mb.raw);
 	}
 	return FI_SUCCESS;
+}
+
+/**
+ * @brief Release negotiated group id.
+ *
+ * @param zb : zbcoll structure
+ */
+void cxip_zbcoll_rlsgroup(struct cxip_zbcoll_obj *zb)
+{
+	struct cxip_ep_zbcoll_obj *zbcoll;
+
+	if (!zb || zb->grpid > ZB_MAP_BITS)
+		return;
+
+	zbcoll = &zb->ep_obj->zbcoll;
+
+	fastlock_acquire(&zbcoll->lock);
+	_setbit(&zbcoll->grpmsk, zb->grpid);
+	zbcoll->grptbl[zb->grpid] = NULL;
+	zb->grpid = ZB_MAP_BITS;
+	fastlock_release(&zbcoll->lock);
 }
 
 /**
@@ -730,43 +1242,50 @@ int cxip_zbcoll_config(struct fid_ep *ep, int num_nids, uint32_t *nids,
  * The data is supplied by the root node data buffer.
  * The data is delivered to the child node data buffers.
  *
- * @param ep       : endpoint
- * @param data     : pointer to data buffer
+ * @param zb      : zbcoll structure
+ * @param dataptr : pointer to data buffer
+ * @param usrfunc : completion callback function
+ * @param usrptr  : data pointer for callback
+ * @return int : FI_SUCCESS or error value
  */
-int cxip_zbcoll_bcast(struct fid_ep *ep, uint64_t *dataptr)
+int cxip_zbcoll_broadcast(struct cxip_zbcoll_obj *zb, uint64_t *dataptr)
 {
-	struct cxip_ep *cxip_ep;
+	struct cxip_ep_zbcoll_obj *zbcoll;
 	struct cxip_zbcoll_state *zbs;
 	union cxip_match_bits mb = {.raw = 0};
-	int n, ret;
+	int i, n;
 
-	cxip_ep = container_of(ep, struct cxip_ep, ep.fid);
-	sched_yield();
-	cxip_ep_ctrl_progress(cxip_ep->ep_obj);
+	/* low level testing */
+	zbcoll = &zb->ep_obj->zbcoll;
+	if (zbcoll->disable) {
+		CXIP_DBG("ZBCOLL disabled\n");
+		return FI_SUCCESS;
+	}
 
-	/* Loop is for testing. Production has count == 1. */
-	ret = -FI_EAGAIN;
-	for (n = 0; n < cxip_ep->ep_obj->zbcoll.count; n++) {
-		zbs = &cxip_ep->ep_obj->zbcoll.state[n];
-		if (zbs->running)
-			continue;
-		/* found a free slot, start the collective */
-		zbs->error = FI_SUCCESS;
-		zbs->complete = false;
-		zbs->running = true;
+	/* function could be called on non-participating NIDs */
+	if (!zb)
+		return -FI_EADDRNOTAVAIL;
+
+	/* operations on a single zb_obj are serialized */
+	if (zb->busy)
+		return -FI_EAGAIN;
+
+	/* Loop is for testing. Production has simcount == 1. The shuffle array
+	 * allows the test to process simulated nics out-of-order, to probe
+	 * for problems based on sequencing of operations.
+	 */
+	zb->error = FI_SUCCESS;
+	zb->busy = zb->simcount;
+	for (i = 0; i < zb->simcount; i++) {
+		n = (zb->simcount > 1 && zb->shuffle) ? zb->shuffle[i] : i;
+		zbs = &zb->state[n];
 		zbs->dataptr = dataptr;
 		zbs->contribs++;
-		if (isroot(zbs) && zbs->dataptr)
-			zbs->dataval = *zbs->dataptr;
-		else
-			zbs->dataval = 0;
 		/* if terminal leaf node, will send up immediately */
-		mb.zb_data = 0;
-		advance_up(cxip_ep->ep_obj, zbs, mb.raw);
-		ret = FI_SUCCESS;
-		break;
+		advance(zbs, mb.raw);
 	}
-	return ret;
+
+	return FI_SUCCESS;
 }
 
 /**
@@ -774,42 +1293,79 @@ int cxip_zbcoll_bcast(struct fid_ep *ep, uint64_t *dataptr)
  *
  * All participants call this.
  *
- * @param ep       : endpoint
+ * @param zb      : zbcoll structure
+ * @param usrfunc : completion callback function
+ * @param usrptr  : data pointer for callback
+ * @return int : FI_SUCCESS or error value
  */
-int cxip_zbcoll_barrier(struct fid_ep *ep)
+int cxip_zbcoll_barrier(struct cxip_zbcoll_obj *zb)
 {
-	return cxip_zbcoll_bcast(ep, NULL);
+	return cxip_zbcoll_broadcast(zb, NULL);
 }
 
 /**
- * @brief Progress the zbcollective state.
+ * @brief Poll for zbcoll completion completion.
  *
- * Returns FI_SUCCESS on successful completion
- * Returns FI_EAGAIN if still running
- * Returns error code on collective failure
- *
- * @param ep   : endpoint
- * @return int : return code
+ * @param ep_obj
  */
-int cxip_zbcoll_progress(struct fid_ep *ep)
+void cxip_zbcoll_progress(struct cxip_ep_obj *ep_obj)
 {
-	struct cxip_ep *cxip_ep;
-	struct cxip_zbcoll_state *zbs;
-	int n, ret;
+	cxip_ep_ctrl_progress(ep_obj);
+}
 
-	cxip_ep = container_of(ep, struct cxip_ep, ep.fid);
+/**
+ * @brief Intialize the zbcoll system.
+ *
+ * @param ep_obj : endpoint
+ * @return int : FI_SUCCESS or error value
+ */
+int cxip_zbcoll_init(struct cxip_ep_obj *ep_obj)
+{
+	struct cxip_ep_zbcoll_obj *zbcoll;
 
-	sched_yield();
-	cxip_ep_ctrl_progress(cxip_ep->ep_obj);
+	zbcoll = &ep_obj->zbcoll;
+	zbcoll->grpmsk = -1ULL;
+	zbcoll->grptbl = calloc(ZB_MAP_BITS, sizeof(void *));
+	if (!zbcoll->grptbl)
+		return -FI_ENOMEM;
+	fastlock_init(&zbcoll->lock);
+	ofi_atomic_initialize32(&zbcoll->dsc_count, 0);
+	ofi_atomic_initialize32(&zbcoll->err_count, 0);
+	ofi_atomic_initialize32(&zbcoll->ack_count, 0);
+	ofi_atomic_initialize32(&zbcoll->rcv_count, 0);
 
-	ret = FI_SUCCESS;
-	for (n = 0; n < cxip_ep->ep_obj->zbcoll.count; n++) {
-		zbs = &cxip_ep->ep_obj->zbcoll.state[n];
-		if (! zbs->complete)
-			return -FI_EAGAIN;
-		zbs->running = false;
-		if (zbs->error)
-			ret = zbs->error;
-	}
-	return ret;
+	return FI_SUCCESS;
+}
+
+/**
+ * @brief Cleanup all operations in progress.
+ *
+ * @param ep_obj : endpoint
+ */
+void cxip_zbcoll_fini(struct cxip_ep_obj *ep_obj)
+{
+	struct cxip_ep_zbcoll_obj *zbcoll;
+	int i;
+
+	zbcoll = &ep_obj->zbcoll;
+	for (i = 0; i < ZB_MAP_BITS; i++)
+		cxip_zbcoll_free(zbcoll->grptbl[i]);
+	free(zbcoll->grptbl);
+	zbcoll->grptbl = NULL;
+}
+
+/**
+ * @brief Reset the endpoint counters.
+ *
+ * @param ep : endpoint
+ */
+void cxip_zbcoll_reset_counters(struct cxip_ep_obj *ep_obj)
+{
+	struct cxip_ep_zbcoll_obj *zbcoll;
+
+	zbcoll = &ep_obj->zbcoll;
+	ofi_atomic_set32(&zbcoll->dsc_count, 0);
+	ofi_atomic_set32(&zbcoll->err_count, 0);
+	ofi_atomic_set32(&zbcoll->ack_count, 0);
+	ofi_atomic_set32(&zbcoll->rcv_count, 0);
 }

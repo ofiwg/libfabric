@@ -53,8 +53,8 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 
 			break;
 		case CXIP_CTRL_MSG_ZB_DATA:
-			ret = cxip_zbcoll_recv(req->ep_obj,
-						nic_addr, pid, mb.raw);
+			ret = cxip_zbcoll_recv_cb(req->ep_obj, nic_addr, pid,
+						  mb.raw);
 			assert(ret == FI_SUCCESS);
 			break;
 		default:
@@ -140,7 +140,6 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 	fastlock_release(&txq->lock);
 
 	CXIP_DBG("Queued control message: %p\n", req);
-
 	return FI_SUCCESS;
 
 err_return_credit:

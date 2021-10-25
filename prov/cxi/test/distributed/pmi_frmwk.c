@@ -51,11 +51,11 @@
 #include <time.h>
 
 #include <ofi.h>
+#include <cxip.h>
 
-#include "pmi_utils.h"
+#include <pmi_utils.h>
 #include "pmi_frmwk.h"
 
-#include "cxip.h"
 
 #define RETURN_ERROR(ret, txt) \
 	if (ret != FI_SUCCESS) { \
@@ -63,12 +63,13 @@
 		return ret; \
 	}
 
-#define	CLOSE_OBJ(obj)	if (obj) fi_close(&obj->fid)
+#define	CLOSE_OBJ(obj)	do {if (obj) fi_close(&obj->fid); } while (0)
 
 /* Exported information about the multi-node configuration */
-int pmi_rank;		/* my rank within the configuration */
-int pmi_numranks;	/* total number of ranks in the job */
-uint32_t *pmi_nids;	/* array of pmi_numrank NIC addresses */
+int pmi_rank;			/* my rank within the configuration */
+int pmi_numranks;		/* total number of ranks in the job */
+char pmi_hostname[256];		/* my hostname */
+struct cxip_addr *pmi_nids;	/* array of pmi_numrank nids */
 
 char *cxit_node;
 char *cxit_service;
@@ -78,7 +79,7 @@ struct fi_info *cxit_fi;
 
 struct fid_fabric *cxit_fabric;
 struct fid_domain *cxit_domain;
-struct fi_cxi_dom_ops *dom_ops;
+struct fi_cxi_dom_ops *cxit_dom_ops;
 
 struct mem_region {
 	uint8_t *mem;
@@ -217,6 +218,7 @@ struct mycontext {
  */
 void pmi_free_libfabric(void)
 {
+	pmi_Finalize();
 	CLOSE_OBJ(cxit_av);
 	CLOSE_OBJ(cxit_rem_cntr);
 	CLOSE_OBJ(cxit_write_cntr);
@@ -261,7 +263,7 @@ int pmi_init_libfabric(void)
 	RETURN_ERROR(ret, "fi_domain");
 
 	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_1, 0,
-			  (void **)&dom_ops, NULL);
+			  (void **)&cxit_dom_ops, NULL);
 	RETURN_ERROR(ret, "fi_open_ops");
 
 	ret = fi_set_ops(&cxit_domain->fid, FI_SET_OPS_HMEM_OVERRIDE, 0,
@@ -309,78 +311,193 @@ int pmi_init_libfabric(void)
 	ret = fi_cntr_open(cxit_domain, NULL, &cxit_rem_cntr, NULL);
 	RETURN_ERROR(ret, "fi_cntr_open REMOTE");
 
+	cxit_av_attr.count = 1024;
+	ret = fi_av_open(cxit_domain, &cxit_av_attr, &cxit_av, NULL);
+	RETURN_ERROR(ret, "fi_av_open");
+
+	ret = fi_ep_bind(cxit_ep, &cxit_av->fid, 0);
+	RETURN_ERROR(ret, "fi_ep_bind AV");
+
+	ret = fi_enable(cxit_ep);
+	RETURN_ERROR(ret, "fi_enable");
+
+	pmi_Init(&pmi_numranks, &pmi_rank, NULL);
+	if (gethostname(pmi_hostname, sizeof(pmi_hostname)))
+		snprintf(pmi_hostname, sizeof(pmi_hostname),
+			 "unknown-host-%d", pmi_rank);
+
 	return 0;
 }
 
 /**
  * @brief One way of populating the address vector.
  *
- * This uses PMI to perform the allgather of addresses across all nodes
- * in the job.
+ * This uses PMI to perform the allgather of addresses across all nodes in the
+ * job.
  *
- * PMI has some limitations. In particular, the Cray PMI2 version is
- * quite unfriendly with attempts to re-initialize PMI, and thus does
- * not tolerate child processes trying to initialize PMI, as under the
- * Criterion system. This framework is intended to test libfabric, and
- * the only thing it needs is the list of node addresses in the job.
- * We do not anticipate any PMI activities after that, so we close PMI
- * within this routine.
+ * PMI has some limitations. In particular, the Cray PMI2 version is quite
+ * unfriendly with attempts to re-initialize PMI, and thus does not tolerate
+ * child processes trying to initialize PMI, as under the Criterion system.
  *
- * This routine can be replaced with anything that provides an accurate
- * AV across all nodes in the job, e.g. MPI, symmetric AVs distributed by
- * some other out-of-band means to all nodes, or logical (rank) addressing
- * of the Cassini chips.
+ * This routine can be replaced with anything that provides an accurate AV
+ * across all nodes in the job, e.g. MPI, symmetric AVs distributed by some
+ * other out-of-band means to all nodes, or logical (rank) addressing of the
+ * Cassini chips.
  *
+ * If fiaddr is supplied, it will return an array of fi_addr_t values in rank
+ * order. It must be freed by the caller.
+ *
+ * @param fiaddr : returns array of fi_addr_t in rank order
+ * @param size   : returns size of fiaddr array
  * @return int error code, 0 on success.
  */
-int pmi_populate_av(void)
+int pmi_populate_av(fi_addr_t **fiaddrp, size_t *sizep)
 {
 	struct cxip_ep *cxip_ep;
 	struct cxip_ep_obj *ep_obj;
-	uint32_t mynid;
+	struct cxip_addr mynid;
+	fi_addr_t *fiaddr = NULL;
+	size_t size = 0;
 	int ret;
+
+	if (!fiaddrp || !sizep)
+		return -FI_EINVAL;
 
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 	ep_obj = cxip_ep->ep_obj;
-	mynid = ep_obj->src_addr.nic;
+	mynid = ep_obj->src_addr;
 
-	pmi_Init(&pmi_numranks, &pmi_rank, NULL);
+	ret = -FI_ENOMEM;
+	size = pmi_numranks;
+	fiaddr = calloc(size, sizeof(*fiaddr));
+	if (!fiaddr)
+		goto free_fiaddr;
+	pmi_nids = calloc(pmi_numranks, sizeof(struct cxip_addr));
+	if (!pmi_nids)
+		goto free_nids;
 
-	pmi_nids = calloc(pmi_numranks, sizeof(uint32_t));
-	pmi_Allgather(&mynid, sizeof(uint32_t), pmi_nids);
-	if (mynid != pmi_nids[pmi_rank]) {
-		fprintf(stderr, "(mynid == %08x) != (nids[%d] == %08x)\n",
-			mynid, pmi_rank, pmi_nids[pmi_rank]);
-		RETURN_ERROR(-1, "pmi_Allgather");
-	}
-	pmi_Finalize();
+	ret = -FI_EINVAL;
+	pmi_Allgather(&mynid, sizeof(struct cxip_addr), pmi_nids);
+	if (mynid.raw != pmi_nids[pmi_rank].raw)
+		goto free_nids;
 
-	cxit_av_attr.count = (pmi_numranks + 1023) & ~1023;
-	ret = fi_av_open(cxit_domain, &cxit_av_attr, &cxit_av, NULL);
-	RETURN_ERROR(ret, "fi_av_open");
+	ret = fi_av_insert(cxit_av, pmi_nids, pmi_numranks,
+			   fiaddr, 0, NULL);
+	if (ret != pmi_numranks)
+		goto free_nids;
 
-	ret = fi_av_insert(cxit_av, pmi_nids, pmi_numranks, 			   	   NULL, 0, NULL);
-	RETURN_ERROR((ret != pmi_numranks), "fi_av_insert");
+	*sizep = size;
+	*fiaddrp = fiaddr;
+	return FI_SUCCESS;
 
-	ret = fi_ep_bind(cxit_ep, &cxit_av->fid, 0);
-	RETURN_ERROR(ret, "fi_ep_bind AV");
-
-	return 0;
+free_nids:
+	free(pmi_nids);
+free_fiaddr:
+	free(fiaddr);
+	return ret;
 }
 
 /**
- * @brief Enable the libfabric framework endpoing.
+ * @brief Display an error message to stderr and return error code.
  *
- * This must be done AFTER initializing the AV.
+ * This prints to stderr only if ret != 0. It includes rank of the failing
+ * process and the size of the job. These values are meaningful only after
+ * pmi_populate_av() has successfully completed.
  *
- * @return int error code, or 0 on success
+ * @param ret : error code
+ * @param fmt : printf format
+ * @param ... : printf parameters
+ * @return int value of ret
  */
-int pmi_enable_libfabric(void)
+int pmi_errmsg(int ret, const char *fmt, ...)
 {
-	int ret;
+	va_list args;
+	char host[256];
+	char *str;
 
-	ret = fi_enable(cxit_ep);
-	RETURN_ERROR(ret, "fi_enable");
+	if (!ret)
+		return 0;
 
+	if (gethostname(host, sizeof(host)))
+		strcpy(host, "unknown");
+
+	va_start(args, fmt);
+	vasprintf(&str, fmt, args);
+	va_end(args);
+	fprintf(stderr, "%s rank %2d of %2d FAILED %d: %s",
+		host, pmi_rank, pmi_numranks, ret, str);
+	free(str);
+
+	return ret;
+}
+
+/**
+ * @brief Trace function.
+ *
+ * Simple debugging trace function for test code. This call is rank-aware, and
+ * prints to file system files with rank-aware names to separate debug streams
+ * so that they can be viewed in real-time.
+ */
+
+cxip_trace_t cxip_trace_attr cxip_trace_fn;
+static FILE *pmi_trace_fid = NULL;
+
+static int cxip_trace_attr pmi_trace(const char *fmt, ...)
+{
+	va_list args;
+	char *str;
+	int len;
+
+	va_start(args, fmt);
+	vasprintf(&str, fmt, args);
+	va_end(args);
+	len = fprintf(pmi_trace_fid, "[%2d|%2d] %s",
+		      pmi_rank, pmi_numranks, str);
+	fflush(pmi_trace_fid);
+	free(str);
+	return len;
+}
+
+int pmi_log0(const char *fmt, ...)
+{
+	va_list args;
+	int len;
+
+	if (pmi_rank != 0)
+		return 0;
+
+	va_start(args, fmt);
+	len = vfprintf(stdout, fmt, args);
+	va_end(args);
+	fflush(stdout);
+	return len;
+}
+
+/**
+ * @brief Enable/disable pmi_frmwk trace function.
+ *
+ * @param enable : if true, install, if false, remove
+ * @return int 0 on success, error code on failure
+ */
+int pmi_trace_enable(bool enable)
+{
+	char fnam[256];
+
+	if (enable) {
+		sprintf(fnam, "./trace%d", pmi_rank);
+		pmi_trace_fid = fopen(fnam, "w");
+		if (!pmi_trace_fid) {
+			fprintf(stderr, "open(%s) failed: %s\n",
+				fnam, strerror(errno));
+			return -1;
+		}
+		cxip_trace_fn = pmi_trace;
+	} else {
+		cxip_trace_fn = NULL;
+		if (pmi_trace_fid) {
+			fclose(pmi_trace_fid);
+			pmi_trace_fid = NULL;
+		}
+	}
 	return 0;
 }

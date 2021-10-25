@@ -7,8 +7,6 @@
 #ifndef _CXIP_TEST_COMMON_PMI_H_
 #define _CXIP_TEST_COMMON_PMI_H_
 
-#include "cxip.h"
-
 extern int cxit_ranks;
 extern int cxit_rank;
 extern uint32_t cxit_mcast_ref;

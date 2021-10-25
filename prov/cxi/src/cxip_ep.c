@@ -2195,9 +2195,8 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 			cxi_ep->ep_obj->rxcs[0] = rxc;
 		}
 
-		ret = cxip_coll_init(cxi_ep->ep_obj);
-		if (ret)
-			goto err;
+		/* initialize the collectives structure */
+		cxip_coll_init(cxi_ep->ep_obj);
 	}
 
 	ofi_atomic_inc32(&cxi_dom->ref);

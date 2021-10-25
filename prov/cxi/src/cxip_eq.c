@@ -42,9 +42,42 @@ static int cxip_eq_close(struct fid *fid)
 	return FI_SUCCESS;
 }
 
+ssize_t cxip_eq_read(struct fid_eq *eq_fid, uint32_t *event,
+		     void *buf, size_t len, uint64_t flags)
+{
+	struct cxip_curl_handle *handle;
+	int ret;
+
+	ret = cxip_curl_progress(&handle);
+	if (ret == FI_SUCCESS) {
+		// callback has run, handle is valid
+		// TODO process data in handle
+	} else if (ret == -FI_EAGAIN) {
+		// nothing avail, but some processing
+		// handle invalid, do nothing
+	} else if (ret == -FI_ENODATA) {
+		// nothing avail, nothing processing
+		// handle invalid, do nothing
+	} else {
+		// curl failure
+		// TODO handle error condition
+	}
+	/* pass control to the OFI EQ handler */
+	return ofi_eq_read(eq_fid, event, buf, len, flags);
+}
+
+static struct fi_ops_eq cxi_eq_ops = {
+	.size = sizeof(struct fi_ops_eq),
+	.read = cxip_eq_read,		// customized
+	.readerr = ofi_eq_readerr,
+	.sread = ofi_eq_sread,
+	.write = ofi_eq_write,
+	.strerror = ofi_eq_strerror,
+};
+
 static struct fi_ops cxi_eq_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = cxip_eq_close,
+	.close = cxip_eq_close,		// customized
 	.bind = fi_no_bind,
 	.control = ofi_eq_control,
 	.ops_open = fi_no_ops_open,
@@ -73,11 +106,14 @@ int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	else
 		cxi_eq->attr = *attr;
 
-	ret = ofi_eq_init(fabric, &cxi_eq->attr, &cxi_eq->util_eq.eq_fid, context);
+	ret = ofi_eq_init(fabric, &cxi_eq->attr, &cxi_eq->util_eq.eq_fid,
+			  context);
 	if (ret != FI_SUCCESS)
 		goto err0;
 
+	/* custom operations */
 	cxi_eq->util_eq.eq_fid.fid.ops = &cxi_eq_fi_ops;
+	cxi_eq->util_eq.eq_fid.ops = &cxi_eq_ops;
 
 	*eq = &cxi_eq->util_eq.eq_fid;
 

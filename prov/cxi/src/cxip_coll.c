@@ -116,7 +116,7 @@ struct cxip_coll_cookie {
 	uint32_t red_id:3;
 	uint32_t magic: 15;
 	uint32_t retry: 1;
-} __attribute__((__packed));           /* size  4b */
+} __attribute__((__packed__));           /* size  4b */
 
 /**
  * Packed header bits and cookie from above.
@@ -132,7 +132,7 @@ struct cxip_coll_hdr {
         uint64_t repsum_ovfl:2;
         uint64_t pad:3;
         struct cxip_coll_cookie cookie;
-} __attribute__((__packed));		/* size 12b */
+} __attribute__((__packed__));		/* size 12b */
 
 /**
  * The following structure is 49 bytes in size, and all of the fields align
@@ -142,7 +142,7 @@ struct red_pkt {
 	uint8_t pad[5];			/* size  5b offset  0b */
 	struct cxip_coll_hdr hdr;	/* size 12b offset  5b */
 	union cxip_coll_data data;	/* size 32b offset 17b */
-} __attribute__((__packed));		/* size 49b */
+} __attribute__((__packed__));		/* size 49b */
 
 
 /**
@@ -926,7 +926,7 @@ out:
  *
  * @return int - FI return code
  */
-int cxip_coll_init(struct cxip_ep_obj *ep_obj)
+void cxip_coll_init(struct cxip_ep_obj *ep_obj)
 {
 	cxip_coll_populate_opcodes();
 
@@ -941,9 +941,6 @@ int cxip_coll_init(struct cxip_ep_obj *ep_obj)
 	ep_obj->coll.buffer_size = CXIP_COLL_MIN_RX_SIZE;
 
 	ofi_atomic_initialize32(&ep_obj->coll.mc_count, 0);
-	fastlock_init(&ep_obj->coll.lock);
-
-	return FI_SUCCESS;
 }
 
 /**
@@ -1021,8 +1018,6 @@ int cxip_coll_close(struct cxip_ep_obj *ep_obj)
 {
 	if (ofi_atomic_get32(&ep_obj->coll.mc_count) != 0)
 		return -FI_EBUSY;
-
-	fastlock_destroy(&ep_obj->coll.lock);
 
 	return FI_SUCCESS;
 }

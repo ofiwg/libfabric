@@ -76,6 +76,13 @@ prov_cxi_test_distributed_test_frmwk_LDFLAGS = -static
 prov_cxi_test_distributed_test_frmwk_LDADD = prov/cxi/lib/libfrmwk.la \
 	$(linkback) $(PTHREAD_LIBS)
 
+bin_PROGRAMS += prov/cxi/test/distributed/test_zbcoll
+prov_cxi_test_distributed_test_zbcoll_SOURCES = \
+	prov/cxi/test/distributed/test_zbcoll.c
+prov_cxi_test_distributed_test_zbcoll_LDFLAGS = -static
+prov_cxi_test_distributed_test_zbcoll_LDADD = prov/cxi/lib/libfrmwk.la \
+	$(linkback) $(PTHREAD_LIBS)
+
 endif HAVE_PMI
 
 if HAVE_CRITERION

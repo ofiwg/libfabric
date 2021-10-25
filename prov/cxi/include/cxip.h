@@ -123,8 +123,7 @@
 	 FI_COLLECTIVE | FI_HMEM)
 #define CXIP_EP_SEC_CAPS \
 	(FI_SOURCE | FI_SHARED_AV | FI_LOCAL_COMM | FI_REMOTE_COMM | \
-	 FI_RMA_EVENT | FI_MULTI_RECV | FI_FENCE | FI_TRIGGER | \
-	 FI_COLLECTIVE)
+	 FI_RMA_EVENT | FI_MULTI_RECV | FI_FENCE | FI_TRIGGER )
 #define CXIP_EP_CAPS (CXIP_EP_PRI_CAPS | CXIP_EP_SEC_CAPS)
 #define CXIP_MSG_ORDER			(FI_ORDER_SAS | \
 					 FI_ORDER_WAW | \
@@ -1086,28 +1085,52 @@ struct cxip_oflow_buf {
 };
 
 /*
- * Zero-buffer collectives context.
+ * Zero-buffer collectives.
  */
-struct cxip_zbcoll_state {
-	uint64_t *dataptr;
-	uint64_t dataval;
-	uint32_t nid;
-	uint32_t pid;
-	uint32_t num_relatives;
-	uint32_t *relatives;
-	uint32_t contribs;
-	int error;
-	bool running;
-	bool complete;
-	ofi_atomic32_t err_count;
-	ofi_atomic32_t ack_count;
-	ofi_atomic32_t rcv_count;
+struct cxip_zbcoll_obj;
+typedef void (*zbcomplete_t)(struct cxip_zbcoll_obj *zb, void *usrptr);
+
+struct cxip_zbcoll_stack {
+	zbcomplete_t usrfunc;		// callback function
+	void *usrptr;			// callback data
+	void *cbstack;			// previous stack pointer
 };
 
+/* Used to track state for one or more zbcoll endpoints */
+struct cxip_zbcoll_state {
+	struct cxip_zbcoll_obj *zb;	// backpointer to zbcoll_obj
+	uint64_t *dataptr;		// user-supplied target
+	uint64_t dataval;		// collective data
+	int num_relatives;		// number of nearest relatives
+	int *relatives;			// nearest relative indices
+	int contribs;			// contribution count
+	int grp_rank;			// local rank within group
+};
+
+/* Used to track concurrent zbcoll operations */
 struct cxip_zbcoll_obj {
-	bool disable;
-	uint32_t count;
-	struct cxip_zbcoll_state *state;
+	struct cxip_ep_obj *ep_obj;	// backpointer to endpoint
+	struct cxip_zbcoll_state *state;// state array
+	struct cxip_addr *caddrs;	// cxip addresses in collective
+	int num_caddrs;			// number of cxip addresses
+	uint32_t *shuffle;		// TEST shuffle array
+	int simcount;			// TEST count of states
+	int busy;			// serialize collectives in zb
+	int grpid;			// zb collective grpid
+	int error;			// error code
+	void *cbstack;			// callback stack
+};
+
+/* zbcoll extension to struct cxip_ep_obj */
+struct cxip_ep_zbcoll_obj {
+	struct cxip_zbcoll_obj **grptbl;// group lookup table
+	uint64_t grpmsk;		// group use mask
+	bool disable;			// low level tests
+	fastlock_t lock;		// group ID negotiation lock
+	ofi_atomic32_t dsc_count;	// cumulative RCV discard count
+	ofi_atomic32_t err_count;	// cumulative ACK error count
+	ofi_atomic32_t ack_count;	// cumulative ACK success count
+	ofi_atomic32_t rcv_count;	// cumulative RCV success count
 };
 
 /*
@@ -1125,7 +1148,6 @@ struct cxip_ep_coll_obj {
 	struct cxip_cq *rx_cq;		// shared with STD EP
 	struct cxip_cq *tx_cq;		// shared with STD EP
 	ofi_atomic32_t mc_count;	// count of MC objects
-	fastlock_t lock;		// collectives lock
 	size_t min_multi_recv;		// trigger value to rotate bufs
 	size_t buffer_size;		// size of receive buffers
 	size_t buffer_count;		// count of receive buffers
@@ -1564,7 +1586,7 @@ struct cxip_ep_obj {
 
 	/* collectives support */
 	struct cxip_ep_coll_obj coll;
-	struct cxip_zbcoll_obj zbcoll;
+	struct cxip_ep_zbcoll_obj zbcoll;
 
 	struct indexer rdzv_ids;
 	int max_rdzv_ids;
@@ -1940,17 +1962,30 @@ void cxip_tree_rowcol(int radix, int nodeidx, int *row, int *col, int *siz);
 void cxip_tree_nodeidx(int radix, int row, int col, int *nodeidx);
 int cxip_tree_relatives(int radix, int nodeidx, int maxnodes, int *rels);
 
-int cxip_zbcoll_send(struct cxip_ep_obj *ep_obj, uint32_t srcnid,
-		     uint32_t dstnid, uint64_t mb);
-void cxip_zbcoll_reset_counters(struct fid_ep *ep);
-int cxip_zbcoll_config(struct fid_ep *ep, int num_nids, uint32_t *nids,
-			bool sim);
-int cxip_zbcoll_recv(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
-		      uint32_t init_pid, uint64_t mbv);
-int cxip_zbcoll_bcast(struct fid_ep *ep, uint64_t *dataptr);
-int cxip_zbcoll_barrier(struct fid_ep *ep);
-int cxip_zbcoll_progress(struct fid_ep *ep);
+void cxip_zbcoll_free(struct cxip_zbcoll_obj *zb);
+int cxip_zbcoll_alloc(struct cxip_ep_obj *ep_obj, int num_addrs,
+		      fi_addr_t *fiaddrs, bool sim,
+		      struct cxip_zbcoll_obj **zbp);
 
+int cxip_zbcoll_push_cb(struct cxip_zbcoll_obj *zb,
+			zbcomplete_t usrfunc, void *usrptr);
+void cxip_zbcoll_pop_cb(struct cxip_zbcoll_obj *zb);
+
+int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
+			uint32_t init_pid, uint64_t mbv);
+void cxip_zbcoll_send(struct cxip_zbcoll_obj *zb, int srcidx, int dstidx,
+		      uint64_t mb);
+
+int cxip_zbcoll_max_grps(bool sim);
+int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb);
+void cxip_zbcoll_rlsgroup(struct cxip_zbcoll_obj *zb);
+int cxip_zbcoll_broadcast(struct cxip_zbcoll_obj *zb, uint64_t *dataptr);
+int cxip_zbcoll_barrier(struct cxip_zbcoll_obj *zb);
+
+void cxip_zbcoll_progress(struct cxip_ep_obj *ep_obj);
+void cxip_zbcoll_reset_counters(struct cxip_ep_obj *ep_obj);
+void cxip_zbcoll_get_counters(struct cxip_ep_obj *ep_obj, uint32_t *dsc,
+			      uint32_t *err, uint32_t *ack, uint32_t *rcv);
 void cxip_zbcoll_fini(struct cxip_ep_obj *ep_obj);
 int cxip_zbcoll_init(struct cxip_ep_obj *ep_obj);
 
@@ -2127,7 +2162,7 @@ void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj);
 int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	        struct fid_av_set **av_set_fid, void * context);
 
-int cxip_coll_init(struct cxip_ep_obj *ep_obj);
+void cxip_coll_init(struct cxip_ep_obj *ep_obj);
 int cxip_coll_enable(struct cxip_ep_obj *ep_obj);
 int cxip_coll_disable(struct cxip_ep_obj *ep_obj);
 int cxip_coll_close(struct cxip_ep_obj *ep_obj);
@@ -2396,6 +2431,13 @@ static inline bool is_netsim(struct cxip_ep_obj *ep_obj)
 	return (ep_obj->domain->iface->info->device_platform ==
 		CXI_PLATFORM_NETSIM);
 }
+
+/* Install different trace functions from application context */
+#define	cxip_trace_attr	__attribute__((format(__printf__, 1, 2)))
+typedef int (*cxip_trace_t)(const char *fmt, ...);
+extern cxip_trace_t cxip_trace_attr cxip_trace_fn;
+#define CXIP_TRACE(fmt, ...) \
+	do {if (cxip_trace_fn) cxip_trace_fn(fmt, ##__VA_ARGS__);} while (0)
 
 #define _CXIP_DBG(subsys, ...) FI_DBG(&cxip_prov, subsys, __VA_ARGS__)
 #define _CXIP_INFO(subsys, ...) FI_INFO(&cxip_prov, subsys, __VA_ARGS__)
