@@ -84,7 +84,7 @@ static ssize_t copy_to_hmem_iov(enum fi_hmem_iface iface, uint64_t device,
 	return cpy_size;
 }
 
-struct fi_hmem_override_ops hmem_ops = {
+struct fi_hmem_override_ops cxi_hmem_ops = {
 	.copy_from_hmem_iov = copy_from_hmem_iov,
 	.copy_to_hmem_iov = copy_to_hmem_iov,
 };
@@ -153,7 +153,7 @@ void cxit_create_domain(void)
 		  dom_ops->topology != NULL, "V2 functions returned");
 
 	ret = fi_set_ops(&cxit_domain->fid, FI_SET_OPS_HMEM_OVERRIDE, 0,
-			 &hmem_ops, NULL);
+			 &cxi_hmem_ops, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_set_ops");
 }
 
