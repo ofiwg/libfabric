@@ -277,6 +277,9 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			   rxm_domain->util_domain.info_domain_caps, attr,
 			   &msg_attr);
 
+	if ((flags & FI_HMEM_HOST_ALLOC) && (attr->iface == FI_HMEM_ZE))
+		msg_attr.device.ze = -1;
+
 	msg_attr.access = rxm_mr_get_msg_access(rxm_domain, attr->access);
 
 	ret = fi_mr_regattr(rxm_domain->msg_domain, &msg_attr,
