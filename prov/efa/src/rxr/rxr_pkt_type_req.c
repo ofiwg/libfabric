@@ -594,6 +594,7 @@ ssize_t rxr_pkt_init_longread_rtm(struct rxr_ep *ep,
 		return err;
 
 	pkt_entry->pkt_size = hdr_size + tx_entry->iov_count * sizeof(struct fi_rma_iov);
+	pkt_entry->x_entry = tx_entry;
 	return 0;
 }
 
@@ -1490,6 +1491,7 @@ ssize_t rxr_pkt_init_longread_rtw(struct rxr_ep *ep,
 		return err;
 
 	pkt_entry->pkt_size = hdr_size + tx_entry->iov_count * sizeof(struct efa_rma_iov);
+	pkt_entry->x_entry = tx_entry;
 	return 0;
 }
 
