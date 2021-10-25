@@ -78,7 +78,7 @@ A set of man pages have been carefully written to specify the libfabric API.
   * Older: [Man pages for v1.1.1](v1.1.1/man/)
   * Older: [Man pages for v1.1.0](v1.1.0/man/)
   * Older: [Man pages for v1.0.0](v1.0.0/man/)
-* [Man pages for current head of development](master/man/)
+* [Man pages for current head of development](main/man/)
 
 [Set of example applications](https://github.com/ofiwg/fabtests) - highlight how an application might use various aspects of libfabric.
 
