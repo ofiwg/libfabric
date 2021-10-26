@@ -156,6 +156,8 @@ do {									\
 
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
+
+extern struct fi_ops_msg rxm_msg_ops;
 extern struct fi_ops_rma rxm_rma_ops;
 extern struct fi_ops_rma rxm_rma_thru_ops;
 extern struct fi_ops_atomic rxm_ops_atomic;
@@ -862,6 +864,35 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
 	pkt->hdr.data = data;
 }
 
+ssize_t
+rxm_send_segment(struct rxm_ep *rxm_ep,
+		 struct rxm_conn *rxm_conn, void *app_context, size_t data_len,
+		 size_t remain_len, uint64_t msg_id, size_t seg_len,
+		 size_t seg_no, size_t segs_cnt, uint64_t data, uint64_t flags,
+		 uint64_t tag, uint8_t op, const struct iovec *iov,
+		 uint8_t count, size_t *iov_offset,
+		 struct rxm_tx_buf **out_tx_buf,
+		 enum fi_hmem_iface iface, uint64_t device);
+ssize_t
+rxm_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		const struct iovec *iov, void **desc, size_t count,
+		void *context, uint64_t data, uint64_t flags, uint64_t tag,
+		uint8_t op);
+ssize_t
+rxm_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		const void *buf, size_t len);
+
+struct rxm_recv_entry *
+rxm_recv_entry_get(struct rxm_ep *rxm_ep, const struct iovec *iov,
+		   void **desc, size_t count, fi_addr_t src_addr,
+		   uint64_t tag, uint64_t ignore, void *context,
+		   uint64_t flags, struct rxm_recv_queue *recv_queue);
+struct rxm_rx_buf *
+rxm_get_unexp_msg(struct rxm_recv_queue *recv_queue, fi_addr_t addr,
+		  uint64_t tag, uint64_t ignore);
+int rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
+			 struct rxm_recv_entry *recv_entry,
+			 struct rxm_rx_buf *rx_buf);
 int rxm_post_recv(struct rxm_rx_buf *rx_buf);
 
 static inline void
