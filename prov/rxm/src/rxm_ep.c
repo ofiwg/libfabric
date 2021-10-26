@@ -1586,9 +1586,13 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		rxm_ep->rndv_ops = &rxm_rndv_ops_read;
 	dlist_init(&rxm_ep->rndv_wait_list);
 
-	(*ep_fid)->msg = &rxm_msg_ops;
-	(*ep_fid)->rma = rxm_passthru_info(info) ?
-			 &rxm_rma_thru_ops : &rxm_rma_ops;
+	if (rxm_passthru_info(info)) {
+		(*ep_fid)->msg = &rxm_msg_thru_ops;
+		(*ep_fid)->rma = &rxm_rma_thru_ops;
+	} else {
+		(*ep_fid)->msg = &rxm_msg_ops;
+		(*ep_fid)->rma = &rxm_rma_ops;
+	}
 	(*ep_fid)->tagged = &rxm_tagged_ops;
 
 	if (rxm_ep->rxm_info->caps & FI_ATOMIC)
