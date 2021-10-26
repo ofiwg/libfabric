@@ -405,6 +405,8 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 int ft_init_av_addr(struct fid_av *av, struct fid_ep *ep,
 		fi_addr_t *addr);
 int ft_exchange_keys(struct fi_rma_iov *peer_iov);
+int ft_reg_mr(struct fi_info *info, void *buf, size_t size, uint64_t access,
+	      uint64_t key, struct fid_mr **mr, void **desc);
 void ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);
 

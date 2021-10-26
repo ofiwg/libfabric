@@ -411,6 +411,10 @@ static int ft_server_child()
 
 	printf("Starting test %d:\n", test_info.test_index);
 
+	ret = ft_hmem_init(opts.iface);
+	if (ret)
+		return ret;
+
 	ret = ft_server_setup(hints, info);
 	if (ret)
 		return ret;
@@ -536,6 +540,10 @@ static int ft_client_child(void)
 	struct fi_info  *info = NULL;
 	int ret, result, sresult = 0;
 	result = -FI_ENODATA;
+
+	ret = ft_hmem_init(opts.iface);
+	if (ret)
+		return ret;
 
 	ret = ft_sock_send(sock, &test_info, sizeof test_info);
 	if (ret)

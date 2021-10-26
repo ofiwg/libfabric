@@ -362,8 +362,8 @@ void ft_free_bit_combo(uint64_t *combo)
 	free(combo);
 }
 
-static int ft_reg_mr(void *buf, size_t size, uint64_t access,
-		     uint64_t key, struct fid_mr **mr, void **desc)
+int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
+	      uint64_t key, struct fid_mr **mr, void **desc)
 {
 	struct fi_mr_attr attr = {0};
 	struct iovec iov = {0};
@@ -439,7 +439,7 @@ static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
 
 		context->buf = (*mr_bufs)[i];
 
-		ret = ft_reg_mr(context->buf, mr_size, access,
+		ret = ft_reg_mr(fi, context->buf, mr_size, access,
 				start_key + i, &context->mr,
 				&context->desc);
 		if (ret)
@@ -516,7 +516,7 @@ static int ft_alloc_msgs(void)
 
 	mr = &no_mr;
 	if (!ft_mr_alloc_func && !ft_check_opts(FT_OPT_SKIP_REG_MR)) {
-		ret = ft_reg_mr(buf, buf_size, ft_info_to_mr_access(fi),
+		ret = ft_reg_mr(fi, buf, buf_size, ft_info_to_mr_access(fi),
 				FT_MR_KEY, &mr, &mr_desc);
 		if (ret)
 			return ret;

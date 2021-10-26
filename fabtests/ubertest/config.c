@@ -717,6 +717,10 @@ int fts_info_is_valid(void)
 	if (test_info.test_type == FT_TEST_UNIT &&
 	    test_info.ep_type == FI_EP_DGRAM)
 		return 0;
+	if ((test_info.test_type == FT_TEST_UNIT) &&
+	    (opts.options & FT_OPT_ENABLE_HMEM) &&
+	    (test_info.test_class == (FT_CAP_ATOMIC)))
+		return 0;
 
 	return 1;
 }
@@ -865,7 +869,10 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 		while (set->mode[i])
 			info->mode |= set->mode[i++];
 	}
-
+	if (opts.options & FT_OPT_ENABLE_HMEM) {
+		info->caps |= FI_HMEM;
+		info->mr_mode |= FI_MR_HMEM;
+	}
 	if (set->cq_format[0]) {
 		info->cq_format = set->cq_format[series->cur_cq_format];
 	} else {
