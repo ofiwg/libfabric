@@ -97,13 +97,14 @@ int main(int argc, char **argv)
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
 	hints->addr_format = opts.address_format;
 
-	while ((op = getopt(argc, argv, "Uho:" CS_OPTS INFO_OPTS BENCHMARK_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "Uh" CS_OPTS INFO_OPTS API_OPTS
+			    BENCHMARK_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parse_benchmark_opts(op, optarg);
 			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
-			ret = ft_parse_rma_opts(op, optarg, hints, &opts);
+			ret = ft_parse_api_opts(op, optarg, hints, &opts);
 			if (ret)
 				return ret;
 			break;

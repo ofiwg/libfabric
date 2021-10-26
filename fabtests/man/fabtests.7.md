@@ -455,9 +455,11 @@ the list available for that test.
   select() to block until the fd has been signaled, prior to checking for
   completions.
 
-*-o <rma_op>*
+*-o <op>*
 : For RMA based tests, specify the type of RMA operation to perform.  Valid
   values are read, write, and writedata.  Write operations are the default.
+  For message based, tests, specify whether msg (default) or tagged transfers
+  will be used.
 
 *-M <mcast_addr>*
 : For multicast tests, specifies the address of the multicast group to join.

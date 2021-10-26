@@ -62,6 +62,8 @@ struct fid_pep *pep;
 struct fid_ep *ep, *alias_ep;
 struct fid_cq *txcq, *rxcq;
 struct fid_cntr *txcntr, *rxcntr;
+struct fid_ep *srx;
+struct fid_stx *stx;
 struct fid_mr *mr;
 void *mr_desc = NULL;
 struct fid_av *av;
@@ -540,6 +542,42 @@ static int ft_alloc_msgs(void)
 	return 0;
 }
 
+int ft_open_domain_res(void)
+{
+	int ret;
+
+	ret = fi_domain(fabric, fi, &domain, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_domain", ret);
+		return ret;
+	}
+
+	if (opts.options & FT_OPT_DOMAIN_EQ) {
+		ret = fi_domain_bind(domain, &eq->fid, 0);
+		if (ret) {
+			FT_PRINTERR("fi_domain_bind", ret);
+			return ret;
+		}
+	}
+
+	if (opts.options & FT_OPT_STX) {
+		ret = fi_stx_context(domain, fi->tx_attr, &stx, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_stx_context", ret);
+			return ret;
+		}
+	}
+
+	if (opts.options & FT_OPT_SRX) {
+		ret = fi_srx_context(domain, fi->rx_attr, &srx, NULL);
+		if (ret) {
+			FT_PRINTERR("fi_srx_context", ret);
+			return ret;
+		}
+	}
+	return 0;
+}
+
 int ft_open_fabric_res(void)
 {
 	int ret;
@@ -556,21 +594,7 @@ int ft_open_fabric_res(void)
 		return ret;
 	}
 
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_domain", ret);
-		return ret;
-	}
-
-	if (opts.options & FT_OPT_DOMAIN_EQ) {
-		ret = fi_domain_bind(domain, &eq->fid, 0);
-		if (ret) {
-			FT_PRINTERR("fi_domain_bind", ret);
-			return ret;
-		}
-	}
-
-	return 0;
+	return ft_open_domain_res();
 }
 
 int ft_alloc_ep_res(struct fi_info *fi)
@@ -998,19 +1022,9 @@ int ft_server_connect(void)
 	if (ret)
 		goto err;
 
-	ret = fi_domain(fabric, fi, &domain, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_domain", ret);
+	ret = ft_open_domain_res();
+	if (ret)
 		goto err;
-	}
-
-	if (opts.options & FT_OPT_DOMAIN_EQ) {
-		ret = fi_domain_bind(domain, &eq->fid, 0);
-		if (ret) {
-			FT_PRINTERR("fi_domain_bind", ret);
-			return ret;
-		}
-	}
 
 	ret = ft_alloc_active_res(fi);
 	if (ret)
@@ -1153,9 +1167,7 @@ int ft_init_alias_ep(uint64_t flags)
 	return 0;
 }
 
-int ft_enable_ep(struct fid_ep *ep, struct fid_eq *eq, struct fid_av *av,
-		 struct fid_cq *txcq, struct fid_cq *rxcq,
-		 struct fid_cntr *txcntr, struct fid_cntr *rxcntr)
+int ft_enable_ep(struct fid_ep *ep)
 {
 	uint64_t flags;
 	int ret;
@@ -1165,6 +1177,8 @@ int ft_enable_ep(struct fid_ep *ep, struct fid_eq *eq, struct fid_av *av,
 		FT_EP_BIND(ep, eq, 0);
 
 	FT_EP_BIND(ep, av, 0);
+	FT_EP_BIND(ep, stx, 0);
+	FT_EP_BIND(ep, srx, 0);
 
 	flags = FI_TRANSMIT;
 	if (!(opts.options & FT_OPT_TX_CQ))
@@ -1218,7 +1232,7 @@ int ft_enable_ep_recv(void)
 {
 	int ret;
 
-	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	ret = ft_enable_ep(ep);
 	if (ret)
 		return ret;
 
@@ -1623,6 +1637,8 @@ static void ft_close_fids(void)
 	if (mr != &no_mr)
 		FT_CLOSE_FID(mr);
 	FT_CLOSE_FID(av);
+	FT_CLOSE_FID(srx);
+	FT_CLOSE_FID(stx);
 	FT_CLOSE_FID(domain);
 	FT_CLOSE_FID(eq);
 	FT_CLOSE_FID(waitset);
@@ -3145,27 +3161,31 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 	}
 }
 
-int ft_parse_rma_opts(int op, char *optarg, struct fi_info *hints,
+int ft_parse_api_opts(int op, char *optarg, struct fi_info *hints,
 		      struct ft_opts *opts)
 {
 	switch (op) {
 	case 'o':
-		if (!strcmp(optarg, "read")) {
+		if (!strcasecmp(optarg, "read")) {
 			hints->caps |= FI_READ | FI_REMOTE_READ;
 			opts->rma_op = FT_RMA_READ;
-		} else if (!strcmp(optarg, "writedata")) {
+		} else if (!strcasecmp(optarg, "writedata")) {
 			hints->caps |= FI_WRITE | FI_REMOTE_WRITE;
 			hints->mode |= FI_RX_CQ_DATA;
 			hints->domain_attr->cq_data_size = 4;
 			opts->rma_op = FT_RMA_WRITEDATA;
 			cq_attr.format = FI_CQ_FORMAT_DATA;
-		} else if (!strcmp(optarg, "write")) {
+		} else if (!strcasecmp(optarg, "write")) {
 			hints->caps |= FI_WRITE | FI_REMOTE_WRITE;
 			opts->rma_op = FT_RMA_WRITE;
+		} else if (!strcasecmp(optarg, "msg")) {
+			hints->caps |= FI_MSG;
+		} else if (!strcasecmp(optarg, "tagged")) {
+			hints->caps |= FI_TAGGED;
 		} else {
-			fprintf(stderr, "Invalid operation type: \"%s\". Usage:\n"
-					"-o <op>\trma op type: read|write|writedata "
-				       "(default:write)\n", optarg);
+			fprintf(stderr, "Invalid operation type: \"%s\"."
+				"Usage:\n-o <op>\top: "
+				"read|write|writedata|msg|tagged\n", optarg);
 			return EXIT_FAILURE;
 		}
 		break;
@@ -3220,7 +3240,7 @@ int ft_check_buf(void *buf, size_t size)
 		recv_data = malloc(size);
 		if (!recv_data)
 			return -FI_ENOMEM;
-	
+
 		ret = ft_hmem_copy_from(opts.iface, opts.device,
 					recv_data, buf, size);
 		if (ret)

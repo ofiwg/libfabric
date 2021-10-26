@@ -213,6 +213,9 @@ enum tcpx_state {
 struct tcpx_cur_rx {
 	union {
 		struct tcpx_base_hdr	base_hdr;
+		struct tcpx_cq_data_hdr cq_data_hdr;
+		struct tcpx_tag_data_hdr tag_data_hdr;
+		struct tcpx_tag_hdr	tag_hdr;
 		uint8_t			max_hdr[TCPX_MAX_HDR];
 	} hdr;
 	size_t			hdr_len;
@@ -230,10 +233,21 @@ struct tcpx_cur_tx {
 struct tcpx_rx_ctx {
 	struct fid_ep		rx_fid;
 	struct slist		rx_queue;
+	struct slist		tag_queue;
+	struct tcpx_xfer_entry	*(*match_tag_rx)(struct tcpx_rx_ctx *srx,
+						 struct tcpx_ep *ep,
+						 uint64_t tag);
+
 	struct ofi_bufpool	*buf_pool;
 	uint64_t		op_flags;
 	fastlock_t		lock;
 };
+
+struct tcpx_xfer_entry *
+tcpx_match_tag_addr(struct tcpx_rx_ctx *srx, struct tcpx_ep *ep, uint64_t tag);
+struct tcpx_xfer_entry *
+tcpx_match_tag(struct tcpx_rx_ctx *srx, struct tcpx_ep *ep, uint64_t tag);
+
 
 struct tcpx_ep {
 	struct util_ep		util_ep;
@@ -290,6 +304,8 @@ struct tcpx_xfer_entry {
 	size_t			iov_cnt;
 	struct iovec		iov[TCPX_IOV_LIMIT+1];
 	struct tcpx_ep		*ep;
+	uint64_t		tag;
+	uint64_t		ignore;
 	uint64_t		cq_flags;
 	uint32_t		ctrl_flags;
 	uint32_t		async_index;
@@ -377,6 +393,7 @@ int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 
 int tcpx_op_invalid(struct tcpx_ep *ep);
 int tcpx_op_msg(struct tcpx_ep *ep);
+int tcpx_op_tagged(struct tcpx_ep *ep);
 int tcpx_op_read_req(struct tcpx_ep *ep);
 int tcpx_op_write(struct tcpx_ep *ep);
 int tcpx_op_read_rsp(struct tcpx_ep *ep);

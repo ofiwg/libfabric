@@ -58,11 +58,8 @@ struct ep_info {
 };
 
 static struct fi_info *fi_dup;
-static int tx_shared_ctx = 1;
-static int rx_shared_ctx = 1;
 static int ep_cnt = 4;
-static struct fid_ep **ep_array, *srx_ctx;
-static struct fid_stx *stx_ctx;
+static struct fid_ep **ep_array;
 static size_t addrlen = 0;
 static fi_addr_t *addr_array;
 
@@ -102,7 +99,7 @@ static int get_dupinfo(void)
 	return ret;
 }
 
-static int alloc_ep(void)
+static int alloc_eps(void)
 {
 	int i, ret;
 
@@ -130,62 +127,11 @@ static int alloc_ep(void)
 	return 0;
 }
 
-static int alloc_ep_res(struct fi_info *fi)
-{
-	int ret;
-
-	ret = ft_alloc_ep_res(fi);
-	if (ret)
-		return ret;
-
-	if (tx_shared_ctx) {
-		ret = fi_stx_context(domain, fi->tx_attr, &stx_ctx, NULL);
-		if (ret) {
-			FT_PRINTERR("fi_stx_context", ret);
-			return ret;
-		}
-	}
-
-	if (rx_shared_ctx) {
-		ret = fi_srx_context(domain, fi->rx_attr, &srx_ctx, NULL);
-		if (ret) {
-			FT_PRINTERR("fi_srx_context", ret);
-			return ret;
-		}
-	}
-	return 0;
-}
-
-static int bind_ep_res(struct fid_ep *ep)
-{
-	int ret;
-
-	if (hints->ep_attr->type == FI_EP_MSG)
-		FT_EP_BIND(ep, eq, 0);
-
-	if (tx_shared_ctx)
-		FT_EP_BIND(ep, stx_ctx, 0);
-
-	if (rx_shared_ctx)
-		FT_EP_BIND(ep, srx_ctx, 0);
-
-	FT_EP_BIND(ep, txcq, FI_SEND);
-	FT_EP_BIND(ep, rxcq, FI_RECV);
-	FT_EP_BIND(ep, av, 0);
-
-	ret = fi_enable(ep);
-	if (ret) {
-		FT_PRINTERR("fi_enable", ret);
-		return ret;
-	}
-	return 0;
-}
-
-static int bind_ep_array_res(void)
+static int enable_eps(void)
 {
 	int i, ret;
 	for (i = 0; i < ep_cnt; i++) {
-		ret = bind_ep_res(ep_array[i]);
+		ret = ft_enable_ep(ep_array[i]);
 		if (ret)
 			return ret;
 	}
@@ -198,9 +144,9 @@ static int run_test()
 
 	/* Post recvs */
 	for (i = 0; i < ep_cnt; i++) {
-		if (rx_shared_ctx) {
+		if (srx) {
 			fprintf(stdout, "Posting recv #%d for shared rx ctx\n", i);
-			ret = ft_post_rx(srx_ctx, rx_size, &rx_ctx_arr[i].context);
+			ret = ft_post_rx(srx, rx_size, &rx_ctx_arr[i].context);
 		 } else {
 			fprintf(stdout, "Posting recv for endpoint #%d\n", i);
 			ret = ft_post_rx(ep_array[i], rx_size, &rx_ctx_arr[i].context);
@@ -212,7 +158,7 @@ static int run_test()
 	if (opts.dst_addr) {
 		/* Post sends addressed to remote EPs */
 		for (i = 0; i < ep_cnt; i++) {
-			if (tx_shared_ctx)
+			if (stx)
 				fprintf(stdout, "Posting send #%d to shared tx ctx\n", i);
 			else
 				fprintf(stdout, "Posting send to endpoint #%d\n", i);
@@ -230,7 +176,7 @@ static int run_test()
 	if (!opts.dst_addr) {
 		/* Post sends addressed to remote EPs */
 		for (i = 0; i < ep_cnt; i++) {
-			if (tx_shared_ctx)
+			if (stx)
 				fprintf(stdout, "Posting send #%d to shared tx ctx\n", i);
 			else
 				fprintf(stdout, "Posting send to endpoint #%d\n", i);
@@ -268,8 +214,8 @@ static int init_av(void)
 			if (ret)
 				return ret;
 
-			if (rx_shared_ctx)
-				ret = ft_rx(srx_ctx, rx_size);
+			if (srx)
+				ret = ft_rx(srx, rx_size);
 			else
 				ret = ft_rx(ep_array[0], rx_size);
 			if (ret)
@@ -283,8 +229,8 @@ static int init_av(void)
 					return ret;
 			}
 		} else {
-			if (rx_shared_ctx)
-				ret = ft_rx(srx_ctx, rx_size);
+			if (srx)
+				ret = ft_rx(srx, rx_size);
 			else
 				ret = ft_rx(ep_array[0], rx_size);
 			if (ret)
@@ -306,8 +252,8 @@ static int init_av(void)
 	if (opts.dst_addr) {
 		ret = ft_tx(ep_array[0], addr_array[0], 1, &tx_ctx);
 	} else {
-		if (rx_shared_ctx)
-			ret = ft_rx(srx_ctx, rx_size);
+		if (srx)
+			ret = ft_rx(srx, rx_size);
 		else
 			ret = ft_rx(ep_array[0], rx_size);
 	}
@@ -333,21 +279,21 @@ static int init_fabric(void)
 
 	av_attr.count = ep_cnt;
 
-	ret = alloc_ep_res(fi);
+	ret = ft_alloc_ep_res(fi);
 	if (ret)
 		return ret;
 
-	ret = alloc_ep();
+	ret = alloc_eps();
 	if (ret)
 		return ret;
 
-	ret = bind_ep_array_res();
+	ret = enable_eps();
 	if (ret)
 		return ret;
 
 	/* Post recv */
-	if (rx_shared_ctx)
-		ret = ft_post_rx(srx_ctx, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
+	if (srx)
+		ret = ft_post_rx(srx, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 	else
 		ret = ft_post_rx(ep_array[0], MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 	if (ret)
@@ -376,15 +322,15 @@ static int client_connect(void)
 	if (ret)
 		return ret;
 
-	ret = alloc_ep_res(fi);
+	ret = ft_alloc_ep_res(fi);
 	if (ret)
 		return ret;
 
-	ret = alloc_ep();
+	ret = alloc_eps();
 	if (ret)
 		return ret;
 
-	ret = bind_ep_array_res();
+	ret = enable_eps();
 	if (ret)
 		return ret;
 
@@ -411,8 +357,8 @@ static int client_connect(void)
 	}
 
 	/* Post recv */
-	if (rx_shared_ctx)
-		ret = ft_post_rx(srx_ctx, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
+	if (srx)
+		ret = ft_post_rx(srx, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 	else
 		ret = ft_post_rx(ep_array[0], MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 	if (ret)
@@ -457,13 +403,11 @@ static int server_connect(void)
 			ep_state_array[num_conn_reqs].state = FT_EP_CONNECT_RCVD;
 
 			if (num_conn_reqs == 0) {
-				ret = fi_domain(fabric, fi, &domain, NULL);
-				if (ret) {
-					FT_PRINTERR("fi_domain", ret);
+				ret = ft_open_domain_res();
+				if (ret)
 					goto err;
-				}
 
-				ret = alloc_ep_res(fi);
+				ret = ft_alloc_ep_res(fi);
 				if (ret)
 					goto err;
 			}
@@ -475,7 +419,7 @@ static int server_connect(void)
 			}
 
 			ep_state_array[num_conn_reqs].ep = ep_array[num_conn_reqs];
-			ret = bind_ep_res(ep_array[num_conn_reqs]);
+			ret = ft_enable_ep(ep_array[num_conn_reqs]);
 			if (ret)
 				goto err;
 
@@ -522,8 +466,8 @@ static int server_connect(void)
 	}
 
 	/* Post recv */
-	if (rx_shared_ctx)
-		ret = ft_post_rx(srx_ctx, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
+	if (srx)
+		ret = ft_post_rx(srx, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 	else
 		ret = ft_post_rx(ep_array[0], MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
 	if (ret)
@@ -588,10 +532,11 @@ int main(int argc, char **argv)
 {
 	int op, ret;
 	int option_index = 0;
+	int use_stx = 1, use_srx = 1;
 
 	struct option long_options[] = {
-		{"no-tx-shared-ctx", no_argument, &tx_shared_ctx, 0},
-		{"no-rx-shared-ctx", no_argument, &rx_shared_ctx, 0},
+		{"no-tx-shared-ctx", no_argument, &use_stx, 0},
+		{"no-rx-shared-ctx", no_argument, &use_srx, 0},
 		{"ep-count", required_argument, 0, FT_EP_CNT},
 		{0, 0, 0, 0},
 	};
@@ -603,8 +548,8 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt_long(argc, argv, "h" ADDR_OPTS INFO_OPTS,
-					long_options, &option_index)) != -1) {
+	while ((op = getopt_long(argc, argv, "h" ADDR_OPTS INFO_OPTS API_OPTS,
+				 long_options, &option_index)) != -1) {
 		switch (op) {
 		case FT_EP_CNT:
 			ep_cnt = atoi(optarg);
@@ -617,6 +562,7 @@ int main(int argc, char **argv)
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
+			ft_parse_api_opts(op, optarg, hints, &opts);
 			break;
 		case '?':
 		case 'h':
@@ -635,22 +581,23 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	hints->caps = FI_MSG;
+	if (!(hints->caps & FI_TAGGED))
+		hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 
-	if (tx_shared_ctx)
+	if (use_stx) {
+		opts.options |= FT_OPT_STX;
 		hints->ep_attr->tx_ctx_cnt = FI_SHARED_CONTEXT;
-	if (rx_shared_ctx)
+	}
+	if (use_srx) {
+		opts.options |= FT_OPT_SRX;
 		hints->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
+	}
 
 	ret = run();
 
 	FT_CLOSEV_FID(ep_array, ep_cnt);
-	if (rx_shared_ctx)
-		FT_CLOSE_FID(srx_ctx);
-	if (tx_shared_ctx)
-		FT_CLOSE_FID(stx_ctx);
 	ft_free_res();
 	free(addr_array);
 	free(ep_array);

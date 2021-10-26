@@ -120,6 +120,8 @@ enum {
 	FT_OPT_USE_DEVICE	= 1 << 18,
 	FT_OPT_DOMAIN_EQ	= 1 << 19,
 	FT_OPT_FORK_CHILD	= 1 << 20,
+	FT_OPT_SRX		= 1 << 21,
+	FT_OPT_STX		= 1 << 22,
 	FT_OPT_OOB_CTRL		= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
 };
 
@@ -192,6 +194,8 @@ extern struct fid_pep *pep;
 extern struct fid_ep *ep, *alias_ep;
 extern struct fid_cq *txcq, *rxcq;
 extern struct fid_cntr *txcntr, *rxcntr;
+extern struct fid_ep *srx;
+extern struct fid_stx *stx;
 extern struct fid_mr *mr, no_mr;
 extern void *mr_desc;
 extern struct fid_av *av;
@@ -225,7 +229,7 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
 		  struct ft_opts *opts);
 void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts);
 void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts);
-int ft_parse_rma_opts(int op, char *optarg, struct fi_info *hints,
+int ft_parse_api_opts(int op, char *optarg, struct fi_info *hints,
 		      struct ft_opts *opts);
 void ft_addr_usage();
 void ft_usage(char *name, char *desc);
@@ -253,6 +257,7 @@ extern int listen_sock;
 #define FAB_OPTS "f:d:p:D:i:HK"
 #define INFO_OPTS FAB_OPTS "e:M:"
 #define CS_OPTS ADDR_OPTS "I:QS:mc:t:w:l"
+#define API_OPTS "o:"
 #define NO_CQ_DATA 0
 
 extern char default_port[8];
@@ -369,6 +374,7 @@ static inline int ft_use_size(int index, int enable_flags)
 int ft_init();
 int ft_alloc_bufs();
 int ft_open_fabric_res();
+int ft_open_domain_res();
 int ft_getinfo(struct fi_info *hints, struct fi_info **info);
 int ft_init_fabric();
 int ft_init_oob();
@@ -386,9 +392,7 @@ int ft_connect_ep(struct fid_ep *ep,
 int ft_alloc_ep_res(struct fi_info *fi);
 int ft_alloc_active_res(struct fi_info *fi);
 int ft_enable_ep_recv(void);
-int ft_enable_ep(struct fid_ep *ep, struct fid_eq *eq, struct fid_av *av,
-		 struct fid_cq *txcq, struct fid_cq *rxcq,
-		 struct fid_cntr *txcntr, struct fid_cntr *rxcntr);
+int ft_enable_ep(struct fid_ep *ep);
 int ft_init_alias_ep(uint64_t flags);
 int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr,
 		uint64_t flags, void *context);

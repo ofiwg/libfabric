@@ -139,7 +139,7 @@ static int run(size_t rnr_retry)
 	}
 	fprintf(stdout, "RNR retry count has been set to %zu.\n", rnr_retry);
 
-	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	ret = ft_enable_ep(ep);
 	if (ret) {
 		FT_PRINTERR("ft_enable_ep_recv", -ret);
 		return ret;

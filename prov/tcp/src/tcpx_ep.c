@@ -780,11 +780,10 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->cm = &tcpx_cm_ops;
 	(*ep_fid)->msg = &tcpx_msg_ops;
 	(*ep_fid)->rma = &tcpx_rma_ops;
-	if (tcpx_dynamic_rbuf(ep))
-		(*ep_fid)->tagged = &tcpx_tagged_ops;
+	(*ep_fid)->tagged = &tcpx_tagged_ops;
 
 	ep->start_op[ofi_op_msg] = tcpx_op_msg;
-	ep->start_op[ofi_op_tagged] = tcpx_op_invalid;
+	ep->start_op[ofi_op_tagged] = tcpx_op_tagged;
 	ep->start_op[ofi_op_read_req] = tcpx_op_read_req;
 	ep->start_op[ofi_op_read_rsp] = tcpx_op_read_rsp;
 	ep->start_op[ofi_op_write] = tcpx_op_write;
@@ -989,8 +988,7 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_EINVAL;
 	}
 
-	ret = ofi_check_info(&tcpx_util_prov, tcpx_util_prov.info,
-			     fabric->api_version, info);
+	ret = ofi_prov_check_info(&tcpx_util_prov, fabric->api_version, info);
 	if (ret)
 		return ret;
 

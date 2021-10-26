@@ -50,13 +50,46 @@
 
 
 static inline struct tcpx_xfer_entry *
-tcpx_alloc_send_entry(struct tcpx_ep *ep)
+tcpx_alloc_send(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *send_entry;
 
 	send_entry = tcpx_alloc_tx(ep);
 	if (send_entry)
 		send_entry->hdr.base_hdr.op = ofi_op_msg;
+
+	return send_entry;
+}
+
+/* When dynamic receive buffers are enabled, receive buffer matching
+ * is handled by the upper layer (rxm).  The tcp provider is only
+ * carrying the tag to reduce header overhead.  The transport operation
+ * is still op_msg at the tcp provider.  This is needed for backwards
+ * compatibility.
+ *
+ * If dynamic receive buffers are disabled, then tagged messages are
+ * being handled entirely by the tcp provider.  We use the op_tagged
+ * protocol for this, which allows distinguishing between the two
+ * cases at the receiver.
+ *
+ * We assume the peer is configured similar to the local side, which
+ * is all we can check.
+ */
+static inline struct tcpx_xfer_entry *
+tcpx_alloc_tsend(struct tcpx_ep *ep)
+{
+	struct tcpx_xfer_entry *send_entry;
+
+	send_entry = tcpx_alloc_tx(ep);
+	if (send_entry) {
+		if (tcpx_dynamic_rbuf(ep)) {
+			send_entry->hdr.base_hdr.op = ofi_op_msg;
+			send_entry->hdr.base_hdr.flags = TCPX_TAGGED;
+		} else {
+			assert(ep->srx_ctx);
+			send_entry->hdr.base_hdr.op = ofi_op_tagged;
+		}
+	}
 
 	return send_entry;
 }
@@ -240,7 +273,7 @@ tcpx_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 	size_t hdr_len;
 
 	ep = container_of(ep_fid, struct tcpx_ep, util_ep.ep_fid);
-	tx_entry = tcpx_alloc_send_entry(ep);
+	tx_entry = tcpx_alloc_send(ep);
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
@@ -271,7 +304,7 @@ tcpx_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct tcpx_ep, util_ep.ep_fid);
 
-	tx_entry = tcpx_alloc_send_entry(ep);
+	tx_entry = tcpx_alloc_send(ep);
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
@@ -294,7 +327,7 @@ tcpx_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	ep = container_of(ep_fid, struct tcpx_ep, util_ep.ep_fid);
 
-	tx_entry = tcpx_alloc_send_entry(ep);
+	tx_entry = tcpx_alloc_send(ep);
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
@@ -318,7 +351,7 @@ tcpx_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct tcpx_ep, util_ep.ep_fid);
 
-	tx_entry = tcpx_alloc_send_entry(ep);
+	tx_entry = tcpx_alloc_send(ep);
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
@@ -339,7 +372,7 @@ tcpx_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct tcpx_ep, util_ep.ep_fid);
 
-	tx_entry = tcpx_alloc_send_entry(ep);
+	tx_entry = tcpx_alloc_send(ep);
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
@@ -368,7 +401,7 @@ tcpx_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct tcpx_ep, util_ep.ep_fid);
 
-	tx_entry = tcpx_alloc_send_entry(ep);
+	tx_entry = tcpx_alloc_send(ep);
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
@@ -415,18 +448,16 @@ tcpx_tsendmsg(struct fid_ep *fid_ep, const struct fi_msg_tagged *msg,
 	size_t hdr_len;
 
 	ep = container_of(fid_ep, struct tcpx_ep, util_ep.ep_fid);
-	tx_entry = tcpx_alloc_send_entry(ep);
+	tx_entry = tcpx_alloc_tsend(ep);
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
 	if (flags & FI_REMOTE_CQ_DATA) {
-		tx_entry->hdr.base_hdr.flags = TCPX_REMOTE_CQ_DATA |
-						TCPX_TAGGED;
+		tx_entry->hdr.base_hdr.flags |= TCPX_REMOTE_CQ_DATA;
 		tx_entry->hdr.tag_data_hdr.cq_data_hdr.cq_data = msg->data;
 		tx_entry->hdr.tag_data_hdr.tag = msg->tag;
 		hdr_len = sizeof(tx_entry->hdr.tag_data_hdr);
 	} else {
-		tx_entry->hdr.base_hdr.flags = TCPX_TAGGED;
 		tx_entry->hdr.tag_hdr.tag = msg->tag;
 		hdr_len = sizeof(tx_entry->hdr.tag_hdr);
 	}
@@ -449,11 +480,10 @@ tcpx_tsend(struct fid_ep *fid_ep, const void *buf, size_t len,
 	struct tcpx_xfer_entry *tx_entry;
 
 	ep = container_of(fid_ep, struct tcpx_ep, util_ep.ep_fid);
-	tx_entry = tcpx_alloc_send_entry(ep);
+	tx_entry = tcpx_alloc_tsend(ep);
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
-	tx_entry->hdr.base_hdr.flags = TCPX_TAGGED;
 	tx_entry->hdr.tag_hdr.tag = tag;
 
 	tcpx_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.tag_hdr), buf, len);
@@ -474,11 +504,10 @@ tcpx_tsendv(struct fid_ep *fid_ep, const struct iovec *iov, void **desc,
 	struct tcpx_xfer_entry *tx_entry;
 
 	ep = container_of(fid_ep, struct tcpx_ep, util_ep.ep_fid);
-	tx_entry = tcpx_alloc_send_entry(ep);
+	tx_entry = tcpx_alloc_tsend(ep);
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
-	tx_entry->hdr.base_hdr.flags = TCPX_TAGGED;
 	tx_entry->hdr.tag_hdr.tag = tag;
 
 	tcpx_init_tx_iov(tx_entry, sizeof(tx_entry->hdr.tag_hdr), iov, count);
@@ -500,11 +529,9 @@ tcpx_tinject(struct fid_ep *fid_ep, const void *buf, size_t len,
 	struct tcpx_xfer_entry *tx_entry;
 
 	ep = container_of(fid_ep, struct tcpx_ep, util_ep.ep_fid);
-	tx_entry = tcpx_alloc_send_entry(ep);
+	tx_entry = tcpx_alloc_tsend(ep);
 	if (!tx_entry)
 		return -FI_EAGAIN;
-
-	tx_entry->hdr.base_hdr.flags = TCPX_TAGGED;
 	tx_entry->hdr.tag_hdr.tag = tag;
 
 	tcpx_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.tag_hdr), buf, len);
@@ -523,11 +550,11 @@ tcpx_tsenddata(struct fid_ep *fid_ep, const void *buf, size_t len, void *desc,
 	struct tcpx_xfer_entry *tx_entry;
 
 	ep = container_of(fid_ep, struct tcpx_ep, util_ep.ep_fid);
-	tx_entry = tcpx_alloc_send_entry(ep);
+	tx_entry = tcpx_alloc_tsend(ep);
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
-	tx_entry->hdr.base_hdr.flags = TCPX_TAGGED | TCPX_REMOTE_CQ_DATA;
+	tx_entry->hdr.base_hdr.flags |= TCPX_REMOTE_CQ_DATA;
 	tx_entry->hdr.tag_data_hdr.tag = tag;
 	tx_entry->hdr.tag_data_hdr.cq_data_hdr.cq_data = data;
 
@@ -551,11 +578,11 @@ tcpx_tinjectdata(struct fid_ep *fid_ep, const void *buf, size_t len,
 
 	ep = container_of(fid_ep, struct tcpx_ep, util_ep.ep_fid);
 
-	tx_entry = tcpx_alloc_send_entry(ep);
+	tx_entry = tcpx_alloc_tsend(ep);
 	if (!tx_entry)
 		return -FI_EAGAIN;
 
-	tx_entry->hdr.base_hdr.flags = TCPX_TAGGED | TCPX_REMOTE_CQ_DATA;
+	tx_entry->hdr.base_hdr.flags |= TCPX_REMOTE_CQ_DATA;
 	tx_entry->hdr.tag_data_hdr.tag = tag;
 	tx_entry->hdr.tag_data_hdr.cq_data_hdr.cq_data = data;
 

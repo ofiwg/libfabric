@@ -156,7 +156,7 @@ static int setup_client_ep(struct fid_ep **ep)
 		return ret;
 	}
 
-	ret = ft_enable_ep(*ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	ret = ft_enable_ep(*ep);
 	if (ret)
 		return ret;
 
@@ -181,7 +181,7 @@ static int setup_server_ep(struct fid_ep **ep)
 		goto failed_accept;
 	}
 
-	ret = ft_enable_ep(*ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	ret = ft_enable_ep(*ep);
 	if (ret)
 		goto failed_accept;
 
@@ -215,7 +215,7 @@ static int setup_av_ep(struct fid_ep **ep, fi_addr_t *remote_addr)
 		return ret;
 	}
 
-	ret = ft_enable_ep(*ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	ret = ft_enable_ep(*ep);
 	if (ret)
 		return ret;
 
