@@ -266,6 +266,10 @@ int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	ofi_mr_update_attr(domain->fabric->fabric_fid.api_version,
 			   domain->info_domain_caps, attr, &cur_abi_attr);
+
+	if ((flags & FI_HMEM_HOST_ALLOC) && (attr->iface == FI_HMEM_ZE))
+		cur_abi_attr.device.ze = -1;
+
 	if (!hmem_ops[cur_abi_attr.iface].initialized) {
 		FI_WARN(domain->mr_map.prov, FI_LOG_MR,
 			"MR registration failed - hmem iface not initialized\n");

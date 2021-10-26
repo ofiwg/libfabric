@@ -175,9 +175,6 @@ vrb_mr_nocache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 	struct vrb_mem_desc *md;
 	int ret;
 
-	if (OFI_UNLIKELY(flags & ~OFI_MR_NOCACHE))
-		return -FI_EBADFLAGS;
-
 	md = calloc(1, sizeof(*md));
 	if (OFI_UNLIKELY(!md))
 		return -FI_ENOMEM;
@@ -248,9 +245,6 @@ vrb_mr_cache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 	struct fi_mr_attr attr;
 	struct iovec iov;
 	int ret;
-
-	if (flags & ~OFI_MR_NOCACHE)
-		return -FI_EBADFLAGS;
 
 	attr.access = access;
 	attr.context = context;
@@ -342,6 +336,9 @@ static int vrb_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	ofi_mr_update_attr(domain->util_domain.fabric->fabric_fid.api_version,
 			   domain->util_domain.info_domain_caps, attr,
 			   &cur_abi_attr);
+
+	if ((flags & FI_HMEM_HOST_ALLOC) && (cur_abi_attr.iface == FI_HMEM_ZE))
+		cur_abi_attr.device.ze = -1;
 
 	return vrb_mr_regv_iface(fid, cur_abi_attr.mr_iov,
 				 cur_abi_attr.iov_count, cur_abi_attr.access,

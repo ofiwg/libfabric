@@ -688,6 +688,14 @@ The follow flag may be specified to any memory registration call.
   to memory regions that were allocated using a device API AllocDevice call
   (as opposed to using the host allocation or unified/shared memory allocation).
 
+*FI_HMEM_HOST_ALLOC*
+: This flag indicates that the memory is owned by the host only. Whether it
+  can be accessed by the device is implementation dependent. The fi_mr_attr
+  field iface is still used to identify the device API, but the field device
+  is ignored. This refers to memory regions that were allocated using a device
+  API AllocHost call (as opposed to using malloc-like host allocation,
+  unified/shared memory allocation, or AllocDevice).
+
 # MEMORY DOMAINS
 
 Memory domains identify the physical separation of memory which
