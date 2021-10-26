@@ -158,6 +158,7 @@ extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
 
 extern struct fi_ops_msg rxm_msg_ops;
+extern struct fi_ops_tagged rxm_tagged_ops;
 extern struct fi_ops_rma rxm_rma_ops;
 extern struct fi_ops_rma rxm_rma_thru_ops;
 extern struct fi_ops_atomic rxm_ops_atomic;

@@ -373,6 +373,7 @@
     <ClCompile Include="prov\rxm\src\rxm_attr.c" />
     <ClCompile Include="prov\rxm\src\rxm_conn.c" />
     <ClCompile Include="prov\rxm\src\rxm_msg.c" />
+    <ClCompile Include="prov\rxm\src\rxm_tagged.c" />
     <ClCompile Include="prov\rxm\src\rxm_rma.c" />
     <ClCompile Include="prov\rxm\src\rxm_cq.c" />
     <ClCompile Include="prov\rxm\src\rxm_av.c" />
