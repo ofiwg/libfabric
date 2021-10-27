@@ -573,7 +573,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 {
 	struct rxm_domain *rxm_domain;
 	struct rxm_fabric *rxm_fabric;
-	struct fi_info *msg_info;
+	struct fi_info *msg_info, *base_info;
 	int ret;
 
 	rxm_domain = calloc(1, sizeof(*rxm_domain));
@@ -582,8 +582,9 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	rxm_fabric = container_of(fabric, struct rxm_fabric, util_fabric.fabric_fid);
 
+	base_info = rxm_passthru_info(info) ? &rxm_thru_info : NULL;
 	ret = ofi_get_core_info(fabric->api_version, NULL, NULL, 0, &rxm_util_prov,
-				info, NULL, rxm_info_to_core, &msg_info);
+				info, base_info, rxm_info_to_core, &msg_info);
 	if (ret)
 		goto err1;
 

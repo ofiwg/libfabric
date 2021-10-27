@@ -692,10 +692,9 @@ void rxm_conn_progress(struct rxm_ep *ep);
 
 
 extern struct fi_provider rxm_prov;
+extern struct fi_info rxm_thru_info;
 extern struct fi_fabric_attr rxm_fabric_attr;
-extern struct fi_domain_attr rxm_domain_attr;
-extern struct fi_tx_attr rxm_tx_attr;
-extern struct fi_rx_attr rxm_rx_attr;
+
 extern struct rxm_rndv_ops rxm_rndv_ops_read;
 extern struct rxm_rndv_ops rxm_rndv_ops_write;
 
