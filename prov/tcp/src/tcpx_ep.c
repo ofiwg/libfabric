@@ -106,17 +106,20 @@ static int tcpx_setup_socket(SOCKET sock, struct fi_info *info)
 		return -ofi_sockerr();
 	}
 
-	if ((tcpx_nodelay == 0) || ((tcpx_nodelay < 0) &&
+	/* Do not enable nodelay for bulk data traffic class, unless nodelay
+	 * has explicitly been requested.
+	 */
+	if (tcpx_nodelay && !((tcpx_nodelay < 0) &&
 	    (info->fabric_attr->api_version >= FI_VERSION(1, 9) &&
-	    info->tx_attr->tclass == FI_TC_BULK_DATA)))
-		return 0;
+	    info->tx_attr->tclass == FI_TC_BULK_DATA))) {
 
-	ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &optval,
-			sizeof(optval));
-	if (ret) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"setsockopt nodelay failed\n");
-		return -ofi_sockerr();
+		ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
+				 (char *) &optval, sizeof(optval));
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"setsockopt nodelay failed\n");
+			return -ofi_sockerr();
+		}
 	}
 
 	ret = fi_fd_nonblock(sock);
