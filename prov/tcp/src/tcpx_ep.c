@@ -95,6 +95,18 @@ static void tcpx_config_bsock(struct ofi_bsock *bsock)
 #define tcpx_config_bsock(bsock)
 #endif
 
+#ifdef IP_BIND_ADDRESS_NO_PORT
+static void tcpx_set_no_port(SOCKET sock)
+{
+	int val = 1;
+
+	(void) setsockopt(sock, IPPROTO_IP, IP_BIND_ADDRESS_NO_PORT,
+			  &val, sizeof(val));
+}
+#else
+#define tcpx_set_no_port(sock)
+#endif
+
 static int tcpx_setup_socket(SOCKET sock, struct fi_info *info)
 {
 	int ret, optval = 1;
@@ -746,6 +758,10 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 		if (info->src_addr && (!ofi_is_any_addr(info->src_addr) ||
 					ofi_addr_get_port(info->src_addr))) {
+
+			if (!ofi_addr_get_port(info->src_addr))
+				tcpx_set_no_port(ep->bsock.sock);
+
 			ret = bind(ep->bsock.sock, info->src_addr,
 				(socklen_t) info->src_addrlen);
 			if (ret) {
