@@ -133,6 +133,7 @@ int cuda_get_handle(void *dev_buf, void **handle);
 int cuda_open_handle(void **handle, uint64_t device, void **ipc_ptr);
 int cuda_close_handle(void *ipc_ptr);
 bool cuda_is_ipc_enabled(void);
+bool cuda_is_gdrcopy_enabled(void);
 
 void cuda_gdrcopy_to_dev(uint64_t handle, void *dev,
 			 const void *host, size_t size);

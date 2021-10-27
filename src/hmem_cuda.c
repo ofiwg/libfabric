@@ -585,6 +585,11 @@ bool cuda_is_ipc_enabled(void)
 	return cuda_ipc_enabled;
 }
 
+bool cuda_is_gdrcopy_enabled(void)
+{
+	return hmem_cuda_use_gdrcopy;
+}
+
 #else
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
@@ -648,6 +653,11 @@ int cuda_close_handle(void *ipc_ptr)
 }
 
 bool cuda_is_ipc_enabled(void)
+{
+	return false;
+}
+
+bool cuda_is_gdrcopy_enabled(void)
 {
 	return false;
 }
