@@ -1103,11 +1103,11 @@ static uint64_t ofi_get_caps(uint64_t info_caps, uint64_t hint_caps,
 	uint64_t caps;
 
 	if (!hint_caps) {
-		caps = (info_caps & attr_caps & FI_PRIMARY_CAPS) |
-		       (attr_caps & FI_SECONDARY_CAPS);
+		caps = (info_caps & attr_caps & OFI_PRIMARY_CAPS) |
+		       (attr_caps & OFI_SECONDARY_CAPS);
 	} else {
-		caps = (hint_caps & FI_PRIMARY_CAPS) |
-		       (attr_caps & FI_SECONDARY_CAPS);
+		caps = (hint_caps & OFI_PRIMARY_CAPS) |
+		       (attr_caps & OFI_SECONDARY_CAPS);
 	}
 
 	if (caps & (FI_MSG | FI_TAGGED) && !(caps & OFI_MSG_DIRECTION_CAPS))
