@@ -1,0 +1,29 @@
+# This workflow warns and then closes issues and PRs that have had no activity for a specified amount of time.
+#
+# You can adjust the behavior by modifying this file.
+# For more information, see:
+# https://github.com/actions/stale
+name: Mark stale issues and pull requests
+
+on:
+  schedule:
+  - cron: '26 10 * * *'
+
+jobs:
+  stale:
+
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+    - uses: actions/stale@v3
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        days-before-stale: 360
+        days-before-close: 7
+        stale-issue-message: 'There has been no activity on this issue for more than 360 days. Marking it stale.'
+        stale-pr-message: 'There has been no activity on this pull request for more than 360 days. Marking it stale.'
+        stale-issue-label: 'stale'
+        stale-pr-label: 'stale'
