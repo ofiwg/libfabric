@@ -1152,14 +1152,19 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 		 * if the call to fi_setopt is before or after EP enabled for
 		 * convience, instead of calling to ibv_query_qp
 		 */
-		if (!efa_ep->qp) {
-			efa_ep->rnr_retry = *(size_t *)optval;
-		} else {
+		if (efa_ep->qp) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"The option FI_OPT_EFA_RNR_RETRY is required \
 				to be set before EP enabled %s\n", __func__);
 			return -FI_EINVAL;
 		}
+
+		if (!efa_ep_support_rnr_retry_modify(rxr_ep->rdm_ep)) {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"RNR capability is not supported %s\n", __func__);
+			return -FI_ENOSYS;
+		}
+		efa_ep->rnr_retry = *(size_t *)optval;
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
