@@ -545,12 +545,6 @@ int rxr_query_atomic(struct fid_domain *domain,
 		return -FI_EINVAL;
 	}
 
-	if ((datatype == FI_INT128) || (datatype == FI_UINT128)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-			"128-bit atomic integers not supported\n");
-		return -FI_EOPNOTSUPP;
-	}
-
 	ret = ofi_atomic_valid(&rxr_prov, datatype, op, flags);
 	if (ret || !attr)
 		return ret;
