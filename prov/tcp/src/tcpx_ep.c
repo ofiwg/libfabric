@@ -675,18 +675,29 @@ int tcpx_ep_setopt(fid_t fid, int level, int optname,
 {
 	struct tcpx_ep *ep;
 
-	if (level != FI_OPT_ENDPOINT ||
-	    optname != FI_OPT_MIN_MULTI_RECV)
-		return -ENOPROTOOPT;
-
-	if (optlen != sizeof(size_t))
-		return -FI_EINVAL;
+	if (level != FI_OPT_ENDPOINT)
+		return -FI_ENOPROTOOPT;
 
 	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
-	ep->min_multi_recv_size = *(size_t *) optval;
+	switch (optname) {
+	case FI_OPT_MIN_MULTI_RECV:
+		if (optlen != sizeof(size_t))
+			return -FI_EINVAL;
 
-	FI_INFO(&tcpx_prov, FI_LOG_EP_CTRL,
-		"FI_OPT_MIN_MULTI_RECV set to %zu\n", ep->min_multi_recv_size);
+		ep->min_multi_recv_size = *(size_t *) optval;
+		FI_INFO(&tcpx_prov, FI_LOG_EP_CTRL,
+			"FI_OPT_MIN_MULTI_RECV set to %zu\n",
+			ep->min_multi_recv_size);
+		break;
+	case OFI_OPT_TCP_FI_ADDR:
+		if (optlen != sizeof(fi_addr_t))
+			return -FI_EINVAL;
+		ep->src_addr = *(fi_addr_t *) optval;
+		break;
+	default:
+		return -ENOPROTOOPT;
+	}
+
 	return FI_SUCCESS;
 }
 

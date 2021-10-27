@@ -266,6 +266,7 @@ struct tcpx_ep {
 	int			rx_avail;
 	struct tcpx_rx_ctx	*srx_ctx;
 	enum tcpx_state		state;
+	fi_addr_t		src_addr;
 	union {
 		struct fid		*fid;
 		struct tcpx_cm_context	*cm_ctx;

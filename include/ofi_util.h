@@ -49,6 +49,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
+#include <rdma/fi_ext.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
@@ -1069,6 +1070,11 @@ struct ofi_ops_dynamic_rbuf {
 	ssize_t	(*get_rbuf)(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 			    size_t *count);
 };
+
+enum {
+	OFI_OPT_TCP_FI_ADDR = -FI_PROV_SPECIFIC_TCP
+};
+
 
 #ifdef __cplusplus
 }
