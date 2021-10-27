@@ -801,11 +801,6 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->rma = &tcpx_rma_ops;
 	(*ep_fid)->tagged = &tcpx_tagged_ops;
 
-	ep->start_op[ofi_op_msg] = tcpx_op_msg;
-	ep->start_op[ofi_op_tagged] = tcpx_op_tagged;
-	ep->start_op[ofi_op_read_req] = tcpx_op_read_req;
-	ep->start_op[ofi_op_read_rsp] = tcpx_op_read_rsp;
-	ep->start_op[ofi_op_write] = tcpx_op_write;
 	return 0;
 err3:
 	ofi_close_socket(ep->bsock.sock);
