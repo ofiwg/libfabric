@@ -185,7 +185,9 @@ struct smr_cmd {
 #define SMR_COMP_INJECT_SIZE	(SMR_INJECT_SIZE / 2)
 #define SMR_SAR_SIZE		16384
 
-#define SMR_NAME_MAX		256
+#define SMR_DIR "/dev/shm/"
+#define SMR_NAME_MAX	256
+#define SMR_PATH_MAX	(SMR_NAME_MAX + sizeof(SMR_DIR))
 #define SMR_SOCK_NAME_MAX sizeof(((struct sockaddr_un *)0)->sun_path)
 
 struct smr_addr {

@@ -52,7 +52,19 @@ int smr_setname(fid_t fid, void *addr, size_t addrlen)
 	struct smr_ep *ep;
 	char *name;
 
+	if (addrlen > SMR_NAME_MAX) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"Addrlen exceeds max addrlen (%d)\n", SMR_NAME_MAX);
+		return -FI_EINVAL;
+	}
+
 	ep = container_of(fid, struct smr_ep, util_ep.ep_fid.fid);
+	if (ep->region) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"Cannot set name after EP has been enabled\n");
+		return -FI_EBUSY;
+	}
+
 	name = strdup(addr);
 	if (!name)
 		return -FI_ENOMEM;
