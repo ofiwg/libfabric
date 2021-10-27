@@ -305,6 +305,7 @@ struct tcpx_xfer_entry {
 	struct tcpx_ep		*ep;
 	uint64_t		tag;
 	uint64_t		ignore;
+	fi_addr_t		src_addr;
 	uint64_t		cq_flags;
 	uint32_t		ctrl_flags;
 	uint32_t		async_index;

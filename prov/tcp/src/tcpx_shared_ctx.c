@@ -178,7 +178,7 @@ tcpx_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	recv_entry->tag = msg->tag;
 	recv_entry->ignore = msg->ignore;
-	recv_entry->ep = (void *) (uintptr_t) msg->addr;
+	recv_entry->src_addr = msg->addr;
 	recv_entry->cq_flags = FI_TAGGED | FI_RECV;
 	recv_entry->context = msg->context;
 	recv_entry->iov_cnt = msg->iov_count;
@@ -210,7 +210,7 @@ tcpx_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	recv_entry->tag = tag;
 	recv_entry->ignore = ignore;
-	recv_entry->ep = (void *) (uintptr_t) src_addr;
+	recv_entry->src_addr = src_addr;
 	recv_entry->cq_flags = FI_TAGGED | FI_RECV;
 	recv_entry->context = context;
 	recv_entry->iov_cnt = 1;
@@ -244,7 +244,7 @@ tcpx_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	recv_entry->tag = tag;
 	recv_entry->ignore = ignore;
-	recv_entry->ep = (void *) (uintptr_t) src_addr;
+	recv_entry->src_addr = src_addr;
 	recv_entry->cq_flags = FI_TAGGED | FI_RECV;
 	recv_entry->context = context;
 	recv_entry->iov_cnt = count;
@@ -299,7 +299,7 @@ tcpx_match_tag_addr(struct tcpx_rx_ctx *srx, struct tcpx_ep *ep, uint64_t tag)
 	slist_foreach(&srx->tag_queue, item, prev) {
 		rx_entry = container_of(item, struct tcpx_xfer_entry, entry);
 		if (ofi_match_tag(rx_entry->tag, rx_entry->ignore, tag) &&
-		    ofi_match_addr((uintptr_t) rx_entry->ep, (uintptr_t) ep)) {
+		    ofi_match_addr(rx_entry->src_addr, ep->src_addr)) {
 			slist_remove(&srx->tag_queue, item, prev);
 			fastlock_release(&srx->lock);
 			return rx_entry;
