@@ -308,7 +308,7 @@ enum {
 	FI_PROTO_UDP,
 	FI_PROTO_SOCK_TCP,
 	/*  MXM provider is deprecated.
-	 *  We will keep  this value in order to save binary compatibility.
+	 *  We will keep this value in order to save binary compatibility.
 	 */
 	FI_PROTO_MXM,
 	FI_PROTO_IWARP_RDM,
@@ -324,7 +324,8 @@ enum {
 	FI_PROTO_RSTREAM,
 	FI_PROTO_RDMA_CM_IB_XRC,
 	FI_PROTO_EFA,
-	FI_PROTO_PSMX3
+	FI_PROTO_PSMX3,
+	FI_PROTO_RXM_TCP,
 };
 
 enum {
