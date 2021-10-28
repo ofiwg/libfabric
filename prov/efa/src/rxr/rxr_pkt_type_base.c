@@ -256,22 +256,46 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 	struct efa_ep *efa_ep;
 	struct efa_mr *desc;
 	ssize_t bytes_copied;
-	int ret;
+	int use_p2p, err;
 
 	pkt_entry->x_entry = rx_entry;
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+
+	if (data_size == 0)
+		goto out;
+
 	desc = rx_entry->desc[0];
 
-	ret = efa_ep_use_p2p(efa_ep, desc);
-	if (ret < 0)
-		return ret;
-	if (ret == 1 && data_size > 0 && efa_ep_is_cuda_mr(desc)) {
-		ret = rxr_read_post_local_read_or_queue(ep, rx_entry, data_offset,
+	/* local read is used to copy data from receiving bounce buffer (on host memory)
+	 * to device memory.
+	 *
+	 * It is an expensive operation thus should be used when CUDA memory is used
+	 * and gdrcopy is not available.
+	 * 
+	 * CUDA memory is special because Nvidia Collective Communications Library (NCCL) forbids
+	 * its plugins (hence libfabric) to call cudaMemcpy. Doing so will result in a deadlock.
+	 *
+	 * Therefore, if gdrcopy is not available, we will have to use local read to do the
+	 * copy.
+	 * Other types of device memory (neuron) does not have this limitation.
+	 */
+	if (efa_ep_is_cuda_mr(desc) && !cuda_is_gdrcopy_enabled()) {
+		efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+		use_p2p = efa_ep_use_p2p(efa_ep, desc);
+		if (use_p2p < 0)
+			return use_p2p;
+
+		if (use_p2p == 0) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "Neither p2p nor gdrcopy is available,"
+				"thus libfabric is not able to copy received data to Nvidia GPU");
+			return -FI_EINVAL;
+		}
+
+		err = rxr_read_post_local_read_or_queue(ep, rx_entry, data_offset,
 							pkt_entry, data, data_size);
-		if (ret)
+		if (err)
 			FI_WARN(&rxr_prov, FI_LOG_CQ, "cannot post read to copy data\n");
 
-		return ret;
+		return err;
 	}
 
 	if (OFI_UNLIKELY((rx_entry->rxr_flags & RXR_RECV_CANCEL)) ||
