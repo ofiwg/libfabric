@@ -150,6 +150,8 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 			core_info->rx_attr->msg_order = hints->rx_attr->msg_order;
 			core_info->rx_attr->comp_order = hints->rx_attr->comp_order;
 		}
+		if ((hints->caps & FI_HMEM) && ofi_hmem_p2p_disabled())
+			return -FI_ENODATA;
 	}
 
 	core_info->ep_attr->type = FI_EP_MSG;
