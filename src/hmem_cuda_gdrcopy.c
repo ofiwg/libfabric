@@ -315,8 +315,8 @@ int cuda_gdrcopy_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle)
 					 reglen, 0, 0, &gdrcopy->mh);
 	if (err) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
-			"gdr_pin_buffer failed! error: %s",
-			strerror(err));
+			"gdr_pin_buffer failed! error: %s ptr: %p len: %ld\n",
+			strerror(err), mr_attr->mr_iov->iov_base, mr_attr->mr_iov->iov_len);
 		free(gdrcopy);
 		goto exit;
 	}
