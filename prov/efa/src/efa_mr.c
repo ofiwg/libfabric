@@ -305,6 +305,15 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 			ret = err;
 		}
 	}
+
+	if (efa_mr->peer.iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) {
+		err = cuda_gdrcopy_dev_unregister(efa_mr->peer.gdrcopy_handle);
+		if (err) {
+			EFA_WARN(FI_LOG_MR,
+				"Unable to de-register gdrcopy handle\n");
+			ret = err;
+		}
+	}
 	return ret;
 }
 
@@ -407,6 +416,21 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 			return ret;
 		}
 	}
+
+	if (mr_attr->iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) {
+		ret = cuda_gdrcopy_dev_register(mr_attr, &efa_mr->peer.gdrcopy_handle);
+		if (ret) {
+			EFA_WARN(FI_LOG_MR,
+				 "Unable to create gdrcopy handle for GPU memory. err: %d buf: %p len: %zu\n",
+				 ret, mr_attr->mr_iov->iov_base, mr_attr->mr_iov->iov_len);
+			ibv_dereg_mr(efa_mr->ibv_mr);
+			ofi_mr_map_remove(&efa_mr->domain->util_domain.mr_map,
+						efa_mr->mr_fid.key);
+			fi_close(&efa_mr->shm_mr->fid);
+			return ret;
+		}
+	}
+
 	return 0;
 }
 

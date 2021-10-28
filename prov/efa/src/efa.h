@@ -291,6 +291,7 @@ struct efa_mr_peer {
 		uint64_t        reserved;
 		int             cuda;
 	} device;
+	uint64_t		gdrcopy_handle;
 };
 
 struct efa_mr {

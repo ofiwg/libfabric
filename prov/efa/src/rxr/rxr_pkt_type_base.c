@@ -241,10 +241,13 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 				      char *data, size_t data_size)
 {
 	ssize_t err, bytes_copied;
+	struct efa_mr *efa_mr;
+	enum fi_hmem_iface hmem_iface;
+	uint64_t hmem_device;
 
 	pkt_entry->x_entry = rx_entry;
 
-	if (data_size > 0 && efa_ep_is_cuda_mr(rx_entry->desc[0])) {
+	if (data_size > 0 && efa_ep_is_cuda_mr(rx_entry->desc[0]) && !cuda_is_gdrcopy_enabled()) {
 		err = rxr_read_post_local_read_or_queue(ep, rx_entry, data_offset,
 							pkt_entry, data, data_size);
 		if (err)
@@ -255,11 +258,22 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 
 	if (OFI_LIKELY(!(rx_entry->rxr_flags & RXR_RECV_CANCEL)) &&
 	    rx_entry->cq_entry.len > data_offset && data_size > 0) {
-		bytes_copied = ofi_copy_to_iov(rx_entry->iov,
-					       rx_entry->iov_count,
-					       data_offset + ep->msg_prefix_size,
-					       data,
-					       data_size);
+		efa_mr = rx_entry->desc[0];
+		hmem_iface = FI_HMEM_SYSTEM;
+		hmem_device = 0;
+		if (efa_ep_is_cuda_mr(rx_entry->desc[0])) {
+			assert(cuda_is_gdrcopy_enabled());
+			hmem_iface = FI_HMEM_CUDA;
+			hmem_device = efa_mr->peer.gdrcopy_handle;
+		}
+
+		bytes_copied = ofi_copy_to_hmem_iov(hmem_iface,
+						    hmem_device,
+						    rx_entry->iov,
+						    rx_entry->iov_count,
+						    data_offset + ep->msg_prefix_size,
+						    data,
+						    data_size);
 		if (bytes_copied != MIN(data_size, rx_entry->cq_entry.len - data_offset)) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
 				bytes_copied);
