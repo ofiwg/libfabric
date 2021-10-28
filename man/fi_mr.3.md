@@ -667,6 +667,13 @@ portable applications target using those interfaces; however, their use
 does carry extra message and memory footprint overhead, making it less
 desirable for highly scalable apps.
 
+There may be cases where device peer to peer support should not be used or
+cannot be used, such as when the PCIe ACS configuration does not permit the
+transfer. The FI_HMEM_DISABLE_P2P environment variable can be set to notify
+Libfabric that peer to peer transactions should not be used. The provider may
+choose to perform a copy instead, or will fail support for FI_HMEM if the
+provider is unable to do that.
+
 # FLAGS
 
 The follow flag may be specified to any memory registration call.
