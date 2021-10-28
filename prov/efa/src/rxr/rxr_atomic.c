@@ -136,6 +136,10 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 
 	assert(msg->iov_count <= rxr_ep->tx_iov_limit);
 	efa_perfset_start(rxr_ep, perf_efa_tx);
+
+	if (efa_ep_is_cuda_mr(msg->desc[0]))
+		return -FI_ENOSYS;
+
 	fastlock_acquire(&rxr_ep->util_ep.lock);
 
 	if (OFI_UNLIKELY(is_tx_res_full(rxr_ep))) {
