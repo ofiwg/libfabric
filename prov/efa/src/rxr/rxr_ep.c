@@ -1135,14 +1135,17 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
 
-	if (optlen < sizeof(size_t))
-		return -FI_EINVAL;
-
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
+		if (optlen != sizeof(size_t))
+			return -FI_EINVAL;
+
 		rxr_ep->min_multi_recv_size = *(size_t *)optval;
 		break;
 	case FI_OPT_EFA_RNR_RETRY:
+		if (optlen != sizeof(size_t))
+			return -FI_EINVAL;
+
 		/*
 		 * Application is required to call to fi_setopt before EP
 		 * enabled. If it's calling to fi_setopt after EP enabled,
