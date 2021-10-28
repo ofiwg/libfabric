@@ -299,11 +299,9 @@ int cuda_gdrcopy_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle)
 	assert(global_gdrcopy_ops.gdr_pin_buffer);
 	assert(global_gdrcopy_ops.gdr_map);
 
-	regbgn = (uintptr_t)mr_attr->mr_iov->iov_base;
+	regbgn = (uintptr_t)ofi_get_page_start(mr_attr->mr_iov->iov_base, GPU_PAGE_SIZE);
 	regend = (uintptr_t)mr_attr->mr_iov->iov_base + mr_attr->mr_iov->iov_len;
-	regbgn = regbgn & GPU_PAGE_MASK;
-	regend = (regend & GPU_PAGE_MASK) + GPU_PAGE_SIZE;
-	reglen = regend - regbgn;
+	reglen = ofi_get_aligned_size(regend - regbgn, GPU_PAGE_SIZE);
 
 	gdrcopy = malloc(sizeof(struct gdrcopy_handle));
 	if (!gdrcopy)
