@@ -626,11 +626,15 @@ static void rxm_handle_error(struct rxm_ep *ep)
 		return;
 	}
 
+	OFI_EQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_EP_CTRL, ep->msg_eq,
+			&entry);
+	if (!entry.fid || entry.fid->fclass != FI_CLASS_EP)
+		return;
+
 	if (entry.err == ECONNREFUSED) {
 		rxm_process_reject(entry.fid->context, &entry);
 	} else {
-		OFI_EQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_EP_CTRL,
-				ep->msg_eq, &entry);
+		rxm_process_shutdown(entry.fid->context);
 	}
 }
 
