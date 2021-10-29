@@ -23,7 +23,10 @@ jobs:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         days-before-stale: 360
         days-before-close: 7
-        stale-issue-message: 'There has been no activity on this issue for more than 360 days. Marking it stale.'
-        stale-pr-message: 'There has been no activity on this pull request for more than 360 days. Marking it stale.'
+        stale-issue-message: 'This issue is stale because it has been open 360 days with no activity. Remove stale label or comment, otherwise it will be closed in 7 days.'
+        stale-pr-message: 'This pull request is stale because it has been open 360 days with no activity. Remove stale label or comment, otherwise it will be closed in 7 days.'
         stale-issue-label: 'stale'
         stale-pr-label: 'stale'
+        operations_per_run: 60
+        exempt-issue-labels: 'enhancement,high priority'
+        exempt-pr-labels: 'work in progress'
