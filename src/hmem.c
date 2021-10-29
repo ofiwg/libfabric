@@ -40,6 +40,8 @@
 #include "ofi.h"
 #include "ofi_iov.h"
 
+bool ofi_hmem_disable_p2p = false;
+
 struct ofi_hmem_ops hmem_ops[] = {
 	[FI_HMEM_SYSTEM] = {
 		.initialized = true,
@@ -209,6 +211,7 @@ bool ofi_hmem_is_initialized(enum fi_hmem_iface iface)
 void ofi_hmem_init(void)
 {
 	int iface, ret;
+	int disable_p2p = 0;
 
 	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
 		ret = hmem_ops[iface].init();
@@ -225,6 +228,15 @@ void ofi_hmem_init(void)
 		} else {
 			hmem_ops[iface].initialized = true;
 		}
+	}
+
+	fi_param_define(NULL, "hmem_disable_p2p", FI_PARAM_BOOL,
+			"Disable peer to peer support between device memory and"
+			" network devices. (default: no).");
+
+	if (!fi_param_get_bool(NULL, "hmem_disable_p2p", &disable_p2p)) {
+		if (disable_p2p == 1)
+			ofi_hmem_disable_p2p = true;
 	}
 }
 

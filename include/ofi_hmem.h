@@ -41,6 +41,8 @@
 #include <rdma/fi_domain.h>
 #include <stdbool.h>
 
+extern bool ofi_hmem_disable_p2p;
+
 #if HAVE_LIBCUDA
 
 #include <cuda.h>
@@ -208,6 +210,11 @@ static inline int ofi_hmem_no_base_addr(const void *ptr, void **base)
 static inline bool ofi_hmem_no_is_ipc_enabled(void)
 {
 	return false;
+}
+
+static inline bool ofi_hmem_p2p_disabled(void)
+{
+	return ofi_hmem_disable_p2p;
 }
 
 ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,

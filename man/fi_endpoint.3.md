@@ -538,6 +538,8 @@ The following option levels and option names and parameters are defined.
 	* FI_HMEM_P2P_DISABLED: Peer to peer support should not be used.
 : fi_setopt() will return -FI_EOPNOTSUPP if the mode requested cannot be supported
   by the provider.
+: The FI_HMEM_DISABLE_P2P environment variable discussed in
+  [`fi_mr`(3)](fi_mr.3.html) takes precedence over this setopt option.
 
 ## fi_tc_dscp_set
 
