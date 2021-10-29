@@ -520,21 +520,26 @@ The following option levels and option names and parameters are defined.
   that applications that want to override the default MIN_MULTI_RECV
   value set this option before enabling the corresponding endpoint.
 
-- *FI_OPT_XPU_TRIGGER - struct fi_trigger_xpu \**
-: This option only applies to the fi_getopt() call.  It is used to query
-  the maximum number of variables required to support XPU
-  triggered operations, along with the size of each variable.
-
-  The user provides a filled out struct fi_trigger_xpu on input.  The iface
-  and device fields should reference an HMEM domain.  If the provider does not
-  support XPU triggered operations from the given device, fi_getopt() will
-  return -FI_EOPNOTSUPP.  On input, var should reference an array of
-  struct fi_trigger_var data structures, with count set to the size of the
-  referenced array.  If count is 0, the var field will be ignored, and the
-  provider will return the number of fi_trigger_var structures needed.  If
-  count is > 0, the provider will set count to the needed value, and for
-  each fi_trigger_var available, set the datatype and count of the variable
-  used for the trigger.
+- *FI_OPT_FI_HMEM_P2P - int*
+: Defines how the provider should handle peer to peer FI_HMEM transfers for
+  this endpoint. By default, the provider will chose whether to use peer to peer
+  support based on the type of transfer (FI_HMEM_P2P_ENABLED). Valid values
+  defined in fi_endpoint.h are:
+	* FI_HMEM_P2P_ENABLED: Peer to peer support may be used by the provider
+	  to handle FI_HMEM transfers, and which transfers are initiated using
+	  peer to peer is subject to the provider implementation.
+	* FI_HMEM_P2P_REQUIRED: Peer to peer support must be used for
+	  transfers, transfers that cannot be performed using p2p will be
+	  reported as failing.
+	* FI_HMEM_P2P_PREFERRED: Peer to peer support should be used by the
+	  provider for all transfers if available, but the provider may choose
+	  to copy the data to initiate the transfer if peer to peer support is
+	  unavailable.
+	* FI_HMEM_P2P_DISABLED: Peer to peer support should not be used.
+: fi_setopt() will return -FI_EOPNOTSUPP if the mode requested cannot be supported
+  by the provider.
+: The FI_HMEM_DISABLE_P2P environment variable discussed in
+  [`fi_mr`(3)](fi_mr.3.html) takes precedence over this setopt option.
 
 ## fi_tc_dscp_set
 
@@ -906,7 +911,7 @@ capability bits from the fi_info structure will be used.
 The following capabilities apply to the transmit attributes: FI_MSG,
 FI_RMA, FI_TAGGED, FI_ATOMIC, FI_READ, FI_WRITE, FI_SEND, FI_HMEM,
 FI_TRIGGER, FI_FENCE, FI_MULTICAST, FI_RMA_PMEM, FI_NAMED_RX_CTX,
-FI_COLLECTIVE, and FI_XPU.
+and FI_COLLECTIVE.
 
 Many applications will be able to ignore this field and rely solely
 on the fi_info::caps field.  Use of this field provides fine grained
@@ -1214,8 +1219,8 @@ capability bits from the fi_info structure will be used.
 The following capabilities apply to the receive attributes: FI_MSG,
 FI_RMA, FI_TAGGED, FI_ATOMIC, FI_REMOTE_READ, FI_REMOTE_WRITE, FI_RECV,
 FI_HMEM, FI_TRIGGER, FI_RMA_PMEM, FI_DIRECTED_RECV, FI_VARIABLE_MSG,
-FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SOURCE_ERR, FI_COLLECTIVE,
-and FI_XPU.
+FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SOURCE_ERR, and
+FI_COLLECTIVE.
 
 Many applications will be able to ignore this field and rely solely
 on the fi_info::caps field.  Use of this field provides fine grained

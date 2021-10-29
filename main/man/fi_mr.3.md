@@ -291,6 +291,13 @@ The following apply to memory registration.
   Similarly, if FI_MR_LOCAL is set, but FI_MR_HMEM is not, the desc
   parameter must either be valid or NULL.
 
+*FI_MR_COLLECTIVE*
+: This bit is associated with the FI_COLLECTIVE capability.  When set,
+  the provider requires that memory regions used in collection operations
+  must explicitly be registered for use with collective calls.  This
+  requires registering regions passed to collective calls using the
+  FI_COLLECTIVE flag.
+
 *Basic Memory Registration*
 : Basic memory registration was deprecated in libfabric version 1.5, but
   is supported for backwards compatibility.  Basic memory registration
@@ -528,11 +535,13 @@ bitwise OR of the following flags:
 
 *FI_SEND*
 : The memory buffer may be used in outgoing message data transfers.  This
-  includes fi_msg and fi_tagged send operations.
+  includes fi_msg and fi_tagged send operations, as well as fi_collective
+  operations.
 
 *FI_RECV*
 : The memory buffer may be used to receive inbound message transfers.
-  This includes fi_msg and fi_tagged receive operations.
+  This includes fi_msg and fi_tagged receive operations, as well as
+  fi_collective operations.
 
 *FI_READ*
 : The memory buffer may be used as the result buffer for RMA read
@@ -555,6 +564,12 @@ bitwise OR of the following flags:
 : The memory buffer may be used as the target buffer of an RMA write
   or atomic operation.  The contents of the memory buffer may be
   modified as a result of such operations.
+
+*FI_COLLECTIVE*
+: This flag provides an explicit indication that the memory buffer may
+  be used with collective operations.  Use of this flag is required if
+  the FI_MR_COLLECTIVE mr_mode bit has been set on the domain.  This flag
+  should be paired with FI_SEND and/or FI_RECV
 
 Note that some providers may not enforce fine grained access permissions.
 For example, a memory region registered for FI_WRITE access may also
@@ -652,6 +667,13 @@ portable applications target using those interfaces; however, their use
 does carry extra message and memory footprint overhead, making it less
 desirable for highly scalable apps.
 
+There may be cases where device peer to peer support should not be used or
+cannot be used, such as when the PCIe ACS configuration does not permit the
+transfer. The FI_HMEM_DISABLE_P2P environment variable can be set to notify
+Libfabric that peer to peer transactions should not be used. The provider may
+choose to perform a copy instead, or will fail support for FI_HMEM if the
+provider is unable to do that.
+
 # FLAGS
 
 The follow flag may be specified to any memory registration call.
@@ -672,6 +694,14 @@ The follow flag may be specified to any memory registration call.
   device is specified by the fi_mr_attr fields iface and device. This refers
   to memory regions that were allocated using a device API AllocDevice call
   (as opposed to using the host allocation or unified/shared memory allocation).
+
+*FI_HMEM_HOST_ALLOC*
+: This flag indicates that the memory is owned by the host only. Whether it
+  can be accessed by the device is implementation dependent. The fi_mr_attr
+  field iface is still used to identify the device API, but the field device
+  is ignored. This refers to memory regions that were allocated using a device
+  API AllocHost call (as opposed to using malloc-like host allocation,
+  unified/shared memory allocation, or AllocDevice).
 
 # MEMORY DOMAINS
 
