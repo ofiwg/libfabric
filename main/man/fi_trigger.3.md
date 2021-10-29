@@ -19,15 +19,13 @@ fi_trigger - Triggered operations
 
 Triggered operations allow an application to queue a data transfer
 request that is deferred until a specified condition is met.  A typical
-use is to send a message only after receiving all input data.  Triggered
-operations can help reduce the latency needed to initiate a transfer by
-removing the need to return control back to an application prior to
-the data transfer starting.
+use is to send a message only after receiving all input data.
 
-An endpoint must be created with the FI_TRIGGER capability in order
-for triggered operations to be specified.  A triggered operation is
-requested by specifying the FI_TRIGGER flag as part of the operation.
-Such an endpoint is referred to as a trigger-able endpoint.
+A triggered operation may be requested by specifying the FI_TRIGGER
+flag as part of the operation.  Alternatively, an endpoint alias may
+be created and configured with the FI_TRIGGER flag.  Such an endpoint
+is referred to as a trigger-able endpoint.  All data transfer
+operations on a trigger-able endpoint are deferred.
 
 Any data transfer operation is potentially trigger-able, subject to
 provider constraints.  Trigger-able endpoints are initialized such that
@@ -53,20 +51,18 @@ is described below.
 
 ```c
 struct fi_triggered_context {
-	enum fi_trigger_event event_type;   /* trigger type */
+	enum fi_trigger_event         event_type;   /* trigger type */
 	union {
 		struct fi_trigger_threshold threshold;
-		struct fi_trigger_xpu xpu;
-		void *internal[3]; /* reserved */
+		void                        *internal[3]; /* reserved */
 	} trigger;
 };
 
 struct fi_triggered_context2 {
-	enum fi_trigger_event event_type;   /* trigger type */
+	enum fi_trigger_event         event_type;   /* trigger type */
 	union {
 		struct fi_trigger_threshold threshold;
-		struct fi_trigger_xpu xpu;
-		void *internal[7]; /* reserved */
+		void                        *internal[7]; /* reserved */
 	} trigger;
 };
 ```
@@ -75,20 +71,15 @@ The triggered context indicates the type of event assigned to the
 trigger, along with a union of trigger details that is based on the
 event type.
 
-# COMPLETION BASED TRIGGERS
+## TRIGGER EVENTS
 
-Completion based triggers defer a data transfer until one or more
-related data transfers complete.  For example, a send operation may
-be deferred until a receive operation completes, indicating that the
-data to be transferred is now available.
-
-The following trigger event related to completion based transfers
-is defined.
+The following trigger events are defined.
 
 *FI_TRIGGER_THRESHOLD*
 : This indicates that the data transfer operation will be deferred
   until an event counter crosses an application specified threshold
-  value.  The threshold is specified using struct fi_trigger_threshold:
+  value.  The threshold is specified using struct
+  fi_trigger_threshold:
 
 ```c
 struct fi_trigger_threshold {
@@ -102,124 +93,6 @@ struct fi_trigger_threshold {
   greater than 1.  If two triggered operations have the same threshold,
   they will be triggered in the order in which they were submitted to
   the endpoint.
-
-# XPU TRIGGERS
-
-XPU based triggers work in conjunction with heterogenous memory (FI_HMEM
-capability).  XPU triggers define a split execution model for specifying
-a data transfer separately from initiating the transfer.  Unlike completion
-triggers, the user controls the timing of when the transfer starts by
-writing data into a trigger variable location.
-
-XPU transfers allow the requesting and triggering to occur on separate
-computational domains.  For example, a process running on the host CPU can
-setup a data transfer, with a compute kernel running on a GPU signaling
-the start of the transfer.  XPU refers to a CPU, GPU, FPGA, or other
-acceleration device with some level of computational ability.
-
-Endpoints must be created with both the FI_TRIGGER and FI_XPU capabilities
-to use XPU triggers.  XPU triggered enabled endpoints only support XPU
-triggered operations.  The behavior of mixing XPU triggered operations with
-normal data transfers or non-XPU triggered operations is not defined by
-the API and subject to provider support and implementation.
-
-The use of XPU triggers requires coordination between the fabric provider,
-application, and submitting XPU.  The result is that hardware
-implementation details need to be conveyed across the computational domains.
-The XPU trigger API abstracts those details.  When submitting a XPU trigger
-operation, the user identifies the XPU where the triggering will
-occur.  The triggering XPU must match with the location of the local memory
-regions.  For example, if triggering will be done by a GPU kernel, the
-type of GPU and its local identifier are given.  As output, the fabric
-provider will return a list of variables and corresponding values.
-The XPU signals that the data transfer is safe to initiate by writing
-the given values to the specified variable locations.  The number of
-variables and their sizes are provider specific.
-
-XPU trigger operations are submitted using the FI_TRIGGER flag with
-struct fi_triggered_context or struct fi_triggered_context2, as
-required by the provider.  The trigger event_type is:
-
-*FI_TRIGGER_XPU*
-: Indicates that the data transfer operation will be deferred until
-  the user writes provider specified data to provider indicated
-  memory locations.  The user indicates which device will initiate
-  the write.  The struct fi_trigger_xpu is used to convey both
-  input and output data regarding the signaling of the trigger.
-
-```c
-struct fi_trigger_var {
-	enum fi_datatype datatype;
-	int count;
-	void *addr;
-	union {
-		uint8_t val8;
-		uint16_t val16;
-		uint32_t val32;
-		uint64_t val64;
-		uint8_t *data;
-	} value;
-};
-
-struct fi_trigger_xpu {
-	int count;
-	enum fi_hmem_iface iface;
-	union {
-		uint64_t reserved;
-		int cuda;
-		int ze;
-	} device;
-	struct fi_trigger_var *var;
-};
-```
-
-On input to a triggered operation, the iface field indicates the software
-interface that will be used to write the variables.  The device union
-specifies the device identifier.  For valid iface and device values, see
-[`fi_mr`(3)](fi_mr.3.html).  The iface and device must match with the
-iface and device of any local HMEM memory regions.  Count should be set
-to the number of fi_trigger_var structures available, with the var field
-pointing to an array of struct fi_trigger_var.  The user is responsible for
-ensuring that there are sufficient fi_trigger_var structures available and of
-an appropriate size.  The count and size of fi_trigger_var structures
-can be obtained by calling fi_getopt() on the endpoint with the
-FI_OPT_XPU_TRIGGER option.  See [`fi_endpoint`(3)](fi_endpoint.3.html)
-for details.
-
-Each fi_trigger_var structure referenced should have the datatype
-and count fields initialized to the number of values referenced by the
-struct fi_trigger_val.  If the count is 1, one of the val fields will be used
-to return the necessary data (val8, val16, etc.).  If count > 1, the data
-field will return all necessary data used to signal the trigger.  The data
-field must reference a buffer large enough to hold the returned bytes.
-
-On output, the provider will set the fi_trigger_xpu count to the number of
-fi_trigger_var variables that must be signaled.  Count will be less than or
-equal to the input value.  The provider will initialize each valid
-fi_trigger_var entry with information needed to signal the trigger.  The
-datatype indicates the size of the data that must be written.  Valid datatype
-values are FI_UINT8, FI_UINT16, FI_UINT32, and FI_UINT64.  For signal
-variables <= 64 bits, the count field will be 1.  If a trigger requires writing
-more than 64-bits, the datatype field will be set to FI_UINT8, with count set
-to the number of bytes that must be written.  The data that must be written
-to signal the start of an operation is returned through either the value
-union val fields or data array.
-
-Users signal the start of a transfer by writing the returned data to the
-given memory address.  The write must occur from the specified input XPU
-location (based on the iface and device fields).  If a transfer cannot
-be initiated for some reason, such as an error occurring before the
-transfer can start, the triggered operation should
-be canceled to release any allocated resources.  If multiple variables are
-specified, they must be updated in order.
-
-Note that the provider will not modify the fi_trigger_xpu or fi_trigger_var
-structures after returning from the data transfer call.
-
-In order to support multiple provider implementations, users should trigger
-data transfer operations in the same order that they are queued and should
-serialize the writing of triggers that reference the same endpoint.  Providers
-may return the same trigger variable for multiple data transfer requests.
 
 # DEFERRED WORK QUEUES
 
@@ -314,6 +187,5 @@ provider, it will fail the operation with -FI_ENOSYS.
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
-[`fi_mr`(3)](fi_mr.3.html),
 [`fi_alias`(3)](fi_alias.3.html),
 [`fi_cntr`(3)](fi_cntr.3.html)

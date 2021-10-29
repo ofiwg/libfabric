@@ -159,8 +159,10 @@ struct fi_av_set_attr {
   communication key is fabric provider specific.
 
 *flags*
-: If the flag FI_UNIVERSE is set, then the AV set will be created
-  containing all addresses stored in the AV.
+: Flags may be used to configure the AV set, including restricting which
+  collective operations the AV set needs to support.  See the flags section
+  for a list of flags that may be specified when creating the AV
+  set.
 
 ## fi_av_set_union
 
@@ -204,10 +206,53 @@ Closes an AV set and releases all resources associated with it.  Any
 operations active at the time an AV set is closed will be aborted, with
 the result of the collective undefined.
 
+# FLAGS
+
+The following flags may be specified as part of AV set creation.
+
+*FI_UNIVERSE*
+: When set, then the AV set will be created containing all addresses stored
+  in the corresponding AV.
+
+*FI_BARRIER_SET*
+: If set, the AV set will be configured to support barrier operations.
+
+*FI_BROADCAST_SET*
+: If set, the AV set will be configured to support broadcast operations.
+
+*FI_ALLTOALL_SET*
+: If set, the AV set will be configured to support all to all operations.
+
+*FI_ALLREDUCE_SET*
+: If set, the AV set will be configured to support all reduce operations.
+
+*FI_ALLGATHER_SET*
+: If set, the AV set will be configured to support all gather operations.
+
+*FI_REDUCE_SCATTER_SET*
+: If set, the AV set will be configured to support reduce scatter operations.
+
+*FI_REDUCE_SET*
+: If set, the AV set will be configured to support reduce operations.
+
+*FI_SCATTER_SET*
+: If set, the AV set will be configured to support scatter operations.
+
+*FI_GATHER_SET*
+: If set, the AV set will be configured to support gather operations.
+
 # NOTES
 
 Developers who are familiar with MPI will find that AV sets are similar to
 MPI groups, and may act as a direct mapping in some, but not all, situations.
+
+By default an AV set will be created to support all collective operations
+supported by the underlying provider (see fi_query_collective).  Users may
+reduce resource requirements by specifying only those collection operations
+needed by the AV set through the use of creation flags: FI_BARRIER_SET,
+FI_BROADCAST_SET, etc.  If no such flags are specified, the AV set will be
+configured to support any that are supported.  It is an error for a user to
+request an unsupported collective.
 
 # RETURN VALUES
 

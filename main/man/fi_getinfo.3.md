@@ -412,7 +412,7 @@ additional optimizations.
 *FI_TRIGGER*
 : Indicates that the endpoint should support triggered operations.
   Endpoints support this capability must meet the usage model as
-  described by [`fi_trigger`(3)](fi_trigger.3.html).
+  described by fi_trigger.3.
 
 *FI_VARIABLE_MSG*
 
@@ -428,12 +428,6 @@ additional optimizations.
 : Indicates that the user requires an endpoint capable of initiating
   writes against remote memory regions.  This flag requires that FI_RMA
   and/or FI_ATOMIC be set.
-
-*FI_XPU*
-: Specifies that the endpoint should support transfers that may be initiated
-  from heterogenous computation devices, such as GPUs.  This flag requires
-  that FI_TRIGGER be set.  For additional details on XPU triggers see
-  [`fi_trigger`(3)](fi_trigger.3.html).
 
 Capabilities may be grouped into three general categories: primary,
 secondary, and primary modifiers.  Primary capabilities must explicitly
@@ -451,8 +445,7 @@ may optionally report non-selected secondary capabilities if doing so
 would not compromise performance or security.
 
 Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_MULTICAST,
-FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_VARIABLE_MSG, FI_HMEM, FI_COLLECTIVE,
-FI_XPU
+FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_VARIABLE_MSG, FI_HMEM, FI_COLLECTIVE
 
 Primary modifiers: FI_READ, FI_WRITE, FI_RECV, FI_SEND,
 FI_REMOTE_READ, FI_REMOTE_WRITE
@@ -759,4 +752,3 @@ Multiple threads may call
 [`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_domain`(3)](fi_domain.3.html),
 [`fi_nic`(3)](fi_nic.3.html)
-[`fi_trigger`(3)](fi_trigger.3.html)
