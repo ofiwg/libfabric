@@ -76,15 +76,12 @@ static void cxip_do_unmap(struct ofi_mr_cache *cache,
 	int ret;
 	struct cxip_md *md = (struct cxip_md *)entry->data;
 
-	if (md->md) {
-		/* Unmap is a no-op if the scalable MD is used. */
-		if (md->dom->scalable_md.md)
-			return;
+	if (!md || !md->dom || md->md == md->dom->scalable_md.md)
+		return;
 
-		ret = cxil_unmap(md->md);
-		if (ret)
-			CXIP_WARN("cxil_unmap failed: %d\n", ret);
-	}
+	ret = cxil_unmap(md->md);
+	if (ret)
+		CXIP_WARN("cxil_unmap failed: %d\n", ret);
 }
 
 static int cxip_scalable_iomm_init(struct cxip_domain *dom)
