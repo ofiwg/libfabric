@@ -490,7 +490,11 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 		 * which means FI_MR_HMEM implies FI_MR_LOCAL for cuda buffer
 		 */
 		if (hints->caps & FI_HMEM) {
-
+			if (ofi_hmem_p2p_disabled()) {
+				FI_WARN(&rxr_prov, FI_LOG_CORE,
+					"FI_HMEM capability currently requires peer to peer support, which is disabled.\n");
+				return -FI_ENODATA;
+			}
 			if (!efa_device_support_rdma_read()) {
 				FI_WARN(&rxr_prov, FI_LOG_CORE,
 				        "FI_HMEM capability requires RDMA, which this device does not support.\n");
