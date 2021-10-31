@@ -415,12 +415,32 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 {
 	struct fid_domain *domain_fid;
 	struct efa_mr *efa_mr = NULL;
+	uint64_t supported_flags;
 	int ret = 0;
 
-	if (flags && flags != OFI_MR_NOCACHE) {
+	/*
+	 * Notes supported memory registration flags:
+	 *
+	 * OFI_MR_NOCACHE:
+	 * when MR cache is enabled, application's call to fi_mr_regattr
+	 * was directed to efa_mr_cache_regattr(). If OFI_MR_NOCACHE
+	 * was specified, efa_mr_cache_regattr() will call this
+	 * function directly (bypassing MR cache), therefore
+	 * this function does not do anything special for this flag
+	 * other than allow it.
+	 *
+	 * FI_HMEM_DEVICE_ONLY:
+	 * This flag is used by some provider that need to distinguish
+	 * whether a device memory can be accessed from device only, or
+	 * can be access from host. EFA provider considers all device memory
+	 * to be accessed by device only. Therefore, this function claim
+	 * support of this flag, but do not save it in efa_mr.
+	 */
+	supported_flags = OFI_MR_NOCACHE | FI_HMEM_DEVICE_ONLY;
+	if (flags & (~supported_flags)) {
 		EFA_WARN(FI_LOG_MR, "Unsupported flag type. requested"
 			 "[0x%" PRIx64 "] supported[0x%" PRIx64 "]\n",
-			 flags, (uint64_t) OFI_MR_NOCACHE);
+			 flags, supported_flags);
 		return -FI_EBADFLAGS;
 	}
 
