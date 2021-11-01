@@ -950,6 +950,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 	ssize_t ret;
 	struct rxr_ep *ep;
 	char shm_ep_name[EFA_SHM_NAME_MAX];
+	size_t shm_ep_name_len;
 
 	switch (command) {
 	case FI_ENABLE:
@@ -980,10 +981,11 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		 * shared memory region.
 		 */
 		if (ep->use_shm) {
-			ret = rxr_raw_addr_to_smr_name(ep->core_addr, shm_ep_name);
+			shm_ep_name_len = EFA_SHM_NAME_MAX;
+			ret = rxr_raw_addr_to_smr_name(ep->core_addr, shm_ep_name, &shm_ep_name_len);
 			if (ret < 0)
 				goto out;
-			fi_setname(&ep->shm_ep->fid, shm_ep_name, sizeof(shm_ep_name));
+			fi_setname(&ep->shm_ep->fid, shm_ep_name, shm_ep_name_len);
 			ret = fi_enable(ep->shm_ep);
 			if (ret)
 				goto out;

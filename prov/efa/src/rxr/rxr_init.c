@@ -182,12 +182,15 @@ static void rxr_init_env(void)
  *
  *    fe80::4a5:28ff:fe98:e500_0001_12918366_03e8
  *
- * @param[in]	ptr		pointer to raw address (struct efa_ep_addr)
- * @param[out]	smr_name	an unique name for shm ep
+ * @param[in]		ptr		pointer to raw address (struct efa_ep_addr)
+ * @param[out]		smr_name	an unique name for shm ep
+ * @param[in,out]	smr_name_len    As input, specify size of the "smr_name" buffer.
+ *					As output, specify number of bytes written to the buffer.
+ *
  * @return	0 on success.
  * 		negative error code on failure.
  */
-int rxr_raw_addr_to_smr_name(void *ptr, char *smr_name)
+int rxr_raw_addr_to_smr_name(void *ptr, char *smr_name, size_t *smr_name_len)
 {
 	struct efa_ep_addr *raw_addr;
 	char gidstr[INET6_ADDRSTRLEN] = { 0 };
@@ -199,14 +202,18 @@ int rxr_raw_addr_to_smr_name(void *ptr, char *smr_name)
 		return -errno;
 	}
 
-	ret = snprintf(smr_name, EFA_SHM_NAME_MAX, "%s_%04x_%08x_%04x",
+	ret = snprintf(smr_name, *smr_name_len, "%s_%04x_%08x_%04x",
 		       gidstr, raw_addr->qpn, raw_addr->qkey, getuid());
-	if (ret <= 0)
+	if (ret < 0)
 		return ret;
 
-	if (ret >= EFA_SHM_NAME_MAX)
+	if (ret == 0 || ret >= *smr_name_len)
 		return -FI_EINVAL;
 
+	/* plus 1 here for the ending '\0' character, which was not
+	 * included in ret of snprintf
+	 */
+	*smr_name_len = ret + 1;
 	return FI_SUCCESS;
 }
 
