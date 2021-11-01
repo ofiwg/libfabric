@@ -204,10 +204,10 @@ int rxr_raw_addr_to_smr_name(void *ptr, char *smr_name, size_t *smr_name_len)
 
 	ret = snprintf(smr_name, *smr_name_len, "%s_%04x_%08x_%04x",
 		       gidstr, raw_addr->qpn, raw_addr->qkey, getuid());
-	if (ret <= 0)
+	if (ret < 0)
 		return ret;
 
-	if (ret >= *smr_name_len)
+	if (ret == 0 || ret >= *smr_name_len)
 		return -FI_EINVAL;
 
 	/* plus 1 here for the ending '\0' character, which was not
