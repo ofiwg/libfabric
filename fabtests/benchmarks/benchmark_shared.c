@@ -39,6 +39,14 @@
 #include "shared.h"
 #include "benchmark_shared.h"
 
+/*
+ * when the -j option is set, user supplied inject_size must be honored,
+ * even if the provider may return a larger value. This flag is used to
+ * distinguish between the '-j 0' option and no '-j' option at all. For
+ * both cases hints->tx_attr->inject_size is 0.
+ */
+static int inject_size_set;
+
 void ft_parse_benchmark_opts(int op, char *optarg)
 {
 	switch (op) {
@@ -50,6 +58,7 @@ void ft_parse_benchmark_opts(int op, char *optarg)
 		break;
 	case 'j':
 		hints->tx_attr->inject_size = atoi(optarg);
+		inject_size_set = 1;
 		break;
 	case 'W':
 		opts.window_size = atoi(optarg);
@@ -72,7 +81,10 @@ void ft_benchmark_usage(void)
 
 int pingpong(void)
 {
-	int ret, i;
+	int ret, i, inject_size;
+
+	inject_size = inject_size_set ?
+			hints->tx_attr->inject_size : fi->tx_attr->inject_size;
 
 	ret = ft_sync();
 	if (ret)
@@ -83,7 +95,7 @@ int pingpong(void)
 			if (i == opts.warmup_iterations)
 				ft_start();
 
-			if (opts.transfer_size < fi->tx_attr->inject_size)
+			if (opts.transfer_size < inject_size)
 				ret = ft_inject(ep, remote_fi_addr, opts.transfer_size);
 			else
 				ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
@@ -103,7 +115,7 @@ int pingpong(void)
 			if (ret)
 				return ret;
 
-			if (opts.transfer_size < fi->tx_attr->inject_size)
+			if (opts.transfer_size < inject_size)
 				ret = ft_inject(ep, remote_fi_addr, opts.transfer_size);
 			else
 				ret = ft_tx(ep, remote_fi_addr, opts.transfer_size, &tx_ctx);
@@ -145,7 +157,10 @@ static int bw_rx_comp()
 
 int bandwidth(void)
 {
-	int ret, i, j;
+	int ret, i, j, inject_size;
+
+	inject_size = inject_size_set ?
+			hints->tx_attr->inject_size : fi->tx_attr->inject_size;
 
 	ret = ft_sync();
 	if (ret)
@@ -163,7 +178,7 @@ int bandwidth(void)
 			if (i == opts.warmup_iterations)
 				ft_start();
 
-			if (opts.transfer_size < fi->tx_attr->inject_size)
+			if (opts.transfer_size < inject_size)
 				ret = ft_inject(ep, remote_fi_addr, opts.transfer_size);
 			else
 				ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
@@ -233,7 +248,10 @@ static int bw_rma_comp(enum ft_rma_opcodes rma_op)
 
 int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 {
-	int ret, i, j;
+	int ret, i, j, inject_size;
+
+	inject_size = inject_size_set ?
+			hints->tx_attr->inject_size: fi->tx_attr->inject_size;
 
 	ret = ft_sync();
 	if (ret)
@@ -245,7 +263,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 
 		switch (rma_op) {
 		case FT_RMA_WRITE:
-			if (opts.transfer_size < fi->tx_attr->inject_size) {
+			if (opts.transfer_size < inject_size) {
 				ret = ft_post_rma_inject(FT_RMA_WRITE, ep,
 						opts.transfer_size, remote);
 			} else {
@@ -265,7 +283,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 					rx_seq++;
 
 			} else {
-				if (opts.transfer_size < fi->tx_attr->inject_size) {
+				if (opts.transfer_size < inject_size) {
 					ret = ft_post_rma_inject(FT_RMA_WRITEDATA,
 							ep,
 							opts.transfer_size,
