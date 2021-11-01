@@ -6,6 +6,170 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v1.14.0, Fri Nov 19, 2021
+=========================
+
+## Core
+
+## EFA
+
+## SHM
+
+## TCP
+
+## RXM
+
+## Util
+
+## Verbs
+
+## Fabtests
+
+v1.13.2, Fri Oct 15, 2021
+========================
+
+## Core
+
+- Provide work-around for segfault in Ze destructor using DL provider
+- Minor code fixes supporting Ze
+- Use copy only engine when accessing GPUs through Ze
+- Sort DL providers to ensure consistent load ordering
+- Update hooking providers to handle fi_open_ops calls to avoid crashes
+- Replace cassert with assert.h to avoid C++ headers in C code
+- Enhance serialization for memory monitors to handle external monitors
+
+## EFA
+
+- Limit memcpy in packet processing to only copy valid data
+- Removed maximum wait time sending packet to avoid silent drops
+- Fix unconditionally growing buffer pools that should not grow
+- Handle possible large backlog of unexpected messages via SHM
+- Update Tx counter for inject operations
+- Allow in flight sends to finish when closing endpoint
+- Fix handing of prefix size when receiving data
+- Removed unnecessary data copy
+
+## SHM
+
+- Fix possible sigbus error
+- Handle errors if peer is not yet initialized
+
+## TCP
+
+- Fix reporting RMA write CQ data
+- Fix RMA read request error completion handling
+- Avoid possible use after free in reject path
+- Remove restriction where EQs and CQs may not share wait sets
+- Increase max supported rx size
+- Fix possible memory leak of CM context structure in error cases
+- Set source address for active EPs to ensure correct address is used
+- Fix memory leak of dest address in CM requests
+
+## RxM
+
+- Improve connection handling responsiveness to fix application stalls
+- Add missing locks around AV data structures
+- Add missing hmem initialization for DL builds
+- Do not ignore user specified rx/tx sizes
+- Fix source address reported to peer
+- Fix possible use of uninitialized memory handling CQ errors
+- Fix address comparison to remove duplicate connections
+- Reworked CM code to fix several possible crash scenarios
+- Fix setting the conn_id when generated 'fake' tagged headers
+
+## Util
+
+- Fix AV set to use non-zero starting address
+- Fix setting of CQ completion flags
+
+## Verbs
+
+- Work-around compilation error with Intel compiler 2018.3.222
+- Avoid possible user after free issue accessing rdma cm id in error cases
+
+## Fabtests
+
+- Add missing prints to fi_av_xfer to report failures
+- Fix memory leak in fi_multinode test
+- Add device validation for hmem tests
+- Update fi_info hints mode field based on user options
+- Fix use of incorrect message prefix sized in fi_pingpong test
+
+v1.13.1, Tue Aug 24, 2021
+=========================
+
+## Core
+
+- Fix ZE check in configure
+- Enable loading ZE library with dlopen()
+- Add IPv6 support to fi_pingpong
+- Fix the call to fi_recv in fi_pingpong
+
+## EFA
+
+- Split ep->rx_entry_queued_list into two lists
+- Split ep->tx_entry_queued_list into two lists
+- Only set FI_HMEM hint for SHM getinfo when requested
+- Include qkey in smr name
+- Do not ignore send completion for a local read operation
+- Convert pkt_entry->state to pkt_entry->flags
+- Detect recvwin overflow and print an error message
+- Add function ofi_recvwin_id_processed()
+- Let efa_av_remove() remove peer with resources
+- Ignore received packets from a remove address
+- Check for and handle empty util_av->ep_list in efa_av
+- Invalidate peer's outstanding TX packets' address when removing peer
+- Extend the scope of deep cleaning resources in rxr_ep_free_res()
+- Eefactor error handling functions for x_entry
+- Only write RNR error completion for send operation
+- Ignore TX completion to a removed peer.
+- Release peer's tx_entry and rx_entry when removing peer
+- Make efa_conn->ep_addr a pointer and use it to identify removed peer
+- Mix the using of released packet in rxr_cq_handler_error()
+- Refactor tx ops counter updating
+- Make rxr_release_tx_entry() release queued pkts
+- Rename rxr_pkt_entry->type to rxr_pkt_entry->alloc_type
+- Initialize rxr_pkt_entry->x_entry to NULL
+- Fix ep->pkt_sendv_pool size
+- Add rnr_backoff prefix to variables related to RNR backoff
+- Refactor rxr_cq_queue_pkt()
+- Eliminate rnr_timeout_exp in rdm_peer
+- Eliminate the flag RXR_PEER_BACKED_OFF
+- Adjust unexpected packet pool chunk size
+- Defer memory allocation to 1st call to progress engine
+- Enable RNR support
+- Remove peer from backoff peer list in efa_rdm_peer_reset()
+- Make rxr_pkt_req_max_header_size use RXR_REQ_OPT_RAW_ADDR_HDR_SIZE
+- Use ibv_is_fork_initialized in EFA fork support
+
+## PSM3
+
+- Update Versions
+- Clean ref's to split cuda hostbufs when no longer needed
+- Fix issue when running gpudirect on gpu with small bar size
+- Fix issues with debug statistics
+- Fix issue with unreleased MR in cache
+
+## SHM
+
+- Fix unsigned comparison introduced in #6948
+- Use hmem iov copies in mmap progression
+- Correct return values in smr_progress.c
+- Fix smr_progress_ipc error handling
+
+## Util
+
+- Do not override default monitor if already set
+- Do not set impmon.impfid to NULL on monitor init
+- Initialize the import monitor
+- Add memory monitor for ZE
+
+## Fabtests
+
+- Use dlopen to load ZE library
+- Bug fixes related to IPv6 address format
+- Do not immediately kill server process
+
 v1.13.0, Thu Jul 1, 2021
 ========================
 
