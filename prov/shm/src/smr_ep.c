@@ -407,13 +407,13 @@ int smr_format_ipc(struct smr_cmd *cmd, void *ptr,
                    size_t len, struct smr_region *smr,
                    struct smr_resp *resp, enum fi_hmem_iface iface)
 {
-    cmd->msg.hdr.op_src = smr_src_ipc;
-    cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
-    cmd->msg.hdr.size = len;
-    cmd->msg.data.ipc_info.iface = iface;
+	cmd->msg.hdr.op_src = smr_src_ipc;
+	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
+	cmd->msg.hdr.size = len;
+	cmd->msg.data.ipc_info.iface = iface;
 
-    return ofi_hmem_get_handle(cmd->msg.data.ipc_info.iface, ptr,
-                               (void **)&cmd->msg.data.ipc_info.ipc_handle);
+	return ofi_hmem_get_handle(cmd->msg.data.ipc_info.iface, ptr,
+				   (void **)&cmd->msg.data.ipc_info.ipc_handle);
 }
 
 int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
