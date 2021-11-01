@@ -272,6 +272,8 @@ int hook_srx_ctx(struct fid_domain *domain,
 
 int hook_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 		  enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
+int hook_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
+			  struct fi_collective_attr *attr, uint64_t flags);
 
 extern struct fi_ops hook_fabric_fid_ops;
 extern struct fi_ops hook_domain_fid_ops;

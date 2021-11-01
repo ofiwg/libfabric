@@ -189,8 +189,8 @@ int hook_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 	return fi_query_atomic(dom->hdomain, datatype, op, attr, flags);
 }
 
-static int hook_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
-				 struct fi_collective_attr *attr, uint64_t flags)
+int hook_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
+			  struct fi_collective_attr *attr, uint64_t flags)
 {
 	struct hook_domain *dom = container_of(domain, struct hook_domain, domain);
 
