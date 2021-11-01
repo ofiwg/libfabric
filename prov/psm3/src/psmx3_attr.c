@@ -286,7 +286,8 @@ static long get_psm3_env(const char *var, int default_value) {
 #endif
 static uint64_t psmx3_check_fi_hmem_cap(void) {
 #ifdef PSM_CUDA
-	if (get_psm3_env("PSM3_CUDA", 0) || get_psm3_env("PSM3_GPUDIRECT", 0))
+	if ((get_psm3_env("PSM3_CUDA", 0) || get_psm3_env("PSM3_GPUDIRECT", 0)) &&
+	    !ofi_hmem_p2p_disabled())
 		return FI_HMEM;
 #endif
 	return 0;
