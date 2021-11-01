@@ -385,7 +385,7 @@ int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
 
 bool ze_hmem_p2p_enabled(void)
 {
-	return p2p_enabled;
+	return !ofi_hmem_p2p_disabled() && p2p_enabled;
 }
 
 #else

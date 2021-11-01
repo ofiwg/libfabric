@@ -582,7 +582,7 @@ int cuda_host_unregister(void *ptr)
 
 bool cuda_is_ipc_enabled(void)
 {
-	return cuda_ipc_enabled;
+	return !ofi_hmem_p2p_disabled() && cuda_ipc_enabled;
 }
 
 #else
