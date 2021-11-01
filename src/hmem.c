@@ -261,7 +261,7 @@ enum fi_hmem_iface ofi_get_hmem_iface(const void *addr)
 	for (iface = ARRAY_SIZE(hmem_ops) - 1; iface > FI_HMEM_SYSTEM;
 	     iface--) {
 		if (ofi_hmem_is_initialized(iface) &&
-		    hmem_ops[iface].is_addr_valid(addr))
+		    hmem_ops[iface].is_addr_valid(addr, NULL, NULL))
 			return iface;
 	}
 

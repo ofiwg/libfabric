@@ -98,7 +98,7 @@ struct ofi_hmem_ops {
 			    size_t size);
 	int (*copy_from_hmem)(uint64_t device, void *dest, const void *src,
 			      size_t size);
-	bool (*is_addr_valid)(const void *addr);
+	bool (*is_addr_valid)(const void *addr, uint64_t *device, uint64_t *flags);
 	int (*get_handle)(void *dev_buf, void **handle);
 	int (*open_handle)(void **handle, uint64_t device, void **ipc_ptr);
 	int (*close_handle)(void *ipc_ptr);
@@ -116,7 +116,7 @@ int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
 		     size_t size);
 int rocr_hmem_init(void);
 int rocr_hmem_cleanup(void);
-bool rocr_is_addr_valid(const void *addr);
+bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 int rocr_host_register(void *ptr, size_t size);
 int rocr_host_unregister(void *ptr);
 
@@ -124,7 +124,7 @@ int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
 int cuda_hmem_init(void);
 int cuda_hmem_cleanup(void);
-bool cuda_is_addr_valid(const void *addr);
+bool cuda_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 int cuda_host_register(void *ptr, size_t size);
 int cuda_host_unregister(void *ptr);
 int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
@@ -147,7 +147,7 @@ int cuda_gdrcopy_dev_unregister(uint64_t handle);
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);
 int ze_hmem_init(void);
 int ze_hmem_cleanup(void);
-bool ze_is_addr_valid(const void *addr);
+bool ze_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 int ze_hmem_get_handle(void *dev_buf, void **handle);
 int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr);
 int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,

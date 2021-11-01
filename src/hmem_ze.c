@@ -48,6 +48,7 @@ static ze_command_queue_handle_t cmd_queue[ZE_MAX_DEVICES];
 static int num_devices = 0;
 static int ordinals[ZE_MAX_DEVICES];
 static int dev_fds[ZE_MAX_DEVICES];
+static ze_device_uuid_t dev_uuids[ZE_MAX_DEVICES];
 static bool p2p_enabled = false;
 
 static ze_command_queue_desc_t cq_desc = {
@@ -123,6 +124,8 @@ struct libze_ops {
 					  void **pptr);
 	ze_result_t (*zeMemCloseIpcHandle)(ze_context_handle_t hContext,
 					   const void *ptr);
+	ze_result_t (*zeDeviceGetProperties)(ze_device_handle_t hDevice,
+					     ze_device_properties_t *pDeviceProperties);
 };
 
 #ifdef ENABLE_ZE_DLOPEN
@@ -154,6 +157,7 @@ static struct libze_ops libze_ops = {
 	.zeMemGetIpcHandle = zeMemGetIpcHandle,
 	.zeMemOpenIpcHandle = zeMemOpenIpcHandle,
 	.zeMemCloseIpcHandle = zeMemCloseIpcHandle,
+	.zeDeviceGetProperties = zeDeviceGetProperties,
 };
 
 #endif /* ENABLE_ZE_DLOPEN */
@@ -295,6 +299,12 @@ ze_result_t ofi_zeMemCloseIpcHandle(ze_context_handle_t hContext,
 				    const void *ptr)
 {
 	return (*libze_ops.zeMemCloseIpcHandle)(hContext, ptr);
+}
+
+ze_result_t ofi_zeDeviceGetProperties(ze_device_handle_t hDevice,
+				      ze_device_properties_t *pDeviceProperties)
+{
+	return (*libze_ops.zeDeviceGetProperties)(hDevice, pDeviceProperties);
 }
 
 #if HAVE_DRM
@@ -539,6 +549,12 @@ static int ze_hmem_dl_init(void)
 		goto err_dlclose;
 	}
 
+	libze_ops.zeDeviceGetProperties = dlsym(libze_handle, "zeDeviceGetProperties");
+	if (!libze_ops.zeDeviceGetProperties) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find zeDeviceGetProperties\n");
+		goto err_dlclose;
+	}
+
 	return FI_SUCCESS;
 
 err_dlclose:
@@ -637,6 +653,7 @@ int ze_hmem_init(void)
 {
 	ze_driver_handle_t driver;
 	ze_context_desc_t context_desc = {0};
+	ze_device_properties_t dev_prop = {0};
 	ze_result_t ze_ret;
 	ze_bool_t access;
 	uint32_t count, i;
@@ -677,6 +694,14 @@ int ze_hmem_init(void)
 		goto err;
 
 	for (num_devices = 0; num_devices < count; num_devices++) {
+		ze_ret = ofi_zeDeviceGetProperties(devices[num_devices],
+						   &dev_prop);
+		if (ze_ret)
+			goto err;
+
+		memcpy(&dev_uuids[num_devices], &dev_prop.uuid,
+		       sizeof(*dev_uuids));
+
 		ze_ret = ze_hmem_find_copy_only_engine(num_devices,
 						       &ordinals[num_devices]);
 		if (ze_ret)
@@ -748,18 +773,40 @@ err:
 	return -FI_EIO;
 }
 
-bool ze_is_addr_valid(const void *addr)
+bool ze_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 {
 	ze_result_t ze_ret;
-	ze_memory_allocation_properties_t mem_props;
-	ze_device_handle_t device;
+	ze_memory_allocation_properties_t mem_props = {0};
+	ze_device_properties_t dev_prop = {0};
+	ze_device_handle_t device_ptr;
+	int i;
 
-	mem_props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
-	mem_props.pNext = NULL;
 	ze_ret = ofi_zeMemGetAllocProperties(context, addr, &mem_props,
-					     &device);
+					     &device_ptr);
+	if (ze_ret)
+		return false;
 
-	return (!ze_ret && mem_props.type == ZE_MEMORY_TYPE_DEVICE);
+	if (flags)
+		*flags = mem_props.type == ZE_MEMORY_TYPE_DEVICE ?
+			 FI_HMEM_DEVICE_ONLY : 0;
+
+	if (!device)
+		return true;
+
+	ze_ret = ofi_zeDeviceGetProperties(device_ptr, &dev_prop);
+	if (ze_ret)
+		return false;
+
+	for (i = 0, *device = 0; i < num_devices; i++) {
+		if (!memcmp(&dev_prop.uuid, &dev_uuids[i],
+			    sizeof(*dev_uuids))) {
+			*device = i;
+			return true;
+		}
+	}
+
+	assert(1);
+	return true;
 }
 
 int ze_hmem_get_handle(void *dev_buf, void **handle)
@@ -866,7 +913,7 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
 	return -FI_ENOSYS;
 }
 
-bool ze_is_addr_valid(const void *addr)
+bool ze_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 {
 	return false;
 }
