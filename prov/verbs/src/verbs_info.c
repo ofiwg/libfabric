@@ -731,6 +731,9 @@ static int vrb_have_device(void)
 
 static bool vrb_hmem_supported(const char *dev_name)
 {
+	if (ofi_hmem_p2p_disabled())
+		return false;
+
 	if (vrb_gl_data.peer_mem_support && strstr(dev_name, "mlx"))
 		return true;
 
