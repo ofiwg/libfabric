@@ -718,12 +718,6 @@ int ft_init(void)
 	tx_cq_cntr = 0;
 	rx_cq_cntr = 0;
 
-	//If using device memory for transfers, require OOB address
-	//exchange because extra steps are involved when passing
-	//device buffers into fi_av_insert
-	if (opts.options & FT_OPT_ENABLE_HMEM)
-		opts.options |= FT_OPT_OOB_ADDR_EXCH;
-
 	return ft_hmem_init(opts.iface);
 }
 
@@ -1332,6 +1326,7 @@ int ft_exchange_addresses_oob(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		fi_addr_t *remote_addr)
 {
+	char temp[FT_MAX_CTRL_MSG];
 	size_t addrlen;
 	int ret;
 
@@ -1349,12 +1344,16 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 			return ret;
 
 		addrlen = FT_MAX_CTRL_MSG;
-		ret = fi_getname(&ep_ptr->fid, (char *) tx_buf + ft_tx_prefix_size(),
-				&addrlen);
+		ret = fi_getname(&ep_ptr->fid, temp, &addrlen);
 		if (ret) {
 			FT_PRINTERR("fi_getname", ret);
 			return ret;
 		}
+
+		ret = ft_hmem_copy_to(opts.iface, opts.device,
+				      tx_buf + ft_tx_prefix_size(), temp, addrlen);
+		if (ret)
+			return ret;
 
 		ret = (int) ft_tx(ep, *remote_addr, addrlen, &tx_ctx);
 		if (ret)
@@ -1368,10 +1367,16 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 		if (ret)
 			return ret;
 
+		ret = ft_hmem_copy_from(opts.iface, opts.device, temp,
+					rx_buf + ft_rx_prefix_size(),
+					FT_MAX_CTRL_MSG);
+		if (ret)
+			return ret;
+
 		/* Test passing NULL fi_addr on one of the sides (server) if
 		 * AV type is FI_AV_TABLE */
-		ret = ft_av_insert(av_ptr, (char *) rx_buf + ft_rx_prefix_size(),
-				   1, ((fi->domain_attr->av_type == FI_AV_TABLE) ?
+		ret = ft_av_insert(av_ptr, temp, 1,
+				   ((fi->domain_attr->av_type == FI_AV_TABLE) ?
 				       NULL : remote_addr), 0, NULL);
 		if (ret)
 			return ret;
