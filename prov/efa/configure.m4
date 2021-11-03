@@ -99,6 +99,13 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 
 	AS_IF([test "$enable_efa" = "no"], [efa_happy=0])
 
+	# TODO: fix this once windows is supported
+	AS_IF([test $linux -ne 1 || { test x$host_cpu != xx86_64 && test x$host_cpu != xaarch64 ;}],
+		[
+			AC_MSG_WARN([The EFA provider requires linux x86_64 or linux aarch64.])
+			efa_happy=0
+		])
+
 	AS_IF([test $efa_happy -eq 1 ], [$1], [$2])
 
 	efa_CPPFLAGS="$efa_ibverbs_CPPFLAGS $efadv_CPPFLAGS"
