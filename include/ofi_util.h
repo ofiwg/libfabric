@@ -119,10 +119,18 @@ extern "C" {
 	OFI_INFO_FIELD(provider, prov->field, user->field, "Supported",	\
 		      "Requested", type)
 
-#define OFI_INFO_CHECK_VAL(provider, prov, user, field)				\
+#define OFI_INFO_CHECK_SIZE(provider, prov, user, field)			\
 	do {									\
 		FI_INFO(provider, FI_LOG_CORE, "Supported: %zd\n", prov->field);\
 		FI_INFO(provider, FI_LOG_CORE, "Requested: %zd\n", user->field);\
+	} while (0)
+
+#define OFI_INFO_CHECK_U64(provider, prov, user, field)			\
+	do {								\
+		FI_INFO(provider, FI_LOG_CORE,				\
+			"Supported: %" PRIu64 "\n", prov->field);	\
+		FI_INFO(provider, FI_LOG_CORE,				\
+			"Requested: %" PRIu64 "\n", user->field);	\
 	} while (0)
 
 #define OFI_INFO_MODE(provider, prov_mode, user_mode)				\
