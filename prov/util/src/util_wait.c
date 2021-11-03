@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include <sched.h>
 
 #include <ofi_enosys.h>
 #include <ofi_util.h>
@@ -618,7 +619,7 @@ static int util_wait_yield_run(struct fid_wait *wait_fid, int timeout)
 			}
 		}
 		fastlock_release(&wait->util_wait.lock);
-		pthread_yield();
+		sched_yield();
 	}
 
 	fastlock_acquire(&wait->signal_lock);

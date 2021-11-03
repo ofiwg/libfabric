@@ -766,6 +766,7 @@
     <ClInclude Include="include\windows\osd.h" />
     <ClInclude Include="include\windows\poll.h" />
     <ClInclude Include="include\windows\pthread.h" />
+    <ClInclude Include="include\windows\sched.h" />
     <ClInclude Include="include\windows\sys\ipc.h" />
     <ClInclude Include="include\windows\sys\mman.h" />
     <ClInclude Include="include\windows\sys\param.h" />
