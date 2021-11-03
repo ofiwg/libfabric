@@ -12,6 +12,24 @@ v1.14.0, Fri Nov 19, 2021
 ## Core
 
 ## EFA
+- Provide better support for long lived applications utilizing the RDM
+  endpoint, that may reuse an EFA queue pair after an application restarts.
+- Fixes for RNR support (enabled in v1.13.1), to allow Libfabric to manage
+  backoff when a receiver's queue is exhausted. A setopt parameter was added to
+  allow applications to set the number of re-transmissions done by the device
+  before a packet is queued by Libfabric, or if Libfabric is configured to not
+  handle resource errors, write an error entry to the application.
+- Potentially reduce memory utilization by waiting until first CQ read to
+  allocate pools
+- Deprecate the FI_EFA_SHM_MAX_MEDIUM_SIZE environment variable
+- Fix a bug in the send path which caused a performance regression for large
+  messages
+- Fix issue in MR registration path when cache is used with CUDA buffers
+- Print a clearer warning message when the reorder buffer is too small
+- Fix 128-bit atomic support
+- Various bugfixes in send path causing unneeded copies
+- Various bugfixes caught by inspection and coverity
+- Add documentation describing version 4 of the RDM protocol
 
 ## SHM
 
@@ -24,6 +42,8 @@ v1.14.0, Fri Nov 19, 2021
 ## Verbs
 
 ## Fabtests
+- Update scripts to allow provider specific fabtests, and add an EFA RDM RNR
+  fabtest
 
 v1.13.2, Fri Oct 15, 2021
 ========================
