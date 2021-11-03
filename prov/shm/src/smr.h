@@ -327,8 +327,8 @@ int smr_format_ze_ipc(struct smr_ep *ep, int64_t id, struct smr_cmd *cmd,
 		      size_t total_len, struct smr_region *smr,
 		      struct smr_resp *resp, struct smr_tx_entry *pend);
 int smr_format_ipc(struct smr_cmd *cmd, void *ptr,
-                   size_t len, struct smr_region *smr,
-                   struct smr_resp *resp, enum fi_hmem_iface iface);
+		   size_t len, struct smr_region *smr,
+		   struct smr_resp *resp, enum fi_hmem_iface iface);
 int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
 		    const struct iovec *iov, size_t count, size_t total_len,
 		    struct smr_tx_entry *pend, struct smr_resp *resp);
