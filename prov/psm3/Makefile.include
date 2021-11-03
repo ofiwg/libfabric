@@ -256,7 +256,8 @@ prov_psm3_psm3_libpsm3i_la_DEPENDENCIES = \
 _psm3_extra_dist = \
 	prov/psm3/psm3/include/psm3_rbtree.c \
 	prov/psm3/psm3/psm_hal_gen1/psm_hal_gen1_spio.c \
-	prov/psm3/psm3/opa/opa_dwordcpy-x86_64-fast.S
+	prov/psm3/psm3/opa/opa_dwordcpy-x86_64-fast.S \
+	prov/psm3/VERSION
 EXTRA_DIST += $(_psm3_extra_dist)
 
 chksum_srcs += \
