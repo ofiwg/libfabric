@@ -101,41 +101,40 @@ extern "C" {
 #define OFI_EQ_STRERROR(prov, level, subsys, eq, entry) \
 	OFI_Q_STRERROR(prov, level, subsys, eq, "eq", entry, fi_eq_strerror)
 
-#define FI_INFO_FIELD(provider, prov_attr, user_attr, prov_str, user_str, type)	\
-	do {										\
-		FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n",			\
-				fi_tostr(&prov_attr, type));				\
-		FI_INFO(provider, FI_LOG_CORE, user_str ": %s\n",			\
-				fi_tostr(&user_attr, type));				\
+#define OFI_INFO_FIELD(provider, prov_attr, user_attr, prov_str, user_str, type) \
+	do {									\
+		FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n",		\
+				fi_tostr(&prov_attr, type));			\
+		FI_INFO(provider, FI_LOG_CORE, user_str ": %s\n",		\
+				fi_tostr(&user_attr, type));			\
 	} while (0)
 
-#define FI_INFO_STRING(provider, prov_attr, user_attr, prov_str, user_str)	\
+#define OFI_INFO_STR(provider, prov_attr, user_attr, prov_str, user_str)	\
 	do {									\
 		FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n", prov_attr);	\
 		FI_INFO(provider, FI_LOG_CORE, user_str ": %s\n", user_attr);	\
 	} while (0)
 
-#define FI_INFO_CHECK(provider, prov, user, field, type)		\
-	FI_INFO_FIELD(provider, prov->field, user->field, "Supported",	\
+#define OFI_INFO_CHECK(provider, prov, user, field, type)		\
+	OFI_INFO_FIELD(provider, prov->field, user->field, "Supported",	\
 		      "Requested", type)
 
-#define FI_INFO_CHECK_VAL(provider, prov, user, field)					\
-	do {										\
-		FI_INFO(provider, FI_LOG_CORE, "Supported: %zd\n", prov->field);	\
-		FI_INFO(provider, FI_LOG_CORE, "Requested: %zd\n", user->field);	\
+#define OFI_INFO_CHECK_VAL(provider, prov, user, field)				\
+	do {									\
+		FI_INFO(provider, FI_LOG_CORE, "Supported: %zd\n", prov->field);\
+		FI_INFO(provider, FI_LOG_CORE, "Requested: %zd\n", user->field);\
 	} while (0)
 
-#define FI_INFO_MODE(provider, prov_mode, user_mode)				\
-	FI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",	\
+#define OFI_INFO_MODE(provider, prov_mode, user_mode)				\
+	OFI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",	\
 		      FI_TYPE_MODE)
 
-#define FI_INFO_MR_MODE(provider, prov_mode, user_mode)			\
-	FI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",	\
+#define OFI_INFO_MR_MODE(provider, prov_mode, user_mode)			\
+	OFI_INFO_FIELD(provider, prov_mode, user_mode, "Expected", "Given",	\
 		      FI_TYPE_MR_MODE)
 
-#define FI_INFO_NAME(provider, prov, user)				\
-	FI_INFO_STRING(provider, prov->name, user->name, "Supported",	\
-		       "Requested")
+#define OFI_INFO_NAME(provider, prov, user)				\
+	OFI_INFO_STR(provider, prov->name, user->name, "Supported", "Requested")
 
 #define ofi_after_eq(a,b)	((long)((a) - (b)) >= 0)
 #define ofi_before(a,b)		((long)((a) - (b)) < 0)

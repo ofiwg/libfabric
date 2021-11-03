@@ -449,7 +449,7 @@ static void psmx3_update_hfi_nic_info(struct fi_info *info)
 
 		args[0].unit = unit;
 		if ((PSM2_OK != psm2_info_query(PSM2_INFO_QUERY_UNIT_SYS_PATH,
-			sys_dev_path, 2, args)) || 
+			sys_dev_path, 2, args)) ||
 			(asprintf(&path, "%s/%s", sys_dev_path, "device") < 0))
 		{
 			FI_WARN(&psmx3_prov, FI_LOG_CORE,
@@ -519,7 +519,7 @@ static int psmx3_getinfo(uint32_t api_version, const char *node,
 	if (hints && hints->domain_attr && hints->domain_attr->name &&
 		NULL == strcasestr(psmx3_hfi_info.default_domain_name, hints->domain_attr->name)) {
 		FI_INFO(&psmx3_prov, FI_LOG_CORE, "Unknown domain name\n");
-		FI_INFO_STRING(&psmx3_prov, psmx3_hfi_info.default_domain_name,
+		OFI_INFO_STR(&psmx3_prov, psmx3_hfi_info.default_domain_name,
 					   hints->domain_attr->name, "Supported", "Requested");
 		goto err_out;
 	}

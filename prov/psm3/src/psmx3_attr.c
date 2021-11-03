@@ -335,7 +335,7 @@ int psmx3_init_prov_info(const struct fi_info *hints, struct fi_info **info)
 	if (hints->fabric_attr && hints->fabric_attr->name &&
 	    strcasecmp(hints->fabric_attr->name, fabric_attr->name)) {
 		FI_INFO(&psmx3_prov, FI_LOG_CORE, "Unknown fabric name\n");
-		FI_INFO_NAME(&psmx3_prov, fabric_attr, hints->fabric_attr);
+		OFI_INFO_NAME(&psmx3_prov, fabric_attr, hints->fabric_attr);
 		return -FI_ENODATA;
 	}
 
@@ -389,7 +389,7 @@ int psmx3_init_prov_info(const struct fi_info *hints, struct fi_info **info)
 
 	if ((hints->caps & prov_info->caps) != hints->caps) {
 		FI_INFO(&psmx3_prov, FI_LOG_CORE, "caps not supported\n");
-		FI_INFO_CHECK(&psmx3_prov, prov_info, hints, caps, FI_TYPE_CAPS);
+		OFI_INFO_CHECK(&psmx3_prov, prov_info, hints, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
