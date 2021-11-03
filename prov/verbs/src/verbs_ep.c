@@ -747,8 +747,7 @@ static int vrb_ep_enable_xrc(struct vrb_ep *ep)
 
 	if (cq->credits < srq_ep->xrc.max_recv_wr) {
 		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "CQ credits %" PRId64 " insufficient\n",
-			   cq->credits);
+			   "CQ credits %zd insufficient\n", cq->credits);
 		ret = -FI_EINVAL;
 		goto done;
 	}
