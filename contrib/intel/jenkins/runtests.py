@@ -15,11 +15,13 @@ parser.add_argument("--ofi_build_mode", help="specify the build configuration", 
                     choices = ["dbg", "dl"])
 parser.add_argument("--test", help="specify test to execute", \
                     choices = ["all", "unit", "shmem", "mpi", "oneccl"])
+parser.add_argument("--device", help="optional gpu device", choices=["ze"])
 
 args = parser.parse_args()
 args_core = args.prov
 
 args_util = args.util
+args_device = args.device
 
 if (args.ofi_build_mode):
     ofi_build_mode = args.ofi_build_mode
@@ -53,21 +55,24 @@ if(args_core):
         hosts.append(host)
 
     if (args_util == None):
-        if (run_test == 'all' or run_test == 'unit'):
-            run.fi_info_test(args_core, hosts, ofi_build_mode)
-            run.fabtests(args_core, hosts, ofi_build_mode)
+        if (args.device != 'ze'):
+            if (run_test == 'all' or run_test == 'unit'):
+                run.fi_info_test(args_core, hosts, ofi_build_mode)
+                run.fabtests(args_core, hosts, ofi_build_mode)
 
-        if (run_test == 'all' or run_test == 'shmem'):
-            run.shmemtest(args_core, hosts, ofi_build_mode)
+            if (run_test == 'all' or run_test == 'shmem'):
+                run.shmemtest(args_core, hosts, ofi_build_mode)
 
-        if (run_test == 'all' or run_test == 'oneccl'):
-            run.oneccltest(args_core, hosts, ofi_build_mode)
+            if (run_test == 'all' or run_test == 'oneccl'):
+                run.oneccltest(args_core, hosts, ofi_build_mode)
 
-        if (run_test == 'all' or run_test == 'all'):
-            for mpi in mpilist:
-                run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode)
-                run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode)
-                run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode)
+            if (run_test == 'all' or run_test == 'all'):
+                for mpi in mpilist:
+                    run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode)
+                    run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode)
+                    run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode)
+        else:
+            run.ze_fabtests(args_core, hosts, ofi_build_mode)
     else:
         if (run_test == 'all' or run_test == 'unit'):
             run.fi_info_test(args_core, hosts, ofi_build_mode, util=args_util)
