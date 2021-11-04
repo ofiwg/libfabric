@@ -102,11 +102,27 @@ pipeline {
                             )
                           """
                         }
-                    }
-                }
-                stage('mlx5-verbs_rxm-dbg') {
-                    agent {node {label 'mlx5'}}
-                    steps {
+                     }
+
+                 }
+		 stage('ze-shm') {
+		     agent {node {label 'ats'}}
+		     steps{
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd  ${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=shm --ofi_build_mode='dbg' --device='ze'
+                            )
+                          """
+                        }
+		     }
+		 }
+                 stage('mlx5-verbs_rxm-dbg') {
+                     agent {node {label 'mlx5'}}
+                     steps{
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
                           sh """
                             env

@@ -31,6 +31,8 @@ def build_libfabric(libfab_install_path, mode):
         for prov in common.disabled_prov_list:
              config_cmd.append('--enable-{}=no'.format(prov))
 
+        config_cmd.append('--enable-ze-dlopen')
+           
         common.run_command(['./autogen.sh'])
         common.run_command(shlex.split(" ".join(config_cmd)))
         common.run_command(['make','clean'])
@@ -48,6 +50,8 @@ def build_fabtests(libfab_install_path, mode):
     else:
         config_cmd = ['./configure', '--prefix={}'.format(libfab_install_path),
                 '--with-libfabric={}'.format(libfab_install_path)]
+
+    config_cmd.append('--enable-ze-dlopen')
 
     common.run_command(['./autogen.sh'])
     common.run_command(config_cmd)
