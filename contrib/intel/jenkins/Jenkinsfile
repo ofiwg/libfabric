@@ -122,6 +122,23 @@ pipeline {
                      }
 
                  }
+
+                 stage('ze-shm') {
+                     agent {node {label 'eth'}}
+                     steps{
+                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                         {
+                           sh """
+                             env
+                             (
+                                 cd ${env.WORKSPACE}/contrib/intel/jenkins/
+                                 python3.7 runtests.py --prov=shm --ofi_build_mode='dbg'
+                             )
+                           """
+                         }
+                      }
+                 }
+
                  stage('hfi1-psm2-verbs-dbg') {
                      agent {node {label 'hfi1'}}
                      steps{

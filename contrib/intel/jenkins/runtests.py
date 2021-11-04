@@ -49,6 +49,7 @@ if(args_core):
         run.fi_info_test(args_core, hosts, ofi_build_mode)
         run.fabtests(args_core, hosts, ofi_build_mode)
         run.shmemtest(args_core, hosts, ofi_build_mode)
+        run.zetest(args_core, hosts, ofi_build_mode)
         for mpi in mpilist:
             run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode)
             run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode)
