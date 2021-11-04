@@ -544,7 +544,7 @@ int ofi_check_mr_mode(const struct fi_provider *prov, uint32_t api_version,
 out:
 	if (ret) {
 		FI_INFO(prov, FI_LOG_CORE, "Invalid memory registration mode\n");
-		FI_INFO_MR_MODE(prov, prov_mode, user_mode);
+		OFI_INFO_MR_MODE(prov, prov_mode, user_mode);
 	}
 
 	return ret;
@@ -589,7 +589,7 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 
 	if (user_attr->cq_data_size > prov_attr->cq_data_size) {
 		FI_INFO(prov, FI_LOG_CORE, "CQ data size too large\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, cq_data_size);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, cq_data_size);
 		return -FI_ENODATA;
 	}
 
@@ -598,12 +598,12 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 
 	if (user_attr->max_ep_stx_ctx > prov_attr->max_ep_stx_ctx) {
 		FI_INFO(prov, FI_LOG_CORE, "max_ep_stx_ctx greater than supported\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, max_ep_stx_ctx);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, max_ep_stx_ctx);
 	}
 
 	if (user_attr->max_ep_srx_ctx > prov_attr->max_ep_srx_ctx) {
 		FI_INFO(prov, FI_LOG_CORE, "max_ep_srx_ctx greater than supported\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, max_ep_srx_ctx);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, max_ep_srx_ctx);
 	}
 
 	/* following checks only apply to api 1.5 and beyond */
@@ -617,31 +617,31 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 
 	if (user_attr->mr_iov_limit > prov_attr->mr_iov_limit) {
 		FI_INFO(prov, FI_LOG_CORE, "MR iov limit too large\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, mr_iov_limit);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, mr_iov_limit);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->caps & ~(prov_attr->caps)) {
 		FI_INFO(prov, FI_LOG_CORE, "Requested domain caps not supported\n");
-		FI_INFO_CHECK(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
+		OFI_INFO_CHECK(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
 	if ((user_attr->mode & prov_attr->mode) != prov_attr->mode) {
 		FI_INFO(prov, FI_LOG_CORE, "Required domain mode missing\n");
-		FI_INFO_MODE(prov, prov_attr->mode, user_attr->mode);
+		OFI_INFO_MODE(prov, prov_attr->mode, user_attr->mode);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->max_err_data > prov_attr->max_err_data) {
 		FI_INFO(prov, FI_LOG_CORE, "Max err data too large\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, max_err_data);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, max_err_data);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->mr_cnt > prov_attr->mr_cnt) {
 		FI_INFO(prov, FI_LOG_CORE, "MR count too large\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, mr_cnt);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, mr_cnt);
 		return -FI_ENODATA;
 	}
 
@@ -656,7 +656,7 @@ int ofi_check_ep_type(const struct fi_provider *prov,
 	    (prov_attr->type != FI_EP_UNSPEC) &&
 	    (user_attr->type != prov_attr->type)) {
 		FI_INFO(prov, FI_LOG_CORE, "unsupported endpoint type\n");
-		FI_INFO_CHECK(prov, prov_attr, user_attr, type, FI_TYPE_EP_TYPE);
+		OFI_INFO_CHECK(prov, prov_attr, user_attr, type, FI_TYPE_EP_TYPE);
 		return -FI_ENODATA;
 	}
 	return 0;
@@ -678,7 +678,7 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 	if ((user_attr->protocol != FI_PROTO_UNSPEC) &&
 	    (user_attr->protocol != prov_attr->protocol)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported protocol\n");
-		FI_INFO_CHECK(prov, prov_attr, user_attr, protocol, FI_TYPE_PROTOCOL);
+		OFI_INFO_CHECK(prov, prov_attr, user_attr, protocol, FI_TYPE_PROTOCOL);
 		return -FI_ENODATA;
 	}
 
@@ -690,7 +690,7 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 
 	if (user_attr->max_msg_size > prov_attr->max_msg_size) {
 		FI_INFO(prov, FI_LOG_CORE, "Max message size too large\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, max_msg_size);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, max_msg_size);
 		return -FI_ENODATA;
 	}
 
@@ -733,8 +733,8 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		    prov_attr->max_order_raw_size) {
 			FI_INFO(prov, FI_LOG_CORE,
 				"Max order RAW size exceeds supported size\n");
-			FI_INFO_CHECK_VAL(prov, prov_attr, user_attr,
-					  max_order_raw_size);
+			OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr,
+					    max_order_raw_size);
 			return -FI_ENODATA;
 		}
 
@@ -742,8 +742,8 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		    prov_attr->max_order_war_size) {
 			FI_INFO(prov, FI_LOG_CORE,
 				"Max order WAR size exceeds supported size\n");
-			FI_INFO_CHECK_VAL(prov, prov_attr, user_attr,
-					  max_order_war_size);
+			OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr,
+					    max_order_war_size);
 			return -FI_ENODATA;
 		}
 
@@ -751,8 +751,8 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		    prov_attr->max_order_waw_size) {
 			FI_INFO(prov, FI_LOG_CORE,
 				"Max order WAW size exceeds supported size\n");
-			FI_INFO_CHECK_VAL(prov, prov_attr, user_attr,
-					  max_order_waw_size);
+			OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr,
+					    max_order_waw_size);
 			return -FI_ENODATA;
 		}
 	}
@@ -760,7 +760,7 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 	if (user_attr->auth_key_size &&
 	    (user_attr->auth_key_size != prov_attr->auth_key_size)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported authentication size.");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, auth_key_size);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, auth_key_size);
 		return -FI_ENODATA;
 	}
 
@@ -768,7 +768,7 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 	    ofi_max_tag(user_attr->mem_tag_format) >
 		    ofi_max_tag(prov_attr->mem_tag_format)) {
 		FI_INFO(prov, FI_LOG_CORE, "Tag size exceeds supported size\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, mem_tag_format);
+		OFI_INFO_CHECK_U64(prov, prov_attr, user_attr, mem_tag_format);
 		return -FI_ENODATA;
 	}
 
@@ -787,54 +787,54 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 
 	if ((user_attr->caps & ~OFI_IGNORED_RX_CAPS) & ~(prov_attr->caps)) {
 		FI_INFO(prov, FI_LOG_CORE, "caps not supported\n");
-		FI_INFO_CHECK(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
+		OFI_INFO_CHECK(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
 	info_mode = user_attr->mode ? user_attr->mode : info_mode;
 	if ((info_mode & prov_attr->mode) != prov_attr->mode) {
 		FI_INFO(prov, FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(prov, prov_attr->mode, user_attr->mode);
+		OFI_INFO_MODE(prov, prov_attr->mode, user_attr->mode);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->op_flags & ~(prov_attr->op_flags)) {
 		FI_INFO(prov, FI_LOG_CORE, "op_flags not supported\n");
-		FI_INFO_CHECK(prov, prov_attr, user_attr, op_flags,
+		OFI_INFO_CHECK(prov, prov_attr, user_attr, op_flags,
 			     FI_TYPE_OP_FLAGS);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->msg_order & ~(prov_attr->msg_order)) {
 		FI_INFO(prov, FI_LOG_CORE, "msg_order not supported\n");
-		FI_INFO_CHECK(prov, prov_attr, user_attr, msg_order,
+		OFI_INFO_CHECK(prov, prov_attr, user_attr, msg_order,
 			     FI_TYPE_MSG_ORDER);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->comp_order & ~(prov_attr->comp_order)) {
 		FI_INFO(prov, FI_LOG_CORE, "comp_order not supported\n");
-		FI_INFO_CHECK(prov, prov_attr, user_attr, comp_order,
+		OFI_INFO_CHECK(prov, prov_attr, user_attr, comp_order,
 			     FI_TYPE_MSG_ORDER);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->total_buffered_recv > prov_attr->total_buffered_recv) {
 		FI_INFO(prov, FI_LOG_CORE, "total_buffered_recv too large\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr,
-				  total_buffered_recv);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr,
+				    total_buffered_recv);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->size > prov_attr->size) {
 		FI_INFO(prov, FI_LOG_CORE, "size is greater than supported\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, size);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, size);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->iov_limit > prov_attr->iov_limit) {
 		FI_INFO(prov, FI_LOG_CORE, "iov_limit too large\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, iov_limit);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, iov_limit);
 		return -FI_ENODATA;
 	}
 
@@ -843,8 +843,8 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 		/* Just log a notification, but ignore the value */
 		FI_INFO(prov, FI_LOG_CORE,
 			"Total buffered recv size exceeds supported size\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr,
-				  total_buffered_recv);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr,
+				    total_buffered_recv);
 	}
 
 	return 0;
@@ -868,7 +868,7 @@ int ofi_check_attr_subset(const struct fi_provider *prov,
 	if (~expanded_caps & requested_caps) {
 		FI_INFO(prov, FI_LOG_CORE,
 			"requested caps not subset of base endpoint caps\n");
-		FI_INFO_FIELD(prov, expanded_caps, requested_caps,
+		OFI_INFO_FIELD(prov, expanded_caps, requested_caps,
 			"Supported", "Requested", FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
@@ -885,59 +885,59 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 
 	if ((user_attr->caps & ~OFI_IGNORED_TX_CAPS) & ~(prov_attr->caps)) {
 		FI_INFO(prov, FI_LOG_CORE, "caps not supported\n");
-		FI_INFO_CHECK(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
+		OFI_INFO_CHECK(prov, prov_attr, user_attr, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
 	info_mode = user_attr->mode ? user_attr->mode : info_mode;
 	if ((info_mode & prov_attr->mode) != prov_attr->mode) {
 		FI_INFO(prov, FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(prov, prov_attr->mode, user_attr->mode);
+		OFI_INFO_MODE(prov, prov_attr->mode, user_attr->mode);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->op_flags & ~(prov_attr->op_flags)) {
 		FI_INFO(prov, FI_LOG_CORE, "op_flags not supported\n");
-		FI_INFO_CHECK(prov, prov_attr, user_attr, op_flags,
+		OFI_INFO_CHECK(prov, prov_attr, user_attr, op_flags,
 			     FI_TYPE_OP_FLAGS);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->msg_order & ~(prov_attr->msg_order)) {
 		FI_INFO(prov, FI_LOG_CORE, "msg_order not supported\n");
-		FI_INFO_CHECK(prov, prov_attr, user_attr, msg_order,
+		OFI_INFO_CHECK(prov, prov_attr, user_attr, msg_order,
 			     FI_TYPE_MSG_ORDER);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->comp_order & ~(prov_attr->comp_order)) {
 		FI_INFO(prov, FI_LOG_CORE, "comp_order not supported\n");
-		FI_INFO_CHECK(prov, prov_attr, user_attr, comp_order,
+		OFI_INFO_CHECK(prov, prov_attr, user_attr, comp_order,
 			     FI_TYPE_MSG_ORDER);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->inject_size > prov_attr->inject_size) {
 		FI_INFO(prov, FI_LOG_CORE, "inject_size too large\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, inject_size);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, inject_size);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->size > prov_attr->size) {
 		FI_INFO(prov, FI_LOG_CORE, "size is greater than supported\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, size);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, size);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->iov_limit > prov_attr->iov_limit) {
 		FI_INFO(prov, FI_LOG_CORE, "iov_limit too large\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, iov_limit);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, iov_limit);
 		return -FI_ENODATA;
 	}
 
 	if (user_attr->rma_iov_limit > prov_attr->rma_iov_limit) {
 		FI_INFO(prov, FI_LOG_CORE, "rma_iov_limit too large\n");
-		FI_INFO_CHECK_VAL(prov, prov_attr, user_attr, rma_iov_limit);
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, rma_iov_limit);
 		return -FI_ENODATA;
 	}
 
@@ -1039,7 +1039,7 @@ int ofi_check_info(const struct util_prov *util_prov,
 
 	if (user_info->caps & ~(prov_info->caps)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported capabilities\n");
-		FI_INFO_CHECK(prov, prov_info, user_info, caps, FI_TYPE_CAPS);
+		OFI_INFO_CHECK(prov, prov_info, user_info, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
@@ -1047,14 +1047,14 @@ int ofi_check_info(const struct util_prov *util_prov,
 
 	if ((user_info->mode & prov_mode) != prov_mode) {
 		FI_INFO(prov, FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(prov, prov_mode, user_info->mode);
+		OFI_INFO_MODE(prov, prov_mode, user_info->mode);
 		return -FI_ENODATA;
 	}
 
 	if (!fi_valid_addr_format(prov_info->addr_format,
 				  user_info->addr_format)) {
 		FI_INFO(prov, FI_LOG_CORE, "address format not supported\n");
-		FI_INFO_CHECK(prov, prov_info, user_info, addr_format,
+		OFI_INFO_CHECK(prov, prov_info, user_info, addr_format,
 			      FI_TYPE_ADDR_FORMAT);
 		return -FI_ENODATA;
 	}

@@ -238,7 +238,7 @@ static int vrb_check_hints(uint32_t version, const struct fi_info *hints,
 
 	if (hints->caps & ~(info->caps)) {
 		VERBS_INFO(FI_LOG_CORE, "Unsupported capabilities\n");
-		FI_INFO_CHECK(&vrb_prov, info, hints, caps, FI_TYPE_CAPS);
+		OFI_INFO_CHECK(&vrb_prov, info, hints, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
@@ -246,7 +246,7 @@ static int vrb_check_hints(uint32_t version, const struct fi_info *hints,
 
 	if ((hints->mode & prov_mode) != prov_mode) {
 		VERBS_INFO(FI_LOG_CORE, "needed mode not set\n");
-		FI_INFO_MODE(&vrb_prov, prov_mode, hints->mode);
+		OFI_INFO_MODE(&vrb_prov, prov_mode, hints->mode);
 		return -FI_ENODATA;
 	}
 

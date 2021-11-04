@@ -187,7 +187,7 @@ static int efa_check_hints(uint32_t version, const struct fi_info *hints,
 
 	if (hints->caps & ~(info->caps)) {
 		EFA_INFO(FI_LOG_CORE, "Unsupported capabilities\n");
-		FI_INFO_CHECK(&efa_prov, info, hints, caps, FI_TYPE_CAPS);
+		OFI_INFO_CHECK(&efa_prov, info, hints, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
@@ -195,7 +195,7 @@ static int efa_check_hints(uint32_t version, const struct fi_info *hints,
 
 	if ((hints->mode & prov_mode) != prov_mode) {
 		EFA_INFO(FI_LOG_CORE, "Required hints mode bits not set\n");
-		FI_INFO_MODE(&efa_prov, prov_mode, hints->mode);
+		OFI_INFO_MODE(&efa_prov, prov_mode, hints->mode);
 		return -FI_ENODATA;
 	}
 

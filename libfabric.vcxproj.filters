@@ -623,6 +623,9 @@
     <ClInclude Include="include\windows\pthread.h">
       <Filter>Header Files\windows</Filter>
     </ClInclude>
+    <ClInclude Include="include\windows\sched.h">
+      <Filter>Header Files\windows</Filter>
+    </ClInclude>
     <ClInclude Include="include\windows\unistd.h">
       <Filter>Header Files\windows</Filter>
     </ClInclude>
