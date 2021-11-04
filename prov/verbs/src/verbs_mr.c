@@ -71,7 +71,7 @@ struct ibv_mr *vrb_mr_ibv_reg_dmabuf_mr(struct ibv_pd *pd, const void *buf,
 	if (err)
 		return NULL;
 
-	err = ze_hmem_get_base_addr((void *)buf, &base);
+	err = ze_hmem_get_base_addr((void *)buf, &base, &len);
 	if (err)
 		return NULL;
 
