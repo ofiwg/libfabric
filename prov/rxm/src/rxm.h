@@ -653,6 +653,9 @@ struct rxm_ep {
 	uint64_t		msg_cq_last_poll;
 	size_t 			comp_per_progress;
 	int			cq_eq_fairness;
+	void			(*handle_comp_error)(struct rxm_ep *ep);
+	ssize_t			(*handle_comp)(struct rxm_ep *ep,
+					       struct fi_cq_tagged_entry *comp);
 
 	bool			msg_mr_local;
 	bool			rdm_mr_local;
@@ -717,7 +720,9 @@ void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err);
 void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err);
 void rxm_handle_comp_error(struct rxm_ep *rxm_ep);
-ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp);
+ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_tagged_entry *comp);
+void rxm_thru_comp_error(struct rxm_ep *rxm_ep);
+ssize_t rxm_thru_comp(struct rxm_ep *rxm_ep, struct fi_cq_tagged_entry *comp);
 void rxm_ep_progress(struct util_ep *util_ep);
 void rxm_ep_progress_coll(struct util_ep *util_ep);
 void rxm_ep_do_progress(struct util_ep *util_ep);

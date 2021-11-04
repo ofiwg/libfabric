@@ -39,17 +39,28 @@
 #include <ofi_coll.h>
 #include "rxm.h"
 
-int rxm_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
-		  struct fid_cntr **cntr_fid, void *context)
+static int
+rxm_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
+	      struct fid_cntr **cntr_fid, void *context)
 {
-	int ret;
+	struct rxm_domain *domain;
 	struct util_cntr *cntr;
+	int ret;
+
+	domain = container_of(fid_domain, struct rxm_domain,
+			      util_domain.domain_fid.fid);
+
+	if (domain->passthru) {
+		FI_WARN(&rxm_prov, FI_LOG_DOMAIN,
+			"counters not supported in passthru mode\n");
+		return -FI_ENOSYS;
+	}
 
 	cntr = calloc(1, sizeof(*cntr));
 	if (!cntr)
 		return -FI_ENOMEM;
 
-	ret = ofi_cntr_init(&rxm_prov, domain, attr, cntr,
+	ret = ofi_cntr_init(&rxm_prov, fid_domain, attr, cntr,
 			    &ofi_cntr_progress, context);
 	if (ret)
 		goto free;

@@ -740,21 +740,21 @@ void rxm_stop_listen(struct rxm_ep *ep)
 
 static void rxm_flush_msg_cq(struct rxm_ep *ep)
 {
-	struct fi_cq_data_entry comp;
+	struct fi_cq_tagged_entry comp;
 	int ret;
 
 	assert(ofi_ep_lock_held(&ep->util_ep));
 	do {
 		ret = fi_cq_read(ep->msg_cq, &comp, 1);
 		if (ret > 0) {
-			ret = rxm_handle_comp(ep, &comp);
+			ret = ep->handle_comp(ep, &comp);
 			if (ret) {
 				rxm_cq_write_error_all(ep, ret);
 			} else {
 				ret = 1;
 			}
 		} else if (ret == -FI_EAVAIL) {
-			rxm_handle_comp_error(ep);
+			ep->handle_comp_error(ep);
 			ret = 1;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			rxm_cq_write_error_all(ep, ret);
