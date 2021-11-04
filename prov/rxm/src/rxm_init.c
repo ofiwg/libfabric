@@ -64,6 +64,12 @@ char *rxm_proto_state_str[] = {
 	RXM_PROTO_STATES(OFI_STR)
 };
 
+bool rxm_passthru_info(const struct fi_info *info)
+{
+	return info && info->ep_attr &&
+	       info->ep_attr->protocol == FI_PROTO_RXM_TCP;
+}
+
 /*
  * - Support FI_MR_LOCAL/FI_LOCAL_MR as ofi_rxm can handle it.
  * - The RxM FI_RMA implementation is pass-through but the provider can handle

@@ -695,6 +695,8 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *rxm_info,
 		     const struct fi_info *base_info, struct fi_info *core_info);
 int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 		     const struct fi_info *base_info, struct fi_info *info);
+bool rxm_passthru_info(const struct fi_info *info);
+
 int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			     struct fid_domain **dom, void *context);
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
