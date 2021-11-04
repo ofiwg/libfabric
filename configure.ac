@@ -746,6 +746,8 @@ LDFLAGS="$LDFLAGS $rocr_LDFLAGS"
 
 AS_IF([test x"$enable_rocr_dlopen" != x"yes"], [LIBS="$LIBS $rocr_LIBS"])
 
+AC_CHECK_SIZEOF([void *])
+
 dnl Provider-specific checks
 FI_PROVIDER_INIT
 FI_PROVIDER_SETUP([psm])
