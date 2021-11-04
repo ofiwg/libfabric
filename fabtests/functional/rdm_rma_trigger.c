@@ -62,6 +62,7 @@ static int rma_write_trigger(void *src, size_t size,
 static int run_test(void)
 {
 	int ret = 0;
+	uint64_t start_tx, start_rx;
 
 	ret = ft_init_fabric();
 	if (ret)
@@ -75,12 +76,14 @@ static int run_test(void)
 	if (ret)
 		return ret;
 
+	start_tx = fi_cntr_read(txcntr);
+	start_rx = fi_cntr_read(rxcntr);
 	if (opts.dst_addr) {
 		sprintf(tx_buf, "%s%s", welcome_text1, welcome_text2);
 
 		fprintf(stdout, "Triggered RMA write to server\n");
 		ret = rma_write_trigger((char *) tx_buf + strlen(welcome_text1),
-					strlen(welcome_text2), txcntr, 3);
+					strlen(welcome_text2), txcntr, start_tx + 1);
 		if (ret)
 			goto out;
 
@@ -92,9 +95,9 @@ static int run_test(void)
  			FT_PRINTERR("fi_write", ret);
  			goto out;
 		}
-		/* The value of the counter is 4 including a transfer during
-		 * init_av and ft_exchange_keys() */
-		ret = fi_cntr_wait(txcntr, 4, -1);
+		/* The value of the tx counter should have increased by 2
+		 * for both operations (write and triggered) */
+		ret = fi_cntr_wait(txcntr, start_tx + 2, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			goto out;
@@ -102,9 +105,9 @@ static int run_test(void)
 
 		fprintf(stdout, "Received completion events for RMA write operations\n");
 	} else {
-		/* The value of the counter is 4 including a transfer during
-		 * init_av and ft_exchange_keys() */
-		ret = fi_cntr_wait(rxcntr, 4, -1);
+		/* The value of the rx counter should have increased by 2
+		 * for both operations (write and triggered) */
+		ret = fi_cntr_wait(rxcntr, start_rx + 2, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			goto out;
