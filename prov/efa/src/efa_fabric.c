@@ -273,7 +273,7 @@ static char *get_sysfs_path(void)
 			sysfs_path[len] = '\0';
 		}
 	} else {
-		sysfs_path = strndup("/sys", IBV_SYSFS_PATH_MAX);
+		sysfs_path = strdup("/sys");
 	}
 
 	return sysfs_path;

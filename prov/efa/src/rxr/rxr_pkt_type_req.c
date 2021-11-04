@@ -2262,6 +2262,7 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	cmp_data = src_data + rx_entry->total_len;
 	offset = 0;
 
+#ifdef HAVE___INT128
 	/*
 	 * Perform a check here on the datatype and then a copy if this is a
 	 * 128-bit integer (otherwise, take the normal code path). We have to
@@ -2295,6 +2296,7 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 			offset += rx_entry->iov[i].iov_len;
 		}
 	} else {
+#endif
 		for (i = 0; i < rx_entry->iov_count; ++i) {
 			ofi_atomic_swap_handler(op, dt, rx_entry->iov[i].iov_base,
 									src_data + offset,
@@ -2303,7 +2305,9 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 									rx_entry->iov[i].iov_len / dtsize);
 			offset += rx_entry->iov[i].iov_len;
 		}
+#ifdef HAVE___INT128
 	}
+#endif
 
 	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_ATOMRSP_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
