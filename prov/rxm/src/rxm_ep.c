@@ -1309,13 +1309,14 @@ static int rxm_ep_enable_check(struct rxm_ep *rxm_ep)
 
 static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 {
+	struct rxm_ep *ep;
 	int ret;
-	struct rxm_ep *rxm_ep
-		= container_of(fid, struct rxm_ep, util_ep.ep_fid.fid);
+
+	ep = container_of(fid, struct rxm_ep, util_ep.ep_fid.fid);
 
 	switch (command) {
 	case FI_ENABLE:
-		ret = rxm_ep_enable_check(rxm_ep);
+		ret = rxm_ep_enable_check(ep);
 		if (ret)
 			return ret;
 
@@ -1324,14 +1325,13 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		 * opened to keep it simple (avoids progressing only MSG EQ first
 		 * and then progressing both MSG EQ and MSG CQ once the latter
 		 * is opened) */
-		assert(!(rxm_ep->rxm_info->caps & FI_ATOMIC) ||
-		       !rxm_ep->cm_thread);
+		assert(!(ep->rxm_info->caps & FI_ATOMIC) || !ep->cm_thread);
 
-		ret = rxm_ep_msg_cq_open(rxm_ep);
+		ret = rxm_ep_msg_cq_open(ep);
 		if (ret)
 			return ret;
 
-		ret = rxm_start_listen(rxm_ep);
+		ret = rxm_start_listen(ep);
 		if (ret)
 			return ret;
 
@@ -1339,12 +1339,12 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		 * FI_OPT_BUFFERED_LIMIT should have been frozen so we can
 		 * create the rendezvous protocol message pool with the right
 		 * size */
-		ret = rxm_ep_txrx_res_open(rxm_ep);
+		ret = rxm_ep_txrx_res_open(ep);
 		if (ret)
 			return ret;
 
-		if (rxm_ep->srx_ctx) {
-			ret = rxm_prepost_recv(rxm_ep, rxm_ep->srx_ctx);
+		if (ep->srx_ctx && !rxm_passthru_info(ep->rxm_info)) {
+			ret = rxm_prepost_recv(ep, ep->srx_ctx);
 			if (ret)
 				goto err;
 		}
@@ -1356,7 +1356,7 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 
 err:
 	/* TODO: cleanup all allocated resources on error */
-	rxm_ep_txrx_res_close(rxm_ep);
+	rxm_ep_txrx_res_close(ep);
 	return ret;
 }
 

@@ -1841,14 +1841,14 @@ int rxm_post_recv(struct rxm_rx_buf *rx_buf)
 	return ret;
 }
 
-int rxm_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep)
+int rxm_prepost_recv(struct rxm_ep *ep, struct fid_ep *rx_ep)
 {
 	struct rxm_rx_buf *rx_buf;
 	int ret;
 	size_t i;
 
-	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
-		rx_buf = rxm_rx_buf_alloc(rxm_ep, rx_ep);
+	for (i = 0; i < ep->msg_info->rx_attr->size; i++) {
+		rx_buf = rxm_rx_buf_alloc(ep, rx_ep);
 		if (!rx_buf)
 			return -FI_ENOMEM;
 
