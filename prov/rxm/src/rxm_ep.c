@@ -1336,10 +1336,6 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
-		ret = rxm_start_listen(ep);
-		if (ret)
-			return ret;
-
 		/* At the time of enabling endpoint, FI_OPT_BUFFERED_MIN,
 		 * FI_OPT_BUFFERED_LIMIT should have been frozen so we can
 		 * create the rendezvous protocol message pool with the right
@@ -1353,6 +1349,11 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 			if (ret)
 				goto err;
 		}
+
+		ret = rxm_start_listen(ep);
+		if (ret)
+			goto err;
+
 		break;
 	default:
 		return -FI_ENOSYS;
