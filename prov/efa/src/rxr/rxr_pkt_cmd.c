@@ -880,7 +880,10 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	if (base_hdr->version < RXR_PROTOCOL_VERSION) {
-		char host_gid[ep->core_addrlen * 3];
+		/* Allocate RXR_MAX_NAME_LENGTH * 3 to allow compilation with MSVC 
+		 * We are calling abort after this, so allocating on stack is fine
+		 */
+		char host_gid[RXR_MAX_NAME_LENGTH * 3];
 		int length = 0;
 
 		for (i = 0; i < ep->core_addrlen; i++)
