@@ -483,7 +483,7 @@ static int tcpx_op_tagged(struct tcpx_ep *ep)
 	assert(ep->srx_ctx && !tcpx_dynamic_rbuf(ep));
 	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.hdr_size);
 
-	tag = (msg->hdr.base_hdr.flags & FI_REMOTE_CQ_DATA) ?
+	tag = (msg->hdr.base_hdr.flags & TCPX_REMOTE_CQ_DATA) ?
 	      msg->hdr.tag_data_hdr.tag : msg->hdr.tag_hdr.tag;
 
 	rx_entry = ep->srx_ctx->match_tag_rx(ep->srx_ctx, ep, tag);
