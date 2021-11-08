@@ -1336,6 +1336,12 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
+		if (rxm_passthru_info(ep->rxm_info)) {
+			ret = fi_ep_bind(ep->srx_ctx, &ep->msg_cq->fid, FI_RECV);
+			if (ret)
+				return ret;
+		}
+
 		/* At the time of enabling endpoint, FI_OPT_BUFFERED_MIN,
 		 * FI_OPT_BUFFERED_LIMIT should have been frozen so we can
 		 * create the rendezvous protocol message pool with the right
