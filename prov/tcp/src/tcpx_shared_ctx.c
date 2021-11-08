@@ -310,6 +310,53 @@ tcpx_match_tag_addr(struct tcpx_rx_ctx *srx, struct tcpx_ep *ep, uint64_t tag)
 	return NULL;
 }
 
+static bool
+tcpx_srx_cancel_rx(struct tcpx_rx_ctx *srx, struct slist *queue, void *context)
+{
+	struct slist_entry *cur, *prev;
+	struct tcpx_xfer_entry *xfer_entry;
+
+	assert(fastlock_held(&srx->lock));
+
+	slist_foreach(queue, cur, prev) {
+		xfer_entry = container_of(cur, struct tcpx_xfer_entry, entry);
+		if (xfer_entry->context == context) {
+			slist_remove(queue, cur, prev);
+			tcpx_cq_report_error(&srx->cq->util_cq, xfer_entry,
+					     FI_ECANCELED);
+			ofi_buf_free(xfer_entry);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static ssize_t tcpx_srx_cancel(fid_t fid, void *context)
+{
+	struct tcpx_rx_ctx *srx;
+
+	srx = container_of(fid, struct tcpx_rx_ctx, rx_fid.fid);
+
+	fastlock_acquire(&srx->lock);
+	if (!tcpx_srx_cancel_rx(srx, &srx->tag_queue, context))
+		tcpx_srx_cancel_rx(srx, &srx->rx_queue, context);
+	fastlock_release(&srx->lock);
+
+	return 0;
+}
+
+static struct fi_ops_ep tcpx_srx_ops = {
+	.size = sizeof(struct fi_ops_ep),
+	.cancel = tcpx_srx_cancel,
+	.getopt = fi_no_getopt,
+	.setopt = fi_no_setopt,
+	.tx_ctx = fi_no_tx_ctx,
+	.rx_ctx = fi_no_rx_ctx,
+	.rx_size_left = fi_no_rx_size_left,
+	.tx_size_left = fi_no_tx_size_left,
+};
+
 int tcpx_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct tcpx_rx_ctx *srx;
@@ -359,7 +406,7 @@ static int tcpx_srx_close(struct fid *fid)
 	return FI_SUCCESS;
 }
 
-static struct fi_ops fi_ops_srx = {
+static struct fi_ops tcpx_srx_fid_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = tcpx_srx_close,
 	.bind = tcpx_srx_bind,
@@ -379,7 +426,8 @@ int tcpx_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 
 	srx->rx_fid.fid.fclass = FI_CLASS_SRX_CTX;
 	srx->rx_fid.fid.context = context;
-	srx->rx_fid.fid.ops = &fi_ops_srx;
+	srx->rx_fid.fid.ops = &tcpx_srx_fid_ops;
+	srx->rx_fid.ops = &tcpx_srx_ops;
 
 	srx->rx_fid.msg = &tcpx_srx_msg_ops;
 	srx->rx_fid.tagged = &tcpx_srx_tag_ops;
