@@ -46,15 +46,6 @@ static int recv_cancel_client(void)
 	if (ret)
 		return ret;
 
-	ft_tag = CANCEL_TAG;
-	ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, NO_CQ_DATA,
-			 &tx_ctx);
-	if (ret)
-		return ret;
-
-	if (opts.verbose)
-		fprintf(stdout, "CANCEL msg posted to server\n");
-
 	ft_tag = STANDARD_TAG;
 	ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, NO_CQ_DATA,
 			 &tx_ctx);
@@ -63,6 +54,15 @@ static int recv_cancel_client(void)
 
 	if (opts.verbose)
 		fprintf(stdout, "STANDARD msg posted to server\n");
+
+	ft_tag = CANCEL_TAG;
+	ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size, NO_CQ_DATA,
+			 &tx_ctx);
+	if (ret)
+		return ret;
+
+	if (opts.verbose)
+		fprintf(stdout, "CANCEL msg posted to server\n");
 
 	ret = ft_get_tx_comp(tx_seq);
 	if (ret)
@@ -96,12 +96,6 @@ static int recv_cancel_host(void)
 		return ret;
 	}
 
-	/* sync with client */
-	ft_tag = 0;
-	ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
-	if (ret)
-		return ret;
-
 	/* Wait for fi_cq_read to fail indicating an err entry */
 	do {
 		ret = fi_cq_read(rxcq, &recv_completion, 1);
@@ -110,8 +104,8 @@ static int recv_cancel_host(void)
 		else
 			retries++;
 		usleep(1000);
-	} while ((ret == -FI_EAGAIN) && (retries < 5000));
-	if (retries >= 5000) {
+	} while ((ret == -FI_EAGAIN) && (retries < 500));
+	if (retries >= 500) {
 		FT_PRINTERR("ERROR: no error CQ entry in cq_read deteceted",
 			    -FI_EOTHER);
 		return -FI_EOTHER;
@@ -150,6 +144,12 @@ static int recv_cancel_host(void)
 
 	if (opts.verbose)
 		fprintf(stdout, "GOOD: no extra error entries detected\n");
+
+	/* sync with client to start the sends */
+	ft_tag = 0;
+	ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
+	if (ret)
+		return ret;
 
 	/* Check for second recv completion*/
 	do {
