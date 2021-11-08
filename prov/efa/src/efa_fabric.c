@@ -663,7 +663,7 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 static void efa_addr_to_str(const uint8_t *raw_addr, char *str)
 {
 	size_t name_len = strlen(EFA_FABRIC_PREFIX) + INET6_ADDRSTRLEN;
-	char straddr[INET6_ADDRSTRLEN] = {};
+	char straddr[INET6_ADDRSTRLEN] = { 0 };
 
 	if (!inet_ntop(AF_INET6, raw_addr, straddr, INET6_ADDRSTRLEN))
 		return;
