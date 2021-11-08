@@ -41,11 +41,10 @@
 static int efa_generate_rdm_connid()
 {
 	struct timeval tv;
-	struct timezone tz;
 	uint32_t val;
 	int err;
 
-	err = gettimeofday(&tv, &tz);
+	err = gettimeofday(&tv, NULL);
 	if (err) {
 		EFA_WARN(FI_LOG_EP_CTRL, "Cannot gettimeofday, err=%d.\n", err);
 		return 0;
