@@ -113,6 +113,7 @@ static struct fi_ep_attr tcpx_ep_srx_attr = {
 	.rx_ctx_cnt = FI_SHARED_CONTEXT,
 	.max_order_raw_size = SIZE_MAX,
 	.max_order_waw_size = SIZE_MAX,
+	.mem_tag_format = FI_TAG_GENERIC,
 };
 
 static struct fi_domain_attr tcpx_domain_attr = {
