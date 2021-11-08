@@ -433,11 +433,15 @@ unlock:
 
 static ssize_t rxm_ep_cancel(fid_t fid_ep, void *context)
 {
-	struct rxm_ep *rxm_ep;
+	struct rxm_ep *ep;
 
-	rxm_ep = container_of(fid_ep, struct rxm_ep, util_ep.ep_fid);
-	if (!rxm_ep_cancel_recv(rxm_ep, &rxm_ep->recv_queue, context))
-		rxm_ep_cancel_recv(rxm_ep, &rxm_ep->trecv_queue, context);
+	ep = container_of(fid_ep, struct rxm_ep, util_ep.ep_fid);
+
+	if (rxm_passthru_info(ep->rxm_info))
+		return fi_cancel(&ep->srx_ctx->fid, context);
+
+	if (!rxm_ep_cancel_recv(ep, &ep->trecv_queue, context))
+		rxm_ep_cancel_recv(ep, &ep->recv_queue, context);
 
 	return 0;
 }
