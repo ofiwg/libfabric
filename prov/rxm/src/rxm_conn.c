@@ -89,6 +89,10 @@ static void rxm_close_conn(struct rxm_conn *conn)
 	rxm_flush_msg_cq(conn->ep);
 	dlist_remove_init(&conn->loopback_entry);
 	conn->msg_ep = NULL;
+
+	if (conn->state == RXM_CM_CONNECTING || conn->state == RXM_CM_ACCEPTING)
+		conn->ep->connecting_cnt--;
+	assert(conn->ep->connecting_cnt >= 0);
 	conn->state = RXM_CM_IDLE;
 }
 
@@ -228,6 +232,7 @@ static int rxm_send_connect(struct rxm_conn *conn)
 		goto err;
 	}
 	conn->state = RXM_CM_CONNECTING;
+	conn->ep->connecting_cnt++;
 	return 0;
 
 err:
@@ -403,6 +408,8 @@ void rxm_process_connect(struct rxm_eq_cm_entry *cm_entry)
 	if (conn->state == RXM_CM_CONNECTING)
 		conn->remote_index = cm_entry->data.accept.server_conn_id;
 
+	conn->ep->connecting_cnt--;
+	assert(conn->ep->connecting_cnt >= 0);
 	conn->state = RXM_CM_CONNECTED;
 }
 
@@ -577,6 +584,7 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 		goto close;
 
 	conn->state = RXM_CM_ACCEPTING;
+	conn->ep->connecting_cnt++;
 put:
 	rxm_put_peer(peer);
 	fi_freeinfo(cm_entry->info);
