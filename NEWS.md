@@ -26,7 +26,6 @@ v1.14.0, Fri Nov 19, 2021
   messages
 - Fix issue in MR registration path when cache is used with CUDA buffers
 - Print a clearer warning message when the reorder buffer is too small
-- Fix 128-bit atomic support
 - Various bugfixes in send path causing unneeded copies
 - Various bugfixes caught by inspection and coverity
 - Add documentation describing version 4 of the RDM protocol
