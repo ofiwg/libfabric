@@ -1,6 +1,6 @@
 
 /*
- * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2016-2021 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2019 Amazon.com, Inc. or its affiliates. All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
@@ -132,6 +132,9 @@ extern size_t rxm_packet_size;
 	FI_DBG(&rxm_prov, subsystem, log_str 			\
 	       " (fi_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 ")\n",\
 	       addr, tag)
+#define RXM_WARN_ERR(subsystem, log_str, err) \
+	FI_WARN(&rxm_prov, subsystem, log_str "%s (%d)\n", \
+		fi_strerror((int) -(err)), (int) err)
 
 #define RXM_GET_PROTO_STATE(context)					\
 	(*(enum rxm_proto_state *)					\
