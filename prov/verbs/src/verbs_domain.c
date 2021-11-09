@@ -224,7 +224,7 @@ static int vrb_open_device_by_name(struct vrb_domain *domain, const char *name)
 				      strlen(name) - strlen(verbs_dgram_domain.suffix));
 			break;
 		default:
-			VERBS_WARN(FI_LOG_DOMAIN,
+			VRB_WARN(FI_LOG_DOMAIN,
 				   "Unsupported EP type - %d\n", domain->ep_type);
 			/* Never should go here */
 			assert(0);
@@ -338,13 +338,13 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	ret = ofi_mr_cache_init(&_domain->util_domain, memory_monitors,
 				&_domain->cache);
 	if (ret) {
-		VERBS_INFO(FI_LOG_MR,
+		VRB_INFO(FI_LOG_MR,
 			   "MR cache init failed: %s. MR caching disabled.\n",
 			   fi_strerror(-ret));
 	} else {
 		for (iface = 0; iface < OFI_HMEM_MAX; iface++) {
 			if (_domain->cache.monitors[iface])
-				VERBS_INFO(FI_LOG_MR,
+				VRB_INFO(FI_LOG_MR,
 					   "MR cache enabled for %s memory\n",
 					   fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
 		}
@@ -378,7 +378,7 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 		_domain->util_domain.domain_fid.ops = &vrb_msg_domain_ops;
 		break;
 	default:
-		VERBS_INFO(FI_LOG_DOMAIN, "Ivalid EP type is provided, "
+		VRB_INFO(FI_LOG_DOMAIN, "Ivalid EP type is provided, "
 			   "EP type :%d\n", _domain->ep_type);
 		ret = -FI_EINVAL;
 		goto err4;
@@ -389,14 +389,12 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 err4:
 	ofi_mr_cache_cleanup(&_domain->cache);
 	if (ibv_dealloc_pd(_domain->pd))
-		VERBS_INFO_ERRNO(FI_LOG_DOMAIN,
-				 "ibv_dealloc_pd", errno);
+		VRB_WARN_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd");
 err3:
 	fi_freeinfo(_domain->info);
 err2:
 	if (ofi_domain_close(&_domain->util_domain))
-		VERBS_INFO(FI_LOG_DOMAIN,
-			   "ofi_domain_close fails");
+		VRB_WARN(FI_LOG_DOMAIN, "ofi_domain_close fails");
 err1:
 	free(_domain);
 	return ret;
