@@ -179,9 +179,9 @@ void DEFAULT_SYMVER_PRE(fi_log)(const struct fi_provider *prov, enum fi_log_leve
 
 	va_list vargs;
 
-	size = snprintf(buf, sizeof(buf), "%s:%d:%s:%s:%s():%d<%s> ", PACKAGE,
-			pid, prov->name, log_subsys[subsys], func, line,
-			log_levels[level]);
+	size = snprintf(buf, sizeof(buf), "%s:%d:%ld:%s:%s:%s():%d<%s> ",
+			PACKAGE, pid, (unsigned long) time(NULL), prov->name,
+			log_subsys[subsys], func, line, log_levels[level]);
 
 	va_start(vargs, fmt);
 	vsnprintf(buf + size, sizeof(buf) - size, fmt, vargs);
