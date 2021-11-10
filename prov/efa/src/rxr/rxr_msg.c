@@ -172,11 +172,13 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 
 		max_rtm_data_size = rxr_pkt_req_max_data_size(rxr_ep,
 							      tx_entry->addr,
-							      RXR_DC_EAGER_MSGRTM_PKT + tagged);
+							      RXR_DC_EAGER_MSGRTM_PKT + tagged,
+							      tx_entry->fi_flags, 0);
 	} else {
 		max_rtm_data_size = rxr_pkt_req_max_data_size(rxr_ep,
 							      tx_entry->addr,
-							      RXR_EAGER_MSGRTM_PKT + tagged);
+							      RXR_EAGER_MSGRTM_PKT + tagged,
+							      tx_entry->fi_flags, 0);
 	}
 
 	if (peer->is_local) {

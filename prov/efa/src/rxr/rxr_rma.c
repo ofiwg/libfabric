@@ -407,7 +407,7 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	struct efa_domain *efa_domain;
 	bool delivery_complete_requested;
 	int ctrl_type;
-	size_t max_rtm_data_size;
+	size_t max_eager_rtw_data_size;
 	struct rxr_domain *rxr_domain = rxr_ep_domain(ep);
 
 	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
@@ -446,17 +446,21 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 		else if (!rxr_peer_support_delivery_complete(peer))
 			return -FI_EOPNOTSUPP;
 
-		max_rtm_data_size = rxr_pkt_req_max_data_size(ep,
-							      tx_entry->addr,
-							      RXR_DC_EAGER_RTW_PKT);
+		max_eager_rtw_data_size = rxr_pkt_req_max_data_size(ep,
+								    tx_entry->addr,
+								    RXR_DC_EAGER_RTW_PKT,
+								    tx_entry->fi_flags,
+								    tx_entry->rma_iov_count);
 	} else {
-		max_rtm_data_size = rxr_pkt_req_max_data_size(ep,
-							      tx_entry->addr,
-							      RXR_EAGER_RTW_PKT);
+		max_eager_rtw_data_size = rxr_pkt_req_max_data_size(ep,
+								    tx_entry->addr,
+								    RXR_EAGER_RTW_PKT,
+								    tx_entry->fi_flags,
+								    tx_entry->rma_iov_count);
 	}
 
 	/* Inter instance */
-	if (tx_entry->total_len < max_rtm_data_size) {
+	if (tx_entry->total_len <= max_eager_rtw_data_size) {
 		ctrl_type = delivery_complete_requested ?
 			RXR_DC_EAGER_RTW_PKT : RXR_EAGER_RTW_PKT;
 		return rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, ctrl_type, 0);
