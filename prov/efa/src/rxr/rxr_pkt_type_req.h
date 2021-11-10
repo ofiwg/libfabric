@@ -50,11 +50,14 @@ size_t rxr_pkt_req_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
 size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
+size_t rxr_pkt_req_header_size(int pkt_type, uint16_t flags, size_t rma_iov_count);
+
 size_t rxr_pkt_req_max_header_size(int pkt_type);
 
 size_t rxr_pkt_max_header_size(void);
 
-size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type);
+size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type,
+				 uint64_t fi_flags, size_t rma_iov_count);
 
 static inline
 struct rxr_rtm_base_hdr *rxr_get_rtm_base_hdr(void *pkt)
