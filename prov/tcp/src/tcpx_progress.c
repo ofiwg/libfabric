@@ -119,6 +119,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 
 		if (ret) {
 			FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "msg send failed\n");
+			tcpx_cntr_incerr(ep, tx_entry);
 			tcpx_cq_report_error(&cq->util_cq, tx_entry, -ret);
 			tcpx_free_xfer(cq, tx_entry);
 		} else if (tx_entry->ctrl_flags & TCPX_NEED_ACK) {
@@ -138,7 +139,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 			slist_insert_tail(&tx_entry->entry,
 						&ep->async_queue);
 		} else {
-			tcpx_cq_report_success(&cq->util_cq, tx_entry);
+			ep->report_success(ep, &cq->util_cq, tx_entry);
 			tcpx_free_xfer(cq, tx_entry);
 		}
 
@@ -269,7 +270,7 @@ retry:
 			goto err;
 	}
 
-	tcpx_cq_report_success(ep->util_ep.rx_cq, rx_entry);
+	ep->report_success(ep, ep->util_ep.rx_cq, rx_entry);
 	tcpx_free_rx(rx_entry);
 	tcpx_reset_rx(ep);
 	return 0;
@@ -277,6 +278,7 @@ retry:
 err:
 	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 		"msg recv failed ret = %d (%s)\n", ret, fi_strerror(-ret));
+	tcpx_cntr_incerr(ep, rx_entry);
 	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	tcpx_free_rx(rx_entry);
 	tcpx_reset_rx(ep);
@@ -332,7 +334,7 @@ static int tcpx_process_remote_write(struct tcpx_ep *ep)
 			goto err;
 	}
 
-	tcpx_cq_report_success(ep->util_ep.rx_cq, rx_entry);
+	ep->report_success(ep, ep->util_ep.rx_cq, rx_entry);
 	tcpx_free_xfer(cq, rx_entry);
 	tcpx_reset_rx(ep);
 	return FI_SUCCESS;
@@ -360,9 +362,10 @@ static int tcpx_process_remote_read(struct tcpx_ep *ep)
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
 			"msg recv Failed ret = %d\n", ret);
+		tcpx_cntr_incerr(ep, rx_entry);
 		tcpx_cq_report_error(&cq->util_cq, rx_entry, -ret);
 	} else {
-		tcpx_cq_report_success(&cq->util_cq, rx_entry);
+		ep->report_success(ep, &cq->util_cq, rx_entry);
 	}
 
 	slist_remove_head(&rx_entry->ep->rma_read_queue);
@@ -415,7 +418,7 @@ static int tcpx_handle_ack(struct tcpx_ep *ep)
 				struct tcpx_xfer_entry, entry);
 
 	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
-	tcpx_cq_report_success(ep->util_ep.tx_cq, tx_entry);
+	ep->report_success(ep, ep->util_ep.tx_cq, tx_entry);
 	tcpx_free_xfer(cq, tx_entry);
 	tcpx_reset_rx(ep);
 	return FI_SUCCESS;
@@ -467,6 +470,7 @@ static int tcpx_op_msg(struct tcpx_ep *ep)
 truncate_err:
 	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 		"posted rx buffer size is not big enough\n");
+	tcpx_cntr_incerr(ep, rx_entry);
 	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	tcpx_free_rx(rx_entry);
 	return ret;
@@ -506,6 +510,7 @@ static int tcpx_op_tagged(struct tcpx_ep *ep)
 truncate_err:
 	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 		"posted rx buffer size is not big enough\n");
+	tcpx_cntr_incerr(ep, rx_entry);
 	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	tcpx_free_rx(rx_entry);
 	return ret;
@@ -714,7 +719,7 @@ void tcpx_progress_async(struct tcpx_ep *ep)
 			break;
 
 		slist_remove_head(&ep->async_queue);
-		tcpx_cq_report_success(ep->util_ep.tx_cq, xfer);
+		ep->report_success(ep, ep->util_ep.tx_cq, xfer);
 		tcpx_free_tx(xfer);
 	}
 }

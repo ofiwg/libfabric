@@ -165,29 +165,9 @@ static int tx_cm_data(SOCKET fd, uint8_t type, struct tcpx_cm_context *cm_ctx)
 	return FI_SUCCESS;
 }
 
-static int tcpx_ep_enable(struct tcpx_ep *ep,
-			  struct fi_eq_cm_entry *cm_entry,
-			  size_t cm_entry_sz)
-
+static int tcpx_ep_add_fd(struct tcpx_ep *ep)
 {
-	int ret = 0;
-
-	if (!ep->util_ep.rx_cq && !ep->util_ep.tx_cq) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"ep must be bound to cq's\n");
-		return -FI_ENOCQ;
-	}
-
-	fastlock_acquire(&ep->lock);
-	if (ep->state != TCPX_CONNECTING && ep->state != TCPX_ACCEPTING) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"ep is in invalid state\n");
-		ret = -FI_EINVAL;
-		goto unlock;
-	}
-
-	ep->state = TCPX_CONNECTED;
-	fastlock_release(&ep->lock);
+	int ret;
 
 	if (ep->util_ep.rx_cq) {
 		ret = ofi_wait_add_fd(ep->util_ep.rx_cq->wait,
@@ -213,6 +193,108 @@ static int tcpx_ep_enable(struct tcpx_ep *ep,
 		}
 	}
 
+	if (ep->util_ep.rx_cntr) {
+		ret = ofi_wait_add_fd(ep->util_ep.rx_cntr->wait,
+				      ep->bsock.sock, POLLIN, tcpx_try_func,
+				      (void *) &ep->util_ep,
+				      &ep->util_ep.ep_fid.fid);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"Failed to add fd to rx_cntr\n");
+			return ret;
+		}
+	}
+
+	if (ep->util_ep.tx_cntr) {
+		ret = ofi_wait_add_fd(ep->util_ep.tx_cntr->wait,
+				      ep->bsock.sock, POLLIN, tcpx_try_func,
+				      (void *) &ep->util_ep,
+				      &ep->util_ep.ep_fid.fid);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"Failed to add fd to tx_cntr\n");
+			return ret;
+		}
+	}
+
+	if (ep->util_ep.wr_cntr) {
+		ret = ofi_wait_add_fd(ep->util_ep.wr_cntr->wait,
+				      ep->bsock.sock, POLLIN, tcpx_try_func,
+				      (void *) &ep->util_ep,
+				      &ep->util_ep.ep_fid.fid);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"Failed to add fd to wr_cntr\n");
+			return ret;
+		}
+	}
+
+	if (ep->util_ep.rd_cntr) {
+		ret = ofi_wait_add_fd(ep->util_ep.rd_cntr->wait,
+				      ep->bsock.sock, POLLIN, tcpx_try_func,
+				      (void *) &ep->util_ep,
+				      &ep->util_ep.ep_fid.fid);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"Failed to add fd to rd_cntr\n");
+			return ret;
+		}
+	}
+
+	if (ep->util_ep.rem_wr_cntr) {
+		ret = ofi_wait_add_fd(ep->util_ep.rem_wr_cntr->wait,
+				      ep->bsock.sock, POLLIN, tcpx_try_func,
+				      (void *) &ep->util_ep,
+				      &ep->util_ep.ep_fid.fid);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"Failed to add fd to rem_wr_cntr\n");
+			return ret;
+		}
+	}
+
+	if (ep->util_ep.rem_rd_cntr) {
+		ret = ofi_wait_add_fd(ep->util_ep.rem_rd_cntr->wait,
+				      ep->bsock.sock, POLLIN, tcpx_try_func,
+				      (void *) &ep->util_ep,
+				      &ep->util_ep.ep_fid.fid);
+		if (ret) {
+			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+				"Failed to add fd to rem_rd_cntr\n");
+			return ret;
+		}
+	}
+	return 0;
+}
+
+static int tcpx_ep_enable(struct tcpx_ep *ep,
+			  struct fi_eq_cm_entry *cm_entry,
+			  size_t cm_entry_sz)
+
+{
+	int ret = 0;
+
+	if (!ep->util_ep.rx_cq && !ep->util_ep.tx_cq) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"ep must be bound to cq's\n");
+		return -FI_ENOCQ;
+	}
+
+	fastlock_acquire(&ep->lock);
+	if (ep->state != TCPX_CONNECTING && ep->state != TCPX_ACCEPTING) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"ep is in invalid state\n");
+		ret = -FI_EINVAL;
+		goto unlock;
+	}
+
+	ep->state = TCPX_CONNECTED;
+	fastlock_release(&ep->lock);
+
+	ret = tcpx_ep_add_fd(ep);
+	if (ret)
+		return ret;
+
 	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, cm_entry,
 				cm_entry_sz, 0);
 	if (ret < 0) {
@@ -221,6 +303,7 @@ static int tcpx_ep_enable(struct tcpx_ep *ep,
 	}
 
 	return 0;
+
 unlock:
 	fastlock_release(&ep->lock);
 	return ret;

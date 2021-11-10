@@ -38,7 +38,10 @@
 #define TCPX_DEF_CQ_SIZE (1024)
 
 
-void tcpx_cq_progress(struct util_cq *cq)
+/*
+ * Must hold lock protecting ep_list
+ */
+void tcpx_progress(struct dlist_entry *ep_list, struct util_wait *wait)
 {
 	struct ofi_epollfds_event events[MAX_POLL_EVENTS];
 	struct fid_list_entry *fid_entry;
@@ -49,10 +52,9 @@ void tcpx_cq_progress(struct util_cq *cq)
 	uint32_t inevent, outevent, errevent;
 	int nfds, i;
 
-	wait_fd = container_of(cq->wait, struct util_wait_fd, util_wait);
+	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
 
-	cq->cq_fastlock_acquire(&cq->ep_list_lock);
-	dlist_foreach(&cq->ep_list, item) {
+	dlist_foreach(ep_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
 		ep = container_of(fid_entry->fid, struct tcpx_ep,
 				  util_ep.ep_fid.fid);
@@ -88,7 +90,7 @@ void tcpx_cq_progress(struct util_cq *cq)
 		errevent = OFI_EPOLL_ERR;
 	}
 	if (nfds <= 0)
-		goto unlock;
+		return;
 
 	for (i = 0; i < nfds; i++) {
 		fid = events[i].data.ptr;
@@ -107,7 +109,12 @@ void tcpx_cq_progress(struct util_cq *cq)
 			tcpx_progress_tx(ep);
 		fastlock_release(&ep->lock);
 	}
-unlock:
+}
+
+void tcpx_cq_progress(struct util_cq *cq)
+{
+	cq->cq_fastlock_acquire(&cq->ep_list_lock);
+	tcpx_progress(&cq->ep_list, cq->wait);
 	cq->cq_fastlock_release(&cq->ep_list_lock);
 }
 
@@ -152,8 +159,8 @@ void tcpx_get_cq_info(struct tcpx_xfer_entry *entry, uint64_t *flags,
 	}
 }
 
-void tcpx_cq_report_success(struct util_cq *cq,
-			    struct tcpx_xfer_entry *xfer_entry)
+void tcpx_report_success(struct tcpx_ep *ep, struct util_cq *cq,
+			 struct tcpx_xfer_entry *xfer_entry)
 {
 	uint64_t flags, data, tag;
 	size_t len;
@@ -288,5 +295,102 @@ destroy_pool:
 	ofi_bufpool_destroy(cq->xfer_pool);
 free_cq:
 	free(cq);
+	return ret;
+}
+
+
+void tcpx_cntr_progress(struct util_cntr *cntr)
+{
+	fastlock_acquire(&cntr->ep_list_lock);
+	tcpx_progress(&cntr->ep_list, cntr->wait);
+	fastlock_release(&cntr->ep_list_lock);
+}
+
+static struct util_cntr *
+tcpx_get_cntr(struct tcpx_ep *ep, struct tcpx_xfer_entry *xfer_entry)
+{
+	struct util_cntr *cntr;
+
+	if (xfer_entry->cq_flags & FI_RECV) {
+		cntr = ep->util_ep.rx_cntr;
+	} else if (xfer_entry->cq_flags & FI_SEND) {
+		cntr = ep->util_ep.tx_cntr;
+	} else if (xfer_entry->cq_flags & FI_WRITE) {
+		cntr = ep->util_ep.wr_cntr;
+	} else if (xfer_entry->cq_flags & FI_READ) {
+		cntr = ep->util_ep.rd_cntr;
+	} else if (xfer_entry->cq_flags & FI_REMOTE_WRITE) {
+		cntr = ep->util_ep.rem_wr_cntr;
+	} else if (xfer_entry->cq_flags & FI_REMOTE_READ) {
+		cntr = ep->util_ep.rem_rd_cntr;
+	} else {
+		assert(0);
+		cntr = NULL;
+	}
+
+	return cntr;
+}
+
+static void
+tcpx_cntr_inc(struct tcpx_ep *ep, struct tcpx_xfer_entry *xfer_entry)
+{
+	struct util_cntr *cntr;
+
+	if (xfer_entry->ctrl_flags & TCPX_INTERNAL_XFER)
+		return;
+
+	cntr = tcpx_get_cntr(ep, xfer_entry);
+	if (cntr)
+		fi_cntr_add(&cntr->cntr_fid, 1);
+}
+
+void tcpx_report_cntr_success(struct tcpx_ep *ep, struct util_cq *cq,
+			      struct tcpx_xfer_entry *xfer_entry)
+{
+	tcpx_cntr_inc(ep, xfer_entry);
+	tcpx_report_success(ep, cq, xfer_entry);
+}
+
+void tcpx_cntr_incerr(struct tcpx_ep *ep, struct tcpx_xfer_entry *xfer_entry)
+{
+	struct util_cntr *cntr;
+
+	if (ep->report_success == tcpx_report_success ||
+	    xfer_entry->ctrl_flags & TCPX_INTERNAL_XFER)
+		return;
+
+	cntr = tcpx_get_cntr(ep, xfer_entry);
+	if (cntr)
+		fi_cntr_adderr(&cntr->cntr_fid, 1);
+}
+
+int tcpx_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
+		   struct fid_cntr **cntr_fid, void *context)
+{
+	struct util_cntr *cntr;
+	struct fi_cntr_attr cntr_attr;
+	int ret;
+
+	cntr = calloc(1, sizeof(*cntr));
+	if (!cntr)
+		return -FI_ENOMEM;
+
+	if (attr->wait_obj == FI_WAIT_NONE ||
+	    attr->wait_obj == FI_WAIT_UNSPEC) {
+		cntr_attr = *attr;
+		cntr_attr.wait_obj = FI_WAIT_POLLFD;
+		attr = &cntr_attr;
+	}
+
+	ret = ofi_cntr_init(&tcpx_prov, fid_domain, attr, cntr,
+			    &tcpx_cntr_progress, context);
+	if (ret)
+		goto free;
+
+	*cntr_fid = &cntr->cntr_fid;
+	return FI_SUCCESS;
+
+free:
+	free(cntr);
 	return ret;
 }

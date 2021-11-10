@@ -545,6 +545,33 @@ static ssize_t tcpx_ep_cancel(fid_t fid, void *context)
 	return 0;
 }
 
+static void tcpx_ep_del_fd(struct tcpx_ep *ep)
+{
+	if (ep->util_ep.rx_cq)
+		ofi_wait_del_fd(ep->util_ep.rx_cq->wait, ep->bsock.sock);
+
+	if (ep->util_ep.tx_cq)
+		ofi_wait_del_fd(ep->util_ep.tx_cq->wait, ep->bsock.sock);
+
+	if (ep->util_ep.rx_cntr)
+		ofi_wait_del_fd(ep->util_ep.rx_cntr->wait, ep->bsock.sock);
+
+	if (ep->util_ep.tx_cntr)
+		ofi_wait_del_fd(ep->util_ep.tx_cntr->wait, ep->bsock.sock);
+
+	if (ep->util_ep.wr_cntr)
+		ofi_wait_del_fd(ep->util_ep.wr_cntr->wait, ep->bsock.sock);
+
+	if (ep->util_ep.rd_cntr)
+		ofi_wait_del_fd(ep->util_ep.rd_cntr->wait, ep->bsock.sock);
+
+	if (ep->util_ep.rem_wr_cntr)
+		ofi_wait_del_fd(ep->util_ep.rem_wr_cntr->wait, ep->bsock.sock);
+
+	if (ep->util_ep.rem_rd_cntr)
+		ofi_wait_del_fd(ep->util_ep.rem_rd_cntr->wait, ep->bsock.sock);
+}
+
 static int tcpx_ep_close(struct fid *fid)
 {
 	struct tcpx_ep *ep;
@@ -558,11 +585,7 @@ static int tcpx_ep_close(struct fid *fid)
 	if (eq)
 		fastlock_acquire(&eq->close_lock);
 
-	if (ep->util_ep.rx_cq)
-		ofi_wait_del_fd(ep->util_ep.rx_cq->wait, ep->bsock.sock);
-
-	if (ep->util_ep.tx_cq)
-		ofi_wait_del_fd(ep->util_ep.tx_cq->wait, ep->bsock.sock);
+	tcpx_ep_del_fd(ep);
 
 	if (ep->util_ep.eq && ep->util_ep.eq->wait)
 		ofi_wait_del_fd(ep->util_ep.eq->wait, ep->bsock.sock);
@@ -617,6 +640,7 @@ static int tcpx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct tcpx_ep *ep;
 	struct tcpx_rx_ctx *rx_ctx;
+	int ret;
 
 	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
@@ -626,7 +650,11 @@ static int tcpx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		return FI_SUCCESS;
 	}
 
-	return ofi_ep_bind(&ep->util_ep, bfid, flags);
+	ret = ofi_ep_bind(&ep->util_ep, bfid, flags);
+	if (!ret && (bfid->fclass == FI_CLASS_CNTR))
+		ep->report_success = tcpx_report_cntr_success;
+
+	return ret;
 }
 
 static struct fi_ops tcpx_ep_fi_ops = {
@@ -803,6 +831,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ep->cur_rx.hdr_len = sizeof(ep->cur_rx.hdr.base_hdr);
 	ep->min_multi_recv_size = TCPX_MIN_MULTI_RECV;
 	tcpx_config_bsock(&ep->bsock);
+	ep->report_success = tcpx_report_success;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &tcpx_ep_fi_ops;

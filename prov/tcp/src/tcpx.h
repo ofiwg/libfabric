@@ -276,6 +276,8 @@ struct tcpx_ep {
 	/* lock for protecting tx/rx queues, rma list, state*/
 	fastlock_t		lock;
 	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
+	void (*report_success)(struct tcpx_ep *ep, struct util_cq *cq,
+			       struct tcpx_xfer_entry *xfer_entry);
 	size_t			min_multi_recv_size;
 	bool			pollout_set;
 };
@@ -335,6 +337,8 @@ struct tcpx_cq {
 	struct ofi_bufpool	*xfer_pool;
 };
 
+/* tcpx_cntr maps directly to util_cntr */
+
 struct tcpx_eq {
 	struct util_eq		util_eq;
 	/*
@@ -364,13 +368,18 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err);
 
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context);
-void tcpx_cq_report_success(struct util_cq *cq,
-			    struct tcpx_xfer_entry *xfer_entry);
+void tcpx_report_success(struct tcpx_ep *ep, struct util_cq *cq,
+			 struct tcpx_xfer_entry *xfer_entry);
 void tcpx_cq_report_error(struct util_cq *cq,
 			  struct tcpx_xfer_entry *xfer_entry,
 			  int err);
 void tcpx_get_cq_info(struct tcpx_xfer_entry *entry, uint64_t *flags,
 		      uint64_t *data, uint64_t *tag);
+int tcpx_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
+		   struct fid_cntr **cntr_fid, void *context);
+void tcpx_report_cntr_success(struct tcpx_ep *ep, struct util_cq *cq,
+			      struct tcpx_xfer_entry *xfer_entry);
+void tcpx_cntr_incerr(struct tcpx_ep *ep, struct tcpx_xfer_entry *xfer_entry);
 
 void tcpx_reset_rx(struct tcpx_ep *ep);
 
