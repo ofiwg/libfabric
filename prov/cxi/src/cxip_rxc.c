@@ -273,6 +273,9 @@ static void cxip_rxc_req_buf_fini(struct cxip_rxc *rxc)
 
 	assert(rxc->rx_pte->state == C_PTLTE_DISABLED);
 
+	CXIP_DBG("Number of request list buffers allocated: %d\n",
+		 ofi_atomic_get32(&rxc->req_bufs_allocated));
+
 	/* All request buffers are split between the active and consumed list.
 	 * Only active buffers need to be unlinked.
 	 */

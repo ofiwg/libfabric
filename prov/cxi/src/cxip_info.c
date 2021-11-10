@@ -535,7 +535,9 @@ static void cxip_env_init(void)
 				  cxip_env.req_buf_min_posted);
 		}
 
-		if (cxip_env.req_buf_max_count < cxip_env.req_buf_min_posted) {
+		/* Zero max count is unlimited */
+		if (cxip_env.req_buf_max_count &&
+		    cxip_env.req_buf_max_count < cxip_env.req_buf_min_posted) {
 			cxip_env.req_buf_max_count =
 					cxip_env.req_buf_min_posted;
 			CXIP_WARN("Adjusted request buffer max count to %lu\n",

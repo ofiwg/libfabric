@@ -318,7 +318,8 @@ at the target until it is matched to a Receive operation.
 Long messages are transferred using a rendezvous protocol.
 The provider implements two rendezvous protocols: offloaded and eager.
 The threshold at which the rendezvous protocol is used is controlled
-with the \f[I]FI_CXI_RDZV_THRESHOLD\f[R] environment variable.
+with the \f[I]FI_CXI_RDZV_THRESHOLD\f[R] and
+\f[I]FI_CXI_RDZV_GET_MIN\f[R] environment variables.
 .PP
 In the offloaded rendezvous protocol, a portion of the message payload
 is sent along with the message header.
@@ -338,7 +339,7 @@ entire payload is dropped.
 Later, when the message is matched to a Receive operation, the entire
 payload is pulled from the source using an RDMA Get operation.
 .PP
-The rendezvous protocol is controlled using the
+The selection of the rendezvous protocol is controlled using the
 \f[I]FI_CXI_RDZV_OFFLOAD\f[R] environment variable.
 The provider uses the offloaded rendezvous protocol by default.
 .PP
@@ -354,8 +355,8 @@ when resources are exhausted, hardware will transition to hybrid
 operation where hardware and software share matching responsibility.
 .PP
 To help avoid this condition, increase Overflow buffer space using
-environment variables \f[I]FI_CXI_OFLOW_*\f[R] and software EP match and
-hybrid modes Request buffer space using the variables
+environment variables \f[I]FI_CXI_OFLOW_*\f[R], and for software and
+hybrid RX match modes increase Request buffer space using the variables
 \f[I]FI_CXI_REQ_*\f[R].
 .SS Message Ordering
 .PP
@@ -681,18 +682,19 @@ The environment variables \f[I]FI_CXI_REQ_BUF_SIZE\f[R] and
 number of the eager request buffers posted to handle incoming unmatched
 messages.
 .RE
-.PP
-\f[I]FI_CXI_HYBRID_PREEMPTIVE\f[R] When in hybrid mode, this variable
-can be used to enable preemptive transitions to software matching.
+.TP
+\f[I]FI_CXI_HYBRID_PREEMPTIVE\f[R]
+When in hybrid mode, this variable can be used to enable preemptive
+transitions to software matching.
 This is useful at scale for poorly written applications with a large
 number of unexpected messages where reserved resources may be
 insufficient to prevent to prevent starvation of software request list
 match entries.
 Default is 0, disabled.
-.PP
-\f[I]FI_CXI_HYBRID_RECV_PREEMPTIVE\f[R] When in hybrid mode, this
-variable can be used to enable preemptive transitions to software
-matching.
+.TP
+\f[I]FI_CXI_HYBRID_RECV_PREEMPTIVE\f[R]
+When in hybrid mode, this variable can be used to enable preemptive
+transitions to software matching.
 This is useful at scale for poorly written applications with a large
 number of unmatched posted receives where reserved resources may be
 insufficient to prevent starvation of software request list match
@@ -703,13 +705,21 @@ Default is 0, disabled.
 Size of request buffers.
 Increasing the request buffer size allows for more unmatched messages to
 be sent into a single request buffer.
+The default size is 2MB.
 .TP
 \f[I]FI_CXI_REQ_BUF_MIN_POSTED\f[R]
 The minimum number of request buffers that should be posted.
+The default minimum posted count is 3.
+Care should be taken to size appropriately based on job scale and
+traffic.
 .TP
 \f[I]FI_CXI_REQ_BUF_MAX_COUNT\f[R]
 The maximum number of request buffers that can be allocated.
-Experimental, currently ignored.
+The default maximum count is 10.
+A value of 0 indicates the count should be unbounded and scale as
+required.
+Care should be taken to size appropriately based on job scale and
+traffic.
 .TP
 \f[I]FI_CXI_MSG_LOSSLESS\f[R]
 Enable or disable lossless receive matching.

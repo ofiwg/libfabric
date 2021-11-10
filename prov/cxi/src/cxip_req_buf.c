@@ -594,8 +594,9 @@ int cxip_req_buf_replenish(struct cxip_rxc *rxc, bool seq_restart)
 
 	while ((ofi_atomic_get32(&rxc->req_bufs_linked) <
 		rxc->req_buf_min_posted) &&
+	       (!rxc->req_buf_max_count ||
 	       (ofi_atomic_get32(&rxc->req_bufs_allocated) <
-		rxc->req_buf_max_count)) {
+		rxc->req_buf_max_count))) {
 
 		RXC_DBG(rxc, "Allocate new req buf entry %p\n", buf);
 

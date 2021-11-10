@@ -284,15 +284,15 @@ operation.
 Long messages are transferred using a rendezvous protocol. The provider
 implements two rendezvous protocols: offloaded and eager. The threshold at which
 the rendezvous protocol is used is controlled with the *FI_CXI_RDZV_THRESHOLD*
-environment variable.
+and *FI_CXI_RDZV_GET_MIN* environment variables.
 
-In the offloaded rendezvous protocol, a portion of the message payload is sent along
-with the message header. Once the header is matched to a Receive operation, the
-remainder of the payload is pulled from the source using an RDMA Get operation.
-If the message arrives unexpectedly, the eager portion of the payload is
-buffered at the target until it is matched to a Receive operation. In the
-normal case, the Get is performed by hardware and the operation completes without
-software progress.
+In the offloaded rendezvous protocol, a portion of the message payload is sent
+along with the message header. Once the header is matched to a Receive
+operation, the remainder of the payload is pulled from the source using an RDMA
+Get operation. If the message arrives unexpectedly, the eager portion of the
+payload is buffered at the target until it is matched to a Receive operation.
+In the normal case, the Get is performed by hardware and the operation
+completes without software progress.
 
 In the eager rendezvous protocol, the entire payload is sent along with the
 message header. If the message matches a pre-posted Receive operation, the
@@ -301,9 +301,9 @@ arrives unexpectedly, the message header is saved and the entire payload is
 dropped. Later, when the message is matched to a Receive operation, the entire
 payload is pulled from the source using an RDMA Get operation.
 
-The rendezvous protocol is controlled using the *FI_CXI_RDZV_OFFLOAD*
-environment variable. The provider uses the offloaded rendezvous protocol
-by default.
+The selection of the rendezvous protocol is controlled using the
+*FI_CXI_RDZV_OFFLOAD* environment variable. The provider uses the
+offloaded rendezvous protocol by default.
 
 Message flow-control is triggered when hardware message matching resources
 become exhausted. Messages may be dropped and retransmitted in order to
@@ -315,8 +315,8 @@ resources are exhausted, hardware will transition to hybrid operation where
 hardware and software share matching responsibility.
 
 To help avoid this condition, increase Overflow buffer space using environment
-variables *FI_CXI_OFLOW_\** and software EP match and hybrid modes
-Request buffer space using the variables *FI_CXI_REQ_\**.
+variables *FI_CXI_OFLOW_\**, and for software and hybrid RX match modes
+increase Request buffer space using the variables *FI_CXI_REQ_\**.
 
 ## Message Ordering
 
@@ -592,14 +592,14 @@ The CXI provider checks for the following environment variables:
     posted to handle incoming unmatched messages.
 
 *FI_CXI_HYBRID_PREEMPTIVE*
-    When in hybrid mode, this variable can be used to enable preemptive
+:   When in hybrid mode, this variable can be used to enable preemptive
     transitions to software matching. This is useful at scale for poorly
     written applications with a large number of unexpected messages
     where reserved resources may be insufficient to prevent to prevent
     starvation of software request list match entries. Default is 0, disabled.
 
 *FI_CXI_HYBRID_RECV_PREEMPTIVE*
-    When in hybrid mode, this variable can be used to enable preemptive
+:   When in hybrid mode, this variable can be used to enable preemptive
     transitions to software matching. This is useful at scale for poorly
     written applications with a large number of unmatched posted receives
     where reserved resources may be insufficient to prevent starvation of
@@ -607,14 +607,19 @@ The CXI provider checks for the following environment variables:
 
 *FI_CXI_REQ_BUF_SIZE*
 :   Size of request buffers. Increasing the request buffer size allows for more
-    unmatched messages to be sent into a single request buffer.
+    unmatched messages to be sent into a single request buffer. The default
+    size is 2MB.
 
 *FI_CXI_REQ_BUF_MIN_POSTED*
-:   The minimum number of request buffers that should be posted.
+:   The minimum number of request buffers that should be posted. The default
+    minimum posted count is 3. Care should be taken to size appropriately
+    based on job scale and traffic.
 
 *FI_CXI_REQ_BUF_MAX_COUNT*
-:   The maximum number of request buffers that can be allocated. Experimental,
-    currently ignored.
+:   The maximum number of request buffers that can be allocated. The default
+    maximum count is 10. A value of 0 indicates the count should be unbounded
+    and scale as required. Care should be taken to size appropriately based
+    on job scale and traffic.
 
 *FI_CXI_MSG_LOSSLESS*
 :   Enable or disable lossless receive matching. If hardware resources are
