@@ -111,38 +111,33 @@ static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 			      util_domain);
 	ret = fi_endpoint(domain->msg_domain, msg_info, &msg_ep, conn);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"unable to create msg_ep: %d\n", ret);
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_endpoint", ret);
 		return ret;
 	}
 
 	ret = fi_ep_bind(msg_ep, &ep->msg_eq->fid, 0);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"unable to bind msg EP to EQ: %d\n", ret);
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
 		goto err;
 	}
 
 	if (ep->srx_ctx) {
 		ret = fi_ep_bind(msg_ep, &ep->srx_ctx->fid, 0);
 		if (ret) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to bind msg "
-				"EP to shared RX ctx: %d\n", ret);
+			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
 			goto err;
 		}
 	}
 
 	ret = fi_ep_bind(msg_ep, &ep->msg_cq->fid, FI_TRANSMIT | FI_RECV);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"unable to bind msg_ep to msg_cq: %d\n", ret);
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
 		goto err;
 	}
 
 	ret = fi_enable(msg_ep);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"unable to enable msg_ep: %d\n", ret);
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_enable", ret);
 		goto err;
 	}
 
@@ -186,7 +181,7 @@ static int rxm_init_connect_data(struct rxm_conn *conn,
 	ret = fi_getopt(&conn->ep->msg_pep->fid, FI_OPT_ENDPOINT,
 			FI_OPT_CM_DATA_SIZE, &cm_data_size, &opt_size);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "fi_getopt failed\n");
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_getopt", ret);
 		return ret;
 	}
 
@@ -228,7 +223,7 @@ static int rxm_send_connect(struct rxm_conn *conn)
 	ret = fi_connect(conn->msg_ep, info->dest_addr, &cm_data,
 			 sizeof(cm_data));
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "unable to connect msg_ep\n");
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_connect", ret);
 		goto err;
 	}
 	conn->state = RXM_CM_CONNECTING;
@@ -321,8 +316,10 @@ rxm_alloc_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
 	assert(ofi_ep_lock_held(&ep->util_ep));
 	av = container_of(ep->util_ep.av, struct rxm_av, util_av);
 	conn = rxm_av_alloc_conn(av);
-	if (!conn)
+	if (!conn) {
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "rxm_av_alloc_conn", -FI_ENOMEM);
 		return NULL;
+	}
 
 	conn->ep = ep;
 	conn->state = RXM_CM_IDLE;
@@ -357,6 +354,7 @@ rxm_add_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
 
 	if (ofi_idm_set(&ep->conn_idx_map, peer->index, conn) < 0) {
 		rxm_free_conn(conn);
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "ofi_idm_set", -FI_ENOMEM);
 		return NULL;
 	}
 
@@ -422,7 +420,7 @@ rxm_process_reject(struct rxm_conn *conn, struct fi_eq_err_entry *entry)
 	union rxm_cm_data *cm_data;
 	uint8_t reason;
 
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
+	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
 	       "Processing reject for handle: %p\n", conn);
 	assert(ofi_ep_lock_held(&conn->ep->util_ep));
 
@@ -495,23 +493,30 @@ rxm_reject_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry,
 		   uint8_t reason)
 {
 	union rxm_cm_data cm_data;
+	int ret;
 
 	cm_data.reject.version = RXM_CM_DATA_VERSION;
 	cm_data.reject.reason = reason;
 
-	fi_reject(ep->msg_pep, cm_entry->info->handle,
-		  &cm_data.reject, sizeof(cm_data.reject));
+	ret = fi_reject(ep->msg_pep, cm_entry->info->handle,
+			&cm_data.reject, sizeof(cm_data.reject));
+	if (ret)
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_reject", ret);
 }
 
 static int
 rxm_accept_connreq(struct rxm_conn *conn, struct rxm_eq_cm_entry *cm_entry)
 {
 	union rxm_cm_data cm_data;
+	int ret;
 
 	cm_data.accept.server_conn_id = conn->peer->index;
 	cm_data.accept.rx_size = cm_entry->info->rx_attr->size;
 
-	return fi_accept(conn->msg_ep, &cm_data.accept, sizeof(cm_data.accept));
+	ret = fi_accept(conn->msg_ep, &cm_data.accept, sizeof(cm_data.accept));
+	if (ret)
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_accept", ret);
+	return ret;
 }
 
 static void
@@ -534,14 +539,16 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 
 	av = container_of(ep->util_ep.av, struct rxm_av, util_av);
 	peer = rxm_get_peer(av, &peer_addr);
-	if (!peer)
+	if (!peer) {
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "rxm_get_peer", -FI_ENOMEM);
 		goto reject;
+	}
 
 	conn = rxm_add_conn(ep, peer);
 	if (!conn)
 		goto remove;
 
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "connreq for %p\n", conn);
+	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "connreq for %p\n", conn);
 	switch (conn->state) {
 	case RXM_CM_IDLE:
 		break;
@@ -550,14 +557,20 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 		cmp = ofi_addr_cmp(&rxm_prov, &peer_addr.sa, &ep->addr.sa);
 		if (cmp < 0) {
 			/* let our request finish */
+			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
+				"simultaneous, reject peer %p\n", conn);
 			rxm_reject_connreq(ep, cm_entry,
 					   RXM_REJECT_ECONNREFUSED);
 			goto put;
 		} else if (cmp > 0) {
 			/* accept peer's request */
+			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
+				"simultaneous, accept peer %p\n", conn);
 			rxm_close_conn(conn);
 		} else {
 			/* connecting to ourself, create loopback conn */
+			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
+				"loopback conn %p\n", conn);
 			conn = rxm_alloc_conn(ep, peer);
 			if (!conn)
 				goto remove;
@@ -568,6 +581,8 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 		break;
 	case RXM_CM_ACCEPTING:
 	case RXM_CM_CONNECTED:
+		FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
+			"connection accepting/done, ignoring %p\n", conn);
 		goto put;
 	default:
 		assert(0);
@@ -603,8 +618,10 @@ reject:
 
 void rxm_process_shutdown(struct rxm_conn *conn)
 {
-	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "shutdown conn %p\n", conn);
 	assert(ofi_ep_lock_held(&conn->ep->util_ep));
+
+	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "shutdown conn %p (state %d)\n",
+		conn, conn->state);
 
 	switch (conn->state) {
 	case RXM_CM_IDLE:
@@ -629,8 +646,7 @@ static void rxm_handle_error(struct rxm_ep *ep)
 	ret = fi_eq_readerr(ep->msg_eq, &entry, 0);
 	if (ret != sizeof(entry)) {
 		if (ret != -FI_EAGAIN)
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"unable to fi_eq_readerr: %zd\n", ret);
+			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_eq_readerr", ret);
 		return;
 	}
 
@@ -710,8 +726,7 @@ void rxm_stop_listen(struct rxm_ep *ep)
 
 	ret = pthread_join(ep->cm_thread, NULL);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to join CM thread\n");
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "pthread_join", -ret);
 	}
 }
 
@@ -761,8 +776,7 @@ static void *rxm_cm_progress(void *arg)
 		} else if (ret == -FI_EAVAIL) {
 			rxm_handle_error(ep);
 		} else {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"Fatal error reading from msg eq");
+			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_eq_sread", ret);
 			break;
 		}
 	}
@@ -790,15 +804,13 @@ static void *rxm_cm_atomic_progress(void *arg)
 			      struct rxm_fabric, util_fabric);
 	ret = fi_control(&ep->msg_eq->fid, FI_GETWAIT, &fds[0].fd);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"unable to get msg EQ fd: %s\n", fi_strerror(ret));
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_control", ret);
 		return NULL;
 	}
 
 	ret = fi_control(&ep->msg_cq->fid, FI_GETWAIT, &fds[1].fd);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"unable to get msg CQ fd: %s\n", fi_strerror(ret));
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_control", ret);
 		return NULL;
 	}
 
@@ -811,8 +823,7 @@ static void *rxm_cm_atomic_progress(void *arg)
 		if (!ret) {
 			ret = poll(fds, 2, -1);
 			if (ret == -1) {
-				FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-					"Select error %s\n", strerror(errno));
+				RXM_WARN_ERR(FI_LOG_EP_CTRL, "poll", -errno);
 			}
 		}
 		ep->util_ep.progress(&ep->util_ep);
@@ -832,16 +843,14 @@ int rxm_start_listen(struct rxm_ep *ep)
 
 	ret = fi_listen(ep->msg_pep);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"unable to set msg PEP to listen state\n");
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_listen", ret);
 		return ret;
 	}
 
 	addr_len = sizeof(ep->addr);
 	ret = fi_getname(&ep->msg_pep->fid, &ep->addr, &addr_len);
 	if (ret) {
-		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-			"Unable to get msg pep name\n");
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_getname", ret);
 		return ret;
 	}
 
@@ -867,13 +876,12 @@ int rxm_start_listen(struct rxm_ep *ep)
 
 		assert(ep->util_ep.domain->threading == FI_THREAD_SAFE);
 		ep->do_progress = true;
-		if (pthread_create(&ep->cm_thread, 0,
-				   ep->rxm_info->caps & FI_ATOMIC ?
-				   rxm_cm_atomic_progress :
-				   rxm_cm_progress, ep)) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
-				"unable to create cm thread\n");
-			return -ofi_syserr();
+		ret = pthread_create(&ep->cm_thread, 0,
+				     ep->rxm_info->caps & FI_ATOMIC ?
+				     rxm_cm_atomic_progress : rxm_cm_progress, ep);
+		if (ret) {
+			RXM_WARN_ERR(FI_LOG_EP_CTRL, "pthread_create", -ret);
+			return -ret;
 		}
 	}
 	return 0;

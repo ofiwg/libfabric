@@ -180,7 +180,7 @@ vrb_poll_events(struct vrb_cq *_cq, int timeout)
 		rc--;
 	}
 	if (rc) {
-		VERBS_WARN(FI_LOG_CQ, "Unknown poll error: check revents\n");
+		VRB_WARN(FI_LOG_CQ, "Unknown poll error: check revents\n");
 		return -FI_EOTHER;
 	}
 
@@ -377,7 +377,7 @@ int vrb_cq_signal(struct fid_cq *cq)
 	_cq = container_of(cq, struct vrb_cq, util_cq.cq_fid);
 
 	if (write(_cq->signal_fd[1], &data, 1) != 1) {
-		VERBS_WARN(FI_LOG_CQ, "Error signalling CQ\n");
+		VRB_WARN(FI_LOG_CQ, "Error signalling CQ\n");
 		return -errno;
 	}
 
@@ -391,7 +391,7 @@ int vrb_cq_trywait(struct vrb_cq *cq)
 	int ret = -FI_EAGAIN, rc;
 
 	if (!cq->channel) {
-		VERBS_WARN(FI_LOG_CQ, "No wait object object associated with CQ\n");
+		VRB_WARN(FI_LOG_CQ, "No wait object object associated with CQ\n");
 		return -FI_EINVAL;
 	}
 
@@ -411,7 +411,7 @@ int vrb_cq_trywait(struct vrb_cq *cq)
 
 	rc = ibv_req_notify_cq(cq->cq, 0);
 	if (rc) {
-		VERBS_WARN(FI_LOG_CQ, "ibv_req_notify_cq error: %d\n", ret);
+		VRB_WARN(FI_LOG_CQ, "ibv_req_notify_cq error: %d\n", ret);
 		ret = -errno;
 		goto out;
 	}
@@ -599,7 +599,7 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		if (attr->signaling_vector < 0 ||
 		    attr->signaling_vector > domain->verbs->num_comp_vectors)  {
 
-			VERBS_WARN(FI_LOG_CQ,
+			VRB_WARN(FI_LOG_CQ,
 				   "Invalid value for the CQ attribute signaling_vector: %d\n",
 				   attr->signaling_vector);
 			ret = -FI_EINVAL;
@@ -612,7 +612,7 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		cq->channel = ibv_create_comp_channel(domain->verbs);
 		if (!cq->channel) {
 			ret = -errno;
-			VERBS_WARN(FI_LOG_CQ,
+			VRB_WARN(FI_LOG_CQ,
 				   "Unable to create completion channel\n");
 			goto err2;
 		}
@@ -646,14 +646,14 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 			       comp_vector);
 	if (!cq->cq) {
 		ret = -errno;
-		VERBS_WARN(FI_LOG_CQ, "Unable to create verbs CQ\n");
+		VRB_WARN(FI_LOG_CQ, "Unable to create verbs CQ\n");
 		goto err4;
 	}
 
 	if (cq->channel) {
 		ret = ibv_req_notify_cq(cq->cq, 0);
 		if (ret) {
-			VERBS_WARN(FI_LOG_CQ,
+			VRB_WARN(FI_LOG_CQ,
 				   "ibv_req_notify_cq failed\n");
 			goto err5;
 		}
@@ -662,7 +662,7 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	ret = ofi_bufpool_create(&cq->wce_pool, sizeof(struct vrb_wc_entry),
 				16, 0, VERBS_WCE_CNT, 0);
 	if (ret) {
-		VERBS_WARN(FI_LOG_CQ, "Failed to create wce_pool\n");
+		VRB_WARN(FI_LOG_CQ, "Failed to create wce_pool\n");
 		goto err5;
 	}
 

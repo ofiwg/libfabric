@@ -92,11 +92,14 @@
 
 #define VERBS_PROV_NAME "verbs"
 
-#define VERBS_DBG(subsys, ...) FI_DBG(&vrb_prov, subsys, __VA_ARGS__)
-#define VERBS_INFO(subsys, ...) FI_INFO(&vrb_prov, subsys, __VA_ARGS__)
-#define VERBS_INFO_ERRNO(subsys, fn, errno) VERBS_INFO(subsys, fn ": %s(%d)\n",	\
-		strerror(errno), errno)
-#define VERBS_WARN(subsys, ...) FI_WARN(&vrb_prov, subsys, __VA_ARGS__)
+#define VRB_DBG(subsys, ...) FI_DBG(&vrb_prov, subsys, __VA_ARGS__)
+#define VRB_INFO(subsys, ...) FI_INFO(&vrb_prov, subsys, __VA_ARGS__)
+#define VRB_WARN(subsys, ...) FI_WARN(&vrb_prov, subsys, __VA_ARGS__)
+
+#define VRB_WARN_ERRNO(subsys, fn) \
+	VRB_WARN(subsys, fn ": %s (%d)\n", strerror(errno), errno)
+#define VRB_WARN_ERR(subsys, fn, err) \
+	VRB_WARN(subsys, fn ": %s (%d)\n", fi_strerror((int) -(err)), (int) err)
 
 
 #define VERBS_INJECT_FLAGS(ep, len, flags, desc) \

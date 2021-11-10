@@ -149,8 +149,8 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 	ret = ibv_post_send(ep->ibv_qp, wr, &bad_wr);
 	wr->wr_id = (uintptr_t) ctx->user_ctx;
 	if (ret) {
-		VERBS_WARN(FI_LOG_EP_DATA, "Post send failed - %zd\n",
-			   vrb_convert_ret(ret));
+		VRB_WARN(FI_LOG_EP_DATA, "Post send failed - %zd\n",
+			 vrb_convert_ret(ret));
 		goto credits;
 	}
 	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
@@ -221,7 +221,7 @@ ssize_t vrb_send_iov(struct vrb_ep *ep, struct ibv_send_wr *wr,
 		ret = ofi_copy_from_hmem_iov(bounce_buf, len, iface, device,
 					     iov, count, 0);
 		if (ret != len) {
-			VERBS_WARN(FI_LOG_EP_DATA, "hmem copy error");
+			VRB_WARN(FI_LOG_EP_DATA, "hmem copy error");
 			return -FI_EIO;
 		}
 
@@ -383,11 +383,11 @@ vrb_alloc_init_ep(struct fi_info *info, struct vrb_domain *domain,
 			goto err1;
 	}
 
-	ret = ofi_endpoint_init(&domain->util_domain.domain_fid, &vrb_util_prov, info,
-				&ep->util_ep, context, vrb_util_ep_progress_noop);
+	ret = ofi_endpoint_init(&domain->util_domain.domain_fid,
+				&vrb_util_prov, info, &ep->util_ep, context,
+				vrb_util_ep_progress_noop);
 	if (ret) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Unable to initialize EP, error - %d\n", ret);
+		VRB_WARN_ERR(FI_LOG_EP_CTRL, "ofi_endpoint_init", ret);
 		goto err2;
 	}
 
@@ -486,24 +486,22 @@ static int vrb_ep_close(fid_t fid)
 				      &ep->service, &ep->ep_name);
 		ret = ibv_destroy_qp(ep->ibv_qp);
 		if (ret) {
-			VERBS_WARN(FI_LOG_EP_CTRL,
-				   "Unable to destroy QP (errno = %d)\n", errno);
+			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_destroy_qp");
 			return -errno;
 		}
 		vrb_cleanup_cq(ep);
 		break;
 	default:
-		VERBS_INFO(FI_LOG_DOMAIN, "Unknown EP type\n");
+		VRB_WARN(FI_LOG_DOMAIN, "Unknown EP type\n");
 		assert(0);
 		return -FI_EINVAL;
 	}
 
-	VERBS_INFO(FI_LOG_DOMAIN, "EP %p is being closed\n", ep);
+	VRB_INFO(FI_LOG_DOMAIN, "EP %p is being closed\n", ep);
 
 	ret = vrb_close_free_ep(ep);
 	if (ret) {
-		VERBS_WARN(FI_LOG_DOMAIN,
-			   "Unable to close EP (%p), error - %d\n", ep, ret);
+		VRB_WARN_ERR(FI_LOG_DOMAIN, "vrb_close_free_ep", ret);
 		return ret;
 	}
 
@@ -539,7 +537,7 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (flags & FI_RECV) {
 			cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 			if (cq->credits < ep->rx_cq_size) {
-				VERBS_WARN(FI_LOG_DOMAIN,
+				VRB_WARN(FI_LOG_EP_CTRL,
 					   "Rx CQ is fully reserved\n");
 				ep->rx_cq_size = 0;
 			}
@@ -568,9 +566,10 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		else
 			ret = rdma_migrate_id(ep->id, ep->eq->channel);
 		fastlock_release(&ep->eq->lock);
-		if (ret)
+		if (ret) {
+			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_migrate_id");
 			return -errno;
-
+		}
 		break;
 	case FI_CLASS_SRX_CTX:
 		if (ep->util_ep.type != FI_EP_MSG)
@@ -611,8 +610,7 @@ static int vrb_create_dgram_ep(struct vrb_domain *domain, struct vrb_ep *ep,
 
 	ep->ibv_qp = ibv_create_qp(domain->pd, init_attr);
 	if (!ep->ibv_qp) {
-		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to create IBV "
-			   "Queue Pair\n");
+		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_create_qp");
 		return -errno;
 	}
 
@@ -622,8 +620,7 @@ static int vrb_create_dgram_ep(struct vrb_domain *domain, struct vrb_ep *ep,
 			    IBV_QP_PORT |
 			    IBV_QP_QKEY);
 	if (ret) {
-		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to modify QP state "
-			   "to INIT\n");
+		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_modify_qp");
 		return -errno;
 	}
 
@@ -632,8 +629,7 @@ static int vrb_create_dgram_ep(struct vrb_domain *domain, struct vrb_ep *ep,
 	ret = ibv_modify_qp(ep->ibv_qp, &attr,
 			    IBV_QP_STATE);
 	if (ret) {
-		VERBS_WARN(FI_LOG_EP_CTRL, "Unable to modify QP state "
-			   "to RTR\n");
+		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_modify_qp");
 		return -errno;
 	}
 
@@ -645,30 +641,25 @@ static int vrb_create_dgram_ep(struct vrb_domain *domain, struct vrb_ep *ep,
 				    IBV_QP_STATE |
 				    IBV_QP_SQ_PSN);
 		if (ret) {
-			VERBS_WARN(FI_LOG_EP_CTRL, "Unable to modify QP state "
-				   "to RTS\n");
+			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_modify_qp");
 			return -errno;
 		}
 	}
 
 	if (ibv_query_gid(domain->verbs, 1, vrb_gl_data.gid_idx, &gid)) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Unable to query GID, errno = %d",
-			   errno);
+		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_query_gid");
 		return -errno;
 	}
 
 	if (ibv_query_pkey(domain->verbs, 1, 0, &p_key)) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
+		VRB_WARN(FI_LOG_EP_CTRL,
 			   "Unable to query P_Key, errno = %d",
 			   errno);
 		return -errno;
 	}
 
 	if (ibv_query_port(domain->verbs, 1, &port_attr)) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Unable to query port attributes, errno = %d",
-			   errno);
+		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_query_port");
 		return -errno;
 	}
 
@@ -705,8 +696,8 @@ static int vrb_process_xrc_preposted(struct vrb_srq_ep *srq_ep)
 			      recv->desc, recv->src_addr, recv->context);
 		free(recv);
 		if (ret) {
-			VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "fi_recv", errno);
-			return -errno;
+			VRB_WARN_ERR(FI_LOG_EP_DATA, "fi_recv", ret);
+			return ret;
 		}
 	}
 	return FI_SUCCESS;
@@ -737,7 +728,7 @@ static int vrb_ep_enable_xrc(struct vrb_ep *ep)
 		 */
 		if (!srq_ep->xrc.cq || srq_ep->xrc.cq != cq) {
 			fastlock_release(&srq_ep->xrc.prepost_lock);
-			VERBS_WARN(FI_LOG_EP_CTRL, "SRX_CTX/CQ mismatch\n");
+			VRB_WARN(FI_LOG_EP_CTRL, "SRX_CTX/CQ mismatch\n");
 			return -FI_EINVAL;
 		}
 		ibv_get_srq_num(srq_ep->srq, &xrc_ep->srqn);
@@ -746,7 +737,7 @@ static int vrb_ep_enable_xrc(struct vrb_ep *ep)
 	}
 
 	if (cq->credits < srq_ep->xrc.max_recv_wr) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
+		VRB_WARN(FI_LOG_EP_CTRL,
 			   "CQ credits %zd insufficient\n", cq->credits);
 		ret = -FI_EINVAL;
 		goto done;
@@ -764,7 +755,7 @@ static int vrb_ep_enable_xrc(struct vrb_ep *ep)
 
 	srq_ep->srq = ibv_create_srq_ex(domain->verbs, &attr);
 	if (!srq_ep->srq) {
-		VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_create_srq_ex", errno);
+		VRB_WARN_ERRNO(FI_LOG_DOMAIN, "ibv_create_srq_ex");
 		ret = -errno;
 		goto done;
 	}
@@ -843,28 +834,28 @@ static int vrb_ep_enable(struct fid_ep *ep_fid)
 	int ret;
 
 	if (!ep->eq && (ep->util_ep.type == FI_EP_MSG)) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Endpoint is not bound to an event queue\n");
+		VRB_WARN(FI_LOG_EP_CTRL,
+			 "Endpoint is not bound to an event queue\n");
 		return -FI_ENOEQ;
 	}
 
 	if (!ep->util_ep.tx_cq && !ep->util_ep.rx_cq) {
-		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
-			   "a send or receive completion queue\n");
+		VRB_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
+			 "a send or receive completion queue\n");
 		return -FI_ENOCQ;
 	}
 
 	if (!ep->util_ep.tx_cq && (ofi_needs_tx(ep->util_ep.caps))) {
-		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
-			   "a send completion queue when it has transmit "
-			   "capabilities enabled (FI_SEND | FI_RMA).\n");
+		VRB_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
+			 "a send completion queue when it has transmit "
+			 "capabilities enabled (FI_SEND | FI_RMA).\n");
 		return -FI_ENOCQ;
 	}
 
 	if (!ep->util_ep.rx_cq && ofi_needs_rx(ep->util_ep.caps)) {
-		VERBS_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
-			   "a receive completion queue when it has receive "
-			   "capabilities enabled. (FI_RECV)\n");
+		VRB_WARN(FI_LOG_EP_CTRL, "Endpoint is not bound to "
+			 "a receive completion queue when it has receive "
+			 "capabilities enabled. (FI_RECV)\n");
 		return -FI_ENOCQ;
 	}
 	vrb_msg_ep_get_qp_attr(ep, &attr);
@@ -883,18 +874,15 @@ static int vrb_ep_enable(struct fid_ep *ep_fid)
 				ep->util_ep.ep_fid.msg->recvmsg = fi_no_msg_recvmsg;
 			}
 		} else if (domain->ext_flags & VRB_USE_XRC) {
-			VERBS_WARN(FI_LOG_EP_CTRL, "XRC EP_MSG not bound "
-				   "to srx_context\n");
+			VRB_WARN(FI_LOG_EP_CTRL, "XRC EP_MSG not bound "
+				 "to srx_context\n");
 			return -FI_EINVAL;
 		}
 
 		ret = rdma_create_qp(ep->id, domain->pd, &attr);
 		if (ret) {
-			ret = -errno;
-			VERBS_WARN(FI_LOG_EP_CTRL,
-				   "Unable to create rdma qp: %s (%d)\n",
-				   fi_strerror(-ret), -ret);
-			return ret;
+			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_create_qp");
+			return -errno;
 		}
 
 		/* Allow shared XRC INI QP not controlled by RDMA CM
@@ -906,13 +894,12 @@ static int vrb_ep_enable(struct fid_ep *ep_fid)
 		attr.sq_sig_all = 1;
 		ret = vrb_create_dgram_ep(domain, ep, &attr);
 		if (ret) {
-			VERBS_WARN(FI_LOG_EP_CTRL, "Unable to create dgram EP: %s (%d)\n",
-				   fi_strerror(-ret), -ret);
+			VRB_WARN_ERR(FI_LOG_EP_CTRL, "vrb_create_dgram_ep", ret);
 			return ret;
 		}
 		break;
 	default:
-		VERBS_INFO(FI_LOG_DOMAIN, "Unknown EP type\n");
+		VRB_WARN(FI_LOG_EP_CTRL, "Unknown EP type\n");
 		assert(0);
 		return -FI_EINVAL;
 	}
@@ -929,7 +916,6 @@ static int vrb_ep_control(struct fid *fid, int command, void *arg)
 		switch (command) {
 		case FI_ENABLE:
 			return vrb_ep_enable(ep);
-			break;
 		default:
 			return -FI_ENOSYS;
 		}
@@ -947,9 +933,9 @@ static int vrb_dgram_ep_setname(fid_t ep_fid, void *addr, size_t addrlen)
 
 	ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid.fid);
 	if (addrlen < ep->info_attr.src_addrlen) {
-		VERBS_INFO(FI_LOG_EP_CTRL,
-			   "addrlen expected: %zu, got: %zu\n",
-			   ep->info_attr.src_addrlen, addrlen);
+		VRB_INFO(FI_LOG_EP_CTRL,
+			 "addrlen expected: %zu, got: %zu\n",
+			 ep->info_attr.src_addrlen, addrlen);
 		return -FI_ETOOSMALL;
 	}
 	/*
@@ -980,9 +966,9 @@ static int vrb_dgram_ep_getname(fid_t ep_fid, void *addr, size_t *addrlen)
 	ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid.fid);
 	if (*addrlen < sizeof(ep->ep_name)) {
 		*addrlen = sizeof(ep->ep_name);
-		VERBS_INFO(FI_LOG_EP_CTRL,
-			   "addrlen expected: %zu, got: %zu\n",
-			   sizeof(ep->ep_name), *addrlen);
+		VRB_INFO(FI_LOG_EP_CTRL,
+			 "addrlen expected: %zu, got: %zu\n",
+			 sizeof(ep->ep_name), *addrlen);
 		return -FI_ETOOSMALL;
 	}
 
@@ -1029,7 +1015,7 @@ static int vrb_ep_save_info_attr(struct vrb_ep *ep, struct fi_info *info)
 	if (info->src_addr) {
 		ep->info_attr.src_addr = mem_dup(info->src_addr, info->src_addrlen);
 		if (ep->info_attr.src_addr == NULL) {
-			VERBS_WARN(FI_LOG_EP_CTRL, "Memory error save src addr\n");
+			VRB_WARN(FI_LOG_EP_CTRL, "Memory error save src addr\n");
 			return -FI_ENOMEM;
 		}
 		ep->info_attr.src_addrlen = info->src_addrlen;
@@ -1037,7 +1023,7 @@ static int vrb_ep_save_info_attr(struct vrb_ep *ep, struct fi_info *info)
 	if (info->dest_addr) {
 		ep->info_attr.dest_addr = mem_dup(info->dest_addr, info->dest_addrlen);
 		if (ep->info_attr.dest_addr == NULL) {
-			VERBS_WARN(FI_LOG_EP_CTRL, "Memory error save dest addr\n");
+			VRB_WARN(FI_LOG_EP_CTRL, "Memory error save dest addr\n");
 			free(ep->info_attr.src_addr);
 			ep->info_attr.src_addr = NULL;
 			return -FI_ENOMEM;
@@ -1070,7 +1056,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 	 * to allocate DGRAM (has prefix <dev_name>-dgram) and MSG EPs */
 	if (strncmp(dom->verbs->device->name, info->domain_attr->name,
 		    strlen(dom->verbs->device->name))) {
-		VERBS_INFO(FI_LOG_DOMAIN,
+		VRB_WARN(FI_LOG_DOMAIN,
 			   "Invalid info->domain_attr->name: %s and %s\n",
 			   dom->verbs->device->name, info->domain_attr->name);
 		return -FI_EINVAL;
@@ -1099,8 +1085,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	ep = vrb_alloc_init_ep(info, dom, context);
 	if (!ep) {
-		VERBS_WARN(FI_LOG_EP_CTRL,
-			   "Unable to allocate/init EP memory\n");
+		VRB_WARN_ERR(FI_LOG_EP_CTRL, "vrb_alloc_init_ep", -ENOMEM);
 		return -FI_ENOMEM;
 	}
 
@@ -1176,7 +1161,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 			if (rdma_resolve_addr(ep->id, info->src_addr, info->dest_addr,
 					      VERBS_RESOLVE_TIMEOUT)) {
 				ret = -errno;
-				VERBS_INFO(FI_LOG_DOMAIN, "Unable to rdma_resolve_addr\n");
+				VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_resolve_addr");
 				goto err2;
 			}
 			ep->id->context = &ep->util_ep.ep_fid.fid;
@@ -1199,7 +1184,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 		ep->util_ep.ep_fid.cm = &vrb_dgram_cm_ops;
 		break;
 	default:
-		VERBS_INFO(FI_LOG_DOMAIN, "Unknown EP type\n");
+		VRB_WARN(FI_LOG_EP_CTRL, "Unknown EP type\n");
 		ret = -FI_EINVAL;
 		assert(0);
 		goto err1;
@@ -1250,7 +1235,7 @@ static int vrb_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	 */
 	if (vrb_is_xrc_info(pep->info)) {
 		if (pep->eq->xrc.pep_port) {
-			VERBS_WARN(FI_LOG_EP_CTRL,
+			VRB_WARN(FI_LOG_EP_CTRL,
 				   "XRC limits EQ binding to a single PEP\n");
 			return -FI_EINVAL;
 		}
@@ -1258,8 +1243,10 @@ static int vrb_pep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	}
 
 	ret = rdma_migrate_id(pep->id, pep->eq->channel);
-	if (ret)
+	if (ret) {
+		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_migrate_id");
 		return -errno;
+	}
 
 	if (vrb_is_xrc_info(pep->info)) {
 		ret = rdma_migrate_id(pep->xrc_ps_udp_id, pep->eq->channel);
@@ -1353,14 +1340,15 @@ int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	ret = rdma_create_id(NULL, &_pep->id, &_pep->pep_fid.fid,
 			     vrb_get_port_space(_pep->info->addr_format));
 	if (ret) {
-		VERBS_INFO(FI_LOG_DOMAIN, "Unable to create PEP rdma_cm_id\n");
+		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_create_id");
 		goto err2;
 	}
 
 	if (info->src_addr) {
-		ret = rdma_bind_addr(_pep->id, (struct sockaddr *)info->src_addr);
+		ret = rdma_bind_addr(_pep->id, (struct sockaddr *) info->src_addr);
 		if (ret) {
-			VERBS_INFO(FI_LOG_DOMAIN, "Unable to bind address to rdma_cm_id\n");
+			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_bind_addr");
+			ret = -errno;
 			goto err3;
 		}
 		_pep->bound = 1;
@@ -1371,8 +1359,7 @@ int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		ret = rdma_create_id(NULL, &_pep->xrc_ps_udp_id,
 				     &_pep->pep_fid.fid, RDMA_PS_UDP);
 		if (ret) {
-			VERBS_INFO(FI_LOG_DOMAIN,
-				   "Unable to create PEP PS_UDP rdma_cm_id\n");
+			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_create_id");
 			goto err3;
 		}
 		/* Currently both listens must be bound to same port number */
@@ -1381,8 +1368,7 @@ int vrb_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		ret = rdma_bind_addr(_pep->xrc_ps_udp_id,
 				     (struct sockaddr *)_pep->info->src_addr);
 		if (ret) {
-			VERBS_INFO(FI_LOG_DOMAIN,
-				   "Unable to bind address to PS_UDP rdma_cm_id\n");
+			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_bind_addr");
 			goto err4;
 		}
 	}
@@ -1641,7 +1627,7 @@ int vrb_xrc_close_srq(struct vrb_srq_ep *srq_ep)
 
 	ret = ibv_destroy_srq(srq_ep->srq);
 	if (ret) {
-		VERBS_WARN(FI_LOG_EP_CTRL, "Cannot destroy SRQ rc=%d\n", ret);
+		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_destroy_srq");
 		return -ret;
 	}
 	srq_ep->xrc.cq->credits += srq_ep->xrc.max_recv_wr;
@@ -1681,7 +1667,7 @@ static int vrb_srq_close(fid_t fid)
 	return FI_SUCCESS;
 
 err:
-	VERBS_WARN(FI_LOG_EP_CTRL, "Cannot destroy SRQ rc=%d\n", ret);
+	VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_destroy_srq");
 	return ret;
 }
 
@@ -1744,7 +1730,7 @@ int vrb_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 
 	srq_ep->srq = ibv_create_srq(dom->pd, &srq_init_attr);
 	if (!srq_ep->srq) {
-		VERBS_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_create_srq", errno);
+		VRB_WARN_ERRNO(FI_LOG_DOMAIN, "ibv_create_srq");
 		ret = -errno;
 		goto free_bufs;
 	}
@@ -1826,8 +1812,8 @@ int vrb_query_atomic(struct fid_domain *domain_fid, enum fi_datatype datatype,
 			return  -FI_EBADFLAGS;
 		}
 		if (domain->info->tx_attr->op_flags & FI_INJECT) {
-			VERBS_INFO(FI_LOG_EP_DATA,
-				   "FI_INJECT not supported for %s\n", log_str);
+			VRB_INFO(FI_LOG_EP_DATA,
+				 "FI_INJECT not supported for %s\n", log_str);
 			return -FI_EINVAL;
 		}
 	}
