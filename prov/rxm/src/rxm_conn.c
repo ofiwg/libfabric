@@ -582,8 +582,9 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 	case RXM_CM_ACCEPTING:
 	case RXM_CM_CONNECTED:
 		FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
-			"connection accepting/done, ignoring %p\n", conn);
-		goto put;
+			"old connection accepting/done, replacing %p\n", conn);
+		rxm_close_conn(conn);
+		break;
 	default:
 		assert(0);
 		break;
