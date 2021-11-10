@@ -50,6 +50,22 @@ size_t rxr_pkt_req_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
 size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
+/*
+ * calculates the data size allowed for a given packet type
+ * Note that there is likely a better name for this as it's purpose is slightly
+ * overlapping with rxr_pkt_req_max_data_size() below. Ideally, we will refactor
+ * this code to be better but that is part of a larger effort.
+ */
+size_t rxr_pkt_req_calc_data_size(struct rxr_ep *ep,
+									fi_addr_t addr,
+									int pkt_type,
+									uint64_t fi_flags,
+									size_t rma_iov_count);
+
+size_t rxr_pkt_req_header_size(int pkt_type,
+								uint16_t flags,
+								size_t rma_iov_count);
+
 size_t rxr_pkt_req_max_header_size(int pkt_type);
 
 size_t rxr_pkt_max_header_size(void);

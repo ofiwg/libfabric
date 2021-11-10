@@ -36,6 +36,10 @@
 
 #include "rdm_proto_v4.h"
 
+#define RXR_PKT_OPT_HDR_FLAGS (RXR_PKT_CONNID_HDR | \
+								RXR_REQ_OPT_RAW_ADDR_HDR_SIZE | \
+								RXR_REQ_OPT_CQ_DATA_HDR)
+
 static inline struct rxr_base_hdr *rxr_get_base_hdr(void *pkt)
 {
 	return (struct rxr_base_hdr *)pkt;
@@ -231,6 +235,29 @@ void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
 void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry);
 
+/* General packet type helper functions */
+static inline
+int rxr_pkt_type_contains_rma_iov(int pkt_type)
+{
+	switch (pkt_type) {
+		case RXR_EAGER_RTW_PKT:
+		case RXR_DC_EAGER_RTW_PKT:
+		case RXR_LONGCTS_RTW_PKT:
+		case RXR_DC_LONGCTS_RTW_PKT:
+		case RXR_LONGREAD_RTW_PKT:
+		case RXR_SHORT_RTR_PKT:
+		case RXR_LONGCTS_RTR_PKT:
+		case RXR_WRITE_RTA_PKT:
+		case RXR_DC_WRITE_RTA_PKT:
+		case RXR_FETCH_RTA_PKT:
+		case RXR_COMPARE_RTA_PKT:
+			return 1;
+			break;
+		default:
+			return 0;
+			break;
+	}
+}
 #endif
 
 #include "rxr_pkt_type_req.h"
