@@ -17,6 +17,7 @@
 #include <ofi_util.h>
 
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_DATA, __VA_ARGS__)
+#define CXIP_INFO(...) _CXIP_WARN(FI_LOG_EP_DATA, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_DATA, __VA_ARGS__)
 
 static int cxip_cntr_copy_ct_writeback(struct cxip_cntr *cntr,
@@ -190,7 +191,7 @@ void cxip_dom_cntr_disable(struct cxip_domain *dom)
 
 const struct fi_cntr_attr cxip_cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
-	.wait_obj = FI_WAIT_NONE,
+	.wait_obj = FI_WAIT_YIELD,
 	.wait_set = NULL,
 	.flags = 0,
 };
@@ -434,14 +435,81 @@ static int cxip_cntr_seterr(struct fid_cntr *fid_cntr, uint64_t value)
 	return cxip_cntr_mod(cxi_cntr, value, true, true);
 }
 
+static int cxip_cntr_emit_trig_event_cmd(struct cxip_cntr *cntr,
+					 uint64_t threshold)
+{
+	struct c_ct_cmd cmd = {
+		.trig_ct = cntr->ct->ctn,
+		.threshold = threshold,
+		.eq = C_EQ_NONE,
+	};
+	struct cxip_cmdq *cmdq = cntr->domain->trig_cmdq;
+	int ret;
+
+	/* TODO: Need to handle TLE exhaustion. */
+	fastlock_acquire(&cmdq->lock);
+	ret = cxi_cq_emit_ct(cmdq->dev_cmdq, C_CMD_CT_TRIG_EVENT, &cmd);
+	if (!ret)
+		cxi_cq_ring(cmdq->dev_cmdq);
+	fastlock_release(&cmdq->lock);
+
+	if (ret)
+		return -FI_EAGAIN;
+	return FI_SUCCESS;
+}
+
 /*
  * cxip_cntr_wait() - fi_cntr_wait() implementation.
  */
-__attribute__((unused))
 static int cxip_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 			  int timeout)
 {
-	return -FI_ENOSYS;
+	struct cxip_cntr *cntr =
+		container_of(fid_cntr, struct cxip_cntr, cntr_fid);
+	uint64_t success = 0;
+	int ret;
+	uint64_t end_ts;
+
+	if (cntr->attr.wait_obj == FI_WAIT_NONE ||
+	    threshold > FI_CXI_CNTR_SUCCESS_MAX)
+		return -FI_EINVAL;
+
+	/* Use a triggered list entry setup to fire at the user's threshold.
+	 * This will cause a success/error writeback to occur at the desired
+	 * threshold.
+	 */
+	ret = cxip_cntr_emit_trig_event_cmd(cntr, threshold);
+	if (ret) {
+		CXIP_INFO("Failed to emit trig cmd: %d\n", ret);
+		return ret;
+	}
+
+	/* Timeout is in msecs. */
+	if (timeout >= 0)
+		end_ts = ofi_gettime_ms() + timeout;
+
+	/* Spin until the trigger list entry fires which updates the CT success
+	 * field.
+	 */
+	do {
+		ret = cxip_cntr_get_ct_success(cntr, &success);
+		if (ret) {
+			CXIP_WARN("Failed to read counter success: %d\n", ret);
+			return ret;
+		}
+
+		if (success >= threshold)
+			return FI_SUCCESS;
+
+		/* Only FI_WAIT_YIELD is supported. */
+		sched_yield();
+	} while (timeout < 0 ||  ofi_gettime_ms() < end_ts);
+
+	/* TODO: Triggered operation may get leaked on timeout and threshold
+	 * never met.
+	 */
+
+	return -FI_ETIMEDOUT;
 }
 
 /*
@@ -604,7 +672,7 @@ static struct fi_ops_cntr cxip_cntr_ops = {
 	.read = cxip_cntr_read,
 	.add = cxip_cntr_add,
 	.set = cxip_cntr_set,
-	.wait = fi_no_cntr_wait,
+	.wait = cxip_cntr_wait,
 	.adderr = cxip_cntr_adderr,
 	.seterr = cxip_cntr_seterr,
 };
@@ -628,8 +696,14 @@ static int cxip_cntr_verify_attr(struct fi_cntr_attr *attr)
 	if (attr->events != FI_CNTR_EVENTS_COMP)
 		return -FI_ENOSYS;
 
-	if (attr->wait_obj != FI_WAIT_NONE)
+	switch (attr->wait_obj) {
+	case FI_WAIT_NONE:
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_YIELD:
+		break;
+	default:
 		return -FI_ENOSYS;
+	}
 
 	if (attr->flags)
 		return -FI_ENOSYS;

@@ -22,9 +22,11 @@ Test(cntr, mod)
 	uint64_t val = 0;
 	uint64_t errval = 0;
 	struct fid_cntr *tmp_cntr;
+	struct fi_cntr_attr attr = {
+		.wait_obj = FI_WAIT_NONE,
+	};
 
-	/* Try ops on a disabled counter */
-	ret = fi_cntr_open(cxit_domain, NULL, &tmp_cntr, NULL);
+	ret = fi_cntr_open(cxit_domain, &attr, &tmp_cntr, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_cntr_open (send)");
 
 	ret = fi_cntr_add(tmp_cntr, 1);
@@ -33,13 +35,13 @@ Test(cntr, mod)
 	while (fi_cntr_read(tmp_cntr) != 1)
 		sched_yield();
 
+	/* fi_cntr_wait() is invalid with FI_WAIT_NONE */
+	ret = fi_cntr_wait(tmp_cntr, 1, -1);
+	cr_assert(ret == -FI_EINVAL);
+
 	fi_close(&tmp_cntr->fid);
 
 	cr_assert(!fi_cntr_read(cxit_write_cntr));
-
-	/* fi_cntr_wait() is unimplemented */
-	ret = fi_cntr_wait(cxit_write_cntr, 1, -1);
-	cr_assert(ret == -FI_ENOSYS);
 
 	/* Test invalid values */
 	ret = fi_cntr_add(cxit_write_cntr, FI_CXI_CNTR_SUCCESS_MAX + 1);
@@ -633,4 +635,79 @@ Test(cntr, counter_ops)
 	cr_assert(ret == FI_SUCCESS, "fi_close cntr");
 
 	free(wb_buf);
+}
+
+Test(cntr, cntr_wait_timeout)
+{
+	struct fid_cntr *cntr;
+	struct fi_cntr_attr attr = {
+		.wait_obj = FI_WAIT_UNSPEC,
+	};
+	int timeout = 2999;
+	uint64_t thresh = 0x1234;
+	int ret;
+
+	ret = fi_cntr_open(cxit_domain, &attr, &cntr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_cntr_wait(cntr, thresh, timeout);
+	cr_assert(ret == -FI_ETIMEDOUT);
+
+	ret = fi_close(&cntr->fid);
+	cr_assert(ret == FI_SUCCESS);
+}
+
+Test(cntr, cntr_wait)
+{
+	struct fid_cntr *cntr;
+	struct fi_cntr_attr attr = {
+		.wait_obj = FI_WAIT_UNSPEC,
+	};
+	void *mmio_addr;
+	size_t mmio_len;
+	struct fi_cxi_cntr_ops *cntr_ops;
+	int timeout = 2000;
+	uint64_t thresh = 0x1234;
+	int ret;
+
+	ret = fi_cntr_open(cxit_domain, &attr, &cntr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_open_ops(&cntr->fid, FI_CXI_COUNTER_OPS, 0,
+			  (void **)&cntr_ops, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = cntr_ops->get_mmio_addr(&cntr->fid, &mmio_addr, &mmio_len);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_cntr_wait(cntr, thresh, timeout);
+	cr_assert(ret == -FI_ETIMEDOUT);
+
+	fi_cxi_cntr_add(mmio_addr, thresh);
+
+	ret = fi_cntr_wait(cntr, thresh, timeout);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_close(&cntr->fid);
+	cr_assert(ret == FI_SUCCESS);
+}
+
+Test(cntr, cntr_wait_bad_threshold)
+{
+	struct fid_cntr *cntr;
+	struct fi_cntr_attr attr = {
+		.wait_obj = FI_WAIT_UNSPEC,
+	};
+	int timeout = 2000;
+	uint64_t thresh = (1ULL << 49);
+	int ret;
+
+	ret = fi_cntr_open(cxit_domain, &attr, &cntr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_cntr_wait(cntr, thresh, timeout);
+	cr_assert(ret == -FI_EINVAL);
+
+	ret = fi_close(&cntr->fid);
+	cr_assert(ret == FI_SUCCESS);
 }
