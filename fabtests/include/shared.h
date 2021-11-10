@@ -228,6 +228,7 @@ extern struct ft_opts opts;
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
 		  struct ft_opts *opts);
 void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts);
+void ft_parse_hmem_opts(int op, char *optarg, struct ft_opts *opts);
 void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts);
 int ft_parse_api_opts(int op, char *optarg, struct fi_info *hints,
 		      struct ft_opts *opts);
@@ -254,8 +255,9 @@ extern int ft_socket_pair[2];
 extern int sock;
 extern int listen_sock;
 #define ADDR_OPTS "B:P:s:a:b::E::C:F:"
-#define FAB_OPTS "f:d:p:D:i:HK"
-#define INFO_OPTS FAB_OPTS "e:M:"
+#define FAB_OPTS "f:d:p:K"
+#define HMEM_OPTS "D:i:H"
+#define INFO_OPTS FAB_OPTS HMEM_OPTS "e:M:"
 #define CS_OPTS ADDR_OPTS "I:QS:mc:t:w:l"
 #define API_OPTS "o:"
 #define NO_CQ_DATA 0

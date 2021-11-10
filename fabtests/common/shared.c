@@ -2979,28 +2979,13 @@ void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
 		if (!strncasecmp("mr_local", optarg, 8))
 			opts->mr_mode &= ~FI_MR_LOCAL;
 		break;
-	case 'D':
-		if (!strncasecmp("ze", optarg, 2))
-			opts->iface = FI_HMEM_ZE;
-		else if (!strncasecmp("cuda", optarg, 4))
-			opts->iface = FI_HMEM_CUDA;
-		else
-			printf("Unsupported interface\n");
-		opts->options |= FT_OPT_ENABLE_HMEM | FT_OPT_USE_DEVICE;
-		break;
-	case 'i':
-		opts->device = atoi(optarg);
-		break;
-	case 'H':
-		opts->options |= FT_OPT_ENABLE_HMEM;
-		break;
 	case 'K':
 		opts->options |= FT_OPT_FORK_CHILD;
 		break;
 	default:
+		ft_parse_hmem_opts(op, optarg, opts);
 		/* let getopt handle unknown opts*/
 		break;
-
 	}
 }
 
@@ -3041,6 +3026,30 @@ void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts)
 		opts->num_connections = atoi(optarg);
 	default:
 		/* let getopt handle unknown opts*/
+		break;
+	}
+}
+
+void ft_parse_hmem_opts(int op, char *optarg, struct ft_opts *opts)
+{
+	switch (op) {
+	case 'D':
+		if (!strncasecmp("ze", optarg, 2))
+			opts->iface = FI_HMEM_ZE;
+		else if (!strncasecmp("cuda", optarg, 4))
+			opts->iface = FI_HMEM_CUDA;
+		else
+			printf("Unsupported interface\n");
+		opts->options |= FT_OPT_ENABLE_HMEM | FT_OPT_USE_DEVICE;
+		break;
+	case 'i':
+		opts->device = atoi(optarg);
+		break;
+	case 'H':
+		opts->options |= FT_OPT_ENABLE_HMEM;
+		break;
+	default:
+		/* Let getopt handle unknown opts*/
 		break;
 	}
 }
