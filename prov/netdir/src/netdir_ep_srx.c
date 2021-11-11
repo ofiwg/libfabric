@@ -188,7 +188,7 @@ static ssize_t ofi_nd_srx_recvmsg(struct fid_ep *pep, const struct fi_msg *msg,
 		entry->iov[i] = msg->msg_iov[i];
 	}
 
-	/* store allocated entry in 1st byte of internal data of context */
+	/* store allocated entry in 1st pointer of internal data of context */
 	if (msg->context)
 		ND_FI_CONTEXT(msg->context) = entry;
 

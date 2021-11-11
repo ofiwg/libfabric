@@ -399,7 +399,7 @@ ofi_nd_ep_sendmsg(struct fid_ep *pep, const struct fi_msg *msg, uint64_t flags)
 	entry->seq = InterlockedAdd64(&ep->domain->msg_cnt, 1);
 
 	/* since send operation can't be canceled, set NULL into
-	 * the 1st byte of internal data of context */
+	 * the 1st pointer of internal data of context */
 	if (msg->context)
 		ND_FI_CONTEXT(msg->context) = 0;
 
@@ -554,7 +554,7 @@ static ssize_t ofi_nd_ep_recvmsg(struct fid_ep *pep, const struct fi_msg *msg,
 	for (i = 0; i < msg->iov_count; i++)
 		entry->iov[i] = msg->msg_iov[i];
 
-	/* store allocated entry in 1st byte of internal data of context */
+	/* store allocated entry in 1st pointer of internal data of context */
 	if (msg->context)
 		ND_FI_CONTEXT(msg->context) = entry;
 

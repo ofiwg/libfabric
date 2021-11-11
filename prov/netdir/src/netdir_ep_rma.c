@@ -192,7 +192,7 @@ ofi_nd_ep_readmsg(struct fid_ep *pep, const struct fi_msg_rma *msg,
 	main_entry->seq = InterlockedAdd64(&ep->domain->msg_cnt, 1);
 
 	/* since write operation can't be canceled, set NULL into
-	 * the 1st byte of internal data of context */
+	 * the 1st pointer of internal data of context */
 	if (msg->context)
 		ND_FI_CONTEXT(msg->context) = 0;
 
@@ -340,7 +340,7 @@ ofi_nd_ep_writemsg(struct fid_ep *pep, const struct fi_msg_rma *msg,
 		return -FI_EINVAL;
 
 	for (i = 0; i < msg->rma_iov_count; i++) {
-		if (msg->rma_iov[i].len && !msg->rma_iov[i].addr) 
+		if (msg->rma_iov[i].len && !msg->rma_iov[i].addr)
 			return -FI_EINVAL;
 		rma_len += msg->rma_iov[i].len;
 	}
@@ -368,7 +368,7 @@ ofi_nd_ep_writemsg(struct fid_ep *pep, const struct fi_msg_rma *msg,
 	main_entry->seq = InterlockedAdd64(&ep->domain->msg_cnt, 1);
 
 	/* since write operation can't be canceled, set NULL into
-	* the 1st byte of internal data of context */
+	* the 1st pointer of internal data of context */
 	if (msg->context)
 		ND_FI_CONTEXT(msg->context) = 0;
 
