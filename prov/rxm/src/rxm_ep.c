@@ -1372,6 +1372,7 @@ err:
 	return ret;
 }
 
+
 static struct fi_ops rxm_ep_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = rxm_ep_close,

@@ -52,6 +52,7 @@
 #include <ofi_enosys.h>
 #include <ofi_util.h>
 #include <ofi_list.h>
+#include <ofi_lock.h>
 #include <ofi_proto.h>
 #include <ofi_iov.h>
 #include <ofi_hmem.h>
@@ -255,6 +256,14 @@ struct rxm_domain {
 	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
 	struct ofi_bufpool *amo_bufpool;
 	fastlock_t amo_bufpool_lock;
+};
+
+
+struct rxm_cntr {
+	struct util_cntr util_cntr;
+
+	/* Used in passthru mode */
+	struct fid_cntr *msg_cntr;
 };
 
 /* All peer addresses, whether they've been inserted into the AV

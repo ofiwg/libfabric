@@ -674,11 +674,14 @@ struct util_cntr {
 	ofi_cntr_progress_func	progress;
 };
 
+#define OFI_TIMEOUT_QUANTUM_MS 50
+
 void ofi_cntr_progress(struct util_cntr *cntr);
 int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 		  struct fi_cntr_attr *attr, struct util_cntr *cntr,
 		  ofi_cntr_progress_func progress, void *context);
 int ofi_cntr_cleanup(struct util_cntr *cntr);
+
 static inline void util_cntr_signal(struct util_cntr *cntr)
 {
 	assert(cntr->wait);

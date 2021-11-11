@@ -39,35 +39,167 @@
 #include <ofi_coll.h>
 #include "rxm.h"
 
+
+static uint64_t rxm_passthru_cntr_read(struct fid_cntr *cntr_fid)
+{
+	struct rxm_cntr *cntr;
+
+	cntr = container_of(cntr_fid, struct rxm_cntr, util_cntr.cntr_fid);
+	cntr->util_cntr.progress(&cntr->util_cntr);
+	return fi_cntr_read(cntr->msg_cntr);
+}
+
+static uint64_t rxm_passthru_cntr_readerr(struct fid_cntr *cntr_fid)
+{
+	struct rxm_cntr *cntr;
+
+	cntr = container_of(cntr_fid, struct rxm_cntr, util_cntr.cntr_fid);
+	cntr->util_cntr.progress(&cntr->util_cntr);
+	return fi_cntr_readerr(cntr->msg_cntr);
+}
+
+static int rxm_passthru_cntr_add(struct fid_cntr *cntr_fid, uint64_t value)
+{
+	struct rxm_cntr *cntr;
+
+	cntr = container_of(cntr_fid, struct rxm_cntr, util_cntr.cntr_fid);
+	return fi_cntr_add(cntr->msg_cntr, value);
+}
+
+static int rxm_passthru_cntr_set(struct fid_cntr *cntr_fid, uint64_t value)
+{
+	struct rxm_cntr *cntr;
+
+	cntr = container_of(cntr_fid, struct rxm_cntr, util_cntr.cntr_fid);
+	return fi_cntr_set(cntr->msg_cntr, value);
+}
+
+
+static int rxm_passthru_cntr_wait(struct fid_cntr *cntr_fid,
+				  uint64_t threshold, int timeout)
+{
+	struct rxm_cntr *cntr;
+	uint64_t endtime, errcnt;
+	int ret, timeout_quantum;
+
+	cntr = container_of(cntr_fid, struct rxm_cntr, util_cntr.cntr_fid);
+	errcnt = fi_cntr_readerr(cntr->msg_cntr);
+	endtime = ofi_timeout_time(timeout);
+
+	do {
+		cntr->util_cntr.progress(&cntr->util_cntr);
+
+		if (errcnt != fi_cntr_readerr(cntr->msg_cntr))
+			return -FI_EAVAIL;
+
+		if (ofi_adjust_timeout(endtime, &timeout))
+			return -FI_ETIMEDOUT;
+
+		/* We need to ensure that CM events are progressed, so return
+		 * periodically to force progress on the EQ.
+		 */
+		timeout_quantum = (timeout < 0 ? OFI_TIMEOUT_QUANTUM_MS :
+				   MIN(OFI_TIMEOUT_QUANTUM_MS, timeout));
+
+		ret = fi_cntr_wait(cntr->msg_cntr, threshold, timeout_quantum);
+	} while (ret == -FI_ETIMEDOUT &&
+	         (timeout < 0 || timeout_quantum < timeout));
+
+	return ret;
+}
+
+static int rxm_passthru_cntr_adderr(struct fid_cntr *cntr_fid, uint64_t value)
+{
+	struct rxm_cntr *cntr;
+
+	cntr = container_of(cntr_fid, struct rxm_cntr, util_cntr.cntr_fid);
+	return fi_cntr_adderr(cntr->msg_cntr, value);
+}
+
+static int rxm_passthru_cntr_seterr(struct fid_cntr *cntr_fid, uint64_t value)
+{
+	struct rxm_cntr *cntr;
+
+	cntr = container_of(cntr_fid, struct rxm_cntr, util_cntr.cntr_fid);
+	return fi_cntr_seterr(cntr->msg_cntr, value);
+}
+
+static struct fi_ops_cntr rxm_passthru_cntr_ops = {
+	.size = sizeof(struct fi_ops_cntr),
+	.read = rxm_passthru_cntr_read,
+	.readerr = rxm_passthru_cntr_readerr,
+	.add = rxm_passthru_cntr_add,
+	.set = rxm_passthru_cntr_set,
+	.wait = rxm_passthru_cntr_wait,
+	.adderr = rxm_passthru_cntr_adderr,
+	.seterr = rxm_passthru_cntr_seterr,
+};
+
+static int rxm_passthru_cntr_close(struct fid *fid)
+{
+	struct rxm_cntr *cntr;
+	int ret;
+
+	cntr = container_of(fid, struct rxm_cntr, util_cntr.cntr_fid.fid);
+
+	if (cntr->msg_cntr) {
+		ret = fi_close(&cntr->msg_cntr->fid);
+		if (ret)
+			return ret;
+	}
+
+	cntr->msg_cntr = NULL;
+	ret = ofi_cntr_cleanup(&cntr->util_cntr);
+	if (ret)
+		return ret;
+
+	free(cntr);
+	return 0;
+}
+
+static struct fi_ops rxm_passthru_cntr_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = rxm_passthru_cntr_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+};
+
 static int
 rxm_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 	      struct fid_cntr **cntr_fid, void *context)
 {
 	struct rxm_domain *domain;
-	struct util_cntr *cntr;
+	struct rxm_cntr *cntr;
 	int ret;
 
 	domain = container_of(fid_domain, struct rxm_domain,
 			      util_domain.domain_fid.fid);
-
-	if (domain->passthru) {
-		FI_WARN(&rxm_prov, FI_LOG_DOMAIN,
-			"counters not supported in passthru mode\n");
-		return -FI_ENOSYS;
-	}
-
 	cntr = calloc(1, sizeof(*cntr));
 	if (!cntr)
 		return -FI_ENOMEM;
 
-	ret = ofi_cntr_init(&rxm_prov, fid_domain, attr, cntr,
+	ret = ofi_cntr_init(&rxm_prov, fid_domain, attr, &cntr->util_cntr,
 			    &ofi_cntr_progress, context);
 	if (ret)
 		goto free;
 
-	*cntr_fid = &cntr->cntr_fid;
+	if (domain->passthru) {
+		ret = fi_cntr_open(domain->msg_domain, attr, &cntr->msg_cntr, cntr);
+		if (ret) {
+			RXM_WARN_ERR(FI_LOG_CNTR, "fi_cntr_open", ret);
+			goto cleanup;
+		}
+
+		cntr->util_cntr.cntr_fid.fid.ops = &rxm_passthru_cntr_fi_ops;
+		cntr->util_cntr.cntr_fid.ops = &rxm_passthru_cntr_ops;
+	}
+
+	*cntr_fid = &cntr->util_cntr.cntr_fid;
 	return FI_SUCCESS;
 
+cleanup:
+	ofi_cntr_cleanup(&cntr->util_cntr);
 free:
 	free(cntr);
 	return ret;
