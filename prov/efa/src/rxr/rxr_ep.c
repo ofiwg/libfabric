@@ -2066,9 +2066,12 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	dlist_foreach_container_safe(&ep->read_pending_list, struct rxr_read_entry,
 				     read_entry, pending_entry, tmp) {
 		peer = rxr_ep_get_peer(ep, read_entry->addr);
-		assert(peer);
-
-		if (peer->flags & RXR_PEER_IN_BACKOFF)
+		/*
+		 * Here peer can be NULL, when the read request is a
+		 * local read request. Local read request is used to copy
+		 * data from host memory to device memory on same process.
+		 */
+		if (peer && (peer->flags & RXR_PEER_IN_BACKOFF))
 			continue;
 
 		/*
