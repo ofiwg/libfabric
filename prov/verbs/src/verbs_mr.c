@@ -151,9 +151,6 @@ vrb_mr_ofi2ibv_access(uint64_t ofi_access, struct vrb_domain *domain)
 			ibv_access |= IBV_ACCESS_REMOTE_WRITE;
 	}
 
-	if (ofi_access & FI_WRITE)
-		ibv_access |= IBV_ACCESS_LOCAL_WRITE;
-
 	if (ofi_access & FI_REMOTE_READ)
 		ibv_access |= IBV_ACCESS_REMOTE_READ;
 
