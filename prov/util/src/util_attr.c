@@ -709,6 +709,11 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 				user_attr->tx_ctx_cnt);
 			return -FI_ENODATA;
 		}
+	} else if (!user_attr->tx_ctx_cnt &&
+		   prov_attr->tx_ctx_cnt == FI_SHARED_CONTEXT) {
+		FI_INFO(prov, FI_LOG_CORE,
+			"Provider requires use of shared tx context\n");
+		return -FI_ENODATA;
 	}
 
 	if (user_attr->rx_ctx_cnt > prov_info->domain_attr->max_ep_rx_ctx) {
@@ -726,6 +731,11 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 				user_attr->rx_ctx_cnt);
 			return -FI_ENODATA;
 		}
+	} else if (!user_attr->rx_ctx_cnt &&
+		   prov_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
+		FI_INFO(prov, FI_LOG_CORE,
+			"Provider requires use of shared rx context\n");
+		return -FI_ENODATA;
 	}
 
 	if (user_info->caps & (FI_RMA | FI_ATOMIC)) {

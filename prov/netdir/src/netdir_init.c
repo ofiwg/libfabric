@@ -101,6 +101,7 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 		return -FI_ENOMEM;
 
 	info->tx_attr->caps = FI_MSG | FI_SEND;
+	info->tx_attr->mode = FI_CONTEXT;
 	info->tx_attr->comp_order = FI_ORDER_STRICT;
 	info->tx_attr->inject_size = (size_t)gl_data.inline_thr;
 	info->tx_attr->size = (size_t)adapter->MaxTransferLength;
@@ -112,6 +113,7 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 	info->tx_attr->msg_order = OFI_ND_MSG_ORDER;
 
 	info->rx_attr->caps = FI_MSG | FI_RECV;
+	info->rx_attr->mode = FI_CONTEXT;
 	info->rx_attr->comp_order = FI_ORDER_STRICT;
 	info->rx_attr->total_buffered_recv = 0;
 	info->rx_attr->size = (size_t)adapter->MaxTransferLength;
@@ -141,6 +143,7 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 	info->fabric_attr->prov_version = OFI_VERSION_DEF_PROV;
 
 	info->caps = OFI_ND_EP_CAPS | OFI_ND_DOMAIN_CAPS;
+	info->mode = FI_CONTEXT;
 	info->addr_format = FI_SOCKADDR;
 
 	if (!ofi_nd_util_prov.info) {
