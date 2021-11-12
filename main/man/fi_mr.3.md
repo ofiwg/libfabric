@@ -112,7 +112,8 @@ int fi_mr_enable(struct fid_mr *mr);
   This parameter is reserved for future use and must be 0.
 
 *requested_key*
-: Optional requested remote key associated with registered buffers.
+: Requested remote key associated with registered buffers.  Parameter
+  is ignored if FI_MR_PROV_KEY flag is set in the domain mr_mode bits.
 
 *attr*
 : Memory region attributes
@@ -349,7 +350,8 @@ region must provide the key associated with the registration.
 Because MR keys must be provided by a remote process, an application
 can use the requested_key parameter to indicate that a specific key
 value be returned.  Support for user requested keys is provider
-specific and is determined by the mr_mode domain attribute.
+specific and is determined by the FI_MR_PROV_KEY flag value in the
+mr_mode domain attribute.
 
 Remote RMA and atomic operations indicate the location within a
 registered memory region by specifying an address.  The location
@@ -590,7 +592,7 @@ can use the requested_key field to indicate that a specific key be
 used by the provider.  This allows applications to use well known key
 values, which can avoid applications needing to exchange and store keys.
 Support for user requested keys is provider specific and is determined
-by the mr_mode domain attribute.
+by the the FI_MR_PROV_KEY flag in the mr_mode domain attribute field.
 
 ## context
 
