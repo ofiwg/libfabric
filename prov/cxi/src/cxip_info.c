@@ -61,7 +61,7 @@ struct fi_tx_attr cxip_tx_attr = {
 	.op_flags = CXIP_TX_OP_FLAGS,
 	.msg_order = CXIP_MSG_ORDER,
 	.inject_size = CXIP_INJECT_SIZE,
-	.size = 256,  /* 64k / 256b */
+	.size = CXIP_MAX_TX_SIZE,
 	.iov_limit = 1,
 	.rma_iov_limit = 1,
 };
@@ -614,6 +614,22 @@ static void cxip_fini(void)
 	cxip_if_fini();
 }
 
+static void cxip_alter_tx_attr(struct fi_tx_attr *attr,
+			       const struct fi_tx_attr *hints,
+			       uint64_t info_caps)
+{
+	if (!hints || hints->size == 0)
+		attr->size = CXIP_DEFAULT_TX_SIZE;
+}
+
+static void cxip_alter_info(struct fi_info *info, const struct fi_info *hints,
+			    uint32_t api_version)
+{
+	for (; info; info = info->next)
+		cxip_alter_tx_attr(info->tx_attr, hints ? hints->tx_attr : NULL,
+				   info->caps);
+}
+
 /*
  * cxip_getinfo() - Provider fi_getinfo() implementation.
  */
@@ -735,6 +751,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		}
 	}
 
+	cxip_alter_info(*info, hints, version);
 
 	/* Check if any infos remain. */
 	if (!*info)

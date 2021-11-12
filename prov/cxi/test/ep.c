@@ -1101,3 +1101,53 @@ Test(ep_init, tclass)
 
 	cxit_teardown_rma();
 }
+
+Test(ep, invalid_tx_attr_size)
+{
+	struct fid_ep *tmp_ep;
+	int ret;
+
+	/* Invalid TX attr size. */
+	cxit_fi->tx_attr->size = 1234567;
+
+	ret = fi_endpoint(cxit_domain, cxit_fi, &tmp_ep, NULL);
+	cr_assert(ret != FI_SUCCESS, "fi_endpoint");
+}
+
+Test(ep, valid_tx_attr_size)
+{
+	struct fid_ep *tmp_ep;
+	int ret;
+
+	/* Invalid TX attr size. */
+	cxit_fi->tx_attr->size = 16384;
+
+	ret = fi_endpoint(cxit_domain, cxit_fi, &tmp_ep, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_endpoint");
+
+	ret = fi_close(&tmp_ep->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close EP");
+}
+
+Test(ep, valid_tx_attr_size_hints)
+{
+	struct fi_info *hints;
+	struct fi_info *info;
+	int ret;
+	unsigned int tx_size = 1024;
+
+	hints = fi_allocinfo();
+	cr_assert(hints != NULL, "fi_allocinfo");
+
+	hints->tx_attr->size = tx_size;
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+
+	assert(info->tx_attr->size == tx_size);
+
+	fi_freeinfo(info);
+	fi_freeinfo(hints);
+}

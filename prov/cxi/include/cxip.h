@@ -138,6 +138,10 @@
 
 #define CXIP_INJECT_SIZE		C_MAX_IDC_PAYLOAD_UNR
 
+/* Max TX size of 16,384 translate to a 4MiB command queue buffer. */
+#define CXIP_MAX_TX_SIZE		16384U
+#define CXIP_DEFAULT_TX_SIZE		256U
+
 #define CXIP_MAJOR_VERSION		0
 #define CXIP_MINOR_VERSION		0
 #define CXIP_PROV_VERSION		FI_VERSION(CXIP_MAJOR_VERSION, \
