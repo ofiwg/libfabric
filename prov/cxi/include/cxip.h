@@ -511,6 +511,7 @@ struct cxip_md {
 	struct cxip_domain *dom;
 	struct cxi_md *md;
 	struct ofi_mr_info info;
+	bool cached;
 };
 
 /*
@@ -563,6 +564,17 @@ struct cxip_domain {
 
 	struct fi_hmem_override_ops hmem_ops;
 };
+
+static inline bool cxip_domain_mr_cache_enabled(struct cxip_domain *dom)
+{
+	return dom->iomm.domain == &dom->util_domain;
+}
+
+static inline bool cxip_domain_mr_cache_iface_enabled(struct cxip_domain *dom,
+						      enum fi_hmem_iface iface)
+{
+	return cxip_domain_mr_cache_enabled(dom) && dom->iomm.monitors[iface];
+}
 
 /* This structure implies knowledge about the breakdown of the NIC address,
  * which is taken from the AMA, that the provider does not know in a flexible

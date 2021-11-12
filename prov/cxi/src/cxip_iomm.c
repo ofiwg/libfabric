@@ -62,6 +62,7 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 		}
 		md->dom = dom;
 		md->info = entry->info;
+		md->cached = true;
 	}
 
 	return ret;
@@ -182,6 +183,7 @@ int cxip_iomm_init(struct cxip_domain *dom)
 		[FI_HMEM_CUDA] = default_cuda_monitor,
 		[FI_HMEM_ROCR] = default_rocr_monitor,
 	};
+	enum fi_hmem_iface iface;
 	int ret;
 	bool scalable;
 
@@ -216,10 +218,14 @@ int cxip_iomm_init(struct cxip_domain *dom)
 		ret = ofi_mr_cache_init(&dom->util_domain, memory_monitors,
 					&dom->iomm);
 		if (ret) {
-			CXIP_WARN("ofi_mr_cache_init failed: %d\n", ret);
-			if (scalable)
-				cxip_scalable_iomm_fini(dom);
-			return ret;
+			CXIP_INFO("MR cache init failed: %s. MR caching disabled.\n",
+				  fi_strerror(-ret));
+		} else {
+			for (iface = 0; iface < OFI_HMEM_MAX; iface++) {
+				if (dom->iomm.monitors[iface])
+					CXIP_INFO("MR cache enabled for %s memory\n",
+						  fi_tostr(&iface, FI_TYPE_HMEM_IFACE));
+			}
 		}
 	}
 
@@ -240,6 +246,79 @@ void cxip_iomm_fini(struct cxip_domain *dom)
 		ofi_mr_cache_cleanup(&dom->iomm);
 }
 
+static int cxip_map_cache(struct cxip_domain *dom, struct fi_mr_attr *attr,
+			  struct cxip_md **md)
+{
+	struct ofi_mr_entry *entry;
+	int ret;
+
+	ret = ofi_mr_cache_search(&dom->iomm, attr, &entry);
+	if (ret) {
+		CXIP_WARN("Failed to acquire mapping (%p, %lu): %d\n",
+			  attr->mr_iov->iov_base, attr->mr_iov->iov_len, ret);
+		return ret;
+	}
+
+	*md = (struct cxip_md *)entry->data;
+
+	return FI_SUCCESS;
+}
+
+static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
+			    struct cxip_md **md)
+{
+	struct cxip_md *uncached_md;
+	uint32_t map_flags;
+	int ret;
+
+	/* Prefer the ATS (scalable MD) whenever possible
+	 *
+	 * TODO: ATS (scalable MD) can only support CPU page sizes and should be
+	 * avoided for non-standard page sizes.
+	 */
+	if (dom->scalable_iomm && attr->iface == FI_HMEM_SYSTEM) {
+		*md = &dom->scalable_md;
+		return FI_SUCCESS;
+	}
+
+	uncached_md = calloc(1, sizeof(*uncached_md));
+	if (!uncached_md)
+		return -FI_ENOMEM;
+
+	map_flags = CXI_MAP_READ | CXI_MAP_WRITE;
+	if (attr->iface == FI_HMEM_SYSTEM) {
+		if (dom->ats)
+			map_flags |= CXI_MAP_ATS;
+
+		if (!dom->odp)
+			map_flags |= CXI_MAP_PIN;
+	} else {
+		map_flags |= CXI_MAP_DEVICE;
+	}
+
+	ret = cxil_map(dom->lni->lni, attr->mr_iov->iov_base,
+		       attr->mr_iov->iov_len, map_flags, NULL,
+		       &uncached_md->md);
+	if (ret) {
+		CXIP_WARN("cxil_map() failed: %d\n", ret);
+		goto err_free_uncached_md;
+	}
+
+	uncached_md->dom = dom;
+	uncached_md->info.iov.iov_base = (void *)uncached_md->md->va;
+	uncached_md->info.iov.iov_len = uncached_md->md->len;
+	uncached_md->info.iface = attr->iface;
+
+	*md = uncached_md;
+
+	return FI_SUCCESS;
+
+err_free_uncached_md:
+	free(uncached_md);
+
+	return ret;
+}
+
 /*
  * cxip_map() - Acquire IO mapping for buf.
  *
@@ -249,7 +328,6 @@ void cxip_iomm_fini(struct cxip_domain *dom)
 int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	     struct cxip_md **md)
 {
-	int ret;
 	struct iovec iov = {
 		.iov_base = (void *)buf,
 		.iov_len = len,
@@ -273,7 +351,7 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	 * memory, the buffer pointer query can be avoided completely if the
 	 * corresponding entry is in the cache.
 	 */
-	if (dom->rocr_dev_mem_only) {
+	if (cxip_domain_mr_cache_enabled(dom) && dom->rocr_dev_mem_only) {
 		entry = ofi_mr_cache_find(&dom->iomm, &attr);
 		if (entry) {
 			*md = (struct cxip_md *)entry->data;
@@ -288,15 +366,29 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	if (dom->hmem)
 		attr.iface = ofi_get_hmem_iface(buf);
 
-	ret = ofi_mr_cache_search(&dom->iomm, &attr, &entry);
-	if (ret) {
-		CXIP_WARN("Failed to acquire mapping (%p, %lu): %d\n",
-			  buf, len, ret);
-		return ret;
-	}
+	if (cxip_domain_mr_cache_iface_enabled(dom, attr.iface))
+		return cxip_map_cache(dom, &attr, md);
 
-	*md = (struct cxip_md *)entry->data;
-	return FI_SUCCESS;
+	return cxip_map_nocache(dom, &attr, md);
+}
+
+static void cxip_unmap_cache(struct cxip_md *md)
+{
+	struct ofi_mr_entry *entry =
+		container_of(md, struct ofi_mr_entry, data);
+
+	ofi_mr_cache_delete(&md->dom->iomm, entry);
+}
+
+static void cxip_unmap_nocache(struct cxip_md *md)
+{
+	int ret;
+
+	ret = cxil_unmap(md->md);
+	if (ret)
+		CXIP_WARN("cxil_unmap failed: %d\n", ret);
+
+	free(md);
 }
 
 /*
@@ -307,12 +399,14 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
  */
 void cxip_unmap(struct cxip_md *md)
 {
-	struct ofi_mr_entry *entry;
-
-	entry = container_of(md, struct ofi_mr_entry, data);
-
+	/* Scalable MD is owned by the CXIP domain and thus will be freed when
+	 * the domain is closed.
+	 */
 	if (md == &md->dom->scalable_md)
 		return;
 
-	ofi_mr_cache_delete(&md->dom->iomm, entry);
+	if (md->cached)
+		cxip_unmap_cache(md);
+	else
+		cxip_unmap_nocache(md);
 }

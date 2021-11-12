@@ -16,9 +16,19 @@ if [[ $# -gt 0 ]]; then
     exit $?
 fi
 
-# Run unit tests.  $(CWD) should be writeable.
-echo "running: ./cxitest --verbose --tap=cxitest.tap -j2 > $TEST_OUTPUT 2>&1"
-./cxitest --verbose --tap=cxitest.tap -j2 > $TEST_OUTPUT 2>&1
+# Run unit tests. $(CWD) should be writeable.
+test="./cxitest --verbose --tap=cxitest.tap -j2 > $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+if [[ $? -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
+# Disable caching of FI_HMEM_SYSTEM.
+test="FI_MR_CACHE_MONITOR=disable ./cxitest --verbose --tap=cxitest-no-cache.tap -j2 >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
 if [[ $? -ne 0 ]]; then
     echo "cxitest return non-zero exit code. Possible failures in test teardown"
     exit 1
