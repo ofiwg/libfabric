@@ -355,7 +355,12 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 	tx_entry->window -= data_len;
 	assert(tx_entry->window >= 0);
 	if (tx_entry->bytes_sent < tx_entry->total_len) {
-		assert(!efa_ep_is_cuda_mr(tx_entry->desc[0]));
+		/*
+		 * We currently require EFA RDMA support to enable the FI_HMEM
+		 * devices we support. Emulated read should not be used.
+		 */
+		assert(!efa_ep_is_hmem_mr(tx_entry->desc[0]));
+
 		if (tx_entry->desc[0] || efa_is_cache_available(efa_domain))
 			rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
 

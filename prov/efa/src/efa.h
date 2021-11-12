@@ -635,9 +635,14 @@ struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 	return av_entry->conn.ep_addr ? &av_entry->conn.rdm_peer : NULL;
 }
 
-static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)
+static inline bool efa_ep_is_hmem_mr(struct efa_mr *efa_mr)
 {
 	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA): false;
+}
+
+static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)
+{
+	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA) : false;
 }
 
 /*

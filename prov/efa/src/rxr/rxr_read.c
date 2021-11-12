@@ -400,7 +400,7 @@ int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 
 	/* setup iov */
 	assert(pkt_entry->x_entry == rx_entry);
-	assert(rx_entry->desc && efa_ep_is_cuda_mr(rx_entry->desc[0]));
+	assert(rx_entry->desc && efa_ep_is_hmem_mr(rx_entry->desc[0]));
 	read_entry->iov_count = rx_entry->iov_count;
 	memset(read_entry->mr, 0, sizeof(*read_entry->mr) * read_entry->iov_count);
 	memcpy(read_entry->iov, rx_entry->iov, rx_entry->iov_count * sizeof(struct iovec));
@@ -414,8 +414,9 @@ int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 		return -FI_ETRUNC;
 	}
 
-	assert(efa_ep_is_cuda_mr(read_entry->mr_desc[0]));
+	assert(efa_ep_is_hmem_mr(read_entry->mr_desc[0]));
 	err = ofi_truncate_iov(read_entry->iov, &read_entry->iov_count, data_size + ep->msg_prefix_size);
+
 	if (err) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"data_offset %ld data_size %ld out of range\n",
