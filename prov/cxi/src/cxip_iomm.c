@@ -250,8 +250,10 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	     struct cxip_md **md)
 {
 	int ret;
-	struct iovec iov;
-	unsigned long buf_adj;
+	struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
 	struct fi_mr_attr attr = {
 		.iov_count = 1,
 		.mr_iov = &iov,
@@ -265,14 +267,6 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 		*md = &dom->scalable_md;
 		return FI_SUCCESS;
 	}
-
-	/* TODO align buffer inside cache so driver can control mapping
-	 * size.
-	 */
-	buf_adj = FLOOR(buf, C_PAGE_SIZE);
-	iov.iov_base = (void *)buf_adj;
-	buf_adj = (unsigned long)buf - buf_adj;
-	iov.iov_len = CEILING(len + buf_adj, C_PAGE_SIZE);
 
 	/* Since the MR cache find operates on virtual addresses and all device
 	 * memory must support a unified virtual address space with system
