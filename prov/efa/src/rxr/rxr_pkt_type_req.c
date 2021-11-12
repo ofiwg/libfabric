@@ -317,25 +317,57 @@ int64_t rxr_pkt_req_cq_data(struct rxr_pkt_entry *pkt_entry)
 	return cq_data_hdr->cq_data;
 }
 
-size_t rxr_pkt_req_max_header_size(int pkt_type)
+/**
+ * @brief calculates the exact header size given a REQ packet type, flags, and IOV count.
+ *
+ * @param[in]	pkt_type	packet type
+ * @param[in]	flags	flags from packet
+ * @param[in]	rma_iov_count	number of RMA IOV structures present
+ * @return	The exact size of the packet header
+ */
+inline
+size_t rxr_pkt_req_header_size(int pkt_type, uint16_t flags, size_t rma_iov_count)
 {
-	/* max_hdr_size does not include optional connid hdr length because
-	 * it is impossible to have both optional connid hdr and opt_raw_addr_hdr
-	 * in the header, and length of opt raw addr hdr is larger than
-	 * connid hdr (which is confirmed by the following assertion).
+	int hdr_size = REQ_INF_LIST[pkt_type].base_hdr_size;
+
+	if (flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
+		/* It is impossible to have both optional connid hdr and opt_raw_addr_hdr
+		 * in the header, and length of opt raw addr hdr is larger than
+		 * connid hdr (which is confirmed by the following assertion).
+		 */
+		assert(RXR_REQ_OPT_RAW_ADDR_HDR_SIZE >= sizeof(struct rxr_req_opt_connid_hdr));
+		hdr_size += RXR_REQ_OPT_RAW_ADDR_HDR_SIZE;
+	} else if (flags & RXR_PKT_CONNID_HDR) {
+		hdr_size += sizeof(struct rxr_req_opt_connid_hdr);
+	}
+
+	if (flags & RXR_REQ_OPT_CQ_DATA_HDR) {
+		hdr_size += sizeof(struct rxr_req_opt_cq_data_hdr);
+	}
+
+	if (rxr_pkt_type_contains_rma_iov(pkt_type)) {
+		hdr_size += rma_iov_count * sizeof(struct fi_rma_iov);
+	}
+
+	return hdr_size;
+}
+
+/**
+ * @brief calculates the max header size given a REQ packet type
+ *
+ * @param[in]	pkt_type	packet type
+ * @return	The max possible size of the packet header
+ */
+inline size_t rxr_pkt_req_max_header_size(int pkt_type)
+{
+	/* To calculate max REQ reader size, we should include all possible REQ opt header flags.
+	 * However, because the optional connid header and optional raw address header cannot
+	 * exist at the same time, and the raw address header is longer than connid header,
+	 * we did not include the flag for CONNID header
 	 */
-	assert(RXR_REQ_OPT_RAW_ADDR_HDR_SIZE >= sizeof(struct rxr_req_opt_connid_hdr));
+	uint16_t header_flags = RXR_REQ_OPT_RAW_ADDR_HDR_SIZE | RXR_REQ_OPT_CQ_DATA_HDR;
 
-	int max_hdr_size = REQ_INF_LIST[pkt_type].base_hdr_size
-		+ RXR_REQ_OPT_RAW_ADDR_HDR_SIZE
-		+ sizeof(struct rxr_req_opt_cq_data_hdr);
-
-	if (pkt_type == RXR_EAGER_RTW_PKT ||
-	    pkt_type == RXR_DC_EAGER_RTW_PKT ||
-	    pkt_type == RXR_LONGCTS_RTW_PKT)
-		max_hdr_size += RXR_IOV_LIMIT * sizeof(struct fi_rma_iov);
-
-	return max_hdr_size;
+	return rxr_pkt_req_header_size(pkt_type, header_flags, RXR_IOV_LIMIT);
 }
 
 size_t rxr_pkt_max_header_size(void)
@@ -353,12 +385,13 @@ size_t rxr_pkt_max_header_size(void)
 	}
 
 	return max_hdr_size;
-
 }
 
-size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type)
+size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type,
+				 uint64_t fi_flags, size_t rma_iov_count)
 {
 	struct rdm_peer *peer;
+	uint16_t header_flags = 0;
 
 	peer = rxr_ep_get_peer(ep, addr);
 	assert(peer);
@@ -368,7 +401,17 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
 		return rxr_env.shm_max_medium_size;
 	}
 
-	return ep->mtu_size - rxr_pkt_req_max_header_size(pkt_type);
+	if (rxr_peer_need_raw_addr_hdr(peer))
+		header_flags |= RXR_REQ_OPT_RAW_ADDR_HDR;
+	else if (rxr_peer_need_connid(peer))
+		header_flags |= RXR_PKT_CONNID_HDR;
+
+	if (fi_flags & FI_REMOTE_CQ_DATA)
+		header_flags |= RXR_REQ_OPT_CQ_DATA_HDR;
+
+	return ep->mtu_size - rxr_pkt_req_header_size(pkt_type,
+						      header_flags,
+						      rma_iov_count);
 }
 
 /*
