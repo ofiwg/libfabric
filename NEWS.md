@@ -42,6 +42,12 @@ v1.14.0, Fri Nov 19, 2021
 
 ## SHM
 
+- Separate HMEM caps and disable FI_ATOMIC when requested
+- Fix casting ints to pointers of different sizes
+- Add error checking in smr_setname
+- Distinguish between max shm name and max path name
+- Move allocation of sar_msg into smr_format_sar()
+
 ## TCP
 
 - Use IP_BIND_ADDRESS_NO_PORT socket option to improve scaling
