@@ -11,6 +11,16 @@ v1.14.0, Fri Nov 19, 2021
 
 ## Core
 
+- Add time stamps to log messages
+- Fix gdrcopy calculation of memory region size when aligned
+- Allow user to disable use of p2p transfers
+- Update fi_tostr print FI_SHARED_CONTEXT text instead of value
+- Update fi_tostr to output field names matching header file names
+- Fix narrow race condition in ofi_init
+- Minor optimization to pollfds to handle timeout of 0
+- Add new fi_log_sparse API to rate limit repeated log output
+- Define memory registration for buffers used for collective operations
+
 ## EFA
 - Provide better support for long lived applications utilizing the RDM
   endpoint, that may reuse an EFA queue pair after an application restarts.
@@ -34,15 +44,50 @@ v1.14.0, Fri Nov 19, 2021
 
 ## TCP
 
+- Use IP_BIND_ADDRESS_NO_PORT socket option to improve scaling
+- Fix situation where we can leave socket in blocking mode
+- Add specific fi_info output to fi_getinfo for srx case
+- Code restructuring and renames to improve maintenance
+- Initial implementation to support tagged messages at tcp layer
+- Optimize RMA handling at receiver
+- Remove non-defined CQ flags when reporting completions
+
 ## RXM
+
+- Reset connection state if we receive a new connection request
+- Increase and update debug log messages to be more consistent
+- Force CM progress if msg ep's are actively connecting
+- Optimize handling for cm_progress_interval = 0
 
 ## Util
 
+- Fix fi_getinfo check if provider requires the use of shared contexts
+- Replace deprecated pthread_yield with sched_yield
+- Fix compiler warning mixing u64 with size_t fields
+- Fix memory leak in util_av_set_close
+- Fix ofi_av_set to use passed in start_addr and end_addr values
+- Add logic to detect if another library is intercepting memory calls
+- Update 128-bit atomic support
+- Fix possible deadlock if multiple memory monitors are enabled for the
+  same memory type
+
 ## Verbs
 
+- Fix setting MR access to handle read-only buffers
+- Expand debug output
+- Fail FI_HMEM support if p2p is disabled
+- Handle FI_HMEM_HOST_ALLOC flag for FI_HMEM_ZE
+
 ## Fabtests
-- Update scripts to allow provider specific fabtests, and add an EFA RDM RNR
-  fabtest
+
+- Fix rdm_rma_trigger support for hmem
+- Add key exchanges to common code to support device memory
+- Remove need for OOB address exchange when hmem is enabled
+- Always use command line provided inject size when given
+- Add ability to test tagged messages over msg ep's
+- Add support for shared rx contexts to common code
+- Update scripts to allow provider specific fabtests
+- Add an EFA RDM RNR fabtest
 
 v1.13.2, Fri Oct 15, 2021
 ========================
