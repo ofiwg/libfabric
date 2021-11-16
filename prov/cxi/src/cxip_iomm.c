@@ -45,6 +45,9 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 		map_flags |= CXI_MAP_DEVICE;
 	}
 
+	if (!cxip_env.iotlb)
+		map_flags |= CXI_MAP_NOCACHE;
+
 	ret = cxil_map(dom->lni->lni, entry->info.iov.iov_base,
 		       entry->info.iov.iov_len, map_flags, NULL, &md->md);
 	if (ret) {
@@ -89,6 +92,9 @@ static int cxip_scalable_iomm_init(struct cxip_domain *dom)
 {
 	int ret;
 	uint32_t map_flags = (CXI_MAP_READ | CXI_MAP_WRITE | CXI_MAP_ATS);
+
+	if (!cxip_env.iotlb)
+		map_flags |= CXI_MAP_NOCACHE;
 
 	ret = cxil_map(dom->lni->lni, 0, -1, map_flags, NULL,
 		       &dom->scalable_md.md);
@@ -295,6 +301,9 @@ static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
 	} else {
 		map_flags |= CXI_MAP_DEVICE;
 	}
+
+	if (!cxip_env.iotlb)
+		map_flags |= CXI_MAP_NOCACHE;
 
 	ret = cxil_map(dom->lni->lni, attr->mr_iov->iov_base,
 		       attr->mr_iov->iov_len, map_flags, NULL,

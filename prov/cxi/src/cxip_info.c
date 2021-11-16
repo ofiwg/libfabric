@@ -253,6 +253,7 @@ static int cxip_env_validate_device_name(const char *device_name)
 struct cxip_environment cxip_env = {
 	.odp = false,
 	.ats = false,
+	.iotlb = true,
 	.ats_mlock_mode = CXIP_ATS_MLOCK_ALL,
 	.rx_match_mode = CXIP_PTLTE_DEFAULT_MODE,
 	.rdzv_offload = true,
@@ -294,6 +295,10 @@ static void cxip_env_init(void)
 	fi_param_define(&cxip_prov, "ats", FI_PARAM_BOOL,
 			"Enables PCIe ATS.");
 	fi_param_get_bool(&cxip_prov, "ats", &cxip_env.ats);
+
+	fi_param_define(&cxip_prov, "iotlb", FI_PARAM_BOOL,
+			"Enables the NIC IOTLB (default %d).", cxip_env.iotlb);
+	fi_param_get_bool(&cxip_prov, "iotlb", &cxip_env.iotlb);
 
 	fi_param_define(&cxip_prov, "ats_mlock_mode", FI_PARAM_STRING,
 			"Sets ATS mlock mode (off | all).");

@@ -200,6 +200,7 @@ struct cxip_environment {
 	/* Translation */
 	int odp;
 	int ats;
+	int iotlb;
 	enum cxip_ats_mlock_mode ats_mlock_mode;
 
 	/* Messaging */
