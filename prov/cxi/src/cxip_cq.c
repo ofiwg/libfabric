@@ -633,8 +633,6 @@ mmap_success:
 	if (eq_passthrough) {
 		eq->md = NULL;
 		eq_attr.flags |= CXI_EQ_PASSTHROUGH;
-	} else if (cq->domain->scalable_iomm) {
-		eq->md = cq->domain->scalable_md.md;
 	} else {
 		ret = cxil_map(cq->domain->lni->lni, eq->buf, eq->len,
 			       CXIP_EQ_MAP_FLAGS, NULL, &eq->md);
