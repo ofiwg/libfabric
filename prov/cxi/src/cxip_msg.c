@@ -4133,6 +4133,11 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
 	bool trig = req->triggered;
 
+	/* Allocate rendezvous ID */
+	rdzv_id = cxip_rdzv_id_alloc(txc->ep_obj, req);
+	if (rdzv_id < 0)
+		return -FI_EAGAIN;
+
 	/* Calculate DFA */
 	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
 		      CXIP_PTL_IDX_RXQ, &dfa, &idx_ext);
@@ -4141,6 +4146,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 	ret = cxip_map(txc->domain, req->send.buf, req->send.len, &send_md);
 	if (ret) {
 		TXC_WARN(txc, "Failed to map send buffer: %d\n", ret);
+		cxip_rdzv_id_free(txc->ep_obj, rdzv_id);
 		return ret;
 	}
 	req->send.send_md = send_md;
@@ -4151,11 +4157,6 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 		TXC_WARN(txc, "Failed to prepare source window: %d\n", ret);
 		goto err_unmap;
 	}
-
-	/* Allocate rendezvous ID */
-	rdzv_id = cxip_rdzv_id_alloc(txc->ep_obj, req);
-	if (rdzv_id < 0)
-		goto err_unmap;
 
 	/* Build match bits */
 	if (req->send.tagged) {
@@ -4187,8 +4188,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 
 	if (cxip_cq_saturated(txc->send_cq)) {
 		TXC_DBG(txc, "CQ saturated\n");
-		ret = -FI_EAGAIN;
-		goto err_free_rdzv_id;
+		goto err_unmap;
 	}
 
 	fastlock_acquire(&cmdq->lock);
@@ -4204,7 +4204,6 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 		if (ret) {
 			TXC_DBG(txc, "Failed to issue CQ_FENCE command: %d\n",
 				ret);
-			ret = -FI_EAGAIN;
 			goto err_unlock;
 		}
 	}
@@ -4262,10 +4261,9 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 
 err_unlock:
 	fastlock_release(&cmdq->lock);
-err_free_rdzv_id:
-	cxip_rdzv_id_free(txc->ep_obj, rdzv_id);
 err_unmap:
 	cxip_unmap(send_md);
+	cxip_rdzv_id_free(txc->ep_obj, rdzv_id);
 
 	return -FI_EAGAIN;
 }
