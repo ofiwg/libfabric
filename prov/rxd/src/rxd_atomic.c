@@ -112,7 +112,7 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 {
 	struct rxd_x_entry *tx_entry;
 	struct iovec iov[RXD_IOV_LIMIT], res_iov[RXD_IOV_LIMIT], comp_iov[RXD_IOV_LIMIT];
-	struct fi_rma_iov rma_iov[RXD_IOV_LIMIT]; 
+	struct fi_rma_iov rma_iov[RXD_IOV_LIMIT];
 	fi_addr_t rxd_addr;
 	ssize_t ret = -FI_EAGAIN;
 
@@ -133,7 +133,7 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
-	
+
 	rxd_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->fi_addr_idx),
 					     RXD_IDX_OFFSET(addr));
 	if (!rxd_addr)
@@ -221,7 +221,7 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	struct rxd_ep *rxd_ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
 	struct rxd_x_entry *tx_entry;
 	struct iovec iov;
-	struct fi_rma_iov rma_iov; 
+	struct fi_rma_iov rma_iov;
 	fi_addr_t rxd_addr;
 	ssize_t ret = -FI_EAGAIN;
 
@@ -237,7 +237,7 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
-	rxd_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->fi_addr_idx), 
+	rxd_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->fi_addr_idx),
 					     RXD_IDX_OFFSET(addr));
 	if (!rxd_addr)
 		goto out;
@@ -413,7 +413,13 @@ int rxd_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 	if (flags & FI_TAGGED) {
 		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
 			"tagged atomic op not supported\n");
-		return -FI_EINVAL;
+		return -FI_EOPNOTSUPP;
+	}
+
+	if ((datatype == FI_INT128) || (datatype == FI_UINT128)) {
+		FI_WARN(&rxd_prov, FI_LOG_EP_CTRL,
+			"128-bit integers not supported\n");
+		return -FI_EOPNOTSUPP;
 	}
 
 	ret = ofi_atomic_valid(&rxd_prov, datatype, op, flags);
