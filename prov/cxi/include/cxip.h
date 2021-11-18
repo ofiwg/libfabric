@@ -981,14 +981,41 @@ struct cxip_ux_send {
 	union c_event put_ev;
 };
 
+/* Key used to associate PUT and PUT_OVERFLOW events */
+union cxip_def_event_key {
+	struct {
+		uint64_t initiator	: 32;
+		uint64_t rdzv_id	: 8;
+		uint64_t pad0		: 23;
+		uint64_t rdzv		: 1;
+	};
+	struct {
+		uint64_t start_addr	: 57;
+		uint64_t pad1		: 7;
+	};
+	uint64_t raw;
+};
+
 struct cxip_deferred_event {
 	struct dlist_entry rxc_entry;
+	union cxip_def_event_key key;
 	struct cxip_req *req;
 	union c_event ev;
 	uint64_t mrecv_start;
 	uint32_t mrecv_len;
 
 	struct cxip_ux_send *ux_send;
+};
+
+/* A very specific (non-generic) hash table is used to map
+ * deferred CXI events to associate PUT and PUT_OVERFLOW events.
+ * Hash entries are added and removed at a high rate and the
+ * overhead of generic implementations is insufficient.
+ */
+#define CXIP_DEF_EVENT_HT_BUCKETS	256
+
+struct def_event_ht {
+	struct dlist_entry bh[CXIP_DEF_EVENT_HT_BUCKETS];
 };
 
 /*
@@ -1237,7 +1264,9 @@ struct cxip_rxc {
 	int oflow_buf_size;
 	int oflow_bufs_max;
 	struct dlist_entry oflow_bufs;		// Overflow buffers
-	struct dlist_entry deferred_events;
+
+	/* Defer events to wait for both put and put overflow */
+	struct def_event_ht deferred_events;
 
 	/* Order list of request buffers emitted to hardware. */
 	struct dlist_entry active_req_bufs;

@@ -499,6 +499,7 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 				int use_shared)
 {
 	struct cxip_rxc *rxc;
+	int i;
 
 	rxc = calloc(1, sizeof(*rxc));
 	if (!rxc)
@@ -518,7 +519,10 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	ofi_atomic_initialize32(&rxc->oflow_bufs_linked, 0);
 	ofi_atomic_initialize32(&rxc->oflow_bufs_in_use, 0);
 	dlist_init(&rxc->oflow_bufs);
-	dlist_init(&rxc->deferred_events);
+
+	for (i = 0; i < CXIP_DEF_EVENT_HT_BUCKETS; i++)
+		dlist_init(&rxc->deferred_events.bh[i]);
+
 	ofi_atomic_initialize32(&rxc->sink_le_linked, 0);
 	dlist_init(&rxc->fc_drops);
 	dlist_init(&rxc->replay_queue);

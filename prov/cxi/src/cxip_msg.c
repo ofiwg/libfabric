@@ -16,6 +16,7 @@
 
 #include <ofi_list.h>
 #include <ofi.h>
+#include <fasthash.h>
 
 #include "cxip.h"
 
@@ -40,77 +41,85 @@ static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req);
 static int cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req);
 
 /*
- * match_put_event() - Find a matching event.
+ * match_put_event() - Find/add a matching event.
  *
  * For every Put Overflow event there is a matching Put event. These events can
  * be generated in any order. Both events must be received before progress can
  * be made.
+ *
+ * If the matching event exists in the mapping, matched is set to true and
+ * the deferred event is returned. If a match was not found, matched is set to
+ * false and the event is added to the deferred event mapping.
+ *
+ * The deferred match event is returned; unless it must be added to the
+ * deferred mapping and memory is insufficient.
+ *
+ * Caller must hold rxc->rx_lock.
  */
 static struct cxip_deferred_event *
-match_put_event(struct cxip_rxc *rxc, const union c_event *event)
+match_put_event(struct cxip_rxc *rxc, struct cxip_req *req,
+		const union c_event *event, bool *matched)
 {
-	uint32_t process = event->tgt_long.initiator.initiator.process;
-	uint32_t ev_rdzv_id = event->tgt_long.rendezvous_id;
+	union cxip_def_event_key key = {};
 	struct cxip_deferred_event *def_ev;
-	uint8_t type = event->hdr.event_type;
+	int bucket;
 
-	dlist_foreach_container(&rxc->deferred_events,
-				struct cxip_deferred_event, def_ev,
-				rxc_entry) {
-		/* Match Put to Put Overflow */
-		if (type == def_ev->ev.hdr.event_type)
-			continue;
-
-		if (event->tgt_long.rendezvous) {
-			/* Rendezvous events are correlated using
-			 * rendezvous_id and initiator.
-			 */
-			if ((def_ev->ev.tgt_long.rendezvous_id == ev_rdzv_id)
-					&&
-			    (def_ev->ev.tgt_long.initiator.initiator.process
-					== process))
-				goto found;
-		} else {
-			/* All other events are correlated using start
-			 * address.
-			 */
-			if (def_ev->ev.tgt_long.start == event->tgt_long.start)
-				goto found;
-		}
+	if (event->tgt_long.rendezvous) {
+		key.initiator = event->tgt_long.initiator.initiator.process;
+		key.rdzv_id = event->tgt_long.rendezvous_id;
+		key.rdzv = 1;
+	} else {
+		key.start_addr = event->tgt_long.start;
 	}
 
-	return NULL;
+	bucket = fasthash64(&key.raw, sizeof(key.raw), 0) %
+			    CXIP_DEF_EVENT_HT_BUCKETS;
+	dlist_foreach_container(&rxc->deferred_events.bh[bucket],
+				struct cxip_deferred_event, def_ev,
+				rxc_entry) {
+		if (def_ev->key.raw == key.raw)
+			goto found;
+	}
+
+	/* Not found, add mapping to hash bucket */
+	*matched = false;
+
+	def_ev = calloc(1, sizeof(*def_ev));
+	if (!def_ev) {
+		RXC_WARN(rxc, "Failed allocate to memory\n");
+		return NULL;
+	}
+
+	def_ev->key.raw	= key.raw;
+	def_ev->req = req;
+	def_ev->ev = *event;
+
+	dlist_insert_tail(&def_ev->rxc_entry, &rxc->deferred_events.bh[bucket]);
+
+	return def_ev;
 
 found:
 	assert(def_ev->ev.tgt_long.match_bits == event->tgt_long.match_bits);
 	assert(def_ev->ev.tgt_long.initiator.initiator.process ==
 	       event->tgt_long.initiator.initiator.process);
 
+	*matched = true;
+
 	return def_ev;
 }
 
 /*
- * defer_put_event() - Store a record of the event for later matching.
+ * free_put_event() - Free a deferred put event.
  *
- * A Deferred event will be matched to a new event in match_put_event().
+ * Free an event previously allocated added with match_put_event().
+ *
+ * Caller must hold rxc->rx_lock.
  */
-static struct cxip_deferred_event *
-defer_put_event(struct cxip_rxc *rxc, struct cxip_req *req,
-	    const union c_event *event)
+static void free_put_event(struct cxip_rxc *rxc,
+			   struct cxip_deferred_event *def_ev)
 {
-	struct cxip_deferred_event *ev;
-
-	ev = calloc(1, sizeof(*ev));
-	if (!ev) {
-		RXC_WARN(rxc, "Failed allocate to memory\n");
-		return NULL;
-	}
-
-	ev->req = req;
-	ev->ev = *event;
-	dlist_insert_tail(&ev->rxc_entry, &rxc->deferred_events);
-
-	return ev;
+	dlist_remove(&def_ev->rxc_entry);
+	free(def_ev);
 }
 
 /*
@@ -1028,18 +1037,11 @@ static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 {
 	int ret;
 	struct cxip_deferred_event *def_ev;
+	bool matched;
 
-	def_ev = match_put_event(rxc, event);
-	if (!def_ev) {
-		/* Put Overflow event pending. Defer this event until it
-		 * arrives.
-		 */
-		def_ev = defer_put_event(rxc, req, event);
-		if (!def_ev)
-			return -FI_EAGAIN;
-
-		return FI_SUCCESS;
-	}
+	def_ev = match_put_event(rxc, req, event, &matched);
+	if (!matched)
+		return !def_ev ? -FI_EAGAIN : FI_SUCCESS;
 
 	RXC_DBG(rxc, "Overflow beat Put event: %p\n", def_ev->req);
 
@@ -1064,8 +1066,7 @@ static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 			return -FI_EAGAIN;
 	}
 
-	dlist_remove(&def_ev->rxc_entry);
-	free(def_ev);
+	free_put_event(rxc, def_ev);
 
 	return FI_SUCCESS;
 }
@@ -1778,26 +1779,30 @@ int cxip_rxc_oflow_init(struct cxip_rxc *rxc)
 void cxip_rxc_oflow_fini(struct cxip_rxc *rxc)
 {
 	int ret;
-	struct cxip_deferred_event *def_ev;
+	struct cxip_deferred_event *def_ev = NULL;
 	struct dlist_entry *tmp;
+	int i;
 	int def_events = 0;
 
 	/* Clean up unexpected Put records. The PtlTE is disabled, so no more
 	 * events can be expected.
 	 */
-	dlist_foreach_container_safe(&rxc->deferred_events,
-				     struct cxip_deferred_event,
-				     def_ev, rxc_entry, tmp) {
-		/* Dropping the last reference will cause the oflow_buf to be
-		 * removed from the RXC list and freed.
-		 */
-		if (def_ev->req->oflow.oflow_buf->type == CXIP_LE_TYPE_RX)
-			oflow_req_put_bytes(def_ev->req,
+	for (i = 0; i < CXIP_DEF_EVENT_HT_BUCKETS; i++) {
+		dlist_foreach_container_safe(&rxc->deferred_events.bh[i],
+					     struct cxip_deferred_event,
+					     def_ev, rxc_entry, tmp) {
+			/* Dropping the last reference will cause the
+			 * oflow_buf to be removed from the RXC list and
+			 * freed.
+			 */
+			if (def_ev->req->oflow.oflow_buf->type ==
+			    CXIP_LE_TYPE_RX)
+				oflow_req_put_bytes(def_ev->req,
 					    def_ev->ev.tgt_long.mlength);
 
-		dlist_remove(&def_ev->rxc_entry);
-		free(def_ev);
-		def_events++;
+			free_put_event(rxc, def_ev);
+			def_events++;
+		}
 	}
 
 	if (def_events)
@@ -1860,6 +1865,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_rxc *rxc = req->recv.rxc;
 	struct cxip_deferred_event *def_ev;
 	int ret;
+	bool matched;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_SEND:
@@ -1871,23 +1877,20 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 
 		fastlock_acquire(&rxc->rx_lock);
 
-		/* Check for a previously received unexpected Put event */
-		def_ev = match_put_event(rxc, event);
-		if (!def_ev) {
-			/* Put event pending. Defer this event until it
-			 * arrives.
-			 */
-			def_ev = defer_put_event(rxc, req, event);
+		/* Check for a previously received unexpected Put event,
+		 * if not found defer until it arrives.
+		 */
+		def_ev = match_put_event(rxc, req, event, &matched);
+		if (!matched) {
 			if (def_ev) {
 				/* Calculate start, length */
 				def_ev->mrecv_start = req->recv.start_offset;
 				def_ev->mrecv_len = mrecv_req_put_bytes(req,
 						event->tgt_long.rlength);
 			}
-
 			fastlock_release(&rxc->rx_lock);
 
-			return def_ev ? FI_SUCCESS : -FI_EAGAIN;
+			return !def_ev ? -FI_EAGAIN : FI_SUCCESS;
 		}
 
 		RXC_DBG(rxc, "Matched deferred event: %p\n", def_ev);
@@ -1900,13 +1903,11 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		ret = cxip_ux_send(req, def_ev->req, &def_ev->ev,
 				   def_ev->mrecv_start, def_ev->mrecv_len,
 				   false);
-		if (ret == FI_SUCCESS) {
-			dlist_remove(&def_ev->rxc_entry);
-			free(def_ev);
-		} else {
+		if (ret == FI_SUCCESS)
+			free_put_event(rxc, def_ev);
+		else
 			/* undo mrecv_req_put_bytes() */
 			req->recv.start_offset -= def_ev->mrecv_len;
-		}
 
 		fastlock_release(&rxc->rx_lock);
 
@@ -2039,6 +2040,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_rxc *rxc = req->recv.rxc;
 	struct cxip_deferred_event *def_ev;
 	bool rdzv = false;
+	bool matched;
 
 	/* Common processing for rendezvous and non-rendezvous events.
 	 * TODO: Avoid having two switch statements for event_type.
@@ -2180,13 +2182,11 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			return ret;
 		}
 
-		/* Check for a previously received unexpected Put event */
-		def_ev = match_put_event(rxc, event);
-		if (!def_ev) {
-			/* Put event pending. Defer this event until it
-			 * arrives.
-			 */
-			def_ev = defer_put_event(rxc, req, event);
+		/* Check for a previously received unexpected Put event,
+		 * if not found defer until it arrives.
+		 */
+		def_ev = match_put_event(rxc, req, event, &matched);
+		if (!matched) {
 			if (def_ev) {
 				/* Calculate start, length */
 				def_ev->mrecv_start = req->recv.start_offset;
@@ -2196,7 +2196,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 			fastlock_release(&rxc->rx_lock);
 
-			return def_ev ? FI_SUCCESS : -FI_EAGAIN;
+			return !def_ev ? -FI_EAGAIN : FI_SUCCESS;
 		}
 
 		/* Calculate start, length */
@@ -2207,13 +2207,11 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		ret = cxip_ux_send(req, def_ev->req, &def_ev->ev,
 				   def_ev->mrecv_start, def_ev->mrecv_len,
 				   false);
-		if (ret == FI_SUCCESS) {
-			dlist_remove(&def_ev->rxc_entry);
-			free(def_ev);
-		} else {
+		if (ret == FI_SUCCESS)
+			free_put_event(rxc, def_ev);
+		else
 			/* undo mrecv_req_put_bytes() */
 			req->recv.start_offset -= def_ev->mrecv_len;
-		}
 
 		fastlock_release(&rxc->rx_lock);
 
@@ -2614,6 +2612,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_rxc *rxc = req->search.rxc;
 	struct cxip_deferred_event *def_ev;
 	struct cxip_ux_send *ux_send;
+	bool matched;
 
 	fastlock_acquire(&rxc->lock);
 
@@ -2636,9 +2635,9 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 		 * no deferred structure would be allocated.
 		 */
 		if (event->tgt_long.rlength) {
-			def_ev = match_put_event(rxc, event);
-			if (!def_ev) {
-				def_ev = defer_put_event(rxc, req, event);
+
+			def_ev = match_put_event(rxc, req, event, &matched);
+			if (!matched) {
 				if (!def_ev) {
 					fastlock_release(&rxc->lock);
 					free(ux_send);
@@ -2652,8 +2651,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 				ux_send->req = def_ev->req;
 				ux_send->put_ev = def_ev->ev;
 
-				dlist_remove(&def_ev->rxc_entry);
-				free(def_ev);
+				free_put_event(rxc, def_ev);
 			}
 		} else {
 			ux_send->put_ev = *event;
