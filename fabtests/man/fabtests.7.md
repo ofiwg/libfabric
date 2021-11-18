@@ -252,12 +252,16 @@ Beyond libfabric defined functionalities, EFA provider defines its
 specific features/functionalities. These EFA provider specific fabtests
 show users how to correctly use them.
 
-*fi_efa_ep_rnr_retry*
-: Tests modifying the RNR retry count (rnr_retry) via fi_setopt, and
-  then runs a simple program to test if the error cq entry (with error
-  FI_ENORX) can be written to application, if RNR happens.
-  Use `-R` option to specify RNR retry count. The valid values are 0-7,
-  where 7 indicates infinite retry on firmware.
+*fi_efa_rnr_read_cq_error*
+  This test modifies the RNR retry count (rnr_retry) to 0 via
+  fi_setopt, and then runs a simple program to test if the error cq entry
+  (with error FI_ENORX) can be read by the application, if RNR happens.
+
+*fi_efa_rnr_queue_resend*
+  This test modifies the RNR retry count (rnr_retry) to 0 via fi_setopt,
+  and then tests RNR queue/re-send logic for different packet types.
+  To run the test, one needs to use `-c` option to specify the category
+  of packet types.
 
 ### Config file options
 
