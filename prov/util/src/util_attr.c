@@ -179,12 +179,13 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 			    ofi_alter_info_t info_to_core,
 			    struct fi_info **core_hints)
 {
-	int ret = -FI_ENOMEM;
+	int ret;
 
 	if (!(*core_hints = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	if (info_to_core(version, util_hints, base_attr, *core_hints))
+	ret = info_to_core(version, util_hints, base_attr, *core_hints);
+	if (ret)
 		goto err;
 
 	if (!util_hints)
