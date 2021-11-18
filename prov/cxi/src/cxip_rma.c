@@ -99,6 +99,424 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 	return FI_SUCCESS;
 }
 
+static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
+			     union c_fab_addr *dfa, uint8_t *idx_ext,
+			     uint64_t addr, uint64_t key, uint64_t data,
+			     uint64_t flags, void *context, bool write,
+			     bool unr, enum cxi_traffic_class_type tc_type,
+			     bool triggered, uint64_t trig_thresh,
+			     struct cxip_cntr *trig_cntr,
+			     struct cxip_cntr *comp_cntr)
+{
+	struct cxip_req *req;
+	struct cxip_md *dma_md = NULL;
+	void *dma_buf;
+	struct c_full_dma_cmd dma_cmd = {};
+	struct c_ct_cmd ct_cmd;
+	int ret;
+	struct cxip_domain *dom = txc->domain;
+	struct cxip_cmdq *cmdq = triggered ? dom->trig_cmdq : txc->tx_cmdq;
+	struct cxip_cntr *cntr;
+
+	/* DMA commands always require a request structure regardless if
+	 * FI_COMPLETION is set. This is due to the provider doing internally
+	 * memory registration and having to clean up the registration on DMA
+	 * operation completion.
+	 */
+	req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+	if (!req) {
+		ret = -FI_ENOMEM;
+		TXC_WARN(txc, "Failed to allocate request: %d:%s\n",
+			 ret, fi_strerror(-ret));
+		goto err;
+	}
+
+	req->context = (uint64_t)context;
+	req->cb = cxip_rma_cb;
+	req->flags = FI_RMA | (write ? FI_WRITE : FI_READ) |
+		(flags & FI_COMPLETION);
+	req->rma.txc = txc;
+	req->type = CXIP_REQ_RMA;
+	req->trig_cntr = trig_cntr;
+
+	/* If the operation is an DMA inject operation (which can occur when
+	 * doing RMA commands to unoptimized MRs), a provider bounce buffer is
+	 * always needed to store the user payload.
+	 */
+	if (len) {
+		if (flags & FI_INJECT) {
+			req->rma.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
+			if (!req->rma.ibuf) {
+				ret = -FI_ENOMEM;
+				TXC_WARN(txc,
+					"Failed to allocate bounce buffer: %d:%s\n",
+					ret, fi_strerror(-ret));
+				goto err_free_cq_req;
+			}
+
+			ret = cxip_txc_copy_from_hmem(txc, req->rma.ibuf, buf,
+							len);
+			assert(ret == len);
+
+			dma_buf = (void *)req->rma.ibuf;
+			dma_md = cxip_cq_ibuf_md(req->rma.ibuf);
+		} else {
+			ret = cxip_map(dom, buf, len, &req->rma.local_md);
+			if (ret) {
+				TXC_WARN(txc, "Failed to map buffer: %d:%s\n",
+					ret, fi_strerror(-ret));
+				goto err_free_cq_req;
+			}
+
+			dma_buf = (void *)buf;
+			dma_md = req->rma.local_md;
+		}
+	}
+
+	/* Build the DMA command before taking the command queue lock. */
+	dma_cmd.command.cmd_type = C_CMD_TYPE_DMA;
+	dma_cmd.index_ext = *idx_ext;
+	dma_cmd.event_send_disable = 1;
+	dma_cmd.dfa = *dfa;
+	dma_cmd.remote_offset = addr;
+	dma_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+	dma_cmd.user_ptr = (uint64_t)req;
+	dma_cmd.match_bits = key;
+
+	if (!unr)
+		dma_cmd.restricted = 1;
+
+	if (write) {
+		dma_cmd.command.opcode = C_CMD_PUT;
+
+		/* Triggered DMA operations have their own completion counter
+		 * and the one associated with the TXC cannot be used.
+		 */
+		cntr = triggered ? comp_cntr : txc->write_cntr;
+		if (cntr) {
+			dma_cmd.event_ct_ack = 1;
+			dma_cmd.ct = cntr->ct->ctn;
+		}
+
+		if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
+			dma_cmd.flush = 1;
+	} else {
+		dma_cmd.command.opcode = C_CMD_GET;
+
+		/* Triggered DMA operations have their own completion counter
+		 * and the one associated with the TXC cannot be used.
+		 */
+		cntr = triggered ? comp_cntr : txc->read_cntr;
+		if (cntr) {
+			dma_cmd.event_ct_reply = 1;
+			dma_cmd.ct = cntr->ct->ctn;
+		}
+	}
+
+	/* Only need to fill if DMA command address fields if MD is valid. */
+	if (dma_md) {
+		dma_cmd.lac = dma_md->md->lac;
+		dma_cmd.local_addr = CXI_VA_TO_IOVA(dma_md->md, dma_buf);
+		dma_cmd.request_len = len;
+	}
+
+	/* Triggered operations do not support changing of traffic classes.
+	 * Thus, communication profile cannot be changed.
+	 */
+	fastlock_acquire(&cmdq->lock);
+
+	if (triggered) {
+		memset(&ct_cmd, 0, sizeof(ct_cmd));
+		ct_cmd.trig_ct = trig_cntr->ct->ctn,
+		ct_cmd.threshold = trig_thresh,
+
+		ret = cxi_cq_emit_trig_full_dma(cmdq->dev_cmdq, &ct_cmd,
+						&dma_cmd);
+		if (ret) {
+			TXC_WARN(txc,
+				 "Failed to emit trigger dma command: %d:%s\n",
+				 ret, fi_strerror(-ret));
+
+			/* Always return -FI_EAGAIN for this failure. */
+			ret = -FI_EAGAIN;
+			goto err_cq_unlock;
+		}
+	} else {
+		/* Ensure correct traffic class is used. */
+		ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
+				      cxip_ofi_to_cxi_tc(txc->tclass), tc_type);
+		if (ret) {
+			TXC_WARN(txc, "Failed to set traffic class: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			goto err_cq_unlock;
+		}
+
+		/* Honor fence if requested. */
+		if (flags & FI_FENCE) {
+			ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq,
+						 C_CMD_CQ_FENCE);
+			if (ret) {
+				TXC_WARN(txc,
+					 "Failed to issue fence command: %d:%s\n",
+					 ret, fi_strerror(-ret));
+
+				/* Always return -FI_EAGAIN for this failure. */
+				ret = -FI_EAGAIN;
+				goto err_cq_unlock;
+			}
+		}
+
+		/* Finally emit the RMA DMA command. */
+		ret = cxi_cq_emit_dma(cmdq->dev_cmdq, &dma_cmd);
+		if (ret) {
+			TXC_WARN(txc, "Failed to emit idc_put command: %d:%s\n",
+				 ret, fi_strerror(-ret));
+
+			/* Always return -FI_EAGAIN for this failure. */
+			ret = -FI_EAGAIN;
+			goto err_cq_unlock;
+		}
+	}
+
+	/* Kick the command queue. */
+	cxip_txq_ring(cmdq, !!(flags & FI_MORE), false,
+		      ofi_atomic_get32(&txc->otx_reqs));
+	ofi_atomic_inc32(&txc->otx_reqs);
+
+	fastlock_release(&cmdq->lock);
+
+	return FI_SUCCESS;
+
+err_cq_unlock:
+	fastlock_release(&cmdq->lock);
+	if (req->rma.ibuf)
+		cxip_cq_ibuf_free(txc->send_cq, req->rma.ibuf);
+err_free_cq_req:
+	if (req)
+		cxip_cq_req_free(req);
+err:
+	return ret;
+}
+
+static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
+			     union c_fab_addr *dfa, uint8_t *idx_ext,
+			     uint64_t addr, uint64_t key, uint64_t data,
+			     uint64_t flags, void *context, bool unr,
+			     enum cxi_traffic_class_type tc_type)
+{
+	int ret;
+	struct cxip_req *req = NULL;
+	void *hmem_buf = NULL;
+	void *idc_buf;
+	struct c_cstate_cmd cstate_cmd = {};
+	struct c_idc_put_cmd idc_put = {};
+	void *inject_req;
+	struct cxip_cmdq *cmdq = txc->tx_cmdq;
+
+	/* IDCs must be traffic if the user requests a completion event. */
+	if (flags & FI_COMPLETION) {
+		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		if (!req) {
+			ret = -FI_ENOMEM;
+			TXC_WARN(txc, "Failed to allocate request: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			goto err;
+		}
+
+		req->context = (uint64_t)context;
+		req->cb = cxip_rma_cb;
+		req->flags = FI_RMA | FI_WRITE | (flags & FI_COMPLETION);
+		req->rma.txc = txc;
+		req->type = CXIP_REQ_RMA;
+	}
+
+	/* If HMEM is request and since the buffer type may not be host memory,
+	 * doing a memcpy could result in a segfault. Thus, an HMEM bounce
+	 * buffer is required to ensure IDC payload is in host memory.
+	 */
+	if (txc->hmem) {
+		hmem_buf = cxip_cq_ibuf_alloc(txc->send_cq);
+		if (!hmem_buf) {
+			ret = -FI_ENOMEM;
+			TXC_WARN(txc,
+				 "Failed to allocate bounce buffer: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			goto err_free_cq_req;
+		}
+
+		ret = cxip_txc_copy_from_hmem(txc, hmem_buf, buf, len);
+		assert(ret == len);
+
+		idc_buf = hmem_buf;
+	} else {
+		idc_buf = (void *)buf;
+	}
+
+	/* Build up the c-state command before taking the command queue lock. */
+	cstate_cmd.event_send_disable = 1;
+	cstate_cmd.index_ext = *idx_ext;
+	cstate_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+
+	if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
+		cstate_cmd.flush = 1;
+
+	if (!unr)
+		cstate_cmd.restricted = 1;
+
+	if (txc->write_cntr) {
+		cstate_cmd.event_ct_ack = 1;
+		cstate_cmd.ct = txc->write_cntr->ct->ctn;
+	}
+
+	/* If the user has not request a completion, success events will be
+	 * disabled. But, if for some reason the operation completes with an
+	 * error, an event will occur. For this case, a TXC inject request is
+	 * allocated. This request enables the reporting of failed operation to
+	 *  the completion queue. This request is freed when the TXC is closed.
+	 */
+	if (req) {
+		cstate_cmd.user_ptr = (uint64_t)req;
+	} else {
+		inject_req = cxip_rma_inject_req(txc);
+		if (!inject_req) {
+			ret = -FI_ENOMEM;
+			TXC_WARN(txc,
+				 "Failed to allocate inject request: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			goto err_free_hmem_buf;
+		}
+
+		cstate_cmd.user_ptr = (uint64_t)inject_req;
+		cstate_cmd.event_success_disable = 1;
+	}
+
+	/* Build up the IDC command before taking the command lock queue. */
+	idc_put.idc_header.dfa = *dfa;
+	idc_put.idc_header.remote_offset = addr;
+
+	/* Emit all commands. Note that if any of the operations do not take,
+	 * no cleaning up of the command queue is needed.
+	 */
+	fastlock_acquire(&cmdq->lock);
+
+	/* Ensure correct traffic class is used. */
+	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
+			      cxip_ofi_to_cxi_tc(txc->tclass), tc_type);
+	if (ret) {
+		TXC_WARN(txc, "Failed to set traffic class: %d:%s\n", ret,
+			 fi_strerror(-ret));
+		goto err_cq_unlock;
+	}
+
+	/* Honor fence if requested. */
+	if (flags & FI_FENCE) {
+		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
+		if (ret) {
+			TXC_WARN(txc, "Failed to issue fence command: %d:%s\n",
+				 ret, fi_strerror(-ret));
+
+			/* Always return -FI_EAGAIN for this failure. */
+			ret = -FI_EAGAIN;
+			goto err_cq_unlock;
+		}
+	}
+
+	/* Update the hardware command queue state to ensure correct fields are
+	 * associated with the IDC command.
+	 */
+	ret = cxip_cmdq_emit_c_state(cmdq, &cstate_cmd);
+	if (ret) {
+		TXC_WARN(txc, "Failed to emit c_state command: %d:%s\n", ret,
+			 fi_strerror(-ret));
+		goto err_cq_unlock;
+	}
+
+	/* Update the IDC put command and payload in the command queue. */
+	ret = cxi_cq_emit_idc_put(cmdq->dev_cmdq, &idc_put, idc_buf, len);
+	if (ret) {
+		TXC_WARN(txc, "Failed to emit idc_put command: %d:%s\n", ret,
+			 fi_strerror(-ret));
+
+		/* Always return -FI_EAGAIN for this failure. */
+		ret = -FI_EAGAIN;
+		goto err_cq_unlock;
+	}
+
+	/* Kick the command queue. */
+	cxip_txq_ring(cmdq, !!(flags & FI_MORE), false,
+		      ofi_atomic_get32(&txc->otx_reqs));
+	if (req)
+		ofi_atomic_inc32(&txc->otx_reqs);
+
+	fastlock_release(&cmdq->lock);
+
+	if (hmem_buf)
+		cxip_cq_ibuf_free(txc->send_cq, hmem_buf);
+
+	return FI_SUCCESS;
+
+err_cq_unlock:
+	fastlock_release(&cmdq->lock);
+err_free_hmem_buf:
+	if (hmem_buf)
+		cxip_cq_ibuf_free(txc->send_cq, hmem_buf);
+err_free_cq_req:
+	if (req)
+		cxip_cq_req_free(req);
+err:
+	return ret;
+}
+
+static bool cxip_rma_is_unrestricted(struct cxip_txc *txc, uint64_t key,
+				     bool write)
+{
+	/* Unoptimized keys are implemented with match bits and must always be
+	 * unrestricted.
+	 */
+	if (!cxip_mr_key_opt(key))
+		return true;
+
+	/* If FI_RMA_EVENTS are requested, it is assumed that the user will bind
+	 * remote MRs to a counter or support remote RMA events. If this is the
+	 * case, unrestircted must always been used.
+	 */
+	if (txc->ep_obj->caps & FI_RMA_EVENT)
+		return true;
+
+	/* If the operation is an RMA write and the user has requested fabric
+	 * write after write ordering, unrestricted must be used.
+	 */
+	if (write && txc->attr.msg_order & (FI_ORDER_WAW | FI_ORDER_RMA_WAW))
+		return true;
+
+	return false;
+}
+
+static bool cxip_rma_is_idc(struct cxip_txc *txc, uint64_t key, size_t len,
+			    bool write, bool triggered)
+{
+	/* IDC commands are not supported for unoptimized MR since the IDC
+	 * small message format does not support remote offset which is needed
+	 * for RMA commands.
+	 */
+	if (!cxip_mr_key_opt(key))
+		return false;
+
+	/* IDC commands are only support with RMA writes. */
+	if (!write)
+		return false;
+
+	/* IDC commands only support a limited payload size. */
+	if (len > C_MAX_IDC_PAYLOAD_RES)
+		return false;
+
+	/* Triggered operations never can be issued with an IDC. */
+	if (triggered)
+		return false;
+
+	return true;
+}
+
 /*
  * cxip_rma_common() - Perform an RMA operation.
  *
@@ -123,109 +541,65 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 			struct cxip_cntr *trig_cntr,
 			struct cxip_cntr *comp_cntr)
 {
-	struct cxip_domain *dom = txc->domain;
-	int ret;
-	struct cxip_req *req = NULL;
 	struct cxip_addr caddr;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
 	uint32_t pid_idx;
-	bool idc;
-	int idc_max_len;
-	bool unr = false; /* use unrestricted command? */
-	struct cxip_cmdq *cmdq = triggered ? dom->trig_cmdq : txc->tx_cmdq;
-	bool write = op == FI_OP_WRITE;
 	enum cxi_traffic_class_type tc_type;
-	void *hmem_buf = NULL;
-	const void *idc_buf = buf;
+	bool write = op == FI_OP_WRITE;
+	bool unr;
+	bool idc;
+	int ret;
 
-	if (!txc->enabled)
+	if (!txc->enabled) {
+		TXC_WARN(txc, "TXC not enabled\n");
 		return -FI_EOPBADSTATE;
+	}
 
-	if (!ofi_rma_initiate_allowed(txc->attr.caps & ~FI_ATOMIC))
+	if (!ofi_rma_initiate_allowed(txc->attr.caps & ~FI_ATOMIC)) {
+		TXC_WARN(txc, "TXC caps do not support RMA initiator\n");
 		return -FI_ENOPROTOOPT;
+	}
 
-	if (len && !buf)
+	if (len && !buf) {
+		TXC_WARN(txc, "Invalid buffer\n");
 		return -FI_EINVAL;
+	}
 
-	if (((flags & FI_INJECT) && len > CXIP_INJECT_SIZE) ||
-	    len > CXIP_EP_MAX_MSG_SZ)
+	if ((flags & FI_INJECT) && len > CXIP_INJECT_SIZE) {
+		TXC_WARN(txc, "RMA inject size exceeds limit\n");
 		return -FI_EMSGSIZE;
+	}
 
-	/* Unordered Puts are optimally supported with restricted commands.
-	 * When Put ordering or remote events are required, or when targeting a
-	 * standard MR, use unrestricted commands. Ordered Gets are never
-	 * supported.
+	if (len > CXIP_EP_MAX_MSG_SZ) {
+		TXC_WARN(txc, "RMA length exceeds limit\n");
+		return -FI_EMSGSIZE;
+	}
+
+	unr = cxip_rma_is_unrestricted(txc, key, write);
+	idc = cxip_rma_is_idc(txc, key, len, write, triggered);
+
+	/* To prevent CQ overrun, perform a sanity check to ensure there is
+	 * enough space for a potential event.
 	 */
-	unr = !cxip_mr_key_opt(key) || txc->ep_obj->caps & FI_RMA_EVENT;
-	if (!unr && write)
-		unr = txc->attr.msg_order & (FI_ORDER_WAW | FI_ORDER_RMA_WAW);
+	if (cxip_cq_saturated(txc->send_cq)) {
+		TXC_DBG(txc, "CQ saturated\n");
+		return -FI_EAGAIN;
+	}
 
-	idc_max_len = unr ? C_MAX_IDC_PAYLOAD_UNR : C_MAX_IDC_PAYLOAD_RES;
-	idc = (op == FI_OP_WRITE) && (len <= idc_max_len) &&
-			cxip_mr_key_opt(key) && !triggered;
-
-	/* Look up target CXI address */
+	/* Build target network address. */
 	ret = _cxip_av_lookup(txc->ep_obj->av, tgt_addr, &caddr);
-	if (ret != FI_SUCCESS) {
-		TXC_WARN(txc, "Failed to look up FI addr: %d\n", ret);
+	if (ret) {
+		TXC_WARN(txc, "Failed to look up FI addr: %d:%s\n",
+			 ret, fi_strerror(-ret));
 		return ret;
 	}
 
-	/* DMA commands must always be tracked. IDCs must be tracked if the
-	 * user requested a completion event. Any tracked request needs a TX
-	 * credit.
-	 */
-	if (!idc || (flags & FI_COMPLETION)) {
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
-		if (!req) {
-			TXC_WARN(txc, "Failed to allocate request\n");
-			return -FI_ENOMEM;
-		}
-
-		/* Populate request */
-		if (flags & FI_COMPLETION)
-			req->context = (uint64_t)context;
-		else
-			req->context = (uint64_t)txc->fid.ctx.fid.context;
-		req->data_len = 0;
-		req->buf = 0;
-		req->data = 0;
-		req->tag = 0;
-		req->cb = cxip_rma_cb;
-		req->flags = FI_RMA | (op == FI_OP_READ ? FI_READ : FI_WRITE) |
-				(flags & FI_COMPLETION);
-		req->rma.txc = txc;
-		req->type = CXIP_REQ_RMA;
-		req->trig_cntr = trig_cntr;
-	}
-
-	if (len && !idc) {
-		if (flags & FI_INJECT) {
-			/* Allocate an internal buffer to hold source data. */
-			req->rma.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
-			if (!req->rma.ibuf)
-				goto req_free;
-
-			ret = cxip_txc_copy_from_hmem(txc, req->rma.ibuf, buf,
-						      len);
-			assert(ret == len);
-		} else {
-			/* Map user buffer for DMA command. */
-			ret = cxip_map(dom, buf, len, &req->rma.local_md);
-			if (ret) {
-				TXC_WARN(txc, "Failed to map buffer: %d\n",
-					 ret);
-				goto req_free;
-			}
-		}
-	}
-
-	/* Generate the destination fabric address */
 	pid_idx = cxip_mr_key_to_ptl_idx(key, write);
 	cxi_build_dfa(caddr.nic, caddr.pid, txc->pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
+	/* Select the correct traffic class type within a traffic class. */
 	if (!unr && (flags & FI_CXI_HRP))
 		tc_type = CXI_TC_TYPE_HRP;
 	else if (!unr)
@@ -233,201 +607,31 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	else
 		tc_type = CXI_TC_TYPE_DEFAULT;
 
-	/* HMEM bounce buffer is required for IDCs and to non-system memory. */
-	if (txc->hmem && idc) {
-		hmem_buf = cxip_cq_ibuf_alloc(txc->send_cq);
-		if (!hmem_buf)
-			goto md_unmap;
+	/* IDC commands are preferred wherever possible since the payload is
+	 * written with the command thus avoiding all memory registration. In
+	 * addition, this allows for success events to be surpressed if
+	 * FI_COMPLETION is not requested.
+	 */
+	if (idc)
+		ret = cxip_rma_emit_idc(txc, buf, len, &dfa, &idx_ext, addr,
+					key, data, flags, context, unr,
+					tc_type);
+	else
+		ret = cxip_rma_emit_dma(txc, buf, len, &dfa, &idx_ext, addr,
+					key, data, flags, context, write, unr,
+					tc_type, triggered, trig_thresh,
+					trig_cntr, comp_cntr);
 
-		ret = cxip_txc_copy_from_hmem(txc, hmem_buf, buf, len);
-		assert(ret == len);
-	}
-
-	if (cxip_cq_saturated(txc->send_cq)) {
-		TXC_DBG(txc, "CQ saturated\n");
-		ret = -FI_EAGAIN;
-		goto ibuf_free;
-	}
-
-	/* Issue command */
-	fastlock_acquire(&cmdq->lock);
-
-	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
-			      cxip_ofi_to_cxi_tc(txc->tclass), tc_type);
-	if (ret != FI_SUCCESS)
-		goto unlock_op;
-
-	if (flags & FI_FENCE) {
-		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
-		if (ret) {
-			TXC_DBG(txc, "Failed to issue CQ_FENCE command: %d\n",
-				ret);
-			ret = -FI_EAGAIN;
-			goto unlock_op;
-		}
-	}
-
-	if (idc) {
-		union c_cmdu cmd = {};
-
-		cmd.c_state.event_send_disable = 1;
-		cmd.c_state.index_ext = idx_ext;
-		cmd.c_state.eq = cxip_cq_tx_eqn(txc->send_cq);
-
-		if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
-			cmd.c_state.flush = 1;
-
-		if (!unr)
-			cmd.c_state.restricted = 1;
-
-		if (txc->write_cntr) {
-			cmd.c_state.event_ct_ack = 1;
-			cmd.c_state.ct = txc->write_cntr->ct->ctn;
-		}
-
-		if (req) {
-			cmd.c_state.user_ptr = (uint64_t)req;
-		} else {
-			void *inject_req = cxip_rma_inject_req(txc);
-			if (!inject_req) {
-				ret = -FI_ENOMEM;
-				goto unlock_op;
-			}
-
-			cmd.c_state.user_ptr = (uint64_t)inject_req;
-			cmd.c_state.event_success_disable = 1;
-		}
-
-		ret = cxip_cmdq_emit_c_state(cmdq, &cmd.c_state);
-		if (ret) {
-			TXC_DBG(txc, "Failed to issue C_STATE command: %d\n",
-				ret);
-			goto unlock_op;
-		}
-
-		memset(&cmd.idc_put, 0, sizeof(cmd.idc_put));
-		cmd.idc_put.idc_header.dfa = dfa;
-		cmd.idc_put.idc_header.remote_offset = addr;
-
-		ret = cxi_cq_emit_idc_put(cmdq->dev_cmdq, &cmd.idc_put, idc_buf,
-					  len);
-		if (ret) {
-			TXC_DBG(txc, "Failed to write IDC: %d\n", ret);
-
-			/* Return error according to Domain Resource Management
-			 */
-			ret = -FI_EAGAIN;
-			goto unlock_op;
-		}
-	} else {
-		struct c_full_dma_cmd cmd = {};
-		struct cxip_cntr *cntr;
-
-		cmd.command.opcode =
-				(op == FI_OP_READ ? C_CMD_GET : C_CMD_PUT);
-		cmd.command.cmd_type = C_CMD_TYPE_DMA;
-		cmd.index_ext = idx_ext;
-
-		if (len) {
-			if (!req->rma.ibuf) {
-				cmd.lac = req->rma.local_md->md->lac;
-				cmd.local_addr =
-					CXI_VA_TO_IOVA(req->rma.local_md->md,
-						       buf);
-			} else {
-				struct cxip_md *ibuf_md =
-						cxip_cq_ibuf_md(req->rma.ibuf);
-
-				cmd.local_addr = CXI_VA_TO_IOVA(ibuf_md->md,
-								req->rma.ibuf);
-				cmd.lac = ibuf_md->md->lac;
-			}
-		}
-
-		cmd.event_send_disable = 1;
-		cmd.dfa = dfa;
-		cmd.remote_offset = addr;
-		cmd.request_len = len;
-		cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
-		cmd.user_ptr = (uint64_t)req;
-		cmd.match_bits = key;
-
-		if ((op == FI_OP_WRITE) &&
-		    (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE)))
-			cmd.flush = 1;
-
-		if (!unr)
-			cmd.restricted = 1;
-
-		if (op == FI_OP_WRITE) {
-			cntr = triggered ? comp_cntr : txc->write_cntr;
-
-			if (cntr) {
-				cmd.event_ct_ack = 1;
-				cmd.ct = cntr->ct->ctn;
-			}
-		} else {
-			cntr = triggered ? comp_cntr : txc->read_cntr;
-
-			if (cntr) {
-				cmd.event_ct_reply = 1;
-				cmd.ct = cntr->ct->ctn;
-			}
-		}
-
-		if (triggered) {
-			const struct c_ct_cmd ct_cmd = {
-				.trig_ct = trig_cntr->ct->ctn,
-				.threshold = trig_thresh,
-			};
-
-			ret = cxi_cq_emit_trig_full_dma(cmdq->dev_cmdq, &ct_cmd,
-							&cmd);
-		} else {
-			ret = cxi_cq_emit_dma(cmdq->dev_cmdq, &cmd);
-		}
-
-		if (ret) {
-			TXC_DBG(txc, "Failed to write DMA command: %d\n", ret);
-
-			/* Return error according to Domain Resource Management
-			 */
-			ret = -FI_EAGAIN;
-			goto unlock_op;
-		}
-	}
-
-	cxip_txq_ring(cmdq, flags & FI_MORE, triggered,
-		      ofi_atomic_get32(&txc->otx_reqs));
-
-	if (req)
-		ofi_atomic_inc32(&txc->otx_reqs);
-
-	fastlock_release(&cmdq->lock);
-
-	if (hmem_buf)
-		cxip_cq_ibuf_free(txc->send_cq, hmem_buf);
-
-	TXC_DBG(txc,
-		"%sreq: %p op: %s buf: %p len: %lu tgt_addr: %ld context %p\n",
-		idc ? "IDC " : "", req, fi_tostr(&op, FI_TYPE_OP_TYPE), buf,
-		len, tgt_addr, context);
-
-	return FI_SUCCESS;
-
-unlock_op:
-	fastlock_release(&txc->tx_cmdq->lock);
-ibuf_free:
-	if (hmem_buf)
-		cxip_cq_ibuf_free(txc->send_cq, hmem_buf);
-md_unmap:
-	if (req && req->rma.ibuf)
-		cxip_cq_ibuf_free(req->cq, req->rma.ibuf);
-	if (req && req->rma.local_md)
-		cxip_unmap(req->rma.local_md);
-req_free:
-	if (req)
-		cxip_cq_req_free(req);
+	if (ret)
+		TXC_WARN(txc,
+			 "%s RMA %s failed: buf=%p len=%lu rkey=%#lx roffset=%#lx nic=%#x pid=%u pid_idx=%u",
+			 idc ? "IDC" : "DMA", write ? "write" : "read",
+			 buf, len, key, addr, caddr.nic, caddr.pid, pid_idx);
+	else
+		TXC_DBG(txc,
+			"%s RMA %s emitted: buf=%p len=%lu rkey=%#lx roffset=%#lx nic=%#x pid=%u pid_idx=%u",
+			idc ? "IDC" : "DMA", write ? "write" : "read",
+			buf, len, key, addr, caddr.nic, caddr.pid, pid_idx);
 
 	return ret;
 }

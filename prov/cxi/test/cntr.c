@@ -157,7 +157,7 @@ Test(cntr, write_sizes)
 	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
 		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
 			       cxit_ep_fi_addr, 0, key_val, NULL);
-		cr_assert(ret == FI_SUCCESS);
+		cr_assert_eq(ret, FI_SUCCESS, "ret=%d", ret);
 
 		/* Wait for async event indicating data has been sent */
 		ret = cxit_await_completion(cxit_tx_cq, &cqe);
