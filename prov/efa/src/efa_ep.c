@@ -41,11 +41,10 @@
 static int efa_generate_rdm_connid()
 {
 	struct timeval tv;
-	struct timezone tz;
 	uint32_t val;
 	int err;
 
-	err = gettimeofday(&tv, &tz);
+	err = gettimeofday(&tv, NULL);
 	if (err) {
 		EFA_WARN(FI_LOG_EP_CTRL, "Cannot gettimeofday, err=%d.\n", err);
 		return 0;
@@ -83,7 +82,7 @@ static int efa_ep_destroy_qp(struct efa_qp *qp)
 static int efa_ep_modify_qp_state(struct efa_ep *ep, struct efa_qp *qp,
 				  enum ibv_qp_state qp_state, int attr_mask)
 {
-	struct ibv_qp_attr attr = {};
+	struct ibv_qp_attr attr = { 0 };
 
 	attr.qp_state = qp_state;
 
@@ -129,7 +128,7 @@ static int efa_ep_create_qp_ex(struct efa_ep *ep,
 {
 	struct efa_domain *domain;
 	struct efa_qp *qp;
-	struct efadv_qp_init_attr efa_attr = {};
+	struct efadv_qp_init_attr efa_attr = { 0 };
 	int err;
 
 	domain = ep->domain;

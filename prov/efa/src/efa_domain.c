@@ -278,6 +278,99 @@ void efa_atfork_callback()
 	abort();
 }
 
+#ifndef _WIN32
+
+/* @brief Check when fork is requested and abort in unsupported cases
+ *
+ * We check if user or another library asked or enabled fork support and
+ * return failure if HUGEPAGES are also enabled as EFA provider does not support this case.
+ *
+ * In addition, we install a fork handler to ensure that we abort if another
+ * library or process initiates a fork and we determined from previous logic 
+ * that we cannot support that.
+ * 
+ * @param domain_fid domain fid so we can check register memory during initialization.
+ * @return error number if we failed to initialize, 0 otherwise
+ */
+static
+int efa_initialize_fork_support(struct fid_domain* domain_fid)
+{
+	static int fork_handler_installed = 0;
+	int ret;
+
+	/*
+	 * Call ibv_fork_init if the user asked for fork support.
+	 */
+	if (efa_fork_status == EFA_FORK_SUPPORT_ON) {
+		ret = -ibv_fork_init();
+		if (ret) {
+			EFA_WARN(FI_LOG_DOMAIN,
+				 "Fork support requested but ibv_fork_init failed: %s\n",
+				 strerror(-ret));
+			return ret;
+		}
+	}
+
+	/*
+	 * Run check to see if fork support was enabled by another library. If
+	 * one of the environment variables was set to enable fork support,
+	 * this variable was set to ON during provider init.  Huge pages for
+	 * bounce buffers will not be used if fork support is on.
+	 */
+	if (efa_fork_status == EFA_FORK_SUPPORT_OFF &&
+		efa_check_fork_enabled(domain_fid))
+		efa_fork_status = EFA_FORK_SUPPORT_ON;
+
+	if (efa_fork_status == EFA_FORK_SUPPORT_ON &&
+		getenv("RDMAV_HUGEPAGES_SAFE")) {
+			EFA_WARN(FI_LOG_DOMAIN,
+				 "Using libibverbs fork support and huge pages is not"
+				 " supported by the EFA provider.\n");
+		return -FI_EINVAL;
+	}
+
+	/*
+	 * It'd be better to install this during provider init (since that's
+	 * only invoked once) but we need to do a memory registration for the
+	 * fork check above. This can move to the provider init once that check
+	 * is gone.
+	 */
+	if (!fork_handler_installed && efa_fork_status == EFA_FORK_SUPPORT_OFF) {
+		ret = pthread_atfork(efa_atfork_callback, NULL, NULL);
+		if (ret) {
+			EFA_WARN(FI_LOG_DOMAIN,
+				 "Unable to register atfork callback: %s\n",
+				 strerror(-ret));
+			return ret;
+		}
+		fork_handler_installed = 1;
+	}
+
+	return 0;
+}
+
+#else
+
+/* @brief Check when fork is requested and return failure on Windows
+ *
+ * We check if fork is requested and return failure as fork is not supported on Windows
+ *
+ * @param domain_fid domain unused
+ * @return error number if fork is requested, 0 otherwise
+ */
+static
+int efa_initialize_fork_support(struct fid_domain* domain_fid)
+{
+	if (efa_fork_status == EFA_FORK_SUPPORT_ON) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "Using fork support is not supported by the EFA provider on Windows\n");
+		return -FI_EINVAL;
+	}
+	return 0;
+}
+
+#endif
+
 /* @brief Setup the MR cache.
  *
  * This function enables the MR cache using the util MR cache code. Note that
@@ -415,7 +508,6 @@ static int efa_mr_cache_init(struct efa_domain *domain, struct fi_info *info)
 int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		    struct fid_domain **domain_fid, void *context)
 {
-	static int fork_handler_installed = 0;
 	struct efa_domain *domain;
 	struct efa_fabric *fabric;
 	const struct fi_info *fi;
@@ -494,53 +586,13 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 
 	domain->cache = NULL;
 
-	/*
-	 * Call ibv_fork_init if the user asked for fork support.
-	 */
-	if (efa_fork_status == EFA_FORK_SUPPORT_ON) {
-		ret = -ibv_fork_init();
-		if (ret) {
-			EFA_WARN(FI_LOG_DOMAIN,
-			         "Fork support requested but ibv_fork_init failed: %s\n",
-			         strerror(-ret));
-			goto err_free_info;
-		}
-	}
+	ret = efa_initialize_fork_support(*domain_fid);
 
-	/*
-	 * Run check to see if fork support was enabled by another library. If
-	 * one of the environment variables was set to enable fork support,
-	 * this variable was set to ON during provider init.  Huge pages for
-	 * bounce buffers will not be used if fork support is on.
-	 */
-	if (efa_fork_status == EFA_FORK_SUPPORT_OFF &&
-	    efa_check_fork_enabled(*domain_fid))
-		efa_fork_status = EFA_FORK_SUPPORT_ON;
-
-	if (efa_fork_status == EFA_FORK_SUPPORT_ON &&
-	    getenv("RDMAV_HUGEPAGES_SAFE")) {
-		EFA_WARN(FI_LOG_DOMAIN,
-			 "Using libibverbs fork support and huge pages is not supported by the EFA provider.\n");
-		ret = -FI_EINVAL;
+	if (ret) {
+		EFA_WARN(FI_LOG_DOMAIN, "Failed to initialize fork support %d", ret);
 		goto err_free_info;
 	}
 
-	/*
-	 * It'd be better to install this during provider init (since that's
-	 * only invoked once) but we need to do a memory registration for the
-	 * fork check above. This can move to the provider init once that check
-	 * is gone.
-	 */
-	if (!fork_handler_installed && efa_fork_status == EFA_FORK_SUPPORT_OFF) {
-		ret = pthread_atfork(efa_atfork_callback, NULL, NULL);
-		if (ret) {
-			EFA_WARN(FI_LOG_DOMAIN,
-				 "Unable to register atfork callback: %s\n",
-				 strerror(-ret));
-			goto err_free_info;
-		}
-		fork_handler_installed = 1;
-	}
 	/*
 	 * If FI_MR_LOCAL is set, we do not want to use the MR cache.
 	 */

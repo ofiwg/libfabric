@@ -610,7 +610,7 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 				info->domain_attr->max_ep_rx_ctx);
 
 	info->tx_attr->iov_limit = efadv_attr.max_sq_sge;
-	info->tx_attr->size = align_down_to_power_of_2(efadv_attr.max_sq_wr);
+	info->tx_attr->size = rounddown_power_of_two(efadv_attr.max_sq_wr);
 	if (info->ep_attr->type == FI_EP_RDM) {
 		info->tx_attr->inject_size = efadv_attr.inline_buf_size;
 	} else if (info->ep_attr->type == FI_EP_DGRAM) {
@@ -625,7 +625,7 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 		info->tx_attr->inject_size = 0;
 	}
 	info->rx_attr->iov_limit = efadv_attr.max_rq_sge;
-	info->rx_attr->size = align_down_to_power_of_2(efadv_attr.max_rq_wr / info->rx_attr->iov_limit);
+	info->rx_attr->size = rounddown_power_of_two(efadv_attr.max_rq_wr / info->rx_attr->iov_limit);
 
 	EFA_DBG(FI_LOG_DOMAIN, "Tx/Rx attribute :\n"
 				"\t info->tx_attr->iov_limit		= %zu\n"
@@ -663,7 +663,7 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 static void efa_addr_to_str(const uint8_t *raw_addr, char *str)
 {
 	size_t name_len = strlen(EFA_FABRIC_PREFIX) + INET6_ADDRSTRLEN;
-	char straddr[INET6_ADDRSTRLEN] = {};
+	char straddr[INET6_ADDRSTRLEN] = { 0 };
 
 	if (!inet_ntop(AF_INET6, raw_addr, straddr, INET6_ADDRSTRLEN))
 		return;

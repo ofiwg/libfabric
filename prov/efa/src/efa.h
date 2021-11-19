@@ -402,14 +402,6 @@ static inline struct efa_av *rxr_ep_av(struct rxr_ep *ep)
 	return container_of(ep->util_ep.av, struct efa_av, util_av);
 }
 
-#define align_down_to_power_of_2(x)		\
-	({					\
-		__typeof__(x) n = (x);		\
-		while (n & (n - 1))		\
-			n = n & (n - 1);	\
-		n;				\
-	})
-
 extern const struct efa_ep_domain efa_rdm_domain;
 extern const struct efa_ep_domain efa_dgrm_domain;
 
