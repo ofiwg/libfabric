@@ -22,41 +22,66 @@
 #include "cxip.h"
 
 /*
- * cxip_rma_inject_cb() - RMA inject event callback.
+ * cxip_rma_selective_completion_cb() - RMA selective completion callback.
  */
-static int cxip_rma_inject_cb(struct cxip_req *req, const union c_event *event)
+int cxip_rma_selective_completion_cb(struct cxip_req *req, const
+					    union c_event *event)
 {
 	return cxip_cq_req_error(req, 0, FI_EIO, cxi_event_rc(event), NULL, 0);
 }
 
 /*
- * cxip_rma_inject_req() - Return request state associated with all RMA inject
- * transactions on the transmit context.
+ * cxip_rma_write_selective_completion_req() - Return request state associated
+ * with all RMA write with selective completion transactions on the transmit
+ * context.
  *
  * The request is freed when the TXC send CQ is closed.
  */
-static struct cxip_req *cxip_rma_inject_req(struct cxip_txc *txc)
+static struct cxip_req *cxip_rma_write_selective_completion_req(struct cxip_txc *txc)
 {
-	if (!txc->rma_inject_req) {
+	if (!txc->rma_write_selective_completion_req) {
 		struct cxip_req *req;
 
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req)
 			return NULL;
 
-		req->cb = cxip_rma_inject_cb;
+		req->cb = cxip_rma_selective_completion_cb;
 		req->context = (uint64_t)txc->fid.ctx.fid.context;
 		req->flags = FI_RMA | FI_WRITE;
-		req->data_len = 0;
-		req->buf = 0;
-		req->data = 0;
-		req->tag = 0;
 		req->addr = FI_ADDR_UNSPEC;
 
-		txc->rma_inject_req = req;
+		txc->rma_write_selective_completion_req = req;
 	}
 
-	return txc->rma_inject_req;
+	return txc->rma_write_selective_completion_req;
+}
+
+/*
+ * cxip_rma_read_selective_completion_req() - Return request state associated
+ * with all RMA read with selective completion transactions on the transmit
+ * context.
+ *
+ * The request is freed when the TXC send CQ is closed.
+ */
+static struct cxip_req *cxip_rma_read_selective_completion_req(struct cxip_txc *txc)
+{
+	if (!txc->rma_read_selective_completion_req) {
+		struct cxip_req *req;
+
+		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		if (!req)
+			return NULL;
+
+		req->cb = cxip_rma_selective_completion_cb;
+		req->context = (uint64_t)txc->fid.ctx.fid.context;
+		req->flags = FI_RMA | FI_READ;
+		req->addr = FI_ADDR_UNSPEC;
+
+		txc->rma_read_selective_completion_req = req;
+	}
+
+	return txc->rma_read_selective_completion_req;
 }
 
 /*
@@ -100,15 +125,16 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 }
 
 static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
-			     union c_fab_addr *dfa, uint8_t *idx_ext,
-			     uint64_t addr, uint64_t key, uint64_t data,
-			     uint64_t flags, void *context, bool write,
-			     bool unr, enum cxi_traffic_class_type tc_type,
+			     struct cxip_mr *mr, union c_fab_addr *dfa,
+			     uint8_t *idx_ext, uint64_t addr, uint64_t key,
+			     uint64_t data, uint64_t flags, void *context,
+			     bool write, bool unr,
+			     enum cxi_traffic_class_type tc_type,
 			     bool triggered, uint64_t trig_thresh,
 			     struct cxip_cntr *trig_cntr,
 			     struct cxip_cntr *comp_cntr)
 {
-	struct cxip_req *req;
+	struct cxip_req *req = NULL;
 	struct cxip_md *dma_md = NULL;
 	void *dma_buf;
 	struct c_full_dma_cmd dma_cmd = {};
@@ -117,34 +143,46 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	struct cxip_domain *dom = txc->domain;
 	struct cxip_cmdq *cmdq = triggered ? dom->trig_cmdq : txc->tx_cmdq;
 	struct cxip_cntr *cntr;
+	void *inject_req;
+
+	/* MR desc cannot be value unless hybrid MR desc is enabled. */
+	if (!dom->hybrid_mr_desc)
+		mr = NULL;
 
 	/* DMA commands always require a request structure regardless if
 	 * FI_COMPLETION is set. This is due to the provider doing internally
 	 * memory registration and having to clean up the registration on DMA
 	 * operation completion.
 	 */
-	req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
-	if (!req) {
-		ret = -FI_ENOMEM;
-		TXC_WARN(txc, "Failed to allocate request: %d:%s\n",
-			 ret, fi_strerror(-ret));
-		goto err;
+	if ((len && (flags & FI_INJECT)) || (flags & FI_COMPLETION) || !mr) {
+		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		if (!req) {
+			ret = -FI_ENOMEM;
+			TXC_WARN(txc, "Failed to allocate request: %d:%s\n",
+					ret, fi_strerror(-ret));
+			goto err;
+		}
+
+		req->context = (uint64_t)context;
+		req->cb = cxip_rma_cb;
+		req->flags = FI_RMA | (write ? FI_WRITE : FI_READ) |
+			(flags & FI_COMPLETION);
+		req->rma.txc = txc;
+		req->type = CXIP_REQ_RMA;
+		req->trig_cntr = trig_cntr;
 	}
 
-	req->context = (uint64_t)context;
-	req->cb = cxip_rma_cb;
-	req->flags = FI_RMA | (write ? FI_WRITE : FI_READ) |
-		(flags & FI_COMPLETION);
-	req->rma.txc = txc;
-	req->type = CXIP_REQ_RMA;
-	req->trig_cntr = trig_cntr;
-
-	/* If the operation is an DMA inject operation (which can occur when
-	 * doing RMA commands to unoptimized MRs), a provider bounce buffer is
-	 * always needed to store the user payload.
-	 */
 	if (len) {
+		/* If the operation is an DMA inject operation (which can occur
+		 * when doing RMA commands to unoptimized MRs), a provider
+		 * bounce buffer is always needed to store the user payload.
+		 *
+		 * Always prefer user provider MR over internally mapping the
+		 * buffer.
+		 */
 		if (flags & FI_INJECT) {
+			assert(req != NULL);
+
 			req->rma.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
 			if (!req->rma.ibuf) {
 				ret = -FI_ENOMEM;
@@ -160,7 +198,12 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 
 			dma_buf = (void *)req->rma.ibuf;
 			dma_md = cxip_cq_ibuf_md(req->rma.ibuf);
+		} else if (mr) {
+			dma_buf = (void *)buf;
+			dma_md = mr->md;
 		} else {
+			assert(req != NULL);
+
 			ret = cxip_map(dom, buf, len, &req->rma.local_md);
 			if (ret) {
 				TXC_WARN(txc, "Failed to map buffer: %d:%s\n",
@@ -180,8 +223,27 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	dma_cmd.dfa = *dfa;
 	dma_cmd.remote_offset = addr;
 	dma_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
-	dma_cmd.user_ptr = (uint64_t)req;
 	dma_cmd.match_bits = key;
+
+	if (req) {
+		dma_cmd.user_ptr = (uint64_t)req;
+	} else {
+		if (write)
+			inject_req = cxip_rma_write_selective_completion_req(txc);
+		else
+			inject_req = cxip_rma_read_selective_completion_req(txc);
+
+		if (!inject_req) {
+			ret = -FI_ENOMEM;
+			TXC_WARN(txc,
+				 "Failed to allocate inject request: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			goto err_free_rma_buf;
+		}
+
+		dma_cmd.user_ptr = (uint64_t)inject_req;
+		dma_cmd.event_success_disable = 1;
+	}
 
 	if (!unr)
 		dma_cmd.restricted = 1;
@@ -289,6 +351,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 
 err_cq_unlock:
 	fastlock_release(&cmdq->lock);
+err_free_rma_buf:
 	if (req->rma.ibuf)
 		cxip_cq_ibuf_free(txc->send_cq, req->rma.ibuf);
 err_free_cq_req:
@@ -377,7 +440,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	if (req) {
 		cstate_cmd.user_ptr = (uint64_t)req;
 	} else {
-		inject_req = cxip_rma_inject_req(txc);
+		inject_req = cxip_rma_write_selective_completion_req(txc);
 		if (!inject_req) {
 			ret = -FI_ENOMEM;
 			TXC_WARN(txc,
@@ -617,9 +680,9 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 					key, data, flags, context, unr,
 					tc_type);
 	else
-		ret = cxip_rma_emit_dma(txc, buf, len, &dfa, &idx_ext, addr,
-					key, data, flags, context, write, unr,
-					tc_type, triggered, trig_thresh,
+		ret = cxip_rma_emit_dma(txc, buf, len, desc, &dfa, &idx_ext,
+					addr, key, data, flags, context, write,
+					unr, tc_type, triggered, trig_thresh,
 					trig_cntr, comp_cntr);
 
 	if (ret)

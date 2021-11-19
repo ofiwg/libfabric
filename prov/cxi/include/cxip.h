@@ -1471,7 +1471,8 @@ struct cxip_txc {
 	struct cxip_cmdq *tx_cmdq;	// added during cxip_txc_enable()
 
 	ofi_atomic32_t otx_reqs;	// outstanding transmit requests
-	struct cxip_req *rma_inject_req;
+	struct cxip_req *rma_write_selective_completion_req;
+	struct cxip_req *rma_read_selective_completion_req;
 	struct cxip_req *amo_inject_req;
 
 	/* Software Rendezvous related structures */

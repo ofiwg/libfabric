@@ -648,6 +648,104 @@ void cxit_setup_rma_disable_fi_rma_event(void)
 	cr_assert(ret == 1);
 }
 
+void cxit_bind_cqs_hybrid_mr_desc(void)
+{
+	int ret;
+
+	ret = fi_ep_bind(cxit_ep, &cxit_tx_cq->fid,
+			 cxit_tx_cq_bind_flags | FI_SELECTIVE_COMPLETION);
+	cr_assert(!ret, "fi_ep_bind TX CQ");
+
+	ret = fi_ep_bind(cxit_ep, &cxit_rx_cq->fid,
+			 cxit_rx_cq_bind_flags | FI_SELECTIVE_COMPLETION);
+	cr_assert(!ret, "fi_ep_bind RX CQ");
+}
+
+void cxit_create_domain_hybrid_mr_desc(void)
+{
+	int ret;
+
+	if (cxit_domain)
+		return;
+
+	ret = fi_domain(cxit_fabric, cxit_fi, &cxit_domain, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_domain");
+
+	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_3, 0,
+			  (void **)&dom_ops, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_open_ops v2");
+	cr_assert(dom_ops->cntr_read != NULL &&
+		  dom_ops->topology != NULL &&
+		  dom_ops->enable_hybrid_mr_desc != NULL,
+		  "V3 functions returned");
+
+	ret = fi_set_ops(&cxit_domain->fid, FI_SET_OPS_HMEM_OVERRIDE, 0,
+			 &cxi_hmem_ops, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_set_ops");
+
+	ret = dom_ops->enable_hybrid_mr_desc(&cxit_domain->fid, true);
+	cr_assert(ret == FI_SUCCESS, "enable_hybrid_mr_desc failed");
+}
+
+void cxit_setup_ep_hybrid_mr_desc(void)
+{
+	cxit_setup_domain();
+	cxit_create_domain_hybrid_mr_desc();
+}
+
+void cxit_setup_enabled_ep_hybrid_mr_desc(void)
+{
+	int ret;
+	size_t addrlen = sizeof(cxit_ep_addr);
+
+	cxit_setup_getinfo();
+
+	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
+	cxit_av_attr.type = FI_AV_TABLE;
+	cxit_av_attr.rx_ctx_bits = 4;
+
+	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+
+	cxit_setup_ep_hybrid_mr_desc();
+
+	/* Set up RMA objects */
+	cxit_create_ep();
+	cxit_create_eq();
+	cxit_bind_eq();
+	cxit_create_cqs();
+	cxit_bind_cqs_hybrid_mr_desc();
+	cxit_create_cntrs();
+	cxit_bind_cntrs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	ret = fi_enable(cxit_ep);
+	cr_assert(ret == FI_SUCCESS, "ret is: %d\n", ret);
+
+	/* Find assigned Endpoint address. Address is assigned during enable. */
+	ret = fi_getname(&cxit_ep->fid, &cxit_ep_addr, &addrlen);
+	cr_assert(ret == FI_SUCCESS, "ret is %d\n", ret);
+	cr_assert(addrlen == sizeof(cxit_ep_addr));
+}
+
+void cxit_setup_rma_hybrid_mr_desc(void)
+{
+	int ret;
+	struct cxip_addr fake_addr = {.nic = 0xad, .pid = 0xbc};
+
+	cxit_setup_enabled_ep_hybrid_mr_desc();
+
+	/* Insert local address into AV to prepare to send to self */
+	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	cr_assert(ret == 1);
+
+	/* Insert local address into AV to prepare to send to self */
+	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, &cxit_ep_fi_addr,
+			   0, NULL);
+	cr_assert(ret == 1);
+}
+
 void cxit_setup_rma(void)
 {
 	int ret;

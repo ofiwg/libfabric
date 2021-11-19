@@ -1369,3 +1369,100 @@ Test(rma, std_mr_inject)
 	mr_destroy(&mem_window);
 	free(send_buf);
 }
+
+static void rma_hybrid_mr_desc_test_runner(bool write, bool cq_events)
+{
+	struct mem_region source_window;
+	struct mem_region remote_window;
+	int iters = 10;
+	int send_len = 1024;
+	int win_len = send_len * iters;
+	int source_key = 0x2;
+	int remote_key = 0x1;
+	int ret;
+	int i;
+	struct iovec msg_iov = {};
+	struct fi_rma_iov rma_iov = {};
+	struct fi_msg_rma msg_rma = {};
+	void *desc[1];
+	struct fi_cq_tagged_entry cqe;
+	uint64_t rma_flags = cq_events ? FI_TRANSMIT_COMPLETE | FI_COMPLETION :
+		FI_TRANSMIT_COMPLETE;
+	uint64_t cqe_flags = write ? FI_RMA | FI_WRITE : FI_RMA | FI_READ;
+
+	ret = mr_create(win_len, FI_READ | FI_WRITE, 0xa, source_key,
+			&source_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	desc[0] = fi_mr_desc(source_window.mr);
+	cr_assert(desc[0] != NULL);
+
+	ret = mr_create(win_len, FI_REMOTE_READ | FI_REMOTE_WRITE, 0x3,
+			remote_key, &remote_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	msg_rma.msg_iov = &msg_iov;
+	msg_rma.desc = desc;
+	msg_rma.iov_count = 1;
+	msg_rma.addr = cxit_ep_fi_addr;
+	msg_rma.rma_iov = &rma_iov;
+	msg_rma.rma_iov_count = 1;
+
+	for (i = 0; i < iters; i++) {
+		msg_iov.iov_base = source_window.mem + (i * send_len);
+		msg_iov.iov_len = send_len;
+
+		rma_iov.addr = i * send_len;
+		rma_iov.key = remote_key;
+		rma_iov.len = send_len;
+
+		if (write)
+			ret = fi_writemsg(cxit_ep, &msg_rma, rma_flags);
+		else
+			ret = fi_readmsg(cxit_ep, &msg_rma, rma_flags);
+		cr_assert_eq(ret, FI_SUCCESS, "Bad rc=%d\n", ret);
+	}
+
+	ret = fi_cntr_wait(cxit_write_cntr, iters, 1000);
+	cr_assert(ret == FI_SUCCESS);
+
+	if (cq_events) {
+		for (i = 0; i < iters; i++) {
+			ret = cxit_await_completion(cxit_tx_cq, &cqe);
+			cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+			validate_tx_event(&cqe, cqe_flags, NULL);
+		}
+	}
+
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	for (i = 0; i < win_len; i++)
+		cr_assert_eq(source_window.mem[i], remote_window.mem[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     source_window.mem[i], remote_window.mem[i]);
+}
+
+TestSuite(rma_hybrid_mr_desc, .init = cxit_setup_rma_hybrid_mr_desc,
+	  .fini = cxit_teardown_rma, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(rma_hybrid_mr_desc, non_inject_selective_completion_write)
+{
+	rma_hybrid_mr_desc_test_runner(true, false);
+}
+
+Test(rma_hybrid_mr_desc, selective_completion_read)
+{
+	rma_hybrid_mr_desc_test_runner(false, false);
+}
+
+Test(rma_hybrid_mr_desc, non_inject_completion_write)
+{
+	rma_hybrid_mr_desc_test_runner(true, true);
+}
+
+Test(rma_hybrid_mr_desc, completion_read)
+{
+	rma_hybrid_mr_desc_test_runner(false, true);
+}
