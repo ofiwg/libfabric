@@ -323,7 +323,8 @@ static inline int cxip_mr_key_to_ptl_idx(int key, bool write)
 
 /* Messaging Match Bit layout */
 #define CXIP_TAG_WIDTH		48
-#define CXIP_RDZV_ID_WIDTH	7
+#define CXIP_RDZV_ID_WIDTH	8
+#define CXIP_EAGER_RDZV_ID_WIDTH 7
 #define CXIP_TX_ID_WIDTH	11
 #define CXIP_TAG_MASK		((1UL << CXIP_TAG_WIDTH) - 1)
 
@@ -361,7 +362,7 @@ union cxip_match_bits {
 	/* Split TX ID for rendezvous operations. */
 	struct {
 		uint64_t pad0       : CXIP_TAG_WIDTH; /* User tag value */
-		uint64_t rdzv_id_hi : CXIP_RDZV_ID_WIDTH;
+		uint64_t rdzv_id_hi : CXIP_EAGER_RDZV_ID_WIDTH;
 		uint64_t rdzv_lac   : 4;  /* Rendezvous Get LAC */
 	};
 	struct {
@@ -1367,6 +1368,7 @@ void cxip_req_buf_free(struct cxip_req_buf *buf);
 int cxip_req_buf_replenish(struct cxip_rxc *rxc, bool seq_restart);
 
 #define CXIP_RDZV_IDS	(1 << CXIP_RDZV_ID_WIDTH)
+#define CXIP_EAGER_RDZV_IDS (1 << CXIP_EAGER_RDZV_ID_WIDTH)
 #define CXIP_TX_IDS	(1 << CXIP_TX_ID_WIDTH)
 
 /*
@@ -1503,6 +1505,7 @@ struct cxip_ep_obj {
 	struct cxip_zbcoll_obj zbcoll;
 
 	struct indexer rdzv_ids;
+	int max_rdzv_ids;
 	fastlock_t rdzv_id_lock;
 
 	struct indexer tx_ids;

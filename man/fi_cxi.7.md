@@ -301,9 +301,10 @@ arrives unexpectedly, the message header is saved and the entire payload is
 dropped. Later, when the message is matched to a Receive operation, the entire
 payload is pulled from the source using an RDMA Get operation.
 
-The selection of the rendezvous protocol is controlled using the
-*FI_CXI_RDZV_OFFLOAD* environment variable. The provider uses the
-offloaded rendezvous protocol by default.
+The rendezvous protocol is controlled using the *FI_CXI_RDZV_OFFLOAD*
+environment variable. The provider uses the offloaded rendezvous protocol
+by default. Both the rendezvous source and target must use the same setting
+for protocol selection.
 
 Message flow-control is triggered when hardware message matching resources
 become exhausted. Messages may be dropped and retransmitted in order to
