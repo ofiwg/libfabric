@@ -137,7 +137,7 @@ static int ft_init_control(void)
 
 static void ft_cleanup_xcontrol(struct ft_xcontrol *ctrl)
 {
-	free(ctrl->buf);
+	ft_hmem_free(opts.iface, ctrl->buf);
 	free(ctrl->iov);
 	free(ctrl->iov_desc);
 	free(ctrl->ctx);
@@ -977,11 +977,11 @@ void ft_cleanup(void)
 	FT_CLOSE_FID(ft_mr_ctrl.mr);
 	FT_CLOSE_FID(ft_atom_ctrl.res_mr);
 	FT_CLOSE_FID(ft_atom_ctrl.comp_mr);
-	ft_free_res();
 	ft_cleanup_xcontrol(&ft_rx_ctrl);
 	ft_cleanup_xcontrol(&ft_tx_ctrl);
 	ft_cleanup_mr_control(&ft_mr_ctrl);
 	ft_cleanup_atomic_control(&ft_atom_ctrl);
+	ft_free_res();
 	memset(&ft_ctrl, 0, sizeof ft_ctrl);
 }
 

@@ -322,6 +322,9 @@ int ft_ze_alloc(uint64_t device, void **buf, size_t size)
 
 int ft_ze_free(void *buf)
 {
+	if (!buf)
+		return FI_SUCCESS;
+
 	return (*libze_ops.zeMemFree)(context, buf) ? -FI_EINVAL : FI_SUCCESS;
 }
 

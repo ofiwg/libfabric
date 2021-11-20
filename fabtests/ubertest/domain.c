@@ -31,7 +31,6 @@
 
 #include "fabtest.h"
 
-
 static int ft_open_fabric(void)
 {
 	int ret;
@@ -181,30 +180,29 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
 {
 	size_t size;
 	int i, ret;
+	uint64_t key;
 
 	size = ft_ctrl.size_array[ft_ctrl.size_cnt - 1];
 	if (!ctrl->buf) {
-		ctrl->buf = calloc(1, size);
+		ret = ft_hmem_alloc(opts.iface, opts.device, &ctrl->buf, size);
+		if (ret)
+			return ret;
 		ctrl->cpy_buf = calloc(1, size);
 		if (!ctrl->buf || !ctrl->cpy_buf)
 			return -FI_ENOMEM;
+		key = (ctrl == &ft_tx_ctrl ? FT_TX_MR_KEY : FT_RX_MR_KEY);
+		ret = ft_reg_mr(fabric_info, ctrl->buf, size,
+                                ft_info_to_mr_access(fabric_info),
+                                key, &ctrl->mr, &ctrl->memdesc);
+                if (ret) {
+                        FT_PRINTERR("fi_mr_reg", ret);
+                        return ret;
+                }
+		for (i = 0; i < ft_ctrl.iov_cnt; i++)
+	                ctrl->iov_desc[i] = ctrl->memdesc;
 	} else {
-		memset(ctrl->buf, 0, size);
+		ft_hmem_memset(opts.iface, opts.device, ctrl->buf, 0, size);
 	}
-
-	if ((fabric_info->domain_attr->mr_mode & FI_MR_LOCAL) && !ctrl->mr) {
-		ret = fi_mr_reg(domain, ctrl->buf, size,
-				ft_info_to_mr_access(fabric_info),
-				0, 0, 0, &ctrl->mr, NULL);
-		if (ret) {
-			FT_PRINTERR("fi_mr_reg", ret);
-			return ret;
-		}
-		ctrl->memdesc = fi_mr_desc(ctrl->mr);
-	}
-
-	for (i = 0; i < ft_ctrl.iov_cnt; i++)
-		ctrl->iov_desc[i] = ctrl->memdesc;
 
 	return 0;
 }

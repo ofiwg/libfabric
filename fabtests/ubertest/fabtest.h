@@ -43,6 +43,7 @@
 #include <rdma/fi_tagged.h>
 #include <shared.h>
 #include <assert.h>
+#include <hmem.h>
 
 #ifdef __cplusplus
 extern "C" {
