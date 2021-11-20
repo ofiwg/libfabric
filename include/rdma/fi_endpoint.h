@@ -67,6 +67,7 @@ enum {
 	FI_OPT_TX_SIZE,
 	FI_OPT_RX_SIZE,
 	FI_OPT_FI_HMEM_P2P,		/* int */
+	FI_OPT_XPU_TRIGGER,		/* struct fi_trigger_xpu */
 };
 
 /*
