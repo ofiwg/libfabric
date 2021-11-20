@@ -118,16 +118,18 @@ void fi_log(const struct fi_provider *prov, enum fi_log_level level,
 	do {} while (0)
 #endif
 
-#define FI_WARN_ONCE(prov, subsystem, ...) ({				\
-	static int warned;						\
-	if (!warned && fi_log_enabled(prov, FI_LOG_WARN, subsystem)) {	\
-		int saved_errno = errno;				\
-		fi_log(prov, FI_LOG_WARN, subsystem,			\
+#define FI_WARN_ONCE(prov, subsystem, ...)  				\
+	do {								\
+		static int warned = 0;					\
+		if (!warned &&						\
+		    fi_log_enabled(prov, FI_LOG_WARN, subsystem)) {	\
+			int saved_errno = errno;			\
+			fi_log(prov, FI_LOG_WARN, subsystem,		\
 			__func__, __LINE__, __VA_ARGS__);		\
-		warned = 1;						\
-		errno = saved_errno;					\
-	}								\
-})
+			warned = 1;					\
+			errno = saved_errno;				\
+		}							\
+	} while (0)
 
 #ifdef __cplusplus
 }
