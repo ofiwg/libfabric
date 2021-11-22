@@ -30,7 +30,20 @@
 # SOFTWARE.
 #
 
-bin_PROGRAMS += prov/efa/src/fi_efa_ep_rnr_retry
+bin_PROGRAMS += prov/efa/src/fi_efa_rnr_read_cq_error \
+		prov/efa/src/fi_efa_rnr_queue_resend
 
-prov_efa_src_fi_efa_ep_rnr_retry_SOURCES = prov/efa/src/rdm_ep_rnr_retry.c
-prov_efa_src_fi_efa_ep_rnr_retry_LDADD =  libfabtests.la
+efa_rnr_srcs = \
+	prov/efa/src/efa_rnr_shared.h \
+	prov/efa/src/efa_rnr_shared.c
+
+prov_efa_src_fi_efa_rnr_read_cq_error_SOURCES = \
+	prov/efa/src/rdm_rnr_read_cq_error.c \
+	$(efa_rnr_srcs)
+prov_efa_src_fi_efa_rnr_read_cq_error_LDADD = libfabtests.la
+
+prov_efa_src_fi_efa_rnr_queue_resend_SOURCES = \
+	prov/efa/src/rdm_rnr_queue_resend.c \
+	$(efa_rnr_srcs)
+prov_efa_src_fi_efa_rnr_queue_resend_LDADD = libfabtests.la
+
