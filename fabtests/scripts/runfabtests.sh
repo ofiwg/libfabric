@@ -239,7 +239,33 @@ multinode_tests=(
 )
 
 prov_efa_tests=( \
-	"fi_efa_ep_rnr_retry -R 0"
+	"fi_efa_rnr_read_cq_error"
+	"fi_efa_rnr_queue_resend -c 0 -S 1048576"
+	"fi_efa_rnr_queue_resend -c 0 -o read -S 4"
+	"fi_efa_rnr_queue_resend -c 0 -A read -S 4"
+	"fi_efa_rnr_queue_resend -c 0 -U -S 4"
+	"fi_efa_rnr_queue_resend -c 1 -S 4"
+	"fi_efa_rnr_queue_resend -c 1 -T -S 4"
+	"fi_efa_rnr_queue_resend -c 1 -S 16384"
+	"fi_efa_rnr_queue_resend -c 1 -T -S 16384"
+	"fi_efa_rnr_queue_resend -c 1 -S 1048576"
+	"fi_efa_rnr_queue_resend -c 1 -T -S 1048576"
+	"fi_efa_rnr_queue_resend -c 1 -o write -S 4"
+	"fi_efa_rnr_queue_resend -c 1 -o write -S 1048576"
+	"fi_efa_rnr_queue_resend -c 1 -o read -S 4"
+	"fi_efa_rnr_queue_resend -c 1 -o read -S 1048576"
+	"fi_efa_rnr_queue_resend -c 1 -A write -S 4"
+	"fi_efa_rnr_queue_resend -c 1 -A read -S 4"
+	"fi_efa_rnr_queue_resend -c 1 -A cswap -S 4"
+	"fi_efa_rnr_queue_resend -c 1 -U -S 4"
+	"fi_efa_rnr_queue_resend -c 1 -T -U -S 4"
+	"fi_efa_rnr_queue_resend -c 1 -U -S 16384"
+	"fi_efa_rnr_queue_resend -c 1 -T -U -S 16384"
+	"fi_efa_rnr_queue_resend -c 1 -U -S 1048576"
+	"fi_efa_rnr_queue_resend -c 1 -T -U -S 1048576"
+	"fi_efa_rnr_queue_resend -c 1 -o write -U -S 4"
+	"fi_efa_rnr_queue_resend -c 1 -o write -U -S 1048576"
+	"fi_efa_rnr_queue_resend -c 1 -A write -U -S 4"
 )
 
 function errcho {
