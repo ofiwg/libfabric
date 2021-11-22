@@ -49,6 +49,10 @@
 
 #include "efa.h"
 
+#ifdef _WIN32
+#include "efawin.h"
+#endif
+
 static struct efa_context **ctx_list;
 static int dev_cnt;
 
@@ -81,6 +85,32 @@ static int efa_device_close(struct efa_context *ctx)
 	return 0;
 }
 
+#ifndef _WIN32
+
+int efa_lib_init(void)
+{
+	return 0;
+}
+
+#else // _WIN32
+
+int efa_lib_init(void)
+{
+	int ret;
+	/*
+	* On Windows we need to load efawin dll to interact with
+ 	* efa device as there is no built-in verbs integration in the OS.
+	* efawin dll provides all the ibv_* functions on Windows.
+	* efa_load_efawin_lib function will replace stub ibv_* functions with
+	* functions from efawin dll
+	*/
+	ret = efa_load_efawin_lib();
+	
+	return ret;
+}
+
+#endif // _WIN32
+
 int efa_device_init(void)
 {
 	struct ibv_device **device_list;
@@ -88,6 +118,11 @@ int efa_device_init(void)
 	int ret;
 
 	fastlock_init(&pd_list_lock);
+
+	ret = efa_lib_init();
+	if (ret != 0) {
+		return ret;
+	}
 
 	device_list = ibv_get_device_list(&dev_cnt);
 	if (device_list == NULL)
@@ -154,6 +189,20 @@ bool efa_device_support_rdma_read(void)
 #endif
 }
 
+#ifndef _WIN32
+
+void efa_lib_close(void) {
+	// Nothing to do when we are not compiling for Windows
+}
+
+#else // _WIN32
+
+void efa_lib_close(void) {
+	efa_free_efawin_lib();
+}
+
+#endif // _WIN32
+
 void efa_device_free(void)
 {
 	int i;
@@ -164,6 +213,7 @@ void efa_device_free(void)
 	free(pd_list);
 	free(ctx_list);
 	dev_cnt = 0;
+	efa_lib_close();
 	fastlock_destroy(&pd_list_lock);
 }
 
