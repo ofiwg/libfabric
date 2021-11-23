@@ -765,6 +765,7 @@ FI_PROVIDER_SETUP([shm])
 FI_PROVIDER_SETUP([rstream])
 FI_PROVIDER_SETUP([perf])
 FI_PROVIDER_SETUP([hook_debug])
+FI_PROVIDER_SETUP([hook_hmem])
 FI_PROVIDER_FINI
 dnl Configure the .pc file
 FI_PROVIDER_SETUP_PC

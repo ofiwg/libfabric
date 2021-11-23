@@ -255,6 +255,14 @@ HOOK_DEBUG_INI ;
 #  define HOOK_DEBUG_INIT NULL
 #endif
 
+#if(HAVE_HOOK_HMEM)
+#  define HOOK_HMEM_INI INI_SIG(fi_hook_hmem_ini)
+#  define HOOK_HMEM_INIT fi_hook_hmem_ini()
+HOOK_HMEM_INI ;
+#else
+#  define HOOK_HMEM_INIT NULL
+#endif
+
 #  define HOOK_NOOP_INI INI_SIG(fi_hook_noop_ini)
 #  define HOOK_NOOP_INIT fi_hook_noop_ini()
 HOOK_NOOP_INI ;

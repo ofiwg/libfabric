@@ -1,0 +1,13 @@
+#if HAVE_HOOK_HMEM
+_hmemhook_files = \
+	prov/hook/hook_hmem/src/hook_hmem.c
+
+_hmemhook_headers = \
+	prov/hook/hook_hmem/include/hook_hmem.h
+
+
+src_libfabric_la_SOURCES  +=	$(_hmemhook_files) \
+				$(_hmemhook_headers)
+src_libfabric_la_CPPFLAGS +=	-I$(top_srcdir)/prov/hook/hook_hmem/include
+src_libfabric_la_LIBADD	  +=	$(hmemhook_shm_LIBS)
+#endif HAVE_HOOK_HMEM
