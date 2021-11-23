@@ -22,6 +22,10 @@ CFLAGS = $(CFLAGS) /Zi /Od /MTd
 outdir = $(output_root)$(arch)\debug-v142
 CFLAGS = $(CFLAGS) /Zi /Od /MTd
 !endif
+!if "$(config)" == "Debug-Efa-v142"
+outdir = $(output_root)$(arch)\debug-efa-v142
+CFLAGS = $(CFLAGS) /Zi /Od /MTd
+!endif
 !if "$(config)" == "Release-v140"
 outdir = $(output_root)$(arch)\release-v140
 CFLAGS = $(CFLAGS) /O2 /MT
@@ -32,6 +36,10 @@ CFLAGS = $(CFLAGS) /O2 /MT
 !endif
 !if "$(config)" == "Release-v142"
 outdir = $(output_root)$(arch)\release-v142
+CFLAGS = $(CFLAGS) /O2 /MT
+!endif
+!if "$(config)" == "Release-Efa-v142"
+outdir = $(output_root)$(arch)\release-efa-v142
 CFLAGS = $(CFLAGS) /O2 /MT
 !endif
 
