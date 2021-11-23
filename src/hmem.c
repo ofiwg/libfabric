@@ -250,7 +250,8 @@ void ofi_hmem_cleanup(void)
 	}
 }
 
-enum fi_hmem_iface ofi_get_hmem_iface(const void *addr)
+enum fi_hmem_iface ofi_get_hmem_iface(const void *addr, uint64_t *device,
+				      uint64_t *flags)
 {
 	int iface;
 
@@ -261,7 +262,7 @@ enum fi_hmem_iface ofi_get_hmem_iface(const void *addr)
 	for (iface = ARRAY_SIZE(hmem_ops) - 1; iface > FI_HMEM_SYSTEM;
 	     iface--) {
 		if (ofi_hmem_is_initialized(iface) &&
-		    hmem_ops[iface].is_addr_valid(addr, NULL, NULL))
+		    hmem_ops[iface].is_addr_valid(addr, device, flags))
 			return iface;
 	}
 

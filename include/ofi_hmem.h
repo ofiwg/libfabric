@@ -238,7 +238,8 @@ bool ofi_hmem_is_initialized(enum fi_hmem_iface iface);
 
 void ofi_hmem_init(void);
 void ofi_hmem_cleanup(void);
-enum fi_hmem_iface ofi_get_hmem_iface(const void *addr);
+enum fi_hmem_iface ofi_get_hmem_iface(const void *addr, uint64_t *device,
+				      uint64_t *flags);
 int ofi_hmem_host_register(void *ptr, size_t size);
 int ofi_hmem_host_unregister(void *ptr);
 bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface);
