@@ -232,9 +232,8 @@ static inline void mlx_req_release(struct mlx_request *req) {
 	ucp_request_free(req);
 }
 
-#define MLX_EP_MSG_TAG (1ULL<<63)
+#define MLX_EP_MSG_TAG (~0ULL)
 #define MLX_AUX_TAG_MASK (~0ULL)
-#define MLX_USER_TAG_MASK ((1ULL<<63)-1)
 
 OFI_DECLARE_CIRQUE(struct fi_cq_tagged_entry, mlx_comp_cirq);
 

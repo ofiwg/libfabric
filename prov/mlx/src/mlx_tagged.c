@@ -49,13 +49,13 @@ static ssize_t mlx_tagged_peek(
 	cq = u_ep->ep.rx_cq;
 	ucp_worker_progress(u_ep->worker);
 	pmsg = ucp_tag_probe_nb(u_ep->worker,
-				(msg->tag & MLX_USER_TAG_MASK),
-				(~(msg->ignore & MLX_USER_TAG_MASK)),
+				msg->tag,
+				~msg->ignore,
 				do_remove, &r_info);
 
 	if (pmsg == NULL) {
 		retval = ofi_cq_write_error_peek(cq,
-				(msg->tag & MLX_USER_TAG_MASK), msg->context);
+				msg->tag, msg->context);
 	} else {
 		retval = ofi_cq_write(cq, msg->context,
 					(FI_RECV | (flags & FI_CLAIM)),
@@ -86,7 +86,7 @@ static ssize_t mlx_tagged_recvmsg(
 	}
 
 #ifdef ENABLE_DEBUG
-	if ((msg->tag & MLX_USER_TAG_MASK) != msg->tag) {
+	if (MLX_EP_MSG_TAG == msg->tag) {
 		FI_DBG( &mlx_prov,FI_LOG_CORE,
 			"Invalid tag format.");
 		return -FI_EINVAL;
@@ -109,7 +109,7 @@ static ssize_t mlx_tagged_sendmsg(
 		return -FI_EBADFLAGS;
 	}
 #ifdef ENABLE_DEBUG
-	if ((msg->tag & MLX_USER_TAG_MASK) != msg->tag) {
+	if (MLX_EP_MSG_TAG == msg->tag) {
 		FI_DBG( &mlx_prov,FI_LOG_CORE,
 			"Invalid tag format.");
 		return -FI_EINVAL;
@@ -125,7 +125,7 @@ static ssize_t mlx_tagged_inject(
 			fi_addr_t dest_addr, uint64_t tag)
 {
 #ifdef ENABLE_DEBUG
-	if ((tag & MLX_USER_TAG_MASK) != tag) {
+	if (MLX_EP_MSG_TAG == tag) {
 		FI_DBG( &mlx_prov,FI_LOG_CORE,
 			"Invalid tag format.");
 		return -FI_EINVAL;

@@ -121,7 +121,7 @@ struct fi_ep_attr mlx_ep_attrs = {
 	.protocol_version = ((FI_MLX_VERSION_MAJOR << UCP_VERSION_MAJOR_SHIFT)|
 			(FI_MLX_VERSION_MINOR << UCP_VERSION_MINOR_SHIFT)),
 	.max_msg_size = SIZE_MAX,
-	.mem_tag_format = 0x0,
+	.mem_tag_format = FI_TAG_GENERIC,
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1,
 };
