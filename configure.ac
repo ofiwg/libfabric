@@ -101,10 +101,24 @@ AC_ARG_ENABLE([atomics],
 	[enable_atomics=yes])
 
 dnl Checks for programs
-AC_PROG_CC_C99
-AS_IF([test "$ac_cv_prog_cc_c99" = "no"],
-      [AC_MSG_WARN([Libfabric requires a C99-compliant compiler])
-       AC_MSG_ERROR([Cannot continue])])
+AC_PROG_CC
+dnl Autoconf 2.70 changed behavior of how it searches for C / C99
+dnl compilers.  Since the world hasn't uniformly updated to Autoconf
+dnl >=v2.70, support both <v2.70 and >=v2.70.
+m4_version_prereq([2.70],
+     [ dnl If Autoconf is >= v2.70
+      AC_MSG_CHECKING([for C compiler conformance level])
+      AC_MSG_RESULT([$ac_prog_cc_stdc])
+      AS_IF([test "$ac_prog_cc_stdc" = "c89"],
+            [AC_MSG_WARN([Libfabric requires a C99-compliant compiler])
+             AC_MSG_ERROR([Cannot continue])])
+     ],
+     [ dnl If Autoconf is < v2.70
+      AC_PROG_CC_C99
+      AS_IF([test "$ac_cv_prog_cc_c99" = "no"],
+            [AC_MSG_WARN([Libfabric requires a C99-compliant compiler])
+             AC_MSG_ERROR([Cannot continue])])
+     ])
 AM_PROG_CC_C_O
 AC_PROG_CPP
 
@@ -150,7 +164,10 @@ AS_IF([test x"$enable_asan" != x"no"],
       [CFLAGS="-fsanitize=address $CFLAGS"])
 
 dnl Checks for header files.
-AC_HEADER_STDC
+dnl This is only necessary for Autoconf <v2.70.
+m4_version_prereq([2.70],
+     [],
+     [AC_HEADER_STDC])
 
 dnl Check for compiler features
 AC_C_TYPEOF
