@@ -236,8 +236,8 @@ AS_IF([test x"$enable_epoll" != x"no"],
 AC_CHECK_HEADER([linux/perf_event.h],
     [AC_CHECK_DECL([__builtin_ia32_rdpmc],
         [
-            AC_TRY_LINK([#include <linux/perf_event.h>],
-                [__builtin_ia32_rdpmc(0);],
+            AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <linux/perf_event.h>]],
+                [[__builtin_ia32_rdpmc(0);]])],
                 [linux_perf_rdpmc=1],
                 [linux_perf_rdpmc=0])
 	],
@@ -251,33 +251,27 @@ AM_CONDITIONAL([HAVE_LINUX_PERF_RDPMC], [test "x$linux_perf_rdpmc" = "x1"])
 dnl Check for gcc atomic intrinsics
 AS_IF([test x"$enable_atomics" != x"no"],
     AC_MSG_CHECKING(compiler support for c11 atomics)
-    AC_TRY_LINK([#include <stdatomic.h>],
-        [atomic_int a;
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdatomic.h>]], [[atomic_int a;
          atomic_init(&a, 0);
          #ifdef __STDC_NO_ATOMICS__
            #error c11 atomics are not supported
          #else
            return 0;
          #endif
-        ],
-        [
+        ]])],[
         AC_MSG_RESULT(yes)
             AC_DEFINE(HAVE_ATOMICS, 1, [Set to 1 to use c11 atomic functions])
-        ],
-        [AC_MSG_RESULT(no)])
+        ],[AC_MSG_RESULT(no)])
 
 
     AC_MSG_CHECKING(compiler support for c11 atomic `least` types)
-    AC_TRY_LINK([#include <stdatomic.h>],
-        [atomic_int_least32_t a;
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdatomic.h>]], [[atomic_int_least32_t a;
          atomic_int_least64_t b;
-        ],
-        [
+        ]])],[
             AC_MSG_RESULT(yes)
             AC_DEFINE(HAVE_ATOMICS_LEAST_TYPES, 1,
                       [Set to 1 to use c11 atomic `least` types])
-        ],
-        [
+        ],[
             AC_MSG_RESULT(no)
         ]),
 [
@@ -287,8 +281,7 @@ AS_IF([test x"$enable_atomics" != x"no"],
 dnl Check for gcc built-in atomics
 AS_IF([test x"$enable_atomics" != x"no"],
     AC_MSG_CHECKING(compiler support for built-in atomics)
-    AC_TRY_LINK([#include <stdint.h>],
-        [int32_t a;
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdint.h>]], [[int32_t a;
          __sync_add_and_fetch(&a, 0);
          __sync_sub_and_fetch(&a, 0);
          #if defined(__PPC__) && !defined(__PPC64__)
@@ -296,12 +289,10 @@ AS_IF([test x"$enable_atomics" != x"no"],
          #else
            return 0;
          #endif
-        ],
-        [
+        ]])],[
         AC_MSG_RESULT(yes)
             AC_DEFINE(HAVE_BUILTIN_ATOMICS, 1, [Set to 1 to use built-in intrincics atomics])
-        ],
-        [AC_MSG_RESULT(no)]),
+        ],[AC_MSG_RESULT(no)]),
 [
     AC_MSG_RESULT(configure: atomics support built-in is disabled)
 ])
@@ -374,18 +365,15 @@ AS_IF([test "$have_mm_atomics" -eq 1 -a "$ac_cv_type___int128" = "yes"],
 
 dnl Check for gcc cpuid intrinsics
 AC_MSG_CHECKING(compiler support for cpuid)
-AC_TRY_LINK([
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
      #include <stddef.h>
-     #include <cpuid.h>],
-    [
+     #include <cpuid.h>]], [[
      int a, b, c, d;
      __cpuid_count(0, 0, a, b, c, d);
-    ],
-    [
+    ]])],[
 	AC_MSG_RESULT(yes)
         AC_DEFINE(HAVE_CPUID, 1, [Set to 1 to use cpuid])
-    ],
-    [AC_MSG_RESULT(no)])
+    ],[AC_MSG_RESULT(no)])
 
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 AC_CHECK_HEADER(valgrind/memcheck.h, [],
@@ -428,13 +416,10 @@ AS_IF([test "$icc_symver_hack"],
 	[AC_MSG_RESULT(disabled)],
 [
 
-AC_TRY_LINK([__asm__(".symver main_, main@ABIVER_1.0");],
-	[],
-	[
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[__asm__(".symver main_, main@ABIVER_1.0");]], [[]])],[
 		AC_MSG_RESULT(yes)
 		ac_asm_symver_support=1
-	],
-	[
+	],[
 		AC_MSG_RESULT(no)
 		ac_asm_symver_support=0
 	])
@@ -445,18 +430,14 @@ AC_DEFINE_UNQUOTED([HAVE_SYMVER_SUPPORT], [$ac_asm_symver_support],
 	  	   [Define to 1 if compiler/linker support symbol versioning.])
 
 AC_MSG_CHECKING(for __alias__ attribute support)
-AC_TRY_LINK(
-	[
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 		int foo(int arg);
 		int foo(int arg) { return arg + 3; };
 		int foo2(int arg) __attribute__ (( __alias__("foo")));
-	],
-	[ foo2(1); ],
-	[
+	]], [[ foo2(1); ]])],[
 		AC_MSG_RESULT(yes)
 		ac_prog_cc_alias_symbols=1
-	],
-	[
+	],[
 		AC_MSG_RESULT(no)
 		ac_prog_cc_alias_symbols=0
 	])
@@ -467,25 +448,22 @@ AC_CHECK_FUNCS([getifaddrs])
 
 dnl Check for ethtool support
 AC_MSG_CHECKING(ethtool support)
-AC_TRY_LINK([
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
     #include <net/if.h>
     #include <sys/types.h>
     #include <linux/ethtool.h>
     #include <linux/sockios.h>
-    #include <sys/ioctl.h>],
-    [
+    #include <sys/ioctl.h>]], [[
         unsigned long ioctl_req = SIOCETHTOOL;
         struct ethtool_cmd cmd = {
             .cmd = ETHTOOL_GSET,
         };
         long speed = cmd.speed;
-    ],
-    [
+    ]])],[
 	AC_MSG_RESULT(yes)
         AC_DEFINE(HAVE_ETHTOOL, 1, [Set to 1 to use ethtool])
 
-    ],
-    [AC_MSG_RESULT(no)])
+    ],[AC_MSG_RESULT(no)])
 
 dnl Check for ethtool SPEED_UNKNOWN macro (suppoirted in the linux
 dnl kernel >= 3.2) and ethtool_cmd_speed function declarations
