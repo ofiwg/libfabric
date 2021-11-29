@@ -17,6 +17,10 @@
       <Configuration>Debug-v142</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug-Efa-v142|x64">
+      <Configuration>Debug-Efa-v142</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Release-ICC|x64">
       <Configuration>Release-ICC</Configuration>
       <Platform>x64</Platform>
@@ -31,6 +35,10 @@
     </ProjectConfiguration>
     <ProjectConfiguration Include="Release-v142|x64">
       <Configuration>Release-v142</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release-Efa-v142|x64">
+      <Configuration>Release-Efa-v142</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
@@ -54,6 +62,12 @@
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-v142|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
@@ -86,6 +100,13 @@
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-Efa-v142|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
@@ -105,6 +126,9 @@
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug-v142|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug-ICC|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
@@ -115,6 +139,9 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release-v142|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release-Efa-v142|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'" Label="PropertySheets">
@@ -133,6 +160,10 @@
     <LinkIncremental>true</LinkIncremental>
     <IntDir>$(Platform)\$(Configuration)\libfabric\</IntDir>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <IntDir>$(Platform)\$(Configuration)\libfabric\</IntDir>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-ICC|x64'">
     <LinkIncremental>true</LinkIncremental>
     <IntDir>$(Platform)\$(Configuration)\libfabric\</IntDir>
@@ -146,6 +177,10 @@
     <IntDir>$(Platform)\$(Configuration)\libfabric\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-v142|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <IntDir>$(Platform)\$(Configuration)\libfabric\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release-Efa-v142|x64'">
     <LinkIncremental>false</LinkIncremental>
     <IntDir>$(Platform)\$(Configuration)\libfabric\</IntDir>
   </PropertyGroup>
@@ -205,6 +240,19 @@
       <C99Support>true</C99Support>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <UseMSVC>false</UseMSVC>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\sockets\include;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\windows;</AdditionalIncludeDirectories>
+      <C99Support>true</C99Support>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <UseMSVC>false</UseMSVC>
+      <AdditionalOptions>/DHAVE_EFA %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
   </ItemDefinitionGroup>
@@ -292,6 +340,27 @@
       <ShowIncludes>false</ShowIncludes>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <AdditionalOptions>/DNDEBUG %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-Efa-v142|x64'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\sockets\include;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\windows;</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
+      <SDLCheck>true</SDLCheck>
+      <C99Support>true</C99Support>
+      <ShowIncludes>false</ShowIncludes>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <AdditionalOptions>/DNDEBUG /DHAVE_EFA %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -659,10 +728,12 @@
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'">ofi_osd.h</ForcedIncludeFiles>
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-v141|x64'">ofi_osd.h</ForcedIncludeFiles>
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-v142|x64'">ofi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64'">ofi_osd.h</ForcedIncludeFiles>
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Debug-ICC|x64'">ofi_osd.h</ForcedIncludeFiles>
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-v140|x64'">ofi_osd.h</ForcedIncludeFiles>
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-v141|x64'">ofi_osd.h</ForcedIncludeFiles>
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-v142|x64'">ofi_osd.h</ForcedIncludeFiles>
+      <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-Efa-v142|x64'">ofi_osd.h</ForcedIncludeFiles>
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'">ofi_osd.h</ForcedIncludeFiles>
     </ClCompile>
     <ClCompile Include="prov\util\src\util_attr.c" />
@@ -710,6 +781,35 @@
     <ClCompile Include="src\tree.c" />
     <ClCompile Include="src\var.c" />
     <ClCompile Include="src\windows\osd.c" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64' OR '$(Configuration)|$(Platform)'=='Release-Efa-v142|x64'">
+    <ClCompile Include="prov\efa\src\efa_av.c" />
+    <ClCompile Include="prov\efa\src\efa_cm.c" />
+    <ClCompile Include="prov\efa\src\efa_cq.c" />
+    <ClCompile Include="prov\efa\src\efa_device.c" />
+    <ClCompile Include="prov\efa\src\efa_domain.c" />
+    <ClCompile Include="prov\efa\src\efa_ep.c" />
+    <ClCompile Include="prov\efa\src\efa_fabric.c" />
+    <ClCompile Include="prov\efa\src\efa_mr.c" />
+    <ClCompile Include="prov\efa\src\efa_msg.c" />
+    <ClCompile Include="prov\efa\src\efa_rma.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_type_base.c" />
+    <ClCompile Include="prov\efa\src\windows\efawin.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_atomic.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_attr.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_cntr.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_cq.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_domain.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_ep.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_init.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_msg.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_cmd.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_entry.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_type_data.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_type_misc.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_type_req.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_read.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_rma.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\fasthash.h" />
@@ -793,6 +893,26 @@
     <ClInclude Include="prov\sockets\include\sock_util.h" />
     <ClInclude Include="prov\tcp\src\tcpx.h" />
     <ClInclude Include="prov\udp\src\udpx.h" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64' OR '$(Configuration)|$(Platform)'=='Release-Efa-v142|x64'">
+    <ClInclude Include="prov\efa\src\efa.h" />
+    <ClInclude Include="prov\efa\src\rxr\rxr_pkt_type_base.h" />
+    <ClInclude Include="prov\efa\src\windows\efacompat.h" />
+    <ClInclude Include="prov\efa\src\windows\efawinver.h" />
+    <ClInclude Include="prov\efa\src\windows\infiniband\efadv.h" />
+    <ClInclude Include="prov\efa\src\windows\efawin.h" />
+    <ClInclude Include="prov\efa\src\windows\infiniband\verbs.h" />
+    <ClInclude Include="prov\efa\src\windows\infiniband\verbs_defs.h" />
+    <ClInclude Include="prov\efa\src\rxr\rxr.h" />
+    <ClInclude Include="prov\efa\src\rxr\rxr_atomic.h" />
+    <ClInclude Include="prov\efa\src\rxr\rxr_cntr.h" />
+    <ClInclude Include="prov\efa\src\rxr\rxr_msg.h" />
+    <ClInclude Include="prov\efa\src\rxr\rxr_pkt_cmd.h" />
+    <ClInclude Include="prov\efa\src\rxr\rxr_pkt_entry.h" />
+    <ClInclude Include="prov\efa\src\rxr\rxr_pkt_type.h" />
+    <ClInclude Include="prov\efa\src\rxr\rxr_pkt_type_req.h" />
+    <ClInclude Include="prov\efa\src\rxr\rxr_read.h" />
+    <ClInclude Include="prov\efa\src\rxr\rxr_rma.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="libfabric.def" />

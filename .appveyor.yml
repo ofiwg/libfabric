@@ -10,9 +10,11 @@ configuration:
   - Debug-v140
   - Debug-v141
   - Debug-v142
+  - Debug-Efa-v142
   - Release-v140
   - Release-v141
   - Release-v142
+  - Release-Efa-v142
 
 matrix:
   exclude:
@@ -23,6 +25,10 @@ matrix:
     - configuration: Debug-v142
       image: Visual Studio 2015
     - configuration: Debug-v142
+      image: Visual Studio 2017    
+    - configuration: Debug-Efa-v142
+      image: Visual Studio 2015
+    - configuration: Debug-Efa-v142
       image: Visual Studio 2017
     - configuration: Release-v140
       image: Visual Studio 2019
@@ -31,6 +37,10 @@ matrix:
     - configuration: Release-v142
       image: Visual Studio 2015
     - configuration: Release-v142
+      image: Visual Studio 2017
+    - configuration: Release-Efa-v142
+      image: Visual Studio 2015
+    - configuration: Release-Efa-v142
       image: Visual Studio 2017
 
 before_build:
