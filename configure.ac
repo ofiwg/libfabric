@@ -48,7 +48,7 @@ debug_c_other_flags="-fstack-protector-strong"
 picky_c_warn_flags="-Wno-long-long -Wmissing-prototypes -Wstrict-prototypes -Wcomment -pedantic"
 
 AC_ARG_WITH([build_id],
-	    [AC_HELP_STRING([--with-build_id],
+	    [AS_HELP_STRING([--with-build_id],
 			    [Enable build_id annotation @<:@default=no@:>@])],
 	    [], [with_build_id=no])
 AS_IF([test x"$with_build_id" = x"no"], [with_build_id=""])
@@ -68,7 +68,7 @@ AM_PROG_AS()
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
 AC_ARG_WITH([valgrind],
-    AC_HELP_STRING([--with-valgrind],
+    AS_HELP_STRING([--with-valgrind],
 		   [Enable valgrind annotations @<:@default=no@:>@]))
 
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
@@ -101,10 +101,24 @@ AC_ARG_ENABLE([atomics],
 	[enable_atomics=yes])
 
 dnl Checks for programs
-AC_PROG_CC_C99
-AS_IF([test "$ac_cv_prog_cc_c99" = "no"],
-      [AC_MSG_WARN([Libfabric requires a C99-compliant compiler])
-       AC_MSG_ERROR([Cannot continue])])
+AC_PROG_CC
+dnl Autoconf 2.70 changed behavior of how it searches for C / C99
+dnl compilers.  Since the world hasn't uniformly updated to Autoconf
+dnl >=v2.70, support both <v2.70 and >=v2.70.
+m4_version_prereq([2.70],
+     [ dnl If Autoconf is >= v2.70
+      AC_MSG_CHECKING([for C compiler conformance level])
+      AC_MSG_RESULT([$ac_prog_cc_stdc])
+      AS_IF([test "$ac_prog_cc_stdc" = "c89"],
+            [AC_MSG_WARN([Libfabric requires a C99-compliant compiler])
+             AC_MSG_ERROR([Cannot continue])])
+     ],
+     [ dnl If Autoconf is < v2.70
+      AC_PROG_CC_C99
+      AS_IF([test "$ac_cv_prog_cc_c99" = "no"],
+            [AC_MSG_WARN([Libfabric requires a C99-compliant compiler])
+             AC_MSG_ERROR([Cannot continue])])
+     ])
 AM_PROG_CC_C_O
 AC_PROG_CPP
 
@@ -150,7 +164,10 @@ AS_IF([test x"$enable_asan" != x"no"],
       [CFLAGS="-fsanitize=address $CFLAGS"])
 
 dnl Checks for header files.
-AC_HEADER_STDC
+dnl This is only necessary for Autoconf <v2.70.
+m4_version_prereq([2.70],
+     [],
+     [AC_HEADER_STDC])
 
 dnl Check for compiler features
 AC_C_TYPEOF
@@ -160,7 +177,7 @@ LT_OUTPUT
 
 dnl dlopen support is optional
 AC_ARG_WITH([dlopen],
-	AC_HELP_STRING([--with-dlopen],
+	AS_HELP_STRING([--with-dlopen],
 		       [dl-loadable provider support @<:@default=yes@:>@]),
 	)
 
@@ -173,7 +190,7 @@ fi
 
 dnl handle picky option
 AC_ARG_ENABLE([picky],
-    [AC_HELP_STRING([--enable-picky],
+    [AS_HELP_STRING([--enable-picky],
                     [Enable developer-level compiler pickyness when building @<:@default=no@:>@])])
 AS_IF([test x"$enable_picky" = x"yes" && test x"$GCC" = x"yes"],
       [AS_IF([test x"$enable_debug" = x"no"],
@@ -219,8 +236,8 @@ AS_IF([test x"$enable_epoll" != x"no"],
 AC_CHECK_HEADER([linux/perf_event.h],
     [AC_CHECK_DECL([__builtin_ia32_rdpmc],
         [
-            AC_TRY_LINK([#include <linux/perf_event.h>],
-                [__builtin_ia32_rdpmc(0);],
+            AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <linux/perf_event.h>]],
+                [[__builtin_ia32_rdpmc(0);]])],
                 [linux_perf_rdpmc=1],
                 [linux_perf_rdpmc=0])
 	],
@@ -234,33 +251,27 @@ AM_CONDITIONAL([HAVE_LINUX_PERF_RDPMC], [test "x$linux_perf_rdpmc" = "x1"])
 dnl Check for gcc atomic intrinsics
 AS_IF([test x"$enable_atomics" != x"no"],
     AC_MSG_CHECKING(compiler support for c11 atomics)
-    AC_TRY_LINK([#include <stdatomic.h>],
-        [atomic_int a;
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdatomic.h>]], [[atomic_int a;
          atomic_init(&a, 0);
          #ifdef __STDC_NO_ATOMICS__
            #error c11 atomics are not supported
          #else
            return 0;
          #endif
-        ],
-        [
+        ]])],[
         AC_MSG_RESULT(yes)
             AC_DEFINE(HAVE_ATOMICS, 1, [Set to 1 to use c11 atomic functions])
-        ],
-        [AC_MSG_RESULT(no)])
+        ],[AC_MSG_RESULT(no)])
 
 
     AC_MSG_CHECKING(compiler support for c11 atomic `least` types)
-    AC_TRY_LINK([#include <stdatomic.h>],
-        [atomic_int_least32_t a;
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdatomic.h>]], [[atomic_int_least32_t a;
          atomic_int_least64_t b;
-        ],
-        [
+        ]])],[
             AC_MSG_RESULT(yes)
             AC_DEFINE(HAVE_ATOMICS_LEAST_TYPES, 1,
                       [Set to 1 to use c11 atomic `least` types])
-        ],
-        [
+        ],[
             AC_MSG_RESULT(no)
         ]),
 [
@@ -270,8 +281,7 @@ AS_IF([test x"$enable_atomics" != x"no"],
 dnl Check for gcc built-in atomics
 AS_IF([test x"$enable_atomics" != x"no"],
     AC_MSG_CHECKING(compiler support for built-in atomics)
-    AC_TRY_LINK([#include <stdint.h>],
-        [int32_t a;
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdint.h>]], [[int32_t a;
          __sync_add_and_fetch(&a, 0);
          __sync_sub_and_fetch(&a, 0);
          #if defined(__PPC__) && !defined(__PPC64__)
@@ -279,12 +289,10 @@ AS_IF([test x"$enable_atomics" != x"no"],
          #else
            return 0;
          #endif
-        ],
-        [
+        ]])],[
         AC_MSG_RESULT(yes)
             AC_DEFINE(HAVE_BUILTIN_ATOMICS, 1, [Set to 1 to use built-in intrincics atomics])
-        ],
-        [AC_MSG_RESULT(no)]),
+        ],[AC_MSG_RESULT(no)]),
 [
     AC_MSG_RESULT(configure: atomics support built-in is disabled)
 ])
@@ -357,18 +365,15 @@ AS_IF([test "$have_mm_atomics" -eq 1 -a "$ac_cv_type___int128" = "yes"],
 
 dnl Check for gcc cpuid intrinsics
 AC_MSG_CHECKING(compiler support for cpuid)
-AC_TRY_LINK([
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
      #include <stddef.h>
-     #include <cpuid.h>],
-    [
+     #include <cpuid.h>]], [[
      int a, b, c, d;
      __cpuid_count(0, 0, a, b, c, d);
-    ],
-    [
+    ]])],[
 	AC_MSG_RESULT(yes)
         AC_DEFINE(HAVE_CPUID, 1, [Set to 1 to use cpuid])
-    ],
-    [AC_MSG_RESULT(no)])
+    ],[AC_MSG_RESULT(no)])
 
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 AC_CHECK_HEADER(valgrind/memcheck.h, [],
@@ -411,13 +416,10 @@ AS_IF([test "$icc_symver_hack"],
 	[AC_MSG_RESULT(disabled)],
 [
 
-AC_TRY_LINK([__asm__(".symver main_, main@ABIVER_1.0");],
-	[],
-	[
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[__asm__(".symver main_, main@ABIVER_1.0");]], [[]])],[
 		AC_MSG_RESULT(yes)
 		ac_asm_symver_support=1
-	],
-	[
+	],[
 		AC_MSG_RESULT(no)
 		ac_asm_symver_support=0
 	])
@@ -428,18 +430,14 @@ AC_DEFINE_UNQUOTED([HAVE_SYMVER_SUPPORT], [$ac_asm_symver_support],
 	  	   [Define to 1 if compiler/linker support symbol versioning.])
 
 AC_MSG_CHECKING(for __alias__ attribute support)
-AC_TRY_LINK(
-	[
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 		int foo(int arg);
 		int foo(int arg) { return arg + 3; };
 		int foo2(int arg) __attribute__ (( __alias__("foo")));
-	],
-	[ foo2(1); ],
-	[
+	]], [[ foo2(1); ]])],[
 		AC_MSG_RESULT(yes)
 		ac_prog_cc_alias_symbols=1
-	],
-	[
+	],[
 		AC_MSG_RESULT(no)
 		ac_prog_cc_alias_symbols=0
 	])
@@ -450,25 +448,22 @@ AC_CHECK_FUNCS([getifaddrs])
 
 dnl Check for ethtool support
 AC_MSG_CHECKING(ethtool support)
-AC_TRY_LINK([
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
     #include <net/if.h>
     #include <sys/types.h>
     #include <linux/ethtool.h>
     #include <linux/sockios.h>
-    #include <sys/ioctl.h>],
-    [
+    #include <sys/ioctl.h>]], [[
         unsigned long ioctl_req = SIOCETHTOOL;
         struct ethtool_cmd cmd = {
             .cmd = ETHTOOL_GSET,
         };
         long speed = cmd.speed;
-    ],
-    [
+    ]])],[
 	AC_MSG_RESULT(yes)
         AC_DEFINE(HAVE_ETHTOOL, 1, [Set to 1 to use ethtool])
 
-    ],
-    [AC_MSG_RESULT(no)])
+    ],[AC_MSG_RESULT(no)])
 
 dnl Check for ethtool SPEED_UNKNOWN macro (suppoirted in the linux
 dnl kernel >= 3.2) and ethtool_cmd_speed function declarations
@@ -529,7 +524,7 @@ AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
 
 dnl Check for CUDA runtime libraries.
 AC_ARG_WITH([cuda],
-	    [AC_HELP_STRING([--with-cuda=DIR],
+	    [AS_HELP_STRING([--with-cuda=DIR],
 			    [Provide path to where the CUDA development
 			    and runtime libraries are installed.])],
 	    [], [])
@@ -567,7 +562,7 @@ AC_ARG_ENABLE([cuda-dlopen],
     [enable_cuda_dlopen=no])
 
 AC_ARG_WITH([ze],
-	AC_HELP_STRING([--with-ze=DIR], [Provide path to where the ZE
+	AS_HELP_STRING([--with-ze=DIR], [Provide path to where the ZE
 					 libraries and headers are installed.]),
 	[], [])
 
@@ -616,7 +611,7 @@ AS_IF([test "$have_ze" = "1" && test x"$with_ze" != x"yes"],
 
 enable_memhooks=1
 AC_ARG_ENABLE([memhooks-monitor],
-              [AC_HELP_STRING([--disable-memhooks-monitor],
+              [AS_HELP_STRING([--disable-memhooks-monitor],
                               [Determine whether memhooks memory monitor is disabled.])],
               [enable_memhooks=0],
               [])
@@ -633,7 +628,7 @@ AS_IF([test "$enable_memhooks" = "1"], [
 
 enable_uffd=1
 AC_ARG_ENABLE([uffd-monitor],
-              [AC_HELP_STRING([--disable-uffd-monitor],
+              [AS_HELP_STRING([--disable-uffd-monitor],
                               [Determine whether uffd memory monitor is disabled.])],
               [enable_uffd=0],
               [])
@@ -663,7 +658,7 @@ AS_IF([test x"$enable_cuda_dlopen" != x"yes"], [LIBS="$LIBS $cuda_LIBS"])
 
 #gdrcopy related configs
 AC_ARG_WITH([gdrcopy],
-	    [AC_HELP_STRING([--with-gdrcopy=DIR],
+	    [AS_HELP_STRING([--with-gdrcopy=DIR],
 			    [Provide path to where the gdrcopy development
 			    and runtime libraries are installed.])],
 	    [], [])
@@ -713,7 +708,7 @@ AS_IF([test x"$enable_gdrcopy_dlopen" != x"yes"], [LIBS="$LIBS $gdrcopy_LIBS"])
 
 dnl Check for ROCR runtime libraries.
 AC_ARG_WITH([rocr],
-	    [AC_HELP_STRING([--with-rocr=DIR],
+	    [AS_HELP_STRING([--with-rocr=DIR],
 			    [Provide path to where the ROCR/HSA development
 			    and runtime libraries are installed.])],
 	    [], [])

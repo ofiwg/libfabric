@@ -72,7 +72,7 @@ m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 AM_PROG_LIBTOOL
 
 AC_ARG_WITH([valgrind],
-    AC_HELP_STRING([--with-valgrind],
+    AS_HELP_STRING([--with-valgrind],
 		   [Enable valgrind annotations - default NO]))
 
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
@@ -100,7 +100,7 @@ AC_DEFINE_UNQUOTED(HAVE_CLOCK_GETTIME, [$have_clock_gettime],
 AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
 
 AC_ARG_WITH([libfabric],
-            AC_HELP_STRING([--with-libfabric], [Use non-default libfabric location - default NO]),
+            AS_HELP_STRING([--with-libfabric], [Use non-default libfabric location - default NO]),
             [AS_IF([test -d $withval/lib64], [fab_libdir="lib64"], [fab_libdir="lib"])
              CPPFLAGS="-I$withval/include $CPPFLAGS"
              LDFLAGS="-L$withval/$fab_libdir $LDFLAGS"],
@@ -108,7 +108,7 @@ AC_ARG_WITH([libfabric],
 
 dnl Check for CUDA support. Require fabtests to dlopen CUDA runtime.
 AC_ARG_WITH([cuda],
-            [AC_HELP_STRING([--with-cuda=DIR],
+            [AS_HELP_STRING([--with-cuda=DIR],
                             [Provide path to where the CUDA development
                              and runtime libraries are installed.])],
             [AS_IF([test "$freebsd" == "0"],
@@ -123,7 +123,7 @@ AC_ARG_WITH([cuda],
 
 dnl Check for ROCR support. Require fabtests to dlopen ROCR.
 AC_ARG_WITH([rocr],
-            [AC_HELP_STRING([--with-rocr=DIR],
+            [AS_HELP_STRING([--with-rocr=DIR],
                             [Provide path to where the ROCR development
                              and runtime libraries are installed.])],
             [AS_IF([test "$freebsd" == "0"],
@@ -146,7 +146,7 @@ AC_CHECK_HEADER([rdma/fabric.h], [],
     [AC_MSG_ERROR([<rdma/fabric.h> not found.  fabtests requires libfabric.])])
 
 AC_ARG_WITH([ze],
-            AC_HELP_STRING([--with-ze], [Use non-default ZE location - default NO]),
+            AS_HELP_STRING([--with-ze], [Use non-default ZE location - default NO]),
             AS_IF([test x"$withval" != x"no"],
 		  [CPPFLAGS="-I$withval/include $CPPFLAGS"
 		   LDFLAGS="-L$withval/$lib $LDFLAGS"]))
