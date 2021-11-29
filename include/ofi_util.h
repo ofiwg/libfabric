@@ -49,6 +49,7 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
+#include <rdma/fi_ext.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
@@ -673,11 +674,14 @@ struct util_cntr {
 	ofi_cntr_progress_func	progress;
 };
 
+#define OFI_TIMEOUT_QUANTUM_MS 50
+
 void ofi_cntr_progress(struct util_cntr *cntr);
 int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 		  struct fi_cntr_attr *attr, struct util_cntr *cntr,
 		  ofi_cntr_progress_func progress, void *context);
 int ofi_cntr_cleanup(struct util_cntr *cntr);
+
 static inline void util_cntr_signal(struct util_cntr *cntr)
 {
 	assert(cntr->wait);
@@ -867,26 +871,6 @@ ssize_t ofi_eq_write(struct fid_eq *eq_fid, uint32_t event,
 const char *ofi_eq_strerror(struct fid_eq *eq_fid, int prov_errno,
 			    const void *err_data, char *buf, size_t len);
 
-/*
-
-#define OFI_MR_MODE_RMA_TARGET (FI_MR_RAW | FI_MR_VIRT_ADDR |\
-				 FI_MR_PROV_KEY | FI_MR_RMA_EVENT)
- * Attributes and capabilities
- */
-#define FI_PRIMARY_CAPS	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS | FI_MULTICAST | \
-			 FI_NAMED_RX_CTX | FI_DIRECTED_RECV | \
-			 FI_READ | FI_WRITE | FI_RECV | FI_SEND | \
-			 FI_REMOTE_READ | FI_REMOTE_WRITE | FI_COLLECTIVE | \
-			 FI_HMEM)
-
-#define FI_SECONDARY_CAPS (FI_MULTI_RECV | FI_SOURCE | FI_RMA_EVENT | \
-			   FI_SHARED_AV | FI_TRIGGER | FI_FENCE | \
-			   FI_LOCAL_COMM | FI_REMOTE_COMM)
-
-#define OFI_TX_MSG_CAPS (FI_MSG | FI_SEND)
-#define OFI_RX_MSG_CAPS (FI_MSG | FI_RECV)
-#define OFI_TX_RMA_CAPS (FI_RMA | FI_READ | FI_WRITE)
-#define OFI_RX_RMA_CAPS (FI_RMA | FI_REMOTE_READ | FI_REMOTE_WRITE)
 
 int ofi_check_ep_type(const struct fi_provider *prov,
 		      const struct fi_ep_attr *prov_attr,
@@ -1069,6 +1053,11 @@ struct ofi_ops_dynamic_rbuf {
 	ssize_t	(*get_rbuf)(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
 			    size_t *count);
 };
+
+enum {
+	OFI_OPT_TCP_FI_ADDR = -FI_PROV_SPECIFIC_TCP
+};
+
 
 #ifdef __cplusplus
 }

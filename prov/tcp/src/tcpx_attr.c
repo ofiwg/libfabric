@@ -38,7 +38,7 @@
 #define TCPX_EP_SRX_CAPS (TCPX_EP_CAPS | FI_TAGGED)
 #define TCPX_TX_CAPS	 (FI_SEND | FI_WRITE | FI_READ)
 #define TCPX_RX_CAPS	 (FI_RECV | FI_REMOTE_READ | 			\
-			  FI_REMOTE_WRITE)
+			  FI_REMOTE_WRITE | FI_RMA_EVENT)
 
 
 #define TCPX_MSG_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS | \
@@ -113,6 +113,7 @@ static struct fi_ep_attr tcpx_ep_srx_attr = {
 	.rx_ctx_cnt = FI_SHARED_CONTEXT,
 	.max_order_raw_size = SIZE_MAX,
 	.max_order_waw_size = SIZE_MAX,
+	.mem_tag_format = FI_TAG_GENERIC,
 };
 
 static struct fi_domain_attr tcpx_domain_attr = {

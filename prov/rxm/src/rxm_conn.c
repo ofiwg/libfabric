@@ -96,11 +96,89 @@ static void rxm_close_conn(struct rxm_conn *conn)
 	conn->state = RXM_CM_IDLE;
 }
 
+static int rxm_bind_comp(struct rxm_ep *ep, struct fid_ep *msg_ep)
+{
+	struct rxm_cntr *cntr;
+	int ret;
+
+	ret = fi_ep_bind(msg_ep, &ep->msg_cq->fid, FI_TRANSMIT | FI_RECV);
+	if (ret) {
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
+		return ret;
+	}
+
+	if (!rxm_passthru_info(ep->rxm_info))
+		return 0;
+
+	if (ep->util_ep.tx_cntr) {
+		cntr = container_of(ep->util_ep.tx_cntr, struct rxm_cntr,
+				    util_cntr);
+		ret = fi_ep_bind(msg_ep, &cntr->msg_cntr->fid, FI_SEND);
+		if (ret) {
+			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
+			return ret;
+		}
+	}
+
+	if (ep->util_ep.rx_cntr) {
+		cntr = container_of(ep->util_ep.rx_cntr, struct rxm_cntr,
+				    util_cntr);
+		ret = fi_ep_bind(msg_ep, &cntr->msg_cntr->fid, FI_RECV);
+		if (ret) {
+			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
+			return ret;
+		}
+	}
+
+	if (ep->util_ep.rd_cntr) {
+		cntr = container_of(ep->util_ep.rd_cntr, struct rxm_cntr,
+				    util_cntr);
+		ret = fi_ep_bind(msg_ep, &cntr->msg_cntr->fid, FI_READ);
+		if (ret) {
+			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
+			return ret;
+		}
+	}
+
+	if (ep->util_ep.wr_cntr) {
+		cntr = container_of(ep->util_ep.wr_cntr, struct rxm_cntr,
+				    util_cntr);
+		ret = fi_ep_bind(msg_ep, &cntr->msg_cntr->fid, FI_WRITE);
+		if (ret) {
+			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
+			return ret;
+		}
+	}
+
+	if (ep->util_ep.rem_rd_cntr) {
+		cntr = container_of(ep->util_ep.rem_rd_cntr, struct rxm_cntr,
+				    util_cntr);
+		ret = fi_ep_bind(msg_ep, &cntr->msg_cntr->fid, FI_REMOTE_READ);
+		if (ret) {
+			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
+			return ret;
+		}
+	}
+
+	if (ep->util_ep.rem_wr_cntr) {
+		cntr = container_of(ep->util_ep.rem_wr_cntr, struct rxm_cntr,
+				    util_cntr);
+		ret = fi_ep_bind(msg_ep, &cntr->msg_cntr->fid, FI_REMOTE_WRITE);
+		if (ret) {
+			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 {
 	struct rxm_domain *domain;
 	struct rxm_ep *ep;
 	struct fid_ep *msg_ep;
+	fi_addr_t src_addr;
 	int ret;
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "open msg ep %p\n", conn);
@@ -122,6 +200,13 @@ static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 	}
 
 	if (ep->srx_ctx) {
+		if (!strcasestr(msg_info->fabric_attr->prov_name, "tcp")) {
+			src_addr = (unsigned) conn->peer->index;
+			(void) fi_setopt(&msg_ep->fid, FI_OPT_ENDPOINT,
+					 OFI_OPT_TCP_FI_ADDR, &src_addr,
+					 sizeof(src_addr));
+		}
+
 		ret = fi_ep_bind(msg_ep, &ep->srx_ctx->fid, 0);
 		if (ret) {
 			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
@@ -129,11 +214,9 @@ static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 		}
 	}
 
-	ret = fi_ep_bind(msg_ep, &ep->msg_cq->fid, FI_TRANSMIT | FI_RECV);
-	if (ret) {
-		RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
+	ret = rxm_bind_comp(ep, msg_ep);
+	if (ret)
 		goto err;
-	}
 
 	ret = fi_enable(msg_ep);
 	if (ret) {
@@ -733,21 +816,21 @@ void rxm_stop_listen(struct rxm_ep *ep)
 
 static void rxm_flush_msg_cq(struct rxm_ep *ep)
 {
-	struct fi_cq_data_entry comp;
+	struct fi_cq_tagged_entry comp;
 	int ret;
 
 	assert(ofi_ep_lock_held(&ep->util_ep));
 	do {
 		ret = fi_cq_read(ep->msg_cq, &comp, 1);
 		if (ret > 0) {
-			ret = rxm_handle_comp(ep, &comp);
+			ret = ep->handle_comp(ep, &comp);
 			if (ret) {
 				rxm_cq_write_error_all(ep, ret);
 			} else {
 				ret = 1;
 			}
 		} else if (ret == -FI_EAVAIL) {
-			rxm_handle_comp_error(ep);
+			ep->handle_comp_error(ep);
 			ret = 1;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
 			rxm_cq_write_error_all(ep, ret);

@@ -179,12 +179,13 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 			    ofi_alter_info_t info_to_core,
 			    struct fi_info **core_hints)
 {
-	int ret = -FI_ENOMEM;
+	int ret;
 
 	if (!(*core_hints = fi_allocinfo()))
 		return -FI_ENOMEM;
 
-	if (info_to_core(version, util_hints, base_attr, *core_hints))
+	ret = info_to_core(version, util_hints, base_attr, *core_hints);
+	if (ret)
 		goto err;
 
 	if (!util_hints)
@@ -398,7 +399,7 @@ int ofi_check_fabric_attr(const struct fi_provider *prov,
 	 * user's hints, if one is specified.
 	 */
 	if (prov_attr->prov_name && user_attr->prov_name &&
-	    strcasestr(user_attr->prov_name, prov_attr->prov_name)) {
+	    !strcasestr(user_attr->prov_name, prov_attr->prov_name)) {
 		FI_INFO(prov, FI_LOG_CORE,
 			"Requesting provider %s, skipping %s\n",
 			prov_attr->prov_name, user_attr->prov_name);
@@ -1113,11 +1114,11 @@ static uint64_t ofi_get_caps(uint64_t info_caps, uint64_t hint_caps,
 	uint64_t caps;
 
 	if (!hint_caps) {
-		caps = (info_caps & attr_caps & FI_PRIMARY_CAPS) |
-		       (attr_caps & FI_SECONDARY_CAPS);
+		caps = (info_caps & attr_caps & OFI_PRIMARY_CAPS) |
+		       (attr_caps & OFI_SECONDARY_CAPS);
 	} else {
-		caps = (hint_caps & FI_PRIMARY_CAPS) |
-		       (attr_caps & FI_SECONDARY_CAPS);
+		caps = (hint_caps & OFI_PRIMARY_CAPS) |
+		       (attr_caps & OFI_SECONDARY_CAPS);
 	}
 
 	if (caps & (FI_MSG | FI_TAGGED) && !(caps & OFI_MSG_DIRECTION_CAPS))

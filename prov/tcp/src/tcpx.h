@@ -73,6 +73,7 @@ extern struct fi_provider	tcpx_prov;
 extern struct util_prov		tcpx_util_prov;
 extern struct fi_info		tcpx_info;
 extern struct tcpx_port_range	port_range;
+
 extern int tcpx_nodelay;
 extern int tcpx_staging_sbuf_size;
 extern int tcpx_prefetch_rbuf_size;
@@ -232,6 +233,7 @@ struct tcpx_cur_tx {
 
 struct tcpx_rx_ctx {
 	struct fid_ep		rx_fid;
+	struct tcpx_cq		*cq;
 	struct slist		rx_queue;
 	struct slist		tag_queue;
 	struct tcpx_xfer_entry	*(*match_tag_rx)(struct tcpx_rx_ctx *srx,
@@ -243,11 +245,8 @@ struct tcpx_rx_ctx {
 	fastlock_t		lock;
 };
 
-struct tcpx_xfer_entry *
-tcpx_match_tag_addr(struct tcpx_rx_ctx *srx, struct tcpx_ep *ep, uint64_t tag);
-struct tcpx_xfer_entry *
-tcpx_match_tag(struct tcpx_rx_ctx *srx, struct tcpx_ep *ep, uint64_t tag);
-
+int tcpx_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
+		     struct fid_ep **rx_ep, void *context);
 
 struct tcpx_ep {
 	struct util_ep		util_ep;
@@ -267,6 +266,7 @@ struct tcpx_ep {
 	int			rx_avail;
 	struct tcpx_rx_ctx	*srx_ctx;
 	enum tcpx_state		state;
+	fi_addr_t		src_addr;
 	union {
 		struct fid		*fid;
 		struct tcpx_cm_context	*cm_ctx;
@@ -275,8 +275,9 @@ struct tcpx_ep {
 
 	/* lock for protecting tx/rx queues, rma list, state*/
 	fastlock_t		lock;
-	int (*start_op[ofi_op_write + 1])(struct tcpx_ep *ep);
 	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
+	void (*report_success)(struct tcpx_ep *ep, struct util_cq *cq,
+			       struct tcpx_xfer_entry *xfer_entry);
 	size_t			min_multi_recv_size;
 	bool			pollout_set;
 };
@@ -306,6 +307,7 @@ struct tcpx_xfer_entry {
 	struct tcpx_ep		*ep;
 	uint64_t		tag;
 	uint64_t		ignore;
+	fi_addr_t		src_addr;
 	uint64_t		cq_flags;
 	uint32_t		ctrl_flags;
 	uint32_t		async_index;
@@ -334,6 +336,8 @@ struct tcpx_cq {
 	struct util_cq		util_cq;
 	struct ofi_bufpool	*xfer_pool;
 };
+
+/* tcpx_cntr maps directly to util_cntr */
 
 struct tcpx_eq {
 	struct util_eq		util_eq;
@@ -364,13 +368,18 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err);
 
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context);
-void tcpx_cq_report_success(struct util_cq *cq,
-			    struct tcpx_xfer_entry *xfer_entry);
+void tcpx_report_success(struct tcpx_ep *ep, struct util_cq *cq,
+			 struct tcpx_xfer_entry *xfer_entry);
 void tcpx_cq_report_error(struct util_cq *cq,
 			  struct tcpx_xfer_entry *xfer_entry,
 			  int err);
 void tcpx_get_cq_info(struct tcpx_xfer_entry *entry, uint64_t *flags,
 		      uint64_t *data, uint64_t *tag);
+int tcpx_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
+		   struct fid_cntr **cntr_fid, void *context);
+void tcpx_report_cntr_success(struct tcpx_ep *ep, struct util_cq *cq,
+			      struct tcpx_xfer_entry *xfer_entry);
+void tcpx_cntr_incerr(struct tcpx_ep *ep, struct tcpx_xfer_entry *xfer_entry);
 
 void tcpx_reset_rx(struct tcpx_ep *ep);
 
@@ -390,13 +399,6 @@ void tcpx_conn_mgr_run(struct util_eq *eq);
 int tcpx_eq_wait_try_func(void *arg);
 int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		   struct fid_eq **eq_fid, void *context);
-
-int tcpx_op_invalid(struct tcpx_ep *ep);
-int tcpx_op_msg(struct tcpx_ep *ep);
-int tcpx_op_tagged(struct tcpx_ep *ep);
-int tcpx_op_read_req(struct tcpx_ep *ep);
-int tcpx_op_write(struct tcpx_ep *ep);
-int tcpx_op_read_rsp(struct tcpx_ep *ep);
 
 
 static inline void

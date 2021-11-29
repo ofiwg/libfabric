@@ -90,6 +90,9 @@ static int free_poll_res(void)
 {
 	int ret;
 
+	if (!pollset)
+		return 0;
+
 	if (txcq) {
 		ret = fi_poll_del(pollset, &txcq->fid, 0);
 		if (ret)

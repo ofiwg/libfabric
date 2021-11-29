@@ -59,6 +59,8 @@ extern "C" {
  */
 
 #define FI_PROV_SPECIFIC_EFA   (0xefa << 16)
+#define FI_PROV_SPECIFIC_TCP   (0x7cb << 16)
+
 
 /* negative options are provider specific */
 enum {

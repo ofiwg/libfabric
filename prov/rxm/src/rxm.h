@@ -52,6 +52,7 @@
 #include <ofi_enosys.h>
 #include <ofi_util.h>
 #include <ofi_list.h>
+#include <ofi_lock.h>
 #include <ofi_proto.h>
 #include <ofi_iov.h>
 #include <ofi_hmem.h>
@@ -156,7 +157,13 @@ do {									\
 
 extern struct fi_provider rxm_prov;
 extern struct util_prov rxm_util_prov;
-extern struct fi_ops_rma rxm_ops_rma;
+
+extern struct fi_ops_msg rxm_msg_ops;
+extern struct fi_ops_msg rxm_msg_thru_ops;
+extern struct fi_ops_tagged rxm_tagged_ops;
+extern struct fi_ops_tagged rxm_tagged_thru_ops;
+extern struct fi_ops_rma rxm_rma_ops;
+extern struct fi_ops_rma rxm_rma_thru_ops;
 extern struct fi_ops_atomic rxm_ops_atomic;
 
 enum {
@@ -170,6 +177,7 @@ extern size_t rxm_msg_tx_size;
 extern size_t rxm_msg_rx_size;
 extern size_t rxm_cm_progress_interval;
 extern size_t rxm_cq_eq_fairness;
+extern int rxm_passthru;
 extern int force_auto_progress;
 extern int rxm_use_write_rndv;
 extern enum fi_wait_obj def_wait_obj, def_tcp_wait_obj;
@@ -245,9 +253,18 @@ struct rxm_domain {
 	size_t rx_post_size;
 	uint64_t mr_key;
 	bool dyn_rbuf;
+	bool passthru;
 	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
 	struct ofi_bufpool *amo_bufpool;
 	fastlock_t amo_bufpool_lock;
+};
+
+
+struct rxm_cntr {
+	struct util_cntr util_cntr;
+
+	/* Used in passthru mode */
+	struct fid_cntr *msg_cntr;
 };
 
 /* All peer addresses, whether they've been inserted into the AV
@@ -646,6 +663,9 @@ struct rxm_ep {
 	uint64_t		msg_cq_last_poll;
 	size_t 			comp_per_progress;
 	int			cq_eq_fairness;
+	void			(*handle_comp_error)(struct rxm_ep *ep);
+	ssize_t			(*handle_comp)(struct rxm_ep *ep,
+					       struct fi_cq_tagged_entry *comp);
 
 	bool			msg_mr_local;
 	bool			rdm_mr_local;
@@ -682,10 +702,9 @@ void rxm_conn_progress(struct rxm_ep *ep);
 
 
 extern struct fi_provider rxm_prov;
+extern struct fi_info rxm_thru_info;
 extern struct fi_fabric_attr rxm_fabric_attr;
-extern struct fi_domain_attr rxm_domain_attr;
-extern struct fi_tx_attr rxm_tx_attr;
-extern struct fi_rx_attr rxm_rx_attr;
+
 extern struct rxm_rndv_ops rxm_rndv_ops_read;
 extern struct rxm_rndv_ops rxm_rndv_ops_write;
 
@@ -695,6 +714,8 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *rxm_info,
 		     const struct fi_info *base_info, struct fi_info *core_info);
 int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 		     const struct fi_info *base_info, struct fi_info *info);
+bool rxm_passthru_info(const struct fi_info *info);
+
 int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			     struct fid_domain **dom, void *context);
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -708,7 +729,9 @@ void rxm_cq_write_error(struct util_cq *cq, struct util_cntr *cntr,
 			void *op_context, int err);
 void rxm_cq_write_error_all(struct rxm_ep *rxm_ep, int err);
 void rxm_handle_comp_error(struct rxm_ep *rxm_ep);
-ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp);
+ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_tagged_entry *comp);
+void rxm_thru_comp_error(struct rxm_ep *rxm_ep);
+ssize_t rxm_thru_comp(struct rxm_ep *rxm_ep, struct fi_cq_tagged_entry *comp);
 void rxm_ep_progress(struct util_ep *util_ep);
 void rxm_ep_progress_coll(struct util_ep *util_ep);
 void rxm_ep_do_progress(struct util_ep *util_ep);
@@ -858,6 +881,35 @@ rxm_ep_format_tx_buf_pkt(struct rxm_conn *rxm_conn, size_t len, uint8_t op,
 	pkt->hdr.data = data;
 }
 
+ssize_t
+rxm_send_segment(struct rxm_ep *rxm_ep,
+		 struct rxm_conn *rxm_conn, void *app_context, size_t data_len,
+		 size_t remain_len, uint64_t msg_id, size_t seg_len,
+		 size_t seg_no, size_t segs_cnt, uint64_t data, uint64_t flags,
+		 uint64_t tag, uint8_t op, const struct iovec *iov,
+		 uint8_t count, size_t *iov_offset,
+		 struct rxm_tx_buf **out_tx_buf,
+		 enum fi_hmem_iface iface, uint64_t device);
+ssize_t
+rxm_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		const struct iovec *iov, void **desc, size_t count,
+		void *context, uint64_t data, uint64_t flags, uint64_t tag,
+		uint8_t op);
+ssize_t
+rxm_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
+		const void *buf, size_t len);
+
+struct rxm_recv_entry *
+rxm_recv_entry_get(struct rxm_ep *rxm_ep, const struct iovec *iov,
+		   void **desc, size_t count, fi_addr_t src_addr,
+		   uint64_t tag, uint64_t ignore, void *context,
+		   uint64_t flags, struct rxm_recv_queue *recv_queue);
+struct rxm_rx_buf *
+rxm_get_unexp_msg(struct rxm_recv_queue *recv_queue, fi_addr_t addr,
+		  uint64_t tag, uint64_t ignore);
+int rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
+			 struct rxm_recv_entry *recv_entry,
+			 struct rxm_rx_buf *rx_buf);
 int rxm_post_recv(struct rxm_rx_buf *rx_buf);
 
 static inline void

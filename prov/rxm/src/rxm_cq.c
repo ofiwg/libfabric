@@ -1350,7 +1350,7 @@ void rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep,
 	}
 }
 
-ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
+ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_tagged_entry *comp)
 {
 	struct rxm_rx_buf *rx_buf;
 	struct rxm_tx_buf *tx_buf;
@@ -1358,7 +1358,7 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 	/* Remote write events may not consume a posted recv so op context
 	 * and hence state would be NULL */
 	if (comp->flags & FI_REMOTE_WRITE) {
-		rxm_handle_remote_write(rxm_ep, comp);
+		rxm_handle_remote_write(rxm_ep, (struct fi_cq_data_entry *) comp);
 		return 0;
 	}
 
@@ -1816,6 +1816,46 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 	}
 }
 
+ssize_t rxm_thru_comp(struct rxm_ep *ep, struct fi_cq_tagged_entry *comp)
+{
+	struct util_cq *cq;
+	int ret;
+
+	cq = (comp->flags & (FI_RECV | FI_REMOTE_WRITE | FI_REMOTE_READ)) ?
+	     ep->util_ep.rx_cq : ep->util_ep.tx_cq;
+
+	ret = ofi_cq_write(cq, comp->op_context, comp->flags, comp->len,
+			   comp->buf, comp->data, comp->tag);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to report completion\n");
+		assert(0);
+	}
+
+	return ret;
+}
+
+void rxm_thru_comp_error(struct rxm_ep *ep)
+{
+	struct util_cq *cq;
+	struct fi_cq_err_entry err_entry = {0};
+	ssize_t ret;
+
+	ret = fi_cq_readerr(ep->msg_cq, &err_entry, 0);
+	if (ret < 0) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"unable to fi_cq_readerr on msg cq\n");
+		rxm_cq_write_error_all(ep, (int) ret);
+		return;
+	}
+
+	cq = (err_entry.flags & FI_RECV) ? ep->util_ep.rx_cq : ep->util_ep.tx_cq;
+	ret = ofi_cq_write_error(cq, &err_entry);
+	if (ret) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to ofi_cq_write_error\n");
+		assert(0);
+	}
+}
+
 int rxm_post_recv(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_domain *domain;
@@ -1841,14 +1881,14 @@ int rxm_post_recv(struct rxm_rx_buf *rx_buf)
 	return ret;
 }
 
-int rxm_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep)
+int rxm_prepost_recv(struct rxm_ep *ep, struct fid_ep *rx_ep)
 {
 	struct rxm_rx_buf *rx_buf;
 	int ret;
 	size_t i;
 
-	for (i = 0; i < rxm_ep->msg_info->rx_attr->size; i++) {
-		rx_buf = rxm_rx_buf_alloc(rxm_ep, rx_ep);
+	for (i = 0; i < ep->msg_info->rx_attr->size; i++) {
+		rx_buf = rxm_rx_buf_alloc(ep, rx_ep);
 		if (!rx_buf)
 			return -FI_ENOMEM;
 
@@ -1864,7 +1904,7 @@ int rxm_prepost_recv(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep)
 void rxm_ep_do_progress(struct util_ep *util_ep)
 {
 	struct rxm_ep *rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
-	struct fi_cq_data_entry comp;
+	struct fi_cq_tagged_entry comp;
 	struct dlist_entry *conn_entry_tmp;
 	struct rxm_conn *rxm_conn;
 	size_t comp_read = 0;
@@ -1874,7 +1914,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 	do {
 		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
 		if (ret > 0) {
-			ret = rxm_handle_comp(rxm_ep, &comp);
+			ret = rxm_ep->handle_comp(rxm_ep, &comp);
 			if (ret) {
 				// We don't have enough info to write a good
 				// error entry to the CQ at this point
@@ -1884,7 +1924,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 			}
 		} else if (ret < 0 && (ret != -FI_EAGAIN)) {
 			if (ret == -FI_EAVAIL)
-				rxm_handle_comp_error(rxm_ep);
+				rxm_ep->handle_comp_error(rxm_ep);
 			else
 				rxm_cq_write_error_all(rxm_ep, ret);
 		}
