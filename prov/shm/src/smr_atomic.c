@@ -167,7 +167,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 		goto unlock_region;
 	}
 
-	fastlock_acquire(&ep->util_ep.tx_cq->cq_lock);
+	ofi_spin_lock(&ep->util_ep.tx_cq->cq_lock);
 	if (ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto unlock_cq;
@@ -254,7 +254,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	peer_smr->cmd_cnt--;
 	smr_signal(peer_smr);
 unlock_cq:
-	fastlock_release(&ep->util_ep.tx_cq->cq_lock);
+	ofi_spin_unlock(&ep->util_ep.tx_cq->cq_lock);
 unlock_region:
 	pthread_mutex_unlock(&peer_smr->lock);
 	return ret;

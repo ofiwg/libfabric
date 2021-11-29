@@ -105,7 +105,7 @@ int efa_lib_init(void)
 	* functions from efawin dll
 	*/
 	ret = efa_load_efawin_lib();
-	
+
 	return ret;
 }
 
@@ -117,7 +117,7 @@ int efa_device_init(void)
 	int ctx_idx;
 	int ret;
 
-	fastlock_init(&pd_list_lock);
+	ofi_spin_init(&pd_list_lock);
 
 	ret = efa_lib_init();
 	if (ret != 0) {
@@ -214,7 +214,7 @@ void efa_device_free(void)
 	free(ctx_list);
 	dev_cnt = 0;
 	efa_lib_close();
-	fastlock_destroy(&pd_list_lock);
+	ofi_spin_destroy(&pd_list_lock);
 }
 
 struct efa_context **efa_device_get_context_list(int *num_ctx)

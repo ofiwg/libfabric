@@ -79,7 +79,7 @@ struct util_av_set {
 	uint64_t		flags;
 	struct util_coll_mc     coll_mc;
 	ofi_atomic32_t		ref;
-	fastlock_t		lock;
+	ofi_spin_t		lock;
 };
 
 enum coll_work_type {

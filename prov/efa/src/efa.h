@@ -253,7 +253,7 @@ struct efa_cq {
 	size_t			entry_size;
 	efa_cq_read_entry	read_entry;
 	struct slist		wcq;
-	fastlock_t		lock;
+	ofi_spin_t		lock;
 	struct ofi_bufpool	*wce_pool;
 
 	struct ibv_cq		*ibv_cq;
@@ -412,7 +412,7 @@ extern struct fi_ops_rma efa_ep_rma_ops;
 ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg,
 			  uint64_t flags, bool self_comm);
 
-extern fastlock_t pd_list_lock;
+extern ofi_spin_t pd_list_lock;
 // This list has the same indicies as ctx_list.
 extern struct efa_pd *pd_list;
 

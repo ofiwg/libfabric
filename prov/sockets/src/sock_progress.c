@@ -319,10 +319,10 @@ static void sock_pe_report_mr_completion(struct sock_domain *domain,
 	struct sock_mr *mr;
 
 	for (i = 0; i < pe_entry->msg_hdr.dest_iov_len; i++) {
-		fastlock_acquire(&domain->lock);
+		ofi_spin_lock(&domain->lock);
 		mr = ofi_mr_map_get(&domain->mr_map,
 				    pe_entry->pe.rx.rx_iov[i].iov.key);
-		fastlock_release(&domain->lock);
+		ofi_spin_unlock(&domain->lock);
 		if (!mr || (!mr->cq && !mr->cntr))
 			continue;
 
@@ -1035,10 +1035,10 @@ sock_pe_process_rx_tatomic(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 	pe_entry->tag = pe_entry->pe.rx.rx_iov[0].ioc.key;
 	pe_entry->data_len = entry_len;
 
-	fastlock_acquire(&rx_ctx->lock);
+	ofi_spin_lock(&rx_ctx->lock);
 	rx_entry = sock_rx_new_buffered_entry(rx_ctx, entry_len);
 	if (!rx_entry) {
-		fastlock_release(&rx_ctx->lock);
+		ofi_spin_unlock(&rx_ctx->lock);
 		return -FI_ENOMEM;
 	}
 
@@ -1060,7 +1060,7 @@ sock_pe_process_rx_tatomic(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx,
 	pe_entry->pe.rx.rx_entry = rx_entry;
 
 	sock_pe_progress_buffered_rx(rx_ctx, true);
-	fastlock_release(&rx_ctx->lock);
+	ofi_spin_unlock(&rx_ctx->lock);
 
 	pe_entry->is_complete = 1;
 
@@ -1076,7 +1076,7 @@ ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr,
 	struct sock_rx_entry *rx_buffered;
 	struct sock_pe_entry pe_entry;
 
-	fastlock_acquire(&rx_ctx->lock);
+	ofi_spin_lock(&rx_ctx->lock);
 	rx_buffered = sock_rx_get_buffered_entry(rx_ctx,
 					(rx_ctx->attr.caps & FI_DIRECTED_RECV) ?
 						 addr : FI_ADDR_UNSPEC,
@@ -1106,7 +1106,7 @@ ssize_t sock_rx_peek_recv(struct sock_rx_ctx *rx_ctx, fi_addr_t addr,
 		sock_cq_report_error(rx_ctx->comp.recv_cq, &pe_entry, 0,
 				     FI_ENOMSG, -FI_ENOMSG, NULL, 0);
 	}
-	fastlock_release(&rx_ctx->lock);
+	ofi_spin_unlock(&rx_ctx->lock);
 	return 0;
 }
 
@@ -1121,7 +1121,7 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context,
 	struct sock_pe_entry pe_entry;
 	struct sock_rx_entry *rx_buffered = NULL;
 
-	fastlock_acquire(&rx_ctx->lock);
+	ofi_spin_lock(&rx_ctx->lock);
 	for (entry = rx_ctx->rx_buffered_list.next;
 	     entry != &rx_ctx->rx_buffered_list; entry = entry->next) {
 		rx_buffered = container_of(entry, struct sock_rx_entry, entry);
@@ -1175,7 +1175,7 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context,
 		ret = -FI_ENOMSG;
 	}
 
-	fastlock_release(&rx_ctx->lock);
+	ofi_spin_unlock(&rx_ctx->lock);
 	return ret;
 }
 
@@ -1347,7 +1347,7 @@ static int sock_pe_process_rx_send(struct sock_pe *pe,
 
 	data_len = pe_entry->msg_hdr.msg_len - len;
 	if (pe_entry->done_len == len && !pe_entry->pe.rx.rx_entry) {
-		fastlock_acquire(&rx_ctx->lock);
+		ofi_spin_lock(&rx_ctx->lock);
 		rx_ctx->progress_start = &rx_ctx->rx_buffered_list;
 		sock_pe_progress_buffered_rx(rx_ctx, false);
 
@@ -1361,7 +1361,7 @@ static int sock_pe_process_rx_send(struct sock_pe *pe,
 
 			rx_entry = sock_rx_new_buffered_entry(rx_ctx, data_len);
 			if (!rx_entry) {
-				fastlock_release(&rx_ctx->lock);
+				ofi_spin_unlock(&rx_ctx->lock);
 				return -FI_ENOMEM;
 			}
 
@@ -1377,7 +1377,7 @@ static int sock_pe_process_rx_send(struct sock_pe *pe,
 			if (pe_entry->msg_hdr.op_type == SOCK_OP_TSEND)
 				rx_entry->is_tagged = 1;
 		}
-		fastlock_release(&rx_ctx->lock);
+		ofi_spin_unlock(&rx_ctx->lock);
 		pe_entry->context = rx_entry->context;
 		pe_entry->pe.rx.rx_entry = rx_entry;
 	}
@@ -1426,7 +1426,7 @@ static int sock_pe_process_rx_send(struct sock_pe *pe,
 		pe_entry->flags |= FI_REMOTE_CQ_DATA;
 	pe_entry->flags &= ~FI_MULTI_RECV;
 
-	fastlock_acquire(&rx_ctx->lock);
+	ofi_spin_lock(&rx_ctx->lock);
 	if (rx_entry->flags & FI_MULTI_RECV) {
 		if (sock_rx_avail_len(rx_entry) < rx_ctx->min_multi_recv) {
 			pe_entry->flags |= FI_MULTI_RECV;
@@ -1437,7 +1437,7 @@ static int sock_pe_process_rx_send(struct sock_pe *pe,
 			dlist_remove(&rx_entry->entry);
 	}
 	rx_entry->is_busy = 0;
-	fastlock_release(&rx_ctx->lock);
+	ofi_spin_unlock(&rx_ctx->lock);
 
 	/* report error, if any */
 	if (rem) {
@@ -1460,10 +1460,10 @@ out:
 	if (!rx_entry->is_buffered &&
 	    (!(rx_entry->flags & FI_MULTI_RECV) ||
 	     (pe_entry->flags & FI_MULTI_RECV))) {
-		fastlock_acquire(&rx_ctx->lock);
+		ofi_spin_lock(&rx_ctx->lock);
 		sock_rx_release_entry(rx_entry);
 		rx_ctx->num_left++;
-		fastlock_release(&rx_ctx->lock);
+		ofi_spin_unlock(&rx_ctx->lock);
 	}
 	return ret;
 }
@@ -1498,13 +1498,13 @@ static int sock_pe_process_rx_conn_msg(struct sock_pe *pe,
 
 	index = (ep_attr->ep_type == FI_EP_MSG) ? 0 : sock_av_get_addr_index(ep_attr->av, addr);
 	if (index != -1) {
-		fastlock_acquire(&map->lock);
+		ofi_spin_lock(&map->lock);
 		conn = sock_ep_lookup_conn(ep_attr, index, addr);
 		if (conn == NULL || conn == SOCK_CM_CONN_IN_PROGRESS) {
 			if (ofi_idm_set(&ep_attr->av_idm, index, pe_entry->conn) < 0)
 				SOCK_LOG_ERROR("ofi_idm_set failed\n");
 		}
-		fastlock_release(&map->lock);
+		ofi_spin_unlock(&map->lock);
 	}
 	pe_entry->conn->av_index = (ep_attr->ep_type == FI_EP_MSG || index == -1) ?
 		FI_ADDR_NOTAVAIL : index;
@@ -1950,9 +1950,9 @@ static int sock_pe_progress_tx_entry(struct sock_pe *pe,
 		ofi_straddr_log(&sock_prov, FI_LOG_WARN, FI_LOG_EP_DATA,
 				"Peer disconnected: removing fd from pollset",
 				&pe_entry->conn->addr.sa);
-		fastlock_acquire(&pe_entry->ep_attr->cmap.lock);
+		ofi_spin_lock(&pe_entry->ep_attr->cmap.lock);
 		sock_ep_remove_conn(pe_entry->ep_attr, pe_entry->conn);
-		fastlock_release(&pe_entry->ep_attr->cmap.lock);
+		ofi_spin_unlock(&pe_entry->ep_attr->cmap.lock);
 
 		sock_pe_report_tx_error(pe_entry, 0, FI_EIO);
 		pe_entry->is_complete = 1;
@@ -2028,9 +2028,9 @@ static int sock_pe_progress_rx_pe_entry(struct sock_pe *pe,
 		ofi_straddr_log(&sock_prov, FI_LOG_WARN, FI_LOG_EP_DATA,
 				"Peer disconnected: removing fd from pollset",
 				&pe_entry->conn->addr.sa);
-		fastlock_acquire(&pe_entry->ep_attr->cmap.lock);
+		ofi_spin_lock(&pe_entry->ep_attr->cmap.lock);
 		sock_ep_remove_conn(pe_entry->ep_attr, pe_entry->conn);
-		fastlock_release(&pe_entry->ep_attr->cmap.lock);
+		ofi_spin_unlock(&pe_entry->ep_attr->cmap.lock);
 
 		if (pe_entry->pe.rx.header_read)
 			sock_pe_report_rx_error(pe_entry, 0, FI_EIO);
@@ -2286,30 +2286,30 @@ void sock_pe_signal(struct sock_pe *pe)
 	if (pe->domain->progress_mode != FI_PROGRESS_AUTO)
 		return;
 
-	fastlock_acquire(&pe->signal_lock);
+	ofi_spin_lock(&pe->signal_lock);
 	if (pe->wcnt == pe->rcnt) {
 		if (ofi_write_socket(pe->signal_fds[SOCK_SIGNAL_WR_FD], &c, 1) != 1)
 			SOCK_LOG_ERROR("Failed to signal\n");
 		else
 			pe->wcnt++;
 	}
-	fastlock_release(&pe->signal_lock);
+	ofi_spin_unlock(&pe->signal_lock);
 }
 
 void sock_pe_poll_add(struct sock_pe *pe, int fd)
 {
-        fastlock_acquire(&pe->signal_lock);
+        ofi_spin_lock(&pe->signal_lock);
         if (ofi_epoll_add(pe->epoll_set, fd, OFI_EPOLL_IN, NULL))
 			SOCK_LOG_ERROR("failed to add to epoll set: %d\n", fd);
-        fastlock_release(&pe->signal_lock);
+        ofi_spin_unlock(&pe->signal_lock);
 }
 
 void sock_pe_poll_del(struct sock_pe *pe, int fd)
 {
-        fastlock_acquire(&pe->signal_lock);
+        ofi_spin_lock(&pe->signal_lock);
         if (ofi_epoll_del(pe->epoll_set, fd))
 			SOCK_LOG_DBG("failed to del from epoll set: %d\n", fd);
-        fastlock_release(&pe->signal_lock);
+        ofi_spin_unlock(&pe->signal_lock);
 }
 
 void sock_pe_add_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *ctx)
@@ -2396,7 +2396,7 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe,
 		return num_fds;
 	}
 
-	fastlock_acquire(&map->lock);
+	ofi_spin_lock(&map->lock);
 	for (i = 0; i < num_fds; i++) {
 		conn = map->epoll_events[i].data.ptr;
 		if (!conn)
@@ -2407,7 +2407,7 @@ static int sock_pe_progress_rx_ep(struct sock_pe *pe,
 
 		sock_pe_new_rx_entry(pe, rx_ctx, ep_attr, conn);
 	}
-	fastlock_release(&map->lock);
+	ofi_spin_unlock(&map->lock);
 
 	return 0;
 }
@@ -2419,11 +2419,11 @@ int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
 	struct dlist_entry *entry;
 	struct sock_pe_entry *pe_entry;
 
-	fastlock_acquire(&pe->lock);
+	ofi_spin_lock(&pe->lock);
 
-	fastlock_acquire(&rx_ctx->lock);
+	ofi_spin_lock(&rx_ctx->lock);
 	sock_pe_progress_buffered_rx(rx_ctx, true);
-	fastlock_release(&rx_ctx->lock);
+	ofi_spin_unlock(&rx_ctx->lock);
 
 	/* check for incoming data */
 	if (rx_ctx->ctx.fid.fclass == FI_CLASS_SRX_CTX) {
@@ -2453,7 +2453,7 @@ int sock_pe_progress_rx_ctx(struct sock_pe *pe, struct sock_rx_ctx *rx_ctx)
 out:
 	if (ret < 0)
 		SOCK_LOG_ERROR("failed to progress RX ctx\n");
-	fastlock_release(&pe->lock);
+	ofi_spin_unlock(&pe->lock);
 	return ret;
 }
 
@@ -2523,7 +2523,7 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 	struct dlist_entry *entry;
 	struct sock_pe_entry *pe_entry;
 
-	fastlock_acquire(&pe->lock);
+	ofi_spin_lock(&pe->lock);
 
 	/* progress tx_ctx in PE table */
 	for (entry = tx_ctx->pe_entry_list.next;
@@ -2538,11 +2538,11 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 		}
 	}
 
-	fastlock_acquire(&tx_ctx->rb_lock);
+	ofi_spin_lock(&tx_ctx->rb_lock);
 	if (!ofi_rbempty(&tx_ctx->rb) && !dlist_empty(&pe->free_list)) {
 		ret = sock_pe_new_tx_entry(pe, tx_ctx);
 	}
-	fastlock_release(&tx_ctx->rb_lock);
+	ofi_spin_unlock(&tx_ctx->rb_lock);
 	if (ret < 0)
 		goto out;
 
@@ -2550,7 +2550,7 @@ int sock_pe_progress_tx_ctx(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 out:
 	if (ret < 0)
 		SOCK_LOG_ERROR("failed to progress TX ctx\n");
-	fastlock_release(&pe->lock);
+	ofi_spin_unlock(&pe->lock);
 	return ret;
 }
 
@@ -2603,14 +2603,14 @@ static void sock_pe_wait(struct sock_pe *pe)
 	if (ret < 0)
 		SOCK_LOG_ERROR("poll failed : %s\n", strerror(ofi_sockerr()));
 
-	fastlock_acquire(&pe->signal_lock);
+	ofi_spin_lock(&pe->signal_lock);
 	if (pe->rcnt != pe->wcnt) {
 		if (ofi_read_socket(pe->signal_fds[SOCK_SIGNAL_RD_FD], &tmp, 1) == 1)
 			pe->rcnt++;
 		else
 			SOCK_LOG_ERROR("Invalid signal\n");
 	}
-	fastlock_release(&pe->signal_lock);
+	ofi_spin_unlock(&pe->signal_lock);
 	pe->waittime = ofi_gettime_ms();
 }
 
@@ -2714,8 +2714,8 @@ struct sock_pe *sock_pe_init(struct sock_domain *domain)
 	sock_pe_init_table(pe);
 	dlist_init(&pe->tx_list);
 	dlist_init(&pe->rx_list);
-	fastlock_init(&pe->lock);
-	fastlock_init(&pe->signal_lock);
+	ofi_spin_init(&pe->lock);
+	ofi_spin_init(&pe->signal_lock);
 	pthread_mutex_init(&pe->list_lock, NULL);
 	pe->domain = domain;
 
@@ -2769,7 +2769,7 @@ err3:
 err2:
 	ofi_bufpool_destroy(pe->pe_rx_pool);
 err1:
-	fastlock_destroy(&pe->lock);
+	ofi_spin_destroy(&pe->lock);
 	free(pe);
 	return NULL;
 }
@@ -2807,8 +2807,8 @@ void sock_pe_finalize(struct sock_pe *pe)
 	}
 
 	sock_pe_free_util_pool(pe);
-	fastlock_destroy(&pe->lock);
-	fastlock_destroy(&pe->signal_lock);
+	ofi_spin_destroy(&pe->lock);
+	ofi_spin_destroy(&pe->signal_lock);
 	pthread_mutex_destroy(&pe->list_lock);
 	ofi_epoll_close(pe->epoll_set);
 	free(pe);

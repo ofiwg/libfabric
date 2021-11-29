@@ -92,7 +92,7 @@ static ssize_t sock_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 				-FI_EAGAIN : ret;
 	}
 
-	fastlock_acquire(&sock_eq->lock);
+	ofi_spin_lock(&sock_eq->lock);
 	list = sock_eq->list.list.next;
 	entry = container_of(list, struct sock_eq_entry, entry);
 
@@ -111,7 +111,7 @@ static ssize_t sock_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 	}
 
 out:
-	fastlock_release(&sock_eq->lock);
+	ofi_spin_unlock(&sock_eq->lock);
 	return (ret == 0 || ret == -FI_ETIMEDOUT) ? -FI_EAGAIN : ret;
 }
 
@@ -136,7 +136,7 @@ static ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 	uint32_t api_version;
 
 	sock_eq = container_of(eq, struct sock_eq, eq);
-	fastlock_acquire(&sock_eq->lock);
+	ofi_spin_lock(&sock_eq->lock);
 	if (dlistfd_empty(&sock_eq->err_list)) {
 		ret = -FI_EAGAIN;
 		goto out;
@@ -178,7 +178,7 @@ static ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 	}
 
 out:
-	fastlock_release(&sock_eq->lock);
+	ofi_spin_unlock(&sock_eq->lock);
 	return (ret == 0) ? -FI_EAGAIN : ret;
 }
 
@@ -196,11 +196,11 @@ ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event,
 	entry->flags = flags;
 	memcpy(entry->event, buf, len);
 
-	fastlock_acquire(&sock_eq->lock);
+	ofi_spin_lock(&sock_eq->lock);
 	dlistfd_insert_tail(&entry->entry, &sock_eq->list);
 	if (sock_eq->signal)
 		sock_wait_signal(sock_eq->waitset);
-	fastlock_release(&sock_eq->lock);
+	ofi_spin_unlock(&sock_eq->lock);
 	return 0;
 }
 
@@ -241,12 +241,12 @@ ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
 					&sock_eq->err_data_list);
 	}
 
-	fastlock_acquire(&sock_eq->lock);
+	ofi_spin_lock(&sock_eq->lock);
 	dlistfd_insert_tail(&entry->entry, &sock_eq->err_list);
 	dlistfd_signal(&sock_eq->list);
 	if (sock_eq->signal)
 		sock_wait_signal(sock_eq->waitset);
-	fastlock_release(&sock_eq->lock);
+	ofi_spin_unlock(&sock_eq->lock);
 	return 0;
 }
 
@@ -291,7 +291,7 @@ static int sock_eq_fi_close(struct fid *fid)
 
 	dlistfd_head_free(&sock_eq->list);
 	dlistfd_head_free(&sock_eq->err_list);
-	fastlock_destroy(&sock_eq->lock);
+	ofi_spin_destroy(&sock_eq->lock);
 	ofi_atomic_dec32(&sock_eq->sock_fab->ref);
 
 	if (sock_eq->signal && sock_eq->attr.wait_obj == FI_WAIT_MUTEX_COND)
@@ -404,7 +404,7 @@ int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	if (ret)
 		goto err2;
 
-	fastlock_init(&sock_eq->lock);
+	ofi_spin_init(&sock_eq->lock);
 	ofi_atomic_inc32(&sock_eq->sock_fab->ref);
 
 	switch (sock_eq->attr.wait_obj) {

@@ -692,7 +692,7 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 	if (av->ep_type == FI_EP_DGRAM)
 		addr->qkey = EFA_DGRAM_CONNID;
 
-	fastlock_acquire(&av->util_av.lock);
+	ofi_spin_lock(&av->util_av.lock);
 	memset(raw_gid_str, 0, sizeof(raw_gid_str));
 	if (!inet_ntop(AF_INET6, addr->raw, raw_gid_str, INET6_ADDRSTRLEN)) {
 		EFA_WARN(FI_LOG_AV, "cannot convert address to string. errno: %d", errno);
@@ -728,7 +728,7 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 		 raw_gid_str, addr->qpn, addr->qkey, *fi_addr);
 	ret = 0;
 out:
-	fastlock_release(&av->util_av.lock);
+	ofi_spin_unlock(&av->util_av.lock);
 	return ret;
 }
 
@@ -848,7 +848,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	if (av->type != FI_AV_MAP && av->type != FI_AV_TABLE)
 		return -FI_EINVAL;
 
-	fastlock_acquire(&av->util_av.lock);
+	ofi_spin_lock(&av->util_av.lock);
 	for (i = 0; i < count; i++) {
 		conn = efa_av_addr_to_conn(av, fi_addr[i]);
 		if (!conn) {
@@ -868,7 +868,7 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		}
 	}
 
-	fastlock_release(&av->util_av.lock);
+	ofi_spin_unlock(&av->util_av.lock);
 	return err;
 }
 
@@ -893,7 +893,7 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 	struct efa_cur_reverse_av *cur_entry, *curtmp;
 	struct efa_prv_reverse_av *prv_entry, *prvtmp;
 
-	fastlock_acquire(&av->util_av.lock);
+	ofi_spin_lock(&av->util_av.lock);
 
 	HASH_ITER(hh, av->cur_reverse_av, cur_entry, curtmp) {
 		efa_conn_release(av, cur_entry->conn);
@@ -903,7 +903,7 @@ static void efa_av_close_reverse_av(struct efa_av *av)
 		efa_conn_release(av, prv_entry->conn);
 	}
 
-	fastlock_release(&av->util_av.lock);
+	ofi_spin_unlock(&av->util_av.lock);
 }
 
 static int efa_av_close(struct fid *fid)

@@ -52,7 +52,7 @@ static const char *rxd_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 
 	cq = container_of(cq_fid, struct rxd_cq, util_cq.cq_fid);
 
-	fastlock_acquire(&cq->util_cq.ep_list_lock);
+	ofi_spin_lock(&cq->util_cq.ep_list_lock);
 	assert(!dlist_empty(&cq->util_cq.ep_list));
 	fid_entry = container_of(cq->util_cq.ep_list.next,
 				struct fid_list_entry, entry);
@@ -60,7 +60,7 @@ static const char *rxd_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	ep = container_of(util_ep, struct rxd_ep, util_ep);
 
 	str = fi_cq_strerror(ep->dg_cq, prov_errno, err_data, buf, len);
-	fastlock_release(&cq->util_cq.ep_list_lock);
+	ofi_spin_unlock(&cq->util_cq.ep_list_lock);
 	return str;
 }
 
@@ -230,7 +230,7 @@ static void rxd_verify_active(struct rxd_ep *ep, fi_addr_t addr, fi_addr_t peer_
 	}
 
 	if (!rxd_peer(ep, addr)->active) {
-		dlist_insert_tail(&(rxd_peer(ep, addr)->entry), 
+		dlist_insert_tail(&(rxd_peer(ep, addr)->entry),
 				  &ep->active_peers);
 		rxd_peer(ep, addr)->retry_cnt = 0;
 		rxd_peer(ep, addr)->active = 1;
@@ -986,15 +986,15 @@ static void rxd_handle_data(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 		}
 		x_entry = rxd_get_data_x_entry(ep, pkt);
 		rxd_ep_recv_data(ep, x_entry, pkt, pkt_entry->pkt_size);
-		if (!dlist_empty(&(rxd_peer(ep, 
+		if (!dlist_empty(&(rxd_peer(ep,
 				   pkt->base_hdr.peer)->buf_pkts)))
 			rxd_progress_buf_pkts(ep, pkt->base_hdr.peer);
 	} else if (!rxd_env.retry) {
-		dlist_insert_order(&(rxd_peer(ep, 
+		dlist_insert_order(&(rxd_peer(ep,
 				     pkt->base_hdr.peer)->buf_pkts),
 				   &rxd_comp_pkt_seq_no, &pkt_entry->d_entry);
 		return;
-	} else if (rxd_peer(ep, pkt->base_hdr.peer)->peer_addr != 
+	} else if (rxd_peer(ep, pkt->base_hdr.peer)->peer_addr !=
 		   RXD_ADDR_INVALID) {
 		rxd_ep_send_ack(ep, pkt->base_hdr.peer);
 	}
@@ -1097,11 +1097,11 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 	if (dlist_empty(&(rxd_peer(ep, peer)->unacked)))
 		return;
 
-	pkt_entry = container_of((&(rxd_peer(ep, 
+	pkt_entry = container_of((&(rxd_peer(ep,
 				    peer)->unacked))->next,
 				 struct rxd_pkt_entry, d_entry);
 
-	while (&pkt_entry->d_entry != &(rxd_peer(ep, 
+	while (&pkt_entry->d_entry != &(rxd_peer(ep,
 				        peer)->unacked)) {
 		hdr = rxd_get_base_hdr(pkt_entry);
 		if (ofi_after_eq(hdr->seq_no, ack->base_hdr.seq_no))

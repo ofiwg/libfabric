@@ -99,7 +99,7 @@ htonll() / ntohll()
 sizeof_field()
 MIN / MAX - simple (i.e. potentially unsafe) min/max macros
 roundup_power_of_two()
-fastlock_t - lock object (spinlock or mutex based on availability)
+ofi_spin_t - lock object (spinlock or mutex based on availability)
 atomic operations - implementation based on availability
 fi_read_file() - read a value from a file
 fi_poll_fd() - call poll() on an fd

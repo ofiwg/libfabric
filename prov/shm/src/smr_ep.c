@@ -152,7 +152,7 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 	struct dlist_entry *entry;
 	int ret = 0;
 
-	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
+	ofi_spin_lock(&ep->util_ep.rx_cq->cq_lock);
 	entry = dlist_remove_first_match(&queue->list, smr_match_recv_ctx,
 					 context);
 	if (entry) {
@@ -165,7 +165,7 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 		ret = ret ? ret : 1;
 	}
 
-	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
+	ofi_spin_unlock(&ep->util_ep.rx_cq->cq_lock);
 	return ret;
 }
 

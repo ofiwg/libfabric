@@ -73,7 +73,7 @@ static void smrn_setup(void)
 		rqs[i] = calloc(1, sizeof(*rqs[i]));
 		cr_assert_neq(rqs[i], NULL);
 
-		fastlock_init(&rqs[i]->lock);
+		ofi_spin_init(&rqs[i]->lock);
 		dlist_init(&rqs[i]->list);
 		dlist_init(&rqs[i]->entry);
 	}

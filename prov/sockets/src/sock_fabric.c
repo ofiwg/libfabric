@@ -68,14 +68,14 @@ int sock_keepalive_probes = INT_MAX;
 
 static struct dlist_entry sock_fab_list;
 static struct dlist_entry sock_dom_list;
-static fastlock_t sock_list_lock;
+static ofi_spin_t sock_list_lock;
 static int read_default_params;
 
 void sock_dom_add_to_list(struct sock_domain *domain)
 {
-	fastlock_acquire(&sock_list_lock);
+	ofi_spin_lock(&sock_list_lock);
 	dlist_insert_tail(&domain->dom_list_entry, &sock_dom_list);
-	fastlock_release(&sock_list_lock);
+	ofi_spin_unlock(&sock_list_lock);
 }
 
 static inline int sock_dom_check_list_internal(struct sock_domain *domain)
@@ -95,32 +95,32 @@ static inline int sock_dom_check_list_internal(struct sock_domain *domain)
 int sock_dom_check_list(struct sock_domain *domain)
 {
 	int found;
-	fastlock_acquire(&sock_list_lock);
+	ofi_spin_lock(&sock_list_lock);
 	found = sock_dom_check_list_internal(domain);
-	fastlock_release(&sock_list_lock);
+	ofi_spin_unlock(&sock_list_lock);
 	return found;
 }
 
 void sock_dom_remove_from_list(struct sock_domain *domain)
 {
-	fastlock_acquire(&sock_list_lock);
+	ofi_spin_lock(&sock_list_lock);
 	if (sock_dom_check_list_internal(domain))
 		dlist_remove(&domain->dom_list_entry);
 
-	fastlock_release(&sock_list_lock);
+	ofi_spin_unlock(&sock_list_lock);
 }
 
 struct sock_domain *sock_dom_list_head(void)
 {
 	struct sock_domain *domain;
-	fastlock_acquire(&sock_list_lock);
+	ofi_spin_lock(&sock_list_lock);
 	if (dlist_empty(&sock_dom_list)) {
 		domain = NULL;
 	} else {
 		domain = container_of(sock_dom_list.next,
 				      struct sock_domain, dom_list_entry);
 	}
-	fastlock_release(&sock_list_lock);
+	ofi_spin_unlock(&sock_list_lock);
 	return domain;
 }
 
@@ -141,9 +141,9 @@ int sock_dom_check_manual_progress(struct sock_fabric *fabric)
 
 void sock_fab_add_to_list(struct sock_fabric *fabric)
 {
-	fastlock_acquire(&sock_list_lock);
+	ofi_spin_lock(&sock_list_lock);
 	dlist_insert_tail(&fabric->fab_list_entry, &sock_fab_list);
-	fastlock_release(&sock_list_lock);
+	ofi_spin_unlock(&sock_list_lock);
 }
 
 static inline int sock_fab_check_list_internal(struct sock_fabric *fabric)
@@ -163,32 +163,32 @@ static inline int sock_fab_check_list_internal(struct sock_fabric *fabric)
 int sock_fab_check_list(struct sock_fabric *fabric)
 {
 	int found;
-	fastlock_acquire(&sock_list_lock);
+	ofi_spin_lock(&sock_list_lock);
 	found = sock_fab_check_list_internal(fabric);
-	fastlock_release(&sock_list_lock);
+	ofi_spin_unlock(&sock_list_lock);
 	return found;
 }
 
 void sock_fab_remove_from_list(struct sock_fabric *fabric)
 {
-	fastlock_acquire(&sock_list_lock);
+	ofi_spin_lock(&sock_list_lock);
 	if (sock_fab_check_list_internal(fabric))
 		dlist_remove(&fabric->fab_list_entry);
 
-	fastlock_release(&sock_list_lock);
+	ofi_spin_unlock(&sock_list_lock);
 }
 
 struct sock_fabric *sock_fab_list_head(void)
 {
 	struct sock_fabric *fabric;
-	fastlock_acquire(&sock_list_lock);
+	ofi_spin_lock(&sock_list_lock);
 	if (dlist_empty(&sock_fab_list)) {
 		fabric = NULL;
 	} else {
 		fabric = container_of(sock_fab_list.next,
 				      struct sock_fabric, fab_list_entry);
 	}
-	fastlock_release(&sock_list_lock);
+	ofi_spin_unlock(&sock_list_lock);
 	return fabric;
 }
 
@@ -215,7 +215,7 @@ static int sock_fabric_close(fid_t fid)
 		return -FI_EBUSY;
 
 	sock_fab_remove_from_list(fab);
-	fastlock_destroy(&fab->lock);
+	ofi_spin_destroy(&fab->lock);
 	free(fab);
 	return 0;
 }
@@ -261,7 +261,7 @@ static int sock_fabric(struct fi_fabric_attr *attr,
 
 	sock_read_default_params();
 
-	fastlock_init(&fab->lock);
+	ofi_spin_init(&fab->lock);
 	dlist_init(&fab->service_list);
 
 	fab->fab_fid.fid.fclass = FI_CLASS_FABRIC;
@@ -318,7 +318,7 @@ static int sock_getinfo(uint32_t version, const char *node, const char *service,
 
 static void fi_sockets_fini(void)
 {
-	fastlock_destroy(&sock_list_lock);
+	ofi_spin_destroy(&sock_list_lock);
 }
 
 struct fi_provider sock_prov = {
@@ -382,7 +382,7 @@ SOCKETS_INI
 	fi_param_define(&sock_prov, "iface", FI_PARAM_STRING,
 			"Specify interface name");
 
-	fastlock_init(&sock_list_lock);
+	ofi_spin_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);
 	dlist_init(&sock_dom_list);
 #if ENABLE_DEBUG

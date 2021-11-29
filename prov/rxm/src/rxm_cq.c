@@ -1117,14 +1117,14 @@ static int rxm_do_device_mem_atomic(struct rxm_mr *dev_mr, uint8_t op,
 		.iov_len = amo_op_size,
 	};
 
-	fastlock_acquire(&dom->amo_bufpool_lock);
+	ofi_spin_lock(&dom->amo_bufpool_lock);
 	tx_buf = ofi_buf_alloc(dom->amo_bufpool);
-	fastlock_release(&dom->amo_bufpool_lock);
+	ofi_spin_unlock(&dom->amo_bufpool_lock);
 
 	if (!tx_buf)
 		return -FI_ENOMEM;
 
-	fastlock_acquire(&dev_mr->amo_lock);
+	ofi_spin_lock(&dev_mr->amo_lock);
 	ret = ofi_copy_from_hmem_iov(tx_buf, amo_op_size, dev_mr->iface, 0,
 				    &iov, 1, 0);
 	assert(ret == amo_op_size);
@@ -1136,11 +1136,11 @@ static int rxm_do_device_mem_atomic(struct rxm_mr *dev_mr, uint8_t op,
 				   amo_op_size);
 	assert(ret == amo_op_size);
 
-	fastlock_release(&dev_mr->amo_lock);
+	ofi_spin_unlock(&dev_mr->amo_lock);
 
-	fastlock_acquire(&dom->amo_bufpool_lock);
+	ofi_spin_lock(&dom->amo_bufpool_lock);
 	ofi_buf_free(tx_buf);
-	fastlock_release(&dom->amo_bufpool_lock);
+	ofi_spin_unlock(&dom->amo_bufpool_lock);
 
 	return FI_SUCCESS;
 }

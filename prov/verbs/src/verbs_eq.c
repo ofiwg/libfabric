@@ -64,7 +64,7 @@ vrb_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 	struct vrb_eq *_eq =
 		container_of(eq, struct vrb_eq, eq_fid.fid);
 	ssize_t rd = -FI_EAGAIN;
-	fastlock_acquire(&_eq->lock);
+	ofi_spin_lock(&_eq->lock);
 	if (!_eq->err.err)
 		goto unlock;
 
@@ -72,7 +72,7 @@ vrb_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *entry,
 				flags, &_eq->err, entry);
 	rd = sizeof(*entry);
 unlock:
-	fastlock_release(&_eq->lock);
+	ofi_spin_unlock(&_eq->lock);
 	return rd;
 }
 
@@ -80,7 +80,7 @@ void vrb_eq_set_xrc_conn_tag(struct vrb_xrc_ep *ep)
 {
 	struct vrb_eq *eq = ep->base_ep.eq;
 
-	assert(fastlock_held(&eq->lock));
+	assert(ofi_spin_held(&eq->lock));
 	assert(ep->conn_setup);
 	assert(ep->conn_setup->conn_tag == VERBS_CONN_TAG_INVALID);
 	ep->conn_setup->conn_tag =
@@ -93,7 +93,7 @@ void vrb_eq_clear_xrc_conn_tag(struct vrb_xrc_ep *ep)
 	struct vrb_eq *eq = ep->base_ep.eq;
 	int index;
 
-	assert(fastlock_held(&eq->lock));
+	assert(ofi_spin_held(&eq->lock));
 	assert(ep->conn_setup);
 	if (ep->conn_setup->conn_tag == VERBS_CONN_TAG_INVALID)
 		return;
@@ -114,7 +114,7 @@ struct vrb_xrc_ep *vrb_eq_xrc_conn_tag2ep(struct vrb_eq *eq,
 	struct vrb_xrc_ep *ep;
 	int index;
 
-	assert(fastlock_held(&eq->lock));
+	assert(ofi_spin_held(&eq->lock));
 	index = ofi_key2idx(&eq->xrc.conn_key_idx, (uint64_t)conn_tag);
 	ep = ofi_idx_lookup(eq->xrc.conn_key_map, index);
 	if (!ep || ep->magic != VERBS_XRC_EP_MAGIC) {
@@ -361,7 +361,7 @@ struct vrb_xrc_ep *vrb_eq_get_sidr_conn(struct vrb_eq *eq,
 	struct ofi_rbnode *node;
 	struct vrb_sidr_conn_key key;
 
-	assert(fastlock_held(&eq->lock));
+	assert(ofi_spin_held(&eq->lock));
 	vrb_set_sidr_conn_key(peer, pep_port, recip, &key);
 	node = ofi_rbmap_find(&eq->xrc.sidr_conn_rbmap, &key);
 	if (OFI_LIKELY(!node))
@@ -376,7 +376,7 @@ int vrb_eq_add_sidr_conn(struct vrb_xrc_ep *ep,
 	int ret;
 	struct vrb_sidr_conn_key key;
 
-	assert(fastlock_held(&ep->base_ep.eq->lock));
+	assert(ofi_spin_held(&ep->base_ep.eq->lock));
 	assert(!ep->accept_param_data);
 	assert(param_len);
 	assert(ep->tgt_id && ep->tgt_id->ps == RDMA_PS_UDP);
@@ -408,7 +408,7 @@ int vrb_eq_add_sidr_conn(struct vrb_xrc_ep *ep,
 
 void vrb_eq_remove_sidr_conn(struct vrb_xrc_ep *ep)
 {
-	assert(fastlock_held(&ep->base_ep.eq->lock));
+	assert(ofi_spin_held(&ep->base_ep.eq->lock));
 	assert(ep->conn_map_node);
 
 	ofi_rbmap_delete(&ep->base_ep.eq->xrc.sidr_conn_rbmap,
@@ -662,7 +662,7 @@ vrb_eq_xrc_rej_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event)
 	struct vrb_xrc_conn_info xrc_info;
 	enum vrb_xrc_ep_conn_state state;
 
-	assert(fastlock_held(&eq->lock));
+	assert(ofi_spin_held(&eq->lock));
 	ep = container_of(fid, struct vrb_xrc_ep, base_ep.util_ep.ep_fid);
 	if (ep->magic != VERBS_XRC_EP_MAGIC) {
 		VRB_WARN(FI_LOG_EP_CTRL,
@@ -707,7 +707,7 @@ static int
 vrb_eq_xrc_connect_retry(struct vrb_xrc_ep *ep,
 			 struct rdma_cm_event *cma_event, int *acked)
 {
-	assert(fastlock_held(&ep->base_ep.eq->lock));
+	assert(ofi_spin_held(&ep->base_ep.eq->lock));
 
 	if (ep->base_ep.info_attr.src_addr)
 		ofi_straddr_dbg(&vrb_prov, FI_LOG_EP_CTRL,
@@ -737,7 +737,7 @@ vrb_eq_xrc_cm_err_event(struct vrb_eq *eq,
 	fid_t fid = cma_event->id->context;
 	int ret;
 
-	assert(fastlock_held(&eq->lock));
+	assert(ofi_spin_held(&eq->lock));
 	ep = container_of(fid, struct vrb_xrc_ep, base_ep.util_ep.ep_fid);
 	if (ep->magic != VERBS_XRC_EP_MAGIC) {
 		VRB_WARN(FI_LOG_EP_CTRL, "CM ID context invalid\n");
@@ -789,7 +789,7 @@ vrb_eq_xrc_connected_event(struct vrb_eq *eq,
 
 	ep = container_of(fid, struct vrb_xrc_ep, base_ep.util_ep.ep_fid);
 
-	assert(fastlock_held(&eq->lock));
+	assert(ofi_spin_held(&eq->lock));
 	assert(ep->conn_state == VRB_XRC_ORIG_CONNECTING ||
 	       ep->conn_state == VRB_XRC_RECIP_CONNECTING);
 
@@ -816,7 +816,7 @@ vrb_eq_xrc_timewait_event(struct vrb_eq *eq,
 	struct vrb_xrc_ep *ep = container_of(fid, struct vrb_xrc_ep,
 						base_ep.util_ep.ep_fid);
 
-	assert(fastlock_held(&eq->lock));
+	assert(ofi_spin_held(&eq->lock));
 	assert(ep->magic == VERBS_XRC_EP_MAGIC);
 	assert(ep->conn_setup);
 
@@ -843,7 +843,7 @@ vrb_eq_xrc_disconnect_event(struct vrb_eq *eq,
 	struct vrb_xrc_ep *ep = container_of(fid, struct vrb_xrc_ep,
 					     base_ep.util_ep.ep_fid);
 
-	assert(fastlock_held(&eq->lock));
+	assert(ofi_spin_held(&eq->lock));
 	assert(ep->magic == VERBS_XRC_EP_MAGIC);
 
 	if (ep->conn_setup && cma_event->id == ep->base_ep.id) {
@@ -1036,9 +1036,9 @@ ack:
 int vrb_eq_trywait(struct vrb_eq *eq)
 {
 	int ret;
-	fastlock_acquire(&eq->lock);
+	ofi_spin_lock(&eq->lock);
 	ret = dlistfd_empty(&eq->list_head);
-	fastlock_release(&eq->lock);
+	ofi_spin_unlock(&eq->lock);
 	return ret ? 0 : -FI_EAGAIN;
 }
 
@@ -1067,7 +1067,7 @@ void vrb_eq_remove_events(struct vrb_eq *eq, struct fid *fid)
 	struct dlist_entry *item;
 	struct vrb_eq_entry *entry;
 
-	assert(fastlock_held(&eq->lock));
+	assert(ofi_spin_held(&eq->lock));
 	while ((item =
 		dlistfd_remove_first_match(&eq->list_head,
 					   vrb_eq_match_event, fid))) {
@@ -1103,9 +1103,9 @@ ssize_t vrb_eq_write_event(struct vrb_eq *eq, uint32_t event,
 	if (!entry)
 		return -FI_ENOMEM;
 
-	fastlock_acquire(&eq->lock);
+	ofi_spin_lock(&eq->lock);
 	dlistfd_insert_tail(&entry->item, &eq->list_head);
-	fastlock_release(&eq->lock);
+	ofi_spin_unlock(&eq->lock);
 
 	return len;
 }
@@ -1128,7 +1128,7 @@ static size_t vrb_eq_read_event(struct vrb_eq *eq, uint32_t *event,
 	struct vrb_eq_entry *entry;
 	ssize_t ret = 0;
 
-	fastlock_acquire(&eq->lock);
+	ofi_spin_lock(&eq->lock);
 
 	if (eq->err.err) {
 		ret = -FI_EAVAIL;
@@ -1154,7 +1154,7 @@ static size_t vrb_eq_read_event(struct vrb_eq *eq, uint32_t *event,
 	}
 
 out:
-	fastlock_release(&eq->lock);
+	ofi_spin_unlock(&eq->lock);
 	return ret;
 }
 
@@ -1176,17 +1176,17 @@ vrb_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 
 	if (eq->channel) {
 next_event:
-		fastlock_acquire(&eq->lock);
+		ofi_spin_lock(&eq->lock);
 		ret = rdma_get_cm_event(eq->channel, &cma_event);
 		if (ret) {
-			fastlock_release(&eq->lock);
+			ofi_spin_unlock(&eq->lock);
 			return -errno;
 		}
 
 		ret = vrb_eq_cm_process_event(eq, cma_event, event,
 						 (struct fi_eq_cm_entry *)buf,
 						 len);
-		fastlock_release(&eq->lock);
+		ofi_spin_unlock(&eq->lock);
 		/* If the CM event was handled internally (e.g. XRC), continue
 		 * to process events. */
 		if (ret == -FI_EAGAIN)
@@ -1314,7 +1314,7 @@ static int vrb_eq_close(fid_t fid)
 	ofi_rbmap_cleanup(&eq->xrc.sidr_conn_rbmap);
 	ofi_idx_reset(eq->xrc.conn_key_map);
 	free(eq->xrc.conn_key_map);
-	fastlock_destroy(&eq->lock);
+	ofi_spin_destroy(&eq->lock);
 	free(eq);
 
 	return 0;
@@ -1349,7 +1349,7 @@ int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	}
 	ofi_rbmap_init(&_eq->xrc.sidr_conn_rbmap, vrb_sidr_conn_compare);
 
-	fastlock_init(&_eq->lock);
+	ofi_spin_init(&_eq->lock);
 	ret = dlistfd_head_init(&_eq->list_head);
 	if (ret) {
 		VRB_INFO(FI_LOG_EQ, "Unable to initialize dlistfd\n");
@@ -1411,7 +1411,7 @@ err3:
 err2:
 	dlistfd_head_free(&_eq->list_head);
 err1:
-	fastlock_destroy(&_eq->lock);
+	ofi_spin_destroy(&_eq->lock);
 	free(_eq->xrc.conn_key_map);
 err0:
 	free(_eq);

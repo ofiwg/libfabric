@@ -645,7 +645,7 @@ struct rxm_tx_buf *rxm_get_tx_buf(struct rxm_ep *ep)
 {
 	struct rxm_tx_buf *buf;
 
-	assert(fastlock_held(&ep->util_ep.lock));
+	assert(ofi_spin_held(&ep->util_ep.lock));
 	if (!ep->tx_credit)
 		return NULL;
 
@@ -659,7 +659,7 @@ struct rxm_tx_buf *rxm_get_tx_buf(struct rxm_ep *ep)
 
 void rxm_free_rx_buf(struct rxm_ep *ep, struct rxm_tx_buf *buf)
 {
-	assert(fastlock_held(&ep->util_ep.lock));
+	assert(ofi_spin_held(&ep->util_ep.lock));
 	assert(buf->user_tx);
 	OFI_DBG_SET(buf->user_tx, false);
 	ep->tx_credit++;

@@ -256,7 +256,7 @@ struct rxm_domain {
 	bool passthru;
 	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
 	struct ofi_bufpool *amo_bufpool;
-	fastlock_t amo_bufpool_lock;
+	ofi_spin_t amo_bufpool_lock;
 };
 
 
@@ -301,7 +301,7 @@ struct rxm_mr {
 	struct rxm_domain *domain;
 	enum fi_hmem_iface iface;
 	uint64_t device;
-	fastlock_t amo_lock;
+	ofi_spin_t amo_lock;
 };
 
 static inline enum fi_hmem_iface

@@ -78,7 +78,7 @@ struct ofi_pollfds {
 	void		**context;
 	struct fd_signal signal;
 	struct slist	work_item_list;
-	fastlock_t	lock;
+	ofi_spin_t	lock;
 };
 
 int ofi_pollfds_create(struct ofi_pollfds **pfds);

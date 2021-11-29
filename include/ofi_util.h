@@ -184,7 +184,7 @@ struct util_fabric_info {
 struct util_fabric {
 	struct fid_fabric	fabric_fid;
 	struct dlist_entry	list_entry;
-	fastlock_t		lock;
+	ofi_spin_t		lock;
 	ofi_atomic32_t		ref;
 	const char		*name;
 	const struct fi_provider *prov;
@@ -207,7 +207,7 @@ struct util_domain {
 	struct dlist_entry	list_entry;
 	struct util_fabric	*fabric;
 	struct util_eq		*eq;
-	fastlock_t		lock;
+	ofi_spin_t		lock;
 	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 
@@ -307,9 +307,9 @@ struct util_ep {
 	uint64_t		caps;
 	uint64_t		flags;
 	ofi_ep_progress_func	progress;
-	fastlock_t		lock;
-	ofi_fastlock_acquire_t	lock_acquire;
-	ofi_fastlock_release_t	lock_release;
+	ofi_spin_t		lock;
+	ofi_spin_lock_t	lock_acquire;
+	ofi_spin_unlock_t	lock_release;
 
 	struct bitmask		*coll_cid_mask;
 	struct slist		coll_ready_queue;
@@ -345,8 +345,8 @@ static inline void ofi_ep_lock_release(struct util_ep *ep)
 
 static inline bool ofi_ep_lock_held(struct util_ep *ep)
 {
-	return (ep->lock_acquire == ofi_fastlock_acquire_noop) ||
-		fastlock_held(&ep->lock);
+	return (ep->lock_acquire == ofi_spin_lock_noop) ||
+		ofi_spin_held(&ep->lock);
 }
 
 static inline void ofi_ep_tx_cntr_inc(struct util_ep *ep)
@@ -429,7 +429,7 @@ struct util_wait {
 	fi_wait_try_func	wait_try;
 
 	struct dlist_entry	fid_list;
-	fastlock_t		lock;
+	ofi_spin_t		lock;
 };
 
 int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
@@ -482,7 +482,7 @@ int ofi_wait_del_fid(struct util_wait *wait, fid_t fid);
 struct util_wait_yield {
 	struct util_wait	util_wait;
 	int			signal;
-	fastlock_t		signal_lock;
+	ofi_spin_t		signal_lock;
 };
 
 int ofi_wait_yield_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
@@ -517,10 +517,10 @@ struct util_cq {
 	struct util_wait	*wait;
 	ofi_atomic32_t		ref;
 	struct dlist_entry	ep_list;
-	fastlock_t		ep_list_lock;
-	fastlock_t		cq_lock;
-	ofi_fastlock_acquire_t	cq_fastlock_acquire;
-	ofi_fastlock_release_t	cq_fastlock_release;
+	ofi_spin_t		ep_list_lock;
+	ofi_spin_t		cq_lock;
+	ofi_spin_lock_t	cq_fastlock_acquire;
+	ofi_spin_unlock_t	cq_fastlock_release;
 
 	struct util_comp_cirq	*cirq;
 	fi_addr_t		*src;
@@ -668,7 +668,7 @@ struct util_cntr {
 	uint64_t		checkpoint_err;
 
 	struct dlist_entry	ep_list;
-	fastlock_t		ep_list_lock;
+	ofi_spin_t		ep_list_lock;
 
 	int			internal_wait;
 	ofi_cntr_progress_func	progress;
@@ -719,7 +719,7 @@ struct util_av {
 	struct util_domain	*domain;
 	struct util_eq		*eq;
 	ofi_atomic32_t		ref;
-	fastlock_t		lock;
+	ofi_spin_t		lock;
 	const struct fi_provider *prov;
 
 	struct util_av_entry	*hash;
@@ -735,7 +735,7 @@ struct util_av {
 	 */
 	size_t			context_offset;
 	struct dlist_entry	ep_list;
-	fastlock_t		ep_list_lock;
+	ofi_spin_t		ep_list_lock;
 };
 
 struct util_av_attr {
@@ -814,7 +814,7 @@ struct util_poll {
 	struct fid_poll		poll_fid;
 	struct util_domain	*domain;
 	struct dlist_entry	fid_list;
-	fastlock_t		lock;
+	ofi_spin_t		lock;
 	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 };
@@ -831,7 +831,7 @@ struct util_eq {
 	struct fid_eq		eq_fid;
 	struct util_fabric	*fabric;
 	struct util_wait	*wait;
-	fastlock_t		lock;
+	ofi_spin_t		lock;
 	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 
@@ -933,9 +933,9 @@ struct fid_list_entry {
 	struct fid		*fid;
 };
 
-int fid_list_insert(struct dlist_entry *fid_list, fastlock_t *lock,
+int fid_list_insert(struct dlist_entry *fid_list, ofi_spin_t *lock,
 		    struct fid *fid);
-void fid_list_remove(struct dlist_entry *fid_list, fastlock_t *lock,
+void fid_list_remove(struct dlist_entry *fid_list, ofi_spin_t *lock,
 		     struct fid *fid);
 
 void ofi_fabric_insert(struct util_fabric *fabric);

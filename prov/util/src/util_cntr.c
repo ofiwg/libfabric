@@ -217,7 +217,7 @@ int ofi_cntr_cleanup(struct util_cntr *cntr)
 	}
 
 	ofi_atomic_dec32(&cntr->domain->ref);
-	fastlock_destroy(&cntr->ep_list_lock);
+	ofi_spin_destroy(&cntr->ep_list_lock);
 	return 0;
 }
 
@@ -240,13 +240,13 @@ void ofi_cntr_progress(struct util_cntr *cntr)
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
 
-	fastlock_acquire(&cntr->ep_list_lock);
+	ofi_spin_lock(&cntr->ep_list_lock);
 	dlist_foreach(&cntr->ep_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
 		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
 		ep->progress(ep);
 	}
-	fastlock_release(&cntr->ep_list_lock);
+	ofi_spin_unlock(&cntr->ep_list_lock);
 }
 
 static struct fi_ops util_cntr_fi_ops = {
@@ -308,7 +308,7 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 		return -FI_EINVAL;
 	}
 
-	fastlock_init(&cntr->ep_list_lock);
+	ofi_spin_init(&cntr->ep_list_lock);
 	ofi_atomic_inc32(&cntr->domain->ref);
 
 	/* CNTR must be fully operational before adding to wait set */

@@ -129,7 +129,7 @@ int fi_wait_cleanup(struct util_wait *wait)
 		free(fid_entry);
 	}
 
-	fastlock_destroy(&wait->lock);
+	ofi_spin_destroy(&wait->lock);
 	ofi_atomic_dec32(&wait->fabric->ref);
 	return 0;
 }
@@ -166,7 +166,7 @@ int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
 		return ret;
 
 	wait->pollset = container_of(poll_fid, struct util_poll, poll_fid);
-	fastlock_init(&wait->lock);
+	ofi_spin_init(&wait->lock);
 	dlist_init(&wait->fid_list);
 	wait->fabric = fabric;
 	ofi_atomic_inc32(&fabric->ref);
@@ -213,7 +213,7 @@ int ofi_wait_del_fd(struct util_wait *wait, int fd)
 	int ret = 0;
 
 	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
-	fastlock_acquire(&wait->lock);
+	ofi_spin_lock(&wait->lock);
 	entry = dlist_find_first_match(&wait_fd->fd_list, ofi_wait_match_fd, &fd);
 	if (!entry) {
 		FI_INFO(wait->prov, FI_LOG_FABRIC,
@@ -231,7 +231,7 @@ int ofi_wait_del_fd(struct util_wait *wait, int fd)
 	ofi_wait_fdset_del(wait_fd, fd_entry->fd);
 	free(fd_entry);
 out:
-	fastlock_release(&wait->lock);
+	ofi_spin_unlock(&wait->lock);
 	return ret;
 }
 
@@ -244,7 +244,7 @@ int ofi_wait_add_fd(struct util_wait *wait, int fd, uint32_t events,
 	int ret = 0;
 
 	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
-	fastlock_acquire(&wait->lock);
+	ofi_spin_lock(&wait->lock);
 	entry = dlist_find_first_match(&wait_fd->fd_list, ofi_wait_match_fd, &fd);
 	if (entry) {
 		FI_DBG(wait->prov, FI_LOG_EP_CTRL,
@@ -276,7 +276,7 @@ int ofi_wait_add_fd(struct util_wait *wait, int fd, uint32_t events,
 
 	dlist_insert_tail(&fd_entry->entry, &wait_fd->fd_list);
 out:
-	fastlock_release(&wait->lock);
+	ofi_spin_unlock(&wait->lock);
 	return ret;
 }
 
@@ -352,7 +352,7 @@ static int util_wait_fd_try(struct util_wait *wait)
 
 	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
 	fd_signal_reset(&wait_fd->signal);
-	fastlock_acquire(&wait->lock);
+	ofi_spin_lock(&wait->lock);
 	dlist_foreach_container(&wait_fd->fd_list, struct ofi_wait_fd_entry,
 				fd_entry, entry) {
 		ret = fd_entry->wait_try(fd_entry->arg);
@@ -373,12 +373,12 @@ static int util_wait_fd_try(struct util_wait *wait)
 			goto release;
 	}
 
-	fastlock_release(&wait->lock);
+	ofi_spin_unlock(&wait->lock);
 	ret = fi_poll(&wait->pollset->poll_fid, &context, 1);
 	return (ret > 0) ? -FI_EAGAIN : (ret == -FI_EAGAIN) ? FI_SUCCESS : ret;
 
 release:
-	fastlock_release(&wait->lock);
+	ofi_spin_unlock(&wait->lock);
 	return ret;
 }
 
@@ -438,7 +438,7 @@ static int util_wait_fd_control(struct fid *fid, int command, void *arg)
 		}
 
 		pollfd = arg;
-		fastlock_acquire(&wait->util_wait.lock);
+		ofi_spin_lock(&wait->util_wait.lock);
 		if (pollfd->nfds >= wait->pollfds->nfds) {
 			memcpy(pollfd->fd, &wait->pollfds->fds[0],
 			       wait->pollfds->nfds * sizeof(*wait->pollfds->fds));
@@ -448,7 +448,7 @@ static int util_wait_fd_control(struct fid *fid, int command, void *arg)
 		}
 		pollfd->change_index = wait->change_index;
 		pollfd->nfds = wait->pollfds->nfds;
-		fastlock_release(&wait->util_wait.lock);
+		ofi_spin_unlock(&wait->util_wait.lock);
 		break;
 	case FI_GETWAITOBJ:
 		*(enum fi_wait_obj *) arg = wait->util_wait.wait_obj;
@@ -471,14 +471,14 @@ static int util_wait_fd_close(struct fid *fid)
 
 	wait = container_of(fid, struct util_wait_fd, util_wait.wait_fid.fid);
 
-	fastlock_acquire(&wait->util_wait.lock);
+	ofi_spin_lock(&wait->util_wait.lock);
 	while (!dlist_empty(&wait->fd_list)) {
 		dlist_pop_front(&wait->fd_list, struct ofi_wait_fd_entry,
 				fd_entry, entry);
 		ofi_wait_fdset_del(wait, fd_entry->fd);
 		free(fd_entry);
 	}
-	fastlock_release(&wait->util_wait.lock);
+	ofi_spin_unlock(&wait->util_wait.lock);
 
 	ret = fi_wait_cleanup(&wait->util_wait);
 	if (ret)
@@ -595,9 +595,9 @@ static void util_wait_yield_signal(struct util_wait *util_wait)
 
 	wait_yield = container_of(util_wait, struct util_wait_yield, util_wait);
 
-	fastlock_acquire(&wait_yield->signal_lock);
+	ofi_spin_lock(&wait_yield->signal_lock);
 	wait_yield->signal = 1;
-	fastlock_release(&wait_yield->signal_lock);
+	ofi_spin_unlock(&wait_yield->signal_lock);
 }
 
 static int util_wait_yield_run(struct fid_wait *wait_fid, int timeout)
@@ -608,23 +608,23 @@ static int util_wait_yield_run(struct fid_wait *wait_fid, int timeout)
 
 	wait = container_of(wait_fid, struct util_wait_yield, util_wait.wait_fid);
 	while (!wait->signal) {
-		fastlock_acquire(&wait->util_wait.lock);
+		ofi_spin_lock(&wait->util_wait.lock);
 		dlist_foreach_container(&wait->util_wait.fid_list,
 					struct ofi_wait_fid_entry,
 					fid_entry, entry) {
 			ret = fid_entry->wait_try(fid_entry->fid);
 			if (ret) {
-				fastlock_release(&wait->util_wait.lock);
+				ofi_spin_unlock(&wait->util_wait.lock);
 				return ret;
 			}
 		}
-		fastlock_release(&wait->util_wait.lock);
+		ofi_spin_unlock(&wait->util_wait.lock);
 		sched_yield();
 	}
 
-	fastlock_acquire(&wait->signal_lock);
+	ofi_spin_lock(&wait->signal_lock);
 	wait->signal = 0;
-	fastlock_release(&wait->signal_lock);
+	ofi_spin_unlock(&wait->signal_lock);
 
 	return FI_SUCCESS;
 }
@@ -639,7 +639,7 @@ static int util_wait_yield_close(struct fid *fid)
 	if (ret)
 		return ret;
 
-	fastlock_destroy(&wait->signal_lock);
+	ofi_spin_destroy(&wait->signal_lock);
 	free(wait);
 	return 0;
 }
@@ -707,7 +707,7 @@ int ofi_wait_yield_open(struct fid_fabric *fabric_fid, struct fi_wait_attr *attr
 	wait->util_wait.wait_fid.fid.ops = &util_wait_yield_fi_ops;
 	wait->util_wait.wait_fid.ops = &util_wait_yield_ops;
 
-	fastlock_init(&wait->signal_lock);
+	ofi_spin_init(&wait->signal_lock);
 
 	*waitset = &wait->util_wait.wait_fid;
 
@@ -731,7 +731,7 @@ int ofi_wait_del_fid(struct util_wait *wait, fid_t fid)
 	size_t i;
 	int ret = 0;
 
-	fastlock_acquire(&wait->lock);
+	ofi_spin_lock(&wait->lock);
 	entry = dlist_find_first_match(&wait->fid_list,
 				       ofi_wait_match_fid, fid);
 	if (!entry) {
@@ -761,7 +761,7 @@ int ofi_wait_del_fid(struct util_wait *wait, fid_t fid)
 	free(fid_entry->pollfds.fd);
 	free(fid_entry);
 out:
-	fastlock_release(&wait->lock);
+	ofi_spin_unlock(&wait->lock);
 	return ret;
 }
 
@@ -840,7 +840,7 @@ int ofi_wait_add_fid(struct util_wait *wait, fid_t fid, uint32_t events,
 	struct dlist_entry *entry;
 	int ret = 0;
 
-	fastlock_acquire(&wait->lock);
+	ofi_spin_lock(&wait->lock);
 	entry = dlist_find_first_match(&wait->fid_list,
 				       ofi_wait_match_fid, fid);
 	if (entry) {
@@ -872,6 +872,6 @@ int ofi_wait_add_fid(struct util_wait *wait, fid_t fid, uint32_t events,
 	}
 	dlist_insert_tail(&fid_entry->entry, &wait->fid_list);
 out:
-	fastlock_release(&wait->lock);
+	ofi_spin_unlock(&wait->lock);
 	return ret;
 }

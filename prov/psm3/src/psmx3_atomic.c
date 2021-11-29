@@ -50,16 +50,16 @@
  *	args[1].u64	req
  */
 
-static fastlock_t psmx3_atomic_lock;
+static ofi_spin_t psmx3_atomic_lock;
 
 void psmx3_atomic_global_init(void)
 {
-	fastlock_init(&psmx3_atomic_lock);
+	ofi_spin_init(&psmx3_atomic_lock);
 }
 
 void psmx3_atomic_global_fini(void)
 {
-	fastlock_destroy(&psmx3_atomic_lock);
+	ofi_spin_destroy(&psmx3_atomic_lock);
 }
 
 static inline void psmx3_ioc_read(const struct fi_ioc *ioc, size_t count,

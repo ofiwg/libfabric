@@ -424,10 +424,10 @@ static pthread_barrier_t mtbar;
  * fat lock when calling them */
 #define USE_LOCK
 #ifdef USE_LOCK
-static fastlock_t my_big_lock;
-#define init_av_lock() fastlock_init(&my_big_lock)
-#define av_lock() fastlock_acquire(&my_big_lock)
-#define av_unlock() fastlock_release(&my_big_lock)
+static ofi_spin_t my_big_lock;
+#define init_av_lock() ofi_spin_init(&my_big_lock)
+#define av_lock() ofi_spin_lock(&my_big_lock)
+#define av_unlock() ofi_spin_unlock(&my_big_lock)
 #else
 #define init_av_lock()
 #define av_lock()

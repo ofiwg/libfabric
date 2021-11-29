@@ -231,7 +231,7 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 	struct vrb_context *ctx;
 	int ret;
 
-	assert(fastlock_held(&cq->util_cq.cq_lock));
+	assert(ofi_spin_held(&cq->util_cq.cq_lock));
 	do {
 		ret = ibv_poll_cq(cq->cq, 1, wc);
 		if (ret <= 0)
@@ -251,9 +251,9 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 				wc->opcode &= ~IBV_WC_RECV;
 		}
 		if (ctx->srx) {
-			fastlock_acquire(&ctx->srx->ctx_lock);
+			ofi_spin_lock(&ctx->srx->ctx_lock);
 			ofi_buf_free(ctx);
-			fastlock_release(&ctx->srx->ctx_lock);
+			ofi_spin_unlock(&ctx->srx->ctx_lock);
 		} else {
 			ofi_buf_free(ctx);
 		}
@@ -267,7 +267,7 @@ int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc)
 {
 	struct vrb_wc_entry *wce;
 
-	assert(fastlock_held(&cq->util_cq.cq_lock));
+	assert(ofi_spin_held(&cq->util_cq.cq_lock));
 	wce = ofi_buf_alloc(cq->wce_pool);
 	if (!wce) {
 		FI_WARN(&vrb_prov, FI_LOG_CQ,
@@ -499,16 +499,16 @@ static int vrb_cq_close(fid_t fid)
 	/* Since an RX CQ and SRX context can be destroyed in any order,
 	 * and the XRC SRQ references the RX CQ, we must destroy any
 	 * XRC SRQ using this CQ before destroying the CQ. */
-	fastlock_acquire(&cq->xrc.srq_list_lock);
+	ofi_spin_lock(&cq->xrc.srq_list_lock);
 	dlist_foreach_container_safe(&cq->xrc.srq_list, struct vrb_srq_ep,
 				     srq_ep, xrc.srq_entry, srq_ep_temp) {
 		ret = vrb_xrc_close_srq(srq_ep);
 		if (ret) {
-			fastlock_release(&cq->xrc.srq_list_lock);
+			ofi_spin_unlock(&cq->xrc.srq_list_lock);
 			return -ret;
 		}
 	}
-	fastlock_release(&cq->xrc.srq_list_lock);
+	ofi_spin_unlock(&cq->xrc.srq_list_lock);
 
 	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
 	while (!slist_empty(&cq->saved_wc_list)) {
@@ -539,7 +539,7 @@ static int vrb_cq_close(fid_t fid)
 	if (cq->channel)
 		ibv_destroy_comp_channel(cq->channel);
 
-	fastlock_destroy(&cq->xrc.srq_list_lock);
+	ofi_spin_destroy(&cq->xrc.srq_list_lock);
 	free(cq);
 	return 0;
 }
@@ -699,7 +699,7 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	slist_init(&cq->saved_wc_list);
 	dlist_init(&cq->xrc.srq_list);
-	fastlock_init(&cq->xrc.srq_list_lock);
+	ofi_spin_init(&cq->xrc.srq_list_lock);
 
 	ofi_atomic_initialize32(&cq->nevents, 0);
 

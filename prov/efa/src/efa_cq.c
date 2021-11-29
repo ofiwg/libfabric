@@ -60,7 +60,7 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 
 	cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 
-	fastlock_acquire(&cq->lock);
+	ofi_spin_lock(&cq->lock);
 	if (slist_empty(&cq->wcq))
 		goto err;
 
@@ -71,7 +71,7 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	api_version = cq->domain->fab->util_fabric.fabric_fid.api_version;
 
 	slist_entry = slist_remove_head(&cq->wcq);
-	fastlock_release(&cq->lock);
+	ofi_spin_unlock(&cq->lock);
 
 	wce = container_of(slist_entry, struct efa_wce, entry);
 
@@ -88,7 +88,7 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	ofi_buf_free(wce);
 	return sizeof(*entry);
 err:
-	fastlock_release(&cq->lock);
+	ofi_spin_unlock(&cq->lock);
 	return -FI_EAGAIN;
 }
 
@@ -130,7 +130,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 
 	cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 
-	fastlock_acquire(&cq->lock);
+	ofi_spin_lock(&cq->lock);
 
 	for (i = 0; i < count; i++) {
 		if (!slist_empty(&cq->wcq)) {
@@ -157,7 +157,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		if (wc.ibv_wc.status) {
 			wce = ofi_buf_alloc(cq->wce_pool);
 			if (!wce) {
-				fastlock_release(&cq->lock);
+				ofi_spin_unlock(&cq->lock);
 				return -FI_ENOMEM;
 			}
 			memset(wce, 0, sizeof(*wce));
@@ -178,7 +178,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		cq->read_entry(&wc, i, buf);
 	}
 
-	fastlock_release(&cq->lock);
+	ofi_spin_unlock(&cq->lock);
 	return i ? i : ret;
 }
 
@@ -224,17 +224,17 @@ static int efa_cq_close(fid_t fid)
 
 	cq = container_of(fid, struct efa_cq, util_cq.cq_fid.fid);
 
-	fastlock_acquire(&cq->lock);
+	ofi_spin_lock(&cq->lock);
 	while (!slist_empty(&cq->wcq)) {
 		entry = slist_remove_head(&cq->wcq);
 		wce = container_of(entry, struct efa_wce, entry);
 		ofi_buf_free(wce);
 	}
-	fastlock_release(&cq->lock);
+	ofi_spin_unlock(&cq->lock);
 
 	ofi_bufpool_destroy(cq->wce_pool);
 
-	fastlock_destroy(&cq->lock);
+	ofi_spin_destroy(&cq->lock);
 
 	ret = -ibv_destroy_cq(cq->ibv_cq);
 	if (ret)
@@ -316,7 +316,7 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		goto err_destroy_pool;
 	}
 
-	fastlock_init(&cq->lock);
+	ofi_spin_init(&cq->lock);
 
 	slist_init(&cq->wcq);
 

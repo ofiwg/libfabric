@@ -100,7 +100,7 @@ int sock_cntr_progress(struct sock_cntr *cntr)
 	if (cntr->domain->progress_mode == FI_PROGRESS_AUTO)
 		return 0;
 
-	fastlock_acquire(&cntr->list_lock);
+	ofi_spin_lock(&cntr->list_lock);
 	for (entry = cntr->tx_list.next; entry != &cntr->tx_list;
 	     entry = entry->next) {
 		fid_entry = container_of(entry, struct fid_list_entry, entry);
@@ -121,7 +121,7 @@ int sock_cntr_progress(struct sock_cntr *cntr)
 			sock_pe_progress_ep_rx(cntr->domain->pe, rx_ctx->ep_attr);
 	}
 
-	fastlock_release(&cntr->list_lock);
+	ofi_spin_unlock(&cntr->list_lock);
 	return 0;
 }
 
@@ -132,7 +132,7 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 	struct dlist_entry *entry;
 	int ret = 0;
 
-	fastlock_acquire(&cntr->trigger_lock);
+	ofi_spin_lock(&cntr->trigger_lock);
 	for (entry = cntr->trigger_list.next;
 	     entry != &cntr->trigger_list;) {
 
@@ -207,7 +207,7 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 			break;
 		}
 	}
-	fastlock_release(&cntr->trigger_lock);
+	ofi_spin_unlock(&cntr->trigger_lock);
 }
 
 static uint64_t sock_cntr_read(struct fid_cntr *fid_cntr)
@@ -437,8 +437,8 @@ static int sock_cntr_close(struct fid *fid)
 	pthread_mutex_unlock(&cntr->mut);
 
 	pthread_mutex_destroy(&cntr->mut);
-	fastlock_destroy(&cntr->list_lock);
-	fastlock_destroy(&cntr->trigger_lock);
+	ofi_spin_destroy(&cntr->list_lock);
+	ofi_spin_destroy(&cntr->trigger_lock);
 
 	pthread_cond_destroy(&cntr->cond);
 	ofi_atomic_dec32(&cntr->domain->ref);
@@ -571,7 +571,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	}
 
 	pthread_mutex_init(&_cntr->mut, NULL);
-	fastlock_init(&_cntr->list_lock);
+	ofi_spin_init(&_cntr->list_lock);
 
 	ofi_atomic_initialize32(&_cntr->ref, 0);
 	ofi_atomic_initialize32(&_cntr->err_cnt, 0);
@@ -584,7 +584,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	dlist_init(&_cntr->rx_list);
 
 	dlist_init(&_cntr->trigger_list);
-	fastlock_init(&_cntr->trigger_lock);
+	ofi_spin_init(&_cntr->trigger_lock);
 
 	_cntr->cntr_fid.fid.fclass = FI_CLASS_CNTR;
 	_cntr->cntr_fid.fid.context = context;

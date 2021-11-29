@@ -59,7 +59,7 @@ int ofi_cq_write_overflow(struct util_cq *cq, void *context, uint64_t flags,
 {
 	struct util_cq_aux_entry *entry;
 
-	assert(fastlock_held(&cq->cq_lock));
+	assert(ofi_spin_held(&cq->cq_lock));
 	FI_DBG(cq->domain->prov, FI_LOG_CQ, "writing to CQ overflow list\n");
 	assert(ofi_cirque_freecnt(cq->cirq) <= 1);
 
@@ -84,7 +84,7 @@ int ofi_cq_insert_error(struct util_cq *cq,
 {
 	struct util_cq_aux_entry *entry;
 
-	assert(fastlock_held(&cq->cq_lock));
+	assert(ofi_spin_held(&cq->cq_lock));
 	assert(err_entry->err);
 	if (!(entry = calloc(1, sizeof(*entry))))
 		return -FI_ENOMEM;
@@ -429,8 +429,8 @@ int ofi_cq_cleanup(struct util_cq *cq)
 
 	ofi_atomic_dec32(&cq->domain->ref);
 	util_comp_cirq_free(cq->cirq);
-	fastlock_destroy(&cq->cq_lock);
-	fastlock_destroy(&cq->ep_list_lock);
+	ofi_spin_destroy(&cq->cq_lock);
+	ofi_spin_destroy(&cq->ep_list_lock);
 	free(cq->src);
 	return 0;
 }
@@ -485,15 +485,15 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	ofi_atomic_initialize32(&cq->ref, 0);
 	ofi_atomic_initialize32(&cq->signaled, 0);
 	dlist_init(&cq->ep_list);
-	fastlock_init(&cq->ep_list_lock);
-	fastlock_init(&cq->cq_lock);
+	ofi_spin_init(&cq->ep_list_lock);
+	ofi_spin_init(&cq->cq_lock);
 	if (cq->domain->threading == FI_THREAD_COMPLETION ||
 	    (cq->domain->threading == FI_THREAD_DOMAIN)) {
-		cq->cq_fastlock_acquire = ofi_fastlock_acquire_noop;
-		cq->cq_fastlock_release = ofi_fastlock_release_noop;
+		cq->cq_fastlock_acquire = ofi_spin_lock_noop;
+		cq->cq_fastlock_release = ofi_spin_unlock_noop;
 	} else {
-		cq->cq_fastlock_acquire = ofi_fastlock_acquire;
-		cq->cq_fastlock_release = ofi_fastlock_release;
+		cq->cq_fastlock_acquire = ofi_spin_lock_op;
+		cq->cq_fastlock_release = ofi_spin_unlock_op;
 	}
 	slist_init(&cq->aux_queue);
 	cq->read_entry = read_entry;

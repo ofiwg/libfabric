@@ -1358,7 +1358,7 @@ int ofi_pollfds_create(struct ofi_pollfds **pfds)
 	(*pfds)->fds[(*pfds)->nfds].events = POLLIN;
 	(*pfds)->context[(*pfds)->nfds++] = NULL;
 	slist_init(&(*pfds)->work_item_list);
-	fastlock_init(&(*pfds)->lock);
+	ofi_spin_init(&(*pfds)->lock);
 	return FI_SUCCESS;
 err2:
 	free((*pfds)->fds);
@@ -1380,10 +1380,10 @@ static int ofi_pollfds_ctl(struct ofi_pollfds *pfds, enum ofi_pollfds_ctl op,
 	item->events = events;
 	item->context = context;
 	item->type = op;
-	fastlock_acquire(&pfds->lock);
+	ofi_spin_lock(&pfds->lock);
 	slist_insert_tail(&item->entry, &pfds->work_item_list);
 	fd_signal_set(&pfds->signal);
-	fastlock_release(&pfds->lock);
+	ofi_spin_unlock(&pfds->lock);
 	return 0;
 }
 
@@ -1418,7 +1418,7 @@ int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 	struct ofi_pollfds_work_item *item;
 	int ret;
 
-	fastlock_acquire(&pfds->lock);
+	ofi_spin_lock(&pfds->lock);
 	ret = ofi_pollfds_do_mod(pfds, fd, events, context);
 	if (!ret)
 		goto signal;
@@ -1434,7 +1434,7 @@ int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 
 signal:
 	fd_signal_set(&pfds->signal);
-	fastlock_release(&pfds->lock);
+	ofi_spin_unlock(&pfds->lock);
 	return 0;
 }
 
@@ -1475,10 +1475,10 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 	int found = 0;
 	uint64_t start = (timeout > 0) ? ofi_gettime_ms() : 0;
 
-	fastlock_acquire(&pfds->lock);
+	ofi_spin_lock(&pfds->lock);
 	if (!slist_empty(&pfds->work_item_list))
 		ofi_pollfds_process_work(pfds);
-	fastlock_release(&pfds->lock);
+	ofi_spin_unlock(&pfds->lock);
 
 	do {
 		ret = poll(pfds->fds, pfds->nfds, timeout);
@@ -1487,10 +1487,10 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 		else if (ret == 0)
 			return 0;
 
-		fastlock_acquire(&pfds->lock);
+		ofi_spin_lock(&pfds->lock);
 		if (!slist_empty(&pfds->work_item_list))
 			ofi_pollfds_process_work(pfds);
-		fastlock_release(&pfds->lock);
+		ofi_spin_unlock(&pfds->lock);
 
 		if (pfds->fds[0].revents) {
 			fd_signal_reset(&pfds->signal);
@@ -1528,7 +1528,7 @@ void ofi_pollfds_close(struct ofi_pollfds *pfds)
 					    entry);
 			free(item);
 		}
-		fastlock_destroy(&pfds->lock);
+		ofi_spin_destroy(&pfds->lock);
 		fd_signal_free(&pfds->signal);
 		free(pfds->fds);
 		free(pfds);

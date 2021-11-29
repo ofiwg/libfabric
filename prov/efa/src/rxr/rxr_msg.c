@@ -278,7 +278,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	assert(msg->iov_count <= rxr_ep->tx_iov_limit);
 
 	efa_perfset_start(rxr_ep, perf_efa_tx);
-	fastlock_acquire(&rxr_ep->util_ep.lock);
+	ofi_spin_lock(&rxr_ep->util_ep.lock);
 
 	if (OFI_UNLIKELY(is_tx_res_full(rxr_ep))) {
 		err = -FI_EAGAIN;
@@ -311,7 +311,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 out:
-	fastlock_release(&rxr_ep->util_ep.lock);
+	ofi_spin_unlock(&rxr_ep->util_ep.lock);
 	efa_perfset_end(rxr_ep, perf_efa_tx);
 	return err;
 }
@@ -1051,7 +1051,7 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 		rx_op_flags &= ~FI_COMPLETION;
 	flags = flags | rx_op_flags;
 
-	fastlock_acquire(&rxr_ep->util_ep.lock);
+	ofi_spin_lock(&rxr_ep->util_ep.lock);
 	if (OFI_UNLIKELY(is_rx_res_full(rxr_ep))) {
 		ret = -FI_EAGAIN;
 		goto out;
@@ -1093,7 +1093,7 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 out:
-	fastlock_release(&rxr_ep->util_ep.lock);
+	ofi_spin_unlock(&rxr_ep->util_ep.lock);
 
 	efa_perfset_end(rxr_ep, perf_efa_recv);
 	return ret;
@@ -1131,7 +1131,7 @@ ssize_t rxr_msg_claim_trecv(struct fid_ep *ep_fid,
 	struct fi_context *context;
 
 	ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
-	fastlock_acquire(&ep->util_ep.lock);
+	ofi_spin_lock(&ep->util_ep.lock);
 
 	context = (struct fi_context *)msg->context;
 	rx_entry = (struct rxr_rx_entry *)context->internal[0];
@@ -1155,7 +1155,7 @@ ssize_t rxr_msg_claim_trecv(struct fid_ep *ep_fid,
 					 msg->addr, ofi_op_tagged, flags);
 
 out:
-	fastlock_release(&ep->util_ep.lock);
+	ofi_spin_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
@@ -1175,7 +1175,7 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 
 	ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
 
-	fastlock_acquire(&ep->util_ep.lock);
+	ofi_spin_lock(&ep->util_ep.lock);
 
 	rxr_ep_progress_internal(ep);
 
@@ -1229,7 +1229,7 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 				   rx_entry->cq_entry.data, tag);
 	rxr_rm_rx_cq_check(ep, ep->util_ep.rx_cq);
 out:
-	fastlock_release(&ep->util_ep.lock);
+	ofi_spin_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
