@@ -712,14 +712,14 @@ RXM_INI
 			"feature targets small to medium size message "
 			"transfers over the tcp provider.  (default: true)");
 
-	fi_param_define(&rxm_prov, "disable_passthru", FI_PARAM_BOOL,
-			"Disables passthru optimization.  Pass thru allows "
+	fi_param_define(&rxm_prov, "enable_passthru", FI_PARAM_BOOL,
+			"Enable passthru optimization.  Pass thru allows "
 			"rxm to pass all data transfer calls directly to the "
 			"core provider, which eliminates the rxm protocol and "
 			"related overhead.  Pass thru is an optimized path "
 			"to the tcp provider, depending on the capabilities "
 			"requested by the application.");
-	fi_param_get_bool(&rxm_prov, "disable_passthru", &rxm_passthru);
+	fi_param_get_bool(&rxm_prov, "enable_passthru", &rxm_passthru);
 
 	rxm_init_infos();
 	fi_param_get_size_t(&rxm_prov, "msg_tx_size", &rxm_msg_tx_size);
