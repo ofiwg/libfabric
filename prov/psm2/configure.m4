@@ -166,12 +166,12 @@ AC_DEFUN([FI_PSM2_CONFIGURE],[
 ])
 
 AC_ARG_WITH([psm2-src],
-	    AC_HELP_STRING([--with-psm2-src=DIR],
+	    AS_HELP_STRING([--with-psm2-src=DIR],
                            [Provide path to the source code of PSM2 library
 			    to be compiled into the provider]))
 
 AC_ARG_WITH([numa],
-	    AC_HELP_STRING([--with-numa=DIR],
+	    AS_HELP_STRING([--with-numa=DIR],
                            [Provide path to where the numactl-devel or libnuma-devel
 			    package is installed]))
 

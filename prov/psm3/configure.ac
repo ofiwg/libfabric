@@ -112,7 +112,7 @@ AS_IF([test x$with_psm3_rv = xno],
 	      ])
       ])
 AC_ARG_WITH([psm-headers],
-	    [AC_HELP_STRING([--with-psm-headers=DIR],
+	    [AS_HELP_STRING([--with-psm-headers=DIR],
 			    [Provide path to where the psm headers are installed for split build. @<:@default=no@:>@])],
 	    [], [with_psm_headers="no"])
 if test "$with_psm_headers" != "" && test "$with_psm_headers" != "no"; then
@@ -212,7 +212,7 @@ debug_c_other_flags="-fstack-protector-strong"
 picky_c_warn_flags="-Wno-long-long -Wmissing-prototypes -Wstrict-prototypes -Wcomment -pedantic"
 
 AC_ARG_WITH([build_id],
-	    [AC_HELP_STRING([--with-build_id],
+	    [AS_HELP_STRING([--with-build_id],
 			    [Enable build_id annotation @<:@default=no@:>@])],
 	    [], [with_build_id=no])
 AS_IF([test x"$with_build_id" = x"no"], [with_build_id=""])
@@ -233,7 +233,7 @@ AM_PROG_AS()
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
 AC_ARG_WITH([valgrind],
-    AC_HELP_STRING([--with-valgrind],
+    AS_HELP_STRING([--with-valgrind],
 		   [Enable valgrind annotations @<:@default=no@:>@]))
 
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
@@ -301,7 +301,7 @@ LT_OUTPUT
 
 dnl dlopen support is optional
 AC_ARG_WITH([dlopen],
-	AC_HELP_STRING([--with-dlopen],
+	AS_HELP_STRING([--with-dlopen],
 		       [dl-loadable provider support @<:@default=yes@:>@]),
 	)
 
@@ -314,7 +314,7 @@ fi
 
 dnl handle picky option
 AC_ARG_ENABLE([picky],
-    [AC_HELP_STRING([--enable-picky],
+    [AS_HELP_STRING([--enable-picky],
                     [Enable developer-level compiler pickyness when building @<:@default=no@:>@])])
 AS_IF([test x"$enable_picky" = x"yes" && test x"$GCC" = x"yes"],
       [AS_IF([test x"$enable_debug" = x"no"],
@@ -631,7 +631,7 @@ AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
 
 dnl Check for CUDA runtime libraries.
 AC_ARG_WITH([cuda],
-	    [AC_HELP_STRING([--with-cuda=DIR],
+	    [AS_HELP_STRING([--with-cuda=DIR],
 			    [Provide path to where the CUDA development
 			    and runtime libraries are installed.])],
 	    [], [])
