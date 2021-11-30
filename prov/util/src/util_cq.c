@@ -430,7 +430,7 @@ int ofi_cq_cleanup(struct util_cq *cq)
 	ofi_atomic_dec32(&cq->domain->ref);
 	util_comp_cirq_free(cq->cirq);
 	ofi_spin_destroy(&cq->cq_lock);
-	ofi_spin_destroy(&cq->ep_list_lock);
+	ofi_mutex_destroy(&cq->ep_list_lock);
 	free(cq->src);
 	return 0;
 }
@@ -485,15 +485,19 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	ofi_atomic_initialize32(&cq->ref, 0);
 	ofi_atomic_initialize32(&cq->signaled, 0);
 	dlist_init(&cq->ep_list);
-	ofi_spin_init(&cq->ep_list_lock);
+	ofi_mutex_init(&cq->ep_list_lock);
 	ofi_spin_init(&cq->cq_lock);
 	if (cq->domain->threading == FI_THREAD_COMPLETION ||
 	    (cq->domain->threading == FI_THREAD_DOMAIN)) {
 		cq->cq_fastlock_acquire = ofi_spin_lock_noop;
 		cq->cq_fastlock_release = ofi_spin_unlock_noop;
+		cq->cq_mutex_lock = ofi_mutex_lock_noop;
+		cq->cq_mutex_unlock = ofi_mutex_unlock_noop;
 	} else {
 		cq->cq_fastlock_acquire = ofi_spin_lock_op;
 		cq->cq_fastlock_release = ofi_spin_unlock_op;
+		cq->cq_mutex_lock = ofi_mutex_lock_op;
+		cq->cq_mutex_unlock = ofi_mutex_unlock_op;
 	}
 	slist_init(&cq->aux_queue);
 	cq->read_entry = read_entry;
@@ -560,14 +564,14 @@ void ofi_cq_progress(struct util_cq *cq)
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
 
-	cq->cq_fastlock_acquire(&cq->ep_list_lock);
+	cq->cq_mutex_lock(&cq->ep_list_lock);
 	dlist_foreach(&cq->ep_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
 		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
 		ep->progress(ep);
 
 	}
-	cq->cq_fastlock_release(&cq->ep_list_lock);
+	cq->cq_mutex_unlock(&cq->ep_list_lock);
 }
 
 int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,

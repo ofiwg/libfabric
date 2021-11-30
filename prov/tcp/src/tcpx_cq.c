@@ -113,9 +113,9 @@ void tcpx_progress(struct dlist_entry *ep_list, struct util_wait *wait)
 
 void tcpx_cq_progress(struct util_cq *cq)
 {
-	cq->cq_fastlock_acquire(&cq->ep_list_lock);
+	cq->cq_mutex_lock(&cq->ep_list_lock);
 	tcpx_progress(&cq->ep_list, cq->wait);
-	cq->cq_fastlock_release(&cq->ep_list_lock);
+	cq->cq_mutex_unlock(&cq->ep_list_lock);
 }
 
 static int tcpx_cq_close(struct fid *fid)
@@ -301,9 +301,9 @@ free_cq:
 
 void tcpx_cntr_progress(struct util_cntr *cntr)
 {
-	ofi_spin_lock(&cntr->ep_list_lock);
+	ofi_mutex_lock(&cntr->ep_list_lock);
 	tcpx_progress(&cntr->ep_list, cntr->wait);
-	ofi_spin_unlock(&cntr->ep_list_lock);
+	ofi_mutex_unlock(&cntr->ep_list_lock);
 }
 
 static struct util_cntr *

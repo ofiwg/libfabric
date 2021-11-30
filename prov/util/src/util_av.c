@@ -410,7 +410,7 @@ int ofi_av_close_lightweight(struct util_av *av)
 	if (av->eq)
 		ofi_atomic_dec32(&av->eq->ref);
 
-	ofi_spin_destroy(&av->ep_list_lock);
+	ofi_mutex_destroy(&av->ep_list_lock);
 
 	ofi_atomic_dec32(&av->domain->ref);
 	ofi_spin_destroy(&av->lock);
@@ -537,7 +537,7 @@ int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr 
 	 */
 	av->context = context;
 	av->domain = domain;
-	ofi_spin_init(&av->ep_list_lock);
+	ofi_mutex_init(&av->ep_list_lock);
 	dlist_init(&av->ep_list);
 	ofi_atomic_inc32(&domain->ref);
 	return 0;

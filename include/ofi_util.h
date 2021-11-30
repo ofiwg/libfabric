@@ -517,9 +517,11 @@ struct util_cq {
 	struct util_wait	*wait;
 	ofi_atomic32_t		ref;
 	struct dlist_entry	ep_list;
-	ofi_spin_t		ep_list_lock;
+	ofi_mutex_t		ep_list_lock;
 	ofi_spin_t		cq_lock;
-	ofi_spin_lock_t	cq_fastlock_acquire;
+	ofi_mutex_lock_t	cq_mutex_lock;
+	ofi_mutex_unlock_t	cq_mutex_unlock;
+	ofi_spin_lock_t		cq_fastlock_acquire;
 	ofi_spin_unlock_t	cq_fastlock_release;
 
 	struct util_comp_cirq	*cirq;
@@ -668,7 +670,7 @@ struct util_cntr {
 	uint64_t		checkpoint_err;
 
 	struct dlist_entry	ep_list;
-	ofi_spin_t		ep_list_lock;
+	ofi_mutex_t		ep_list_lock;
 
 	int			internal_wait;
 	ofi_cntr_progress_func	progress;
@@ -735,7 +737,7 @@ struct util_av {
 	 */
 	size_t			context_offset;
 	struct dlist_entry	ep_list;
-	ofi_spin_t		ep_list_lock;
+	ofi_mutex_t		ep_list_lock;
 };
 
 struct util_av_attr {

@@ -52,7 +52,7 @@ static const char *rxd_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 
 	cq = container_of(cq_fid, struct rxd_cq, util_cq.cq_fid);
 
-	ofi_spin_lock(&cq->util_cq.ep_list_lock);
+	ofi_mutex_lock(&cq->util_cq.ep_list_lock);
 	assert(!dlist_empty(&cq->util_cq.ep_list));
 	fid_entry = container_of(cq->util_cq.ep_list.next,
 				struct fid_list_entry, entry);
@@ -60,7 +60,7 @@ static const char *rxd_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 	ep = container_of(util_ep, struct rxd_ep, util_ep);
 
 	str = fi_cq_strerror(ep->dg_cq, prov_errno, err_data, buf, len);
-	ofi_spin_unlock(&cq->util_cq.ep_list_lock);
+	ofi_mutex_unlock(&cq->util_cq.ep_list_lock);
 	return str;
 }
 
@@ -1254,7 +1254,7 @@ ssize_t rxd_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		}
 
 		ep_retry = -1;
-		cq->cq_fastlock_acquire(&cq->ep_list_lock);
+		cq->cq_mutex_lock(&cq->ep_list_lock);
 		dlist_foreach_container(&cq->ep_list, struct fid_list_entry,
 					fid_entry, entry) {
 			ep = container_of(fid_entry->fid, struct rxd_ep,
@@ -1264,7 +1264,7 @@ ssize_t rxd_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			ep_retry = ep_retry == -1 ? ep->next_retry :
 					MIN(ep_retry, ep->next_retry);
 		}
-		cq->cq_fastlock_release(&cq->ep_list_lock);
+		cq->cq_mutex_unlock(&cq->ep_list_lock);
 
 		ret = fi_wait(&cq->wait->wait_fid, ep_retry == -1 ?
 			      timeout : rxd_get_timeout(ep_retry));
