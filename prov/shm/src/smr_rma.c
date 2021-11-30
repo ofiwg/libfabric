@@ -121,7 +121,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 		    (FI_REMOTE_CQ_DATA | FI_DELIVERY_COMPLETE)) &&
 		     rma_count == 1 && smr_cma_enabled(ep, peer_smr));
 
-	fastlock_acquire(&peer_smr->lock);
+	pthread_mutex_lock(&peer_smr->lock);
 	if (peer_smr->cmd_cnt < cmds ||
 	    smr_peer_data(ep->region)[id].sar_status) {
 		ret = -FI_EAGAIN;
@@ -248,7 +248,7 @@ commit_comp:
 unlock_cq:
 	fastlock_release(&ep->util_ep.tx_cq->cq_lock);
 unlock_region:
-	fastlock_release(&peer_smr->lock);
+	pthread_mutex_unlock(&peer_smr->lock);
 	return ret;
 }
 
@@ -386,7 +386,7 @@ ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	cmds = 1 + !(domain->fast_rma && !(flags & FI_REMOTE_CQ_DATA) &&
 		     smr_cma_enabled(ep, peer_smr));
 
-	fastlock_acquire(&peer_smr->lock);
+	pthread_mutex_lock(&peer_smr->lock);
 	if (peer_smr->cmd_cnt < cmds ||
 	    smr_peer_data(ep->region)[id].sar_status) {
 		ret = -FI_EAGAIN;
@@ -429,7 +429,7 @@ commit:
 	smr_signal(peer_smr);
 	ofi_ep_tx_cntr_inc_func(&ep->util_ep, ofi_op_write);
 unlock_region:
-	fastlock_release(&peer_smr->lock);
+	pthread_mutex_unlock(&peer_smr->lock);
 	return ret;
 }
 

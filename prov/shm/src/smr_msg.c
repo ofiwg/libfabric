@@ -95,7 +95,7 @@ ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov, void **desc
 	assert(iov_count <= SMR_IOV_LIMIT);
 	assert(!(flags & FI_MULTI_RECV) || iov_count == 1);
 
-	fastlock_acquire(&ep->region->lock);
+	pthread_mutex_lock(&ep->region->lock);
 	fastlock_acquire(&ep->util_ep.rx_cq->cq_lock);
 
 	entry = smr_get_recv_entry(ep, iov, desc, iov_count, addr, context, tag,
@@ -107,7 +107,7 @@ ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov, void **desc
 	ret = smr_progress_unexp_queue(ep, entry, unexp_queue);
 out:
 	fastlock_release(&ep->util_ep.rx_cq->cq_lock);
-	fastlock_release(&ep->region->lock);
+	pthread_mutex_unlock(&ep->region->lock);
 	return ret;
 }
 
@@ -178,7 +178,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
 
-	fastlock_acquire(&peer_smr->lock);
+	pthread_mutex_lock(&peer_smr->lock);
 	if (!peer_smr->cmd_cnt || smr_peer_data(ep->region)[peer_id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock_region;
@@ -272,7 +272,7 @@ commit:
 unlock_cq:
 	fastlock_release(&ep->util_ep.tx_cq->cq_lock);
 unlock_region:
-	fastlock_release(&peer_smr->lock);
+	pthread_mutex_unlock(&peer_smr->lock);
 	return ret;
 }
 
@@ -341,7 +341,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
 
-	fastlock_acquire(&peer_smr->lock);
+	pthread_mutex_lock(&peer_smr->lock);
 	if (!peer_smr->cmd_cnt || smr_peer_data(ep->region)[id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -362,7 +362,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	smr_signal(peer_smr);
 unlock:
-	fastlock_release(&peer_smr->lock);
+	pthread_mutex_unlock(&peer_smr->lock);
 
 	return ret;
 }
