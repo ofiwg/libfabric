@@ -59,7 +59,7 @@ void tcpx_progress(struct dlist_entry *ep_list, struct util_wait *wait)
 		ep = container_of(fid_entry->fid, struct tcpx_ep,
 				  util_ep.ep_fid.fid);
 
-		ofi_spin_lock(&ep->lock);
+		ofi_mutex_lock(&ep->lock);
 		/* We need to progress receives in the case where we're waiting
 		 * on the application to post a buffer to consume a receive
 		 * that we've already read from the kernel.  If the message is
@@ -73,7 +73,7 @@ void tcpx_progress(struct dlist_entry *ep_list, struct util_wait *wait)
 		}
 
 		(void) tcpx_update_epoll(ep);
-		ofi_spin_unlock(&ep->lock);
+		ofi_mutex_unlock(&ep->lock);
 	}
 
 	if (wait_fd->util_wait.wait_obj == FI_WAIT_FD) {
@@ -100,14 +100,14 @@ void tcpx_progress(struct dlist_entry *ep_list, struct util_wait *wait)
 		}
 
 		ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
-		ofi_spin_lock(&ep->lock);
+		ofi_mutex_lock(&ep->lock);
 		if (events[i].events & errevent)
 			tcpx_progress_async(ep);
 		if (events[i].events & inevent)
 			tcpx_progress_rx(ep);
 		if (events[i].events & outevent)
 			tcpx_progress_tx(ep);
-		ofi_spin_unlock(&ep->lock);
+		ofi_mutex_unlock(&ep->lock);
 	}
 }
 

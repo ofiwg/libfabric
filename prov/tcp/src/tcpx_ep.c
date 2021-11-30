@@ -185,9 +185,9 @@ static int tcpx_ep_connect(struct fid_ep *ep_fid, const void *addr,
 	return 0;
 
 disable:
-	ofi_spin_lock(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	tcpx_ep_disable(ep, -ret);
-	ofi_spin_unlock(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 free:
 	tcpx_free_cm_ctx(cm_ctx);
 	return ret;
@@ -255,7 +255,7 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 {
 	struct tcpx_cq *cq;
 
-	assert(ofi_spin_held(&ep->lock));
+	assert(ofi_mutex_held(&ep->lock));
 	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 	if (ep->cur_tx.entry) {
 		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
@@ -289,7 +289,7 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 	struct fi_eq_err_entry err_entry = {0};
 	int ret;
 
-	assert(ofi_spin_held(&ep->lock));
+	assert(ofi_mutex_held(&ep->lock));
 	switch (ep->state) {
 	case TCPX_RCVD_REQ:
 		break;
@@ -349,9 +349,9 @@ static int tcpx_ep_shutdown(struct fid_ep *ep_fid, uint64_t flags)
 	ep = container_of(ep_fid, struct tcpx_ep, util_ep.ep_fid);
 	(void) ofi_bsock_flush(&ep->bsock);
 
-	ofi_spin_lock(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	tcpx_ep_disable(ep, 0);
-	ofi_spin_unlock(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 
 	return FI_SUCCESS;
 }
@@ -500,7 +500,7 @@ static void tcpx_ep_cancel_rx(struct tcpx_ep *ep, void *context)
 	struct tcpx_xfer_entry *xfer_entry;
 	struct tcpx_cq *cq;
 
-	assert(ofi_spin_held(&ep->lock));
+	assert(ofi_mutex_held(&ep->lock));
 
 	/* To cancel an active receive, we would need to flush the socket of
 	 * all data associated with that message.  Since some of that data
@@ -538,9 +538,9 @@ static ssize_t tcpx_ep_cancel(fid_t fid, void *context)
 
 	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
-	ofi_spin_lock(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	tcpx_ep_cancel_rx(ep, context);
-	ofi_spin_unlock(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 
 	return 0;
 }
@@ -583,7 +583,7 @@ static int tcpx_ep_close(struct fid *fid)
 
 	/* eq->close_lock protects from processing stale connection events */
 	if (eq)
-		ofi_spin_lock(&eq->close_lock);
+		ofi_mutex_lock(&eq->close_lock);
 
 	tcpx_ep_del_fd(ep);
 
@@ -591,7 +591,7 @@ static int tcpx_ep_close(struct fid *fid)
 		ofi_wait_del_fd(ep->util_ep.eq->wait, ep->bsock.sock);
 
 	if (eq)
-		ofi_spin_unlock(&eq->close_lock);
+		ofi_mutex_unlock(&eq->close_lock);
 
 	if (ep->fid && ep->fid->fclass == TCPX_CLASS_CM)
 		tcpx_free_cm_ctx(ep->cm_ctx);
@@ -599,9 +599,9 @@ static int tcpx_ep_close(struct fid *fid)
 	/* Lock not technically needed, since we're freeing the EP.  But it's
 	 * harmless to acquire and silences static code analysis tools.
 	 */
-	ofi_spin_lock(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	tcpx_ep_flush_all_queues(ep);
-	ofi_spin_unlock(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 
 	if (eq) {
 		ofi_eq_remove_fid_events(ep->util_ep.eq,
@@ -609,7 +609,7 @@ static int tcpx_ep_close(struct fid *fid)
 	}
 	ofi_close_socket(ep->bsock.sock);
 	ofi_endpoint_close(&ep->util_ep);
-	ofi_spin_destroy(&ep->lock);
+	ofi_mutex_destroy(&ep->lock);
 
 	free(ep);
 	return 0;
@@ -813,7 +813,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		}
 	}
 
-	ret = ofi_spin_init(&ep->lock);
+	ret = ofi_mutex_init(&ep->lock);
 	if (ret)
 		goto err3;
 

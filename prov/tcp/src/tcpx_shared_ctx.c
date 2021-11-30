@@ -50,7 +50,7 @@ tcpx_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	srx = container_of(ep_fid, struct tcpx_rx_ctx, rx_fid);
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
 
-	ofi_spin_lock(&srx->lock);
+	ofi_mutex_lock(&srx->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -65,7 +65,7 @@ tcpx_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
 unlock:
-	ofi_spin_unlock(&srx->lock);
+	ofi_mutex_unlock(&srx->lock);
 	return ret;
 }
 
@@ -79,7 +79,7 @@ tcpx_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	srx = container_of(ep_fid, struct tcpx_rx_ctx, rx_fid);
 
-	ofi_spin_lock(&srx->lock);
+	ofi_mutex_lock(&srx->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -94,7 +94,7 @@ tcpx_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
 unlock:
-	ofi_spin_unlock(&srx->lock);
+	ofi_mutex_unlock(&srx->lock);
 	return ret;
 }
 
@@ -109,7 +109,7 @@ tcpx_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	srx = container_of(ep_fid, struct tcpx_rx_ctx, rx_fid);
 	assert(count <= TCPX_IOV_LIMIT);
 
-	ofi_spin_lock(&srx->lock);
+	ofi_mutex_lock(&srx->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -123,7 +123,7 @@ tcpx_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
 unlock:
-	ofi_spin_unlock(&srx->lock);
+	ofi_mutex_unlock(&srx->lock);
 	return ret;
 }
 
@@ -169,7 +169,7 @@ tcpx_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	if (flags & FI_PEEK)
 		return tcpx_srx_peek(srx, msg, flags);
 
-	ofi_spin_lock(&srx->lock);
+	ofi_mutex_lock(&srx->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -187,7 +187,7 @@ tcpx_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	slist_insert_tail(&recv_entry->entry, &srx->tag_queue);
 unlock:
-	ofi_spin_unlock(&srx->lock);
+	ofi_mutex_unlock(&srx->lock);
 	return ret;
 }
 
@@ -201,7 +201,7 @@ tcpx_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	srx = container_of(ep_fid, struct tcpx_rx_ctx, rx_fid);
 
-	ofi_spin_lock(&srx->lock);
+	ofi_mutex_lock(&srx->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -219,7 +219,7 @@ tcpx_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	slist_insert_tail(&recv_entry->entry, &srx->tag_queue);
 unlock:
-	ofi_spin_unlock(&srx->lock);
+	ofi_mutex_unlock(&srx->lock);
 	return ret;
 }
 
@@ -235,7 +235,7 @@ tcpx_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	srx = container_of(ep_fid, struct tcpx_rx_ctx, rx_fid);
 	assert(count <= TCPX_IOV_LIMIT);
 
-	ofi_spin_lock(&srx->lock);
+	ofi_mutex_lock(&srx->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -252,7 +252,7 @@ tcpx_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	slist_insert_tail(&recv_entry->entry, &srx->tag_queue);
 unlock:
-	ofi_spin_unlock(&srx->lock);
+	ofi_mutex_unlock(&srx->lock);
 	return ret;
 }
 
@@ -275,16 +275,16 @@ tcpx_match_tag(struct tcpx_rx_ctx *srx, struct tcpx_ep *ep, uint64_t tag)
 	struct tcpx_xfer_entry *rx_entry;
 	struct slist_entry *item, *prev;
 
-	ofi_spin_lock(&srx->lock);
+	ofi_mutex_lock(&srx->lock);
 	slist_foreach(&srx->tag_queue, item, prev) {
 		rx_entry = container_of(item, struct tcpx_xfer_entry, entry);
 		if (ofi_match_tag(rx_entry->tag, rx_entry->ignore, tag)) {
 			slist_remove(&srx->tag_queue, item, prev);
-			ofi_spin_unlock(&srx->lock);
+			ofi_mutex_unlock(&srx->lock);
 			return rx_entry;
 		}
 	}
-	ofi_spin_unlock(&srx->lock);
+	ofi_mutex_unlock(&srx->lock);
 
 	return NULL;
 }
@@ -295,17 +295,17 @@ tcpx_match_tag_addr(struct tcpx_rx_ctx *srx, struct tcpx_ep *ep, uint64_t tag)
 	struct tcpx_xfer_entry *rx_entry;
 	struct slist_entry *item, *prev;
 
-	ofi_spin_lock(&srx->lock);
+	ofi_mutex_lock(&srx->lock);
 	slist_foreach(&srx->tag_queue, item, prev) {
 		rx_entry = container_of(item, struct tcpx_xfer_entry, entry);
 		if (ofi_match_tag(rx_entry->tag, rx_entry->ignore, tag) &&
 		    ofi_match_addr(rx_entry->src_addr, ep->src_addr)) {
 			slist_remove(&srx->tag_queue, item, prev);
-			ofi_spin_unlock(&srx->lock);
+			ofi_mutex_unlock(&srx->lock);
 			return rx_entry;
 		}
 	}
-	ofi_spin_unlock(&srx->lock);
+	ofi_mutex_unlock(&srx->lock);
 
 	return NULL;
 }
@@ -316,7 +316,7 @@ tcpx_srx_cancel_rx(struct tcpx_rx_ctx *srx, struct slist *queue, void *context)
 	struct slist_entry *cur, *prev;
 	struct tcpx_xfer_entry *xfer_entry;
 
-	assert(ofi_spin_held(&srx->lock));
+	assert(ofi_mutex_held(&srx->lock));
 
 	slist_foreach(queue, cur, prev) {
 		xfer_entry = container_of(cur, struct tcpx_xfer_entry, entry);
@@ -338,10 +338,10 @@ static ssize_t tcpx_srx_cancel(fid_t fid, void *context)
 
 	srx = container_of(fid, struct tcpx_rx_ctx, rx_fid.fid);
 
-	ofi_spin_lock(&srx->lock);
+	ofi_mutex_lock(&srx->lock);
 	if (!tcpx_srx_cancel_rx(srx, &srx->tag_queue, context))
 		tcpx_srx_cancel_rx(srx, &srx->rx_queue, context);
-	ofi_spin_unlock(&srx->lock);
+	ofi_mutex_unlock(&srx->lock);
 
 	return 0;
 }
@@ -401,7 +401,7 @@ static int tcpx_srx_close(struct fid *fid)
 	if (srx->cq)
 		ofi_atomic_dec32(&srx->cq->util_cq.ref);
 	ofi_bufpool_destroy(srx->buf_pool);
-	ofi_spin_destroy(&srx->lock);
+	ofi_mutex_destroy(&srx->lock);
 	free(srx);
 	return FI_SUCCESS;
 }
@@ -434,7 +434,7 @@ int tcpx_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 	slist_init(&srx->rx_queue);
 	slist_init(&srx->tag_queue);
 
-	ret = ofi_spin_init(&srx->lock);
+	ret = ofi_mutex_init(&srx->lock);
 	if (ret)
 		goto err1;
 
@@ -450,7 +450,7 @@ int tcpx_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 	*rx_ep = &srx->rx_fid;
 	return FI_SUCCESS;
 err2:
-	ofi_spin_destroy(&srx->lock);
+	ofi_mutex_destroy(&srx->lock);
 err1:
 	free(srx);
 	return ret;
