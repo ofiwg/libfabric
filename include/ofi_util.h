@@ -184,7 +184,7 @@ struct util_fabric_info {
 struct util_fabric {
 	struct fid_fabric	fabric_fid;
 	struct dlist_entry	list_entry;
-	ofi_spin_t		lock;
+	ofi_mutex_t		lock;
 	ofi_atomic32_t		ref;
 	const char		*name;
 	const struct fi_provider *prov;
@@ -207,7 +207,7 @@ struct util_domain {
 	struct dlist_entry	list_entry;
 	struct util_fabric	*fabric;
 	struct util_eq		*eq;
-	ofi_spin_t		lock;
+	ofi_mutex_t		lock;
 	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 
@@ -308,7 +308,7 @@ struct util_ep {
 	uint64_t		flags;
 	ofi_ep_progress_func	progress;
 	ofi_spin_t		lock;
-	ofi_spin_lock_t	lock_acquire;
+	ofi_spin_lock_t		lock_acquire;
 	ofi_spin_unlock_t	lock_release;
 
 	struct bitmask		*coll_cid_mask;
@@ -429,7 +429,7 @@ struct util_wait {
 	fi_wait_try_func	wait_try;
 
 	struct dlist_entry	fid_list;
-	ofi_spin_t		lock;
+	ofi_mutex_t		lock;
 };
 
 int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
@@ -482,7 +482,7 @@ int ofi_wait_del_fid(struct util_wait *wait, fid_t fid);
 struct util_wait_yield {
 	struct util_wait	util_wait;
 	int			signal;
-	ofi_spin_t		signal_lock;
+	ofi_mutex_t		signal_lock;
 };
 
 int ofi_wait_yield_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
@@ -721,7 +721,7 @@ struct util_av {
 	struct util_domain	*domain;
 	struct util_eq		*eq;
 	ofi_atomic32_t		ref;
-	ofi_spin_t		lock;
+	ofi_mutex_t		lock;
 	const struct fi_provider *prov;
 
 	struct util_av_entry	*hash;
@@ -816,7 +816,7 @@ struct util_poll {
 	struct fid_poll		poll_fid;
 	struct util_domain	*domain;
 	struct dlist_entry	fid_list;
-	ofi_spin_t		lock;
+	ofi_mutex_t		lock;
 	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 };
@@ -833,7 +833,7 @@ struct util_eq {
 	struct fid_eq		eq_fid;
 	struct util_fabric	*fabric;
 	struct util_wait	*wait;
-	ofi_spin_t		lock;
+	ofi_mutex_t		lock;
 	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 

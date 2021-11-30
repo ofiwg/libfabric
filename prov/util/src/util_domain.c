@@ -81,12 +81,12 @@ int ofi_domain_close(struct util_domain *domain)
 	if (domain->mr_map.rbtree)
 		ofi_mr_map_close(&domain->mr_map);
 
-	ofi_spin_lock(&domain->fabric->lock);
+	ofi_mutex_lock(&domain->fabric->lock);
 	dlist_remove(&domain->list_entry);
-	ofi_spin_unlock(&domain->fabric->lock);
+	ofi_mutex_unlock(&domain->fabric->lock);
 
 	free(domain->name);
-	ofi_spin_destroy(&domain->lock);
+	ofi_mutex_destroy(&domain->lock);
 	ofi_atomic_dec32(&domain->fabric->ref);
 	return 0;
 }
@@ -102,7 +102,7 @@ static int util_domain_init(struct util_domain *domain,
 			    const struct fi_info *info)
 {
 	ofi_atomic_initialize32(&domain->ref, 0);
-	ofi_spin_init(&domain->lock);
+	ofi_mutex_init(&domain->lock);
 	domain->info_domain_caps = info->caps | info->domain_attr->caps;
 	domain->info_domain_mode = info->mode | info->domain_attr->mode;
 	domain->mr_mode = info->domain_attr->mr_mode;
@@ -141,9 +141,9 @@ int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 		return ret;
 	}
 
-	ofi_spin_lock(&fabric->lock);
+	ofi_mutex_lock(&fabric->lock);
 	dlist_insert_tail(&domain->list_entry, &fabric->domain_list);
-	ofi_spin_unlock(&fabric->lock);
+	ofi_mutex_unlock(&fabric->lock);
 
 	ofi_atomic_inc32(&fabric->ref);
 	return 0;

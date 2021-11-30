@@ -214,7 +214,7 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 			FI_DBG(prov, FI_LOG_CORE, "Found opened fabric\n");
 			(*info)->fabric_attr->fabric = &fabric->fabric_fid;
 
-			ofi_spin_lock(&fabric->lock);
+			ofi_mutex_lock(&fabric->lock);
 			item = dlist_find_first_match(&fabric->domain_list,
 						      util_find_domain, *info);
 			if (item) {
@@ -225,7 +225,7 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 				(*info)->domain_attr->domain =
 						&domain->domain_fid;
 			}
-			ofi_spin_unlock(&fabric->lock);
+			ofi_mutex_unlock(&fabric->lock);
 
 		}
 		pthread_mutex_unlock(&common_locks.util_fabric_lock);

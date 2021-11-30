@@ -208,7 +208,7 @@ static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		memset(sync_err, 0, sizeof(*sync_err) * count);
 	}
 
-	ofi_spin_lock(&av->util_av.lock);
+	ofi_mutex_lock(&av->util_av.lock);
 	if (!av->dg_addrlen) {
 		ret = rxd_av_set_addrlen(av, addr);
 		if (ret)
@@ -257,7 +257,7 @@ static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	}
 out:
 	av->dg_av_used += success_cnt;
-	ofi_spin_unlock(&av->util_av.lock);
+	ofi_mutex_unlock(&av->util_av.lock);
 
 	for (; i < count; i++) {
 		if (fi_addr)
@@ -299,7 +299,7 @@ static int rxd_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 	struct rxd_av *av;
 
 	av = container_of(av_fid, struct rxd_av, util_av.av_fid);
-	ofi_spin_lock(&av->util_av.lock);
+	ofi_mutex_lock(&av->util_av.lock);
 	for (i = 0; i < count; i++) {
 		rxd_addr = (intptr_t)ofi_idx_lookup(&av->fi_addr_idx,
 						    RXD_IDX_OFFSET(fi_addr[i]));
@@ -315,7 +315,7 @@ err:
 	if (ret)
 		FI_WARN(&rxd_prov, FI_LOG_AV, "Unable to remove address from AV\n");
 
-	ofi_spin_unlock(&av->util_av.lock);
+	ofi_mutex_unlock(&av->util_av.lock);
 	return ret;
 }
 

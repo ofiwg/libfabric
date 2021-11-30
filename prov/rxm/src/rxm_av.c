@@ -39,18 +39,18 @@ size_t rxm_av_max_peers(struct rxm_av *av)
 {
 	size_t cnt;
 
-	ofi_spin_lock(&av->util_av.lock);
+	ofi_mutex_lock(&av->util_av.lock);
 	cnt = av->peer_pool->entry_cnt;
-	ofi_spin_unlock(&av->util_av.lock);
+	ofi_mutex_unlock(&av->util_av.lock);
 	return cnt;
 }
 
 struct rxm_conn *rxm_av_alloc_conn(struct rxm_av *av)
 {
 	struct rxm_conn *conn;
-	ofi_spin_lock(&av->util_av.lock);
+	ofi_mutex_lock(&av->util_av.lock);
 	conn = ofi_buf_alloc(av->conn_pool);
-	ofi_spin_unlock(&av->util_av.lock);
+	ofi_mutex_unlock(&av->util_av.lock);
 	return conn;
 }
 
@@ -58,9 +58,9 @@ void rxm_av_free_conn(struct rxm_conn *conn)
 {
 	struct rxm_av *av;
 	av = container_of(conn->ep->util_ep.av, struct rxm_av, util_av);
-	ofi_spin_lock(&av->util_av.lock);
+	ofi_mutex_lock(&av->util_av.lock);
 	ofi_buf_free(conn);
-	ofi_spin_unlock(&av->util_av.lock);
+	ofi_mutex_unlock(&av->util_av.lock);
 }
 
 static int rxm_addr_compare(struct ofi_rbmap *map, void *key, void *data)
@@ -74,7 +74,7 @@ rxm_alloc_peer(struct rxm_av *av, const void *addr)
 {
 	struct rxm_peer_addr *peer;
 
-	assert(ofi_spin_held(&av->util_av.lock));
+	assert(ofi_mutex_held(&av->util_av.lock));
 	peer = ofi_ibuf_alloc(av->peer_pool);
 	if (!peer)
 		return NULL;
@@ -95,7 +95,7 @@ rxm_alloc_peer(struct rxm_av *av, const void *addr)
 
 static void rxm_free_peer(struct rxm_peer_addr *peer)
 {
-	assert(ofi_spin_held(&peer->av->util_av.lock));
+	assert(ofi_mutex_held(&peer->av->util_av.lock));
 	assert(!peer->refcnt);
 	ofi_rbmap_delete(&peer->av->addr_map, peer->node);
 	ofi_ibuf_free(peer);
@@ -107,7 +107,7 @@ rxm_get_peer(struct rxm_av *av, const void *addr)
 	struct rxm_peer_addr *peer;
 	struct ofi_rbnode *node;
 
-	ofi_spin_lock(&av->util_av.lock);
+	ofi_mutex_lock(&av->util_av.lock);
 	node = ofi_rbmap_find(&av->addr_map, (void *) addr);
 	if (node) {
 		peer = node->data;
@@ -116,7 +116,7 @@ rxm_get_peer(struct rxm_av *av, const void *addr)
 		peer = rxm_alloc_peer(av, addr);
 	}
 
-	ofi_spin_unlock(&av->util_av.lock);
+	ofi_mutex_unlock(&av->util_av.lock);
 	return peer;
 }
 
@@ -125,17 +125,17 @@ void rxm_put_peer(struct rxm_peer_addr *peer)
 	struct rxm_av *av;
 
 	av = peer->av;
-	ofi_spin_lock(&av->util_av.lock);
+	ofi_mutex_lock(&av->util_av.lock);
 	if (--peer->refcnt == 0)
 		rxm_free_peer(peer);
-	ofi_spin_unlock(&av->util_av.lock);
+	ofi_mutex_unlock(&av->util_av.lock);
 }
 
 void rxm_ref_peer(struct rxm_peer_addr *peer)
 {
-	ofi_spin_lock(&peer->av->util_av.lock);
+	ofi_mutex_lock(&peer->av->util_av.lock);
 	peer->refcnt++;
-	ofi_spin_unlock(&peer->av->util_av.lock);
+	ofi_mutex_unlock(&peer->av->util_av.lock);
 }
 
 static void
@@ -153,13 +153,13 @@ rxm_put_peer_addr(struct rxm_av *av, fi_addr_t fi_addr)
 {
 	struct rxm_peer_addr **peer;
 
-	ofi_spin_lock(&av->util_av.lock);
+	ofi_mutex_lock(&av->util_av.lock);
 	peer = ofi_av_addr_context(&av->util_av, fi_addr);
 	if (--(*peer)->refcnt == 0)
 		rxm_free_peer(*peer);
 
 	rxm_set_av_context(av, fi_addr, NULL);
-	ofi_spin_unlock(&av->util_av.lock);
+	ofi_mutex_unlock(&av->util_av.lock);
 }
 
 static int

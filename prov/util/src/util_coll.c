@@ -1121,7 +1121,7 @@ static inline int util_av_set_init(struct util_av_set *av_set,
 	av_set->av_set_fid.fid.ops = &util_av_set_fi_ops;
 	av_set->av = util_av;
 	ofi_atomic_initialize32(&av_set->ref, 0);
-	ret = ofi_spin_init(&av_set->lock);
+	ret = ofi_mutex_init(&av_set->lock);
 
 	return ret;
 }
@@ -1164,7 +1164,7 @@ static int util_coll_av_init(struct util_av *av)
 	return FI_SUCCESS;
 
 err4:
-	ofi_spin_destroy(&coll_mc->av_set->lock);
+	ofi_mutex_destroy(&coll_mc->av_set->lock);
 err3:
 	free(coll_mc->av_set->fi_addr_array);
 err2:
@@ -1214,7 +1214,7 @@ int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	(*av_set_fid) = &av_set->av_set_fid;
 	return FI_SUCCESS;
 err2:
-	ofi_spin_destroy(&av_set->lock);
+	ofi_mutex_destroy(&av_set->lock);
 err1:
 	free(av_set);
 	return ret;

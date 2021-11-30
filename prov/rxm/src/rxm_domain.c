@@ -221,10 +221,10 @@ static struct fi_ops_domain rxm_domain_ops = {
 
 static void rxm_mr_remove_map_entry(struct rxm_mr *mr)
 {
-	ofi_spin_lock(&mr->domain->util_domain.lock);
+	ofi_mutex_lock(&mr->domain->util_domain.lock);
 	(void) ofi_mr_map_remove(&mr->domain->util_domain.mr_map,
 				 mr->mr_fid.key);
-	ofi_spin_unlock(&mr->domain->util_domain.lock);
+	ofi_mutex_unlock(&mr->domain->util_domain.lock);
 }
 
 static int rxm_mr_add_map_entry(struct util_domain *domain,
@@ -236,7 +236,7 @@ static int rxm_mr_add_map_entry(struct util_domain *domain,
 
 	msg_attr->requested_key = rxm_mr->mr_fid.key;
 
-	ofi_spin_lock(&domain->lock);
+	ofi_mutex_lock(&domain->lock);
 	ret = ofi_mr_map_insert(&domain->mr_map, msg_attr, &temp_key, rxm_mr);
 	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&rxm_prov, FI_LOG_DOMAIN,
@@ -245,7 +245,7 @@ static int rxm_mr_add_map_entry(struct util_domain *domain,
 	} else {
 		assert(rxm_mr->mr_fid.key == temp_key);
 	}
-	ofi_spin_unlock(&domain->lock);
+	ofi_mutex_unlock(&domain->lock);
 
 	return ret;
 }
@@ -254,9 +254,9 @@ struct rxm_mr *rxm_mr_get_map_entry(struct rxm_domain *domain, uint64_t key)
 {
 	struct rxm_mr *mr;
 
-	ofi_spin_lock(&domain->util_domain.lock);
+	ofi_mutex_lock(&domain->util_domain.lock);
 	mr = ofi_mr_map_get(&domain->util_domain.mr_map, key);
-	ofi_spin_unlock(&domain->util_domain.lock);
+	ofi_mutex_unlock(&domain->util_domain.lock);
 
 	return mr;
 }
@@ -268,7 +268,7 @@ static int rxm_domain_close(fid_t fid)
 
 	rxm_domain = container_of(fid, struct rxm_domain, util_domain.domain_fid.fid);
 
-	ofi_spin_destroy(&rxm_domain->amo_bufpool_lock);
+	ofi_mutex_destroy(&rxm_domain->amo_bufpool_lock);
 	ofi_bufpool_destroy(rxm_domain->amo_bufpool);
 
 	ret = fi_close(&rxm_domain->msg_domain->fid);
@@ -432,7 +432,7 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		goto err;
 	}
 	rxm_mr_init(rxm_mr, rxm_domain, attr->context);
-	ofi_spin_init(&rxm_mr->amo_lock);
+	ofi_mutex_init(&rxm_mr->amo_lock);
 	rxm_mr->iface = msg_attr.iface;
 	rxm_mr->device = msg_attr.device.reserved;
 	*mr = &rxm_mr->mr_fid;
@@ -748,7 +748,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err3;
 
-	ofi_spin_init(&rxm_domain->amo_bufpool_lock);
+	ofi_mutex_init(&rxm_domain->amo_bufpool_lock);
 
 	rxm_domain->passthru = rxm_passthru_info(info);
 	if (rxm_domain->passthru)
@@ -765,7 +765,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	fi_freeinfo(msg_info);
 	return 0;
 err4:
-	ofi_spin_destroy(&rxm_domain->amo_bufpool_lock);
+	ofi_mutex_destroy(&rxm_domain->amo_bufpool_lock);
 	ofi_bufpool_destroy(rxm_domain->amo_bufpool);
 err3:
 	fi_close(&rxm_domain->msg_domain->fid);
