@@ -59,7 +59,7 @@ static int usdf_poll_poll(struct fid_poll *fps, void **context, int count)
 
 	ps = poll_ftou(fps);
 
-	ofi_spin_lock(&ps->lock);
+	ofi_mutex_lock(&ps->lock);
 
 	dlist_foreach(&ps->list, item) {
 		entry = container_of(item, struct fid_list_entry, entry);
@@ -86,7 +86,7 @@ static int usdf_poll_poll(struct fid_poll *fps, void **context, int count)
 		}
 	}
 
-	ofi_spin_unlock(&ps->lock);
+	ofi_mutex_unlock(&ps->lock);
 
 	return copied;
 }
@@ -115,7 +115,7 @@ static int usdf_poll_add(struct fid_poll *fps, struct fid *event_fid,
 		return -FI_EINVAL;
 	}
 
-	ret = fid_list_insert(&ps->list, &ps->lock, event_fid);
+	ret = fid_list_insert_m(&ps->list, &ps->lock, event_fid);
 	if (ret)
 		return ret;
 
@@ -152,7 +152,7 @@ static int usdf_poll_del(struct fid_poll *fps, struct fid *event_fid,
 		return -FI_EINVAL;
 	}
 
-	fid_list_remove(&ps->list, &ps->lock, event_fid);
+	fid_list_remove_m(&ps->list, &ps->lock, event_fid);
 
 	cq = cq_fidtou(event_fid);
 	ret = ofi_atomic_dec32(&cq->cq_refcnt);
@@ -220,7 +220,7 @@ static int usdf_poll_close(struct fid *fps)
 	}
 
 	ofi_atomic_dec32(&ps->poll_domain->dom_refcnt);
-	ofi_spin_destroy(&ps->lock);
+	ofi_mutex_destroy(&ps->lock);
 	free(ps);
 
 	return ret;
@@ -267,7 +267,7 @@ int usdf_poll_open(struct fid_domain *fdom, struct fi_poll_attr *attr,
 
 	dlist_init(&ps->list);
 	ofi_atomic_initialize32(&ps->poll_refcnt, 0);
-	ofi_spin_init(&ps->lock);
+	ofi_mutex_init(&ps->lock);
 
 	ps->poll_fid.fid.ops = &usdf_poll_fi_ops;
 	ps->poll_fid.fid.fclass = FI_CLASS_POLL;
