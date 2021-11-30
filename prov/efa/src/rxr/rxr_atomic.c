@@ -140,7 +140,7 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 	if (efa_ep_is_cuda_mr(msg->desc[0]))
 		return -FI_ENOSYS;
 
-	ofi_spin_lock(&rxr_ep->util_ep.lock);
+	ofi_mutex_lock(&rxr_ep->util_ep.lock);
 
 	if (OFI_UNLIKELY(is_tx_res_full(rxr_ep))) {
 		err = -FI_EAGAIN;
@@ -221,7 +221,7 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 	}
 
 out:
-	ofi_spin_unlock(&rxr_ep->util_ep.lock);
+	ofi_mutex_unlock(&rxr_ep->util_ep.lock);
 	efa_perfset_end(rxr_ep, perf_efa_tx);
 	return err;
 }

@@ -307,9 +307,9 @@ struct util_ep {
 	uint64_t		caps;
 	uint64_t		flags;
 	ofi_ep_progress_func	progress;
-	ofi_spin_t		lock;
-	ofi_spin_lock_t		lock_acquire;
-	ofi_spin_unlock_t	lock_release;
+	ofi_mutex_t		lock;
+	ofi_mutex_lock_t	lock_acquire;
+	ofi_mutex_unlock_t	lock_release;
 
 	struct bitmask		*coll_cid_mask;
 	struct slist		coll_ready_queue;
@@ -345,8 +345,8 @@ static inline void ofi_ep_lock_release(struct util_ep *ep)
 
 static inline bool ofi_ep_lock_held(struct util_ep *ep)
 {
-	return (ep->lock_acquire == ofi_spin_lock_noop) ||
-		ofi_spin_held(&ep->lock);
+	return (ep->lock_acquire == ofi_mutex_lock_noop) ||
+		ofi_mutex_held(&ep->lock);
 }
 
 static inline void ofi_ep_tx_cntr_inc(struct util_ep *ep)

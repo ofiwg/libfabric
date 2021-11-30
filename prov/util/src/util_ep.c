@@ -247,13 +247,13 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	ofi_atomic_inc32(&util_domain->ref);
 	if (util_domain->eq)
 		ofi_ep_bind_eq(ep, util_domain->eq);
-	ofi_spin_init(&ep->lock);
+	ofi_mutex_init(&ep->lock);
 	if (ep->domain->threading != FI_THREAD_SAFE) {
-		ep->lock_acquire = ofi_spin_lock_noop;
-		ep->lock_release = ofi_spin_unlock_noop;
+		ep->lock_acquire = ofi_mutex_lock_noop;
+		ep->lock_release = ofi_mutex_unlock_noop;
 	} else {
-		ep->lock_acquire = ofi_spin_lock_op;
-		ep->lock_release = ofi_spin_unlock_op;
+		ep->lock_acquire = ofi_mutex_lock_op;
+		ep->lock_release = ofi_mutex_unlock_op;
 	}
 	if (ep->caps & FI_COLLECTIVE) {
 		ep->coll_cid_mask = calloc(1, sizeof(*ep->coll_cid_mask));
@@ -341,6 +341,6 @@ int ofi_endpoint_close(struct util_ep *util_ep)
 	if (util_ep->eq)
 		ofi_atomic_dec32(&util_ep->eq->ref);
 	ofi_atomic_dec32(&util_ep->domain->ref);
-	ofi_spin_destroy(&util_ep->lock);
+	ofi_mutex_destroy(&util_ep->lock);
 	return 0;
 }
