@@ -411,7 +411,7 @@ ssize_t rstream_process_cq(struct rstream_ep *ep, enum rstream_msg_type type)
 	enum rstream_msg_type comp_type;
 	int len;
 
-	ofi_spin_lock(&ep->cq_lock);
+	ofi_mutex_lock(&ep->cq_lock);
 	do {
 		ret = rstream_check_cq(ep, &cq_entry);
 		if (ret == 1) {
@@ -445,7 +445,7 @@ ssize_t rstream_process_cq(struct rstream_ep *ep, enum rstream_msg_type type)
 		!found_msg_type) || (found_msg_type && ret > 0));
 
 	ret = rstream_update_target(ep, rx_completions, 0);
-	ofi_spin_unlock(&ep->cq_lock);
+	ofi_mutex_unlock(&ep->cq_lock);
 	if (ret)
 		return ret;
 
@@ -454,7 +454,7 @@ ssize_t rstream_process_cq(struct rstream_ep *ep, enum rstream_msg_type type)
 	else
 		return -FI_EAGAIN;
 out:
-	ofi_spin_unlock(&ep->cq_lock);
+	ofi_mutex_unlock(&ep->cq_lock);
 	return ret;
 }
 

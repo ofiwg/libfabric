@@ -58,7 +58,7 @@ static int rstream_ep_close(fid_t fid)
 
 	ofi_spin_destroy(&rstream_ep->send_lock);
 	ofi_spin_destroy(&rstream_ep->recv_lock);
-	ofi_spin_destroy(&rstream_ep->cq_lock);
+	ofi_mutex_destroy(&rstream_ep->cq_lock);
 	free(rstream_ep->rx_ctxs);
 	free(rstream_ep);
 	return 0;
@@ -291,7 +291,7 @@ int rstream_ep_open(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->msg = &rstream_ops_msg;
 	ofi_spin_init(&rstream_ep->send_lock);
 	ofi_spin_init(&rstream_ep->recv_lock);
-	ofi_spin_init(&rstream_ep->cq_lock);
+	ofi_mutex_init(&rstream_ep->cq_lock);
 	return 0;
 
 err1:

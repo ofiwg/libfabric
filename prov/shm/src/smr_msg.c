@@ -96,7 +96,7 @@ ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov, void **desc
 	assert(!(flags & FI_MULTI_RECV) || iov_count == 1);
 
 	pthread_mutex_lock(&ep->region->lock);
-	ofi_spin_lock(&ep->util_ep.rx_cq->cq_lock);
+	ofi_mutex_lock(&ep->util_ep.rx_cq->cq_lock);
 
 	entry = smr_get_recv_entry(ep, iov, desc, iov_count, addr, context, tag,
 				   ignore, flags);
@@ -106,7 +106,7 @@ ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov, void **desc
 	dlist_insert_tail(&entry->entry, &recv_queue->list);
 	ret = smr_progress_unexp_queue(ep, entry, unexp_queue);
 out:
-	ofi_spin_unlock(&ep->util_ep.rx_cq->cq_lock);
+	ofi_mutex_unlock(&ep->util_ep.rx_cq->cq_lock);
 	pthread_mutex_unlock(&ep->region->lock);
 	return ret;
 }
@@ -184,7 +184,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 		goto unlock_region;
 	}
 
-	ofi_spin_lock(&ep->util_ep.tx_cq->cq_lock);
+	ofi_mutex_lock(&ep->util_ep.tx_cq->cq_lock);
 	if (ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto unlock_cq;
@@ -270,7 +270,7 @@ commit:
 	peer_smr->cmd_cnt--;
 	smr_signal(peer_smr);
 unlock_cq:
-	ofi_spin_unlock(&ep->util_ep.tx_cq->cq_lock);
+	ofi_mutex_unlock(&ep->util_ep.tx_cq->cq_lock);
 unlock_region:
 	pthread_mutex_unlock(&peer_smr->lock);
 	return ret;

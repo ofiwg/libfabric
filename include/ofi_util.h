@@ -518,11 +518,9 @@ struct util_cq {
 	ofi_atomic32_t		ref;
 	struct dlist_entry	ep_list;
 	ofi_mutex_t		ep_list_lock;
-	ofi_spin_t		cq_lock;
+	ofi_mutex_t		cq_lock;
 	ofi_mutex_lock_t	cq_mutex_lock;
 	ofi_mutex_unlock_t	cq_mutex_unlock;
-	ofi_spin_lock_t		cq_fastlock_acquire;
-	ofi_spin_unlock_t	cq_fastlock_release;
 
 	struct util_comp_cirq	*cirq;
 	fi_addr_t		*src;
@@ -592,7 +590,7 @@ ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 {
 	int ret;
 
-	cq->cq_fastlock_acquire(&cq->cq_lock);
+	cq->cq_mutex_lock(&cq->cq_lock);
 	if (ofi_cirque_freecnt(cq->cirq) > 1) {
 		ofi_cq_write_entry(cq, context, flags, len, buf, data, tag);
 		ret = 0;
@@ -600,7 +598,7 @@ ofi_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 		ret = ofi_cq_write_overflow(cq, context, flags, len,
 					    buf, data, tag, FI_ADDR_NOTAVAIL);
 	}
-	cq->cq_fastlock_release(&cq->cq_lock);
+	cq->cq_mutex_unlock(&cq->cq_lock);
 	return ret;
 }
 
@@ -610,7 +608,7 @@ ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 {
 	int ret;
 
-	cq->cq_fastlock_acquire(&cq->cq_lock);
+	cq->cq_mutex_lock(&cq->cq_lock);
 	if (ofi_cirque_freecnt(cq->cirq) > 1) {
 		ofi_cq_write_src_entry(cq, context, flags, len, buf, data,
 				       tag, src);
@@ -619,7 +617,7 @@ ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 		ret = ofi_cq_write_overflow(cq, context, flags, len,
 					    buf, data, tag, src);
 	}
-	cq->cq_fastlock_release(&cq->cq_lock);
+	cq->cq_mutex_unlock(&cq->cq_lock);
 	return ret;
 }
 

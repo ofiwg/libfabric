@@ -180,7 +180,7 @@ struct rstream_ep {
 	ofi_spin_t send_lock;
 	ofi_spin_t recv_lock;
 	/* must take send/recv lock before cq_lock */
-	ofi_spin_t cq_lock;
+	ofi_mutex_t cq_lock;
 };
 
 struct rstream_pep {
