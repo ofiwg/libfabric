@@ -177,8 +177,8 @@ struct rstream_ep {
 	uint32_t rx_ctx_index;
 	struct rstream_tx_ctx_fs *tx_ctxs;
 	struct rstream_cq_data rx_cq_data;
-	ofi_spin_t send_lock;
-	ofi_spin_t recv_lock;
+	ofi_mutex_t send_lock;
+	ofi_mutex_t recv_lock;
 	/* must take send/recv lock before cq_lock */
 	ofi_mutex_t cq_lock;
 };

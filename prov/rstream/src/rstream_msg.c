@@ -510,14 +510,14 @@ static ssize_t rstream_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	uint32_t curr_avail_len = len;
 	void *ctx;
 
-	ofi_spin_lock(&ep->send_lock);
+	ofi_mutex_lock(&ep->send_lock);
 	do {
 		ret = rstream_can_send(ep);
 		if (ret < 0) {
 			if (ret < 0 && ret != -FI_EAGAIN) {
 				goto err;
 			} else {
-				ofi_spin_unlock(&ep->send_lock);
+				ofi_mutex_unlock(&ep->send_lock);
 				return ((sent_len) ? sent_len : ret);
 			}
 		}
@@ -556,11 +556,11 @@ static ssize_t rstream_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	} while(curr_avail_len); /* circle buffer rollover requires two loops */
 
-	ofi_spin_unlock(&ep->send_lock);
+	ofi_mutex_unlock(&ep->send_lock);
 	return sent_len;
 
 err:
-	ofi_spin_unlock(&ep->send_lock);
+	ofi_mutex_unlock(&ep->send_lock);
 	return ret;
 }
 
@@ -578,9 +578,9 @@ static ssize_t rstream_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		util_ep.ep_fid);
 
 	if (flags == FI_PEEK) {
-		ofi_spin_lock(&ep->send_lock);
+		ofi_mutex_lock(&ep->send_lock);
 		ret = rstream_can_send(ep);
-		ofi_spin_unlock(&ep->send_lock);
+		ofi_mutex_unlock(&ep->send_lock);
 		return ret;
 	} else {
 		return -FI_ENOSYS;
@@ -649,14 +649,14 @@ static ssize_t rstream_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 	uint32_t copy_out_len = 0;
 	ssize_t ret;
 
-	ofi_spin_lock(&ep->recv_lock);
+	ofi_mutex_lock(&ep->recv_lock);
 
 	copy_out_len = rstream_copy_out_chunk(ep, buf, len);
 
 	if ((len - copy_out_len)) {
 		ret = rstream_process_cq(ep, RSTREAM_RX_MSG_COMP);
 		if(ret < 0 && ret != -FI_EAGAIN) {
-			ofi_spin_unlock(&ep->recv_lock);
+			ofi_mutex_unlock(&ep->recv_lock);
 			return ret;
 		}
 
@@ -664,10 +664,10 @@ static ssize_t rstream_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 			((char *)buf + copy_out_len), (len - copy_out_len));
 	}
 
-	ofi_spin_lock(&ep->send_lock);
+	ofi_mutex_lock(&ep->send_lock);
 	ret = rstream_update_target(ep, 0, copy_out_len);
-	ofi_spin_unlock(&ep->send_lock);
-	ofi_spin_unlock(&ep->recv_lock);
+	ofi_mutex_unlock(&ep->send_lock);
+	ofi_mutex_unlock(&ep->recv_lock);
 	if(ret < 0 && ret != -FI_EAGAIN) {
 		return ret;
 	}
@@ -696,32 +696,32 @@ static ssize_t rstream_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		util_ep.ep_fid);
 
 	if (flags == FI_PEEK) {
-		ofi_spin_lock(&ep->recv_lock);
+		ofi_mutex_lock(&ep->recv_lock);
 		if (!ep->local_mr.rx.avail_size) {
 			ret = rstream_process_cq(ep, RSTREAM_RX_MSG_COMP);
 			if (ret < 0) {
-				ofi_spin_unlock(&ep->recv_lock);
+				ofi_mutex_unlock(&ep->recv_lock);
 				return ret;
 			}
 		}
-		ofi_spin_unlock(&ep->recv_lock);
+		ofi_mutex_unlock(&ep->recv_lock);
 
-		ofi_spin_lock(&ep->send_lock);
+		ofi_mutex_lock(&ep->send_lock);
 		if (rstream_target_rx_full(ep)) {
 			ret = rstream_process_cq(ep, RSTREAM_RX_MSG_COMP);
 			if (ret < 0) {
-				ofi_spin_unlock(&ep->send_lock);
+				ofi_mutex_unlock(&ep->send_lock);
 				return ret;
 			}
 		}
 
 		if (!ep->qp_win.ctrl_credits) {
 			ret = rstream_process_cq(ep, RSTREAM_TX_MSG_COMP);
-			ofi_spin_unlock(&ep->send_lock);
+			ofi_mutex_unlock(&ep->send_lock);
 			return ret;
 		}
 
-		ofi_spin_unlock(&ep->send_lock);
+		ofi_mutex_unlock(&ep->send_lock);
 		return 0;
 	} else {
 		return -FI_ENOSYS;
