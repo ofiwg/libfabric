@@ -1279,7 +1279,7 @@ void sock_ep_cm_wait_handle_finalized(struct sock_ep_cm_head *cm_head,
 
 	pthread_mutex_lock(&handle->finalized_mutex);
 	while (handle->state != SOCK_CONN_HANDLE_FINALIZED)
-		fi_wait_cond(&handle->finalized_cond,
+		ofi_wait_cond(&handle->finalized_cond,
 				&handle->finalized_mutex, -1);
 	pthread_mutex_unlock(&handle->finalized_mutex);
 }

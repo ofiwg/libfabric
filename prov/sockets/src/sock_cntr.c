@@ -338,7 +338,7 @@ static int sock_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 			ret = sock_cntr_progress(cntr);
 			pthread_mutex_lock(&cntr->mut);
 		} else {
-			ret = fi_wait_cond(&cntr->cond, &cntr->mut, remaining_ms);
+			ret = ofi_wait_cond(&cntr->cond, &cntr->mut, remaining_ms);
 		}
 
 		uint64_t curr_ms = ofi_gettime_ms();

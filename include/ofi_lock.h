@@ -48,7 +48,7 @@ extern "C" {
 #endif
 
 
-int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms);
+int ofi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms);
 
 
 #if PT_LOCK_SPIN == 1

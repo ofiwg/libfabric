@@ -824,7 +824,7 @@ static inline int ofi_syserr(void)
 	return winerr2bsderr(GetLastError());
 }
 
-static inline int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms)
+static inline int ofi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms)
 {
 	return !SleepConditionVariableCS(cond, mut, (DWORD)timeout_ms);
 }
