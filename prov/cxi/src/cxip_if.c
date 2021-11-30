@@ -1021,7 +1021,7 @@ static int netdev_lookup(struct cxil_devinfo *info, char **netdev)
 
 		rc = sscanf(addr, "%x:%x:%x.%x", &dom, &bus, &dev, &func);
 		if (rc != 4)
-			goto free_glob;
+			continue;
 
 		if (info->pci_domain == dom &&
 		    info->pci_bus == bus &&
