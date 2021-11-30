@@ -749,7 +749,7 @@ static int usdf_cq_unbind_wait(struct usdf_cq *cq)
 		return ret;
 	}
 
-	fid_list_remove_m(&wait_priv->list, &wait_priv->lock, &cq->cq_fid.fid);
+	fid_list_remove(&wait_priv->list, &wait_priv->lock, &cq->cq_fid.fid);
 
 	ofi_atomic_dec32(&wait_priv->wait_refcnt);
 
@@ -1177,7 +1177,7 @@ static int usdf_cq_bind_wait(struct usdf_cq *cq)
 	 */
 	wait_priv = wait_ftou(cq->cq_attr.wait_set);
 
-	ret = fid_list_insert_m(&wait_priv->list, &wait_priv->lock,
+	ret = fid_list_insert(&wait_priv->list, &wait_priv->lock,
 			&cq->cq_fid.fid);
 	if (ret) {
 		USDF_WARN_SYS(CQ,
@@ -1198,7 +1198,7 @@ static int usdf_cq_bind_wait(struct usdf_cq *cq)
 	return ret;
 
 err:
-	fid_list_remove_m(&wait_priv->list, &wait_priv->lock, &cq->cq_fid.fid);
+	fid_list_remove(&wait_priv->list, &wait_priv->lock, &cq->cq_fid.fid);
 	return ret;
 }
 

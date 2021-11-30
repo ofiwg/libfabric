@@ -72,48 +72,7 @@ static int ofi_fid_match(struct dlist_entry *entry, const void *fid)
 	return (item->fid == fid);
 }
 
-int fid_list_insert(struct dlist_entry *fid_list, ofi_spin_t *lock,
-		    struct fid *fid)
-{
-	int ret = 0;
-	struct dlist_entry *entry;
-	struct fid_list_entry *item;
-
-	ofi_spin_lock(lock);
-	entry = dlist_find_first_match(fid_list, ofi_fid_match, fid);
-	if (entry)
-		goto out;
-
-	item = calloc(1, sizeof(*item));
-	if (!item) {
-		ret = -FI_ENOMEM;
-		goto out;
-	}
-
-	item->fid = fid;
-	dlist_insert_tail(&item->entry, fid_list);
-out:
-	ofi_spin_unlock(lock);
-	return ret;
-}
-
-void fid_list_remove(struct dlist_entry *fid_list, ofi_spin_t *lock,
-		     struct fid *fid)
-{
-	struct fid_list_entry *item;
-	struct dlist_entry *entry;
-
-	ofi_spin_lock(lock);
-	entry = dlist_remove_first_match(fid_list, ofi_fid_match, fid);
-	ofi_spin_unlock(lock);
-
-	if (entry) {
-		item = container_of(entry, struct fid_list_entry, entry);
-		free(item);
-	}
-}
-
-int fid_list_insert_m(struct dlist_entry *fid_list, ofi_mutex_t *lock,
+int fid_list_insert(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 		    struct fid *fid)
 {
 	int ret = 0;
@@ -138,7 +97,7 @@ out:
 	return ret;
 }
 
-void fid_list_remove_m(struct dlist_entry *fid_list, ofi_mutex_t *lock,
+void fid_list_remove(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 		     struct fid *fid)
 {
 	struct fid_list_entry *item;

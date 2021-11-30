@@ -57,7 +57,7 @@ void sock_cntr_add_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx)
 {
 	int ret;
 	struct fid *fid = &tx_ctx->fid.ctx.fid;
-	ret = fid_list_insert_m(&cntr->tx_list, &cntr->list_lock, fid);
+	ret = fid_list_insert(&cntr->tx_list, &cntr->list_lock, fid);
 	if (ret)
 		SOCK_LOG_ERROR("Error in adding ctx to progress list\n");
 	else
@@ -67,7 +67,7 @@ void sock_cntr_add_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx)
 void sock_cntr_remove_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx)
 {
 	struct fid *fid = &tx_ctx->fid.ctx.fid;
-	fid_list_remove_m(&cntr->tx_list, &cntr->list_lock, fid);
+	fid_list_remove(&cntr->tx_list, &cntr->list_lock, fid);
 	ofi_atomic_dec32(&cntr->ref);
 }
 
@@ -75,7 +75,7 @@ void sock_cntr_add_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
 {
 	int ret;
 	struct fid *fid = &rx_ctx->ctx.fid;
-	ret = fid_list_insert_m(&cntr->rx_list, &cntr->list_lock, fid);
+	ret = fid_list_insert(&cntr->rx_list, &cntr->list_lock, fid);
 	if (ret)
 		SOCK_LOG_ERROR("Error in adding ctx to progress list\n");
 	else
@@ -85,7 +85,7 @@ void sock_cntr_add_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
 void sock_cntr_remove_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
 {
 	struct fid *fid = &rx_ctx->ctx.fid;
-	fid_list_remove_m(&cntr->rx_list, &cntr->list_lock, fid);
+	fid_list_remove(&cntr->rx_list, &cntr->list_lock, fid);
 	ofi_atomic_dec32(&cntr->ref);
 }
 

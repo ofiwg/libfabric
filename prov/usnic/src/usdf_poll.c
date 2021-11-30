@@ -115,7 +115,7 @@ static int usdf_poll_add(struct fid_poll *fps, struct fid *event_fid,
 		return -FI_EINVAL;
 	}
 
-	ret = fid_list_insert_m(&ps->list, &ps->lock, event_fid);
+	ret = fid_list_insert(&ps->list, &ps->lock, event_fid);
 	if (ret)
 		return ret;
 
@@ -152,7 +152,7 @@ static int usdf_poll_del(struct fid_poll *fps, struct fid *event_fid,
 		return -FI_EINVAL;
 	}
 
-	fid_list_remove_m(&ps->list, &ps->lock, event_fid);
+	fid_list_remove(&ps->list, &ps->lock, event_fid);
 
 	cq = cq_fidtou(event_fid);
 	ret = ofi_atomic_dec32(&cq->cq_refcnt);

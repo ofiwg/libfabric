@@ -659,7 +659,7 @@ static int sock_ep_close(struct fid *fid)
 	}
 	if (sock_ep->attr->av) {
 		ofi_mutex_lock(&sock_ep->attr->av->list_lock);
-		fid_list_remove_m(&sock_ep->attr->av->ep_list,
+		fid_list_remove(&sock_ep->attr->av->ep_list,
 				&sock_ep->attr->lock, &sock_ep->ep.fid);
 		ofi_mutex_unlock(&sock_ep->attr->av->list_lock);
 	}
@@ -867,7 +867,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				ep->attr->rx_array[i]->av = av;
 		}
 		ofi_mutex_lock(&av->list_lock);
-		ret = fid_list_insert_m(&av->ep_list, &ep->attr->lock, &ep->ep.fid);
+		ret = fid_list_insert(&av->ep_list, &ep->attr->lock, &ep->ep.fid);
 		if (ret) {
 			SOCK_LOG_ERROR("Error in adding fid in the EP list\n");
 			ofi_mutex_unlock(&av->list_lock);

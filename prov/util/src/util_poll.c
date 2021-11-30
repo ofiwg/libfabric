@@ -58,7 +58,7 @@ static int util_poll_add(struct fid_poll *poll_fid, struct fid *event_fid,
 		return -FI_EINVAL;
 	}
 
-	return fid_list_insert_m(&pollset->fid_list, &pollset->lock, event_fid);
+	return fid_list_insert(&pollset->fid_list, &pollset->lock, event_fid);
 }
 
 static int util_poll_del(struct fid_poll *poll_fid, struct fid *event_fid,
@@ -67,7 +67,7 @@ static int util_poll_del(struct fid_poll *poll_fid, struct fid *event_fid,
 	struct util_poll *pollset;
 
 	pollset = container_of(poll_fid, struct util_poll, poll_fid);
-	fid_list_remove_m(&pollset->fid_list, &pollset->lock, event_fid);
+	fid_list_remove(&pollset->fid_list, &pollset->lock, event_fid);
 	return 0;
 }
 
