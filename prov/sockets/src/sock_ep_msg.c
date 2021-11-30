@@ -283,7 +283,7 @@ static void sock_ep_cm_shutdown_report(struct sock_ep *ep, int send_shutdown)
 	struct sock_conn_hdr msg = {0};
 	enum sock_cm_state old_state;
 
-	ofi_spin_lock(&ep->attr->cm.lock);
+	ofi_mutex_lock(&ep->attr->cm.lock);
 	old_state = ep->attr->cm.state;
 	switch (ep->attr->cm.state) {
 	case SOCK_CM_STATE_REQUESTED:
@@ -298,7 +298,7 @@ static void sock_ep_cm_shutdown_report(struct sock_ep *ep, int send_shutdown)
 		assert(0);
 		break;
 	}
-	ofi_spin_unlock(&ep->attr->cm.lock);
+	ofi_mutex_unlock(&ep->attr->cm.lock);
 
 	switch (old_state) {
 	case SOCK_CM_STATE_CONNECTED:
@@ -348,12 +348,12 @@ static void sock_ep_cm_report_connect_fail(struct sock_ep *ep,
 {
 	int do_report = 0;
 
-	ofi_spin_lock(&ep->attr->cm.lock);
+	ofi_mutex_lock(&ep->attr->cm.lock);
 	if (ep->attr->cm.state == SOCK_CM_STATE_REQUESTED) {
 		do_report = 1;
 		ep->attr->cm.state = SOCK_CM_STATE_DISCONNECTED;
 	}
-	ofi_spin_unlock(&ep->attr->cm.lock);
+	ofi_mutex_unlock(&ep->attr->cm.lock);
 
 	if (do_report) {
 		SOCK_LOG_DBG("reporting FI_REJECT\n");

@@ -58,7 +58,7 @@ static int sock_dom_close(struct fid *fid)
 	sock_ep_cm_stop_thread(&dom->cm_head);
 
 	sock_pe_finalize(dom->pe);
-	ofi_spin_destroy(&dom->lock);
+	ofi_mutex_destroy(&dom->lock);
 	ofi_mr_map_close(&dom->mr_map);
 	sock_dom_remove_from_list(dom);
 	free(dom);
@@ -162,7 +162,7 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (!sock_domain)
 		return -FI_ENOMEM;
 
-	ofi_spin_init(&sock_domain->lock);
+	ofi_mutex_init(&sock_domain->lock);
 	ofi_atomic_initialize32(&sock_domain->ref, 0);
 
 	sock_domain->info = *info;
@@ -211,7 +211,7 @@ err3:
 err2:
 	sock_pe_finalize(sock_domain->pe);
 err1:
-	ofi_spin_destroy(&sock_domain->lock);
+	ofi_mutex_destroy(&sock_domain->lock);
 	free(sock_domain);
 	return -FI_EINVAL;
 }

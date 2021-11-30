@@ -57,7 +57,7 @@ void sock_cntr_add_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx)
 {
 	int ret;
 	struct fid *fid = &tx_ctx->fid.ctx.fid;
-	ret = fid_list_insert(&cntr->tx_list, &cntr->list_lock, fid);
+	ret = fid_list_insert_m(&cntr->tx_list, &cntr->list_lock, fid);
 	if (ret)
 		SOCK_LOG_ERROR("Error in adding ctx to progress list\n");
 	else
@@ -67,7 +67,7 @@ void sock_cntr_add_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx)
 void sock_cntr_remove_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx)
 {
 	struct fid *fid = &tx_ctx->fid.ctx.fid;
-	fid_list_remove(&cntr->tx_list, &cntr->list_lock, fid);
+	fid_list_remove_m(&cntr->tx_list, &cntr->list_lock, fid);
 	ofi_atomic_dec32(&cntr->ref);
 }
 
@@ -75,7 +75,7 @@ void sock_cntr_add_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
 {
 	int ret;
 	struct fid *fid = &rx_ctx->ctx.fid;
-	ret = fid_list_insert(&cntr->rx_list, &cntr->list_lock, fid);
+	ret = fid_list_insert_m(&cntr->rx_list, &cntr->list_lock, fid);
 	if (ret)
 		SOCK_LOG_ERROR("Error in adding ctx to progress list\n");
 	else
@@ -85,7 +85,7 @@ void sock_cntr_add_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
 void sock_cntr_remove_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
 {
 	struct fid *fid = &rx_ctx->ctx.fid;
-	fid_list_remove(&cntr->rx_list, &cntr->list_lock, fid);
+	fid_list_remove_m(&cntr->rx_list, &cntr->list_lock, fid);
 	ofi_atomic_dec32(&cntr->ref);
 }
 
@@ -100,7 +100,7 @@ int sock_cntr_progress(struct sock_cntr *cntr)
 	if (cntr->domain->progress_mode == FI_PROGRESS_AUTO)
 		return 0;
 
-	ofi_spin_lock(&cntr->list_lock);
+	ofi_mutex_lock(&cntr->list_lock);
 	for (entry = cntr->tx_list.next; entry != &cntr->tx_list;
 	     entry = entry->next) {
 		fid_entry = container_of(entry, struct fid_list_entry, entry);
@@ -121,7 +121,7 @@ int sock_cntr_progress(struct sock_cntr *cntr)
 			sock_pe_progress_ep_rx(cntr->domain->pe, rx_ctx->ep_attr);
 	}
 
-	ofi_spin_unlock(&cntr->list_lock);
+	ofi_mutex_unlock(&cntr->list_lock);
 	return 0;
 }
 
@@ -132,7 +132,7 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 	struct dlist_entry *entry;
 	int ret = 0;
 
-	ofi_spin_lock(&cntr->trigger_lock);
+	ofi_mutex_lock(&cntr->trigger_lock);
 	for (entry = cntr->trigger_list.next;
 	     entry != &cntr->trigger_list;) {
 
@@ -207,7 +207,7 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 			break;
 		}
 	}
-	ofi_spin_unlock(&cntr->trigger_lock);
+	ofi_mutex_unlock(&cntr->trigger_lock);
 }
 
 static uint64_t sock_cntr_read(struct fid_cntr *fid_cntr)
@@ -437,8 +437,8 @@ static int sock_cntr_close(struct fid *fid)
 	pthread_mutex_unlock(&cntr->mut);
 
 	pthread_mutex_destroy(&cntr->mut);
-	ofi_spin_destroy(&cntr->list_lock);
-	ofi_spin_destroy(&cntr->trigger_lock);
+	ofi_mutex_destroy(&cntr->list_lock);
+	ofi_mutex_destroy(&cntr->trigger_lock);
 
 	pthread_cond_destroy(&cntr->cond);
 	ofi_atomic_dec32(&cntr->domain->ref);
@@ -571,7 +571,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	}
 
 	pthread_mutex_init(&_cntr->mut, NULL);
-	ofi_spin_init(&_cntr->list_lock);
+	ofi_mutex_init(&_cntr->list_lock);
 
 	ofi_atomic_initialize32(&_cntr->ref, 0);
 	ofi_atomic_initialize32(&_cntr->err_cnt, 0);
@@ -584,7 +584,7 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	dlist_init(&_cntr->rx_list);
 
 	dlist_init(&_cntr->trigger_list);
-	ofi_spin_init(&_cntr->trigger_lock);
+	ofi_mutex_init(&_cntr->trigger_lock);
 
 	_cntr->cntr_fid.fid.fclass = FI_CLASS_CNTR;
 	_cntr->cntr_fid.fid.context = context;
