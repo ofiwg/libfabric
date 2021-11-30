@@ -615,7 +615,7 @@ static int ofi_str_to_sib(const char *str, void **addr, size_t *len)
 
 static int ofi_str_to_efa(const char *str, void **addr, size_t *len)
 {
-	char gid[INET6_ADDRSTRLEN];
+	char gid[INET6_ADDRSTRLEN + 1];
 	uint16_t *qpn;
 	uint32_t *qkey;
 	int ret;
@@ -628,7 +628,7 @@ static int ofi_str_to_efa(const char *str, void **addr, size_t *len)
 		return -FI_ENOMEM;
 	qpn = (uint16_t *)*addr + 8;
 	qkey = (uint32_t *)*addr + 5;
-	ret = sscanf(str, "%*[^:]://[%64[^]]]:%" SCNu16 ":%" SCNu32, gid, qpn, qkey);
+	ret = sscanf(str, "%*[^:]://[%46[^]]]:%" SCNu16 ":%" SCNu32, gid, qpn, qkey);
 	if (ret < 1)
 		goto err;
 
@@ -643,7 +643,7 @@ err:
 static int ofi_str_to_sin(const char *str, void **addr, size_t *len)
 {
 	struct sockaddr_in *sin;
-	char ip[64];
+	char ip[65];
 	int ret;
 
 	*len = sizeof(*sin);
@@ -688,7 +688,7 @@ match_port:
 static int ofi_str_to_sin6(const char *str, void **addr, size_t *len)
 {
 	struct sockaddr_in6 *sin6;
-	char ip[64];
+	char ip[65];
 	int ret;
 
 	*len = sizeof(*sin6);
