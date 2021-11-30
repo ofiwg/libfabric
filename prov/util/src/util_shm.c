@@ -185,6 +185,15 @@ err:
 	return -FI_EBUSY;
 }
 
+static void smr_lock_init(pthread_mutex_t *mutex)
+{
+	pthread_mutexattr_t attr;
+
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
+	pthread_mutex_init(mutex, &attr);
+}
+
 /* TODO: Determine if aligning SMR data helps performance */
 int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	       const struct smr_attr *attr, struct smr_region *volatile *smr)
@@ -256,7 +265,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	pthread_mutex_unlock(&ep_list_lock);
 
 	*smr = mapped_addr;
-	fastlock_init(&(*smr)->lock);
+	smr_lock_init(&(*smr)->lock);
 	ofi_atomic_initialize32(&(*smr)->signal, 0);
 
 	(*smr)->map = map;
