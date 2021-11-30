@@ -284,7 +284,7 @@ typedef int (*vrb_trywait_func)(struct fid *fid);
 struct vrb_eq {
 	struct fid_eq		eq_fid;
 	struct vrb_fabric	*fab;
-	ofi_spin_t		lock;
+	ofi_mutex_t		lock;
 	struct dlistfd_head	list_head;
 	struct rdma_event_channel *channel;
 	uint64_t		flags;
@@ -381,9 +381,9 @@ struct vrb_domain {
 		 * physical XRC INI connection to the associated node. The
 		 * map and XRC INI connection object state information are
 		 * protected via the ini_lock. */
-		ofi_spin_t		ini_lock;
-		ofi_spin_lock_t	lock_acquire;
-		ofi_spin_unlock_t	lock_release;
+		ofi_mutex_t		ini_lock;
+		ofi_mutex_lock_t	lock_acquire;
+		ofi_mutex_unlock_t	lock_release;
 		struct ofi_rbmap	*ini_conn_rbmap;
 	} xrc;
 
@@ -417,7 +417,7 @@ struct vrb_cq {
 
 	struct {
 		/* The list of XRC SRQ contexts associated with this CQ */
-		ofi_spin_t		srq_list_lock;
+		ofi_mutex_t		srq_list_lock;
 		struct dlist_entry	srq_list;
 	} xrc;
 
@@ -468,12 +468,12 @@ struct vrb_srq_ep {
 	struct ibv_srq		*srq;
 	struct vrb_domain	*domain;
 	struct ofi_bufpool	*ctx_pool;
-	ofi_spin_t		ctx_lock;
+	ofi_mutex_t		ctx_lock;
 
 	/* For XRC SRQ only */
 	struct {
 		/* XRC SRQ is not created until endpoint enable */
-		ofi_spin_t		prepost_lock;
+		ofi_mutex_t		prepost_lock;
 		struct slist		prepost_list;
 		uint32_t		max_recv_wr;
 		uint32_t		max_sge;

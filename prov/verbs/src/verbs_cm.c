@@ -309,7 +309,7 @@ vrb_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 	cm_hdr = alloca(sizeof(*cm_hdr) + paramlen);
 	vrb_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
 
-	ofi_spin_lock(&_pep->eq->lock);
+	ofi_mutex_lock(&_pep->eq->lock);
 	if (connreq->is_xrc) {
 		ret = vrb_msg_xrc_ep_reject(connreq, cm_hdr,
 				(uint8_t)(sizeof(*cm_hdr) + paramlen));
@@ -319,7 +319,7 @@ vrb_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 	} else {
 		ret = -FI_EBUSY;
 	}
-	ofi_spin_unlock(&_pep->eq->lock);
+	ofi_mutex_unlock(&_pep->eq->lock);
 
 	if (ret)
 		VRB_WARN_ERR(FI_LOG_EP_CTRL, "rdma_reject", ret);
@@ -413,9 +413,9 @@ vrb_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 	}
 	xrc_ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
 
-	ofi_spin_lock(&xrc_ep->base_ep.eq->lock);
+	ofi_mutex_lock(&xrc_ep->base_ep.eq->lock);
 	ret = vrb_connect_xrc(xrc_ep, NULL, 0, adjusted_param, paramlen);
-	ofi_spin_unlock(&xrc_ep->base_ep.eq->lock);
+	ofi_mutex_unlock(&xrc_ep->base_ep.eq->lock);
 
 	free(adjusted_param);
 	free(cm_hdr);
@@ -445,9 +445,9 @@ vrb_msg_xrc_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	if (ret)
 		return ret;
 
-	ofi_spin_lock(&xrc_ep->base_ep.eq->lock);
+	ofi_mutex_lock(&xrc_ep->base_ep.eq->lock);
 	ret = vrb_accept_xrc(xrc_ep, 0, adjusted_param, paramlen);
-	ofi_spin_unlock(&xrc_ep->base_ep.eq->lock);
+	ofi_mutex_unlock(&xrc_ep->base_ep.eq->lock);
 
 	free(adjusted_param);
 	return ret;
