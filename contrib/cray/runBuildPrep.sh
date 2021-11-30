@@ -12,7 +12,6 @@ echo "$0: --> PRODUCT: '${PRODUCT}'"
 echo "$0: --> TARGET_ARCH: '${TARGET_ARCH}'"
 echo "$0: --> TARGET_OS: '${TARGET_OS}'"
 
-
 if [[ "${BRANCH_NAME}" == release/* ]]; then
     ARTI_LOCATION='rpm-stable-local'
     ARTI_BRANCH=${BRANCH_NAME}
@@ -24,9 +23,14 @@ fi
 echo "$0: --> ARTI_LOCATION: '${ARTI_LOCATION}'"
 echo "$0: --> ARTI_BRANCH: '${ARTI_BRANCH}'"
 
+ZE_ARTI_BRANCH=dev/master
+
+echo "$0: --> ZE_ARTI_BRANCH: '${ZE_ARTI_BRANCH}'"
+
 # Override per OS
 with_rocm=0
 with_cuda=0
+with_ze=0
 
 RPMS="cray-libcxi-devel"
 CUDA_RPMS="nvhpc-2021"
@@ -41,14 +45,18 @@ else
     ROCR_RPMS="hsa-rocr-devel"
 fi
 
+if [[ ${TARGET_OS} == "sle15_sp3_ncn" ]]; then
+    with_ze=1
+    ZE_RPMS="level-zero-devel"
+else
+    ZE_RPMS=""
+fi
+
 if [[ ${TARGET_OS} =~ ^centos ]]; then
     RPMS+=" libcurl-devel json-c-devel"
 else
     RPMS+=" libcurl-devel libjson-c-devel"
 fi
-
-with_cuda=0
-with_rocm=0
 
 if command -v yum > /dev/null; then
     yum-config-manager --add-repo=${ARTI_URL}/${PRODUCT}-${ARTI_LOCATION}/${ARTI_BRANCH}/${TARGET_OS}/
@@ -74,10 +82,20 @@ elif command -v zypper > /dev/null; then
         ${ARTI_URL}/cos-internal-third-party-generic-local/rocm/latest/${TARGET_OS}/${TARGET_ARCH}/${ARTI_BRANCH}/ \
         rocm
 
+    if [[ $with_ze -eq 1 ]]; then
+        zypper --verbose --non-interactive  addrepo --no-gpgcheck --check \
+	--priority 20 --name=ze \
+	${ARTI_URL}/cos-internal-third-party-generic-local/intel_gpu/${TARGET_OS}/${TARGET_ARCH}/${ZE_ARTI_BRANCH}/ \
+	ze
+    fi
+
     zypper refresh
     zypper --non-interactive --no-gpg-checks install $RPMS
     zypper --non-interactive --no-gpg-checks install $CUDA_RPMS
     zypper --non-interactive --no-gpg-checks install $ROCR_RPMS
+    if [[ $with_ze -eq 1 ]]; then
+        zypper --non-interactive --no-gpg-checks install $ZE_RPMS
+    fi
 else
     "Unsupported package manager or package manager not found -- installing nothing"
 fi

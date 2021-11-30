@@ -12,17 +12,21 @@ function cleanup {
 trap cleanup EXIT
 
 if [[ "${TARGET_OS}" == "sle15_sp2_cn" || "${TARGET_OS}" == "sle15_sp2_ncn" || "${TARGET_OS}" == "sle15_sp3_cn" || "${TARGET_OS}" == "sle15_sp3_ncn" ]]; then
-	ROCM_CONFIG="-c --with-rocr=/opt/rocm \
--c --enable-rocr-dlopen"
+    ROCM_CONFIG="-c --with-rocr=/opt/rocm -c --enable-rocr-dlopen"
 else
     ROCM_CONFIG=""
 fi
 
 if [[ "${TARGET_OS}" == sle* ]]; then
-    CUDA_CONFIG="-c --with-cuda=/usr/local/cuda \
--c --enable-cuda-dlopen"
+    CUDA_CONFIG="-c --with-cuda=/usr/local/cuda -c --enable-cuda-dlopen"
 else
     CUDA_CONFIG=""
+fi
+
+if [[ "${TARGET_OS}" == "sle15_sp3_ncn" ]]; then
+    ZE_CONFIG="-c --with-ze=/usr -c --enable-ze-dlopen"
+else
+    ZE_CONFIG=""
 fi
 
 LIBFABRIC_VERSION=$(grep AC_INIT configure.ac | \
@@ -90,5 +94,6 @@ cleanup
     -c "--disable-memhooks-monitor" \
     ${CUDA_CONFIG} \
     ${ROCM_CONFIG} \
+    ${ZE_CONFIG} \
     -D \
     libfabric-${NEW_VERSION}.tar.bz2

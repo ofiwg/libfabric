@@ -19,6 +19,10 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	struct cxip_md *md = (struct cxip_md *)entry->data;
 	struct cxip_domain *dom;
 	uint32_t map_flags = CXI_MAP_READ | CXI_MAP_WRITE;
+	struct cxi_md_hints hints;
+	void *ze_handle;
+	void *ze_base_addr;
+	size_t ze_base_size;
 
 	dom = container_of(cache, struct cxip_domain, iomm);
 
@@ -35,6 +39,8 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 		return FI_SUCCESS;
 	}
 
+	memset(&hints, 0, sizeof(hints));
+
 	if (entry->info.iface == FI_HMEM_SYSTEM) {
 		if (dom->ats)
 			map_flags |= CXI_MAP_ATS;
@@ -42,14 +48,43 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 		if (!dom->odp)
 			map_flags |= CXI_MAP_PIN;
 	} else {
-		map_flags |= CXI_MAP_DEVICE;
+		/* TODO: Remove PIN when DMA buf move_notify is supported. */
+		map_flags |= CXI_MAP_DEVICE | CXI_MAP_PIN;
+
+		/* ZE support requires the use of the DMA buf FD and offset
+		 * hints fields.
+		 */
+		if (entry->info.iface == FI_HMEM_ZE) {
+			ret = ze_hmem_get_handle(entry->info.iov.iov_base,
+						 &ze_handle);
+			if (ret) {
+				CXIP_WARN("ze_hmem_get_handle failed: rc=%d\n",
+					  ret);
+				return ret;
+			}
+
+			ret = ze_hmem_get_base_addr(entry->info.iov.iov_base,
+						    &ze_base_addr,
+						    &ze_base_size);
+			if (ret) {
+				CXIP_WARN("ze_hmem_get_base_addr failed: rc=%d\n",
+					  ret);
+				return ret;
+			}
+
+			hints.dmabuf_fd = (int)(uintptr_t)ze_handle;
+			hints.dmabuf_offset =
+				(uintptr_t)entry->info.iov.iov_base -
+				(uintptr_t)ze_base_addr;
+			hints.dmabuf_valid = true;
+		}
 	}
 
 	if (!cxip_env.iotlb)
 		map_flags |= CXI_MAP_NOCACHE;
 
 	ret = cxil_map(dom->lni->lni, entry->info.iov.iov_base,
-		       entry->info.iov.iov_len, map_flags, NULL, &md->md);
+		       entry->info.iov.iov_len, map_flags, &hints, &md->md);
 	if (ret) {
 		md->dom = NULL;
 		CXIP_WARN("cxil_map() failed: %d\n", ret);
@@ -188,6 +223,7 @@ int cxip_iomm_init(struct cxip_domain *dom)
 		[FI_HMEM_SYSTEM] = default_monitor,
 		[FI_HMEM_CUDA] = default_cuda_monitor,
 		[FI_HMEM_ROCR] = default_rocr_monitor,
+		[FI_HMEM_ZE] = default_ze_monitor,
 	};
 	enum fi_hmem_iface iface;
 	int ret;
@@ -276,6 +312,10 @@ static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
 	struct cxip_md *uncached_md;
 	uint32_t map_flags;
 	int ret;
+	struct cxi_md_hints hints;
+	void *ze_handle;
+	void *ze_base_addr;
+	size_t ze_base_size;
 
 	/* Prefer the ATS (scalable MD) whenever possible
 	 *
@@ -286,6 +326,8 @@ static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
 		*md = &dom->scalable_md;
 		return FI_SUCCESS;
 	}
+
+	memset(&hints, 0, sizeof(hints));
 
 	uncached_md = calloc(1, sizeof(*uncached_md));
 	if (!uncached_md)
@@ -299,14 +341,43 @@ static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
 		if (!dom->odp)
 			map_flags |= CXI_MAP_PIN;
 	} else {
-		map_flags |= CXI_MAP_DEVICE;
+		/* TODO: Remove PIN when DMA buf move_notify is supported. */
+		map_flags |= CXI_MAP_DEVICE | CXI_MAP_PIN;
+
+		/* ZE support requires the use of the DMA buf FD and offset
+		 * hints fields.
+		 */
+		if (attr->iface == FI_HMEM_ZE) {
+			ret = ze_hmem_get_handle(attr->mr_iov->iov_base,
+						 &ze_handle);
+			if (ret) {
+				CXIP_WARN("ze_hmem_get_handle failed: rc=%d\n",
+					  ret);
+				return ret;
+			}
+
+			ret = ze_hmem_get_base_addr(attr->mr_iov->iov_base,
+						    &ze_base_addr,
+						    &ze_base_size);
+			if (ret) {
+				CXIP_WARN("ze_hmem_get_base_addr failed: rc=%d\n",
+					  ret);
+				return ret;
+			}
+
+			hints.dmabuf_fd = (int)(uintptr_t)ze_handle;
+			hints.dmabuf_offset =
+				(uintptr_t)attr->mr_iov->iov_base -
+				(uintptr_t)ze_base_addr;
+			hints.dmabuf_valid = true;
+		}
 	}
 
 	if (!cxip_env.iotlb)
 		map_flags |= CXI_MAP_NOCACHE;
 
 	ret = cxil_map(dom->lni->lni, attr->mr_iov->iov_base,
-		       attr->mr_iov->iov_len, map_flags, NULL,
+		       attr->mr_iov->iov_len, map_flags, &hints,
 		       &uncached_md->md);
 	if (ret) {
 		CXIP_WARN("cxil_map() failed: %d\n", ret);
