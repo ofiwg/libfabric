@@ -310,20 +310,6 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 	return 0;
 }
 
-int ofi_av_elements_iter(struct util_av *av, ofi_av_apply_func apply, void *arg)
-{
-	struct util_av_entry *av_entry = NULL, *av_entry_tmp = NULL;
-	int ret;
-
-	HASH_ITER(hh, av->hash, av_entry, av_entry_tmp) {
-		ret = apply(av, av_entry->data,
-			    ofi_buf_index(av_entry), arg);
-		if (OFI_UNLIKELY(ret))
-			return ret;
-	}
-	return 0;
-}
-
 int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 {
 	struct util_av_entry *av_entry;
@@ -420,9 +406,23 @@ int ofi_av_close_lightweight(struct util_av *av)
 
 int ofi_av_close(struct util_av *av)
 {
-	int ret = ofi_av_close_lightweight(av);
+	int ret;
+
+	ofi_mutex_lock(&av->lock);
+	if (av->av_set) {
+		ret = fi_close(&av->av_set->av_set_fid.fid);
+		if (ret) {
+			ofi_mutex_unlock(&av->lock);
+			return ret;
+		}
+		av->av_set = NULL;
+	}
+	ofi_mutex_unlock(&av->lock);
+
+	ret = ofi_av_close_lightweight(av);
 	if (ret)
 		return ret;
+
 	util_av_close(av);
 	return 0;
 }

@@ -747,20 +747,6 @@ static struct fi_ops util_coll_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static inline void util_coll_mc_init(struct util_coll_mc *coll_mc,
-				   struct util_av_set *av_set,
-				   struct fid_ep *ep, void *context)
-{
-	coll_mc->mc_fid.fid.fclass = FI_CLASS_MC;
-	coll_mc->mc_fid.fid.context = context;
-	coll_mc->mc_fid.fid.ops = &util_coll_fi_ops;
-	coll_mc->mc_fid.fi_addr = (uintptr_t) coll_mc;
-	coll_mc->ep = ep;
-	assert(av_set != NULL);
-	ofi_atomic_inc32(&av_set->ref);
-	coll_mc->av_set = av_set;
-}
-
 static int ofi_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr)
 {
 	struct util_av_set *av_set;
@@ -802,7 +788,7 @@ static int util_coll_find_local_rank(struct fid_ep *ep, struct util_coll_mc *col
 
 	coll_mc->local_rank = FI_ADDR_NOTAVAIL;
 	if (my_addr != FI_ADDR_NOTAVAIL) {
-		for (i=0; i<coll_mc->av_set->fi_addr_count; i++)
+		for (i = 0; i < coll_mc->av_set->fi_addr_count; i++)
 			if (coll_mc->av_set->fi_addr_array[i] == my_addr) {
 				coll_mc->local_rank = i;
 				break;
@@ -820,7 +806,8 @@ void util_coll_join_comp(struct util_coll_operation *coll_op)
 	struct util_ep *ep = container_of(coll_op->mc->ep, struct util_ep, ep_fid);
 
 	coll_op->data.join.new_mc->seq = 0;
-	coll_op->data.join.new_mc->group_id = ofi_bitmask_get_lsbset(coll_op->data.join.data);
+	coll_op->data.join.new_mc->group_id =
+				ofi_bitmask_get_lsbset(coll_op->data.join.data);
 	// mark the local mask bit
 	ofi_bitmask_unset(ep->coll_cid_mask, coll_op->data.join.new_mc->group_id);
 
@@ -990,6 +977,27 @@ out:
 	return ret;
 }
 
+static struct util_coll_mc *
+util_create_coll_mc(struct fid_ep *ep, struct util_av_set *av_set, void *context)
+{
+	struct util_coll_mc *coll_mc;
+
+	coll_mc = calloc(1, sizeof(*coll_mc));
+	if (!coll_mc)
+		return NULL;
+
+	coll_mc->mc_fid.fid.fclass = FI_CLASS_MC;
+	coll_mc->mc_fid.fid.context = context;
+	coll_mc->mc_fid.fid.ops = &util_coll_fi_ops;
+	coll_mc->mc_fid.fi_addr = (uintptr_t) coll_mc;
+
+	ofi_atomic_inc32(&av_set->ref);
+	coll_mc->av_set = av_set;
+	coll_mc->ep = ep;
+
+	return coll_mc;
+}
+
 int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		       const struct fid_av_set *set,
 		       uint64_t flags, struct fid_mc **mc, void *context)
@@ -1004,22 +1012,17 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	av_set = container_of(set, struct util_av_set, av_set_fid);
 
 	if (coll_addr == FI_ADDR_NOTAVAIL) {
-		assert(av_set->av->coll_mc != NULL);
-		coll_mc = av_set->av->coll_mc;
+		assert(av_set->av->av_set);
+		coll_mc = &av_set->av->av_set->coll_mc;
 	} else {
 		coll_mc = (struct util_coll_mc*) ((uintptr_t) coll_addr);
 	}
-
-	new_coll_mc = calloc(1, sizeof(*new_coll_mc));
-	if (!new_coll_mc)
-		return -FI_ENOMEM;
-
-	// set up the new mc for future collectives
-	util_coll_mc_init(new_coll_mc, av_set, ep, context);
-
+	/* TODO: This won't work if there are multiple ep's */
 	coll_mc->ep = ep;
 
-	util_ep = container_of(ep, struct util_ep, ep_fid);
+	new_coll_mc = util_create_coll_mc(ep, av_set, context);
+	if (!new_coll_mc)
+		return -FI_ENOMEM;
 
 	/* get the rank */
 	util_coll_find_local_rank(ep, new_coll_mc);
@@ -1040,6 +1043,7 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	if (ret)
 		goto err3;
 
+	util_ep = container_of(ep, struct util_ep, ep_fid);
 	ret = util_coll_allreduce(join_op, util_ep->coll_cid_mask->bytes,
 				  join_op->data.join.data.bytes,
 				  join_op->data.join.tmp.bytes,
@@ -1063,11 +1067,11 @@ err3:
 err2:
 	free(join_op);
 err1:
-	free(new_coll_mc);
+	fi_close(&new_coll_mc->mc_fid.fid);
 	return ret;
 }
 
-static struct fi_ops_av_set util_av_set_ops= {
+static struct fi_ops_av_set util_av_set_ops = {
 	.set_union	=	ofi_av_set_union,
 	.intersect	=	ofi_av_set_intersect,
 	.diff		=	ofi_av_set_diff,
@@ -1076,28 +1080,17 @@ static struct fi_ops_av_set util_av_set_ops= {
 	.addr		=	ofi_av_set_addr
 };
 
-static int util_coll_copy_from_av(struct util_av *av, void *addr,
-			      fi_addr_t fi_addr, void *arg)
-{
-	struct util_av_set *av_set = (struct util_av_set *) arg;
-	av_set->fi_addr_array[av_set->fi_addr_count++] = fi_addr;
-	return FI_SUCCESS;
-}
-
 static int util_av_set_close(struct fid *fid)
 {
 	struct util_av_set *av_set;
 
 	av_set = container_of(fid, struct util_av_set, av_set_fid.fid);
-
-	// release reference taken by internal coll_mc embedded in av_set
-	ofi_atomic_dec32(&av_set->ref);
 	if (ofi_atomic_get32(&av_set->ref) > 0)
 		return -FI_EBUSY;
 
+	ofi_atomic_dec32(&av_set->av->ref);
 	free(av_set->fi_addr_array);
 	free(av_set);
-
 	return FI_SUCCESS;
 }
 
@@ -1109,115 +1102,93 @@ static struct fi_ops util_av_set_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static inline int util_av_set_init(struct util_av_set *av_set,
-				   struct util_av *util_av,
-				   void *context)
+static struct util_av_set *
+ofi_av_set_create(struct util_av *av, struct fi_av_set_attr *attr, void *context)
 {
-	int ret = FI_SUCCESS;
+	struct util_av_set *av_set;
+	size_t max_size;
+	uint64_t i;
+
+	av_set = calloc(1, sizeof(*av_set));
+	if (!av_set)
+		return NULL;
+
+	if (ofi_mutex_init(&av_set->lock))
+		goto free;
+
+	max_size = attr->count ? attr->count : ofi_av_size(av);
+	av_set->fi_addr_array = calloc(max_size,
+				       sizeof(*av_set->fi_addr_array));
+	if (!av_set->fi_addr_array)
+		goto destroy;
+
+	for (i = attr->start_addr; i <= attr->end_addr; i += attr->stride) {
+		av_set->fi_addr_array[av_set->fi_addr_count++] = av->av_set ?
+			av->av_set->fi_addr_array[i] : i;
+	}
+	assert(av_set->fi_addr_count <= max_size);
+
+	ofi_atomic_initialize32(&av_set->ref, 0);
+	av_set->coll_mc.av_set = av_set;
 
 	av_set->av_set_fid.ops = &util_av_set_ops;
 	av_set->av_set_fid.fid.fclass = FI_CLASS_AV_SET;
 	av_set->av_set_fid.fid.context = context;
 	av_set->av_set_fid.fid.ops = &util_av_set_fi_ops;
-	av_set->av = util_av;
-	ofi_atomic_initialize32(&av_set->ref, 0);
-	ret = ofi_mutex_init(&av_set->lock);
 
-	return ret;
+	av_set->av = av;
+	ofi_atomic_inc32(&av->ref);
+	return av_set;
+
+destroy:
+	ofi_mutex_destroy(&av_set->lock);
+free:
+	free(av_set);
+	return NULL;
 }
 
-static int util_coll_av_init(struct util_av *av)
+static int util_av_create_base_set(struct util_av *av)
 {
-	struct util_coll_mc *coll_mc;
-	int ret;
+	struct fi_av_set_attr attr = {0};
 
-	assert(!av->coll_mc);
+	assert(!av->av_set);
+	assert(ofi_mutex_held(&av->lock));
 
-	coll_mc = calloc(1, sizeof(*coll_mc));
-	if (!coll_mc)
+	attr.stride = 1;
+	if (HASH_COUNT(av->hash)) {
+		attr.end_addr = HASH_COUNT(av->hash) - 1;
+	} else {
+		/* set start > end to skip insertions */
+		attr.start_addr = 1;
+	}
+
+	av->av_set = ofi_av_set_create(av, &attr, av);
+	if (!av->av_set)
 		return -FI_ENOMEM;
 
-	coll_mc->av_set = calloc(1, sizeof(*coll_mc->av_set));
-	if (!coll_mc->av_set) {
-		ret = -FI_ENOMEM;
-		goto err1;
-	}
-	ret = util_av_set_init(coll_mc->av_set, av, NULL);
-	if (ret)
-		goto err3;
-
-	coll_mc->av_set->fi_addr_array = calloc(ofi_av_size(av),
-					 sizeof(*coll_mc->av_set->fi_addr_array));
-	if (!coll_mc->av_set->fi_addr_array) {
-		ret = -FI_ENOMEM;
-		goto err2;
-	}
-
-	ret = ofi_av_elements_iter(av, util_coll_copy_from_av,
-				   (void *)coll_mc->av_set);
-	if (ret)
-		goto err4;
-
-	util_coll_mc_init(coll_mc, coll_mc->av_set, NULL, NULL);
-
-	av->coll_mc = coll_mc;
 	return FI_SUCCESS;
-
-err4:
-	ofi_mutex_destroy(&coll_mc->av_set->lock);
-err3:
-	free(coll_mc->av_set->fi_addr_array);
-err2:
-	free(coll_mc->av_set);
-err1:
-	free(coll_mc);
-	return ret;
 }
 
-int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
-	       struct fid_av_set **av_set_fid, void * context)
+int ofi_av_set(struct fid_av *av_fid, struct fi_av_set_attr *attr,
+	       struct fid_av_set **av_set_fid, void *context)
 {
-	struct util_av *util_av = container_of(av, struct util_av, av_fid);
 	struct util_av_set *av_set;
-	size_t max_size;
-	uint64_t i;
+	struct util_av *av;
 	int ret;
 
-	if (!util_av->coll_mc) {
-		ret = util_coll_av_init(util_av);
-		if (ret)
-			return ret;
-	}
+	av = container_of(av_fid, struct util_av, av_fid);
+	ofi_mutex_lock(&av->lock);
+	ret = av->av_set ? 0 : util_av_create_base_set(av);
+	ofi_mutex_unlock(&av->lock);
+	if (ret)
+		return ret;
 
-	av_set = calloc(1, sizeof(*av_set));
+	av_set = ofi_av_set_create(av, attr, context);
 	if (!av_set)
 		return -FI_ENOMEM;
 
-	ret = util_av_set_init(av_set, util_av, context);
-	if (ret)
-		goto err1;
-
-	max_size = attr->count ? attr->count : ofi_av_size(util_av);
-	av_set->fi_addr_array = calloc(max_size,
-				       sizeof(*av_set->fi_addr_array));
-	if (!av_set->fi_addr_array)
-		goto err2;
-
-	for (i = attr->start_addr; i <= attr->end_addr; i += attr->stride) {
-		av_set->fi_addr_array[av_set->fi_addr_count++] =
-			util_av->coll_mc->av_set->fi_addr_array[i];
-	}
-	assert(av_set->fi_addr_count <= max_size);
-
-	util_coll_mc_init(&av_set->coll_mc, av_set, NULL, context);
-
-	(*av_set_fid) = &av_set->av_set_fid;
+	*av_set_fid = &av_set->av_set_fid;
 	return FI_SUCCESS;
-err2:
-	ofi_mutex_destroy(&av_set->lock);
-err1:
-	free(av_set);
-	return ret;
 }
 
 ssize_t ofi_ep_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
