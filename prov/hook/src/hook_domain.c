@@ -189,8 +189,8 @@ int hook_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 	return fi_query_atomic(dom->hdomain, datatype, op, attr, flags);
 }
 
-static int hook_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
-				 struct fi_collective_attr *attr, uint64_t flags)
+int hook_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
+			  struct fi_collective_attr *attr, uint64_t flags)
 {
 	struct hook_domain *dom = container_of(domain, struct hook_domain, domain);
 
@@ -212,16 +212,12 @@ struct fi_ops_domain hook_domain_ops = {
 };
 
 
-int hook_domain(struct fid_fabric *fabric, struct fi_info *info,
-		struct fid_domain **domain, void *context)
+int hook_domain_init(struct fid_fabric *fabric, struct fi_info *info,
+		     struct fid_domain **domain, void *context,
+		     struct hook_domain *dom)
 {
 	struct hook_fabric *fab = container_of(fabric, struct hook_fabric, fabric);
-	struct hook_domain *dom;
 	int ret;
-
-	dom = calloc(1, sizeof *dom);
-	if (!dom)
-		return -FI_ENOMEM;
 
 	dom->fabric = fab;
 	dom->domain.fid.fclass = FI_CLASS_DOMAIN;
@@ -232,13 +228,31 @@ int hook_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	ret = fi_domain(fab->hfabric, info, &dom->hdomain, &dom->domain.fid);
 	if (ret)
-		goto err1;
+		return ret;
 
 	*domain = &dom->domain;
+
+	return 0;
+}
+
+int hook_domain(struct fid_fabric *fabric, struct fi_info *info,
+		struct fid_domain **domain, void *context)
+{
+	struct hook_domain *dom;
+	int ret;
+
+	dom = calloc(1, sizeof *dom);
+	if (!dom)
+		return -FI_ENOMEM;
+
+	ret = hook_domain_init(fabric, info, domain, context, dom);
+	if (ret)
+		goto err1;
 
 	ret = hook_ini_fid(dom->fabric->prov_ctx, &dom->domain.fid);
 	if (ret)
 		goto err2;
+
 	return 0;
 err2:
 	fi_close(&dom->domain.fid);
