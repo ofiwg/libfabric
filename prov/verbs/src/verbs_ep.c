@@ -46,9 +46,9 @@ void vrb_add_credits(struct fid_ep *ep_fid, size_t credits)
 	ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
 	cq = ep->util_ep.tx_cq;
 
-	cq->cq_fastlock_acquire(&cq->cq_lock);
+	cq->cq_mutex_lock(&cq->cq_lock);
 	ep->peer_rq_credits += credits;
-	cq->cq_fastlock_release(&cq->cq_lock);
+	cq->cq_mutex_unlock(&cq->cq_lock);
 }
 
 /* Receive CQ credits are pre-allocated */
@@ -64,7 +64,7 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
 	domain = vrb_ep_to_domain(ep);
 
-	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
 	ctx = ofi_buf_alloc(cq->ctx_pool);
 	if (!ctx)
 		goto unlock;
@@ -85,13 +85,13 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	} else {
 		credits_to_give = 0;
 	}
-	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
 
 	if (credits_to_give &&
 	    domain->send_credits(&ep->util_ep.ep_fid, credits_to_give)) {
-		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+		cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
 		ep->rq_credits_avail += credits_to_give;
-		cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+		cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
 	}
 
 	return 0;
@@ -99,7 +99,7 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 freebuf:
 	ofi_buf_free(ctx);
 unlock:
-	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
 	return -FI_EAGAIN;
 }
 
@@ -116,7 +116,7 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 
 	cq = container_of(ep->util_ep.tx_cq, struct vrb_cq, util_cq);
 	domain = vrb_ep_to_domain(ep);
-	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
 	ctx = ofi_buf_alloc(cq->ctx_pool);
 	if (!ctx)
 		goto unlock;
@@ -153,7 +153,7 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 			 vrb_convert_ret(ret));
 		goto credits;
 	}
-	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
 
 	return 0;
 
@@ -165,19 +165,19 @@ credits:
 freebuf:
 	ofi_buf_free(ctx);
 unlock:
-	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
 	cq_rx = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
-	cq_rx->util_cq.cq_fastlock_acquire(&cq_rx->util_cq.cq_lock);
+	cq_rx->util_cq.cq_mutex_lock(&cq_rx->util_cq.cq_lock);
 	if (ep->rq_credits_avail >= ep->threshold) {
 		credits_to_give = ep->rq_credits_avail;
 		ep->rq_credits_avail = 0;
 	}
-	cq_rx->util_cq.cq_fastlock_release(&cq_rx->util_cq.cq_lock);
+	cq_rx->util_cq.cq_mutex_unlock(&cq_rx->util_cq.cq_lock);
 	if (credits_to_give &&
 	    domain->send_credits(&ep->util_ep.ep_fid, credits_to_give)) {
-		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+		cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
 		ep->rq_credits_avail += credits_to_give;
-		cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+		cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
 	}
 	return -FI_EAGAIN;
 }
@@ -416,9 +416,9 @@ static int vrb_close_free_ep(struct vrb_ep *ep)
 
 	if (ep->util_ep.rx_cq) {
 		cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
-		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+		cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
 		cq->credits += ep->rx_cq_size;
-		cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+		cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
 	}
 	ret = ofi_endpoint_close(&ep->util_ep);
 	if (ret)
@@ -437,7 +437,7 @@ static void vrb_ep_xrc_close(struct vrb_ep *ep)
 	struct vrb_xrc_ep *xrc_ep = container_of(ep, struct vrb_xrc_ep,
 						 base_ep);
 
-	assert(fastlock_held(&ep->eq->lock));
+	assert(ofi_mutex_held(&ep->eq->lock));
 	if (xrc_ep->conn_setup)
 		vrb_free_xrc_conn_setup(xrc_ep, 0);
 
@@ -457,7 +457,7 @@ static int vrb_ep_close(fid_t fid)
 	switch (ep->util_ep.type) {
 	case FI_EP_MSG:
 		if (ep->eq) {
-			fastlock_acquire(&ep->eq->lock);
+			ofi_mutex_lock(&ep->eq->lock);
 			if (ep->eq->err.err && ep->eq->err.fid == fid) {
 				if (ep->eq->err.err_data) {
 					free(ep->eq->err.err_data);
@@ -476,7 +476,7 @@ static int vrb_ep_close(fid_t fid)
 			rdma_destroy_ep(ep->id);
 
 		if (ep->eq)
-			fastlock_release(&ep->eq->lock);
+			ofi_mutex_unlock(&ep->eq->lock);
 		vrb_cleanup_cq(ep);
 		break;
 	case FI_EP_DGRAM:
@@ -535,21 +535,21 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_CQ:
 		/* Reserve space for receives */
 		if (flags & FI_RECV) {
-			cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+			cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
 			if (cq->credits < ep->rx_cq_size) {
 				VRB_WARN(FI_LOG_EP_CTRL,
 					   "Rx CQ is fully reserved\n");
 				ep->rx_cq_size = 0;
 			}
 			cq->credits -= ep->rx_cq_size;
-			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+			cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
 		}
 
 		ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
 		if (ret) {
-			cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+			cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
 			cq->credits += ep->rx_cq_size;
-			cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+			cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
 			return ret;
 		}
 		break;
@@ -560,12 +560,12 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		ep->eq = container_of(bfid, struct vrb_eq, eq_fid.fid);
 
 		/* Make sure EQ channel is not polled during migrate */
-		fastlock_acquire(&ep->eq->lock);
+		ofi_mutex_lock(&ep->eq->lock);
 		if (vrb_is_xrc_ep(ep))
 			ret = vrb_ep_xrc_set_tgt_chan(ep);
 		else
 			ret = rdma_migrate_id(ep->id, ep->eq->channel);
-		fastlock_release(&ep->eq->lock);
+		ofi_mutex_unlock(&ep->eq->lock);
 		if (ret) {
 			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_migrate_id");
 			return -errno;
@@ -685,7 +685,7 @@ static int vrb_process_xrc_preposted(struct vrb_srq_ep *srq_ep)
 	struct slist_entry *entry;
 	int ret;
 
-	assert(fastlock_held(&srq_ep->xrc.prepost_lock));
+	assert(ofi_mutex_held(&srq_ep->xrc.prepost_lock));
 	/* The pre-post SRQ function ops have been replaced so the
 	 * posting here results in adding the RX entries to the SRQ */
 	while (!slist_empty(&srq_ep->xrc.prepost_list)) {
@@ -720,14 +720,14 @@ static int vrb_ep_enable_xrc(struct vrb_ep *ep)
 	dlist_init(&xrc_ep->ini_conn_entry);
 	xrc_ep->conn_state = VRB_XRC_UNCONNECTED;
 
-	fastlock_acquire(&srq_ep->xrc.prepost_lock);
+	ofi_mutex_lock(&srq_ep->xrc.prepost_lock);
 	if (srq_ep->srq) {
 		/*
 		 * Multiple endpoints bound to the same XRC SRX context have
 		 * the restriction that they must be bound to the same RX CQ
 		 */
 		if (!srq_ep->xrc.cq || srq_ep->xrc.cq != cq) {
-			fastlock_release(&srq_ep->xrc.prepost_lock);
+			ofi_mutex_unlock(&srq_ep->xrc.prepost_lock);
 			VRB_WARN(FI_LOG_EP_CTRL, "SRX_CTX/CQ mismatch\n");
 			return -FI_EINVAL;
 		}
@@ -761,11 +761,11 @@ static int vrb_ep_enable_xrc(struct vrb_ep *ep)
 	}
 	/* The RX CQ maintains a list of all the XRC SRQs that were created
 	 * using it as the CQ */
-	cq->util_cq.cq_fastlock_acquire(&cq->xrc.srq_list_lock);
+	ofi_mutex_lock(&cq->xrc.srq_list_lock);
 	dlist_insert_tail(&srq_ep->xrc.srq_entry, &cq->xrc.srq_list);
 	srq_ep->xrc.cq = cq;
 	cq->credits -= srq_ep->xrc.max_recv_wr;
-	cq->util_cq.cq_fastlock_release(&cq->xrc.srq_list_lock);
+	ofi_mutex_unlock(&cq->xrc.srq_list_lock);
 
 	ibv_get_srq_num(srq_ep->srq, &xrc_ep->srqn);
 
@@ -773,7 +773,7 @@ static int vrb_ep_enable_xrc(struct vrb_ep *ep)
 	srq_ep->ep_fid.msg = &vrb_srq_msg_ops;
 	ret = vrb_process_xrc_preposted(srq_ep);
 done:
-	fastlock_release(&srq_ep->xrc.prepost_lock);
+	ofi_mutex_unlock(&srq_ep->xrc.prepost_lock);
 
 	return ret;
 #else /* VERBS_HAVE_XRC */
@@ -1457,7 +1457,7 @@ ssize_t vrb_post_srq(struct vrb_srq_ep *ep, struct ibv_recv_wr *wr)
 	struct ibv_recv_wr *bad_wr;
 	int ret;
 
-	fastlock_acquire(&ep->ctx_lock);
+	ofi_mutex_lock(&ep->ctx_lock);
 	ctx = ofi_buf_alloc(ep->ctx_pool);
 	if (!ctx)
 		goto unlock;
@@ -1471,13 +1471,13 @@ ssize_t vrb_post_srq(struct vrb_srq_ep *ep, struct ibv_recv_wr *wr)
 	wr->wr_id = (uintptr_t) ctx->user_ctx;
 	if (ret)
 		goto freebuf;
-	fastlock_release(&ep->ctx_lock);
+	ofi_mutex_unlock(&ep->ctx_lock);
 	return 0;
 
 freebuf:
 	ofi_buf_free(ctx);
 unlock:
-	fastlock_release(&ep->ctx_lock);
+	ofi_mutex_unlock(&ep->ctx_lock);
 	return -FI_EAGAIN;
 }
 
@@ -1555,12 +1555,12 @@ vrb_xrc_srq_ep_prepost_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 	struct vrb_xrc_srx_prepost *recv;
 	ssize_t ret;
 
-	fastlock_acquire(&ep->xrc.prepost_lock);
+	ofi_mutex_lock(&ep->xrc.prepost_lock);
 
 	/* Handle race that can occur when SRQ is created and pre-post
 	 * receive message function is swapped out. */
 	if (ep->srq) {
-		fastlock_release(&ep->xrc.prepost_lock);
+		ofi_mutex_unlock(&ep->xrc.prepost_lock);
 		return vrb_convert_ret(fi_recv(ep_fid, buf, len, desc,
 						 src_addr, context));
 	}
@@ -1586,7 +1586,7 @@ vrb_xrc_srq_ep_prepost_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 	slist_insert_tail(&recv->prepost_entry, &ep->xrc.prepost_list);
 	ret = FI_SUCCESS;
 done:
-	fastlock_release(&ep->xrc.prepost_lock);
+	ofi_mutex_unlock(&ep->xrc.prepost_lock);
 	return ret;
 }
 
@@ -1620,7 +1620,7 @@ int vrb_xrc_close_srq(struct vrb_srq_ep *srq_ep)
 {
 	int ret;
 
-	assert(fastlock_held(&srq_ep->xrc.cq->xrc.srq_list_lock));
+	assert(ofi_mutex_held(&srq_ep->xrc.cq->xrc.srq_list_lock));
 	assert(srq_ep->domain->ext_flags & VRB_USE_XRC);
 	if (!srq_ep->xrc.cq || !srq_ep->srq)
 		return FI_SUCCESS;
@@ -1648,13 +1648,13 @@ static int vrb_srq_close(fid_t fid)
 
 	if (srq_ep->domain->ext_flags & VRB_USE_XRC) {
 		if (cq) {
-			fastlock_acquire(&cq->xrc.srq_list_lock);
+			ofi_mutex_lock(&cq->xrc.srq_list_lock);
 			ret = vrb_xrc_close_srq(srq_ep);
-			fastlock_release(&cq->xrc.srq_list_lock);
+			ofi_mutex_unlock(&cq->xrc.srq_list_lock);
 			if (ret)
 				goto err;
 		}
-		fastlock_destroy(&srq_ep->xrc.prepost_lock);
+		ofi_mutex_destroy(&srq_ep->xrc.prepost_lock);
 	} else {
 		ret = ibv_destroy_srq(srq_ep->srq);
 		if (ret)
@@ -1662,7 +1662,7 @@ static int vrb_srq_close(fid_t fid)
 	}
 
 	ofi_bufpool_destroy(srq_ep->ctx_pool);
-	fastlock_destroy(&srq_ep->ctx_lock);
+	ofi_mutex_destroy(&srq_ep->ctx_lock);
 	free(srq_ep);
 	return FI_SUCCESS;
 
@@ -1694,7 +1694,7 @@ int vrb_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 	if (!srq_ep)
 		return -FI_ENOMEM;
 
-	fastlock_init(&srq_ep->ctx_lock);
+	ofi_mutex_init(&srq_ep->ctx_lock);
 	ret = ofi_bufpool_create(&srq_ep->ctx_pool, sizeof(struct fi_context),
 				 16, attr->size, 1024, OFI_BUFPOOL_NO_TRACK);
 	if (ret)
@@ -1715,7 +1715,7 @@ int vrb_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 	/* XRC SRQ creation is delayed until the first endpoint it is bound
 	 * to is enabled.*/
 	if (dom->ext_flags & VRB_USE_XRC) {
-		fastlock_init(&srq_ep->xrc.prepost_lock);
+		ofi_mutex_init(&srq_ep->xrc.prepost_lock);
 		slist_init(&srq_ep->xrc.prepost_list);
 		dlist_init(&srq_ep->xrc.srq_entry);
 		srq_ep->xrc.max_recv_wr = attr->size;
@@ -1742,7 +1742,7 @@ done:
 free_bufs:
 	ofi_bufpool_destroy(srq_ep->ctx_pool);
 free_ep:
-	fastlock_destroy(&srq_ep->ctx_lock);
+	ofi_mutex_destroy(&srq_ep->ctx_lock);
 	free(srq_ep);
 	return ret;
 }

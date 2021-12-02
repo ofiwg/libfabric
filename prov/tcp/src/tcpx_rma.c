@@ -122,10 +122,10 @@ tcpx_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	tcpx_rma_read_send_entry_fill(send_entry, recv_entry, ep, msg);
 	tcpx_rma_read_recv_entry_fill(recv_entry, ep, msg, flags);
 
-	fastlock_acquire(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	slist_insert_tail(&recv_entry->entry, &ep->rma_read_queue);
 	tcpx_tx_queue_insert(ep, send_entry);
-	fastlock_release(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 	return FI_SUCCESS;
 }
 
@@ -242,9 +242,9 @@ tcpx_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	tcpx_set_commit_flags(send_entry, flags);
 	send_entry->context = msg->context;
 
-	fastlock_acquire(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	tcpx_tx_queue_insert(ep, send_entry);
-	fastlock_release(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 	return FI_SUCCESS;
 }
 
@@ -373,9 +373,9 @@ tcpx_rma_inject_common(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	send_entry->hdr.base_hdr.size = offset;
 
-	fastlock_acquire(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	tcpx_tx_queue_insert(ep, send_entry);
-	fastlock_release(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 	return FI_SUCCESS;
 }
 

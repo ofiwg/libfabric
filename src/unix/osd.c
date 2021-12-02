@@ -106,7 +106,7 @@ int fi_fd_block(int fd)
 	return 0;
 }
 
-int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms)
+int ofi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms)
 {
 	uint64_t t;
 	struct timespec ts;

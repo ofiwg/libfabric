@@ -961,7 +961,7 @@ static inline int psmx2_cq_any_complete(struct psmx2_fid_cq *poll_cq,
 
 		if (event == event_in) {
 			if (src_addr) {
-				src_addr[*read_count] = 
+				src_addr[*read_count] =
 					psmx2_av_translate_source(av, source, source_sep_id);
 				if (src_addr[*read_count] == FI_ADDR_NOTAVAIL) {
 					event = psmx2_cq_alloc_event(comp_cq);
@@ -1831,7 +1831,7 @@ static int psmx2_cq_close(fid_t fid)
 		free(item);
 	}
 
-	fastlock_destroy(&cq->lock);
+	ofi_spin_destroy(&cq->lock);
 
 	if (cq->wait) {
 		fi_poll_del(&cq->wait->pollset->poll_fid, &cq->cq.fid, 0);
@@ -2004,7 +2004,7 @@ int psmx2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	slist_init(&cq_priv->poll_list);
 	slist_init(&cq_priv->event_queue);
 	slist_init(&cq_priv->free_list);
-	fastlock_init(&cq_priv->lock);
+	ofi_spin_init(&cq_priv->lock);
 
 #define PSMX2_FREE_LIST_SIZE	64
 	for (i=0; i<PSMX2_FREE_LIST_SIZE; i++) {

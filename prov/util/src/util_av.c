@@ -286,7 +286,7 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 {
 	struct util_av_entry *entry = NULL;
 
-	assert(fastlock_held(&av->lock));
+	assert(ofi_mutex_held(&av->lock));
 	HASH_FIND(hh, av->hash, addr, av->addrlen, entry);
 	if (entry) {
 		if (fi_addr)
@@ -328,7 +328,7 @@ int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 {
 	struct util_av_entry *av_entry;
 
-	assert(fastlock_held(&av->lock));
+	assert(ofi_mutex_held(&av->lock));
 	av_entry = ofi_bufpool_get_ibuf(av->av_entry_pool, fi_addr);
 	if (!av_entry)
 		return -FI_ENOENT;
@@ -352,9 +352,9 @@ fi_addr_t ofi_av_lookup_fi_addr_unsafe(struct util_av *av, const void *addr)
 fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr)
 {
 	fi_addr_t fi_addr;
-	fastlock_acquire(&av->lock);
+	ofi_mutex_lock(&av->lock);
 	fi_addr = ofi_av_lookup_fi_addr_unsafe(av, addr);
-	fastlock_release(&av->lock);
+	ofi_mutex_unlock(&av->lock);
 	return fi_addr;
 }
 
@@ -410,10 +410,10 @@ int ofi_av_close_lightweight(struct util_av *av)
 	if (av->eq)
 		ofi_atomic_dec32(&av->eq->ref);
 
-	fastlock_destroy(&av->ep_list_lock);
+	ofi_mutex_destroy(&av->ep_list_lock);
 
 	ofi_atomic_dec32(&av->domain->ref);
-	fastlock_destroy(&av->lock);
+	ofi_mutex_destroy(&av->lock);
 
 	return 0;
 }
@@ -528,7 +528,7 @@ int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr 
 
 	av->prov = domain->prov;
 	ofi_atomic_initialize32(&av->ref, 0);
-	fastlock_init(&av->lock);
+	ofi_mutex_init(&av->lock);
 	av->av_fid.fid.fclass = FI_CLASS_AV;
 	/*
 	 * ops set by provider
@@ -537,7 +537,7 @@ int ofi_av_init_lightweight(struct util_domain *domain, const struct fi_av_attr 
 	 */
 	av->context = context;
 	av->domain = domain;
-	fastlock_init(&av->ep_list_lock);
+	ofi_mutex_init(&av->ep_list_lock);
 	dlist_init(&av->ep_list);
 	ofi_atomic_inc32(&domain->ref);
 	return 0;
@@ -603,9 +603,9 @@ static int ip_av_insert_addr(struct util_av *av, const void *addr,
 	int ret;
 
 	if (ofi_valid_dest_ipaddr(addr)) {
-		fastlock_acquire(&av->lock);
+		ofi_mutex_lock(&av->lock);
 		ret = ofi_av_insert_addr(av, addr, fi_addr);
-		fastlock_release(&av->lock);
+		ofi_mutex_unlock(&av->lock);
 	} else {
 		ret = -FI_EADDRNOTAVAIL;
 		if (fi_addr)
@@ -893,9 +893,9 @@ int ofi_ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	 * Thus, we walk through the array backwards.
 	 */
 	for (i = count - 1; i >= 0; i--) {
-		fastlock_acquire(&av->lock);
+		ofi_mutex_lock(&av->lock);
 		ret = ofi_av_remove_addr(av, fi_addr[i]);
-		fastlock_release(&av->lock);
+		ofi_mutex_unlock(&av->lock);
 		if (ret) {
 			FI_WARN(av->prov, FI_LOG_AV,
 				"removal of fi_addr %"PRIu64" failed\n",

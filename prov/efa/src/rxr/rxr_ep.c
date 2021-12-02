@@ -111,7 +111,7 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 		 */
 		assert(op == ofi_op_msg || op == ofi_op_tagged);
 		rx_entry->peer = NULL;
-	} 
+	}
 
 	rx_entry->op = op;
 	switch (op) {
@@ -798,13 +798,13 @@ bool rxr_ep_has_unfinished_send(struct rxr_ep *rxr_ep)
 static inline
 void rxr_ep_wait_send(struct rxr_ep *rxr_ep)
 {
-	fastlock_acquire(&rxr_ep->util_ep.lock);
+	ofi_mutex_lock(&rxr_ep->util_ep.lock);
 
 	while (rxr_ep_has_unfinished_send(rxr_ep)) {
 		rxr_ep_progress_internal(rxr_ep);
 	}
 
-	fastlock_release(&rxr_ep->util_ep.lock);
+	ofi_mutex_unlock(&rxr_ep->util_ep.lock);
 }
 
 static int rxr_ep_close(struct fid *fid)
@@ -961,7 +961,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
-		fastlock_acquire(&ep->util_ep.lock);
+		ofi_mutex_lock(&ep->util_ep.lock);
 
 		rxr_ep_set_extra_info(ep);
 
@@ -992,7 +992,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		}
 
 out:
-		fastlock_release(&ep->util_ep.lock);
+		ofi_mutex_unlock(&ep->util_ep.lock);
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -1029,12 +1029,12 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 	struct fi_cq_err_entry err_entry;
 	uint32_t api_version;
 
-	fastlock_acquire(&ep->util_ep.lock);
+	ofi_mutex_lock(&ep->util_ep.lock);
 	entry = dlist_remove_first_match(recv_list,
 					 &rxr_ep_cancel_match_recv,
 					 context);
 	if (!entry) {
-		fastlock_release(&ep->util_ep.lock);
+		ofi_mutex_unlock(&ep->util_ep.lock);
 		return 0;
 	}
 
@@ -1058,7 +1058,7 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 		   rx_entry->rxr_flags & RXR_MULTI_RECV_CONSUMER) {
 		rxr_msg_multi_recv_handle_completion(ep, rx_entry);
 	}
-	fastlock_release(&ep->util_ep.lock);
+	ofi_mutex_unlock(&ep->util_ep.lock);
 	memset(&err_entry, 0, sizeof(err_entry));
 	err_entry.op_context = rx_entry->cq_entry.op_context;
 	err_entry.flags |= rx_entry->cq_entry.flags;
@@ -2199,9 +2199,9 @@ void rxr_ep_progress(struct util_ep *util_ep)
 
 	ep = container_of(util_ep, struct rxr_ep, util_ep);
 
-	fastlock_acquire(&ep->util_ep.lock);
+	ofi_mutex_lock(&ep->util_ep.lock);
 	rxr_ep_progress_internal(ep);
-	fastlock_release(&ep->util_ep.lock);
+	ofi_mutex_unlock(&ep->util_ep.lock);
 }
 
 static

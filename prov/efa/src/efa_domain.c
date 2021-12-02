@@ -37,7 +37,7 @@
 #include "efa.h"
 #include "rxr_cntr.h"
 
-fastlock_t pd_list_lock;
+ofi_spin_t pd_list_lock;
 struct efa_pd *pd_list = NULL;
 
 enum efa_fork_support_status efa_fork_status = EFA_FORK_SUPPORT_OFF;
@@ -58,12 +58,12 @@ static int efa_domain_close(fid_t fid)
 	}
 
 	if (domain->ibv_pd) {
-		fastlock_acquire(&pd_list_lock);
+		ofi_spin_lock(&pd_list_lock);
 		efa_pd = &pd_list[domain->ctx->dev_idx];
 		if (efa_pd->use_cnt == 1) {
 			ret = -ibv_dealloc_pd(domain->ibv_pd);
 			if (ret) {
-				fastlock_release(&pd_list_lock);
+				ofi_spin_unlock(&pd_list_lock);
 				EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd",
 				               ret);
 				return ret;
@@ -72,7 +72,7 @@ static int efa_domain_close(fid_t fid)
 		}
 		efa_pd->use_cnt--;
 		domain->ibv_pd = NULL;
-		fastlock_release(&pd_list_lock);
+		ofi_spin_unlock(&pd_list_lock);
 	}
 
 	ret = ofi_domain_close(&domain->util_domain);
@@ -122,7 +122,7 @@ static int efa_open_device_by_name(struct efa_domain *domain, const char *name)
 	 * Check if a PD has already been allocated for this device and reuse
 	 * it if this is the case.
 	 */
-	fastlock_acquire(&pd_list_lock);
+	ofi_spin_lock(&pd_list_lock);
 	if (pd_list[i].ibv_pd) {
 		domain->ibv_pd = pd_list[i].ibv_pd;
 		pd_list[i].use_cnt++;
@@ -135,7 +135,7 @@ static int efa_open_device_by_name(struct efa_domain *domain, const char *name)
 			pd_list[i].use_cnt++;
 		}
 	}
-	fastlock_release(&pd_list_lock);
+	ofi_spin_unlock(&pd_list_lock);
 
 	efa_device_free_context_list(ctx_list);
 	return ret;
@@ -286,9 +286,9 @@ void efa_atfork_callback()
  * return failure if HUGEPAGES are also enabled as EFA provider does not support this case.
  *
  * In addition, we install a fork handler to ensure that we abort if another
- * library or process initiates a fork and we determined from previous logic 
+ * library or process initiates a fork and we determined from previous logic
  * that we cannot support that.
- * 
+ *
  * @param domain_fid domain fid so we can check register memory during initialization.
  * @return error number if we failed to initialize, 0 otherwise
  */

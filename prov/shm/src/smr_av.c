@@ -76,10 +76,10 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			ret = smr_map_add(&smr_prov, smr_av->smr_map,
 					  addr, &shm_id);
 			if (!ret) {
-				fastlock_acquire(&util_av->lock);
+				ofi_mutex_lock(&util_av->lock);
 				ret = ofi_av_insert_addr(util_av, &shm_id,
 							 &util_addr);
-				fastlock_release(&util_av->lock);
+				ofi_mutex_unlock(&util_av->lock);
 			}
 		} else {
 			FI_WARN(&smr_prov, FI_LOG_AV,
@@ -132,7 +132,7 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 	util_av = container_of(av_fid, struct util_av, av_fid);
 	smr_av = container_of(util_av, struct smr_av, util_av);
 
-	fastlock_acquire(&util_av->lock);
+	ofi_mutex_lock(&util_av->lock);
 	for (i = 0; i < count; i++) {
 		id = smr_addr_lookup(util_av, fi_addr[i]);
 		ret = ofi_av_remove_addr(util_av, fi_addr[i]);
@@ -151,7 +151,7 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 		smr_av->used--;
 	}
 
-	fastlock_release(&util_av->lock);
+	ofi_mutex_unlock(&util_av->lock);
 	return ret;
 }
 

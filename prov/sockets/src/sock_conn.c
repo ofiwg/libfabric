@@ -114,7 +114,7 @@ int sock_conn_map_init(struct sock_ep *ep, int init_size)
 		goto err2;
 	}
 
-	fastlock_init(&map->lock);
+	ofi_mutex_init(&map->lock);
 	map->used = 0;
 	map->size = init_size;
 	map->epoll_size = init_size;
@@ -160,7 +160,7 @@ void sock_conn_map_destroy(struct sock_ep_attr *ep_attr)
 	cmap->epoll_size = 0;
 	cmap->used = cmap->size = 0;
 	ofi_epoll_close(cmap->epoll_set);
-	fastlock_destroy(&cmap->lock);
+	ofi_mutex_destroy(&cmap->lock);
 }
 
 void sock_conn_release_entry(struct sock_conn_map *map, struct sock_conn *conn)
@@ -299,9 +299,9 @@ int sock_conn_stop_listener_thread(struct sock_conn_listener *conn_listener)
 {
 	conn_listener->do_listen = 0;
 
-	fastlock_acquire(&conn_listener->signal_lock);
+	ofi_mutex_lock(&conn_listener->signal_lock);
 	fd_signal_set(&conn_listener->signal);
-	fastlock_release(&conn_listener->signal_lock);
+	ofi_mutex_unlock(&conn_listener->signal_lock);
 
 	if (conn_listener->listener_thread &&
 	    pthread_join(conn_listener->listener_thread, NULL)) {
@@ -310,7 +310,7 @@ int sock_conn_stop_listener_thread(struct sock_conn_listener *conn_listener)
 
 	fd_signal_free(&conn_listener->signal);
 	ofi_epoll_close(conn_listener->epollfd);
-	fastlock_destroy(&conn_listener->signal_lock);
+	ofi_mutex_destroy(&conn_listener->signal_lock);
 
 	return 0;
 }
@@ -333,7 +333,7 @@ static void *sock_conn_listener_thread(void *arg)
 			continue;
 		}
 
-		fastlock_acquire(&conn_listener->signal_lock);
+		ofi_mutex_lock(&conn_listener->signal_lock);
 		if (conn_listener->removed_from_epollfd) {
 			/* The epoll set changed between calling wait and wait
 			 * returning.  Get an updated set of events to avoid
@@ -366,13 +366,13 @@ static void *sock_conn_listener_thread(void *arg)
 			}
 
 			ep_attr = container_of(conn_handle, struct sock_ep_attr, conn_handle);
-			fastlock_acquire(&ep_attr->cmap.lock);
+			ofi_mutex_lock(&ep_attr->cmap.lock);
 			sock_conn_map_insert(ep_attr, &remote, conn_fd, 1);
-			fastlock_release(&ep_attr->cmap.lock);
+			ofi_mutex_unlock(&ep_attr->cmap.lock);
 			sock_pe_signal(ep_attr->domain->pe);
 		}
 skip:
-		fastlock_release(&conn_listener->signal_lock);
+		ofi_mutex_unlock(&conn_listener->signal_lock);
 	}
 
 	return NULL;
@@ -382,7 +382,7 @@ int sock_conn_start_listener_thread(struct sock_conn_listener *conn_listener)
 {
 	int ret;
 
-	fastlock_init(&conn_listener->signal_lock);
+	ofi_mutex_init(&conn_listener->signal_lock);
 
 	ret = ofi_epoll_create(&conn_listener->epollfd);
 	if (ret < 0) {
@@ -420,7 +420,7 @@ err3:
 err2:
 	ofi_epoll_close(conn_listener->epollfd);
 err1:
-	fastlock_destroy(&conn_listener->signal_lock);
+	ofi_mutex_destroy(&conn_listener->signal_lock);
 	return ret;
 }
 
@@ -476,11 +476,11 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	conn_handle->sock = listen_fd;
 	conn_handle->do_listen = 1;
 
-	fastlock_acquire(&ep_attr->domain->conn_listener.signal_lock);
+	ofi_mutex_lock(&ep_attr->domain->conn_listener.signal_lock);
 	ret = ofi_epoll_add(ep_attr->domain->conn_listener.epollfd,
 	                   conn_handle->sock, OFI_EPOLL_IN, conn_handle);
 	fd_signal_set(&ep_attr->domain->conn_listener.signal);
-	fastlock_release(&ep_attr->domain->conn_listener.signal_lock);
+	ofi_mutex_unlock(&ep_attr->domain->conn_listener.signal_lock);
 	if (ret) {
 		SOCK_LOG_ERROR("failed to add fd to pollset: %d\n", ret);
 		goto err;
@@ -515,15 +515,15 @@ int sock_ep_connect(struct sock_ep_attr *ep_attr, fi_addr_t index,
 		addr = *ep_attr->dest_addr;
 		ofi_addr_set_port(&addr.sa, ep_attr->msg_dest_port);
 	} else {
-		fastlock_acquire(&ep_attr->av->table_lock);
+		ofi_mutex_lock(&ep_attr->av->table_lock);
 		addr = ep_attr->av->table[index].addr;
-		fastlock_release(&ep_attr->av->table_lock);
+		ofi_mutex_unlock(&ep_attr->av->table_lock);
 	}
 
 do_connect:
-	fastlock_acquire(&ep_attr->cmap.lock);
+	ofi_mutex_lock(&ep_attr->cmap.lock);
 	*conn = sock_ep_lookup_conn(ep_attr, index, &addr);
-	fastlock_release(&ep_attr->cmap.lock);
+	ofi_mutex_unlock(&ep_attr->cmap.lock);
 
 	if (*conn != SOCK_CM_CONN_IN_PROGRESS)
 		return FI_SUCCESS;
@@ -600,10 +600,10 @@ retry:
         goto do_connect;
 
 out:
-	fastlock_acquire(&ep_attr->cmap.lock);
+	ofi_mutex_lock(&ep_attr->cmap.lock);
 	new_conn = sock_conn_map_insert(ep_attr, &addr, conn_fd, 0);
 	if (!new_conn) {
-		fastlock_release(&ep_attr->cmap.lock);
+		ofi_mutex_unlock(&ep_attr->cmap.lock);
 		goto err;
 	}
 	new_conn->av_index = (ep_attr->ep_type == FI_EP_MSG) ?
@@ -614,7 +614,7 @@ out:
 			SOCK_LOG_ERROR("ofi_idm_set failed\n");
 		*conn = new_conn;
 	}
-	fastlock_release(&ep_attr->cmap.lock);
+	ofi_mutex_unlock(&ep_attr->cmap.lock);
 	return FI_SUCCESS;
 
 err:

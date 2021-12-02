@@ -225,9 +225,9 @@ void psmx3_trx_ctxt_free(struct psmx3_trx_ctxt *trx_ctxt, int usage_flags)
 		psm2_ep_close(trx_ctxt->psm2_ep, PSM2_EP_CLOSE_FORCE, 0);
 
 	ofi_bufpool_destroy(trx_ctxt->am_req_pool);
-	fastlock_destroy(&trx_ctxt->am_req_pool_lock);
-	fastlock_destroy(&trx_ctxt->poll_lock);
-	fastlock_destroy(&trx_ctxt->peer_lock);
+	ofi_spin_destroy(&trx_ctxt->am_req_pool_lock);
+	ofi_spin_destroy(&trx_ctxt->poll_lock);
+	ofi_spin_destroy(&trx_ctxt->peer_lock);
 
 	if (!ofi_atomic_dec32(&trx_ctxt->poll_refcnt))
 		free(trx_ctxt);
@@ -333,10 +333,10 @@ struct psmx3_trx_ctxt *psmx3_trx_ctxt_alloc(struct psmx3_fid_domain *domain,
 		goto err_out_close_ep;
 	}
 
-	fastlock_init(&trx_ctxt->peer_lock);
-	fastlock_init(&trx_ctxt->poll_lock);
-	fastlock_init(&trx_ctxt->am_req_pool_lock);
-	fastlock_init(&trx_ctxt->trigger_queue.lock);
+	ofi_spin_init(&trx_ctxt->peer_lock);
+	ofi_spin_init(&trx_ctxt->poll_lock);
+	ofi_spin_init(&trx_ctxt->am_req_pool_lock);
+	ofi_spin_init(&trx_ctxt->trigger_queue.lock);
 	dlist_init(&trx_ctxt->peer_list);
 	slist_init(&trx_ctxt->trigger_queue.list);
 	trx_ctxt->id = psmx3_trx_ctxt_cnt++;

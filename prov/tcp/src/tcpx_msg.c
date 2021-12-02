@@ -161,13 +161,13 @@ tcpx_queue_recv(struct tcpx_ep *ep, struct tcpx_xfer_entry *recv_entry)
 {
 	bool ret;
 
-	fastlock_acquire(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	ret = ep->rx_avail;
 	if (ret) {
 		slist_insert_tail(&recv_entry->entry, &ep->rx_queue);
 		ep->rx_avail--;
 	}
-	fastlock_release(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 	return ret;
 }
 
@@ -260,9 +260,9 @@ tcpx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 static inline void
 tcpx_queue_send(struct tcpx_ep *ep, struct tcpx_xfer_entry *tx_entry)
 {
-	fastlock_acquire(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	tcpx_tx_queue_insert(ep, tx_entry);
-	fastlock_release(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 }
 
 static ssize_t

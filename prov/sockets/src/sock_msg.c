@@ -109,9 +109,9 @@ ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 					  msg->msg_iov, msg->iov_count);
 	}
 
-	fastlock_acquire(&rx_ctx->lock);
+	ofi_mutex_lock(&rx_ctx->lock);
 	rx_entry = sock_rx_new_entry(rx_ctx);
-	fastlock_release(&rx_ctx->lock);
+	ofi_mutex_unlock(&rx_ctx->lock);
 	if (!rx_entry)
 		return -FI_ENOMEM;
 
@@ -133,10 +133,10 @@ ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 	SOCK_LOG_DBG("New rx_entry: %p (ctx: %p)\n", rx_entry, rx_ctx);
-	fastlock_acquire(&rx_ctx->lock);
+	ofi_mutex_lock(&rx_ctx->lock);
 	dlist_insert_tail(&rx_entry->entry, &rx_ctx->rx_entry_list);
 	rx_ctx->progress_start = &rx_ctx->rx_buffered_list;
-	fastlock_release(&rx_ctx->lock);
+	ofi_mutex_unlock(&rx_ctx->lock);
 	return 0;
 }
 
@@ -453,9 +453,9 @@ ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 					  msg->msg_iov, msg->iov_count);
 	}
 
-	fastlock_acquire(&rx_ctx->lock);
+	ofi_mutex_lock(&rx_ctx->lock);
 	rx_entry = sock_rx_new_entry(rx_ctx);
-	fastlock_release(&rx_ctx->lock);
+	ofi_mutex_unlock(&rx_ctx->lock);
 	if (!rx_entry)
 		return -FI_ENOMEM;
 
@@ -477,11 +477,11 @@ ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 		rx_entry->total_len += rx_entry->iov[i].iov.len;
 	}
 
-	fastlock_acquire(&rx_ctx->lock);
+	ofi_mutex_lock(&rx_ctx->lock);
 	SOCK_LOG_DBG("New rx_entry: %p (ctx: %p)\n", rx_entry, rx_ctx);
 	dlist_insert_tail(&rx_entry->entry, &rx_ctx->rx_entry_list);
 	rx_ctx->progress_start = &rx_ctx->rx_buffered_list;
-	fastlock_release(&rx_ctx->lock);
+	ofi_mutex_unlock(&rx_ctx->lock);
 	return 0;
 }
 

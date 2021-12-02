@@ -280,7 +280,7 @@ static int tcpx_ep_enable(struct tcpx_ep *ep,
 		return -FI_ENOCQ;
 	}
 
-	fastlock_acquire(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	if (ep->state != TCPX_CONNECTING && ep->state != TCPX_ACCEPTING) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"ep is in invalid state\n");
@@ -289,7 +289,7 @@ static int tcpx_ep_enable(struct tcpx_ep *ep,
 	}
 
 	ep->state = TCPX_CONNECTED;
-	fastlock_release(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 
 	ret = tcpx_ep_add_fd(ep);
 	if (ret)
@@ -305,7 +305,7 @@ static int tcpx_ep_enable(struct tcpx_ep *ep,
 	return 0;
 
 unlock:
-	fastlock_release(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 	return ret;
 }
 
@@ -362,9 +362,9 @@ static void tcpx_cm_recv_resp(struct util_wait *wait,
 err2:
 	free(cm_entry);
 err1:
-	fastlock_acquire(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	tcpx_ep_disable(ep, -ret);
-	fastlock_release(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 	tcpx_free_cm_ctx(cm_ctx);
 }
 
@@ -413,9 +413,9 @@ static void tcpx_cm_send_resp(struct util_wait *wait,
 delfd:
 	ofi_wait_del_fd(wait, ep->bsock.sock);
 disable:
-	fastlock_acquire(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	tcpx_ep_disable(ep, -ret);
-	fastlock_release(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 	tcpx_free_cm_ctx(cm_ctx);
 }
 
@@ -533,9 +533,9 @@ static void tcpx_cm_send_req(struct util_wait *wait,
 delfd:
 	ofi_wait_del_fd(wait, ep->bsock.sock);
 disable:
-	fastlock_acquire(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	tcpx_ep_disable(ep, -ret);
-	fastlock_release(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 	tcpx_free_cm_ctx(cm_ctx);
 }
 
@@ -641,7 +641,7 @@ void tcpx_conn_mgr_run(struct util_eq *util_eq)
 	wait_fd = container_of(util_eq->wait, struct util_wait_fd, util_wait);
 
 	eq = container_of(util_eq, struct tcpx_eq, util_eq);
-	fastlock_acquire(&eq->close_lock);
+	ofi_mutex_lock(&eq->close_lock);
 	count = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 		ofi_epoll_wait(wait_fd->epoll_fd, events, MAX_POLL_EVENTS, 0) :
 		ofi_pollfds_wait(wait_fd->pollfds, events, MAX_POLL_EVENTS, 0);
@@ -658,5 +658,5 @@ void tcpx_conn_mgr_run(struct util_eq *util_eq)
 			process_cm_ctx(util_eq->wait, events[i].data.ptr);
 	}
 unlock:
-	fastlock_release(&eq->close_lock);
+	ofi_mutex_unlock(&eq->close_lock);
 }

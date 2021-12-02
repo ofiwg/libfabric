@@ -61,9 +61,9 @@ static inline void __gnix_set_block(gnix_bitmap_t *bitmap, int index,
 {
 	gnix_bitmap_block_t *block = &bitmap->arr[index];
 
-	fastlock_acquire(&block->lock);
+	ofi_spin_lock(&block->lock);
 	block->val = value;
-	fastlock_release(&block->lock);
+	ofi_spin_unlock(&block->lock);
 }
 
 static inline uint64_t __gnix_load_block(gnix_bitmap_t *bitmap, int index)
@@ -71,9 +71,9 @@ static inline uint64_t __gnix_load_block(gnix_bitmap_t *bitmap, int index)
 	gnix_bitmap_block_t *block = &bitmap->arr[index];
 	uint64_t ret;
 
-	fastlock_acquire(&block->lock);
+	ofi_spin_lock(&block->lock);
 	ret = block->val;
-	fastlock_release(&block->lock);
+	ofi_spin_unlock(&block->lock);
 
 	return ret;
 }

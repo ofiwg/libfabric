@@ -1105,7 +1105,7 @@ static int psmx3_cq_close(fid_t fid)
 		free(item);
 	}
 
-	fastlock_destroy(&cq->lock);
+	ofi_spin_destroy(&cq->lock);
 
 	if (cq->wait) {
 		fi_poll_del(&cq->wait->pollset->poll_fid, &cq->cq.fid, 0);
@@ -1278,7 +1278,7 @@ int psmx3_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	slist_init(&cq_priv->poll_list);
 	slist_init(&cq_priv->event_queue);
 	slist_init(&cq_priv->free_list);
-	fastlock_init(&cq_priv->lock);
+	ofi_spin_init(&cq_priv->lock);
 
 #define PSMX3_FREE_LIST_SIZE	64
 	for (i=0; i<PSMX3_FREE_LIST_SIZE; i++) {

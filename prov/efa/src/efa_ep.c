@@ -593,7 +593,7 @@ void efa_ep_progress(struct util_ep *ep)
 	rcq = efa_ep->rcq;
 	scq = efa_ep->scq;
 
-	fastlock_acquire(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 
 	if (rcq)
 		efa_ep_progress_internal(efa_ep, rcq);
@@ -601,7 +601,7 @@ void efa_ep_progress(struct util_ep *ep)
 	if (scq && scq != rcq)
 		efa_ep_progress_internal(efa_ep, scq);
 
-	fastlock_release(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 }
 
 static struct fi_ops_atomic efa_ep_atomic_ops = {

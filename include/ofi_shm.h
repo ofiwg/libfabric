@@ -228,7 +228,7 @@ struct smr_peer {
 #define SMR_MAX_PEERS	256
 
 struct smr_map {
-	fastlock_t		lock;
+	ofi_spin_t		lock;
 	int64_t			cur_id;
 	struct ofi_rbmap	rbmap;
 	struct smr_peer		peers[SMR_MAX_PEERS];

@@ -89,7 +89,7 @@ int vrb_get_shared_ini_conn(struct vrb_xrc_ep *ep,
 	struct ofi_rbnode *node;
 	int ret;
 
-	assert(fastlock_held(&domain->xrc.ini_lock));
+	assert(ofi_mutex_held(&domain->xrc.ini_lock));
 	vrb_set_ini_conn_key(ep, &key);
 	node = ofi_rbmap_find(domain->xrc.ini_conn_rbmap, &key);
 	if (node) {
@@ -143,7 +143,7 @@ void _vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
 	struct vrb_ini_shared_conn *ini_conn;
 	struct vrb_ini_conn_key key;
 
-	assert(fastlock_held(&domain->xrc.ini_lock));
+	assert(ofi_mutex_held(&domain->xrc.ini_lock));
 	if (!ep->ini_conn)
 		return;
 
@@ -194,7 +194,7 @@ void vrb_put_shared_ini_conn(struct vrb_xrc_ep *ep)
 void vrb_add_pending_ini_conn(struct vrb_xrc_ep *ep, int reciprocal,
 			      void *conn_param, size_t conn_paramlen)
 {
-	assert(fastlock_held(&vrb_ep_to_domain(&ep->base_ep)->xrc.ini_lock));
+	assert(ofi_mutex_held(&vrb_ep_to_domain(&ep->base_ep)->xrc.ini_lock));
 
 	ep->conn_setup->pending_recip = reciprocal;
 	ep->conn_setup->pending_paramlen = MIN(conn_paramlen,
@@ -432,7 +432,7 @@ static int vrb_put_tgt_qp(struct vrb_xrc_ep *ep)
 
 int vrb_ep_destroy_xrc_qp(struct vrb_xrc_ep *ep)
 {
-	assert(fastlock_held(&ep->base_ep.eq->lock));
+	assert(ofi_mutex_held(&ep->base_ep.eq->lock));
 	vrb_put_shared_ini_conn(ep);
 
 	if (ep->base_ep.id) {
@@ -533,13 +533,13 @@ int vrb_domain_xrc_init(struct vrb_domain *domain)
 		goto rbmap_err;
 	}
 
-	fastlock_init(&domain->xrc.ini_lock);
+	ofi_mutex_init(&domain->xrc.ini_lock);
 	if (domain->util_domain.threading == FI_THREAD_DOMAIN) {
-		domain->xrc.lock_acquire = ofi_fastlock_acquire_noop;
-		domain->xrc.lock_release = ofi_fastlock_release_noop;
+		domain->xrc.lock_acquire = ofi_mutex_lock_noop;
+		domain->xrc.lock_release = ofi_mutex_unlock_noop;
 	} else {
-		domain->xrc.lock_acquire = ofi_fastlock_acquire;
-		domain->xrc.lock_release = ofi_fastlock_release;
+		domain->xrc.lock_acquire = ofi_mutex_lock_op;
+		domain->xrc.lock_release = ofi_mutex_unlock_op;
 	}
 	domain->ext_flags |= VRB_USE_XRC;
 	return FI_SUCCESS;
@@ -580,7 +580,7 @@ int vrb_domain_xrc_cleanup(struct vrb_domain *domain)
 	}
 
 	ofi_rbmap_destroy(domain->xrc.ini_conn_rbmap);
-	fastlock_destroy(&domain->xrc.ini_lock);
+	ofi_mutex_destroy(&domain->xrc.ini_lock);
 #endif /* VERBS_HAVE_XRC */
 	return 0;
 }

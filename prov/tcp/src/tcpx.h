@@ -242,7 +242,7 @@ struct tcpx_rx_ctx {
 
 	struct ofi_bufpool	*buf_pool;
 	uint64_t		op_flags;
-	fastlock_t		lock;
+	ofi_mutex_t		lock;
 };
 
 int tcpx_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
@@ -274,7 +274,7 @@ struct tcpx_ep {
 	};
 
 	/* lock for protecting tx/rx queues, rma list, state*/
-	fastlock_t		lock;
+	ofi_mutex_t		lock;
 	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
 	void (*report_success)(struct tcpx_ep *ep, struct util_cq *cq,
 			       struct tcpx_xfer_entry *xfer_entry);
@@ -345,7 +345,7 @@ struct tcpx_eq {
 	  The following lock avoids race between ep close
 	  and connection management code.
 	 */
-	fastlock_t		close_lock;
+	ofi_mutex_t		close_lock;
 };
 
 int tcpx_create_fabric(struct fi_fabric_attr *attr,
@@ -443,9 +443,9 @@ tcpx_alloc_xfer(struct tcpx_cq *cq)
 {
 	struct tcpx_xfer_entry *xfer;
 
-	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
 	xfer = ofi_buf_alloc(cq->xfer_pool);
-	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
 
 	return xfer;
 }
@@ -458,9 +458,9 @@ tcpx_free_xfer(struct tcpx_cq *cq, struct tcpx_xfer_entry *xfer)
 	xfer->ctrl_flags = 0;
 	xfer->context = 0;
 
-	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
 	ofi_buf_free(xfer);
-	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
 }
 
 static inline struct tcpx_xfer_entry *
@@ -485,9 +485,9 @@ tcpx_free_rx(struct tcpx_xfer_entry *xfer)
 
 	if (xfer->ep->srx_ctx) {
 		srx = xfer->ep->srx_ctx;
-		fastlock_acquire(&srx->lock);
+		ofi_mutex_lock(&srx->lock);
 		ofi_buf_free(xfer);
-		fastlock_release(&srx->lock);
+		ofi_mutex_unlock(&srx->lock);
 	} else {
 		cq = container_of(xfer->ep->util_ep.rx_cq,
 				  struct tcpx_cq, util_cq);

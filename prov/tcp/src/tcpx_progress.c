@@ -108,7 +108,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 	struct tcpx_cq *cq;
 	int ret;
 
-	assert(fastlock_held(&ep->lock));
+	assert(ofi_mutex_held(&ep->lock));
 	while (ep->cur_tx.entry) {
 		ret = tcpx_send_msg(ep);
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
@@ -381,7 +381,7 @@ static struct tcpx_xfer_entry *tcpx_get_rx_entry(struct tcpx_ep *ep)
 
 	if (ep->srx_ctx) {
 		srx = ep->srx_ctx;
-		fastlock_acquire(&srx->lock);
+		ofi_mutex_lock(&srx->lock);
 		if (!slist_empty(&srx->rx_queue)) {
 			xfer = container_of(slist_remove_head(&srx->rx_queue),
 					    struct tcpx_xfer_entry, entry);
@@ -389,9 +389,9 @@ static struct tcpx_xfer_entry *tcpx_get_rx_entry(struct tcpx_ep *ep)
 		} else {
 			xfer = NULL;
 		}
-		fastlock_release(&ep->srx_ctx->lock);
+		ofi_mutex_unlock(&ep->srx_ctx->lock);
 	} else {
-		assert(fastlock_held(&ep->lock));
+		assert(ofi_mutex_held(&ep->lock));
 		if (!slist_empty(&ep->rx_queue)) {
 			xfer = container_of(slist_remove_head(&ep->rx_queue),
 					    struct tcpx_xfer_entry, entry);
@@ -692,7 +692,7 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 {
 	int ret;
 
-	assert(fastlock_held(&ep->lock));
+	assert(ofi_mutex_held(&ep->lock));
 	do {
 		if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
 			ret = tcpx_recv_hdr(ep);
@@ -734,7 +734,7 @@ static int tcpx_mod_epoll(struct tcpx_ep *ep, struct util_wait_fd *wait_fd)
 	uint32_t events;
 	int ret;
 
-	assert(fastlock_held(&ep->lock));
+	assert(ofi_mutex_held(&ep->lock));
 	if (ep->pollout_set) {
 		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
 			 (OFI_EPOLL_IN | OFI_EPOLL_OUT) : (POLLIN | POLLOUT);
@@ -771,7 +771,7 @@ int tcpx_update_epoll(struct tcpx_ep *ep)
 	struct util_wait_fd *rx_wait, *tx_wait;
 	int ret;
 
-	assert(fastlock_held(&ep->lock));
+	assert(ofi_mutex_held(&ep->lock));
 	if ((tcpx_tx_pending(ep) && ep->pollout_set) ||
 	    (!tcpx_tx_pending(ep) && !ep->pollout_set))
 		return FI_SUCCESS;
@@ -799,13 +799,13 @@ int tcpx_try_func(void *util_ep)
 	int ret;
 
 	ep = container_of(util_ep, struct tcpx_ep, util_ep);
-	fastlock_acquire(&ep->lock);
+	ofi_mutex_lock(&ep->lock);
 	if (ofi_bsock_readable(&ep->bsock)) {
 		ret = -FI_EAGAIN;
 	} else {
 		ret = tcpx_update_epoll(ep);
 	}
-	fastlock_release(&ep->lock);
+	ofi_mutex_unlock(&ep->lock);
 	return ret;
 }
 
