@@ -44,7 +44,7 @@
 
 struct hook_hmem_domain {
 	struct hook_domain	hook_domain;
-	fastlock_t              lock;
+	ofi_mutex_t		lock;
 	int			mr_mode;
 	struct ofi_bufpool	*mr_pool;
 	struct ofi_bufpool	*ctx_pool;

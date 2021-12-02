@@ -181,7 +181,7 @@ static int hook_hmem_track(struct hook_ep *ep, const struct iovec *iov,
 	int ret = FI_SUCCESS;
 
 	domain = container_of(ep->domain, struct hook_hmem_domain, hook_domain);
-	fastlock_acquire(&domain->lock);
+	ofi_mutex_lock(&domain->lock);
 
 	*hmem_ctx = ofi_buf_alloc(domain->ctx_pool);
 	if (!*hmem_ctx)
@@ -206,7 +206,7 @@ static int hook_hmem_track(struct hook_ep *ep, const struct iovec *iov,
 err:
 	ofi_buf_free(*hmem_ctx);
 out:
-	fastlock_release(&domain->lock);
+	ofi_mutex_unlock(&domain->lock);
 	return ret;
 }
 
@@ -214,7 +214,7 @@ static void hook_hmem_untrack(struct hook_hmem_ctx *hmem_ctx)
 {
 	int i;
 
-	fastlock_acquire(&hmem_ctx->domain->lock);
+	ofi_mutex_lock(&hmem_ctx->domain->lock);
 
 	for (i = 0; i < hmem_ctx->desc_count; i++)
 		hook_hmem_uncache_mr(hmem_ctx->domain,
@@ -229,7 +229,7 @@ static void hook_hmem_untrack(struct hook_hmem_ctx *hmem_ctx)
 				     &hmem_ctx->res_desc[i]->iov);
 
 	ofi_buf_free(hmem_ctx);
-	fastlock_release(&hmem_ctx->domain->lock);
+	ofi_mutex_unlock(&hmem_ctx->domain->lock);
 }
 
 static int hook_hmem_track_atomic(struct hook_ep *ep, const struct fi_ioc *ioc,
@@ -247,7 +247,7 @@ static int hook_hmem_track_atomic(struct hook_ep *ep, const struct fi_ioc *ioc,
 	int ret = FI_SUCCESS;
 
 	domain = container_of(ep->domain, struct hook_hmem_domain, hook_domain);
-	fastlock_acquire(&domain->lock);
+	ofi_mutex_lock(&domain->lock);
 
 	*hmem_ctx = ofi_buf_alloc(domain->ctx_pool);
 	if (!*hmem_ctx)
@@ -312,7 +312,7 @@ err2:
 err3:
 	ofi_buf_free(*hmem_ctx);
 out:
-	fastlock_release(&domain->lock);
+	ofi_mutex_lock(&domain->lock);
 	return ret;
 }
 
@@ -1751,7 +1751,7 @@ static int hook_hmem_domain_close(struct fid *fid)
 
 	ofi_bufpool_destroy(hmem_domain->mr_pool);
 	ofi_bufpool_destroy(hmem_domain->ctx_pool);
-	fastlock_destroy(&hmem_domain->lock);
+	ofi_mutex_destroy(&hmem_domain->lock);
 
 	free(hmem_domain);
 	return 0;
@@ -1882,7 +1882,7 @@ static int hook_hmem_domain(struct fid_fabric *fabric, struct fi_info *info,
 	hmem_domain->mr_mode = info->domain_attr->mr_mode;
 	ofi_rbmap_init(&hmem_domain->rbmap, hook_hmem_iov_compare);
 	dlist_init(&hmem_domain->mr_list);
-	fastlock_init(&hmem_domain->lock);
+	ofi_mutex_init(&hmem_domain->lock);
 
 	return 0;
 out:
