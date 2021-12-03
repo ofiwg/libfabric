@@ -60,10 +60,6 @@ where those are queued and progressed in `rxr_ep_progress_internal`.
 
 ### Dealing with receiver not ready errors (RNR)
 
-Note: this functionality is currently turned off. We configure the device to do
-infinite retries as there are known bugs in the queuing/RNR logic that need to
-be resolved first.
-
 Finally, the EFA device may write an error completion for RNR, meaning there is
 no receive buffer available for the device to place the payload. This can
 happen when the application is not posting receive buffers fast enough, but for
@@ -81,6 +77,6 @@ retransmit we start random exponential backoff for that peer. We stop sending
 to that peer until the peer exits backoff, meaning we either received a
 successful send completion for that peer or the backoff timer expires.
 
-See `rxr_cq_queue_pkt` for where the packets are queued and backoff timers are
+See `rxr_cq_queue_rnr_pkt` for where the packets are queued and backoff timers are
 set, and see `rxr_ep_check_peer_backoff_timer` for where those timers are
 checked and we allow sends to that remote peer again.
