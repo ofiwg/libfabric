@@ -25,7 +25,7 @@ echo "$0: --> TARGET_OS: '${TARGET_OS}'"
 ZYPPER_OPTS="--verbose --non-interactive"
 RPMS="cray-libcxi-devel"
 CUDA_RPMS="nvhpc-2021"
-ROCR_RPMS="hsa-rocr-dev"
+ROCR_RPMS="hsa-rocr-devel"
 if [[ ${TARGET_OS} =~ ^centos ]]; then
     RPMS+=" libcurl-devel json-c-devel"
 else
