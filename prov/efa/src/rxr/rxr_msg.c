@@ -63,7 +63,7 @@ ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 {
 	int err, tagged;
 	struct rdm_peer *peer;
-	int pkt_type;
+	int pkt_type, max_eager_data_size;
 	bool delivery_complete_requested;
 
 	assert(RXR_EAGER_MSGRTM_PKT + 1 == RXR_EAGER_TAGRTM_PKT);
@@ -74,15 +74,36 @@ ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	assert(tagged == 0 || tagged == 1);
 
 	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
-	if (tx_entry->total_len == 0) {
+	/*
+	 * Todo: use information in handshake packet to determine whether
+	 * the receiver supports gdrcopy.
+	 */
+	if (tx_entry->total_len == 0 || cuda_is_gdrcopy_enabled()) {
 		pkt_type = delivery_complete_requested ? RXR_DC_EAGER_MSGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
-		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					 pkt_type + tagged, 0, 0);
+		max_eager_data_size = rxr_pkt_req_max_data_size(rxr_ep,
+								tx_entry->addr,
+								pkt_type + tagged,
+								tx_entry->fi_flags, 0);
+
+		max_eager_data_size = MIN(max_eager_data_size, rxr_env.efa_max_gdrcopy_msg_size);
+
+		if (tx_entry->total_len <= max_eager_data_size) {
+			return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
+						 pkt_type + tagged, 0, 0);
+		}
+
+		if (tx_entry->total_len <= rxr_env.efa_max_gdrcopy_msg_size) {
+			pkt_type = delivery_complete_requested ? RXR_DC_LONGCTS_MSGRTM_PKT : RXR_LONGCTS_MSGRTM_PKT;
+			tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
+
+			return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
+						 pkt_type + tagged, 0, 0);
+		}
 	}
 
-	/* Currently cuda data must be sent using read message protocol.
-	 * However, because read message protocol is an extra feature, we cannot
-	 * sure if the receiver supports it.
+	/* At this point we must use read message protocol for cuda memory.
+	 * However, because read message protocol is an extra feature, we do not know
+	 * whether the receiver supports it.
 	 * The only way we can be sure of that is through the handshake packet
 	 * from the receiver, so here we call rxr_pkt_wait_handshake().
 	 */

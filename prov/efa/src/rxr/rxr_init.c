@@ -74,6 +74,7 @@ struct rxr_env rxr_env = {
 	.shm_cq_read_size = 50,
 	.efa_max_medium_msg_size = 65536,
 	.efa_min_read_msg_size = 1048576,
+	.efa_max_gdrcopy_msg_size = 32768,
 	.efa_min_read_write_size = 65536,
 	.efa_read_segment_size = 1073741824,
 	.rnr_retry = 3, /* Setting this value to EFA_RNR_INFINITE_RETRY makes the firmware retry indefinitey */
@@ -140,6 +141,8 @@ static void rxr_init_env(void)
 			    &rxr_env.efa_min_read_write_size);
 	fi_param_get_size_t(&rxr_prov, "inter_read_segment_size",
 			    &rxr_env.efa_read_segment_size);
+	fi_param_get_size_t(&rxr_prov, "inter_max_gdrcopy_message_size",
+			    &rxr_env.efa_max_gdrcopy_msg_size);
 
 	/* Initialize EFA's fork support flag based on the environment and
 	 * system support. */
@@ -878,7 +881,8 @@ EFA_INI
 			"The maximum message size for inter EFA medium message protocol (Default 65536).");
 	fi_param_define(&rxr_prov, "inter_min_read_message_size", FI_PARAM_INT,
 			"The minimum message size for inter EFA read message protocol. If instance support RDMA read, messages whose size is larger than this value will be sent by read message protocol (Default 1048576).");
-
+	fi_param_define(&rxr_prov, "inter_max_gdrcopy_message_size", FI_PARAM_INT,
+			"The maximum message size to use gdrcopy. If instance support gdrcopy, messages whose size is smaller than this value will be sent by eager/longcts protocol (Default 32768).");
 	fi_param_define(&rxr_prov, "inter_min_read_write_size", FI_PARAM_INT,
 			"The mimimum message size for inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536).");
 	fi_param_define(&rxr_prov, "inter_read_segment_size", FI_PARAM_INT,
