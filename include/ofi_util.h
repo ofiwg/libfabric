@@ -707,7 +707,6 @@ struct util_av_set;
 
 struct util_coll_mc {
 	struct fid_mc		mc_fid;
-	struct fid_ep		*ep;
 	struct util_av_set	*av_set;
 	uint64_t		local_rank;
 	uint16_t		group_id;

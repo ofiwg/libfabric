@@ -148,8 +148,10 @@ struct util_coll_operation {
 	enum util_coll_op_type		type;
 	uint32_t			cid;
 	void				*context;
+	struct fid_ep			*ep;
 	struct util_coll_mc		*mc;
 	struct dlist_entry		work_queue;
+
 	union {
 		struct join_data	join;
 		struct barrier_data	barrier;
