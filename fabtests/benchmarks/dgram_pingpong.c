@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation.  All rights reserved.
  * Copyright (c) 2014-2017 Cisco Systems, Inc.  All rights reserved.
+ * Copyright (c) 2020-2021 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -54,6 +55,8 @@ static int run(void)
 	 */
 	ret = fi_recv(ep, rx_buf, rx_size + ft_rx_prefix_size(), mr_desc,
 			0, &rx_ctx);
+	if (ret)
+		return ret;
 
 	if (!(opts.options & FT_OPT_SIZE)) {
 		for (i = 0; i < TEST_CNT; i++) {
