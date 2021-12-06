@@ -702,6 +702,29 @@ static inline void ofi_cntr_inc(struct util_cntr *cntr)
  * AV / addressing
  */
 
+struct util_av;
+struct util_av_set;
+
+struct util_coll_mc {
+	struct fid_mc		mc_fid;
+	struct util_av_set	*av_set;
+	uint64_t		local_rank;
+	uint16_t		group_id;
+	uint16_t		seq;
+	ofi_atomic32_t		ref;
+};
+
+struct util_av_set {
+	struct fid_av_set	av_set_fid;
+	struct util_av		*av;
+	fi_addr_t		*fi_addr_array;
+	size_t			fi_addr_count;
+	uint64_t		flags;
+	struct util_coll_mc     coll_mc;
+	ofi_atomic32_t		ref;
+	ofi_mutex_t		lock;
+};
+
 struct util_av_entry {
 	ofi_atomic32_t	use_cnt;
 	UT_hash_handle	hh;
@@ -725,7 +748,7 @@ struct util_av {
 	struct util_av_entry	*hash;
 	struct ofi_bufpool	*av_entry_pool;
 
-	struct util_coll_mc	*coll_mc;
+	struct util_av_set	*av_set;
 	void			*context;
 	uint64_t		flags;
 	size_t			addrlen;
@@ -765,7 +788,6 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr);
 fi_addr_t ofi_av_lookup_fi_addr_unsafe(struct util_av *av, const void *addr);
 fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr);
-int ofi_av_elements_iter(struct util_av *av, ofi_av_apply_func apply, void *arg);
 int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags);
 void ofi_av_write_event(struct util_av *av, uint64_t data,
 			int err, void *context);
