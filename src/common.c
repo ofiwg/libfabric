@@ -1051,14 +1051,19 @@ void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
 ssize_t ofi_bsock_flush(struct ofi_bsock *bsock)
 {
 	ssize_t ret;
+	int err;
 
 	if (!ofi_bsock_tosend(bsock))
 		return 0;
 
 	ret = ofi_byteq_send(&bsock->sq, bsock->sock);
 	if (ret < 0) {
-		return ofi_sockerr() == EPIPE ?
-			-FI_ENOTCONN : -ofi_sockerr();
+		err = ofi_sockerr();
+		if (err == EPIPE)
+			return -FI_ENOTCONN;
+		if (err == EWOULDBLOCK)
+			return -FI_EAGAIN;
+		return -err;
 	}
 
 	return ofi_bsock_tosend(bsock) ? -FI_EAGAIN : 0;
