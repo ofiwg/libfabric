@@ -1,105 +1,83 @@
 #!/bin/bash
+set -ex
 
-PROJECT="NETC"
-TARGET_ARCH="x86_64"
-DEV_NAME="dev"
-BRANCH_NAME="master"
-IYUM_REPO_NAME_1="os-networking-team"
+ARTI_URL=https://arti.dev.cray.com/artifactory
+
+# Override product since we are only using the internal product stream to avoid
+# clashing with slingshot10 libfabric
+PRODUCT='slingshot-host-software'
+
+echo "$0: --> BRANCH_NAME: '${BRANCH_NAME}'"
+echo "$0: --> PRODUCT: '${PRODUCT}'"
+echo "$0: --> TARGET_ARCH: '${TARGET_ARCH}'"
+echo "$0: --> TARGET_OS: '${TARGET_OS}'"
 
 
-PRODUCT="slingshot-host-software"
-
-if [[ "${TARGET_OS}" = "" ]]
-then
-    TARGET_OS="sle15_cn"
+if [[ "${BRANCH_NAME}" == release/* ]]; then
+    ARTI_LOCATION='rpm-stable-local'
+    ARTI_BRANCH=${BRANCH_NAME}
+else
+    ARTI_LOCATION='rpm-master-local'
+    ARTI_BRANCH=dev/master
 fi
 
-if [[ "${TARGET_OS}" = "centos_8" ]]
-then
+echo "$0: --> ARTI_LOCATION: '${ARTI_LOCATION}'"
+echo "$0: --> ARTI_BRANCH: '${ARTI_BRANCH}'"
+
+# Override per OS
+with_rocm=0
+with_cuda=0
+
+RPMS="cray-libcxi-devel"
+CUDA_RPMS="nvhpc-2021"
+
+if [[ ${TARGET_OS} == "centos_8" ]]; then
     TARGET_OS="centos_8_ncn"
 fi
 
-echo "$0: --> PRODUCT: '${PRODUCT}'"
-echo "$0: --> TARGET_OS: '${TARGET_OS}'"
+if [[ ${TARGET_OS} == "sle15_sp2_cn" || ${TARGET_OS} == "sle15_sp2_ncn" ]]; then
+    ROCR_RPMS="hsa-rocr-dev"
+else
+    ROCR_RPMS="hsa-rocr-devel"
+fi
 
-ZYPPER_OPTS="--verbose --non-interactive"
-RPMS="cray-libcxi-devel"
-CUDA_RPMS="nvhpc-2021"
-ROCR_RPMS="hsa-rocr-devel"
 if [[ ${TARGET_OS} =~ ^centos ]]; then
     RPMS+=" libcurl-devel json-c-devel"
 else
     RPMS+=" libcurl-devel libjson-c-devel"
 fi
 
-URL_PREFIX="http://car.dev.cray.com/artifactory"
-URL_SUFFIX="${TARGET_OS}/${TARGET_ARCH}/${DEV_NAME}/${BRANCH_NAME}"
-
-# URL="http://car.dev.cray.com/artifactory/"
-# URL+="${PRODUCT}/${PROJECT}/${TARGET_OS}/${TARGET_ARCH}/"
-# URL+="${DEV_NAME}/${BRANCH_NAME}/"
-URL="${URL_PREFIX}/${PRODUCT}/${PROJECT}/${URL_SUFFIX}"
-
-URL_HOSTSW="${URL_PREFIX}/slingshot-host-software/${PROJECT}/${URL_SUFFIX}"
-
-URL_INT="${URL_PREFIX}/internal/${PROJECT}/${URL_SUFFIX}"
-
-# URL_SSHOT="http://car.dev.cray.com/artifactory/"
-# URL_SSHOT+="${PRODUCT}/SSHOT/${TARGET_OS}/${TARGET_ARCH}/"
-# URL_SSHOT+="${DEV_NAME}/${BRANCH_NAME}/"
-URL_SSHOT="${URL_PREFIX}/${PRODUCT}/SSHOT/${URL_SUFFIX}"
-
-URL_SSHOT_INT="${URL_PREFIX}/internal/SSHOT/${TARGET_OS}/${TARGET_ARCH}/"
-URL_SSHOT_INT+="dev/master/"
-
-CUDA_URL="https://arti.dev.cray.com/artifactory/cos-internal-third-party-generic-local/nvidia_hpc_sdk/${TARGET_OS}/${TARGET_ARCH}/${DEV_NAME}/${BRANCH_NAME}/"
-
-if [[ ${TARGET_OS} != "centos_8_ncn" ]]; then
-    with_cuda=1
-else
-    with_cuda=0
-fi
-
-
-if [[ ${TARGET_OS} == "sle15_sp2_cn" || ${TARGET_OS} == "sle15_sp2_ncn" || ${TARGET_OS} == "sle15_sp3_ncn" || ${TARGET_OS} == "sle15_sp3_cn" ]]; then
-    with_rocm=1
-else
-    with_rocm=0
-fi
-
-# No ROCM SP1 support is available.
-if [[ $with_rocm -eq 1 ]]; then
-    ROCR_URL="https://arti.dev.cray.com/artifactory/cos-internal-third-party-generic-local/rocm/latest/${TARGET_OS}/${TARGET_ARCH}/${DEV_NAME}/${BRANCH_NAME}/"
-fi
+with_cuda=0
+with_rocm=0
 
 if command -v yum > /dev/null; then
-    yum-config-manager --add-repo=$URL
-    yum-config-manager --add-repo=$URL_HOSTSW
-    yum-config-manager --add-repo=$URL_SSHOT
-
+    yum-config-manager --add-repo=${ARTI_URL}/${PRODUCT}-${ARTI_LOCATION}/${ARTI_BRANCH}/${TARGET_OS}/
     yum-config-manager --setopt=gpgcheck=0 --save
 
     yum install -y $RPMS
 elif command -v zypper > /dev/null; then
-    zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 1 \
-    	--name=$IYUM_REPO_NAME_1 $URL $IYUM_REPO_NAME_1
-    zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 1 \
-        --name=$IYUM_REPO_NAME_1 $URL_HOSTSW ${IYUM_REPO_NAME_1}_HOSTSW
-    zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 1 \
-    	--name=${IYUM_REPO_NAME_1}_SSHOT $URL_SSHOT \
-        ${IYUM_REPO_NAME_1}_SSHOT
-    zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 1 \
-       --name=cuda $CUDA_URL cuda
+    with_cuda=1
+    with_rocm=1
+
+    zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
+        --priority 20 --name=${PRODUCT}-${ARTI_LOCATION} \
+         ${ARTI_URL}/${PRODUCT}-${ARTI_LOCATION}/${ARTI_BRANCH}/${TARGET_OS}/ \
+         ${PRODUCT}-${ARTI_LOCATION}
+
+    zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
+        --priority 20 --name=cuda \
+        ${ARTI_URL}/cos-internal-third-party-generic-local/nvidia_hpc_sdk/${TARGET_OS}/${TARGET_ARCH}/${ARTI_BRANCH}/ \
+        cuda
+
+    zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
+        --priority 20 --name=rocm \
+        ${ARTI_URL}/cos-internal-third-party-generic-local/rocm/latest/${TARGET_OS}/${TARGET_ARCH}/${ARTI_BRANCH}/ \
+        rocm
 
     zypper refresh
-    zypper $ZYPPER_OPTS install $RPMS
-    zypper $ZYPPER_OPTS install $CUDA_RPMS
-
-    if [[ $with_rocm -eq 1 ]]; then
-        zypper $ZYPPER_OPTS addrepo --no-gpgcheck --check --priority 1 \
-            --name=rocm $ROCR_URL rocm
-        zypper $ZYPPER_OPTS install $ROCR_RPMS
-    fi
+    zypper --non-interactive --no-gpg-checks install $RPMS
+    zypper --non-interactive --no-gpg-checks install $CUDA_RPMS
+    zypper --non-interactive --no-gpg-checks install $ROCR_RPMS
 else
     "Unsupported package manager or package manager not found -- installing nothing"
 fi
