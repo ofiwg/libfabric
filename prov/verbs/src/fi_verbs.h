@@ -577,6 +577,7 @@ struct vrb_ep {
 	/* Protected by send CQ lock */
 	uint64_t			sq_credits;
 	uint64_t			peer_rq_credits;
+	struct slist			sq_list;
 	/* Protected by recv CQ lock */
 	int64_t				rq_credits_avail;
 	int64_t				threshold;
@@ -626,6 +627,7 @@ enum vrb_op_ctx {
 };
 
 struct vrb_context {
+	struct slist_entry		entry;
 	union {
 		struct vrb_ep		*ep;
 		struct vrb_srq_ep	*srx;
