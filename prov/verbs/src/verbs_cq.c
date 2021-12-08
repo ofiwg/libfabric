@@ -240,6 +240,10 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 		ctx = (struct vrb_context *) (uintptr_t) wc->wr_id;
 		wc->wr_id = (uintptr_t) ctx->user_ctx;
 		if (ctx->op_ctx == VRB_POST_SQ) {
+			assert(ctx->ep);
+			assert(!slist_empty(&ctx->ep->sq_list));
+			assert(ctx->ep->sq_list.head == &ctx->entry);
+			(void) slist_remove_head(&ctx->ep->sq_list);
 			cq->credits++;
 			ctx->ep->sq_credits++;
 		}
