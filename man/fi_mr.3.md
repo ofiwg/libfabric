@@ -633,7 +633,7 @@ requested the FI_HMEM capability.
 : Uses AMD ROCR interfaces such as hsa_memory_allocate and hsa_memory_free.
 
 *FI_HMEM_ZE*
-: Uses Intel L0 ZE interfaces such as zeDriverAllocSharedMem,
+: Uses oneAPI Level Zero interfaces such as zeDriverAllocSharedMem,
   zeDriverFreeMem.
 
 ## device
@@ -833,9 +833,9 @@ configure registration caches.
   unified virtual addressing enabled.
 
 *FI_MR_ZE_CACHE_MONITOR_ENABLED*
-: The ZE cache monitor is responsible for detecting ZE device memory
-  (FI_HMEM_ZE) changes made between the device virtual addresses used by an
-  application and the underlying device physical pages. Valid monitor options
+: The ZE cache monitor is responsible for detecting oneAPI Level Zero device
+  memory (FI_HMEM_ZE) changes made between the device virtual addresses used by
+  an application and the underlying device physical pages. Valid monitor options
   are: 0 or 1.
 
 More direct access to the internal registration cache is possible through the
