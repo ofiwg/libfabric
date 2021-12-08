@@ -196,13 +196,13 @@ void ofi_monitors_init(void)
 			" memory caching.");
 	fi_param_define(NULL, "mr_cuda_cache_monitor_enabled", FI_PARAM_BOOL,
 			"Enable or disable the CUDA cache memory monitor."
-			"Monitor is enabled by default.");
+			"Enabled by default.");
 	fi_param_define(NULL, "mr_rocr_cache_monitor_enabled", FI_PARAM_BOOL,
 			"Enable or disable the ROCR cache memory monitor. "
-			"Monitor is enabled by default.");
+			"Enabled by default.");
 	fi_param_define(NULL, "mr_ze_cache_monitor_enabled", FI_PARAM_BOOL,
-			"Enable or disable the ZE cache memory monitor. "
-			"Monitor is enabled by default.");
+			"Enable or disable the oneAPI Level Zero cache memory "
+			"monitor.  Enabled by default.");
 
 	fi_param_get_size_t(NULL, "mr_cache_max_size", &cache_params.max_size);
 	fi_param_get_size_t(NULL, "mr_cache_max_count", &cache_params.max_cnt);
