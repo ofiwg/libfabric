@@ -619,14 +619,20 @@ struct vrb_ep {
 };
 
 
-/* Must be cast-able to struct fi_context */
-struct vrb_context {
-	struct vrb_ep			*ep;
-	struct vrb_srq_ep		*srx;
-	void				*user_ctx;
-	uint32_t			flags;
+enum vrb_op_ctx {
+	VRB_POST_SQ,
+	VRB_POST_RQ,
+	VRB_POST_SRQ,
 };
 
+struct vrb_context {
+	union {
+		struct vrb_ep		*ep;
+		struct vrb_srq_ep	*srx;
+	};
+	void				*user_ctx;
+	enum vrb_op_ctx			op_ctx;
+};
 
 #define VERBS_XRC_EP_MAGIC		0x1F3D5B79
 struct vrb_xrc_ep {

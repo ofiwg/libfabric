@@ -69,9 +69,9 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	if (!ctx)
 		goto unlock;
 
-	ctx->ep = ep;
+	OFI_DBG_SET(ctx->ep, ep);
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
-	ctx->flags = FI_RECV;
+	ctx->op_ctx = VRB_POST_RQ;
 	wr->wr_id = (uintptr_t) ctx;
 
 	ret = ibv_post_recv(ep->ibv_qp, wr, &bad_wr);
@@ -143,7 +143,7 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 
 	ctx->ep = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
-	ctx->flags = FI_TRANSMIT | flags;
+	ctx->op_ctx = VRB_POST_SQ;
 	wr->wr_id = (uintptr_t) ctx;
 
 	ret = ibv_post_send(ep->ibv_qp, wr, &bad_wr);
@@ -1464,7 +1464,7 @@ ssize_t vrb_post_srq(struct vrb_srq_ep *ep, struct ibv_recv_wr *wr)
 
 	ctx->srx = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
-	ctx->flags = FI_RECV;
+	ctx->op_ctx = VRB_POST_SRQ;
 	wr->wr_id = (uintptr_t) ctx;
 
 	ret = ibv_post_srq_recv(ep->srq, wr, &bad_wr);
