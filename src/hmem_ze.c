@@ -310,15 +310,16 @@ ze_result_t ofi_zeDeviceGetProperties(ze_device_handle_t hDevice,
 #if HAVE_DRM
 #include <drm/i915_drm.h>
 #include <sys/ioctl.h>
+#include <stdio.h>
 
 static int ze_hmem_init_fds(void)
 {
-	const char *dev_dir = "/dev/dri/by-path";
+	const char *dev_dir = "/dev/dri/by-path/";
 	const char *suffix = "-render";
 	DIR *dir;
 	struct dirent *ent = NULL;
-	char dev_name[128];
-	int i = 0;
+	char dev_name[NAME_MAX];
+	int i = 0, ret;
 
 	dir = opendir(dev_dir);
 	if (dir == NULL)
@@ -330,20 +331,23 @@ static int ze_hmem_init_fds(void)
 			continue;
 
 		memset(dev_name, 0, sizeof(dev_name));
-		strncpy(dev_name, dev_dir, sizeof(dev_name));
-		strncat(dev_name, "/",
-			sizeof(dev_name) - strlen(dev_name));
-		strncat(dev_name, ent->d_name,
-			sizeof(dev_name) - strlen(dev_name));
+		ret = snprintf(dev_name, NAME_MAX, "%s%s", dev_dir, ent->d_name);
+		if (ret < 0 || ret >= NAME_MAX)
+			goto err;
+
 		dev_fds[i] = open(dev_name, O_RDWR);
-		if (dev_fds[i] == -1) {
-			FI_WARN(&core_prov, FI_LOG_CORE,
-				"Failed open device %d\n", i);
-			return -FI_EIO;
-		}
+		if (dev_fds[i] == -1)
+			goto err;
 		i++;
 	}
+	(void) closedir(dir);
 	return FI_SUCCESS;
+
+err:
+	(void) closedir(dir);
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed open device %d\n", i);
+	return -FI_EIO;
 }
 
 int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
