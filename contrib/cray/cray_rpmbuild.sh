@@ -23,7 +23,7 @@ else
     CUDA_CONFIG=""
 fi
 
-if [[ "${TARGET_OS}" == "sle15_sp3_ncn" ]]; then
+if [[ ${TARGET_OS} == "sle15_sp3_ncn" && ! ${BRANCH_NAME} == release/* ]]; then
     ZE_CONFIG="-c --with-ze=/usr -c --enable-ze-dlopen"
 else
     ZE_CONFIG=""
