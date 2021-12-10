@@ -198,7 +198,7 @@ static ssize_t copy_to_hmem_iov(enum fi_hmem_iface iface, uint64_t device,
 	return cpy_size;
 }
 
-struct fi_hmem_override_ops hmem_ops = {
+struct fi_hmem_override_ops cxit_hmem_ops = {
 	.copy_from_hmem_iov = copy_from_hmem_iov,
 	.copy_to_hmem_iov = copy_to_hmem_iov,
 };
@@ -265,7 +265,7 @@ int pmi_init_libfabric(void)
 	RETURN_ERROR(ret, "fi_open_ops");
 
 	ret = fi_set_ops(&cxit_domain->fid, FI_SET_OPS_HMEM_OVERRIDE, 0,
-			 &hmem_ops, NULL);
+			 &cxit_hmem_ops, NULL);
 	RETURN_ERROR(ret, "fi_set_ops");
 
 	ret = fi_endpoint(cxit_domain, cxit_fi, &cxit_ep, NULL);
