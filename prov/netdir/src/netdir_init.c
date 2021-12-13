@@ -54,9 +54,14 @@ struct fi_provider ofi_nd_prov = {
 	.cleanup = ofi_nd_fini
 };
 
+static int ofi_nd_alter_defaults(uint32_t version, const struct fi_info *hints,
+		                         const struct fi_info *base_info,
+		                         struct fi_info *dest_info);
+
 struct util_prov ofi_nd_util_prov = {
 	.prov = &ofi_nd_prov,
 	.info = 0,
+    .alter_defaults = &ofi_nd_alter_defaults,
 	.flags = UTIL_RX_SHARED_CTX,
 };
 
@@ -68,6 +73,23 @@ struct gl_data gl_data = {
 	.flow_control_cnt = 1,
 	.total_avail = 64
 };
+
+static size_t nd_default_tx_iov_limit = 8;
+static size_t nd_default_tx_size = 384;
+static size_t nd_default_rx_iov_limit = 8;
+static size_t nd_default_rx_size = 384;
+
+static int ofi_nd_alter_defaults(uint32_t version, const struct fi_info *hints,
+                                 const struct fi_info *base_info,
+                                 struct fi_info *dest_info)
+{
+    dest_info->tx_attr->iov_limit = min(base_info->tx_attr->iov_limit, nd_default_tx_iov_limit);
+    dest_info->tx_attr->size = min(base_info->tx_attr->size, nd_default_tx_size);
+    dest_info->rx_attr->iov_limit = min(base_info->rx_attr->iov_limit, nd_default_rx_iov_limit);
+    dest_info->rx_attr->size = min(base_info->rx_attr->size, nd_default_rx_size);
+
+    return 0;
+}
 
 int ofi_nd_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info *hints,
@@ -107,8 +129,8 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 	info->tx_attr->size = (size_t)adapter->MaxInitiatorQueueDepth;
 	/* TODO: if optimization will be needed, we can use adapter->MaxInitiatorSge,
 	 * and use ND SGE to send/write iovecs */
-	info->tx_attr->iov_limit = (size_t)adapter->MaxInitiatorSge;
-	info->tx_attr->rma_iov_limit = (size_t)adapter->MaxInitiatorSge;
+	info->tx_attr->iov_limit = (size_t)min(adapter->MaxInitiatorSge, ND_MSG_IOV_LIMIT);
+    info->tx_attr->rma_iov_limit = 1;
 	info->tx_attr->op_flags = OFI_ND_TX_OP_FLAGS;
 	info->tx_attr->msg_order = OFI_ND_MSG_ORDER;
 
@@ -119,7 +141,7 @@ static int ofi_nd_adapter_cb(const ND2_ADAPTER_INFO *adapter, const char *name)
 	info->rx_attr->size = (size_t)adapter->MaxReceiveQueueDepth;
 	/* TODO: if optimization will be needed, we can use adapter->MaxInitiatorSge,
 	 * and use ND SGE to recv iovecs */
-	info->rx_attr->iov_limit = (size_t)adapter->MaxReceiveSge;
+	info->rx_attr->iov_limit = (size_t)min(adapter->MaxReceiveSge, ND_MSG_IOV_LIMIT);
 	info->rx_attr->msg_order = OFI_ND_MSG_ORDER;
 
 	info->ep_attr->type = FI_EP_MSG;
