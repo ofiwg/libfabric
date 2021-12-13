@@ -3,93 +3,90 @@ pipeline {
     agent any
     options {
         timestamps()
-        timeout(activity: true, time: 4, unit: 'HOURS')    
+        timeout(activity: true, time: 4, unit: 'HOURS')
     }
     environment {
         JOB_CADENCE = 'PR'
     }
 
     stages {
-        stage ('fetch-opa-psm2')  {
-             steps {
-                 withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) { 
-                     dir('opa-psm2-lib') {
-
-                        checkout changelog: false, poll: false, scm: [$class: 'GitSCM', \
-                        branches: [[name: '*/master']], \
-                        doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], \
-                        userRemoteConfigs: [[url: 'https://github.com/intel/opa-psm2.git']]]                        
-                      }
-                 }
-             }
-        }
-        
         stage ('build-libfabric') {
             steps {
-                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) { 
-                sh """ 
+                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) {
+                sh """
                   python3.7 contrib/intel/jenkins/build.py 'libfabric' --ofi_build_mode='dbg'
-                  echo "libfabric build completed"  
+                  python3.7 contrib/intel/jenkins/build.py 'libfabric'
+                  python3.7 contrib/intel/jenkins/build.py 'libfabric' --ofi_build_mode='dl'
+                  echo "libfabric build completed"
                  """
                 }
             }
         }
         stage('build-fabtests') {
             steps {
-                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) { 
+                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) {
                 sh """
-                python3.7 contrib/intel/jenkins/build.py 'fabtests' --ofi_build_mode='dbg'              
-                echo 'fabtests build completed' 
+                python3.7 contrib/intel/jenkins/build.py 'fabtests' --ofi_build_mode='dbg'
+                python3.7 contrib/intel/jenkins/build.py 'fabtests'
+                python3.7 contrib/intel/jenkins/build.py 'fabtests' --ofi_build_mode='dl'
+                echo 'fabtests build completed'
                 """
                 }
             }
         }
-        
-        stage ('build-shmem') {
-            steps {
-              withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
-                sh """
-                python3.7  contrib/intel/jenkins/build.py 'shmem' --ofi_build_mode='dbg'
-                echo 'shmem benchmarks built successfully'
-                """
-              }
-            }
-        }
-        stage('build MPICH_bm') {
-            steps {
-              withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
-                sh """
-                python3.7 contrib/intel/jenkins/build.py 'mpich_benchmarks' --ofi_build_mode='dbg'
-                echo "mpi benchmarks with mpich - built successfully"
-                """
-              }
-            }
-        }
-        stage('build IMPI_bm') {
-            steps {
-              withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
-                sh """
-                python3.7 contrib/intel/jenkins/build.py 'impi_benchmarks' --ofi_build_mode='dbg'
-                echo 'mpi benchmarks with impi - built successfully'
-                """
-              }
-            }
-        }  
 
-        stage ('build OMPI_bm') {
-            steps {
-              withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
-                sh """
-                python3.7 contrib/intel/jenkins/build.py 'ompi_benchmarks' --ofi_build_mode='dbg'
-                echo 'mpi benchmarks with ompi - built successfully'
-                """
-              }
+        stage('parallel-build') {
+          parallel {
+            stage ('build-SHMEM') {
+                steps {
+                  withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
+                    sh """
+                    python3.7  contrib/intel/jenkins/build.py 'shmem' --ofi_build_mode='dbg'
+                    python3.7  contrib/intel/jenkins/build.py 'shmem'
+                    echo 'shmem benchmarks built successfully'
+                    """
+                  }
+                }
             }
+            stage('build-MPICH') {
+                steps {
+                  withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
+                    sh """
+                    python3.7 contrib/intel/jenkins/build.py 'mpich_benchmarks' --ofi_build_mode='dbg'
+                    python3.7 contrib/intel/jenkins/build.py 'mpich_benchmarks'
+                    echo "mpi benchmarks with mpich - built successfully"
+                    """
+                  }
+                }
+            }
+            stage('build-IMPI') {
+                steps {
+                  withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
+                    sh """
+                    python3.7 contrib/intel/jenkins/build.py 'impi_benchmarks' --ofi_build_mode='dbg'
+                    python3.7 contrib/intel/jenkins/build.py 'impi_benchmarks'
+                    echo 'mpi benchmarks with impi - built successfully'
+                    """
+                  }
+                }
+            }
+            stage ('build-OMPI') {
+                steps {
+                  withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
+                    sh """
+                    python3.7 contrib/intel/jenkins/build.py 'ompi_benchmarks' --ofi_build_mode='dbg'
+                    python3.7 contrib/intel/jenkins/build.py 'ompi_benchmarks'
+                    echo 'mpi benchmarks with ompi - built successfully'
+                    """
+                  }
+                }
+            }
+          }
         }
-    
+
         stage('parallel-tests') {
-            parallel { 
-                 stage('eth-tcp-dbg') {
+            parallel {
+                stage('tcp') {
                     agent {node {label 'eth'}}
                     steps{
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
@@ -98,13 +95,16 @@ pipeline {
                             env
                             (
                                 cd  ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=tcp --ofi_build_mode='dbg'
+                                python3.7 runtests.py --prov=tcp --ofi_build_mode='dbg' --test_mode='unit'
+                                python3.7 runtests.py --prov=tcp --test_mode='unit'
+                                python3.7 runtests.py --prov=tcp --test_mode='mpi'
+                                python3.7 runtests.py --prov=sockets --test_mode='unit'
                             )
                           """
                         }
                      }
-                 }
-                 stage('eth-udp-shm-dbg') {
+                }
+                stage('udp') {
                      agent {node {label 'eth'}}
                      steps{
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
@@ -113,60 +113,30 @@ pipeline {
                             env
                             (
                                 cd  ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=udp --ofi_build_mode='dbg'
-                                python3.7 runtests.py --prov=udp --util=rxd --ofi_build_mode='dbg'
-                                python3.7 runtests.py --prov=shm --ofi_build_mode='dbg'
+                                python3.7 runtests.py --prov=udp --ofi_build_mode='dbg' --test_mode='unit'
+                                python3.7 runtests.py --prov=udp --test_mode='unit'
                             )
                           """
                         }
                      }
-
-                 }
-                 stage('hfi1-psm2-verbs-dbg') {
-                     agent {node {label 'hfi1'}}
+                }
+                stage('shm') {
+                     agent {node {label 'eth'}}
                      steps{
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
                           sh """
                             env
                             (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=psm2 --ofi_build_mode='dbg'
-                                python3.7 runtests.py --prov=verbs --ofi_build_mode='dbg'
+                                cd  ${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=shm --ofi_build_mode='dbg' --test_mode='unit'
+                                python3.7 runtests.py --prov=shm --test_mode='unit'
                             )
-                         """
+                          """
                         }
                      }
-                 }
-                
-                 stage('hfi1-verbs_rxd-dbg') {
-                    agent {node {label 'hfi1'}}
-                     steps{
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-                          sh """
-                            env
-                            (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --util=rxd --ofi_build_mode='dbg'
-                            )
-                         """
-                        }
-                     }
-                 }
-                 stage('hfi1-verbs_rxm-dbg') {
-                     agent {node {label 'hfi1'}}
-                     steps{
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-                          sh """
-                            env
-                            (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --util=rxm --ofi_build_mode='dbg'
-                            )
-                         """
-                        }
-                     }
-                 }
-                 stage('mlx5-verbs_rxm-dbg') {
+                }
+                stage('verbs-rc') {
                      agent {node {label 'mlx5'}}
                      steps{
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
@@ -174,14 +144,15 @@ pipeline {
                             env
                             (
                                 cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --ofi_build_mode='dbg'
-                                python3.7 runtests.py --prov=verbs --util=rxm --ofi_build_mode='dbg'
+                                python3.7 runtests.py --prov=verbs --ofi_build_mode='dbg' --test_mode='unit'
+                                python3.7 runtests.py --prov=verbs --test_mode='unit'
+                                python3.7 runtests.py --prov=verbs --test_mode='mpi'
                             )
-                          """
+                         """
                         }
                      }
-                 }
-                 stage('mlx5-verbs_rxd-dbg') {
+                }
+                stage('verbs-ud') {
                      agent {node {label 'mlx5'}}
                      steps{
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
@@ -189,28 +160,26 @@ pipeline {
                             env
                             (
                                 cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --util=rxd --ofi_build_mode='dbg'
+                                python3.7 runtests.py --prov=verbs --util=rxd --ofi_build_mode='dbg' --test_mode='unit'
                             )
-                          """
+                         """
                         }
                      }
-                 }     
-            } 
-   }        
+                }
+            }
+      }
+    }
 
-  }
- 
-  post {
-    cleanup {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+    post {
+        cleanup {
+          withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
             sh "rm -rf '/mpibuilddir/mpich-build-dir/${env.JOB_NAME}/${env.BUILD_NUMBER}'"
             sh "rm -rf '/mpibuilddir/ompi-build-dir/${env.JOB_NAME}/${env.BUILD_NUMBER}'"
             sh "rm -rf '/mpibuilddir/mpich-suite-build-dir/${env.JOB_NAME}/${env.BUILD_NUMBER}'"
-	    dir("${env.WORKSPACE}"){
-                deleteDir()
+	          dir("${env.WORKSPACE}") {
+              deleteDir()
             }
+          }
         }
-    }  
-  }
-  
+    }
 }

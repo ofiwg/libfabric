@@ -3,7 +3,6 @@
 # Exclude all prefix tests
 -k
 
-rdm
 dgram
 
 trigger
@@ -17,3 +16,6 @@ multi_recv
 recv_cancel
 unexpected_msg
 inj_complete
+rdm_rma_event
+trigger
+shared_av

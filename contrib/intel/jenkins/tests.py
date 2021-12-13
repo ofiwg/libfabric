@@ -142,11 +142,6 @@ class Fabtest(Test):
 
         return opts
 
-    @property
-    def execute_condn(self):
-        return True if (self.core_prov != 'shm' or \
-                        self.ofi_build_mode == 'dbg') else False
-
     def execute_cmd(self):
         curdir = os.getcwd()
         os.chdir(self.fabtestconfigpath)
@@ -189,13 +184,6 @@ class ShmemTest(Test):
                 provider=prov, test=shmem_testname, \
                 inf=ci_site_config.interface_map[self.fabric])
         return opts
-
-    @property
-    def execute_condn(self):
-        return True if (self.job_cadence == 'daily' and \
-                        (self.core_prov == "psm2" or \
-                        self.core_prov == "sockets")) \
-                    else False
 
     def execute_cmd(self, shmem_testname):
         command = self.cmd + self.options(shmem_testname)
@@ -266,16 +254,6 @@ class MpiTests(Test):
                 opts = "{} -x {}={} ".format(opts,key,val)
         return opts
 
-    @property
-    def mpi_gen_execute_condn(self):
-        #Skip MPI tests for udp, verbs(core) providers.
-        # we would still have MPI tests runnning for
-        # verbs-rxd and verbs-rxm providers
-        return True if (self.core_prov != "udp" and \
-                        self.core_prov != "shm" and \
-                       (self.core_prov != "verbs" or \
-                       self.util_prov == "ofi_rxm" or \
-                       self.util_prov == "ofi_rxd")) else False
 
 # IMBtests serves as an abstract class for different
 # types of intel MPI benchmarks. Currently we have
@@ -329,6 +307,7 @@ class IMBrma(IMBtests):
     def imb_cmd(self):
         return "{}/intel64/bin/IMB-RMA".format(ci_site_config.impi_root)
 
+    # verbs provider has issues with RMA test - skip
     @property
     def execute_condn(self):
         return True if (self.core_prov != "verbs") else False
@@ -354,9 +333,8 @@ class MpiTestIMB(MpiTests):
 
     def execute_cmd(self):
         command = self.cmd + self.options
-        if(self.mpi1.execute_condn):
-            outputcmd = shlex.split(command +  self.mpi1.imb_cmd)
-            common.run_command(outputcmd)
+        outputcmd = shlex.split(command +  self.mpi1.imb_cmd)
+        common.run_command(outputcmd)
         if (self.rma.execute_condn):
             outputcmd = shlex.split(command + self.rma.imb_cmd)
             common.run_command(outputcmd)
@@ -407,10 +385,10 @@ class MpichTestSuite(MpiTests):
 
         return opts
 
+    # sockets provider fails with MPICH test suite - skip
     @property
     def execute_condn(self):
-        return True if (self.mpi == 'impi' and  self.core_prov != 'psm2' \
-                        and self.core_prov != 'sockets') else False
+        return True if (self.mpi == 'impi' and self.core_prov != 'sockets') else False
 
     def execute_cmd(self, testgroupname):
         print("Running Tests: " + testgroupname)
@@ -461,11 +439,10 @@ class MpiTestOSU(MpiTests):
 
     @property
     def execute_condn(self):
-        # sockets and psm2 have some issues with OSU benchmark testing.
+        # sockets has issues with OSU benchmark testing - skip
         return True if ((self.job_cadence  == 'daily') and \
                         (self.mpi != "ompi" or \
                         (self.core_prov != "sockets" and \
-                         self.core_prov != "psm2" and \
                          self.ofi_build_mode!="dbg"))) \
                     else False
 
