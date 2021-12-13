@@ -57,6 +57,8 @@ CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 				   CUdeviceptr ptr);
 cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags);
 cudaError_t ofi_cudaHostUnregister(void *ptr);
+cudaError_t ofi_cudaMalloc(void **ptr, size_t size);
+cudaError_t ofi_cudaFree(void *ptr);
 
 #endif /* HAVE_LIBCUDA */
 
