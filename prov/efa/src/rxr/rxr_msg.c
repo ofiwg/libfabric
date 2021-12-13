@@ -127,10 +127,13 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	bool delivery_complete_requested;
 	int ctrl_type;
 	struct efa_domain *efa_domain;
+	struct efa_ep *efa_ep;
 	struct rxr_domain *rxr_domain = rxr_ep_domain(rxr_ep);
 
 	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
 				  util_domain.domain_fid);
+
+	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 
 	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
 	tagged = (tx_entry->op == ofi_op_tagged);
@@ -205,7 +208,10 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry, ctrl_type + tagged, 0, 0);
 	}
 
-	if (efa_ep_is_cuda_mr(tx_entry->desc[0])) {
+	ret = efa_ep_use_p2p(efa_ep, tx_entry->desc[0]);
+	if (ret < 0)
+		return ret;
+	if (ret == 1 && efa_ep_is_cuda_mr(tx_entry->desc[0])) {
 		return rxr_msg_post_cuda_rtm(rxr_ep, tx_entry);
 	}
 

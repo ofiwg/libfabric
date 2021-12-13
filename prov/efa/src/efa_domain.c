@@ -593,6 +593,13 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		goto err_free_info;
 	}
 
+	if ((domain->info->caps & FI_HMEM) &&
+	    ofi_hmem_is_initialized(FI_HMEM_CUDA)) {
+		domain->hmem_info[FI_HMEM_CUDA].initialized = true;
+		/* TODO: register a cuda page here instead */
+		domain->hmem_info[FI_HMEM_CUDA].p2p_supported = true;
+	}
+
 	/*
 	 * If FI_MR_LOCAL is set, we do not want to use the MR cache.
 	 */

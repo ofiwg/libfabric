@@ -882,7 +882,6 @@ EFA_INI
 			"Calls to RDMA read is segmented using this value.");
 	fi_param_define(&rxr_prov, "fork_safe", FI_PARAM_BOOL,
 			"Enables fork support and disables internal usage of huge pages. Has no effect on kernels which set copy-on-fork for registered pages, generally 5.13 and later. (Default: false)");
-
 	rxr_init_env();
 
 #if HAVE_EFA_DL
