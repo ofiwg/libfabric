@@ -502,6 +502,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 					"FI_HMEM capability currently requires peer to peer support, which is disabled.\n");
 				return -FI_ENODATA;
 			}
+			//TODO: remove the rdma checks once FI_HMEM w/o p2p is supported
 			if (!efa_device_support_rdma_read()) {
 				FI_WARN(&rxr_prov, FI_LOG_CORE,
 				        "FI_HMEM capability requires RDMA, which this device does not support.\n");

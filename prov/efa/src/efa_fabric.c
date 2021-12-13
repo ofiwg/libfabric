@@ -569,67 +569,6 @@ err_free_nic:
 	return ret;
 }
 
-#if HAVE_LIBCUDA
-/*
- * efa_get_gdr_support() checks if the provider can support GPUDirect RDMA. It
- * checks whether the hmem initialization succeeded and also reads from the EFA
- * driver sysfs file "class/infiniband/<device_name>/gdr" to verify the EFA
- * driver was able to successfully load p2p device support.
- *
- * TODO: the gdr sysfs file does not necessarily mean a specific p2p transfer
- * will succeed, more work is needed here.
- *
- * Return value:
- *   return 1 if gdr is supported
- *   return 0 if it is not
- *   return a negative value on error
- */
-static int efa_get_gdr_support(struct efa_context *efa_context)
-{
-	static const int MAX_GDR_SUPPORT_STRLEN = 8;
-	char *gdr_path = NULL;
-	char gdr_support_str[MAX_GDR_SUPPORT_STRLEN];
-	int ret, read_len;
-
-	if (!ofi_hmem_is_initialized(FI_HMEM_CUDA)) {
-		EFA_WARN(FI_LOG_MR,
-		         "FI_HMEM_CUDA is not initialized\n");
-		return 0;
-	}
-
-	ret = asprintf(&gdr_path, "class/infiniband/%s/device/gdr",
-		       efa_context->ibv_ctx->device->name);
-	if (ret < 0) {
-		EFA_INFO_ERRNO(FI_LOG_FABRIC, "asprintf to build sysfs file name failed", ret);
-		goto out;
-	}
-
-	ret = fi_read_file(get_sysfs_path(), gdr_path,
-			   gdr_support_str, MAX_GDR_SUPPORT_STRLEN);
-	if (ret < 0) {
-		if (errno == ENOENT) {
-			/* sysfs file does not exist, gdr is not supported */
-			ret = 0;
-		}
-
-		goto out;
-	}
-
-	if (ret == 0) {
-		EFA_WARN(FI_LOG_FABRIC, "Sysfs file %s is empty\n", gdr_path);
-		ret = -FI_EINVAL;
-		goto out;
-	}
-
-	read_len = MIN(ret, MAX_GDR_SUPPORT_STRLEN);
-	ret = (0 == strncmp(gdr_support_str, "1", read_len));
-
-out:
-	free(gdr_path);
-	return ret;
-}
-#endif
-
 static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 {
 	struct efadv_device_attr efadv_attr;
@@ -677,19 +616,12 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 	info->domain_attr->mr_cnt		= base_attr->max_mr;
 
 #if HAVE_LIBCUDA
-	if (info->ep_attr->type == FI_EP_RDM) {
-		ret = efa_get_gdr_support(ctx);
-		if (ret < 0) {
-			EFA_WARN(FI_LOG_FABRIC, "get gdr support failed!\n");
-			return ret;
-		}
-
-		if (ret == 1) {
-			info->caps			|= FI_HMEM;
-			info->tx_attr->caps		|= FI_HMEM;
-			info->rx_attr->caps		|= FI_HMEM;
-			info->domain_attr->mr_mode	|= FI_MR_HMEM;
-		}
+	if (info->ep_attr->type == FI_EP_RDM &&
+	    ofi_hmem_is_initialized(FI_HMEM_CUDA)) {
+		info->caps			|= FI_HMEM;
+		info->tx_attr->caps		|= FI_HMEM;
+		info->rx_attr->caps		|= FI_HMEM;
+		info->domain_attr->mr_mode	|= FI_MR_HMEM;
 	}
 #endif
 
