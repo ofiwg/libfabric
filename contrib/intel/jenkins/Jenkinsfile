@@ -52,12 +52,13 @@ pipeline {
         }
         stage('build IMPI_bm') {
             steps {
-                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
-                  sh """
-                    python3.7 contrib/intel/jenkins/build.py 'impi_benchmarks' --ofi_build_mode='dbg'
-                    echo 'mpi benchmarks with impi - built successfully'
-                  """
-                }
+              withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
+                sh """
+                source ${env.CI_IMPI_ONEAPI_ROOT}/env/vars.sh -i_mpi_ofi_internal=0
+                python3.7 contrib/intel/jenkins/build.py 'impi_benchmarks' --ofi_build_mode='dbg'
+                echo 'mpi benchmarks with impi - built successfully'
+                """
+              }
             }
         }
         stage ('build OMPI_bm') {

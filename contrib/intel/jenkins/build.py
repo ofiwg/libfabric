@@ -156,7 +156,7 @@ def build_mpi(mpi, mpisrc, mpi_install_path, libfab_install_path,  ofi_build_mod
 def build_mpich_suite(mpi, mpi_install_path, libfab_install_path, ofi_build_mode):
 
     mpich_suite_build_path = "/mpibuilddir/mpich-suite-build-dir/{}/{}/{}/mpich" \
-                             .format(jobname, buildno, ofi_build_mode);
+                             .format(jobname, buildno, ofi_build_mode)
     if (os.path.exists(mpich_suite_build_path) == False):
         shutil.copytree(ci_site_config.mpich_src, mpich_suite_build_path)
 
