@@ -57,7 +57,7 @@ static void ofi_nd_pep_connreq_free(nd_event_base *base);
 static void ofi_nd_pep_connreq(nd_event_base *base, DWORD bytes);
 static void ofi_nd_pep_connreq_err(nd_event_base *base, DWORD err,
 				   DWORD bytes);
-static int ofi_nd_pep_getopt(struct fid *ep, int level, int optname,
+extern int ofi_nd_ep_getopt(struct fid *ep, int level, int optname,
 			void *optval, size_t *optlen);
 
 static struct fi_ops ofi_nd_fi_ops = {
@@ -90,7 +90,7 @@ static struct fi_ops_cm ofi_nd_cm_ops = {
 static struct fi_ops_ep ofi_nd_pep_ops = {
 	.size = sizeof(ofi_nd_pep_ops),
 	.cancel = fi_no_cancel,
-	.getopt = ofi_nd_pep_getopt,
+	.getopt = ofi_nd_ep_getopt,
 	.setopt = fi_no_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
@@ -475,30 +475,6 @@ static int ofi_nd_pep_reject(struct fid_pep *ppep, fid_t handle,
 	ofi_nd_buf_free_nd_connreq(connreq);
 
 	return FI_SUCCESS;
-}
-
-static int ofi_nd_pep_getopt(struct fid *ep, int level, int optname,
-			void *optval, size_t *optlen)
-{
-	OFI_UNUSED(ep);
-
-	assert(level == FI_OPT_ENDPOINT &&
-		optname == FI_OPT_CM_DATA_SIZE);
-	assert(optval);
-	assert(optlen);
-
-	if (level != FI_OPT_ENDPOINT || optname != FI_OPT_CM_DATA_SIZE)
-		return -FI_ENOPROTOOPT;
-
-	if (*optlen < sizeof(size_t)) {
-		*optlen = sizeof(size_t);
-		return -FI_ETOOSMALL;
-	}
-
-	*((size_t *)optval) = ND_EP_MAX_CM_DATA_SIZE;
-	*optlen = sizeof(size_t);
-
-	return 0;
 }
 
 #endif /* _WIN32 */
