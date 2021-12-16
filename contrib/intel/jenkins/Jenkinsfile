@@ -3,7 +3,7 @@ pipeline {
     agent any
     options {
         timestamps()
-        timeout(activity: true, time: 4, unit: 'HOURS')    
+        timeout(activity: true, time: 4, unit: 'HOURS')
     }
     environment {
         JOB_CADENCE = 'PR'
@@ -12,39 +12,39 @@ pipeline {
     stages {
         stage ('fetch-opa-psm2')  {
              steps {
-                 withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) { 
+                 withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) {
                      dir('opa-psm2-lib') {
 
                         checkout changelog: false, poll: false, scm: [$class: 'GitSCM', \
                         branches: [[name: '*/master']], \
                         doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], \
-                        userRemoteConfigs: [[url: 'https://github.com/intel/opa-psm2.git']]]                        
+                        userRemoteConfigs: [[url: 'https://github.com/intel/opa-psm2.git']]]
                       }
                  }
              }
         }
-        
+
         stage ('build-libfabric') {
             steps {
-                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) { 
-                sh """ 
+                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) {
+                sh """
                   python3.7 contrib/intel/jenkins/build.py 'libfabric' --ofi_build_mode='dbg'
-                  echo "libfabric build completed"  
+                  echo "libfabric build completed"
                  """
                 }
             }
         }
         stage('build-fabtests') {
             steps {
-                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) { 
+                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) {
                 sh """
-                python3.7 contrib/intel/jenkins/build.py 'fabtests' --ofi_build_mode='dbg'              
-                echo 'fabtests build completed' 
+                python3.7 contrib/intel/jenkins/build.py 'fabtests' --ofi_build_mode='dbg'
+                echo 'fabtests build completed'
                 """
                 }
             }
         }
-        
+
         stage ('build-shmem') {
             steps {
               withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
@@ -74,7 +74,7 @@ pipeline {
                 """
               }
             }
-        }  
+        }
 
         stage ('build OMPI_bm') {
             steps {
@@ -86,9 +86,9 @@ pipeline {
               }
             }
         }
-    
+
         stage('parallel-tests') {
-            parallel { 
+            parallel {
                  stage('eth-tcp-dbg') {
                     agent {node {label 'eth'}}
                     steps{
@@ -137,7 +137,7 @@ pipeline {
                         }
                      }
                  }
-                
+
                  stage('hfi1-verbs_rxd-dbg') {
                     agent {node {label 'hfi1'}}
                      steps{
@@ -194,12 +194,12 @@ pipeline {
                           """
                         }
                      }
-                 }     
-            } 
-   }        
+                 }
+            }
+   }
 
   }
- 
+
   post {
     cleanup {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
@@ -210,7 +210,7 @@ pipeline {
                 deleteDir()
             }
         }
-    }  
+    }
   }
-  
+
 }
