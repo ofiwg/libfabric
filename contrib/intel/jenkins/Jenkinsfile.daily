@@ -9,20 +9,6 @@ pipeline {
         JOB_CADENCE = 'daily'
     }
     stages {
-        stage ('fetch-opa-psm2')  {
-             steps {
-                 withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) {
-                     dir('opa-psm2-lib') {
-
-                        checkout changelog: false, poll: false, scm: [$class: 'GitSCM', \
-                        branches: [[name: '*/master']], \
-                        doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], \
-                        userRemoteConfigs: [[url: 'https://github.com/intel/opa-psm2.git']]]
-                      }
-                 }
-             }
-        }
-
         stage ('build-libfabric') {
             steps {
                 withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) {
@@ -148,7 +134,7 @@ pipeline {
                         }
                      }
                  }
-                 stage('hfi1-psm2-verbs') {
+                 stage('hfi1-verbs') {
                      agent {node {label 'hfi1'}}
                      steps{
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
@@ -156,7 +142,6 @@ pipeline {
                             env
                             (
                                 cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=psm2
                                 python3.7 runtests.py --prov=verbs
                             )
                           """
@@ -275,7 +260,7 @@ pipeline {
                      }
 
                  }
-                 stage('hfi1-psm2-verbs-dbg') {
+                 stage('hfi1-verbs-dbg') {
                      agent {node {label 'hfi1'}}
                      steps{
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
@@ -283,7 +268,6 @@ pipeline {
                             env
                             (
                                 cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=psm2 --ofi_build_mode='dbg'
                                 python3.7 runtests.py --prov=verbs --ofi_build_mode='dbg'
                             )
                          """
@@ -397,7 +381,7 @@ pipeline {
 
                  }
 
-                 stage('hfi1-psm2-verbs-dl') {
+                 stage('hfi1-verbs-dl') {
                      agent {node {label 'hfi1'}}
                      steps{
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
@@ -405,7 +389,6 @@ pipeline {
                             env
                             (
                                 cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=psm2 --ofi_build_mode='dl'
                                 python3.7 runtests.py --prov=verbs --ofi_build_mode='dl'
                             )
                          """
