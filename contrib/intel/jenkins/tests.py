@@ -13,9 +13,11 @@ from abc import ABC, abstractmethod # abstract base class for creating abstract 
 
 job_cadence = os.environ['JOB_CADENCE']
 
+
 # A Jenkins env variable for job name is composed of the name of the jenkins job and the branch name
 # it is building for. for e.g. in our case jobname = 'ofi_libfabric/master'
 class Test:
+
     def __init__ (self, jobname, buildno, testname, core_prov, fabric,
                   hosts, ofi_build_mode, util_prov=None):
         self.jobname = jobname
@@ -38,7 +40,10 @@ class Test:
         self.env = [("FI_VERBS_MR_CACHE_ENABLE", "1"),\
                     ("FI_VERBS_INLINE_SIZE", "256")] \
                     if self.core_prov == "verbs" else []
+
+
 class FiInfoTest(Test):
+
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  hosts, ofi_build_mode, util_prov=None):
 
@@ -155,7 +160,9 @@ class Fabtest(Test):
         common.run_command(outputcmd)
         os.chdir(curdir)
 
+
 class ShmemTest(Test):
+
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  hosts, ofi_build_mode, util_prov=None):
 
@@ -203,6 +210,7 @@ class ShmemTest(Test):
 
 
 class MpiTests(Test):
+
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  mpitype, hosts, ofi_build_mode, util_prov=None):
 
@@ -276,11 +284,11 @@ class MpiTests(Test):
                        self.util_prov == "ofi_rxm" or \
                        self.util_prov == "ofi_rxd")) else False
 
+
 # IMBtests serves as an abstract class for different
 # types of intel MPI benchmarks. Currently we have
 # the mpi1 and rma tests enabled which are encapsulated
 # in the IMB_mpi1 and IMB_rma classes below.
-
 class IMBtests(ABC):
     """
     This is an abstract class for IMB tests.
@@ -298,6 +306,7 @@ class IMBtests(ABC):
     @abstractmethod
     def execute_condn(self):
         pass
+
 
 class IMBmpi1(IMBtests):
 
@@ -320,6 +329,7 @@ class IMBmpi1(IMBtests):
     def execute_condn(self):
         return True
 
+
 class IMBrma(IMBtests):
     def __init__(self, core_prov):
         self.core_prov =  core_prov
@@ -331,6 +341,7 @@ class IMBrma(IMBtests):
     @property
     def execute_condn(self):
         return True if (self.core_prov != "verbs") else False
+
 
 # MpiTestIMB class inherits from the MPITests class.
 # It uses the same options method and class variables as all MPI tests.
@@ -359,6 +370,7 @@ class MpiTestIMB(MpiTests):
         if (self.rma.execute_condn):
             outputcmd = shlex.split(command + self.rma.imb_cmd)
             common.run_command(outputcmd)
+
 
 class MpichTestSuite(MpiTests):
 
@@ -485,5 +497,3 @@ class MpiTestOSU(MpiTests):
                     command = launcher + osu_cmd
                     outputcmd = shlex.split(command)
                     common.run_command(outputcmd)
-
-

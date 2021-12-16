@@ -67,4 +67,3 @@ if(args_core):
                                              util=args_util)
 else:
     print("Error : Specify a core provider to run tests")
-
