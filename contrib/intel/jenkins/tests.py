@@ -322,7 +322,7 @@ class IMBmpi1(IMBtests):
 
     @property
     def imb_cmd(self):
-        return "{}/intel64/bin/IMB-MPI1 -include {}".format(ci_site_config.impi_root, \
+        return "{}/bin/IMB-MPI1 -include {}".format(ci_site_config.impi_root, \
                 ','.join(self.additional_tests))
 
     @property
@@ -336,7 +336,7 @@ class IMBrma(IMBtests):
 
     @property
     def imb_cmd(self):
-        return "{}/intel64/bin/IMB-RMA".format(ci_site_config.impi_root)
+        return "{}/bin/IMB-RMA".format(ci_site_config.impi_root)
 
     @property
     def execute_condn(self):
