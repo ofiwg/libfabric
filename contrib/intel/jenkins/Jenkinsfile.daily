@@ -134,52 +134,6 @@ pipeline {
                         }
                      }
                  }
-                 stage('hfi1-verbs') {
-                     agent {node {label 'hfi1'}}
-                     steps{
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-                          sh """
-                            env
-                            (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs
-                            )
-                          """
-                        }
-                     }
-
-                 }
-                 stage('hfi1-verbs-rxm') {
-                     agent {node {label 'hfi1'}}
-                     steps{
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-                          sh """
-                            env
-                            (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --util=rxm
-                            )
-                          """
-                        }
-                     }
-
-                 }
-                 stage('hfi1-verbs-rxd') {
-                     agent {node {label 'hfi1'}}
-                     steps{
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-                          sh """
-                            env
-                            (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --util=rxd
-
-                            )
-                          """
-                        }
-                     }
-
-                 }
                  stage('mlx5-verbs-rxm') {
                      agent {node {label 'mlx5'}}
                      steps{
@@ -260,48 +214,6 @@ pipeline {
                      }
 
                  }
-                 stage('hfi1-verbs-dbg') {
-                     agent {node {label 'hfi1'}}
-                     steps{
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-                          sh """
-                            env
-                            (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --ofi_build_mode='dbg'
-                            )
-                         """
-                        }
-                     }
-                 }
-                 stage('hfi1-verbs_rxd-dbg') {
-                     agent {node {label 'hfi1'}}
-                     steps{
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-                          sh """
-                            env
-                            (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --util=rxd --ofi_build_mode='dbg'
-                            )
-                         """
-                        }
-                     }
-                 }
-                 stage('hfi1-verbs_rxm-dbg') {
-                     agent {node {label 'hfi1'}}
-                     steps{
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-                          sh """
-                            env
-                            (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --util=rxm --ofi_build_mode='dbg'
-                            )
-                         """
-                        }
-                     }
-                 }
                  stage('mlx5-verbs_rxm-dbg') {
                      agent {node {label 'mlx5'}}
                      steps{
@@ -380,50 +292,6 @@ pipeline {
                      }
 
                  }
-
-                 stage('hfi1-verbs-dl') {
-                     agent {node {label 'hfi1'}}
-                     steps{
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-                          sh """
-                            env
-                            (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --ofi_build_mode='dl'
-                            )
-                         """
-                        }
-                     }
-                 }
-                  stage('hfi1-verbs_rxd-dl') {
-                     agent {node {label 'hfi1'}}
-                     steps{
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-                          sh """
-                            env
-                            (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --util=rxd --ofi_build_mode='dl'
-                            )
-                         """
-                        }
-                     }
-                 }
-                 stage('hfi1-verbs_rxm-dl') {
-                     agent {node {label 'hfi1'}}
-                     steps{
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-                          sh """
-                            env
-                            (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --util=rxm --ofi_build_mode='dl'
-                            )
-                         """
-                        }
-                     }
-                 }
-
                  stage('mlx5-verbs_rxm-dl') {
                      agent {node {label 'mlx5'}}
                      steps{
