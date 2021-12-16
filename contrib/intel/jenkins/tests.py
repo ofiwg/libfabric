@@ -193,8 +193,7 @@ class ShmemTest(Test):
     @property
     def execute_condn(self):
         return True if (self.job_cadence == 'daily' and \
-                        (self.core_prov == "psm2" or \
-                        self.core_prov == "sockets")) \
+                        self.core_prov == "sockets") \
                     else False
 
     def execute_cmd(self, shmem_testname):
@@ -409,7 +408,7 @@ class MpichTestSuite(MpiTests):
 
     @property
     def execute_condn(self):
-        return True if (self.mpi == 'impi' and  self.core_prov != 'psm2' \
+        return True if (self.mpi == 'impi' \
                         and self.core_prov != 'sockets') else False
 
     def execute_cmd(self, testgroupname):
@@ -461,11 +460,10 @@ class MpiTestOSU(MpiTests):
 
     @property
     def execute_condn(self):
-        # sockets and psm2 have some issues with OSU benchmark testing.
+        # sockets have some issues with OSU benchmark testing.
         return True if ((self.job_cadence  == 'daily') and \
                         (self.mpi != "ompi" or \
                         (self.core_prov != "sockets" and \
-                         self.core_prov != "psm2" and \
                          self.ofi_build_mode!="dbg"))) \
                     else False
 

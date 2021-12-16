@@ -30,9 +30,6 @@ def build_libfabric(libfab_install_path, mode):
         for prov in common.disabled_prov_list:
              config_cmd.append('--enable-{}=no'.format(prov))
 
-        config_cmd.append('--with-psm2-src={}/opa-psm2-lib'.format(workspace))
-
-
         common.run_command(['./autogen.sh'])
         common.run_command(shlex.split(" ".join(config_cmd)))
         common.run_command(['make','clean'])
