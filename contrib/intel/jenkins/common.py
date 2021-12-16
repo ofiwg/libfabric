@@ -25,7 +25,6 @@ def run_command(command):
 
 Prov = collections.namedtuple('Prov', 'core util')
 prov_list = [
-
    Prov("psm3", None),
    Prov("verbs", None),
    Prov("verbs", "rxd"),
@@ -54,4 +53,3 @@ disabled_prov_list = [
     'bgq'
     'mrail'
 ]
-

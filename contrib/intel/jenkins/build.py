@@ -12,6 +12,7 @@ import common
 import re
 import shutil
 
+
 def build_libfabric(libfab_install_path, mode):
 
         if (os.path.exists(libfab_install_path) != True):
@@ -48,12 +49,12 @@ def build_fabtests(libfab_install_path, mode):
         config_cmd = ['./configure', '--prefix={}'.format(libfab_install_path),
                 '--with-libfabric={}'.format(libfab_install_path)]
 
-
     common.run_command(['./autogen.sh'])
     common.run_command(config_cmd)
     common.run_command(['make','clean'])
     common.run_command(['make'])
     common.run_command(['make', 'install'])
+
 
 def build_shmem(shmem_dir, libfab_install_path):
 
@@ -76,7 +77,6 @@ def build_shmem(shmem_dir, libfab_install_path):
                   'LDFLAGS=-fno-pie']
 
     common.run_command(config_cmd)
-
     common.run_command(['make','-j4'])
     common.run_command(['make', 'check', 'TESTS='])
     common.run_command(['make', 'install'])
@@ -87,10 +87,11 @@ def build_ISx(shmem_dir):
     oshcc = '{}/bin/oshcc'.format(shmem_dir)
     tmp_isx_src = '{}/ISx'.format(ci_site_config.shmem_root)
     shutil.copytree(tmp_isx_src, '{}/ISx'.format(shmem_dir))
+
     #os.chdir(shmem_dir)
     #git_cmd = ['git', 'clone', '--depth', '1', 'https://github.com/ParRes/ISx.git', 'ISx']
-
     #common.run_command(git_cmd)
+
     os.chdir('{}/ISx/SHMEM'.format(shmem_dir))
     common.run_command(['make', 'CC={}'.format(oshcc), 'LDLIBS=-lm'])
 
@@ -101,23 +102,29 @@ def build_PRK(shmem_dir):
     shmem_src = '{}/SOS'.format(shmem_dir)
     tmp_prk_src = '{}/PRK'.format(ci_site_config.shmem_root)
     shutil.copytree(tmp_prk_src, '{}/PRK'.format(shmem_dir))
+
     #os.chdir(shmem_dir)
     #git_cmd = ['git', 'clone', '--depth', ' 1', 'https://github.com/ParRes/Kernels.git', 'PRK']
     #common.run_command(git_cmd)
+
     os.chdir('{}/PRK'.format(shmem_dir))
     with open('common/make.defs','w') as f:
         f.write('SHMEMCC={} -std=c99\nSHMEMTOP={}\n'.format(oshcc,shmem_src))
 
     common.run_command(['make', 'allshmem'])
 
+
 def build_uh(shmem_dir):
+
     oshcc_bin = "{}/bin".format(shmem_dir)
     os.environ["PATH"] += os.pathsep + oshcc_bin
     tmp_uh_src = '{}/tests-uh'.format(ci_site_config.shmem_root)
     shutil.copytree(tmp_uh_src, '{}/tests-uh'.format(shmem_dir))
+
     #os.chdir(shmem_dir)
     #git_cmd = ['git', 'clone', '--depth', '1', 'https://github.com/openshmem-org/tests-uh.git', 'tests-uh']
     #common.run_command(git_cmd)
+
     os.chdir('{}/tests-uh'.format(shmem_dir))
     common.run_command(['make', '-j4', 'C_feature_tests'])
 
@@ -145,6 +152,7 @@ def build_mpi(mpi, mpisrc, mpi_install_path, libfab_install_path,  ofi_build_mod
     common.run_command(["make", "clean"])
     common.run_command(["make", "install", "-j32"])
 
+
 def build_mpich_suite(mpi, mpi_install_path, libfab_install_path, ofi_build_mode):
 
     mpich_suite_build_path = "/mpibuilddir/mpich-suite-build-dir/{}/{}/{}/mpich" \
@@ -155,6 +163,7 @@ def build_mpich_suite(mpi, mpi_install_path, libfab_install_path, ofi_build_mode
     mpich_suite_path = '{}/test/'.format(mpich_suite_build_path)
     mpichsuite_installpath= "{}/mpichsuite/test".format(mpi_install_path)
     pwd = os.getcwd()
+
     if (mpi == 'impi'):
         os.chdir("{}/mpi".format(mpich_suite_path))
         cmd = ["./configure", "--with-mpi={}/intel64" \
@@ -166,7 +175,6 @@ def build_mpich_suite(mpi, mpi_install_path, libfab_install_path, ofi_build_mode
         shutil.copytree(mpich_suite_path, mpichsuite_installpath)
         common.run_command(["make", "distclean"])
         os.chdir(pwd)
-
 
 
 def build_stress_bm(mpi, mpi_install_path, libfab_install_path):
@@ -207,13 +215,11 @@ def build_osu_bm(mpi, mpi_install_path, libfab_install_path):
         os.environ['CXX']="{}/bin/mpicxx".format(mpi_install_path)
         os.environ['LD_LIBRARY_PATH']=""
 
-
     os.environ['CFLAGS']="-I{}/util/".format(ci_site_config.benchmarks['osu'])
     cmd = " ".join(["{}/configure".format(ci_site_config.benchmarks['osu']),
                     "--prefix={}".format(osu_install_path)])
 
     configure_cmd = shlex.split(cmd)
-
     common.run_command(configure_cmd)
     common.run_command(["make", "-j4"])
     common.run_command(["make", "install"])
@@ -227,8 +233,6 @@ if __name__ == "__main__":
     jobname = os.environ['JOB_NAME']
     buildno = os.environ['BUILD_NUMBER']
     workspace = os.environ['WORKSPACE']
-
-
 
     parser = argparse.ArgumentParser()
     parser.add_argument("build_item", help="build libfabric or fabtests",
@@ -245,8 +249,6 @@ if __name__ == "__main__":
     else:
         ofi_build_mode = 'reg'
 
-
-
     install_path = "{installdir}/{jbname}/{bno}/{bmode}" \
                      .format(installdir=ci_site_config.install_dir,
                             jbname=jobname, bno=buildno,bmode=ofi_build_mode)
@@ -258,7 +260,7 @@ if __name__ == "__main__":
 
     elif (build_item == 'fabtests'):
         build_fabtests(install_path, ofi_build_mode)
-   #if the build_item contains the string 'mpi'
+    # if the build_item contains the string 'mpi'
     elif (p.search(build_item)):
         mpi = build_item[:-11] #extract the mpitype from '*mpi*_benchmarks' build_item
         mpi_install_path = "{}/{}".format(install_path, mpi)
@@ -271,7 +273,7 @@ if __name__ == "__main__":
             # only need to build ompi or mpich, impi is available as binary
             build_mpi(mpi, mpisrc, mpi_install_path, install_path, ofi_build_mode)
 
-	# build mpich_test_suite
+	    # build mpich_test_suite
         build_mpich_suite(mpi, mpi_install_path, install_path, ofi_build_mode)
         # run stress and osu benchmarks for all mpitypes
         build_stress_bm(mpi, mpi_install_path, install_path)
@@ -283,6 +285,3 @@ if __name__ == "__main__":
         build_ISx(shmem_dir)
         build_PRK(shmem_dir)
         build_uh(shmem_dir)
-
-
-
