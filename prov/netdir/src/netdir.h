@@ -51,7 +51,6 @@ extern "C" {
 
 #define ND_MSG_IOV_LIMIT		(256)
 #define ND_MSG_INTERNAL_IOV_LIMIT	(512)
-#define ND_EP_MAX_CM_DATA_SIZE		(256)
 #define OFI_ND_MAX_MR_CNT		(1 << 16)
 
 #define OFI_ND_DOMAIN_CAPS	(FI_LOCAL_COMM | FI_REMOTE_COMM)

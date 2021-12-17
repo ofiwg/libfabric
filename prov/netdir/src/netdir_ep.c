@@ -69,7 +69,8 @@ static void ofi_nd_ep_disconnected_free(struct nd_event_base* base);
 static void ofi_nd_ep_disconnected(struct nd_event_base* base, DWORD bytes);
 static void ofi_nd_ep_disconnected_err(struct nd_event_base* base, DWORD bytes, DWORD err);
 static ssize_t ofi_nd_ep_cancel(fid_t fid, void *context);
-
+int ofi_nd_ep_getopt(struct fid* ep, int level, int optname,
+	void* optval, size_t* optlen);
 
 static struct fi_ops ofi_nd_fi_ops = {
 	.size = sizeof(ofi_nd_fi_ops),
@@ -98,7 +99,7 @@ extern struct fi_ops_rma ofi_nd_ep_rma;
 static struct fi_ops_ep ofi_nd_ep_ops = {
 	.size = sizeof(ofi_nd_ep_ops),
 	.cancel = ofi_nd_ep_cancel,
-	.getopt = fi_no_getopt,
+	.getopt = ofi_nd_ep_getopt,
 	.setopt = fi_no_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
@@ -266,10 +267,10 @@ static int ofi_nd_ep_control(struct fid *fid, int command, void *arg)
 		(IUnknown*)ep->domain->cq,
 		(IUnknown*)ep->domain->cq,
 		ep,
-		ep->domain->ainfo.MaxReceiveQueueDepth,
-		ep->domain->ainfo.MaxInitiatorQueueDepth,
-		ep->domain->ainfo.MaxReceiveSge,
-		ep->domain->ainfo.MaxInitiatorSge,
+		ep->info->rx_attr->size,
+		ep->info->tx_attr->size,
+		ep->info->rx_attr->iov_limit,
+		ep->info->tx_attr->iov_limit,
 		0, (void**)&ep->qp);
 	if (FAILED(hr))
 		return H2F(hr);
@@ -800,7 +801,7 @@ static void ofi_nd_ep_disconnected(struct nd_event_base* base, DWORD bytes)
 	assert(ep->fid.fid.fclass == FI_CLASS_EP);
 
 	ep->connected = 0;
-	
+
 	struct nd_eq_event *ev = ND_BUF_ALLOC(nd_eq_event);
 	if (!ev) {
 		return;
@@ -850,5 +851,27 @@ static ssize_t ofi_nd_ep_cancel(fid_t fid, void *context)
 	return ofi_nd_cq_cancel(fid, context);
 }
 
-#endif /* _WIN32 */
+int ofi_nd_ep_getopt(struct fid* fid, int level, int optname,
+	void* optval, size_t* optlen)
+{
+	assert(fid->fclass == FI_CLASS_EP);
+	struct nd_ep* ep = container_of(fid, struct nd_ep, fid.fid);
 
+	assert(optval);
+	assert(optlen);
+
+	if (level != FI_OPT_ENDPOINT || optname != FI_OPT_CM_DATA_SIZE)
+		return -FI_ENOPROTOOPT;
+
+	if (*optlen < sizeof(size_t)) {
+		*optlen = sizeof(size_t);
+		return -FI_ETOOSMALL;
+	}
+
+	*((size_t*)optval) = ep->domain->ainfo.MaxCallerData;
+	*optlen = sizeof(size_t);
+
+	return 0;
+}
+
+#endif /* _WIN32 */
