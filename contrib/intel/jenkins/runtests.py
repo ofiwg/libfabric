@@ -8,11 +8,13 @@ import common
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--prov", help="core provider", choices=["psm2", "verbs", \
+parser.add_argument("--prov", help="core provider", choices=["verbs", \
                      "tcp", "udp", "sockets", "shm"])
 parser.add_argument("--util", help="utility provider", choices=["rxd", "rxm"])
 parser.add_argument("--ofi_build_mode", help="specify the build configuration", \
-                     choices = ["dbg", "dl"])
+                    choices = ["dbg", "dl"])
+parser.add_argument("--test", help="specify test to execute", \
+                    choices = ["all", "unit", "shmem", "mpi"])
 
 args = parser.parse_args()
 args_core = args.prov
@@ -23,6 +25,11 @@ if (args.ofi_build_mode):
     ofi_build_mode = args.ofi_build_mode
 else:
     ofi_build_mode='reg'
+
+if (args.test):
+    run_test = args.test
+else:
+    run_test = 'all'
 
 node = (os.environ['NODE_NAME']).split('-')[0]
 hosts = [node]
@@ -46,25 +53,33 @@ if(args_core):
         hosts.append(host)
 
     if (args_util == None):
-        run.fi_info_test(args_core, hosts, ofi_build_mode)
-        run.fabtests(args_core, hosts, ofi_build_mode)
-        run.shmemtest(args_core, hosts, ofi_build_mode)
-        for mpi in mpilist:
-            run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode)
-            run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode)
-            run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode)
-    else:
-        run.fi_info_test(args_core, hosts, ofi_build_mode, util=args_util)
-        run.fabtests(args_core, hosts, ofi_build_mode, util=args_util)
-        run.shmemtest(args_core, hosts, ofi_build_mode, util=args_util)
-        for mpi in mpilist:
-            run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode, \
-                                 util=args_util)
+        if (run_test == 'all' or run_test == 'unit'):
+            run.fi_info_test(args_core, hosts, ofi_build_mode)
+            run.fabtests(args_core, hosts, ofi_build_mode)
 
-            run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode, \
-                                    util=args_util)
-            run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode, \
-                                             util=args_util)
+        if (run_test == 'all' or run_test == 'shmem'):
+            run.shmemtest(args_core, hosts, ofi_build_mode)
+
+        if (run_test == 'all' or run_test == 'all'):
+            for mpi in mpilist:
+                run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode)
+                run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode)
+                run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode)
+    else:
+        if (run_test == 'all' or run_test == 'unit'):
+            run.fi_info_test(args_core, hosts, ofi_build_mode, util=args_util)
+            run.fabtests(args_core, hosts, ofi_build_mode, util=args_util)
+
+        if (run_test == 'all' or run_test == 'shmem'):
+            run.shmemtest(args_core, hosts, ofi_build_mode, util=args_util)
+
+        if (run_test == 'all' or run_test == 'all'):
+            for mpi in mpilist:
+                run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode, \
+                                     util=args_util)
+                run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode, \
+                                        util=args_util)
+                run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode, \
+                                  util=args_util)
 else:
     print("Error : Specify a core provider to run tests")
-
