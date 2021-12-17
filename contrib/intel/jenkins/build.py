@@ -153,7 +153,6 @@ def build_mpi(mpi, mpisrc, mpi_install_path, libfab_install_path,  ofi_build_mod
         
     configure_cmd = shlex.split(" ".join(cmd))
     common.run_command(configure_cmd)
-    common.run_command(["make", "clean"])
     common.run_command(["make", "install", "-j32"])
 
 
