@@ -662,7 +662,7 @@ static int ft_msg_sync(void)
 	if (ret)
 		return ret;
 
-	msg_iov.iov_base = (void *) buf;
+	msg_iov.iov_base = (void *) ft_tx_ctrl.buf;
 	msg_iov.iov_len = 0;
 
 	msg.msg_iov = &msg_iov;
@@ -689,7 +689,7 @@ static int ft_tmsg_sync(void)
 	if (ret)
 		return ret;
 
-	msg_iov.iov_base = (void *) buf;
+	msg_iov.iov_base = (void *) ft_tx_ctrl.buf;
 	msg_iov.iov_len = 0;
 
 	msg.msg_iov = &msg_iov;
