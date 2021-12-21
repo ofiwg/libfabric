@@ -102,6 +102,13 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.get_base_addr = ze_hmem_get_base_addr,
 		.is_ipc_enabled = ze_hmem_p2p_enabled,
 	},
+	[FI_HMEM_NEURON] = {
+		.initialized = false,
+		.init = neuron_hmem_init,
+		.cleanup = neuron_hmem_cleanup,
+		.copy_to_hmem = neuron_copy_to_dev,
+		.copy_from_hmem = neuron_copy_from_dev,
+	},
 };
 
 static inline int ofi_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device,

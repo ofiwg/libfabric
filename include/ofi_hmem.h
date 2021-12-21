@@ -163,6 +163,13 @@ int ze_hmem_get_base_addr(const void *ptr, void **base, size_t *size);
 int ze_hmem_get_id(const void *ptr, uint64_t *id);
 int *ze_hmem_get_dev_fds(int *nfds);
 
+int neuron_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
+int neuron_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
+int neuron_hmem_init(void);
+int neuron_hmem_cleanup(void);
+void *neuron_alloc(void **handle, size_t size);
+void neuron_free(void **handle);
+
 static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
 			     size_t size)
 {
