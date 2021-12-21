@@ -40,6 +40,7 @@
 #include <netinet/tcp.h>
 #include <sys/uio.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_rma.h>

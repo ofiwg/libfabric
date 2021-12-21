@@ -388,6 +388,9 @@ int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
 	attr.iface = opts.iface;
 
 	switch (opts.iface) {
+	case FI_HMEM_NEURON:
+		attr.device.neuron = opts.device;
+		break;
 	case FI_HMEM_ZE:
 		attr.device.ze = opts.device;
 		break;
@@ -2905,8 +2908,9 @@ void ft_mcusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
-	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: eg ze (default: None). "
-			     "Automatically enables FI_HMEM (-H)");
+	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: "
+			    "e.g. cuda, ze, neuron (default: None). "
+			    "Automatically enables FI_HMEM (-H)");
 	FT_PRINT_OPTS_USAGE("-i <device_id>", "Specify which device to use (default: 0)");
 	FT_PRINT_OPTS_USAGE("-H", "Enable provider FI_HMEM support");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
@@ -2923,8 +2927,10 @@ void ft_csusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or 'all'");
 	FT_PRINT_OPTS_USAGE("-l", "align transmit and receive buffers to page size");
 	FT_PRINT_OPTS_USAGE("-m", "machine readable output");
-	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: eg cuda, ze(default: None). "
-			     "Automatically enables FI_HMEM (-H)");
+	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: "
+			    "e.g. cuda, ze, neuron (default: None). "
+			    "Automatically enables FI_HMEM (-H)");
+	FT_PRINT_OPTS_USAGE("-i <device_index>", "Index of the device to use");
 	FT_PRINT_OPTS_USAGE("-t <type>", "completion type [queue, counter]");
 	FT_PRINT_OPTS_USAGE("-c <method>", "completion method [spin, sread, fd, yield]");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
@@ -3037,6 +3043,8 @@ void ft_parse_hmem_opts(int op, char *optarg, struct ft_opts *opts)
 			opts->iface = FI_HMEM_ZE;
 		else if (!strncasecmp("cuda", optarg, 4))
 			opts->iface = FI_HMEM_CUDA;
+		else if (!strncasecmp("neuron", optarg, 6))
+			opts->iface = FI_HMEM_NEURON;
 		else
 			printf("Unsupported interface\n");
 		opts->options |= FT_OPT_ENABLE_HMEM | FT_OPT_USE_DEVICE;
