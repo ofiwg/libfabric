@@ -21,6 +21,21 @@ def run_command(command):
     if (p.returncode != 0):
         print("exiting with " + str(p.poll()))
         sys.exit(p.returncode)
+def run_command_try(command):
+    print(" ".join(command))
+    p = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
+    print(p.returncode)
+    while True:
+        out = p.stdout.read(1)
+        if (out == "" and p.poll() != None):
+            break
+        if (out != ""):
+            sys.stdout.write(out)
+            sys.stdout.flush()
+    if (p.returncode != 0):
+        print("command didnt succeed" + str(p.poll()))
+        
+
 
 
 Prov = collections.namedtuple('Prov', 'core util')

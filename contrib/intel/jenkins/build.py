@@ -149,7 +149,7 @@ def build_mpi(mpi, mpisrc, mpi_install_path, libfab_install_path,  ofi_build_mod
 
     configure_cmd = shlex.split(" ".join(cmd))
     common.run_command(configure_cmd)
-    common.run_command(["make", "clean"])
+    common.run_command_try(["make", "clean"])
     common.run_command(["make", "install", "-j32"])
 
 
@@ -173,7 +173,7 @@ def build_mpich_suite(mpi, mpi_install_path, libfab_install_path, ofi_build_mode
         common.run_command(configure_cmd)
         common.run_command(["make", "all","-j32"])
         shutil.copytree(mpich_suite_path, mpichsuite_installpath)
-        common.run_command(["make", "distclean"])
+        common.run_command_try(["make", "distclean"])
         os.chdir(pwd)
 
 
@@ -220,8 +220,9 @@ def build_osu_bm(mpi, mpi_install_path, libfab_install_path):
                     "--prefix={}".format(osu_install_path)])
 
     configure_cmd = shlex.split(cmd)
+    common.run_command_try(["make","distclean"])
     common.run_command(configure_cmd)
-    common.run_command(["make", "-j4"])
+    common.run_command(["make", "-j"])
     common.run_command(["make", "install"])
 
 
