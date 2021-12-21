@@ -166,7 +166,7 @@ def build_mpich_suite(mpi, mpi_install_path, libfab_install_path, ofi_build_mode
 
     if (mpi == 'impi'):
         os.chdir("{}/mpi".format(mpich_suite_path))
-        cmd = ["./configure", "--with-mpi={}/intel64" \
+        cmd = ["./configure", "--with-mpi={}" \
                .format(ci_site_config.impi_root)]
 
         configure_cmd = shlex.split(" ".join(cmd))
@@ -185,7 +185,7 @@ def build_stress_bm(mpi, mpi_install_path, libfab_install_path):
 
     if (mpi == 'impi'):
         os.environ['LD_LIBRARY_PATH'] = "{}/lib".format(libfab_install_path)
-        mpicc_path = "{}/intel64/bin/mpicc".format(ci_site_config.impi_root)
+        mpicc_path = "{}/bin/mpicc".format(ci_site_config.impi_root) 
     else:
         os.environ['LD_LIBRARY_PATH'] = ""
         mpicc_path = "{}/bin/mpicc".format(mpi_install_path)
@@ -206,8 +206,8 @@ def build_osu_bm(mpi, mpi_install_path, libfab_install_path):
     os.chdir(osu_install_path)
 
     if (mpi == 'impi'):
-        os.environ['CC']="{}/intel64/bin/mpicc".format(ci_site_config.impi_root)
-        os.environ['CXX']="{}/intel64/bin/mpicxx".format(ci_site_config.impi_root)
+        os.environ['CC']="{}/bin/mpicc".format(ci_site_config.impi_root)
+        os.environ['CXX']="{}/bin/mpicxx".format(ci_site_config.impi_root)
         os.environ['LD_LIBRARY_PATH'] = "{}/lib".format(libfab_install_path)
 
     else:
