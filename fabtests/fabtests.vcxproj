@@ -238,6 +238,7 @@
     <ClInclude Include="include\jsmn.h" />
     <ClInclude Include="include\hmem.h" />
     <ClInclude Include="include\shared.h" />
+    <ClInclude Include="include\ft_list.h" />
     <ClInclude Include="include\unit_common.h" />
     <ClInclude Include="include\windows\getopt\getopt.h" />
     <ClInclude Include="include\windows\netdb.h" />

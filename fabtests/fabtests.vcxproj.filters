@@ -203,6 +203,9 @@
     <ClInclude Include="include\shared.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\ft_list.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="include\unit_common.h">
       <Filter>Header Files</Filter>
     </ClInclude>
