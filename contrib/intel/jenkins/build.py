@@ -203,7 +203,7 @@ def build_osu_bm(mpi, mpi_install_path, libfab_install_path):
     osu_install_path = "{}/osu".format(mpi_install_path)
     if (os.path.exists(osu_install_path) == False):
         os.makedirs(osu_install_path)
-    os.chdir(osu_install_path)
+    os.chdir(ci_site.config.benchmarks['osu'])
 
     if (mpi == 'impi'):
         os.environ['CC']="{}/bin/mpicc".format(ci_site_config.impi_root)
@@ -216,8 +216,7 @@ def build_osu_bm(mpi, mpi_install_path, libfab_install_path):
         os.environ['LD_LIBRARY_PATH']=""
 
     os.environ['CFLAGS']="-I{}/util/".format(ci_site_config.benchmarks['osu'])
-    cmd = " ".join(["{}/configure".format(ci_site_config.benchmarks['osu']),
-                    "--prefix={}".format(osu_install_path)])
+    cmd = " ".join(["./configure", "--prefix={}".format(osu_install_path)])
 
     configure_cmd = shlex.split(cmd)
     common.run_command(configure_cmd)
