@@ -41,8 +41,7 @@ cq_data
 multi_mr
 rdm_rma_trigger
 
-# Exclude all MSG tests
-msg
+msg_sockets
 rc_pingpong
 
 # Exclude all polling tests
