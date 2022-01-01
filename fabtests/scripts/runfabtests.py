@@ -203,6 +203,11 @@ def fabtests_args_to_pytest_args(fabtests_args):
         pytest_args.append(os.path.abspath(fabtests_args.html))
         pytest_args.append("--self-contained-html")
 
+    if fabtests_args.junit_xml:
+        pytest_args.append("--junit-xml")
+        pytest_args.append(os.path.abspath(fabtests_args.junit_xml))
+        pytest_args.append("--self-contained-html")
+
     return pytest_args
 
 def get_pytest_root_dir():
@@ -274,6 +279,8 @@ def main():
                         help="only run tests which match the given substring expression.")
     parser.add_argument("--html", dest="html", type=str,
                         help="path to generated html report")
+    parser.add_argument("--junit_xml", dest="junit_xml", type=str,
+                        help="path to generated junit xml report")
 
     fabtests_args = parser.parse_args()
     pytest_args = fabtests_args_to_pytest_args(fabtests_args)
