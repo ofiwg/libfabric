@@ -194,6 +194,10 @@ def fabtests_args_to_pytest_args(fabtests_args):
     if fabtests_args.oob_address_exchange:
         pytest_args.append("--oob_address_exchange")
 
+    if fabtests_args.expression:
+        pytest_args.append("-k")
+        pytest_args.append(fabtests_args.expression)
+
     return pytest_args
 
 def get_pytest_root_dir():
@@ -261,6 +265,8 @@ def main():
                         help="Additional server test arguments: Parameters to pass to server fabtests")
     parser.add_argument("-b", dest="oob_address_exchange", action="store_true",
                         help="out-of-band address exchange over the default port")
+    parser.add_argument("--expression", dest="expression", type=str,
+                        help="only run tests which match the given substring expression.")
 
     fabtests_args = parser.parse_args()
     pytest_args = fabtests_args_to_pytest_args(fabtests_args)
