@@ -701,6 +701,7 @@ function multinode_test {
 		skip_count+=1
 	elif [ $s_ret -ne 0 -o $c_ret -ne 0 ]; then
 		print_results "$test_exe" "Fail" "$test_time" "$s_outp" "$s_cmd" "" "$c_cmd"
+		printf -- "  client_cmd: %s\n" "$c_cmd"
 		for c_out in "${c_out_arr[@]}"
 		do
 			printf -- "  client_stdout $pe: |\n"
@@ -713,6 +714,7 @@ function multinode_test {
 		fail_count+=1
 	else
 		print_results "$test_exe" "Pass" "$test_time" "$s_outp" "$s_cmd" "" "$c_cmd"
+		printf -- "  client_cmd: %s\n" "$c_cmd"
 		for c_out in "${c_out_arr[@]}"
 		do
 			printf -- "  client_stdout $pe: |\n"
