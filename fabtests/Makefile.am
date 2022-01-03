@@ -38,7 +38,7 @@ bin_PROGRAMS = \
 	functional/fi_recv_cancel \
 	functional/fi_unexpected_msg \
 	functional/fi_unmap_mem \
-	functional/fi_inj_complete \
+	functional/fi_msg_inject \
 	functional/fi_resmgmt_test \
 	functional/fi_rdm_atomic \
 	functional/fi_multi_recv \
@@ -239,9 +239,9 @@ functional_fi_recv_cancel_SOURCES = \
 	functional/recv_cancel.c
 functional_fi_recv_cancel_LDADD = libfabtests.la
 
-functional_fi_inj_complete_SOURCES = \
-	functional/inj_complete.c
-functional_fi_inj_complete_LDADD = libfabtests.la
+functional_fi_msg_inject_SOURCES = \
+	functional/msg_inject.c
+functional_fi_msg_inject_LDADD = libfabtests.la
 
 functional_fi_resmgmt_test_SOURCES = \
 	functional/resmgmt_test.c

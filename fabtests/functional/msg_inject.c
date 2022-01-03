@@ -37,7 +37,8 @@
 #include <rdma/fi_tagged.h>
 #include "shared.h"
 
-int use_sendmsg, use_recvmsg, send_inj_count;
+int use_sendmsg;
+uint64_t flag = 0;
 
 static int send_msg(int sendmsg, size_t size)
 {
@@ -52,7 +53,7 @@ static int send_msg(int sendmsg, size_t size)
 
 	if (sendmsg) {
 		ret = ft_sendmsg(ep, remote_fi_addr, size,
-				&tx_ctx, FI_INJECT_COMPLETE);
+				&tx_ctx, flag);
 		if (ret) {
 			FT_PRINTERR("ft_sendmsg", ret);
 			return ret;
@@ -64,41 +65,37 @@ static int send_msg(int sendmsg, size_t size)
 			return ret;
 		}
 	}
-	ret = ft_cq_read_verify(txcq, &tx_ctx);
-	if (ret) {
-		FT_PRINTERR("ft_cq_read_verify", ret);
-		return ret;
+	if (flag & FI_INJECT) {
+		memset(tx_buf, 0xb, size);
+		ret = ft_cq_read_verify(txcq, &tx_ctx);
+		if (ret) {
+			FT_PRINTERR("ft_cq_read_verify", ret);
+			return ret;
+		}
+		tx_cq_cntr++;
+	} else if (flag & FI_INJECT_COMPLETE) {
+		ret = ft_cq_read_verify(txcq, &tx_ctx);
+		if (ret) {
+			FT_PRINTERR("ft_cq_read_verify", ret);
+			return ret;
+		}
+		tx_cq_cntr++;
+		memset(tx_buf, 0xb, size);
 	}
-	tx_cq_cntr++;
-	/*
-	Alter the tx buffer contents, if the inject event
-	was properly generated, then the changes to the TX buffer
-	will not be sent to the target.
-	*/
-	memset(tx_buf, 0xb, size);
 
 	return 0;
 }
 
-static int receive_msg(int recvmsg, size_t size)
+static int receive_msg(size_t size)
 {
 	int ret;
 	struct fi_context inj_ctx;
 	ft_tag = 0xabcd;
 
-	if (recvmsg) {
-		ret = ft_recvmsg(ep, FI_ADDR_UNSPEC, size,
-				&inj_ctx, 0);
-		if (ret) {
-			FT_PRINTERR("ft_recvmsg", ret);
-			return ret;
-		}
-	} else {
-		ret = ft_post_rx(ep, size, &inj_ctx);
-		if (ret) {
-			FT_PRINTERR("ft_post_rx", ret);
-			return ret;
-		}
+	ret = ft_post_rx(ep, size, &inj_ctx);
+	if (ret) {
+		FT_PRINTERR("ft_post_rx", ret);
+		return ret;
 	}
 
 	ret = ft_cq_read_verify(rxcq, &inj_ctx);
@@ -122,31 +119,30 @@ static int run_test(void)
 	int ret = 0, i;
 
 	if (!use_sendmsg)
-		hints->tx_attr->op_flags |= FI_INJECT_COMPLETE;
+		hints->tx_attr->op_flags |= flag;
 
-	if (hints->ep_attr->type == FI_EP_MSG) {
-		ret = ft_init_fabric_cm();
-		if (ret)
-			return ret;
-	} else {
-		ret = ft_init_fabric();
-		if (ret)
-			return ret;
-	}
+	ret = ft_init_fabric();
+	if (ret)
+		return ret;
 
-	fprintf(stdout, "Start testing FI_INJECT_COMPLETIONS\n");
-	for (i = 0; i < send_inj_count; i++) {
+	if (flag & FI_INJECT && opts.transfer_size > hints->tx_attr->inject_size)
+		opts.transfer_size = hints->tx_attr->inject_size;
+
+	fprintf(stdout, "Start testing %s\n", fi_tostr(&flag,
+		FI_TYPE_OP_FLAGS));
+	for (i = 0; i < opts.iterations; i++) {
 		if (opts.dst_addr) {
 			ret = send_msg(use_sendmsg, opts.transfer_size);
 			if (ret)
 				return ret;
 		} else {
-			ret = receive_msg(use_recvmsg, opts.transfer_size);
+			ret = receive_msg(opts.transfer_size);
 			if (ret)
 				return ret;
 		}
 	}
-	fprintf(stdout, "GOOD: Completed FI_INJECT_COMPLETIONS Testing\n");
+	fprintf(stdout, "GOOD: Completed %s Testing\n", fi_tostr(&flag,
+		FI_TYPE_OP_FLAGS));
 
 	return 0;
 }
@@ -158,42 +154,41 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	use_sendmsg = 0;
-	use_recvmsg = 0;
-	send_inj_count = 1;
+	opts.iterations = 1;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "m:OSRvh" ADDR_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "NvhA:" CS_OPTS ADDR_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
+			ft_parsecsopts(op, optarg, &opts);
 			break;
-		case 'O':
-			send_inj_count = 100;
-			break;
-		case 'm':
-			opts.transfer_size = strtoul(optarg, NULL, 0);
-			break;
-		case 'S':
+		case 'N':
 			use_sendmsg = 1;
-			break;
-		case 'R':
-			use_recvmsg = 1;
 			break;
 		case 'v':
 			opts.options |= FT_OPT_VERIFY_DATA;
 			break;
+		case 'A':
+			if (!strncasecmp("inj_complete", optarg, 12)) {
+				flag = FI_INJECT_COMPLETE;
+			} else if (!strncasecmp("inject", optarg, 6)) {
+				flag = FI_INJECT;
+			} else {
+				printf ("Unsupported flag\n");
+				return EXIT_FAILURE;
+			}
+			break;
 		case '?':
 		case 'h':
-			ft_usage(argv[0], "FI_Inject_Completion Functional Test");
-			FT_PRINT_OPTS_USAGE("-m <size>", "size of Injection message");
-			FT_PRINT_OPTS_USAGE("-S", "enable testing with fi_sendmsg");
-			FT_PRINT_OPTS_USAGE("-R", "enable testing with fi_recvmsg");
-			FT_PRINT_OPTS_USAGE("-O", "enable testing injection overrun");
+			ft_csusage(argv[0], "FI_Inject_Completion Functional Test");
+			FT_PRINT_OPTS_USAGE("-N", "enable testing with fi_sendmsg");
 			FT_PRINT_OPTS_USAGE("-v", "Enable DataCheck testing");
+			FT_PRINT_OPTS_USAGE("-A", "Enable flag testing. Options: inject, inj_complete");
 			return EXIT_FAILURE;
 		}
 	}
@@ -201,6 +196,7 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
+	hints->ep_attr->type = FI_EP_RDM;
 	hints->mode = FI_CONTEXT;
 	hints->caps = FI_TAGGED;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;

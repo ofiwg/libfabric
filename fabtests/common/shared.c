@@ -2870,7 +2870,6 @@ void ft_usage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("", "fi_recv_cancel");
 	FT_PRINT_OPTS_USAGE("", "fi_unexpected_msg");
 	FT_PRINT_OPTS_USAGE("", "fi_resmgmt_test");
-	FT_PRINT_OPTS_USAGE("", "fi_inj_complete");
 	FT_PRINT_OPTS_USAGE("", "fi_bw");
 	FT_PRINT_OPTS_USAGE("-U", "run fabtests with FI_DELIVERY_COMPLETE set");
 	FT_PRINT_OPTS_USAGE("", "Only the following tests support this option for now:");
