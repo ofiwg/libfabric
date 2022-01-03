@@ -502,6 +502,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 					"FI_HMEM capability currently requires peer to peer support, which is disabled.\n");
 				return -FI_ENODATA;
 			}
+			//TODO: remove the rdma checks once FI_HMEM w/o p2p is supported
 			if (!efa_device_support_rdma_read()) {
 				FI_WARN(&rxr_prov, FI_LOG_CORE,
 				        "FI_HMEM capability requires RDMA, which this device does not support.\n");
@@ -882,7 +883,6 @@ EFA_INI
 			"Calls to RDMA read is segmented using this value.");
 	fi_param_define(&rxr_prov, "fork_safe", FI_PARAM_BOOL,
 			"Enables fork support and disables internal usage of huge pages. Has no effect on kernels which set copy-on-fork for registered pages, generally 5.13 and later. (Default: false)");
-
 	rxr_init_env();
 
 #if HAVE_EFA_DL

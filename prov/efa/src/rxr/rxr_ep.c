@@ -949,13 +949,29 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	ssize_t ret;
 	struct rxr_ep *ep;
+	struct rxr_domain *rxr_domain;
+	struct efa_domain *efa_domain;
 	char shm_ep_name[EFA_SHM_NAME_MAX];
 	size_t shm_ep_name_len;
 
 	switch (command) {
 	case FI_ENABLE:
-		/* Enable core endpoints & post recv buff */
 		ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
+		rxr_domain = rxr_ep_domain(ep);
+		efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
+					  util_domain.domain_fid);
+
+		/*
+		 * TODO: once we support other FI_HMEM p2p modes, check the
+		 * setopt option first.
+		 */
+		if ((efa_domain->util_domain.info_domain_caps & FI_HMEM) &&
+		    (!efa_domain->hmem_info[FI_HMEM_CUDA].initialized ||
+		     !efa_domain->hmem_info[FI_HMEM_CUDA].p2p_supported)) {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"NVIDIA GPUDirect support is not available, but FI_HMEM was requested.\n");
+			return -FI_EOPNOTSUPP;
+		}
 
 		ret = fi_enable(ep->rdm_ep);
 		if (ret)
@@ -1095,6 +1111,41 @@ static ssize_t rxr_ep_cancel(fid_t fid_ep, void *context)
 	return ret;
 }
 
+/*
+ * Validate p2p opt passed by the user and set the endpoint option if it is
+ * valid. If the option chosen is invalid or not supported, return an error.
+ *
+ * @param[in]	efa_ep	efa endpoint
+ * @return 	0 on success, negative errno on error
+ */
+static int efa_set_fi_hmem_p2p_opt(struct efa_ep *efa_ep, int opt)
+{
+	switch (opt) {
+	/*
+	 * TODO: support the other options. We can only support ENABLED
+	 * and PREFERRED when p2p is available. DISABLED is not
+	 * supported yet.
+	 */
+	case FI_HMEM_P2P_REQUIRED:
+	case FI_HMEM_P2P_ENABLED:
+	case FI_HMEM_P2P_PREFERRED:
+		if (!efa_ep->domain->hmem_info[FI_HMEM_CUDA].initialized ||
+		    !efa_ep->domain->hmem_info[FI_HMEM_CUDA].p2p_supported)
+			return -FI_EOPNOTSUPP;
+
+		efa_ep->hmem_p2p_opt = opt;
+
+		break;
+	case FI_HMEM_P2P_DISABLED:
+		return -FI_EOPNOTSUPP;
+		break;
+	default:
+		return -FI_EINVAL;
+	}
+
+	return 0;
+}
+
 static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 			 size_t *optlen)
 {
@@ -1116,6 +1167,10 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*(size_t *)optval = efa_ep->rnr_retry;
 		*optlen = sizeof(size_t);
 		break;
+	case FI_OPT_FI_HMEM_P2P:
+		*(int *)optval = efa_ep->hmem_p2p_opt;
+		*optlen = sizeof(int);
+		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Unknown endpoint option %s\n", __func__);
@@ -1130,6 +1185,7 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 {
 	struct rxr_ep *rxr_ep;
 	struct efa_ep *efa_ep;
+	int intval, ret;
 
 	rxr_ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
 	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
@@ -1170,6 +1226,16 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 			return -FI_ENOSYS;
 		}
 		efa_ep->rnr_retry = *(size_t *)optval;
+		break;
+	case FI_OPT_FI_HMEM_P2P:
+		if (optlen != sizeof(int))
+			return -FI_EINVAL;
+
+		intval = *(int *)optval;
+
+		ret = efa_set_fi_hmem_p2p_opt(efa_ep, intval);
+		if (ret)
+			return ret;
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -1269,6 +1335,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 		hp_pool_flag = 0;
 	else
 		hp_pool_flag = OFI_BUFPOOL_HUGEPAGES;
+
 
 	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_tx_pool_chunk_cnt(ep),
 				  hp_pool_flag,

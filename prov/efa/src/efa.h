@@ -155,6 +155,11 @@ struct efa_domain_base {
 	enum efa_domain_type	type;
 };
 
+struct efa_hmem_info {
+	bool initialized; 	/* do we support it at all */
+	bool p2p_supported;	/* do we support p2p with this device */
+};
+
 struct efa_domain {
 	struct util_domain	util_domain;
 	enum efa_domain_type	type;
@@ -166,6 +171,7 @@ struct efa_domain {
 	struct ofi_mr_cache	*cache;
 	struct efa_qp		**qp_table;
 	size_t			qp_table_sz_m1;
+	struct efa_hmem_info	hmem_info[OFI_HMEM_MAX];
 };
 
 /**
@@ -321,6 +327,7 @@ struct efa_ep {
 	struct ofi_bufpool	*send_wr_pool;
 	struct ofi_bufpool	*recv_wr_pool;
 	struct ibv_ah		*self_ah;
+	int			hmem_p2p_opt; /* what to do for hmem transfers */
 };
 
 struct efa_send_wr {
@@ -631,6 +638,38 @@ struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)
 {
 	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA): false;
+}
+
+/*
+ * @brief: check whether we should use p2p for this transaction
+ *
+ * @param[in]	ep	efa_ep
+ * @param[in]	efa_mr	memory registration struct
+ *
+ * @return: 0 if p2p should not be used, 1 if it should, and negative FI code
+ * if the transfer should fail.
+ */
+static inline int efa_ep_use_p2p(struct efa_ep *ep, struct efa_mr *efa_mr)
+{
+	if (!efa_mr)
+		return 0;
+
+	/*
+	 * always send from host buffers if we have a descriptor
+	 */
+	if (efa_mr->peer.iface == FI_HMEM_SYSTEM)
+		return 1;
+
+	if (ep->domain->hmem_info[efa_mr->peer.iface].p2p_supported)
+		return (ep->hmem_p2p_opt != FI_HMEM_P2P_DISABLED);
+
+	if (ep->hmem_p2p_opt == FI_HMEM_P2P_REQUIRED) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "Peer to peer support is currently required, but not available.");
+		return -FI_ENOSYS;
+	}
+
+	return 0;
 }
 
 /*

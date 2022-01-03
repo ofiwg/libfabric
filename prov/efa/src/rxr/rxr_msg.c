@@ -122,15 +122,18 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 
 	int tagged;
 	size_t max_rtm_data_size;
-	ssize_t err;
+	ssize_t ret;
 	struct rdm_peer *peer;
 	bool delivery_complete_requested;
 	int ctrl_type;
 	struct efa_domain *efa_domain;
+	struct efa_ep *efa_ep;
 	struct rxr_domain *rxr_domain = rxr_ep_domain(rxr_ep);
 
 	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
 				  util_domain.domain_fid);
+
+	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 
 	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
 	tagged = (tx_entry->op == ofi_op_tagged);
@@ -160,9 +163,9 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		 * the information whether the peer
 		 * support it or not.
 		 */
-		err = rxr_pkt_trigger_handshake(rxr_ep, tx_entry->addr, peer);
-		if (OFI_UNLIKELY(err))
-			return err;
+		ret = rxr_pkt_trigger_handshake(rxr_ep, tx_entry->addr, peer);
+		if (OFI_UNLIKELY(ret))
+			return ret;
 
 		if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
 			return -FI_EAGAIN;
@@ -205,7 +208,10 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry, ctrl_type + tagged, 0, 0);
 	}
 
-	if (efa_ep_is_cuda_mr(tx_entry->desc[0])) {
+	ret = efa_ep_use_p2p(efa_ep, tx_entry->desc[0]);
+	if (ret < 0)
+		return ret;
+	if (ret == 1 && efa_ep_is_cuda_mr(tx_entry->desc[0])) {
 		return rxr_msg_post_cuda_rtm(rxr_ep, tx_entry);
 	}
 
@@ -239,11 +245,11 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	    efa_both_support_rdma_read(rxr_ep, peer) &&
 	    (tx_entry->desc[0] || efa_is_cache_available(efa_domain))) {
 		/* Read message support FI_DELIVERY_COMPLETE implicitly. */
-		err = rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
+		ret = rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
 					RXR_LONGREAD_MSGRTM_PKT + tagged, 0, 0);
 
-		if (err != -FI_ENOMEM)
-			return err;
+		if (ret != -FI_ENOMEM)
+			return ret;
 
 		/*
 		 * If memory registration failed, we continue here
@@ -251,9 +257,9 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		 */
 	}
 
-	err = rxr_ep_set_tx_credit_request(rxr_ep, tx_entry);
-	if (OFI_UNLIKELY(err))
-		return err;
+	ret = rxr_ep_set_tx_credit_request(rxr_ep, tx_entry);
+	if (OFI_UNLIKELY(ret))
+		return ret;
 
 	ctrl_type = delivery_complete_requested ? RXR_DC_LONGCTS_MSGRTM_PKT : RXR_LONGCTS_MSGRTM_PKT;
 	tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;

@@ -701,6 +701,18 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 		memcpy(ep->src_addr, info->src_addr, info->src_addrlen);
 	}
 
+	if (ep->domain->hmem_info[FI_HMEM_CUDA].initialized) {
+		/*
+		 * Set the default to required. NCCL plugin requires p2p, but
+		 * does not call setopt for this option in older NCCL plugin
+		 * versions.
+		 */
+		ep->hmem_p2p_opt = FI_HMEM_P2P_REQUIRED;
+	} else {
+		/* no hmem devices, disable p2p */
+		ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
+	}
+
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.fclass = FI_CLASS_EP;
 	(*ep_fid)->fid.context = context;
