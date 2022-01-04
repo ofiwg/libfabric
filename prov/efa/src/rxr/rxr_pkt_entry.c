@@ -308,7 +308,7 @@ ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 			      const struct fi_msg *msg, uint64_t flags)
 {
 	struct rdm_peer *peer;
-	size_t ret;
+	ssize_t ret;
 
 	if (pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL &&
 	    ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
