@@ -1748,12 +1748,12 @@ err_exit:
 	efa_eq_write_error(&ep->util_ep, err, err);
 }
 
-static inline int rxr_ep_send_queued_pkts(struct rxr_ep *ep,
-					  struct dlist_entry *pkts)
+static inline ssize_t rxr_ep_send_queued_pkts(struct rxr_ep *ep,
+					      struct dlist_entry *pkts)
 {
 	struct dlist_entry *tmp;
 	struct rxr_pkt_entry *pkt_entry;
-	int ret;
+	ssize_t ret;
 
 	dlist_foreach_container_safe(pkts, struct rxr_pkt_entry,
 				     pkt_entry, entry, tmp) {
