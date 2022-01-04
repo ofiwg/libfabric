@@ -296,6 +296,7 @@ struct efa_mr_peer {
 	union {
 		uint64_t        reserved;
 		int             cuda;
+		int             neuron;
 	} device;
 };
 
@@ -637,12 +638,18 @@ struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 
 static inline bool efa_ep_is_hmem_mr(struct efa_mr *efa_mr)
 {
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA): false;
+	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA ||
+			 efa_mr->peer.iface == FI_HMEM_NEURON): false;
 }
 
 static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)
 {
 	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA) : false;
+}
+
+static inline bool efa_ep_is_neuron_mr(struct efa_mr *efa_mr)
+{
+	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_NEURON) : false;
 }
 
 /*

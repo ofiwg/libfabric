@@ -339,6 +339,18 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 		 * so we do not check it here
 		 */
 		use_lower_ep_read = true;
+	} else if (efa_ep_is_neuron_mr(tx_entry->desc[0])) {
+		err = rxr_ep_determine_rdma_support(rxr_ep, tx_entry->addr, peer);
+
+		if (err < 0)
+			goto out;
+
+		if (err != 1) {
+			err = -FI_EOPNOTSUPP;
+			goto out;
+		}
+
+		use_lower_ep_read = true;
 	}
 
 	/*
@@ -469,6 +481,20 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 		ctrl_type = delivery_complete_requested ?
 			RXR_DC_EAGER_RTW_PKT : RXR_EAGER_RTW_PKT;
 		return rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, ctrl_type, 0, 0);
+	}
+
+	/* See rxr_msg_post_rtm() */
+	if (efa_ep_is_neuron_mr(tx_entry->desc[0])) {
+		err = rxr_ep_determine_rdma_support(ep, tx_entry->addr, peer);
+
+		if (err < 0)
+			return err;
+
+		if (err != 1)
+			return -FI_EOPNOTSUPP;
+
+		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_LONGREAD_RTW_PKT, 0, 0);
+		return err;
 	}
 
 	if (tx_entry->total_len >= rxr_env.efa_min_read_write_size &&
