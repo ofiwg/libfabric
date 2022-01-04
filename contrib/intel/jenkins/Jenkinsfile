@@ -1,6 +1,6 @@
 
 pipeline {
-    agent any
+    agent { node { label 'master' } }
     options {
         timestamps()
         timeout(activity: true, time: 4, unit: 'HOURS')
