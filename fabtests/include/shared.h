@@ -325,14 +325,16 @@ static inline int ft_use_size(int index, int enable_flags)
 #define FT_DEBUG(fmt, ...)
 #endif
 
-#define FT_EQ_ERR(eq, entry, buf, len)				\
-	FT_ERR("eq_readerr (Provider errno: %d) : %s",			\
+#define FT_EQ_ERR(eq, entry, buf, len)					\
+	FT_ERR("eq_readerr %d (%s), provider errno: %d (%s)",		\
+		entry.err, fi_strerror(entry.err),			\
 		entry.prov_errno, fi_eq_strerror(eq, entry.prov_errno,	\
 						 entry.err_data,	\
 						 buf, len))		\
 
-#define FT_CQ_ERR(cq, entry, buf, len)				\
-	FT_ERR("cq_readerr (Provider errno: %d) : %s",			\
+#define FT_CQ_ERR(cq, entry, buf, len)					\
+	FT_ERR("cq_readerr %d (%s), provider errno: %d (%s)",		\
+		entry.err, fi_strerror(entry.err),			\
 		entry.prov_errno, fi_cq_strerror(cq, entry.prov_errno,	\
 						 entry.err_data,	\
 						 buf, len))		\
