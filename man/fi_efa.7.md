@@ -82,6 +82,11 @@ No support for counters for the DGRAM endpoint.
 
 No support for inject.
 
+When using FI_HMEM for either CUDA and Neuron buffers, the provider requires
+peer to peer transaction support between the EFA and the FI_HMEM device.
+Therefore, the FI_HMEM_P2P_DISABLED option is not supported by the EFA
+provider.
+
 # PROVIDER SPECIFIC ENDPOINT LEVEL OPTION
 
 *FI_OPT_EFA_RNR_RETRY*

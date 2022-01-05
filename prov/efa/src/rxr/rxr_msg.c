@@ -224,6 +224,30 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 					 ctrl_type + tagged, 0, 0);
 	}
 
+	/*
+	 * Force the LONGREAD protocol for Neuron buffers, regardless of what
+	 * is specified by the user for protocol switch over points.
+	 */
+	if (efa_ep_is_neuron_mr(tx_entry->desc[0])) {
+		/*
+		 * It is possible for the remote endpoint to support RDMA read,
+		 * but not p2p transfers between efa and neuron. That scenario
+		 * will cause a fatal error; if we want to catch this we will
+		 * need to extend the handshake packet to report device p2p
+		 * support.
+		 */
+		ret = rxr_ep_determine_rdma_support(rxr_ep, tx_entry->addr, peer);
+		if (ret < 0)
+			return ret;
+
+		if (ret != 1)
+			return -FI_EOPNOTSUPP;
+
+		ret = rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
+					RXR_LONGREAD_MSGRTM_PKT + tagged, 0, 0);
+		return ret;
+	}
+
 	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size) {
 		/* we do not check the return value of rxr_ep_init_mr_desc()
 		 * because medium message works even if MR registration failed

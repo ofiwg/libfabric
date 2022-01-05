@@ -615,9 +615,10 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 	info->domain_attr->resource_mgmt	= FI_RM_DISABLED;
 	info->domain_attr->mr_cnt		= base_attr->max_mr;
 
-#if HAVE_LIBCUDA
+#if HAVE_LIBCUDA || HAVE_NEURON
 	if (info->ep_attr->type == FI_EP_RDM &&
-	    ofi_hmem_is_initialized(FI_HMEM_CUDA)) {
+	    (ofi_hmem_is_initialized(FI_HMEM_CUDA) ||
+	     ofi_hmem_is_initialized(FI_HMEM_NEURON))) {
 		info->caps			|= FI_HMEM;
 		info->tx_attr->caps		|= FI_HMEM;
 		info->rx_attr->caps		|= FI_HMEM;

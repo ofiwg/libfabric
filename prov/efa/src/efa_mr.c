@@ -104,6 +104,8 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 
 	if (efa_mr->peer.iface == FI_HMEM_CUDA)
 		efa_mr->peer.device.cuda = attr->device.cuda;
+	else if (attr->iface == FI_HMEM_NEURON)
+		efa_mr->peer.device.neuron = attr->device.neuron;
 
 	return FI_SUCCESS;
 }
@@ -141,6 +143,8 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 
 	if (attr.iface == FI_HMEM_CUDA)
 		attr.device.cuda = entry->info.device;
+	else if (attr.iface == FI_HMEM_NEURON)
+		attr.device.neuron = entry->info.device;
 
 	ret = efa_mr_reg_impl(efa_mr, 0, (void *)&attr);
 	return ret;

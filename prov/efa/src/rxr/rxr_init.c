@@ -239,7 +239,7 @@ void rxr_info_to_core_mr_modes(uint32_t version,
 					hints->domain_attr->mr_mode & OFI_MR_BASIC_MAP;
 			core_info->addr_format = hints->addr_format;
 		}
-#if HAVE_LIBCUDA
+#if HAVE_LIBCUDA || HAVE_NEURON
 		core_info->domain_attr->mr_mode |= FI_MR_HMEM;
 #endif
 	}
@@ -484,17 +484,18 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 			info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 		}
 
-#if HAVE_LIBCUDA
-		/* If the application requires HMEM support, we will add FI_MR_HMEM
-		 * to mr_mode, because we need application to provide descriptor
-		 * for cuda buffer.
-		 * Note we did not add FI_MR_LOCAL here because according
-		 * to FI_MR man page:
+
+#if HAVE_LIBCUDA || HAVE_NEURON
+		/* If the application requires HMEM support, we will add
+		 * FI_MR_HMEM to mr_mode, because we need application to
+		 * provide descriptor for cuda or neuron buffer. Note we did
+		 * not add FI_MR_LOCAL here because according to FI_MR man
+		 * page:
 		 *
 		 *     "If FI_MR_HMEM is set, but FI_MR_LOCAL is unset,
 		 *      only device buffers must be registered when used locally.
 		 *      "
-		 * which means FI_MR_HMEM implies FI_MR_LOCAL for cuda buffer
+		 * which means FI_MR_HMEM implies FI_MR_LOCAL for cuda or neuron buffer.
 		 */
 		if (hints->caps & FI_HMEM) {
 			if (ofi_hmem_p2p_disabled()) {
@@ -503,6 +504,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 				return -FI_ENODATA;
 			}
 			//TODO: remove the rdma checks once FI_HMEM w/o p2p is supported
+
 			if (!efa_device_support_rdma_read()) {
 				FI_WARN(&rxr_prov, FI_LOG_CORE,
 				        "FI_HMEM capability requires RDMA, which this device does not support.\n");

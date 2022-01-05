@@ -922,6 +922,35 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	return ret;
 }
 
+/*
+ * For a given peer, trigger a handshake packet and determine if both peers
+ * support rdma read.
+ *
+ * @param[in]	ep	rxr_ep
+ * @param[in]	addr	remote address
+ * @param[in]	peer	remote peer
+ * @return 	1 if supported, 0 if not, negative errno on error
+ */
+int rxr_ep_determine_rdma_support(struct rxr_ep *ep, fi_addr_t addr,
+				  struct rdm_peer *peer)
+{
+	int ret;
+
+	if (!peer->is_local) {
+		ret = rxr_pkt_trigger_handshake(ep, addr, peer);
+		if (OFI_UNLIKELY(ret))
+			return ret;
+
+		if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
+			return -FI_EAGAIN;
+	}
+
+	if (!efa_both_support_rdma_read(ep, peer))
+		return 0;
+
+	return 1;
+}
+
 static
 void rxr_ep_set_extra_info(struct rxr_ep *ep)
 {
@@ -945,6 +974,48 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
 	ep->extra_info[0] |= RXR_EXTRA_REQUEST_CONNID_HEADER;
 }
 
+/*
+ * Set the efa_domain hmem_info state based on what CUDA/Neuron capabilities
+ * are available. Return whether hmem is supported or not.
+ *
+ * @param[in]	efa_domain efa domain
+ * @return 	1 if we have any devices that support hmem, 0 if not, negative
+ * 		errno on error.
+ */
+static int efa_ep_hmem_check(struct efa_domain *efa_domain)
+{
+	int have_hmem = 0;
+
+	if (!(efa_domain->util_domain.info_domain_caps & FI_HMEM))
+		return 0;
+
+	/*
+	 * TODO: once we support other FI_HMEM p2p modes, check the setopt
+	 * option first. For now, require p2p from at least one device type.
+	 */
+	if (efa_domain->hmem_info[FI_HMEM_CUDA].initialized &&
+	    efa_domain->hmem_info[FI_HMEM_CUDA].p2p_supported)
+		have_hmem = 1;
+	else
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"NVIDIA GPUDirect support is not available, but FI_HMEM was requested.\n");
+
+	if (efa_domain->hmem_info[FI_HMEM_NEURON].initialized &&
+	    efa_domain->hmem_info[FI_HMEM_NEURON].p2p_supported)
+		have_hmem = 1;
+	else
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"AWS Neuron peer to peer support is not available, but FI_HMEM was requested.\n");
+
+	if (!have_hmem) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"EFA FI_HMEM support requested but unavailable.\n");
+		return -FI_EOPNOTSUPP;
+	}
+
+	return have_hmem;
+}
+
 static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	ssize_t ret;
@@ -961,17 +1032,9 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
 					  util_domain.domain_fid);
 
-		/*
-		 * TODO: once we support other FI_HMEM p2p modes, check the
-		 * setopt option first.
-		 */
-		if ((efa_domain->util_domain.info_domain_caps & FI_HMEM) &&
-		    (!efa_domain->hmem_info[FI_HMEM_CUDA].initialized ||
-		     !efa_domain->hmem_info[FI_HMEM_CUDA].p2p_supported)) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-				"NVIDIA GPUDirect support is not available, but FI_HMEM was requested.\n");
-			return -FI_EOPNOTSUPP;
-		}
+		ret = efa_ep_hmem_check(efa_domain);
+		if (ret < 0)
+			return ret;
 
 		ret = fi_enable(ep->rdm_ep);
 		if (ret)
@@ -1120,6 +1183,10 @@ static ssize_t rxr_ep_cancel(fid_t fid_ep, void *context)
  */
 static int efa_set_fi_hmem_p2p_opt(struct efa_ep *efa_ep, int opt)
 {
+	struct efa_hmem_info *hmem_info;
+
+	hmem_info = efa_ep->domain->hmem_info;
+
 	switch (opt) {
 	/*
 	 * TODO: support the other options. We can only support ENABLED
@@ -1129,11 +1196,21 @@ static int efa_set_fi_hmem_p2p_opt(struct efa_ep *efa_ep, int opt)
 	case FI_HMEM_P2P_REQUIRED:
 	case FI_HMEM_P2P_ENABLED:
 	case FI_HMEM_P2P_PREFERRED:
-		if (!efa_ep->domain->hmem_info[FI_HMEM_CUDA].initialized ||
-		    !efa_ep->domain->hmem_info[FI_HMEM_CUDA].p2p_supported)
+		if (hmem_info[FI_HMEM_CUDA].initialized &&
+		    hmem_info[FI_HMEM_CUDA].p2p_supported) {
+			efa_ep->hmem_p2p_opt = opt;
+		} else if (hmem_info[FI_HMEM_NEURON].initialized &&
+			   hmem_info[FI_HMEM_NEURON].p2p_supported) {
+			/*
+			 * Neuron requires p2p support and supports no
+			 * other modes.
+			 */
+			if (opt != FI_HMEM_P2P_REQUIRED)
+				return -FI_EOPNOTSUPP;
+			efa_ep->hmem_p2p_opt = FI_HMEM_P2P_REQUIRED;
+		} else {
 			return -FI_EOPNOTSUPP;
-
-		efa_ep->hmem_p2p_opt = opt;
+		}
 
 		break;
 	case FI_HMEM_P2P_DISABLED:
@@ -2303,6 +2380,9 @@ bool rxr_ep_use_shm(struct fi_info *info)
 	 * The long term fix is make shm provider to support cuda
 	 * buffers through cuda IPC. Once that is implemented, the
 	 * following two lines need to be removed.
+	 *
+	 * In addition, AWS Neuron is currently not supported by the SHM
+	 * provider.
 	 */
 	if (info && (info->caps & FI_HMEM))
 		return 0;
