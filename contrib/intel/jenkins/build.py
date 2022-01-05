@@ -34,7 +34,7 @@ def build_libfabric(libfab_install_path, mode):
         common.run_command(['./autogen.sh'])
         common.run_command(shlex.split(" ".join(config_cmd)))
         common.run_command(['make','clean'])
-        common.run_command(['make'])
+        common.run_command(['make', '-j32'])
         common.run_command(['make','install'])
 
 
@@ -52,7 +52,7 @@ def build_fabtests(libfab_install_path, mode):
     common.run_command(['./autogen.sh'])
     common.run_command(config_cmd)
     common.run_command(['make','clean'])
-    common.run_command(['make'])
+    common.run_command(['make', '-j32'])
     common.run_command(['make', 'install'])
 
 
