@@ -1316,6 +1316,9 @@ static const char *const errstr[] = {
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 const char *DEFAULT_SYMVER_PRE(fi_strerror)(int errnum)
 {
+	if (errnum < 0)
+		errnum = -errnum;
+
 	if (errnum < FI_ERRNO_OFFSET)
 		return strerror(errnum);
 	else if (errnum < FI_ERRNO_MAX)
