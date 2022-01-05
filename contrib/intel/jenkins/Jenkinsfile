@@ -30,43 +30,12 @@ pipeline {
                 }
             }
         }
-        stage ('build-shmem') {
+        stage ('copy-build-dirs') {
             steps {
-                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
+                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) {
                   sh """
-                    python3.7  contrib/intel/jenkins/build.py 'shmem' --ofi_build_mode='dbg'
-                    echo 'shmem benchmarks built successfully'
-                  """
-                }
-            }
-        }
-        stage('build MPICH_bm') {
-            steps {
-                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
-                  sh """
-                    python3.7 contrib/intel/jenkins/build.py 'mpich_benchmarks' --ofi_build_mode='dbg'
-                    echo "mpi benchmarks with mpich - built successfully"
-                  """
-                }
-            }
-        }
-        stage('build IMPI_bm') {
-            steps {
-              withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
-                sh """
-                source ${env.CI_IMPI_ONEAPI_ROOT}/env/vars.sh -i_mpi_ofi_internal=0
-                python3.7 contrib/intel/jenkins/build.py 'impi_benchmarks' --ofi_build_mode='dbg'
-                echo 'mpi benchmarks with impi - built successfully'
-                """
-              }
-            }
-        }
-        stage ('build OMPI_bm') {
-            steps {
-                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']){
-                  sh """
-                    python3.7 contrib/intel/jenkins/build.py 'ompi_benchmarks' --ofi_build_mode='dbg'
-                    echo 'mpi benchmarks with ompi - built successfully'
+                    python3.7 contrib/intel/jenkins/build.py 'builddir' --ofi_build_mode='dbg'
+                    echo "copy build dirs complete"
                   """
                 }
             }
@@ -141,10 +110,8 @@ pipeline {
     post {
         cleanup {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-                sh "rm -rf '/mpibuilddir/mpich-build-dir/${env.JOB_NAME}/${env.BUILD_NUMBER}'"
-                sh "rm -rf '/mpibuilddir/ompi-build-dir/${env.JOB_NAME}/${env.BUILD_NUMBER}'"
-                sh "rm -rf '/mpibuilddir/mpich-suite-build-dir/${env.JOB_NAME}/${env.BUILD_NUMBER}'"
                 dir("${env.WORKSPACE}") {
+                    sh "rm -rf '${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/ci_middlewares'"
                     deleteDir()
                 }
             }

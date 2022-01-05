@@ -36,6 +36,9 @@ class Test:
         self.nw_interface = ci_site_config.interface_map[self.fabric]
         self.libfab_installpath = "{}/{}/{}/{}".format(ci_site_config.install_dir,
                                   self.jobname, self.buildno, self.ofi_build_mode)
+        self.ci_middlewares_path = "{}/{}/{}/ci_middlewares" \
+                                   .format(ci_site_config.install_dir, \
+                                   self.jobname, self.buildno)
 
         self.env = [("FI_VERBS_MR_CACHE_ENABLE", "1"),\
                     ("FI_VERBS_INLINE_SIZE", "256")] \
@@ -173,7 +176,7 @@ class ShmemTest(Test):
         self.n = 4
         # self.ppn - number of processes per node.
         self.ppn = 2
-        self.shmem_dir = "{}/shmem".format(self.libfab_installpath)
+        self.shmem_dir = "{}/shmem".format(self.ci_middlewares_path)
 
     @property
     def cmd(self):
@@ -224,7 +227,7 @@ class MpiTests(Test):
             self.testpath = ci_site_config.mpi_testpath
             return "{}/run_{}.sh ".format(self.testpath,self.mpi)
         elif(self.mpi =="ompi"):
-            self.testpath = "{}/ompi/bin".format(self.libfab_installpath)
+            self.testpath = "{}/ompi/bin".format(self.ci_middlewares_path)
             return "{}/mpirun ".format(self.testpath)
 
     @property
@@ -239,7 +242,7 @@ class MpiTests(Test):
                         ci_site_config.impi_root)
             else:
                 opts = "{} -mpi_root={}/mpich".format(opts,
-                        self.libfab_installpath)
+                        self.ci_middlewares_path)
 
             opts = "{} -libfabric_path={}/lib ".format(opts,
                     self.libfab_installpath)
@@ -379,7 +382,7 @@ class MpichTestSuite(MpiTests):
             super().__init__(jobname, buildno, testname, core_prov, fabric,
 			     mpitype,  hosts, ofi_build_mode, util_prov)
             self.mpichsuitepath =  "{}/{}/mpichsuite/test/mpi/" \
-                                   .format(self.libfab_installpath, self.mpi)
+                                   .format(self.ci_middlewares_path, self.mpi)
             self.pwd = os.getcwd()
 
     def testgroup(self, testgroupname):
@@ -398,7 +401,7 @@ class MpichTestSuite(MpiTests):
             if (self.mpi == "impi"):
                 mpiroot = ci_site_config.impi_root
             else:
-                mpiroot = "{}/mpich".format(self.libfab_installpath)
+                mpiroot = "{}/mpich".format(self.ci_middlewares_path)
             if (self.util_prov):
                 prov = "\"{};{}\"".format(self.core_prov, self.util_prov)
             else:
@@ -468,7 +471,7 @@ class MpiTestOSU(MpiTests):
                               }
 
         self.osu_mpi_path = "{}/{}/osu/libexec/osu-micro-benchmarks/mpi/". \
-                            format(self.libfab_installpath,mpitype)
+                            format(self.ci_middlewares_path, mpitype)
 
     @property
     def execute_condn(self):
