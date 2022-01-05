@@ -636,6 +636,9 @@ requested the FI_HMEM capability.
 : Uses oneAPI Level Zero interfaces such as zeDriverAllocSharedMem,
   zeDriverFreeMem.
 
+*FI_HMEM_NEURON*
+: Uses the AWS Neuron SDK to support AWS Trainium devices.
+
 ## device
 Reserved 64 bits for device identifier if using non-standard HMEM interface.
 This field is ignore unless the iface field is valid.
