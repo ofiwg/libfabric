@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2020 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2021 Amazon.com, Inc. or its affiliates.
  *
  * This software is available to you under the BSD license below:
  *
@@ -83,6 +84,15 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.memset = ft_ze_memset,
 		.copy_to_hmem = ft_ze_copy,
 		.copy_from_hmem = ft_ze_copy,
+	},
+	[FI_HMEM_NEURON] = {
+		.init = ft_neuron_init,
+		.cleanup = ft_neuron_cleanup,
+		.alloc = ft_neuron_alloc,
+		.free = ft_neuron_free,
+		.memset = ft_neuron_memset,
+		.copy_to_hmem = ft_neuron_memcpy_to_hmem,
+		.copy_from_hmem = ft_neuron_memcpy_from_hmem,
 	},
 };
 

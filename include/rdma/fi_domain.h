@@ -126,6 +126,7 @@ enum fi_hmem_iface {
 	FI_HMEM_CUDA,
 	FI_HMEM_ROCR,
 	FI_HMEM_ZE,
+	FI_HMEM_NEURON,
 };
 
 struct fi_mr_attr {
@@ -142,6 +143,7 @@ struct fi_mr_attr {
 		uint64_t	reserved;
 		int		cuda;
 		int		ze;
+		int		neuron;
 	} device;
 };
 

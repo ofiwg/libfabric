@@ -194,6 +194,7 @@
     <ClCompile Include="common\hmem_cuda.c" />
     <ClCompile Include="common\hmem_rocr.c" />
     <ClCompile Include="common\hmem_ze.c" />
+    <ClCompile Include="common\hmem_neuron.c" />
     <ClCompile Include="common\shared.c" />
     <ClCompile Include="common\windows\getopt.c" />
     <ClCompile Include="common\windows\osd.c" />
@@ -238,6 +239,7 @@
     <ClInclude Include="include\jsmn.h" />
     <ClInclude Include="include\hmem.h" />
     <ClInclude Include="include\shared.h" />
+    <ClInclude Include="include\ft_list.h" />
     <ClInclude Include="include\unit_common.h" />
     <ClInclude Include="include\windows\getopt\getopt.h" />
     <ClInclude Include="include\windows\netdb.h" />

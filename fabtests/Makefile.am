@@ -119,7 +119,9 @@ libfabtests_la_SOURCES = \
 	common/hmem_cuda.c \
 	common/hmem_rocr.c \
 	common/hmem_ze.c \
+	common/hmem_neuron.c \
 	include/shared.h \
+	include/ft_list.h \
 	include/hmem.h \
 	include/jsmn.h \
 	include/unix/osd.h \

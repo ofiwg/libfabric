@@ -95,6 +95,14 @@ int ft_rocr_free(void *buf);
 int ft_rocr_memset(uint64_t device, void *buf, int value, size_t size);
 int ft_rocr_memcpy(uint64_t device, void *dst, const void *src, size_t size);
 
+int ft_neuron_init(void);
+int ft_neuron_cleanup(void);
+int ft_neuron_alloc(uint64_t device, void **buf, size_t size);
+int ft_neuron_free(void *buf);
+int ft_neuron_memset(uint64_t device, void *buf, int value, size_t size);
+int ft_neuron_memcpy_to_hmem(uint64_t device, void *dst, const void *src, size_t size);
+int ft_neuron_memcpy_from_hmem(uint64_t device, void *dst, const void *src, size_t size);
+
 int ft_hmem_init(enum fi_hmem_iface iface);
 int ft_hmem_cleanup(enum fi_hmem_iface iface);
 int ft_hmem_alloc(enum fi_hmem_iface iface, uint64_t device, void **buf,

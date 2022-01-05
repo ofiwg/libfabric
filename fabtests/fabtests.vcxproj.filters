@@ -60,6 +60,9 @@
     <ClCompile Include="common\hmem_ze.c">
       <Filter>Source Files\common</Filter>
     </ClCompile>
+    <ClCompile Include="common\hmem_neuron.c">
+      <Filter>Source Files\common</Filter>
+    </ClCompile>
     <ClCompile Include="common\shared.c">
       <Filter>Source Files\common</Filter>
     </ClCompile>
@@ -201,6 +204,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\shared.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ft_list.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\unit_common.h">

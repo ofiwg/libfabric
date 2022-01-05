@@ -136,6 +136,21 @@ AC_ARG_WITH([rocr],
                              [AC_MSG_ERROR([<hsa/hsa.h> not found])])],
             [])
 
+dnl Check for Neuron support.
+AC_ARG_WITH([neuron],
+            AC_HELP_STRING([--with-neuron=DIR],
+                            [Provide path to where the Neuron development
+                             and runtime libraries are installed.]),
+            [AS_IF([test "$freebsd" == "0"],
+                   [AC_CHECK_LIB(dl, dlopen, [], [AC_MSG_ERROR([dlopen not found.])])],
+                   [])
+             CPPFLAGS="-I$withval/include $CPPFLAGS"
+             AC_CHECK_HEADER([nrt/nrt.h],
+                             [AC_DEFINE([HAVE_NEURON], [1],
+                                        [Define to 1 if you have <nrt/nrt.h>])],
+                             [AC_MSG_ERROR([<nrt/nrt.h> not found])])],
+            [])
+
 dnl Checks for libraries
 AC_CHECK_LIB([fabric], fi_getinfo, [],
     AC_MSG_ERROR([fi_getinfo() not found.  fabtests requires libfabric.]))

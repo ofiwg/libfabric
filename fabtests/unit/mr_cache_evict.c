@@ -528,6 +528,12 @@ static int mr_cache_test(enum alloc_type type)
 		}
 		break;
 
+	/* Add test case for this once neuron has a memory monitor cache. */
+	case FI_HMEM_NEURON:
+		ret = -FI_ENOSYS;
+		goto cleanup;
+		break;
+
 	default:
 		prime_buf = malloc(mr_buf_size);
 		if (!prime_buf) {

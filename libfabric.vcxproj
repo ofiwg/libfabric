@@ -773,6 +773,7 @@
     <ClCompile Include="src\hmem_cuda.c" />
     <ClCompile Include="src\hmem_rocr.c" />
     <ClCompile Include="src\hmem_ze.c" />
+    <ClCompile Include="src\hmem_neuron.c" />
     <ClCompile Include="src\indexer.c" />
     <ClCompile Include="src\iov.c" />
     <ClCompile Include="src\shared\ofi_str.c" />
