@@ -111,6 +111,11 @@
 #define CXIP_UX_BUFFER_SIZE		(CXIP_OFLOW_BUF_COUNT * \
 					 CXIP_OFLOW_BUF_SIZE)
 
+/* When device memory is safe to access via load/store then the
+ * CPU will be used to move data below this threshold.
+ */
+#define CXIP_SAFE_DEVMEM_COPY_THRESH	4096
+
 #define CXIP_EP_PRI_CAPS \
 	(FI_RMA | FI_ATOMICS | FI_TAGGED | FI_RECV | FI_SEND | \
 	 FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
@@ -214,6 +219,7 @@ struct cxip_environment {
 	size_t rdzv_eager_size;
 	size_t oflow_buf_size;
 	size_t oflow_buf_count;
+	size_t safe_devmem_copy_threshold;
 	size_t req_buf_size;
 	size_t req_buf_min_posted;
 	size_t req_buf_max_count;
@@ -621,6 +627,32 @@ cxip_copy_to_hmem_iov(struct cxip_domain *domain, enum fi_hmem_iface hmem_iface,
 }
 
 static inline ssize_t
+cxip_domain_copy_to_hmem(struct cxip_domain *domain, uint64_t device,
+			 void *hmem_dest, const void *src, size_t size,
+			 enum fi_hmem_iface hmem_iface, bool hmem_iface_valid)
+{
+	struct iovec hmem_iov = {
+		.iov_base = (void *)hmem_dest,
+		.iov_len = size,
+	};
+
+	/* If device memory not supported or device supports access via
+	 * load/store, just use memcpy to avoid expensive pointer query.
+	 */
+	if (!domain->hmem || (domain->rocr_dev_mem_only &&
+	    size <= cxip_env.safe_devmem_copy_threshold)) {
+		memcpy(hmem_dest, src, size);
+		return size;
+	}
+
+	if (!hmem_iface_valid)
+		hmem_iface = ofi_get_hmem_iface(hmem_dest);
+
+	return cxip_copy_to_hmem_iov(domain, hmem_iface, device,
+				     &hmem_iov, 1, 0, src, size);
+}
+
+static inline ssize_t
 cxip_domain_copy_from_hmem(struct cxip_domain *domain, void *dest,
 			   const void *hmem_src, size_t size,
 			   enum fi_hmem_iface hmem_iface, bool hmem_iface_valid)
@@ -630,11 +662,11 @@ cxip_domain_copy_from_hmem(struct cxip_domain *domain, void *dest,
 		.iov_len = size,
 	};
 
-	/* ROCR memory can be accessed via load/store. If the memcpy size is
-	 * less than or equal to an IDC, do direct load/store to avoid expensive
-	 * pointer query.
+	/* If device memory not supported or device supports access via
+	 * load/store, just use memcpy to avoid expensive pointer query.
 	 */
-	if (domain->rocr_dev_mem_only && size <= C_MAX_IDC_PAYLOAD_RES) {
+	if (!domain->hmem || (domain->rocr_dev_mem_only &&
+	    size <= cxip_env.safe_devmem_copy_threshold)) {
 		memcpy(dest, hmem_src, size);
 		return size;
 	}
@@ -1322,6 +1354,20 @@ struct cxip_rxc {
 	bool hmem;
 };
 
+static inline ssize_t
+cxip_rxc_copy_to_hmem(struct cxip_rxc *rxc, uint64_t device,
+		      void *hmem_dest, const void *src, size_t size,
+		      enum fi_hmem_iface hmem_iface)
+{
+	if (!rxc->hmem) {
+		memcpy(hmem_dest, src, size);
+		return size;
+	}
+
+	return cxip_domain_copy_to_hmem(rxc->domain, device, hmem_dest, src,
+					size, hmem_iface, true);
+}
+
 /* Request buffer structure. */
 struct cxip_req_buf {
 	/* RX context the request buffer is posted on. */
@@ -1439,6 +1485,11 @@ static inline ssize_t
 cxip_txc_copy_from_hmem(struct cxip_txc *txc, void *dest, const void *hmem_src,
 			size_t size)
 {
+	if (!txc->hmem) {
+		memcpy(dest, hmem_src, size);
+		return size;
+	}
+
 	return cxip_domain_copy_from_hmem(txc->domain, dest, hmem_src, size,
 					  FI_HMEM_SYSTEM, !txc->hmem);
 }

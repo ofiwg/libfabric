@@ -837,10 +837,8 @@ static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
 	union cxip_match_bits mb;
 	enum fi_hmem_iface iface = match_req->recv.recv_md->info.iface;
 	uint64_t device = match_req->recv.recv_md->info.device;
-	struct iovec hmem_iov;
 	ssize_t ret;
 	struct cxip_req *parent_req = match_req;
-	struct cxip_domain *dom = match_req->recv.rxc->domain;
 
 	assert(match_req->type == CXIP_REQ_RECV);
 
@@ -900,11 +898,9 @@ static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
 	/* Copy data out of overflow buffer. */
 	oflow_bytes = MIN(put_event->tgt_long.mlength, match_req->data_len);
 
-	hmem_iov.iov_base = match_req->recv.recv_buf;
-	hmem_iov.iov_len = match_req->data_len;
-
-	ret = cxip_copy_to_hmem_iov(dom, iface, device, &hmem_iov, 1, 0,
-				    oflow_va, oflow_bytes);
+	ret = cxip_rxc_copy_to_hmem(match_req->recv.rxc, device,
+				    match_req->recv.recv_buf,
+				    oflow_va, oflow_bytes, iface);
 	assert(ret == oflow_bytes);
 
 	if (oflow_req->type == CXIP_REQ_OFLOW)

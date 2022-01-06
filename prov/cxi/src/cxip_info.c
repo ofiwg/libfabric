@@ -262,6 +262,7 @@ struct cxip_environment cxip_env = {
 	.rdzv_eager_size = CXIP_RDZV_THRESHOLD,
 	.oflow_buf_size = CXIP_OFLOW_BUF_SIZE,
 	.oflow_buf_count = CXIP_OFLOW_BUF_COUNT,
+	.safe_devmem_copy_threshold =  CXIP_SAFE_DEVMEM_COPY_THRESH,
 	.optimized_mrs = true,
 	.llring_mode = CXIP_LLRING_IDLE,
 	.cq_policy = CXI_CQ_UPDATE_LOW_FREQ_EMPTY,
@@ -399,6 +400,13 @@ static void cxip_env_init(void)
 			"Overflow buffer count.");
 	fi_param_get_size_t(&cxip_prov, "oflow_buf_count",
 			    &cxip_env.oflow_buf_count);
+
+	fi_param_define(&cxip_prov, "safe_devmem_copy_threshold",
+			FI_PARAM_SIZE_T,
+			"Max memcpy for load/store HMEM access (default %lu).",
+			cxip_env.safe_devmem_copy_threshold);
+	fi_param_get_size_t(&cxip_prov, "safe_devmem_copy_threshold",
+			    &cxip_env.safe_devmem_copy_threshold);
 
 	fi_param_define(&cxip_prov, "optimized_mrs", FI_PARAM_BOOL,
 			"Enables optimized memory regions.");

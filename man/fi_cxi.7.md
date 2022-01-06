@@ -549,6 +549,10 @@ The CXI provider checks for the following environment variables:
 *FI_CXI_OFLOW_BUF_COUNT*
 :   Overflow buffer count.
 
+*FI_CXI_SAFE_DEVMEM_COPY_THRESHOLD
+:   Defines the maximum CPU memcpy size for HMEM device memory that is
+    accessible by the CPU with load/store operations.
+
 *FI_CXI_OPTIMIZED_MRS*
 :   Enables optimized memory regions.
 
