@@ -870,6 +870,16 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 			fi_ptr->caps &= ~FI_FENCE;
 			fi_ptr->tx_attr->caps &= ~FI_FENCE;
 		}
+
+		/* Requesting FI_HMEM requires use of device memory safe
+		 * copy routines. Do not set FI_HMEM unless requested or
+		 * all supported provider capabilities are requested.
+		 */
+		if (hints->caps && !(hints->caps & FI_HMEM)) {
+			fi_ptr->caps &= ~FI_HMEM;
+			fi_ptr->tx_attr->caps &= ~FI_HMEM;
+			fi_ptr->rx_attr->caps &= ~FI_HMEM;
+		}
 	}
 
 	return FI_SUCCESS;
