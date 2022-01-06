@@ -779,6 +779,20 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	struct cxip_addr *src_addr;
 	int ret;
 
+	/* The OFI check_info function does not verify that rx/tx attribute
+	 * capabilities are a subset of the info capabilities. Currently
+	 * MPI removes the FI_HMEM cap from info->caps but not the rx/tx
+	 * caps. To avoided breaking MPI, the capabilities are removed
+	 * here as a temporary work around.
+	 * TODO: Remove this code when no longer required.
+	 */
+	if (info->caps && !(info->caps & FI_HMEM)) {
+		if (info->tx_attr)
+			info->tx_attr->caps &= ~FI_HMEM;
+		if (info->rx_attr)
+			info->rx_attr->caps &= ~FI_HMEM;
+	}
+
 	ret = ofi_prov_check_info(&cxip_util_prov, CXIP_FI_VERSION, info);
 	if (ret != FI_SUCCESS)
 		return -FI_ENOPROTOOPT;
