@@ -2787,3 +2787,523 @@ Test(amo_opt, netcassini_2794)
 
 	_cxit_destroy_mr(&mr);
 }
+
+static void amo_hybrid_mr_desc_test_runner(bool fetching, bool compare,
+					   bool cq_events, bool buf_mr,
+					   bool compare_mr, bool result_mr,
+					   bool mswap, bool read, bool flush)
+{
+	struct mem_region buf_window;
+	struct mem_region compare_window;
+	struct mem_region result_window;
+	struct mem_region remote_window;
+	int remote_key = 0x1;
+	int win_len = 1;
+	void *buf_desc[1] = {};
+	void *compare_desc[1] = {};
+	void *result_desc[1] = {};
+	struct fi_msg_atomic msg = {};
+	struct fi_ioc ioc = {};
+	struct fi_rma_ioc rma_ioc = {};
+	struct fi_ioc fetch_ioc = {};
+	struct fi_ioc compare_ioc = {};
+	int ret;
+	uint64_t cqe_flags = fetching ? FI_ATOMIC | FI_READ :
+		FI_ATOMIC | FI_WRITE;
+	struct fid_cntr *cntr = fetching ? cxit_read_cntr : cxit_write_cntr;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t amo_flags = cq_events ? FI_COMPLETION : 0;
+
+	if (flush)
+		amo_flags |= FI_DELIVERY_COMPLETE;
+	else
+		amo_flags |= FI_TRANSMIT_COMPLETE;
+
+	ret = mr_create(win_len, FI_READ | FI_WRITE, 0xa, 0x2,
+			&buf_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = mr_create(win_len, FI_READ | FI_WRITE, 0xa, 0x3,
+			&compare_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = mr_create(win_len, FI_READ | FI_WRITE, 0xa, 0x4,
+			&result_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = mr_create(win_len, FI_REMOTE_READ | FI_REMOTE_WRITE, 0x3,
+			remote_key, &remote_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	if (buf_mr)
+		buf_desc[0] = fi_mr_desc(buf_window.mr);
+
+	if (compare_mr)
+		compare_desc[0] = fi_mr_desc(compare_window.mr);
+
+	if (result_mr)
+		result_desc[0] = fi_mr_desc(result_window.mr);
+
+	ioc.addr = buf_window.mem;
+	ioc.count = 1;
+
+	rma_ioc.count = 1;
+	rma_ioc.key = remote_key;
+
+	msg.msg_iov = &ioc;
+	msg.desc = buf_desc;
+	msg.iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+
+	if (!compare) {
+		msg.datatype = FI_UINT8;
+
+		if (fetching && read)
+			msg.op = FI_ATOMIC_READ;
+		else
+			msg.op = FI_SUM;
+
+		*buf_window.mem = 1;
+		*result_window.mem = 0;
+		*remote_window.mem = 1;
+
+		if (fetching) {
+			fetch_ioc.addr = result_window.mem;
+			fetch_ioc.count = 1;
+
+			ret = fi_fetch_atomicmsg(cxit_ep, &msg, &fetch_ioc,
+						 result_desc, 1, amo_flags);
+			cr_assert(ret == FI_SUCCESS);
+		} else {
+			ret = fi_atomicmsg(cxit_ep, &msg, amo_flags);
+			cr_assert(ret == FI_SUCCESS);
+		}
+
+		while (1) {
+			ret = fi_cntr_wait(cntr, 1, 1000);
+			if (ret == FI_SUCCESS)
+				break;
+
+			fi_cq_read(cxit_tx_cq, &cqe, 0);
+		}
+
+		if (!read)
+			cr_assert_eq(*remote_window.mem, 2,
+				     "Data mismatch: expected=2 got=%d\n",
+				     *remote_window.mem);
+
+		if (fetching)
+			cr_assert_eq(*result_window.mem, 1,
+				     "Data mismatch: expected=1 got=%d\n",
+				     *result_window.mem);
+	} else if (mswap) {
+		msg.datatype = FI_UINT8;
+		msg.op = FI_MSWAP;
+
+		compare_ioc.addr = compare_window.mem;
+		compare_ioc.count = 1;
+
+		fetch_ioc.addr = result_window.mem;
+		fetch_ioc.count = 1;
+
+		*buf_window.mem = 0xA0;
+		*compare_window.mem = 0xB;
+		*result_window.mem = 1;
+		*remote_window.mem = 0xF;
+
+		ret = fi_compare_atomicmsg(cxit_ep, &msg, &compare_ioc,
+					   compare_desc, 1, &fetch_ioc,
+					   result_desc, 1, amo_flags);
+		cr_assert_eq(ret, FI_SUCCESS, "Bad rc=%d\n", ret);
+
+		while (1) {
+			ret = fi_cntr_wait(cntr, 1, 1000);
+			if (ret == FI_SUCCESS)
+				break;
+
+			fi_cq_read(cxit_tx_cq, &cqe, 0);
+		}
+
+		cr_assert_eq(*remote_window.mem, 4,
+			     "Data mismatch: expected=4 got=%d\n",
+			     *remote_window.mem);
+
+		cr_assert_eq(*result_window.mem, 0xF,
+			     "Data mismatch: expected=0xF got=%d\n",
+			     *result_window.mem);
+	} else {
+		msg.datatype = FI_UINT8;
+		msg.op = FI_CSWAP;
+
+		compare_ioc.addr = compare_window.mem;
+		compare_ioc.count = 1;
+
+		fetch_ioc.addr = result_window.mem;
+		fetch_ioc.count = 1;
+
+		*buf_window.mem = 3;
+		*compare_window.mem = 1;
+		*result_window.mem = 0;
+		*remote_window.mem = 1;
+
+		ret = fi_compare_atomicmsg(cxit_ep, &msg, &compare_ioc,
+					   compare_desc, 1, &fetch_ioc,
+					   result_desc, 1, amo_flags);
+		cr_assert_eq(ret, FI_SUCCESS, "Bad rc=%d\n", ret);
+
+		while (1) {
+			ret = fi_cntr_wait(cntr, 1, 1000);
+			if (ret == FI_SUCCESS)
+				break;
+
+			fi_cq_read(cxit_tx_cq, &cqe, 0);
+		}
+
+		cr_assert_eq(*remote_window.mem, 3,
+			     "Data mismatch: expected=3 got=%d\n",
+			     *remote_window.mem);
+
+		cr_assert_eq(*result_window.mem, 1,
+			     "Data mismatch: expected=1 got=%d\n",
+			     *result_window.mem);
+	}
+
+	if (cq_events) {
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+		validate_tx_event(&cqe, cqe_flags, NULL);
+	}
+
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	mr_destroy(&remote_window);
+	mr_destroy(&result_window);
+	mr_destroy(&compare_window);
+	mr_destroy(&buf_window);
+}
+
+TestSuite(amo_hybrid_mr_desc, .init = cxit_setup_rma_hybrid_mr_desc,
+	  .fini = cxit_teardown_rma, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(amo_hybrid_mr_desc, non_fetching_no_mr_desc_no_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(false, false, false, false, false,
+				       false, false, false, false);
+}
+
+Test(amo_hybrid_mr_desc, non_fetching_buf_result_mr_desc_no_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(false, false, false, true, false, true,
+				       false, false, false);
+}
+
+Test(amo_hybrid_mr_desc, fetching_no_mr_desc_no_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(true, false, false, false, false, false,
+				       false, false, false);
+}
+
+Test(amo_hybrid_mr_desc, fetching_buf_result_mr_desc_no_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(true, false, false, true, false, true,
+				       false, false, false);
+}
+
+Test(amo_hybrid_mr_desc, non_fetching_no_mr_desc_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(false, false, true, false, false, false,
+				       false, false, false);
+}
+
+Test(amo_hybrid_mr_desc, non_fetching_buf_result_mr_desc_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(false, false, true, true, false, true,
+				       false, false, false);
+}
+
+Test(amo_hybrid_mr_desc, fetching_no_mr_desc_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(true, false, true, false, false, false,
+				       false, false, false);
+}
+
+Test(amo_hybrid_mr_desc, fetching_buf_result_mr_desc_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(true, false, true, true, false, true,
+				       false, false, false);
+}
+
+Test(amo_hybrid_mr_desc, compare_no_mr_desc_no_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(true, true, false, false, false, false,
+				       false, false, false);
+}
+
+Test(amo_hybrid_mr_desc, compare_buf_compare_result_mr_desc_no_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(true, true, false, true, true, true,
+				       false, false, false);
+}
+
+Test(amo_hybrid_mr_desc, compare_no_mr_desc_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(true, true, true, false, false, false,
+				       false, false, false);
+}
+
+Test(amo_hybrid_mr_desc, compare_buf_compare_result_mr_desc_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(true, true, true, true, true, true,
+				       false, false, false);
+}
+
+Test(amo_hybrid_mr_desc, compare_mswap_buf_compare_result_mr_desc_no_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(true, true, false, true, true, true,
+				       true, false, false);
+}
+
+Test(amo_hybrid_mr_desc, compare_mswap_buf_compare_result_mr_desc_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(true, true, true, true, true, true,
+				       true, false, false);
+}
+
+Test(amo_hybrid_mr_desc, read_buf_result_mr_desc_no_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(true, false, false, true, false, true,
+				       false, true, false);
+}
+
+Test(amo_hybrid_mr_desc, read_buf_result_mr_desc_cqe)
+{
+	amo_hybrid_mr_desc_test_runner(true, false, true, true, false, true,
+				       false, true, false);
+}
+
+Test(amo_hybrid_mr_desc, non_fetching_no_mr_desc_no_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(false, false, false, false, false,
+				       false, false, false, true);
+}
+
+Test(amo_hybrid_mr_desc, non_fetching_buf_result_mr_desc_no_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(false, false, false, true, false, true,
+				       false, false, true);
+}
+
+Test(amo_hybrid_mr_desc, fetching_no_mr_desc_no_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(true, false, false, false, false, false,
+				       false, false, true);
+}
+
+Test(amo_hybrid_mr_desc, fetching_buf_result_mr_desc_no_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(true, false, false, true, false, true,
+				       false, false, true);
+}
+
+Test(amo_hybrid_mr_desc, non_fetching_no_mr_desc_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(false, false, true, false, false, false,
+				       false, false, true);
+}
+
+Test(amo_hybrid_mr_desc, non_fetching_buf_result_mr_desc_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(false, false, true, true, false, true,
+				       false, false, true);
+}
+
+Test(amo_hybrid_mr_desc, fetching_no_mr_desc_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(true, false, true, false, false, false,
+				       false, false, true);
+}
+
+Test(amo_hybrid_mr_desc, fetching_buf_result_mr_desc_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(true, false, true, true, false, true,
+				       false, false, true);
+}
+
+Test(amo_hybrid_mr_desc, compare_no_mr_desc_no_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(true, true, false, false, false, false,
+				       false, false, true);
+}
+
+Test(amo_hybrid_mr_desc, compare_buf_compare_result_mr_desc_no_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(true, true, false, true, true, true,
+				       false, false, true);
+}
+
+Test(amo_hybrid_mr_desc, compare_no_mr_desc_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(true, true, true, false, false, false,
+				       false, false, true);
+}
+
+Test(amo_hybrid_mr_desc, compare_buf_compare_result_mr_desc_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(true, true, true, true, true, true,
+				       false, false, true);
+}
+
+Test(amo_hybrid_mr_desc, compare_mswap_buf_compare_result_mr_desc_no_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(true, true, false, true, true, true,
+				       true, false, true);
+}
+
+Test(amo_hybrid_mr_desc, compare_mswap_buf_compare_result_mr_desc_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(true, true, true, true, true, true,
+				       true, false, true);
+}
+
+Test(amo_hybrid_mr_desc, read_buf_result_mr_desc_no_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(true, false, false, true, false, true,
+				       false, true, true);
+}
+
+Test(amo_hybrid_mr_desc, read_buf_result_mr_desc_cqe_flush)
+{
+	amo_hybrid_mr_desc_test_runner(true, false, true, true, false, true,
+				       false, true, true);
+}
+
+Test(amo_hybrid_mr_desc, fetching_amo_failure)
+{
+	struct mem_region buf_window;
+	struct mem_region result_window;
+	int remote_key = 0x1;
+	int win_len = 1;
+	void *buf_desc[1] = {};
+	void *result_desc[1] = {};
+	struct fi_msg_atomic msg = {};
+	struct fi_ioc ioc = {};
+	struct fi_rma_ioc rma_ioc = {};
+	struct fi_ioc fetch_ioc = {};
+	int ret;
+	struct fid_cntr *cntr = cxit_read_cntr;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_err_entry cq_err;
+	uint64_t amo_flags = FI_TRANSMIT_COMPLETE;
+
+	ret = mr_create(win_len, FI_READ | FI_WRITE, 0xa, 0x2,
+			&buf_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = mr_create(win_len, FI_READ | FI_WRITE, 0xa, 0x4,
+			&result_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	buf_desc[0] = fi_mr_desc(buf_window.mr);
+	result_desc[0] = fi_mr_desc(result_window.mr);
+
+	ioc.addr = buf_window.mem;
+	ioc.count = 1;
+
+	rma_ioc.count = 1;
+	rma_ioc.key = remote_key;
+
+	msg.msg_iov = &ioc;
+	msg.desc = buf_desc;
+	msg.iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+	msg.datatype = FI_UINT8;
+	msg.op = FI_SUM;
+
+	fetch_ioc.addr = result_window.mem;
+	fetch_ioc.count = 1;
+
+	ret = fi_fetch_atomicmsg(cxit_ep, &msg, &fetch_ioc, result_desc, 1,
+				 amo_flags);
+	cr_assert(ret == FI_SUCCESS);
+
+	while (fi_cntr_readerr(cntr) != 1)
+		fi_cq_read(cxit_tx_cq, &cqe, 0);
+
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAVAIL);
+
+	ret = fi_cq_readerr(cxit_tx_cq, &cq_err, 0);
+	cr_assert(ret == 1);
+
+	cr_assert(cq_err.flags == (FI_ATOMIC | FI_READ));
+	cr_assert(cq_err.op_context == NULL);
+
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	mr_destroy(&result_window);
+	mr_destroy(&buf_window);
+}
+
+Test(amo_hybrid_mr_desc, amo_failure)
+{
+	struct mem_region buf_window;
+	int remote_key = 0x1;
+	int win_len = 1;
+	void *buf_desc[1] = {};
+	struct fi_msg_atomic msg = {};
+	struct fi_ioc ioc = {};
+	struct fi_rma_ioc rma_ioc = {};
+	int ret;
+	struct fid_cntr *cntr = cxit_write_cntr;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_err_entry cq_err;
+	uint64_t amo_flags = FI_TRANSMIT_COMPLETE;
+
+	ret = mr_create(win_len, FI_READ | FI_WRITE, 0xa, 0x2,
+			&buf_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	buf_desc[0] = fi_mr_desc(buf_window.mr);
+
+	ioc.addr = buf_window.mem;
+	ioc.count = 1;
+
+	rma_ioc.count = 1;
+	rma_ioc.key = remote_key;
+
+	msg.msg_iov = &ioc;
+	msg.desc = buf_desc;
+	msg.iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+	msg.datatype = FI_UINT8;
+	msg.op = FI_SUM;
+
+	ret = fi_atomicmsg(cxit_ep, &msg, amo_flags);
+	cr_assert(ret == FI_SUCCESS);
+
+	while (fi_cntr_readerr(cntr) != 1)
+		fi_cq_read(cxit_tx_cq, &cqe, 0);
+
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAVAIL);
+
+	ret = fi_cq_readerr(cxit_tx_cq, &cq_err, 0);
+	cr_assert(ret == 1);
+
+	cr_assert(cq_err.flags == (FI_ATOMIC | FI_WRITE));
+	cr_assert(cq_err.op_context == NULL);
+
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	mr_destroy(&buf_window);
+}

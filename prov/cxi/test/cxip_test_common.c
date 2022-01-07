@@ -709,6 +709,11 @@ void cxit_setup_enabled_ep_hybrid_mr_desc(void)
 
 	cxit_setup_ep_hybrid_mr_desc();
 
+	cxit_fi->caps &= ~FI_RMA_EVENT;
+	cxit_fi->domain_attr->caps &= ~FI_RMA_EVENT;
+	cxit_fi->tx_attr->caps &= ~FI_RMA_EVENT;
+	cxit_fi->rx_attr->caps &= ~FI_RMA_EVENT;
+
 	/* Set up RMA objects */
 	cxit_create_ep();
 	cxit_create_eq();

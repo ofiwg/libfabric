@@ -226,14 +226,14 @@ static int cxip_amo_inject_cb(struct cxip_req *req, const union c_event *event)
 }
 
 /*
- * cxip_amo_inject_req() - Return request state associated with all AMO inject
- * transactions on the transmit context.
+ * cxip_amo_selective_completion_req() - Return request state associated with
+ * all AMO inject transactions on the transmit context.
  *
  * The request is freed when the TXC send CQ is closed.
  */
-static struct cxip_req *cxip_amo_inject_req(struct cxip_txc *txc)
+static struct cxip_req *cxip_amo_selective_completion_req(struct cxip_txc *txc)
 {
-	if (!txc->amo_inject_req) {
+	if (!txc->amo_selective_completion_req) {
 		struct cxip_req *req;
 		bool free_request = false;
 
@@ -244,15 +244,11 @@ static struct cxip_req *cxip_amo_inject_req(struct cxip_txc *txc)
 		req->cb = cxip_amo_inject_cb;
 		req->context = (uint64_t)txc->fid.ctx.fid.context;
 		req->flags = FI_ATOMIC | FI_WRITE;
-		req->data_len = 0;
-		req->buf = 0;
-		req->data = 0;
-		req->tag = 0;
 		req->addr = FI_ADDR_UNSPEC;
 
 		fastlock_acquire(&txc->lock);
-		if (!txc->amo_inject_req)
-			txc->amo_inject_req = req;
+		if (!txc->amo_selective_completion_req)
+			txc->amo_selective_completion_req = req;
 		else
 			free_request = true;
 		fastlock_release(&txc->lock);
@@ -261,7 +257,43 @@ static struct cxip_req *cxip_amo_inject_req(struct cxip_txc *txc)
 			cxip_cq_req_free(req);
 	}
 
-	return txc->amo_inject_req;
+	return txc->amo_selective_completion_req;
+}
+
+/*
+ * cxip_amo_fetching_selective_completion_req() - Return request state
+ * associated with all fetching AMO inject transactions on the transmit context.
+ *
+ * The request is freed when the TXC send CQ is closed.
+ */
+static struct cxip_req *
+cxip_amo_fetching_selective_completion_req(struct cxip_txc *txc)
+{
+	if (!txc->amo_fetch_selective_completion_req) {
+		struct cxip_req *req;
+		bool free_request = false;
+
+		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		if (!req)
+			return NULL;
+
+		req->cb = cxip_amo_inject_cb;
+		req->context = (uint64_t)txc->fid.ctx.fid.context;
+		req->flags = FI_ATOMIC | FI_READ;
+		req->addr = FI_ADDR_UNSPEC;
+
+		fastlock_acquire(&txc->lock);
+		if (!txc->amo_selective_completion_req)
+			txc->amo_fetch_selective_completion_req = req;
+		else
+			free_request = true;
+		fastlock_release(&txc->lock);
+
+		if (free_request)
+			cxip_cq_req_free(req);
+	}
+
+	return txc->amo_fetch_selective_completion_req;
 }
 
 /**
@@ -379,11 +411,36 @@ static inline bool _rma_vector_valid(size_t vn, const struct fi_rma_ioc *v)
 		v[0].count == CXIP_AMO_MAX_PACKED_IOV);
 }
 
+static bool cxip_amo_emit_idc_req_needed(uint64_t flags, void *result,
+					 struct cxip_mr *result_mr,
+					 bool fetching_amo_flush)
+{
+	/* User completion events always require a tracking structure. */
+	if (flags & FI_COMPLETION)
+		return true;
+
+	/* If a fetching operation (i.e. result buffer is valid) and the user
+	 * did not provide an MR for the result arg, internal memory
+	 * registration needs to occur. This requires tracking.
+	 */
+	if (result && !result_mr)
+		return true;
+
+	/* Fetching AMO with flush always requires a request struct since two
+	 * operations are required to implement it.
+	 */
+	if (fetching_amo_flush)
+		return true;
+
+	return false;
+}
+
 /* TODO: Update HMEM buf type for 128-bit AMOs. */
 static int cxip_amo_emit_idc(struct cxip_txc *txc,
 			     enum cxip_amo_req_type req_type,
 			     const struct fi_msg_atomic *msg, void *buf,
 			     void *compare, void *result,
+			     struct cxip_mr *result_mr,
 			     uint64_t remote_offset, union c_fab_addr *dfa,
 			     uint8_t *idx_ext, enum c_atomic_op atomic_op,
 			     enum c_cswap_op cswap_op,
@@ -392,6 +449,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 {
 	struct cxip_domain *dom = txc->domain;
 	struct cxip_cmdq *cmdq = txc->tx_cmdq;
+	struct cxip_md *result_md;
 	struct c_cstate_cmd cstate_cmd = {};
 	struct c_idc_amo_cmd idc_amo_cmd = {};
 	struct c_full_dma_cmd flush_cmd;
@@ -401,10 +459,14 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	bool fetching_amo_flush = fetching && flush;
 	bool restricted = !!(flags & FI_CXI_UNRELIABLE);
 	int ret;
-	void *inject_req;
+	void *selective_completion_req;
 	enum cxi_traffic_class_type tc_type;
 	uint64_t hmem_buf;
 	uint64_t hmem_compare;
+
+	/* MR desc cannot be value unless hybrid MR desc is enabled. */
+	if (!dom->hybrid_mr_desc)
+		result_mr = NULL;
 
 	/* Restricted AMOs must target optimized MRs without target events */
 	if (restricted && (txc->ep_obj->caps & FI_RMA_EVENT)) {
@@ -440,15 +502,8 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	    msg->datatype == FI_UINT32)
 		flags &= ~FI_CXI_HRP;
 
-	/* For IDC AMOs, a tracking request structure is needed for the
-	 * following cases.
-	 * 1. User has requested a completion event (i.e.
-	 * FI_SELECTIVE_COMPLETION is not used).
-	 * 2. The operation is a fetching AMO. A fetching AMO requires the
-	 * provider to internally register memory. Thus, this needs to be
-	 * tracked.
-	 */
-	if ((flags & FI_COMPLETION) || result || fetching_amo_flush) {
+	if (cxip_amo_emit_idc_req_needed(flags, result, result_mr,
+	    fetching_amo_flush)) {
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
 			TXC_WARN(txc, "Failed to allocate request\n");
@@ -473,14 +528,22 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 		 * always be registered.
 		 */
 		if (result) {
-			ret = cxip_map(dom, result, atomic_type_len,
-				       &req->amo.result_md);
-			if (ret) {
-				TXC_WARN_RET(txc, ret,
-					     "Failed to map result buffer\n");
-				goto err_free_req;
+			if (result_mr) {
+				result_md = result_mr->md;
+			} else {
+				ret = cxip_map(dom, result, atomic_type_len,
+					       &req->amo.result_md);
+				if (ret) {
+					TXC_WARN_RET(txc, ret,
+						     "Failed to map result buffer\n");
+					goto err_free_req;
+				}
+
+				result_md = req->amo.result_md;
 			}
 		}
+	} else if (result_mr) {
+		result_md = result_mr->md;
 	}
 
 	/* Identify the correct traffic class sub-type. */
@@ -493,7 +556,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 
 	/* Prepare the c-state command for the AMO IDC operation. */
 	if (result)
-		cstate_cmd.write_lac = req->amo.result_md->md->lac;
+		cstate_cmd.write_lac = result_md->md->lac;
 
 	cstate_cmd.event_send_disable = 1;
 	cstate_cmd.index_ext = *idx_ext;
@@ -509,14 +572,21 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	if (req) {
 		cstate_cmd.user_ptr = (uint64_t)req;
 	} else {
-		inject_req = cxip_amo_inject_req(txc);
-		if (!inject_req) {
-			TXC_WARN(txc, "Failed to allocate inject request\n");
+		if (req_type == CXIP_RQ_AMO)
+			selective_completion_req =
+				cxip_amo_selective_completion_req(txc);
+		else
+			selective_completion_req =
+				cxip_amo_fetching_selective_completion_req(txc);
+
+		if (!selective_completion_req) {
 			ret = -FI_ENOMEM;
+			TXC_WARN(txc,
+				 "Failed to allocate selective completion request\n");
 			goto err_unmap_result_buf;
 		}
 
-		cstate_cmd.user_ptr = (uint64_t)inject_req;
+		cstate_cmd.user_ptr = (uint64_t)selective_completion_req;
 		cstate_cmd.event_success_disable = 1;
 	}
 
@@ -548,8 +618,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	idc_amo_cmd.cswap_op = cswap_op;
 
 	if (result)
-		idc_amo_cmd.local_addr =
-			CXI_VA_TO_IOVA(req->amo.result_md->md, result);
+		idc_amo_cmd.local_addr = CXI_VA_TO_IOVA(result_md->md, result);
 
 	switch (msg->op) {
 	case FI_MSWAP:
@@ -579,7 +648,6 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 		assert(ret == atomic_type_len);
 	}
 
-
 	if (compare) {
 		/* Note: 16-byte value will overflow into op2_word2 */
 		ret = cxip_txc_copy_from_hmem(txc, &idc_amo_cmd.op2_word1,
@@ -589,6 +657,8 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 
 	/* Optionally configure the flushing command used for fetching AMOs. */
 	if (fetching_amo_flush) {
+		assert(req != NULL);
+
 		memset(&flush_cmd, 0, sizeof(flush_cmd));
 
 		if (req_type == CXIP_RQ_AMO)
@@ -754,8 +824,6 @@ static int cxip_amo_emit_trig_dma(struct cxip_txc *txc, struct cxip_cmdq *cmdq,
 
 	cxip_txq_ring(cmdq, flags & FI_MORE, ofi_atomic_get32(&txc->otx_reqs));
 
-	ofi_atomic_inc32(&txc->otx_reqs);
-
 	fastlock_release(&cmdq->lock);
 
 	return FI_SUCCESS;
@@ -824,8 +892,6 @@ static int cxip_amo_emit_non_trig_dma(struct cxip_txc *txc,
 
 	cxip_txq_ring(cmdq, flags & FI_MORE, ofi_atomic_get32(&txc->otx_reqs));
 
-	ofi_atomic_inc32(&txc->otx_reqs);
-
 	fastlock_release(&cmdq->lock);
 
 	return FI_SUCCESS;
@@ -836,13 +902,59 @@ err_unlock:
 	return ret;
 }
 
+static bool cxip_amo_emit_dma_req_needed(const struct fi_msg_atomic *msg,
+					 uint64_t flags, void *result,
+					 struct cxip_mr *buf_mr,
+					 struct cxip_mr *result_mr,
+					 bool fetching_amo_flush)
+{
+	/* To support FI_INJECt + DMA operations, an internal bounce buffer is
+	 * needed. This buffer is tracked in the request structure.
+	 */
+	if (flags & FI_INJECT)
+		return true;
+
+	/* User completion events always require a tracking structure. */
+	if (flags & FI_COMPLETION)
+		return true;
+
+	/* If the user did not provide an MR for the buffer arg, internal memory
+	 * registration needs to occur. This requires tracking.
+	 */
+	if (!buf_mr)
+		return true;
+
+	/* If a fetching operation (i.e. result buffer is valid) and the user
+	 * did not provide an MR for the result arg, internal memory
+	 * registration needs to occur. This requires tracking.
+	 */
+	if (result && !result_mr)
+		return true;
+
+	/* FI_ATOMIC_READ and FI_MSWAP are require the use of an internal bounce
+	 * buffer. This requires tracking.
+	 */
+	if (msg->op == FI_ATOMIC_READ || msg->op == FI_MSWAP)
+		return true;
+
+	/* Fetching AMO with flush always requires a request struct since two
+	 * operations are required to implement it.
+	 */
+	if (fetching_amo_flush)
+		return true;
+
+	return false;
+}
+
 /* TODO: Update HMEM buf type for 128-bit AMOs. */
 static int cxip_amo_emit_dma(struct cxip_txc *txc,
 			     enum cxip_amo_req_type req_type,
 			     const struct fi_msg_atomic *msg, void *buf,
-			     void *compare, void *result, uint64_t key,
-			     uint64_t remote_offset, union c_fab_addr *dfa,
-			     uint8_t *idx_ext, enum c_atomic_op atomic_op,
+			     void *compare, void *result,
+			     struct cxip_mr *buf_mr, struct cxip_mr *result_mr,
+			     uint64_t key, uint64_t remote_offset,
+			     union c_fab_addr *dfa, uint8_t *idx_ext,
+			     enum c_atomic_op atomic_op,
 			     enum c_cswap_op cswap_op,
 			     enum c_atomic_type atomic_type,
 			     unsigned int atomic_type_len, uint64_t flags,
@@ -859,10 +971,18 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 	bool fetching_amo_flush = fetching && flush;
 	struct cxip_req *req;
 	struct cxip_cntr *cntr;
-	struct cxip_md *ibuf_md;
 	int ret;
 	uint64_t hmem_buf;
 	uint64_t hmem_compare;
+	struct cxip_md *buf_md;
+	struct cxip_md *result_md;
+	void *selective_completion_req;
+
+	/* MR desc cannot be value unless hybrid MR desc is enabled. */
+	if (!dom->hybrid_mr_desc) {
+		buf_mr = NULL;
+		result_mr = NULL;
+	}
 
 	/* Since fetching AMO with flush results in two commands, if
 	 * FI_RMA_EVENT is enabled, this would results in two remote MR counter
@@ -874,90 +994,122 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 		return -FI_EINVAL;
 	}
 
-	/* Since internal MR tracking is required, all matching AMO commands
-	 * require a tracking structure.
-	 */
-	req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
-	if (!req) {
-		ret = -FI_ENOMEM;
-		TXC_WARN_RET(txc, ret, "Failed to allocate request");
-		goto err;
-	}
-
-	/* Values set here are passed back to the user through the CQ */
-	if (flags & FI_COMPLETION)
-		req->context = (uint64_t)msg->context;
-	else
-		req->context = (uint64_t)txc->fid.ctx.fid.context;
-	req->flags = FI_ATOMIC;
-	req->flags |= (req_type == CXIP_RQ_AMO ? FI_WRITE : FI_READ);
-	req->flags |= (flags & FI_COMPLETION);
-	req->cb = _cxip_amo_cb;
-	req->amo.txc = txc;
-	req->amo.fetching_amo_flush = fetching_amo_flush;
-	req->type = CXIP_REQ_AMO;
-	req->trig_cntr = trig_cntr;
-
-	/* For fetching AMOs, the result buffer (i.e. fetch buffer) must always
-	 * be registered.
-	 */
-	if (result) {
-		ret = cxip_map(dom, result, atomic_type_len,
-			       &req->amo.result_md);
-		if (ret) {
-			TXC_WARN_RET(txc, ret, "Failed to map result buffer\n");
-			goto err_free_req;
-		}
-	}
-
-	if ((flags & FI_INJECT) || msg->op == FI_ATOMIC_READ ||
-	    msg->op == FI_MSWAP) {
-		/* To support FI_INJECT ot FI_ATOMIC_READ with matching AMO
-		 * commands, an internal buffer is needed to store the payload.
-		 */
-		req->amo.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
-		if (!req->amo.ibuf) {
+	if (cxip_amo_emit_dma_req_needed(msg, flags, result, buf_mr, result_mr,
+					 fetching_amo_flush)) {
+		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		if (!req) {
 			ret = -FI_ENOMEM;
-			TXC_WARN_RET(txc, ret, "Failed to allocate ibuf\n");
-			goto err_unmap_result_buf;
+			TXC_WARN_RET(txc, ret, "Failed to allocate request\n");
+			goto err;
 		}
 
-		switch (msg->op) {
-		/* FI_ATOMIC_READ is implemented as a sum of zero. Thus, zero
-		 * internal buffer which is used for the sum operand.
-		 */
-		case FI_ATOMIC_READ:
-			memset(req->amo.ibuf, 0, atomic_type_len);
-			break;
+		/* Values set here are passed back to the user through the CQ */
+		if (flags & FI_COMPLETION)
+			req->context = (uint64_t)msg->context;
+		else
+			req->context = (uint64_t)txc->fid.ctx.fid.context;
+		req->flags = FI_ATOMIC;
+		req->flags |= (req_type == CXIP_RQ_AMO ? FI_WRITE : FI_READ);
+		req->flags |= (flags & FI_COMPLETION);
+		req->cb = _cxip_amo_cb;
+		req->amo.txc = txc;
+		req->amo.fetching_amo_flush = fetching_amo_flush;
+		req->type = CXIP_REQ_AMO;
+		req->trig_cntr = trig_cntr;
 
-		case FI_MSWAP:
-			ret = cxip_txc_copy_from_hmem(txc, &hmem_buf, buf,
-						      atomic_type_len);
-			assert(ret == atomic_type_len);
+		/* Optionally register result MR. */
+		if (result) {
+			if (!result_mr) {
+				ret = cxip_map(dom, result, atomic_type_len,
+					       &req->amo.result_md);
+				if (ret) {
+					TXC_WARN(txc,
+						 "Failed to map result buffer: %d:%s\n",
+						 ret, fi_strerror(-ret));
+					goto err_free_req;
+				}
 
-			ret = cxip_txc_copy_from_hmem(txc, &hmem_compare,
-						      compare, atomic_type_len);
-			assert(ret == atomic_type_len);
+				result_md = req->amo.result_md;
+			} else {
+				result_md = result_mr->md;
+			}
+		}
 
-			hmem_buf &= hmem_compare;
+		if ((flags & FI_INJECT) || msg->op == FI_ATOMIC_READ ||
+		    msg->op == FI_MSWAP) {
+			/* To support FI_INJECT ot FI_ATOMIC_READ with matching
+			 * AMO commands, an internal buffer is needed to store
+			 * the payload.
+			 */
+			req->amo.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
+			if (!req->amo.ibuf) {
+				ret = -FI_ENOMEM;
+				TXC_WARN(txc,
+					 "Failed to allocate ibuf: %d:%s\n",
+					 ret, fi_strerror(-ret));
+				goto err_unmap_result_buf;
+			}
 
-			memcpy(req->amo.ibuf, &hmem_buf, atomic_type_len);
-			break;
+			switch (msg->op) {
+			/* FI_ATOMIC_READ is implemented as a sum of zero. Thus,
+			 * zero internal buffer which is used for the sum
+			 * operand.
+			 */
+			case FI_ATOMIC_READ:
+				memset(req->amo.ibuf, 0, atomic_type_len);
+				break;
 
-		/* Copy over user payload for FI_INJECT operation. */
-		default:
-			ret = cxip_txc_copy_from_hmem(txc, req->amo.ibuf, buf,
-						      atomic_type_len);
-			assert(ret == atomic_type_len);
+			case FI_MSWAP:
+				ret = cxip_txc_copy_from_hmem(txc, &hmem_buf,
+							      buf,
+							      atomic_type_len);
+				assert(ret == atomic_type_len);
+
+				ret = cxip_txc_copy_from_hmem(txc,
+							      &hmem_compare,
+							      compare,
+							      atomic_type_len);
+				assert(ret == atomic_type_len);
+
+				hmem_buf &= hmem_compare;
+
+				memcpy(req->amo.ibuf, &hmem_buf,
+				       atomic_type_len);
+				break;
+
+			/* Copy over user payload for FI_INJECT operation. */
+			default:
+				ret = cxip_txc_copy_from_hmem(txc,
+							      req->amo.ibuf,
+							      buf,
+							      atomic_type_len);
+				assert(ret == atomic_type_len);
+			}
+
+			buf = req->amo.ibuf;
+			buf_md = cxip_cq_ibuf_md(req->amo.ibuf);
+		} else if (buf_mr) {
+			buf_md = buf_mr->md;
+		} else {
+			/* Map user operand buffer for DMA command. */
+			ret = cxip_map(dom, buf, atomic_type_len,
+				       &req->amo.oper1_md);
+			if (ret) {
+				TXC_WARN(txc,
+					 "Failed to map operand buffer: %d:%s\n",
+					 ret, fi_strerror(-ret));
+				goto err_unmap_result_buf;
+			}
+
+			buf_md = req->amo.oper1_md;
 		}
 	} else {
-		/* Map user operand buffer for DMA command. */
-		ret = cxip_map(dom, buf, atomic_type_len, &req->amo.oper1_md);
-		if (ret) {
-			TXC_WARN_RET(txc, ret,
-				     "Failed to map operand buffer\n");
-			goto err_unmap_result_buf;
-		}
+		req = NULL;
+
+		if (result)
+			result_md = result_mr->md;
+
+		buf_md = buf_mr->md;
 	}
 
 	/* Build up the matching AMO command. */
@@ -967,22 +1119,32 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 	dma_amo_cmd.remote_offset = remote_offset;
 	dma_amo_cmd.request_len = atomic_type_len;
 	dma_amo_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
-	dma_amo_cmd.user_ptr = (uint64_t)req;
 	dma_amo_cmd.match_bits = key;
 	dma_amo_cmd.atomic_op = atomic_op;
 	dma_amo_cmd.atomic_type = atomic_type;
 	dma_amo_cmd.cswap_op = cswap_op;
+	dma_amo_cmd.local_read_addr = CXI_VA_TO_IOVA(buf_md->md, buf);
+	dma_amo_cmd.lac = buf_md->md->lac;
 
-	if (req->amo.ibuf) {
-		ibuf_md = cxip_cq_ibuf_md(req->amo.ibuf);
-
-		dma_amo_cmd.local_read_addr =
-			CXI_VA_TO_IOVA(ibuf_md->md, req->amo.ibuf);
-		dma_amo_cmd.lac = ibuf_md->md->lac;
+	if (req) {
+		dma_amo_cmd.user_ptr = (uint64_t)req;
 	} else {
-		dma_amo_cmd.local_read_addr =
-			CXI_VA_TO_IOVA(req->amo.oper1_md->md, buf);
-		dma_amo_cmd.lac = req->amo.oper1_md->md->lac;
+		if (req_type == CXIP_RQ_AMO)
+			selective_completion_req =
+				cxip_amo_selective_completion_req(txc);
+		else
+			selective_completion_req =
+				cxip_amo_fetching_selective_completion_req(txc);
+
+		if (!selective_completion_req) {
+			ret = -FI_ENOMEM;
+			TXC_WARN(txc,
+				 "Failed to allocate selective completion request\n");
+			goto err_unmap_operand_buf;
+		}
+
+		dma_amo_cmd.user_ptr = (uint64_t)selective_completion_req;
+		dma_amo_cmd.event_success_disable = 1;
 	}
 
 	if (compare) {
@@ -994,8 +1156,8 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 
 	if (result) {
 		dma_amo_cmd.local_write_addr =
-			CXI_VA_TO_IOVA(req->amo.result_md->md, result);
-		dma_amo_cmd.write_lac = req->amo.result_md->md->lac;
+			CXI_VA_TO_IOVA(result_md->md, result);
+		dma_amo_cmd.write_lac = result_md->md->lac;
 	}
 
 	/* Fetching AMO with flushes requires a trailing zero-byte put with
@@ -1023,6 +1185,8 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 
 	/* Optionally configure the flushing command used for fetching AMOs. */
 	if (fetching_amo_flush) {
+		assert(req != NULL);
+
 		memset(&flush_cmd, 0, sizeof(flush_cmd));
 
 		if (req_type == CXIP_RQ_AMO)
@@ -1068,18 +1232,24 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 		}
 	}
 
+	if (req)
+		ofi_atomic_inc32(&txc->otx_reqs);
+
 	return FI_SUCCESS;
 
 err_unmap_operand_buf:
-	if (req->amo.ibuf)
-		cxip_cq_ibuf_free(txc->send_cq, req->amo.ibuf);
-	else
-		cxip_unmap(req->amo.oper1_md);
+	if (req) {
+		if (req->amo.ibuf)
+			cxip_cq_ibuf_free(txc->send_cq, req->amo.ibuf);
+		else
+			cxip_unmap(req->amo.oper1_md);
+	}
 err_unmap_result_buf:
-	if (req->amo.result_md)
+	if (req && req->amo.result_md)
 		cxip_unmap(req->amo.result_md);
 err_free_req:
-	cxip_cq_req_free(req);
+	if (req)
+		cxip_cq_req_free(req);
 err:
 	TXC_WARN_RET(txc, ret,
 		     "%s %s failed: atomic_op=%u cswap_op=%u atomic_type=%u buf=%p compare=%p result=%p len=%u rkey=%#lx roffset=%#lx nid=%#x ep=%u idx_ext=%u\n",
@@ -1124,6 +1294,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
 	uint32_t pid_idx;
+	struct cxip_mr *buf_mr = NULL;
+	struct cxip_mr *result_mr = NULL;
 
 	if (!txc->enabled) {
 		TXC_WARN(txc, "EP/TXC not enabled\n");
@@ -1159,6 +1331,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		}
 
 		result = resultv[0].addr;
+		if (resultdesc && resultdesc[0])
+			result_mr = resultdesc[0];
 
 		/* FALLTHRU */
 	case CXIP_RQ_AMO:
@@ -1176,6 +1350,9 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		}
 
 		buf = msg->msg_iov[0].addr;
+		if (msg->desc && msg->desc[0])
+			buf_mr = msg->desc[0];
+
 		remote_offset = msg->rma_iov[0].addr;
 		key = msg->rma_iov[0].key;
 		break;
@@ -1209,16 +1386,16 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 
 	if (idc)
 		ret = cxip_amo_emit_idc(txc, req_type, msg, buf, compare,
-					result, remote_offset, &dfa, &idx_ext,
-					atomic_op, cswap_op, atomic_type,
-					atomic_type_len, flags);
+					result, result_mr, remote_offset, &dfa,
+					&idx_ext, atomic_op, cswap_op,
+					atomic_type, atomic_type_len, flags);
 	else
 		ret = cxip_amo_emit_dma(txc, req_type, msg, buf, compare,
-					result, key, remote_offset, &dfa,
-					&idx_ext, atomic_op, cswap_op,
-					atomic_type, atomic_type_len, flags,
-					triggered, trig_thresh, trig_cntr,
-					comp_cntr);
+					result, buf_mr, result_mr, key,
+					remote_offset, &dfa, &idx_ext,
+					atomic_op, cswap_op, atomic_type,
+					atomic_type_len, flags, triggered,
+					trig_thresh, trig_cntr, comp_cntr);
 
 	if (ret)
 		TXC_WARN_RET(txc, ret,

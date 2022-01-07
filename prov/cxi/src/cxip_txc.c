@@ -199,6 +199,8 @@ static void txc_cleanup(struct cxip_txc *txc)
 		}
 	}
 
+	assert(ofi_atomic_get32(&txc->otx_reqs) == 0);
+
 	dlist_foreach_container_safe(&txc->fc_peers, struct cxip_fc_peer,
 				     fc_peer, txc_entry, tmp) {
 		dlist_remove(&fc_peer->txc_entry);

@@ -1474,7 +1474,8 @@ struct cxip_txc {
 	ofi_atomic32_t otx_reqs;	// outstanding transmit requests
 	struct cxip_req *rma_write_selective_completion_req;
 	struct cxip_req *rma_read_selective_completion_req;
-	struct cxip_req *amo_inject_req;
+	struct cxip_req *amo_selective_completion_req;
+	struct cxip_req *amo_fetch_selective_completion_req;
 
 	/* Software Rendezvous related structures */
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
