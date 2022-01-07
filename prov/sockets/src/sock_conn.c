@@ -280,6 +280,17 @@ static void sock_set_sockopt_reuseaddr(int sock)
 		SOCK_LOG_ERROR("setsockopt reuseaddr failed\n");
 }
 
+static void sock_set_sockopt_bufsize(int sock)
+{
+        int bufsize = 0;
+	socklen_t len = sizeof(int);
+	if (sock_buf_sz == 0)
+		return;
+        bufsize = sock_buf_sz;
+        setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *)&bufsize, len);
+        setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *)&bufsize, len);
+}
+
 void sock_set_sockopts(int sock, int sock_opts)
 {
 	int optval;
@@ -293,6 +304,9 @@ void sock_set_sockopts(int sock, int sock_opts)
 
 	if (sock_opts & SOCK_OPTS_NONBLOCK)
 		fd_set_nonblock(sock);
+
+	if (sock_opts & SOCK_OPTS_BUFSIZE)
+		sock_set_sockopt_bufsize(sock);
 }
 
 int sock_conn_stop_listener_thread(struct sock_conn_listener *conn_listener)
@@ -436,7 +450,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	if (listen_fd == INVALID_SOCKET)
 		return -ofi_sockerr();
 
-	sock_set_sockopts(listen_fd, SOCK_OPTS_NONBLOCK);
+	sock_set_sockopts(listen_fd, SOCK_OPTS_NONBLOCK | SOCK_OPTS_BUFSIZE);
 
 	addr = *ep_attr->src_addr;
 	if (ep_attr->ep_type == FI_EP_MSG)

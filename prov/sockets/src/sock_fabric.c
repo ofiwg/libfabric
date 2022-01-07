@@ -65,6 +65,7 @@ int sock_keepalive_enable;
 int sock_keepalive_time = INT_MAX;
 int sock_keepalive_intvl = INT_MAX;
 int sock_keepalive_probes = INT_MAX;
+int sock_buf_sz = 0;
 
 static struct dlist_entry sock_fab_list;
 static struct dlist_entry sock_dom_list;
@@ -245,6 +246,7 @@ static void sock_read_default_params()
 		fi_param_get_int(&sock_prov, "keepalive_time", &sock_keepalive_time);
 		fi_param_get_int(&sock_prov, "keepalive_intvl", &sock_keepalive_intvl);
 		fi_param_get_int(&sock_prov, "keepalive_probes", &sock_keepalive_probes);
+		fi_param_get_int(&sock_prov, "max_buf_sz", &sock_buf_sz);
 
 		read_default_params = 1;
 	}
@@ -381,6 +383,9 @@ SOCKETS_INI
 
 	fi_param_define(&sock_prov, "iface", FI_PARAM_STRING,
 			"Specify interface name");
+
+	fi_param_define(&sock_prov, "max_buf_sz", FI_PARAM_INT,
+                        "Maximum socket send and recv buffer in bytes (i.e. SO_RCVBUF, SO_SNDBUF)");
 
 	ofi_mutex_init(&sock_list_lock);
 	dlist_init(&sock_fab_list);

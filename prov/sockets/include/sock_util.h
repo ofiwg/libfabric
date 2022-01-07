@@ -57,6 +57,7 @@ extern int sock_keepalive_enable;
 extern int sock_keepalive_time;
 extern int sock_keepalive_intvl;
 extern int sock_keepalive_probes;
+extern int sock_buf_sz;
 
 #define _SOCK_LOG_DBG(subsys, ...) FI_DBG(&sock_prov, subsys, __VA_ARGS__)
 #define _SOCK_LOG_ERROR(subsys, ...) FI_WARN(&sock_prov, subsys, __VA_ARGS__)
