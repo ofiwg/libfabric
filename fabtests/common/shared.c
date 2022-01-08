@@ -1806,7 +1806,7 @@ static void ft_force_progress(void)
 		fi_cq_read(rxcq, NULL, 0);
 }
 
-static int ft_progress(struct fid_cq *cq, uint64_t total, uint64_t *cq_cntr)
+int ft_progress(struct fid_cq *cq, uint64_t total, uint64_t *cq_cntr)
 {
 	struct fi_cq_err_entry comp;
 	int ret;
