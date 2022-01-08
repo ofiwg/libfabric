@@ -333,10 +333,16 @@ are defined.
   that the desired functionality is implemented by the provider
   hardware or is a standard service of the operating system.
 
-  All providers are required to support FI_PROGRESS_AUTO.  However, if
-  a provider does not natively support automatic progress, forcing the
-  use of FI_PROGRESS_AUTO may result in threads being allocated below
-  the fabric interfaces.
+  It is recommended that providers support FI_PROGRESS_AUTO.  However,
+  if a provider does not natively support automatic progress, forcing
+  the use of FI_PROGRESS_AUTO may result in threads being allocated
+  below the fabric interfaces.
+
+  Note that prior versions of the library required providers to support
+  FI_PROGRESS_AUTO.  However, in some cases progress threads cannot be
+  blocked when communication is idle, which results in threads spinning
+  in progress functions.  As a result, those providers only supported
+  FI_PROGRESS_MANUAL.
 
 *FI_PROGRESS_MANUAL*
 : This progress model indicates that the provider requires the use of
