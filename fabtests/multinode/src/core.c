@@ -198,27 +198,6 @@ err:
 	return ft_exit_code(ret);
 }
 
-static int ft_progress(struct fid_cq *cq, uint64_t total, uint64_t *cq_cntr)
-{
-	struct fi_cq_err_entry comp;
-	int ret;
-
-	ret = fi_cq_read(cq, &comp, 1);
-	if (ret > 0)
-		(*cq_cntr)++;
-
-	if (ret >= 0 || ret == -FI_EAGAIN)
-		return 0;
-
-	if (ret == -FI_EAVAIL) {
-		ret = ft_cq_readerr(cq);
-		(*cq_cntr)++;
-	} else {
-		FT_PRINTERR("fi_cq_read/sread", ret);
-	}
-	return ret;
-}
-
 int multi_msg_recv()
 {
 	int ret, offset;
