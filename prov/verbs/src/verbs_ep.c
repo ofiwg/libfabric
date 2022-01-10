@@ -71,7 +71,7 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 
 	OFI_DBG_SET(ctx->ep, ep);
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
-	ctx->op_ctx = VRB_POST_RQ;
+	ctx->op_queue = VRB_OP_RQ;
 	wr->wr_id = (uintptr_t) ctx;
 
 	ret = ibv_post_recv(ep->ibv_qp, wr, &bad_wr);
@@ -143,7 +143,8 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 
 	ctx->ep = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
-	ctx->op_ctx = VRB_POST_SQ;
+	ctx->op_queue = VRB_OP_SQ;
+	ctx->sq_opcode = wr->opcode;
 	wr->wr_id = (uintptr_t) ctx;
 
 	ret = ibv_post_send(ep->ibv_qp, wr, &bad_wr);
@@ -407,10 +408,7 @@ err1:
 	return NULL;
 }
 
-/* Generate flush completion entries for any queued send requests.
- * We only need to record the wr_id and that the entry was not a
- * receive (indicated by lack of IBV_WC_RECV flag).
- */
+/* Generate flush completion entries for any queued send requests. */
 static void vrb_flush_sq(struct vrb_ep *ep)
 {
 	struct vrb_context *ctx;
@@ -429,9 +427,11 @@ static void vrb_flush_sq(struct vrb_ep *ep)
 	while (!slist_empty(&ep->sq_list)) {
 		entry = slist_remove_head(&ep->sq_list);
 		ctx = container_of(entry, struct vrb_context, entry);
-		assert(ctx->op_ctx == VRB_POST_SQ);
+		assert(ctx->op_queue == VRB_OP_SQ);
 
 		wc.wr_id = (uintptr_t) ctx->user_ctx;
+		wc.opcode = vrb_wr2wc_opcode(ctx->sq_opcode);
+
 		cq->credits++;
 		ctx->ep->sq_credits++;
 		ofi_buf_free(ctx);
@@ -1503,7 +1503,7 @@ ssize_t vrb_post_srq(struct vrb_srq_ep *ep, struct ibv_recv_wr *wr)
 
 	ctx->srx = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
-	ctx->op_ctx = VRB_POST_SRQ;
+	ctx->op_queue = VRB_OP_SRQ;
 	wr->wr_id = (uintptr_t) ctx;
 
 	ret = ibv_post_srq_recv(ep->srq, wr, &bad_wr);
