@@ -309,7 +309,7 @@ void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
 	pfds->fds[item->fd].fd = item->fd;
 	pfds->fds[item->fd].events = item->events;
 	pfds->fds[item->fd].revents = 0;
-	pfds->context[item->fd] = item->context;
+	pfds->ctx[item->fd].context = item->context;
 	if (item->fd >= pfds->nfds)
 		pfds->nfds = item->fd + 1;
 }
@@ -319,7 +319,7 @@ int ofi_pollfds_do_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 {
 	if ((fd < pfds->nfds) && (pfds->fds[fd].fd == fd)) {
 		pfds->fds[fd].events = events;
-		pfds->context[fd] = context;
+		pfds->ctx[fd].context = context;
 		return FI_SUCCESS;
 	}
 

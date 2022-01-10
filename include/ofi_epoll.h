@@ -71,11 +71,15 @@ struct ofi_pollfds_work_item {
 	struct slist_entry entry;
 };
 
+struct ofi_pollfds_ctx {
+	void		*context;
+};
+
 struct ofi_pollfds {
 	int		size;
 	int		nfds;
 	struct pollfd	*fds;
-	void		**context;
+	struct ofi_pollfds_ctx *ctx;
 	struct fd_signal signal;
 	struct slist	work_item_list;
 	ofi_mutex_t	lock;

@@ -1314,7 +1314,7 @@ uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
 int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 {
 	struct pollfd *fds;
-	void *contexts;
+	struct ofi_pollfds_ctx *ctx;
 	size_t size;
 
 	if (max_size < pfds->size)
@@ -1324,14 +1324,14 @@ int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 	if (size < pfds->size + 64)
 		size = pfds->size + 64;
 
-	fds = calloc(size, sizeof(*pfds->fds) + sizeof(*pfds->context));
+	fds = calloc(size, sizeof(*pfds->fds) + sizeof(*pfds->ctx));
 	if (!fds)
 		return -FI_ENOMEM;
 
-	contexts = fds + size;
+	ctx = (struct ofi_pollfds_ctx *) (fds + size);
 	if (pfds->size) {
 		memcpy(fds, pfds->fds, pfds->size * sizeof(*pfds->fds));
-		memcpy(contexts, pfds->context, pfds->size * sizeof(*pfds->context));
+		memcpy(ctx, pfds->ctx, pfds->size * sizeof(*pfds->ctx));
 		free(pfds->fds);
 	}
 
@@ -1339,7 +1339,7 @@ int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 		fds[pfds->size++].fd = INVALID_SOCKET;
 
 	pfds->fds = fds;
-	pfds->context = contexts;
+	pfds->ctx = ctx;
 	return FI_SUCCESS;
 }
 
@@ -1361,7 +1361,7 @@ int ofi_pollfds_create(struct ofi_pollfds **pfds)
 
 	(*pfds)->fds[(*pfds)->nfds].fd = (*pfds)->signal.fd[FI_READ_FD];
 	(*pfds)->fds[(*pfds)->nfds].events = POLLIN;
-	(*pfds)->context[(*pfds)->nfds++] = NULL;
+	(*pfds)->ctx[(*pfds)->nfds++].context = NULL;
 	slist_init(&(*pfds)->work_item_list);
 	ofi_mutex_init(&(*pfds)->lock);
 	return FI_SUCCESS;
@@ -1476,15 +1476,16 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 		     struct ofi_epollfds_event *events,
 		     int maxevents, int timeout)
 {
+	uint64_t start;
 	int i, ret;
 	int found = 0;
-	uint64_t start = (timeout > 0) ? ofi_gettime_ms() : 0;
 
 	ofi_mutex_lock(&pfds->lock);
 	if (!slist_empty(&pfds->work_item_list))
 		ofi_pollfds_process_work(pfds);
 	ofi_mutex_unlock(&pfds->lock);
 
+	start = (timeout > 0) ? ofi_gettime_ms() : 0;
 	do {
 		ret = poll(pfds->fds, pfds->nfds, timeout);
 		if (ret == SOCKET_ERROR)
@@ -1508,7 +1509,7 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 		for (i = 1; i < pfds->nfds && found < ret; i++) {
 			if (pfds->fds[i].revents) {
 				events[found].events = pfds->fds[i].revents;
-				events[found++].data.ptr = pfds->context[i];
+				events[found++].data.ptr = pfds->ctx[i].context;
 			}
 		}
 

@@ -613,7 +613,7 @@ void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
 	pfds->fds[pfds->nfds].fd = item->fd;
 	pfds->fds[pfds->nfds].events = item->events;
 	pfds->fds[pfds->nfds].revents = 0;
-	pfds->context[pfds->nfds] = item->context;
+	pfds->ctx[pfds->nfds].context = item->context;
 	pfds->nfds++;
 }
 
@@ -626,7 +626,7 @@ int ofi_pollfds_do_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 	for (i = 1; i < pfds->nfds; i++) {
 		if (pfds->fds[i].fd == fd) {
 			pfds->fds[i].events = events;
-			pfds->context[i] = context;
+			pfds->ctx[i].context = context;
 			return FI_SUCCESS;
 		}
 	}
@@ -647,7 +647,7 @@ void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
 			pfds->fds[i].fd = pfds->fds[pfds->nfds].fd;
 			pfds->fds[i].events = pfds->fds[pfds->nfds].events;
 			pfds->fds[i].revents = pfds->fds[pfds->nfds].revents;
-			pfds->context[i] = pfds->context[pfds->nfds];
+			pfds->ctx[i] = pfds->ctx[pfds->nfds];
 			break;
 		}
 	}
