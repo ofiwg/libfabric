@@ -4293,11 +4293,6 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 			req->send.send_md = NULL;
 		}
 
-		if (req->send.ibuf) {
-			cxip_cq_ibuf_free(req->cq, req->send.ibuf);
-			req->send.ibuf = NULL;
-		}
-
 		if (match_complete)
 			cxip_tx_id_free(req->send.txc->ep_obj, req->send.tx_id);
 
