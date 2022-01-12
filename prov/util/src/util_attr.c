@@ -1008,9 +1008,8 @@ int ofi_prov_check_dup_info(const struct util_prov *util_prov,
 		}
 
 		if (util_prov->alter_defaults) {
-			ret = util_prov->alter_defaults(api_version, user_info,
-							prov_info, fi);
-			assert(ret == FI_SUCCESS);
+			util_prov->alter_defaults(api_version, user_info,
+						  prov_info, fi);
 		}
 
 		if (!*info)

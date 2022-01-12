@@ -164,11 +164,15 @@ struct ofi_common_locks {
 typedef int (*ofi_map_info_t)(uint32_t version, const struct fi_info *src_info,
 			      const struct fi_info *base_info,
 			      struct fi_info *dest_info);
+typedef void (*ofi_alter_info_t)(uint32_t version,
+				 const struct fi_info *hints,
+				 const struct fi_info *base_info,
+				 struct fi_info *dest_info);
 
 struct util_prov {
 	const struct fi_provider	*prov;
 	const struct fi_info		*info;
-	ofi_map_info_t			alter_defaults;
+	ofi_alter_info_t		alter_defaults;
 	const int			flags;
 };
 

@@ -54,9 +54,9 @@ struct fi_provider ofi_nd_prov = {
 	.cleanup = ofi_nd_fini
 };
 
-static int ofi_nd_alter_defaults(uint32_t version, const struct fi_info *hints,
-		                         const struct fi_info *base_info,
-		                         struct fi_info *dest_info);
+static void ofi_nd_alter_defaults(uint32_t version, const struct fi_info *hints,
+				  const struct fi_info *base_info,
+				  struct fi_info *dest_info);
 
 struct util_prov ofi_nd_util_prov = {
 	.prov = &ofi_nd_prov,
@@ -79,9 +79,9 @@ static size_t nd_default_tx_size = 384;
 static size_t nd_default_rx_iov_limit = 8;
 static size_t nd_default_rx_size = 384;
 
-static int ofi_nd_alter_defaults(uint32_t version, const struct fi_info *hints,
-                                 const struct fi_info *base_info,
-                                 struct fi_info *dest_info)
+static void ofi_nd_alter_defaults(uint32_t version, const struct fi_info *hints,
+				  const struct fi_info *base_info,
+				  struct fi_info *dest_info)
 {
     dest_info->tx_attr->iov_limit = min(base_info->tx_attr->iov_limit,
     					nd_default_tx_iov_limit);
@@ -91,8 +91,6 @@ static int ofi_nd_alter_defaults(uint32_t version, const struct fi_info *hints,
     					nd_default_rx_iov_limit);
     dest_info->rx_attr->size = min(base_info->rx_attr->size,
     				   nd_default_rx_size);
-
-    return 0;
 }
 
 int ofi_nd_getinfo(uint32_t version, const char *node, const char *service,
