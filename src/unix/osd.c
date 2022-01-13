@@ -310,6 +310,10 @@ void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
 	pfds->fds[item->fd].events = item->events;
 	pfds->fds[item->fd].revents = 0;
 	pfds->ctx[item->fd].context = item->context;
+
+	if (ofi_poll_fairness)
+		ofi_pollfds_heatfd(pfds, item->fd);
+
 	if (item->fd >= pfds->nfds)
 		pfds->nfds = item->fd + 1;
 }
@@ -335,6 +339,11 @@ void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
 	pfds->fds[item->fd].fd = INVALID_SOCKET;
 	pfds->fds[item->fd].events = 0;
 	pfds->fds[item->fd].revents = 0;
+
+	if (pfds->ctx[item->fd].hot_index != INVALID_SOCKET &&
+	    ofi_poll_fairness)
+		ofi_pollfds_coolfd(pfds, item->fd);
+
 	while (pfds->nfds && pfds->fds[pfds->nfds - 1].fd == INVALID_SOCKET)
 		pfds->nfds--;
 }
