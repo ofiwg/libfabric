@@ -1274,12 +1274,13 @@ ofi_ep_allreduce(struct fid_ep *ep, const void *buf, size_t count, void *desc,
 	if (!allreduce_op)
 		return -FI_ENOMEM;
 
-
 	allreduce_op->data.allreduce.size = count * ofi_datatype_size(datatype);
 	allreduce_op->data.allreduce.data = calloc(count,
 						ofi_datatype_size(datatype));
-	if (!allreduce_op->data.allreduce.data)
+	if (!allreduce_op->data.allreduce.data) {
+		ret = -FI_ENOMEM;
 		goto err1;
+	}
 
 	ret = util_coll_allreduce(allreduce_op, buf, result,
 				  allreduce_op->data.allreduce.data, count,
@@ -1295,6 +1296,7 @@ ofi_ep_allreduce(struct fid_ep *ep, const void *buf, size_t count, void *desc,
 	util_coll_op_progress_work(util_ep, allreduce_op);
 
 	return FI_SUCCESS;
+
 err2:
 	free(allreduce_op->data.allreduce.data);
 err1:
