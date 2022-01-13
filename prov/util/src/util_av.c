@@ -799,8 +799,10 @@ static int ip_av_nodesym_getaddr(struct util_av *av, const char *node,
 				"insert\n", node, service);
 
 			ret = getaddrinfo(node, service, &hints, &ai);
-			if (ret)
+			if (ret) {
+				ret = -abs(ret);
 				goto err;
+			}
 
 			memcpy(addr_temp, ai->ai_addr, *addrlen);
 			addr_temp = (char *)addr_temp + *addrlen;
