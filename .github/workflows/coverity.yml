@@ -1,0 +1,83 @@
+name: Nightly Coverity Scan
+on:
+  schedule:
+  # Every night, at midnight
+  - cron: '0 0 * * *'
+env:
+  APT_PACKAGES: >-
+    abi-compliance-checker
+    abi-dumper
+    build-essential
+    debhelper
+    dh-systemd
+    fakeroot
+    gcc
+    git
+    libnl-3-200 libnl-3-dev libnl-route-3-200 libnl-route-3-dev
+    libnuma-dev
+    libudev-dev
+    uuid-dev
+    make
+    ninja-build
+    pandoc
+    pkg-config
+    python
+    rpm
+    sparse
+    valgrind
+    wget
+  OFI_PROVIDER_FLAGS: >-
+    --enable-efa=rdma-core/build
+    --enable-mrail
+    --enable-psm3=rdma-core/build
+    --enable-rxd
+    --enable-rxm
+    --enable-shm
+    --enable-tcp
+    --enable-udp
+    --enable-usnic
+    --enable-verbs=rdma-core/build
+  RDMA_CORE_PATH: 'rdma-core/build'
+  RDMA_CORE_VERSION: v34.1
+jobs:
+  coverity:
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Install dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ env.APT_PACKAGES }}
+      - uses: actions/checkout@v2
+      - name: Download Coverity tools
+        run: |
+          wget https://scan.coverity.com/download/linux64 --post-data "token=${{ secrets.COVERITY_SCAN_TOKEN }}&project=ofiwg%2Flibfabric" -O coverity_tool.tgz
+          mkdir cov-analysis-linux64-2020.09
+          tar xzf coverity_tool.tgz --strip 1 -C cov-analysis-linux64-2020.09
+      - name: Run Coverity Build
+        run: |
+          set -x
+          git clone --depth 1 -b ${{ env.RDMA_CORE_VERSION }} https://github.com/linux-rdma/rdma-core.git
+          pushd rdma-core; bash build.sh; popd
+          export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
+
+          ./autogen.sh
+          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }}
+
+          export PATH=$PWD/cov-analysis-linux64-2020.09/bin:$PATH
+          cov-build --dir cov-int make
+          make install
+      - name: Submit results
+        run: |
+          tar czvf libfabric.tgz cov-int
+          curl \
+            --form token=${{ secrets.COVERITY_SCAN_TOKEN }} \
+            --form email=oss@rajachan.com \
+            --form file=@libfabric.tgz \
+            --form version="main" \
+            --form description="`$PWD/install/bin/fi_info -l`" \
+            https://scan.coverity.com/builds?project=ofiwg%2Flibfabric
+      - name: Upload build logs
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverity-build-log.txt
+          path: cov-int/build-log.txt
