@@ -120,48 +120,6 @@ jobs:
         with:
           name: config.log
           path: config.log
-  coverity:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install dependencies (Linux)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ${{ env.APT_PACKAGES }}
-      - uses: actions/checkout@v2
-      - name: Download Coverity tools
-        run: |
-          wget https://scan.coverity.com/download/linux64 --post-data "token=${{ secrets.COVERITY_SCAN_TOKEN }}&project=ofiwg%2Flibfabric" -O coverity_tool.tgz
-          mkdir cov-analysis-linux64-2020.09
-          tar xzf coverity_tool.tgz --strip 1 -C cov-analysis-linux64-2020.09
-      - name: Run Coverity Build
-        run: |
-          set -x
-          git clone --depth 1 -b ${{ env.RDMA_CORE_VERSION }} https://github.com/linux-rdma/rdma-core.git
-          pushd rdma-core; bash build.sh; popd
-          export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
-
-          ./autogen.sh
-          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }}
-
-          export PATH=$PWD/cov-analysis-linux64-2020.09/bin:$PATH
-          cov-build --dir cov-int make
-          make install
-      - name: Submit results
-        run: |
-          tar czvf libfabric.tgz cov-int
-          curl \
-            --form token=${{ secrets.COVERITY_SCAN_TOKEN }} \
-            --form email=oss@rajachan.com \
-            --form file=@libfabric.tgz \
-            --form version="main" \
-            --form description="`$PWD/install/bin/fi_info -l`" \
-            https://scan.coverity.com/builds?project=ofiwg%2Flibfabric
-      - name: Upload build logs
-        if: failure()
-        uses: actions/upload-artifact@v2
-        with:
-          name: config.log
-          path: config.log
   macos:
     runs-on: macos-10.15
     steps:
