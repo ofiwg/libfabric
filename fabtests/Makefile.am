@@ -67,6 +67,7 @@ bin_PROGRAMS = \
 
 dist_bin_SCRIPTS = \
 	scripts/runfabtests.sh \
+	scripts/runfabtests.py \
 	scripts/rft_yaml_to_junit_xml
 
 dist_noinst_SCRIPTS = \
@@ -110,7 +111,31 @@ nobase_dist_config_DATA = \
 	test_configs/shm/quick.test \
 	test_configs/shm/verify.test \
 	test_configs/efa/efa-neuron.exclude \
-	test_configs/efa/efa.exclude
+	test_configs/efa/efa.exclude \
+	pytest/pytest.ini \
+	pytest/conftest.py \
+	pytest/common.py \
+	pytest/default/test_av.py \
+	pytest/default/test_cm.py \
+	pytest/default/test_cntr.py \
+	pytest/default/test_cq.py \
+	pytest/default/test_dgram.py \
+	pytest/default/test_dom.py \
+	pytest/default/test_eq.py \
+	pytest/default/test_getinfo.py \
+	pytest/default/test_mr.py \
+	pytest/default/test_msg_inject.py \
+	pytest/default/test_msg.py \
+	pytest/default/test_multinode.py \
+	pytest/default/test_multi_recv.py \
+	pytest/default/test_poll.py \
+	pytest/default/test_rdm.py \
+	pytest/default/test_recv_cancel.py \
+	pytest/default/test_rma_bw.py \
+	pytest/default/test_scalable_ep.py \
+	pytest/default/test_shared_ctx.py \
+	pytest/default/test_ubertest.py \
+	pytest/default/test_unexpected_msg.py
 
 noinst_LTLIBRARIES = libfabtests.la
 
