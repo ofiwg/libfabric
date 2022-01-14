@@ -469,6 +469,7 @@ int cuda_hmem_init(void)
 	if (ret != FI_SUCCESS)
 		goto dl_cleanup;
 
+	ret = 1;
 	fi_param_get_bool(NULL, "hmem_cuda_use_gdrcopy",
 			  &ret);
 	hmem_cuda_use_gdrcopy = (ret != 0);
