@@ -135,7 +135,14 @@ nobase_dist_config_DATA = \
 	pytest/default/test_scalable_ep.py \
 	pytest/default/test_shared_ctx.py \
 	pytest/default/test_ubertest.py \
-	pytest/default/test_unexpected_msg.py
+	pytest/default/test_unexpected_msg.py \
+	pytest/efa/test_from_default.py \
+	pytest/efa/test_av.py \
+	pytest/efa/test_dgram.py \
+	pytest/efa/test_rdm.py \
+	pytest/efa/test_rma_bw.py \
+	pytest/efa/test_unexpected_msg.py \
+	pytest/efa/test_multi_recv.py
 
 noinst_LTLIBRARIES = libfabtests.la
 
