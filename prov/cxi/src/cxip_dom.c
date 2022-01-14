@@ -56,6 +56,8 @@ int cxip_domain_enable(struct cxip_domain *dom)
 		goto free_lni;
 	}
 
+	cxip_mr_domain_init(&dom->mr_domain);
+
 	dom->enabled = true;
 	fastlock_release(&dom->lock);
 
@@ -87,6 +89,8 @@ static void cxip_domain_disable(struct cxip_domain *dom)
 
 	if (!dom->enabled)
 		goto unlock;
+
+	cxip_mr_domain_fini(&dom->mr_domain);
 
 	cxip_dom_cntr_disable(dom);
 

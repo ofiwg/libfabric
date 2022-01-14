@@ -127,31 +127,22 @@ Test(mr, mr_zero_len)
 /* Validate that unique keys are enforced. */
 Test(mr, mr_unique_key)
 {
-	struct mem_region mr;
-	struct mem_region mr2;
+	char buf[256];
+	struct fid_mr *mr1;
+	struct fid_mr *mr2;
 	int ret;
 
-	/* Optimized MR */
-
-	ret = mr_create(0, FI_REMOTE_WRITE, 0, 0, &mr);
+	/* MR keys are enforced by the domain. */
+	ret = fi_mr_reg(cxit_domain, buf, 256, FI_REMOTE_WRITE, 0, 0, 0, &mr1,
+			NULL);
 	cr_assert(ret == FI_SUCCESS);
 
-	ret = mr_create(0, FI_REMOTE_WRITE, 0, 0, &mr2);
+	ret = fi_mr_reg(cxit_domain, buf, 256, FI_REMOTE_WRITE, 0, 0, 0, &mr2,
+			NULL);
 	cr_assert(ret == -FI_ENOKEY);
 
-	mr_destroy(&mr);
-	mr_destroy(&mr2);
-
-	/* Standard MR */
-
-	ret = mr_create(0, FI_REMOTE_WRITE, 0, 200, &mr);
+	ret = fi_close(&mr1->fid);
 	cr_assert(ret == FI_SUCCESS);
-
-	ret = mr_create(0, FI_REMOTE_WRITE, 0, 200, &mr2);
-	cr_assert(ret == -FI_ENOKEY);
-
-	mr_destroy(&mr);
-	mr_destroy(&mr2);
 }
 
 /* Test creating and destroying an MR that is never bound to an EP. */

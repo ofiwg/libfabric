@@ -9,7 +9,7 @@
 
 #include <stdlib.h>
 #include <string.h>
-
+#include <fasthash.h>
 #include <ofi_util.h>
 
 #include "cxip.h"
@@ -17,30 +17,75 @@
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_MR, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_MR, __VA_ARGS__)
 
+static void cxip_mr_domain_remove(struct cxip_mr_domain *mr_domain,
+				  struct cxip_mr *mr)
+{
+	fastlock_acquire(&mr_domain->lock);
+	dlist_remove(&mr->mr_domain_entry);
+	fastlock_release(&mr_domain->lock);
+}
+
+static int cxip_mr_domain_insert(struct cxip_mr_domain *mr_domain,
+				 struct cxip_mr *mr)
+{
+	int bucket;
+	struct cxip_mr *clash_mr;
+
+	bucket = fasthash64(&mr->key, sizeof(mr->key), 0) %
+		CXIP_MR_DOMAIN_HT_BUCKETS;
+
+	fastlock_acquire(&mr_domain->lock);
+
+	dlist_foreach_container(&mr_domain->buckets[bucket], struct cxip_mr,
+				clash_mr, mr_domain_entry) {
+		if (clash_mr->key == mr->key) {
+			fastlock_release(&mr_domain->lock);
+			return -FI_ENOKEY;
+		}
+	}
+
+	dlist_insert_tail(&mr->mr_domain_entry, &mr_domain->buckets[bucket]);
+
+	fastlock_release(&mr_domain->lock);
+
+	return FI_SUCCESS;
+}
+
+void cxip_mr_domain_fini(struct cxip_mr_domain *mr_domain)
+{
+	int i;
+
+	/* Assumption is this is only called when a domain is freed and only a
+	 * single thread should be freeing a domain. Thus, no lock is taken.
+	 */
+	for (i = 0; i < CXIP_MR_DOMAIN_HT_BUCKETS; i++) {
+		if (!dlist_empty(&mr_domain->buckets[i]))
+			CXIP_WARN("MR domain bucket %d is not empty\n", i);
+	}
+
+	fastlock_destroy(&mr_domain->lock);
+}
+
+void cxip_mr_domain_init(struct cxip_mr_domain *mr_domain)
+{
+	int i;
+
+	fastlock_init(&mr_domain->lock);
+
+	for (i = 0; i < CXIP_MR_DOMAIN_HT_BUCKETS; i++)
+		dlist_init(&mr_domain->buckets[i]);
+}
+
 /*
  * cxip_ep_mr_insert() - Insert an MR key into the EP key space.
  *
  * Called during MR enable. The key space is a sparse 64 bits.
  */
-static int cxip_ep_mr_insert(struct cxip_ep_obj *ep_obj, struct cxip_mr *mr)
+static void cxip_ep_mr_insert(struct cxip_ep_obj *ep_obj, struct cxip_mr *mr)
 {
-	struct cxip_mr *tmp_mr;
-
 	fastlock_acquire(&ep_obj->lock);
-
-	dlist_foreach_container(&ep_obj->mr_list, struct cxip_mr, tmp_mr,
-				ep_entry) {
-		if (tmp_mr->key == mr->key) {
-			fastlock_release(&ep_obj->lock);
-			return -FI_ENOKEY;
-		}
-	}
-
 	dlist_insert_tail(&mr->ep_entry, &ep_obj->mr_list);
-
 	fastlock_release(&ep_obj->lock);
-
-	return FI_SUCCESS;
 }
 
 /*
@@ -49,9 +94,7 @@ static int cxip_ep_mr_insert(struct cxip_ep_obj *ep_obj, struct cxip_mr *mr)
 static void cxip_ep_mr_remove(struct cxip_mr *mr)
 {
 	fastlock_acquire(&mr->ep->ep_obj->lock);
-
 	dlist_remove(&mr->ep_entry);
-
 	fastlock_release(&mr->ep->ep_obj->lock);
 }
 
@@ -400,11 +443,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	if (mr->enabled)
 		return FI_SUCCESS;
 
-	ret = cxip_ep_mr_insert(mr->ep->ep_obj, mr);
-	if (ret) {
-		CXIP_WARN("Failed to insert MR key: %lu\n", mr->key);
-		return ret;
-	}
+	cxip_ep_mr_insert(mr->ep->ep_obj, mr);
 
 	if (mr->optimized)
 		ret = cxip_mr_enable_opt(mr);
@@ -412,7 +451,12 @@ int cxip_mr_enable(struct cxip_mr *mr)
 		ret = cxip_mr_enable_std(mr);
 
 	if (ret != FI_SUCCESS)
-		cxip_ep_mr_remove(mr);
+		goto err_remove_mr;
+
+	return FI_SUCCESS;
+
+err_remove_mr:
+	cxip_ep_mr_remove(mr);
 
 	return ret;
 }
@@ -452,6 +496,8 @@ static int cxip_mr_close(struct fid *fid)
 	ret = cxip_mr_disable(mr);
 	if (ret != FI_SUCCESS)
 		CXIP_WARN("Failed to disable MR: %d\n", ret);
+
+	cxip_mr_domain_remove(&mr->domain->mr_domain, mr);
 
 	if (mr->ep)
 		ofi_atomic_dec32(&mr->ep->ep_obj->ref);
@@ -580,14 +626,13 @@ static struct fi_ops cxip_mr_fi_ops = {
 static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			uint64_t flags, struct fid_mr **mr)
 {
-	//struct fi_eq_entry eq_entry;
 	struct cxip_domain *dom;
 	struct cxip_mr *_mr;
+	int ret;
 
 	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0)
 		return -FI_EINVAL;
 
-	/* Only support length 1 IOVs for now */
 	if (attr->iov_count != 1)
 		return -FI_ENOSYS;
 
@@ -618,11 +663,20 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	_mr->mr_state = CXIP_MR_DISABLED;
 
+	ret = cxip_mr_domain_insert(&dom->mr_domain, _mr);
+	if (ret)
+		goto err_free_mr;
+
 	ofi_atomic_inc32(&dom->ref);
 
 	*mr = &_mr->mr_fid;
 
-	return 0;
+	return FI_SUCCESS;
+
+err_free_mr:
+	free(_mr);
+
+	return ret;
 }
 
 static int cxip_regv(struct fid *fid, const struct iovec *iov, size_t count,

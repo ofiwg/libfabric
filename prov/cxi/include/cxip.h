@@ -526,6 +526,16 @@ struct cxip_md {
 	bool cached;
 };
 
+#define CXIP_MR_DOMAIN_HT_BUCKETS 16
+
+struct cxip_mr_domain {
+	struct dlist_entry buckets[CXIP_MR_DOMAIN_HT_BUCKETS];
+	fastlock_t lock;
+};
+
+void cxip_mr_domain_init(struct cxip_mr_domain *mr_domain);
+void cxip_mr_domain_fini(struct cxip_mr_domain *mr_domain);
+
 /*
  * CXI Provider Domain object
  */
@@ -576,6 +586,9 @@ struct cxip_domain {
 
 	struct fi_hmem_override_ops hmem_ops;
 	bool hybrid_mr_desc;
+
+	/* Container of in-use MRs against this domain. */
+	struct cxip_mr_domain mr_domain;
 };
 
 static inline bool cxip_domain_mr_cache_enabled(struct cxip_domain *dom)
@@ -1631,6 +1644,8 @@ struct cxip_mr {
 	uint64_t len;			// memory length
 	struct cxip_md *md;		// buffer IO descriptor
 	struct dlist_entry ep_entry;
+
+	struct dlist_entry mr_domain_entry;
 };
 
 /*
