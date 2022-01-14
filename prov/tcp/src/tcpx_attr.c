@@ -167,7 +167,7 @@ struct fi_info tcpx_info = {
 /* User hints will still override the modified dest_info attributes
  * through ofi_alter_info
  */
-static int
+static void
 tcpx_alter_defaults(uint32_t version, const struct fi_info *hints,
 		    const struct fi_info *base_info,
 		    struct fi_info *dest_info)
@@ -177,7 +177,6 @@ tcpx_alter_defaults(uint32_t version, const struct fi_info *hints,
 	    hints && hints->ep_attr &&
 	    (hints->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT))
 		dest_info->rx_attr->size = tcpx_default_rx_size;
-	return 0;
 }
 
 

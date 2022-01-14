@@ -176,7 +176,7 @@ static int ofi_set_prov_name(const struct fi_provider *prov,
 static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 			    const struct fi_info *util_hints,
 			    const struct fi_info *base_attr,
-			    ofi_alter_info_t info_to_core,
+			    ofi_map_info_t info_to_core,
 			    struct fi_info **core_hints)
 {
 	int ret;
@@ -228,8 +228,9 @@ err:
 }
 
 static int ofi_info_to_util(uint32_t version, const struct fi_provider *prov,
-			    struct fi_info *core_info, const struct fi_info *base_info,
-			    ofi_alter_info_t info_to_util,
+			    struct fi_info *core_info,
+			    const struct fi_info *base_info,
+			    ofi_map_info_t info_to_util,
 			    struct fi_info **util_info)
 {
 	if (!(*util_info = fi_allocinfo()))
@@ -284,7 +285,7 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 		      uint64_t flags, const struct util_prov *util_prov,
 		      const struct fi_info *util_hints,
 		      const struct fi_info *base_attr,
-		      ofi_alter_info_t info_to_core, struct fi_info **core_info)
+		      ofi_map_info_t info_to_core, struct fi_info **core_info)
 {
 	struct fi_info *core_hints = NULL;
 	int ret;
@@ -307,8 +308,8 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 
 int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		 uint64_t flags, const struct util_prov *util_prov,
-		 const struct fi_info *hints, ofi_alter_info_t info_to_core,
-		 ofi_alter_info_t info_to_util, struct fi_info **info)
+		 const struct fi_info *hints, ofi_map_info_t info_to_core,
+		 ofi_map_info_t info_to_util, struct fi_info **info)
 {
 	struct fi_info *core_info, *base_info, *util_info, *cur, *tail;
 	int ret = -FI_ENODATA;
@@ -1007,9 +1008,8 @@ int ofi_prov_check_dup_info(const struct util_prov *util_prov,
 		}
 
 		if (util_prov->alter_defaults) {
-			ret = util_prov->alter_defaults(api_version, user_info,
-							prov_info, fi);
-			assert(ret == FI_SUCCESS);
+			util_prov->alter_defaults(api_version, user_info,
+						  prov_info, fi);
 		}
 
 		if (!*info)

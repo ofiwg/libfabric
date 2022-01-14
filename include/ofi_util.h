@@ -161,9 +161,13 @@ struct ofi_common_locks {
 /*
  * Provider details
  */
-typedef int (*ofi_alter_info_t)(uint32_t version, const struct fi_info *src_info,
-				const struct fi_info *base_info,
-				struct fi_info *dest_info);
+typedef int (*ofi_map_info_t)(uint32_t version, const struct fi_info *src_info,
+			      const struct fi_info *base_info,
+			      struct fi_info *dest_info);
+typedef void (*ofi_alter_info_t)(uint32_t version,
+				 const struct fi_info *hints,
+				 const struct fi_info *base_info,
+				 struct fi_info *dest_info);
 
 struct util_prov {
 	const struct fi_provider	*prov;
@@ -980,12 +984,12 @@ int ofi_get_core_info(uint32_t version, const char *node, const char *service,
 		      uint64_t flags, const struct util_prov *util_prov,
 		      const struct fi_info *util_hints,
 		      const struct fi_info *base_attr,
-		      ofi_alter_info_t info_to_core,
+		      ofi_map_info_t info_to_core,
 		      struct fi_info **core_info);
 int ofix_getinfo(uint32_t version, const char *node, const char *service,
 		 uint64_t flags, const struct util_prov *util_prov,
-		 const struct fi_info *hints, ofi_alter_info_t info_to_core,
-		 ofi_alter_info_t info_to_util, struct fi_info **info);
+		 const struct fi_info *hints, ofi_map_info_t info_to_core,
+		 ofi_map_info_t info_to_util, struct fi_info **info);
 int ofi_get_core_info_fabric(const struct fi_provider *prov,
 			     const struct fi_fabric_attr *util_attr,
 			     struct fi_info **core_info);
