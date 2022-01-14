@@ -409,7 +409,11 @@ int cxip_mr_enable(struct cxip_mr *mr)
 {
 	int ret;
 
-	if (mr->enabled)
+	/* MR which require remote access require additional resources. Locally
+	 * access MRs only do not. Thus, return FI_SUCCESS.
+	 */
+	if (mr->enabled ||
+	    !(mr->attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
 		return FI_SUCCESS;
 
 	cxip_ep_mr_insert(mr->ep->ep_obj, mr);
@@ -434,7 +438,8 @@ int cxip_mr_disable(struct cxip_mr *mr)
 {
 	int ret;
 
-	if (!mr->enabled)
+	if (!mr->enabled ||
+	    !(mr->attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
 		return FI_SUCCESS;
 
 	if (mr->optimized)
