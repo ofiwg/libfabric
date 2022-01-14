@@ -60,10 +60,17 @@ jobs:
           pushd rdma-core; bash build.sh; popd
           export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
 
-          ./autogen.sh
-          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }}
-
+          # We use a compiler extension that supports broader complex type
+          # definitions than what's defined in C99 standard (which only defines
+          # complex floats). For some reason, the version of GCC in this
+          # container does not provide that extension, but clang does. Until we
+          # know better, this action will use the clang compiler to generate the
+          # cov-build bundle needed for the coverity scan.
           export PATH=$PWD/cov-analysis-linux64-2020.09/bin:$PATH
+          cov-configure --clang
+
+          ./autogen.sh
+          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} CC=clang
           cov-build --dir cov-int make
           make install
       - name: Submit results
