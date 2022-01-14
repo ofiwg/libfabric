@@ -166,14 +166,6 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	mr->req.cb = cxip_mr_cb;
 	mr->req.mr.mr = mr;
 
-	if (mr->len) {
-		ret = cxip_map(mr->domain, (void *)mr->buf, mr->len, &mr->md);
-		if (ret) {
-			CXIP_WARN("Failed to map MR buffer: %d\n", ret);
-			goto err_free_idx;
-		}
-	}
-
 	le_flags = C_LE_EVENT_SUCCESS_DISABLE | C_LE_UNRESTRICTED_BODY_RO;
 	if (mr->attr.access & FI_REMOTE_WRITE)
 		le_flags |= C_LE_OP_PUT;
@@ -190,7 +182,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 			      0, le_flags, mr->cntr, ep_obj->ctrl_tgq, true);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to write Append command: %d\n", ret);
-		goto err_unmap;
+		goto err_free_idx;
 	}
 
 	/* Wait for Rendezvous PTE state changes */
@@ -205,9 +197,6 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 
 	return FI_SUCCESS;
 
-err_unmap:
-	if (mr->len)
-		cxip_unmap(mr->md);
 err_free_idx:
 	fastlock_acquire(&ep_obj->lock);
 	ofi_idx_remove(&ep_obj->req_ids, mr->req.req_id);
@@ -226,12 +215,10 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 	int ret;
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 
+	/* TODO: Handle -FI_EAGAIN. */
 	ret = cxip_pte_unlink(ep_obj->ctrl_pte, C_PTL_LIST_PRIORITY,
 			      mr->req.req_id, ep_obj->ctrl_tgq);
-	if (ret) {
-		CXIP_WARN("Failed to enqueue Unlink: %d\n", ret);
-		goto cleanup;
-	}
+	assert(ret == FI_SUCCESS);
 
 	do {
 		sched_yield();
@@ -243,10 +230,6 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 	if (ret)
 		CXIP_WARN("MR invalidate failed: %d (mr: %p key %lu)\n",
 			  ret, mr, mr->key);
-
-cleanup:
-	if (mr->len)
-		cxip_unmap(mr->md);
 
 	fastlock_acquire(&ep_obj->lock);
 	ofi_idx_remove(&ep_obj->req_ids, mr->req.req_id);
@@ -312,19 +295,11 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	mr->req.cb = cxip_mr_cb;
 	mr->req.mr.mr = mr;
 
-	if (mr->len) {
-		ret = cxip_map(mr->domain, (void *)mr->buf, mr->len, &mr->md);
-		if (ret) {
-			CXIP_WARN("Failed to map MR buffer: %d\n", ret);
-			goto err_free_idx;
-		}
-	}
-
 	ret = cxip_pte_alloc_nomap(ep_obj->if_dom[0], ep_obj->ctrl_tgt_evtq,
 				   &opts, cxip_mr_opt_pte_cb, mr, &mr->pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate PTE: %d\n", ret);
-		goto err_unmap;
+		goto err_free_idx;
 	}
 
 	ret = cxip_pte_map(mr->pte, CXIP_PTL_IDX_WRITE_MR_OPT(mr->key), false);
@@ -386,9 +361,6 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 
 err_pte_free:
 	cxip_pte_free(mr->pte);
-err_unmap:
-	if (mr->len)
-		cxip_unmap(mr->md);
 err_free_idx:
 	fastlock_acquire(&ep_obj->lock);
 	ofi_idx_remove(&ep_obj->req_ids, mr->req.req_id);
@@ -421,9 +393,6 @@ static int cxip_mr_disable_opt(struct cxip_mr *mr)
 
 cleanup:
 	cxip_pte_free(mr->pte);
-
-	if (mr->len)
-		cxip_unmap(mr->md);
 
 	fastlock_acquire(&ep_obj->lock);
 	ofi_idx_remove(&ep_obj->req_ids, mr->req.req_id);
@@ -496,6 +465,9 @@ static int cxip_mr_close(struct fid *fid)
 	ret = cxip_mr_disable(mr);
 	if (ret != FI_SUCCESS)
 		CXIP_WARN("Failed to disable MR: %d\n", ret);
+
+	if (mr->len)
+		cxip_unmap(mr->md);
 
 	cxip_mr_domain_remove(&mr->domain->mr_domain, mr);
 
@@ -619,6 +591,31 @@ static struct fi_ops cxip_mr_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static void cxip_mr_init(struct cxip_mr *mr, struct cxip_domain *dom,
+			 const struct fi_mr_attr *attr, uint64_t flags)
+{
+	fastlock_init(&mr->lock);
+
+	mr->mr_fid.fid.fclass = FI_CLASS_MR;
+	mr->mr_fid.fid.context = attr->context;
+	mr->mr_fid.fid.ops = &cxip_mr_fi_ops;
+
+	mr->domain = dom;
+	mr->flags = flags;
+	mr->attr = *attr;
+
+	/* Support length 1 IOV only for now */
+	mr->buf = mr->attr.mr_iov[0].iov_base;
+	mr->len = mr->attr.mr_iov[0].iov_len;
+
+	mr->mr_fid.key = mr->key = attr->requested_key;
+	mr->mr_fid.mem_desc = (void *)mr;
+
+	mr->optimized = cxip_mr_key_opt(mr->key);
+
+	mr->mr_state = CXIP_MR_DISABLED;
+}
+
 /*
  * Libfabric MR creation APIs
  */
@@ -642,30 +639,20 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (!_mr)
 		return -FI_ENOMEM;
 
-	fastlock_init(&_mr->lock);
-
-	_mr->mr_fid.fid.fclass = FI_CLASS_MR;
-	_mr->mr_fid.fid.context = attr->context;
-	_mr->mr_fid.fid.ops = &cxip_mr_fi_ops;
-
-	_mr->domain = dom;
-	_mr->flags = flags;
-	_mr->attr = *attr;
-
-	/* Support length 1 IOV only for now */
-	_mr->buf = _mr->attr.mr_iov[0].iov_base;
-	_mr->len = _mr->attr.mr_iov[0].iov_len;
-
-	_mr->mr_fid.key = _mr->key = attr->requested_key;
-	_mr->mr_fid.mem_desc = (void *)_mr;
-
-	_mr->optimized = cxip_mr_key_opt(_mr->key);
-
-	_mr->mr_state = CXIP_MR_DISABLED;
+	cxip_mr_init(_mr, dom, attr, flags);
 
 	ret = cxip_mr_domain_insert(&dom->mr_domain, _mr);
 	if (ret)
 		goto err_free_mr;
+
+	if (_mr->len) {
+		ret = cxip_map(_mr->domain, (void *)_mr->buf, _mr->len,
+			       &_mr->md);
+		if (ret) {
+			CXIP_WARN("Failed to map MR buffer: %d\n", ret);
+			goto err_remove_mr;
+		}
+	}
 
 	ofi_atomic_inc32(&dom->ref);
 
@@ -673,6 +660,8 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	return FI_SUCCESS;
 
+err_remove_mr:
+	cxip_mr_domain_remove(&dom->mr_domain, _mr);
 err_free_mr:
 	free(_mr);
 
