@@ -747,6 +747,8 @@ util_coll_scatter(struct util_coll_operation *coll_op, const void *data,
 		// our local data to the result buffer
 		ret = util_coll_sched_copy(coll_op, send_data, result,
 					   count, datatype, 1);
+		if (ret)
+			return ret;
 	}
 
 	return FI_SUCCESS;
