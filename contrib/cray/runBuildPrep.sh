@@ -41,7 +41,7 @@ fi
 
 # ROCM RPM names changed with 4.5.0
 # SP2 and release branches still use 4.4
-if [[ ${TARGET_OS} == "sle15_sp2_cn" || ${TARGET_OS} == "sle15_sp2_ncn" ||  ( ${TARGET_OS} == sle* && ${BRANCH_NAME} == release/* ) ]]; then
+if [[ ${TARGET_OS} == "sle15_sp2_cn" || ${TARGET_OS} == "sle15_sp2_ncn" ]]; then
     ROCR_RPMS="hsa-rocr-dev"
 else
     ROCR_RPMS="hsa-rocr-devel"
