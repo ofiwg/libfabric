@@ -239,6 +239,7 @@ struct rxr_env {
 	size_t efa_cq_read_size;
 	size_t shm_cq_read_size;
 	size_t efa_max_medium_msg_size;
+	size_t efa_max_gdrcopy_msg_size;
 	size_t efa_min_read_msg_size;
 	size_t efa_min_read_write_size;
 	size_t efa_read_segment_size;

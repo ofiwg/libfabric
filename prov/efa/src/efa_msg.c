@@ -313,6 +313,15 @@ ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr)
 	return ret;
 }
 
+static bool efa_msg_has_hmem_mr(const struct fi_msg *msg)
+{
+	/* the device only support send up 2 iov, so iov_count cannot be > 2 */
+	assert(msg->iov_count == 1 || msg->iov_count == 2);
+	/* first iov is always on host memory, because it must contain packet header */
+	assert(!efa_ep_is_hmem_mr(msg->desc[0]));
+	return (msg->iov_count == 2) && efa_ep_is_hmem_mr(msg->desc[1]);
+}
+
 static ssize_t efa_post_send(struct efa_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
 	struct efa_qp *qp = ep->qp;
@@ -342,7 +351,8 @@ static ssize_t efa_post_send(struct efa_ep *ep, const struct fi_msg *msg, uint64
 
 	efa_post_send_sgl(ep, msg, ewr);
 
-	if (len <= ep->domain->ctx->inline_buf_size)
+	if (len <= ep->domain->ctx->inline_buf_size &&
+	    !efa_msg_has_hmem_mr(msg))
 		wr->send_flags |= IBV_SEND_INLINE;
 
 	wr->opcode = IBV_WR_SEND;

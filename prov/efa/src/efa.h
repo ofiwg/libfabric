@@ -295,7 +295,10 @@ struct efa_mr_peer {
 	enum fi_hmem_iface      iface;
 	union {
 		uint64_t        reserved;
-		int             cuda;
+		/* this field is gdrcopy handle when gdrcopy is enabled,
+		 * otherwise it is cuda device id.
+		 */
+		uint64_t        cuda;
 		int             neuron;
 	} device;
 };

@@ -72,10 +72,14 @@ static struct fi_ops efa_mr_cache_ops = {
 static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
                              const struct fi_mr_attr *attr)
 {
+	int err;
+
 	if (attr->iface == FI_HMEM_SYSTEM) {
 		efa_mr->peer.iface = FI_HMEM_SYSTEM;
 		return FI_SUCCESS;
-	} else if (efa_mr->domain->util_domain.info_domain_caps & FI_HMEM) {
+	}
+
+	if (efa_mr->domain->util_domain.info_domain_caps & FI_HMEM) {
 		/*
 		 * Skipping the domain type check above is okay here since
 		 * util_domain is at the beginning of both efa_domain and
@@ -102,10 +106,19 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		efa_mr->peer.iface = FI_HMEM_SYSTEM;
 	}
 
-	if (efa_mr->peer.iface == FI_HMEM_CUDA)
-		efa_mr->peer.device.cuda = attr->device.cuda;
-	else if (attr->iface == FI_HMEM_NEURON)
+	/* efa_mr->peer.device is an union. Setting reserved to 0 cleared everything in it (cuda, neuron etc) */
+	efa_mr->peer.device.reserved = 0;
+	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
+		err = cuda_dev_register((struct fi_mr_attr *)attr, &efa_mr->peer.device.cuda);
+		if (err) {
+			EFA_WARN(FI_LOG_MR,
+				 "Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n",
+				 err, attr->mr_iov->iov_base, attr->mr_iov->iov_len);
+			return err;
+		}
+	} else if (attr->iface == FI_HMEM_NEURON) {
 		efa_mr->peer.device.neuron = attr->device.neuron;
+	}
 
 	return FI_SUCCESS;
 }
@@ -309,6 +322,15 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 			ret = err;
 		}
 	}
+
+	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
+		err = cuda_dev_unregister(efa_mr->peer.device.cuda);
+		if (err) {
+			EFA_WARN(FI_LOG_MR,
+				"Unable to de-register cuda handle\n");
+			ret = err;
+		}
+	}
 	return ret;
 }
 
@@ -372,6 +394,9 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 	if (!efa_mr->ibv_mr) {
 		EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
 				fi_strerror(-errno));
+		if (efa_mr->peer.iface == FI_HMEM_CUDA)
+			cuda_dev_unregister(efa_mr->peer.device.cuda);
+
 		return -errno;
 	}
 
