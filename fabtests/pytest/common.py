@@ -1,5 +1,9 @@
 import pytest
 
+def has_cuda(ip):
+    from subprocess import run
+    proc = run(["ssh", ip, "nvidia-smi", "-L"])
+    return proc.returncode == 0
 
 def check_returncode(returncode, strict):
     import errno
@@ -64,20 +68,24 @@ class UnitTest:
 class ClientServerTest:
 
     def __init__(self, cmdline_args, executable, iteration_type=None, completion_type="transmit_complete",
-                 prefix_type="wout_prefix", datacheck_type="wout_datacheck", message_size=None):
+                 prefix_type="wout_prefix", datacheck_type="wout_datacheck", message_size=None,
+                 memory_type="host_to_host"):
 
         self._cmdline_args = cmdline_args
         self._server_base_command = self.prepare_base_command("server", executable, iteration_type,
                                                               completion_type, prefix_type,
-                                                              datacheck_type, message_size)
+                                                              datacheck_type, message_size,
+                                                              memory_type)
         self._client_base_command = self.prepare_base_command("client", executable, iteration_type,
                                                               completion_type, prefix_type,
-                                                              datacheck_type, message_size)
+                                                              datacheck_type, message_size,
+                                                              memory_type)
         self._server_command = cmdline_args.populate_command(self._server_base_command, "server")
         self._client_command = cmdline_args.populate_command(self._client_base_command, "client")
 
     def prepare_base_command(self, command_type, executable, iteration_type=None, completion_type="transmit_complete",
-                             prefix_type="wout_prefix", datacheck_type="wout_datacheck", message_size=None):
+                             prefix_type="wout_prefix", datacheck_type="wout_datacheck", message_size=None,
+                             memory_type="host_to_host"):
         if executable == "fi_ubertest":
             return "fi_ubertest"
 
@@ -120,6 +128,22 @@ class ClientServerTest:
 
         if message_size:
             command += " -S " + str(message_size)
+
+        # in communication test, client is sender, server is receiver
+        client_memory_type,server_memory_type = memory_type.split("_to_")
+        if command_type == "server" and server_memory_type == "cuda":
+            if not has_cuda(self._cmdline_args.server_id):
+                pytest.skip("no cuda device")
+                return
+
+            return command + " -D cuda"
+
+        if command_type == "client" and client_memory_type == "cuda":
+            if not has_cuda(self._cmdline_args.client_id):
+                pytest.skip("no cuda device")
+                return
+
+            return command + " -D cuda"
 
         return command
 
