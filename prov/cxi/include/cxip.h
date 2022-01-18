@@ -575,6 +575,7 @@ struct cxip_domain {
 	struct dlist_entry cq_list;
 
 	struct fi_hmem_override_ops hmem_ops;
+	bool hybrid_mr_desc;
 };
 
 static inline bool cxip_domain_mr_cache_enabled(struct cxip_domain *dom)

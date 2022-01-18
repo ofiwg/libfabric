@@ -51,6 +51,20 @@ Test(domain, topology)
 	cxit_destroy_domain();
 }
 
+Test(domain, enable_hybrid_mr_desc)
+{
+	int ret;
+
+	cxit_create_domain();
+	cr_assert(cxit_domain != NULL);
+
+	ret = dom_ops->enable_hybrid_mr_desc(&cxit_domain->fid, true);
+	cr_assert_eq(ret, FI_SUCCESS, "enable_hybrid_mr_desc failed: %d\n",
+		     ret);
+
+	cxit_destroy_domain();
+}
+
 TestSuite(domain_cntrs, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 

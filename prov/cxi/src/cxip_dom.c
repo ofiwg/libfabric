@@ -705,17 +705,36 @@ static int cxip_domain_topology(struct fid *fid, unsigned int *group_id,
 	return FI_SUCCESS;
 }
 
+static int cxip_domain_enable_hybrid_mr_desc(struct fid *fid, bool enable)
+{
+	struct cxip_domain *dom;
+
+	if (fid->fclass != FI_CLASS_DOMAIN) {
+		CXIP_WARN("Invalid FID: %p\n", fid);
+		return -FI_EINVAL;
+	}
+
+	dom = container_of(fid, struct cxip_domain,
+			   util_domain.domain_fid.fid);
+
+	dom->hybrid_mr_desc = enable;
+
+	return FI_SUCCESS;
+}
+
 static struct fi_cxi_dom_ops cxip_dom_ops_ext = {
 	.cntr_read = cxip_domain_cntr_read,
 	.topology = cxip_domain_topology,
+	.enable_hybrid_mr_desc = cxip_domain_enable_hybrid_mr_desc,
 };
 
 static int cxip_dom_ops_open(struct fid *fid, const char *ops_name,
 			     uint64_t flags, void **ops, void *context)
 {
-	/* v2 only appended a new function */
+	/* v3 only appended a new function */
 	if (!strcmp(ops_name, FI_CXI_DOM_OPS_1) ||
-	    !strcmp(ops_name, FI_CXI_DOM_OPS_2)) {
+	    !strcmp(ops_name, FI_CXI_DOM_OPS_2) ||
+	    !strcmp(ops_name, FI_CXI_DOM_OPS_3)) {
 		*ops = &cxip_dom_ops_ext;
 		return FI_SUCCESS;
 	}

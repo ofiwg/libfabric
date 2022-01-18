@@ -139,6 +139,7 @@ static inline void *fi_cxi_get_cntr_reseterr_addr(void *cntr_mmio)
 
 #define FI_CXI_DOM_OPS_1 "dom_ops_v1"
 #define FI_CXI_DOM_OPS_2 "dom_ops_v2"
+#define FI_CXI_DOM_OPS_3 "dom_ops_v3"
 
 /* v1 and v2 can use the same struct since v2 only appended a routine */
 struct fi_cxi_dom_ops {
@@ -146,6 +147,25 @@ struct fi_cxi_dom_ops {
 		      struct timespec *ts);
 	int (*topology)(struct fid *fid, unsigned int *group_id,
 			unsigned int *switch_id, unsigned int *port_id);
+
+	/* Enable hybrid MR desc mode. Hybrid MR desc allows for libfabric users
+	 * to optionally pass in a valid MR desc for local communication
+	 * operations.
+	 *
+	 * When enabled, if the MR desc is NULL, the provider will
+	 * perform internal memory registration. Else, the provider will assume
+	 * the MR desc field is valid and skip internal memory registration.
+	 *
+	 * When disabled, the provider will ignore the MR desc field and always
+	 * perform internal memory registration. This is the default behavior.
+	 *
+	 * All child endpoints will inherit the current domain status of hybrid
+	 * MR desc only during endpoint creation. Dynamically changing the
+	 * domain hybrid MR desc status with endpoint allocate may not propagate
+	 * to child endpoints. Thus, it is recommended to set hybrid MR desc
+	 * status prior to allocating endpoints.
+	 */
+	int (*enable_hybrid_mr_desc)(struct fid *fid, bool enable);
 };
 
 /*

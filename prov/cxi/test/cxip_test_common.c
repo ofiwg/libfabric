@@ -140,7 +140,7 @@ void cxit_create_domain(void)
 	ret = fi_domain(cxit_fabric, cxit_fi, &cxit_domain, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_domain");
 
-	/* Should be able to open either v1 or v2 */
+	/* Should be able to open either v1, v2, or v3 */
 	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_1, 0,
 			  (void **)&dom_ops, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_open_ops v1");
@@ -151,6 +151,14 @@ void cxit_create_domain(void)
 	cr_assert(ret == FI_SUCCESS, "fi_open_ops v2");
 	cr_assert(dom_ops->cntr_read != NULL &&
 		  dom_ops->topology != NULL, "V2 functions returned");
+
+	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_3, 0,
+			  (void **)&dom_ops, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_open_ops v3");
+	cr_assert(dom_ops->cntr_read != NULL &&
+		  dom_ops->topology != NULL &&
+		  dom_ops->enable_hybrid_mr_desc != NULL,
+		  "V3 functions returned");
 
 	ret = fi_set_ops(&cxit_domain->fid, FI_SET_OPS_HMEM_OVERRIDE, 0,
 			 &cxi_hmem_ops, NULL);
