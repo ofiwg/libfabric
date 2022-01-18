@@ -44,6 +44,9 @@ debug_c_other_flags="-fstack-protector-strong"
 AC_ARG_ENABLE([debug],
 	[AS_HELP_STRING([--enable-debug],
 			[Enable debugging - default NO])],
+	[], [enable_debug=no])
+
+AS_IF([test x"$enable_debug" != x"no"],
 	[CFLAGS="-g -O0 ${base_c_warn_flags} ${debug_c_warn_flags} ${debug_c_other_flags} $CFLAGS"
 	 dbg=1],
 	[dbg=0])
