@@ -281,6 +281,7 @@ struct cxip_environment cxip_env = {
 	.disable_cq_hugetlb = false,
 	.zbcoll_radix = 2,
 	.cq_fill_percent = 50,
+	.enable_unrestricted_end_ro = true,
 };
 
 static void cxip_env_init(void)
@@ -288,6 +289,11 @@ static void cxip_env_init(void)
 	char *param_str = NULL;
 	size_t min_free;
 	int ret;
+
+	fi_param_define(&cxip_prov, "enable_unrestricted_end_ro", FI_PARAM_BOOL,
+			"Default: %d", cxip_env.enable_unrestricted_end_ro);
+	fi_param_get_bool(&cxip_prov, "enable_unrestricted_end_ro",
+			  &cxip_env.enable_unrestricted_end_ro);
 
 	fi_param_define(&cxip_prov, "odp", FI_PARAM_BOOL,
 			"Enables on-demand paging.");

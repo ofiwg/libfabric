@@ -331,10 +331,15 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		le_flags |= C_LE_EVENT_CT_COMM;
 
 	/* When FI_FENCE is not requested, restricted operations can used PCIe
-	 * relaxed ordering.
+	 * relaxed ordering. Unrestricted operations PCIe relaxed ordering is
+	 * controlled by an env for now.
 	 */
-	if (!(ep_obj->caps & FI_FENCE))
+	if (!(ep_obj->caps & FI_FENCE)) {
 		ib = 1;
+
+		if (cxip_env.enable_unrestricted_end_ro)
+			le_flags |= C_LE_UNRESTRICTED_END_RO;
+	}
 
 	ret = cxip_pte_append(mr->pte,
 			      mr->len ? CXI_VA_TO_IOVA(mr->md->md, mr->buf) : 0,
