@@ -174,7 +174,7 @@ vrb_get_sib_rai(const char *node, const char *service, uint64_t flags,
 		return -FI_ENOMEM;
 
 	ret = vrb_set_rai(addr_format, src_addr, src_addrlen, dest_addr,
-						 dest_addrlen, flags, *rai);
+			  dest_addrlen, flags, *rai);
 	if (ret)
 		return ret;
 
@@ -250,7 +250,7 @@ vrb_get_rdma_rai(const char *node, const char *service, uint32_t addr_format,
 	}
 
 	return vrb_get_rdmacm_rai(node, service, flags, addr_format, src_addr,
-					src_addrlen, dest_addr, dest_addrlen, rai);
+				  src_addrlen, dest_addr, dest_addrlen, rai);
 }
 
 int vrb_get_rai_id(const char *node, const char *service, uint64_t flags,
