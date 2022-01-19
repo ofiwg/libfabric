@@ -1088,8 +1088,10 @@ static int vrb_get_sib(struct dlist_entry *verbs_devs)
 						continue;
 
 					dev_name = strdup(ibv_get_device_name(context->device));
-					if (!dev_name)
+					if (!dev_name) {
+						rdma_freeaddrinfo(rai);
 						return -FI_ENOMEM;
+					}
 
 					ret = verbs_devs_add(verbs_devs, dev_name, rai);
 					if (ret) {
