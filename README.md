@@ -1,6 +1,5 @@
-[<img alt="libfabric master branch Travis CI status" src="https://travis-ci.org/ofiwg/libfabric.svg?branch=master"/>](https://travis-ci.org/ofiwg/libfabric)
 [<img alt="libfabric Coverity scan build status" src="https://scan.coverity.com/projects/4274/badge.svg"/>](https://scan.coverity.com/projects/4274)
-[<img alt="libfabric master branch AppVeyor CI status" src="https://ci.appveyor.com/api/projects/status/github/ofiwg/libfabric?svg=true"/>](https://ci.appveyor.com/api/projects/status/github/ofiwg/libfabric)
+[<img alt="libfabric main branch AppVeyor CI status" src="https://ci.appveyor.com/api/projects/status/github/ofiwg/libfabric?svg=true"/>](https://ci.appveyor.com/api/projects/status/github/ofiwg/libfabric)
 [![libfabric release version](https://img.shields.io/github/release/ofiwg/libfabric.svg)](https://github.com/ofiwg/libfabric/releases/latest)
 
 # libfabric
@@ -182,7 +181,7 @@ running over Intel's E810 Ethernet NICs and using Intel's rendezvous kernel
 module ([`rv`](https://github.com/intel/iefs-kernel-updates)). PSM 3.x fully integrates the OFI provider and the underlying
 PSM3 protocols/implementation and only exports the OFI APIs.
 
-See [`fi_psm3`(7)](https://ofiwg.github.io/libfabric/master/man/fi_psm3.7.html) for more details.
+See [`fi_psm3`(7)](https://ofiwg.github.io/libfabric/main/man/fi_psm3.7.html) for more details.
 
 ### rxm
 
@@ -191,7 +190,7 @@ See [`fi_psm3`(7)](https://ofiwg.github.io/libfabric/master/man/fi_psm3.7.html) 
 The `ofi_rxm` provider is an utility provider that supports RDM endpoints emulated
 over MSG endpoints of a core provider.
 
-See [`fi_rxm`(7)](https://ofiwg.github.io/libfabric/master/man/fi_rxm.7.html) for more information.
+See [`fi_rxm`(7)](https://ofiwg.github.io/libfabric/main/man/fi_rxm.7.html) for more information.
 
 ### sockets
 
@@ -367,7 +366,7 @@ EC2 Elastic Fabric Adapter (EFA)](https://aws.amazon.com/hpc/efa/), a
 custom-built OS bypass hardware interface for inter-instance communication on
 EC2.
 
-See [`fi_efa`(7)](https://ofiwg.github.io/libfabric/master/man/fi_efa.7.html) for more information.
+See [`fi_efa`(7)](https://ofiwg.github.io/libfabric/main/man/fi_efa.7.html) for more information.
 
 ## WINDOWS Instructions
 
