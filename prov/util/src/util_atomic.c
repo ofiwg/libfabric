@@ -1106,7 +1106,7 @@ int ofi_atomic_valid(const struct fi_provider *prov,
 		return -FI_EBADFLAGS;
 	}
 
-	if (datatype > OFI_DATATYPE_CNT) {
+	if (datatype >= OFI_DATATYPE_CNT) {
 		FI_INFO(prov, FI_LOG_DOMAIN, "Invalid datatype\n");
 		return -FI_EOPNOTSUPP;
 	}
