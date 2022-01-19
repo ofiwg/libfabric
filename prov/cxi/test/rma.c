@@ -1389,6 +1389,7 @@ static void rma_hybrid_mr_desc_test_runner(bool write, bool cq_events)
 	uint64_t rma_flags = cq_events ? FI_TRANSMIT_COMPLETE | FI_COMPLETION :
 		FI_TRANSMIT_COMPLETE;
 	uint64_t cqe_flags = write ? FI_RMA | FI_WRITE : FI_RMA | FI_READ;
+	struct fid_cntr *cntr = write ? cxit_write_cntr : cxit_read_cntr;
 
 	ret = mr_create(win_len, FI_READ | FI_WRITE, 0xa, source_key,
 			&source_window);
@@ -1423,7 +1424,7 @@ static void rma_hybrid_mr_desc_test_runner(bool write, bool cq_events)
 		cr_assert_eq(ret, FI_SUCCESS, "Bad rc=%d\n", ret);
 	}
 
-	ret = fi_cntr_wait(cxit_write_cntr, iters, 1000);
+	ret = fi_cntr_wait(cntr, iters, 1000);
 	cr_assert(ret == FI_SUCCESS);
 
 	if (cq_events) {
@@ -1442,6 +1443,9 @@ static void rma_hybrid_mr_desc_test_runner(bool write, bool cq_events)
 		cr_assert_eq(source_window.mem[i], remote_window.mem[i],
 			     "data mismatch, element: (%d) %02x != %02x\n", i,
 			     source_window.mem[i], remote_window.mem[i]);
+
+	mr_destroy(&source_window);
+	mr_destroy(&remote_window);
 }
 
 TestSuite(rma_hybrid_mr_desc, .init = cxit_setup_rma_hybrid_mr_desc,
