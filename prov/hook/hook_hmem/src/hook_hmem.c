@@ -178,14 +178,16 @@ static int hook_hmem_track(struct hook_ep *ep, const struct iovec *iov,
 			   void *app_ctx, struct hook_hmem_ctx **hmem_ctx)
 {
 	struct hook_hmem_domain *domain;
-	int ret = FI_SUCCESS;
+	int ret;
 
 	domain = container_of(ep->domain, struct hook_hmem_domain, hook_domain);
 	ofi_mutex_lock(&domain->lock);
 
 	*hmem_ctx = ofi_buf_alloc(domain->ctx_pool);
-	if (!*hmem_ctx)
-		goto out;
+	if (!*hmem_ctx) {
+		ret = -FI_ENOMEM;
+		goto unlock;
+	}
 
 	(*hmem_ctx)->app_ctx = app_ctx;
 	(*hmem_ctx)->domain = domain;
@@ -194,18 +196,19 @@ static int hook_hmem_track(struct hook_ep *ep, const struct iovec *iov,
 	ret = hook_hmem_cache_mr_iov(domain, iov, desc, count,
 				     (*hmem_ctx)->hmem_desc);
 	if (ret)
-		goto err;
+		goto free;
 
 	(*hmem_ctx)->desc_count = count;
 	(*hmem_ctx)->comp_count = 0;
 	(*hmem_ctx)->comp_desc = NULL;
 	(*hmem_ctx)->res_count = 0;
 	(*hmem_ctx)->res_desc = NULL;
-	goto out;
+	ofi_mutex_unlock(&domain->lock);
+	return FI_SUCCESS;
 
-err:
+free:
 	ofi_buf_free(*hmem_ctx);
-out:
+unlock:
 	ofi_mutex_unlock(&domain->lock);
 	return ret;
 }
