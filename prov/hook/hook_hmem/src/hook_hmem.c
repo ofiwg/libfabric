@@ -1663,6 +1663,12 @@ static int hook_hmem_mr_regv(struct fid *fid, const struct iovec *iov,
 	attr.auth_key_size = 0;
 	attr.auth_key = NULL;
 
+	/* hook_hmem_mr_regattr will determine the correct iface,
+	 * this silences warnings about uninitialized fields
+	 */
+	attr.iface = FI_HMEM_SYSTEM;
+	attr.device.reserved = 0;
+
 	return hook_hmem_mr_regattr(fid, &attr, flags, mr);
 }
 
