@@ -79,15 +79,15 @@ void tcpx_progress(struct dlist_entry *ep_list, struct util_wait *wait)
 	if (wait_fd->util_wait.wait_obj == FI_WAIT_FD) {
 		nfds = ofi_epoll_wait(wait_fd->epoll_fd, events,
 				      MAX_POLL_EVENTS, 0);
-		inevent = POLLIN;
-		outevent = POLLOUT;
-		errevent = POLLERR;
-	} else {
-		nfds = ofi_pollfds_wait(wait_fd->pollfds, events,
-					MAX_POLL_EVENTS, 0);
 		inevent = OFI_EPOLL_IN;
 		outevent = OFI_EPOLL_OUT;
 		errevent = OFI_EPOLL_ERR;
+	} else {
+		nfds = ofi_pollfds_wait(wait_fd->pollfds, events,
+					MAX_POLL_EVENTS, 0);
+		inevent = POLLIN;
+		outevent = POLLOUT;
+		errevent = POLLERR;
 	}
 	if (nfds <= 0)
 		return;
