@@ -43,6 +43,7 @@ pipeline {
         stage('parallel-tests') {
             parallel {
                 stage('eth-tcp-dbg') {
+                    options { skipDefaultCheckout() }
                     agent {node {label 'eth'}}
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
@@ -50,7 +51,7 @@ pipeline {
                           sh """
                             env
                             (
-                                cd  ${env.WORKSPACE}/contrib/intel/jenkins/
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
                                 python3.7 runtests.py --prov=tcp --ofi_build_mode='dbg'
                             )
                           """
@@ -59,13 +60,14 @@ pipeline {
                 }
                 stage('eth-udp-shm-dbg') {
                     agent {node {label 'eth'}}
+                    options { skipDefaultCheckout() }
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
                         {
                           sh """
                             env
                             (
-                                cd  ${env.WORKSPACE}/contrib/intel/jenkins/
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
                                 python3.7 runtests.py --prov=udp --ofi_build_mode='dbg'
                                 python3.7 runtests.py --prov=udp --util=rxd --ofi_build_mode='dbg'
                                 python3.7 runtests.py --prov=shm --ofi_build_mode='dbg'
@@ -76,12 +78,13 @@ pipeline {
                 }
                 stage('mlx5-verbs_rxm-dbg') {
                     agent {node {label 'mlx5'}}
+                    options { skipDefaultCheckout() }
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
                           sh """
                             env
                             (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
                                 python3.7 runtests.py --prov=verbs --ofi_build_mode='dbg'
                                 python3.7 runtests.py --prov=verbs --util=rxm --ofi_build_mode='dbg'
                             )
@@ -91,12 +94,13 @@ pipeline {
                 }
                 stage('mlx5-verbs_rxd-dbg') {
                     agent {node {label 'mlx5'}}
+                    options { skipDefaultCheckout() }
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
                           sh """
                             env
                             (
-                                cd ${env.WORKSPACE}/contrib/intel/jenkins/
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
                                 python3.7 runtests.py --prov=verbs --util=rxd --ofi_build_mode='dbg'
                             )
                           """
