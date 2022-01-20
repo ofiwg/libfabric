@@ -265,14 +265,15 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 		}
 
 		/* workaround incorrect opcode reported by verbs */
-		wc->opcode = (ctx->op_queue == VRB_OP_SQ) ?
-			     vrb_wr2wc_opcode(ctx->sq_opcode) : IBV_WC_RECV;
+		if (ctx->op_queue == VRB_OP_SQ)
+			wc->opcode = vrb_wr2wc_opcode(ctx->sq_opcode);
 
 		if (ctx->op_queue == VRB_OP_SRQ) {
 			ofi_mutex_lock(&ctx->srx->ctx_lock);
 			ofi_buf_free(ctx);
 			ofi_mutex_unlock(&ctx->srx->ctx_lock);
 		} else {
+			assert(wc->opcode & IBV_WC_RECV);
 			ofi_buf_free(ctx);
 		}
 
