@@ -281,13 +281,18 @@ static void sock_set_sockopt_reuseaddr(int sock)
 
 static void sock_set_sockopt_bufsize(int sock)
 {
-        int bufsize = 0;
+	int bufsize = 0;
 	socklen_t len = sizeof(int);
+
 	if (sock_buf_sz == 0)
 		return;
-        bufsize = sock_buf_sz;
-        setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *)&bufsize, len);
-        setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *)&bufsize, len);
+	bufsize = sock_buf_sz;
+
+	if (setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *) &bufsize, len))
+		SOCK_LOG_ERROR("setsockopt rcvbuf size failed\n");
+
+	if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *) &bufsize, len))
+		SOCK_LOG_ERROR("setsockopt sndbuf size failed\n");
 }
 
 void sock_set_sockopts(int sock, int sock_opts)

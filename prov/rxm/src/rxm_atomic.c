@@ -514,10 +514,13 @@ int rxm_ep_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 		return ret;
 
 	tot_size = flags & FI_COMPARE_ATOMIC ?
-		rxm_domain->max_atomic_size / 2 : rxm_domain->max_atomic_size;
+		   rxm_domain->max_atomic_size / 2 :
+		   rxm_domain->max_atomic_size;
 	attr->size = ofi_datatype_size(datatype);
-	attr->count = tot_size / attr->size;
+	if (!attr->size)
+		return -FI_EOPNOTSUPP;
 
+	attr->count = tot_size / attr->size;
 	if (attr->count == 0)
 		return -FI_EOPNOTSUPP;
 

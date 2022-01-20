@@ -178,14 +178,16 @@ static int hook_hmem_track(struct hook_ep *ep, const struct iovec *iov,
 			   void *app_ctx, struct hook_hmem_ctx **hmem_ctx)
 {
 	struct hook_hmem_domain *domain;
-	int ret = FI_SUCCESS;
+	int ret;
 
 	domain = container_of(ep->domain, struct hook_hmem_domain, hook_domain);
 	ofi_mutex_lock(&domain->lock);
 
 	*hmem_ctx = ofi_buf_alloc(domain->ctx_pool);
-	if (!*hmem_ctx)
-		goto out;
+	if (!*hmem_ctx) {
+		ret = -FI_ENOMEM;
+		goto unlock;
+	}
 
 	(*hmem_ctx)->app_ctx = app_ctx;
 	(*hmem_ctx)->domain = domain;
@@ -194,18 +196,19 @@ static int hook_hmem_track(struct hook_ep *ep, const struct iovec *iov,
 	ret = hook_hmem_cache_mr_iov(domain, iov, desc, count,
 				     (*hmem_ctx)->hmem_desc);
 	if (ret)
-		goto err;
+		goto free;
 
 	(*hmem_ctx)->desc_count = count;
 	(*hmem_ctx)->comp_count = 0;
 	(*hmem_ctx)->comp_desc = NULL;
 	(*hmem_ctx)->res_count = 0;
 	(*hmem_ctx)->res_desc = NULL;
-	goto out;
+	ofi_mutex_unlock(&domain->lock);
+	return FI_SUCCESS;
 
-err:
+free:
 	ofi_buf_free(*hmem_ctx);
-out:
+unlock:
 	ofi_mutex_unlock(&domain->lock);
 	return ret;
 }
@@ -244,14 +247,16 @@ static int hook_hmem_track_atomic(struct hook_ep *ep, const struct fi_ioc *ioc,
 	struct iovec res_iov[HOOK_HMEM_IOV_LIMIT];
 	struct iovec comp_iov[HOOK_HMEM_IOV_LIMIT];
 	size_t dt_size = ofi_datatype_size(datatype);
-	int ret = FI_SUCCESS;
+	int ret;
 
 	domain = container_of(ep->domain, struct hook_hmem_domain, hook_domain);
 	ofi_mutex_lock(&domain->lock);
 
 	*hmem_ctx = ofi_buf_alloc(domain->ctx_pool);
-	if (!*hmem_ctx)
-		goto out;
+	if (!*hmem_ctx) {
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
 
 	(*hmem_ctx)->app_ctx = app_ctx;
 	(*hmem_ctx)->domain = domain;
@@ -262,21 +267,23 @@ static int hook_hmem_track_atomic(struct hook_ep *ep, const struct fi_ioc *ioc,
 		ret = hook_hmem_cache_mr_iov(domain, iov, desc, count,
 					     (*hmem_ctx)->hmem_desc);
 		if (ret)
-			goto err3;
+			goto err2;
 	}
 
 	if (comp_count) {
 		(*hmem_ctx)->comp_desc = calloc(comp_count,
 					sizeof(**(*hmem_ctx)->comp_desc));
-		if ((*hmem_ctx)->comp_desc)
-			goto err2;
+		if ((*hmem_ctx)->comp_desc) {
+			ret = -FI_ENOMEM;
+			goto err3;
+		}
 
 		ofi_ioc_to_iov(comp_ioc, comp_iov, comp_count, dt_size);
 		ret = hook_hmem_cache_mr_iov(domain, comp_iov, comp_desc,
 					comp_count, (*hmem_ctx)->comp_desc);
 		if (ret) {
 			free((*hmem_ctx)->comp_desc);
-			goto err2;
+			goto err3;
 		}
 		(*hmem_ctx)->comp_count = comp_count;
 	} else {
@@ -287,15 +294,17 @@ static int hook_hmem_track_atomic(struct hook_ep *ep, const struct fi_ioc *ioc,
 	if (res_count) {
 		(*hmem_ctx)->res_desc = calloc(res_count,
 					     sizeof(**(*hmem_ctx)->res_desc));
-		if (!(*hmem_ctx)->res_desc)
-			goto err1;
+		if (!(*hmem_ctx)->res_desc) {
+			ret = -FI_ENOMEM;
+			goto err4;
+		}
 
 		ofi_ioc_to_iov(res_ioc, res_iov, res_count, dt_size);
 		ret = hook_hmem_cache_mr_iov(domain, res_iov, res_desc,
 					res_count, (*hmem_ctx)->res_desc);
 		if (ret) {
 			free((*hmem_ctx)->comp_desc);
-			goto err1;
+			goto err4;
 		}
 		(*hmem_ctx)->res_count = res_count;
 	} else {
@@ -303,16 +312,21 @@ static int hook_hmem_track_atomic(struct hook_ep *ep, const struct fi_ioc *ioc,
 		(*hmem_ctx)->res_desc = NULL;
 	}
 
-	goto out;
-err1:
-	hook_hmem_uncache_mr_iov(domain, comp_iov, comp_count);
-	free((*hmem_ctx)->comp_desc);
-err2:
-	hook_hmem_uncache_mr_iov(domain, iov, count);
+	ofi_mutex_unlock(&domain->lock);
+	return FI_SUCCESS;
+
+err4:
+	if (comp_count) {
+		hook_hmem_uncache_mr_iov(domain, comp_iov, comp_count);
+		free((*hmem_ctx)->comp_desc);
+	}
 err3:
+	if (count)
+		hook_hmem_uncache_mr_iov(domain, iov, count);
+err2:
 	ofi_buf_free(*hmem_ctx);
-out:
-	ofi_mutex_lock(&domain->lock);
+err1:
+	ofi_mutex_unlock(&domain->lock);
 	return ret;
 }
 
@@ -1648,6 +1662,12 @@ static int hook_hmem_mr_regv(struct fid *fid, const struct iovec *iov,
 	attr.context = context;
 	attr.auth_key_size = 0;
 	attr.auth_key = NULL;
+
+	/* hook_hmem_mr_regattr will determine the correct iface,
+	 * this silences warnings about uninitialized fields
+	 */
+	attr.iface = FI_HMEM_SYSTEM;
+	attr.device.reserved = 0;
 
 	return hook_hmem_mr_regattr(fid, &attr, flags, mr);
 }

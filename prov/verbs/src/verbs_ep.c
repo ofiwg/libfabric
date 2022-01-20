@@ -1041,8 +1041,7 @@ static struct fi_ops_cm vrb_dgram_cm_ops = {
 
 static int vrb_ep_save_info_attr(struct vrb_ep *ep, struct fi_info *info)
 {
-	ep->info_attr.protocol = info->ep_attr ? info->ep_attr->protocol:
-	    FI_PROTO_UNSPEC;
+	ep->info_attr.protocol = info->ep_attr->protocol;
 	ep->info_attr.inject_size = info->tx_attr->inject_size;
 	ep->info_attr.tx_size = info->tx_attr->size;
 	ep->info_attr.tx_iov_limit = info->tx_attr->iov_limit;
@@ -1082,6 +1081,9 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 	struct fi_info *fi;
 	int ret;
 
+	if (!info->ep_attr || !info->rx_attr || !info->tx_attr)
+		return -FI_EINVAL;
+
 	if (info->src_addr)
 		ofi_straddr_dbg(&vrb_prov, FI_LOG_FABRIC,
 				"open_ep src addr", info->src_addr);
@@ -1103,24 +1105,18 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	fi = dom->info;
 
-	if (info->ep_attr) {
-		ret = vrb_check_ep_attr(info, fi);
-		if (ret)
-			return ret;
-	}
+	ret = vrb_check_ep_attr(info, fi);
+	if (ret)
+		return ret;
 
-	if (info->tx_attr) {
-		ret = ofi_check_tx_attr(&vrb_prov, fi->tx_attr,
-					info->tx_attr, info->mode);
-		if (ret)
-			return ret;
-	}
+	ret = ofi_check_tx_attr(&vrb_prov, fi->tx_attr,
+				info->tx_attr, info->mode);
+	if (ret)
+		return ret;
 
-	if (info->rx_attr) {
-		ret = vrb_check_rx_attr(info->rx_attr, info, fi);
-		if (ret)
-			return ret;
-	}
+	ret = vrb_check_rx_attr(info->rx_attr, info, fi);
+	if (ret)
+		return ret;
 
 	ep = vrb_alloc_init_ep(info, dom, context);
 	if (!ep) {
@@ -1134,7 +1130,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	ret = vrb_ep_save_info_attr(ep, info);
 	if (ret)
-		goto err1;
+		goto close_ep;
 
 	switch (info->ep_attr->type) {
 	case FI_EP_MSG:
@@ -1166,7 +1162,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 				ret = vrb_create_ep(ep,
 					vrb_get_port_space(info->addr_format), &ep->id);
 				if (ret)
-					goto err1;
+					goto close_ep;
 				ep->id->context = &ep->util_ep.ep_fid.fid;
 			}
 		} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
@@ -1176,10 +1172,9 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 				assert(connreq->is_xrc);
 
 				if (!connreq->xrc.is_reciprocal) {
-					ret = vrb_process_xrc_connreq(ep,
-								connreq);
+					ret = vrb_process_xrc_connreq(ep, connreq);
 					if (ret)
-						goto err1;
+						goto close_ep;
 				}
 			} else {
 				/* ep now owns this rdma cm id, prevent trying to access
@@ -1201,12 +1196,15 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 					      VERBS_RESOLVE_TIMEOUT)) {
 				ret = -errno;
 				VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_resolve_addr");
-				goto err2;
+				/* rdma_destroy_ep will close the id->qp */
+				ep->ibv_qp = NULL;
+				rdma_destroy_ep(ep->id);
+				goto close_ep;
 			}
 			ep->id->context = &ep->util_ep.ep_fid.fid;
 		} else {
 			ret = -FI_ENOSYS;
-			goto err1;
+			goto close_ep;
 		}
 		break;
 	case FI_EP_DGRAM:
@@ -1226,31 +1224,24 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 		VRB_WARN(FI_LOG_EP_CTRL, "Unknown EP type\n");
 		ret = -FI_EINVAL;
 		assert(0);
-		goto err1;
+		goto close_ep;
 	}
 
 	if (info->ep_attr->rx_ctx_cnt == 0 ||
-	    info->ep_attr->rx_ctx_cnt == 1) {
-		ep->rx_cq_size = info->rx_attr ? info->rx_attr->size :
-				 fi->rx_attr->size;
-	}
+	    info->ep_attr->rx_ctx_cnt == 1)
+		ep->rx_cq_size = info->rx_attr->size;
 
 	if (info->ep_attr->tx_ctx_cnt == 0 ||
-	    info->ep_attr->tx_ctx_cnt == 1) {
-		ep->sq_credits = info->tx_attr ? info->tx_attr->size :
-				 fi->tx_attr->size;
-	}
+	    info->ep_attr->tx_ctx_cnt == 1)
+		ep->sq_credits = info->tx_attr->size;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	ep->util_ep.ep_fid.fid.ops = &vrb_ep_ops;
 	ep->util_ep.ep_fid.ops = &vrb_ep_base_ops;
 
 	return FI_SUCCESS;
-err2:
-	ep->ibv_qp = NULL;
-	if (ep->id)
-		rdma_destroy_ep(ep->id);
-err1:
+
+close_ep:
 	vrb_close_free_ep(ep);
 	return ret;
 }
