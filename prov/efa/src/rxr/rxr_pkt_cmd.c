@@ -1047,7 +1047,9 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 			 * Application called fi_av_remove() to remove the address
 			 * from address vector. In this case, this packet should be ignored.
 			 */
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "Warning: ignoring a received packet from a removed address\n");
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"Warning: ignoring a received packet from a removed address. packet type: %" PRIu8
+				", packet flags: %x\n", rxr_get_base_hdr(pkt_entry->pkt)->type, rxr_get_base_hdr(pkt_entry->pkt)->flags);
 			rxr_pkt_entry_release_rx(ep, pkt_entry);
 			return;
 		}

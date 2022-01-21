@@ -243,8 +243,13 @@ fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qp
 	cur_key.qpn = qpn;
 	HASH_FIND(hh, av->cur_reverse_av, &cur_key, sizeof(cur_key), cur_entry);
 
-	if (OFI_UNLIKELY(!cur_entry))
+	if (OFI_UNLIKELY(!cur_entry)) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"peer with ahn: %" PRIu16
+			", qpn: %" PRIu16
+			" is not found in the cur_reverse_av table. \n", ahn, qpn);
 		return FI_ADDR_NOTAVAIL;
+	}
 
 	connid = rxr_pkt_connid_ptr(pkt_entry);
 	if (!connid) {
@@ -266,7 +271,14 @@ fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qp
 	prv_key.connid = *connid;
 	HASH_FIND(hh, av->prv_reverse_av, &prv_key, sizeof(prv_key), prv_entry);
 
-	return OFI_LIKELY(!!prv_entry) ? prv_entry->conn->fi_addr : FI_ADDR_NOTAVAIL;
+	if (OFI_UNLIKELY(!prv_entry)) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			"peer with ahn: %" PRIu16
+			", qpn: %" PRIu16
+			" is not found in the prv_reverse_av table. \n", ahn, qpn);
+		return FI_ADDR_NOTAVAIL;
+	}
+	return  prv_entry->conn->fi_addr;
 }
 
 static inline int efa_av_is_valid_address(struct efa_ep_addr *addr)
