@@ -104,7 +104,8 @@ but may involve lengthy address resolution and fabric management
 protocols.  AV operations are synchronous by default, but may be set
 to operate asynchronously by specifying the FI_EVENT flag to
 `fi_av_open`.  When requesting asynchronous operation, the application
-must first bind an event queue to the AV before inserting addresses.
+must first bind an event queue to the AV before inserting addresses.  See
+the NOTES section for AV restrictions on duplicate addresses.
 
 ## fi_av_open
 
@@ -154,7 +155,7 @@ struct fi_av_attr {
   indices will be assigned across insertion calls on the same AV.
 
 - *FI_AV_UNSPEC*
-: Provider will choose its preferred AV type. The AV type used will 
+: Provider will choose its preferred AV type. The AV type used will
   be returned through the type field in fi_av_attr.
 
 *Receive Context Bits (rx_ctx_bits)*
@@ -431,6 +432,16 @@ larger than the input len.  If the provided buffer is too small, the
 results will be truncated.  fi_av_straddr returns a pointer to buf.
 
 # NOTES
+
+An AV should only store a single instance of an address.
+Attempting to insert a duplicate copy of the same address into an AV
+may result in undefined behavior, depending on the provider implementation.
+Providers are not required to check for duplicates, as doing so could
+incur significant overhead to the insertion process. For portability,
+applications may need to track which peer addresses have been inserted
+into a given AV in order to avoid duplicate entries.  However, providers are
+required to support the removal, followed by the re-insertion of an
+address.  Only duplicate insertions are restricted.
 
 Providers may implement AV's using a variety of mechanisms.
 Specifically, a provider may begin resolving inserted addresses as
