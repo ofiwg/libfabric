@@ -2227,13 +2227,8 @@ static inline int cxip_fid_to_rxc(struct fid_ep *ep, struct cxip_rxc **rxc)
 }
 
 static inline void cxip_txq_ring(struct cxip_cmdq *cmdq, bool more,
-				 bool triggered, int otx_reqs)
+				 int otx_reqs)
 {
-	if (triggered) {
-		cxi_cq_ring(cmdq->dev_cmdq);
-		return;
-	}
-
 	if (!more) {
 		switch (cmdq->llring_mode) {
 		case CXIP_LLRING_IDLE:
