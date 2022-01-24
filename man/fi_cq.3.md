@@ -330,7 +330,8 @@ when the CQ was opened.  Multiple completions may be retrieved from a
 CQ in a single call.  The maximum number of entries to return is
 limited to the specified count parameter, with the number of entries
 successfully read from the CQ returned by the call.  (See return
-values section below.)
+values section below.)  A count value of 0 may be used to drive
+progress on associated endpoints when manual progress is enabled.
 
 CQs are optimized to report operations which have completed
 successfully.  Operations which fail are reported 'out of band'.  Such
