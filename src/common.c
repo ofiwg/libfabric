@@ -316,9 +316,8 @@ sa_sin:
 			       sizeof(str)))
 			return NULL;
 
-		size = snprintf(buf, MIN(*len, sizeof(str)),
-				"fi_sockaddr_in://%s:%" PRIu16, str,
-				ntohs(sin->sin_port));
+		size = snprintf(buf, *len, "fi_sockaddr_in://%s:%" PRIu16,
+				str, ntohs(sin->sin_port));
 		break;
 	case FI_SOCKADDR_IN6:
 sa_sin6:
@@ -327,9 +326,8 @@ sa_sin6:
 			       sizeof(str)))
 			return NULL;
 
-		size = snprintf(buf, MIN(*len, sizeof(str)),
-				"fi_sockaddr_in6://[%s]:%" PRIu16, str,
-				ntohs(sin6->sin6_port));
+		size = snprintf(buf, *len, "fi_sockaddr_in6://[%s]:%" PRIu16,
+				str, ntohs(sin6->sin6_port));
 		break;
 	case FI_ADDR_EFA:
 		memset(str, 0, sizeof(str));
