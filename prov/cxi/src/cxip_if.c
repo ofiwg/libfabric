@@ -771,6 +771,15 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 		cq_opts->lcid = cp->lcid;
 
 		new_cmdq->cur_cp = cp;
+
+		/* Trig command queue can never use LL ring. */
+		if (cq_opts->flags & CXI_CQ_TX_WITH_TRIG_CMDS ||
+		    lni->iface->info->device_platform == CXI_PLATFORM_NETSIM)
+			new_cmdq->llring_mode = CXIP_LLRING_NEVER;
+		else
+			new_cmdq->llring_mode = cxip_env.llring_mode;
+	} else {
+		new_cmdq->llring_mode = CXIP_LLRING_NEVER;
 	}
 
 	ret = cxil_alloc_cmdq(lni->lni, evtq, cq_opts, &dev_cmdq);
@@ -783,11 +792,6 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 
 	new_cmdq->dev_cmdq = dev_cmdq;
 	new_cmdq->lni = lni;
-
-	if (lni->iface->info->device_platform == CXI_PLATFORM_NETSIM)
-		new_cmdq->llring_mode = CXIP_LLRING_NEVER;
-	else
-		new_cmdq->llring_mode = cxip_env.llring_mode;
 
 	fastlock_init(&new_cmdq->lock);
 	*cmdq = new_cmdq;
