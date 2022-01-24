@@ -272,7 +272,7 @@ static int hook_hmem_track_atomic(struct hook_ep *ep, const struct fi_ioc *ioc,
 
 	if (comp_count) {
 		(*hmem_ctx)->comp_desc = calloc(comp_count,
-					sizeof(**(*hmem_ctx)->comp_desc));
+					sizeof(*(*hmem_ctx)->comp_desc));
 		if ((*hmem_ctx)->comp_desc) {
 			ret = -FI_ENOMEM;
 			goto err3;
@@ -293,7 +293,7 @@ static int hook_hmem_track_atomic(struct hook_ep *ep, const struct fi_ioc *ioc,
 
 	if (res_count) {
 		(*hmem_ctx)->res_desc = calloc(res_count,
-					     sizeof(**(*hmem_ctx)->res_desc));
+					     sizeof(*(*hmem_ctx)->res_desc));
 		if (!(*hmem_ctx)->res_desc) {
 			ret = -FI_ENOMEM;
 			goto err4;
