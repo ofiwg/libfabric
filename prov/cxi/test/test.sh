@@ -17,7 +17,7 @@ if [[ $# -gt 0 ]]; then
 fi
 
 # Run unit tests. $(CWD) should be writeable.
-test="./cxitest --verbose --tap=cxitest.tap -j2 > $TEST_OUTPUT 2>&1"
+test="./cxitest --verbose --tap=cxitest.tap -j 1 > $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
@@ -26,7 +26,7 @@ if [[ $? -ne 0 ]]; then
 fi
 
 # Disable caching of FI_HMEM_SYSTEM and IOTLB.
-test="FI_MR_CACHE_MONITOR=disable FI_CXI_IOTLB=0 ./cxitest --verbose --tap=cxitest-no-cache.tap -j2 >> $TEST_OUTPUT 2>&1"
+test="FI_MR_CACHE_MONITOR=disable FI_CXI_IOTLB=0 ./cxitest --verbose --tap=cxitest-no-cache.tap -j 1 >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
@@ -40,7 +40,7 @@ fi
 
 # Run tests with RPut and SW Gets
 csrutil store csr get_ctrl get_en=0 > /dev/null
-echo "running: ./cxitest --verbose --filter=\"@(tagged|msg)/*\" --tap=cxitest-swget.tap -j2 >> $TEST_OUTPUT 2>&1"
+echo "running: ./cxitest --verbose --filter=\"@(tagged|msg)/*\" --tap=cxitest-swget.tap -j 1 >> $TEST_OUTPUT 2>&1"
 ./cxitest --verbose --filter="@(tagged|msg)/*" --tap=cxitest-swget.tap -j2 >> $TEST_OUTPUT 2>&1
 cxitest_exit_status=$?
 csrutil store csr get_ctrl get_en=1 > /dev/null
@@ -62,7 +62,7 @@ if [[ $cxitest_exit_status -ne 0 ]]; then
 fi
 
 # Verify tag matching with rendezvous
-test="FI_CXI_DEVICE_NAME=cxi1,cxi0 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j2 --filter=\"tagged_directed/*\" --tap=cxitest-hw-rdzv-tag-matching.tap >> $TEST_OUTPUT 2>&1"
+test="FI_CXI_DEVICE_NAME=cxi1,cxi0 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j 1 --filter=\"tagged_directed/*\" --tap=cxitest-hw-rdzv-tag-matching.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
