@@ -58,7 +58,19 @@ NEW_VERSION=${ORIGINAL_VERSION}.${MINOR}
 if [[ -z $BUILD_METADATA ]] ; then
 	RELEASE=1
 else
-    SS_VERSION=$(curl https://stash.us.cray.com/projects/SSHOT/repos/slingshot-version/raw/slingshot-version?at=refs%2Fheads%2Fmaster)
+	BRANCH=`git branch --show-current`
+	git clone https://$HPE_GITHUB_TOKEN@github.hpe.com/hpe/hpc-sshot-slingshot-version.git
+
+	cd hpc-sshot-slingshot-version
+	# Just use master branch for now
+
+	#if ! git checkout $BRANCH ; then
+	#   echo "INFO: Branch "BRANCH" is not an official Slingshot branch, using version string from master branch"
+	#fi
+
+	cd -
+
+	PRODUCT_VERSION=$(cat hpc-sshot-slingshot-version/slingshot-version)
 	RELEASE="SSHOT${SS_VERSION}_${BUILD_METADATA}"
 fi
 
