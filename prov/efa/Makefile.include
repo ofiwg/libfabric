@@ -73,6 +73,26 @@ _efa_headers = \
 	prov/efa/src/rxr/rxr_atomic.h \
 	prov/efa/src/rxr/rdm_proto_v4.h
 
+
+if ENABLE_EFA_UNIT_TEST
+check_PROGRAMS += prov/efa/test/efa_unit_test
+TESTS += prov/efa/test/efa_unit_test
+nodist_prov_efa_test_efa_unit_test_SOURCES = \
+	prov/efa/test/efa_unit_tests.h \
+	prov/efa/test/efa_unit_tests.c \
+	prov/efa/test/rdma_core_mocks.c
+
+efa_CPPFLAGS += -I$(top_srcdir)/prov/efa/test $(cmocka_CPPFLAGS)
+
+
+prov_efa_test_efa_unit_test_CPPFLAGS = $(efa_CPPFLAGS)
+prov_efa_test_efa_unit_test_LDADD = $(cmocka_LIBS) $(linkback)
+prov_efa_test_efa_unit_test_LDFLAGS = $(efa_LDFLAGS) $(cmocka_LDFLAGS) -Wl,--wrap=ibv_create_ah \
+																		-Wl,--wrap=efadv_query_ah
+prov_efa_test_efa_unit_test_LIBS = $(efa_LIBS) $(linkback)
+
+endif ENABLE_EFA_UNIT_TEST
+
 efa_CPPFLAGS += \
 	-I$(top_srcdir)/prov/efa/src/ \
 	-I$(top_srcdir)/prov/efa/src/rxr/
