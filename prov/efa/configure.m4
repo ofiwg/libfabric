@@ -11,6 +11,8 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	# Determine if we can support the efa provider
 	efa_happy=0
 	efa_h_enable_poisoning=0
+	efa_unit_test=no
+
 	AS_IF([test x"$enable_efa" != x"no"],
 	      [FI_CHECK_PACKAGE([efa_ibverbs],
 				[infiniband/verbs.h],
@@ -113,6 +115,35 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_SUBST(efa_CPPFLAGS)
 	AC_SUBST(efa_LDFLAGS)
 	AC_SUBST(efa_LIBS)
+
+	AC_ARG_ENABLE([efa-unit-test],
+		[AS_HELP_STRING([--enable-efa-unit-test],
+			[Enable EFA unit testing @<:@default=no@:>@])],
+		[efa_unit_test=$enableval],
+		[efa_unit_test=no])
+
+	if test x"$efa_unit_test" = x"yes"; then
+		AC_CHECK_HEADERS([cmocka.h],
+			[
+				AC_DEFINE([EFA_UNIT_TEST], [1],
+					[EFA unit testing])
+				efatest_CPPFLAGS="$efatest_CPPFLAGS $efadv_CPPFLAGS"
+				efatest_LIBS="-lcmocka -libverbs -static $efatest_LIBS"
+			],
+			[
+				AC_MSG_WARN([Cannot compile EFA unit tests without cmocka.])
+				efa_unit_test=no
+			],
+			[
+				#include <stdarg.h>
+				#include <stddef.h>
+				#include <setjmp.h>
+			])
+	fi
+
+	AM_CONDITIONAL([ENABLE_EFA_UNIT_TEST], [test x"$efa_unit_test" = x"yes"])
+	AC_SUBST(efatest_CPPFLAGS)
+	AC_SUBST(efatest_LIBS)
 ])
 
 dnl

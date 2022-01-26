@@ -15,6 +15,7 @@ AM_CPPFLAGS = \
 
 noinst_LTLIBRARIES =
 lib_LTLIBRARIES =
+check_PROGRAMS =
 
 if EMBEDDED
 noinst_LTLIBRARIES += src/libfabric.la

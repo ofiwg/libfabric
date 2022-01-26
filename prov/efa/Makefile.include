@@ -73,9 +73,26 @@ _efa_headers = \
 	prov/efa/src/rxr/rxr_atomic.h \
 	prov/efa/src/rxr/rdm_proto_v4.h
 
+
+if ENABLE_EFA_UNIT_TEST
+check_PROGRAMS += prov/efa/test/efa_unit_test
+TESTS += prov/efa/test/efa_unit_test
+nodist_prov_efa_test_efa_unit_test_SOURCES = \
+	prov/efa/test/efa_unit_tests.h \
+	prov/efa/test/efa_unit_tests.c \
+	prov/efa/test/efa_test_getinfo.c
+
+prov_efa_test_efa_unit_test_LDADD = $(efatest_LIBS) $(linkback)
+prov_efa_test_efa_unit_test_CPPFLAGS = -I$(top_srcdir)/include -pthread $(efatest_CPPFLAGS) -I$(top_srcdir)/prov/efa/src -I$(top_srcdir)/prov/efa/src/rxr -I$(top_srcdir)/prov/efa/test
+prov_efa_test_efa_unit_test_LDFLAGS = $(efatest_LDFLAGS) -Wl,--wrap=rxr_info_to_rxr,--wrap=ibv_get_device_list
+
+endif ENABLE_EFA_UNIT_TEST
+
 efa_CPPFLAGS += \
 	-I$(top_srcdir)/prov/efa/src/ \
-	-I$(top_srcdir)/prov/efa/src/rxr/
+	-I$(top_srcdir)/prov/efa/src/rxr/ \
+	-I$(top_srcdir)/prov/efa/test/
+
 
 if HAVE_EFA_DL
 pkglib_LTLIBRARIES += libefa-fi.la
