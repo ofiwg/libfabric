@@ -59,10 +59,12 @@ The following features are supported:
   application. The *FI_EP_DGRAM* endpoint only supports *FI_MR_LOCAL*.
 
 *Progress*
-: The RDM endpoint supports both *FI_PROGRESS_AUTO* and *FI_PROGRESS_MANUAL*,
-  with the default set to auto. However, receive side data buffers are not
-  modified outside of completion processing routines. The DGRAM endpoint only
-  supports *FI_PROGRESS_MANUAL*.
+: RDM and DGRAM endpoints support *FI_PROGRESS_MANUAL*.
+  EFA erroneously claims the support for *FI_PROGRESS_AUTO*, despite not properly
+  supporting automatic progress. Unfortunately, some Libfabric consumers also ask
+  for *FI_PROGRESS_AUTO* when they only require *FI_PROGRESS_MANUAL*, and fixing
+  this bug would break those applications. This will be fixed in a future version
+  of the EFA provider by adding proper support for *FI_PROGRESS_AUTO*.
 
 *Threading*
 : The RDM endpoint supports *FI_THREAD_SAFE*, the DGRAM endpoint supports
