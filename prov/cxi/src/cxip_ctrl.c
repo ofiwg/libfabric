@@ -271,6 +271,19 @@ static struct cxip_ctrl_req *cxip_ep_ctrl_event_req(struct cxip_ep_obj *ep_obj,
 			   event->cmd_fail.fail_command.cmd_type,
 			   event->cmd_fail.fail_command.cmd_size,
 			   event->cmd_fail.fail_command.opcode);
+
+	/* Since the control PtlTE is used for unoptimized MRs, it is possible
+	 * to trigger a target error message if the user uses an invalid MR key.
+	 * For such operations, it is safe to just drop the EQ event.
+	 */
+	case C_EVENT_ATOMIC:
+	case C_EVENT_FETCH_ATOMIC:
+		if (cxi_event_rc(event) != C_RC_ENTRY_NOT_FOUND)
+			CXIP_FATAL("Invalid %d event rc: %d\n",
+				   event->hdr.event_type, cxi_event_rc(event));
+		req = NULL;
+		break;
+
 	default:
 		CXIP_FATAL("Invalid event type: %d\n", event->hdr.event_type);
 	}
