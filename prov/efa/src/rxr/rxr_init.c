@@ -80,6 +80,13 @@ struct rxr_env rxr_env = {
 	.rnr_retry = 3, /* Setting this value to EFA_RNR_INFINITE_RETRY makes the firmware retry indefinitey */
 };
 
+static int rxr_getenv_bool(const char *var)
+{
+	char *env_value = getenv(var);
+
+	return env_value && (strcmp(env_value, "0") != 0);
+}
+
 /* @brief Read and store the FI_EFA_* environment variables.
  */
 static void rxr_init_env(void)
@@ -161,8 +168,9 @@ static void rxr_init_env(void)
 		 * libibverbs' fork support are set. These variables are
 		 * defined by ibv_fork_init(3).
 		 */
-		if (fork_safe || getenv("RDMAV_FORK_SAFE") || getenv("IBV_FORK_SAFE"))
+		if (fork_safe || rxr_getenv_bool("RDMAV_FORK_SAFE") || rxr_getenv_bool("RDMAV_FORK_SAFE")) {
 			efa_fork_status = EFA_FORK_SUPPORT_ON;
+		}
 	}
 }
 
