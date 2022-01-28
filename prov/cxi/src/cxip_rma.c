@@ -343,7 +343,9 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	/* Kick the command queue. */
 	cxip_txq_ring(cmdq, !!(flags & FI_MORE),
 		      ofi_atomic_get32(&txc->otx_reqs));
-	ofi_atomic_inc32(&txc->otx_reqs);
+
+	if (req)
+		ofi_atomic_inc32(&txc->otx_reqs);
 
 	fastlock_release(&cmdq->lock);
 
