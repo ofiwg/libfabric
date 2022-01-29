@@ -356,8 +356,7 @@ tcpx_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 		return -FI_EAGAIN;
 
 	tcpx_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.base_hdr), buf, len);
-
-	tx_entry->cq_flags = FI_MSG | FI_SEND; /* set in case of error */
+	tx_entry->ctrl_flags = TCPX_INJECT_OP;
 
 	tcpx_queue_send(ep, tx_entry);
 	return FI_SUCCESS;
@@ -410,8 +409,7 @@ tcpx_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	tcpx_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.cq_data_hdr),
 			    buf, len);
-
-	tx_entry->cq_flags = FI_MSG | FI_SEND; /* set in case of error */
+	tx_entry->ctrl_flags = TCPX_INJECT_OP;
 
 	tcpx_queue_send(ep, tx_entry);
 	return FI_SUCCESS;
@@ -535,8 +533,7 @@ tcpx_tinject(struct fid_ep *fid_ep, const void *buf, size_t len,
 	tx_entry->hdr.tag_hdr.tag = tag;
 
 	tcpx_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.tag_hdr), buf, len);
-
-	tx_entry->cq_flags = FI_TAGGED | FI_SEND; /* set in case of error */
+	tx_entry->ctrl_flags = TCPX_INJECT_OP;
 
 	tcpx_queue_send(ep, tx_entry);
 	return FI_SUCCESS;
@@ -588,8 +585,7 @@ tcpx_tinjectdata(struct fid_ep *fid_ep, const void *buf, size_t len,
 
 	tcpx_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.tag_data_hdr),
 			    buf, len);
-
-	tx_entry->cq_flags = FI_TAGGED | FI_SEND; /* set in case of error */
+	tx_entry->ctrl_flags = TCPX_INJECT_OP;
 
 	tcpx_queue_send(ep, tx_entry);
 	return FI_SUCCESS;
