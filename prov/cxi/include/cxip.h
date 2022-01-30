@@ -2389,6 +2389,8 @@ static inline bool is_netsim(struct cxip_ep_obj *ep_obj)
 	_CXIP_WARN(FI_LOG_EP_DATA, "TXC (%#x:%u:%u): " fmt "", \
 		   (txc)->ep_obj->src_addr.nic, (txc)->ep_obj->src_addr.pid, \
 		   (txc)->tx_id, ##__VA_ARGS__)
+#define TXC_WARN_RET(txc, ret, fmt, ...) \
+	TXC_WARN(txc, "%d:%s: " fmt "", ret, fi_strerror(-ret), ##__VA_ARGS__)
 #define TXC_FATAL(txc, fmt, ...) \
 	CXIP_FATAL("TXC (%#x:%u:%u):: " fmt "", (txc)->ep_obj->src_addr.nic, \
 		   (txc)->ep_obj->src_addr.pid, (txc)->tx_id, ##__VA_ARGS__)
