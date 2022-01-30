@@ -2929,8 +2929,11 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 			rxc->rx_pte->pte->ptn);
 
 		/* Queue all FC resume messages */
-		if (rxc->state == RXC_FLOW_CONTROL)
+		if (rxc->state == RXC_FLOW_CONTROL) {
 			cxip_fc_progress_ctrl(rxc);
+			RXC_WARN(rxc, "PtlTE %d Now in RXC_ENABLED\n",
+				 rxc->rx_pte->pte->ptn);
+		}
 
 		rxc->state = RXC_ENABLED;
 		break;
