@@ -235,6 +235,7 @@ static struct cxip_req *cxip_amo_inject_req(struct cxip_txc *txc)
 {
 	if (!txc->amo_inject_req) {
 		struct cxip_req *req;
+		bool free_request = false;
 
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req)
@@ -249,7 +250,15 @@ static struct cxip_req *cxip_amo_inject_req(struct cxip_txc *txc)
 		req->tag = 0;
 		req->addr = FI_ADDR_UNSPEC;
 
-		txc->amo_inject_req = req;
+		fastlock_acquire(&txc->lock);
+		if (!txc->amo_inject_req)
+			txc->amo_inject_req = req;
+		else
+			free_request = true;
+		fastlock_release(&txc->lock);
+
+		if (free_request)
+			cxip_cq_req_free(req);
 	}
 
 	return txc->amo_inject_req;
