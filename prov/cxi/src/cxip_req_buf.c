@@ -602,7 +602,7 @@ int cxip_req_buf_replenish(struct cxip_rxc *rxc, bool seq_restart)
 
 		buf = cxip_req_buf_alloc(rxc);
 		if (!buf) {
-			RXC_WARN(rxc, "Memory allocation err\n");
+			RXC_WARN(rxc, "Buffer allocation/registration err\n");
 			return -FI_ENOMEM;
 		}
 
@@ -616,6 +616,18 @@ int cxip_req_buf_replenish(struct cxip_rxc *rxc, bool seq_restart)
 			break;
 		}
 		bufs_added++;
+	}
+
+	/* If no buffer appended, check for fatal conditions. */
+	if (!bufs_added) {
+		if (rxc->req_buf_max_count &&
+		    (ofi_atomic_get32(&rxc->req_bufs_allocated) >=
+		     rxc->req_buf_max_count))
+			RXC_FATAL(rxc, "Request buffer max exceeded: %ld\n",
+				  rxc->req_buf_max_count);
+
+		if (ofi_atomic_get32(&rxc->req_bufs_linked) < 1)
+			RXC_FATAL(rxc, "Request buffer list exhausted\n");
 	}
 
 	RXC_DBG(rxc, "req_bufs_allocated=%u, req_bufs_linked=%u\n",
