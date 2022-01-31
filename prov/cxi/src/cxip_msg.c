@@ -2309,7 +2309,8 @@ int cxip_recv_reenable(struct cxip_rxc *rxc)
 	ret = cxil_pte_status(rxc->rx_pte->pte, &pte_status);
 	assert(!ret);
 
-	RXC_DBG(rxc, "Processed %d/%d drops\n",
+	RXC_DBG(rxc, "PtlTE %d Processed %d/%d drops\n",
+		rxc->rx_pte->pte->ptn,
 		rxc->drop_count + 1, pte_status.drop_count + 1);
 
 	if (rxc->drop_count != pte_status.drop_count)
@@ -2898,8 +2899,15 @@ void cxip_fc_progress_ctrl(struct cxip_rxc *rxc)
 
 	assert(rxc->state == RXC_FLOW_CONTROL);
 
-	/* Reset RXC drop count. */
-	rxc->drop_count = -1;
+	/* Reset RXC drop count. For flow control to software
+	 * managed transition it does not appear pte_status.drop
+	 * count gets reset to 0; we accumulate in this case.
+	 * TODO: Handle when transitioning back to hardware case.
+	 */
+	if (cxip_software_pte_allowed() && rxc->drop_count >= 0)
+		rxc->drop_count--;
+	else
+		rxc->drop_count = -1;
 
 	while ((ret = cxip_recv_resume(rxc)) == -FI_EAGAIN) {
 		fastlock_release(&rxc->lock);
