@@ -239,7 +239,10 @@ RSTREAM_INI ;
 #  define RSTREAM_INIT NULL
 #endif
 
-#if(HAVE_PERF)
+#if (HAVE_PERF) && (HAVE_PERF_DL)
+#  define HOOK_PERF_INI FI_EXT_INI
+#  define HOOK_PERF_INIT NULL
+#elif (HAVE_PERF)
 #  define HOOK_PERF_INI INI_SIG(fi_hook_perf_ini)
 #  define HOOK_PERF_INIT fi_hook_perf_ini()
 HOOK_PERF_INI ;
@@ -247,7 +250,10 @@ HOOK_PERF_INI ;
 #  define HOOK_PERF_INIT NULL
 #endif
 
-#if(HAVE_HOOK_DEBUG)
+#if (HAVE_HOOK_DEBUG) && (HAVE_HOOK_DEBUG_DL)
+#  define HOOK_DEBUG_INI FI_EXT_INI
+#  define HOOK_DEBUG_INIT NULL
+#elif (HAVE_HOOK_DEBUG)
 #  define HOOK_DEBUG_INI INI_SIG(fi_debug_hook_ini)
 #  define HOOK_DEBUG_INIT fi_debug_hook_ini()
 HOOK_DEBUG_INI ;
@@ -255,7 +261,10 @@ HOOK_DEBUG_INI ;
 #  define HOOK_DEBUG_INIT NULL
 #endif
 
-#if(HAVE_HOOK_HMEM)
+#if (HAVE_HOOK_HMEM) && (HAVE_HOOK_HMEM_DL)
+#  define HOOK_HMEM_INI FI_EXT_INI
+#  define HOOK_HMEM_INIT NULL
+#elif (HAVE_HOOK_HMEM)
 #  define HOOK_HMEM_INI INI_SIG(fi_hook_hmem_ini)
 #  define HOOK_HMEM_INIT fi_hook_hmem_ini()
 HOOK_HMEM_INI ;
