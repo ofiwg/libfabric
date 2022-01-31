@@ -236,6 +236,7 @@ struct fi_filter {
 
 extern struct fi_filter prov_log_filter;
 extern struct fi_provider core_prov;
+extern const char *log_prefix;
 
 void ofi_create_filter(struct fi_filter *filter, const char *env_name);
 void ofi_free_filter(struct fi_filter *filter);

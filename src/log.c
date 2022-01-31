@@ -81,6 +81,7 @@ enum {
 static int log_interval = 2000;
 uint64_t log_mask;
 struct fi_filter prov_log_filter;
+const char *log_prefix = "";
 
 static pid_t pid;
 
@@ -179,9 +180,10 @@ void DEFAULT_SYMVER_PRE(fi_log)(const struct fi_provider *prov, enum fi_log_leve
 
 	va_list vargs;
 
-	size = snprintf(buf, sizeof(buf), "%s:%d:%ld:%s:%s:%s():%d<%s> ",
-			PACKAGE, pid, (unsigned long) time(NULL), prov->name,
-			log_subsys[subsys], func, line, log_levels[level]);
+	size = snprintf(buf, sizeof(buf), "%s:%d:%ld:%s:%s:%s:%s():%d<%s> ",
+			PACKAGE, pid, (unsigned long) time(NULL), log_prefix,
+			prov->name, log_subsys[subsys], func, line,
+			log_levels[level]);
 
 	va_start(vargs, fmt);
 	vsnprintf(buf + size, sizeof(buf) - size, fmt, vargs);
