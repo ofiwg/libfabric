@@ -299,6 +299,6 @@ def main():
     print(pytest_command)
 
     # actually running tests
-    pytest.main(pytest_args)
+    exit(pytest.main(pytest_args))
 
 main()
