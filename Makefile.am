@@ -105,6 +105,18 @@ common_srcs += include/linux/osd.h
 common_srcs += include/unix/osd.h
 endif
 
+common_hook_srcs =				\
+	prov/hook/src/hook.c			\
+	prov/hook/src/hook_av.c			\
+	prov/hook/src/hook_cm.c			\
+	prov/hook/src/hook_cntr.c		\
+	prov/hook/src/hook_cq.c			\
+	prov/hook/src/hook_domain.c		\
+	prov/hook/src/hook_ep.c			\
+	prov/hook/src/hook_eq.c			\
+	prov/hook/src/hook_wait.c		\
+	prov/hook/src/hook_xfer.c
+
 # ensure dl-built providers link back to libfabric
 linkback = src/libfabric.la
 
@@ -169,16 +181,7 @@ src_libfabric_la_SOURCES =			\
 	src/log.c				\
 	src/var.c				\
 	src/abi_1_0.c				\
-	prov/hook/src/hook.c			\
-	prov/hook/src/hook_av.c			\
-	prov/hook/src/hook_cm.c			\
-	prov/hook/src/hook_cntr.c		\
-	prov/hook/src/hook_cq.c			\
-	prov/hook/src/hook_domain.c		\
-	prov/hook/src/hook_ep.c			\
-	prov/hook/src/hook_eq.c			\
-	prov/hook/src/hook_wait.c		\
-	prov/hook/src/hook_xfer.c		\
+	$(common_hook_srcs)			\
 	$(common_srcs)
 
 src_libfabric_la_CPPFLAGS = $(AM_CPPFLAGS)
