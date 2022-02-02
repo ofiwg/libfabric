@@ -103,7 +103,8 @@ AC_DEFINE_UNQUOTED(HAVE_CLOCK_GETTIME, [$have_clock_gettime],
 AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
 
 AC_ARG_WITH([libfabric],
-            AS_HELP_STRING([--with-libfabric], [Use non-default libfabric location - default NO]),
+            AS_HELP_STRING([--with-libfabric=DIR], [Provide a path to the libfabric installation directory,
+                                                    or defaults to the library search path]),
             [AS_IF([test -d $withval/lib64], [fab_libdir="lib64"], [fab_libdir="lib"])
              CPPFLAGS="-I$withval/include $CPPFLAGS"
              LDFLAGS="-L$withval/$fab_libdir $LDFLAGS"],
