@@ -110,5 +110,24 @@ def osu_benchmark(core, hosts, mpi, mode, util=None):
     print("----------------------------------------------------------------------------------------\n")
 
 
+#OneCCL examples and functional tests
+def oneccltest(core, hosts, mode, util=None):
+
+    runoneccltest = tests.OneCCLTests(jobname=jbname,buildno=bno, \
+                    testname="oneccl test", core_prov=core, fabric=fab, \
+                    hosts=hosts, ofi_build_mode=mode, util_prov=util)
+    if (runoneccltest.execute_condn):
+        print("running oneCCL examples test for {}-{}-{}" \
+              .format(core, util, fab))
+        runoneccltest.execute_cmd("examples")
+        print("running oneCCL functional test for {}-{}-{}" \
+              .format(core, util, fab))
+        runoneccltest.execute_cmd("functional")
+    else:
+        print("skipping {} as execute condition fails" \
+              .format(runoneccltest.testname))
+    print("----------------------------------------------------------------------------------------\n")
+
+
 if __name__ == "__main__":
     pass

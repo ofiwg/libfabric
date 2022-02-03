@@ -14,7 +14,7 @@ parser.add_argument("--util", help="utility provider", choices=["rxd", "rxm"])
 parser.add_argument("--ofi_build_mode", help="specify the build configuration", \
                     choices = ["dbg", "dl"])
 parser.add_argument("--test", help="specify test to execute", \
-                    choices = ["all", "unit", "shmem", "mpi"])
+                    choices = ["all", "unit", "shmem", "mpi", "oneccl"])
 
 args = parser.parse_args()
 args_core = args.prov
@@ -60,6 +60,9 @@ if(args_core):
         if (run_test == 'all' or run_test == 'shmem'):
             run.shmemtest(args_core, hosts, ofi_build_mode)
 
+        if (run_test == 'all' or run_test == 'oneccl'):
+            run.oneccltest(args_core, hosts, ofi_build_mode)
+
         if (run_test == 'all' or run_test == 'all'):
             for mpi in mpilist:
                 run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode)
@@ -72,6 +75,9 @@ if(args_core):
 
         if (run_test == 'all' or run_test == 'shmem'):
             run.shmemtest(args_core, hosts, ofi_build_mode, util=args_util)
+
+        if (run_test == 'all' or run_test == 'oneccl'):
+            run.oneccltest(args_core, hosts, ofi_build_mode, util=args_util)
 
         if (run_test == 'all' or run_test == 'all'):
             for mpi in mpilist:
