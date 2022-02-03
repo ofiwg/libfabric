@@ -81,7 +81,6 @@ enum {
 static int log_interval = 2000;
 uint64_t log_mask;
 struct fi_filter prov_log_filter;
-const char *log_prefix = "";
 
 static pid_t pid;
 
