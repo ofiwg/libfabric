@@ -146,9 +146,9 @@ struct test_entry test_array[] = {
 	{ NULL, "" }
 };
 
-static void usage(void)
+static void usage(char *name)
 {
-	ft_unit_usage("cntr_test", "Unit test for counter (cntr)");
+	ft_unit_usage(name, "Unit test for counter (cntr)");
 }
 
 int main(int argc, char **argv)
@@ -167,7 +167,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			usage();
+			usage(argv[0]);
 			return EXIT_FAILURE;
 		}
 	}

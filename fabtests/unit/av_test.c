@@ -1073,11 +1073,11 @@ run_test_set()
 	return failed;
 }
 
-static void usage(void)
+static void usage(char *name)
 {
-	ft_unit_usage("av_test", "Unit test for Address Vector (AV)");
+	ft_unit_usage(name, "Unit test for Address Vector (AV)");
 	FT_PRINT_OPTS_USAGE("-g <good_address>", "");
-	FT_PRINT_OPTS_USAGE("-G <bad_address>]", "");
+	FT_PRINT_OPTS_USAGE("-G <bad_address>", "");
 	fprintf(stderr, FT_OPTS_USAGE_FORMAT " (max=%d)\n", "-n <num_good_addr>",
 			"Number of good addresses", MAX_ADDR - 1);
 	FT_PRINT_OPTS_USAGE("-s <source_address>", "");
@@ -1114,7 +1114,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			usage();
+			usage(argv[0]);
 			return EXIT_FAILURE;
 
 		}

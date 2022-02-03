@@ -929,9 +929,9 @@ getinfo_test(caps, 4, "Test for capability bit regression",
 	     NULL, NULL, 0, hints, NULL, test_caps_regression, NULL, 0)
 
 
-static void usage(void)
+static void usage(char *name)
 {
-	ft_unit_usage("getinfo_test", "Unit tests for fi_getinfo");
+	ft_unit_usage(name, "Unit tests for fi_getinfo");
 	FT_PRINT_OPTS_USAGE("-e <ep_type>",
 			    "Endpoint type: msg|rdm|dgram (default:rdm)");
 	ft_addr_usage();
@@ -1032,10 +1032,8 @@ int main(int argc, char **argv)
 			ft_parseinfo(op, optarg, hints, &opts);
 			break;
 		case 'h':
-			usage();
-			return EXIT_SUCCESS;
 		case '?':
-			usage();
+			usage(argv[0]);
 			return EXIT_FAILURE;
 		}
 	}
