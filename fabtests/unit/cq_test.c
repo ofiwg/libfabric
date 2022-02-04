@@ -215,9 +215,9 @@ struct test_entry test_array[] = {
 	{ NULL, "" }
 };
 
-static void usage(void)
+static void usage(char *name)
 {
-	ft_unit_usage("cq_test", "Unit test for Completion Queue (CQ)");
+	ft_unit_usage(name, "Unit test for Completion Queue (CQ)");
 	FT_PRINT_OPTS_USAGE("-L <int>", "Limit of CQs to open. Default: 32k");
 }
 
@@ -240,7 +240,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			usage();
+			usage(argv[0]);
 			return EXIT_FAILURE;
 		}
 	}

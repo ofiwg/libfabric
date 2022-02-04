@@ -738,9 +738,9 @@ struct test_entry test_array[] = {
 	{ NULL, "" }
 };
 
-static void usage(void)
+static void usage(char *name)
 {
-	ft_unit_usage("fi_mr_cache_evict",
+	ft_unit_usage(name,
 		"Test a provider's ability to evict MR cache entries.\n"
 		"Evictions are verified using MMAP, BRK, SBRK, CUDA and ROCR\n"
 		"allocations. FI_HMEM support must be enabled to run CUDA and\n"
@@ -799,7 +799,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			usage();
+			usage(argv[0]);
 			return EXIT_FAILURE;
 		}
 	}

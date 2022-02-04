@@ -195,9 +195,9 @@ struct test_entry test_array[] = {
 	{ NULL, "" }
 };
 
-static void usage(void)
+static void usage(char *name)
 {
-	ft_unit_usage("mr_test", "Unit test for Memory Region (MR)");
+	ft_unit_usage(name, "Unit test for Memory Region (MR)");
 }
 
 int main(int argc, char **argv)
@@ -218,7 +218,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			usage();
+			usage(argv[0]);
 			return EXIT_FAILURE;
 		}
 	}

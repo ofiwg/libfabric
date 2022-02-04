@@ -50,9 +50,9 @@ static struct fid_domain **domain_vec = NULL;
  * - test open and close of a domain
  */
 
-static void usage(void)
+static void usage(char *name)
 {
-	ft_unit_usage("dom_test", "Unit test for Domain");
+	ft_unit_usage(name, "Unit test for Domain");
 	FT_PRINT_OPTS_USAGE("-n <num_domains>", "num domains to open");
 }
 
@@ -83,7 +83,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			usage();
+			usage(argv[0]);
 			return EXIT_FAILURE;
 		}
 	}
