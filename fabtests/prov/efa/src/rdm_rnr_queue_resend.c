@@ -186,7 +186,7 @@ static int trigger_rnr_queue_resend(enum fi_op atomic_op, void *result, void *co
 				return ret;
 		}
 	}
-	return ret;
+	return 0;
 }
 
 static int rnr_queue_resend_test(int req_pkt, enum fi_op atomic_op)
