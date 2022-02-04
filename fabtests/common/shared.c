@@ -2906,8 +2906,6 @@ void ft_mcusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-f <fabric>", "fabric name");
 	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
-	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
-	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
 	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: "
 			    "e.g. cuda, ze, neuron (default: None). "
 			    "Automatically enables FI_HMEM (-H)");
