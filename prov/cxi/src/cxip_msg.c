@@ -4099,6 +4099,32 @@ int cxip_txc_rdzv_src_fini(struct cxip_txc *txc)
 	return FI_SUCCESS;
 }
 
+
+/* TXC cmdq->lock must be held */
+static inline int cxip_send_prep_cmdq(struct cxip_cmdq *cmdq,
+				      struct cxip_req *req)
+{
+	struct cxip_txc *txc = req->send.txc;
+	int ret;
+
+	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
+			      cxip_ofi_to_cxi_tc(txc->tclass),
+			      CXI_TC_TYPE_DEFAULT);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	if (req->send.flags & FI_FENCE) {
+		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
+		if (ret) {
+			TXC_DBG(txc, "Failed to issue CQ_FENCE command: %d\n",
+				ret);
+			return -FI_EAGAIN;
+		}
+	}
+
+	return FI_SUCCESS;
+}
+
 /*
  * _cxip_send_long() - Initiate a long send operation.
  *
@@ -4198,20 +4224,9 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 
 	fastlock_acquire(&cmdq->lock);
 
-	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
-			      cxip_ofi_to_cxi_tc(txc->tclass),
-			      CXI_TC_TYPE_DEFAULT);
-	if (ret != FI_SUCCESS)
+	ret = cxip_send_prep_cmdq(cmdq, req);
+	if (ret)
 		goto err_unlock;
-
-	if (req->send.flags & FI_FENCE) {
-		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
-		if (ret) {
-			TXC_DBG(txc, "Failed to issue CQ_FENCE command: %d\n",
-				ret);
-			goto err_unlock;
-		}
-	}
 
 	if (txc->ep_obj->rdzv_offload) {
 		cmd.command.opcode = C_CMD_RENDEZVOUS_PUT;
@@ -4257,7 +4272,7 @@ static ssize_t _cxip_send_long(struct cxip_req *req)
 		goto err_unlock;
 	}
 
-	cxip_txq_ring(cmdq, req->send.flags & FI_MORE,
+	cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
 		      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
 
 	fastlock_release(&cmdq->lock);
@@ -4345,40 +4360,60 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 	return FI_SUCCESS;
 }
 
+static inline int cxip_set_eager_mb(struct cxip_req *req,
+				    union cxip_match_bits *mb)
+{
+	int tx_id;
+
+	mb->raw = 0;
+	mb->le_type = CXIP_LE_TYPE_RX;
+	mb->tagged = req->send.tagged;
+	mb->tag = req->send.tag;
+	mb->cq_data = !!(req->send.flags & FI_REMOTE_CQ_DATA);
+
+	/* Allocate a TX ID if match completion guarantees are required */
+	if (req->send.flags & FI_MATCH_COMPLETE) {
+
+		tx_id = cxip_tx_id_alloc(req->send.txc->ep_obj, req);
+		if (tx_id < 0) {
+			TXC_WARN(req->send.txc,
+				 "Failed to allocate TX ID: %d\n", tx_id);
+			return -FI_EAGAIN;
+		}
+
+		req->send.tx_id = tx_id;
+		mb->match_comp = 1;
+		mb->tx_id = tx_id;
+	}
+
+	return FI_SUCCESS;
+}
+
 /*
- * _cxip_send_eager() - Enqueue eager send command.
+ * _cxip_send_eager_idc() - Enqueue eager IDC message
  */
-static ssize_t _cxip_send_eager(struct cxip_req *req)
+static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 {
 	struct cxip_txc *txc = req->send.txc;
-	struct cxip_md *send_md = NULL;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
-	union cxip_match_bits mb = {
-		.le_type = CXIP_LE_TYPE_RX
-	};
-	int idc;
+	union cxip_match_bits mb;
 	ssize_t ret;
-	int match_complete = req->send.flags & FI_MATCH_COMPLETE;
-	struct cxip_cmdq *cmdq =
-		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
-	const void *buf = NULL;
-	bool trig = req->triggered;
-
-	/* Always use IDCs when the payload fits */
-	idc = (req->send.len <= CXIP_INJECT_SIZE) && !trig;
+	struct cxip_cmdq *cmdq = txc->tx_cmdq;
+	const void *buf = req->send.buf;
+	struct c_cstate_cmd cstate_cmd = {};
+	struct c_idc_msg_hdr idc_cmd;
 
 	/* Calculate DFA */
 	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
 		      CXIP_PTL_IDX_RXQ, &dfa, &idx_ext);
 
 	if (req->send.len) {
-		if (req->send.flags & FI_INJECT || (idc && txc->hmem)) {
-			/* Allocate an internal buffer to hold source data for
-			 * SW retry and/or a FI_HMEM bounce buffer. If a send
-			 * request is being retried, ibuf may already be
-			 * allocated. No need to allocate new buffer.
-			 */
+		/* Allocate an internal buffer to hold source data for SW
+		 * retry and/or a FI_HMEM bounce buffer. If a send request
+		 * is being retried, ibuf may already be allocated.
+		 */
+		if (req->send.flags & FI_INJECT || txc->hmem) {
 			if (!req->send.ibuf) {
 				req->send.ibuf =
 					cxip_cq_ibuf_alloc(txc->send_cq);
@@ -4393,49 +4428,13 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 			}
 
 			buf = req->send.ibuf;
-		} else {
-			/* IDCs do not require memory mapping. */
-			if (!idc) {
-				ret = cxip_map(txc->domain, req->send.buf,
-					       req->send.len, &send_md);
-				if (ret != FI_SUCCESS) {
-					TXC_WARN(txc,
-						 "Failed to map send buffer: %ld\n",
-						 ret);
-					return ret;
-				}
-			}
-
-			buf = req->send.buf;
 		}
 	}
-	req->send.send_md = send_md;
+	assert(req->send.send_md == NULL);
 
-	/* Build match bits */
-	if (req->send.tagged) {
-		mb.tagged = 1;
-		mb.tag = req->send.tag;
-	}
-
-	if (req->send.flags & FI_REMOTE_CQ_DATA)
-		mb.cq_data = 1;
-
-	/* Allocate a TX ID if match completion guarantees are required */
-	if (match_complete) {
-		int tx_id;
-
-		tx_id = cxip_tx_id_alloc(txc->ep_obj, req);
-		if (tx_id < 0) {
-			TXC_WARN(txc, "Failed to allocate TX ID: %d\n", tx_id);
-			ret = -FI_EAGAIN;
-			goto err_unmap;
-		}
-
-		req->send.tx_id = tx_id;
-
-		mb.match_comp = 1;
-		mb.tx_id = tx_id;
-	}
+	ret = cxip_set_eager_mb(req, &mb);
+	if (ret)
+		goto err_free_ibuf;
 
 	req->cb = cxip_send_eager_cb;
 
@@ -4445,127 +4444,50 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		goto err_free_tx_id;
 	}
 
+	/* Build commands before taking lock */
+	cstate_cmd.event_send_disable = 1;
+	cstate_cmd.index_ext = idx_ext;
+	cstate_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+	cstate_cmd.initiator = cxip_msg_match_id(txc);
+
+	/* If MATCH_COMPLETE was requested, software must manage
+	 * counters.
+	 */
+	if (req->send.cntr && !mb.match_comp) {
+		cstate_cmd.event_ct_ack = 1;
+		cstate_cmd.ct = req->send.cntr->ct->ctn;
+	}
+
+	/* Note: IDC command completely filled in */
+	idc_cmd.unused_0 = 0;
+	idc_cmd.dfa = dfa;
+	idc_cmd.match_bits = mb.raw;
+	idc_cmd.header_data = req->send.data;
+	idc_cmd.user_ptr = (uint64_t)req;
+
 	/* Submit command */
 	fastlock_acquire(&cmdq->lock);
 
-	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
-			      cxip_ofi_to_cxi_tc(txc->tclass),
-			      CXI_TC_TYPE_DEFAULT);
-	if (ret != FI_SUCCESS)
+	ret = cxip_send_prep_cmdq(cmdq, req);
+	if (ret)
 		goto err_unlock;
 
-	if (req->send.flags & FI_FENCE) {
-		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
-		if (ret) {
-			TXC_DBG(txc, "Failed to issue CQ_FENCE command: %ld\n",
-				ret);
-			ret = -FI_EAGAIN;
-			goto err_unlock;
-		}
+	ret = cxip_cmdq_emit_c_state(cmdq, &cstate_cmd);
+	if (ret) {
+		TXC_DBG(txc, "Failed to issue C_STATE command: %ld\n", ret);
+		goto err_unlock;
 	}
 
-	if (idc) {
-		union c_cmdu cmd = {};
+	ret = cxi_cq_emit_idc_msg(cmdq->dev_cmdq, &idc_cmd, buf, req->send.len);
+	if (ret) {
+		TXC_DBG(txc, "Failed to write IDC: %ld\n", ret);
 
-		cmd.c_state.event_send_disable = 1;
-		cmd.c_state.index_ext = idx_ext;
-		cmd.c_state.eq = cxip_cq_tx_eqn(txc->send_cq);
-		cmd.c_state.initiator = cxip_msg_match_id(txc);
-
-		/* If MATCH_COMPLETE was requested, software must manage
-		 * counters.
-		 */
-		if (req->send.cntr && !match_complete) {
-			cmd.c_state.event_ct_ack = 1;
-			cmd.c_state.ct = req->send.cntr->ct->ctn;
-		}
-
-		ret = cxip_cmdq_emit_c_state(cmdq, &cmd.c_state);
-		if (ret) {
-			TXC_DBG(txc, "Failed to issue C_STATE command: %ld\n",
-				ret);
-			goto err_unlock;
-		}
-
-		memset(&cmd.idc_msg, 0, sizeof(cmd.idc_msg));
-		cmd.idc_msg.dfa = dfa;
-		cmd.idc_msg.match_bits = mb.raw;
-		cmd.idc_msg.header_data = req->send.data;
-		cmd.idc_msg.user_ptr = (uint64_t)req;
-
-		ret = cxi_cq_emit_idc_msg(cmdq->dev_cmdq, &cmd.idc_msg,
-					  buf, req->send.len);
-		if (ret) {
-			TXC_DBG(txc, "Failed to write IDC: %ld\n", ret);
-
-			/* Return error according to Domain Resource Management
-			 */
-			ret = -FI_EAGAIN;
-			goto err_unlock;
-		}
-	} else {
-		struct c_full_dma_cmd cmd = {};
-
-		/* Inject should only use IDCs. */
-		assert(!req->send.ibuf);
-
-		cmd.command.cmd_type = C_CMD_TYPE_DMA;
-		cmd.command.opcode = C_CMD_PUT;
-		cmd.index_ext = idx_ext;
-		cmd.event_send_disable = 1;
-		cmd.restricted = 0;
-		cmd.dfa = dfa;
-		cmd.remote_offset = 0;
-		cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
-		cmd.user_ptr = (uint64_t)req;
-		cmd.initiator = cxip_msg_match_id(txc);
-		cmd.match_bits = mb.raw;
-		cmd.header_data = req->send.data;
-
-		/* Triggered ops could result in 0 length DMA */
-		if (send_md) {
-			cmd.lac = send_md->md->lac;
-			cmd.local_addr = CXI_VA_TO_IOVA(send_md->md,
-							req->send.buf);
-			cmd.request_len = req->send.len;
-		}
-
-		/* If MATCH_COMPLETE was requested, software must manage
-		 * counters.
-		 */
-		if (req->send.cntr && !match_complete) {
-			cmd.event_ct_ack = 1;
-			cmd.ct = req->send.cntr->ct->ctn;
-		}
-
-		/* Issue Eager Put command */
-		if (trig) {
-			const struct c_ct_cmd ct_cmd = {
-				.trig_ct = req->trig_cntr->ct->ctn,
-				.threshold = req->trig_thresh,
-			};
-
-			/* Clear the triggered flag to prevent retrying of
-			 * operation, due to flow control, from using the
-			 * triggered path.
-			 */
-			req->triggered = false;
-
-			ret = cxi_cq_emit_trig_full_dma(cmdq->dev_cmdq, &ct_cmd,
-							&cmd);
-		} else {
-			ret = cxi_cq_emit_dma(cmdq->dev_cmdq, &cmd);
-		}
-
-		if (ret) {
-			TXC_DBG(txc, "Failed to write DMA command: %ld\n",
-				ret);
-			ret = -FI_EAGAIN;
-			goto err_unlock;
-		}
+		/* Return error according to Domain Resource Management */
+		ret = -FI_EAGAIN;
+		goto err_unlock;
 	}
 
-	cxip_txq_ring(cmdq, req->send.flags & FI_MORE,
+	cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
 		      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
 
 	fastlock_release(&cmdq->lock);
@@ -4575,23 +4497,147 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 err_unlock:
 	fastlock_release(&cmdq->lock);
 err_free_tx_id:
-	if (match_complete)
+	if (mb.match_comp)
 		cxip_tx_id_free(txc->ep_obj, req->send.tx_id);
-err_unmap:
+err_free_ibuf:
 	if (req->send.ibuf)
 		cxip_cq_ibuf_free(req->cq, req->send.ibuf);
-	if (send_md)
-		cxip_unmap(send_md);
+
+	return ret;
+}
+
+/*
+ * _cxip_send_eager() - Enqueue eager send command.
+ */
+static ssize_t _cxip_send_eager(struct cxip_req *req)
+{
+	struct cxip_txc *txc = req->send.txc;
+	union c_fab_addr dfa;
+	uint8_t idx_ext;
+	union cxip_match_bits mb;
+	ssize_t ret;
+	struct cxip_cmdq *cmdq =
+		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
+	bool trig = req->triggered;
+	struct c_full_dma_cmd cmd = {};
+
+	/* Calculate DFA */
+	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
+		      CXIP_PTL_IDX_RXQ, &dfa, &idx_ext);
+
+	if (req->send.len) {
+		ret = cxip_map(txc->domain, req->send.buf,
+			       req->send.len, &req->send.send_md);
+		if (ret != FI_SUCCESS) {
+			TXC_WARN(txc, "Failed to map send buffer: %ld\n", ret);
+			return ret;
+		}
+	}
+
+	ret = cxip_set_eager_mb(req, &mb);
+	if (ret)
+		goto err_unmap;
+
+	req->cb = cxip_send_eager_cb;
+
+	if (cxip_cq_saturated(txc->send_cq)) {
+		TXC_DBG(txc, "CQ saturated\n");
+		ret = -FI_EAGAIN;
+		goto err_free_tx_id;
+	}
+
+	cmd.command.cmd_type = C_CMD_TYPE_DMA;
+	cmd.command.opcode = C_CMD_PUT;
+	cmd.index_ext = idx_ext;
+	cmd.event_send_disable = 1;
+	cmd.dfa = dfa;
+	cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+	cmd.user_ptr = (uint64_t)req;
+	cmd.initiator = cxip_msg_match_id(txc);
+	cmd.match_bits = mb.raw;
+	cmd.header_data = req->send.data;
+
+	/* Triggered ops could result in 0 length DMA */
+	if (req->send.send_md) {
+		cmd.lac = req->send.send_md->md->lac;
+		cmd.local_addr = CXI_VA_TO_IOVA(req->send.send_md->md,
+						req->send.buf);
+		cmd.request_len = req->send.len;
+	}
+
+	/* If MATCH_COMPLETE was requested, software must manage
+	 * counters.
+	 */
+	if (req->send.cntr && !mb.match_comp) {
+		cmd.event_ct_ack = 1;
+		cmd.ct = req->send.cntr->ct->ctn;
+	}
+
+	/* Submit command */
+	fastlock_acquire(&cmdq->lock);
+
+	ret = cxip_send_prep_cmdq(cmdq, req);
+	if (ret)
+		goto err_unlock;
+
+	/* Issue Eager Put command */
+	if (trig) {
+		const struct c_ct_cmd ct_cmd = {
+			.trig_ct = req->trig_cntr->ct->ctn,
+			.threshold = req->trig_thresh,
+		};
+
+		/* Clear the triggered flag to prevent retrying of
+		 * operation, due to flow control, from using the
+		 * triggered path.
+		 */
+		req->triggered = false;
+
+		ret = cxi_cq_emit_trig_full_dma(cmdq->dev_cmdq, &ct_cmd,
+						&cmd);
+	} else {
+		ret = cxi_cq_emit_dma(cmdq->dev_cmdq, &cmd);
+	}
+
+	if (ret) {
+		TXC_DBG(txc, "Failed to write DMA command: %ld\n", ret);
+		ret = -FI_EAGAIN;
+		goto err_unlock;
+	}
+
+	cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
+		      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
+
+	fastlock_release(&cmdq->lock);
+
+	return FI_SUCCESS;
+
+err_unlock:
+	fastlock_release(&cmdq->lock);
+err_free_tx_id:
+	if (mb.match_comp)
+		cxip_tx_id_free(txc->ep_obj, req->send.tx_id);
+err_unmap:
+	if (req->send.send_md) {
+		cxip_unmap(req->send.send_md);
+		req->send.send_md = NULL;
+	}
 
 	return ret;
 }
 
 static ssize_t _cxip_send_req(struct cxip_req *req)
 {
-	if (req->send.len > req->send.txc->max_eager_size)
-		return _cxip_send_long(req);
-	else
+	/* Prefer IDC if possible, all injects take the IDC path
+	 * since triggered operations do not support FI_INJECT.
+	 */
+	if (req->send.len <= CXIP_INJECT_SIZE && !req->triggered)
+		return _cxip_send_eager_idc(req);
+
+	if (req->send.len <= req->send.txc->max_eager_size)
 		return _cxip_send_eager(req);
+
+	return _cxip_send_long(req);
 }
 
 /*
@@ -4996,23 +5042,19 @@ ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
 	req->send.cntr = triggered ? comp_cntr : txc->send_cntr;
 	req->send.buf = buf;
 	req->send.len = len;
-	req->send.tagged = tagged;
-	req->send.tag = tag;
 	req->send.data = data;
 	req->send.flags = flags;
 
 	/* Set completion parameters */
 	req->context = (uint64_t)context;
 	req->flags = FI_SEND | (flags & (FI_COMPLETION | FI_MATCH_COMPLETE));
-	if (tagged)
+	if (tagged) {
+		req->send.tagged = tagged;
+		req->send.tag = tag;
 		req->flags |= FI_TAGGED;
-	else
+	} else {
 		req->flags |= FI_MSG;
-
-	req->data_len = 0;
-	req->buf = 0;
-	req->data = 0;
-	req->tag = 0;
+	}
 
 	/* Look up target CXI address */
 	ret = _cxip_av_lookup(txc->ep_obj->av, dest_addr, &caddr);
