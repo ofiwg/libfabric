@@ -399,6 +399,13 @@ err_free_uncached_md:
 	return ret;
 }
 
+static bool __attribute__ ((noinline)) cxip_map_is_stack_addr(const void *buf)
+{
+	char *sp = NULL;
+
+	return (char *)buf >= (char *)&sp;
+}
+
 /*
  * cxip_map() - Acquire IO mapping for buf.
  *
@@ -446,9 +453,13 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	if (dom->hmem)
 		attr.iface = ofi_get_hmem_iface(buf);
 
+	if (cxip_env.thread_safe_mr_reg && cxip_map_is_stack_addr(buf))
+		goto nocache;
+
 	if (cxip_domain_mr_cache_iface_enabled(dom, attr.iface))
 		return cxip_map_cache(dom, &attr, md);
 
+nocache:
 	return cxip_map_nocache(dom, &attr, md);
 }
 
