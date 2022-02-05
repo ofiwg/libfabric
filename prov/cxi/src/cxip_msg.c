@@ -1395,7 +1395,7 @@ static int eager_buf_add(struct cxip_rxc *rxc, bool seq_restart)
 			      rxc->oflow_buf_size, oflow_buf->md->md->lac,
 			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
 			      CXI_MATCH_ID_ANY,
-			      rxc->rdzv_threshold + rxc->rdzv_get_min,
+			      rxc->max_eager_size,
 			      le_flags, NULL, rxc->rx_cmdq, true);
 	if (ret) {
 		RXC_WARN(rxc, "Failed to write Append command: %d\n", ret);
@@ -4588,9 +4588,7 @@ err_unmap:
 
 static ssize_t _cxip_send_req(struct cxip_req *req)
 {
-	if (req->send.len >
-	    (req->send.txc->rdzv_threshold +
-	     req->send.txc->rdzv_get_min))
+	if (req->send.len > req->send.txc->max_eager_size)
 		return _cxip_send_long(req);
 	else
 		return _cxip_send_eager(req);

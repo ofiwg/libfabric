@@ -536,8 +536,7 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	ofi_atomic_initialize32(&rxc->req_bufs_linked, 0);
 	ofi_atomic_initialize32(&rxc->req_bufs_allocated, 0);
 
-	rxc->rdzv_threshold = cxip_env.rdzv_threshold;
-	rxc->rdzv_get_min = cxip_env.rdzv_get_min;
+	rxc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
 	rxc->oflow_buf_size = cxip_env.oflow_buf_size;
 	rxc->oflow_bufs_max = cxip_env.oflow_buf_count;
 	rxc->req_buf_size = cxip_env.req_buf_size;

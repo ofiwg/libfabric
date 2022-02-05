@@ -1302,8 +1302,7 @@ struct cxip_rxc {
 	unsigned int recv_appends;
 
 	int min_multi_recv;
-	int rdzv_threshold;
-	int rdzv_get_min;
+	int max_eager_size;
 
 	/* Unexpected message handling */
 	fastlock_t rx_lock;			// RX message lock
@@ -1480,8 +1479,8 @@ struct cxip_txc {
 
 	/* Software Rendezvous related structures */
 	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
-	int rdzv_threshold;
-	int rdzv_get_min;
+
+	int max_eager_size;
 	int rdzv_eager_size;
 	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
 	ofi_atomic32_t rdzv_src_lacs;	// Bitmask of LACs
