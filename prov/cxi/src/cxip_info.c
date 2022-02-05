@@ -375,6 +375,15 @@ static void cxip_env_init(void)
 	fi_param_get_size_t(&cxip_prov, "rdzv_threshold",
 			    &cxip_env.rdzv_threshold);
 
+	/* Rendezvous protocol does support FI_INJECT, make sure
+	 * eager send message is selected for FI_INJECT.
+	 */
+	if (cxip_env.rdzv_threshold < CXIP_INJECT_SIZE) {
+		CXIP_WARN("Increased rdzv_threshold size to: %lu\n",
+			  cxip_env.rdzv_threshold);
+		cxip_env.rdzv_threshold = CXIP_INJECT_SIZE;
+	}
+
 	fi_param_define(&cxip_prov, "rdzv_get_min", FI_PARAM_SIZE_T,
 			"Minimum rendezvous Get payload size.");
 	fi_param_get_size_t(&cxip_prov, "rdzv_get_min",
