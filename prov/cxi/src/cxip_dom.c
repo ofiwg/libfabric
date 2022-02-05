@@ -166,6 +166,12 @@ static int cxip_dom_dwq_op_send(struct cxip_domain *dom, struct fi_op_msg *msg,
 	if (!msg || msg->msg.iov_count > 1)
 		return -FI_EINVAL;
 
+	/* FI_INJECT is not supported for triggered sends */
+	if (msg->flags & FI_INJECT) {
+		CXIP_WARN("FI_INJECT not supported for triggered op\n");
+		return -FI_EINVAL;
+	}
+
 	ret = cxip_fid_to_txc(msg->ep, &txc);
 	if (ret)
 		return ret;
@@ -198,6 +204,12 @@ static int cxip_dom_dwq_op_tsend(struct cxip_domain *dom,
 
 	if (!tagged || tagged->msg.iov_count > 1)
 		return -FI_EINVAL;
+
+	/* FI_INJECT is not supported for triggered tsends */
+	if (tagged->flags & FI_INJECT) {
+		CXIP_WARN("FI_INJECT not supported for triggered op\n");
+		return -FI_EINVAL;
+	}
 
 	ret = cxip_fid_to_txc(tagged->ep, &txc);
 	if (ret)

@@ -893,3 +893,61 @@ Test(deferred_work, recv_tagged_non_zero_thresh)
 {
 	deferred_recv_non_zero_thresh(true);
 }
+
+/* FI_INJECT with deferred work queue processing is not supported. */
+void deferred_msg_inject_test(bool is_tagged)
+{
+	int ret;
+	uint8_t *send_buf;
+	struct iovec iov = {};
+	struct fi_op_msg msg = {};
+	struct fi_op_tagged tagged = {};
+	struct fi_deferred_work work = {};
+
+	send_buf = calloc(1, 20);
+	cr_assert(send_buf);
+
+	/* Send deferred op to self */
+	iov.iov_base = send_buf;
+	iov.iov_len = 20;
+
+	work.threshold = 5;
+	work.triggering_cntr = cxit_send_cntr;
+	work.completion_cntr = cxit_send_cntr;
+
+	if (is_tagged) {
+		tagged.ep = cxit_ep;
+		tagged.msg.msg_iov = &iov;
+		tagged.msg.iov_count = 1;
+		tagged.msg.addr = cxit_ep_fi_addr;
+		tagged.msg.tag = 0x0123;
+		tagged.flags = FI_INJECT | FI_COMPLETION;
+
+		work.op_type = FI_OP_TSEND;
+		work.op.tagged = &tagged;
+	} else {
+		msg.ep = cxit_ep;
+		msg.msg.msg_iov = &iov;
+		msg.msg.iov_count = 1;
+		msg.msg.addr = cxit_ep_fi_addr;
+		msg.flags = FI_INJECT | FI_COMPLETION;
+
+		work.op_type = FI_OP_SEND;
+		work.op.msg = &msg;
+	}
+
+	ret = fi_control(&cxit_domain->fid, FI_QUEUE_WORK, &work);
+	cr_assert_eq(ret, -FI_EINVAL, "FI_INJECT did not fail %d", ret);
+
+	free(send_buf);
+}
+
+Test(deferred_work, tsend_inject)
+{
+	deferred_msg_inject_test(true);
+}
+
+Test(deferred_work, send_inject)
+{
+	deferred_msg_inject_test(false);
+}
