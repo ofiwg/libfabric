@@ -4512,18 +4512,23 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 		cmd.command.cmd_type = C_CMD_TYPE_DMA;
 		cmd.command.opcode = C_CMD_PUT;
 		cmd.index_ext = idx_ext;
-		cmd.lac = send_md->md->lac;
 		cmd.event_send_disable = 1;
 		cmd.restricted = 0;
 		cmd.dfa = dfa;
 		cmd.remote_offset = 0;
-		cmd.local_addr = CXI_VA_TO_IOVA(send_md->md, req->send.buf);
-		cmd.request_len = req->send.len;
 		cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
 		cmd.user_ptr = (uint64_t)req;
 		cmd.initiator = cxip_msg_match_id(txc);
 		cmd.match_bits = mb.raw;
 		cmd.header_data = req->send.data;
+
+		/* Triggered ops could result in 0 length DMA */
+		if (send_md) {
+			cmd.lac = send_md->md->lac;
+			cmd.local_addr = CXI_VA_TO_IOVA(send_md->md,
+							req->send.buf);
+			cmd.request_len = req->send.len;
+		}
 
 		/* If MATCH_COMPLETE was requested, software must manage
 		 * counters.
