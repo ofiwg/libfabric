@@ -47,7 +47,7 @@ class UnitTest:
 
         # start running
         outfile = NamedTemporaryFile(prefix="fabtests_server.out.").name
-        process = Popen(self._command + ">& " + outfile, shell=True)
+        process = Popen(self._command + "> " + outfile + " 2>&1", shell=True)
 
         timeout = False
         try:
@@ -163,10 +163,10 @@ class ClientServerTest:
 
         # start running
         server_outfile = NamedTemporaryFile(prefix="fabtests_server.out.").name
-        server_process = Popen(self._server_command + ">& " + server_outfile, shell=True)
+        server_process = Popen(self._server_command + " > " + server_outfile + " 2>&1", shell=True)
         sleep(1)
         client_outfile = NamedTemporaryFile(prefix="fabtests_client.out.").name
-        client_process = Popen(self._client_command + ">& " + client_outfile, shell=True)
+        client_process = Popen(self._client_command + " > " + client_outfile + " 2>&1", shell=True)
 
         if timeout is None:
             timeout=self._cmdline_args.timeout
@@ -226,7 +226,7 @@ class MultinodeTest:
         server_outfile = NamedTemporaryFile(prefix="fabtests_server.out.").name
 
         # start running
-        server_process = Popen(self._server_command + ">& " + server_outfile, shell=True)
+        server_process = Popen(self._server_command + "> " + server_outfile + " 2>&1", shell=True)
         sleep(1)
 
         numclient = self._numproc - 1
@@ -234,7 +234,7 @@ class MultinodeTest:
         client_outfile_list = [None] * numclient
         for i in range(numclient):
             client_outfile_list[i] = NamedTemporaryFile(prefix="fabtests_client_{}.out.".format(i)).name
-            client_process_list[i] = Popen(self._client_command + ">& " + client_outfile_list[i], shell=True)
+            client_process_list[i] = Popen(self._client_command + "> " + client_outfile_list[i] + " 2>&1", shell=True)
 
         server_timeout = False
         try:
