@@ -203,7 +203,7 @@ static void smr_send_name(struct smr_ep *ep, int64_t id)
 
 	peer_smr = smr_peer_region(ep->region, id);
 
-	pthread_mutex_lock(&peer_smr->lock);
+	pthread_spin_lock(&peer_smr->lock);
 
 	if (smr_peer_data(ep->region)[id].name_sent || !peer_smr->cmd_cnt)
 		goto out;
@@ -226,7 +226,7 @@ static void smr_send_name(struct smr_ep *ep, int64_t id)
 	smr_signal(peer_smr);
 
 out:
-	pthread_mutex_unlock(&peer_smr->lock);
+	pthread_spin_unlock(&peer_smr->lock);
 }
 
 int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
