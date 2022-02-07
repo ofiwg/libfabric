@@ -523,7 +523,6 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	for (i = 0; i < CXIP_DEF_EVENT_HT_BUCKETS; i++)
 		dlist_init(&rxc->deferred_events.bh[i]);
 
-	ofi_atomic_initialize32(&rxc->sink_le_linked, 0);
 	dlist_init(&rxc->fc_drops);
 	dlist_init(&rxc->replay_queue);
 	dlist_init(&rxc->sw_ux_list);

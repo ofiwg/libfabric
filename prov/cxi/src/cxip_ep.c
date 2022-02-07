@@ -106,7 +106,7 @@ int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
 
 	id = ofi_idx_insert(&ep_obj->rdzv_ids, ctx);
 
-	if (id < 0 || id >= ep_obj->max_rdzv_ids) {
+	if (id < 0 || id >= CXIP_RDZV_IDS) {
 		CXIP_WARN("Failed to allocate ID: %d\n", id);
 		if (id > 0)
 			ofi_idx_remove(&ep_obj->rdzv_ids, id);
@@ -1945,11 +1945,6 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	cxi_ep->ep_obj->src_addr.valid = 1;
 	cxi_ep->ep_obj->fi_addr = FI_ADDR_NOTAVAIL;
 
-	/* Limit maximum rendezvous ID limit when using long eager protocol */
-	if (!cxip_env.rdzv_offload)
-		cxi_ep->ep_obj->max_rdzv_ids = CXIP_EAGER_RDZV_IDS;
-	else
-		cxi_ep->ep_obj->max_rdzv_ids = CXIP_RDZV_IDS;
 	memset(&cxi_ep->ep_obj->rdzv_ids, 0, sizeof(cxi_ep->ep_obj->rdzv_ids));
 	fastlock_init(&cxi_ep->ep_obj->rdzv_id_lock);
 
@@ -1961,9 +1956,6 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 		ofi_atomic_initialize32(&cxi_ep->ep_obj->txq_refs[i], 0);
 		ofi_atomic_initialize32(&cxi_ep->ep_obj->tgq_refs[i], 0);
 	}
-
-	if (cxip_env.rdzv_offload)
-		cxi_ep->ep_obj->rdzv_offload = true;
 
 	switch (fclass) {
 	case FI_CLASS_EP:

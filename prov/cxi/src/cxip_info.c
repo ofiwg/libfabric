@@ -256,7 +256,6 @@ struct cxip_environment cxip_env = {
 	.iotlb = true,
 	.ats_mlock_mode = CXIP_ATS_MLOCK_ALL,
 	.rx_match_mode = CXIP_PTLTE_DEFAULT_MODE,
-	.rdzv_offload = true,
 	.rdzv_threshold = CXIP_RDZV_THRESHOLD,
 	.rdzv_get_min = 2049, /* Avoid single packet Gets */
 	.rdzv_eager_size = CXIP_RDZV_THRESHOLD,
@@ -365,10 +364,6 @@ static void cxip_env_init(void)
 
 		param_str = NULL;
 	}
-
-	fi_param_define(&cxip_prov, "rdzv_offload", FI_PARAM_BOOL,
-			"Enables offloaded rendezvous messaging protocol.");
-	fi_param_get_bool(&cxip_prov, "rdzv_offload", &cxip_env.rdzv_offload);
 
 	fi_param_define(&cxip_prov, "rdzv_threshold", FI_PARAM_SIZE_T,
 			"Message size threshold for rendezvous protocol.");
@@ -512,18 +507,6 @@ static void cxip_env_init(void)
 			"Maximum number of request buffer allocated.");
 	fi_param_get_size_t(&cxip_prov, "req_buf_max_count",
 			    &cxip_env.req_buf_max_count);
-
-	/* Any RX context message matching mode other than hardware requires
-	 * that rendezvous processing is offloaded. We let the rendezvous
-	 * setting override the message matching setting. Primarily this
-	 * would be done to support the long eager protocol.
-	 */
-	if (!cxip_env.rdzv_offload &&
-	    cxip_env.rx_match_mode != CXIP_PTLTE_HARDWARE_MODE) {
-		CXIP_WARN("Onloaded rendezvous forced hardware match mode\n");
-		cxip_env.rx_match_mode = CXIP_PTLTE_HARDWARE_MODE;
-		cxip_env.msg_offload = true;
-	}
 
 	/* Parameters to tailor hybrid hardware to software transitions
 	 * that are initiated by software.

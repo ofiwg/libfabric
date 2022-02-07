@@ -211,7 +211,6 @@ struct cxip_environment {
 	/* Messaging */
 	enum cxip_ep_ptle_mode rx_match_mode;
 	int msg_offload;
-	int rdzv_offload;
 	int hybrid_preemptive;
 	int hybrid_recv_preemptive;
 	size_t rdzv_threshold;
@@ -248,9 +247,7 @@ extern struct cxip_environment cxip_env;
 
 static inline bool cxip_software_pte_allowed(void)
 {
-	return (cxip_env.rdzv_offload &&
-		(cxip_env.rx_match_mode == CXIP_PTLTE_SOFTWARE_MODE ||
-		 cxip_env.rx_match_mode == CXIP_PTLTE_HYBRID_MODE));
+	return cxip_env.rx_match_mode != CXIP_PTLTE_HARDWARE_MODE;
 }
 
 /*
@@ -339,7 +336,6 @@ static inline int cxip_mr_key_to_ptl_idx(int key, bool write)
 /* Define several types of LEs */
 enum cxip_le_type {
 	CXIP_LE_TYPE_RX = 0,	/* RX data LE */
-	CXIP_LE_TYPE_SINK,	/* Truncating RX LE */
 	CXIP_LE_TYPE_ZBP,	/* Zero-byte Put control message LE. Used to
 				 * exchange data in the EQ header_data and
 				 * match_bits fields. Unexpected headers are
@@ -796,7 +792,7 @@ struct cxip_req_send {
 		int tx_id;
 	};
 	int rc;				// DMA return code
-	int long_send_events;		// Processed event count
+	int rdzv_send_events;		// Processed event count
 };
 
 struct cxip_req_oflow {
@@ -1335,11 +1331,6 @@ struct cxip_rxc {
 	size_t req_buf_size;
 	size_t req_buf_max_count;
 	size_t req_buf_min_posted;
-
-	/* Long eager send handling */
-	ofi_atomic32_t sink_le_linked;
-	struct cxip_oflow_buf sink_le;		// Long UX sink buffer
-
 	struct dlist_entry fc_drops;
 	struct dlist_entry replay_queue;
 	struct dlist_entry sw_ux_list;
@@ -1564,7 +1555,6 @@ struct cxip_ep_obj {
 
 	struct cxip_addr src_addr;	// address of this NIC
 	fi_addr_t fi_addr;		// AV address of this EP
-	int rdzv_offload;
 
 	struct cxip_if_domain *if_dom[CXIP_EP_MAX_TX_CNT];
 

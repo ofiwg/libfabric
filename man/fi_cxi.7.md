@@ -281,30 +281,17 @@ sent along with the message header. If an eager message arrives unexpectedly,
 the entire message is buffered at the target until it is matched to a Receive
 operation.
 
-Long messages are transferred using a rendezvous protocol. The provider
-implements two rendezvous protocols: offloaded and eager. The threshold at which
-the rendezvous protocol is used is controlled with the *FI_CXI_RDZV_THRESHOLD*
-and *FI_CXI_RDZV_GET_MIN* environment variables.
+Long messages are transferred using a rendezvous protocol. The threshold at
+which the rendezvous protocol is used is controlled with the
+*FI_CXI_RDZV_THRESHOLD* and *FI_CXI_RDZV_GET_MIN* environment variables.
 
-In the offloaded rendezvous protocol, a portion of the message payload is sent
+In the rendezvous protocol, a portion of the message payload is sent
 along with the message header. Once the header is matched to a Receive
 operation, the remainder of the payload is pulled from the source using an RDMA
 Get operation. If the message arrives unexpectedly, the eager portion of the
 payload is buffered at the target until it is matched to a Receive operation.
 In the normal case, the Get is performed by hardware and the operation
 completes without software progress.
-
-In the eager rendezvous protocol, the entire payload is sent along with the
-message header. If the message matches a pre-posted Receive operation, the
-entire payload is written directly to the matched Receive buffer. If the message
-arrives unexpectedly, the message header is saved and the entire payload is
-dropped. Later, when the message is matched to a Receive operation, the entire
-payload is pulled from the source using an RDMA Get operation.
-
-The rendezvous protocol is controlled using the *FI_CXI_RDZV_OFFLOAD*
-environment variable. The provider uses the offloaded rendezvous protocol
-by default. Both the rendezvous source and target must use the same setting
-for protocol selection.
 
 Message flow-control is triggered when hardware message matching resources
 become exhausted. Messages may be dropped and retransmitted in order to
@@ -521,13 +508,6 @@ The CXI provider checks for the following environment variables:
     most network page faults. Using mlockall() may increase pressure on
     physical memory.  Ignored when ODP is disabled.
 
-*FI_CXI_RDZV_OFFLOAD*
-:   Controls the offload of the rendezvous messaging protocol, defaults to
-    offloaded rendezvous protocol. Selecting the eager rendezvous protocol
-    by disabling offload requires that message offload is enabled and will
-    override the setting of *FI_CXI_RX_MATCH_MODE* and disable the fallback to
-    software managed EP mode when hardware resources are low.
-
 *FI_CXI_RDZV_THRESHOLD*
 :   Message size threshold for rendezvous protocol.
 
@@ -589,12 +569,12 @@ The CXI provider checks for the following environment variables:
     exhuasted hardware will transition message matching to a hybrid of
     hardware and software matching.
 
-    For both *"hybrid"* and *"software"* modes, rendezvous processing must be
-    offloaded, and care should be taken to minimize the threshold for rendezvous
-    processing (i.e. *FI_CXI_RDZV_THRESHOLD* + *FI_CXI_RDZV_GET_MIN*). The
-    environment variables *FI_CXI_REQ_BUF_SIZE* and *FI_CXI_REQ_BUF_MIN_POSTED*
-    are used to control the size and number of the eager request buffers
-    posted to handle incoming unmatched messages.
+    For both *"hybrid"* and *"software"* modes and care should be taken to
+    minimize the threshold for rendezvous processing
+    (i.e. *FI_CXI_RDZV_THRESHOLD* + *FI_CXI_RDZV_GET_MIN*). When running in
+    software endpoint mode the environment variables *FI_CXI_REQ_BUF_SIZE*
+    and *FI_CXI_REQ_BUF_MIN_POSTED* are used to control the size and number
+    of the eager request buffers posted to handle incoming unmatched messages.
 
 *FI_CXI_HYBRID_PREEMPTIVE*
 :   When in hybrid mode, this variable can be used to enable preemptive

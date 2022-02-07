@@ -34,10 +34,6 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-# Re-run messaging tests with RPut disabled
-#echo "running: FI_CXI_RDZV_OFFLOAD=0 ./cxitest --verbose --filter=\"@(tagged|msg)/*\" --tap=cxitest-swrdzv.tap -j2 >> $TEST_OUTPUT 2>&1"
-#FI_CXI_RDZV_OFFLOAD=0 ./cxitest --verbose --filter="@(tagged|msg)/*" --tap=cxitest-swrdzv.tap -j2 >> $TEST_OUTPUT 2>&1
-
 # Run tests with RPut and SW Gets
 csrutil store csr C_LPE_CFG_GET_CTRL get_en=0 > /dev/null
 echo "running: ./cxitest --verbose --filter=\"@(tagged|msg)/*\" --tap=cxitest-swget.tap -j 1 >> $TEST_OUTPUT 2>&1"
@@ -69,10 +65,6 @@ if [[ $? -ne 0 ]]; then
     echo "cxitest return non-zero exit code. Possible failures in test teardown"
     exit 1
 fi
-
-#test="FI_CXI_RDZV_OFFLOAD=0 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j2 --filter=\"tagged_directed/*\" --tap=cxitest-sw-rdzv-tag-matching.tap >> $TEST_OUTPUT 2>&1"
-#echo "running: $test"
-#eval $test
 
 test="FI_CXI_RX_MATCH_MODE=\"software\" FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j 1 --tap=cxitest-sw-ep-mode.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
