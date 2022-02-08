@@ -281,7 +281,6 @@ struct cxip_environment cxip_env = {
 	.zbcoll_radix = 2,
 	.cq_fill_percent = 50,
 	.enable_unrestricted_end_ro = true,
-	.thread_safe_mr_reg = true,
 };
 
 static void cxip_env_init(void)
@@ -289,12 +288,6 @@ static void cxip_env_init(void)
 	char *param_str = NULL;
 	size_t min_free;
 	int ret;
-
-	fi_param_define(&cxip_prov, "thread safe memory registration",
-			FI_PARAM_BOOL, "Default: %d",
-			cxip_env.thread_safe_mr_reg);
-	fi_param_get_bool(&cxip_prov, "thread_safe_mr_reg",
-			  &cxip_env.thread_safe_mr_reg);
 
 	fi_param_define(&cxip_prov, "enable_unrestricted_end_ro", FI_PARAM_BOOL,
 			"Default: %d", cxip_env.enable_unrestricted_end_ro);
