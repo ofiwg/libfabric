@@ -289,6 +289,7 @@ enum {
 	OFI_BUFPOOL_INDEXED		= 1 << 1,
 	OFI_BUFPOOL_NO_TRACK		= 1 << 2,
 	OFI_BUFPOOL_HUGEPAGES		= 1 << 3,
+	OFI_BUFPOOL_PAGE_ALIGNED	= 1 << 4,
 };
 
 struct ofi_bufpool_region;

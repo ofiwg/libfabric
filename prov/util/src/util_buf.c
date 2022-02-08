@@ -52,6 +52,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 	void *buf;
 	int ret;
 	size_t i;
+	size_t alignment;
 
 	if (pool->attr.max_cnt && pool->entry_cnt >= pool->attr.max_cnt)
 		return -FI_ENOMEM;
@@ -76,9 +77,19 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 		}
 		buf_region->flags = OFI_BUFPOOL_HUGEPAGES;
 	} else {
+		alignment = (pool->attr.flags & OFI_BUFPOOL_PAGE_ALIGNED) ? page_sizes[OFI_PAGE_SIZE] : 0;
+		if (alignment % pool->attr.alignment) {
+			FI_DBG(&core_prov, FI_LOG_CORE, "Page aligned allocation requested "
+				"but entry alignment %lu does not evenly divide page size %lu\n",
+				(unsigned long)pool->attr.alignment, (unsigned long)alignment);
+			return -EINVAL;
+		}
+		if (alignment < pool->attr.alignment) {
+			alignment = pool->attr.alignment;
+		}
 retry:
 		ret = ofi_memalign((void **) &buf_region->alloc_region,
-				   roundup_power_of_two(pool->attr.alignment),
+				   roundup_power_of_two(alignment),
 				   pool->alloc_size);
 	}
 	if (ret) {
@@ -193,6 +204,9 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 	if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES) {
 		pool->alloc_size = ofi_get_aligned_size(pool->alloc_size,
 							hp_size);
+	} else if (pool->attr.flags & OFI_BUFPOOL_PAGE_ALIGNED) {
+		pool->alloc_size = ofi_get_aligned_size(pool->alloc_size,
+							page_sizes[OFI_PAGE_SIZE]);
 	}
 
 	pool->region_size = pool->alloc_size - pool->entry_size;

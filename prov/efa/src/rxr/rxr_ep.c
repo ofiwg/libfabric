@@ -1399,7 +1399,7 @@ static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
 int rxr_ep_init(struct rxr_ep *ep)
 {
 	size_t entry_sz, sendv_pool_size;
-	int hp_pool_flag;
+	int flags;
 	int ret;
 
 	entry_sz = ep->mtu_size + sizeof(struct rxr_pkt_entry);
@@ -1409,19 +1409,21 @@ int rxr_ep_init(struct rxr_ep *ep)
 #endif
 
 	if (efa_fork_status == EFA_FORK_SUPPORT_ON)
-		hp_pool_flag = 0;
+		// Buffer pool needs to be page aligned in order to set MADV_DONTFORK
+		// on the pages making up the pool.
+		flags = OFI_BUFPOOL_PAGE_ALIGNED;
 	else
-		hp_pool_flag = OFI_BUFPOOL_HUGEPAGES;
+		flags = OFI_BUFPOOL_HUGEPAGES;
 
 
 	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_tx_pool_chunk_cnt(ep),
-				  hp_pool_flag,
+				  flags,
 				  &ep->efa_tx_pkt_pool);
 	if (ret)
 		goto err_free;
 
 	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_rx_pool_chunk_cnt(ep),
-				  hp_pool_flag,
+				  flags,
 				  &ep->efa_rx_pkt_pool);
 	if (ret)
 		goto err_free;
@@ -1452,7 +1454,8 @@ int rxr_ep_init(struct rxr_ep *ep)
 		 */
 		ret = rxr_create_pkt_pool(ep, entry_sz,
 					  rxr_env.readcopy_pool_size,
-					  0, &ep->rx_readcopy_pkt_pool);
+					  flags & ~OFI_BUFPOOL_HUGEPAGES,
+					  &ep->rx_readcopy_pkt_pool);
 
 		if (ret)
 			goto err_free;
