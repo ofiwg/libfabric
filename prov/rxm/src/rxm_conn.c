@@ -274,7 +274,7 @@ static int rxm_init_connect_data(struct rxm_conn *conn,
 	}
 
 	cm_data->connect.port = ofi_addr_get_port(&conn->ep->addr.sa);
-	cm_data->connect.client_conn_id = conn->peer->index;
+	cm_data->connect.client_conn_id = rxm_conn_id(conn->peer->index);
 	return 0;
 }
 
@@ -486,8 +486,12 @@ void rxm_process_connect(struct rxm_eq_cm_entry *cm_entry)
 	       "processing connected for handle: %p\n", conn);
 
 	assert(ofi_ep_lock_held(&conn->ep->util_ep));
-	if (conn->state == RXM_CM_CONNECTING)
-		conn->remote_index = cm_entry->data.accept.server_conn_id;
+	if (conn->state == RXM_CM_CONNECTING) {
+		conn->remote_index = rxm_peer_index(cm_entry->data.accept.
+						    server_conn_id);
+		conn->remote_pid = rxm_peer_pid(cm_entry->data.accept.
+						server_conn_id);
+	}
 
 	conn->ep->connecting_cnt--;
 	assert(conn->ep->connecting_cnt >= 0);
@@ -593,7 +597,7 @@ rxm_accept_connreq(struct rxm_conn *conn, struct rxm_eq_cm_entry *cm_entry)
 	union rxm_cm_data cm_data;
 	int ret;
 
-	cm_data.accept.server_conn_id = conn->peer->index;
+	cm_data.accept.server_conn_id = rxm_conn_id(conn->peer->index);
 	cm_data.accept.rx_size = cm_entry->info->rx_attr->size;
 	cm_data.accept.align_pad = 0;
 
@@ -665,16 +669,27 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 		break;
 	case RXM_CM_ACCEPTING:
 	case RXM_CM_CONNECTED:
-		FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
-			"old connection accepting/done, replacing %p\n", conn);
-		rxm_close_conn(conn);
+		if (conn->remote_pid &&
+		    (conn->remote_pid == rxm_peer_pid(cm_entry->data.connect.
+		    				      client_conn_id))) {
+			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
+				"simultaneous, reject peer\n");
+			rxm_reject_connreq(ep, cm_entry,
+					   RXM_REJECT_ECONNREFUSED);
+			goto put;
+		} else {
+			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
+				"old connection exists, replacing %p\n", conn);
+			rxm_close_conn(conn);
+		}
 		break;
 	default:
 		assert(0);
 		break;
 	}
 
-	conn->remote_index = cm_entry->data.connect.client_conn_id;
+	conn->remote_pid = rxm_peer_pid(cm_entry->data.connect.client_conn_id);
+	conn->remote_index = rxm_peer_index(cm_entry->data.connect.client_conn_id);
 	ret = rxm_open_conn(conn, cm_entry->info);
 	if (ret)
 		goto free;

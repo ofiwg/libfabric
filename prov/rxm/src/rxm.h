@@ -96,6 +96,20 @@ union rxm_cm_data {
 	} reject;
 };
 
+static inline uint64_t rxm_conn_id(int peer_index)
+{
+	return (((uint64_t) getpid()) << 32) | ((uint32_t) peer_index);
+}
+
+static inline int rxm_peer_index(uint64_t conn_id)
+{
+	return (int) conn_id;
+}
+
+static inline uint32_t rxm_peer_pid(uint64_t conn_id)
+{
+	return (uint32_t) (conn_id >> 32);
+}
 
 extern size_t rxm_buffer_size;
 extern size_t rxm_packet_size;
@@ -231,6 +245,7 @@ struct rxm_conn {
 	 * the peer_addr.
 	 */
 	int remote_index;
+	uint32_t remote_pid;
 	uint8_t flags;
 
 	struct dlist_entry deferred_entry;
