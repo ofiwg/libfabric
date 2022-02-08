@@ -63,6 +63,10 @@
 #define HOST_NAME_MAX 255
 #endif
 
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS MAP_ANON
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -78,11 +82,6 @@ static inline ssize_t ofi_get_hugepage_size(void)
 }
 
 static inline int ofi_alloc_hugepage_buf(void **memptr, size_t size)
-{
-	return -FI_ENOSYS;
-}
-
-static inline int ofi_free_hugepage_buf(void *memptr, size_t size)
 {
 	return -FI_ENOSYS;
 }

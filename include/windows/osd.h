@@ -682,6 +682,16 @@ static inline char* strsep(char **stringp, const char *delim)
 
 #define __attribute__(x)
 
+static inline int ofi_mmap_anon_pages(void **memptr, size_t size, int flags)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_unmap_anon_pages(void *memptr, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
 static inline int ofi_memalign(void **memptr, size_t alignment, size_t size)
 {
 	*memptr = _aligned_malloc(size, alignment);
@@ -896,11 +906,6 @@ static inline ssize_t ofi_get_hugepage_size(void)
 }
 
 static inline int ofi_alloc_hugepage_buf(void **memptr, size_t size)
-{
-	return -FI_ENOSYS;
-}
-
-static inline int ofi_free_hugepage_buf(void *memptr, size_t size)
 {
 	return -FI_ENOSYS;
 }

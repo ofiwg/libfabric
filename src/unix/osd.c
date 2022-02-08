@@ -120,6 +120,24 @@ int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms)
 	return pthread_cond_timedwait(cond, mut, &ts);
 }
 
+int ofi_mmap_anon_pages(void **memptr, size_t size, int flags)
+{
+	*memptr = mmap(NULL, size, PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANONYMOUS | flags, -1, 0);
+	if (OFI_UNLIKELY(*memptr == MAP_FAILED)) {
+		return -errno;
+	}
+	return FI_SUCCESS;
+}
+
+int ofi_unmap_anon_pages(void *memptr, size_t size)
+{
+	if (munmap(memptr, size)) {
+		return -errno;
+	}
+	return FI_SUCCESS;
+}
+
 int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
 		int readonly, void **mapped)
 {
