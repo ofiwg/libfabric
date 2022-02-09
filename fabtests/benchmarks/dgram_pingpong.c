@@ -90,13 +90,15 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "hT:" CS_OPTS INFO_OPTS BENCHMARK_OPTS)) !=
-			-1) {
+	while ((op = getopt_long(argc, argv, "hT:" CS_OPTS INFO_OPTS BENCHMARK_OPTS,
+				 long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		case 'T':
 			timeout = atoi(optarg);
 			break;
 		default:
+			if (!ft_parse_long_opts(op, optarg))
+				continue;
 			ft_parse_benchmark_opts(op, optarg);
 			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
@@ -107,6 +109,7 @@ int main(int argc, char **argv)
 			ft_benchmark_usage();
 			FT_PRINT_OPTS_USAGE("-T <timeout>",
 					"seconds before timeout on receive");
+			ft_longopts_usage();
 			return EXIT_FAILURE;
 		}
 	}

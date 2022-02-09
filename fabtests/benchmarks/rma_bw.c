@@ -97,10 +97,12 @@ int main(int argc, char **argv)
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
 	hints->addr_format = opts.address_format;
 
-	while ((op = getopt(argc, argv, "Uh" CS_OPTS INFO_OPTS API_OPTS
-			    BENCHMARK_OPTS)) != -1) {
+	while ((op = getopt_long(argc, argv, "Uh" CS_OPTS INFO_OPTS API_OPTS
+			    BENCHMARK_OPTS, long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		default:
+			if (!ft_parse_long_opts(op, optarg))
+				continue;
 			ft_parse_benchmark_opts(op, optarg);
 			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
@@ -120,6 +122,7 @@ int main(int argc, char **argv)
 			fprintf(stderr, "Note: read/write bw tests are bidirectional.\n"
 					"      writedata bw test is unidirectional"
 					" from the client side.\n");
+			ft_longopts_usage();
 			return EXIT_FAILURE;
 		}
 	}

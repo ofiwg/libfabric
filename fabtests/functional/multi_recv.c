@@ -279,9 +279,12 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "Mhv" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt_long(argc, argv, "Mhv" CS_OPTS INFO_OPTS,
+				 long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		default:
+			if (!ft_parse_long_opts(op, optarg))
+				continue;
 			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
 			break;
@@ -297,6 +300,7 @@ int main(int argc, char **argv)
 				"Streaming RDM client-server using multi recv buffer.");
 			FT_PRINT_OPTS_USAGE("-M", "enable testing with fi_recvmsg");
 			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
+			ft_longopts_usage();
 			return EXIT_FAILURE;
 		}
 	}
