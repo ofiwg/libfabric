@@ -232,9 +232,16 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
 /**
  * @brief copy data to receive buffer and update counter in rx_entry.
  *
- * If receiving buffer is on GPU memory, it will post a local
- * read request. Otherwise it will copy data directly, and call
- * rxr_pkt_handle_data_copied().
+ * Depend on memory location, and software stack  this function will use different
+ * strategies to copy data.
+ *
+ * First, if memory is on cuda GPU, and gdrcopy is not available, this function
+ * will post a local read request to copy data. In this case the data is not
+ * copied upon return of this function, and the function rxr_pkt_handle_copied()
+ * is not called.
+ *
+ * In all other conditions, data is copied and rxr_pkt_handle_copied() is called
+ * upon return of this function.
  *
  * @param[in]		ep		endpoint
  * @param[in,out]	rx_entry	rx_entry contains information of the receive
@@ -260,8 +267,29 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 
 	pkt_entry->x_entry = rx_entry;
 
-	if (data_size == 0)
-		goto out;
+	/*
+	 * Under 3 rare situations, this function does not perform the copy
+	 * action, but still consider data is copied:
+	 *
+	 * 1. application cancelled the receive, thus the receive buffer is not
+	 *    available for copying to. In the case, this function is still
+	 *    called because sender will keep sending data as receiver did not
+	 *    notify the sender about the cancelation,
+	 *
+	 * 2. application's receiving buffer is smaller than incoming message size,
+	 *    and data in the packet is outside of receiving buffer (truncated message).
+	 *    In this case, this function is still called because sender will
+	 *    keep sending data as receiver did not notify the sender about the
+	 *    truncation.
+	 *
+	 * 3. message size is 0, thus no data to copy.
+	 */
+	if (OFI_UNLIKELY((rx_entry->rxr_flags & RXR_RECV_CANCEL)) ||
+	    OFI_UNLIKELY(data_offset >= rx_entry->cq_entry.len) ||
+	    OFI_UNLIKELY(data_size == 0)) {
+		rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
+		return 0;
+	}
 
 	desc = rx_entry->desc[0];
 
@@ -295,12 +323,13 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 		if (err)
 			FI_WARN(&rxr_prov, FI_LOG_CQ, "cannot post read to copy data\n");
 
+		/* At this point data has NOT been copied yet, thus we cannot call
+		 * rxr_pkt_handle_data_copied(). The function will be called
+		 * when the completion of the local read request is received
+		 * (by progress engine).
+		 */
 		return err;
 	}
-
-	if (OFI_UNLIKELY((rx_entry->rxr_flags & RXR_RECV_CANCEL)) ||
-	    data_offset >= rx_entry->cq_entry.len || data_size == 0)
-		goto out;
 
 	bytes_copied = ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
 					    desc ? desc->peer.device.reserved : 0,
@@ -314,7 +343,6 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 		return -FI_EIO;
 	}
 
-out:
 	rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
 	return 0;
 }
