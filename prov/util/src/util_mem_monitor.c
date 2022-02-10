@@ -224,10 +224,10 @@ void ofi_monitors_init(void)
 	 * do not override
 	 */
 	if (!default_monitor) {
-#if HAVE_MEMHOOKS_MONITOR
-		default_monitor = memhooks_monitor;
-#elif HAVE_UFFD_MONITOR
+#if HAVE_UFFD_MONITOR
 		default_monitor = uffd_monitor;
+#elif HAVE_MEMHOOKS_MONITOR
+		default_monitor = memhooks_monitor;
 #else
 		default_monitor = NULL;
 #endif
