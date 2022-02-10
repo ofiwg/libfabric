@@ -3102,9 +3102,9 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 		break;
 	case 'S':
 		if (!strncasecmp("all", optarg, 3)) {
-			opts->sizes_enabled = FT_ENABLE_ALL;
+			opts->sizes_enabled = FT_ENABLE_SIZES;
 		} else if (!strncasecmp("r:", optarg, 2)){
-			opts->sizes_enabled = FT_ENABLE_ALL;
+			opts->sizes_enabled = FT_ENABLE_SIZES;
 			ft_parse_opts_range(optarg);
 		} else {
 			opts->options |= FT_OPT_SIZE;

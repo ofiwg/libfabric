@@ -82,7 +82,7 @@ extern struct test_size_param *test_size;
 extern unsigned int test_cnt;
 #define TEST_CNT test_cnt
 
-#define FT_ENABLE_ALL		(~0)
+#define FT_ENABLE_SIZES		(~0)
 #define FT_DEFAULT_SIZE		(1 << 0)
 
 enum precision {
@@ -305,7 +305,7 @@ size_t datatype_to_size(enum fi_datatype datatype);
 static inline int ft_use_size(int index, int enable_flags)
 {
 	return test_size[index].size <= fi->ep_attr->max_msg_size &&
-		((enable_flags == FT_ENABLE_ALL) ||
+		((enable_flags == FT_ENABLE_SIZES) ||
 		(enable_flags & test_size[index].enable_flags));
 }
 
