@@ -119,7 +119,7 @@ struct fi_rma_iov remote;
 
 struct ft_opts opts;
 
-struct test_size_param test_size[] = {
+struct test_size_param def_test_sizes[] = {
 	{ 1 <<  0, 0 },
 	{ 1 <<  1, 0 }, { (1 <<  1) + (1 <<  0), 0 },
 	{ 1 <<  2, 0 }, { (1 <<  2) + (1 <<  1), 0 },
@@ -146,7 +146,11 @@ struct test_size_param test_size[] = {
 	{ 1 << 23, 0 },
 };
 
-const unsigned int test_cnt = (sizeof test_size / sizeof test_size[0]);
+unsigned int test_cnt = (sizeof def_test_sizes / sizeof def_test_sizes[0]);
+
+struct test_size_param *test_size = def_test_sizes;
+/* range of messages is dynamically allocated */
+struct test_size_param *range_test_size;
 
 static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
@@ -1597,7 +1601,7 @@ void ft_free_res(void)
 	rx_ctx_arr = NULL;
 
 	ft_close_fids();
-
+	free(range_test_size);
 	if (buf) {
 		ret = ft_hmem_free(opts.iface, buf);
 		if (ret)
@@ -2922,7 +2926,8 @@ void ft_csusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-I <number>", "number of iterations");
 	FT_PRINT_OPTS_USAGE("-Q", "bind EQ to domain (vs. endpoint)");
 	FT_PRINT_OPTS_USAGE("-w <number>", "number of warmup iterations");
-	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or 'all'");
+	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or "
+			    " a range of sizes (syntax r:start,inc,end) or 'all'");
 	FT_PRINT_OPTS_USAGE("-l", "align transmit and receive buffers to page size");
 	FT_PRINT_OPTS_USAGE("-m", "machine readable output");
 	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: "
@@ -3059,6 +3064,30 @@ void ft_parse_hmem_opts(int op, char *optarg, struct ft_opts *opts)
 	}
 }
 
+void ft_parse_opts_range(char* optarg)
+{
+       size_t start, inc, end;
+       int i, ret;
+
+       ret = sscanf(optarg, "r:%ld,%ld,%ld", &start, &inc, &end);
+       if (ret != 3) {
+	      perror("sscanf");
+	      exit(EXIT_FAILURE);
+       }
+       assert(end >= start && inc > 0);
+       test_cnt = (end - start) / inc + 1;
+       range_test_size = calloc(test_cnt, sizeof(*range_test_size));
+       if (!range_test_size) {
+	       perror("calloc");
+	       exit(EXIT_FAILURE);
+       }
+       for (i = 0; i < test_cnt && i < end; i++) {
+	       range_test_size[i].size = start + (i * inc);
+	       range_test_size[i].enable_flags = 0;
+       }
+       test_size = range_test_size;
+}
+
 void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 {
 	ft_parse_addr_opts(op, optarg, opts);
@@ -3074,6 +3103,9 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 	case 'S':
 		if (!strncasecmp("all", optarg, 3)) {
 			opts->sizes_enabled = FT_ENABLE_ALL;
+		} else if (!strncasecmp("r:", optarg, 2)){
+			opts->sizes_enabled = FT_ENABLE_ALL;
+			ft_parse_opts_range(optarg);
 		} else {
 			opts->options |= FT_OPT_SIZE;
 			opts->transfer_size = atol(optarg);
