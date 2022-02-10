@@ -103,7 +103,6 @@ cleanup
     -P /opt/cray \
     -M /opt/cray/modulefiles \
     -V ${NEW_VERSION} \
-    -c "--disable-memhooks-monitor" \
     ${CUDA_CONFIG} \
     ${ROCM_CONFIG} \
     ${ZE_CONFIG} \
