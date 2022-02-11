@@ -2161,6 +2161,40 @@ int cxip_coll_arm_enable(struct fid_mc *mc, bool enable);
 void cxip_coll_reset_mc_ctrs(struct fid_mc *mc);
 
 /*
+ * cxip_fid_to_tx_info() - Return TXC and attributes from FID
+ * provided to a transmit API.
+ */
+static inline int cxip_fid_to_tx_info(struct fid_ep *ep,
+				      struct cxip_txc **txc,
+				      struct fi_tx_attr **attr)
+{
+	struct cxip_ep *cxi_ep;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	assert(txc && attr);
+
+	/* The input FID could be a standard endpoint (containing a TX
+	 * context), or a TX context itself.
+	 */
+	switch (ep->fid.fclass) {
+	case FI_CLASS_EP:
+		cxi_ep = container_of(ep, struct cxip_ep, ep);
+		*txc = cxi_ep->ep_obj->txcs[0];
+		*attr = &cxi_ep->tx_attr;
+		return FI_SUCCESS;
+
+	case FI_CLASS_TX_CTX:
+		*txc = container_of(ep, struct cxip_txc, fid.ctx);
+		*attr = &(*txc)->attr;
+		return FI_SUCCESS;
+	default:
+		return -FI_EINVAL;
+	}
+}
+
+/*
  * cxip_fid_to_txc() - Return TXC from FID provided to a transmit API.
  */
 static inline int cxip_fid_to_txc(struct fid_ep *ep, struct cxip_txc **txc)

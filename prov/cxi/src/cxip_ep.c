@@ -1255,6 +1255,10 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 						       bfid, flags);
 				if (ret)
 					return ret;
+
+				if (i == 0)
+					ep->tx_attr.op_flags =
+							txc->attr.op_flags;
 			}
 		}
 
@@ -1270,6 +1274,10 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 						       flags);
 				if (ret)
 					return ret;
+
+				if (i == 0)
+					ep->rx_attr.op_flags =
+							rxc->attr.op_flags;
 			}
 		}
 		break;

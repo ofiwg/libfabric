@@ -4971,12 +4971,14 @@ static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
 			  void *context)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_send_common(txc, buf, len, desc, 0, dest_addr, tag, context,
-				txc->attr.op_flags, true, false, 0, NULL, NULL);
+	return cxip_send_common(txc, buf, len, desc, 0, dest_addr, tag,
+				context, attr->op_flags, true, false, 0,
+				NULL, NULL);
 }
 
 static ssize_t cxip_tsendv(struct fid_ep *ep, const struct iovec *iov,
@@ -4984,16 +4986,17 @@ static ssize_t cxip_tsendv(struct fid_ep *ep, const struct iovec *iov,
 			   uint64_t tag, void *context)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	return cxip_send_common(txc, iov[0].iov_base, iov[0].iov_len,
 				desc ? desc[0] : NULL, 0, dest_addr, tag,
-				context, txc->attr.op_flags, true, false, 0,
+				context, attr->op_flags, true, false, 0,
 				NULL, NULL);
 }
 
@@ -5044,12 +5047,13 @@ static ssize_t cxip_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 			      uint64_t tag, void *context)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	return cxip_send_common(txc, buf, len, desc, data, dest_addr, tag,
-				context, txc->attr.op_flags | FI_REMOTE_CQ_DATA,
+				context, attr->op_flags | FI_REMOTE_CQ_DATA,
 				true, false, 0, NULL, NULL);
 }
 
@@ -5139,12 +5143,13 @@ static ssize_t cxip_send(struct fid_ep *ep, const void *buf, size_t len,
 			 void *desc, fi_addr_t dest_addr, void *context)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	return cxip_send_common(txc, buf, len, desc, 0, dest_addr, 0, context,
-				txc->attr.op_flags, false, false, 0, NULL,
+				attr->op_flags, false, false, 0, NULL,
 				NULL);
 }
 
@@ -5153,16 +5158,17 @@ static ssize_t cxip_sendv(struct fid_ep *ep, const struct iovec *iov,
 			  void *context)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	return cxip_send_common(txc, iov[0].iov_base, iov[0].iov_len,
 				desc ? desc[0] : NULL, 0, dest_addr, 0, context,
-				txc->attr.op_flags, false, false, 0, NULL,
+				attr->op_flags, false, false, 0, NULL,
 				NULL);
 }
 
@@ -5213,12 +5219,13 @@ static ssize_t cxip_senddata(struct fid_ep *ep, const void *buf, size_t len,
 			     void *context)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	return cxip_send_common(txc, buf, len, desc, data, dest_addr, 0,
-				context, txc->attr.op_flags | FI_REMOTE_CQ_DATA,
+				context, attr->op_flags | FI_REMOTE_CQ_DATA,
 				false, false, 0, NULL, NULL);
 }
 

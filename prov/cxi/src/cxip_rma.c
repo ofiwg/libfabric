@@ -712,12 +712,13 @@ static ssize_t cxip_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 			      uint64_t key, void *context)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	return cxip_rma_common(FI_OP_WRITE, txc, buf, len, desc, dest_addr,
-			       addr, key, 0, txc->attr.op_flags, context, false,
+			       addr, key, 0, attr->op_flags, context, false,
 			       0, NULL, NULL);
 }
 
@@ -726,8 +727,9 @@ static ssize_t cxip_rma_writev(struct fid_ep *ep, const struct iovec *iov,
 			       uint64_t addr, uint64_t key, void *context)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	if (!iov || count != 1)
@@ -735,7 +737,7 @@ static ssize_t cxip_rma_writev(struct fid_ep *ep, const struct iovec *iov,
 
 	return cxip_rma_common(FI_OP_WRITE, txc, iov[0].iov_base,
 			       iov[0].iov_len, desc ? desc[0] : NULL, dest_addr,
-			       addr, key, 0, txc->attr.op_flags, context, false,
+			       addr, key, 0, attr->op_flags, context, false,
 			       0, NULL, NULL);
 }
 
@@ -789,12 +791,13 @@ static ssize_t cxip_rma_read(struct fid_ep *ep, void *buf, size_t len,
 			     uint64_t key, void *context)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	return cxip_rma_common(FI_OP_READ, txc, buf, len, desc, src_addr, addr,
-			       key, 0, txc->attr.op_flags, context, false, 0,
+			       key, 0, attr->op_flags, context, false, 0,
 			       NULL, NULL);
 }
 
@@ -803,8 +806,9 @@ static ssize_t cxip_rma_readv(struct fid_ep *ep, const struct iovec *iov,
 			      uint64_t addr, uint64_t key, void *context)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	if (!iov || count != 1)
@@ -812,7 +816,7 @@ static ssize_t cxip_rma_readv(struct fid_ep *ep, const struct iovec *iov,
 
 	return cxip_rma_common(FI_OP_READ, txc, iov[0].iov_base, iov[0].iov_len,
 			       desc ? desc[0] : NULL, src_addr, addr, key, 0,
-			       txc->attr.op_flags, context, false, 0, NULL,
+			       attr->op_flags, context, false, 0, NULL,
 			       NULL);
 }
 
