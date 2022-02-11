@@ -229,19 +229,107 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
 	return 0;
 }
 
+
+/*
+ * @brief copy data to hmem buffer
+ *
+ * This function queue multiple (up to RXR_EP_MAX_QUEUED_COPY) copies to
+ * device memory, and do them at the same time. This is to avoid any memory
+ * barrier between copies, which will cause a flush.
+ *
+ * @param[in]		ep		endpoint
+ * @param[in]		pkt_entry	the packet entry that contains data, which
+ *                                      x_entry pointing to the correct rx_entry.
+ * @param[in]		data		the pointer pointing to the beginning of data
+ * @param[in]		data_size	the length of data
+ * @param[in]		data_offset	the offset of the data in the packet in respect
+ *					of the receiving buffer.
+ * @return		On success, return 0
+ * 			On failure, return libfabric error code
+ */
+static inline
+int rxr_pkt_copy_data_to_hmem(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry,
+			      char *data,
+			      size_t data_size,
+			      size_t data_offset)
+{
+	struct efa_mr *desc;
+	struct rxr_rx_entry *rx_entry;
+	size_t bytes_copied[RXR_EP_MAX_QUEUED_COPY] = {0};
+	size_t i;
+
+	assert(ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY);
+	ep->queued_copy_vec[ep->queued_copy_num].pkt_entry = pkt_entry;
+	ep->queued_copy_vec[ep->queued_copy_num].data = data;
+	ep->queued_copy_vec[ep->queued_copy_num].data_size = data_size;
+	ep->queued_copy_vec[ep->queued_copy_num].data_offset = data_offset;
+	ep->queued_copy_num += 1;
+
+	rx_entry = pkt_entry->x_entry;
+	assert(rx_entry);
+	rx_entry->bytes_queued += data_size;
+
+	if (ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY &&
+	    rx_entry->bytes_copied + rx_entry->bytes_queued < rx_entry->total_len) {
+		return 0;
+	}
+
+	for (i = 0; i < ep->queued_copy_num; ++i) {
+		pkt_entry = ep->queued_copy_vec[i].pkt_entry;
+		data = ep->queued_copy_vec[i].data;
+		data_size = ep->queued_copy_vec[i].data_size;
+		data_offset = ep->queued_copy_vec[i].data_offset;
+
+		rx_entry = pkt_entry->x_entry;
+		desc = rx_entry->desc[0];
+		assert(desc && desc->peer.iface != FI_HMEM_SYSTEM);
+		bytes_copied[i] = ofi_copy_to_hmem_iov(desc->peer.iface, desc->peer.device.reserved,
+						       rx_entry->iov, rx_entry->iov_count,
+						       data_offset + ep->msg_prefix_size,
+						       data, data_size);
+	}
+
+	for (i = 0; i < ep->queued_copy_num; ++i) {
+		pkt_entry = ep->queued_copy_vec[i].pkt_entry;
+		data_size = ep->queued_copy_vec[i].data_size;
+		data_offset = ep->queued_copy_vec[i].data_offset;
+		rx_entry = pkt_entry->x_entry;
+
+		if (bytes_copied[i] != MIN(data_size, rx_entry->cq_entry.len - data_offset)) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
+				bytes_copied[i]);
+			return -FI_EIO;
+		}
+
+		rx_entry->bytes_queued -= data_size;
+		rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
+	}
+
+	ep->queued_copy_num = 0;
+	return 0;
+}
+
 /**
- * @brief copy data to receive buffer and update counter in rx_entry.
+ * @brief copy data to application's receive buffer and update counter in rx_entry.
  *
- * Depend on memory location, and software stack  this function will use different
- * strategies to copy data.
+ * Depend on when application's receive buffer is located (host or device) and
+ * the software stack, this function will select different, strategies to copy data.
  *
- * First, if memory is on cuda GPU, and gdrcopy is not available, this function
- * will post a local read request to copy data. In this case the data is not
- * copied upon return of this function, and the function rxr_pkt_handle_copied()
- * is not called.
+ * When application's receive buffer is on device, there are two scenarios:
  *
- * In all other conditions, data is copied and rxr_pkt_handle_copied() is called
- * upon return of this function.
+ *    If memory is on cuda GPU, and gdrcopy is not available, this function
+ *    will post a local read request to copy data. (This is because NCCL forbids its
+ *    plugin to make cuda calls). In this case, the data is not copied upon return of
+ *    this function, and the function rxr_pkt_handle_copied() is not called. It will
+ *    be called upon the completion of local read operation by the progress engine.
+ *
+ *    Otherwise, this function calls rxr_pkt_copy_data_to_hmem(), which will batch
+ *    multiple copies, and perform the copy (then call rxr_pkt_handle_copied()) together
+ *    to improve performance.
+ *
+ * When application's receive buffer is on host, data is copied immediately, and
+ * rxr_pkt_handle_copied() is called.
  *
  * @param[in]		ep		endpoint
  * @param[in,out]	rx_entry	rx_entry contains information of the receive
@@ -331,11 +419,13 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 		return err;
 	}
 
-	bytes_copied = ofi_copy_to_hmem_iov(desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-					    desc ? desc->peer.device.reserved : 0,
-					    rx_entry->iov, rx_entry->iov_count,
-					    data_offset + ep->msg_prefix_size,
-					    data, data_size);
+	if (efa_ep_is_hmem_mr(desc))
+		return rxr_pkt_copy_data_to_hmem(ep, pkt_entry, data, data_size, data_offset);
+
+	assert( !desc || desc->peer.iface == FI_HMEM_SYSTEM);
+	bytes_copied = ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count,
+				       data_offset + ep->msg_prefix_size,
+				       data, data_size);
 
 	if (bytes_copied != MIN(data_size, rx_entry->cq_entry.len - data_offset)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
