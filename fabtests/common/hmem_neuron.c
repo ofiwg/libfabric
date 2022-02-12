@@ -175,8 +175,10 @@ int ft_neuron_cleanup(void)
 	                             region, entry, tmp)
 		ft_neuron_free_region(region);
 
-	if (neuron_handle)
+	if (neuron_handle) {
 		dlclose(neuron_handle);
+		neuron_handle = NULL;
+	}
 
 	return 0;
 }
