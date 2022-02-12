@@ -3942,11 +3942,13 @@ static inline int cxip_send_prep_cmdq(struct cxip_cmdq *cmdq,
 	struct cxip_txc *txc = req->send.txc;
 	int ret;
 
-	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
-			      cxip_ofi_to_cxi_tc(txc->tclass),
-			      CXI_TC_TYPE_DEFAULT);
-	if (ret != FI_SUCCESS)
-		return ret;
+	if (!req->triggered) {
+		ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
+				      cxip_ofi_to_cxi_tc(txc->tclass),
+				      CXI_TC_TYPE_DEFAULT);
+		if (ret != FI_SUCCESS)
+			return ret;
+	}
 
 	if (req->send.flags & FI_FENCE) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
