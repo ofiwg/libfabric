@@ -179,7 +179,7 @@ static int cxip_dom_dwq_op_send(struct cxip_domain *dom, struct fi_op_msg *msg,
 	buf = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_base : NULL;
 	len = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_len : 0;
 
-	ret = cxip_send_common(txc, buf, len, NULL, msg->msg.data,
+	ret = cxip_send_common(txc, txc->tclass, buf, len, NULL, msg->msg.data,
 			       msg->msg.addr, 0, msg->msg.context, msg->flags,
 			       false, true, trig_thresh, trig_cntr, comp_cntr);
 	if (ret)
@@ -218,10 +218,11 @@ static int cxip_dom_dwq_op_tsend(struct cxip_domain *dom,
 	buf = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_base : NULL;
 	len = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_len : 0;
 
-	ret = cxip_send_common(txc, buf, len, NULL, tagged->msg.data,
-			       tagged->msg.addr, tagged->msg.tag,
-			       tagged->msg.context, tagged->flags, true, true,
-			       trig_thresh, trig_cntr, comp_cntr);
+	ret = cxip_send_common(txc, txc->tclass, buf, len, NULL,
+			       tagged->msg.data, tagged->msg.addr,
+			       tagged->msg.tag, tagged->msg.context,
+			       tagged->flags, true, true, trig_thresh,
+			       trig_cntr, comp_cntr);
 	if (ret)
 		CXIP_DBG("Failed to emit tagged message triggered op, ret=%d\n",
 			 ret);
@@ -253,7 +254,8 @@ static int cxip_dom_dwq_op_rma(struct cxip_domain *dom, struct fi_op_rma *rma,
 	buf = rma->msg.iov_count ? rma->msg.msg_iov[0].iov_base : NULL;
 	len = rma->msg.iov_count ? rma->msg.msg_iov[0].iov_len : 0;
 
-	ret = cxip_rma_common(op, txc, buf, len, NULL, rma->msg.addr,
+	ret = cxip_rma_common(op, txc, txc->tclass,
+			      buf, len, NULL, rma->msg.addr,
 			      rma->msg.rma_iov[0].addr, rma->msg.rma_iov[0].key,
 			      rma->msg.data, rma->flags, rma->msg.context, true,
 			      trig_thresh, trig_cntr, comp_cntr);
@@ -282,9 +284,9 @@ static int cxip_dom_dwq_op_atomic(struct cxip_domain *dom,
 	if (ret)
 		return ret;
 
-	ret = cxip_amo_common(CXIP_RQ_AMO, txc, &amo->msg, NULL, NULL, 0, NULL,
-			      NULL, 0, amo->flags, true, trig_thresh, trig_cntr,
-			      comp_cntr);
+	ret = cxip_amo_common(CXIP_RQ_AMO, txc, txc->tclass, &amo->msg,
+			      NULL, NULL, 0, NULL, NULL, 0, amo->flags,
+			      true, trig_thresh, trig_cntr, comp_cntr);
 	if (ret)
 		CXIP_DBG("Failed to emit AMO triggered op, ret=%d\n", ret);
 	else
@@ -310,11 +312,11 @@ static int cxip_dom_dwq_op_fetch_atomic(struct cxip_domain *dom,
 	if (ret)
 		return ret;
 
-	ret = cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, &fetch_amo->msg, NULL,
-			      NULL, 0, fetch_amo->fetch.msg_iov,
-			      fetch_amo->fetch.desc, fetch_amo->fetch.iov_count,
-			      fetch_amo->flags, true, trig_thresh, trig_cntr,
-			      comp_cntr);
+	ret = cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, txc->tclass,
+			      &fetch_amo->msg, NULL, NULL, 0,
+			      fetch_amo->fetch.msg_iov, fetch_amo->fetch.desc,
+			      fetch_amo->fetch.iov_count, fetch_amo->flags,
+			      true, trig_thresh, trig_cntr, comp_cntr);
 	if (ret)
 		CXIP_DBG("Failed to emit fetching AMO triggered op, ret=%d\n",
 			 ret);
@@ -341,8 +343,9 @@ static int cxip_dom_dwq_op_comp_atomic(struct cxip_domain *dom,
 	if (ret)
 		return ret;
 
-	ret = cxip_amo_common(CXIP_RQ_AMO_SWAP, txc, &comp_amo->msg,
-			      comp_amo->compare.msg_iov, comp_amo->compare.desc,
+	ret = cxip_amo_common(CXIP_RQ_AMO_SWAP, txc, txc->tclass,
+			      &comp_amo->msg, comp_amo->compare.msg_iov,
+			      comp_amo->compare.desc,
 			      comp_amo->compare.iov_count,
 			      comp_amo->fetch.msg_iov, comp_amo->fetch.desc,
 			      comp_amo->fetch.iov_count, comp_amo->flags, true,

@@ -23,6 +23,7 @@ struct fid_fabric *cxit_fabric;
 struct fid_domain *cxit_domain;
 struct fi_cxi_dom_ops *dom_ops;
 struct fid_ep *cxit_ep;
+struct fid_ep *cxit_tx_alias_ep;
 struct cxip_addr cxit_ep_addr;
 fi_addr_t cxit_ep_fi_addr;
 struct fid_ep *cxit_sep;
@@ -770,6 +771,64 @@ void cxit_setup_rma(void)
 
 void cxit_teardown_rma(void)
 {
+	/* Tear down RMA objects */
+	cxit_destroy_ep(); /* EP must be destroyed before bound objects */
+
+	cxit_destroy_av();
+	cxit_destroy_cntrs();
+	cxit_destroy_cqs();
+	cxit_destroy_eq();
+	cxit_teardown_ep();
+}
+
+void cxit_setup_tx_alias_rma(void)
+{
+	int ret;
+	struct cxip_ep *cxi_ep;
+	struct cxip_ep *cxi_alias_ep = NULL;
+	uint64_t op_flags;
+	struct cxip_addr fake_addr = {.nic = 0xad, .pid = 0xbc};
+
+	cxit_setup_enabled_ep();
+
+	/* Insert local address into AV to prepare to send to self */
+	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	cr_assert(ret == 1);
+
+	/* Insert local address into AV to prepare to send to self */
+	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, &cxit_ep_fi_addr,
+			   0, NULL);
+	cr_assert(ret == 1);
+
+	/* Create TX alias EP */
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
+	cr_assert(!(cxi_ep->tx_attr.op_flags & FI_RECV), "Bad op flags");
+
+	op_flags = cxi_ep->tx_attr.op_flags | FI_TRANSMIT;
+#if 1
+	ret = fi_ep_alias(cxit_ep, &cxit_tx_alias_ep, op_flags);
+#else
+	ret = fi_ep_alias(&cxi_ep->ep, &cxit_tx_alias_ep, op_flags);
+#endif
+	cr_assert_eq(ret, FI_SUCCESS, "fi_alias");
+
+	cxi_alias_ep = container_of(&cxit_tx_alias_ep->fid,
+				    struct cxip_ep, ep.fid);
+	cr_assert_not_null(cxi_alias_ep->ep_obj);
+}
+
+void cxit_teardown_tx_alias_rma(void)
+{
+	struct cxip_ep *cxi_ep;
+	int ret;
+
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
+
+	ret = fi_close(&cxit_tx_alias_ep->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close alias endpoint");
+	cr_assert_eq(ofi_atomic_get32(&cxi_ep->ep_obj->ref), 0,
+		     "EP reference count");
+
 	/* Tear down RMA objects */
 	cxit_destroy_ep(); /* EP must be destroyed before bound objects */
 

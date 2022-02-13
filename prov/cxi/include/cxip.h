@@ -778,6 +778,7 @@ struct cxip_req_send {
 	struct cxip_addr caddr;
 	uint8_t rxc_id;
 	bool tagged;
+	uint32_t tclass;
 	uint64_t tag;
 	uint64_t data;
 	uint64_t flags;
@@ -2161,7 +2162,7 @@ int cxip_coll_arm_enable(struct fid_mc *mc, bool enable);
 void cxip_coll_reset_mc_ctrs(struct fid_mc *mc);
 
 /*
- * cxip_fid_to_tx_info() - Return TXC and attributes from FID
+ * cxip_fid_to_tx_info() - Return the TXC and attributes from FID
  * provided to a transmit API.
  */
 static inline int cxip_fid_to_tx_info(struct fid_ep *ep,
@@ -2272,12 +2273,13 @@ static inline void cxip_txq_ring(struct cxip_cmdq *cmdq, bool more,
 	}
 }
 
-ssize_t cxip_send_common(struct cxip_txc *txc, const void *buf, size_t len,
-			void *desc, uint64_t data, fi_addr_t dest_addr,
-			uint64_t tag, void *context, uint64_t flags,
-			bool tagged, bool triggered, uint64_t trig_thresh,
-			struct cxip_cntr *trig_cntr,
-			struct cxip_cntr *comp_cntr);
+ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass,
+			 const void *buf, size_t len,
+			 void *desc, uint64_t data, fi_addr_t dest_addr,
+			 uint64_t tag, void *context, uint64_t flags,
+			 bool tagged, bool triggered, uint64_t trig_thresh,
+			 struct cxip_cntr *trig_cntr,
+			 struct cxip_cntr *comp_cntr);
 
 ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 			 void *desc, fi_addr_t src_addr, uint64_t tag,
@@ -2285,10 +2287,10 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 			 bool tagged, struct cxip_cntr *comp_cntr);
 
 ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
-			const void *buf, size_t len, void *desc,
-			fi_addr_t tgt_addr, uint64_t addr, uint64_t key,
-			uint64_t data, uint64_t flags, void *context,
-			bool triggered, uint64_t trig_thresh,
+			uint32_t tclass, const void *buf, size_t len,
+			void *desc, fi_addr_t tgt_addr, uint64_t addr,
+			uint64_t key, uint64_t data, uint64_t flags,
+			void *context, bool triggered, uint64_t trig_thresh,
 			struct cxip_cntr *trig_cntr,
 			struct cxip_cntr *comp_cntr);
 
@@ -2318,7 +2320,7 @@ enum cxip_amo_req_type {
 };
 
 int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
-		    const struct fi_msg_atomic *msg,
+		    uint32_t tclass, const struct fi_msg_atomic *msg,
 		    const struct fi_ioc *comparev, void **comparedesc,
 		    size_t compare_count, const struct fi_ioc *resultv,
 		    void **resultdesc, size_t result_count, uint64_t flags,

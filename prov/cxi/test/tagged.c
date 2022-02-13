@@ -4627,3 +4627,281 @@ Test(tagged, NC2192)
 	free(send_buf);
 	free(recv_buf);
 }
+
+TestSuite(tagged_tclass, .init = cxit_setup_tx_alias_tagged,
+	  .fini = cxit_teardown_tx_alias_tagged,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
+
+/* Simple send using both the EP and alias EP with new TC */
+Test(tagged_tclass, ping)
+{
+	int ret;
+	uint8_t *recv_buf,
+		*send_buf;
+	int recv_len = 64;
+	int send_len = 64;
+	struct fi_cq_tagged_entry tx_cqe,
+				  rx_cqe;
+	uint32_t tclass = FI_TC_LOW_LATENCY;
+	fi_addr_t from;
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len * 2);
+	cr_assert(recv_buf);
+	memset(recv_buf, 0, recv_len * 2);
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len * 2);
+	cr_assert(send_buf);
+
+	/* Post RX buffers */
+	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL, FI_ADDR_UNSPEC, 0,
+		       0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+	ret = fi_trecv(cxit_ep, recv_buf + recv_len, recv_len, NULL,
+		       FI_ADDR_UNSPEC, 0, 0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+
+	/* Update EP alias traffic class */
+	ret = fi_set_val(&cxit_tx_alias_ep->fid, FI_OPT_CXI_SET_TCLASS,
+			 (void *)&tclass);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_set_val failed %d for tc %d\n",
+		     ret, tclass);
+
+
+	/* Send 64 bytes to self */
+	ret = fi_tsend(cxit_ep, send_buf, send_len, NULL, cxit_ep_fi_addr, 0,
+		       NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+
+	ret = fi_tsend(cxit_tx_alias_ep, send_buf + send_len, send_len, NULL,
+		       cxit_ep_fi_addr, 0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_tsend for alias failed %d", ret);
+
+	/* Wait for async event indicating data has been received */
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
+			  0, 0);
+	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
+			  0, 0);
+	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+	free(send_buf);
+	free(recv_buf);
+}
+
+/* Various tagged protocols using both the original endpoint
+ * and an alias endpoint modified to use the specified tclass.
+ *
+ * Note that receive order is not expected between the original
+ * and alias EP; tags are used for getting completions.
+ */
+struct multi_tc_params {
+	size_t length;
+	size_t num_ios;
+	uint32_t tclass;
+	uint32_t alias_mask;
+	bool peek;
+};
+
+void do_multi_tc(struct multi_tc_params *param)
+{
+	int ret;
+	size_t buf_len = param->length;
+	struct fid_ep *ep;
+	struct fi_cq_tagged_entry *rx_cqe;
+	struct fi_cq_tagged_entry *tx_cqe;
+	struct tagged_thread_args *tx_args;
+	struct tagged_thread_args *rx_args;
+	pthread_t tx_thread;
+	pthread_t rx_thread;
+	pthread_attr_t attr;
+	struct tagged_event_args tx_evt_args = {
+		.cq = cxit_tx_cq,
+		.io_num = param->num_ios,
+	};
+	struct tagged_event_args rx_evt_args = {
+		.cq = cxit_rx_cq,
+		.io_num = param->num_ios,
+	};
+
+	tx_cqe = calloc(param->num_ios, sizeof(struct fi_cq_tagged_entry));
+	cr_assert_not_null(tx_cqe);
+
+	rx_cqe = calloc(param->num_ios, sizeof(struct fi_cq_tagged_entry));
+	cr_assert_not_null(rx_cqe);
+
+	tx_args = calloc(param->num_ios, sizeof(struct tagged_thread_args));
+	cr_assert_not_null(tx_args);
+
+	rx_args = calloc(param->num_ios, sizeof(struct tagged_thread_args));
+	cr_assert_not_null(rx_args);
+
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+	tx_evt_args.cqe = tx_cqe;
+	rx_evt_args.cqe = rx_cqe;
+
+	/* Set alias EP traffic class */
+	ret = fi_set_val(&cxit_tx_alias_ep->fid, FI_OPT_CXI_SET_TCLASS,
+			 &param->tclass);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_set_val traffic class");
+
+	/* Issue the Sends */
+	for (size_t tx_io = 0; tx_io < param->num_ios; tx_io++) {
+		tx_args[tx_io].len = buf_len;
+		tx_args[tx_io].tag = tx_io;
+		tx_args[tx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		cr_assert_not_null(tx_args[tx_io].buf);
+		for (size_t i = 0; i < buf_len; i++)
+			tx_args[tx_io].buf[i] = i + 0xa0 + tx_io;
+
+		ep = tx_io & param->alias_mask ? cxit_tx_alias_ep : cxit_ep;
+		do {
+			ret = fi_tsend(ep, tx_args[tx_io].buf,
+				       tx_args[tx_io].len, NULL,
+				       cxit_ep_fi_addr, tx_args[tx_io].tag,
+				       NULL);
+			if (ret == -FI_EAGAIN) {
+				fi_cq_read(cxit_tx_cq, NULL, 0);
+				fi_cq_read(cxit_rx_cq, NULL, 0);
+			}
+		} while (ret == -FI_EAGAIN);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend %ld: unexpected ret %d",
+			     tx_io, ret);
+	}
+
+	/* Start processing Send events */
+	ret = pthread_create(&tx_thread, &attr, tagged_evt_worker,
+				(void *)&tx_evt_args);
+	cr_assert_eq(ret, 0, "Send thread create failed %d", ret);
+
+	sleep(1);
+
+	/* Force onloading of UX entries if operating in SW EP mode */
+	fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+
+	/* Optional peek to see if all send tags are found on ux list */
+	if (param->peek) {
+		for (size_t rx_io = 0; rx_io < param->num_ios; rx_io++) {
+			ret = try_peek(FI_ADDR_UNSPEC, rx_io, 0, buf_len, NULL);
+			cr_assert_eq(ret, FI_SUCCESS,
+				     "peek of UX message failed");
+		}
+	}
+
+	/* Issue the Receives */
+	for (size_t rx_io = 0; rx_io < param->num_ios; rx_io++) {
+		rx_args[rx_io].len = buf_len;
+		rx_args[rx_io].tag = rx_io;
+		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		cr_assert_not_null(rx_args[rx_io].buf);
+		memset(rx_args[rx_io].buf, 0, buf_len);
+
+		do {
+			ret = fi_trecv(cxit_ep, rx_args[rx_io].buf,
+				       rx_args[rx_io].len, NULL,
+				       FI_ADDR_UNSPEC, rx_args[rx_io].tag,
+				       0, NULL);
+			if (ret == -FI_EAGAIN)
+				fi_cq_read(cxit_rx_cq, NULL, 0);
+		} while (ret == -FI_EAGAIN);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_trecv %ld: unexpected ret %d",
+			     rx_io, ret);
+	}
+
+	/* Start processing Receive events */
+	ret = pthread_create(&rx_thread, &attr, tagged_evt_worker,
+			     (void *)&rx_evt_args);
+	cr_assert_eq(ret, 0, "Receive thread create failed %d", ret);
+
+	/* Wait for the RX/TX event threads to complete */
+	ret = pthread_join(tx_thread, NULL);
+	cr_assert_eq(ret, 0, "Send thread join failed %d", ret);
+
+	ret = pthread_join(rx_thread, NULL);
+	cr_assert_eq(ret, 0, "Recv thread join failed %d", ret);
+
+	/* Validate results */
+	for (size_t io = 0; io < param->num_ios; io++) {
+		/* Validate sent data */
+		cr_expect_arr_eq(rx_args[io].buf, tx_args[io].buf, buf_len);
+
+		validate_tx_event(&tx_cqe[io], FI_TAGGED | FI_SEND, NULL);
+
+		validate_rx_event(&rx_cqe[io], NULL, buf_len,
+				  FI_TAGGED | FI_RECV, NULL,
+				  0, tx_args[rx_cqe[io].tag].tag);
+
+		free(tx_args[io].buf);
+		free(rx_args[io].buf);
+	}
+
+	pthread_attr_destroy(&attr);
+	free(rx_cqe);
+	free(tx_cqe);
+	free(tx_args);
+	free(rx_args);
+}
+
+ParameterizedTestParameters(tagged_tclass, multi_tc)
+{
+	size_t param_sz;
+
+	static struct multi_tc_params params[] = {
+		{.length = 64,		/* Eager IDC */
+		 .num_ios = 10,
+		 .tclass = FI_TC_LOW_LATENCY,
+		 .peek = true,
+		 .alias_mask = 0x1},
+		{.length = 64,		/* Eager IDC */
+		 .num_ios = 10,
+		 .tclass = FI_TC_LOW_LATENCY,
+		 .peek = true,
+		 .alias_mask = 0x3},
+		{.length = 2 * 1024,	/* Eager */
+		 .num_ios = 15,
+		 .tclass = FI_TC_LOW_LATENCY,
+		 .peek = true,
+		 .alias_mask = 0x1},
+		{.length = 4 * 1024,	/* Rendezvous */
+		 .num_ios = 12,
+		 .tclass = FI_TC_LOW_LATENCY,
+		 .peek = true,
+		 .alias_mask = 0x1},
+		{.length = 128 * 1024,	/* Rendezvous */
+		 .num_ios = 25,
+		 .tclass = FI_TC_LOW_LATENCY,
+		 .peek = true,
+		 .alias_mask = 0x1},
+	};
+
+	param_sz = ARRAY_SIZE(params);
+	return cr_make_param_array(struct multi_tc_params, params,
+				   param_sz);
+}
+
+ParameterizedTest(struct multi_tc_params *param, tagged_tclass, multi_tc,
+		  .timeout = 60)
+{
+	do_multi_tc(param);
+}

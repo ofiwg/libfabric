@@ -20,6 +20,16 @@
 #define FI_CXI_UNRELIABLE (1ULL << 61)
 
 /*
+ * TODO: The following should be integrated into the include/rdma/fi_ext.h
+ * and are use for provider specific fi_control() operations.
+ */
+#define FI_PROV_SPECIFIC_CXI	(0xccc << 16)
+
+enum {
+	FI_OPT_CXI_SET_TCLASS = -FI_PROV_SPECIFIC_CXI,
+};
+
+/*
  * Used in conjunction with the deferred work queue API. If a deferred work
  * queue operation has this flag set, the CXI provider will ensure a counter
  * writeback occurs once the deferred work queue operation completes.

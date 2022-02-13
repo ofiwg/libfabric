@@ -316,12 +316,12 @@ static int cxip_cp_get(struct cxip_lni *lni, uint16_t vni,
 			    &lni->hw_cps[lni->n_cps]);
 	if (ret) {
 		/* Attempt to fall back to remap traffic class with the same
-		 * traffic class type and allocate HW CP is necessary.
+		 * traffic class type and allocate HW CP if necessary.
 		 */
-		CXIP_INFO("Failed to allocate CP, ret: %d VNI: %u TC: %s TYPE: %s\n",
+		CXIP_WARN("Failed to allocate CP, ret: %d VNI: %u TC: %s TYPE: %s\n",
 			  ret, vni, cxi_tc_to_str(tc),
 			  cxi_tc_type_to_str(tc_type));
-		CXIP_INFO("Remapping original TC from %s to %s\n",
+		CXIP_WARN("Remapping original TC from %s to %s\n",
 			  cxi_tc_to_str(tc), cxi_tc_to_str(remap_tc));
 
 		/* Check to see if a matching HW CP has already been allocated.

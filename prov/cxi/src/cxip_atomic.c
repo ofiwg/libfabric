@@ -445,7 +445,8 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 			     uint8_t *idx_ext, enum c_atomic_op atomic_op,
 			     enum c_cswap_op cswap_op,
 			     enum c_atomic_type atomic_type,
-			     unsigned int atomic_type_len, uint64_t flags)
+			     unsigned int atomic_type_len, uint64_t flags,
+			     uint32_t tclass)
 {
 	struct cxip_domain *dom = txc->domain;
 	struct cxip_cmdq *cmdq = txc->tx_cmdq;
@@ -686,7 +687,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 
 	/* Ensure correct traffic class is used. */
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
-			      cxip_ofi_to_cxi_tc(txc->tclass), tc_type);
+			      cxip_ofi_to_cxi_tc(tclass), tc_type);
 	if (ret) {
 		TXC_WARN_RET(txc, ret, "Failed to set traffic class\n");
 		goto err_cq_unlock;
@@ -839,7 +840,7 @@ static int cxip_amo_emit_non_trig_dma(struct cxip_txc *txc,
 				      struct c_dma_amo_cmd *dma_amo_cmd,
 				      struct c_full_dma_cmd *flush_cmd,
 				      bool fetching, bool fetching_amo_flush,
-				      uint64_t flags)
+				      uint64_t flags, uint32_t tclass)
 {
 	int ret;
 
@@ -847,7 +848,7 @@ static int cxip_amo_emit_non_trig_dma(struct cxip_txc *txc,
 
 	/* Only CXI_TC_TYPE_DEFAULT is supported with DMA AMO commands. */
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
-			      cxip_ofi_to_cxi_tc(txc->tclass),
+			      cxip_ofi_to_cxi_tc(tclass),
 			      CXI_TC_TYPE_DEFAULT);
 	if (ret) {
 		TXC_WARN_RET(txc, ret,
@@ -958,8 +959,8 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 			     enum c_cswap_op cswap_op,
 			     enum c_atomic_type atomic_type,
 			     unsigned int atomic_type_len, uint64_t flags,
-			     bool triggered, uint64_t trig_thresh,
-			     struct cxip_cntr *trig_cntr,
+			     uint32_t tclass, bool triggered,
+			     uint64_t trig_thresh, struct cxip_cntr *trig_cntr,
 			     struct cxip_cntr *comp_cntr)
 {
 	struct cxip_domain *dom = txc->domain;
@@ -1224,7 +1225,8 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 	} else {
 		ret = cxip_amo_emit_non_trig_dma(txc, cmdq, &dma_amo_cmd,
 						 &flush_cmd, fetching,
-						 fetching_amo_flush, flags);
+						 fetching_amo_flush, flags,
+						 tclass);
 		if (ret) {
 			TXC_WARN_RET(txc, ret,
 				     "Failed to emit non-triggered AMO\n");
@@ -1272,7 +1274,7 @@ static bool cxip_amo_is_idc(struct cxip_txc *txc, uint64_t key, bool triggered)
 }
 
 int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
-		    const struct fi_msg_atomic *msg,
+		    uint32_t tclass, const struct fi_msg_atomic *msg,
 		    const struct fi_ioc *comparev, void **comparedesc,
 		    size_t compare_count, const struct fi_ioc *resultv,
 		    void **resultdesc, size_t result_count, uint64_t flags,
@@ -1388,14 +1390,16 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		ret = cxip_amo_emit_idc(txc, req_type, msg, buf, compare,
 					result, result_mr, remote_offset, &dfa,
 					&idx_ext, atomic_op, cswap_op,
-					atomic_type, atomic_type_len, flags);
+					atomic_type, atomic_type_len, flags,
+					tclass);
 	else
 		ret = cxip_amo_emit_dma(txc, req_type, msg, buf, compare,
 					result, buf_mr, result_mr, key,
 					remote_offset, &dfa, &idx_ext,
 					atomic_op, cswap_op, atomic_type,
-					atomic_type_len, flags, triggered,
-					trig_thresh, trig_cntr, comp_cntr);
+					atomic_type_len, flags, tclass,
+					triggered, trig_thresh, trig_cntr,
+					comp_cntr);
 
 	if (ret)
 		TXC_WARN_RET(txc, ret,
@@ -1450,9 +1454,9 @@ static ssize_t cxip_ep_atomic_write(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_amo_common(CXIP_RQ_AMO, txc, &msg, NULL, NULL, 0, NULL,
-			       NULL, 0, attr->op_flags, false, 0, NULL,
-			       NULL);
+	return cxip_amo_common(CXIP_RQ_AMO, txc, attr->tclass, &msg,
+			       NULL, NULL, 0, NULL, NULL, 0, attr->op_flags,
+			       false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_writev(struct fid_ep *ep,
@@ -1485,8 +1489,9 @@ static ssize_t cxip_ep_atomic_writev(struct fid_ep *ep,
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_amo_common(CXIP_RQ_AMO, txc, &msg, NULL, NULL, 0, NULL,
-			       NULL, 0, attr->op_flags, false, 0, NULL, NULL);
+	return cxip_amo_common(CXIP_RQ_AMO, txc, attr->tclass, &msg,
+			       NULL, NULL, 0, NULL, NULL, 0, attr->op_flags,
+			       false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *ep,
@@ -1494,13 +1499,14 @@ static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *ep,
 				       uint64_t flags)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
 	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS |
 		      FI_CXI_UNRELIABLE |
 		      FI_CXI_HRP))
 		return -FI_EBADFLAGS;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	if (flags & FI_FENCE && !(txc->attr.caps & FI_FENCE))
@@ -1512,8 +1518,9 @@ static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *ep,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return cxip_amo_common(CXIP_RQ_AMO, txc, msg, NULL, NULL, 0, NULL, NULL,
-			       0, flags, false, 0, NULL, NULL);
+	return cxip_amo_common(CXIP_RQ_AMO, txc, attr->tclass, msg, NULL,
+			       NULL, 0, NULL, NULL, 0, flags, false, 0,
+			       NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_inject(struct fid_ep *ep, const void *buf,
@@ -1522,6 +1529,7 @@ static ssize_t cxip_ep_atomic_inject(struct fid_ep *ep, const void *buf,
 				     enum fi_datatype datatype, enum fi_op op)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
 	struct fi_ioc oper1 = {
 		.addr = (void *)buf,
@@ -1544,11 +1552,12 @@ static ssize_t cxip_ep_atomic_inject(struct fid_ep *ep, const void *buf,
 		.context = NULL
 	};
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_amo_common(CXIP_RQ_AMO, txc, &msg, NULL, NULL, 0, NULL,
-			       NULL, 0, FI_INJECT, false, 0, NULL, NULL);
+	return cxip_amo_common(CXIP_RQ_AMO, txc, attr->tclass, &msg,
+			       NULL, NULL, 0, NULL, NULL, 0, FI_INJECT,
+			       false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_readwrite(struct fid_ep *ep, const void *buf,
@@ -1589,9 +1598,9 @@ static ssize_t cxip_ep_atomic_readwrite(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, &msg, NULL, NULL, 0,
-			       &resultv, &result_desc, 1, attr->op_flags,
-			       false, 0, NULL, NULL);
+	return cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, attr->tclass, &msg,
+			       NULL, NULL, 0, &resultv, &result_desc,
+			       1, attr->op_flags, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *ep,
@@ -1628,9 +1637,10 @@ static ssize_t cxip_ep_atomic_readwritev(struct fid_ep *ep,
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, &msg, NULL, NULL, 0,
-			       resultv, result_desc, result_count,
-			       attr->op_flags, false, 0, NULL, NULL);
+	return cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, attr->tclass, &msg,
+			       NULL, NULL, 0, resultv, result_desc,
+			       result_count, attr->op_flags,
+			       false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
@@ -1640,11 +1650,12 @@ static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 					   size_t result_count, uint64_t flags)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
 	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS | FI_CXI_UNRELIABLE))
 		return -FI_EBADFLAGS;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	if (flags & FI_FENCE && !(txc->attr.caps & FI_FENCE))
@@ -1656,9 +1667,9 @@ static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, msg, NULL, NULL, 0,
-			       resultv, result_desc, result_count, flags, false,
-			       0, NULL, NULL);
+	return cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, attr->tclass, msg,
+			       NULL, NULL, 0, resultv, result_desc,
+			       result_count, flags, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
@@ -1704,9 +1715,10 @@ static ssize_t cxip_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_amo_common(CXIP_RQ_AMO_SWAP, txc, &msg, &comparev,
-			       &result_desc, 1, &resultv, &result_desc, 1,
-			       attr->op_flags, false, 0, NULL, NULL);
+	return cxip_amo_common(CXIP_RQ_AMO_SWAP, txc, attr->tclass, &msg,
+			       &comparev, &result_desc, 1, &resultv,
+			       &result_desc, 1, attr->op_flags,
+			       false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *ep,
@@ -1746,8 +1758,8 @@ static ssize_t cxip_ep_atomic_compwritev(struct fid_ep *ep,
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_amo_common(CXIP_RQ_AMO_SWAP, txc, &msg, comparev,
-			       compare_desc, compare_count, resultv,
+	return cxip_amo_common(CXIP_RQ_AMO_SWAP, txc, attr->tclass, &msg,
+			       comparev, compare_desc, compare_count, resultv,
 			       result_desc, result_count, attr->op_flags,
 			       false, 0, NULL, NULL);
 }
@@ -1760,11 +1772,12 @@ cxip_ep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 			    uint64_t flags)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
 	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS | FI_CXI_UNRELIABLE))
 		return -FI_EBADFLAGS;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	if (flags & FI_FENCE && !(txc->attr.caps & FI_FENCE))
@@ -1776,8 +1789,8 @@ cxip_ep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return cxip_amo_common(CXIP_RQ_AMO_SWAP, txc, msg, comparev,
-			       compare_desc, compare_count, resultv,
+	return cxip_amo_common(CXIP_RQ_AMO_SWAP, txc, attr->tclass, msg,
+			       comparev, compare_desc, compare_count, resultv,
 			       result_desc, result_count, flags, false, 0, NULL,
 			       NULL);
 }

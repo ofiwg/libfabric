@@ -1151,3 +1151,116 @@ Test(ep, valid_tx_attr_size_hints)
 	fi_freeinfo(info);
 	fi_freeinfo(hints);
 }
+
+TestSuite(ep_tclass, .init = cxit_setup_tx_alias_rma,
+	  .fini = cxit_teardown_tx_alias_rma, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+/* Add control test for setting of EP tclass.
+ *
+ * Test same for alias EP.
+ *
+ * Parameterized for all TCLASS values and bad values.
+ */
+struct ep_tclass_params {
+	int tclass;
+	int retval;
+};
+
+static struct ep_tclass_params tclass_params[] = {
+	{.tclass = 0,
+	 .retval = FI_SUCCESS},
+	{.tclass = FI_TC_UNSPEC,
+	 .retval = FI_SUCCESS},
+	{.tclass = FI_TC_DSCP,
+	 .retval = -FI_EINVAL},
+	{.tclass = FI_TC_LABEL,
+	 .retval = FI_SUCCESS},
+	{.tclass = FI_TC_BEST_EFFORT,
+	 .retval = FI_SUCCESS},
+	{.tclass = FI_TC_LOW_LATENCY,
+	 .retval = FI_SUCCESS},
+	{.tclass = FI_TC_DEDICATED_ACCESS,
+	 .retval = FI_SUCCESS},
+	{.tclass = FI_TC_BULK_DATA,
+	 .retval = FI_SUCCESS},
+	{.tclass = FI_TC_SCAVENGER,
+	 .retval = FI_SUCCESS},
+	{.tclass = FI_TC_NETWORK_CTRL,		/* Not supported */
+	 .retval = -FI_EINVAL},
+	{.tclass = FI_TC_NETWORK_CTRL + 1,	/* Illegal */
+	 .retval = -FI_EINVAL},
+};
+
+int set_ep_tclass(struct cxip_ep *ep, uint32_t tclass)
+{
+	int ret;
+
+	ret = fi_set_val(&ep->ep.fid, FI_OPT_CXI_SET_TCLASS,
+			 (void *)&tclass);
+	if (ret == FI_SUCCESS) {
+		if (tclass != FI_TC_UNSPEC)
+			cr_assert_eq(tclass, ep->tx_attr.tclass,
+				     "update tclass mismatch. %d != %d",
+				     tclass, ep->tx_attr.tclass);
+		else
+			cr_assert_neq(tclass, ep->tx_attr.tclass,
+				      "FI_TC_UNSPEC tclass not updated");
+	}
+
+	return ret;
+}
+
+ParameterizedTestParameters(ep_tclass, alias_set_tclass)
+{
+	size_t param_sz;
+
+	param_sz = ARRAY_SIZE(tclass_params);
+	return cr_make_param_array(struct ep_tclass_params,
+				   tclass_params, param_sz);
+}
+
+/* Modify EP alias traffic class */
+ParameterizedTest(struct ep_tclass_params *param, ep_tclass,
+		  alias_set_tclass)
+{
+	int ret;
+	struct cxip_ep *cxi_ep;
+	struct cxip_ep *alias_ep = NULL;
+	uint32_t orig_ep_tclass;
+
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
+	orig_ep_tclass = cxi_ep->tx_attr.tclass;
+
+	alias_ep = container_of(&cxit_tx_alias_ep->fid, struct cxip_ep, ep.fid);
+	cr_assert_not_null(alias_ep->ep_obj);
+
+	ret = set_ep_tclass(alias_ep, param->tclass);
+	cr_assert_eq(ret, param->retval,
+		     "fi_set_val for TCLASS %d", param->tclass);
+
+	/* make sure only the alias EP tclass changed */
+	cr_assert_eq(orig_ep_tclass, cxi_ep->tx_attr.tclass,
+		     "Original EP tclass changed");
+}
+
+ParameterizedTestParameters(ep_tclass, set_tclass)
+{
+	size_t param_sz;
+
+	param_sz = ARRAY_SIZE(tclass_params);
+	return cr_make_param_array(struct ep_tclass_params,
+				   tclass_params, param_sz);
+}
+
+/* Modify standard EP traffic class parameters */
+ParameterizedTest(struct ep_tclass_params *param, ep_tclass, set_tclass)
+{
+	int ret;
+	struct cxip_ep *cxi_ep;
+
+	cxi_ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
+
+	ret = set_ep_tclass(cxi_ep, param->tclass);
+	cr_assert_eq(ret, param->retval,
+		     "fi_set_val for TCLASS %d", param->tclass);
+}

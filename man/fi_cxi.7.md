@@ -746,6 +746,36 @@ ret = fi_control(&domain->fid, FI_QUEUE_WORK, &rma_work);
 conserve hardware resources, it is recommended to only use the *FI_CXI_CNTR_WB*
 when a counter writeback is absolutely required.
 
+## CXI Alias EP Overrides
+
+A transmit alias endpoint can be created and configured to utilize
+a different traffic class than the original endpoint. This provides a
+lightweight mechanism to utilize multiple traffic classes within a process.
+Message order between the original endpoint and the alias endpoint is
+not defined/guaranteed. See example usage below for setting the traffic
+class of a transmit alias endpoint.
+
+```c
+#include <rdma/fabric.h>
+#include <rdma/fi_endpoint.h>
+#include <rdma/fi_cxi_ext.h>     // Ultimately fi_ext.h
+
+struct fid_ep *ep;
+. . .
+
+struct fid_ep *alias_ep = NULL;
+uint32_t tclass = FI_TC_LOW_LATENCY;
+uint64_t op_flags = FI_TRANSMIT | desired data operation flags;
+
+ret = fi_ep_alias(ep, &alias_ep, op_flags);
+if (ret)
+    error;
+
+ret = fi_set_val(&alias_ep->fid, FI_OPT_CXI_SET_TCLASS, (void *)&tlcass);
+if (ret)
+    error;
+```
+
 # FABTESTS
 
 The CXI provider does not currently support fabtests which depend on IP

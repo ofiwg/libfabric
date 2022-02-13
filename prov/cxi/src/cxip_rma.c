@@ -128,7 +128,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 			     struct cxip_mr *mr, union c_fab_addr *dfa,
 			     uint8_t *idx_ext, uint64_t addr, uint64_t key,
 			     uint64_t data, uint64_t flags, void *context,
-			     bool write, bool unr,
+			     bool write, bool unr, uint32_t tclass,
 			     enum cxi_traffic_class_type tc_type,
 			     bool triggered, uint64_t trig_thresh,
 			     struct cxip_cntr *trig_cntr,
@@ -306,7 +306,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	} else {
 		/* Ensure correct traffic class is used. */
 		ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
-				      cxip_ofi_to_cxi_tc(txc->tclass), tc_type);
+				      cxip_ofi_to_cxi_tc(tclass), tc_type);
 		if (ret) {
 			TXC_WARN(txc, "Failed to set traffic class: %d:%s\n",
 				 ret, fi_strerror(-ret));
@@ -367,6 +367,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 			     union c_fab_addr *dfa, uint8_t *idx_ext,
 			     uint64_t addr, uint64_t key, uint64_t data,
 			     uint64_t flags, void *context, bool unr,
+			     uint32_t tclass,
 			     enum cxi_traffic_class_type tc_type)
 {
 	int ret;
@@ -466,7 +467,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 
 	/* Ensure correct traffic class is used. */
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
-			      cxip_ofi_to_cxi_tc(txc->tclass), tc_type);
+			      cxip_ofi_to_cxi_tc(tclass), tc_type);
 	if (ret) {
 		TXC_WARN(txc, "Failed to set traffic class: %d:%s\n", ret,
 			 fi_strerror(-ret));
@@ -601,8 +602,9 @@ static bool cxip_rma_is_idc(struct cxip_txc *txc, uint64_t key, size_t len,
  * DMA commands in order to clean up the source buffer mapping on completion.
  */
 ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
-			const void *buf, size_t len, void *desc,
-			fi_addr_t tgt_addr, uint64_t addr, uint64_t key,
+			uint32_t tclass, const void *buf, size_t len,
+			void *desc, fi_addr_t tgt_addr,
+			uint64_t addr, uint64_t key,
 			uint64_t data, uint64_t flags, void *context,
 			bool triggered, uint64_t trig_thresh,
 			struct cxip_cntr *trig_cntr,
@@ -682,11 +684,12 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	if (idc)
 		ret = cxip_rma_emit_idc(txc, buf, len, &dfa, &idx_ext, addr,
 					key, data, flags, context, unr,
-					tc_type);
+					tclass, tc_type);
 	else
 		ret = cxip_rma_emit_dma(txc, buf, len, desc, &dfa, &idx_ext,
 					addr, key, data, flags, context, write,
-					unr, tc_type, triggered, trig_thresh,
+					unr, tclass, tc_type,
+					triggered, trig_thresh,
 					trig_cntr, comp_cntr);
 
 	if (ret)
@@ -717,9 +720,9 @@ static ssize_t cxip_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_rma_common(FI_OP_WRITE, txc, buf, len, desc, dest_addr,
-			       addr, key, 0, attr->op_flags, context, false,
-			       0, NULL, NULL);
+	return cxip_rma_common(FI_OP_WRITE, txc, attr->tclass, buf, len, desc,
+			       dest_addr, addr, key, 0, attr->op_flags,
+			       context, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_rma_writev(struct fid_ep *ep, const struct iovec *iov,
@@ -735,7 +738,7 @@ static ssize_t cxip_rma_writev(struct fid_ep *ep, const struct iovec *iov,
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	return cxip_rma_common(FI_OP_WRITE, txc, iov[0].iov_base,
+	return cxip_rma_common(FI_OP_WRITE, txc, attr->tclass, iov[0].iov_base,
 			       iov[0].iov_len, desc ? desc[0] : NULL, dest_addr,
 			       addr, key, 0, attr->op_flags, context, false,
 			       0, NULL, NULL);
@@ -745,6 +748,7 @@ static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
 				 const struct fi_msg_rma *msg, uint64_t flags)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
 	if (!msg || !msg->msg_iov || !msg->rma_iov ||
 	    msg->iov_count != 1 || msg->rma_iov_count != 1)
@@ -753,7 +757,7 @@ static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
 	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS | FI_CXI_HRP))
 		return -FI_EBADFLAGS;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	if (flags & FI_FENCE && !(txc->attr.caps & FI_FENCE))
@@ -765,7 +769,8 @@ static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return cxip_rma_common(FI_OP_WRITE, txc, msg->msg_iov[0].iov_base,
+	return cxip_rma_common(FI_OP_WRITE, txc, attr->tclass,
+			       msg->msg_iov[0].iov_base,
 			       msg->msg_iov[0].iov_len,
 			       msg->desc ? msg->desc[0] : NULL, msg->addr,
 			       msg->rma_iov[0].addr, msg->rma_iov[0].key,
@@ -777,13 +782,14 @@ ssize_t cxip_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
 			fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_rma_common(FI_OP_WRITE, txc, buf, len, NULL, dest_addr,
-			       addr, key, 0, FI_INJECT, NULL, false, 0, NULL,
-			       NULL);
+	return cxip_rma_common(FI_OP_WRITE, txc, attr->tclass, buf, len, NULL,
+			       dest_addr, addr, key, 0, FI_INJECT,
+			       NULL, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_rma_read(struct fid_ep *ep, void *buf, size_t len,
@@ -796,9 +802,9 @@ static ssize_t cxip_rma_read(struct fid_ep *ep, void *buf, size_t len,
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_rma_common(FI_OP_READ, txc, buf, len, desc, src_addr, addr,
-			       key, 0, attr->op_flags, context, false, 0,
-			       NULL, NULL);
+	return cxip_rma_common(FI_OP_READ, txc, attr->tclass, buf, len,
+			       desc, src_addr, addr, key, 0, attr->op_flags,
+			       context, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_rma_readv(struct fid_ep *ep, const struct iovec *iov,
@@ -814,7 +820,8 @@ static ssize_t cxip_rma_readv(struct fid_ep *ep, const struct iovec *iov,
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	return cxip_rma_common(FI_OP_READ, txc, iov[0].iov_base, iov[0].iov_len,
+	return cxip_rma_common(FI_OP_READ, txc, attr->tclass,
+			       iov[0].iov_base, iov[0].iov_len,
 			       desc ? desc[0] : NULL, src_addr, addr, key, 0,
 			       attr->op_flags, context, false, 0, NULL,
 			       NULL);
@@ -824,6 +831,7 @@ static ssize_t cxip_rma_readmsg(struct fid_ep *ep,
 				const struct fi_msg_rma *msg, uint64_t flags)
 {
 	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
 	if (!msg || !msg->msg_iov || !msg->rma_iov ||
 	    msg->iov_count != 1 || msg->rma_iov_count != 1)
@@ -832,7 +840,7 @@ static ssize_t cxip_rma_readmsg(struct fid_ep *ep,
 	if (flags & ~CXIP_READMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
 
-	if (cxip_fid_to_txc(ep, &txc) != FI_SUCCESS)
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
 	if (flags & FI_FENCE && !(txc->attr.caps & FI_FENCE))
@@ -844,7 +852,8 @@ static ssize_t cxip_rma_readmsg(struct fid_ep *ep,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return cxip_rma_common(FI_OP_READ, txc, msg->msg_iov[0].iov_base,
+	return cxip_rma_common(FI_OP_READ, txc, attr->tclass,
+			       msg->msg_iov[0].iov_base,
 			       msg->msg_iov[0].iov_len,
 			       msg->desc ? msg->desc[0] : NULL, msg->addr,
 			       msg->rma_iov[0].addr, msg->rma_iov[0].key,

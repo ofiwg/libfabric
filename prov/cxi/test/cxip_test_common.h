@@ -17,6 +17,7 @@ extern struct fid_fabric *cxit_fabric;
 extern struct fid_domain *cxit_domain;
 extern struct fi_cxi_dom_ops *dom_ops;
 extern struct fid_ep *cxit_ep;
+extern struct fid_ep *cxit_tx_alias_ep;
 extern struct cxip_addr cxit_ep_addr;
 extern fi_addr_t cxit_ep_fi_addr;
 extern struct fid_ep *cxit_sep;
@@ -85,6 +86,10 @@ void cxit_teardown_rma(void);
 #define cxit_teardown_tagged cxit_teardown_rma
 #define cxit_teardown_msg cxit_teardown_rma
 #define	cxit_teardown_enabled_ep cxit_teardown_rma
+void cxit_setup_tx_alias_rma(void);
+#define cxit_setup_tx_alias_tagged cxit_setup_tx_alias_rma
+void cxit_teardown_tx_alias_rma(void);
+#define cxit_teardown_tx_alias_tagged cxit_teardown_tx_alias_rma
 int cxit_await_completion(struct fid_cq *cq, struct fi_cq_tagged_entry *cqe);
 void validate_tx_event(struct fi_cq_tagged_entry *cqe, uint64_t flags,
 		       void *context);

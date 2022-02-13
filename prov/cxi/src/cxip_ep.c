@@ -1362,6 +1362,57 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
+/*
+ * cxip_set_tclass()
+ */
+static int cxip_set_tclass(uint32_t desired_tc, uint32_t default_tc,
+			   uint32_t *new_tc)
+{
+	assert(new_tc != NULL);
+
+	if (desired_tc != FI_TC_UNSPEC) {
+		if (desired_tc >= FI_TC_LABEL &&
+		    desired_tc <= FI_TC_SCAVENGER) {
+			*new_tc = desired_tc;
+		} else {
+			CXIP_WARN("Invalid tclass\n");
+			return -FI_EINVAL;
+		}
+	} else {
+		*new_tc = default_tc;
+	}
+
+	CXIP_DBG("Set tclass to %d\n", *new_tc);
+	return FI_SUCCESS;
+}
+
+/**
+ * provider fi_set_val()/FI_SET_VAL implementation for EP
+ *
+ * @param fid : EP fid
+ * @param val : parameter structure for set value operations.
+ *
+ * @return int : 0 on success, -errno on failure
+ */
+static inline int cxip_ep_set_val(struct cxip_ep *cxi_ep,
+				  struct fi_fid_var *val)
+{
+	uint32_t *req_tclass;
+	uint32_t new_tclass;
+
+	if (val->name != FI_OPT_CXI_SET_TCLASS || !val->val)
+		return -FI_EINVAL;
+
+	req_tclass = (uint32_t *) val->val;
+
+	if (cxip_set_tclass(*req_tclass, cxi_ep->tx_attr.tclass, &new_tclass))
+		return -FI_EINVAL;
+
+	cxi_ep->tx_attr.tclass = new_tclass;
+
+	return FI_SUCCESS;
+}
+
 /**
  * Control EP.
  *
@@ -1436,6 +1487,10 @@ static int cxip_ep_control(struct fid *fid, int command, void *arg)
 	case FI_ENABLE:
 		ep_fid = container_of(fid, struct fid_ep, fid);
 		return cxip_ep_enable(ep_fid);
+	case FI_SET_VAL:
+		if (!arg)
+			return -FI_EINVAL;
+		return cxip_ep_set_val(cxi_ep, (struct fi_fid_var *) arg);
 	default:
 		return -FI_EINVAL;
 	}
@@ -1605,17 +1660,10 @@ static int cxip_ep_txc(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	if (!txc)
 		return -FI_ENOMEM;
 
-	if (ep_attr->tclass != FI_TC_UNSPEC) {
-		if (ep_attr->tclass >= FI_TC_LABEL &&
-		    ep_attr->tclass <= FI_TC_SCAVENGER) {
-			txc->tclass = ep_attr->tclass;
-		} else {
-			CXIP_WARN("Invalid tclass\n");
-			return -FI_EINVAL;
-		}
-	} else {
-		/* Inherit tclass from Domain. */
-		txc->tclass = cxi_ep->ep_obj->domain->tclass;
+	if (cxip_set_tclass(ep_attr->tclass,
+			    cxi_ep->ep_obj->domain->tclass, &txc->tclass)) {
+		CXIP_WARN("Invalid tclass 0x%x\n", ep_attr->tclass);
+		return -FI_EINVAL;
 	}
 
 	txc->tx_id = index;
@@ -1919,19 +1967,17 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 		CXIP_DBG("Inherited domain auth_key\n");
 	}
 
-	if (cxi_ep->tx_attr.tclass != FI_TC_UNSPEC) {
-		if (cxi_ep->tx_attr.tclass >= FI_TC_LABEL &&
-		    cxi_ep->tx_attr.tclass <= FI_TC_SCAVENGER) {
-			tclass = cxi_ep->tx_attr.tclass;
-		} else {
-			CXIP_WARN("Invalid tclass\n");
-			ret = -FI_EINVAL;
-			goto err;
-		}
-	} else {
-		/* Inherit tclass from Domain. */
-		tclass = cxi_dom->tclass;
+	if (cxip_set_tclass(cxi_ep->tx_attr.tclass,
+			    cxi_dom->tclass, &tclass)) {
+		CXIP_WARN("Invalid tclass\n");
+		ret = -FI_EINVAL;
+		goto err;
 	}
+
+	/* EP traffic class can be modified to override the transmit
+	 * context default traffic class. Initially they are the same.
+	 */
+	cxi_ep->tx_attr.tclass = tclass;
 
 	/* Complete EP fid initialization */
 	cxi_ep->ep.fid.fclass = fclass;
