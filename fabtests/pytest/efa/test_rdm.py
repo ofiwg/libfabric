@@ -4,11 +4,6 @@ from default.test_rdm import test_rdm_bw_functional
 from default.test_rdm import test_rdm_atomic
 
 
-@pytest.fixture(scope="module", params=["host_to_host", "host_to_cuda",
-                                        "cuda_to_host", "cuda_to_cuda"])
-def memory_type(request):
-    return request.param
-
 def run_rdm_test(cmdline_args, executable, iteration_type, completion_type, memory_type):
     from common import ClientServerTest
     test = ClientServerTest(cmdline_args, executable, iteration_type,
