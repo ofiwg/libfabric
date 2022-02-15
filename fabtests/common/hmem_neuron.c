@@ -75,6 +75,7 @@ static struct dlist_entry neuron_alloc_list;
 int ft_neuron_init(void)
 {
 	NRT_STATUS ret;
+	static bool nrt_initialized = false;
 
 	if (neuron_handle)
 		return FI_SUCCESS;
@@ -123,10 +124,13 @@ int ft_neuron_init(void)
 
 	dlist_init(&neuron_alloc_list);
 
-	ret = neuron_ops.nrt_init(NRT_FRAMEWORK_TYPE_NO_FW, "2.0", "");
-	if (ret != NRT_SUCCESS) {
-		FT_ERR("Neuron init failed ret=%d\n", ret);
-		goto err;
+	if (!nrt_initialized) {
+		ret = neuron_ops.nrt_init(NRT_FRAMEWORK_TYPE_NO_FW, "2.0", "");
+		if (ret != NRT_SUCCESS) {
+			FT_ERR("Neuron init failed ret=%d\n", ret);
+			goto err;
+		}
+		nrt_initialized = true;
 	}
 
 	return FI_SUCCESS;
@@ -175,8 +179,10 @@ int ft_neuron_cleanup(void)
 	                             region, entry, tmp)
 		ft_neuron_free_region(region);
 
-	if (neuron_handle)
+	if (neuron_handle) {
 		dlclose(neuron_handle);
+		neuron_handle = NULL;
+	}
 
 	return 0;
 }
