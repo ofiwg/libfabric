@@ -93,8 +93,12 @@ ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 		}
 
 		if (tx_entry->total_len <= rxr_env.efa_max_gdrcopy_msg_size) {
-			pkt_type = delivery_complete_requested ? RXR_DC_LONGCTS_MSGRTM_PKT : RXR_LONGCTS_MSGRTM_PKT;
-			tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
+			if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size) {
+				pkt_type = delivery_complete_requested ? RXR_DC_MEDIUM_MSGRTM_PKT : RXR_MEDIUM_MSGRTM_PKT;
+			} else {
+				pkt_type = delivery_complete_requested ? RXR_DC_LONGCTS_MSGRTM_PKT : RXR_LONGCTS_MSGRTM_PKT;
+				tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
+			}
 
 			return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
 						 pkt_type + tagged, 0, 0);
