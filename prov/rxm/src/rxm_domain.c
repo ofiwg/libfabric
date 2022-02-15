@@ -725,7 +725,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err2;
 
-	ret = ofi_domain_init(fabric, info, &rxm_domain->util_domain, context);
+	ret = ofi_domain_init(fabric, info, &rxm_domain->util_domain, context, 0);
 	if (ret) {
 		goto err3;
 	}

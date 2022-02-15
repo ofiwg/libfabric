@@ -93,7 +93,7 @@ int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (!smr_domain)
 		return -FI_ENOMEM;
 
-	ret = ofi_domain_init(fabric, info, &smr_domain->util_domain, context);
+	ret = ofi_domain_init(fabric, info, &smr_domain->util_domain, context, 0);
 	if (ret) {
 		free(smr_domain);
 		return ret;

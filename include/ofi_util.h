@@ -89,6 +89,12 @@ extern "C" {
 /* Memory registration should not be cached */
 #define OFI_MR_NOCACHE		BIT_ULL(60)
 
+/* Provider domain flags
+ * SPINLOCK: Use spinlocks for domain and CQ objects.
+ *           EP is not included (not needed yet)
+ */
+#define OFI_DOMAIN_SPINLOCK	BIT_ULL(61)
+
 #define OFI_Q_STRERROR(prov, level, subsys, q, q_str, entry, q_strerror)	\
 	FI_LOG(prov, level, subsys, "fi_" q_str "_readerr: err: %s (%d), "	\
 	       "prov_err: %s (%d)\n", strerror((entry)->err), (entry)->err,	\
@@ -228,7 +234,7 @@ struct util_domain {
 };
 
 int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
-		     struct util_domain *domain, void *context);
+		     struct util_domain *domain, void *context, uint64_t flags);
 int ofi_domain_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
 int ofi_domain_close(struct util_domain *domain);
 

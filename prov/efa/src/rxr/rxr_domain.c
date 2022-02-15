@@ -211,7 +211,7 @@ int rxr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	rxr_domain->cq_size = MAX(info->rx_attr->size + info->tx_attr->size,
 				  rxr_env.cq_size);
 
-	ret = ofi_domain_init(fabric, info, &rxr_domain->util_domain, context);
+	ret = ofi_domain_init(fabric, info, &rxr_domain->util_domain, context, 0);
 	if (ret)
 		goto err_close_shm_domain;
 
