@@ -161,7 +161,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
 
-	pthread_mutex_lock(&peer_smr->lock);
+	pthread_spin_lock(&peer_smr->lock);
 	if (peer_smr->cmd_cnt < 2 || smr_peer_data(ep->region)[id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock_region;
@@ -256,7 +256,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 unlock_cq:
 	ofi_genlock_unlock(&ep->util_ep.tx_cq->cq_lock);
 unlock_region:
-	pthread_mutex_unlock(&peer_smr->lock);
+	pthread_spin_unlock(&peer_smr->lock);
 	return ret;
 }
 
@@ -341,7 +341,7 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
 
-	pthread_mutex_lock(&peer_smr->lock);
+	pthread_spin_lock(&peer_smr->lock);
 	if (peer_smr->cmd_cnt < 2 || smr_peer_data(ep->region)[id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock_region;
@@ -378,7 +378,7 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	ofi_ep_tx_cntr_inc_func(&ep->util_ep, ofi_op_atomic);
 unlock_region:
-	pthread_mutex_unlock(&peer_smr->lock);
+	pthread_spin_unlock(&peer_smr->lock);
 	return ret;
 }
 

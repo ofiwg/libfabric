@@ -185,13 +185,9 @@ err:
 	return -FI_EBUSY;
 }
 
-static void smr_lock_init(pthread_mutex_t *mutex)
+static void smr_lock_init(pthread_spinlock_t *lock)
 {
-	pthread_mutexattr_t attr;
-
-	pthread_mutexattr_init(&attr);
-	pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED);
-	pthread_mutex_init(mutex, &attr);
+	pthread_spin_init(lock, PTHREAD_PROCESS_SHARED);
 }
 
 /* TODO: Determine if aligning SMR data helps performance */
