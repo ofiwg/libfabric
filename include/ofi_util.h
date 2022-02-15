@@ -211,7 +211,8 @@ struct util_domain {
 	struct dlist_entry	list_entry;
 	struct util_fabric	*fabric;
 	struct util_eq		*eq;
-	ofi_mutex_t		lock;
+
+	struct ofi_genlock	lock;
 	ofi_atomic32_t		ref;
 	const struct fi_provider *prov;
 

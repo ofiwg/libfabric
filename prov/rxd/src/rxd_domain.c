@@ -91,10 +91,10 @@ int rxd_mr_verify(struct rxd_domain *rxd_domain, ssize_t len,
 {
 	int ret;
 
-	ofi_mutex_lock(&rxd_domain->util_domain.lock);
+	ofi_genlock_lock(&rxd_domain->util_domain.lock);
 	ret = ofi_mr_map_verify(&rxd_domain->mr_map, io_addr, len,
 				key, access, NULL);
-	ofi_mutex_unlock(&rxd_domain->util_domain.lock);
+	ofi_genlock_unlock(&rxd_domain->util_domain.lock);
 	return ret;
 }
 

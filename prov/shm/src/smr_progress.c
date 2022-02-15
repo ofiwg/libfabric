@@ -832,7 +832,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	ep->region->cmd_cnt++;
 	rma_cmd = ofi_cirque_head(smr_cmd_queue(ep->region));
 
-	ofi_mutex_lock(&domain->util_domain.lock);
+	ofi_genlock_lock(&domain->util_domain.lock);
 	for (iov_count = 0; iov_count < rma_cmd->rma.rma_count; iov_count++) {
 		ret = ofi_mr_map_verify(&domain->util_domain.mr_map,
 				(uintptr_t *) &(rma_cmd->rma.rma_iov[iov_count].addr),
@@ -852,7 +852,7 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 			assert(mr->iface == iface && mr->device == device);
 		}
 	}
-	ofi_mutex_unlock(&domain->util_domain.lock);
+	ofi_genlock_unlock(&domain->util_domain.lock);
 
 	ofi_cirque_discard(smr_cmd_queue(ep->region));
 	if (ret) {

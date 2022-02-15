@@ -200,9 +200,9 @@ int ofi_mr_close(struct fid *fid)
 
 	mr = container_of(fid, struct ofi_mr, mr_fid.fid);
 
-	ofi_mutex_lock(&mr->domain->lock);
+	ofi_genlock_lock(&mr->domain->lock);
 	ret = ofi_mr_map_remove(&mr->domain->mr_map, mr->key);
-	ofi_mutex_unlock(&mr->domain->lock);
+	ofi_genlock_unlock(&mr->domain->lock);
 	if (ret)
 		return ret;
 
@@ -277,7 +277,7 @@ int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_ENOSYS;
 	}
 
-	ofi_mutex_lock(&domain->lock);
+	ofi_genlock_lock(&domain->lock);
 
 	mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	mr->mr_fid.fid.context = attr->context;
@@ -300,7 +300,7 @@ int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	ofi_atomic_inc32(&domain->ref);
 
 out:
-	ofi_mutex_unlock(&domain->lock);
+	ofi_genlock_unlock(&domain->lock);
 	return ret;
 }
 
@@ -342,9 +342,9 @@ int ofi_mr_verify(struct ofi_mr_map *map, ssize_t len,
 	int ret;
 
 	domain = container_of(map, struct util_domain, mr_map);
-	ofi_mutex_lock(&domain->lock);
+	ofi_genlock_lock(&domain->lock);
 	ret = ofi_mr_map_verify(&domain->mr_map, addr, len,
 				key, access, NULL);
-	ofi_mutex_unlock(&domain->lock);
+	ofi_genlock_unlock(&domain->lock);
 	return ret;
 }
