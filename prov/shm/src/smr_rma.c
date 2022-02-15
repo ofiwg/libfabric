@@ -128,7 +128,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 		goto unlock_region;
 	}
 
-	ofi_mutex_lock(&ep->util_ep.tx_cq->cq_lock);
+	ofi_genlock_lock(&ep->util_ep.tx_cq->cq_lock);
 	if (ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto unlock_cq;
@@ -246,7 +246,7 @@ commit_comp:
 	}
 
 unlock_cq:
-	ofi_mutex_unlock(&ep->util_ep.tx_cq->cq_lock);
+	ofi_genlock_unlock(&ep->util_ep.tx_cq->cq_lock);
 unlock_region:
 	pthread_mutex_unlock(&peer_smr->lock);
 	return ret;

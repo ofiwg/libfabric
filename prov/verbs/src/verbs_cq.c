@@ -119,7 +119,7 @@ vrb_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 
 	cq = container_of(cq_fid, struct vrb_cq, util_cq.cq_fid);
 
-	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	if (slist_empty(&cq->saved_wc_list))
 		goto err;
 
@@ -130,7 +130,7 @@ vrb_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	api_version = cq->util_cq.domain->fabric->fabric_fid.api_version;
 
 	slist_entry = slist_remove_head(&cq->saved_wc_list);
-	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 
 	wce = container_of(slist_entry, struct vrb_wc_entry, entry);
 
@@ -157,7 +157,7 @@ vrb_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	ofi_buf_free(wce);
 	return 1;
 err:
-	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 	return -FI_EAGAIN;
 }
 
@@ -247,7 +247,7 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 	struct vrb_context *ctx;
 	int ret;
 
-	assert(ofi_mutex_held(&cq->util_cq.cq_lock));
+	assert(ofi_genlock_held(&cq->util_cq.cq_lock));
 	do {
 		ret = ibv_poll_cq(cq->cq, 1, wc);
 		if (ret <= 0)
@@ -287,7 +287,7 @@ int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc)
 {
 	struct vrb_wc_entry *wce;
 
-	assert(ofi_mutex_held(&cq->util_cq.cq_lock));
+	assert(ofi_genlock_held(&cq->util_cq.cq_lock));
 	wce = ofi_buf_alloc(cq->wce_pool);
 	if (!wce) {
 		FI_WARN(&vrb_prov, FI_LOG_CQ,
@@ -305,7 +305,7 @@ static void vrb_flush_cq(struct vrb_cq *cq)
 	struct ibv_wc wc;
 	ssize_t ret;
 
-	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	while (1) {
 		ret = vrb_poll_cq(cq, &wc);
 		if (ret <= 0)
@@ -314,7 +314,7 @@ static void vrb_flush_cq(struct vrb_cq *cq)
 		vrb_save_wc(cq, &wc);
 	};
 
-	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 }
 
 void vrb_cleanup_cq(struct vrb_ep *ep)
@@ -339,7 +339,7 @@ static ssize_t vrb_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 
 	cq = container_of(cq_fid, struct vrb_cq, util_cq.cq_fid);
 
-	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+	ofi_genlock_lock(&cq->util_cq.cq_lock);
 
 	for (i = 0; i < count; i++) {
 		if (!slist_empty(&cq->saved_wc_list)) {
@@ -363,7 +363,7 @@ static ssize_t vrb_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 		if (wc.status) {
 			wce = ofi_buf_alloc(cq->wce_pool);
 			if (!wce) {
-				cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+				ofi_genlock_unlock(&cq->util_cq.cq_lock);
 				return -FI_ENOMEM;
 			}
 			memset(wce, 0, sizeof(*wce));
@@ -376,7 +376,7 @@ static ssize_t vrb_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 		cq->read_entry(&wc, (char *)buf + i * cq->entry_size);
 	}
 
-	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 	return i ? i : (ret < 0 ? ret : -FI_EAGAIN);
 }
 
@@ -415,7 +415,7 @@ int vrb_cq_trywait(struct vrb_cq *cq)
 		return -FI_EINVAL;
 	}
 
-	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	if (!slist_empty(&cq->saved_wc_list))
 		goto out;
 
@@ -447,7 +447,7 @@ int vrb_cq_trywait(struct vrb_cq *cq)
 
 	ret = FI_SUCCESS;
 out:
-	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 	return ret;
 }
 
@@ -530,13 +530,13 @@ static int vrb_cq_close(fid_t fid)
 	}
 	ofi_mutex_unlock(&cq->xrc.srq_list_lock);
 
-	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	while (!slist_empty(&cq->saved_wc_list)) {
 		entry = slist_remove_head(&cq->saved_wc_list);
 		wce = container_of(entry, struct vrb_wc_entry, entry);
 		ofi_buf_free(wce);
 	}
-	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 
 	ofi_bufpool_destroy(cq->wce_pool);
 	ofi_bufpool_destroy(cq->ctx_pool);

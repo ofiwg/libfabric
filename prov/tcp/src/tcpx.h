@@ -445,9 +445,9 @@ tcpx_alloc_xfer(struct tcpx_cq *cq)
 {
 	struct tcpx_xfer_entry *xfer;
 
-	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	xfer = ofi_buf_alloc(cq->xfer_pool);
-	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 
 	return xfer;
 }
@@ -460,9 +460,9 @@ tcpx_free_xfer(struct tcpx_cq *cq, struct tcpx_xfer_entry *xfer)
 	xfer->ctrl_flags = 0;
 	xfer->context = 0;
 
-	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	ofi_buf_free(xfer);
-	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 }
 
 static inline struct tcpx_xfer_entry *

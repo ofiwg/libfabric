@@ -113,9 +113,9 @@ void tcpx_progress(struct dlist_entry *ep_list, struct util_wait *wait)
 
 void tcpx_cq_progress(struct util_cq *cq)
 {
-	cq->cq_mutex_lock(&cq->ep_list_lock);
+	ofi_mutex_lock(&cq->ep_list_lock);
 	tcpx_progress(&cq->ep_list, cq->wait);
-	cq->cq_mutex_unlock(&cq->ep_list_lock);
+	ofi_mutex_unlock(&cq->ep_list_lock);
 }
 
 static int tcpx_cq_close(struct fid *fid)
