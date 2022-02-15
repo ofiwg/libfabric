@@ -39,6 +39,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #include <ofi_osd.h>
 
@@ -186,6 +187,10 @@ static inline void ofi_spin_unlock_op(ofi_spin_t *lock)
 	ofi_spin_unlock(lock);
 }
 
+static inline int ofi_spin_held_op(ofi_spin_t *lock)
+{
+	return ofi_spin_held(lock);
+}
 
 #define ofi_mutex_t_ pthread_mutex_t
 #define ofi_mutex_init_(lock) pthread_mutex_init(lock, NULL)
@@ -309,6 +314,55 @@ static inline void ofi_mutex_unlock_op(ofi_mutex_t *lock)
 	ofi_mutex_unlock(lock);
 }
 
+static inline int ofi_mutex_held_op(ofi_mutex_t *lock)
+{
+	return ofi_mutex_held(lock);
+}
+
+
+/*
+ * Generic lock abstraction
+ * Caller selects lock implementation at runtime
+ */
+enum ofi_lock_type {
+	OFI_LOCK_MUTEX,		/* default */
+	OFI_LOCK_SPINLOCK,
+	OFI_LOCK_NONE,
+};
+
+typedef int  (*ofi_genlock_lockheld_t)(void *baselock);
+typedef void (*ofi_genlock_lockop_t)(void *baselock);
+
+struct ofi_genlock {
+	enum ofi_lock_type	lock_type;
+	union {
+		ofi_mutex_t	mutex;
+		ofi_spin_t	spinlock;
+	} base;
+
+	ofi_genlock_lockheld_t	held;
+	ofi_genlock_lockop_t	lock;
+	ofi_genlock_lockop_t	unlock;
+};
+
+int ofi_genlock_init(struct ofi_genlock *lock,
+		     enum ofi_lock_type lock_type);
+void ofi_genlock_destroy(struct ofi_genlock *lock);
+
+static inline int ofi_genlock_held(struct ofi_genlock *lock)
+{
+	return lock->held(&lock->base);
+}
+
+static inline void ofi_genlock_lock(struct ofi_genlock *lock)
+{
+	lock->lock(&lock->base);
+}
+
+static inline void ofi_genlock_unlock(struct ofi_genlock *lock)
+{
+	lock->unlock(&lock->base);
+}
 
 #ifdef __cplusplus
 }

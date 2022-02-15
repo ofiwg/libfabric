@@ -67,6 +67,7 @@
 #include <ofi_util.h>
 #include <ofi_epoll.h>
 #include <ofi_list.h>
+#include <ofi_lock.h>
 #include <ofi_osd.h>
 #include <ofi_iov.h>
 #include <shared/ofi_str.h>
@@ -84,6 +85,56 @@ struct ofi_common_locks common_locks = {
 
 size_t ofi_universe_size = 1024;
 int ofi_poll_fairness = 0; /* see comments ofi_pollfds_hotties */
+
+
+int ofi_genlock_init(struct ofi_genlock *lock,
+		     enum ofi_lock_type lock_type)
+{
+	int ret;
+
+	switch (lock->lock_type) {
+	case OFI_LOCK_SPINLOCK:
+		ret = ofi_spin_init(&lock->base.spinlock);
+		lock->lock = (ofi_genlock_lockop_t) ofi_spin_lock_op;
+		lock->unlock = (ofi_genlock_lockop_t) ofi_spin_unlock_op;
+		lock->held = (ofi_genlock_lockheld_t) ofi_spin_held_op;
+		break;
+	case OFI_LOCK_MUTEX:
+		ret = ofi_mutex_init(&lock->base.mutex);
+		lock->lock = (ofi_genlock_lockop_t) ofi_mutex_lock_op;
+		lock->unlock = (ofi_genlock_lockop_t) ofi_mutex_unlock_op;
+		lock->held = (ofi_genlock_lockheld_t) ofi_mutex_held_op;
+		break;
+	case OFI_LOCK_NONE:
+		/* Use mutex for debug no-op support */
+		ret = ofi_mutex_init(&lock->base.mutex);
+		lock->lock = (ofi_genlock_lockop_t) ofi_mutex_lock_noop;
+		lock->unlock = (ofi_genlock_lockop_t) ofi_mutex_unlock_noop;
+		lock->held = (ofi_genlock_lockheld_t) ofi_mutex_held_op;
+		break;
+	default:
+		ret = -FI_EINVAL;
+		break;
+	};
+
+	return ret;
+}
+
+void ofi_genlock_destroy(struct ofi_genlock *lock)
+{
+	switch (lock->lock_type) {
+	case OFI_LOCK_SPINLOCK:
+		ofi_spin_destroy(&lock->base.spinlock);
+		break;
+	case OFI_LOCK_MUTEX:
+	case OFI_LOCK_NONE:
+		ofi_mutex_destroy(&lock->base.mutex);
+		break;
+	default:
+		assert(0);
+		break;
+	};
+}
 
 
 int fi_poll_fd(int fd, int timeout)
