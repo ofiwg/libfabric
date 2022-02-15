@@ -283,7 +283,7 @@ cxip_amo_fetching_selective_completion_req(struct cxip_txc *txc)
 		req->addr = FI_ADDR_UNSPEC;
 
 		fastlock_acquire(&txc->lock);
-		if (!txc->amo_selective_completion_req)
+		if (!txc->amo_fetch_selective_completion_req)
 			txc->amo_fetch_selective_completion_req = req;
 		else
 			free_request = true;
