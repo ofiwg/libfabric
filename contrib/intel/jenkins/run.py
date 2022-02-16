@@ -42,7 +42,9 @@ def fabtests(core, hosts, mode, util=None):
               .format(runfabtest.testname))
     print("----------------------------------------------------------------------------------------\n")
 
+
 def shmemtest(core, hosts, mode, util=None):
+
     runshmemtest = tests.ShmemTest(jobname=jbname,buildno=bno,\
                  testname="shmem test", core_prov=core, fabric=fab,\
                  hosts=hosts, ofi_build_mode=mode, util_prov=util)
@@ -76,8 +78,10 @@ def intel_mpi_benchmark(core, hosts, mpi, mode, util=None):
                     .format(imb_test.testname))
     print("----------------------------------------------------------------------------------------\n")
 
+
 #mpich_test_suite
 def mpich_test_suite(core, hosts, mpi, mode, util=None):
+
     mpich_tests = tests.MpichTestSuite(jobname=jbname,buildno=bno,\
                   testname="MpichTestSuite",core_prov=core, fabric=fab,\
                   mpitype=mpi, hosts=hosts, ofi_build_mode=mode, \
@@ -88,6 +92,7 @@ def mpich_test_suite(core, hosts, mpi, mode, util=None):
         os.environ["MPITEST_RETURN_WITH_CODE"] = "1"
         mpich_tests.execute_cmd("spawn")
     print("----------------------------------------------------------------------------------------\n")
+
 
 #osu benchmark tests
 def osu_benchmark(core, hosts, mpi, mode, util=None):
@@ -107,5 +112,3 @@ def osu_benchmark(core, hosts, mpi, mode, util=None):
 
 if __name__ == "__main__":
     pass
-
-
