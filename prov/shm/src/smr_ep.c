@@ -152,7 +152,7 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 	struct dlist_entry *entry;
 	int ret = 0;
 
-	ofi_mutex_lock(&ep->util_ep.rx_cq->cq_lock);
+	ofi_genlock_lock(&ep->util_ep.rx_cq->cq_lock);
 	entry = dlist_remove_first_match(&queue->list, smr_match_recv_ctx,
 					 context);
 	if (entry) {
@@ -165,7 +165,7 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 		ret = ret ? ret : 1;
 	}
 
-	ofi_mutex_unlock(&ep->util_ep.rx_cq->cq_lock);
+	ofi_genlock_unlock(&ep->util_ep.rx_cq->cq_lock);
 	return ret;
 }
 
@@ -203,7 +203,7 @@ static void smr_send_name(struct smr_ep *ep, int64_t id)
 
 	peer_smr = smr_peer_region(ep->region, id);
 
-	pthread_mutex_lock(&peer_smr->lock);
+	pthread_spin_lock(&peer_smr->lock);
 
 	if (smr_peer_data(ep->region)[id].name_sent || !peer_smr->cmd_cnt)
 		goto out;
@@ -226,7 +226,7 @@ static void smr_send_name(struct smr_ep *ep, int64_t id)
 	smr_signal(peer_smr);
 
 out:
-	pthread_mutex_unlock(&peer_smr->lock);
+	pthread_spin_unlock(&peer_smr->lock);
 }
 
 int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)

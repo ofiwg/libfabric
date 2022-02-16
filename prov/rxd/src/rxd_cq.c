@@ -1254,7 +1254,7 @@ ssize_t rxd_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		}
 
 		ep_retry = -1;
-		cq->cq_mutex_lock(&cq->ep_list_lock);
+		ofi_mutex_lock(&cq->ep_list_lock);
 		dlist_foreach_container(&cq->ep_list, struct fid_list_entry,
 					fid_entry, entry) {
 			ep = container_of(fid_entry->fid, struct rxd_ep,
@@ -1264,7 +1264,7 @@ ssize_t rxd_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			ep_retry = ep_retry == -1 ? ep->next_retry :
 					MIN(ep_retry, ep->next_retry);
 		}
-		cq->cq_mutex_unlock(&cq->ep_list_lock);
+		ofi_mutex_unlock(&cq->ep_list_lock);
 
 		ret = fi_wait(&cq->wait->wait_fid, ep_retry == -1 ?
 			      timeout : rxd_get_timeout(ep_retry));

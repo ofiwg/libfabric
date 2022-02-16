@@ -95,8 +95,8 @@ ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov, void **desc
 	assert(iov_count <= SMR_IOV_LIMIT);
 	assert(!(flags & FI_MULTI_RECV) || iov_count == 1);
 
-	pthread_mutex_lock(&ep->region->lock);
-	ofi_mutex_lock(&ep->util_ep.rx_cq->cq_lock);
+	pthread_spin_lock(&ep->region->lock);
+	ofi_genlock_lock(&ep->util_ep.rx_cq->cq_lock);
 
 	entry = smr_get_recv_entry(ep, iov, desc, iov_count, addr, context, tag,
 				   ignore, flags);
@@ -106,8 +106,8 @@ ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov, void **desc
 	dlist_insert_tail(&entry->entry, &recv_queue->list);
 	ret = smr_progress_unexp_queue(ep, entry, unexp_queue);
 out:
-	ofi_mutex_unlock(&ep->util_ep.rx_cq->cq_lock);
-	pthread_mutex_unlock(&ep->region->lock);
+	ofi_genlock_unlock(&ep->util_ep.rx_cq->cq_lock);
+	pthread_spin_unlock(&ep->region->lock);
 	return ret;
 }
 
@@ -178,13 +178,13 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
 
-	pthread_mutex_lock(&peer_smr->lock);
+	pthread_spin_lock(&peer_smr->lock);
 	if (!peer_smr->cmd_cnt || smr_peer_data(ep->region)[peer_id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock_region;
 	}
 
-	ofi_mutex_lock(&ep->util_ep.tx_cq->cq_lock);
+	ofi_genlock_lock(&ep->util_ep.tx_cq->cq_lock);
 	if (ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
 		ret = -FI_EAGAIN;
 		goto unlock_cq;
@@ -270,9 +270,9 @@ commit:
 	peer_smr->cmd_cnt--;
 	smr_signal(peer_smr);
 unlock_cq:
-	ofi_mutex_unlock(&ep->util_ep.tx_cq->cq_lock);
+	ofi_genlock_unlock(&ep->util_ep.tx_cq->cq_lock);
 unlock_region:
-	pthread_mutex_unlock(&peer_smr->lock);
+	pthread_spin_unlock(&peer_smr->lock);
 	return ret;
 }
 
@@ -341,7 +341,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
 
-	pthread_mutex_lock(&peer_smr->lock);
+	pthread_spin_lock(&peer_smr->lock);
 	if (!peer_smr->cmd_cnt || smr_peer_data(ep->region)[id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -362,7 +362,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	smr_signal(peer_smr);
 unlock:
-	pthread_mutex_unlock(&peer_smr->lock);
+	pthread_spin_unlock(&peer_smr->lock);
 
 	return ret;
 }

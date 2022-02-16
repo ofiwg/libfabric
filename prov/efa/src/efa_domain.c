@@ -668,7 +668,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	}
 
 	ret = ofi_domain_init(fabric_fid, info, &domain->util_domain,
-			      context);
+			      context, 0);
 	if (ret)
 		goto err_free_qp_table;
 

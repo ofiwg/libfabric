@@ -221,10 +221,10 @@ static struct fi_ops_domain rxm_domain_ops = {
 
 static void rxm_mr_remove_map_entry(struct rxm_mr *mr)
 {
-	ofi_mutex_lock(&mr->domain->util_domain.lock);
+	ofi_genlock_lock(&mr->domain->util_domain.lock);
 	(void) ofi_mr_map_remove(&mr->domain->util_domain.mr_map,
 				 mr->mr_fid.key);
-	ofi_mutex_unlock(&mr->domain->util_domain.lock);
+	ofi_genlock_unlock(&mr->domain->util_domain.lock);
 }
 
 static int rxm_mr_add_map_entry(struct util_domain *domain,
@@ -236,7 +236,7 @@ static int rxm_mr_add_map_entry(struct util_domain *domain,
 
 	msg_attr->requested_key = rxm_mr->mr_fid.key;
 
-	ofi_mutex_lock(&domain->lock);
+	ofi_genlock_lock(&domain->lock);
 	ret = ofi_mr_map_insert(&domain->mr_map, msg_attr, &temp_key, rxm_mr);
 	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&rxm_prov, FI_LOG_DOMAIN,
@@ -245,7 +245,7 @@ static int rxm_mr_add_map_entry(struct util_domain *domain,
 	} else {
 		assert(rxm_mr->mr_fid.key == temp_key);
 	}
-	ofi_mutex_unlock(&domain->lock);
+	ofi_genlock_unlock(&domain->lock);
 
 	return ret;
 }
@@ -254,9 +254,9 @@ struct rxm_mr *rxm_mr_get_map_entry(struct rxm_domain *domain, uint64_t key)
 {
 	struct rxm_mr *mr;
 
-	ofi_mutex_lock(&domain->util_domain.lock);
+	ofi_genlock_lock(&domain->util_domain.lock);
 	mr = ofi_mr_map_get(&domain->util_domain.mr_map, key);
-	ofi_mutex_unlock(&domain->util_domain.lock);
+	ofi_genlock_unlock(&domain->util_domain.lock);
 
 	return mr;
 }
@@ -725,7 +725,7 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err2;
 
-	ret = ofi_domain_init(fabric, info, &rxm_domain->util_domain, context);
+	ret = ofi_domain_init(fabric, info, &rxm_domain->util_domain, context, 0);
 	if (ret) {
 		goto err3;
 	}

@@ -46,9 +46,9 @@ void vrb_add_credits(struct fid_ep *ep_fid, size_t credits)
 	ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
 	cq = ep->util_ep.tx_cq;
 
-	cq->cq_mutex_lock(&cq->cq_lock);
+	ofi_genlock_lock(&cq->cq_lock);
 	ep->peer_rq_credits += credits;
-	cq->cq_mutex_unlock(&cq->cq_lock);
+	ofi_genlock_unlock(&cq->cq_lock);
 }
 
 /* Receive CQ credits are pre-allocated */
@@ -64,7 +64,7 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
 	domain = vrb_ep_to_domain(ep);
 
-	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	ctx = ofi_buf_alloc(cq->ctx_pool);
 	if (!ctx)
 		goto unlock;
@@ -85,13 +85,13 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	} else {
 		credits_to_give = 0;
 	}
-	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 
 	if (credits_to_give &&
 	    domain->send_credits(&ep->util_ep.ep_fid, credits_to_give)) {
-		cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+		ofi_genlock_lock(&cq->util_cq.cq_lock);
 		ep->rq_credits_avail += credits_to_give;
-		cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+		ofi_genlock_unlock(&cq->util_cq.cq_lock);
 	}
 
 	return 0;
@@ -99,7 +99,7 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 freebuf:
 	ofi_buf_free(ctx);
 unlock:
-	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 	return -FI_EAGAIN;
 }
 
@@ -116,7 +116,7 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 
 	cq = container_of(ep->util_ep.tx_cq, struct vrb_cq, util_cq);
 	domain = vrb_ep_to_domain(ep);
-	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	ctx = ofi_buf_alloc(cq->ctx_pool);
 	if (!ctx)
 		goto unlock;
@@ -155,7 +155,7 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 		goto credits;
 	}
 	slist_insert_tail(&ctx->entry, &ep->sq_list);
-	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 
 	return 0;
 
@@ -167,19 +167,19 @@ credits:
 freebuf:
 	ofi_buf_free(ctx);
 unlock:
-	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 	cq_rx = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
-	cq_rx->util_cq.cq_mutex_lock(&cq_rx->util_cq.cq_lock);
+	ofi_genlock_lock(&cq_rx->util_cq.cq_lock);
 	if (ep->rq_credits_avail >= ep->threshold) {
 		credits_to_give = ep->rq_credits_avail;
 		ep->rq_credits_avail = 0;
 	}
-	cq_rx->util_cq.cq_mutex_unlock(&cq_rx->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq_rx->util_cq.cq_lock);
 	if (credits_to_give &&
 	    domain->send_credits(&ep->util_ep.ep_fid, credits_to_give)) {
-		cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+		ofi_genlock_lock(&cq->util_cq.cq_lock);
 		ep->rq_credits_avail += credits_to_give;
-		cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+		ofi_genlock_unlock(&cq->util_cq.cq_lock);
 	}
 	return -FI_EAGAIN;
 }
@@ -423,7 +423,7 @@ static void vrb_flush_sq(struct vrb_ep *ep)
 	wc.status = IBV_WC_WR_FLUSH_ERR;
 	wc.vendor_err = FI_ECANCELED;
 
-	cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	while (!slist_empty(&ep->sq_list)) {
 		entry = slist_remove_head(&ep->sq_list);
 		ctx = container_of(entry, struct vrb_context, entry);
@@ -439,7 +439,7 @@ static void vrb_flush_sq(struct vrb_ep *ep)
 		if (wc.wr_id != VERBS_NO_COMP_FLAG)
 			vrb_save_wc(cq, &wc);
 	}
-	cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 }
 
 static int vrb_close_free_ep(struct vrb_ep *ep)
@@ -453,9 +453,9 @@ static int vrb_close_free_ep(struct vrb_ep *ep)
 
 	if (ep->util_ep.rx_cq) {
 		cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
-		cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+		ofi_genlock_lock(&cq->util_cq.cq_lock);
 		cq->credits += ep->rx_cq_size;
-		cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+		ofi_genlock_unlock(&cq->util_cq.cq_lock);
 	}
 	ret = ofi_endpoint_close(&ep->util_ep);
 	if (ret)
@@ -574,21 +574,21 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_CQ:
 		/* Reserve space for receives */
 		if (flags & FI_RECV) {
-			cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+			ofi_genlock_lock(&cq->util_cq.cq_lock);
 			if (cq->credits < ep->rx_cq_size) {
 				VRB_WARN(FI_LOG_EP_CTRL,
 					   "Rx CQ is fully reserved\n");
 				ep->rx_cq_size = 0;
 			}
 			cq->credits -= ep->rx_cq_size;
-			cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+			ofi_genlock_unlock(&cq->util_cq.cq_lock);
 		}
 
 		ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
 		if (ret) {
-			cq->util_cq.cq_mutex_lock(&cq->util_cq.cq_lock);
+			ofi_genlock_lock(&cq->util_cq.cq_lock);
 			cq->credits += ep->rx_cq_size;
-			cq->util_cq.cq_mutex_unlock(&cq->util_cq.cq_lock);
+			ofi_genlock_unlock(&cq->util_cq.cq_lock);
 			return ret;
 		}
 		break;

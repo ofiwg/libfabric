@@ -242,7 +242,7 @@ struct smr_region {
 	uint8_t		cma_cap_peer;
 	uint8_t		cma_cap_self;
 	void		*base_addr;
-	pthread_mutex_t	lock; /* lock for shm access
+	pthread_spinlock_t	lock; /* lock for shm access
 				 Must hold smr->lock before tx/rx cq locks
 				 in order to progress or post recv */
 	ofi_atomic32_t	signal;

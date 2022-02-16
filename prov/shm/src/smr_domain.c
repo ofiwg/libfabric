@@ -93,12 +93,14 @@ int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (!smr_domain)
 		return -FI_ENOMEM;
 
-	ret = ofi_domain_init(fabric, info, &smr_domain->util_domain, context);
+	ret = ofi_domain_init(fabric, info, &smr_domain->util_domain, context,
+			      OFI_DOMAIN_SPINLOCK);
 	if (ret) {
 		free(smr_domain);
 		return ret;
 	}
 
+	smr_domain->util_domain.threading = FI_THREAD_SAFE;
 	smr_fabric = container_of(fabric, struct smr_fabric, util_fabric.fabric_fid);
 	ofi_mutex_lock(&smr_fabric->util_fabric.lock);
 	smr_domain->fast_rma = smr_fast_rma_enabled(info->domain_attr->mr_mode,

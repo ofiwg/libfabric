@@ -1019,22 +1019,22 @@ static inline uint64_t is_rx_res_full(struct rxr_ep *ep)
 
 static inline void rxr_rm_rx_cq_check(struct rxr_ep *ep, struct util_cq *rx_cq)
 {
-	ofi_mutex_lock(&rx_cq->cq_lock);
+	ofi_genlock_lock(&rx_cq->cq_lock);
 	if (ofi_cirque_isfull(rx_cq->cirq))
 		ep->rm_full |= RXR_RM_RX_CQ_FULL;
 	else
 		ep->rm_full &= ~RXR_RM_RX_CQ_FULL;
-	ofi_mutex_unlock(&rx_cq->cq_lock);
+	ofi_genlock_unlock(&rx_cq->cq_lock);
 }
 
 static inline void rxr_rm_tx_cq_check(struct rxr_ep *ep, struct util_cq *tx_cq)
 {
-	ofi_mutex_lock(&tx_cq->cq_lock);
+	ofi_genlock_lock(&tx_cq->cq_lock);
 	if (ofi_cirque_isfull(tx_cq->cirq))
 		ep->rm_full |= RXR_RM_TX_CQ_FULL;
 	else
 		ep->rm_full &= ~RXR_RM_TX_CQ_FULL;
-	ofi_mutex_unlock(&tx_cq->cq_lock);
+	ofi_genlock_unlock(&tx_cq->cq_lock);
 }
 
 #endif
