@@ -86,6 +86,9 @@ int pingpong(void)
 	inject_size = inject_size_set ?
 			hints->tx_attr->inject_size : fi->tx_attr->inject_size;
 
+	if (opts.options & FT_OPT_ENABLE_HMEM)
+		inject_size = 0;
+
 	ret = ft_sync();
 	if (ret)
 		return ret;
@@ -161,6 +164,9 @@ int bandwidth(void)
 
 	inject_size = inject_size_set ?
 			hints->tx_attr->inject_size : fi->tx_attr->inject_size;
+
+	if (opts.options & FT_OPT_ENABLE_HMEM)
+		inject_size = 0;
 
 	ret = ft_sync();
 	if (ret)
@@ -252,6 +258,9 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 
 	inject_size = inject_size_set ?
 			hints->tx_attr->inject_size: fi->tx_attr->inject_size;
+
+	if (opts.options & FT_OPT_ENABLE_HMEM)
+		inject_size = 0;
 
 	ret = ft_sync();
 	if (ret)
