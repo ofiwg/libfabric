@@ -1,6 +1,7 @@
 Libfabric release notes
 =======================
 
+
 This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
