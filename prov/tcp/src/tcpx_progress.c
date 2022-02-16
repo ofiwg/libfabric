@@ -796,7 +796,7 @@ int tcpx_try_func(void *util_ep)
 void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 			  struct tcpx_xfer_entry *tx_entry)
 {
-	struct util_wait *wait = ep->util_ep.tx_cq->wait;
+	struct util_wait *rx_wait, *tx_wait;
 
 	if (!ep->cur_tx.entry) {
 		ep->cur_tx.entry = tx_entry;
@@ -805,8 +805,17 @@ void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 		ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 		tcpx_progress_tx(ep);
 
-		if (!ep->cur_tx.entry && wait)
-			wait->signal(wait);
+		/* Wake-up blocked threads if they need to add POLLOUT to
+		 * their events to monitor for this socket.
+		 */
+		tx_wait = ep->util_ep.tx_cq->wait;
+		rx_wait = ep->util_ep.rx_cq->wait;
+		if (ep->cur_tx.entry) {
+			if (tx_wait)
+				tx_wait->signal(tx_wait);
+			if (rx_wait && rx_wait != tx_wait)
+				rx_wait->signal(rx_wait);
+		}
 	} else if (tx_entry->flags & TCPX_INTERNAL_XFER) {
 		slist_insert_tail(&tx_entry->entry, &ep->priority_queue);
 	} else {
