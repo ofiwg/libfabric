@@ -37,7 +37,7 @@
 #include "ofi_hmem.h"
 #include "ofi.h"
 
-#if HAVE_LIBZE
+#if HAVE_ZE
 
 #include <dirent.h>
 #include <level_zero/ze_api.h>
@@ -128,7 +128,7 @@ struct libze_ops {
 					     ze_device_properties_t *pDeviceProperties);
 };
 
-#ifdef ENABLE_ZE_DLOPEN
+#if ENABLE_ZE_DLOPEN
 
 #include <dlfcn.h>
 
@@ -429,7 +429,7 @@ bool ze_hmem_p2p_enabled(void)
 
 static int ze_hmem_dl_init(void)
 {
-#ifdef ENABLE_ZE_DLOPEN
+#if ENABLE_ZE_DLOPEN
 	libze_handle = dlopen("libze_loader.so", RTLD_NOW);
 	if (!libze_handle) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
@@ -969,4 +969,4 @@ int *ze_hmem_get_dev_fds(int *nfds)
 	return NULL;
 }
 
-#endif /* HAVE_LIBZE */
+#endif /* HAVE_ZE */
