@@ -14,7 +14,9 @@ parser.add_argument('--util', help="utility provider", choices=['rxd', 'rxm'])
 parser.add_argument('--ofi_build_mode', help="specify the build configuration", \
                     choices = ['dbg', 'dl'])
 parser.add_argument('--test', help="specify test to execute", \
-                    choices = ['all', 'shmem', 'mpi', 'oneccl', 'fabtests'])
+                    choices = ['all', 'shmem', 'IMB', 'oneccl', 'fabtests'])
+parser.add_argument('--imb_grp', help="IMB test group {1:[MPI1, P2P], \
+                    2:[EXT, IO], 3:[NBC, RMA, MT]", choices=['1', '2', '3'])
 parser.add_argument("--device", help="optional gpu device", choices=["ze"])
 
 args = parser.parse_args()
@@ -32,6 +34,11 @@ if (args.test):
     run_test = args.test
 else:
     run_test = 'all'
+
+if (args.imb_grp):
+    imb_group = args.imb_grp
+else:
+    imb_group = '1'
 
 node = (os.environ['NODE_NAME']).split('-')[0]
 hosts = [node]
@@ -66,11 +73,12 @@ if(args_core):
             if (run_test == 'all' or run_test == 'oneccl'):
                 run.oneccltest(args_core, hosts, ofi_build_mode)
 
-            if (run_test == 'all' or run_test == 'all'):
-                for mpi in mpilist:
-                    run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode)
-                    run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode)
-                    run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode)
+            for mpi in mpilist:
+                if (run_test == 'all' or run_test == 'IMB'):
+#                    run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode)
+                    run.intel_mpi_benchmark(args_core, hosts, mpi,
+                                            ofi_build_mode, imb_group)
+#                    run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode)
         else:
             run.ze_fabtests(args_core, hosts, ofi_build_mode)
     else:
@@ -84,13 +92,13 @@ if(args_core):
         if (run_test == 'all' or run_test == 'oneccl'):
             run.oneccltest(args_core, hosts, ofi_build_mode, util=args_util)
 
-        if (run_test == 'all' or run_test == 'all'):
-            for mpi in mpilist:
-                run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode, \
-                                     util=args_util)
+        for mpi in mpilist:
+            if (run_test == 'all' or run_test == 'IMB'):
+                #run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode, \
+                #                     util=args_util)
                 run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode, \
-                                        util=args_util)
-                run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode, \
-                                  util=args_util)
+                                        imb_group, util=args_util)
+                #run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode, \
+                #                  util=args_util)
 else:
     print("Error : Specify a core provider to run tests")

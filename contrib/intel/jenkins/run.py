@@ -74,20 +74,23 @@ def ze_fabtests(core, hosts, mode, util=None):
               .format(runfabzetests.testname))
     print("----------------------------------------------------------------------------------------\n")
 
-#imb-tests
-def intel_mpi_benchmark(core, hosts, mpi, mode, util=None):
+def intel_mpi_benchmark(core, hosts, mpi, mode, group, util=None):
 
-    imb_test = tests.MpiTestIMB(jobname=jbname,buildno=bno,\
-               testname="IntelMPIbenchmark",core_prov=core, fabric=fab,\
-               hosts=hosts, mpitype=mpi, ofi_build_mode=mode, util_prov=util)
+    imb_test = tests.MpiTestIMB(jobname=jbname,buildno=bno,
+                                testname='IntelMPIbenchmark', core_prov=core,
+                                fabric=fab, hosts=hosts, mpitype=mpi,
+                                ofi_build_mode=mode, test_group=group,
+                                util_prov=util)
 
-    if (imb_test.execute_condn == True  and imb_test.mpi_gen_execute_condn == True):
-        print("running imb-tests for {}-{}-{}-{}".format(core, util, fab, mpi))
+    print("-------------------------------------------------------------------")
+    if (imb_test.execute_condn == True and \
+        imb_test.mpi_gen_execute_condn == True):
+        print("Running IMB-tests for {}-{}-{}-{}".format(core, util, fab, mpi))
         imb_test.execute_cmd()
     else:
-        print("skipping {} as execute condition fails"\
-                    .format(imb_test.testname))
-    print("----------------------------------------------------------------------------------------\n")
+        print("Skipping {} {} as execute condition fails" \
+              .format(mpi.upper(), imb_test.testname))
+    print("-------------------------------------------------------------------")
 
 
 #mpich_test_suite

@@ -9,7 +9,6 @@ import re
 import ci_site_config
 import common
 import shlex
-from abc import ABC, abstractmethod # abstract base class for creating abstract classes in python
 
 job_cadence = os.environ['JOB_CADENCE']
 
@@ -254,29 +253,31 @@ class ZeFabtests(Test):
 class MpiTests(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 mpitype, hosts, ofi_build_mode, util_prov=None):
+                 mpitype, hosts, ofi_build_mode, imb_group, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
                          fabric, hosts, ofi_build_mode, util_prov)
         self.mpi = mpitype
+        self.imb_group=imb_group
 
     @property
     def cmd(self):
-        if (self.mpi == "impi" or self.mpi == "mpich"):
+        if (self.mpi == 'impi' or self.mpi == 'mpich'):
             self.testpath = ci_site_config.mpi_testpath
             return "{}/run_{}.sh ".format(self.testpath,self.mpi)
-        elif(self.mpi =="ompi"):
+        elif(self.mpi == 'ompi'):
             self.testpath = "{}/ompi/bin".format(self.ci_middlewares_path)
             return "{}/mpirun ".format(self.testpath)
 
     @property
     def options(self):
         opts = []
-        if (self.mpi == "impi" or self.mpi == "mpich"):
-            opts = "-n {} -ppn {} -hosts {},{} ".format(self.n,self.ppn,
-                    self.server,self.client)
+        if (self.mpi == 'impi' or self.mpi == 'mpich'):
+            opts = "-n {} ".format(self.n)
+            opts += "-ppn {} ".format(self.ppn)
+            opts += "-hosts {},{} ".format(self.server,self.client)
 
-            if (self.mpi == "impi"):
+            if (self.mpi == 'impi'):
                 opts = "{} -mpi_root={} ".format(opts,
                         ci_site_config.impi_root)
             else:
@@ -295,9 +296,9 @@ class MpiTests(Test):
             for key, val in self.env:
                 opts = "{} -genv {} {} ".format(opts, key, val)
 
-        elif (self.mpi == "ompi"):
+        elif (self.mpi == 'ompi'):
             opts = "-np {} ".format(self.n)
-            hosts = ",".join([":".join([host,str(self.ppn)]) \
+            hosts = ','.join([':'.join([host,str(self.ppn)]) \
                     for host in self.hosts])
 
             opts = "{} --host {} ".format(opts, hosts)
@@ -317,101 +318,108 @@ class MpiTests(Test):
 
     @property
     def mpi_gen_execute_condn(self):
-        #Skip MPI tests for udp, verbs(core) providers.
-        # we would still have MPI tests runnning for
-        # verbs-rxd and verbs-rxm providers
-        return True if (self.core_prov != "udp" and \
-                        self.core_prov != "shm" and \
-                       (self.core_prov != "verbs" or \
-                       self.util_prov == "ofi_rxm" or \
-                       self.util_prov == "ofi_rxd")) else False
+        return True if ((self.core_prov == 'verbs' and \
+                         self.util_prov == 'ofi_rxm') or \
+                        (self.core_prov == 'tcp' and \
+                         self.util_prov == 'ofi_rxm')) \
+                    else False
 
-
-# IMBtests serves as an abstract class for different
-# types of intel MPI benchmarks. Currently we have
-# the mpi1 and rma tests enabled which are encapsulated
-# in the IMB_mpi1 and IMB_rma classes below.
-class IMBtests(ABC):
-    """
-    This is an abstract class for IMB tests.
-    currently IMB-MPI1 and IMB-RMA tests are
-    supported. In future there could be more.
-    All abstract  methods must be implemented.
-    """
+class IMBtests:
+    def __init__(self, test_name, core_prov, util_prov):
+        self.test_name = test_name
+        self.core_prov = core_prov
+        self.util_prov = util_prov
+        # Iters are limited for time constraints
+        self.iter = 100
+        self.include = {
+                        'MPI1':[
+                                   'Biband',
+                                   'Uniband',
+                                   'PingPongAnySource',
+                                   'PingPingAnySource',
+                                   'PingPongSpecificSource',
+                                   'PingPingSpecificSource'
+                               ],
+                        'P2P':[],
+                        'EXT':[],
+                        'IO':[],
+                        'NBC':[],
+                        'RMA':[],
+                        'MT':[]
+                       }
+        self.exclude = {
+                        'MPI1':[],
+                        'P2P':[],
+                        'EXT':[],
+                        'IO':[],
+                        'NBC':[],
+                        'RMA':[
+                                  'Accumulate',
+                                  'Get_accumulate',
+                                  'Fetch_and_op',
+                                  'Compare_and_swap'
+                              ],
+                        'MT':[]
+                       }
 
     @property
-    @abstractmethod
     def imb_cmd(self):
-        pass
+        print("Running IMB-{}".format(self.test_name))
+        cmd = "{}/bin/IMB-{} ".format(ci_site_config.impi_root, self.test_name)
+        if (self.test_name != 'MT'):
+            cmd += "-iter {} ".format(self.iter)
 
-    @property
-    @abstractmethod
-    def execute_condn(self):
-        pass
+        if (len(self.include[self.test_name]) > 0):
+            cmd += "-include {} ".format(','.join(self.include[self.test_name]))
 
-
-class IMBmpi1(IMBtests):
-
-    def __init__(self):
-        self.additional_tests = [
-                                   "Biband",
-                                   "Uniband",
-                                   "PingPongAnySource",
-                                   "PingPingAnySource",
-                                   "PingPongSpecificSource",
-                                   "PingPingSpecificSource"
-        ]
-
-    @property
-    def imb_cmd(self):
-        return "{}/bin/IMB-MPI1 -include {}".format(ci_site_config.impi_root, \
-                ','.join(self.additional_tests))
+        if (len(self.exclude[self.test_name]) > 0):
+            cmd += "-exclude {} ".format(','.join(self.exclude[self.test_name]))
+        return cmd
 
     @property
     def execute_condn(self):
         return True
 
-
-class IMBrma(IMBtests):
-    def __init__(self, core_prov):
-        self.core_prov =  core_prov
-
-    @property
-    def imb_cmd(self):
-        return "{}/bin/IMB-RMA".format(ci_site_config.impi_root)
-
-    @property
-    def execute_condn(self):
-        return True if (self.core_prov != "verbs") else False
-
-
-# MpiTestIMB class inherits from the MPITests class.
-# It uses the same options method and class variables as all MPI tests.
-# It creates IMB_xxx test objects for each kind of IMB test.
 class MpiTestIMB(MpiTests):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 mpitype, hosts, ofi_build_mode, util_prov=None):
+                 mpitype, hosts, ofi_build_mode, test_group, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          mpitype, hosts, ofi_build_mode, util_prov)
 
+        self.test_group = test_group
         self.n = 4
         self.ppn = 1
-        self.mpi1 = IMBmpi1()
-        self.rma = IMBrma(self.core_prov)
+        self.imb_tests = {
+                             '1':[
+                                     'MPI1',
+                                     'P2P'
+                                 ],
+                             '2':[
+                                     'EXT',
+                                     'IO'
+                                 ],
+                             '3':[
+                                     # NBC fails MPI_ALLgather and during collective
+                                     #'NBC',
+                                     'RMA',
+                                     'MT'
+                                 ]
+                         }
 
     @property
     def execute_condn(self):
-        return True if (self.mpi == "impi") else False
+        return True if (self.mpi == 'impi') else False
 
     def execute_cmd(self):
         command = self.cmd + self.options
-        if(self.mpi1.execute_condn):
-            outputcmd = shlex.split(command +  self.mpi1.imb_cmd)
-            common.run_command(outputcmd)
-        if (self.rma.execute_condn):
-            outputcmd = shlex.split(command + self.rma.imb_cmd)
-            common.run_command(outputcmd)
+        for test_type in self.imb_tests[self.test_group]:
+            self.test_obj = IMBtests(test_type, self.core_prov, self.util_prov)
+            if (self.test_obj.execute_condn):
+                outputcmd = shlex.split(command + self.test_obj.imb_cmd)
+                common.run_command(outputcmd)
+            else:
+                print("IMB-{} not run".format(test_type))
 
 
 class MpichTestSuite(MpiTests):
