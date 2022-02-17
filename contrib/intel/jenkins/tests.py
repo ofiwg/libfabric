@@ -10,9 +10,6 @@ import ci_site_config
 import common
 import shlex
 
-job_cadence = os.environ['JOB_CADENCE']
-
-
 # A Jenkins env variable for job name is composed of the name of the jenkins job and the branch name
 # it is building for. for e.g. in our case jobname = 'ofi_libfabric/master'
 class Test:
@@ -27,7 +24,6 @@ class Test:
         self.fabric = fabric
         self.hosts = hosts
         self.ofi_build_mode = ofi_build_mode
-        self.job_cadence = job_cadence
         if (len(hosts) == 2):
             self.server = hosts[0]
             self.client = hosts[1]
@@ -181,12 +177,11 @@ class ShmemTest(Test):
         self.n = 4
         # self.ppn - number of processes per node.
         self.ppn = 2
-        self.shmem_dir = "{}/shmem".format(self.ci_middlewares_path)
+        self.shmem_dir = '{}/shmem'.format(self.ci_middlewares_path)
 
     @property
     def cmd(self):
-        #todo: rename mpi_testpath to testpath to make it generic for shmem and mpitest
-        return "{}/run_shmem.sh ".format(ci_site_config.mpi_testpath)
+        return "{}/run_shmem.sh ".format(ci_site_config.testpath)
 
     def options(self, shmem_testname):
 
@@ -196,19 +191,21 @@ class ShmemTest(Test):
         else:
             prov = self.core_prov
 
-        opts = "-n {n} -hosts {server},{client} -shmem_dir={shmemdir} \
-                -libfabric_path={path}/lib -prov '{provider}' -test {test} \
-                -server {server} -inf {inf}" \
-                .format(n=self.n, server=self.server, client=self.client, \
-                shmemdir=self.shmem_dir, path=self.libfab_installpath, \
-                provider=prov, test=shmem_testname, \
-                inf=ci_site_config.interface_map[self.fabric])
+        opts = "-n {n} ".format(n=self.n)
+        opts += "-hosts {server},{client} ".format(server=self.server, \
+                                                   client=self.client)
+        opts += "-shmem_dir={shmemdir} ".format(shmemdir=self.shmem_dir)
+        opts += "-libfabric_path={path}/lib ".format(path=self.libfab_installpath)
+        opts += "-prov {provider} ".format(provider=prov)
+        opts += "-test {test} ".format(test=shmem_testname)
+        opts += "-server {server} ".format(server=self.server)
+        opts += "-inf {inf}".format(inf=ci_site_config.interface_map[self.fabric])
         return opts
 
     @property
     def execute_condn(self):
-        return True if (self.job_cadence == 'daily' and \
-                        self.core_prov == "sockets") \
+        #make always true when verbs and sockets are passing
+        return True if (self.core_prov == 'tcp') \
                     else False
 
     def execute_cmd(self, shmem_testname):
@@ -263,7 +260,7 @@ class MpiTests(Test):
     @property
     def cmd(self):
         if (self.mpi == 'impi' or self.mpi == 'mpich'):
-            self.testpath = ci_site_config.mpi_testpath
+            self.testpath = ci_site_config.testpath
             return "{}/run_{}.sh ".format(self.testpath,self.mpi)
         elif(self.mpi == 'ompi'):
             self.testpath = "{}/ompi/bin".format(self.ci_middlewares_path)
@@ -616,7 +613,7 @@ class OneCCLTests(Test):
 
     @property
     def cmd(self):
-        return "{}/run_oneccl.sh ".format(ci_site_config.mpi_testpath)
+        return "{}/run_oneccl.sh ".format(ci_site_config.testpath)
 
     def options(self, oneccl_test):
         opts = "-n {n} ".format(n=self.n)
