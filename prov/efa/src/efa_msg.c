@@ -351,10 +351,6 @@ static ssize_t efa_post_send(struct efa_ep *ep, const struct fi_msg *msg, uint64
 
 	efa_post_send_sgl(ep, msg, ewr);
 
-	if (len <= ep->domain->ctx->inline_buf_size &&
-	    !efa_msg_has_hmem_mr(msg))
-		wr->send_flags |= IBV_SEND_INLINE;
-
 	wr->opcode = IBV_WR_SEND;
 	wr->wr_id = (uintptr_t)msg->context;
 	wr->wr.ud.ah = conn->ah->ibv_ah;
