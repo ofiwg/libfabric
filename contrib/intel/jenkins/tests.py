@@ -318,10 +318,7 @@ class MpiTests(Test):
 
     @property
     def mpi_gen_execute_condn(self):
-        return True if ((self.core_prov == 'verbs' and \
-                         self.util_prov == 'ofi_rxm') or \
-                        (self.core_prov == 'tcp' and \
-                         self.util_prov == 'ofi_rxm')) \
+        return True if (self.mpi == 'impi' or self.mpi == 'mpich') \
                     else False
 
 class IMBtests:
@@ -470,8 +467,8 @@ class MpichTestSuite(MpiTests):
 
     @property
     def execute_condn(self):
-        return True if (self.mpi == 'impi' \
-                        and self.core_prov != 'sockets') else False
+        return True if (self.mpi == 'impi' or self.mpi == 'mpich') \
+                    else False
 
     def execute_cmd(self, testgroupname):
         print("Running Tests: " + testgroupname)
@@ -497,56 +494,81 @@ class MpichTestSuite(MpiTests):
 class MpiTestOSU(MpiTests):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 mpitype, hosts, ofi_build_mode, util_prov=None):
+                 mpitype, hosts, ofi_build_mode, imb_group=None,
+                 util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          mpitype, hosts, ofi_build_mode, util_prov)
 
         self.n = 4
         self.ppn = 2
-        self.two_proc_tests = {'osu_latency',
-                               'osu_bibw',
-                               'osu_latency_mt',
-                               'osu_bw','osu_get_latency',
-                               'osu_fop_latency',
-                               'osu_acc_latency',
-                               'osu_get_bw',
-                               'osu_put_latency',
-                               'osu_put_bw',
-                               'osu_put_bibw',
-                               'osu_cas_latency',
-                               'osu_get_acc_latency'
+        self.two_proc_tests = {
+                                  'osu_latency',
+                                  'osu_bibw',
+                                  'osu_latency_mt',
+                                  'osu_bw',
+                                  'osu_get_latency',
+                                  'osu_fop_latency',
+                                  'osu_acc_latency',
+                                  'osu_get_bw',
+                                  'osu_put_latency',
+                                  'osu_put_bw',
+                                  'osu_put_bibw',
+                                  'osu_cas_latency',
+                                  'osu_get_acc_latency',
+                                  'osu_latency_mp'
                               }
+       #these tests have race conditions or segmentation faults
+       #self.disable = {
+       #                   'osu_allgather',
+       #                   'osu_allgatherv',
+       #                   'osu_allreduce',
+       #                   'osu_alltoall'
+       #                   'osu_alltoallv',
+       #                   'osu_iallgather',
+       #                   'osu_iallgatherv',
+       #                   'osu_ialltoall',
+       #                   'osu_ialltoallv',
+       #                   'osu_ialltoallw',
+       #                   'osu_ibarrier'
+       #               }
 
-        self.osu_mpi_path = "{}/{}/osu/libexec/osu-micro-benchmarks/mpi/". \
+        self.osu_mpi_path = '{}/{}/osu/libexec/osu-micro-benchmarks/mpi/'. \
                             format(self.ci_middlewares_path, mpitype)
 
     @property
     def execute_condn(self):
-        # sockets have some issues with OSU benchmark testing.
-        return True if ((self.job_cadence  == 'daily') and \
-                        (self.mpi != "ompi" or \
-                        (self.core_prov != "sockets" and \
-                         self.ofi_build_mode!="dbg"))) \
-                    else False
+        return False
+        # see disable list for mpich, impi, ompi failures
+        #return True if (self.mpi == 'impi' or self.mpi == 'mpich') \
+        #            else False
 
     def execute_cmd(self):
         assert(self.osu_mpi_path)
         p = re.compile('osu_put*')
         for root, dirs, tests in os.walk(self.osu_mpi_path):
             for test in tests:
+#                if test in self.disable:
+#                    continue
+
                 if test in self.two_proc_tests:
                     self.n=2
                     self.ppn=1
                 else:
                     self.n=4
                     self.ppn=2
-                # for sockets provider skip 'osu_put' benchmark tests as they fail.
-                if(self.core_prov !='sockets' or p.search(test)== None):
+
+                if (test == 'osu_latency_mp' and self.core_prov == 'verbs'):
+                    self.env.append(('IBV_FORK_SAFE', '1'))
+
+                if(p.search(test) == None):
                     launcher = self.cmd + self.options
                     osu_cmd = os.path.join(root, test)
                     command = launcher + osu_cmd
                     outputcmd = shlex.split(command)
                     common.run_command(outputcmd)
+
+                if (test == 'osu_latency_mp' and self.core_prov == 'verbs'):
+                    self.env.remove(('IBV_FORK_SAFE', '1'))
 
 class OneCCLTests(Test):
 

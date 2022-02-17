@@ -14,7 +14,7 @@ parser.add_argument('--util', help="utility provider", choices=['rxd', 'rxm'])
 parser.add_argument('--ofi_build_mode', help="specify the build configuration", \
                     choices = ['dbg', 'dl'])
 parser.add_argument('--test', help="specify test to execute", \
-                    choices = ['all', 'shmem', 'IMB', 'oneccl', 'fabtests'])
+                    choices = ['all', 'shmem', 'IMB', 'osu', 'oneccl', 'fabtests'])
 parser.add_argument('--imb_grp', help="IMB test group {1:[MPI1, P2P], \
                     2:[EXT, IO], 3:[NBC, RMA, MT]", choices=['1', '2', '3'])
 parser.add_argument("--device", help="optional gpu device", choices=["ze"])
@@ -78,7 +78,8 @@ if(args_core):
 #                    run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode)
                     run.intel_mpi_benchmark(args_core, hosts, mpi,
                                             ofi_build_mode, imb_group)
-#                    run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode)
+                if (run_test == 'all' or run_test == 'osu'):
+                    run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode)
         else:
             run.ze_fabtests(args_core, hosts, ofi_build_mode)
     else:
@@ -98,7 +99,9 @@ if(args_core):
                 #                     util=args_util)
                 run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode, \
                                         imb_group, util=args_util)
-                #run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode, \
-                #                  util=args_util)
+            if (run_test == 'all' or run_test == 'osu'):
+                run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode, \
+                                  util=args_util)
+
 else:
     print("Error : Specify a core provider to run tests")

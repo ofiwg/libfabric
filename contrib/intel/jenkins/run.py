@@ -107,22 +107,22 @@ def mpich_test_suite(core, hosts, mpi, mode, util=None):
         mpich_tests.execute_cmd("spawn")
     print("----------------------------------------------------------------------------------------\n")
 
-
-#osu benchmark tests
 def osu_benchmark(core, hosts, mpi, mode, util=None):
 
-    osu_test = tests.MpiTestOSU(jobname=jbname, buildno=bno, \
-               testname="osu-benchmarks",core_prov=core, fabric=fab, mpitype=mpi, \
-               hosts=hosts, ofi_build_mode=mode, util_prov=util)
+    osu_test = tests.MpiTestOSU(jobname=jbname, buildno=bno,
+                                testname='osu-benchmarks', core_prov=core,
+                                fabric=fab, mpitype=mpi, hosts=hosts,
+                                ofi_build_mode=mode, util_prov=util)
 
-    if (osu_test.execute_condn == True and osu_test.mpi_gen_execute_condn == True):
-        print("running osu-test for {}-{}-{}-{}".format(core, util, fab, mpi))
+    print("-------------------------------------------------------------------")
+    if (osu_test.execute_condn == True and \
+        osu_test.mpi_gen_execute_condn == True):
+        print("Running OSU-Test for {}-{}-{}-{}".format(core, util, fab, mpi))
         osu_test.execute_cmd()
     else:
-        print("skipping {} as execute condition fails" \
-                .format(osu_test.testname))
-    print("----------------------------------------------------------------------------------------\n")
-
+        print("Skipping {} {} as execute condition fails" \
+              .format(mpi.upper(), osu_test.testname))
+    print("-------------------------------------------------------------------")
 
 #OneCCL examples and functional tests
 def oneccltest(core, hosts, mode, util=None):
