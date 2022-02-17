@@ -776,6 +776,20 @@ if (ret)
     error;
 ```
 
+In addition, the alias endpoint message order may be modified to override
+the default endpoint message order. Message order between the modified
+alias endpoint and the original endpoint is not guaranteed. See example
+usage below for setting the traffic class of a transmit alias endpoint.
+
+```c
+uint64_t msg_order = FI_ORDER_RMA_WAW;
+
+ret = fi_set_val(&alias_ep->fid, FI_OPT_CXI_SET_MSG_ORDER,
+                 (void *)&msg_order);
+if (ret)
+    error;
+```
+
 # FABTESTS
 
 The CXI provider does not currently support fabtests which depend on IP

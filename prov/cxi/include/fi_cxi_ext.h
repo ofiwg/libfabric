@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: GPL-2.0
  *
  * Copyright (c) 2020 Cray Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Hewlett Packard Enterprise Development LP
+ *
  */
 
 #ifndef _FI_CXI_EXT_H_
@@ -26,7 +28,8 @@
 #define FI_PROV_SPECIFIC_CXI	(0xccc << 16)
 
 enum {
-	FI_OPT_CXI_SET_TCLASS = -FI_PROV_SPECIFIC_CXI,
+	FI_OPT_CXI_SET_TCLASS = -FI_PROV_SPECIFIC_CXI,	/* uint32_t */
+	FI_OPT_CXI_SET_MSG_ORDER,			/* uint64_t */
 };
 
 /*

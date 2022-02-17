@@ -805,11 +805,7 @@ void cxit_setup_tx_alias_rma(void)
 	cr_assert(!(cxi_ep->tx_attr.op_flags & FI_RECV), "Bad op flags");
 
 	op_flags = cxi_ep->tx_attr.op_flags | FI_TRANSMIT;
-#if 1
 	ret = fi_ep_alias(cxit_ep, &cxit_tx_alias_ep, op_flags);
-#else
-	ret = fi_ep_alias(&cxi_ep->ep, &cxit_tx_alias_ep, op_flags);
-#endif
 	cr_assert_eq(ret, FI_SUCCESS, "fi_alias");
 
 	cxi_alias_ep = container_of(&cxit_tx_alias_ep->fid,

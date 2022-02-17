@@ -4,6 +4,7 @@
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -534,7 +535,7 @@ err:
 }
 
 static bool cxip_rma_is_unrestricted(struct cxip_txc *txc, uint64_t key,
-				     bool write)
+				     uint64_t msg_order, bool write)
 {
 	/* Unoptimized keys are implemented with match bits and must always be
 	 * unrestricted.
@@ -552,7 +553,7 @@ static bool cxip_rma_is_unrestricted(struct cxip_txc *txc, uint64_t key,
 	/* If the operation is an RMA write and the user has requested fabric
 	 * write after write ordering, unrestricted must be used.
 	 */
-	if (write && txc->attr.msg_order & (FI_ORDER_WAW | FI_ORDER_RMA_WAW))
+	if (write && msg_order & (FI_ORDER_WAW | FI_ORDER_RMA_WAW))
 		return true;
 
 	return false;
@@ -602,10 +603,10 @@ static bool cxip_rma_is_idc(struct cxip_txc *txc, uint64_t key, size_t len,
  * DMA commands in order to clean up the source buffer mapping on completion.
  */
 ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
-			uint32_t tclass, const void *buf, size_t len,
-			void *desc, fi_addr_t tgt_addr,
-			uint64_t addr, uint64_t key,
-			uint64_t data, uint64_t flags, void *context,
+			const void *buf, size_t len, void *desc,
+			fi_addr_t tgt_addr, uint64_t addr, uint64_t key,
+			uint64_t data, uint64_t flags, uint32_t tclass,
+			uint64_t msg_order, void *context,
 			bool triggered, uint64_t trig_thresh,
 			struct cxip_cntr *trig_cntr,
 			struct cxip_cntr *comp_cntr)
@@ -645,7 +646,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		return -FI_EMSGSIZE;
 	}
 
-	unr = cxip_rma_is_unrestricted(txc, key, write);
+	unr = cxip_rma_is_unrestricted(txc, key, msg_order, write);
 	idc = cxip_rma_is_idc(txc, key, len, write, triggered, unr);
 
 	/* To prevent CQ overrun, perform a sanity check to ensure there is
@@ -720,9 +721,9 @@ static ssize_t cxip_rma_write(struct fid_ep *ep, const void *buf, size_t len,
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_rma_common(FI_OP_WRITE, txc, attr->tclass, buf, len, desc,
-			       dest_addr, addr, key, 0, attr->op_flags,
-			       context, false, 0, NULL, NULL);
+	return cxip_rma_common(FI_OP_WRITE, txc, buf, len, desc, dest_addr,
+			       addr, key, 0, attr->op_flags, attr->tclass,
+			       attr->msg_order, context, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_rma_writev(struct fid_ep *ep, const struct iovec *iov,
@@ -738,10 +739,10 @@ static ssize_t cxip_rma_writev(struct fid_ep *ep, const struct iovec *iov,
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	return cxip_rma_common(FI_OP_WRITE, txc, attr->tclass, iov[0].iov_base,
+	return cxip_rma_common(FI_OP_WRITE, txc, iov[0].iov_base,
 			       iov[0].iov_len, desc ? desc[0] : NULL, dest_addr,
-			       addr, key, 0, attr->op_flags, context, false,
-			       0, NULL, NULL);
+			       addr, key, 0, attr->op_flags, attr->tclass,
+			       attr->msg_order, context, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
@@ -769,13 +770,12 @@ static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return cxip_rma_common(FI_OP_WRITE, txc, attr->tclass,
-			       msg->msg_iov[0].iov_base,
+	return cxip_rma_common(FI_OP_WRITE, txc, msg->msg_iov[0].iov_base,
 			       msg->msg_iov[0].iov_len,
 			       msg->desc ? msg->desc[0] : NULL, msg->addr,
 			       msg->rma_iov[0].addr, msg->rma_iov[0].key,
-			       msg->data, flags, msg->context, false, 0, NULL,
-			       NULL);
+			       msg->data, flags, attr->tclass, attr->msg_order,
+			       msg->context, false, 0, NULL, NULL);
 }
 
 ssize_t cxip_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
@@ -787,9 +787,9 @@ ssize_t cxip_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_rma_common(FI_OP_WRITE, txc, attr->tclass, buf, len, NULL,
-			       dest_addr, addr, key, 0, FI_INJECT,
-			       NULL, false, 0, NULL, NULL);
+	return cxip_rma_common(FI_OP_WRITE, txc, buf, len, NULL, dest_addr,
+			       addr, key, 0, FI_INJECT, attr->tclass,
+			       attr->msg_order, NULL, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_rma_read(struct fid_ep *ep, void *buf, size_t len,
@@ -802,9 +802,9 @@ static ssize_t cxip_rma_read(struct fid_ep *ep, void *buf, size_t len,
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
 		return -FI_EINVAL;
 
-	return cxip_rma_common(FI_OP_READ, txc, attr->tclass, buf, len,
-			       desc, src_addr, addr, key, 0, attr->op_flags,
-			       context, false, 0, NULL, NULL);
+	return cxip_rma_common(FI_OP_READ, txc, buf, len, desc, src_addr,
+			       addr, key, 0, attr->op_flags, attr->tclass,
+			       attr->msg_order, context, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_rma_readv(struct fid_ep *ep, const struct iovec *iov,
@@ -820,11 +820,10 @@ static ssize_t cxip_rma_readv(struct fid_ep *ep, const struct iovec *iov,
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	return cxip_rma_common(FI_OP_READ, txc, attr->tclass,
-			       iov[0].iov_base, iov[0].iov_len,
+	return cxip_rma_common(FI_OP_READ, txc, iov[0].iov_base, iov[0].iov_len,
 			       desc ? desc[0] : NULL, src_addr, addr, key, 0,
-			       attr->op_flags, context, false, 0, NULL,
-			       NULL);
+			       attr->op_flags, attr->tclass, attr->msg_order,
+			       context, false, 0, NULL, NULL);
 }
 
 static ssize_t cxip_rma_readmsg(struct fid_ep *ep,
@@ -852,13 +851,12 @@ static ssize_t cxip_rma_readmsg(struct fid_ep *ep,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return cxip_rma_common(FI_OP_READ, txc, attr->tclass,
-			       msg->msg_iov[0].iov_base,
+	return cxip_rma_common(FI_OP_READ, txc, msg->msg_iov[0].iov_base,
 			       msg->msg_iov[0].iov_len,
 			       msg->desc ? msg->desc[0] : NULL, msg->addr,
 			       msg->rma_iov[0].addr, msg->rma_iov[0].key,
-			       msg->data, flags, msg->context, false, 0, NULL,
-			       NULL);
+			       msg->data, flags, attr->tclass, attr->msg_order,
+			       msg->context, false, 0, NULL, NULL);
 }
 
 struct fi_ops_rma cxip_ep_rma = {

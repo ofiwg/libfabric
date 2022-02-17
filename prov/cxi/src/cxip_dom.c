@@ -4,6 +4,7 @@
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  * Copyright (c) 2018,2020 Cray Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -254,10 +255,10 @@ static int cxip_dom_dwq_op_rma(struct cxip_domain *dom, struct fi_op_rma *rma,
 	buf = rma->msg.iov_count ? rma->msg.msg_iov[0].iov_base : NULL;
 	len = rma->msg.iov_count ? rma->msg.msg_iov[0].iov_len : 0;
 
-	ret = cxip_rma_common(op, txc, txc->tclass,
-			      buf, len, NULL, rma->msg.addr,
+	ret = cxip_rma_common(op, txc, buf, len, NULL, rma->msg.addr,
 			      rma->msg.rma_iov[0].addr, rma->msg.rma_iov[0].key,
-			      rma->msg.data, rma->flags, rma->msg.context, true,
+			      rma->msg.data, rma->flags, txc->attr.tclass,
+			      txc->attr.msg_order, rma->msg.context, true,
 			      trig_thresh, trig_cntr, comp_cntr);
 	if (ret)
 		CXIP_DBG("Failed to emit RMA triggered op, ret=%d\n", ret);

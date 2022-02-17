@@ -5,6 +5,7 @@
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  * Copyright (c) 2018,2020 Cray Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -1398,17 +1399,36 @@ static inline int cxip_ep_set_val(struct cxip_ep *cxi_ep,
 				  struct fi_fid_var *val)
 {
 	uint32_t *req_tclass;
+	uint64_t *req_order;
 	uint32_t new_tclass;
 
-	if (val->name != FI_OPT_CXI_SET_TCLASS || !val->val)
+	if (!val->val)
 		return -FI_EINVAL;
 
-	req_tclass = (uint32_t *) val->val;
+	switch (val->name) {
+	case FI_OPT_CXI_SET_TCLASS:
+		req_tclass = (uint32_t *) val->val;
 
-	if (cxip_set_tclass(*req_tclass, cxi_ep->tx_attr.tclass, &new_tclass))
+		if (cxip_set_tclass(*req_tclass, cxi_ep->tx_attr.tclass,
+				    &new_tclass))
+			return -FI_EINVAL;
+
+		cxi_ep->tx_attr.tclass = new_tclass;
+		break;
+	case FI_OPT_CXI_SET_MSG_ORDER:
+		req_order = (uint64_t *) val->val;
+
+		if (*req_order & ~CXIP_MSG_ORDER) {
+			CXIP_WARN("Invalid message order 0x%" PRIx64 "\n",
+				  *req_order);
+			return -FI_EINVAL;
+		}
+
+		cxi_ep->tx_attr.msg_order = *req_order;
+		break;
+	default:
 		return -FI_EINVAL;
-
-	cxi_ep->tx_attr.tclass = new_tclass;
+	}
 
 	return FI_SUCCESS;
 }

@@ -5,7 +5,7 @@
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  * Copyright (c) 2018-2020 Cray Inc. All rights reserved.
- * Copyright (c) 2021 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2021-2022 Hewlett Packard Enterprise Development LP
  */
 
 #ifndef _CXIP_PROV_H_
@@ -2287,10 +2287,11 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 			 bool tagged, struct cxip_cntr *comp_cntr);
 
 ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
-			uint32_t tclass, const void *buf, size_t len,
-			void *desc, fi_addr_t tgt_addr, uint64_t addr,
+			const void *buf, size_t len, void *desc,
+			fi_addr_t tgt_addr, uint64_t addr,
 			uint64_t key, uint64_t data, uint64_t flags,
-			void *context, bool triggered, uint64_t trig_thresh,
+			uint32_t tclass, uint64_t msg_order, void *context,
+			bool triggered, uint64_t trig_thresh,
 			struct cxip_cntr *trig_cntr,
 			struct cxip_cntr *comp_cntr);
 
