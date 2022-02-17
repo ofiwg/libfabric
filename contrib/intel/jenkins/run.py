@@ -92,20 +92,23 @@ def intel_mpi_benchmark(core, hosts, mpi, mode, group, util=None):
               .format(mpi.upper(), imb_test.testname))
     print("-------------------------------------------------------------------")
 
-
-#mpich_test_suite
 def mpich_test_suite(core, hosts, mpi, mode, util=None):
 
-    mpich_tests = tests.MpichTestSuite(jobname=jbname,buildno=bno,\
-                  testname="MpichTestSuite",core_prov=core, fabric=fab,\
-                  mpitype=mpi, hosts=hosts, ofi_build_mode=mode, \
-                  util_prov=util)
+    mpich_tests = tests.MpichTestSuite(jobname=jbname,buildno=bno,
+                                       testname="MpichTestSuite",core_prov=core,
+                                       fabric=fab, mpitype=mpi, hosts=hosts,
+                                       ofi_build_mode=mode, util_prov=util)
+
+    print("-------------------------------------------------------------------")
     if (mpich_tests.execute_condn == True and \
         mpich_tests.mpi_gen_execute_condn == True):
-        print("Running mpich test suite: Spawn coll, comm, dt Tests for {}-{}-{}-{}".format(core, util, fab, mpi))
-        os.environ["MPITEST_RETURN_WITH_CODE"] = "1"
+        print("Running mpichtestsuite: Spawn Tests " \
+              "for {}-{}-{}-{}".format(core, util, fab, mpi))
         mpich_tests.execute_cmd("spawn")
-    print("----------------------------------------------------------------------------------------\n")
+    else:
+        print("Skipping {} {} as execute condition fails" \
+              .format(mpi.upper(), mpich_tests.testname))
+    print("-------------------------------------------------------------------")
 
 def osu_benchmark(core, hosts, mpi, mode, util=None):
 

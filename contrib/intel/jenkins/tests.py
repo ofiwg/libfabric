@@ -422,18 +422,19 @@ class MpiTestIMB(MpiTests):
 class MpichTestSuite(MpiTests):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-		     mpitype, hosts, ofi_build_mode, util_prov=None):
+		 mpitype, hosts, ofi_build_mode, imb_group=None,
+                 util_prov=None):
             super().__init__(jobname, buildno, testname, core_prov, fabric,
 			     mpitype,  hosts, ofi_build_mode, util_prov)
-            self.mpichsuitepath =  "{}/{}/mpichsuite/test/mpi/" \
-                                   .format(self.ci_middlewares_path, self.mpi)
+            self.mpichsuitepath = '{}/{}/mpichsuite/test/mpi/' \
+                                  .format(self.ci_middlewares_path, self.mpi)
             self.pwd = os.getcwd()
 
     def testgroup(self, testgroupname):
 
-        testpath = "{}/{}".format(self.mpichsuitepath, testgroupname)
+        testpath = '{}/{}'.format(self.mpichsuitepath, testgroupname)
         tests = []
-        with open("{}/testlist".format(testpath)) as file:
+        with open('{}/testlist'.format(testpath)) as file:
             for line in file:
                 if(line[0] != '#' and  line[0] != '\n'):
                     tests.append((line.rstrip('\n')).split(' '))
@@ -441,33 +442,38 @@ class MpichTestSuite(MpiTests):
         return tests
 
     def options(self, nprocs, timeout=None):
-        if (self.mpi == "impi" or self.mpi == "mpich"):
-            if (self.mpi == "impi"):
+        if (self.mpi == 'impi' or self.mpi == 'mpich'):
+            if (self.mpi == 'impi'):
                 mpiroot = ci_site_config.impi_root
             else:
-                mpiroot = "{}/mpich".format(self.ci_middlewares_path)
+                mpiroot = '{}/mpich'.format(self.ci_middlewares_path)
             if (self.util_prov):
-                prov = "\"{};{}\"".format(self.core_prov, self.util_prov)
+                prov = '\"{};{}\"'.format(self.core_prov, self.util_prov)
             else:
                 prov = self.core_prov
 
             if (timeout != None):
                 os.environ['MPIEXEC_TIMEOUT']=timeout
 
-            opts = "-n {np} -hosts {s},{c} -mpi_root={mpiroot} \
-                    -libfabric_path={installpath}/lib -prov {provider} "  \
-                    .format(np=nprocs, s=self.server, c=self.client, \
-                            provider=prov, mpiroot=mpiroot, \
-                            installpath=self.libfab_installpath)
+            opts = "-n {np} ".format(np=nprocs)
+            opts += "-hosts {s},{c} ".format(s=self.server, c=self.client)
+            opts += "-mpi_root={mpiroot} ".format(mpiroot=mpiroot)
+            opts += "-libfabric_path={installpath}/lib " \
+                    .format(installpath=self.libfab_installpath)
+            opts += "-prov {provider} ".format(provider=prov)
 
-        elif (self.mpi == "ompi"):
+        elif (self.mpi == 'ompi'):
             print(self.mpi)
 
         return opts
 
     @property
     def execute_condn(self):
-        return True if (self.mpi == 'impi' or self.mpi == 'mpich') \
+        # MPICH tcp mpich testsuite hangs
+        # MPICH sockets mpich testsuite hangs
+        return True if (self.mpi == 'impi' or \
+                       (self.mpi == 'mpich' and \
+                        self.core_prov == 'verbs')) \
                     else False
 
     def execute_cmd(self, testgroupname):

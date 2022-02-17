@@ -14,7 +14,8 @@ parser.add_argument('--util', help="utility provider", choices=['rxd', 'rxm'])
 parser.add_argument('--ofi_build_mode', help="specify the build configuration", \
                     choices = ['dbg', 'dl'])
 parser.add_argument('--test', help="specify test to execute", \
-                    choices = ['all', 'shmem', 'IMB', 'osu', 'oneccl', 'fabtests'])
+                    choices = ['all', 'shmem', 'IMB', 'osu', 'oneccl', \
+                               'mpichtestsuite', 'fabtests'])
 parser.add_argument('--imb_grp', help="IMB test group {1:[MPI1, P2P], \
                     2:[EXT, IO], 3:[NBC, RMA, MT]", choices=['1', '2', '3'])
 parser.add_argument("--device", help="optional gpu device", choices=["ze"])
@@ -42,11 +43,7 @@ else:
 
 node = (os.environ['NODE_NAME']).split('-')[0]
 hosts = [node]
-# Note: Temporarily disabling all mpich testing
-# due to mpich options issues which is causing
-# multiple tests to fail.
-#mpilist = ['impi', 'mpich', 'ompi']
-mpilist = ['impi', 'ompi']
+mpilist = ['impi', 'mpich', 'ompi']
 
 #this script is executed from /tmp
 #this is done since some mpi tests
@@ -74,8 +71,9 @@ if(args_core):
                 run.oneccltest(args_core, hosts, ofi_build_mode)
 
             for mpi in mpilist:
+                if (run_test == 'all' or run_test == 'mpichtestsuite'):
+                    run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode)
                 if (run_test == 'all' or run_test == 'IMB'):
-#                    run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode)
                     run.intel_mpi_benchmark(args_core, hosts, mpi,
                                             ofi_build_mode, imb_group)
                 if (run_test == 'all' or run_test == 'osu'):
@@ -95,10 +93,11 @@ if(args_core):
 
         for mpi in mpilist:
             if (run_test == 'all' or run_test == 'IMB'):
-                #run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode, \
-                #                     util=args_util)
                 run.intel_mpi_benchmark(args_core, hosts, mpi, ofi_build_mode, \
                                         imb_group, util=args_util)
+            if (run_test == 'all' or run_test == 'mpichtestsuite'):
+                run.mpich_test_suite(args_core, hosts, mpi, ofi_build_mode, \
+                                     util=args_util)
             if (run_test == 'all' or run_test == 'osu'):
                 run.osu_benchmark(args_core, hosts, mpi, ofi_build_mode, \
                                   util=args_util)
