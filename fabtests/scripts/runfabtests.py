@@ -182,6 +182,9 @@ def fabtests_args_to_pytest_args(fabtests_args):
 
     pytest_args.append("--timeout={}".format(fabtests_args.timeout))
 
+    if fabtests_args.core_list:
+        pytest_args.append("--pin-core=" + fabtests_args.core_list)
+
     if fabtests_args.strict:
         pytest_args.append("--strict_fabtests_mode")
 
@@ -266,6 +269,7 @@ def main():
     parser.add_argument("-s", dest="server_interface", type=str, help="server interface")
     parser.add_argument("-u", dest="ubertest_config_file", type=str, help="configure option for ubertest tests")
     parser.add_argument("-T", dest="timeout", type=int, default=120, help="timeout value in seconds")
+    parser.add_argument("--pin-core", dest="core_list", type=str, help="Specify cores to pin when running standard tests. Cores can specified via a comma-delimited list, like 0,2-4")
     parser.add_argument("-S", dest="strict", action="store_true",
                         help="Strict mode: -FI_ENODATA, -FI_ENOSYS errors would be treated as failures"
                              " instead of skipped/notrun")

@@ -227,6 +227,9 @@
     <ClInclude Include="include\windows\unistd.h">
       <Filter>Header Files\osd</Filter>
     </ClInclude>
+    <ClInclude Include="include\windows\sched.h">
+      <Filter>Header Files\osd</Filter>
+    </ClInclude>
     <ClInclude Include="include\windows\sys\socket.h">
       <Filter>Header Files\osd\sys</Filter>
     </ClInclude>

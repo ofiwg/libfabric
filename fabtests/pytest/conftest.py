@@ -20,6 +20,7 @@ def pytest_addoption(parser):
                      help="configure option for ubertest tests")
     parser.addoption("--timeout", dest="timeout", default="120",
                      help="timeout value for each test, default to 120 seconds")
+    parser.addoption("--pin-core", dest="core_list", type=str, help="Specify cores to pin when running standard tests. Cores can specified via a comma-delimited list, like 0,2-4")
     parser.addoption("--strict_fabtests_mode", dest="strict_fabtests_more", action="store_true",
                      help="strict mode. -FI_ENODATA and -FI_NOSYS treated as failure instead of skip/notrun") 
     parser.addoption("--additional_server_arguments", dest="additional_server_arguments", type=str,
@@ -73,6 +74,7 @@ class CmdlineArgs:
 
         self.ubertest_config_file = request.config.getoption("--ubertest_config_file")
         self.timeout = int(request.config.getoption("--timeout"))
+        self.core_list = request.config.getoption("--pin-core")
         self.strict_fabtests_mode = request.config.getoption("--strict_fabtests_mode")
         self.additional_server_arguments = request.config.getoption("--additional_server_arguments")
         self.additional_client_arguments = request.config.getoption("--additional_client_arguments")

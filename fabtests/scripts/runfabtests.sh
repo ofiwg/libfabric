@@ -61,6 +61,7 @@ declare FORK=0
 declare OOB=0
 declare C_ARGS=""
 declare S_ARGS=""
+declare PIN_CORE=""
 declare PROVIDER_TESTS=0
 
 declare cur_excludes=""
@@ -480,6 +481,11 @@ function cs_test {
 	local start_time
 	local end_time
 	local test_time
+	local pin_core
+
+	if [ $# -eq 2 ]; then
+		pin_core=$2
+	fi
 
 	is_excluded "$test" && return
 
@@ -490,7 +496,7 @@ function cs_test {
 	else
 		s_arg="-s $S_INTERFACE"
 	fi
-	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} $s_arg"
+	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} ${pin_core} $s_arg"
 	${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	s_pid=$!
 	sleep 1
@@ -500,7 +506,7 @@ function cs_test {
 	else
 		c_arg="-s $C_INTERFACE $S_INTERFACE"
 	fi
-	c_cmd="${BIN_PATH}${test_exe} ${C_ARGS} $c_arg"
+	c_cmd="${BIN_PATH}${test_exe} ${C_ARGS} ${pin_core} $c_arg"
 	${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
 	c_pid=$!
 
@@ -794,7 +800,11 @@ function main {
 		;;
 		standard)
 			for test in "${standard_tests[@]}"; do
-				cs_test "$test"
+				if [ ! -z $PIN_CORE ]; then
+					cs_test "$test" "--pin-core $PIN_CORE"
+				else
+					cs_test "$test"
+				fi
 			done
 		;;
 		complex)
@@ -867,62 +877,77 @@ function usage {
 	errcho -e " -L\tAdditional server test arguments: Parameters to pass to server fabtests"
 	errcho -e " -b\tenable out-of-band address exchange over the default port"
 	errcho -e " -P\tRun provider specific tests"
+	errcho -e " --ping-core\tSpecify cores to pin when running standard tests. Cores can specified via a comma-delimited list, e.g. 0,2-4"
 	exit 1
 }
 
-while getopts ":vt:p:g:e:f:c:s:u:T:C:L:NRSbkPE:" opt; do
-case ${opt} in
-	t) TEST_TYPE=$OPTARG
-	;;
-	v) VERBOSE+=1
-	;;
-	p) BIN_PATH="${OPTARG}/"
-	;;
-	g) GOOD_ADDR=${OPTARG}
-	;;
-	f) read_exclude_file ${OPTARG}
-	;;
-	e) [[ -z "$input_excludes" ]] && input_excludes=${OPTARG} || \
-		input_excludes="${input_excludes},${OPTARG}"
-	;;
-	c) C_INTERFACE=${OPTARG}
-	;;
-	s) S_INTERFACE=${OPTARG}
-	;;
-	u) COMPLEX_CFG=${OPTARG}
-	;;
-	T) TIMEOUT_VAL=${OPTARG}
-	;;
-	N) SKIP_NEG+=1
-	;;
-	P) PROVIDER_TESTS=1
-	;;
-	R)
-	;;
-	S) STRICT_MODE=1
-	;;
-	b) OOB=1
-	;;
-	k) FORK=1
-	;;
-	C) C_ARGS="${OPTARG}"
-	;;
-	L) S_ARGS="${OPTARG}"
-	;;
-	E)
-	delimiter="="
-	value=${OPTARG#*$delimiter}
-	var=${OPTARG:0:$(( ${#OPTARG} - ${#value} - ${#delimiter} ))}
-	EXPORT_STRING="export $var=\"$value\""
-	if [[ -z $EXPORT_ENV ]] ; then
-		EXPORT_ENV="$EXPORT_STRING ;"
-	else
-		EXPORT_ENV="$EXPORT_ENV $EXPORT_STRING ;"
-	fi
-	;;
-	:|\?) usage
-	;;
-esac
+Options=$(getopt --options v,t:,p:,g:,e:,f:,c:,s:,u:,T:,C:,L:,N,R,S,b,k,P,E:h \
+		 --longoptions pin-core:,help \
+		 --quiet \
+		 -- "$@")
+
+eval set -- "$Options"
+
+while true; do
+	case "$1" in
+		-t)
+		    TEST_TYPE=$2; shift 2 ;;
+		-v)
+		    VERBOSE+=1; shift ;;
+		-p)
+		    BIN_PATH="$2/"; shift 2 ;;
+		-g)
+		    GOOD_ADDR=$2; shift 2 ;;
+		-f)
+		    read_exclude_file $2; shift 2 ;;
+		-e)
+		    [[ -z "$input_excludes" ]] && input_excludes=${OPTARG} || \
+		    input_excludes="${input_excludes},${OPTARG}"
+		    shift 2 ;;
+		-c)
+		    C_INTERFACE=$2; shift 2 ;;
+		-s)
+		    S_INTERFACE=$2; shift 2 ;;
+		-u)
+		    COMPLEX_CFG=$2; shift 2 ;;
+		-T)
+		    TIMEOUT_VAL=$2; shift 2 ;;
+		-N)
+		    SKIP_NEG+=1; shift ;;
+		-P)
+		    PROVIDER_TESTS=1; shift ;;
+		-R)
+		    shift ;;
+		-S)
+		    STRICT_MODE=1; shift ;;
+		-b)
+		    OOB=1; shift ;;
+		-k)
+		    FORK=1; shift ;;
+		-C)
+		    C_ARGS=$2; shift 2 ;;
+		-L)
+		    S_ARGS=$2; shift 2 ;;
+		-E)
+		    delimiter="="
+		    value=${2#*$delimiter}
+		    var=${2:0:$(( ${#2} - ${#value} - ${#delimiter} ))}
+		    EXPORT_STRING="export $var=\"$value\""
+		    if [[ -z $EXPORT_ENV ]] ; then
+			EXPORT_ENV="$EXPORT_STRING ;"
+		    else
+			EXPORT_ENV="$EXPORT_ENV $EXPORT_STRING ;"
+		    fi
+		    shift 2 ;;
+		--pin-core)
+		    PIN_CORE=$2; shift 2 ;;
+		-h | --help)
+		    usage ;;
+		--)
+		    shift ; break ;;
+		*)
+		    usage ;;
+	esac
 
 done
 

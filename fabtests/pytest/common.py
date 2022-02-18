@@ -103,6 +103,8 @@ class ClientServerTest:
         if iteration_type == "short":
             command += " -I 5"
         elif iteration_type == "standard":
+            if not (self._cmdline_args.core_list is None):
+                command += " --pin-core " + self._cmdline_args.core_list
             pass
         elif iteration_type is None:
             pass

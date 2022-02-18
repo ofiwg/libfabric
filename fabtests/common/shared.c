@@ -37,6 +37,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <sched.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -151,6 +152,12 @@ unsigned int test_cnt = (sizeof def_test_sizes / sizeof def_test_sizes[0]);
 struct test_size_param *test_size = def_test_sizes;
 /* range of messages is dynamically allocated */
 struct test_size_param *range_test_size;
+
+int lopt_idx = 0;
+struct option long_opts[] = {
+	{"pin-core", required_argument, NULL, LONG_OPT_PIN_CORE},
+	{0, 0, 0, 0}
+};
 
 static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
@@ -2941,6 +2948,14 @@ void ft_csusage(char *name, char *desc)
 	return;
 }
 
+void ft_longopts_usage()
+{
+	FT_PRINT_OPTS_USAGE("--pin_core <core_list>", "specify which cores to pin");
+	FT_PRINT_OPTS_USAGE("", "disabled by default. <core_list> format uses");
+	FT_PRINT_OPTS_USAGE("", "a comma-separated list, like 0,2-4");
+	return;
+}
+
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
 		  struct ft_opts *opts)
 {
@@ -3587,4 +3602,77 @@ void ft_free_string_array(char **s)
 
 	/* and then the actual array of pointers */
 	free(s);
+}
+
+static const char *nexttoken(const char *str,  int chr)
+{
+	if (str)
+		str = strchr(str, chr);
+	if (str)
+		str++;
+	return str;
+}
+
+static int ft_pin_core(const char *core_list)
+{
+	cpu_set_t mask;
+	size_t max_bits;
+	const char *curr_ptr, *next_ptr;
+	int r = 0;
+
+	max_bits = 8 * sizeof(mask);
+	next_ptr = core_list;
+	CPU_ZERO(&mask);
+
+	// parse each sub-list, delimited by comma
+	while (curr_ptr = next_ptr, next_ptr = nexttoken(next_ptr, ','), curr_ptr) {
+		int start, end;
+		const char *p1, *p2;
+		char c;
+		//get starting cpu number
+		if ((r = sscanf(curr_ptr, "%u%c", &start, &c)) < 1)
+			return EXIT_FAILURE;
+
+		end = start;
+		p1 = nexttoken(curr_ptr, '-');
+		p2 = nexttoken(curr_ptr, ',');
+		// get ending cpu number
+		if (p1 != NULL && (p2 == NULL || p1 < p2)) {
+			if ((r = sscanf(p1, "%u%c", &end, &c)) < 1)
+				return EXIT_FAILURE;
+		}
+
+		if (start > end)
+			return EXIT_FAILURE;
+		while (start <= end) {
+			if (start > max_bits)
+				return EXIT_FAILURE;
+			CPU_SET(start, &mask);
+			start++;
+		}
+	}
+
+	if (r == 2)
+		return EXIT_FAILURE;
+
+	return sched_setaffinity(0, sizeof(mask), &mask);
+}
+
+static int ft_parse_pin_core_opt(char *optarg)
+{
+	if (optarg) {
+		if (ft_pin_core(optarg))
+			FT_WARN("Pin to core %s failed\n", optarg);
+	}
+	return 0;
+}
+
+int ft_parse_long_opts(int op, char *optarg)
+{
+	switch (op) {
+	case LONG_OPT_PIN_CORE:
+		return ft_parse_pin_core_opt(optarg);
+	default:
+		return EXIT_FAILURE;
+	}
 }
