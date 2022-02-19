@@ -877,7 +877,7 @@ function usage {
 	errcho -e " -L\tAdditional server test arguments: Parameters to pass to server fabtests"
 	errcho -e " -b\tenable out-of-band address exchange over the default port"
 	errcho -e " -P\tRun provider specific tests"
-	errcho -e " --ping-core\tSpecify cores to pin when running standard tests. Cores can specified via a comma-delimited list, e.g. 0,2-4"
+	errcho -e " --pin-core\tSpecify cores to pin when running standard tests. Cores can specified via a comma-delimited list, e.g. 0,2-4"
 	exit 1
 }
 
