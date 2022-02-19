@@ -103,9 +103,11 @@ void fid_list_remove(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 	struct fid_list_entry *item;
 	struct dlist_entry *entry;
 
-	ofi_mutex_lock(lock);
+	if (lock)
+		ofi_mutex_lock(lock);
 	entry = dlist_remove_first_match(fid_list, ofi_fid_match, fid);
-	ofi_mutex_unlock(lock);
+	if (lock)
+		ofi_mutex_unlock(lock);
 
 	if (entry) {
 		item = container_of(entry, struct fid_list_entry, entry);
