@@ -352,8 +352,8 @@ void ft_format_iov(struct iovec *iov, size_t cnt, char *buf, size_t len);
 void ft_format_iocs(struct iovec *iov, size_t *iov_count);
 void ft_next_iov_cnt(struct ft_xcontrol *ctrl, size_t max_iov_cnt);
 int ft_get_ctx(struct ft_xcontrol *ctrl, struct fi_context **ctx);
-int ft_generates_rx_comp();
-int ft_generates_tx_comp();
+bool ft_generates_rx_comp();
+bool ft_generates_tx_comp();
 int ft_check_rx_completion();
 int ft_check_tx_completion();
 
