@@ -1542,7 +1542,13 @@ static void rxm_fake_rx_hdr(struct rxm_rx_buf *rx_buf,
 	rx_buf->pkt.hdr.op = ofi_op_tagged;
 	rx_buf->pkt.hdr.tag = entry->tag;
 	rx_buf->pkt.hdr.size = entry->len;
-	rx_buf->pkt.hdr.flags = 0;
+
+	if (entry->flags & FI_REMOTE_CQ_DATA) {
+		rx_buf->pkt.hdr.data = entry->data;
+		rx_buf->pkt.hdr.flags = FI_REMOTE_CQ_DATA;
+	} else {
+		rx_buf->pkt.hdr.flags = 0;
+	}
 }
 
 static ssize_t
