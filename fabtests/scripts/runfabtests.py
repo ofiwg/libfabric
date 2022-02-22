@@ -214,11 +214,28 @@ def fabtests_args_to_pytest_args(fabtests_args):
     return pytest_args
 
 def get_pytest_root_dir():
+    '''
+        find the pytest root directory according the location of runfabtests.py
+    '''
     import os
     import sys
     script_path = os.path.abspath(sys.argv[0])
-    fabtests_root_dir = os.path.dirname(os.path.dirname(script_path))
-    return os.path.join(fabtests_root_dir, "share", "fabtests", "pytest")
+    script_dir = os.path.dirname(script_path)
+    if os.path.basename(script_dir) == "bin":
+        # runfabtests.py is part of a fabtests installation
+        pytest_root_dir = os.path.abspath(os.path.join(script_dir, "..", "share", "fabtests", "pytest"))
+    elif os.path.basename(script_dir) == "scripts":
+        # runfabtests.py is part of a fabtests source code
+        pytest_root_dir = os.path.abspath(os.path.join(script_dir, "..", "pytest"))
+    else:
+        raise RuntimeError("Error: runfabtests.py is under directory {}, "
+                "which is neither part of fabtests installation "
+                "nor part of fabetsts source code".format(script_dir))
+
+    if not os.path.exists(pytest_root_dir):
+        raise RuntimeError("Deduced pytest root directory {} does not exist!".format(pytest_root_dir))
+
+    return pytest_root_dir
 
 def get_pytest_relative_case_dir(fabtests_args, pytest_root_dir):
     '''
