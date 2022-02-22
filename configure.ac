@@ -562,49 +562,57 @@ AC_ARG_ENABLE([cuda-dlopen],
     [enable_cuda_dlopen=no])
 
 AC_ARG_WITH([ze],
-	AS_HELP_STRING([--with-ze=DIR], [Provide path to where the ZE
-					 libraries and headers are installed.]),
-	[], [])
+	[AS_HELP_STRING([--with-ze=DIR], [Enable ZE build and fail if not found.
+					  Optional=<Path to where the ZE libraries
+					  and headers are installed.>])])
 
 have_ze=0
-AS_IF([test x"$with_ze" != x"no"],
-      [FI_CHECK_PACKAGE([ze],
-			[level_zero/ze_api.h],
-			[ze_loader],
-			[zeInit],
-			[],
-			[$with_ze],
-			[],
-			[have_ze=1],
-			[], [])],
-      [])
-
-have_drm=0
-AS_IF([test "$have_ze" = "1"],
-      [AC_CHECK_HEADER(drm/i915_drm.h, [have_drm=1], [])]
-      [])
-
-AS_IF([test x"$with_ze" != x"no" && test -n "$with_ze" && test "$have_ze" = "0" ],
-	[AC_MSG_ERROR([ZE support requested but ZE runtime not available.])],
-	[])
-
-AC_DEFINE_UNQUOTED([HAVE_LIBZE], [$have_ze], [ZE support])
-AC_DEFINE_UNQUOTED([HAVE_DRM], [$have_drm], [i915 DRM header])
-
+ze_dlopen=0
 AC_ARG_ENABLE([ze-dlopen],
     [AS_HELP_STRING([--enable-ze-dlopen],
         [Enable dlopen of ZE libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test "$freebsd" = "0"], [
-            AC_CHECK_LIB(dl, dlopen, [],
-                [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-        ])
-        AC_DEFINE([ENABLE_ZE_DLOPEN], [1], [dlopen ZE libraries])
-    ],
-    [enable_ze_dlopen=no])
+        AS_IF([test x"$with_dlopen" = "no"],
+              [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+	ze_dlopen=1
+    ])
 
-AS_IF([test x"$enable_ze_dlopen" != x"yes"], [LIBS="$LIBS $ze_LIBS"])
+AS_IF([test x"$with_ze" != x"no"],
+      [
+	AS_IF([test "$ze_dlopen" != "0"],
+	      [
+		_FI_CHECK_PACKAGE_HEADER([ze],
+				[level_zero/ze_api.h],
+				[$with_ze],
+				[have_ze=1],
+				[AC_MSG_ERROR([ZE headers not found. Cannot enable ZE DL])])
+	      ],
+	      [
+		FI_CHECK_PACKAGE([ze],
+				[level_zero/ze_api.h],
+				[ze_loader],
+				[zeInit],
+				[],
+				[$with_ze],
+				[],
+				[have_ze=1])
+	      ])
+      ])
+
+AC_DEFINE_UNQUOTED([ENABLE_ZE_DLOPEN], [$ze_dlopen], [dlopen ZE libraries])
+
+have_drm=0
+AS_IF([test "$have_ze" = "1"],
+      [AC_CHECK_HEADER(drm/i915_drm.h, [have_drm=1])])
+
+AS_IF([test x"$with_ze" != x"no" && test -n "$with_ze" && test "$have_ze" = "0" ],
+	[AC_MSG_ERROR([ZE support requested but ZE runtime not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_ZE], [$have_ze], [ZE support])
+AC_DEFINE_UNQUOTED([HAVE_DRM], [$have_drm], [i915 DRM header])
+
+AS_IF([test "$ze_dlopen" != "1"], [LIBS="$LIBS $ze_LIBS"])
 AS_IF([test "$have_ze" = "1" && test x"$with_ze" != x"yes"],
       [CPPFLAGS="$CPPFLAGS $ze_CPPFLAGS"
        LDFLAGS="$LDFLAGS $ze_LDFLAGS"])

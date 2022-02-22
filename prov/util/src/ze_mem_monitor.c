@@ -32,7 +32,7 @@
 
 #include "ofi_mr.h"
 
-#if HAVE_LIBZE
+#if HAVE_ZE
 
 #include "ofi_hmem.h"
 
@@ -96,7 +96,7 @@ static int ze_monitor_start(struct ofi_mem_monitor *monitor)
 	return -FI_ENOSYS;
 }
 
-#endif /* HAVE_LIBZE */
+#endif /* HAVE_ZE */
 
 void ze_monitor_stop(struct ofi_mem_monitor *monitor)
 {
