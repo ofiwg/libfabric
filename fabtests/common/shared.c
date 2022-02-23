@@ -2950,7 +2950,7 @@ void ft_csusage(char *name, char *desc)
 
 void ft_longopts_usage()
 {
-	FT_PRINT_OPTS_USAGE("--pin_core <core_list>", "specify which cores to pin");
+	FT_PRINT_OPTS_USAGE("--pin-core <core_list>", "specify which cores to pin");
 	FT_PRINT_OPTS_USAGE("", "disabled by default. <core_list> format uses");
 	FT_PRINT_OPTS_USAGE("", "a comma-separated list, like 0,2-4");
 	return;
