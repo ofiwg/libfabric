@@ -77,10 +77,10 @@ static void dmabuf_reg_remove(int reg_fd, uint32_t fd)
  *
  * Return value:
  *
- *  0 ---------- the range is covered, fd is set to the corresponding dmabuf fd
- *  -ENOENT ---- the range is empty in the registry
- *  -EINVAL ---- the range partially overlaps with entries in the registry
- *  Others ----- I/O error
+ *  0 ---------- The range is covered, fd is set to the corresponding dmabuf fd
+ *  -ENOENT ---- The range is empty in the registry
+ *  Others ----- Various errors including: invalid range (e.g. overflow), range
+ * 		 partially overlapping with entries in the registry, and I/O error.
  */
 static int dmabuf_reg_query(int reg_fd, uint64_t addr, uint64_t size,
 			    uint32_t *fd)
