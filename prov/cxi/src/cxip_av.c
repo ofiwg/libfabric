@@ -420,13 +420,13 @@ static int cxip_av_lookup(struct fid_av *avfid, fi_addr_t fi_addr, void *addr,
 	av = container_of(avfid, struct cxip_av, av_fid);
 	index = ((uint64_t)fi_addr & av->mask);
 	if (index >= av->table_hdr->size) {
-		CXIP_WARN("requested address is invalid");
+		CXIP_WARN("requested address is invalid\n");
 		return -FI_EINVAL;
 	}
 
 	ret = _cxip_av_lookup(av, fi_addr, &av_addr);
 	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Failed to look up FI addr: %lu", fi_addr);
+		CXIP_WARN("Failed to look up FI addr: %lu\n", fi_addr);
 		return ret;
 	}
 

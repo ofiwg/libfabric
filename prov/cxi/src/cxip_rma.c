@@ -695,12 +695,12 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 
 	if (ret)
 		TXC_WARN(txc,
-			 "%s RMA %s failed: buf=%p len=%lu rkey=%#lx roffset=%#lx nic=%#x pid=%u pid_idx=%u",
+			 "%s RMA %s failed: buf=%p len=%lu rkey=%#lx roffset=%#lx nic=%#x pid=%u pid_idx=%u\n",
 			 idc ? "IDC" : "DMA", write ? "write" : "read",
 			 buf, len, key, addr, caddr.nic, caddr.pid, pid_idx);
 	else
 		TXC_DBG(txc,
-			"%s RMA %s emitted: buf=%p len=%lu rkey=%#lx roffset=%#lx nic=%#x pid=%u pid_idx=%u",
+			"%s RMA %s emitted: buf=%p len=%lu rkey=%#lx roffset=%#lx nic=%#x pid=%u pid_idx=%u\n",
 			idc ? "IDC" : "DMA", write ? "write" : "read",
 			buf, len, key, addr, caddr.nic, caddr.pid, pid_idx);
 
