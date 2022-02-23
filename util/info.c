@@ -330,7 +330,7 @@ static int run(struct fi_info *hints, char *node, char *port, uint64_t flags)
 
 	if (env)
 		ret = print_vars();
-	else if (verbose || info)
+	else if (verbose)
 		ret = print_long_info(info);
 	else if (list_providers)
 		ret = print_providers(info);
