@@ -69,7 +69,7 @@ class ClientServerTest:
 
     def __init__(self, cmdline_args, executable, iteration_type=None, completion_type="transmit_complete",
                  prefix_type="wout_prefix", datacheck_type="wout_datacheck", message_size=None,
-                 memory_type="host_to_host"):
+                 memory_type="host_to_host", timeout=None):
 
         self._cmdline_args = cmdline_args
         self._server_base_command = self.prepare_base_command("server", executable, iteration_type,
@@ -80,8 +80,14 @@ class ClientServerTest:
                                                               completion_type, prefix_type,
                                                               datacheck_type, message_size,
                                                               memory_type)
-        self._server_command = cmdline_args.populate_command(self._server_base_command, "server")
-        self._client_command = cmdline_args.populate_command(self._client_base_command, "client")
+
+        if timeout:
+            self._timeout = timeout
+        else:
+            self._timeout = cmdline_args.timeout
+
+        self._server_command = cmdline_args.populate_command(self._server_base_command, "server", self._timeout)
+        self._client_command = cmdline_args.populate_command(self._client_base_command, "client", self._timeout)
 
     def prepare_base_command(self, command_type, executable, iteration_type=None, completion_type="transmit_complete",
                              prefix_type="wout_prefix", datacheck_type="wout_datacheck", message_size=None,
@@ -149,7 +155,7 @@ class ClientServerTest:
 
         return command
 
-    def run(self, timeout=None):
+    def run(self):
         import os
         from time import sleep
         from tempfile import NamedTemporaryFile
@@ -170,22 +176,19 @@ class ClientServerTest:
         client_outfile = NamedTemporaryFile(prefix="fabtests_client.out.").name
         client_process = Popen(self._client_command + " > " + client_outfile + " 2>&1", shell=True)
 
-        if timeout is None:
-            timeout=self._cmdline_args.timeout
-
-        server_timeout = False
+        server_timed_out = False
         try:
-            server_process.wait(timeout=timeout)
+            server_process.wait(timeout=self._timeout)
         except TimeoutExpired:
             server_process.terminate()
-            server_timeout = True
+            server_timed_out = True
 
-        client_timeout = False
+        client_timed_out = False
         try:
-            client_process.wait(timeout=timeout)
+            client_process.wait(timeout=self._timeout)
         except TimeoutExpired:
             client_process.terminate()
-            client_timeout = True
+            client_timed_out = True
 
         print("")
         print("server_command: " + self._server_command)
@@ -197,8 +200,8 @@ class ClientServerTest:
         print(open(client_outfile).read())
         os.unlink(client_outfile)
 
-        assert not server_timeout, "server timed out"
-        assert not client_timeout, "client timed out"
+        assert not server_timed_out, "server timed out"
+        assert not client_timed_out, "client timed out"
 
         strict = self._cmdline_args.strict_fabtests_mode
         check_returncode(server_process.returncode, strict)
@@ -210,10 +213,11 @@ class MultinodeTest:
         self._cmdline_args = cmdline_args
         self._base_command = base_command
         self._numproc = numproc
+        self._timeout = self._cmdline_args.timeout
 
         multinode_command = self._base_command + " -n {}".format(self._numproc)
-        self._server_command = cmdline_args.populate_command(multinode_command, "server")
-        self._client_command = cmdline_args.populate_command(multinode_command, "client")
+        self._server_command = cmdline_args.populate_command(multinode_command, "server", self._timeout)
+        self._client_command = cmdline_args.populate_command(multinode_command, "client", self._timeout)
 
     def run(self):
         import os
@@ -238,20 +242,20 @@ class MultinodeTest:
             client_outfile_list[i] = NamedTemporaryFile(prefix="fabtests_client_{}.out.".format(i)).name
             client_process_list[i] = Popen(self._client_command + "> " + client_outfile_list[i] + " 2>&1", shell=True)
 
-        server_timeout = False
+        server_timed_out = False
         try:
-            server_process.wait(timeout=self._cmdline_args.timeout)
+            server_process.wait(timeout=self._timeout)
         except TimeoutExpired:
             server_process.terminate()
-            server_timeout = True
+            server_timed_out = True
 
-        client_timeout = False
+        client_timed_out = False
         for i in range(numclient):
             try:
-                client_process_list[i].wait(timeout=self._cmdline_args.timeout)
+                client_process_list[i].wait(timeout=self._timeout)
             except TimeoutExpired:
                 client_process_list[i].terminate()
-                client_timeout = True
+                client_timed_out = True
 
         print("")
         print("server_command: " + self._server_command)
@@ -265,8 +269,8 @@ class MultinodeTest:
             print(open(client_outfile_list[i]).read())
             os.unlink(client_outfile_list[i])
 
-        assert not server_timeout, "server timed out"
-        assert not client_timeout, "client timed out"
+        assert not server_timed_out, "server timed out"
+        assert not client_timed_out, "client timed out"
 
         strict = self._cmdline_args.strict_fabtests_mode
         check_returncode(server_process.returncode, strict)

@@ -70,7 +70,7 @@ class CmdlineArgs:
         if self.server_interface is None:
             self.server_interface = self.server_id
 
-    def populate_command(self, base_command, host_type):
+    def populate_command(self, base_command, host_type, timeout=None):
         '''
             populate base command with informations in command line: provider, environments, etc
         '''
@@ -79,7 +79,10 @@ class CmdlineArgs:
         if not (self.binpath is None):
             command = self.binpath + "/" + command
 
-        command = "timeout " + str(self.timeout) + " " + command
+        if timeout is None:
+            timeout = self.timeout
+
+        command = "timeout " + str(timeout) + " " + command
 
         # set environment variables if specified
         if not (self.environments is None):
