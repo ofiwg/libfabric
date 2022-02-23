@@ -31,6 +31,12 @@
 # SOFTWARE.
 #
 
+def get_option_longform(option_name, option_params):
+    '''
+        get the long form command line option name of an option
+    '''
+    return option_params.get("longform", "--" + option_name.replace("_", "-"))
+
 def get_ubertest_test_type(fabtests_testsets):
     test_list = fabtests_testsets.split(",")
 
@@ -110,14 +116,42 @@ def get_default_ubertest_config_file(fabtests_args):
 
     return cfg_file
 
-def fabtests_args_to_pytest_args(fabtests_args):
+def add_common_arguments(parser, shared_options):
+    import builtins
+
+    for option_name in shared_options.keys():
+        option_params = shared_options[option_name]
+        option_longform = get_option_longform(option_name, option_params)
+        option_shortform = option_params.get("shortform")
+        option_type = option_params["type"]
+        option_helpmsg = option_params["help"]
+        option_default = option_params.get("default")
+        if option_type == "int" and not (option_default is None):
+            option_default = int(option_default)
+
+        if option_shortform:
+            forms = [option_shortform, option_longform]
+        else:
+            forms = [option_longform]
+
+        if option_type == "bool" or option_type == "boolean":
+            parser.add_argument(*forms,
+                                dest=option_name, action="store_true",
+                                help=option_helpmsg, default=option_default)
+        else:
+            assert option_type == "str" or option_type == "int"
+            parser.add_argument(*forms,
+                                dest=option_name, type=getattr(builtins, option_type),
+                                help=option_helpmsg, default=option_default)
+
+def fabtests_args_to_pytest_args(fabtests_args, shared_options):
     import os
 
     pytest_args = []
 
     pytest_args.append("--provider=" + fabtests_args.provider)
-    pytest_args.append("--server_id=" + fabtests_args.server_id)
-    pytest_args.append("--client_id=" + fabtests_args.client_id)
+    pytest_args.append("--server-id=" + fabtests_args.server_id)
+    pytest_args.append("--client-id=" + fabtests_args.client_id)
 
     # -v make pytest to print 1 line for each test
     pytest_args.append("-v")
@@ -132,7 +166,6 @@ def fabtests_args_to_pytest_args(fabtests_args):
             3 : "-rA",      # print extra information for all test(s) (failed/skipped/passed)
         }
 
-    print("fabtests_args.verbose: {}".format(fabtests_args.verbose))
     pytest_args.append(pytest_verbose_options[fabtests_args.verbose])
 
     verbose_fail = fabtests_args.verbose > 0
@@ -145,53 +178,6 @@ def fabtests_args_to_pytest_args(fabtests_args):
     markers = fabtests_testsets_to_pytest_markers(fabtests_args.testsets)
     pytest_args.append("-m")
     pytest_args.append(markers)
-
-    if fabtests_args.environments:
-        pytest_args.append("--environments=" + fabtests_args.environments)
-
-    if fabtests_args.exclusion_list:
-        pytest_args.append("--exclusion_list=" + fabtests_args.exclusion_list)
-
-    default_exclusion_file = get_default_exclusion_file(fabtests_args)
-    if fabtests_args.exclusion_file:
-        pytest_args.append("--exclusion_file=" + fabtests_args.exclusion_file)
-    elif default_exclusion_file:
-        pytest_args.append("--exclusion_file=" + default_exclusion_file)
-
-    if fabtests_args.exclude_negative_tests:
-        pytest_args.append("--exclude_negative_tests")
-
-    if fabtests_args.binpath:
-        pytest_args.append("--binpath=" + fabtests_args.binpath)
-
-    if fabtests_args.client_interface:
-        pytest_args.append("--client_interface=" + fabtests_args.client_interface)
-
-    if fabtests_args.server_interface:
-        pytest_args.append("--server_interface=" + fabtests_args.server_interface)
-
-    default_ubertest_config_file = get_default_ubertest_config_file(fabtests_args)
-    if fabtests_args.ubertest_config_file:
-        pytest_args.append("--ubertest_config_file=" + fabtests_args.ubertest_config_file)
-    elif default_ubertest_config_file:
-        pytest_args.append("--ubertest_config_file=" + default_ubertest_config_file)
-
-    pytest_args.append("--timeout={}".format(fabtests_args.timeout))
-
-    if fabtests_args.core_list:
-        pytest_args.append("--pin-core=" + fabtests_args.core_list)
-
-    if fabtests_args.strict:
-        pytest_args.append("--strict_fabtests_mode")
-
-    if fabtests_args.additional_client_arguments:
-        pytest_args.append("--additional_client_arguments=" + fabtests_args.additional_client_arguments)
-
-    if fabtests_args.additional_server_arguments:
-        pytest_args.append("--additional_server_arguments=" + fabtests_args.additional_server_arguments)
-
-    if fabtests_args.oob_address_exchange:
-        pytest_args.append("--oob_address_exchange")
 
     if fabtests_args.expression:
         pytest_args.append("-k")
@@ -206,6 +192,36 @@ def fabtests_args_to_pytest_args(fabtests_args):
         pytest_args.append("--junit-xml")
         pytest_args.append(os.path.abspath(fabtests_args.junit_xml))
         pytest_args.append("--self-contained-html")
+
+    # add options shared between runfabtests.py and libfabric pytest
+    for option_name in shared_options.keys():
+        option_params = shared_options[option_name]
+        option_longform = get_option_longform(option_name, option_params)
+        option_type = option_params["type"]
+ 
+        if not hasattr(fabtests_args, option_name):
+            continue
+
+        option_value = getattr(fabtests_args, option_name)
+        if (option_value is None):
+            continue
+
+        if option_type == "bool" or option_type == "boolean":
+            assert option_value
+            pytest_args.append(get_option_longform(option_name, option_params))
+        else:
+            assert option_type == "str" or option_type == "int"
+            pytest_args.append(get_option_longform(option_name, option_params) + "=" + str(option_value))
+
+    if not hasattr(fabtests_args, "exclusion_file") or not fabtests_args.exclusion_file:
+        default_exclusion_file = get_default_exclusion_file(fabtests_args)
+        if default_exclusion_file:
+            pytest_args.append("--exclusion-file=" + default_exclusion_file)
+
+    if not hasattr(fabtests_args, "ubertest_config_file") or not fabtests_args.ubertest_config_file:
+        default_ubertest_config_file = get_default_ubertest_config_file(fabtests_args)
+        if default_ubertest_config_file:
+            pytest_args.append("--ubertest-config-file=" + default_ubertest_config_file)
 
     return pytest_args
 
@@ -250,59 +266,43 @@ def get_pytest_relative_case_dir(fabtests_args, pytest_root_dir):
 def main():
     import os
     import sys
+    import yaml
     import pytest
     import argparse
+
+    pytest_root_dir = get_pytest_root_dir()
+
+    # pytest/options.yaml contains the definition of a list of options that are
+    # shared between runfabtests.py and pytest
+    option_yaml = os.path.join(pytest_root_dir, "options.yaml")
+    if not os.path.exists(option_yaml):
+        print("Error: option definition yaml file {} not found!".format(option_yaml))
+        exit(1)
+
+    shared_options = yaml.safe_load(open(option_yaml))
 
     parser = argparse.ArgumentParser(description="libfabric integration test runner")
 
     parser.add_argument("provider", type=str, help="libfabric provider")
     parser.add_argument("server_id", type=str, help="server ip or hostname")
     parser.add_argument("client_id", type=str, help="client ip or hostname")
-    parser.add_argument("-g", dest="good_address",
-                        help="good address from host's perspective (default $GOOD_ADDR)")
+    parser.add_argument("-t", dest="testsets", type=str, default="quick",
+                        help="test set(s): all,quick,unit,functional,standard,short,ubertest (default quick)")
     parser.add_argument("-v", dest="verbose", action="count", default=0,
                         help="verbosity level"
                              "-v: print extra info for failed test(s)"
                              "-vv: print extra info of failed/skipped test(s)"
                              "-vvv: print extra info of failed/skipped/passed test(s)")
-    parser.add_argument("-t", dest="testsets", type=str, default="quick",
-                        help="test set(s): all,quick,unit,functional,standard,short,ubertest (default quick)")
-    parser.add_argument("-E", dest="environments", type=str,
-                        help="export provided variable name and value to ssh client and server processes.")
-    parser.add_argument("-e", dest="exclusion_list", type=str,
-                        help="exclude tests: comma delimited list of test names/regex patterns"
-                             " e.g. \"dgram,rma.*write\"")
-    parser.add_argument("-f", dest="exclusion_file", type=str,
-                        help="exclude tests file: File containing list of test names/regex patterns"
-                             " to exclude (one per line)")
-    parser.add_argument("-N", dest="exclude_negative_tests", action="store_true", help="exlcude negative unit tests")
-    parser.add_argument("-p", dest="binpath", type=str, help="path to test bins (default PATH)")
-    parser.add_argument("-c", dest="client_interface", type=str, help="client interface")
-    parser.add_argument("-s", dest="server_interface", type=str, help="server interface")
-    parser.add_argument("-u", dest="ubertest_config_file", type=str, help="configure option for ubertest tests")
-    parser.add_argument("-T", dest="timeout", type=int, default=120, help="timeout value in seconds")
-    parser.add_argument("--pin-core", dest="core_list", type=str, help="Specify cores to pin when running standard tests. Cores can specified via a comma-delimited list, like 0,2-4")
-    parser.add_argument("-S", dest="strict", action="store_true",
-                        help="Strict mode: -FI_ENODATA, -FI_ENOSYS errors would be treated as failures"
-                             " instead of skipped/notrun")
-    parser.add_argument("-C", dest="additional_client_arguments", type=str,
-                        help="Additional client test arguments: Parameters to pass to client fabtests")
-    parser.add_argument("-L", dest="additional_server_arguments", type=str,
-                        help="Additional server test arguments: Parameters to pass to server fabtests")
-    parser.add_argument("-b", dest="oob_address_exchange", action="store_true",
-                        help="out-of-band address exchange over the default port")
-    parser.add_argument("--expression", dest="expression", type=str,
+    parser.add_argument("--expression", type=str,
                         help="only run tests which match the given substring expression.")
-    parser.add_argument("--html", dest="html", type=str,
-                        help="path to generated html report")
-    parser.add_argument("--junit_xml", dest="junit_xml", type=str,
-                        help="path to generated junit xml report")
+    parser.add_argument("--html", type=str, help="path to generated html report")
+    parser.add_argument("--junit-xml", type=str, help="path to generated junit xml report")
+
+    add_common_arguments(parser, shared_options)
 
     fabtests_args = parser.parse_args()
-    pytest_args = fabtests_args_to_pytest_args(fabtests_args)
+    pytest_args = fabtests_args_to_pytest_args(fabtests_args, shared_options)
 
-    # find the directory that contains testing scripts
-    pytest_root_dir = get_pytest_root_dir()
     os.chdir(pytest_root_dir)
 
     pytest_args.append(get_pytest_relative_case_dir(fabtests_args, pytest_root_dir))
