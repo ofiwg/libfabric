@@ -125,21 +125,17 @@ def fabtests_args_to_pytest_args(fabtests_args):
     if fabtests_args.good_address:
         pytest_args.append("--good_address " + fabtests_args.good_address)
 
-    if fabtests_args.verbose_fail_skip_pass:
-        # print extra info for failed/skipped/passed test(s)
-        pytest_args.append("-rA")
-        verbose_fail = True
-    elif fabtests_args.verbose_fail_skip:
-        # print extra info for failed/skipped test(s)
-        pytest_args.append("-rfEsx")
-        verbose_fail = True
-    elif fabtests_args.verbose_fail:
-        pytest_args.append("-rfE")
-        verbose_fail = True
-    else:
-        pytest_args.append("-rN")
-        verbose_fail = False
+    pytest_verbose_options = {
+            0 : "-rN",      # print no extra information
+            1 : "-rfE",     # print extra information for failed test(s)
+            2 : "-rfEsx",   # print extra information for failed/skipped test(s)
+            3 : "-rA",      # print extra information for all test(s) (failed/skipped/passed)
+        }
 
+    print("fabtests_args.verbose: {}".format(fabtests_args.verbose))
+    pytest_args.append(pytest_verbose_options[fabtests_args.verbose])
+
+    verbose_fail = fabtests_args.verbose > 0
     if verbose_fail:
         # Use short python trace back because it show captured stdout of failed tests
         pytest_args.append("--tb=short")
@@ -264,12 +260,11 @@ def main():
     parser.add_argument("client_id", type=str, help="client ip or hostname")
     parser.add_argument("-g", dest="good_address",
                         help="good address from host's perspective (default $GOOD_ADDR)")
-    parser.add_argument("-v", dest="verbose_fail", action="store_true",
-                        help="print extra info for failed test(s)")
-    parser.add_argument("-vv", dest="verbose_fail_skip", action="store_true",
-                        help="print extra info of failed/skipped test(s)")
-    parser.add_argument("-vvv", dest="verbose_fail_skip_pass", action="store_true",
-                        help="print extra info of failed/skipped/passed test(s)")
+    parser.add_argument("-v", dest="verbose", action="count", default=0,
+                        help="verbosity level"
+                             "-v: print extra info for failed test(s)"
+                             "-vv: print extra info of failed/skipped test(s)"
+                             "-vvv: print extra info of failed/skipped/passed test(s)")
     parser.add_argument("-t", dest="testsets", type=str, default="quick",
                         help="test set(s): all,quick,unit,functional,standard,short,ubertest (default quick)")
     parser.add_argument("-E", dest="environments", type=str,
