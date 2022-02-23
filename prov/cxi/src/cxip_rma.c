@@ -558,8 +558,10 @@ static bool cxip_rma_is_unrestricted(struct cxip_txc *txc, uint64_t key,
 }
 
 static bool cxip_rma_is_idc(struct cxip_txc *txc, uint64_t key, size_t len,
-			    bool write, bool triggered)
+			    bool write, bool triggered, bool unr)
 {
+	size_t max_idc_size = unr ? CXIP_INJECT_SIZE : C_MAX_IDC_PAYLOAD_RES;
+
 	/* IDC commands are not supported for unoptimized MR since the IDC
 	 * small message format does not support remote offset which is needed
 	 * for RMA commands.
@@ -572,7 +574,7 @@ static bool cxip_rma_is_idc(struct cxip_txc *txc, uint64_t key, size_t len,
 		return false;
 
 	/* IDC commands only support a limited payload size. */
-	if (len > C_MAX_IDC_PAYLOAD_RES)
+	if (len > max_idc_size)
 		return false;
 
 	/* Triggered operations never can be issued with an IDC. */
@@ -642,7 +644,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	}
 
 	unr = cxip_rma_is_unrestricted(txc, key, write);
-	idc = cxip_rma_is_idc(txc, key, len, write, triggered);
+	idc = cxip_rma_is_idc(txc, key, len, write, triggered, unr);
 
 	/* To prevent CQ overrun, perform a sanity check to ensure there is
 	 * enough space for a potential event.
