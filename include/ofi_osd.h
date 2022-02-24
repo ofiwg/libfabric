@@ -115,10 +115,12 @@ static inline int ofi_detect_endianness(void)
 #define OFI_DBG_VAR(type, name) type name;
 #define OFI_DBG_SET(name, val) name = val
 #define OFI_DBG_ADD(name, val) name += val
+#define OFI_DBG_CALL(func) func
 #else
 #define OFI_DBG_VAR(type, name)
-#define OFI_DBG_SET(name, val)
-#define OFI_DBG_ADD(name, val)
+#define OFI_DBG_SET(name, val) do {} while (0)
+#define OFI_DBG_ADD(name, val) do {} while (0)
+#define OFI_DBG_CALL(func) do {} while (0)
 #endif
 
 #endif /* _OFI_OSD_H_ */
