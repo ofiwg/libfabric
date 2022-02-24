@@ -62,7 +62,7 @@ cudaError_t ofi_cudaFree(void *ptr);
 
 #endif /* HAVE_LIBCUDA */
 
-#ifdef HAVE_ROCR
+#if HAVE_ROCR
 
 #include <hsa/hsa_ext_amd.h>
 

@@ -738,38 +738,55 @@ AS_IF([test x"$enable_gdrcopy_dlopen" != x"yes"], [LIBS="$LIBS $gdrcopy_LIBS"])
 
 dnl Check for ROCR runtime libraries.
 AC_ARG_WITH([rocr],
-	    [AS_HELP_STRING([--with-rocr=DIR],
-			    [Provide path to where the ROCR/HSA development
-			    and runtime libraries are installed.])],
-	    [], [])
+	[AS_HELP_STRING([--with-rocr=DIR], [Enable ROCR/HSA build and fail if not found.
+					    Optional=<Path to where the ROCR/HSA libraries
+					    and headers are installed.>])])
 
+have_rocr=0
+rocr_dlopen=0
 AC_ARG_ENABLE([rocr-dlopen],
     [AS_HELP_STRING([--enable-rocr-dlopen],
         [Enable dlopen of ROCR libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test "$freebsd" = "0"], [
-            AC_CHECK_LIB(dl, dlopen, [],
-                [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-        ])
-        AC_DEFINE([ENABLE_ROCR_DLOPEN], [1], [dlopen ROCR libraries])
-    ],
-    [enable_rocr_dlopen=no])
+        AS_IF([test x"$with_dlopen" = "no"],
+              [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+	rocr_dlopen=1
+    ])
 
-FI_CHECK_PACKAGE([rocr],
-		 [hsa/hsa_ext_amd.h],
-		 [hsa-runtime64],
-		 [hsa_amd_pointer_info],
-		 [],
-		 [$with_rocr],
-		 [$with_rocr/lib],
-		 [AC_DEFINE([HAVE_ROCR], [1], [ROCR HSA support])],
-		 [], [])
+AS_IF([test x"$with_rocr" != x"no"],
+      [
+	AS_IF([test "$rocr_dlopen" != "0"],
+	      [
+		_FI_CHECK_PACKAGE_HEADER([rocr],
+				[hsa/hsa_ext_amd.h],
+				[$with_rocr],
+				[have_rocr=1],
+				[AC_MSG_ERROR([ROCR headers not found. Cannot enable ROCR DL])])
+	      ],
+	      [
+		FI_CHECK_PACKAGE([rocr],
+				 [hsa/hsa_ext_amd.h],
+				 [hsa-runtime64],
+				 [hsa_amd_pointer_info],
+				 [],
+				 [$with_rocr],
+				 [$with_rocr/lib],
+				 [have_rocr=1])
+	      ])
+      ])
 
-CPPFLAGS="$CPPFLAGS $rocr_CPPFLAGS"
-LDFLAGS="$LDFLAGS $rocr_LDFLAGS"
+AC_DEFINE_UNQUOTED([ENABLE_ROCR_DLOPEN], [$rocr_dlopen], [dlopen ROCR libraries])
 
-AS_IF([test x"$enable_rocr_dlopen" != x"yes"], [LIBS="$LIBS $rocr_LIBS"])
+AS_IF([test x"$with_rocr" != x"no" && test -n "$with_rocr" && test "$have_rocr" = "0" ],
+	[AC_MSG_ERROR([ROCR support requested but ROCR runtime not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_ROCR], [$have_rocr], [ROCR support])
+
+AS_IF([test "$rocr_dlopen" != "1"], [LIBS="$LIBS $rocr_LIBS"])
+AS_IF([test "$have_rocr" = "1" && test x"$with_rocr" != x"yes"],
+      [CPPFLAGS="$CPPFLAGS $rocr_CPPFLAGS"
+       LDFLAGS="$LDFLAGS $rocr_LDFLAGS"])
 
 AC_CHECK_SIZEOF([void *])
 

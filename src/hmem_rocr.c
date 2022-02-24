@@ -37,7 +37,7 @@
 #include "ofi_hmem.h"
 #include "ofi.h"
 
-#ifdef HAVE_ROCR
+#if HAVE_ROCR
 
 #include <hsa/hsa_ext_amd.h>
 
@@ -67,7 +67,7 @@ struct rocr_ops {
 					   void *value);
 };
 
-#ifdef ENABLE_ROCR_DLOPEN
+#if ENABLE_ROCR_DLOPEN
 
 #include <dlfcn.h>
 
@@ -277,7 +277,7 @@ bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 
 static int rocr_hmem_dl_init(void)
 {
-#ifdef ENABLE_ROCR_DLOPEN
+#if ENABLE_ROCR_DLOPEN
 	/* Assume if dlopen fails, the ROCR library could not be found. Do not
 	 * treat this as an error.
 	 */
@@ -375,7 +375,7 @@ err:
 
 static void rocr_hmem_dl_cleanup(void)
 {
-#ifdef ENABLE_ROCR_DLOPEN
+#if ENABLE_ROCR_DLOPEN
 	dlclose(rocr_handle);
 #endif
 }
