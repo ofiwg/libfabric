@@ -632,26 +632,25 @@ AS_IF([test "$have_ze" = "1" && test x"$with_ze" != x"yes"],
        LDFLAGS="$LDFLAGS $ze_LDFLAGS"])
 
 dnl Check for AWS Neuron runtime library for Neuron device support
+have_neuron=0
 AC_ARG_WITH([neuron],
 	AS_HELP_STRING([--with-neuron=DIR],
-		       [Provide path to where the Neuron headers are installed.]),
-	[], [])
+		       [Enable Neuron build and fail if not found.
+			Optional=<Path to where the Neuron libraries
+			and headers are installed.>]))
 
 _FI_CHECK_PACKAGE_HEADER([neuron], [nrt/nrt.h], [$with_neuron],
 	[
-		AS_IF([test "$freebsd" = "0"], [
-		    AC_CHECK_LIB(dl, dlopen, [],
+		AS_IF([test x"$with_dlopen" = "no"],
 			[AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-		])
-		AC_DEFINE([HAVE_NEURON], [1], [build with neuron support])
+		have_neuron=1
 	],
-	[
-		AS_IF([test x"$with_neuron" != x"no" && test -n "$with_neuron"],
-		      [AC_MSG_ERROR([Neuron support requested but headers are not available.])],
-		      [])
-		AC_DEFINE([HAVE_NEURON], [0], [build with neuron support])
-	]
 )
+
+AS_IF([test x"$with_neuron" != x"no" && test -n "$with_neuron" && test "$have_neuron" = "0" ],
+	[AC_MSG_ERROR([Neuron support requested but headers are not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_NEURON], [$have_neuron], [Build with Neuron support])
 
 enable_memhooks=1
 AC_ARG_ENABLE([memhooks-monitor],
