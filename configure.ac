@@ -697,52 +697,55 @@ AH_BOTTOM([
 
 #gdrcopy related configs
 AC_ARG_WITH([gdrcopy],
-	    [AS_HELP_STRING([--with-gdrcopy=DIR],
-			    [Provide path to where the gdrcopy development
-			    and runtime libraries are installed.])],
-	    [], [])
-
-AS_IF([test -n "$with_gdrcopy" && test x"$with_gdrcopy" != x"no" && test "$have_cuda" = "0"],
-	[AC_MSG_ERROR([gdrcopy is requested but cuda is not requested or cuda runtime is not available.])],
-	[])
+	[AS_HELP_STRING([--with-gdrcopy=DIR], [Enable gdrcopy build and fail if not found.
+					       Optional=<Path to where the gdrcopy development
+					       and runtime libraries are installed.>])])
 
 have_gdrcopy=0
-AS_IF([test "$have_cuda" = "1" && test x"$with_gdrcopy" != x"no"],
-	[AS_IF([test x"$with_gdrcopy" = x"yes"],[gdrcopy_dir=""],[gdrcopy_dir=$with_gdrcopy])
-	 FI_CHECK_PACKAGE([gdrcopy],
-			  [gdrapi.h],
-			  [gdrapi],
-			  [gdr_open],
-			  [],
-			  [$gdrcopy_dir],
-			  [],
-			  [have_gdrcopy=1],
-			  [],
-			  [])],
-	[])
-
-AS_IF([test x"$with_gdrcopy" != x"no" && test -n "$with_gdrcopy" && test "$have_gdrcopy" = "0" ],
-	[AC_MSG_ERROR([gdrcopy support requested but gdrcopy development library is not available.])],
-	[])
-
-AC_DEFINE_UNQUOTED([HAVE_GDRCOPY], [$have_gdrcopy], [Whether we have gdrcopy development library or not])
-
+gdrcopy_dlopen=0
 AC_ARG_ENABLE([gdrcopy-dlopen],
     [AS_HELP_STRING([--enable-gdrcopy-dlopen],
         [Enable dlopen of gdrcopy libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test "$freebsd" = "0"], [
-            AC_CHECK_LIB(dl, dlopen, [],
-                [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-        ])
-        AC_DEFINE([ENABLE_GDRCOPY_DLOPEN], [1], [dlopen CUDA libraries])
-    ],
-    [enable_gdrcopy_dlopen=no])
+        AS_IF([test x"$with_dlopen" = "no"],
+              [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+	gdrcopy_dlopen=1
+    ])
 
-CPPFLAGS="$CPPFLAGS $gdrcopy_CPPFLAGS"
-LDFLAGS="$LDFLAGS $gdrcopy_LDFLAGS"
-AS_IF([test x"$enable_gdrcopy_dlopen" != x"yes"], [LIBS="$LIBS $gdrcopy_LIBS"])
+AS_IF([test "$have_cuda" = 1 && test x"$with_gdrcopy" != x"no"],
+      [
+	AS_IF([test "$gdrcopy_dlopen" != "0"],
+	      [
+		_FI_CHECK_PACKAGE_HEADER([gdrcopy],
+				[gdrapi.h],
+				[$with_gdrcopy],
+				[have_gdrcopy=1],
+				[AC_MSG_ERROR([gdrcopy headers not found. Cannot enable gdrcopy DL])])
+	      ],
+	      [
+		FI_CHECK_PACKAGE([gdrcopy],
+				 [gdrapi.h],
+				 [gdrapi],
+				 [gdr_open],
+				 [],
+				 [$with_gdrcopy],
+				 [],
+				 [have_gdrcopy=1])
+	      ])
+      ])
+
+AC_DEFINE_UNQUOTED([ENABLE_GDRCOPY_DLOPEN], [$gdrcopy_dlopen], [dlopen gdrcopy libraries])
+
+AS_IF([test x"$with_gdrcopy" != x"no" && test -n "$with_gdrcopy" && test "$have_gdrcopy" = "0" ],
+	[AC_MSG_ERROR([gdrcopy support requested but gdrcopy runtime not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_GDRCOPY], [$have_gdrcopy], [gdrcopy support])
+
+AS_IF([test "$gdrcopy_dlopen" != "1"], [LIBS="$LIBS $gdrcopy_LIBS"])
+AS_IF([test "$have_gdrcopy" = "1" && test x"$with_gdrcopy" != x"yes"],
+      [CPPFLAGS="$CPPFLAGS $gdrcopy_CPPFLAGS"
+       LDFLAGS="$LDFLAGS $gdrcopy_LDFLAGS"])
 #end gdrcopy configures
 
 dnl Check for ROCR runtime libraries.
