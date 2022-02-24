@@ -13,6 +13,7 @@ AM_CPPFLAGS += \
 _cxi_files = \
 	prov/cxi/src/cxip_if.c \
 	prov/cxi/src/cxip_fabric.c \
+	prov/cxi/src/cxip_repsum.c \
 	prov/cxi/src/cxip_coll.c \
 	prov/cxi/src/cxip_zbcoll.c \
 	prov/cxi/src/cxip_curl.c \
@@ -117,7 +118,8 @@ nodist_prov_cxi_test_cxitest_SOURCES = \
 	prov/cxi/test/deferred_work.c \
 	prov/cxi/test/coll.c \
 	prov/cxi/test/ctrl.c \
-	prov/cxi/test/lat.c
+	prov/cxi/test/lat.c \
+	prov/cxi/test/repsum.c
 
 prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
 	$(cxitest_CPPFLAGS) $(PTHREAD_CFLAGS)

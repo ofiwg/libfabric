@@ -1902,6 +1902,16 @@ union cxip_coll_data {
 	} fminmax;
 } __attribute__((packed));
 
+/*
+ * Reproducible sum structure.
+ */
+typedef struct {
+	int64_t T[4];
+	int M;
+	bool overflow;
+	bool inexact;
+} cxip_repsum_t;
+
 /* Our asynchronous handle for requests */
 struct cxip_curl_handle;
 
@@ -2199,6 +2209,12 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 void cxip_coll_limit_red_id(struct fid_mc *mc, int max_red_id);
 int cxip_coll_arm_enable(struct fid_mc *mc, bool enable);
 void cxip_coll_reset_mc_ctrs(struct fid_mc *mc);
+
+void cxip_dbl_to_rep(cxip_repsum_t *x, double d);
+void cxip_rep_to_dbl(double *d, const cxip_repsum_t *x);
+void cxip_rep_add(cxip_repsum_t *x, const cxip_repsum_t *y);
+double cxip_rep_add_dbl(double d1, double d2);
+double cxip_rep_sum(size_t count, double *values);
 
 /*
  * cxip_fid_to_tx_info() - Return the TXC and attributes from FID
