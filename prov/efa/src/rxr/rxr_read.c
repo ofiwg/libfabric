@@ -584,8 +584,18 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 
 	assert(read_entry->iov_count > 0);
 	assert(read_entry->rma_iov_count > 0);
-	assert(read_entry->bytes_submitted < read_entry->total_len);
 
+	if (read_entry->total_len == 0) {
+		return rxr_read_post_once(ep,
+					  read_entry,
+					  read_entry->iov[0].iov_base,
+					  0,
+					  read_entry->mr_desc[0],
+					  read_entry->rma_iov[0].addr,
+					  read_entry->rma_iov[0].key);
+	}
+
+	assert(read_entry->bytes_submitted < read_entry->total_len);
 	if (read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY) {
 		assert(read_entry->lower_ep_type == EFA_EP);
 		ret = rxr_read_prepare_pkt_entry_mr(ep, read_entry);
