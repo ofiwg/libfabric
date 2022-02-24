@@ -1,34 +1,35 @@
 import pytest
 
+def get_option_longform(option_name, option_params):
+    '''
+        get the long form command line option name of an option
+    '''
+    return option_params.get("longform", "--" + option_name.replace("_", "-"))
+
 def pytest_addoption(parser):
+    import yaml, builtins
+
     parser.addoption("--provider", dest="provider", help="libfabric provider")
-    parser.addoption("--client_id", dest="client_id", help="client IP address or hostname")
-    parser.addoption("--server_id", dest="server_id", help="server IP address or hostname")
-    parser.addoption("--good_address", dest="good_address",
-                     help="good address from host's perspective (default $GOOD_ADDR)")
-    parser.addoption("--exclusion_list", dest="exclusion_list", help="a list of regex patterns")
-    parser.addoption("--environments", dest="environments",
-                     help="export provided variable name and value to ssh client and server processes.")
-    parser.addoption("--exclusion_file", dest="exclusion_file",
-                     help="a file that contains a list of regex patterns (one per line)")
-    parser.addoption("--exclude_negative_tests", dest="exclude_negative_tests", action="store_true",
-                     help="exclude negative unit tests")
-    parser.addoption("--binpath", dest="binpath", help="path to test bins (default PATH)") 
-    parser.addoption("--client_interface", dest="client_interface", type=str, help="client interface")
-    parser.addoption("--server_interface", dest="server_interface", type=str, help="server interface")
-    parser.addoption("--ubertest_config_file", dest="ubertest_config_file", type=str,
-                     help="configure option for ubertest tests")
-    parser.addoption("--timeout", dest="timeout", default="120",
-                     help="timeout value for each test, default to 120 seconds")
-    parser.addoption("--pin-core", dest="core_list", type=str, help="Specify cores to pin when running standard tests. Cores can specified via a comma-delimited list, like 0,2-4")
-    parser.addoption("--strict_fabtests_mode", dest="strict_fabtests_more", action="store_true",
-                     help="strict mode. -FI_ENODATA and -FI_NOSYS treated as failure instead of skip/notrun") 
-    parser.addoption("--additional_server_arguments", dest="additional_server_arguments", type=str,
-                     help="addtional arguments passed to server programs")
-    parser.addoption("--additional_client_arguments", dest="additional_client_arguments", type=str,
-                     help="addtional arguments passed to client programs")
-    parser.addoption("--oob_address_exchange", dest="oob_address_exchange", action="store_true",
-                     help="use out of band address exchange")
+    parser.addoption("--client-id", dest="client_id", help="client IP address or hostname")
+    parser.addoption("--server-id", dest="server_id", help="server IP address or hostname")
+
+    options = yaml.safe_load(open("options.yaml"))
+    for option_name in options.keys():
+        option_params = options[option_name]
+        option_longform = get_option_longform(option_name, option_params)
+        option_type = option_params["type"]
+        option_helpmsg = option_params["help"]
+        option_default = option_params.get("default")
+        if option_type == "int" and not (option_default is None):
+            option_default = int(option_default)
+
+        if option_type == "bool" or option_type == "boolean":
+            parser.addoption(option_longform, dest=option_name, action="store_true",
+                             help=option_helpmsg, default=option_default)
+        else:
+            assert option_type == "str" or option_type == "int"
+            parser.addoption(option_longform, dest=option_name, type=getattr(builtins, option_type),
+                             help=option_helpmsg, default=option_default)
 
 # base ssh command
 bssh = "ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
@@ -36,51 +37,40 @@ bssh = "ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
 class CmdlineArgs:
 
     def __init__(self, request):
+        import yaml
+
         self.provider = request.config.getoption("--provider")
         if self.provider is None:
             raise RuntimeError("Error: libfabric provider is not specified")
 
-        self.server_id = request.config.getoption("--server_id")
+        self.server_id = request.config.getoption("--server-id")
         if self.server_id is None:
             raise RuntimeError("Error: server is not specified")
 
-        self.client_id = request.config.getoption("--client_id")
+        self.client_id = request.config.getoption("--client-id")
         if self.client_id is None:
             raise RuntimeError("Error: client is not specified")
 
-        self.good_address = request.config.getoption("--good_address")
-        self.environments = request.config.getoption("--environments")
+        options = yaml.safe_load(open("options.yaml"))
+        for option_name in options.keys():
+            option_params = options[option_name]
+            option_longform = get_option_longform(option_name, option_params)
+            setattr(self, option_name, request.config.getoption(option_longform))
 
         self._exclusion_patterns = []
-        exclusion_list = request.config.getoption("--exclusion_list")
-        if exclusion_list:
-            self._add_exclusion_patterns_from_list(exclusion_list)
+        if self.exclusion_list:
+            self._add_exclusion_patterns_from_list(self.exclusion_list)
 
-        exclusion_file = request.config.getoption("--exclusion_file")
-        if exclusion_file:
-            self._add_exclusion_patterns_from_file(exclusion_file)
+        if self.exclusion_file:
+            self._add_exclusion_patterns_from_file(self.exclusion_file)
 
-        self.exclude_negative_tests = request.config.getoption("--exclude_negative_tests")
-
-        self.binpath = request.config.getoption("--binpath")
-
-        self.client_interface = request.config.getoption("--client_interface")
         if self.client_interface is None:
             self.client_interface = self.client_id
 
-        self.server_interface = request.config.getoption("--server_interface")
         if self.server_interface is None:
             self.server_interface = self.server_id
 
-        self.ubertest_config_file = request.config.getoption("--ubertest_config_file")
-        self.timeout = int(request.config.getoption("--timeout"))
-        self.core_list = request.config.getoption("--pin-core")
-        self.strict_fabtests_mode = request.config.getoption("--strict_fabtests_mode")
-        self.additional_server_arguments = request.config.getoption("--additional_server_arguments")
-        self.additional_client_arguments = request.config.getoption("--additional_client_arguments")
-        self.oob_address_exchange = request.config.getoption("--oob_address_exchange")
-
-    def populate_command(self, base_command, host_type):
+    def populate_command(self, base_command, host_type, timeout=None):
         '''
             populate base command with informations in command line: provider, environments, etc
         '''
@@ -89,7 +79,10 @@ class CmdlineArgs:
         if not (self.binpath is None):
             command = self.binpath + "/" + command
 
-        command = "timeout " + str(self.timeout) + " " + command
+        if timeout is None:
+            timeout = self.timeout
+
+        command = "timeout " + str(timeout) + " " + command
 
         # set environment variables if specified
         if not (self.environments is None):

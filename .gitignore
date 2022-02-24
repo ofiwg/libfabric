@@ -76,3 +76,6 @@ fabtests/unit/fi_*
 fabtests/multinode/fi_*
 fabtests/prov/efa/src/fi_efa*
 pingpong/fi_*
+
+fabtests/pytest/__pycache__
+fabtests/pytest/*/__pycache__

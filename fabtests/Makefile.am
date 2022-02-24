@@ -113,6 +113,7 @@ nobase_dist_config_DATA = \
 	test_configs/efa/efa-neuron.exclude \
 	test_configs/efa/efa.exclude \
 	pytest/pytest.ini \
+	pytest/options.yaml \
 	pytest/conftest.py \
 	pytest/common.py \
 	pytest/default/test_av.py \
