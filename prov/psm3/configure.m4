@@ -138,6 +138,8 @@ ifelse('
 			])
 		CFLAGS=$save_CFLAGS
 
+		have_libcuda=0
+		AS_IF([test $have_cuda -eq 1 && test $cuda_dlopen -eq 1], [have_libcuda=1])
 		AS_IF([test $have_libcuda -eq 1],
 		      [psm3_CPPFLAGS="$psm3_CPPFLAGS -DPSM_CUDA -DNVIDIA_GPU_DIRECT"])
 		AC_DEFINE_UNQUOTED([PSM3_CUDA], [$have_libcuda], [Whether we have CUDA runtime or not])

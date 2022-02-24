@@ -36,7 +36,7 @@
 
 #ifndef _OFI_CUDA_H_
 #define _OFI_CUDA_H_
-#if HAVE_LIBCUDA
+#if HAVE_CUDA
 
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -107,5 +107,5 @@ ofi_copy_to_cuda_iov(const struct iovec *iov, size_t iov_count, uint64_t iov_off
 	}
 }
 
-#endif /* HAVE_LIBCUDA */
+#endif /* HAVE_CUDA */
 #endif /* _OFI_CUDA_H_ */

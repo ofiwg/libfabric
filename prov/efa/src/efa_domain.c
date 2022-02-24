@@ -489,7 +489,7 @@ static int efa_mr_cache_init(struct efa_domain *domain, struct fi_info *info)
 
 static int efa_set_domain_hmem_info_cuda(struct efa_domain *domain)
 {
-#if HAVE_LIBCUDA
+#if HAVE_CUDA
 	cudaError_t cuda_ret;
 	void *ptr = NULL;
 	struct ibv_mr *ibv_mr;

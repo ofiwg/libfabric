@@ -242,7 +242,7 @@ void rxr_info_to_core_mr_modes(uint32_t version,
 					hints->domain_attr->mr_mode & OFI_MR_BASIC_MAP;
 			core_info->addr_format = hints->addr_format;
 		}
-#if HAVE_LIBCUDA || HAVE_NEURON
+#if HAVE_CUDA || HAVE_NEURON
 		core_info->domain_attr->mr_mode |= FI_MR_HMEM;
 #endif
 	}
@@ -488,7 +488,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 		}
 
 
-#if HAVE_LIBCUDA || HAVE_NEURON
+#if HAVE_CUDA || HAVE_NEURON
 		/* If the application requires HMEM support, we will add
 		 * FI_MR_HMEM to mr_mode, because we need application to
 		 * provide descriptor for cuda or neuron buffer. Note we did

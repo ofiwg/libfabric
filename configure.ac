@@ -522,44 +522,58 @@ AC_DEFINE_UNQUOTED(HAVE_CLOCK_GETTIME, [$have_clock_gettime],
        [Define to 1 if clock_gettime is available.])
 AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
 
-dnl Check for CUDA runtime libraries.
+dnl Check for CUDA runtime libraries
 AC_ARG_WITH([cuda],
-	    [AS_HELP_STRING([--with-cuda=DIR],
-			    [Provide path to where the CUDA development
-			    and runtime libraries are installed.])],
-	    [], [])
+	[AS_HELP_STRING([--with-cuda=DIR],
+			[Enable CUDA build and fail if not found.
+			 Optional=<Path to where the CUDA libraries
+			 and headers are installed.>])])
 
-have_libcuda=0
-AS_IF([test x"$with_cuda" != x"no"],
-	    [FI_CHECK_PACKAGE([cuda],
-			      [cuda_runtime.h],
-			      [cudart],
-			      [cudaMemcpy],
-			      [-lcuda],
-			      [$with_cuda],
-			      [],
-			      [have_libcuda=1],
-			      [],
-			      [])],
-	    [])
-
-AS_IF([test x"$with_cuda" != x"no" && test -n "$with_cuda" && test "$have_libcuda" = "0" ],
-	[AC_MSG_ERROR([CUDA support requested but CUDA runtime not available.])],
-	[])
-AC_DEFINE_UNQUOTED([HAVE_LIBCUDA], [$have_libcuda], [Whether we have CUDA runtime or not])
-
+have_cuda=0
+cuda_dlopen=0
 AC_ARG_ENABLE([cuda-dlopen],
     [AS_HELP_STRING([--enable-cuda-dlopen],
         [Enable dlopen of CUDA libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test "$freebsd" = "0"], [
-            AC_CHECK_LIB(dl, dlopen, [],
-                [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-        ])
-        AC_DEFINE([ENABLE_CUDA_DLOPEN], [1], [dlopen CUDA libraries])
-    ],
-    [enable_cuda_dlopen=no])
+        AS_IF([test x"$with_dlopen" = "no"],
+              [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+	cuda_dlopen=1
+    ])
+
+AS_IF([test x"$with_cuda" != x"no"],
+      [
+	AS_IF([test "$cuda_dlopen" != "0"],
+	      [
+		_FI_CHECK_PACKAGE_HEADER([cuda],
+				[cuda_runtime.h],
+				[$with_cuda],
+				[have_cuda=1],
+				[AC_MSG_ERROR([CUDA headers not found. Cannot enable CUDA DL])])
+	      ],
+	      [
+		FI_CHECK_PACKAGE([cuda],
+				 [cuda_runtime.h],
+				 [cudart],
+				 [cudaMemcpy],
+				 [-lcuda],
+				 [$with_cuda],
+				 [],
+				 [have_cuda=1])
+	      ])
+      ])
+
+AC_DEFINE_UNQUOTED([ENABLE_CUDA_DLOPEN], [$cuda_dlopen], [dlopen CUDA libraries])
+
+AS_IF([test x"$with_cuda" != x"no" && test -n "$with_cuda" && test "$have_cuda" = "0" ],
+	[AC_MSG_ERROR([CUDA support requested but CUDA runtime not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_CUDA], [$have_cuda], [CUDA support])
+
+AS_IF([test "$cuda_dlopen" != "1"], [LIBS="$LIBS $cuda_LIBS"])
+AS_IF([test "$have_cuda" = "1" && test x"$with_cuda" != x"yes"],
+      [CPPFLAGS="$CPPFLAGS $cuda_CPPFLAGS"
+       LDFLAGS="$LDFLAGS $cuda_LDFLAGS"])
 
 AC_ARG_WITH([ze],
 	[AS_HELP_STRING([--with-ze=DIR], [Enable ZE build and fail if not found.
@@ -681,11 +695,6 @@ AH_BOTTOM([
 #endif
 ])
 
-CPPFLAGS="$CPPFLAGS $cuda_CPPFLAGS"
-LDFLAGS="$LDFLAGS $cuda_LDFLAGS"
-
-AS_IF([test x"$enable_cuda_dlopen" != x"yes"], [LIBS="$LIBS $cuda_LIBS"])
-
 #gdrcopy related configs
 AC_ARG_WITH([gdrcopy],
 	    [AS_HELP_STRING([--with-gdrcopy=DIR],
@@ -693,12 +702,12 @@ AC_ARG_WITH([gdrcopy],
 			    and runtime libraries are installed.])],
 	    [], [])
 
-AS_IF([test -n "$with_gdrcopy" && test x"$with_gdrcopy" != x"no" && test "$have_libcuda" = "0"],
+AS_IF([test -n "$with_gdrcopy" && test x"$with_gdrcopy" != x"no" && test "$have_cuda" = "0"],
 	[AC_MSG_ERROR([gdrcopy is requested but cuda is not requested or cuda runtime is not available.])],
 	[])
 
 have_gdrcopy=0
-AS_IF([test "$have_libcuda" = "1" && test x"$with_gdrcopy" != x"no"],
+AS_IF([test "$have_cuda" = "1" && test x"$with_gdrcopy" != x"no"],
 	[AS_IF([test x"$with_gdrcopy" = x"yes"],[gdrcopy_dir=""],[gdrcopy_dir=$with_gdrcopy])
 	 FI_CHECK_PACKAGE([gdrcopy],
 			  [gdrapi.h],

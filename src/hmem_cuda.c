@@ -38,7 +38,7 @@
 #include "ofi_hmem.h"
 #include "ofi.h"
 
-#if HAVE_LIBCUDA
+#if HAVE_CUDA
 
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -73,7 +73,7 @@ static bool cuda_ipc_enabled;
 static cudaError_t cuda_disabled_cudaMemcpy(void *dst, const void *src,
 					    size_t size, enum cudaMemcpyKind kind);
 
-#ifdef ENABLE_CUDA_DLOPEN
+#if ENABLE_CUDA_DLOPEN
 
 #include <dlfcn.h>
 
@@ -274,7 +274,7 @@ static cudaError_t cuda_disabled_cudaMemcpy(void *dst, const void *src,
 
 static int cuda_hmem_dl_init(void)
 {
-#ifdef ENABLE_CUDA_DLOPEN
+#if ENABLE_CUDA_DLOPEN
 	/* Assume failure to dlopen CUDA runtime is caused by the library not
 	 * being found. Thus, CUDA is not supported.
 	 */
@@ -411,7 +411,7 @@ err_dlclose_cudart:
 
 static void cuda_hmem_dl_cleanup(void)
 {
-#ifdef ENABLE_CUDA_DLOPEN
+#if ENABLE_CUDA_DLOPEN
 	dlclose(cuda_handle);
 	dlclose(cudart_handle);
 #endif
@@ -686,4 +686,4 @@ bool cuda_is_gdrcopy_enabled(void)
 	return false;
 }
 
-#endif /* HAVE_LIBCUDA */
+#endif /* HAVE_CUDA */
