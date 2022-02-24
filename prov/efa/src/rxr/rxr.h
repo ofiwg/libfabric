@@ -379,6 +379,7 @@ struct rxr_rx_entry {
 
 	uint64_t bytes_received;
 	uint64_t bytes_copied;
+	uint64_t bytes_queued;
 	int64_t window;
 	uint16_t credit_request;
 	int credit_cts;
@@ -537,6 +538,22 @@ struct rxr_domain {
 	int do_progress;
 	size_t cq_size;
 };
+
+/** @brief Information of a queued copy.
+ *
+ * This struct is used when receiving buffer is on device.
+ * Under such circumstance, batching a series copies to
+ * do them at the same time can avoid memory barriers between
+ * copies, and improve performance.
+ */
+struct rxr_queued_copy {
+	struct rxr_pkt_entry *pkt_entry;
+	char *data;
+	size_t data_size;
+	size_t data_offset;
+};
+
+#define RXR_EP_MAX_QUEUED_COPY (8)
 
 struct rxr_ep {
 	struct util_ep util_ep;
@@ -731,6 +748,9 @@ struct rxr_ep {
 	size_t efa_outstanding_tx_ops;
 	/* number of outstanding tx ops on shm */
 	size_t shm_outstanding_tx_ops;
+
+	struct rxr_queued_copy queued_copy_vec[RXR_EP_MAX_QUEUED_COPY];
+	int queued_copy_num;
 };
 
 #define rxr_rx_flags(rxr_ep) ((rxr_ep)->util_ep.rx_op_flags)

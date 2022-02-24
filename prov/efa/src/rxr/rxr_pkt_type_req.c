@@ -428,6 +428,7 @@ int rxr_pkt_init_rtm(struct rxr_ep *ep,
 	size_t data_size;
 	struct rxr_rtm_base_hdr *rtm_hdr;
 	int ret;
+	static const size_t CUDA_MEMORY_ALIGNMENT = 64;
 
 	rxr_pkt_init_req_hdr(ep, tx_entry, pkt_type, pkt_entry);
 
@@ -437,6 +438,11 @@ int rxr_pkt_init_rtm(struct rxr_ep *ep,
 
 	data_size = MIN(tx_entry->total_len - data_offset,
 			ep->mtu_size - rxr_pkt_req_hdr_size(pkt_entry));
+	if (efa_ep_is_cuda_mr(tx_entry->desc[0]) &&
+	    data_size + data_offset < tx_entry->total_len) {
+		data_size &= ~(CUDA_MEMORY_ALIGNMENT -1);
+	}
+
 	ret = rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, rxr_pkt_req_hdr_size(pkt_entry),
 					      tx_entry, data_offset, data_size);
 	return ret;
