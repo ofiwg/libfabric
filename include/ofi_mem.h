@@ -330,7 +330,7 @@ struct ofi_bufpool_region {
 	void 				*context;
 	struct ofi_bufpool 		*pool;
 	int				flags;
-	OFI_DBG_VAR(size_t,		use_cnt)
+	OFI_DBG_VAR(ofi_atomic32_t,	use_cnt)
 };
 
 struct ofi_bufpool_ftr {
@@ -396,7 +396,7 @@ static inline struct ofi_bufpool *ofi_buf_pool(void *buf)
 
 static inline void ofi_buf_free(void *buf)
 {
-	assert(ofi_buf_region(buf)->use_cnt--);
+	assert(ofi_atomic_dec32(&ofi_buf_region(buf)->use_cnt) >= 0);
 	assert(!(ofi_buf_pool(buf)->attr.flags & OFI_BUFPOOL_INDEXED));
 	assert(ofi_buf_hdr(buf)->magic == OFI_MAGIC_SIZE_T);
 	assert(ofi_buf_hdr(buf)->ftr->magic == OFI_MAGIC_SIZE_T);
@@ -414,7 +414,7 @@ static inline void ofi_ibuf_free(void *buf)
 
 	buf_hdr = ofi_buf_hdr(buf);
 
-	assert(ofi_buf_region(buf)->use_cnt--);
+	assert(ofi_atomic_dec32(&ofi_buf_region(buf)->use_cnt) >= 0);
 	assert(ofi_buf_pool(buf)->attr.flags & OFI_BUFPOOL_INDEXED);
 	assert(buf_hdr->magic == OFI_MAGIC_SIZE_T);
 	assert(buf_hdr->ftr->magic == OFI_MAGIC_SIZE_T);
@@ -440,7 +440,7 @@ static inline void *ofi_bufpool_get_ibuf(struct ofi_bufpool *pool, size_t index)
 	buf = pool->region_table[(size_t)(index / pool->attr.chunk_cnt)]->
 		mem_region + (index % pool->attr.chunk_cnt) * pool->entry_size;
 
-	assert(ofi_buf_region(buf)->use_cnt);
+	assert(ofi_atomic_get32(&ofi_buf_region(buf)->use_cnt));
 	return buf;
 }
 
@@ -466,7 +466,7 @@ static inline void *ofi_buf_alloc(struct ofi_bufpool *pool)
 
 	slist_remove_head_container(&pool->free_list.entries,
 				struct ofi_bufpool_hdr, buf_hdr, entry.slist);
-	assert(++buf_hdr->region->use_cnt);
+	assert(ofi_atomic_inc32(&buf_hdr->region->use_cnt));
 	return ofi_buf_data(buf_hdr);
 }
 
@@ -498,7 +498,7 @@ static inline void *ofi_ibuf_alloc(struct ofi_bufpool *pool)
 				  struct ofi_bufpool_region, entry);
 	dlist_pop_front(&buf_region->free_list, struct ofi_bufpool_hdr,
 			buf_hdr, entry.dlist);
-	assert(++buf_hdr->region->use_cnt);
+	assert(ofi_atomic_inc32(&buf_hdr->region->use_cnt));
 
 	if (dlist_empty(&buf_region->free_list))
 		dlist_remove_init(&buf_region->entry);

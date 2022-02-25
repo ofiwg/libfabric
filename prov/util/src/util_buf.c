@@ -61,6 +61,7 @@ int ofi_bufpool_grow(struct ofi_bufpool *pool)
 		return -FI_ENOMEM;
 
 	buf_region->pool = pool;
+	OFI_DBG_CALL(ofi_atomic_initialize32(&buf_region->use_cnt, 0));
 	dlist_init(&buf_region->free_list);
 
 	if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES) {
@@ -210,7 +211,7 @@ void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 		buf_region = pool->region_table[i];
 
 		assert((pool->attr.flags & OFI_BUFPOOL_NO_TRACK) ||
-			(buf_region->use_cnt == 0));
+			!ofi_atomic_get32(&buf_region->use_cnt));
 		if (pool->attr.free_fn)
 			pool->attr.free_fn(buf_region);
 
