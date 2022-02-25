@@ -545,39 +545,26 @@ static ssize_t tcpx_ep_cancel(fid_t fid, void *context)
 	return 0;
 }
 
-static void tcpx_ep_del_fd(struct tcpx_ep *ep)
+/* Hold progress lock around removing ep from progress list and
+ * removing the socket from the pollfd set to ensure that all
+ * progress is halted at once and we don't pick up any data.
+ */
+#define tcpx_halt_progress(ep, comp_obj)				\
+	do {								\
+		if (comp_obj) {						\
+			ofi_mutex_lock(&comp_obj->ep_list_lock);	\
+			fid_list_remove(&comp_obj->ep_list, NULL,	\
+					&ep->util_ep.ep_fid.fid);	\
+			ofi_wait_del_fd(comp_obj->wait, ep->bsock.sock);\
+			ofi_mutex_unlock(&comp_obj->ep_list_lock);	\
+			ofi_atomic_dec32(&comp_obj->ref);		\
+		}							\
+	} while (0)
+
+static void tcpx_ep_halt(struct tcpx_ep *ep)
 {
-	if (ep->util_ep.rx_cq)
-		ofi_wait_del_fd(ep->util_ep.rx_cq->wait, ep->bsock.sock);
-
-	if (ep->util_ep.tx_cq)
-		ofi_wait_del_fd(ep->util_ep.tx_cq->wait, ep->bsock.sock);
-
-	if (ep->util_ep.rx_cntr)
-		ofi_wait_del_fd(ep->util_ep.rx_cntr->wait, ep->bsock.sock);
-
-	if (ep->util_ep.tx_cntr)
-		ofi_wait_del_fd(ep->util_ep.tx_cntr->wait, ep->bsock.sock);
-
-	if (ep->util_ep.wr_cntr)
-		ofi_wait_del_fd(ep->util_ep.wr_cntr->wait, ep->bsock.sock);
-
-	if (ep->util_ep.rd_cntr)
-		ofi_wait_del_fd(ep->util_ep.rd_cntr->wait, ep->bsock.sock);
-
-	if (ep->util_ep.rem_wr_cntr)
-		ofi_wait_del_fd(ep->util_ep.rem_wr_cntr->wait, ep->bsock.sock);
-
-	if (ep->util_ep.rem_rd_cntr)
-		ofi_wait_del_fd(ep->util_ep.rem_rd_cntr->wait, ep->bsock.sock);
-}
-
-static int tcpx_ep_close(struct fid *fid)
-{
-	struct tcpx_ep *ep;
 	struct tcpx_eq *eq;
 
-	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
 	eq = ep->util_ep.eq ?
 	     container_of(ep->util_ep.eq, struct tcpx_eq, util_eq) : NULL;
 
@@ -585,16 +572,32 @@ static int tcpx_ep_close(struct fid *fid)
 	if (eq)
 		ofi_mutex_lock(&eq->close_lock);
 
-	tcpx_ep_del_fd(ep);
+	tcpx_halt_progress(ep, ep->util_ep.rx_cq);
+	tcpx_halt_progress(ep, ep->util_ep.tx_cq);
+	tcpx_halt_progress(ep, ep->util_ep.rx_cntr);
+	tcpx_halt_progress(ep, ep->util_ep.tx_cntr);
+	tcpx_halt_progress(ep, ep->util_ep.wr_cntr);
+	tcpx_halt_progress(ep, ep->util_ep.rd_cntr);
+	tcpx_halt_progress(ep, ep->util_ep.rem_wr_cntr);
+	tcpx_halt_progress(ep, ep->util_ep.rem_rd_cntr);
 
+	/* There's no ep_list with an EQ.  We only need to remove the
+	 * socket from the pollfd set to disable progress.
+	 */
 	if (ep->util_ep.eq && ep->util_ep.eq->wait)
 		ofi_wait_del_fd(ep->util_ep.eq->wait, ep->bsock.sock);
 
 	if (eq)
 		ofi_mutex_unlock(&eq->close_lock);
+}
 
-	if (ep->fid && ep->fid->fclass == TCPX_CLASS_CM)
-		tcpx_free_cm_ctx(ep->cm_ctx);
+static int tcpx_ep_close(struct fid *fid)
+{
+	struct tcpx_ep *ep;
+
+	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
+
+	tcpx_ep_halt(ep);
 
 	/* Lock not technically needed, since we're freeing the EP.  But it's
 	 * harmless to acquire and silences static code analysis tools.
@@ -603,12 +606,19 @@ static int tcpx_ep_close(struct fid *fid)
 	tcpx_ep_flush_all_queues(ep);
 	ofi_mutex_unlock(&ep->lock);
 
-	if (eq) {
+	if (ep->util_ep.eq) {
 		ofi_eq_remove_fid_events(ep->util_ep.eq,
 					 &ep->util_ep.ep_fid.fid);
 	}
+
+	if (ep->fid && ep->fid->fclass == TCPX_CLASS_CM)
+		tcpx_free_cm_ctx(ep->cm_ctx);
+
 	ofi_close_socket(ep->bsock.sock);
-	ofi_endpoint_close(&ep->util_ep);
+	if (ep->util_ep.eq)
+		ofi_atomic_dec32(&ep->util_ep.eq->ref);
+	ofi_atomic_dec32(&ep->util_ep.domain->ref);
+	ofi_mutex_destroy(&ep->util_ep.lock);
 	ofi_mutex_destroy(&ep->lock);
 
 	free(ep);
