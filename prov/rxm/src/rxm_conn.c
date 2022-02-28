@@ -228,6 +228,7 @@ static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 	if (!ret) {
 		domain->flow_ctrl_ops->set_threshold(msg_ep,
 					ep->msg_info->rx_attr->size / 2);
+		conn->flow_ctrl = 1;
 	}
 
 	if (!ep->srx_ctx) {
@@ -260,6 +261,7 @@ static int rxm_init_connect_data(struct rxm_conn *conn,
 	cm_data->connect.endianness = ofi_detect_endianness();
 	cm_data->connect.eager_limit = conn->ep->eager_limit;
 	cm_data->connect.rx_size = conn->ep->msg_info->rx_attr->size;
+	cm_data->connect.flow_ctrl = conn->flow_ctrl;
 
 	ret = fi_getopt(&conn->ep->msg_pep->fid, FI_OPT_ENDPOINT,
 			FI_OPT_CM_DATA_SIZE, &cm_data_size, &opt_size);
@@ -480,6 +482,7 @@ ssize_t rxm_get_conn(struct rxm_ep *ep, fi_addr_t addr, struct rxm_conn **conn)
 void rxm_process_connect(struct rxm_eq_cm_entry *cm_entry)
 {
 	struct rxm_conn *conn;
+	struct rxm_domain *domain;
 
 	conn = cm_entry->fid->context;
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
@@ -491,6 +494,13 @@ void rxm_process_connect(struct rxm_eq_cm_entry *cm_entry)
 						    server_conn_id);
 		conn->remote_pid = rxm_peer_pid(cm_entry->data.accept.
 						server_conn_id);
+	}
+
+	if (conn->flow_ctrl & !cm_entry->data.accept.flow_ctrl) {
+		domain = container_of(conn->ep->util_ep.domain,
+				      struct rxm_domain, util_domain);
+		domain->flow_ctrl_ops->disable(conn->msg_ep);
+		conn->flow_ctrl = 0;
 	}
 
 	conn->ep->connecting_cnt--;
@@ -599,7 +609,10 @@ rxm_accept_connreq(struct rxm_conn *conn, struct rxm_eq_cm_entry *cm_entry)
 
 	cm_data.accept.server_conn_id = rxm_conn_id(conn->peer->index);
 	cm_data.accept.rx_size = cm_entry->info->rx_attr->size;
-	cm_data.accept.align_pad = 0;
+	cm_data.accept.flow_ctrl = conn->flow_ctrl;
+	cm_data.accept.align_pad[0] = 0;
+	cm_data.accept.align_pad[1] = 0;
+	cm_data.accept.align_pad[2] = 0;
 
 	ret = fi_accept(conn->msg_ep, &cm_data.accept, sizeof(cm_data.accept));
 	if (ret)

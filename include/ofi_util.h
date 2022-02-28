@@ -1064,6 +1064,7 @@ struct ofi_ops_flow_ctrl {
 	int	(*enable)(struct fid_ep *ep);
 	void	(*set_send_handler)(struct fid_domain *domain,
 			ssize_t (*send_handler)(struct fid_ep *ep, uint64_t credits));
+	void	(*disable)(struct fid_ep *ep);
 };
 
 

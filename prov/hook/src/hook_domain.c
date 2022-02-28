@@ -138,6 +138,13 @@ static int hook_enable_ep_flow_ctrl(struct fid_ep *ep_fid)
 	return ep->domain->base_ops_flow_ctrl->enable(ep->hep);
 }
 
+static void hook_disable_ep_flow_ctrl(struct fid_ep *ep_fid)
+{
+	struct hook_ep *ep = container_of(ep_fid, struct hook_ep, ep);
+
+	return ep->domain->base_ops_flow_ctrl->disable(ep->hep);
+}
+
 static void hook_add_credits(struct fid_ep *ep_fid, size_t credits)
 {
 	struct hook_ep *ep = container_of(ep_fid, struct hook_ep, ep);
@@ -151,6 +158,7 @@ static struct ofi_ops_flow_ctrl hook_ops_flow_ctrl = {
 	.add_credits = hook_add_credits,
 	.enable = hook_enable_ep_flow_ctrl,
 	.set_send_handler = hook_set_send_handler,
+	.disable = hook_disable_ep_flow_ctrl,
 };
 
 static int hook_domain_ops_open(struct fid *fid, const char *name,
