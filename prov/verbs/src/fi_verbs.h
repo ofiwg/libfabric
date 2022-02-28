@@ -577,6 +577,7 @@ struct vrb_ep {
 	/* Protected by send CQ lock */
 	uint64_t			sq_credits;
 	uint64_t			peer_rq_credits;
+	uint64_t			saved_peer_rq_credits;
 	struct slist			sq_list;
 	/* Protected by recv CQ lock */
 	int64_t				rq_credits_avail;
