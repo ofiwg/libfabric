@@ -109,6 +109,8 @@ tcpx_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 
 	assert(msg->iov_count <= TCPX_IOV_LIMIT);
 	assert(msg->rma_iov_count <= TCPX_IOV_LIMIT);
+	assert(ofi_total_iov_len(msg->msg_iov, msg->iov_count) ==
+	       ofi_total_rma_iov_len(msg->rma_iov, msg->rma_iov_count));
 
 	send_entry = tcpx_alloc_tx(ep);
 	if (!send_entry)
@@ -200,6 +202,8 @@ tcpx_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 
 	data_len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
 
+	assert(ofi_total_rma_iov_len(msg->rma_iov, msg->rma_iov_count) ==
+	       data_len);
 	assert(!(flags & FI_INJECT) || (data_len <= TCPX_MAX_INJECT));
 
 	send_entry->hdr.base_hdr.op = ofi_op_write;
