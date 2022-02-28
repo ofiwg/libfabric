@@ -107,6 +107,8 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 	assert(rma_count <= SMR_IOV_LIMIT);
+	assert(ofi_total_iov_len(iov, iov_count) ==
+	       ofi_total_rma_iov_len(rma_iov, rma_count));
 
 	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
 
