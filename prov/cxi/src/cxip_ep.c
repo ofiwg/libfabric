@@ -1144,8 +1144,15 @@ static int cxip_ep_close(struct fid *fid)
 	}
 
 	if (cxi_ep->is_alias) {
-		ofi_atomic_dec32(&cxi_ep->ep_obj->ref);
-		return 0;
+		if (ofi_atomic_get32(&cxi_ep->ep_obj->ref) > 0) {
+			ofi_atomic_dec32(&cxi_ep->ep_obj->ref);
+			free(cxi_ep);
+			return FI_SUCCESS;
+		}
+
+		CXIP_WARN("Invalid EP alias %p, no reference to EP object\n",
+			  cxi_ep);
+		return -FI_EINVAL;
 	}
 
 	/* If FI_CLASS_SEP, num_*_ctx > 0 until all CTX removed.
