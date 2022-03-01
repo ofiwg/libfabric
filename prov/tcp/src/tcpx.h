@@ -286,11 +286,13 @@ struct tcpx_fabric {
 };
 
 
+/* tcpx_xfer_entry::ctrl_flags */
 #define TCPX_NEED_RESP		BIT(1)
 #define TCPX_NEED_ACK		BIT(2)
 #define TCPX_INTERNAL_XFER	BIT(3)
 #define TCPX_NEED_DYN_RBUF 	BIT(4)
 #define TCPX_ASYNC		BIT(5)
+#define TCPX_INJECT_OP		BIT(6)
 
 struct tcpx_xfer_entry {
 	struct slist_entry	entry;
