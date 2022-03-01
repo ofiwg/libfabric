@@ -165,8 +165,8 @@ class CmdlineArgs:
 
         assert host_type == "client"
         assert self.ubertest_config_file
-        assert self.client_id
-        return command + " -u " + self.ubertest_config_file + " " + self.client_id
+        assert self.server_id
+        return command + " -u " + self.ubertest_config_file + " " + self.server_id
 
 @pytest.fixture
 def cmdline_args(request):
