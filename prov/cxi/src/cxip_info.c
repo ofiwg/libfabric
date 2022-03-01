@@ -259,6 +259,7 @@ struct cxip_environment cxip_env = {
 	.rdzv_threshold = CXIP_RDZV_THRESHOLD,
 	.rdzv_get_min = 2049, /* Avoid single packet Gets */
 	.rdzv_eager_size = CXIP_RDZV_THRESHOLD,
+	.rdzv_aligned_sw_rget = 1,
 	.oflow_buf_size = CXIP_OFLOW_BUF_SIZE,
 	.oflow_buf_count = CXIP_OFLOW_BUF_COUNT,
 	.safe_devmem_copy_threshold =  CXIP_SAFE_DEVMEM_COPY_THRESH,
@@ -282,6 +283,7 @@ struct cxip_environment cxip_env = {
 	.cq_fill_percent = 50,
 	.enable_unrestricted_end_ro = true,
 	.rget_tc = FI_TC_UNSPEC,
+	.cacheline_size = CXIP_DEFAULT_CACHE_LINE_SIZE,
 };
 
 static void cxip_env_init(void)
@@ -307,6 +309,16 @@ static void cxip_env_init(void)
 			CXIP_WARN("Unrecognized rget_tc: %s\n", param_str);
 		param_str = NULL;
 	}
+
+	cxip_env.cacheline_size = cxip_cacheline_size();
+	CXIP_DBG("Provider using cacheline size of %d\n",
+		 cxip_env.cacheline_size);
+
+	fi_param_define(&cxip_prov, "rdzv_aligned_sw_rget", FI_PARAM_BOOL,
+			"Enables SW RGet address alignment (default: %d).",
+			cxip_env.rdzv_aligned_sw_rget);
+	fi_param_get_bool(&cxip_prov, "rdzv_aligned_sw_rget",
+			  &cxip_env.rdzv_aligned_sw_rget);
 
 	fi_param_define(&cxip_prov, "enable_unrestricted_end_ro", FI_PARAM_BOOL,
 			"Default: %d", cxip_env.enable_unrestricted_end_ro);
@@ -386,9 +398,19 @@ static void cxip_env_init(void)
 	 * eager send message is selected for FI_INJECT.
 	 */
 	if (cxip_env.rdzv_threshold < CXIP_INJECT_SIZE) {
+		cxip_env.rdzv_threshold = CXIP_INJECT_SIZE;
 		CXIP_WARN("Increased rdzv_threshold size to: %lu\n",
 			  cxip_env.rdzv_threshold);
-		cxip_env.rdzv_threshold = CXIP_INJECT_SIZE;
+	}
+
+	/* If aligned SW Rget is enabled, rendezvous eager data must
+	 * be greater than cache-line size.
+	 */
+	if (cxip_env.rdzv_aligned_sw_rget &&
+	    cxip_env.rdzv_threshold < cxip_env.cacheline_size) {
+		cxip_env.rdzv_threshold = cxip_env.cacheline_size;
+		CXIP_WARN("Increased rdzv_threshold size to: %lu\n",
+			  cxip_env.rdzv_threshold);
 	}
 
 	fi_param_define(&cxip_prov, "rdzv_get_min", FI_PARAM_SIZE_T,

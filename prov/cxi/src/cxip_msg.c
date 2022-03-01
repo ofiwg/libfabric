@@ -601,7 +601,11 @@ static void oflow_req_put_bytes(struct cxip_req *req, size_t bytes)
  */
 static int issue_rdzv_get(struct cxip_req *req)
 {
-	union c_cmdu cmd = {};
+	struct c_full_dma_cmd cmd = {};
+	uint64_t local_addr;
+	uint64_t rem_offset;
+	uint32_t align_bytes;
+	uint32_t mlen;
 	struct cxip_rxc *rxc = req->recv.rxc;
 	uint32_t pid_idx = rxc->domain->iface->dev->info.rdzv_get_idx;
 	uint8_t idx_ext;
@@ -609,32 +613,52 @@ static int issue_rdzv_get(struct cxip_req *req)
 	int ret;
 	union c_fab_addr dfa;
 
-	cmd.full_dma.command.cmd_type = C_CMD_TYPE_DMA;
-	cmd.full_dma.command.opcode = C_CMD_GET;
-	cmd.full_dma.lac = req->recv.recv_md->md->lac;
-	cmd.full_dma.event_send_disable = 1;
-	cmd.full_dma.eq = cxip_cq_tx_eqn(rxc->recv_cq);
+	cmd.command.cmd_type = C_CMD_TYPE_DMA;
+	cmd.command.opcode = C_CMD_GET;
+	cmd.lac = req->recv.recv_md->md->lac;
+	cmd.event_send_disable = 1;
+	cmd.eq = cxip_cq_tx_eqn(rxc->recv_cq);
 
 	mb.rdzv_lac = req->recv.rdzv_lac;
 	mb.rdzv_id_lo = req->recv.rdzv_id;
-	cmd.full_dma.match_bits = mb.raw;
+	cmd.match_bits = mb.raw;
 
-	cmd.full_dma.user_ptr = (uint64_t)req;
-	cmd.full_dma.remote_offset = req->recv.src_offset;
-
+	cmd.user_ptr = (uint64_t)req;
 	cxi_build_dfa(req->recv.rget_nic, req->recv.rget_pid, rxc->pid_bits,
 		      pid_idx, &dfa, &idx_ext);
-	cmd.full_dma.dfa = dfa;
-	cmd.full_dma.index_ext = idx_ext;
+	cmd.dfa = dfa;
+	cmd.index_ext = idx_ext;
 
-	if (req->data_len < req->recv.rdzv_mlen)
-		cmd.full_dma.request_len = 0;
+	local_addr = CXI_VA_TO_IOVA(req->recv.recv_md->md,
+				    req->recv.recv_buf);
+	local_addr += req->recv.rdzv_mlen;
+
+	rem_offset = req->recv.src_offset;
+	mlen = req->recv.rdzv_mlen;
+
+	RXC_DBG(rxc, "SW RGet addr: 0x%" PRIx64 " len %" PRId64
+		" rem_off: %" PRId64 "\n", local_addr,
+		req->data_len - req->recv.rdzv_mlen, rem_offset);
+
+	/* Align mask will be non-zero if local DMA address cache-line
+	 * alignment is desired.
+	 */
+	align_bytes = local_addr & rxc->rget_align_mask;
+	local_addr -= align_bytes;
+	rem_offset -= align_bytes;
+	mlen -= align_bytes;
+
+	if (req->data_len < mlen)
+		cmd.request_len = 0;
 	else
-		cmd.full_dma.request_len = req->data_len - req->recv.rdzv_mlen;
+		cmd.request_len = req->data_len - mlen;
 
-	cmd.full_dma.local_addr = CXI_VA_TO_IOVA(req->recv.recv_md->md,
-						 req->recv.recv_buf);
-	cmd.full_dma.local_addr += req->recv.rdzv_mlen;
+	cmd.local_addr = local_addr;
+	cmd.remote_offset = rem_offset;
+
+	RXC_DBG(rxc, "Aligned addr: 0x%" PRIx64 " len %d rem_off %" PRId64 "\n",
+		(uint64_t)cmd.local_addr, cmd.request_len,
+		(uint64_t)cmd.remote_offset);
 
 	if (cxip_cq_saturated(rxc->recv_cq)) {
 		RXC_DBG(rxc, "CQ saturated\n");
@@ -644,7 +668,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 	fastlock_acquire(&rxc->tx_cmdq->lock);
 
 	/* Issue Rendezvous Get command */
-	ret = cxi_cq_emit_dma_f(rxc->tx_cmdq->dev_cmdq, &cmd.full_dma);
+	ret = cxi_cq_emit_dma_f(rxc->tx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
 		RXC_DBG(rxc, "Failed to queue GET command: %d\n", ret);
 

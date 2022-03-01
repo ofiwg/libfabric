@@ -216,6 +216,7 @@ struct cxip_environment {
 	size_t rdzv_threshold;
 	size_t rdzv_get_min;
 	size_t rdzv_eager_size;
+	int rdzv_aligned_sw_rget;
 	size_t oflow_buf_size;
 	size_t oflow_buf_count;
 	size_t safe_devmem_copy_threshold;
@@ -241,6 +242,7 @@ struct cxip_environment {
 	size_t cq_fill_percent;
 	int enable_unrestricted_end_ro;
 	int rget_tc;
+	int cacheline_size;
 };
 
 extern struct cxip_environment cxip_env;
@@ -1355,6 +1357,7 @@ struct cxip_rxc {
 	enum cxip_rxc_state state;
 	enum cxip_rxc_state prev_state;
 	bool msg_offload;
+	uint64_t rget_align_mask;
 
 	/* RXC drop count used for FC accounting. */
 	int drop_count;
@@ -2434,5 +2437,39 @@ static inline bool is_netsim(struct cxip_ep_obj *ep_obj)
 #define RXC_FATAL(rxc, fmt, ...) \
 	CXIP_FATAL("RXC (%#x:%u:%u): " fmt "", (rxc)->ep_obj->src_addr.nic, \
 		   (rxc)->ep_obj->src_addr.pid, (rxc)->rx_id, ##__VA_ARGS__)
+
+#define CXIP_DEFAULT_CACHE_LINE_SIZE 64
+
+#define CXIP_SYSFS_CACHE_LINE_SIZE      \
+	"/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size"
+
+/* cxip_cacheline_size() - Return the CPU cache-line size, if unable to
+ * read then return the assumed cache size.
+ */
+static inline int cxip_cacheline_size(void)
+{
+	FILE *f;
+	int cache_line_size;
+	int ret;
+
+	f = fopen(CXIP_SYSFS_CACHE_LINE_SIZE, "r");
+	if (!f) {
+		_CXIP_WARN(FI_LOG_CORE,
+			   "Error %d determining cacheline size\n",
+			   errno);
+		cache_line_size = CXIP_DEFAULT_CACHE_LINE_SIZE;
+	} else {
+		ret = fscanf(f, "%d", &cache_line_size);
+		if (ret != 1) {
+			_CXIP_WARN(FI_LOG_CORE,
+				   "Error reading cacheline size\n");
+			cache_line_size = CXIP_DEFAULT_CACHE_LINE_SIZE;
+		}
+
+		fclose(f);
+	}
+
+	return cache_line_size;
+}
 
 #endif

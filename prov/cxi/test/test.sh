@@ -45,6 +45,17 @@ if [[ $cxitest_exit_status -ne 0 ]]; then
     exit 1
 fi
 
+# Run tests with RPut and SW Gets forcing unaligned address for RGet
+csrutil store csr C_LPE_CFG_GET_CTRL get_en=0 > /dev/null
+echo "running: FI_CXI_RDZV_THRESHOLD=2036 ./cxitest --verbose --filter=\"@(tagged|msg)/*\" --tap=cxitest-swget-unaligned.tap -j 1 >> $TEST_OUTPUT 2>&1"
+FI_CXI_RDZV_THRESHOLD=2036 ./cxitest --verbose --filter="@(tagged|msg)/*" --tap=cxitest-swget-unaligned.tap -j1 >> $TEST_OUTPUT 2>&1
+cxitest_exit_status=$?
+csrutil store csr C_LPE_CFG_GET_CTRL get_en=1 > /dev/null
+if [[ $cxitest_exit_status -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
 # Run tests with constrained LE count
 MAX_ALLOC=`csrutil dump csr le_pools[63] |grep max_alloc |awk '{print $3}'`
 csrutil store csr le_pools[] max_alloc=10 > /dev/null

@@ -577,6 +577,8 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	rxc->state = RXC_DISABLED;
 	rxc->msg_offload = cxip_env.msg_offload;
 	rxc->hmem = !!(attr->caps & FI_HMEM);
+	rxc->rget_align_mask = cxip_env.rdzv_aligned_sw_rget ?
+					cxip_env.cacheline_size - 1 : 0;
 
 	return rxc;
 }
