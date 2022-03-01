@@ -525,7 +525,12 @@ static inline void * ofi_get_ipaddr(const struct sockaddr *addr)
 
 static inline bool ofi_valid_dest_ipaddr(const struct sockaddr *addr)
 {
-	return ofi_addr_get_port(addr) && !ofi_is_any_addr(addr);
+	char sin_zero[8] = {0};
+
+	return ofi_addr_get_port(addr) && !ofi_is_any_addr(addr) &&
+	       (addr->sa_family != AF_INET ||
+	         !memcmp(((const struct sockaddr_in *) addr)->sin_zero,
+			 sin_zero, sizeof sin_zero));
 }
 
 static inline bool ofi_equals_ipaddr(const struct sockaddr *addr1,
