@@ -281,6 +281,7 @@ struct cxip_environment cxip_env = {
 	.zbcoll_radix = 2,
 	.cq_fill_percent = 50,
 	.enable_unrestricted_end_ro = true,
+	.rget_tc = FI_TC_UNSPEC,
 };
 
 static void cxip_env_init(void)
@@ -288,6 +289,24 @@ static void cxip_env_init(void)
 	char *param_str = NULL;
 	size_t min_free;
 	int ret;
+
+	fi_param_define(&cxip_prov, "rget_tc", FI_PARAM_STRING,
+			"Traffic class used for software initiated rendezvous gets.");
+	fi_param_get_str(&cxip_prov, "rget_tc", &param_str);
+
+	if (param_str) {
+		if (!strcmp(param_str, "BEST_EFFORT"))
+			cxip_env.rget_tc = FI_TC_BEST_EFFORT;
+		else if (!strcmp(param_str, "LOW_LATENCY"))
+			cxip_env.rget_tc = FI_TC_LOW_LATENCY;
+		else if (!strcmp(param_str, "DEDICATED_ACCESS"))
+			cxip_env.rget_tc = FI_TC_DEDICATED_ACCESS;
+		else if (!strcmp(param_str, "BULK_DATA"))
+			cxip_env.rget_tc = FI_TC_BULK_DATA;
+		else
+			CXIP_WARN("Unrecognized rget_tc: %s\n", param_str);
+		param_str = NULL;
+	}
 
 	fi_param_define(&cxip_prov, "enable_unrestricted_end_ro", FI_PARAM_BOOL,
 			"Default: %d", cxip_env.enable_unrestricted_end_ro);

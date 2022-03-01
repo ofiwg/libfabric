@@ -36,8 +36,8 @@ fi
 
 # Run tests with RPut and SW Gets
 csrutil store csr C_LPE_CFG_GET_CTRL get_en=0 > /dev/null
-echo "running: ./cxitest --verbose --filter=\"@(tagged|msg)/*\" --tap=cxitest-swget.tap -j 1 >> $TEST_OUTPUT 2>&1"
-./cxitest --verbose --filter="@(tagged|msg)/*" --tap=cxitest-swget.tap -j1 >> $TEST_OUTPUT 2>&1
+echo "running: FI_CXI_RGET_TC=BULK_DATA ./cxitest --verbose --filter=\"@(tagged|msg)/*\" --tap=cxitest-swget.tap -j 1 >> $TEST_OUTPUT 2>&1"
+FI_CXI_RGET_TC=BULK_DATA ./cxitest --verbose --filter="@(tagged|msg)/*" --tap=cxitest-swget.tap -j1 >> $TEST_OUTPUT 2>&1
 cxitest_exit_status=$?
 csrutil store csr C_LPE_CFG_GET_CTRL get_en=1 > /dev/null
 if [[ $cxitest_exit_status -ne 0 ]]; then

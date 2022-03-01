@@ -95,6 +95,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 		.en_flowctrl = 1,
 		.lossless = cxip_env.msg_lossless,
 	};
+	struct cxi_cq_alloc_opts cq_opts = {};
 
 	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, false, FI_TC_UNSPEC,
 			   rxc->recv_cq->eq.eq, &rxc->rx_cmdq);
@@ -103,12 +104,34 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 		return -FI_EDOMAIN;
 	}
 
-	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, true, FI_TC_UNSPEC,
-			   rxc->recv_cq->eq.eq, &rxc->tx_cmdq);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
-		ret = -FI_EDOMAIN;
-		goto put_rx_cmdq;
+	/* For FI_TC_UNSPEC, reuse the TX context command queue if possible. If
+	 * a specific traffic class is requested, allocate a new command queue.
+	 * This is done to prevent performance issues with reusing the TX
+	 * context command queue and changing the communication profile.
+	 */
+	if (cxip_env.rget_tc == FI_TC_UNSPEC) {
+		ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, true, FI_TC_UNSPEC,
+				   rxc->recv_cq->eq.eq, &rxc->tx_cmdq);
+		if (ret != FI_SUCCESS) {
+			CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
+			ret = -FI_EDOMAIN;
+			goto put_rx_cmdq;
+		}
+	} else {
+		cq_opts.count = rxc->ep_obj->txq_size * 4;
+		cq_opts.flags = CXI_CQ_IS_TX;
+		cq_opts.policy = cxip_env.cq_policy;
+
+		ret = cxip_cmdq_alloc(rxc->ep_obj->domain->lni,
+				      rxc->recv_cq->eq.eq, &cq_opts,
+				      rxc->ep_obj->auth_key.vni,
+				      cxip_ofi_to_cxi_tc(cxip_env.rget_tc),
+				      CXI_TC_TYPE_DEFAULT, &rxc->tx_cmdq);
+		if (ret != FI_SUCCESS) {
+			CXIP_WARN("Unable to allocate CMDQ, ret: %d\n", ret);
+			ret = -FI_ENOSPC;
+			goto put_rx_cmdq;
+		}
 	}
 
 	/* If applications AVs are symmetric, use logical FI addresses for
@@ -143,7 +166,10 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 free_pte:
 	cxip_pte_free(rxc->rx_pte);
 put_tx_cmdq:
-	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, true);
+	if (cxip_env.rget_tc == FI_TC_UNSPEC)
+		cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, true);
+	else
+		cxip_cmdq_free(rxc->tx_cmdq);
 put_rx_cmdq:
 	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, false);
 
@@ -166,7 +192,10 @@ static int rxc_msg_fini(struct cxip_rxc *rxc)
 
 	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, false);
 
-	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, true);
+	if (cxip_env.rget_tc == FI_TC_UNSPEC)
+		cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, true);
+	else
+		cxip_cmdq_free(rxc->tx_cmdq);
 
 	cxip_cq_adjust_reserved_fc_event_slots(rxc->recv_cq,
 					       -1 * RXC_RESERVED_FC_SLOTS);

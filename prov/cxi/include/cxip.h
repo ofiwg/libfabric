@@ -240,6 +240,7 @@ struct cxip_environment {
 	char *device_name;
 	size_t cq_fill_percent;
 	int enable_unrestricted_end_ro;
+	int rget_tc;
 };
 
 extern struct cxip_environment cxip_env;
