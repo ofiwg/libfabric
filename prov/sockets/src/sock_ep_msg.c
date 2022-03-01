@@ -410,7 +410,8 @@ static void sock_ep_cm_connect_handler(struct sock_ep_cm_head *cm_head,
 			goto err;
 
 		cm_entry->fid = &ep->ep.fid;
-		memcpy(&cm_entry->data, param, cm_data_sz);
+		if (cm_data_sz)
+			memcpy(&cm_entry->data, param, cm_data_sz);
 		ep->attr->cm.state = SOCK_CM_STATE_CONNECTED;
 		ep->attr->cm.sock = sock_fd;
 		ep->attr->msg_dest_port = response_port;
