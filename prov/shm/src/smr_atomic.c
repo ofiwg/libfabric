@@ -536,6 +536,12 @@ int smr_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 		return -FI_EINVAL;
 	}
 
+	if (datatype >= FI_DATATYPE_LAST) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"128-bit datatypes not supported\n");
+		return -FI_EOPNOTSUPP;
+	}
+
 	ret = ofi_atomic_valid(&smr_prov, datatype, op, flags);
 	if (ret || !attr)
 		return ret;
