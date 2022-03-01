@@ -88,10 +88,12 @@ class CmdlineArgs:
         if not (self.environments is None):
             command = self.environments + " " + command
 
-        if command.find("fi_ubertest") == -1:
-            command = self._populate_normal_command(command, host_type)
-        else:
+        if command.find("fi_ubertest") != -1:
             command = self._populate_ubertest_command(command, host_type)
+        elif command.find("fi_multinode") != -1:
+            command = self._populate_multinode_command(command, host_type)
+        else:
+            command = self._populate_normal_command(command, host_type)
 
         if host_type == "host" or host_type == "server":
             command = bssh + " " + self.server_id + " " + command
@@ -167,6 +169,18 @@ class CmdlineArgs:
         assert self.ubertest_config_file
         assert self.server_id
         return command + " -u " + self.ubertest_config_file + " " + self.server_id
+
+    def _populate_multinode_command(self, command, host_type):
+        assert command.find("fi_multinode") != -1
+
+        command += " -p " + self.provider
+
+        command += " -s " + self.server_interface
+
+        if self.additional_server_arguments:
+                command += " " + self.additional_server_arguments
+
+        return command
 
 @pytest.fixture
 def cmdline_args(request):
