@@ -1012,10 +1012,13 @@ int sock_ep_enable(struct fid_ep *ep)
 		}
 	}
 
-	if (sock_ep->attr->ep_type != FI_EP_MSG &&
-	    !sock_ep->attr->conn_handle.do_listen &&
-	    sock_conn_listen(sock_ep->attr))
-		SOCK_LOG_ERROR("cannot start connection thread\n");
+	if (sock_ep->attr->ep_type != FI_EP_MSG && !sock_ep->attr->conn_handle.do_listen) {
+		int ret = sock_conn_listen(sock_ep->attr);
+		if (ret) {
+			SOCK_LOG_ERROR("cannot start connection thread\n");
+			return ret;
+		}
+	}
 	sock_ep->attr->is_enabled = 1;
 	return 0;
 }
