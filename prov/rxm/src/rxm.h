@@ -86,6 +86,7 @@ union rxm_cm_data {
 	struct _accept {
 		uint64_t server_conn_id;
 		uint32_t rx_size; /* used? */
+		uint32_t align_pad;
 	} accept;
 
 	struct _reject {

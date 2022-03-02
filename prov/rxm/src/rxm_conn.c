@@ -512,6 +512,7 @@ rxm_accept_connreq(struct rxm_conn *conn, struct rxm_eq_cm_entry *cm_entry)
 
 	cm_data.accept.server_conn_id = conn->peer->index;
 	cm_data.accept.rx_size = cm_entry->info->rx_attr->size;
+	cm_data.accept.align_pad = 0;
 
 	ret = fi_accept(conn->msg_ep, &cm_data.accept, sizeof(cm_data.accept));
 	if (ret)
