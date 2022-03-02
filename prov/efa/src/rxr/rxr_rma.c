@@ -190,10 +190,15 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	rxr_convert_desc_for_shm(msg.iov_count, tx_entry->desc);
 
 	err = fi_writemsg(rxr_ep->shm_ep, &msg, tx_entry->fi_flags);
-	if (err)
+	if (err) {
 		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
+		return err;
+	}
 
-	return err;
+#if ENABLE_DEBUG
+	dlist_insert_tail(&pkt_entry->dbg_entry, &rxr_ep->tx_pkt_list);
+#endif
+	return 0;
 }
 
 /* rma_read functions */
