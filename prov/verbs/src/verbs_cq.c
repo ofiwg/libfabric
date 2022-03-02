@@ -265,8 +265,10 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 		}
 
 		/* workaround incorrect opcode reported by verbs */
-		wc->opcode = (ctx->op_queue == VRB_OP_SQ) ?
-			     vrb_wr2wc_opcode(ctx->sq_opcode) : IBV_WC_RECV;
+		if (ctx->op_queue == VRB_OP_SQ)
+			wc->opcode = vrb_wr2wc_opcode(ctx->sq_opcode);
+		else if (wc->status)
+			wc->opcode = IBV_WC_RECV;
 
 		if (ctx->op_queue == VRB_OP_SRQ) {
 			fastlock_acquire(&ctx->srx->ctx_lock);
