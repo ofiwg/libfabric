@@ -33,7 +33,7 @@
 
 #include "ofi_mr.h"
 
-#ifdef HAVE_ROCR
+#if HAVE_ROCR
 
 #include "ofi_tree.h"
 #include "ofi_iov.h"

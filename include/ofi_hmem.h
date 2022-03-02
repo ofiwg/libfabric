@@ -43,7 +43,7 @@
 
 extern bool ofi_hmem_disable_p2p;
 
-#if HAVE_LIBCUDA
+#if HAVE_CUDA
 
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -60,9 +60,9 @@ cudaError_t ofi_cudaHostUnregister(void *ptr);
 cudaError_t ofi_cudaMalloc(void **ptr, size_t size);
 cudaError_t ofi_cudaFree(void *ptr);
 
-#endif /* HAVE_LIBCUDA */
+#endif /* HAVE_CUDA */
 
-#ifdef HAVE_ROCR
+#if HAVE_ROCR
 
 #include <hsa/hsa_ext_amd.h>
 

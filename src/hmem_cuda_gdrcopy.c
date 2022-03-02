@@ -73,7 +73,7 @@ enum gdrcopy_dir {
 static gdr_t global_gdr;
 static pthread_spinlock_t global_gdr_lock;
 
-#ifdef ENABLE_GDRCOPY_DLOPEN
+#if ENABLE_GDRCOPY_DLOPEN
 
 #include <dlfcn.h>
 

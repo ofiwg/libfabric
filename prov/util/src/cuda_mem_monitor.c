@@ -32,7 +32,7 @@
 
 #include "ofi_mr.h"
 
-#if HAVE_LIBCUDA
+#if HAVE_CUDA
 
 #include "ofi_hmem.h"
 
@@ -130,7 +130,7 @@ static int cuda_monitor_start(struct ofi_mem_monitor *monitor)
 	return -FI_ENOSYS;
 }
 
-#endif /* HAVE_LIBCUDA */
+#endif /* HAVE_CUDA */
 
 void cuda_monitor_stop(struct ofi_mem_monitor *monitor)
 {

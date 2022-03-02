@@ -522,44 +522,58 @@ AC_DEFINE_UNQUOTED(HAVE_CLOCK_GETTIME, [$have_clock_gettime],
        [Define to 1 if clock_gettime is available.])
 AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
 
-dnl Check for CUDA runtime libraries.
+dnl Check for CUDA runtime libraries
 AC_ARG_WITH([cuda],
-	    [AS_HELP_STRING([--with-cuda=DIR],
-			    [Provide path to where the CUDA development
-			    and runtime libraries are installed.])],
-	    [], [])
+	[AS_HELP_STRING([--with-cuda=DIR],
+			[Enable CUDA build and fail if not found.
+			 Optional=<Path to where the CUDA libraries
+			 and headers are installed.>])])
 
-have_libcuda=0
-AS_IF([test x"$with_cuda" != x"no"],
-	    [FI_CHECK_PACKAGE([cuda],
-			      [cuda_runtime.h],
-			      [cudart],
-			      [cudaMemcpy],
-			      [-lcuda],
-			      [$with_cuda],
-			      [],
-			      [have_libcuda=1],
-			      [],
-			      [])],
-	    [])
-
-AS_IF([test x"$with_cuda" != x"no" && test -n "$with_cuda" && test "$have_libcuda" = "0" ],
-	[AC_MSG_ERROR([CUDA support requested but CUDA runtime not available.])],
-	[])
-AC_DEFINE_UNQUOTED([HAVE_LIBCUDA], [$have_libcuda], [Whether we have CUDA runtime or not])
-
+have_cuda=0
+cuda_dlopen=0
 AC_ARG_ENABLE([cuda-dlopen],
     [AS_HELP_STRING([--enable-cuda-dlopen],
         [Enable dlopen of CUDA libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test "$freebsd" = "0"], [
-            AC_CHECK_LIB(dl, dlopen, [],
-                [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-        ])
-        AC_DEFINE([ENABLE_CUDA_DLOPEN], [1], [dlopen CUDA libraries])
-    ],
-    [enable_cuda_dlopen=no])
+        AS_IF([test x"$with_dlopen" = "no"],
+              [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+	cuda_dlopen=1
+    ])
+
+AS_IF([test x"$with_cuda" != x"no"],
+      [
+	AS_IF([test "$cuda_dlopen" != "0"],
+	      [
+		_FI_CHECK_PACKAGE_HEADER([cuda],
+				[cuda_runtime.h],
+				[$with_cuda],
+				[have_cuda=1],
+				[AC_MSG_ERROR([CUDA headers not found. Cannot enable CUDA DL])])
+	      ],
+	      [
+		FI_CHECK_PACKAGE([cuda],
+				 [cuda_runtime.h],
+				 [cudart],
+				 [cudaMemcpy],
+				 [-lcuda],
+				 [$with_cuda],
+				 [],
+				 [have_cuda=1])
+	      ])
+      ])
+
+AC_DEFINE_UNQUOTED([ENABLE_CUDA_DLOPEN], [$cuda_dlopen], [dlopen CUDA libraries])
+
+AS_IF([test x"$with_cuda" != x"no" && test -n "$with_cuda" && test "$have_cuda" = "0" ],
+	[AC_MSG_ERROR([CUDA support requested but CUDA runtime not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_CUDA], [$have_cuda], [CUDA support])
+
+AS_IF([test "$cuda_dlopen" != "1"], [LIBS="$LIBS $cuda_LIBS"])
+AS_IF([test "$have_cuda" = "1" && test x"$with_cuda" != x"yes"],
+      [CPPFLAGS="$CPPFLAGS $cuda_CPPFLAGS"
+       LDFLAGS="$LDFLAGS $cuda_LDFLAGS"])
 
 AC_ARG_WITH([ze],
 	[AS_HELP_STRING([--with-ze=DIR], [Enable ZE build and fail if not found.
@@ -618,26 +632,25 @@ AS_IF([test "$have_ze" = "1" && test x"$with_ze" != x"yes"],
        LDFLAGS="$LDFLAGS $ze_LDFLAGS"])
 
 dnl Check for AWS Neuron runtime library for Neuron device support
+have_neuron=0
 AC_ARG_WITH([neuron],
 	AS_HELP_STRING([--with-neuron=DIR],
-		       [Provide path to where the Neuron headers are installed.]),
-	[], [])
+		       [Enable Neuron build and fail if not found.
+			Optional=<Path to where the Neuron libraries
+			and headers are installed.>]))
 
 _FI_CHECK_PACKAGE_HEADER([neuron], [nrt/nrt.h], [$with_neuron],
 	[
-		AS_IF([test "$freebsd" = "0"], [
-		    AC_CHECK_LIB(dl, dlopen, [],
+		AS_IF([test x"$with_dlopen" = "no"],
 			[AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-		])
-		AC_DEFINE([HAVE_NEURON], [1], [build with neuron support])
+		have_neuron=1
 	],
-	[
-		AS_IF([test x"$with_neuron" != x"no" && test -n "$with_neuron"],
-		      [AC_MSG_ERROR([Neuron support requested but headers are not available.])],
-		      [])
-		AC_DEFINE([HAVE_NEURON], [0], [build with neuron support])
-	]
 )
+
+AS_IF([test x"$with_neuron" != x"no" && test -n "$with_neuron" && test "$have_neuron" = "0" ],
+	[AC_MSG_ERROR([Neuron support requested but headers are not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_NEURON], [$have_neuron], [Build with Neuron support])
 
 enable_memhooks=1
 AC_ARG_ENABLE([memhooks-monitor],
@@ -681,95 +694,110 @@ AH_BOTTOM([
 #endif
 ])
 
-CPPFLAGS="$CPPFLAGS $cuda_CPPFLAGS"
-LDFLAGS="$LDFLAGS $cuda_LDFLAGS"
-
-AS_IF([test x"$enable_cuda_dlopen" != x"yes"], [LIBS="$LIBS $cuda_LIBS"])
-
 #gdrcopy related configs
 AC_ARG_WITH([gdrcopy],
-	    [AS_HELP_STRING([--with-gdrcopy=DIR],
-			    [Provide path to where the gdrcopy development
-			    and runtime libraries are installed.])],
-	    [], [])
-
-AS_IF([test -n "$with_gdrcopy" && test x"$with_gdrcopy" != x"no" && test "$have_libcuda" = "0"],
-	[AC_MSG_ERROR([gdrcopy is requested but cuda is not requested or cuda runtime is not available.])],
-	[])
+	[AS_HELP_STRING([--with-gdrcopy=DIR], [Enable gdrcopy build and fail if not found.
+					       Optional=<Path to where the gdrcopy development
+					       and runtime libraries are installed.>])])
 
 have_gdrcopy=0
-AS_IF([test "$have_libcuda" = "1" && test x"$with_gdrcopy" != x"no"],
-	[AS_IF([test x"$with_gdrcopy" = x"yes"],[gdrcopy_dir=""],[gdrcopy_dir=$with_gdrcopy])
-	 FI_CHECK_PACKAGE([gdrcopy],
-			  [gdrapi.h],
-			  [gdrapi],
-			  [gdr_open],
-			  [],
-			  [$gdrcopy_dir],
-			  [],
-			  [have_gdrcopy=1],
-			  [],
-			  [])],
-	[])
-
-AS_IF([test x"$with_gdrcopy" != x"no" && test -n "$with_gdrcopy" && test "$have_gdrcopy" = "0" ],
-	[AC_MSG_ERROR([gdrcopy support requested but gdrcopy development library is not available.])],
-	[])
-
-AC_DEFINE_UNQUOTED([HAVE_GDRCOPY], [$have_gdrcopy], [Whether we have gdrcopy development library or not])
-
+gdrcopy_dlopen=0
 AC_ARG_ENABLE([gdrcopy-dlopen],
     [AS_HELP_STRING([--enable-gdrcopy-dlopen],
         [Enable dlopen of gdrcopy libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test "$freebsd" = "0"], [
-            AC_CHECK_LIB(dl, dlopen, [],
-                [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-        ])
-        AC_DEFINE([ENABLE_GDRCOPY_DLOPEN], [1], [dlopen CUDA libraries])
-    ],
-    [enable_gdrcopy_dlopen=no])
+        AS_IF([test x"$with_dlopen" = "no"],
+              [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+	gdrcopy_dlopen=1
+    ])
 
-CPPFLAGS="$CPPFLAGS $gdrcopy_CPPFLAGS"
-LDFLAGS="$LDFLAGS $gdrcopy_LDFLAGS"
-AS_IF([test x"$enable_gdrcopy_dlopen" != x"yes"], [LIBS="$LIBS $gdrcopy_LIBS"])
+AS_IF([test "$have_cuda" = 1 && test x"$with_gdrcopy" != x"no"],
+      [
+	AS_IF([test "$gdrcopy_dlopen" != "0"],
+	      [
+		_FI_CHECK_PACKAGE_HEADER([gdrcopy],
+				[gdrapi.h],
+				[$with_gdrcopy],
+				[have_gdrcopy=1],
+				[AC_MSG_ERROR([gdrcopy headers not found. Cannot enable gdrcopy DL])])
+	      ],
+	      [
+		FI_CHECK_PACKAGE([gdrcopy],
+				 [gdrapi.h],
+				 [gdrapi],
+				 [gdr_open],
+				 [],
+				 [$with_gdrcopy],
+				 [],
+				 [have_gdrcopy=1])
+	      ])
+      ])
+
+AC_DEFINE_UNQUOTED([ENABLE_GDRCOPY_DLOPEN], [$gdrcopy_dlopen], [dlopen gdrcopy libraries])
+
+AS_IF([test x"$with_gdrcopy" != x"no" && test -n "$with_gdrcopy" && test "$have_gdrcopy" = "0" ],
+	[AC_MSG_ERROR([gdrcopy support requested but gdrcopy runtime not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_GDRCOPY], [$have_gdrcopy], [gdrcopy support])
+
+AS_IF([test "$gdrcopy_dlopen" != "1"], [LIBS="$LIBS $gdrcopy_LIBS"])
+AS_IF([test "$have_gdrcopy" = "1" && test x"$with_gdrcopy" != x"yes"],
+      [CPPFLAGS="$CPPFLAGS $gdrcopy_CPPFLAGS"
+       LDFLAGS="$LDFLAGS $gdrcopy_LDFLAGS"])
 #end gdrcopy configures
 
 dnl Check for ROCR runtime libraries.
 AC_ARG_WITH([rocr],
-	    [AS_HELP_STRING([--with-rocr=DIR],
-			    [Provide path to where the ROCR/HSA development
-			    and runtime libraries are installed.])],
-	    [], [])
+	[AS_HELP_STRING([--with-rocr=DIR], [Enable ROCR/HSA build and fail if not found.
+					    Optional=<Path to where the ROCR/HSA libraries
+					    and headers are installed.>])])
 
+have_rocr=0
+rocr_dlopen=0
 AC_ARG_ENABLE([rocr-dlopen],
     [AS_HELP_STRING([--enable-rocr-dlopen],
         [Enable dlopen of ROCR libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test "$freebsd" = "0"], [
-            AC_CHECK_LIB(dl, dlopen, [],
-                [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-        ])
-        AC_DEFINE([ENABLE_ROCR_DLOPEN], [1], [dlopen ROCR libraries])
-    ],
-    [enable_rocr_dlopen=no])
+        AS_IF([test x"$with_dlopen" = "no"],
+              [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+	rocr_dlopen=1
+    ])
 
-FI_CHECK_PACKAGE([rocr],
-		 [hsa/hsa_ext_amd.h],
-		 [hsa-runtime64],
-		 [hsa_amd_pointer_info],
-		 [],
-		 [$with_rocr],
-		 [$with_rocr/lib],
-		 [AC_DEFINE([HAVE_ROCR], [1], [ROCR HSA support])],
-		 [], [])
+AS_IF([test x"$with_rocr" != x"no"],
+      [
+	AS_IF([test "$rocr_dlopen" != "0"],
+	      [
+		_FI_CHECK_PACKAGE_HEADER([rocr],
+				[hsa/hsa_ext_amd.h],
+				[$with_rocr],
+				[have_rocr=1],
+				[AC_MSG_ERROR([ROCR headers not found. Cannot enable ROCR DL])])
+	      ],
+	      [
+		FI_CHECK_PACKAGE([rocr],
+				 [hsa/hsa_ext_amd.h],
+				 [hsa-runtime64],
+				 [hsa_amd_pointer_info],
+				 [],
+				 [$with_rocr],
+				 [$with_rocr/lib],
+				 [have_rocr=1])
+	      ])
+      ])
 
-CPPFLAGS="$CPPFLAGS $rocr_CPPFLAGS"
-LDFLAGS="$LDFLAGS $rocr_LDFLAGS"
+AC_DEFINE_UNQUOTED([ENABLE_ROCR_DLOPEN], [$rocr_dlopen], [dlopen ROCR libraries])
 
-AS_IF([test x"$enable_rocr_dlopen" != x"yes"], [LIBS="$LIBS $rocr_LIBS"])
+AS_IF([test x"$with_rocr" != x"no" && test -n "$with_rocr" && test "$have_rocr" = "0" ],
+	[AC_MSG_ERROR([ROCR support requested but ROCR runtime not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_ROCR], [$have_rocr], [ROCR support])
+
+AS_IF([test "$rocr_dlopen" != "1"], [LIBS="$LIBS $rocr_LIBS"])
+AS_IF([test "$have_rocr" = "1" && test x"$with_rocr" != x"yes"],
+      [CPPFLAGS="$CPPFLAGS $rocr_CPPFLAGS"
+       LDFLAGS="$LDFLAGS $rocr_LDFLAGS"])
 
 AC_CHECK_SIZEOF([void *])
 
