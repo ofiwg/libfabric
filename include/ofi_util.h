@@ -1043,9 +1043,9 @@ void *ofi_ns_resolve_name(struct util_ns *ns, const char *server,
 
 struct ofi_ops_flow_ctrl {
 	size_t	size;
-	void	(*set_threshold)(struct fid_ep *ep, uint64_t threshold);
+	bool	(*available)(struct fid_ep *ep);
+	int	(*enable)(struct fid_ep *ep, uint64_t threshold);
 	void	(*add_credits)(struct fid_ep *ep, uint64_t credits);
-	int	(*enable)(struct fid_ep *ep);
 	void	(*set_send_handler)(struct fid_domain *domain,
 			ssize_t (*send_handler)(struct fid_ep *ep, uint64_t credits));
 };

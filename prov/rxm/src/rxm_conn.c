@@ -141,11 +141,7 @@ static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 		goto err;
 	}
 
-	ret = domain->flow_ctrl_ops->enable(msg_ep);
-	if (!ret) {
-		domain->flow_ctrl_ops->set_threshold(msg_ep,
-					ep->msg_info->rx_attr->size / 2);
-	}
+	conn->flow_ctrl = domain->flow_ctrl_ops->available(msg_ep);
 
 	if (!ep->srx_ctx) {
 		ret = rxm_prepost_recv(ep, msg_ep);
@@ -177,6 +173,9 @@ static int rxm_init_connect_data(struct rxm_conn *conn,
 	cm_data->connect.endianness = ofi_detect_endianness();
 	cm_data->connect.eager_limit = conn->ep->eager_limit;
 	cm_data->connect.rx_size = conn->ep->msg_info->rx_attr->size;
+	cm_data->connect.flow_ctrl = conn->flow_ctrl ?
+						RXM_CM_FLOW_CTRL_PEER_ON :
+						RXM_CM_FLOW_CTRL_PEER_OFF;
 
 	ret = fi_getopt(&conn->ep->msg_pep->fid, FI_OPT_ENDPOINT,
 			FI_OPT_CM_DATA_SIZE, &cm_data_size, &opt_size);
@@ -394,9 +393,32 @@ ssize_t rxm_get_conn(struct rxm_ep *ep, fi_addr_t addr, struct rxm_conn **conn)
 	return ret;
 }
 
+static void rxm_set_peer_flow_ctrl(struct rxm_conn *conn, int cm_flow_ctrl_flag)
+{
+	switch (cm_flow_ctrl_flag) {
+	case RXM_CM_FLOW_CTRL_LOCAL:
+		/*
+		 * For backward compatibility: the flag maps to 0 paddings in
+		 * old protocol. Old protocol doesn't negotiate flow control
+		 * capability. Decision is made locally.
+		 */
+		conn->peer_flow_ctrl = conn->flow_ctrl;
+		break;
+
+	case RXM_CM_FLOW_CTRL_PEER_ON:
+		conn->peer_flow_ctrl = 1;
+		break;
+
+	case RXM_CM_FLOW_CTRL_PEER_OFF:
+		conn->peer_flow_ctrl = 0;
+		break;
+	}
+}
+
 void rxm_process_connect(struct rxm_eq_cm_entry *cm_entry)
 {
 	struct rxm_conn *conn;
+	struct rxm_domain *domain;
 
 	conn = cm_entry->fid->context;
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL,
@@ -408,6 +430,14 @@ void rxm_process_connect(struct rxm_eq_cm_entry *cm_entry)
 						    server_conn_id);
 		conn->remote_pid = rxm_peer_pid(cm_entry->data.accept.
 						server_conn_id);
+		rxm_set_peer_flow_ctrl(conn, cm_entry->data.accept.flow_ctrl);
+	}
+
+	if (conn->flow_ctrl & conn->peer_flow_ctrl) {
+		domain = container_of(conn->ep->util_ep.domain,
+				      struct rxm_domain, util_domain);
+		domain->flow_ctrl_ops->enable(conn->msg_ep,
+					      conn->ep->msg_info->rx_attr->size / 2);
 	}
 
 	conn->ep->connecting_cnt--;
@@ -516,7 +546,11 @@ rxm_accept_connreq(struct rxm_conn *conn, struct rxm_eq_cm_entry *cm_entry)
 
 	cm_data.accept.server_conn_id = rxm_conn_id(conn->peer->index);
 	cm_data.accept.rx_size = cm_entry->info->rx_attr->size;
-	cm_data.accept.align_pad = 0;
+	cm_data.accept.flow_ctrl = conn->flow_ctrl ? RXM_CM_FLOW_CTRL_PEER_ON :
+						     RXM_CM_FLOW_CTRL_PEER_OFF;
+	cm_data.accept.align_pad[0] = 0;
+	cm_data.accept.align_pad[1] = 0;
+	cm_data.accept.align_pad[2] = 0;
 
 	ret = fi_accept(conn->msg_ep, &cm_data.accept, sizeof(cm_data.accept));
 	if (ret)
@@ -610,6 +644,8 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 	ret = rxm_open_conn(conn, cm_entry->info);
 	if (ret)
 		goto free;
+
+	rxm_set_peer_flow_ctrl(conn, cm_entry->data.connect.flow_ctrl);
 
 	ret = rxm_accept_connreq(conn, cm_entry);
 	if (ret)
