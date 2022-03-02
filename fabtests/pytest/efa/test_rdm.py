@@ -1,7 +1,6 @@
 import pytest
 
 from default.test_rdm import test_rdm_bw_functional
-from default.test_rdm import test_rdm_atomic
 
 def run_rdm_test(cmdline_args, executable, iteration_type, completion_type, memory_type, message_size):
     from common import ClientServerTest
@@ -47,3 +46,16 @@ def test_rdm_tagged_bw(cmdline_args, iteration_type, completion_type, memory_typ
 def test_rdm_tagged_bw_range(cmdline_args, completion_type, memory_type, message_size):
     run_rdm_test(cmdline_args, "fi_rdm_tagged_bw", "short",
                  completion_type, memory_type, message_size)
+
+@pytest.mark.parametrize("iteration_type",
+                         [pytest.param("short", marks=pytest.mark.short),
+                          pytest.param("standard", marks=pytest.mark.standard)])
+def test_rdm_atomic(cmdline_args, iteration_type, completion_type):
+    from common import ClientServerTest
+    # the rdm_atomic test's run time has a high variance when running single c6gn instance.
+    # the issue is tracked in:  https://github.com/ofiwg/libfabric/issues/7002
+    # to mitigate the issue, set the maximum timeout of fi_rdm_atomic to 1800 seconds.
+    test = ClientServerTest(cmdline_args, "fi_rdm_atomic", iteration_type, completion_type,
+                            timeout=1800)
+    test.run()
+
