@@ -47,7 +47,15 @@ void vrb_add_credits(struct fid_ep *ep_fid, size_t credits)
 	cq = ep->util_ep.tx_cq;
 
 	ofi_genlock_lock(&cq->cq_lock);
-	ep->peer_rq_credits += credits;
+	/*
+	 * 'saved_peer_rq_credits' is only for the credit update coming before
+	 * flow_ctrl_ops->enable() is called, at which point 'peer_rq_credits'
+	 * is guaranteed to be UNIT64_MAX because no send has happened yet.
+	 */
+	if (ep->peer_rq_credits == UINT64_MAX)
+		ep->saved_peer_rq_credits += credits;
+	else
+		ep->peer_rq_credits += credits;
 	ofi_genlock_unlock(&cq->cq_lock);
 }
 
