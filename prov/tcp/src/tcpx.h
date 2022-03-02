@@ -73,6 +73,7 @@ extern struct fi_provider	tcpx_prov;
 extern struct util_prov		tcpx_util_prov;
 extern struct fi_info		tcpx_info;
 extern struct tcpx_port_range	port_range;
+
 extern int tcpx_nodelay;
 extern int tcpx_staging_sbuf_size;
 extern int tcpx_prefetch_rbuf_size;
@@ -275,7 +276,6 @@ struct tcpx_ep {
 
 	/* lock for protecting tx/rx queues, rma list, state*/
 	fastlock_t		lock;
-	int (*start_op[ofi_op_write + 1])(struct tcpx_ep *ep);
 	void (*hdr_bswap)(struct tcpx_base_hdr *hdr);
 	size_t			min_multi_recv_size;
 	bool			pollout_set;
@@ -286,11 +286,13 @@ struct tcpx_fabric {
 };
 
 
+/* tcpx_xfer_entry::ctrl_flags */
 #define TCPX_NEED_RESP		BIT(1)
 #define TCPX_NEED_ACK		BIT(2)
 #define TCPX_INTERNAL_XFER	BIT(3)
 #define TCPX_NEED_DYN_RBUF 	BIT(4)
 #define TCPX_ASYNC		BIT(5)
+#define TCPX_INJECT_OP		BIT(6)
 
 struct tcpx_xfer_entry {
 	struct slist_entry	entry;
@@ -390,13 +392,6 @@ void tcpx_conn_mgr_run(struct util_eq *eq);
 int tcpx_eq_wait_try_func(void *arg);
 int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		   struct fid_eq **eq_fid, void *context);
-
-int tcpx_op_invalid(struct tcpx_ep *ep);
-int tcpx_op_msg(struct tcpx_ep *ep);
-int tcpx_op_tagged(struct tcpx_ep *ep);
-int tcpx_op_read_req(struct tcpx_ep *ep);
-int tcpx_op_write(struct tcpx_ep *ep);
-int tcpx_op_read_rsp(struct tcpx_ep *ep);
 
 
 static inline void
