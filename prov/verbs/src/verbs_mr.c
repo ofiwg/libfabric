@@ -66,6 +66,13 @@ struct ibv_mr *vrb_mr_ibv_reg_dmabuf_mr(struct ibv_pd *pd, const void *buf,
 	void *base;
 	uint64_t offset;
 	int err;
+	struct ibv_mr *mr;
+	int saved_errno = 0;
+	enum { TRY, ALWAYS, NEVER };
+	static int failover_policy = TRY;
+
+	if (failover_policy == ALWAYS)
+		goto failover;
 
 	err = ze_hmem_get_handle((void *)buf, &handle);
 	if (err)
@@ -76,9 +83,31 @@ struct ibv_mr *vrb_mr_ibv_reg_dmabuf_mr(struct ibv_pd *pd, const void *buf,
 		return NULL;
 
 	offset = (uintptr_t)buf - (uintptr_t)base;
-	return ibv_reg_dmabuf_mr(pd, offset, len, (uint64_t)buf/* iova */,
-				 (int)(uintptr_t)handle/* dmabuf fd */,
-				 vrb_access);
+	mr = ibv_reg_dmabuf_mr(pd, offset, len, (uint64_t)buf/* iova */,
+			       (int)(uintptr_t)handle/* dmabuf fd */,
+			       vrb_access);
+	if (!mr && failover_policy == TRY && vrb_gl_data.peer_mem_support) {
+		saved_errno = errno;
+		goto failover;
+	}
+
+	failover_policy = NEVER;
+	return mr;
+
+failover:
+	mr = ibv_reg_mr(pd, (void *)buf, len, vrb_access);
+	if (!mr) {
+		if (saved_errno)
+			errno = saved_errno;
+		return NULL;
+	}
+
+	if (failover_policy == TRY) {
+		failover_policy = ALWAYS;
+		FI_INFO(&vrb_prov, FI_LOG_MR,
+			"Failover on: ibv_reg_dmabuf_mr() ==> ibv_reg_mr\n");
+	}
+	return mr;
 }
 #endif
 
