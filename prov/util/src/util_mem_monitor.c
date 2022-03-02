@@ -479,8 +479,12 @@ void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 static void *ofi_uffd_handler(void *arg)
 {
 	struct uffd_msg msg;
+	struct uffdio_zeropage zp;
 	struct pollfd fds;
 	int ret;
+	int i;
+	void *address;
+	bool found;
 
 	fds.fd = uffd.fd;
 	fds.events = POLLIN;
@@ -500,6 +504,8 @@ static void *ofi_uffd_handler(void *arg)
 			continue;
 		}
 
+		FI_DBG(&core_prov, FI_LOG_MR, "Received UFFD event %d\n", msg.event);
+
 		switch (msg.event) {
 		case UFFD_EVENT_REMOVE:
 			ofi_monitor_unsubscribe(&uffd.monitor,
@@ -517,6 +523,80 @@ static void *ofi_uffd_handler(void *arg)
 			ofi_monitor_notify(&uffd.monitor,
 				(void *) (uintptr_t) msg.arg.remap.from,
 				(size_t) msg.arg.remap.len);
+			break;
+		case UFFD_EVENT_PAGEFAULT:
+
+			 /* The event tells us the address of the fault
+			  * (which can be anywhere on the page). It does not
+			  * tell us the size of the page so we have to guess
+			  * from the list of known page_sizes.
+			  *
+			  * We employ the standard resolution: install a zeroed page.
+			  */
+
+			address = (void *) (uintptr_t) msg.arg.pagefault.address;
+			found = false;
+
+			for (i = 0; i < num_page_sizes; ) {
+				/* setup a zeropage reqest for this pagesize */
+				zp.range.start = (uint64_t) (uintptr_t)
+					ofi_get_page_start(address, page_sizes[i]);
+				zp.range.len = (uint64_t) page_sizes[i];
+				zp.mode = 0;
+				zp.zeropage = 0;
+
+				ret = ioctl(uffd.fd, UFFDIO_ZEROPAGE, &zp);
+
+				if (0 == ret) {		/* success */
+					found = true;
+					break;
+				}
+
+				/* Note: the documentation (man ioctl_userfaultfd) says
+				 * that the ioctl() returns -1 on error and errno is set
+				 * to indicate the error. It also says that the zeropage
+				 * member of struct uffdio_zeropage is set to the negated
+				 * error.  The unit tests for uffd say 
+				 *    real retval in uffdio_zeropage.zeropage
+				 * so that's what we use here.
+				 */
+
+				if (-EAGAIN == zp.zeropage) {
+					/* This is a tough case.  If the memory map is 
+					 * changing, the kernel returns EAGAIN before
+					 * servicing the zeropage request.  So the page
+					 * fault has not been rectified.  If we don't try
+					 * again, the application will crash.  If we add 
+					 * a maximum retry count we could still end up
+					 * with an unresolved page fault.
+					 *
+					 * It's likely a kernel bug if it returns EAGAIN
+					 * forever.  So we retry until we get a return
+					 * value from the ioctl that is not EAGAIN.
+					 */ 
+					continue;
+				}
+				i++;
+
+				if (-EINVAL == zp.zeropage)	/* wrong page size */
+					continue;
+
+				/* If we get here we failed to install the zeroed
+				 * page for this pagesize and it wasn't a size error.
+				 * We could either stop trying or go on to the
+				 * next pagesize.  We choose to print a warning and try
+				 * another pagesize.
+				 */
+
+				FI_DBG(&core_prov, FI_LOG_MR,
+					"Unable to install zeroed page of size %lu to rectify page fault."
+				        "  address = %p zeropage = %lld errno = %d\n",
+					page_sizes[i], address, zp.zeropage, errno);
+			}
+			if (!found)
+				FI_WARN(&core_prov, FI_LOG_MR,
+					"Unable to handle event UFFD_EVENT_PAGEFAULT for address %p.\n",
+					address);
 			break;
 		default:
 			FI_WARN(&core_prov, FI_LOG_MR,
