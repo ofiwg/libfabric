@@ -533,7 +533,13 @@ int smr_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 	if (flags & FI_TAGGED) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"tagged atomic op not supported\n");
-		return -FI_EINVAL;
+		return -FI_EOPNOTSUPP;
+	}
+
+	if ((datatype == FI_INT128) || (datatype == FI_UINT128)) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"128-bit datatypes not supported\n");
+		return -FI_EOPNOTSUPP;
 	}
 
 	ret = ofi_atomic_valid(&smr_prov, datatype, op, flags);
