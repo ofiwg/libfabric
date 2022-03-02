@@ -122,7 +122,7 @@ vrb_get_rdmacm_rai(const char *node, const char *service, uint64_t flags,
 		rai_hints.ai_flags |= RAI_PASSIVE;
 	}
 
-	ret = rdma_getaddrinfo(node, service, &rai_hints, &_rai);
+	ret = rdma_getaddrinfo((char *) node, (char *) service, &rai_hints, &_rai);
 	if (ret) {
 		VRB_WARN_ERRNO(FI_LOG_FABRIC, "rdma_getaddrinfo");
 		if (errno)

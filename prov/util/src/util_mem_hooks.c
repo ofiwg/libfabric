@@ -160,7 +160,7 @@ static struct ofi_intercept intercepts[] = {
 extern void *__curbrk; /* in libc */
 #endif
 
-#if HAVE___CLEAR_CACHE
+#ifdef HAVE___CLEAR_CACHE
 /*
  * Used on ARM64 platforms, see https://github.com/open-mpi/ompi/issues/5631
  */
