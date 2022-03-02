@@ -2,7 +2,7 @@ dnl
 dnl Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
 dnl Copyright (c) 2019-2021 Intel, Inc.  All rights reserved.
 dnl Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
-dnl (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+dnl (C) Copyright 2020,2024 Hewlett Packard Enterprise Development LP
 dnl Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
 dnl Copyright (c) 2023 Tactical Computing Labs, LLC. All rights reserved.
 dnl
@@ -556,6 +556,37 @@ AS_IF([test $have_uffd -eq 1],
 
 AC_DEFINE_UNQUOTED([HAVE_UFFD_UNMAP], [$have_uffd],
 	[Define to 1 if platform supports userfault fd unmap])
+
+dnl Check uffd thread id support
+have_uffd_thread_id=0
+AS_IF([test $have_uffd -eq 1],
+	[AC_MSG_CHECKING([for userfaultfd thread id support])
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+			#include <sys/types.h>
+			#include <linux/userfaultfd.h>
+			#include <unistd.h>
+			#include <sys/syscall.h>
+			#include <fcntl.h>
+			#include <sys/ioctl.h>
+		]],
+		[[
+			int fd;
+			struct uffdio_api api_obj;
+			api_obj.api = UFFD_API;
+			api_obj.features = UFFD_FEATURE_THREAD_ID |
+					UFFD_FEATURE_EVENT_UNMAP |
+					UFFD_FEATURE_EVENT_REMOVE |
+					UFFD_FEATURE_EVENT_REMAP;
+			fd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
+			return ioctl(fd, UFFDIO_API, &api_obj);
+		]])
+	],
+	[AC_MSG_RESULT([yes])
+		have_uffd_thread_id=1],
+	[AC_MSG_RESULT([no])])])
+
+AC_DEFINE_UNQUOTED([HAVE_UFFD_THREAD_ID], [$have_uffd_thread_id],
+	[Define to 1 if platform supports userfault fd thread id])
 
 dnl restricted DL open
 restricted_dl=0
