@@ -41,6 +41,7 @@ bin_PROGRAMS = \
 	functional/fi_msg_inject \
 	functional/fi_resmgmt_test \
 	functional/fi_rdm_atomic \
+	functional/fi_rdm_stress \
 	functional/fi_multi_recv \
 	functional/fi_bw \
 	functional/fi_rdm_multi_client \
@@ -289,6 +290,10 @@ functional_fi_rdm_atomic_SOURCES = \
 	functional/rdm_atomic.c
 functional_fi_rdm_atomic_LDADD = libfabtests.la
 
+functional_fi_rdm_stress_SOURCES = \
+	functional/rdm_stress.c
+functional_fi_rdm_stress_LDADD = libfabtests.la
+
 functional_fi_multi_recv_SOURCES = \
 	functional/multi_recv.c
 functional_fi_multi_recv_LDADD = libfabtests.la
@@ -452,6 +457,7 @@ dummy_man_pages = \
 	man/man1/fi_rdm_rma_trigger.1 \
 	man/man1/fi_rdm_shared_av.1 \
 	man/man1/fi_rdm_tagged_peek.1 \
+	man/man1/fi_rdm_stress.1 \
 	man/man1/fi_recv_cancel.1 \
 	man/man1/fi_resmgmt_test.1 \
 	man/man1/fi_scalable_ep.1 \

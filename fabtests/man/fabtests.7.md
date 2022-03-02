@@ -113,6 +113,10 @@ features of libfabric.
 : Spawns child processes to verify basic functionality of using a shared
   address vector with RDM endpoints.
 
+*fi_rdm_stress*
+: A multi-process, multi-threaded stress test of RDM endpoints handling
+  transfer errors.
+
 *fi_rdm_tagged_peek*
 : Basic test of using the FI_PEEK operation flag with tagged messages.
   Works with RDM endpoints.
