@@ -190,10 +190,15 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	rxr_convert_desc_for_shm(msg.iov_count, tx_entry->desc);
 
 	err = fi_writemsg(rxr_ep->shm_ep, &msg, tx_entry->fi_flags);
-	if (err)
+	if (err) {
 		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
+		return err;
+	}
 
-	return err;
+#if ENABLE_DEBUG
+	dlist_insert_tail(&pkt_entry->dbg_entry, &rxr_ep->tx_pkt_list);
+#endif
+	return 0;
 }
 
 /* rma_read functions */
@@ -600,6 +605,13 @@ ssize_t rxr_rma_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 	struct fi_msg_rma msg;
 	struct iovec iov;
 	struct fi_rma_iov rma_iov;
+	struct rxr_ep *rxr_ep;
+	struct rdm_peer *peer;
+
+	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
+	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
+	if (peer->is_local)
+		return fi_inject_write(rxr_ep->shm_ep, buf, len, peer->shm_fiaddr, addr, key);
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
@@ -624,6 +636,13 @@ ssize_t rxr_rma_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	struct fi_msg_rma msg;
 	struct iovec iov;
 	struct fi_rma_iov rma_iov;
+	struct rxr_ep *rxr_ep;
+	struct rdm_peer *peer;
+
+	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
+	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
+	if (peer->is_local)
+		return fi_inject_writedata(rxr_ep->shm_ep, buf, len, data, peer->shm_fiaddr, addr, key);
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
