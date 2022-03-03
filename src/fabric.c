@@ -424,6 +424,7 @@ static void ofi_ordered_provs_init(void)
 		 * doesn't matter
 		 */
 		"ofi_hook_perf", "ofi_hook_debug", "ofi_hook_noop", "ofi_hook_hmem",
+		"ofi_hook_dmabuf_peer_mem",
 	};
 	struct ofi_prov *prov;
 	int num_provs, i;
