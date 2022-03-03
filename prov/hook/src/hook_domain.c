@@ -113,13 +113,6 @@ static ssize_t hook_credit_handler(struct fid_ep *ep_fid, size_t credits)
 	return (*ep->domain->base_credit_handler)(&ep->ep, credits);
 }
 
-static void hook_set_threshold(struct fid_ep *ep_fid, size_t threshold)
-{
-	struct hook_ep *ep = container_of(ep_fid, struct hook_ep, ep);
-
-	return ep->domain->base_ops_flow_ctrl->set_threshold(ep->hep, threshold);
-}
-
 static void hook_set_send_handler(struct fid_domain *domain_fid,
 		ssize_t (*credit_handler)(struct fid_ep *ep, size_t credits))
 {
@@ -131,11 +124,11 @@ static void hook_set_send_handler(struct fid_domain *domain_fid,
 						     hook_credit_handler);
 }
 
-static int hook_enable_ep_flow_ctrl(struct fid_ep *ep_fid)
+static int hook_enable_ep_flow_ctrl(struct fid_ep *ep_fid, uint64_t threshold)
 {
 	struct hook_ep *ep = container_of(ep_fid, struct hook_ep, ep);
 
-	return ep->domain->base_ops_flow_ctrl->enable(ep->hep);
+	return ep->domain->base_ops_flow_ctrl->enable(ep->hep, threshold);
 }
 
 static void hook_add_credits(struct fid_ep *ep_fid, size_t credits)
@@ -145,12 +138,19 @@ static void hook_add_credits(struct fid_ep *ep_fid, size_t credits)
 	return ep->domain->base_ops_flow_ctrl->add_credits(ep->hep, credits);
 }
 
+static bool hook_flow_ctrl_available(struct fid_ep *ep_fid)
+{
+	struct hook_ep *ep = container_of(ep_fid, struct hook_ep, ep);
+
+	return ep->domain->base_ops_flow_ctrl->available(ep->hep);
+}
+
 static struct ofi_ops_flow_ctrl hook_ops_flow_ctrl = {
 	.size = sizeof(struct ofi_ops_flow_ctrl),
-	.set_threshold = hook_set_threshold,
 	.add_credits = hook_add_credits,
 	.enable = hook_enable_ep_flow_ctrl,
 	.set_send_handler = hook_set_send_handler,
+	.available = hook_flow_ctrl_available,
 };
 
 static int hook_domain_ops_open(struct fid *fid, const char *name,

@@ -70,6 +70,12 @@ enum {
 	RXM_REJECT_EALREADY,
 };
 
+enum {
+	RXM_CM_FLOW_CTRL_LOCAL,
+	RXM_CM_FLOW_CTRL_PEER_ON,
+	RXM_CM_FLOW_CTRL_PEER_OFF,
+};
+
 union rxm_cm_data {
 	struct _connect {
 		uint8_t version;
@@ -77,7 +83,8 @@ union rxm_cm_data {
 		uint8_t ctrl_version;
 		uint8_t op_version;
 		uint16_t port;
-		uint8_t padding[2];
+		uint8_t flow_ctrl;
+		uint8_t padding;
 		uint32_t eager_limit;
 		uint32_t rx_size; /* used? */
 		uint64_t client_conn_id;
@@ -86,6 +93,8 @@ union rxm_cm_data {
 	struct _accept {
 		uint64_t server_conn_id;
 		uint32_t rx_size; /* used? */
+		uint8_t flow_ctrl;
+		uint8_t align_pad[3];
 	} accept;
 
 	struct _reject {
@@ -94,6 +103,20 @@ union rxm_cm_data {
 	} reject;
 };
 
+static inline uint64_t rxm_conn_id(int peer_index)
+{
+	return (((uint64_t) getpid()) << 32) | ((uint32_t) peer_index);
+}
+
+static inline int rxm_peer_index(uint64_t conn_id)
+{
+	return (int) conn_id;
+}
+
+static inline uint32_t rxm_peer_pid(uint64_t conn_id)
+{
+	return (uint32_t) (conn_id >> 32);
+}
 
 extern size_t rxm_buffer_size;
 extern size_t rxm_packet_size;
@@ -222,7 +245,10 @@ struct rxm_conn {
 	 * the peer_addr.
 	 */
 	int remote_index;
+	uint32_t remote_pid;
 	uint8_t flags;
+	uint8_t flow_ctrl;
+	uint8_t peer_flow_ctrl;
 
 	struct dlist_entry deferred_entry;
 	struct dlist_entry deferred_tx_queue;

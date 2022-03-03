@@ -429,9 +429,12 @@ int rxd_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 	rxd_domain = container_of(domain, struct rxd_domain,
 				  util_domain.domain_fid);
 	attr->size = ofi_datatype_size(datatype);
+	if (!attr->size)
+		return -FI_EOPNOTSUPP;
 
-	total_size = (flags & FI_COMPARE_ATOMIC) ?  rxd_domain->max_inline_atom / 2 :
-		      rxd_domain->max_inline_atom;
+	total_size = (flags & FI_COMPARE_ATOMIC) ?
+		     rxd_domain->max_inline_atom / 2 :
+		     rxd_domain->max_inline_atom;
 	attr->count = total_size / attr->size;
 
 	return ret;

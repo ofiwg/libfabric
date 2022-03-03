@@ -761,8 +761,9 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		if (info->src_addr && (!ofi_is_any_addr(info->src_addr) ||
 					ofi_addr_get_port(info->src_addr))) {
 
-			if (!ofi_addr_get_port(info->src_addr))
+			if (!ofi_addr_get_port(info->src_addr)) {
 				tcpx_set_no_port(ep->bsock.sock);
+			}
 
 			ret = bind(ep->bsock.sock, info->src_addr,
 				(socklen_t) info->src_addrlen);

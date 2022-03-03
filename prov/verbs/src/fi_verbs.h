@@ -577,6 +577,7 @@ struct vrb_ep {
 	/* Protected by send CQ lock */
 	uint64_t			sq_credits;
 	uint64_t			peer_rq_credits;
+	uint64_t			saved_peer_rq_credits;
 	struct slist			sq_list;
 	/* Protected by recv CQ lock */
 	int64_t				rq_credits_avail;
@@ -620,10 +621,10 @@ struct vrb_ep {
 };
 
 
-enum vrb_op_ctx {
-	VRB_POST_SQ,
-	VRB_POST_RQ,
-	VRB_POST_SRQ,
+enum vrb_op_queue {
+	VRB_OP_SQ,
+	VRB_OP_RQ,
+	VRB_OP_SRQ,
 };
 
 struct vrb_context {
@@ -633,8 +634,11 @@ struct vrb_context {
 		struct vrb_srq_ep	*srx;
 	};
 	void				*user_ctx;
-	enum vrb_op_ctx			op_ctx;
+	enum vrb_op_queue		op_queue;
+	enum ibv_wr_opcode		sq_opcode;
 };
+
+enum ibv_wc_opcode vrb_wr2wc_opcode(enum ibv_wr_opcode wr);
 
 #define VERBS_XRC_EP_MAGIC		0x1F3D5B79
 struct vrb_xrc_ep {

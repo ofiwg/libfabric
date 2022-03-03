@@ -37,6 +37,22 @@
 
 #include "fi_verbs.h"
 
+
+enum ibv_wc_opcode vrb_wr2wc_opcode(enum ibv_wr_opcode wr)
+{
+	static enum ibv_wc_opcode wc[] = {
+		[IBV_WR_RDMA_WRITE] = IBV_WC_RDMA_WRITE,
+		[IBV_WR_RDMA_WRITE_WITH_IMM] = IBV_WC_RDMA_WRITE,
+		[IBV_WR_SEND] = IBV_WC_SEND,
+		[IBV_WR_SEND_WITH_IMM] = IBV_WC_SEND,
+		[IBV_WR_RDMA_READ] = IBV_WC_RDMA_READ,
+		[IBV_WR_ATOMIC_CMP_AND_SWP] = IBV_WC_COMP_SWAP,
+		[IBV_WR_ATOMIC_FETCH_AND_ADD] = IBV_WC_FETCH_ADD,
+	};
+
+	return (wr < ARRAY_SIZE(wc)) ? wc[wr] : IBV_WC_SEND;
+}
+
 static void vrb_cq_read_context_entry(struct ibv_wc *wc, void *buf)
 {
 	struct fi_cq_entry *entry = buf;
@@ -239,7 +255,7 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 
 		ctx = (struct vrb_context *) (uintptr_t) wc->wr_id;
 		wc->wr_id = (uintptr_t) ctx->user_ctx;
-		if (ctx->op_ctx == VRB_POST_SQ) {
+		if (ctx->op_queue == VRB_OP_SQ) {
 			assert(ctx->ep);
 			assert(!slist_empty(&ctx->ep->sq_list));
 			assert(ctx->ep->sq_list.head == &ctx->entry);
@@ -248,13 +264,13 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 			ctx->ep->sq_credits++;
 		}
 
-		if (wc->status) {
-			if (ctx->op_ctx == VRB_POST_SQ)
-				wc->opcode &= ~IBV_WC_RECV;
-			else
-				wc->opcode |= IBV_WC_RECV;
-		}
-		if (ctx->op_ctx == VRB_POST_SRQ) {
+		/* workaround incorrect opcode reported by verbs */
+		if (ctx->op_queue == VRB_OP_SQ)
+			wc->opcode = vrb_wr2wc_opcode(ctx->sq_opcode);
+		else if (wc->status)
+			wc->opcode = IBV_WC_RECV;
+
+		if (ctx->op_queue == VRB_OP_SRQ) {
 			fastlock_acquire(&ctx->srx->ctx_lock);
 			ofi_buf_free(ctx);
 			fastlock_release(&ctx->srx->ctx_lock);

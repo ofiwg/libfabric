@@ -179,7 +179,8 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 		    const struct fi_info *base_info, struct fi_info *info)
 {
-	info->caps = base_info->caps;
+	info->caps = ofi_pick_core_flags(base_info->caps, core_info->caps,
+					 FI_LOCAL_COMM | FI_REMOTE_COMM);
 	info->mode = (core_info->mode & ~FI_RX_CQ_DATA) | base_info->mode;
 
 	info->tx_attr->caps		= base_info->tx_attr->caps;
@@ -231,6 +232,9 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	info->ep_attr->max_order_waw_size = core_info->ep_attr->max_order_waw_size;
 
 	*info->domain_attr = *base_info->domain_attr;
+	info->domain_attr->caps = ofi_pick_core_flags(base_info->domain_attr->caps,
+						core_info->domain_attr->caps,
+						FI_LOCAL_COMM | FI_REMOTE_COMM);
 	info->domain_attr->mr_mode |= core_info->domain_attr->mr_mode;
 	info->domain_attr->cq_data_size = MIN(core_info->domain_attr->cq_data_size,
 					      base_info->domain_attr->cq_data_size);

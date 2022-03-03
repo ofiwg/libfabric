@@ -47,7 +47,15 @@ void vrb_add_credits(struct fid_ep *ep_fid, size_t credits)
 	cq = ep->util_ep.tx_cq;
 
 	cq->cq_fastlock_acquire(&cq->cq_lock);
-	ep->peer_rq_credits += credits;
+	/*
+	 * 'saved_peer_rq_credits' is only for the credit update coming before
+	 * flow_ctrl_ops->enable() is called, at which point 'peer_rq_credits'
+	 * is guaranteed to be UNIT64_MAX because no send has happened yet.
+	 */
+	if (ep->peer_rq_credits == UINT64_MAX)
+		ep->saved_peer_rq_credits += credits;
+	else
+		ep->peer_rq_credits += credits;
 	cq->cq_fastlock_release(&cq->cq_lock);
 }
 
@@ -71,7 +79,7 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 
 	OFI_DBG_SET(ctx->ep, ep);
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
-	ctx->op_ctx = VRB_POST_RQ;
+	ctx->op_queue = VRB_OP_RQ;
 	wr->wr_id = (uintptr_t) ctx;
 
 	ret = ibv_post_recv(ep->ibv_qp, wr, &bad_wr);
@@ -143,7 +151,8 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 
 	ctx->ep = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
-	ctx->op_ctx = VRB_POST_SQ;
+	ctx->op_queue = VRB_OP_SQ;
+	ctx->sq_opcode = wr->opcode;
 	wr->wr_id = (uintptr_t) ctx;
 
 	ret = ibv_post_send(ep->ibv_qp, wr, &bad_wr);
@@ -407,10 +416,7 @@ err1:
 	return NULL;
 }
 
-/* Generate flush completion entries for any queued send requests.
- * We only need to record the wr_id and that the entry was not a
- * receive (indicated by lack of IBV_WC_RECV flag).
- */
+/* Generate flush completion entries for any queued send requests. */
 static void vrb_flush_sq(struct vrb_ep *ep)
 {
 	struct vrb_context *ctx;
@@ -429,9 +435,11 @@ static void vrb_flush_sq(struct vrb_ep *ep)
 	while (!slist_empty(&ep->sq_list)) {
 		entry = slist_remove_head(&ep->sq_list);
 		ctx = container_of(entry, struct vrb_context, entry);
-		assert(ctx->op_ctx == VRB_POST_SQ);
+		assert(ctx->op_queue == VRB_OP_SQ);
 
 		wc.wr_id = (uintptr_t) ctx->user_ctx;
+		wc.opcode = vrb_wr2wc_opcode(ctx->sq_opcode);
+
 		cq->credits++;
 		ctx->ep->sq_credits++;
 		ofi_buf_free(ctx);
@@ -1041,8 +1049,7 @@ static struct fi_ops_cm vrb_dgram_cm_ops = {
 
 static int vrb_ep_save_info_attr(struct vrb_ep *ep, struct fi_info *info)
 {
-	ep->info_attr.protocol = info->ep_attr ? info->ep_attr->protocol:
-	    FI_PROTO_UNSPEC;
+	ep->info_attr.protocol = info->ep_attr->protocol;
 	ep->info_attr.inject_size = info->tx_attr->inject_size;
 	ep->info_attr.tx_size = info->tx_attr->size;
 	ep->info_attr.tx_iov_limit = info->tx_attr->iov_limit;
@@ -1082,6 +1089,9 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 	struct fi_info *fi;
 	int ret;
 
+	if (!info->ep_attr || !info->rx_attr || !info->tx_attr)
+		return -FI_EINVAL;
+
 	if (info->src_addr)
 		ofi_straddr_dbg(&vrb_prov, FI_LOG_FABRIC,
 				"open_ep src addr", info->src_addr);
@@ -1103,24 +1113,18 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	fi = dom->info;
 
-	if (info->ep_attr) {
-		ret = vrb_check_ep_attr(info, fi);
-		if (ret)
-			return ret;
-	}
+	ret = vrb_check_ep_attr(info, fi);
+	if (ret)
+		return ret;
 
-	if (info->tx_attr) {
-		ret = ofi_check_tx_attr(&vrb_prov, fi->tx_attr,
-					info->tx_attr, info->mode);
-		if (ret)
-			return ret;
-	}
+	ret = ofi_check_tx_attr(&vrb_prov, fi->tx_attr,
+				info->tx_attr, info->mode);
+	if (ret)
+		return ret;
 
-	if (info->rx_attr) {
-		ret = vrb_check_rx_attr(info->rx_attr, info, fi);
-		if (ret)
-			return ret;
-	}
+	ret = vrb_check_rx_attr(info->rx_attr, info, fi);
+	if (ret)
+		return ret;
 
 	ep = vrb_alloc_init_ep(info, dom, context);
 	if (!ep) {
@@ -1134,7 +1138,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 
 	ret = vrb_ep_save_info_attr(ep, info);
 	if (ret)
-		goto err1;
+		goto close_ep;
 
 	switch (info->ep_attr->type) {
 	case FI_EP_MSG:
@@ -1166,7 +1170,7 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 				ret = vrb_create_ep(ep,
 					vrb_get_port_space(info->addr_format), &ep->id);
 				if (ret)
-					goto err1;
+					goto close_ep;
 				ep->id->context = &ep->util_ep.ep_fid.fid;
 			}
 		} else if (info->handle->fclass == FI_CLASS_CONNREQ) {
@@ -1176,10 +1180,9 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 				assert(connreq->is_xrc);
 
 				if (!connreq->xrc.is_reciprocal) {
-					ret = vrb_process_xrc_connreq(ep,
-								connreq);
+					ret = vrb_process_xrc_connreq(ep, connreq);
 					if (ret)
-						goto err1;
+						goto close_ep;
 				}
 			} else {
 				/* ep now owns this rdma cm id, prevent trying to access
@@ -1201,12 +1204,15 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 					      VERBS_RESOLVE_TIMEOUT)) {
 				ret = -errno;
 				VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_resolve_addr");
-				goto err2;
+				/* rdma_destroy_ep will close the id->qp */
+				ep->ibv_qp = NULL;
+				rdma_destroy_ep(ep->id);
+				goto close_ep;
 			}
 			ep->id->context = &ep->util_ep.ep_fid.fid;
 		} else {
 			ret = -FI_ENOSYS;
-			goto err1;
+			goto close_ep;
 		}
 		break;
 	case FI_EP_DGRAM:
@@ -1226,31 +1232,24 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 		VRB_WARN(FI_LOG_EP_CTRL, "Unknown EP type\n");
 		ret = -FI_EINVAL;
 		assert(0);
-		goto err1;
+		goto close_ep;
 	}
 
 	if (info->ep_attr->rx_ctx_cnt == 0 ||
-	    info->ep_attr->rx_ctx_cnt == 1) {
-		ep->rx_cq_size = info->rx_attr ? info->rx_attr->size :
-				 fi->rx_attr->size;
-	}
+	    info->ep_attr->rx_ctx_cnt == 1)
+		ep->rx_cq_size = info->rx_attr->size;
 
 	if (info->ep_attr->tx_ctx_cnt == 0 ||
-	    info->ep_attr->tx_ctx_cnt == 1) {
-		ep->sq_credits = info->tx_attr ? info->tx_attr->size :
-				 fi->tx_attr->size;
-	}
+	    info->ep_attr->tx_ctx_cnt == 1)
+		ep->sq_credits = info->tx_attr->size;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	ep->util_ep.ep_fid.fid.ops = &vrb_ep_ops;
 	ep->util_ep.ep_fid.ops = &vrb_ep_base_ops;
 
 	return FI_SUCCESS;
-err2:
-	ep->ibv_qp = NULL;
-	if (ep->id)
-		rdma_destroy_ep(ep->id);
-err1:
+
+close_ep:
 	vrb_close_free_ep(ep);
 	return ret;
 }
@@ -1503,7 +1502,7 @@ ssize_t vrb_post_srq(struct vrb_srq_ep *ep, struct ibv_recv_wr *wr)
 
 	ctx->srx = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
-	ctx->op_ctx = VRB_POST_SRQ;
+	ctx->op_queue = VRB_OP_SRQ;
 	wr->wr_id = (uintptr_t) ctx;
 
 	ret = ibv_post_srq_recv(ep->srq, wr, &bad_wr);

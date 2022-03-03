@@ -147,11 +147,13 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	iface = smr_get_mr_hmem_iface(ep->util_ep.domain, desc, &device);
 
 	total_len = ofi_total_iov_len(iov, iov_count);
+	assert(!(op_flags & FI_INJECT) || total_len <= SMR_INJECT_SIZE);
 
 	/* Do not inline/inject if IPC is available so device to device
 	 * transfer may occur if possible. */
 	use_ipc = ofi_hmem_is_ipc_enabled(iface) && (iov_count == 1) &&
-		  desc && (smr_get_mr_flags(desc) & FI_HMEM_DEVICE_ONLY);
+		  desc && (smr_get_mr_flags(desc) & FI_HMEM_DEVICE_ONLY) &&
+		  !(op_flags & FI_INJECT);
 
 	smr_generic_format(cmd, peer_id, op, 0, data, op_flags);
 	if (total_len <= SMR_MSG_DATA_LEN && op == ofi_op_write &&
@@ -183,7 +185,8 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 		}
 		resp = ofi_cirque_next(smr_resp_queue(ep->region));
 		pend = ofi_freestack_pop(ep->pend_fs);
-		if (smr_cma_enabled(ep, peer_smr) && iface == FI_HMEM_SYSTEM) {
+		if (smr_cma_enabled(ep, peer_smr) && iface == FI_HMEM_SYSTEM &&
+		    !(op_flags & FI_INJECT)) { 
 			smr_format_iov(cmd, iov, iov_count, total_len, ep->region,
 				       resp);
 		} else {
@@ -204,7 +207,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 							     pend, resp);
 				}
 			} else if (total_len <= smr_env.sar_threshold ||
-			    iface != FI_HMEM_SYSTEM) {
+			    iface != FI_HMEM_SYSTEM || op_flags & FI_INJECT) {
 				ret = smr_format_sar(cmd, iface, device, iov,
 						     iov_count, total_len,
 						     ep->region, peer_smr, id,

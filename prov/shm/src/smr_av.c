@@ -71,8 +71,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	smr_av = container_of(util_av, struct smr_av, util_av);
 
 	for (i = 0; i < count; i++, addr = (char *) addr + strlen(addr) + 1) {
+		util_addr = FI_ADDR_NOTAVAIL;
 		if (smr_av->used < SMR_MAX_PEERS) {
-			util_addr = FI_ADDR_NOTAVAIL;
 			ret = smr_map_add(&smr_prov, smr_av->smr_map,
 					  addr, &shm_id);
 			if (!ret) {

@@ -325,10 +325,10 @@ int vrb_set_rai(uint32_t addr_format, void *src_addr, size_t src_addrlen,
 		break;
 	case FI_SOCKADDR:
 		rai->ai_port_space = RDMA_PS_TCP;
-		if (src_addrlen) {
+		if (src_addr && src_addrlen) {
 			rai->ai_family = ((struct sockaddr *)src_addr)->sa_family;
 			rai->ai_flags |= RAI_FAMILY;
-		} else if (dest_addrlen) {
+		} else if (dest_addr && dest_addrlen) {
 			rai->ai_family = ((struct sockaddr *)dest_addr)->sa_family;
 			rai->ai_flags |= RAI_FAMILY;
 		}
@@ -337,13 +337,13 @@ int vrb_set_rai(uint32_t addr_format, void *src_addr, size_t src_addrlen,
 		VRB_INFO(FI_LOG_FABRIC, "Unknown addr_format\n");
 	}
 
-	if (src_addrlen) {
+	if (src_addr && src_addrlen) {
 		if (!(rai->ai_src_addr = malloc(src_addrlen)))
 			return -FI_ENOMEM;
 		memcpy(rai->ai_src_addr, src_addr, src_addrlen);
 		rai->ai_src_len = src_addrlen;
 	}
-	if (dest_addrlen) {
+	if (dest_addr && dest_addrlen) {
 		if (!(rai->ai_dst_addr = malloc(dest_addrlen)))
 			return -FI_ENOMEM;
 		memcpy(rai->ai_dst_addr, dest_addr, dest_addrlen);
@@ -1088,8 +1088,10 @@ static int vrb_get_sib(struct dlist_entry *verbs_devs)
 						continue;
 
 					dev_name = strdup(ibv_get_device_name(context->device));
-					if (!dev_name)
+					if (!dev_name) {
+						rdma_freeaddrinfo(rai);
 						return -FI_ENOMEM;
+					}
 
 					ret = verbs_devs_add(verbs_devs, dev_name, rai);
 					if (ret) {

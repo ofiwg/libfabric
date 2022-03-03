@@ -215,23 +215,25 @@ vrb_eq_cm_getinfo(struct rdma_cm_event *event, struct fi_info *pep_info,
 	}
 
 	ret = vrb_get_matching_info(hints->fabric_attr->api_version, hints,
-				       info, vrb_util_prov.info, 0);
+				    info, vrb_util_prov.info, 0);
 	if (ret)
 		goto err1;
 
-	assert(!(*info)->dest_addr);
-
 	ofi_alter_info(*info, hints, hints->fabric_attr->api_version);
 	vrb_alter_info(hints, *info);
+	(*info)->fabric_attr->api_version = pep_info->fabric_attr->api_version;
+	(*info)->fabric_attr->prov_name = strdup(pep_info->fabric_attr->prov_name);
+	if (!(*info)->fabric_attr->prov_name)
+		goto err2;
 
 	free((*info)->src_addr);
-
 	(*info)->src_addrlen = ofi_sizeofaddr(rdma_get_local_addr(event->id));
 	(*info)->src_addr = malloc((*info)->src_addrlen);
 	if (!((*info)->src_addr))
 		goto err2;
 	memcpy((*info)->src_addr, rdma_get_local_addr(event->id), (*info)->src_addrlen);
 
+	assert(!(*info)->dest_addr);
 	(*info)->dest_addrlen = ofi_sizeofaddr(rdma_get_peer_addr(event->id));
 	(*info)->dest_addr = malloc((*info)->dest_addrlen);
 	if (!((*info)->dest_addr))
@@ -1164,18 +1166,20 @@ vrb_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 {
 	struct vrb_eq *eq;
 	struct rdma_cm_event *cma_event;
-	ssize_t ret = 0;
+	ssize_t ret;
 
 	if (len < sizeof(struct fi_eq_cm_entry))
 		return -FI_ETOOSMALL;
 
 	eq = container_of(eq_fid, struct vrb_eq, eq_fid.fid);
+	assert(eq->channel);
 
-	if ((ret = vrb_eq_read_event(eq, event, buf, len, flags)))
+	ret = vrb_eq_read_event(eq, event, buf, len, flags);
+	if (ret)
 		return ret;
 
-	if (eq->channel) {
-next_event:
+	/* Skip events that are handled internally (e.g. XRC CM events). */
+	do {
 		fastlock_acquire(&eq->lock);
 		ret = rdma_get_cm_event(eq->channel, &cma_event);
 		if (ret) {
@@ -1183,22 +1187,15 @@ next_event:
 			return -errno;
 		}
 
-		ret = vrb_eq_cm_process_event(eq, cma_event, event,
-						 (struct fi_eq_cm_entry *)buf,
-						 len);
+		ret = vrb_eq_cm_process_event(eq, cma_event, event, buf, len);
 		fastlock_release(&eq->lock);
-		/* If the CM event was handled internally (e.g. XRC), continue
-		 * to process events. */
-		if (ret == -FI_EAGAIN)
-			goto next_event;
 
-		if (flags & FI_PEEK)
-			ret = vrb_eq_write_event(eq, *event, buf, ret);
+	} while (ret == -FI_EAGAIN);
 
-		return ret;
-	}
+	if (ret > 0 && flags & FI_PEEK)
+		ret = vrb_eq_write_event(eq, *event, buf, ret);
 
-	return -FI_EAGAIN;
+	return ret;
 }
 
 static ssize_t

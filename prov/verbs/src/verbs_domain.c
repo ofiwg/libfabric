@@ -39,13 +39,6 @@
 #include <malloc.h>
 
 
-
-static void vrb_set_threshold(struct fid_ep *ep_fid, size_t threshold)
-{
-	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
-	ep->threshold = threshold;
-}
-
 static void vrb_set_credit_handler(struct fid_domain *domain_fid,
 		ssize_t (*credit_handler)(struct fid_ep *ep, size_t credits))
 {
@@ -56,24 +49,62 @@ static void vrb_set_credit_handler(struct fid_domain *domain_fid,
 	domain->send_credits = credit_handler;
 }
 
-static int vrb_enable_ep_flow_ctrl(struct fid_ep *ep_fid)
+static bool vrb_flow_ctrl_available(struct fid_ep *ep_fid)
 {
 	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
+
 	// only enable if we are not using SRQ
-	if (!ep->srq_ep && ep->ibv_qp && ep->ibv_qp->qp_type == IBV_QPT_RC) {
-		ep->peer_rq_credits = 1;
-		return FI_SUCCESS;
+	return (!ep->srq_ep && ep->ibv_qp && ep->ibv_qp->qp_type == IBV_QPT_RC);
+}
+
+static int vrb_enable_ep_flow_ctrl(struct fid_ep *ep_fid, uint64_t threshold)
+{
+	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
+	struct vrb_cq *cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
+	struct vrb_domain *domain = vrb_ep_to_domain(ep);
+	uint64_t credits_to_give;
+
+	if (!vrb_flow_ctrl_available(ep_fid))
+		return -FI_ENOSYS;
+
+	cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+	ep->threshold = threshold;
+
+	/*
+	 * Both sides assume 1 credit to start with. Previously received credits
+	 * from peer should also be added in.
+	 */
+	ep->peer_rq_credits = 1 + ep->saved_peer_rq_credits;
+	ep->saved_peer_rq_credits = 0;
+
+	/*
+	 * Preposted recvs may happen before flow control is enabled.
+	 * Send credit update if needed.
+	 */
+	if (ep->rq_credits_avail >= ep->threshold) {
+		credits_to_give = ep->rq_credits_avail;
+		ep->rq_credits_avail = 0;
+	} else {
+		credits_to_give = 0;
+	}
+	cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
+
+	if (credits_to_give &&
+	    domain->send_credits(&ep->util_ep.ep_fid, credits_to_give)) {
+		cq->util_cq.cq_fastlock_acquire(&cq->util_cq.cq_lock);
+		ep->rq_credits_avail += credits_to_give;
+		cq->util_cq.cq_fastlock_release(&cq->util_cq.cq_lock);
 	}
 
-	return -FI_ENOSYS;
+	return FI_SUCCESS;
 }
 
 struct ofi_ops_flow_ctrl vrb_ops_flow_ctrl = {
 	.size = sizeof(struct ofi_ops_flow_ctrl),
-	.set_threshold = vrb_set_threshold,
 	.add_credits = vrb_add_credits,
 	.enable = vrb_enable_ep_flow_ctrl,
 	.set_send_handler = vrb_set_credit_handler,
+	.available = vrb_flow_ctrl_available,
 };
 
 static int

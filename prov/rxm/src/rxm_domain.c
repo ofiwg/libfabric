@@ -434,9 +434,6 @@ defer:
 	return FI_SUCCESS;
 }
 
-static void rxm_no_set_threshold(struct fid_ep *ep_fid, size_t threshold)
-{ }
-
 static void rxm_no_add_credits(struct fid_ep *ep_fid, size_t credits)
 { }
 
@@ -444,17 +441,22 @@ static void rxm_no_credit_handler(struct fid_domain *domain_fid,
 		ssize_t (*credit_handler)(struct fid_ep *ep, size_t credits))
 { }
 
-static int rxm_no_enable_flow_ctrl(struct fid_ep *ep_fid)
+static int rxm_no_enable_flow_ctrl(struct fid_ep *ep_fid, uint64_t threshold)
 {
 	return -FI_ENOSYS;
 }
 
+static bool rxm_no_flow_ctrl_available(struct fid_ep *ep_fid)
+{
+	return false;
+}
+
 struct ofi_ops_flow_ctrl rxm_no_ops_flow_ctrl = {
 	.size = sizeof(struct ofi_ops_flow_ctrl),
-	.set_threshold = rxm_no_set_threshold,
 	.add_credits = rxm_no_add_credits,
 	.enable = rxm_no_enable_flow_ctrl,
 	.set_send_handler = rxm_no_credit_handler,
+	.available = rxm_no_flow_ctrl_available,
 };
 
 static int rxm_config_flow_ctrl(struct rxm_domain *domain)
