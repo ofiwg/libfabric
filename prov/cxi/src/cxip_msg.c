@@ -63,6 +63,8 @@ match_put_event(struct cxip_rxc *rxc, struct cxip_req *req,
 	union cxip_def_event_key key = {};
 	struct cxip_deferred_event *def_ev;
 	int bucket;
+	enum c_event_type match_type =
+		event->tgt_long.event_type == C_EVENT_PUT ? C_EVENT_PUT_OVERFLOW : C_EVENT_PUT;
 
 	if (event->tgt_long.rendezvous) {
 		key.initiator = event->tgt_long.initiator.initiator.process;
@@ -77,8 +79,14 @@ match_put_event(struct cxip_rxc *rxc, struct cxip_req *req,
 	dlist_foreach_container(&rxc->deferred_events.bh[bucket],
 				struct cxip_deferred_event, def_ev,
 				rxc_entry) {
-		if (def_ev->key.raw == key.raw)
-			goto found;
+		if (def_ev->key.raw == key.raw &&
+		    def_ev->ev.tgt_long.event_type == match_type &&
+		    def_ev->ev.tgt_long.return_code == event->tgt_long.return_code &&
+		    def_ev->ev.tgt_long.initiator.initiator.process == event->tgt_long.initiator.initiator.process &&
+		    def_ev->ev.tgt_long.match_bits == event->tgt_long.match_bits) {
+			*matched = true;
+			return def_ev;
+		}
 	}
 
 	/* Not found, add mapping to hash bucket */
@@ -95,15 +103,6 @@ match_put_event(struct cxip_rxc *rxc, struct cxip_req *req,
 	def_ev->ev = *event;
 
 	dlist_insert_tail(&def_ev->rxc_entry, &rxc->deferred_events.bh[bucket]);
-
-	return def_ev;
-
-found:
-	assert(def_ev->ev.tgt_long.match_bits == event->tgt_long.match_bits);
-	assert(def_ev->ev.tgt_long.initiator.initiator.process ==
-	       event->tgt_long.initiator.initiator.process);
-
-	*matched = true;
 
 	return def_ev;
 }
