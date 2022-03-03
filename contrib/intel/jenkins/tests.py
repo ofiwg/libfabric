@@ -211,6 +211,39 @@ class ShmemTest(Test):
         outputcmd = shlex.split(command)
         common.run_command(outputcmd)
 
+class ZeFabtests(Test):
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+                 hosts, ofi_build_mode, util_prov=None):
+
+        super().__init__(jobname, buildno, testname, core_prov, fabric,
+                         hosts, ofi_build_mode, util_prov)
+        self.fabtestpath = "{}/bin".format(self.libfab_installpath)
+        self.zefabtest_script_path = "{}".format(ci_site_config.ze_testpath)
+        self.fabtestconfigpath = "{}/share/fabtests".format(self.libfab_installpath)
+
+    @property
+    def cmd(self):
+        return "{}/runfabtests_ze.sh ".format(self.zefabtest_script_path)
+
+    @property
+    def options(self):
+        opts = "-p {} ".format(self.fabtestpath)
+        opts += "-B {} ".format(self.fabtestpath)
+        opts += "{} {} ".format(self.server, self.client)
+
+        return opts
+
+    @property
+    def execute_condn(self):
+        return True if (self.core_prov == 'shm') else False
+
+    def execute_cmd(self):
+        curdir = os.getcwd()
+        os.chdir(self.fabtestconfigpath)
+        command = self.cmd + self.options
+        outputcmd = shlex.split(command)
+        common.run_command(outputcmd)
+        os.chdir(curdir)
 
 class MpiTests(Test):
 

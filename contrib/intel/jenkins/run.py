@@ -62,6 +62,17 @@ def shmemtest(core, hosts, mode, util=None):
               .format(runshmemtest.testname))
     print("----------------------------------------------------------------------------------------\n")
 
+def ze_fabtests(core, hosts, mode, util=None):
+    runzefabtests = tests.ZeFabtests(jobname=jbname,buildno=bno,\
+                   testname="ze test", core_prov=core, fabric=fab,\
+                   hosts=hosts, ofi_build_mode=mode, util_prov=util)
+    if (runzefabtests.execute_condn):
+        print("running ze tests for {}-{}-{}".format(core, util, fab))
+        runzefabtests.execute_cmd()
+    else:
+        print("skipping {} as execute condition fails"\
+              .format(runfabzetests.testname))
+    print("----------------------------------------------------------------------------------------\n")
 
 #imb-tests
 def intel_mpi_benchmark(core, hosts, mpi, mode, util=None):

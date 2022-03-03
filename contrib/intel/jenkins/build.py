@@ -15,27 +15,29 @@ import shutil
 
 def build_libfabric(libfab_install_path, mode):
 
-        if (os.path.exists(libfab_install_path) != True):
-            os.makedirs(libfab_install_path)
+    if (os.path.exists(libfab_install_path) != True):
+        os.makedirs(libfab_install_path)
 
-        config_cmd = ['./configure', '--prefix={}'.format(libfab_install_path)]
-        enable_prov_val = 'yes'
+    config_cmd = ['./configure', '--prefix={}'.format(libfab_install_path)]
+    enable_prov_val = 'yes'
 
-        if (mode == 'dbg'):
-            config_cmd.append('--enable-debug')
-        elif (mode == 'dl'):
-            enable_prov_val='dl'
+    if (mode == 'dbg'):
+        config_cmd.append('--enable-debug')
+    elif (mode == 'dl'):
+        enable_prov_val='dl'
 
-        for prov in common.enabled_prov_list:
-            config_cmd.append('--enable-{}={}'.format(prov, enable_prov_val))
-        for prov in common.disabled_prov_list:
-             config_cmd.append('--enable-{}=no'.format(prov))
+    for prov in common.enabled_prov_list:
+        config_cmd.append('--enable-{}={}'.format(prov, enable_prov_val))
+    for prov in common.disabled_prov_list:
+         config_cmd.append('--enable-{}=no'.format(prov))
 
-        common.run_command(['./autogen.sh'])
-        common.run_command(shlex.split(" ".join(config_cmd)))
-        common.run_command(['make','clean'])
-        common.run_command(['make', '-j32'])
-        common.run_command(['make','install'])
+    config_cmd.append('--enable-ze-dlopen')
+
+    common.run_command(['./autogen.sh'])
+    common.run_command(shlex.split(" ".join(config_cmd)))
+    common.run_command(['make','clean'])
+    common.run_command(['make', '-j32'])
+    common.run_command(['make','install'])
 
 
 def build_fabtests(libfab_install_path, mode):
