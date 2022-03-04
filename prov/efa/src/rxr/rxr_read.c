@@ -541,6 +541,7 @@ int rxr_read_post_once(struct rxr_ep *ep, struct rxr_read_entry *read_entry,
 	if (read_entry->lower_ep_type == SHM_EP) {
 		peer = rxr_ep_get_peer(ep, read_entry->addr);
 		assert(peer);
+		assert(peer->is_local && ep->use_shm_for_tx);
 		msg.addr = peer->shm_fiaddr;
 		err = fi_readmsg(ep->shm_ep, &msg, 0);
 	} else {

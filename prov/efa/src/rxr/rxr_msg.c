@@ -209,8 +209,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 							      tx_entry->fi_flags, 0);
 	}
 
-	if (peer->is_local) {
-		assert(rxr_ep->use_shm);
+	if (peer->is_local && rxr_ep->use_shm_for_tx) {
 		/* intra instance message
 		 *
 		 * Currently the shm provider does not support mixed memory type

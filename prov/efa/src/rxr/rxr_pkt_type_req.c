@@ -396,8 +396,7 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
 	peer = rxr_ep_get_peer(ep, addr);
 	assert(peer);
 
-	if (peer->is_local) {
-		assert(ep->use_shm);
+	if (peer->is_local && ep->use_shm_for_tx) {
 		return rxr_env.shm_max_medium_size;
 	}
 
@@ -1355,7 +1354,6 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 {
 	struct rxr_base_hdr *base_hdr;
 	struct rdm_peer *peer;
-	bool need_ordering;
 	int ret, msg_id;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
@@ -1382,27 +1380,8 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 		}
 	}
 
-	need_ordering = false;
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
-
-	if (!peer->is_local) {
-		/*
- 		 * only need to reorder msg for efa_ep
-		 */
-		base_hdr = (struct rxr_base_hdr *)pkt_entry->pkt;
-		if ((base_hdr->flags & RXR_REQ_MSG) && rxr_need_sas_ordering(ep))
-			need_ordering = true;
-		else if (base_hdr->flags & RXR_REQ_ATOMIC)
-			need_ordering = true;
-	}
-
-	if (!need_ordering) {
-		/* rxr_pkt_proc_rtm will write error cq entry if needed */
-		rxr_pkt_proc_rtm_rta(ep, pkt_entry);
-		return;
-	}
-
 	msg_id = rxr_pkt_msg_id(pkt_entry);
 	ret = rxr_cq_reorder_msg(ep, peer, pkt_entry);
 	if (ret == 1) {

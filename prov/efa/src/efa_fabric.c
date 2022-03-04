@@ -1037,16 +1037,15 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 		goto err_free_fabric;
 
 	/* Open shm provider's fabric domain */
-	if (rxr_env.enable_shm_transfer) {
+	if (shm_info) {
 		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
 		ret = fi_fabric(shm_info->fabric_attr,
-				    &efa_fabric->shm_fabric, context);
+				&efa_fabric->shm_fabric, context);
 		if (ret)
 			goto err_close_util_fabric;
 	} else {
 		efa_fabric->shm_fabric = NULL;
 	}
-
 
 #ifdef EFA_PERF_ENABLED
 	ret = ofi_perfset_create(&rxr_prov, &efa_fabric->perf_set,

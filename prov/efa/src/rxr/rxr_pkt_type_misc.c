@@ -96,7 +96,7 @@ ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rdm_peer *peer)
 	ssize_t ret;
 
 	addr = peer->efa_fiaddr;
-	if (peer->is_local)
+	if (peer->is_local && ep->use_shm_for_tx)
 		pkt_entry = rxr_pkt_entry_alloc(ep, ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
 	else
 		pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
