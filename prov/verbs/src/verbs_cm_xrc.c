@@ -317,7 +317,7 @@ int vrb_accept_xrc(struct vrb_xrc_ep *ep, int reciprocal,
 	struct vrb_connreq *connreq;
 	struct rdma_conn_param conn_param = { 0 };
 	struct vrb_xrc_cm_data *cm_data = param;
-	struct vrb_xrc_cm_data connect_cm_data;
+	struct vrb_xrc_cm_data connect_cm_data = { 0 };
 	int ret;
 
 	assert(ofi_mutex_held(&ep->base_ep.eq->lock));

@@ -562,7 +562,7 @@ vrb_eq_xrc_conn_event(struct vrb_xrc_ep *ep,
 			 uint32_t *event)
 {
 	struct vrb_xrc_conn_info xrc_info;
-	struct vrb_xrc_cm_data cm_data;
+	struct vrb_xrc_cm_data cm_data = { 0 };;
 	const void *priv_data = cma_event->param.conn.private_data;
 	size_t priv_datalen = cma_event->param.conn.private_data_len;
 	int ret;
