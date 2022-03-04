@@ -200,6 +200,8 @@ static int sock_regv(struct fid *fid, const struct iovec *iov,
 	attr.offset = offset;
 	attr.requested_key = requested_key;
 	attr.context = context;
+	attr.auth_key_size = 0;
+	attr.auth_key = NULL;
 	return sock_regattr(fid, &attr, flags, mr);
 }
 
