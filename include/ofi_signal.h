@@ -105,7 +105,7 @@ static inline void fd_signal_set(struct fd_signal *signal)
 {
 	char c = 0;
 	bool cas; /* cas result */
-	int write_rc;
+	ssize_t write_rc;
 
 	cas = ofi_atomic_cas_bool_strong32(&signal->state,
 					   OFI_SIGNAL_UNSET,
@@ -136,7 +136,7 @@ static inline void fd_signal_reset(struct fd_signal *signal)
 	char c;
 	bool cas; /* cas result */
 	enum ofi_signal_state state;
-	int read_rc;
+	ssize_t read_rc;
 
 	do {
 		cas = ofi_atomic_cas_bool_weak32(&signal->state,
