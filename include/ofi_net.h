@@ -177,7 +177,7 @@ ofi_byteq_read(struct ofi_byteq *byteq, void *buf, size_t len)
 
 	if (len < avail) {
 		memcpy(buf, &byteq->data[byteq->head], len);
-		byteq->head += len;
+		byteq->head += (unsigned)len;
 		return len;
 	}
 
@@ -192,7 +192,7 @@ ofi_byteq_write(struct ofi_byteq *byteq, const void *buf, size_t len)
 {
 	assert(len <= ofi_byteq_writeable(byteq));
 	memcpy(&byteq->data[byteq->tail], buf, len);
-	byteq->tail += len;
+	byteq->tail += (unsigned)len;
 }
 
 void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
@@ -208,7 +208,7 @@ static inline ssize_t ofi_byteq_recv(struct ofi_byteq *byteq, SOCKET sock)
 	ret = ofi_recv_socket(sock, &byteq->data[byteq->tail], avail,
 			      MSG_NOSIGNAL);
 	if (ret > 0)
-		byteq->tail += ret;
+		byteq->tail += (unsigned)ret;
 	return ret;
 }
 
@@ -224,11 +224,11 @@ static inline ssize_t ofi_byteq_send(struct ofi_byteq *byteq, SOCKET sock)
 	assert(avail);
 	ret = ofi_send_socket(sock, &byteq->data[byteq->head], avail,
 			      MSG_NOSIGNAL);
-	if (ret == avail) {
+	if ((size_t) ret == avail) {
 		byteq->head = 0;
 		byteq->tail = 0;
 	} else if (ret > 0) {
-		byteq->head += ret;
+		byteq->head += (unsigned)ret;
 	}
 	return ret;
 }
