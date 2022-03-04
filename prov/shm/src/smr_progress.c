@@ -213,7 +213,7 @@ static void smr_progress_resp(struct smr_ep *ep)
 			break;
 
 		ret = smr_complete_tx(ep, pending->context,
-				  pending->cmd.msg.hdr.op, pending->cmd.msg.hdr.op_flags,
+				  pending->cmd.msg.hdr.op, pending->op_flags,
 				  -(resp->status));
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -577,21 +577,12 @@ static int smr_progress_inline_atomic(struct smr_cmd *cmd, struct fi_ioc *ioc,
 			       size_t ioc_count, size_t *len)
 {
 	int i;
-	uint8_t *src, *comp;
+	uint8_t *src = cmd->msg.data.msg;
 
-	switch (cmd->msg.hdr.op) {
-	case ofi_op_atomic_compare:
-		src = cmd->msg.data.buf;
-		comp = cmd->msg.data.comp;
-		break;
-	default:
-		src = cmd->msg.data.msg;
-		comp = NULL;
-		break;
-	}
+	assert(cmd->msg.hdr.op == ofi_op_atomic);
 
 	for (i = *len = 0; i < ioc_count && *len < cmd->msg.hdr.size; i++) {
-		smr_do_atomic(&src[*len], ioc[i].addr, comp ? &comp[*len] : NULL,
+		smr_do_atomic(&src[*len], ioc[i].addr, NULL,
 			      cmd->msg.hdr.datatype, cmd->msg.hdr.atomic_op,
 			      ioc[i].count, cmd->msg.hdr.op_flags);
 		*len += ioc[i].count * ofi_datatype_size(cmd->msg.hdr.datatype);

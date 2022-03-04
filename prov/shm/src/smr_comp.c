@@ -38,11 +38,11 @@
 #include "smr.h"
 
 int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
-		    uint16_t flags, uint64_t err)
+		    uint64_t flags, uint64_t err)
 {
 	ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
 
-	if (!err && !(flags & SMR_TX_COMPLETION))
+	if (!err && !(flags & FI_COMPLETION))
 		return 0;
 
 	return ep->tx_comp(ep, context, op, flags, err);
