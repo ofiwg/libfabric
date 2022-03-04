@@ -1048,7 +1048,7 @@ static void *smr_start_listener(void *args)
 	struct ofi_epollfds_event events[SMR_MAX_PEERS + 1];
 	int i, ret, poll_fds, sock = -1;
 	int peer_fds[ZE_MAX_DEVICES];
-	socklen_t len;
+	socklen_t len = sizeof(sockaddr);
 	int64_t id, peer_id;
 
 	ep->region->flags |= SMR_FLAG_IPC_SOCK;
