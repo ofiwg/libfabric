@@ -1951,7 +1951,7 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 			pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc.slid, ibv_wc.src_qp, pkt_entry);
 			pkt_entry->pkt_size = ibv_wc.byte_len;
 			assert(pkt_entry->pkt_size > 0);
-			rxr_pkt_handle_recv_completion(ep, pkt_entry);
+			rxr_pkt_handle_recv_completion(ep, pkt_entry, EFA_EP);
 #if ENABLE_DEBUG
 			ep->recv_comps++;
 #endif
@@ -2046,7 +2046,7 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 			pkt_entry->addr = src_addr;
 			pkt_entry->pkt_size = cq_entry.len;
 			assert(pkt_entry->pkt_size > 0);
-			rxr_pkt_handle_recv_completion(ep, pkt_entry);
+			rxr_pkt_handle_recv_completion(ep, pkt_entry, SHM_EP);
 		} else {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Unhandled cq type\n");
