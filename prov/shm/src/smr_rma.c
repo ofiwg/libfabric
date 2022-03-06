@@ -108,7 +108,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	int cmds, err = 0, proto = smr_src_inline;
 	ssize_t ret = 0;
 	size_t total_len;
-	bool use_ipc;
+	bool use_ipc, completed;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 	assert(rma_count <= SMR_IOV_LIMIT);
@@ -172,7 +172,9 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 signal_comp:
 	smr_signal(peer_smr);
 
-	if (proto != smr_src_inline && proto != smr_src_inject)
+	completed = (proto == smr_src_inline || proto == smr_src_inject) &&
+		    (op != ofi_op_read_req);
+	if (!completed)
 		goto unlock_cq;
 
 	ret = smr_complete_tx(ep, context, op, op_flags, err);

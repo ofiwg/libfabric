@@ -591,6 +591,9 @@ int smr_select_proto(bool use_ipc, bool cma_avail, enum fi_hmem_iface iface,
 		     uint32_t op, uint64_t total_len, uint64_t op_flags)
 {
 	if (op == ofi_op_read_req) {
+		if (total_len <= SMR_INJECT_SIZE)
+			return smr_src_inject;
+
 		if (use_ipc)
 			return smr_src_ipc;
 		if (cma_avail && FI_HMEM_SYSTEM)
@@ -652,12 +655,29 @@ static ssize_t smr_do_inject(struct smr_ep *ep, struct smr_region *peer_smr, int
 {
 	struct smr_cmd *cmd;
 	struct smr_inject_buf *tx_buf;
+	struct smr_resp *resp;
+	struct smr_tx_entry *pend;
 
 	cmd = ofi_cirque_next(smr_cmd_queue(peer_smr));
 	tx_buf = smr_freestack_pop(smr_inject_pool(peer_smr));
 
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
 	smr_format_inject(cmd, iface, device, iov, iov_count, peer_smr, tx_buf);
+
+	if (op == ofi_op_read_req) {
+		if (ofi_cirque_isfull(smr_resp_queue(ep->region))) {
+			smr_freestack_push(smr_inject_pool(peer_smr), tx_buf);
+			return -FI_EAGAIN;
+		}
+
+		cmd->msg.hdr.op_flags |= SMR_RMA_REQ;
+		resp = ofi_cirque_next(smr_resp_queue(ep->region));
+		pend = ofi_freestack_pop(ep->pend_fs);
+		smr_format_pend_resp(pend, cmd, context, iface, device, iov,
+				     iov_count, op_flags, id, resp);
+		cmd->msg.hdr.data = smr_get_offset(ep->region, resp);
+		ofi_cirque_commit(smr_resp_queue(ep->region));
+	}
 
 	ofi_cirque_commit(smr_cmd_queue(peer_smr));
 	peer_smr->cmd_cnt--;
