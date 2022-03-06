@@ -135,7 +135,7 @@ static void hook_add_credits(struct fid_ep *ep_fid, size_t credits)
 {
 	struct hook_ep *ep = container_of(ep_fid, struct hook_ep, ep);
 
-	return ep->domain->base_ops_flow_ctrl->add_credits(ep->hep, credits);
+	ep->domain->base_ops_flow_ctrl->add_credits(ep->hep, credits);
 }
 
 static bool hook_flow_ctrl_available(struct fid_ep *ep_fid)

@@ -174,7 +174,8 @@ static int ofi_find_name(char **names, const char *name)
 /* matches if names[i] == "xxx;yyy" and name == "xxx" */
 static int ofi_find_layered_name(char **names, const char *name)
 {
-	int i, len;
+	int i;	
+	size_t len;
 
 	len = strlen(name);
 	for (i = 0; names[i]; i++) {
@@ -187,7 +188,8 @@ static int ofi_find_layered_name(char **names, const char *name)
 /* matches if names[i] == "xxx" and name == "xxx;yyy" */
 static int ofi_find_core_name(char **names, const char *name)
 {
-	int i, len;
+	int i;
+	size_t len;
 
 	for (i = 0; names[i]; i++) {
 		len = strlen(names[i]);
@@ -1021,7 +1023,7 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 {
 	char *prov_name;
 	struct ofi_prov *core_ofi_prov;
-	int i;
+	ssize_t i;
 
 	/* Excluded providers must be at the end */
 	for (i = count - 1; i >= 0; i--) {

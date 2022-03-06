@@ -688,7 +688,7 @@ struct rxm_ep {
 	struct fid_cq 		*msg_cq;
 	uint64_t		msg_cq_last_poll;
 	size_t 			comp_per_progress;
-	int			cq_eq_fairness;
+	size_t			cq_eq_fairness;
 	void			(*handle_comp_error)(struct rxm_ep *ep);
 	ssize_t			(*handle_comp)(struct rxm_ep *ep,
 					       struct fi_cq_tagged_entry *comp);
@@ -933,9 +933,9 @@ rxm_recv_entry_get(struct rxm_ep *rxm_ep, const struct iovec *iov,
 struct rxm_rx_buf *
 rxm_get_unexp_msg(struct rxm_recv_queue *recv_queue, fi_addr_t addr,
 		  uint64_t tag, uint64_t ignore);
-int rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
-			 struct rxm_recv_entry *recv_entry,
-			 struct rxm_rx_buf *rx_buf);
+ssize_t rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
+			     struct rxm_recv_entry *recv_entry,
+			     struct rxm_rx_buf *rx_buf);
 int rxm_post_recv(struct rxm_rx_buf *rx_buf);
 
 static inline void

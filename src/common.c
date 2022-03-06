@@ -599,7 +599,7 @@ static int ofi_str_to_sib(const char *str, void **addr, size_t *len)
 		return -FI_EINVAL;
 	}
 
-	pkey = strtol(tok, &endptr, 0);
+	pkey = (uint16_t) strtol(tok, &endptr, 0);
 	if (*endptr) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Invalid pkey in address: %s\n", str);
@@ -613,7 +613,7 @@ static int ofi_str_to_sib(const char *str, void **addr, size_t *len)
 		return -FI_EINVAL;
 	}
 
-	ps = strtol(tok, &endptr, 0);
+	ps = (uint16_t) strtol(tok, &endptr, 0);
 	if (*endptr) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Invalid port space in address: %s\n", str);
@@ -637,7 +637,7 @@ static int ofi_str_to_sib(const char *str, void **addr, size_t *len)
 	/* Port is optional */
 	tok = strtok_r(NULL, ":", &saveptr);
 	if (tok)
-		port = strtol(tok, &endptr, 0);
+		port = (uint16_t) strtol(tok, &endptr, 0);
 	else
 		port = 0;
 
@@ -1046,7 +1046,7 @@ void ofi_straddr_log_internal(const char *func, int line,
 	}
 }
 
-int ofi_discard_socket(SOCKET sock, size_t len)
+ssize_t ofi_discard_socket(SOCKET sock, size_t len)
 {
 	char buf;
 	ssize_t ret = 0;
@@ -1071,7 +1071,7 @@ size_t ofi_byteq_readv(struct ofi_byteq *byteq, struct iovec *iov,
 	len = ofi_copy_iov_buf(iov, cnt, offset, &byteq->data[byteq->head],
 			       avail, OFI_COPY_BUF_TO_IOV);
 	if (len < avail) {
-		byteq->head += len;
+		byteq->head += (unsigned) len;
 	} else {
 		byteq->head = 0;
 		byteq->tail = 0;
@@ -1094,7 +1094,7 @@ void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
 	for (i = 0; i < cnt; i++) {
 		memcpy(&byteq->data[byteq->tail], iov[i].iov_base,
 		       iov[i].iov_len);
-		byteq->tail += iov[i].iov_len;
+		byteq->tail += (unsigned) iov[i].iov_len;
 	}
 }
 
@@ -1429,7 +1429,7 @@ void ofi_pollfds_heatfd(struct ofi_pollfds *pfds, int index)
 {
 	struct pollfd *new_fds;
 	struct ofi_pollfds_ctx *ctx;
-	size_t size;
+	int size;
 
 	assert(ofi_poll_fairness);
 	ctx = &pfds->ctx[index];

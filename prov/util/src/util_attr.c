@@ -94,7 +94,7 @@ char *ofi_strdup_append(const char *head, const char *tail)
 int ofi_exclude_prov_name(char **prov_name_list, const char *util_prov_name)
 {
 	char *exclude, *name, *temp;
-	int length;
+	size_t length;
 
 	length = strlen(util_prov_name) + 2;
 	exclude = malloc(length);
@@ -181,7 +181,8 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 {
 	int ret;
 
-	if (!(*core_hints = fi_allocinfo()))
+	*core_hints = fi_allocinfo();
+	if (!*core_hints)
 		return -FI_ENOMEM;
 
 	ret = info_to_core(version, util_hints, base_attr, *core_hints);
@@ -233,7 +234,8 @@ static int ofi_info_to_util(uint32_t version, const struct fi_provider *prov,
 			    ofi_map_info_t info_to_util,
 			    struct fi_info **util_info)
 {
-	if (!(*util_info = fi_allocinfo()))
+	*util_info = fi_allocinfo();
+	if (!*util_info)
 		return -FI_ENOMEM;
 
 	if (info_to_util(version, core_info, base_info, *util_info))
@@ -364,7 +366,8 @@ int ofi_get_core_info_fabric(const struct fi_provider *prov,
 		return -FI_ENODATA;
 
 	memset(&hints, 0, sizeof hints);
-	if (!(hints.fabric_attr = calloc(1, sizeof(*hints.fabric_attr))))
+	hints.fabric_attr = calloc(1, sizeof(*hints.fabric_attr));
+	if (!hints.fabric_attr)
 		return -FI_ENOMEM;
 
 	hints.fabric_attr->prov_name = strdup(util_attr->prov_name);
@@ -379,7 +382,7 @@ int ofi_get_core_info_fabric(const struct fi_provider *prov,
 
 	hints.fabric_attr->name = util_attr->name;
 	hints.fabric_attr->api_version = util_attr->api_version;
-	hints.mode = ~0;
+	hints.mode = ~0ULL;
 
 	ret = fi_getinfo(util_attr->api_version, NULL, NULL, OFI_CORE_PROV_ONLY,
 	                 &hints, core_info);
@@ -1002,7 +1005,8 @@ int ofi_prov_check_dup_info(const struct util_prov *util_prov,
 	    	if (ret)
 			continue;
 
-		if (!(fi = fi_dupinfo(prov_info))) {
+		fi = fi_dupinfo(prov_info);
+		if (!fi) {
 			ret = -FI_ENOMEM;
 			goto err;
 		}

@@ -1039,9 +1039,9 @@ ofi_cpuid(unsigned func, unsigned subfunc, unsigned cpuinfo[4])
 	__cpuidex((int *)cpuinfo, func, subfunc);
 }
 
-#define ofi_clwb(addr) do { _mm_clflush(addr); _mm_sfence(); } while (0)
-#define ofi_clflushopt(addr) do { _mm_clflush(addr); _mm_sfence(); } while (0)
-#define ofi_clflush(addr) _mm_clflush(addr)
+#define ofi_clwb(addr) do { _mm_clflush((void const *)addr); _mm_sfence(); } while (0)
+#define ofi_clflushopt(addr) do { _mm_clflush((void const *)addr); _mm_sfence(); } while (0)
+#define ofi_clflush(addr) _mm_clflush((void const *)addr)
 #define ofi_sfence() _mm_sfence()
 
 #else /* defined(_M_X64) || defined(_M_AMD64) */

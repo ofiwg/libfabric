@@ -192,7 +192,7 @@ ssize_t ofi_ep_broadcast(struct fid_ep *ep, void *buf, size_t count, void *desc,
 			 fi_addr_t coll_addr, fi_addr_t root_addr,
 			 enum fi_datatype datatype, uint64_t flags, void *context);
 
-int ofi_coll_ep_progress(struct fid_ep *ep);
+ssize_t ofi_coll_ep_progress(struct fid_ep *ep);
 
 void ofi_coll_handle_xfer_comp(uint64_t tag, void *ctx);
 

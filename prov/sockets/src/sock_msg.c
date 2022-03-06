@@ -60,7 +60,7 @@
 ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags)
 {
-	int ret;
+	ssize_t ret;
 	size_t i;
 	struct sock_rx_ctx *rx_ctx;
 	struct sock_rx_entry *rx_entry;
@@ -116,7 +116,7 @@ ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		return -FI_ENOMEM;
 
 	rx_entry->rx_op.op = SOCK_OP_RECV;
-	rx_entry->rx_op.dest_iov_len = msg->iov_count;
+	rx_entry->rx_op.dest_iov_len = (uint8_t) msg->iov_count;
 
 	rx_entry->flags = flags;
 	rx_entry->context = (uintptr_t) msg->context;
@@ -178,7 +178,7 @@ static ssize_t sock_ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags)
 {
-	int ret;
+	ssize_t ret;
 	size_t i;
 	uint64_t total_len, op_flags;
 	struct sock_op tx_op;
@@ -245,9 +245,9 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		if (total_len > SOCK_EP_MAX_INJECT_SZ)
 			return -FI_EINVAL;
 
-		tx_op.src_iov_len = total_len;
+		tx_op.src_iov_len = (uint8_t) total_len;
 	} else {
-		tx_op.src_iov_len = msg->iov_count;
+		tx_op.src_iov_len = (uint8_t) msg->iov_count;
 		total_len = msg->iov_count * sizeof(union sock_iov);
 	}
 
@@ -402,7 +402,7 @@ struct fi_ops_msg sock_ep_msg_ops = {
 ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 			 const struct fi_msg_tagged *msg, uint64_t flags)
 {
-	int ret;
+	ssize_t ret;
 	size_t i;
 	struct sock_rx_ctx *rx_ctx;
 	struct sock_rx_entry *rx_entry;
@@ -460,7 +460,7 @@ ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 		return -FI_ENOMEM;
 
 	rx_entry->rx_op.op = SOCK_OP_TRECV;
-	rx_entry->rx_op.dest_iov_len = msg->iov_count;
+	rx_entry->rx_op.dest_iov_len = (uint8_t) msg->iov_count;
 
 	rx_entry->flags = flags;
 	rx_entry->context = (uintptr_t) msg->context;
@@ -528,7 +528,7 @@ static ssize_t sock_ep_trecvv(struct fid_ep *ep, const struct iovec *iov,
 ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 			 const struct fi_msg_tagged *msg, uint64_t flags)
 {
-	int ret;
+	ssize_t ret;
 	size_t i;
 	uint64_t total_len, op_flags;
 	struct sock_op tx_op;
@@ -589,12 +589,12 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 		for (i = 0; i < msg->iov_count; i++)
 			total_len += msg->msg_iov[i].iov_len;
 
-		tx_op.src_iov_len = total_len;
+		tx_op.src_iov_len = (uint8_t) total_len;
 		if (total_len > SOCK_EP_MAX_INJECT_SZ)
 			return -FI_EINVAL;
 	} else {
 		total_len = msg->iov_count * sizeof(union sock_iov);
-		tx_op.src_iov_len = msg->iov_count;
+		tx_op.src_iov_len = (uint8_t) msg->iov_count;
 	}
 
 	total_len += sizeof(struct sock_op_tsend);

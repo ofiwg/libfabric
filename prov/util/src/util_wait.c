@@ -782,7 +782,7 @@ static int ofi_wait_get_fd(struct util_wait_fd *wait_fd,
 		goto free;
 	}
 
-	fds->events = fid_entry->events;
+	fds->events = (short) fid_entry->events;
 	fid_entry->pollfds.fd = fds;
 	fid_entry->pollfds.nfds = 1;
 	return 0;
