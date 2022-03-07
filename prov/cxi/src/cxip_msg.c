@@ -2169,21 +2169,23 @@ int cxip_recv_reenable(struct cxip_rxc *rxc)
 	int ret __attribute__((unused));
 
 	if (rxc->drop_count == -1) {
-		RXC_DBG(rxc, "Waiting to process pending FC_NOTIFY messages\n");
+		RXC_WARN(rxc,
+			 "PtlTE %d waiting for pending FC_NOTIFY messages\n",
+			 rxc->rx_pte->pte->ptn);
 		return -FI_EAGAIN;
 	}
 
 	ret = cxil_pte_status(rxc->rx_pte->pte, &pte_status);
 	assert(!ret);
 
-	RXC_DBG(rxc, "PtlTE %d Processed %d/%d drops\n",
+	RXC_WARN(rxc, "PtlTE %d Processed %d/%d drops\n",
 		rxc->rx_pte->pte->ptn,
 		rxc->drop_count + 1, pte_status.drop_count + 1);
 
 	if (rxc->drop_count != pte_status.drop_count)
 		return -FI_EAGAIN;
 
-	RXC_DBG(rxc, "Re-enabling PTE\n");
+	RXC_WARN(rxc, "PtlTE %d re-enabling PTE\n", rxc->rx_pte->pte->ptn);
 
 	do {
 		ret = cxip_rxc_msg_enable(rxc, rxc->drop_count);
@@ -2296,8 +2298,8 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
 
 	dlist_insert_tail(&fc_drops->rxc_entry, &rxc->fc_drops);
 
-	RXC_DBG(rxc, "Processed drops: %d NIC: %#x TXC: %d RXC: %p\n", drops,
-		nic_addr, txc_id, rxc);
+	RXC_WARN(rxc, "PtlTE %d processed drops: %d NIC: %#x TXC: %d\n",
+		 rxc->rx_pte->pte->ptn, drops, nic_addr, txc_id);
 
 	rxc->drop_count += drops;
 
