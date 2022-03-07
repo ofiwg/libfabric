@@ -1,3 +1,4 @@
+#ifdef PSM_VERBS
 /*
 
   This file is provided under a dual BSD/GPLv2 license.  When using or
@@ -5,7 +6,7 @@
 
   GPL LICENSE SUMMARY
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2017 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -21,7 +22,7 @@
 
   BSD LICENSE
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2017 Intel Corporation.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -51,47 +52,46 @@
 
 */
 
-/* This file contains hfi service routine interface used by the low */
-/* level hfi protocol code. */
+#ifndef _PSM_HAL_VERBS_HAL_H
+#define _PSM_HAL_VERBS_HAL_H
 
-#include <sys/poll.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <unistd.h>
-#include <errno.h>
-#include <string.h>
-#include <stdio.h>
-#include <fcntl.h>
-#include <malloc.h>
-#include <time.h>
+#include "psm_user.h"
+#include "ips_proto.h"
+#include "ips_proto_internal.h"
+#include "psm_mq_internal.h"
+#include "verbs_user.h"
 
-#include "opa_user_gen1.h"
-
-/* touch the pages, with a 32 bit read */
-void hfi_touch_mmap(void *m, size_t bytes)
+/* declare hfp_verbs_t struct, (combines public psmi_hal_instance_t
+   together with a private struct) */
+typedef struct _hfp_verbs
 {
-	volatile uint32_t *b = (volatile uint32_t *)m, c;
-	size_t i;		/* m is always page aligned, so pgcnt exact */
-	int __hfi_pg_sz;
+	psmi_hal_instance_t phi;
+} hfp_verbs_t;
 
-	/* First get the page size */
-	__hfi_pg_sz = sysconf(_SC_PAGESIZE);
+psm2_error_t psm3_verbs_ips_ptl_init_pre_proto_init(struct ptl_ips *ptl);
+psm2_error_t psm3_verbs_ips_ptl_init_post_proto_init(struct ptl_ips *ptl);
+psm2_error_t psm3_verbs_ips_ptl_fini(struct ptl_ips *ptl);
 
-	_HFI_VDBG("Touch %lu mmap'ed pages starting at %p\n",
-		  (unsigned long)bytes / __hfi_pg_sz, m);
-	bytes /= sizeof(c);
-	for (i = 0; i < bytes; i += __hfi_pg_sz / sizeof(c))
-		c = b[i];
-}
+psm2_error_t psm3_verbs_ips_ptl_pollintr(psm2_ep_t ep,
+				struct ips_recvhdrq *recvq, int fd_pipe, int next_timeout,
+				uint64_t *pollok, uint64_t *pollcyc);
 
+int psm3_verbs_ips_ptl_process_unknown(const struct ips_recvhdrq_event *rcv_ev);
 
-// never called for UD/UDP, we use __psm2_ep_poll_type instead
+psm2_error_t
+psm3_verbs_recvhdrq_init(const struct ips_epstate *epstate,
+		  const struct ips_proto *proto,
+		  const struct ips_recvhdrq_callbacks *callbacks,
+		  struct ips_recvhdrq *recvq
+		);
 
+psm2_error_t psm3_verbs_recvhdrq_progress(struct ips_recvhdrq *recvq);
 
+#ifdef PSM_CUDA
+void* psm3_verbs_gdr_convert_gpu_to_host_addr(unsigned long buf,
+                                size_t size, int flags,
+                                psm2_ep_t ep);
+#endif /* PSM_CUDA */
 
-
-
-
+#endif /* _PSM_HAL_VERBS_HAL_H */
+#endif /* PSM_VERBS */

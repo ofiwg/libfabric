@@ -1,3 +1,4 @@
+#ifdef PSM_SOCKETS
 /*
 
   This file is provided under a dual BSD/GPLv2 license.  When using or
@@ -5,7 +6,7 @@
 
   GPL LICENSE SUMMARY
 
-  Copyright(c) 2018 Intel Corporation.
+  Copyright(c) 2015 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -21,7 +22,7 @@
 
   BSD LICENSE
 
-  Copyright(c) 2018 Intel Corporation.
+  Copyright(c) 2015 Intel Corporation.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -50,70 +51,41 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
-#ifdef PSM_CUDA
-#include "psm_user.h"
-#include "psm2_hal.h"
-#include "psm_gdrcpy.h"
-#include <fcntl.h>
-#include <sys/ioctl.h>
-#include <sys/types.h>
-#include "ptl_ips/ips_tid.h"
-#include "ptl_ips/ips_expected_proto.h"
-#include "opa_user_gen1.h"
 
-static int gdr_fd;
+#ifndef PSM_HAL_SOCKETS_USER_H
+#define PSM_HAL_SOCKETS_USER_H
 
-int get_gdr_fd(){
-	return gdr_fd;
-}
+/* This file contains all of the data structures and routines that are
+   publicly visible and usable (to low level infrastructure code; it is
+   not expected that any application, or even normal application-level library,
+   will ever need to use any of this).
 
-#define GPU_PAGE_OFFSET_MASK (PSMI_GPU_PAGESIZE -1)
-#define GPU_PAGE_MASK ~GPU_PAGE_OFFSET_MASK
+   Additional entry points and data structures that are used by these routines
+   may be referenced in this file, but they should not be generally available;
+   they are visible here only to allow use in inlined functions.  Any variable,
+   data structure, or function that starts with a leading "_" is in this
+   category.
+*/
 
+/* Include header files we need that are unlikely to otherwise be needed by */
+/* programs. */
+#include <stddef.h>
+#include <stdarg.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <sys/user.h>
+#include <syslog.h>
+#include <stdbool.h>
+#include "utils_user.h"
+#include "sockets_service.h"
 
-
-
-
-// flags=0 for send, 1 for recv
-void *
-gdr_convert_gpu_to_host_addr(int gdr_fd, unsigned long buf,
-							 size_t size, int flags,
-							 psm2_ep_t ep)
-{
-	void *host_addr_buf;
-
-	uintptr_t pageaddr = buf & GPU_PAGE_MASK;
-	uint64_t pagelen = (uint64_t) (PSMI_GPU_PAGESIZE +
-					   ((buf + size - 1) & GPU_PAGE_MASK) -
-					   pageaddr);
-
-	_HFI_VDBG("buf=%p size=%zu pageaddr=%p pagelen=%"PRIu64" flags=0x%x ep=%p\n",
-		(void *)buf, size, (void *)pageaddr, pagelen, flags, ep);
-#ifdef RNDV_MOD
-	ep = ep->mctxt_master;
-	host_addr_buf = __psm2_rv_pin_and_mmap(ep->verbs_ep.rv, pageaddr, pagelen, IBV_ACCESS_IS_GPU_ADDR);
-	if_pf (! host_addr_buf) {
-		if (errno == ENOMEM) {
-			if (psm2_verbs_evict_some(ep, pagelen, IBV_ACCESS_IS_GPU_ADDR) > 0)
-				host_addr_buf = __psm2_rv_pin_and_mmap(ep->verbs_ep.rv, pageaddr, pagelen, IBV_ACCESS_IS_GPU_ADDR);
-		}
-		if_pf (! host_addr_buf)
-			return NULL;
-	}
-//_HFI_ERROR("pinned buf=%p size=%zu pageaddr=%p pagelen=%u flags=0x%x ep=%p, @ %p\n", (void *)buf, size, (void *)pageaddr, pagelen, flags, ep, host_addr_buf);
-#else
-	psmi_assert_always(0);	// unimplemented, should not get here
-	host_addr_buf = NULL;
-#endif /* RNDV_MOD */
-	return host_addr_buf + (buf & GPU_PAGE_OFFSET_MASK);
-}
-
-void hfi_gdr_open(){
-	return;
-}
-
-void hfi_gdr_close()
-{
-}
-
+/* make sure uintmax_t can hold the result of unsigned int multiplication */
+#if UINT_MAX > (UINTMAX_MAX / UINT_MAX)
+#error We cannot safely multiply unsigned integers on this platform
 #endif
+
+#endif /* PSM_HAL_SOCKETS_USER_H */
+#endif /* PSM_SOCKETS */

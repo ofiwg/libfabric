@@ -1,3 +1,4 @@
+#ifdef PSM_SOCKETS
 /*
 
   This file is provided under a dual BSD/GPLv2 license.  When using or
@@ -5,7 +6,7 @@
 
   GPL LICENSE SUMMARY
 
-  Copyright(c) 2017 Intel Corporation.
+  Copyright(c) 2018 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -21,7 +22,7 @@
 
   BSD LICENSE
 
-  Copyright(c) 2017 Intel Corporation.
+  Copyright(c) 2018 Intel Corporation.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -50,25 +51,48 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
-
+#ifdef PSM_CUDA
 #include "psm_user.h"
+#include "psm2_hal.h"
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
 #include "ips_proto.h"
-#include "ips_proto_internal.h"
-#include "psm_hal_gen1_spio.h"
-#include "psm_mq_internal.h"
-#include "opa_user_gen1.h"
+#include "ptl_ips/ips_tid.h"
+#include "ptl_ips/ips_expected_proto.h"
 
-
-/* Private struct on a per-context basis. */
-typedef struct _hfp_gen1_pc_private
+// flags=0 for send, 1 for recv
+void *
+psm3_sockets_gdr_convert_gpu_to_host_addr(unsigned long buf,
+							 size_t size, int flags,
+							 psm2_ep_t ep)
 {
-} hfp_gen1_pc_private;
+	void *host_addr_buf;
 
+	uintptr_t pageaddr = buf & GPU_PAGE_MASK;
+	uint64_t pagelen = (uint64_t) (PSMI_GPU_PAGESIZE +
+					   ((buf + size - 1) & GPU_PAGE_MASK) -
+					   pageaddr);
 
-/* declare hfp_gen1_t struct, (combines public psmi_hal_instance_t
-   together with a private struct) */
-typedef struct _hfp_gen1
-{
-	psmi_hal_instance_t phi;
-} hfp_gen1_t;
-
+	_HFI_VDBG("buf=%p size=%zu pageaddr=%p pagelen=%"PRIu64" flags=0x%x ep=%p\n",
+		(void *)buf, size, (void *)pageaddr, pagelen, flags, ep);
+#ifdef RNDV_MOD
+	ep = ep->mctxt_master;
+	host_addr_buf = psm3_rv_pin_and_mmap(ep->rv, pageaddr, pagelen, IBV_ACCESS_IS_GPU_ADDR);
+	if_pf (! host_addr_buf) {
+		if (errno == ENOMEM) {
+			if (psm3_gpu_evict_some(ep, pagelen, IBV_ACCESS_IS_GPU_ADDR) > 0)
+				host_addr_buf = psm3_rv_pin_and_mmap(ep->rv, pageaddr, pagelen, IBV_ACCESS_IS_GPU_ADDR);
+		}
+		if_pf (! host_addr_buf)
+			return NULL;
+	}
+//_HFI_ERROR("pinned buf=%p size=%zu pageaddr=%p pagelen=%u flags=0x%x ep=%p, @ %p\n", (void *)buf, size, (void *)pageaddr, pagelen, flags, ep, host_addr_buf);
+#else
+	psmi_assert_always(0);	// unimplemented, should not get here
+	host_addr_buf = NULL;
+#endif /* RNDV_MOD */
+	return host_addr_buf + (buf & GPU_PAGE_OFFSET_MASK);
+}
+#endif /* PSM_CUDA */
+#endif /* PSM_SOCKETS */

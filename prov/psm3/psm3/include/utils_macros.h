@@ -53,12 +53,46 @@
 
 /* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
 
+#ifndef UTILS_MACROS_H
+#define UTILS_MACROS_H
+
+#include <sys/uio.h>
 #include <sys/types.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <stddef.h>
-#include <unistd.h>
-#include <errno.h>
-#include <string.h>
-#include <stdio.h>
 
+#ifdef __inline__
+#undef __inline__
+#endif
+#define __inline__ inline __attribute__((always_inline, unused))
+
+#include "sysdep.h"
+#include "bit_ops.h"
+
+/* these aren't implemented for user mode, which is OK until we multi-thread */
+typedef struct _atomic {
+	uint32_t counter;
+} atomic_t;			/* no atomic_t type in user-land */
+#define atomic_set(a, v) ((a)->counter = (v))
+#define atomic_inc_return(a)  (++(a)->counter)
+
+#if defined(__GNUC__)
+#ifndef likely
+#define likely(x)    __builtin_expect(!!(x), 1L)
+#endif
+#ifndef unlikely
+#define unlikely(x)  __builtin_expect(!!(x), 0L)
+#endif
+#ifndef if_pt
+#define if_pt(cond) if (likely(cond))
+#endif
+#ifndef if_pf
+#define if_pf(cond) if (unlikely(cond))
+#endif
+#define _Pragma_unlikely
+#define _Pragma_likely
+#else
+#error "Unsupported compiler"
+#endif
+
+#define yield() sched_yield()
+#endif /* UTILS_MACROS_H */

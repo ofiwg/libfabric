@@ -77,7 +77,7 @@ static struct fi_ops_fabric psmx3_fabric_ops = {
 };
 
 static struct fi_fabric_attr psmx3_fabric_attr = {
-	.name = PSMX3_FABRIC_NAME,
+	.name = NULL,
 };
 
 int psmx3_fabric(struct fi_fabric_attr *attr,
@@ -87,9 +87,6 @@ int psmx3_fabric(struct fi_fabric_attr *attr,
 	int ret;
 
 	FI_INFO(&psmx3_prov, FI_LOG_CORE, "\n");
-
-	if (strcmp(attr->name, PSMX3_FABRIC_NAME))
-		return -FI_ENODATA;
 
 	if (psmx3_active_fabric) {
 		psmx3_fabric_acquire(psmx3_active_fabric);

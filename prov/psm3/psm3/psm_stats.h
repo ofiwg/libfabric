@@ -68,16 +68,18 @@
 #endif
 #define PSMI_STATSTYPE_RCVTHREAD    0x00100	/* num_wakups, ratio, etc. */
 #define PSMI_STATSTYPE_IPSPROTO	    0x00200	/* acks,naks,err_chks */
-#define PSMI_STATSTYPE_TIDS	    	0x00400
+#define PSMI_STATSTYPE_RDMA	    	0x00400	/* RDMA */
 #if 0	// unused code, specific to QLogic MPI
 #define PSMI_STATSTYPE_P2P	    	0x00800	/* ep-to-ep details */
 #endif
+#ifdef PSM_HAVE_REG_MR
 #define PSMI_STATSTYPE_MR_CACHE	    0x00800
+#endif
 #define PSMI_STATSTYPE_MEMORY	    0x01000
-#ifdef RNDV_MOD
+#if defined(PSM_HAVE_REG_MR) && defined(PSM_HAVE_RNDV_MOD)
 #define PSMI_STATSTYPE_RV_EVENT	    0x02000	/* RV user event */
 #define PSMI_STATSTYPE_RV_RDMA	    0x04000	/* RV shared conn RDMA */
-#endif
+#endif /* PSM_VERBS */
 #define PSMI_STATSTYPE_FAULTINJ	    0x08000	/* fault injection - PSM_FI */
 #define PSMI_STATSTYPE_ALL	    	0xfffff
 #define _PSMI_STATSTYPE_SHOWZERO	0x100000
@@ -86,12 +88,8 @@
 #define PSMI_STATSTYPE_HFI	    (PSMI_STATSTYPE_RCVTHREAD|	\
 				     PSMI_STATSTYPE_IPSPROTO |  \
 				     PSMI_STATSTYPE_MEMORY |  \
-				     PSMI_STATSTYPE_TIDS)
+				     PSMI_STATSTYPE_RDMA)
 #endif
-
-/* Used to determine how many stats in static array decl. */
-#define PSMI_STATS_HOWMANY(entries)	    \
-	    (sizeof(entries)/sizeof(entries[0]))
 
 #define PSMI_STATS_DECL(_desc, _flags, _getfn, _val)   \
 	{  .desc  = _desc,			    \
@@ -138,10 +136,10 @@ psmi_stats_init_u64(struct psmi_stats_entry *e, const char *desc, uint64_t *val)
  * statstype and context form a unique key to identify the stats for deregister
  */
 psm2_error_t
-psmi_stats_register_type(const char *heading,
+psm3_stats_register_type(const char *heading,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries,
-			 int num_entries, uint64_t id, void *context,
+			 int num_entries, const char *id, void *context,
 			 const char *info);
 
 /* deregister old copy and register a new one in it's place */
@@ -149,7 +147,7 @@ psm2_error_t
 psmi_stats_reregister_type(const char *heading,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries,
-			 int num_entries, uint64_t id, void *context,
+			 int num_entries, const char *id, void *context,
 			 const char *info);
 
 psm2_error_t psmi_stats_deregister_type(uint32_t statstype, void *context);
