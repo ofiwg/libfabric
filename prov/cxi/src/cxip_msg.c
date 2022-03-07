@@ -667,7 +667,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 	fastlock_acquire(&rxc->tx_cmdq->lock);
 
 	/* Issue Rendezvous Get command */
-	ret = cxi_cq_emit_dma_f(rxc->tx_cmdq->dev_cmdq, &cmd);
+	ret = cxi_cq_emit_dma(rxc->tx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
 		RXC_DBG(rxc, "Failed to queue GET command: %d\n", ret);
 
