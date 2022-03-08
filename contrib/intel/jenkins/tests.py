@@ -585,31 +585,33 @@ class OneCCLTests(Test):
 
         self.n = 2
         self.ppn = 1
-        self.oneccl_path = "{}/oneccl/build".format(ci_site_config.build_dir)
+        self.oneccl_path = '{}/oneccl/build'.format(self.ci_middlewares_path)
 
-        self.examples_tests = {'allgatherv',
-                               'allreduce',
-                               'alltoallv',
-                               'broadcast',
-                               'communicator',
-                               'cpu_allgatherv_test',
-                               'cpu_allreduce_bf16_test',
-                               'cpu_allreduce_test',
-                               'custom_allreduce',
-                               'datatype',
-                               'external_kvs',
-                               'priority_allreduce',
-                               'reduce',
-                               'reduce_scatter',
-                               'unordered_allreduce'
+        self.examples_tests = {
+                                  'allgatherv',
+                                  'allreduce',
+                                  'alltoallv',
+                                  'broadcast',
+                                  'communicator',
+                                  'cpu_allgatherv_test',
+                                  'cpu_allreduce_bf16_test',
+                                  'cpu_allreduce_test',
+                                  'custom_allreduce',
+                                  'datatype',
+                                  'external_kvs',
+                                  'priority_allreduce',
+                                  'reduce',
+                                  'reduce_scatter',
+                                  'unordered_allreduce'
                               }
-        self.functional_tests = {'allgatherv_test',
-                                 'allreduce_test',
-                                 'alltoall_test',
-                                 'alltoallv_test',
-                                 'bcast_test',
-                                 'reduce_scatter_test',
-                                 'reduce_test'
+        self.functional_tests = {
+                                    'allgatherv_test',
+                                    'allreduce_test',
+                                    'alltoall_test',
+                                    'alltoallv_test',
+                                    'bcast_test',
+                                    'reduce_scatter_test',
+                                    'reduce_test'
                                 }
 
     @property
@@ -617,27 +619,31 @@ class OneCCLTests(Test):
         return "{}/run_oneccl.sh ".format(ci_site_config.mpi_testpath)
 
     def options(self, oneccl_test):
-        opts = "-n {n} -ppn {ppn} -hosts {server},{client} -prov '{provider}' \
-        -test {test_suite} -libfabric_path={path}/lib \
-        -oneccl_root={oneccl_path}" \
-        .format(n=self.n, ppn=self.ppn, server=self.server, \
-        client=self.client, provider=self.core_prov, test_suite=oneccl_test, \
-        path=self.libfab_installpath, oneccl_path=self.oneccl_path)
+        opts = "-n {n} ".format(n=self.n)
+        opts += "-ppn {ppn} ".format(ppn=self.ppn)
+        opts += "-hosts {server},{client} ".format(server=self.server,
+                                                   client=self.client)
+        opts += "-prov '{provider}' ".format(provider=self.core_prov)
+        opts += "-test {test_suite} ".format(test_suite=oneccl_test)
+        opts += "-libfabric_path={path}/lib " \
+                .format(path=self.libfab_installpath)
+        opts += '-oneccl_root={oneccl_path}' \
+                .format(oneccl_path=self.oneccl_path)
         return opts
 
     @property
     def execute_condn(self):
-        return True if (self.core_prov == "tcp") else False
+        return True
 
 
     def execute_cmd(self, oneccl_test):
-        if oneccl_test == "examples":
+        if oneccl_test == 'examples':
                 for test in self.examples_tests:
                         command = self.cmd + self.options(oneccl_test) + \
                                   " {}".format(test)
                         outputcmd = shlex.split(command)
                         common.run_command(outputcmd)
-        elif oneccl_test == "functional":
+        elif oneccl_test == 'functional':
                 for test in self.functional_tests:
                         command = self.cmd + self.options(oneccl_test) + \
                                   " {}".format(test)

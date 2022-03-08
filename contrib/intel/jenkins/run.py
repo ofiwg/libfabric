@@ -127,24 +127,27 @@ def osu_benchmark(core, hosts, mpi, mode, util=None):
               .format(mpi.upper(), osu_test.testname))
     print("-------------------------------------------------------------------")
 
-#OneCCL examples and functional tests
 def oneccltest(core, hosts, mode, util=None):
 
-    runoneccltest = tests.OneCCLTests(jobname=jbname,buildno=bno, \
-                    testname="oneccl test", core_prov=core, fabric=fab, \
-                    hosts=hosts, ofi_build_mode=mode, util_prov=util)
+    runoneccltest = tests.OneCCLTests(jobname=jbname,buildno=bno,
+                                      testname="oneccl test", core_prov=core,
+                                      fabric=fab, hosts=hosts,
+                                      ofi_build_mode=mode, util_prov=util)
+
+    print("-------------------------------------------------------------------")
     if (runoneccltest.execute_condn):
-        print("running oneCCL examples test for {}-{}-{}" \
+        print("Running oneCCL examples test for {}-{}-{}" \
               .format(core, util, fab))
         runoneccltest.execute_cmd("examples")
-        print("running oneCCL functional test for {}-{}-{}" \
+
+        print("---------------------------------------------------------------")
+        print("Running oneCCL functional test for {}-{}-{}" \
               .format(core, util, fab))
         runoneccltest.execute_cmd("functional")
     else:
-        print("skipping {} as execute condition fails" \
+        print("Skipping {} as execute condition fails" \
               .format(runoneccltest.testname))
-    print("----------------------------------------------------------------------------------------\n")
-
+    print("-------------------------------------------------------------------")
 
 if __name__ == "__main__":
     pass
