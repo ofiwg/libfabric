@@ -39,6 +39,7 @@
 
 #if HAVE_ZE
 
+#include <stdio.h>
 #include <dirent.h>
 #include <level_zero/ze_api.h>
 
@@ -47,6 +48,7 @@ static ze_device_handle_t devices[ZE_MAX_DEVICES];
 static ze_command_queue_handle_t cmd_queue[ZE_MAX_DEVICES];
 static int num_devices = 0;
 static int ordinals[ZE_MAX_DEVICES];
+static int indices[ZE_MAX_DEVICES];
 static int dev_fds[ZE_MAX_DEVICES];
 static ze_device_uuid_t dev_uuids[ZE_MAX_DEVICES];
 static bool p2p_enabled = false;
@@ -579,12 +581,12 @@ static void ze_hmem_dl_cleanup(void)
 #endif
 }
 
-static int ze_hmem_find_copy_only_engine(int device_num, int *ordinal)
+static int ze_hmem_find_copy_only_engine(int device_num, int *ordinal, int *index)
 {
 	ze_result_t ze_ret;
 	uint32_t cq_grp_count = 0;
 	ze_command_queue_group_properties_t *cq_grp_props = NULL;
-	int i = 0;
+	int i = 0, j = 0;
 
 	ze_ret = ofi_zeDeviceGetCommandQueueGroupProperties(devices[device_num],
 							    &cq_grp_count, NULL);
@@ -599,7 +601,28 @@ static int ze_hmem_find_copy_only_engine(int device_num, int *ordinal)
 	if (ze_ret)
 		goto out;
 
-	for (i = 0; i < cq_grp_count; i++) {
+	i = *ordinal;
+	j = *index;
+
+	/* Use user specified engine group if it is valid */
+	if (i != -1 && i >= 0 && i < cq_grp_count) {
+		if (j < 0 || j >= cq_grp_props[i].numQueues) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"ZE device %d: invalid engine index %d for "
+				"group %d, use default.\n", device_num, j, i);
+			j = 0;
+		}
+		goto out;
+	}
+
+	if (i != -1)
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"ZE device %d: invalid engine group %d, use default.\n",
+			device_num, i);
+
+	/* Auto select the first copy-only engine group if possible */
+	j = 0;
+	for (i = cq_grp_count - 1; i >= 0; i--) {
 		if (cq_grp_props[i].flags &
 		    ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY &&
 		    !(cq_grp_props[i].flags &
@@ -610,7 +633,8 @@ static int ze_hmem_find_copy_only_engine(int device_num, int *ordinal)
 
 out:
 	free(cq_grp_props);
-	*ordinal = i == cq_grp_count ? 0 : i;
+	*ordinal = (i < 0) ? 0 : i;
+	*index = j;
 	return ze_ret;
 }
 
@@ -663,6 +687,16 @@ int ze_hmem_init(void)
 	uint32_t count, i;
 	bool p2p = true;
 	int ret;
+	char *enginestr = NULL;
+	int ordinal = -1;
+	int index = 0;
+
+	fi_param_define(NULL, "hmem_ze_copy_engine", FI_PARAM_STRING,
+                        "Specify GPU engine used for copy operation: <group>, "
+			"<group>.<index> (default: 1st copy-only engine)");
+        fi_param_get_str(NULL, "log_level", &enginestr);
+	if (enginestr)
+		sscanf(enginestr, "%d.%d", &ordinal, &index);
 
 	ret = ze_hmem_dl_init();
 	if (ret)
@@ -706,12 +740,16 @@ int ze_hmem_init(void)
 		memcpy(&dev_uuids[num_devices], &dev_prop.uuid,
 		       sizeof(*dev_uuids));
 
+		ordinals[num_devices] = ordinal;
+		indices[num_devices] = index;
 		ze_ret = ze_hmem_find_copy_only_engine(num_devices,
-						       &ordinals[num_devices]);
+						       &ordinals[num_devices],
+						       &indices[num_devices]);
 		if (ze_ret)
 			goto err;
 
 		cq_desc.ordinal = ordinals[num_devices];
+		cq_desc.index = indices[num_devices];
 		ze_ret = ofi_zeCommandQueueCreate(context,
 						  devices[num_devices],
 						  &cq_desc,
