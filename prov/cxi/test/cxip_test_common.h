@@ -87,6 +87,7 @@ void cxit_teardown_rma(void);
 #define cxit_teardown_msg cxit_teardown_rma
 #define	cxit_teardown_enabled_ep cxit_teardown_rma
 void cxit_setup_tx_alias_rma(void);
+void cxit_setup_tx_alias_rma_dc(void);
 #define cxit_setup_tx_alias_tagged cxit_setup_tx_alias_rma
 void cxit_teardown_tx_alias_rma(void);
 #define cxit_teardown_tx_alias_tagged cxit_teardown_tx_alias_rma

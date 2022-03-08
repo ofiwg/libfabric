@@ -781,7 +781,7 @@ void cxit_teardown_rma(void)
 	cxit_teardown_ep();
 }
 
-void cxit_setup_tx_alias_rma(void)
+static void cxit_setup_tx_alias_rma_impl(bool delivery_complete)
 {
 	int ret;
 	struct cxip_ep *cxi_ep;
@@ -805,12 +805,24 @@ void cxit_setup_tx_alias_rma(void)
 	cr_assert(!(cxi_ep->tx_attr.op_flags & FI_RECV), "Bad op flags");
 
 	op_flags = cxi_ep->tx_attr.op_flags | FI_TRANSMIT;
+	if (delivery_complete)
+		op_flags |= FI_DELIVERY_COMPLETE;
 	ret = fi_ep_alias(cxit_ep, &cxit_tx_alias_ep, op_flags);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_alias");
 
 	cxi_alias_ep = container_of(&cxit_tx_alias_ep->fid,
 				    struct cxip_ep, ep.fid);
 	cr_assert_not_null(cxi_alias_ep->ep_obj);
+}
+
+void cxit_setup_tx_alias_rma(void)
+{
+	cxit_setup_tx_alias_rma_impl(false);
+}
+
+void cxit_setup_tx_alias_rma_dc(void)
+{
+	cxit_setup_tx_alias_rma_impl(true);
 }
 
 void cxit_teardown_tx_alias_rma(void)

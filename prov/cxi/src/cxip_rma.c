@@ -315,7 +315,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		}
 
 		/* Honor fence if requested. */
-		if (flags & FI_FENCE) {
+		if (flags & (FI_FENCE | FI_CXI_WEAK_FENCE)) {
 			ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq,
 						 C_CMD_CQ_FENCE);
 			if (ret) {
@@ -476,7 +476,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	}
 
 	/* Honor fence if requested. */
-	if (flags & FI_FENCE) {
+	if (flags & (FI_FENCE | FI_CXI_WEAK_FENCE)) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
 		if (ret) {
 			TXC_WARN(txc, "Failed to issue fence command: %d:%s\n",
@@ -755,7 +755,8 @@ static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
 	    msg->iov_count != 1 || msg->rma_iov_count != 1)
 		return -FI_EINVAL;
 
-	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS | FI_CXI_HRP))
+	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS | FI_CXI_HRP |
+		      FI_CXI_WEAK_FENCE))
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)

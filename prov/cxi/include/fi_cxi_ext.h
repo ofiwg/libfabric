@@ -10,6 +10,17 @@
 #define _FI_CXI_EXT_H_
 
 /*
+ * TODO: The following should be integrated into the include/rdma/fi_ext.h
+ * and are use for provider specific fi_control() operations.
+ */
+#define FI_PROV_SPECIFIC_CXI	(0xccc << 16)
+
+enum {
+	FI_OPT_CXI_SET_TCLASS = -FI_PROV_SPECIFIC_CXI,	/* uint32_t */
+	FI_OPT_CXI_SET_MSG_ORDER,			/* uint64_t */
+};
+
+/*
  * Use CXI High Rate Puts (HRP). Increases message rate performance. Applies to
  * RMA and unreliable, non-fetching AMO operations.
  */
@@ -22,15 +33,10 @@
 #define FI_CXI_UNRELIABLE (1ULL << 61)
 
 /*
- * TODO: The following should be integrated into the include/rdma/fi_ext.h
- * and are use for provider specific fi_control() operations.
+ * Request a provider specific weak FENCE operation to facilitate an
+ * EP alias ordering point, when the original EP utilizes PCIe RO=1.
  */
-#define FI_PROV_SPECIFIC_CXI	(0xccc << 16)
-
-enum {
-	FI_OPT_CXI_SET_TCLASS = -FI_PROV_SPECIFIC_CXI,	/* uint32_t */
-	FI_OPT_CXI_SET_MSG_ORDER,			/* uint64_t */
-};
+#define FI_CXI_WEAK_FENCE (1ULL << 63)
 
 /*
  * Used in conjunction with the deferred work queue API. If a deferred work

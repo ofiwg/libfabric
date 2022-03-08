@@ -1470,3 +1470,160 @@ Test(rma_hybrid_mr_desc, completion_read)
 {
 	rma_hybrid_mr_desc_test_runner(false, true);
 }
+
+void cxit_rma_setup_tx_alias_no_fence(void)
+{
+	int ret;
+	uint64_t order = FI_ORDER_RMA_WAW;
+
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = CXIP_EP_PRI_CAPS;
+	cxit_setup_tx_alias_rma_dc();
+
+	/* Set WAW ordering */
+	ret = fi_set_val(&cxit_tx_alias_ep->fid, FI_OPT_CXI_SET_MSG_ORDER,
+			 (void *)&order);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_set_val(FI_OPT_SET_MSG_ORDER)");
+}
+
+/* RMA TX Alias capability */
+TestSuite(rma_tx_alias, .init = cxit_rma_setup_tx_alias_no_fence,
+	  .fini = cxit_teardown_tx_alias_rma, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(rma_tx_alias, flush)
+{
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 0x1000;
+	int send_len = 8;
+	struct mem_region mem_window;
+	int key_val = RMA_WIN_KEY;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_msg_rma msg = {};
+	struct iovec iov[1];
+	struct fi_rma_iov rma[1];
+	uint64_t flags = FI_DELIVERY_COMPLETE;
+	uint64_t flushes_start;
+	uint64_t flushes_end;
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
+				 &flushes_start, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+
+	iov[0].iov_base = send_buf;
+	iov[0].iov_len = send_len;
+
+	rma[0].addr = 0;
+	rma[0].len = send_len;
+	rma[0].key = key_val;
+
+	msg.msg_iov = iov;
+	msg.iov_count = 1;
+	msg.rma_iov = rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+
+	/* Send 8 bytes from send buffer data to RMA window 0 at FI address 0
+	 * (self)
+	 */
+	ret = fi_writemsg(cxit_tx_alias_ep, &msg, flags);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg failed %d", ret);
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+	validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+	/* Validate sent data */
+	for (int i = 0; i < send_len; i++)
+		cr_assert_eq(mem_window.mem[i], send_buf[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     mem_window.mem[i], send_buf[i]);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+
+	sleep(1);
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
+				 &flushes_end, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+	cr_assert(flushes_end > flushes_start);
+}
+
+Test(rma_tx_alias, weak_fence)
+{
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 0x1000;
+	int send_len = 8;
+	int i;
+	struct mem_region mem_window;
+	int key_val = RMA_WIN_KEY;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_msg_rma msg = {};
+	struct iovec iov[1];
+	struct fi_rma_iov rma[1];
+	uint64_t flags = FI_DELIVERY_COMPLETE;
+
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	for (i = 0; i < send_len*2; i++)
+		send_buf[i] = i;
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+
+	iov[0].iov_base = send_buf;
+	iov[0].iov_len = send_len;
+
+	rma[0].addr = 0;
+	rma[0].len = send_len;
+	rma[0].key = key_val;
+
+	msg.msg_iov = iov;
+	msg.iov_count = 1;
+	msg.rma_iov = rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+
+	/* Verify FI_FENCE can not be done with original EP */
+	ret = fi_writemsg(cxit_ep, &msg, flags | FI_FENCE);
+	cr_assert_eq(ret, -FI_EINVAL, "fi_writemsg FI_FENCE ret %d", ret);
+
+	/* Verify FI_CXI_WEAK_FENCE can be done with original EP */
+	ret = fi_writemsg(cxit_ep, &msg, flags | FI_CXI_WEAK_FENCE);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg FI_WEAK_FENCE ret %d", ret);
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+	/* Verifiy FI_CXI_WEAK_FENCE can be done with alias EP */
+	rma[0].addr = send_len;
+	iov[0].iov_base = send_buf + send_len;
+	ret = fi_writemsg(cxit_tx_alias_ep, &msg, flags | FI_CXI_WEAK_FENCE);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_writemsg FI_WEAK_FENCE ret %d", ret);
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+	validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+	/* Validate sent data */
+	for (int i = 0; i < send_len * 2; i++)
+		cr_assert_eq(mem_window.mem[i], send_buf[i],
+			     "data mismatch, element: (%d) %02x != %02x\n", i,
+			     mem_window.mem[i], send_buf[i]);
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}

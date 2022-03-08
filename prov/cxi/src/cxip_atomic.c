@@ -694,7 +694,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	}
 
 	/* Honor fence if requested. */
-	if (flags & FI_FENCE) {
+	if (flags & (FI_FENCE | FI_CXI_WEAK_FENCE)) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
 		if (ret) {
 			TXC_WARN_RET(txc, ret,
@@ -856,7 +856,7 @@ static int cxip_amo_emit_non_trig_dma(struct cxip_txc *txc,
 		goto err_unlock;
 	}
 
-	if (flags & FI_FENCE) {
+	if (flags & (FI_FENCE | FI_CXI_WEAK_FENCE)) {
 		ret = cxi_cq_emit_cq_cmd(cmdq->dev_cmdq, C_CMD_CQ_FENCE);
 		if (ret) {
 			TXC_WARN_RET(txc, ret,
@@ -1503,7 +1503,7 @@ static ssize_t cxip_ep_atomic_writemsg(struct fid_ep *ep,
 
 	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS |
 		      FI_CXI_UNRELIABLE |
-		      FI_CXI_HRP))
+		      FI_CXI_HRP | FI_CXI_WEAK_FENCE))
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
@@ -1652,7 +1652,8 @@ static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 	struct cxip_txc *txc;
 	struct fi_tx_attr *attr;
 
-	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS | FI_CXI_UNRELIABLE))
+	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS |
+		      FI_CXI_UNRELIABLE | FI_CXI_WEAK_FENCE))
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
@@ -1774,7 +1775,8 @@ cxip_ep_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic *msg,
 	struct cxip_txc *txc;
 	struct fi_tx_attr *attr;
 
-	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS | FI_CXI_UNRELIABLE))
+	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS |
+		      FI_CXI_UNRELIABLE | FI_CXI_WEAK_FENCE))
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
