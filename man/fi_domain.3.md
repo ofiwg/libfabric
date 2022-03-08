@@ -761,7 +761,7 @@ provider to optimize any memory registration cache or lookup tables.
 ## Traffic Class (tclass)
 
 This specifies the default traffic class that will be associated any endpoints
-created within the domain.  See [`fi_endpoint`(3)](fi_endpoint.3.html
+created within the domain.  See [`fi_endpoint`(3)](fi_endpoint.3.html)
 for additional information.
 
 # RETURN VALUE
@@ -793,6 +793,5 @@ installed provider(s).
 [`fi_getinfo`(3)](fi_getinfo.3.html),
 [`fi_endpoint`(3)](fi_endpoint.3.html),
 [`fi_av`(3)](fi_av.3.html),
-[`fi_ep`(3)](fi_ep.3.html),
 [`fi_eq`(3)](fi_eq.3.html),
 [`fi_mr`(3)](fi_mr.3.html)
