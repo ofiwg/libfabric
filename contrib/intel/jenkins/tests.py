@@ -219,13 +219,13 @@ class ZeFabtests(Test):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          hosts, ofi_build_mode, util_prov)
-        self.fabtestpath = "{}/bin".format(self.libfab_installpath)
-        self.zefabtest_script_path = "{}".format(ci_site_config.ze_testpath)
-        self.fabtestconfigpath = "{}/share/fabtests".format(self.libfab_installpath)
+        self.fabtestpath = '{}/bin'.format(self.libfab_installpath)
+        self.zefabtest_script_path = '{}'.format(ci_site_config.ze_testpath)
+        self.fabtestconfigpath = '{}/share/fabtests'.format(self.libfab_installpath)
 
     @property
     def cmd(self):
-        return "{}/runfabtests_ze.sh ".format(self.zefabtest_script_path)
+        return '{}/runfabtests_ze.sh '.format(self.zefabtest_script_path)
 
     @property
     def options(self):

@@ -16,7 +16,7 @@ fab = os.environ['FABRIC']#args.fabric
 jbname = os.environ['JOB_NAME']#args.jobname
 bno = os.environ['BUILD_NUMBER']#args.buildno
 
-def fi_info_test(core, hosts, mode,util=None):
+def fi_info_test(core, hosts, mode, util):
 
     fi_info_test = tests.FiInfoTest(jobname=jbname,buildno=bno,
                                     testname='fi_info', core_prov=core,
@@ -27,7 +27,7 @@ def fi_info_test(core, hosts, mode,util=None):
     fi_info_test.execute_cmd()
     print("-------------------------------------------------------------------")
 
-def fabtests(core, hosts, mode, util=None):
+def fabtests(core, hosts, mode, util):
 
     runfabtest = tests.Fabtest(jobname=jbname,buildno=bno,
                                testname='runfabtests', core_prov=core,
@@ -43,7 +43,7 @@ def fabtests(core, hosts, mode, util=None):
               .format(core, runfabtest.testname))
     print("-------------------------------------------------------------------")
 
-def shmemtest(core, hosts, mode, util=None):
+def shmemtest(core, hosts, mode, util):
 
     runshmemtest = tests.ShmemTest(jobname=jbname,buildno=bno,
                                    testname="shmem test", core_prov=core,
@@ -70,19 +70,22 @@ def shmemtest(core, hosts, mode, util=None):
               .format(core, runshmemtest.testname))
     print("-------------------------------------------------------------------")
 
-def ze_fabtests(core, hosts, mode, util=None):
-    runzefabtests = tests.ZeFabtests(jobname=jbname,buildno=bno,\
-                   testname="ze test", core_prov=core, fabric=fab,\
-                   hosts=hosts, ofi_build_mode=mode, util_prov=util)
+def ze_fabtests(core, hosts, mode, util):
+    runzefabtests = tests.ZeFabtests(jobname=jbname,buildno=bno,
+                                     testname="ze test", core_prov=core,
+                                     fabric=fab, hosts=hosts,
+                                     ofi_build_mode=mode, util_prov=util)
+
+    print("-------------------------------------------------------------------")
     if (runzefabtests.execute_condn):
-        print("running ze tests for {}-{}-{}".format(core, util, fab))
+        print("Running ze tests for {}-{}-{}".format(core, util, fab))
         runzefabtests.execute_cmd()
     else:
-        print("skipping {} as execute condition fails"\
-              .format(runfabzetests.testname))
-    print("----------------------------------------------------------------------------------------\n")
+        print("Skipping {} {} as execute condition fails"\
+              .format(core, runfabzetests.testname))
+    print("-------------------------------------------------------------------")
 
-def intel_mpi_benchmark(core, hosts, mpi, mode, group, util=None):
+def intel_mpi_benchmark(core, hosts, mpi, mode, group, util):
 
     imb_test = tests.MpiTestIMB(jobname=jbname,buildno=bno,
                                 testname='IntelMPIbenchmark', core_prov=core,
@@ -100,7 +103,7 @@ def intel_mpi_benchmark(core, hosts, mpi, mode, group, util=None):
               .format(mpi.upper(), imb_test.testname))
     print("-------------------------------------------------------------------")
 
-def mpich_test_suite(core, hosts, mpi, mode, util=None):
+def mpich_test_suite(core, hosts, mpi, mode, util):
 
     mpich_tests = tests.MpichTestSuite(jobname=jbname,buildno=bno,
                                        testname="MpichTestSuite",core_prov=core,
@@ -118,7 +121,7 @@ def mpich_test_suite(core, hosts, mpi, mode, util=None):
               .format(mpi.upper(), mpich_tests.testname))
     print("-------------------------------------------------------------------")
 
-def osu_benchmark(core, hosts, mpi, mode, util=None):
+def osu_benchmark(core, hosts, mpi, mode, util):
 
     osu_test = tests.MpiTestOSU(jobname=jbname, buildno=bno,
                                 testname='osu-benchmarks', core_prov=core,
@@ -135,7 +138,7 @@ def osu_benchmark(core, hosts, mpi, mode, util=None):
               .format(mpi.upper(), osu_test.testname))
     print("-------------------------------------------------------------------")
 
-def oneccltest(core, hosts, mode, util=None):
+def oneccltest(core, hosts, mode, util):
 
     runoneccltest = tests.OneCCLTests(jobname=jbname,buildno=bno,
                                       testname="oneccl test", core_prov=core,
