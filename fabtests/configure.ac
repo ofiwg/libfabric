@@ -142,9 +142,9 @@ AC_ARG_WITH([rocr],
 
 dnl Check for Neuron support.
 AC_ARG_WITH([neuron],
-            AC_HELP_STRING([--with-neuron=DIR],
+            [AS_HELP_STRING([--with-neuron=DIR],
                             [Provide path to where the Neuron development
-                             and runtime libraries are installed.]),
+                             and runtime libraries are installed.])],
             [AS_IF([test "$freebsd" == "0"],
                    [AC_CHECK_LIB(dl, dlopen, [], [AC_MSG_ERROR([dlopen not found.])])],
                    [])
