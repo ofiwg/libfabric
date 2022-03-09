@@ -8,13 +8,13 @@ import common
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--prov", help="core provider", choices=["verbs", \
-                     "tcp", "udp", "sockets", "shm"])
-parser.add_argument("--util", help="utility provider", choices=["rxd", "rxm"])
-parser.add_argument("--ofi_build_mode", help="specify the build configuration", \
-                    choices = ["dbg", "dl"])
-parser.add_argument("--test", help="specify test to execute", \
-                    choices = ["all", "unit", "shmem", "mpi", "oneccl"])
+parser.add_argument('--prov', help="core provider", choices=['verbs', \
+                     'tcp', 'udp', 'sockets', 'shm'])
+parser.add_argument('--util', help="utility provider", choices=['rxd', 'rxm'])
+parser.add_argument('--ofi_build_mode', help="specify the build configuration", \
+                    choices = ['dbg', 'dl'])
+parser.add_argument('--test', help="specify test to execute", \
+                    choices = ['all', 'shmem', 'mpi', 'oneccl', 'fabtests'])
 parser.add_argument("--device", help="optional gpu device", choices=["ze"])
 
 args = parser.parse_args()
@@ -56,7 +56,7 @@ if(args_core):
 
     if (args_util == None):
         if (args.device != 'ze'):
-            if (run_test == 'all' or run_test == 'unit'):
+            if (run_test == 'all' or run_test == 'fabtests'):
                 run.fi_info_test(args_core, hosts, ofi_build_mode)
                 run.fabtests(args_core, hosts, ofi_build_mode)
 
@@ -74,7 +74,7 @@ if(args_core):
         else:
             run.ze_fabtests(args_core, hosts, ofi_build_mode)
     else:
-        if (run_test == 'all' or run_test == 'unit'):
+        if (run_test == 'all' or run_test == 'fabtests'):
             run.fi_info_test(args_core, hosts, ofi_build_mode, util=args_util)
             run.fabtests(args_core, hosts, ofi_build_mode, util=args_util)
 

@@ -24,7 +24,7 @@ class Test:
         self.buildno = buildno
         self.testname = testname
         self.core_prov = core_prov
-        self.util_prov = "ofi_{}".format(util_prov) if util_prov != None else ""
+        self.util_prov = 'ofi_{}'.format(util_prov) if util_prov != None else ''
         self.fabric = fabric
         self.hosts = hosts
         self.ofi_build_mode = ofi_build_mode
@@ -34,15 +34,15 @@ class Test:
             self.client = hosts[1]
 
         self.nw_interface = ci_site_config.interface_map[self.fabric]
-        self.libfab_installpath = "{}/{}/{}/{}".format(ci_site_config.install_dir,
+        self.libfab_installpath = '{}/{}/{}/{}'.format(ci_site_config.install_dir,
                                   self.jobname, self.buildno, self.ofi_build_mode)
-        self.ci_middlewares_path = "{}/{}/{}/ci_middlewares" \
+        self.ci_middlewares_path = '{}/{}/{}/ci_middlewares' \
                                    .format(ci_site_config.install_dir, \
                                    self.jobname, self.buildno)
 
-        self.env = [("FI_VERBS_MR_CACHE_ENABLE", "1"),\
-                    ("FI_VERBS_INLINE_SIZE", "256")] \
-                    if self.core_prov == "verbs" else []
+        self.env = [('FI_VERBS_MR_CACHE_ENABLE', '1'),\
+                    ('FI_VERBS_INLINE_SIZE', '256')] \
+                    if self.core_prov == 'verbs' else []
 
 
 class FiInfoTest(Test):
@@ -53,7 +53,7 @@ class FiInfoTest(Test):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                      hosts, ofi_build_mode, util_prov)
 
-        self.fi_info_testpath =  "{}/bin".format(self.libfab_installpath)
+        self.fi_info_testpath =  '{}/bin'.format(self.libfab_installpath)
 
     @property
     def cmd(self):
@@ -81,21 +81,22 @@ class Fabtest(Test):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          hosts, ofi_build_mode, util_prov)
-        self.fabtestpath = "{}/bin".format(self.libfab_installpath)
-        self.fabtestconfigpath = "{}/share/fabtests".format(self.libfab_installpath)
+        self.fabtestpath = '{}/bin'.format(self.libfab_installpath)
+        self.fabtestconfigpath = '{}/share/fabtests'.format(self.libfab_installpath)
+
     def get_exclude_file(self):
         path = self.libfab_installpath
-        efile_path = "{}/share/fabtests/test_configs".format(path)
+        efile_path = '{}/share/fabtests/test_configs'.format(path)
 
         prov = self.util_prov if self.util_prov else self.core_prov
-        efile_old = "{path}/{prov}/{prov}.exclude".format(path=efile_path,
+        efile_old = '{path}/{prov}/{prov}.exclude'.format(path=efile_path,
                       prov=prov)
 
         if self.util_prov:
-            efile = "{path}/{util_prov}/{core_prov}/exclude".format(path=efile_path,
+            efile = '{path}/{util_prov}/{core_prov}/exclude'.format(path=efile_path,
                       util_prov=self.util_prov, core_prov=self.core_prov)
         else:
-            efile = "{path}/{prov}/exclude".format(path=efile_path,
+            efile = '{path}/{prov}/exclude'.format(path=efile_path,
                       prov=self.core_prov)
 
         if os.path.isfile(efile):
@@ -113,19 +114,25 @@ class Fabtest(Test):
     @property
     def options(self):
         opts = "-T 300 -vvv -p {} -S ".format(self.fabtestpath)
-        if (self.core_prov == "verbs" and self.nw_interface):
+        if (self.core_prov == 'verbs' and self.nw_interface):
             opts = "{} -s {} ".format(opts, common.get_node_name(self.server,
                     self.nw_interface)) # include common.py
             opts = "{} -c {} ".format(opts, common.get_node_name(self.client,
                     self.nw_interface)) # from common.py
 
-        if (self.core_prov == "shm"):
+        if (self.core_prov == 'shm'):
             opts = "{} -s {} ".format(opts, self.server)
             opts = "{} -c {} ".format(opts, self.client)
             opts += "-N "
 
-        if not re.match(".*sockets|udp.*", self.core_prov):
+        if (self.ofi_build_mode == 'dl'):
+            opts += '-t short'
+        elif not re.match(".*sockets|udp.*", self.core_prov):
             opts = "{} -t all ".format(opts)
+
+        if ((self.ofi_build_mode == 'reg' and self.core_prov == 'udp') or \
+            self.ofi_build_mode != 'reg'):
+            opts = "{} -e \'multinode,ubertest\' ".format(opts)
 
         efile = self.get_exclude_file()
         if efile:
@@ -143,7 +150,7 @@ class Fabtest(Test):
             opts = "{options} {core} ".format(options=opts,
                     core=self.core_prov)
 
-        if (self.core_prov == "shm"):
+        if (self.core_prov == 'shm'):
             opts += "{} {} ".format(self.server, self.server)
         else:
             opts += "{} {} ".format(self.server, self.client)
@@ -152,8 +159,7 @@ class Fabtest(Test):
 
     @property
     def execute_condn(self):
-        return True if (self.core_prov != 'shm' or \
-                        self.ofi_build_mode == 'dbg') else False
+        return True
 
     def execute_cmd(self):
         curdir = os.getcwd()

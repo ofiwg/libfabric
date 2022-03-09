@@ -16,32 +16,32 @@ fab = os.environ['FABRIC']#args.fabric
 jbname = os.environ['JOB_NAME']#args.jobname
 bno = os.environ['BUILD_NUMBER']#args.buildno
 
-
-#run fi_info test
 def fi_info_test(core, hosts, mode,util=None):
 
-    fi_info_test = tests.FiInfoTest(jobname=jbname,buildno=bno,\
-                    testname="fi_info", core_prov=core, fabric=fab,\
-                         hosts=hosts, ofi_build_mode=mode, util_prov=util)
-    print("running fi_info test for {}-{}-{}".format(core, util, fab))
+    fi_info_test = tests.FiInfoTest(jobname=jbname,buildno=bno,
+                                    testname='fi_info', core_prov=core,
+                                    fabric=fab, hosts=hosts,
+                                    ofi_build_mode=mode, util_prov=util)
+    print("-------------------------------------------------------------------")
+    print("Running fi_info test for {}-{}-{}".format(core, util, fab))
     fi_info_test.execute_cmd()
+    print("-------------------------------------------------------------------")
 
-
-#runfabtests
 def fabtests(core, hosts, mode, util=None):
 
-    runfabtest = tests.Fabtest(jobname=jbname,buildno=bno,\
-                 testname="runfabtests", core_prov=core, fabric=fab,\
-                 hosts=hosts, ofi_build_mode=mode, util_prov=util)
+    runfabtest = tests.Fabtest(jobname=jbname,buildno=bno,
+                               testname='runfabtests', core_prov=core,
+                               fabric=fab, hosts=hosts, ofi_build_mode=mode,
+                               util_prov=util)
 
+    print("-------------------------------------------------------------------")
     if (runfabtest.execute_condn):
-        print("running fabtests for {}-{}-{}".format(core, util, fab))
+        print("Running Fabtests for {}-{}-{}".format(core, util, fab))
         runfabtest.execute_cmd()
     else:
-        print("skipping {} as execute condition fails"\
-              .format(runfabtest.testname))
-    print("----------------------------------------------------------------------------------------\n")
-
+        print("Skipping {} {} as execute condition fails" \
+              .format(core, runfabtest.testname))
+    print("-------------------------------------------------------------------")
 
 def shmemtest(core, hosts, mode, util=None):
 
