@@ -59,15 +59,24 @@ GNI_INI ;
 #  define GNI_INIT NULL
 #endif
 
-#if (HAVE_VERBS) && (HAVE_VERBS_DL)
-#  define VERBS_INI FI_EXT_INI
+/* If HAVE_EFA is defined on Windows, then the VisualStudio project configures
+ * MSBuild to include the efa related files and exclude the verbs related files.
+ * With the verbs related files excluded from the build, we need only ensure
+ * that VERBS_INIT is NULL so that ofi_register_provider will skip it.
+ */
+#if defined(_WIN32) && (HAVE_EFA)
 #  define VERBS_INIT NULL
-#elif (HAVE_VERBS)
-#  define VERBS_INI INI_SIG(fi_verbs_ini)
-#  define VERBS_INIT fi_verbs_ini()
-VERBS_INI ;
 #else
-#  define VERBS_INIT NULL
+#  if (HAVE_VERBS) && (HAVE_VERBS_DL)
+#    define VERBS_INI FI_EXT_INI
+#    define VERBS_INIT NULL
+#  elif (HAVE_VERBS)
+#    define VERBS_INI INI_SIG(fi_verbs_ini)
+#    define VERBS_INIT fi_verbs_ini()
+VERBS_INI ;
+#  else
+#    define VERBS_INIT NULL
+#  endif
 #endif
 
 #if (HAVE_EFA) && (HAVE_EFA_DL)

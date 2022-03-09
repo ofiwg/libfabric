@@ -24,7 +24,7 @@
 /* #undef HAVE_HOST_GET_CLOCK_SERVICE */
 
 /* Define to 1 if you have the <infiniband/verbs.h> header file. */
-/* #undef HAVE_INFINIBAND_VERBS_H */
+#define HAVE_INFINIBAND_VERBS_H 1
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
@@ -141,10 +141,13 @@
 /* #undef HAVE_USNIC_DL */
 
 /* verbs provider is built */
-/* #undef HAVE_VERBS */
+#define HAVE_VERBS 1
 
 /* verbs provider is built as DSO */
-/* #undef HAVE_VERBS_DL */
+#define HAVE_VERBS_DL 0
+
+/* Whether infiniband/verbs.h has XRC support or not */
+#define VERBS_HAVE_XRC 0
 
 /* Define to 1 to enable valgrind annotations */
 /* #undef INCLUDE_VALGRIND */

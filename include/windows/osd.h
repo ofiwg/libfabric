@@ -277,6 +277,7 @@ do						\
 
 #define htonll _byteswap_uint64
 #define ntohll _byteswap_uint64
+#define be64toh ntohll
 #define strncasecmp _strnicmp
 
 typedef int pid_t;
