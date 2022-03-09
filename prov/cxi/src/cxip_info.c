@@ -426,9 +426,9 @@ static void cxip_env_init(void)
 			    &cxip_env.rdzv_eager_size);
 
 	if (cxip_env.rdzv_eager_size > cxip_env.rdzv_threshold) {
-		CXIP_WARN("Invalid rdzv_eager_size: %lu\n",
-			  cxip_env.rdzv_eager_size);
 		cxip_env.rdzv_eager_size = cxip_env.rdzv_threshold;
+		CXIP_WARN("Invalid rdzv_eager_size, new size: %lu\n",
+			  cxip_env.rdzv_eager_size);
 	}
 
 	fi_param_define(&cxip_prov, "oflow_buf_size", FI_PARAM_SIZE_T,

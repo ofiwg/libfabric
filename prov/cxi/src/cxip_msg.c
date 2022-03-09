@@ -642,10 +642,12 @@ static int issue_rdzv_get(struct cxip_req *req)
 	/* Align mask will be non-zero if local DMA address cache-line
 	 * alignment is desired.
 	 */
-	align_bytes = local_addr & rxc->rget_align_mask;
-	local_addr -= align_bytes;
-	rem_offset -= align_bytes;
-	mlen -= align_bytes;
+	if (mlen >= rxc->rget_align_mask) {
+		align_bytes = local_addr & rxc->rget_align_mask;
+		local_addr -= align_bytes;
+		rem_offset -= align_bytes;
+		mlen -= align_bytes;
+	}
 
 	if (req->data_len < mlen)
 		cmd.request_len = 0;
