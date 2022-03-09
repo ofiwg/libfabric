@@ -437,8 +437,10 @@ static struct smr_sar_entry *smr_progress_sar(struct smr_cmd *cmd,
 		smr_try_progress_from_sar(peer_smr, sar_msg, resp, cmd, iface, device,
 					  sar_iov, iov_count, total_len, &next);
 
-	if (*total_len == cmd->msg.hdr.size)
+	if (*total_len == cmd->msg.hdr.size) {
+		resp->status = FI_SUCCESS;
 		return NULL;
+	}
 
 	sar_entry = ofi_freestack_pop(ep->sar_fs);
 
