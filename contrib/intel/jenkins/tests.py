@@ -2,7 +2,7 @@ import sys
 import os
 
 print(os.environ['CI_SITE_CONFIG'])
-sys.path.append(os.environ['CI_SITE_CONFIG']) # for adding path for ci_site_config
+sys.path.append(os.environ['CI_SITE_CONFIG'])
 
 import subprocess
 import re
@@ -29,10 +29,12 @@ class Test:
             self.client = hosts[1]
 
         self.nw_interface = ci_site_config.interface_map[self.fabric]
-        self.libfab_installpath = '{}/{}/{}/{}'.format(ci_site_config.install_dir,
-                                  self.jobname, self.buildno, self.ofi_build_mode)
+        self.libfab_installpath = '{}/{}/{}/{}' \
+                                  .format(ci_site_config.install_dir,
+                                  self.jobname, self.buildno,
+                                  self.ofi_build_mode)
         self.ci_middlewares_path = '{}/{}/{}/ci_middlewares' \
-                                   .format(ci_site_config.install_dir, \
+                                   .format(ci_site_config.install_dir,
                                    self.jobname, self.buildno)
 
         self.env = [('FI_VERBS_MR_CACHE_ENABLE', '1'),\
@@ -88,8 +90,9 @@ class Fabtest(Test):
                       prov=prov)
 
         if self.util_prov:
-            efile = '{path}/{util_prov}/{core_prov}/exclude'.format(path=efile_path,
-                      util_prov=self.util_prov, core_prov=self.core_prov)
+            efile = '{path}/{util_prov}/{core_prov}/exclude' \
+                    .format(path=efile_path, util_prov=self.util_prov,
+                    core_prov=self.core_prov)
         else:
             efile = '{path}/{prov}/exclude'.format(path=efile_path,
                       prov=self.core_prov)
