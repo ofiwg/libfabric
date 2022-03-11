@@ -1,3 +1,4 @@
+#ifdef PSM_VERBS
 /*
 
   This file is provided under a dual BSD/GPLv2 license.  When using or
@@ -51,27 +52,40 @@
 
 */
 
-/* This file contains the initialization functions used by the low
-   level hfi protocol code. */
+#ifndef PSM_HAL_VERBS_USER_H
+#define PSM_HAL_VERBS_USER_H
 
-#include <sys/poll.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <stdint.h>
-#include <stdlib.h>
+/* This file contains all of the data structures and routines that are
+   publicly visible and usable (to low level infrastructure code; it is
+   not expected that any application, or even normal application-level library,
+   will ever need to use any of this).
+
+   Additional entry points and data structures that are used by these routines
+   may be referenced in this file, but they should not be generally available;
+   they are visible here only to allow use in inlined functions.  Any variable,
+   data structure, or function that starts with a leading "_" is in this
+   category.
+*/
+
+/* Include header files we need that are unlikely to otherwise be needed by */
+/* programs. */
 #include <stddef.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
-#include <stdio.h>
-#include <fcntl.h>
-#include <malloc.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <sys/user.h>
+#include <syslog.h>
+#include <stdbool.h>
+#include "utils_user.h"
+#include "verbs_service.h"
 
-#include "opa_user_gen1.h"
-#include "opa_udebug.h"
+/* make sure uintmax_t can hold the result of unsigned int multiplication */
+#if UINT_MAX > (UINTMAX_MAX / UINT_MAX)
+#error We cannot safely multiply unsigned integers on this platform
+#endif
 
-#include <sched.h>
-
-size_t arrsz[MAPSIZE_MAX] = { 0 };
-
-
+#endif /* PSM_HAL_VERBS_USER_H */
+#endif /* PSM_VERBS */

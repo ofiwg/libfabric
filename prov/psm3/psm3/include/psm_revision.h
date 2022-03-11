@@ -51,11 +51,14 @@
 
 */
 
-/* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
+#ifndef PSM_REVISION_H
+#define PSM_REVISION_H
 
-#ifndef OPA_COMMON_GEN1_H
-#define OPA_COMMON_GEN1_H
+/* Those variables are defined in the _revision.c file
+which is dynamically generated during building of the library */
+extern char psm3_IEFS_version[];
+extern char psm3_build_timestamp[];
+extern char psm3_sources_checksum[];
+extern char psm3_git_checksum[];
 
-#include "hfi1_deprecated_gen1.h"
-
-#endif /* OPA_COMMON_GEN1_H */
+#endif /* PSM_REVISION_H */

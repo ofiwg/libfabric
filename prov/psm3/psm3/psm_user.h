@@ -60,6 +60,50 @@
 extern "C" {
 #endif
 
+/* Instead of testing a HAL cap mask bit at runtime (in addition to thresholds),
+ * we only test thresholds, especially in the ips_proto_mq.c datapath.
+ * To allow for slightly more optimized builds, a few build time capability
+ * flags are set which reflect if any of the built-in HALs selected have
+ * the potential to support the given feature.  If none do, the code will be
+ * omitted.  All HALs must make sure the thresholds are properly set so the
+ * feature is disabled when not available, in which case runtime threshold
+ * checks will skip the feature.  A good example is the REG_MR capability.
+ */
+
+/* This indicates at least 1 HAL in the build can register MRs for use in
+ * send DMA or RDMA.
+ * If Send DMA is not available, the various eager_thresh controls in ips_proto
+ * must be disabled (set to ~0).
+ * If RDMA is not available, proto->protoexp must be NULL.
+ */
+#if defined(PSM_VERBS)
+#define PSM_HAVE_REG_MR
+#endif
+
+/* This indicates at least 1 HAL in the build can perform Send DMA */
+#ifdef PSM_VERBS
+#define PSM_HAVE_SDMA
+#endif
+
+/* This indicates at least 1 HAL in the build can perform RDMA */
+#ifdef PSM_VERBS
+#define PSM_HAVE_RDMA
+#endif
+#ifdef RNDV_MOD
+/* This is used to guard all RNDV_MOD code in the main parts of PSM
+ * so that RNDV_MOD code is only really enabled when a HAL present is able
+ * to take advantage of it
+ */
+/* This indicates at least 1 HAL in the build can take advantage of the
+ * rendezvous module.  This define should be tested outside the individual
+ * HALs instead of testing specific HAL flags like PSM_VERBS or PSM_SOCKETS.
+ * Thus, when adding a new HAL, the generic code need not be revisited.
+ */
+#if defined(PSM_VERBS) || (defined(PSM_SOCKETS) && defined(PSM_CUDA))
+#define PSM_HAVE_RNDV_MOD
+#endif /* UD || (UDP & CUDA) */
+#endif /* RNDV_MOD */
+
 #include "psm_config.h"
 #include <inttypes.h>
 #include <pthread.h>
@@ -75,8 +119,8 @@ extern "C" {
 
 #include "ptl.h"
 
-#include "opa_user.h"
-#include "opa_queue.h"
+#include "utils_user.h"
+#include "utils_queue.h"
 
 #include "psm_log.h"
 #include "psm_perf.h"
@@ -95,6 +139,12 @@ typedef void *psmi_hal_hw_context;
 #include "psm_utils.h"
 #include "psm_timer.h"
 #include "psm_mpool.h"
+#ifdef PSM_HAVE_REG_MR
+#include "psm_verbs_mr.h"
+#ifdef RNDV_MOD
+#include "psm_rndv_mod.h"
+#endif
+#endif
 #include "psm_ep.h"
 #include "psm_lock.h"
 #include "psm_stats.h"
@@ -107,53 +157,28 @@ typedef void *psmi_hal_hw_context;
 #define PSMI_VERNO_GET_MAJOR(verno) (((verno)>>8) & 0xff)
 #define PSMI_VERNO_GET_MINOR(verno) (((verno)>>0) & 0xff)
 
-int psmi_verno_client();
-int psmi_verno_isinteroperable(uint16_t verno);
-int MOCKABLE(psmi_isinitialized)();
-MOCK_DCL_EPILOGUE(psmi_isinitialized);
+int psm3_verno_client();
+int psm3_verno_isinteroperable(uint16_t verno);
+int MOCKABLE(psm3_isinitialized)();
+MOCK_DCL_EPILOGUE(psm3_isinitialized);
 
-psm2_error_t psmi_poll_internal(psm2_ep_t ep, int poll_amsh);
-psm2_error_t psmi_mq_wait_internal(psm2_mq_req_t *ireq);
+psm2_error_t psm3_poll_internal(psm2_ep_t ep, int poll_amsh);
+psm2_error_t psm3_mq_wait_internal(psm2_mq_req_t *ireq);
 
-int psmi_get_current_proc_location();
+int psm3_get_current_proc_location();
 
-extern int psmi_epid_ver;
 extern int psmi_allow_routers;
 extern uint32_t non_dw_mul_sdma;
-extern psmi_lock_t psmi_creation_lock;
-extern psm2_ep_t psmi_opened_endpoint;
+extern psmi_lock_t psm3_creation_lock;
+extern psm2_ep_t psm3_opened_endpoint;
 
-extern int psmi_affinity_shared_file_opened;
-extern uint64_t *shared_affinity_ptr;
-extern char *affinity_shm_name;
+extern int psm3_affinity_shared_file_opened;
+extern uint64_t *psm3_shared_affinity_ptr;
+extern char *psm3_affinity_shm_name;
 
-extern sem_t *sem_affinity_shm_rw;
-extern int psmi_affinity_semaphore_open;
-extern char *sem_affinity_shm_rw_name;
-
-PSMI_ALWAYS_INLINE(
-int
-_psmi_get_epid_version()) {
-	return psmi_epid_ver;
-}
-
-#define PSMI_EPID_VERSION_SHM 				0
-#define PSMI_EPID_SHM_ONLY				1
-#define PSMI_EPID_IPS_SHM				0
-#define PSMI_EPID_VERSION 				_psmi_get_epid_version()
-#define PSMI_MAX_EPID_VERNO_SUPPORTED			4
-#define PSMI_MIN_EPID_VERNO_SUPPORTED			3
-#define PSMI_EPID_VERNO_DEFAULT				3	// allows 3 or 4 based on NIC
-#define PSMI_EPID_V3					3	// IB UD
-#define PSMI_EPID_V4					4	// Eth UD
-
-#define PSMI_EPID_GET_LID(epid) ((PSMI_EPID_GET_EPID_VERSION(epid) == PSMI_EPID_V3) ? \
-								 (int)PSMI_EPID_GET_LID_V3(epid)      \
-							   : (int)PSMI_EPID_GET_LID_V4(epid))
-// for V3 we use low 16 and next 16 should be zero
-// for V4 we have network in low 32 bits
-#define PSMI_GET_SUBNET_ID(gid_hi) (gid_hi & 0xffffffff)
-
+extern sem_t *psm3_sem_affinity_shm_rw;
+extern int psm3_affinity_semaphore_open;
+extern char *psm3_sem_affinity_shm_rw_name;
 
 /*
  * Following is the definition of various lock implementations. The choice is
@@ -359,6 +384,7 @@ extern CUresult (*psmi_cuDevicePrimaryCtxGetState)(CUdevice dev, unsigned int* f
 extern CUresult (*psmi_cuDevicePrimaryCtxRetain)(CUcontext* pctx, CUdevice dev);
 extern CUresult (*psmi_cuCtxGetDevice)(CUdevice* device);
 extern CUresult (*psmi_cuDevicePrimaryCtxRelease)(CUdevice device);
+extern CUresult (*psmi_cuGetErrorString)(CUresult error, const char **pStr);
 
 extern uint64_t psmi_count_cuInit;
 extern uint64_t psmi_count_cuCtxDetach;
@@ -395,6 +421,7 @@ extern uint64_t psmi_count_cuDevicePrimaryCtxGetState;
 extern uint64_t psmi_count_cuDevicePrimaryCtxRetain;
 extern uint64_t psmi_count_cuCtxGetDevice;
 extern uint64_t psmi_count_cuDevicePrimaryCtxRelease;
+extern uint64_t psmi_count_cuGetErrorString;
 
 static int check_set_cuda_ctxt(void)
 {
@@ -420,18 +447,22 @@ static int check_set_cuda_ctxt(void)
 #define PSMI_CUDA_CALL(func, args...) do {				\
 		CUresult cudaerr;					\
 		if (unlikely(check_set_cuda_ctxt())) {			\
-			psmi_handle_error(PSMI_EP_NORETURN,		\
+			psm3_handle_error(PSMI_EP_NORETURN,		\
 			PSM2_INTERNAL_ERR, "Failed to set/synchronize"	\
 			" CUDA context.\n");				\
 		}							\
 		psmi_count_##func++;					\
 		cudaerr = psmi_##func(args);				\
 		if (cudaerr != CUDA_SUCCESS) {				\
+			const char *pStr = NULL;			\
+			psmi_count_cuGetErrorString++;			\
+			psmi_cuGetErrorString(cudaerr, &pStr);		\
 			_HFI_ERROR(					\
 				"CUDA failure: %s() (at %s:%d)"		\
-				"returned %d\n",			\
-				#func, __FILE__, __LINE__, cudaerr);	\
-			psmi_handle_error(				\
+				"returned %d: %s\n",			\
+				#func, __FILE__, __LINE__, cudaerr,	\
+				pStr?pStr:"Unknown");			\
+			psm3_handle_error(				\
 				PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,	\
 				"Error returned from CUDA function.\n");\
 		}							\
@@ -459,7 +490,7 @@ void verify_device_support_unified_addr())
 				device);
 
 		if (unifiedAddressing !=1) {
-			psmi_handle_error(PSMI_EP_NORETURN, PSM2_EP_DEVICE_FAILURE,
+			psm3_handle_error(PSMI_EP_NORETURN, PSM2_EP_DEVICE_FAILURE,
 				"CUDA device %d does not support Unified Virtual Addressing.\n",
 				dev);
 		}
@@ -475,7 +506,7 @@ int device_support_gpudirect())
 
 	int num_devices, dev;
 
-	/* Check if all devices support Unified Virtual Addressing. */
+	/* Check if all devices support GPU Direct RDMA based on version. */
 	PSMI_CUDA_CALL(cuDeviceGetCount, &num_devices);
 
 	_device_support_gpudirect = 1;
@@ -561,29 +592,37 @@ int gpu_p2p_supported())
  */
 #define PSMI_CUDA_CALL_EXCEPT(except_err, func, args...) do {		\
 		if (unlikely(check_set_cuda_ctxt())) {			\
-			psmi_handle_error(PSMI_EP_NORETURN,		\
+			psm3_handle_error(PSMI_EP_NORETURN,		\
 				PSM2_INTERNAL_ERR, "Failed to "		\
 				"set/synchronize CUDA context.\n");	\
 		}							\
 		psmi_count_##func++;					\
 		cudaerr = psmi_##func(args);				\
 		if (cudaerr != CUDA_SUCCESS && cudaerr != except_err) {	\
+			const char *pStr = NULL;			\
+			psmi_count_cuGetErrorString++;			\
+			psmi_cuGetErrorString(cudaerr, &pStr);		\
 			if (cu_ctxt == NULL)				\
 				_HFI_ERROR(				\
 				"Check if CUDA is initialized"	\
-				"before psm2_ep_open call \n");		\
+				"before psm3_ep_open call \n");		\
 			_HFI_ERROR(					\
 				"CUDA failure: %s() (at %s:%d)"		\
-				"returned %d\n",			\
-				#func, __FILE__, __LINE__, cudaerr);	\
-			psmi_handle_error(				\
+				"returned %d: %s\n",			\
+				#func, __FILE__, __LINE__, cudaerr,	\
+				pStr?pStr:"Unknown");			\
+			psm3_handle_error(				\
 				PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,	\
 				"Error returned from CUDA function.\n");\
 		} else if (cudaerr == except_err) { \
+			const char *pStr = NULL;			\
+			psmi_count_cuGetErrorString++;			\
+			psmi_cuGetErrorString(cudaerr, &pStr);		\
 			_HFI_DBG( \
 				"CUDA non-zero return value: %s() (at %s:%d)"		\
-				"returned %d\n",			\
-				#func, __FILE__, __LINE__, cudaerr);	\
+				"returned %d: %s\n",			\
+				#func, __FILE__, __LINE__, cudaerr,	\
+				pStr?pStr:"Unknown");			\
 		} \
 	} while (0)
 
@@ -592,10 +631,14 @@ int gpu_p2p_supported())
 		cudaerr = psmi_cuEventQuery(event);			\
 		if ((cudaerr != CUDA_SUCCESS) &&			\
 		    (cudaerr != CUDA_ERROR_NOT_READY)) {		\
+			const char *pStr = NULL;			\
+			psmi_count_cuGetErrorString++;			\
+			psmi_cuGetErrorString(cudaerr, &pStr);		\
 			_HFI_ERROR(					\
-				"CUDA failure: %s() returned %d\n",	\
-				"cuEventQuery", cudaerr);		\
-			psmi_handle_error(				\
+				"CUDA failure: %s() returned %d: %s\n",	\
+				"cuEventQuery", cudaerr,		\
+				pStr?pStr:"Unknown");			\
+			psm3_handle_error(				\
 				PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,	\
 				"Error returned from CUDA function.\n");\
 		}							\
@@ -604,7 +647,7 @@ int gpu_p2p_supported())
 #define PSMI_CUDA_DLSYM(psmi_cuda_lib,func) do {                        \
 	psmi_##func = dlsym(psmi_cuda_lib, STRINGIFY(func));            \
 	if (!psmi_##func) {               				\
-		psmi_handle_error(PSMI_EP_NORETURN,                     \
+		psm3_handle_error(PSMI_EP_NORETURN,                     \
 			       PSM2_INTERNAL_ERR,                       \
 			       " Unable to resolve %s symbol"		\
 			       " in CUDA libraries.\n",STRINGIFY(func));\
@@ -678,8 +721,8 @@ void psmi_cuda_hostbuf_alloc_func(int is_alloc, void *context, void *obj);
 	    .mode[PSMI_MEMMODE_LARGE]   = {  32, 512 }		\
 	}
 
-extern uint32_t gpudirect_send_limit;
-extern uint32_t gpudirect_recv_limit;
+extern uint32_t gpudirect_rdma_send_limit;
+extern uint32_t gpudirect_rdma_recv_limit;
 extern uint32_t cuda_thresh_rndv;
 /* This limit dictates when the sender turns off
  * GDR Copy and uses SDMA. The limit needs to be less than equal
@@ -694,7 +737,7 @@ extern uint32_t gdr_copy_limit_send;
  */
 extern uint32_t gdr_copy_limit_recv;
 
-uint64_t gpu_cache_evict;
+uint64_t psm3_gpu_cache_evict;
 
 // Only valid if called for a GPU buffer
 #define PSMI_USE_GDR_COPY_RECV(len) ((len) >=1 && (len) <= gdr_copy_limit_recv)

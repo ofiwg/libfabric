@@ -108,7 +108,7 @@ struct mpool {
 static int psmi_mpool_allocate_chunk(mpool_t);
 
 /**
- * psmi_mpool_create()
+ * psm3_mpool_create()
  *
  * Create a memory pool and allocates <num_obj_per_chunk> objects of size
  * <obj_size>.  If more memory is needed to accommodate mpool_get()
@@ -132,7 +132,7 @@ static int psmi_mpool_allocate_chunk(mpool_t);
  * Return the mpool on success, NULL on failure.
  */
 mpool_t
-psmi_mpool_create_inner(size_t obj_size, uint32_t num_obj_per_chunk,
+psm3_mpool_create_inner(size_t obj_size, uint32_t num_obj_per_chunk,
 			uint32_t num_obj_max_total, int flags,
 			psmi_memtype_t statstype,
 			non_empty_callback_fn_t cb, void *context)
@@ -144,6 +144,11 @@ psmi_mpool_create_inner(size_t obj_size, uint32_t num_obj_per_chunk,
 	if (!PSMI_POWEROFTWO(num_obj_per_chunk) ||
 	    !PSMI_POWEROFTWO(num_obj_max_total) ||
 	    num_obj_max_total < num_obj_per_chunk) {
+		fprintf(stderr,
+			"Invalid memory pool parameters: values must be a "
+		        "power of 2 and num_obj_max(%u) must be greater "
+			"than num_obj_per_chunk(%u)\n",
+			num_obj_max_total, num_obj_per_chunk);
 		return NULL;
 	}
 
@@ -204,14 +209,14 @@ psmi_mpool_create_inner(size_t obj_size, uint32_t num_obj_per_chunk,
 }
 
 mpool_t
-MOCKABLE(psmi_mpool_create)(size_t obj_size, uint32_t num_obj_per_chunk,
+MOCKABLE(psm3_mpool_create)(size_t obj_size, uint32_t num_obj_per_chunk,
 		  uint32_t num_obj_max_total, int flags,
 		  psmi_memtype_t statstype, non_empty_callback_fn_t cb,
 		  void *context)
 {
 	mpool_t mp;
 
-	mp = psmi_mpool_create_inner(obj_size, num_obj_per_chunk,
+	mp = psm3_mpool_create_inner(obj_size, num_obj_per_chunk,
 					num_obj_max_total, flags, statstype,
 					cb, context);
 
@@ -219,17 +224,17 @@ MOCKABLE(psmi_mpool_create)(size_t obj_size, uint32_t num_obj_per_chunk,
 		return NULL;
 
 	if (psmi_mpool_allocate_chunk(mp) != PSM2_OK) {
-		psmi_mpool_destroy(mp);
+		psm3_mpool_destroy(mp);
 		return NULL;
 	}
 
 	return mp;
 }
-MOCK_DEF_EPILOGUE(psmi_mpool_create);
+MOCK_DEF_EPILOGUE(psm3_mpool_create);
 
 #ifdef PSM_CUDA
 mpool_t
-psmi_mpool_create_for_cuda(size_t obj_size, uint32_t num_obj_per_chunk,
+psm3_mpool_create_for_cuda(size_t obj_size, uint32_t num_obj_per_chunk,
 			   uint32_t num_obj_max_total, int flags,
 			   psmi_memtype_t statstype,
 			   non_empty_callback_fn_t cb, void *context,
@@ -237,7 +242,7 @@ psmi_mpool_create_for_cuda(size_t obj_size, uint32_t num_obj_per_chunk,
 {
 	mpool_t mp;
 
-	mp = psmi_mpool_create_inner(obj_size, num_obj_per_chunk,
+	mp = psm3_mpool_create_inner(obj_size, num_obj_per_chunk,
 					num_obj_max_total, flags, statstype,
 					cb, context);
 
@@ -248,7 +253,7 @@ psmi_mpool_create_for_cuda(size_t obj_size, uint32_t num_obj_per_chunk,
 	mp->mp_alloc_dealloc_cb_context = ad_context;
 
 	if (psmi_mpool_allocate_chunk(mp) != PSM2_OK) {
-		psmi_mpool_destroy(mp);
+		psm3_mpool_destroy(mp);
 		return NULL;
 	}
 
@@ -257,16 +262,16 @@ psmi_mpool_create_for_cuda(size_t obj_size, uint32_t num_obj_per_chunk,
 #endif
 
 /**
- * psmi_mpool_get()
+ * psm3_mpool_get()
  *
  * <mp>	    memory pool
  *
  * Requests an object from the memory pool.
  *
  * Returns NULL if the maximum number of objects has been allocated (refer to
- * <num_obj_max_total> in psmi_mpool_create) or if running out of memory.
+ * <num_obj_max_total> in psm3_mpool_create) or if running out of memory.
  */
-void *psmi_mpool_get(mpool_t mp)
+void *psm3_mpool_get(mpool_t mp)
 {
 	struct mpool_element *me;
 	void *obj;
@@ -293,14 +298,14 @@ void *psmi_mpool_get(mpool_t mp)
 }
 
 /**
- * psmi_mpool_put()
+ * psm3_mpool_put()
  *
  * <obj>    object to return to the memory pool
  *
  * Returns an <obj> to the memory pool subsystem.  This object will be re-used
- * to fulfill new psmi_mpool_get() requests.
+ * to fulfill new psm3_mpool_get() requests.
  */
-void psmi_mpool_put(void *obj)
+void psm3_mpool_put(void *obj)
 {
 	struct mpool_element *me;
 	int was_empty;
@@ -328,14 +333,14 @@ void psmi_mpool_put(void *obj)
 }
 
 /**
- * psmi_mpool_get_obj_index()
+ * psm3_mpool_get_obj_index()
  *
  * <obj>    object in the memory pool
  *
  * Returns the index of the <obj> in the memory pool.
  */
 
-int psmi_mpool_get_obj_index(void *obj)
+int psm3_mpool_get_obj_index(void *obj)
 {
 	struct mpool_element *me = (struct mpool_element *)
 	    ((uintptr_t) obj - sizeof(struct mpool_element));
@@ -344,13 +349,13 @@ int psmi_mpool_get_obj_index(void *obj)
 }
 
 /**
- * psmi_mpool_get_obj_gen_count()
+ * psm3_mpool_get_obj_gen_count()
  *
  * <obj>    object in the memory pool
  *
  * Returns the generation count of the <obj>.
  */
-uint32_t psmi_mpool_get_obj_gen_count(void *obj)
+uint32_t psm3_mpool_get_obj_gen_count(void *obj)
 {
 	struct mpool_element *me = (struct mpool_element *)
 	    ((uintptr_t) obj - sizeof(struct mpool_element));
@@ -359,7 +364,7 @@ uint32_t psmi_mpool_get_obj_gen_count(void *obj)
 }
 
 /**
- * psmi_mpool_get_obj_index_gen_count()
+ * psm3_mpool_get_obj_index_gen_count()
  *
  * <obj>    object in the memory pool
  *
@@ -367,7 +372,7 @@ uint32_t psmi_mpool_get_obj_gen_count(void *obj)
  * Returns the generation count of the <obj> in <gen_count>.
  */
 int
-psmi_mpool_get_obj_index_gen_count(void *obj, uint32_t *index,
+psm3_mpool_get_obj_index_gen_count(void *obj, uint32_t *index,
 				   uint32_t *gen_count)
 {
 	struct mpool_element *me = (struct mpool_element *)
@@ -379,7 +384,7 @@ psmi_mpool_get_obj_index_gen_count(void *obj, uint32_t *index,
 }
 
 /**
- * psmi_mpool_find_obj_by_index()
+ * psm3_mpool_find_obj_by_index()
  *
  * <mp>	    memory pool
  * <index>  index of the object
@@ -387,7 +392,7 @@ psmi_mpool_get_obj_index_gen_count(void *obj, uint32_t *index,
  * Returns the object located at <index> in the memory pool or NULL if the
  * <index> is invalid.
  */
-void *psmi_mpool_find_obj_by_index(mpool_t mp, int index)
+void *psm3_mpool_find_obj_by_index(mpool_t mp, int index)
 {
 	struct mpool_element *me;
 
@@ -428,15 +433,15 @@ void psmi_mpool_chunk_dealloc(mpool_t mp, int idx)
 }
 #endif
 /**
- * psmi_mpool_destroy()
+ * psm3_mpool_destroy()
  *
  * <mp>	    memory pool
  *
  * Destroy a previously allocated memory pool and reclaim its associated
  * memory.  The behavior is undefined if some objects have not been returned
- * to the memory pool with psmi_mpool_put().
+ * to the memory pool with psm3_mpool_put().
  */
-void psmi_mpool_destroy(mpool_t mp)
+void psm3_mpool_destroy(mpool_t mp)
 {
 	int i = 0;
 	size_t nbytes = mp->mp_num_obj * mp->mp_elm_size;
@@ -457,7 +462,7 @@ void psmi_mpool_destroy(mpool_t mp)
 }
 
 /**
- * psmi_mpool_get_max_obj()
+ * psm3_mpool_get_max_obj()
  *
  * <mp>	    memory pool
  *
@@ -465,14 +470,14 @@ void psmi_mpool_destroy(mpool_t mp)
  * Returns the num-obj-max-total
  */
 void
-MOCKABLE(psmi_mpool_get_obj_info)(mpool_t mp, uint32_t *num_obj_per_chunk,
+MOCKABLE(psm3_mpool_get_obj_info)(mpool_t mp, uint32_t *num_obj_per_chunk,
 			uint32_t *num_obj_max_total)
 {
 	*num_obj_per_chunk = mp->mp_num_obj_per_chunk;
 	*num_obj_max_total = mp->mp_num_obj_max_total;
 	return;
 }
-MOCK_DEF_EPILOGUE(psmi_mpool_get_obj_info);
+MOCK_DEF_EPILOGUE(psm3_mpool_get_obj_info);
 
 static int psmi_mpool_allocate_chunk(mpool_t mp)
 {

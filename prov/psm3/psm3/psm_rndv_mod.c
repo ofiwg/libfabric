@@ -52,7 +52,6 @@
 */
 
 /* Copyright (c) 2003-2016 Intel Corporation. All rights reserved. */
-#ifdef RNDV_MOD
 
 #include <stdint.h>
 #include <stddef.h>
@@ -65,7 +64,9 @@
 #include <ctype.h>		/* isalpha */
 //#include <netdb.h>
 #include <infiniband/verbs.h>
-#include "psm_user.h"	// get psmi_calloc and free
+#include "psm_user.h"	// get psmi_calloc and free and PSM_HAVE_RNDV_MOD
+
+#ifdef PSM_HAVE_RNDV_MOD
 #include "psm_rndv_mod.h"
 #include "ips_config.h"
 
@@ -132,7 +133,7 @@ static uint64_t get_nvidia_bar_addr(int domain, int bus, int slot)
 		if (gpu_pin_check) {
 			_HFI_ERROR("Unable to open %s for GPU BAR Address: %s\n",
 				sysfs, strerror(errno));
-			psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+			psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 				"Unable to get GPU BAR address\n");
 		}
 		return 0;
@@ -145,7 +146,7 @@ static uint64_t get_nvidia_bar_addr(int domain, int bus, int slot)
 		if (gpu_pin_check) {
 			_HFI_ERROR("Unable to get GPU BAR Address from %s: %s\n",
 				sysfs, strerror(errno));
-			psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+			psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 				"Unable to get GPU BAR address\n");
 		}
 		fclose(f);
@@ -165,7 +166,7 @@ void psm2_get_gpu_bars(void)
 	int num_devices, dev;
 	union psmi_envvar_val env;
 
-	psmi_getenv("PSM3_GPU_PIN_CHECK",
+	psm3_getenv("PSM3_GPU_PIN_CHECK",
 			"Enable sanity check of physical addresses mapped into GPU BAR space (Enabled by default)",
 			PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
 			(union psmi_envvar_val)1, &env);
@@ -207,7 +208,7 @@ static psm2_error_t psm2_check_phys_addr(uint64_t phys_addr)
 		if (phys_addr == gpu_bars[i]) {
 			_HFI_ERROR("Incorrect Physical Address (0x%"PRIx64") returned by nVidia driver.  PSM3 exiting to avoid data corruption.  Job may be rerun with PSM3_GPUDIRECT=0 to avoid this issue.\n",
 				phys_addr);
-			psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+			psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 				"Incorrect Physical Address returned by nVidia driver\n");
 			psmi_assert_always(0);
 			return PSM2_INTERNAL_ERR;
@@ -216,13 +217,13 @@ static psm2_error_t psm2_check_phys_addr(uint64_t phys_addr)
 	return PSM2_OK;
 }
 
-uint64_t __psm2_min_gpu_bar_size(void)
+uint64_t psm3_min_gpu_bar_size(void)
 {
 	return min_gpu_bar_size;
 }
 #endif
 
-static int rv_map_event_ring(psm2_rv_t rv, struct rv_event_ring* ring,
+static int rv_map_event_ring(psm3_rv_t rv, struct rv_event_ring* ring,
 				int entries, int offset)
 {
 #ifdef RV_RING_ALLOC_LEN
@@ -246,7 +247,7 @@ static int rv_map_event_ring(psm2_rv_t rv, struct rv_event_ring* ring,
 	return 0;
 }
 
-static void rv_unmap_event_ring(psm2_rv_t rv, struct rv_event_ring* ring)
+static void rv_unmap_event_ring(psm3_rv_t rv, struct rv_event_ring* ring)
 {
 	if (ring->hdr)
 		if(munmap(ring->hdr, ring->len))
@@ -258,16 +259,16 @@ static void rv_unmap_event_ring(psm2_rv_t rv, struct rv_event_ring* ring)
 
 // we call this once per ep (eg. NIC) so we supply the local address
 // of our NIC for use in the IB CM bind, especially for ethernet
-psm2_rv_t __psm2_rv_open(const char *devname, struct local_info *loc_info)
+psm3_rv_t psm3_rv_open(const char *devname, struct local_info *loc_info)
 {
-	psm2_rv_t rv = NULL;
+	psm3_rv_t rv = NULL;
 	struct rv_attach_params aparams;
 	struct rv_query_params_out qparams;
 	int ret;
 	int save_errno;
 
 	loc_info->capability = 0;
-	rv = (psm2_rv_t)my_calloc(1, sizeof(struct psm2_rv));
+	rv = (psm3_rv_t)my_calloc(1, sizeof(struct psm2_rv));
 	if (! rv) {
 		save_errno = ENOMEM;
 		goto fail;
@@ -364,6 +365,7 @@ psm2_rv_t __psm2_rv_open(const char *devname, struct local_info *loc_info)
 		loc_info->q_depth = aparams.out.q_depth;
 		loc_info->reconnect_timeout = aparams.out.reconnect_timeout;
 #ifdef PSM_CUDA
+		loc_info->gpu_cache_size = 0;
 	}
 #endif
 
@@ -376,10 +378,42 @@ psm2_rv_t __psm2_rv_open(const char *devname, struct local_info *loc_info)
 		}
 	}
 
+#ifndef RV_CAP_GPU_DIRECT
+#ifdef PSM_CUDA
+#error "Inconsistent build.  RV_CAP_GPU_DIRECT must be defined for CUDA builds. Must use CUDA enabled rv headers"
+#else
+// lifted from rv_user_ioctls.h
+ #define RV_CAP_GPU_DIRECT (1UL << 63)
+#endif
+ #endif
+	if (psmi_parse_identify()) {
+		if (loc_info->capability & RV_CAP_GPU_DIRECT)
+#ifdef PSM_CUDA
+			printf("%s %s run-time rv interface v%d.%d%s gpu v%d.%d cuda\n",
+			       psm3_get_mylabel(), psm3_ident_tag,
+			       loc_info->major_rev,
+			       loc_info->minor_rev,
+			       (loc_info->capability & RV_CAP_USER_MR)?" user_mr":"",
+			       loc_info->gpu_major_rev,
+			       loc_info->gpu_minor_rev);
+#else
+			printf("%s %s run-time rv interface v%d.%d%s cuda\n",
+			       psm3_get_mylabel(), psm3_ident_tag,
+			       loc_info->major_rev,
+			       loc_info->minor_rev,
+			       (loc_info->capability & RV_CAP_USER_MR)?" user_mr":"");
+#endif /*  PSM_CUDA */
+		else
+			printf("%s %s run-time rv interface v%d.%d%s\n",
+			       psm3_get_mylabel(), psm3_ident_tag,
+			       loc_info->major_rev,
+			       loc_info->minor_rev,
+			       (loc_info->capability & RV_CAP_USER_MR)?" user_mr":"");
+	}
 	return rv;
 fail:
 	if (rv) {
-		(void)__psm2_rv_close(rv);
+		(void)psm3_rv_close(rv);
 	}
 	errno = save_errno;
 	return NULL;
@@ -387,7 +421,7 @@ fail:
 
 // 0 on success
 // -1 if rv invalid or not open and errno set
-int __psm2_rv_close(psm2_rv_t rv)
+int psm3_rv_close(psm3_rv_t rv)
 {
 
 	if (! rv) {
@@ -409,7 +443,7 @@ int __psm2_rv_close(psm2_rv_t rv)
 	return 0;
 }
 
-int __psm2_rv_get_cache_stats(psm2_rv_t rv, struct psm2_rv_cache_stats *stats)
+int psm3_rv_get_cache_stats(psm3_rv_t rv, struct psm3_rv_cache_stats *stats)
 {
 	struct rv_cache_stats_params_out sparams;
 	int ret;
@@ -444,7 +478,7 @@ fail:
 }
 
 #ifdef PSM_CUDA
-int __psm2_rv_gpu_get_cache_stats(psm2_rv_t rv, struct psm2_rv_gpu_cache_stats *stats)
+int psm3_rv_gpu_get_cache_stats(psm3_rv_t rv, struct psm3_rv_gpu_cache_stats *stats)
 {
 	struct rv_gpu_cache_stats_params_out sparams;
 	int ret;
@@ -557,15 +591,15 @@ fail:
 // set in rv_open) to decide which side is passive vs active side of IB CM
 // connection establishment
 // See description above for more info on connection model
-psm2_rv_conn_t __psm2_rv_create_conn(psm2_rv_t rv,
+psm3_rv_conn_t psm3_rv_create_conn(psm3_rv_t rv,
 				     struct ibv_ah_attr *ah_attr, // for remote node
 					 uint32_t rem_addr)  // for simple compare to loc_addr
 {
-	psm2_rv_conn_t conn = NULL;
+	psm3_rv_conn_t conn = NULL;
 	struct rv_conn_create_params param;
 	int save_errno;
 
-	conn = (psm2_rv_conn_t)my_calloc(1, sizeof(struct psm2_rv_conn));
+	conn = (psm3_rv_conn_t)my_calloc(1, sizeof(struct psm3_rv_conn));
 	if (! conn) {
 		save_errno = ENOMEM;
 		goto fail;
@@ -605,7 +639,7 @@ fail:
 	return NULL;
 }
 
-int __psm2_rv_connect(psm2_rv_conn_t conn, const struct ib_user_path_rec *path)
+int psm3_rv_connect(psm3_rv_conn_t conn, const struct ib_user_path_rec *path)
 {
 	struct rv_conn_connect_params_in param;
 	int ret;
@@ -657,7 +691,7 @@ int __psm2_rv_connect(psm2_rv_conn_t conn, const struct ib_user_path_rec *path)
 	return ret;
 }
 
-int __psm2_rv_connected(psm2_rv_conn_t conn)
+int psm3_rv_connected(psm3_rv_conn_t conn)
 {
 	struct rv_conn_connected_params_in param;
 
@@ -681,7 +715,7 @@ int __psm2_rv_connected(psm2_rv_conn_t conn)
 // and drained.
 // returns -1 with EIO if connection cannot be recovered
 // return 0 with latest conn_count if connected or being recovered
-int __psm2_rv_get_conn_count(psm2_rv_t rv, psm2_rv_conn_t conn,
+int psm3_rv_get_conn_count(psm3_rv_t rv, psm3_rv_conn_t conn,
 				uint8_t index, uint32_t *count)
 {
 	struct rv_conn_get_conn_count_params params;
@@ -705,8 +739,8 @@ fail:
 	return -1;
 }
 
-int __psm2_rv_get_conn_stats(psm2_rv_t rv, psm2_rv_conn_t conn,
-				uint8_t index, struct psm2_rv_conn_stats *stats)
+int psm3_rv_get_conn_stats(psm3_rv_t rv, psm3_rv_conn_t conn,
+				uint8_t index, struct psm3_rv_conn_stats *stats)
 {
 	struct rv_conn_get_stats_params sparams;
 	int ret;
@@ -785,7 +819,7 @@ fail:
 	return -1;
 }
 
-int __psm2_rv_get_event_stats(psm2_rv_t rv, struct psm2_rv_event_stats *stats)
+int psm3_rv_get_event_stats(psm3_rv_t rv, struct psm3_rv_event_stats *stats)
 {
 	struct rv_event_stats_params_out sparams;
 	int ret;
@@ -810,7 +844,7 @@ fail:
 	return -1;
 }
 
-int __psm2_rv_disconnect(psm2_rv_conn_t conn)
+int psm3_rv_disconnect(psm3_rv_conn_t conn)
 {
 	if (! conn) {
 		errno = EINVAL;
@@ -828,13 +862,13 @@ int __psm2_rv_disconnect(psm2_rv_conn_t conn)
 	return 0;
 }
 
-void __psm2_rv_destroy_conn(psm2_rv_conn_t conn)
+void psm3_rv_destroy_conn(psm3_rv_conn_t conn)
 {
 	if (! conn) {
 		// TBD - could have errno and return code here?
 		return;
 	}
-	//psm2_rv_t rv = conn->rv;
+	//psm3_rv_t rv = conn->rv;
 	//TBD - tell kernel, it will cleanup and start disconnect if not alraedy
 	//		started
 	//TBD - cleanup conn resources
@@ -842,10 +876,10 @@ void __psm2_rv_destroy_conn(psm2_rv_conn_t conn)
 	my_free(conn);
 }
 
-psm2_rv_mr_t __psm2_rv_reg_mem(psm2_rv_t rv, int cmd_fd_int, struct ibv_pd *pd,
+psm3_rv_mr_t psm3_rv_reg_mem(psm3_rv_t rv, int cmd_fd_int, struct ibv_pd *pd,
 				void *addr, uint64_t length, int access)
 {
-	psm2_rv_mr_t mr = NULL;
+	psm3_rv_mr_t mr = NULL;
 	struct rv_mem_params mparams;
 	struct irdma_mem_reg_req req;
 	int save_errno;
@@ -857,11 +891,11 @@ psm2_rv_mr_t __psm2_rv_reg_mem(psm2_rv_t rv, int cmd_fd_int, struct ibv_pd *pd,
 
 #ifdef PSM_CUDA
 #ifdef PSM_FI
-	if_pf((access & IBV_ACCESS_IS_GPU_ADDR) && PSMI_FAULTINJ_ENABLED()) {
-                PSMI_FAULTINJ_STATIC_DECL(fi_gpu_reg_mr, "gpu_reg_mr",
+	if_pf((access & IBV_ACCESS_IS_GPU_ADDR) && PSM3_FAULTINJ_ENABLED()) {
+                PSM3_FAULTINJ_STATIC_DECL(fi_gpu_reg_mr, "gpu_reg_mr",
                                           "fail GPU reg_mr",
                                            1, IPS_FAULTINJ_GPU_REG_MR);
-                if_pf(PSMI_FAULTINJ_IS_FAULT(fi_gpu_reg_mr, "")) {
+                if_pf(PSM3_FAULTINJ_IS_FAULT(fi_gpu_reg_mr, NULL, "")) {
                         errno = ENOMEM;
                         return NULL;
                 }
@@ -869,7 +903,7 @@ psm2_rv_mr_t __psm2_rv_reg_mem(psm2_rv_t rv, int cmd_fd_int, struct ibv_pd *pd,
 #endif
 #endif
 
-	mr = (psm2_rv_mr_t)my_calloc(1, sizeof(struct psm2_rv_mr));
+	mr = (psm3_rv_mr_t)my_calloc(1, sizeof(struct psm3_rv_mr));
 	if (! mr) {
 		save_errno = ENOMEM;
 		goto fail;
@@ -895,7 +929,7 @@ psm2_rv_mr_t __psm2_rv_reg_mem(psm2_rv_t rv, int cmd_fd_int, struct ibv_pd *pd,
 #ifdef PSM_CUDA
 	if ((access & IBV_ACCESS_IS_GPU_ADDR)
 		&& PSM2_OK != psm2_check_phys_addr(mparams.out.iova)) {
-		(void)__psm2_rv_dereg_mem(rv, mr);
+		(void)psm3_rv_dereg_mem(rv, mr);
 		errno = EFAULT;
 		return NULL;
 	}
@@ -919,7 +953,7 @@ fail:
 	return NULL;
 }
 
-int __psm2_rv_dereg_mem(psm2_rv_t rv, psm2_rv_mr_t mr)
+int psm3_rv_dereg_mem(psm3_rv_t rv, psm3_rv_mr_t mr)
 {
 	struct rv_dereg_params_in dparams;
 	int ret;
@@ -941,18 +975,18 @@ int __psm2_rv_dereg_mem(psm2_rv_t rv, psm2_rv_mr_t mr)
 
 #ifdef PSM_CUDA
 
-void * __psm2_rv_pin_and_mmap(psm2_rv_t rv, uintptr_t pageaddr,
+void * psm3_rv_pin_and_mmap(psm3_rv_t rv, uintptr_t pageaddr,
 				uint64_t pagelen, int access)
 {
 	struct rv_gpu_mem_params params;
 	int ret;
 
 #ifdef PSM_FI
-	if_pf(PSMI_FAULTINJ_ENABLED()) {
-                PSMI_FAULTINJ_STATIC_DECL(fi_gdrmmap, "gdrmmap",
+	if_pf(PSM3_FAULTINJ_ENABLED()) {
+                PSM3_FAULTINJ_STATIC_DECL(fi_gdrmmap, "gdrmmap",
                                           "fail GPU gdrcopy mmap",
                                            1, IPS_FAULTINJ_GDRMMAP);
-                if_pf(PSMI_FAULTINJ_IS_FAULT(fi_gdrmmap, "")) {
+                if_pf(PSM3_FAULTINJ_IS_FAULT(fi_gdrmmap, NULL, "")) {
                         errno = ENOMEM;
                         return NULL;
                 }
@@ -968,7 +1002,7 @@ void * __psm2_rv_pin_and_mmap(psm2_rv_t rv, uintptr_t pageaddr,
 		return NULL;
 
 	if (PSM2_OK != psm2_check_phys_addr(params.out.phys_addr)) {
-		(void)__psm2_rv_evict_exact(rv, (void*)pageaddr, pagelen, access);
+		(void)psm3_rv_evict_exact(rv, (void*)pageaddr, pagelen, access);
 		errno = EFAULT;
 		return NULL;
 	}
@@ -978,13 +1012,13 @@ void * __psm2_rv_pin_and_mmap(psm2_rv_t rv, uintptr_t pageaddr,
 #endif /* PSM_CUDA */
 
 // addr, length, access are what was used in a previous call to
-// __psm_rv_reg_mem or __psm2_rv_pin_and_mmap
+// __psm_rv_reg_mem or psm3_rv_pin_and_mmap
 // this will remove from the cache the matching entry if it's
 // refcount is 0.  In the case of reg_mem, a matching call
 // to dereg_mem is required for this to be able to evict the entry
 // return number of bytes evicted (> 0) on success or -1 with errno
 // Reports ENOENT if entry not found in cache (may already be evicted)
-int64_t __psm2_rv_evict_exact(psm2_rv_t rv, void *addr, uint64_t length, int access)
+int64_t psm3_rv_evict_exact(psm3_rv_t rv, void *addr, uint64_t length, int access)
 {
 #ifdef RV_IOCTL_EVICT
 	struct rv_evict_params params;
@@ -1019,7 +1053,7 @@ int64_t __psm2_rv_evict_exact(psm2_rv_t rv, void *addr, uint64_t length, int acc
 // to dereg_mem is required for this to be able to evict the entry
 // return number of bytes evicted (> 0) on success or -1 with errno
 // Reports ENOENT if no matching entries found in cache (may already be evicted)
-int64_t __psm2_rv_evict_range(psm2_rv_t rv, void *addr, uint64_t length)
+int64_t psm3_rv_evict_range(psm3_rv_t rv, void *addr, uint64_t length)
 {
 #ifdef RV_IOCTL_EVICT
 	struct rv_evict_params params;
@@ -1054,7 +1088,7 @@ int64_t __psm2_rv_evict_range(psm2_rv_t rv, void *addr, uint64_t length)
 // to dereg_mem is required for this to be able to evict the entry
 // return number of bytes evicted (> 0) on success or -1 with errno
 // Reports ENOENT if no matching entries found in cache (may already be evicted)
-int64_t __psm2_rv_evict_gpu_range(psm2_rv_t rv, uintptr_t addr, uint64_t length)
+int64_t psm3_rv_evict_gpu_range(psm3_rv_t rv, uintptr_t addr, uint64_t length)
 {
 #ifdef RV_IOCTL_EVICT
 	struct rv_evict_params params;
@@ -1089,7 +1123,7 @@ int64_t __psm2_rv_evict_gpu_range(psm2_rv_t rv, uintptr_t addr, uint64_t length)
 // to dereg_mem is required for this to be able to evict the entry
 // return number of bytes evicted (> 0) on success or -1 with errno
 // Reports ENOENT if no entries could be evicted
-int64_t __psm2_rv_evict_amount(psm2_rv_t rv, uint64_t bytes, uint32_t count)
+int64_t psm3_rv_evict_amount(psm3_rv_t rv, uint64_t bytes, uint32_t count)
 {
 #ifdef RV_IOCTL_EVICT
 	struct rv_evict_params params;
@@ -1124,7 +1158,7 @@ int64_t __psm2_rv_evict_amount(psm2_rv_t rv, uint64_t bytes, uint32_t count)
 // to dereg_mem is required for this to be able to evict the entry
 // return number of bytes evicted (> 0) on success or -1 with errno
 // Reports ENOENT if no entries could be evicted
-int64_t __psm2_rv_evict_gpu_amount(psm2_rv_t rv, uint64_t bytes, uint32_t count)
+int64_t psm3_rv_evict_gpu_amount(psm3_rv_t rv, uint64_t bytes, uint32_t count)
 {
 #ifdef RV_IOCTL_EVICT
 	struct rv_evict_params params;
@@ -1153,8 +1187,8 @@ int64_t __psm2_rv_evict_gpu_amount(psm2_rv_t rv, uint64_t bytes, uint32_t count)
 }
 #endif // PSM_CUDA
 
-int __psm2_rv_post_rdma_write_immed(psm2_rv_t rv, psm2_rv_conn_t conn,
-				void *loc_buf, psm2_rv_mr_t loc_mr,
+int psm3_rv_post_rdma_write_immed(psm3_rv_t rv, psm3_rv_conn_t conn,
+				void *loc_buf, psm3_rv_mr_t loc_mr,
 				uint64_t rem_buf, uint32_t rkey,
 				uint64_t len, uint32_t immed, uint64_t wr_id,
 				uint8_t *sconn_index, uint32_t *conn_count)
@@ -1189,7 +1223,7 @@ int __psm2_rv_post_rdma_write_immed(psm2_rv_t rv, psm2_rv_conn_t conn,
 // returns 0 if CQ empty, 1 if consumed an entry and -1 if error
 // given PSM locking model, we don't need to get a lock here, caller will
 // already hold progress_lock if needed
-int __psm2_rv_poll_cq(psm2_rv_t rv, struct rv_event *ev)
+int psm3_rv_poll_cq(psm3_rv_t rv, struct rv_event *ev)
 {
 	uint32_t next;
 	// TBD - may want to skip error checks for datapath perf
@@ -1218,7 +1252,7 @@ int __psm2_rv_poll_cq(psm2_rv_t rv, struct rv_event *ev)
 // arriving during or after this function are not scanned
 // given PSM locking model, we don't need to get a lock here, caller will
 // already hold progress_lock if needed
-int __psm2_rv_scan_cq(psm2_rv_t rv, uint8_t event_type,
+int psm3_rv_scan_cq(psm3_rv_t rv, uint8_t event_type,
 			uint32_t imm_mask, uint32_t imm_value)
 {
 	uint32_t next;
@@ -1251,7 +1285,7 @@ int __psm2_rv_scan_cq(psm2_rv_t rv, uint8_t event_type,
 // returns 0 if CQ has never overflowed
 // In future could use overflow_cnt to identify if ring recently
 // overflowed (eg. save overflow_cnt when check) and trigger PSM recovery
-int __psm2_rv_cq_overflowed(psm2_rv_t rv)
+int psm3_rv_cq_overflowed(psm3_rv_t rv)
 {
 	if (! rv || ! rv->events.hdr) {
 		errno = EINVAL;
@@ -1263,4 +1297,4 @@ int __psm2_rv_cq_overflowed(psm2_rv_t rv)
 	return 0;
 #endif
 }
-#endif // RNDV_MOD
+#endif // PSM_HAVE_RNDV_MOD

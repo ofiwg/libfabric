@@ -413,8 +413,9 @@ sa_sin6:
 		break;
 	case FI_ADDR_PSMX3:
 		size =
-		    snprintf(buf, *len, "fi_addr_psmx3://%" PRIx64 ":%" PRIx64,
-			     *(uint64_t *)addr, *((uint64_t *)addr + 1));
+		    snprintf(buf, *len, "fi_addr_psmx3://%" PRIx64 ":%" PRIx64 ":%" PRIx64 ":%" PRIx64,
+			     *(uint64_t *)addr, *((uint64_t *)addr + 1),
+			     *((uint64_t *)addr + 2), *((uint64_t *)addr + 3));
 		break;
 	case FI_ADDR_GNI:
 		size = snprintf(buf, *len, "fi_addr_gni://%" PRIx64,
@@ -528,14 +529,15 @@ static int ofi_str_to_psmx3(const char *str, void **addr, size_t *len)
 {
 	int ret;
 
-	*len = 2 * sizeof(uint64_t);
+	*len = 4 * sizeof(uint64_t);
 	*addr = calloc(1, *len);
 	if (!(*addr))
 		return -FI_ENOMEM;
 
-	ret = sscanf(str, "%*[^:]://%" SCNx64 ":%" SCNx64,
-		     (uint64_t *) *addr, (uint64_t *) *addr + 1);
-	if (ret == 2)
+	ret = sscanf(str, "%*[^:]://%" SCNx64 ":%" SCNx64 ":%" SCNx64 ":%" SCNx64,
+		     (uint64_t *) *addr, (uint64_t *) *addr + 1,
+		     (uint64_t *) *addr + 2, (uint64_t *) *addr + 3);
+	if (ret == 4)
 		return 0;
 
 	free(*addr);

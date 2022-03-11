@@ -136,7 +136,7 @@ struct ptl_arg {
 /* can be tracked per protocol, only fully tracked and reported
  * for ips_proto at this time but by defining here we can later track
  * for shm and maybe self protocols too and we avoid a branch in
- * psmi_mq_handle_envelope
+ * psm3_mq_handle_envelope
  */
 struct ptl_strategy_stats {
 	uint64_t tiny_cpu_isend;
@@ -399,7 +399,5 @@ struct ptl_ctl {
 				      int nargs, void *src, size_t len,
 				      void *dest, int flags);
 #endif
-	psm2_error_t (*msg_size_thresh_query) (enum psm2_info_query_thresh_et,
-					       uint32_t *out, psm2_mq_t mq, psm2_epaddr_t);
 };
 #endif

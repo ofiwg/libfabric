@@ -5,7 +5,7 @@
 
   GPL LICENSE SUMMARY
 
-  Copyright(c) 2016 Intel Corporation.
+  Copyright(c) 2015 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -21,7 +21,7 @@
 
   BSD LICENSE
 
-  Copyright(c) 2016 Intel Corporation.
+  Copyright(c) 2015 Intel Corporation.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -51,19 +51,42 @@
 
 */
 
+/* This file contains hfi service routine interface used by the low */
+/* level hfi protocol code. */
+
+#include <sys/poll.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <stddef.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <malloc.h>
+#include <time.h>
+
+#include "utils_user.h"
+
+/* keep track whether we disabled mmap in malloc */
+int psm3_malloc_no_mmap = 0;
+
 /*
-
-  hfi1_deprecated_gen1.h
-
-  Contains certain features of the hfi1 module that have been deprecated.
-
-  These features may still need to be supported by the psm library for
-  reasons of backwards compatibility.
+ * Add a constructor function to disable mmap if asked to do so by the user
  */
+static void init_mallopt_disable_mmap(void) __attribute__ ((constructor));
 
-#ifndef __HFI1_DEPRECATED_GEN1_H__
+static void init_mallopt_disable_mmap(void)
+{
+	char *env = getenv("PSM3_DISABLE_MMAP_MALLOC");
 
-#define __HFI1_DEPRECATED_GEN1_H__
+	if (env && *env) {
+		if (mallopt(M_MMAP_MAX, 0) && mallopt(M_TRIM_THRESHOLD, -1)) {
+			psm3_malloc_no_mmap = 1;
+		}
+	}
 
-
-#endif /* #ifndef __HFI1_DEPRECATED_GEN1_H__ */
+	return;
+}

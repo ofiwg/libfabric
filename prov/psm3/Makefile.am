@@ -12,10 +12,8 @@ AM_CPPFLAGS = \
 	-D_GNU_SOURCE -D__USE_XOPEN2K8 \
 	-DSYSCONFDIR=\"$(sysconfdir)\" \
 	-DRDMADIR=\"@rdmadir@\" \
-	-DPROVDLDIR=\"$(pkglibdir)\"
-if HAVE_PSM3_SRC
-AM_CPPFLAGS += -I$(srcdir)/psm3
-endif
+	-DPROVDLDIR=\"$(pkglibdir)\" \
+	-I$(srcdir)/psm3
 
 noinst_LTLIBRARIES =
 libfabric_pkglibdir = $(libdir)/libfabric
@@ -78,7 +76,8 @@ common_srcs = \
 	util/src/util_shm.c \
 	util/src/util_wait.c \
 	util/src/cuda_mem_monitor.c \
-	util/src/rocr_mem_monitor.c
+	util/src/rocr_mem_monitor.c \
+	util/src/ze_mem_monitor.c
 
 if MACOS
 common_srcs += shared/osx/osd.c
@@ -153,6 +152,7 @@ src_libpsm3_fi_la_SOURCES = \
 	inc/rdma/fi_collective.h \
 	inc/rdma/fi_domain.h \
 	inc/rdma/fi_eq.h \
+	inc/rdma/fi_ext.h \
 	inc/rdma/fi_rma.h \
 	inc/rdma/fi_endpoint.h \
 	inc/rdma/fi_errno.h \
@@ -192,18 +192,22 @@ src_libpsm3_fi_la_LDFLAGS += \
 
 chksum_srcs = $(src_libpsm3_fi_la_SOURCES)
 if HAVE_PSM3_SRC
-nodist_src_libpsm3_fi_la_SOURCES += src/psm3_revision.c
+nodist_src_libpsm3_fi_la_SOURCES += \
+	src/psm3_revision.c \
+	src/psm3_src_chksum.h
 
 include psm3/Makefile.include
-src_libpsm3_fi_la_LIBADD += libpsm2.la
-src_libpsm3_fi_la_DEPENDENCIES += libpsm2.la
+src_libpsm3_fi_la_LIBADD += psm3/libpsm3i.la
+src_libpsm3_fi_la_DEPENDENCIES += \
+	src/psm3_src_chksum.h \
+	psm3/libpsm3i.la
 
 else !HAVE_PSM3_SRC
 src_libpsm3_fi_la_LDFLAGS += -lpsm2
 endif !HAVE_PSM3_SRC
 
 if !EMBEDDED
-src_libpsm3_fi_la_LDFLAGS += -version-info 16:1:15
+src_libpsm3_fi_la_LDFLAGS += -version-info 18:0:17
 endif
 
 prov_install_man_pages = man/man7/fi_psm3.7
@@ -213,28 +217,26 @@ prov_dist_man_pages = man/man7/fi_psm3.7
 man_MANS = $(prov_install_man_pages)
 
 EXTRA_DIST += \
-        libpsm3-fi.spec.in \
-        config/distscript.pl \
-        $(prov_dist_man_pages) \
-        VERSION
+	autogen.sh \
+	libpsm3-fi.spec.in \
+	config/distscript.pl \
+	$(prov_dist_man_pages) \
+	VERSION
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libpsm3-fi.pc
 
 chksum_srcs += $(EXTRA_DIST) $(pkgconfig_DATA)
 
-all-local:
-	@echo "Building src checksum..."; \
-	chksum=`cat $(chksum_srcs) | sha1sum | cut -d' ' -f 1`; \
-	if ! grep -q $$chksum src/psm3_revision.c 2>/dev/null; then \
-		sed -i "/define PSMX3_SRC_CHECKSUM/s/\".*\"/\"$$chksum\"/" src/psm3_revision.c; \
-		echo "SRC checksum updated to $$chksum"; \
-	else \
-		echo "SRC checksum not changed: $$chksum"; \
-	fi; \
-	timestamp=`date`; \
-	sed -i "/define PSMX3_BUILD_TIMESTAMP/s/\".*\"/\"$$timestamp\"/" src/psm3_revision.c; \
-	echo "Updated build timestamp: $$timestamp"
+BUILT_SOURCES = src/psm3_src_chksum.h
+CLEANFILES = src/psm3_src_chksum.h
+DATE_FMT = +%Y-%m-%dT%H:%M:%S
+src/psm3_src_chksum.h: Makefile $(chksum_srcs)
+	$(AM_V_GEN) chksum=`for file in $(chksum_srcs); do cat $(top_srcdir)/$$file; done | sha1sum | cut -d' ' -f 1`; \
+	if ! grep -q $$chksum src/psm3_src_chksum.h 2>/dev/null; then \
+		echo "#define PSMX3_SRC_CHECKSUM \"$$chksum\"" > src/psm3_src_chksum.h; \
+		echo "#define PSMX3_BUILD_TIMESTAMP \"`if test -z "$(SOURCE_DATE_EPOCH)" ; then date "$(DATE_FMT)" ; else date -u -d "@$(SOURCE_DATE_EPOCH)" "$(DATE_FMT)" 2>/dev/null || date -u -r "$(SOURCE_DATE_EPOCH)" "$(DATE_FMT)" 2>/dev/null || date -u "$(DATE_FMT)" ; fi`\"" >> src/psm3_src_chksum.h; \
+	fi
 
 nroff:
 	@for file in $(prov_install_man_pages); do \

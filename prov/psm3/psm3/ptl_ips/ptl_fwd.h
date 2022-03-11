@@ -61,7 +61,7 @@ typedef struct ips_epaddr ips_epaddr_t;
 typedef struct ips_msgctl ips_msgctl_t;
 
 /* Symbol in ips ptl */
-extern struct ptl_ctl_init psmi_ptl_ips;
+extern struct ptl_ctl_init psm3_ptl_ips;
 
-extern struct ptl_ctl_rcvthread psmi_ptl_ips_rcvthread;
+extern struct ptl_ctl_rcvthread psm3_ptl_ips_rcvthread;
 #endif /* _PTL_FWD_IPS_H */

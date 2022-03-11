@@ -5,7 +5,7 @@
 
   GPL LICENSE SUMMARY
 
-  Copyright(c) 2017 Intel Corporation.
+  Copyright(c) 2016 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -21,7 +21,7 @@
 
   BSD LICENSE
 
-  Copyright(c) 2017 Intel Corporation.
+  Copyright(c) 2016 Intel Corporation.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -51,72 +51,74 @@
 
 */
 
-#include "psm_user.h"
-#include "psm2_hal.h"
+/* Copyright (c) 2003-2016 Intel Corporation. All rights reserved. */
 
-#if PSMI_HAL_INST_CNT > 1
-#define PSMI_HAL_CAT_INL_SYM(KERNEL) hfp_gen1_ ## KERNEL
-#include "psm2_hal_inline_t.h"
-#include "psm_hal_inline_i.h"
+#ifdef UMR_CACHE
+#ifndef _PSMI_VERBS_UMRC_H
+#define _PSMI_VERBS_UMRC_H
+#ifndef _PSMI_IN_USER_H
+#error psm_verbs_umrc.h not meant to be included directly, include psm_user.h instead
 #endif
 
-/* define the singleton that implements hal for gen1 */
-static hfp_gen1_t psm_gen1_hi = {
-	/* start of public psmi_hal_instance_t data */
-	.phi = {
-		.type					  = PSM_HAL_INSTANCE_GEN1,
-		.description				  = "PSM3 HAL instance for GEN1"
-#ifdef PSM_CUDA
-								" (cuda)"
-#endif
-									,
-		.hfi_name				  = "hfi1",
-		.hfi_sys_class_path			  = "/sys/class/infiniband/hfi1",
-		.params					  = {0},
+#ifdef PSM_HAVE_REG_MR
+#include <stdint.h>
+#include <pthread.h>
+#include <linux/userfaultfd.h>
+#include "psm_lock.h"
+#include "utils_queue.h"
 
-		/* The following methods are alphabetized */
-#if PSMI_HAL_INST_CNT > 1
+#define UFFD_POLL_TIMEOUT_MS	100
+#define UMR_CACHE_QUEUE_DEPTH	32
 
-		.hfp_close_context			  = hfp_gen1_close_context,
-		.hfp_context_open			  = hfp_gen1_context_open,
-		.hfp_context_initstats			  = hfp_gen1_context_initstats,
+typedef struct psm2_umrc *psm2_umrc_t;
+typedef struct psm2_umrc_event *psm2_umrc_event_t;
+typedef struct psm2_umr_cache *psm2_umr_cache_t;
 
-
-		.hfp_finalize_				  = hfp_gen1_finalize_,
-
-
-		.hfp_get_jkey				  = hfp_gen1_get_jkey,
-
-
-		.hfp_get_node_id			  = hfp_gen1_get_node_id,
-
-
-
-		.hfp_get_port_lid			  = hfp_gen1_get_port_lid,
-
-
-		.hfp_get_port_rate			  = hfp_gen1_get_port_rate,
-
-
-		.hfp_spio_process_events		  = hfp_gen1_spio_process_events,
-		.hfp_spio_transfer_frame		  = hfp_gen1_spio_transfer_frame,
-
-
-#endif // PSMI_HAL_INST_CNT > 1
-		.hfp_get_port_subnet		  = hfp_gen1_get_port_subnet,
-		.hfp_get_default_pkey			  = hfp_gen1_get_default_pkey,
-		.hfp_get_num_contexts			  = hfp_gen1_get_num_contexts,
-		.hfp_get_num_free_contexts		  = hfp_gen1_get_num_free_contexts,
-		.hfp_get_num_units			  = hfp_gen1_get_num_units,
-		.hfp_get_num_ports			  = hfp_gen1_get_num_ports,
-		.hfp_get_port_active			  = hfp_gen1_get_port_active,
-		.hfp_get_unit_active			  = hfp_gen1_get_unit_active,
-		.hfp_initialize				  = hfp_gen1_initialize,
-	},
+struct uffd_handler_thread {
+	int pipefd[2];
+	pthread_t thread;
 };
 
-/* __psmi_hal_gen1_constructor */
-static void __attribute__ ((constructor)) __psmi_hal_gen1_constructor(void)
-{
-	psmi_hal_register_instance((psmi_hal_instance_t*)&psm_gen1_hi);
-}
+struct psm2_umrc {
+	int fd;
+	psm2_ep_t ep;
+	void *mr_cache;
+	int event_queue;
+	int thread;
+	struct uffd_handler_thread *uffd_thread;
+};
+
+struct psm2_umrc_event {
+	uint64_t addr;
+	uint64_t length;
+	uint32_t event;
+	TAILQ_ENTRY(psm2_umrc_event) next;
+};
+
+struct psm2_umr_cache {
+	int *fd;
+	int save_errno;
+	int lock;
+	uint32_t page_size;
+	int event_queue;
+	uint32_t queue_cnt;
+	struct {
+		uint64_t evict;
+		uint64_t remap;
+		uint64_t remove;
+		uint64_t unmap;
+	} stats;
+	void *mr_cache;
+	psm2_umrc_event_t mm_events;
+};
+
+int psm3_verbs_umrc_init(psm2_umrc_t umrc, int thread_opt);
+void psm3_verbs_umrc_stop(psm2_umrc_t umrc);
+void psm3_verbs_umrc_free(psm2_umrc_t umrc);
+int psm3_verbs_umrc_register(psm2_umr_cache_t umr_cache, uint64_t addr, uint64_t len);
+int psm3_verbs_umrc_unregister(psm2_umr_cache_t umr_cache, uint64_t addr, uint64_t len);
+void psm3_verbs_uffd_event(psm2_ep_t ep);
+
+#endif // PSM_HAVE_REG_MR
+#endif // _PSMI_VERBS_UMRC_H
+#endif // UMR_CACHE
