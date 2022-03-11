@@ -1078,6 +1078,7 @@ out:
 		break;
 	}
 
+	fprintf(stderr, "main\n");
 	return ret;
 }
 
