@@ -11,10 +11,12 @@ fi_psm3 \- The PSM3 Fabric Provider
 
 # OVERVIEW
 
-The *psm3* provider implements a Performance Scaled Messaging
-capability which supports Intel RoCEv2 capable NICs. PSM3 represents
-an Ethernet and standard RoCEv2 enhancement of previous PSM
-implementations.
+The *psm3* provider implements a Performance Scaled Messaging capability
+which supports most verbs UD and sockets devices. Additional features and
+optimizations can be enabled when running over Intel's E810 Ethernet NICs
+and/or using Intel's rendezvous kernel module ([`rv`](https://github.com/intel/iefs-kernel-updates)).
+PSM 3.x fully integrates the OFI provider and the underlying PSM3
+protocols/implementation and only exports the OFI APIs.
 
 # SUPPORTED FEATURES
 
