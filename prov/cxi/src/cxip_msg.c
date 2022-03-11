@@ -2885,6 +2885,18 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 				 rxc->rx_pte->pte->ptn);
 		}
 
+		/* If flow control has occurred during an on-going NIC
+		 * initiated hardware to software transition, then on-loading
+		 * has already been initiated and does not need to be done.
+		 * The PtlTE will be re-enabled at completion of the transition.
+		 */
+		if (rxc->prev_state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED) {
+			RXC_WARN(rxc,
+				 "PtlTE %d FC during HW-to-SW transition\n",
+				 rxc->rx_pte->pte->ptn);
+			break;
+		}
+
 		do {
 			ret = cxip_flush_appends(rxc);
 		} while (ret == -FI_EAGAIN);
