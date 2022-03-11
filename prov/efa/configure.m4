@@ -11,6 +11,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	# Determine if we can support the efa provider
 	efa_happy=0
 	efa_h_enable_poisoning=0
+
 	AS_IF([test x"$enable_efa" != x"no"],
 	      [FI_CHECK_PACKAGE([efa_ibverbs],
 				[infiniband/verbs.h],
@@ -113,6 +114,45 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AC_SUBST(efa_CPPFLAGS)
 	AC_SUBST(efa_LDFLAGS)
 	AC_SUBST(efa_LIBS)
+
+	AC_ARG_ENABLE([efa-unit-test],
+		[AS_HELP_STRING([--enable-efa-unit-test=CMOCKA_INSTALL_DIR],
+				[Provide a path to the CMocka installation directory
+				 in order to enable EFA Unit Tests.])])
+
+	cmocka_dir=""
+	if [test x"$enable_efa_unit_test" = x"yes"]; then
+		cmocka_dir=""
+	else
+		cmocka_dir="$enable_efa_unit_test"
+	fi
+
+	if [ test x"$enable_efa_unit_test" != x"" && test x"$enable_efa_unit_test" != x"no" ]; then
+		FI_CHECK_PACKAGE(cmocka,
+						 [cmocka.h],
+						 [cmocka],
+						 [_expect_any],
+						 [],
+						 [$cmocka_dir],
+						 [$cmocka_dir/lib64],
+						 [
+							efa_LIBS+=" $cmocka_LDFLAGS $cmocka_LIBS -static"
+							AC_DEFINE([EFA_UNIT_TEST], [1], [EFA unit testing])
+						 ],
+					 	 [
+							AC_DEFINE([EFA_UNIT_TEST], [0], [EFA unit testing])
+							AC_MSG_ERROR([Cannot compile EFA unit tests without a valid Cmocka installation directory.])
+					 	 ],
+						 [
+							#include <stdarg.h>
+							#include <stddef.h>
+							#include <setjmp.h>
+					 	 ])
+	else
+		AC_DEFINE([EFA_UNIT_TEST], [0], [EFA unit testing])
+	fi
+
+	AM_CONDITIONAL([ENABLE_EFA_UNIT_TEST], [ test x"$enable_efa_unit_test" != x"" && test x"$enable_efa_unit_test" != x"no" ])
 ])
 
 dnl

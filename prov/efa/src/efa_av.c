@@ -1075,3 +1075,103 @@ err:
 	free(av);
 	return ret;
 }
+
+#if EFA_UNIT_TEST
+
+#include "efa_unit_tests.h"
+
+/* Common Setup/Teardown */
+
+struct efa_resource {
+	struct fid_fabric *fabric;
+	struct fid_domain *domain;
+	struct fid_av *av;
+};
+
+struct efa_resource *create_efa_resource() {
+	struct efa_resource *resource = (struct efa_resource*) malloc(sizeof(struct efa_resource));
+	struct fi_info *info;
+	struct fi_av_attr av_attr = {0};
+	int err;
+
+	resource->fabric = NULL;
+	resource->domain = NULL;
+	resource->av = NULL;
+
+	err = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, NULL, &info);
+	if (err) {
+		free(resource);
+		return NULL;
+	}
+
+	err = fi_fabric(info->fabric_attr, &resource->fabric, NULL);
+	if (err) {
+		free(resource);
+		return NULL;
+	}
+
+	err = fi_domain(resource->fabric, info, &resource->domain, NULL);
+	if (err) {
+		fi_close(&resource->fabric->fid);
+		free(resource);
+		return NULL;
+	}
+
+	err = fi_av_open(resource->domain, &av_attr, &resource->av, NULL);
+	if (err) {
+		fi_close(&resource->domain->fid);
+		fi_close(&resource->fabric->fid);
+		free(resource);
+		return NULL;
+	}
+
+	return resource;
+}
+
+void delete_efa_resource(struct efa_resource *resource) {
+	fi_close(&resource->av->fid);
+	fi_close(&resource->domain->fid);
+	fi_close(&resource->fabric->fid);
+	free(resource);
+}
+
+/*
+ * Only works on nodes with EFA devices
+ * This test calls efa_ah_alloc twice with the same GID,
+ * and verifies that ibv_create_ah only gets called once.
+ */
+void test_duplicate_efa_ah_creation() {
+	/* Setup Local Variables */
+	int ibv_err = 4242;
+	struct efa_resource *resource;
+	struct efa_av *av;
+	struct efa_ah *efa_ah;
+	struct efa_ah *efa_ah2;
+	uint8_t gid[EFA_GID_LEN];
+	memset(gid, 7, EFA_GID_LEN);
+
+	resource = create_efa_resource();
+	assert_non_null(resource);
+	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	assert_non_null(av);
+
+	/* Set mock expectations and call UUT, success */
+	expect_value(__wrap_ibv_create_ah, pd, av->domain->ibv_pd);
+	expect_any(__wrap_ibv_create_ah, attr);
+	expect_value(__wrap_efadv_query_ah, ibvah, ibv_err);
+	expect_any(__wrap_efadv_query_ah, attr);
+	expect_any(__wrap_efadv_query_ah, inlen);
+	will_return(__wrap_ibv_create_ah, ibv_err);
+	will_return(__wrap_efadv_query_ah, 0);
+	efa_ah = efa_ah_alloc(av, gid);
+	assert_non_null(efa_ah);
+
+	/* Call UUT again */
+	efa_ah2 = efa_ah_alloc(av, gid);
+	assert_true(efa_ah2 == efa_ah);
+	assert_true(efa_ah->refcnt == 2);
+	assert_true(av->ah_map->refcnt == 2);
+
+	delete_efa_resource(resource);
+}
+#endif
