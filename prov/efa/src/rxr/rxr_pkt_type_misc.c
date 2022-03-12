@@ -472,7 +472,11 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 		} else if (read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY) {
 			rx_entry = read_entry->context;
 			if (rx_entry->op == ofi_op_msg || rx_entry->op == ofi_op_tagged) {
+				if (rx_entry->fi_flags & FI_MULTI_RECV)
+					rxr_msg_multi_recv_handle_completion(ep, rx_entry);
+
 				rxr_cq_write_rx_completion(ep, rx_entry);
+				rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 			} else {
 				assert(rx_entry->op == ofi_op_write);
 				if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
