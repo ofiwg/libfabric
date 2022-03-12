@@ -519,7 +519,8 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 				size_t data_size)
 {
 	struct rxr_rx_entry *rx_entry;
-	ssize_t ret;
+	bool post_ctrl;
+	int ctrl_type;
 
 	rx_entry = pkt_entry->x_entry;
 	assert(rx_entry);
@@ -528,34 +529,13 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 
 	if (rx_entry->total_len == rx_entry->bytes_copied) {
+		post_ctrl = false;
 		if (rx_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED) {
-			ret = rxr_pkt_post_ctrl_or_queue(ep,
-							 RXR_RX_ENTRY,
-							 rx_entry,
-							 RXR_RECEIPT_PKT, 0);
-			if (OFI_UNLIKELY(ret)) {
-				FI_WARN(&rxr_prov,
-					FI_LOG_CQ,
-					"Posting of receipt packet failed! err=%s\n",
-					fi_strerror(ret));
-				efa_eq_write_error(&ep->util_ep,
-						   FI_EIO,
-						   ret);
-				rxr_release_rx_entry(ep,
-						     rx_entry);
-				return;
-			}
-			rxr_cq_handle_rx_completion(ep, rx_entry);
-			rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
-			/* rx_entry will be released
-			 * when sender receives the
-			 * receipt packet.
-			 */
-			return;
+			post_ctrl = true;
+			ctrl_type = RXR_RECEIPT_PKT;
 		}
-		rxr_cq_handle_rx_completion(ep, rx_entry);
-		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
-		rxr_release_rx_entry(ep, rx_entry);
+
+		rxr_cq_complete_rx(ep, rx_entry, post_ctrl, ctrl_type);
 	}
 }
 
