@@ -20,8 +20,10 @@
 
 #include "cxip.h"
 
-#define FC_SW_EP_MSG "Flow control triggered due to failure to append LE. "\
-"Software endpoint mode required.\n"
+#define FC_SW_LE_MSG "LE exhaustion during flow control. "\
+       "FI_CXI_RX_MATCH_MODE=[hybrid|software] is required.\n"
+#define FC_SW_ONLOAD_MSG "LE resources not recovered during flow control. "\
+       "FI_CXI_RX_MATCH_MODE=[hybrid|software] is required.\n"
 
 /* Defines the posted receive interval for checking LE allocation if
  * in hybrid RX match mode and preemptive transitions to software
@@ -1082,7 +1084,7 @@ static int cxip_recv_pending_ptlte_disable(struct cxip_rxc *rxc,
 	 * LE limit.
 	 */
 	if (check_fc && rxc->state == RXC_FLOW_CONTROL)
-		RXC_FATAL(rxc, FC_SW_EP_MSG);
+		RXC_FATAL(rxc, FC_SW_LE_MSG);
 
 	if (rxc->state != RXC_ENABLED && rxc->state != RXC_ENABLED_SOFTWARE)
 		return FI_SUCCESS;
@@ -2441,7 +2443,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
 
 		if (rxc->state == RXC_ONLOAD_FLOW_CONTROL)
-			RXC_FATAL(rxc, FC_SW_EP_MSG);
+			RXC_FATAL(rxc, FC_SW_ONLOAD_MSG);
 
 		req->search.complete = true;
 

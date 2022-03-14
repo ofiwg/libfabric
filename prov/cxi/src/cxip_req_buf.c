@@ -622,7 +622,9 @@ int cxip_req_buf_replenish(struct cxip_rxc *rxc, bool seq_restart)
 		if (rxc->req_buf_max_count &&
 		    (ofi_atomic_get32(&rxc->req_bufs_allocated) >=
 		     rxc->req_buf_max_count))
-			RXC_FATAL(rxc, "Request buffer max exceeded: %ld\n",
+			RXC_FATAL(rxc,
+				  "Request buffer max exceeded: %ld, increase"
+				  " or set FI_CXI_REQ_BUF_MAX_COUNT=0\n",
 				  rxc->req_buf_max_count);
 
 		if (ofi_atomic_get32(&rxc->req_bufs_linked) < 1)
