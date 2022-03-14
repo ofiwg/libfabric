@@ -187,7 +187,7 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 
 	pool->alloc_size = (pool->attr.chunk_cnt + 1) * pool->entry_size;
 	hp_size = ofi_get_hugepage_size();
-	if (hp_size <= 0 || pool->alloc_size < hp_size)
+	if (hp_size <= 0 || (ssize_t) pool->alloc_size < hp_size)
 		pool->attr.flags &= ~OFI_BUFPOOL_HUGEPAGES;
 
 	if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES) {

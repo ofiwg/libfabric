@@ -370,7 +370,7 @@ static int tcpx_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen)
 		if (rand_port_number > port_range.high)
 			rand_port_number = port_range.low;
 
-		ofi_addr_set_port(src_addr, rand_port_number);
+		ofi_addr_set_port(src_addr, (uint16_t) rand_port_number);
 		ret = bind(sock, src_addr, (socklen_t) addrlen);
 		if (ret) {
 			if (ofi_sockerr() == EADDRINUSE)
@@ -836,7 +836,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	slist_init(&ep->async_queue);
 
 	if (info->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT)
-		ep->rx_avail = info->rx_attr->size;
+		ep->rx_avail = (int) info->rx_attr->size;
 
 	ep->cur_rx.hdr_done = 0;
 	ep->cur_rx.hdr_len = sizeof(ep->cur_rx.hdr.base_hdr);
@@ -972,6 +972,7 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t fid_handle,
 {
 	struct tcpx_cm_msg msg;
 	struct tcpx_conn_handle *handle;
+	ssize_t size_ret;
 	int ret;
 
 	handle = container_of(fid_handle, struct tcpx_conn_handle, fid);
@@ -986,9 +987,9 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t fid_handle,
 	if (paramlen)
 		memcpy(&msg.data, param, paramlen);
 
-	ret = ofi_send_socket(handle->sock, &msg,
-			      sizeof(msg.hdr) + paramlen, MSG_NOSIGNAL);
-	if (ret != sizeof(msg.hdr) + paramlen)
+	size_ret = ofi_send_socket(handle->sock, &msg,
+				   sizeof(msg.hdr) + paramlen, MSG_NOSIGNAL);
+	if ((size_t) size_ret != sizeof(msg.hdr) + paramlen)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"sending of reject message failed\n");
 

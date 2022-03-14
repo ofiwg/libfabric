@@ -133,7 +133,7 @@ static void rxd_complete_rx(struct rxd_ep *ep, struct rxd_x_entry *rx_entry)
 	      rx_entry->cq_entry.flags & FI_RECV))
 		rx_cq->write_fn(rx_cq, &rx_entry->cq_entry);
 
-	ofi_ep_rx_cntr_inc_func(&ep->util_ep, rx_entry->op);
+	ofi_ep_rx_cntr_inc_func(&ep->util_ep, (uint8_t) rx_entry->op);
 
 out:
 	rxd_rx_entry_free(ep, rx_entry);
@@ -146,7 +146,7 @@ static void rxd_complete_tx(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 	if (!(tx_entry->flags & RXD_NO_TX_COMP))
 		tx_cq->write_fn(tx_cq, &tx_entry->cq_entry);
 
-	ofi_ep_tx_cntr_inc_func(&ep->util_ep, tx_entry->op);
+	ofi_ep_tx_cntr_inc_func(&ep->util_ep, (uint8_t) tx_entry->op);
 
 	rxd_tx_entry_free(ep, tx_entry);
 }
@@ -251,7 +251,7 @@ int rxd_start_xfer(struct rxd_ep *ep, struct rxd_x_entry *tx_entry)
 		rxd_peer(ep, tx_entry->peer)->tx_seq_no = tx_entry->start_seq +
 						      tx_entry->num_segs;
 	}
-	hdr->peer = rxd_peer(ep, tx_entry->peer)->peer_addr;
+	hdr->peer = (uint32_t) rxd_peer(ep, tx_entry->peer)->peer_addr;
 	rxd_ep_send_pkt(ep, tx_entry->pkt);
 	rxd_insert_unacked(ep, tx_entry->peer, tx_entry->pkt);
 	tx_entry->pkt = NULL;
@@ -272,7 +272,8 @@ void rxd_progress_tx_list(struct rxd_ep *ep, struct rxd_peer *peer)
 	struct dlist_entry *tmp_entry;
 	struct rxd_x_entry *tx_entry;
 	uint64_t head_seq = peer->last_rx_ack;
-	int ret = 0, inc = 0;
+	ssize_t ret = 0;
+	int inc = 0;
 
 	if (!dlist_empty(&peer->unacked)) {
 		head_seq = rxd_get_base_hdr(container_of(
@@ -472,7 +473,7 @@ struct rxd_x_entry *rxd_progress_multi_recv(struct rxd_ep *ep,
 	}
 	dup_id = dup_entry->rx_id;
 	memcpy(dup_entry, rx_entry, sizeof(*rx_entry));
-	dup_entry->rx_id = dup_id;
+	dup_entry->rx_id = (uint16_t) dup_id;
 	dup_entry->iov[0].iov_base = rx_entry->iov[0].iov_base;
 	dup_entry->iov[0].iov_len = total_size;
 	dup_entry->cq_entry.len = total_size;
@@ -581,7 +582,7 @@ static struct rxd_x_entry *rxd_rma_read_entry_init(struct rxd_ep *ep,
 		return NULL;
 	}
 
-	rx_entry->tx_id = sar_hdr->tx_id;
+	rx_entry->tx_id = (uint16_t)sar_hdr->tx_id;
 	rx_entry->op = RXD_DATA_READ;
 	rx_entry->peer = base_hdr->peer;
 	rx_entry->flags = RXD_NO_TX_COMP;
@@ -652,7 +653,7 @@ static struct rxd_x_entry *rxd_rx_atomic_fetch(struct rxd_ep *ep,
 		rxd_rx_entry_free(ep, rx_entry);
 		return NULL;
 	}
-	rx_entry->tx_id = sar_hdr->tx_id;
+	rx_entry->tx_id = (uint16_t) sar_hdr->tx_id;
 
 	rx_entry->op = RXD_DATA_READ;
 	rx_entry->peer = base_hdr->peer;
@@ -731,7 +732,7 @@ static int rxd_unpack_hdrs(size_t pkt_size, struct rxd_base_hdr *base_hdr,
 		*atom_hdr = NULL;
 	}
 
-	if (pkt_size < (ptr - (char *) base_hdr))
+	if (pkt_size < (size_t)(ptr - (char *) base_hdr))
 		goto err;
 
 	*msg = ptr;
@@ -846,7 +847,8 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 		     void **msg, size_t size)
 {
 	if (sar_hdr)
-		rxd_peer(ep, base_hdr->peer)->curr_tx_id = sar_hdr->tx_id;
+		rxd_peer(ep, base_hdr->peer)->curr_tx_id =
+			(uint16_t) sar_hdr->tx_id;
 
 	rxd_peer(ep, base_hdr->peer)->curr_rx_id = rx_entry->rx_id;
 
@@ -877,7 +879,7 @@ void rxd_progress_op(struct rxd_ep *ep, struct rxd_x_entry *rx_entry,
 		return;
 	}
 
-	rx_entry->tx_id = sar_hdr->tx_id;
+	rx_entry->tx_id = (uint16_t) sar_hdr->tx_id;
 	rx_entry->num_segs = sar_hdr->num_segs;
 	rx_entry->next_seg_no++;
 	rx_entry->start_seq = base_hdr->seq_no;
@@ -1054,7 +1056,7 @@ static void rxd_handle_op(struct rxd_ep *ep, struct rxd_pkt_entry *pkt_entry)
 	}
 
 	rxd_peer(ep, base_hdr->peer)->rx_seq_no++;
-	rxd_peer(ep, base_hdr->peer)->rx_window = rxd_env.max_unacked;
+	rxd_peer(ep, base_hdr->peer)->rx_window = (uint16_t) rxd_env.max_unacked;
 	rxd_progress_op(ep, rx_entry, pkt_entry, base_hdr, sar_hdr, tag_hdr,
 			data_hdr, rma_hdr, atom_hdr, &msg, msg_size);
 
@@ -1087,7 +1089,7 @@ static void rxd_handle_ack(struct rxd_ep *ep, struct rxd_pkt_entry *ack_entry)
 	fi_addr_t peer = ack->base_hdr.peer;
 	struct rxd_base_hdr *hdr;
 
-	rxd_peer(ep, peer)->tx_window = ack->ext_hdr.rx_id;
+	rxd_peer(ep, peer)->tx_window = (uint16_t) ack->ext_hdr.rx_id;
 
 	if (rxd_peer(ep, peer)->last_rx_ack == ack->base_hdr.seq_no)
 		return;
@@ -1193,12 +1195,12 @@ void rxd_handle_recv_comp(struct rxd_ep *ep, struct fi_cq_msg_entry *comp)
 void rxd_handle_error(struct rxd_ep *ep)
 {
 	struct fi_cq_err_entry err = {0};
-	int ret;
+	ssize_t ret;
 
 	ret = fi_cq_readerr(ep->dg_cq, &err, 0);
 	if (ret < 0) {
 		FI_WARN(&rxd_prov, FI_LOG_CQ,
-			"Error reading CQ: %s\n", fi_strerror(-ret));
+			"Error reading CQ: %s\n", fi_strerror((int) -ret));
 	} else {
 		FI_WARN(&rxd_prov, FI_LOG_CQ,
 			"Received %s error from core provider: %s\n",
@@ -1234,7 +1236,8 @@ ssize_t rxd_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	struct util_cq *cq;
 	struct rxd_ep *ep;
 	uint64_t endtime;
-	int ret, ep_retry;
+	ssize_t ret;
+	int ep_retry;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	assert(cq->wait && cq->internal_wait);

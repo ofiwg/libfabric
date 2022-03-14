@@ -263,7 +263,7 @@ ssize_t sock_queue_cntr_op(struct fi_deferred_work *work, uint64_t flags)
 	return 0;
 }
 
-int sock_queue_work(struct sock_domain *dom, struct fi_deferred_work *work)
+ssize_t sock_queue_work(struct sock_domain *dom, struct fi_deferred_work *work)
 {
 	struct sock_triggered_context *ctx;
 	uint64_t flags = SOCK_NO_COMPLETION | SOCK_TRIGGERED_OP | FI_TRIGGER;
@@ -295,12 +295,12 @@ int sock_queue_work(struct sock_domain *dom, struct fi_deferred_work *work)
 		if (work->op.tagged->msg.context != &work->context)
 			return -FI_EINVAL;
 		return sock_ep_trecvmsg(work->op.tagged->ep, &work->op.tagged->msg,
-					  work->op.tagged->flags | flags);
+					work->op.tagged->flags | flags);
 	case FI_OP_TSEND:
 		if (work->op.tagged->msg.context != &work->context)
 			return -FI_EINVAL;
 		return sock_ep_tsendmsg(work->op.tagged->ep, &work->op.tagged->msg,
-					  work->op.tagged->flags | flags);
+					work->op.tagged->flags | flags);
 	case FI_OP_READ:
 		if (work->op.rma->msg.context != &work->context)
 			return -FI_EINVAL;

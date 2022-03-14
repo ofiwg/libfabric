@@ -130,7 +130,7 @@ void sock_cntr_check_trigger_list(struct sock_cntr *cntr)
 	struct fi_deferred_work *work;
 	struct sock_trigger *trigger;
 	struct dlist_entry *entry;
-	int ret = 0;
+	ssize_t ret = 0;
 
 	ofi_mutex_lock(&cntr->trigger_lock);
 	for (entry = cntr->trigger_list.next;
@@ -237,8 +237,8 @@ static int sock_cntr_add(struct fid_cntr *fid_cntr, uint64_t value)
 	cntr = container_of(fid_cntr, struct sock_cntr, cntr_fid);
 
 	pthread_mutex_lock(&cntr->mut);
-	new_val = ofi_atomic_add32(&cntr->value, value);
-	ofi_atomic_set32(&cntr->last_read_val, new_val);
+	new_val = ofi_atomic_add32(&cntr->value, (int32_t) value);
+	ofi_atomic_set32(&cntr->last_read_val, (int32_t) new_val);
 	if (ofi_atomic_get32(&cntr->num_waiting))
 		pthread_cond_broadcast(&cntr->cond);
 	if (cntr->signal)
@@ -256,8 +256,8 @@ static int sock_cntr_set(struct fid_cntr *fid_cntr, uint64_t value)
 	cntr = container_of(fid_cntr, struct sock_cntr, cntr_fid);
 
 	pthread_mutex_lock(&cntr->mut);
-	new_val = ofi_atomic_set32(&cntr->value, value);
-	ofi_atomic_set32(&cntr->last_read_val, new_val);
+	new_val = ofi_atomic_set32(&cntr->value, (int32_t) value);
+	ofi_atomic_set32(&cntr->last_read_val, (int32_t) new_val);
 	if (ofi_atomic_get32(&cntr->num_waiting))
 		pthread_cond_broadcast(&cntr->cond);
 	if (cntr->signal)
@@ -274,7 +274,7 @@ static int sock_cntr_adderr(struct fid_cntr *fid_cntr, uint64_t value)
 	cntr = container_of(fid_cntr, struct sock_cntr, cntr_fid);
 
 	pthread_mutex_lock(&cntr->mut);
-	ofi_atomic_add32(&cntr->err_cnt, value);
+	ofi_atomic_add32(&cntr->err_cnt, (int32_t) value);
 	if (!cntr->err_flag)
 		cntr->err_flag = 1;
 	pthread_cond_signal(&cntr->cond);
@@ -291,7 +291,7 @@ static int sock_cntr_seterr(struct fid_cntr *fid_cntr, uint64_t value)
 
 	cntr = container_of(fid_cntr, struct sock_cntr, cntr_fid);
 	pthread_mutex_lock(&cntr->mut);
-	ofi_atomic_set32(&cntr->err_cnt, value);
+	ofi_atomic_set32(&cntr->err_cnt, (int32_t) value);
 	if (!cntr->err_flag)
 		cntr->err_flag = 1;
 	pthread_cond_signal(&cntr->cond);
@@ -338,7 +338,7 @@ static int sock_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 			ret = sock_cntr_progress(cntr);
 			pthread_mutex_lock(&cntr->mut);
 		} else {
-			ret = ofi_wait_cond(&cntr->cond, &cntr->mut, remaining_ms);
+			ret = ofi_wait_cond(&cntr->cond, &cntr->mut, (int) remaining_ms);
 		}
 
 		uint64_t curr_ms = ofi_gettime_ms();

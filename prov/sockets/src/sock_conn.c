@@ -275,7 +275,8 @@ static void sock_set_sockopt_reuseaddr(int sock)
 {
 	int optval;
 	optval = 1;
-	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)))
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
+		       (const void *) &optval, sizeof(optval)))
 		SOCK_LOG_ERROR("setsockopt reuseaddr failed\n");
 }
 
@@ -303,7 +304,8 @@ void sock_set_sockopts(int sock, int sock_opts)
 	sock_set_sockopt_reuseaddr(sock);
 	if (sock_opts & SOCK_OPTS_KEEPALIVE)
 		sock_set_sockopt_keepalive(sock);
-	if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval)))
+	if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
+		       (const void *) &optval, sizeof(optval)))
 		SOCK_LOG_ERROR("setsockopt nodelay failed\n");
 
 	if (sock_opts & SOCK_OPTS_NONBLOCK)
@@ -460,7 +462,7 @@ int sock_conn_listen(struct sock_ep_attr *ep_attr)
 	if (ep_attr->ep_type == FI_EP_MSG)
 		ofi_addr_set_port(&addr.sa, 0);
 
-	ret = bind(listen_fd, &addr.sa, ofi_sizeofaddr(&addr.sa));
+	ret = bind(listen_fd, &addr.sa, (socklen_t) ofi_sizeofaddr(&addr.sa));
 	if (ret) {
 		SOCK_LOG_ERROR("failed to bind listener: %s\n",
 			       strerror(ofi_sockerr()));
@@ -564,7 +566,7 @@ do_connect:
 
 	ofi_straddr_dbg(&sock_prov, FI_LOG_EP_CTRL, "connecting to addr: ",
 			&addr.sa);
-	ret = connect(conn_fd, &addr.sa, ofi_sizeofaddr(&addr.sa));
+	ret = connect(conn_fd, &addr.sa, (socklen_t) ofi_sizeofaddr(&addr.sa));
 	if (ret < 0) {
 		if (OFI_SOCK_TRY_CONN_AGAIN(ofi_sockerr())) {
 			poll_fd.fd = conn_fd;
@@ -626,9 +628,9 @@ out:
 	}
 	new_conn->av_index = (ep_attr->ep_type == FI_EP_MSG) ?
 			     FI_ADDR_NOTAVAIL : index;
-	*conn = ofi_idm_lookup(&ep_attr->av_idm, index);
+	*conn = ofi_idm_lookup(&ep_attr->av_idm, (int) index);
 	if (*conn == SOCK_CM_CONN_IN_PROGRESS) {
-		if (ofi_idm_set(&ep_attr->av_idm, index, new_conn) < 0)
+		if (ofi_idm_set(&ep_attr->av_idm, (int) index, new_conn) < 0)
 			SOCK_LOG_ERROR("ofi_idm_set failed\n");
 		*conn = new_conn;
 	}

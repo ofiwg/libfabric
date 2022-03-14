@@ -519,7 +519,7 @@ ssize_t rxm_rndv_read(struct rxm_rx_buf *rx_buf)
 			    rx_buf);
 	if (ret) {
 		rxm_cq_write_error(rx_buf->ep->util_ep.rx_cq,
-				   rx_buf->ep->util_ep.rx_cntr, rx_buf, ret);
+				   rx_buf->ep->util_ep.rx_cntr, rx_buf, (int) ret);
 	}
 	return ret;
 }
@@ -563,7 +563,7 @@ static ssize_t rxm_rndv_handle_wr_data(struct rxm_rx_buf *rx_buf)
 	if (ret)
 		rxm_cq_write_error(rx_buf->ep->util_ep.rx_cq,
 				   rx_buf->ep->util_ep.rx_cntr,
-				   tx_buf, ret);
+				   tx_buf, (int) ret);
 	rxm_rx_buf_free(rx_buf);
 	return ret;
 }
@@ -637,7 +637,7 @@ void rxm_handle_eager(struct rxm_rx_buf *rx_buf)
 					rx_buf->recv_entry->rxm_iov.iov,
 					rx_buf->recv_entry->rxm_iov.count, 0,
 					rx_buf->data, rx_buf->pkt.hdr.size);
-	assert(done_len == rx_buf->pkt.hdr.size);
+	assert((size_t) done_len == rx_buf->pkt.hdr.size);
 
 	rxm_finish_recv(rx_buf, done_len);
 }
@@ -656,7 +656,7 @@ void rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 					rx_buf->recv_entry->rxm_iov.iov,
 					rx_buf->recv_entry->rxm_iov.count, 0,
 					rx_buf->data, rx_buf->pkt.hdr.size);
-	assert(done_len == rx_buf->pkt.hdr.size);
+	assert((size_t) done_len == rx_buf->pkt.hdr.size);
 
 	if (rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
 		ofi_coll_handle_xfer_comp(rx_buf->pkt.hdr.tag,
@@ -1007,7 +1007,7 @@ static void rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 
 static void rxm_format_atomic_resp_pkt_hdr(struct rxm_conn *rxm_conn,
 					   struct rxm_tx_buf *tx_buf,
-					   size_t data_len, uint32_t pkt_op,
+					   size_t data_len, uint8_t pkt_op,
 					   enum fi_datatype datatype,
 					   uint8_t atomic_op)
 {
@@ -1042,7 +1042,7 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 	resp_buf->pkt.ctrl_hdr.msg_id = rx_buf->pkt.ctrl_hdr.msg_id;
 	atomic_hdr = (struct rxm_atomic_resp_hdr *) resp_buf->pkt.data;
 	atomic_hdr->status = htonl(status);
-	atomic_hdr->result_len = htonl(result_len);
+	atomic_hdr->result_len = htonl((uint32_t) result_len);
 
 	if (tot_len < rxm_ep->inject_limit) {
 		ret = fi_inject(rx_buf->conn->msg_ep, &resp_buf->pkt,
@@ -1127,14 +1127,14 @@ static int rxm_do_device_mem_atomic(struct rxm_mr *dev_mr, uint8_t op,
 	ofi_mutex_lock(&dev_mr->amo_lock);
 	ret = ofi_copy_from_hmem_iov(tx_buf, amo_op_size, dev_mr->iface, 0,
 				    &iov, 1, 0);
-	assert(ret == amo_op_size);
+	assert((size_t) ret == amo_op_size);
 
 	rxm_do_atomic(op, tx_buf, src, cmp, res, amo_count, datatype,
 		      amo_op);
 
 	ret = ofi_copy_to_hmem_iov(dev_mr->iface, 0, &iov, 1, 0, tx_buf,
 				   amo_op_size);
-	assert(ret == amo_op_size);
+	assert((size_t) ret == amo_op_size);
 
 	ofi_mutex_unlock(&dev_mr->amo_lock);
 
@@ -1194,7 +1194,7 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
 				"Atomic RMA MR verify error %ld\n", ret);
 			return rxm_atomic_send_resp(rxm_ep, rx_buf, resp_buf, 0,
-						    -FI_EACCES);
+						    (uint32_t) -FI_EACCES);
 		}
 	}
 
@@ -1222,7 +1222,8 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 					"Atomic operation failed %ld\n", ret);
 
 				return rxm_atomic_send_resp(rxm_ep, rx_buf,
-							    resp_buf, 0, ret);
+							    resp_buf, 0,
+							    (uint32_t) ret);
 			}
 		} else {
 			rxm_do_atomic(op, dst_buf, src_buf, cmp_buf, res_buf,
@@ -1286,7 +1287,7 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 	copy_len = ofi_copy_to_hmem_iov(iface, device, tx_buf->atomic_result.iov,
 				   tx_buf->atomic_result.count, 0, resp_hdr->data,
 				   len);
-	if (copy_len != len) {
+	if ((size_t) copy_len != len) {
 		ret = -FI_EIO;
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "copy length error\n");
 		goto write_err;
@@ -1716,7 +1717,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 	if ((ret) < 0) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"unable to fi_cq_readerr on msg cq\n");
-		rxm_cq_write_error_all(rxm_ep, (int)ret);
+		rxm_cq_write_error_all(rxm_ep, (int) ret);
 		return;
 	}
 
@@ -1924,7 +1925,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 			if (ret) {
 				// We don't have enough info to write a good
 				// error entry to the CQ at this point
-				rxm_cq_write_error_all(rxm_ep, ret);
+				rxm_cq_write_error_all(rxm_ep, (int) ret);
 			} else {
 				ret = 1;
 			}
@@ -1932,7 +1933,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 			if (ret == -FI_EAVAIL)
 				rxm_ep->handle_comp_error(rxm_ep);
 			else
-				rxm_cq_write_error_all(rxm_ep, ret);
+				rxm_cq_write_error_all(rxm_ep, (int) ret);
 		}
 
 		if (ret == -FI_EAGAIN || rxm_ep->connecting_cnt ||

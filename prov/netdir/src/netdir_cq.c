@@ -198,6 +198,7 @@ int ofi_nd_cq_open(struct fid_domain *pdomain, struct fi_cq_attr *attr,
 	struct nd_domain *domain = container_of(pdomain, struct nd_domain, fid);
 	assert(domain->adapter);
 	assert(domain->adapter_file);
+	OFI_UNUSED(domain);
 
 	cq->iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
 	if (!cq->iocp || cq->iocp == INVALID_HANDLE_VALUE) {
@@ -660,7 +661,7 @@ void ofi_nd_unexp_2_read(nd_cq_entry *entry, void *unexpected)
 	size_t location_cnt = unexp->buf->header.location_cnt;
 	struct nd_msg_location *locations = unexp->buf->received_buf.locations;
 	struct nd_ep *ep = unexp->ep;
-	HRESULT hr;
+	HRESULT hr = 0;
 	size_t i;
 
 	ofi_nd_release_unexp_entry(unexp);
