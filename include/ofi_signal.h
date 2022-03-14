@@ -137,6 +137,7 @@ static inline void fd_signal_reset(struct fd_signal *signal)
 	bool cas; /* cas result */
 	enum ofi_signal_state state;
 	ssize_t read_rc;
+	int retries = 0;
 
 	do {
 		cas = ofi_atomic_cas_bool_weak32(&signal->state,
@@ -155,10 +156,11 @@ static inline void fd_signal_reset(struct fd_signal *signal)
 			} else {
 				ofi_atomic_set32(&signal->state, OFI_SIGNAL_SET);
 
-				/* Avoid spinning forever in this highly
-				 * unlikely code path.
-				 */
-				break;
+				if (++retries > 256)
+				{
+					/* Avoid spinning forever. */
+					break;
+				}
 			}
 		}
 
