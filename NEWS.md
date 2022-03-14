@@ -13,6 +13,23 @@ v1.15.0, Fri Apr 1, 2022
 
 ## EFA
 
+## PSM3
+- Updated psm3 to match IEFS 11.2.0.0 release
+- Added support for sockets (TCP/UDP) via a runtime selectable Hardware
+Abstraction Layer (HAL)
+- Added support for IPv6 addressing in RoCE and sockets
+- Added various NIC selection filtering options (wildcarded NIC name,
+address format, wildcarded IP subnet, link speed)
+- Performance tuning in conjunction with OneAPI and OneCCL
+- Tested with aws-nccl-plugin using NVIDIA NCCL over OFI over PSM3
+- Improved PSM3_IDENTIFY output
+- Rename most internal symbols to psm3_
+- Corrected vulnerabilities found during Coverity scans
+- configure options refined and help text improved
+- PSM3_MULTI_EP has been deprecated (recommend always enabled, default
+is enabled [same default as previous releases])
+- Various bug fixes
+
 ## RxD
 
 ## RxM
