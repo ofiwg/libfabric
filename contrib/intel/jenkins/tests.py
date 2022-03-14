@@ -124,8 +124,8 @@ class Fabtest(Test):
             opts += "-N "
 
         if (self.ofi_build_mode == 'dl'):
-            opts += '-t short'
-        elif not re.match(".*sockets|udp.*", self.core_prov):
+            opts = "{} -t short ".format(opts)
+        else:
             opts = "{} -t all ".format(opts)
 
         if (self.core_prov == 'sockets' and self.ofi_build_mode == 'reg'):
