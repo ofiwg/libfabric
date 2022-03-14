@@ -12,55 +12,44 @@ pipeline {
     }
 
     stages {
-        stage ('build-libfabric') {
+        stage ('build') {
             steps {
-                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) {
+                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:PYTHONPATH']) {
                   sh """
-                    python3.7 contrib/intel/jenkins/build.py 'libfabric' --ofi_build_mode='dbg'
-                    echo "libfabric build completed"
-                  """
-                }
-            }
-        }
-        stage('build-fabtests') {
-            steps {
-                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) {
-                  sh """
-                    python3.7 contrib/intel/jenkins/build.py 'fabtests' --ofi_build_mode='dbg'
-                    echo 'fabtests build completed'
-                  """
-                }
-            }
-        }
-        stage ('copy-build-dirs') {
-            steps {
-                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin']) {
-                  sh """
-                    python3.7 contrib/intel/jenkins/build.py 'builddir' --ofi_build_mode='dbg'
-                    echo "copy build dirs complete"
+                    echo "-----------------------------------------------------"
+                    echo "Building libfabric reg."
+                    python3.7 contrib/intel/jenkins/build.py --build_item=libfabric
+                    echo "-----------------------------------------------------"
+                    echo "Building libfabric dbg."
+                    python3.7 contrib/intel/jenkins/build.py --build_item=libfabric --ofi_build_mode=dbg
+                    echo "-----------------------------------------------------"
+                    echo "Building libfabric dl."
+                    python3.7 contrib/intel/jenkins/build.py --build_item=libfabric --ofi_build_mode=dl
+                    echo "Libfabric builds completed."
+
+                    echo "-----------------------------------------------------"
+                    echo "Building fabtests reg."
+                    python3.7 contrib/intel/jenkins/build.py --build_item=fabtests
+                    echo "-----------------------------------------------------"
+                    echo "Building fabtests dbg."
+                    python3.7 contrib/intel/jenkins/build.py --build_item=fabtests --ofi_build_mode=dbg
+                    echo "-----------------------------------------------------"
+                    echo "Building fabtests dl."
+                    python3.7 contrib/intel/jenkins/build.py --build_item=fabtests --ofi_build_mode=dl
+                    echo 'Fabtests builds completed.'
+
+                    echo "-----------------------------------------------------"
+                    echo "Copy build dirs."
+                    python3.7 contrib/intel/jenkins/build.py --build_item=builddir
+                    echo "Copy build dirs completed."
+                    echo "-----------------------------------------------------"
                   """
                 }
             }
         }
         stage('parallel-tests') {
             parallel {
-                stage('eth-tcp-dbg') {
-                    options { skipDefaultCheckout() }
-                    agent {node {label 'eth'}}
-                    steps {
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
-                        {
-                          sh """
-                            env
-                            (
-                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=tcp --ofi_build_mode='dbg'
-                            )
-                          """
-                        }
-                    }
-                }
-                stage('eth-udp-shm-dbg') {
+                stage('tcp') {
                     agent {node {label 'eth'}}
                     options { skipDefaultCheckout() }
                     steps {
@@ -70,61 +59,265 @@ pipeline {
                             env
                             (
                                 cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=udp --ofi_build_mode='dbg'
-                                python3.7 runtests.py --prov=udp --util=rxd --ofi_build_mode='dbg'
-                                python3.7 runtests.py --prov=shm --ofi_build_mode='dbg'
+                                python3.7 runtests.py --prov=tcp --test=fabtests
+                                python3.7 runtests.py --prov=tcp --test=fabtests --ofi_build_mode=dbg
+                                python3.7 runtests.py --prov=tcp --test=fabtests --ofi_build_mode=dl
+                                echo "tcp completed."
                             )
                           """
                         }
                     }
                 }
-                stage('mlx5-verbs_rxm-dbg') {
+                stage('verbs-rxm') {
                     agent {node {label 'mlx5'}}
                     options { skipDefaultCheckout() }
                     steps {
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
                           sh """
                             env
                             (
                                 cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --ofi_build_mode='dbg'
-                                python3.7 runtests.py --prov=verbs --util=rxm --ofi_build_mode='dbg'
+                                python3.7 runtests.py --prov=verbs --util=rxm --test=fabtests
+                                python3.7 runtests.py --prov=verbs --util=rxm --test=fabtests --ofi_build_mode=dbg
+                                python3.7 runtests.py --prov=verbs --util=rxm --test=fabtests --ofi_build_mode=dl
+                                echo "verbs-rxm completed."
                             )
                           """
                         }
                     }
                 }
-                stage('mlx5-verbs_rxd-dbg') {
+                stage('verbs-rxd') {
                     agent {node {label 'mlx5'}}
                     options { skipDefaultCheckout() }
                     steps {
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
                           sh """
                             env
                             (
                                 cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --util=rxd --ofi_build_mode='dbg'
+                                python3.7 runtests.py --prov=verbs --util=rxd --test=fabtests
+                                python3.7 runtests.py --prov=verbs --util=rxd --test=fabtests --ofi_build_mode=dbg
+                                python3.7 runtests.py --prov=verbs --util=rxd --test=fabtests --ofi_build_mode=dl
+                                echo "verbs-rxd completed."
                             )
                           """
                         }
                     }
                 }
-		stage('ze') {
-		    agent {node {label 'ze'}}
+                stage('udp') {
+                    agent {node {label 'eth'}}
                     options { skipDefaultCheckout() }
-		    steps{
-                       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
-                       {
-                         sh """
-                           env
-                           (
-                               cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
-                               python3.7 runtests.py --prov=shm --ofi_build_mode='dbg' --device='ze'
-                           )
-                         """
-                       }
-		    }
-		}
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=udp --test=fabtests
+                                python3.7 runtests.py --prov=udp --test=fabtests --ofi_build_mode=dbg
+                                python3.7 runtests.py --prov=udp --test=fabtests --ofi_build_mode=dl
+                                echo "udp completed."
+                            )
+                          """
+                        }
+                    }
+                }
+                stage('shm') {
+                    agent {node {label 'eth'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=shm --test=fabtests
+                                python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dbg
+                                python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dl
+                                echo "shm completed."
+                            )
+                          """
+                        }
+                    }
+                }
+                stage('sockets') {
+                    agent {node {label 'eth'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=sockets --test=fabtests
+                                python3.7 runtests.py --prov=sockets --test=fabtests --ofi_build_mode=dbg
+                                python3.7 runtests.py --prov=sockets --test=fabtests --ofi_build_mode=dl
+                                echo "sockets completed."
+                            )
+                          """
+                        }
+                    }
+                }
+                stage('MPI-verbs-rxm') {
+                    agent {node {label 'mlx5'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=1
+                                echo "IMB verbs-rxm Group 1 completed."
+                                python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=2
+                                echo "IMB verbs-rxm Group 2 completed."
+                                python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=3
+                                echo "IMB verbs-rxm Group 3 completed."
+                                python3.7 runtests.py --prov=verbs --util=rxm --test=osu
+                                echo "OSU verbs-rxm completed."
+                                echo "MPI-verbs-rxm completed."
+                            )
+                          """
+                        }
+                    }
+                }
+                stage('MPI-tcp-rxm-1') {
+                    agent {node {label 'eth'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=1
+                                echo "MPI-tcp-rxm-1 completed."
+                            )
+                          """
+                        }
+                    }
+                }
+                stage('MPI-tcp-rxm-2') {
+                    agent {node {label 'eth'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=2
+                                echo "MPI-tcp-rxm-2 completed."
+                            )
+                          """
+                        }
+                    }
+                }
+                stage('MPI-tcp-rxm-3') {
+                    agent {node {label 'eth'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=3
+                                echo "MPI-tcp-rxm-3 completed."
+                                python3.7 runtests.py --prov=tcp --util=rxm --test=osu
+                                echo "OSU verbs-rxm completed."
+                            )
+                          """
+                        }
+                    }
+                }
+                stage('MPICH testsuite') {
+                    agent {node {label 'mlx5'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=verbs --util=rxm --test=mpichtestsuite
+                                echo "verbs-rxm MPICH testsuite completed."
+                                python3.7 runtests.py --prov=tcp --util=rxm --test=mpichtestsuite
+                                echo "tcp-rxm MPICH testsuite completed."
+                                python3.7 runtests.py --prov=sockets --test=mpichtestsuite
+                                echo "sockets MPICH testsuite completed."
+                                echo "MPICH testsuite completed."
+                            )
+                          """
+                        }
+                    }
+                }
+                stage('SHMEM') {
+                    agent {node {label 'mlx5'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=tcp --test=shmem
+                                echo "SHMEM tcp completed."
+                                python3.7 runtests.py --prov=verbs --test=shmem
+                                echo "SHMEM verbs completed."
+                                python3.7 runtests.py --prov=sockets --test=shmem
+                                echo "SHMEM sockets completed."
+                                echo "SHMEM completed."
+                            )
+                          """
+                        }
+                    }
+                }
+                stage('oneCCL-tcp-rxm') {
+                    agent {node {label 'eth'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=tcp --util=rxm --test=oneccl
+                                echo "oneCCL tcp-rxm completed."
+                            )
+                          """
+                        }
+                    }
+                }
+                stage('ze-shm') {
+                    agent {node {label 'ze'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=shm --device='ze'
+                                echo "ze-shm completed."
+                            )
+                          """
+                        }
+                    }
+                }
             }
         }
     }
