@@ -411,7 +411,7 @@ static struct fi_provider *ofi_get_hook(const char *name)
 static void ofi_ordered_provs_init(void)
 {
 	char *ordered_prov_names[] = {
-		"efa", "psm2", "psm", "usnic", "gni", "bgq", "verbs",
+		"efa", "opx", "psm2", "psm", "usnic", "gni", "bgq", "verbs",
 		"netdir", "psm3", "ofi_rxm", "ofi_rxd", "shm",
 		/* Initialize the socket based providers last of the
 		 * standard providers.  This will result in them being
@@ -854,6 +854,7 @@ void fi_ini(void)
 	ofi_register_provider(MRAIL_INIT, NULL);
 	ofi_register_provider(RXD_INIT, NULL);
 	ofi_register_provider(EFA_INIT, NULL);
+	ofi_register_provider(OPX_INIT, NULL);
 	ofi_register_provider(UDP_INIT, NULL);
 	ofi_register_provider(SOCKETS_INIT, NULL);
 	ofi_register_provider(TCP_INIT, NULL);
