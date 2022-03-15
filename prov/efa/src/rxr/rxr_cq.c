@@ -42,6 +42,7 @@
 #include "rxr_cntr.h"
 #include "rxr_read.h"
 #include "rxr_atomic.h"
+#include "rxr_pkt_cmd.h"
 #include "efa.h"
 
 static const char *rxr_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
@@ -450,30 +451,61 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 	efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
 }
 
-void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
-				 struct rxr_rx_entry *rx_entry)
+/**
+ * @brief complete an RX operation
+ *
+ * This function completes an RX operation. RX operation can be
+ * a receive, a write response, or a read response. This function
+ * is called when all data has been transmitted.
+ *
+ * To complete a RX operation, this function does 3 things:
+ *
+ * 1. If necessary, write completion to application. (Not all
+ *    completed RX action will cause a completion to be written).
+ *
+ * 2. When asked, send a ctrl packet back to the peer.
+ *    Caller of this function needs to decide whether such a ctrl packet
+ *    is needed. Usually it is because of the two scenarios:
+ *
+ *    a. longread message/write protocol was used, which requires the receiver/
+ *       responder send an EOR back to the sender/requester.
+ *
+ *    b. dc eager/medium/long message/write protocol was used, which requires
+ *       the receiver/responder to send an RECEIPT back to sender/requester.
+ *
+ * 3. Ensure release of rx_entry.
+ *
+ * @param[in,out]	ep		endpoint
+ * @param[in,out]	rx_entry	rx entry that contains information of the RX operation
+ * @param[in]		post_ctrl	whether to post a ctrl packet back to sender/requester
+ * @param[in]		ctrl_type	ctrl packet type.
+ */
+void rxr_cq_complete_rx(struct rxr_ep *ep,
+		        struct rxr_rx_entry *rx_entry,
+			bool post_ctrl, int ctrl_type)
 {
 	struct rxr_tx_entry *tx_entry = NULL;
+	struct rdm_peer *peer;
+	bool inject;
+	int err;
 
+	/* It is important to write completion before sending ctrl packet, because the
+	 * action of sending ctrl packet may cause the release of RX entry (when inject
+	 * was used on lower device).
+	 */
 	if (rx_entry->cq_entry.flags & FI_WRITE) {
 		/*
-		 * must be on the remote side, notify cq if REMOTE_CQ_DATA is on
+		 * For write, only write RX completion when REMOTE_CQ_DATA is on
 		 */
 		if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
 			rxr_cq_write_rx_completion(ep, rx_entry);
-
-		return;
-	}
-
-	if (rx_entry->cq_entry.flags & FI_READ) {
-		/* Note for emulated FI_READ, there is an rx_entry on
-		 * both initiator side and on remote side.
-		 * However, only on the initiator side,
-		 * rxr_cq_handle_rx_completion() will be called.
-		 * The following shows the sequence of events that
-		 * is happening
+	} else if (rx_entry->cq_entry.flags & FI_READ) {
+		/* This rx_entry is part of the for emulated read protocol,
+		 * created on the read requester side.
+		 * The following shows the sequence of events in an emulated
+		 * read protocol.
 		 *
-		 * Initiator side                 Remote side
+		 * Requester                      Responder
 		 * create tx_entry
 		 * create rx_entry
 		 * send rtr(with rx_id)
@@ -483,15 +515,13 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		 *                                tx_entry sending data
 		 * rx_entry receiving data
 		 * receive completed              send completed
-		 * handle_rx_completion()         handle_pkt_send_completion()
-		 * |->write_tx_completion()
+		 * call rxr_cq_comlepte_rx()      call rxr_cq_handle_tx_completion()
 		 *
-		 * As can be seen, although there is a rx_entry on remote side,
-		 * the entry will not enter into rxr_cq_handle_rx_completion
-		 * So at this point we must be on the initiator side, we
-		 *     1. find the corresponding tx_entry
-		 *     2. call rxr_cq_write_tx_completion()
+		 * As can be seen, in the emulated read protocol, this function is called only
+		 * on the requester side, so we need to find the corresponding tx_entry and
+		 * complete it.
 		 */
+		assert(!post_ctrl); /* in emulated read, no ctrl should be posted */
 		tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, rx_entry->rma_loc_tx_id);
 		assert(tx_entry->state == RXR_TX_REQ);
 		if (tx_entry->fi_flags & FI_COMPLETION) {
@@ -501,17 +531,54 @@ void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
 		}
 
 		rxr_release_tx_entry(ep, tx_entry);
-		/*
-		 * do not call rxr_release_rx_entry here because
-		 * caller will release
-		 */
-		return;
+	} else {
+		assert(rx_entry->op == ofi_op_msg || rx_entry->op == ofi_op_tagged);
+		if (rx_entry->fi_flags & FI_MULTI_RECV)
+			rxr_msg_multi_recv_handle_completion(ep, rx_entry);
+
+		rxr_cq_write_rx_completion(ep, rx_entry);
+		rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 	}
 
-	if (rx_entry->fi_flags & FI_MULTI_RECV)
-		rxr_msg_multi_recv_handle_completion(ep, rx_entry);
+	/* As can be seen, this function does not release rx_entry when
+	 * rxr_pkt_post_ctrl_or_queue() was successful.
+	 *
+	 * This is because that rxr_pkt_post_ctrl_or_queue() might have
+	 * queued the ctrl packet (due to out of resource), and progress
+	 * engine will resend the packet. In that case, progress engine
+	 * needs the rx_entry to construct the ctrl packet.
+	 * 
+	 * Hence, the rx_entry can be safely released only when we got
+	 * the send completion of the ctrl packet.
+	 *
+	 * Another interesting point is that when inject was used, the
+	 * rx_entry was released by rxr_pkt_post_ctrl_or_queue(), because
+	 * when inject was used, lower device will not provider send
+	 * completion for the ctrl packet.
+	 */
+	if (post_ctrl) {
+		assert(ctrl_type == RXR_RECEIPT_PKT || ctrl_type == RXR_EOR_PKT);
+		peer = rxr_ep_get_peer(ep, rx_entry->addr);
+		assert(peer);
+		inject = peer->is_local;
+		err = rxr_pkt_post_ctrl_or_queue(ep,
+						 RXR_RX_ENTRY,
+						 rx_entry,
+						 ctrl_type,
+						 inject);
+		if (OFI_UNLIKELY(err)) {
+			FI_WARN(&rxr_prov,
+				FI_LOG_CQ,
+				"Posting of ctrl packet failed when complete rx! err=%s(%d)\n",
+				fi_strerror(-err), -err);
+			rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
+			rxr_release_rx_entry(ep, rx_entry);
+			return;
+		}
+	} else {
+		rxr_release_rx_entry(ep, rx_entry);
+	}
 
-	rxr_cq_write_rx_completion(ep, rx_entry);
 	return;
 }
 

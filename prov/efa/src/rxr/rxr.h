@@ -962,8 +962,9 @@ void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
 void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 				struct rxr_rx_entry *rx_entry);
 
-void rxr_cq_handle_rx_completion(struct rxr_ep *ep,
-				 struct rxr_rx_entry *rx_entry);
+void rxr_cq_complete_rx(struct rxr_ep *ep,
+			struct rxr_rx_entry *rx_entry,
+			bool post_ctrl, int ctrl_type);
 
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 				struct rxr_tx_entry *tx_entry);

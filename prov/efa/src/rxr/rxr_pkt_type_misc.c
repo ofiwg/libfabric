@@ -451,9 +451,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_read_entry *read_entry;
 	struct rxr_rma_context_pkt *rma_context_pkt;
-	int inject;
 	size_t data_size;
-	ssize_t ret;
 
 	rma_context_pkt = (struct rxr_rma_context_pkt *)context_pkt_entry->pkt;
 	assert(rma_context_pkt->type == RXR_RMA_CONTEXT_PKT);
@@ -471,20 +469,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			rxr_release_tx_entry(ep, tx_entry);
 		} else if (read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY) {
 			rx_entry = read_entry->context;
-			if (rx_entry->op == ofi_op_msg || rx_entry->op == ofi_op_tagged) {
-				rxr_cq_write_rx_completion(ep, rx_entry);
-			} else {
-				assert(rx_entry->op == ofi_op_write);
-				if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
-					rxr_cq_write_rx_completion(ep, rx_entry);
-			}
-
-			inject = (read_entry->lower_ep_type == SHM_EP);
-			ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_EOR_PKT, inject);
-			if (OFI_UNLIKELY(ret)) {
-				rxr_cq_write_rx_error(ep, rx_entry, -ret, -ret);
-				rxr_release_rx_entry(ep, rx_entry);
-			}
+			rxr_cq_complete_rx(ep, rx_entry, true, RXR_EOR_PKT);
 		} else {
 			assert(read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY);
 			pkt_entry = read_entry->context;
