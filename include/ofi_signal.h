@@ -154,13 +154,21 @@ static inline void fd_signal_reset(struct fd_signal *signal)
 						 OFI_SIGNAL_UNSET);
 				break;
 			} else {
+                /* Because the setting of signal->state in fd_signal_set is
+                 * atomic but the write to the socket pair must go through
+                 * the kernel, it is possible that the compare-and-set
+                 * operation returns true but the socket pair has not yet
+                 * received the data written and the read fails. Some
+                 * empirical evidence showed a maximum of 131 spins through
+                 * the loop in the use case that triggered this code path.
+                 * Rounding up to 256, a nice power of 2, for the limit on
+                 * retries seemed a good trade off between what has been
+                 * seen occuring and avoiding spinning forever.
+                 */
 				ofi_atomic_set32(&signal->state, OFI_SIGNAL_SET);
 
 				if (++retries > 256)
-				{
-					/* Avoid spinning forever. */
 					break;
-				}
 			}
 		}
 
