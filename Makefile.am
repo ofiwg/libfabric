@@ -423,6 +423,7 @@ include prov/rxm/Makefile.include
 include prov/mrail/Makefile.include
 include prov/rxd/Makefile.include
 include prov/bgq/Makefile.include
+include prov/opx/Makefile.include
 include prov/shm/Makefile.include
 include prov/tcp/Makefile.include
 include prov/rstream/Makefile.include
