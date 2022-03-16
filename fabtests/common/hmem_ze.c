@@ -43,7 +43,7 @@
 #include <dlfcn.h>
 #include <level_zero/ze_api.h>
 
-#define ZE_MAX_DEVICES 4
+#define ZE_MAX_DEVICES 8
 
 static ze_context_handle_t context;
 static ze_device_handle_t devices[ZE_MAX_DEVICES];
