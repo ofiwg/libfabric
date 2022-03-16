@@ -49,6 +49,47 @@ pipeline {
         }
         stage('parallel-tests') {
             parallel {
+                stage('MPI-verbs-rxm') {
+                    agent {node {label 'mlx5'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=1
+                                echo "IMB verbs-rxm Group 1 completed."
+                                python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=2
+                                echo "IMB verbs-rxm Group 2 completed."
+                                python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=3
+                                echo "IMB verbs-rxm Group 3 completed."
+                                python3.7 runtests.py --prov=verbs --util=rxm --test=osu
+                                echo "OSU verbs-rxm completed."
+                                echo "MPI-verbs-rxm completed."
+                            )
+                          """
+                        }
+                    }
+                }
+                stage('MPI-tcp-rxm-2') {
+                    agent {node {label 'eth'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=2
+                                echo "MPI-tcp-rxm-2 completed."
+                            )
+                          """
+                        }
+                    }
+                }
                 stage('tcp') {
                     agent {node {label 'eth'}}
                     options { skipDefaultCheckout() }
@@ -163,30 +204,6 @@ pipeline {
                         }
                     }
                 }
-                stage('MPI-verbs-rxm') {
-                    agent {node {label 'mlx5'}}
-                    options { skipDefaultCheckout() }
-                    steps {
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
-                        {
-                          sh """
-                            env
-                            (
-                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=1
-                                echo "IMB verbs-rxm Group 1 completed."
-                                python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=2
-                                echo "IMB verbs-rxm Group 2 completed."
-                                python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=3
-                                echo "IMB verbs-rxm Group 3 completed."
-                                python3.7 runtests.py --prov=verbs --util=rxm --test=osu
-                                echo "OSU verbs-rxm completed."
-                                echo "MPI-verbs-rxm completed."
-                            )
-                          """
-                        }
-                    }
-                }
                 stage('MPI-tcp-rxm-1') {
                     agent {node {label 'eth'}}
                     options { skipDefaultCheckout() }
@@ -199,23 +216,6 @@ pipeline {
                                 cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
                                 python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=1
                                 echo "MPI-tcp-rxm-1 completed."
-                            )
-                          """
-                        }
-                    }
-                }
-                stage('MPI-tcp-rxm-2') {
-                    agent {node {label 'eth'}}
-                    options { skipDefaultCheckout() }
-                    steps {
-                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
-                        {
-                          sh """
-                            env
-                            (
-                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
-                                python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=2
-                                echo "MPI-tcp-rxm-2 completed."
                             )
                           """
                         }
