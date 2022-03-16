@@ -78,10 +78,15 @@ static inline int ft_host_memcpy(uint64_t device, void *dst, const void *src,
 	return FI_SUCCESS;
 }
 
+int ft_default_alloc_host(void **buf, size_t size);
+int ft_default_free_host(void *buf);
+
 int ft_cuda_init(void);
 int ft_cuda_cleanup(void);
 int ft_cuda_alloc(uint64_t device, void **buf, size_t size);
+int ft_cuda_alloc_host(void **buf, size_t size);
 int ft_cuda_free(void *buf);
+int ft_cuda_free_host(void *buf);
 int ft_cuda_memset(uint64_t device, void *buf, int value, size_t size);
 int ft_cuda_copy_to_hmem(uint64_t device, void *dst, const void *src,
 			 size_t size);
@@ -107,7 +112,9 @@ int ft_hmem_init(enum fi_hmem_iface iface);
 int ft_hmem_cleanup(enum fi_hmem_iface iface);
 int ft_hmem_alloc(enum fi_hmem_iface iface, uint64_t device, void **buf,
 		  size_t size);
+int ft_hmem_alloc_host(enum fi_hmem_iface iface, void **buf, size_t size);
 int ft_hmem_free(enum fi_hmem_iface iface, void *buf);
+int ft_hmem_free_host(enum fi_hmem_iface iface, void *buf);
 int ft_hmem_memset(enum fi_hmem_iface iface, uint64_t device, void *buf,
 		   int value, size_t size);
 int ft_hmem_copy_to(enum fi_hmem_iface iface, uint64_t device, void *dst,

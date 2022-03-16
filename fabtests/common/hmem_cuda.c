@@ -43,7 +43,9 @@ struct cuda_ops {
 	cudaError_t (*cudaMemcpy)(void *dst, const void *src, size_t count,
 				  enum cudaMemcpyKind kind);
 	cudaError_t (*cudaMalloc)(void **ptr, size_t size);
+	cudaError_t (*cudaMallocHost)(void **ptr, size_t size);
 	cudaError_t (*cudaFree)(void *ptr);
+	cudaError_t (*cudaFreeHost)(void *ptr);
 	cudaError_t (*cudaMemset)(void *ptr, int value, size_t count);
 	const char *(*cudaGetErrorName)(cudaError_t error);
 	const char *(*cudaGetErrorString)(cudaError_t error);
@@ -76,9 +78,21 @@ int ft_cuda_init(void)
 		goto err_dlclose_cuda;
 	}
 
+	cuda_ops.cudaMallocHost = dlsym(cudart_handle, "cudaMallocHost");
+	if (!cuda_ops.cudaMallocHost) {
+		FT_ERR("Failed to find cudaMallocHost");
+		goto err_dlclose_cuda;
+	}
+
 	cuda_ops.cudaFree = dlsym(cudart_handle, "cudaFree");
 	if (!cuda_ops.cudaFree) {
 		FT_ERR("Failed to find cudaFree");
+		goto err_dlclose_cuda;
+	}
+
+	cuda_ops.cudaFreeHost = dlsym(cudart_handle, "cudaFreeHost");
+	if (!cuda_ops.cudaFree) {
+		FT_ERR("Failed to find cudaFreeHost");
 		goto err_dlclose_cuda;
 	}
 
@@ -128,6 +142,19 @@ int ft_cuda_alloc(uint64_t device, void **buf, size_t size)
 	return -FI_ENOMEM;
 }
 
+int ft_cuda_alloc_host(void **buf, size_t size)
+{
+	cudaError_t cuda_ret;
+
+	cuda_ret = cuda_ops.cudaMallocHost(buf, size);
+	if (cuda_ret == cudaSuccess)
+		return FI_SUCCESS;
+
+	CUDA_ERR(cuda_ret, "cudaMallocHost failed");
+
+	return -FI_ENOMEM;
+}
+
 int ft_cuda_free(void *buf)
 {
 	cudaError_t cuda_ret;
@@ -137,6 +164,19 @@ int ft_cuda_free(void *buf)
 		return FI_SUCCESS;
 
 	CUDA_ERR(cuda_ret, "cudaFree failed");
+
+	return -FI_EIO;
+}
+
+int ft_cuda_free_host(void *buf)
+{
+	cudaError_t cuda_ret;
+
+	cuda_ret = cuda_ops.cudaFreeHost(buf);
+	if (cuda_ret == cudaSuccess)
+		return FI_SUCCESS;
+
+	CUDA_ERR(cuda_ret, "cudaFreeHost failed");
 
 	return -FI_EIO;
 }
@@ -199,7 +239,17 @@ int ft_cuda_alloc(uint64_t device, void **buf, size_t size)
 	return -FI_ENOSYS;
 }
 
+int ft_cuda_alloc_host(void **buf, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
 int ft_cuda_free(void *buf)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_cuda_free_host(void *buf)
 {
 	return -FI_ENOSYS;
 }
