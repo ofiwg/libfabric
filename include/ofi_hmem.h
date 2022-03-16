@@ -144,7 +144,7 @@ int cuda_gdrcopy_hmem_cleanup(void);
 int cuda_gdrcopy_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
 int cuda_gdrcopy_dev_unregister(uint64_t handle);
 
-#define ZE_MAX_DEVICES 4
+#define ZE_MAX_DEVICES 8
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);
 int ze_hmem_init(void);
 int ze_hmem_cleanup(void);
