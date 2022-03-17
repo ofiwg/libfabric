@@ -124,12 +124,20 @@ class Fabtest(Test):
             opts += "-N "
 
         if (self.ofi_build_mode == 'dl'):
-            opts += '-t short'
-        elif not re.match(".*sockets|udp.*", self.core_prov):
+            opts = "{} -t short ".format(opts)
+        else:
             opts = "{} -t all ".format(opts)
 
-        if ((self.ofi_build_mode == 'reg' and self.core_prov == 'udp') or \
-            self.ofi_build_mode != 'reg'):
+        if (self.core_prov == 'sockets' and self.ofi_build_mode == 'reg'):
+            complex_test_file = '{}/share/fabtests/test_configs/{}/quick.test' \
+                                .format(self.libfab_installpath,
+                                self.core_prov)
+            if (os.path.isfile(complex_test_file)):
+                opts = "{} -u {} ".format(opts, complex_test_file)
+            else:
+                print("{} Complex test file not found".format(self.core_prov))
+
+        if (self.ofi_build_mode != 'reg' or self.core_prov == 'udp'):
             opts = "{} -e \'multinode,ubertest\' ".format(opts)
 
         efile = self.get_exclude_file()
