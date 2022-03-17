@@ -555,11 +555,11 @@ ofi_tostr_domain_attr(char *buf, size_t len, const struct fi_domain_attr *attr,
 	ofi_strncatf(buf, len, "%s%smr_iov_limit: %zu\n", prefix, TAB,
 		     attr->mr_iov_limit);
 
-	ofi_strncatf(buf, len, "%scaps: [ ", TAB);
+	ofi_strncatf(buf, len, "%s%scaps: [ ", prefix, TAB);
 	ofi_tostr_caps(buf, len, attr->caps);
 	ofi_strncatf(buf, len, " ]\n");
 
-	ofi_strncatf(buf, len, "%smode: [ ", TAB);
+	ofi_strncatf(buf, len, "%s%smode: [ ", prefix, TAB);
 	ofi_tostr_mode(buf, len, attr->mode);
 	ofi_strncatf(buf, len, " ]\n");
 
