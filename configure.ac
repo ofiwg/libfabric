@@ -508,6 +508,37 @@ AS_IF([test $have_uffd -eq 1],
 AC_DEFINE_UNQUOTED([HAVE_UFFD_UNMAP], [$have_uffd],
 	[Define to 1 if platform supports userfault fd unmap])
 
+dnl Check uffd thread id support
+have_uffd_thread_id=0
+AS_IF([test $have_uffd -eq 1],
+	[AC_MSG_CHECKING([for userfaultfd thread id support])
+	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+			#include <sys/types.h>
+			#include <linux/userfaultfd.h>
+			#include <unistd.h>
+			#include <sys/syscall.h>
+			#include <fcntl.h>
+			#include <sys/ioctl.h>
+		]],
+		[[
+			int fd;
+			struct uffdio_api api_obj;
+			api_obj.api = UFFD_API;
+			api_obj.features = UFFD_FEATURE_THREAD_ID |
+					UFFD_FEATURE_EVENT_UNMAP |
+					UFFD_FEATURE_EVENT_REMOVE |
+					UFFD_FEATURE_EVENT_REMAP;
+			fd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
+			return ioctl(fd, UFFDIO_API, &api_obj);
+		]])
+	],
+	[AC_MSG_RESULT([yes])
+		have_uffd_thread_id=1],
+	[AC_MSG_RESULT([no])])])
+
+AC_DEFINE_UNQUOTED([HAVE_UFFD_THREAD_ID], [$have_uffd_thread_id],
+	[Define to 1 if platform supports userfault fd thread id])
+
 dnl Check support to intercept syscalls
 AC_CHECK_HEADERS_ONCE(elf.h sys/auxv.h)
 
