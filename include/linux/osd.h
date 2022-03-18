@@ -65,18 +65,7 @@ ssize_t ofi_get_hugepage_size(void);
 
 static inline int ofi_alloc_hugepage_buf(void **memptr, size_t size)
 {
-	*memptr = mmap(NULL, size, PROT_READ | PROT_WRITE,
-		       MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
-
-	if (*memptr == MAP_FAILED)
-		return -errno;
-
-	return FI_SUCCESS;
-}
-
-static inline int ofi_free_hugepage_buf(void *memptr, size_t size)
-{
-	return munmap(memptr, size);
+	return ofi_mmap_anon_pages(memptr, size, MAP_HUGETLB);
 }
 
 static inline int ofi_hugepage_enabled(void)
@@ -93,7 +82,7 @@ static inline int ofi_hugepage_enabled(void)
 	if (ret)
 		return 0;
 
-	ret = ofi_free_hugepage_buf(buffer, len);
+	ret = ofi_unmap_anon_pages(buffer, len);
 	assert(ret == 0);
 
 	return 1;
