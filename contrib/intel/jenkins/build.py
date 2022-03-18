@@ -141,7 +141,7 @@ def build_mpi(mpi, mpisrc, mpi_install_path, libfab_install_path,  ofi_build_mod
     elif (mpi == 'mpich'):
         cmd.append("--enable-fortran=no")
         cmd.append("--with-device=ch4:ofi")
-        cmd.append("--enable-ch4-direct=netmod")
+        cmd.append("--without-ch4-shmmods")
         
     configure_cmd = shlex.split(" ".join(cmd))
     common.run_command(configure_cmd)
