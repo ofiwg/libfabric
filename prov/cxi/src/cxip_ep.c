@@ -50,7 +50,7 @@ int cxip_tx_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
 	id = ofi_idx_insert(&ep_obj->tx_ids, ctx);
 
 	if (id < 0 || id >= CXIP_TX_IDS) {
-		CXIP_WARN("Failed to allocate ID: %d\n", id);
+		CXIP_DBG("Failed to allocate TX ID: %d\n", id);
 		if (id > 0)
 			ofi_idx_remove(&ep_obj->tx_ids, id);
 		fastlock_release(&ep_obj->tx_id_lock);
@@ -108,7 +108,7 @@ int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
 	id = ofi_idx_insert(&ep_obj->rdzv_ids, ctx);
 
 	if (id < 0 || id >= CXIP_RDZV_IDS) {
-		CXIP_WARN("Failed to allocate ID: %d\n", id);
+		CXIP_DBG("Failed to allocate rdzv ID: %d\n", id);
 		if (id > 0)
 			ofi_idx_remove(&ep_obj->rdzv_ids, id);
 		fastlock_release(&ep_obj->rdzv_id_lock);

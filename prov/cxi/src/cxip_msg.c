@@ -4209,8 +4209,8 @@ static inline int cxip_set_eager_mb(struct cxip_req *req,
 
 		tx_id = cxip_tx_id_alloc(req->send.txc->ep_obj, req);
 		if (tx_id < 0) {
-			TXC_WARN(req->send.txc,
-				 "Failed to allocate TX ID: %d\n", tx_id);
+			TXC_DBG(req->send.txc,
+				"Failed to allocate TX ID: %d\n", tx_id);
 			return -FI_EAGAIN;
 		}
 
