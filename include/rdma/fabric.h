@@ -139,6 +139,9 @@ typedef struct fid *fid_t;
 #define FI_MULTICAST		(1ULL << 5)
 #define FI_COLLECTIVE		(1ULL << 6)
 
+/* Indicate that provider supports linking with other providers */
+#define FI_LINK				(1ULL << 7)
+
 #define FI_READ			(1ULL << 8)
 #define FI_WRITE		(1ULL << 9)
 #define FI_RECV			(1ULL << 10)
