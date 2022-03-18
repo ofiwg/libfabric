@@ -121,6 +121,9 @@ common_hook_srcs =				\
 	prov/hook/src/hook_wait.c		\
 	prov/hook/src/hook_xfer.c
 
+common_link_srcs =				\
+	prov/linkx/src/linkx_init.c
+
 # ensure dl-built providers link back to libfabric
 linkback = src/libfabric.la
 
@@ -177,6 +180,7 @@ src_libfabric_la_SOURCES =			\
 	include/rbtree.h			\
 	include/uthash.h			\
 	include/ofi_prov.h			\
+	include/ofi_linkx.h			\
 	include/rdma/providers/fi_log.h		\
 	include/rdma/providers/fi_prov.h	\
 	src/fabric.c				\
@@ -186,6 +190,7 @@ src_libfabric_la_SOURCES =			\
 	src/var.c				\
 	src/abi_1_0.c				\
 	$(common_hook_srcs)			\
+	$(common_link_srcs)			\
 	$(common_srcs)
 
 src_libfabric_la_CPPFLAGS = $(AM_CPPFLAGS)

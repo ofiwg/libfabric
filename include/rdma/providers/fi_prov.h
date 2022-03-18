@@ -73,7 +73,6 @@ struct fi_provider {
 	void	(*cleanup)(void);
 };
 
-
 /*
  * Defines a configuration parameter for use with libfabric.
  */

@@ -45,6 +45,7 @@
 #include <rdma/fi_errno.h>
 #include "ofi_util.h"
 #include "ofi.h"
+#include "ofi_linkx.h"
 #include "shared/ofi_str.h"
 #include "ofi_prov.h"
 #include "ofi_perf.h"
@@ -54,7 +55,6 @@
 #ifdef HAVE_LIBDL
 #include <dlfcn.h>
 #endif
-
 
 struct ofi_prov {
 	struct ofi_prov		*next;
@@ -1316,6 +1316,26 @@ fail:
 	return NULL;
 }
 DEFAULT_SYMVER(fi_dupinfo_, fi_dupinfo, FABRIC_1.3);
+
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+int DEFAULT_SYMVER_PRE(fi_link)(struct fi_info *prov_list,
+		struct fid_fabric **fabric, uint64_t caps, void *context)
+{
+	/* count number of providers */
+	int num_prov = 0;
+	struct fi_info *info;
+
+	for (info = prov_list; info; info = prov_list->next)
+		num_prov++;
+
+	if (num_prov == 1) {
+		return fi_fabric(prov_list->fabric_attr, fabric, context);
+	}
+
+	/* create a link between providers in the list */
+	return ofi_create_link(prov_list, fabric, caps, context);
+}
+DEFAULT_SYMVER(fi_link_, fi_link, FABRIC_1.7);
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,

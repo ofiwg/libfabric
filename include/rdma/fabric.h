@@ -598,6 +598,8 @@ struct fid_fabric {
 
 int fi_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	      void *context);
+int fi_link(struct fi_info *prov_list, struct fid_fabric **fabric,
+			uint64_t caps, void *context);
 int fi_open(uint32_t version, const char *name, void *attr, size_t attr_len,
 	    uint64_t flags, struct fid **fid, void *context);
 
