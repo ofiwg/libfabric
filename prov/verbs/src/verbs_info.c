@@ -406,20 +406,20 @@ static int vrb_rai_to_fi(struct rdma_addrinfo *rai, struct fi_info *fi)
 
 	if (rai->ai_src_len) {
 		free(fi->src_addr);
- 		if (!(fi->src_addr = malloc(rai->ai_src_len)))
- 			return -FI_ENOMEM;
- 		memcpy(fi->src_addr, rai->ai_src_addr, rai->ai_src_len);
- 		fi->src_addrlen = rai->ai_src_len;
- 	}
- 	if (rai->ai_dst_len) {
+		if (!(fi->src_addr = malloc(rai->ai_src_len)))
+			return -FI_ENOMEM;
+		memcpy(fi->src_addr, rai->ai_src_addr, rai->ai_src_len);
+		fi->src_addrlen = rai->ai_src_len;
+	}
+	if (rai->ai_dst_len) {
 		free(fi->dest_addr);
 		if (!(fi->dest_addr = malloc(rai->ai_dst_len)))
 			return -FI_ENOMEM;
- 		memcpy(fi->dest_addr, rai->ai_dst_addr, rai->ai_dst_len);
- 		fi->dest_addrlen = rai->ai_dst_len;
- 	}
+		memcpy(fi->dest_addr, rai->ai_dst_addr, rai->ai_dst_len);
+		fi->dest_addrlen = rai->ai_dst_len;
+	}
 
- 	return FI_SUCCESS;
+	return FI_SUCCESS;
 }
 
 static inline int vrb_get_qp_cap(struct ibv_context *ctx,
@@ -660,7 +660,7 @@ static int vrb_get_device_attrs(struct ibv_context *ctx,
 		return -FI_ENOMEM;
 	}
 
-        info->nic->device_attr->firmware = strdup(device_attr.fw_ver);
+	info->nic->device_attr->firmware = strdup(device_attr.fw_ver);
 	if (!info->nic->device_attr->firmware) {
 		VRB_WARN(FI_LOG_FABRIC,
 			   "Unable to allocate memory for device_attr::firmware\n");
@@ -1142,7 +1142,7 @@ static int vrb_getifaddrs(struct dlist_entry *verbs_devs)
 
 	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
 		if (!ifa->ifa_addr || !(ifa->ifa_flags & IFF_UP) ||
-				!strcmp(ifa->ifa_name, "lo"))
+				(ifa->ifa_flags & IFF_LOOPBACK))
 			continue;
 
 		if (iface) {
