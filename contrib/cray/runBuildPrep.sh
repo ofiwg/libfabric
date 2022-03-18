@@ -54,7 +54,7 @@ else
     ZE_RPMS=""
 fi
 
-if [[ ${TARGET_OS} =~ ^centos ]]; then
+if [[ ${TARGET_OS} =~ ^centos || ${TARGET_OS} =~ ^rhel ]]; then
     RPMS+=" libcurl-devel json-c-devel"
 else
     RPMS+=" libcurl-devel libjson-c-devel"

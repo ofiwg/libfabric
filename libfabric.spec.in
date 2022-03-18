@@ -23,7 +23,7 @@ BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 %if 0%{?suse_version} >= 1
 Provides: libfabric1 = %{version}-%{release}
 %endif
-%if 0%{?centos}
+%if 0%{?centos} || 0%{?rhel}
 Requires:   libcurl json-c
 BuildRequires: libcurl-devel json-c-devel
 %else
