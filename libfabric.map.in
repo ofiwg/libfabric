@@ -59,4 +59,5 @@ FABRIC_1.7 {
 		fi_getinfo;
 		fi_freeinfo;
 		fi_dupinfo;
+		fi_link;
 } FABRIC_1.6;
