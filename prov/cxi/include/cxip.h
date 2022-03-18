@@ -242,6 +242,8 @@ struct cxip_environment {
 	int enable_unrestricted_end_ro;
 	int rget_tc;
 	int cacheline_size;
+
+	int coll_use_repsum;
 };
 
 extern struct cxip_environment cxip_env;

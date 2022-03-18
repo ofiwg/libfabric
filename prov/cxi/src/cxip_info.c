@@ -286,6 +286,7 @@ struct cxip_environment cxip_env = {
 	.enable_unrestricted_end_ro = true,
 	.rget_tc = FI_TC_UNSPEC,
 	.cacheline_size = CXIP_DEFAULT_CACHE_LINE_SIZE,
+	.coll_use_repsum = false,
 };
 
 static void cxip_env_init(void)
@@ -640,6 +641,11 @@ static void cxip_env_init(void)
 		CXIP_WARN("CQ fill percent invalid. Setting to %lu.\n",
 			  cxip_env.cq_fill_percent);
 	}
+
+	fi_param_define(&cxip_prov, "coll_use_repsum", FI_PARAM_BOOL,
+			"Use reproducible sum for collective double sum.");
+	fi_param_get_bool(&cxip_prov, "coll_use_repsum",
+			  &cxip_env.coll_use_repsum);
 }
 
 /*
