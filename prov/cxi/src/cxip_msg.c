@@ -661,11 +661,6 @@ static int issue_rdzv_get(struct cxip_req *req)
 		(uint64_t)cmd.local_addr, cmd.request_len,
 		(uint64_t)cmd.remote_offset);
 
-	if (cxip_cq_saturated(rxc->recv_cq)) {
-		RXC_DBG(rxc, "CQ saturated\n");
-		return -FI_EAGAIN;
-	}
-
 	fastlock_acquire(&rxc->tx_cmdq->lock);
 
 	/* Issue Rendezvous Get command */
@@ -735,11 +730,6 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 	cmd.c_state.event_send_disable = 1;
 	cmd.c_state.index_ext = idx_ext;
 	cmd.c_state.eq = cxip_cq_tx_eqn(rxc->recv_cq);
-
-	if (cxip_cq_saturated(rxc->recv_cq)) {
-		RXC_DBG(rxc, "CQ saturated\n");
-		return -FI_EAGAIN;
-	}
 
 	fastlock_acquire(&rxc->tx_cmdq->lock);
 
