@@ -159,6 +159,9 @@ def build_mpich_suite(mpi, mpi_install_path, libfab_install_path, ofi_build_mode
     mpichsuite_installpath= "{}/mpichsuite/test".format(mpi_install_path)
     pwd = os.getcwd()
     if (mpi == 'impi'):
+        os.environ['I_MPI_ROOT'] = "{}/intel64".format(ci_site_config.impi_root)
+        os.environ['LIBRARY_PATH'] = "{}/intel64/lib:{}/intel64/lib/debug" \
+               .format(ci_site_config.impi_root, ci_site_config.impi_root)
         os.chdir("{}/mpi".format(mpich_suite_path)) 
         cmd = ["./configure", "--with-mpi={}/intel64" \
                .format(ci_site_config.impi_root)]
