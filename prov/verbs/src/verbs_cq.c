@@ -167,10 +167,9 @@ vrb_poll_events(struct vrb_cq *_cq, int timeout)
 	int ret, rc;
 	void *context;
 	struct pollfd fds[2];
-	char data;
 
 	fds[0].fd = _cq->channel->fd;
-	fds[1].fd = _cq->signal_fd[0];
+	fds[1].fd = fd_signal_get(&_cq->signal);
 
 	fds[0].events = fds[1].events = POLLIN;
 
@@ -189,9 +188,7 @@ vrb_poll_events(struct vrb_cq *_cq, int timeout)
 		rc--;
 	}
 	if (fds[1].revents & POLLIN) {
-		do {
-			ret = read(fds[1].fd, &data, 1);
-		} while (ret > 0);
+		fd_signal_reset(&_cq->signal);
 		ret = -FI_EAGAIN;
 		rc--;
 	}
@@ -392,14 +389,10 @@ vrb_cq_strerror(struct fid_cq *eq, int prov_errno, const void *err_data,
 int vrb_cq_signal(struct fid_cq *cq)
 {
 	struct vrb_cq *_cq;
-	char data = '0';
 
 	_cq = container_of(cq, struct vrb_cq, util_cq.cq_fid);
 
-	if (write(_cq->signal_fd[1], &data, 1) != 1) {
-		VRB_WARN(FI_LOG_CQ, "Error signalling CQ\n");
-		return -errno;
-	}
+	fd_signal_set(&_cq->signal);
 
 	return 0;
 }
@@ -547,12 +540,8 @@ static int vrb_cq_close(fid_t fid)
 			return -ret;
 	}
 
-	if (cq->signal_fd[0]) {
-		ofi_close_socket(cq->signal_fd[0]);
-	}
-	if (cq->signal_fd[1]) {
-		ofi_close_socket(cq->signal_fd[1]);
-	}
+	if (cq->wait_obj != FI_WAIT_NONE)
+		fd_signal_free(&cq->signal);
 
 	ofi_cq_cleanup(&cq->util_cq);
 
@@ -612,7 +601,7 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		break;
 	default:
 		ret = -FI_ENOSYS;
-		goto err4;
+		goto err2;
 	}
 
 	if (attr->flags & FI_AFFINITY) {
@@ -623,7 +612,7 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 				   "Invalid value for the CQ attribute signaling_vector: %d\n",
 				   attr->signaling_vector);
 			ret = -FI_EINVAL;
-			goto err4;
+			goto err2;
 		}
 		comp_vector = attr->signaling_vector;
 	}
@@ -641,14 +630,10 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		if (ret)
 			goto err3;
 
-		if (socketpair(AF_UNIX, SOCK_STREAM, 0, cq->signal_fd)) {
+		if (fd_signal_init(&cq->signal)) {
 			ret = -errno;
 			goto err3;
 		}
-
-		ret = fi_fd_nonblock(cq->signal_fd[0]);
-		if (ret)
-			goto err4;
 	}
 
 	size = attr->size ? attr->size : VERBS_DEF_CQ_SIZE;
@@ -667,7 +652,7 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	if (!cq->cq) {
 		ret = -errno;
 		VRB_WARN(FI_LOG_CQ, "Unable to create verbs CQ\n");
-		goto err4;
+		goto err3;
 	}
 
 	if (cq->channel) {
@@ -675,7 +660,7 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		if (ret) {
 			VRB_WARN(FI_LOG_CQ,
 				   "ibv_req_notify_cq failed\n");
-			goto err5;
+			goto err4;
 		}
 	}
 
@@ -683,7 +668,7 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 				16, 0, VERBS_WCE_CNT, 0);
 	if (ret) {
 		VRB_WARN(FI_LOG_CQ, "Failed to create wce_pool\n");
-		goto err5;
+		goto err4;
 	}
 
 	cq->flags |= attr->flags;
@@ -709,13 +694,13 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	case FI_CQ_FORMAT_TAGGED:
 	default:
 		ret = -FI_ENOSYS;
-		goto err6;
+		goto err5;
 	}
 
 	ret = ofi_bufpool_create(&cq->ctx_pool, sizeof(struct fi_context),
 				 16, 0, size, OFI_BUFPOOL_NO_TRACK);
 	if (ret)
-		goto err6;
+		goto err5;
 
 	slist_init(&cq->saved_wc_list);
 	dlist_init(&cq->xrc.srq_list);
@@ -727,13 +712,10 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	*cq_fid = &cq->util_cq.cq_fid;
 	return 0;
-err6:
-	ofi_bufpool_destroy(cq->wce_pool);
 err5:
-	ibv_destroy_cq(cq->cq);
+	ofi_bufpool_destroy(cq->wce_pool);
 err4:
-	ofi_close_socket(cq->signal_fd[0]);
-	ofi_close_socket(cq->signal_fd[1]);
+	ibv_destroy_cq(cq->cq);
 err3:
 	if (cq->channel)
 		ibv_destroy_comp_channel(cq->channel);
