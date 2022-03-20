@@ -742,7 +742,7 @@ static void ofi_import_monitor_unsubscribe(struct ofi_mem_monitor *notifier,
 					   union ofi_mr_hmem_info *hmem_info)
 {
 	assert(impmon.impfid);
-	return impmon.impfid->export_ops->unsubscribe(impmon.impfid, addr, len);
+	impmon.impfid->export_ops->unsubscribe(impmon.impfid, addr, len);
 }
 
 static bool ofi_import_monitor_valid(struct ofi_mem_monitor *notifier,

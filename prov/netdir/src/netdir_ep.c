@@ -267,10 +267,10 @@ static int ofi_nd_ep_control(struct fid *fid, int command, void *arg)
 		(IUnknown*)ep->domain->cq,
 		(IUnknown*)ep->domain->cq,
 		ep,
-		ep->info->rx_attr->size,
-		ep->info->tx_attr->size,
-		ep->info->rx_attr->iov_limit,
-		ep->info->tx_attr->iov_limit,
+		(ULONG) ep->info->rx_attr->size,
+		(ULONG) ep->info->tx_attr->size,
+		(ULONG) ep->info->rx_attr->iov_limit,
+		(ULONG) ep->info->tx_attr->iov_limit,
 		0, (void**)&ep->qp);
 	if (FAILED(hr))
 		return H2F(hr);
@@ -335,6 +335,7 @@ static void ofi_nd_ep_completed(nd_event_base *base, DWORD bytes)
 
 	nd_ep_completed *compl = container_of(base, nd_ep_completed, base);
 	assert(compl->connector);
+	OFI_UNUSED(compl);
 
 	base->free(base);
 }

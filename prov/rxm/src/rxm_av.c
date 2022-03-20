@@ -244,7 +244,7 @@ static int rxm_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		return ret;
 	}
 
-	return av->util_av.eq ? 0 : count;
+	return av->util_av.eq ? 0 : (int) count;
 }
 
 static int rxm_av_insertsym(struct fid_av *av_fid, const char *node,
@@ -280,7 +280,7 @@ static int rxm_av_insertsym(struct fid_av *av_fid, const char *node,
 	}
 
 	free(addr);
-	return av->util_av.eq ? 0 : count;
+	return av->util_av.eq ? 0 : (int) count;
 }
 
 int rxm_av_insertsvc(struct fid_av *av, const char *node, const char *service,

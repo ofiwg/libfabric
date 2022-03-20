@@ -78,7 +78,7 @@ void tcpx_free_cm_ctx(struct tcpx_cm_context *cm_ctx)
  * CM message should be readable, as it fits within a single MTU
  * and is the first data transferred over the socket.
  */
-static int rx_cm_data(SOCKET fd, int type, struct tcpx_cm_context *cm_ctx)
+static ssize_t rx_cm_data(SOCKET fd, int type, struct tcpx_cm_context *cm_ctx)
 {
 	size_t data_size = 0;
 	ssize_t ret;
@@ -159,7 +159,7 @@ static int tx_cm_data(SOCKET fd, uint8_t type, struct tcpx_cm_context *cm_ctx)
 
 	ret = ofi_send_socket(fd, &cm_ctx->msg, sizeof(cm_ctx->msg.hdr) +
 			      cm_ctx->cm_data_sz, MSG_NOSIGNAL);
-	if (ret != sizeof(cm_ctx->msg.hdr) + cm_ctx->cm_data_sz)
+	if ((size_t) ret != sizeof(cm_ctx->msg.hdr) + cm_ctx->cm_data_sz)
 		return ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
 
 	return FI_SUCCESS;
@@ -314,7 +314,7 @@ static void tcpx_cm_recv_resp(struct util_wait *wait,
 {
 	struct fi_eq_cm_entry *cm_entry;
 	struct tcpx_ep *ep;
-	int ret;
+	ssize_t ret;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Handling accept from server\n");
 	assert(cm_ctx->hfid->fclass == FI_CLASS_EP);
@@ -425,7 +425,7 @@ static void tcpx_cm_recv_req(struct util_wait *wait,
 	struct tcpx_conn_handle *handle;
 	struct fi_eq_cm_entry *cm_entry;
 	socklen_t len;
-	int ret;
+	ssize_t ret;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "Server receive connect request\n");
 	handle  = container_of(cm_ctx->hfid, struct tcpx_conn_handle, fid);
@@ -454,7 +454,9 @@ static void tcpx_cm_recv_req(struct util_wait *wait,
 	if (!cm_entry->info)
 		goto err2;
 
-	len = cm_entry->info->dest_addrlen = handle->pep->info->src_addrlen;
+	cm_entry->info->dest_addrlen = handle->pep->info->src_addrlen;
+	len = (socklen_t) cm_entry->info->dest_addrlen;
+
 	free(cm_entry->info->dest_addr);
 	cm_entry->info->dest_addr = malloc(len);
 	if (!cm_entry->info->dest_addr)

@@ -63,7 +63,8 @@ int ofi_cq_write_overflow(struct util_cq *cq, void *context, uint64_t flags,
 	FI_DBG(cq->domain->prov, FI_LOG_CQ, "writing to CQ overflow list\n");
 	assert(ofi_cirque_freecnt(cq->cirq) <= 1);
 
-	if (!(entry = calloc(1, sizeof(*entry))))
+	entry = calloc(1, sizeof(*entry));
+	if (!entry)
 		return -FI_ENOMEM;
 
 	entry->comp.op_context = context;
@@ -86,7 +87,8 @@ int ofi_cq_insert_error(struct util_cq *cq,
 
 	assert(ofi_genlock_held(&cq->cq_lock));
 	assert(err_entry->err);
-	if (!(entry = calloc(1, sizeof(*entry))))
+	entry = calloc(1, sizeof(*entry));
+	if (!entry)
 		return -FI_ENOMEM;
 
 	entry->comp = *err_entry;
@@ -350,7 +352,7 @@ ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 {
 	struct util_cq *cq;
 	uint64_t endtime;
-	int ret;
+	ssize_t ret;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	assert(cq->wait && cq->internal_wait);

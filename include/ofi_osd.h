@@ -85,7 +85,7 @@ enum {
 	OFI_ENDIAN_LITTLE_WORD,	/* Middle-endian, PDP-11 style */
 };
 
-static inline int ofi_detect_endianness(void)
+static inline uint8_t ofi_detect_endianness(void)
 {
 	union {
 		uint8_t data[sizeof(uint32_t)];

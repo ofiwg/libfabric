@@ -1137,7 +1137,7 @@ static int sock_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	if (!tx_ctx)
 		return -FI_ENOMEM;
 
-	tx_ctx->tx_id = index;
+	tx_ctx->tx_id = (uint16_t) index;
 	tx_ctx->ep_attr = sock_ep->attr;
 	tx_ctx->domain = sock_ep->attr->domain;
 	if (tx_ctx->rx_ctrl_ctx && tx_ctx->rx_ctrl_ctx->is_ctrl_ctx)
@@ -1183,7 +1183,7 @@ static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 	if (!rx_ctx)
 		return -FI_ENOMEM;
 
-	rx_ctx->rx_id = index;
+	rx_ctx->rx_id = (uint16_t) index;
 	rx_ctx->ep_attr = sock_ep->attr;
 	rx_ctx->domain = sock_ep->attr->domain;
 	rx_ctx->av = sock_ep->attr->av;
@@ -1332,8 +1332,9 @@ static char *sock_get_fabric_name(struct sockaddr *src_addr)
 			continue;
 
 		if (ofi_equals_ipaddr(ifa->ifa_addr, src_addr)) {
-			prefix_len = ofi_mask_addr(&net_in_addr.sa,
-					ifa->ifa_addr, ifa->ifa_netmask);
+			prefix_len = (int) ofi_mask_addr(&net_in_addr.sa,
+							 ifa->ifa_addr,
+							 ifa->ifa_netmask);
 
 			switch (net_in_addr.sa.sa_family) {
 			case AF_INET:
@@ -1805,7 +1806,7 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 
 	idx = (attr->ep_type == FI_EP_MSG) ? index : index & attr->av->mask;
 
-	conn = ofi_idm_lookup(&attr->av_idm, idx);
+	conn = ofi_idm_lookup(&attr->av_idm, (int) idx);
 	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS) {
 		/* Verify that the existing connection is still usable, and
 		 * that the peer didn't restart.
@@ -1870,7 +1871,7 @@ int sock_ep_get_conn(struct sock_ep_attr *attr, struct sock_tx_ctx *tx_ctx,
 	conn = sock_ep_lookup_conn(attr, av_index, addr);
 	if (!conn) {
 		conn = SOCK_CM_CONN_IN_PROGRESS;
-		if (ofi_idm_set(&attr->av_idm, av_index, conn) < 0)
+		if (ofi_idm_set(&attr->av_idm, (int) av_index, conn) < 0)
 			SOCK_LOG_ERROR("ofi_idm_set failed\n");
 	}
 	ofi_mutex_unlock(&attr->cmap.lock);
@@ -1889,5 +1890,5 @@ int sock_ep_get_conn(struct sock_ep_attr *attr, struct sock_tx_ctx *tx_ctx,
 
 	*pconn = conn;
 	return conn->address_published ?
-	       0 : sock_conn_send_src_addr(attr, tx_ctx, conn);
+	       0 : (int) sock_conn_send_src_addr(attr, tx_ctx, conn);
 }

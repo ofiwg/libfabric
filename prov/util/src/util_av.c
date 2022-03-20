@@ -65,7 +65,7 @@ static int fi_get_src_sockaddr(const struct sockaddr *dest_addr, size_t dest_add
 	if (sock < 0)
 		return -errno;
 
-	ret = connect(sock, dest_addr, dest_addrlen);
+	ret = connect(sock, dest_addr, (socklen_t) dest_addrlen);
 	if (ret)
 		goto out;
 
@@ -135,7 +135,8 @@ void ofi_getnodename(uint16_t sa_family, char *buf, int buflen)
 				continue;
 			}
 
-			ret = getnameinfo(ifa->ifa_addr, ofi_sizeofaddr(ifa->ifa_addr),
+			ret = getnameinfo(ifa->ifa_addr,
+					  (socklen_t) ofi_sizeofaddr(ifa->ifa_addr),
 				  	  buf, buflen, NULL, 0, NI_NUMERICHOST);
 			buf[buflen - 1] = '\0';
 			if (ret == 0) {
@@ -582,7 +583,7 @@ void ofi_av_write_event(struct util_av *av, uint64_t data,
 
 	ret = fi_eq_write(&av->eq->eq_fid, FI_AV_COMPLETE, &entry,
 			  size, flags);
-	if (ret != size)
+	if ((size_t) ret != size)
 		FI_WARN(av->prov, FI_LOG_AV, "error writing to EQ\n");
 }
 
@@ -684,7 +685,7 @@ ip_av_ip4sym_getaddr(struct util_av *av, struct in_addr ip, size_t ipcnt,
 		     uint16_t port, size_t portcnt, void **addr, size_t *addrlen)
 {
 	struct sockaddr_in *sin;
-	int count = ipcnt * portcnt;
+	size_t count = ipcnt * portcnt;
 	size_t i, p, k;
 
 	*addrlen = sizeof(*sin);
@@ -696,12 +697,12 @@ ip_av_ip4sym_getaddr(struct util_av *av, struct in_addr ip, size_t ipcnt,
 		for (p = 0; p < portcnt; p++, k++) {
 			sin[k].sin_family = AF_INET;
 			/* TODO: should we skip addresses x.x.x.0 and x.x.x.255? */
-			sin[k].sin_addr.s_addr = htonl(ntohl(ip.s_addr) + i);
-			sin[k].sin_port = htons(port + p);
+			sin[k].sin_addr.s_addr = htonl(ntohl(ip.s_addr) + (uint32_t) i);
+			sin[k].sin_port = htons(port + (uint16_t) p);
 		}
 	}
 	*addr = sin;
-	return count;
+	return (int) count;
 }
 
 /* Caller should free *addr */
@@ -710,7 +711,7 @@ ip_av_ip6sym_getaddr(struct util_av *av, struct in6_addr ip, size_t ipcnt,
 		     uint16_t port, size_t portcnt, void **addr, size_t *addrlen)
 {
 	struct sockaddr_in6 *sin6, sin6_temp;
-	int j, count = ipcnt * portcnt;
+	int j, count = (int)(ipcnt * portcnt);
 	size_t i, p, k;
 
 	*addrlen = sizeof(*sin6);
@@ -724,7 +725,7 @@ ip_av_ip6sym_getaddr(struct util_av *av, struct in6_addr ip, size_t ipcnt,
 		for (p = 0; p < portcnt; p++, k++) {
 			sin6[k].sin6_family = AF_INET6;
 			sin6[k].sin6_addr = sin6_temp.sin6_addr;
-			sin6[k].sin6_port = htons(port + p);
+			sin6[k].sin6_port = htons((uint16_t)(port + p));
 		}
 		/* TODO: should we skip addresses x::0 and x::255? */
 		for (j = 15; j >= 0; j--) {
@@ -746,7 +747,7 @@ static int ip_av_nodesym_getaddr(struct util_av *av, const char *node,
 	char name[FI_NAME_MAX];
 	char svc[FI_NAME_MAX];
 	size_t name_len, n, s;
-	int ret, name_index, svc_index, count = nodecnt * svccnt;
+	int ret, name_index, svc_index, count = (int)(nodecnt * svccnt);
 
 	memset(&hints, 0, sizeof hints);
 
@@ -880,7 +881,8 @@ int ofi_ip_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		     size_t count, uint64_t flags)
 {
 	struct util_av *av;
-	int i, ret;
+	ssize_t i;
+	int ret;
 
 	av = container_of(av_fid, struct util_av, av_fid);
 	if (flags) {

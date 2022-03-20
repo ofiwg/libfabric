@@ -231,6 +231,7 @@ extern "C" {
 												\
 		LONG dec = InterlockedDecrement(&footer->used);					\
 		assert(dec >= 0);								\
+		OFI_UNUSED(dec); 								\
 	}											\
 												\
 	static inline void ofi_nd_buf_free_##name(type *data)					\
