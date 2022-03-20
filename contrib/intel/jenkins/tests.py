@@ -54,9 +54,9 @@ class FiInfoTest(Test):
     @property
     def options(self):
         if (self.util_prov):
-            opts  = "-f -p {};{}".format(self.core_prov, self.util_prov)
+            opts  = "-f {} -p {};{}".format(self.fabric, self.core_prov, self.util_prov)
         else:
-            opts = "-f -p {}".format(self.core_prov)
+            opts = "-f {} -p {}".format(self.fabric, self.core_prov)
 
         return opts
 
