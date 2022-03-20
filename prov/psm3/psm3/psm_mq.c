@@ -60,10 +60,6 @@
 #include "psm_mq_internal.h"
 #include "ips_proto_params.h"
 
-#ifdef PSM_CUDA
-#include "psm_gdrcpy.h"
-#endif
-
 /*
  * Functions to manipulate the expected queue in mq_ep.
  */
@@ -74,7 +70,7 @@
  * reqs into the hash tables where the hashing searches will look for them.
  */
 void
-psmi_mq_fastpath_disable(psm2_mq_t mq)
+psm3_mq_fastpath_disable(psm2_mq_t mq)
 {
 	psm2_mq_req_t *curp, cur;
 	struct mqq *qp;
@@ -134,7 +130,7 @@ psmi_mq_fastpath_disable(psm2_mq_t mq)
    aggressive threshold: if |hash| + |list| < X
    even easier: if |hash| + |list| == 0
    might be better approach to avoid constant bouncing between modes */
-void psmi_mq_fastpath_try_reenable(psm2_mq_t mq)
+void psm3_mq_fastpath_try_reenable(psm2_mq_t mq)
 {
 	if_pf(mq->nohash_fastpath == 0 &&
 	      mq->unexpected_hash_len == 0 &&
@@ -206,7 +202,7 @@ mq_req_match_with_tagsel(psm2_mq_t mq, psm2_epaddr_t src,
 					mq->unexpected_hash_len--;
 				for (; j < NUM_MQ_SUBLISTS; j++)
 					mq_qq_remove_which(cur, j);
-				psmi_mq_fastpath_try_reenable(mq);
+				psm3_mq_fastpath_try_reenable(mq);
 			}
 			return cur;
 		}
@@ -225,7 +221,7 @@ static void mq_add_to_expected_hashes(psm2_mq_t mq, psm2_mq_req_t req)
 		req->q[PSM2_ANYTAG_ANYSRC] = &mq->expected_q;
 		mq->expected_list_len++;
 		if_pf (mq->expected_list_len >= HASH_THRESHOLD)
-			psmi_mq_fastpath_disable(mq);
+			psm3_mq_fastpath_disable(mq);
 	} else if ((req->req_data.tagsel.tag[0] == 0xFFFFFFFF) &&
 		   (req->req_data.tagsel.tag[1] == 0xFFFFFFFF)) {
 		i = PSM2_TAG_SRC;
@@ -281,7 +277,7 @@ int mq_req_remove_single(psm2_mq_t mq, psm2_mq_req_t req)
 	}
 
 	mq_qq_remove_which(req, i);
-	psmi_mq_fastpath_try_reenable(mq);
+	psm3_mq_fastpath_try_reenable(mq);
 	return 1;
 }
 
@@ -301,7 +297,7 @@ psmi_mq_iprobe_inner(psm2_mq_t mq, psm2_epaddr_t src,
 		return req;
 	}
 
-	psmi_poll_internal(mq->ep, 1);
+	psm3_poll_internal(mq->ep, 1);
 	/* try again */
 	req = mq_req_match_with_tagsel(mq, src, tag, tagsel, remove_req);
 
@@ -310,7 +306,7 @@ psmi_mq_iprobe_inner(psm2_mq_t mq, psm2_epaddr_t src,
 }
 
 psm2_error_t
-__psm2_mq_iprobe2(psm2_mq_t mq, psm2_epaddr_t src,
+psm3_mq_iprobe2(psm2_mq_t mq, psm2_epaddr_t src,
 		 psm2_mq_tag_t *tag, psm2_mq_tag_t *tagsel,
 		 psm2_mq_status2_t *status)
 {
@@ -332,10 +328,9 @@ __psm2_mq_iprobe2(psm2_mq_t mq, psm2_epaddr_t src,
 	PSM2_LOG_MSG("leaving");
 	return PSM2_MQ_NO_COMPLETIONS;
 }
-PSMI_API_DECL(psm2_mq_iprobe2)
 
 psm2_error_t
-__psm2_mq_iprobe(psm2_mq_t mq, uint64_t tag, uint64_t tagsel,
+psm3_mq_iprobe(psm2_mq_t mq, uint64_t tag, uint64_t tagsel,
 		psm2_mq_status_t *status)
 {
 	psm2_mq_tag_t rtag;
@@ -367,10 +362,9 @@ __psm2_mq_iprobe(psm2_mq_t mq, uint64_t tag, uint64_t tagsel,
 
 	return PSM2_MQ_NO_COMPLETIONS;
 }
-PSMI_API_DECL(psm2_mq_iprobe)
 
 psm2_error_t
-__psm2_mq_improbe2(psm2_mq_t mq, psm2_epaddr_t src,
+psm3_mq_improbe2(psm2_mq_t mq, psm2_epaddr_t src,
 		  psm2_mq_tag_t *tag, psm2_mq_tag_t *tagsel,
 		  psm2_mq_req_t *reqo, psm2_mq_status2_t *status)
 {
@@ -394,10 +388,9 @@ __psm2_mq_improbe2(psm2_mq_t mq, psm2_epaddr_t src,
 	PSM2_LOG_MSG("leaving");
 	return PSM2_MQ_NO_COMPLETIONS;
 }
-PSMI_API_DECL(psm2_mq_improbe2)
 
 psm2_error_t
-__psm2_mq_improbe(psm2_mq_t mq, uint64_t tag, uint64_t tagsel,
+psm3_mq_improbe(psm2_mq_t mq, uint64_t tag, uint64_t tagsel,
 		 psm2_mq_req_t *reqo, psm2_mq_status_t *status)
 {
 	psm2_mq_tag_t rtag;
@@ -428,9 +421,8 @@ __psm2_mq_improbe(psm2_mq_t mq, uint64_t tag, uint64_t tagsel,
 	PSM2_LOG_MSG("leaving");
 	return PSM2_MQ_NO_COMPLETIONS;
 }
-PSMI_API_DECL(psm2_mq_improbe)
 
-psm2_error_t __psm2_mq_cancel(psm2_mq_req_t *ireq)
+psm2_error_t psm3_mq_cancel(psm2_mq_req_t *ireq)
 {
 	psm2_mq_req_t req = *ireq;
 	psm2_mq_t mq;
@@ -463,7 +455,7 @@ psm2_error_t __psm2_mq_cancel(psm2_mq_req_t *ireq)
 		} else
 			err = PSM2_MQ_NO_COMPLETIONS;
 	} else {
-		err = psmi_handle_error(mq->ep, PSM2_PARAM_ERR,
+		err = psm3_handle_error(mq->ep, PSM2_PARAM_ERR,
 					"Cannot cancel send requests (req=%p)",
 					req);
 	}
@@ -474,7 +466,6 @@ psm2_error_t __psm2_mq_cancel(psm2_mq_req_t *ireq)
 
 	return err;
 }
-PSMI_API_DECL(psm2_mq_cancel)
 
 /* This is the only PSM function that blocks.
  * We handle it in a special manner since we don't know what the user's
@@ -547,7 +538,7 @@ fail_with_lock:
 }
 
 psm2_error_t
-__psm2_mq_wait2(psm2_mq_req_t *ireq, psm2_mq_status2_t *status)
+psm3_mq_wait2(psm2_mq_req_t *ireq, psm2_mq_status2_t *status)
 {
 	psm2_error_t rv;
 	PSM2_LOG_MSG("entering");
@@ -559,10 +550,9 @@ __psm2_mq_wait2(psm2_mq_req_t *ireq, psm2_mq_status2_t *status)
 	PSM2_LOG_MSG("leaving");
 	return rv;
 }
-PSMI_API_DECL(psm2_mq_wait2)
 
 psm2_error_t
-__psm2_mq_wait(psm2_mq_req_t *ireq, psm2_mq_status_t *status)
+psm3_mq_wait(psm2_mq_req_t *ireq, psm2_mq_status_t *status)
 {
 	psm2_error_t rv;
 	PSM2_LOG_MSG("entering");
@@ -574,9 +564,8 @@ __psm2_mq_wait(psm2_mq_req_t *ireq, psm2_mq_status_t *status)
 	PSM2_LOG_MSG("leaving");
 	return rv;
 }
-PSMI_API_DECL(psm2_mq_wait)
 
-psm2_error_t psmi_mq_wait_internal(psm2_mq_req_t *ireq)
+psm2_error_t psm3_mq_wait_internal(psm2_mq_req_t *ireq)
 {
 	return psmi_mq_wait_inner(ireq, NULL, NULL, 0);
 }
@@ -632,7 +621,7 @@ psmi_mq_test_inner(psm2_mq_req_t *ireq, void *status,
 }
 
 psm2_error_t
-__psm2_mq_test2(psm2_mq_req_t *ireq, psm2_mq_status2_t *status)
+psm3_mq_test2(psm2_mq_req_t *ireq, psm2_mq_status2_t *status)
 {
 	psm2_error_t rv;
 	PSM2_LOG_MSG("entering");
@@ -641,10 +630,9 @@ __psm2_mq_test2(psm2_mq_req_t *ireq, psm2_mq_status2_t *status)
 	PSM2_LOG_MSG("leaving");
 	return rv;
 }
-PSMI_API_DECL(psm2_mq_test2)
 
 psm2_error_t
-__psm2_mq_test(psm2_mq_req_t *ireq, psm2_mq_status_t *status)
+psm3_mq_test(psm2_mq_req_t *ireq, psm2_mq_status_t *status)
 {
 	psm2_error_t rv;
 	PSM2_LOG_MSG("entering");
@@ -654,10 +642,9 @@ __psm2_mq_test(psm2_mq_req_t *ireq, psm2_mq_status_t *status)
 	return rv;
 
 }
-PSMI_API_DECL(psm2_mq_test)
 
 psm2_error_t
-__psm2_mq_isend2(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags,
+psm3_mq_isend2(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags,
 		psm2_mq_tag_t *stag, const void *buf, uint32_t len,
 		void *context, psm2_mq_req_t *req)
 {
@@ -683,10 +670,9 @@ __psm2_mq_isend2(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags,
 
 	return err;
 }
-PSMI_API_DECL(psm2_mq_isend2)
 
 psm2_error_t
-__psm2_mq_isend(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags, uint64_t stag,
+psm3_mq_isend(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags, uint64_t stag,
 	       const void *buf, uint32_t len, void *context, psm2_mq_req_t *req)
 {
 	psm2_error_t err;
@@ -712,10 +698,9 @@ __psm2_mq_isend(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags, uint64_t stag,
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
-PSMI_API_DECL(psm2_mq_isend)
 
 psm2_error_t
-__psm2_mq_send2(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags,
+psm3_mq_send2(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags,
 	       psm2_mq_tag_t *stag, const void *buf, uint32_t len)
 {
 	psm2_error_t err;
@@ -730,10 +715,9 @@ __psm2_mq_send2(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags,
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
-PSMI_API_DECL(psm2_mq_send2)
 
 psm2_error_t
-__psm2_mq_send(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags, uint64_t stag,
+psm3_mq_send(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags, uint64_t stag,
 	      const void *buf, uint32_t len)
 {
 	psm2_error_t err;
@@ -752,10 +736,9 @@ __psm2_mq_send(psm2_mq_t mq, psm2_epaddr_t dest, uint32_t flags, uint64_t stag,
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
-PSMI_API_DECL(psm2_mq_send)
 
 /*
- * Common subroutine to psm2_mq_irecv2 and psm2_mq_imrecv.  This code assumes
+ * Common subroutine to psm3_mq_irecv2 and psm3_mq_imrecv.  This code assumes
  * that the provided request has been matched, and begins copying message data
  * that has already arrived to the user's buffer.  Any remaining data is copied
  * by PSM polling until the message is complete.
@@ -765,7 +748,7 @@ PSMI_API_DECL(psm2_mq_send)
  * where data was landed.
  */
 static psm2_error_t
-psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
+psm3_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 {
 	uint32_t msglen;
 
@@ -783,7 +766,7 @@ psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 					req->is_buf_gpu_mem,
 #endif
 					buf, len, msglen);
-			psmi_mq_sysbuf_free(mq, req->req_data.buf);
+			psm3_mq_sysbuf_free(mq, req->req_data.buf);
 #ifdef PSM_CUDA
 		} else {
 			mq->stats.rx_sysbuf_cpu_num++;
@@ -805,7 +788,7 @@ psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 				req->is_buf_gpu_mem,
 #endif
 				buf, len, req->recv_msgoff);
-		psmi_mq_sysbuf_free(mq, req->req_data.buf);
+		psm3_mq_sysbuf_free(mq, req->req_data.buf);
 
 		req->state = MQ_STATE_MATCHED;
 		req->req_data.buf = buf;
@@ -824,7 +807,7 @@ psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 					req->is_buf_gpu_mem,
 #endif
 					buf, len, req->recv_msgoff);
-			psmi_mq_sysbuf_free(mq, req->req_data.buf);
+			psm3_mq_sysbuf_free(mq, req->req_data.buf);
 		}
 
 		req->state = MQ_STATE_MATCHED;
@@ -846,7 +829,7 @@ psm2_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 }
 
 psm2_error_t
-__psm2_mq_fp_msg(psm2_ep_t ep, psm2_mq_t mq, psm2_epaddr_t addr, psm2_mq_tag_t *tag,
+psm3_mq_fp_msg(psm2_ep_t ep, psm2_mq_t mq, psm2_epaddr_t addr, psm2_mq_tag_t *tag,
 		psm2_mq_tag_t *tagsel, uint32_t flags, void *buf, uint32_t len,
 		void *context, enum psm2_mq_fp_op fp_type, psm2_mq_req_t *req)
 {
@@ -888,7 +871,7 @@ __psm2_mq_fp_msg(psm2_ep_t ep, psm2_mq_t mq, psm2_epaddr_t addr, psm2_mq_tag_t *
 
 		if (recv_req == NULL) {
 			/* prepost before arrival, add to expected q */
-			recv_req = psmi_mq_req_alloc(mq, MQE_TYPE_RECV);
+			recv_req = psm3_mq_req_alloc(mq, MQE_TYPE_RECV);
 			if_pf(recv_req == NULL) {
 				err = PSM2_NO_MEMORY;
 				goto recv_ret;
@@ -927,7 +910,7 @@ __psm2_mq_fp_msg(psm2_ep_t ep, psm2_mq_t mq, psm2_epaddr_t addr, psm2_mq_tag_t *
 
 			recv_req->req_data.context = context;
 
-			psm2_mq_irecv_inner(mq, recv_req, buf, len);
+			psm3_mq_irecv_inner(mq, recv_req, buf, len);
 		}
 recv_ret:
 		psmi_assert_req_not_internal(recv_req);
@@ -940,10 +923,9 @@ recv_ret:
 
 	return err;
 }
-PSMI_API_DECL(psm2_mq_fp_msg)
 
 psm2_error_t
-__psm2_mq_irecv2(psm2_mq_t mq, psm2_epaddr_t src,
+psm3_mq_irecv2(psm2_mq_t mq, psm2_epaddr_t src,
 		psm2_mq_tag_t *tag, psm2_mq_tag_t *tagsel,
 		uint32_t flags, void *buf, uint32_t len, void *context,
 		psm2_mq_req_t *reqo)
@@ -971,7 +953,7 @@ __psm2_mq_irecv2(psm2_mq_t mq, psm2_epaddr_t src,
 
 	if (req == NULL) {
 		/* prepost before arrival, add to expected q */
-		req = psmi_mq_req_alloc(mq, MQE_TYPE_RECV);
+		req = psm3_mq_req_alloc(mq, MQE_TYPE_RECV);
 		if_pf(req == NULL) {
 			err = PSM2_NO_MEMORY;
 			goto ret;
@@ -1015,7 +997,7 @@ __psm2_mq_irecv2(psm2_mq_t mq, psm2_epaddr_t src,
 
 		req->req_data.context = context;
 
-		psm2_mq_irecv_inner(mq, req, buf, len);
+		psm3_mq_irecv_inner(mq, req, buf, len);
 	}
 
 ret:
@@ -1026,10 +1008,9 @@ ret:
 
 	return err;
 }
-PSMI_API_DECL(psm2_mq_irecv2)
 
 psm2_error_t
-__psm2_mq_irecv(psm2_mq_t mq, uint64_t tag, uint64_t tagsel, uint32_t flags,
+psm3_mq_irecv(psm2_mq_t mq, uint64_t tag, uint64_t tagsel, uint32_t flags,
 	       void *buf, uint32_t len, void *context, psm2_mq_req_t *reqo)
 {
 	psm2_error_t rv;
@@ -1046,7 +1027,7 @@ __psm2_mq_irecv(psm2_mq_t mq, uint64_t tag, uint64_t tagsel, uint32_t flags,
 #endif
 	rtagsel.tag64 = tagsel;
 	rtagsel.tag[2] = 0;
-	rv = __psm2_mq_irecv2(mq, PSM2_MQ_ANY_ADDR, &rtag, &rtagsel,
+	rv = psm3_mq_irecv2(mq, PSM2_MQ_ANY_ADDR, &rtag, &rtagsel,
 			       flags, buf, len, context, reqo);
 
 	psmi_assert_req_not_internal(*reqo);
@@ -1054,10 +1035,9 @@ __psm2_mq_irecv(psm2_mq_t mq, uint64_t tag, uint64_t tagsel, uint32_t flags,
 
 	return rv;
 }
-PSMI_API_DECL(psm2_mq_irecv)
 
 psm2_error_t
-__psm2_mq_imrecv(psm2_mq_t mq, uint32_t flags, void *buf, uint32_t len,
+psm3_mq_imrecv(psm2_mq_t mq, uint32_t flags, void *buf, uint32_t len,
 		void *context, psm2_mq_req_t *reqo)
 {
 	psm2_error_t err = PSM2_OK;
@@ -1067,7 +1047,7 @@ __psm2_mq_imrecv(psm2_mq_t mq, uint32_t flags, void *buf, uint32_t len,
 	PSMI_ASSERT_INITIALIZED();
 
 	if (req == PSM2_MQ_REQINVALID) {
-		err = psmi_handle_error(mq->ep, PSM2_PARAM_ERR,
+		err = psm3_handle_error(mq->ep, PSM2_PARAM_ERR,
 					"Invalid request (req=%p)", req);
 	} else {
 		/* Message is already matched -- begin delivering message data to the
@@ -1086,7 +1066,7 @@ __psm2_mq_imrecv(psm2_mq_t mq, uint32_t flags, void *buf, uint32_t len,
 #endif
 
 		PSMI_LOCK(mq->progress_lock);
-		psm2_mq_irecv_inner(mq, req, buf, len);
+		psm3_mq_irecv_inner(mq, req, buf, len);
 		PSMI_UNLOCK(mq->progress_lock);
 	}
 
@@ -1094,7 +1074,6 @@ __psm2_mq_imrecv(psm2_mq_t mq, uint32_t flags, void *buf, uint32_t len,
 
 	return err;
 }
-PSMI_API_DECL(psm2_mq_imrecv)
 
 /* The status argument can be an instance of either type psm2_mq_status_t or
  * psm2_mq_status2_t.  Depending on the type, a corresponding status copy
@@ -1112,7 +1091,7 @@ psmi_mq_ipeek_inner(psm2_mq_t mq, psm2_mq_req_t *oreq,
 
 	if ((req = mq->completed_q.first) == NULL) {
 		PSMI_LOCK(mq->progress_lock);
-		psmi_poll_internal(mq->ep, 1);
+		psm3_poll_internal(mq->ep, 1);
 		if ((req = mq->completed_q.first) == NULL) {
 			PSMI_UNLOCK(mq->progress_lock);
 			return PSM2_MQ_NO_COMPLETIONS;
@@ -1128,7 +1107,7 @@ psmi_mq_ipeek_inner(psm2_mq_t mq, psm2_mq_req_t *oreq,
 }
 
 psm2_error_t
-__psm2_mq_ipeek2(psm2_mq_t mq, psm2_mq_req_t *oreq, psm2_mq_status2_t *status)
+psm3_mq_ipeek2(psm2_mq_t mq, psm2_mq_req_t *oreq, psm2_mq_status2_t *status)
 {
 	psm2_error_t rv;
 
@@ -1142,10 +1121,9 @@ __psm2_mq_ipeek2(psm2_mq_t mq, psm2_mq_req_t *oreq, psm2_mq_status2_t *status)
 	PSM2_LOG_MSG("leaving");
 	return rv;
 }
-PSMI_API_DECL(psm2_mq_ipeek2)
 
 psm2_error_t
-__psm2_mq_ipeek(psm2_mq_t mq, psm2_mq_req_t *oreq, psm2_mq_status_t *status)
+psm3_mq_ipeek(psm2_mq_t mq, psm2_mq_req_t *oreq, psm2_mq_status_t *status)
 {
 	psm2_error_t rv;
 
@@ -1158,9 +1136,8 @@ __psm2_mq_ipeek(psm2_mq_t mq, psm2_mq_req_t *oreq, psm2_mq_status_t *status)
 	PSM2_LOG_MSG("leaving");
 	return rv;
 }
-PSMI_API_DECL(psm2_mq_ipeek)
 
-psm2_error_t __psm2_mq_ipeek_dequeue_multi(psm2_mq_t mq, void *status_array,
+psm2_error_t psm3_mq_ipeek_dequeue_multi(psm2_mq_t mq, void *status_array,
 		psmi_mq_status_copy_user_t status_copy, int *count)
 {
 	psm2_mq_req_t req;
@@ -1174,7 +1151,7 @@ psm2_error_t __psm2_mq_ipeek_dequeue_multi(psm2_mq_t mq, void *status_array,
 		PSMI_LOCK(mq->progress_lock);
 
 		if (mq->completed_q.first == NULL)
-			psmi_poll_internal(mq->ep, 1);
+			psm3_poll_internal(mq->ep, 1);
 
 		if ((req = mq->completed_q.first) == NULL) {
 			PSMI_UNLOCK(mq->progress_lock);
@@ -1185,7 +1162,7 @@ psm2_error_t __psm2_mq_ipeek_dequeue_multi(psm2_mq_t mq, void *status_array,
 		PSMI_UNLOCK(mq->progress_lock);
 
 		ret = status_copy(&req->req_data, status_array, *count);
-		psm2_mq_req_free(mq, req);
+		psm3_mq_req_free(mq, req);
 
 		if (unlikely(ret < 0)) {
 			*count = ret;
@@ -1201,16 +1178,15 @@ psm2_error_t __psm2_mq_ipeek_dequeue_multi(psm2_mq_t mq, void *status_array,
 	}
 	return PSM2_OK;
 }
-PSMI_API_DECL(psm2_mq_ipeek_dequeue_multi)
 
-psm2_error_t __psm2_mq_ipeek_dequeue(psm2_mq_t mq, psm2_mq_req_t *oreq)
+psm2_error_t psm3_mq_ipeek_dequeue(psm2_mq_t mq, psm2_mq_req_t *oreq)
 {
 	psm2_mq_req_t req;
 
 	PSMI_ASSERT_INITIALIZED();
 	PSMI_LOCK(mq->progress_lock);
 	if (mq->completed_q.first == NULL)
-		psmi_poll_internal(mq->ep, 1);
+		psm3_poll_internal(mq->ep, 1);
 	if ((req = mq->completed_q.first) == NULL) {
 		PSMI_UNLOCK(mq->progress_lock);
 		return PSM2_MQ_NO_COMPLETIONS;
@@ -1220,9 +1196,8 @@ psm2_error_t __psm2_mq_ipeek_dequeue(psm2_mq_t mq, psm2_mq_req_t *oreq)
 	*oreq = req;
 	return PSM2_OK;
 }
-PSMI_API_DECL(psm2_mq_ipeek_dequeue)
 
-psm2_error_t __psm2_mq_req_free(psm2_mq_t mq, psm2_mq_req_t req)
+psm2_error_t psm3_mq_req_free(psm2_mq_t mq, psm2_mq_req_t req)
 {
 	PSMI_ASSERT_INITIALIZED();
 	if (req == NULL)
@@ -1233,7 +1208,6 @@ psm2_error_t __psm2_mq_req_free(psm2_mq_t mq, psm2_mq_req_t req)
 
 	return PSM2_OK;
 }
-PSMI_API_DECL(psm2_mq_req_free)
 
 static
 psm2_error_t psmi_mqopt_ctl(psm2_mq_t mq, uint32_t key, void *value, int get)
@@ -1269,14 +1243,14 @@ psm2_error_t psmi_mqopt_ctl(psm2_mq_t mq, uint32_t key, void *value, int get)
 
 	default:
 		err =
-		    psmi_handle_error(NULL, PSM2_PARAM_ERR,
+		    psm3_handle_error(NULL, PSM2_PARAM_ERR,
 				      "Unknown option key=%u", key);
 		break;
 	}
 	return err;
 }
 
-psm2_error_t __psm2_mq_getopt(psm2_mq_t mq, int key, void *value)
+psm2_error_t psm3_mq_getopt(psm2_mq_t mq, int key, void *value)
 {
 	psm2_error_t rv;
 	PSM2_LOG_MSG("entering");
@@ -1285,9 +1259,8 @@ psm2_error_t __psm2_mq_getopt(psm2_mq_t mq, int key, void *value)
 	PSM2_LOG_MSG("leaving");
 	return rv;
 }
-PSMI_API_DECL(psm2_mq_getopt)
 
-psm2_error_t __psm2_mq_setopt(psm2_mq_t mq, int key, const void *value)
+psm2_error_t psm3_mq_setopt(psm2_mq_t mq, int key, const void *value)
 {
 	psm2_error_t rv;
 	PSM2_LOG_MSG("entering");
@@ -1296,7 +1269,6 @@ psm2_error_t __psm2_mq_setopt(psm2_mq_t mq, int key, const void *value)
 	PSM2_LOG_MSG("leaving");
 	return rv;
 }
-PSMI_API_DECL(psm2_mq_setopt)
 
 #define TAB_SIZE 16
 #define STATS				\
@@ -1322,7 +1294,7 @@ psmi_mq_print_stats(psm2_mq_t mq, FILE *perf_stats_fd)
 	psm2_mq_stats_t stats;
 	char msg_buffer[MSG_BUFFER_LEN];
 
-	psm2_mq_get_stats(mq, &stats);
+	psm3_mq_get_stats(mq, &stats);
 
 #define STAT(x) \
 	snprintf(msg_buffer, MSG_BUFFER_LEN, "%*lu",TAB_SIZE, stats.x); \
@@ -1345,8 +1317,8 @@ void
 	char msg_buffer[MSG_BUFFER_LEN];
 	int delta_t = 0;
 
-	snprintf(perf_file_name, MSG_BUFFER_LEN, "./psm3-perf-stat-ep-0x%" PRIx64 "-pid-%d",
-			(uint64_t)(mq->ep->epid),
+	snprintf(perf_file_name, MSG_BUFFER_LEN, "./psm3-perf-stat-ep-%s-pid-%d",
+			psm3_epid_fmt(mq->ep->epid, 0),
 			getpid());
 	FILE *perf_stats_fd = fopen(perf_file_name, "w+");
 
@@ -1411,7 +1383,7 @@ psmi_mq_print_stats_finalize(psm2_mq_t mq)
  * the user can set options after obtaining an endpoint
  */
 psm2_error_t
-__psm2_mq_init(psm2_ep_t ep, uint64_t ignored,
+psm3_mq_init(psm2_ep_t ep, uint64_t ignored,
 	      const struct psm2_optkey *opts, int numopts, psm2_mq_t *mqo)
 {
 	psm2_error_t err = PSM2_OK;
@@ -1431,7 +1403,7 @@ __psm2_mq_init(psm2_ep_t ep, uint64_t ignored,
 	psmi_assert_always(mq != NULL);
 	psmi_assert_always(mq->ep != NULL);
 
-	mq->stats.comm_world_rank = hfi_get_myrank();
+	mq->stats.comm_world_rank = psm3_get_myrank();
 
 	/* Process options */
 	for (i = 0; err == PSM2_OK && i < numopts; i++)
@@ -1440,9 +1412,9 @@ __psm2_mq_init(psm2_ep_t ep, uint64_t ignored,
 		goto fail;
 
 	/* Initialize the unexpected system buffer allocator */
-	psmi_mq_sysbuf_init(mq);
+	psm3_mq_sysbuf_init(mq);
 	char buf[128];
-	psmi_mq_sysbuf_getinfo(mq, buf, sizeof buf);
+	psm3_mq_sysbuf_getinfo(mq, buf, sizeof buf);
 	_HFI_VDBG("%s", buf);
 
 	*mqo = mq;
@@ -1454,9 +1426,8 @@ fail:
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
-PSMI_API_DECL(psm2_mq_init)
 
-psm2_error_t __psm2_mq_finalize(psm2_mq_t mq)
+psm2_error_t psm3_mq_finalize(psm2_mq_t mq)
 {
 	psm2_error_t rv = PSM2_OK;
 
@@ -1475,15 +1446,13 @@ psm2_error_t __psm2_mq_finalize(psm2_mq_t mq)
 	PSM2_LOG_MSG("leaving");
 	return rv;
 }
-PSMI_API_DECL(psm2_mq_finalize)
 
-void __psm2_mq_get_stats(psm2_mq_t mq, psm2_mq_stats_t *stats)
+void psm3_mq_get_stats(psm2_mq_t mq, psm2_mq_stats_t *stats)
 {
 	PSM2_LOG_MSG("entering");
 	memcpy(stats, &mq->stats, sizeof(psm2_mq_stats_t));
 	PSM2_LOG_MSG("leaving");
 }
-PSMI_API_DECL(psm2_mq_get_stats)
 
 psm2_error_t psmi_mq_initstats(psm2_mq_t mq, psm2_epid_t epid)
 {
@@ -1520,28 +1489,28 @@ psm2_error_t psmi_mq_initstats(psm2_mq_t mq, psm2_epid_t epid)
 #endif
 	};
 
-	return psmi_stats_register_type("MPI_Statistics_Summary",
+	return psm3_stats_register_type("MPI_Statistics_Summary",
 					PSMI_STATSTYPE_MQ,
 					entries,
-					PSMI_STATS_HOWMANY(entries),
-					epid, mq, NULL);
+					PSMI_HOWMANY(entries),
+					psm3_epid_fmt(epid, 0), mq, NULL);
 }
 
-psm2_error_t psmi_mq_malloc(psm2_mq_t *mqo)
+psm2_error_t psm3_mq_malloc(psm2_mq_t *mqo)
 {
 	psm2_error_t err = PSM2_OK;
 
 	psm2_mq_t mq =
 	    (psm2_mq_t) psmi_calloc(NULL, UNDEFINED, 1, sizeof(struct psm2_mq));
 	if (mq == NULL) {
-		err = psmi_handle_error(NULL, PSM2_NO_MEMORY,
+		err = psm3_handle_error(NULL, PSM2_NO_MEMORY,
 					"Couldn't allocate memory for mq endpoint");
 		goto fail;
 	}
 
 	mq->ep = NULL;
 	/*mq->unexpected_callback = NULL; */
-	mq->memmode = psmi_parse_memmode();
+	mq->memmode = psm3_parse_memmode();
 
 	memset(mq->unexpected_htab, 0,
 	       NUM_HASH_CONFIGS * NUM_HASH_BUCKETS * sizeof(struct mqq));
@@ -1554,30 +1523,14 @@ psm2_error_t psmi_mq_malloc(psm2_mq_t *mqo)
 	STAILQ_INIT(&mq->eager_q);
 
 
-	/* The values are overwritten in initialize_defaults, they're just set to
-	 * sensible defaults until then */
-	if(psmi_cpu_model == CPUID_MODEL_PHI_GEN2 || psmi_cpu_model == CPUID_MODEL_PHI_GEN2M)
-	{
-		mq->hfi_thresh_rv = MQ_HFI_THRESH_RNDV_PHI2;
-		mq->hfi_base_window_rv = MQ_HFI_WINDOW_RNDV_PHI2;
-	} else {
-		mq->hfi_thresh_rv = MQ_HFI_THRESH_RNDV_XEON;
-		mq->hfi_base_window_rv = MQ_HFI_WINDOW_RNDV_XEON;
-	}
-	if (! (psmi_parse_rdmamode() & IPS_PROTOEXP_FLAG_ENABLED)) {
-		// TBD - when RDMA is disabled do we want to disable rendezvous?
-		// even without RDMA, the receiver controlled pacing helps scalability
-		mq->hfi_thresh_rv = (~(uint32_t)0); // disable rendezvous
-	}
-	mq->hfi_thresh_tiny = MQ_HFI_THRESH_TINY;
-#ifdef PSM_CUDA
-	if (PSMI_IS_CUDA_ENABLED)
-		mq->hfi_base_window_rv = MQ_HFI_WINDOW_RNDV_CUDA;
-#endif
+	// shm_thresh_rv is N/A to NIC and HAL, so we set this here and let
+	// HAL set the rest of the defaults
 	mq->shm_thresh_rv = MQ_SHM_THRESH_RNDV;
 
+	psmi_hal_mq_init_defaults(mq);
+
 	memset(&mq->stats, 0, sizeof(psm2_mq_stats_t));
-	err = psmi_mq_req_init(mq);
+	err = psm3_mq_req_init(mq);
 	if (err)
 		goto fail;
 
@@ -1590,39 +1543,41 @@ fail:
 	return err;
 }
 
-psm2_error_t psmi_mq_initialize_defaults(psm2_mq_t mq)
+// parse MQ env variables
+psm2_error_t psm3_mq_initialize_params(psm2_mq_t mq)
 {
 	union psmi_envvar_val env_hfitiny, env_rvwin, env_hfirv,
 		env_shmrv, env_stats;
 
-	psmi_getenv("PSM3_MQ_TINY_NIC_LIMIT",
+	// a limit of PSM_MQ_MAX_TINY btyes is hardcoded into the PSM protocol
+	psm3_getenv("PSM3_MQ_TINY_NIC_LIMIT",
 		    "NIC tiny packet limit (max 8, default 8)",
 		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 		    (union psmi_envvar_val)mq->hfi_thresh_tiny, &env_hfitiny);
-	mq->hfi_thresh_tiny = min(env_hfitiny.e_uint, 8);
+	mq->hfi_thresh_tiny = min(env_hfitiny.e_uint, PSM_MQ_NIC_MAX_TINY);
 
-	psmi_getenv("PSM3_MQ_RNDV_NIC_THRESH",
+	psm3_getenv("PSM3_MQ_RNDV_NIC_THRESH",
 		    "NIC eager-to-rendezvous switchover",
 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
 		    (union psmi_envvar_val)mq->hfi_thresh_rv, &env_hfirv);
 	mq->hfi_thresh_rv = env_hfirv.e_uint;
 
-	psmi_getenv("PSM3_MQ_RNDV_NIC_WINDOW",
+	psm3_getenv("PSM3_MQ_RNDV_NIC_WINDOW",
 		    "NIC rendezvous window size, max 4M",
 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
 		    (union psmi_envvar_val)mq->hfi_base_window_rv, &env_rvwin);
-	mq->hfi_base_window_rv = min(4 * 1024 * 1024, env_rvwin.e_uint);
+	mq->hfi_base_window_rv = min(PSM_MQ_NIC_MAX_RNDV_WINDOW, env_rvwin.e_uint);
 
 	/* Re-evaluate this since it may have changed after initializing the shm
 	 * device */
-	mq->shm_thresh_rv = psmi_shm_mq_rv_thresh;
-	psmi_getenv("PSM3_MQ_RNDV_SHM_THRESH",
+	mq->shm_thresh_rv = psm3_shm_mq_rv_thresh;
+	psm3_getenv("PSM3_MQ_RNDV_SHM_THRESH",
 		    "shm eager-to-rendezvous switchover",
 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
 		    (union psmi_envvar_val)mq->shm_thresh_rv, &env_shmrv);
 	mq->shm_thresh_rv = env_shmrv.e_uint;
 
-	psmi_getenv("PSM3_MQ_PRINT_STATS",
+	psm3_getenv("PSM3_MQ_PRINT_STATS",
 		    "Prints MQ performance stats every n seconds to file "
 			"./psm3-perf-stat-ep-[epid]-pid-[pid] when set to -1 stats are "
 			"printed only once during finalization",
@@ -1634,12 +1589,12 @@ psm2_error_t psmi_mq_initialize_defaults(psm2_mq_t mq)
 	return PSM2_OK;
 }
 
-psm2_error_t MOCKABLE(psmi_mq_free)(psm2_mq_t mq)
+psm2_error_t MOCKABLE(psm3_mq_free)(psm2_mq_t mq)
 {
-	psmi_mq_req_fini(mq);
-	psmi_mq_sysbuf_fini(mq);
+	psm3_mq_req_fini(mq);
+	psm3_mq_sysbuf_fini(mq);
 	psmi_stats_deregister_type(PSMI_STATSTYPE_MQ, mq);
 	psmi_free(mq);
 	return PSM2_OK;
 }
-MOCK_DEF_EPILOGUE(psmi_mq_free);
+MOCK_DEF_EPILOGUE(psm3_mq_free);

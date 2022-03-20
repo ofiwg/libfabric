@@ -1,3 +1,4 @@
+#ifdef PSM_VERBS
 /*
 
   This file is provided under a dual BSD/GPLv2 license.  When using or
@@ -52,6 +53,8 @@
 */
 
 /* Copyright (c) 2003-2017 Intel Corporation. All rights reserved. */
+#ifndef _VERBS_SPIO_C_
+#define _VERBS_SPIO_C_
 
 /* included header files  */
 #include <stdlib.h>
@@ -62,27 +65,7 @@
 
 #include "ips_proto.h"
 #include "ips_proto_internal.h"
-#include "psm_hal_gen1_spio.h"
 #include "ips_proto_params.h"
-
-/* Report PIO stalls every 20 seconds at the least */
-#define SPIO_STALL_WARNING_INTERVAL	  (nanosecs_to_cycles(20e9))
-#define SPIO_MAX_CONSECUTIVE_SEND_FAIL	  (1<<20)	/* 1M */
-/* RESYNC_CONSECUTIVE_SEND_FAIL has to be a multiple of MAX_CONSECUTIVE */
-#define SPIO_RESYNC_CONSECUTIVE_SEND_FAIL (1<<4)	/* 16 */
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /*
  * Check and process events
@@ -90,19 +73,21 @@
  *  PSM2_OK: normal events processing;
  *  PSM2_OK_NO_PROGRESS: no event is processed;
  */
-static PSMI_HAL_INLINE psm2_error_t
-ips_spio_process_events(const struct ptl *ptl_gen)
+static inline psm2_error_t
+psm3_verbs_spio_process_events(const struct ptl *ptl_gen)
 {
 	// TODD - TBD - check link status events for UD/UDP
 	return PSM2_OK;
 }
-
 
 // TBD we could get also get scb->cksum out of scb
 // when called:
 //		scb->ips_lrh has fixed size PSM header including OPA LRH
 //		payload, length is data after header
 //		we don't do checksum, let verbs handle that for us
+// for isCtrlMsg, scb is only partially initialized (see ips_scb.h)
+// and payload and length may refer to buffers on stack
+//
 // we need to manage our own registered send buffers because
 // in the control paths (connect, disconnect), the scb may be on the stack
 // and we must be done with it when this returns.
@@ -123,8 +108,8 @@ ips_spio_process_events(const struct ptl *ptl_gen)
 // local HFI, does not imply end to end delivery.  PIO has
 // similar semantics and we know the UDP sendto simply puts a packet on
 // a UDP queue for future transmission, much like a UD QP post_send works
-psm2_error_t
-ips_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
+static inline psm2_error_t
+psm3_verbs_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 			struct ips_scb *scb, uint32_t *payload,
 			uint32_t length, uint32_t isCtrlMsg,
 			uint32_t cksum_valid, uint32_t cksum
@@ -140,27 +125,36 @@ ips_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 	struct ibv_send_wr *bad_wr;
 	struct ibv_sge list[2];
 	sbuf_t sbuf;
+	sbuf_t prev_sbuf; // in case need to unalloc_sbuf
 	struct ips_message_header *ips_lrh = &scb->ips_lrh;
 	int send_dma = ips_scb_flags(scb) & IPS_SEND_FLAG_SEND_MR;
 
 	// these defines are bit ugly, but make code below simpler with less ifdefs
 	// once we decide if USE_RC is valuable we can cleanup
+#ifdef USE_RC
 	// for RC we continue to use UD QP for control messages
 	// (connect/disconnect/ack/nak/becn), this avoids issues especially during
 	// QP teardown in disconnect.  We also use UD for ACK/NAK, this allows
 	// flow credits to be managed over UD
-#define USE_ALLOCATOR (isCtrlMsg?&ep->verbs_ep.send_allocator:flow->ipsaddr->use_allocator)
-#define USE_QP (isCtrlMsg?ep->verbs_ep.qp:flow->ipsaddr->use_qp)
-#define USE_MAX_INLINE (isCtrlMsg?ep->verbs_ep.qp_cap.max_inline_data:flow->ipsaddr->use_max_inline_data)
+#define USE_ALLOCATOR (isCtrlMsg?&ep->verbs_ep.send_allocator:flow->ipsaddr->verbs.use_allocator)
+#define USE_QP (isCtrlMsg?ep->verbs_ep.qp:flow->ipsaddr->verbs.use_qp)
+#define USE_MAX_INLINE (isCtrlMsg?ep->verbs_ep.qp_cap.max_inline_data:flow->ipsaddr->verbs.use_max_inline_data)
+#else
+#define USE_ALLOCATOR (&ep->verbs_ep.send_allocator)
+#define USE_QP (ep->verbs_ep.qp)
+#define USE_MAX_INLINE	(ep->verbs_ep.qp_cap.max_inline_data)
+#endif
 
 #ifdef PSM_FI
-	if_pf(PSMI_FAULTINJ_ENABLED_EP(ep)) {
-		PSMI_FAULTINJ_STATIC_DECL(fi_sendlost, "sendlost",
+	if_pf(PSM3_FAULTINJ_ENABLED_EP(ep)) {
+		PSM3_FAULTINJ_STATIC_DECL(fi_sendlost, "sendlost",
 				"drop "
+#ifdef USE_RC
 				"RC eager or any "
+#endif
 				"UD packet before sending",
 				1, IPS_FAULTINJ_SENDLOST);
-		if_pf(PSMI_FAULTINJ_IS_FAULT(fi_sendlost, ""))
+		if_pf(PSM3_FAULTINJ_IS_FAULT(fi_sendlost, ep, ""))
 			return PSM2_OK;
 	}
 #endif // PSM_FI
@@ -169,13 +163,13 @@ ips_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 	// allocate a send buffer
 	// if we have no buffers, we can return PSM2_EP_NO_RESOURCES and caller
 	// will try again later
-	sbuf = __psm2_ep_verbs_alloc_sbuf(USE_ALLOCATOR);
+	sbuf = psm3_ep_verbs_alloc_sbuf(USE_ALLOCATOR, &prev_sbuf);
 	if_pf (! sbuf) {
 		// reap some SQ completions
-		ret = psm2_verbs_completion_update(proto->ep);
+		ret = psm3_verbs_completion_update(proto->ep, 0);
 		if_pf (ret != PSM2_OK)
 			return ret;
-		sbuf = __psm2_ep_verbs_alloc_sbuf(USE_ALLOCATOR);
+		sbuf = psm3_ep_verbs_alloc_sbuf(USE_ALLOCATOR, &prev_sbuf);
 	}
 	if_pf (! sbuf) {
 		_HFI_VDBG("out of send buffers\n");
@@ -214,35 +208,44 @@ ips_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 			+ ((uintptr_t)ips_scb_buffer(scb) - (uintptr_t)scb->mr->addr);
 		psmi_assert(ips_scb_buffer(scb) == payload);
 #ifdef RNDV_MOD
-		psmi_assert(psm2_verbs_user_space_mr(scb->mr));
+		psmi_assert(psm3_verbs_user_space_mr(scb->mr));
 #endif
 		list[1].length = length;
 		list[1].lkey = scb->mr->lkey;
+		sbuf->scb = scb;
+		scb->sdma_outstanding++;
 	} else {
 		list[0].length = sizeof(*ips_lrh)+ length ;	// note no UD_ADDITION
 		list[1].length = 0;
 	}
 #ifdef PSM_FI
-	if_pf(PSMI_FAULTINJ_ENABLED_EP(ep)) {
-		PSMI_FAULTINJ_STATIC_DECL(fi_sq_lkey, "sq_lkey",
+	if_pf(PSM3_FAULTINJ_ENABLED_EP(ep)) {
+		PSM3_FAULTINJ_STATIC_DECL(fi_sq_lkey, "sq_lkey",
 				"send "
+#ifdef USE_RC
 				"RC eager or any "
+#endif
 				"UD packet with bad lkey",
 				0, IPS_FAULTINJ_SQ_LKEY);
-		if_pf(PSMI_FAULTINJ_IS_FAULT(fi_sq_lkey, " QP %u", USE_QP->qp_num ))
+		if_pf(PSM3_FAULTINJ_IS_FAULT(fi_sq_lkey, ep, " QP %u", USE_QP->qp_num ))
 			list[0].lkey = 0x55;
 	}
 #endif // PSM_FI
-	wr.next = NULL;	// just post 1
 	psmi_assert(!((uintptr_t)sbuf & VERBS_SQ_WR_ID_MASK));
 	wr.wr_id = (uintptr_t)sbuf | VERBS_SQ_WR_ID_SEND;	// we'll get this back in completion
+	wr.next = NULL;	// just post 1
 		// we don't use the scb as wr_id since for PIO they may be freed
 		// immediately after a succesful call to transfer
 	wr.sg_list = list;
-	if (send_dma)
+	if (send_dma) {
 		wr.num_sge = 2;	// size of sg_list
-	else
+		// we need Send DMA completions so we can reap them quickly and
+		// maintain scb->sdma_outstanding to allow scb->mr release on ACK
+		wr.send_flags = IBV_SEND_SIGNALED;	// get a completion
+	} else {
 		wr.num_sge = 1;	// size of sg_list
+		wr.send_flags = 0;
+	}
 	wr.opcode = IBV_WR_SEND;
 	// we want to only get occasional send completions
 	// and use them to release a whole set of buffers for reuse
@@ -255,8 +258,6 @@ ips_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 	if_pf ( ! --(USE_ALLOCATOR->send_num_til_coallesce)) {
 		wr.send_flags = IBV_SEND_SIGNALED;	// get a completion
 		USE_ALLOCATOR->send_num_til_coallesce = VERBS_SEND_CQ_COALLESCE;
-	} else {
-		wr.send_flags = 0;
 	}
 	if_pf (ips_lrh->khdr.kdeth0 & __cpu_to_le32(IPS_SEND_FLAG_INTR)) {
 		_HFI_VDBG("send solicted event\n");
@@ -270,32 +271,42 @@ ips_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 	// ud fields are ignored for RC send (overlay fields for RDMA)
 	// so reduce branches by just always filling in these few fields
 	//if (USE_QP->qp_type == IBV_QPT_UD)
-	psmi_assert_always(flow->path->ah);
-	wr.wr.ud.ah = flow->path->ah;
-	wr.wr.ud.remote_qpn = flow->ipsaddr->remote_qpn;
+	psmi_assert_always(flow->path->verbs.pr_ah);
+	wr.wr.ud.ah = flow->path->verbs.pr_ah;
+	wr.wr.ud.remote_qpn = flow->ipsaddr->verbs.remote_qpn;
 	wr.wr.ud.remote_qkey = ep->verbs_ep.qkey;
 
 	if (_HFI_PDBG_ON) {
-		_HFI_PDBG("ud_transfer_frame: len %u, remote qpn %u payload %u\n",
+		_HFI_PDBG_ALWAYS("ud_transfer_frame: len %u, remote qpn %u payload %u\n",
 			list[0].length+list[1].length,
-				(USE_QP->qp_type != IBV_QPT_UD)? flow->ipsaddr->remote_qpn :
+#ifdef USE_RC
+				(USE_QP->qp_type != IBV_QPT_UD)? flow->ipsaddr->verbs.remote_qpn :
+#endif
 				 wr.wr.ud.remote_qpn,
 			length);
-		_HFI_PDBG_DUMP((uint8_t*)list[0].addr, list[1].length);
-		_HFI_PDBG("post send: QP %p (%u)\n", USE_QP, USE_QP->qp_num);
+		_HFI_PDBG_DUMP_ALWAYS((uint8_t*)list[0].addr, list[0].length);
+		// cannot dump list[1] since SDMA may be a GPU address or iova
+		// could be different from CPU virtual
+		_HFI_PDBG_ALWAYS("post send: QP %p (%u)\n", USE_QP, USE_QP->qp_num);
 	}
 	if_pf (ibv_post_send(USE_QP, &wr, &bad_wr)) {
 		if (errno != EBUSY && errno != EAGAIN && errno != ENOMEM)
 			_HFI_ERROR("failed to post SQ on %s: %s", ep->dev_name, strerror(errno));
 		proto->stats.post_send_fail++;
+		// unwind our allocation and our update to send_num_til_coalllesce
+		if_pf ( (USE_ALLOCATOR->send_num_til_coallesce) == VERBS_SEND_CQ_COALLESCE)
+			(USE_ALLOCATOR->send_num_til_coallesce) = 1;
+		psm3_ep_verbs_unalloc_sbuf(USE_ALLOCATOR, sbuf, prev_sbuf);
 		ret = PSM2_EP_NO_RESOURCES;
 	}
 	_HFI_VDBG("done ud_transfer_frame: len %u, remote qpn %u\n",
 		list[0].length +list[1].length,
-		(USE_QP->qp_type != IBV_QPT_UD)? flow->ipsaddr->remote_qpn :
+#ifdef USE_RC
+		(USE_QP->qp_type != IBV_QPT_UD)? flow->ipsaddr->verbs.remote_qpn :
+#endif
  		wr.wr.ud.remote_qpn);
 	// reap any completions
-	err = psm2_verbs_completion_update(proto->ep);
+	err = psm3_verbs_completion_update(proto->ep, 0);
 	if_pf (err != PSM2_OK)
 		return err;
 	return ret;
@@ -304,3 +315,5 @@ ips_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 #undef USE_MAX_INLINE
 }
 
+#endif /* PSM_VERBS */
+#endif /* _VERBS_SPIO_C_ */

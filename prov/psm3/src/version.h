@@ -47,8 +47,6 @@
 #endif
 
 #define PSMX3_PROV_NAME		"psm3"
-#define PSMX3_DOMAIN_NAME	"any_verbs_ud_device"
-#define PSMX3_FABRIC_NAME	"psm3"
 
 #define PSMX3_DEFAULT_UUID	"00FF00FF-0000-0000-0000-00FF00FF00FF"
 #define PROVIDER_INI		PSM3_INI

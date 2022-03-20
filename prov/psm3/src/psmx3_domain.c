@@ -309,14 +309,6 @@ int psmx3_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	fabric_priv = container_of(fabric, struct psmx3_fid_fabric,
 				   util_fabric.fabric_fid);
 
-#if 0
-	if (!info->domain_attr->name ||
-	    strncmp(info->domain_attr->name, PSMX3_DOMAIN_NAME, strlen(PSMX3_DOMAIN_NAME))) {
-		err = -FI_EINVAL;
-		goto err_out;
-	}
-#endif /* 0 */
-
 	domain_priv = (struct psmx3_fid_domain *) calloc(1, sizeof *domain_priv);
 	if (!domain_priv) {
 		err = -FI_ENOMEM;
