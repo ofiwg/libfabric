@@ -253,7 +253,8 @@ int pm_get_oob_server_addr()
 
 	ret = getaddrinfo(opts.src_addr, NULL, NULL, &res);
 	if (ret) {
-		FT_ERR( "getaddrinfo failed\n");
+		FT_ERR("getaddrinfo failed. src_addr = %s\n",
+			opts.src_addr ? opts.src_addr : "<NULL>");
 		return ret;
 	}
 
