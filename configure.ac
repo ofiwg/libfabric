@@ -801,6 +801,15 @@ AS_IF([test "$have_rocr" = "1" && test x"$with_rocr" != x"yes"],
 
 AC_CHECK_SIZEOF([void *])
 
+dnl patching ${archive_cmds} to affect generation of file "libtool" to fix linking with clang
+dnl allows for building with clang lto and fast linking with non gnu ld
+dnl --> checking if the linker (clang) is GNU ld... no
+AS_CASE(["$LD"],
+    [*clang*],
+        [AS_CASE(["${host_os}"],
+            [*linux*],
+            [archive_cmds='$CC -shared $pic_flag $libobjs $deplibs $compiler_flags $wl-soname $wl$soname $wl-version-script $wl$libname.map -o $lib'])])
+
 dnl Provider-specific checks
 FI_PROVIDER_INIT
 FI_PROVIDER_SETUP([psm])
@@ -825,6 +834,7 @@ FI_PROVIDER_SETUP([perf])
 FI_PROVIDER_SETUP([hook_debug])
 FI_PROVIDER_SETUP([hook_hmem])
 FI_PROVIDER_SETUP([dmabuf_peer_mem])
+FI_PROVIDER_SETUP([opx])
 FI_PROVIDER_FINI
 dnl Configure the .pc file
 FI_PROVIDER_SETUP_PC

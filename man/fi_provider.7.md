@@ -41,6 +41,10 @@ This distribution of libfabric contains the following providers
 : High-speed Ethernet networking from Intel.  See
   [`fi_psm3`(7)](fi_psm3.7.html) for more information.
 
+*OPX*
+: High-speed Omni-Path networking from Cornelis Networks.  See
+  [`fi_opx`(7)](fi_opx.7.html) for more information.
+
 *Sockets*
 : A general purpose provider that can be used on any network that
   supports TCP/UDP sockets.  This provider is not intended to provide
@@ -237,3 +241,4 @@ Logging is performed using the FI_ERR, FI_LOG, and FI_DEBUG macros.
 [`fi_usnic`(7)](fi_usnic.7.html),
 [`fi_verbs`(7)](fi_verbs.7.html),
 [`fi_bgq`(7)](fi_bgq.7.html),
+[`fi_opx`(7)](fi_opx.7.html),
