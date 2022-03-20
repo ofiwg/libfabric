@@ -44,7 +44,7 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
 			AC_MSG_ERROR([No HALs enable. Must enable at least one HAL])
 		      ])
 
-		AS_IF([test "$xenable_psm3_udp" = "xyes"],
+		AS_IF([test "x$enable_psm3_udp" = "xyes"],
 		      [
 			AS_IF([test "x$enable_psm3_sockets" = "xyes"],
 			      [psm3_CPPFLAGS="$psm3_CPPFLAGS -DUSE_UDP"],
@@ -53,7 +53,7 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
 		dnl RC requires the Verbs HAL, so if Verbs HAL is disabled, then this should default to match verbs HAL
 		AS_IF([test "x$enable_psm3_rc" = "xcheck"],
 		      [enable_psm3_rc=$enable_psm3_verbs])
-		AS_IF([test "$xenable_psm3_rc" = "xyes"],
+		AS_IF([test "x$enable_psm3_rc" = "xyes"],
 		      [
 			AS_IF([test "x$enable_psm3_verbs" = "xyes"],
 			      [psm3_CPPFLAGS="$psm3_CPPFLAGS -DUSE_RC"],
