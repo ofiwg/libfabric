@@ -273,8 +273,7 @@ static void txc_disable(struct cxip_txc *txc)
  *
  * Used to support creating a TX context for fi_endpoint() or fi_tx_context().
  */
-static struct cxip_txc *txc_alloc(const struct fi_tx_attr *attr, void *context,
-				  int use_shared, size_t fclass)
+struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context)
 {
 	struct cxip_txc *txc;
 
@@ -292,50 +291,15 @@ static struct cxip_txc *txc_alloc(const struct fi_tx_attr *attr, void *context,
 	dlist_init(&txc->msg_queue);
 	dlist_init(&txc->fc_peers);
 
-	switch (fclass) {
-	case FI_CLASS_TX_CTX:
-		txc->fid.ctx.fid.fclass = FI_CLASS_TX_CTX;
-		txc->fid.ctx.fid.context = context;
-		txc->fclass = FI_CLASS_TX_CTX;
-		txc->use_shared = use_shared;
-		break;
-	case FI_CLASS_STX_CTX:
-		txc->fid.stx.fid.fclass = FI_CLASS_STX_CTX;
-		txc->fid.stx.fid.context = context;
-		txc->fclass = FI_CLASS_STX_CTX;
-		break;
-	default:
-		goto err;
-	}
-
+	txc->fid.ctx.fid.fclass = FI_CLASS_TX_CTX;
+	txc->fid.ctx.fid.context = context;
+	txc->fclass = FI_CLASS_TX_CTX;
 	txc->attr = *attr;
 	txc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
 	txc->rdzv_eager_size = cxip_env.rdzv_eager_size;
 	txc->hmem = !!(attr->caps & FI_HMEM);
 
 	return txc;
-
-err:
-	fastlock_destroy(&txc->lock);
-	free(txc);
-	return NULL;
-}
-
-/*
- * cxip_stx_alloc() - Allocate a regular (not shared) TX context.
- */
-struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context,
-				int use_shared)
-{
-	return txc_alloc(attr, context, use_shared, FI_CLASS_TX_CTX);
-}
-
-/*
- * cxip_stx_alloc() - Allocate a shared TX context.
- */
-struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context)
-{
-	return txc_alloc(attr, context, 0, FI_CLASS_STX_CTX);
 }
 
 /*

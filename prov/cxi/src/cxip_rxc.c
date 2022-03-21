@@ -529,8 +529,7 @@ static void rxc_disable(struct cxip_rxc *rxc)
  *
  * Used to support creating an RX context for fi_endpoint() or fi_rx_context().
  */
-struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
-				int use_shared)
+struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context)
 {
 	struct cxip_rxc *rxc;
 	int i;
@@ -546,7 +545,6 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context,
 	rxc->ctx.fid.fclass = FI_CLASS_RX_CTX;
 	rxc->ctx.fid.context = context;
 	rxc->attr = *attr;
-	rxc->use_shared = use_shared;
 
 	fastlock_init(&rxc->rx_lock);
 	ofi_atomic_initialize32(&rxc->oflow_bufs_submitted, 0);

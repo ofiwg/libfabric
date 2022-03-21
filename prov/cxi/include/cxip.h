@@ -1300,9 +1300,6 @@ struct cxip_rxc {
 
 	uint16_t rx_id;			// SEP index
 
-	int use_shared;
-	struct cxip_rxc *srx;
-
 	struct cxip_cq *recv_cq;
 	struct cxip_cntr *recv_cntr;
 
@@ -1471,9 +1468,6 @@ struct cxip_txc {
 
 	bool hmem;
 
-	int use_shared;
-	struct cxip_txc *stx;
-
 	struct cxip_cq *send_cq;
 	struct cxip_cntr *send_cntr;
 	struct cxip_cntr *read_cntr;
@@ -1549,9 +1543,6 @@ void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc);
  */
 struct cxip_ep_obj {
 	size_t fclass;
-
-	int tx_shared;
-	int rx_shared;
 	size_t min_multi_recv;
 
 	ofi_atomic32_t ref;
@@ -2118,16 +2109,14 @@ int cxip_txc_rdzv_src_fini(struct cxip_txc *txc);
 int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
 		   uint32_t nic_addr, uint32_t pid, uint8_t rxc_id);
 
-struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context,
-				int use_shared);
+struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context);
 int cxip_txc_enable(struct cxip_txc *txc);
 struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context);
 void cxip_txc_free(struct cxip_txc *txc);
 
 int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count);
 int cxip_rxc_enable(struct cxip_rxc *rxc);
-struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr,
-				      void *context, int use_shared);
+struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context);
 void cxip_rxc_free(struct cxip_rxc *rxc);
 
 int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
