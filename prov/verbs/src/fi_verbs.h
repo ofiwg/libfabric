@@ -409,7 +409,7 @@ struct vrb_cq {
 	enum fi_wait_obj	wait_obj;
 	enum fi_cq_wait_cond	wait_cond;
 	struct ibv_wc		wc;
-	int			signal_fd[2];
+	struct fd_signal	signal;
 	vrb_cq_read_entry	read_entry;
 	struct slist		saved_wc_list;
 	ofi_atomic32_t		nevents;
