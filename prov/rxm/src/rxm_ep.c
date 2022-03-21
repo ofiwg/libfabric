@@ -1317,7 +1317,7 @@ static ssize_t
 rxm_msg_tinject(struct fid_ep *msg_ep, const void *buf, size_t len,
 		bool cq_data, uint64_t data, uint64_t tag)
 {
-	return cq_data ?
+	return !cq_data ?
 		fi_tinject(msg_ep, buf, len, 0, tag) :
 		fi_tinjectdata(msg_ep, buf, len, data, 0, tag);
 }
