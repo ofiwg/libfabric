@@ -228,7 +228,7 @@ ssize_t rxd_ep_generic_recvmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 	if (rxd_ep->util_ep.caps & FI_DIRECTED_RECV &&
 	    addr != FI_ADDR_UNSPEC) {
 		rxd_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->fi_addr_idx),
-						     RXD_IDX_OFFSET(addr));
+						     RXD_IDX_OFFSET((int)addr));
 	}
 
 	if (flags & FI_PEEK) {
@@ -273,7 +273,7 @@ static ssize_t rxd_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
 
 	return rxd_ep_generic_recvmsg(ep, msg->msg_iov, msg->iov_count,
-				      msg->addr, 0, ~0, msg->context, RXD_MSG,
+				      msg->addr, 0, ~0ULL, msg->context, RXD_MSG,
 				      rxd_rx_flags(flags | ep->util_ep.rx_msg_flags),
 				      flags);
 }
@@ -289,7 +289,7 @@ static ssize_t rxd_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *d
 	msg_iov.iov_base = buf;
 	msg_iov.iov_len = len;
 
-	return rxd_ep_generic_recvmsg(ep, &msg_iov, 1, src_addr, 0, ~0, context,
+	return rxd_ep_generic_recvmsg(ep, &msg_iov, 1, src_addr, 0, ~0ULL, context,
 				      RXD_MSG, ep->rx_flags, 0);
 }
 
@@ -301,7 +301,7 @@ static ssize_t rxd_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void
 	ep = container_of(ep_fid, struct rxd_ep, util_ep.ep_fid.fid);
 
 	return rxd_ep_generic_recvmsg(ep, iov, count, src_addr,
-				      0, ~0, context, RXD_MSG, ep->rx_flags, 0);
+				      0, ~0ULL, context, RXD_MSG, ep->rx_flags, 0);
 }
 
 static struct rxd_x_entry *rxd_tx_entry_init_msg(struct rxd_ep *ep, fi_addr_t addr,
@@ -335,7 +335,7 @@ static struct rxd_x_entry *rxd_tx_entry_init_msg(struct rxd_ep *ep, fi_addr_t ad
 		rxd_init_sar_hdr(&ptr, tx_entry, 0);
 	} else {
 		tx_entry->flags |= RXD_INLINE;
-		base_hdr->flags = tx_entry->flags;
+		base_hdr->flags = (uint16_t) tx_entry->flags;
 		tx_entry->num_segs = 1;
 	}
 
@@ -359,7 +359,7 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 
 	assert(iov_count <= RXD_IOV_LIMIT);
 	assert(ofi_total_iov_len(iov, iov_count) <=
-	       rxd_ep_domain(rxd_ep)->max_inline_msg);
+	       (size_t) rxd_ep_domain(rxd_ep)->max_inline_msg);
 
 	ofi_mutex_lock(&rxd_ep->util_ep.lock);
 
@@ -367,7 +367,7 @@ ssize_t rxd_ep_generic_inject(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		goto out;
 
 	rxd_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->fi_addr_idx),
-					     RXD_IDX_OFFSET(addr));
+					     RXD_IDX_OFFSET((int) addr));
 	if (!rxd_addr)
 		goto out;
 
@@ -411,7 +411,7 @@ ssize_t rxd_ep_generic_sendmsg(struct rxd_ep *rxd_ep, const struct iovec *iov,
 		goto out;
 
 	rxd_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->fi_addr_idx),
-					     RXD_IDX_OFFSET(addr));
+					     RXD_IDX_OFFSET((int) addr));
 	if (!rxd_addr)
 		goto out;
 

@@ -85,6 +85,12 @@ int ft_socket_pair[2];
 
 fi_addr_t remote_fi_addr = FI_ADDR_UNSPEC;
 char *buf, *tx_buf, *rx_buf;
+/*
+ * tx_msg_buf are used by ft_fill_buf() to stage data sent over wire,
+ * when tx_buf is on device memory.
+ */
+void *tx_msg_buf = NULL;
+
 char **tx_mr_bufs = NULL, **rx_mr_bufs = NULL;
 size_t buf_size, tx_size, rx_size, tx_mr_size, rx_mr_size;
 int rx_fd = -1, tx_fd = -1;
@@ -513,6 +519,10 @@ static int ft_alloc_msgs(void)
 		}
 	} else {
 		ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &buf, buf_size);
+		if (ret)
+			return ret;
+
+		ret = ft_hmem_alloc_host(opts.iface, &tx_msg_buf, MAX(tx_size, FT_MAX_CTRL_MSG));
 		if (ret)
 			return ret;
 	}
@@ -1615,6 +1625,12 @@ void ft_free_res(void)
 			FT_PRINTERR("ft_hmem_free", ret);
 		buf = rx_buf = tx_buf = NULL;
 		buf_size = rx_size = tx_size = tx_mr_size = rx_mr_size = 0;
+	}
+	if (tx_msg_buf) {
+		ret = ft_hmem_free_host(opts.iface, tx_msg_buf);
+		if (ret)
+			FT_PRINTERR("ft_hmem_free_host", ret);
+		tx_msg_buf = NULL;
 	}
 	if (fi_pep) {
 		fi_freeinfo(fi_pep);
@@ -3201,9 +3217,8 @@ int ft_fill_buf(void *buf, size_t size)
 	int ret = 0;
 
 	if (opts.iface != FI_HMEM_SYSTEM) {
-		msg_buf = malloc(size);
-		if (!msg_buf)
-			return -FI_ENOMEM;
+		assert(tx_msg_buf);
+		msg_buf = tx_msg_buf;
 	} else {
 		msg_buf = (char *) buf;
 	}
@@ -3220,8 +3235,6 @@ int ft_fill_buf(void *buf, size_t size)
 			goto out;
 	}
 out:
-	if (opts.iface != FI_HMEM_SYSTEM)
-		free(msg_buf);
 	return ret;
 }
 

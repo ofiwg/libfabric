@@ -63,7 +63,7 @@
 #endif
 
 /* not reported yet, so just track in a global so can pass a pointer to
- * psmi_mq_handle_envelope and psmi_mq_handle_rts
+ * psm3_mq_handle_envelope and psm3_mq_handle_rts
  */
 static struct ptl_strategy_stats strat_stats;
 
@@ -114,7 +114,7 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 
 	if ((ptl->psmi_kassist_mode & PSMI_KASSIST_GET)
 	    && req->req_data.recv_msglen > 0
-	    && (pid = psmi_epaddr_pid(epaddr))) {
+	    && (pid = psm3_epaddr_pid(epaddr))) {
 #ifdef PSM_CUDA
 		/* If the buffer on the send side is on the host,
 		 * we alloc a bounce buffer, use kassist and then
@@ -123,7 +123,7 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 		 */
 		if (req->is_buf_gpu_mem) {
 			void* cuda_ipc_bounce_buf = psmi_malloc(PSMI_EP_NONE, UNDEFINED, req->req_data.recv_msglen);
-			size_t nbytes = cma_get(pid, (void *)req->rts_sbuf,
+			size_t nbytes = psm3_cma_get(pid, (void *)req->rts_sbuf,
 					cuda_ipc_bounce_buf, req->req_data.recv_msglen);
 			psmi_assert_always(nbytes == req->req_data.recv_msglen);
 			PSMI_CUDA_CALL(cuMemcpyHtoD, (CUdeviceptr)req->req_data.buf, cuda_ipc_bounce_buf,
@@ -137,13 +137,13 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 			psmi_free(cuda_ipc_bounce_buf);
 		} else {
 			/* cma can be done in handler context or not. */
-			size_t nbytes = cma_get(pid, (void *)req->rts_sbuf,
+			size_t nbytes = psm3_cma_get(pid, (void *)req->rts_sbuf,
 						req->req_data.buf, req->req_data.recv_msglen);
 			psmi_assert_always(nbytes == req->req_data.recv_msglen);
 		}
 #else
 		/* cma can be done in handler context or not. */
-		size_t nbytes = cma_get(pid, (void *)req->rts_sbuf,
+		size_t nbytes = psm3_cma_get(pid, (void *)req->rts_sbuf,
 					req->req_data.buf, req->req_data.recv_msglen);
 		if (nbytes == -1) {
 			ptl->psmi_kassist_mode = PSMI_KASSIST_OFF;
@@ -168,11 +168,11 @@ send_cts:
 	args[4].u32w0 = ptl->psmi_kassist_mode;		// pass current kassist mode to the peer process
 
 	if (tok != NULL) {
-		psmi_am_reqq_add(AMREQUEST_SHORT, tok->ptl,
+		psm3_am_reqq_add(AMREQUEST_SHORT, tok->ptl,
 				 tok->tok.epaddr_incoming, mq_handler_rtsmatch_hidx,
 				 args, 5, NULL, 0, NULL, 0);
 	} else
-		psmi_amsh_short_request((struct ptl *)ptl, epaddr, mq_handler_rtsmatch_hidx,
+		psm3_amsh_short_request((struct ptl *)ptl, epaddr, mq_handler_rtsmatch_hidx,
 					args, 5, NULL, 0, 0);
 
 	req->mq->stats.rx_user_num++;
@@ -183,7 +183,7 @@ send_cts:
 	/* 0-byte completion or we used kassist */
 	if (pid || cma_succeed ||
 		req->req_data.recv_msglen == 0 || cuda_ipc_send_completion == 1) {
-		psmi_mq_handle_rts_complete(req);
+		psm3_mq_handle_rts_complete(req);
 	}
 	PSM2_LOG_MSG("leaving.");
 	return PSM2_OK;
@@ -200,19 +200,19 @@ ptl_handle_rtsmatch(psm2_mq_req_t req, int was_posted)
 }
 
 void
-psmi_am_mq_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
+psm3_am_mq_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 		   size_t len)
 {
 	amsh_am_token_t *tok = (amsh_am_token_t *) toki;
 	psm2_mq_req_t req;
-	psm2_mq_tag_t tag;
+	uint32_t tag[3];
 	int rc;
 	uint32_t opcode = args[0].u32w0;
 	uint32_t msglen = opcode <= MQ_MSG_SHORT ? len : args[0].u32w1;
 
-	tag.tag[0] = args[1].u32w1;
-	tag.tag[1] = args[1].u32w0;
-	tag.tag[2] = args[2].u32w1;
+	tag[0] = args[1].u32w1;
+	tag[1] = args[1].u32w0;
+	tag[2] = args[2].u32w1;
 	psmi_assert(toki != NULL);
 	_HFI_VDBG("mq=%p opcode=%x, len=%d, msglen=%d\n",
 		  tok->mq, opcode, (int)len, msglen);
@@ -221,8 +221,8 @@ psmi_am_mq_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 	case MQ_MSG_TINY:
 	case MQ_MSG_SHORT:
 	case MQ_MSG_EAGER:
-		rc = psmi_mq_handle_envelope(tok->mq, tok->tok.epaddr_incoming,
-					     &tag, &strat_stats, msglen, 0, buf,
+		rc = psm3_mq_handle_envelope(tok->mq, tok->tok.epaddr_incoming,
+					     tag, &strat_stats, msglen, 0, buf,
 					     (uint32_t) len, 1, opcode, &req);
 
 		/* for eager matching */
@@ -238,8 +238,8 @@ psmi_am_mq_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			uintptr_t sbuf = (uintptr_t) args[4].u64w0;
 			psmi_assert(narg == 5);
 			psmi_assert_always(opcode == MQ_MSG_LONGRTS);
-			rc = psmi_mq_handle_rts(tok->mq, tok->tok.epaddr_incoming,
-						&tag, &strat_stats, msglen, NULL, 0, 1,
+			rc = psm3_mq_handle_rts(tok->mq, tok->tok.epaddr_incoming,
+						tag, &strat_stats, msglen, NULL, 0, 1,
 						ptl_handle_rtsmatch, &req);
 
 			req->rts_peer = tok->tok.epaddr_incoming;
@@ -267,7 +267,7 @@ psmi_am_mq_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 }
 
 void
-psmi_am_mq_handler_data(void *toki, psm2_amarg_t *args, int narg, void *buf,
+psm3_am_mq_handler_data(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			size_t len)
 {
 	amsh_am_token_t *tok = (amsh_am_token_t *) toki;
@@ -278,9 +278,9 @@ psmi_am_mq_handler_data(void *toki, psm2_amarg_t *args, int narg, void *buf,
 	psm2_mq_req_t req = mq_eager_match(tok->mq, epaddr, 0);	/* using seqnum 0 */
 	psmi_assert_always(req != NULL);
 #ifdef PSM_CUDA
-	psmi_mq_handle_data(tok->mq, req, args[2].u32w0, buf, len, 0, NULL);
+	psm3_mq_handle_data(tok->mq, req, args[2].u32w0, buf, len, 0, NULL);
 #else
-	psmi_mq_handle_data(tok->mq, req, args[2].u32w0, buf, len);
+	psm3_mq_handle_data(tok->mq, req, args[2].u32w0, buf, len);
 #endif
 
 	return;
@@ -290,7 +290,7 @@ psmi_am_mq_handler_data(void *toki, psm2_amarg_t *args, int narg, void *buf,
  * Function to handle CTS on the sender.
  */
 void
-psmi_am_mq_handler_rtsmatch(void *toki, psm2_amarg_t *args, int narg, void *buf,
+psm3_am_mq_handler_rtsmatch(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			    size_t len)
 {
 	amsh_am_token_t *tok = (amsh_am_token_t *) toki;
@@ -307,7 +307,7 @@ psmi_am_mq_handler_rtsmatch(void *toki, psm2_amarg_t *args, int narg, void *buf,
 		sreq->cuda_ipc_handle_attached = 0;
 		sreq->mq->stats.tx_shm_bytes += sreq->req_data.send_msglen;
 		sreq->mq->stats.tx_rndv_bytes += sreq->req_data.send_msglen;
-		psmi_mq_handle_rts_complete(sreq);
+		psm3_mq_handle_rts_complete(sreq);
 		return;
 	}
 #endif
@@ -332,8 +332,8 @@ psmi_am_mq_handler_rtsmatch(void *toki, psm2_amarg_t *args, int narg, void *buf,
 		}
 
 		if (kassist_mode & PSMI_KASSIST_PUT) {
-			int pid = psmi_epaddr_pid(tok->tok.epaddr_incoming);
-			size_t nbytes = cma_put(sreq->req_data.buf, pid, dest, msglen);
+			int pid = psm3_epaddr_pid(tok->tok.epaddr_incoming);
+			size_t nbytes = psm3_cma_put(sreq->req_data.buf, pid, dest, msglen);
 			if (nbytes == -1) {
 				_HFI_ERROR("Writing to remote process' memory failed. Disabling CMA support\n");
 				((struct ptl_am *)ptl)->psmi_kassist_mode = PSMI_KASSIST_OFF;
@@ -343,33 +343,33 @@ psmi_am_mq_handler_rtsmatch(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			psmi_assert_always(nbytes == msglen);
 
 			/* Send response that PUT is complete */
-			psmi_amsh_short_reply(tok, mq_handler_rtsdone_hidx,
+			psm3_amsh_short_reply(tok, mq_handler_rtsdone_hidx,
 					      rarg, 1, NULL, 0, 0);
 		} else if (!(kassist_mode & PSMI_KASSIST_MASK)) {
 			/* Only transfer if kassist is off, i.e. neither GET nor PUT. */
 no_kassist:
-			psmi_amsh_long_reply(tok, mq_handler_rtsdone_hidx, rarg,
+			psm3_amsh_long_reply(tok, mq_handler_rtsdone_hidx, rarg,
 					     1, sreq->req_data.buf, msglen, dest, 0);
 		}
 	}
 	sreq->mq->stats.tx_shm_bytes += sreq->req_data.send_msglen;
 	sreq->mq->stats.tx_rndv_bytes += sreq->req_data.send_msglen;
-	psmi_mq_handle_rts_complete(sreq);
+	psm3_mq_handle_rts_complete(sreq);
 }
 
 void
-psmi_am_mq_handler_rtsdone(void *toki, psm2_amarg_t *args, int narg, void *buf,
+psm3_am_mq_handler_rtsdone(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			   size_t len)
 {
 	psm2_mq_req_t rreq = (psm2_mq_req_t) (uintptr_t) args[0].u64w0;
 	psmi_assert(narg == 1);
 	_HFI_VDBG("[rndv][recv] req=%p dest=%p len=%d\n", rreq, rreq->req_data.buf,
 		  rreq->req_data.recv_msglen);
-	psmi_mq_handle_rts_complete(rreq);
+	psm3_mq_handle_rts_complete(rreq);
 }
 
 void
-psmi_am_handler(void *toki, psm2_amarg_t *args, int narg, void *buf, size_t len)
+psm3_am_handler(void *toki, psm2_amarg_t *args, int narg, void *buf, size_t len)
 {
 	amsh_am_token_t *tok = (amsh_am_token_t *) toki;
 	struct psm2_ep_am_handle_entry *hentry;

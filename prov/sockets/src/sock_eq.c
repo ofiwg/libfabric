@@ -68,7 +68,7 @@ static void sock_eq_clean_err_data_list(struct sock_eq *eq, int free_all)
 static ssize_t sock_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 				size_t len, int timeout, uint64_t flags)
 {
-	int ret;
+	ssize_t ret;
 	struct sock_eq *sock_eq;
 	struct dlist_entry *list;
 	struct sock_eq_entry *entry;
@@ -125,7 +125,7 @@ static ssize_t sock_eq_read(struct fid_eq *eq, uint32_t *event, void *buf,
 static ssize_t sock_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 			uint64_t flags)
 {
-	int ret;
+	ssize_t ret;
 	struct sock_eq *sock_eq;
 	struct dlist_entry *list;
 	struct sock_eq_entry *entry;
@@ -182,8 +182,8 @@ out:
 	return (ret == 0) ? -FI_EAGAIN : ret;
 }
 
-ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event,
-			     const void *buf, size_t len, uint64_t flags)
+int sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event,
+			 const void *buf, size_t len, uint64_t flags)
 {
 	struct sock_eq_entry *entry;
 
@@ -204,9 +204,9 @@ ssize_t sock_eq_report_event(struct sock_eq *sock_eq, uint32_t event,
 	return 0;
 }
 
-ssize_t sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
-			     uint64_t data, int err, int prov_errno,
-			     void *err_data, size_t err_data_size)
+int sock_eq_report_error(struct sock_eq *sock_eq, fid_t fid, void *context,
+			 uint64_t data, int err, int prov_errno,
+			 void *err_data, size_t err_data_size)
 {
 	struct fi_eq_err_entry *err_entry;
 	struct sock_eq_entry *entry;

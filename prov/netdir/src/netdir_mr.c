@@ -328,6 +328,7 @@ static void ofi_nd_mr_ov_err(struct nd_event_base* base, DWORD bytes,
 
 	struct nd_mr *mr = container_of(ov->fid, struct nd_mr, fid.fid);
 	assert(mr->mr);
+	OFI_UNUSED(mr);
 
 	struct fi_eq_err_entry entry = {
 		.fid = ov->fid,

@@ -506,8 +506,8 @@ void freeifaddrs(struct ifaddrs *ifa)
 static ssize_t
 ofi_sendv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt, int flags)
 {
-	ssize_t size = 0;
-	int ret, i;
+	ssize_t size = 0, ret;
+	int i;
 
 	if (iov_cnt == 1) {
 		return ofi_send_socket(fd, iovec[0].iov_base,
@@ -519,7 +519,7 @@ ofi_sendv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt, int flags
 				      iovec[i].iov_len, flags);
 		if (ret >= 0) {
 			size += ret;
-			if (ret != iovec[i].iov_len)
+			if ((size_t) ret != iovec[i].iov_len)
 				return size;
 		} else {
 			return size ? size : ret;
@@ -531,8 +531,8 @@ ofi_sendv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt, int flags
 static ssize_t
 ofi_recvv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt, int flags)
 {
-	ssize_t size = 0;
-	int ret, i;
+	ssize_t size = 0, ret;
+	int i;
 
 	if (iov_cnt == 1) {
 		return ofi_recv_socket(fd, iovec[0].iov_base,
@@ -544,7 +544,7 @@ ofi_recvv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt, int flags
 				      iovec[i].iov_len, flags);
 		if (ret >= 0) {
 			size += ret;
-			if (ret != iovec[i].iov_len)
+			if ((size_t) ret != iovec[i].iov_len)
 				return size;
 		} else {
 			return size ? size : ret;
@@ -597,7 +597,7 @@ ssize_t ofi_recvmsg_udp(SOCKET fd, struct msghdr *msg, int flags)
 			return ret;
 	}
 
-	ret = WSARecvMsg(fd, msg, &bytes, NULL, NULL);
+	ret = WSARecvMsg(fd, (LPWSAMSG) msg, &bytes, NULL, NULL);
 	return ret ? ret : bytes;
 }
 
@@ -611,7 +611,7 @@ void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
 	}
 
 	pfds->fds[pfds->nfds].fd = item->fd;
-	pfds->fds[pfds->nfds].events = item->events;
+	pfds->fds[pfds->nfds].events = (SHORT) item->events;
 	pfds->fds[pfds->nfds].revents = 0;
 	pfds->ctx[pfds->nfds].context = item->context;
 	pfds->nfds++;
@@ -625,7 +625,7 @@ int ofi_pollfds_do_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 	/* 0 is signaling fd */
 	for (i = 1; i < pfds->nfds; i++) {
 		if (pfds->fds[i].fd == fd) {
-			pfds->fds[i].events = events;
+			pfds->fds[i].events = (SHORT) events;
 			pfds->ctx[i].context = context;
 			return FI_SUCCESS;
 		}

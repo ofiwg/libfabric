@@ -254,8 +254,8 @@ static int rxm_init_connect_data(struct rxm_conn *conn,
 	cm_data->connect.ctrl_version = RXM_CTRL_VERSION;
 	cm_data->connect.op_version = RXM_OP_VERSION;
 	cm_data->connect.endianness = ofi_detect_endianness();
-	cm_data->connect.eager_limit = conn->ep->eager_limit;
-	cm_data->connect.rx_size = conn->ep->msg_info->rx_attr->size;
+	cm_data->connect.eager_limit = (uint32_t) conn->ep->eager_limit;
+	cm_data->connect.rx_size = (uint32_t) conn->ep->msg_info->rx_attr->size;
 	cm_data->connect.flow_ctrl = conn->flow_ctrl ?
 						RXM_CM_FLOW_CTRL_PEER_ON :
 						RXM_CM_FLOW_CTRL_PEER_OFF;
@@ -628,7 +628,7 @@ rxm_accept_connreq(struct rxm_conn *conn, struct rxm_eq_cm_entry *cm_entry)
 	int ret;
 
 	cm_data.accept.server_conn_id = rxm_conn_id(conn->peer->index);
-	cm_data.accept.rx_size = cm_entry->info->rx_attr->size;
+	cm_data.accept.rx_size = (uint32_t) cm_entry->info->rx_attr->size;
 	cm_data.accept.flow_ctrl = conn->flow_ctrl ? RXM_CM_FLOW_CTRL_PEER_ON :
 						     RXM_CM_FLOW_CTRL_PEER_OFF;
 	cm_data.accept.align_pad[0] = 0;
@@ -826,7 +826,7 @@ void rxm_conn_progress(struct rxm_ep *ep)
 {
 	struct rxm_eq_cm_entry cm_entry;
 	uint32_t event;
-	int ret;
+	ssize_t ret;
 
 	assert(ofi_ep_lock_held(&ep->util_ep));
 	do {
@@ -844,6 +844,7 @@ void rxm_conn_progress(struct rxm_ep *ep)
 void rxm_stop_listen(struct rxm_ep *ep)
 {
 	struct fi_eq_entry entry = {0};
+	ssize_t size_ret;
 	int ret;
 
 	FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "stopping CM thread\n");
@@ -854,8 +855,8 @@ void rxm_stop_listen(struct rxm_ep *ep)
 	ep->do_progress = false;
 	ofi_ep_lock_release(&ep->util_ep);
 
-	ret = fi_eq_write(ep->msg_eq, FI_NOTIFY, &entry, sizeof(entry), 0);
-	if (ret != sizeof(entry)) {
+	size_ret = fi_eq_write(ep->msg_eq, FI_NOTIFY, &entry, sizeof(entry), 0);
+	if (size_ret != sizeof(entry)) {
 		FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, "Unable to signal\n");
 		return;
 	}
@@ -869,7 +870,7 @@ void rxm_stop_listen(struct rxm_ep *ep)
 static void rxm_flush_msg_cq(struct rxm_ep *ep)
 {
 	struct fi_cq_tagged_entry comp;
-	int ret;
+	ssize_t ret;
 
 	assert(ofi_ep_lock_held(&ep->util_ep));
 	do {
@@ -877,7 +878,7 @@ static void rxm_flush_msg_cq(struct rxm_ep *ep)
 		if (ret > 0) {
 			ret = ep->handle_comp(ep, &comp);
 			if (ret) {
-				rxm_cq_write_error_all(ep, ret);
+				rxm_cq_write_error_all(ep, (int) ret);
 			} else {
 				ret = 1;
 			}
@@ -885,7 +886,7 @@ static void rxm_flush_msg_cq(struct rxm_ep *ep)
 			ep->handle_comp_error(ep);
 			ret = 1;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
-			rxm_cq_write_error_all(ep, ret);
+			rxm_cq_write_error_all(ep, (int) ret);
 		}
 	} while (ret > 0);
 }

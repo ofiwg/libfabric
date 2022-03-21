@@ -50,10 +50,10 @@ static int rxd_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 
 	do {
 		cntr->progress(cntr);
-		if (threshold <= ofi_atomic_get64(&cntr->cnt))
+		if (threshold <= (uint64_t) ofi_atomic_get64(&cntr->cnt))
 			return FI_SUCCESS;
 
-		if (errcnt != ofi_atomic_get64(&cntr->err))
+		if (errcnt != (uint64_t) ofi_atomic_get64(&cntr->err))
 			return -FI_EAVAIL;
 
 		if (ofi_adjust_timeout(endtime, &timeout))

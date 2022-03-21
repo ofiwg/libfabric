@@ -116,7 +116,8 @@ int ofi_av_set_diff(struct fid_av_set *dst, const struct fid_av_set *src)
 
 	struct util_av_set *src_av_set;
 	struct util_av_set *dst_av_set;
-	int i,j, temp;
+	int i,j;
+	size_t temp;
 
 	src_av_set = container_of(src, struct util_av_set, av_set_fid);
 	dst_av_set = container_of(dst, struct util_av_set, av_set_fid);
@@ -355,8 +356,8 @@ static void util_coll_op_bind_work(struct util_coll_operation *coll_op,
 }
 
 static int
-util_coll_sched_send(struct util_coll_operation *coll_op, uint32_t dest,
-		     void *buf, int count, enum fi_datatype datatype, int fence)
+util_coll_sched_send(struct util_coll_operation *coll_op, uint64_t dest,
+		     void *buf, size_t count, enum fi_datatype datatype, int fence)
 {
 	struct util_coll_xfer_item *xfer_item;
 
@@ -367,19 +368,20 @@ util_coll_sched_send(struct util_coll_operation *coll_op, uint32_t dest,
 	xfer_item->hdr.type = UTIL_COLL_SEND;
 	xfer_item->hdr.state = UTIL_COLL_WAITING;
 	xfer_item->hdr.fence = fence;
-	xfer_item->tag = util_coll_form_tag(coll_op->cid, coll_op->mc->local_rank);
+	xfer_item->tag = util_coll_form_tag(coll_op->cid,
+					    (uint32_t) coll_op->mc->local_rank);
 	xfer_item->buf = buf;
-	xfer_item->count = count;
+	xfer_item->count = (int) count;
 	xfer_item->datatype = datatype;
-	xfer_item->remote_rank = dest;
+	xfer_item->remote_rank = (int) dest;
 
 	util_coll_op_bind_work(coll_op, &xfer_item->hdr);
 	return FI_SUCCESS;
 }
 
 static int
-util_coll_sched_recv(struct util_coll_operation *coll_op, uint32_t src,
-		     void *buf, int count, enum fi_datatype datatype, int fence)
+util_coll_sched_recv(struct util_coll_operation *coll_op, uint64_t src,
+		     void *buf, size_t count, enum fi_datatype datatype, int fence)
 {
 	struct util_coll_xfer_item *xfer_item;
 
@@ -390,11 +392,11 @@ util_coll_sched_recv(struct util_coll_operation *coll_op, uint32_t src,
 	xfer_item->hdr.type = UTIL_COLL_RECV;
 	xfer_item->hdr.state = UTIL_COLL_WAITING;
 	xfer_item->hdr.fence = fence;
-	xfer_item->tag = util_coll_form_tag(coll_op->cid, src);
+	xfer_item->tag = util_coll_form_tag(coll_op->cid, (uint32_t) src);
 	xfer_item->buf = buf;
-	xfer_item->count = count;
+	xfer_item->count = (int) count;
 	xfer_item->datatype = datatype;
-	xfer_item->remote_rank = src;
+	xfer_item->remote_rank = (int) src;
 
 	util_coll_op_bind_work(coll_op, &xfer_item->hdr);
 	return FI_SUCCESS;
@@ -402,7 +404,7 @@ util_coll_sched_recv(struct util_coll_operation *coll_op, uint32_t src,
 
 static int
 util_coll_sched_reduce(struct util_coll_operation *coll_op, void *in_buf,
-		       void *inout_buf, int count, enum fi_datatype datatype,
+		       void *inout_buf, size_t count, enum fi_datatype datatype,
 		       enum fi_op op, int fence)
 {
 	struct util_coll_reduce_item *reduce_item;
@@ -416,7 +418,7 @@ util_coll_sched_reduce(struct util_coll_operation *coll_op, void *in_buf,
 	reduce_item->hdr.fence = fence;
 	reduce_item->in_buf = in_buf;
 	reduce_item->inout_buf = inout_buf;
-	reduce_item->count = count;
+	reduce_item->count = (int) count;
 	reduce_item->datatype = datatype;
 	reduce_item->op = op;
 
@@ -426,7 +428,7 @@ util_coll_sched_reduce(struct util_coll_operation *coll_op, void *in_buf,
 
 static int
 util_coll_sched_copy(struct util_coll_operation *coll_op, void *in_buf,
-		     void *out_buf, int count, enum fi_datatype datatype,
+		     void *out_buf, size_t count, enum fi_datatype datatype,
 		     int fence)
 {
 	struct util_coll_copy_item *copy_item;
@@ -440,7 +442,7 @@ util_coll_sched_copy(struct util_coll_operation *coll_op, void *in_buf,
 	copy_item->hdr.fence = fence;
 	copy_item->in_buf = in_buf;
 	copy_item->out_buf = out_buf;
-	copy_item->count = count;
+	copy_item->count = (int) count;
 	copy_item->datatype = datatype;
 
 	util_coll_op_bind_work(coll_op, &copy_item->hdr);
@@ -466,7 +468,7 @@ static int util_coll_sched_comp(struct util_coll_operation *coll_op)
 /* TODO: when this fails, clean up the already scheduled work in this function */
 static int
 util_coll_allreduce(struct util_coll_operation *coll_op, const void *send_buf,
-		    void *result, void* tmp_buf, int count,
+		    void *result, void* tmp_buf, uint64_t count,
 		    enum fi_datatype datatype, enum fi_op op)
 {
 	uint64_t rem, pof2, my_new_id;
@@ -488,7 +490,7 @@ util_coll_allreduce(struct util_coll_operation *coll_op, const void *send_buf,
 			if (ret)
 				return ret;
 
-			my_new_id = -1;
+			my_new_id = (uint64_t)-1;
 		} else {
 			ret = util_coll_sched_recv(coll_op, local - 1,
 						   tmp_buf, count, datatype, 1);
@@ -570,9 +572,10 @@ util_coll_allreduce(struct util_coll_operation *coll_op, const void *send_buf,
 /* allgather implemented using ring algorithm */
 static int
 util_coll_allgather(struct util_coll_operation *coll_op, const void *send_buf,
-		    void *result, int count, enum fi_datatype datatype)
+		    void *result, size_t count, enum fi_datatype datatype)
 {
-	int64_t ret, i, cur_offset, next_offset;
+	uint64_t i, cur_offset, next_offset;
+	int ret;
 	size_t nbytes, numranks;
 	uint64_t local_rank, left_rank, right_rank;
 
@@ -617,7 +620,7 @@ util_coll_allgather(struct util_coll_operation *coll_op, const void *send_buf,
 
 static size_t util_binomial_tree_values_to_recv(uint64_t rank, size_t numranks)
 {
-	size_t nvalues = 0x1 << (ofi_lsb(rank) - 1);
+	size_t nvalues = 0x1ULL << (ofi_lsb(rank) - 1);
 	if (numranks < rank + nvalues)
 		nvalues = numranks - rank;
 
@@ -630,9 +633,10 @@ util_coll_scatter(struct util_coll_operation *coll_op, const void *data,
 		  void *result, void **temp, size_t count, uint64_t root,
 		  enum fi_datatype datatype)
 {
-	uint64_t local_rank, relative_rank;
+	int64_t remote_rank;
+	uint64_t local_rank, relative_rank, mask;
 	size_t nbytes, numranks, send_cnt, cur_cnt = 0;
-	int ret, mask, remote_rank;
+	int ret;
 	void *send_data;
 
 	local_rank = coll_op->mc->local_rank;
@@ -722,11 +726,11 @@ util_coll_scatter(struct util_coll_operation *coll_op, const void *data,
 			send_cnt = cur_cnt - count * mask;
 
 			remote_rank = local_rank + mask;
-			if (remote_rank >= numranks)
+			if ((uint64_t) remote_rank >= numranks)
 				remote_rank -= numranks;
 
 			FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
-			       "MASK: 0x%0x CUR_CNT: %ld SENDING: %ld TO: %d\n",
+			       "MASK: 0x%0lx CUR_CNT: %ld SENDING: %ld TO: %ld\n",
 			       mask, cur_cnt, send_cnt, remote_rank);
 
 			assert(send_cnt > 0);
@@ -832,7 +836,7 @@ void util_coll_join_comp(struct util_coll_operation *coll_op)
 	ep = container_of(coll_op->ep, struct util_ep, ep_fid);
 	coll_op->data.join.new_mc->seq = 0;
 	coll_op->data.join.new_mc->group_id =
-				ofi_bitmask_get_lsbset(coll_op->data.join.data);
+		(uint16_t) ofi_bitmask_get_lsbset(coll_op->data.join.data);
 	// mark the local mask bit
 	ofi_bitmask_unset(ep->coll_cid_mask, coll_op->data.join.new_mc->group_id);
 
@@ -880,7 +884,7 @@ void util_coll_collective_comp(struct util_coll_operation *coll_op)
 	}
 }
 
-static int util_coll_proc_reduce_item(struct util_coll_reduce_item *reduce_item)
+static ssize_t util_coll_proc_reduce_item(struct util_coll_reduce_item *reduce_item)
 {
 	if (FI_MIN <= reduce_item->op && FI_BXOR >= reduce_item->op) {
 		ofi_atomic_write_handler(reduce_item->op, reduce_item->datatype,
@@ -893,12 +897,12 @@ static int util_coll_proc_reduce_item(struct util_coll_reduce_item *reduce_item)
 	return FI_SUCCESS;
 }
 
-int util_coll_process_xfer_item(struct util_coll_xfer_item *item)
+static ssize_t util_coll_process_xfer_item(struct util_coll_xfer_item *item)
 {
 	struct util_coll_operation *coll_op;
 	struct fi_msg_tagged msg;
 	struct iovec iov;
-	int ret;
+	ssize_t ret;
 
 	coll_op = item->hdr.coll_op;
 
@@ -937,7 +941,7 @@ int util_coll_process_xfer_item(struct util_coll_xfer_item *item)
 	return -FI_ENOSYS;
 }
 
-int ofi_coll_ep_progress(struct fid_ep *ep)
+ssize_t ofi_coll_ep_progress(struct fid_ep *ep)
 {
 	struct util_coll_work_item *work_item;
 	struct util_coll_reduce_item *reduce_item;
@@ -945,7 +949,7 @@ int ofi_coll_ep_progress(struct fid_ep *ep)
 	struct util_coll_xfer_item *xfer_item;
 	struct util_coll_operation *coll_op;
 	struct util_ep *util_ep;
-	int ret;
+	ssize_t ret;
 
 	util_ep  = container_of(ep, struct util_ep, ep_fid);
 
@@ -1079,7 +1083,7 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	ret = util_coll_allreduce(join_op, util_ep->coll_cid_mask->bytes,
 				  join_op->data.join.data.bytes,
 				  join_op->data.join.tmp.bytes,
-				  ofi_bitmask_bytesize(util_ep->coll_cid_mask),
+				  (int) ofi_bitmask_bytesize(util_ep->coll_cid_mask),
 				  FI_UINT8, FI_BAND);
 	if (ret)
 		goto err4;
@@ -1380,7 +1384,8 @@ ssize_t ofi_ep_broadcast(struct fid_ep *ep, void *buf, size_t count, void *desc,
 	struct util_coll_mc *coll_mc;
 	struct util_coll_operation *broadcast_op;
 	struct util_ep *util_ep;
-	int ret, chunk_cnt, numranks, local;
+	uint64_t chunk_cnt, numranks, local;
+	int ret;
 
 	coll_mc = (struct util_coll_mc *) ((uintptr_t) coll_addr);
 	broadcast_op = util_coll_op_create(ep, coll_mc, UTIL_COLL_BROADCAST_OP,

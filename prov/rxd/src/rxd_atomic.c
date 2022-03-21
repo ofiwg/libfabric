@@ -59,7 +59,7 @@ static struct rxd_x_entry *rxd_tx_entry_init_atomic(struct rxd_ep *ep, fi_addr_t
 		return NULL;
 
 	if (res_count) {
-		tx_entry->res_count = res_count;
+		tx_entry->res_count = (uint8_t) res_count;
 		memcpy(&tx_entry->res_iov[0], res_iov, sizeof(*res_iov) * res_count);
 	}
 
@@ -71,7 +71,7 @@ static struct rxd_x_entry *rxd_tx_entry_init_atomic(struct rxd_ep *ep, fi_addr_t
 		rxd_init_sar_hdr(&ptr, tx_entry, rma_count);
 	} else {
 		tx_entry->flags |= RXD_INLINE;
-		base_hdr->flags = tx_entry->flags;
+		base_hdr->flags = (uint16_t) tx_entry->flags;
 		tx_entry->num_segs = 1;
 	}
 
@@ -135,7 +135,7 @@ static ssize_t rxd_generic_atomic(struct rxd_ep *rxd_ep,
 		goto out;
 
 	rxd_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->fi_addr_idx),
-					     RXD_IDX_OFFSET(addr));
+					     RXD_IDX_OFFSET((int) addr));
 	if (!rxd_addr)
 		goto out;
 	ret = rxd_send_rts_if_needed(rxd_ep, rxd_addr);
@@ -227,7 +227,7 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	iov.iov_base = (void *) buf;
 	iov.iov_len = count * ofi_datatype_size(datatype);
-	assert(iov.iov_len <= rxd_ep_domain(rxd_ep)->max_inline_atom);
+	assert(iov.iov_len <= (size_t) rxd_ep_domain(rxd_ep)->max_inline_atom);
 
 	rma_iov.addr = addr;
 	rma_iov.len = count * ofi_datatype_size(datatype);
@@ -238,7 +238,7 @@ static ssize_t rxd_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	if (ofi_cirque_isfull(rxd_ep->util_ep.tx_cq->cirq))
 		goto out;
 	rxd_addr = (intptr_t) ofi_idx_lookup(&(rxd_ep_av(rxd_ep)->fi_addr_idx),
-					     RXD_IDX_OFFSET(addr));
+					     RXD_IDX_OFFSET((int) addr));
 	if (!rxd_addr)
 		goto out;
 

@@ -289,7 +289,7 @@ int sock_get_src_addr(union ofi_sock_ip *dest_addr,
 	if (sock < 0)
 		return -ofi_sockerr();
 
-	len = ofi_sizeofaddr(&dest_addr->sa);
+	len = (socklen_t) ofi_sizeofaddr(&dest_addr->sa);
 	ret = connect(sock, &dest_addr->sa, len);
 	if (ret) {
 		SOCK_LOG_DBG("Failed to connect udp socket\n");

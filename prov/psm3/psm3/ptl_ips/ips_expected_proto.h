@@ -76,6 +76,10 @@
 
 #define __IPS_EXPECTED_PROTO_H__ 1
 
+#ifndef _PSMI_USER_H
+#error "must include psm_user.h before ips_expected_proto.h"
+#endif
+
 #define _desc_idx   u32w0
 #define _desc_genc  u32w1
 
@@ -116,7 +120,7 @@ struct ips_protoexp {
 	struct psmi_timer timer_send;
 
 	STAILQ_HEAD(ips_tid_get_pend, ips_tid_get_request) pend_getreqsq;	/* pending tid reqs */
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RNDV_MOD
 	STAILQ_HEAD(ips_tid_err_resp_pend, ips_epaddr) pend_err_resp;	/* pending ERR CHK RDMA RESP */
 #endif
 	/* services pend_getreqsq and pend_err_chk_rdma_resp */
@@ -133,31 +137,6 @@ struct ips_protoexp {
 #endif
 };
 
-/*
- * TID member list format used in communication.
- * Since the compiler does not make sure the bit fields order,
- * we use mask and shift defined below.
-typedef struct {
-	uint32_t length:11;	// in page unit, max 1024 pages
-	uint32_t reserved:9;	// for future usage
-	uint32_t tidctrl:2;	// hardware defined tidctrl value
-	uint32_t tid:10;	// hardware only support 10bits
-}
-ips_tid_session_member;
- */
-#define IPS_TIDINFO_LENGTH_SHIFT	0
-#define IPS_TIDINFO_LENGTH_MASK		0x7ff
-#define IPS_TIDINFO_TIDCTRL_SHIFT	20
-#define IPS_TIDINFO_TIDCTRL_MASK	0x3
-#define IPS_TIDINFO_TID_SHIFT		22
-#define IPS_TIDINFO_TID_MASK		0x3ff
-
-#define IPS_TIDINFO_GET_LENGTH(tidinfo)	\
-	(((tidinfo)>>IPS_TIDINFO_LENGTH_SHIFT)&IPS_TIDINFO_LENGTH_MASK)
-#define IPS_TIDINFO_GET_TIDCTRL(tidinfo) \
-	(((tidinfo)>>IPS_TIDINFO_TIDCTRL_SHIFT)&IPS_TIDINFO_TIDCTRL_MASK)
-#define IPS_TIDINFO_GET_TID(tidinfo) \
-	(((tidinfo)>>IPS_TIDINFO_TID_SHIFT)&IPS_TIDINFO_TID_MASK)
 
 // This structure is used as CTS payload to describe TID receive
 // for UD it describes the destination for an RDMA Write
@@ -192,7 +171,9 @@ struct ips_tid_send_desc {
 	ips_epaddr_t *ipsaddr;
 	psm2_mq_req_t mqreq;
 
-	psm2_verbs_mr_t mr;
+#if defined(PSM_VERBS)
+	psm3_verbs_mr_t mr;
+#endif
 
 	/* Iterated during send progress */
 	void *userbuf;		/* user privided buffer */
@@ -201,7 +182,7 @@ struct ips_tid_send_desc {
 
 
 	uint8_t is_complete:1;	// all packets for send queued, waiting CQE/response
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RNDV_MOD
 	uint8_t rv_need_err_chk_rdma:1; // need to determine if a retry is required
 	uint8_t reserved:6;
 	uint8_t rv_sconn_index;	// sconn in rv we issued RDMA write on
@@ -235,7 +216,6 @@ struct ips_expected_recv_stats {
 };
 
 struct ips_tid_recv_desc {
-	const psmi_context_t *context;
 	struct ips_protoexp *protoexp;
 
 	ptl_arg_t rdescid;	/* reciever descid */
@@ -244,11 +224,13 @@ struct ips_tid_recv_desc {
 
 	/* scb to send tid grant CTS */
 	ips_scb_t *grantscb;
-	psm2_verbs_mr_t mr;	// MR for this message window/chunk
+#if defined(PSM_VERBS)
+	psm3_verbs_mr_t mr;	// MR for this message window/chunk
+#endif
 
 	/* TF protocol state (recv) */
 	uint32_t state;
-	// TBD - these next 3 fields are probably not needed for PSM_UD USE_RC
+	// TBD - these next 3 fields are probably not needed for PSM_VERBS USE_RC
 	uint32_t tidflow_active_gen;
 	uint32_t tidflow_nswap_gen;
 	psmi_seqnum_t tidflow_genseq;
@@ -263,8 +245,6 @@ struct ips_tid_recv_desc {
 
 	struct ips_expected_recv_stats stats;
 
-	/* bitmap of queued control messages for */
-	uint16_t ctrl_msg_queued;
 	// ips_tid_session_list is fixed sized for UD
 	// N/A to UDP
 	ips_tid_session_list tid_list;
@@ -330,25 +310,26 @@ struct ips_tid_get_request {
  * to identify a particular send.
  */
 psm2_error_t
-MOCKABLE(ips_protoexp_init)(const psmi_context_t *context,
-			      const struct ips_proto *proto,
+MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 			      uint32_t protoexp_flags, int num_of_send_bufs,
 			      int num_of_send_desc,
 			      struct ips_protoexp **protoexp_o);
-MOCK_DCL_EPILOGUE(ips_protoexp_init);
+MOCK_DCL_EPILOGUE(psm3_ips_protoexp_init);
 
-psm2_error_t ips_protoexp_fini(struct ips_protoexp *protoexp);
+psm2_error_t psm3_ips_protoexp_fini(struct ips_protoexp *protoexp);
 
+#ifdef PSM_VERBS
 int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
-								int conn_type, uint32_t immed, uint32_t len);
-int ips_protoexp_rdma_write_completion( uint64_t wr_id);
-#ifdef RNDV_MOD
+                                   int conn_type, uint32_t immed, uint32_t len);
+int ips_protoexp_rdma_write_completion(uint64_t wr_id);
+#ifdef PSM_HAVE_RNDV_MOD
 int ips_protoexp_rdma_write_completion_error(psm2_ep_t ep, uint64_t wr_id,
-												enum ibv_wc_status wc_status);
+                                             enum ibv_wc_status wc_status);
 int ips_protoexp_process_err_chk_rdma(struct ips_recvhdrq_event *rcv_ev);
 int ips_protoexp_process_err_chk_rdma_resp(struct ips_recvhdrq_event *rcv_ev);
-#endif
+#endif // PSM_HAVE_RNDV_MOD
 
+#endif //PSM_VERBS
 
 
 PSMI_ALWAYS_INLINE(
@@ -365,14 +346,14 @@ void ips_protoexp_unaligned_copy(uint8_t *dst, uint8_t *src, uint16_t len))
  */
 #define IPS_PROTOEXP_TIDGET_WAIT	0x1
 #define IPS_PROTOEXP_TIDGET_PEERWAIT	0x2
-psm2_error_t ips_protoexp_tid_get_from_token(struct ips_protoexp *protoexp,
+psm2_error_t psm3_ips_protoexp_tid_get_from_token(struct ips_protoexp *protoexp,
 			    void *buf, uint32_t length,
 			    psm2_epaddr_t epaddr,
 			    uint32_t remote_tok, uint32_t flags,
 			    ips_tid_completion_callback_t
 			    callback, psm2_mq_req_t req);
 psm2_error_t
-ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
+psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 			    ips_epaddr_t *ipsaddr, psm2_mq_req_t req,
 			    ptl_arg_t rdescid, uint32_t tidflow_genseq,
 			    ips_tid_session_list *tid_list,

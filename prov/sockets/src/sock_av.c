@@ -88,16 +88,16 @@ int sock_av_get_addr_index(struct sock_av *av, union ofi_sock_ip *addr)
 int sock_av_compare_addr(struct sock_av *av,
 			 fi_addr_t addr1, fi_addr_t addr2)
 {
-	int index1, index2;
+	int64_t index1, index2;
 	struct sock_av_addr *av_addr1, *av_addr2;
 	int ret;
 
-	index1 = ((uint64_t)addr1 & av->mask);
-	index2 = ((uint64_t)addr2 & av->mask);
+	index1 = addr1 & av->mask;
+	index2 = addr2 & av->mask;
 
 	ofi_mutex_lock(&av->table_lock);
-	if (index1 >= (int)av->table_hdr->size || index1 < 0 ||
-	    index2 >= (int)av->table_hdr->size || index2 < 0) {
+	if (index1 >= av->table_hdr->size || index1 < 0 ||
+	    index2 >= av->table_hdr->size || index2 < 0) {
 		SOCK_LOG_ERROR("requested rank is larger than av table\n");
 		ofi_mutex_unlock(&av->table_lock);
 		return -1;
@@ -182,7 +182,7 @@ static int sock_resize_av_table(struct sock_av *av)
 	return 0;
 }
 
-static int sock_av_get_next_index(struct sock_av *av)
+static int64_t sock_av_get_next_index(struct sock_av *av)
 {
 	uint64_t i;
 
@@ -202,7 +202,7 @@ static int sock_check_table_in(struct sock_av *_av, const void *addr,
 	uint64_t j;
 	char sa_ip[INET6_ADDRSTRLEN];
 	struct sock_av_addr *av_addr;
-	int index;
+	int64_t index;
 
 	if ((_av->attr.flags & FI_EVENT) && !_av->eq)
 		return -FI_ENOEQ;
@@ -288,7 +288,7 @@ static int sock_av_insert(struct fid_av *av, const void *addr, size_t count,
 	_av = container_of(av, struct sock_av, av_fid);
 
 	ofi_mutex_lock(&_av->table_lock);
-	ret = sock_check_table_in(_av, addr, fi_addr, count, flags, context);
+	ret = sock_check_table_in(_av, addr, fi_addr, (int) count, flags, context);
 	ofi_mutex_unlock(&_av->table_lock);
 	return ret;
 }
@@ -296,15 +296,15 @@ static int sock_av_insert(struct fid_av *av, const void *addr, size_t count,
 static int sock_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			  size_t *addrlen)
 {
-	int index;
+	int64_t index;
 	struct sock_av *_av;
 	struct sock_av_addr *av_addr;
 
 	_av = container_of(av, struct sock_av, av_fid);
-	index = ((uint64_t)fi_addr & _av->mask);
+	index = fi_addr & _av->mask;
 
 	ofi_mutex_lock(&_av->table_lock);
-	if (index >= (int)_av->table_hdr->size || index < 0) {
+	if (index >= _av->table_hdr->size || index < 0) {
 		SOCK_LOG_ERROR("requested address not inserted\n");
 		ofi_mutex_unlock(&_av->table_lock);
 		return -EINVAL;
@@ -379,7 +379,7 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 		return -FI_EINVAL;
 	}
 
-	hostlen = strlen(node);
+	hostlen = (int) strlen(node);
 	while (isdigit(*(node + hostlen - (offset + 1))))
 		offset++;
 
@@ -435,7 +435,7 @@ static int sock_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 		sock_ep = container_of(fid_entry->fid, struct sock_ep, ep.fid);
 		ofi_mutex_lock(&sock_ep->attr->cmap.lock);
 		for (i = 0; i < count; i++) {
-			idx = fi_addr[i] & sock_ep->attr->av->mask;
+			idx = (uint16_t)(fi_addr[i] & sock_ep->attr->av->mask);
 			conn = ofi_idm_lookup(&sock_ep->attr->av_idm, idx);
 			if (conn) {
 				/* A peer may be using the connection, so leave

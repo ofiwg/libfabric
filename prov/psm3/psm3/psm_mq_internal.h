@@ -101,7 +101,7 @@ struct psm2_mq {
 	struct mqq expected_htab[NUM_HASH_CONFIGS][NUM_HASH_BUCKETS];
 
 	/* in case the compiler can't figure out how to preserve the hashed values
-	between mq_req_match() and mq_add_to_unexpected_hashes() ... */
+	between psm3_mq_req_match() and mq_add_to_unexpected_hashes() ... */
 	unsigned hashvals[NUM_HASH_CONFIGS];
 
 	/*psm_mq_unexpected_callback_fn_t unexpected_callback; */
@@ -243,7 +243,9 @@ struct psm2_mq_req {
 	psm2_epaddr_t rts_peer;
 	uintptr_t rts_sbuf;
 
-	psm2_verbs_mr_t	mr;	// local registered memory for app buffer
+#ifdef PSM_HAVE_REG_MR
+	psm3_verbs_mr_t	mr;	// local registered memory for app buffer
+#endif
 
 #ifdef PSM_CUDA
 	uint8_t* user_gpu_buffer;	/* for recv */
@@ -288,14 +290,14 @@ hash_32(uint32_t a))
 	return _mm_crc32_u32(0, a);
 }
 
-void MOCKABLE(psmi_mq_mtucpy)(void *vdest, const void *vsrc, uint32_t nchars);
-MOCK_DCL_EPILOGUE(psmi_mq_mtucpy);
-void psmi_mq_mtucpy_host_mem(void *vdest, const void *vsrc, uint32_t nchars);
+void MOCKABLE(psm3_mq_mtucpy)(void *vdest, const void *vsrc, uint32_t nchars);
+MOCK_DCL_EPILOGUE(psm3_mq_mtucpy);
+void psm3_mq_mtucpy_host_mem(void *vdest, const void *vsrc, uint32_t nchars);
 
 #if defined(__x86_64__)
-void psmi_mq_mtucpy_safe(void *vdest, const void *vsrc, uint32_t nchars);
+void psm3_mq_mtucpy_safe(void *vdest, const void *vsrc, uint32_t nchars);
 #else
-#define psmi_mq_mtucpy_safe psmi_mq_mtucpy
+#define psm3_mq_mtucpy_safe psm3_mq_mtucpy
 #endif
 
 /*
@@ -329,7 +331,7 @@ mq_copy_tiny(uint32_t *dest, uint32_t *src, uint8_t len))
 	case 1:
 		break;
 	default:		/* greater than 8 */
-		psmi_mq_mtucpy(dest, src, len);
+		psm3_mq_mtucpy(dest, src, len);
 		return;
 	}
 	uint8_t *dest1 = (uint8_t *) dest;
@@ -369,7 +371,7 @@ mq_copy_tiny_host_mem(uint32_t *dest, uint32_t *src, uint8_t len))
 	case 1:
 		break;
 	default:		/* greater than 8 */
-		psmi_mq_mtucpy(dest, src, len);
+		psm3_mq_mtucpy(dest, src, len);
 		return;
 	}
 	uint8_t *dest1 = (uint8_t *) dest;
@@ -524,21 +526,21 @@ PSMI_ALWAYS_INLINE(void mq_qq_remove_which(psm2_mq_req_t req, int table))
 		q->first = req->next[table];
 }
 
-psm2_error_t psmi_mq_req_init(psm2_mq_t mq);
-psm2_error_t psmi_mq_req_fini(psm2_mq_t mq);
-psm2_mq_req_t MOCKABLE(psmi_mq_req_alloc)(psm2_mq_t mq, uint32_t type);
-MOCK_DCL_EPILOGUE(psmi_mq_req_alloc);
-#define      psmi_mq_req_free(req)  psmi_mpool_put(req)
+psm2_error_t psm3_mq_req_init(psm2_mq_t mq);
+psm2_error_t psm3_mq_req_fini(psm2_mq_t mq);
+psm2_mq_req_t MOCKABLE(psm3_mq_req_alloc)(psm2_mq_t mq, uint32_t type);
+MOCK_DCL_EPILOGUE(psm3_mq_req_alloc);
+#define      psmi_mq_req_free(req)  psm3_mpool_put(req)
 
 /*
  * Main receive progress engine, for shmops and hfi, in mq.c
  */
-psm2_error_t psmi_mq_malloc(psm2_mq_t *mqo);
-psm2_error_t psmi_mq_initialize_defaults(psm2_mq_t mq);
+psm2_error_t psm3_mq_malloc(psm2_mq_t *mqo);
+psm2_error_t psm3_mq_initialize_params(psm2_mq_t mq);
 psm2_error_t psmi_mq_initstats(psm2_mq_t mq, psm2_epid_t epid);
 
-psm2_error_t MOCKABLE(psmi_mq_free)(psm2_mq_t mq);
-MOCK_DCL_EPILOGUE(psmi_mq_free);
+psm2_error_t MOCKABLE(psm3_mq_free)(psm2_mq_t mq);
+MOCK_DCL_EPILOGUE(psm3_mq_free);
 
 /* Three functions that handle all MQ stuff */
 #define MQ_RET_MATCH_OK	0
@@ -547,25 +549,24 @@ MOCK_DCL_EPILOGUE(psmi_mq_free);
 #define MQ_RET_DATA_OK 3
 #define MQ_RET_DATA_OUT_OF_ORDER 4
 
-void psmi_mq_handle_rts_complete(psm2_mq_req_t req);
-int psmi_mq_handle_data(psm2_mq_t mq, psm2_mq_req_t req,
+void psm3_mq_handle_rts_complete(psm2_mq_req_t req);
+int psm3_mq_handle_data(psm2_mq_t mq, psm2_mq_req_t req,
 			uint32_t offset, const void *payload, uint32_t paylen
 #ifdef PSM_CUDA
-			, int use_gdrcopy,
-			psm2_ep_t ep
+			, int use_gdrcopy, psm2_ep_t ep
 #endif
 			);
-int psmi_mq_handle_rts(psm2_mq_t mq, psm2_epaddr_t src, psm2_mq_tag_t *tag,
+int psm3_mq_handle_rts(psm2_mq_t mq, psm2_epaddr_t src, uint32_t *_tag,
 		       struct ptl_strategy_stats *stats,
 		       uint32_t msglen, const void *payload, uint32_t paylen,
 		       int msgorder, mq_rts_callback_fn_t cb,
 		       psm2_mq_req_t *req_o);
-int psmi_mq_handle_envelope(psm2_mq_t mq, psm2_epaddr_t src, psm2_mq_tag_t *tag,
+int psm3_mq_handle_envelope(psm2_mq_t mq, psm2_epaddr_t src, uint32_t *_tag,
 			    struct ptl_strategy_stats *stats,
 			    uint32_t msglen, uint32_t offset,
 			    const void *payload, uint32_t paylen, int msgorder,
 			    uint32_t opcode, psm2_mq_req_t *req_o);
-int psmi_mq_handle_outoforder(psm2_mq_t mq, psm2_mq_req_t req);
+int psm3_mq_handle_outoforder(psm2_mq_t mq, psm2_mq_req_t req);
 
 // perform the actual copy for a recv matching a sysbuf.  We copy from a sysbuf
 // (req->req_data.buf) to the actual user buffer (buf) and keep statistics.
@@ -583,7 +584,7 @@ void psmi_mq_recv_copy(psm2_mq_t mq, psm2_mq_req_t req, void *buf,
                                 uint32_t len, uint32_t copysz))
 {
 	if (copysz)
-		psmi_mq_mtucpy(buf, (const void *)req->req_data.buf, copysz);
+		psm3_mq_mtucpy(buf, (const void *)req->req_data.buf, copysz);
 }
 #endif
 
@@ -591,8 +592,8 @@ void psmi_mq_recv_copy(psm2_mq_t mq, psm2_mq_req_t req, void *buf,
 void psmi_mq_stats_register(psm2_mq_t mq, mpspawn_stats_add_fn add_fn);
 #endif
 
-void psmi_mq_fastpath_disable(psm2_mq_t mq);
-void psmi_mq_fastpath_try_reenable(psm2_mq_t mq);
+void psm3_mq_fastpath_disable(psm2_mq_t mq);
+void psm3_mq_fastpath_try_reenable(psm2_mq_t mq);
 
 PSMI_ALWAYS_INLINE(
 psm2_mq_req_t

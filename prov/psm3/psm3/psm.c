@@ -54,17 +54,25 @@
 /* Copyright (c) 2003-2016 Intel Corporation. All rights reserved. */
 
 #include <dlfcn.h>
+#include <ctype.h>
 #include "psm_user.h"
 #include "psm2_hal.h"
-#include "opa_revision.h"
 #include "psm_mq_internal.h"
 
-static int psmi_verno_major = PSM2_VERNO_MAJOR;
-static int psmi_verno_minor = PSM2_VERNO_MINOR;
-static int psmi_verno = PSMI_VERNO_MAKE(PSM2_VERNO_MAJOR, PSM2_VERNO_MINOR);
-static int psmi_verno_client_val;
-int psmi_epid_ver;
-int psmi_allow_routers;
+static int psm3_verno_major = PSM2_VERNO_MAJOR;
+static int psm3_verno_minor = PSM2_VERNO_MINOR;
+static int psm3_verno = PSMI_VERNO_MAKE(PSM2_VERNO_MAJOR, PSM2_VERNO_MINOR);
+static int psm3_verno_client_val;
+uint8_t  psmi_addr_fmt;	// PSM3_ADDR_FMT
+int psmi_allow_routers;	// PSM3_ALLOW_ROUTERS
+
+char *psmi_allow_subnets[PSMI_MAX_SUBNETS];	// PSM3_SUBNETS
+int psmi_num_allow_subnets;
+
+const char *psmi_nic_wildcard = NULL;
+
+const char *psm3_nic_speed_wildcard = NULL;
+uint64_t psm3_nic_speed_max_found = 0;
 
 // Special psmi_refcount values
 #define PSMI_NOT_INITIALIZED    0
@@ -76,20 +84,20 @@ int psmi_allow_routers;
 static int psmi_refcount = PSMI_NOT_INITIALIZED;
 
 /* Global lock used for endpoint creation and destroy
- * (in functions psm2_ep_open and psm2_ep_close) and also
+ * (in functions psm3_ep_open and psm3_ep_close) and also
  * for synchronization with recv_thread (so that recv_thread
  * will not work on an endpoint which is in a middle of closing). */
-psmi_lock_t psmi_creation_lock;
+psmi_lock_t psm3_creation_lock;
 
-int psmi_affinity_semaphore_open = 0;
-char *sem_affinity_shm_rw_name;
-sem_t *sem_affinity_shm_rw = NULL;
+int psm3_affinity_semaphore_open = 0;
+char *psm3_sem_affinity_shm_rw_name;
+sem_t *psm3_sem_affinity_shm_rw = NULL;
 
-int psmi_affinity_shared_file_opened = 0;
-char *affinity_shm_name;
-uint64_t *shared_affinity_ptr;
+int psm3_affinity_shared_file_opened = 0;
+char *psm3_affinity_shm_name;
+uint64_t *psm3_shared_affinity_ptr;
 
-uint32_t psmi_cpu_model;
+uint32_t psm3_cpu_model;
 
 #ifdef PSM_CUDA
 int is_cuda_enabled;
@@ -104,7 +112,7 @@ int is_driver_gpudirect_enabled;
 uint32_t cuda_thresh_rndv;
 uint32_t gdr_copy_limit_send;
 uint32_t gdr_copy_limit_recv;
-uint64_t gpu_cache_evict;	// in bytes
+uint64_t psm3_gpu_cache_evict;	// in bytes
 
 void *psmi_cuda_lib;
 CUresult (*psmi_cuInit)(unsigned int  Flags );
@@ -142,6 +150,7 @@ CUresult (*psmi_cuDevicePrimaryCtxGetState)(CUdevice dev, unsigned int* flags, i
 CUresult (*psmi_cuDevicePrimaryCtxRetain)(CUcontext* pctx, CUdevice dev);
 CUresult (*psmi_cuCtxGetDevice)(CUdevice* device);
 CUresult (*psmi_cuDevicePrimaryCtxRelease)(CUdevice device);
+CUresult (*psmi_cuGetErrorString)(CUresult error, const char **pStr);
 
 uint64_t psmi_count_cuInit;
 uint64_t psmi_count_cuCtxDetach;
@@ -178,6 +187,7 @@ uint64_t psmi_count_cuDevicePrimaryCtxGetState;
 uint64_t psmi_count_cuDevicePrimaryCtxRetain;
 uint64_t psmi_count_cuCtxGetDevice;
 uint64_t psmi_count_cuDevicePrimaryCtxRelease;
+uint64_t psmi_count_cuGetErrorString;
 #endif
 
 /*
@@ -187,11 +197,11 @@ uint64_t psmi_count_cuDevicePrimaryCtxRelease;
  * on conditional compilation basis
  * along with future features/capabilities.
  */
-uint64_t psm2_capabilities_bitset = PSM2_MULTI_EP_CAP | PSM2_LIB_REFCOUNT_CAP;
+uint64_t psm3_capabilities_bitset = PSM2_MULTI_EP_CAP | PSM2_LIB_REFCOUNT_CAP;
 
-int psmi_verno_client()
+int psm3_verno_client()
 {
-	return psmi_verno_client_val;
+	return psm3_verno_client_val;
 }
 
 /* This function is used to determine whether the current library build can
@@ -201,7 +211,7 @@ int psmi_verno_client()
  * PSM 2.x is always ABI compatible, but this checks to see if two different
  * versions of the library can coexist.
  */
-int psmi_verno_isinteroperable(uint16_t verno)
+int psm3_verno_isinteroperable(uint16_t verno)
 {
 	if (PSMI_VERNO_GET_MAJOR(verno) != PSM2_VERNO_MAJOR)
 		return 0;
@@ -209,11 +219,11 @@ int psmi_verno_isinteroperable(uint16_t verno)
 	return 1;
 }
 
-int MOCKABLE(psmi_isinitialized)()
+int MOCKABLE(psm3_isinitialized)()
 {
 	return (psmi_refcount > 0);
 }
-MOCK_DEF_EPILOGUE(psmi_isinitialized);
+MOCK_DEF_EPILOGUE(psm3_isinitialized);
 
 #ifdef PSM_CUDA
 int psmi_cuda_lib_load()
@@ -232,7 +242,6 @@ int psmi_cuda_lib_load()
 		goto fail;
 	}
 
-	psmi_count_cuDriverGetVersion++;
 	psmi_cuDriverGetVersion = dlsym(psmi_cuda_lib, "cuDriverGetVersion");
 
 	if (!psmi_cuDriverGetVersion) {
@@ -240,6 +249,7 @@ int psmi_cuda_lib_load()
 			("Unable to resolve symbols in CUDA libraries.\n");
 		goto fail;
 	}
+	PSMI_CUDA_DLSYM(psmi_cuda_lib, cuGetErrorString);// for PSMI_CUDA_CALL
 
 	PSMI_CUDA_CALL(cuDriverGetVersion, &cuda_lib_version);
 	if (cuda_lib_version < 7000) {
@@ -287,7 +297,7 @@ int psmi_cuda_lib_load()
 fail:
 	if (psmi_cuda_lib)
 		dlclose(psmi_cuda_lib);
-	err = psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR, "Unable to load CUDA library.\n");
+	err = psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR, "Unable to load CUDA library.\n");
 	return err;
 }
 
@@ -332,12 +342,13 @@ static void psmi_cuda_stats_register()
 		PSMI_CUDA_COUNT_DECLU64(cuDevicePrimaryCtxRetain),
 		PSMI_CUDA_COUNT_DECLU64(cuCtxGetDevice),
 		PSMI_CUDA_COUNT_DECLU64(cuDevicePrimaryCtxRelease),
+		PSMI_CUDA_COUNT_DECLU64(cuGetErrorString),
 	};
 #undef PSMI_CUDA_COUNT_DECLU64
 
-	psmi_stats_register_type("PSM_Cuda_call_statistics",
+	psm3_stats_register_type("PSM_Cuda_call_statistics",
 			PSMI_STATSTYPE_CUDA,
-			entries, PSMI_STATS_HOWMANY(entries), 0,
+			entries, PSMI_HOWMANY(entries), NULL,
 			&is_cuda_enabled, NULL); /* context must != NULL */
 }
 
@@ -356,29 +367,27 @@ int psmi_cuda_initialize()
 
 	PSMI_CUDA_CALL(cuInit, 0);
 
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RNDV_MOD
 	psm2_get_gpu_bars();
 #endif
+
 	union psmi_envvar_val env_enable_gdr_copy;
-	psmi_getenv("PSM3_GDRCOPY",
+	psm3_getenv("PSM3_GDRCOPY",
 				"Enable (set envvar to 1) for gdr copy support in PSM (Enabled by default)",
 				PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
 				(union psmi_envvar_val)1, &env_enable_gdr_copy);
 	is_gdr_copy_enabled = env_enable_gdr_copy.e_int;
 
 	union psmi_envvar_val env_cuda_thresh_rndv;
-	psmi_getenv("PSM3_CUDA_THRESH_RNDV",
+	psm3_getenv("PSM3_CUDA_THRESH_RNDV",
 				"RNDV protocol is used for GPU send message sizes greater than the threshold",
 				PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
 				(union psmi_envvar_val)CUDA_THRESH_RNDV, &env_cuda_thresh_rndv);
 	cuda_thresh_rndv = env_cuda_thresh_rndv.e_int;
 
-	if (cuda_thresh_rndv < 0
-		)
-	    cuda_thresh_rndv = CUDA_THRESH_RNDV;
 
 	union psmi_envvar_val env_gdr_copy_limit_send;
-	psmi_getenv("PSM3_GDRCOPY_LIMIT_SEND",
+	psm3_getenv("PSM3_GDRCOPY_LIMIT_SEND",
 				"GDR Copy is turned off on the send side"
 				" for message sizes greater than the limit"
 #ifndef OPA
@@ -394,7 +403,7 @@ int psmi_cuda_initialize()
 		gdr_copy_limit_send = max(GDR_COPY_LIMIT_SEND, cuda_thresh_rndv);
 
 	union psmi_envvar_val env_gdr_copy_limit_recv;
-	psmi_getenv("PSM3_GDRCOPY_LIMIT_RECV",
+	psm3_getenv("PSM3_GDRCOPY_LIMIT_RECV",
 				"GDR Copy is turned off on the recv side"
 				" for message sizes greater than the limit\n",
 				PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
@@ -410,15 +419,105 @@ int psmi_cuda_initialize()
 	PSM2_LOG_MSG("leaving");
 	return err;
 fail:
-	err = psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR, "Unable to initialize PSM3 CUDA support.\n");
+	err = psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR, "Unable to initialize PSM3 CUDA support.\n");
 	return err;
 }
 #endif
 
-psm2_error_t __psm2_init(int *major, int *minor)
+/* parse PSM3_SUBNETS to get a list of subnets we'll consider */
+static
+psm2_error_t
+psmi_parse_subnets(const char *subnets)
+{
+	char *tempstr = NULL;
+	char *e, *ee, *b;
+	psm2_error_t err = PSM2_OK;
+	int len;
+	int i = 0;
+
+	psmi_assert_always(subnets != NULL);
+	len = strlen(subnets) + 1;
+
+	tempstr = (char *)psmi_calloc(PSMI_EP_NONE, UNDEFINED, 1, len);
+	if (tempstr == NULL)
+		goto fail;
+
+	strncpy(tempstr, subnets, len);
+	ee = tempstr + len;	// very end of subnets string
+	for (e=tempstr, i=0; e < ee && *e && i < PSMI_MAX_SUBNETS; e++) {
+		char *p;
+
+		while (*e && isspace(*e))
+			e++;
+		b = e;	// begining of subnet
+		while (*e && *e != ',' )
+			e++;
+		*e = '\0';	// mark end
+		// skip whitespace at end of subnet
+		for (p = e-1; p >= b && isspace(*p); p--)
+			*p = '\0';
+		if (*b) {
+			psmi_allow_subnets[i] = psmi_strdup(PSMI_EP_NONE, b);
+			if (! psmi_allow_subnets[i]) {
+				err = PSM2_NO_MEMORY;
+				goto fail;
+			}
+			_HFI_DBG("PSM3_SUBNETS Entry %d = '%s'\n",
+					i, psmi_allow_subnets[i]);
+			i++;
+		}
+	}
+	if ( e < ee && *e)
+		_HFI_INFO("More than %d entries in PSM3_SUBNETS, ignoring extra entries\n", PSMI_MAX_SUBNETS);
+	psmi_num_allow_subnets = i;
+	_HFI_DBG("PSM3_SUBNETS Num subnets = %d\n", psmi_num_allow_subnets);
+fail:
+	if (tempstr != NULL)
+		psmi_free(tempstr);
+	return err;
+
+}
+
+static
+void psmi_parse_nic_var()
+{
+	union psmi_envvar_val env_nic;
+	psm3_getenv("PSM3_NIC",
+		"Device Unit number or name or wildcard (-1 or 'any' autodetects)",
+		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
+		(union psmi_envvar_val)"any", &env_nic);
+	//autodetect
+	if (0 == strcasecmp(env_nic.e_str, "any")) {
+		//so this disables filtering
+		psmi_nic_wildcard = NULL;
+		return;
+	}
+	char *endptr = NULL;
+	int unit = strtol(env_nic.e_str, &endptr, 10);
+	//Unit decimal number
+	if ((env_nic.e_str != endptr)&&(*endptr == '\0'))
+	{
+		//filter equals device name
+		psmi_nic_wildcard = psm3_sysfs_unit_dev_name(unit);
+		return;
+	}
+	unit = strtol(env_nic.e_str, &endptr, 16);
+	//Unit hex number
+	if ((env_nic.e_str != endptr)&&(*endptr == '\0'))
+	{
+		//filter equals device name
+		psmi_nic_wildcard = psm3_sysfs_unit_dev_name(unit);
+		return;
+	}
+	//Unit name or wildcard
+	psmi_nic_wildcard = env_nic.e_str;
+}
+
+psm2_error_t psm3_init(int *major, int *minor)
 {
 	psm2_error_t err = PSM2_OK;
 	union psmi_envvar_val env_tmask;
+	int devid_enabled[PTL_MAX_INIT];
 
 	psmi_stats_initialize();
 
@@ -450,18 +549,24 @@ psm2_error_t __psm2_init(int *major, int *minor)
 		goto fail;
 	}
 
-	psmi_init_lock(&psmi_creation_lock);
+	psmi_init_lock(&psm3_creation_lock);
 
 #ifdef PSM_DEBUG
-	if (!getenv("PSM3_NO_WARN"))
+	if (!getenv("PSM3_NO_WARN")) {
+		_HFI_ERROR(
+			"!!! WARNING !!! YOU ARE RUNNING AN INTERNAL-ONLY PSM *DEBUG* BUILD.\n");
 		fprintf(stderr,
 			"!!! WARNING !!! YOU ARE RUNNING AN INTERNAL-ONLY PSM *DEBUG* BUILD.\n");
+	}
 #endif
 
 #ifdef PSM_PROFILE
-	if (!getenv("PSM3_NO_WARN"))
+	if (!getenv("PSM3_NO_WARN")) {
+		_HFI_ERROR(
+			"!!! WARNING !!! YOU ARE RUNNING AN INTERNAL-ONLY PSM *PROFILE* BUILD.\n");
 		fprintf(stderr,
 			"!!! WARNING !!! YOU ARE RUNNING AN INTERNAL-ONLY PSM *PROFILE* BUILD.\n");
+	}
 #endif
 
 #ifdef PSM_FI
@@ -473,16 +578,16 @@ psm2_error_t __psm2_init(int *major, int *minor)
 
 	/* Make sure, as an internal check, that this version knows how to detect
 	 * compatibility with other library versions it may communicate with */
-	if (psmi_verno_isinteroperable(psmi_verno) != 1) {
-		err = psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-					"psmi_verno_isinteroperable() not updated for current version!");
+	if (psm3_verno_isinteroperable(psm3_verno) != 1) {
+		err = psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+					"psm3_verno_isinteroperable() not updated for current version!");
 		goto fail;
 	}
 
 	/* The only way to not support a client is if the major number doesn't
 	 * match */
 	if (*major != PSM2_VERNO_MAJOR && *major != PSM2_VERNO_COMPAT_MAJOR) {
-		err = psmi_handle_error(NULL, PSM2_INIT_BAD_API_VERSION,
+		err = psm3_handle_error(NULL, PSM2_INIT_BAD_API_VERSION,
 					"This library does not implement version %d.%d",
 					*major, *minor);
 		goto fail;
@@ -490,13 +595,13 @@ psm2_error_t __psm2_init(int *major, int *minor)
 
 	/* Make sure we don't keep track of a client that claims a higher version
 	 * number than we are */
-	psmi_verno_client_val =
-	    min(PSMI_VERNO_MAKE(*major, *minor), psmi_verno);
+	psm3_verno_client_val =
+	    min(PSMI_VERNO_MAKE(*major, *minor), psm3_verno);
 
 	/* Check to see if we need to set Architecture flags to something
 	 * besides big core Xeons */
 	cpuid_t id;
-	psmi_cpu_model = CPUID_MODEL_UNDEFINED;
+	psm3_cpu_model = CPUID_MODEL_UNDEFINED;
 
 	/* First check to ensure Genuine Intel */
 	get_cpuid(0x0, 0, &id);
@@ -506,34 +611,34 @@ psm2_error_t __psm2_init(int *major, int *minor)
 	{
 		/* Use cpuid with EAX=1 to get processor info */
 		get_cpuid(0x1, 0, &id);
-		psmi_cpu_model = CPUID_GENUINE_INTEL;
+		psm3_cpu_model = CPUID_GENUINE_INTEL;
 	}
 
-	if( (psmi_cpu_model == CPUID_GENUINE_INTEL) &&
+	if( (psm3_cpu_model == CPUID_GENUINE_INTEL) &&
 		(id.eax & CPUID_FAMILY_MASK) == CPUID_FAMILY_XEON)
 	{
-		psmi_cpu_model = ((id.eax & CPUID_MODEL_MASK) >> 4) |
+		psm3_cpu_model = ((id.eax & CPUID_MODEL_MASK) >> 4) |
 				((id.eax & CPUID_EXMODEL_MASK) >> 12);
 	}
 
 	psmi_refcount++;
-	/* hfi_debug lives in libhfi.so */
-	psmi_getenv("PSM3_TRACEMASK",
+	/* psm3_dbgmask lives in libhfi.so */
+	psm3_getenv("PSM3_TRACEMASK",
 		    "Mask flags for tracing",
 		    PSMI_ENVVAR_LEVEL_USER,
 		    PSMI_ENVVAR_TYPE_STR,
 		    (union psmi_envvar_val)__HFI_DEBUG_DEFAULT_STR, &env_tmask);
-	hfi_debug = psmi_parse_val_pattern(env_tmask.e_str, __HFI_DEBUG_DEFAULT,
+	psm3_dbgmask = psmi_parse_val_pattern(env_tmask.e_str, __HFI_DEBUG_DEFAULT,
 			__HFI_DEBUG_DEFAULT);
 
 	/* The "real thing" is done in hfi_proto.c as a constructor function, but
 	 * we getenv it here to report what we're doing with the setting */
 	{
-		extern int __hfi_malloc_no_mmap;
+		extern int psm3_malloc_no_mmap;
 		union psmi_envvar_val env_mmap;
 		char *env = getenv("PSM3_DISABLE_MMAP_MALLOC");
-		int broken = (env && *env && !__hfi_malloc_no_mmap);
-		psmi_getenv("PSM3_DISABLE_MMAP_MALLOC",
+		int broken = (env && *env && !psm3_malloc_no_mmap);
+		psm3_getenv("PSM3_DISABLE_MMAP_MALLOC",
 			    broken ? "Skipping mmap disable for malloc()" :
 			    "Disable mmap for malloc()",
 			    PSMI_ENVVAR_LEVEL_USER,
@@ -546,48 +651,88 @@ psm2_error_t __psm2_init(int *major, int *minor)
 	}
 
 	{
-		union psmi_envvar_val env_epid_ver;
-		psmi_getenv("PSM3_ADDR_FMT",
-					"Used to force PSM3 to use a particular version of EPID",
-					PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
-					(union psmi_envvar_val)PSMI_EPID_VERNO_DEFAULT, &env_epid_ver);
-		psmi_epid_ver = env_epid_ver.e_int;
-		if (psmi_epid_ver > PSMI_MAX_EPID_VERNO_SUPPORTED) {
-			psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-					  " The max epid version supported in this version of PSM3 is %d \n"
+		union psmi_envvar_val env_addr_fmt;
+		psm3_getenv("PSM3_ADDR_FMT",
+					"Select address format for NICs and EPID",
+					PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
+					(union psmi_envvar_val)PSMI_ADDR_FMT_DEFAULT, &env_addr_fmt);
+		if (env_addr_fmt.e_int > PSMI_MAX_ADDR_FMT_SUPPORTED) {
+			psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+					  " The max epid version supported in this version of PSM3 is %u \n"
 					  "Please upgrade PSM3 \n",
-					  PSMI_MAX_EPID_VERNO_SUPPORTED);
+					  PSMI_MAX_ADDR_FMT_SUPPORTED);
 			goto fail;
-		} else if (psmi_epid_ver < PSMI_MIN_EPID_VERNO_SUPPORTED) {
-			psmi_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-					  " Invalid value provided through PSM3_ADDR_FMT \n");
+		} else if ( env_addr_fmt.e_int != PSMI_ADDR_FMT_DEFAULT
+			&& (env_addr_fmt.e_int < PSMI_MIN_ADDR_FMT_SUPPORTED
+				|| ! PSMI_IPS_ADDR_FMT_IS_VALID(env_addr_fmt.e_int))
+			) {
+			psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+					  " Invalid value provided through PSM3_ADDR_FMT %d\n", env_addr_fmt.e_int);
 			goto fail;
 		}
+		psmi_addr_fmt = env_addr_fmt.e_int;
 	}
 	{
 		union psmi_envvar_val env_allow_routers;
-		psmi_getenv("PSM3_ALLOW_ROUTERS",
+		psm3_getenv("PSM3_ALLOW_ROUTERS",
 					"Disable check for Ethernet subnet equality between nodes\n"
 					" allows routers between nodes and assumes single network plane for multi-rail\n",
 					PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
 					(union psmi_envvar_val)0, &env_allow_routers);
 		psmi_allow_routers = env_allow_routers.e_int;
 	}
+	{
+		union psmi_envvar_val env_subnets;
+		psm3_getenv("PSM3_SUBNETS",
+			"List of comma separated patterns for IPv4 and IPv6 subnets to consider",
+			PSMI_ENVVAR_LEVEL_USER,
+			PSMI_ENVVAR_TYPE_STR,
+			(union psmi_envvar_val)PSMI_SUBNETS_DEFAULT, &env_subnets);
+
+		if ((err = psmi_parse_subnets(env_subnets.e_str)))
+			goto fail;
+	}
+	psmi_parse_nic_var();
+
+
+	{
+		/* get PSM3_NIC_SPEED
+		 * "any" - allow any and all NIC speeds
+		 * "max" - among the non-filtered NICs, identify fastest and
+		 *	filter all NICs with lower speeds (default)
+		 * # - select only NICs which match the given speed
+		 *		(in bits/sec)
+		 * pattern - a pattern which may contain one or more numeric
+		 *		speed values
+		 */
+		union psmi_envvar_val env_speed;
+		psm3_getenv("PSM3_NIC_SPEED",
+			"NIC speed selection criteria ('any', 'max' or pattern of exact speeds)",
+			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
+			(union psmi_envvar_val)"max", &env_speed);
+		psm3_nic_speed_wildcard = env_speed.e_str;
+	}
 
 	if (getenv("PSM3_DIAGS")) {
 		_HFI_INFO("Running diags...\n");
-		psmi_diags();
+		if (psm3_diags()) {
+			psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR, " diags failure \n");
+			goto fail;
+		}
 	}
 
-	psmi_multi_ep_init();
+	psm3_multi_ep_init();
 
 #ifdef PSM_FI
-	psmi_faultinj_init();
+	psm3_faultinj_init();
 #endif /* #ifdef PSM_FI */
 
-	psmi_epid_init();
+	psm3_epid_init();
 
-	int rc = psmi_hal_initialize();
+	if ((err = psmi_parse_devices(devid_enabled)))
+		goto fail;
+
+	int rc = psm3_hal_initialize(devid_enabled);
 
 	if (rc)
 	{
@@ -597,7 +742,7 @@ psm2_error_t __psm2_init(int *major, int *minor)
 
 #ifdef PSM_CUDA
 	union psmi_envvar_val env_enable_cuda;
-	psmi_getenv("PSM3_CUDA",
+	psm3_getenv("PSM3_CUDA",
 			"Enable (set envvar to 1) for cuda support in PSM (Disabled by default)",
 			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
 			(union psmi_envvar_val)0, &env_enable_cuda);
@@ -612,108 +757,35 @@ psm2_error_t __psm2_init(int *major, int *minor)
 #endif
 
 update:
-	if (psmi_parse_identify()) {
-                Dl_info info_psm;
-		char ofed_delta[100] = "";
-		strcat(strcat(ofed_delta," built for IEFS "),psmi_hfi_IFS_version);
-                printf("%s %s PSM3 v%d.%d%s%s\n"
-		       "%s %s location %s\n"
-		       "%s %s build date %s\n"
-		       "%s %s src checksum %s\n"
-                       "%s %s git checksum %s\n"
-#ifdef RNDV_MOD
-#ifdef NVIDIA_GPU_DIRECT
-                       "%s %s built against rv interface v%d.%d gpu v%d.%d cuda\n"
-#else
-                       "%s %s built against rv interface v%d.%d\n"
-#endif
-#endif
-                       "%s %s Global Rank %d (%d total) Local Rank %d (%d total)\n"
-                       "%s %s CPU Core %d NUMA %d\n",
-		       hfi_get_mylabel(), hfi_ident_tag,
-				PSM2_VERNO_MAJOR,PSM2_VERNO_MINOR,
-#ifdef PSM_CUDA
-				"-cuda",
-#else
-				"",
-#endif
-				(strcmp(psmi_hfi_IFS_version,"") != 0) ? ofed_delta : "",
-		       hfi_get_mylabel(), hfi_ident_tag,
-				dladdr(psm2_init, &info_psm) ?
-					info_psm.dli_fname : "PSM3 path not available",
-		       hfi_get_mylabel(), hfi_ident_tag, psmi_hfi_build_timestamp,
-		       hfi_get_mylabel(), hfi_ident_tag, psmi_hfi_sources_checksum,
-		       hfi_get_mylabel(), hfi_ident_tag,
-				(strcmp(psmi_hfi_git_checksum,"") != 0) ?
-					psmi_hfi_git_checksum : "<not available>",
-#ifdef RNDV_MOD
-#ifdef NVIDIA_GPU_DIRECT
-		       hfi_get_mylabel(), hfi_ident_tag,
-				psm2_rv_get_user_major_bldtime_version(),
-				psm2_rv_get_user_minor_bldtime_version(),
-				psm2_rv_get_gpu_user_major_bldtime_version(),
-				psm2_rv_get_gpu_user_minor_bldtime_version(),
-#else
-		       hfi_get_mylabel(), hfi_ident_tag,
-				psm2_rv_get_user_major_bldtime_version(),
-				psm2_rv_get_user_minor_bldtime_version(),
-#endif
-#endif
-		       hfi_get_mylabel(), hfi_ident_tag,
-				hfi_get_myrank(), hfi_get_myrank_count(),
-				hfi_get_mylocalrank(),
-				hfi_get_mylocalrank_count(),
-		       hfi_get_mylabel(), hfi_ident_tag,
-				sched_getcpu(), psmi_get_current_proc_location()
-		       );
-	}
-
-	*major = (int)psmi_verno_major;
-	*minor = (int)psmi_verno_minor;
+	*major = (int)psm3_verno_major;
+	*minor = (int)psm3_verno_minor;
 fail:
 	_HFI_DBG("psmi_refcount=%d,err=%u\n", psmi_refcount, err);
 
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
-PSMI_API_DECL(psm2_init)
 
-static
-psm2_error_t psmi_get_psm2_config(psm2_mq_t     mq,
-				  psm2_epaddr_t epaddr,
-				  uint32_t *out)
+/* convert return value for various device queries into
+ * a psm2_error_t.  Only used for functions requesting NIC details
+ * -3 -> PSM2_EP_NO_DEVICE, 0 -> PSM2_OK, other -> PSM2_INTERNAL_ERR
+ */
+static inline psm2_error_t unit_query_ret_to_err(int ret)
 {
-	psm2_error_t rv = PSM2_INTERNAL_ERR;
-
-	*out = 0;
-	if (&mq->ep->ptl_ips == epaddr->ptlctl)
-	{
-		rv = PSM2_OK;
-		*out |= PSM2_INFO_QUERY_CONFIG_IPS;
-#ifdef PSM_CUDA
-		if (PSMI_IS_CUDA_ENABLED)
-		{
-			*out |= PSM2_INFO_QUERY_CONFIG_CUDA;
-			if (PSMI_IS_GDR_COPY_ENABLED)
-				*out |= PSM2_INFO_QUERY_CONFIG_GDR_COPY;
-		}
-#endif
-		*out |= PSM2_INFO_QUERY_CONFIG_PIO;
+	switch (ret) {
+	case -3:
+		return PSM2_EP_NO_DEVICE;
+		break;
+	case 0:
+		return PSM2_OK;
+		break;
+	default:
+		return PSM2_INTERNAL_ERR;
+		break;
 	}
-	else if (&mq->ep->ptl_amsh == epaddr->ptlctl)
-	{
-		*out |= PSM2_INFO_QUERY_CONFIG_AMSH;
-		rv = PSM2_OK;
-	}
-	else if (&mq->ep->ptl_self == epaddr->ptlctl)
-	{
-		*out |= PSM2_INFO_QUERY_CONFIG_SELF;
-		rv = PSM2_OK;
-	}
-	return rv;
 }
 
-psm2_error_t __psm2_info_query(psm2_info_query_t q, void *out,
+psm2_error_t psm3_info_query(psm2_info_query_t q, void *out,
 			       size_t nargs, psm2_info_query_arg_t args[])
 {
 	static const size_t expected_arg_cnt[PSM2_INFO_QUERY_LAST] =
@@ -724,23 +796,26 @@ psm2_error_t __psm2_info_query(psm2_info_query_t q, void *out,
 		2, /* PSM2_INFO_QUERY_UNIT_PORT_STATUS  */
 		1, /* PSM2_INFO_QUERY_NUM_FREE_CONTEXTS */
 		1, /* PSM2_INFO_QUERY_NUM_CONTEXTS      */
-		2, /* PSM2_INFO_QUERY_CONFIG            */
-		3, /* PSM2_INFO_QUERY_THRESH            */
-		3, /* PSM2_INFO_QUERY_DEVICE_NAME       */
-		2, /* PSM2_INFO_QUERY_MTU               */
-		2, /* PSM2_INFO_QUERY_LINK_SPEED        */
-		1, /* PSM2_INFO_QUERY_NETWORK_TYPE      */
+		0, /* was PSM2_INFO_QUERY_CONFIG        */
+		0, /* was PSM2_INFO_QUERY_THRESH        */
+		0, /* was PSM2_INFO_QUERY_DEVICE_NAME   */
+		0, /* was PSM2_INFO_QUERY_MTU           */
+		0, /* was PSM2_INFO_QUERY_LINK_SPEED    */
+		0, /* was PSM2_INFO_QUERY_NETWORK_TYPE  */
 		0, /* PSM2_INFO_QUERY_FEATURE_MASK      */
 		2, /* PSM2_INFO_QUERY_UNIT_NAME         */
-		2, /* PSM2_INFO_QUERY_UNIT_SYS_PATH     */
+		0, /* was PSM2_INFO_QUERY_UNIT_SYS_PATH */
+		2, /* PSM2_INFO_QUERY_UNIT_PCI_BUS      */
+		2, /* PSM2_INFO_QUERY_UNIT_SUBNET_NAME  */
+		2, /* PSM2_INFO_QUERY_UNIT_DEVICE_ID    */
+		2, /* PSM2_INFO_QUERY_UNIT_DEVICE_VERSION */
+		2, /* PSM2_INFO_QUERY_UNIT_VENDOR_ID    */
+		2, /* PSM2_INFO_QUERY_UNIT_DRIVER       */
+		2, /* PSM2_INFO_QUERY_PORT_SPEED        */
 	};
 	psm2_error_t rv = PSM2_INTERNAL_ERR;
 
-	if ((q < 0) ||
-	    (q >= PSM2_INFO_QUERY_LAST))
-		return 	PSM2_IQ_INVALID_QUERY;
-
-	if (nargs != expected_arg_cnt[q])
+	if (q >= 0 && q < PSM2_INFO_QUERY_LAST && nargs != expected_arg_cnt[q])
 		return PSM2_PARAM_ERR;
 
 	switch (q)
@@ -770,88 +845,6 @@ psm2_error_t __psm2_info_query(psm2_info_query_t q, void *out,
 		*((uint32_t*)out) = psmi_hal_get_num_contexts(args[0].unit);
 		rv = PSM2_OK;
 		break;
-	case PSM2_INFO_QUERY_CONFIG:
-		{
-			psm2_mq_t     mq     = args[0].mq;
-			psm2_epaddr_t epaddr = args[1].epaddr;
-			rv = psmi_get_psm2_config(mq, epaddr, (uint32_t*)out);
-		}
-		break;
-	case PSM2_INFO_QUERY_THRESH:
-		{
-			psm2_mq_t                      mq     = args[0].mq;
-			psm2_epaddr_t                  epaddr = args[1].epaddr;
-			enum psm2_info_query_thresh_et iqt    = args[2].mstq;
-
-			uint32_t                       config;
-			rv = psmi_get_psm2_config(mq, epaddr, &config);
-			if (rv == PSM2_OK)
-			{
-				*((uint32_t*)out) = 0;
-				/* Delegate the call to the ptl member function: */
-				rv = epaddr->ptlctl->msg_size_thresh_query(iqt, (uint32_t*)out, mq, epaddr);
-			}
-		}
-		break;
-	case PSM2_INFO_QUERY_DEVICE_NAME:
-		{
-			char         *hfiName       = (char*)out;
-			psm2_mq_t     mq            = args[0].mq;
-			psm2_epaddr_t epaddr        = args[1].epaddr;
-			size_t        hfiNameLength = args[2].length;
-			uint32_t      config;
-
-			rv = psmi_get_psm2_config(mq, epaddr, &config);
-			if (rv == PSM2_OK)
-			{
-				if (snprintf(hfiName, hfiNameLength, "%s_%d",
-					     psmi_hal_get_hfi_name(),
-					     mq->ep->unit_id)
-				    < hfiNameLength)
-					rv = PSM2_OK;
-			}
-		}
-		break;
-	case PSM2_INFO_QUERY_MTU:
-		{
-			psm2_mq_t     mq     = args[0].mq;
-			psm2_epaddr_t epaddr = args[1].epaddr;
-			uint32_t      config;
-
-			rv = psmi_get_psm2_config(mq, epaddr, &config);
-			if (rv == PSM2_OK)
-			{
-				// TBD - should get ipsaddr to find pr_mtu negotiated
-				*((uint32_t*)out) = mq->ep->mtu;
-			}
-		}
-		break;
-	case PSM2_INFO_QUERY_LINK_SPEED:
-		{
-			psm2_mq_t     mq     = args[0].mq;
-			psm2_epaddr_t epaddr = args[1].epaddr;
-			uint32_t      config;
-
-			rv = psmi_get_psm2_config(mq, epaddr, &config);
-			if (rv == PSM2_OK)
-			{
-				*((uint32_t*)out) = psmi_hal_get_port_rate(mq->ep->unit_id,
-								       mq->ep->portnum);
-			}
-		}
-		break;
-	case PSM2_INFO_QUERY_NETWORK_TYPE:
-		{
-			char              *networkType      = (char*)out;
-			size_t            networkTypeLength = args[0].length;
-			const char *const intelopa          = "Intel(R) OPA";
-			if (networkTypeLength >= strlen(intelopa)+1)
-			{
-				strcpy(networkType,intelopa);
-				rv = PSM2_OK;
-			}
-		}
-		break;
 	case PSM2_INFO_QUERY_FEATURE_MASK:
 		{
 #ifdef PSM_CUDA
@@ -867,49 +860,111 @@ psm2_error_t __psm2_info_query(psm2_info_query_t q, void *out,
 			char         *hfiName       = (char*)out;
 			uint32_t      unit          = args[0].unit;
 			size_t        hfiNameLength = args[1].length;
-			const char   *pathName      = sysfs_unit_path(unit);
-			char         *unitName      = NULL;
 
-			if (!pathName) break;
-
-			unitName = strrchr(sysfs_unit_path(unit),'/');
-			if (!unitName) break;
-
-			strncpy(hfiName, ++unitName, hfiNameLength);
-			hfiName[hfiNameLength-1] = '\0';
+			snprintf(hfiName, hfiNameLength, "%s", psmi_hal_get_unit_name(unit));
 			rv = PSM2_OK;
 		}
 		break;
-	case PSM2_INFO_QUERY_UNIT_SYS_PATH:
+	case PSM2_INFO_QUERY_UNIT_PCI_BUS:
 		{
-			char         *hfiName       = (char*)out;
+			uint32_t     *pciBus        = (uint32_t *)out;
 			uint32_t      unit          = args[0].unit;
-			size_t        hfiNameLength = args[1].length;
-			const char   *pathName      = sysfs_unit_path(unit);
-			//char         *unitName      = NULL;
 
-			if (!pathName) break;
+			if (args[1].length != (sizeof(uint32_t)*4)) break;
 
-			strncpy(hfiName, pathName, hfiNameLength);
-			hfiName[hfiNameLength-1] = '\0';
+			rv = unit_query_ret_to_err(psmi_hal_get_unit_pci_bus(unit, pciBus,
+							pciBus+1, pciBus+2, pciBus+3));
+		}
+		break;
+	case PSM2_INFO_QUERY_UNIT_SUBNET_NAME:
+		{
+			char         *subnetName       = (char*)out;
+			uint32_t      unit          = args[0].unit;
+			size_t        subnetNameLength = args[1].length;
+
+			if (psmi_hal_get_unit_active(unit) <= 0) break;
+
+			if (psmi_hal_get_port_subnet_name(unit, 1 /* VERBS_PORT*/,
+						subnetName, subnetNameLength))
+				break;
 			rv = PSM2_OK;
+		}
+		break;
+	case PSM2_INFO_QUERY_UNIT_DEVICE_ID:
+		{
+			char         *devId         = (char*)out;
+			uint32_t      unit          = args[0].unit;
+			size_t        len           = args[1].length;
+
+			rv = unit_query_ret_to_err(psmi_hal_get_unit_device_id(unit, devId, len));
+		}
+		break;
+	case PSM2_INFO_QUERY_UNIT_DEVICE_VERSION:
+		{
+			char         *devVer        = (char*)out;
+			uint32_t      unit          = args[0].unit;
+			size_t        len           = args[1].length;
+
+			rv = unit_query_ret_to_err(psmi_hal_get_unit_device_version(unit, devVer, len));
+		}
+		break;
+	case PSM2_INFO_QUERY_UNIT_VENDOR_ID:
+		{
+			char         *venId         = (char*)out;
+			uint32_t      unit          = args[0].unit;
+			size_t        len           = args[1].length;
+
+			rv = unit_query_ret_to_err(psmi_hal_get_unit_vendor_id(unit, venId, len));
+		}
+		break;
+	case PSM2_INFO_QUERY_UNIT_DRIVER:
+		{
+			char         *driver        = (char*)out;
+			uint32_t      unit          = args[0].unit;
+			size_t        len           = args[1].length;
+
+			rv = unit_query_ret_to_err(psmi_hal_get_unit_driver(unit, driver, len));
+		}
+		break;
+	case PSM2_INFO_QUERY_PORT_SPEED:
+		{
+			uint64_t *speed = (uint64_t *)out;
+			uint32_t  unit  = args[0].unit;
+			uint32_t  port  = args[1].port;
+
+			if (port == 0) port = 1; /* VERBS_PORT */
+
+			if (unit == -1) {
+				// query for unit -1 returns max speed of all candidate NICs
+				*speed = 0;
+				for (unit = 0; unit < psmi_hal_get_num_units_(); unit++) {
+					uint64_t unit_speed;
+					if (psmi_hal_get_port_lid(unit, port) <= 0)
+						continue;
+					if (0 <= psmi_hal_get_port_speed(unit, port, &unit_speed))
+						*speed = max(*speed, unit_speed);
+				}
+				rv = (*speed) ? PSM2_OK : PSM2_EP_NO_DEVICE;
+			} else {
+				if (psmi_hal_get_port_active(unit, port) <= 0) break;
+
+				rv = unit_query_ret_to_err(psmi_hal_get_port_speed(unit, port, speed));
+			}
 		}
 		break;
 	default:
-		break;
+		return 	PSM2_IQ_INVALID_QUERY;
 	}
 
 	return rv;
 }
-PSMI_API_DECL(psm2_info_query)
 
-uint64_t __psm2_get_capability_mask(uint64_t req_cap_mask)
+uint64_t psm3_get_capability_mask(uint64_t req_cap_mask)
 {
-	return (psm2_capabilities_bitset & req_cap_mask);
+	return (psm3_capabilities_bitset & req_cap_mask);
 }
-PSMI_API_DECL(psm2_get_capability_mask)
 
-psm2_error_t __psm2_finalize(void)
+psm2_error_t psm3_finalize(void)
 {
 	struct psmi_eptab_iterator itor;
 	char *hostname;
@@ -930,66 +985,66 @@ psm2_error_t __psm2_finalize(void)
 	   instruction cycles gathered in the current run to be dumped
 	   to stderr. */
 	GENERIC_PERF_DUMP(stderr);
-	ep = psmi_opened_endpoint;
+	ep = psm3_opened_endpoint;
 	while (ep != NULL) {
 		psm2_ep_t saved_ep = ep->user_ep_next;
-		psm2_ep_close(ep, PSM2_EP_CLOSE_GRACEFUL,
+		psm3_ep_close(ep, PSM2_EP_CLOSE_GRACEFUL,
 			     2 * PSMI_MIN_EP_CLOSE_TIMEOUT);
-		psmi_opened_endpoint = ep = saved_ep;
+		psm3_opened_endpoint = ep = saved_ep;
 	}
 
 #ifdef PSM_FI
-	psmi_faultinj_fini();
+	psm3_faultinj_fini();
 #endif /* #ifdef PSM_FI */
 
 	/* De-allocate memory for any allocated space to store hostnames */
-	psmi_epid_itor_init(&itor, PSMI_EP_HOSTNAME);
-	while ((hostname = psmi_epid_itor_next(&itor)))
+	psm3_epid_itor_init(&itor, PSMI_EP_HOSTNAME);
+	while ((hostname = psm3_epid_itor_next(&itor)))
 		psmi_free(hostname);
-	psmi_epid_itor_fini(&itor);
+	psm3_epid_itor_fini(&itor);
 
-	psmi_epid_fini();
+	psm3_epid_fini();
 
 	/* unmap shared mem object for affinity */
-	if (psmi_affinity_shared_file_opened) {
+	if (psm3_affinity_shared_file_opened) {
 		/*
 		 * Start critical section to decrement ref count and unlink
 		 * affinity shm file.
 		 */
-		psmi_sem_timedwait(sem_affinity_shm_rw, sem_affinity_shm_rw_name);
+		psmi_sem_timedwait(psm3_sem_affinity_shm_rw, psm3_sem_affinity_shm_rw_name);
 
-		shared_affinity_ptr[AFFINITY_SHM_REF_COUNT_LOCATION] -= 1;
-		if (shared_affinity_ptr[AFFINITY_SHM_REF_COUNT_LOCATION] <= 0) {
+		psm3_shared_affinity_ptr[AFFINITY_SHM_REF_COUNT_LOCATION] -= 1;
+		if (psm3_shared_affinity_ptr[AFFINITY_SHM_REF_COUNT_LOCATION] <= 0) {
 			_HFI_VDBG("Unlink shm file for NIC affinity as there are no more users\n");
-			shm_unlink(affinity_shm_name);
+			shm_unlink(psm3_affinity_shm_name);
 		} else {
 			_HFI_VDBG("Number of affinity shared memory users left=%ld\n",
-				  shared_affinity_ptr[AFFINITY_SHM_REF_COUNT_LOCATION]);
+				  psm3_shared_affinity_ptr[AFFINITY_SHM_REF_COUNT_LOCATION]);
 		}
 
-		msync(shared_affinity_ptr, AFFINITY_SHMEMSIZE, MS_SYNC);
+		msync(psm3_shared_affinity_ptr, PSMI_PAGESIZE, MS_SYNC);
 
 		/* End critical section */
-		psmi_sem_post(sem_affinity_shm_rw, sem_affinity_shm_rw_name);
+		psmi_sem_post(psm3_sem_affinity_shm_rw, psm3_sem_affinity_shm_rw_name);
 
-		munmap(shared_affinity_ptr, AFFINITY_SHMEMSIZE);
-		shared_affinity_ptr = NULL;
-		psmi_free(affinity_shm_name);
-		affinity_shm_name = NULL;
-		psmi_affinity_shared_file_opened = 0;
+		munmap(psm3_shared_affinity_ptr, PSMI_PAGESIZE);
+		psm3_shared_affinity_ptr = NULL;
+		psmi_free(psm3_affinity_shm_name);
+		psm3_affinity_shm_name = NULL;
+		psm3_affinity_shared_file_opened = 0;
 	}
 
-	if (psmi_affinity_semaphore_open) {
-		_HFI_VDBG("Closing and Unlinking Semaphore: %s.\n", sem_affinity_shm_rw_name);
-		sem_close(sem_affinity_shm_rw);
-		sem_affinity_shm_rw = NULL;
-		sem_unlink(sem_affinity_shm_rw_name);
-		psmi_free(sem_affinity_shm_rw_name);
-		sem_affinity_shm_rw_name = NULL;
-		psmi_affinity_semaphore_open = 0;
+	if (psm3_affinity_semaphore_open) {
+		_HFI_VDBG("Closing and Unlinking Semaphore: %s.\n", psm3_sem_affinity_shm_rw_name);
+		sem_close(psm3_sem_affinity_shm_rw);
+		psm3_sem_affinity_shm_rw = NULL;
+		sem_unlink(psm3_sem_affinity_shm_rw_name);
+		psmi_free(psm3_sem_affinity_shm_rw_name);
+		psm3_sem_affinity_shm_rw_name = NULL;
+		psm3_affinity_semaphore_open = 0;
 	}
 
-	psmi_hal_finalize();
+	psm3_hal_finalize();
 #ifdef PSM_CUDA
 	if (PSMI_IS_CUDA_ENABLED)
 		psmi_stats_deregister_type(PSMI_STATSTYPE_CUDA, &is_cuda_enabled);
@@ -1005,13 +1060,12 @@ psm2_error_t __psm2_finalize(void)
 
 	return PSM2_OK;
 }
-PSMI_API_DECL(psm2_finalize)
 
 /*
  * Function exposed in >= 1.05
  */
 psm2_error_t
-__psm2_map_nid_hostname(int num, const uint64_t *nids, const char **hostnames)
+psm3_map_nid_hostname(int num, const psm2_nid_t *nids, const char **hostnames)
 {
 	int i;
 	psm2_error_t err = PSM2_OK;
@@ -1026,7 +1080,7 @@ __psm2_map_nid_hostname(int num, const uint64_t *nids, const char **hostnames)
 	}
 
 	for (i = 0; i < num; i++) {
-		if ((err = psmi_epid_set_hostname(nids[i], hostnames[i], 1)))
+		if ((err = psm3_epid_set_hostname(nids[i], hostnames[i], 1)))
 			break;
 	}
 
@@ -1034,28 +1088,25 @@ fail:
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
-PSMI_API_DECL(psm2_map_nid_hostname)
 
-void __psm2_epaddr_setlabel(psm2_epaddr_t epaddr, char const *epaddr_label)
+void psm3_epaddr_setlabel(psm2_epaddr_t epaddr, char const *epaddr_label)
 {
 	PSM2_LOG_MSG("entering");
 	PSM2_LOG_MSG("leaving");
 	return;			/* ignore this function */
 }
-PSMI_API_DECL(psm2_epaddr_setlabel)
 
-void __psm2_epaddr_setctxt(psm2_epaddr_t epaddr, void *ctxt)
+void psm3_epaddr_setctxt(psm2_epaddr_t epaddr, void *ctxt)
 {
-
+	uint64_t optlen = sizeof(void *);
 	/* Eventually deprecate this API to use set/get opt as this is unsafe. */
 	PSM2_LOG_MSG("entering");
-	psm2_setopt(PSM2_COMPONENT_CORE, (const void *)epaddr,
-		   PSM2_CORE_OPT_EP_CTXT, (const void *)ctxt, sizeof(void *));
+	psm3_setopt(PSM2_COMPONENT_CORE, (const void *)epaddr,
+		   PSM2_CORE_OPT_EP_CTXT, (const void *)ctxt, optlen);
 	PSM2_LOG_MSG("leaving");
 }
-PSMI_API_DECL(psm2_epaddr_setctxt)
 
-void *__psm2_epaddr_getctxt(psm2_epaddr_t epaddr)
+void *psm3_epaddr_getctxt(psm2_epaddr_t epaddr)
 {
 	psm2_error_t err;
 	uint64_t optlen = sizeof(void *);
@@ -1063,7 +1114,7 @@ void *__psm2_epaddr_getctxt(psm2_epaddr_t epaddr)
 
 	PSM2_LOG_MSG("entering");
 	/* Eventually deprecate this API to use set/get opt as this is unsafe. */
-	err = psm2_getopt(PSM2_COMPONENT_CORE, (const void *)epaddr,
+	err = psm3_getopt(PSM2_COMPONENT_CORE, (const void *)epaddr,
 			 PSM2_CORE_OPT_EP_CTXT, (void *)&result, &optlen);
 
 	PSM2_LOG_MSG("leaving");
@@ -1073,35 +1124,34 @@ void *__psm2_epaddr_getctxt(psm2_epaddr_t epaddr)
 	else
 		return NULL;
 }
-PSMI_API_DECL(psm2_epaddr_getctxt)
 
 psm2_error_t
-__psm2_setopt(psm2_component_t component, const void *component_obj,
+psm3_setopt(psm2_component_t component, const void *component_obj,
 	     int optname, const void *optval, uint64_t optlen)
 {
 	psm2_error_t rv;
 	PSM2_LOG_MSG("entering");
 	switch (component) {
 	case PSM2_COMPONENT_CORE:
-		rv = psmi_core_setopt(component_obj, optname, optval, optlen);
+		rv = psm3_core_setopt(component_obj, optname, optval, optlen);
 		PSM2_LOG_MSG("leaving");
 		return rv;
 		break;
 	case PSM2_COMPONENT_MQ:
 		/* Use the deprecated MQ set/get opt for now which does not use optlen */
-		rv = psm2_mq_setopt((psm2_mq_t) component_obj, optname, optval);
+		rv = psm3_mq_setopt((psm2_mq_t) component_obj, optname, optval);
 		PSM2_LOG_MSG("leaving");
 		return rv;
 		break;
 	case PSM2_COMPONENT_AM:
 		/* Hand off to active messages */
-		rv = psmi_am_setopt(component_obj, optname, optval, optlen);
+		rv = psm3_am_setopt(component_obj, optname, optval, optlen);
 		PSM2_LOG_MSG("leaving");
 		return rv;
 		break;
 	case PSM2_COMPONENT_IB:
 		/* Hand off to IPS ptl to set option */
-		rv = psmi_ptl_ips.setopt(component_obj, optname, optval,
+		rv = psm3_ptl_ips.setopt(component_obj, optname, optval,
 					   optlen);
 		PSM2_LOG_MSG("leaving");
 		return rv;
@@ -1109,15 +1159,14 @@ __psm2_setopt(psm2_component_t component, const void *component_obj,
 	}
 
 	/* Unrecognized/unknown component */
-	rv = psmi_handle_error(NULL, PSM2_PARAM_ERR, "Unknown component %u",
+	rv = psm3_handle_error(NULL, PSM2_PARAM_ERR, "Unknown component %u",
 				 component);
 	PSM2_LOG_MSG("leaving");
 	return rv;
 }
-PSMI_API_DECL(psm2_setopt);
 
 psm2_error_t
-__psm2_getopt(psm2_component_t component, const void *component_obj,
+psm3_getopt(psm2_component_t component, const void *component_obj,
 	     int optname, void *optval, uint64_t *optlen)
 {
 	psm2_error_t rv;
@@ -1125,25 +1174,25 @@ __psm2_getopt(psm2_component_t component, const void *component_obj,
 	PSM2_LOG_MSG("entering");
 	switch (component) {
 	case PSM2_COMPONENT_CORE:
-		rv = psmi_core_getopt(component_obj, optname, optval, optlen);
+		rv = psm3_core_getopt(component_obj, optname, optval, optlen);
 		PSM2_LOG_MSG("leaving");
 		return rv;
 		break;
 	case PSM2_COMPONENT_MQ:
 		/* Use the deprecated MQ set/get opt for now which does not use optlen */
-		rv = psm2_mq_getopt((psm2_mq_t) component_obj, optname, optval);
+		rv = psm3_mq_getopt((psm2_mq_t) component_obj, optname, optval);
 		PSM2_LOG_MSG("leaving");
 		return rv;
 		break;
 	case PSM2_COMPONENT_AM:
 		/* Hand off to active messages */
-		rv = psmi_am_getopt(component_obj, optname, optval, optlen);
+		rv = psm3_am_getopt(component_obj, optname, optval, optlen);
 		PSM2_LOG_MSG("leaving");
 		return rv;
 		break;
 	case PSM2_COMPONENT_IB:
 		/* Hand off to IPS ptl to set option */
-		rv = psmi_ptl_ips.getopt(component_obj, optname, optval,
+		rv = psm3_ptl_ips.getopt(component_obj, optname, optval,
 					   optlen);
 		PSM2_LOG_MSG("leaving");
 		return rv;
@@ -1151,22 +1200,20 @@ __psm2_getopt(psm2_component_t component, const void *component_obj,
 	}
 
 	/* Unrecognized/unknown component */
-	rv = psmi_handle_error(NULL, PSM2_PARAM_ERR, "Unknown component %u",
+	rv = psm3_handle_error(NULL, PSM2_PARAM_ERR, "Unknown component %u",
 				 component);
 	PSM2_LOG_MSG("leaving");
 	return rv;
 }
-PSMI_API_DECL(psm2_getopt);
 
-psm2_error_t __psmi_poll_noop(ptl_t *ptl, int replyonly)
+psm2_error_t psm3_poll_noop(ptl_t *ptl, int replyonly)
 {
 	PSM2_LOG_MSG("entering");
 	PSM2_LOG_MSG("leaving");
 	return PSM2_OK_NO_PROGRESS;
 }
-PSMI_API_DECL(psmi_poll_noop)
 
-psm2_error_t __psm2_poll(psm2_ep_t ep)
+psm2_error_t psm3_poll(psm2_ep_t ep)
 {
 	psm2_error_t err1 = PSM2_OK, err2 = PSM2_OK;
 	psm2_ep_t tmp;
@@ -1204,9 +1251,8 @@ psm2_error_t __psm2_poll(psm2_ep_t ep)
 	PSM2_LOG_MSG("leaving");
 	return (err1 & err2);
 }
-PSMI_API_DECL(psm2_poll)
 
-psm2_error_t __psmi_poll_internal(psm2_ep_t ep, int poll_amsh)
+psm2_error_t psm3_poll_internal(psm2_ep_t ep, int poll_amsh)
 {
 	psm2_error_t err1 = PSM2_OK_NO_PROGRESS;
 	psm2_error_t err2;
@@ -1236,7 +1282,6 @@ psm2_error_t __psmi_poll_internal(psm2_ep_t ep, int poll_amsh)
 	PSM2_LOG_MSG("leaving");
 	return (err1 & err2);
 }
-PSMI_API_DECL(psmi_poll_internal)
 #ifdef PSM_PROFILE
 /* These functions each have weak symbols */
 void psmi_profile_block()

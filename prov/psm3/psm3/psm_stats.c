@@ -64,7 +64,7 @@ struct psmi_stats_type {
 	int num_entries;
 	const char *heading;
 	uint32_t statstype;
-	uint64_t id;	// identifier to include in output, typically epid
+	char *id;	// identifier to include in output, typically epid
 	void *context;
 	char *info;
 	pid_t tid;	// thread id, useful for multi-ep
@@ -111,6 +111,8 @@ psmi_stats_deregister_type_internal(uint32_t statstype,
 			psmi_free(type->entries);
 			if (type->info)
 				psmi_free(type->info);
+			if (type->id)
+				psmi_free(type->id);
 			psmi_free(type);
 			return PSM2_OK;
 		}
@@ -119,10 +121,10 @@ psmi_stats_deregister_type_internal(uint32_t statstype,
 }
 
 static psm2_error_t
-psmi_stats_register_type_internal(const char *heading,
+psm3_stats_register_type_internal(const char *heading,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries_i,
-			 int num_entries, uint64_t id, void *context,
+			 int num_entries, const char *id, void *context,
 			 const char *info, bool rereg)
 {
 	struct psmi_stats_entry *entries;
@@ -144,7 +146,8 @@ psmi_stats_register_type_internal(const char *heading,
 	type->entries = entries;
 	type->num_entries = num_entries;
 	type->statstype = statstype;
-	type->id = id;
+	if (id)
+		type->id = psmi_strdup(NULL, id);
 	type->context = context;
 	type->heading = heading;
 	if (info)
@@ -175,19 +178,21 @@ fail:
 	if (type) {
 		if (type->info)
 			psmi_free(type->info);
+		if (type->id)
+			psmi_free(type->id);
 		psmi_free(type);
 	}
 	return err;
 }
 
 psm2_error_t
-psmi_stats_register_type(const char *heading,
+psm3_stats_register_type(const char *heading,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries_i,
-			 int num_entries, uint64_t id, void *context,
+			 int num_entries, const char *id, void *context,
 			 const char* info)
 {
-	return psmi_stats_register_type_internal(heading, statstype, entries_i,
+	return psm3_stats_register_type_internal(heading, statstype, entries_i,
 			 num_entries, id, context, info, 0);
 }
 
@@ -195,10 +200,10 @@ psm2_error_t
 psmi_stats_reregister_type(const char *heading,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries_i,
-			 int num_entries, uint64_t id, void *context,
+			 int num_entries, const char *id, void *context,
 			 const char *info)
 {
-	return psmi_stats_register_type_internal(heading, statstype, entries_i,
+	return psm3_stats_register_type_internal(heading, statstype, entries_i,
 			 num_entries, id, context, info, 1);
 }
 
@@ -224,11 +229,11 @@ void psmi_stats_show(uint32_t statsmask)
 
 		if (! (type->statstype & statsmask))
 			continue;
-		// when id == 0, we expect 1 report of given type per
+		// when id == NULL, we expect 1 report of given type per
 		// process, so we also omit tid.  In which case info probably
 		// NULL but show it if provided when stats_register called.
 		if (type->id)
-			fprintf(perf_stats_fd, " %s id 0x%"PRIx64"%s%s tid %d\n",
+			fprintf(perf_stats_fd, " %s id %s%s%s tid %d\n",
 				type->heading, type->id, type->info?" ":"",
 				type->info?type->info:"", type->tid);
 		else
@@ -262,7 +267,7 @@ psm2_error_t psmi_stats_deregister_type(uint32_t statstype, void *context)
 	return err;
 }
 
-psm2_error_t psmi_stats_deregister_all(void)
+psm2_error_t psm3_stats_deregister_all(void)
 {
 	struct psmi_stats_type *type;
 
@@ -274,6 +279,8 @@ psm2_error_t psmi_stats_deregister_all(void)
 		psmi_free(type->entries);
 		if (type->info)
 			psmi_free(type->info);
+		if (type->id)
+			psmi_free(type->id);
 		psmi_free(type);
 	}
 	pthread_spin_unlock(&psmi_stats_lock);
@@ -319,7 +326,7 @@ psmi_stats_initialize(void)
 {
 	union psmi_envvar_val env_stats;
 
-	psmi_getenv("PSM3_PRINT_STATS",
+	psm3_getenv("PSM3_PRINT_STATS",
 			"Prints performance stats every n seconds to file "
 			"./psm3-perf-stat-[hostname]-pid-[pid] when set to -1 stats are "
 			"printed only once on 1st ep close",
@@ -327,14 +334,16 @@ psmi_stats_initialize(void)
 			(union psmi_envvar_val) 0, &env_stats);
 	print_stats_freq = env_stats.e_uint;
 
-	psmi_getenv("PSM3_PRINT_STATSMASK",
+	psm3_getenv("PSM3_PRINT_STATSMASK",
 			"Mask of statistic types to print: "
 			"MQ=1, RCVTHREAD=0x100, IPS=0x200"
+#if   defined(PSM_HAVE_REG_MR)
 			", RDMA=0x400, MRCache=0x800"
+#endif
 #ifdef PSM_DEBUG
 			", MEMORY=0x1000"
 #endif
-#ifdef RNDV_MOD
+#if defined(PSM_HAVE_REG_MR) && defined(PSM_HAVE_RNDV_MOD)
 			", RVEvents=0x2000, RVRDMA=0x4000"
 #endif
 #ifdef PSM_FI
@@ -350,7 +359,7 @@ psmi_stats_initialize(void)
 
 	snprintf(perf_file_name, sizeof(perf_file_name),
 			"./psm3-perf-stat-%s-pid-%d",
-			psmi_gethostname(), getpid());
+			psm3_gethostname(), getpid());
 
 	if (print_stats_freq > 0)
 		psmi_print_stats_init_thread();
@@ -370,7 +379,7 @@ psmi_stats_finalize(void)
 		fclose(perf_stats_fd);
 		perf_stats_fd = NULL;
 	}
-	psmi_stats_deregister_all();
+	psm3_stats_deregister_all();
 }
 
 // called at start of ep_close so we can output 1 shot as needed while
@@ -404,7 +413,7 @@ static uint32_t typestring_to_type(const char *typestr)
 		return PSMI_STATSTYPE_MQ;
 	else if ((strncasecmp(typestr, "tid", 4) == 0) ||
 		 (strncasecmp(typestr, "tids", 5) == 0))
-		return PSMI_STATSTYPE_TIDS;
+		return PSMI_STATSTYPE_RDMA;
 	else if ((strncasecmp(typestr, "memory", 7) == 0) ||
 		 (strncasecmp(typestr, "alloc", 6) == 0) ||
 		 (strncasecmp(typestr, "malloc", 7) == 0))
@@ -455,7 +464,7 @@ void psmi_stats_mpspawn_callback(struct mpspawn_stats_req_args *args)
 		for (i = 0; i < num; i++) {
 			entry = &type->entries[i];
 			stats[i] =
-			    *(uint64_t *) ((uintptr_t) &psmi_stats_memory +
+			    *(uint64_t *) ((uintptr_t) &psm3_stats_memory +
 					   (uintptr_t) entry->u.off);
 		}
 	} else {
@@ -776,7 +785,7 @@ void stats_register_mem_stats(psm2_ep_t ep)
 		_SDECL("PSM_desctors_(max)", m_descriptors_max),
 		_SDECL("Unexp._buffers_(current)", m_unexpbufs_total),
 		_SDECL("Unexp._Buffers_(max)", m_unexpbufs_max),
-#ifdef RNDV_MOD
+#ifdef PSM_HAVE_RNDV_MOD
 		_SDECL("Peer_Rndv_(current)", m_peerrndv_total),
 		_SDECL("Peer_Rndv_(max)", m_peerrndv_max),
 #endif
@@ -786,9 +795,9 @@ void stats_register_mem_stats(psm2_ep_t ep)
 
 	// TBD - these are global, should only call once and not provide
 	// ep nor device name
-	psmi_stats_register_type("PSM_memory_allocation_statistics",
+	psm3_stats_register_type("PSM_memory_allocation_statistics",
 				 PSMI_STATSTYPE_MEMORY,
-				 entries, PSMI_STATS_HOWMANY(entries), ep,
+				 entries, PSMI_HOWMANY(entries), ep,
 				 ep->dev_name);
 }
 #endif // 0   // unused code, specific to QLogic MPI

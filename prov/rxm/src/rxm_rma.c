@@ -52,7 +52,7 @@ rxm_ep_rma_reg_iov(struct rxm_ep *rxm_ep, const struct iovec *msg_iov,
 
 		for (i = 0; i < iov_count; i++)
 			desc_storage[i] = fi_mr_desc(rma_buf->rma.mr[i]);
-		rma_buf->rma.count = iov_count;
+		rma_buf->rma.count = (uint8_t) iov_count;
 	} else {
 		for (i = 0; i < iov_count; i++)
 			desc_storage[i] =
@@ -200,7 +200,7 @@ rxm_ep_format_rma_msg(struct rxm_tx_buf *rma_buf,
 	ret = ofi_copy_from_hmem_iov(rma_buf->pkt.data, rma_buf->pkt.hdr.size,
 				     iface, device, orig_msg->msg_iov,
 				     orig_msg->iov_count, 0);
-	assert(ret == rma_buf->pkt.hdr.size);
+	assert((size_t) ret == rma_buf->pkt.hdr.size);
 
 	rxm_iov->iov_base = &rma_buf->pkt.data;
 	rxm_iov->iov_len = rma_buf->pkt.hdr.size;

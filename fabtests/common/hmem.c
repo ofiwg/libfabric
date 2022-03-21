@@ -40,7 +40,9 @@ struct ft_hmem_ops {
 	int (*init)(void);
 	int (*cleanup)(void);
 	int (*alloc)(uint64_t device, void **buf, size_t size);
+	int (*alloc_host)(void **buf, size_t size);
 	int (*free)(void *buf);
+	int (*free_host)(void *buf);
 	int (*memset)(uint64_t device, void *buf, int value, size_t size);
 	int (*copy_to_hmem)(uint64_t device, void *dst, const void *src,
 			    size_t size);
@@ -53,7 +55,9 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.init = ft_host_init,
 		.cleanup = ft_host_cleanup,
 		.alloc = ft_host_alloc,
+		.alloc_host = ft_default_alloc_host,
 		.free = ft_host_free,
+		.free_host = ft_default_free_host,
 		.memset = ft_host_memset,
 		.copy_to_hmem = ft_host_memcpy,
 		.copy_from_hmem = ft_host_memcpy,
@@ -62,7 +66,9 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.init = ft_cuda_init,
 		.cleanup = ft_cuda_cleanup,
 		.alloc = ft_cuda_alloc,
+		.alloc_host = ft_cuda_alloc_host,
 		.free = ft_cuda_free,
+		.free_host = ft_cuda_free_host,
 		.memset = ft_cuda_memset,
 		.copy_to_hmem = ft_cuda_copy_to_hmem,
 		.copy_from_hmem = ft_cuda_copy_from_hmem,
@@ -71,7 +77,9 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.init = ft_rocr_init,
 		.cleanup = ft_rocr_cleanup,
 		.alloc = ft_rocr_alloc,
+		.alloc_host = ft_default_alloc_host,
 		.free = ft_rocr_free,
+		.free_host = ft_default_free_host,
 		.memset = ft_rocr_memset,
 		.copy_to_hmem = ft_rocr_memcpy,
 		.copy_from_hmem = ft_rocr_memcpy,
@@ -80,7 +88,9 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.init = ft_ze_init,
 		.cleanup = ft_ze_cleanup,
 		.alloc = ft_ze_alloc,
+		.alloc_host = ft_default_alloc_host,
 		.free = ft_ze_free,
+		.free_host = ft_default_free_host,
 		.memset = ft_ze_memset,
 		.copy_to_hmem = ft_ze_copy,
 		.copy_from_hmem = ft_ze_copy,
@@ -89,7 +99,9 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.init = ft_neuron_init,
 		.cleanup = ft_neuron_cleanup,
 		.alloc = ft_neuron_alloc,
+		.alloc_host = ft_default_alloc_host,
 		.free = ft_neuron_free,
+		.free_host = ft_default_free_host,
 		.memset = ft_neuron_memset,
 		.copy_to_hmem = ft_neuron_memcpy_to_hmem,
 		.copy_from_hmem = ft_neuron_memcpy_from_hmem,
@@ -126,9 +138,32 @@ int ft_hmem_alloc(enum fi_hmem_iface iface, uint64_t device, void **buf,
 	return hmem_ops[iface].alloc(device, buf, size);
 }
 
+int ft_default_alloc_host(void **buf, size_t size)
+{
+	*buf = malloc(size);
+	return (*buf == NULL) ? -FI_ENOMEM : 0;
+}
+
+int ft_default_free_host(void *buf)
+{
+	free(buf);
+	return 0;
+}
+
+int ft_hmem_alloc_host(enum fi_hmem_iface iface, void **buf,
+		       size_t size)
+{
+	return hmem_ops[iface].alloc_host(buf, size);
+}
+
 int ft_hmem_free(enum fi_hmem_iface iface, void *buf)
 {
 	return hmem_ops[iface].free(buf);
+}
+
+int ft_hmem_free_host(enum fi_hmem_iface iface, void *buf)
+{
+	return hmem_ops[iface].free_host(buf);
 }
 
 int ft_hmem_memset(enum fi_hmem_iface iface, uint64_t device, void *buf,

@@ -123,7 +123,7 @@ static inline int ofi_sendall_socket(SOCKET sock, const void *buf, size_t len)
 	return (size_t) sent != len;
 }
 
-int ofi_discard_socket(SOCKET sock, size_t len);
+ssize_t ofi_discard_socket(SOCKET sock, size_t len);
 
 /*
  * Byte queue - streaming socket staging buffer

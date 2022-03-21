@@ -682,6 +682,16 @@ static inline char* strsep(char **stringp, const char *delim)
 
 #define __attribute__(x)
 
+static inline int ofi_mmap_anon_pages(void **memptr, size_t size, int flags)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int ofi_unmap_anon_pages(void *memptr, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
 static inline int ofi_memalign(void **memptr, size_t alignment, size_t size)
 {
 	*memptr = _aligned_malloc(size, alignment);
@@ -900,11 +910,6 @@ static inline int ofi_alloc_hugepage_buf(void **memptr, size_t size)
 	return -FI_ENOSYS;
 }
 
-static inline int ofi_free_hugepage_buf(void *memptr, size_t size)
-{
-	return -FI_ENOSYS;
-}
-
 static inline int ofi_hugepage_enabled(void)
 {
 	return 0;
@@ -1039,9 +1044,9 @@ ofi_cpuid(unsigned func, unsigned subfunc, unsigned cpuinfo[4])
 	__cpuidex((int *)cpuinfo, func, subfunc);
 }
 
-#define ofi_clwb(addr) do { _mm_clflush(addr); _mm_sfence(); } while (0)
-#define ofi_clflushopt(addr) do { _mm_clflush(addr); _mm_sfence(); } while (0)
-#define ofi_clflush(addr) _mm_clflush(addr)
+#define ofi_clwb(addr) do { _mm_clflush((void const *)addr); _mm_sfence(); } while (0)
+#define ofi_clflushopt(addr) do { _mm_clflush((void const *)addr); _mm_sfence(); } while (0)
+#define ofi_clflush(addr) _mm_clflush((void const *)addr)
 #define ofi_sfence() _mm_sfence()
 
 #else /* defined(_M_X64) || defined(_M_AMD64) */

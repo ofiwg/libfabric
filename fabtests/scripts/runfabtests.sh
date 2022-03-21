@@ -903,8 +903,8 @@ while true; do
 		-f)
 		    read_exclude_file $2; shift 2 ;;
 		-e)
-		    [[ -z "$input_excludes" ]] && input_excludes=${OPTARG} || \
-		    input_excludes="${input_excludes},${OPTARG}"
+		    [[ -z "$input_excludes" ]] && input_excludes=${2} || \
+		    input_excludes="${input_excludes},${2}"
 		    shift 2 ;;
 		-c)
 		    C_INTERFACE=$2; shift 2 ;;

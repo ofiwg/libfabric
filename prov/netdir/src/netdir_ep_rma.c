@@ -153,7 +153,7 @@ ofi_nd_ep_readmsg(struct fid_ep *pep, const struct fi_msg_rma *msg,
 		return -FI_EINVAL;
 
 	size_t msg_len = 0, rma_len = 0, i;
-	HRESULT hr;
+	HRESULT hr = 0;
 
 	struct nd_ep *ep = container_of(pep, struct nd_ep, fid);
 
@@ -321,7 +321,7 @@ ofi_nd_ep_writemsg(struct fid_ep *pep, const struct fi_msg_rma *msg,
 		return -FI_EINVAL;
 
 	size_t msg_len = 0, rma_len = 0, i;
-	HRESULT hr;
+	HRESULT hr = 0;
 
 	struct nd_cq_entry *entries[ND_MSG_IOV_LIMIT];
 	struct nd_ep *ep = container_of(pep, struct nd_ep, fid);

@@ -90,7 +90,7 @@ static int sock_dom_ctrl(struct fid *fid, int command, void *arg)
 	dom = container_of(fid, struct sock_domain, dom_fid.fid);
 	switch (command) {
 	case FI_QUEUE_WORK:
-		return sock_queue_work(dom, arg);
+		return (int) sock_queue_work(dom, arg);
 	default:
 		return -FI_ENOSYS;
 	}
