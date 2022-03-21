@@ -550,8 +550,10 @@ function complex_test {
 
 	set_cfg_file $config
 	if [[ -z "$COMPLEX_CFG" ]]; then
-		is_excluded "$test" && return
+		return
 	fi
+
+	is_excluded "$test" && return
 
 	start_time=$(date '+%s')
 
