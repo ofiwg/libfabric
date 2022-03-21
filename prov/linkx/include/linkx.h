@@ -39,6 +39,7 @@ struct local_prov_ep {
 	bool lpe_local;
 	char lpe_fabric_name[FI_NAME_MAX];
 	struct fid_fabric *lpe_fabric;
+	struct fid_domain *lpe_domain;
 	struct fi_info *lpe_fi_info;
 };
 
@@ -65,5 +66,26 @@ int lnx_fabric_close(struct fid *fid);
 
 int lnx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 					struct fid_domain **dom, void *context);
+
+static inline
+int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
+				struct fid_av **av, void *context)
+{
+	return -FI_EOPNOTSUPP;
+}
+
+static inline
+int lnx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+				struct fid_cq **cq, void *context)
+{
+	return -FI_EOPNOTSUPP;
+}
+
+static inline
+int lnx_endpoint(struct fid_domain *domain, struct fi_info *info,
+				 struct fid_ep **ep, void *context)
+{
+	return -FI_EOPNOTSUPP;
+}
 
 #endif /* LINKX_H */
