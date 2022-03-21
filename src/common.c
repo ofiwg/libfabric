@@ -1644,11 +1644,10 @@ static int ofi_pollfds_waitall(struct ofi_pollfds *pfds,
 			       struct ofi_epollfds_event *events,
 			       int maxevents, int timeout)
 {
-	uint64_t start;
 	int i, ret;
 	int found = 0;
 
-	start = (timeout > 0) ? ofi_gettime_ms() : 0;
+	uint64_t endtime = ofi_timeout_time(timeout);
 	do {
 		ret = poll(pfds->fds, pfds->nfds, timeout);
 		if (ret == SOCKET_ERROR)
@@ -1685,10 +1684,9 @@ static int ofi_pollfds_waitall(struct ofi_pollfds *pfds,
 			}
 		}
 
-		if (!found && timeout > 0)
-			timeout -= (int) (ofi_gettime_ms() - start);
-
-	} while (timeout > 0 && !found);
+		if (!found && ofi_adjust_timeout(endtime, &timeout))
+			break;
+	} while (!found);
 
 	return found;
 }
