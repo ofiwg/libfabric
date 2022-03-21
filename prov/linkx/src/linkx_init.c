@@ -58,10 +58,21 @@ struct fi_fabric_attr lnx_fabric_attr = {
 	.prov_version = OFI_VERSION_DEF_PROV
 };
 
+struct fi_domain_attr lnx_domain_attr = {
+	.name = "linkx",
+	.threading = FI_THREAD_SAFE,
+	.control_progress = FI_PROGRESS_AUTO,
+	.data_progress = FI_PROGRESS_MANUAL,
+	.resource_mgmt = FI_RM_ENABLED,
+	.av_type = FI_AV_UNSPEC,
+	.mr_mode = FI_MR_UNSPEC,
+};
+
 struct fi_info lnx_info = {
 	.caps = FI_LNX_BASIC,
 	.addr_format = FI_FORMAT_UNSPEC,
 	.fabric_attr = &lnx_fabric_attr,
+	.domain_attr = &lnx_domain_attr,
 };
 
 static struct fi_ops lnx_fabric_fi_ops = {
@@ -266,12 +277,6 @@ int lnx_fabric_close(struct fid *fid)
 	rc = ofi_fabric_close(fabric);
 
 	return rc;
-}
-
-int lnx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-					struct fid_domain **dom, void *context)
-{
-	return -FI_EOPNOTSUPP;
 }
 
 void ofi_link_fini(void)

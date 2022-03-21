@@ -122,7 +122,8 @@ common_hook_srcs =				\
 	prov/hook/src/hook_xfer.c
 
 common_link_srcs =				\
-	prov/linkx/src/linkx_init.c
+	prov/linkx/src/linkx_init.c \
+	prov/linkx/src/linkx_domain.c
 
 # ensure dl-built providers link back to libfabric
 linkback = src/libfabric.la
