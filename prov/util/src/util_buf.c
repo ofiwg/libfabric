@@ -54,8 +54,8 @@ static int ofi_bufpool_region_alloc(struct ofi_bufpool_region *buf_region)
 
 	if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES) {
 		page_size = ofi_get_hugepage_size();
-		if (page_size > 0 && (ssize_t) pool->alloc_size >= page_size) {
-			alloc_size = ofi_get_aligned_size(pool->alloc_size, page_size);
+		if (page_size > 0 && pool->alloc_size >= (size_t) page_size) {
+			alloc_size = ofi_get_aligned_size(pool->alloc_size, (size_t) page_size);
 			ret = ofi_alloc_hugepage_buf((void **) &buf_region->alloc_region,
 					     alloc_size);
 			if (!ret) {
@@ -74,7 +74,10 @@ static int ofi_bufpool_region_alloc(struct ofi_bufpool_region *buf_region)
 
 	if (pool->attr.flags & OFI_BUFPOOL_NONSHARED) {
 		page_size = ofi_get_page_size();
-		pool->alloc_size = ofi_get_aligned_size(pool->alloc_size, page_size);
+		if (page_size < 0) {
+			return -ofi_syserr();
+		}
+		pool->alloc_size = ofi_get_aligned_size(pool->alloc_size, (size_t) page_size);
 		ret = ofi_mmap_anon_pages((void **) &buf_region->alloc_region,
 					     pool->alloc_size, 0);
 		if (!ret) {
