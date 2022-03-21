@@ -555,7 +555,7 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	struct sock_conn_req_handle *handle;
 	struct sock_ep_attr *ep_attr;
 	struct fi_eq_cm_entry cm_entry;
-	struct sock_conn_hdr reply;
+	struct sock_conn_hdr reply = {0};
 	struct sock_ep *_ep;
 
 	_ep = container_of(ep, struct sock_ep, ep);
