@@ -244,7 +244,6 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 {
 	struct ofi_bufpool_region *buf_region;
-	int ret;
 	size_t i;
 
 	for (i = 0; i < pool->region_cnt; i++) {
