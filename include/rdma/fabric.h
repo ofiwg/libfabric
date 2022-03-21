@@ -371,6 +371,9 @@ static inline uint8_t fi_tc_dscp_get(uint32_t tclass)
 #define FI_CONTEXT2		(1ULL << 52)
 #define FI_BUFFERED_RECV	(1ULL << 51)
 
+/* LINKx Capabilities */
+#define FI_LNX_BASIC (1ULL << 0)
+
 struct fi_tx_attr {
 	uint64_t		caps;
 	uint64_t		mode;
