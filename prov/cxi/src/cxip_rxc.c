@@ -473,6 +473,10 @@ static void rxc_cleanup(struct cxip_rxc *rxc)
 		dlist_remove(&fc_drops->rxc_entry);
 		free(fc_drops);
 	}
+
+	CXIP_INFO("Flow Ctrl events: EQ Full %d Append %d UX/No Match %d\n",
+		  rxc->num_fc_eq_full, rxc->num_fc_append_fail,
+		  rxc->num_fc_unexp_or_match);
 }
 
 /*

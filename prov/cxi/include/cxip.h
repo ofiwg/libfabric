@@ -1325,6 +1325,11 @@ struct cxip_rxc {
 	int min_multi_recv;
 	int max_eager_size;
 
+	/* Flow control metrics */
+	int num_fc_eq_full;
+	int num_fc_append_fail;
+	int num_fc_unexp_or_match;
+
 	/* Unexpected message handling */
 	fastlock_t rx_lock;			// RX message lock
 	ofi_atomic32_t oflow_bufs_submitted;

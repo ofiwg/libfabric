@@ -2852,6 +2852,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 			RXC_WARN(rxc, "PtlTE %d SW initiated flow control\n",
 				 rxc->rx_pte->pte->ptn);
 			rxc->drop_count++;
+			rxc->num_fc_append_fail++;
 
 		} else if (event->tgt_long.initiator.state_change.sc_reason ==
 			   C_SC_FC_EQ_FULL) {
@@ -2859,6 +2860,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 			RXC_WARN(rxc, "PtlTE %d flow control EQ full\n",
 				 rxc->rx_pte->pte->ptn);
 			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
+			rxc->num_fc_eq_full++;
 
 		} else if (event->tgt_long.initiator.state_change.sc_reason ==
 			   C_SC_FC_REQUEST_FULL) {
@@ -2868,12 +2870,14 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 			RXC_WARN(rxc,
 				 "PtlTE %d flow control Request full\n",
 				 rxc->rx_pte->pte->ptn);
+			rxc->num_fc_unexp_or_match++;
 		} else {
 			/* Flow control occurred due to either
 			 * SC_FC_NO_MATCH or C_SC_UNEXPECTED_FAIL.
 			 */
 			RXC_WARN(rxc, "PtlTE %d flow control LE/match\n",
 				 rxc->rx_pte->pte->ptn);
+			rxc->num_fc_unexp_or_match++;
 		}
 
 		/* If flow control has occurred during an on-going NIC
