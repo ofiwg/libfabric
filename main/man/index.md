@@ -47,6 +47,7 @@ main](https://github.com/ofiwg/libfabric/tree/main).
   * [fi_hook(7)](fi_hook.7.html)
   * [fi_mrail(7)](fi_mrail.7.html)
   * [fi_netdir(7)](fi_netdir.7.html)
+  * [fi_opx(7)](fi_opx.7.html)
   * [fi_psm(7)](fi_psm.7.html)
   * [fi_psm2(7)](fi_psm2.7.html)
   * [fi_psm3(7)](fi_psm3.7.html)
