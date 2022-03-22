@@ -24,6 +24,7 @@ You have been warned.
   * [fi_mlx(7)](fi_mlx.7.html)
   * [fi_mrail(7)](fi_mrail.7.html)
   * [fi_netdir(7)](fi_netdir.7.html)
+  * [fi_opx(7)](fi_opx.7.html)
   * [fi_provider(7)](fi_provider.7.html)
   * [fi_psm(7)](fi_psm.7.html)
   * [fi_psm2(7)](fi_psm2.7.html)
