@@ -5,7 +5,7 @@ pipeline {
     agent { node { label 'master' } }
     options {
         timestamps()
-        timeout(activity: true, time: 4, unit: 'HOURS')
+        timeout(activity: true, time: 1, unit: 'HOURS')
     }
     environment {
         JOB_CADENCE = 'PR'
