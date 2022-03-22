@@ -101,6 +101,12 @@ struct fi_provider lnx_prov = {
 	.cleanup = lnx_fini
 };
 
+struct util_prov lnx_util_prov = {
+	.prov = &lnx_prov,
+	.info = &lnx_info,
+	.flags = 0
+};
+
 int lnx_getinfo(uint32_t version, const char *node, const char *service,
 	     uint64_t flags, const struct fi_info *hints,
 	     struct fi_info **info)
