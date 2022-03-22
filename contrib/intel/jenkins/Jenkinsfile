@@ -1,5 +1,22 @@
 
 properties([disableConcurrentBuilds(abortPrevious: true)])
+def DO_RUN=1
+
+def skip() {
+    def changes = readFile "${env.WORKSPACE}/commit_id"
+    def changeStrings = new ArrayList<String>()
+
+    for (line in changes.readLines()) {
+        changeStrings.add(line)
+    }
+
+    echo "${changeStrings.toArray()}"
+    if (changeStrings.toArray().every { it =~ /(?:fabtests\/pytests|man|prov\/efa|prov\/opx).*$/ }) {
+        echo "DONT RUN!"
+        DO_RUN=0
+    }
+}
+
 
 pipeline {
     agent { node { label 'master' } }
@@ -16,6 +33,15 @@ pipeline {
             steps {
                 withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:PYTHONPATH']) {
                   sh """
+                    echo "${env.WORKSPACE}"
+                    echo "-----------------------------------------------------"
+                    echo "Copy build dirs."
+                    python3.7 contrib/intel/jenkins/build.py --build_item=builddir
+                    echo "Copy build dirs completed."
+                    echo "-----------------------------------------------------"
+
+                    python3.7 contrib/intel/jenkins/build.py --build_item=skip
+
                     echo "-----------------------------------------------------"
                     echo "Building libfabric reg."
                     python3.7 contrib/intel/jenkins/build.py --build_item=libfabric
@@ -37,17 +63,13 @@ pipeline {
                     echo "Building fabtests dl."
                     python3.7 contrib/intel/jenkins/build.py --build_item=fabtests --ofi_build_mode=dl
                     echo 'Fabtests builds completed.'
-
-                    echo "-----------------------------------------------------"
-                    echo "Copy build dirs."
-                    python3.7 contrib/intel/jenkins/build.py --build_item=builddir
-                    echo "Copy build dirs completed."
-                    echo "-----------------------------------------------------"
                   """
                 }
+                skip()
             }
         }
         stage('parallel-tests') {
+            when { equals expected: 1, actual: DO_RUN }
             parallel {
                 stage('MPI-verbs-rxm') {
                     agent {node {label 'mlx5'}}
