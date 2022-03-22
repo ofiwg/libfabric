@@ -954,7 +954,7 @@ while true; do
 done
 
 # base ssh command
-declare bssh="ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
+declare bssh="ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o BatchMode=yes"
 if [ -z "$(which timeout 2> /dev/null)" ]; then
 	# forego timeout
 	declare SERVER_CMD="eval"

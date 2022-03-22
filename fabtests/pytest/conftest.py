@@ -32,7 +32,7 @@ def pytest_addoption(parser):
                              help=option_helpmsg, default=option_default)
 
 # base ssh command
-bssh = "ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=2 -o BatchMode=yes"
+bssh = "ssh -n -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o BatchMode=yes"
 
 class CmdlineArgs:
 
