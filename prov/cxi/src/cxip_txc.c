@@ -18,64 +18,6 @@
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 /*
- * cxip_rdzv_pte_cb() - Process rendezvous source PTE state change events.
- */
-void cxip_rdzv_pte_cb(struct cxip_pte *pte, const union c_event *event)
-{
-	switch (pte->state) {
-	case C_PTLTE_ENABLED:
-		break;
-	default:
-		CXIP_FATAL("Unexpected state received: %u\n", pte->state);
-	}
-}
-
-static void cxip_txc_rdzv_pte_free(struct cxip_txc *txc)
-{
-	cxip_pte_free(txc->rdzv_pte);
-}
-
-static int cxip_txc_rdzv_pte_alloc(struct cxip_txc *txc)
-{
-	int ret;
-	struct cxi_pt_alloc_opts pt_opts = {
-		.is_matching = 1,
-	};
-
-	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC) {
-		CXIP_DBG("Using logical PTE matching\n");
-		pt_opts.use_logical = 1;
-	}
-
-	/* Reserve the Rendezvous Send PTE */
-	ret = cxip_pte_alloc(txc->ep_obj->if_dom[txc->tx_id],
-			     txc->send_cq->eq.eq,
-			     txc->domain->iface->dev->info.rdzv_get_idx,
-			     false, &pt_opts, cxip_rdzv_pte_cb, txc,
-			     &txc->rdzv_pte);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Failed to allocate RDZV PTE: %d:%s\n", ret,
-			  fi_strerror(-ret));
-		goto err;
-	}
-
-	ret = cxip_pte_set_state_wait(txc->rdzv_pte, txc->rx_cmdq, txc->send_cq,
-				      C_PTLTE_ENABLED, 0);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Failed to enqueue command: %d:%s\n", ret,
-			  fi_strerror(-ret));
-		goto err_free_rdzv_pte;
-	}
-
-	return FI_SUCCESS;
-
-err_free_rdzv_pte:
-	cxip_pte_free(txc->rdzv_pte);
-err:
-	return ret;
-}
-
-/*
  * txc_msg_init() - Initialize an RX context for messaging.
  *
  * Allocates and initializes hardware resources used for transmitting messages.
@@ -94,25 +36,17 @@ static int txc_msg_init(struct cxip_txc *txc)
 		return -FI_EDOMAIN;
 	}
 
-	ret = cxip_txc_rdzv_pte_alloc(txc);
+	ret = cxip_rdzv_pte_alloc(txc, &txc->rdzv_pte);
 	if (ret) {
 		CXIP_WARN("Failed to allocate rendezvous PtlTE: %d:%s\n", ret,
 			  fi_strerror(-ret));
 		goto err_put_rx_cmdq;
 	}
 
-	ret = cxip_txc_zbp_init(txc);
-	if (ret) {
-		CXIP_WARN("Failed to initialize ZBP: %d\n", ret);
-		goto err_free_rdzv_pte;
-	}
-
 	CXIP_DBG("TXC RDZV PtlTE enabled: %p\n", txc);
 
 	return FI_SUCCESS;
 
-err_free_rdzv_pte:
-	cxip_txc_rdzv_pte_free(txc);
 err_put_rx_cmdq:
 	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, false);
 
@@ -129,9 +63,7 @@ err_put_rx_cmdq:
  */
 static int txc_msg_fini(struct cxip_txc *txc)
 {
-	cxip_txc_zbp_fini(txc);
-	cxip_txc_rdzv_src_fini(txc);
-	cxip_txc_rdzv_pte_free(txc);
+	cxip_rdzv_pte_free(txc->rdzv_pte);
 	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, false);
 
 	return FI_SUCCESS;
@@ -283,11 +215,7 @@ struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context)
 
 	dlist_init(&txc->ep_list);
 	fastlock_init(&txc->lock);
-	fastlock_init(&txc->rdzv_src_lock);
 	ofi_atomic_initialize32(&txc->otx_reqs, 0);
-	ofi_atomic_initialize32(&txc->zbp_le_linked, 0);
-	ofi_atomic_initialize32(&txc->rdzv_src_lacs, 0);
-	dlist_init(&txc->rdzv_src_reqs);
 	dlist_init(&txc->msg_queue);
 	dlist_init(&txc->fc_peers);
 

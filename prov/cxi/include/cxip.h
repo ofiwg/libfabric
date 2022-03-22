@@ -1450,6 +1450,30 @@ int cxip_req_buf_replenish(struct cxip_rxc *rxc, bool seq_restart);
 #define CXIP_EAGER_RDZV_IDS (1 << CXIP_EAGER_RDZV_ID_WIDTH)
 #define CXIP_TX_IDS	(1 << CXIP_TX_ID_WIDTH)
 
+#define RDZV_SRC_LES 8U
+
+struct cxip_rdzv_pte {
+	struct cxip_txc *txc;
+	struct cxip_pte *pte;
+
+	/* Request structure used to handle zero byte puts used for match
+	 * complete.
+	 */
+	struct cxip_req *zbp_req;
+
+	/* Request structures used to handle rendezvous source/data transfers.
+	 * There is one request structure (and LE) for each LAC.
+	 */
+	struct cxip_req *src_reqs[RDZV_SRC_LES];
+	fastlock_t src_reqs_lock;
+
+	/* Count of the number of buffers successfully linked on this PtlTE. */
+	ofi_atomic32_t le_linked_success_count;
+
+	/* Count of the number of buffers failed to link on this PtlTE. */
+	ofi_atomic32_t le_linked_failure_count;
+};
+
 /*
  * Transmit Context
  *
@@ -1493,18 +1517,11 @@ struct cxip_txc {
 	struct cxip_req *amo_fetch_selective_completion_req;
 
 	/* Software Rendezvous related structures */
-	struct cxip_pte *rdzv_pte;	// PTE for SW Rendezvous commands
+	struct cxip_rdzv_pte *rdzv_pte;	// PTE for SW Rendezvous commands
 
 	int max_eager_size;
 	int rdzv_eager_size;
 	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
-	ofi_atomic32_t rdzv_src_lacs;	// Bitmask of LACs
-	struct dlist_entry rdzv_src_reqs;
-	fastlock_t rdzv_src_lock;
-
-	/* Header message handling */
-	ofi_atomic32_t zbp_le_linked;
-	struct cxip_oflow_buf zbp_le;	// Zero-byte Put LE
 
 	/* Flow Control recovery */
 	struct dlist_entry msg_queue;
@@ -2006,6 +2023,12 @@ struct cxip_fid_list {
 	struct fid *fid;
 };
 
+int cxip_rdzv_pte_alloc(struct cxip_txc *txc, struct cxip_rdzv_pte **rdzv_pte);
+int cxip_rdzv_pte_src_req_alloc(struct cxip_rdzv_pte *pte, int lac);
+void cxip_rdzv_pte_free(struct cxip_rdzv_pte *pte);
+int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event);
+int cxip_rdzv_pte_src_cb(struct cxip_req *req, const union c_event *event);
+
 struct cxip_if *cxip_if_lookup_addr(uint32_t nic_addr);
 struct cxip_if *cxip_if_lookup_name(const char *name);
 int cxip_get_if(uint32_t nic_addr, struct cxip_if **dev_if);
@@ -2103,9 +2126,6 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event);
 void cxip_rxc_req_fini(struct cxip_rxc *rxc);
 int cxip_rxc_oflow_init(struct cxip_rxc *rxc);
 void cxip_rxc_oflow_fini(struct cxip_rxc *rxc);
-int cxip_txc_zbp_init(struct cxip_txc *txc);
-int cxip_txc_zbp_fini(struct cxip_txc *txc);
-int cxip_txc_rdzv_src_fini(struct cxip_txc *txc);
 int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
 		   uint32_t nic_addr, uint32_t pid, uint8_t rxc_id);
 

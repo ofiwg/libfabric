@@ -1453,10 +1453,10 @@ static void report_send_completion(struct cxip_req *req, bool sw_cntr);
  * buffers outside of the EQ. ZBPs are currently only used for match complete
  * messages.
  */
-static int
-cxip_zbp_cb(struct cxip_req *req, const union c_event *event)
+int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 {
-	struct cxip_txc *txc = req->oflow.txc;
+	struct cxip_rdzv_pte *rdzv_pte = req->req_ctx;
+	struct cxip_txc *txc = rdzv_pte->txc;
 	struct cxip_req *put_req;
 	union cxip_match_bits mb;
 	int event_rc;
@@ -1464,23 +1464,12 @@ cxip_zbp_cb(struct cxip_req *req, const union c_event *event)
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
-		/* TODO Handle append errors. */
-		if (cxi_event_rc(event) != C_RC_OK)
-			TXC_FATAL(txc, "Unexpected LINK status: %d\n",
-				  cxi_event_rc(event));
-
-		ofi_atomic_inc32(&txc->zbp_le_linked);
+		if (cxi_event_rc(event) == C_RC_OK)
+			ofi_atomic_inc32(&rdzv_pte->le_linked_success_count);
+		else
+			ofi_atomic_inc32(&rdzv_pte->le_linked_failure_count);
 		return FI_SUCCESS;
-	case C_EVENT_UNLINK:
-		/* TODO Handle append errors. */
-		assert(cxi_event_rc(event) == C_RC_OK);
 
-		/* Zero-byte Put LE was manually unlinked. */
-		ofi_atomic_dec32(&txc->zbp_le_linked);
-
-		/* Clean up overflow buffers */
-		cxip_cq_req_free(req);
-		return FI_SUCCESS;
 	case C_EVENT_PUT:
 		mb.raw = event->tgt_long.match_bits;
 		put_req = cxip_tx_id_lookup(txc->ep_obj, mb.tx_id);
@@ -1521,95 +1510,6 @@ cxip_zbp_cb(struct cxip_req *req, const union c_event *event)
 		TXC_FATAL(txc, "Unexpected event type: %d\n",
 			  event->hdr.event_type);
 	}
-}
-
-/*
- * cxip_txc_zbp_init() - Initialize zero-byte Put LE.
- */
-int cxip_txc_zbp_init(struct cxip_txc *txc)
-{
-	int ret;
-	struct cxip_req *req;
-	uint32_t le_flags;
-	union cxip_match_bits mb = {
-		.le_type = CXIP_LE_TYPE_ZBP,
-	};
-	union cxip_match_bits ib = {
-		.tag = ~0,
-		.tx_id = ~0,
-		.cq_data = 1,
-		.tagged = 1,
-		.match_comp = 1,
-	};
-
-	/* Populate request */
-	req = cxip_cq_req_alloc(txc->send_cq, 1, NULL);
-	if (!req) {
-		TXC_WARN(txc, "Failed to allocate request\n");
-		return -FI_ENOMEM;
-	}
-
-	le_flags = C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
-		   C_LE_OP_PUT;
-
-	ret = cxip_pte_append(txc->rdzv_pte, 0, 0, 0,
-			      C_PTL_LIST_PRIORITY, req->req_id, mb.raw, ib.raw,
-			      CXI_MATCH_ID_ANY, 0, le_flags, NULL,
-			      txc->rx_cmdq, true);
-	if (ret) {
-		TXC_DBG(txc, "Failed to write Append command: %d\n", ret);
-		goto req_free;
-	}
-
-	/* Initialize oflow_buf structure */
-	txc->zbp_le.type = CXIP_LE_TYPE_ZBP;
-	txc->zbp_le.txc = txc;
-	txc->zbp_le.buffer_id = req->req_id;
-
-	req->type = CXIP_REQ_OFLOW;
-	req->oflow.txc = txc;
-	req->oflow.oflow_buf = &txc->zbp_le;
-	req->cb = cxip_zbp_cb;
-
-	/* Wait for link */
-	do {
-		sched_yield();
-		cxip_cq_progress(txc->send_cq);
-	} while (!ofi_atomic_get32(&txc->zbp_le_linked));
-
-	TXC_DBG(txc, "ZBP LE linked\n");
-
-	return FI_SUCCESS;
-
-req_free:
-	cxip_cq_req_free(req);
-
-	return ret;
-}
-
-/*
- * cxip_txc_zbp_fini() - Tear down zero-byte Put LE.
- */
-int cxip_txc_zbp_fini(struct cxip_txc *txc)
-{
-	int ret;
-
-	ret = cxip_pte_unlink(txc->rdzv_pte, C_PTL_LIST_PRIORITY,
-			      txc->zbp_le.buffer_id, txc->rx_cmdq);
-	if (ret) {
-		/* TODO handle error */
-		TXC_WARN(txc, "Failed to enqueue Unlink: %d\n", ret);
-	}
-
-	/* Wait for unlink */
-	do {
-		sched_yield();
-		cxip_cq_progress(txc->send_cq);
-	} while (ofi_atomic_get32(&txc->zbp_le_linked));
-
-	TXC_DBG(txc, "ZBP LE unlinked\n");
-
-	return ret;
 }
 
 /*
@@ -3800,38 +3700,26 @@ static int cxip_send_rdzv_put_cb(struct cxip_req *req,
 }
 
 /*
- * rdzv_src_cb() - Process rendezvous source buffer events.
+ * cxip_rdzv_pte_src_cb() - Process rendezvous source buffer events.
  *
  * A Get event is generated for each rendezvous Send indicating Send completion.
  */
-static int rdzv_src_cb(struct cxip_req *req, const union c_event *event)
+int cxip_rdzv_pte_src_cb(struct cxip_req *req, const union c_event *event)
 {
-	struct cxip_txc *txc = req->rdzv_src.txc;
+	struct cxip_rdzv_pte *rdzv_pte = req->req_ctx;
+	struct cxip_txc *txc = rdzv_pte->txc;
 	struct cxip_req *get_req;
 	union cxip_match_bits mb;
-	int event_rc = cxi_tgt_event_rc(event);
+	int event_rc = cxi_event_rc(event);
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
-		if (event_rc != C_RC_OK)
-			TXC_WARN(txc, "%s error: %p rc: %s\n",
-				 cxi_event_to_str(event), req,
-				 cxi_rc_to_str(event_rc));
+		if (event_rc == C_RC_OK)
+			ofi_atomic_inc32(&rdzv_pte->le_linked_success_count);
 		else
-			TXC_DBG(txc, "%s received: %p rc: %s\n",
-				cxi_event_to_str(event), req,
-				cxi_rc_to_str(event_rc));
-
-		req->rdzv_src.rc = cxi_tgt_event_rc(event);
+			ofi_atomic_inc32(&rdzv_pte->le_linked_failure_count);
 		return FI_SUCCESS;
-	case C_EVENT_UNLINK:
-		dlist_remove(&req->rdzv_src.list);
-		cxip_cq_req_free(req);
-		ofi_atomic_sub32(&txc->rdzv_src_lacs, 1 << req->rdzv_src.lac);
 
-		TXC_DBG(txc, "RDZV source window unlinked (LAC: %u)\n",
-			req->rdzv_src.lac);
-		return FI_SUCCESS;
 	case C_EVENT_GET:
 		mb.raw = event->tgt_long.match_bits;
 		get_req = cxip_rdzv_id_lookup(txc->ep_obj, mb.rdzv_id_lo);
@@ -3841,7 +3729,6 @@ static int rdzv_src_cb(struct cxip_req *req, const union c_event *event)
 			return FI_SUCCESS;
 		}
 
-		event_rc = cxi_tgt_event_rc(event);
 		if (event_rc != C_RC_OK)
 			TXC_WARN(txc, "Get error: %p rc: %s\n", get_req,
 				 cxi_rc_to_str(event_rc));
@@ -3860,114 +3747,6 @@ static int rdzv_src_cb(struct cxip_req *req, const union c_event *event)
 			  cxi_event_to_str(event));
 	}
 }
-
-/*
- * cxip_txc_prep_rdzv_src() - Prepare an LAC for use with the rendezvous
- * protocol.
- *
- * Synchronously append an LE describing every address in the specified LAC.
- * Each rendezvous Send uses this LE to access source buffer data.
- */
-static int cxip_txc_prep_rdzv_src(struct cxip_txc *txc, unsigned int lac)
-{
-	int ret;
-	struct cxip_req *req;
-	uint32_t le_flags;
-	union cxip_match_bits mb = {};
-	union cxip_match_bits ib = { .raw = ~0 };
-	uint32_t lac_mask = 1 << lac;
-
-	if (ofi_atomic_get32(&txc->rdzv_src_lacs) & lac_mask)
-		return FI_SUCCESS;
-
-	fastlock_acquire(&txc->rdzv_src_lock);
-
-	if (ofi_atomic_get32(&txc->rdzv_src_lacs) & lac_mask) {
-		ret = FI_SUCCESS;
-		goto unlock;
-	}
-
-	req = cxip_cq_req_alloc(txc->send_cq, 1, NULL);
-	if (!req) {
-		ret = -FI_EAGAIN;
-		goto unlock;
-	}
-
-	req->cb = rdzv_src_cb;
-	req->type = CXIP_REQ_RDZV_SRC;
-	req->rdzv_src.txc = txc;
-	req->rdzv_src.lac = lac;
-	req->rdzv_src.rc = 0;
-
-	mb.rdzv_lac = lac;
-	ib.rdzv_lac = 0;
-
-	le_flags = C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
-		   C_LE_OP_GET;
-
-	ret = cxip_pte_append(txc->rdzv_pte, 0, -1ULL, lac,
-			      C_PTL_LIST_PRIORITY, req->req_id,
-			      mb.raw, ib.raw, CXI_MATCH_ID_ANY, 0,
-			      le_flags, NULL, txc->rx_cmdq, true);
-	if (ret != FI_SUCCESS) {
-		ret = -FI_EAGAIN;
-		goto req_free;
-	}
-
-	do {
-		sched_yield();
-		cxip_cq_progress(txc->send_cq);
-	} while (!req->rdzv_src.rc);
-
-	if (req->rdzv_src.rc == C_RC_OK) {
-		ofi_atomic_add32(&txc->rdzv_src_lacs, lac_mask);
-		dlist_insert_tail(&req->rdzv_src.list, &txc->rdzv_src_reqs);
-
-		TXC_DBG(txc, "RDZV source window linked (LAC: %u)\n", lac);
-	} else {
-		ret = -FI_EAGAIN;
-		goto req_free;
-	}
-
-	fastlock_release(&txc->rdzv_src_lock);
-
-	return FI_SUCCESS;
-
-req_free:
-	cxip_cq_req_free(req);
-unlock:
-	fastlock_release(&txc->rdzv_src_lock);
-
-	return ret;
-}
-
-/*
- * cxip_txc_rdzv_src_fini() - Unlink rendezvous source LEs.
- */
-int cxip_txc_rdzv_src_fini(struct cxip_txc *txc)
-{
-	struct cxip_req *req;
-	int ret;
-
-	dlist_foreach_container(&txc->rdzv_src_reqs, struct cxip_req, req,
-				     rdzv_src.list) {
-		ret = cxip_pte_unlink(txc->rdzv_pte, C_PTL_LIST_PRIORITY,
-				      req->req_id, txc->rx_cmdq);
-		if (ret) {
-			TXC_WARN(txc, "Failed to enqueue Unlink: %d\n", ret);
-			return ret;
-		}
-	}
-
-	/* Wait for unlink events */
-	do {
-		sched_yield();
-		cxip_cq_progress(txc->send_cq);
-	} while (ofi_atomic_get32(&txc->rdzv_src_lacs));
-
-	return FI_SUCCESS;
-}
-
 
 /* TXC cmdq->lock must be held */
 static inline int cxip_send_prep_cmdq(struct cxip_cmdq *cmdq,
@@ -4038,9 +3817,11 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	}
 	req->send.send_md = send_md;
 
-	/* Prepare rendezvous source buffer */
-	ret = cxip_txc_prep_rdzv_src(txc, send_md->md->lac);
-	if (ret != FI_SUCCESS) {
+	/* Allocate a source request for the given LAC. This makes the source
+	 * memory accessible for rendezvous.
+	 */
+	ret = cxip_rdzv_pte_src_req_alloc(txc->rdzv_pte, send_md->md->lac);
+	if (ret) {
 		TXC_WARN(txc, "Failed to prepare source window: %d\n", ret);
 		goto err_unmap;
 	}
