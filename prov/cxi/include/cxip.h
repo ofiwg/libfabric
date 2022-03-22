@@ -1328,7 +1328,6 @@ struct cxip_rxc {
 	/* Unexpected message handling */
 	fastlock_t rx_lock;			// RX message lock
 	ofi_atomic32_t oflow_bufs_submitted;
-	ofi_atomic32_t oflow_bufs_linked;
 	ofi_atomic32_t oflow_bufs_in_use;
 	int oflow_buf_size;
 	int oflow_bufs_max;

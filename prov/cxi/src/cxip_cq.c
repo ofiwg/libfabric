@@ -506,11 +506,6 @@ static void cxip_cq_eq_progress(struct cxip_cq *cq, struct cxip_cq_eq *eq)
 	 */
 	eq->prev_eq_status = *eq->eq->status;
 
-	if (eq->prev_eq_status.unackd_dropped_event)
-		CXIP_WARN("EQ dropped event, rsvd slots %u, free slots %u\n",
-			  eq->prev_eq_status.event_slots_rsrvd,
-			  eq->prev_eq_status.event_slots_free);
-
 	while ((event = cxi_eq_peek_event(eq->eq))) {
 		req = cxip_cq_event_req(cq, event);
 		if (req) {
@@ -528,8 +523,12 @@ static void cxip_cq_eq_progress(struct cxip_cq *cq, struct cxip_cq_eq *eq)
 		}
 	}
 
-	if (cxi_eq_get_drops(eq->eq))
+	if (cxi_eq_get_drops(eq->eq)) {
+		CXIP_WARN("EQ dropped event, rsvd slots %u, free slots %u\n",
+			  eq->eq->status->event_slots_rsrvd,
+			  eq->eq->status->event_slots_free);
 		CXIP_FATAL("Cassini Event Queue overflow detected.\n");
+	}
 
 	if (ret == FI_SUCCESS)
 		eq->eq_saturated = false;

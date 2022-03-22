@@ -1129,11 +1129,10 @@ static inline bool cxip_check_hybrid_preempt(struct cxip_rxc *rxc,
 /*
  * cxip_oflow_cb() - Process an Overflow buffer event.
  *
- * Overflow buffers are used to land unexpected Send data. Link, Unlink and Put
- * events are expected from Overflow buffers.
- *
- * A Link event indicates that a new buffer has been appended to the Overflow
- * list.
+ * Overflow buffers are used to land unexpected Send data. Link, Unlink
+ * and Put events are expected from Overflow buffers. However, Link
+ * events will only be requested when running in hybrid RX match mode
+ * with FI_CXI_HYBRID_PREEMPTIVE=1.
  *
  * An Unlink event indicates that buffer space was exhausted. Overflow buffers
  * are configured to use locally managed LEs. When enough Puts match in an
@@ -1172,12 +1171,11 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
+		/* Success events only used with hybrid preemptive */
 		if (cxi_event_rc(event) == C_RC_OK) {
-			RXC_DBG(rxc, "Eager buffer linked: %p\n", req);
-			ofi_atomic_inc32(&rxc->oflow_bufs_linked);
+			assert(cxip_env.hybrid_preemptive);
 
-			if (!cxip_software_pte_allowed() ||
-			    !cxip_env.hybrid_preemptive) {
+			if (!cxip_software_pte_allowed()) {
 				fastlock_release(&rxc->rx_lock);
 				return FI_SUCCESS;
 			}
@@ -1221,10 +1219,10 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_UNLINK:
 		assert(!event->tgt_long.auto_unlinked);
 
-		RXC_DBG(rxc, "Eager buffer manually unlinked: %p\n", req);
+		RXC_DBG(rxc, "PtlTE %d eager buffer manually unlinked: %p\n",
+			rxc->rx_pte->pte->ptn, req);
 
 		ofi_atomic_dec32(&rxc->oflow_bufs_submitted);
-		ofi_atomic_dec32(&rxc->oflow_bufs_linked);
 		oflow_buf_free(oflow_buf);
 		cxip_cq_req_free(req);
 
@@ -1240,12 +1238,14 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	}
 
 	if (event->tgt_long.auto_unlinked) {
+
+		RXC_DBG(rxc, "PtlTE %d oflow auto unlink\n",
+			rxc->rx_pte->pte->ptn);
+
 		oflow_buf->hw_consumed = event->tgt_long.start -
 			CXI_VA_TO_IOVA(oflow_buf->md->md, oflow_buf->buf)
 			+ event->tgt_long.mlength;
-
 		ofi_atomic_dec32(&rxc->oflow_bufs_submitted);
-		ofi_atomic_dec32(&rxc->oflow_bufs_linked);
 
 		/* Replace the eager overflow buffer. */
 		cxip_rxc_eager_replenish(rxc, false);
@@ -1339,6 +1339,10 @@ static int eager_buf_add(struct cxip_rxc *rxc, bool seq_restart)
 		   C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
 		   C_LE_OP_PUT | C_LE_EVENT_UNLINK_DISABLE;
 
+	/* Only take link events if preemptive hybrid mode is requested */
+	if (!cxip_env.hybrid_recv_preemptive)
+		le_flags |= C_LE_EVENT_LINK_DISABLE;
+
 	if (seq_restart)
 		le_flags |= C_LE_RESTART_SEQ;
 
@@ -1364,6 +1368,7 @@ static int eager_buf_add(struct cxip_rxc *rxc, bool seq_restart)
 
 	ofi_atomic_inc32(&rxc->oflow_bufs_submitted);
 	ofi_atomic_inc32(&rxc->oflow_bufs_in_use);
+
 	RXC_DBG(rxc, "Eager buffer created: %p\n", req);
 
 	return FI_SUCCESS;
@@ -1617,18 +1622,10 @@ int cxip_rxc_oflow_init(struct cxip_rxc *rxc)
 	int ret;
 
 	ret = cxip_rxc_eager_replenish(rxc, false);
-
 	if (ret) {
 		RXC_WARN(rxc, "cxip_rxc_eager_replenish failed: %d\n", ret);
 		return ret;
 	}
-
-	/* Wait for Overflow buffers to be linked. */
-	do {
-		sched_yield();
-		cxip_cq_progress(rxc->recv_cq);
-	} while (ofi_atomic_get32(&rxc->oflow_bufs_linked) <
-		 rxc->oflow_bufs_max);
 
 	return FI_SUCCESS;
 }
@@ -1680,7 +1677,7 @@ void cxip_rxc_oflow_fini(struct cxip_rxc *rxc)
 	do {
 		sched_yield();
 		cxip_cq_progress(rxc->recv_cq);
-	} while (ofi_atomic_get32(&rxc->oflow_bufs_linked));
+	} while (ofi_atomic_get32(&rxc->oflow_bufs_submitted));
 
 	assert(ofi_atomic_get32(&rxc->oflow_bufs_in_use) == 0);
 }
@@ -2170,7 +2167,7 @@ int cxip_recv_reenable(struct cxip_rxc *rxc)
 	ret = cxil_pte_status(rxc->rx_pte->pte, &pte_status);
 	assert(!ret);
 
-	RXC_WARN(rxc, "PtlTE %d Processed %d/%d drops\n",
+	RXC_DBG(rxc, "PtlTE %d Processed %d/%d drops\n",
 		rxc->rx_pte->pte->ptn,
 		rxc->drop_count + 1, pte_status.drop_count + 1);
 
@@ -2290,8 +2287,8 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
 
 	dlist_insert_tail(&fc_drops->rxc_entry, &rxc->fc_drops);
 
-	RXC_WARN(rxc, "PtlTE %d processed drops: %d NIC: %#x TXC: %d\n",
-		 rxc->rx_pte->pte->ptn, drops, nic_addr, txc_id);
+	RXC_DBG(rxc, "PtlTE %d processed drops: %d NIC: %#x TXC: %d\n",
+		rxc->rx_pte->pte->ptn, drops, nic_addr, txc_id);
 
 	rxc->drop_count += drops;
 
@@ -2426,14 +2423,16 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 	ofi_atomic_dec32(&rxc->orx_reqs);
 	cxip_cq_req_free(req);
 
-	RXC_DBG(rxc, "onload complete, replay failed receives\n");
+	RXC_DBG(rxc, "PtlTE %d onload complete, replay failed receives\n",
+		rxc->rx_pte->pte->ptn);
 
 	/* Priority list appends that failed during the transition can
 	 * now be replayed.
 	 */
 	ret = cxip_recv_replay(rxc);
 
-	RXC_DBG(rxc, " replay of failed receives ret: %d\n", ret);
+	RXC_DBG(rxc, "PtlTE %d replay of failed receives ret: %d\n",
+		rxc->rx_pte->pte->ptn, ret);
 	assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
 
 	if (rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED) {
@@ -2532,7 +2531,8 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 		dlist_insert_tail(&ux_send->rxc_entry, &rxc->sw_ux_list);
 		rxc->sw_ux_list_len++;
 
-		RXC_DBG(rxc, "Onloaded Send: %p\n", ux_send);
+		RXC_DBG(rxc, "PtlTE %d Onloaded Send: %p\n",
+			rxc->rx_pte->pte->ptn, ux_send);
 
 		break;
 	case C_EVENT_SEARCH:
@@ -2553,8 +2553,8 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 
 		break;
 	default:
-		RXC_FATAL(rxc, "Unexpected event type: %d\n",
-			  event->hdr.event_type);
+		RXC_FATAL(rxc, "PtlTE %d Unexpected event type: %d\n",
+			  rxc->rx_pte->pte->ptn, event->hdr.event_type);
 	}
 
 	fastlock_release(&rxc->lock);
@@ -2859,6 +2859,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 			RXC_WARN(rxc, "PtlTE %d flow control EQ full\n",
 				 rxc->rx_pte->pte->ptn);
 			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
+
 		} else if (event->tgt_long.initiator.state_change.sc_reason ==
 			   C_SC_FC_REQUEST_FULL) {
 			/* Flow control because request list was full/could
