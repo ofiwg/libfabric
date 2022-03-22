@@ -1256,7 +1256,7 @@ static int rxr_create_pkt_pool(struct rxr_ep *ep, size_t size,
 int rxr_ep_init(struct rxr_ep *ep)
 {
 	size_t entry_sz, sendv_pool_size;
-	int hp_pool_flag;
+	int pkt_pool_flags;
 	int ret;
 
 	entry_sz = ep->mtu_size + sizeof(struct rxr_pkt_entry);
@@ -1265,19 +1265,27 @@ int rxr_ep_init(struct rxr_ep *ep)
 	ep->rx_pkt_pool_entry_sz = entry_sz;
 #endif
 
-	if (efa_fork_status == EFA_FORK_SUPPORT_ON)
-		hp_pool_flag = 0;
-	else
-		hp_pool_flag = OFI_BUFPOOL_HUGEPAGES;
+	if (efa_fork_status == EFA_FORK_SUPPORT_ON) {
+		/*
+		 * Make sure that no data structures can share the memory pages used
+		 * for this buffer pool.
+		 * When fork support is on, registering a buffer with ibv_reg_mr will
+		 * set MADV_DONTFORK on the underlying pages.  After fork() the child
+		 * process will not have a page mapping at that address.
+		 */
+		pkt_pool_flags = OFI_BUFPOOL_NONSHARED;
+	} else {
+		pkt_pool_flags = OFI_BUFPOOL_HUGEPAGES;
+	}
 
 	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_tx_pool_chunk_cnt(ep),
-				  hp_pool_flag,
+				  pkt_pool_flags,
 				  &ep->efa_tx_pkt_pool);
 	if (ret)
 		goto err_free;
 
 	ret = rxr_create_pkt_pool(ep, entry_sz, rxr_get_rx_pool_chunk_cnt(ep),
-				  hp_pool_flag,
+				  pkt_pool_flags,
 				  &ep->efa_rx_pkt_pool);
 	if (ret)
 		goto err_free;
@@ -1308,7 +1316,8 @@ int rxr_ep_init(struct rxr_ep *ep)
 		 */
 		ret = rxr_create_pkt_pool(ep, entry_sz,
 					  rxr_env.readcopy_pool_size,
-					  0, &ep->rx_readcopy_pkt_pool);
+					  pkt_pool_flags,
+					  &ep->rx_readcopy_pkt_pool);
 
 		if (ret)
 			goto err_free;
