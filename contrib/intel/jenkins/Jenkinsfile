@@ -325,8 +325,19 @@ pipeline {
     post {
         cleanup {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+                sh "rm -rf '${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/ci_middlewares'"
+                sh "rm -rf '${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/reg'"
+                sh "rm -rf '${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/dbg'"
+                sh "rm -rf '${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/dl'"
+            }
+        }
+        success {
+            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
                 dir("${env.WORKSPACE}") {
-                    sh "rm -rf '${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/ci_middlewares'"
+                    deleteDir()
+                }
+                dir("${env.WORKSPACE}@tmp") {
+                    deleteDir()
                 }
             }
         }
