@@ -122,6 +122,7 @@ static void ofi_tostr_addr_format(char *buf, size_t len, uint32_t addr_format)
 	CASEENUMSTRN(FI_ADDR_IB_UD, len);
 	CASEENUMSTRN(FI_ADDR_EFA, len);
 	CASEENUMSTRN(FI_ADDR_PSMX3, len);
+	CASEENUMSTRN(FI_ADDR_OPX, len);
 	default:
 		if (addr_format & FI_PROV_SPECIFIC)
 			ofi_strncatf(buf, len, "Provider specific");
@@ -270,7 +271,8 @@ static void ofi_tostr_protocol(char *buf, size_t len, uint32_t protocol)
 	CASEENUMSTRN(FI_PROTO_EFA, len);
 	CASEENUMSTRN(FI_PROTO_PSMX3, len);
 	CASEENUMSTRN(FI_PROTO_RXM_TCP, len);
-	default:
+	CASEENUMSTRN(FI_PROTO_OPX, len);
+    default:
 		if (protocol & FI_PROV_SPECIFIC)
 			ofi_strncatf(buf, len, "Provider specific");
 		else

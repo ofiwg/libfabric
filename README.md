@@ -141,6 +141,23 @@ See the `fi_gni(7)` man page for more details.
 
 - The `gni` provider requires `gcc` version 4.9 or higher.
 
+### opx
+
+***
+
+The OPX provider is an updated Libfabric provider for Omni-Path HPC
+fabrics. The other provider for Omni-Path is PSM2.
+
+The OPX provider began as a fork of the libfabric BGQ provider, with the
+hardware-specific parts re-written for the Omni-Path hfi1 fabric
+interface card. Therefore OPX inherits several desirable characteristics
+of the BGQ driver, and analysis of instruction counts and cache line
+footprints of most HPC operations show OPX being lighter weight than
+PSM2 on the host software stack, leading to better overall performance.
+
+See the `fi_opx(7)` man page for more details. See [Cornelis Customer
+Center](https://customercenter.cornelisnetworks.com/) for support information.
+
 ### psm
 
 ***

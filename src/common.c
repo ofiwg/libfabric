@@ -424,6 +424,9 @@ sa_sin6:
 	case FI_ADDR_BGQ:
 		size = snprintf(buf, *len, "fi_addr_bgq://%p", addr);
 		break;
+	case FI_ADDR_OPX:
+		size = snprintf(buf, *len, "fi_addr_opx://%016lx", *(uint64_t *)addr);
+		break;
 	case FI_ADDR_MLX:
 		size = snprintf(buf, *len, "fi_addr_mlx://%p", addr);
 		break;
@@ -480,6 +483,8 @@ uint32_t ofi_addr_format(const char *str)
 		return FI_ADDR_GNI;
 	else if (!strcasecmp(fmt, "fi_addr_bgq"))
 		return FI_ADDR_BGQ;
+	else if (!strcasecmp(fmt, "fi_addr_opx"))
+		return FI_ADDR_OPX;
 	else if (!strcasecmp(fmt, "fi_addr_efa"))
 		return FI_ADDR_EFA;
 	else if (!strcasecmp(fmt, "fi_addr_mlx"))
@@ -538,6 +543,23 @@ static int ofi_str_to_psmx3(const char *str, void **addr, size_t *len)
 		     (uint64_t *) *addr, (uint64_t *) *addr + 1,
 		     (uint64_t *) *addr + 2, (uint64_t *) *addr + 3);
 	if (ret == 4)
+		return 0;
+
+	free(*addr);
+	return -FI_EINVAL;
+}
+
+static int ofi_str_to_opx(const char *str, void **addr, size_t *len)
+{
+	int ret;
+
+	*len = sizeof(uint64_t);
+	*addr = calloc(1, *len);
+	if (!(*addr))
+		return -FI_ENOMEM;
+
+	ret = sscanf(str, "%*[^:]://%" SCNx64, (uint64_t *) *addr);
+	if (ret == 1)
 		return 0;
 
 	free(*addr);
@@ -878,6 +900,8 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 		return ofi_str_to_psmx2(str, addr, len);
 	case FI_ADDR_PSMX3:
 		return ofi_str_to_psmx3(str, addr, len);
+	case FI_ADDR_OPX:
+		return ofi_str_to_opx(str, addr, len);
 	case FI_ADDR_IB_UD:
 		return ofi_str_to_ib_ud(str, addr, len);
 	case FI_ADDR_EFA:
@@ -1644,11 +1668,11 @@ static int ofi_pollfds_waitall(struct ofi_pollfds *pfds,
 			       struct ofi_epollfds_event *events,
 			       int maxevents, int timeout)
 {
-	uint64_t start;
+	uint64_t endtime;
 	int i, ret;
 	int found = 0;
 
-	start = (timeout > 0) ? ofi_gettime_ms() : 0;
+	endtime = ofi_timeout_time(timeout);
 	do {
 		ret = poll(pfds->fds, pfds->nfds, timeout);
 		if (ret == SOCKET_ERROR)
@@ -1685,10 +1709,7 @@ static int ofi_pollfds_waitall(struct ofi_pollfds *pfds,
 			}
 		}
 
-		if (!found && timeout > 0)
-			timeout -= (int) (ofi_gettime_ms() - start);
-
-	} while (timeout > 0 && !found);
+	} while (!found && !ofi_adjust_timeout(endtime, &timeout));
 
 	return found;
 }
