@@ -597,12 +597,12 @@ The CXI provider checks for the following environment variables:
 
 *FI_CXI_REQ_BUF_MIN_POSTED*
 :   The minimum number of request buffers that should be posted. The default
-    minimum posted count is 3. Care should be taken to size appropriately
+    minimum posted count is 4. Care should be taken to size appropriately
     based on job scale and traffic.
 
 *FI_CXI_REQ_BUF_MAX_COUNT*
 :   The maximum number of request buffers that can be allocated. The default
-    maximum count is 10. A value of 0 indicates the count should be unbounded
+    maximum count is 0. A value of 0 indicates the count should be unbounded
     and scale as required. Care should be taken to size appropriately based
     on job scale and traffic.
 
