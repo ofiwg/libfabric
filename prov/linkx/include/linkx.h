@@ -40,6 +40,7 @@ struct local_prov_ep {
 	char lpe_fabric_name[FI_NAME_MAX];
 	struct fid_fabric *lpe_fabric;
 	struct fid_domain *lpe_domain;
+	struct fid_ep *lpe_ep;
 	struct fi_info *lpe_fi_info;
 };
 
@@ -50,7 +51,15 @@ struct local_prov {
 	struct local_prov_ep *lpv_prov_eps[LNX_MAX_LOCAL_EPS];
 };
 
+struct lnx_ep {
+	struct util_ep le_ep;
+	struct util_domain *le_domain;
+	size_t le_fclass;
+	/* TODO - add the shared queues here */
+};
+
 extern struct dlist_entry local_prov_table;
+extern struct util_prov lnx_util_prov;
 extern struct fi_provider lnx_prov;
 
 int lnx_getinfo(uint32_t version, const char *node, const char *service,
@@ -81,11 +90,10 @@ int lnx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	return -FI_EOPNOTSUPP;
 }
 
-static inline
 int lnx_endpoint(struct fid_domain *domain, struct fi_info *info,
-				 struct fid_ep **ep, void *context)
-{
-	return -FI_EOPNOTSUPP;
-}
+				 struct fid_ep **ep, void *context);
+
+int lnx_scalable_ep(struct fid_domain *domain, struct fi_info *info,
+					struct fid_ep **ep, void *context);
 
 #endif /* LINKX_H */
