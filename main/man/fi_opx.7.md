@@ -5,11 +5,11 @@ tagline: Libfabric Programmer's Manual
 ---
 {%include JB/setup %}
 
-#NAME
+# NAME
 
 fi_opx \- The Omni-Path Express Fabric Provider
 
-#OVERVIEW
+# OVERVIEW
 
 The OPX provider is a native implementation of the libfabric interfaces
 that makes direct use of Omni-Path fabrics as well as libfabric
@@ -19,7 +19,7 @@ performance of libfabric, providing an "extreme scale" development
 environment for applications and middleware using the libfabric API, and
 to support a functional and performant version of MPI on Omni-Path fabrics.
 
-#SUPPORTED FEATURES
+# SUPPORTED FEATURES
 
 The OPX provider supports most features defined for the libfabric API.
 
