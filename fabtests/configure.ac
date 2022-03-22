@@ -102,6 +102,9 @@ AC_DEFINE_UNQUOTED(HAVE_CLOCK_GETTIME, [$have_clock_gettime],
 		   [Define to 1 if clock_gettime is available.])
 AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
 
+AC_CHECK_LIB(pthread, pthread_create, [],
+    AC_MSG_ERROR([pthread_create() not found.  fabtests requires libpthread.]))
+
 AC_ARG_WITH([libfabric],
             AS_HELP_STRING([--with-libfabric=DIR], [Provide a path to the libfabric installation directory,
                                                     or defaults to the library search path]),

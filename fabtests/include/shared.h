@@ -124,6 +124,7 @@ enum {
 	FT_OPT_FORK_CHILD	= 1 << 20,
 	FT_OPT_SRX		= 1 << 21,
 	FT_OPT_STX		= 1 << 22,
+	FT_OPT_SKIP_ADDR_EXCH	= 1 << 23,
 	FT_OPT_OOB_CTRL		= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
 };
 
@@ -420,6 +421,24 @@ int ft_reg_mr(struct fi_info *info, void *buf, size_t size, uint64_t access,
 	      uint64_t key, struct fid_mr **mr, void **desc);
 void ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);
+
+static inline uint64_t ft_gettime_ns(void)
+{
+	struct timespec now;
+
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	return now.tv_sec * 1000000000 + now.tv_nsec;
+}
+
+static inline uint64_t ft_gettime_us(void)
+{
+	return ft_gettime_ns() / 1000;
+}
+
+static inline uint64_t ft_gettime_ms(void)
+{
+	return ft_gettime_ns() / 1000000;
+}
 
 static inline void ft_start(void)
 {

@@ -1354,6 +1354,9 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 	size_t addrlen;
 	int ret;
 
+	if (opts.options & FT_OPT_SKIP_ADDR_EXCH)
+		return 0;
+
 	if (opts.options & FT_OPT_OOB_ADDR_EXCH) {
 		ret = ft_exchange_addresses_oob(av_ptr, ep_ptr, remote_addr);
 		if (ret)
@@ -1437,6 +1440,9 @@ int ft_init_av_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 {
 	size_t addrlen;
 	int ret;
+
+	if (opts.options & FT_OPT_SKIP_ADDR_EXCH)
+		return 0;
 
 	if (opts.options & FT_OPT_OOB_ADDR_EXCH)
 		return ft_exchange_addresses_oob(av_ptr, ep_ptr, remote_addr);
