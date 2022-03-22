@@ -560,7 +560,7 @@ void rxr_cq_complete_rx(struct rxr_ep *ep,
 		assert(ctrl_type == RXR_RECEIPT_PKT || ctrl_type == RXR_EOR_PKT);
 		peer = rxr_ep_get_peer(ep, rx_entry->addr);
 		assert(peer);
-		inject = peer->is_local;
+		inject = peer->is_local && ep->use_shm_for_tx;
 		err = rxr_pkt_post_ctrl_or_queue(ep,
 						 RXR_RX_ENTRY,
 						 rx_entry,

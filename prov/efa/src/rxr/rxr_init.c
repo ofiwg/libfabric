@@ -761,7 +761,7 @@ dgram_info:
 	if (ret == -FI_ENODATA && *info)
 		ret = 0;
 
-	if (!ret && rxr_env.enable_shm_transfer && !shm_info) {
+	if (!ret && !shm_info) {
 		shm_info = NULL;
 		shm_hints = fi_allocinfo();
 		rxr_set_shm_hints(hints, shm_hints);
@@ -794,16 +794,14 @@ static void rxr_fini(void)
 
 	efa_finalize_prov();
 
-	if (rxr_env.enable_shm_transfer) {
-		/* Cleanup all local efa nic GIDs */
-		while (local_efa_addr) {
-			cur = local_efa_addr;
-			local_efa_addr = local_efa_addr->next;
-			free(cur);
-		}
-		if (shm_info)
-			fi_freeinfo(shm_info);
+	/* Cleanup all local efa nic GIDs */
+	while (local_efa_addr) {
+		cur = local_efa_addr;
+		local_efa_addr = local_efa_addr->next;
+		free(cur);
 	}
+	if (shm_info)
+		fi_freeinfo(shm_info);
 
 #if HAVE_EFA_DL
 	ofi_monitors_cleanup();
@@ -832,7 +830,7 @@ EFA_INI
 	fi_param_define(&rxr_prov, "tx_queue_size", FI_PARAM_INT,
 			"Defines the maximum number of unacknowledged sends with the NIC.");
 	fi_param_define(&rxr_prov, "enable_shm_transfer", FI_PARAM_INT,
-			"Enable using SHM provider to provide the communication between processes on the same system. (Default: 1)");
+			"Enable using SHM provider to perform TX operations between processes on the same system. (Default: 1)");
 	fi_param_define(&rxr_prov, "use_device_rdma", FI_PARAM_INT,
 			"whether to use device's RDMA functionality for one-sided and two-sided transfer.");
 	fi_param_define(&rxr_prov, "use_zcpy_rx", FI_PARAM_INT,
@@ -900,7 +898,7 @@ EFA_INI
 	if (efa_init_prov())
 		return NULL;
 
-	if (rxr_env.enable_shm_transfer && rxr_get_local_gids())
+	if (rxr_get_local_gids())
 		return NULL;
 
 	return &rxr_prov;

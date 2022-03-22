@@ -58,7 +58,8 @@ void rxr_pkt_handle_recv_error(struct rxr_ep *ep,
 			       int err, int prov_errno);
 
 void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
-				    struct rxr_pkt_entry *pkt_entry);
+				    struct rxr_pkt_entry *pkt_entry,
+				    enum rxr_lower_ep_type lower_ep_type);
 
 ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rdm_peer *peer);
 

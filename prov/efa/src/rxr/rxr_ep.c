@@ -676,7 +676,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		ofi_buf_free(pkt);
 	}
 
-	if (rxr_ep->use_shm) {
+	if (rxr_ep->shm_ep) {
 		dlist_foreach_safe(&rxr_ep->rx_posted_buf_shm_list, entry, tmp) {
 			pkt = container_of(entry, struct rxr_pkt_entry, dbg_entry);
 			ofi_buf_free(pkt);
@@ -757,13 +757,11 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	if (rxr_ep->pkt_sendv_pool)
 		ofi_bufpool_destroy(rxr_ep->pkt_sendv_pool);
 
-	if (rxr_ep->use_shm) {
-		if (rxr_ep->shm_rx_pkt_pool)
-			ofi_bufpool_destroy(rxr_ep->shm_rx_pkt_pool);
+	if (rxr_ep->shm_rx_pkt_pool)
+		ofi_bufpool_destroy(rxr_ep->shm_rx_pkt_pool);
 
-		if (rxr_ep->shm_tx_pkt_pool)
-			ofi_bufpool_destroy(rxr_ep->shm_tx_pkt_pool);
-	}
+	if (rxr_ep->shm_tx_pkt_pool)
+		ofi_bufpool_destroy(rxr_ep->shm_tx_pkt_pool);
 }
 
 /*
@@ -828,21 +826,21 @@ static int rxr_ep_close(struct fid *fid)
 		retv = ret;
 	}
 
-	/* Close shm provider's endpoint and cq */
-	if (rxr_ep->use_shm) {
+	if (rxr_ep->shm_ep) {
 		ret = fi_close(&rxr_ep->shm_ep->fid);
 		if (ret) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close shm EP\n");
 			retv = ret;
 		}
+	}
 
+	if (rxr_ep->shm_cq) {
 		ret = fi_close(&rxr_ep->shm_cq->fid);
 		if (ret) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close shm CQ\n");
 			retv = ret;
 		}
 	}
-
 
 	ret = ofi_endpoint_close(&rxr_ep->util_ep);
 	if (ret) {
@@ -887,7 +885,8 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 
 		/* Bind shm provider endpoint & shm av */
-		if (rxr_ep->use_shm) {
+		if (rxr_ep->shm_ep) {
+			assert(av->shm_rdm_av);
 			ret = fi_ep_bind(rxr_ep->shm_ep, &av->shm_rdm_av->fid, flags);
 			if (ret)
 				return ret;
@@ -1059,7 +1058,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		 * In this way, each peer is able to open and map to other local peers'
 		 * shared memory region.
 		 */
-		if (ep->use_shm) {
+		if (ep->shm_ep) {
 			shm_ep_name_len = EFA_SHM_NAME_MAX;
 			ret = rxr_raw_addr_to_smr_name(ep->core_addr, shm_ep_name, &shm_ep_name_len);
 			if (ret < 0)
@@ -1069,7 +1068,6 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 			if (ret)
 				goto out;
 		}
-
 out:
 		ofi_mutex_unlock(&ep->util_ep.lock);
 		break;
@@ -1517,7 +1515,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 		goto err_free;
 
 	sendv_pool_size = rxr_get_tx_pool_chunk_cnt(ep);
-	if (ep->use_shm)
+	if (ep->use_shm_for_tx)
 		sendv_pool_size += shm_info->tx_attr->size;
 	ret = ofi_bufpool_create(&ep->pkt_sendv_pool,
 				 sizeof(struct rxr_pkt_sendv),
@@ -1528,7 +1526,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 		goto err_free;
 
 	/* create pkt pool for shm */
-	if (ep->use_shm) {
+	if (ep->use_shm_for_tx) {
 		ret = ofi_bufpool_create(&ep->shm_tx_pkt_pool,
 					 entry_sz,
 					 RXR_BUF_POOL_ALIGNMENT,
@@ -1536,7 +1534,9 @@ int rxr_ep_init(struct rxr_ep *ep)
 					 shm_info->tx_attr->size, 0);
 		if (ret)
 			goto err_free;
+	}
 
+	if (ep->shm_ep) {
 		ret = ofi_bufpool_create(&ep->shm_rx_pkt_pool,
 					 entry_sz,
 					 RXR_BUF_POOL_ALIGNMENT,
@@ -1671,8 +1671,7 @@ int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
 		return err;
 	}
 
-	if (ep->use_shm) {
-		assert(ep->shm_rx_pkt_pool);
+	if (ep->shm_rx_pkt_pool) {
 		err = ofi_bufpool_grow(ep->shm_rx_pkt_pool);
 		if (err) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
@@ -1805,7 +1804,7 @@ void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
 			ep->efa_rx_pkts_to_post = rxr_get_rx_pool_chunk_cnt(ep);
 			ep->available_data_bufs = rxr_get_rx_pool_chunk_cnt(ep);
 
-			if (ep->use_shm) {
+			if (ep->shm_ep) {
 				assert(ep->shm_rx_pkts_posted == 0 && ep->shm_rx_pkts_to_post == 0);
 				ep->shm_rx_pkts_to_post = shm_info->rx_attr->size;
 			}
@@ -1818,7 +1817,7 @@ void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
 
 	ep->efa_rx_pkts_to_post = 0;
 
-	if (ep->use_shm) {
+	if (ep->shm_ep) {
 		err = rxr_ep_bulk_post_internal_rx_pkts(ep, ep->shm_rx_pkts_to_post, SHM_EP);
 		if (err)
 			goto err_exit;
@@ -1842,7 +1841,7 @@ static inline ssize_t rxr_ep_send_queued_pkts(struct rxr_ep *ep,
 
 	dlist_foreach_container_safe(pkts, struct rxr_pkt_entry,
 				     pkt_entry, entry, tmp) {
-		if (ep->use_shm && rxr_ep_get_peer(ep, pkt_entry->addr)->is_local) {
+		if (ep->use_shm_for_tx && rxr_ep_get_peer(ep, pkt_entry->addr)->is_local) {
 			dlist_remove(&pkt_entry->entry);
 			continue;
 		}
@@ -1959,7 +1958,7 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 			pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc.slid, ibv_wc.src_qp, pkt_entry);
 			pkt_entry->pkt_size = ibv_wc.byte_len;
 			assert(pkt_entry->pkt_size > 0);
-			rxr_pkt_handle_recv_completion(ep, pkt_entry);
+			rxr_pkt_handle_recv_completion(ep, pkt_entry, EFA_EP);
 #if ENABLE_DEBUG
 			ep->recv_comps++;
 #endif
@@ -2054,7 +2053,7 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 			pkt_entry->addr = src_addr;
 			pkt_entry->pkt_size = cq_entry.len;
 			assert(pkt_entry->pkt_size > 0);
-			rxr_pkt_handle_recv_completion(ep, pkt_entry);
+			rxr_pkt_handle_recv_completion(ep, pkt_entry, SHM_EP);
 		} else {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Unhandled cq type\n");
@@ -2078,9 +2077,10 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	// Poll the EFA completion queue
 	rdm_ep_poll_ibv_cq(ep, rxr_env.efa_cq_read_size);
 
-	// Poll the SHM completion queue if enabled
-	if (ep->use_shm)
+	if (ep->shm_cq) {
+		// Poll the SHM completion queue
 		rdm_ep_poll_shm_cq(ep, rxr_env.shm_cq_read_size);
+	}
 
 	rxr_ep_progress_post_internal_rx_pkts(ep);
 
@@ -2357,7 +2357,7 @@ void rxr_ep_progress(struct util_ep *util_ep)
 }
 
 static
-bool rxr_ep_use_shm(struct fi_info *info)
+bool rxr_ep_use_shm_for_tx(struct fi_info *info)
 {
 	/* App provided hints supercede environmental variables.
 	 *
@@ -2439,14 +2439,17 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
 				  util_domain.domain_fid);
 
-	rxr_ep->use_shm = rxr_ep_use_shm(info);
-	if (rxr_ep->use_shm) {
-		/* Open shm provider's endpoint */
+	if (efa_domain->shm_domain) {
 		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
 		ret = fi_endpoint(efa_domain->shm_domain, shm_info,
 				  &rxr_ep->shm_ep, rxr_ep);
 		if (ret)
 			goto err_close_core_ep;
+
+		rxr_ep->use_shm_for_tx = rxr_ep_use_shm_for_tx(info);
+	} else {
+		rxr_ep->shm_ep = NULL;
+		rxr_ep->use_shm_for_tx = false;
 	}
 
 	rxr_ep->rx_size = info->rx_attr->size;
@@ -2523,8 +2526,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err_close_core_cq;
 
-	/* Bind ep with shm provider's cq */
-	if (rxr_ep->use_shm) {
+	if (efa_domain->shm_domain) {
+		/* Bind ep with shm provider's cq */
 		ret = fi_cq_open(efa_domain->shm_domain, &cq_attr,
 				 &rxr_ep->shm_cq, rxr_ep);
 		if (ret)
@@ -2551,7 +2554,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	return 0;
 
 err_close_shm_cq:
-	if (rxr_ep->use_shm && rxr_ep->shm_cq) {
+	if (rxr_ep->shm_cq) {
 		retv = fi_close(&rxr_ep->shm_cq->fid);
 		if (retv)
 			FI_WARN(&rxr_prov, FI_LOG_CQ, "Unable to close shm cq: %s\n",
@@ -2563,7 +2566,7 @@ err_close_core_cq:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Unable to close cq: %s\n",
 			fi_strerror(-retv));
 err_close_shm_ep:
-	if (rxr_ep->use_shm && rxr_ep->shm_ep) {
+	if (rxr_ep->shm_ep) {
 		retv = fi_close(&rxr_ep->shm_ep->fid);
 		if (retv)
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close shm EP: %s\n",

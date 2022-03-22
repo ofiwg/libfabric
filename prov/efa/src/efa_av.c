@@ -399,7 +399,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 	efa_rdm_peer_init(peer, rxr_ep, conn);
 
 	/* If peer is local, insert the address into shm provider's av */
-	if (rxr_ep->use_shm && efa_is_local_peer(av, conn->ep_addr)) {
+	if (efa_is_local_peer(av, conn->ep_addr) && av->shm_rdm_av) {
 		if (av->shm_used >= rxr_env.shm_av_size) {
 			EFA_WARN(FI_LOG_AV,
 				 "Max number of shm AV entry (%d) has been reached.\n",
@@ -454,7 +454,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 	assert(av->ep_type == FI_EP_RDM);
 
 	peer = &conn->rdm_peer;
-	if (peer->is_local) {
+	if (peer->is_local && av->shm_rdm_av) {
 		err = fi_av_remove(av->shm_rdm_av, &peer->shm_fiaddr, 1, 0);
 		if (err) {
 			EFA_WARN(FI_LOG_AV, "remove address from shm av failed! err=%d\n", err);
@@ -925,7 +925,6 @@ static int efa_av_close(struct fid *fid)
 
 	if (av->ep_type == FI_EP_RDM) {
 		if (av->shm_rdm_av) {
-			assert(rxr_env.enable_shm_transfer);
 			ret = fi_close(&av->shm_rdm_av->fid);
 			if (ret) {
 				err = ret;
