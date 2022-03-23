@@ -437,7 +437,7 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(peer);
 
-	if (peer->is_local)
+	if (peer->is_local && ep->use_shm_for_tx)
 		return rxr_rma_post_shm_write(ep, tx_entry);
 
 	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;

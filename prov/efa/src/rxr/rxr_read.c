@@ -356,7 +356,7 @@ int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, int entry_type, void *
 	}
 	assert(peer);
 
-	lower_ep_type = (peer->is_local) ? SHM_EP : EFA_EP;
+	lower_ep_type = (peer->is_local && ep->use_shm_for_tx) ? SHM_EP : EFA_EP;
 	read_entry = rxr_read_alloc_entry(ep, entry_type, x_entry, lower_ep_type);
 	if (!read_entry) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
