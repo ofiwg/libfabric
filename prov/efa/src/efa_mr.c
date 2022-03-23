@@ -404,6 +404,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 	assert(efa_mr->mr_fid.key != FI_KEY_NOTAVAIL);
 
 	mr_attr->requested_key = efa_mr->mr_fid.key;
+	mr_attr->device.reserved = efa_mr->peer.device.reserved;
 
 	ret = ofi_mr_map_insert(&efa_mr->domain->util_domain.mr_map, attr,
 				&efa_mr->mr_fid.key, &efa_mr->mr_fid);
