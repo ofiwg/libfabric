@@ -114,7 +114,7 @@ extern "C" {
 //#define	FI_EADV			EADV		/* Advertise error */
 //#define	FI_ESRMNT		ESRMNT		/* Srmount error */
 //#define	FI_ECOMM		ECOMM		/* Communication error on send */
-//#define	FI_EPROTO		EPROTO		/* Protocol error */
+#define	FI_EPROTO		EPROTO			/* Protocol error */
 //#define	FI_EMULTIHOP		EMULTIHOP	/* Multihop attempted */
 //#define	FI_EDOTDOT		EDOTDOT		/* RFS specific error */
 //#define	FI_EBADMSG		EBADMSG		/* Not a data message */

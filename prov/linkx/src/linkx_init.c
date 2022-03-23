@@ -49,6 +49,7 @@
 #include "rdma/fi_ext.h"
 #include "linkx.h"
 
+struct local_prov *shm_prov;
 struct util_fabric lnx_fabric_info;
 
 DEFINE_LIST(local_prov_table);
@@ -199,7 +200,8 @@ int ofi_create_link(struct fi_info *prov_list,
 
 	memset(&lnx_fabric_info, 0, sizeof(lnx_fabric_info));
 
-	/* create the fabric for the list of providers */
+	/* create the fabric for the list of providers 
+	 * TODO: modify the code to work with the new data structures */
 	for (prov = prov_list; prov; prov = prov->next) {
 		entry = calloc(sizeof(*entry), 1);
 		if (!entry)
@@ -228,8 +230,10 @@ int ofi_create_link(struct fi_info *prov_list,
 		}
 
 		/* indicate that this fabric can be used for on-node communication */
-		if (!strncasecmp(lprov->lpv_prov_name, "shm", 3))
+		if (!strncasecmp(lprov->lpv_prov_name, "shm", 3)) {
+			shm_prov = lprov;
 			entry->lpe_local = true;
+		}
 
 		rc = lnx_add_ep_to_prov(lprov, entry);
 		if (rc)
