@@ -295,6 +295,8 @@ static void cxip_env_init(void)
 	size_t min_free;
 	int ret;
 
+	gethostname(cxip_env.hostname, sizeof(cxip_env.hostname));
+
 	fi_param_define(&cxip_prov, "rget_tc", FI_PARAM_STRING,
 			"Traffic class used for software initiated rendezvous gets.");
 	fi_param_get_str(&cxip_prov, "rget_tc", &param_str);

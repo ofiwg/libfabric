@@ -244,6 +244,7 @@ struct cxip_environment {
 	int cacheline_size;
 
 	int coll_use_repsum;
+	char hostname[255];
 };
 
 extern struct cxip_environment cxip_env;
@@ -2537,18 +2538,26 @@ extern cxip_trace_t cxip_trace_attr cxip_trace_fn;
 #define CXIP_TRACE(fmt, ...) \
 	do {if (cxip_trace_fn) cxip_trace_fn(fmt, ##__VA_ARGS__);} while (0)
 
-#define _CXIP_DBG(subsys, ...) FI_DBG(&cxip_prov, subsys, __VA_ARGS__)
-#define _CXIP_INFO(subsys, ...) FI_INFO(&cxip_prov, subsys, __VA_ARGS__)
-#define _CXIP_WARN(subsys, ...) FI_WARN(&cxip_prov, subsys, __VA_ARGS__)
-#define _CXIP_WARN_ONCE(subsys, ...) FI_WARN_ONCE(&cxip_prov, subsys, \
-						  __VA_ARGS__)
-#define CXIP_LOG(...)						\
-	fi_log(&cxip_prov, FI_LOG_WARN, FI_LOG_CORE,		\
-	       __func__, __LINE__, __VA_ARGS__)
+#define _CXIP_DBG(subsys, fmt,  ...) \
+	FI_DBG(&cxip_prov, subsys, "%s: " fmt "", cxip_env.hostname, \
+	       ##__VA_ARGS__)
+#define _CXIP_INFO(subsys, fmt, ...) \
+	FI_INFO(&cxip_prov, subsys, "%s: " fmt "", cxip_env.hostname, \
+		##__VA_ARGS__)
+#define _CXIP_WARN(subsys, fmt, ...) \
+	FI_WARN(&cxip_prov, subsys, "%s: " fmt "", cxip_env.hostname, \
+		##__VA_ARGS__)
+#define _CXIP_WARN_ONCE(subsys, fmt, ...) \
+	FI_WARN_ONCE(&cxip_prov, subsys, "%s: " fmt "", cxip_env.hostname, \
+		     ##__VA_ARGS__)
+#define CXIP_LOG(fmt,  ...) \
+	fi_log(&cxip_prov, FI_LOG_WARN, FI_LOG_CORE, \
+	       __func__, __LINE__, "%s: " fmt "", cxip_env.hostname, \
+	       ##__VA_ARGS__)
 
-#define CXIP_FATAL(...)						\
+#define CXIP_FATAL(fmt, ...)					\
 	do {							\
-		CXIP_LOG(__VA_ARGS__);				\
+		CXIP_LOG(fmt, ##__VA_ARGS__);			\
 		abort();					\
 	} while (0)
 
