@@ -166,6 +166,8 @@ void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor)
  */
 void ofi_monitors_init(void)
 {
+	pthread_mutex_init(&mm_state_lock, NULL);
+
 	uffd_monitor->init(uffd_monitor);
 	memhooks_monitor->init(memhooks_monitor);
 	cuda_monitor->init(cuda_monitor);
