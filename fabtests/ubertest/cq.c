@@ -71,11 +71,14 @@ bool ft_generates_rx_comp(void)
 	if (test_info.test_class & FI_ATOMIC)
 		return false;
 
-	if ((test_info.test_class & FI_RMA) &&
-	    !is_data_func(test_info.class_function) &&
-	    !(is_msg_func(test_info.class_function) &&
-	      test_info.msg_flags & FI_REMOTE_CQ_DATA))
-		return false;
+	if ((test_info.test_class & FI_RMA)) {
+		if (!is_data_func(test_info.class_function) &&
+		    !(is_msg_func(test_info.class_function) &&
+		      test_info.msg_flags & FI_REMOTE_CQ_DATA))
+			return false;
+		if (!(test_info.mode & FI_RX_CQ_DATA))
+			return true;
+	}
 
 	if (!(test_info.rx_cq_bind_flags & FI_SELECTIVE_COMPLETION))
 		return true;
