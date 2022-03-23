@@ -403,6 +403,10 @@ the list available for that test.
 *-B <src_port>*
 : Specifies the port number of the local endpoint, overriding the default.
 
+*-C <num_connections>*
+: Specifies the number of simultaneous connections or communication
+  endpoints to the server.
+
 *-P <dst_port>*
 : Specifies the port number of the peer endpoint, overriding the default.
 
