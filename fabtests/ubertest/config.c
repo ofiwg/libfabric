@@ -871,11 +871,11 @@ void fts_cur_info(struct ft_series *series, struct ft_info *info)
 	} else {
 		if (info->test_class & FI_TAGGED)
 			info->cq_format = FI_CQ_FORMAT_TAGGED;
-		else if (info->test_class & FI_MSG)
-			info->cq_format = FI_CQ_FORMAT_MSG;
 		else if (info->msg_flags & FI_REMOTE_CQ_DATA ||
 		    is_data_func(info->class_function))
 			info->cq_format = FI_CQ_FORMAT_DATA;
+		else if (info->test_class & FI_MSG)
+			info->cq_format = FI_CQ_FORMAT_MSG;
 		else
 			info->cq_format = FI_CQ_FORMAT_CONTEXT;
 	}

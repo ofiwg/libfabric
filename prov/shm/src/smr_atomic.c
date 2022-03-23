@@ -100,6 +100,10 @@ static void smr_format_inject_atomic(struct smr_cmd *cmd,
 
 	switch (cmd->msg.hdr.op) {
 	case ofi_op_atomic:
+		cmd->msg.hdr.size = ofi_copy_from_hmem_iov(tx_buf->data,
+					SMR_INJECT_SIZE, iface, device,
+					iov, count, 0);
+		break;
 	case ofi_op_atomic_fetch:
 		if (cmd->msg.hdr.atomic_op == FI_ATOMIC_READ)
 			cmd->msg.hdr.size = ofi_total_iov_len(resultv, result_count);
