@@ -52,6 +52,26 @@ struct local_prov {
 	struct local_prov_ep *lpv_prov_eps[LNX_MAX_LOCAL_EPS];
 };
 
+struct lnx_address_prov {
+	char lap_prov[FI_NAME_MAX];
+	/* an array of addresses of size count. */
+	/* entry 0 is shm if available */
+	/* array can't be larger than LNX_MAX_LOCAL_EPS */
+	int lap_addr_count;
+	/* size as specified by the provider */
+	int lap_addr_size;
+	/* payload */
+	char lap_addrs[];
+};
+
+struct lnx_addresses {
+	/* used to determine if the address is node local or node remote */
+	char la_hostname[FI_NAME_MAX];
+	/* number of providers <= LNX_MAX_LOCAL_EPS */
+	int la_prov_count;
+	struct lnx_address_prov la_addr_prov[];
+};
+
 struct lnx_ep {
 	struct util_ep le_ep;
 	struct util_domain *le_domain;
@@ -59,36 +79,67 @@ struct lnx_ep {
 	/* TODO - add the shared queues here */
 };
 
-struct lnx_peer_entry {
-	int lp_addr_count;
-	int lp_ep_count;
+struct lnx_local2peer_map {
+	struct local_prov_ep *local_ep;
+	int addr_count;
+	fi_addr_t peer_addrs[LNX_MAX_LOCAL_EPS];
+};
+
+struct lnx_peer_prov {
+	/* provider name */
+	char lpp_prov_name[FI_NAME_MAX];
+
+	uint64_t lpp_flags;
+
 	/* pointer to the local endpoint information to be used for
 	 * communication with this peer.
 	 *
-	 * If the peer is on-node, then lp_endpoints[0] = shm &&
-	 * lp_addr_count = 1
+	 * If the peer is on-node, then lp_endpoints[0] = shm
 	 *
 	 * if peer is off-node, then there could be up to LNX_MAX_LOCAL_EPS
-	 * endpoints we can use to reach that peer.
+	 * local endpoints we can use to reach that peer.
 	 */
-	struct local_prov_entry *lp_endpoints[LNX_MAX_LOCAL_EPS];
+	struct local_prov *lpp_prov;
 
-	/* All addresses which we can reach that peer on */
-	fi_addr_t lp_fi_addrs[LNX_MAX_LOCAL_EPS];
+	/* each peer can be reached from any of the local provider endpoints
+	 * on any of the addresses which are given to us. It's an N:N
+	 * relationship
+	 */
+	struct lnx_local2peer_map *lpp_map[LNX_MAX_LOCAL_EPS];
+};
+
+struct lnx_peer {
+	/* true if peer can be reached over shared memory, false otherwise */
+	bool lp_local;
+
+	/* Each provider that we can reach the peer on will have an entry
+	 * below. Each entry will contain all the local provider endpoints we
+	 * can reach the peer on, as well as all the peer addresses on that
+	 * provider.
+	 *
+	 * We can potentially multi-rail between the interfaces on the same
+	 * provider, both local and remote.
+	 *
+	 * Or we can multi-rail across different providers. Although this
+	 * might be more complicated due to the differences in provider
+	 * capabilities.
+	 */
+	struct lnx_peer_prov *lp_provs[LNX_MAX_LOCAL_EPS];
 };
 
 struct lnx_peer_table {
-	struct fid_av lpt_av_fid;
-	size_t lpt_size;
+	struct util_av lpt_av;
+	int lpt_max_count;
 	int lpt_count;
 	struct util_domain *lpt_domain;
 	/* an array of peer entries */
-	struct lnx_peer_entry *lpt_entries;
+	struct lnx_peer **lpt_entries;
 };
 
 extern struct dlist_entry local_prov_table;
 extern struct util_prov lnx_util_prov;
 extern struct fi_provider lnx_prov;
+extern struct local_prov *shm_prov;
 
 int lnx_getinfo(uint32_t version, const char *node, const char *service,
 				uint64_t flags, const struct fi_info *hints,
