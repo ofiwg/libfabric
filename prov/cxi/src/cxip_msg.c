@@ -1755,6 +1755,14 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	}
 }
 
+static void cxip_rxc_record_req_stat(struct cxip_rxc *rxc, enum c_ptl_list list,
+				     size_t rlength, struct cxip_req *req)
+{
+	enum fi_hmem_iface iface = rlength ? req->recv.recv_md->info.iface : FI_HMEM_SYSTEM;
+
+	cxip_msg_counters_msg_record(&rxc->cntrs, list, iface, rlength);
+}
+
 /*
  * cxip_recv_cb() - Process a user receive buffer event.
  *
@@ -1888,6 +1896,9 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		return FI_SUCCESS;
 
 	case C_EVENT_PUT_OVERFLOW:
+		cxip_rxc_record_req_stat(rxc, C_PTL_LIST_OVERFLOW,
+					 event->tgt_long.rlength, req);
+
 		/* ULE freed. Update RXC state to signal that the RXC should
 		 * be reenabled.
 		 */
@@ -1897,6 +1908,8 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		break;
 
 	case C_EVENT_PUT:
+		cxip_rxc_record_req_stat(rxc, C_PTL_LIST_PRIORITY,
+					 event->tgt_long.rlength, req);
 		break;
 	default:
 		break;

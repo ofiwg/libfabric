@@ -524,6 +524,45 @@ static void rxc_disable(struct cxip_rxc *rxc)
 	}
 }
 
+static void cxip_rxc_dump_counters(struct cxip_rxc *rxc)
+{
+	int i;
+	int j;
+	int k;
+	size_t msg_size;
+	bool print_header;
+	int count;
+
+	for (i = 0; i < CXIP_LIST_COUNTS; i++) {
+		for (j = 0; j < OFI_HMEM_MAX; j++) {
+
+			print_header = true;
+
+			for (k = 0; k < CXIP_COUNTER_BUCKETS; k++) {
+				if (k == 0)
+					msg_size = 0;
+				else
+					msg_size = (1ULL << (k - 1));
+
+				count = ofi_atomic_get32(&rxc->cntrs.msg_count[i][j][k]);
+				if (count) {
+					if (print_header) {
+						RXC_INFO(rxc, "Recv Message Size %s - %s Histogram\n",
+							 c_ptl_list_strs[i],
+							 fi_tostr(&j, FI_TYPE_HMEM_IFACE));
+						RXC_INFO(rxc, "%-14s Count\n", "Size");
+						print_header = false;
+					}
+
+					RXC_INFO(rxc, "%-14lu %u\n", msg_size,
+						 count);
+				}
+			}
+		}
+
+	}
+}
+
 /*
  * cxip_rxc_alloc() - Allocate an RX context.
  *
@@ -582,6 +621,8 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context)
 	rxc->rget_align_mask = cxip_env.rdzv_aligned_sw_rget ?
 					cxip_env.cacheline_size - 1 : 0;
 
+	cxip_msg_counters_init(&rxc->cntrs);
+
 	return rxc;
 }
 
@@ -590,6 +631,8 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context)
  */
 void cxip_rxc_free(struct cxip_rxc *rxc)
 {
+	cxip_rxc_dump_counters(rxc);
+
 	rxc_disable(rxc);
 	fastlock_destroy(&rxc->lock);
 	free(rxc);
