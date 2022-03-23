@@ -6,13 +6,13 @@ from default.test_rdm import test_rdm_bw_functional
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 def test_rdm_pingpong(cmdline_args, iteration_type, completion_type, memory_type):
-    from efa.common import efa_run_client_server_test
+    from efa.efa_common import efa_run_client_server_test
     efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong", iteration_type,
                                completion_type, memory_type, "all")
 
 @pytest.mark.functional
 def test_rdm_pingpong_range(cmdline_args, completion_type, memory_type, message_size):
-    from efa.common import efa_run_client_server_test
+    from efa.efa_common import efa_run_client_server_test
     efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong", "short",
                                completion_type, memory_type, message_size)
 
@@ -20,13 +20,13 @@ def test_rdm_pingpong_range(cmdline_args, completion_type, memory_type, message_
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 def test_rdm_tagged_pingpong(cmdline_args, iteration_type, completion_type, memory_type):
-    from efa.common import efa_run_client_server_test
+    from efa.efa_common import efa_run_client_server_test
     efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_pingpong", iteration_type,
                                completion_type, memory_type, "all")
 
 @pytest.mark.functional
 def test_rdm_tagged_pingpong_range(cmdline_args, completion_type, memory_type, message_size):
-    from efa.common import efa_run_client_server_test
+    from efa.efa_common import efa_run_client_server_test
     efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_pingpong", "short",
                                completion_type, memory_type, message_size)
 
@@ -34,13 +34,13 @@ def test_rdm_tagged_pingpong_range(cmdline_args, completion_type, memory_type, m
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 def test_rdm_tagged_bw(cmdline_args, iteration_type, completion_type, memory_type):
-    from efa.common import efa_run_client_server_test
+    from efa.efa_common import efa_run_client_server_test
     efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_bw", iteration_type,
                                completion_type, memory_type, "all")
 
 @pytest.mark.functional
 def test_rdm_tagged_bw_range(cmdline_args, completion_type, memory_type, message_size):
-    from efa.common import efa_run_client_server_test
+    from efa.efa_common import efa_run_client_server_test
     efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_bw", "short",
                                completion_type, memory_type, message_size)
 
