@@ -2,57 +2,47 @@ import pytest
 
 from default.test_rdm import test_rdm_bw_functional
 
-def run_rdm_test(cmdline_args, executable, iteration_type, completion_type, memory_type, message_size):
-    from common import ClientServerTest
-    # It is observed that cuda tests requires larger time-out limit (~240 secs) to test all
-    # message sizes for libfabric's debug and mem-poisoning builds, on p4d instances.
-    timeout = None
-    if "cuda" in memory_type and message_size == "all":
-        timeout = 240
-
-    test = ClientServerTest(cmdline_args, executable, iteration_type,
-                            completion_type=completion_type,
-                            datacheck_type="with_datacheck",
-                            message_size=message_size,
-                            memory_type=memory_type,
-                            timeout=timeout)
-    test.run()
-
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 def test_rdm_pingpong(cmdline_args, iteration_type, completion_type, memory_type):
-    run_rdm_test(cmdline_args, "fi_rdm_pingpong", iteration_type,
-            completion_type, memory_type, "all")
+    from efa.common import efa_run_client_server_test
+    efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong", iteration_type,
+                               completion_type, memory_type, "all")
 
 @pytest.mark.functional
 def test_rdm_pingpong_range(cmdline_args, completion_type, memory_type, message_size):
-    run_rdm_test(cmdline_args, "fi_rdm_pingpong", "short",
-                 completion_type, memory_type, message_size)
+    from efa.common import efa_run_client_server_test
+    efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong", "short",
+                               completion_type, memory_type, message_size)
 
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 def test_rdm_tagged_pingpong(cmdline_args, iteration_type, completion_type, memory_type):
-    run_rdm_test(cmdline_args, "fi_rdm_tagged_pingpong", iteration_type,
-                 completion_type, memory_type, "all")
+    from efa.common import efa_run_client_server_test
+    efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_pingpong", iteration_type,
+                               completion_type, memory_type, "all")
 
 @pytest.mark.functional
 def test_rdm_tagged_pingpong_range(cmdline_args, completion_type, memory_type, message_size):
-    run_rdm_test(cmdline_args, "fi_rdm_tagged_pingpong", "short",
-                 completion_type, memory_type, message_size)
+    from efa.common import efa_run_client_server_test
+    efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_pingpong", "short",
+                               completion_type, memory_type, message_size)
 
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 def test_rdm_tagged_bw(cmdline_args, iteration_type, completion_type, memory_type):
-    run_rdm_test(cmdline_args, "fi_rdm_tagged_bw", iteration_type,
-                 completion_type, memory_type, "all")
+    from efa.common import efa_run_client_server_test
+    efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_bw", iteration_type,
+                               completion_type, memory_type, "all")
 
 @pytest.mark.functional
 def test_rdm_tagged_bw_range(cmdline_args, completion_type, memory_type, message_size):
-    run_rdm_test(cmdline_args, "fi_rdm_tagged_bw", "short",
-                 completion_type, memory_type, message_size)
+    from efa.common import efa_run_client_server_test
+    efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_bw", "short",
+                               completion_type, memory_type, message_size)
 
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
