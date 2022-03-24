@@ -140,6 +140,7 @@ nobase_dist_config_DATA = \
 	pytest/default/test_ubertest.py \
 	pytest/default/test_unexpected_msg.py \
 	pytest/efa/conftest.py \
+	pytest/efa/efa_common.py \
 	pytest/efa/test_from_default.py \
 	pytest/efa/test_dgram.py \
 	pytest/efa/test_rdm.py \

@@ -109,9 +109,9 @@ ssize_t rxr_read_prepare_pkt_entry_mr(struct rxr_ep *ep, struct rxr_read_entry *
 		return 0;
 	}
 
-	/* only ooo and unexp packet entry's memory is not registered with device */
 	assert(pkt_entry->alloc_type == RXR_PKT_FROM_OOO_POOL ||
-	       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL);
+	       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL ||
+	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_RX_POOL);
 
 	pkt_offset = (char *)read_entry->rma_iov[0].addr - (char *)pkt_entry->pkt;
 	assert(pkt_offset > sizeof(struct rxr_base_hdr));
@@ -356,7 +356,7 @@ int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, int entry_type, void *
 	}
 	assert(peer);
 
-	lower_ep_type = (peer->is_local) ? SHM_EP : EFA_EP;
+	lower_ep_type = (peer->is_local && ep->use_shm_for_tx) ? SHM_EP : EFA_EP;
 	read_entry = rxr_read_alloc_entry(ep, entry_type, x_entry, lower_ep_type);
 	if (!read_entry) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
