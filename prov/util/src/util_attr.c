@@ -192,7 +192,8 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 	if (!util_hints)
 		return 0;
 
-	if (ofi_dup_addr(util_hints, *core_hints))
+	ret = ofi_dup_addr(util_hints, *core_hints);
+	if (ret)
 		goto err;
 
 	if (util_hints->fabric_attr) {
@@ -202,6 +203,7 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 			if (!(*core_hints)->fabric_attr->name) {
 				FI_WARN(prov, FI_LOG_FABRIC,
 					"Unable to allocate fabric name\n");
+				ret = -FI_ENOMEM;
 				goto err;
 			}
 		}
@@ -218,6 +220,7 @@ static int ofi_info_to_core(uint32_t version, const struct fi_provider *prov,
 		if (!(*core_hints)->domain_attr->name) {
 			FI_WARN(prov, FI_LOG_FABRIC,
 				"Unable to allocate domain name\n");
+			ret = -FI_ENOMEM;
 			goto err;
 		}
 	}
