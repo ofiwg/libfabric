@@ -399,6 +399,63 @@ err_free_uncached_md:
 	return ret;
 }
 
+#ifdef HAVE_ROCR
+
+#include <hsa/hsa_ext_amd.h>
+
+static void cxip_map_get_rocr_mem_region_size(const void *buf,
+					      unsigned long len, void **out_buf,
+					      unsigned long *out_len)
+{
+	hsa_amd_pointer_info_t hsa_info = {
+		.size = sizeof(hsa_info),
+	};
+	hsa_status_t hsa_ret;
+
+	/* Determine full ROCR memory region size. */
+	hsa_ret = ofi_hsa_amd_pointer_info((void *)buf, &hsa_info, NULL, NULL,
+					   NULL);
+	if (hsa_ret != HSA_STATUS_SUCCESS) {
+		CXIP_WARN("Failed to perform hsa_amd_pointer_info: %s\n",
+			  ofi_hsa_status_to_string(hsa_ret));
+		*out_buf = (void *)buf;
+		*out_len = len;
+	} else {
+		CXIP_DBG("User addr=%p User len=%lu Region addr=%p Region len=%lu\n",
+			 buf, len, hsa_info.agentBaseAddress,
+			 hsa_info.sizeInBytes);
+
+		*out_buf = hsa_info.agentBaseAddress;
+		*out_len = hsa_info.sizeInBytes;
+	}
+}
+
+#else
+
+static void cxip_map_get_rocr_mem_region_size(const void *buf,
+					      unsigned long len, void **out_buf,
+					      unsigned long *out_len)
+{
+	*out_buf = (void *)buf;
+	*out_len = len;
+}
+
+#endif
+
+static void cxip_map_get_mem_region_size(const void *buf, unsigned long len,
+					 enum fi_hmem_iface iface,
+					 void **out_buf, unsigned long *out_len)
+{
+	switch (iface) {
+	case FI_HMEM_ROCR:
+		cxip_map_get_rocr_mem_region_size(buf, len, out_buf, out_len);
+		break;
+	default:
+		*out_buf = (void *)buf;
+		*out_len = len;
+	}
+}
+
 /*
  * cxip_map() - Acquire IO mapping for buf.
  *
@@ -446,8 +503,13 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	if (dom->hmem)
 		attr.iface = ofi_get_hmem_iface(buf);
 
-	if (cxip_domain_mr_cache_iface_enabled(dom, attr.iface))
+	if (cxip_domain_mr_cache_iface_enabled(dom, attr.iface)) {
+		cxip_map_get_mem_region_size(iov.iov_base, iov.iov_len,
+					     attr.iface, &iov.iov_base,
+					     &iov.iov_len);
+
 		return cxip_map_cache(dom, &attr, md);
+	}
 
 	return cxip_map_nocache(dom, &attr, md);
 }
