@@ -873,8 +873,10 @@ static int run_server(void)
 
 		ret = (int) fi_recv(ep, req, sizeof(*req), NULL,
 				    FI_ADDR_UNSPEC, req);
-		if (ret)
+		if (ret) {
+			FT_PRINTERR("fi_read", ret);
 			break;
+		}
 
 		do {
 			/* The rx and tx cq's are the same */
@@ -890,6 +892,10 @@ static int run_server(void)
 					ret = pthread_create(&thread, NULL,
 							     complete_rpc,
 							     comp.op_context);
+				}
+				if (ret) {
+					ret = -ret;
+					FT_PRINTERR("pthread_create", -ret);
 				}
 			}
 		} while (!ret && !(comp.flags & FI_RECV));
