@@ -603,6 +603,31 @@ int fi_no_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 	return -FI_ENOSYS;
 }
 
+int fi_no_av_set_union(struct fid_av_set *dst, const struct fid_av_set *src)
+{
+	return -FI_ENOSYS;
+}
+int fi_no_av_set_intersect(struct fid_av_set *dst, const struct fid_av_set *src)
+{
+	return -FI_ENOSYS;
+}
+int fi_no_av_set_diff(struct fid_av_set *dst, const struct fid_av_set *src)
+{
+	return -FI_ENOSYS;
+}
+int fi_no_av_set_insert(struct fid_av_set *set, fi_addr_t addr)
+{
+	return -FI_ENOSYS;
+}
+int fi_no_av_set_remove(struct fid_av_set *set, fi_addr_t addr)
+{
+	return -FI_ENOSYS;
+}
+int fi_no_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr)
+{
+	return -FI_ENOSYS;
+}
+
 ssize_t fi_coll_no_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
 {
 	return -FI_ENOSYS;

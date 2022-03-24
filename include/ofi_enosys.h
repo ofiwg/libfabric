@@ -463,6 +463,25 @@ int fi_no_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			uint64_t flags);
 
 /*
+static struct fi_ops_av_set X = {
+	.size = sizeof(struct fi_ops_av),
+	.set_union = fi_no_av_set_union,
+	.intersect = fi_no_av_set_intersect,
+	.diff = fi_no_av_set_diff,
+	.insert = fi_no_av_set_insert,
+	.remove = fi_no_av_set_remove,
+	.straddr = X,
+};
+*/
+
+int fi_no_av_set_union(struct fid_av_set *dst, const struct fid_av_set *src);
+int fi_no_av_set_intersect(struct fid_av_set *dst, const struct fid_av_set *src);
+int fi_no_av_set_diff(struct fid_av_set *dst, const struct fid_av_set *src);
+int fi_no_av_set_insert(struct fid_av_set *set, fi_addr_t addr);
+int fi_no_av_set_remove(struct fid_av_set *set, fi_addr_t addr);
+int fi_no_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr);
+
+/*
 static struct fi_ops_collective X = {
 	.size = sizeof(struct fi_ops_collective),
 	.barrier = fi_coll_no_barrier,
