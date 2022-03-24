@@ -78,7 +78,7 @@ jobs:
           tar czvf libfabric.tgz cov-int
           curl \
             --form token=${{ secrets.COVERITY_SCAN_TOKEN }} \
-            --form email=oss@rajachan.com \
+            --form email=ofiwg@lists.openfabrics.org \
             --form file=@libfabric.tgz \
             --form version="main" \
             --form description="`$PWD/install/bin/fi_info -l`" \
