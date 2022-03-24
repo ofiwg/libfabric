@@ -2258,7 +2258,7 @@ int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 void cxip_coll_init(struct cxip_ep_obj *ep_obj);
 int cxip_coll_enable(struct cxip_ep_obj *ep_obj);
 int cxip_coll_disable(struct cxip_ep_obj *ep_obj);
-int cxip_coll_close(struct cxip_ep_obj *ep_obj);
+void cxip_coll_close(struct cxip_ep_obj *ep_obj);
 void cxip_coll_populate_opcodes(void);
 int cxip_fi2cxi_opcode(int op, int datatype);
 int cxip_coll_send(struct cxip_coll_reduction *reduction,

@@ -1010,16 +1010,15 @@ int cxip_coll_disable(struct cxip_ep_obj *ep_obj)
 /**
  * Closes collectives and cleans up.
  *
+ * Formal placeholder.
+ *
  * Must be done during EP close.
  *
  * @param ep_obj - EP object
  */
-int cxip_coll_close(struct cxip_ep_obj *ep_obj)
+void cxip_coll_close(struct cxip_ep_obj *ep_obj)
 {
-	if (ofi_atomic_get32(&ep_obj->coll.mc_count) != 0)
-		return -FI_EBUSY;
 
-	return FI_SUCCESS;
 }
 
 /* Write a Join Complete event to the endpoint EQ
