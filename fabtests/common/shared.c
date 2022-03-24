@@ -2878,8 +2878,7 @@ void ft_addr_usage()
 			"synchronization over the, optional, port");
 	FT_PRINT_OPTS_USAGE("-E[=<oob_port>]", "enable out-of-band address exchange only "
 			"over the, optional, port");
-	FT_PRINT_OPTS_USAGE("-C <number>", "number of connections to accept before "
-			"cleaning up a server");
+	FT_PRINT_OPTS_USAGE("-C <number>", "simultaneous connections to server");
 	FT_PRINT_OPTS_USAGE("-F <addr_format>", "Address format (default:FI_FORMAT_UNSPEC)");
 }
 
