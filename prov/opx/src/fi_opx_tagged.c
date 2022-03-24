@@ -99,7 +99,11 @@ ssize_t fi_opx_trecvmsg_generic (struct fid_ep *ep,
 		assert((flags & (FI_PEEK | FI_CLAIM)) != FI_CLAIM);	/* TODO - why not? */
 
 		struct fi_opx_context_ext * ext = NULL;
-		posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext));
+		if (posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext))) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Out of memory.\n");
+			return -FI_ENOMEM;
+		}
 		flags |= FI_OPX_CQ_CONTEXT_EXT;
 
 		ext->opx_context.next = NULL;

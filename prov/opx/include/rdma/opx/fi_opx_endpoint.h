@@ -687,7 +687,11 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				ext = (struct fi_opx_context_ext *)context;
 				ext->err_entry.op_context = ext->msg.op_context;
 			} else {
-				posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext));
+				if (posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext))) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"Out of memory error.\n");
+					abort();
+				}
 				ext->opx_context.flags = FI_OPX_CQ_CONTEXT_EXT;
 				ext->err_entry.op_context = context;
 			}
@@ -814,7 +818,11 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				ext = (struct fi_opx_context_ext *)context;
 				ext->err_entry.op_context = ext->msg.op_context;
 			} else {
-				posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext));
+				if (posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext))) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"Out of memory error.\n");
+					abort();
+				}
 				ext->opx_context.flags = FI_OPX_CQ_CONTEXT_EXT;
 				ext->err_entry.op_context = context;
 			}
@@ -902,7 +910,11 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				ext = (struct fi_opx_context_ext *)context;
 				ext->err_entry.op_context = ext->msg.op_context;
 			} else {
-				posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext));
+				if (posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext))) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"Out of memory error.");
+					abort();
+				}
 				ext->opx_context = *context;
 				ext->opx_context.flags = FI_OPX_CQ_CONTEXT_EXT;
 				ext->err_entry.op_context = context;
@@ -1200,7 +1212,11 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				ext = (struct fi_opx_context_ext *)context;
 				ext->err_entry.op_context = ext->msg.op_context;
 			} else {
-				posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext));
+				if(posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext))) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"Out of memory error.\n");
+					abort();
+				}
 				ext->opx_context.flags = FI_OPX_CQ_CONTEXT_EXT;
 				ext->err_entry.op_context = context;
 			}
@@ -2124,7 +2140,8 @@ int fi_opx_ep_cancel_context(struct fi_opx_ep * opx_ep,
 		if (is_context_ext) {
 			ext = (struct fi_opx_context_ext *)context;
 		} else {
-			posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext));
+			if (posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext)))
+				return -FI_ENOMEM;
 			ext->opx_context.flags = FI_OPX_CQ_CONTEXT_EXT;
 		}
 
@@ -2510,8 +2527,9 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 	} else {
 //	fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 		struct fi_opx_context_ext * ext;
-		posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext));
-
+		if (posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext)))
+			return -FI_ENOMEM;
+		
 		ext->opx_context.flags = flags | FI_OPX_CQ_CONTEXT_EXT;
 		ext->opx_context.byte_counter = (uint64_t)-1;
 
