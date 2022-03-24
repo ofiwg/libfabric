@@ -67,7 +67,7 @@ static void dmabuf_reg_remove(int reg_fd, uint32_t fd)
 		.fd = fd,
 	};
 
-	ioctl(reg_fd, DMABUF_REG_IOCTL, &args);
+	(void) ioctl(reg_fd, DMABUF_REG_IOCTL, &args);
 }
 
 /*
