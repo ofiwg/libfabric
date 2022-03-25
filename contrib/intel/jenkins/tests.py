@@ -405,8 +405,7 @@ class MpiTestIMB(MpiTests):
                                      'IO'
                                  ],
                              '3':[
-                                     # NBC fails MPI_ALLgather and during collective
-                                     #'NBC',
+                                     'NBC',
                                      'RMA',
                                      'MT'
                                  ]
