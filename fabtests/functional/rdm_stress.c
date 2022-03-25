@@ -851,11 +851,33 @@ static int handle_cq_error(void)
 	return 0;
 }
 
+static int start_thread(void *(handler)(void *), void *context)
+{
+	pthread_t thread;
+	int ret, retries = 0;
+
+	ret = pthread_create(&thread, NULL, handler, context);
+	while (ret == EAGAIN && retries++ < 1000) {
+		sched_yield();
+		ret = pthread_create(&thread, NULL, handler, context);
+	}
+
+	if (ret == EAGAIN) {
+		printf("Cannot create thread, handling in main thread\n");
+		handler(context);
+		ret = 0;
+	} else if (ret) {
+		ret = -ret;
+		FT_PRINTERR("pthread_create", ret);
+	}
+
+	return ret;
+}
+
 static int run_server(void)
 {
 	struct fi_cq_tagged_entry comp = {0};
 	struct rpc_hello_msg *req;
-	pthread_t thread;
 	int ret;
 
 	printf("Starting rpc stress server\n");
@@ -873,8 +895,10 @@ static int run_server(void)
 
 		ret = (int) fi_recv(ep, req, sizeof(*req), NULL,
 				    FI_ADDR_UNSPEC, req);
-		if (ret)
+		if (ret) {
+			FT_PRINTERR("fi_read", ret);
 			break;
+		}
 
 		do {
 			/* The rx and tx cq's are the same */
@@ -884,12 +908,10 @@ static int run_server(void)
 				ret = handle_cq_error();
 			} else if (ret > 0) {
 				if (comp.flags & FI_RECV) {
-					ret = pthread_create(&thread, NULL,
-							     start_rpc, req);
+					ret = start_thread(start_rpc, req);
 				} else {
-					ret = pthread_create(&thread, NULL,
-							     complete_rpc,
-							     comp.op_context);
+					ret = start_thread(complete_rpc,
+							   comp.op_context);
 				}
 			}
 		} while (!ret && !(comp.flags & FI_RECV));
