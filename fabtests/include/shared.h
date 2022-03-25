@@ -578,7 +578,8 @@ void ft_longopts_usage();
 
 #define TEST_SET_N_RETURN(str, len, val_str, val, type, data)	\
 	do {							\
-		if (!strncmp(str, val_str, len)) {	\
+		if (len == strlen(val_str) &&			\
+		    !strncmp(str, val_str, len)) {		\
 			*(type *)(data) = val;			\
 			return 0;				\
 		}						\
