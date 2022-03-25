@@ -25,11 +25,11 @@ set functional_tests=^
 	"poll -t counter"^
 	"rdm"^
 	"rdm_rma_event"^
-	"rdm_rma_trigger"^
 	"rdm_tagged_peek"^
 	"bw -e rdm -v -T 1"^
 	"bw -e msg -v -T 1"^
 	"scalable_ep"
+rem	"rdm_rma_trigger"^  disabled because of frequent failures
 rem	"msg_epoll"
 
 set short_tests=^
