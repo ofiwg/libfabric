@@ -584,6 +584,17 @@ void ft_longopts_usage();
 		}						\
 	} while (0)
 
+/* FT_TOKEN_CHECK - compare a token character array (may not be
+ * NULL terminated) against keyword (NULL terminated).  Expression
+ * is true if they are the same length and characters.
+ * token - character array that may not be NULL termianted
+ * len - number of characters to compare from token
+ * keyword - NULL terminated string to be compared against token
+ */
+
+#define FT_TOKEN_CHECK(token, len, keyword) \
+		(len == strlen(keyword) && !strncmp(token, keyword, len))
+
 #ifdef __cplusplus
 }
 #endif

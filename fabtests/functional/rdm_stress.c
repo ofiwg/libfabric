@@ -124,16 +124,15 @@ struct rpc_client {
 	pid_t pid;
 };
 
-struct rpc_ctrl *ctrl;
+struct rpc_ctrl *ctrls;
 struct rpc_ctrl *pending_req;
 int ctrl_cnt;
-struct rpc_client clients[128];
+#define MAX_RPC_CLIENTS 128
+struct rpc_client clients[MAX_RPC_CLIENTS];
 
 static uint32_t myid;
 static uint32_t id_at_server;
 static fi_addr_t server_addr;
-static char *ctrlfile = NULL;
-
 
 static char *rpc_cmd_str(uint32_t cmd)
 {
@@ -593,8 +592,8 @@ static int run_child(void)
 
 	for (i = 0; i < ctrl_cnt && !ret; i++) {
 		printf("(%d-%d) rpc op %s\n", myid, id_at_server,
-		       rpc_op_str(ctrl[i].op));
-		ret = ctrl_op[ctrl[i].op](&ctrl[i]);
+		       rpc_op_str(ctrls[i].op));
+		ret = ctrl_op[ctrls[i].op](&ctrls[i]);
 	}
 
 free:
@@ -602,49 +601,263 @@ free:
 	return ret;
 }
 
-
-static struct rpc_ctrl ctrl_array[] = {
-	{op_goodbye},
-	{op_hello},
-	{op_msg_req, 1000},
-	{op_msg_resp},
-	{op_tag_req, 2000},
-	{op_tag_resp},
-	{op_msg_req, 1000000},
-	{op_msg_resp},
-	{op_write_req, 5600000, {12000}},
-	{op_write_resp},
-	{op_read_req, 64000},
-	{op_read_resp},
-	{op_tag_req, 2000000},
-	{op_tag_resp},
-	{op_read_req, 32000},
-	{op_read_resp},
-	{op_write_req, 86000, {6000}},
-	{op_write_resp},
-	{op_read_req, 1000000},
-	{op_read_resp},
-	{op_write_req, 56000, {12000}},
-	{op_write_resp},
-	{op_sleep, 100},
-	{op_exit},
-};
-
-/* TODO: read and parse control file */
-static int init_rpc(void)
+static bool get_uint64_val(const char *js, jsmntok_t *t, uint64_t *val)
 {
-	ctrl = ctrl_array;
-	ctrl_cnt = ARRAY_SIZE(ctrl_array);
-	return 0;
+	if (t->type != JSMN_PRIMITIVE)
+		return false;
+	return (sscanf(&js[t->start], "%lu", val) == 1);
 }
 
-static int run_parent(void)
+static bool get_op_enum(const char *js, jsmntok_t *t, uint32_t *op)
+{
+	const char *str;
+	size_t len;
+
+	if (t->type != JSMN_STRING)
+		return false;
+
+	str = &js[t->start];
+	len = t->end - t->start;
+
+	if (FT_TOKEN_CHECK(str, len, "msg_req")) {
+		*op = op_msg_req;
+		return true;
+	} else if (FT_TOKEN_CHECK(str, len, "msg_resp")) {
+		*op = op_msg_resp;
+		return true;
+	} else if (FT_TOKEN_CHECK(str, len, "tag_req")) {
+		*op = op_tag_req;
+		return true;
+	} else if (FT_TOKEN_CHECK(str, len, "tag_resp")) {
+		*op = op_tag_resp;
+		return true;
+	} else if (FT_TOKEN_CHECK(str, len, "read_req")) {
+		*op = op_read_req;
+		return true;
+	} else if (FT_TOKEN_CHECK(str, len, "read_resp")) {
+		*op = op_read_resp;
+		return true;
+	} else if (FT_TOKEN_CHECK(str, len, "write_req")) {
+		*op = op_write_req;
+		return true;
+	} else if (FT_TOKEN_CHECK(str, len, "write_resp")) {
+		*op = op_write_resp;
+		return true;
+	} else if (FT_TOKEN_CHECK(str, len, "sleep")) {
+		*op = op_sleep;
+		return true;
+	} else if (FT_TOKEN_CHECK(str, len, "noop")) {
+		*op = op_noop;
+		return true;
+	} else if (FT_TOKEN_CHECK(str, len, "goodbye")) {
+		*op = op_goodbye;
+		return true;
+	} else if (FT_TOKEN_CHECK(str, len, "hello")) {
+		*op = op_hello;
+		return true;
+	} else if (FT_TOKEN_CHECK(str, len, "exit")) {
+		*op = op_exit;
+		return true;
+	}
+
+	return false;
+}
+
+static void init_rpc_ctrl(struct rpc_ctrl *ctrl)
+{
+	ctrl->op = op_last;
+	ctrl->size = 0;
+	ctrl->offset = 0;
+	ctrl->buf = 0;
+	ctrl->mr = 0;
+}
+
+/* add_ctrl extracts a rpc_ctrl struct from information in jts[idx], a
+ *          JSMN_OBJECT, and its child tokens.
+ * Returns true if a valid rpc_ctrl is extracted.
+ *         false otherwise.
+ */
+static bool add_ctrl(const char *js, int njts, jsmntok_t *jts,
+		     struct rpc_ctrl *ctrl, int *idx)
+{
+	int oidx = *idx;  /* save object index for error print */
+	int osize = jts[*idx].size;  /* # child tokens in object token */
+	jsmntok_t *t;
+	const char *ks;
+	size_t len;
+
+	assert(jts[*idx].type == JSMN_OBJECT);
+
+	init_rpc_ctrl(ctrl);
+	/* i is indexing # of key:value pairs in JSMN_OBJECT */
+	for (int i = 0; i < osize && *idx < njts; i++) {
+		(*idx)++; /* advance to next token, expecting key token */
+		t = &jts[*idx];
+		/* key token must be JSMN_STRING and size == 1 */
+		if (t->type != JSMN_STRING || t->size != 1)
+			goto err_out;
+
+		ks = &js[t->start];
+		len = t->end - t->start;
+		if (FT_TOKEN_CHECK(ks, len, "op")) {
+			(*idx)++; /* advance to value token */
+			t = &jts[*idx];
+			if (!get_op_enum(js, t, &ctrl->op))
+				goto err_out;
+		} else if (FT_TOKEN_CHECK(ks, len, "size")) {
+			(*idx)++; /* advance to value token */
+			t = &jts[*idx];
+			if (!get_uint64_val(js, t, &ctrl->size))
+				goto err_out;
+		} else if (FT_TOKEN_CHECK(ks, len, "offset")) {
+			(*idx)++; /* advance to value token */
+			t = &jts[*idx];
+			if (!get_uint64_val(js, t, &ctrl->offset))
+				goto err_out;
+		} else if (FT_TOKEN_CHECK(ks, len, "ms")) {
+			(*idx)++; /* advance to value token */
+			t = &jts[*idx];
+			if (!get_uint64_val(js, t, &ctrl->size))
+				goto err_out;
+		} else {
+			goto err_out;
+		}
+	}
+
+	/* op is rquired for rpc_ctrl to be valid */
+	if (ctrl->op == op_last)
+		goto err_out;
+	return true;
+
+err_out:
+	printf("Invalid JSON entry: %.*s\n",
+		jts[oidx].end - jts[oidx].start,
+		&js[jts[oidx].start]);
+	init_rpc_ctrl(ctrl);
+	return false;
+}
+
+/* read and parse control file */
+static int init_ctrls(const char *ctrlfile)
+{
+	FILE *ctrl_f;
+	struct stat sb;
+	char *js;	/* control file loaded in string */
+	jsmn_parser jp;
+	int njts;	/* # of JSON tokens in the control file */
+	jsmntok_t *jts;
+	int nobj;	/* # of JSON objects = possible rpc_ctrl entries */
+	int start, i;
+	int ret = 0;
+
+	ctrl_f = fopen(ctrlfile, "r");
+	if (!ctrl_f)
+		return -errno;
+
+	if (stat(ctrlfile, &sb))
+		return -errno;
+
+	js = malloc(sb.st_size + 1);
+	if (!js) {
+		ret = -FI_ENOMEM;
+		goto no_mem_out;
+	}
+
+	if (fread(js, sb.st_size, 1, ctrl_f) != 1) {
+		ret = -FI_EINVAL;
+		goto read_err_out;
+	}
+	js[sb.st_size] = 0;
+
+	/* get # of tokens, allcoate memory and parse JSON */
+	jsmn_init(&jp);
+	njts = jsmn_parse(&jp, js, sb.st_size, NULL, 0);
+	if (njts < 0) {
+		ret = -FI_EINVAL;
+		goto read_err_out;
+	}
+
+	jts = malloc(sizeof(jsmntok_t) * njts);
+	if (!jts) {
+		ret = -FI_ENOMEM;
+		goto read_err_out;
+	}
+
+	jsmn_init(&jp);
+	if (jsmn_parse(&jp, js, sb.st_size, jts, njts) != njts) {
+		ret = -FI_EINVAL;
+		goto parse_err_out;
+	}
+
+	/* find the first JSON array bypassing comments at the top */
+	for (start = 0; start < njts && jts[start].type != JSMN_ARRAY; start++)
+		;
+	if (start == njts) {
+		ret = -FI_EINVAL;
+		goto parse_err_out;
+	}
+
+	/* count # of JSMN_OBJECT which is # of potential rpc_ctrl entries */
+	for (i = start, nobj = 0; i < njts; i++)
+		if  (jts[i].type == JSMN_OBJECT)
+			nobj++;
+
+	if (nobj <= 0) {
+		ret = -FI_EINVAL;
+		goto parse_err_out;
+	}
+
+	ctrls = malloc(sizeof(struct rpc_ctrl) * nobj);
+	if (!ctrls) {
+		ret = -FI_ENOMEM;
+		goto parse_err_out;
+	}
+
+	/* extract rpc_ctrl structs from tokens */
+	for (ctrl_cnt = 0; start < njts; start++) {
+		if (jts[start].type != JSMN_OBJECT)
+			continue;
+
+		if (add_ctrl(js, njts, jts, &ctrls[ctrl_cnt], &start))
+			ctrl_cnt++;
+	}
+
+	free(jts);
+	free(js);
+	fclose(ctrl_f);
+
+	if (ctrl_cnt <= 0) {
+		free(ctrls);
+		ctrls = NULL;
+		return -FI_EINVAL;
+	}
+	return 0;
+
+parse_err_out:
+	free(jts);
+read_err_out:
+	free(js);
+no_mem_out:
+	fclose(ctrl_f);
+	return ret;
+}
+
+static void free_ctrls(void)
+{
+	free(ctrls);
+	ctrls = NULL;
+}
+
+static int run_parent(const char *ctrlfile)
 {
 	pid_t pid;
 	int i, ret;
 
+	if (!ctrlfile)
+		return -FI_ENOENT;
+
 	printf("Starting rpc client(s)\n");
-	ret = init_rpc();
+	ret = init_ctrls(ctrlfile);
 	if (ret)
 		return ret;
 
@@ -655,7 +868,7 @@ static int run_parent(void)
 		if (opts.num_connections == 1) {
 			ret = run_child();
 			if (ret)
-				return ret;
+				goto free;
 			continue;
 		}
 
@@ -670,8 +883,10 @@ static int run_parent(void)
 			ret = fork();
 			if (!ret)
 				return run_child();
-			if (ret < 0)
-				return -errno;
+			if (ret < 0) {
+				ret = -errno;
+				goto free;
+			}
 
 			clients[myid].pid = ret;
 		}
@@ -686,9 +901,10 @@ static int run_parent(void)
 		}
 	}
 
+free:
+	free_ctrls();
 	return ret;
 }
-
 
 /* If we fail to send the response (e.g. EAGAIN), we need to remove the
  * address from the AV to avoid double insertions.  We could loop on
@@ -923,6 +1139,7 @@ static int run_server(void)
 
 int main(int argc, char **argv)
 {
+	char *ctrlfile = NULL;
 	int op, ret;
 
 	opts = INIT_OPTS;
@@ -943,17 +1160,22 @@ int main(int argc, char **argv)
 			ft_parseinfo(op, optarg, hints, &opts);
 			break;
 		case 'u':
-			ctrlfile = strdup(optarg);
+			ctrlfile = optarg;
 			break;
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "An RDM endpoint error stress test.");
+			FT_PRINT_OPTS_USAGE("-u <test control file>",
+			"Sample file - fabtests/test_configs/ofi_rxm/stress.json");
 			return EXIT_FAILURE;
 		}
 	}
 
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
+
+	/* limit num_connections to MAX_RPC_CLIENTS */
+	opts.num_connections = MIN(opts.num_connections, MAX_RPC_CLIENTS);
 
 	hints->caps = FI_MSG | FI_TAGGED | FI_RMA;
 	hints->domain_attr->mr_mode = opts.mr_mode;
@@ -962,10 +1184,9 @@ int main(int argc, char **argv)
 	hints->tx_attr->inject_size = sizeof(struct rpc_hello_msg);
 
 	if (opts.dst_addr)
-		ret = run_parent();
+		ret = run_parent(ctrlfile);
 	else
 		ret = run_server();
 
-//	free(ctrl);
 	return ft_exit_code(ret);
 }
