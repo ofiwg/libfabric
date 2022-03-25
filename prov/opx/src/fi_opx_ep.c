@@ -1305,7 +1305,11 @@ int fi_opx_ep_rx_cancel (struct fi_opx_ep_rx * rx,
 			if (cancel_context->flags & FI_OPX_CQ_CONTEXT_EXT) {
 				ext = (struct fi_opx_context_ext *)cancel_context;
 			} else {
-				posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext));
+				if (posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext))) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"Out of memory.\n");
+					return -FI_ENOMEM;
+				}
 				ext->opx_context.flags = FI_OPX_CQ_CONTEXT_EXT;
 			}
 
@@ -1778,7 +1782,11 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 			ext = (struct fi_opx_context_ext *)context;
 			assert((ext->opx_context.flags & FI_OPX_CQ_CONTEXT_EXT) != 0);
 		} else {
-			posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext));
+			if (posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext))) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, 
+					"Out of memory.\n");
+				abort();
+			}
 			ext->opx_context.flags = rx_op_flags | FI_OPX_CQ_CONTEXT_EXT;
 		}
 

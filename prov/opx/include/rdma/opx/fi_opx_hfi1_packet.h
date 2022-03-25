@@ -164,9 +164,13 @@ static inline
 void fi_opx_hfi1_dump_stl_packet_hdr (struct fi_opx_hfi1_stl_packet_hdr * hdr,
 		const char * fn, const unsigned ln) {
 
+#if __GNUC__ > 9 
 #pragma GCC diagnostic ignored "=Waddress-of-packed-member"
+#endif
 	const uint64_t * const qw = (uint64_t *)hdr;
+#if __GNUC__ > 9 
 #pragma GCC diagnostic pop	
+#endif
 
 	fprintf(stderr, "%s():%u ==== dump stl packet header @ %p [%016lx %016lx %016lx %016lx]\n", fn, ln, hdr, qw[0], qw[1], qw[2], qw[3]);
 	fprintf(stderr, "%s():%u .lrh.flags .............     0x%04hx\n", fn, ln, hdr->lrh.flags);
