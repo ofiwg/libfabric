@@ -526,7 +526,7 @@ static void efa_ep_progress_internal(struct efa_ep *ep, struct efa_cq *efa_cq)
 	struct util_cq *cq;
 	struct fi_cq_tagged_entry cq_entry[EFA_CQ_PROGRESS_ENTRIES];
 	struct fi_cq_tagged_entry *temp_cq_entry;
-	struct fi_cq_err_entry cq_err_entry;
+	struct fi_cq_err_entry cq_err_entry = {0};
 	fi_addr_t src_addr[EFA_CQ_PROGRESS_ENTRIES];
 	uint64_t flags;
 	int i;
