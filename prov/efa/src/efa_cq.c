@@ -125,7 +125,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	struct efa_wce *wce;
 	struct slist_entry *entry;
 	struct efa_av *av;
-	struct efa_wc wc;
+	struct efa_wc wc = {0};
 	ssize_t ret = 0, i;
 
 	cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
