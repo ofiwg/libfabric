@@ -681,42 +681,42 @@ static void init_rpc_ctrl(struct rpc_ctrl *ctrl)
 static bool add_ctrl(const char *js, int njts, jsmntok_t *jts,
 		     struct rpc_ctrl *ctrl, int *idx)
 {
-	int oidx = *idx;  /* save object index for error print */
-	int osize = jts[*idx].size;  /* # child tokens in object token */
+	int oidx = *idx;
+	int osize = jts[*idx].size;
 	jsmntok_t *t;
 	const char *ks;
 	size_t len;
+	int i;
 
 	assert(jts[*idx].type == JSMN_OBJECT);
 
 	init_rpc_ctrl(ctrl);
 	/* i is indexing # of key:value pairs in JSMN_OBJECT */
-	for (int i = 0; i < osize && *idx < njts; i++) {
+	for (i = 0; i < osize && *idx < njts; i++) {
 		(*idx)++; /* advance to next token, expecting key token */
 		t = &jts[*idx];
-		/* key token must be JSMN_STRING and size == 1 */
 		if (t->type != JSMN_STRING || t->size != 1)
 			goto err_out;
 
 		ks = &js[t->start];
 		len = t->end - t->start;
 		if (FT_TOKEN_CHECK(ks, len, "op")) {
-			(*idx)++; /* advance to value token */
+			(*idx)++;
 			t = &jts[*idx];
 			if (!get_op_enum(js, t, &ctrl->op))
 				goto err_out;
 		} else if (FT_TOKEN_CHECK(ks, len, "size")) {
-			(*idx)++; /* advance to value token */
+			(*idx)++;
 			t = &jts[*idx];
 			if (!get_uint64_val(js, t, &ctrl->size))
 				goto err_out;
 		} else if (FT_TOKEN_CHECK(ks, len, "offset")) {
-			(*idx)++; /* advance to value token */
+			(*idx)++;
 			t = &jts[*idx];
 			if (!get_uint64_val(js, t, &ctrl->offset))
 				goto err_out;
 		} else if (FT_TOKEN_CHECK(ks, len, "ms")) {
-			(*idx)++; /* advance to value token */
+			(*idx)++;
 			t = &jts[*idx];
 			if (!get_uint64_val(js, t, &ctrl->size))
 				goto err_out;
