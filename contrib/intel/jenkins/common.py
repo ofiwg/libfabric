@@ -40,10 +40,10 @@ enabled_prov_list = [
     "tcp",
     "sockets",
     "udp",
-    "shm"
+    "shm",
+    "psm3"
 ]
 disabled_prov_list = [
-    "psm3",
     'usnic',
     'psm',
     'efa',
