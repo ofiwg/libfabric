@@ -62,11 +62,8 @@ static void smr_handle_signal(int signum, siginfo_t *info, void *ucontext)
 	/* call the original handler */
 	if (old_action[signum].sa_flags & SA_SIGINFO)
 		old_action[signum].sa_sigaction(signum, info, ucontext);
-	else if (old_action[signum].sa_handler == SIG_DFL ||
-		 old_action[signum].sa_handler == SIG_IGN)
-		return;
 	else
-		old_action[signum].sa_handler(signum);
+		raise(signum);
 
 }
 
