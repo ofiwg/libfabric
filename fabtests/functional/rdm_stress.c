@@ -83,6 +83,7 @@ enum {
 #endif
 	rpc_write_key = 189,
 	rpc_read_key = 724,
+	rpc_threads = 32,
 };
 
 /* Wire protocol */
@@ -680,42 +681,42 @@ static void init_rpc_ctrl(struct rpc_ctrl *ctrl)
 static bool add_ctrl(const char *js, int njts, jsmntok_t *jts,
 		     struct rpc_ctrl *ctrl, int *idx)
 {
-	int oidx = *idx;  /* save object index for error print */
-	int osize = jts[*idx].size;  /* # child tokens in object token */
+	int oidx = *idx;
+	int osize = jts[*idx].size;
 	jsmntok_t *t;
 	const char *ks;
 	size_t len;
+	int i;
 
 	assert(jts[*idx].type == JSMN_OBJECT);
 
 	init_rpc_ctrl(ctrl);
 	/* i is indexing # of key:value pairs in JSMN_OBJECT */
-	for (int i = 0; i < osize && *idx < njts; i++) {
+	for (i = 0; i < osize && *idx < njts; i++) {
 		(*idx)++; /* advance to next token, expecting key token */
 		t = &jts[*idx];
-		/* key token must be JSMN_STRING and size == 1 */
 		if (t->type != JSMN_STRING || t->size != 1)
 			goto err_out;
 
 		ks = &js[t->start];
 		len = t->end - t->start;
 		if (FT_TOKEN_CHECK(ks, len, "op")) {
-			(*idx)++; /* advance to value token */
+			(*idx)++;
 			t = &jts[*idx];
 			if (!get_op_enum(js, t, &ctrl->op))
 				goto err_out;
 		} else if (FT_TOKEN_CHECK(ks, len, "size")) {
-			(*idx)++; /* advance to value token */
+			(*idx)++;
 			t = &jts[*idx];
 			if (!get_uint64_val(js, t, &ctrl->size))
 				goto err_out;
 		} else if (FT_TOKEN_CHECK(ks, len, "offset")) {
-			(*idx)++; /* advance to value token */
+			(*idx)++;
 			t = &jts[*idx];
 			if (!get_uint64_val(js, t, &ctrl->offset))
 				goto err_out;
 		} else if (FT_TOKEN_CHECK(ks, len, "ms")) {
-			(*idx)++; /* advance to value token */
+			(*idx)++;
 			t = &jts[*idx];
 			if (!get_uint64_val(js, t, &ctrl->size))
 				goto err_out;
@@ -990,10 +991,8 @@ int (*handle_rpc[cmd_last])(struct rpc_hdr *req, struct rpc_resp *resp) = {
 	handle_write,
 };
 
-static void *complete_rpc(void *arg)
+static void complete_rpc(struct rpc_resp *resp)
 {
-	struct rpc_resp *resp = arg;
-
 	printf("(%d) complete rpc %s (%s)\n", resp->hdr.client_id,
 	       rpc_cmd_str(resp->hdr.cmd), fi_strerror(resp->status));
 
@@ -1004,13 +1003,11 @@ static void *complete_rpc(void *arg)
 		fi_close(&resp->mr->fid);
 	(void) ft_check_buf(resp + 1, resp->hdr.size);
 	free(resp);
-	return NULL;
 }
 
-static void *start_rpc(void *arg)
+static void start_rpc(struct rpc_hdr *req)
 {
 	struct rpc_resp *resp;
-	struct rpc_hdr *req = arg;
 	uint64_t start;
 	int ret;
 
@@ -1041,7 +1038,6 @@ static void *start_rpc(void *arg)
 
 free:
 	free(req);
-	return NULL;
 }
 
 /* Completion errors are expected as clients are misbehaving */
@@ -1067,40 +1063,11 @@ static int handle_cq_error(void)
 	return 0;
 }
 
-static int start_thread(void *(handler)(void *), void *context)
-{
-	pthread_t thread;
-	int ret, retries = 0;
-
-	ret = pthread_create(&thread, NULL, handler, context);
-	while (ret == EAGAIN && retries++ < 1000) {
-		sched_yield();
-		ret = pthread_create(&thread, NULL, handler, context);
-	}
-
-	if (ret == EAGAIN) {
-		printf("Cannot create thread, handling in main thread\n");
-		handler(context);
-		ret = 0;
-	} else if (ret) {
-		ret = -ret;
-		FT_PRINTERR("pthread_create", ret);
-	}
-
-	return ret;
-}
-
-static int run_server(void)
+static void *process_rpcs(void *context)
 {
 	struct fi_cq_tagged_entry comp = {0};
 	struct rpc_hello_msg *req;
 	int ret;
-
-	printf("Starting rpc stress server\n");
-	opts.options |= FT_OPT_CQ_SHARED;
-	ret = ft_init_fabric();
-	if (ret)
-		return ret;
 
 	do {
 		req = calloc(1, sizeof(*req));
@@ -1123,15 +1090,41 @@ static int run_server(void)
 				comp.flags = FI_SEND;
 				ret = handle_cq_error();
 			} else if (ret > 0) {
-				if (comp.flags & FI_RECV) {
-					ret = start_thread(start_rpc, req);
-				} else {
-					ret = start_thread(complete_rpc,
-							   comp.op_context);
-				}
+				ret = 0;
+				if (comp.flags & FI_RECV)
+					start_rpc(&req->hdr);
+				else
+					complete_rpc(comp.op_context);
 			}
 		} while (!ret && !(comp.flags & FI_RECV));
 	} while (!ret);
+
+	return NULL;
+}
+
+static int run_server(void)
+{
+	pthread_t thread[rpc_threads];
+	int i, ret;
+
+	printf("Starting rpc stress server\n");
+	opts.options |= FT_OPT_CQ_SHARED;
+	ret = ft_init_fabric();
+	if (ret)
+		return ret;
+
+	for (i = 0; i < rpc_threads; i++) {
+		ret = pthread_create(&thread[i], NULL, process_rpcs,
+				     (void *) (uintptr_t) i);
+		if (ret) {
+			ret = -ret;
+			FT_PRINTERR("pthread_create", ret);
+			break;
+		}
+	}
+
+	while (i-- > 0)
+		pthread_join(thread[i], NULL);
 
 	ft_free_res();
 	return ret;
