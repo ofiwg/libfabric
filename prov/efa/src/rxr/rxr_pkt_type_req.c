@@ -1036,6 +1036,7 @@ ssize_t rxr_pkt_proc_matched_longread_rtm(struct rxr_ep *ep,
 {
 	struct rxr_longread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
+	int err;
 
 	rtm_hdr = rxr_get_longread_rtm_base_hdr(pkt_entry->pkt);
 	read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + rxr_pkt_req_hdr_size(pkt_entry));
@@ -1050,7 +1051,14 @@ ssize_t rxr_pkt_proc_matched_longread_rtm(struct rxr_ep *ep,
 	/* truncate rx_entry->iov to save memory registration pages because we
 	 * need to do memory registration for the receiving buffer.
 	 */
-	ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_count, rx_entry->total_len + ep->msg_prefix_size);
+	err = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_count, rx_entry->total_len + ep->msg_prefix_size);
+	if (err) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"ofi_truncated_iov failed. new_size: %ld\n",
+			rx_entry->total_len + ep->msg_prefix_size);
+		return err;
+	}
+
 	return rxr_read_post_remote_read_or_queue(ep, RXR_RX_ENTRY, rx_entry);
 }
 

@@ -140,7 +140,7 @@ static ssize_t efa_post_recv(struct efa_ep *ep, const struct fi_msg *msg, uint64
 	struct efa_recv_wr *ewr;
 	struct ibv_recv_wr *wr;
 	uintptr_t addr;
-	ssize_t err;
+	ssize_t err, post_recv_err;
 	size_t i;
 
 	ewr = ofi_buf_alloc(ep->recv_wr_pool);
@@ -193,8 +193,14 @@ static ssize_t efa_post_recv(struct efa_ep *ep, const struct fi_msg *msg, uint64
 	return err;
 
 out_err:
-	if (ep->recv_more_wr_head.next)
-		ibv_post_recv(qp->ibv_qp, ep->recv_more_wr_head.next, &bad_wr);
+	if (ep->recv_more_wr_head.next) {
+		post_recv_err = ibv_post_recv(qp->ibv_qp, ep->recv_more_wr_head.next, &bad_wr);
+		if (post_recv_err) {
+			EFA_WARN(FI_LOG_EP_DATA,
+				 "Encountered error %ld when ibv_post_recv on error handling path\n",
+				 post_recv_err);
+		}
+	}
 
 	free_recv_wr_list(ep->recv_more_wr_head.next);
 	ep->recv_more_wr_tail = &ep->recv_more_wr_head;
