@@ -947,7 +947,8 @@ static int handle_goodbye(struct rpc_hdr *req, struct rpc_resp *resp)
 
 	addr = req->client_id;
 	ret = fi_av_remove(av, &addr, 1, 0);
-	assert(ret == FI_SUCCESS);
+	if (ret)
+		FT_PRINTERR("fi_av_remove", ret);
 
 	/* No response generated */
 	printf("(%d) complete rpc %s (%s)\n", resp->hdr.client_id,
