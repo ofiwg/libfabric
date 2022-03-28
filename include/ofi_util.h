@@ -537,7 +537,7 @@ struct util_cq {
 	struct slist		aux_queue;
 	fi_cq_read_func		read_entry;
 	int			internal_wait;
-	ofi_atomic32_t		signaled;
+	ofi_atomic32_t		wakeup;
 	ofi_cq_progress_func	progress;
 };
 
@@ -564,11 +564,6 @@ int ofi_cq_write_overflow(struct util_cq *cq, void *context, uint64_t flags,
 			  size_t len, void *buf, uint64_t data, uint64_t tag,
 			  fi_addr_t src);
 
-static inline void util_cq_signal(struct util_cq *cq)
-{
-	assert(cq->wait);
-	cq->wait->signal(cq->wait);
-}
 
 static inline void
 ofi_cq_write_entry(struct util_cq *cq, void *context, uint64_t flags,

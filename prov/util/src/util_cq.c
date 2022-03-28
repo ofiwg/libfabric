@@ -366,8 +366,8 @@ ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		if (ofi_adjust_timeout(endtime, &timeout))
 			return -FI_EAGAIN;
 
-		if (ofi_atomic_get32(&cq->signaled)) {
-			ofi_atomic_set32(&cq->signaled, 0);
+		if (ofi_atomic_get32(&cq->wakeup)) {
+			ofi_atomic_set32(&cq->wakeup, 0);
 			return -FI_EAGAIN;
 		}
 
@@ -386,8 +386,10 @@ ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
 int ofi_cq_signal(struct fid_cq *cq_fid)
 {
 	struct util_cq *cq = container_of(cq_fid, struct util_cq, cq_fid);
-	ofi_atomic_set32(&cq->signaled, 1);
-	util_cq_signal(cq);
+
+	assert(cq->wait);
+	ofi_atomic_set32(&cq->wakeup, 1);
+	cq->wait->signal(cq->wait);
 	return 0;
 }
 
@@ -485,7 +487,7 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cq->domain = container_of(domain, struct util_domain, domain_fid);
 	ofi_atomic_initialize32(&cq->ref, 0);
-	ofi_atomic_initialize32(&cq->signaled, 0);
+	ofi_atomic_initialize32(&cq->wakeup, 0);
 	dlist_init(&cq->ep_list);
 	ofi_mutex_init(&cq->ep_list_lock);
 	if (cq->domain->lock.lock_type == OFI_LOCK_NONE ||
