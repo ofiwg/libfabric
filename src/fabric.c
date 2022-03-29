@@ -1031,8 +1031,12 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 		if (prov_vec[i][0] != '^')
 		    break;
 
-		if (!strcasecmp(&prov_vec[i][1], provider->name))
+		if (!strcasecmp(&prov_vec[i][1], provider->name)) {
+			FI_INFO(&core_prov, FI_LOG_CORE,
+				"Provider %s is excluded\n",
+				provider->name);
 			return 0;
+		}
 	}
 	count = i + 1;
 
