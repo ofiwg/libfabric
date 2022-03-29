@@ -385,6 +385,7 @@ static uint64_t cxip_cntr_read(struct fid_cntr *fid_cntr)
 
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
 
+	cxip_cntr_progress(cxi_cntr);
 	cxip_cntr_get(cxi_cntr, false);
 
 	/* TODO: Fall back to reading register on error? */
@@ -406,6 +407,7 @@ static uint64_t cxip_cntr_readerr(struct fid_cntr *fid_cntr)
 
 	cxi_cntr = container_of(fid_cntr, struct cxip_cntr, cntr_fid);
 
+	cxip_cntr_progress(cxi_cntr);
 	cxip_cntr_get(cxi_cntr, false);
 
 	/* TODO: Fall back to reading register on error? */
