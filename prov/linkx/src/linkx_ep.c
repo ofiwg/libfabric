@@ -107,7 +107,95 @@ int lnx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 int lnx_getname(fid_t fid, void *addr, size_t *addrlen)
 {
-	return -FI_EOPNOTSUPP;
+	struct local_prov *entry;
+	size_t size = sizeof(struct lnx_addresses);
+	/* initial location to put the address */
+	char ep_addr[FI_NAME_MAX];
+	char *tmp = NULL;
+	struct lnx_addresses *la;
+	struct lnx_address_prov *lap;
+	char hostname[FI_NAME_MAX];
+	size_t prov_addrlen;
+	size_t addrlen_list[LNX_MAX_LOCAL_EPS];
+	int rc, i, j = 0;
+
+	/* check the hostname and compare it to mine
+	 * TODO: Is this good enough? or do we need a better way of
+	 * determining if the address is local?
+	 */
+	rc = gethostname(hostname, FI_NAME_MAX);
+	if (rc == -1) {
+		FI_WARN(&lnx_prov, FI_LOG_CORE, "failed to get hostname\n");
+		return -FI_EPERM;
+	}
+
+	addrlen_list[0] = 0;
+
+	/* calculate the size of the address */
+	dlist_foreach_container(&local_prov_table, struct local_prov,
+							entry, lpv_entry) {
+		size += sizeof(struct lnx_address_prov);
+		prov_addrlen = 0;
+
+		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+			struct local_prov_ep *ep = entry->lpv_prov_eps[i];
+			if (!ep)
+				continue;
+
+			rc = fi_getname(&ep->lpe_ep->fid, (void*)ep_addr, &prov_addrlen);
+			if (rc == -FI_ETOOSMALL) {
+				size += prov_addrlen * entry->lpv_ep_count;
+				addrlen_list[j] = prov_addrlen;
+				j++;
+				break;
+			} else {
+				/* this shouldn't have happened. */
+				return -FI_EINVAL;
+			}
+		}
+	}
+
+	if (!addr || *addrlen < size) {
+		*addrlen = size;
+		return -FI_ETOOSMALL;
+	}
+
+	la = addr;
+
+	lap = (struct lnx_address_prov *)((char*)la + sizeof(*la));
+
+	j = 0;
+	dlist_foreach_container(&local_prov_table, struct local_prov,
+							entry, lpv_entry) {
+		memcpy(lap->lap_prov, entry->lpv_prov_name, FI_NAME_MAX - 1);
+		lap->lap_addr_count = entry->lpv_ep_count;
+		lap->lap_addr_size = addrlen_list[j];
+
+		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+			struct local_prov_ep *ep = entry->lpv_prov_eps[i];
+			if (!ep)
+				continue;
+
+			tmp = (char*)lap + sizeof(*lap);
+
+			rc = fi_getname(&ep->lpe_ep->fid, (void*)tmp, &addrlen_list[j]);
+			if (rc)
+				return rc;
+
+			if (lap->lap_addr_size != addrlen_list[j])
+				return -FI_EINVAL;
+
+			tmp += addrlen_list[j];
+		}
+
+		lap = (struct lnx_address_prov *)tmp;
+		j++;
+	}
+
+	la->la_prov_count = j;
+	memcpy(la->la_hostname, hostname, FI_NAME_MAX - 1);
+
+	return 0;
 }
 
 struct fi_ops_ep lnx_ep_ops = {
