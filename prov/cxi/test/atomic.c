@@ -461,8 +461,10 @@ Test(atomic, simple_inject)
 			       FI_UINT64, FI_SUM);
 	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
 	count++;
+
 	while (fi_cntr_read(cxit_write_cntr) != count)
-		sched_yield();
+		;
+
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -474,8 +476,10 @@ Test(atomic, simple_inject)
 			       FI_UINT64, FI_SUM);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	count++;
+
 	while (fi_cntr_read(cxit_write_cntr) != count)
-		sched_yield();
+		;
+
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -487,8 +491,10 @@ Test(atomic, simple_inject)
 			       FI_UINT64, FI_SUM);
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 	count++;
+
 	while (fi_cntr_read(cxit_write_cntr) != count)
-		sched_yield();
+		;
+
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -514,8 +520,10 @@ Test(atomic, simple_inject)
 			       FI_UINT64, FI_SUM);
 	cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
 	count++;
+
 	while (fi_cntr_read(cxit_write_cntr) != count)
-		sched_yield();
+		;
+
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -614,7 +622,7 @@ Test(atomic, simple_fetch)
 			     *loc, exp_result);
 
 		while (fi_cntr_read(cxit_read_cntr) != 3)
-			sched_yield();
+			;
 
 		free(loc);
 		_cxit_destroy_mr(&mr);
@@ -1559,7 +1567,7 @@ Test(atomic, amo_batch)
 	cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 
 	while (fi_cntr_read(cxit_write_cntr) != 4)
-		sched_yield();
+		;
 
 	for (i = 0; i < 4; i++) {
 		ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -1665,7 +1673,8 @@ Test(atomic_sel, selective_completion,
 	count++;
 
 	while (fi_cntr_read(cxit_write_cntr) != count)
-		sched_yield();
+		;
+
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -1684,7 +1693,8 @@ Test(atomic_sel, selective_completion,
 	count++;
 
 	while (fi_cntr_read(cxit_write_cntr) != count)
-		sched_yield();
+		;
+
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -1759,7 +1769,8 @@ Test(atomic_sel, selective_completion,
 	count++;
 
 	while (fi_cntr_read(cxit_read_cntr) != count)
-		sched_yield();
+		;
+
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -1801,7 +1812,7 @@ Test(atomic_sel, selective_completion,
 	count++;
 
 	while (fi_cntr_read(cxit_read_cntr) != count)
-		sched_yield();
+		;
 
 	/* Make sure an event wasn't delivered */
 	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
@@ -1877,7 +1888,8 @@ Test(atomic_sel, selective_completion_suppress,
 	count++;
 
 	while (fi_cntr_read(cxit_write_cntr) != count)
-		sched_yield();
+		;
+
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -1908,7 +1920,8 @@ Test(atomic_sel, selective_completion_suppress,
 	count++;
 
 	while (fi_cntr_read(cxit_write_cntr) != count)
-		sched_yield();
+		;
+
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -1927,7 +1940,8 @@ Test(atomic_sel, selective_completion_suppress,
 	count++;
 
 	while (fi_cntr_read(cxit_write_cntr) != count)
-		sched_yield();
+		;
+
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -1950,7 +1964,8 @@ Test(atomic_sel, selective_completion_suppress,
 	count++;
 
 	while (fi_cntr_read(cxit_read_cntr) != count)
-		sched_yield();
+		;
+
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -1982,7 +1997,8 @@ Test(atomic_sel, selective_completion_suppress,
 	count++;
 
 	while (fi_cntr_read(cxit_read_cntr) != count)
-		sched_yield();
+		;
+
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
 		     *rma, exp_remote);
@@ -2003,7 +2019,7 @@ Test(atomic_sel, selective_completion_suppress,
 	count++;
 
 	while (fi_cntr_read(cxit_write_cntr) != count)
-		sched_yield();
+		;
 
 	/* Make sure an event wasn't delivered */
 	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
@@ -2045,7 +2061,7 @@ Test(atomic_sel, selective_completion_suppress,
 	count++;
 
 	while (fi_cntr_read(cxit_read_cntr) != count)
-		sched_yield();
+		;
 
 	/* Make sure an event wasn't delivered */
 	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
@@ -2079,8 +2095,9 @@ Test(atomic, rem_cntr)
 
 	/* Wait for remote counter event, then check data */
 	count++;
+
 	while (fi_cntr_read(cxit_rem_cntr) != count)
-		sched_yield();
+		;
 
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
@@ -2098,8 +2115,9 @@ Test(atomic, rem_cntr)
 
 	/* Wait for remote counter event, then check data */
 	count++;
+
 	while (fi_cntr_read(cxit_rem_cntr) != count)
-		sched_yield();
+		;
 
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
@@ -2118,8 +2136,9 @@ Test(atomic, rem_cntr)
 
 	/* Wait for remote counter event, then check data */
 	count++;
+
 	while (fi_cntr_read(cxit_rem_cntr) != count)
-		sched_yield();
+		;
 
 	cr_assert_eq(*rma, exp_remote,
 		     "Result = %ld, expected = %ld",
@@ -2665,7 +2684,8 @@ Test(atomic, std_mr_inject)
 	operand1 = 0;
 
 	while (fi_cntr_read(cxit_write_cntr) != count)
-		sched_yield();
+		;
+
 	cr_assert_eq(*rma, exp_remote,
 			"Result = %ld, expected = %ld",
 			*rma, exp_remote);
@@ -2885,8 +2905,6 @@ static void amo_hybrid_mr_desc_test_runner(bool fetching, bool compare,
 			ret = fi_cntr_wait(cntr, 1, 1000);
 			if (ret == FI_SUCCESS)
 				break;
-
-			fi_cq_read(cxit_tx_cq, &cqe, 0);
 		}
 
 		if (!read)
@@ -2922,8 +2940,6 @@ static void amo_hybrid_mr_desc_test_runner(bool fetching, bool compare,
 			ret = fi_cntr_wait(cntr, 1, 1000);
 			if (ret == FI_SUCCESS)
 				break;
-
-			fi_cq_read(cxit_tx_cq, &cqe, 0);
 		}
 
 		cr_assert_eq(*remote_window.mem, 4,
@@ -2957,8 +2973,6 @@ static void amo_hybrid_mr_desc_test_runner(bool fetching, bool compare,
 			ret = fi_cntr_wait(cntr, 1, 1000);
 			if (ret == FI_SUCCESS)
 				break;
-
-			fi_cq_read(cxit_tx_cq, &cqe, 0);
 		}
 
 		cr_assert_eq(*remote_window.mem, 3,
@@ -3233,9 +3247,11 @@ Test(amo_hybrid_mr_desc, fetching_amo_failure)
 	cr_assert(ret == FI_SUCCESS);
 
 	while (fi_cntr_readerr(cntr) != 1)
-		fi_cq_read(cxit_tx_cq, &cqe, 0);
+		;
 
-	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	} while (ret == -FI_EAGAIN);
 	cr_assert(ret == -FI_EAVAIL);
 
 	ret = fi_cq_readerr(cxit_tx_cq, &cq_err, 0);
@@ -3291,9 +3307,11 @@ Test(amo_hybrid_mr_desc, amo_failure)
 	cr_assert(ret == FI_SUCCESS);
 
 	while (fi_cntr_readerr(cntr) != 1)
-		fi_cq_read(cxit_tx_cq, &cqe, 0);
+		;
 
-	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	} while (ret == -FI_EAGAIN);
 	cr_assert(ret == -FI_EAVAIL);
 
 	ret = fi_cq_readerr(cxit_tx_cq, &cq_err, 0);

@@ -102,7 +102,7 @@ Test(mr, mr_zero_len)
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
 	while (fi_cntr_read(cxit_rem_cntr) != 1)
-		sched_yield();
+		;
 
 	mr_destroy(&mr);
 
@@ -119,7 +119,7 @@ Test(mr, mr_zero_len)
 	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
 
 	while (fi_cntr_read(cxit_rem_cntr) != 2)
-		sched_yield();
+		;
 
 	mr_destroy(&mr);
 }

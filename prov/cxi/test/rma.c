@@ -553,7 +553,7 @@ Test(rma, simple_inject_write)
 	cr_assert(ret == FI_SUCCESS);
 
 	while (fi_cntr_read(cxit_write_cntr) != 1)
-		sched_yield();
+		;
 
 	/* Validate sent data */
 	for (int i = 0; i < send_len; i++)
@@ -593,7 +593,7 @@ Test(rma, simple_read)
 	cr_assert_eq(ret, FI_SUCCESS, "fi_read() failed (%d)", ret);
 
 	while (fi_cntr_read(cxit_read_cntr) != 1)
-		sched_yield();
+		;
 
 	/* Wait for async event indicating data has been sent */
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -978,7 +978,7 @@ Test(rma_sel, selective_completion,
 		count++;
 
 		while (fi_cntr_read(cxit_write_cntr) != count)
-			sched_yield();
+			;
 
 		/* Validate sent data */
 		for (int i = 0; i < loc_len; i++)
@@ -1060,7 +1060,7 @@ Test(rma_sel, selective_completion,
 		count++;
 
 		while (fi_cntr_read(cxit_read_cntr) != count)
-			sched_yield();
+			;
 
 		/* Validate sent data */
 		for (int i = 0; i < loc_len; i++)
@@ -1129,7 +1129,7 @@ Test(rma_sel, selective_completion_suppress,
 		write_count++;
 
 		while (fi_cntr_read(cxit_write_cntr) != write_count)
-			sched_yield();
+			;
 
 		/* Validate sent data */
 		for (int i = 0; i < send_len; i++)
@@ -1171,7 +1171,7 @@ Test(rma_sel, selective_completion_suppress,
 		write_count++;
 
 		while (fi_cntr_read(cxit_write_cntr) != write_count)
-			sched_yield();
+			;
 
 		/* Validate sent data */
 		for (int i = 0; i < send_len; i++)
@@ -1192,7 +1192,7 @@ Test(rma_sel, selective_completion_suppress,
 	write_count++;
 
 	while (fi_cntr_read(cxit_write_cntr) != write_count)
-		sched_yield();
+		;
 
 	/* Validate sent data */
 	for (int i = 0; i < send_len; i++)
@@ -1231,8 +1231,9 @@ Test(rma, rem_cntr)
 
 		/* Wait for remote counter event, then check data */
 		count++;
+
 		while (fi_cntr_read(cxit_rem_cntr) != count)
-			sched_yield();
+			;
 
 		/* Validate sent data */
 		for (int i = 0; i < send_len; i++)
@@ -1354,7 +1355,7 @@ Test(rma, std_mr_inject)
 	memset(send_buf, 0xff, send_len);
 
 	while (fi_cntr_read(cxit_write_cntr) != iters)
-		sched_yield();
+		;
 
 	/* Validate sent data */
 	for (int i = 0; i < win_len; i++)

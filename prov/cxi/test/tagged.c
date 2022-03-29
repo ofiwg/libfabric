@@ -2276,11 +2276,11 @@ void do_msg(uint8_t *send_buf, size_t send_len, uint64_t send_tag,
 		recv_cnt++;
 
 	while (fi_cntr_read(cxit_send_cntr) != send_cnt)
-		sched_yield();
+		;
 	while (fi_cntr_read(cxit_recv_cntr) != recv_cnt)
-		sched_yield();
+		;
 	while (fi_cntr_readerr(cxit_recv_cntr) != recv_errcnt)
-		sched_yield();
+		;
 
 	/* Error count is 7 bits */
 	if (recv_errcnt == 127) {
@@ -3015,13 +3015,8 @@ Test(tagged_sel, selective_completion,
 		cr_assert_eq(ret, FI_SUCCESS, "fi_tsendmsg failed %d", ret);
 
 		/* Wait for async events indicating data has been received */
-		do {
-			ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
-			cr_assert(ret == -FI_EAGAIN);
-
-			ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
-			cr_assert(ret == -FI_EAGAIN);
-		} while (fi_cntr_read(cxit_recv_cntr) != recv_cnt);
+		while (fi_cntr_read(cxit_recv_cntr) != recv_cnt)
+			;
 
 		/* Validate sent data */
 		for (i = 0; i < send_len; i++) {
@@ -3150,13 +3145,8 @@ Test(tagged_sel, selective_completion_suppress,
 		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
 
 		/* Wait for async events indicating data has been received */
-		do {
-			ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
-			cr_assert(ret == -FI_EAGAIN);
-
-			ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
-			cr_assert(ret == -FI_EAGAIN);
-		} while (fi_cntr_read(cxit_recv_cntr) != recv_cnt);
+		while (fi_cntr_read(cxit_recv_cntr) != recv_cnt)
+			;
 
 		/* Validate sent data */
 		for (i = 0; i < send_len; i++) {
@@ -3237,13 +3227,9 @@ Test(tagged_sel, selective_completion_suppress,
 		cr_assert_eq(ret, FI_SUCCESS, "fi_tsendmsg failed %d", ret);
 
 		/* Wait for async events indicating data has been received */
-		do {
-			ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
-			cr_assert(ret == -FI_EAGAIN);
+		while (fi_cntr_read(cxit_recv_cntr) != recv_cnt)
+			;
 
-			ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
-			cr_assert(ret == -FI_EAGAIN);
-		} while (fi_cntr_read(cxit_recv_cntr) != recv_cnt);
 
 		/* Validate sent data */
 		for (i = 0; i < send_len; i++) {
@@ -3275,13 +3261,8 @@ Test(tagged_sel, selective_completion_suppress,
 	cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
 
 	/* Wait for async events indicating data has been received */
-	do {
-		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
-		cr_assert(ret == -FI_EAGAIN);
-
-		ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
-		cr_assert(ret == -FI_EAGAIN);
-	} while (fi_cntr_read(cxit_recv_cntr) != recv_cnt);
+	while (fi_cntr_read(cxit_recv_cntr) != recv_cnt)
+		;
 
 	/* Validate sent data */
 	for (i = 0; i < send_len; i++) {
