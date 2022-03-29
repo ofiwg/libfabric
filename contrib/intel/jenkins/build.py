@@ -61,6 +61,13 @@ def copy_build_dir(install_path):
     shutil.copytree(ci_site_config.build_dir,
                     '{}/ci_middlewares'.format(install_path))
 
+def skip(install_path):
+    command = [
+                  '{}/skip.sh'.format(ci_site_config.testpath),
+                  '{}'.format(os.environ['WORKSPACE'])
+              ]
+    common.run_command(command)
+
 if __name__ == "__main__":
 #read Jenkins environment variables
     # In Jenkins,  JOB_NAME  = 'ofi_libfabric/master' vs BRANCH_NAME = 'master'
@@ -72,7 +79,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--build_item', help="build libfabric or fabtests",
-                         choices=['libfabric', 'fabtests', 'builddir'])
+                         choices=['libfabric', 'fabtests', 'builddir', 'skip'])
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl", \
                         choices=['dbg', 'dl'])
 
@@ -101,4 +108,7 @@ if __name__ == "__main__":
 
     elif (build_item == 'builddir'):
         copy_build_dir(ci_middlewares_install_path)
+
+    elif (build_item == 'skip'):
+        skip(ci_middlewares_install_path)
 
