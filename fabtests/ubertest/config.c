@@ -438,7 +438,9 @@ static int ft_parse_key_val(char *config, jsmntok_t *token, char *test_set)
 	}
 
 	for (i = 0; i < sizeof(keys) / sizeof(keys[0]); i++) {
-		if (!strncmp(config + key_token->start, keys[i].str, strlen(keys[i].str))) {
+		if (FT_TOKEN_CHECK(config + key_token->start,
+				   key_token->end - key_token->start,
+				   keys[i].str)) {
 			key = &keys[i];
 			parsed++;
 			break;
