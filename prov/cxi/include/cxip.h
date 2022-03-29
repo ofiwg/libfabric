@@ -1015,6 +1015,9 @@ struct cxip_cntr {
 
 	struct fid_wait *wait;
 
+	/* Contexts to which counter is bound */
+	struct dlist_entry ctx_list;
+
 	fastlock_t lock;
 
 	struct cxi_ct *ct;

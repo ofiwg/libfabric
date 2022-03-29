@@ -303,14 +303,26 @@ static void cxip_txc_close(struct cxip_txc *txc)
 	if (txc->send_cq)
 		ofi_atomic_dec32(&txc->send_cq->ref);
 
-	if (txc->send_cntr)
+	if (txc->send_cntr) {
+		fid_list_remove(&txc->send_cntr->ctx_list,
+				&txc->send_cntr->lock,
+				&txc->fid.ctx.fid);
 		ofi_atomic_dec32(&txc->send_cntr->ref);
+	}
 
-	if (txc->read_cntr)
+	if (txc->read_cntr) {
+		fid_list_remove(&txc->read_cntr->ctx_list,
+				&txc->read_cntr->lock,
+				&txc->fid.ctx.fid);
 		ofi_atomic_dec32(&txc->read_cntr->ref);
+	}
 
-	if (txc->write_cntr)
+	if (txc->write_cntr) {
+		fid_list_remove(&txc->write_cntr->ctx_list,
+				&txc->write_cntr->lock,
+				&txc->fid.ctx.fid);
 		ofi_atomic_dec32(&txc->write_cntr->ref);
+	}
 
 	cxip_domain_remove_txc(txc->domain, txc);
 }
@@ -327,8 +339,12 @@ static void cxip_rxc_close(struct cxip_rxc *rxc)
 	if (rxc->recv_cq)
 		ofi_atomic_dec32(&rxc->recv_cq->ref);
 
-	if (rxc->recv_cntr)
+	if (rxc->recv_cntr) {
+		fid_list_remove(&rxc->recv_cntr->ctx_list,
+				&rxc->recv_cntr->lock,
+				&rxc->ctx.fid);
 		ofi_atomic_dec32(&rxc->recv_cntr->ref);
+	}
 }
 
 /**
@@ -472,6 +488,7 @@ static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct cxip_cntr *cntr;
 	struct cxip_txc *txc;
 	struct cxip_rxc *rxc;
+	int ret;
 
 	if ((flags | CXIP_EP_CNTR_FLAGS) != CXIP_EP_CNTR_FLAGS) {
 		CXIP_WARN("Invalid cntr flag\n");
@@ -479,8 +496,16 @@ static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 	}
 
 	cntr = container_of(bfid, struct cxip_cntr, cntr_fid.fid);
+
 	switch (fid->fclass) {
 	case FI_CLASS_TX_CTX:
+		ret = fid_list_insert(&cntr->ctx_list, &cntr->lock, fid);
+		if (ret) {
+			CXIP_WARN("Counter TXC bind failed: %d:%s\n",
+				  ret, fi_strerror(-ret));
+			return ret;
+		}
+
 		txc = container_of(fid, struct cxip_txc, fid.ctx.fid);
 		if (flags & FI_SEND) {
 			txc->send_cntr = cntr;
@@ -499,6 +524,13 @@ static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	case FI_CLASS_RX_CTX:
+		ret = fid_list_insert(&cntr->ctx_list, &cntr->lock, fid);
+		if (ret) {
+			CXIP_WARN("Counter RXC bind failed: %d:%s\n",
+				  ret, fi_strerror(-ret));
+			return ret;
+		}
+
 		rxc = container_of(fid, struct cxip_rxc, ctx.fid);
 		if (flags & FI_RECV) {
 			rxc->recv_cntr = cntr;
@@ -507,11 +539,11 @@ static int cxip_ctx_bind_cntr(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	default:
-		CXIP_WARN("Invalid fid\n");
+		CXIP_WARN("Counter context bind, invalid fid\n");
 		return -FI_EINVAL;
 	}
 
-	return 0;
+	return FI_SUCCESS;
 }
 
 /**

@@ -334,6 +334,47 @@ static int cxip_cntr_get(struct cxip_cntr *cxi_cntr, bool force)
 }
 
 /*
+ * cxip_cntr_progress() - Make CQ progress on bound endpoint.
+ */
+static void cxip_cntr_progress(struct cxip_cntr *cntr)
+{
+	struct fid_list_entry *fid_entry;
+	struct dlist_entry *item;
+	struct cxip_cq *cq;
+	struct cxip_txc *txc;
+	struct cxip_rxc *rxc;
+
+	/* Lock is used to protect bound context list. Note that
+	 * CQ processing updates counters via doorbells, use of
+	 * cntr->lock is not required by CQ processing.
+	 */
+	fastlock_acquire(&cntr->lock);
+
+	dlist_foreach(&cntr->ctx_list, item) {
+		fid_entry = container_of(item, struct fid_list_entry, entry);
+		switch (fid_entry->fid->fclass) {
+		case FI_CLASS_TX_CTX:
+			txc = container_of(fid_entry->fid, struct cxip_txc,
+					   fid.ctx.fid);
+			cq = txc->send_cq;
+			break;
+		case FI_CLASS_RX_CTX:
+			rxc = container_of(fid_entry->fid, struct cxip_rxc,
+					   ctx.fid);
+			cq = rxc->recv_cq;
+			break;
+		default:
+			CXIP_WARN("Counter can not initiate CQ progress\n");
+			continue;
+		}
+
+		cxip_cq_progress(cq);
+	}
+
+	fastlock_release(&cntr->lock);
+}
+
+/*
  * cxip_cntr_read() - fi_cntr_read() implementation.
  */
 static uint64_t cxip_cntr_read(struct fid_cntr *fid_cntr)
@@ -468,11 +509,14 @@ static int cxip_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 		container_of(fid_cntr, struct cxip_cntr, cntr_fid);
 	uint64_t success = 0;
 	int ret;
-	uint64_t end_ts;
+	uint64_t endtime;
+
 
 	if (cntr->attr.wait_obj == FI_WAIT_NONE ||
 	    threshold > FI_CXI_CNTR_SUCCESS_MAX)
 		return -FI_EINVAL;
+
+	endtime = ofi_timeout_time(timeout);
 
 	/* Use a triggered list entry setup to fire at the user's threshold.
 	 * This will cause a success/error writeback to occur at the desired
@@ -483,10 +527,6 @@ static int cxip_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 		CXIP_INFO("Failed to emit trig cmd: %d\n", ret);
 		return ret;
 	}
-
-	/* Timeout is in msecs. */
-	if (timeout >= 0)
-		end_ts = ofi_gettime_ms() + timeout;
 
 	/* Spin until the trigger list entry fires which updates the CT success
 	 * field.
@@ -501,15 +541,19 @@ static int cxip_cntr_wait(struct fid_cntr *fid_cntr, uint64_t threshold,
 		if (success >= threshold)
 			return FI_SUCCESS;
 
+		if (ofi_adjust_timeout(endtime, &timeout))
+			return -FI_ETIMEDOUT;
+
 		/* Only FI_WAIT_YIELD is supported. */
 		sched_yield();
-	} while (timeout < 0 ||  ofi_gettime_ms() < end_ts);
+
+		cxip_cntr_progress(cntr);
+
+	} while (1);
 
 	/* TODO: Triggered operation may get leaked on timeout and threshold
 	 * never met.
 	 */
-
-	return -FI_ETIMEDOUT;
 }
 
 /*
@@ -590,6 +634,8 @@ static int cxip_cntr_close(struct fid *fid)
 	cntr = container_of(fid, struct cxip_cntr, cntr_fid.fid);
 	if (ofi_atomic_get32(&cntr->ref))
 		return -FI_EBUSY;
+
+	assert(dlist_empty(&cntr->ctx_list));
 
 	ret = cxil_destroy_ct(cntr->ct);
 	if (ret)
@@ -737,6 +783,7 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		memcpy(&_cntr->attr, attr, sizeof(cxip_cntr_attr));
 
 	ofi_atomic_initialize32(&_cntr->ref, 0);
+	dlist_init(&_cntr->ctx_list);
 
 	fastlock_init(&_cntr->lock);
 
