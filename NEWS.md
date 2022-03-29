@@ -12,6 +12,12 @@ v1.15.0, Fri Apr 1, 2022
 ## Core
 
 ## EFA
+- Added windows support through efawin (https://github.com/aws/efawin)
+- Added support of AWS neuron.
+- Added support of using gdrcopy to copy data from host to device.
+- Fixed a bug that cause 0 byte read to fail.
+- Fixed a memory corruption issue that can caused forked process to crash.
+- Extended testing coverage through new pytest based testing framework.
 
 ## RxD
 
