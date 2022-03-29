@@ -47,7 +47,7 @@ done
 git config --global user.name "OFIWG Bot"
 git config --global user.email "ofiwg@lists.openfabrics.org"
 
-branch_name=pr/update-nroff-generated-man-pages
+branch_name=pr/update-nroff-generated-man-pages-$BASE_REF
 git checkout -b $branch_name
 
 set +e
