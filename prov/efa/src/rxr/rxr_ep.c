@@ -362,19 +362,24 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	tx_entry->msg_id = 0;
 	dlist_init(&tx_entry->queued_pkts);
 
-	memcpy(&tx_entry->iov[0], msg->msg_iov, sizeof(struct iovec) * msg->iov_count);
+	memcpy(tx_entry->iov, msg->msg_iov, sizeof(struct iovec) * msg->iov_count);
 	memset(tx_entry->mr, 0, sizeof(*tx_entry->mr) * msg->iov_count);
 	if (msg->desc)
 		memcpy(tx_entry->desc, msg->desc, sizeof(*msg->desc) * msg->iov_count);
 	else
 		memset(tx_entry->desc, 0, sizeof(tx_entry->desc));
 
+	/* cq_entry on completion */
+	tx_entry->cq_entry.op_context = msg->context;
+	tx_entry->cq_entry.data = msg->data;
+	tx_entry->cq_entry.len = ofi_total_iov_len(tx_entry->iov, tx_entry->iov_count);
+	tx_entry->cq_entry.buf = OFI_LIKELY(tx_entry->cq_entry.len > 0) ? tx_entry->iov[0].iov_base : NULL;
+
 	if (ep->msg_prefix_size > 0) {
 		assert(tx_entry->iov[0].iov_len >= ep->msg_prefix_size);
 		tx_entry->iov[0].iov_base = (char *)tx_entry->iov[0].iov_base + ep->msg_prefix_size;
 		tx_entry->iov[0].iov_len -= ep->msg_prefix_size;
 	}
-
 	tx_entry->total_len = ofi_total_iov_len(tx_entry->iov, tx_entry->iov_count);
 
 	/* set flags */
@@ -385,15 +390,6 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 		tx_op_flags &= ~FI_COMPLETION;
 	tx_entry->fi_flags = flags | tx_op_flags;
 
-	/* cq_entry on completion */
-	tx_entry->cq_entry.op_context = msg->context;
-	tx_entry->cq_entry.len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
-	if (OFI_LIKELY(tx_entry->cq_entry.len > 0))
-		tx_entry->cq_entry.buf = msg->msg_iov[0].iov_base;
-	else
-		tx_entry->cq_entry.buf = NULL;
-
-	tx_entry->cq_entry.data = msg->data;
 	switch (op) {
 	case ofi_op_tagged:
 		tx_entry->cq_entry.flags = FI_TRANSMIT | FI_MSG | FI_TAGGED;
