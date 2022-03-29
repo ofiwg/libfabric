@@ -324,11 +324,6 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	struct rxr_tx_entry *tx_entry;
 	struct rdm_peer *peer;
 
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
-	       "iov_len: %lu tag: %lx op: %x flags: %lx\n",
-	       ofi_total_iov_len(msg->msg_iov, msg->iov_count),
-	       tag, op, flags);
-
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	assert(msg->iov_count <= rxr_ep->tx_iov_limit);
 
@@ -355,6 +350,11 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 		rxr_ep_progress_internal(rxr_ep);
 		goto out;
 	}
+
+	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+	       "iov_len: %lu tag: %lx op: %x flags: %lx\n",
+	       tx_entry->total_len,
+	       tag, op, flags);
 
 	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
 
@@ -716,7 +716,7 @@ struct rxr_rx_entry *rxr_msg_alloc_rx_entry(struct rxr_ep *ep,
 	if (rx_entry->iov_count) {
 		assert(msg->msg_iov);
 		memcpy(rx_entry->iov, msg->msg_iov, sizeof(*rx_entry->iov) * msg->iov_count);
-		rx_entry->cq_entry.len = ofi_total_iov_len(msg->msg_iov, msg->iov_count);
+		rx_entry->cq_entry.len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 		rx_entry->cq_entry.buf = msg->msg_iov[0].iov_base;
 	}
 
@@ -996,10 +996,6 @@ ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct fi_msg *msg,
 	struct rxr_rx_entry *rx_entry;
 	int ret = 0;
 
-	if ((ofi_total_iov_len(msg->msg_iov, msg->iov_count)
-	     < rxr_ep->min_multi_recv_size) || op != ofi_op_msg)
-		return -FI_EINVAL;
-
 	/*
 	 * Always get new rx_entry of type RXR_MULTI_RECV_POSTED when in the
 	 * multi recv path. The posted entry will not be used for receiving
@@ -1010,6 +1006,19 @@ ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct fi_msg *msg,
 	if (OFI_UNLIKELY(!rx_entry)) {
 		rxr_ep_progress_internal(rxr_ep);
 		return -FI_EAGAIN;
+	}
+
+	if (rx_entry->cq_entry.len < rxr_ep->min_multi_recv_size) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "invalid size (%ld) for multi_recv! expected to be >= %ld\n",
+			rx_entry->cq_entry.len, rxr_ep->min_multi_recv_size);
+		rxr_release_rx_entry(rxr_ep, rx_entry);
+		return -FI_EINVAL;
+	}
+
+	if (op == ofi_op_tagged) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "tagged recv cannot be applied to multi_recv!\n");
+		rxr_release_rx_entry(rxr_ep, rx_entry);
+		return -FI_EINVAL;
 	}
 
 	rx_entry->rxr_flags |= RXR_MULTI_RECV_POSTED;
@@ -1089,11 +1098,6 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 	struct rxr_rx_entry *rx_entry;
 	uint64_t rx_op_flags;
 
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
-	       "%s: iov_len: %lu tag: %lx ignore: %lx op: %x flags: %lx\n",
-	       __func__, ofi_total_iov_len(msg->msg_iov, msg->iov_count), tag, ignore,
-	       op, flags);
-
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 
 	assert(msg->iov_count <= rxr_ep->rx_iov_limit);
@@ -1136,6 +1140,11 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 		rxr_ep_progress_internal(rxr_ep);
 		goto out;
 	}
+
+	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+	       "%s: iov_len: %lu tag: %lx ignore: %lx op: %x flags: %lx\n",
+	       __func__, rx_entry->total_len, tag, ignore,
+	       op, flags);
 
 	if (rxr_ep->use_zcpy_rx) {
 		ret = rxr_ep_post_user_recv_buf(rxr_ep, rx_entry, flags);
