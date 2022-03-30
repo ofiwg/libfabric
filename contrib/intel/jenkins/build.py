@@ -63,8 +63,9 @@ def copy_build_dir(install_path):
 
 def skip(install_path):
     command = [
-                  '{}/skip.sh'.format(ci_site_config.testpath),
-                  '{}'.format(os.environ['WORKSPACE'])
+                  '{}/skip1.sh'.format(ci_site_config.testpath),
+                  '{}'.format(os.environ['WORKSPACE']),
+                  'refs/pull/{}/head'.format(os.environ['CHANGE_ID'])
               ]
     common.run_command(command)
 

@@ -3,7 +3,13 @@ properties([disableConcurrentBuilds(abortPrevious: true)])
 def DO_RUN=1
 
 def skip() {
-    def changes = readFile "${env.WORKSPACE}/commit_id"
+    def file = "${env.WORKSPACE}/commit_id}"
+    if (!fileExists(file)) {
+        echo "CI Run has not rebased with ofiwg/libfabric. Please Rebase."
+        return
+    }
+
+    def changes = readFile file
     def changeStrings = new ArrayList<String>()
 
     for (line in changes.readLines()) {
