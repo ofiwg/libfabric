@@ -65,9 +65,15 @@ def copy_build_dir(install_path):
                     '{}/ci_middlewares'.format(install_path))
 
 def skip(install_path):
+    if os.getenv('CHANGE_TARGET') is not None:
+        change_target = os.environ['CHANGE_TARGET']
+    else:
+        change_target = os.environ['GIT_BRANCH']
+
     command = [
                   '{}/skip.sh'.format(ci_site_config.testpath),
-                  '{}'.format(os.environ['WORKSPACE'])
+                  '{}'.format(os.environ['WORKSPACE']),
+                  '{}'.format(change_target)
               ]
     common.run_command(command)
 
