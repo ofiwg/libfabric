@@ -31,6 +31,9 @@ def build_libfabric(libfab_install_path, mode):
     for prov in common.disabled_prov_list:
          config_cmd.append('--enable-{}=no'.format(prov))
 
+    config_cmd.append('--disable-opx') # we do not test opx in intel jenkins ci
+    config_cmd.append('--disable-efa') # we do not test efa in intel jenkins ci
+
     config_cmd.append('--enable-ze-dlopen')
 
     common.run_command(['./autogen.sh'])
