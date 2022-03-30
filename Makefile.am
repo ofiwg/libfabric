@@ -244,6 +244,7 @@ real_man_pages = \
         man/man3/fi_errno.3 \
         man/man3/fi_eq.3 \
         man/man3/fi_fabric.3 \
+        man/man3/fi_peer.3 \
         man/man3/fi_provider.3 \
         man/man3/fi_getinfo.3 \
         man/man3/fi_mr.3 \
