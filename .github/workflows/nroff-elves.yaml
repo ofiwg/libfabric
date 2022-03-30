@@ -1,9 +1,10 @@
-name: GitHub Action Schedule
+name: Man Page Converter
 
 on:
-  schedule:
-    - cron: '0 * * * *'
-  workflow_dispatch:
+    push:
+        paths:
+          - 'man/*.md'
+    workflow_dispatch:
 
 jobs:
     nroff-elves-scheduled:
@@ -28,4 +29,4 @@ jobs:
             env:
               GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               REPO: ${{ github.event.repository.full_name }}
-              BASE_REF: ${{ github.event.repository.default_branch }}
+              BASE_REF: ${{ github.ref_name }}
