@@ -172,4 +172,40 @@ int lnx_endpoint(struct fid_domain *domain, struct fi_info *info,
 int lnx_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 					struct fid_ep **ep, void *context);
 
+static inline
+int lnx_select_send_pathway(struct lnx_peer *lp, struct fid_ep **cep,
+							fi_addr_t *addr)
+{
+	int idx = 0;
+	struct lnx_local2peer_map *lpm;
+
+	/* TODO this will need to be expanded to handle Multi-Rail. For now
+	 * the assumption is that local peers can be reached on shm and remote
+	 * peers have only one interface, hence indexing on 0 and 1
+	 */
+	if (!lp->lp_local)
+		idx = 1;
+
+	/* TODO when we support multi-rail we can have multiple maps */
+	lpm = lp->lp_provs[idx]->lpp_map[0];
+
+	*cep = lpm->local_ep->lpe_ep;
+	*addr = lpm->peer_addrs[0];
+
+	return 0;
+}
+
+static inline
+int lnx_select_recv_pathway(struct lnx_peer *lp, struct fid_ep **cep,
+							fi_addr_t *addr)
+{
+	/* TODO for now keeping two different functions. The receive case will
+	 * need to handle FI_ADDR_UNSPEC
+	 */
+	if (!lp)
+		return -FI_ENOSYS;
+
+	return lnx_select_send_pathway(lp, cep, addr);
+}
+
 #endif /* LINKX_H */
