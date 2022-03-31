@@ -849,6 +849,8 @@ rxm_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 			"Unable to report completion\n");
 		assert(0);
 	}
+	if (cq->wait)
+		cq->wait->signal(cq->wait);
 }
 
 static inline void
@@ -866,6 +868,8 @@ rxm_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 			"Unable to report completion\n");
 		assert(0);
 	}
+	if (cq->wait)
+		cq->wait->signal(cq->wait);
 }
 
 ssize_t rxm_get_conn(struct rxm_ep *rxm_ep, fi_addr_t addr,
