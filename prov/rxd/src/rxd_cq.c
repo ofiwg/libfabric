@@ -1251,9 +1251,9 @@ ssize_t rxd_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		if (ofi_adjust_timeout(endtime, &timeout))
 			return -FI_ETIMEDOUT;
 
-		if (ofi_atomic_get32(&cq->signaled)) {
-			ofi_atomic_set32(&cq->signaled, 0);
-			return -FI_ECANCELED;
+		if (ofi_atomic_get32(&cq->wakeup)) {
+			ofi_atomic_set32(&cq->wakeup, 0);
+			return -FI_EAGAIN;
 		}
 
 		ep_retry = -1;
