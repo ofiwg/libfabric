@@ -1837,6 +1837,8 @@ ssize_t rxm_thru_comp(struct rxm_ep *ep, struct fi_cq_tagged_entry *comp)
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to report completion\n");
 		assert(0);
 	}
+	if (cq->wait)
+		cq->wait->signal(cq->wait);
 
 	return ret;
 }
