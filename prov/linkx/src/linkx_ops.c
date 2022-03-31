@@ -49,60 +49,220 @@
 #include "rdma/fi_ext.h"
 #include "linkx.h"
 
-ssize_t lnx_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
-		fi_addr_t src_addr,
-		uint64_t tag, uint64_t ignore, void *context)
+static inline struct lnx_peer *
+get_peer(struct lnx_peer **peers, fi_addr_t addr)
 {
-	return -FI_EOPNOTSUPP;
+	/* TODO: need to support FI_ADDR_UNSPEC */
+	if (!peers || addr == FI_ADDR_UNSPEC)
+		return NULL;
+
+	return peers[addr];
+}
+
+ssize_t lnx_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
+		fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context)
+{
+	/* TODO: To properly handle recv for multi-rail, we'll need to have
+	 * shared queues. As you can be receiving from any of the underlying
+	 * core endpoints
+	 */
+	int rc;
+	struct lnx_ep *lep;
+	struct fid_ep *cep;
+	fi_addr_t core_addr;
+	struct lnx_peer_table *peer_tbl;
+
+	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
+
+	peer_tbl = lep->le_peer_tbl;
+
+	rc = lnx_select_recv_pathway(get_peer(peer_tbl->lpt_entries, src_addr),
+								 &cep, &core_addr);
+	if (rc)
+		return rc;
+
+	rc = fi_trecv(cep, buf, len, desc, core_addr, tag, ignore, context);
+
+	return rc;
 }
 
 ssize_t lnx_trecvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t src_addr,
-		uint64_t tag, uint64_t ignore, void *context)
+		size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
+		void *context)
 {
-	return -FI_EOPNOTSUPP;
+	int rc;
+	struct lnx_ep *lep;
+	struct fid_ep *cep;
+	fi_addr_t core_addr;
+	struct lnx_peer_table *peer_tbl;
+
+	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
+
+	peer_tbl = lep->le_peer_tbl;
+
+	rc = lnx_select_recv_pathway(get_peer(peer_tbl->lpt_entries, src_addr),
+								 &cep, &core_addr);
+	if (rc)
+		return rc;
+
+	rc = fi_trecvv(cep, iov, desc, count, core_addr, tag, ignore, context);
+
+	return rc;
 }
 
 ssize_t lnx_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 		uint64_t flags)
 {
-	return -FI_EOPNOTSUPP;
+	int rc;
+	struct lnx_ep *lep;
+	struct fid_ep *cep;
+	fi_addr_t core_addr;
+	struct lnx_peer_table *peer_tbl;
+
+	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
+
+	peer_tbl = lep->le_peer_tbl;
+
+	rc = lnx_select_recv_pathway(get_peer(peer_tbl->lpt_entries, msg->addr),
+								 &cep, &core_addr);
+	if (rc)
+		return rc;
+
+	rc = fi_trecvmsg(cep, msg, flags);
+
+	return rc;
 }
 
 ssize_t lnx_tsend(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, uint64_t tag, void *context)
 {
-	return -FI_EOPNOTSUPP;
+	int rc;
+	struct lnx_ep *lep;
+	struct fid_ep *cep;
+	fi_addr_t core_addr;
+	struct lnx_peer_table *peer_tbl;
+
+	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
+
+	peer_tbl = lep->le_peer_tbl;
+
+	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], &cep, &core_addr);
+	if (rc)
+		return rc;
+
+	rc = fi_tsend(cep, buf, len, desc, core_addr, tag, context);
+
+	return rc;
 }
 
 ssize_t lnx_tsendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		size_t count, fi_addr_t dest_addr, uint64_t tag, void *context)
 {
-	return -FI_EOPNOTSUPP;
+	int rc;
+	struct lnx_ep *lep;
+	struct fid_ep *cep;
+	fi_addr_t core_addr;
+	struct lnx_peer_table *peer_tbl;
+
+	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
+
+	peer_tbl = lep->le_peer_tbl;
+
+	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], &cep, &core_addr);
+	if (rc)
+		return rc;
+
+	rc = fi_tsendv(cep, iov, desc, count, core_addr, tag, context);
+
+	return rc;
 }
 
 ssize_t lnx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 		uint64_t flags)
 {
-	return -FI_EOPNOTSUPP;
+	int rc;
+	struct lnx_ep *lep;
+	struct fid_ep *cep;
+	fi_addr_t core_addr;
+	struct lnx_peer_table *peer_tbl;
+
+	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
+
+	peer_tbl = lep->le_peer_tbl;
+
+	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[msg->addr], &cep, &core_addr);
+	if (rc)
+		return rc;
+
+	rc = fi_tsendmsg(cep, msg, flags);
+
+	return rc;
 }
 
 ssize_t lnx_tinject(struct fid_ep *ep, const void *buf, size_t len,
 		fi_addr_t dest_addr, uint64_t tag)
 {
-	return -FI_EOPNOTSUPP;
+	int rc;
+	struct lnx_ep *lep;
+	struct fid_ep *cep;
+	fi_addr_t core_addr;
+	struct lnx_peer_table *peer_tbl;
+
+	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
+
+	peer_tbl = lep->le_peer_tbl;
+
+	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], &cep, &core_addr);
+	if (rc)
+		return rc;
+
+	rc = fi_tinject(cep, buf, len, core_addr, tag);
+
+	return rc;
 }
 
 ssize_t lnx_tsenddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		uint64_t data, fi_addr_t dest_addr, uint64_t tag, void *context)
 {
-	return -FI_EOPNOTSUPP;
+	int rc;
+	struct lnx_ep *lep;
+	struct fid_ep *cep;
+	fi_addr_t core_addr;
+	struct lnx_peer_table *peer_tbl;
+
+	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
+
+	peer_tbl = lep->le_peer_tbl;
+
+	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], &cep, &core_addr);
+	if (rc)
+		return rc;
+
+	rc = fi_tsenddata(cep, buf, len, desc, data, core_addr, tag, context);
+
+	return rc;
 }
 
 ssize_t lnx_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 		uint64_t data, fi_addr_t dest_addr, uint64_t tag)
 {
-	return -FI_EOPNOTSUPP;
+	int rc;
+	struct lnx_ep *lep;
+	struct fid_ep *cep;
+	fi_addr_t core_addr;
+	struct lnx_peer_table *peer_tbl;
+
+	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
+
+	peer_tbl = lep->le_peer_tbl;
+
+	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], &cep, &core_addr);
+	if (rc)
+		return rc;
+
+	rc = fi_tinjectdata(cep, buf, len, data, core_addr, tag);
+
+	return rc;
 }
 
 struct fi_ops_tagged lnx_tagged_ops = {
