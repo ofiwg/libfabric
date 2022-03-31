@@ -164,15 +164,16 @@ int _test_send_to_dest(struct cxip_ep_obj *ep_obj,
 /* normal utility to wait for collective completion, returns coll error */
 static int _coll_wait(struct cxip_zbcoll_obj *zb, long nsec_wait)
 {
-	struct cxip_ep_obj *ep_obj = zb->ep_obj;
 	uint32_t dsc, err, ack, rcv;
 	struct timespec ts;
 	long nsecs = 0L;
 
+	if (!zb)
+		return -FI_EINVAL;
 	_init_nsecs(&ts);
 	do {
-		cxip_zbcoll_progress(ep_obj);
-		cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
+		cxip_zbcoll_progress(zb->ep_obj);
+		cxip_zbcoll_get_counters(zb->ep_obj, &dsc, &err, &ack, &rcv);
 		/* this waits for a software completion */
 		if (zb->error || !zb->busy)
 			break;
@@ -216,33 +217,38 @@ int _getgroup(struct cxip_ep_obj *ep_obj,
 	int ret;
 
 	/* need a zbcoll object for this */
-	if (! *zbp) {
+	if (!zbp)
+		return -FI_EINVAL;
+	if (!*zbp) {
 		ret = cxip_zbcoll_alloc(ep_obj, size, fiaddrs, false, zbp);
 		if (ret == -FI_EADDRNOTAVAIL) {
 			trc("=== COMPLETED SKIP\n");
 			return FI_SUCCESS;
 		}
 		if (pmi_errmsg(ret, "%s: cxip_zbcoll_alloc()\n", __func__))
-			return ret;
+			goto out;
 	}
 
 	/* getgroup collective */
 	do {
 		ret = cxip_zbcoll_getgroup(*zbp);
 		if (pmi_errmsg(ret, "%s: cxip_zbcoll_getgroup()\n", __func__))
-			return ret;
+			goto out;
 		/* Returns a collective completion error */
 		ret = _coll_wait(*zbp, nMSEC(100));
 	} while (ret == -FI_EAGAIN);
 
 	/* clean up after error */
-	if (ret) {
-		cxip_zbcoll_free(*zbp);
-		*zbp = NULL;
-		return ret;
-	}
+	if (ret)
+		goto out;
+
 	trc("=== COMPLETED ZBCOLL %d ret=%d\n", (*zbp)->grpid, ret);
 	return FI_SUCCESS;
+
+out:
+	cxip_zbcoll_free(*zbp);
+	*zbp = NULL;
+	return ret;
 }
 
 /* detect overt getgroup errors */
@@ -808,6 +814,9 @@ const char *testnames[] = {
 	"test 12: barrier",
 	"test 13: broadcast (single)",
 	"test 14: broadcast (concurrent)",
+	"test 15: getgroup perf",
+	"test 16: barrier perf",
+	"test 17: broadcast perf",
 	NULL
 };
 
@@ -1093,6 +1102,7 @@ int main(int argc, char **argv)
 	if (testmask & TEST(12)) {
 		testname = testnames[12];
 		trc("======= %s\n", testname);
+		zb1 = NULL;
 		ret = 0;
 		ret += !!_test_barr(ep_obj, size, fiaddrs, &zb1);
 		ret += !!_test_barr_wait_free(zb1);
@@ -1104,8 +1114,10 @@ int main(int argc, char **argv)
 	if (testmask & TEST(13)) {
 		testname = testnames[13];
 		trc("======= %s\n", testname);
+		zb1 = NULL;
 		ret = 0;
-		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result1, 0x123, &zb1);
+		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result1, 0x123,
+				     &zb1);
 		ret += !!_test_bcast_wait_free(zb1, &result1, 0x123);
 		errcnt += !!ret;
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
@@ -1115,13 +1127,103 @@ int main(int argc, char **argv)
 	if (testmask & TEST(14)) {
 		testname = testnames[14];
 		trc("======= %s\n", testname);
+		zb1 = zb2 = NULL;
 		ret = 0;
-		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result1, 0x123, &zb1);
-		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result2, 0x456, &zb2);
+		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result1, 0x123,
+				     &zb1);
+		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result2, 0x456,
+				     &zb2);
 		ret += !!_test_bcast_wait_free(zb1, &result1, 0x123);
 		ret += !!_test_bcast_wait_free(zb2, &result2, 0x456);
 		errcnt += !!ret;
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		pmi_Barrier();
+	}
+
+	if (testmask & TEST(15)) {
+		struct timespec t0;
+		long count = 0;
+		double time;
+
+		testname = testnames[15];
+		trc("======= %s\n", testname);
+		pmi_trace_enable(false);
+		zb1 = NULL;
+		ret = cxip_zbcoll_alloc(ep_obj, size, fiaddrs, false, &zb1);
+		clock_gettime(CLOCK_MONOTONIC, &t0);
+		while (!ret && count < 100000) {
+			int ret2;
+			do {
+				ret += !!cxip_zbcoll_getgroup(zb1);
+				ret2 = _coll_wait(zb1, nMSEC(100));
+			} while (!ret && ret2 == -FI_EAGAIN);
+			ret += !!ret2;
+			cxip_zbcoll_rlsgroup(zb1);
+			count++;
+		}
+		time = _measure_nsecs(&t0);
+		time /= 1.0*count;
+		time /= 1000.0;
+		pmi_trace_enable(true);
+		cxip_zbcoll_free(zb1);
+		errcnt += !!ret;
+		pmi_log0("%4s %s \tcount=%ld time=%1.2fus\n",
+			 ret ? "FAIL" : "ok", testname, count, time);
+		pmi_Barrier();
+	}
+
+	if (testmask & TEST(16)) {
+		struct timespec t0;
+		long count = 0;
+		double time;
+
+		testname = testnames[16];
+		trc("======= %s\n", testname);
+		pmi_trace_enable(false);
+		zb1 = NULL;
+		ret = _getgroup(ep_obj, size, fiaddrs, &zb1);
+		clock_gettime(CLOCK_MONOTONIC, &t0);
+		while (!ret && count < 100000) {
+			ret += !!cxip_zbcoll_barrier(zb1);
+			ret += !!_coll_wait(zb1, nMSEC(100));
+			count++;
+		}
+		time = _measure_nsecs(&t0);
+		time /= 1.0*count;
+		time /= 1000.0;
+		pmi_trace_enable(true);
+		cxip_zbcoll_free(zb1);
+		errcnt += !!ret;
+		pmi_log0("%4s %s \tcount=%ld time=%1.2fus\n",
+			 ret ? "FAIL" : "ok", testname, count, time);
+		pmi_Barrier();
+	}
+
+	if (testmask & TEST(17)) {
+		struct timespec t0;
+		uint64_t result = 0x1234;
+		long count = 0;
+		double time;
+
+		testname = testnames[17];
+		trc("======= %s\n", testname);
+		pmi_trace_enable(false);
+		zb1 = NULL;
+		ret = _getgroup(ep_obj, size, fiaddrs, &zb1);
+		clock_gettime(CLOCK_MONOTONIC, &t0);
+		while (!ret && count < 100000) {
+			ret += !!cxip_zbcoll_broadcast(zb1, &result);
+			ret += !!_coll_wait(zb1, nMSEC(100));
+			count++;
+		}
+		time = _measure_nsecs(&t0);
+		time /= 1.0*count;
+		time /= 1000.0;
+		pmi_trace_enable(true);
+		cxip_zbcoll_free(zb1);
+		errcnt += !!ret;
+		pmi_log0("%4s %s \tcount=%ld time=%1.2fus\n",
+			 ret ? "FAIL" : "ok", testname, count, time);
 		pmi_Barrier();
 	}
 

@@ -1222,7 +1222,7 @@ void cxip_zbcoll_rlsgroup(struct cxip_zbcoll_obj *zb)
 {
 	struct cxip_ep_zbcoll_obj *zbcoll;
 
-	if (!zb || zb->grpid > ZB_MAP_BITS)
+	if (!zb || zb->grpid > ZB_NEG_BIT)
 		return;
 
 	zbcoll = &zb->ep_obj->zbcoll;
@@ -1230,7 +1230,7 @@ void cxip_zbcoll_rlsgroup(struct cxip_zbcoll_obj *zb)
 	fastlock_acquire(&zbcoll->lock);
 	_setbit(&zbcoll->grpmsk, zb->grpid);
 	zbcoll->grptbl[zb->grpid] = NULL;
-	zb->grpid = ZB_MAP_BITS;
+	zb->grpid = ZB_NEG_BIT;
 	fastlock_release(&zbcoll->lock);
 }
 
