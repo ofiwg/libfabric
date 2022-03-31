@@ -649,6 +649,9 @@ This field is ignore unless the iface field is valid.
 *ze*
 : For FI_HMEM_ZE, this is equivalent to the ze_device_handle_t index (int).
 
+*neuron*
+: For FI_HMEM_NEURON, the device identifier for AWS Trainium devices.
+
 # NOTES
 
 Direct access to an application's memory by a remote peer requires that
