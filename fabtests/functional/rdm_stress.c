@@ -1091,10 +1091,12 @@ static void *process_rpcs(void *context)
 				ret = handle_cq_error();
 			} else if (ret > 0) {
 				ret = 0;
-				if (comp.flags & FI_RECV)
+				if (comp.flags & FI_RECV) {
+					req = comp.op_context;
 					start_rpc(&req->hdr);
-				else
+				} else {
 					complete_rpc(comp.op_context);
+				}
 			}
 		} while (!ret && !(comp.flags & FI_RECV));
 	} while (!ret);
