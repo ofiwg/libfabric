@@ -167,6 +167,8 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 		if (cur->caps & FI_HMEM) {
 			if (!(mr_mode & FI_MR_HMEM)) {
 				fi_freeinfo(cur);
+				FI_INFO(&smr_prov, FI_LOG_CORE,
+					"mr_mode does not match FI_HMEM capability.\n");
 				return -FI_ENODATA;
 			}
 			cur->domain_attr->mr_mode |= FI_MR_HMEM;
