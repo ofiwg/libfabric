@@ -31,6 +31,9 @@ def build_libfabric(libfab_install_path, mode):
     for prov in common.disabled_prov_list:
          config_cmd.append('--enable-{}=no'.format(prov))
 
+    config_cmd.append('--disable-opx') # we do not test opx in intel jenkins ci
+    config_cmd.append('--disable-efa') # we do not test efa in intel jenkins ci
+
     config_cmd.append('--enable-ze-dlopen')
 
     common.run_command(['./autogen.sh'])
@@ -62,9 +65,15 @@ def copy_build_dir(install_path):
                     '{}/ci_middlewares'.format(install_path))
 
 def skip(install_path):
+    if os.getenv('CHANGE_TARGET') is not None:
+        change_target = os.environ['CHANGE_TARGET']
+    else:
+        change_target = os.environ['GIT_BRANCH']
+
     command = [
                   '{}/skip.sh'.format(ci_site_config.testpath),
-                  '{}'.format(os.environ['WORKSPACE'])
+                  '{}'.format(os.environ['WORKSPACE']),
+                  '{}'.format(change_target)
               ]
     common.run_command(command)
 

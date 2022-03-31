@@ -3,7 +3,13 @@ properties([disableConcurrentBuilds(abortPrevious: true)])
 def DO_RUN=1
 
 def skip() {
-    def changes = readFile "${env.WORKSPACE}/commit_id"
+    def file = "${env.WORKSPACE}/commit_id"
+    if (!fileExists(file)) {
+        echo "CI Run has not rebased with ofiwg/libfabric. Please Rebase."
+        return 1
+    }
+
+    def changes = readFile file
     def changeStrings = new ArrayList<String>()
 
     for (line in changes.readLines()) {
@@ -13,8 +19,10 @@ def skip() {
     echo "${changeStrings.toArray()}"
     if (changeStrings.toArray().every { it =~ /(?:fabtests\/pytests|man|prov\/efa|prov\/opx).*$/ }) {
         echo "DONT RUN!"
-        DO_RUN=0
+        return 0
     }
+
+    return 1
 }
 
 
@@ -29,18 +37,29 @@ pipeline {
     }
 
     stages {
-        stage ('build') {
+        stage ('opt-out') {
             steps {
-                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:PYTHONPATH']) {
+                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
                   sh """
-                    echo "${env.WORKSPACE}"
+                    python3.7 contrib/intel/jenkins/build.py --build_item=skip
+
+                  """
+                }
+                script {
+                    DO_RUN=skip()
+                }
+            }
+        }
+        stage ('build') {
+            when { equals expected: 1, actual: DO_RUN }
+            steps {
+                withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+                  sh """
                     echo "-----------------------------------------------------"
                     echo "Copy build dirs."
                     python3.7 contrib/intel/jenkins/build.py --build_item=builddir
                     echo "Copy build dirs completed."
                     echo "-----------------------------------------------------"
-
-                    python3.7 contrib/intel/jenkins/build.py --build_item=skip
 
                     echo "-----------------------------------------------------"
                     echo "Building libfabric reg."
@@ -63,9 +82,9 @@ pipeline {
                     echo "Building fabtests dl."
                     python3.7 contrib/intel/jenkins/build.py --build_item=fabtests --ofi_build_mode=dl
                     echo 'Fabtests builds completed.'
+
                   """
                 }
-                skip()
             }
         }
         stage('parallel-tests') {
@@ -365,3 +384,4 @@ pipeline {
         }
     }
 }
+
