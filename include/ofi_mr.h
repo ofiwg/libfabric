@@ -294,7 +294,7 @@ struct ofi_mr_entry {
 	uint8_t				data[];
 };
 
-#define OFI_HMEM_MAX 5
+#define OFI_HMEM_MAX 6
 
 struct ofi_mr_cache {
 	struct util_domain		*domain;

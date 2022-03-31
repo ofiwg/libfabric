@@ -47,6 +47,7 @@ common_srcs =				\
 	src/hmem_cuda_gdrcopy.c		\
 	src/hmem_ze.c			\
 	src/hmem_neuron.c		\
+	src/hmem_synapseai.c		\
 	src/common.c			\
 	src/enosys.c			\
 	src/rbtree.c			\
