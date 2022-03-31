@@ -100,9 +100,80 @@ int lnx_ep_close(struct fid *fid)
 	return rc;
 }
 
+static int lnx_ep_bind_core_prov(uint64_t flags)
+{
+	struct local_prov *entry;
+	struct local_prov_ep *ep;
+	int i, rc;
+
+	dlist_foreach_container(&local_prov_table, struct local_prov,
+							entry, lpv_entry) {
+		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+			ep = entry->lpv_prov_eps[i];
+			if (!ep)
+				continue;
+
+			rc = fi_ep_bind(ep->lpe_ep, &ep->lpe_av->fid, flags);
+			if (rc)
+				return rc;
+		}
+	}
+
+	return rc;
+}
+
 int lnx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	return -FI_EOPNOTSUPP;
+	int rc = 0;
+	struct lnx_ep *ep;
+	struct lnx_peer_table *peer_tbl;
+
+	switch (fid->fclass) {
+	case FI_CLASS_EP:	/* Standard EP */
+	case FI_CLASS_SEP:	/* Scalable EP */
+		ep = container_of(fid, struct lnx_ep, le_ep.ep_fid.fid);
+		break;
+
+	default:
+		return -FI_EINVAL;
+	}
+
+	switch (bfid->fclass) {
+	case FI_CLASS_EQ:
+		/* TODO */
+		break;
+
+	case FI_CLASS_CQ:
+		/* TODO */
+		break;
+
+	case FI_CLASS_CNTR:
+		/* TODO */
+		break;
+
+	case FI_CLASS_AV:
+		peer_tbl = container_of(bfid, struct lnx_peer_table,
+								lpt_av.av_fid.fid);
+		if (peer_tbl->lpt_domain != ep->le_domain)
+			return -FI_EINVAL;
+		ep->le_peer_tbl = peer_tbl;
+		/* forward the bind to the core provider endpoints */
+		rc = lnx_ep_bind_core_prov(flags);
+		break;
+
+	case FI_CLASS_STX_CTX:	/* shared TX context */
+		/* TODO */
+		break;
+
+	case FI_CLASS_SRX_CTX:	/* shared RX context */
+		/* TODO */
+		break;
+
+	default:
+		return -FI_EINVAL;
+	}
+
+	return rc;
 }
 
 int lnx_getname(fid_t fid, void *addr, size_t *addrlen)

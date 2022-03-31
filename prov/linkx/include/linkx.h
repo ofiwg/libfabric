@@ -72,13 +72,6 @@ struct lnx_addresses {
 	struct lnx_address_prov la_addr_prov[];
 };
 
-struct lnx_ep {
-	struct util_ep le_ep;
-	struct util_domain *le_domain;
-	size_t le_fclass;
-	/* TODO - add the shared queues here */
-};
-
 struct lnx_local2peer_map {
 	struct local_prov_ep *local_ep;
 	int addr_count;
@@ -134,6 +127,14 @@ struct lnx_peer_table {
 	struct util_domain *lpt_domain;
 	/* an array of peer entries */
 	struct lnx_peer **lpt_entries;
+};
+
+struct lnx_ep {
+	struct util_ep le_ep;
+	struct util_domain *le_domain;
+	size_t le_fclass;
+	struct lnx_peer_table *le_peer_tbl;
+	/* TODO - add the shared queues here */
 };
 
 extern struct dlist_entry local_prov_table;
