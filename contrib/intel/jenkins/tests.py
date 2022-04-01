@@ -60,6 +60,8 @@ class FiInfoTest(Test):
     def options(self):
         if (self.util_prov):
             opts  = "-f {} -p {};{}".format(self.fabric, self.core_prov, self.util_prov)
+        elif (self.core_prov == 'psm3'):
+            opts = "-p {}".format(self.core_prov)
         else:
             opts = "-f {} -p {}".format(self.fabric, self.core_prov)
 
