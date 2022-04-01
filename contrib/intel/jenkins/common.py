@@ -50,6 +50,7 @@ disabled_prov_list = [
     'perf',
     'rstream',
     'hook_debug',
-    'bgq'
-    'mrail'
+    'bgq',
+    'mrail',
+    'opx'
 ]
