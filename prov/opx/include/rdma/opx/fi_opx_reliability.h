@@ -642,6 +642,39 @@ int32_t fi_opx_reliability_tx_max_nacks () {
 
 void fi_opx_reliability_inc_throttle_count();
 
+__OPX_FORCE_INLINE_AND_FLATTEN__
+bool opx_reliability_ready(struct fid_ep *ep,
+			struct fi_opx_reliability_client_state * state,
+			const uint64_t dlid,
+			const uint64_t rx,
+			const uint64_t target_reliability_rx,
+			const enum ofi_reliability_kind reliability)
+{
+
+	/* Not using reliability, or it's Intranode */
+	if (reliability == OFI_RELIABILITY_KIND_NONE || state->lid_be == dlid)
+		return true;
+
+	union fi_opx_reliability_service_flow_key key = {
+		.slid = (uint32_t) state->lid_be,
+		.tx = (uint32_t) state->tx,
+		.dlid = (uint32_t) dlid,
+		.rx = (uint32_t) rx,
+	};
+
+	void * itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void*)key.value);
+	if (OFI_UNLIKELY(!itr)) {
+		/* Reliability handshake is incomplete, initiate it */
+		fi_opx_hfi1_tx_reliability_inject_init(ep,
+					key.value, key.dlid,
+					target_reliability_rx,
+					FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT);
+		return false;
+	}
+
+	return true;
+}
+
 __OPX_FORCE_INLINE__
 int32_t fi_opx_reliability_tx_next_psn (struct fid_ep *ep,
 					struct fi_opx_reliability_client_state * state,

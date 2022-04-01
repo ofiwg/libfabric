@@ -1079,7 +1079,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 
 	params->work_elem.slist_entry.next = NULL;
 	params->work_elem.work_fn = fi_opx_hfi1_do_dput;
-	params->work_elem.completion_action = NULL;
+	params->work_elem.completion_action = completion_action;
 	params->work_elem.payload_copy = NULL;
 	params->opx_ep = opx_ep;
 	params->opx_mr = opx_mr;
