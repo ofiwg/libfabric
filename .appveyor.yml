@@ -57,3 +57,10 @@ test_script:
   - set PATH=%CD%\x64\%CONFIGURATION%;%PATH%
   - set FI_PROVIDER=sockets
   - scripts\runfabtests.cmd
+
+skip_commits:
+  files:
+    - man/*
+    - prov/opx/*
+    - prov/psm.?/*
+    - contrib/*
