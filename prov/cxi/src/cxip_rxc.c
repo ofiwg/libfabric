@@ -18,6 +18,10 @@
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 
+#define CXIP_SC_STATS "FC/SC stats - EQ full: %d append fail: %d no match: %d"\
+		      " request full: %d unexpected: %d, NIC HW2SW unexp: %d"\
+		      " NIC HW2SW append fail: %d\n"
+
 /*
  * rxc_msg_enable() - Enable RXC messaging.
  *
@@ -32,8 +36,9 @@ int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count)
 	int ret;
 	enum c_ptlte_state new_state;
 
-	/* If hybrid endpoints are enabled, then flow control will transition
-	 * to software; otherwise it will attempt to re-enable hardware mode.
+	/* If hybrid endpoints are enabled, the endpoint will transition to
+	 * software matching; otherwise it will attempt to re-enable hardware
+	 * match mode.
 	 */
 	if (cxip_software_pte_allowed())
 		new_state = C_PTLTE_SOFTWARE_MANAGED;
@@ -474,9 +479,15 @@ static void rxc_cleanup(struct cxip_rxc *rxc)
 		free(fc_drops);
 	}
 
-	CXIP_INFO("Flow Ctrl events: EQ Full %d Append %d UX/No Match %d\n",
-		  rxc->num_fc_eq_full, rxc->num_fc_append_fail,
-		  rxc->num_fc_unexp_or_match);
+	if (rxc->num_fc_eq_full || rxc->num_fc_no_match ||
+	    rxc->num_fc_req_full || rxc->num_fc_unexp ||
+	    rxc->num_fc_append_fail || rxc->num_sc_nic_hw2sw_unexp ||
+	    rxc->num_sc_nic_hw2sw_append_fail)
+		CXIP_INFO(CXIP_SC_STATS, rxc->num_fc_eq_full,
+			  rxc->num_fc_append_fail, rxc->num_fc_no_match,
+			  rxc->num_fc_req_full, rxc->num_fc_unexp,
+			  rxc->num_sc_nic_hw2sw_unexp,
+			  rxc->num_sc_nic_hw2sw_append_fail);
 }
 
 /*

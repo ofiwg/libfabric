@@ -1852,7 +1852,9 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		 * software managed EP.
 		 */
 		if (cxi_tgt_event_rc(event) == C_RC_PTLTE_SW_MANAGED) {
-			RXC_WARN(rxc, "Append failure due to SW transition\n");
+			RXC_WARN(rxc,
+				 "PtlTE %d append err, transition to SW\n",
+				 rxc->rx_pte->pte->ptn);
 
 			cxip_recv_req_dropped(req);
 			fastlock_release(&rxc->lock);
@@ -1867,8 +1869,8 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			CXIP_FATAL("Unexpected link event rc: %d\n",
 				   cxi_tgt_event_rc(event));
 
-		RXC_WARN(rxc,
-			 "Failed to append user buffer due to LE exhaustion\n");
+		RXC_WARN(rxc, "PtlTE %d append err, LE exhaustion\n",
+			 rxc->rx_pte->pte->ptn);
 
 		/* Manually transition to DISABLED to initiate flow control
 		 * and onload  instead of waiting for eventual NIC no match
@@ -2236,7 +2238,7 @@ static int cxip_recv_replay(struct cxip_rxc *rxc)
 	bool restart_seq = true;
 	int ret;
 
-	if (rxc->msg_offload) {
+	if (rxc->msg_offload && rxc->fc_reason != C_SC_FC_EQ_FULL) {
 		ret = cxip_rxc_eager_replenish(rxc, true);
 		if (ret != FI_SUCCESS)
 			RXC_WARN(rxc,
@@ -2332,7 +2334,6 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 		RXC_DBG(rxc, "PtlTE %d transitioning to SW EP\n",
 			rxc->rx_pte->pte->ptn);
 		rxc->msg_offload = 0;
-
 	}
 
 	ofi_atomic_dec32(&rxc->orx_reqs);
@@ -2358,10 +2359,12 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 		RXC_WARN(rxc, "PtlTE %d Now in RXC_ENABLED_SOFTWARE\n",
 			 rxc->rx_pte->pte->ptn);
 	} else if (rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE) {
-		/* Attempt to reenable in software managed state if
-		 * supported; otherwise resume with hardware matching.
+		/* Request list should only be replenished if we are
+		 * already running in software mode and the flow
+		 * control was not due to EQ full.
 		 */
-		if (rxc->prev_state == RXC_ENABLED_SOFTWARE) {
+		if (rxc->prev_state == RXC_ENABLED_SOFTWARE &&
+		    rxc->fc_reason != C_SC_FC_EQ_FULL) {
 			ret = cxip_req_buf_replenish(rxc, true);
 			if (ret)
 				RXC_WARN(rxc, "PtlTE %d replenish error: %d\n",
@@ -2699,6 +2702,7 @@ void cxip_fc_progress_ctrl(struct cxip_rxc *rxc)
 void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 {
 	struct cxip_rxc *rxc = (struct cxip_rxc *)pte->ctx;
+	int fc_reason;
 	int ret __attribute__((unused));
 
 	fastlock_acquire(&rxc->lock);
@@ -2726,9 +2730,8 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 		if (rxc->state == RXC_DISABLED)
 			break;
 
-		if (event->tgt_long.initiator.state_change.sc_nic_auto &&
-		    event->tgt_long.initiator.state_change.sc_reason ==
-		    C_SC_DIS_UNCOR)
+		fc_reason = cxip_fc_reason(event);
+		if (fc_reason == C_SC_DIS_UNCOR)
 			CXIP_FATAL("PtlTE %d disabled, LE uncorrectable err\n",
 				   rxc->rx_pte->pte->ptn);
 
@@ -2756,10 +2759,10 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 			"PtlTE %d flow control detected, H/W: %d reason: %d\n",
 			rxc->rx_pte->pte->ptn,
 			event->tgt_long.initiator.state_change.sc_nic_auto,
-			event->tgt_long.initiator.state_change.sc_nic_auto ?
-			event->tgt_long.initiator.state_change.sc_reason : -1);
+			fc_reason);
 
-		if (!event->tgt_long.initiator.state_change.sc_nic_auto) {
+		switch (fc_reason) {
+		case CXIP_FC_SOFTWARE_INITIATED:
 			/* Software initiated state change, drop count
 			 * needs to start at zero instead of -1. Add 1 to
 			 * account for this.
@@ -2768,31 +2771,55 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 				 rxc->rx_pte->pte->ptn);
 			rxc->drop_count++;
 			rxc->num_fc_append_fail++;
+			break;
 
-		} else if (event->tgt_long.initiator.state_change.sc_reason ==
-			   C_SC_FC_EQ_FULL) {
-			/* Flow control occurred due to no EQ space. */
+		case C_SC_FC_EQ_FULL:
+			/* EQ full does not require LE resources be recovered
+			 * to re-enable.
+			 */
 			RXC_WARN(rxc, "PtlTE %d flow control EQ full\n",
 				 rxc->rx_pte->pte->ptn);
 			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
 			rxc->num_fc_eq_full++;
+			break;
 
-		} else if (event->tgt_long.initiator.state_change.sc_reason ==
-			   C_SC_FC_REQUEST_FULL) {
-			/* Flow control because request list was full/could
-			 * not be matched against.
+		case C_SC_FC_REQUEST_FULL:
+			/* Flow control, in software EP mode and request list
+			 * buffers were full/could not be matched against.
 			 */
 			RXC_WARN(rxc,
 				 "PtlTE %d flow control Request full\n",
 				 rxc->rx_pte->pte->ptn);
-			rxc->num_fc_unexp_or_match++;
-		} else {
-			/* Flow control occurred due to either
-			 * SC_FC_NO_MATCH or C_SC_UNEXPECTED_FAIL.
+			rxc->num_fc_req_full++;
+			break;
+
+		case C_SC_FC_NO_MATCH:
+			/* Hybrid mode not enabled and overflow list buffers
+			 * were full/could't be matched against.
+			 */
+			RXC_WARN(rxc, "PtlTE %d flow control oflow no match\n",
+				 rxc->rx_pte->pte->ptn);
+			rxc->num_fc_no_match++;
+			break;
+
+		case C_SC_FC_UNEXPECTED_FAIL:
+			/* Hybrid mode not enabled and overflow matches, but
+			 * LE resources prevent unexpected message allocation.
 			 */
 			RXC_WARN(rxc, "PtlTE %d flow control LE/match\n",
 				 rxc->rx_pte->pte->ptn);
-			rxc->num_fc_unexp_or_match++;
+			rxc->num_fc_unexp++;
+			break;
+
+		case C_SC_SM_APPEND_FAIL:
+		case C_SC_SM_UNEXPECTED_FAIL:
+			RXC_WARN(rxc,
+				 "PtlTE %d unexpected flow control status %d\n",
+				 rxc->rx_pte->pte->ptn, fc_reason);
+			break;
+		default:
+			RXC_FATAL(rxc, "Invalid PTE c_sc_reason: %d\n",
+				  fc_reason);
 		}
 
 		/* If flow control has occurred during an on-going NIC
@@ -2806,6 +2833,8 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 				 rxc->rx_pte->pte->ptn);
 			break;
 		}
+
+		rxc->fc_reason = fc_reason;
 
 		do {
 			ret = cxip_flush_appends(rxc);
@@ -2873,11 +2902,17 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 		 * attempted until onload completes and the failed appends are
 		 * replayed.
 		 */
-		RXC_DBG(rxc, "PtlTE %d, NIC HW to SW managed transition\n",
-			rxc->rx_pte->pte->ptn);
+		RXC_WARN(rxc, "PtlTE %d, NIC HW to SW managed transition\n",
+			 rxc->rx_pte->pte->ptn);
 
 		rxc->prev_state = rxc->state;
 		rxc->state = RXC_PENDING_PTLTE_SOFTWARE_MANAGED;
+		rxc->fc_reason = cxip_fc_reason(event);
+
+		if (rxc->fc_reason == C_SC_SM_UNEXPECTED_FAIL)
+			rxc->num_sc_nic_hw2sw_unexp++;
+		else if (rxc->fc_reason == C_SC_SM_APPEND_FAIL)
+			rxc->num_sc_nic_hw2sw_append_fail++;
 
 		do {
 			/* Flush and kick-off onloading of UX list */

@@ -1424,10 +1424,14 @@ struct cxip_rxc {
 	int min_multi_recv;
 	int max_eager_size;
 
-	/* Flow control metrics */
+	/* Flow control/software state change metrics */
 	int num_fc_eq_full;
+	int num_fc_no_match;
+	int num_fc_unexp;
 	int num_fc_append_fail;
-	int num_fc_unexp_or_match;
+	int num_fc_req_full;
+	int num_sc_nic_hw2sw_append_fail;
+	int num_sc_nic_hw2sw_unexp;
 
 	/* Unexpected message handling */
 	fastlock_t rx_lock;			// RX message lock
@@ -1481,6 +1485,8 @@ struct cxip_rxc {
 
 	enum cxip_rxc_state state;
 	enum cxip_rxc_state prev_state;
+	enum c_sc_reason fc_reason;
+
 	bool msg_offload;
 	uint64_t rget_align_mask;
 
@@ -2332,6 +2338,19 @@ void cxip_rep_to_dbl(double *d, const cxip_repsum_t *x);
 void cxip_rep_add(cxip_repsum_t *x, const cxip_repsum_t *y);
 double cxip_rep_add_dbl(double d1, double d2);
 double cxip_rep_sum(size_t count, double *values);
+
+#define CXIP_FC_SOFTWARE_INITIATED -1
+
+/* cxip_fc_reason() - Returns the event reason for portal state
+ * change (FC reason or SC reason).
+ */
+static inline int cxip_fc_reason(const union c_event *event)
+{
+	if (!event->tgt_long.initiator.state_change.sc_nic_auto)
+		return CXIP_FC_SOFTWARE_INITIATED;
+
+	return event->tgt_long.initiator.state_change.sc_reason;
+}
 
 /*
  * cxip_fid_to_tx_info() - Return the TXC and attributes from FID
