@@ -100,6 +100,50 @@ int lnx_ep_close(struct fid *fid)
 	return rc;
 }
 
+static int lnx_enable_core_eps(void *arg)
+{
+	int rc, i;
+	struct local_prov *entry;
+	struct local_prov_ep *ep;
+
+	dlist_foreach_container(&local_prov_table, struct local_prov,
+							entry, lpv_entry) {
+		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+			ep = entry->lpv_prov_eps[i];
+			if (!ep)
+				continue;
+			rc = fi_enable(ep->lpe_ep);
+			if (rc)
+				return rc;
+		}
+	}
+
+	return 0;
+}
+
+static int lnx_ep_control(struct fid *fid, int command, void *arg)
+{
+	struct lnx_ep *ep;
+	int rc;
+
+	ep = container_of(fid, struct lnx_ep, le_ep.ep_fid.fid);
+
+	switch (command) {
+	case FI_ENABLE:
+		if ((ofi_needs_rx(ep->le_ep.caps) && !ep->le_ep.rx_cq) ||
+		    (ofi_needs_tx(ep->le_ep.caps) && !ep->le_ep.tx_cq))
+			return -FI_ENOCQ;
+		if (!ep->le_peer_tbl)
+			return -FI_ENOAV;
+		rc = lnx_enable_core_eps(arg);
+		break;
+	default:
+		return -FI_ENOSYS;
+	}
+
+	return rc;
+}
+
 static int lnx_ep_bind_core_prov(uint64_t flags)
 {
 	struct local_prov *entry;
@@ -284,6 +328,7 @@ struct fi_ops lnx_ep_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = lnx_ep_close,
 	.bind = lnx_ep_bind,
+	.control = lnx_ep_control,
 	.ops_open = fi_no_ops_open,
 };
 
