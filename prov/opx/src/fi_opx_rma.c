@@ -137,6 +137,16 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 
 	assert(dst_addr != FI_ADDR_UNSPEC);
 
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
+			&opx_ep->reliability->state,
+			opx_dst_addr.uid.lid,
+			opx_dst_addr.hfi1_rx,
+			opx_dst_addr.reliability_rx,
+			reliability))) {
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		return -FI_EAGAIN;
+	}
+
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->byte_counter = len;
 	cc->cntr = opx_ep->write_cntr;
@@ -145,8 +155,9 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 	cc->hit_zero = fi_opx_hit_zero;
 
 	fi_opx_write_internal(opx_ep, buf, len, opx_dst_addr, addr_offset, key,
-			      (union fi_opx_context *)NULL, cc, FI_VOID, FI_NOOP, opx_ep->tx->op_flags, lock_required,
-			      caps, reliability);
+				NULL, cc, FI_VOID, FI_NOOP,
+				opx_ep->tx->op_flags | FI_INJECT,
+				lock_required, caps, reliability);
 
 	return 0;
 }
