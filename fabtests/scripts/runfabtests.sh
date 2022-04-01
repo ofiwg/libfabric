@@ -307,6 +307,7 @@ function print_results {
 		esac
 
 		printf -- "- name:   %s\n" "$test_exe"
+		printf -- "  timestamp: %s\n" "$(date -u +'%Y%m%d-%H%M%S%z')"
 		printf -- "  result: %s\n" "$test_result"
 		printf -- "  time:   %s\n" "$test_time"
 		if [ $emit_stdout -eq 1 -a "$server_out_file" != "" ] ; then
