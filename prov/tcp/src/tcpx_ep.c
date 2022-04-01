@@ -276,8 +276,8 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 		tcpx_cq_report_error(&cq->util_cq, ep->cur_rx.entry,
 				     FI_ECANCELED);
 		tcpx_free_xfer(cq, ep->cur_rx.entry);
-		tcpx_reset_rx(ep);
 	}
+	tcpx_reset_rx(ep);
 	tcpx_ep_flush_queue(&ep->rx_queue, cq);
 	ofi_bsock_discard(&ep->bsock);
 }
