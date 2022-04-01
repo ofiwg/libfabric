@@ -109,6 +109,20 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.copy_to_hmem = neuron_copy_to_dev,
 		.copy_from_hmem = neuron_copy_from_dev,
 	},
+	[FI_HMEM_SYNAPSEAI] = {
+		.initialized = false,
+		.init = synapseai_init,
+		.cleanup = synapseai_cleanup,
+		.copy_to_hmem = synapseai_copy_to_hmem,
+		.copy_from_hmem = synapseai_copy_from_hmem,
+		.get_handle = synapseai_get_handle,
+		.open_handle = synapseai_open_handle,
+		.close_handle = synapseai_close_handle,
+		.host_register = synapseai_host_register,
+		.host_unregister = synapseai_host_unregister,
+		.get_base_addr = synapseai_get_base_addr,
+		.is_ipc_enabled = synapseai_is_ipc_enabled,
+	},
 };
 
 static inline int ofi_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device,

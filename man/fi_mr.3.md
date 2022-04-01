@@ -639,6 +639,9 @@ requested the FI_HMEM capability.
 *FI_HMEM_NEURON*
 : Uses the AWS Neuron SDK to support AWS Trainium devices.
 
+*FI_HMEM_SYNAPSEAI*
+: Uses the SynapseAI API to support Habana Gaudi devices.
+
 ## device
 Reserved 64 bits for device identifier if using non-standard HMEM interface.
 This field is ignore unless the iface field is valid.
@@ -651,6 +654,9 @@ This field is ignore unless the iface field is valid.
 
 *neuron*
 : For FI_HMEM_NEURON, the device identifier for AWS Trainium devices.
+
+*synapseai*
+: For FI_HMEM_SYNAPSEAI, the device identifier for Habana Gaudi hardware.
 
 # NOTES
 
