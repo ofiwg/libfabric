@@ -155,6 +155,54 @@ struct fi_peer_cq_context {
 };
 
 
+/* Peer shared rx context */
+struct fid_peer_srx;
+
+/* Castable to dlist_entry */
+struct fi_peer_rx_entry {
+	struct fi_peer_rx_entry *next;
+	struct fi_peer_rx_entry *prev;
+	fi_addr_t addr;
+	size_t size;
+	uint64_t tag;
+	void *context;
+	size_t count;
+	void **desc;
+	struct iovec iov[];
+};
+
+struct fi_ops_srx_owner {
+	size_t	size;
+	int	(*get_msg_entry)(struct fid_peer_srx *srx,
+			struct fi_peer_rx_entry *entry);
+	int	(*get_tag_entry)(struct fid_peer_srx *srx,
+			struct fi_peer_rx_entry *entry);
+};
+
+struct fi_ops_srx_peer {
+	size_t	size;
+	int	(*start_msg)(struct fid_peer_srx *srx,
+			struct fi_peer_rx_entry *entry);
+	int	(*start_tag)(struct fid_peer_srx *srx,
+			struct fi_peer_rx_entry *entry);
+	int	(*discard_msg)(struct fid_peer_srx *srx,
+			struct fi_peer_rx_entry *entry);
+	int	(*discard_tag)(struct fid_peer_srx *srx,
+			struct fi_peer_rx_entry *entry);
+};
+
+struct fid_peer_srx {
+	struct fid fid;
+	struct fi_ops_srx_owner *owner_ops;
+	struct fi_ops_srx_peer *peer_ops;
+};
+
+struct fi_peer_srx_context {
+	size_t size;
+	struct fid_peer_srx *srx;
+};
+
+
 #ifdef __cplusplus
 }
 #endif

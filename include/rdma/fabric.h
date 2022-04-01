@@ -524,6 +524,7 @@ enum {
 	FI_CLASS_MR_CACHE,
 	FI_CLASS_MEM_MONITOR,
 	FI_CLASS_PEER_CQ,
+	FI_CLASS_PEER_SRX,
 };
 
 struct fi_eq_attr;
