@@ -68,7 +68,7 @@ def skip(install_path):
     if os.getenv('CHANGE_TARGET') is not None:
         change_target = os.environ['CHANGE_TARGET']
     else:
-        change_target = os.environ['GIT_BRANCH']
+        change_target = 'main'
 
     command = [
                   '{}/skip.sh'.format(ci_site_config.testpath),
