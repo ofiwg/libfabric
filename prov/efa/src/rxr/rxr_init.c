@@ -86,6 +86,15 @@ static void rxr_init_env(void)
 	};
 
 	fi_param_get_int(&rxr_prov, "tx_min_credits", &rxr_env.tx_min_credits);
+	if (rxr_env.tx_min_credits <= 0) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_DATA,
+			"FI_EFA_TX_MIN_CREDITS was set to %d, which is <= 0."
+			"This value will cause EFA communication to deadlock."
+			"To avoid that, the variable was reset to %d\n",
+			rxr_env.tx_min_credits, RXR_DEF_MIN_TX_CREDITS);
+		rxr_env.tx_min_credits = RXR_DEF_MIN_TX_CREDITS;
+	}
+
 	fi_param_get_int(&rxr_prov, "tx_queue_size", &rxr_env.tx_queue_size);
 	fi_param_get_int(&rxr_prov, "enable_shm_transfer", &rxr_env.enable_shm_transfer);
 	fi_param_get_int(&rxr_prov, "use_device_rdma", &rxr_env.use_device_rdma);

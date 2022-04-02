@@ -259,6 +259,7 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *t
 	if (tx_entry->total_len < ep->mtu_size - sizeof(struct rxr_readrsp_hdr)) {
 		err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_SHORT_RTR_PKT, 0, 0);
 	} else {
+		assert(rxr_env.tx_min_credits > 0);
 		rx_entry->window = MIN(tx_entry->total_len,
 				       rxr_env.tx_min_credits * ep->max_data_payload_size);
 		tx_entry->rma_window = rx_entry->window;
