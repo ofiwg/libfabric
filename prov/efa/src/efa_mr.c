@@ -39,6 +39,12 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr);
 static int efa_mr_dereg_impl(struct efa_mr *efa_mr);
 
+
+#define EFA_DEF_MR_CACHE_ENABLE 1
+int efa_mr_cache_enable	= EFA_DEF_MR_CACHE_ENABLE;
+size_t efa_mr_max_cached_count;
+size_t efa_mr_max_cached_size;
+
 /* @brief Setup the MR cache.
  *
  * This function enables the MR cache using the util MR cache code.

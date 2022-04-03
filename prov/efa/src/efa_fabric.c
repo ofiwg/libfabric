@@ -78,18 +78,12 @@
 
 #define EFA_NO_DEFAULT -1
 
-#define EFA_DEF_MR_CACHE_ENABLE 1
 
 #ifdef EFA_PERF_ENABLED
 const char *efa_perf_counters_str[] = {
 	EFA_PERF_FOREACH(OFI_STR)
 };
 #endif
-
-int efa_mr_cache_enable		= EFA_DEF_MR_CACHE_ENABLE;
-size_t efa_mr_max_cached_count;
-size_t efa_mr_max_cached_size;
-
 static void efa_addr_to_str(const uint8_t *raw_addr, char *str);
 
 const struct fi_fabric_attr efa_fabric_attr = {
