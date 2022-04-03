@@ -792,7 +792,7 @@ static void rxr_fini(void)
 {
 	struct efa_ep_addr *cur;
 
-	efa_finalize_prov();
+	efa_prov_finalize();
 
 	/* Cleanup all local efa nic GIDs */
 	while (local_efa_addr) {
@@ -895,7 +895,7 @@ EFA_INI
 	ofi_monitors_init();
 #endif
 
-	if (efa_init_prov())
+	if (efa_prov_initialize())
 		return NULL;
 
 	if (rxr_get_local_gids())

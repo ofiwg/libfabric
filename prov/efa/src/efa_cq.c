@@ -282,7 +282,7 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 				  util_domain.domain_fid);
 
 	size = attr->size ? attr->size : EFA_DEF_CQ_SIZE;
-	cq->ibv_cq = ibv_create_cq(cq->domain->ctx->ibv_ctx, size, NULL, NULL, 0);
+	cq->ibv_cq = ibv_create_cq(cq->domain->device->ibv_ctx, size, NULL, NULL, 0);
 	if (!cq->ibv_cq) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create CQ\n");
 		ret = -FI_EINVAL;

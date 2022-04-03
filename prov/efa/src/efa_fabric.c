@@ -91,7 +91,6 @@ size_t efa_mr_max_cached_count;
 size_t efa_mr_max_cached_size;
 
 static void efa_addr_to_str(const uint8_t *raw_addr, char *str);
-static int efa_get_addr(struct efa_context *ctx, void *src_addr);
 
 const struct fi_fabric_attr efa_fabric_attr = {
 	.fabric		= NULL,
@@ -281,7 +280,7 @@ static char *get_sysfs_path(void)
 
 #ifndef _WIN32
 
-static int efa_get_driver(struct efa_context *ctx,
+static int efa_get_driver(struct efa_device *ctx,
 			     char **efa_driver)
 {
 	int ret;
@@ -321,7 +320,7 @@ err_free_driver_sym:
 
 #else // _WIN32
 
-static int efa_get_driver(struct efa_context *ctx,
+static int efa_get_driver(struct efa_device *ctx,
 			     char **efa_driver)
 {
 	int ret;
@@ -342,8 +341,8 @@ static int efa_get_driver(struct efa_context *ctx,
 
 #ifndef _WIN32
 
-static int efa_get_device_version(struct efa_device_attr *efa_device_attr, 
-			     char **device_version)
+static int efa_get_device_version(struct efa_device *efa_device,
+				  char **device_version)
 {
 	char *sysfs_path;
 	int ret;
@@ -375,14 +374,14 @@ free_sysfs_path:
 
 #else // _WIN32
 
-static int efa_get_device_version(struct efa_device_attr *efa_device_attr, 
-			     char **device_version)
+static int efa_get_device_version(struct efa_device *efa_device,
+				  char **device_version)
 {
 	int ret;
 	/*
 	 * On Windows, there is no sysfs. We use hw_ver field of ibv_attr to obtain it
 	 */
-	ret = asprintf(device_version, "%u", efa_device_attr->ibv_attr.hw_ver);
+	ret = asprintf(device_version, "%u", efa_device->ibv_attr.hw_ver);
 	if (ret < 0) {
 		return -FI_ENOMEM;
 	}
@@ -393,7 +392,7 @@ static int efa_get_device_version(struct efa_device_attr *efa_device_attr,
 
 #ifndef _WIN32
 
-static int efa_get_pci_attr(struct efa_context *ctx,
+static int efa_get_pci_attr(struct efa_device *device,
 			     struct fi_pci_attr *pci_attr)
 {
 	char *dbdf_sym_path;
@@ -401,7 +400,7 @@ static int efa_get_pci_attr(struct efa_context *ctx,
 	char dbdf_real_path[PATH_MAX];
 	int ret;
 	ret = asprintf(&dbdf_sym_path, "%s%s",
-	       ctx->ibv_ctx->device->ibdev_path, "/device");
+	       device->ibv_ctx->device->ibdev_path, "/device");
 	if (ret < 0) {
 		return -FI_ENOMEM;
 	}
@@ -436,7 +435,7 @@ err_free_dbdf_sym:
 
 #else // _WIN32
 
-static int efa_get_pci_attr(struct efa_context *ctx,
+static int efa_get_pci_attr(struct efa_device *device,
 			     struct fi_pci_attr *pci_attr)
 {
 	/*
@@ -448,9 +447,7 @@ static int efa_get_pci_attr(struct efa_context *ctx,
 
 #endif // _WIN32
 
-static int efa_alloc_fid_nic(struct fi_info *fi, struct efa_context *ctx,
-			     struct efa_device_attr *efa_device_attr,
-			     struct ibv_port_attr *port_attr)
+static int efa_alloc_fid_nic(struct fi_info *fi, struct efa_device *device)
 {
 	struct fi_device_attr *device_attr;
 	struct fi_link_attr *link_attr;
@@ -471,38 +468,38 @@ static int efa_alloc_fid_nic(struct fi_info *fi, struct efa_context *ctx,
 	link_attr = fi->nic->link_attr;
 
 	/* fi_device_attr */
-	device_attr->name = strdup(ctx->ibv_ctx->device->name);
+	device_attr->name = strdup(device->ibv_ctx->device->name);
 	if (!device_attr->name) {
 		ret = -FI_ENOMEM;
 		goto err_free_nic;
 	}
 
 	ret = asprintf(&device_attr->device_id, "0x%x",
-		       efa_device_attr->ibv_attr.vendor_part_id);
+		       device->ibv_attr.vendor_part_id);
 	/* ofi_nic_close will free all attributes of the fi_nic struct */
 	if (ret < 0) {
 		ret = -FI_ENOMEM;
 		goto err_free_nic;
 	}
 
-	ret = efa_get_device_version(efa_device_attr, &device_attr->device_version);
+	ret = efa_get_device_version(device, &device_attr->device_version);
 	if (ret != 0){
 		goto err_free_nic;
 	}
 
 	ret = asprintf(&device_attr->vendor_id, "0x%x",
-		       efa_device_attr->ibv_attr.vendor_id);
+		       device->ibv_attr.vendor_id);
 	if (ret < 0) {
 		ret = -FI_ENOMEM;
 		goto err_free_nic;
 	}
 
-	ret = efa_get_driver(ctx, &device_attr->driver);
+	ret = efa_get_driver(device, &device_attr->driver);
 	if (ret != 0) {
 		goto err_free_nic;
 	}
 
-	device_attr->firmware = strdup(efa_device_attr->ibv_attr.fw_ver);
+	device_attr->firmware = strdup(device->ibv_attr.fw_ver);
 	if (!device_attr->firmware) {
 		ret = -FI_ENOMEM;
 		goto err_free_nic;
@@ -512,7 +509,7 @@ static int efa_alloc_fid_nic(struct fi_info *fi, struct efa_context *ctx,
 	bus_attr->bus_type = FI_BUS_PCI;
 
 	/* fi_pci_attr */
-	ret = efa_get_pci_attr(ctx, pci_attr);
+	ret = efa_get_pci_attr(device, pci_attr);
 	if (ret != 0) {
 		goto err_free_nic;
 	}
@@ -523,9 +520,7 @@ static int efa_alloc_fid_nic(struct fi_info *fi, struct efa_context *ctx,
 		goto err_free_nic;
 	}
 
-	ret = efa_get_addr(ctx, src_addr);
-	if (ret)
-		goto err_free_src_addr;
+	memcpy(src_addr, &device->ibv_gid, sizeof(device->ibv_gid));
 
 	name_len = strlen(EFA_FABRIC_PREFIX) + INET6_ADDRSTRLEN;
 	link_attr->address = calloc(1, name_len + 1);
@@ -536,11 +531,11 @@ static int efa_alloc_fid_nic(struct fi_info *fi, struct efa_context *ctx,
 
 	efa_addr_to_str(src_addr, link_attr->address);
 
-	link_attr->mtu = port_attr->max_msg_sz - rxr_pkt_max_header_size();
-	link_attr->speed = ofi_vrb_speed(port_attr->active_speed,
-	                                 port_attr->active_width);
+	link_attr->mtu = device->ibv_port_attr.max_msg_sz - rxr_pkt_max_header_size();
+	link_attr->speed = ofi_vrb_speed(device->ibv_port_attr.active_speed,
+	                                 device->ibv_port_attr.active_width);
 
-	switch (port_attr->state) {
+	switch (device->ibv_port_attr.state) {
 	case IBV_PORT_DOWN:
 		link_attr->state = FI_LINK_DOWN;
 		break;
@@ -569,51 +564,18 @@ err_free_nic:
 	return ret;
 }
 
-static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
+static int efa_get_device_attrs(struct efa_device *device, struct fi_info *info)
 {
-	struct efadv_device_attr efadv_attr;
-	struct efa_device_attr device_attr;
-	struct ibv_device_attr *base_attr;
-	struct ibv_port_attr port_attr;
 	int ret;
 
-	memset(&efadv_attr, 0, sizeof(efadv_attr));
-	memset(&device_attr, 0, sizeof(device_attr));
-
-	base_attr = &device_attr.ibv_attr;
-	ret = -ibv_query_device(ctx->ibv_ctx, base_attr);
-	if (ret) {
-		EFA_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_device", ret);
-		return ret;
-	}
-
-	ret = -efadv_query_device(ctx->ibv_ctx, &efadv_attr,
-				  sizeof(efadv_attr));
-	if (ret) {
-		EFA_INFO_ERRNO(FI_LOG_FABRIC, "efadv_query_device", ret);
-		return ret;
-	}
-
-	ctx->inline_buf_size = efadv_attr.inline_buf_size;
-	ctx->max_wr_rdma_sge = base_attr->max_sge_rd;
-
-#ifdef HAVE_RDMA_SIZE
-	ctx->max_rdma_size = efadv_attr.max_rdma_size;
-	ctx->device_caps = efadv_attr.device_caps;
-#else
-	ctx->max_rdma_size = 0;
-	ctx->device_caps = 0;
-#endif
-
-	ctx->max_mr_size			= base_attr->max_mr_size;
-	info->domain_attr->cq_cnt		= base_attr->max_cq;
-	info->domain_attr->ep_cnt		= base_attr->max_qp;
-	info->domain_attr->tx_ctx_cnt		= MIN(info->domain_attr->tx_ctx_cnt, base_attr->max_qp);
-	info->domain_attr->rx_ctx_cnt		= MIN(info->domain_attr->rx_ctx_cnt, base_attr->max_qp);
+	info->domain_attr->cq_cnt		= device->ibv_attr.max_cq;
+	info->domain_attr->ep_cnt		= device->ibv_attr.max_qp;
+	info->domain_attr->tx_ctx_cnt		= MIN(info->domain_attr->tx_ctx_cnt, device->ibv_attr.max_qp);
+	info->domain_attr->rx_ctx_cnt		= MIN(info->domain_attr->rx_ctx_cnt, device->ibv_attr.max_qp);
 	info->domain_attr->max_ep_tx_ctx	= 1;
 	info->domain_attr->max_ep_rx_ctx	= 1;
 	info->domain_attr->resource_mgmt	= FI_RM_DISABLED;
-	info->domain_attr->mr_cnt		= base_attr->max_mr;
+	info->domain_attr->mr_cnt		= device->ibv_attr.max_mr;
 
 #if HAVE_CUDA || HAVE_NEURON
 	if (info->ep_attr->type == FI_EP_RDM &&
@@ -640,10 +602,10 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 				info->domain_attr->max_ep_tx_ctx,
 				info->domain_attr->max_ep_rx_ctx);
 
-	info->tx_attr->iov_limit = efadv_attr.max_sq_sge;
-	info->tx_attr->size = rounddown_power_of_two(efadv_attr.max_sq_wr);
+	info->tx_attr->iov_limit = device->efa_attr.max_sq_sge;
+	info->tx_attr->size = rounddown_power_of_two(device->efa_attr.max_sq_wr);
 	if (info->ep_attr->type == FI_EP_RDM) {
-		info->tx_attr->inject_size = efadv_attr.inline_buf_size;
+		info->tx_attr->inject_size = device->efa_attr.inline_buf_size;
 	} else if (info->ep_attr->type == FI_EP_DGRAM) {
                 /*
                  * Currently, there is no mechanism for EFA layer (lower layer)
@@ -655,8 +617,8 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
                  */
 		info->tx_attr->inject_size = 0;
 	}
-	info->rx_attr->iov_limit = efadv_attr.max_rq_sge;
-	info->rx_attr->size = rounddown_power_of_two(efadv_attr.max_rq_wr / info->rx_attr->iov_limit);
+	info->rx_attr->iov_limit = device->efa_attr.max_rq_sge;
+	info->rx_attr->size = rounddown_power_of_two(device->efa_attr.max_rq_wr / info->rx_attr->iov_limit);
 
 	EFA_DBG(FI_LOG_DOMAIN, "Tx/Rx attribute :\n"
 				"\t info->tx_attr->iov_limit		= %zu\n"
@@ -670,18 +632,13 @@ static int efa_get_device_attrs(struct efa_context *ctx, struct fi_info *info)
 				info->rx_attr->iov_limit,
 				info->rx_attr->size);
 
-	ret = -ibv_query_port(ctx->ibv_ctx, 1, &port_attr);
-	if (ret) {
-		EFA_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_port", ret);
-		return ret;
-	}
 
-	info->ep_attr->max_msg_size		= port_attr.max_msg_sz;
-	info->ep_attr->max_order_raw_size	= port_attr.max_msg_sz;
-	info->ep_attr->max_order_waw_size	= port_attr.max_msg_sz;
+	info->ep_attr->max_msg_size		= device->ibv_port_attr.max_msg_sz;
+	info->ep_attr->max_order_raw_size	= device->ibv_port_attr.max_msg_sz;
+	info->ep_attr->max_order_waw_size	= device->ibv_port_attr.max_msg_sz;
 
 	/* Set fid nic attributes. */
-	ret = efa_alloc_fid_nic(info, ctx, &device_attr, &port_attr);
+	ret = efa_alloc_fid_nic(info, device);
 	if (ret) {
 		EFA_WARN(FI_LOG_FABRIC,
 			 "Unable to allocate fid_nic: %s\n", fi_strerror(-ret));
@@ -719,27 +676,10 @@ static int efa_str_to_ep_addr(const char *node, const char *service, struct efa_
 	return 0;
 }
 
-static int efa_get_addr(struct efa_context *ctx, void *src_addr)
-{
-	union ibv_gid gid;
-	int ret;
-
-	ret = ibv_query_gid(ctx->ibv_ctx, 1, 0, &gid);
-	if (ret) {
-		EFA_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_gid", ret);
-		return ret;
-	}
-
-	memcpy(src_addr, &gid, sizeof(gid));
-
-	return 0;
-}
-
-static int efa_alloc_info(struct efa_context *ctx, struct fi_info **info,
+static int efa_alloc_info(struct efa_device *device, struct fi_info **info,
 			  const struct efa_ep_domain *ep_dom)
 {
 	struct fi_info *fi;
-	union ibv_gid gid;
 	size_t name_len;
 	int ret;
 
@@ -766,15 +706,9 @@ static int efa_alloc_info(struct efa_context *ctx, struct fi_info **info,
 	fi->ep_attr->protocol	= FI_PROTO_EFA;
 	fi->ep_attr->type	= ep_dom->type;
 
-	ret = efa_get_device_attrs(ctx, fi);
+	ret = efa_get_device_attrs(device, fi);
 	if (ret)
 		goto err_free_info;
-
-	ret = ibv_query_gid(ctx->ibv_ctx, 1, 0, &gid);
-	if (ret) {
-		EFA_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_gid", ret);
-		goto err_free_info;
-	}
 
 	name_len = strlen(EFA_FABRIC_PREFIX) + INET6_ADDRSTRLEN;
 
@@ -783,9 +717,9 @@ static int efa_alloc_info(struct efa_context *ctx, struct fi_info **info,
 		ret = -FI_ENOMEM;
 		goto err_free_info;
 	}
-	efa_addr_to_str(gid.raw, fi->fabric_attr->name);
+	efa_addr_to_str(device->ibv_gid.raw, fi->fabric_attr->name);
 
-	name_len = strlen(ctx->ibv_ctx->device->name) + strlen(ep_dom->suffix);
+	name_len = strlen(device->ibv_ctx->device->name) + strlen(ep_dom->suffix);
 	fi->domain_attr->name = malloc(name_len + 1);
 	if (!fi->domain_attr->name) {
 		ret = -FI_ENOMEM;
@@ -793,7 +727,7 @@ static int efa_alloc_info(struct efa_context *ctx, struct fi_info **info,
 	}
 
 	snprintf(fi->domain_attr->name, name_len + 1, "%s%s",
-		 ctx->ibv_ctx->device->name, ep_dom->suffix);
+		 device->ibv_ctx->device->name, ep_dom->suffix);
 	fi->domain_attr->name[name_len] = '\0';
 
 	fi->addr_format = FI_ADDR_EFA;
@@ -803,9 +737,7 @@ static int efa_alloc_info(struct efa_context *ctx, struct fi_info **info,
 		goto err_free_info;
 	}
 	fi->src_addrlen = EFA_EP_ADDR_LEN;
-	ret = efa_get_addr(ctx, fi->src_addr);
-	if (ret)
-		goto err_free_info;
+	memcpy(fi->src_addr, &device->ibv_gid, sizeof(device->ibv_gid));
 
 	fi->domain_attr->av_type = FI_AV_TABLE;
 
@@ -1079,17 +1011,173 @@ err_free_fabric:
 	return ret;
 }
 
-void efa_finalize_prov(void)
+#ifndef _WIN32
+
+
+void efa_win_lib_finalize(void)
 {
-	struct efa_context **ctx_list;
-	int num_devices;
+	// Nothing to do when we are not compiling for Windows
+}
 
-	fi_freeinfo((void *)efa_util_prov.info);
+int efa_win_lib_initialize(void)
+{
+	return 0;
+}
+
+#else // _WIN32
+
+#include "efawin.h"
+
+/**
+ * @brief open efawin.dll and load the symbols on windows platform
+ *
+ * This function is a no-op on windows
+ */
+int efa_win_lib_initialize(void)
+{
+	/* On Windows we need to load efawin dll to interact with
+ 	* efa device as there is no built-in verbs integration in the OS.
+	* efawin dll provides all the ibv_* functions on Windows.
+	* efa_load_efawin_lib function will replace stub ibv_* functions with
+	* functions from efawin dll
+	*/
+	return efa_load_efawin_lib();
+}
+
+/**
+ * @brief close efawin.dll on windows
+ *
+ * This function is a no-op on windows
+ */
+void efa_win_lib_finalize(void) {
+	efa_free_efawin_lib();
+}
+
+#endif // _WIN32
+
+struct fi_info *g_device_info_list;
+
+/**
+ * @brief initialize global variable: util_prov and g_device_info_list
+ *
+ * g_device_info_list is a linked list of fi_info
+ * objects, with each fi_info object containing
+ * one EFA device's attribute. Each device has
+ * two fi_info objects, one for dgram, the other
+ * for rdm.
+ *
+ * util_prov is the util_provider with its
+ * info pointing to the head of g_device_info_list
+ */
+static int efa_util_prov_initialize()
+{
+	int i, err;
+	struct fi_info *rdm_info = NULL;
+	struct fi_info *dgrm_info = NULL;
+	struct fi_info *tail_info = NULL;
+
+	g_device_info_list = NULL;
+	for (i = 0; i < g_device_cnt; i++) {
+		rdm_info = NULL;
+		dgrm_info = NULL;
+		err = efa_alloc_info(&g_device_list[i], &rdm_info, &efa_rdm_domain);
+		if (err)
+			goto err_free;
+
+		err = efa_alloc_info(&g_device_list[i], &dgrm_info, &efa_dgrm_domain);
+		if (err)
+			goto err_free;
+
+		if (i==0) {
+			g_device_info_list = rdm_info;
+		} else {
+			tail_info->next = rdm_info;
+		}
+
+		rdm_info->next = dgrm_info;
+		tail_info = dgrm_info;
+	}
+
+	efa_util_prov.info = g_device_info_list;
+	return 0;
+
+err_free:
+	fi_freeinfo(g_device_info_list);
+	fi_freeinfo(rdm_info);
+	fi_freeinfo(dgrm_info);
+	return err;
+}
+
+/**
+ * @brief release resources of g_device_info_list and reset util_prov
+ */
+static void efa_util_prov_finalize()
+{
+	fi_freeinfo(g_device_info_list);
 	efa_util_prov.info = NULL;
+}
 
-	ctx_list = efa_device_get_context_list(&num_devices);
-	efa_device_free_context_list(ctx_list);
-	efa_device_free();
+/**
+ * @brief initialize global variables use by EFA provider.
+ *
+ * This function call various functions to initialize
+ * device_list, pd_list, win_lib and util_prov. All
+ * of them are global variables.
+ */
+int efa_prov_initialize(void)
+{
+	int ret = 0, err;
+
+	err = efa_device_list_initialize();
+	if (err)
+		return err;
+
+	if (g_device_cnt <= 0)
+		return -FI_ENODEV;
+
+	err = efa_pd_list_initialize();
+	if (err) {
+		ret = err;
+		goto err_free;
+	}
+
+	err = efa_win_lib_initialize();
+	if (err) {
+		ret = err;
+		goto err_free;
+	}
+
+	err = efa_util_prov_initialize();
+	if (err) {
+		ret = err;
+		goto err_free;
+	}
+
+	return 0;
+
+err_free:
+	efa_win_lib_finalize();
+	efa_pd_list_finalize();
+	efa_device_list_finalize();
+	return ret;
+}
+
+/**
+ * @brief release the resources of global variables of provider
+ *
+ * This function calls various functions to release
+ * util_prov, device_list, pd_list, win_lib
+ */
+void efa_prov_finalize(void)
+{
+	efa_util_prov_finalize();
+
+	efa_device_list_finalize();
+
+	efa_pd_list_finalize();
+
+	efa_win_lib_finalize();
+
 #if HAVE_EFA_DL
 	smr_cleanup();
 #endif
@@ -1101,7 +1189,7 @@ struct fi_provider efa_prov = {
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = efa_getinfo,
 	.fabric = efa_fabric,
-	.cleanup = efa_finalize_prov
+	.cleanup = efa_prov_finalize
 };
 
 struct util_prov efa_util_prov = {
@@ -1110,55 +1198,3 @@ struct util_prov efa_util_prov = {
 	.flags = 0,
 };
 
-static int efa_init_info(const struct fi_info **all_infos)
-{
-	struct efa_context **ctx_list;
-	int ret, retv = 1, i, num_devices;
-	struct fi_info *tail = NULL;
-	struct fi_info *fi = NULL;
-
-	ret = efa_device_init();
-	if (ret)
-		return ret;
-
-	ctx_list = efa_device_get_context_list(&num_devices);
-	if (!num_devices) {
-		if (ctx_list) {
-			free(ctx_list);
-		}
-		return -FI_ENODEV;
-	}
-
-	*all_infos = NULL;
-	for (i = 0; i < num_devices; i++) {
-		ret = efa_alloc_info(ctx_list[i], &fi, &efa_rdm_domain);
-		if (!ret) {
-			if (!*all_infos) {
-				*all_infos = fi;
-			} else {
-				assert(tail);
-				tail->next = fi;
-			}
-			tail = fi;
-			ret = efa_alloc_info(ctx_list[i], &fi, &efa_dgrm_domain);
-			if (!ret) {
-				tail->next = fi;
-				tail = fi;
-			}
-		} else {
-			continue;
-		}
-
-		retv = 0;
-	}
-
-	efa_device_free_context_list(ctx_list);
-	if (retv)
-		return ret;
-	return retv;
-}
-
-int efa_init_prov(void)
-{
-	return efa_init_info(&efa_util_prov.info);
-}

@@ -458,7 +458,7 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 		attr_ex.recv_cq = ep->scq->ibv_cq;
 	}
 
-	attr_ex.cap.max_inline_data = ep->domain->ctx->inline_buf_size;
+	attr_ex.cap.max_inline_data = ep->domain->device->efa_attr.inline_buf_size;
 
 	if (ep->domain->type == EFA_DOMAIN_RDM) {
 		attr_ex.qp_type = IBV_QPT_DRIVER;
@@ -633,8 +633,8 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 			      util_domain.domain_fid);
 
 	if (!info || !info->ep_attr || !info->domain_attr ||
-	    strncmp(domain->ctx->ibv_ctx->device->name, info->domain_attr->name,
-		    strlen(domain->ctx->ibv_ctx->device->name))) {
+	    strncmp(domain->device->ibv_ctx->device->name, info->domain_attr->name,
+		    strlen(domain->device->ibv_ctx->device->name))) {
 		EFA_INFO(FI_LOG_DOMAIN, "Invalid info->domain_attr->name\n");
 		return -FI_EINVAL;
 	}
