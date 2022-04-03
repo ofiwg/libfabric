@@ -32,6 +32,7 @@
 if HAVE_EFA
 _efa_files = \
 	prov/efa/src/efa_device.c \
+	prov/efa/src/efa_hmem.c \
 	prov/efa/src/efa_av.c \
 	prov/efa/src/efa_domain.c \
 	prov/efa/src/efa_cm.c \
@@ -61,6 +62,7 @@ _efa_files = \
 _efa_headers = \
 	prov/efa/src/efa.h \
 	prov/efa/src/efa_device.h \
+	prov/efa/src/efa_hmem.h \
 	prov/efa/src/rxr/rxr.h \
 	prov/efa/src/rxr/rxr_cntr.h \
 	prov/efa/src/rxr/rxr_rma.h \

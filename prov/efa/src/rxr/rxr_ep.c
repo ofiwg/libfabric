@@ -970,7 +970,7 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
 }
 
 /*
- * Set the efa_domain hmem_info state based on what CUDA/Neuron capabilities
+ * Set the efa_domain hmem_support_status state based on what CUDA/Neuron capabilities
  * are available. Return whether hmem is supported or not.
  *
  * @param[in]	efa_domain efa domain
@@ -988,15 +988,15 @@ static int efa_ep_hmem_check(struct efa_domain *efa_domain)
 	 * TODO: once we support other FI_HMEM p2p modes, check the setopt
 	 * option first. For now, require p2p from at least one device type.
 	 */
-	if (efa_domain->hmem_info[FI_HMEM_CUDA].initialized &&
-	    efa_domain->hmem_info[FI_HMEM_CUDA].p2p_supported)
+	if (efa_domain->hmem_support_status[FI_HMEM_CUDA].initialized &&
+	    efa_domain->hmem_support_status[FI_HMEM_CUDA].p2p_supported)
 		have_hmem = 1;
 	else
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"NVIDIA GPUDirect support is not available, but FI_HMEM was requested.\n");
 
-	if (efa_domain->hmem_info[FI_HMEM_NEURON].initialized &&
-	    efa_domain->hmem_info[FI_HMEM_NEURON].p2p_supported)
+	if (efa_domain->hmem_support_status[FI_HMEM_NEURON].initialized &&
+	    efa_domain->hmem_support_status[FI_HMEM_NEURON].p2p_supported)
 		have_hmem = 1;
 	else
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -1177,9 +1177,9 @@ static ssize_t rxr_ep_cancel(fid_t fid_ep, void *context)
  */
 static int efa_set_fi_hmem_p2p_opt(struct efa_ep *efa_ep, int opt)
 {
-	struct efa_hmem_info *hmem_info;
+	struct efa_hmem_support_status *hmem_support_status;
 
-	hmem_info = efa_ep->domain->hmem_info;
+	hmem_support_status = efa_ep->domain->hmem_support_status;
 
 	switch (opt) {
 	/*
@@ -1190,11 +1190,11 @@ static int efa_set_fi_hmem_p2p_opt(struct efa_ep *efa_ep, int opt)
 	case FI_HMEM_P2P_REQUIRED:
 	case FI_HMEM_P2P_ENABLED:
 	case FI_HMEM_P2P_PREFERRED:
-		if (hmem_info[FI_HMEM_CUDA].initialized &&
-		    hmem_info[FI_HMEM_CUDA].p2p_supported) {
+		if (hmem_support_status[FI_HMEM_CUDA].initialized &&
+		    hmem_support_status[FI_HMEM_CUDA].p2p_supported) {
 			efa_ep->hmem_p2p_opt = opt;
-		} else if (hmem_info[FI_HMEM_NEURON].initialized &&
-			   hmem_info[FI_HMEM_NEURON].p2p_supported) {
+		} else if (hmem_support_status[FI_HMEM_NEURON].initialized &&
+			   hmem_support_status[FI_HMEM_NEURON].p2p_supported) {
 			/*
 			 * Neuron requires p2p support and supports no
 			 * other modes.

@@ -65,6 +65,7 @@
 #include "ofi_file.h"
 
 #include "efa_device.h"
+#include "efa_hmem.h"
 #include "rxr.h"
 #define EFA_PROV_NAME "efa"
 
@@ -156,11 +157,6 @@ struct efa_domain_base {
 	enum efa_domain_type	type;
 };
 
-struct efa_hmem_info {
-	bool initialized; 	/* do we support it at all */
-	bool p2p_supported;	/* do we support p2p with this device */
-};
-
 struct efa_domain {
 	struct util_domain	util_domain;
 	enum efa_domain_type	type;
@@ -172,7 +168,7 @@ struct efa_domain {
 	struct ofi_mr_cache	*cache;
 	struct efa_qp		**qp_table;
 	size_t			qp_table_sz_m1;
-	struct efa_hmem_info	hmem_info[OFI_HMEM_MAX];
+	struct efa_hmem_support_status	hmem_support_status[OFI_HMEM_MAX];
 };
 
 /**
@@ -641,7 +637,7 @@ static inline int efa_ep_use_p2p(struct efa_ep *ep, struct efa_mr *efa_mr)
 	if (efa_mr->peer.iface == FI_HMEM_SYSTEM)
 		return 1;
 
-	if (ep->domain->hmem_info[efa_mr->peer.iface].p2p_supported)
+	if (ep->domain->hmem_support_status[efa_mr->peer.iface].p2p_supported)
 		return (ep->hmem_p2p_opt != FI_HMEM_P2P_DISABLED);
 
 	if (ep->hmem_p2p_opt == FI_HMEM_P2P_REQUIRED) {
