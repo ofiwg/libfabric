@@ -583,7 +583,7 @@ static void oflow_buf_free(struct cxip_oflow_buf *oflow_buf)
  */
 static void oflow_req_put_bytes(struct cxip_req *req, size_t bytes)
 {
-	struct cxip_oflow_buf *oflow_buf = req->oflow.oflow_buf;
+	struct cxip_oflow_buf *oflow_buf = req->req_ctx;
 
 	oflow_buf->sw_consumed += bytes;
 
@@ -883,7 +883,7 @@ static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
 	recv_req_tgt_event(match_req, put_event);
 
 	if (oflow_req->type == CXIP_REQ_OFLOW) {
-		oflow_buf = oflow_req->oflow.oflow_buf;
+		oflow_buf = oflow_req->req_ctx;
 		oflow_va = (void *)CXI_IOVA_TO_VA(oflow_buf->md->md,
 			put_event->tgt_long.start);
 	} else {
@@ -1165,8 +1165,8 @@ static inline bool cxip_check_hybrid_preempt(struct cxip_rxc *rxc,
  */
 static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 {
-	struct cxip_rxc *rxc = req->oflow.rxc;
-	struct cxip_oflow_buf *oflow_buf = req->oflow.oflow_buf;
+	struct cxip_oflow_buf *oflow_buf = req->req_ctx;
+	struct cxip_rxc *rxc = oflow_buf->rxc;
 	int ret = FI_SUCCESS;
 
 	fastlock_acquire(&rxc->rx_lock);
@@ -1277,7 +1277,6 @@ static int eager_buf_add(struct cxip_rxc *rxc, bool seq_restart)
 	struct cxip_domain *dom;
 	int ret;
 	struct cxip_oflow_buf *oflow_buf;
-	struct cxip_req *req;
 	uint32_t le_flags;
 
 	/* Match all eager, long sends */
@@ -1325,17 +1324,17 @@ static int eager_buf_add(struct cxip_rxc *rxc, bool seq_restart)
 	}
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
-	if (!req) {
+	oflow_buf->req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
+	if (!oflow_buf->req) {
 		RXC_WARN(rxc, "Failed to allocate request\n");
 		ret = -FI_ENOMEM;
 		goto oflow_unmap;
 	}
 
-	req->cb = cxip_oflow_cb;
-	req->oflow.rxc = rxc;
-	req->oflow.oflow_buf = oflow_buf;
-	req->type = CXIP_REQ_OFLOW;
+	oflow_buf->req->cb = cxip_oflow_cb;
+	oflow_buf->req->req_ctx = oflow_buf;
+	oflow_buf->req->type = CXIP_REQ_OFLOW;
+	oflow_buf->rxc = rxc;
 
 	le_flags = C_LE_MANAGE_LOCAL | C_LE_NO_TRUNCATE |
 		   C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
@@ -1353,8 +1352,8 @@ static int eager_buf_add(struct cxip_rxc *rxc, bool seq_restart)
 			      CXI_VA_TO_IOVA(oflow_buf->md->md,
 					     oflow_buf->buf),
 			      rxc->oflow_buf_size, oflow_buf->md->md->lac,
-			      C_PTL_LIST_OVERFLOW, req->req_id, mb.raw, ib.raw,
-			      CXI_MATCH_ID_ANY,
+			      C_PTL_LIST_OVERFLOW, oflow_buf->req->req_id,
+			      mb.raw, ib.raw, CXI_MATCH_ID_ANY,
 			      rxc->max_eager_size,
 			      le_flags, NULL, rxc->rx_cmdq, true);
 	if (ret) {
@@ -1364,19 +1363,17 @@ static int eager_buf_add(struct cxip_rxc *rxc, bool seq_restart)
 
 	/* Initialize oflow_buf structure */
 	dlist_insert_tail(&oflow_buf->list, &rxc->oflow_bufs);
-	oflow_buf->rxc = rxc;
-	oflow_buf->buffer_id = req->req_id;
 	oflow_buf->type = CXIP_LE_TYPE_RX;
 
 	ofi_atomic_inc32(&rxc->oflow_bufs_submitted);
 	ofi_atomic_inc32(&rxc->oflow_bufs_in_use);
 
-	RXC_DBG(rxc, "Eager buffer created: %p\n", req);
+	RXC_DBG(rxc, "Eager buffer created: %p\n", oflow_buf->req);
 
 	return FI_SUCCESS;
 
 oflow_req_free:
-	cxip_cq_req_free(req);
+	cxip_cq_req_free(oflow_buf->req);
 oflow_unmap:
 	cxip_unmap(oflow_buf->md);
 free_unreg_buf:
@@ -1435,7 +1432,7 @@ static int cxip_rxc_eager_fini(struct cxip_rxc *rxc)
 	dlist_foreach_container(&rxc->oflow_bufs, struct cxip_oflow_buf,
 				oflow_buf, list) {
 		ret = cxip_pte_unlink(rxc->rx_pte, C_PTL_LIST_OVERFLOW,
-				      oflow_buf->buffer_id, rxc->rx_cmdq);
+				      oflow_buf->req->req_id, rxc->rx_cmdq);
 		if (ret != FI_SUCCESS) {
 			/* TODO handle error */
 			RXC_WARN(rxc, "Failed to enqueue Unlink: %d\n", ret);
@@ -1541,6 +1538,7 @@ void cxip_rxc_oflow_fini(struct cxip_rxc *rxc)
 {
 	int ret;
 	struct cxip_deferred_event *def_ev = NULL;
+	struct cxip_oflow_buf *oflow_buf;
 	struct dlist_entry *tmp;
 	int i;
 	int def_events = 0;
@@ -1556,8 +1554,9 @@ void cxip_rxc_oflow_fini(struct cxip_rxc *rxc)
 			 * oflow_buf to be removed from the RXC list and
 			 * freed.
 			 */
-			if (def_ev->req->oflow.oflow_buf->type ==
-			    CXIP_LE_TYPE_RX)
+			oflow_buf = def_ev->req->req_ctx;
+
+			if (oflow_buf->type == CXIP_LE_TYPE_RX)
 				oflow_req_put_bytes(def_ev->req,
 					    def_ev->ev.tgt_long.mlength);
 

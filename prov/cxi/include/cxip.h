@@ -830,14 +830,6 @@ struct cxip_req_send {
 	int rdzv_send_events;		// Processed event count
 };
 
-struct cxip_req_oflow {
-	union {
-		struct cxip_txc *txc;
-		struct cxip_rxc *rxc;
-	};
-	struct cxip_oflow_buf *oflow_buf;
-};
-
 struct cxip_req_rdzv_src {
 	struct dlist_entry list;
 	struct cxip_txc *txc;
@@ -919,7 +911,6 @@ struct cxip_req {
 	union {
 		struct cxip_req_rma rma;
 		struct cxip_req_amo amo;
-		struct cxip_req_oflow oflow;
 		struct cxip_req_recv recv;
 		struct cxip_req_send send;
 		struct cxip_req_rdzv_src rdzv_src;
@@ -1109,15 +1100,13 @@ struct def_event_ht {
 struct cxip_oflow_buf {
 	struct dlist_entry list;
 	enum cxip_le_type type;
-	union {
-		struct cxip_txc *txc;
-		struct cxip_rxc *rxc;
-	};
+	struct cxip_rxc *rxc;
+	struct cxip_req *req;
+
 	void *buf;
 	struct cxip_md *md;
 	size_t sw_consumed;
 	size_t hw_consumed;
-	int buffer_id;
 };
 
 /*
