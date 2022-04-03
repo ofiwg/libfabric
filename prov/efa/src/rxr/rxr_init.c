@@ -40,9 +40,6 @@
 
 struct fi_info *shm_info;
 
-struct efa_ep_addr *local_efa_addr;
-
-
 struct rxr_env rxr_env = {
 	.rx_window_size	= RXR_DEF_MAX_RX_WINDOW,
 	.tx_max_credits = RXR_DEF_MAX_TX_CREDITS,
@@ -609,49 +606,6 @@ int rxr_get_lower_rdm_info(uint32_t version, const char *node,
 	return ret;
 }
 
-/*
- * Call efa_getinfo() to get all locally qualified fi_info
- * structure, then store the corresponding efa nic GIDs
- */
-int rxr_get_local_gids(void)
-{
-	struct fi_info *core_info, *cur;
-	struct efa_ep_addr *cur_efa_addr;
-	int ret;
-
-	cur_efa_addr = local_efa_addr = NULL;
-	core_info = cur = NULL;
-
-	ret = efa_getinfo(rxr_prov.fi_version, NULL, NULL, 0, NULL, &core_info);
-	if (ret)
-		return ret;
-
-	local_efa_addr = (struct efa_ep_addr *)malloc(sizeof(struct efa_ep_addr));
-	if (!local_efa_addr) {
-		ret = -FI_ENOMEM;
-		goto out;
-	}
-	local_efa_addr->next = NULL;
-
-	cur_efa_addr = local_efa_addr;
-	for (cur = core_info; cur; cur = cur->next) {
-		memcpy(cur_efa_addr->raw, ((struct efa_ep_addr *)cur->src_addr)->raw, 16);
-		if (cur->next) {
-			cur_efa_addr->next = (struct efa_ep_addr *)malloc(sizeof(struct efa_ep_addr));
-			if (!cur_efa_addr->next) {
-				ret = -FI_ENOMEM;
-				goto out;
-			}
-			cur_efa_addr = cur_efa_addr->next;
-			cur_efa_addr->next = NULL;
-		}
-	}
-
-out:
-	fi_freeinfo(core_info);
-	return ret;
-}
-
 static int rxr_dgram_getinfo(uint32_t version, const char *node,
 			     const char *service, uint64_t flags,
 			     const struct fi_info *hints, struct fi_info **info,
@@ -790,16 +744,8 @@ free_info:
 
 static void rxr_fini(void)
 {
-	struct efa_ep_addr *cur;
-
 	efa_prov_finalize();
 
-	/* Cleanup all local efa nic GIDs */
-	while (local_efa_addr) {
-		cur = local_efa_addr;
-		local_efa_addr = local_efa_addr->next;
-		free(cur);
-	}
 	if (shm_info)
 		fi_freeinfo(shm_info);
 
@@ -896,9 +842,6 @@ EFA_INI
 #endif
 
 	if (efa_prov_initialize())
-		return NULL;
-
-	if (rxr_get_local_gids())
 		return NULL;
 
 	return &rxr_prov;
