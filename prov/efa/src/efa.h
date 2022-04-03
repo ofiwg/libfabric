@@ -266,11 +266,6 @@ struct efa_cq {
 	struct ibv_cq		*ibv_cq;
 };
 
-struct efa_pd {
-	struct ibv_pd	   *ibv_pd;
-	int		   use_cnt;
-};
-
 struct efa_qp {
 	struct ibv_qp	*ibv_qp;
 	struct ibv_qp_ex *ibv_qp_ex;
@@ -404,11 +399,6 @@ extern struct fi_ops_rma efa_ep_rma_ops;
 
 ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg,
 			  uint64_t flags, bool self_comm);
-
-extern ofi_spin_t pd_list_lock;
-extern struct efa_pd *pd_list;
-int efa_pd_list_initialize();
-void efa_pd_list_finalize();
 
 const struct fi_info *efa_get_efa_info(const char *domain_name);
 int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,

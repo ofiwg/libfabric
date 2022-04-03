@@ -1135,12 +1135,6 @@ int efa_prov_initialize(void)
 	if (g_device_cnt <= 0)
 		return -FI_ENODEV;
 
-	err = efa_pd_list_initialize();
-	if (err) {
-		ret = err;
-		goto err_free;
-	}
-
 	err = efa_win_lib_initialize();
 	if (err) {
 		ret = err;
@@ -1157,7 +1151,6 @@ int efa_prov_initialize(void)
 
 err_free:
 	efa_win_lib_finalize();
-	efa_pd_list_finalize();
 	efa_device_list_finalize();
 	return ret;
 }
@@ -1173,8 +1166,6 @@ void efa_prov_finalize(void)
 	efa_util_prov_finalize();
 
 	efa_device_list_finalize();
-
-	efa_pd_list_finalize();
 
 	efa_win_lib_finalize();
 

@@ -37,38 +37,11 @@
 #include "efa.h"
 #include "rxr_cntr.h"
 
-ofi_spin_t pd_list_lock;
-struct efa_pd *pd_list = NULL;
-
-/**
- * @brief initialize global variable pd_list and pd_list_lock
- */
-int efa_pd_list_initialize(void)
-{
-	ofi_spin_init(&pd_list_lock);
-
-	pd_list = calloc(g_device_cnt, sizeof(*pd_list));
-	if (!pd_list)
-		return -ENOMEM;
-
-	return 0;
-}
-
-/**
- * @brief release resources of two global variable: pd_list and pd_list_lock
- */
-void efa_pd_list_finalize(void)
-{
-	free(pd_list);
-	ofi_spin_destroy(&pd_list_lock);
-}
-
 enum efa_fork_support_status efa_fork_status = EFA_FORK_SUPPORT_OFF;
 
 static int efa_domain_close(fid_t fid)
 {
 	struct efa_domain *domain;
-	struct efa_pd *efa_pd;
 	int ret;
 
 	domain = container_of(fid, struct efa_domain,
@@ -81,21 +54,7 @@ static int efa_domain_close(fid_t fid)
 	}
 
 	if (domain->ibv_pd) {
-		ofi_spin_lock(&pd_list_lock);
-		efa_pd = &pd_list[domain->device->device_idx];
-		if (efa_pd->use_cnt == 1) {
-			ret = -ibv_dealloc_pd(domain->ibv_pd);
-			if (ret) {
-				ofi_spin_unlock(&pd_list_lock);
-				EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd",
-				               ret);
-				return ret;
-			}
-			efa_pd->ibv_pd = NULL;
-		}
-		efa_pd->use_cnt--;
 		domain->ibv_pd = NULL;
-		ofi_spin_unlock(&pd_list_lock);
 	}
 
 	ret = ofi_domain_close(&domain->util_domain);
@@ -135,26 +94,11 @@ static int efa_open_device_by_name(struct efa_domain *domain, const char *name)
 		}
 	}
 
-	/*
-	 * Check if a PD has already been allocated for this device and reuse
-	 * it if this is the case.
-	 */
-	ofi_spin_lock(&pd_list_lock);
-	if (pd_list[i].ibv_pd) {
-		domain->ibv_pd = pd_list[i].ibv_pd;
-		pd_list[i].use_cnt++;
-	} else {
-		domain->ibv_pd = ibv_alloc_pd(domain->device->ibv_ctx);
-		if (!domain->ibv_pd) {
-			ret = -errno;
-		} else {
-			pd_list[i].ibv_pd = domain->ibv_pd;
-			pd_list[i].use_cnt++;
-		}
-	}
-	ofi_spin_unlock(&pd_list_lock);
+	if (i == g_device_cnt)
+		return -FI_ENODEV;
 
-	return ret;
+	domain->ibv_pd = domain->device->ibv_pd;
+	return 0;
 }
 
 /* @brief Check if rdma-core fork support is enabled and prevent fork

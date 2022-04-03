@@ -108,6 +108,14 @@ static int efa_device_construct(struct efa_device *efa_device,
 		goto err_close;
 	}
 
+	efa_device->ibv_pd = ibv_alloc_pd(efa_device->ibv_ctx);
+	if (!efa_device->ibv_pd) {
+		EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_alloc_pd",
+		               errno);
+		err = errno;
+		goto err_close;
+	}
+
 #ifdef HAVE_RDMA_SIZE
 	efa_device->max_rdma_size = efa_device->efa_attr.max_rdma_size;
 	efa_device->device_caps = efa_device->efa_attr.device_caps;
@@ -129,8 +137,25 @@ err_close:
  */
 static void efa_device_destruct(struct efa_device *device)
 {
-	if (device->ibv_ctx)
-		ibv_close_device(device->ibv_ctx);
+	int err;
+
+	if (device->ibv_pd) {
+		err = ibv_dealloc_pd(device->ibv_pd);
+		if (err)
+			EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd",
+			               err);
+	}
+
+	device->ibv_pd = NULL;
+
+	if (device->ibv_ctx) {
+		err = ibv_close_device(device->ibv_ctx);
+		if (err)
+			EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd",
+			               err);
+	}
+
+	device->ibv_ctx = NULL;
 }
 
 struct efa_device *g_device_list;
@@ -218,4 +243,3 @@ bool efa_device_support_rdma_read(void)
 
 	return g_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
 }
-

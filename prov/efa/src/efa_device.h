@@ -45,6 +45,7 @@ struct efa_device {
 	union ibv_gid		ibv_gid;
 	uint32_t		device_caps;
 	uint32_t		max_rdma_size;
+	struct ibv_pd		*ibv_pd;
 };
 
 int efa_device_list_initialize(void);
