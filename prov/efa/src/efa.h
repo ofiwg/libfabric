@@ -67,6 +67,7 @@
 #include "efa_fork_support.h"
 #include "efa_device.h"
 #include "efa_hmem.h"
+#include "efa_mr.h"
 #include "rxr.h"
 #define EFA_PROV_NAME "efa"
 
@@ -113,10 +114,6 @@
 #define EFA_SHM_MAX_AV_COUNT       (256)
 /* maximum name length for shm endpoint */
 #define EFA_SHM_NAME_MAX	   (256)
-
-extern int efa_mr_cache_enable;
-extern size_t efa_mr_max_cached_count;
-extern size_t efa_mr_max_cached_size;
 
 extern struct fi_provider efa_prov;
 extern struct util_prov efa_util_prov;
@@ -228,16 +225,6 @@ enum efa_domain_type efa_domain_get_type(struct fid_domain *domain_fid)
 	return efa_domain_base->type;
 }
 
-extern struct fi_ops_mr efa_domain_mr_ops;
-extern struct fi_ops_mr efa_domain_mr_cache_ops;
-int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
-			   struct ofi_mr_entry *entry);
-void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
-			      struct ofi_mr_entry *entry);
-
-int efa_mr_reg_shm(struct fid_domain *domain_fid, struct iovec *iov,
-		   uint64_t access, struct fid_mr **mr_fid);
-
 struct efa_wc {
 	struct ibv_wc		ibv_wc;
 	/* Source address */
@@ -269,32 +256,6 @@ struct efa_qp {
 	struct efa_ep	*ep;
 	uint32_t	qp_num;
 	uint32_t	qkey;
-};
-
-/*
- * Descriptor returned for FI_HMEM peer memory registrations
- */
-struct efa_mr_peer {
-	enum fi_hmem_iface      iface;
-	union {
-		uint64_t        reserved;
-		/* this field is gdrcopy handle when gdrcopy is enabled,
-		 * otherwise it is cuda device id.
-		 */
-		uint64_t        cuda;
-		int             neuron;
-	} device;
-};
-
-struct efa_mr {
-	struct fid_mr		mr_fid;
-	struct ibv_mr		*ibv_mr;
-	struct efa_domain	*domain;
-	/* Used only in MR cache */
-	struct ofi_mr_entry	*entry;
-	/* Used only in rdm */
-	struct fid_mr		*shm_mr;
-	struct efa_mr_peer	peer;
 };
 
 struct efa_ep {
@@ -589,22 +550,6 @@ struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 	                                     addr);
 	av_entry = (struct efa_av_entry *)util_av_entry->data;
 	return av_entry->conn.ep_addr ? &av_entry->conn.rdm_peer : NULL;
-}
-
-static inline bool efa_ep_is_hmem_mr(struct efa_mr *efa_mr)
-{
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA ||
-			 efa_mr->peer.iface == FI_HMEM_NEURON): false;
-}
-
-static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)
-{
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA) : false;
-}
-
-static inline bool efa_ep_is_neuron_mr(struct efa_mr *efa_mr)
-{
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_NEURON) : false;
 }
 
 /*

@@ -324,8 +324,8 @@ static bool efa_msg_has_hmem_mr(const struct fi_msg *msg)
 	/* the device only support send up 2 iov, so iov_count cannot be > 2 */
 	assert(msg->iov_count == 1 || msg->iov_count == 2);
 	/* first iov is always on host memory, because it must contain packet header */
-	assert(!efa_ep_is_hmem_mr(msg->desc[0]));
-	return (msg->iov_count == 2) && efa_ep_is_hmem_mr(msg->desc[1]);
+	assert(!efa_mr_is_hmem(msg->desc[0]));
+	return (msg->iov_count == 2) && efa_mr_is_hmem(msg->desc[1]);
 }
 
 static ssize_t efa_post_send(struct efa_ep *ep, const struct fi_msg *msg, uint64_t flags)

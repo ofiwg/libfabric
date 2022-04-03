@@ -62,6 +62,7 @@ _efa_files = \
 
 _efa_headers = \
 	prov/efa/src/efa.h \
+	prov/efa/src/efa_mr.h \
 	prov/efa/src/efa_hmem.h \
 	prov/efa/src/efa_device.h \
 	prov/efa/src/efa_fork_support.h \

@@ -221,7 +221,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		 * Have the remote side issue a read to copy the data instead
 		 * to work around this issue.
 		 */
-		if (tx_entry->total_len > max_rtm_data_size || efa_ep_is_hmem_mr(tx_entry->desc[0]))
+		if (tx_entry->total_len > max_rtm_data_size || efa_mr_is_hmem(tx_entry->desc[0]))
 			/*
 			 * Read message support
 			 * FI_DELIVERY_COMPLETE implicitly.
@@ -236,7 +236,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	ret = efa_ep_use_p2p(efa_ep, tx_entry->desc[0]);
 	if (ret < 0)
 		return ret;
-	if (ret == 1 && efa_ep_is_cuda_mr(tx_entry->desc[0])) {
+	if (ret == 1 && efa_mr_is_cuda(tx_entry->desc[0])) {
 		return rxr_msg_post_cuda_rtm(rxr_ep, tx_entry);
 	}
 
@@ -252,7 +252,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	 * Force the LONGREAD protocol for Neuron buffers, regardless of what
 	 * is specified by the user for protocol switch over points.
 	 */
-	if (efa_ep_is_neuron_mr(tx_entry->desc[0])) {
+	if (efa_mr_is_neuron(tx_entry->desc[0])) {
 		/*
 		 * It is possible for the remote endpoint to support RDMA read,
 		 * but not p2p transfers between efa and neuron. That scenario
