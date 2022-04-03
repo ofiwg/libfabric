@@ -798,6 +798,7 @@
     <ClCompile Include="prov\efa\src\efa_mr.c" />
     <ClCompile Include="prov\efa\src\efa_msg.c" />
     <ClCompile Include="prov\efa\src\efa_rma.c" />
+    <ClCompile Include="prov\efa\src\efa_fork_support.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_pkt_type_base.c" />
     <ClCompile Include="prov\efa\src\windows\efawin.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_atomic.c" />

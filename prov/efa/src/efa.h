@@ -64,6 +64,7 @@
 #include "ofi_util.h"
 #include "ofi_file.h"
 
+#include "efa_fork_support.h"
 #include "efa_device.h"
 #include "efa_hmem.h"
 #include "rxr.h"
@@ -434,17 +435,6 @@ ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr);
 ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_t *src_addr);
 
 ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry, uint64_t flags);
-
-/*
- * ON will avoid using huge pages for bounce buffers, so that the libibverbs
- * fork support can be used safely.
- */
-enum efa_fork_support_status {
-	EFA_FORK_SUPPORT_OFF = 0,
-	EFA_FORK_SUPPORT_ON,
-	EFA_FORK_SUPPORT_UNNEEDED,
-};
-extern enum efa_fork_support_status efa_fork_status;
 
 static inline
 bool efa_ep_support_rdma_read(struct fid_ep *ep_fid)

@@ -1402,7 +1402,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 	ep->rx_pkt_pool_entry_sz = entry_sz;
 #endif
 
-	if (efa_fork_status == EFA_FORK_SUPPORT_ON) {
+	if (g_efa_fork_status == EFA_FORK_SUPPORT_ON) {
 		/*
 		 * Make sure that no data structures can share the memory pages used
 		 * for this buffer pool.
