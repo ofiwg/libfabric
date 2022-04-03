@@ -34,7 +34,6 @@
 #include <rdma/fi_errno.h>
 
 #include <ofi_prov.h>
-#include "rxr.h"
 #include "efa.h"
 #include "ofi_hmem.h"
 

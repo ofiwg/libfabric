@@ -931,11 +931,7 @@ static struct fi_ops efa_fi_ops = {
 
 static struct fi_ops_fabric efa_ops_fabric = {
 	.size = sizeof(struct fi_ops_fabric),
-	/*
-	 * The reason we use rxr_domain_open() here is because it actually handles
-	 * both RDM and DGRAM.
-	 */
-	.domain = rxr_domain_open,
+	.domain = efa_domain_open,
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = ofi_eq_create,
 	.wait_open = ofi_wait_fd_open,

@@ -37,7 +37,6 @@
 #include "ofi.h"
 #include <ofi_util.h>
 #include <ofi_iov.h>
-#include "rxr.h"
 #include "efa.h"
 #include "rxr_msg.h"
 #include "rxr_rma.h"
@@ -484,7 +483,7 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	ofi_buf_free(tx_entry);
 }
 
-int rxr_ep_tx_init_mr_desc(struct rxr_domain *rxr_domain,
+int rxr_ep_tx_init_mr_desc(struct efa_domain *efa_domain,
 			   struct rxr_tx_entry *tx_entry,
 			   int mr_iov_start, uint64_t access)
 {
@@ -502,7 +501,7 @@ int rxr_ep_tx_init_mr_desc(struct rxr_domain *rxr_domain,
 			continue;
 		}
 
-		err = fi_mr_reg(rxr_domain->rdm_domain,
+		err = fi_mr_reg(&efa_domain->util_domain.domain_fid,
 				tx_entry->iov[i].iov_base,
 				tx_entry->iov[i].iov_len,
 				access, 0, 0, 0,
@@ -547,7 +546,7 @@ void rxr_convert_desc_for_shm(int numdesc, void **desc)
 	}
 }
 
-void rxr_prepare_desc_send(struct rxr_domain *rxr_domain,
+void rxr_prepare_desc_send(struct efa_domain *efa_domain,
 			   struct rxr_tx_entry *tx_entry)
 {
 	size_t offset;
@@ -570,7 +569,7 @@ void rxr_prepare_desc_send(struct rxr_domain *rxr_domain,
 	 * because the long message protocol would work with or without
 	 * memory registration and descriptor.
 	 */
-	rxr_ep_tx_init_mr_desc(rxr_domain, tx_entry, index, FI_SEND);
+	rxr_ep_tx_init_mr_desc(efa_domain, tx_entry, index, FI_SEND);
 }
 
 /* Generic send */
@@ -1015,7 +1014,6 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	ssize_t ret;
 	struct rxr_ep *ep;
-	struct rxr_domain *rxr_domain;
 	struct efa_domain *efa_domain;
 	char shm_ep_name[EFA_SHM_NAME_MAX];
 	size_t shm_ep_name_len;
@@ -1023,9 +1021,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 	switch (command) {
 	case FI_ENABLE:
 		ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
-		rxr_domain = rxr_ep_domain(ep);
-		efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
-					  util_domain.domain_fid);
+		efa_domain = rxr_ep_domain(ep);
 
 		ret = efa_ep_hmem_check(efa_domain);
 		if (ret < 0)
@@ -1096,7 +1092,7 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 				  struct dlist_entry *recv_list,
 				  void *context)
 {
-	struct rxr_domain *domain;
+	struct efa_domain *domain;
 	struct dlist_entry *entry;
 	struct rxr_rx_entry *rx_entry;
 	struct fi_cq_err_entry err_entry;
@@ -1332,9 +1328,9 @@ static int rxr_buf_region_alloc_hndlr(struct ofi_bufpool_region *region)
 {
 	size_t ret;
 	struct fid_mr *mr;
-	struct rxr_domain *domain = region->pool->attr.context;
+	struct efa_domain *domain = region->pool->attr.context;
 
-	ret = fi_mr_reg(domain->rdm_domain, region->alloc_region,
+	ret = fi_mr_reg(&domain->util_domain.domain_fid, region->alloc_region,
 			region->pool->alloc_size,
 			FI_SEND | FI_RECV, 0, 0, 0, &mr, NULL);
 
@@ -2398,7 +2394,6 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
 	struct fi_info *rdm_info;
-	struct rxr_domain *rxr_domain;
 	struct efa_domain *efa_domain;
 	struct rxr_ep *rxr_ep;
 	struct fi_cq_attr cq_attr;
@@ -2408,7 +2403,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (!rxr_ep)
 		return -FI_ENOMEM;
 
-	rxr_domain = container_of(domain, struct rxr_domain,
+	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
 	memset(&cq_attr, 0, sizeof(cq_attr));
 	cq_attr.format = FI_CQ_FORMAT_DATA;
@@ -2419,7 +2414,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err_free_ep;
 
-	ret = rxr_get_lower_rdm_info(rxr_domain->util_domain.fabric->
+	ret = rxr_get_lower_rdm_info(efa_domain->util_domain.fabric->
 				     fabric_fid.api_version, NULL, NULL, 0,
 				     &rxr_util_prov, info, &rdm_info);
 	if (ret)
@@ -2427,13 +2422,10 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	rxr_reset_rx_tx_to_core(info, rdm_info);
 
-	ret = fi_endpoint(rxr_domain->rdm_domain, rdm_info,
+	ret = efa_ep_open(&efa_domain->util_domain.domain_fid, rdm_info,
 			  &rxr_ep->rdm_ep, rxr_ep);
 	if (ret)
 		goto err_free_rdm_info;
-
-	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
-				  util_domain.domain_fid);
 
 	if (efa_domain->shm_domain) {
 		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
@@ -2512,8 +2504,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->shm_outstanding_tx_ops = 0;
 	rxr_ep->available_data_bufs_ts = 0;
 
-	ret = fi_cq_open(rxr_domain->rdm_domain, &cq_attr,
-			 &rxr_ep->rdm_cq, rxr_ep);
+	ret = efa_cq_open(&efa_domain->util_domain.domain_fid, &cq_attr,
+			  &rxr_ep->rdm_cq, rxr_ep);
 	if (ret)
 		goto err_close_shm_ep;
 

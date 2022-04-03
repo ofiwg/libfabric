@@ -68,7 +68,7 @@ ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 	if (!wce->wc.ibv_wc.status)
 		goto err;
 
-	api_version = cq->domain->fab->util_fabric.fabric_fid.api_version;
+	api_version = cq->domain->fabric->util_fabric.fabric_fid.api_version;
 
 	slist_entry = slist_remove_head(&cq->wcq);
 	ofi_spin_unlock(&cq->lock);

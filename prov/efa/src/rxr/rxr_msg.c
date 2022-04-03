@@ -151,13 +151,10 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	struct rdm_peer *peer;
 	bool delivery_complete_requested;
 	int ctrl_type;
-	struct efa_domain *efa_domain;
 	struct efa_ep *efa_ep;
-	struct rxr_domain *rxr_domain = rxr_ep_domain(rxr_ep);
+	struct efa_domain *efa_domain;
 
-	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
-				  util_domain.domain_fid);
-
+	efa_domain = rxr_ep_domain(rxr_ep);
 	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 
 	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
@@ -277,7 +274,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		 * because medium message works even if MR registration failed
 		 */
 		if (tx_entry->desc[0] || efa_is_cache_available(efa_domain))
-			rxr_ep_tx_init_mr_desc(rxr_domain, tx_entry, 0, FI_SEND);
+			rxr_ep_tx_init_mr_desc(efa_domain, tx_entry, 0, FI_SEND);
 
 		/*
 		 * we have to queue message RTM because data is sent as multiple

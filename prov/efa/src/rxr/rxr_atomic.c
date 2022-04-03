@@ -535,7 +535,7 @@ int rxr_query_atomic(struct fid_domain *domain,
 		     enum fi_datatype datatype, enum fi_op op,
 		     struct fi_atomic_attr *attr, uint64_t flags)
 {
-	struct rxr_domain *rxr_domain;
+	struct efa_domain *efa_domain;
 	int ret;
 	size_t max_atomic_size;
 
@@ -555,11 +555,11 @@ int rxr_query_atomic(struct fid_domain *domain,
 	if (ret || !attr)
 		return ret;
 
-	rxr_domain = container_of(domain, struct rxr_domain,
+	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
 
-	max_atomic_size = rxr_domain->mtu_size - sizeof(struct rxr_rta_hdr)
-			  - rxr_domain->addrlen
+	max_atomic_size = efa_domain->mtu_size - sizeof(struct rxr_rta_hdr)
+			  - efa_domain->addrlen
 			  - RXR_IOV_LIMIT * sizeof(struct fi_rma_iov);
 
 	if (flags & FI_COMPARE_ATOMIC)

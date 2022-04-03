@@ -521,23 +521,6 @@ struct rxr_tx_entry {
 	(*((enum rxr_x_entry_type *)	\
 	 ((unsigned char *)((pkt_entry)->x_entry))))
 
-enum efa_domain_type {
-	EFA_DOMAIN_DGRAM = 0,
-	EFA_DOMAIN_RDM,
-};
-
-struct rxr_domain {
-	struct util_domain util_domain;
-	enum efa_domain_type type;
-	struct fid_domain *rdm_domain;
-	size_t mtu_size;
-	size_t addrlen;
-	uint8_t rxr_mr_local;
-	uint64_t rdm_mode;
-	int do_progress;
-	size_t cq_size;
-};
-
 /** @brief Information of a queued copy.
  *
  * This struct is used when receiving buffer is on device.
@@ -898,8 +881,6 @@ int rxr_get_lower_rdm_info(uint32_t version, const char *node, const char *servi
 			   uint64_t flags, const struct util_prov *util_prov,
 			   const struct fi_info *util_hints,
 			   struct fi_info **core_info);
-int rxr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-		    struct fid_domain **dom, void *context);
 int rxr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
 int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
@@ -918,13 +899,13 @@ int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep,
 int rxr_ep_determine_rdma_support(struct rxr_ep *ep, fi_addr_t addr,
 				  struct rdm_peer *peer);
 
-int rxr_ep_tx_init_mr_desc(struct rxr_domain *rxr_domain,
+int rxr_ep_tx_init_mr_desc(struct efa_domain *efa_domain,
 			   struct rxr_tx_entry *tx_entry,
 			   int mr_iov_start, uint64_t access);
 
 void rxr_convert_desc_for_shm(int numdesc, void **desc);
 
-void rxr_prepare_desc_send(struct rxr_domain *rxr_domain,
+void rxr_prepare_desc_send(struct efa_domain *efa_domain,
 			   struct rxr_tx_entry *tx_entry);
 
 struct rxr_rx_entry *rxr_ep_lookup_mediumrtm_rx_entry(struct rxr_ep *ep,
@@ -1018,9 +999,9 @@ static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
 	abort();
 }
 
-static inline struct rxr_domain *rxr_ep_domain(struct rxr_ep *ep)
+static inline struct efa_domain *rxr_ep_domain(struct rxr_ep *ep)
 {
-	return container_of(ep->util_ep.domain, struct rxr_domain, util_domain);
+	return container_of(ep->util_ep.domain, struct efa_domain, util_domain);
 }
 
 /*

@@ -344,11 +344,8 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 	struct rxr_tx_entry *tx_entry;
 	size_t data_len;
 	struct efa_domain *efa_domain;
-	struct rxr_domain *rxr_domain = rxr_ep_domain(ep);
 
-	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
-				  util_domain.domain_fid);
-
+	efa_domain = rxr_ep_domain(ep);
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	data_len = rxr_get_readrsp_hdr(pkt_entry->pkt)->seg_length;
 	tx_entry->bytes_sent += data_len;

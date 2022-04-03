@@ -1012,17 +1012,17 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	attr->type = FI_AV_TABLE;
 
-	efa_domain = efa_domain_from_fid(domain_fid);
+	efa_domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
 
 	ret = efa_av_init_util_av(efa_domain, attr, &av->util_av, context);
 	if (ret)
 		goto err;
 
-	if (efa_domain_get_type(domain_fid) == EFA_DOMAIN_RDM) {
+	if (EFA_EP_TYPE_IS_RDM(efa_domain->info)) {
 		av->ep_type = FI_EP_RDM;
 
 		av_attr = *attr;
-		if (efa_domain->fab && efa_domain->fab->shm_fabric) {
+		if (efa_domain->fabric && efa_domain->fabric->shm_fabric) {
 			/*
 			 * shm av supports maximum 256 entries
 			 * Reset the count to 128 to reduce memory footprint and satisfy

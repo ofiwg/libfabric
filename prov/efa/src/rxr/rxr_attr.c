@@ -31,7 +31,7 @@
  * SOFTWARE.
  */
 
-#include "rxr.h"
+#include "efa.h"
 
 #ifdef ENABLE_EFA_POISONING
 const uint32_t rxr_poison_value = 0xdeadbeef;
@@ -89,7 +89,7 @@ struct fi_ep_attr rxr_ep_attr = {
 	.rx_ctx_cnt = 1
 };
 
-struct fi_domain_attr rxr_domain_attr = {
+struct fi_domain_attr efa_rdm_domain_attr = {
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
@@ -120,7 +120,7 @@ struct fi_info rxr_info = {
 	.tx_attr = &rxr_tx_attr,
 	.rx_attr = &rxr_rx_attr,
 	.ep_attr = &rxr_ep_attr,
-	.domain_attr = &rxr_domain_attr,
+	.domain_attr = &efa_rdm_domain_attr,
 	.fabric_attr = &rxr_fabric_attr
 };
 
