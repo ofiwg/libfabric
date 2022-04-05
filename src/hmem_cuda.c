@@ -431,6 +431,11 @@ static int cuda_hmem_verify_devices(void)
 	case cudaErrorNoDevice:
 		return -FI_ENOSYS;
 
+	case cudaErrorStubLibrary:
+		FI_INFO(&core_prov, FI_LOG_CORE,
+			"CUDA driver is a stub library\n");
+		return -FI_ENOSYS;
+
 	default:
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to perform cudaGetDeviceCount: %s:%s\n",
