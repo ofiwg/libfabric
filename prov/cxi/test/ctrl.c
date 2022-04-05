@@ -158,7 +158,7 @@ Test(ctrl, zb_config)
 
 	/* test case, object but no tree */
 	trc("case: no tree\n");
-	ret = cxip_zbcoll_alloc(ep_obj, 0, NULL, false, &zb);
+	ret = cxip_zbcoll_alloc(ep_obj, 0, NULL, ZB_NOSIM, &zb);
 	cr_assert(ret == 0,
 		  "no tree: ret=%d\n", ret);
 	cr_assert(zb->simcount == 1,
@@ -170,7 +170,7 @@ Test(ctrl, zb_config)
 
 	/* request simulation */
 	trc("case: simulated\n");
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, true, &zb);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, ZB_ALLSIM, &zb);
 	cr_assert(ret == 0,
 		  "sim tree 4: ret=%d\n", ret);
 	cr_assert(zb->simcount == num_addrs,
@@ -179,8 +179,8 @@ Test(ctrl, zb_config)
 
 	/* exercise real setup, send-to-self-only */
 	trc("case: real send-only\n");
-	ret = cxip_zbcoll_alloc(ep_obj, 0, NULL, false, &zb);
-	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %d\n", ret);
+	ret = cxip_zbcoll_alloc(ep_obj, 0, NULL, ZB_NOSIM, &zb);
+	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %s\n", fi_strerror(-ret));
 	cr_assert(zb != NULL);
 	cr_assert(zb->simcount == 1);
 	cr_assert(zb->state != NULL);
@@ -188,8 +188,8 @@ Test(ctrl, zb_config)
 
 	/* exercise real setup success, all caddrs are real */
 	trc("case: real addresses root 0\n");
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, false, &zb);
-	cr_assert(ret == 0, "real tree0: ret=%d\n", ret);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, ZB_NOSIM, &zb);
+	cr_assert(ret == 0, "real tree0: ret=%s\n", fi_strerror(-ret));
 	cr_assert(zb->simcount == 1, "real tree0: simcnt=%d\n", zb->simcount);
 	cr_assert(zb->state[0].grp_rank == 0, "real tree0: grp_rank=%d\n",
 		  zb->state[0].grp_rank);
@@ -201,8 +201,8 @@ Test(ctrl, zb_config)
 	ret = fi_av_insert(&ep_obj->av->av_fid, caddrs, num_addrs, fiaddrs,
 			   0L, NULL);
 	cr_assert(ret == num_addrs);
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, false, &zb);
-	cr_assert(ret == 0, "real tree1: ret=%d\n", ret);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, ZB_NOSIM, &zb);
+	cr_assert(ret == 0, "real tree1: ret=%s\n", fi_strerror(-ret));
 	cr_assert(zb->simcount == 1, "real tree1: simcnt=%d\n", zb->simcount);
 	cr_assert(zb->state[0].grp_rank == 1, "real tree1: grp_rank=%d\n",
 		  zb->state[0].grp_rank);
@@ -215,8 +215,8 @@ Test(ctrl, zb_config)
 	ret = fi_av_insert(&ep_obj->av->av_fid, caddrs, num_addrs, fiaddrs,
 			   0L, NULL);
 	cr_assert(ret == num_addrs);
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, false, &zb);
-	cr_assert(ret == -FI_EADDRNOTAVAIL, "real treeN: ret=%d\n", ret);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, ZB_NOSIM, &zb);
+	cr_assert(ret == -FI_EINVAL, "real treeN: ret=%s\n", fi_strerror(-ret));
 	cxip_zbcoll_free(zb);
 
 	free(fiaddrs);
@@ -240,12 +240,12 @@ Test(ctrl, zb_send0)
 	ep_obj = cxip_ep->ep_obj;
 
 	/* Set up the send-only zbcoll */
-	ret = cxip_zbcoll_alloc(ep_obj, 0, NULL, false, &zb);
+	ret = cxip_zbcoll_alloc(ep_obj, 0, NULL, ZB_NOSIM, &zb);
 
 	/* Test that if disabled, getgroup is no-op */
 	ep_obj->zbcoll.disable = true;
 	ret = cxip_zbcoll_getgroup(zb);
-	cr_assert(ret == 0, "getgroup = %d\n", ret);
+	cr_assert(ret == 0, "getgroup = %s\n", fi_strerror(-ret));
 
 	/* Legitimate send to self */
 	cxip_zbcoll_reset_counters(ep_obj);
@@ -253,7 +253,7 @@ Test(ctrl, zb_send0)
 	cnt = 0;
 	do {
 		usleep(1);
-		cxip_zbcoll_progress(ep_obj);
+		cxip_ep_ctrl_progress(ep_obj);
 		cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
 		ret = (dsc || err || (ack && rcv));
 		cnt++;
@@ -270,7 +270,7 @@ Test(ctrl, zb_send0)
 	cnt = 0;
 	do {
 		usleep(1);
-		cxip_zbcoll_progress(ep_obj);
+		cxip_ep_ctrl_progress(ep_obj);
 		cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
 		ret = (err || dsc || (ack && rcv));
 		cnt++;
@@ -301,7 +301,7 @@ static void _send(struct cxip_zbcoll_obj *zb, int srcidx, int dstidx)
 	cnt = 0;
 	do {
 		usleep(1);
-		cxip_zbcoll_progress(ep_obj);
+		cxip_ep_ctrl_progress(ep_obj);
 		cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
 		ret = (err || dsc || (ack && rcv));
 		cnt++;
@@ -331,8 +331,8 @@ Test(ctrl, zb_sendN)
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 	ep_obj = cxip_ep->ep_obj;
 
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, true, &zb);
-	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %d\n", ret);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, ZB_ALLSIM, &zb);
+	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %s\n", fi_strerror(-ret));
 	cr_assert(zb != NULL);
 	cr_assert(zb->simcount == num_addrs);
 	cr_assert(zb->state != NULL);
@@ -340,7 +340,7 @@ Test(ctrl, zb_sendN)
 	/* Test that if disabled, getgroup is no-op */
 	ep_obj->zbcoll.disable = true;
 	ret = cxip_zbcoll_getgroup(zb);
-	cr_assert(ret == 0, "getgroup = %d\n", ret);
+	cr_assert(ret == 0, "getgroup = %s\n", fi_strerror(-ret));
 
 	for (srcidx = 0; srcidx < num_addrs; srcidx++)
 		for (dstidx = 0; dstidx < num_addrs; dstidx++)
@@ -348,7 +348,7 @@ Test(ctrl, zb_sendN)
 	cxip_zbcoll_free(zb);
 }
 
-/* Utility to wait until a collective has completed */
+/* Utility to wait until an ALLSIM collective has completed */
 static int _await_complete(struct cxip_zbcoll_obj *zb)
 {
 	uint32_t rep;
@@ -356,13 +356,37 @@ static int _await_complete(struct cxip_zbcoll_obj *zb)
 	/* We only wait for 1 sec */
 	for (rep = 0; rep < 10000; rep++) {
 		usleep(100);
-		cxip_zbcoll_progress(zb->ep_obj);
-		if (!zb->busy || zb->error)
+		cxip_ep_ctrl_progress(zb->ep_obj);
+		if (zb->error)
+			return zb->error;
+		if (!zb->busy)
 			break;
 	}
-	return zb->error;
+	return (zb->busy) ? -FI_ETIMEDOUT : FI_SUCCESS;
 }
 
+/* Utility to wait until a multi-zb collective has completed */
+static int _await_complete_all(struct cxip_zbcoll_obj **zb, int cnt)
+{
+	uint32_t i, rep;
+
+	/* We only wait for 1 sec */
+	for (rep = 0; rep < 10000; rep++) {
+		usleep(100);
+		cxip_ep_ctrl_progress(zb[0]->ep_obj);
+		for (i = 0; i < cnt; i++) {
+			if (zb[i]->error)
+				return zb[i]->error;
+			if (zb[i]->busy)
+				break;
+		}
+		if (i == cnt)
+			break;
+	}
+	return (i < cnt) ? -FI_ETIMEDOUT : FI_SUCCESS;
+}
+
+/* shuffle the array */
 void _shuffle_array32(uint32_t *array, size_t size)
 {
 	uint32_t i, j, t;
@@ -385,6 +409,8 @@ void _addr_shuffle(struct cxip_zbcoll_obj *zb, bool shuffle)
 	srand((unsigned int)tv.tv_nsec);
 	free(zb->shuffle);
 	zb->shuffle = calloc(zb->simcount, sizeof(uint32_t));
+	if (!zb->shuffle)
+		return;
 	for (i = 0; i < zb->simcount; i++)
 		zb->shuffle[i] = i;
 	if (shuffle)
@@ -395,12 +421,10 @@ void _addr_shuffle(struct cxip_zbcoll_obj *zb, bool shuffle)
 /**
  * @brief Test simulated getgroup.
  *
- * This exercises the basic broad operation, the user callback, and the
- * non-concurrency lockout.
+ * This exercises the basic getgroup operation, the user callback, and the
+ * non-concurrency lockout. It tests grpid wrap-around at the limit.
  *
- * This is simulated in a single thread, so it tests only a single barrier
- * across multiple addrs. It randomizes the nid processing order, and performs
- * multiple barriers to uncover any ordering issues.
+ * This does not test error returns, which are not robustly simulated.
  */
 
 struct getgroup_data {
@@ -416,11 +440,12 @@ Test(ctrl, zb_getgroup)
 	struct cxip_ep *cxip_ep;
 	struct cxip_ep_obj *ep_obj;
 	struct cxip_zbcoll_obj **zb;
-	struct getgroup_data zbd;
-	int i, ret;
+	struct getgroup_data zbd = {};
+	int i, j, ret;
 	uint32_t dsc, err, ack, rcv;
-	int num_addrs = 9;	// arbitrary
-	int num_zb = 43;	// limit for simulation
+	int max_zb = cxip_zbcoll_max_grps(true);
+	int num_zb = 2*max_zb;
+	int num_addrs = 9;
 	int cnt = 0;
 
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
@@ -429,18 +454,22 @@ Test(ctrl, zb_getgroup)
 	zb = calloc(num_zb, sizeof(struct cxip_zbcoll_obj *));
 	cr_assert(zb, "zb out of memory\n");
 
-	memset(&zbd, 0, sizeof(zbd));
-
 	for (i = 0; i < num_zb; i++) {
 		/* Verify multiple allocations */
 		ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL,
-					true, &zb[i]);
-		cr_assert(ret == 0, "cxip_zbcoll_alloc() = %d\n", ret);
+					ZB_ALLSIM, &zb[i]);
+		cr_assert(ret == 0, "cxip_zbcoll_alloc() = %s\n",
+			  fi_strerror(-ret));
 		cr_assert(zb[i]->simcount == num_addrs,
 			"zb->simcount = %d, != %d\n",
 			zb[i]->simcount, num_addrs);
 		/* Initialize the address shuffling */
 		_addr_shuffle(zb[i], false);
+	}
+	for (i = j = 0; i < num_zb; i++) {
+		/* Free space if necessary */
+		while ((i - j) >= max_zb)
+			cxip_zbcoll_free(zb[j++]);
 		/* Test getgroup operation */
 		cxip_zbcoll_push_cb(zb[i], getgroup_func, &zbd);
 		ret = cxip_zbcoll_getgroup(zb[i]);
@@ -458,38 +487,125 @@ Test(ctrl, zb_getgroup)
 		cr_assert(zbd.count == i+1, "%d zbdcount = %d\n",
 			  i, zbd.count);
 		/* Confirm expected grpid */
-		cr_assert(zb[i]->grpid == i, "%d grpid = %d\n",
-			  i, zb[i]->grpid);
+		cr_assert(zb[i]->grpid == (i % max_zb),
+			  "%d grpid = %d, exp %d\n",
+			  i, zb[i]->grpid, i % max_zb);
+		/* Attempt another getgroup */
+		ret = cxip_zbcoll_getgroup(zb[i]);
+		cr_assert(ret == -FI_EINVAL, "%d getgroup = %s\n",
+			  i, fi_strerror(-ret));
 
 		cnt += 2 * (num_addrs - 1);
 	}
-
-	/* Free item [0] and try again */
-	i = 0;
-	cxip_zbcoll_free(zb[i]);
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, true, &zb[i]);
-	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %d\n", ret);
-	ret = cxip_zbcoll_getgroup(zb[i]);
-	cr_assert(ret == FI_SUCCESS, "retry %d getgroup = %s\n",
-		  i, fi_strerror(-ret));
-	ret = cxip_zbcoll_getgroup(zb[i]);
-	cr_assert(ret == -FI_EAGAIN, "retry %d getgroup = %s\n",
-		  i, fi_strerror(-ret));
-	ret = _await_complete(zb[i]);
-	cr_assert(ret == FI_SUCCESS, "retry %d getgroup = %s\n",
-		  i, fi_strerror(-ret));
-	cr_assert(zb[i]->grpid == i,
-			"%d grpid = %d\n", i, zb[i]->grpid);
-	cnt += 2 * (num_addrs - 1);
 
 	cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
 	cr_assert(dsc == 0 && err == 0,
 		  "FAILED dsc=%d err=%d ack=%d rcv=%d cnt=%d\n",
 		  dsc, err, ack, rcv, cnt);
 	/* cleanup */
-	for (i = 0; i < num_zb; i++)
+	while (j < num_zb)
+		cxip_zbcoll_free(zb[j++]);
+	free(zb);
+}
+
+/*****************************************************************/
+/**
+ * @brief Test simulated getgroup with multiple zb objects.
+ *
+ */
+
+void _getgroup_multi(int num_addrs, struct cxip_zbcoll_obj **zb,
+		     int expect_grpid)
+{
+	struct cxip_ep *cxip_ep;
+	struct cxip_ep_obj *ep_obj;
+	struct getgroup_data zbd = {};
+	int i, ret;
+
+	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
+	ep_obj = cxip_ep->ep_obj;
+
+	/* allocate multiple zb objects, simrank = i */
+	for (i = 0; i < num_addrs; i++) {
+		ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, i, &zb[i]);
+		cr_assert(ret == 0, "cxip_zbcoll_alloc() = %s\n",
+			  fi_strerror(-ret));
+		cr_assert(zb[i]->simcount == num_addrs,
+			  "zb->simcount = %d, != %d\n",
+			  zb[i]->simcount, num_addrs);
+	}
+	/* link zb objects to function as a single collective */
+	for (i = 1; i < num_addrs; i++) {
+		ret = cxip_zbcoll_simlink(zb[0], zb[i]);
+		cr_assert(!ret, "link zb[%d] failed\n", i);
+	}
+	ret = cxip_zbcoll_simlink_done(zb[0]);
+	cr_assert(!ret, "link zb[%d] failed %s\n", i, fi_strerror(-ret));
+
+	/* initiate getgroup across all of the zb objects */
+	for (i = 0; i < num_addrs; i++) {
+		cxip_zbcoll_push_cb(zb[i], getgroup_func, &zbd);
+		ret = cxip_zbcoll_getgroup(zb[i]);
+		cr_assert(ret == FI_SUCCESS, "getgroup[%d]=%s, exp success\n",
+			  i, fi_strerror(-ret));
+	}
+
+	/* make a second attempt */
+	for (i = 0; i < num_addrs; i++) {
+		ret = cxip_zbcoll_getgroup(zb[i]);
+		cr_assert(ret == -FI_EAGAIN, "getgroup[%d]=%s exp FI_EAGAIN\n",
+			  i, fi_strerror(-ret));
+	}
+
+	/* Poll until all are complete */
+	ret = _await_complete_all(zb, num_addrs);
+	cr_assert(ret == FI_SUCCESS, "getgroup = %s\n",
+		  fi_strerror(-ret));
+
+	/* Ensure all objects have the same group ids */
+	ret = 0;
+	for (i = 0; i < num_addrs; i++) {
+		if (zb[i]->grpid != expect_grpid) {
+			printf("zb[%d]->grpid = %d, exp %d\n",
+				i, zb[i]->grpid, expect_grpid);
+			ret++;
+		}
+	}
+	cr_assert(!ret, "Some zb objects have the wrong group id\n");
+
+	/* Make sure we can't take a second group id */
+	for (i = 0; i < num_addrs; i++) {
+		ret = cxip_zbcoll_getgroup(zb[i]);
+		cr_assert(ret == -FI_EINVAL, "getgroup[%d]=%s exp FI_EINVAL\n",
+			  i, fi_strerror(-ret));
+	}
+
+}
+
+void _free_getgroup_multi(int num_addrs, struct cxip_zbcoll_obj **zb)
+{
+	int i;
+
+	for (i = 0; i < num_addrs; i++)
 		cxip_zbcoll_free(zb[i]);
 	free(zb);
+}
+
+Test(ctrl, zb_getgroup2)
+{
+	struct cxip_zbcoll_obj **zb1, **zb2;
+	int num_addrs = 9;	// arbitrary
+
+	zb1 = calloc(num_addrs, sizeof(struct cxip_zbcoll_obj *));
+	cr_assert(zb1, "zb out of memory\n");
+	zb2 = calloc(num_addrs, sizeof(struct cxip_zbcoll_obj *));
+	cr_assert(zb2, "zb out of memory\n");
+
+	_getgroup_multi(num_addrs, zb1, 0);
+	_getgroup_multi(num_addrs, zb2, 1);
+
+	_free_getgroup_multi(num_addrs, zb2);
+	_free_getgroup_multi(num_addrs, zb1);
 }
 
 /*****************************************************************/
@@ -527,8 +643,8 @@ Test(ctrl, zb_barrier)
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 	ep_obj = cxip_ep->ep_obj;
 
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, true, &zb);
-	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %d\n", ret);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, ZB_ALLSIM, &zb);
+	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %s\n", fi_strerror(-ret));
 	cr_assert(zb->simcount == num_addrs,
 		  "zb->simcount = %d, != %d\n", zb->simcount, num_addrs);
 	/* Initialize the addresses */
@@ -536,9 +652,9 @@ Test(ctrl, zb_barrier)
 
 	/* Acquire a group id */
 	ret = cxip_zbcoll_getgroup(zb);
-	cr_assert(ret == 0, "getgroup = %d\n", ret);
+	cr_assert(ret == 0, "getgroup = %s\n", fi_strerror(-ret));
 	ret = _await_complete(zb);
-	cr_assert(ret == 0, "getgroup done = %d\n", ret);
+	cr_assert(ret == 0, "getgroup done = %s\n", fi_strerror(-ret));
 
 	memset(&zbd, 0, sizeof(zbd));
 	for (rep = 0; rep < 20; rep++) {
@@ -571,6 +687,50 @@ Test(ctrl, zb_barrier)
 	cxip_zbcoll_free(zb);
 }
 
+Test(ctrl, zb_barrier2)
+{
+	struct cxip_zbcoll_obj **zb1, **zb2;
+	struct barrier_data zbd1 = {};
+	struct barrier_data zbd2 = {};
+	int num_addrs = 17;	// arbitrary
+	int i, ret;
+
+	zb1 = calloc(num_addrs, sizeof(*zb1));
+	cr_assert(zb1);
+	zb2 = calloc(num_addrs, sizeof(*zb2));
+	cr_assert(zb2);
+
+	_getgroup_multi(num_addrs, zb1, 0);
+	_getgroup_multi(num_addrs, zb2, 1);
+
+	for (i = 0; i < num_addrs; i++) {
+		cxip_zbcoll_push_cb(zb1[i], barrier_func, &zbd1);
+		ret = cxip_zbcoll_barrier(zb1[i]);
+		cr_assert(!ret, "zb1 barrier[%d]=%s\n", i, fi_strerror(-ret));
+
+		cxip_zbcoll_push_cb(zb2[i], barrier_func, &zbd2);
+		ret = cxip_zbcoll_barrier(zb2[i]);
+		cr_assert(!ret, "zb2 barrier[%d]=%s\n", i, fi_strerror(-ret));
+	}
+
+	/* Poll until all are complete */
+	ret = _await_complete_all(zb1, num_addrs);
+	cr_assert(ret == FI_SUCCESS, "zb1 broadcast = %s\n",
+		  fi_strerror(-ret));
+	ret = _await_complete_all(zb2, num_addrs);
+	cr_assert(ret == FI_SUCCESS, "zb2 broadcast = %s\n",
+		  fi_strerror(-ret));
+
+	/* Validate data */
+	cr_assert(zbd1.count == num_addrs, "zb1 count=%d != %d\n",
+		  zbd1.count, num_addrs);
+	cr_assert(zbd2.count == num_addrs, "zb2 count=%d != %d\n",
+		  zbd2.count, num_addrs);
+
+	_free_getgroup_multi(num_addrs, zb2);
+	_free_getgroup_multi(num_addrs, zb1);
+}
+
 /*****************************************************************/
 /**
  * @brief Perform a simulated broadcast.
@@ -593,8 +753,12 @@ static void bcast_func(struct cxip_zbcoll_obj *zb, void *usrptr)
 	struct bcast_data *data = (struct bcast_data *)usrptr;
 	int i;
 
-	for (i = 0; i < zb->simcount; i++)
-		data->data[i] = *zb->state[i].dataptr;
+	if (zb->simrank >= 0) {
+		data->data[zb->simrank] = *zb->state[zb->simrank].dataptr;
+	} else {
+		for (i = 0; i < zb->simcount; i++)
+			data->data[i] = *zb->state[i].dataptr;
+	}
 	data->count++;
 }
 
@@ -604,7 +768,7 @@ Test(ctrl, zb_broadcast)
 	struct cxip_ep *cxip_ep;
 	struct cxip_ep_obj *ep_obj;
 	struct cxip_zbcoll_obj *zb;
-	struct bcast_data zbd;
+	struct bcast_data zbd = {};
 	int i, rep, ret;
 	uint64_t data;
 
@@ -613,17 +777,17 @@ Test(ctrl, zb_broadcast)
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 	ep_obj = cxip_ep->ep_obj;
 
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, true, &zb);
-	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %d\n", ret);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, ZB_ALLSIM, &zb);
+	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %s\n", fi_strerror(-ret));
 	cr_assert(zb->simcount == num_addrs,
 		  "zb->simcount = %d, != %d\n", zb->simcount, num_addrs);
 	_addr_shuffle(zb, false);
 
 	/* Acquire a group id */
 	ret = cxip_zbcoll_getgroup(zb);
-	cr_assert(ret == 0, "getgroup = %d\n", ret);
+	cr_assert(ret == 0, "getgroup = %s\n", fi_strerror(-ret));
 	ret = _await_complete(zb);
-	cr_assert(ret == 0, "getgroup done = %d\n", ret);
+	cr_assert(ret == 0, "getgroup done = %s\n", fi_strerror(-ret));
 
 	memset(&zbd, 0, sizeof(zbd));
 	zbd.data = calloc(num_addrs, sizeof(uint64_t));
@@ -650,7 +814,8 @@ Test(ctrl, zb_broadcast)
 			cr_assert(zbd.data[i] == data, "[%d] %ld != %ld\n",
 				  i, zbd.data[i], data);
 	}
-	cr_assert(zbd.count == rep);
+	cr_assert(zbd.count == rep, "zbd.count=%d rep=%d\n",
+		  zbd.count, rep);
 
 	uint32_t dsc, err, ack, rcv;
 	cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
@@ -660,4 +825,66 @@ Test(ctrl, zb_broadcast)
 
 	free(zbd.data);
 	cxip_zbcoll_free(zb);
+}
+
+Test(ctrl, zb_broadcast2)
+{
+	struct cxip_zbcoll_obj **zb1, **zb2;
+	int num_addrs = 11;	// arbitrary
+	uint64_t data1, data2;
+	struct bcast_data zbd1 = {};
+	struct bcast_data zbd2 = {};
+	int i, ret;
+
+	zb1 = calloc(num_addrs, sizeof(*zb1));
+	cr_assert(zb1);
+	zb2 = calloc(num_addrs, sizeof(*zb2));
+	cr_assert(zb2);
+	zbd1.data = calloc(num_addrs, sizeof(*zbd1.data));
+	cr_assert(zbd1.data);
+	zbd2.data = calloc(num_addrs, sizeof(*zbd2.data));
+	cr_assert(zbd2.data);
+
+	_getgroup_multi(num_addrs, zb1, 0);
+	_getgroup_multi(num_addrs, zb2, 1);
+
+	data1 = (rand() & ((1 << 29) - 1)) | (1 << 28);
+	data2 = (rand() & ((1 << 29) - 1)) | (1 << 28);
+
+	for (i = 0; i < num_addrs; i++) {
+		cxip_zbcoll_push_cb(zb1[i], bcast_func, &zbd1);
+		ret = cxip_zbcoll_broadcast(zb1[i], &data1);
+		cr_assert(!ret, "zb1 broadcast[%d]=%s\n", i, fi_strerror(-ret));
+
+		cxip_zbcoll_push_cb(zb2[i], bcast_func, &zbd2);
+		ret = cxip_zbcoll_broadcast(zb2[i], &data2);
+		cr_assert(!ret, "zb2 broadcast[%d]=%s\n", i, fi_strerror(-ret));
+	}
+
+	/* Poll until all are complete */
+	ret = _await_complete_all(zb1, num_addrs);
+	cr_assert(ret == FI_SUCCESS, "zb1 broadcast = %s\n",
+		  fi_strerror(-ret));
+	ret = _await_complete_all(zb2, num_addrs);
+	cr_assert(ret == FI_SUCCESS, "zb2 broadcast = %s\n",
+		  fi_strerror(-ret));
+
+	/* Validate data */
+	cr_assert(zbd1.count == num_addrs, "count=%d != %d\n",
+		  zbd1.count, num_addrs);
+	for (i = 0; i < num_addrs; i++) {
+		cr_assert(data1 == zbd1.data[i],
+			  "data1=%ld != zbd1[%d]=%ld\n",
+			  data1, i, zbd1.data[i]);
+	}
+	cr_assert(zbd2.count == num_addrs, "count=%d != %d\n",
+		  zbd2.count, num_addrs);
+	for (i = 0; i < zbd2.count; i++) {
+		cr_assert(data2 == zbd2.data[i],
+			  "data2=%ld != zbd2[%d]=%ld\n",
+			  data2, i, zbd2.data[i]);
+	}
+
+	_free_getgroup_multi(num_addrs, zb2);
+	_free_getgroup_multi(num_addrs, zb1);
 }

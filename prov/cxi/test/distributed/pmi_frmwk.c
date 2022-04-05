@@ -477,27 +477,29 @@ int pmi_log0(const char *fmt, ...)
  * @brief Enable/disable pmi_frmwk trace function.
  *
  * @param enable : if true, install, if false, remove
- * @return int 0 on success, error code on failure
+ * @return bool previous state of enablement
  */
-int pmi_trace_enable(bool enable)
+bool pmi_trace_enable(bool enable)
 {
 	char fnam[256];
+	bool enabled;
 
-	if (enable) {
+	enabled = !!pmi_trace_fid;
+	if (enable && !enabled) {
 		sprintf(fnam, "./trace%d", pmi_rank);
 		pmi_trace_fid = fopen(fnam, "w");
 		if (!pmi_trace_fid) {
 			fprintf(stderr, "open(%s) failed: %s\n",
 				fnam, strerror(errno));
-			return -1;
+		} else {
+			cxip_trace_fn = pmi_trace;
 		}
-		cxip_trace_fn = pmi_trace;
-	} else {
+	} else if (enabled) {
 		cxip_trace_fn = NULL;
 		if (pmi_trace_fid) {
 			fclose(pmi_trace_fid);
 			pmi_trace_fid = NULL;
 		}
 	}
-	return 0;
+	return enabled;
 }

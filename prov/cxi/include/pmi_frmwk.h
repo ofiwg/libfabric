@@ -56,4 +56,4 @@ int pmi_errmsg(int ret, const char *fmt, ...)
 int pmi_log0(const char *fmt, ...)
 	__attribute__((format(__printf__, 1, 2)));
 
-int pmi_trace_enable(bool enable);
+bool pmi_trace_enable(bool enable);

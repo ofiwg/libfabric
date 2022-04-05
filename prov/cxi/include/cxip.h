@@ -1110,6 +1110,9 @@ struct def_event_ht {
 /*
  * Zero-buffer collectives.
  */
+#define	ZB_NOSIM	-1
+#define	ZB_ALLSIM	-2
+
 struct cxip_zbcoll_obj;
 typedef void (*zbcomplete_t)(struct cxip_zbcoll_obj *zb, void *usrptr);
 
@@ -1138,6 +1141,7 @@ struct cxip_zbcoll_obj {
 	int num_caddrs;			// number of cxip addresses
 	uint32_t *shuffle;		// TEST shuffle array
 	int simcount;			// TEST count of states
+	int simrank;			// TEST simulated rank
 	int busy;			// serialize collectives in zb
 	int grpid;			// zb collective grpid
 	int error;			// error code
@@ -1149,6 +1153,7 @@ struct cxip_zbcoll_obj {
 struct cxip_ep_zbcoll_obj {
 	struct cxip_zbcoll_obj **grptbl;// group lookup table
 	uint64_t grpmsk;		// group use mask
+	int refcnt;			// grptbl reference count
 	bool disable;			// low level tests
 	fastlock_t lock;		// group ID negotiation lock
 	ofi_atomic32_t dsc_count;	// cumulative RCV discard count
@@ -2131,8 +2136,11 @@ int cxip_tree_relatives(int radix, int nodeidx, int maxnodes, int *rels);
 
 void cxip_zbcoll_free(struct cxip_zbcoll_obj *zb);
 int cxip_zbcoll_alloc(struct cxip_ep_obj *ep_obj, int num_addrs,
-		      fi_addr_t *fiaddrs, bool sim,
+		      fi_addr_t *fiaddrs, int simrank,
 		      struct cxip_zbcoll_obj **zbp);
+int cxip_zbcoll_simlink(struct cxip_zbcoll_obj *zb0,
+			struct cxip_zbcoll_obj *zb);
+int cxip_zbcoll_simlink_done(struct cxip_zbcoll_obj *zb0);
 
 int cxip_zbcoll_push_cb(struct cxip_zbcoll_obj *zb,
 			zbcomplete_t usrfunc, void *usrptr);
@@ -2149,7 +2157,6 @@ void cxip_zbcoll_rlsgroup(struct cxip_zbcoll_obj *zb);
 int cxip_zbcoll_broadcast(struct cxip_zbcoll_obj *zb, uint64_t *dataptr);
 int cxip_zbcoll_barrier(struct cxip_zbcoll_obj *zb);
 
-void cxip_zbcoll_progress(struct cxip_ep_obj *ep_obj);
 void cxip_zbcoll_reset_counters(struct cxip_ep_obj *ep_obj);
 void cxip_zbcoll_get_counters(struct cxip_ep_obj *ep_obj, uint32_t *dsc,
 			      uint32_t *err, uint32_t *ack, uint32_t *rcv);
