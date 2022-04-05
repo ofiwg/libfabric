@@ -40,7 +40,7 @@
 #define OFI_RMA_DIRECTION_CAPS	(FI_READ | FI_WRITE | \
 				 FI_REMOTE_READ | FI_REMOTE_WRITE)
 
-static int fi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
+int ofi_valid_addr_format(uint32_t prov_format, uint32_t user_format)
 {
 	if (user_format == FI_FORMAT_UNSPEC || prov_format == FI_FORMAT_UNSPEC)
 		return 1;
@@ -1069,7 +1069,7 @@ int ofi_check_info(const struct util_prov *util_prov,
 		return -FI_ENODATA;
 	}
 
-	if (!fi_valid_addr_format(prov_info->addr_format,
+	if (!ofi_valid_addr_format(prov_info->addr_format,
 				  user_info->addr_format)) {
 		FI_INFO(prov, FI_LOG_CORE, "address format not supported\n");
 		OFI_INFO_CHECK(prov, prov_info, user_info, addr_format,
