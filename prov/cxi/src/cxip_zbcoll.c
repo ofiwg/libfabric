@@ -296,7 +296,7 @@ void cxip_zbcoll_free(struct cxip_zbcoll_obj *zb)
 	free(zb);
 }
 
-/* configure the zbcoll object */
+/* configure the zbcoll object -- error frees zb in caller */
 static int _state_config(struct cxip_zbcoll_obj *zb, int simcount, int grp_rank)
 {
 	struct cxip_zbcoll_state *zbs;
@@ -307,7 +307,7 @@ static int _state_config(struct cxip_zbcoll_obj *zb, int simcount, int grp_rank)
 	zb->simcount = simcount;
 	zb->state = calloc(simcount, sizeof(*zbs));
 	if (!zb->state)
-		goto nomem;
+		return -FI_ENOMEM;
 
 	free(zb->shuffle);
 	zb->shuffle = NULL;
@@ -328,7 +328,7 @@ static int _state_config(struct cxip_zbcoll_obj *zb, int simcount, int grp_rank)
 		zbs->grp_rank = grp_rank;
 		zbs->relatives = calloc(radix + 1, sizeof(*zbs->relatives));
 		if (!zbs->relatives)
-			goto fail;
+			return -FI_ENOMEM;
 
 		/* This produces indices in an abstract tree */
 		zbs->num_relatives =
@@ -336,67 +336,67 @@ static int _state_config(struct cxip_zbcoll_obj *zb, int simcount, int grp_rank)
 					    zbs->relatives);
 	}
 	return FI_SUCCESS;
-fail:
-	for (n = 0; n < simcount; n++) {
-		zbs = &zb->state[n];
-		free(zbs->relatives);
-	}
-nomem:
-	free(zb->state);
-	zb->state = NULL;
-	return -FI_ENOMEM;
 }
 
-/* sort out the various configuration cases */
+/* sort out the various configuration cases -- error frees zb in caller */
 static int _zbcoll_config(struct cxip_zbcoll_obj *zb, int num_addrs,
 			  fi_addr_t *fiaddrs, bool sim)
 {
-	int grp_rank, i, ret;
-
-	if (num_addrs && !fiaddrs) {
-		CXIP_WARN("Non-zero addr count with NULL addr pointer\n");
-		return -FI_EINVAL;
-	}
-
-	/* do a lookup on all of the fiaddrs */
-	if (num_addrs) {
-		zb->num_caddrs = num_addrs;
-		zb->caddrs = calloc(num_addrs, sizeof(*zb->caddrs));
-		if (!zb->caddrs)
-			return -FI_ENOMEM;
-		for (i = 0; i < num_addrs; i++) {
-			ret = _cxip_av_lookup(zb->ep_obj->av, fiaddrs[i],
-					      &zb->caddrs[i]);
-			if (ret) {
-				CXIP_WARN("Lookup on fiaddr=%ld failed]n",
-					  fiaddrs[i]);
-				return -FI_EINVAL;
-			}
-		}
-	}
-
-	/* find the index of the source address in the address list */
-	for (grp_rank = 0; !sim && grp_rank < num_addrs; grp_rank++)
-		if (CXIP_ADDR_EQUAL(zb->caddrs[grp_rank], zb->ep_obj->src_addr))
-			break;
+	int grp_rank, simcnt, i, ret;
 
 	if (!num_addrs) {
 		/* test case: no nics, send-to-self only */
-		ret = _state_config(zb, 1, grp_rank);
-	} else if (sim && num_addrs <= (1 << ZB_SIM_BITS)) {
-		/* simulation: create a state for each item in addrs[] */
-		ret = _state_config(zb, num_addrs, grp_rank);
+		zb->num_caddrs = 1;
+		zb->caddrs = calloc(zb->num_caddrs, sizeof(*zb->caddrs));
+		zb->caddrs[0] = zb->ep_obj->src_addr;
+		grp_rank = 0;
+		simcnt = 1;
 	} else if (sim) {
-		CXIP_WARN("Simulation maximum size = %d\n", (1 << ZB_SIM_BITS));
-		ret = -FI_EADDRNOTAVAIL;
-	} else if (grp_rank < num_addrs) {
-		/* we want to participate as addrs[src_idx] == myaddr */
-		ret = _state_config(zb, 1, grp_rank);
+		/* test case: regression with simulated addresses */
+		if (num_addrs > (1 << ZB_SIM_BITS)) {
+			CXIP_WARN("Simulation maximum size = %d\n",
+				  (1 << ZB_SIM_BITS));
+			return -FI_EADDRNOTAVAIL;
+		}
+		zb->num_caddrs = num_addrs;
+		zb->caddrs = calloc(zb->num_caddrs, sizeof(*zb->caddrs));
+		if (!zb->caddrs)
+			return -FI_ENOMEM;
+		for (i = 0; i < num_addrs; i++) {
+			zb->caddrs[i].nic = i;
+			zb->caddrs[i].pid = zb->ep_obj->src_addr.pid;
+		}
+		grp_rank = 0;
+		simcnt = num_addrs;
 	} else {
-		CXIP_WARN("Endpoint addr not in addrs[]\n");
-		ret = -FI_EADDRNOTAVAIL;
+		/* Real addresses prepared externally */
+		zb->num_caddrs = num_addrs;
+		zb->caddrs = calloc(zb->num_caddrs, sizeof(*zb->caddrs));
+		if (!zb->caddrs)
+			return -FI_ENOMEM;
+		grp_rank = -1;
+		for (i = 0; i < num_addrs; i++) {
+			ret = _cxip_av_lookup(zb->ep_obj->av,
+					      fiaddrs[i], &zb->caddrs[i]);
+			if (ret) {
+				CXIP_WARN("Lookup on fiaddr=%ld failed\n",
+					  fiaddrs[i]);
+				return -FI_EINVAL;
+			}
+			if (grp_rank == -1 &&
+			    CXIP_ADDR_EQUAL(zb->caddrs[i],
+					    zb->ep_obj->src_addr))
+				grp_rank = i;
+		}
+		if (grp_rank < 0) {
+			CXIP_WARN("Endpoint addr not in addrs[]\n");
+			return -FI_EADDRNOTAVAIL;
+		}
+		simcnt = 1;
 	}
-	return ret;
+
+	/* find the index of the source address in the address list */
+	return _state_config(zb, simcnt, grp_rank);
 }
 
 /**
@@ -1167,15 +1167,16 @@ int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb)
 	union cxip_match_bits mb = {.raw = 0};
 	int i, n, ret;
 
+	/* function could be called by non-participating nodes */
+	if (!zb)
+		return -FI_EADDRNOTAVAIL;
+
+	/* if disabled, we're done */
 	zbcoll = &zb->ep_obj->zbcoll;
 	if (zbcoll->disable) {
 		CXIP_DBG("ZBCOLL disabled\n");
 		return FI_SUCCESS;
 	}
-
-	/* function could be called by non-participating nodes */
-	if (!zb)
-		return -FI_EADDRNOTAVAIL;
 
 	/* check for malformed object */
 	if (zb->grpid > ZB_NEG_BIT)

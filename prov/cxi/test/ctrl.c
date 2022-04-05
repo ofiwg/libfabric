@@ -128,62 +128,6 @@ static void dumpmap(struct cxip_zbcoll_obj *zb)
 }
 
 /**
- * Generate simualted addresses.
- *
- * This generates size + 1 addresses.
- *
- * fiaddr[0..size-1] are simulated addresses.
- *
- * fiaddr[size] is the real hardware address of this node.
- *
- * Note that under NETSIM, the real NIC address is 0, which coincidentally
- * matches the simulation NIC address of 0.
- */
-static int _generate_sim_addrs(struct cxip_ep_obj *ep_obj, int size,
-			       fi_addr_t **fiaddrp)
-{
-	struct cxip_addr *caddrs;
-	fi_addr_t *fiaddrs;
- 	int i, ret;
-
-	if (fiaddrp)
-		*fiaddrp = NULL;
-	if (size < 1)
-		return -FI_EINVAL;
-
-	/* NOTE: creates a "hidden" final addr == actual NIC address */
-	ret = -FI_ENOMEM;
-	caddrs = calloc(size + 1, sizeof(*caddrs));
-	fiaddrs = calloc(size + 1, sizeof(*fiaddrs));
-	if (!caddrs || !fiaddrs)
-		goto cleanup;
-
-	/* Prepare simulated addresses, including "hidden" addr */
-	for (i = 0; i < size; i++) {
-		caddrs[i].nic = i;
-		caddrs[i].pid = ep_obj->src_addr.pid;
-	}
-	caddrs[i++] = ep_obj->src_addr;
-
-	/* Register these with the av */
-	ret = fi_av_insert(&ep_obj->av->av_fid, caddrs, size + 1, fiaddrs,
-			   0L, NULL);
-	if (ret < 1)
-		goto cleanup;
-
-	/* returning */
-	if (fiaddrp) {
-		*fiaddrp = fiaddrs;
-		fiaddrs = NULL;
-	}
-	ret = FI_SUCCESS;
-cleanup:
-	free(fiaddrs);
-	free(caddrs);
-	return ret;
-}
-
-/**
  * @brief Test the valid and invalid cxip_zbcoll_obj configurations.
  */
 Test(ctrl, zb_config)
@@ -191,67 +135,88 @@ Test(ctrl, zb_config)
 	struct cxip_ep *cxip_ep;
 	struct cxip_ep_obj *ep_obj;
 	struct cxip_zbcoll_obj *zb;
+	struct cxip_addr *caddrs;
 	fi_addr_t *fiaddrs;
-	int ret;
+	int i, ret;
 
 	int num_addrs = 5;
+
 
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 	ep_obj = cxip_ep->ep_obj;
 
-	trc("Generating addresses\n");
-	ret = _generate_sim_addrs(ep_obj, num_addrs, &fiaddrs);
-	cr_assert(!ret, "out of memory\n");
-	cr_assert(fiaddrs, "no fi_addrs\n");
+	caddrs = calloc(num_addrs, sizeof(*caddrs));
+	cr_assert(caddrs);
+	fiaddrs = calloc(num_addrs, sizeof(*fiaddrs));
+	cr_assert(fiaddrs);
 
-	/* cannot specify num_addrs > 0 with addrs == NULL */
-	trc("case: null\n");
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, false, &zb);
-	cr_assert(ret == -FI_EINVAL,
-		  "illegal config: num_addrs && !addrs, ret=%d\n", ret);
-	cxip_zbcoll_free(zb);
+	for (i = 0; i < num_addrs; i++)
+		caddrs[i].raw = ep_obj->src_addr.raw;
+	ret = fi_av_insert(&ep_obj->av->av_fid, caddrs, num_addrs, fiaddrs,
+			   0L, NULL);
+	cr_assert(ret == num_addrs);
 
-	/* test case, do not generate a tree */
+	/* test case, object but no tree */
 	trc("case: no tree\n");
 	ret = cxip_zbcoll_alloc(ep_obj, 0, NULL, false, &zb);
 	cr_assert(ret == 0,
 		  "no tree: ret=%d\n", ret);
 	cr_assert(zb->simcount == 1,
 		  "no tree: simcnt=%d\n", zb->simcount);
+	cr_assert(zb->num_caddrs == 1,
+		  "no_tree: num_caddrs=%d\n", zb->num_caddrs);
+	cr_assert(zb->caddrs[0].raw == ep_obj->src_addr.raw);
 	cxip_zbcoll_free(zb);
 
 	/* request simulation */
 	trc("case: simulated\n");
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, true, &zb);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, true, &zb);
 	cr_assert(ret == 0,
 		  "sim tree 4: ret=%d\n", ret);
 	cr_assert(zb->simcount == num_addrs,
 		  "sim tree 4: cnt=%d\n", zb->simcount);
 	cxip_zbcoll_free(zb);
 
-	/* resize simulation */
-	trc("case: resize simulation\n");
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs-1, fiaddrs, true, &zb);
-	cr_assert(ret == 0,
-		  "sim tree 3: ret=%d\n", ret);
-	cr_assert(zb->simcount == num_addrs-1,
-		  "sim tree 3: cnt=%d\n", zb->simcount);
+	/* exercise real setup, send-to-self-only */
+	trc("case: real send-only\n");
+	ret = cxip_zbcoll_alloc(ep_obj, 0, NULL, false, &zb);
+	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %d\n", ret);
+	cr_assert(zb != NULL);
+	cr_assert(zb->simcount == 1);
+	cr_assert(zb->state != NULL);
+	cr_assert(CXIP_ADDR_EQUAL(zb->caddrs[0], ep_obj->src_addr));
+
+	/* exercise real setup success, all caddrs are real */
+	trc("case: real addresses root 0\n");
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, false, &zb);
+	cr_assert(ret == 0, "real tree0: ret=%d\n", ret);
+	cr_assert(zb->simcount == 1, "real tree0: simcnt=%d\n", zb->simcount);
+	cr_assert(zb->state[0].grp_rank == 0, "real tree0: grp_rank=%d\n",
+		  zb->state[0].grp_rank);
 	cxip_zbcoll_free(zb);
 
-	/* exercise real setup success, ensure real addr is in list */
-	trc("case: real addresses success\n");
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, &fiaddrs[1], false, &zb);
-	cr_assert(ret == 0,
-		  "real tree, in list: ret=%d\n", ret);
-	cr_assert(zb->simcount == 1,
-		  "real tree, in list: simcnt=%d\n", zb->simcount);
+	/* exercise real setup success, first caddr is not me */
+	trc("case: real addresses root 1\n");
+	caddrs[0].nic += 1;
+	ret = fi_av_insert(&ep_obj->av->av_fid, caddrs, num_addrs, fiaddrs,
+			   0L, NULL);
+	cr_assert(ret == num_addrs);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, false, &zb);
+	cr_assert(ret == 0, "real tree1: ret=%d\n", ret);
+	cr_assert(zb->simcount == 1, "real tree1: simcnt=%d\n", zb->simcount);
+	cr_assert(zb->state[0].grp_rank == 1, "real tree1: grp_rank=%d\n",
+		  zb->state[0].grp_rank);
 	cxip_zbcoll_free(zb);
 
-	/* exercise real setup failure, ensure real addr not in list */
-	trc("case: real addresses failure\n");
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs-1, &fiaddrs[1], false, &zb);
-	cr_assert(ret == -FI_EADDRNOTAVAIL,
-		  "real tree, not in list: ret=%d\n", ret);
+	/* exercise real setup failure, no caddr is me */
+	trc("case: real addresses root N\n");
+	for (i = 0; i < num_addrs; i++)
+		caddrs[i].nic += i + 1;
+	ret = fi_av_insert(&ep_obj->av->av_fid, caddrs, num_addrs, fiaddrs,
+			   0L, NULL);
+	cr_assert(ret == num_addrs);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, false, &zb);
+	cr_assert(ret == -FI_EADDRNOTAVAIL, "real treeN: ret=%d\n", ret);
 	cxip_zbcoll_free(zb);
 
 	free(fiaddrs);
@@ -269,22 +234,13 @@ Test(ctrl, zb_send0)
 	uint32_t dsc, err, ack, rcv, cnt;
 	int ret;
 
-	fi_addr_t *fiaddrs;
-	int num_addrs = 2;
-
 	cr_assert(sizeof(union cxip_match_bits) == 8);
 
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 	ep_obj = cxip_ep->ep_obj;
-	ret = _generate_sim_addrs(ep_obj, num_addrs, &fiaddrs);
-	cr_assert(!ret, "out of memory\n");
 
 	/* Set up the send-only zbcoll */
-	ret = cxip_zbcoll_alloc(ep_obj, 1, &fiaddrs[num_addrs], false, &zb);
-	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %d\n", ret);
-	cr_assert(zb != NULL);
-	cr_assert(zb->simcount == 1);
-	cr_assert(zb->state != NULL);
+	ret = cxip_zbcoll_alloc(ep_obj, 0, NULL, false, &zb);
 
 	/* Test that if disabled, getgroup is no-op */
 	ep_obj->zbcoll.disable = true;
@@ -310,7 +266,7 @@ Test(ctrl, zb_send0)
 
 	/* Invalid send to out-of-range address index */
 	cxip_zbcoll_reset_counters(ep_obj);
-	cxip_zbcoll_send(zb, 0, num_addrs, mb.raw);
+	cxip_zbcoll_send(zb, 0, 1, mb.raw);
 	cnt = 0;
 	do {
 		usleep(1);
@@ -326,7 +282,6 @@ Test(ctrl, zb_send0)
 	cr_assert(rcv == 0, "rcv = %d, != 0\n", rcv);
 
 	cxip_zbcoll_free(zb);
-	free(fiaddrs);
 }
 
 /* utility to send from src to dst */
@@ -371,16 +326,12 @@ Test(ctrl, zb_sendN)
 	struct cxip_zbcoll_obj *zb;
 	int srcidx, dstidx, ret;
 
-	fi_addr_t *fiaddrs;
 	int num_addrs = 5;
 
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 	ep_obj = cxip_ep->ep_obj;
 
-	ret = _generate_sim_addrs(ep_obj, num_addrs, &fiaddrs);
-	cr_assert(!ret, "out of memory\n");
-
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, true, &zb);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, true, &zb);
 	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %d\n", ret);
 	cr_assert(zb != NULL);
 	cr_assert(zb->simcount == num_addrs);
@@ -395,7 +346,6 @@ Test(ctrl, zb_sendN)
 		for (dstidx = 0; dstidx < num_addrs; dstidx++)
 			_send(zb, srcidx, dstidx);
 	cxip_zbcoll_free(zb);
-	free(fiaddrs);
 }
 
 /* Utility to wait until a collective has completed */
@@ -469,16 +419,12 @@ Test(ctrl, zb_getgroup)
 	struct getgroup_data zbd;
 	int i, ret;
 	uint32_t dsc, err, ack, rcv;
-	fi_addr_t *fiaddrs;
 	int num_addrs = 9;	// arbitrary
 	int num_zb = 43;	// limit for simulation
 	int cnt = 0;
 
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 	ep_obj = cxip_ep->ep_obj;
-
-	ret = _generate_sim_addrs(ep_obj, num_addrs, &fiaddrs);
-	cr_assert(!ret, "addrs out of memory\n");
 
 	zb = calloc(num_zb, sizeof(struct cxip_zbcoll_obj *));
 	cr_assert(zb, "zb out of memory\n");
@@ -487,7 +433,7 @@ Test(ctrl, zb_getgroup)
 
 	for (i = 0; i < num_zb; i++) {
 		/* Verify multiple allocations */
-		ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs,
+		ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL,
 					true, &zb[i]);
 		cr_assert(ret == 0, "cxip_zbcoll_alloc() = %d\n", ret);
 		cr_assert(zb[i]->simcount == num_addrs,
@@ -521,7 +467,7 @@ Test(ctrl, zb_getgroup)
 	/* Free item [0] and try again */
 	i = 0;
 	cxip_zbcoll_free(zb[i]);
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, true, &zb[i]);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, true, &zb[i]);
 	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %d\n", ret);
 	ret = cxip_zbcoll_getgroup(zb[i]);
 	cr_assert(ret == FI_SUCCESS, "retry %d getgroup = %s\n",
@@ -544,7 +490,6 @@ Test(ctrl, zb_getgroup)
 	for (i = 0; i < num_zb; i++)
 		cxip_zbcoll_free(zb[i]);
 	free(zb);
-	free(fiaddrs);
 }
 
 /*****************************************************************/
@@ -577,16 +522,12 @@ Test(ctrl, zb_barrier)
 	struct barrier_data zbd;
 	int rep, ret;
 
-	fi_addr_t *fiaddrs;
 	int num_addrs = 9;
 
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 	ep_obj = cxip_ep->ep_obj;
 
-	ret = _generate_sim_addrs(ep_obj, num_addrs, &fiaddrs);
-	cr_assert(!ret, "out of memory\n");
-
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, true, &zb);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, true, &zb);
 	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %d\n", ret);
 	cr_assert(zb->simcount == num_addrs,
 		  "zb->simcount = %d, != %d\n", zb->simcount, num_addrs);
@@ -628,7 +569,6 @@ Test(ctrl, zb_barrier)
 		  dsc, err, ack, rcv);
 
 	cxip_zbcoll_free(zb);
-	free(fiaddrs);
 }
 
 /*****************************************************************/
@@ -668,16 +608,12 @@ Test(ctrl, zb_broadcast)
 	int i, rep, ret;
 	uint64_t data;
 
-	fi_addr_t *fiaddrs;
 	int num_addrs = 25;
 
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 	ep_obj = cxip_ep->ep_obj;
 
-	ret = _generate_sim_addrs(ep_obj, num_addrs, &fiaddrs);
-	cr_assert(!ret, "out of memory\n");
-
-	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, true, &zb);
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, true, &zb);
 	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %d\n", ret);
 	cr_assert(zb->simcount == num_addrs,
 		  "zb->simcount = %d, != %d\n", zb->simcount, num_addrs);
@@ -724,5 +660,4 @@ Test(ctrl, zb_broadcast)
 
 	free(zbd.data);
 	cxip_zbcoll_free(zb);
-	free(fiaddrs);
 }
