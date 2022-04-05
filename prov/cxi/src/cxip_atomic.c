@@ -450,7 +450,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 {
 	struct cxip_domain *dom = txc->domain;
 	struct cxip_cmdq *cmdq = txc->tx_cmdq;
-	struct cxip_md *result_md;
+	struct cxip_md *result_md = NULL;
 	struct c_cstate_cmd cstate_cmd = {};
 	struct c_idc_amo_cmd idc_amo_cmd = {};
 	struct c_full_dma_cmd flush_cmd;
@@ -505,6 +505,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 
 	if (cxip_amo_emit_idc_req_needed(flags, result, result_mr,
 	    fetching_amo_flush)) {
+		/* if (result && !result_mr) we end up in this branch */
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
 			TXC_WARN(txc, "Failed to allocate request\n");
@@ -546,6 +547,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	} else if (result_mr) {
 		result_md = result_mr->md;
 	}
+	/* else {result == false} */
 
 	/* Identify the correct traffic class sub-type. */
 	if (flags & FI_CXI_HRP)
@@ -618,6 +620,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	idc_amo_cmd.atomic_type = atomic_type;
 	idc_amo_cmd.cswap_op = cswap_op;
 
+	/* if (result) {result_md is set} */
 	if (result)
 		idc_amo_cmd.local_addr = CXI_VA_TO_IOVA(result_md->md, result);
 
@@ -976,7 +979,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 	uint64_t hmem_buf;
 	uint64_t hmem_compare;
 	struct cxip_md *buf_md;
-	struct cxip_md *result_md;
+	struct cxip_md *result_md = NULL;
 	void *selective_completion_req;
 
 	/* MR desc cannot be value unless hybrid MR desc is enabled. */
@@ -997,6 +1000,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 
 	if (cxip_amo_emit_dma_req_needed(msg, flags, result, buf_mr, result_mr,
 					 fetching_amo_flush)) {
+		/* if (result && !result_mr) we end up in this branch */
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
 			ret = -FI_ENOMEM;
@@ -1155,6 +1159,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 		assert(ret == atomic_type_len);
 	}
 
+	/* if (result) {result_md is set} */
 	if (result) {
 		dma_amo_cmd.local_write_addr =
 			CXI_VA_TO_IOVA(result_md->md, result);
