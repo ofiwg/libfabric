@@ -32,59 +32,29 @@
 #include "config.h"
 #include "cxip.h"
 
-static bool cxip_req_buf_is_head(struct cxip_req_buf *buf)
+static bool cxip_req_buf_is_head(struct cxip_ptelist_buf *buf)
 {
-	struct cxip_req_buf *head_buf =
-		container_of(buf->rxc->active_req_bufs.next,
-			     struct cxip_req_buf, req_buf_entry);
+	struct cxip_ptelist_buf *head_buf =
+			container_of(buf->pool->active_bufs.next,
+				     struct cxip_ptelist_buf, buf_entry);
 
 	return head_buf == buf;
 }
 
-static bool cxip_req_buf_is_consumed(struct cxip_req_buf *buf)
+static bool cxip_req_buf_is_consumed(struct cxip_ptelist_buf *buf)
 {
 	return buf->unlink_length && buf->unlink_length == buf->cur_offset &&
-		dlist_empty(&buf->pending_ux_list);
+		dlist_empty(&buf->request.pending_ux_list);
 }
 
-static bool cxip_req_buf_is_next_put(struct cxip_req_buf *buf,
-					    const union c_event *event)
+static bool cxip_req_buf_is_next_put(struct cxip_ptelist_buf *buf,
+				     const union c_event *event)
 {
-	return (CXI_VA_TO_IOVA(buf->md->md, buf->req_buf) + buf->cur_offset) ==
+	return (CXI_VA_TO_IOVA(buf->md->md, buf->data) + buf->cur_offset) ==
 		event->tgt_long.start;
 }
 
-static void cxip_req_buf_put(struct cxip_req_buf *buf, bool repost)
-{
-	int ret;
-	int refcount = ofi_atomic_dec32(&buf->refcount);
-
-	RXC_DBG(buf->rxc, "rbuf=%p refcount=%u\n", buf, refcount);
-
-	if (refcount < 0) {
-		RXC_FATAL(buf->rxc, "Request buffer refcount underflow: %d\n",
-			  refcount);
-	} else if (refcount == 0 && repost) {
-		do {
-			ret = cxip_req_buf_link(buf, false);
-		} while (ret == -FI_EAGAIN);
-
-		if (ret != FI_SUCCESS)
-			RXC_FATAL(buf->rxc,
-				  "Unhandled request buffer link error: %d",
-				  ret);
-	}
-}
-
-static void cxip_req_buf_get(struct cxip_req_buf *buf)
-{
-	ofi_atomic_inc32(&buf->refcount);
-
-	RXC_DBG(buf->rxc, "rbuf=%p refcount=%u\n", buf,
-		ofi_atomic_get32(&buf->refcount));
-}
-
-static void cxip_req_buf_get_header_info(struct cxip_req_buf *buf,
+static void cxip_req_buf_get_header_info(struct cxip_ptelist_buf *buf,
 					 struct cxip_ux_send *ux,
 					 size_t *header_length,
 					 uint64_t *remote_offset)
@@ -116,24 +86,12 @@ static void cxip_req_buf_get_header_info(struct cxip_req_buf *buf,
 	}
 }
 
-static void _cxip_req_buf_ux_free(struct cxip_ux_send *ux, bool repost)
-{
-	struct cxip_req_buf *buf = ux->req->req_ctx;
-
-	assert(ux->req->type == CXIP_REQ_RBUF);
-
-	cxip_req_buf_put(buf, repost);
-	free(ux);
-
-	RXC_DBG(buf->rxc, "rbuf=%p ux=%p\n", buf, ux);
-}
-
 void cxip_req_buf_ux_free(struct cxip_ux_send *ux)
 {
 	_cxip_req_buf_ux_free(ux, true);
 }
 
-static struct cxip_ux_send *cxip_req_buf_ux_alloc(struct cxip_req_buf *buf,
+static struct cxip_ux_send *cxip_req_buf_ux_alloc(struct cxip_ptelist_buf *buf,
 						  const union c_event *event)
 {
 	struct cxip_ux_send *ux;
@@ -145,7 +103,7 @@ static struct cxip_ux_send *cxip_req_buf_ux_alloc(struct cxip_req_buf *buf,
 	ux->put_ev = *event;
 	ux->req = buf->req;
 	dlist_init(&ux->rxc_entry);
-	cxip_req_buf_get(buf);
+	cxip_ptelist_buf_get(buf);
 
 	RXC_DBG(buf->rxc, "rbuf=%p ux=%p\n", buf, ux);
 
@@ -153,7 +111,7 @@ static struct cxip_ux_send *cxip_req_buf_ux_alloc(struct cxip_req_buf *buf,
 }
 
 /* Caller must hold rxc->lock */
-static int cxip_req_buf_process_ux(struct cxip_req_buf *buf,
+static int cxip_req_buf_process_ux(struct cxip_ptelist_buf *buf,
 				   struct cxip_ux_send *ux)
 {
 	struct cxip_rxc *rxc = buf->rxc;
@@ -166,7 +124,7 @@ static int cxip_req_buf_process_ux(struct cxip_req_buf *buf,
 	/* Pre-processing of unlink events. */
 	if (unlinked)
 		unlink_length = ux->put_ev.tgt_long.start -
-			CXI_VA_TO_IOVA(buf->md->md, buf->req_buf) +
+			CXI_VA_TO_IOVA(buf->md->md, buf->data) +
 			ux->put_ev.tgt_long.mlength;
 
 	buf->cur_offset += ux->put_ev.tgt_long.mlength;
@@ -243,13 +201,13 @@ check_unlinked:
 	 */
 	if (unlinked) {
 		buf->unlink_length = unlink_length;
-		ofi_atomic_dec32(&rxc->req_bufs_linked);
+		ofi_atomic_dec32(&buf->pool->bufs_linked);
 
 		RXC_DBG(rxc, "rbuf=%p rxc_rbuf_linked=%u\n", buf,
-			ofi_atomic_get32(&rxc->req_bufs_linked));
+			ofi_atomic_get32(&buf->pool->bufs_linked));
 
 		/* Replenish to keep minimum linked */
-		ret = cxip_req_buf_replenish(rxc, false);
+		ret = cxip_ptelist_buf_replenish(rxc->req_list_bufpool, false);
 		if (ret)
 			RXC_WARN(rxc, "Request replenish failed: %d\n", ret);
 	}
@@ -259,15 +217,15 @@ check_unlinked:
 	return FI_SUCCESS;
 }
 
-static void cxip_req_buf_progress_pending_ux(struct cxip_req_buf *buf)
+static void cxip_req_buf_progress_pending_ux(struct cxip_ptelist_buf *buf)
 {
 	struct cxip_ux_send *ux;
 	struct dlist_entry *tmp;
 	int ret;
 
 again:
-	dlist_foreach_container_safe(&buf->pending_ux_list, struct cxip_ux_send,
-				     ux, rxc_entry, tmp) {
+	dlist_foreach_container_safe(&buf->request.pending_ux_list,
+				     struct cxip_ux_send, ux, rxc_entry, tmp) {
 		if (cxip_req_buf_is_next_put(buf, &ux->put_ev)) {
 			dlist_remove(&ux->rxc_entry);
 
@@ -287,7 +245,7 @@ again:
 	}
 }
 
-static int cxip_req_buf_process_put_event(struct cxip_req_buf *buf,
+static int cxip_req_buf_process_put_event(struct cxip_ptelist_buf *buf,
 					  const union c_event *event)
 {
 	struct cxip_ux_send *ux;
@@ -322,22 +280,14 @@ static int cxip_req_buf_process_put_event(struct cxip_req_buf *buf,
 		 * buffers processing their pending unexpected lists until a
 		 * request buffer is not consumed.
 		 */
-		while ((buf = dlist_first_entry_or_null(&rxc->active_req_bufs,
-							struct cxip_req_buf,
-							req_buf_entry))) {
+		while ((buf = dlist_first_entry_or_null(&buf->pool->active_bufs,
+							struct cxip_ptelist_buf,
+							buf_entry))) {
 			cxip_req_buf_progress_pending_ux(buf);
 
 			if (cxip_req_buf_is_consumed(buf)) {
 				RXC_DBG(rxc, "rbuf=%p consumed\n", buf);
-
-				dlist_remove(&buf->req_buf_entry);
-				dlist_insert_tail(&buf->req_buf_entry,
-						  &rxc->consumed_req_bufs);
-
-				/* Since buffer is consumed, return reference
-				 * taken during the initial linking.
-				 */
-				cxip_req_buf_put(buf, true);
+				cxip_ptelist_buf_consumed(buf);
 			} else {
 				break;
 			}
@@ -346,7 +296,8 @@ static int cxip_req_buf_process_put_event(struct cxip_req_buf *buf,
 		/* Out-of-order target event. Queue unexpected message on
 		 * pending list until these addition events occur.
 		 */
-		dlist_insert_tail(&ux->rxc_entry, &buf->pending_ux_list);
+		dlist_insert_tail(&ux->rxc_entry,
+				  &buf->request.pending_ux_list);
 
 		RXC_DBG(rxc, "rbuf=%p pend ux_send=%p\n", buf, ux);
 	}
@@ -359,35 +310,17 @@ unlock:
 
 static int cxip_req_buf_cb(struct cxip_req *req, const union c_event *event)
 {
-	struct cxip_req_buf *buf = req->req_ctx;
+	struct cxip_ptelist_buf *buf = req->req_ctx;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
-		RXC_WARN(buf->rxc, "Request LINK error %d\n",
-			 cxi_event_rc(event));
-
-		assert(cxi_event_rc(event) == C_RC_NO_SPACE);
-		cxip_req_buf_put(buf, false);
-		ofi_atomic_dec32(&buf->rxc->req_bufs_linked);
-
-		/* We are running out of LE resources, do not
-		 * repost immediately.
-		 */
-		assert(ofi_atomic_get32(&buf->refcount) == 0);
-		dlist_remove(&buf->req_buf_entry);
-		dlist_insert_tail(&buf->req_buf_entry,
-				  &buf->rxc->free_req_bufs);
-
+		/* Success events not requested */
+		cxip_ptelist_buf_link_err(buf, cxi_event_rc(event));
 		return FI_SUCCESS;
 
 	case C_EVENT_UNLINK:
 		assert(!event->tgt_long.auto_unlinked);
-		cxip_req_buf_put(buf, false);
-		ofi_atomic_dec32(&buf->rxc->req_bufs_linked);
-
-		RXC_DBG(buf->rxc, "rbuf=%p rxc_rbuf_linked=%u\n", buf,
-			ofi_atomic_get32(&buf->rxc->req_bufs_linked));
-
+		cxip_ptelist_buf_unlink(buf);
 		return FI_SUCCESS;
 
 	case C_EVENT_PUT:
@@ -399,241 +332,22 @@ static int cxip_req_buf_cb(struct cxip_req *req, const union c_event *event)
 	}
 }
 
-int cxip_req_buf_unlink(struct cxip_req_buf *buf)
+int cxip_req_bufpool_init(struct cxip_rxc *rxc)
 {
-	struct cxip_rxc *rxc = buf->rxc;
-	int ret;
-
-	ret = cxip_pte_unlink(rxc->rx_pte, C_PTL_LIST_REQUEST, buf->req->req_id,
-			      rxc->rx_cmdq);
-	if (ret)
-		RXC_DBG(rxc, "Failed to write Unlink command: %d\n", ret);
-
-	return ret;
-}
-
-int cxip_req_buf_link(struct cxip_req_buf *buf, bool seq_restart)
-{
-	struct cxip_rxc *rxc = buf->rxc;
-	uint32_t le_flags = C_LE_MANAGE_LOCAL | C_LE_NO_TRUNCATE |
-			    C_LE_UNRESTRICTED_BODY_RO | C_LE_OP_PUT |
-			    C_LE_UNRESTRICTED_END_RO | C_LE_EVENT_LINK_DISABLE |
-			    C_LE_EVENT_UNLINK_DISABLE;
-	size_t min_free = CXIP_REQ_BUF_HEADER_MAX_SIZE + rxc->max_eager_size;
-	int ret;
-
-	/* Match all eager, long sends */
-	union cxip_match_bits mb = {
-		.le_type = CXIP_LE_TYPE_RX
-	};
-	union cxip_match_bits ib = {
-		.tag = ~0,
-		.tx_id = ~0,
-		.cq_data = 1,
-		.tagged = 1,
-		.match_comp = 1,
+	struct cxip_ptelist_bufpool_attr attr = {
+		.list_type = C_PTL_LIST_REQUEST,
+		.ptelist_cb = cxip_req_buf_cb,
+		.buf_size = cxip_env.req_buf_size,
+		.min_space_avail = CXIP_REQ_BUF_HEADER_MAX_SIZE +
+				   rxc->max_eager_size,
+		.min_posted = cxip_env.req_buf_min_posted,
+		.max_count = cxip_env.req_buf_max_count,
 	};
 
-	if (seq_restart)
-		le_flags |= C_LE_RESTART_SEQ;
-
-	/* Reset request buffer stats used to know when the buffer is consumed.
-	 */
-	assert(dlist_empty(&buf->pending_ux_list));
-	buf->unlink_length = 0;
-	buf->cur_offset = 0;
-
-	/* Take a request buffer reference for the link. */
-	ret = cxip_pte_append(rxc->rx_pte,
-			      CXI_VA_TO_IOVA(buf->md->md, buf->req_buf),
-			      cxip_env.req_buf_size, buf->md->md->lac,
-			      C_PTL_LIST_REQUEST, buf->req->req_id, mb.raw,
-			      ib.raw, CXI_MATCH_ID_ANY, min_free,
-			      le_flags, NULL, rxc->rx_cmdq, true);
-	if (ret) {
-		RXC_DBG(rxc, "Failed to write Append command: %d\n", ret);
-	} else {
-		dlist_remove(&buf->req_buf_entry);
-		dlist_insert_tail(&buf->req_buf_entry,
-				  &buf->rxc->active_req_bufs);
-		ofi_atomic_inc32(&buf->rxc->req_bufs_linked);
-
-		/* Reference taken until buffer is consumed or manually
-		 * unlinked.
-		 */
-		cxip_req_buf_get(buf);
-
-		RXC_DBG(rxc, "rbuf=%p rxc_rbuf_linked=%u\n", buf,
-			ofi_atomic_get32(&buf->rxc->req_bufs_linked));
-	}
-
-	return ret;
+	return cxip_ptelist_bufpool_init(rxc, &rxc->req_list_bufpool, &attr);
 }
 
-/*
- * cxip_req_buf_alloc() - Allocate a request buffer against an RX context.
- */
-struct cxip_req_buf *cxip_req_buf_alloc(struct cxip_rxc *rxc)
+void cxip_req_bufpool_fini(struct cxip_rxc *rxc)
 {
-	struct cxip_req_buf *buf;
-	size_t req_buf_size = sizeof(*buf) + rxc->req_buf_size;
-	int ret;
-
-	buf = calloc(1, req_buf_size);
-	if (!buf)
-		goto err;
-
-	if (rxc->hmem) {
-		ret = ofi_hmem_host_register(buf, req_buf_size);
-		if (ret)
-			goto err_free_buf;
-	}
-
-	ret = cxip_map(rxc->domain, buf->req_buf, rxc->req_buf_size, &buf->md);
-	if (ret)
-		goto err_unreg_buf;
-
-	buf->req = cxip_cq_req_alloc(rxc->recv_cq, true, buf);
-	if (!buf->req) {
-		ret = -FI_ENOMEM;
-		goto err_unmap_buf;
-	}
-
-	buf->req->cb = cxip_req_buf_cb;
-	buf->req->type = CXIP_REQ_RBUF;
-
-	ofi_atomic_initialize32(&buf->refcount, 0);
-	dlist_init(&buf->pending_ux_list);
-	dlist_init(&buf->req_buf_entry);
-
-	ofi_atomic_inc32(&rxc->req_bufs_allocated);
-	buf->rxc = rxc;
-
-	RXC_DBG(rxc, "rbuf=%p rxc_rbuf_cnt=%u\n", buf,
-		ofi_atomic_get32(&rxc->req_bufs_allocated));
-
-	return buf;
-
-err_unmap_buf:
-	cxip_unmap(buf->md);
-err_unreg_buf:
-	if (rxc->hmem)
-		ofi_hmem_host_unregister(buf);
-err_free_buf:
-	free(buf);
-err:
-	return NULL;
-}
-
-void cxip_req_buf_free(struct cxip_req_buf *buf)
-{
-	struct cxip_ux_send *ux;
-	struct dlist_entry *tmp;
-	struct cxip_rxc *rxc = buf->rxc;
-
-	/* Sanity check making sure the buffer was properly removed before
-	 * freeing.
-	 */
-	assert(dlist_empty(&buf->req_buf_entry));
-
-	dlist_foreach_container_safe(&buf->pending_ux_list, struct cxip_ux_send,
-				     ux, rxc_entry, tmp) {
-		dlist_remove(&ux->rxc_entry);
-		_cxip_req_buf_ux_free(ux, false);
-	}
-
-	if (ofi_atomic_get32(&buf->refcount) != 0)
-		RXC_FATAL(rxc, "rbuf=%p non-zero refcount: %d\n", buf,
-			  ofi_atomic_get32(&buf->refcount));
-
-	cxip_cq_req_free(buf->req);
-	cxip_unmap(buf->md);
-	if (rxc->hmem)
-		ofi_hmem_host_unregister(buf);
-	free(buf);
-
-	ofi_atomic_dec32(&rxc->req_bufs_allocated);
-
-	RXC_DBG(rxc, "rbuf=%p rxc_rbuf_cnt=%u\n", buf,
-		ofi_atomic_get32(&rxc->req_bufs_allocated));
-}
-
-/*
- * cxip_req_buf_replenish() - Replenish RXC request list eager buffers.
- *
- * Caller must hold rxc->rx_lock.
- */
-int cxip_req_buf_replenish(struct cxip_rxc *rxc, bool seq_restart)
-{
-	struct cxip_req_buf *buf;
-	struct dlist_entry *tmp;
-	int bufs_added = 0;
-	int ret = FI_SUCCESS;
-
-	if (rxc->msg_offload)
-		return FI_SUCCESS;
-
-	/* Append any buffers that failed to be previously
-	 * appended, then replenish up to the minimum that
-	 * should be posted.
-	 */
-	dlist_foreach_container_safe(&rxc->free_req_bufs, struct cxip_req_buf,
-				     buf, req_buf_entry, tmp) {
-
-		RXC_DBG(rxc, "Append previous link error req buf entry %p\n",
-			buf);
-
-		/* Link call removes from list */
-		ret = cxip_req_buf_link(buf, !bufs_added);
-		if (ret)
-			RXC_WARN(rxc, "Request append failure %d\n", ret);
-
-		bufs_added++;
-	}
-
-	while ((ofi_atomic_get32(&rxc->req_bufs_linked) <
-		rxc->req_buf_min_posted) &&
-	       (!rxc->req_buf_max_count ||
-	       (ofi_atomic_get32(&rxc->req_bufs_allocated) <
-		rxc->req_buf_max_count))) {
-
-		RXC_DBG(rxc, "Allocate new req buf entry %p\n", buf);
-
-		buf = cxip_req_buf_alloc(rxc);
-		if (!buf) {
-			RXC_WARN(rxc, "Buffer allocation/registration err\n");
-			return -FI_ENOMEM;
-		}
-
-		RXC_DBG(rxc, "Link req buf entry %p\n", buf);
-
-		ret = cxip_req_buf_link(buf, !bufs_added);
-		if (ret) {
-			RXC_WARN(rxc, "Request append failure %d\n", ret);
-			dlist_insert_tail(&buf->req_buf_entry,
-					  &rxc->free_req_bufs);
-			break;
-		}
-		bufs_added++;
-	}
-
-	/* If no buffer appended, check for fatal conditions. */
-	if (!bufs_added) {
-		if (rxc->req_buf_max_count &&
-		    (ofi_atomic_get32(&rxc->req_bufs_allocated) >=
-		     rxc->req_buf_max_count))
-			RXC_FATAL(rxc,
-				  "Request buffer max exceeded: %ld, increase"
-				  " or set FI_CXI_REQ_BUF_MAX_COUNT=0\n",
-				  rxc->req_buf_max_count);
-
-		if (ofi_atomic_get32(&rxc->req_bufs_linked) < 1)
-			RXC_FATAL(rxc, "Request buffer list exhausted\n");
-	}
-
-	RXC_DBG(rxc, "req_bufs_allocated=%u, req_bufs_linked=%u\n",
-		ofi_atomic_get32(&rxc->req_bufs_allocated),
-		ofi_atomic_get32(&rxc->req_bufs_linked));
-
-	return ret;
+	return cxip_ptelist_bufpool_fini(rxc->req_list_bufpool);
 }

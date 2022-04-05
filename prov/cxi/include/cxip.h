@@ -1424,6 +1424,8 @@ struct cxip_rxc {
 
 	/* Unexpected message handling */
 	fastlock_t rx_lock;			// RX message lock
+	struct cxip_ptelist_bufpool *req_list_bufpool;
+
 	ofi_atomic32_t oflow_bufs_submitted;
 	ofi_atomic32_t oflow_bufs_in_use;
 	int oflow_buf_size;
@@ -1433,25 +1435,6 @@ struct cxip_rxc {
 	/* Defer events to wait for both put and put overflow */
 	struct def_event_ht deferred_events;
 
-	/* Order list of request buffers emitted to hardware. */
-	struct dlist_entry active_req_bufs;
-
-	/* List of consumed buffers which cannot be reposted yet since
-	 * unexpected entries have not been matched yet.
-	 */
-	struct dlist_entry consumed_req_bufs;
-
-	/*
-	 * List of available buffers for which an append failed or have
-	 * have been removed but not yet released.
-	 */
-	struct dlist_entry free_req_bufs;
-
-	ofi_atomic32_t req_bufs_linked;
-	ofi_atomic32_t req_bufs_allocated;
-	size_t req_buf_size;
-	size_t req_buf_max_count;
-	size_t req_buf_min_posted;
 	struct dlist_entry fc_drops;
 	struct dlist_entry replay_queue;
 	struct dlist_entry sw_ux_list;
@@ -1500,11 +1483,56 @@ cxip_rxc_copy_to_hmem(struct cxip_rxc *rxc, uint64_t device,
 					size, hmem_iface, true);
 }
 
-/* Request buffer structure. */
-struct cxip_req_buf {
+/* PtlTE buffer pool - Common PtlTE request/overflow list processing.
+ *
+ * Only C_PTL_LIST_REQUEST and C_PTL_LIST_OVERFLOW are supported.
+ */
+struct cxip_ptelist_bufpool_attr {
+	enum c_ptl_list list_type;
+
+	/* Callback to handle PtlTE link error/unlink events */
+	int (*ptelist_cb)(struct cxip_req *req, const union c_event *event);
+	size_t buf_size;
+	size_t min_space_avail;
+	size_t min_posted;
+	size_t max_count;
+};
+
+struct cxip_ptelist_bufpool {
+	struct cxip_ptelist_bufpool_attr attr;
+	struct cxip_rxc *rxc;
+
+	/* Ordered list of buffers emitted to hardware */
+	struct dlist_entry active_bufs;
+
+	/* List of consumed buffers which cannot be reposted yet
+	 * since unexpected entries have not been matched.
+	 */
+	struct dlist_entry consumed_bufs;
+
+	/* List of available buffers for which an append failed or
+	 * they have been removed but not yet released.
+	 */
+	struct dlist_entry free_bufs;
+
+	ofi_atomic32_t bufs_linked;
+	ofi_atomic32_t bufs_allocated;
+};
+
+struct cxip_ptelist_req {
+	/* Pending list of unexpected header entries which could not be placed
+	 * on the RX context unexpected header list due to put events being
+	 * receive out-of-order.
+	 */
+	struct dlist_entry pending_ux_list;
+};
+
+struct cxip_ptelist_buf {
+	struct cxip_ptelist_bufpool *pool;
+
 	/* RX context the request buffer is posted on. */
 	struct cxip_rxc *rxc;
-	struct dlist_entry req_buf_entry;
+	struct dlist_entry buf_entry;
 	struct cxip_req *req;
 
 	/* Memory mapping of req_buf field. */
@@ -1521,29 +1549,49 @@ struct cxip_req_buf {
 	 */
 	size_t cur_offset;
 
-	/* Pending list of unexpected header entries which could not be placed
-	 * on the RX context unexpected header list due to put events being
-	 * receive out-of-order.
-	 */
-	struct dlist_entry pending_ux_list;
+	/* Request list specific control */
+	struct cxip_ptelist_req request;
 
 	/* The number of unexpected headers posted placed on the RX context
 	 * unexpected header list which have not been matched.
 	 */
 	ofi_atomic32_t refcount;
 
-	/* Buffer used to land packets matching on the request list. This field
-	 * must remain at the bottom of this structure.
+	/* Buffer used to land packets.
 	 */
-	char req_buf[0];
+	char data[0];
 };
 
+int cxip_ptelist_bufpool_init(struct cxip_rxc *rxc,
+			      struct cxip_ptelist_bufpool **pool,
+			      struct cxip_ptelist_bufpool_attr *attr);
+void cxip_ptelist_bufpool_fini(struct cxip_ptelist_bufpool *pool);
+int cxip_ptelist_buf_replenish(struct cxip_ptelist_bufpool *pool,
+			       bool seq_restart);
+void cxip_ptelist_buf_link_err(struct cxip_ptelist_buf *buf,
+			       int link_error);
+void cxip_ptelist_buf_unlink(struct cxip_ptelist_buf *buf);
+void cxip_ptelist_buf_put(struct cxip_ptelist_buf *buf, bool repost);
+void cxip_ptelist_buf_get(struct cxip_ptelist_buf *buf);
+void cxip_ptelist_buf_consumed(struct cxip_ptelist_buf *buf);
+
+/*
+ * cxip_req_bufpool_init() - Initialize PtlTE request list buffer management
+ * object.
+ */
+int cxip_req_bufpool_init(struct cxip_rxc *rxc);
+void cxip_req_bufpool_fini(struct cxip_rxc *rxc);
+
+/*
+ * cxip_oflow_bufpool_init() - Initialize PtlTE overflow list buffer management
+ * object.
+ */
+int cxip_oflow_bufpool_init(struct cxip_rxc *rxc);
+void cxip_oflow_bufpool_fini(struct cxip_rxc *rxc);
+
+void _cxip_req_buf_ux_free(struct cxip_ux_send *ux, bool repost);
 void cxip_req_buf_ux_free(struct cxip_ux_send *ux);
-int cxip_req_buf_unlink(struct cxip_req_buf *buf);
-int cxip_req_buf_link(struct cxip_req_buf *buf, bool seq_restart);
-struct cxip_req_buf *cxip_req_buf_alloc(struct cxip_rxc *rxc);
-void cxip_req_buf_free(struct cxip_req_buf *buf);
-int cxip_req_buf_replenish(struct cxip_rxc *rxc, bool seq_restart);
+
 
 #define CXIP_RDZV_IDS	(1 << CXIP_RDZV_ID_WIDTH)
 #define CXIP_EAGER_RDZV_IDS (1 << CXIP_EAGER_RDZV_ID_WIDTH)

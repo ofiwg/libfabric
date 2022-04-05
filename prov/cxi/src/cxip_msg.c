@@ -847,7 +847,7 @@ static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
 			uint32_t mrecv_len, bool remove_recv_entry)
 {
 	struct cxip_oflow_buf *oflow_buf;
-	struct cxip_req_buf *req_buf;
+	struct cxip_ptelist_buf *req_buf;
 	void *oflow_va;
 	size_t oflow_bytes;
 	union cxip_match_bits mb;
@@ -1581,6 +1581,16 @@ void cxip_rxc_oflow_fini(struct cxip_rxc *rxc)
 	} while (ofi_atomic_get32(&rxc->oflow_bufs_submitted));
 
 	assert(ofi_atomic_get32(&rxc->oflow_bufs_in_use) == 0);
+}
+
+int cxip_oflow_bufpool_init(struct cxip_rxc *rxc)
+{
+	return cxip_rxc_oflow_init(rxc);
+}
+
+void cxip_oflow_bufpool_fini(struct cxip_rxc *rxc)
+{
+	return cxip_rxc_oflow_fini(rxc);
 }
 
 /*
@@ -2364,7 +2374,8 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 		 */
 		if (rxc->prev_state == RXC_ENABLED_SOFTWARE &&
 		    rxc->fc_reason != C_SC_FC_EQ_FULL) {
-			ret = cxip_req_buf_replenish(rxc, true);
+			ret = cxip_ptelist_buf_replenish(rxc->req_list_bufpool,
+							 true);
 			if (ret)
 				RXC_WARN(rxc, "PtlTE %d replenish error: %d\n",
 					 rxc->rx_pte->pte->ptn, ret);
@@ -3205,7 +3216,7 @@ static int cxip_recv_sw_matcher(struct cxip_rxc *rxc, struct cxip_req *req,
  */
 int cxip_recv_ux_sw_matcher(struct cxip_ux_send *ux)
 {
-	struct cxip_req_buf *rbuf = ux->req->req_ctx;
+	struct cxip_ptelist_buf *rbuf = ux->req->req_ctx;
 	struct cxip_rxc *rxc = rbuf->rxc;
 	struct cxip_req *req;
 	struct dlist_entry *tmp;
