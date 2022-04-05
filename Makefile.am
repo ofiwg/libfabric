@@ -126,6 +126,7 @@ common_link_srcs =				\
 	prov/linkx/src/linkx_domain.c \
 	prov/linkx/src/linkx_ep.c \
 	prov/linkx/src/linkx_peers.c \
+	prov/linkx/src/linkx_cq.c \
 	prov/linkx/src/linkx_ops.c
 
 # ensure dl-built providers link back to libfabric

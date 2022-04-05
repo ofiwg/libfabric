@@ -144,6 +144,45 @@ static int lnx_ep_control(struct fid *fid, int command, void *arg)
 	return rc;
 }
 
+int lnx_cq_bind_core_prov(struct fid *fid, struct fid *bfid, uint64_t flags)
+{
+	int rc, i;
+	struct lnx_ep *lep;
+	/* LINKx CQ */
+	struct util_cq *cq;
+	struct local_prov_ep *ep;
+	struct local_prov *entry;
+
+	lep = container_of(fid, struct lnx_ep, le_ep.ep_fid.fid);
+	cq = container_of(bfid, struct util_cq, cq_fid.fid);
+
+	rc = ofi_ep_bind_cq(&lep->le_ep, cq, flags);
+	if (rc)
+		return rc;
+
+	rc = fid_list_insert(&cq->ep_list,
+						 &cq->ep_list_lock,
+						 fid);
+	if (rc)
+		return rc;
+
+	/* bind the core providers to their respective CQs */
+	dlist_foreach_container(&local_prov_table, struct local_prov,
+							entry, lpv_entry) {
+		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+			ep = entry->lpv_prov_eps[i];
+			if (!ep)
+				continue;
+
+			rc = fi_ep_bind(ep->lpe_ep, &ep->lpe_cq.lpc_core_cq->fid, flags);
+			if (rc)
+				return rc;
+		}
+	}
+
+	return 0;
+}
+
 static int lnx_ep_bind_core_prov(uint64_t flags)
 {
 	struct local_prov *entry;
@@ -188,7 +227,7 @@ int lnx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	case FI_CLASS_CQ:
-		/* TODO */
+		rc = lnx_cq_bind_core_prov(fid, bfid, flags);
 		break;
 
 	case FI_CLASS_CNTR:

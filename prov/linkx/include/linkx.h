@@ -35,6 +35,21 @@
 
 #define LNX_MAX_LOCAL_EPS 16
 
+/*
+ * . Each endpoint LINKx manages will have an instance of this structure.
+ * . The structure has a pointer to the general shared cq.
+ *     . All events are written into that CQ.
+ * . The structure has a pointer to the core cq which the core provider
+ *   returns
+ * . The structure has an instance of the peer_cq which is unique for
+ *   handling communication with the constituent endpoint.
+ */
+struct lnx_peer_cq {
+	struct util_cq *lpc_shared_cq;
+	struct fid_peer_cq lpc_cq;
+	struct fid_cq *lpc_core_cq;
+};
+
 struct local_prov_ep {
 	bool lpe_local;
 	char lpe_fabric_name[FI_NAME_MAX];
@@ -42,6 +57,7 @@ struct local_prov_ep {
 	struct fid_domain *lpe_domain;
 	struct fid_ep *lpe_ep;
 	struct fid_av *lpe_av;
+	struct lnx_peer_cq lpe_cq;
 	struct fi_info *lpe_fi_info;
 };
 
@@ -159,18 +175,16 @@ int lnx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 				struct fid_av **av, void *context);
 
-static inline
 int lnx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-				struct fid_cq **cq, void *context)
-{
-	return -FI_EOPNOTSUPP;
-}
+				struct fid_cq **cq, void *context);
 
 int lnx_endpoint(struct fid_domain *domain, struct fi_info *info,
 				 struct fid_ep **ep, void *context);
 
 int lnx_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 					struct fid_ep **ep, void *context);
+
+int lnx_cq2ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
 
 static inline
 int lnx_select_send_pathway(struct lnx_peer *lp, struct fid_ep **cep,
