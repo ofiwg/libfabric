@@ -36,6 +36,7 @@
 
 #include <stdbool.h>
 #include <rdma/fabric.h>
+#include <rdma/fi_eq.h>
 
 
 #ifdef __cplusplus
@@ -121,6 +122,84 @@ struct fid_mem_monitor {
 	struct fid fid;
 	struct fi_ops_mem_monitor *export_ops;
 	struct fi_ops_mem_notify *import_ops;
+};
+
+
+/* Peer provider CQ support. */
+struct fid_peer_cq;
+
+struct fi_ops_cq_owner {
+	size_t	size;
+	ssize_t (*write)(struct fid_peer_cq *cq, void *context, uint64_t flags,
+			size_t len, void *buf, uint64_t data, uint64_t tag,
+			fi_addr_t src);
+	ssize_t	(*writeerr)(struct fid_peer_cq *cq,
+			const struct fi_cq_err_entry *err_entry);
+};
+
+struct fi_ops_cq_peer {
+	size_t	size;
+	void	(*progress)(struct fid_peer_cq *cq);
+
+};
+
+struct fid_peer_cq {
+	struct fid fid;
+	struct fi_ops_cq_owner *owner_ops;
+	struct fi_ops_cq_peer *peer_ops;
+};
+
+struct fi_peer_cq_context {
+	size_t size;
+	struct fid_peer_cq *cq;
+};
+
+
+/* Peer shared rx context */
+struct fid_peer_srx;
+
+/* Castable to dlist_entry */
+struct fi_peer_rx_entry {
+	struct fi_peer_rx_entry *next;
+	struct fi_peer_rx_entry *prev;
+	fi_addr_t addr;
+	size_t size;
+	uint64_t tag;
+	void *context;
+	size_t count;
+	void **desc;
+	struct iovec iov[];
+};
+
+struct fi_ops_srx_owner {
+	size_t	size;
+	int	(*get_msg_entry)(struct fid_peer_srx *srx,
+			struct fi_peer_rx_entry *entry);
+	int	(*get_tag_entry)(struct fid_peer_srx *srx,
+			struct fi_peer_rx_entry *entry);
+};
+
+struct fi_ops_srx_peer {
+	size_t	size;
+	int	(*start_msg)(struct fid_peer_srx *srx,
+			struct fi_peer_rx_entry *entry);
+	int	(*start_tag)(struct fid_peer_srx *srx,
+			struct fi_peer_rx_entry *entry);
+	int	(*discard_msg)(struct fid_peer_srx *srx,
+			struct fi_peer_rx_entry *entry);
+	int	(*discard_tag)(struct fid_peer_srx *srx,
+			struct fi_peer_rx_entry *entry);
+};
+
+struct fid_peer_srx {
+	struct fid fid;
+	struct fi_ops_srx_owner *owner_ops;
+	struct fi_ops_srx_peer *peer_ops;
+};
+
+struct fi_peer_srx_context {
+	size_t size;
+	struct fid_peer_srx *srx;
 };
 
 
