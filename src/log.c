@@ -41,6 +41,7 @@
 #include <rdma/fi_ext.h>
 
 #include "ofi.h"
+#include "ofi_enosys.h"
 #include "ofi_util.h"
 
 
@@ -84,6 +85,7 @@ enum {
 static int log_interval = 2000;
 uint64_t log_mask;
 struct fi_filter prov_log_filter;
+extern struct ofi_common_locks common_locks;
 
 static pid_t pid;
 
@@ -167,9 +169,83 @@ static struct fi_ops_log ofi_import_log_ops = {
 	.log = ofi_log,
 };
 
+static int ofi_close_logging_fid(struct fid *fid)
+{
+	return 0;
+}
+
+static int ofi_bind_logging_fid(struct fid *fid, struct fid *bfid,
+				uint64_t flags);
+
+static struct fi_ops ofi_logging_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = ofi_close_logging_fid,
+	.bind = ofi_bind_logging_fid,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+	.tostr = fi_no_tostr,
+	.ops_set = fi_no_ops_set,
+};
+
 static struct fid_logging log_fid = {
+	.fid = {
+		.fclass = FI_CLASS_LOG,
+		.ops = &ofi_logging_ops,
+	},
 	.ops = &ofi_import_log_ops,
 };
+
+static int ofi_close_import(struct fid *fid)
+{
+	/* Reset logging ops to default */
+	pthread_mutex_lock(&common_locks.ini_lock);
+	log_fid.ops->enabled = ofi_log_enabled;
+	log_fid.ops->ready = ofi_log_ready;
+	log_fid.ops->log = ofi_log;
+	pthread_mutex_unlock(&common_locks.ini_lock);
+	return 0;
+}
+
+static struct fi_ops impfid_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = ofi_close_import,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = fi_no_ops_open,
+	.tostr = fi_no_tostr,
+	.ops_set = fi_no_ops_set,
+};
+
+static int ofi_logging_import(struct fid *fid)
+{
+	struct fid_logging *impfid;
+
+	if (fid->fclass != FI_CLASS_LOG)
+		return -FI_EINVAL;
+
+	impfid = container_of(fid, struct fid_logging, fid);
+	if (impfid->ops->size < sizeof(struct fi_ops_log))
+		return -FI_EINVAL;
+
+	if (impfid->ops->enabled)
+		log_fid.ops->enabled = impfid->ops->enabled;
+	if (impfid->ops->ready)
+		log_fid.ops->ready = impfid->ops->ready;
+	if (impfid->ops->log)
+		log_fid.ops->log = impfid->ops->log;
+
+	impfid->fid.ops = &impfid_ops;
+	return 0;
+}
+
+static int ofi_bind_logging_fid(struct fid *fid, struct fid *bfid,
+				uint64_t flags)
+{
+	if (flags || bfid->fclass != FI_CLASS_LOG)
+		return -FI_EINVAL;
+
+	return ofi_logging_import(bfid);
+}
 
 static int ofi_log_ready(const struct fi_provider *prov,
 			 enum fi_log_level level, enum fi_log_subsys subsys,
@@ -186,6 +262,35 @@ static int ofi_log_ready(const struct fi_provider *prov,
     }
 
     return false;
+}
+
+int ofi_open_log(uint32_t version, void *attr, size_t attr_len,
+		 uint64_t flags, struct fid **fid, void *context)
+{
+	int ret;
+
+	if (FI_VERSION_LT(version, FI_VERSION(1, 13)) || attr_len)
+		return -FI_EINVAL;
+
+	if (flags)
+		return -FI_EBADFLAGS;
+
+	/* The logging subsystem can be opened once only! */
+	pthread_mutex_lock(&common_locks.ini_lock);
+	if (log_fid.ops->enabled != ofi_log_enabled ||
+	    log_fid.ops->ready != ofi_log_ready ||
+	    log_fid.ops->log != ofi_log) {
+		ret = -FI_EALREADY;
+		goto unlock;
+	}
+
+	log_fid.fid.context = context;
+	*fid = &log_fid.fid;
+	ret = 0;
+
+unlock:
+	pthread_mutex_unlock(&common_locks.ini_lock);
+	return ret;
 }
 
 void fi_log_fini(void)

@@ -221,6 +221,31 @@ struct fid_logging {
 	struct fi_ops_log   *ops;
 };
 
+static inline int fi_import(uint32_t version, const char *name, void *attr,
+			    size_t attr_len, uint64_t flags, struct fid *fid,
+			    void *context)
+{
+	struct fid *open_fid;
+	int ret;
+
+	ret = fi_open(version, name, attr, attr_len, flags, &open_fid, context);
+	if (ret != FI_SUCCESS)
+	    return ret;
+
+	ret = fi_import_fid(open_fid, fid, flags);
+	fi_close(open_fid);
+	return ret;
+}
+
+static inline int fi_import_log(uint32_t version, uint64_t flags,
+				struct fid_logging *log_fid)
+{
+	log_fid->fid.fclass = FI_CLASS_LOG;
+	log_fid->ops->size = sizeof(struct fi_ops_log);
+
+	return fi_import(version, "logging", NULL, 0, flags, &log_fid->fid, log_fid);
+}
+
 #ifdef __cplusplus
 }
 #endif
