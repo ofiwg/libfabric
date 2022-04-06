@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2015-2016, Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2015, Intel Corp., Inc.  All rights reserved.
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,8 +38,10 @@
 #include <stdlib.h>
 
 #include <rdma/fi_errno.h>
+#include <rdma/fi_ext.h>
 
 #include "ofi.h"
+#include "ofi_util.h"
 
 
 static const char * const log_subsys[] = {
@@ -133,6 +136,58 @@ void fi_log_init(void)
 	pid = getpid();
 }
 
+static int ofi_log_enabled(const struct fi_provider *prov,
+			   enum fi_log_level level, enum fi_log_subsys subsys,
+			   uint64_t flags)
+{
+	int prov_filtered = (flags & FI_LOG_PROV_FILTERED);
+
+	return ((FI_LOG_TAG(prov_filtered, level, subsys) & log_mask) ==
+		FI_LOG_TAG(prov_filtered, level, subsys));
+}
+
+static void ofi_log(const struct fi_provider *prov, enum fi_log_level level,
+		    enum fi_log_subsys subsys, const char *func, int line,
+		    const char *msg)
+{
+	fprintf(stderr, "%s:%d:%ld:%s:%s:%s:%s():%d<%s> %s",
+		PACKAGE, pid, (unsigned long) time(NULL), log_prefix,
+		prov->name, log_subsys[subsys], func, line,
+		log_levels[level], msg);
+}
+
+static int ofi_log_ready(const struct fi_provider *prov,
+			 enum fi_log_level level, enum fi_log_subsys subsys,
+			 uint64_t flags, uint64_t *showtime);
+
+static struct fi_ops_log ofi_import_log_ops = {
+	.size = sizeof(struct fi_ops),
+	.enabled = ofi_log_enabled,
+	.ready = ofi_log_ready,
+	.log = ofi_log,
+};
+
+static struct fid_logging log_fid = {
+	.ops = &ofi_import_log_ops,
+};
+
+static int ofi_log_ready(const struct fi_provider *prov,
+			 enum fi_log_level level, enum fi_log_subsys subsys,
+			 uint64_t flags, uint64_t *showtime)
+{
+    uint64_t cur;
+
+    if (log_fid.ops->enabled(prov, level, subsys, flags)) {
+	    cur = ofi_gettime_ms();
+	    if (cur >= *showtime) {
+		    *showtime = cur + (uint64_t) log_interval;
+		    return true;
+	    }
+    }
+
+    return false;
+}
+
 void fi_log_fini(void)
 {
 	ofi_free_filter(&prov_log_filter);
@@ -144,10 +199,13 @@ int DEFAULT_SYMVER_PRE(fi_log_enabled)(const struct fi_provider *prov,
 		enum fi_log_subsys subsys)
 {
 	struct fi_prov_context *ctx;
+	uint64_t flags = 0;
 
 	ctx = (struct fi_prov_context *) &prov->context;
-	return ((FI_LOG_TAG(ctx->disable_logging, level, subsys) & log_mask) ==
-		FI_LOG_TAG(ctx->disable_logging, level, subsys));
+	if (ctx->disable_logging)
+		flags |= FI_LOG_PROV_FILTERED;
+
+	return log_fid.ops->enabled(prov, level, subsys, flags);
 }
 DEFAULT_SYMVER(fi_log_enabled_, fi_log_enabled, FABRIC_1.0);
 
@@ -156,16 +214,14 @@ int DEFAULT_SYMVER_PRE(fi_log_ready)(const struct fi_provider *prov,
 		enum fi_log_level level, enum fi_log_subsys subsys,
 		uint64_t *showtime)
 {
-	uint64_t cur;
+	struct fi_prov_context *ctx;
+	uint64_t flags = 0;
 
-	if (fi_log_enabled(prov, level, subsys)) {
-		cur = ofi_gettime_ms();
-		if (cur >= *showtime) {
-			*showtime = cur + (uint64_t) log_interval;
-			return true;
-		}
-	}
-	return false;
+	ctx = (struct fi_prov_context *) &prov->context;
+	if (ctx->disable_logging)
+		flags |= FI_LOG_PROV_FILTERED;
+
+	return log_fid.ops->ready(prov, level, subsys, flags, showtime);
 }
 CURRENT_SYMVER(fi_log_ready_, fi_log_ready);
 
@@ -174,20 +230,14 @@ void DEFAULT_SYMVER_PRE(fi_log)(const struct fi_provider *prov, enum fi_log_leve
 		enum fi_log_subsys subsys, const char *func, int line,
 		const char *fmt, ...)
 {
-	char buf[1024];
-	int size;
-
+	char msg[1024];
+	int size = 0;
 	va_list vargs;
 
-	size = snprintf(buf, sizeof(buf), "%s:%d:%ld:%s:%s:%s:%s():%d<%s> ",
-			PACKAGE, pid, (unsigned long) time(NULL), log_prefix,
-			prov->name, log_subsys[subsys], func, line,
-			log_levels[level]);
-
 	va_start(vargs, fmt);
-	vsnprintf(buf + size, sizeof(buf) - size, fmt, vargs);
+	vsnprintf(msg + size, sizeof(msg) - size, fmt, vargs);
 	va_end(vargs);
 
-	fprintf(stderr, "%s", buf);
+	log_fid.ops->log(prov, level, subsys, func, line, msg);
 }
 DEFAULT_SYMVER(fi_log_, fi_log, FABRIC_1.0);

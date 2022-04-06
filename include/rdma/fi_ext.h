@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2021 Intel Corporation. All rights reserved.
  * Copyright (c) 2021 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,6 +38,8 @@
 #include <stdbool.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_eq.h>
+#include <rdma/providers/fi_prov.h>
+#include <rdma/providers/fi_log.h>
 
 
 #ifdef __cplusplus
@@ -195,6 +198,28 @@ struct fi_peer_srx_context {
 	struct fid_peer_srx *srx;
 };
 
+/*
+ * System logging import extension:
+ * To use, open logging fid and import.
+ */
+
+#define FI_LOG_PROV_FILTERED (1ULL << 0) /* Filter provider */
+
+struct fi_ops_log {
+	size_t size;
+	int (*enabled)(const struct fi_provider *prov, enum fi_log_level level,
+		       enum fi_log_subsys subsys, uint64_t flags);
+	int (*ready)(const struct fi_provider *prov, enum fi_log_level level,
+		     enum fi_log_subsys subsys, uint64_t flags, uint64_t *showtime);
+	void (*log)(const struct fi_provider *prov, enum fi_log_level level,
+		    enum fi_log_subsys subsys, const char *func, int line,
+		    const char *msg);
+};
+
+struct fid_logging {
+	struct fid          fid;
+	struct fi_ops_log   *ops;
+};
 
 #ifdef __cplusplus
 }
