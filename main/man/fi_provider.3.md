@@ -18,9 +18,6 @@ fi_log_enabled / fi_log_ready / fi_log
 fi_open / fi_close
 : Open a named library object
 
-fi_export_fid / fi_import_fid
-: Share a fabric object between different providers or resources
-
 # SYNOPSIS
 
 ```c
@@ -68,16 +65,6 @@ int fi_open(uint32_t version, const char *name, void *attr,
 	size_t attr_len, uint64_t flags, struct fid **fid, void *context);
 
 int fi_close(struct fid *fid);
-```
-
-```c
-#include <rdma/fabric.h>
-#include <rdma/fi_ext.h>
-
-int fi_export_fid(struct fid *fid, uint64_t flags,
-	struct fid **expfid, void *context);
-
-int fi_import_fid(struct fid *fid, struct fid *expfid, uint64_t flags);
 ```
 
 # ARGUMENTS
@@ -184,25 +171,6 @@ of the service or resource to which they correspond.
   used by the different providers.  Additional information on the cache
   is available in the `fi_mr(3)` man page.
 
-## fi_export_fid / fi_import_fid
-
-Generally, fabric objects are allocated and managed entirely by a single
-provider.  Typically only the application facing software interfaces of
-a fabric object are defined, for example, the message or tagged operations
-of an endpoint.  The fi_export_fid and fi_import_fid calls provide a
-a mechanism by which provider facing APIs may be accessed.  This allows
-the creation of fid objects that are shareable between providers, or
-for library plug-in services.  The ability to export a shareable object
-is object and provider implementation dependent.
-
-Shareable fids typically contain at least 3 main components: a
-base fid, a set of exporter defined ops, and a set of importer defined
-ops.
-
-# NOTES
-
-TODO
-
 # PROVIDER INTERFACE
 
 The fi_provider structure defines entry points for the libfabric core
@@ -237,16 +205,11 @@ requested api version for the application to use the provider.  It is a
 provider's responsibility to support older versions of the api if it
 wishes to supports legacy applications.  For integrated providers
 
-## TODO
-
 # RETURN VALUE
 
 Returns FI_SUCCESS on success. On error, a negative value corresponding to
 fabric errno is returned. Fabric errno values are defined in
 `rdma/fi_errno.h`.
-
-# ERRORS
-
 
 # SEE ALSO
 
