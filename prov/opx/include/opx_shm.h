@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2016-2018 Intel Corporation. All rights reserved.
- * Copyright (c) 2021 Cornelis Networks.
+ * Copyright (c) 2022 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -67,8 +67,9 @@
 #define opx_shm_x86_pause()  __asm__ __volatile__ ( "pause"  )
 
 struct opx_shm_connection {
-	void 				*segment_ptr;
-	size_t				 segment_size;
+	void	*segment_ptr;
+	size_t	segment_size;
+	bool	inuse;
 };
 
 struct opx_shm_tx {
@@ -79,6 +80,11 @@ struct opx_shm_tx {
 
 };
 
+struct opx_shm_resynch {
+	uint64_t	counter;
+	bool		completed;
+};
+
 struct opx_shm_rx {
 	struct opx_shm_fifo	*fifo;
 	void				*segment_ptr;
@@ -86,6 +92,7 @@ struct opx_shm_rx {
 	char				 segment_key[OPX_SHM_SEGMENT_NAME_MAX_LENGTH];
 	struct fi_provider	*prov;
 	struct opx_shm_rx   *next; // for signal handler
+	struct opx_shm_resynch resynch_connection[OPX_SHM_MAX_CONN_NUM];
 };
 
 extern struct opx_shm_tx *shm_tx_head;
@@ -120,6 +127,11 @@ ssize_t opx_shm_rx_init (struct opx_shm_rx *rx,
 	rx->segment_ptr = NULL;
 	rx->segment_size = 0;
 	rx->prov = prov;
+
+	for (int i = 0; i < OPX_SHM_MAX_CONN_NUM; ++i) {
+		rx->resynch_connection[i].completed = false;
+		rx->resynch_connection[i].counter = 0;
+	}
 
 	memset(rx->segment_key, 0, OPX_SHM_SEGMENT_NAME_MAX_LENGTH);
 
@@ -216,6 +228,7 @@ ssize_t opx_shm_tx_init (struct opx_shm_tx *tx,
 	for (i = 0; i < OPX_SHM_MAX_CONN_NUM; ++i) {
 		tx->connection[i].segment_ptr = NULL;
 		tx->connection[i].segment_size = 0;
+		tx->connection[i].inuse = false;
 		tx->fifo[i] = NULL;
 	}
 
@@ -267,6 +280,7 @@ ssize_t opx_shm_tx_connect (struct opx_shm_tx *tx,
 
 	tx->connection[rx_id].segment_ptr = segment_ptr;
 	tx->connection[rx_id].segment_size = segment_size;
+	tx->connection[rx_id].inuse = false;
 	tx->fifo[rx_id] = (struct opx_shm_fifo *)(((uintptr_t)segment_ptr + 64) & (~0x03Full));
 
 	FI_LOG(tx->prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
@@ -284,6 +298,22 @@ error_return:
 }
 
 static inline
+ssize_t opx_shm_tx_close (struct opx_shm_tx *tx,
+		const unsigned rx_id)
+{
+	if (tx->connection[rx_id].segment_ptr != NULL) {
+		munmap(tx->connection[rx_id].segment_ptr,
+			tx->connection[rx_id].segment_size);
+		tx->connection[rx_id].segment_ptr = NULL;
+		tx->connection[rx_id].segment_size = 0;
+		tx->fifo[rx_id] = NULL;
+		tx->connection[rx_id].inuse = false;
+	}
+
+	return FI_SUCCESS;
+}
+
+static inline
 ssize_t opx_shm_tx_fini (struct opx_shm_tx *tx)
 {
 	unsigned i = 0;
@@ -294,6 +324,7 @@ ssize_t opx_shm_tx_fini (struct opx_shm_tx *tx)
 				tx->connection[i].segment_size);
 			tx->connection[i].segment_ptr = NULL;
 			tx->connection[i].segment_size = 0;
+			tx->connection[i].inuse = false;
 			tx->fifo[i] = NULL;
 		}
 	}
@@ -328,6 +359,9 @@ void * opx_shm_tx_next (struct opx_shm_tx *tx, unsigned peer, uint64_t *pos)
 		}
 
     }
+
+	tx->connection[peer].inuse = true;
+
 	return (void*) packet->data;
 }
 
