@@ -399,6 +399,41 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode (struct fid_ep *ep,
 	return FI_SUCCESS;
 }
 
+/* This mask should always be set to 1 less than a power of 2,
+ * i.e. all lower bits on */
+#define OPX_RELIABILITY_HANDSHAKE_INIT_THROTTLE_MASK 0xFFFull
+
+void opx_reliability_handshake_init(struct fid_ep *ep,
+				union fi_opx_reliability_service_flow_key key,
+				const uint64_t target_reliability_rx)
+{
+	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+
+	void * itr = fi_opx_rbt_find(opx_ep->reliability->service.handshake_init, (void*)key.value);
+	if (OFI_UNLIKELY(!itr)) {
+		/* Reliability handshake not yet started, initiate it */
+		fi_opx_hfi1_tx_reliability_inject_ud_init(ep,
+							key.value, key.dlid,
+							target_reliability_rx,
+							FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT);
+
+		uint64_t value = 1;
+		rbtInsert(opx_ep->reliability->service.handshake_init, (void*)key.value, (void*)value);
+		return;
+	}
+
+	/* Reliability handshake has started, but not yet completed. Only send
+	 * an init packet every so often, so as not to flood the receiver. */
+	uint64_t *count_ptr = (uint64_t *) fi_opx_rbt_value_ptr(opx_ep->reliability->service.handshake_init, itr);
+	if (!((*count_ptr) & OPX_RELIABILITY_HANDSHAKE_INIT_THROTTLE_MASK)) {
+		fi_opx_hfi1_tx_reliability_inject_ud_init(ep,
+							key.value, key.dlid,
+							target_reliability_rx,
+							FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT);
+	}
+
+	(*count_ptr)++;
+}
 
 ssize_t fi_opx_hfi1_tx_reliability_inject_ud_init(struct fid_ep *ep,
 						const uint64_t key,
@@ -1782,6 +1817,7 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 
 	service->tx.flow = rbtNew(fi_opx_reliability_compare);
 	service->rx.flow = rbtNew(fi_opx_reliability_compare);
+	service->handshake_init = rbtNew(fi_opx_reliability_compare);
 
 	char * env;
 
