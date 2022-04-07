@@ -52,6 +52,11 @@ enum ofi_reliability_kind {
 	OFI_RELIABILITY_KIND_UNSET,
 };
 
+enum ofi_reliability_app_kind {
+	OFI_RELIABILITY_APP_KIND_MPI = 0,
+	OFI_RELIABILITY_APP_KIND_DAOS
+};
+
 /* #define SKIP_RELIABILITY_PROTOCOL_RX */
 /* #define SKIP_RELIABILITY_PROTOCOL_TX */
 /* #define OPX_RELIABILITY_DEBUG */
@@ -202,6 +207,15 @@ struct fi_opx_reliability_tx_replay {
 	uint64_t					payload[(FI_OPX_HFI1_PACKET_MTU>>3)+8];
 
 } __attribute__((__aligned__(64)));
+
+
+struct fi_opx_reliability_resynch_flow {
+	bool client_ep;
+	uint64_t resynch_counter;
+	union fi_opx_reliability_service_flow_key key;
+	/* client related fields */
+	bool remote_ep_resynch_completed;
+};
 
 // Begin rbtree implementation
 // Import and inline data structures from the red-black tree implementation
@@ -417,8 +431,10 @@ struct fi_opx_reliability_client_state {
 	/* -- not critical; only for debug, init/fini, etc. -- */
 	uint16_t					drop_count;
 	uint16_t					drop_mask;
-	enum ofi_reliability_kind			reliability_kind;
+	enum ofi_reliability_kind	reliability_kind;
 	// 118 bytes
+	RbtHandle	flow_rbtree_resynch;
+	// 126 bytes
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 
 void fi_opx_reliability_client_init (struct fi_opx_reliability_client_state * state,
@@ -478,7 +494,13 @@ uint16_t fi_opx_reliability_rx_drop_packet (struct fi_opx_reliability_client_sta
 void dump_ping_counts();
 #endif
 
-ssize_t fi_opx_hfi1_tx_reliability_inject_init(struct fid_ep *ep,
+ssize_t fi_opx_hfi1_tx_reliability_inject_ud_init(struct fid_ep *ep,
+						const uint64_t key,
+						const uint64_t dlid,
+						const uint64_t reliability_rx,
+						const uint64_t opcode);
+
+ssize_t fi_opx_hfi1_tx_reliability_inject_ud_resynch(struct fid_ep *ep,
 						const uint64_t key,
 						const uint64_t dlid,
 						const uint64_t reliability_rx,
@@ -527,7 +549,7 @@ void fi_opx_reliability_handle_ud_init(struct fid_ep *ep,
 		fi_opx_reliability_create_rx_flow(state, key.value, origin_rx);
 	}
 
-	fi_opx_hfi1_tx_reliability_inject_init(ep, key.value, key.slid, origin_rx, FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK);
+	fi_opx_hfi1_tx_reliability_inject_ud_init(ep, key.value, key.slid, origin_rx, FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK);
 }
 
 __OPX_FORCE_INLINE__
@@ -614,6 +636,14 @@ void fi_opx_hfi1_rx_reliability_send_pre_acks(struct fid_ep *ep, const uint64_t 
 					      const union fi_opx_hfi1_packet_hdr *const hdr,
 					      const uint8_t origin_rx);
 
+void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
+		struct fi_opx_reliability_service * service,
+		const union fi_opx_hfi1_packet_hdr *const hdr);
+
+void fi_opx_hfi1_rx_reliability_ack_resynch (struct fid_ep *ep,
+		struct fi_opx_reliability_service * service,
+		const union fi_opx_hfi1_packet_hdr *const hdr);
+
 __OPX_FORCE_INLINE__
 int32_t fi_opx_reliability_tx_max_outstanding () {
 	// Eager buffer size is 32*262144
@@ -697,7 +727,7 @@ int32_t fi_opx_reliability_tx_next_psn (struct fid_ep *ep,
 		/* We've never sent to this receiver, so initiate a reliability handshake
 		   with them. Once they create the receive flow on their end, and we receive
 		   their ack, we'll create the flow on our end and be able to send. */
-		fi_opx_hfi1_tx_reliability_inject_init(ep,
+		fi_opx_hfi1_tx_reliability_inject_ud_init(ep,
 					key.value, key.dlid, target_reliability_rx,
 					FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT);
 		return -1;
@@ -838,5 +868,9 @@ void fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service * s
 
 
 void fi_opx_hfi_rx_reliablity_process_requests(struct fid_ep *ep, int max_to_send);
+
+ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep,
+	union fi_opx_addr dest_addr,
+	const uint64_t caps);
 
 #endif /* _FI_PROV_OPX_RELIABILITY_H_ */

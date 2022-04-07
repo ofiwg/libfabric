@@ -108,6 +108,15 @@ enum ofi_reliability_kind fi_opx_select_reliability(struct fi_opx_ep *opx_ep) {
 }
 
 
+__OPX_FORCE_INLINE__
+enum ofi_reliability_app_kind fi_opx_select_app_reliability(struct fi_opx_ep *opx_ep) {
+	return ((opx_ep->common_info && opx_ep->common_info->src_addr &&
+		((union fi_opx_addr *)(opx_ep->common_info->src_addr))->hfi1_unit != opx_default_addr.hfi1_unit) ?
+		OFI_RELIABILITY_APP_KIND_DAOS :
+		OFI_RELIABILITY_APP_KIND_MPI);
+}
+
+
 static int fi_opx_close_stx_nofree(struct fi_opx_stx *opx_stx)
 {
 	int ret;
@@ -393,7 +402,8 @@ static int fi_opx_close_ep(fid_t fid)
 		union fi_opx_timer_stamp * timestamp = &service->tx.timestamp;
 		union fi_opx_timer_stamp start;
 		uint64_t compare = fi_opx_timer_now(&start, timer);
-		uint64_t next = fi_opx_timer_next_event_usec(timer, &start, 1000000);
+		uint64_t next =
+			fi_opx_timer_next_event_usec(timer, &start, FI_OPX_TIMER_NEXT_EVENT_USEC_DEFAULT);
 
 		while ((compare < next) && fi_opx_reliability_client_active(&opx_ep->reliability->state)) {
 			if (OFI_UNLIKELY(compare > service->usec_next)) {
@@ -969,6 +979,13 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 													 opx_ep->hfi->info.rxe.id,		/* rx */
 													 opx_ep->hfi->send_ctxt,		/* tx */
 													 fi_opx_ep_rx_reliability_process_packet);
+			}
+
+			if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD &&
+				fi_opx_select_app_reliability(opx_ep) == OFI_RELIABILITY_APP_KIND_DAOS) {
+				opx_ep->do_resynch_remote_ep = true;
+			} else {
+				opx_ep->do_resynch_remote_ep = false;
 			}
 
 			// Allocate both the tx and the rx side of the endpoint

@@ -35,6 +35,8 @@
 
 #include <time.h>
 
+#define FI_OPX_TIMER_NEXT_EVENT_USEC_DEFAULT	1000000
+
 union fi_opx_timer_state {
 	struct {
 		uint32_t picos_per_cycle;
