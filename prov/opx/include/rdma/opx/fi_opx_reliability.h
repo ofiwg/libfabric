@@ -150,9 +150,12 @@ struct fi_opx_reliability_service {
 
 	/* == CACHE LINE == */
 	int				is_backoff_enabled;
-	enum ofi_reliability_kind	reliability_kind;
+	enum ofi_reliability_kind	reliability_kind;	/* 4 bytes */
 	uint8_t				fifo_max;
 	uint8_t				hfi1_max;
+	uint16_t			unused[3];
+	RbtHandle			handshake_init;		/*  1 qw  =   8 bytes */
+	/* 40 bytes left in cacheline */
 
 } __attribute__((__aligned__(64))) __attribute__((__packed__));
 
@@ -644,6 +647,10 @@ void fi_opx_hfi1_rx_reliability_ack_resynch (struct fid_ep *ep,
 		struct fi_opx_reliability_service * service,
 		const union fi_opx_hfi1_packet_hdr *const hdr);
 
+void opx_reliability_handshake_init(struct fid_ep *ep,
+				    union fi_opx_reliability_service_flow_key key,
+				    const uint64_t target_reliability_rx);
+
 __OPX_FORCE_INLINE__
 int32_t fi_opx_reliability_tx_max_outstanding () {
 	// Eager buffer size is 32*262144
@@ -695,10 +702,7 @@ bool opx_reliability_ready(struct fid_ep *ep,
 	void * itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void*)key.value);
 	if (OFI_UNLIKELY(!itr)) {
 		/* Reliability handshake is incomplete, initiate it */
-		fi_opx_hfi1_tx_reliability_inject_init(ep,
-					key.value, key.dlid,
-					target_reliability_rx,
-					FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT);
+		opx_reliability_handshake_init(ep, key, target_reliability_rx);
 		return false;
 	}
 
@@ -727,9 +731,7 @@ int32_t fi_opx_reliability_tx_next_psn (struct fid_ep *ep,
 		/* We've never sent to this receiver, so initiate a reliability handshake
 		   with them. Once they create the receive flow on their end, and we receive
 		   their ack, we'll create the flow on our end and be able to send. */
-		fi_opx_hfi1_tx_reliability_inject_ud_init(ep,
-					key.value, key.dlid, target_reliability_rx,
-					FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT);
+		opx_reliability_handshake_init(ep, key, target_reliability_rx);
 		return -1;
 	} else {
 		*psn_ptr = (union fi_opx_reliability_tx_psn *)fi_opx_rbt_value_ptr(state->tx_flow_rbtree, itr);
