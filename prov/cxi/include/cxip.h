@@ -1124,6 +1124,7 @@ struct cxip_zbcoll_obj {
 	int busy;			// serialize collectives in zb
 	int grpid;			// zb collective grpid
 	int error;			// error code
+	int flush;			// flush callback stack
 	void *cbstack;			// callback stack
 };
 
