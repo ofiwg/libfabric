@@ -261,6 +261,12 @@ struct smr_sock_info {
 	struct smr_cmap_entry	peers[SMR_MAX_PEERS];
 };
 
+struct smr_cq {
+	struct util_cq util_cq;
+	struct fid_peer_cq *peer_cq;
+	struct ofi_peer_cq_cb cq_cb;
+};
+
 struct smr_ep {
 	struct util_ep		util_ep;
 	smr_rx_comp_func	rx_comp;
@@ -329,10 +335,24 @@ typedef ssize_t (*smr_proto_func)(struct smr_ep *ep, struct smr_region *peer_smr
 		size_t total_len, void *context);
 extern smr_proto_func smr_proto_ops[smr_src_max];
 
-int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
-		uint64_t flags, uint64_t err);
+int smr_cq_err(struct util_cq *cq, const struct fi_cq_err_entry *err_entry);
+int smr_cq_comp(struct util_cq *cq, void *context,
+		   uint64_t flags, size_t len, void *buf, uint64_t data,
+		   uint64_t tag);
+int smr_cq_comp_src(struct util_cq *cq, void *context,
+		   uint64_t flags, size_t len, void *buf, uint64_t data,
+		   uint64_t tag, fi_addr_t addr);
+int smr_peer_cq_err(struct util_cq *cq, const struct fi_cq_err_entry *err_entry);
+int smr_peer_cq_comp(struct util_cq *cq, void *context,
+		   uint64_t flags, size_t len, void *buf, uint64_t data,
+		   uint64_t tag);
+int smr_peer_cq_comp_src(struct util_cq *cq, void *context,
+		   uint64_t flags, size_t len, void *buf, uint64_t data,
+		   uint64_t tag, fi_addr_t addr);
 int smr_tx_comp(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, uint64_t err);
+int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
+		uint64_t flags, uint64_t err);
 int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, uint64_t err);
 int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,

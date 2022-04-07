@@ -49,7 +49,7 @@ int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
 }
 
 static int
-smr_write_err_comp(struct util_cq *cq, void *context,
+smr_write_err_comp(struct smr_cq *cq, void *context,
 		   uint64_t flags, uint64_t tag, uint64_t err)
 {
 	struct fi_cq_err_entry err_entry;
@@ -60,39 +60,35 @@ smr_write_err_comp(struct util_cq *cq, void *context,
 	err_entry.tag = tag;
 	err_entry.err = err;
 	err_entry.prov_errno = -err;
-	return ofi_cq_insert_error(cq, &err_entry);
+	return cq->cq_cb.cq_err(&cq->util_cq, &err_entry);
 }
 
-static int
-smr_write_comp(struct util_cq *cq, void *context,
-	       uint64_t flags, size_t len, void *buf,
-	       uint64_t tag, uint64_t data, uint64_t err)
+int smr_cq_err(struct util_cq *cq, const struct fi_cq_err_entry *err_entry)
 {
-	if (err)
-		return smr_write_err_comp(cq, context, flags, tag, err);
+	return ofi_cq_insert_error(cq, err_entry);
+}
 
+int smr_cq_comp(struct util_cq *cq, void *context,
+		   uint64_t flags, size_t len, void *buf, uint64_t data,
+		   uint64_t tag)
+{
 	if (ofi_cirque_freecnt(cq->cirq) > 1) {
 		ofi_cq_write_entry(cq, context, flags, len,
-				   buf, data, tag);
+				buf, data, tag);
 		return 0;
 	} else {
 		return ofi_cq_write_overflow(cq, context, flags,
-					     len, buf, data, tag,
-					     FI_ADDR_NOTAVAIL);
+					     len, buf, data, tag, FI_ADDR_NOTAVAIL);
 	}
 }
 
-static int
-smr_write_src_comp(struct util_cq *cq, void *context,
-		   uint64_t flags, size_t len, void *buf, fi_addr_t addr,
-		   uint64_t tag, uint64_t data, uint64_t err)
+int smr_cq_comp_src(struct util_cq *cq, void *context,
+		   uint64_t flags, size_t len, void *buf, uint64_t data,
+		   uint64_t tag, fi_addr_t addr)
 {
-	if (err)
-		return smr_write_err_comp(cq, context, flags, tag, err);
-
 	if (ofi_cirque_freecnt(cq->cirq) > 1) {
 		ofi_cq_write_src_entry(cq, context, flags, len,
-				       buf, data, tag, addr);
+					buf, data, tag, addr);
 		return 0;
 	} else {
 		return ofi_cq_write_overflow(cq, context, flags,
@@ -100,11 +96,58 @@ smr_write_src_comp(struct util_cq *cq, void *context,
 	}
 }
 
+int smr_peer_cq_err(struct util_cq *cq, const struct fi_cq_err_entry *err_entry)
+{
+	struct smr_cq *smr_cq;
+	struct fid_peer_cq *peer_cq;
+
+	smr_cq = container_of(cq, struct smr_cq, util_cq);
+	peer_cq = smr_cq->peer_cq;
+
+	return peer_cq->owner_ops->writeerr(peer_cq, err_entry);
+}
+
+int smr_peer_cq_comp(struct util_cq *cq, void *context,
+		   uint64_t flags, size_t len, void *buf, uint64_t data,
+		   uint64_t tag)
+{
+	struct smr_cq *smr_cq;
+	struct fid_peer_cq *peer_cq;
+
+	smr_cq = container_of(cq, struct smr_cq, util_cq);
+	peer_cq = smr_cq->peer_cq;
+
+	return peer_cq->owner_ops->write(peer_cq, context, flags, len, buf, data,
+									tag, FI_ADDR_NOTAVAIL);
+}
+
+int smr_peer_cq_comp_src(struct util_cq *cq, void *context,
+		   uint64_t flags, size_t len, void *buf, uint64_t data,
+		   uint64_t tag, fi_addr_t addr)
+{
+	struct smr_cq *smr_cq;
+	struct fid_peer_cq *peer_cq;
+
+	smr_cq = container_of(cq, struct smr_cq, util_cq);
+	peer_cq = smr_cq->peer_cq;
+
+	return peer_cq->owner_ops->write(peer_cq, context, flags, len, buf, data,
+									tag, addr);
+}
+
 int smr_tx_comp(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, uint64_t err)
 {
-	return smr_write_comp(ep->util_ep.tx_cq, context,
-			      ofi_tx_cq_flags(op), 0, NULL, 0, 0, err);
+	struct smr_cq *smr_cq;
+
+	smr_cq = container_of(ep->util_ep.tx_cq, struct smr_cq, util_cq);
+
+	if (err)
+		return smr_write_err_comp(smr_cq, context,
+						ofi_tx_cq_flags(op), 0, err);
+
+	return smr_cq->cq_cb.cq_comp(ep->util_ep.tx_cq, context, ofi_tx_cq_flags(op),
+						0, NULL, 0, 0);
 }
 
 int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
@@ -137,22 +180,56 @@ int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
 			   fiaddr, tag, data, err);
 }
 
+static int
+smr_rx_cq_write(struct smr_ep *ep, void *context, uint32_t op,
+		uint16_t flags, size_t len, void *buf,
+		uint64_t data, uint64_t tag, uint64_t err)
+{
+	struct smr_cq *smr_cq;
+
+	smr_cq = container_of(ep->util_ep.rx_cq, struct smr_cq, util_cq);
+
+	if (err)
+		return smr_write_err_comp(smr_cq, context,
+						smr_rx_cq_flags(op, flags), tag, err);
+
+	return smr_cq->cq_cb.cq_comp(ep->util_ep.rx_cq, context,
+						smr_rx_cq_flags(op, flags), len, buf, data,
+						tag);
+}
+
+static int
+smr_rx_cq_write_src(struct smr_ep *ep, void *context, uint32_t op,
+		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
+		uint64_t data, uint64_t tag, uint64_t err)
+{
+	struct smr_cq *smr_cq;
+
+	smr_cq = container_of(ep->util_ep.rx_cq, struct smr_cq, util_cq);
+
+	if (err)
+		return smr_write_err_comp(smr_cq, context,
+						smr_rx_cq_flags(op, flags), tag, err);
+
+	return smr_cq->cq_cb.cq_comp_src(ep->util_ep.rx_cq, context,
+						smr_rx_cq_flags(op, flags), len, buf, data,
+						tag, addr);
+}
+
 int smr_rx_comp(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
 		uint64_t tag, uint64_t data, uint64_t err)
 {
-	return smr_write_comp(ep->util_ep.rx_cq, context,
-			      smr_rx_cq_flags(op, flags), len, buf,
-			      tag, data, err);
+	return smr_rx_cq_write(ep, context, op, flags, len, buf,
+				data, tag, err);
 }
 
 int smr_rx_src_comp(struct smr_ep *ep, void *context, uint32_t op,
-		    uint16_t flags, size_t len, void *buf, fi_addr_t addr,
-		    uint64_t tag, uint64_t data, uint64_t err)
+		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
+		uint64_t tag, uint64_t data, uint64_t err)
 {
-	return smr_write_src_comp(ep->util_ep.rx_cq, context,
-				  smr_rx_cq_flags(op, flags), len, buf, addr,
-				  tag, data, err);
+	return smr_rx_cq_write_src(ep, context, op, flags, len, buf,
+						addr, data, tag, err);
 }
 
 int smr_rx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
@@ -161,8 +238,8 @@ int smr_rx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 {
 	int ret;
 
-	ret = smr_rx_comp(ep, context, op, flags, len, buf, addr, tag,
-			  data, err);
+	ret = smr_rx_cq_write(ep, context, op, flags, len, buf,
+				data, tag, err);
 	if (ret)
 		return ret;
 	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
@@ -175,8 +252,8 @@ int smr_rx_src_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 {
 	int ret;
 
-	ret = smr_rx_src_comp(ep, context, op, flags, len, buf, addr,
-			      tag, data, err);
+	ret = smr_rx_cq_write_src(ep, context, op, flags, len, buf,
+				addr, data, tag, err);
 	if (ret)
 		return ret;
 	ep->util_ep.rx_cq->wait->signal(ep->util_ep.rx_cq->wait);
