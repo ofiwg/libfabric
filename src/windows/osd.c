@@ -602,53 +602,79 @@ ssize_t ofi_recvmsg_udp(SOCKET fd, struct msghdr *msg, int flags)
 }
 
 
-void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
-			struct ofi_pollfds_work_item *item)
-{
-	if (pfds->nfds == pfds->size) {
-		if (ofi_pollfds_grow(pfds, pfds->size + 1))
-			return;
-	}
-
-	pfds->fds[pfds->nfds].fd = item->fd;
-	pfds->fds[pfds->nfds].events = (SHORT) item->events;
-	pfds->fds[pfds->nfds].revents = 0;
-	pfds->ctx[pfds->nfds].context = item->context;
-	pfds->nfds++;
-}
-
-int ofi_pollfds_do_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
-		       void *context)
+struct ofi_pollfds_ctx *ofi_pollfds_get_ctx(struct ofi_pollfds *pfds, int fd)
 {
 	int i;
 
 	/* 0 is signaling fd */
 	for (i = 1; i < pfds->nfds; i++) {
-		if (pfds->fds[i].fd == fd) {
-			pfds->fds[i].events = (SHORT) events;
-			pfds->ctx[i].context = context;
-			return FI_SUCCESS;
-		}
+		if (pfds->fds[i].fd == fd)
+			return &pfds->ctx[i];
+	}
+	return NULL;
+}
+
+void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
+			struct ofi_pollfds_work_item *item)
+{
+	struct ofi_pollfds_ctx *ctx;
+
+	if (pfds->nfds == pfds->size) {
+		if (ofi_pollfds_grow(pfds, pfds->size + 1))
+			return;
 	}
 
-	return -FI_ENOENT;
+	ctx = ofi_pollfds_get_ctx(pfds, fd);
+	if (!ctx) {
+		ctx = &pfds->ctx[pfds->nfds];
+		ctx->index = pfds->nfds++;
+	}
+	ctx->context = item->context;
+
+	pfds->fds[ctx->index].fd = item->fd;
+	pfds->fds[ctx->index].events = (SHORT) item->events;
+	pfds->fds[ctx->index].revents = 0;
+
+	if (ofi_poll_fairness)
+		ofi_pollfds_headfd(pfds, item->fd);
+}
+
+int ofi_pollfds_do_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		       void *context)
+{
+	struct ofi_pollfds_ctx *ctx;
+
+	ctx = ofi_pollfds_get_ctx(pfds, fd);
+	if (!ctx || ctx->index < 0 ||
+	    ctx->index >= pfds->nfds || pfds->fds[ctx->index].fd != fd)
+		return -FI_ENOENT;
+
+	pfds->fds[ctx->index].events = events;
+	ctx->context = context;
+	return FI_SUCCESS;
 }
 
 void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
 			struct ofi_pollfds_work_item *item)
 {
-	int i;
+	struct ofi_pollfds_ctx *ctx, *swap_ctx;
 
-	for (i = 0; i < pfds->nfds; i++) {
-		if (pfds->fds[i].fd == item->fd) {
-			pfds->fds[i].fd = INVALID_SOCKET;
+	ctx = ofi_pollfds_get_ctx(pfds, fd);
+	if (!ctx || ctx->index < 0 ||
+	    ctx->index >= pfds->nfds || pfds->fds[ctx->index].fd != fd)
+		return;
 
-			pfds->nfds--;
-			pfds->fds[i].fd = pfds->fds[pfds->nfds].fd;
-			pfds->fds[i].events = pfds->fds[pfds->nfds].events;
-			pfds->fds[i].revents = pfds->fds[pfds->nfds].revents;
-			pfds->ctx[i] = pfds->ctx[pfds->nfds];
-			break;
-		}
+	if (ofi_poll_fairness && ctx->hot_index >= 0)
+		ofi_pollfds_coolfd(pfds, item->fd);
+
+	pfds->nfds--;
+	if (ctx->index < pfds->nfds) {
+		pfds->fds[ctx->index] = pfds->fds[pfds->nfds];
+
+		swap_ctx = ofi_pollfds_get_ctx(pfds, pfds->fds[pfds->nfds].fd);
+		swap_ctx->index = ctx->index;
+		pfds->fds[pfds->nfds].fd = INVALID_SOCKET;
+		pfds->fds[pfds->nfds].events = 0;
+		pfds->fds[pfds->nfds].revents = 0;
 	}
 }

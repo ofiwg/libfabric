@@ -75,6 +75,7 @@ struct ofi_pollfds_work_item {
 
 struct ofi_pollfds_ctx {
 	void		*context;
+	int		index;
 	int		hit_cnt;
 	int		hot_index;
 };
@@ -110,6 +111,7 @@ void ofi_pollfds_coolfd(struct ofi_pollfds *pfds, int fd);
 void ofi_pollfds_heatfd(struct ofi_pollfds *pfds, int fd);
 
 /* OS specific */
+struct ofi_pollfds_ctx *ofi_pollfds_get_ctx(struct ofi_pollfds *pfds, int fd);
 void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
 			struct ofi_pollfds_work_item *item);
 int ofi_pollfds_do_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,

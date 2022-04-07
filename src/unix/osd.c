@@ -316,51 +316,72 @@ int ofi_set_thread_affinity(const char *s)
 }
 
 
+struct ofi_pollfds_ctx *ofi_pollfds_get_ctx(struct ofi_pollfds *pfds, int fd)
+{
+	return &pfds->ctx[fd];
+}
+
 void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
 			struct ofi_pollfds_work_item *item)
 {
+	struct ofi_pollfds_ctx *ctx;
+
 	if (item->fd >= pfds->size) {
 		if (ofi_pollfds_grow(pfds, item->fd))
 			return;
 	}
 
-	pfds->fds[item->fd].fd = item->fd;
-	pfds->fds[item->fd].events = item->events;
-	pfds->fds[item->fd].revents = 0;
-	pfds->ctx[item->fd].context = item->context;
+	ctx = ofi_pollfds_get_ctx(pfds, item->fd);
+	if (ctx->index < 0)
+		ctx->index = pfds->nfds++;
+	ctx->context = item->context;
+
+	pfds->fds[ctx->index].fd = item->fd;
+	pfds->fds[ctx->index].events = item->events;
+	pfds->fds[ctx->index].revents = 0;
 
 	if (ofi_poll_fairness)
 		ofi_pollfds_heatfd(pfds, item->fd);
-
-	if (item->fd >= pfds->nfds)
-		pfds->nfds = item->fd + 1;
 }
 
 int ofi_pollfds_do_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		       void *context)
 {
-	if ((fd < pfds->nfds) && (pfds->fds[fd].fd == fd)) {
-		pfds->fds[fd].events = events;
-		pfds->ctx[fd].context = context;
-		return FI_SUCCESS;
-	}
+	struct ofi_pollfds_ctx *ctx;
 
-	return -FI_ENOENT;
+	ctx = ofi_pollfds_get_ctx(pfds, fd);
+	if (fd < 0 || fd >= pfds->size || ctx->index < 0 ||
+	    ctx->index >= pfds->nfds || pfds->fds[ctx->index].fd != fd)
+		return -FI_ENOENT;
+
+	pfds->fds[ctx->index].events = events;
+	ctx->context = context;
+	return FI_SUCCESS;
 }
 
 void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
 			struct ofi_pollfds_work_item *item)
 {
-	if (item->fd >= pfds->nfds)
+	struct ofi_pollfds_ctx *ctx, *swap_ctx;
+
+	ctx = ofi_pollfds_get_ctx(pfds, item->fd);
+	if (item->fd < 0 || item->fd >= pfds->size || ctx->index < 0 ||
+	    ctx->index >= pfds->nfds || pfds->fds[ctx->index].fd != item->fd)
 		return;
 
-	pfds->fds[item->fd].fd = INVALID_SOCKET;
-	pfds->fds[item->fd].events = 0;
-	pfds->fds[item->fd].revents = 0;
-
-	if (pfds->ctx[item->fd].hot_index >= 0 && ofi_poll_fairness)
+	if (ofi_poll_fairness && ctx->hot_index >= 0)
 		ofi_pollfds_coolfd(pfds, item->fd);
 
-	while (pfds->nfds && pfds->fds[pfds->nfds - 1].fd == INVALID_SOCKET)
-		pfds->nfds--;
+	pfds->nfds--;
+	if (ctx->index < pfds->nfds) {
+		pfds->fds[ctx->index] = pfds->fds[pfds->nfds];
+
+		swap_ctx = ofi_pollfds_get_ctx(pfds, pfds->fds[pfds->nfds].fd);
+		swap_ctx->index = ctx->index;
+		pfds->fds[pfds->nfds].fd = INVALID_SOCKET;
+		pfds->fds[pfds->nfds].events = 0;
+		pfds->fds[pfds->nfds].revents = 0;
+	}
+
+	ctx->index = -1;
 }
