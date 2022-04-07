@@ -48,269 +48,433 @@
 
 #include <shared.h>
 
-int *clients;
 
-fd_set select_set;
-int max_sock, connections;
-struct pollfd *poll_set;
-struct epoll_event *events;
-int efpd;
+static int *fds;
+static int connections = 1000;
+uint64_t starttime, endtime;
 
-static int start_server()
+static struct pollfd *poll_set;
+static struct epoll_event *ep_events;
+static int epfd = -1;
+
+
+static void show_header(void)
+{
+	printf("connections: %d, iterations: %d\n", connections, opts.iterations);
+	if (connections > FD_SETSIZE)
+		printf("* select tests limited to %d sockets\n", FD_SETSIZE);
+
+	printf("%-20s : usec/call\n", "test");
+	printf("%-20s : ---------\n", "----");
+}
+
+static void show_result(const char *test, uint64_t starttime, uint64_t endtime)
+{
+	printf("%-20s : %.2f\n", test,
+	       (float) (endtime - starttime) / opts.iterations);
+}
+
+static int start_server(void)
 {
 	struct addrinfo *ai = NULL;
-	int ret;
 	int optval = 1;
+	int ret;
 
 	ret = getaddrinfo(opts.src_addr, opts.src_port, NULL, &ai);
 	if (ret) {
-		printf("getaddrinfo failed\n");
-		goto out;
+		FT_PRINTERR("getaddrinfo", ret);
+		return -ret;
 	}
 
 	listen_sock = socket(ai->ai_family, SOCK_STREAM, 0);
 	if (listen_sock < 0) {
-		printf("socket error: %i: %s\n", errno, strerror(errno));
-		ret = -1;
-		goto out;
+		FT_PRINTERR("socket", -errno);
+		goto free;
 	}
 
-	ret = setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, (char *) &optval, 
-		sizeof(optval));
+	ret = setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR,
+			 (char *) &optval, sizeof(optval));
 	if (ret) {
-		printf("error setting socket options\n");
-		goto out;
+		FT_PRINTERR("setsockopt", -errno);
+		goto close;
 	}
 
 	ret = bind(listen_sock, ai->ai_addr, ai->ai_addrlen);
 	if (ret) {
-		printf("bind failed\n");
-		goto out;
+		FT_PRINTERR("bind", -errno);
+		goto close;
 	}
 
-	ret = listen(listen_sock, connections);
+	ret = listen(listen_sock, 0);
 	if (ret) {
-		printf ("listen failed\n");
-		goto out;
+		FT_PRINTERR("listen", -errno);
+		goto close;
 	}
 
 	freeaddrinfo(ai);
-	return ret;
+	return 0;
 
-out:
+close:
 	close(listen_sock);
+free:
 	freeaddrinfo(ai);
-	return ret;
+	return -errno;
 }
 
-static int server_connect()
+static int server_connect(void)
 {
-	int new_sock, i;
+	int i, ret;
+
+	ret = start_server();
+	if (ret)
+		return ret;
 
 	for (i = 0; i < connections; i++) {
-		new_sock = accept(listen_sock, NULL, NULL);
-		if (new_sock < 0) {
-			printf("error during server init\n");
-			return -1;
+		fds[i] = accept(listen_sock, NULL, NULL);
+		if (fds[i] < 0) {
+			FT_PRINTERR("accept", -errno);
+			ret = -errno;
+			goto close;
 		}
-
-		clients[i] = new_sock;
-		
 	}
+	close(listen_sock);
 	return 0;
+
+close:
+	while (i--) {
+		close(fds[i]);
+		fds[i] = -1;
+	}
+	close(listen_sock);
+	return ret;
 }
 
-static int client_connect()
+static int run_client(void)
 {
 	struct addrinfo *res;
-	int i, ret, new_sock;
+	ssize_t bytes;
+	int i, ret;
+	char c;
 
 	ret = getaddrinfo(opts.dst_addr, opts.dst_port, NULL, &res);
 	if (ret) {
-		printf("getaddrinfo failed\n");
-		goto out;
+		FT_PRINTERR("getaddrinfo", ret);
+		return -ret;
 	}
 
 	for (i = 0; i < connections; i++) {
-
-		new_sock = socket(res->ai_family, SOCK_STREAM, 0);
-		if (new_sock < 0) {
-			ret = -1;
-			goto out;
+		fds[i] = socket(res->ai_family, SOCK_STREAM, 0);
+		if (fds[i] < 0) {
+			FT_PRINTERR("socket", -errno);
+			goto close;
 		}
 
-		ret = connect(new_sock, res->ai_addr, res->ai_addrlen);
-		if (ret)
-			goto out;
-
-		clients[i] = new_sock;
+		ret = connect(fds[i], res->ai_addr, res->ai_addrlen);
+		if (ret) {
+			FT_PRINTERR("connect", -errno);
+			ret = -errno;
+			goto close;
+		}
 	}
 
-out:
+	/* wait for server to finish */
+	bytes = recv(fds[0], &c, 1, 0);
+	if (bytes < 0)
+		FT_PRINTERR("recv", -errno);
+	freeaddrinfo(res);
+	return 0;
+
+close:
+	while (i--) {
+		close(fds[i]);
+		fds[i] = -1;
+	}
 	freeaddrinfo(res);
 	return ret;
 }
 
-static void print_average()
+static int
+time_select(const char *test, fd_set *readfds, fd_set *writefds, int stride)
 {
-	printf("%i: %f\n", connections, (double)(end.tv_nsec + end.tv_sec * 
-			1000000000) - (start.tv_nsec + start.tv_sec * 1000000000)
-			/ connections);
+	int i, j, ret, max_sock = 0;
+	struct timeval timeout = {0};
+
+	if (readfds)
+		FD_ZERO(readfds);
+	if (writefds)
+		FD_ZERO(writefds);
+
+	starttime = ft_gettime_us();
+	for (i = 0; i < opts.iterations; i++) {
+		for (j = 0; j < connections && fds[j] < FD_SETSIZE; j++) {
+			if (readfds && ((j % stride) == 0))
+				FD_SET(fds[j], readfds);
+			if (writefds && ((j % stride) == 0))
+				FD_SET(fds[j], writefds);
+
+			if ((fds[j] > max_sock) && ((j % stride) == 0))
+				max_sock = fds[j];
+		}
+		ret = select(max_sock + 1, readfds, writefds, NULL, &timeout);
+		if (ret < 0) {
+			FT_PRINTERR("select", -errno);
+			return -errno;
+		}
+	}
+	endtime = ft_gettime_us();
+	show_result(test, starttime, endtime);
+	return 0;
 }
 
-static int init_select() 
+static int test_select(void)
 {
-	FD_ZERO(&select_set);
-	FD_SET(listen_sock, &select_set);
-	max_sock = listen_sock;
+	fd_set readfds, writefds;
+	int ret;
+
+	ret = time_select("select(read)", &readfds, NULL, 1);
+	if (ret)
+		return ret;
+
+	ret = time_select("select(write)", NULL, &writefds, 1);
+	if (ret)
+		return ret;
+
+	ret = time_select("select(rd/wr)", &readfds, &writefds, 1);
+	if (ret)
+		return ret;
+
+	ret = time_select("select(1/2 rd/wr)", &readfds, &writefds, 2);
+	if (ret)
+		return ret;
+
+	ret = time_select("select(1/4 rd/wr)", &readfds, &writefds, 4);
+	if (ret)
+		return ret;
+
+	ret = time_select("select(1/100 rd/wr)", &readfds, &writefds, 100);
+	if (ret)
+		return ret;
 
 	return 0;
 }
 
-static int time_select() 
+static int time_poll(const char *test, short events, int stride)
 {
-	int i, j;
-	int ret = 0;
-	struct timeval timeout;
-	timeout.tv_sec  = 0;
-	timeout.tv_usec = 0;
+	int i, ret = 0;
 
-	ft_start();
-	for (i = 0; i< opts.iterations; i++) {
-		for (j = 0; j < connections; j++) {
-			FD_SET(clients[j], &select_set);
+	poll_set = calloc(connections, sizeof(*poll_set));
+	if (!poll_set)
+		return -FI_ENOMEM;
 
-			if (clients[j] > max_sock)
-				max_sock = clients[j];
+	for (i = 0; i < connections; i++) {
+		if ((i % stride) == 0) {
+			poll_set[i].fd = fds[i];
+			poll_set[i].events = events;
+		} else {
+			poll_set[i].fd = -fds[i];
 		}
-		ret = select(max_sock + 1, &select_set, NULL, NULL, &timeout);
-		if (ret)
-			return ret;
 	}
-	ft_stop();
-	
-	print_average();
-	
+
+	starttime = ft_gettime_us();
+	for (i = 0; i < opts.iterations; i++) {
+		ret = poll(poll_set, connections, 0);
+		if (ret < 0) {
+			FT_PRINTERR("poll", -errno);
+			ret = -errno;
+			goto out;
+		}
+	}
+	endtime = ft_gettime_us();
+	show_result(test, starttime, endtime);
+
+out:
+	free(poll_set);
+	return ret < 0 ? ret : 0;
+}
+
+static int test_poll(void)
+{
+	int ret;
+
+	ret = time_poll("poll(read)", POLLIN, 1);
+	if (ret)
+		return ret;
+
+	ret = time_poll("poll(write)", POLLOUT, 1);
+	if (ret)
+		return ret;
+
+	ret = time_poll("poll(rd/wr)", POLLIN | POLLOUT, 1);
+	if (ret)
+		return ret;
+
+	ret = time_poll("poll(1/2 rd/wr)", POLLIN | POLLOUT, 2);
+	if (ret)
+		return ret;
+
+	ret = time_poll("poll(1/4 rd/wr)", POLLIN | POLLOUT, 4);
+	if (ret)
+		return ret;
+
+	ret = time_poll("poll(1/100 rd/wr)", POLLIN | POLLOUT, 100);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int init_epoll(uint32_t events, int stride)
+{
+	struct epoll_event event;
+	int i, ret;
+
+	epfd = epoll_create1(0);
+	if (epfd < 0) {
+		FT_PRINTERR("epoll_create1", -errno);
+		return -errno;
+	}
+
+	ep_events = calloc(connections, sizeof(*ep_events));
+	if (!ep_events) {
+		ret = -errno;
+		goto close;
+	}
+
+	for (i = 0; i < connections; i++) {
+		if (i % stride)
+			continue;
+
+		event.events = events;
+		ret = epoll_ctl(epfd, EPOLL_CTL_ADD, fds[i], &event);
+		if (ret) {
+			FT_PRINTERR("epoll_ctl", -errno);
+			ret = -errno;
+			goto free;
+		}
+	}
+
+	return 0;
+
+free:
+	free(ep_events);
+close:
+	close(epfd);
 	return ret;
 }
 
-static int init_poll()
-{
-	int i;
-	poll_set = malloc(sizeof(struct pollfd) * connections);
-	if (!poll_set)
-		return -1;
-
-	for (i = 0; i < connections; i++) {
-		poll_set[i].fd = clients[i];
-	}
-
-	return 0;
-}
-
-static int time_poll()
-{
-	int i;
-	
-	ft_start();
-	for (i = 0; i < opts.iterations; i++) {
-		poll(poll_set, POLLIN, 0);
-	}
-	ft_stop();
-
-	print_average();
-
-	return 0;
-}
-
-static int init_epoll()
+static int time_epoll(const char *test, uint32_t events, int stride)
 {
 	int i, ret;
 
-	efpd = epoll_create1(0);
-	events = malloc(sizeof(struct epoll_event) * connections);
-	if (!events)
-		return -1;
+	ret = init_epoll(events, stride);
+	if (ret)
+		return ret;
 
-	for (i = 0; i < connections; i++) {
-		events[i].events = EPOLLIN;
-		events[i].data.fd = clients[i];
-		ret = epoll_ctl(efpd, EPOLL_CTL_ADD, clients[i], &events[i]);
-		if (ret)
-			return ret;
+	starttime = ft_gettime_us();
+	for (i = 0; i < opts.iterations; i++) {
+		ret = epoll_wait(epfd, ep_events, connections, 0);
+		if (ret < 0) {
+			FT_PRINTERR("epoll_wait", -errno);
+			ret = -errno;
+			goto out;
+		}
 	}
+	endtime = ft_gettime_us();
+	show_result(test, starttime, endtime);
+
+out:
+	free(ep_events);
+	close(epfd);
+	return ret < 0 ? ret : 0;
+}
+
+static int test_epoll(void)
+{
+	int ret;
+
+	ret = time_epoll("epoll(read)", EPOLLIN, 1);
+	if (ret)
+		return ret;
+
+	ret = time_epoll("epoll(write)", EPOLLOUT, 1);
+	if (ret)
+		return ret;
+
+	ret = time_epoll("epoll(rd/wr)", EPOLLIN | EPOLLOUT, 1);
+	if (ret)
+		return ret;
+
+	ret = time_epoll("epoll(1/2 rd/wr)", EPOLLIN | EPOLLOUT, 2);
+	if (ret)
+		return ret;
+
+	ret = time_epoll("epoll(1/4 rd/wr)", EPOLLIN | EPOLLOUT, 4);
+	if (ret)
+		return ret;
+
+	ret = time_epoll("epoll(1/100 rd/wr)", EPOLLIN | EPOLLOUT, 100);
+	if (ret)
+		return ret;
 
 	return 0;
 }
 
-static int time_epoll()
+static void close_conns(void)
 {
 	int i;
-	
-	ft_start();
-	for (i = 0; i < opts.iterations; i++) {
-		epoll_wait(EPOLLIN, events, connections, 0);
+
+	for (i = 0; i < connections; i++) {
+		if (fds[i] < 0)
+			continue;
+		shutdown(fds[i], SHUT_RDWR);
+		close(fds[i]);
 	}
-	ft_stop();
+	free(fds);
+}
 
-	print_average();
+static int run_server(void)
+{
+	char c = 'a';
+	int ret;
 
+	show_header();
+
+	ret = server_connect();
+	if (ret)
+		return ret;
+
+	ret = test_select();
+	if (ret)
+		return ret;
+
+	ret = test_poll();
+	if (ret)
+		return ret;
+
+	ret = test_epoll();
+	if (ret)
+		return ret;
+
+	send(fds[0], &c, 1, 0);
 	return 0;
-}
-
-static int init_resources(int (*poll_method) (int))
-{
-	int ret = 0;
-
-	if (poll_method == time_select)
-		ret = init_select();
-	else if (poll_method == time_poll)
-		ret = init_poll();
-	else
-		ret = init_epoll();
-
-	return ret;
-}
-
-static void free_resources()
-{
-	free(clients);
-	free(poll_set);
-	free(events);
 }
 
 int main(int argc, char **argv)
 {
 	extern char *optarg;
-	int c, ret, i;
-	char *mode;
-	int (*poll_method) ();
+	int c, ret;
 
-	opts = INIT_OPTS;
-	opts.options |= FT_OPT_SIZE;
+	opts.iterations = 100;
+	opts.src_port = default_port;
+	opts.dst_port = default_port;
 
-	while ((c = getopt(argc, argv, "n:m:" ADDR_OPTS)) != -1) {
+	while ((c = getopt(argc, argv, "n:" ADDR_OPTS)) != -1) {
 		switch (c) {
-		default:
-			ft_parse_addr_opts(c, optarg, &opts);
-			break;
 		case 'n':
 			connections = atoi(optarg);
 			break;
-		case 'm':
-			mode = optarg;
-			if (strcasecmp(mode, "select") == 0) {
-				printf("select mode\n");
-				poll_method = time_select;
-			} else if (strcasecmp(mode, "poll") == 0) {
-				printf("poll mode\n");
-				poll_method = time_poll;
-			} else if (strcasecmp(mode, "epoll") == 0) {
-				printf("epoll mode\n");
-				poll_method = time_epoll;
-			} else {
-				printf("running all modes");
-			}
+		default:
+			ft_parse_addr_opts(c, optarg, &opts);
 			break;
 		}
 	}
@@ -318,68 +482,12 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
-	clients = calloc(connections, sizeof(*clients));
-	if (!clients)
-		return -1;
+	fds = calloc(connections, sizeof(*fds));
+	if (!fds)
+		return -FI_ENOMEM;
 
-	if (!opts.dst_addr) {
+	ret = opts.dst_addr ? run_client() : run_server();
 
-		if (!opts.src_port)
-			opts.src_port = default_port;
-
-		ret = start_server();
-		if (ret)
-			return ret;
-
-		ret = server_connect();
-		if (ret)
-			return ret;
-		if (poll_method) {
-			ret = init_resources(poll_method);
-			if (ret)
-				return ret;
-
-			ret = poll_method();
-			if (ret)
-				return ret;
-		} else {
-			ret = init_resources(time_select);
-			if (ret)
-				return ret;
-
-			ret = time_select();
-			if (ret)
-				return ret;
-
-			ret = init_resources(time_poll);
-			if (ret)
-				return ret;
-
-			ret = time_poll();
-			if (ret)
-				return ret;
-
-			ret = init_resources(time_epoll);
-			if (ret)
-				return ret;
-
-			ret = time_epoll();
-			if (ret)
-				return ret;
-		}
-	} else {
-		if (!opts.dst_port)
-			opts.dst_port = default_port;
-
-		ret = client_connect();
-	}
-	
-	for (i = 0; i < connections; i++) {
-		close(clients[i]);
-	}
-	close(listen_sock);
-
-	free_resources();
-
+	close_conns();
 	return ret;
 }
