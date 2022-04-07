@@ -342,7 +342,7 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 	av_set = reduction->mc_obj->av_set;
 
 	/* Send address */
-	switch (av_set->comm_key.type) {
+	switch (av_set->comm_key.keytype) {
 	case COMM_KEY_MULTICAST:
 		/* - dest_addr == multicast ID
 		 * - idx_ext == 0
@@ -397,7 +397,7 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		break;
 	default:
 		CXIP_INFO("unexpected comm_key type: %d\n",
-			  av_set->comm_key.type);
+			  av_set->comm_key.keytype);
 		return -FI_EINVAL;
 	}
 	return FI_SUCCESS;
@@ -1112,7 +1112,7 @@ static inline ssize_t _send_pkt(struct cxip_coll_reduction *reduction,
 {
 	int ret;
 
-	if (reduction->mc_obj->av_set->comm_key.type == COMM_KEY_MULTICAST) {
+	if (reduction->mc_obj->av_set->comm_key.keytype == COMM_KEY_MULTICAST) {
 		ret = _send_pkt_mc(reduction, retry);
 	} else if (is_hw_root(reduction->mc_obj)) {
 		ret = _send_pkt_as_root(reduction, retry);
@@ -2200,7 +2200,7 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	}
 
 	/* PTE receive address */
-	switch (av_set->comm_key.type) {
+	switch (av_set->comm_key.keytype) {
 	case COMM_KEY_MULTICAST:
 		if (is_netsim(ep_obj)) {
 			CXIP_INFO("NETSIM does not support mcast\n");
@@ -2246,8 +2246,8 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 		}
 		break;
 	default:
-		CXIP_INFO("unexpected comm_key type: %d\n",
-			  av_set->comm_key.type);
+		CXIP_INFO("unexpected comm_key keytype: %d\n",
+			  av_set->comm_key.keytype);
 		return -FI_EINVAL;
 	}
 
@@ -2409,7 +2409,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	if (coll_addr != FI_ADDR_NOTAVAIL) {
 		CXIP_INFO("coll_addr is not FI_ADDR_NOTAVAIL\n");
 		return -FI_EINVAL;
-	} else if (av_set->comm_key.type == COMM_KEY_NONE) {
+	} else if (av_set->comm_key.keytype == COMM_KEY_NONE) {
 		CXIP_INFO("comm_key not specified\n");
 		return -FI_EINVAL;
 	}
@@ -2435,7 +2435,7 @@ size_t cxip_coll_init_mcast_comm_key(struct cxip_coll_comm_key *comm_key,
 {
 	struct cxip_comm_key *key = (struct cxip_comm_key *)comm_key;
 
-	key->type = COMM_KEY_MULTICAST;
+	key->keytype = COMM_KEY_MULTICAST;
 	key->mcast.mcast_ref = mcast_ref;
 	key->mcast.mcast_id = mcast_id;
 	key->mcast.hwroot_idx = hwroot_idx;
