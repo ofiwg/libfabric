@@ -105,7 +105,8 @@ static struct cxip_ux_send *cxip_req_buf_ux_alloc(struct cxip_ptelist_buf *buf,
 	dlist_init(&ux->rxc_entry);
 	cxip_ptelist_buf_get(buf);
 
-	RXC_DBG(buf->rxc, "rbuf=%p ux=%p\n", buf, ux);
+	RXC_DBG(buf->rxc, "PtlTE %d referenced REQ buf=%p ux=%p\n",
+		buf->rxc->rx_pte->pte->ptn, buf, ux);
 
 	return ux;
 }
@@ -286,7 +287,9 @@ static int cxip_req_buf_process_put_event(struct cxip_ptelist_buf *buf,
 			cxip_req_buf_progress_pending_ux(buf);
 
 			if (cxip_req_buf_is_consumed(buf)) {
-				RXC_DBG(rxc, "rbuf=%p consumed\n", buf);
+				RXC_DBG(rxc, "PtlTE %d buf=%p consumed\n",
+					buf->rxc->rx_pte->pte->ptn, buf);
+
 				cxip_ptelist_buf_consumed(buf);
 			} else {
 				break;
@@ -341,7 +344,9 @@ int cxip_req_bufpool_init(struct cxip_rxc *rxc)
 		.min_space_avail = CXIP_REQ_BUF_HEADER_MAX_SIZE +
 				   rxc->max_eager_size,
 		.min_posted = cxip_env.req_buf_min_posted,
-		.max_count = cxip_env.req_buf_max_count,
+		/* Allow growing the number request bufs posted */
+		.max_posted = cxip_env.req_buf_min_posted << 3,
+		.max_cached = cxip_env.req_buf_max_cached,
 	};
 
 	return cxip_ptelist_bufpool_init(rxc, &rxc->req_list_bufpool, &attr);

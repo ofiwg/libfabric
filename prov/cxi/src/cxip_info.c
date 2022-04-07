@@ -263,7 +263,8 @@ struct cxip_environment cxip_env = {
 	.rdzv_eager_size = CXIP_RDZV_THRESHOLD,
 	.rdzv_aligned_sw_rget = 1,
 	.oflow_buf_size = CXIP_OFLOW_BUF_SIZE,
-	.oflow_buf_count = CXIP_OFLOW_BUF_COUNT,
+	.oflow_buf_min_posted = CXIP_OFLOW_BUF_MIN_POSTED,
+	.oflow_buf_max_cached = CXIP_OFLOW_BUF_MAX_CACHED,
 	.safe_devmem_copy_threshold =  CXIP_SAFE_DEVMEM_COPY_THRESH,
 	.optimized_mrs = true,
 	.llring_mode = CXIP_LLRING_IDLE,
@@ -272,7 +273,7 @@ struct cxip_environment cxip_env = {
 	.eq_ack_batch_size = 32,
 	.req_buf_size = CXIP_REQ_BUF_SIZE,
 	.req_buf_min_posted = CXIP_REQ_BUF_MIN_POSTED,
-	.req_buf_max_count = CXIP_REQ_BUF_MAX_COUNT,
+	.req_buf_max_cached = CXIP_REQ_BUF_MAX_CACHED,
 	.msg_offload = 1,
 	.msg_lossless = 0,
 	.hybrid_preemptive = 0,
@@ -469,10 +470,27 @@ static void cxip_env_init(void)
 		cxip_env.rdzv_get_min = 0;
 	}
 
+	/* Allow either FI_CXI_OFLOW_BUF_COUNT or FI_CXI_FLOW_BUF_MIN_POSTED */
 	fi_param_define(&cxip_prov, "oflow_buf_count", FI_PARAM_SIZE_T,
-			"Overflow buffer count.");
+			"Overflow buffer count/min posted.");
 	fi_param_get_size_t(&cxip_prov, "oflow_buf_count",
-			    &cxip_env.oflow_buf_count);
+			    &cxip_env.oflow_buf_min_posted);
+	fi_param_define(&cxip_prov, "oflow_buf_min_posted", FI_PARAM_SIZE_T,
+			"Overflow buffer count/min posted.");
+	fi_param_get_size_t(&cxip_prov, "oflow_buf_min_posted",
+			    &cxip_env.oflow_buf_min_posted);
+	cxip_env.oflow_buf_max_cached = cxip_env.oflow_buf_min_posted * 3;
+
+	fi_param_define(&cxip_prov, "oflow_buf_max_cached", FI_PARAM_SIZE_T,
+			"Maximum number of overflow buffers cached.");
+	fi_param_get_size_t(&cxip_prov, "oflow_buf_max_cached",
+			    &cxip_env.oflow_buf_max_cached);
+	if (cxip_env.oflow_buf_max_cached && cxip_env.oflow_buf_max_cached <
+	    cxip_env.oflow_buf_min_posted) {
+		cxip_env.oflow_buf_max_cached = cxip_env.oflow_buf_min_posted;
+		CXIP_WARN("Adjusted oflow buffer max cached to %lu\n",
+			  cxip_env.oflow_buf_max_cached);
+	}
 
 	fi_param_define(&cxip_prov, "safe_devmem_copy_threshold",
 			FI_PARAM_SIZE_T,
@@ -559,10 +577,15 @@ static void cxip_env_init(void)
 	fi_param_get_size_t(&cxip_prov, "req_buf_min_posted",
 			    &cxip_env.req_buf_min_posted);
 
+	/* Allow either FI_CXI_REQ_BUF_MAX_CACHED or FI_CXI_REQ_BUF_MAX_COUNT */
 	fi_param_define(&cxip_prov, "req_buf_max_count", FI_PARAM_SIZE_T,
-			"Maximum number of request buffer allocated.");
+			"Maximum number of request buffer cached.");
 	fi_param_get_size_t(&cxip_prov, "req_buf_max_count",
-			    &cxip_env.req_buf_max_count);
+			    &cxip_env.req_buf_max_cached);
+	fi_param_define(&cxip_prov, "req_buf_max_cached", FI_PARAM_SIZE_T,
+			"Maximum number of request buffer cached.");
+	fi_param_get_size_t(&cxip_prov, "req_buf_max_cached",
+			    &cxip_env.req_buf_max_cached);
 
 	/* Parameters to tailor hybrid hardware to software transitions
 	 * that are initiated by software.
@@ -605,12 +628,12 @@ static void cxip_env_init(void)
 		}
 
 		/* Zero max count is unlimited */
-		if (cxip_env.req_buf_max_count &&
-		    cxip_env.req_buf_max_count < cxip_env.req_buf_min_posted) {
-			cxip_env.req_buf_max_count =
+		if (cxip_env.req_buf_max_cached &&
+		    cxip_env.req_buf_max_cached < cxip_env.req_buf_min_posted) {
+			cxip_env.req_buf_max_cached =
 					cxip_env.req_buf_min_posted;
-			CXIP_WARN("Adjusted request buffer max count to %lu\n",
-				  cxip_env.req_buf_max_count);
+			CXIP_WARN("Adjusted request buffer max cached to %lu\n",
+				  cxip_env.req_buf_max_cached);
 		}
 	}
 

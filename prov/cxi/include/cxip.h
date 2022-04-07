@@ -104,11 +104,12 @@
 #define CXIP_PTE_IGNORE_DROPS		((1 << 24) - 1)
 #define CXIP_RDZV_THRESHOLD		2048
 #define CXIP_OFLOW_BUF_SIZE		(2*1024*1024)
-#define CXIP_OFLOW_BUF_COUNT		3
+#define CXIP_OFLOW_BUF_MIN_POSTED	3
+#define CXIP_OFLOW_BUF_MAX_CACHED	(CXIP_OFLOW_BUF_MIN_POSTED * 3)
 #define CXIP_REQ_BUF_SIZE		(2*1024*1024)
 #define CXIP_REQ_BUF_MIN_POSTED		4
-#define CXIP_REQ_BUF_MAX_COUNT		0
-#define CXIP_UX_BUFFER_SIZE		(CXIP_OFLOW_BUF_COUNT * \
+#define CXIP_REQ_BUF_MAX_CACHED		0
+#define CXIP_UX_BUFFER_SIZE		(CXIP_OFLOW_BUF_MIN_POSTED * \
 					 CXIP_OFLOW_BUF_SIZE)
 
 /* When device memory is safe to access via load/store then the
@@ -217,11 +218,12 @@ struct cxip_environment {
 	size_t rdzv_eager_size;
 	int rdzv_aligned_sw_rget;
 	size_t oflow_buf_size;
-	size_t oflow_buf_count;
+	size_t oflow_buf_min_posted;
+	size_t oflow_buf_max_cached;
 	size_t safe_devmem_copy_threshold;
 	size_t req_buf_size;
 	size_t req_buf_min_posted;
-	size_t req_buf_max_count;
+	size_t req_buf_max_cached;
 	int msg_lossless;
 	size_t default_cq_size;
 	int optimized_mrs;
@@ -1093,23 +1095,6 @@ struct def_event_ht {
 };
 
 /*
- * Overflow buffer
- *
- * Support structure.
- */
-struct cxip_oflow_buf {
-	struct dlist_entry list;
-	enum cxip_le_type type;
-	struct cxip_rxc *rxc;
-	struct cxip_req *req;
-
-	void *buf;
-	struct cxip_md *md;
-	size_t sw_consumed;
-	size_t hw_consumed;
-};
-
-/*
  * Zero-buffer collectives.
  */
 struct cxip_zbcoll_obj;
@@ -1425,12 +1410,7 @@ struct cxip_rxc {
 	/* Unexpected message handling */
 	fastlock_t rx_lock;			// RX message lock
 	struct cxip_ptelist_bufpool *req_list_bufpool;
-
-	ofi_atomic32_t oflow_bufs_submitted;
-	ofi_atomic32_t oflow_bufs_in_use;
-	int oflow_buf_size;
-	int oflow_bufs_max;
-	struct dlist_entry oflow_bufs;		// Overflow buffers
+	struct cxip_ptelist_bufpool *oflow_list_bufpool;
 
 	/* Defer events to wait for both put and put overflow */
 	struct def_event_ht deferred_events;
@@ -1483,7 +1463,8 @@ cxip_rxc_copy_to_hmem(struct cxip_rxc *rxc, uint64_t device,
 					size, hmem_iface, true);
 }
 
-/* PtlTE buffer pool - Common PtlTE request/overflow list processing.
+/* PtlTE buffer pool - Common PtlTE request/overflow list buffer
+ * management.
  *
  * Only C_PTL_LIST_REQUEST and C_PTL_LIST_OVERFLOW are supported.
  */
@@ -1495,7 +1476,8 @@ struct cxip_ptelist_bufpool_attr {
 	size_t buf_size;
 	size_t min_space_avail;
 	size_t min_posted;
-	size_t max_count;
+	size_t max_posted;
+	size_t max_cached;
 };
 
 struct cxip_ptelist_bufpool {
@@ -1510,19 +1492,22 @@ struct cxip_ptelist_bufpool {
 	 */
 	struct dlist_entry consumed_bufs;
 
-	/* List of available buffers for which an append failed or
-	 * they have been removed but not yet released.
+	/* List of available buffers that may be appended to the list.
+	 * These could be from a previous append failure or be cached
+	 * from previous message processing to avoid map/unmap of
+	 * list buffer.
 	 */
 	struct dlist_entry free_bufs;
 
 	ofi_atomic32_t bufs_linked;
 	ofi_atomic32_t bufs_allocated;
+	ofi_atomic32_t bufs_free;
 };
 
 struct cxip_ptelist_req {
 	/* Pending list of unexpected header entries which could not be placed
 	 * on the RX context unexpected header list due to put events being
-	 * receive out-of-order.
+	 * received out-of-order.
 	 */
 	struct dlist_entry pending_ux_list;
 };
@@ -1532,6 +1517,7 @@ struct cxip_ptelist_buf {
 
 	/* RX context the request buffer is posted on. */
 	struct cxip_rxc *rxc;
+	enum cxip_le_type le_type;
 	struct dlist_entry buf_entry;
 	struct cxip_req *req;
 
@@ -1543,13 +1529,13 @@ struct cxip_ptelist_buf {
 	 */
 	size_t unlink_length;
 
-	/* Current offset into the req_buf where packets are landing. When
-	 * cur_offset is equal to unlink_length, software has received all
-	 * hardware put events for this request buffer.
+	/* Current offset into the buffer where packets/data are landing. When
+	 * the cur_offset is equal to unlink_length, software has completed
+	 * event processing for the buffer.
 	 */
 	size_t cur_offset;
 
-	/* Request list specific control */
+	/* Request list specific control information */
 	struct cxip_ptelist_req request;
 
 	/* The number of unexpected headers posted placed on the RX context
@@ -1557,8 +1543,7 @@ struct cxip_ptelist_buf {
 	 */
 	ofi_atomic32_t refcount;
 
-	/* Buffer used to land packets.
-	 */
+	/* Buffer used to land packets. */
 	char data[0];
 };
 
@@ -1569,7 +1554,7 @@ void cxip_ptelist_bufpool_fini(struct cxip_ptelist_bufpool *pool);
 int cxip_ptelist_buf_replenish(struct cxip_ptelist_bufpool *pool,
 			       bool seq_restart);
 void cxip_ptelist_buf_link_err(struct cxip_ptelist_buf *buf,
-			       int link_error);
+			       int rc_link_error);
 void cxip_ptelist_buf_unlink(struct cxip_ptelist_buf *buf);
 void cxip_ptelist_buf_put(struct cxip_ptelist_buf *buf, bool repost);
 void cxip_ptelist_buf_get(struct cxip_ptelist_buf *buf);

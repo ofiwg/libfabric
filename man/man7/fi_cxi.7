@@ -605,10 +605,26 @@ be less than or equal to \f[I]FI_CXI_OFLOW_BUF_SIZE\f[R].
 Eager data size for rendezvous protocol.
 .TP
 \f[I]FI_CXI_OFLOW_BUF_SIZE\f[R]
-Overflow buffer size.
+Size of overflow buffers.
+Increasing the overflow buffer size allows for more unexpected message
+eager data to be held in single overflow buffer.
+The default size is 2MB.
 .TP
-\f[I]FI_CXI_OFLOW_BUF_COUNT\f[R]
-Overflow buffer count.
+\f[I]FI_CXI_OFLOW_BUF_MIN_POSTED/FI_CXI_OFLOW_BUF_COUNT\f[R]
+The minimum number of overflow buffers that should be posted.
+The default minimum posted count is 3.
+Buffers will grow unbounded to support outstanding unexpected messages.
+Care should be taken to size appropriately based on job scale, size of
+eager data, and the amount of unexpected message traffic to reduce the
+need for flow control.
+.TP
+\f[I]FI_CXI_OFLOW_BUF_MAX_CACHED\f[R]
+The maximum number of overflow buffers that will be cached.
+The default maximum count is 3 * FI_CXI_OFLOW_BUF_MIN_POSTED.
+A value of zero indicates that once a overflow buffer is allocated it
+will be cached and used as needed.
+A non-zero value can be used with bursty traffic to shrink the number of
+allocated buffers to the maximum count when they are no longer needed.
 .TP
 *FI_CXI_SAFE_DEVMEM_COPY_THRESHOLD
 Defines the maximum CPU memcpy size for HMEM device memory that is
@@ -692,16 +708,18 @@ The default size is 2MB.
 \f[I]FI_CXI_REQ_BUF_MIN_POSTED\f[R]
 The minimum number of request buffers that should be posted.
 The default minimum posted count is 4.
-Care should be taken to size appropriately based on job scale and
-traffic.
+The number of buffers will grow unbounded to support outstanding
+unexpected messages.
+Care should be taken to size appropriately based on job scale and the
+size of eager data to reduce the need for flow control.
 .TP
-\f[I]FI_CXI_REQ_BUF_MAX_COUNT\f[R]
-The maximum number of request buffers that can be allocated.
+\f[I]FI_CXI_REQ_BUF_MAX_CACHED/FI_CXI_REQ_BUF_MAX_COUNT\f[R]
+The maximum number of request buffers that will be cached.
 The default maximum count is 0.
-A value of 0 indicates the count should be unbounded and scale as
-required.
-Care should be taken to size appropriately based on job scale and
-traffic.
+A value of zero indicates that once a request buffer is allocated it
+will be cached and used as needed.
+A non-zero value can be used with bursty traffic to shrink the number of
+allocated buffers to a maximum count when they are no longer needed.
 .TP
 \f[I]FI_CXI_MSG_LOSSLESS\f[R]
 Enable or disable lossless receive matching.

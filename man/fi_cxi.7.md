@@ -524,10 +524,24 @@ The CXI provider checks for the following environment variables:
 :   Eager data size for rendezvous protocol.
 
 *FI_CXI_OFLOW_BUF_SIZE*
-:   Overflow buffer size.
+:   Size of overflow buffers. Increasing the overflow buffer size allows for
+    more unexpected message eager data to be held in single overflow buffer.
+    The default size is 2MB.
 
-*FI_CXI_OFLOW_BUF_COUNT*
-:   Overflow buffer count.
+*FI_CXI_OFLOW_BUF_MIN_POSTED/FI_CXI_OFLOW_BUF_COUNT*
+:   The minimum number of overflow buffers that should be posted. The default
+    minimum posted count is 3. Buffers will grow unbounded to support
+    outstanding unexpected messages. Care should be taken to size appropriately
+    based on job scale, size of eager data, and the amount of unexpected
+    message traffic to reduce the need for flow control.
+
+*FI_CXI_OFLOW_BUF_MAX_CACHED*
+:   The maximum number of overflow buffers that will be cached. The default
+    maximum count is 3 * FI_CXI_OFLOW_BUF_MIN_POSTED. A value of zero indicates
+    that once a overflow buffer is allocated it will be cached and used as
+    needed. A non-zero value can be used with bursty traffic to shrink the
+    number of allocated buffers to the maximum count when they are no longer
+    needed.
 
 *FI_CXI_SAFE_DEVMEM_COPY_THRESHOLD
 :   Defines the maximum CPU memcpy size for HMEM device memory that is
@@ -597,14 +611,17 @@ The CXI provider checks for the following environment variables:
 
 *FI_CXI_REQ_BUF_MIN_POSTED*
 :   The minimum number of request buffers that should be posted. The default
-    minimum posted count is 4. Care should be taken to size appropriately
-    based on job scale and traffic.
+    minimum posted count is 4. The number of buffers will grow unbounded to
+    support outstanding unexpected messages. Care should be taken to size
+    appropriately based on job scale and the size of eager data to reduce
+    the need for flow control.
 
-*FI_CXI_REQ_BUF_MAX_COUNT*
-:   The maximum number of request buffers that can be allocated. The default
-    maximum count is 0. A value of 0 indicates the count should be unbounded
-    and scale as required. Care should be taken to size appropriately based
-    on job scale and traffic.
+*FI_CXI_REQ_BUF_MAX_CACHED/FI_CXI_REQ_BUF_MAX_COUNT*
+:   The maximum number of request buffers that will be cached. The default
+    maximum count is 0. A value of zero indicates that once a request buffer
+    is allocated it will be cached and used as needed. A non-zero value can
+    be used with bursty traffic to shrink the number of allocated buffers to
+    a maximum count when they are no longer needed.
 
 *FI_CXI_MSG_LOSSLESS*
 :   Enable or disable lossless receive matching. If hardware resources are

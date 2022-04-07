@@ -515,9 +515,6 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context)
 	rxc->attr = *attr;
 
 	fastlock_init(&rxc->rx_lock);
-	ofi_atomic_initialize32(&rxc->oflow_bufs_submitted, 0);
-	ofi_atomic_initialize32(&rxc->oflow_bufs_in_use, 0);
-	dlist_init(&rxc->oflow_bufs);
 
 	for (i = 0; i < CXIP_DEF_EVENT_HT_BUCKETS; i++)
 		dlist_init(&rxc->deferred_events.bh[i]);
@@ -529,8 +526,6 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context)
 	dlist_init(&rxc->sw_pending_ux_list);
 
 	rxc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
-	rxc->oflow_buf_size = cxip_env.oflow_buf_size;
-	rxc->oflow_bufs_max = cxip_env.oflow_buf_count;
 	rxc->drop_count = -1;
 
 	/* TODO make configurable */
