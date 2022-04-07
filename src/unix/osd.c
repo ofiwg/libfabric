@@ -358,8 +358,7 @@ void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
 	pfds->fds[item->fd].events = 0;
 	pfds->fds[item->fd].revents = 0;
 
-	if (pfds->ctx[item->fd].hot_index != INVALID_SOCKET &&
-	    ofi_poll_fairness)
+	if (pfds->ctx[item->fd].hot_index >= 0 && ofi_poll_fairness)
 		ofi_pollfds_coolfd(pfds, item->fd);
 
 	while (pfds->nfds && pfds->fds[pfds->nfds - 1].fd == INVALID_SOCKET)
