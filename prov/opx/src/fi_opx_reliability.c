@@ -1803,24 +1803,26 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 
 	/*
 	 * How often to preemptively acknowledge packets.
-	 * The default is 0, which indicates no preemptive acking.
+	 * The default is 64, which indicates send a 
+	 * preemptive, non-solicited ACK after 64 packets received.
 	 * Must be a power of 2, so that we can create an AND mask
 	 * that will quickly tell us whether or not to ack
+	 * Setting to 0 disables this feature
 	 */
-	int preemptive_ack_rate = 0;
+	int preemptive_ack_rate = 64;
 	if (fi_param_get_int(fi_opx_global.prov, "reliability_service_pre_ack_rate", &preemptive_ack_rate) == FI_SUCCESS) {
 		if (preemptive_ack_rate < 0 || preemptive_ack_rate > 32768) {
 			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE has value %d which is outside the valid range of 0-32,768. Using default rate of 0 (disabled)\n", preemptive_ack_rate);
-			preemptive_ack_rate = 0;
+				"FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE has value %d which is outside the valid range of 0-32,768. Using default rate of 64\n", preemptive_ack_rate);
+			preemptive_ack_rate = 64;
 		} else if (preemptive_ack_rate & (preemptive_ack_rate - 1)) {
-			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE has value %d which is not a power of 2. Using default rate of 0 (disabled)\n", preemptive_ack_rate);
-			preemptive_ack_rate = 0;
+			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE has value %d which is not a power of 2. Using default rate of 64\n", preemptive_ack_rate);
+			preemptive_ack_rate = 64;
 		} else {
 			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Using environment-specified FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE of %d%s\n", preemptive_ack_rate, preemptive_ack_rate ? "" : " (disabled)");
 		}
 	} else {
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE not specified, using default value of 0 (disabled)\n");
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE not specified, using default value of 64\n");
 	}
 
 	/* Subtract 1 from the rate to give us the AND mask we want to use for PSN comparison. */
@@ -1837,14 +1839,14 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 	if (rc == FI_SUCCESS) {
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_USEC_MAX set to %d\n", usec);
 	} else {
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_USEC_MAX not specified, using default value of 100\n");
-		usec = 100; // TODO: Make this a define.
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_USEC_MAX not specified, using default value of 500\n");
+		usec = 500;
 	}
 	service->usec_max = usec;
 
 	service->usec_next = fi_opx_timer_next_event_usec(&service->tx.timer, &service->tx.timestamp, service->usec_max);
 
-	int dcomp_threshold;
+	int dcomp_threshold;  //TODO, this ENV is for SDMA testing.  Remove this at some point.
 	rc = fi_param_get_int(fi_opx_global.prov, "delivery_completion_threshold",
 		&dcomp_threshold);
 	if (rc != FI_SUCCESS || dcomp_threshold < OPX_MIN_DCOMP_THRESHOLD ||
