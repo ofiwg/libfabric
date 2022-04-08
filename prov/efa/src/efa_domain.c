@@ -37,15 +37,11 @@
 #include "efa.h"
 #include "rxr_cntr.h"
 
-ofi_spin_t pd_list_lock;
-struct efa_pd *pd_list = NULL;
-
 enum efa_fork_support_status efa_fork_status = EFA_FORK_SUPPORT_OFF;
 
 static int efa_domain_close(fid_t fid)
 {
 	struct efa_domain *domain;
-	struct efa_pd *efa_pd;
 	int ret;
 
 	domain = container_of(fid, struct efa_domain,
@@ -58,21 +54,7 @@ static int efa_domain_close(fid_t fid)
 	}
 
 	if (domain->ibv_pd) {
-		ofi_spin_lock(&pd_list_lock);
-		efa_pd = &pd_list[domain->ctx->dev_idx];
-		if (efa_pd->use_cnt == 1) {
-			ret = -ibv_dealloc_pd(domain->ibv_pd);
-			if (ret) {
-				ofi_spin_unlock(&pd_list_lock);
-				EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_dealloc_pd",
-				               ret);
-				return ret;
-			}
-			efa_pd->ibv_pd = NULL;
-		}
-		efa_pd->use_cnt--;
 		domain->ibv_pd = NULL;
-		ofi_spin_unlock(&pd_list_lock);
 	}
 
 	ret = ofi_domain_close(&domain->util_domain);
@@ -93,52 +75,30 @@ static int efa_domain_close(fid_t fid)
 
 static int efa_open_device_by_name(struct efa_domain *domain, const char *name)
 {
-	struct efa_context **ctx_list;
 	int i, ret = -FI_ENODEV;
 	int name_len;
-	int num_ctx;
 
 	if (!name)
 		return -FI_EINVAL;
-
-	ctx_list = efa_device_get_context_list(&num_ctx);
-	if (!ctx_list)
-		return -errno;
 
 	if (domain->type == EFA_DOMAIN_RDM)
 		name_len = strlen(name) - strlen(efa_rdm_domain.suffix);
 	else
 		name_len = strlen(name) - strlen(efa_dgrm_domain.suffix);
 
-	for (i = 0; i < num_ctx; i++) {
-		ret = strncmp(name, ctx_list[i]->ibv_ctx->device->name, name_len);
+	for (i = 0; i < g_device_cnt; i++) {
+		ret = strncmp(name, g_device_list[i].ibv_ctx->device->name, name_len);
 		if (!ret) {
-			domain->ctx = ctx_list[i];
+			domain->device = &g_device_list[i];
 			break;
 		}
 	}
 
-	/*
-	 * Check if a PD has already been allocated for this device and reuse
-	 * it if this is the case.
-	 */
-	ofi_spin_lock(&pd_list_lock);
-	if (pd_list[i].ibv_pd) {
-		domain->ibv_pd = pd_list[i].ibv_pd;
-		pd_list[i].use_cnt++;
-	} else {
-		domain->ibv_pd = ibv_alloc_pd(domain->ctx->ibv_ctx);
-		if (!domain->ibv_pd) {
-			ret = -errno;
-		} else {
-			pd_list[i].ibv_pd = domain->ibv_pd;
-			pd_list[i].use_cnt++;
-		}
-	}
-	ofi_spin_unlock(&pd_list_lock);
+	if (i == g_device_cnt)
+		return -FI_ENODEV;
 
-	efa_device_free_context_list(ctx_list);
-	return ret;
+	domain->ibv_pd = domain->device->ibv_pd;
+	return 0;
 }
 
 /* @brief Check if rdma-core fork support is enabled and prevent fork
@@ -460,7 +420,7 @@ static int efa_mr_cache_init(struct efa_domain *domain, struct fi_info *info)
 		efa_mr_max_cached_count = info->domain_attr->mr_cnt *
 					  EFA_MR_CACHE_LIMIT_MULT;
 	if (!efa_mr_max_cached_size)
-		efa_mr_max_cached_size = domain->ctx->max_mr_size *
+		efa_mr_max_cached_size = domain->device->ibv_attr.max_mr_size *
 					 EFA_MR_CACHE_LIMIT_MULT;
 	/*
 	 * XXX: we're modifying a global in the util mr cache? do we need an
@@ -503,7 +463,7 @@ static int efa_set_domain_hmem_info_cuda(struct efa_domain *domain)
 		return 0;
 	}
 
-	if (domain->ctx->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)
+	if (domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)
 		ibv_access |= IBV_ACCESS_REMOTE_READ;
 
 	domain->hmem_info[FI_HMEM_CUDA].initialized = true;
@@ -554,7 +514,7 @@ static int efa_set_domain_hmem_info_neuron(struct efa_domain *domain)
 		return 0;
 	}
 
-	if (domain->ctx->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ) {
+	if (domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ) {
 		ibv_access |= IBV_ACCESS_REMOTE_READ;
 	} else {
 		EFA_WARN(FI_LOG_DOMAIN,
@@ -756,3 +716,4 @@ err_free_domain:
 	free(domain);
 	return ret;
 }
+

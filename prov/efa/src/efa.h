@@ -64,6 +64,7 @@
 #include "ofi_util.h"
 #include "ofi_file.h"
 
+#include "efa_device.h"
 #include "rxr.h"
 #define EFA_PROV_NAME "efa"
 
@@ -164,7 +165,7 @@ struct efa_domain {
 	struct util_domain	util_domain;
 	enum efa_domain_type	type;
 	struct fid_domain	*shm_domain;
-	struct efa_context	*ctx;
+	struct efa_device	*device;
 	struct ibv_pd		*ibv_pd;
 	struct fi_info		*info;
 	struct efa_fabric	*fab;
@@ -263,21 +264,6 @@ struct efa_cq {
 	struct ofi_bufpool	*wce_pool;
 
 	struct ibv_cq		*ibv_cq;
-};
-
-struct efa_context {
-	struct ibv_context	*ibv_ctx;
-	int			dev_idx;
-	uint64_t		max_mr_size;
-	uint16_t		inline_buf_size;
-	uint16_t		max_wr_rdma_sge;
-	uint32_t		max_rdma_size;
-	uint32_t		device_caps;
-};
-
-struct efa_pd {
-	struct ibv_pd	   *ibv_pd;
-	int		   use_cnt;
 };
 
 struct efa_qp {
@@ -399,15 +385,6 @@ struct efa_ep_domain {
 	uint64_t	caps;
 };
 
-struct efa_device_attr {
-	struct ibv_device_attr	ibv_attr;
-	uint32_t		max_sq_wr;
-	uint32_t		max_rq_wr;
-	uint16_t		max_sq_sge;
-	uint16_t		max_rq_sge;
-};
-
-
 static inline struct efa_av *rxr_ep_av(struct rxr_ep *ep)
 {
 	return container_of(ep->util_ep.av, struct efa_av, util_av);
@@ -423,16 +400,6 @@ extern struct fi_ops_rma efa_ep_rma_ops;
 ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg,
 			  uint64_t flags, bool self_comm);
 
-extern ofi_spin_t pd_list_lock;
-// This list has the same indicies as ctx_list.
-extern struct efa_pd *pd_list;
-
-int efa_device_init(void);
-void efa_device_free(void);
-
-struct efa_context **efa_device_get_context_list(int *num_ctx);
-void efa_device_free_context_list(struct efa_context **list);
-
 const struct fi_info *efa_get_efa_info(const char *domain_name);
 int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		    struct fid_domain **domain_fid, void *context);
@@ -446,7 +413,6 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	       void *context);
 int efa_getinfo(uint32_t version, const char *node, const char *service,
 		uint64_t flags, const struct fi_info *hints, struct fi_info **info);
-void efa_finalize_prov(void);
 
 /* AV sub-functions */
 int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
@@ -463,7 +429,9 @@ fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qp
 
 fi_addr_t efa_av_reverse_lookup_dgram(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 
-int efa_init_prov(void);
+int efa_prov_initialize(void);
+
+void efa_prov_finalize(void);
 
 ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr);
 
@@ -482,15 +450,13 @@ enum efa_fork_support_status {
 };
 extern enum efa_fork_support_status efa_fork_status;
 
-bool efa_device_support_rdma_read(void);
-
 static inline
 bool efa_ep_support_rdma_read(struct fid_ep *ep_fid)
 {
 	struct efa_ep *efa_ep;
 
 	efa_ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
-	return efa_ep->domain->ctx->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+	return efa_ep->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
 }
 
 static inline
@@ -500,7 +466,7 @@ bool efa_ep_support_rnr_retry_modify(struct fid_ep *ep_fid)
 	struct efa_ep *efa_ep;
 
 	efa_ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
-	return efa_ep->domain->ctx->device_caps & EFADV_DEVICE_ATTR_CAPS_RNR_RETRY;
+	return efa_ep->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RNR_RETRY;
 #else
 	return false;
 #endif
@@ -621,7 +587,7 @@ size_t efa_max_rdma_size(struct fid_ep *ep_fid)
 	struct efa_ep *efa_ep;
 
 	efa_ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
-	return efa_ep->domain->ctx->max_rdma_size;
+	return efa_ep->domain->device->max_rdma_size;
 }
 
 static inline

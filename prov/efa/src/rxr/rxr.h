@@ -207,7 +207,6 @@ extern struct fi_info rxr_info;
 extern struct rxr_env rxr_env;
 extern struct fi_fabric_attr rxr_fabric_attr;
 extern struct util_prov rxr_util_prov;
-extern struct efa_ep_addr *local_efa_addr;
 
 struct rxr_env {
 	int rx_window_size;
