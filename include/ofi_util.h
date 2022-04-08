@@ -528,6 +528,23 @@ struct util_cq {
 	ofi_cq_progress_func	progress;
 };
 
+/*
+ * Peer CQ callbacks.
+ * These callback definitions can be used by providers to define generic
+ * callbacks which can be assigned different functions to handle completion
+ * for an imported cq vs an internal cq
+ */
+struct ofi_peer_cq_cb {
+	int (*cq_comp)(struct util_cq *cq, void *context,
+				uint64_t flags, size_t len, void *buf, uint64_t data,
+				uint64_t tag);
+	int (*cq_comp_src)(struct util_cq *cq, void *context,
+				uint64_t flags, size_t len, void *buf, uint64_t data,
+				uint64_t tag, fi_addr_t addr);
+	int (*cq_err)(struct util_cq *cq,
+				  const struct fi_cq_err_entry *err_entry);
+};
+
 int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		 struct fi_cq_attr *attr, struct util_cq *cq,
 		 ofi_cq_progress_func progress, void *context);
