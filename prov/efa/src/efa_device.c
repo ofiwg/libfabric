@@ -49,6 +49,7 @@
 
 #include "efa.h"
 #include "efa_device.h"
+#include "efa_prov_info.h"
 
 #ifdef _WIN32
 #include "efawin.h"
@@ -82,6 +83,7 @@ static int efa_device_construct(struct efa_device *efa_device,
 	memset(&efa_device->ibv_attr, 0, sizeof(efa_device->ibv_attr));
 	err = ibv_query_device(efa_device->ibv_ctx, &efa_device->ibv_attr);
 	if (err) {
+		err = -err;
 		EFA_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_device", err);
 		goto err_close;
 	}
@@ -90,6 +92,7 @@ static int efa_device_construct(struct efa_device *efa_device,
 	err = efadv_query_device(efa_device->ibv_ctx, &efa_device->efa_attr,
 				 sizeof(efa_device->efa_attr));
 	if (err) {
+		err = -err;
 		EFA_INFO_ERRNO(FI_LOG_FABRIC, "efadv_query_device", err);
 		goto err_close;
 	}
@@ -98,6 +101,7 @@ static int efa_device_construct(struct efa_device *efa_device,
 	err = ibv_query_port(efa_device->ibv_ctx, 1, &efa_device->ibv_port_attr);
 	if (err) {
 		EFA_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_port", err);
+		err = -err;
 		goto err_close;
 	}
 
@@ -105,6 +109,7 @@ static int efa_device_construct(struct efa_device *efa_device,
 	err = ibv_query_gid(efa_device->ibv_ctx, 1, 0, &efa_device->ibv_gid);
 	if (err) {
 		EFA_INFO_ERRNO(FI_LOG_FABRIC, "ibv_query_gid", err);
+		err = -err;
 		goto err_close;
 	}
 
@@ -112,7 +117,7 @@ static int efa_device_construct(struct efa_device *efa_device,
 	if (!efa_device->ibv_pd) {
 		EFA_INFO_ERRNO(FI_LOG_DOMAIN, "ibv_alloc_pd",
 		               errno);
-		err = errno;
+		err = -errno;
 		goto err_close;
 	}
 
@@ -123,11 +128,34 @@ static int efa_device_construct(struct efa_device *efa_device,
 	efa_device->max_rdma_size = 0;
 	efa_device->device_caps = 0;
 #endif
+	efa_device->rdm_info = NULL;
+	err = efa_prov_info_alloc(&efa_device->rdm_info, efa_device, &efa_rdm_domain);
+	if (err) {
+		EFA_WARN(FI_LOG_DOMAIN, "failed to allocate device info for RDM. err: %d\n",
+			 -err);
+		goto err_close;
+	}
+
+	efa_device->dgram_info = NULL;
+	err = efa_prov_info_alloc(&efa_device->dgram_info, efa_device, &efa_dgrm_domain);
+	if (err) {
+		EFA_WARN(FI_LOG_DOMAIN, "failed to allocate device info for DGRAM. err: %d\n",
+			 -err);
+		goto err_close;
+	}
+
 	return 0;
 
 err_close:
 	ibv_close_device(efa_device->ibv_ctx);
-	return -err;
+
+	if (efa_device->rdm_info)
+		fi_freeinfo(efa_device->rdm_info);
+
+	if (efa_device->dgram_info)
+		fi_freeinfo(efa_device->dgram_info);
+
+	return err;
 }
 
 /**

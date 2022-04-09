@@ -457,65 +457,35 @@ void efa_win_lib_finalize(void) {
 
 #endif // _WIN32
 
-struct fi_info *g_device_info_list;
-
 /**
- * @brief initialize global variable: util_prov and g_device_info_list
- *
- * g_device_info_list is a linked list of fi_info
- * objects, with each fi_info object containing
- * one EFA device's attribute. Each device has
- * two fi_info objects, one for dgram, the other
- * for rdm.
+ * @brief initialize global variable: util_prov
  *
  * util_prov is the util_provider with its
- * info pointing to the head of g_device_info_list
+ * info pointing a linked list of device info
  */
 static int efa_util_prov_initialize()
 {
-	int i, err;
-	struct fi_info *rdm_info = NULL;
-	struct fi_info *dgrm_info = NULL;
-	struct fi_info *tail_info = NULL;
+	int i;
 
-	g_device_info_list = NULL;
 	for (i = 0; i < g_device_cnt; i++) {
-		rdm_info = NULL;
-		dgrm_info = NULL;
-		err = efa_prov_info_alloc(&rdm_info, &g_device_list[i], &efa_rdm_domain);
-		if (err)
-			goto err_free;
-
-		err = efa_prov_info_alloc(&dgrm_info, &g_device_list[i], &efa_dgrm_domain);
-		if (err)
-			goto err_free;
-
-		if (i==0) {
-			g_device_info_list = rdm_info;
-		} else {
-			tail_info->next = rdm_info;
-		}
-
-		rdm_info->next = dgrm_info;
-		tail_info = dgrm_info;
+		assert(g_device_list[i].rdm_info);
+		assert(g_device_list[i].dgram_info);
+		g_device_list[i].rdm_info->next = g_device_list[i].dgram_info;
+		if (i < g_device_cnt - 1)
+			g_device_list[i].dgram_info->next = g_device_list[i+1].rdm_info;
+		else
+			g_device_list[i].dgram_info->next = NULL;
 	}
 
-	efa_util_prov.info = g_device_info_list;
+	efa_util_prov.info = g_device_list[0].rdm_info;
 	return 0;
-
-err_free:
-	fi_freeinfo(g_device_info_list);
-	fi_freeinfo(rdm_info);
-	fi_freeinfo(dgrm_info);
-	return err;
 }
 
 /**
- * @brief release resources of g_device_info_list and reset util_prov
+ * @brief reset util_prov.info
  */
 static void efa_util_prov_finalize()
 {
-	fi_freeinfo(g_device_info_list);
 	efa_util_prov.info = NULL;
 }
 
