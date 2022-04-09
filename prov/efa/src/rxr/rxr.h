@@ -861,8 +861,6 @@ static inline int rxr_ep_use_zcpy_rx(struct rxr_ep *ep, struct fi_info *info)
 }
 
 /* Initialization functions */
-void rxr_reset_rx_tx_to_core(const struct fi_info *user_info,
-			     struct fi_info *core_info);
 int rxr_get_lower_rdm_info(uint32_t version, const char *node, const char *service,
 			   uint64_t flags, const struct util_prov *util_prov,
 			   const struct fi_info *util_hints,
