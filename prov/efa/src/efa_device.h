@@ -58,4 +58,13 @@ extern int g_device_cnt;
 
 bool efa_device_support_rdma_read(void);
 
+int efa_device_get_driver(struct efa_device *efa_device,
+			  char **efa_driver);
+
+int efa_device_get_version(struct efa_device *efa_device,
+			   char **device_version);
+
+int efa_device_get_pci_attr(struct efa_device *device,
+			    struct fi_pci_attr *pci_attr);
+
 #endif

@@ -245,202 +245,6 @@ static int efa_check_hints(uint32_t version, const struct fi_info *hints,
 	return 0;
 }
 
-static char *get_sysfs_path(void)
-{
-	char *env = NULL;
-	char *sysfs_path = NULL;
-	int len;
-
-	/*
-	 * Only follow use path passed in through the calling user's
-	 * environment if we're not running SUID.
-	 */
-	if (getuid() == geteuid())
-		env = getenv("SYSFS_PATH");
-
-	if (env) {
-		sysfs_path = strndup(env, IBV_SYSFS_PATH_MAX);
-		len = strlen(sysfs_path);
-		while (len > 0 && sysfs_path[len - 1] == '/') {
-			--len;
-			sysfs_path[len] = '\0';
-		}
-	} else {
-		sysfs_path = strdup("/sys");
-	}
-
-	return sysfs_path;
-}
-
-#ifndef _WIN32
-
-static int efa_get_driver(struct efa_device *ctx,
-			     char **efa_driver)
-{
-	int ret;
-	char *driver_sym_path;
-	char driver_real_path[PATH_MAX];
-	char *driver;
-	ret = asprintf(&driver_sym_path, "%s%s",
-		       ctx->ibv_ctx->device->ibdev_path, "/device/driver");
-	if (ret < 0) {
-		return -FI_ENOMEM;
-	}
-
-	if (!realpath(driver_sym_path, driver_real_path)) {
-		ret = -errno;
-		goto err_free_driver_sym;
-	}
-
-	driver = strrchr(driver_real_path, '/');
-	if (!driver) {
-		ret = -FI_EINVAL;
-		goto err_free_driver_sym;
-	}
-	driver++;
-	*efa_driver = strdup(driver);
-	if (!*efa_driver) {
-		ret = -FI_ENOMEM;
-		goto err_free_driver_sym;
-	}
-
-	free(driver_sym_path);
-	return 0;
-
-err_free_driver_sym:
-	free(driver_sym_path);
-	return ret;
-}
-
-#else // _WIN32
-
-static int efa_get_driver(struct efa_device *ctx,
-			     char **efa_driver)
-{
-	int ret;
-	/*
-	 * On windows efa device is not exposed as infiniband device.
-	 * The driver for efa device can be queried using Windows Setup API.
-	 * The code required to do that is more complex than necessary in this context.
-	 * We will return a hardcoded string as driver.
-	 */
-	ret = asprintf(efa_driver, "%s", "efa.sys");
-	if (ret < 0) {
-		return -FI_ENOMEM;
-	}
-	return 0;
-}
-
-#endif // _WIN32
-
-#ifndef _WIN32
-
-static int efa_get_device_version(struct efa_device *efa_device,
-				  char **device_version)
-{
-	char *sysfs_path;
-	int ret;
-
-	*device_version = calloc(1, EFA_ABI_VER_MAX_LEN + 1);
-	if (!*device_version) {
-		return -FI_ENOMEM;
-	}
-
-	sysfs_path = get_sysfs_path();
-	if (!sysfs_path) {
-		return -FI_ENOMEM;
-	}
-
-	ret = fi_read_file(sysfs_path, "class/infiniband_verbs/abi_version",
-			   *device_version,
-			   EFA_ABI_VER_MAX_LEN);
-	if (ret < 0) {
-		goto free_sysfs_path;
-	}
-
-	free(sysfs_path);
-	return 0;
-
-free_sysfs_path:
-	free(sysfs_path);
-	return ret;
-}
-
-#else // _WIN32
-
-static int efa_get_device_version(struct efa_device *efa_device,
-				  char **device_version)
-{
-	int ret;
-	/*
-	 * On Windows, there is no sysfs. We use hw_ver field of ibv_attr to obtain it
-	 */
-	ret = asprintf(device_version, "%u", efa_device->ibv_attr.hw_ver);
-	if (ret < 0) {
-		return -FI_ENOMEM;
-	}
-	return 0;
-}
-
-#endif // _WIN32
-
-#ifndef _WIN32
-
-static int efa_get_pci_attr(struct efa_device *device,
-			     struct fi_pci_attr *pci_attr)
-{
-	char *dbdf_sym_path;
-	char *dbdf;
-	char dbdf_real_path[PATH_MAX];
-	int ret;
-	ret = asprintf(&dbdf_sym_path, "%s%s",
-	       device->ibv_ctx->device->ibdev_path, "/device");
-	if (ret < 0) {
-		return -FI_ENOMEM;
-	}
-
-	if (!realpath(dbdf_sym_path, dbdf_real_path)) {
-		ret = -errno;
-		goto err_free_dbdf_sym;
-	}
-
-	dbdf = strrchr(dbdf_real_path, '/');
-	if (!dbdf) {
-		ret = -FI_EINVAL;
-		goto err_free_dbdf_sym;
-	}
-	dbdf++;
-
-	ret = sscanf(dbdf, "%hx:%hhx:%hhx.%hhx", &pci_attr->domain_id,
-		     &pci_attr->bus_id, &pci_attr->device_id,
-		     &pci_attr->function_id);
-	if (ret != 4) {
-		ret = -FI_EINVAL;
-		goto err_free_dbdf_sym;
-	}
-
-	free(dbdf_sym_path);
-	return 0;
-
-err_free_dbdf_sym:
-	free(dbdf_sym_path);
-	return ret;
-}
-
-#else // _WIN32
-
-static int efa_get_pci_attr(struct efa_device *device,
-			     struct fi_pci_attr *pci_attr)
-{
-	/*
-	 * pci_attr is currently not supported on Windows. We return success
-	 * to let applications continue without failures.
-	 */
-	return 0;
-}
-
-#endif // _WIN32
-
 static int efa_alloc_fid_nic(struct fi_info *fi, struct efa_device *device)
 {
 	struct fi_device_attr *device_attr;
@@ -476,7 +280,7 @@ static int efa_alloc_fid_nic(struct fi_info *fi, struct efa_device *device)
 		goto err_free_nic;
 	}
 
-	ret = efa_get_device_version(device, &device_attr->device_version);
+	ret = efa_device_get_version(device, &device_attr->device_version);
 	if (ret != 0){
 		goto err_free_nic;
 	}
@@ -488,7 +292,7 @@ static int efa_alloc_fid_nic(struct fi_info *fi, struct efa_device *device)
 		goto err_free_nic;
 	}
 
-	ret = efa_get_driver(device, &device_attr->driver);
+	ret = efa_device_get_driver(device, &device_attr->driver);
 	if (ret != 0) {
 		goto err_free_nic;
 	}
@@ -503,7 +307,7 @@ static int efa_alloc_fid_nic(struct fi_info *fi, struct efa_device *device)
 	bus_attr->bus_type = FI_BUS_PCI;
 
 	/* fi_pci_attr */
-	ret = efa_get_pci_attr(device, pci_attr);
+	ret = efa_device_get_pci_attr(device, pci_attr);
 	if (ret != 0) {
 		goto err_free_nic;
 	}
