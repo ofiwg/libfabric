@@ -34,9 +34,9 @@ int cxip_cq_req_complete(struct cxip_req *req)
 		return FI_SUCCESS;
 	}
 
-	return ofi_cq_write(&req->cq->util_cq, (void *)req->context,
-			    req->flags, req->data_len, (void *)req->buf,
-			    req->data, req->tag);
+	return ofi_peer_cq_write(&req->cq->util_cq, (void *)req->context,
+				 req->flags, req->data_len, (void *)req->buf,
+				 req->data, req->tag, FI_ADDR_NOTAVAIL);
 }
 
 /*
@@ -50,9 +50,9 @@ int cxip_cq_req_complete_addr(struct cxip_req *req, fi_addr_t src)
 		return FI_SUCCESS;
 	}
 
-	return ofi_cq_write_src(&req->cq->util_cq, (void *)req->context,
-				req->flags, req->data_len, (void *)req->buf,
-				req->data, req->tag, src);
+	return ofi_peer_cq_write(&req->cq->util_cq, (void *)req->context,
+				 req->flags, req->data_len, (void *)req->buf,
+				 req->data, req->tag, src);
 }
 
 /*
@@ -94,7 +94,7 @@ int cxip_cq_req_error(struct cxip_req *req, size_t olen,
 	err_entry.buf = (void *)(uintptr_t)req->buf;
 	err_entry.src_addr = src_addr;
 
-	return ofi_cq_write_error(&req->cq->util_cq, &err_entry);
+	return ofi_peer_cq_write_error(&req->cq->util_cq, &err_entry);
 }
 
 /*
@@ -432,7 +432,6 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto err_util_cq;
 	}
 
-	cxi_cq->util_cq.cq_fid.ops->strerror = &cxip_cq_strerror;
 	cxi_cq->util_cq.cq_fid.fid.ops = &cxip_cq_fi_ops;
 
 	cxi_cq->domain = cxi_dom;
