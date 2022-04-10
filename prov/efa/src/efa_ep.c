@@ -410,7 +410,6 @@ int efa_ep_create_self_ah(struct efa_ep *ep, struct ibv_pd *ibv_pd)
 static int efa_ep_enable(struct fid_ep *ep_fid)
 {
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
-	const struct fi_info *efa_info;
 	struct ibv_pd *ibv_pd;
 	struct efa_ep *ep;
 	int err;
@@ -432,12 +431,6 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 		EFA_WARN(FI_LOG_EP_CTRL,
 			 "Endpoint is not bound to a receive completion queue when it has receive capabilities enabled. (FI_RECV)\n");
 		return -FI_ENOCQ;
-	}
-
-	efa_info = efa_get_efa_info(ep->info->domain_attr->name);
-	if (!efa_info) {
-		EFA_INFO(FI_LOG_EP_CTRL, "Unable to find matching efa_info\n");
-		return -FI_EINVAL;
 	}
 
 	if (ep->scq) {
@@ -622,68 +615,64 @@ static struct fi_ops_atomic efa_ep_atomic_ops = {
 	.compwritevalid = fi_no_atomic_compwritevalid,
 };
 
-int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
+int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 		struct fid_ep **ep_fid, void *context)
 {
 	struct efa_domain *domain;
-	const struct fi_info *fi;
+	const struct fi_info *prov_info;
 	struct efa_ep *ep;
 	int ret;
 
 	domain = container_of(domain_fid, struct efa_domain,
 			      util_domain.domain_fid);
 
-	if (!info || !info->ep_attr || !info->domain_attr ||
-	    strncmp(domain->device->ibv_ctx->device->name, info->domain_attr->name,
+	if (!user_info || !user_info->ep_attr || !user_info->domain_attr ||
+	    strncmp(domain->device->ibv_ctx->device->name, user_info->domain_attr->name,
 		    strlen(domain->device->ibv_ctx->device->name))) {
 		EFA_INFO(FI_LOG_DOMAIN, "Invalid info->domain_attr->name\n");
 		return -FI_EINVAL;
 	}
 
-	fi = efa_get_efa_info(info->domain_attr->name);
-	if (!fi) {
-		EFA_INFO(FI_LOG_DOMAIN, "Unable to find matching efa_info\n");
-		return -FI_EINVAL;
-	}
+	prov_info = efa_domain_get_prov_info(domain, user_info->ep_attr->type);
+	assert(prov_info);
 
-	if (info->ep_attr) {
-		ret = ofi_check_ep_attr(&efa_util_prov, info->fabric_attr->api_version, fi, info);
+	assert(user_info->ep_attr);
+	ret = ofi_check_ep_attr(&efa_util_prov, user_info->fabric_attr->api_version, prov_info, user_info);
+	if (ret)
+		return ret;
+
+	if (user_info->tx_attr) {
+		ret = ofi_check_tx_attr(&efa_prov, prov_info->tx_attr,
+					user_info->tx_attr, user_info->mode);
 		if (ret)
 			return ret;
 	}
 
-	if (info->tx_attr) {
-		ret = ofi_check_tx_attr(&efa_prov, fi->tx_attr,
-					info->tx_attr, info->mode);
+	if (user_info->rx_attr) {
+		ret = ofi_check_rx_attr(&efa_prov, prov_info, user_info->rx_attr, user_info->mode);
 		if (ret)
 			return ret;
 	}
 
-	if (info->rx_attr) {
-		ret = ofi_check_rx_attr(&efa_prov, fi, info->rx_attr, info->mode);
-		if (ret)
-			return ret;
-	}
-
-	ep = efa_ep_alloc(info);
+	ep = efa_ep_alloc(user_info);
 	if (!ep)
 		return -FI_ENOMEM;
 
-	ret = ofi_endpoint_init(domain_fid, &efa_util_prov, info, &ep->util_ep,
+	ret = ofi_endpoint_init(domain_fid, &efa_util_prov, user_info, &ep->util_ep,
 				context, efa_ep_progress);
 	if (ret)
 		goto err_ep_destroy;
 
 	ret = ofi_bufpool_create(&ep->send_wr_pool,
 		sizeof(struct efa_send_wr) +
-		info->tx_attr->iov_limit * sizeof(struct ibv_sge),
+		user_info->tx_attr->iov_limit * sizeof(struct ibv_sge),
 		16, 0, 1024, 0);
 	if (ret)
 		goto err_ep_destroy;
 
 	ret = ofi_bufpool_create(&ep->recv_wr_pool,
 		sizeof(struct efa_recv_wr) +
-		info->rx_attr->iov_limit * sizeof(struct ibv_sge),
+		user_info->rx_attr->iov_limit * sizeof(struct ibv_sge),
 		16, 0, 1024, 0);
 	if (ret)
 		goto err_send_wr_destroy;
@@ -693,13 +682,13 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 	ep->recv_more_wr_tail = &ep->recv_more_wr_head;
 	ep->rnr_retry = rxr_env.rnr_retry;
 
-	if (info->src_addr) {
+	if (user_info->src_addr) {
 		ep->src_addr = (void *)calloc(1, EFA_EP_ADDR_LEN);
 		if (!ep->src_addr) {
 			ret = -FI_ENOMEM;
 			goto err_recv_wr_destroy;
 		}
-		memcpy(ep->src_addr, info->src_addr, info->src_addrlen);
+		memcpy(ep->src_addr, user_info->src_addr, user_info->src_addrlen);
 	}
 
 	if (ep->domain->hmem_support_status[FI_HMEM_CUDA].initialized) {

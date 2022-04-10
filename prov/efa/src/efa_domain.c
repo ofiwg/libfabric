@@ -196,11 +196,11 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	 */
 	efa_domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
 
-	efa_domain->info = fi_dupinfo(efa_get_efa_info(info->domain_attr->name));
-	if (!efa_domain->info) {
-		ret = -FI_ENOMEM;
-		goto err_free;
+	if (!info->ep_attr || info->ep_attr->type == FI_EP_UNSPEC) {
+		EFA_WARN(FI_LOG_DOMAIN, "ep type not specified when creating domain");
+		return -FI_EINVAL;
 	}
+
 
 	efa_domain->mr_local = ofi_mr_local(info);
 	if (EFA_EP_TYPE_IS_DGRAM(info) && !efa_domain->mr_local) {
@@ -212,6 +212,12 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	err = efa_domain_init_device_and_pd(efa_domain, info->domain_attr->name);
 	if (err) {
 		ret = err;
+		goto err_free;
+	}
+
+	efa_domain->info = fi_dupinfo(EFA_EP_TYPE_IS_RDM(info) ? efa_domain->device->rdm_info : efa_domain->device->dgram_info);
+	if (!efa_domain->info) {
+		ret = -FI_ENOMEM;
 		goto err_free;
 	}
 

@@ -80,4 +80,18 @@ const char *efa_domain_name_suffix(enum fi_ep_type ep_type)
 	return (ep_type == FI_EP_RDM) ? "-rdm" : "-dgrm";
 }
 
+/**
+ * @brief get prov_info according to endpoint type
+ *
+ * @param	efa_domain[in]		EFA domain
+ * @param	ep_type[in]		end point type
+ * @return	pointer to prov_info
+ */
+static inline
+struct fi_info *efa_domain_get_prov_info(struct efa_domain *efa_domain, enum fi_ep_type ep_type)
+{
+	assert(ep_type == FI_EP_RDM || ep_type == FI_EP_DGRAM);
+	return (ep_type == FI_EP_RDM) ? efa_domain->device->rdm_info : efa_domain->device->dgram_info;
+}
+
 #endif

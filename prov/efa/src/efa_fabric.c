@@ -155,18 +155,6 @@ static int efa_str_to_ep_addr(const char *node, const char *service, struct efa_
 	return 0;
 }
 
-const struct fi_info *efa_get_efa_info(const char *domain_name)
-{
-	const struct fi_info *fi;
-
-	for (fi = efa_util_prov.info; fi; fi = fi->next) {
-		if (!strcmp(fi->domain_attr->name, domain_name))
-			return fi;
-	}
-
-	return NULL;
-}
-
 static int efa_node_matches_addr(struct efa_ep_addr *addr, const char *node)
 {
 	struct efa_ep_addr eaddr;
