@@ -123,11 +123,11 @@ extern "C" {
 #if HAVE_SYMVER_SUPPORT
 
 #define COMPAT_SYMVER(name, api, ver) \
-	asm(".symver " #name "," #api "@" #ver)
+	asm(".symver " #name "," #api "@" #ver "\n")
 #define DEFAULT_SYMVER(name, api, ver) \
-	asm(".symver " #name "," #api "@@" #ver)
+	asm(".symver " #name "," #api "@@" #ver "\n")
 #define CURRENT_SYMVER(name, api) \
-	asm(".symver " #name "," #api "@@" CURRENT_ABI)
+	asm(".symver " #name "," #api "@@" CURRENT_ABI "\n")
 
 #else
 
