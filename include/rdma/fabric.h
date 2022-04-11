@@ -160,7 +160,8 @@ typedef struct fid *fid_t;
 #define FI_COMMIT_COMPLETE	(1ULL << 30)
 #define FI_MATCH_COMPLETE	(1ULL << 31)
 
-#define FI_PEER_IMPORT		(1ULL << 43)
+#define FI_PEER_SRX		(1ULL << 42)
+#define FI_PEER_CQ		(1ULL << 43)
 #define FI_XPU_TRIGGER		(1ULL << 44)
 #define FI_HMEM_HOST_ALLOC	(1ULL << 45)
 #define FI_HMEM_DEVICE_ONLY	(1ULL << 46)

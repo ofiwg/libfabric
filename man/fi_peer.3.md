@@ -85,8 +85,8 @@ the fid_peer_cq is known as the owner, with the other provider referred to
 as the peer.  An owner may setup peer relationships with multiple providers.
 
 Peer CQs are configured by the owner calling the peer's fi_cq_open() call.
-The owner passes in the FI_PEER_IMPORT flag to fi_cq_open().  When
-FI_PEER_IMPORT is specified, the context parameter passed
+The owner passes in the FI_PEER_CQ flag to fi_cq_open().  When
+FI_PEER_CQ is specified, the context parameter passed
 into fi_cq_open() must reference a struct fi_peer_cq_context.  Providers that
 do not support peer CQs must fail the fi_cq_open() call with -FI_EINVAL
 (indicating an invalid flag).  The fid_peer_cq referenced by struct
@@ -183,7 +183,7 @@ on the local node.
 4. Provider A takes these steps:
    allocate peer_cq and reference cq_a
    set peer_cq_context->cq = peer_cq
-   set attr_b.flags |= FI_PEER_IMPORT
+   set attr_b.flags |= FI_PEER_CQ
    fi_cq_open(domain_b, attr_b, &cq_b, peer_cq_context)
 5. Provider B allocates a cq, but configures it such that all completions
    are written to the peer_cq.  The cq ops to read from the cq are
@@ -202,7 +202,7 @@ message ordering.
 The setup of a peer SRX is similar to the setup for a peer CQ outlined above.
 A fid_peer_srx object links the owner of the SRX with the peer provider.
 Peer SRXs are configured by the owner calling the peer's fi_srx_context()
-call with the FI_IMPORT_PEER flag set.  The context parameter passed to
+call with the FI_PEER_SRX flag set.  The context parameter passed to
 fi_srx_context() must be a struct fi_peer_srx_context.
 
 The data structures to support peer SRXs are defined as follows:
@@ -325,7 +325,7 @@ on the local node.
 4. Provider A takes these steps:
    allocate peer_srx and reference srx_a
    set peer_srx_context->srx = peer_srx
-   set attr_b.flags |= FI_PEER_IMPORT
+   set attr_b.flags |= FI_PEER_SRX
    fi_srx_context(domain_b, attr_b, &srx_b, peer_srx_context)
 5. Provider B allocates an srx, but configures it such that all receive
    buffers are obtained from the peer_srx.  The srx ops to post receives are
