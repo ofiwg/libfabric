@@ -37,6 +37,6 @@
 
 int efa_prov_info_alloc(struct fi_info **prov_info,
 			struct efa_device *device,
-			const struct efa_ep_domain *ep_dom);
+			enum fi_ep_type ep_type);
 
 #endif

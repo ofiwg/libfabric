@@ -137,18 +137,6 @@ const struct fi_tx_attr efa_rdm_tx_attr = {
 	.rma_iov_limit		= 1,
 };
 
-const struct efa_ep_domain efa_rdm_domain = {
-	.suffix			= "-rdm",
-	.type			= FI_EP_RDM,
-	.caps			= EFA_RDM_CAPS,
-};
-
-const struct efa_ep_domain efa_dgrm_domain = {
-	.suffix			= "-dgrm",
-	.type			= FI_EP_DGRAM,
-	.caps			= EFA_DGRM_CAPS,
-};
-
 static void efa_addr_to_str(const uint8_t *raw_addr, char *str)
 {
 	size_t name_len = strlen(EFA_FABRIC_PREFIX) + INET6_ADDRSTRLEN;
@@ -368,13 +356,14 @@ static int efa_get_device_attrs(struct efa_device *device, struct fi_info *info)
  *
  * @param	info[out]	info object to be allocated
  * @param	device[in]	efa_device that contains device's information
- * @param	ep_dom[in]	either ep_rdm_dom or ep_dgrm_dom
+ * @param	ep_type[in]	either FI_EP_RDM or FI_EP_DGRAM
  * @return	0 on success
- * 		negative libfabric error code on failure
+ * 		negative libfabric error code on failure. Possible errors are:
+ * 		-FI_ENOMEM	cannot allocate memory for the info object
+ * 		-FI_ENODATA	unsupported endpoint type
  */
-int efa_prov_info_alloc(struct fi_info **info,
-			struct efa_device *device,
-			const struct efa_ep_domain *ep_dom)
+int efa_prov_info_alloc(struct fi_info **info, struct efa_device *device,
+			enum fi_ep_type ep_type)
 {
 	struct fi_info *fi;
 	size_t name_len;
@@ -384,13 +373,20 @@ int efa_prov_info_alloc(struct fi_info **info,
 	if (!fi)
 		return -FI_ENOMEM;
 
-	fi->caps		= ep_dom->caps;
+	if (ep_type != FI_EP_RDM && ep_type != FI_EP_DGRAM) {
+		EFA_WARN(FI_LOG_DOMAIN, "Unsupported endpoint type: %d\n",
+			 ep_type);
+		return -FI_ENODATA;
+	}
+
+	fi->caps		= (ep_type == FI_EP_RDM) ? EFA_RDM_CAPS : EFA_DGRM_CAPS;
 	fi->handle		= NULL;
 	*fi->ep_attr		= efa_ep_attr;
-	if (ep_dom->type == FI_EP_RDM) {
+	if (ep_type == FI_EP_RDM) {
 		*fi->tx_attr	= efa_rdm_tx_attr;
 		*fi->rx_attr	= efa_rdm_rx_attr;
-	} else if (ep_dom->type == FI_EP_DGRAM) {
+	} else {
+		assert(ep_type == FI_EP_DGRAM);
 		fi->mode |= FI_MSG_PREFIX;
 		fi->ep_attr->msg_prefix_size = 40;
 		*fi->tx_attr	= efa_dgrm_tx_attr;
@@ -401,7 +397,7 @@ int efa_prov_info_alloc(struct fi_info **info,
 	*fi->fabric_attr	= efa_fabric_attr;
 
 	fi->ep_attr->protocol	= FI_PROTO_EFA;
-	fi->ep_attr->type	= ep_dom->type;
+	fi->ep_attr->type	= ep_type;
 
 	ret = efa_get_device_attrs(device, fi);
 	if (ret)
@@ -417,7 +413,7 @@ int efa_prov_info_alloc(struct fi_info **info,
 
 	strcpy(fi->fabric_attr->name, EFA_FABRIC_NAME);
 
-	name_len = strlen(device->ibv_ctx->device->name) + strlen(ep_dom->suffix);
+	name_len = strlen(device->ibv_ctx->device->name) + strlen(efa_domain_name_suffix(ep_type));
 	fi->domain_attr->name = malloc(name_len + 1);
 	if (!fi->domain_attr->name) {
 		ret = -FI_ENOMEM;
@@ -425,7 +421,7 @@ int efa_prov_info_alloc(struct fi_info **info,
 	}
 
 	snprintf(fi->domain_attr->name, name_len + 1, "%s%s",
-		 device->ibv_ctx->device->name, ep_dom->suffix);
+		 device->ibv_ctx->device->name, efa_domain_name_suffix(ep_type));
 	fi->domain_attr->name[name_len] = '\0';
 
 	fi->addr_format = FI_ADDR_EFA;

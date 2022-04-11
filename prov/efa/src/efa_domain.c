@@ -88,20 +88,12 @@ static struct fi_ops_domain efa_ops_domain_rdm = {
 static int efa_domain_init_device_and_pd(struct efa_domain *efa_domain, const char *domain_name)
 {
 	int i;
-	int name_len, name_diff;
 
 	if (!domain_name)
 		return -FI_EINVAL;
 
-	assert(efa_domain->info);
-	if (EFA_EP_TYPE_IS_RDM(efa_domain->info))
-		name_len = strlen(domain_name) - strlen(efa_rdm_domain.suffix);
-	else
-		name_len = strlen(domain_name) - strlen(efa_dgrm_domain.suffix);
-
 	for (i = 0; i < g_device_cnt; i++) {
-		name_diff = strncmp(domain_name, g_device_list[i].ibv_ctx->device->name, name_len);
-		if (!name_diff) {
+		if (strstr(domain_name, g_device_list[i].ibv_ctx->device->name) == domain_name) {
 			efa_domain->device = &g_device_list[i];
 			break;
 		}

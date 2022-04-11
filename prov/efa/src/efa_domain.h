@@ -67,13 +67,17 @@ static inline bool efa_is_cache_available(struct efa_domain *efa_domain)
 	return efa_domain->cache;
 }
 
-struct efa_ep_domain {
-	char		*suffix;
-	enum fi_ep_type	type;
-	uint64_t	caps;
-};
-
-extern const struct efa_ep_domain efa_rdm_domain;
-extern const struct efa_ep_domain efa_dgrm_domain;
+/**
+ * @brief domain name suffix according to endpoint type
+ *
+ * @param	ep_type[in]		end point type
+ * @return	a string to be append to domain name
+ */
+static inline
+const char *efa_domain_name_suffix(enum fi_ep_type ep_type)
+{
+	assert(ep_type == FI_EP_RDM || ep_type == FI_EP_DGRAM);
+	return (ep_type == FI_EP_RDM) ? "-rdm" : "-dgrm";
+}
 
 #endif
