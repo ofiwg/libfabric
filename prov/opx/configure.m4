@@ -117,6 +117,11 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		   	[],
 		   	[opx_happy=0])
 
+               AC_CHECK_DECL([HAVE_ATOMICS],
+                             [],
+                             [cc_version=`$CC --version | head -n1`
+                              AC_MSG_WARN(["$cc_version" doesn't support native atomics.  Disabling OPX provider.])
+                              opx_happy=0])
 	])
 
 	AS_IF([test $opx_happy -eq 1], [$1], [$2])
