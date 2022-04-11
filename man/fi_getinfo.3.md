@@ -263,6 +263,12 @@ additional optimizations.
   FI_WRITE, FI_REMOTE_READ, and FI_REMOTE_WRITE flags to restrict the
   types of atomic operations supported by an endpoint.
 
+*FI_AV_USER_ID*
+: Requests that the provider support the association of a user specified
+  identifier with each address vector (AV) address.  User identifiers are
+  returned with completion data in place of the AV address.  See [`fi_av`(3)]
+  (fi_av.3.html) for more details.
+
 *FI_COLLECTIVE*
 : Requests support for collective operations.  Endpoints that support
   this capability support the collective operations defined in
