@@ -203,10 +203,6 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 
 #define RXR_MTU_MAX_LIMIT	BIT_ULL(15)
 
-
-
-extern struct fi_info *shm_info;
-
 extern struct fi_provider rxr_prov;
 extern struct rxr_env rxr_env;
 extern struct fi_fabric_attr rxr_fabric_attr;
@@ -704,8 +700,6 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 					   struct rxr_rx_entry *posted_entry,
 					   struct rxr_rx_entry *consumer_entry,
 					   struct rxr_pkt_entry *pkt_entry);
-
-int rxr_raw_addr_to_smr_name(void *addr, char *smr_name, size_t *smr_name_len);
 
 /* CQ sub-functions */
 void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
