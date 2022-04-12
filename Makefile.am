@@ -36,8 +36,10 @@ else !HAVE_LD_VERSION_SCRIPT
 endif !HAVE_LD_VERSION_SCRIPT
 
 rdmaincludedir = $(includedir)/rdma
+providersincludedir = $(rdmaincludedir)/providers
 
 rdmainclude_HEADERS =
+providersinclude_HEADERS =
 
 # internal utility functions shared by in-tree providers:
 common_srcs =				\
@@ -209,6 +211,9 @@ rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fi_errno.h \
 	$(top_srcdir)/include/rdma/fi_tagged.h \
 	$(top_srcdir)/include/rdma/fi_trigger.h
+providersinclude_HEADERS += \
+	$(top_srcdir)/include/rdma/providers/fi_prov.h \
+	$(top_srcdir)/include/rdma/providers/fi_log.h
 
 if HAVE_DIRECT
 nodist_rdmainclude_HEADERS = \
