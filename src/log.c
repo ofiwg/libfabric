@@ -293,6 +293,22 @@ unlock:
 	return ret;
 }
 
+void ofi_tostr_log_level(char *buf, size_t len, enum fi_log_level level)
+{
+    if (level >= FI_LOG_MAX)
+	ofi_strncatf(buf, len, "Unknown");
+    else
+	ofi_strncatf(buf, len, log_levels[level]);
+}
+
+void ofi_tostr_log_subsys(char *buf, size_t len, enum fi_log_subsys subsys)
+{
+    if (subsys >= FI_LOG_SUBSYS_MAX)
+	ofi_strncatf(buf, len, "Unknown");
+    else
+	ofi_strncatf(buf, len, log_subsys[subsys]);
+}
+
 void fi_log_fini(void)
 {
 	ofi_free_filter(&prov_log_filter);

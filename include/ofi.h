@@ -415,6 +415,8 @@ size_t ofi_vrb_speed(uint8_t speed, uint8_t width);
 
 int ofi_open_log(uint32_t version, void *attr, size_t attr_len,
 		 uint64_t flags, struct fid **fid, void *context);
+void ofi_tostr_log_level(char *buf, size_t len, enum fi_log_level level);
+void ofi_tostr_log_subsys(char *buf, size_t len, enum fi_log_subsys subsys);
 
 #ifdef __cplusplus
 }

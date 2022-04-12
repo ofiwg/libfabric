@@ -2,6 +2,7 @@
  * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -738,6 +739,8 @@ enum fi_type {
 	FI_TYPE_COLLECTIVE_OP,
 	FI_TYPE_HMEM_IFACE,
 	FI_TYPE_CQ_FORMAT,
+	FI_TYPE_LOG_LEVEL,
+	FI_TYPE_LOG_SUBSYS,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);
