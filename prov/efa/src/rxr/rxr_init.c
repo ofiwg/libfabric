@@ -450,21 +450,24 @@ int rxr_get_lower_rdm_info(uint32_t version, const char *node,
 
 static int rxr_dgram_getinfo(uint32_t version, const char *node,
 			     const char *service, uint64_t flags,
-			     const struct fi_info *hints, struct fi_info **info,
-			     struct fi_info **tail)
+			     const struct fi_info *hints, struct fi_info **info)
 {
-	struct fi_info *core_info, *util_info, *cur;
+	struct fi_info *core_info, *util_info, *cur, *tail;
 	int ret;
 
 	core_info = NULL;
 
 	ret = efa_getinfo(version, node, service, flags, hints, &core_info);
 
-	if (ret)
+	if (ret) {
+		*info = NULL;
 		return ret;
+	}
 
 	ret = -FI_ENODATA;
 
+	*info = NULL;
+	tail = NULL;
 	for (cur = core_info; cur; cur = cur->next) {
 		/* Skip non DGRAM info structs */
 		if (cur->ep_attr->type != FI_EP_DGRAM)
@@ -484,8 +487,8 @@ static int rxr_dgram_getinfo(uint32_t version, const char *node,
 		if (!*info)
 			*info = util_info;
 		else
-			(*tail)->next = util_info;
-		*tail = util_info;
+			tail->next = util_info;
+		tail = util_info;
 	}
 
 out:
@@ -493,24 +496,18 @@ out:
 	return ret;
 }
 
-int rxr_getinfo(uint32_t version, const char *node,
-		const char *service, uint64_t flags,
-		const struct fi_info *hints, struct fi_info **info)
+static
+int rxr_rdm_getinfo(uint32_t version, const char *node,
+		    const char *service, uint64_t flags,
+		    const struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *core_info, *util_info, *cur, *tail;
 	int ret;
 
 	*info = tail = core_info = NULL;
 
-	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_DGRAM)
-		goto dgram_info;
-
-
 	ret = rxr_get_lower_rdm_info(version, node, service, flags,
 				     &rxr_util_prov, hints, &core_info);
-
-	if (ret == -FI_ENODATA)
-		goto dgram_info;
 
 	if (ret)
 		return ret;
@@ -547,14 +544,23 @@ int rxr_getinfo(uint32_t version, const char *node,
 		tail = util_info;
 	}
 
-dgram_info:
-	ret = rxr_dgram_getinfo(version, node, service, flags, hints, info,
-				&tail);
-	/*
-	 * Ignore dgram getinfo return code if rdm getinfo was successful.
-	 */
-	if (ret == -FI_ENODATA && *info)
-		ret = 0;
+	fi_freeinfo(core_info);
+	return ret;
+free_info:
+	fi_freeinfo(core_info);
+	fi_freeinfo(util_info);
+	fi_freeinfo(*info);
+	*info = NULL;
+	return ret;
+}
+
+int rxr_getinfo(uint32_t version, const char *node,
+		const char *service, uint64_t flags,
+		const struct fi_info *hints, struct fi_info **info)
+{
+	struct fi_info *dgram_info_list, *rdm_info_list;
+	int err;
+	static bool shm_info_initialized = false;
 
 	/*
 	 * efa_shm_info_initialize() initializes the global variable g_shm_info.
@@ -564,18 +570,60 @@ dgram_info:
 	 * we initialize g_shm_info when the rxr_getinfo() is called 1st time,
 	 * at this point all the providers have been initialized.
 	 */
-	if (!ret && !g_shm_info) {
+	if (!shm_info_initialized) {
 		efa_shm_info_initialize(hints);
+		shm_info_initialized = true;
 	}
 
-	fi_freeinfo(core_info);
-	return ret;
-free_info:
-	fi_freeinfo(core_info);
-	fi_freeinfo(util_info);
-	fi_freeinfo(*info);
+	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_DGRAM)
+		return rxr_dgram_getinfo(version, node, service, flags, hints, info);
+
+	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_RDM)
+		return rxr_rdm_getinfo(version, node, service, flags, hints, info);
+
+	if (hints && hints->ep_attr && hints->ep_attr->type != FI_EP_UNSPEC) {
+		EFA_WARN(FI_LOG_DOMAIN, "unsupported endpoint type: %d\n",
+			 hints->ep_attr->type);
+		return -FI_ENODATA;
+	}
+
+	err = rxr_dgram_getinfo(version, node, service, flags, hints, &dgram_info_list);
+	if (err && err != -FI_ENODATA) {
+		return err;
+	}
+
+	err = rxr_rdm_getinfo(version, node, service, flags, hints, &rdm_info_list);
+	if (err && err != -FI_ENODATA) {
+		fi_freeinfo(dgram_info_list);
+		return err;
+	}
+
+	if (rdm_info_list && dgram_info_list) {
+		struct fi_info *tail;
+
+		tail = rdm_info_list;
+		while (tail->next)
+			tail = tail->next;
+
+		tail->next = dgram_info_list;
+		*info = rdm_info_list;
+		return 0;
+	}
+
+	if (rdm_info_list) {
+		assert(!dgram_info_list);
+		*info = rdm_info_list;
+		return 0;
+	}
+
+	if (dgram_info_list) {
+		assert(!rdm_info_list);
+		*info = dgram_info_list;
+		return 0;
+	}
+
 	*info = NULL;
-	return ret;
+	return -FI_ENODATA;
 }
 
 void rxr_define_env()
