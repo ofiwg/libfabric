@@ -65,6 +65,7 @@
 #include "ofi_file.h"
 
 #include "efa_mr.h"
+#include "efa_shm.h"
 #include "efa_hmem.h"
 #include "efa_device.h"
 #include "efa_domain.h"

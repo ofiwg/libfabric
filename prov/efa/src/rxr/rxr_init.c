@@ -36,8 +36,6 @@
 #include "efa.h"
 #include "ofi_hmem.h"
 
-struct fi_info *shm_info;
-
 struct rxr_env rxr_env = {
 	.tx_min_credits = RXR_DEF_MIN_TX_CREDITS,
 	.tx_queue_size = 0,
@@ -147,60 +145,6 @@ void rxr_init_env(void)
 	efa_fork_support_request_initialize();
 }
 
-/* @brief convert raw address to an unique shm endpoint name (smr_name)
- *
- * Note even though all shm endpoints are on same instance. But because
- * one instance can have multiple EFA device, it is still necessary
- * to include GID on the name.
- *
- * a smr name consist of the following 4 parts:
- *
- *    GID:   ipv6 address from inet_ntop
- *    QPN:   %04x format
- *    QKEY:  %08x format
- *    UID:   %04x format
- *
- * each part is connected via an underscore.
- *
- * The following is an example:
- *
- *    fe80::4a5:28ff:fe98:e500_0001_12918366_03e8
- *
- * @param[in]		ptr		pointer to raw address (struct efa_ep_addr)
- * @param[out]		smr_name	an unique name for shm ep
- * @param[in,out]	smr_name_len    As input, specify size of the "smr_name" buffer.
- *					As output, specify number of bytes written to the buffer.
- *
- * @return	0 on success.
- * 		negative error code on failure.
- */
-int rxr_raw_addr_to_smr_name(void *ptr, char *smr_name, size_t *smr_name_len)
-{
-	struct efa_ep_addr *raw_addr;
-	char gidstr[INET6_ADDRSTRLEN] = { 0 };
-	int ret;
-
-	raw_addr = (struct efa_ep_addr *)ptr;
-	if (!inet_ntop(AF_INET6, raw_addr->raw, gidstr, INET6_ADDRSTRLEN)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Failed to convert GID to string errno: %d\n", errno);
-		return -errno;
-	}
-
-	ret = snprintf(smr_name, *smr_name_len, "%s_%04x_%08x_%04x",
-		       gidstr, raw_addr->qpn, raw_addr->qkey, getuid());
-	if (ret < 0)
-		return ret;
-
-	if (ret == 0 || ret >= *smr_name_len)
-		return -FI_EINVAL;
-
-	/* plus 1 here for the ending '\0' character, which was not
-	 * included in ret of snprintf
-	 */
-	*smr_name_len = ret + 1;
-	return FI_SUCCESS;
-}
-
 void rxr_info_to_core_mr_modes(uint32_t version,
 			       const struct fi_info *hints,
 			       struct fi_info *core_info)
@@ -295,34 +239,6 @@ static int rxr_info_to_core(uint32_t version, const struct fi_info *rxr_info,
 	if (ret)
 		fi_freeinfo(*core_info);
 	return ret;
-}
-
-/* Explicitly set all necessary bits before calling shm provider's getinfo function */
-static void rxr_set_shm_hints(const struct fi_info *app_hints, struct fi_info *shm_hints)
-{
-	shm_hints->caps = FI_MSG | FI_TAGGED | FI_RECV | FI_SEND | FI_READ
-			   | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
-			   | FI_MULTI_RECV | FI_RMA;
-	shm_hints->domain_attr->av_type = FI_AV_TABLE;
-	shm_hints->domain_attr->mr_mode = FI_MR_VIRT_ADDR;
-	shm_hints->domain_attr->caps |= FI_LOCAL_COMM;
-	shm_hints->tx_attr->msg_order = FI_ORDER_SAS;
-	shm_hints->rx_attr->msg_order = FI_ORDER_SAS;
-	shm_hints->fabric_attr->name = strdup("shm");
-	shm_hints->fabric_attr->prov_name = strdup("shm");
-	shm_hints->ep_attr->type = FI_EP_RDM;
-
-	/*
-	 * We validate whether FI_HMEM is supported before this function is
-	 * called, so it's safe to check for this via the app hints directly.
-	 * We should combine this and the earlier FI_HMEM validation when we
-	 * clean up the getinfo path. That's not possible at the moment as we
-	 * only have one SHM info for the entire provider which isn't right.
-	 */
-	if (app_hints && (app_hints->caps & FI_HMEM)) {
-		shm_hints->caps |= FI_HMEM;
-		shm_hints->domain_attr->mr_mode |= FI_MR_HMEM;
-	}
 }
 
 /*
@@ -582,7 +498,6 @@ int rxr_getinfo(uint32_t version, const char *node,
 		const struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *core_info, *util_info, *cur, *tail;
-	struct fi_info *shm_hints;
 	int ret;
 
 	*info = tail = core_info = NULL;
@@ -641,21 +556,16 @@ dgram_info:
 	if (ret == -FI_ENODATA && *info)
 		ret = 0;
 
-	if (!ret && !shm_info) {
-		shm_info = NULL;
-		shm_hints = fi_allocinfo();
-		rxr_set_shm_hints(hints, shm_hints);
-		ret = fi_getinfo(FI_VERSION(1, 8), NULL, NULL,
-		                 OFI_GETINFO_HIDDEN, shm_hints, &shm_info);
-		fi_freeinfo(shm_hints);
-		if (ret) {
-			FI_WARN(&rxr_prov, FI_LOG_CORE, "Disabling EFA shared memory support; failed to get shm provider's info: %s\n",
-				fi_strerror(-ret));
-			rxr_env.enable_shm_transfer = 0;
-			ret = 0;
-		} else {
-			assert(!strcmp(shm_info->fabric_attr->name, "shm"));
-		}
+	/*
+	 * efa_shm_info_initialize() initializes the global variable g_shm_info.
+	 * Ideally it should be called during provider initialization. However,
+	 * At the time of EFA provider initialization, shm provider has not been
+	 * initialized yet, therefore g_shm_info cannot be initialized. As a workaround,
+	 * we initialize g_shm_info when the rxr_getinfo() is called 1st time,
+	 * at this point all the providers have been initialized.
+	 */
+	if (!ret && !g_shm_info) {
+		efa_shm_info_initialize(hints);
 	}
 
 	fi_freeinfo(core_info);

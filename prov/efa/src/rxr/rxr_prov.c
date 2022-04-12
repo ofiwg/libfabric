@@ -124,8 +124,7 @@ static void rxr_fini(void)
 
 	efa_prov_finalize();
 
-	if (shm_info)
-		fi_freeinfo(shm_info);
+	efa_shm_info_finalize();
 
 #if HAVE_EFA_DL
 	ofi_monitors_cleanup();

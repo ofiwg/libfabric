@@ -53,6 +53,7 @@
 
 #include "efa.h"
 #include "efa_prov_info.h"
+
 #if HAVE_EFA_DL
 #include <ofi_shm.h>
 #endif
@@ -359,9 +360,9 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 		goto err_free_fabric;
 
 	/* Open shm provider's fabric domain */
-	if (shm_info) {
-		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
-		ret = fi_fabric(shm_info->fabric_attr,
+	if (g_shm_info) {
+		assert(!strcmp(g_shm_info->fabric_attr->name, "shm"));
+		ret = fi_fabric(g_shm_info->fabric_attr,
 				&efa_fabric->shm_fabric, context);
 		if (ret)
 			goto err_close_util_fabric;

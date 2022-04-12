@@ -407,7 +407,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 		}
 
 		smr_name_len = EFA_SHM_NAME_MAX;
-		err = rxr_raw_addr_to_smr_name(conn->ep_addr, smr_name, &smr_name_len);
+		err = efa_shm_ep_name_construct(smr_name, &smr_name_len, conn->ep_addr);
 		if (err != FI_SUCCESS) {
 			EFA_WARN(FI_LOG_AV,
 				 "rxr_ep_efa_addr_to_str() failed! err=%d\n", err);
