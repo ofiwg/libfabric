@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2022 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2022 Amazon.com, Inc. or its affiliates.
+ * All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,17 +31,15 @@
  * SOFTWARE.
  */
 
-#ifndef EFA_DEVICE_INFO_H
-#define EFA_DEVICE_INFO_H
+#ifndef _RXR_INIT_H
+#define _RXR_INIT_H
 
-#include "efa.h"
+int rxr_getinfo(uint32_t version, const char *node,
+		const char *service, uint64_t flags,
+		const struct fi_info *hints, struct fi_info **info);
 
-int efa_prov_info_alloc(struct fi_info **prov_info,
-			struct efa_device *device,
-			enum fi_ep_type ep_type);
+void rxr_define_env();
 
-int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr,
-				struct efa_device *device);
-
+void rxr_init_env();
 
 #endif

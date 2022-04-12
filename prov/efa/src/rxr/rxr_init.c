@@ -33,7 +33,6 @@
 
 #include <rdma/fi_errno.h>
 
-#include <ofi_prov.h>
 #include "efa.h"
 #include "ofi_hmem.h"
 
@@ -76,7 +75,7 @@ struct rxr_env rxr_env = {
 
 /* @brief Read and store the FI_EFA_* environment variables.
  */
-static void rxr_init_env(void)
+void rxr_init_env(void)
 {
 	if (getenv("FI_EFA_SHM_MAX_MEDIUM_SIZE")) {
 		fprintf(stderr,
@@ -359,40 +358,21 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 			   struct fi_info *info, const struct fi_info *hints)
 {
 	uint64_t atomic_ordering;
-	uint64_t max_atomic_size;
-	uint64_t min_pkt_size;
+	const struct fi_info *rxr_info;
+
+	rxr_info = rxr_util_prov.info;
 
 	if (!core_info) {
 		return -FI_EINVAL;
 	}
 
-	info->caps = rxr_info.caps;
-	info->mode = rxr_info.mode;
+	info->caps = rxr_info->caps;
+	info->mode = rxr_info->mode;
 
-	*info->tx_attr = *rxr_info.tx_attr;
-	*info->rx_attr = *rxr_info.rx_attr;
-	*info->ep_attr = *rxr_info.ep_attr;
-	*info->domain_attr = *rxr_info.domain_attr;
-
-	/*
-	 * The requirement for inject is: upon return, the user buffer can be reused immediately.
-	 *
-	 * For EFA, inject is implement as: construct a packet entry, copy user data to packet entry
-	 * then send the packet entry. Therefore the maximum inject size is
-	 *    pkt_entry_size - maximum_header_size.
-	 */
-	if (rxr_env.enable_shm_transfer)
-		min_pkt_size = MIN(core_info->ep_attr->max_msg_size, rxr_env.shm_max_medium_size);
-	else
-		min_pkt_size = core_info->ep_attr->max_msg_size;
-
-	if (min_pkt_size < rxr_pkt_max_header_size()) {
-		info->tx_attr->inject_size = 0;
-	} else {
-		info->tx_attr->inject_size = min_pkt_size - rxr_pkt_max_header_size();
-	}
-
-	rxr_info.tx_attr->inject_size = info->tx_attr->inject_size;
+	*info->tx_attr = *rxr_info->tx_attr;
+	*info->rx_attr = *rxr_info->rx_attr;
+	*info->ep_attr = *rxr_info->ep_attr;
+	*info->domain_attr = *rxr_info->domain_attr;
 
 	info->addr_format = core_info->addr_format;
 	info->domain_attr->ep_cnt = core_info->domain_attr->ep_cnt;
@@ -415,29 +395,10 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	 */
 	if (hints) {
 		if (hints->tx_attr) {
-
 			atomic_ordering = FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
 					  FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
 			if (hints->tx_attr->msg_order & atomic_ordering) {
-				max_atomic_size = core_info->ep_attr->max_msg_size
-						  - sizeof(struct rxr_rta_hdr)
-						  - core_info->src_addrlen
-						  - RXR_IOV_LIMIT * sizeof(struct fi_rma_iov);
-
-				if (hints->tx_attr->msg_order & FI_ORDER_ATOMIC_RAW) {
-					info->ep_attr->max_order_raw_size = max_atomic_size;
-					rxr_info.ep_attr->max_order_raw_size = max_atomic_size;
-				}
-
-				if (hints->tx_attr->msg_order & FI_ORDER_ATOMIC_WAR) {
-					info->ep_attr->max_order_war_size = max_atomic_size;
-					rxr_info.ep_attr->max_order_war_size = max_atomic_size;
-				}
-
-				if (hints->tx_attr->msg_order & FI_ORDER_ATOMIC_WAW) {
-					info->ep_attr->max_order_waw_size = max_atomic_size;
-					rxr_info.ep_attr->max_order_waw_size = max_atomic_size;
-				}
+				info->ep_attr->max_order_raw_size = rxr_info->ep_attr->max_order_raw_size;
 			}
 		}
 
@@ -614,9 +575,9 @@ out:
 	return ret;
 }
 
-static int rxr_getinfo(uint32_t version, const char *node,
-		       const char *service, uint64_t flags,
-		       const struct fi_info *hints, struct fi_info **info)
+int rxr_getinfo(uint32_t version, const char *node,
+		const char *service, uint64_t flags,
+		const struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *core_info, *util_info, *cur, *tail;
 	struct fi_info *shm_hints;
@@ -705,30 +666,7 @@ free_info:
 	return ret;
 }
 
-static void rxr_fini(void)
-{
-	efa_prov_finalize();
-
-	if (shm_info)
-		fi_freeinfo(shm_info);
-
-#if HAVE_EFA_DL
-	ofi_monitors_cleanup();
-	ofi_hmem_cleanup();
-	ofi_mem_fini();
-#endif
-}
-
-struct fi_provider rxr_prov = {
-	.name = "efa",
-	.version = OFI_VERSION_DEF_PROV,
-	.fi_version = OFI_VERSION_LATEST,
-	.getinfo = rxr_getinfo,
-	.fabric = efa_fabric,
-	.cleanup = rxr_fini
-};
-
-EFA_INI
+void rxr_define_env()
 {
 	fi_param_define(&rxr_prov, "tx_min_credits", FI_PARAM_INT,
 			"Defines the minimum number of credits a sender requests from a receiver (Default: 32).");
@@ -792,16 +730,5 @@ EFA_INI
 			"Calls to RDMA read is segmented using this value.");
 	fi_param_define(&rxr_prov, "fork_safe", FI_PARAM_BOOL,
 			"Enables fork support and disables internal usage of huge pages. Has no effect on kernels which set copy-on-fork for registered pages, generally 5.13 and later. (Default: false)");
-	rxr_init_env();
-
-#if HAVE_EFA_DL
-	ofi_mem_init();
-	ofi_hmem_init();
-	ofi_monitors_init();
-#endif
-
-	if (efa_prov_initialize())
-		return NULL;
-
-	return &rxr_prov;
 }
+

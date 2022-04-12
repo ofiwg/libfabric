@@ -123,18 +123,6 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 {
 	int err;
 
-	rxr_info.addr_format = info->addr_format;
-	/*
-	 * Set the RxR's tx/rx size here based on core provider the user
-	 * selected so that ofi_prov_check_info succeeds.
-	 *
-	 * TODO: handle the case where a single process opens multiple domains
-	 * with different core providers
-	 */
-	rxr_info.tx_attr->size = info->tx_attr->size;
-	rxr_info.rx_attr->size = info->rx_attr->size;
-	rxr_info.rx_attr->op_flags |= info->rx_attr->op_flags & FI_MULTI_RECV;
-
 	if (efa_domain->fabric->shm_fabric) {
 		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
 		err = fi_domain(efa_domain->fabric->shm_fabric, shm_info,

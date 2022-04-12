@@ -463,7 +463,7 @@ void efa_prov_info_set_hmem_flags(struct fi_info *prov_info)
 #endif
 
 /**
- * @brief allocate a prov_info object that matches device's capability
+ * @brief allocate a prov_info object that matches device's attributes
  *
  * A prov_info is a fi_info object that contains used by ofi_check_info() to validate
  * fi_info passed by user (known as user_info).
@@ -537,3 +537,150 @@ err_free:
 	return err;
 }
 
+/**
+ * @brief allocate an prov_info object that matches the functionality of RxR
+ *
+ * RxR (RDM over RDM) is a software layer that implemented mulitple
+ * additional functionalities for an RDM endpoint. The added functionalities
+ * include:
+ *
+ * tag matching, orderred send/receive, message segmentation,
+ * emulated RMA/atomic emulation, multi recv.
+ *
+ * This function allocates a prov_info object the matches RxR's functionality.
+ *
+ * @param[out]		prov_info_rxr_ptr	pointer to pointer of prov_info_rxr
+ * @param[in]		device			efa_device information
+ * @return		0 on success
+ * 			-FI_ENOMEM if memory allocation failed.
+ */
+int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
+				struct efa_device *device)
+{
+	uint64_t rxr_added_tx_caps = FI_TAGGED | OFI_TX_RMA_CAPS | FI_ATOMIC;
+
+	uint64_t rxr_added_rx_caps = FI_TAGGED | OFI_RX_RMA_CAPS | FI_ATOMIC |
+				     FI_SOURCE | FI_MULTI_RECV | FI_DIRECTED_RECV;
+
+	uint64_t rxr_domain_caps = FI_LOCAL_COMM | FI_REMOTE_COMM;
+
+	struct fi_info *prov_info_rxr;
+
+	assert(device->rdm_info);
+
+	prov_info_rxr  = fi_dupinfo(device->rdm_info);
+	if (!prov_info_rxr)
+		return -FI_ENOMEM;
+
+	prov_info_rxr->caps |= rxr_added_tx_caps | rxr_added_rx_caps | rxr_domain_caps;
+
+	/* update domain_attr */
+	{
+		/* RxR ensure thread safety by pthread lock */
+		prov_info_rxr->domain_attr->threading = FI_THREAD_SAFE;
+		/* RxR handles Receiver Not Ready (RNR) events by queuing the send,
+		 * hence resource_mgmt is enabled.
+		 */
+		prov_info_rxr->domain_attr->resource_mgmt = FI_RM_ENABLED;
+		/*
+		 * The device endpoint requires a memory descriptor for any send/receive.
+		 * Therefore it set the FI_MR_LOCAL mode.
+		 * buffer. RxR does not have this requirement, hence unset the flag
+		 */
+		prov_info_rxr->domain_attr->mr_mode &= ~FI_MR_LOCAL;
+
+		/* RxR support writing CQ data by put it in packet header
+		 */
+		prov_info_rxr->domain_attr->cq_data_size = RXR_CQ_DATA_SIZE;
+	}
+
+	/* update ep_attr */
+	{
+		int max_atomic_size;
+
+		prov_info_rxr->ep_attr->protocol = FI_PROTO_EFA;
+		prov_info_rxr->ep_attr->mem_tag_format = FI_TAG_GENERIC;
+		prov_info_rxr->ep_attr->protocol_version = RXR_PROTOCOL_VERSION;
+		/*
+		 * RxR support message segmentation, hence increase the max_msg_size
+		 */
+		prov_info_rxr->ep_attr->max_msg_size = UINT64_MAX;
+
+		/*
+		 * RxR implemented emulated atomic, hence set atomic size
+		 */
+		max_atomic_size = device->rdm_info->ep_attr->max_msg_size
+					- sizeof(struct rxr_rta_hdr)
+					- device->rdm_info->src_addrlen
+					- RXR_IOV_LIMIT * sizeof(struct fi_rma_iov);
+		prov_info_rxr->ep_attr->max_order_raw_size = max_atomic_size;
+	}
+
+	/* update tx_attr */
+	{
+		int min_pkt_size;
+		/*
+		 * RxR supports ordered two-sided/atomic by putting messages by
+		 * software reorder buffer, hence set tx_attr->message order accordingly.
+		 */
+		prov_info_rxr->tx_attr->caps |= rxr_added_tx_caps;
+		prov_info_rxr->tx_attr->msg_order = FI_ORDER_SAS | FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
+						    FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
+
+		/*
+		 * RxR supports injection by software emulation.
+		 * RxR supports delivery complete by using DC capable protocols.
+		 * Therefore changing the default op_flags
+		 */
+		prov_info_rxr->tx_attr->op_flags = FI_INJECT | FI_COMPLETION | FI_TRANSMIT_COMPLETE |
+						   FI_DELIVERY_COMPLETE;
+
+		/* Here we calculate the max msg size for emulated injection of RxR.
+		 * The requirement for inject is: upon return, the user buffer can be reused immediately.
+		 *
+		 * For EFA, inject is implement as: construct a packet entry, copy user data to packet entry
+		 * then send the packet entry. Therefore the maximum inject size is
+		 *    pkt_entry_size - maximum_header_size.
+		 */
+		if (rxr_env.enable_shm_transfer)
+			min_pkt_size = MIN(device->rdm_info->ep_attr->max_msg_size, rxr_env.shm_max_medium_size);
+		else
+			min_pkt_size = device->rdm_info->ep_attr->max_msg_size;
+
+		if (min_pkt_size < rxr_pkt_max_header_size()) {
+			prov_info_rxr->tx_attr->inject_size = 0;
+		} else {
+			prov_info_rxr->tx_attr->inject_size = min_pkt_size - rxr_pkt_max_header_size();
+		}
+
+		/*
+		 * RxR support multiple IOV by segmentation.
+		 */
+		prov_info_rxr->tx_attr->iov_limit = RXR_IOV_LIMIT;
+		if (rxr_env.tx_iov_limit > 0)
+			prov_info_rxr->tx_attr->iov_limit = rxr_env.tx_iov_limit;
+
+		if (rxr_env.tx_size > 0)
+			prov_info_rxr->tx_attr->size = rxr_env.tx_size;
+
+	}
+
+	/*
+	 * Set RX attributes for RxR info
+	 */
+	{
+		prov_info_rxr->rx_attr->caps |= rxr_added_rx_caps;
+		prov_info_rxr->rx_attr->msg_order = FI_ORDER_SAS | FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
+						    FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
+		prov_info_rxr->rx_attr->op_flags = FI_COMPLETION | FI_MULTI_RECV;
+		prov_info_rxr->rx_attr->iov_limit = RXR_IOV_LIMIT;
+		if (rxr_env.rx_iov_limit > 0)
+			prov_info_rxr->rx_attr->iov_limit = rxr_env.rx_iov_limit;
+
+		if (rxr_env.rx_size > 0)
+			prov_info_rxr->rx_attr->size = rxr_env.rx_size;
+	}
+
+	*prov_info_rxr_ptr = prov_info_rxr;
+	return 0;
+}
