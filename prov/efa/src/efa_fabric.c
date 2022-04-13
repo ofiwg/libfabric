@@ -57,7 +57,7 @@
 #endif
 
 #define EFA_FABRIC_PREFIX "EFA-"
-
+#define EFA_FABRIC_NAME "efa"
 #define EFA_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 
 #define EFA_RDM_TX_CAPS (OFI_TX_MSG_CAPS)
@@ -710,14 +710,15 @@ static int efa_alloc_info(struct efa_device *device, struct fi_info **info,
 	if (ret)
 		goto err_free_info;
 
-	name_len = strlen(EFA_FABRIC_PREFIX) + INET6_ADDRSTRLEN;
+	name_len = strlen(EFA_FABRIC_NAME);
 
 	fi->fabric_attr->name = calloc(1, name_len + 1);
 	if (!fi->fabric_attr->name) {
 		ret = -FI_ENOMEM;
 		goto err_free_info;
 	}
-	efa_addr_to_str(device->ibv_gid.raw, fi->fabric_attr->name);
+
+	strcpy(fi->fabric_attr->name, EFA_FABRIC_NAME);
 
 	name_len = strlen(device->ibv_ctx->device->name) + strlen(ep_dom->suffix);
 	fi->domain_attr->name = malloc(name_len + 1);
