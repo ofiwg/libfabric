@@ -103,15 +103,9 @@ struct fi_ops_cq_owner {
         const struct fi_cq_err_entry *err_entry);
 };
 
-struct fi_ops_cq_peer {
-    size_t size;
-    void (*progress)(struct fid_peer_cq *cq);
-};
-
 struct fid_peer_cq {
     struct fid fid;
     struct fi_ops_cq_owner *owner_ops;
-    struct fi_ops_cq_peer *peer_ops;
 };
 
 struct fi_peer_cq_context {
@@ -123,14 +117,10 @@ For struct fid_peer_cq, the owner initializes the fid and owner_ops
 fields.  struct fi_ops_cq_owner is used by the peer to communicate
 with the owning provider.
 
-The size field in struct fi_ops_cq_peer is filled by the owner
-and used as a versioning check by the peer.  However, the function
-handlers are filled out by the peer and must be initialized before
-returning from fi_cq_open().  These calls are used by the owner to
-communicate with the peer.
-
-Because the peer's CQ should not be directly accessed, functions to
-read the peer's CQ (i.e. read, readerr, sread, etc.) should be set
+If manual progress is needed on the peer CQ, the owner should drive
+progress by using the fi_cq_read() function with the buf parameter
+set to NULL and count equal 0.  The peer provider should set other functions
+that attempt to read the peer's CQ (i.e. fi_cq_readerr, fi_cq_sread, etc.)
 to return -FI_ENOSYS.
 
 ## fi_ops_cq_owner::write()
@@ -156,14 +146,6 @@ Do we need backoff / resume callbacks in ops_cq_user?)
 
 The behavior of this call is similar to the write() ops.  It inserts
 a completion indicating that a data transfer has failed into the CQ.
-
-## fi_ops_cq_peer::progress()
-
-This callback is invoked by the owner to drive progress in the peer
-provider on endpoints owned by the peer.  The owner must support the
-thread calling the progress() function invoking one of the owner
-ops from within the progress() function.  For example, the peer calling
-write() to insert a new completion.
 
 ## EXAMPLE PEER CQ SETUP
 
