@@ -104,6 +104,12 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		dnl OPX hardware is not available for MacOS or FreeBSD.
 		AS_IF([test "x$macos" = "x1"],[opx_happy=0],[])
 		AS_IF([test "x$freebsd" = "x1"],[opx_happy=0],[])
+
+		AC_CHECK_DECL([HAVE_ATOMICS],
+                             [],
+                             [cc_version=`$CC --version | head -n1`
+                              AC_MSG_WARN(["$cc_version" doesn't support native atomics.  Disabling OPX provider.])
+                              opx_happy=0])
 	])
 
 	AS_IF([test $opx_happy -eq 1], [$1], [$2])
