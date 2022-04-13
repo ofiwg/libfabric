@@ -187,6 +187,12 @@ Peer SRXs are configured by the owner calling the peer's fi_srx_context()
 call with the FI_PEER_SRX flag set.  The context parameter passed to
 fi_srx_context() must be a struct fi_peer_srx_context.
 
+The owner provider initializes all elements of the fid_peer_srx and
+referenced structures (fi_ops_srx_owner and fi_ops_srx_peer), with the
+exception of the fi_ops_srx_peer callback functions.  Those must be
+initialized by the peer provider prior to returning from the fi_srx_contex()
+call and are used by the owner to control peer actions.
+
 The data structures to support peer SRXs are defined as follows:
 
 ```
