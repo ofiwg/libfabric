@@ -236,8 +236,8 @@ void fi_opx_write_fence(struct fi_opx_ep *opx_ep, const uint64_t tx_op_flags,
 			const union fi_opx_addr *opx_dst_addr, union fi_opx_context *opx_context,
 			const int lock_required);
 
-
-static inline void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len,
+__OPX_FORCE_INLINE__
+void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len,
 					const union fi_opx_addr opx_dst_addr, uint64_t addr_offset,
 					const uint64_t key, union fi_opx_context *opx_context,
 					struct fi_opx_completion_counter *cc, enum fi_datatype dt, enum fi_op op,
@@ -250,8 +250,6 @@ static inline void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *b
 			(FI_COMPLETION | FI_TRANSMIT_COMPLETE));
 		assert((tx_op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) !=
 			(FI_COMPLETION | FI_DELIVERY_COMPLETE));
-		fprintf(stderr, "FI_INJECT flag unimplemented with rma_write internal\n");
-		abort();
 	}
 
 	assert((opx_ep->tx->pio_max_eager_tx_bytes & 0x3f) == 0);
@@ -294,6 +292,17 @@ static inline void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *b
 		return;
 	}
 	assert(rc == -FI_EAGAIN);
+
+	/* We weren't able to complete the write on the first try. If this was an inject,
+	   the outbound buffer may be re-used as soon as we return to the caller, even when
+	   this operation will be completed asyncronously. So copy the payload bytes into
+	   our own copy of the buffer, and set iov.sbuf to point to it. */
+	if (tx_op_flags & FI_INJECT) {
+		assert(len <= FI_OPX_HFI1_PACKET_IMM);
+		memcpy(params->inject_data, buf, len);
+		params->iov[0].sbuf = (uintptr_t) params->inject_data;
+	}
+
 
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);

@@ -370,6 +370,7 @@ struct fi_opx_hfi1_dput_params {
 	enum ofi_reliability_kind reliability;
 	uint32_t cur_iov;
 	uint64_t bytes_sent;
+	uint8_t inject_data[FI_OPX_HFI1_PACKET_IMM];
 	struct fi_opx_hfi1_dput_iov iov[FI_OPX_MAX_DPUT_IOV];
 };
 

@@ -89,8 +89,9 @@ static inline int fi_opx_check_atomic(struct fi_opx_ep *opx_ep, enum fi_datatype
 	return 0;
 }
 
-static inline void fi_opx_atomic_fetch_internal(struct fi_opx_ep *opx_ep,
-												const void *buf,
+__OPX_FORCE_INLINE__
+void fi_opx_atomic_fetch_internal(struct fi_opx_ep *opx_ep,
+				  const void *buf,
 				  const size_t len, const union fi_opx_addr opx_dst_addr,
 				  const uint64_t addr_offset,
 				  const uint64_t key,
@@ -262,20 +263,21 @@ static inline void fi_opx_atomic_fetch_internal(struct fi_opx_ep *opx_ep,
 }
 
 
-static inline void fi_opx_atomic_cas_internal(struct fi_opx_ep *opx_ep,
-												const void *buf,
-				  const size_t len, const union fi_opx_addr opx_dst_addr,
-				  const uint64_t addr_offset,
-				  const uint64_t key,
-				  const void *fetch_vaddr,
-				  const void *compare_vaddr,
-				  union fi_opx_context *opx_context, const uint64_t tx_op_flags,
-				  const struct fi_opx_cq *opx_cq,
-				  const struct fi_opx_cntr *opx_cntr,
-				  struct fi_opx_completion_counter *cc,
-				  enum fi_datatype dt, enum fi_op op,
-				  const int lock_required, const uint64_t caps,
-				  const enum ofi_reliability_kind reliability)
+__OPX_FORCE_INLINE__
+void fi_opx_atomic_cas_internal(struct fi_opx_ep *opx_ep,
+				const void *buf,
+				const size_t len, const union fi_opx_addr opx_dst_addr,
+				const uint64_t addr_offset,
+				const uint64_t key,
+				const void *fetch_vaddr,
+				const void *compare_vaddr,
+				union fi_opx_context *opx_context, const uint64_t tx_op_flags,
+				const struct fi_opx_cq *opx_cq,
+				const struct fi_opx_cntr *opx_cntr,
+				struct fi_opx_completion_counter *cc,
+				enum fi_datatype dt, enum fi_op op,
+				const int lock_required, const uint64_t caps,
+				const enum ofi_reliability_kind reliability)
 {
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
@@ -445,17 +447,18 @@ static inline void fi_opx_atomic_cas_internal(struct fi_opx_ep *opx_ep,
 
 
 
-static inline size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
-					const void *buf, size_t count,
-					const union fi_opx_addr opx_dst_addr,
-					uint64_t addr, uint64_t key,
-					enum fi_datatype datatype, enum fi_op op,
-					void *context, struct fi_opx_completion_counter *cc,
-					const unsigned is_fetch, const void *fetch_vaddr,
-					const unsigned is_compare, const void *compare_vaddr,
-					const uint64_t tx_op_flags, const int lock_required,
-					const enum fi_av_type av_type, const uint64_t caps,
-					const enum ofi_reliability_kind reliability)
+__OPX_FORCE_INLINE__
+size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
+				const void *buf, size_t count,
+				const union fi_opx_addr opx_dst_addr,
+				uint64_t addr, uint64_t key,
+				enum fi_datatype datatype, enum fi_op op,
+				void *context, struct fi_opx_completion_counter *cc,
+				const unsigned is_fetch, const void *fetch_vaddr,
+				const unsigned is_compare, const void *compare_vaddr,
+				const uint64_t tx_op_flags, const int lock_required,
+				const enum fi_av_type av_type, const uint64_t caps,
+				const enum ofi_reliability_kind reliability)
 {
 	assert((is_fetch == 0) || (is_fetch == 1));
 	assert((is_compare == 0) || (is_compare == 1));
@@ -541,6 +544,17 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 	if (av_type == FI_AV_TABLE) {
 		opx_addr = opx_ep->tx->av_addr[dst_addr];
 	}
+
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
+			&opx_ep->reliability->state,
+			opx_addr.uid.lid,
+			opx_addr.hfi1_rx,
+			opx_addr.reliability_rx,
+			reliability))) {
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		return -FI_EAGAIN;
+	}
+
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->byte_counter = sizeofdt(datatype) * count;
 	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) ||
@@ -562,12 +576,14 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 	return 0;
 }
 
-static inline ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep,
-						     const struct fi_msg_atomic *msg,
-						     const uint64_t flags, const int lock_required,
-						     const enum fi_av_type av_type,
-						     const uint64_t caps,
-						     const enum ofi_reliability_kind reliability)
+__OPX_FORCE_INLINE__
+ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep,
+					const struct fi_msg_atomic *msg,
+					const uint64_t flags,
+					const int lock_required,
+					const enum fi_av_type av_type,
+					const uint64_t caps,
+					const enum ofi_reliability_kind reliability)
 {
 	struct fi_opx_ep *opx_ep;
 	opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -587,6 +603,16 @@ static inline ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep,
 	const union fi_opx_addr opx_dst_addr = { .fi = (av_type == FI_AV_TABLE) ?
 							       opx_ep->tx->av_addr[msg->addr].fi :
 							       msg->addr };
+
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
+			&opx_ep->reliability->state,
+			opx_dst_addr.uid.lid,
+			opx_dst_addr.hfi1_rx,
+			opx_dst_addr.reliability_rx,
+			reliability))) {
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		return -FI_EAGAIN;
+	}
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	size_t index;
@@ -649,12 +675,16 @@ static inline ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep,
 	return 0;
 }
 
-static inline ssize_t
-fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep, const struct fi_msg_atomic *msg,
-				   struct fi_ioc *resultv, const size_t result_count,
-				   const uint64_t flags, const int lock_required,
-				   const enum fi_av_type av_type, const uint64_t caps,
-				   const enum ofi_reliability_kind reliability)
+__OPX_FORCE_INLINE__
+ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep,
+					   const struct fi_msg_atomic *msg,
+					   struct fi_ioc *resultv,
+					   const size_t result_count,
+					   const uint64_t flags,
+					   const int lock_required,
+					   const enum fi_av_type av_type,
+					   const uint64_t caps,
+					   const enum ofi_reliability_kind reliability)
 {
 	struct fi_opx_ep *opx_ep;
 	opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -674,6 +704,16 @@ fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep, const struct fi_msg_atomic
 	const union fi_opx_addr opx_dst_addr = { .fi = (av_type == FI_AV_TABLE) ?
 							       opx_ep->tx->av_addr[msg->addr].fi :
 							       msg->addr };
+
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
+			&opx_ep->reliability->state,
+			opx_dst_addr.uid.lid,
+			opx_dst_addr.hfi1_rx,
+			opx_dst_addr.reliability_rx,
+			reliability))) {
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		return -FI_EAGAIN;
+	}
 
 	const size_t dtsize = sizeofdt(datatype);
 
@@ -789,12 +829,18 @@ fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep, const struct fi_msg_atomic
 	return 0;
 }
 
-static inline ssize_t
-fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep, const struct fi_msg_atomic *msg,
-				   const struct fi_ioc *comparev, size_t compare_count,
-				   struct fi_ioc *resultv, size_t result_count, uint64_t flags,
-				   const int lock_required, const enum fi_av_type av_type,
-				   const uint64_t caps, const enum ofi_reliability_kind reliability)
+__OPX_FORCE_INLINE__
+ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep,
+					   const struct fi_msg_atomic *msg,
+					   const struct fi_ioc *comparev,
+					   size_t compare_count,
+					   struct fi_ioc *resultv,
+					   size_t result_count,
+					   uint64_t flags,
+					   const int lock_required,
+					   const enum fi_av_type av_type,
+					   const uint64_t caps,
+					   const enum ofi_reliability_kind reliability)
 {
 	struct fi_opx_ep *opx_ep;
 	opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -814,6 +860,16 @@ fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep, const struct fi_msg_atomic
 	const union fi_opx_addr opx_dst_addr = { .fi = (av_type == FI_AV_TABLE) ?
 							       opx_ep->tx->av_addr[msg->addr].fi :
 							       msg->addr };
+
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
+			&opx_ep->reliability->state,
+			opx_dst_addr.uid.lid,
+			opx_dst_addr.hfi1_rx,
+			opx_dst_addr.reliability_rx,
+			reliability))) {
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		return -FI_EAGAIN;
+	}
 
 	const size_t dtsize = sizeofdt(datatype);
 
@@ -911,7 +967,8 @@ fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep, const struct fi_msg_atomic
  * (2 operand) atomics.
  */
 
-static inline ssize_t fi_opx_fetch_compare_atomic_generic(
+__OPX_FORCE_INLINE__
+ssize_t fi_opx_fetch_compare_atomic_generic(
 	struct fid_ep *ep, const void *buf, size_t count, void *desc, const void *compare,
 	void *compare_desc, void *result, void *result_desc, fi_addr_t dest_addr, uint64_t addr,
 	uint64_t key, enum fi_datatype datatype, enum fi_op op, void *context, int lock_required,
@@ -931,6 +988,17 @@ static inline ssize_t fi_opx_fetch_compare_atomic_generic(
 	if (av_type == FI_AV_TABLE) {
 		opx_addr = opx_ep->tx->av_addr[dest_addr];
 	}
+
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
+			&opx_ep->reliability->state,
+			opx_addr.uid.lid,
+			opx_addr.hfi1_rx,
+			opx_addr.reliability_rx,
+			reliability))) {
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		return -FI_EAGAIN;
+	}
+
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->byte_counter = sizeofdt(datatype) * count;
 	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) ||
@@ -1000,16 +1068,33 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 							       opx_ep->tx->av_addr[dest_addr].fi :
 							       dest_addr };
 
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
+			&opx_ep->reliability->state,
+			opx_dst_addr.uid.lid,
+			opx_dst_addr.hfi1_rx,
+			opx_dst_addr.reliability_rx,
+			reliability))) {
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		return -FI_EAGAIN;
+	}
+
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->byte_counter = sizeofdt(datatype) * count;
 	cc->cq = NULL;
 	cc->context = NULL;
 	cc->hit_zero = fi_opx_hit_zero;
+	cc->cntr = opx_ep->write_cntr;
 
-	fi_opx_atomic_internal(opx_ep, buf, count, opx_dst_addr, addr, key, datatype, op, NULL, cc,
-			       0, NULL, 0, NULL, opx_ep->tx->op_flags, lock_required, av_type, caps,
-			       reliability);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			 "===================================== ATOMIC INJECT WRITE (begin)\n");
 
+	fi_opx_write_internal(opx_ep, buf, count*sizeofdt(datatype),
+				opx_dst_addr, addr, key, NULL, cc, datatype,
+				op, opx_ep->tx->op_flags | FI_INJECT,
+				lock_required, caps, reliability);
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== ATOMIC INJECT WRITE (end)\n");
 	return 0;
 }
 
@@ -1022,14 +1107,21 @@ ssize_t fi_opx_atomic(struct fid_ep *ep, const void *buf, size_t count, void *de
 	const enum fi_threading threading = opx_ep->threading;
 	if (OFI_UNLIKELY(fi_opx_threading_unknown(threading))) {
 		return -FI_EINVAL;
-        }
+	}
 
 	const int lock_required = fi_opx_threading_lock_required(threading);
 
-	return fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op,
-				     context, lock_required,
+	ssize_t rc;
+	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
+
+	rc = fi_opx_atomic_generic(ep, buf, count, dst_addr, addr, key, datatype, op,
+				     context, FI_OPX_LOCK_NOT_REQUIRED,
 				     opx_ep->av_type, 0x0018000000000000ull,
 				     OPX_RELIABILITY);
+
+	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
+
+	return rc;
 }
 
 ssize_t fi_opx_fetch_atomic(struct fid_ep *ep, const void *buf, size_t count, void *desc,
@@ -1041,7 +1133,7 @@ ssize_t fi_opx_fetch_atomic(struct fid_ep *ep, const void *buf, size_t count, vo
 	const enum fi_threading threading = opx_ep->threading;
 	if (OFI_UNLIKELY(fi_opx_threading_unknown(threading))) {
 		return -FI_EINVAL;
-        }
+	}
 
 	const int lock_required = fi_opx_threading_lock_required(threading);
 
@@ -1075,7 +1167,7 @@ ssize_t fi_opx_compare_atomic(struct fid_ep *ep, const void *buf, size_t count, 
 	const enum fi_threading threading = opx_ep->threading;
 	if (OFI_UNLIKELY(fi_opx_threading_unknown(threading))) {
 		return -FI_EINVAL;
-        }
+	}
 
 	const int lock_required = fi_opx_threading_lock_required(threading);
 
@@ -1107,7 +1199,7 @@ ssize_t fi_opx_inject_atomic(struct fid_ep *ep, const void *buf, size_t count, f
 	const enum fi_threading threading = opx_ep->threading;
 	if (OFI_UNLIKELY(fi_opx_threading_unknown(threading))) {
 		return -FI_EINVAL;
-        }
+	}
 
 	const int lock_required = fi_opx_threading_lock_required(threading);
 
@@ -1126,7 +1218,7 @@ ssize_t fi_opx_inject_atomic(struct fid_ep *ep, const void *buf, size_t count, f
 						  OPX_RELIABILITY);
 	}
 
-	fi_opx_unlock(&opx_ep->lock);
+	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	return rc;
 }
 
@@ -1145,7 +1237,7 @@ ssize_t fi_opx_atomic_writemsg(struct fid_ep *ep, const struct fi_msg_atomic *ms
 	const enum fi_threading threading = opx_ep->threading;
 	if (OFI_UNLIKELY(fi_opx_threading_unknown(threading))) {
 		return -FI_EINVAL;
-        }
+	}
 
 	const int lock_required = fi_opx_threading_lock_required(threading);
 
@@ -1164,7 +1256,7 @@ ssize_t fi_opx_atomic_writemsg(struct fid_ep *ep, const struct fi_msg_atomic *ms
 						    OPX_RELIABILITY);
 	}
 
-	fi_opx_unlock(&opx_ep->lock);
+	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	return rc;
 }
 
@@ -1177,7 +1269,7 @@ ssize_t fi_opx_atomic_readwritemsg(struct fid_ep *ep, const struct fi_msg_atomic
 	const enum fi_threading threading = opx_ep->threading;
 	if (OFI_UNLIKELY(fi_opx_threading_unknown(threading))) {
 		return -FI_EINVAL;
-        }
+	}
 
 	const int lock_required = fi_opx_threading_lock_required(threading);
 
@@ -1198,7 +1290,7 @@ ssize_t fi_opx_atomic_readwritemsg(struct fid_ep *ep, const struct fi_msg_atomic
 							OPX_RELIABILITY);
 	}
 
-	fi_opx_unlock(&opx_ep->lock);
+	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	return rc;
 }
 
@@ -1212,7 +1304,7 @@ ssize_t fi_opx_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic
 	const enum fi_threading threading = opx_ep->threading;
 	if (OFI_UNLIKELY(fi_opx_threading_unknown(threading))) {
 		return -FI_EINVAL;
-        }
+	}
 
 	const int lock_required = fi_opx_threading_lock_required(threading);
 
@@ -1233,7 +1325,7 @@ ssize_t fi_opx_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic
 							OPX_RELIABILITY);
 	}
 
-	fi_opx_unlock(&opx_ep->lock);
+	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	return rc;
 }
 
