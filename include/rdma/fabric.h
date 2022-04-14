@@ -343,6 +343,7 @@ enum {
 	FI_PROTO_UCX,
 	FI_PROTO_SM2,
 	FI_PROTO_CXI_RNR,
+	FI_PROTO_LINKX,
 };
 
 enum {
