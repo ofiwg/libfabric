@@ -49,31 +49,93 @@
 #include "rdma/fi_ext.h"
 #include "linkx.h"
 
+#define LNX_PASSTHRU_TX_OP_FLAGS	(FI_INJECT_COMPLETE | \
+					 FI_TRANSMIT_COMPLETE | \
+					 FI_DELIVERY_COMPLETE)
+#define LNX_PASSTHRU_RX_OP_FLAGS	(0ULL)
+#define LNX_TX_OP_FLAGS		(FI_INJECT | FI_COMPLETION)
+#define LNX_RX_OP_FLAGS		(FI_COMPLETION)
+#define LNX_IOV_LIMIT		5
+
 struct local_prov *shm_prov;
 struct util_fabric lnx_fabric_info;
 
 DEFINE_LIST(local_prov_table);
 
-struct fi_fabric_attr lnx_fabric_attr = {
-	.name = "linkx",
-	.prov_version = OFI_VERSION_DEF_PROV
+struct fi_tx_attr lnx_tx_attr = {
+	.caps 		= ~0x0ULL,
+	.op_flags	= LNX_PASSTHRU_TX_OP_FLAGS | LNX_TX_OP_FLAGS,
+	.msg_order 	= ~0x0ULL,
+	.comp_order 	= ~0x0ULL,
+	.inject_size 	= SIZE_MAX,
+	.size 		= SIZE_MAX,
+	.iov_limit 	= LNX_IOV_LIMIT,
+	.rma_iov_limit 	= SIZE_MAX,
+};
+
+struct fi_rx_attr lnx_rx_attr = {
+	.caps 			= ~0x0ULL,
+	.op_flags		= LNX_PASSTHRU_RX_OP_FLAGS | LNX_RX_OP_FLAGS,
+	.msg_order 		= ~0x0ULL,
+	.comp_order 		= ~0x0ULL,
+	.total_buffered_recv 	= SIZE_MAX,
+	.size 			= SIZE_MAX,
+	.iov_limit		= SIZE_MAX,
+};
+
+struct fi_ep_attr lnx_ep_attr = {
+	.type 			= FI_EP_UNSPEC,
+	.protocol 		= FI_PROTO_LINKX,
+	.protocol_version 	= 1,
+	.max_msg_size 		= SIZE_MAX,
+	.msg_prefix_size	= SIZE_MAX,
+	.max_order_raw_size 	= SIZE_MAX,
+	.max_order_war_size 	= SIZE_MAX,
+	.max_order_waw_size 	= SIZE_MAX,
+	.mem_tag_format = FI_TAG_GENERIC,
+	.tx_ctx_cnt 		= SIZE_MAX,
+	.rx_ctx_cnt 		= SIZE_MAX,
+	.auth_key_size		= SIZE_MAX,
 };
 
 struct fi_domain_attr lnx_domain_attr = {
-	.name = "linkx",
-	.threading = FI_THREAD_SAFE,
-	.control_progress = FI_PROGRESS_AUTO,
-	.data_progress = FI_PROGRESS_MANUAL,
-	.resource_mgmt = FI_RM_ENABLED,
-	.av_type = FI_AV_UNSPEC,
-	.mr_mode = FI_MR_UNSPEC,
+	.name			= "ofi_lnx_domain",
+	.threading 		= FI_THREAD_SAFE,
+	.control_progress 	= FI_PROGRESS_AUTO,
+	.data_progress 		= FI_PROGRESS_AUTO,
+	.resource_mgmt 		= FI_RM_ENABLED,
+	.av_type 		= FI_AV_UNSPEC,
+	.mr_mode 		= FI_MR_BASIC | FI_MR_SCALABLE | FI_MR_RAW,
+	.mr_key_size		= SIZE_MAX,
+	.cq_data_size 		= SIZE_MAX,
+	.cq_cnt 		= SIZE_MAX,
+	.ep_cnt 		= SIZE_MAX,
+	.tx_ctx_cnt 		= SIZE_MAX,
+	.rx_ctx_cnt 		= SIZE_MAX,
+	.max_ep_tx_ctx 		= SIZE_MAX,
+	.max_ep_rx_ctx 		= SIZE_MAX,
+	.max_ep_stx_ctx 	= SIZE_MAX,
+	.max_ep_srx_ctx 	= SIZE_MAX,
+	.cntr_cnt 		= SIZE_MAX,
+	.mr_iov_limit 		= SIZE_MAX,
+	.caps			= ~0x0ULL,
+	.auth_key_size		= SIZE_MAX,
+	.max_err_data		= SIZE_MAX,
+	.mr_cnt			= SIZE_MAX,
+};
+
+struct fi_fabric_attr lnx_fabric_attr = {
+	.prov_version = OFI_VERSION_DEF_PROV,
+	.name = "ofi_lnx_fabric",
 };
 
 struct fi_info lnx_info = {
-	.caps = FI_LNX_BASIC,
-	.addr_format = FI_FORMAT_UNSPEC,
-	.fabric_attr = &lnx_fabric_attr,
+	.caps = ~0x0ULL,
+	.tx_attr = &lnx_tx_attr,
+	.rx_attr = &lnx_rx_attr,
+	.ep_attr = &lnx_ep_attr,
 	.domain_attr = &lnx_domain_attr,
+	.fabric_attr = &lnx_fabric_attr
 };
 
 static struct fi_ops lnx_fabric_fi_ops = {
@@ -94,7 +156,7 @@ static struct fi_ops_fabric lnx_fabric_ops = {
 };
 
 struct fi_provider lnx_prov = {
-	.name = "linkx",
+	.name = OFI_UTIL_PREFIX "linkx",
 	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = lnx_getinfo,
@@ -108,32 +170,241 @@ struct util_prov lnx_util_prov = {
 	.flags = 0
 };
 
+struct lnx_fi_info_cache {
+	char cache_name[FI_NAME_MAX];
+	struct fi_info *cache_info;
+};
+
+/*
+ * For the fi_getinfo() -> fi_fabric() -> fi_domain() path, we need to
+ * keep track of the fi_info in case we need them later on when linking in
+ * the fi_fabric() function.
+ *
+ * This cache gets cleared after we use the ones we need, or when the
+ * library exists, if LINKx is never used.
+ */
+static struct lnx_fi_info_cache lnx_fi_info_cache[LNX_MAX_LOCAL_EPS] = {0};
+
+static void lnx_free_info_cache(void)
+{
+	int i;
+
+	/* free the cache if there are any left */
+	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+		if (lnx_fi_info_cache[i].cache_info) {
+			fi_freeinfo(lnx_fi_info_cache[i].cache_info);
+			lnx_fi_info_cache[i].cache_info = NULL;
+		}
+	}
+}
+
+static int lnx_cache_info(struct fi_info *info, int idx)
+{
+	struct fi_info *prov_info;
+
+	/* exceeded the number of supported providers */
+	if (idx >= LNX_MAX_LOCAL_EPS)
+		return -FI_ENODATA;
+
+	/* stash this fi info */
+	lnx_fi_info_cache[idx].cache_info = fi_dupinfo(info);
+	if (!lnx_fi_info_cache[idx].cache_info)
+		return -FI_ENODATA;
+
+	prov_info = lnx_fi_info_cache[idx].cache_info;
+	if (!strcmp(info->fabric_attr->prov_name, "shm"))
+		snprintf(lnx_fi_info_cache[idx].cache_name, FI_NAME_MAX, "%s%d",
+				 prov_info->fabric_attr->prov_name,
+				 idx);
+	else
+		snprintf(lnx_fi_info_cache[idx].cache_name, FI_NAME_MAX, "%s",
+				 prov_info->fabric_attr->prov_name);
+
+	FI_INFO(&lnx_prov, FI_LOG_CORE, "Caching %s\n",
+			prov_info->fabric_attr->prov_name);
+	prov_info->next = NULL;
+
+	return 0;
+}
+
+static int lnx_generate_info(struct fi_info *ci, struct fi_info **info,
+							 int idx)
+{
+	struct fi_info *itr, *fi, *tail;
+	char *s, *prov_name, *domain;
+	int rc, num = idx, num_shm = idx, i, incr = 0;
+
+	*info = tail = NULL;
+	for (itr = ci; itr; itr = itr->next) {
+		if (itr->fabric_attr->prov_name &&
+			!strcmp(itr->fabric_attr->prov_name, "shm"))
+			continue;
+
+		rc = lnx_cache_info(itr, num);
+		if (rc)
+			goto err;
+
+		for (i = 0; i < num_shm; i++) {
+			fi = fi_dupinfo(itr);
+			if (!fi)
+				return -FI_ENOMEM;
+
+			incr += i;
+
+			free(fi->fabric_attr->name);
+			domain = fi->domain_attr->name;
+			prov_name = fi->fabric_attr->prov_name;
+
+			fi->fabric_attr->name = NULL;
+			fi->domain_attr->name = NULL;
+			fi->fabric_attr->prov_name = NULL;
+
+			if (asprintf(&s, "shm%d+%s", i, prov_name) < 0) {
+				free(prov_name);
+				fi_freeinfo(fi);
+				goto err;
+			}
+			free(prov_name);
+			fi->fabric_attr->prov_name = s;
+
+			if (asprintf(&s, "%s_%d", lnx_info.fabric_attr->name,
+						 num + incr) < 0) {
+				fi_freeinfo(fi);
+				goto err;
+			}
+			fi->fabric_attr->name = s;
+
+			if (asprintf(&s, "shm%d+%s;%s", i, domain, lnx_info.domain_attr->name) < 0) {
+				free(domain);
+				fi_freeinfo(fi);
+				goto err;
+			}
+			free(domain);
+			fi->domain_attr->name = s;
+
+			/* TODO: ofi_endpoint_init() looks at the ep_attr in detail to
+			* make sure it matches between what's passed in by the user and
+			* what's given by the provider. That's why we just copy the
+			* provider ep_attr into what we return to the user.
+			*/
+			memcpy(fi->ep_attr, lnx_info.ep_attr, sizeof(*lnx_info.ep_attr));
+			fi->fabric_attr->prov_version = lnx_info.fabric_attr->prov_version;
+
+			if (!tail)
+				*info = fi;
+			else
+				tail->next = fi;
+			tail = fi;
+		}
+
+		num++;
+	}
+
+	if (num == idx)
+		return -FI_ENODATA;
+
+	return 0;
+
+err:
+	fi_freeinfo(*info);
+	lnx_free_info_cache();
+
+	return -FI_ENODATA;
+}
+
 int lnx_getinfo(uint32_t version, const char *node, const char *service,
 	     uint64_t flags, const struct fi_info *hints,
 	     struct fi_info **info)
 {
-	/* LINKx provider doesn't show up in fi_getinfo(). It can not be
-	 * selected explicitly. It's a hidden provider of sorts.
-	 *
-	 * TODO: should it be shown in the fi_getinof() result? It doesn't
-	 * make sense, since the intent is to make this an undercover
-	 * provider, which is returned only as part of fi_link()
+	int rc, num;
+	char *orig_prov_name = NULL;
+	struct fi_info *core_info, *lnx_hints, *itr;
+	uint64_t caps;
+
+	/* If the hints are not provided then we endup with a new block */
+	lnx_hints = fi_dupinfo(hints);
+	if (!lnx_hints)
+		return -FI_ENOMEM;
+
+	/* get the providers which support linking */
+	lnx_hints->caps |= FI_LINK;
+	/* we need to lookup the shm as well, so turn off FI_REMOTE_COMM
+	 * and FI_LOCAL_COMM if they are set.
 	 */
-	return -FI_EOPNOTSUPP;
+	caps = lnx_hints->caps;
+	lnx_hints->caps &= ~(FI_REMOTE_COMM | FI_LOCAL_COMM);
+
+	FI_INFO(&lnx_prov, FI_LOG_FABRIC, "LINKX START -------------------\n");
+
+	if (lnx_hints->fabric_attr->prov_name) {
+		/* find the shm memory provider. There could be more than one. We need
+		* to look it up ahead so we can generate all possible combination
+		* between shm and other providers which it can link against.
+		*/
+		orig_prov_name = lnx_hints->fabric_attr->prov_name;
+		lnx_hints->fabric_attr->prov_name = NULL;
+	}
+
+	lnx_hints->fabric_attr->prov_name = strdup("shm");
+	rc = fi_getinfo(version, NULL, NULL, OFI_GETINFO_INTERNAL,
+					lnx_hints, &core_info);
+	if (rc) {
+		lnx_hints->fabric_attr->prov_name = orig_prov_name;
+		goto free_hints;
+	}
+
+	num = 0;
+	for (itr = core_info; itr; itr = itr->next) {
+		rc = lnx_cache_info(itr, num);
+		num++;
+	}
+	free(lnx_hints->fabric_attr->prov_name);
+
+	if (!num) {
+		FI_WARN(&lnx_prov, FI_LOG_FABRIC, "No SHM provider available");
+		rc = -FI_ENODATA;
+		goto free_hints;
+	}
+
+	lnx_hints->fabric_attr->prov_name = orig_prov_name;
+
+	rc = ofi_exclude_prov_name(&lnx_hints->fabric_attr->prov_name,
+			lnx_prov.name);
+	if (rc)
+		goto free_hints;
+
+	lnx_hints->caps = caps;
+	rc = fi_getinfo(version, NULL, NULL,
+				OFI_GETINFO_INTERNAL, lnx_hints,
+				&core_info);
+	if (rc)
+		goto free_hints;
+
+	FI_INFO(&lnx_prov, FI_LOG_FABRIC, "LINKX END -------------------\n");
+
+	/* The list pointed to by core_info can all be coupled with shm. Note
+	 * that shm will be included in that list, so we need to exclude it
+	 * from the list
+	 */
+	rc = lnx_generate_info(core_info, info, num);
+
+	fi_freeinfo(core_info);
+
+free_hints:
+	fi_freeinfo(lnx_hints);
+	return rc;
 }
 
 int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		void *context)
 {
-	/* LINKx provider's fabric is not explicitly initialized using
-	 * lnx_fabric(). It gets initialized implicitly with ofi_link
-	 */
+	/* Create a LINKx fabric which will be used to link the core endpoints */
 	return -FI_EOPNOTSUPP;
 }
 
 void lnx_fini(void)
 {
-	/* TODO clean up */
+	lnx_free_info_cache();
 }
 
 static struct local_prov *
@@ -275,10 +546,9 @@ int lnx_fabric_close(struct fid *fid)
 								 entry, lpv_entry, tmp) {
 		dlist_remove(&entry->lpv_entry);
 		rc = lnx_cleanup_eps(entry);
-		if (rc) {
-			FI_INFO(&lnx_prov, FI_LOG_CORE, "Failed to close provider %s\n",
+		if (rc)
+			FI_WARN(&lnx_prov, FI_LOG_CORE, "Failed to close provider %s\n",
 					entry->lpv_prov_name);
-		}
 
 		free(entry);
 	}
@@ -294,4 +564,7 @@ void ofi_link_fini(void)
 	lnx_prov.cleanup();
 }
 
-
+LNX_INI
+{
+	return &lnx_prov;
+}

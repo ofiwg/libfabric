@@ -237,6 +237,17 @@ MRAIL_INI ;
 #  define MRAIL_INIT NULL
 #endif
 
+#if (HAVE_LINKX) && (HAVE_LINKX_DL)
+#  define LNX_INI FI_EXT_INI
+#  define LNX_INIT NULL
+#elif (HAVE_LINKX)
+#  define LNX_INI INI_SIG(fi_lnx_ini)
+#  define LNX_INIT fi_lnx_ini()
+LNX_INI ;
+#else
+#  define LNX_INIT NULL
+#endif
+
 #if (HAVE_RSTREAM) && (HAVE_RSTREAM_DL)
 #  define RSTREAM_INI FI_EXT_INI
 #  define RSTREAM_INIT NULL

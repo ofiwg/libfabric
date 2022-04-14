@@ -336,6 +336,7 @@ enum {
 	FI_PROTO_RXM_TCP,
 	FI_PROTO_OPX,
 	FI_PROTO_CXI,
+	FI_PROTO_LINKX,
 };
 
 enum {
