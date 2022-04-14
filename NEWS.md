@@ -25,6 +25,7 @@ v1.15.0, Fri Apr 29, 2022
 - Add new FI_PROTO_RXM_TCP for optimized rxm over tcp path
 
 ## EFA
+
 - Added windows support through efawin (https://github.com/aws/efawin)
 - Added support of AWS neuron.
 - Added support of using gdrcopy to copy data from host to device.
@@ -43,6 +44,7 @@ v1.15.0, Fri Apr 29, 2022
 - New provider supporting Cornelis Networks Omni-path hardware
 
 ## PSM3
+
 - Updated psm3 to match IEFS 11.2.0.0 release
 - Added support for sockets (TCP/UDP) via a runtime selectable Hardware
   Abstraction Layer (HAL)
@@ -135,8 +137,8 @@ v1.15.0, Fri Apr 29, 2022
 - ubertest: Add GPU testing and validation support
 - Add HMEM options parsing support
 
-v1.14.1, Fri Apr 22, 2022
-========================
+v1.14.1, Fri Apr 15, 2022
+=========================
 
 ## Core
 
@@ -146,6 +148,11 @@ v1.14.1, Fri Apr 22, 2022
 - Ensure proper timeout time for pollfds to avoid early exit
 
 ## EFA
+
+- Use non-shared buffer pool allocations to use MADV_DONTFORK safely
+- Handle read completion properly for multi_recv
+- Use shm's inject write when possible
+- Support 0 byte read
 
 ## RxD
 
