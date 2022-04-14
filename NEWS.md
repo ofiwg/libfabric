@@ -6,8 +6,8 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
-v1.14.1, Fri Apr 1, 2022
-========================
+v1.14.1, Fri Apr 15, 2022
+=========================
 
 ## Core
 
@@ -17,6 +17,11 @@ v1.14.1, Fri Apr 1, 2022
 - Ensure proper timeout time for pollfds to avoid early exit
 
 ## EFA
+
+- Use non-shared buffer pool allocations to use MADV_DONTFORK safely
+- Handle read completion properly for multi_recv
+- Use shm's inject write when possible
+- Support 0 byte read
 
 ## RxD
 
