@@ -69,6 +69,7 @@
 #include "efa_hmem.h"
 #include "efa_device.h"
 #include "efa_domain.h"
+#include "efa_user_info.h"
 #include "efa_fork_support.h"
 #include "rxr.h"
 #define EFA_PROV_NAME "efa"
@@ -139,6 +140,26 @@ struct efa_ah {
 	int		refcnt; /* reference counter. Multiple efa_conn can share an efa_ah */
 	UT_hash_handle	hh; /* hash map handle, link all efa_ah with efa_ep->ah_map */
 };
+
+static inline
+int efa_str_to_ep_addr(const char *node, const char *service, struct efa_ep_addr *addr)
+{
+	int ret;
+
+	if (!node)
+		return -FI_EINVAL;
+
+	memset(addr, 0, sizeof(*addr));
+
+	ret = inet_pton(AF_INET6, node, addr->raw);
+	if (ret != 1)
+		return -FI_EINVAL;
+	if (service)
+		addr->qpn = atoi(service);
+
+	return 0;
+}
+
 
 struct efa_conn {
 	struct efa_ah		*ah;
@@ -285,8 +306,6 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
 int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	       void *context);
-int efa_getinfo(uint32_t version, const char *node, const char *service,
-		uint64_t flags, const struct fi_info *hints, struct fi_info **info);
 
 /* AV sub-functions */
 int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
