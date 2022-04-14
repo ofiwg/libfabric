@@ -34,6 +34,8 @@
 #include <rdma/fi_errno.h>
 
 #include "efa.h"
+#include "efa_prov_info.h"
+#include "efa_user_info.h"
 #include "ofi_hmem.h"
 
 struct rxr_env rxr_env = {
@@ -145,102 +147,6 @@ void rxr_init_env(void)
 	efa_fork_support_request_initialize();
 }
 
-void rxr_info_to_core_mr_modes(uint32_t version,
-			       const struct fi_info *hints,
-			       struct fi_info *core_info)
-{
-	if (hints && hints->domain_attr &&
-	    (hints->domain_attr->mr_mode & (FI_MR_SCALABLE | FI_MR_BASIC))) {
-		core_info->mode = FI_LOCAL_MR | FI_MR_ALLOCATED;
-		core_info->domain_attr->mr_mode = hints->domain_attr->mr_mode;
-	} else if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		core_info->mode |= FI_LOCAL_MR | FI_MR_ALLOCATED;
-		core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
-	} else {
-		core_info->domain_attr->mr_mode |=
-			FI_MR_LOCAL | FI_MR_ALLOCATED;
-		if (!hints)
-			core_info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
-		else {
-			if (hints->domain_attr)
-				core_info->domain_attr->mr_mode |=
-					hints->domain_attr->mr_mode & OFI_MR_BASIC_MAP;
-			core_info->addr_format = hints->addr_format;
-		}
-#if HAVE_CUDA || HAVE_NEURON
-		core_info->domain_attr->mr_mode |= FI_MR_HMEM;
-#endif
-	}
-}
-
-static int rxr_copy_attr(const struct fi_info *info, struct fi_info *dup)
-{
-	if (info->src_addr) {
-		dup->src_addrlen = info->src_addrlen;
-		dup->src_addr = mem_dup(info->src_addr,
-					info->src_addrlen);
-		if (!dup->src_addr)
-			return -FI_ENOMEM;
-	}
-	if (info->dest_addr) {
-		dup->dest_addrlen = info->dest_addrlen;
-		dup->dest_addr = mem_dup(info->dest_addr,
-					 info->dest_addrlen);
-		if (!dup->dest_addr)
-			return -FI_ENOMEM;
-	}
-	if (info->fabric_attr) {
-		if (info->fabric_attr->name) {
-			dup->fabric_attr->name =
-				strdup(info->fabric_attr->name);
-			if (!dup->fabric_attr->name)
-				return -FI_ENOMEM;
-		}
-	}
-	if (info->domain_attr) {
-		if (info->domain_attr->name) {
-			dup->domain_attr->name =
-				strdup(info->domain_attr->name);
-			if (!dup->domain_attr->name)
-				return -FI_ENOMEM;
-		}
-	}
-	if (info->nic) {
-		dup->nic = ofi_nic_dup(info->nic);
-		if (!dup->nic)
-			return -FI_ENOMEM;
-	}
-	if (info->caps & FI_HMEM)
-		dup->caps |= FI_HMEM;
-
-	return 0;
-}
-
-static int rxr_info_to_core(uint32_t version, const struct fi_info *rxr_info,
-			    struct fi_info **core_info)
-{
-	int ret = 0;
-	*core_info = fi_allocinfo();
-	if (!*core_info)
-		return -FI_ENOMEM;
-
-	rxr_info_to_core_mr_modes(version, rxr_info, *core_info);
-	(*core_info)->caps = FI_MSG;
-	(*core_info)->ep_attr->type = FI_EP_RDM;
-	(*core_info)->tx_attr->op_flags = FI_TRANSMIT_COMPLETE;
-
-	/*
-	 * Skip copying address, domain, fabric info.
-	 */
-	if (!rxr_info)
-		return 0;
-
-	ret = rxr_copy_attr(rxr_info, *core_info);
-	if (ret)
-		fi_freeinfo(*core_info);
-	return ret;
-}
-
 /*
  * Used to set tx/rx attributes that are characteristic of the device for the
  * two endpoint types and not emulated in software.
@@ -272,30 +178,10 @@ static int rxr_dgram_info_to_rxr(uint32_t version,
 	return 0;
 }
 
-static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
+static int rxr_info_to_rxr(uint32_t version,
 			   struct fi_info *info, const struct fi_info *hints)
 {
 	uint64_t atomic_ordering;
-	const struct fi_info *rxr_info;
-
-	rxr_info = rxr_util_prov.info;
-
-	if (!core_info) {
-		return -FI_EINVAL;
-	}
-
-	info->caps = rxr_info->caps;
-	info->mode = rxr_info->mode;
-
-	*info->tx_attr = *rxr_info->tx_attr;
-	*info->rx_attr = *rxr_info->rx_attr;
-	*info->ep_attr = *rxr_info->ep_attr;
-	*info->domain_attr = *rxr_info->domain_attr;
-
-	info->addr_format = core_info->addr_format;
-	info->domain_attr->ep_cnt = core_info->domain_attr->ep_cnt;
-	info->domain_attr->cq_cnt = core_info->domain_attr->cq_cnt;
-	info->domain_attr->mr_key_size = core_info->domain_attr->mr_key_size;
 
 	/*
 	 * Do not advertise FI_HMEM capabilities when the core can not support
@@ -303,7 +189,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	 * cap). The logic for device-specific checks pertaining to HMEM comes
 	 * further along this path.
 	 */
-	if (!(core_info->caps & FI_HMEM) || !hints) {
+	if (!hints) {
 		info->caps &= ~FI_HMEM;
 	}
 
@@ -315,8 +201,8 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 		if (hints->tx_attr) {
 			atomic_ordering = FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
 					  FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
-			if (hints->tx_attr->msg_order & atomic_ordering) {
-				info->ep_attr->max_order_raw_size = rxr_info->ep_attr->max_order_raw_size;
+			if (!(hints->tx_attr->msg_order & atomic_ordering)) {			
+				info->ep_attr->max_order_raw_size = 0;
 			}
 		}
 
@@ -411,6 +297,8 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	if (!hints || !hints->domain_attr ||
 	    hints->domain_attr->av_type == FI_AV_UNSPEC)
 		info->domain_attr->av_type = FI_AV_TABLE;
+	else
+		info->domain_attr->av_type = hints->domain_attr->av_type;
 
 	if (!hints || !hints->domain_attr ||
 	    hints->domain_attr->resource_mgmt == FI_RM_UNSPEC)
@@ -418,34 +306,7 @@ static int rxr_info_to_rxr(uint32_t version, const struct fi_info *core_info,
 	else
 		info->domain_attr->resource_mgmt = hints->domain_attr->resource_mgmt;
 
-	rxr_set_rx_tx_size(info, core_info);
 	return 0;
-}
-
-/*
- * For the RDM endpoint, translate user hints to hints for the lower layer and
- * call getinfo on the lower layer.
- */
-int rxr_get_lower_rdm_info(uint32_t version, const char *node,
-			   const char *service, uint64_t flags,
-			   const struct util_prov *util_prov,
-			   const struct fi_info *util_hints,
-			   struct fi_info **core_info)
-{
-	struct fi_info *core_hints = NULL;
-	int ret;
-
-	ret = ofi_prov_check_info(&rxr_util_prov, version, util_hints);
-	if (ret)
-		return ret;
-
-	ret = rxr_info_to_core(version, util_hints, &core_hints);
-	if (ret)
-		return ret;
-
-	ret = efa_getinfo(version, node, service, flags, core_hints, core_info);
-	fi_freeinfo(core_hints);
-	return ret;
 }
 
 static int rxr_dgram_getinfo(uint32_t version, const char *node,
@@ -501,33 +362,45 @@ int rxr_rdm_getinfo(uint32_t version, const char *node,
 		    const char *service, uint64_t flags,
 		    const struct fi_info *hints, struct fi_info **info)
 {
-	struct fi_info *core_info, *util_info, *cur, *tail;
+	const struct fi_info *prov_info_rxr;
+	struct fi_info *dupinfo, *tail;
 	int ret;
 
-	*info = tail = core_info = NULL;
-
-	ret = rxr_get_lower_rdm_info(version, node, service, flags,
-				     &rxr_util_prov, hints, &core_info);
-
+	ret = efa_user_info_check_hints_addr(node, service, flags, hints);
 	if (ret)
 		return ret;
 
-	for (cur = core_info; cur; cur = cur->next) {
-		util_info = fi_allocinfo();
-		if (!util_info) {
+	if (hints) {
+		ret = ofi_prov_check_info(&rxr_util_prov, version, hints);
+		if (ret)
+			return ret;
+	}
+
+	*info = tail = NULL;
+	for (prov_info_rxr = rxr_util_prov.info;
+	     prov_info_rxr;
+	     prov_info_rxr = prov_info_rxr->next) {
+		ret = efa_prov_info_compare_src_addr(node, flags, hints, prov_info_rxr);
+		if (ret)
+			continue;
+
+		dupinfo = fi_dupinfo(prov_info_rxr);
+		if (!dupinfo) {
 			ret = -FI_ENOMEM;
 			goto free_info;
 		}
 
-		ret = rxr_info_to_rxr(version, cur, util_info, hints);
+		ret = efa_user_info_set_dest_addr(node, service, flags, hints, *info);
 		if (ret)
 			goto free_info;
 
-		ret = rxr_copy_attr(cur, util_info);
+		dupinfo->fabric_attr->api_version = version;
+
+		ret = rxr_info_to_rxr(version, dupinfo, hints);
 		if (ret)
 			goto free_info;
 
-		ofi_alter_info(util_info, hints, version);
+		ofi_alter_info(dupinfo, hints, version);
 
 		/* If application asked for FI_REMOTE_COMM but not FI_LOCAL_COMM, it
 		 * does not want to use shm. In this case, we honor the request by
@@ -535,20 +408,18 @@ int rxr_rdm_getinfo(uint32_t version, const char *node,
 		 * should disable shm transfer for the endpoint
 		 */
 		if (hints && hints->caps & FI_REMOTE_COMM && !(hints->caps & FI_LOCAL_COMM))
-			util_info->caps &= ~FI_LOCAL_COMM;
+			dupinfo->caps &= ~FI_LOCAL_COMM;
 
 		if (!*info)
-			*info = util_info;
+			*info = dupinfo;
 		else
-			tail->next = util_info;
-		tail = util_info;
+			tail->next = dupinfo;
+		tail = dupinfo;
 	}
 
-	fi_freeinfo(core_info);
-	return ret;
+	return 0;
 free_info:
-	fi_freeinfo(core_info);
-	fi_freeinfo(util_info);
+	fi_freeinfo(dupinfo);
 	fi_freeinfo(*info);
 	*info = NULL;
 	return ret;

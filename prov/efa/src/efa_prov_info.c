@@ -687,3 +687,37 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
 	*prov_info_rxr_ptr = prov_info_rxr;
 	return 0;
 }
+
+
+static int efa_node_matches_addr(struct efa_ep_addr *addr, const char *node)
+{
+	struct efa_ep_addr eaddr;
+
+	efa_str_to_ep_addr(node, NULL, &eaddr);
+	return memcmp(&eaddr.raw, &addr->raw, sizeof(addr->raw));
+}
+
+/**
+ * @brief compare the src_addr field of an info object with user information
+ *
+ * @param	info[in]	info object
+ * @param	node[in]	node from user's call to fi_getinfo()
+ * @param	flags[in]	flags from user's call to fi_getinfo()
+ * @param	hints[in]	hints from user's call to fi_getinfo()
+ *
+ * return	the difference between info->src_addr and user provided src_addr.
+ *		Note 0 means no difference.
+ */
+int efa_prov_info_compare_src_addr(const char *node, uint64_t flags, const struct fi_info *hints,
+				   const struct fi_info *info)
+{
+	if (flags & FI_SOURCE) {
+		if (node)
+			return efa_node_matches_addr(info->src_addr, node);
+	} else if (hints && hints->src_addr) {
+		return memcmp(info->src_addr, hints->src_addr, EFA_EP_ADDR_LEN);
+	}
+
+	return 0;
+}
+
