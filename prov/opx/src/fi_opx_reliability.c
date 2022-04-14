@@ -351,13 +351,14 @@ void fi_reliability_service_print_replay_ring (struct fi_opx_reliability_tx_repl
 	return;
 }
 
-ssize_t fi_opx_hfi1_tx_reliability_inject_init(struct fid_ep *ep,
+
+__OPX_FORCE_INLINE__
+ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode (struct fid_ep *ep,
 						const uint64_t key,
 						const uint64_t dlid,
 						const uint64_t reliability_rx,
 						const uint64_t opcode)
 {
-	assert(opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT || opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK);
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
@@ -394,6 +395,107 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_init(struct fid_ep *ep,
 
 	/* save the updated txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+
+	return FI_SUCCESS;
+}
+
+/* This mask should always be set to 1 less than a power of 2,
+ * i.e. all lower bits on */
+#define OPX_RELIABILITY_HANDSHAKE_INIT_THROTTLE_MASK 0xFFFull
+
+void opx_reliability_handshake_init(struct fid_ep *ep,
+				union fi_opx_reliability_service_flow_key key,
+				const uint64_t target_reliability_rx)
+{
+	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+
+	void * itr = fi_opx_rbt_find(opx_ep->reliability->service.handshake_init, (void*)key.value);
+	if (OFI_UNLIKELY(!itr)) {
+		/* Reliability handshake not yet started, initiate it */
+		fi_opx_hfi1_tx_reliability_inject_ud_init(ep,
+							key.value, key.dlid,
+							target_reliability_rx,
+							FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT);
+
+		uint64_t value = 1;
+		rbtInsert(opx_ep->reliability->service.handshake_init, (void*)key.value, (void*)value);
+		return;
+	}
+
+	/* Reliability handshake has started, but not yet completed. Only send
+	 * an init packet every so often, so as not to flood the receiver. */
+	uint64_t *count_ptr = (uint64_t *) fi_opx_rbt_value_ptr(opx_ep->reliability->service.handshake_init, itr);
+	if (!((*count_ptr) & OPX_RELIABILITY_HANDSHAKE_INIT_THROTTLE_MASK)) {
+		fi_opx_hfi1_tx_reliability_inject_ud_init(ep,
+							key.value, key.dlid,
+							target_reliability_rx,
+							FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT);
+	}
+
+	(*count_ptr)++;
+}
+
+ssize_t fi_opx_hfi1_tx_reliability_inject_ud_init(struct fid_ep *ep,
+						const uint64_t key,
+						const uint64_t dlid,
+						const uint64_t reliability_rx,
+						const uint64_t opcode)
+{
+	assert(opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT || opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK);
+
+	ssize_t rc = fi_opx_hfi1_tx_reliability_inject_ud_opcode(ep, key, dlid, reliability_rx, opcode);
+
+	if (OFI_UNLIKELY(rc)) {
+#ifdef OPX_RELIABILITY_DEBUG
+		if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT) {
+			fprintf(stderr, "(tx) flow__ %016lx 0x%x inj init dropped; no credits\n", key, reliability_rx);
+		} else if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK) {
+			fprintf(stderr, "(rx) flow__ %016lx 0x%x inj init ack dropped; no credits\n", key, reliability_rx);
+		}
+#endif
+		return -FI_EAGAIN;
+	}
+	
+#ifdef OPX_RELIABILITY_DEBUG
+	if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT) {
+		fprintf(stderr, "(tx) flow__ %016lx 0x%x inj init\n", key, reliability_rx);
+	} else if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK) {
+		fprintf(stderr, "(rx) flow__ %016lx 0x%x inj init ack\n", key, reliability_rx);
+	}
+#endif
+
+	return FI_SUCCESS;
+}
+
+
+ssize_t fi_opx_hfi1_tx_reliability_inject_ud_resynch(struct fid_ep *ep,
+						const uint64_t key,
+						const uint64_t dlid,
+						const uint64_t reliability_rx,
+						const uint64_t opcode)
+{
+	assert(opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH || opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK);
+
+	ssize_t rc = fi_opx_hfi1_tx_reliability_inject_ud_opcode(ep, key, dlid, reliability_rx, opcode);
+
+	if (OFI_UNLIKELY(rc)) {
+#ifdef OPX_RELIABILITY_DEBUG
+		if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH) {
+			fprintf(stderr, "(tx) Client flow__ %016lx 0x%x inj resynch dropped; no credits\n", key, reliability_rx);
+		} else if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK) {
+			fprintf(stderr, "(rx) Server flow__ %016lx 0x%x inj resynch ack dropped; no credits\n", key, reliability_rx);
+		}
+#endif
+		return -FI_EAGAIN;
+	}
+	
+#ifdef OPX_RELIABILITY_DEBUG
+	if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH) {
+		fprintf(stderr, "(tx) Client flow__ %016lx 0x%x inj resynch\n", key, reliability_rx);
+	} else if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK) {
+		fprintf(stderr, "(rx) Server flow__ %016lx 0x%x inj resynch ack\n", key, reliability_rx);
+	}
+#endif
 
 	return FI_SUCCESS;
 }
@@ -1715,6 +1817,7 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 
 	service->tx.flow = rbtNew(fi_opx_reliability_compare);
 	service->rx.flow = rbtNew(fi_opx_reliability_compare);
+	service->handshake_init = rbtNew(fi_opx_reliability_compare);
 
 	char * env;
 
@@ -1736,24 +1839,26 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 
 	/*
 	 * How often to preemptively acknowledge packets.
-	 * The default is 0, which indicates no preemptive acking.
+	 * The default is 64, which indicates send a 
+	 * preemptive, non-solicited ACK after 64 packets received.
 	 * Must be a power of 2, so that we can create an AND mask
 	 * that will quickly tell us whether or not to ack
+	 * Setting to 0 disables this feature
 	 */
-	int preemptive_ack_rate = 0;
+	int preemptive_ack_rate = 64;
 	if (fi_param_get_int(fi_opx_global.prov, "reliability_service_pre_ack_rate", &preemptive_ack_rate) == FI_SUCCESS) {
 		if (preemptive_ack_rate < 0 || preemptive_ack_rate > 32768) {
 			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE has value %d which is outside the valid range of 0-32,768. Using default rate of 0 (disabled)\n", preemptive_ack_rate);
-			preemptive_ack_rate = 0;
+				"FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE has value %d which is outside the valid range of 0-32,768. Using default rate of 64\n", preemptive_ack_rate);
+			preemptive_ack_rate = 64;
 		} else if (preemptive_ack_rate & (preemptive_ack_rate - 1)) {
-			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE has value %d which is not a power of 2. Using default rate of 0 (disabled)\n", preemptive_ack_rate);
-			preemptive_ack_rate = 0;
+			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE has value %d which is not a power of 2. Using default rate of 64\n", preemptive_ack_rate);
+			preemptive_ack_rate = 64;
 		} else {
 			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Using environment-specified FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE of %d%s\n", preemptive_ack_rate, preemptive_ack_rate ? "" : " (disabled)");
 		}
 	} else {
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE not specified, using default value of 0 (disabled)\n");
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE not specified, using default value of 64\n");
 	}
 
 	/* Subtract 1 from the rate to give us the AND mask we want to use for PSN comparison. */
@@ -1770,14 +1875,14 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 	if (rc == FI_SUCCESS) {
 		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_USEC_MAX set to %d\n", usec);
 	} else {
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_USEC_MAX not specified, using default value of 100\n");
-		usec = 100; // TODO: Make this a define.
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_USEC_MAX not specified, using default value of 500\n");
+		usec = 500;
 	}
 	service->usec_max = usec;
 
 	service->usec_next = fi_opx_timer_next_event_usec(&service->tx.timer, &service->tx.timestamp, service->usec_max);
 
-	int dcomp_threshold;
+	int dcomp_threshold;  //TODO, this ENV is for SDMA testing.  Remove this at some point.
 	rc = fi_param_get_int(fi_opx_global.prov, "delivery_completion_threshold",
 		&dcomp_threshold);
 	if (rc != FI_SUCCESS || dcomp_threshold < OPX_MIN_DCOMP_THRESHOLD ||
@@ -2033,6 +2138,10 @@ void fi_opx_reliability_client_init (struct fi_opx_reliability_client_state * st
 	/* ---- tx only ---- */
 	state->tx = tx;
 	state->tx_flow_rbtree = rbtNew(fi_opx_reliability_compare);
+
+	/* ---- resynch only ---- */
+	state->flow_rbtree_resynch = rbtNew(fi_opx_reliability_compare);
+
 
 	/*
  	 * The replay pool is used for the main send path. The pool has
@@ -2456,3 +2565,452 @@ void fi_opx_hfi_rx_reliablity_process_requests(struct fid_ep *ep, int max_to_sen
 	return;
 }
 
+
+__OPX_FORCE_INLINE__
+ssize_t fi_opx_hfi1_tx_reliability_inject_shm (struct fid_ep *ep,
+		const uint64_t key, const uint64_t dlid, const uint64_t reliability_rx,
+		const uint64_t opcode)
+{
+	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+
+#ifdef OPX_RELIABILITY_DEBUG
+	if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH) {
+		fprintf(stderr, "(tx) SHM - Client flow__ %016lx 0x%x inj resynch\n",
+			key, (unsigned)reliability_rx);
+	} else if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK) {
+		fprintf(stderr, "(rx) SHM - Server flow__ %016lx 0x%x inj resynch ack\n",
+			key, (unsigned)reliability_rx);
+	} else {
+		fprintf(stderr, "%s:%s():%d bad opcode (%lu) .. abort\n", __FILE__, __func__, __LINE__, opcode);
+		abort();
+	}
+#endif
+
+	/* Make sure the connection to remote EP exists. */
+	fi_opx_shm_dynamic_tx_connect(1, opx_ep, (unsigned)reliability_rx);
+
+	/*
+	 * Construct and send packet to send to remote EP
+	 */
+	uint64_t pos;
+	union fi_opx_hfi1_packet_hdr * const hdr =
+		opx_shm_tx_next(&opx_ep->tx->shm, reliability_rx, &pos);
+
+	if (!hdr) return -FI_EAGAIN;
+
+	const uint64_t lrh_dlid = dlid << 16;
+	const uint64_t bth_rx = reliability_rx << 56;
+
+	struct fi_opx_hfi1_txe_scb model = opx_ep->reliability->service.tx.hfi1.ping_model;
+	model.hdr.ud.opcode = opcode;
+
+	hdr->qw[0] = model.hdr.qw[0] | lrh_dlid;
+
+	hdr->qw[1] =  model.hdr.qw[1] | bth_rx;
+
+	hdr->qw[2] = model.hdr.qw[2];
+
+	hdr->qw[3] = model.hdr.qw[3]; 
+
+	hdr->qw[4] = model.hdr.qw[4];
+
+	hdr->qw[5] = model.hdr.qw[5];
+	// hdr->qw[6]
+	hdr->service.key = key;
+
+	opx_shm_tx_advance(&opx_ep->tx->shm, (void*)hdr, pos);
+
+	return FI_SUCCESS;
+}
+
+
+__OPX_FORCE_INLINE__
+struct fi_opx_reliability_resynch_flow * fi_opx_reliability_resynch_flow_init (
+		struct fi_opx_reliability_client_state * state,
+		union fi_opx_reliability_service_flow_key rx_key,
+		bool client)
+{
+	struct fi_opx_reliability_resynch_flow * resynch_flow = NULL;
+	void *itr, *rx_key_ptr;
+
+	itr = fi_opx_rbt_find(state->flow_rbtree_resynch, (void*)rx_key.value);
+	if (itr) {
+		fi_opx_rbt_key_value(state->flow_rbtree_resynch, itr, &rx_key_ptr, (void **)&resynch_flow);
+		resynch_flow->resynch_counter++;
+
+		if (client) {
+			resynch_flow->remote_ep_resynch_completed = 0;
+
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"(rx) Client flow__ %016lx is waiting for resynch ack again: %ld.\n",
+				rx_key.value, resynch_flow->resynch_counter);
+		} else {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"(rx) Server flow__ %016lx is resynched again: %ld.\n",
+				rx_key.value, resynch_flow->resynch_counter);
+		}
+	} else {
+		int rc __attribute__ ((unused));
+		rc = posix_memalign((void **)&resynch_flow, 32, sizeof(*resynch_flow));
+		assert(rc==0);
+
+		resynch_flow->key.value = rx_key.value;
+		resynch_flow->resynch_counter = 1;
+
+		if (client) {
+			resynch_flow->client_ep = true;
+			resynch_flow->remote_ep_resynch_completed = 0;
+
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"(rx) Client flow__ %016lx is waiting for resynch ack: %ld.\n",
+				rx_key.value, resynch_flow->resynch_counter);
+		} else {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"(rx) Server flow__ %016lx is resynched: %ld.\n",
+				rx_key.value, resynch_flow->resynch_counter);
+		}
+
+		rbtInsert(state->flow_rbtree_resynch, (void*)rx_key.value, (void*)resynch_flow);
+	}
+
+	return resynch_flow;
+}
+
+
+void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
+		struct fi_opx_reliability_service * service,
+		const union fi_opx_hfi1_packet_hdr *const hdr)
+{
+	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+	struct fi_opx_reliability_client_state * state = &opx_ep->reliability->state;
+	uint8_t origin_reliability_rx = hdr->service.origin_reliability_rx;
+
+	union fi_opx_reliability_service_flow_key rx_key = { .value = hdr->service.key };
+	union fi_opx_reliability_service_flow_key tx_key = {
+		.slid = rx_key.dlid,
+		.tx = state->tx,
+		.dlid = rx_key.slid,
+		.rx = state->rx
+	};
+
+	/* 
+	 * INTRA-NODE:
+	 * Reset all SHM related reliability protocol data retained by this
+	 * Server EP about the remote Client EP.
+	 */
+	if (rx_key.slid == rx_key.dlid) {
+
+		/* Record completion of the resynch request for the remote Client EP */
+		opx_ep->rx->shm.resynch_connection[origin_reliability_rx].completed = true;
+		opx_ep->rx->shm.resynch_connection[origin_reliability_rx].counter++;
+
+#ifdef OPX_RELIABILITY_DEBUG
+		fprintf(stderr, "(rx) SHM - Server flow__ %016lx 0x%x rcv resynch: %ld\n",
+			rx_key.value, origin_reliability_rx,
+			opx_ep->rx->shm.resynch_connection[origin_reliability_rx].counter);
+#endif
+
+		/*
+		 * Close connection to the remote Client EP to cause the Server EP to
+		 * re-establish a connection on the next transmit operation issued
+		 *  by the Server EP.
+		 */
+		opx_shm_tx_close(&opx_ep->tx->shm, origin_reliability_rx);
+
+	 	/* Send ack to notify the remote ep that the resynch was completed */
+		fi_opx_hfi1_tx_reliability_inject_shm(ep,
+			rx_key.value, tx_key.dlid, origin_reliability_rx,
+			FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK);
+		
+		return;
+	}
+
+	/* 
+	 * INTER-NODE:
+	 * Reset all rx/tx related reliability protocol data retained by this
+	 * Server EP about the remote Client EP.
+	 */
+#ifdef OPX_RELIABILITY_DEBUG
+	fprintf(stderr, "(rx) Server flow__ %016lx rcv resynch\n", rx_key.value);
+#endif
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"Server resynching local:\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"\t(rx) flow__ %016lx\n", rx_key.value);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"\t(tx) flow__ %016lx\n", tx_key.value);
+
+	/*
+	 * Reset all (rx) related reliability protocol data
+	 */
+	struct fi_opx_reliability_flow *flow;
+	void *itr, *rx_key_ptr;
+
+	itr = fi_opx_rbt_find(state->rx_flow_rbtree, (void*)rx_key.value);
+	if (itr) {
+        fi_opx_rbt_key_value(state->rx_flow_rbtree, itr, &rx_key_ptr, (void **)&flow);
+		//dump_flow_rx(flow, __LINE__);
+
+		/* Reset next expected inbound packet PSN value */
+		flow->next_psn = 0;
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"(rx) Server flow__ %016lx is reset.\n", rx_key.value);
+
+		/* Delete all uepkt related entries from flow list */
+		struct fi_opx_reliability_rx_uepkt * head = flow->uepkt;
+
+		while (head != NULL) {
+#ifdef OPX_RELIABILITY_DEBUG
+			fprintf(stderr, "(rx) packet %016lx %08lu deleted.\n", rx_key.value, head->psn);
+#endif
+
+			struct fi_opx_reliability_rx_uepkt * next = head->next;
+			if (next == head) {
+				/* Last element in the list */
+				assert(head->prev == head);
+				next = NULL;
+			}
+
+			head->prev->next = head->next;
+			head->next->prev = head->prev;
+			free(head);
+			head = next;
+		};
+
+		flow->uepkt = NULL;
+	}
+
+
+	/*
+	 * Reset all (tx) related reliability protocol data
+	 */
+
+	/* Delete all state related entries from flow list */
+	itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void*)tx_key.value);
+	if (itr) {
+		/* When the Server does its first transmit, this will cause the Server to */
+		/* initiate a handshake with the Client.                                  */ 
+		rbtErase(state->tx_flow_rbtree, itr);
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"(tx) Server state flow__ %016lx is reset.\n", tx_key.value);
+	}
+
+
+	/* Delete all service replay related entries from flow list */
+	itr = fi_opx_rbt_find(service->tx.flow, (void*)tx_key.value);
+	if (itr) {
+		struct fi_opx_reliability_tx_replay ** value_ptr =
+			(struct fi_opx_reliability_tx_replay **) fi_opx_rbt_value_ptr(service->tx.flow, itr);
+
+		struct fi_opx_reliability_tx_replay * head = *value_ptr;
+
+		if (head) {
+			/* Retire all queue elements */
+			*value_ptr = NULL;
+
+			struct fi_opx_reliability_tx_replay * next = NULL;
+			struct fi_opx_reliability_tx_replay * tmp = head;
+
+			do {
+#ifdef OPX_RELIABILITY_DEBUG
+				fprintf(stderr, "(tx) packet %016lx %08u retired.\n", tx_key.value, tmp->scb.hdr.reliability.psn);
+#endif
+				next = tmp->next;
+
+				fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, tmp);
+				tmp = next;
+			} while (tmp != head);
+
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"(tx) Server service flow__ %016lx is reset.\n", tx_key.value);
+		}
+	}
+
+	/* 
+	 * Create record of the RESYNCH operation being completed for all (rx) & (tx)
+	 * related reliability protocol data.
+	 */
+	fi_opx_reliability_resynch_flow_init(state, tx_key, false);
+
+	/*
+	 * Send ack to notify the remote ep that the resynch was completed
+	 */
+	fi_opx_hfi1_tx_reliability_inject_ud_resynch(ep,
+		rx_key.value, tx_key.dlid, origin_reliability_rx,
+		FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK);
+}
+
+
+void fi_opx_hfi1_rx_reliability_ack_resynch (struct fid_ep *ep,
+		struct fi_opx_reliability_service * service,
+		const union fi_opx_hfi1_packet_hdr *const hdr)
+{
+	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+	union fi_opx_reliability_service_flow_key rx_key = { .value = hdr->service.key };
+
+#ifdef OPX_RELIABILITY_DEBUG
+	fprintf(stderr, "(rx) %s Client flow__ %016lx rcv resynch ack\n",
+		(rx_key.slid == rx_key.dlid) ? "SHM -" : "",
+		rx_key.value);
+#endif
+
+	/* No complicated linked list or queue mechanism required at this time.
+	 * A simple flag to indicate reception of the ack resynch response is
+	 * sufficient and quick.
+	 */
+	struct fi_opx_reliability_client_state * state = &opx_ep->reliability->state;
+	struct fi_opx_reliability_resynch_flow * resynch_flow = NULL;
+	void * itr, *rx_key_ptr;
+	itr = fi_opx_rbt_find(state->flow_rbtree_resynch, (void*)rx_key.value);
+
+	if (itr) {
+        fi_opx_rbt_key_value(state->flow_rbtree_resynch, itr, &rx_key_ptr, (void **)&resynch_flow);
+
+		resynch_flow->remote_ep_resynch_completed = 1;
+	}
+#ifdef OPX_RELIABILITY_DEBUG
+	else {
+		fprintf(stderr, "Warning, (rx) %s Client flow__ %016lx rcv resynch ack; not found.\n",
+			(rx_key.slid == rx_key.dlid) ? "SHM -" : "",
+			rx_key.value);
+	}
+#endif
+}
+
+
+ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep,
+	union fi_opx_addr dest_addr,
+	const uint64_t caps)
+{
+	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+	ssize_t rc = FI_SUCCESS;
+	bool inject_done = false;
+
+	union fi_opx_reliability_service_flow_key tx_key = {
+		.slid = opx_ep->tx->send.hdr.stl.lrh.slid,
+		.tx = opx_ep->tx->send.hdr.reliability.origin_tx,
+		.dlid = dest_addr.uid.lid,
+		.rx = dest_addr.hfi1_rx
+	};
+
+	if (!opx_ep->reliability ||
+		opx_ep->reliability->state.kind != OFI_RELIABILITY_KIND_ONLOAD ||
+		opx_ep->rx->self.fi == dest_addr.fi) {
+		/* Nothing to do */
+		return FI_SUCCESS;
+	}
+
+	if (fi_opx_hfi1_tx_is_intranode(ep, dest_addr.fi, caps)) {
+		/* INTRA-NODE */
+
+		/* 
+		 * Check whether RESYNCH request has been received from the remote EP.
+		 * If so, then this is a Server EP amd there is nothing to be done.
+		 */
+		if (opx_ep->rx->shm.resynch_connection[dest_addr.hfi1_rx].completed) {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"(rx) SHM - Server already received resynch from Client %016lx 0x%x: %ld\n",
+				tx_key.value,
+				dest_addr.hfi1_rx,
+				opx_ep->rx->shm.resynch_connection[dest_addr.hfi1_rx].counter);
+
+			return FI_SUCCESS;
+		}
+
+		/* 
+		 * Check whether packets have already been sent to the dest EP.  If not,
+		 * then send RESYNCH request to the dest Server EP.  This causes the dest
+		 * Server EP to resynch all SHM related data that it maintains associated
+		 * with this Client EP.
+		 */
+		if (opx_ep->tx->shm.fifo[dest_addr.hfi1_rx] &&
+			!opx_ep->tx->shm.connection[dest_addr.hfi1_rx].inuse) {
+			inject_done = true;
+			rc = fi_opx_hfi1_tx_reliability_inject_shm(ep,
+					tx_key.value, dest_addr.uid.lid, dest_addr.hfi1_rx,
+					FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH);
+			if (rc)
+				return -FI_EAGAIN;
+		}
+
+	} else {
+		/* INTER-NODE */
+
+		/* 
+		 * Check whether a RESYNCH request was already received from the remote EP.
+		 * If so, then this is a Server EP; otherwise this is a Client EP.
+		 */
+		void * rx_itr = fi_opx_rbt_find(opx_ep->reliability->state.flow_rbtree_resynch,
+										(void*)tx_key.value);
+
+		if (rx_itr) {
+			struct fi_opx_reliability_resynch_flow ** value_ptr =
+				(struct fi_opx_reliability_resynch_flow **) fi_opx_rbt_value_ptr(
+						opx_ep->reliability->state.flow_rbtree_resynch, rx_itr
+					);
+
+			struct fi_opx_reliability_resynch_flow * resynch_flow = *value_ptr;
+			if (!resynch_flow->client_ep) {
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"(rx) Server already received resynch from Client %016lx: %ld\n",
+					tx_key.value, resynch_flow->resynch_counter);
+				return FI_SUCCESS;
+			}
+		}
+
+		/*
+		 * Query (tx) rbTree to determine whether packets have already been sent
+		 * to the remote Server EP.  If not, then send RESYNCH request to the Server EP.
+		 * This causes the Server EP to reset all necessary rbTree related data that
+		 * it maintains associated with this Client EP.
+		 */
+		void * itr = fi_opx_rbt_find(opx_ep->reliability->state.tx_flow_rbtree, (void*)tx_key.value);
+		if (!itr) {
+			inject_done = true;
+
+			fi_opx_hfi1_tx_reliability_inject_ud_resynch(ep,
+				tx_key.value, tx_key.dlid, dest_addr.reliability_rx,
+				FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH);
+		}
+	}
+
+	/*
+	 * If necessary, wait for ACK response to the RESYNCH request.
+	 */
+	if (inject_done) {
+		/* Create entry to monitor reception of ACK response */
+		struct fi_opx_reliability_resynch_flow * resynch_flow =
+			fi_opx_reliability_resynch_flow_init(&opx_ep->reliability->state, tx_key, true);
+
+		if (!resynch_flow) {
+			return -FI_EAGAIN;
+		}
+
+		struct fi_opx_reliability_service *service = opx_ep->reliability->state.service;
+		union fi_opx_timer_state * timer = &service->tx.timer;
+		union fi_opx_timer_stamp * timestamp = &service->tx.timestamp;
+		union fi_opx_timer_stamp start;
+		uint64_t compare = fi_opx_timer_now(&start, timer);
+		uint64_t next =
+			fi_opx_timer_next_event_usec(timer, &start, FI_OPX_TIMER_NEXT_EVENT_USEC_DEFAULT);
+
+		while (compare < next) {
+			fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+			compare = fi_opx_timer_now(timestamp, timer);
+
+			if (resynch_flow->remote_ep_resynch_completed) {
+				return FI_SUCCESS;
+			}
+		}
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"(rx) Client failed to receive ack resynch from Server %016lx.\n",
+			tx_key.value);
+		rc = -FI_EAGAIN;
+	}
+
+	return rc;
+}

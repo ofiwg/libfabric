@@ -422,6 +422,7 @@ struct fi_opx_ep {
 	bool                is_tx_cq_bound;
 	bool                is_rx_cq_bound;
 	ofi_spin_t	 		lock;
+	bool                do_resynch_remote_ep;
 
 
 #ifdef FLIGHT_RECORDER_ENABLE
@@ -2970,6 +2971,13 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 		fi_opx_ep_tx_do_cq_completion(opx_ep, override_flags, tx_op_flags);
 
 	ssize_t rc = 0;
+
+	if (opx_ep->do_resynch_remote_ep) {
+		rc = fi_opx_reliability_do_remote_ep_resynch(ep, addr, caps);
+		if (OFI_UNLIKELY(rc == -FI_EAGAIN)) {
+			return rc;
+		}
+	}
 
 	if (total_len <= opx_ep->tx->pio_max_eager_tx_bytes) {
 

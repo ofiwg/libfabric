@@ -195,6 +195,12 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep,
 			case FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK:
 				fi_opx_reliability_handle_ud_init_ack(&opx_ep->reliability->state, hdr);
 				break;
+			case FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH:
+				fi_opx_hfi1_rx_reliability_resynch(&opx_ep->ep_fid, opx_ep->reliability->state.service, hdr);
+				break;
+			case FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK:
+				fi_opx_hfi1_rx_reliability_ack_resynch(&opx_ep->ep_fid, opx_ep->reliability->state.service, hdr);
+				break;
 			default:
 				fprintf(stderr, "%s:%s():%d bad ud header packet; abort.\n", __FILE__,
 					__func__, __LINE__);
@@ -526,13 +532,28 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 	while (hdr != NULL) {
 		const uint8_t opcode = hdr->stl.bth.opcode;
 
-		if (OFI_LIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT)) {
+		if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
 			fi_opx_ep_rx_process_header(ep, hdr, NULL, 0,
 				FI_TAGGED,
 				FI_OPX_HFI_BTH_OPCODE_TAG_INJECT,
 				1, /* is_intranode */
 				lock_required,
 				OFI_RELIABILITY_KIND_NONE);
+
+		} else if (opcode == FI_OPX_HFI_BTH_OPCODE_UD) {
+			const uint8_t ud_opcode = hdr->ud.opcode;
+
+			if (ud_opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH) {
+				fi_opx_hfi1_rx_reliability_resynch(&opx_ep->ep_fid,
+								opx_ep->reliability->state.service, hdr);
+			} else if (ud_opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK) {
+				fi_opx_hfi1_rx_reliability_ack_resynch(&opx_ep->ep_fid,
+								opx_ep->reliability->state.service, hdr);
+			} else {
+				fprintf(stderr, "%s:%s():%d bad ud opcode (%u); abort.\n",
+					__FILE__, __func__, __LINE__, ud_opcode);
+				abort();
+			}
 
 		} else {
 
