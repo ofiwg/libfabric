@@ -147,37 +147,6 @@ void rxr_init_env(void)
 	efa_fork_support_request_initialize();
 }
 
-/*
- * Used to set tx/rx attributes that are characteristic of the device for the
- * two endpoint types and not emulated in software.
- */
-void rxr_set_rx_tx_size(struct fi_info *info,
-			const struct fi_info *core_info)
-{
-	if (rxr_env.tx_size > 0)
-		info->tx_attr->size = rxr_env.tx_size;
-	else
-		info->tx_attr->size = core_info->tx_attr->size;
-
-	if (rxr_env.rx_size > 0)
-		info->rx_attr->size = rxr_env.rx_size;
-	else
-		info->rx_attr->size = core_info->rx_attr->size;
-
-	if (rxr_env.tx_iov_limit > 0)
-		info->tx_attr->iov_limit = rxr_env.tx_iov_limit;
-
-	if (rxr_env.rx_iov_limit > 0)
-		info->rx_attr->iov_limit = rxr_env.rx_iov_limit;
-}
-
-static int rxr_dgram_info_to_rxr(uint32_t version,
-				 const struct fi_info *core_info,
-				 struct fi_info *info) {
-	rxr_set_rx_tx_size(info, core_info);
-	return 0;
-}
-
 static int rxr_info_to_rxr(uint32_t version,
 			   struct fi_info *info, const struct fi_info *hints)
 {
@@ -343,8 +312,6 @@ static int rxr_dgram_getinfo(uint32_t version, const char *node,
 			goto out;
 		}
 
-		rxr_dgram_info_to_rxr(version, cur, util_info);
-
 		if (!*info)
 			*info = util_info;
 		else
@@ -367,13 +334,17 @@ int rxr_rdm_getinfo(uint32_t version, const char *node,
 	int ret;
 
 	ret = efa_user_info_check_hints_addr(node, service, flags, hints);
-	if (ret)
+	if (ret) {
+		*info = NULL;
 		return ret;
+	}
 
 	if (hints) {
 		ret = ofi_prov_check_info(&rxr_util_prov, version, hints);
-		if (ret)
+		if (ret) {
+			*info = NULL;
 			return ret;
+		}
 	}
 
 	*info = tail = NULL;
@@ -415,6 +386,7 @@ int rxr_rdm_getinfo(uint32_t version, const char *node,
 		else
 			tail->next = dupinfo;
 		tail = dupinfo;
+		dupinfo = NULL;
 	}
 
 	return 0;
