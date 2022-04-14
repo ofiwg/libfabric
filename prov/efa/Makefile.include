@@ -88,8 +88,9 @@ efa_CPPFLAGS += -I$(top_srcdir)/prov/efa/test $(cmocka_CPPFLAGS)
 
 prov_efa_test_efa_unit_test_CPPFLAGS = $(efa_CPPFLAGS)
 prov_efa_test_efa_unit_test_LDADD = $(cmocka_LIBS) $(linkback)
-prov_efa_test_efa_unit_test_LDFLAGS = $(efa_LDFLAGS) $(cmocka_LDFLAGS) -Wl,--wrap=ibv_create_ah \
-																		-Wl,--wrap=efadv_query_ah
+prov_efa_test_efa_unit_test_LDFLAGS = $(cmocka_rpath) $(efa_LDFLAGS) $(cmocka_LDFLAGS) \
+                                                                    -Wl,--wrap=ibv_create_ah \
+																	-Wl,--wrap=efadv_query_ah
 prov_efa_test_efa_unit_test_LIBS = $(efa_LIBS) $(linkback)
 
 endif ENABLE_EFA_UNIT_TEST
