@@ -11,22 +11,68 @@ v1.14.1, Fri Apr 1, 2022
 
 ## Core
 
+- Use non-shared memory allocations to use MADV_DONTFORK safely
+- Various fixes for compiler warnings
+- Fix incorrect use of gdr_copy_from_mapping
+- Ensure proper timeout time for pollfds to avoid early exit
+
 ## EFA
 
 ## RxD
 
+- Verify valid atomic size
+
 ## RxM
+
+- Ensure signaling the CQ fd after writing completion
+- Fix inject path for sending tagged messages with cq data
+- Negotiate credit based flow control support over CM
+- Add PID to CM messages to detect stale vs duplicate connections
+- Fix race handling unexpected messages from unknown peers
+- Fix possible leak of stack data in cm_accept
+- Restrict reported caps based on core provider
+- Delay starting listen until endpoint fully initialized
+- Verify valid atomic size
 
 ## Sockets
 
+- Fix coverity reports on uninitialized data
+- Check for NULL pointers passed to memcpy
+- Minor cleanups
+- Add missing error return code from sock_ep_enable
+
 ## TCP
 
-## Util
+- Fix performance regression resulting from sparse pollfd sets
+- Fix assertion failure in CQ progress function
+- Do not generate error completions for inject msgs
+- Fix use of incorrect event names in progress handler
+- Fix check for CQ data in tagged messages
+- Make start_op array a static to reduce memory
+- Wake-up threads blocked on CQ to update their poll events
 
 ## Verbs
 
+- Generate error completions for all failed transmits
+- Set all fields in the fi_fabric_attr for FI_CONNREQ events
+- Set proper completion flags for all failed transfer
+- Minor updates to silence coverity warnings on NULL pointers
+- Ensure that all attributes are provided when opening an endpoint
+- Fix error handling in vrb_eq_read
+- Fix memory leak in error case in vrb_get_sib
+- Work-around bug in verbs HW not reported correct send opcodes
+- Only call ibv_reg_dmabuf_mr when kernel support exists
+- Add a failover path to dma-buf based memory registration
+- Negotiate credit based flow control support over CM
+- Add OS portable detection of loopback devices
+
 ## Fabtests
 
+- Disable inject when FI_HMEM is enabled
+- Increase the number of supported ZE devices
+- Change cq format if remote cq data is received
+- Fix ubertest config exclude file check
+- Fix ubertest checks for expected completions
 
 v1.14.0, Fri Nov 19, 2021
 =========================
