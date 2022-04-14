@@ -6,10 +6,23 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
-v1.15.0, Fri Apr 1, 2022
+v1.15.0, Fri Apr 29, 2022
 ========================
 
 ## Core
+
+- Fix fi_info indentation error in fi_tostr
+- hmem_ze: Add runtime option to choose specific copy engine
+- Cleanup of configure HMEM checks
+- Fixed stringop-truncation in ofi_ifaddr_get_speed
+- Add utility provider log suffix to make logs easier to read
+- Fix truncation of ipv6 addressing
+- hmem: add support for AWS Trainium devices
+- Fix potential sscanf overflows
+- hmem: pass through device and flags when querying memory interface
+- Rework locking in several areas to convert spinlocks to mutexes
+- Add new locking abstractions to select lock types at runtime
+- Add new FI_PROTO_RXM_TCP for optimized rxm over tcp path
 
 ## EFA
 - Added windows support through efawin (https://github.com/aws/efawin)
@@ -19,13 +32,23 @@ v1.15.0, Fri Apr 1, 2022
 - Fixed a memory corruption issue that can caused forked process to crash.
 - Extended testing coverage through new pytest based testing framework.
 
+## HOOKS
+
+- Add new hooking provider dmabuf_peer_mem
+- Enable DL build of hooking providers
+- Add HMEM memory registration hook
+
+## OPX
+
+- New provider supporting Cornelis Networks Omni-path hardware
+
 ## PSM3
 - Updated psm3 to match IEFS 11.2.0.0 release
 - Added support for sockets (TCP/UDP) via a runtime selectable Hardware
-Abstraction Layer (HAL)
+  Abstraction Layer (HAL)
 - Added support for IPv6 addressing in RoCE and sockets
 - Added various NIC selection filtering options (wildcarded NIC name,
-address format, wildcarded IP subnet, link speed)
+  address format, wildcarded IP subnet, link speed)
 - Performance tuning in conjunction with OneAPI and OneCCL
 - Tested with aws-nccl-plugin using NVIDIA NCCL over OFI over PSM3
 - Improved PSM3_IDENTIFY output
@@ -33,25 +56,152 @@ address format, wildcarded IP subnet, link speed)
 - Corrected vulnerabilities found during Coverity scans
 - configure options refined and help text improved
 - PSM3_MULTI_EP has been deprecated (recommend always enabled, default
-is enabled [same default as previous releases])
+  is enabled [same default as previous releases])
 - Various bug fixes
-
-## RxD
 
 ## RxM
 
+- Add check that atomic size is valid
+- Add support to passthru calls to tcp provider in specific cases
+
 ## TCP
+
+- Add assert to verify RMA source/target msg sizes match
+- Wake-up threads blocked on CQ to update their poll events
+- Fix use of incorrect events in progress handler
+- Fixes for various compile warnings, mostly on Windows
+- Add support for FI_RMA_EVENT capability
+- Add support for completion counters
+- Fix check for CQ data in tagged messages
+- Add cancel support to shared rx context
+- Add src_addr receive buffer matching
+- Add provider control to assign a src_addr with an ep
+- Handle trecv with FI_PEEK flag
+- Allow binding a CQ with an SRX
+- Restructuring of code in source files
+- Handle EWOULDBLOCK returned by send call
+- Add hot (active) pollfd list
 
 ## SHM
 
-## Sockets
+- Properly chain the original signal handlers
+- Avoid uninitialized variable with invalid atomic parameters
+- Fix 0 byte SAR read
+- Initialize len parameter to accept
+- Refactor and simplify protocol code
+- Remove broken support for 128-bit atomics
+- Fix FI_INJECT flag support
+- Add assert to verify RMA source/target msg sizes match
+- Set domain threading to thread safe
+- Fix possible use of uninitiated var in av_insert
 
 ## Util
 
+- Fix sign warning in ofi_bufpool_region_alloc
+- Remove unused variable from ofi_bufpool_destroy
+- Fix check for valid datatype in ofi_atomic_valid
+- Return with error if util_coll_sched_copy fails
+- Fix use of uninitialized variable in ofi_ep_allreduce
+- Fix memory access in ip_av_insertsym
+- Track ep per collective operation not with multicast
+- Restructure collective av set creation/destruction
+- Change most locks from spin locks to mutexes
+- Allow selection of spinlocks for CQ and domain objects
+
 ## Verbs
+
+- Initial changes for compiling on Windows (via NetworkDirect)
+- Add a failover path to dma-buf based memory registration
+- Replace use of spin locks with mutexes
 
 ## Fabtests
 
+- hmem_cuda: used device allocated host buff to fill device buf
+- Add python scripts to control test execution
+- test_configs: include util provider in core config file
+- Add option "--pin-core"
+- Only call nrt_init once
+- Fix a bug in ft_neuron_cleanup
+- Correct help for unit test programs
+- Remove duplicate help prints from fi_mcast
+- configure.ac: fix --enable-debug=no not properly detected
+- msg_inject: handle the case ft_tsendmsg return -FI_EAGAIN
+- Add AWS Trainium device support
+- fi_inj_complete: Add FI_INJECT to fabtests
+- inj_complete.c: Make arguments align with the other tests
+- dgram_pingpong: handle the error return of fi_recv
+- recv_cancel: Remove requirement for unexpected msg handling
+- poll: Fix crash if unable to allocate pollset
+- ubertest: Add GPU testing and validation support
+- Add HMEM options parsing support
+
+v1.14.1, Fri Apr 22, 2022
+========================
+
+## Core
+
+- Use non-shared memory allocations to use MADV_DONTFORK safely
+- Various fixes for compiler warnings
+- Fix incorrect use of gdr_copy_from_mapping
+- Ensure proper timeout time for pollfds to avoid early exit
+
+## EFA
+
+## RxD
+
+- Verify valid atomic size
+
+## RxM
+
+- Ensure signaling the CQ fd after writing completion
+- Fix inject path for sending tagged messages with cq data
+- Negotiate credit based flow control support over CM
+- Add PID to CM messages to detect stale vs duplicate connections
+- Fix race handling unexpected messages from unknown peers
+- Fix possible leak of stack data in cm_accept
+- Restrict reported caps based on core provider
+- Delay starting listen until endpoint fully initialized
+- Verify valid atomic size
+
+## Sockets
+
+- Fix coverity reports on uninitialized data
+- Check for NULL pointers passed to memcpy
+- Minor cleanups
+- Add missing error return code from sock_ep_enable
+
+## TCP
+
+- Fix performance regression resulting from sparse pollfd sets
+- Fix assertion failure in CQ progress function
+- Do not generate error completions for inject msgs
+- Fix use of incorrect event names in progress handler
+- Fix check for CQ data in tagged messages
+- Make start_op array a static to reduce memory
+- Wake-up threads blocked on CQ to update their poll events
+
+## Verbs
+
+- Generate error completions for all failed transmits
+- Set all fields in the fi_fabric_attr for FI_CONNREQ events
+- Set proper completion flags for all failed transfer
+- Minor updates to silence coverity warnings on NULL pointers
+- Ensure that all attributes are provided when opening an endpoint
+- Fix error handling in vrb_eq_read
+- Fix memory leak in error case in vrb_get_sib
+- Work-around bug in verbs HW not reported correct send opcodes
+- Only call ibv_reg_dmabuf_mr when kernel support exists
+- Add a failover path to dma-buf based memory registration
+- Negotiate credit based flow control support over CM
+- Add OS portable detection of loopback devices
+
+## Fabtests
+
+- Disable inject when FI_HMEM is enabled
+- Increase the number of supported ZE devices
+- Change cq format if remote cq data is received
+- Fix ubertest config exclude file check
+- Fix ubertest checks for expected completions
 
 v1.14.0, Fri Nov 19, 2021
 =========================
