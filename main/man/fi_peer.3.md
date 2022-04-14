@@ -85,8 +85,8 @@ the fid_peer_cq is known as the owner, with the other provider referred to
 as the peer.  An owner may setup peer relationships with multiple providers.
 
 Peer CQs are configured by the owner calling the peer's fi_cq_open() call.
-The owner passes in the FI_PEER_IMPORT flag to fi_cq_open().  When
-FI_PEER_IMPORT is specified, the context parameter passed
+The owner passes in the FI_PEER_CQ flag to fi_cq_open().  When
+FI_PEER_CQ is specified, the context parameter passed
 into fi_cq_open() must reference a struct fi_peer_cq_context.  Providers that
 do not support peer CQs must fail the fi_cq_open() call with -FI_EINVAL
 (indicating an invalid flag).  The fid_peer_cq referenced by struct
@@ -103,15 +103,9 @@ struct fi_ops_cq_owner {
         const struct fi_cq_err_entry *err_entry);
 };
 
-struct fi_ops_cq_peer {
-    size_t size;
-    void (*progress)(struct fid_peer_cq *cq);
-};
-
 struct fid_peer_cq {
     struct fid fid;
     struct fi_ops_cq_owner *owner_ops;
-    struct fi_ops_cq_peer *peer_ops;
 };
 
 struct fi_peer_cq_context {
@@ -123,14 +117,10 @@ For struct fid_peer_cq, the owner initializes the fid and owner_ops
 fields.  struct fi_ops_cq_owner is used by the peer to communicate
 with the owning provider.
 
-The size field in struct fi_ops_cq_peer is filled by the owner
-and used as a versioning check by the peer.  However, the function
-handlers are filled out by the peer and must be initialized before
-returning from fi_cq_open().  These calls are used by the owner to
-communicate with the peer.
-
-Because the peer's CQ should not be directly accessed, functions to
-read the peer's CQ (i.e. read, readerr, sread, etc.) should be set
+If manual progress is needed on the peer CQ, the owner should drive
+progress by using the fi_cq_read() function with the buf parameter
+set to NULL and count equal 0.  The peer provider should set other functions
+that attempt to read the peer's CQ (i.e. fi_cq_readerr, fi_cq_sread, etc.)
 to return -FI_ENOSYS.
 
 ## fi_ops_cq_owner::write()
@@ -157,14 +147,6 @@ Do we need backoff / resume callbacks in ops_cq_user?)
 The behavior of this call is similar to the write() ops.  It inserts
 a completion indicating that a data transfer has failed into the CQ.
 
-## fi_ops_cq_peer::progress()
-
-This callback is invoked by the owner to drive progress in the peer
-provider on endpoints owned by the peer.  The owner must support the
-thread calling the progress() function invoking one of the owner
-ops from within the progress() function.  For example, the peer calling
-write() to insert a new completion.
-
 ## EXAMPLE PEER CQ SETUP
 
 The above description defines the generic mechanism for sharing CQs
@@ -183,7 +165,7 @@ on the local node.
 4. Provider A takes these steps:
    allocate peer_cq and reference cq_a
    set peer_cq_context->cq = peer_cq
-   set attr_b.flags |= FI_PEER_IMPORT
+   set attr_b.flags |= FI_PEER_CQ
    fi_cq_open(domain_b, attr_b, &cq_b, peer_cq_context)
 5. Provider B allocates a cq, but configures it such that all completions
    are written to the peer_cq.  The cq ops to read from the cq are
@@ -202,8 +184,14 @@ message ordering.
 The setup of a peer SRX is similar to the setup for a peer CQ outlined above.
 A fid_peer_srx object links the owner of the SRX with the peer provider.
 Peer SRXs are configured by the owner calling the peer's fi_srx_context()
-call with the FI_IMPORT_PEER flag set.  The context parameter passed to
+call with the FI_PEER_SRX flag set.  The context parameter passed to
 fi_srx_context() must be a struct fi_peer_srx_context.
+
+The owner provider initializes all elements of the fid_peer_srx and
+referenced structures (fi_ops_srx_owner and fi_ops_srx_peer), with the
+exception of the fi_ops_srx_peer callback functions.  Those must be
+initialized by the peer provider prior to returning from the fi_srx_contex()
+call and are used by the owner to control peer actions.
 
 The data structures to support peer SRXs are defined as follows:
 
@@ -325,7 +313,7 @@ on the local node.
 4. Provider A takes these steps:
    allocate peer_srx and reference srx_a
    set peer_srx_context->srx = peer_srx
-   set attr_b.flags |= FI_PEER_IMPORT
+   set attr_b.flags |= FI_PEER_SRX
    fi_srx_context(domain_b, attr_b, &srx_b, peer_srx_context)
 5. Provider B allocates an srx, but configures it such that all receive
    buffers are obtained from the peer_srx.  The srx ops to post receives are
