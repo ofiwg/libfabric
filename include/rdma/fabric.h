@@ -44,12 +44,16 @@
 #ifdef __GNUC__
 #define FI_DEPRECATED_FUNC __attribute__((deprecated))
 #define FI_DEPRECATED_FIELD __attribute__((deprecated))
+#define FI_FORMAT_PRINTF(string, first) \
+	__attribute__ ((__format__ (__printf__, (string), (first))))
 #elif defined(_MSC_VER)
 #define FI_DEPRECATED_FUNC __declspec(deprecated)
 #define FI_DEPRECATED_FIELD
+#define FI_FORMAT_PRINTF(string, first)
 #else
 #define FI_DEPRECATED_FUNC
 #define FI_DEPRECATED_FIELD
+#define FI_FORMAT_PRINTF(string, first)
 #endif
 
 #if defined(__GNUC__) && !defined(__clang__)
