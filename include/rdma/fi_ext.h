@@ -137,16 +137,9 @@ struct fi_ops_cq_owner {
 			const struct fi_cq_err_entry *err_entry);
 };
 
-struct fi_ops_cq_peer {
-	size_t	size;
-	void	(*progress)(struct fid_peer_cq *cq);
-
-};
-
 struct fid_peer_cq {
 	struct fid fid;
 	struct fi_ops_cq_owner *owner_ops;
-	struct fi_ops_cq_peer *peer_ops;
 };
 
 struct fi_peer_cq_context {
