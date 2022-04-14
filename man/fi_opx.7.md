@@ -110,7 +110,7 @@ Shared memory is not cleaned up after an application crashes. Use
   will issue PING requests to a remote connection. Reducing this value
   may improve performance at the expense of increased traffic on the OPX 
   fabric.
-  Default setting is 100.
+  Default setting is 500.
 
 *FI_OPX_RELIABILITY_SERVICE_PRE_ACK_RATE*
 : This setting controls how frequently a receiving rank will send ACKs
@@ -121,7 +121,7 @@ Shared memory is not cleaned up after an application crashes. Use
 
   Valid values are 0 (disabled) and powers of 2 in the range of 1-32,768, inclusive.
 
-  Default setting is 0 (disabled).
+  Default setting is 64.
 
 *FI_OPX_HFI_SELECT*
 : Controls how OPX chooses which HFI to use when opening a context.
