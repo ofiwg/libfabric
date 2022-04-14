@@ -111,9 +111,11 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	efa_CPPFLAGS="$efa_ibverbs_CPPFLAGS $efadv_CPPFLAGS"
 	efa_LDFLAGS="$efa_ibverbs_LDFLAGS $efadv_LDFLAGS"
 	efa_LIBS="$efa_ibverbs_LIBS $efadv_LIBS"
+	cmocka_rpath=""
 	AC_SUBST(efa_CPPFLAGS)
 	AC_SUBST(efa_LDFLAGS)
 	AC_SUBST(efa_LIBS)
+	AC_SUBST(cmocka_rpath)
 
 	AC_ARG_ENABLE([efa-unit-test],
 		[AS_HELP_STRING([--enable-efa-unit-test=CMOCKA_INSTALL_DIR],
@@ -148,6 +150,9 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 							#include <stddef.h>
 							#include <setjmp.h>
 					 	 ])
+        if [ test x"$cmocka_dir" != x""]; then
+            cmocka_rpath+=" -R$cmocka_dir/lib64 "
+        fi
 	else
 		AC_DEFINE([EFA_UNIT_TEST], [0], [EFA unit testing])
 	fi
