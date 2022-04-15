@@ -15,8 +15,11 @@ fi_param_define / fi_param_get
 fi_log_enabled / fi_log_ready / fi_log
 : Control and output debug logging information.
 
-fi_open / fi_close
-: Open a named library object
+fi_open / fi_import / fi_close
+: Open and import a named library object
+
+fi_import_log
+: Import new logging callbacks
 
 # SYNOPSIS
 
@@ -64,7 +67,19 @@ void fi_log(const struct fi_provider *prov, enum fi_log_level level,
 int fi_open(uint32_t version, const char *name, void *attr,
 	size_t attr_len, uint64_t flags, struct fid **fid, void *context);
 
+static inline int fi_import(uint32_t version, const char *name, void *attr,
+			    size_t attr_len, uint64_t flags, struct fid *fid,
+			    void *context);
+
 int fi_close(struct fid *fid);
+```
+
+```c
+#include <rdma/fabric.h>
+#include <rdma/fi_ext.h>
+
+static inline int fi_import_log(uint32_t version, uint64_t flags,
+				struct fid_logging *log_fid);
 ```
 
 # ARGUMENTS
@@ -170,6 +185,42 @@ of the service or resource to which they correspond.
 : The mr_cache object references the internal memory registration cache
   used by the different providers.  Additional information on the cache
   is available in the `fi_mr(3)` man page.
+
+*logging*
+: The logging object references the internal logging subsystem used by
+  the different providers.  Once opened, custom logging callbacks may
+  be installed.  Can be opened only once and only the last import is
+  used if imported multiple times.
+
+## fi_import
+
+This helper function is a combination of `fi_open` and `fi_import_fid`.
+It may be used to import a fabric object created and owned by the
+libfabric user.  This allows the upper level libraries or the application
+to override or define low\-level libfabric behavior.
+
+## fi_import_log
+
+Helper function to override the low\-level libfabric's logging system with
+new callback functions.
+
+```c
+struct fi_ops_log {
+	size_t size;
+	int (*enabled)(const struct fi_provider *prov, enum fi_log_level level,
+		       enum fi_log_subsys subsys, uint64_t flags);
+	int (*ready)(const struct fi_provider *prov, enum fi_log_level level,
+		     enum fi_log_subsys subsys, uint64_t flags, uint64_t *showtime);
+	void (*log)(const struct fi_provider *prov, enum fi_log_level level,
+		    enum fi_log_subsys subsys, const char *func, int line,
+		    const char *msg);
+};
+
+struct fid_logging {
+	struct fid          fid;
+	struct fi_ops_log   *ops;
+};
+```
 
 # PROVIDER INTERFACE
 
