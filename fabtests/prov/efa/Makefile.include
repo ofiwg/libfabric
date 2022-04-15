@@ -31,7 +31,8 @@
 #
 
 bin_PROGRAMS += prov/efa/src/fi_efa_rnr_read_cq_error \
-		prov/efa/src/fi_efa_rnr_queue_resend
+		prov/efa/src/fi_efa_rnr_queue_resend \
+		prov/efa/src/fi_efa_info_test
 
 efa_rnr_srcs = \
 	prov/efa/src/efa_rnr_shared.h \
@@ -47,3 +48,6 @@ prov_efa_src_fi_efa_rnr_queue_resend_SOURCES = \
 	$(efa_rnr_srcs)
 prov_efa_src_fi_efa_rnr_queue_resend_LDADD = libfabtests.la
 
+prov_efa_src_fi_efa_info_test_SOURCES = \
+	prov/efa/src/efa_info_test.c
+prov_efa_src_fi_efa_info_test_LDADD = libfabtests.la
