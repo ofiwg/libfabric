@@ -316,51 +316,33 @@ int ofi_set_thread_affinity(const char *s)
 }
 
 
-void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
-			struct ofi_pollfds_work_item *item)
+struct ofi_pollfds_ctx *ofi_pollfds_get_ctx(struct ofi_pollfds *pfds, int fd)
 {
-	if (item->fd >= pfds->size) {
-		if (ofi_pollfds_grow(pfds, item->fd))
-			return;
-	}
+	struct ofi_pollfds_ctx *ctx;
 
-	pfds->fds[item->fd].fd = item->fd;
-	pfds->fds[item->fd].events = item->events;
-	pfds->fds[item->fd].revents = 0;
-	pfds->ctx[item->fd].context = item->context;
+	if (fd < 0 || fd >= pfds->size)
+		return NULL;
 
-	if (ofi_poll_fairness)
-		ofi_pollfds_heatfd(pfds, item->fd);
+	ctx = &pfds->ctx[fd];
+	if (ctx->index < 0 || ctx->index >= pfds->nfds ||
+	    pfds->fds[ctx->index].fd != fd)
+		return NULL;
 
-	if (item->fd >= pfds->nfds)
-		pfds->nfds = item->fd + 1;
+	return ctx;
 }
 
-int ofi_pollfds_do_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
-		       void *context)
+struct ofi_pollfds_ctx *ofi_pollfds_alloc_ctx(struct ofi_pollfds *pfds, int fd)
 {
-	if ((fd < pfds->nfds) && (pfds->fds[fd].fd == fd)) {
-		pfds->fds[fd].events = events;
-		pfds->ctx[fd].context = context;
-		return FI_SUCCESS;
+	struct ofi_pollfds_ctx *ctx;
+
+	assert(!ofi_pollfds_get_ctx(pfds, fd));
+	if (fd >= pfds->size) {
+		if (ofi_pollfds_grow(pfds, fd))
+			return NULL;
 	}
 
-	return -FI_ENOENT;
-}
-
-void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
-			struct ofi_pollfds_work_item *item)
-{
-	if (item->fd >= pfds->nfds)
-		return;
-
-	pfds->fds[item->fd].fd = INVALID_SOCKET;
-	pfds->fds[item->fd].events = 0;
-	pfds->fds[item->fd].revents = 0;
-
-	if (pfds->ctx[item->fd].hot_index >= 0 && ofi_poll_fairness)
-		ofi_pollfds_coolfd(pfds, item->fd);
-
-	while (pfds->nfds && pfds->fds[pfds->nfds - 1].fd == INVALID_SOCKET)
-		pfds->nfds--;
+	ctx = &pfds->ctx[fd];
+	assert(ctx->index < 0);
+	ctx->index = pfds->nfds++;
+	return ctx;
 }

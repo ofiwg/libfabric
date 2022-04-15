@@ -602,53 +602,40 @@ ssize_t ofi_recvmsg_udp(SOCKET fd, struct msghdr *msg, int flags)
 }
 
 
-void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
-			struct ofi_pollfds_work_item *item)
+struct ofi_pollfds_ctx *ofi_pollfds_get_ctx(struct ofi_pollfds *pfds, int fd)
 {
-	if (pfds->nfds == pfds->size) {
-		if (ofi_pollfds_grow(pfds, pfds->size + 1))
-			return;
-	}
-
-	pfds->fds[pfds->nfds].fd = item->fd;
-	pfds->fds[pfds->nfds].events = (SHORT) item->events;
-	pfds->fds[pfds->nfds].revents = 0;
-	pfds->ctx[pfds->nfds].context = item->context;
-	pfds->nfds++;
-}
-
-int ofi_pollfds_do_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
-		       void *context)
-{
+	struct ofi_pollfds_ctx *ctx = NULL;
 	int i;
 
 	/* 0 is signaling fd */
 	for (i = 1; i < pfds->nfds; i++) {
 		if (pfds->fds[i].fd == fd) {
-			pfds->fds[i].events = (SHORT) events;
-			pfds->ctx[i].context = context;
-			return FI_SUCCESS;
+			ctx = &pfds->ctx[i];
+			goto found;
 		}
 	}
 
-	return -FI_ENOENT;
+	return NULL;
+found:
+	if (ctx->index < 0 || ctx->index >= pfds->nfds ||
+	    pfds->fds[ctx->index].fd != fd)
+		return NULL;
+
+	return ctx;
 }
 
-void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
-			struct ofi_pollfds_work_item *item)
+struct ofi_pollfds_ctx *ofi_pollfds_alloc_ctx(struct ofi_pollfds *pfds, int fd)
 {
-	int i;
+	struct ofi_pollfds_ctx *ctx;
 
-	for (i = 0; i < pfds->nfds; i++) {
-		if (pfds->fds[i].fd == item->fd) {
-			pfds->fds[i].fd = INVALID_SOCKET;
-
-			pfds->nfds--;
-			pfds->fds[i].fd = pfds->fds[pfds->nfds].fd;
-			pfds->fds[i].events = pfds->fds[pfds->nfds].events;
-			pfds->fds[i].revents = pfds->fds[pfds->nfds].revents;
-			pfds->ctx[i] = pfds->ctx[pfds->nfds];
-			break;
-		}
+	assert(!ofi_pollfds_get_ctx(pfds, fd));
+	if (pfds->nfds == pfds->size) {
+		if (ofi_pollfds_grow(pfds, pfds->size + 1))
+			return NULL;
 	}
+
+	ctx = &pfds->ctx[pfds->nfds];
+	assert(ctx->index < 0);
+	ctx->index = pfds->nfds++;
+	return ctx;
 }
