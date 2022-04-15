@@ -36,8 +36,9 @@
 #include "efa.h"
 #include "efa_prov_info.h"
 
-static int efa_check_hints(uint32_t version, const struct fi_info *hints,
-			   const struct fi_info *info)
+static
+int efa_check_hints_dgram(uint32_t version, const struct fi_info *hints,
+			  const struct fi_info *info)
 {
 	uint64_t prov_mode;
 	size_t size;
@@ -186,79 +187,77 @@ int efa_user_info_check_hints_addr(const char *node, const char *service,
 	return 0;
 }
 
-static int efa_get_matching_info(uint32_t version, const char *node, uint64_t flags,
-				 const struct fi_info *hints, struct fi_info **info)
+/**
+ * @brief get a list of dgram info the fit user's requirements
+ *
+ * @param	node[in]	node from user's call to fi_getinfo()
+ * @param	service[in]	service from user's call to fi_getinfo()
+ * @param	flags[in]	flags from user's call to fi_getinfo()
+ * @param	hints[in]	hints from user's call to fi_getinfo()
+ * @param	info[out]	a linked list of user_info that met user's requirements
+ */
+int efa_user_info_get_dgram(uint32_t version, const char *node, const char *service,
+			    uint64_t flags, const struct fi_info *hints, struct fi_info **user_info)
 {
-	const struct fi_info *check_info;
-	struct fi_info *fi, *tail;
-	int ret;
+	int ret, i;
+	struct fi_info *prov_info_dgram, *dupinfo, *tail;
 
-	*info = tail = NULL;
+	ret = efa_user_info_check_hints_addr(node, service, flags, hints);
+	if (ret) {
+		*user_info = NULL;
+		return ret;
+	}
 
-	for (check_info = efa_util_prov.info; check_info; check_info = check_info->next) {
-		ret = efa_prov_info_compare_src_addr(node, flags, hints, check_info);
+	*user_info = NULL;
+	dupinfo = NULL;
+	tail = NULL;
+	for (i = 0; i < g_device_cnt; ++i) {
+		prov_info_dgram = g_device_list[i].dgram_info;
+
+		ret = efa_prov_info_compare_src_addr(node, flags, hints, prov_info_dgram);
 		if (ret)
 			continue;
 
-		EFA_INFO(FI_LOG_FABRIC, "found match for interface %s %s\n", node, check_info->fabric_attr->name);
+		EFA_INFO(FI_LOG_FABRIC, "found match for interface %s %s\n",
+			 node, prov_info_dgram->fabric_attr->name);
 		if (hints) {
-			ret = efa_check_hints(version, hints, check_info);
+			ret = efa_check_hints_dgram(version, hints, prov_info_dgram);
 			if (ret)
 				continue;
 		}
 
-		fi = fi_dupinfo(check_info);
-		if (!fi) {
+		dupinfo = fi_dupinfo(prov_info_dgram);
+		if (!dupinfo) {
 			ret = -FI_ENOMEM;
-			goto err_free_info;
+			goto err_free;
 		}
 
-		fi->fabric_attr->api_version = version;
+		dupinfo->fabric_attr->api_version = version;
 
-		if (!*info)
-			*info = fi;
+		if (!*user_info)
+			*user_info = dupinfo;
 		else
-			tail->next = fi;
-		tail = fi;
+			tail->next = dupinfo;
+		tail = dupinfo;
+		dupinfo = NULL;
 	}
 
-	if (!*info)
-		return -FI_ENODATA;
+	if (!*user_info) {
+		ret = -FI_ENODATA;
+		goto err_free;
+	}
 
+	ret = efa_user_info_set_dest_addr(node, service, flags, hints, *user_info);
+	if (ret)
+		goto err_free;
+
+	ofi_alter_info(*user_info, hints, version);
 	return 0;
 
-err_free_info:
-	fi_freeinfo(*info);
-	*info = NULL;
-	return ret;
-}
-
-int efa_getinfo(uint32_t version, const char *node, const char *service,
-		uint64_t flags, const struct fi_info *hints, struct fi_info **info)
-{
-	int ret;
-
-	ret = efa_user_info_check_hints_addr(node, service, flags, hints);
-	if (ret)
-		goto out;
-
-	ret = efa_get_matching_info(version, node, flags, hints, info);
-	if (ret)
-		goto out;
-
-	ret = efa_user_info_set_dest_addr(node, service, flags, hints, *info);
-	if (ret)
-		goto out;
-
-	ofi_alter_info(*info, hints, version);
-
-out:
-	if (!ret || ret == -FI_ENOMEM || ret == -FI_ENODEV) {
-		return ret;
-	} else {
-		fi_freeinfo(*info);
-		*info = NULL;
-		return -FI_ENODATA;
-	}
+err_free:
+	fi_freeinfo(dupinfo);
+	fi_freeinfo(*user_info);
+	*user_info = NULL;
+	return -FI_ENODATA;
 }
 

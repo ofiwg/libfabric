@@ -278,52 +278,6 @@ static int rxr_info_to_rxr(uint32_t version,
 	return 0;
 }
 
-static int rxr_dgram_getinfo(uint32_t version, const char *node,
-			     const char *service, uint64_t flags,
-			     const struct fi_info *hints, struct fi_info **info)
-{
-	struct fi_info *core_info, *util_info, *cur, *tail;
-	int ret;
-
-	core_info = NULL;
-
-	ret = efa_getinfo(version, node, service, flags, hints, &core_info);
-
-	if (ret) {
-		*info = NULL;
-		return ret;
-	}
-
-	ret = -FI_ENODATA;
-
-	*info = NULL;
-	tail = NULL;
-	for (cur = core_info; cur; cur = cur->next) {
-		/* Skip non DGRAM info structs */
-		if (cur->ep_attr->type != FI_EP_DGRAM)
-			continue;
-
-		ret = 0;
-
-		util_info = fi_dupinfo(cur);
-		if (!util_info) {
-			ret = -FI_ENOMEM;
-			fi_freeinfo(*info);
-			goto out;
-		}
-
-		if (!*info)
-			*info = util_info;
-		else
-			tail->next = util_info;
-		tail = util_info;
-	}
-
-out:
-	fi_freeinfo(core_info);
-	return ret;
-}
-
 static
 int rxr_rdm_getinfo(uint32_t version, const char *node,
 		    const char *service, uint64_t flags,
@@ -397,7 +351,7 @@ free_info:
 	return ret;
 }
 
-int rxr_getinfo(uint32_t version, const char *node,
+int efa_getinfo(uint32_t version, const char *node,
 		const char *service, uint64_t flags,
 		const struct fi_info *hints, struct fi_info **info)
 {
@@ -419,7 +373,7 @@ int rxr_getinfo(uint32_t version, const char *node,
 	}
 
 	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_DGRAM)
-		return rxr_dgram_getinfo(version, node, service, flags, hints, info);
+		return efa_user_info_get_dgram(version, node, service, flags, hints, info);
 
 	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_RDM)
 		return rxr_rdm_getinfo(version, node, service, flags, hints, info);
@@ -430,7 +384,7 @@ int rxr_getinfo(uint32_t version, const char *node,
 		return -FI_ENODATA;
 	}
 
-	err = rxr_dgram_getinfo(version, node, service, flags, hints, &dgram_info_list);
+	err = efa_user_info_get_dgram(version, node, service, flags, hints, &dgram_info_list);
 	if (err && err != -FI_ENODATA) {
 		return err;
 	}

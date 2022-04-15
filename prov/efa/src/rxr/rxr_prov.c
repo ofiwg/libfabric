@@ -47,7 +47,7 @@ struct fi_provider rxr_prov = {
 	.name = "efa",
 	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
-	.getinfo = rxr_getinfo,
+	.getinfo = efa_getinfo,
 	.fabric = efa_fabric,
 	.cleanup = rxr_fini
 };
