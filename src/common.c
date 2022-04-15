@@ -1413,7 +1413,7 @@ int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 	}
 
 	while (pfds->size < size) {
-		ctx[pfds->size].hot_index = INVALID_SOCKET;
+		ctx[pfds->size].hot_index = -1;
 		fds[pfds->size++].fd = INVALID_SOCKET;
 	}
 
@@ -1459,7 +1459,7 @@ void ofi_pollfds_heatfd(struct ofi_pollfds *pfds, int index)
 
 	assert(ofi_poll_fairness);
 	ctx = &pfds->ctx[index];
-	assert(ctx->hot_index == INVALID_SOCKET);
+	assert(ctx->hot_index == -1);
 
 	if (pfds->hot_nfds >= pfds->hot_size) {
 		size = pfds->hot_size + 8;
@@ -1495,7 +1495,7 @@ void ofi_pollfds_coolfd(struct ofi_pollfds *pfds, int index)
 
 	assert(ofi_poll_fairness);
 	ctx = &pfds->ctx[index];
-	assert(ctx->hot_index != INVALID_SOCKET);
+	assert(ctx->hot_index >= 0);
 	assert(pfds->hot_nfds);
 
 	if (ctx->hot_index < pfds->hot_nfds - 1) {
@@ -1508,7 +1508,7 @@ void ofi_pollfds_coolfd(struct ofi_pollfds *pfds, int index)
 
 	OFI_DBG_SET(pfds->hot_fds[pfds->hot_nfds].fd, INVALID_SOCKET);
 	pfds->hot_nfds--;
-	ctx->hot_index = INVALID_SOCKET;
+	ctx->hot_index = -1;
 	ctx->hit_cnt = 0;
 }
 
@@ -1656,10 +1656,10 @@ static void ofi_pollfds_adjust_temp(struct ofi_pollfds *pfds, int index)
 
 	if (pfd->revents || ctx->hit_cnt || (pfd->events & POLLOUT)) {
 		ctx->hit_cnt = 0;
-		if (ctx->hot_index == INVALID_SOCKET)
+		if (ctx->hot_index == -1)
 			ofi_pollfds_heatfd(pfds, index);
 
-	} else if (ctx->hot_index != INVALID_SOCKET) {
+	} else if (ctx->hot_index != -1) {
 		ofi_pollfds_coolfd(pfds, index);
 	}
 }
