@@ -2,6 +2,7 @@
  * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -44,12 +45,16 @@
 #ifdef __GNUC__
 #define FI_DEPRECATED_FUNC __attribute__((deprecated))
 #define FI_DEPRECATED_FIELD __attribute__((deprecated))
+#define FI_FORMAT_PRINTF(string, first) \
+	__attribute__ ((__format__ (__printf__, (string), (first))))
 #elif defined(_MSC_VER)
 #define FI_DEPRECATED_FUNC __declspec(deprecated)
 #define FI_DEPRECATED_FIELD
+#define FI_FORMAT_PRINTF(string, first)
 #else
 #define FI_DEPRECATED_FUNC
 #define FI_DEPRECATED_FIELD
+#define FI_FORMAT_PRINTF(string, first)
 #endif
 
 #if defined(__GNUC__) && !defined(__clang__)
@@ -527,6 +532,7 @@ enum {
 	FI_CLASS_MEM_MONITOR,
 	FI_CLASS_PEER_CQ,
 	FI_CLASS_PEER_SRX,
+	FI_CLASS_LOG,
 };
 
 struct fi_eq_attr;
@@ -733,6 +739,8 @@ enum fi_type {
 	FI_TYPE_COLLECTIVE_OP,
 	FI_TYPE_HMEM_IFACE,
 	FI_TYPE_CQ_FORMAT,
+	FI_TYPE_LOG_LEVEL,
+	FI_TYPE_LOG_SUBSYS,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);

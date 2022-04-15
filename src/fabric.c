@@ -174,7 +174,7 @@ static int ofi_find_name(char **names, const char *name)
 /* matches if names[i] == "xxx;yyy" and name == "xxx" */
 static int ofi_find_layered_name(char **names, const char *name)
 {
-	int i;	
+	int i;
 	size_t len;
 
 	len = strlen(name);
@@ -1372,6 +1372,9 @@ int DEFAULT_SYMVER_PRE(fi_open)(uint32_t version, const char *name,
 	if (!strcasecmp("mr_cache", name))
 		return ofi_open_mr_cache(version, attr, attr_len,
 					 flags, fid, context);
+	if (!strcasecmp("logging", name))
+		return ofi_open_log(version, attr, attr_len,
+				    flags, fid, context);
 
 	return -FI_ENOSYS;
 }
