@@ -1451,14 +1451,14 @@ err1:
 	return ret;
 }
 
-void ofi_pollfds_heatfd(struct ofi_pollfds *pfds, int index)
+void ofi_pollfds_heatfd(struct ofi_pollfds *pfds, int fd)
 {
 	struct pollfd *new_fds;
 	struct ofi_pollfds_ctx *ctx;
 	int size;
 
-	assert(ofi_poll_fairness);
-	ctx = &pfds->ctx[index];
+	assert(ofi_poll_fairness && fd >= 0);
+	ctx = &pfds->ctx[fd];
 	assert(ctx->hot_index == -1);
 
 	if (pfds->hot_nfds >= pfds->hot_size) {
@@ -1477,24 +1477,24 @@ void ofi_pollfds_heatfd(struct ofi_pollfds *pfds, int index)
 		pfds->hot_size = size;
 	}
 
-	pfds->hot_fds[pfds->hot_nfds] = pfds->fds[index];
+	pfds->hot_fds[pfds->hot_nfds] = pfds->fds[fd];
 	ctx->hot_index = pfds->hot_nfds++;
 	ctx->hit_cnt = 1;
 }
 
 /* We maintain a compact pollfds array for the hot fds.  To remove an entry from
  * the hot fds, we swap the one at the end with the entry being removed.  This
- * requires updating the full fds array, so that the reference to the hot fd
+ * requires updating the ctx array, so that the reference to the hot fd
  * that was moved is updated.  For that, we use the fd as a direct index into
  * the ctx array.  This only works on unix systems (see src/unix/osd.c).
  */
-void ofi_pollfds_coolfd(struct ofi_pollfds *pfds, int index)
+void ofi_pollfds_coolfd(struct ofi_pollfds *pfds, int fd)
 {
 	struct ofi_pollfds_ctx *swap_ctx, *ctx;
 	struct pollfd *swap_pfd;
 
-	assert(ofi_poll_fairness);
-	ctx = &pfds->ctx[index];
+	assert(ofi_poll_fairness && fd >= 0);
+	ctx = &pfds->ctx[fd];
 	assert(ctx->hot_index >= 0);
 	assert(pfds->hot_nfds);
 
@@ -1646,21 +1646,22 @@ static int ofi_pollfds_hotties(struct ofi_pollfds *pfds,
 	return found;
 }
 
-static void ofi_pollfds_adjust_temp(struct ofi_pollfds *pfds, int index)
+static void ofi_pollfds_adjust_temp(struct ofi_pollfds *pfds, int fd)
 {
 	struct pollfd *pfd;
 	struct ofi_pollfds_ctx *ctx;
 
-	pfd = &pfds->fds[index];
-	ctx = &pfds->ctx[index];
+	assert(ofi_poll_fairness && fd >= 0);
+	pfd = &pfds->fds[fd];
+	ctx = &pfds->ctx[fd];
 
 	if (pfd->revents || ctx->hit_cnt || (pfd->events & POLLOUT)) {
 		ctx->hit_cnt = 0;
 		if (ctx->hot_index == -1)
-			ofi_pollfds_heatfd(pfds, index);
+			ofi_pollfds_heatfd(pfds, fd);
 
 	} else if (ctx->hot_index != -1) {
-		ofi_pollfds_coolfd(pfds, index);
+		ofi_pollfds_coolfd(pfds, fd);
 	}
 }
 
@@ -1699,13 +1700,14 @@ static int ofi_pollfds_waitall(struct ofi_pollfds *pfds,
 				events[found++].data.ptr = pfds->ctx[i].context;
 			}
 
-			if (ofi_poll_fairness)
-				ofi_pollfds_adjust_temp(pfds, i);
+			if (ofi_poll_fairness && pfds->fds[i].fd >= 0)
+				ofi_pollfds_adjust_temp(pfds, pfds->fds[i].fd);
 		}
 
 		if (ofi_poll_fairness) {
 			for (; i < pfds->nfds; i++) {
-				ofi_pollfds_adjust_temp(pfds, i);
+				if (pfds->fds[i].fd >= 0)
+					ofi_pollfds_adjust_temp(pfds, pfds->fds[i].fd);
 			}
 		}
 

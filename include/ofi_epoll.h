@@ -106,8 +106,8 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 		     int maxevents, int timeout);
 void ofi_pollfds_close(struct ofi_pollfds *pfds);
 
-void ofi_pollfds_coolfd(struct ofi_pollfds *pfds, int index);
-void ofi_pollfds_heatfd(struct ofi_pollfds *pfds, int index);
+void ofi_pollfds_coolfd(struct ofi_pollfds *pfds, int fd);
+void ofi_pollfds_heatfd(struct ofi_pollfds *pfds, int fd);
 
 /* OS specific */
 void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
