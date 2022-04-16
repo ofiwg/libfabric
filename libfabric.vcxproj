@@ -868,7 +868,7 @@
     <ClCompile Include="prov\efa\src\rxr\rxr_cntr.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_cq.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_ep.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_init.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_env.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_msg.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_pkt_cmd.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_pkt_entry.c" />
