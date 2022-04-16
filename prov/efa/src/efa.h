@@ -64,7 +64,10 @@
 #include "ofi_util.h"
 #include "ofi_file.h"
 
+#include "efa_fork_support.h"
 #include "efa_device.h"
+#include "efa_hmem.h"
+#include "efa_mr.h"
 #include "rxr.h"
 #define EFA_PROV_NAME "efa"
 
@@ -112,10 +115,6 @@
 /* maximum name length for shm endpoint */
 #define EFA_SHM_NAME_MAX	   (256)
 
-extern int efa_mr_cache_enable;
-extern size_t efa_mr_max_cached_count;
-extern size_t efa_mr_max_cached_size;
-
 extern struct fi_provider efa_prov;
 extern struct util_prov efa_util_prov;
 
@@ -156,11 +155,6 @@ struct efa_domain_base {
 	enum efa_domain_type	type;
 };
 
-struct efa_hmem_info {
-	bool initialized; 	/* do we support it at all */
-	bool p2p_supported;	/* do we support p2p with this device */
-};
-
 struct efa_domain {
 	struct util_domain	util_domain;
 	enum efa_domain_type	type;
@@ -172,7 +166,7 @@ struct efa_domain {
 	struct ofi_mr_cache	*cache;
 	struct efa_qp		**qp_table;
 	size_t			qp_table_sz_m1;
-	struct efa_hmem_info	hmem_info[OFI_HMEM_MAX];
+	struct efa_hmem_support_status	hmem_support_status[OFI_HMEM_MAX];
 };
 
 /**
@@ -231,16 +225,6 @@ enum efa_domain_type efa_domain_get_type(struct fid_domain *domain_fid)
 	return efa_domain_base->type;
 }
 
-extern struct fi_ops_mr efa_domain_mr_ops;
-extern struct fi_ops_mr efa_domain_mr_cache_ops;
-int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
-			   struct ofi_mr_entry *entry);
-void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
-			      struct ofi_mr_entry *entry);
-
-int efa_mr_reg_shm(struct fid_domain *domain_fid, struct iovec *iov,
-		   uint64_t access, struct fid_mr **mr_fid);
-
 struct efa_wc {
 	struct ibv_wc		ibv_wc;
 	/* Source address */
@@ -272,32 +256,6 @@ struct efa_qp {
 	struct efa_ep	*ep;
 	uint32_t	qp_num;
 	uint32_t	qkey;
-};
-
-/*
- * Descriptor returned for FI_HMEM peer memory registrations
- */
-struct efa_mr_peer {
-	enum fi_hmem_iface      iface;
-	union {
-		uint64_t        reserved;
-		/* this field is gdrcopy handle when gdrcopy is enabled,
-		 * otherwise it is cuda device id.
-		 */
-		uint64_t        cuda;
-		int             neuron;
-	} device;
-};
-
-struct efa_mr {
-	struct fid_mr		mr_fid;
-	struct ibv_mr		*ibv_mr;
-	struct efa_domain	*domain;
-	/* Used only in MR cache */
-	struct ofi_mr_entry	*entry;
-	/* Used only in rdm */
-	struct fid_mr		*shm_mr;
-	struct efa_mr_peer	peer;
 };
 
 struct efa_ep {
@@ -438,17 +396,6 @@ ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr);
 ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_t *src_addr);
 
 ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry, uint64_t flags);
-
-/*
- * ON will avoid using huge pages for bounce buffers, so that the libibverbs
- * fork support can be used safely.
- */
-enum efa_fork_support_status {
-	EFA_FORK_SUPPORT_OFF = 0,
-	EFA_FORK_SUPPORT_ON,
-	EFA_FORK_SUPPORT_UNNEEDED,
-};
-extern enum efa_fork_support_status efa_fork_status;
 
 static inline
 bool efa_ep_support_rdma_read(struct fid_ep *ep_fid)
@@ -605,22 +552,6 @@ struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 	return av_entry->conn.ep_addr ? &av_entry->conn.rdm_peer : NULL;
 }
 
-static inline bool efa_ep_is_hmem_mr(struct efa_mr *efa_mr)
-{
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA ||
-			 efa_mr->peer.iface == FI_HMEM_NEURON): false;
-}
-
-static inline bool efa_ep_is_cuda_mr(struct efa_mr *efa_mr)
-{
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA) : false;
-}
-
-static inline bool efa_ep_is_neuron_mr(struct efa_mr *efa_mr)
-{
-	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_NEURON) : false;
-}
-
 /*
  * @brief: check whether we should use p2p for this transaction
  *
@@ -641,7 +572,7 @@ static inline int efa_ep_use_p2p(struct efa_ep *ep, struct efa_mr *efa_mr)
 	if (efa_mr->peer.iface == FI_HMEM_SYSTEM)
 		return 1;
 
-	if (ep->domain->hmem_info[efa_mr->peer.iface].p2p_supported)
+	if (ep->domain->hmem_support_status[efa_mr->peer.iface].p2p_supported)
 		return (ep->hmem_p2p_opt != FI_HMEM_P2P_DISABLED);
 
 	if (ep->hmem_p2p_opt == FI_HMEM_P2P_REQUIRED) {

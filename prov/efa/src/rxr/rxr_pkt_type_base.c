@@ -394,7 +394,7 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 	 * copy.
 	 * Other types of device memory (neuron) does not have this limitation.
 	 */
-	if (efa_ep_is_cuda_mr(desc) && !cuda_is_gdrcopy_enabled()) {
+	if (efa_mr_is_cuda(desc) && !cuda_is_gdrcopy_enabled()) {
 		efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 		use_p2p = efa_ep_use_p2p(efa_ep, desc);
 		if (use_p2p < 0)
@@ -419,7 +419,7 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 		return err;
 	}
 
-	if (efa_ep_is_hmem_mr(desc))
+	if (efa_mr_is_hmem(desc))
 		return rxr_pkt_copy_data_to_hmem(ep, pkt_entry, data, data_size, data_offset);
 
 	assert( !desc || desc->peer.iface == FI_HMEM_SYSTEM);

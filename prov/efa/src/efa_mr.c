@@ -39,6 +39,126 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr);
 static int efa_mr_dereg_impl(struct efa_mr *efa_mr);
 
+
+#define EFA_DEF_MR_CACHE_ENABLE 1
+int efa_mr_cache_enable	= EFA_DEF_MR_CACHE_ENABLE;
+size_t efa_mr_max_cached_count;
+size_t efa_mr_max_cached_size;
+
+/* @brief Setup the MR cache.
+ *
+ * This function enables the MR cache using the util MR cache code.
+ *
+ * @param cache		The ofi_mr_cache that is to be set up.
+ * @param domain	The EFA domain where cache will be used.
+ * @return 0 on success, fi_errno on failure.
+ */
+int efa_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain)
+{
+	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {
+		[FI_HMEM_SYSTEM] = default_monitor,
+		[FI_HMEM_CUDA] = cuda_monitor,
+	};
+	int err;
+
+	/* Both Open MPI (and possibly other MPI implementations) and
+	 * Libfabric use the same live binary patching to enable memory
+	 * monitoring, but the patching technique only allows a single
+	 * "winning" patch.  The Libfabric memhooks monitor will not
+	 * overwrite a previous patch, but instead return
+	 * -FI_EALREADY.  There are three cases of concern, and in all
+	 * but one of them, we can avoid changing the default monitor.
+	 *
+	 * (1) Upper layer does not patch, such as Open MPI 4.0 and
+	 * earlier.  In this case, the default monitor will be used,
+	 * as the default monitor is either not the memhooks monitor
+	 * (because the user specified a different monitor) or the
+	 * default monitor is the memhooks monitor, but we were able
+	 * to install the patches.  We will use the default monitor in
+	 * this case.
+	 *
+	 * (2) Upper layer does patch, but does not export a memory
+	 * monitor, such as Open MPI 4.1.0 and 4.1.1.  In this case,
+	 * if the default memory monitor is not memhooks, we will use
+	 * the default monitor.  If the default monitor is memhooks,
+	 * the patch will fail to apply, and we will change the
+	 * requested monitor to UFFD to avoid a broken configuration.
+	 * If the user explicitly requested memhooks, we will return
+	 * an error, as we can not satisfy that request.
+	 *
+	 * (3) Upper layer does patch and exports a memory monitor,
+	 * such as Open MPI 4.1.2 and later.  In this case, the
+	 * default monitor will have been changed from the memhooks
+	 * monitor to the imported monitor, so we will use the
+	 * imported monitor.
+	 *
+	 * The only known cases in which we will not use the default
+	 * monitor are Open MPI 4.1.0/4.1.1.
+	 *
+	 * It is possible that this could be better handled at the
+	 * mem_monitor level in Libfabric, but so far we have not
+	 * reached agreement on how that would work.
+	 */
+	if (default_monitor == memhooks_monitor) {
+		err = memhooks_monitor->start(memhooks_monitor);
+		if (err == -FI_EALREADY) {
+			if (cache_params.monitor) {
+				EFA_WARN(FI_LOG_DOMAIN,
+					 "Memhooks monitor requested via FI_MR_CACHE_MONITOR, but memhooks failed to\n"
+					 "install.  No working monitor availale.\n");
+				return -FI_ENOSYS;
+			}
+			EFA_INFO(FI_LOG_DOMAIN,
+				 "Detected potential memhooks monitor conflict. Switching to UFFD.\n");
+			memory_monitors[FI_HMEM_SYSTEM] = uffd_monitor;
+		}
+	} else if (default_monitor == NULL) {
+		/* TODO: Fail if we don't find a system monitor.  This
+		 * is a debatable decision, as the VERBS provider
+		 * falls back to a no-cache mode in this case.  We
+		 * fail the domain creation because the rest of the MR
+		 * code hasn't been audited to deal with a NULL
+		 * monitor.
+		 */
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "No default SYSTEM monitor available.\n");
+		return -FI_ENOSYS;
+	}
+
+	*cache = (struct ofi_mr_cache *)calloc(1, sizeof(struct ofi_mr_cache));
+	if (!*cache)
+		return -FI_ENOMEM;
+
+	if (!efa_mr_max_cached_count)
+		efa_mr_max_cached_count = domain->device->ibv_attr.max_mr *
+					  EFA_MR_CACHE_LIMIT_MULT;
+	if (!efa_mr_max_cached_size)
+		efa_mr_max_cached_size = domain->device->ibv_attr.max_mr_size *
+					 EFA_MR_CACHE_LIMIT_MULT;
+	/*
+	 * XXX: we're modifying a global in the util mr cache? do we need an
+	 * API here instead?
+	 */
+	cache_params.max_cnt = efa_mr_max_cached_count;
+	cache_params.max_size = efa_mr_max_cached_size;
+	(*cache)->entry_data_size = sizeof(struct efa_mr);
+	(*cache)->add_region = efa_mr_cache_entry_reg;
+	(*cache)->delete_region = efa_mr_cache_entry_dereg;
+	err = ofi_mr_cache_init(&domain->util_domain, memory_monitors,
+				*cache);
+	if (err) {
+		EFA_WARN(FI_LOG_DOMAIN, "EFA MR cache init failed: %s\n",
+		         fi_strerror(err));
+		free(*cache);
+		*cache = NULL;
+		return -err;
+	}
+
+	EFA_INFO(FI_LOG_DOMAIN, "EFA MR cache enabled, max_cnt: %zu max_size: %zu\n",
+		 cache_params.max_cnt, cache_params.max_size);
+	return 0;
+}
+
 static int efa_mr_cache_close(fid_t fid)
 {
 	struct efa_mr *efa_mr = container_of(fid, struct efa_mr,
@@ -85,7 +205,7 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		 * util_domain is at the beginning of both efa_domain and
 		 * rxr_domain.
 		 */
-		if (efa_mr->domain->hmem_info[attr->iface].initialized) {
+		if (efa_mr->domain->hmem_support_status[attr->iface].initialized) {
 			efa_mr->peer.iface = attr->iface;
 		} else {
 			EFA_WARN(FI_LOG_MR,

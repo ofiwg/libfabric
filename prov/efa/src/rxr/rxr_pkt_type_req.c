@@ -437,7 +437,7 @@ int rxr_pkt_init_rtm(struct rxr_ep *ep,
 
 	data_size = MIN(tx_entry->total_len - data_offset,
 			ep->mtu_size - rxr_pkt_req_hdr_size(pkt_entry));
-	if (efa_ep_is_cuda_mr(tx_entry->desc[0]) &&
+	if (efa_mr_is_cuda(tx_entry->desc[0]) &&
 	    data_size + data_offset < tx_entry->total_len) {
 		data_size &= ~(CUDA_MEMORY_ALIGNMENT -1);
 	}

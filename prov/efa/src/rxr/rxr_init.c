@@ -81,8 +81,6 @@ struct rxr_env rxr_env = {
  */
 static void rxr_init_env(void)
 {
-	int fork_safe = 0;
-
 	if (getenv("FI_EFA_SHM_MAX_MEDIUM_SIZE")) {
 		fprintf(stderr,
 			"FI_EFA_SHM_MAX_MEDIUM_SIZE env variable detected! The use of this variable has been deprecated and as such execution cannot proceed.\n");
@@ -141,26 +139,7 @@ static void rxr_init_env(void)
 	fi_param_get_size_t(&rxr_prov, "inter_max_gdrcopy_message_size",
 			    &rxr_env.efa_max_gdrcopy_msg_size);
 
-	/* Initialize EFA's fork support flag based on the environment and
-	 * system support. */
-	efa_fork_status = EFA_FORK_SUPPORT_OFF;
-
-#if HAVE_IBV_IS_FORK_INITIALIZED == 1
-	if (ibv_is_fork_initialized() == IBV_FORK_UNNEEDED)
-		efa_fork_status = EFA_FORK_SUPPORT_UNNEEDED;
-#endif
-
-	if (efa_fork_status != EFA_FORK_SUPPORT_UNNEEDED) {
-		fi_param_get_bool(&rxr_prov, "fork_safe", &fork_safe);
-
-		/*
-		 * Check if any environment variables which would trigger
-		 * libibverbs' fork support are set. These variables are
-		 * defined by ibv_fork_init(3).
-		 */
-		if (fork_safe || getenv("RDMAV_FORK_SAFE") || getenv("IBV_FORK_SAFE"))
-			efa_fork_status = EFA_FORK_SUPPORT_ON;
-	}
+	efa_fork_support_request_initialize();
 }
 
 /* @brief convert raw address to an unique shm endpoint name (smr_name)

@@ -343,7 +343,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 		 * so we do not check it here
 		 */
 		use_lower_ep_read = true;
-	} else if (efa_ep_is_neuron_mr(tx_entry->desc[0])) {
+	} else if (efa_mr_is_neuron(tx_entry->desc[0])) {
 		err = rxr_ep_determine_rdma_support(rxr_ep, tx_entry->addr, peer);
 
 		if (err < 0)
@@ -488,7 +488,7 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	}
 
 	/* See rxr_msg_post_rtm() */
-	if (efa_ep_is_neuron_mr(tx_entry->desc[0])) {
+	if (efa_mr_is_neuron(tx_entry->desc[0])) {
 		err = rxr_ep_determine_rdma_support(ep, tx_entry->addr, peer);
 
 		if (err < 0)
