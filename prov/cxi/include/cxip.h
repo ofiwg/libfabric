@@ -245,6 +245,8 @@ struct cxip_environment {
 
 	int coll_use_repsum;
 	char hostname[255];
+	char *telemetry;
+	int telemetry_rgid;
 };
 
 extern struct cxip_environment cxip_env;
@@ -538,6 +540,31 @@ struct cxip_mr_domain {
 void cxip_mr_domain_init(struct cxip_mr_domain *mr_domain);
 void cxip_mr_domain_fini(struct cxip_mr_domain *mr_domain);
 
+struct cxip_telemetry {
+	struct cxip_domain *dom;
+
+	/* List of telemetry entries to being monitored. */
+	struct dlist_entry telemetry_list;
+};
+
+void cxip_telemetry_dump_delta(struct cxip_telemetry *telemetry);
+void cxip_telemetry_free(struct cxip_telemetry *telemetry);
+int cxip_telemetry_alloc(struct cxip_domain *dom,
+			 struct cxip_telemetry **telemetry);
+
+#define TELEMETRY_ENTRY_NAME_SIZE 64U
+
+struct cxip_telemetry_entry {
+	struct cxip_telemetry *telemetry;
+	struct dlist_entry telemetry_entry;
+
+	/* Telemetry name. */
+	char name[TELEMETRY_ENTRY_NAME_SIZE];
+
+	/* Telemetry value. */
+	unsigned long value;
+};
+
 /*
  * CXI Provider Domain object
  */
@@ -591,6 +618,9 @@ struct cxip_domain {
 
 	/* Container of in-use MRs against this domain. */
 	struct cxip_mr_domain mr_domain;
+
+	/* Counters collected for the duration of the domain existence. */
+	struct cxip_telemetry *telemetry;
 };
 
 static inline bool cxip_domain_mr_cache_enabled(struct cxip_domain *dom)
@@ -2594,6 +2624,15 @@ extern cxip_trace_t cxip_trace_attr cxip_trace_fn;
 #define RXC_FATAL(rxc, fmt, ...) \
 	CXIP_FATAL("RXC (%#x:%u:%u): " fmt "", (rxc)->ep_obj->src_addr.nic, \
 		   (rxc)->ep_obj->src_addr.pid, (rxc)->rx_id, ##__VA_ARGS__)
+
+#define DOM_INFO(dom, fmt, ...) \
+	_CXIP_INFO(FI_LOG_DOMAIN, "DOM (cxi%u:%u:%#x): " fmt "", \
+		   (dom)->iface->info->dev_id, (dom)->lni->lni->id, \
+		   (dom)->nic_addr, ##__VA_ARGS__)
+#define DOM_WARN(dom, fmt, ...) \
+	_CXIP_WARN(FI_LOG_DOMAIN, "DOM (cxi%u:%u:%#x): " fmt "", \
+		   (dom)->iface->info->dev_id, (dom)->lni->lni->id, \
+		   (dom)->nic_addr, ##__VA_ARGS__)
 
 #define CXIP_DEFAULT_CACHE_LINE_SIZE 64
 

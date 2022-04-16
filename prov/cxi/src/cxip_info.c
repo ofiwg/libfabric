@@ -287,6 +287,7 @@ struct cxip_environment cxip_env = {
 	.rget_tc = FI_TC_UNSPEC,
 	.cacheline_size = CXIP_DEFAULT_CACHE_LINE_SIZE,
 	.coll_use_repsum = false,
+	.telemetry_rgid = -1,
 };
 
 static void cxip_env_init(void)
@@ -369,6 +370,22 @@ static void cxip_env_init(void)
 			cxip_env.device_name = NULL;
 		}
 	}
+
+	/* Counters env string is validate when the cxip_env.telemetry string
+	 * is used.
+	 */
+	fi_param_define(&cxip_prov, "telemetry", FI_PARAM_STRING,
+			"Perform a telemetry delta captured between fi_domain open and close. "
+			"Format is a comma separated list of telemetry files as defined in /sys/class/cxi/cxi*/device/telemetry/. "
+			"Default is counter delta captured disabled.");
+	fi_param_get_str(&cxip_prov, "telemetry", &cxip_env.telemetry);
+
+	fi_param_define(&cxip_prov, "telemetry_rgid", FI_PARAM_INT,
+			"Resource group ID (RGID) to restrict the telemetry collection to. "
+			"Value less than 0 is no restrictions. "
+			"Default is no restrictions.");
+	fi_param_get_int(&cxip_prov, "telemetry_rgid",
+			 &cxip_env.telemetry_rgid);
 
 	fi_param_define(&cxip_prov, "rx_match_mode", FI_PARAM_STRING,
 			"Sets RX message match mode (hardware | software | hybrid).");

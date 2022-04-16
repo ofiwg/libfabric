@@ -35,7 +35,8 @@ _cxi_files = \
 	prov/cxi/src/cxip_info.c \
 	prov/cxi/src/cxip_ctrl.c \
 	prov/cxi/src/cxip_req_buf.c \
-	prov/cxi/src/cxip_rdzv_pte.c
+	prov/cxi/src/cxip_rdzv_pte.c \
+	prov/cxi/src/cxip_telemetry.c
 
 _cxi_headers = \
 	prov/cxi/include/cxip.h \

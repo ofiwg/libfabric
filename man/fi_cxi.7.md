@@ -643,6 +643,17 @@ The CXI provider checks for the following environment variables:
 :   Restrict CXI provider to specific CXI devices. Format is a comma separated
     list of CXI devices (e.g. cxi0,cxi1).
 
+*FI_CXI_TELEMETRY*
+:   Perform a telemetry delta between fi_domain open and close. Format is a
+    comma separated list of telemetry files as defined in
+    /sys/class/cxi/cxi*/device/telemetry/. The ALL-in-binary file in this
+    directory is invalid. Note that these are per CXI interface counters and not
+    per CXI process per interface counters.
+
+*FI_CXI_TELEMETRY_RGID*
+:   Resource group ID (RGID) to restrict the telemetry collection to. Value less
+    than 0 is no restrictions.
+
 *FI_CXI_CQ_FILL_PERCENT*
 :   Fill percent of underlying hardware event queue used to determine when
     completion queue is saturated. A saturated completion queue results in the
