@@ -261,3 +261,313 @@ err_free:
 	return -FI_ENODATA;
 }
 
+/**
+ * @brief update an info to match user hints
+ *
+ * the input info is a duplicate of prov info, which matches
+ * the capability of the EFA device. This function tailor it
+ * so it matches user provided hints
+ *
+ * @param	info[in,out]	info to be updated
+ * @param	hints[in]	user provided hints
+ * @return	0 on success
+ * 		negative libfabric error code on failure
+ */
+static
+int efa_user_info_alter_rxr(struct fi_info *info, const struct fi_info *hints)
+{
+	uint64_t atomic_ordering;
+
+	/*
+	 * Do not advertise FI_HMEM capabilities when the core can not support
+	 * it or when the application passes NULL hints (given this is a primary
+	 * cap). The logic for device-specific checks pertaining to HMEM comes
+	 * further along this path.
+	 */
+	if (!hints) {
+		info->caps &= ~FI_HMEM;
+	}
+
+	/*
+	 * Handle user-provided hints and adapt the info object passed back up
+	 * based on EFA-specific constraints.
+	 */
+	if (hints) {
+		if (hints->tx_attr) {
+			atomic_ordering = FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
+					  FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
+			if (!(hints->tx_attr->msg_order & atomic_ordering)) {
+				info->ep_attr->max_order_raw_size = 0;
+			}
+		}
+
+		/* We only support manual progress for RMA operations */
+		if (hints->caps & FI_RMA) {
+			info->domain_attr->control_progress = FI_PROGRESS_MANUAL;
+			info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+		}
+
+
+#if HAVE_CUDA || HAVE_NEURON
+		/* If the application requires HMEM support, we will add
+		 * FI_MR_HMEM to mr_mode, because we need application to
+		 * provide descriptor for cuda or neuron buffer. Note we did
+		 * not add FI_MR_LOCAL here because according to FI_MR man
+		 * page:
+		 *
+		 *     "If FI_MR_HMEM is set, but FI_MR_LOCAL is unset,
+		 *      only device buffers must be registered when used locally.
+		 *      "
+		 * which means FI_MR_HMEM implies FI_MR_LOCAL for cuda or neuron buffer.
+		 */
+		if (hints->caps & FI_HMEM) {
+			if (ofi_hmem_p2p_disabled()) {
+				EFA_WARN(FI_LOG_CORE,
+					"FI_HMEM capability currently requires peer to peer support, which is disabled.\n");
+				return -FI_ENODATA;
+			}
+			//TODO: remove the rdma checks once FI_HMEM w/o p2p is supported
+
+			if (!efa_device_support_rdma_read()) {
+				EFA_WARN(FI_LOG_CORE,
+				        "FI_HMEM capability requires RDMA, which this device does not support.\n");
+				return -FI_ENODATA;
+
+			}
+
+			if (!rxr_env.use_device_rdma) {
+				EFA_WARN(FI_LOG_CORE,
+				        "FI_HMEM capability requires RDMA, which is turned off. You can turn it on by set environment variable FI_EFA_USE_DEVICE_RDMA to 1.\n");
+				return -FI_ENODATA;
+			}
+
+			if (hints->domain_attr &&
+			    !(hints->domain_attr->mr_mode & FI_MR_HMEM)) {
+				EFA_WARN(FI_LOG_CORE,
+				        "FI_HMEM capability requires device registrations (FI_MR_HMEM)\n");
+				return -FI_ENODATA;
+			}
+
+			info->domain_attr->mr_mode |= FI_MR_HMEM;
+
+		} else {
+			/*
+			 * FI_HMEM is a primary capability. Providers should
+			 * only enable it if requested by applications.
+			 */
+			info->caps &= ~FI_HMEM;
+		}
+#endif
+		/*
+		 * The provider does not force applications to register buffers
+		 * with the device, but if an application is able to, reuse
+		 * their registrations and avoid the bounce buffers.
+		 */
+		if (hints->domain_attr && hints->domain_attr->mr_mode & FI_MR_LOCAL)
+			info->domain_attr->mr_mode |= FI_MR_LOCAL;
+
+		/*
+		 * Same goes for prefix mode, where the protocol does not
+		 * absolutely need a prefix before receive buffers, but it can
+		 * use it when available to optimize transfers with endpoints
+		 * having the following profile:
+		 *	- Requires FI_MSG and not FI_TAGGED/FI_ATOMIC/FI_RMA
+		 *	- Can handle registrations (FI_MR_LOCAL)
+		 *	- No need for FI_DIRECTED_RECV
+		 *	- Guaranteed to send msgs smaller than info->nic->link_attr->mtu
+		 */
+		if (hints->mode & FI_MSG_PREFIX) {
+			FI_INFO(&rxr_prov, FI_LOG_CORE,
+				"FI_MSG_PREFIX supported by application.\n");
+			info->mode |= FI_MSG_PREFIX;
+			info->tx_attr->mode |= FI_MSG_PREFIX;
+			info->rx_attr->mode |= FI_MSG_PREFIX;
+			info->ep_attr->msg_prefix_size = RXR_MSG_PREFIX_SIZE;
+			FI_INFO(&rxr_prov, FI_LOG_CORE,
+				"FI_MSG_PREFIX size = %ld\n", info->ep_attr->msg_prefix_size);
+		}
+	}
+
+	/* Use a table for AV if the app has no strong requirement */
+	if (!hints || !hints->domain_attr ||
+	    hints->domain_attr->av_type == FI_AV_UNSPEC)
+		info->domain_attr->av_type = FI_AV_TABLE;
+	else
+		info->domain_attr->av_type = hints->domain_attr->av_type;
+
+	if (!hints || !hints->domain_attr ||
+	    hints->domain_attr->resource_mgmt == FI_RM_UNSPEC)
+		info->domain_attr->resource_mgmt = FI_RM_ENABLED;
+	else
+		info->domain_attr->resource_mgmt = hints->domain_attr->resource_mgmt;
+
+	return 0;
+}
+
+/**
+ * @brief get a list of rdm info the fit user's requirements
+ *
+ * @param	node[in]	node from user's call to fi_getinfo()
+ * @param	service[in]	service from user's call to fi_getinfo()
+ * @param	flags[in]	flags from user's call to fi_getinfo()
+ * @param	hints[in]	hints from user's call to fi_getinfo()
+ * @param	info[out]	a linked list of user_info that met user's requirements
+ * @return 	0 on success
+ * 		negative libfabric error code on failure
+ */
+static
+int efa_user_info_get_rdm(uint32_t version, const char *node,
+			  const char *service, uint64_t flags,
+			  const struct fi_info *hints, struct fi_info **info)
+{
+	const struct fi_info *prov_info_rxr;
+	struct fi_info *dupinfo, *tail;
+	int ret;
+
+	ret = efa_user_info_check_hints_addr(node, service, flags, hints);
+	if (ret) {
+		*info = NULL;
+		return ret;
+	}
+
+	if (hints) {
+		ret = ofi_prov_check_info(&rxr_util_prov, version, hints);
+		if (ret) {
+			*info = NULL;
+			return ret;
+		}
+	}
+
+	*info = tail = NULL;
+	for (prov_info_rxr = rxr_util_prov.info;
+	     prov_info_rxr;
+	     prov_info_rxr = prov_info_rxr->next) {
+		ret = efa_prov_info_compare_src_addr(node, flags, hints, prov_info_rxr);
+		if (ret)
+			continue;
+
+		dupinfo = fi_dupinfo(prov_info_rxr);
+		if (!dupinfo) {
+			ret = -FI_ENOMEM;
+			goto free_info;
+		}
+
+		ret = efa_user_info_set_dest_addr(node, service, flags, hints, *info);
+		if (ret)
+			goto free_info;
+
+		dupinfo->fabric_attr->api_version = version;
+
+		ret = efa_user_info_alter_rxr(dupinfo, hints);
+		if (ret)
+			goto free_info;
+
+		ofi_alter_info(dupinfo, hints, version);
+
+		/* If application asked for FI_REMOTE_COMM but not FI_LOCAL_COMM, it
+		 * does not want to use shm. In this case, we honor the request by
+		 * unsetting the FI_LOCAL_COMM flag in info. This way rxr_endpoint()
+		 * should disable shm transfer for the endpoint
+		 */
+		if (hints && hints->caps & FI_REMOTE_COMM && !(hints->caps & FI_LOCAL_COMM))
+			dupinfo->caps &= ~FI_LOCAL_COMM;
+
+		if (!*info)
+			*info = dupinfo;
+		else
+			tail->next = dupinfo;
+		tail = dupinfo;
+	}
+
+	return 0;
+free_info:
+	fi_freeinfo(dupinfo);
+	fi_freeinfo(*info);
+	*info = NULL;
+	return ret;
+}
+
+/**
+ * @brief get a list of info the fit user's requirements
+ * 
+ * This is EFA provider's implemenation of fi_getinfo() API.
+ *
+ * @param	node[in]	node from user's call to fi_getinfo()
+ * @param	service[in]	service from user's call to fi_getinfo()
+ * @param	flags[in]	flags from user's call to fi_getinfo()
+ * @param	hints[in]	hints from user's call to fi_getinfo()
+ * @param	info[out]	a linked list of user_info that met user's requirements
+ * @return 	0 on success
+ * 		negative libfabric error code on failure
+ */
+int efa_getinfo(uint32_t version, const char *node,
+		const char *service, uint64_t flags,
+		const struct fi_info *hints, struct fi_info **info)
+{
+	struct fi_info *dgram_info_list, *rdm_info_list;
+	int err;
+	static bool shm_info_initialized = false;
+
+	/*
+	 * efa_shm_info_initialize() initializes the global variable g_shm_info.
+	 * Ideally it should be called during provider initialization. However,
+	 * At the time of EFA provider initialization, shm provider has not been
+	 * initialized yet, therefore g_shm_info cannot be initialized. As a workaround,
+	 * we initialize g_shm_info when the rxr_getinfo() is called 1st time,
+	 * at this point all the providers have been initialized.
+	 */
+	if (!shm_info_initialized) {
+		efa_shm_info_initialize(hints);
+		shm_info_initialized = true;
+	}
+
+	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_DGRAM)
+		return efa_user_info_get_dgram(version, node, service, flags, hints, info);
+
+	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_RDM)
+		return efa_user_info_get_rdm(version, node, service, flags, hints, info);
+
+	if (hints && hints->ep_attr && hints->ep_attr->type != FI_EP_UNSPEC) {
+		EFA_WARN(FI_LOG_DOMAIN, "unsupported endpoint type: %d\n",
+			 hints->ep_attr->type);
+		return -FI_ENODATA;
+	}
+
+	err = efa_user_info_get_dgram(version, node, service, flags, hints, &dgram_info_list);
+	if (err && err != -FI_ENODATA) {
+		return err;
+	}
+
+	err = efa_user_info_get_rdm(version, node, service, flags, hints, &rdm_info_list);
+	if (err && err != -FI_ENODATA) {
+		fi_freeinfo(dgram_info_list);
+		return err;
+	}
+
+	if (rdm_info_list && dgram_info_list) {
+		struct fi_info *tail;
+
+		tail = rdm_info_list;
+		while (tail->next)
+			tail = tail->next;
+
+		tail->next = dgram_info_list;
+		*info = rdm_info_list;
+		return 0;
+	}
+
+	if (rdm_info_list) {
+		assert(!dgram_info_list);
+		*info = rdm_info_list;
+		return 0;
+	}
+
+	if (dgram_info_list) {
+		assert(!rdm_info_list);
+		*info = dgram_info_list;
+		return 0;
+	}
+
+	return -FI_ENODATA;
+}
+

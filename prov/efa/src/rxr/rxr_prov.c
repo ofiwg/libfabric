@@ -34,7 +34,7 @@
 #include <ofi_prov.h>
 #include "efa.h"
 #include "rxr.h"
-#include "rxr_init.h"
+#include "rxr_env.h"
 #include "efa_prov_info.h"
 
 #ifdef ENABLE_EFA_POISONING
@@ -100,8 +100,7 @@ static void rxr_util_prov_finalize()
 
 EFA_INI
 {
-	rxr_define_env();
-	rxr_init_env();
+	rxr_env_initialize();
 
 #if HAVE_EFA_DL
 	ofi_mem_init();
