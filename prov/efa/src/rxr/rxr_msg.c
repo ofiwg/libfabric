@@ -306,10 +306,6 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		 */
 	}
 
-	ret = rxr_ep_set_tx_credit_request(rxr_ep, tx_entry);
-	if (OFI_UNLIKELY(ret))
-		return ret;
-
 	ctrl_type = delivery_complete_requested ? RXR_DC_LONGCTS_MSGRTM_PKT : RXR_LONGCTS_MSGRTM_PKT;
 	tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
 	return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,

@@ -811,14 +811,8 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 
 void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 {
-	struct rdm_peer *peer;
-
 	if (tx_entry->state == RXR_TX_SEND)
 		dlist_remove(&tx_entry->entry);
-
-	peer = rxr_ep_get_peer(ep, tx_entry->addr);
-	assert(peer);
-	peer->tx_credits += tx_entry->credit_allocated;
 
 	if (tx_entry->cq_entry.flags & FI_READ) {
 		/*

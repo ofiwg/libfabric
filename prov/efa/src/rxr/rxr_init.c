@@ -41,8 +41,6 @@
 struct fi_info *shm_info;
 
 struct rxr_env rxr_env = {
-	.rx_window_size	= RXR_DEF_MAX_RX_WINDOW,
-	.tx_max_credits = RXR_DEF_MAX_TX_CREDITS,
 	.tx_min_credits = RXR_DEF_MIN_TX_CREDITS,
 	.tx_queue_size = 0,
 	.enable_shm_transfer = 1,
@@ -87,9 +85,16 @@ static void rxr_init_env(void)
 		abort();
 	};
 
-	fi_param_get_int(&rxr_prov, "rx_window_size", &rxr_env.rx_window_size);
-	fi_param_get_int(&rxr_prov, "tx_max_credits", &rxr_env.tx_max_credits);
 	fi_param_get_int(&rxr_prov, "tx_min_credits", &rxr_env.tx_min_credits);
+	if (rxr_env.tx_min_credits <= 0) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_DATA,
+			"FI_EFA_TX_MIN_CREDITS was set to %d, which is <= 0."
+			"This value will cause EFA communication to deadlock."
+			"To avoid that, the variable was reset to %d\n",
+			rxr_env.tx_min_credits, RXR_DEF_MIN_TX_CREDITS);
+		rxr_env.tx_min_credits = RXR_DEF_MIN_TX_CREDITS;
+	}
+
 	fi_param_get_int(&rxr_prov, "tx_queue_size", &rxr_env.tx_queue_size);
 	fi_param_get_int(&rxr_prov, "enable_shm_transfer", &rxr_env.enable_shm_transfer);
 	fi_param_get_int(&rxr_prov, "use_device_rdma", &rxr_env.use_device_rdma);
@@ -746,10 +751,6 @@ struct fi_provider rxr_prov = {
 
 EFA_INI
 {
-	fi_param_define(&rxr_prov, "rx_window_size", FI_PARAM_INT,
-			"Defines the maximum window size that a receiver will return for matched large messages. (Default: 128).");
-	fi_param_define(&rxr_prov, "tx_max_credits", FI_PARAM_INT,
-			"Defines the maximum number of credits a sender requests from a receiver (Default: 64).");
 	fi_param_define(&rxr_prov, "tx_min_credits", FI_PARAM_INT,
 			"Defines the minimum number of credits a sender requests from a receiver (Default: 32).");
 	fi_param_define(&rxr_prov, "tx_queue_size", FI_PARAM_INT,

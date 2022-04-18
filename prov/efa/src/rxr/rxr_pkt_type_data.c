@@ -139,7 +139,6 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 		       char *data, size_t seg_offset,
 		       size_t seg_size)
 {
-	struct rdm_peer *peer;
 	bool all_received = 0;
 	ssize_t err;
 
@@ -152,14 +151,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 	assert(rx_entry->bytes_received <= rx_entry->total_len);
 	all_received = (rx_entry->bytes_received == rx_entry->total_len);
 
-	peer = rxr_ep_get_peer(ep, rx_entry->addr);
-	assert(peer);
-	peer->rx_credits += ofi_div_ceil(seg_size, ep->max_data_payload_size);
-
 	rx_entry->window -= seg_size;
-	if (ep->available_data_bufs < rxr_get_rx_pool_chunk_cnt(ep))
-		ep->available_data_bufs++;
-
 #if ENABLE_DEBUG
 	/* rx_entry can be released by rxr_pkt_copy_data_to_rx_entry
 	 * so the call to dlist_remove must happen before

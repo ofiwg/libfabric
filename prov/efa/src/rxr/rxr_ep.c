@@ -574,35 +574,6 @@ void rxr_prepare_desc_send(struct rxr_domain *rxr_domain,
 }
 
 /* Generic send */
-int rxr_ep_set_tx_credit_request(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
-{
-	struct rdm_peer *peer;
-	int outstanding;
-
-	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
-	assert(peer);
-
-	/*
-	 * Divy up available credits to outstanding transfers and request the
-	 * minimum of that and the amount required to finish the current long
-	 * message.
-	 */
-	outstanding = peer->efa_outstanding_tx_ops + 1;
-	tx_entry->credit_request = MIN(ofi_div_ceil(peer->tx_credits, outstanding),
-				       ofi_div_ceil(tx_entry->total_len,
-						    rxr_ep->max_data_payload_size));
-	tx_entry->credit_request = MAX(tx_entry->credit_request,
-				       rxr_env.tx_min_credits);
-	if (peer->tx_credits >= tx_entry->credit_request)
-		peer->tx_credits -= tx_entry->credit_request;
-
-	/* Queue this REQ for later if there are too many outstanding packets */
-	if (!tx_entry->credit_request)
-		return -FI_EAGAIN;
-
-	return 0;
-}
-
 static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 {
 	struct dlist_entry *entry, *tmp;
@@ -1798,7 +1769,6 @@ void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
 				goto err_exit;
 
 			ep->efa_rx_pkts_to_post = rxr_get_rx_pool_chunk_cnt(ep);
-			ep->available_data_bufs = rxr_get_rx_pool_chunk_cnt(ep);
 
 			if (ep->shm_ep) {
 				assert(ep->shm_rx_pkts_posted == 0 && ep->shm_rx_pkts_to_post == 0);
@@ -1859,20 +1829,6 @@ static inline ssize_t rxr_ep_send_queued_pkts(struct rxr_ep *ep,
 		}
 	}
 	return 0;
-}
-
-static inline void rxr_ep_check_available_data_bufs_timer(struct rxr_ep *ep)
-{
-	if (OFI_LIKELY(ep->available_data_bufs != 0))
-		return;
-
-	if (ofi_gettime_us() - ep->available_data_bufs_ts >=
-	    RXR_AVAILABLE_DATA_BUFS_TIMEOUT) {
-		ep->available_data_bufs = rxr_get_rx_pool_chunk_cnt(ep);
-		ep->available_data_bufs_ts = 0;
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-			"Reset available buffers for large message receives\n");
-	}
 }
 
 static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
@@ -2081,9 +2037,6 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	rxr_ep_progress_post_internal_rx_pkts(ep);
 
 	rxr_ep_check_peer_backoff_timer(ep);
-
-	if (!ep->use_zcpy_rx)
-		rxr_ep_check_available_data_bufs_timer(ep);
 	/*
 	 * Resend handshake packet for any peers where the first
 	 * handshake send failed.
@@ -2510,7 +2463,6 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->efa_rx_pkts_to_post = 0;
 	rxr_ep->efa_outstanding_tx_ops = 0;
 	rxr_ep->shm_outstanding_tx_ops = 0;
-	rxr_ep->available_data_bufs_ts = 0;
 
 	ret = fi_cq_open(rxr_domain->rdm_domain, &cq_attr,
 			 &rxr_ep->rdm_cq, rxr_ep);
