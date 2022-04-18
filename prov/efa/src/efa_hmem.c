@@ -178,7 +178,7 @@ int efa_hmem_support_status_update_all(struct efa_hmem_support_status *all_statu
 			 err);
 	}
 
-	ret = efa_hmem_support_status_update_neuron(&all_status[FI_HMEM_NEURON]);
+	err = efa_hmem_support_status_update_neuron(&all_status[FI_HMEM_NEURON]);
 	if (err) {
 		ret = err;
 		EFA_WARN(FI_LOG_DOMAIN, "check neuron support status failed! err: %d\n",
