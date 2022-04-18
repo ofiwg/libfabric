@@ -227,6 +227,29 @@ static int lnx_cache_info(struct fi_info *info, int idx)
 	return 0;
 }
 
+static struct fi_info *
+lnx_get_cache_entry(char *prov_name)
+{
+	int i;
+
+	/* free the cache if there are any left */
+	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+		struct fi_info *info = lnx_fi_info_cache[i].cache_info;
+
+		if (info && info->fabric_attr) {
+			if (!strcmp(prov_name,
+						lnx_fi_info_cache[i].cache_name)) {
+				lnx_fi_info_cache[i].cache_info = NULL;
+				FI_INFO(&lnx_prov, FI_LOG_CORE, "Found %s\n",
+						info->fabric_attr->prov_name);
+				return info;
+			}
+		}
+	}
+
+	return NULL;
+}
+
 static int lnx_generate_info(struct fi_info *ci, struct fi_info **info,
 							 int idx)
 {
@@ -395,16 +418,27 @@ free_hints:
 	return rc;
 }
 
-int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-		void *context)
+static int
+lnx_parse_prov_name(char *name, char **shm, char **prov)
 {
-	/* Create a LINKx fabric which will be used to link the core endpoints */
-	return -FI_EOPNOTSUPP;
-}
+	char *sub1, *sub2, *delim;
 
-void lnx_fini(void)
-{
-	lnx_free_info_cache();
+	/* the name comes in as: shm+<prov>;ofi_linkx */
+	sub1 = strtok(name, ";");
+	if (!sub1)
+		return -FI_ENODATA;
+
+	delim = strchr(sub1, '+');
+	if (!delim)
+		return -FI_ENODATA;
+
+	sub2 = delim+1;
+	*delim = '\0';
+
+	*shm = sub1;
+	*prov = sub2;
+
+	return 0;
 }
 
 static struct local_prov *
@@ -422,8 +456,9 @@ lnx_get_local_prov(char *prov_name)
 	return NULL;
 }
 
-static int lnx_add_ep_to_prov(struct local_prov *prov,
-							  struct local_prov_ep *ep)
+static int
+lnx_add_ep_to_prov(struct local_prov *prov,
+				   struct local_prov_ep *ep)
 {
 	int i;
 
@@ -436,6 +471,140 @@ static int lnx_add_ep_to_prov(struct local_prov *prov,
 	}
 
 	return -FI_ENOENT;
+}
+
+static int
+lnx_setup_core_prov(struct fi_info *info, void *context)
+{
+	int rc;
+	struct local_prov_ep *entry = NULL;
+	struct local_prov *lprov, *new_lprov = NULL;
+
+	entry = calloc(sizeof(*entry), 1);
+	if (!entry)
+		return -FI_ENOMEM;
+
+	new_lprov = calloc(sizeof(*new_lprov), 1);
+	if (!new_lprov)
+		goto free_entry;
+
+	rc = fi_fabric(info->fabric_attr, &entry->lpe_fabric, context);
+	if (rc)
+		return rc;
+
+	entry->lpe_fi_info = info;
+	strncpy(entry->lpe_fabric_name, info->fabric_attr->name,
+			FI_NAME_MAX - 1);
+
+	lprov = lnx_get_local_prov(info->fabric_attr->prov_name);
+	if (!lprov) {
+		lprov = new_lprov;
+		new_lprov = NULL;
+		strncpy(lprov->lpv_prov_name, info->fabric_attr->prov_name,
+				FI_NAME_MAX - 1);
+	} else {
+		free(new_lprov);
+	}
+
+	/* indicate that this fabric can be used for on-node communication */
+	if (!strncasecmp(lprov->lpv_prov_name, "shm", 3)) {
+		shm_prov = lprov;
+		entry->lpe_local = true;
+	}
+
+	rc = lnx_add_ep_to_prov(lprov, entry);
+	if (rc)
+		goto free_all;
+
+	dlist_insert_after(&lprov->lpv_entry, &local_prov_table);
+
+	return 0;
+
+free_all:
+	if (new_lprov)
+		free(new_lprov);
+free_entry:
+	if (entry)
+		free(entry);
+
+	return rc;
+}
+
+int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+		void *context)
+{
+	struct fi_info *info = NULL;
+	char *dup, *shm, *prov;
+	int rc;
+	/*
+	 * provider: shm1+cxi;ofi_linkx
+	 *     fabric: ofi_lnx_fabric_3
+	 *     domain: shm1+cxi3;ofi_lnx_domain
+	 *     version: 115.0
+	 *     type: FI_EP_RDM
+	 *     protocol: FI_PROTO_LINKX
+	 *
+	 * Parse out the provider name. It should be shm+<prov>
+	 *
+	 * Create a fabric for shm and one for the other provider.
+	 *
+	 * When fi_domain() is called, we get the fi_info for the
+	 * second provider, which we should've returned as part of the
+	 * fi_getinfo() call.
+	 */
+	/* create a new entry for shm.
+	 * Create its fabric.
+	 * insert fabric in the global table
+	 */
+	dup = strdup(attr->prov_name);
+	rc = lnx_parse_prov_name(dup, &shm, &prov);
+	if (rc)
+		goto fail;
+
+	info = lnx_get_cache_entry(shm);
+	if (!info) {
+		rc = -FI_ENODATA;
+		goto fail;
+	}
+
+	rc = lnx_setup_core_prov(info, context);
+	if (rc)
+		goto fail;
+
+	info = lnx_get_cache_entry(prov);
+	if (!info) {
+		rc = -FI_ENODATA;
+		goto fail;
+	}
+
+	rc = lnx_setup_core_prov(info, context);
+	if (rc)
+		goto fail;
+
+	memset(&lnx_fabric_info, 0, sizeof(lnx_fabric_info));
+
+	rc = ofi_fabric_init(&lnx_prov, lnx_info.fabric_attr,
+						 lnx_info.fabric_attr, &lnx_fabric_info, context);
+	if (rc)
+		goto fail;
+
+	lnx_fabric_info.fabric_fid.fid.ops = &lnx_fabric_fi_ops;
+	lnx_fabric_info.fabric_fid.ops = &lnx_fabric_ops;
+	*fabric = &lnx_fabric_info.fabric_fid;
+
+	free(dup);
+
+	return 0;
+
+fail:
+	free(dup);
+	fi_freeinfo(info);
+	return rc;
+}
+
+void lnx_fini(void)
+{
+	lnx_free_info_cache();
 }
 
 static int lnx_cleanup_eps(struct local_prov *prov)
@@ -466,72 +635,32 @@ int ofi_create_link(struct fi_info *prov_list,
 {
 	int rc;
 	struct fi_info *prov;
-	struct local_prov *lprov, *new_lprov = NULL;
-	struct local_prov_ep *entry = NULL;
-
-	memset(&lnx_fabric_info, 0, sizeof(lnx_fabric_info));
 
 	/* create the fabric for the list of providers 
 	 * TODO: modify the code to work with the new data structures */
 	for (prov = prov_list; prov; prov = prov->next) {
-		entry = calloc(sizeof(*entry), 1);
-		if (!entry)
-			return -FI_ENOMEM;
+		struct fi_info *info = fi_dupinfo(prov);
 
-		new_lprov = calloc(sizeof(*new_lprov), 1);
-		if (!new_lprov)
-			goto free_entry;
+		if (!info)
+			return -FI_ENODATA;
 
-		rc = fi_fabric(prov->fabric_attr, &entry->lpe_fabric, context);
+		rc = lnx_setup_core_prov(prov, context);
 		if (rc)
-			goto free_all;
-
-		entry->lpe_fi_info = prov;
-		strncpy(entry->lpe_fabric_name, prov->fabric_attr->name,
-				FI_NAME_MAX - 1);
-
-		lprov = lnx_get_local_prov(prov->fabric_attr->prov_name);
-		if (!lprov) {
-			lprov = new_lprov;
-			new_lprov = NULL;
-			strncpy(lprov->lpv_prov_name, prov->fabric_attr->prov_name,
-					FI_NAME_MAX - 1);
-		} else {
-			free(new_lprov);
-		}
-
-		/* indicate that this fabric can be used for on-node communication */
-		if (!strncasecmp(lprov->lpv_prov_name, "shm", 3)) {
-			shm_prov = lprov;
-			entry->lpe_local = true;
-		}
-
-		rc = lnx_add_ep_to_prov(lprov, entry);
-		if (rc)
-			goto free_all;
-
-		dlist_insert_after(&lprov->lpv_entry, &local_prov_table);
+			return rc;
 	}
+
+	memset(&lnx_fabric_info, 0, sizeof(lnx_fabric_info));
 
 	rc = ofi_fabric_init(&lnx_prov, lnx_info.fabric_attr,
 						 lnx_info.fabric_attr, &lnx_fabric_info, context);
 	if (rc)
-		goto free_all;
+		return rc;
 
 	lnx_fabric_info.fabric_fid.fid.ops = &lnx_fabric_fi_ops;
 	lnx_fabric_info.fabric_fid.ops = &lnx_fabric_ops;
 	*fabric = &lnx_fabric_info.fabric_fid;
 
 	return 0;
-
-free_all:
-	if (new_lprov)
-		free(new_lprov);
-free_entry:
-	if (entry)
-		free(entry);
-
-	return rc;
 }
 
 int lnx_fabric_close(struct fid *fid)
