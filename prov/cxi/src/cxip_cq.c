@@ -113,7 +113,7 @@ int cxip_ibuf_chunk_init(struct ofi_bufpool_region *region)
 	int ret;
 
 	ret = cxip_map(cq->domain, region->mem_region,
-		       region->pool->region_size, &md);
+		       region->pool->region_size, OFI_MR_NOCACHE, &md);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to map inject buffer chunk\n");
 		return ret;

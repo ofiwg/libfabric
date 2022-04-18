@@ -656,7 +656,7 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		goto err_free_mr;
 
 	if (_mr->len) {
-		ret = cxip_map(_mr->domain, (void *)_mr->buf, _mr->len,
+		ret = cxip_map(_mr->domain, (void *)_mr->buf, _mr->len, 0,
 			       &_mr->md);
 		if (ret) {
 			CXIP_WARN("Failed to map MR buffer: %d\n", ret);

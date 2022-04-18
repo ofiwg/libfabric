@@ -463,7 +463,7 @@ static void cxip_map_get_mem_region_size(const void *buf, unsigned long len,
  * mapping has been established, create one and cache it.
  */
 int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
-	     struct cxip_md **md)
+	     uint64_t flags, struct cxip_md **md)
 {
 	struct iovec iov = {
 		.iov_base = (void *)buf,
@@ -474,6 +474,7 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 		.mr_iov = &iov,
 	};
 	struct ofi_mr_entry *entry;
+	bool cache = !(flags & OFI_MR_NOCACHE);
 
 	/* TODO: ATS (scalable MD) can only support CPU page sizes and should be
 	 * avoided for non-standard page sizes.
@@ -488,7 +489,8 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	 * memory, the buffer pointer query can be avoided completely if the
 	 * corresponding entry is in the cache.
 	 */
-	if (cxip_domain_mr_cache_enabled(dom) && dom->rocr_dev_mem_only) {
+	if (cache && cxip_domain_mr_cache_enabled(dom) &&
+	    dom->rocr_dev_mem_only) {
 		entry = ofi_mr_cache_find(&dom->iomm, &attr);
 		if (entry) {
 			*md = (struct cxip_md *)entry->data;
@@ -503,7 +505,7 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	if (dom->hmem)
 		attr.iface = ofi_get_hmem_iface(buf);
 
-	if (cxip_domain_mr_cache_iface_enabled(dom, attr.iface)) {
+	if (cache && cxip_domain_mr_cache_iface_enabled(dom, attr.iface)) {
 		cxip_map_get_mem_region_size(iov.iov_base, iov.iov_len,
 					     attr.iface, &iov.iov_base,
 					     &iov.iov_len);

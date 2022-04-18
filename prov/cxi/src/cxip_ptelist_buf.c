@@ -152,7 +152,8 @@ cxip_ptelist_buf_alloc(struct cxip_ptelist_bufpool *pool)
 			goto err_free_buf;
 	}
 
-	ret = cxip_map(rxc->domain, buf->data, pool->attr.buf_size, &buf->md);
+	ret = cxip_map(rxc->domain, buf->data, pool->attr.buf_size,
+		       OFI_MR_NOCACHE, &buf->md);
 	if (ret)
 		goto err_unreg_buf;
 

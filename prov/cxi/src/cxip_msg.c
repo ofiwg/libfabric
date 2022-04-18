@@ -168,7 +168,7 @@ static struct cxip_req *cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf,
 	}
 
 	if (len) {
-		ret = cxip_map(dom, (void *)buf, len, &recv_md);
+		ret = cxip_map(dom, (void *)buf, len, 0, &recv_md);
 		if (ret) {
 			RXC_WARN(rxc, "Failed to map recv buffer: %d\n", ret);
 			goto err_free_request;
@@ -3617,7 +3617,7 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 		      CXIP_PTL_IDX_RXQ, &dfa, &idx_ext);
 
 	/* Map local buffer */
-	ret = cxip_map(txc->domain, req->send.buf, req->send.len, &send_md);
+	ret = cxip_map(txc->domain, req->send.buf, req->send.len, 0, &send_md);
 	if (ret) {
 		TXC_WARN(txc, "Failed to map send buffer: %d\n", ret);
 		cxip_rdzv_id_free(txc->ep_obj, rdzv_id);
@@ -3947,7 +3947,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 
 	if (req->send.len) {
 		ret = cxip_map(txc->domain, req->send.buf,
-			       req->send.len, &req->send.send_md);
+			       req->send.len, 0, &req->send.send_md);
 		if (ret != FI_SUCCESS) {
 			TXC_WARN(txc, "Failed to map send buffer: %ld\n", ret);
 			return ret;
