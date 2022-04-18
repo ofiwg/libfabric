@@ -574,8 +574,8 @@ pipeline {
         PMI_INSTALL_PATH = "/usr/lib64"
         LTU_VERSION = "0.0.0"
         SFT_VERSION = "0.0.0"
-        LTU_GIT_REPO = 'git@stash.us.cray.com:7999/ofi-cray/libfabric-test-utils.git'
-        SFT_GIT_REPO = 'git@stash.us.cray.com:7999/ofi-cray/libfabric-sft.git'
+        LTU_GIT_REPO = 'git@github.hpe.com:hpe/hpc-shs-libfabric-test-utils.git'
+        SFT_GIT_REPO = 'git@github.hpe.com:hpe/hpc-shs-libfabric-sft.git'
         SRC_GIT_BRANCH = 'master'
     }
 }
