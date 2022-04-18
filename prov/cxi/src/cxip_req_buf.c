@@ -105,8 +105,7 @@ static struct cxip_ux_send *cxip_req_buf_ux_alloc(struct cxip_ptelist_buf *buf,
 	dlist_init(&ux->rxc_entry);
 	cxip_ptelist_buf_get(buf);
 
-	RXC_DBG(buf->rxc, "PtlTE %d referenced REQ buf=%p ux=%p\n",
-		buf->rxc->rx_pte->pte->ptn, buf, ux);
+	RXC_DBG(buf->rxc, "Referenced REQ buf=%p ux=%p\n", buf, ux);
 
 	return ux;
 }
@@ -287,9 +286,7 @@ static int cxip_req_buf_process_put_event(struct cxip_ptelist_buf *buf,
 			cxip_req_buf_progress_pending_ux(buf);
 
 			if (cxip_req_buf_is_consumed(buf)) {
-				RXC_DBG(rxc, "PtlTE %d buf=%p consumed\n",
-					buf->rxc->rx_pte->pte->ptn, buf);
-
+				RXC_DBG(rxc, "buf=%p consumed\n", buf);
 				cxip_ptelist_buf_consumed(buf);
 			} else {
 				break;

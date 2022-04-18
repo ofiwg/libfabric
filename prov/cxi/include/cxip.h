@@ -2651,20 +2651,22 @@ extern cxip_trace_t cxip_trace_attr cxip_trace_fn;
 		   (txc)->ep_obj->src_addr.pid, (txc)->tx_id, ##__VA_ARGS__)
 
 #define RXC_DBG(rxc, fmt, ...) \
-	_CXIP_DBG(FI_LOG_EP_DATA, "RXC (%#x:%u:%u): " fmt "", \
+	_CXIP_DBG(FI_LOG_EP_DATA, "RXC (%#x:%u:%u) PtlTE %u: " fmt "", \
 		  (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
-		  (rxc)->rx_id, ##__VA_ARGS__)
+		  (rxc)->rx_id, (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_INFO(rxc, fmt, ...) \
-	_CXIP_INFO(FI_LOG_EP_DATA, "RXC (%#x:%u:%u): " fmt "", \
+	_CXIP_INFO(FI_LOG_EP_DATA, "RXC (%#x:%u:%u) PtlTE %u: " fmt "", \
 		   (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
-		   (rxc)->rx_id, ##__VA_ARGS__)
+		   (rxc)->rx_id, (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_WARN(rxc, fmt, ...) \
-	_CXIP_WARN(FI_LOG_EP_DATA, "RXC (%#x:%u:%u): " fmt "", \
+	_CXIP_WARN(FI_LOG_EP_DATA, "RXC (%#x:%u:%u) PtlTE %u: " fmt "", \
 		   (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
-		   (rxc)->rx_id, ##__VA_ARGS__)
+		   (rxc)->rx_id, (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_FATAL(rxc, fmt, ...) \
-	CXIP_FATAL("RXC (%#x:%u:%u): " fmt "", (rxc)->ep_obj->src_addr.nic, \
-		   (rxc)->ep_obj->src_addr.pid, (rxc)->rx_id, ##__VA_ARGS__)
+	CXIP_FATAL("RXC (%#x:%u:%u): PtlTE %u" fmt "", \
+		   (rxc)->ep_obj->src_addr.nic, \
+		   (rxc)->ep_obj->src_addr.pid, (rxc)->rx_id, \
+		   (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 
 #define DOM_INFO(dom, fmt, ...) \
 	_CXIP_INFO(FI_LOG_DOMAIN, "DOM (cxi%u:%u:%#x): " fmt "", \

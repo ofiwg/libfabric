@@ -40,8 +40,6 @@
 
 #include "cxip.h"
 
-#define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
-
 static const char*
 cxip_ptelist_to_str(struct cxip_ptelist_bufpool *pool)
 {
@@ -56,8 +54,8 @@ static int cxip_ptelist_unlink_buf(struct cxip_ptelist_buf *buf)
 	ret = cxip_pte_unlink(rxc->rx_pte, buf->pool->attr.list_type,
 			      buf->req->req_id, rxc->rx_cmdq);
 	if (ret)
-		RXC_DBG(rxc, "PtlTE %d failed to write command %d %s\n",
-			rxc->rx_pte->pte->ptn, ret, fi_strerror(-ret));
+		RXC_DBG(rxc, "Failed to write command %d %s\n",
+			ret, fi_strerror(-ret));
 
 	return ret;
 }
@@ -90,9 +88,9 @@ static int cxip_ptelist_link_buf(struct cxip_ptelist_buf *buf,
 	if (seq_restart)
 		le_flags |= C_LE_RESTART_SEQ;
 
-	RXC_DBG(rxc, "PtlTE %d %s link buf %p num linked %u\n",
-		rxc->rx_pte->pte->ptn, cxip_ptelist_to_str(buf->pool),
-		buf, ofi_atomic_get32(&buf->pool->bufs_linked));
+	RXC_DBG(rxc, "%s link buf %p num linked %u\n",
+		cxip_ptelist_to_str(buf->pool), buf,
+		ofi_atomic_get32(&buf->pool->bufs_linked));
 
 	/* Reset request buffer stats used to know when the buffer is consumed.
 	 */
@@ -110,8 +108,8 @@ static int cxip_ptelist_link_buf(struct cxip_ptelist_buf *buf,
 			      buf->pool->attr.min_space_avail,
 			      le_flags, NULL, rxc->rx_cmdq, true);
 	if (ret) {
-		RXC_WARN(rxc, "PtlTE %d failed to write %s append %d %s\n",
-			 rxc->rx_pte->pte->ptn, cxip_ptelist_to_str(buf->pool),
+		RXC_WARN(rxc, "Failed to write %s append %d %s\n",
+			 cxip_ptelist_to_str(buf->pool),
 			 ret, fi_strerror(-ret));
 		return ret;
 	}
@@ -126,9 +124,9 @@ static int cxip_ptelist_link_buf(struct cxip_ptelist_buf *buf,
 	 */
 	cxip_ptelist_buf_get(buf);
 
-	RXC_DBG(rxc, "PtlTE %d APPEND %s buf %p num linked %u\n",
-		rxc->rx_pte->pte->ptn, cxip_ptelist_to_str(buf->pool),
-		buf, ofi_atomic_get32(&buf->pool->bufs_linked));
+	RXC_DBG(rxc, "APPEND %s buf %p num linked %u\n",
+		cxip_ptelist_to_str(buf->pool), buf,
+		ofi_atomic_get32(&buf->pool->bufs_linked));
 
 	return ret;
 }
@@ -179,8 +177,7 @@ cxip_ptelist_buf_alloc(struct cxip_ptelist_bufpool *pool)
 	dlist_init(&buf->buf_entry);
 	ofi_atomic_inc32(&pool->bufs_allocated);
 
-	RXC_DBG(rxc, "PtlTE %d allocated %s buf %p num alloc %u\n",
-		rxc->rx_pte->pte->ptn,
+	RXC_DBG(rxc, "Allocated %s buf %p num alloc %u\n",
 		cxip_ptelist_to_str(buf->pool), buf,
 		ofi_atomic_get32(&pool->bufs_allocated));
 
@@ -218,8 +215,7 @@ static void cxip_ptelist_buf_free(struct cxip_ptelist_buf *buf)
 	}
 
 	if (ofi_atomic_get32(&buf->refcount) != 0)
-		RXC_FATAL(rxc, "PtlTE %d %s buf %p non-zero refcount %u\n",
-			  rxc->rx_pte->pte->ptn,
+		RXC_FATAL(rxc, "%s buf %p non-zero refcount %u\n",
 			  cxip_ptelist_to_str(buf->pool), buf,
 			  ofi_atomic_get32(&buf->refcount));
 	cxip_cq_req_free(buf->req);
@@ -229,8 +225,8 @@ static void cxip_ptelist_buf_free(struct cxip_ptelist_buf *buf)
 
 	ofi_atomic_dec32(&buf->pool->bufs_allocated);
 
-	RXC_DBG(rxc, "PtlTE %d freeing %s buf %p num_alloc %u\n",
-		rxc->rx_pte->pte->ptn, cxip_ptelist_to_str(buf->pool), buf,
+	RXC_DBG(rxc, "Freeing %s buf %p num_alloc %u\n",
+		cxip_ptelist_to_str(buf->pool), buf,
 		ofi_atomic_get32(&buf->pool->bufs_allocated));
 	free(buf);
 }
@@ -252,8 +248,8 @@ void cxip_ptelist_buf_link_err(struct cxip_ptelist_buf *buf,
 {
 	struct cxip_rxc *rxc = buf->pool->rxc;
 
-	RXC_WARN(rxc, "PtlTE %d %s buffer %p link error %s\n",
-		 rxc->rx_pte->pte->ptn, cxip_ptelist_to_str(buf->pool),
+	RXC_WARN(rxc, "%s buffer %p link error %s\n",
+		 cxip_ptelist_to_str(buf->pool),
 		 buf, cxi_rc_to_str(rc_link_error));
 
 	assert(rc_link_error == C_RC_NO_SPACE);
@@ -277,8 +273,7 @@ void cxip_ptelist_buf_unlink(struct cxip_ptelist_buf *buf)
 	cxip_ptelist_buf_put(buf, false);
 	ofi_atomic_dec32(&pool->bufs_linked);
 
-	RXC_DBG(pool->rxc, "PtlTE: %d %s buffer unlink\n",
-		pool->rxc->rx_pte->pte->ptn, cxip_ptelist_to_str(pool));
+	RXC_DBG(pool->rxc, "%s buffer unlink\n", cxip_ptelist_to_str(pool));
 }
 
 int cxip_ptelist_bufpool_init(struct cxip_rxc *rxc,
@@ -349,9 +344,9 @@ void cxip_ptelist_bufpool_fini(struct cxip_ptelist_bufpool *pool)
 
 	assert(rxc->rx_pte->state == C_PTLTE_DISABLED);
 
-	CXIP_INFO("PtlTE %d number of %s buffers allocated %d\n",
-		  rxc->rx_pte->pte->ptn, cxip_ptelist_to_str(pool),
-		  ofi_atomic_get32(&pool->bufs_allocated));
+	RXC_INFO(rxc, "Number of %s buffers allocated %d\n",
+		 cxip_ptelist_to_str(pool),
+		 ofi_atomic_get32(&pool->bufs_allocated));
 
 	/* All request buffers are split between the active and consumed list.
 	 * Only active buffers need to be unlinked.
@@ -408,33 +403,28 @@ int cxip_ptelist_buf_replenish(struct cxip_ptelist_bufpool *pool,
 					buf_entry);
 			ofi_atomic_dec32(&buf->pool->bufs_free);
 
-			RXC_DBG(rxc, "PtlTE %d %s LINK REPOST buf %p\n",
-				rxc->rx_pte->pte->ptn,
+			RXC_DBG(rxc, "%s LINK REPOST buf %p\n",
 				cxip_ptelist_to_str(pool), buf);
 		} else {
 			buf = cxip_ptelist_buf_alloc(pool);
 
-			RXC_DBG(rxc, "PtlTE %d %s LINK NEW buf %p\n",
-				rxc->rx_pte->pte->ptn,
+			RXC_DBG(rxc, "%s LINK NEW buf %p\n",
 				cxip_ptelist_to_str(pool), buf);
 
 		}
 
 		if (!buf) {
-			RXC_WARN(rxc, "PtlTE %d %s buffer allocation err\n",
-				 rxc->rx_pte->pte->ptn,
+			RXC_WARN(rxc, "%s buffer allocation err\n",
 				 cxip_ptelist_to_str(pool));
 			break;
 		}
 
-		RXC_DBG(rxc, "PtlTE %d link %s buf entry %p\n",
-			rxc->rx_pte->pte->ptn, cxip_ptelist_to_str(pool),
-			buf);
+		RXC_DBG(rxc, "Link %s buf entry %p\n",
+			cxip_ptelist_to_str(pool), buf);
 
 		ret = cxip_ptelist_link_buf(buf, !bufs_added);
 		if (ret) {
-			RXC_WARN(rxc, "PtlTE %d %s append failure %d %s\n",
-				 rxc->rx_pte->pte->ptn,
+			RXC_WARN(rxc, "%s append failure %d %s\n",
 				 cxip_ptelist_to_str(pool), ret,
 				 fi_strerror(-ret));
 
@@ -449,13 +439,12 @@ int cxip_ptelist_buf_replenish(struct cxip_ptelist_bufpool *pool,
 	/* If no buffer appended, check for fatal conditions. */
 	if (!bufs_added) {
 		if (ofi_atomic_get32(&pool->bufs_linked) < 1)
-			RXC_FATAL(rxc, "PtlTE %d %s buffer list exhausted\n",
-				  rxc->rx_pte->pte->ptn,
+			RXC_FATAL(rxc, "%s buffer list exhausted\n",
 				  cxip_ptelist_to_str(pool));
 	}
 
-	RXC_DBG(rxc, "PtlTE %d %s current bufs alloc %u, num linked %u\n",
-		rxc->rx_pte->pte->ptn, cxip_ptelist_to_str(pool),
+	RXC_DBG(rxc, "%s current bufs alloc %u, num linked %u\n",
+		cxip_ptelist_to_str(pool),
 		ofi_atomic_get32(&pool->bufs_allocated),
 		ofi_atomic_get32(&pool->bufs_linked));
 
@@ -466,8 +455,7 @@ void cxip_ptelist_buf_get(struct cxip_ptelist_buf *buf)
 {
 	ofi_atomic_inc32(&buf->refcount);
 
-	RXC_DBG(buf->rxc, "PtlTE %d %s GET buf %p refcnt %u\n",
-		buf->rxc->rx_pte->pte->ptn,
+	RXC_DBG(buf->rxc, "%s GET buf %p refcnt %u\n",
 		cxip_ptelist_to_str(buf->pool),
 		buf, ofi_atomic_get32(&buf->refcount));
 }
@@ -477,14 +465,11 @@ void cxip_ptelist_buf_put(struct cxip_ptelist_buf *buf, bool repost)
 	int ret;
 	int refcount = ofi_atomic_dec32(&buf->refcount);
 
-	RXC_DBG(buf->rxc, "PtlTE %d %s PUT buf %p refcnt %u repost %d\n",
-		buf->rxc->rx_pte->pte->ptn,
+	RXC_DBG(buf->rxc, "%s PUT buf %p refcnt %u repost %d\n",
 		cxip_ptelist_to_str(buf->pool), buf, refcount, repost);
 
 	if (refcount < 0) {
-		RXC_FATAL(buf->rxc,
-			  "PtlTE %d %s buffer refcount underflow %d\n",
-			  buf->rxc->rx_pte->pte->ptn,
+		RXC_FATAL(buf->rxc, "%s buffer refcount underflow %d\n",
 			  cxip_ptelist_to_str(buf->pool), refcount);
 		/* not needed */
 		return;
@@ -509,10 +494,9 @@ void cxip_ptelist_buf_put(struct cxip_ptelist_buf *buf, bool repost)
 
 			if (ret != FI_SUCCESS)
 				RXC_FATAL(buf->rxc,
-					"PtlTE %d fatal %s buf link err %d %s",
-					buf->rxc->rx_pte->pte->ptn,
-					cxip_ptelist_to_str(buf->pool),
-					ret, fi_strerror(-ret));
+					  "Fatal %s buf link err %d %s",
+					  cxip_ptelist_to_str(buf->pool),
+					  ret, fi_strerror(-ret));
 
 			return;
 		}
@@ -549,8 +533,7 @@ free_buf:
 
 void cxip_ptelist_buf_consumed(struct cxip_ptelist_buf *buf)
 {
-	RXC_DBG(buf->rxc, "PtlTE %d %s CONSUMED off %ld len %ld buf %p\n",
-		buf->rxc->rx_pte->pte->ptn,
+	RXC_DBG(buf->rxc, "%s CONSUMED off %ld len %ld buf %p\n",
 		cxip_ptelist_to_str(buf->pool), buf->cur_offset,
 		buf->unlink_length, buf);
 
@@ -573,7 +556,6 @@ void _cxip_req_buf_ux_free(struct cxip_ux_send *ux, bool repost)
 	cxip_ptelist_buf_put(buf, repost);
 	free(ux);
 
-	RXC_DBG(buf->rxc, "PtlTE %d %s buf %p ux %p\n",
-		buf->rxc->rx_pte->pte->ptn,
+	RXC_DBG(buf->rxc, "%s buf %p ux %p\n",
 		cxip_ptelist_to_str(buf->pool), buf, ux);
 }
