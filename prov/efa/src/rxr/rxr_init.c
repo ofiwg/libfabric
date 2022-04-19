@@ -71,6 +71,7 @@ struct rxr_env rxr_env = {
 	.efa_min_read_write_size = 65536,
 	.efa_read_segment_size = 1073741824,
 	.rnr_retry = 3, /* Setting this value to EFA_RNR_INFINITE_RETRY makes the firmware retry indefinitey */
+	.efa_runt_size = 0,
 };
 
 /* @brief Read and store the FI_EFA_* environment variables.
@@ -141,7 +142,8 @@ void rxr_init_env(void)
 			    &rxr_env.efa_read_segment_size);
 	fi_param_get_size_t(&rxr_prov, "inter_max_gdrcopy_message_size",
 			    &rxr_env.efa_max_gdrcopy_msg_size);
-
+	fi_param_get_size_t(&rxr_prov, "runt_size",
+			    &rxr_env.efa_runt_size);
 	efa_fork_support_request_initialize();
 }
 
@@ -730,5 +732,7 @@ void rxr_define_env()
 			"Calls to RDMA read is segmented using this value.");
 	fi_param_define(&rxr_prov, "fork_safe", FI_PARAM_BOOL,
 			"Enables fork support and disables internal usage of huge pages. Has no effect on kernels which set copy-on-fork for registered pages, generally 5.13 and later. (Default: false)");
+	fi_param_define(&rxr_prov, "runt_size", FI_PARAM_INT,
+			"The part of message that will be eagerly sent of a runting protocol (Default 0).");
 }
 
