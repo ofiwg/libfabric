@@ -35,8 +35,6 @@
 #ifndef FI_LOG_H
 #define FI_LOG_H
 
-#include "config.h"
-
 #include <rdma/fabric.h>
 #include <rdma/providers/fi_prov.h>
 
@@ -106,7 +104,7 @@ void fi_log(const struct fi_provider *prov, enum fi_log_level level,
 #define FI_INFO(prov, subsystem, ...)					\
 	FI_LOG(prov, FI_LOG_INFO, subsystem, __VA_ARGS__)
 
-#if ENABLE_DEBUG
+#if defined(ENABLE_DEBUG) && ENABLE_DEBUG
 #define FI_DBG(prov, subsystem, ...)					\
 	FI_LOG(prov, FI_LOG_DEBUG, subsystem, __VA_ARGS__)
 #define FI_DBG_TRACE(prov, subsystem, ...)				\
