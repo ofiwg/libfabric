@@ -64,10 +64,11 @@
 #include "ofi_util.h"
 #include "ofi_file.h"
 
-#include "efa_fork_support.h"
-#include "efa_device.h"
-#include "efa_hmem.h"
 #include "efa_mr.h"
+#include "efa_hmem.h"
+#include "efa_device.h"
+#include "efa_domain.h"
+#include "efa_fork_support.h"
 #include "rxr.h"
 #define EFA_PROV_NAME "efa"
 
@@ -86,6 +87,9 @@
 
 #define EFA_EP_TYPE_IS_RDM(_info) \
 	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_RDM))
+
+#define EFA_EP_TYPE_IS_DGRAM(_info) \
+	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_DGRAM))
 
 #define EFA_DEF_POOL_ALIGNMENT (8)
 #define EFA_MEM_ALIGNMENT (64)
@@ -144,86 +148,6 @@ struct efa_conn {
 	fi_addr_t		util_av_fi_addr;
 	struct rdm_peer		rdm_peer;
 };
-
-/*
- * Common fields for the beginning of the efa_domain and rxr_domain structures.
- * This structure must be kept in sync with rxr_domain and efa_domain. This
- * will be removed when the rxr and efa domain structures are combined.
- */
-struct efa_domain_base {
-	struct util_domain	util_domain;
-	enum efa_domain_type	type;
-};
-
-struct efa_domain {
-	struct util_domain	util_domain;
-	enum efa_domain_type	type;
-	struct fid_domain	*shm_domain;
-	struct efa_device	*device;
-	struct ibv_pd		*ibv_pd;
-	struct fi_info		*info;
-	struct efa_fabric	*fab;
-	struct ofi_mr_cache	*cache;
-	struct efa_qp		**qp_table;
-	size_t			qp_table_sz_m1;
-	struct efa_hmem_support_status	hmem_support_status[OFI_HMEM_MAX];
-};
-
-/**
- * @brief get a pointer to struct efa_domain from a domain_fid
- *
- * @param[in]	domain_fid	a fid to a domain
- * @return	return the pointer to struct efa_domain
- */
-static inline
-struct efa_domain *efa_domain_from_fid(struct fid_domain *domain_fid)
-{
-	struct util_domain *util_domain;
-	struct efa_domain_base *efa_domain_base;
-	struct rxr_domain *rxr_domain;
-	struct efa_domain *efa_domain;
-
-	util_domain = container_of(domain_fid, struct util_domain,
-				   domain_fid);
-	efa_domain_base = container_of(util_domain, struct efa_domain_base,
-				       util_domain.domain_fid);
-
-	/*
-	 * An rxr_domain fid was passed to the user if this is an RDM
-	 * endpoint, otherwise it is an efa_domain fid.  This will be
-	 * removed once the rxr and efa domain structures are combined.
-	 */
-	if (efa_domain_base->type == EFA_DOMAIN_RDM) {
-		rxr_domain = (struct rxr_domain *)efa_domain_base;
-		efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
-					  util_domain.domain_fid);
-	} else {
-		assert(efa_domain_base->type == EFA_DOMAIN_DGRAM);
-		efa_domain = (struct efa_domain *)efa_domain_base;
-	}
-
-	return efa_domain;
-}
-
-/**
- * @brief get efa domain type from domain fid
- *
- * @param[in]	domain_fid	a fid to a domain
- * @return	efa domain type, either EFA_DOMAIN_DGRAM or EFA_DOMAIN_RDM
- */
-static inline
-enum efa_domain_type efa_domain_get_type(struct fid_domain *domain_fid)
-{
-	struct util_domain *util_domain;
-	struct efa_domain_base *efa_domain_base;
-
-	util_domain = container_of(domain_fid, struct util_domain,
-				   domain_fid);
-	efa_domain_base = container_of(util_domain, struct efa_domain_base,
-				       util_domain.domain_fid);
-
-	return efa_domain_base->type;
-}
 
 struct efa_wc {
 	struct ibv_wc		ibv_wc;
@@ -337,19 +261,10 @@ struct efa_prv_reverse_av {
 
 #define EFA_DGRAM_CONNID (0x0)
 
-struct efa_ep_domain {
-	char		*suffix;
-	enum fi_ep_type	type;
-	uint64_t	caps;
-};
-
 static inline struct efa_av *rxr_ep_av(struct rxr_ep *ep)
 {
 	return container_of(ep->util_ep.av, struct efa_av, util_av);
 }
-
-extern const struct efa_ep_domain efa_rdm_domain;
-extern const struct efa_ep_domain efa_dgrm_domain;
 
 extern struct fi_ops_cm efa_ep_cm_ops;
 extern struct fi_ops_msg efa_ep_msg_ops;
@@ -584,19 +499,6 @@ static inline int efa_ep_use_p2p(struct efa_ep *ep, struct efa_mr *efa_mr)
 	return 0;
 }
 
-/*
- * efa_is_cache_available() is a check to see whether a memory registration
- * cache is available to be used by this domain.
- *
- * Return value:
- *    return true if a memory registration cache exists in this domain.
- *    return false if a memory registration cache does not exist in this domain.
- */
-static inline bool efa_is_cache_available(struct efa_domain *efa_domain)
-{
-	return efa_domain->cache;
-}
-
 #define RXR_REQ_OPT_HDR_ALIGNMENT 8
 #define RXR_REQ_OPT_RAW_ADDR_HDR_SIZE (((sizeof(struct rxr_req_opt_raw_addr_hdr) + EFA_EP_ADDR_LEN - 1)/RXR_REQ_OPT_HDR_ALIGNMENT + 1) * RXR_REQ_OPT_HDR_ALIGNMENT)
 
@@ -624,7 +526,7 @@ extern const char *efa_perf_counters_str[];
 
 static inline void efa_perfset_start(struct rxr_ep *ep, size_t index)
 {
-	struct rxr_domain *domain = rxr_ep_domain(ep);
+	struct efa_domain *domain = rxr_ep_domain(ep);
 	struct efa_fabric *fabric = container_of(domain->util_domain.fabric,
 						 struct efa_fabric,
 						 util_fabric);
@@ -633,7 +535,7 @@ static inline void efa_perfset_start(struct rxr_ep *ep, size_t index)
 
 static inline void efa_perfset_end(struct rxr_ep *ep, size_t index)
 {
-	struct rxr_domain *domain = rxr_ep_domain(ep);
+	struct efa_domain *domain = rxr_ep_domain(ep);
 	struct efa_fabric *fabric = container_of(domain->util_domain.fabric,
 						 struct efa_fabric,
 						 util_fabric);

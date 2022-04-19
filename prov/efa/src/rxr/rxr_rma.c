@@ -402,14 +402,12 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 {
 	ssize_t err;
 	struct rdm_peer *peer;
-	struct efa_domain *efa_domain;
 	bool delivery_complete_requested;
 	int ctrl_type;
 	size_t max_eager_rtw_data_size;
-	struct rxr_domain *rxr_domain = rxr_ep_domain(ep);
-
-	efa_domain = container_of(rxr_domain->rdm_domain, struct efa_domain,
-				  util_domain.domain_fid);
+	struct efa_domain *efa_domain;
+       
+	efa_domain = rxr_ep_domain(ep);
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(peer);

@@ -805,7 +805,6 @@
     <ClCompile Include="prov\efa\src\rxr\rxr_attr.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_cntr.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_cq.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_domain.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_ep.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_init.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_msg.c" />

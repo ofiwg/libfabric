@@ -147,13 +147,16 @@ ssize_t rxr_read_mr_reg(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 {
 	size_t i;
 	int err;
+	struct efa_domain *efa_domain;
+
+	efa_domain = rxr_ep_domain(ep);
 
 	for (i = 0; i < read_entry->iov_count; ++i) {
 		if (read_entry->mr_desc[i] || read_entry->mr[i]) {
 			continue;
 		}
 
-		err = fi_mr_reg(rxr_ep_domain(ep)->rdm_domain,
+		err = fi_mr_reg(&efa_domain->util_domain.domain_fid,
 				read_entry->iov[i].iov_base, read_entry->iov[i].iov_len,
 				FI_RECV, 0, 0, 0, &read_entry->mr[i], NULL);
 
@@ -435,6 +438,9 @@ int rxr_read_init_iov(struct rxr_ep *ep,
 	int i, err;
 	struct fid_mr *mr;
 	struct rdm_peer *peer;
+	struct efa_domain *efa_domain;
+
+	efa_domain = rxr_ep_domain(ep);
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 
@@ -456,11 +462,11 @@ int rxr_read_init_iov(struct rxr_ep *ep,
 				assert(peer);
 
 				if (peer->is_local)
-					err = efa_mr_reg_shm(rxr_ep_domain(ep)->rdm_domain,
+					err = efa_mr_reg_shm(&efa_domain->util_domain.domain_fid,
 							     tx_entry->iov + i,
 							     FI_REMOTE_READ, &tx_entry->mr[i]);
 				else
-					err = fi_mr_regv(rxr_ep_domain(ep)->rdm_domain,
+					err = fi_mr_regv(&efa_domain->util_domain.domain_fid,
 							 tx_entry->iov + i, 1,
 							 FI_REMOTE_READ,
 							 0, 0, 0, &tx_entry->mr[i], NULL);

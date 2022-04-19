@@ -38,7 +38,6 @@
 #include <ofi_util.h>
 #include <ofi_iov.h>
 
-#include "rxr.h"
 #include "efa.h"
 #include "rxr_msg.h"
 #include "rxr_rma.h"

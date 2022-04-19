@@ -30,76 +30,18 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include <assert.h>
+#include <ofi_util.h>
 
 #include "config.h"
-
-#include <ofi_util.h>
 #include "efa.h"
+#include "rxr.h"
 #include "rxr_cntr.h"
+#include "rxr_atomic.h"
 
-static int efa_domain_close(fid_t fid)
-{
-	struct efa_domain *domain;
-	int ret;
+static int efa_domain_close(fid_t fid);
 
-	domain = container_of(fid, struct efa_domain,
-			      util_domain.domain_fid.fid);
-
-	if (efa_is_cache_available(domain)) {
-		ofi_mr_cache_cleanup(domain->cache);
-		free(domain->cache);
-		domain->cache = NULL;
-	}
-
-	if (domain->ibv_pd) {
-		domain->ibv_pd = NULL;
-	}
-
-	ret = ofi_domain_close(&domain->util_domain);
-	if (ret)
-		return ret;
-
-	if (domain->shm_domain) {
-		ret = fi_close(&domain->shm_domain->fid);
-		if (ret)
-			return ret;
-	}
-
-	fi_freeinfo(domain->info);
-	free(domain->qp_table);
-	free(domain);
-	return 0;
-}
-
-static int efa_open_device_by_name(struct efa_domain *domain, const char *name)
-{
-	int i, ret = -FI_ENODEV;
-	int name_len;
-
-	if (!name)
-		return -FI_EINVAL;
-
-	if (domain->type == EFA_DOMAIN_RDM)
-		name_len = strlen(name) - strlen(efa_rdm_domain.suffix);
-	else
-		name_len = strlen(name) - strlen(efa_dgrm_domain.suffix);
-
-	for (i = 0; i < g_device_cnt; i++) {
-		ret = strncmp(name, g_device_list[i].ibv_ctx->device->name, name_len);
-		if (!ret) {
-			domain->device = &g_device_list[i];
-			break;
-		}
-	}
-
-	if (i == g_device_cnt)
-		return -FI_ENODEV;
-
-	domain->ibv_pd = domain->device->ibv_pd;
-	return 0;
-}
-
-static struct fi_ops efa_fid_ops = {
+static struct fi_ops efa_ops_domain_fid = {
 	.size = sizeof(struct fi_ops),
 	.close = efa_domain_close,
 	.bind = fi_no_bind,
@@ -107,7 +49,7 @@ static struct fi_ops efa_fid_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static struct fi_ops_domain efa_domain_ops = {
+static struct fi_ops_domain efa_ops_domain_dgram = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = efa_av_open,
 	.cq_open = efa_cq_open,
@@ -121,17 +63,107 @@ static struct fi_ops_domain efa_domain_ops = {
 	.query_collective = fi_no_query_collective,
 };
 
+static struct fi_ops_domain efa_ops_domain_rdm = {
+	.size = sizeof(struct fi_ops_domain),
+	.av_open = efa_av_open,
+	.cq_open = rxr_cq_open,
+	.endpoint = rxr_endpoint,
+	.scalable_ep = fi_no_scalable_ep,
+	.cntr_open = efa_cntr_open,
+	.poll_open = fi_poll_create,
+	.stx_ctx = fi_no_stx_context,
+	.srx_ctx = fi_no_srx_context,
+	.query_atomic = rxr_query_atomic,
+	.query_collective = fi_no_query_collective,
+};
+
+/**
+ * @brief init the device and ibv_pd field in efa_domain
+ *
+ * @param efa_domain[in,out]	efa domain to be set.
+ * @param domain_name		domain name
+ * @return 0 if efa_domain->device and efa_domain->ibv_pd has been set successfully
+ *         negative error code if err is encountered
+ */
+static int efa_domain_init_device_and_pd(struct efa_domain *efa_domain, const char *domain_name)
+{
+	int i;
+	int name_len, name_diff;
+
+	if (!domain_name)
+		return -FI_EINVAL;
+
+	assert(efa_domain->info);
+	if (EFA_EP_TYPE_IS_RDM(efa_domain->info))
+		name_len = strlen(domain_name) - strlen(efa_rdm_domain.suffix);
+	else
+		name_len = strlen(domain_name) - strlen(efa_dgrm_domain.suffix);
+
+	for (i = 0; i < g_device_cnt; i++) {
+		name_diff = strncmp(domain_name, g_device_list[i].ibv_ctx->device->name, name_len);
+		if (!name_diff) {
+			efa_domain->device = &g_device_list[i];
+			break;
+		}
+	}
+
+	if (i == g_device_cnt)
+		return -FI_ENODEV;
+
+	efa_domain->ibv_pd = efa_domain->device->ibv_pd;
+	return 0;
+}
+
+static int efa_domain_init_qp_table(struct efa_domain *efa_domain)
+{
+	size_t qp_table_size;
+
+	qp_table_size = roundup_power_of_two(efa_domain->device->ibv_attr.max_qp);
+	efa_domain->qp_table_sz_m1 = qp_table_size - 1;
+	efa_domain->qp_table = calloc(qp_table_size, sizeof(*efa_domain->qp_table));
+	if (!efa_domain->qp_table)
+		return -FI_ENOMEM;
+
+	return 0;
+}
+
+static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *info)
+{
+	int err;
+
+	rxr_info.addr_format = info->addr_format;
+	/*
+	 * Set the RxR's tx/rx size here based on core provider the user
+	 * selected so that ofi_prov_check_info succeeds.
+	 *
+	 * TODO: handle the case where a single process opens multiple domains
+	 * with different core providers
+	 */
+	rxr_info.tx_attr->size = info->tx_attr->size;
+	rxr_info.rx_attr->size = info->rx_attr->size;
+	rxr_info.rx_attr->op_flags |= info->rx_attr->op_flags & FI_MULTI_RECV;
+
+	if (efa_domain->fabric->shm_fabric) {
+		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
+		err = fi_domain(efa_domain->fabric->shm_fabric, shm_info,
+				&efa_domain->shm_domain, NULL);
+		if (err)
+			return err;
+	}
+
+	efa_domain->rdm_mode = info->mode;
+	efa_domain->mtu_size = efa_domain->device->ibv_port_attr.max_msg_sz;
+	efa_domain->addrlen = (info->src_addr) ? info->src_addrlen : info->dest_addrlen;
+	efa_domain->rdm_cq_size = MAX(info->rx_attr->size + info->tx_attr->size,
+				  rxr_env.cq_size);
+	return 0;
+}
+
 /* @brief Allocate a domain, open the device, and set it up based on the hints.
  *
  * This function creates a domain and uses the info struct to configure the
  * domain based on what capabilities are set. Fork support is checked here and
  * the MR cache is also set up here.
- *
- * Note the trickery with rxr_domain where detect whether this endpoint is RDM
- * or DGRAM to set some state in rxr_domain. We can do this as the type field
- * is at the beginning of efa_domain and rxr_domain, and we know efa_domain
- * stored within rxr_domain. This will be removed when rxr_domain_open and
- * efa_domain_open are combined.
  *
  * @param fabric_fid fabric that the domain should be tied to
  * @param info info struct that was validated and returned by fi_getinfo
@@ -142,124 +174,157 @@ static struct fi_ops_domain efa_domain_ops = {
 int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		    struct fid_domain **domain_fid, void *context)
 {
-	struct efa_domain *domain;
-	struct efa_fabric *fabric;
-	const struct fi_info *fi;
-	size_t qp_table_size;
-	bool app_mr_local;
-	int ret, err;
+	struct efa_domain *efa_domain;
+	int ret = 0, err;
 
-	fi = efa_get_efa_info(info->domain_attr->name);
-	if (!fi)
-		return -FI_EINVAL;
-
-	fabric = container_of(fabric_fid, struct efa_fabric,
-			      util_fabric.fabric_fid);
-	ret = ofi_check_domain_attr(&efa_prov, fabric_fid->api_version,
-				    fi->domain_attr, info);
-	if (ret)
-		return ret;
-
-	domain = calloc(1, sizeof(*domain));
-	if (!domain)
+	efa_domain = calloc(1, sizeof(struct efa_domain));
+	if (!efa_domain)
 		return -FI_ENOMEM;
 
-	qp_table_size = roundup_power_of_two(info->domain_attr->ep_cnt);
-	domain->qp_table_sz_m1 = qp_table_size - 1;
-	domain->qp_table = calloc(qp_table_size, sizeof(*domain->qp_table));
-	if (!domain->qp_table) {
-		ret = -FI_ENOMEM;
-		goto err_free_domain;
-	}
+	efa_domain->fabric = container_of(fabric_fid, struct efa_fabric,
+					  util_fabric.fabric_fid);
 
-	ret = ofi_domain_init(fabric_fid, info, &domain->util_domain,
+	err = ofi_domain_init(fabric_fid, info, &efa_domain->util_domain,
 			      context, 0);
-	if (ret)
-		goto err_free_qp_table;
+	if (err) {
+		ret = err;
+		goto err_free;
+	}
 
-	domain->info = fi_dupinfo(info);
-	if (!domain->info) {
+	efa_domain->util_domain.mr_map.mode |= FI_MR_VIRT_ADDR;
+	/*
+	 * FI_MR_PROV_KEY means provider will generate a key for MR,
+	 * which EFA provider does by using key generated by EFA device.
+	 *
+	 * util_domain.mr_map.mode is same as info->mode, which has
+	 * the bit FI_MR_PROV_KEY on. When the bit is on, util_domain.mr_map
+	 * will generate a key for MR, which is not what we want
+	 * (we want to use the key generated by device). Therefore unset
+	 * the FI_MR_PROV_KEY bit of mr_map.
+	 */
+	efa_domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
+
+	efa_domain->info = fi_dupinfo(efa_get_efa_info(info->domain_attr->name));
+	if (!efa_domain->info) {
 		ret = -FI_ENOMEM;
-		goto err_close_domain;
+		goto err_free;
 	}
 
-	if (EFA_EP_TYPE_IS_RDM(info)) {
-		struct rxr_domain *rxr_domain;
-		domain->type = EFA_DOMAIN_RDM;
-		rxr_domain = container_of(domain_fid, struct rxr_domain,
-					  rdm_domain);
-		app_mr_local = rxr_domain->rxr_mr_local;
-	} else {
-		domain->type = EFA_DOMAIN_DGRAM;
-		/* DGRAM always requires FI_MR_LOCAL */
-		app_mr_local = true;
+	efa_domain->mr_local = ofi_mr_local(info);
+	if (EFA_EP_TYPE_IS_DGRAM(info) && !efa_domain->mr_local) {
+		EFA_WARN(FI_LOG_EP_DATA, "dgram require FI_MR_LOCAL, but application does not support it\n");
+		ret = -FI_ENODATA;
+		goto err_free;
 	}
 
-	ret = efa_open_device_by_name(domain, info->domain_attr->name);
-	if (ret)
-		goto err_free_info;
+	err = efa_domain_init_device_and_pd(efa_domain, info->domain_attr->name);
+	if (err) {
+		ret = err;
+		goto err_free;
+	}
 
-	domain->util_domain.domain_fid.fid.ops = &efa_fid_ops;
-	domain->util_domain.domain_fid.ops = &efa_domain_ops;
-	/* RMA mr_modes are being removed, since EFA layer
-	 * does not have RMA capabilities. Hence, adding FI_MR_VIRT_ADDR
-	 * until RMA capabilities are added to EFA layer
-	 */
-	domain->util_domain.mr_map.mode |= FI_MR_VIRT_ADDR;
+	*domain_fid = &efa_domain->util_domain.domain_fid;
+
+	err = efa_domain_init_qp_table(efa_domain);
+	if (err) {
+		ret = err;
+		EFA_WARN(FI_LOG_DOMAIN, "Failed to init qp table. err: %d", ret);
+		goto err_free;
+	}
+
 	/*
-	 * ofi_domain_init() would have stored the EFA mr_modes in the mr_map,
-	 * but we need the rbtree insertions and lookups to use EFA provider's
-	 * specific key, so unset the FI_MR_PROV_KEY bit for mr_map.
+	 * FI_MR_LOCAL means application will handle memory registration by itself.
+	 * Therefore when FI_MR_LOCAL is on, MR cache is not necessary.
 	 */
-	domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
-	domain->fab = fabric;
-
-	domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
-
-	*domain_fid = &domain->util_domain.domain_fid;
-
-	domain->cache = NULL;
-
-	ret = efa_fork_support_enable_if_requested(*domain_fid);
-	if (ret) {
-		EFA_WARN(FI_LOG_DOMAIN, "Failed to initialize fork support %d", ret);
-		goto err_free_info;
-	}
-
-	if (EFA_EP_TYPE_IS_RDM(info)) {
-		ret = efa_hmem_support_status_update_all(domain->hmem_support_status);
-		if (ret) {
-			EFA_WARN(FI_LOG_DOMAIN,
-				 "efa_check_hmem_support failed: %s\n",
-				 fi_strerror(-ret));
-			goto err_free_info;
+	if (!efa_domain->mr_local && efa_mr_cache_enable) {
+		err = efa_mr_cache_open(&efa_domain->cache, efa_domain);
+		if (err) {
+			ret = err;
+			goto err_free;
 		}
+
+		efa_domain->util_domain.domain_fid.mr = &efa_domain_mr_cache_ops;
+	} else {
+		efa_domain->util_domain.domain_fid.mr = &efa_domain_mr_ops;
 	}
 
-	/*
-	 * If FI_MR_LOCAL is set, we do not want to use the MR cache.
-	 */
-	if (!app_mr_local && efa_mr_cache_enable) {
-		ret = efa_mr_cache_open(&domain->cache, domain);
-		if (ret)
-			goto err_free_info;
+	efa_domain->util_domain.domain_fid.fid.ops = &efa_ops_domain_fid;
+	if (EFA_EP_TYPE_IS_RDM(info)) {
+		err = efa_domain_init_rdm(efa_domain, info);
+		if (err) {
+			EFA_WARN(FI_LOG_DOMAIN,
+				 "efa_domain_init_rdm failed. err: %d\n",
+				 -err);
+			goto err_free;
+		}
+		efa_domain->util_domain.domain_fid.ops = &efa_ops_domain_rdm;
+	} else {
+		assert(EFA_EP_TYPE_IS_DGRAM(info));
+		efa_domain->util_domain.domain_fid.ops = &efa_ops_domain_dgram;
+	}
 
-		domain->util_domain.domain_fid.mr = &efa_domain_mr_cache_ops;
+	err = efa_fork_support_enable_if_requested(*domain_fid);
+	if (err) {
+		ret = err;
+		EFA_WARN(FI_LOG_DOMAIN, "Failed to initialize fork support. err: %d", ret);
+		goto err_free;
+	}
+
+	err = efa_hmem_support_status_update_all(efa_domain->hmem_support_status);
+	if (err) {
+		ret = err;
+		EFA_WARN(FI_LOG_DOMAIN, "Failed to check hmem support status. err: %d", ret);
+		goto err_free;
 	}
 
 	return 0;
-err_free_info:
-	fi_freeinfo(domain->info);
-err_close_domain:
-	err = ofi_domain_close(&domain->util_domain);
+
+err_free:
+	assert(efa_domain);
+
+	err = efa_domain_close(&efa_domain->util_domain.domain_fid.fid);
 	if (err) {
-		EFA_WARN(FI_LOG_DOMAIN,
-			   "ofi_domain_close fails: %d", err);
+		EFA_WARN(FI_LOG_DOMAIN, "When handling error (%d), domain resource was being released."
+			 "During the release process, an addtional error (%d) was encoutered\n",
+			 -ret, -err);
 	}
-err_free_qp_table:
-	free(domain->qp_table);
-err_free_domain:
-	free(domain);
+
+	efa_domain = NULL;
 	return ret;
+}
+
+static int efa_domain_close(fid_t fid)
+{
+	struct efa_domain *efa_domain;
+	int ret;
+
+	efa_domain = container_of(fid, struct efa_domain,
+				  util_domain.domain_fid.fid);
+
+	if (efa_domain->cache) {
+		ofi_mr_cache_cleanup(efa_domain->cache);
+		free(efa_domain->cache);
+		efa_domain->cache = NULL;
+	}
+
+	if (efa_domain->ibv_pd) {
+		efa_domain->ibv_pd = NULL;
+	}
+
+	ret = ofi_domain_close(&efa_domain->util_domain);
+	if (ret)
+		return ret;
+
+	if (efa_domain->shm_domain) {
+		ret = fi_close(&efa_domain->shm_domain->fid);
+		if (ret)
+			return ret;
+	}
+
+	if (efa_domain->info)
+		fi_freeinfo(efa_domain->info);
+	free(efa_domain->qp_table);
+	free(efa_domain);
+	return 0;
 }
 

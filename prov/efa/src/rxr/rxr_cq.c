@@ -36,14 +36,13 @@
 #include <inttypes.h>
 #include <ofi_iov.h>
 #include <ofi_recvwin.h>
-#include "rxr.h"
+#include "efa.h"
 #include "rxr_rma.h"
 #include "rxr_msg.h"
 #include "rxr_cntr.h"
 #include "rxr_read.h"
 #include "rxr_atomic.h"
 #include "rxr_pkt_cmd.h"
-#include "efa.h"
 
 static const char *rxr_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 				   const void *err_data, char *buf, size_t len)
@@ -880,7 +879,7 @@ int rxr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 {
 	int ret;
 	struct util_cq *cq;
-	struct rxr_domain *rxr_domain;
+	struct efa_domain *efa_domain;
 
 	if (attr->wait_obj != FI_WAIT_NONE)
 		return -FI_ENOSYS;
@@ -889,10 +888,10 @@ int rxr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!cq)
 		return -FI_ENOMEM;
 
-	rxr_domain = container_of(domain, struct rxr_domain,
+	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
 	/* Override user cq size if it's less than recommended cq size */
-	attr->size = MAX(rxr_domain->cq_size, attr->size);
+	attr->size = MAX(efa_domain->rdm_cq_size, attr->size);
 
 	ret = ofi_cq_init(&rxr_prov, domain, attr, cq,
 			  &ofi_cq_progress, context);
