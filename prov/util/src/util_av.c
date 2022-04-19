@@ -632,6 +632,10 @@ int ofi_ip_av_insertv(struct util_av *av, const void *addr, size_t addrlen,
 	int *sync_err = NULL;
 	size_t i;
 
+	assert(av->addrlen >= addrlen);
+	if (av->addrlen > addrlen)
+		av->addrlen = addrlen;
+
 	FI_DBG(av->prov, FI_LOG_AV, "inserting %zu addresses\n", count);
 	if (flags & FI_SYNC_ERR) {
 		sync_err = context;
