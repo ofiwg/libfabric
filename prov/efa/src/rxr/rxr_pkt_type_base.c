@@ -90,19 +90,19 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
  *        pkt_entry->iov to tx_entry->iov.
  *        It requires the packet header to be set.
  *
- * @param[in]		ep		end point.
- * @param[in,out]	pkt_entry	packet entry. Header must have been set when the function is called
- * @param[in]		hdr_size	packet header size.
- * @param[in]		tx_entry	This function will use iov, iov_count and desc of tx_entry
- * @param[in]		data_offset	offset of the data to be set up. In reference to tx_entry->total_len.
- * @param[in]		data_size	length of the data to be set up. In reference to tx_entry->total_len.
+ * @param[in]		ep			end point.
+ * @param[in,out]	pkt_entry		packet entry. Header must have been set when the function is called
+ * @param[in]		pkt_data_offset		the data offset in packet, (in reference to pkt_entry->pkt).
+ * @param[in]		tx_entry		This function will use iov, iov_count and desc of tx_entry
+ * @param[in]		tx_data_offset		source offset of the data (in reference to tx_entry->iov)
+ * @param[in]		data_size		length of the data to be set up.
  * @return		0 on success, negative FI code on error
  */
 int rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
 				    struct rxr_pkt_entry *pkt_entry,
-				    size_t hdr_size,
+				    size_t pkt_data_offset,
 				    struct rxr_tx_entry *tx_entry,
-				    size_t data_offset,
+				    size_t tx_data_offset,
 				    size_t data_size)
 {
 	struct efa_ep *efa_ep;
@@ -114,7 +114,7 @@ int rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 
-	assert(hdr_size > 0);
+	assert(pkt_data_offset > 0);
 
 	pkt_entry->x_entry = tx_entry;
 	/* pkt_sendv_pool's size equal efa_tx_pkt_pool size +
@@ -130,11 +130,11 @@ int rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
 
 	if (data_size == 0) {
 		pkt_entry->send->iov_count = 0;
-		pkt_entry->pkt_size = hdr_size;
+		pkt_entry->pkt_size = pkt_data_offset;
 		return 0;
 	}
 
-	rxr_locate_iov_pos(tx_entry->iov, tx_entry->iov_count, data_offset,
+	rxr_locate_iov_pos(tx_entry->iov, tx_entry->iov_count, tx_data_offset,
 			   &tx_iov_index, &tx_iov_offset);
 	desc = tx_entry->desc[0];
 	assert(tx_iov_index < tx_entry->iov_count);
@@ -160,29 +160,29 @@ int rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
 
 		assert(ep->core_iov_limit >= 2);
 		pkt_entry->send->iov[0].iov_base = pkt_entry->pkt;
-		pkt_entry->send->iov[0].iov_len = hdr_size;
+		pkt_entry->send->iov[0].iov_len = pkt_data_offset;
 		pkt_entry->send->desc[0] = pkt_entry->mr ? fi_mr_desc(pkt_entry->mr) : NULL;
 
 		pkt_entry->send->iov[1].iov_base = (char *)tx_entry->iov[tx_iov_index].iov_base + tx_iov_offset;
 		pkt_entry->send->iov[1].iov_len = data_size;
 		pkt_entry->send->desc[1] = tx_entry->desc[tx_iov_index];
 		pkt_entry->send->iov_count = 2;
-		pkt_entry->pkt_size = hdr_size + data_size;
+		pkt_entry->pkt_size = pkt_data_offset + data_size;
 		return 0;
 	}
 
 copy:
-	data = pkt_entry->pkt + hdr_size;
+	data = pkt_entry->pkt + pkt_data_offset;
 	copied = ofi_copy_from_hmem_iov(data,
 					data_size,
 					desc ? desc->peer.iface : FI_HMEM_SYSTEM,
 					desc ? desc->peer.device.reserved : 0,
 					tx_entry->iov,
 					tx_entry->iov_count,
-					data_offset);
+					tx_data_offset);
 	assert(copied == data_size);
 	pkt_entry->send->iov_count = 0;
-	pkt_entry->pkt_size = hdr_size + copied;
+	pkt_entry->pkt_size = pkt_data_offset + copied;
 	return 0;
 }
 
