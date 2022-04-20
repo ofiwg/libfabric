@@ -136,7 +136,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 						 [_expect_any],
 						 [],
 						 [$cmocka_dir],
-						 [$cmocka_dir/lib64],
+						 [],
 						 [
 							efa_LIBS+=" $cmocka_LDFLAGS $cmocka_LIBS -static"
 							AC_DEFINE([EFA_UNIT_TEST], [1], [EFA unit testing])
@@ -151,7 +151,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 							#include <setjmp.h>
 					 	 ])
         if [ test x"$cmocka_dir" != x""]; then
-            cmocka_rpath+=" -R$cmocka_dir/lib64 "
+            cmocka_rpath+=" -R${cmocka_LDFLAGS:3} "
         fi
 	else
 		AC_DEFINE([EFA_UNIT_TEST], [0], [EFA unit testing])
