@@ -410,7 +410,13 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			rxr_release_tx_entry(ep, tx_entry);
 		} else if (read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY) {
 			rx_entry = read_entry->context;
-			rxr_cq_complete_rx(ep, rx_entry, true, RXR_EOR_PKT);
+			rx_entry->bytes_received += (read_entry->total_len - rx_entry->bytes_runt);
+			rx_entry->bytes_copied += (read_entry->total_len - rx_entry->bytes_runt);
+			if (rx_entry->bytes_copied == rx_entry->total_len) {
+				rxr_cq_complete_rx(ep, rx_entry, true, RXR_EOR_PKT);
+			} else if(rx_entry->bytes_copied + rx_entry->bytes_queued_blocking_copy == rx_entry->total_len) {
+				rxr_ep_flush_queued_blocking_copy_to_hmem(ep);
+			}
 		} else {
 			assert(read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY);
 			pkt_entry = read_entry->context;

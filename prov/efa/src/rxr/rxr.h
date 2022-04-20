@@ -503,6 +503,8 @@ struct rxr_ep {
 	int queued_copy_num;
 };
 
+int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep);
+
 #define rxr_rx_flags(rxr_ep) ((rxr_ep)->util_ep.rx_op_flags)
 #define rxr_tx_flags(rxr_ep) ((rxr_ep)->util_ep.tx_op_flags)
 

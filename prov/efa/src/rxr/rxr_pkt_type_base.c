@@ -219,9 +219,11 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
 		       pkt_type == RXR_DC_LONGCTS_MSGRTM_PKT ||
 		       pkt_type == RXR_DC_LONGCTS_TAGRTM_PKT ||
 		       pkt_type == RXR_DC_EAGER_RTW_PKT ||
-		       pkt_type == RXR_DC_LONGCTS_RTW_PKT);
+		       pkt_type == RXR_DC_LONGCTS_RTW_PKT ||
+		       pkt_type == RXR_RUNTREAD_MSGRTM_PKT ||
+		       pkt_type == RXR_RUNTREAD_TAGRTM_PKT);
 
-		return pkt_entry->pkt_size - rxr_pkt_req_hdr_size(pkt_entry);
+		return rxr_pkt_req_data_size(pkt_entry);
 	}
 
 	/* other packet type does not contain data, thus return 0
@@ -229,51 +231,32 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
 	return 0;
 }
 
-
-/*
- * @brief copy data to hmem buffer
+/**
+ * @brief flush queued blocking copy to hmem
  *
- * This function queue multiple (up to RXR_EP_MAX_QUEUED_COPY) copies to
- * device memory, and do them at the same time. This is to avoid any memory
- * barrier between copies, which will cause a flush.
+ * The copying of data from bounce buffer to hmem receiving buffer
+ * is queued, and we copy them in batch.
  *
- * @param[in]		ep		endpoint
- * @param[in]		pkt_entry	the packet entry that contains data, which
- *                                      x_entry pointing to the correct rx_entry.
- * @param[in]		data		the pointer pointing to the beginning of data
- * @param[in]		data_size	the length of data
- * @param[in]		data_offset	the offset of the data in the packet in respect
- *					of the receiving buffer.
- * @return		On success, return 0
- * 			On failure, return libfabric error code
+ * This functions is used to flush all the queued hmem copy.
+ *
+ * It can be called in two scenarios:
+ *
+ * 1. the number of queued hmem copy reached limit
+ *
+ * 2. all the data of one of the queued message has arrived.
+ *
+ * @param[in,out]	ep	endpoint, where queue_copy_num and queued_copy_vec reside.
+ *
  */
-static inline
-int rxr_pkt_copy_data_to_hmem(struct rxr_ep *ep,
-			      struct rxr_pkt_entry *pkt_entry,
-			      char *data,
-			      size_t data_size,
-			      size_t data_offset)
+int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
 {
+	size_t i;
+	size_t bytes_copied[RXR_EP_MAX_QUEUED_COPY] = {0};
 	struct efa_mr *desc;
 	struct rxr_rx_entry *rx_entry;
-	size_t bytes_copied[RXR_EP_MAX_QUEUED_COPY] = {0};
-	size_t i;
-
-	assert(ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY);
-	ep->queued_copy_vec[ep->queued_copy_num].pkt_entry = pkt_entry;
-	ep->queued_copy_vec[ep->queued_copy_num].data = data;
-	ep->queued_copy_vec[ep->queued_copy_num].data_size = data_size;
-	ep->queued_copy_vec[ep->queued_copy_num].data_offset = data_offset;
-	ep->queued_copy_num += 1;
-
-	rx_entry = pkt_entry->x_entry;
-	assert(rx_entry);
-	rx_entry->bytes_queued += data_size;
-
-	if (ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY &&
-	    rx_entry->bytes_copied + rx_entry->bytes_queued < rx_entry->total_len) {
-		return 0;
-	}
+	struct rxr_pkt_entry *pkt_entry;
+	char *data;
+	size_t data_size, data_offset;
 
 	for (i = 0; i < ep->queued_copy_num; ++i) {
 		pkt_entry = ep->queued_copy_vec[i].pkt_entry;
@@ -302,12 +285,57 @@ int rxr_pkt_copy_data_to_hmem(struct rxr_ep *ep,
 			return -FI_EIO;
 		}
 
-		rx_entry->bytes_queued -= data_size;
+		rx_entry->bytes_queued_blocking_copy -= data_size;
 		rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
 	}
 
 	ep->queued_copy_num = 0;
 	return 0;
+}
+
+/*
+ * @brief copy data to hmem buffer
+ *
+ * This function queue multiple (up to RXR_EP_MAX_QUEUED_COPY) copies to
+ * device memory, and do them at the same time. This is to avoid any memory
+ * barrier between copies, which will cause a flush.
+ *
+ * @param[in]		ep		endpoint
+ * @param[in]		pkt_entry	the packet entry that contains data, which
+ *                                      x_entry pointing to the correct rx_entry.
+ * @param[in]		data		the pointer pointing to the beginning of data
+ * @param[in]		data_size	the length of data
+ * @param[in]		data_offset	the offset of the data in the packet in respect
+ *					of the receiving buffer.
+ * @return		On success, return 0
+ * 			On failure, return libfabric error code
+ */
+static inline
+int rxr_pkt_copy_data_to_hmem(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry,
+			      char *data,
+			      size_t data_size,
+			      size_t data_offset)
+{
+	struct rxr_rx_entry *rx_entry;
+
+	assert(ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY);
+	ep->queued_copy_vec[ep->queued_copy_num].pkt_entry = pkt_entry;
+	ep->queued_copy_vec[ep->queued_copy_num].data = data;
+	ep->queued_copy_vec[ep->queued_copy_num].data_size = data_size;
+	ep->queued_copy_vec[ep->queued_copy_num].data_offset = data_offset;
+	ep->queued_copy_num += 1;
+
+	rx_entry = pkt_entry->x_entry;
+	assert(rx_entry);
+	rx_entry->bytes_queued_blocking_copy += data_size;
+
+	if (ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY &&
+	    rx_entry->bytes_copied + rx_entry->bytes_queued_blocking_copy < rx_entry->total_len) {
+		return 0;
+	}
+
+	return rxr_ep_flush_queued_blocking_copy_to_hmem(ep);
 }
 
 /**

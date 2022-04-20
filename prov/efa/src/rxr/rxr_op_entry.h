@@ -125,6 +125,8 @@ struct rxr_op_entry {
 
 	struct fi_cq_tagged_entry cq_entry;
 
+	struct rxr_read_entry *read_entry;
+
 	/* For tx_entry, entry is linked with tx_pending_list in rxr_ep.
 	 * For rx_entry, entry is linked with one of the receive lists: rx_list, rx_tagged_list,
 	 * rx_unexp_list and rxr_unexp_tagged_list in rxr_ep.
@@ -150,8 +152,9 @@ struct rxr_op_entry {
 
 	/* the following variables are for RX operation only */
 	uint64_t bytes_received;
+	uint64_t bytes_received_via_mulreq;
 	uint64_t bytes_copied;
-	uint64_t bytes_queued;
+	uint64_t bytes_queued_blocking_copy;
 
 	/* In emulated read protocol, rma_loc_tx_id is the tx_id of
 	 * the tx_entry on the read responder

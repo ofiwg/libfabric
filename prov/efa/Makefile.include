@@ -74,6 +74,7 @@ _efa_headers = \
 	prov/efa/src/rxr/rxr_cntr.h \
 	prov/efa/src/rxr/rxr_rma.h \
 	prov/efa/src/rxr/rxr_msg.h \
+	prov/efa/src/rxr/rxr_pkt_hdr.h \
 	prov/efa/src/rxr/rxr_pkt_entry.h \
 	prov/efa/src/rxr/rxr_pkt_type.h \
 	prov/efa/src/rxr/rxr_pkt_type_req.h \

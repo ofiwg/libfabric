@@ -253,6 +253,66 @@ int rxr_pkt_type_contains_rma_iov(int pkt_type)
 			break;
 	}
 }
+
+/**
+ * @brief determine whether a req pkt type is part of a runt protocol
+ *
+ * A runt protocol send user data into two parts. The first part
+ * was sent by multiple eagerly sent packages. The rest of the
+ * data is sent regularly.
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool rxr_pkt_type_is_runt(int pkt_type)
+{
+	return (pkt_type >= RXR_RUNT_PKT_BEGIN && pkt_type < RXR_RUNT_PKT_END);
+}
+
+/**
+ * @brief determine whether a req pkt type is part of a medium protocol
+ *
+ * medium protocol send user data eagerly without CTS based flow control.
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool rxr_pkt_type_is_medium(int pkt_type)
+{
+	return pkt_type == RXR_MEDIUM_TAGRTM_PKT || pkt_type == RXR_MEDIUM_MSGRTM_PKT ||
+	       pkt_type == RXR_DC_MEDIUM_MSGRTM_PKT ||pkt_type == RXR_DC_MEDIUM_TAGRTM_PKT;
+}
+
+/**
+ * @brief determine whether a req pkt type is part of a multi-req protocol
+ *
+ * A multi-req protocol sends multiple (>=2) data containing REQ packets.
+ * This function determine whether a req pkt type is part of a multi-req
+ * protocol
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool rxr_pkt_type_is_mulreq(int pkt_type)
+{
+	return rxr_pkt_type_is_medium(pkt_type) || rxr_pkt_type_is_runt(pkt_type);
+}
+
+/**
+ * @brief determine whether a pkt type is runtread rtm
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool rxr_pkt_type_is_runtread(int pkt_type)
+{
+	return pkt_type == RXR_RUNTREAD_TAGRTM_PKT || pkt_type == RXR_RUNTREAD_MSGRTM_PKT;
+}
+
 #endif
 
 #include "rxr_pkt_type_req.h"

@@ -52,6 +52,8 @@ size_t rxr_pkt_req_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
 size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
+size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry);
+
 size_t rxr_pkt_req_header_size(int pkt_type, uint16_t flags, size_t rma_iov_count);
 
 size_t rxr_pkt_req_max_header_size(int pkt_type);
@@ -174,53 +176,6 @@ int rxr_longread_rtm_pkt_type(int op)
 	assert(op == ofi_op_tagged || op == ofi_op_msg);
 	return (op == ofi_op_tagged) ? RXR_LONGREAD_TAGRTM_PKT
 				     : RXR_LONGREAD_MSGRTM_PKT;
-}
-
-/**
- * @brief determine whether a req pkt type is part of a runt protocol
- *
- * A runt protocol send user data into two parts. The first part
- * was sent by multiple eagerly sent packages. The rest of the
- * data is sent regularly.
- *
- * @param[in]		pkt_type		REQ packet type
- * @return		a boolean
- */
-static inline
-bool rxr_pkt_type_is_runt(int pkt_type)
-{
-	return (pkt_type >= RXR_RUNT_PKT_BEGIN && pkt_type < RXR_RUNT_PKT_END);
-}
-
-/**
- * @brief determine whether a req pkt type is part of a medium protocol
- *
- * medium protocol send user data eagerly without CTS based flow control.
- *
- * @param[in]		pkt_type		REQ packet type
- * @return		a boolean
- */
-static inline
-bool rxr_pkt_type_is_medium(int pkt_type)
-{
-	return pkt_type == RXR_MEDIUM_TAGRTM_PKT || pkt_type == RXR_MEDIUM_MSGRTM_PKT ||
-	       pkt_type == RXR_DC_MEDIUM_MSGRTM_PKT ||pkt_type == RXR_DC_MEDIUM_TAGRTM_PKT;
-}
-
-/**
- * @brief determine whether a req pkt type is part of a multi-req protocol
- *
- * A multi-req protocol sends multiple (>=2) data containing REQ packets.
- * This function determine whether a req pkt type is part of a multi-req
- * protocol
- *
- * @param[in]		pkt_type		REQ packet type
- * @return		a boolean
- */
-static inline
-bool rxr_pkt_type_is_mulreq(int pkt_type)
-{
-	return rxr_pkt_type_is_medium(pkt_type) || rxr_pkt_type_is_runt(pkt_type);
 }
 
 size_t rxr_pkt_mulreq_total_data_size(int pkt_type, struct rxr_op_entry *op_entry);

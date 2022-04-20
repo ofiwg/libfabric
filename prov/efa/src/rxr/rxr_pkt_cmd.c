@@ -575,9 +575,18 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 
 	if (rx_entry->total_len == rx_entry->bytes_copied) {
 		post_ctrl = false;
+		ctrl_type = 0;
 		if (rx_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED) {
 			post_ctrl = true;
 			ctrl_type = RXR_RECEIPT_PKT;
+		} else if(rx_entry->bytes_runt > 0 && rx_entry->read_entry) {
+			/* runt read protocol is being used,
+			 * this function is called for the runt part.
+			 * This packet has the last peice of data, therefore
+			 * must send a EOR (End Of RuntRead) back.
+			 */
+			post_ctrl = true;
+			ctrl_type = RXR_EOR_PKT;
 		}
 
 		rxr_cq_complete_rx(ep, rx_entry, post_ctrl, ctrl_type);
@@ -1003,6 +1012,8 @@ void rxr_pkt_proc_received(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	case RXR_DC_LONGCTS_TAGRTM_PKT:
 	case RXR_LONGREAD_MSGRTM_PKT:
 	case RXR_LONGREAD_TAGRTM_PKT:
+	case RXR_RUNTREAD_MSGRTM_PKT:
+	case RXR_RUNTREAD_TAGRTM_PKT:
 	case RXR_WRITE_RTA_PKT:
 	case RXR_DC_WRITE_RTA_PKT:
 	case RXR_FETCH_RTA_PKT:
