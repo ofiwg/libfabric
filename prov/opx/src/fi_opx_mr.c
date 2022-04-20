@@ -121,6 +121,23 @@ static int fi_opx_mr_reg(struct fid *fid, const void *buf,
 			return -errno;
 		}
 	}
+
+	if ( (access & (FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)) != access ) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+		"Unsupported access mask specified, client requested %lu\n", access);
+		errno = FI_EINVAL;
+		return -errno;
+	}
+
+	if ( (flags & (FI_MR_LOCAL | FI_MR_RAW | FI_MR_VIRT_ADDR | FI_MR_ALLOCATED |
+		FI_MR_PROV_KEY | FI_MR_MMU_NOTIFY | FI_MR_RMA_EVENT | FI_MR_ENDPOINT | FI_MR_HMEM )) != flags ) {
+
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
+		"Unsupported flags specified, client requested %lu\n", flags);
+		errno = FI_EINVAL;
+		return -errno;
+	}
+
 	opx_mr = calloc(1, sizeof(*opx_mr));
 	if (!opx_mr) {
 		errno = FI_ENOMEM;
@@ -136,25 +153,9 @@ static int fi_opx_mr_reg(struct fid *fid, const void *buf,
 	}
 
 	opx_mr->buf 	= buf;
-	opx_mr->len	= len;
+	opx_mr->len 	= len;
 	opx_mr->offset	= offset;
-
-	if ( (access & (FI_SEND | FI_RECV | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)) != access ) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-		"Unsuppored access mask specified, client requeseted %lu", access);
-		errno = FI_EINVAL;
-		return -errno;
-	}
-	opx_mr->access = access;
-
-	if ( (flags & (FI_MR_LOCAL | FI_MR_RAW | FI_MR_VIRT_ADDR | FI_MR_ALLOCATED |
-		FI_MR_PROV_KEY | FI_MR_MMU_NOTIFY | FI_MR_RMA_EVENT | FI_MR_ENDPOINT | FI_MR_HMEM )) != flags ) {
-
-		FI_WARN(fi_opx_global.prov, FI_LOG_MR,
-		"Unsuppored flags specified, client requeseted %lu", flags);
-		errno = FI_EINVAL;
-		return -errno;
-	}
+	opx_mr->access 	= access;
 	opx_mr->flags	= flags;
 	opx_mr->domain  = opx_domain;
 
@@ -170,6 +171,35 @@ static int fi_opx_mr_reg(struct fid *fid, const void *buf,
 	return 0;
 }
 
+static int fi_opx_mr_regv(struct fid *fid,
+                        const struct iovec *iov, size_t count,
+                        uint64_t access, uint64_t offset,
+                        uint64_t requested_key, uint64_t flags,
+                        struct fid_mr **mr, void *context)
+{
+	if(iov) {
+		if(count == 1) {
+			const void *buf = iov[0].iov_base;
+			size_t len = iov[0].iov_len;
+			return fi_opx_mr_reg(fid, buf, len, access, offset, requested_key, flags, mr, context);
+		}
+		FI_WARN(fi_opx_global.prov, FI_LOG_MR, "Unsupported iov count %lu\n", count);
+	}
+	errno = FI_EINVAL;
+	return -errno;
+}
+
+static int fi_opx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+							uint64_t flags, struct fid_mr **mr)
+{
+	if (!attr) {
+		errno = FI_EINVAL;
+		return -errno;
+	}
+    return fi_opx_mr_regv(fid, attr->mr_iov, attr->iov_count, attr->access,
+						attr->offset, attr->requested_key, flags, mr, attr->context);
+}
+
 int fi_opx_bind_ep_mr(struct fid_ep *ep,
 		struct fid_mr *mr, uint64_t flags)
 {
@@ -179,8 +209,8 @@ int fi_opx_bind_ep_mr(struct fid_ep *ep,
 static struct fi_ops_mr fi_opx_mr_ops = {
 	.size		= sizeof(struct fi_ops_mr),
 	.reg 		= fi_opx_mr_reg,
-	.regv 		= fi_no_mr_regv,
-	.regattr	= fi_no_mr_regattr
+	.regv 		= fi_opx_mr_regv,
+	.regattr	= fi_opx_mr_regattr
 };
 
 int fi_opx_init_mr_ops(struct fid_domain *domain, struct fi_info *info)
