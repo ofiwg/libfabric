@@ -98,6 +98,12 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 	case RXR_LONGREAD_TAGRTM_PKT:
 		ret = rxr_pkt_init_longread_tagrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
+	case RXR_RUNTREAD_MSGRTM_PKT:
+		ret = rxr_pkt_init_runtread_msgrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
+	case RXR_RUNTREAD_TAGRTM_PKT:
+		ret = rxr_pkt_init_runtread_tagrtm(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		break;
 	case RXR_EAGER_RTW_PKT:
 		ret = rxr_pkt_init_eager_rtw(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
@@ -204,6 +210,10 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 	case RXR_LONGREAD_MSGRTM_PKT:
 	case RXR_LONGREAD_TAGRTM_PKT:
 		rxr_pkt_handle_longread_rtm_sent(rxr_ep, pkt_entry);
+		break;
+	case RXR_RUNTREAD_MSGRTM_PKT:
+	case RXR_RUNTREAD_TAGRTM_PKT:
+		rxr_pkt_handle_runtread_rtm_sent(rxr_ep, pkt_entry);
 		break;
 	case RXR_EAGER_RTW_PKT:
 		rxr_pkt_handle_eager_rtw_sent(rxr_ep, pkt_entry);
@@ -338,13 +348,10 @@ ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int pkt_t
 {
 	ssize_t err;
 
-	if (pkt_type == RXR_MEDIUM_TAGRTM_PKT ||
-	    pkt_type == RXR_MEDIUM_MSGRTM_PKT ||
-	    pkt_type == RXR_DC_MEDIUM_MSGRTM_PKT ||
-	    pkt_type == RXR_DC_MEDIUM_TAGRTM_PKT) {
+	if (rxr_pkt_type_is_mulreq(pkt_type)) {
 		assert(!inject);
 
-		while (tx_entry->bytes_sent < tx_entry->total_len) {
+		while (tx_entry->bytes_sent < rxr_pkt_mulreq_total_data_size(pkt_type, tx_entry)) {
 			err = rxr_pkt_post_one(ep, tx_entry, pkt_type, 0, flags);
 			if (OFI_UNLIKELY(err))
 				return err;
@@ -402,21 +409,21 @@ ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry, 
 }
 
 /**
- * @brief post req packet(s). Queue the post for medium RTM
+ * @brief post req packet(s). Queue the post for multi-req packet types
  *
- * We must use rxr_pkt_post_or_queue() for Medium RTM.
+ * We must use rxr_pkt_post_or_queue() for multi-req packet types.
  *
- * This is for medium RTM, rxr_pkt_post() will send multiple
- * packets.
+ * This is because for multi-req packets, rxr_pkt_post() will
+ * send multiple packets.
  *
  * It can happen that 1st packet was sent successfully, and the next
  * one encountered -FI_EAGAIN, which will cause rxr_pkt_post()
- * will return -FI_EAGAIN.
+ * to return -FI_EAGAIN.
  *
- * If this function uses rxr_pkt_post() for medium RTM, then -FI_EAGAIN will
- * be returned to user application. User application will will try to send
+ * If rxr_pkt_post() was used by this function, the -FI_EAGAIN will
+ * be returned to user application. User application will then send
  * the entire message again. This would cause the receiver to receive duplicated
- * MEDIUM RTM packets (because 1st packet was sent successfully).
+ * packets (because 1st packet was sent successfully).
  *
  * @param[in]   rxr_ep          endpoint
  * @param[in]   x_entry         pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
@@ -429,10 +436,7 @@ ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int r
 	assert(tx_entry->type == RXR_TX_ENTRY);
 	assert(req_type >= RXR_REQ_PKT_BEGIN);
 
-	if (req_type == RXR_MEDIUM_TAGRTM_PKT ||
-	    req_type == RXR_MEDIUM_MSGRTM_PKT ||
-	    req_type == RXR_DC_MEDIUM_MSGRTM_PKT ||
-	    req_type == RXR_DC_MEDIUM_TAGRTM_PKT) {
+	if (rxr_pkt_type_is_mulreq(req_type)) {
 		assert(!inject);
 
 		return rxr_pkt_post_or_queue(ep, tx_entry, req_type, flags);
@@ -798,6 +802,10 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 	case RXR_LONGREAD_MSGRTM_PKT:
 	case RXR_LONGREAD_TAGRTM_PKT:
 		rxr_pkt_handle_longread_rtm_send_completion(ep, pkt_entry);
+		break;
+	case RXR_RUNTREAD_MSGRTM_PKT:
+	case RXR_RUNTREAD_TAGRTM_PKT:
+		rxr_pkt_handle_runtread_rtm_send_completion(ep, pkt_entry);
 		break;
 	case RXR_EAGER_RTW_PKT:
 		rxr_pkt_handle_eager_rtw_send_completion(ep, pkt_entry);

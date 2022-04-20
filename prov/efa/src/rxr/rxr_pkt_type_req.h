@@ -163,12 +163,67 @@ struct rxr_longread_rtm_base_hdr *rxr_get_longread_rtm_base_hdr(void *pkt)
 }
 
 static inline
+struct rxr_runtread_rtm_base_hdr *rxr_get_runtread_rtm_base_hdr(void *pkt)
+{
+	return (struct rxr_runtread_rtm_base_hdr *)pkt;
+}
+
+static inline
 int rxr_longread_rtm_pkt_type(int op)
 {
 	assert(op == ofi_op_tagged || op == ofi_op_msg);
 	return (op == ofi_op_tagged) ? RXR_LONGREAD_TAGRTM_PKT
 				     : RXR_LONGREAD_MSGRTM_PKT;
 }
+
+/**
+ * @brief determine whether a req pkt type is part of a runt protocol
+ *
+ * A runt protocol send user data into two parts. The first part
+ * was sent by multiple eagerly sent packages. The rest of the
+ * data is sent regularly.
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool rxr_pkt_type_is_runt(int pkt_type)
+{
+	return (pkt_type >= RXR_RUNT_PKT_BEGIN && pkt_type < RXR_RUNT_PKT_END);
+}
+
+/**
+ * @brief determine whether a req pkt type is part of a medium protocol
+ *
+ * medium protocol send user data eagerly without CTS based flow control.
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool rxr_pkt_type_is_medium(int pkt_type)
+{
+	return pkt_type == RXR_MEDIUM_TAGRTM_PKT || pkt_type == RXR_MEDIUM_MSGRTM_PKT ||
+	       pkt_type == RXR_DC_MEDIUM_MSGRTM_PKT ||pkt_type == RXR_DC_MEDIUM_TAGRTM_PKT;
+}
+
+/**
+ * @brief determine whether a req pkt type is part of a multi-req protocol
+ *
+ * A multi-req protocol sends multiple (>=2) data containing REQ packets.
+ * This function determine whether a req pkt type is part of a multi-req
+ * protocol
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool rxr_pkt_type_is_mulreq(int pkt_type)
+{
+	return rxr_pkt_type_is_medium(pkt_type) || rxr_pkt_type_is_runt(pkt_type);
+}
+
+size_t rxr_pkt_mulreq_total_data_size(int pkt_type, struct rxr_op_entry *op_entry);
 
 ssize_t rxr_pkt_init_eager_msgrtm(struct rxr_ep *ep,
 				  struct rxr_tx_entry *tx_entry,
@@ -226,6 +281,14 @@ ssize_t rxr_pkt_init_longread_tagrtm(struct rxr_ep *ep,
 				 struct rxr_tx_entry *tx_entry,
 				 struct rxr_pkt_entry *pkt_entry);
 
+ssize_t rxr_pkt_init_runtread_msgrtm(struct rxr_ep *ep,
+				 struct rxr_tx_entry *tx_entry,
+				 struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_runtread_tagrtm(struct rxr_ep *ep,
+				 struct rxr_tx_entry *tx_entry,
+				 struct rxr_pkt_entry *pkt_entry);
+
 static inline
 void rxr_pkt_handle_eager_rtm_sent(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry)
@@ -246,6 +309,9 @@ void rxr_pkt_handle_longread_rtm_sent(struct rxr_ep *ep,
 {
 }
 
+void rxr_pkt_handle_runtread_rtm_sent(struct rxr_ep *ep,
+				      struct rxr_pkt_entry *pkt_entry);
+
 void rxr_pkt_handle_eager_rtm_send_completion(struct rxr_ep *ep,
 					      struct rxr_pkt_entry *pkt_entry);
 
@@ -262,6 +328,15 @@ static inline
 void rxr_pkt_handle_longread_rtm_send_completion(struct rxr_ep *ep,
 					     struct rxr_pkt_entry *pkt_entry)
 {
+}
+
+static inline
+void rxr_pkt_handle_runtread_rtm_send_completion(struct rxr_ep *ep,
+						 struct rxr_pkt_entry *pkt_entry)
+{
+	/* nothing to do for a send completion of a runtread rtm packet
+	 * because the sender has to wait for EOR to write TX completion
+	 */
 }
 
 void rxr_pkt_rtm_update_rx_entry(struct rxr_pkt_entry *pkt_entry,

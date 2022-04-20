@@ -146,6 +146,8 @@ struct rxr_op_entry {
 	/* linked with tx/rx_entry_list in rdm_peer */
 	struct dlist_entry peer_entry;
 
+	uint64_t bytes_runt;
+
 	/* the following variables are for RX operation only */
 	uint64_t bytes_received;
 	uint64_t bytes_copied;

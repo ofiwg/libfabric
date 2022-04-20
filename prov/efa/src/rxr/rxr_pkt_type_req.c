@@ -101,11 +101,20 @@ bool rxr_pkt_req_supported_by_peer(int req_type, struct rdm_peer *peer)
 
 size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry)
 {
-	size_t hdr_size;
+	int pkt_type, read_iov_count;
+	size_t pkt_data_offset;
 
-	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
-	assert(hdr_size > 0);
-	return pkt_entry->pkt_size - hdr_size;
+	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
+	pkt_data_offset = rxr_pkt_req_hdr_size(pkt_entry);
+	assert(pkt_data_offset > 0);
+
+	if (pkt_type == RXR_RUNTREAD_MSGRTM_PKT ||
+	    pkt_type == RXR_RUNTREAD_TAGRTM_PKT) {
+		read_iov_count = rxr_get_runtread_rtm_base_hdr(pkt_entry->pkt)->read_iov_count;
+		pkt_data_offset +=  read_iov_count * sizeof(struct fi_rma_iov);
+	}
+
+	return pkt_entry->pkt_size - pkt_data_offset;
 }
 
 void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
@@ -416,6 +425,34 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
 	return ep->mtu_size - rxr_pkt_req_header_size(pkt_type,
 						      header_flags,
 						      rma_iov_count);
+}
+
+/**
+ * @brief total data size in the multiple REQ packets
+ *
+ * For an op_entry that uses multi-req protocol, this function return
+ * how many bytes will be sent via the REQ packets.
+ *
+ * Note some multi-req protocols send only part of the data via REQ packets.
+ * The reminder of the data is sent via other type of packets or via RDMA operations.
+ *
+ * param[in]		pkt_type		REQ packet type
+ * param[in]		op_entry		contains operation information
+ * return		size of total data transfered by REQ packets
+ */
+size_t rxr_pkt_mulreq_total_data_size(int pkt_type, struct rxr_tx_entry *op_entry)
+{
+	assert(rxr_pkt_type_is_mulreq(pkt_type));
+
+	if (rxr_pkt_type_is_medium(pkt_type)) {
+		return op_entry->total_len;
+	}
+
+	assert(rxr_pkt_type_is_runt(pkt_type));
+	if (op_entry->bytes_runt)
+		return op_entry->bytes_runt;
+
+	return rxr_env.efa_runt_size;
 }
 
 /*
@@ -739,6 +776,89 @@ ssize_t rxr_pkt_init_longread_tagrtm(struct rxr_ep *ep,
 	return 0;
 }
 
+/**
+ * @brief fill in the rxr_runtread_rtm_base_hdr and data of a RUNTREAD packet
+ *
+ * only thing left unset is tag
+ *
+ * @param[in]		ep		end point
+ * @param[in]		tx_entry	contains information of the send operation
+ * @param[in]		pkt_type	RXR_RUNREAD_MSGRTM or RXR_RUNTREAD_TAGRTM
+ * @param[out]		pkt_entry	pkt_entry to be initialzied
+ */
+static
+ssize_t rxr_pkt_init_runtread_rtm(struct rxr_ep *ep,
+				  struct rxr_tx_entry *tx_entry,
+				  int pkt_type,
+				  struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_runtread_rtm_base_hdr *rtm_hdr;
+	struct fi_rma_iov *read_iov;
+	size_t hdr_size, pkt_data_offset, tx_data_offset, data_size;
+	int err;
+
+	if (!tx_entry->bytes_sent) {
+		assert(tx_entry->bytes_runt == 0);
+		/* This is the 1st runtread RTM for the tx_entry,
+		 * thus initialize bytes_runt here.
+		 * TODO: adjust bytes_runt such that read buffer
+		 *       is page aligned, but must be >= rxr_env.efa_runt_size
+		 */
+		tx_entry->bytes_runt = rxr_env.efa_runt_size;
+	}
+
+	assert(tx_entry->bytes_sent < tx_entry->bytes_runt);
+
+	rxr_pkt_init_req_hdr(ep, tx_entry, pkt_type, pkt_entry);
+
+	rtm_hdr = rxr_get_runtread_rtm_base_hdr(pkt_entry->pkt);
+	rtm_hdr->hdr.flags |= RXR_REQ_MSG;
+	rtm_hdr->hdr.msg_id = tx_entry->msg_id;
+	rtm_hdr->msg_length = tx_entry->total_len;
+	rtm_hdr->send_id = tx_entry->tx_id;
+	rtm_hdr->seg_offset = tx_entry->bytes_sent;
+	rtm_hdr->runt_length = tx_entry->bytes_runt;
+	rtm_hdr->read_iov_count = tx_entry->iov_count;
+
+	hdr_size = rxr_pkt_req_hdr_size(pkt_entry);
+	read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + hdr_size);
+	err = rxr_read_init_iov(ep, tx_entry, read_iov);
+	if (OFI_UNLIKELY(err))
+		return err;
+
+	pkt_data_offset  = hdr_size + tx_entry->iov_count * sizeof(struct fi_rma_iov);
+	tx_data_offset = tx_entry->bytes_sent;
+	data_size = MIN(tx_entry->bytes_runt - tx_entry->bytes_sent,
+			ep->mtu_size - pkt_data_offset);
+
+	return rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, pkt_data_offset, tx_entry, tx_data_offset, data_size);
+}
+
+ssize_t rxr_pkt_init_runtread_msgrtm(struct rxr_ep *ep,
+				 struct rxr_tx_entry *tx_entry,
+				 struct rxr_pkt_entry *pkt_entry)
+{
+	return rxr_pkt_init_runtread_rtm(ep, tx_entry, RXR_RUNTREAD_MSGRTM_PKT, pkt_entry);
+}
+
+ssize_t rxr_pkt_init_runtread_tagrtm(struct rxr_ep *ep,
+				 struct rxr_tx_entry *tx_entry,
+				 struct rxr_pkt_entry *pkt_entry)
+{
+	ssize_t err;
+	struct rxr_base_hdr *base_hdr;
+
+	err = rxr_pkt_init_runtread_rtm(ep, tx_entry, RXR_RUNTREAD_TAGRTM_PKT, pkt_entry);
+	if (err)
+		return err;
+
+	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	base_hdr->flags |= RXR_REQ_TAGGED;
+	rxr_pkt_rtm_settag(pkt_entry, tx_entry->tag);
+	return 0;
+}
+
+
 /*
  *     handle_sent() functions
  */
@@ -768,6 +888,15 @@ void rxr_pkt_handle_longcts_rtm_sent(struct rxr_ep *ep,
 
 	if (tx_entry->desc[0] || efa_is_cache_available(efa_domain))
 		rxr_prepare_desc_send(efa_domain, tx_entry);
+}
+
+void rxr_pkt_handle_runtread_rtm_sent(struct rxr_ep *ep,
+				      struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_tx_entry *tx_entry;
+
+	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
+	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 }
 
 /*
@@ -845,6 +974,9 @@ size_t rxr_pkt_rtm_total_len(struct rxr_pkt_entry *pkt_entry)
 	case RXR_LONGREAD_MSGRTM_PKT:
 	case RXR_LONGREAD_TAGRTM_PKT:
 		return rxr_get_longread_rtm_base_hdr(pkt_entry->pkt)->msg_length;
+	case RXR_RUNTREAD_MSGRTM_PKT:
+	case RXR_RUNTREAD_TAGRTM_PKT:
+		return rxr_get_runtread_rtm_base_hdr(pkt_entry->pkt)->msg_length;
 	default:
 		assert(0 && "Unknown REQ packet type\n");
 	}
