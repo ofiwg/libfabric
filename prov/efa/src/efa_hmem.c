@@ -113,7 +113,7 @@ static int efa_hmem_support_status_update_neuron(struct efa_hmem_support_status 
 		return 0;
 	}
 
-	if (domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ) {
+	if (g_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ) {
 		ibv_access |= IBV_ACCESS_REMOTE_READ;
 	} else {
 		EFA_WARN(FI_LOG_DOMAIN,
@@ -127,7 +127,7 @@ static int efa_hmem_support_status_update_neuron(struct efa_hmem_support_status 
 	if (!ptr)
 		return -FI_ENOMEM;
 
-	ibv_mr = ibv_reg_mr(domain->ibv_pd, ptr, len, ibv_access);
+	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
 	if (!ibv_mr) {
 		EFA_WARN(FI_LOG_DOMAIN,
 			 "Failed to register Neuron buffer with the EFA device, FI_HMEM transfers that require peer to peer support will fail.\n");
