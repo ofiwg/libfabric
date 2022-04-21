@@ -282,6 +282,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	params->bytes_sent = 0;
 	params->opx_mr = NULL;
 	params->origin_byte_counter = NULL;
+	params->payload_bytes_for_iovec = 0;
 
 	fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->u8_rx);
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
