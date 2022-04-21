@@ -479,7 +479,7 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	rxr_poison_mem_region((uint32_t *)tx_entry,
 			      sizeof(struct rxr_tx_entry));
 #endif
-	tx_entry->state = RXR_TX_FREE;
+	tx_entry->state = RXR_OP_FREE;
 	ofi_buf_free(tx_entry);
 }
 
@@ -2115,11 +2115,11 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 
 		/* it can happen that rxr_pkt_post_ctrl() released rx_entry
 		 * (if the packet type is EOR and inject is used). In
-		 * that case rx_entry's state has been set to RXR_RX_FREE and
+		 * that case rx_entry's state has been set to RXR_OP_FREE and
 		 * it has been removed from ep->rx_queued_entry_list, so nothing
 		 * is left to do.
 		 */
-		if (rx_entry->state == RXR_RX_FREE)
+		if (rx_entry->state == RXR_OP_FREE)
 			continue;
 
 		dlist_remove(&rx_entry->queued_ctrl_entry);

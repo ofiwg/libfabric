@@ -64,9 +64,9 @@
 #include <ofi_perf.h>
 #include <ofi_hmem.h>
 
+#include "rxr_op_entry.h"
 #include "rxr_pkt_entry.h"
 #include "rxr_pkt_type.h"
-#include "rxr_op_entry.h"
 
 #define RXR_FI_VERSION		OFI_VERSION_LATEST
 
@@ -597,7 +597,7 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 	rxr_poison_mem_region((uint32_t *)rx_entry,
 			      sizeof(struct rxr_rx_entry));
 #endif
-	rx_entry->state = RXR_RX_FREE;
+	rx_entry->state = RXR_OP_FREE;
 	ofi_buf_free(rx_entry);
 }
 
