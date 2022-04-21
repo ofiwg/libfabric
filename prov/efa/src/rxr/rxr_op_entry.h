@@ -182,9 +182,6 @@ struct rxr_op_entry {
 	/* end of RX related variables */
 
 	/* the following variables are for TX operation only */
-	uint64_t iov_mr_start;
-	uint64_t iov_index;
-	uint64_t iov_offset;
 	uint64_t bytes_acked;
 	uint64_t bytes_sent;
 	/* end of TX only variables */

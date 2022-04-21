@@ -355,9 +355,6 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	tx_entry->bytes_sent = 0;
 	tx_entry->window = 0;
 	tx_entry->iov_count = msg->iov_count;
-	tx_entry->iov_index = 0;
-	tx_entry->iov_mr_start = 0;
-	tx_entry->iov_offset = 0;
 	tx_entry->msg_id = 0;
 	dlist_init(&tx_entry->queued_pkts);
 
@@ -549,27 +546,20 @@ void rxr_convert_desc_for_shm(int numdesc, void **desc)
 void rxr_prepare_desc_send(struct efa_domain *efa_domain,
 			   struct rxr_tx_entry *tx_entry)
 {
-	size_t offset;
-	int index;
+	int tx_iov_index;
+	size_t tx_iov_offset;
 
-	/* Set the iov index and iov offset from bytes sent */
-	offset = tx_entry->bytes_sent;
-	for (index = 0; index < tx_entry->iov_count; ++index) {
-		if (offset >= tx_entry->iov[index].iov_len) {
-			offset -= tx_entry->iov[index].iov_len;
-		} else {
-			tx_entry->iov_index = index;
-			tx_entry->iov_offset = offset;
-			break;
-		}
-	}
+	rxr_locate_iov_pos(tx_entry->iov,
+			   tx_entry->iov_count,
+			   tx_entry->bytes_sent,
+			   &tx_iov_index,
+			   &tx_iov_offset);
 
-	tx_entry->iov_mr_start = index;
 	/* the return value of rxr_ep_tx_init_mr_desc() is not checked
 	 * because the long message protocol would work with or without
 	 * memory registration and descriptor.
 	 */
-	rxr_ep_tx_init_mr_desc(efa_domain, tx_entry, index, FI_SEND);
+	rxr_ep_tx_init_mr_desc(efa_domain, tx_entry, tx_iov_index, FI_SEND);
 }
 
 /* Generic send */
