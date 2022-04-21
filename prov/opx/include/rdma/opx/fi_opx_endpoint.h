@@ -1388,38 +1388,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 	case FI_OPX_HFI_DPUT_OPCODE_FENCE:
 	{
 		assert(payload != NULL);
-		struct fi_opx_completion_counter *cc = (struct fi_opx_completion_counter *)hdr->dput.target.fence.completion_counter;
-		const uint64_t bytes_to_fence = hdr->dput.target.fence.bytes_to_fence;
-		const union fi_opx_hfi1_packet_hdr * const hfi1_hdr =
-				(const union fi_opx_hfi1_packet_hdr * const) hdr;
-
-		const uint64_t lrh_dlid = (hfi1_hdr->stl.lrh.qw[0] & 0xFFFF000000000000ul) >> 32;
-		const uint64_t bth_rx = (uint64_t)u8_rx << 56;
-		const uint64_t pbc_dws = 2 + /* pbc */
-				2 + /* lrh */
-				3 + /* bth */
-				9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-				(0 << 4);
-		const uint16_t lrh_dws = htons(pbc_dws - 1);
-
-		fi_opx_shm_dynamic_tx_connect(is_intranode, opx_ep, u8_rx);
-		uint64_t pos;
-		union fi_opx_hfi1_packet_hdr *const tx_hdr =
-			opx_shm_tx_next(&opx_ep->tx->shm, u8_rx, &pos);
-		while(!tx_hdr) {
-			// TODO:  It's possible this could hang forever
-			// Add the ability to defer the fence operation
-			opx_shm_tx_next(&opx_ep->tx->shm, u8_rx, &pos);
-		}
-		tx_hdr->qw[0] = opx_ep->rx->tx.dput.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
-		tx_hdr->qw[1] = opx_ep->rx->tx.dput.hdr.qw[1] | bth_rx;
-		tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2];
-		tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
-		tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_FENCE | (0ULL << 32);
-		tx_hdr->qw[5] = (uint64_t)cc;
-		tx_hdr->qw[6] = bytes_to_fence;
-
-		opx_shm_tx_advance(&opx_ep->tx->shm, (void *)tx_hdr, pos);
+		opx_hfi1_dput_fence(opx_ep, hdr, u8_rx);
 	}
 	break;
 	default:

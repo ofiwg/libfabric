@@ -828,6 +828,70 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
 }
 
+int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
+{
+	const uint64_t pbc_dws = 2 + /* pbc */
+				2 + /* lrh */
+				3 + /* bth */
+				9;  /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+	const uint16_t lrh_dws = htons(pbc_dws - 1);
+
+	struct fi_opx_hfi1_rx_dput_fence_params *params = &work->fence;
+	struct fi_opx_ep * opx_ep = params->opx_ep;
+
+	uint64_t pos;
+	union fi_opx_hfi1_packet_hdr *const tx_hdr =
+			opx_shm_tx_next(&opx_ep->tx->shm, params->u8_rx, &pos);
+	if (tx_hdr == NULL) {
+		return -FI_EAGAIN;
+	}
+
+	tx_hdr->qw[0] = opx_ep->rx->tx.dput.hdr.qw[0] | params->lrh_dlid | ((uint64_t)lrh_dws << 32);
+	tx_hdr->qw[1] = opx_ep->rx->tx.dput.hdr.qw[1] | params->bth_rx;
+	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2];
+	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
+	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_FENCE;
+	tx_hdr->qw[5] = (uint64_t)params->cc;
+	tx_hdr->qw[6] = params->bytes_to_fence;
+
+	opx_shm_tx_advance(&opx_ep->tx->shm, (void *)tx_hdr, pos);
+
+	return FI_SUCCESS;
+}
+
+void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
+			const union fi_opx_hfi1_packet_hdr *const hdr,
+			const uint8_t u8_rx)
+{
+	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
+	assert(work != NULL);
+	struct fi_opx_hfi1_rx_dput_fence_params *params = &work->fence;
+	params->opx_ep = opx_ep;
+	params->work_elem.slist_entry.next = NULL;
+	params->work_elem.work_fn = opx_hfi1_do_dput_fence;
+	params->work_elem.completion_action = NULL;
+	params->work_elem.payload_copy = NULL;
+
+	params->lrh_dlid = (hdr->stl.lrh.qw[0] & 0xFFFF000000000000ul) >> 32;
+	params->bth_rx = (uint64_t)u8_rx << 56;
+	params->u8_rx = u8_rx;
+	params->bytes_to_fence = hdr->dput.target.fence.bytes_to_fence;
+	params->cc = (struct fi_opx_completion_counter *) hdr->dput.target.fence.completion_counter;
+
+	fi_opx_shm_dynamic_tx_connect(1, opx_ep, u8_rx);
+
+	int rc = opx_hfi1_do_dput_fence(work);
+
+	if (rc == FI_SUCCESS) {
+		ofi_buf_free(work);
+		return;
+	}
+	assert(rc == -FI_EAGAIN);
+	/* Try again later*/
+	assert(work->work_elem.slist_entry.next == NULL);
+	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+}
+
 __OPX_FORCE_INLINE__
 int opx_hfi1_dput_write_header_and_payload_put(
 				struct fi_opx_ep *opx_ep,
