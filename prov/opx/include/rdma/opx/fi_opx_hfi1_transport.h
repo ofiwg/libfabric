@@ -395,12 +395,27 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	struct iovec src_iov[FI_OPX_MAX_DPUT_IOV];
 };
 
+struct fi_opx_hfi1_rx_dput_fence_params {
+	struct fi_opx_work_elem work_elem;
+	struct fi_opx_ep *opx_ep;
+	struct fi_opx_completion_counter *cc;
+	uint64_t lrh_dlid;
+	uint64_t bth_rx;
+	uint64_t bytes_to_fence;
+	uint8_t u8_rx;
+};
 
 union fi_opx_hfi1_deferred_work {
 	struct fi_opx_work_elem work_elem;
 	struct fi_opx_hfi1_dput_params dput;
 	struct fi_opx_hfi1_rx_rzv_rts_params rx_rzv_rts;
+	struct fi_opx_hfi1_rx_dput_fence_params fence;
 };
+
+int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work);
+void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
+			const union fi_opx_hfi1_packet_hdr *const hdr,
+			const uint8_t u8_rx);
 
 int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work *work);
 
@@ -1826,7 +1841,7 @@ static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep, const uint64
 	union fi_opx_hfi1_packet_hdr * tx_hdr = opx_shm_tx_next(
 		&opx_ep->tx->shm, dest_rx, &pos);
 	while(OFI_UNLIKELY(tx_hdr == NULL)) {  //TODO: Verify that all callers of this function can tolderate a NULL rc
-		fi_opx_shm_poll_many(&opx_ep->ep_fid, 0);
+		fi_opx_shm_poll_many(&opx_ep->ep_fid, FI_OPX_LOCK_NOT_REQUIRED);
 		tx_hdr = opx_shm_tx_next(
 			&opx_ep->tx->shm, dest_rx, &pos);
 	}
