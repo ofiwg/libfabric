@@ -345,22 +345,36 @@ int rxr_read_post_or_queue(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 	return err;
 }
 
-int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry)
+/**
+ * @brief post a read request to a peer
+ *
+ * A read request can be posted for multiple reasons:
+ *
+ * First, it can be because user directly initiated a read requst
+ * (by calling fi_readxxx() API). In this case the op_entry argument
+ * will be a tx_entry (op_entry->type == RXR_TX_ENTRY)
+ *
+ * Second, it can be part of a read-base message protocol, such as
+ * the longread message protocol. In this case, the op_entry argument
+ * will be a rx_entry (op_entry->type == RXR_RX_ENTRY)
+ *
+ * @param[in,out]		ep		endpoint
+ * @param[in,out]		op_entry	information of the operation the needs to post a read
+ * @return		0 if the read request is posted successfully.
+ * 			negative libfabric error code on failure.
+ */
+int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry)
 {
 	struct rdm_peer *peer;
 	struct rxr_read_entry *read_entry;
 	int lower_ep_type;
 
-	if (entry_type == RXR_TX_ENTRY) {
-		peer = rxr_ep_get_peer(ep, ((struct rxr_tx_entry *)x_entry)->addr);
-	} else {
-		assert(entry_type == RXR_RX_ENTRY);
-		peer = rxr_ep_get_peer(ep, ((struct rxr_rx_entry *)x_entry)->addr);
-	}
+	assert(op_entry->type == RXR_RX_ENTRY || op_entry->type == RXR_TX_ENTRY);
+	peer = rxr_ep_get_peer(ep, op_entry->addr);
 	assert(peer);
 
 	lower_ep_type = (peer->is_local && ep->use_shm_for_tx) ? SHM_EP : EFA_EP;
-	read_entry = rxr_read_alloc_entry(ep, entry_type, x_entry, lower_ep_type);
+	read_entry = rxr_read_alloc_entry(ep, op_entry->type, op_entry, lower_ep_type);
 	if (!read_entry) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RDMA entries exhausted.\n");

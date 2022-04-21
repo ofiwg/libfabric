@@ -117,7 +117,7 @@ int rxr_read_init_iov(struct rxr_ep *ep,
 
 int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry);
 
-int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry);
+int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry);
 
 int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 				      struct rxr_rx_entry *rx_entry,

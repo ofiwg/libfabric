@@ -1056,7 +1056,7 @@ ssize_t rxr_pkt_proc_matched_longread_rtm(struct rxr_ep *ep,
 		return err;
 	}
 
-	return rxr_read_post_remote_read_or_queue(ep, RXR_RX_ENTRY, rx_entry);
+	return rxr_read_post_remote_read_or_queue(ep, rx_entry);
 }
 
 ssize_t rxr_pkt_proc_matched_medium_rtm(struct rxr_ep *ep,
@@ -1863,7 +1863,7 @@ void rxr_pkt_handle_longread_rtw_recv(struct rxr_ep *ep,
 	       rx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
-	err = rxr_read_post_remote_read_or_queue(ep, RXR_RX_ENTRY, rx_entry);
+	err = rxr_read_post_remote_read_or_queue(ep, rx_entry);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RDMA post read or queue failed.\n");
