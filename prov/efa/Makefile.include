@@ -81,7 +81,7 @@ _efa_headers = \
 
 
 if ENABLE_EFA_UNIT_TEST
-check_PROGRAMS += prov/efa/test/efa_unit_test
+noinst_PROGRAMS += prov/efa/test/efa_unit_test
 TESTS += prov/efa/test/efa_unit_test
 nodist_prov_efa_test_efa_unit_test_SOURCES = \
 	prov/efa/test/efa_unit_tests.h \
