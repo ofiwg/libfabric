@@ -223,11 +223,9 @@ void rxr_read_copy_desc(enum rxr_lower_ep_type lower_ep_type,
  *   On success, return the pointer of allocated read_entry
  *   Otherwise, return NULL
  */
-struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, void *x_entry,
+struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, struct rxr_op_entry *op_entry,
 					    enum rxr_lower_ep_type lower_ep_type)
 {
-	struct rxr_tx_entry *tx_entry = NULL;
-	struct rxr_rx_entry *rx_entry = NULL;
 	struct rxr_read_entry *read_entry;
 	int i;
 	size_t total_iov_len, total_rma_iov_len;
@@ -242,50 +240,32 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, v
 	read_entry->read_id = ofi_buf_index(read_entry);
 	read_entry->state = RXR_RDMA_ENTRY_CREATED;
 
-	if (entry_type == RXR_TX_ENTRY) {
-		tx_entry = (struct rxr_tx_entry *)x_entry;
-		assert(tx_entry->op == ofi_op_read_req);
 
+	read_entry->iov_count = op_entry->iov_count;
+	memcpy(read_entry->iov, op_entry->iov,
+	       op_entry->iov_count * sizeof(struct iovec));
+
+	read_entry->rma_iov_count = op_entry->rma_iov_count;
+	memcpy(read_entry->rma_iov, op_entry->rma_iov,
+	       op_entry->rma_iov_count * sizeof(struct fi_rma_iov));
+
+	total_iov_len = ofi_total_iov_len(op_entry->iov, op_entry->iov_count);
+	total_rma_iov_len = ofi_total_rma_iov_len(op_entry->rma_iov, op_entry->rma_iov_count);
+	read_entry->total_len = MIN(total_iov_len, total_rma_iov_len);
+
+	rxr_read_copy_desc(lower_ep_type, read_entry->iov_count, op_entry->desc, read_entry->mr_desc);
+
+	read_entry->context = op_entry;
+	read_entry->addr = op_entry->addr;
+
+	if (op_entry->type == RXR_TX_ENTRY) {
+		assert(op_entry->op == ofi_op_read_req);
 		read_entry->context_type = RXR_READ_CONTEXT_TX_ENTRY;
-		read_entry->context = tx_entry;
-		read_entry->addr = tx_entry->addr;
-
-		read_entry->iov_count = tx_entry->iov_count;
-		memcpy(read_entry->iov, tx_entry->iov,
-		       tx_entry->iov_count * sizeof(struct iovec));
-
-		read_entry->rma_iov_count = tx_entry->rma_iov_count;
-		memcpy(read_entry->rma_iov, tx_entry->rma_iov,
-		       tx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
-
-		total_iov_len = ofi_total_iov_len(tx_entry->iov, tx_entry->iov_count);
-		total_rma_iov_len = ofi_total_rma_iov_len(tx_entry->rma_iov, tx_entry->rma_iov_count);
-		read_entry->total_len = MIN(total_iov_len, total_rma_iov_len);
-
-		rxr_read_copy_desc(lower_ep_type, read_entry->iov_count, tx_entry->desc, read_entry->mr_desc);
-
 	} else {
-		rx_entry = (struct rxr_rx_entry *)x_entry;
-		assert(rx_entry->op == ofi_op_write || rx_entry->op == ofi_op_msg ||
-		       rx_entry->op == ofi_op_tagged);
-
+		assert(op_entry->type == RXR_RX_ENTRY);
+		assert(op_entry->op == ofi_op_write || op_entry->op == ofi_op_msg ||
+		       op_entry->op == ofi_op_tagged);
 		read_entry->context_type = RXR_READ_CONTEXT_RX_ENTRY;
-		read_entry->context = rx_entry;
-		read_entry->addr = rx_entry->addr;
-
-		read_entry->iov_count = rx_entry->iov_count;
-		memcpy(read_entry->iov, rx_entry->iov,
-		       rx_entry->iov_count * sizeof(struct iovec));
-
-		read_entry->rma_iov_count = rx_entry->rma_iov_count;
-		memcpy(read_entry->rma_iov, rx_entry->rma_iov,
-		       rx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
-
-		total_iov_len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
-		total_rma_iov_len = ofi_total_rma_iov_len(rx_entry->rma_iov, rx_entry->rma_iov_count);
-		read_entry->total_len = MIN(total_iov_len, total_rma_iov_len);
-
-		rxr_read_copy_desc(lower_ep_type, read_entry->iov_count, rx_entry->desc, read_entry->mr_desc);
 	}
 
 	memset(read_entry->mr, 0, read_entry->iov_count * sizeof(struct fid_mr *));
@@ -374,7 +354,7 @@ int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, struct rxr_op_entry *o
 	assert(peer);
 
 	lower_ep_type = (peer->is_local && ep->use_shm_for_tx) ? SHM_EP : EFA_EP;
-	read_entry = rxr_read_alloc_entry(ep, op_entry->type, op_entry, lower_ep_type);
+	read_entry = rxr_read_alloc_entry(ep, op_entry, lower_ep_type);
 	if (!read_entry) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"RDMA entries exhausted.\n");
