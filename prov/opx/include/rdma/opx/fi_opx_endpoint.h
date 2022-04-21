@@ -1441,7 +1441,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 				const enum ofi_reliability_kind reliability)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== RECV -- RENDEZVOUS DATA (begin)\n");
+		"===================================== RECV -- RENDEZVOUS DATA Opcode=%0hhX (begin)\n", hdr->dput.target.opcode);
 	switch(hdr->dput.target.opcode) {
 	case FI_OPX_HFI_DPUT_OPCODE_RZV:
 	{
@@ -1590,7 +1590,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 
 		assert(dput_iov.bytes <= FI_OPX_HFI1_PACKET_MTU - sizeof(dput_iov));
 
-		dput_iov.bytes /= 2;
+		dput_iov.bytes >>= 1;
 		union fi_opx_hfi1_deferred_work *work =
 		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, opx_mr, (const void * const) hdr, (const void * const) payload,
 					payload_bytes,
@@ -2954,6 +2954,17 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 			opx_ep->tx->av_addr[dest_addr].fi :
 			dest_addr
 	};
+
+	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
+			&opx_ep->reliability->state,
+			addr.uid.lid,
+			addr.hfi1_rx,
+			addr.reliability_rx,
+			reliability))) {
+		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+		return -FI_EAGAIN;
+	}
+
 	size_t total_len = len;
 	const struct iovec *local_iov = NULL;
 	size_t niov = 0;

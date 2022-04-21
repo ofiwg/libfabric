@@ -416,41 +416,43 @@ union fi_opx_hfi1_packet_hdr {
 
 		union {
 			uint8_t	opcode;
-            struct {
-                /* == quadword 4 == */
-				uint8_t	    opcode;
-				uint8_t     unused;
-                uint16_t	origin_rs;
-                uint32_t    niov;           /* number of non-contiguous buffers described in the packet payload */
-                /* == quadword 5,6 == */
-                uintptr_t	origin_byte_counter_vaddr;
-                uintptr_t	target_byte_counter_vaddr;
-            } vaddr;
-            struct {
-                /* == quadword 4 == */
-				uint8_t	    opcode;
-				uint8_t     unused;
-                uint16_t	origin_rs;
-                uint8_t     dt;
-                uint8_t     op;
-                uint16_t    niov;           /* number of non-contiguous buffers described in the packet payload */
-                /* == quadword 5,6 == */
-                uintptr_t	target_completion_counter_vaddr;
-                uint64_t	key;
-            } mr;
-            struct {
-                /* == quadword 4 == */
-                uint8_t     opcode;
-				uint8_t     unused;
-                uint16_t    origin_rs;
-                uint8_t     unused0;
-                uint8_t     unused1;
-                uint16_t    unused2;         /* number of non-contiguous buffers described in the packet payload */
+			struct {
+				/* == quadword 4 == */
+				uint8_t		opcode;
+				uint8_t		unused;
+				uint16_t	origin_rs;
+				uint32_t	niov;		/* number of non-contiguous buffers described in the packet payload */
 
-                /* == quadword 5,6 == */
-                uintptr_t   completion_counter;
-                uint64_t    bytes_to_fence;
-            } fence;
+				/* == quadword 5,6 == */
+				uintptr_t	origin_byte_counter_vaddr;
+				uintptr_t	target_byte_counter_vaddr;
+			} vaddr;
+			struct {
+				/* == quadword 4 == */
+				uint8_t		opcode;
+				uint8_t		unused;
+				uint16_t	origin_rs;
+				uint8_t		dt;
+				uint8_t		op;
+				uint16_t	niov;		/* number of non-contiguous buffers described in the packet payload */
+
+				/* == quadword 5,6 == */
+				uintptr_t	target_completion_counter_vaddr;
+				uint64_t	key;
+			} mr;
+			struct {
+				/* == quadword 4 == */
+				uint8_t		opcode;
+				uint8_t		unused;
+				uint16_t	origin_rs;
+				uint8_t		unused0;
+				uint8_t		unused1;
+				uint16_t	unused2;	/* number of non-contiguous buffers described in the packet payload */
+
+				/* == quadword 5,6 == */
+				uintptr_t	completion_counter;
+				uint64_t	bytes_to_fence;
+			} fence;
 		} target;
 
 	} __attribute__((__packed__)) cts;
@@ -475,10 +477,8 @@ union fi_opx_hfi1_packet_hdr {
 			uint8_t	opcode;
 			struct {
 				/* == quadword 4 == */
-				uint8_t     opcode;
-				uint8_t     unused0;
-				uint8_t	    unused1;
-				uint8_t	    unused2;
+				uint8_t		opcode;
+				uint8_t		unused[3];
 				uint32_t	bytes;
 
 				/* == quadword 5,6 == */
@@ -487,29 +487,29 @@ union fi_opx_hfi1_packet_hdr {
 			} vaddr;
 			struct {
 				/* == quadword 4 == */
-				uint8_t opcode;
-				uint8_t unused;
-				uint16_t origin_rs;
+				uint8_t		opcode;
+				uint8_t		unused;
+				uint16_t	origin_rs;
+				uint8_t		dt;
+				uint8_t		op;
+				uint16_t	bytes;
+
 				/* == quadword 5,6 == */
-				uint8_t dt;
-				uint8_t op;
-				uint16_t bytes;
 				uintptr_t	offset;
 				uintptr_t	key;
 			} mr;
-			struct fi_opx_mr_atomic mr_atomic;
-            struct {
-                /* == quadword 4 == */
-                uint8_t     opcode;
-                uint8_t     unused0;
-                uint8_t     unused1;
-                uint8_t     unused2;
-                uint32_t    unused3;
 
-                /* == quadword 5,6 == */
-                uintptr_t   completion_counter;
-                uint64_t    bytes_to_fence;
-            } fence;
+			struct fi_opx_mr_atomic mr_atomic;
+			struct {
+				/* == quadword 4 == */
+				uint8_t		opcode;
+				uint8_t		unused[3];
+				uint32_t	unused2;
+
+				/* == quadword 5,6 == */
+				uintptr_t	completion_counter;
+				uint64_t	bytes_to_fence;
+			} fence;
 		} target;
 
 	} __attribute__((__packed__)) dput;
