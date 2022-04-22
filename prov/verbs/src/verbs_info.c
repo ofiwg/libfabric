@@ -242,6 +242,9 @@ static int vrb_check_hints(uint32_t version, const struct fi_info *hints,
 		return -FI_ENODATA;
 	}
 
+	if (!ofi_valid_addr_format(info->addr_format, hints->addr_format))
+		return -FI_ENODATA;
+
 	prov_mode = ofi_mr_get_prov_mode(version, hints, info);
 
 	if ((hints->mode & prov_mode) != prov_mode) {
@@ -768,12 +771,14 @@ static int vrb_alloc_info(struct ibv_context *ctx, struct fi_info **info,
 		fi->caps = VERBS_MSG_CAPS;
 		*(fi->tx_attr) = verbs_tx_attr;
 		*(fi->rx_attr) = verbs_rx_attr;
+		fi->addr_format = FI_SOCKADDR;
 		break;
 	case FI_EP_DGRAM:
 		fi->caps = VERBS_DGRAM_CAPS;
 		fi->mode = VERBS_DGRAM_RX_MODE;
 		*(fi->tx_attr) = verbs_dgram_tx_attr;
 		*(fi->rx_attr) = verbs_dgram_rx_attr;
+		fi->addr_format = FI_ADDR_IB_UD;
 		fi->ep_attr->msg_prefix_size = VERBS_DGRAM_MSG_PREFIX_SIZE;
 		break;
 	default:
