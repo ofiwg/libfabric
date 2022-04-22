@@ -219,7 +219,8 @@ standard_tests=(
 
 unit_tests=(
 	"fi_getinfo_test -s SERVER_ADDR GOOD_ADDR"
-	"fi_av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR"
+	"fi_av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR -e rdm"
+	"fi_av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR -e dgram"
 	"fi_dom_test -n 2"
 	"fi_eq_test"
 	"fi_cq_test"
