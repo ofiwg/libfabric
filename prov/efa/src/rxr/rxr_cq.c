@@ -540,9 +540,9 @@ void rxr_cq_complete_rx(struct rxr_ep *ep,
 	}
 
 	/* As can be seen, this function does not release rx_entry when
-	 * rxr_pkt_post_ctrl_or_queue() was successful.
+	 * rxr_pkt_post_or_queue() was successful.
 	 *
-	 * This is because that rxr_pkt_post_ctrl_or_queue() might have
+	 * This is because that rxr_pkt_post_or_queue() might have
 	 * queued the ctrl packet (due to out of resource), and progress
 	 * engine will resend the packet. In that case, progress engine
 	 * needs the rx_entry to construct the ctrl packet.
@@ -551,7 +551,7 @@ void rxr_cq_complete_rx(struct rxr_ep *ep,
 	 * the send completion of the ctrl packet.
 	 *
 	 * Another interesting point is that when inject was used, the
-	 * rx_entry was released by rxr_pkt_post_ctrl_or_queue(), because
+	 * rx_entry was released by rxr_pkt_post_or_queue(), because
 	 * when inject was used, lower device will not provider send
 	 * completion for the ctrl packet.
 	 */
@@ -560,11 +560,7 @@ void rxr_cq_complete_rx(struct rxr_ep *ep,
 		peer = rxr_ep_get_peer(ep, rx_entry->addr);
 		assert(peer);
 		inject = peer->is_local && ep->use_shm_for_tx;
-		err = rxr_pkt_post_ctrl_or_queue(ep,
-						 RXR_RX_ENTRY,
-						 rx_entry,
-						 ctrl_type,
-						 inject);
+		err = rxr_pkt_post_or_queue(ep, rx_entry, ctrl_type, inject);
 		if (OFI_UNLIKELY(err)) {
 			FI_WARN(&rxr_prov,
 				FI_LOG_CQ,
