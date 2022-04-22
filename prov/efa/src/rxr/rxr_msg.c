@@ -169,7 +169,6 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	assert(peer);
 
 	if (delivery_complete_requested && !(peer->is_local)) {
-		tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 		/*
 		 * Because delivery complete is defined as an extra
 		 * feature, the receiver might not support it.

@@ -164,7 +164,6 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 
 	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
 	if (delivery_complete_requested && !(peer->is_local)) {
-		tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 		/*
 		 * Because delivery complete is defined as an extra
 		 * feature, the receiver might not support it.

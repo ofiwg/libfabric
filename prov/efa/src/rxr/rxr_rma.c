@@ -417,7 +417,6 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 
 	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
 	if (delivery_complete_requested) {
-		tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 		/*
 		 * Because delivery complete is defined as an extra
 		 * feature, the receiver might not support it.
