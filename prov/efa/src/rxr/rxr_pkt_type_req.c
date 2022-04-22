@@ -603,6 +603,7 @@ int rxr_pkt_init_longcts_rtm(struct rxr_ep *ep,
 	struct rxr_longcts_rtm_base_hdr *rtm_hdr;
 	int ret;
 
+	tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
 	ret = rxr_pkt_init_rtm(ep, tx_entry, pkt_type, 0, pkt_entry);
 	if (ret)
 		return ret;
@@ -1500,6 +1501,7 @@ static inline void rxr_pkt_init_longcts_rtw_hdr(struct rxr_ep *ep,
 {
 	struct rxr_longcts_rtw_hdr *rtw_hdr;
 
+	tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
 	rtw_hdr = (struct rxr_longcts_rtw_hdr *)pkt_entry->pkt;
 	rtw_hdr->rma_iov_count = tx_entry->rma_iov_count;
 	rtw_hdr->msg_length = tx_entry->total_len;

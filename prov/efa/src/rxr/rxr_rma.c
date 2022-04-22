@@ -489,7 +489,6 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 
 	ctrl_type = delivery_complete_requested ?
 		RXR_DC_LONGCTS_RTW_PKT : RXR_LONGCTS_RTW_PKT;
-	tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
 	return rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, ctrl_type, 0, 0);
 }
 
