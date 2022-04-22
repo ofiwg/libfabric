@@ -94,6 +94,14 @@ struct rxr_req_inf REQ_INF_LIST[] = {
 	[RXR_COMPARE_RTA_PKT] = {4, sizeof(struct rxr_rta_hdr), 0},
 };
 
+bool rxr_pkt_req_supported_by_peer(int req_type, struct rdm_peer *peer)
+{
+	assert(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED);
+
+	int extra_id = REQ_INF_LIST[req_type].protover - 4;
+	return peer->extra_info[extra_id] & REQ_INF_LIST[req_type].ex_feature_flag;
+}
+
 size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry)
 {
 	size_t hdr_size;

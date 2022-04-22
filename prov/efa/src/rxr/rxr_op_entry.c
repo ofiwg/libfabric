@@ -67,9 +67,14 @@
  * case tx_entry->desc will not be filled either.
  *
  * Because this function is not guaranteed to fill tx_entry->desc,
- * caller is responsible to ensure the message transfer
- * can continue if tx_entry->desc is not available, which usually
- * means to use the 1st solution (bounce buffer).
+ * it is used by protocols that does not rely on memory registration
+ * such as the medium message protocol and long-cts protocol. These
+ * protocol check tx_entry->desc, and when tx_entry->desc is not set,
+ * they use bounce buffer.
+ *
+ * Among other protocols, eager protocol will not register memory,
+ * so do not call this function. Read base protocol rely on memory
+ * registration, hence cannot use function for memory registration either.
  *
  * @param[in,out]	tx_entry	contains the inforation of a TX operation
  * @param[in]		efa_domain	where memory regstration function operates from

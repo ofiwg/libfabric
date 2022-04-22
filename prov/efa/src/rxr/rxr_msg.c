@@ -55,157 +55,107 @@
  *  Send function
  */
 
+
 /**
- *   Utility functions used by both non-tagged and tagged send.
+ * @brief select a two-sided protocol for the send operation when send buffer is on cuda memory
+ *
+ * @param[in]		rxr_ep		endpoint
+ * @param[in]		tx_entry	contains information of the send operation
+ * @return		the RTM packet type of the two-sided protocol. Four
+ *                      types of protocol can be used: eager, medium, longcts, longread.
+ *                      Each protocol has tagged/non-tagged version. Some protocols has a DC version.
+ *
  */
 static inline
-ssize_t rxr_msg_post_cuda_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
+int rxr_msg_select_rtm_for_cuda(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 {
-	int err, tagged;
-	struct rdm_peer *peer;
-	int pkt_type, max_eager_data_size;
+	int tagged;
+	int eager_rtm, medium_rtm, longcts_rtm, longread_rtm;
+	int eager_rtm_max_data_size;
 	bool delivery_complete_requested;
 
-	assert(RXR_EAGER_MSGRTM_PKT + 1 == RXR_EAGER_TAGRTM_PKT);
-	assert(RXR_LONGREAD_MSGRTM_PKT + 1 == RXR_LONGREAD_TAGRTM_PKT);
-	assert(RXR_DC_EAGER_MSGRTM_PKT + 1 == RXR_DC_EAGER_TAGRTM_PKT);
-
+	assert(tx_entry->op == ofi_op_tagged || tx_entry->op == ofi_op_msg);
 	tagged = (tx_entry->op == ofi_op_tagged);
 	assert(tagged == 0 || tagged == 1);
 
 	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
-	/*
-	 * Todo: use information in handshake packet to determine whether
-	 * the receiver supports gdrcopy.
-	 */
-	if (tx_entry->total_len == 0 || cuda_is_gdrcopy_enabled()) {
-		pkt_type = delivery_complete_requested ? RXR_DC_EAGER_MSGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
-		max_eager_data_size = rxr_pkt_req_max_data_size(rxr_ep,
-								tx_entry->addr,
-								pkt_type + tagged,
-								tx_entry->fi_flags, 0);
 
-		max_eager_data_size = MIN(max_eager_data_size, rxr_env.efa_max_gdrcopy_msg_size);
+	eager_rtm = (delivery_complete_requested) ? RXR_DC_EAGER_MSGRTM_PKT + tagged
+						  : RXR_EAGER_MSGRTM_PKT + tagged;
 
-		if (tx_entry->total_len <= max_eager_data_size) {
-			return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						 pkt_type + tagged, 0, 0);
-		}
+	medium_rtm = (delivery_complete_requested) ? RXR_DC_MEDIUM_MSGRTM_PKT + tagged
+						   : RXR_MEDIUM_MSGRTM_PKT + tagged;
 
-		if (tx_entry->total_len <= rxr_env.efa_max_gdrcopy_msg_size) {
-			if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size) {
-				pkt_type = delivery_complete_requested ? RXR_DC_MEDIUM_MSGRTM_PKT : RXR_MEDIUM_MSGRTM_PKT;
-			} else {
-				pkt_type = delivery_complete_requested ? RXR_DC_LONGCTS_MSGRTM_PKT : RXR_LONGCTS_MSGRTM_PKT;
-			}
+	longcts_rtm = (delivery_complete_requested) ? RXR_DC_LONGCTS_MSGRTM_PKT + tagged
+						    : RXR_LONGCTS_MSGRTM_PKT + tagged;
 
-			return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						 pkt_type + tagged, 0, 0);
-		}
+	longread_rtm = RXR_LONGREAD_MSGRTM_PKT + tagged;
+
+	if (tx_entry->total_len == 0)
+		return eager_rtm;
+
+	if (cuda_is_gdrcopy_enabled() && tx_entry->total_len <= rxr_env.efa_max_gdrcopy_msg_size) {
+		eager_rtm_max_data_size = rxr_pkt_req_max_data_size(rxr_ep, tx_entry->addr, eager_rtm,
+								    tx_entry->fi_flags, 0);
+
+		eager_rtm_max_data_size = MIN(eager_rtm_max_data_size, rxr_env.efa_max_gdrcopy_msg_size);
+
+		if (tx_entry->total_len <= eager_rtm_max_data_size)
+			return eager_rtm;
+
+		if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size)
+			return medium_rtm;
+
+		return longcts_rtm;
 	}
 
-	/* At this point we must use read message protocol for cuda memory.
-	 * However, because read message protocol is an extra feature, we do not know
-	 * whether the receiver supports it.
-	 * The only way we can be sure of that is through the handshake packet
-	 * from the receiver, so here we call rxr_pkt_wait_handshake().
-	 */
-	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
-	assert(peer);
-
-	err = rxr_pkt_wait_handshake(rxr_ep, tx_entry->addr, peer);
-	if (OFI_UNLIKELY(err)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "waiting for handshake packet failed!\n");
-		return err;
-	}
-
-	assert(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED);
-	if (!efa_peer_support_rdma_read(peer)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Cannot send gpu data because receiver does not support RDMA\n");
-		return -FI_EOPNOTSUPP;
-	}
-
-	return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-				 RXR_LONGREAD_MSGRTM_PKT + tagged, 0, 0);
+	return longread_rtm;
 }
 
-ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
+/**
+ * @brief select a two-sided protocol for the send operation
+ *
+ * @param[in]		rxr_ep		endpoint
+ * @param[in]		tx_entry	contains information of the send operation
+ * @param[in]		use_p2p		whether p2p can be used
+ * @return		the RTM packet type of the two-sided protocol. Four
+ *                      types of protocol can be used: eager, medium, longcts, longread.
+ *                      Each protocol has tagged/non-tagged version. Some protocols has a DC version.
+ *
+ */
+int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int use_p2p)
 {
 	/*
 	 * For performance consideration, this function assume the tagged rtm packet type id is
 	 * always the correspondent message rtm packet type id + 1, thus the assertion here.
 	 */
 	assert(RXR_EAGER_MSGRTM_PKT + 1 == RXR_EAGER_TAGRTM_PKT);
-	assert(RXR_LONGREAD_MSGRTM_PKT + 1 == RXR_LONGREAD_TAGRTM_PKT);
-	assert(RXR_LONGCTS_MSGRTM_PKT + 1 == RXR_LONGCTS_TAGRTM_PKT);
 	assert(RXR_MEDIUM_MSGRTM_PKT + 1 == RXR_MEDIUM_TAGRTM_PKT);
-
+	assert(RXR_LONGCTS_MSGRTM_PKT + 1 == RXR_LONGCTS_TAGRTM_PKT);
+	assert(RXR_LONGREAD_MSGRTM_PKT + 1 == RXR_LONGREAD_TAGRTM_PKT);
 	assert(RXR_DC_EAGER_MSGRTM_PKT + 1 == RXR_DC_EAGER_TAGRTM_PKT);
 	assert(RXR_DC_MEDIUM_MSGRTM_PKT + 1 == RXR_DC_MEDIUM_TAGRTM_PKT);
 	assert(RXR_DC_LONGCTS_MSGRTM_PKT + 1 == RXR_DC_LONGCTS_TAGRTM_PKT);
 
 	int tagged;
-	size_t max_rtm_data_size;
-	ssize_t ret;
+	int eager_rtm, medium_rtm, longcts_rtm, longread_rtm;
+	size_t eager_rtm_max_data_size;
 	struct rdm_peer *peer;
 	bool delivery_complete_requested;
-	int ctrl_type;
-	struct efa_ep *efa_ep;
-	struct efa_domain *efa_domain;
 
-	efa_domain = rxr_ep_domain(rxr_ep);
-	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 
 	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
 	tagged = (tx_entry->op == ofi_op_tagged);
 	assert(tagged == 0 || tagged == 1);
 
-	if (tx_entry->fi_flags & FI_INJECT)
-		delivery_complete_requested = false;
-	else
-		delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
 	assert(peer);
 
-	if (delivery_complete_requested && !(peer->is_local)) {
-		/*
-		 * Because delivery complete is defined as an extra
-		 * feature, the receiver might not support it.
-		 *
-		 * The sender cannot send with FI_DELIVERY_COMPLETE
-		 * if the peer is not able to handle it.
-		 *
-		 * If the sender does not know whether the peer
-		 * can handle it, it needs to trigger
-		 * a handshake packet from the peer.
-		 *
-		 * The handshake packet contains
-		 * the information whether the peer
-		 * support it or not.
-		 */
-		ret = rxr_pkt_trigger_handshake(rxr_ep, tx_entry->addr, peer);
-		if (OFI_UNLIKELY(ret))
-			return ret;
-
-		if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
-			return -FI_EAGAIN;
-
-		else if (!rxr_peer_support_delivery_complete(peer))
-			return -FI_EOPNOTSUPP;
-
-		max_rtm_data_size = rxr_pkt_req_max_data_size(rxr_ep,
-							      tx_entry->addr,
-							      RXR_DC_EAGER_MSGRTM_PKT + tagged,
-							      tx_entry->fi_flags, 0);
-	} else {
-		max_rtm_data_size = rxr_pkt_req_max_data_size(rxr_ep,
-							      tx_entry->addr,
-							      RXR_EAGER_MSGRTM_PKT + tagged,
-							      tx_entry->fi_flags, 0);
-	}
-
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
-		/* intra instance message
+		/* Use shm for intra instance message.
+		 *
+		 * Shm provider support delivery complete, so we do not need to
+		 * use DC version of EAGER RTM.
 		 *
 		 * Currently the shm provider does not support mixed memory type
 		 * iov (it will crash), which will happen if the eager message
@@ -216,95 +166,126 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 		 * Have the remote side issue a read to copy the data instead
 		 * to work around this issue.
 		 */
-		if (tx_entry->total_len > max_rtm_data_size || efa_mr_is_hmem(tx_entry->desc[0]))
-			/*
-			 * Read message support
-			 * FI_DELIVERY_COMPLETE implicitly.
-			 */
-			ctrl_type = RXR_LONGREAD_MSGRTM_PKT;
-		else
-			ctrl_type = delivery_complete_requested ? RXR_DC_EAGER_MSGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
+		if (tx_entry->total_len > rxr_env.shm_max_medium_size || efa_mr_is_hmem(tx_entry->desc[0]))
+			return RXR_LONGREAD_MSGRTM_PKT + tagged;
 
-		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry, ctrl_type + tagged, 0, 0);
+		return RXR_EAGER_MSGRTM_PKT + tagged;
 	}
 
-	ret = efa_ep_use_p2p(efa_ep, tx_entry->desc[0]);
-	if (ret < 0)
-		return ret;
-	if (ret == 1 && efa_mr_is_cuda(tx_entry->desc[0])) {
-		return rxr_msg_post_cuda_rtm(rxr_ep, tx_entry);
-	}
+	if (use_p2p && efa_mr_is_cuda(tx_entry->desc[0]))
+		return rxr_msg_select_rtm_for_cuda(rxr_ep, tx_entry);
 
-	/* inter instance message */
-	if (tx_entry->total_len <= max_rtm_data_size) {
-		ctrl_type = (delivery_complete_requested) ?
-			RXR_DC_EAGER_MSGRTM_PKT : RXR_EAGER_MSGRTM_PKT;
-		return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					 ctrl_type + tagged, 0, 0);
-	}
+	/* inter instance message using host/neuron memory */
+	if (tx_entry->fi_flags & FI_INJECT)
+		delivery_complete_requested = false;
+	else
+		delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
+
+	eager_rtm = (delivery_complete_requested) ? RXR_DC_EAGER_MSGRTM_PKT + tagged
+						  : RXR_EAGER_MSGRTM_PKT + tagged;
+
+	medium_rtm = (delivery_complete_requested) ? RXR_DC_MEDIUM_MSGRTM_PKT + tagged
+						   :  RXR_MEDIUM_MSGRTM_PKT + tagged;
+
+	longcts_rtm = (delivery_complete_requested) ? RXR_DC_LONGCTS_MSGRTM_PKT + tagged
+						    : RXR_LONGCTS_MSGRTM_PKT + tagged;
+
+	longread_rtm = RXR_LONGREAD_MSGRTM_PKT + tagged;
+
+	eager_rtm_max_data_size = rxr_pkt_req_max_data_size(rxr_ep,
+							    tx_entry->addr,
+							    eager_rtm,
+							    tx_entry->fi_flags, 0);
+
+	if (tx_entry->total_len <= eager_rtm_max_data_size)
+		return eager_rtm;
 
 	/*
 	 * Force the LONGREAD protocol for Neuron buffers, regardless of what
 	 * is specified by the user for protocol switch over points.
 	 */
-	if (efa_mr_is_neuron(tx_entry->desc[0])) {
-		/*
-		 * It is possible for the remote endpoint to support RDMA read,
-		 * but not p2p transfers between efa and neuron. That scenario
-		 * will cause a fatal error; if we want to catch this we will
-		 * need to extend the handshake packet to report device p2p
-		 * support.
-		 */
-		ret = rxr_ep_determine_rdma_support(rxr_ep, tx_entry->addr, peer);
-		if (ret < 0)
-			return ret;
+	if (efa_mr_is_neuron(tx_entry->desc[0]))
+		return longread_rtm;
 
-		if (ret != 1)
-			return -FI_EOPNOTSUPP;
+	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size)
+		return medium_rtm;
 
-		ret = rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					RXR_LONGREAD_MSGRTM_PKT + tagged, 0, 0);
-		return ret;
+	/*
+	 * read based message transfer requires memory registration of send buffer
+	 * and receiver buffer, therefore should only be used when user proivded
+	 * memory descriptor or MR cache is available.
+	 */
+	if (efa_ep_support_rdma_read(rxr_ep->rdm_ep) &&
+	    tx_entry->total_len >= rxr_env.efa_min_read_msg_size &&
+	    (tx_entry->desc[0] || efa_is_cache_available(rxr_ep_domain(rxr_ep))))
+		return longread_rtm;
+
+	return longcts_rtm;
+}
+
+/**
+ * @brief post RTM packet(s) for a send operation
+ *
+ * @param[in,out]	ep		endpoint
+ * @param[in,out]	tx_entry	information of the send operation.
+ * @param[in]		use_p2p		whether p2p can be used for this send operation.
+ * @return		0 if packet(s) was posted successfully.
+ *
+ * 			negative libfabric error code on faliure, including but not limited to:
+ *
+ * 			-FI_ENOSUPP if the send operation requires an extra feature,
+ * 			which peer does not support.
+ *
+ * 			-FI_EAGAIN for temporary out of resources for send
+ */
+ssize_t rxr_msg_post_rtm(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int use_p2p)
+{
+	ssize_t err;
+	int rtm_type;
+	struct rdm_peer *peer;
+
+	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	assert(peer);
+
+	rtm_type = rxr_msg_select_rtm(ep, tx_entry, use_p2p);
+	assert(rtm_type >= RXR_REQ_PKT_BEGIN);
+
+	if (peer->is_local && ep->use_shm_for_tx) {
+		/* we know shm's capablity, so no need to check handshake */
+		return rxr_pkt_post_req(ep, tx_entry, rtm_type, 0, 0);
 	}
 
-	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size) {
-		/*
-		 * we have to queue message RTM because data is sent as multiple
-		 * medium RTM packets. It could happend that the first several packets
-		 * were sent successfully, but the following packet encountered -FI_EAGAIN
-		 */
-		ctrl_type = delivery_complete_requested ?
-			RXR_DC_MEDIUM_MSGRTM_PKT : RXR_MEDIUM_MSGRTM_PKT;
-		return rxr_pkt_post_ctrl_or_queue(rxr_ep, RXR_TX_ENTRY, tx_entry,
-						  ctrl_type + tagged, 0);
+	if (rtm_type < RXR_EXTRA_REQ_PKT_BEGIN) {
+		/* rtm requires only baseline feature, which peer should always support. */
+		return rxr_pkt_post_req(ep, tx_entry, rtm_type, 0, 0);
 	}
 
-	if (tx_entry->total_len >= rxr_env.efa_min_read_msg_size &&
-	    efa_both_support_rdma_read(rxr_ep, peer) &&
-	    (tx_entry->desc[0] || efa_is_cache_available(efa_domain))) {
-		/* Read message support FI_DELIVERY_COMPLETE implicitly. */
-		ret = rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-					RXR_LONGREAD_MSGRTM_PKT + tagged, 0, 0);
+	/*
+	 * rtm_type requrirs an extra feature, which peer might not support.
+	 *
+	 * Check handshake packet from peer to verify support status.
+	 */
+	if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)) {
+		err = rxr_pkt_trigger_handshake(ep, tx_entry->addr, peer);
+		if (err)
+			return err;
 
-		if (ret != -FI_ENOMEM)
-			return ret;
-
-		/*
-		 * If memory registration failed, we continue here
-		 * and fall back to use long message protocol
-		 */
+		rxr_ep_progress_internal(ep);
+		return -FI_EAGAIN;
 	}
 
-	ctrl_type = delivery_complete_requested ? RXR_DC_LONGCTS_MSGRTM_PKT : RXR_LONGCTS_MSGRTM_PKT;
-	return rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY, tx_entry,
-				 ctrl_type + tagged, 0, 0);
+	if (!rxr_pkt_req_supported_by_peer(rtm_type, peer))
+		return -FI_EOPNOTSUPP;
+
+	return rxr_pkt_post_req(ep, tx_entry, rtm_type, 0, 0);
 }
 
 ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 			     uint64_t tag, uint32_t op, uint64_t flags)
 {
 	struct rxr_ep *rxr_ep;
-	ssize_t err;
+	struct efa_ep *efa_ep;
+	ssize_t err, ret, use_p2p;
 	struct rxr_tx_entry *tx_entry;
 	struct rdm_peer *peer;
 
@@ -328,12 +309,20 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 	tx_entry = rxr_ep_alloc_tx_entry(rxr_ep, msg, op, tag, flags);
-
 	if (OFI_UNLIKELY(!tx_entry)) {
 		err = -FI_EAGAIN;
 		rxr_ep_progress_internal(rxr_ep);
 		goto out;
 	}
+
+	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	ret = efa_ep_use_p2p(efa_ep, tx_entry->desc[0]);
+	if (ret < 0) {
+		err = ret;
+		goto out;
+	}
+
+	use_p2p = ret;
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 	       "iov_len: %lu tag: %lx op: %x flags: %lx\n",
@@ -343,7 +332,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
 
 	tx_entry->msg_id = peer->next_msg_id++;
-	err = rxr_msg_post_rtm(rxr_ep, tx_entry);
+	err = rxr_msg_post_rtm(rxr_ep, tx_entry, use_p2p);
 	if (OFI_UNLIKELY(err)) {
 		rxr_release_tx_entry(rxr_ep, tx_entry);
 		peer->next_msg_id--;
