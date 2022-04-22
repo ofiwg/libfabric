@@ -71,6 +71,7 @@ fabtests/ubertest/fabtest
 fabtests/ubertest/fi_ubertest
 
 fabtests/benchmarks/fi_*
+fabtests/component/sock_test
 fabtests/functional/fi_*
 fabtests/unit/fi_*
 fabtests/multinode/fi_*
