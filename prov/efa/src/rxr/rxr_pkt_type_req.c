@@ -519,6 +519,7 @@ ssize_t rxr_pkt_init_medium_msgrtm(struct rxr_ep *ep,
 				   struct rxr_tx_entry *tx_entry,
 				   struct rxr_pkt_entry *pkt_entry)
 {
+	struct efa_domain *efa_domain;
 	struct rxr_medium_rtm_base_hdr *rtm_hdr;
 	int ret;
 
@@ -526,6 +527,9 @@ ssize_t rxr_pkt_init_medium_msgrtm(struct rxr_ep *ep,
 			       tx_entry->bytes_sent, pkt_entry);
 	if (ret)
 		return ret;
+
+	efa_domain = rxr_ep_domain(ep);
+	rxr_tx_entry_try_fill_desc(tx_entry, efa_domain, 0, FI_SEND);
 
 	rtm_hdr = rxr_get_medium_rtm_base_hdr(pkt_entry->pkt);
 	rtm_hdr->msg_length = tx_entry->total_len;
@@ -537,6 +541,7 @@ ssize_t rxr_pkt_init_dc_medium_msgrtm(struct rxr_ep *ep,
 				      struct rxr_tx_entry *tx_entry,
 				      struct rxr_pkt_entry *pkt_entry)
 {
+	struct efa_domain *efa_domain;
 	struct rxr_dc_medium_msgrtm_hdr *dc_medium_msgrtm_hdr;
 	int ret;
 
@@ -545,6 +550,9 @@ ssize_t rxr_pkt_init_dc_medium_msgrtm(struct rxr_ep *ep,
 			       tx_entry->bytes_sent, pkt_entry);
 	if (ret)
 		return ret;
+
+	efa_domain = rxr_ep_domain(ep);
+	rxr_tx_entry_try_fill_desc(tx_entry, efa_domain, 0, FI_SEND);
 
 	dc_medium_msgrtm_hdr = rxr_get_dc_medium_msgrtm_hdr(pkt_entry->pkt);
 	dc_medium_msgrtm_hdr->hdr.msg_length = tx_entry->total_len;
@@ -557,6 +565,7 @@ ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_ep *ep,
 				   struct rxr_tx_entry *tx_entry,
 				   struct rxr_pkt_entry *pkt_entry)
 {
+	struct efa_domain *efa_domain;
 	struct rxr_medium_rtm_base_hdr *rtm_hdr;
 	int ret;
 
@@ -564,6 +573,9 @@ ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_ep *ep,
 			       tx_entry->bytes_sent, pkt_entry);
 	if (ret)
 		return ret;
+
+	efa_domain = rxr_ep_domain(ep);
+	rxr_tx_entry_try_fill_desc(tx_entry, efa_domain, 0, FI_SEND);
 
 	rtm_hdr = rxr_get_medium_rtm_base_hdr(pkt_entry->pkt);
 	rtm_hdr->msg_length = tx_entry->total_len;
@@ -577,6 +589,7 @@ ssize_t rxr_pkt_init_dc_medium_tagrtm(struct rxr_ep *ep,
 				      struct rxr_tx_entry *tx_entry,
 				      struct rxr_pkt_entry *pkt_entry)
 {
+	struct efa_domain *efa_domain;
 	struct rxr_dc_medium_tagrtm_hdr *dc_medium_tagrtm_hdr;
 	int ret;
 
@@ -585,6 +598,9 @@ ssize_t rxr_pkt_init_dc_medium_tagrtm(struct rxr_ep *ep,
 			       tx_entry->bytes_sent, pkt_entry);
 	if (ret)
 		return ret;
+
+	efa_domain = rxr_ep_domain(ep);
+	rxr_tx_entry_try_fill_desc(tx_entry, efa_domain, 0, FI_SEND);
 
 	dc_medium_tagrtm_hdr = rxr_get_dc_medium_tagrtm_hdr(pkt_entry->pkt);
 	dc_medium_tagrtm_hdr->hdr.msg_length = tx_entry->total_len;

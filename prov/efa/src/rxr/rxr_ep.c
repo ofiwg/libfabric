@@ -480,45 +480,6 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	ofi_buf_free(tx_entry);
 }
 
-int rxr_ep_tx_init_mr_desc(struct efa_domain *efa_domain,
-			   struct rxr_tx_entry *tx_entry,
-			   int mr_iov_start, uint64_t access)
-{
-	int i, err, ret;
-
-	ret = 0;
-	for (i = mr_iov_start; i < tx_entry->iov_count; ++i) {
-		if (tx_entry->desc[i]) {
-			assert(!tx_entry->mr[i]);
-			continue;
-		}
-
-		if (tx_entry->iov[i].iov_len <= rxr_env.max_memcpy_size) {
-			assert(!tx_entry->mr[i]);
-			continue;
-		}
-
-		err = fi_mr_reg(&efa_domain->util_domain.domain_fid,
-				tx_entry->iov[i].iov_base,
-				tx_entry->iov[i].iov_len,
-				access, 0, 0, 0,
-				&tx_entry->mr[i], NULL);
-		if (err) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-				"fi_mr_reg failed! buf: %p len: %ld access: %lx",
-				tx_entry->iov[i].iov_base, tx_entry->iov[i].iov_len,
-				access);
-
-			tx_entry->mr[i] = NULL;
-			ret = err;
-		} else {
-			tx_entry->desc[i] = fi_mr_desc(tx_entry->mr[i]);
-		}
-	}
-
-	return ret;
-}
-
 /**
  * @brief convert EFA descriptors to shm descriptors.
  *
@@ -555,11 +516,7 @@ void rxr_prepare_desc_send(struct efa_domain *efa_domain,
 			   &tx_iov_index,
 			   &tx_iov_offset);
 
-	/* the return value of rxr_ep_tx_init_mr_desc() is not checked
-	 * because the long message protocol would work with or without
-	 * memory registration and descriptor.
-	 */
-	rxr_ep_tx_init_mr_desc(efa_domain, tx_entry, tx_iov_index, FI_SEND);
+	rxr_tx_entry_try_fill_desc(tx_entry, efa_domain, tx_iov_index, FI_SEND);
 }
 
 /* Generic send */

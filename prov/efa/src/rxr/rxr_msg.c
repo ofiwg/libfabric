@@ -268,12 +268,6 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 	}
 
 	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size) {
-		/* we do not check the return value of rxr_ep_init_mr_desc()
-		 * because medium message works even if MR registration failed
-		 */
-		if (tx_entry->desc[0] || efa_is_cache_available(efa_domain))
-			rxr_ep_tx_init_mr_desc(efa_domain, tx_entry, 0, FI_SEND);
-
 		/*
 		 * we have to queue message RTM because data is sent as multiple
 		 * medium RTM packets. It could happend that the first several packets

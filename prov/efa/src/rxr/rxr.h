@@ -662,10 +662,6 @@ int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 int rxr_ep_determine_rdma_support(struct rxr_ep *ep, fi_addr_t addr,
 				  struct rdm_peer *peer);
 
-int rxr_ep_tx_init_mr_desc(struct efa_domain *efa_domain,
-			   struct rxr_tx_entry *tx_entry,
-			   int mr_iov_start, uint64_t access);
-
 void rxr_convert_desc_for_shm(int numdesc, void **desc);
 
 void rxr_prepare_desc_send(struct efa_domain *efa_domain,
