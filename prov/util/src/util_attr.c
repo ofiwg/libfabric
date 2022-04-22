@@ -406,7 +406,7 @@ int ofi_check_fabric_attr(const struct fi_provider *prov,
 	    !strcasestr(user_attr->prov_name, prov_attr->prov_name)) {
 		FI_INFO(prov, FI_LOG_CORE,
 			"Requesting provider %s, skipping %s\n",
-			prov_attr->prov_name, user_attr->prov_name);
+			user_attr->prov_name, prov_attr->prov_name);
 		return -FI_ENODATA;
 	}
 
