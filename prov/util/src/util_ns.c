@@ -41,6 +41,8 @@
  * a query to the name server residing on "node".
  */
 
+#include <config.h>
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -112,7 +114,7 @@ err2:
 err1:
 	return ret;
 }
- 
+
 static int util_ns_map_del(struct util_ns *ns, void *service_in,
 			   void *name_in)
 {

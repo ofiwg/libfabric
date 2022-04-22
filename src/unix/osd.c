@@ -35,6 +35,8 @@
 #define _GNU_SOURCE
 #endif /* _GNU_SOURCE */
 
+#include "config.h"
+
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>

@@ -33,6 +33,8 @@
 #ifndef _FI_NETDIR_LOG_H_
 #define _FI_NETDIR_LOG_H_
 
+#include "config.h"
+
 #include <windows.h>
 
 #include "rdma/providers/fi_log.h"
@@ -120,7 +122,7 @@ ofi_nd_get_last_error_str(HRESULT hr, char *errmsg, SIZE_T max_msg_len)
 	  break
 
 #define ND_FLUSHED 0x10000L	/* undocumented ND error code */
-#define ND_DISCONNECTED 0xc000020C 
+#define ND_DISCONNECTED 0xc000020C
 
 static char *ofi_nd_error_str(HRESULT hr)
 {
