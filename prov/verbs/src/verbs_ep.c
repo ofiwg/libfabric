@@ -530,10 +530,12 @@ static int vrb_ep_close(fid_t fid)
 				   struct vrb_fabric, util_fabric.fabric_fid.fid);
 		ofi_ns_del_local_name(&fab->name_server,
 				      &ep->service, &ep->ep_name);
-		ret = ibv_destroy_qp(ep->ibv_qp);
-		if (ret) {
-			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_destroy_qp");
-			return -errno;
+		if (ep->ibv_qp) {
+			ret = ibv_destroy_qp(ep->ibv_qp);
+			if (ret) {
+				VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_destroy_qp");
+				return -errno;
+			}
 		}
 		vrb_cleanup_cq(ep);
 		vrb_flush_sq(ep);

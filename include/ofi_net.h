@@ -404,6 +404,8 @@ static inline int ofi_translate_addr_format(int family)
 static inline size_t ofi_sizeof_addr_format(int format)
 {
 	switch (format) {
+	case FI_SOCKADDR:
+		return sizeof(union ofi_sock_ip);
 	case FI_SOCKADDR_IN:
 		return sizeof(struct sockaddr_in);
 	case FI_SOCKADDR_IN6:

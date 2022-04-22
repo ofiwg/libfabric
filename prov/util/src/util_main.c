@@ -306,8 +306,22 @@ static void util_getinfo_ifs(const struct util_prov *prov,
 	slist_foreach(&addr_list, entry, prev) {
 		addr_entry = container_of(entry, struct ofi_addr_list_entry, entry);
 
+		switch (addr_entry->ipaddr.sin.sin_family) {
+		case AF_INET:
+			addrlen = sizeof(struct sockaddr_in);
+			addr_format = FI_SOCKADDR_IN;
+			break;
+		case AF_INET6:
+			addrlen = sizeof(struct sockaddr_in6);
+			addr_format = FI_SOCKADDR_IN6;
+			break;
+		default:
+			continue;
+		}
+
 		if (hints && ((hints->caps & addr_entry->comm_caps) !=
-		    (hints->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM))))
+		    (hints->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) ||
+		     !ofi_valid_addr_format(addr_format, hints->addr_format)))
 			continue;
 
 		cur = fi_dupinfo(src_info);
@@ -322,19 +336,6 @@ static void util_getinfo_ifs(const struct util_prov *prov,
 			(*tail)->next = cur;
 		}
 		*tail = cur;
-
-		switch (addr_entry->ipaddr.sin.sin_family) {
-		case AF_INET:
-			addrlen = sizeof(struct sockaddr_in);
-			addr_format = FI_SOCKADDR_IN;
-			break;
-		case AF_INET6:
-			addrlen = sizeof(struct sockaddr_in6);
-			addr_format = FI_SOCKADDR_IN6;
-			break;
-		default:
-			continue;
-		}
 
 		cur->caps = (cur->caps & ~(FI_LOCAL_COMM | FI_REMOTE_COMM)) |
 			    addr_entry->comm_caps;

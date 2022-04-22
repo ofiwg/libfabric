@@ -128,6 +128,8 @@ functional_tests=(
 	"fi_rdm_shared_av"
 	"fi_multi_mr -e msg -V"
 	"fi_multi_mr -e rdm -V"
+	"fi_multi_ep -e msg -v"
+	"fi_multi_ep -e rdm -v"
 	"fi_recv_cancel -e rdm -V"
 	"fi_unexpected_msg -e msg -I 10"
 	"fi_unexpected_msg -e rdm -I 10"
@@ -219,7 +221,8 @@ standard_tests=(
 
 unit_tests=(
 	"fi_getinfo_test -s SERVER_ADDR GOOD_ADDR"
-	"fi_av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR"
+	"fi_av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR -e rdm"
+	"fi_av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR -e dgram"
 	"fi_dom_test -n 2"
 	"fi_eq_test"
 	"fi_cq_test"
