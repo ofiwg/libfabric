@@ -324,26 +324,6 @@ static void rxr_set_shm_hints(const struct fi_info *app_hints, struct fi_info *s
 	}
 }
 
-/* Pass tx/rx attr that user specifies down to core provider */
-void rxr_reset_rx_tx_to_core(const struct fi_info *user_info,
-			     struct fi_info *core_info)
-{
-	/* rx attr */
-	core_info->rx_attr->total_buffered_recv =
-		user_info->rx_attr->total_buffered_recv < core_info->rx_attr->total_buffered_recv ?
-		user_info->rx_attr->total_buffered_recv : core_info->rx_attr->total_buffered_recv;
-	core_info->rx_attr->size =
-		user_info->rx_attr->size < core_info->rx_attr->size ?
-		user_info->rx_attr->size : core_info->rx_attr->size;
-	/* tx attr */
-	core_info->tx_attr->inject_size =
-		user_info->tx_attr->inject_size < core_info->tx_attr->inject_size ?
-		user_info->tx_attr->inject_size : core_info->tx_attr->inject_size;
-	core_info->tx_attr->size =
-		user_info->tx_attr->size < core_info->tx_attr->size ?
-		user_info->tx_attr->size : core_info->tx_attr->size;
-}
-
 /*
  * Used to set tx/rx attributes that are characteristic of the device for the
  * two endpoint types and not emulated in software.
