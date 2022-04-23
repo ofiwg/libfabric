@@ -2343,6 +2343,35 @@ bool rxr_ep_use_shm_for_tx(struct fi_info *info)
 	return rxr_env.enable_shm_transfer;
 }
 
+/**
+ * @brief allocate a fi_info that can be used to open a device endpoint
+ *
+ * @param	app_device_info[out]		output
+ * @param	raw_device_info[in]		info from efa_device_info_alloc
+ * @param	app_info[in]			info passed from application
+ */
+static
+int rxr_ep_alloc_app_device_info(struct fi_info **app_device_info,
+				 struct fi_info *raw_device_info,
+				 struct fi_info *app_info)
+{
+	struct fi_info *result;
+
+	*app_device_info = NULL;
+
+	result = fi_dupinfo(raw_device_info);
+	if (!result)
+		return -FI_ENOMEM;
+
+	/* the MR mode in raw_device_info contains all MR modes that device
+	 * can support. Some of the modes are mutually exclusive. So use the
+	 * MR mode from the app to open device EP.
+	 */
+	result->domain_attr->mr_mode = app_info->domain_attr->mr_mode;
+	*app_device_info = result;
+	return 0;
+}
+
 int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
@@ -2367,8 +2396,10 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err_free_ep;
 
-	rdm_info = fi_dupinfo(efa_domain->device->rdm_info);
-	if (!rdm_info)
+	ret = rxr_ep_alloc_app_device_info(&rdm_info,
+					   efa_domain->device->rdm_info,
+					   info);
+	if (ret)
 		goto err_close_ofi_ep;
 
 	ret = efa_ep_open(&efa_domain->util_domain.domain_fid, rdm_info,
