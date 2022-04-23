@@ -190,7 +190,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		ret = err;
 		goto err_free;
 	}
-
+	efa_domain->util_domain.av_type = FI_AV_TABLE;
 	efa_domain->util_domain.mr_map.mode |= FI_MR_VIRT_ADDR;
 	/*
 	 * FI_MR_PROV_KEY means provider will generate a key for MR,
