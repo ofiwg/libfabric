@@ -2347,27 +2347,44 @@ bool rxr_ep_use_shm_for_tx(struct fi_info *info)
  * @brief allocate a fi_info that can be used to open a device endpoint
  *
  * @param	app_device_info[out]		output
- * @param	raw_device_info[in]		info from efa_device_info_alloc
- * @param	app_info[in]			info passed from application
+ * @param	device_prov_info[in]		info from efa_prov_info_alloc(FI_EP_RDM)
+ * @return	0 on success.
+ * 		-FI_ENOMEM if memory allocation of fi_info object failed.
  */
 static
 int rxr_ep_alloc_app_device_info(struct fi_info **app_device_info,
-				 struct fi_info *raw_device_info,
-				 struct fi_info *app_info)
+				 struct fi_info *device_prov_info)
 {
 	struct fi_info *result;
 
 	*app_device_info = NULL;
 
-	result = fi_dupinfo(raw_device_info);
+	result = fi_dupinfo(device_prov_info);
 	if (!result)
 		return -FI_ENOMEM;
 
-	/* the MR mode in raw_device_info contains all MR modes that device
-	 * can support. Some of the modes are mutually exclusive. So use the
-	 * MR mode from the app to open device EP.
+	/* the MR mode in device_prov_info contains both FI_MR_BASIC and
+	 * OFI_MR_BASIC_MAP (OFI_MR_BASIC_MAP equals to FI_MR_VIRT_ADDR |
+	 * FI_MR_ALLOCATED | FI_MR_PROV_KEY).
+	 *
+	 * According to document:
+	 * https://ofiwg.github.io/libfabric/main/man/fi_domain.3.html,
+	 *
+	 * FI_MR_BASIC and OFI_MR_BASIC_MAP means the same functionality,
+	 * FI_MR_BASIC has been deprecated since libfabric 1.5 and defined
+	 * only for backward compatibility.
+	 *
+	 * For applications that are still using FI_MR_BASIC to be able
+	 * to pick up EFA, we kept FI_MR_BASIC in device_prov_info.
+	 *
+	 * When opening a device endpoint, the info object cannot have both
+	 * FI_MR_BASIC and OFI_MR_BASIC_MAP, because FI_MR_BASIC cannot be
+	 * used with other MR modes.
+	 *
+	 * Hence unsetting the FI_MR_BASIC flag here to use the newer API
+	 * (>= 1.5).
 	 */
-	result->domain_attr->mr_mode = app_info->domain_attr->mr_mode;
+	result->domain_attr->mr_mode &= ~FI_MR_BASIC;
 	*app_device_info = result;
 	return 0;
 }
@@ -2397,8 +2414,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err_free_ep;
 
 	ret = rxr_ep_alloc_app_device_info(&rdm_info,
-					   efa_domain->device->rdm_info,
-					   info);
+					   efa_domain->device->rdm_info);
 	if (ret)
 		goto err_close_ofi_ep;
 
