@@ -887,6 +887,8 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
 	}
 
 	ep->extra_info[0] |= RXR_EXTRA_REQUEST_CONNID_HEADER;
+
+	ep->extra_info[0] |= RXR_EXTRA_FEATURE_RUNT;
 }
 
 /*

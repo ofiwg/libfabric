@@ -123,6 +123,19 @@ size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry)
 	return pkt_entry->pkt_size - rxr_pkt_req_data_offset(pkt_entry);
 }
 
+int rxr_pkt_type_readbase_rtm(int op)
+{
+	assert(op == ofi_op_tagged || op == ofi_op_msg);
+	if (rxr_env.efa_runt_size > 0) {
+		return (op == ofi_op_tagged) ? RXR_RUNTREAD_TAGRTM_PKT
+					     : RXR_RUNTREAD_MSGRTM_PKT;
+	} else {
+		return (op == ofi_op_tagged) ? RXR_LONGREAD_TAGRTM_PKT
+					     : RXR_LONGREAD_MSGRTM_PKT;
+	}
+}
+
+
 void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 			  struct rxr_tx_entry *tx_entry,
 			  int pkt_type,

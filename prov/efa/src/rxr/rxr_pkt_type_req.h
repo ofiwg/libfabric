@@ -170,14 +170,6 @@ struct rxr_runtread_rtm_base_hdr *rxr_get_runtread_rtm_base_hdr(void *pkt)
 	return (struct rxr_runtread_rtm_base_hdr *)pkt;
 }
 
-static inline
-int rxr_longread_rtm_pkt_type(int op)
-{
-	assert(op == ofi_op_tagged || op == ofi_op_msg);
-	return (op == ofi_op_tagged) ? RXR_LONGREAD_TAGRTM_PKT
-				     : RXR_LONGREAD_MSGRTM_PKT;
-}
-
 size_t rxr_pkt_mulreq_total_data_size(int pkt_type, struct rxr_op_entry *op_entry);
 
 ssize_t rxr_pkt_init_eager_msgrtm(struct rxr_ep *ep,
