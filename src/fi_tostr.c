@@ -748,6 +748,7 @@ ofi_tostr_hmem_iface(char *buf, size_t len, enum fi_hmem_iface iface)
 	CASEENUMSTRN(FI_HMEM_CUDA, len);
 	CASEENUMSTRN(FI_HMEM_ROCR, len);
 	CASEENUMSTRN(FI_HMEM_ZE, len);
+	CASEENUMSTRN(FI_HMEM_NEURON, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;
