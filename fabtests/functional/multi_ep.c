@@ -106,15 +106,11 @@ static int alloc_multi_ep_res()
 		recv_bufs[i] = rx_buf_ptr + opts.transfer_size * i;
 	}
 
-	if (fi->domain_attr->mr_mode & FI_MR_LOCAL) {
-		ret = fi_mr_reg(domain, data_bufs, num_eps * 2 * opts.transfer_size,
-				ft_info_to_mr_access(fi), 0, FT_MR_KEY, 0, &data_mr, NULL);
-		if (ret) {
-			free_ep_res();
-			return ret;
-		}
-
-		data_desc = fi_mr_desc(data_mr);
+	ret = ft_reg_mr(fi, data_bufs, num_eps * 2 * opts.transfer_size,
+			ft_info_to_mr_access(fi), FT_MR_KEY + 1, &data_mr, &data_desc);
+	if (ret) {
+		free_ep_res();
+		return ret;
 	}
 
 	return 0;
@@ -372,7 +368,7 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.transfer_size = 256;
-	opts.options |= FT_OPT_SKIP_REG_MR | FT_OPT_OOB_ADDR_EXCH;
+	opts.options |= FT_OPT_OOB_ADDR_EXCH;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -405,6 +401,7 @@ int main(int argc, char **argv)
 
 	hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT;
+	hints->domain_attr->mr_mode = opts.mr_mode;
 
 	ret = run_test();
 
