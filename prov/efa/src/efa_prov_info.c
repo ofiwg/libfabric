@@ -77,7 +77,7 @@ const struct fi_domain_attr efa_domain_attr = {
 	.control_progress	= FI_PROGRESS_AUTO,
 	.data_progress		= FI_PROGRESS_AUTO,
 	.resource_mgmt		= FI_RM_DISABLED,
-	.mr_mode		= OFI_MR_BASIC_MAP | FI_MR_LOCAL,
+	.mr_mode		= OFI_MR_BASIC_MAP | FI_MR_LOCAL | FI_MR_BASIC,
 	.mr_key_size		= sizeof_field(struct ibv_sge, lkey),
 	.cq_data_size		= 0,
 	.tx_ctx_cnt		= 1024,
@@ -385,7 +385,6 @@ int efa_prov_info_alloc(struct fi_info **info,
 		return -FI_ENOMEM;
 
 	fi->caps		= ep_dom->caps;
-	fi->mode		= FI_LOCAL_MR;
 	fi->handle		= NULL;
 	*fi->ep_attr		= efa_ep_attr;
 	if (ep_dom->type == FI_EP_RDM) {

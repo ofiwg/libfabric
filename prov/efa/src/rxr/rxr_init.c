@@ -212,7 +212,6 @@ void rxr_info_to_core_mr_modes(uint32_t version,
 		core_info->mode |= FI_LOCAL_MR | FI_MR_ALLOCATED;
 		core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
 	} else {
-		core_info->mode = FI_LOCAL_MR | FI_MR_ALLOCATED;
 		core_info->domain_attr->mr_mode |=
 			FI_MR_LOCAL | FI_MR_ALLOCATED;
 		if (!hints)
@@ -223,7 +222,6 @@ void rxr_info_to_core_mr_modes(uint32_t version,
 					hints->domain_attr->mr_mode & OFI_MR_BASIC_MAP;
 			core_info->addr_format = hints->addr_format;
 		}
-
 #if HAVE_CUDA || HAVE_NEURON
 		core_info->domain_attr->mr_mode |= FI_MR_HMEM;
 #endif
