@@ -2086,30 +2086,25 @@ int cxip_recv_resume(struct cxip_rxc *rxc)
 }
 
 /*
- * cxip_ux_onload_complete() - Complete a UX on-load operation.
+ * cxip_post_ux_onload() - Continue flow control after UX onload completes.
  *
- * All unexpected message headers have been onloaded from hardware.
+ * Update SW ux list and prepare to re-enable PtlTE.
  */
-static void cxip_ux_onload_complete(struct cxip_req *req)
+static void cxip_post_ux_onload(struct cxip_rxc *rxc)
 {
-	struct cxip_rxc *rxc = req->search.rxc;
-	int ret __attribute__((unused));
-
-	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
-	       rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
-
-	free(rxc->ule_offsets);
+	int ret;
 
 	/* During a transition to software managed PtlTE, received
 	 * request list entries resulting from hardware not matching
-	 * the priority list on an incoming packet, were added to a
+	 * the priority list on an incoming packet were added to a
 	 * pending unexpected message list.
 	 */
 	dlist_splice_tail(&rxc->sw_ux_list, &rxc->sw_pending_ux_list);
 	rxc->sw_ux_list_len += rxc->sw_pending_ux_list_len;
 	rxc->sw_pending_ux_list_len = 0;
 
-	RXC_DBG(rxc, "UX onload done, %d SW UX entries\n", rxc->sw_ux_list_len);
+	RXC_DBG(rxc, "Software UX list updated, %d SW UX entries\n",
+		rxc->sw_ux_list_len);
 
 	if (rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED ||
 	    cxip_software_pte_allowed()) {
@@ -2117,10 +2112,7 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 		rxc->msg_offload = 0;
 	}
 
-	ofi_atomic_dec32(&rxc->orx_reqs);
-	cxip_cq_req_free(req);
-
-	RXC_DBG(rxc, "Onload complete, replay failed receives\n");
+	RXC_DBG(rxc, "Replay failed receives\n");
 
 	/* Priority list appends that failed during the transition can
 	 * now be replayed.
@@ -2157,6 +2149,26 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 		assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
 		RXC_WARN(rxc, "Now in RXC_FLOW_CONTROL\n");
 	}
+}
+
+/*
+ * cxip_ux_onload_complete() - Unexpected list entry onload complete.
+ *
+ * All unexpected message headers have been onloaded from hardware.
+ */
+static void cxip_ux_onload_complete(struct cxip_req *req)
+{
+	struct cxip_rxc *rxc = req->search.rxc;
+
+	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
+	       rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
+
+	free(rxc->ule_offsets);
+
+	cxip_post_ux_onload(rxc);
+
+	ofi_atomic_dec32(&rxc->orx_reqs);
+	cxip_cq_req_free(req);
 }
 
 /*
@@ -2274,11 +2286,23 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	size_t cur_ule_count = 0;
 	int ret;
 
-	RXC_DBG(rxc, "Initiate hardware UX list onload\n");
-
 	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
 	       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
 	       rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
+
+
+	/* If PtlTE was in software managed state, onloading of
+	 * hardware UX list is not needed.
+	 */
+	if (rxc->prev_state == RXC_ENABLED_SOFTWARE) {
+		if (rxc->state == RXC_ONLOAD_FLOW_CONTROL)
+			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
+
+		cxip_post_ux_onload(rxc);
+		return FI_SUCCESS;
+	}
+
+	RXC_DBG(rxc, "Initiate hardware UX list onload\n");
 
 	/* Get all the unexpected header remote offsets. */
 	rxc->ule_offsets = NULL;
@@ -2362,10 +2386,6 @@ static int cxip_flush_appends_cb(struct cxip_req *req,
 	assert(event->hdr.event_type == C_EVENT_SEARCH);
 	assert(cxi_event_rc(event) == C_RC_NO_MATCH);
 
-	/* TODO: optimization:
-	 * If rxc->prev_state == RXC_ENABLED_SOFTWARE then
-	 * then there is no need to onload.
-	 */
 	fastlock_acquire(&rxc->lock);
 	ret = cxip_ux_onload(rxc);
 	fastlock_release(&rxc->lock);
