@@ -102,7 +102,7 @@ struct rxr_read_entry {
 	struct dlist_entry pending_entry;
 };
 
-struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, int entry_type, void *x_entry,
+struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, struct rxr_op_entry *x_entry,
 					    enum rxr_lower_ep_type lower_ep_type);
 
 void rxr_read_release_entry(struct rxr_ep *ep, struct rxr_read_entry *read_entry);
@@ -117,7 +117,7 @@ int rxr_read_init_iov(struct rxr_ep *ep,
 
 int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry);
 
-int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry);
+int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry);
 
 int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 				      struct rxr_rx_entry *rx_entry,

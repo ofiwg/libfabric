@@ -34,6 +34,7 @@
 #ifndef _RXR_PKT_TYPE_H
 #define _RXR_PKT_TYPE_H
 
+#include "rxr_op_entry.h"
 #include "rdm_proto_v4.h"
 
 static inline struct rxr_base_hdr *rxr_get_base_hdr(void *pkt)
@@ -43,8 +44,6 @@ static inline struct rxr_base_hdr *rxr_get_base_hdr(void *pkt)
 
 struct rxr_ep;
 struct rdm_peer;
-struct rxr_tx_entry;
-struct rxr_rx_entry;
 struct rxr_read_entry;
 
 /* HANDSHAKE packet related functions */
