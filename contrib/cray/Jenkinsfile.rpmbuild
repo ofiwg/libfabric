@@ -1,0 +1,21 @@
+@Library("dst-shared@master") _
+
+// Note that although we use rpmBuildCmd to build with a custom script, we still
+// need to provide a specfile (or in this case a specfile template) otherwise
+// the "Add RPM Metadata" stage will fail.
+rpmBuild(
+    product: "slingshot-host-software",
+    buildPrepScript: "contrib/cray/runBuildPrep.sh",
+    rpmBuildCmd: "contrib/cray/cray_rpmbuild.sh",
+    specfile: "libfabric.spec.in",
+    obs_target_os: "[ \
+        ['cos-2.2',   ['sle15sp3'],'cn'] \
+        ,['cos-2.3',   ['sle15sp3'],'cn'] \
+        ,['csm-1.0.11',['sle15sp2'],'ncn'] \
+        ,['csm-1.2.0', ['sle15sp3'],'ncn'] \
+        ,['',['sle15sp2','sle15sp3','centos8'],'ncn'] \
+        ,['',['sle15sp3'],'cn'] \
+    ]",
+    masterBranch: "integration",
+    recv_triggers: ["libcxi-built"]
+)

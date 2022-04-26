@@ -1,9 +1,0 @@
-@Library('dst-shared@master') _
-sle15sp1NCN {
-    timeout = 60
-    buildExternal = "true"
-    product = 'shasta-premium'
-    buildPrepScript = "contrib/cray/runBuildPrep.sh"
-    rpmBuildScript = "contrib/cray/cray_rpmbuild.sh"
-    masterBranch = "integration"
-}

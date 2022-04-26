@@ -108,3 +108,26 @@ cleanup
     ${ZE_CONFIG} \
     -D \
     libfabric-${NEW_VERSION}.tar.bz2
+
+# Move the RPMs and SRPMS to where the "Publish" stage expects to find them
+mkdir RPMS
+mv `find rpmbuild/RPMS | grep rpm$` `find rpmbuild/SRPMS | grep rpm$` RPMS
+chmod a+rX -R RPMS
+
+# Finish up rpmlint to check for warnings and errors.
+rpmlint RPMS/*.rpm ||:
+
+# Return codes from rpmlint:
+#  0: OK
+#  1: Unspecified error
+#  2: Interrupted
+# 64: One or more error messages
+# 66: Badness level exceeded
+
+# Let's not fail builds for (for example) using static linking.
+if [[ $? != 0 && $? != 64 ]]; then
+    echo "rpmlint failure!"
+    exit 1
+fi
+
+exit 0
