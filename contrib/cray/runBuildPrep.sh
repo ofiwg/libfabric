@@ -33,7 +33,6 @@ with_cuda=0
 with_ze=0
 
 RPMS="cray-libcxi-devel"
-CUDA_RPMS="nvhpc-2021"
 
 if [[ ${TARGET_OS} == "centos_8" ]]; then
     TARGET_OS="centos_8_ncn"
@@ -52,6 +51,12 @@ if [[ ${TARGET_OS} == "sle15_sp3_ncn" && ! ${BRANCH_NAME} == release/* ]]; then
     ZE_RPMS="level-zero-devel"
 else
     ZE_RPMS=""
+fi
+
+if [[ ${TARGET_OS} == sle15_sp2* ]]; then
+    CUDA_RPMS="nvhpc-2021"
+else
+    CUDA_RPMS="nvhpc-2022"
 fi
 
 if [[ ${TARGET_OS} =~ ^centos || ${TARGET_OS} =~ ^rhel ]]; then
