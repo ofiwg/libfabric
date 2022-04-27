@@ -94,6 +94,7 @@
 
 #define VRB_DBG(subsys, ...) FI_DBG(&vrb_prov, subsys, __VA_ARGS__)
 #define VRB_INFO(subsys, ...) FI_INFO(&vrb_prov, subsys, __VA_ARGS__)
+#define VRB_TRACE(subsys, ...) FI_TRACE(&vrb_prov, subsys, __VA_ARGS__)
 #define VRB_WARN(subsys, ...) FI_WARN(&vrb_prov, subsys, __VA_ARGS__)
 
 #define VRB_WARN_ERRNO(subsys, fn) \
