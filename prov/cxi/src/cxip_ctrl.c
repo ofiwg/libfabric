@@ -283,6 +283,15 @@ static struct cxip_ctrl_req *cxip_ep_ctrl_event_req(struct cxip_ep_obj *ep_obj,
 		req = NULL;
 		break;
 
+	/* Get events can be generated when an invalid standard MR key is used
+	 */
+	case C_EVENT_GET:
+		CXIP_WARN("Unexpected %s event rc: %s\n",
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
+		req = NULL;
+		break;
+
 	default:
 		CXIP_FATAL("Invalid event type: %d\n", event->hdr.event_type);
 	}

@@ -1419,6 +1419,46 @@ Test(rma, invalid_source_mr_key)
 	cr_assert(ret == -FI_EKEYREJECTED);
 }
 
+static void rma_invalid_read_target_mr_key(uint64_t rkey)
+{
+	int ret;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_err_entry err;
+
+	/* Zero byte read to invalid MR key. */
+	ret = fi_read(cxit_ep, NULL, 0, NULL, cxit_ep_fi_addr, 0, rkey, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	while (fi_cntr_readerr(cxit_read_cntr) != 1)
+		;
+
+	/* No target event should be generated. */
+	ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	/* There should be an source error entry. */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAVAIL);
+
+	/* Expect a source error. */
+	ret = fi_cq_readerr(cxit_tx_cq, &err, 1);
+	cr_assert(ret == 1);
+
+	/* Expect no other events. */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+}
+
+Test(rma, invalid_read_target_std_mr_key)
+{
+	rma_invalid_read_target_mr_key(0x1234);
+}
+
+Test(rma, invalid_read_target_opt_mr_key)
+{
+	rma_invalid_read_target_mr_key(0x10);
+}
+
 static void rma_hybrid_mr_desc_test_runner(bool write, bool cq_events)
 {
 	struct mem_region source_window;
