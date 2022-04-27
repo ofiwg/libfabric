@@ -245,6 +245,27 @@ pipeline {
                         }
                     }
                 }
+                stage('psm3') {
+                    agent {node {label 'mlx5'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                export PSM3_IDENTIFY=1
+                                export FI_LOG_LEVEL=info
+                                cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=psm3 --test=fabtests
+                                python3.7 runtests.py --prov=psm3 --test=fabtests --ofi_build_mode=dbg
+                                python3.7 runtests.py --prov=psm3 --test=fabtests --ofi_build_mode=dl
+                                echo "psm3 completed."
+                            )
+                          """
+                        }
+                    }
+                }
                 stage('MPI-tcp-rxm-1') {
                     agent {node {label 'eth'}}
                     options { skipDefaultCheckout() }
@@ -325,7 +346,7 @@ pipeline {
                         }
                     }
                 }
-                stage('oneCCL-tcp-rxm') {
+                stage('oneCCL') {
                     agent {node {label 'eth'}}
                     options { skipDefaultCheckout() }
                     steps {
@@ -337,6 +358,9 @@ pipeline {
                                 cd /opt${env.WORKSPACE}/contrib/intel/jenkins/
                                 python3.7 runtests.py --prov=tcp --util=rxm --test=oneccl
                                 echo "oneCCL tcp-rxm completed."
+                                python3.7 runtests.py --prov=psm3 --test=oneccl
+                                echo "oneCCL psm3 completed."
+                                echo "OneCCL completed."
                             )
                           """
                         }

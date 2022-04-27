@@ -15,3 +15,6 @@ scalable_ep
 shared_av
 rdm_cntr_pingpong
 multi_recv
+rdm_tagged_peek
+dgram_waitset
+cq_data

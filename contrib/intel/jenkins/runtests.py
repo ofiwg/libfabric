@@ -9,7 +9,7 @@ import common
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--prov', help="core provider", choices=['verbs', \
-                     'tcp', 'udp', 'sockets', 'shm'])
+                     'tcp', 'udp', 'sockets', 'shm', 'psm3'])
 parser.add_argument('--util', help="utility provider", choices=['rxd', 'rxm'])
 parser.add_argument('--ofi_build_mode', help="specify the build configuration", \
                     choices = ['dbg', 'dl'])
