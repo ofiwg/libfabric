@@ -31,6 +31,9 @@ static int cxip_mr_domain_insert(struct cxip_mr_domain *mr_domain,
 	int bucket;
 	struct cxip_mr *clash_mr;
 
+	if (!cxip_is_valid_mr_key(mr->key))
+		return -FI_EKEYREJECTED;
+
 	bucket = fasthash64(&mr->key, sizeof(mr->key), 0) %
 		CXIP_MR_DOMAIN_HT_BUCKETS;
 

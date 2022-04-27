@@ -1391,6 +1391,11 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		return -FI_EINVAL;
 	}
 
+	if (!cxip_is_valid_mr_key(key)) {
+		TXC_WARN(txc, "Invalid remote key: %lx\n", key);
+		return -FI_EKEYREJECTED;
+	}
+
 	idc = cxip_amo_is_idc(txc, key, triggered);
 
 	/* Convert FI to CXI codes, fail if operation not supported */

@@ -166,6 +166,19 @@
 #define CXIP_REQ_BUF_HEADER_MIN_SIZE (sizeof(struct c_port_fab_hdr) + \
 	sizeof(struct c_port_small_msg_hdr))
 
+/* 16 bits of MR keys equals the hardware MR resource limit. Could explore
+ * increasing key range if needed.
+ */
+#define CXIP_MR_KEY_SIZE sizeof(uint16_t)
+#define CXIP_MR_KEY_MASK ((1ULL << (8 * CXIP_MR_KEY_SIZE)) - 1)
+
+static inline bool cxip_is_valid_mr_key(uint64_t key)
+{
+	if (key & ~CXIP_MR_KEY_MASK)
+		return false;
+	return true;
+}
+
 extern char cxip_prov_name[];
 extern struct fi_provider cxip_prov;
 extern struct util_prov cxip_util_prov;

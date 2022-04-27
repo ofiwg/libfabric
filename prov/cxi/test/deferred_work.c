@@ -474,7 +474,7 @@ static void deferred_amo_test(bool comp_event, bool fetch, bool comp)
 	uint64_t source_buf = 1;
 	uint64_t *target_buf;
 	uint64_t result;
-	uint64_t key = 0xbbbbb;
+	uint64_t key = 0xbbb;
 	uint64_t trig_thresh = 12345;
 	uint64_t init_target_value = 0x7FFFFFFFFFFFFFFF;
 	uint64_t fetch_result = 0;

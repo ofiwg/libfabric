@@ -668,6 +668,11 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		return -FI_EMSGSIZE;
 	}
 
+	if (!cxip_is_valid_mr_key(key)) {
+		TXC_WARN(txc, "Invalid remote key: %lx\n", key);
+		return -FI_EKEYREJECTED;
+	}
+
 	unr = cxip_rma_is_unrestricted(txc, key, msg_order, write);
 	idc = cxip_rma_is_idc(txc, key, len, write, triggered, unr);
 

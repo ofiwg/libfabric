@@ -152,7 +152,7 @@ Test(rma, simple_write_std_mr)
 	int win_len = 16 * 1024;
 	int send_len = 8;
 	struct mem_region mem_window;
-	uint64_t key_val = 0xabcdef;
+	uint64_t key_val = 0xdef;
 	struct fi_cq_tagged_entry cqe;
 
 	send_buf = calloc(1, win_len);
@@ -1369,6 +1369,54 @@ Test(rma, std_mr_inject)
 
 	mr_destroy(&mem_window);
 	free(send_buf);
+}
+
+static void rma_invalid_target_mr_key(uint64_t rkey)
+{
+	int ret;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_err_entry err;
+
+	/* Zero byte write to invalid MR key. */
+	ret = fi_inject_write(cxit_ep, NULL, 0, cxit_ep_fi_addr, 0, rkey);
+	cr_assert(ret == FI_SUCCESS);
+
+	while (fi_cntr_readerr(cxit_write_cntr) != 1)
+		;
+
+	/* No target event should be generated. */
+	ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	/* There should be an source error entry. */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAVAIL);
+
+	/* Expect a source error. */
+	ret = fi_cq_readerr(cxit_tx_cq, &err, 1);
+	cr_assert(ret == 1);
+
+	/* Expect no other events. */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+}
+
+Test(rma, invalid_target_std_mr_key)
+{
+	rma_invalid_target_mr_key(0x1234);
+}
+
+Test(rma, invalid_target_opt_mr_key)
+{
+	rma_invalid_target_mr_key(0x10);
+}
+
+Test(rma, invalid_source_mr_key)
+{
+	int ret;
+
+	ret = fi_inject_write(cxit_ep, NULL, 0, cxit_ep_fi_addr, 0, 0x10001);
+	cr_assert(ret == -FI_EKEYREJECTED);
 }
 
 static void rma_hybrid_mr_desc_test_runner(bool write, bool cq_events)
