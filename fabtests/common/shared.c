@@ -67,7 +67,7 @@ struct fid_ep *srx;
 struct fid_stx *stx;
 struct fid_mr *mr;
 void *mr_desc = NULL;
-struct fid_av *av;
+struct fid_av *av = NULL;
 struct fid_eq *eq;
 struct fid_mc *mc;
 
@@ -84,7 +84,7 @@ pid_t ft_child_pid = 0;
 int ft_socket_pair[2];
 
 fi_addr_t remote_fi_addr = FI_ADDR_UNSPEC;
-char *buf, *tx_buf, *rx_buf;
+char *buf = NULL, *tx_buf, *rx_buf;
 /*
  * tx_msg_buf are used by ft_fill_buf() to stage data sent over wire,
  * when tx_buf is on device memory.
@@ -489,6 +489,9 @@ static int ft_alloc_msgs(void)
 	int ret;
 	long alignment = 1;
 
+	if (buf)
+		return 0;
+
 	if (ft_check_opts(FT_OPT_SKIP_MSG_ALLOC))
 		return 0;
 
@@ -621,7 +624,9 @@ int ft_open_fabric_res(void)
 	return ft_open_domain_res();
 }
 
-int ft_alloc_ep_res(struct fi_info *fi)
+int ft_alloc_ep_res(struct fi_info *fi, struct fid_cq **new_txcq,
+		    struct fid_cq **new_rxcq, struct fid_cntr **new_txcntr,
+		    struct fid_cntr **new_rxcntr)
 {
 	int ret;
 
@@ -650,12 +655,12 @@ int ft_alloc_ep_res(struct fi_info *fi)
 		else
 			cq_attr.size += fi->rx_attr->size;
 
-		ret = fi_cq_open(domain, &cq_attr, &txcq, &txcq);
+		ret = fi_cq_open(domain, &cq_attr, new_txcq, new_txcq);
 		if (ret) {
 			FT_PRINTERR("fi_cq_open", ret);
 			return ret;
 		}
-		rxcq = txcq;
+		*new_rxcq = *new_txcq;
 	}
 
 	if (!(opts.options & FT_OPT_CQ_SHARED)) {
@@ -665,7 +670,7 @@ int ft_alloc_ep_res(struct fi_info *fi)
 		else
 			cq_attr.size = fi->tx_attr->size;
 
-		ret = fi_cq_open(domain, &cq_attr, &txcq, &txcq);
+		ret = fi_cq_open(domain, &cq_attr, new_txcq, new_txcq);
 		if (ret) {
 			FT_PRINTERR("fi_cq_open", ret);
 			return ret;
@@ -673,7 +678,7 @@ int ft_alloc_ep_res(struct fi_info *fi)
 	}
 
 	if (opts.options & FT_OPT_TX_CNTR) {
-		ret = ft_cntr_open(&txcntr);
+		ret = ft_cntr_open(new_txcntr);
 		if (ret) {
 			FT_PRINTERR("fi_cntr_open", ret);
 			return ret;
@@ -687,7 +692,7 @@ int ft_alloc_ep_res(struct fi_info *fi)
 		else
 			cq_attr.size = fi->rx_attr->size;
 
-		ret = fi_cq_open(domain, &cq_attr, &rxcq, &rxcq);
+		ret = fi_cq_open(domain, &cq_attr, new_rxcq, new_rxcq);
 		if (ret) {
 			FT_PRINTERR("fi_cq_open", ret);
 			return ret;
@@ -695,14 +700,14 @@ int ft_alloc_ep_res(struct fi_info *fi)
 	}
 
 	if (opts.options & FT_OPT_RX_CNTR) {
-		ret = ft_cntr_open(&rxcntr);
+		ret = ft_cntr_open(new_rxcntr);
 		if (ret) {
 			FT_PRINTERR("fi_cntr_open", ret);
 			return ret;
 		}
 	}
 
-	if (fi->ep_attr->type == FI_EP_RDM || fi->ep_attr->type == FI_EP_DGRAM) {
+	if (!av && (fi->ep_attr->type == FI_EP_RDM || fi->ep_attr->type == FI_EP_DGRAM)) {
 		if (fi->domain_attr->av_type != FI_AV_UNSPEC)
 			av_attr.type = fi->domain_attr->av_type;
 
@@ -722,7 +727,7 @@ int ft_alloc_ep_res(struct fi_info *fi)
 int ft_alloc_active_res(struct fi_info *fi)
 {
 	int ret;
-	ret = ft_alloc_ep_res(fi);
+	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr);
 	if (ret)
 		return ret;
 
@@ -1185,34 +1190,36 @@ int ft_init_alias_ep(uint64_t flags)
 	return 0;
 }
 
-int ft_enable_ep(struct fid_ep *ep)
+int ft_enable_ep(struct fid_ep *bind_ep, struct fid_eq *bind_eq, struct fid_av *bind_av,
+		 struct fid_cq *bind_txcq, struct fid_cq *bind_rxcq,
+		 struct fid_cntr *bind_txcntr, struct fid_cntr *bind_rxcntr)
 {
 	uint64_t flags;
 	int ret;
 
 	if ((fi->ep_attr->type == FI_EP_MSG || fi->caps & FI_MULTICAST ||
 	    fi->caps & FI_COLLECTIVE) && !(opts.options & FT_OPT_DOMAIN_EQ))
-		FT_EP_BIND(ep, eq, 0);
+		FT_EP_BIND(bind_ep, bind_eq, 0);
 
-	FT_EP_BIND(ep, av, 0);
-	FT_EP_BIND(ep, stx, 0);
-	FT_EP_BIND(ep, srx, 0);
+	FT_EP_BIND(bind_ep, bind_av, 0);
+	FT_EP_BIND(bind_ep, stx, 0);
+	FT_EP_BIND(bind_ep, srx, 0);
 
 	flags = FI_TRANSMIT;
 	if (!(opts.options & FT_OPT_TX_CQ))
 		flags |= FI_SELECTIVE_COMPLETION;
-	FT_EP_BIND(ep, txcq, flags);
+	FT_EP_BIND(bind_ep, bind_txcq, flags);
 
 	flags = FI_RECV;
 	if (!(opts.options & FT_OPT_RX_CQ))
 		flags |= FI_SELECTIVE_COMPLETION;
-	FT_EP_BIND(ep, rxcq, flags);
+	FT_EP_BIND(bind_ep, bind_rxcq, flags);
 
-	ret = ft_get_cq_fd(txcq, &tx_fd);
+	ret = ft_get_cq_fd(bind_txcq, &tx_fd);
 	if (ret)
 		return ret;
 
-	ret = ft_get_cq_fd(rxcq, &rx_fd);
+	ret = ft_get_cq_fd(bind_rxcq, &rx_fd);
 	if (ret)
 		return ret;
 
@@ -1225,7 +1232,7 @@ int ft_enable_ep(struct fid_ep *ep)
 		flags |= hints->caps & (FI_WRITE | FI_READ);
 	else if (hints->caps & FI_RMA)
 		flags |= FI_WRITE | FI_READ;
-	FT_EP_BIND(ep, txcntr, flags);
+	FT_EP_BIND(bind_ep, bind_txcntr, flags);
 
 	if (opts.options & FT_OPT_RX_CQ)
 		flags = 0;
@@ -1235,9 +1242,9 @@ int ft_enable_ep(struct fid_ep *ep)
 		flags |= hints->caps & (FI_REMOTE_WRITE | FI_REMOTE_READ);
 	else if (hints->caps & FI_RMA)
 		flags |= FI_REMOTE_WRITE | FI_REMOTE_READ;
-	FT_EP_BIND(ep, rxcntr, flags);
+	FT_EP_BIND(bind_ep, bind_rxcntr, flags);
 
-	ret = fi_enable(ep);
+	ret = fi_enable(bind_ep);
 	if (ret) {
 		FT_PRINTERR("fi_enable", ret);
 		return ret;
@@ -1250,7 +1257,7 @@ int ft_enable_ep_recv(void)
 {
 	int ret;
 
-	ret = ft_enable_ep(ep);
+	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
 	if (ret)
 		return ret;
 
@@ -2312,8 +2319,7 @@ static int ft_fdwait_for_comp(struct fid_cq *cq, uint64_t *cur,
 	return 0;
 }
 
-static int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur,
-			  uint64_t total, int timeout)
+int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total, int timeout)
 {
 	int ret;
 

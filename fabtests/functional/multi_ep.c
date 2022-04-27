@@ -53,43 +53,25 @@ static char **send_bufs;
 static char **recv_bufs;
 static struct fi_context *recv_ctx;
 static struct fi_context *send_ctx;
+static struct fid_cq **txcqs, **rxcqs;
+static struct fid_mr *data_mr = NULL;
+static void *data_desc = NULL;
 static fi_addr_t *remote_addr;
 int num_eps = 3;
-
-
-static int alloc_multi_ep_res()
-{
-	char *rx_buf_ptr;
-	int i;
-
-	eps = calloc(num_eps, sizeof(*eps));
-	remote_addr = calloc(num_eps, sizeof(*remote_addr));
-	send_bufs = calloc(num_eps, sizeof(*send_bufs));
-	recv_bufs = calloc(num_eps, sizeof(*recv_bufs));
-	send_ctx = calloc(num_eps, sizeof(*send_ctx));
-	recv_ctx = calloc(num_eps, sizeof(*recv_ctx));
-	data_bufs = calloc(num_eps * 2, opts.transfer_size);
-
-	if (!eps || !remote_addr || !send_bufs || !recv_bufs ||
-	    !send_ctx || !recv_ctx || !data_bufs)
-		return -FI_ENOMEM;
-
-	rx_buf_ptr = data_bufs + opts.transfer_size * num_eps;
-	for (i = 0; i < num_eps; i++) {
-		send_bufs[i] = data_bufs + opts.transfer_size * i;
-		recv_bufs[i] = rx_buf_ptr + opts.transfer_size * i;
-	}
-
-	return 0;
-}
 
 static void free_ep_res()
 {
 	int i;
 
-	for (i = 0; i < num_eps; i++)
+	FT_CLOSE_FID(data_mr);
+	for (i = 0; i < num_eps; i++) {
 		FT_CLOSE_FID(eps[i]);
+		FT_CLOSE_FID(txcqs[i]);
+		FT_CLOSE_FID(rxcqs[i]);
+	}
 
+	free(txcqs);
+	free(rxcqs);
 	free(data_bufs);
 	free(send_bufs);
 	free(recv_bufs);
@@ -99,37 +81,108 @@ static void free_ep_res()
 	free(eps);
 }
 
+static int alloc_multi_ep_res()
+{
+	char *rx_buf_ptr;
+	int i, ret;
+
+	eps = calloc(num_eps, sizeof(*eps));
+	remote_addr = calloc(num_eps, sizeof(*remote_addr));
+	send_bufs = calloc(num_eps, sizeof(*send_bufs));
+	recv_bufs = calloc(num_eps, sizeof(*recv_bufs));
+	send_ctx = calloc(num_eps, sizeof(*send_ctx));
+	recv_ctx = calloc(num_eps, sizeof(*recv_ctx));
+	data_bufs = calloc(num_eps * 2, opts.transfer_size);
+	txcqs = calloc(num_eps, sizeof(*txcqs));
+	rxcqs = calloc(num_eps, sizeof(*rxcqs));
+
+	if (!eps || !remote_addr || !send_bufs || !recv_bufs ||
+	    !send_ctx || !recv_ctx || !data_bufs || !txcqs || !rxcqs)
+		return -FI_ENOMEM;
+
+	rx_buf_ptr = data_bufs + opts.transfer_size * num_eps;
+	for (i = 0; i < num_eps; i++) {
+		send_bufs[i] = data_bufs + opts.transfer_size * i;
+		recv_bufs[i] = rx_buf_ptr + opts.transfer_size * i;
+	}
+
+	ret = ft_reg_mr(fi, data_bufs, num_eps * 2 * opts.transfer_size,
+			ft_info_to_mr_access(fi), FT_MR_KEY + 1, &data_mr, &data_desc);
+	if (ret) {
+		free_ep_res();
+		return ret;
+	}
+
+	return 0;
+}
+
+static int ep_post_rx(int idx)
+{
+	int ret;
+
+	do {
+		ret = fi_recv(eps[idx], recv_bufs[idx], opts.transfer_size,
+			      data_desc, FI_ADDR_UNSPEC, &recv_ctx[idx]);
+		if (ret == -FI_EAGAIN)
+			(void) fi_cq_read(rxcqs[idx], NULL, 0);
+
+	} while (ret == -FI_EAGAIN);
+
+	return ret;
+}
+
+static int ep_post_tx(int idx)
+{
+	int ret;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA))
+		ft_fill_buf(send_bufs[idx], opts.transfer_size);
+
+	do {
+		ret = fi_send(eps[idx], send_bufs[idx], opts.transfer_size,
+			      data_desc, remote_addr[idx], &send_ctx[idx]);
+		if (ret == -FI_EAGAIN)
+			(void) fi_cq_read(txcqs[idx], NULL, 0);
+
+	} while (ret == -FI_EAGAIN);
+
+	return ret;
+}
+
 static int do_transfers(void)
 {
 	int i, ret;
+	uint64_t cur;
 
 	for (i = 0; i < num_eps; i++) {
-		rx_buf = recv_bufs[i];
-		ret = ft_post_rx(eps[i], opts.transfer_size, &recv_ctx[i]);
-		if (ret)
+		ret = ep_post_rx(i);
+		if (ret) {
+			FT_PRINTERR("fi_recv", ret);
 			return ret;
-	}
-
-	for (i = 0; i < num_eps; i++) {
-		if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-			ret = ft_fill_buf(send_bufs[i], opts.transfer_size);
-			if (ret)
-				return ret;
 		}
-
-		tx_buf = send_bufs[i];
-		ret = ft_post_tx(eps[i], remote_addr[i], opts.transfer_size, NO_CQ_DATA, &send_ctx[i]);
-		if (ret)
-			return ret;
 	}
 
-	ret = ft_get_tx_comp(num_eps);
-	if (ret < 0)
-		return ret;
+	printf("Send to all %d remote EPs\n", num_eps);
+	for (i = 0; i < num_eps; i++) {
+		ret = ep_post_tx(i);
+		if (ret) {
+			FT_PRINTERR("fi_send", ret);
+			return ret;
+		}
+	}
 
-	ret = ft_get_rx_comp(num_eps);
-	if (ret < 0)
-		return ret;
+	printf("Wait for all messages from peer\n");
+	for (i = 0; i < num_eps; i++) {
+		cur = 0;
+		ret = ft_get_cq_comp(txcqs[i], &cur, 1, -1);
+		if (ret < 0)
+			return ret;
+
+		cur = 0;
+		ret = ft_get_cq_comp(rxcqs[i], &cur, 1, -1);
+		if (ret < 0)
+			return ret;
+	}
 
 	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
 		for (i = 0; i < num_eps; i++) {
@@ -137,37 +190,44 @@ static int do_transfers(void)
 			if (ret)
 				return ret;
 		}
+		printf("Data check OK\n");
 	}
 
-	for (i = 0; i < num_eps; i++)
-		ft_finalize_ep(eps[i]);
+	ret = ft_finalize_ep(ep);
+	if (ret)
+		return ret;
 
 	printf("PASSED multi ep\n");
 	return 0;
 }
 
-static int setup_client_ep(struct fid_ep **ep)
+static int setup_client_ep(int idx)
 {
 	int ret;
 
-	ret = fi_endpoint(domain, fi, ep, NULL);
+	ret = fi_endpoint(domain, fi, &eps[idx], NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
 		return ret;
 	}
 
-	ret = ft_enable_ep(*ep);
+	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL);
 	if (ret)
 		return ret;
 
-	ret = ft_connect_ep(*ep, eq, fi->dest_addr);
+	ret = ft_enable_ep(eps[idx], eq, av, txcqs[idx], rxcqs[idx],
+			   NULL, NULL);
+	if (ret)
+		return ret;
+
+	ret = ft_connect_ep(eps[idx], eq, fi->dest_addr);
 	if (ret)
 		return ret;
 
 	return 0;
 }
 
-static int setup_server_ep(struct fid_ep **ep)
+static int setup_server_ep(int idx)
 {
 	int ret;
 
@@ -175,17 +235,22 @@ static int setup_server_ep(struct fid_ep **ep)
 	if (ret)
 		goto failed_accept;
 
-	ret = fi_endpoint(domain, fi, ep, NULL);
+	ret = fi_endpoint(domain, fi, &eps[idx], NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
 		goto failed_accept;
 	}
 
-	ret = ft_enable_ep(*ep);
+	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL);
+	if (ret)
+		return ret;
+
+	ret = ft_enable_ep(eps[idx], eq, av, txcqs[idx], rxcqs[idx],
+			   NULL, NULL);
 	if (ret)
 		goto failed_accept;
 
-	ret = ft_accept_connection(*ep, eq);
+	ret = ft_accept_connection(eps[idx], eq);
 	if (ret)
 		goto failed_accept;
 
@@ -196,30 +261,46 @@ failed_accept:
 	return ret;
 }
 
-static int setup_av_ep(struct fid_ep **ep, fi_addr_t *remote_addr)
+static int setup_av_ep(int idx)
 {
 	int ret;
-	hints->src_addr = NULL;
 
+	fi_freeinfo(hints);
+	hints = fi_dupinfo(fi);
 	fi_freeinfo(fi);
 
-	ret = fi_getinfo(FT_FIVERSION, NULL, NULL, 0, hints, &fi);
+	hints->src_addr = NULL;
+	hints->src_addrlen = 0;
+
+	ret = fi_getinfo(FT_FIVERSION, opts.src_addr, NULL, 0, hints, &fi);
 	if (ret) {
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
 
-	ret = fi_endpoint(domain, fi, ep, NULL);
+	ret = fi_endpoint(domain, fi, &eps[idx], NULL);
 	if (ret) {
 		FT_PRINTERR("fi_endpoint", ret);
 		return ret;
 	}
 
-	ret = ft_enable_ep(*ep);
+	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL);
 	if (ret)
 		return ret;
 
-	ret = ft_init_av_addr(av, *ep, remote_addr);
+	return 0;
+}
+
+static int enable_ep(int idx)
+{
+	int ret;
+
+	ret = ft_enable_ep(eps[idx], eq, av, txcqs[idx], rxcqs[idx],
+			   NULL, NULL);
+	if (ret)
+		return ret;
+
+	ret = ft_init_av_addr(av, eps[idx], &remote_addr[idx]);
 	if (ret)
 		return ret;
 
@@ -229,10 +310,6 @@ static int setup_av_ep(struct fid_ep **ep, fi_addr_t *remote_addr)
 static int run_test(void)
 {
 	int i, ret;
-
-	ret = alloc_multi_ep_res();
-	if (ret)
-		return ret;
 
 	if (hints->ep_attr->type == FI_EP_MSG) {
 		ret = ft_init_fabric_cm();
@@ -245,32 +322,43 @@ static int run_test(void)
 			return ret;
 	}
 
-	/* Create additional endpoints. */
-	for (i = 0; i < num_eps; i++) {
-		if (hints->ep_attr->type == FI_EP_MSG) {
-			if (opts.dst_addr) {
-				ret = setup_client_ep(&eps[i]);
-				if (ret)
-					return ret;
-			} else {
-				ret = setup_server_ep(&eps[i]);
-				if (ret)
-					return ret;
-			}
-		} else {
-			ret = setup_av_ep(&eps[i], &remote_addr[i]);
-			if (ret)
-				return ret;
-		}
-	}
-
-	tx_cq_cntr = rx_cq_cntr = 0;
-	tx_seq = rx_seq = 0;
-	ret = do_transfers();
+	ret = alloc_multi_ep_res();
 	if (ret)
 		return ret;
 
-	return 0;
+	/* Create additional endpoints. */
+	printf("Creating %d EPs\n", num_eps);
+	for (i = 0; i < num_eps; i++) {
+		if (hints->ep_attr->type == FI_EP_MSG) {
+			if (opts.dst_addr) {
+				ret = setup_client_ep(i);
+				if (ret)
+					goto out;
+			} else {
+				ret = setup_server_ep(i);
+				if (ret)
+					goto out;
+			}
+		} else {
+			ret = setup_av_ep(i);
+			if (ret)
+				goto out;
+		}
+	}
+
+	for (i = 0; i < num_eps; i++) {
+		if (hints->ep_attr->type != FI_EP_MSG) {
+			ret = enable_ep(i);
+			if (ret)
+				goto out;
+		}
+	}
+
+	ret = do_transfers();
+
+out:
+	free_ep_res();
+	return ret;
 }
 
 int main(int argc, char **argv)
@@ -280,7 +368,7 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.transfer_size = 256;
-	opts.options |= FT_OPT_SKIP_REG_MR;
+	opts.options |= FT_OPT_OOB_ADDR_EXCH;
 
 	hints = fi_allocinfo();
 	if (!hints)
@@ -313,10 +401,10 @@ int main(int argc, char **argv)
 
 	hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT;
+	hints->domain_attr->mr_mode = opts.mr_mode;
 
 	ret = run_test();
 
-	free_ep_res();
 	ft_free_res();
 	return ft_exit_code(ret);
 }

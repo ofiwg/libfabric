@@ -109,12 +109,16 @@ v1.15.0, Fri Apr 29, 2022
 - Restructure collective av set creation/destruction
 - Change most locks from spin locks to mutexes
 - Allow selection of spinlocks for CQ and domain objects
+- Fix AV default addrlen
+- Update fi_getinfo checks to include hints->addr_format
 
 ## Verbs
 
 - Initial changes for compiling on Windows (via NetworkDirect)
 - Add a failover path to dma-buf based memory registration
 - Replace use of spin locks with mutexes
+- Check for valid qp prior to cleanup
+- Set and check for address format correct in fi_getinfo
 
 ## Fabtests
 
@@ -136,6 +140,7 @@ v1.15.0, Fri Apr 29, 2022
 - poll: Fix crash if unable to allocate pollset
 - ubertest: Add GPU testing and validation support
 - Add HMEM options parsing support
+- Update and re-enable fi_multi_ep test
 
 v1.14.1, Fri Apr 15, 2022
 =========================
