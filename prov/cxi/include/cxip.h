@@ -169,7 +169,7 @@
 /* 16 bits of MR keys equals the hardware MR resource limit. Could explore
  * increasing key range if needed.
  */
-#define CXIP_MR_KEY_SIZE sizeof(uint16_t)
+#define CXIP_MR_KEY_SIZE sizeof(uint32_t)
 #define CXIP_MR_KEY_MASK ((1ULL << (8 * CXIP_MR_KEY_SIZE)) - 1)
 
 static inline bool cxip_is_valid_mr_key(uint64_t key)

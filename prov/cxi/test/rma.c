@@ -1415,7 +1415,8 @@ Test(rma, invalid_source_mr_key)
 {
 	int ret;
 
-	ret = fi_inject_write(cxit_ep, NULL, 0, cxit_ep_fi_addr, 0, 0x10001);
+	ret = fi_inject_write(cxit_ep, NULL, 0, cxit_ep_fi_addr, 0,
+			      0x100000001);
 	cr_assert(ret == -FI_EKEYREJECTED);
 }
 
