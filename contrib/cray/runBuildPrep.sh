@@ -15,13 +15,23 @@ echo "$0: --> TARGET_OS: '${TARGET_OS}'"
 if [[ "${BRANCH_NAME}" == release/* ]]; then
     ARTI_LOCATION='rpm-stable-local'
     ARTI_BRANCH=${BRANCH_NAME}
+
+    case "${OBS_TARGET_OS}" in
+        cos_2_2*)       GPU_BRANCH='release/cos-2.2' ;;
+        csm_1_0_11*)    GPU_BRANCH='release/cos-2.2' ;;
+        cos_2_3*)       GPU_BRANCH='release/cos-2.3' ;;
+        csm_1_2_0*)     GPU_BRANCH='release/cos-2.3' ;;
+        *)              GPU_BRANCH=${BRANCH_NAME} ;;
+    esac
 else
     ARTI_LOCATION='rpm-master-local'
     ARTI_BRANCH=dev/master
+    GPU_BRANCH=dev/master
 fi
 
 echo "$0: --> ARTI_LOCATION: '${ARTI_LOCATION}'"
 echo "$0: --> ARTI_BRANCH: '${ARTI_BRANCH}'"
+echo "$0: --> GPU_BRANCH: '${GPU_BRANCH}'"
 
 ZE_ARTI_BRANCH=dev/master
 
@@ -53,12 +63,6 @@ else
     ZE_RPMS=""
 fi
 
-if [[ ${TARGET_OS} == sle15_sp2* ]]; then
-    CUDA_RPMS="nvhpc-2021"
-else
-    CUDA_RPMS="nvhpc-2022"
-fi
-
 if [[ ${TARGET_OS} =~ ^centos || ${TARGET_OS} =~ ^rhel ]]; then
     RPMS+=" libcurl-devel json-c-devel"
 else
@@ -73,6 +77,26 @@ if command -v yum > /dev/null; then
 elif command -v zypper > /dev/null; then
     with_cuda=1
     with_rocm=1
+
+    if [[ "${BRANCH_NAME}" == release/* ]]; then
+        case "${OBS_TARGET_OS}" in
+            cos_2_2*)       CUDA_RPMS="nvhpc-2021"
+                        ;;
+            csm_1_0_11*)    CUDA_RPMS="nvhpc-2021"
+                        ;;
+            cos_2_3*)       CUDA_RPMS="nvhpc-2022"
+                        ;;
+            csm_1_2_0*)     CUDA_RPMS="nvhpc-2022"
+                        ;;
+        esac
+    else
+        case ${TARGET_OS} in
+            sle15_sp2*) CUDA_RPMS="nvhpc-2021"
+                        ;;
+            sle15_sp3*) CUDA_RPMS="nvhpc-2022"
+                        ;;
+        esac
+    fi
 
     zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
         --priority 20 --name=${PRODUCT}-${ARTI_LOCATION} \
