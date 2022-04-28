@@ -21,6 +21,8 @@
 
 #include "cxip.h"
 
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
+
 /* Cassini supports ONLY 1-element vectors, and this code presumes that the
  * value is 1.
  */
@@ -222,6 +224,16 @@ static inline int _cxip_ep_valid(struct fid_ep *ep,
  */
 static int cxip_amo_inject_cb(struct cxip_req *req, const union c_event *event)
 {
+	/* When errors happen, send events can occur before the put/get event.
+	 * These events should just be dropped.
+	 */
+	if (event->hdr.event_type == C_EVENT_SEND) {
+		CXIP_WARN("Unexpected %s event: rc=%s\n",
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
+		return FI_SUCCESS;
+	}
+
 	return cxip_cq_req_error(req, 0, FI_EIO, cxi_event_rc(event), NULL, 0);
 }
 
@@ -308,6 +320,16 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 	int event_rc;
 	int success_event = (req->flags & FI_COMPLETION);
 	struct cxip_txc *txc = req->amo.txc;
+
+	/* When errors happen, send events can occur before the put/get event.
+	 * These events should just be dropped.
+	 */
+	if (event->hdr.event_type == C_EVENT_SEND) {
+		TXC_WARN(txc, "Unexpected %s event: rc=%s\n",
+			 cxi_event_to_str(event),
+			 cxi_rc_to_str(cxi_event_rc(event)));
+		return FI_SUCCESS;
+	}
 
 	/* Fetching AMO with flush requires two events. Only once two events are
 	 * processed can the user-generated completion queue event be

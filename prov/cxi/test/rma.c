@@ -1472,6 +1472,99 @@ Test(rma_hybrid_mr_desc, completion_read)
 	rma_hybrid_mr_desc_test_runner(false, true);
 }
 
+static void rma_hybrid_invalid_addr_mr_desc_test_runner(bool write,
+							bool cq_events)
+{
+	struct mem_region source_window;
+	struct mem_region remote_window;
+	int send_len = 1024;
+	int source_key = 0x2;
+	int remote_key = 0x1;
+	int ret;
+	struct iovec msg_iov = {};
+	struct fi_rma_iov rma_iov = {};
+	struct fi_msg_rma msg_rma = {};
+	void *desc[1];
+	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_err_entry err;
+	uint64_t rma_flags = cq_events ? FI_TRANSMIT_COMPLETE | FI_COMPLETION :
+		FI_TRANSMIT_COMPLETE;
+	struct fid_cntr *cntr = write ? cxit_write_cntr : cxit_read_cntr;
+
+	ret = mr_create(send_len, FI_READ | FI_WRITE, 0xa, source_key,
+			&source_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	desc[0] = fi_mr_desc(source_window.mr);
+	cr_assert(desc[0] != NULL);
+
+	ret = mr_create(send_len, FI_REMOTE_READ | FI_REMOTE_WRITE, 0x3,
+			remote_key, &remote_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	msg_rma.msg_iov = &msg_iov;
+	msg_rma.desc = desc;
+	msg_rma.iov_count = 1;
+	msg_rma.addr = cxit_ep_fi_addr;
+	msg_rma.rma_iov = &rma_iov;
+	msg_rma.rma_iov_count = 1;
+
+	/* Generate invalid memory address. */
+	msg_iov.iov_base = source_window.mem + 0xfffffffff;
+	msg_iov.iov_len = send_len;
+
+	rma_iov.key = remote_key;
+	rma_iov.len = send_len;
+
+	if (write)
+		ret = fi_writemsg(cxit_ep, &msg_rma, rma_flags);
+	else
+		ret = fi_readmsg(cxit_ep, &msg_rma, rma_flags);
+	cr_assert_eq(ret, FI_SUCCESS, "Bad rc=%d\n", ret);
+
+	while (fi_cntr_readerr(cntr) != 1)
+		;
+
+	/* No target event should be generated. */
+	ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	/* There should be an source error entry. */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAVAIL);
+
+	/* Expect a source error. */
+	ret = fi_cq_readerr(cxit_tx_cq, &err, 1);
+	cr_assert(ret == 1);
+
+	/* Expect no other events. */
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	mr_destroy(&source_window);
+	mr_destroy(&remote_window);
+}
+
+Test(rma_hybrid_mr_desc, invalid_addr_non_inject_selective_completion_write)
+{
+	rma_hybrid_invalid_addr_mr_desc_test_runner(true, false);
+}
+
+Test(rma_hybrid_mr_desc, invalid_addr_selective_completion_read)
+{
+	rma_hybrid_invalid_addr_mr_desc_test_runner(false, false);
+}
+
+Test(rma_hybrid_mr_desc, invalid_addr_non_inject_completion_write)
+{
+	rma_hybrid_invalid_addr_mr_desc_test_runner(true, true);
+}
+
+Test(rma_hybrid_mr_desc, invalid_addr_completion_read)
+{
+	rma_hybrid_invalid_addr_mr_desc_test_runner(false, true);
+}
+
 void cxit_rma_setup_tx_alias_no_fence(void)
 {
 	int ret;

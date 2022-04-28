@@ -3325,3 +3325,75 @@ Test(amo_hybrid_mr_desc, amo_failure)
 
 	mr_destroy(&buf_window);
 }
+
+Test(amo_hybrid_mr_desc, invalid_addr_fetching_amo_failure)
+{
+	struct mem_region buf_window;
+	struct mem_region result_window;
+	int remote_key = 0x1;
+	int win_len = 1;
+	void *buf_desc[1] = {};
+	void *result_desc[1] = {};
+	struct fi_msg_atomic msg = {};
+	struct fi_ioc ioc = {};
+	struct fi_rma_ioc rma_ioc = {};
+	struct fi_ioc fetch_ioc = {};
+	int ret;
+	struct fid_cntr *cntr = cxit_read_cntr;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_err_entry cq_err;
+	uint64_t amo_flags = FI_TRANSMIT_COMPLETE;
+
+	ret = mr_create(win_len, FI_READ | FI_WRITE, 0xa, remote_key,
+			&buf_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = mr_create(win_len, FI_READ | FI_WRITE, 0xa, 0x4,
+			&result_window);
+	cr_assert(ret == FI_SUCCESS);
+
+	buf_desc[0] = fi_mr_desc(buf_window.mr);
+	result_desc[0] = fi_mr_desc(result_window.mr);
+
+	ioc.addr = buf_window.mem;
+	ioc.count = 1;
+
+	rma_ioc.count = 1;
+	rma_ioc.key = remote_key;
+
+	msg.msg_iov = &ioc;
+	msg.desc = buf_desc;
+	msg.iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+	msg.datatype = FI_UINT8;
+	msg.op = FI_SUM;
+
+	fetch_ioc.addr = result_window.mem + 0xffffffffff;
+	fetch_ioc.count = 1;
+
+	ret = fi_fetch_atomicmsg(cxit_ep, &msg, &fetch_ioc, result_desc, 1,
+				 amo_flags);
+	cr_assert(ret == FI_SUCCESS);
+
+	while (fi_cntr_readerr(cntr) != 1)
+		;
+
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert(ret == -FI_EAVAIL);
+
+	ret = fi_cq_readerr(cxit_tx_cq, &cq_err, 0);
+	cr_assert(ret == 1);
+
+	cr_assert(cq_err.flags == (FI_ATOMIC | FI_READ));
+	cr_assert(cq_err.op_context == NULL);
+
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	mr_destroy(&result_window);
+	mr_destroy(&buf_window);
+}

@@ -1412,10 +1412,15 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	bool matched;
 
 	switch (event->hdr.event_type) {
+	/* When errors happen, send events can occur before the put/get event.
+	 * These events should just be dropped.
+	 */
 	case C_EVENT_SEND:
-		/* TODO Handle Send event errors. */
-		assert(cxi_event_rc(event) == C_RC_OK);
+		RXC_WARN(rxc, "Unexpected %s event: rc=%s\n",
+			 cxi_event_to_str(event),
+			 cxi_rc_to_str(cxi_event_rc(event)));
 		return FI_SUCCESS;
+
 	case C_EVENT_PUT_OVERFLOW:
 		/* We matched an unexpected header */
 
@@ -1539,6 +1544,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		/* Count the rendezvous event. */
 		rdzv_recv_req_event(req);
 		return FI_SUCCESS;
+
 	default:
 		RXC_FATAL(rxc, "Unexpected event type: %d\n",
 			  event->hdr.event_type);
@@ -3521,6 +3527,16 @@ static int cxip_send_rdzv_put_cb(struct cxip_req *req,
 			rdzv_send_req_event(req);
 		}
 		return FI_SUCCESS;
+
+	/* When errors happen, send events can occur before the put/get event.
+	 * These events should just be dropped.
+	 */
+	case C_EVENT_SEND:
+		TXC_WARN(txc, "Unexpected %s event: rc=%s\n",
+			 cxi_event_to_str(event),
+			 cxi_rc_to_str(cxi_event_rc(event)));
+		return FI_SUCCESS;
+
 	default:
 		TXC_FATAL(txc, "Unexpected event received: %s\n",
 			  cxi_event_to_str(event));
@@ -3744,6 +3760,18 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 {
 	int match_complete = req->flags & FI_MATCH_COMPLETE;
 	int ret;
+
+	/* When errors happen, send events can occur before the put/get event.
+	 * These events should just be dropped.
+	 */
+	if (event->hdr.event_type == C_EVENT_SEND) {
+		TXC_WARN(req->send.txc, "Unexpected %s event: rc=%s\n",
+			 cxi_event_to_str(event),
+			 cxi_rc_to_str(cxi_event_rc(event)));
+		return FI_SUCCESS;
+	}
+
+	assert(event->hdr.event_type == C_EVENT_ACK);
 
 	req->send.rc = cxi_init_event_rc(event);
 
