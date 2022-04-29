@@ -105,12 +105,12 @@ elif command -v zypper > /dev/null; then
 
     zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
         --priority 20 --name=cuda \
-        ${ARTI_URL}/cos-internal-third-party-generic-local/nvidia_hpc_sdk/${TARGET_OS}/${TARGET_ARCH}/${ARTI_BRANCH}/ \
+        ${ARTI_URL}/cos-internal-third-party-generic-local/nvidia_hpc_sdk/${TARGET_OS}/${TARGET_ARCH}/${GPU_BRANCH}/ \
         cuda
 
     zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
         --priority 20 --name=rocm \
-        ${ARTI_URL}/cos-internal-third-party-generic-local/rocm/latest/${TARGET_OS}/${TARGET_ARCH}/${ARTI_BRANCH}/ \
+        ${ARTI_URL}/cos-internal-third-party-generic-local/rocm/latest/${TARGET_OS}/${TARGET_ARCH}/${GPU_BRANCH}/ \
         rocm
 
     if [[ $with_ze -eq 1 ]]; then
