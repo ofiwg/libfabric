@@ -222,7 +222,6 @@ enum rxr_lower_ep_type {
  * Progress engine will retry sending handshake.
  */
 #define RXR_PEER_HANDSHAKE_QUEUED      BIT_ULL(5)
-#define RXR_MAX_NUM_PROTOCOLS (RXR_MAX_PROTOCOL_VERSION - RXR_BASE_PROTOCOL_VERSION + 1)
 
 struct rdm_peer {
 	bool is_self;			/* self flag */
