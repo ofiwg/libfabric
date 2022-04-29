@@ -904,16 +904,30 @@ static void *rxm_cm_progress(void *arg)
 	while (ep->do_progress) {
 		ofi_ep_lock_release(&ep->util_ep);
 
+		/* We must retrieve any event after we acquire the ep lock.
+		 * Otherwise, we could obtain an event for a msg ep that
+		 * another thread could be closing.  If we try to process that
+		 * event, we can access freed memory.  So, we use FI_PEEK here
+		 * to wait until an event is ready, then read any event after
+		 * we hold the ep lock.  Because closing an ep will free any
+		 * events queued on the eq, the event we find here may be gone
+		 * by the time we call read below.  This is what we want as it
+		 * avoids processing the stale event.
+		 */
 		ret = fi_eq_sread(ep->msg_eq, &event, &cm_entry,
-				  sizeof(cm_entry), -1, 0);
+				  sizeof(cm_entry), -1, FI_PEEK);
 
 		ofi_ep_lock_acquire(&ep->util_ep);
+		if (ret > 0) {
+			ret = fi_eq_read(ep->msg_eq, &event, &cm_entry,
+					 sizeof(cm_entry), 0);
+		}
 		if (ret > 0) {
 			rxm_handle_event(ep, event, &cm_entry, ret);
 		} else if (ret == -FI_EAVAIL) {
 			rxm_handle_error(ep);
-		} else {
-			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_eq_sread", ret);
+		} else if (ret && ret != -FI_EAGAIN) {
+			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_eq_read", ret);
 			break;
 		}
 	}
