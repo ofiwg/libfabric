@@ -35,6 +35,8 @@
 #ifndef _SOCK_UTIL_H_
 #define _SOCK_UTIL_H_
 
+#include <config.h>
+
 #include <sys/mman.h>
 #include <rdma/providers/fi_log.h>
 #include "sock.h"
