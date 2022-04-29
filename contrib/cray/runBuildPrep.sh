@@ -100,7 +100,7 @@ elif command -v zypper > /dev/null; then
 
     zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
         --priority 20 --name=${PRODUCT}-${ARTI_LOCATION} \
-         ${ARTI_URL}/${PRODUCT}-${ARTI_LOCATION}/${ARTI_BRANCH}/${TARGET_OS}/ \
+         ${ARTI_URL}/${PRODUCT}-${ARTI_LOCATION}/${ARTI_BRANCH}/${OBS_TARGET_OS}/ \
          ${PRODUCT}-${ARTI_LOCATION}
 
     zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
