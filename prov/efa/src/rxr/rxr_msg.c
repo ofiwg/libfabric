@@ -566,7 +566,7 @@ int rxr_msg_match_ep_unexp_by_tag(struct dlist_entry *item, const void *arg)
 
 	rx_entry = container_of(item, struct rxr_rx_entry, entry);
 
-	return rxr_match_tag(rx_entry->tag, match_info->ignore,
+	return ofi_match_tag(rx_entry->tag, match_info->ignore,
 			     match_info->tag);
 }
 
@@ -585,7 +585,7 @@ int rxr_msg_match_peer_unexp_by_tag(struct dlist_entry *item, const void *arg)
 
 	rx_entry = container_of(item, struct rxr_rx_entry, peer_unexp_entry);
 
-	return rxr_match_tag(rx_entry->tag, match_info->ignore,
+	return ofi_match_tag(rx_entry->tag, match_info->ignore,
 			     match_info->tag);
 }
 

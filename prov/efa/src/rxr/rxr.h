@@ -562,17 +562,6 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 	ofi_buf_free(rx_entry);
 }
 
-static inline int rxr_match_addr(fi_addr_t addr, fi_addr_t match_addr)
-{
-	return (addr == FI_ADDR_UNSPEC || addr == match_addr);
-}
-
-static inline int rxr_match_tag(uint64_t tag, uint64_t ignore,
-				uint64_t match_tag)
-{
-	return ((tag | ignore) == (match_tag | ignore));
-}
-
 void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
 void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);

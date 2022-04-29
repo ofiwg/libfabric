@@ -34,6 +34,7 @@
 /**
  * multi recv related functions
  */
+
 bool rxr_msg_multi_recv_buffer_available(struct rxr_ep *ep,
 					 struct rxr_rx_entry *rx_entry);
 
