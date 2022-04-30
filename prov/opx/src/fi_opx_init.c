@@ -37,6 +37,7 @@
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/fi_opx_domain.h"
 #include "ofi_prov.h"
+#include "opa_service.h"
 
 #include "rdma/opx/fi_opx_addr.h"
 
@@ -367,6 +368,9 @@ static int fi_opx_getinfo(uint32_t version, const char *node,
 	struct fi_info *fi = NULL;
 
 	*info = NULL;
+	fi_opx_count = opx_hfi_get_hfi1_count();
+	FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
+			"Detected %d hfi1(s) in the system\n", fi_opx_count);	
 
 	if (!fi_opx_count) {
 		return -FI_ENODATA;

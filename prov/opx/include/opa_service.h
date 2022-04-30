@@ -271,4 +271,7 @@ int64_t opx_hfi_sysfs_unit_read_node_s64(uint32_t unit);
 
 int opx_hfi_cmd_wait_for_packet(int fd);
 
+/* returns number of hfi1_* devs in /dev */
+int opx_hfi_get_hfi1_count();
+
 #endif /* OPA_SERVICE_H */
