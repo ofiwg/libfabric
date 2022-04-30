@@ -448,9 +448,9 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_init(struct fid_ep *ep,
 	if (OFI_UNLIKELY(rc)) {
 #ifdef OPX_RELIABILITY_DEBUG
 		if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT) {
-			fprintf(stderr, "(tx) flow__ %016lx 0x%x inj init dropped; no credits\n", key, reliability_rx);
+			fprintf(stderr, "(tx) flow__ %016lx 0x%lx inj init dropped; no credits\n", key, reliability_rx);
 		} else if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK) {
-			fprintf(stderr, "(rx) flow__ %016lx 0x%x inj init ack dropped; no credits\n", key, reliability_rx);
+			fprintf(stderr, "(rx) flow__ %016lx 0x%lx inj init ack dropped; no credits\n", key, reliability_rx);
 		}
 #endif
 		return -FI_EAGAIN;
@@ -458,9 +458,9 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_init(struct fid_ep *ep,
 	
 #ifdef OPX_RELIABILITY_DEBUG
 	if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT) {
-		fprintf(stderr, "(tx) flow__ %016lx 0x%x inj init\n", key, reliability_rx);
+		fprintf(stderr, "(tx) flow__ %016lx 0x%lx inj init\n", key, reliability_rx);
 	} else if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK) {
-		fprintf(stderr, "(rx) flow__ %016lx 0x%x inj init ack\n", key, reliability_rx);
+		fprintf(stderr, "(rx) flow__ %016lx 0x%lx inj init ack\n", key, reliability_rx);
 	}
 #endif
 
@@ -481,9 +481,9 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_resynch(struct fid_ep *ep,
 	if (OFI_UNLIKELY(rc)) {
 #ifdef OPX_RELIABILITY_DEBUG
 		if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH) {
-			fprintf(stderr, "(tx) Client flow__ %016lx 0x%x inj resynch dropped; no credits\n", key, reliability_rx);
+			fprintf(stderr, "(tx) Client flow__ %016lx 0x%lx inj resynch dropped; no credits\n", key, reliability_rx);
 		} else if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK) {
-			fprintf(stderr, "(rx) Server flow__ %016lx 0x%x inj resynch ack dropped; no credits\n", key, reliability_rx);
+			fprintf(stderr, "(rx) Server flow__ %016lx 0x%lx inj resynch ack dropped; no credits\n", key, reliability_rx);
 		}
 #endif
 		return -FI_EAGAIN;
@@ -491,9 +491,9 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_resynch(struct fid_ep *ep,
 	
 #ifdef OPX_RELIABILITY_DEBUG
 	if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH) {
-		fprintf(stderr, "(tx) Client flow__ %016lx 0x%x inj resynch\n", key, reliability_rx);
+		fprintf(stderr, "(tx) Client flow__ %016lx 0x%lx inj resynch\n", key, reliability_rx);
 	} else if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK) {
-		fprintf(stderr, "(rx) Server flow__ %016lx 0x%x inj resynch ack\n", key, reliability_rx);
+		fprintf(stderr, "(rx) Server flow__ %016lx 0x%lx inj resynch ack\n", key, reliability_rx);
 	}
 #endif
 
@@ -983,7 +983,7 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 		(tail->scb.hdr.reliability.psn >= head->scb.hdr.reliability.psn)) {
 
 #ifdef OPX_RELIABILITY_DEBUG
-	last_ack_index=snprintf(last_ack, LAST_ACK_LEN, "(tx) Retiring on the fast path: %"PRIx64", %"PRIx64", %"PRIx64", H: %"PRIx64", T: %"PRIx64"\n",
+	last_ack_index = snprintf(last_ack, LAST_ACK_LEN, "(tx) Retiring on the fast path: %"PRIx64", %"PRIx64", %"PRIx64", H: %d, T: %d\n",
 		psn_start, psn_count, stop_psn, head->scb.hdr.reliability.psn,
 		tail->scb.hdr.reliability.psn);
 #endif
@@ -1099,7 +1099,7 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 #ifdef OPX_RELIABILITY_DEBUG
 	if (last_ack_index < LAST_ACK_LEN)
 		last_ack_index+=snprintf(&last_ack[last_ack_index],LAST_ACK_LEN-last_ack_index,
-			"(tx) Start = %lx, Stop = %lx, Halt = %lx\n",
+			"(tx) Start = %x, Stop = %x, Halt = %x\n",
 			start->scb.hdr.reliability.psn,
 			stop->scb.hdr.reliability.psn,
 			halt->scb.hdr.reliability.psn);
@@ -2356,7 +2356,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 			 * old packet or REALLY old packet.. drop it
 			 */
 #ifdef OPX_RELIABILITY_DEBUG
-			fprintf(stderr, "(rx) packet %"PRIx64" Dropping %s duplicate packet. psn_24 = %"PRIx64", psn_64 = %"PRIx64", next_psn = %"PRIx64"\n",
+			fprintf(stderr, "(rx) packet %"PRIx64" Dropping %s duplicate packet. psn_24 = %u, psn_64 = %"PRIx64", next_psn = %"PRIx64"\n",
 				key.value, (psn_64 < next_psn) ? "" : "really old", psn, psn_64, next_psn);
 #endif
 			/*
