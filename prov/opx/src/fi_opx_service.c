@@ -809,3 +809,26 @@ int opx_hfi_cmd_wait_for_packet(int fd)
 
 	return ret;
 }
+
+/* 
+ * A fast check to count the number of hfi1 devs.
+ * Device(s) may not be usable, more checking is needed
+ * returns number of hfi1 devices found in /dev (0 means none)
+ */
+int opx_hfi_get_hfi1_count() {
+	struct stat st;
+	int ret;
+	char hfi1_pathname[256];
+	int hfi1_count = 0;
+
+	for (int i = 0; i < FI_OPX_MAX_HFIS; i++) {
+		snprintf(hfi1_pathname, sizeof(hfi1_pathname), "%s_%u", 
+			OPX_DEVICE_PATH, i);
+		ret = stat(hfi1_pathname, &st);
+		if (!ret) {
+			//TODO add additional check opx_hfi_get_unit_active
+			hfi1_count++;
+		}
+	}
+	return hfi1_count;
+}
