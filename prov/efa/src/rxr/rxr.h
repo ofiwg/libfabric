@@ -491,17 +491,6 @@ static inline void rxr_copy_shm_cq_entry(struct fi_cq_tagged_entry *cq_tagged_en
 
 }
 
-static inline void rxr_setup_msg(struct fi_msg *msg, const struct iovec *iov, void **desc,
-				 size_t count, fi_addr_t addr, void *context, uint32_t data)
-{
-	msg->msg_iov = iov;
-	msg->desc = desc;
-	msg->iov_count = count;
-	msg->addr = addr;
-	msg->context = context;
-	msg->data = data;
-}
-
 struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep);
 
 const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen);
