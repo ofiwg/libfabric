@@ -4,7 +4,7 @@
 // need to provide a specfile (or in this case a specfile template) otherwise
 // the "Add RPM Metadata" stage will fail.
 rpmBuild(
-    product: "slingshot-host-software",
+    product: "internal",
     buildPrepScript: "contrib/cray/runBuildPrep.sh",
     rpmBuildCmd: "contrib/cray/cray_rpmbuild.sh",
     specfile: "libfabric.spec.in",
