@@ -98,6 +98,12 @@ static inline int sched_setaffinity(pid_t pid, size_t cpusetsize, cpu_set_t *mas
 	return 0;
 }
 
+static inline int sched_yield(void)
+{
+	(void) SwitchToThread();
+	return 0;
+}
+
 #ifdef __cplusplus
 }
 #endif
