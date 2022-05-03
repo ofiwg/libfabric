@@ -136,21 +136,45 @@ int rdma_create_id(struct rdma_event_channel *channel, struct rdma_cm_id **id,
 	id_nd->ov_file = INVALID_HANDLE_VALUE;
 	ofi_atomic_initialize32(&id_nd->cm_events_pending, 0);
 
+	ofi_mutex_init(&id_nd->connect_event.base.lock);
+	pthread_cond_init(&id_nd->connect_event.base.cond, 0);
 	id_nd->connect_event.base.event_cb = nd_cm_connect_ack;
 	id_nd->connect_event.base.error_cb = nd_cm_connect_nack;
 	id_nd->connect_event.id = *id;
 	id_nd->connect_event.channel = channel;
 
+	ofi_mutex_init(&id_nd->peer_event.base.lock);
+	pthread_cond_init(&id_nd->peer_event.base.cond, 0);
 	id_nd->peer_event.base.event_cb = nd_cm_connect_ack;
 	id_nd->peer_event.base.error_cb = nd_cm_connect_nack;
 	id_nd->peer_event.id = *id;
 	id_nd->peer_event.channel = channel;
 
+	ofi_mutex_init(&id_nd->listen_event.base.lock);
+	pthread_cond_init(&id_nd->listen_event.base.cond, 0);
 	id_nd->listen_event.base.event_cb = nd_cm_connreq_event;
 	id_nd->listen_event.base.error_cb = nd_cm_connreq_error;
 	id_nd->listen_event.listen_id = *id;
 
 	return 0;
+}
+
+static void remove_cm_id_events_from_channel(struct rdma_cm_id *id)
+{
+	struct nd_cm_event *entry_nd;
+	struct dlist_entry *tmp;
+	struct nd_event_channel *ch_nd =
+		container_of(id->channel, struct nd_event_channel, channel);
+
+	dlist_foreach_container_safe(&ch_nd->q.list, struct nd_cm_event,
+				     entry_nd, entry, tmp)
+	{
+		if (entry_nd->event.id == id) {
+			dlistfd_remove(&entry_nd->entry, &ch_nd->q);
+			free((void *)entry_nd->event.param.conn.private_data);
+			free(&entry_nd->event);
+		}
+	}
 }
 
 int rdma_destroy_id(struct rdma_cm_id *id)
@@ -168,15 +192,23 @@ int rdma_destroy_id(struct rdma_cm_id *id)
 	}
 
 	id_nd = container_of(id, struct nd_cm_id, id);
+	if (nd_cancel_pending(&id_nd->connect_event.base,
+			      (IND2Overlapped *)id_nd->connector) ||
+	    nd_cancel_pending(&id_nd->peer_event.base,
+			      (IND2Overlapped *)id_nd->connector) ||
+	    nd_cancel_pending(&id_nd->listen_event.base,
+			      (IND2Overlapped *)id_nd->listener))
+		return -1;
+
 	while (compare = ofi_atomic_get32(&id_nd->cm_events_pending)) {
 		WaitOnAddress(&id_nd->cm_events_pending, &compare,
 			      sizeof(id_nd->cm_events_pending), INFINITE);
 	}
 
-	if (id_nd->ov_file != INVALID_HANDLE_VALUE) {
-		ret = CloseHandle(id_nd->ov_file);
-		assert(ret);
+	if (id->channel) {
+		remove_cm_id_events_from_channel(id);
 	}
+
 	if (id_nd->listener) {
 		ret = id_nd->listener->lpVtbl->Release(id_nd->listener);
 		assert(!ret);
@@ -185,11 +217,24 @@ int rdma_destroy_id(struct rdma_cm_id *id)
 		refcnt = id_nd->connector->lpVtbl->Release(id_nd->connector);
 		assert(!refcnt);
 	}
+
 	if (id->qp) {
 		ibv_destroy_qp(id->qp);
 		id->qp = NULL;
 	}
 	// Should also destroy any associated SRQ here.
+
+	if (id_nd->ov_file != INVALID_HANDLE_VALUE) {
+		ret = CloseHandle(id_nd->ov_file);
+		assert(ret);
+	}
+
+	pthread_cond_destroy(&id_nd->listen_event.base.cond);
+	ofi_mutex_destroy(&id_nd->listen_event.base.lock);
+	pthread_cond_destroy(&id_nd->peer_event.base.cond);
+	ofi_mutex_destroy(&id_nd->peer_event.base.lock);
+	pthread_cond_destroy(&id_nd->connect_event.base.cond);
+	ofi_mutex_destroy(&id_nd->connect_event.base.lock);
 	free(id_nd);
 
 	return 0;
@@ -391,7 +436,7 @@ int rdma_listen(struct rdma_cm_id *id, int backlog)
 		return -1;
 	}
 
-	adapter = get_adapter_by_context(id->verbs);
+	adapter = nd_get_adapter_by_context(id->verbs);
 	if (!adapter) {
 		errno = ENODEV;
 		return -1;
@@ -442,16 +487,21 @@ int rdma_listen(struct rdma_cm_id *id, int backlog)
 		goto err1;
 	}
 
+	ofi_mutex_lock(&id_nd->listen_event.base.lock);
+	++id_nd->listen_event.base.cb_pending;
 	hr = id_nd->listener->lpVtbl->GetConnectionRequest(
-		id_nd->listener, (IUnknown *)id_nd->connector, &id_nd->listen_event.base.ov);
+		id_nd->listener, (IUnknown *)id_nd->connector,
+		&id_nd->listen_event.base.ov);
 	FI_LOG(&vrb_prov, FAILED(hr) ? FI_LOG_WARN : FI_LOG_DEBUG,
 	       FI_LOG_EP_CTRL,
 	       "IND2Listener::GetConnectionRequest: hr=0x%08lx; ov=%p\n", hr,
 	       &id_nd->listen_event.base.ov);
 	if (FAILED(hr)) {
+		--id_nd->listen_event.base.cb_pending;
 		errno = hresult2fi(hr);
 		goto err1;
 	}
+	ofi_mutex_unlock(&id_nd->listen_event.base.lock);
 
 	return 0;
 err1:
@@ -475,8 +525,10 @@ int rdma_connect(struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
 	id_nd = container_of(id, struct nd_cm_id, id);
 	qp_nd = container_of(id->qp, struct nd_qp, qp);
 
-	id_nd->connect_event.state = ND_CM_CONNECT;
+	id_nd->connect_event.type = ND_CM_CONNECT;
 
+	ofi_mutex_lock(&id_nd->connect_event.base.lock);
+	++id_nd->connect_event.base.cb_pending;
 	hr = id_nd->connector->lpVtbl->Connect(
 		id_nd->connector, (IUnknown *)qp_nd->nd2qp,
 		&id->route.addr.dst_addr, sizeof(id->route.addr.dst_addr),
@@ -487,9 +539,11 @@ int rdma_connect(struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
 	       FI_LOG_EP_CTRL, "IND2Connector::Connect: hr=0x%08lx; ov=%p\n",
 	       hr, &id_nd->connect_event.base.ov);
 	if (FAILED(hr)) {
+		--id_nd->connect_event.base.cb_pending;
 		errno = hresult2fi(hr);
 		return -1;
 	}
+	ofi_mutex_unlock(&id_nd->connect_event.base.lock);
 
 	return 0;
 }
@@ -510,8 +564,10 @@ int rdma_accept(struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
 	id_nd = container_of(id, struct nd_cm_id, id);
 	qp_nd = container_of(id->qp, struct nd_qp, qp);
 
-	id_nd->connect_event.state = ND_CM_ACCEPT;
+	id_nd->connect_event.type = ND_CM_ACCEPT;
 
+	ofi_mutex_lock(&id_nd->connect_event.base.lock);
+	++id_nd->connect_event.base.cb_pending;
 	hr = id_nd->connector->lpVtbl->Accept(
 		id_nd->connector, (IUnknown *)qp_nd->nd2qp,
 		conn_param->responder_resources, conn_param->initiator_depth,
@@ -521,9 +577,11 @@ int rdma_accept(struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
 	       FI_LOG_EP_CTRL, "IND2Connector::Accept: hr=0x%08lx; ov=%p\n", hr,
 	       &id_nd->connect_event.base.ov);
 	if (FAILED(hr)) {
+		--id_nd->connect_event.base.cb_pending;
 		errno = hresult2fi(hr);
 		return -1;
 	}
+	ofi_mutex_unlock(&id_nd->connect_event.base.lock);
 
 	return 0;
 }
@@ -557,7 +615,6 @@ int rdma_reject(struct rdma_cm_id *id, const void *private_data,
 int rdma_disconnect(struct rdma_cm_id *id)
 {
 	struct nd_cm_id *id_nd;
-	struct nd_qp *qp_nd;
 	HRESULT hr;
 
 	VRB_TRACE(FI_LOG_FABRIC, "\n");
@@ -568,19 +625,25 @@ int rdma_disconnect(struct rdma_cm_id *id)
 	}
 
 	id_nd = container_of(id, struct nd_cm_id, id);
-	qp_nd = container_of(id->qp, struct nd_qp, qp);
 
-	id_nd->connect_event.state = ND_CM_DISCONNECT;
+	if (nd_cancel_pending(&id_nd->peer_event.base,
+			      (IND2Overlapped *)id_nd->connector))
+		return -1;
 
-	hr = id_nd->connector->lpVtbl->Disconnect(id_nd->connector,
-						  &id_nd->connect_event.base.ov);
+	ofi_mutex_lock(&id_nd->connect_event.base.lock);
+	id_nd->connect_event.type = ND_CM_DISCONNECT;
+	++id_nd->connect_event.base.cb_pending;
+	hr = id_nd->connector->lpVtbl->Disconnect(
+		id_nd->connector, &id_nd->connect_event.base.ov);
 	FI_LOG(&vrb_prov, FAILED(hr) ? FI_LOG_WARN : FI_LOG_DEBUG,
 	       FI_LOG_EP_CTRL, "IND2Connector::Disconnect: hr=0x%08lx, ov=%p\n",
 	       hr, &id_nd->connect_event.base.ov);
 	if (FAILED(hr)) {
+		--id_nd->connect_event.base.cb_pending;
 		errno = hresult2fi(hr);
 		return -1;
 	}
+	ofi_mutex_unlock(&id_nd->connect_event.base.lock);
 
 	return 0;
 }

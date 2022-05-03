@@ -116,7 +116,7 @@ struct nd_infrastructure {
 extern struct nd_infrastructure nd_infra;
 
 static inline struct nd_adapter *
-get_adapter_by_context(struct ibv_context *context)
+nd_get_adapter_by_context(struct ibv_context *context)
 {
 	for (int i = 0; i < nd_infra.adapters.count; ++i) {
 		if (nd_infra.adapters.context_list[i] == context) {
@@ -127,7 +127,7 @@ get_adapter_by_context(struct ibv_context *context)
 }
 
 static inline struct ibv_context *
-get_context_by_device(struct ibv_device *device)
+nd_get_context_by_device(struct ibv_device *device)
 {
 	for (int i = 0; i < nd_infra.adapters.count; ++i) {
 		if (nd_infra.adapters.device_list[i] == device) {
@@ -145,7 +145,12 @@ struct nd_event_base {
 	OVERLAPPED ov;
 	nd_event_handler event_cb;
 	nd_error_handler error_cb;
+	ofi_mutex_t lock;
+	pthread_cond_t cond;
+	uint32_t cb_pending;
 };
+
+HRESULT nd_cancel_pending(struct nd_event_base *event, IND2Overlapped *ov);
 
 void CALLBACK nd_io_cb(DWORD error, DWORD bytes, LPOVERLAPPED ov);
 
@@ -165,8 +170,8 @@ void nd_cm_connreq_error(struct nd_event_base *base, DWORD bytes, DWORD error);
 //   IND2Connector::CompleteConnect()
 //   IND2Connector::Disconnect()
 //   IND2Connector::NotifyDisconnect()
-enum nd_cm_state {
-	ND_CM_IDLE,
+enum nd_cm_event_type {
+	ND_CM_NONE,
 	ND_CM_CONNECT,
 	ND_CM_ACCEPT,
 	ND_CM_COMPLETE,
@@ -176,7 +181,7 @@ enum nd_cm_state {
 
 struct nd_cm_connect_event {
 	struct nd_event_base base;
-	enum nd_cm_state state;
+	enum nd_cm_event_type type;
 	IND2Connector *connector;
 	struct rdma_cm_id *id;
 	struct rdma_event_channel *channel;
@@ -188,9 +193,6 @@ struct nd_cm_connect_event {
 		uint8_t initiator_depth;
 	} param;
 };
-
-void nd_get_connection_data(IND2Connector *connector,
-			    struct nd_cm_event *entry_nd);
 
 void nd_cm_connect_ack(struct nd_event_base *base, DWORD bytes);
 void nd_cm_connect_nack(struct nd_event_base *base, DWORD bytes, DWORD error);
@@ -207,7 +209,7 @@ struct nd_cm_id {
 	struct nd_cm_connect_event connect_event;
 	struct nd_cm_connect_event peer_event;
 	IND2Listener *listener;
-    struct nd_cm_listen_event listen_event;
+	struct nd_cm_listen_event listen_event;
 	ofi_atomic32_t cm_events_pending;
 };
 
@@ -225,8 +227,6 @@ struct nd_cq {
 	struct ibv_cq cq;
 	HANDLE ov_file;
 	IND2CompletionQueue *nd2cq;
-	ofi_mutex_t lock;
-	bool notify_pending;
 	struct nd_event_base notification;
 	struct dlist_entry entry;
 };
