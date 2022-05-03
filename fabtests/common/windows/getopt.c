@@ -245,7 +245,7 @@ static opt_type check_for_long_option(const struct option *longopts, int *longin
 		*arg = str + i + 1; /* set potential option name substring length */
 
 	/* detecting the nearest option name to string */
-	int index = 1;
+	int index = 0;
 	const char* opt = longopts->name;
 
 	if (!opt)
