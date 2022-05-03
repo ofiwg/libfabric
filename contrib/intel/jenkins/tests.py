@@ -601,21 +601,38 @@ class OSUtests(Test):
                     self.env.remove(('IBV_FORK_SAFE', '1'))
 
 
-class MpichTestSuite(MpiTests):
+class MpichTestSuite(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-		 mpitype, hosts, ofi_build_mode, imb_group=None,
-                 util_prov=None):
-            super().__init__(jobname, buildno, testname, core_prov, fabric,
-			     mpitype,  hosts, ofi_build_mode, util_prov)
-            self.mpichsuitepath = '{}/{}/mpichsuite/test/mpi/' \
-                                  .format(self.ci_middlewares_path, self.mpi)
-            self.pwd = os.getcwd()
+                 hosts, mpitype, ofi_build_mode, util_prov=None):
+
+        super().__init__(jobname, buildno, testname, core_prov,
+                         fabric, hosts, ofi_build_mode, util_prov)
+
+        self.mpichsuitepath = '{}/{}/mpichsuite/test/mpi/' \
+                              .format(self.ci_middlewares_path, mpitype)
+        self.pwd = os.getcwd()
+        self.mpi_type = mpitype
+        self.mpi = ''
+        if (self.mpi_type == 'impi'):
+            self.mpi = IMPI(self.core_prov, self.hosts,
+                            self.libfab_installpath, self.nw_interface,
+                            self.server, self.client, self.env, self.util_prov)
+        elif (self.mpi_type == 'ompi'):
+            self.mpi = OMPI(self.core_prov, self.hosts,
+                             self.libfab_installpath, self.nw_interface,
+                             self.server, self.client, self.env,
+                             self.ci_middlewares_path, self.util_prov)
+        elif (self.mpi_type == 'mpich'):
+            self.mpi = MPICH(self.core_prov, self.hosts,
+                             self.libfab_installpath, self.nw_interface,
+                             self.server, self.client, self.env,
+                             self.ci_middlewares_path, self.util_prov)
 
     def testgroup(self, testgroupname):
-
         testpath = '{}/{}'.format(self.mpichsuitepath, testgroupname)
         tests = []
+        print(f'{testpath}/testlist')
         with open('{}/testlist'.format(testpath)) as file:
             for line in file:
                 if(line[0] != '#' and  line[0] != '\n'):
@@ -623,41 +640,16 @@ class MpichTestSuite(MpiTests):
 
         return tests
 
-    def options(self, nprocs, timeout=None):
-        if (self.mpi == 'impi' or self.mpi == 'mpich'):
-            if (self.mpi == 'impi'):
-                mpiroot = ci_site_config.impi_root
-            else:
-                mpiroot = '{}/mpich'.format(self.ci_middlewares_path)
-            if (self.util_prov):
-                prov = '\"{};{}\"'.format(self.core_prov, self.util_prov)
-            else:
-                prov = self.core_prov
+    def set_options(self, nprocs, timeout=None):
+        self.mpi.n = nprocs
+        if (timeout != None):
+            os.environ['MPIEXEC_TIMEOUT']=timeout
 
-            if (timeout != None):
-                os.environ['MPIEXEC_TIMEOUT']=timeout
-
-            opts = "-n {np} ".format(np=nprocs)
-            opts += "-hosts {s},{c} ".format(s=common.get_node_name(\
-                                             self.server, self.nw_interface), \
-                                             c=common.get_node_name(\
-                                             self.client, self.nw_interface))
-            opts += "-mpi_root={mpiroot} ".format(mpiroot=mpiroot)
-            opts += "-libfabric_path={installpath}/lib " \
-                    .format(installpath=self.libfab_installpath)
-            opts += "-prov {provider} ".format(provider=prov)
-
-        elif (self.mpi == 'ompi'):
-            print(self.mpi)
-
-        return opts
 
     @property
     def execute_condn(self):
-        # MPICH tcp mpich testsuite hangs
-        # MPICH sockets mpich testsuite hangs
-        return True if (self.mpi == 'impi' or \
-                       (self.mpi == 'mpich' and \
+        return True if (self.mpi_type == 'impi' or \
+                       (self.mpi_type == 'mpich' and \
                         self.core_prov == 'verbs')) \
                     else False
 
@@ -665,7 +657,7 @@ class MpichTestSuite(MpiTests):
         print("Running Tests: " + testgroupname)
         tests = []
         time = None
-        os.chdir("{}/{}".format(self.mpichsuitepath,testgroupname))
+        os.chdir("{}/{}".format(self.mpichsuitepath, testgroupname))
         tests = self.testgroup(testgroupname)
         for test in tests:
             testname = test[0]
@@ -675,9 +667,9 @@ class MpichTestSuite(MpiTests):
                itemlist =  item.split('=')
                if (itemlist[0] == 'timelimit'):
                    time = itemlist[1]
-            opts = self.options(nprocs, timeout=time)
-            testcmd = self.cmd + opts +"./{}".format(testname)
-            outputcmd = shlex.split(testcmd)
+            self.set_options(nprocs, timeout=time)
+            testcmd = "./{}".format(testname)
+            outputcmd = shlex.split(self.mpi.env + self.mpi.cmd + testcmd + '\'')
             common.run_command(outputcmd)
         os.chdir(self.pwd)
 
