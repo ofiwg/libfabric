@@ -1592,8 +1592,8 @@ int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd)
 static void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
 			       struct ofi_pollfds_work_item *item)
 {
-	struct ofi_pollfds_ctx *ctx, *swap_ctx;
-	struct pollfd *swap_pfd;
+	struct ofi_pollfds_ctx *ctx, *last_ctx;
+	struct pollfd *last_pfd;
 
 	ctx = ofi_pollfds_get_ctx(pfds, item->fd);
 	if (!ctx)
@@ -1602,19 +1602,22 @@ static void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
 	if (ofi_poll_fairness && ctx->hot_index >= 0)
 		ofi_pollfds_coolfd(pfds, item->fd);
 
+	last_pfd = &pfds->fds[pfds->nfds - 1];
+	last_ctx = ofi_pollfds_get_ctx(pfds, last_pfd->fd);
+	assert(last_ctx);
 	if (ctx->index < pfds->nfds - 1) {
-		swap_pfd = &pfds->fds[pfds->nfds - 1];
-		swap_ctx = ofi_pollfds_get_ctx(pfds, swap_pfd->fd);
-		assert(swap_ctx);
-		swap_ctx->index = ctx->index;
-		pfds->fds[swap_ctx->index] = *swap_pfd;
-
-		swap_pfd->fd = INVALID_SOCKET;
-		swap_pfd->events = 0;
-		swap_pfd->revents = 0;
+		last_ctx->index = ctx->index;
+		pfds->ctx[ctx->index] = *last_ctx;
+		pfds->fds[ctx->index] = *last_pfd;
 	}
+	last_pfd->fd = INVALID_SOCKET;
+	last_pfd->events = 0;
+	last_pfd->revents = 0;
+	last_ctx->context = 0;
+	last_ctx->index = -1;
+	last_ctx->hit_cnt = 0;
+	last_ctx->hot_index = -1;
 	pfds->nfds--;
-	ctx->index = -1;
 }
 
 static void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
