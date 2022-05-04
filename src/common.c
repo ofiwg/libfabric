@@ -1895,16 +1895,30 @@ int ofi_getifaddrs(struct ifaddrs **ifaddr)
 	return FI_SUCCESS;
 }
 
+/* Sort based on:
+ * 1. link speed, 2. SA family, 3. address
+ */
 static int
-ofi_addr_list_entry_comp_speed(struct slist_entry *cur, const void *insert)
+ofi_compare_addr_entry(struct slist_entry *cur, const void *insert)
 {
-	const struct ofi_addr_list_entry *cur_addr =
-		container_of(cur, struct ofi_addr_list_entry, entry);
-	const struct ofi_addr_list_entry *insert_addr =
-		container_of((const struct slist_entry *) insert,
+	const struct ofi_addr_list_entry *cur_addr, *insert_addr;
+
+	cur_addr = container_of(cur, struct ofi_addr_list_entry, entry);
+	insert_addr = container_of((const struct slist_entry *) insert,
 			     struct ofi_addr_list_entry, entry);
 
-	return (cur_addr->speed < insert_addr->speed);
+	if (insert_addr->speed > cur_addr->speed)
+		return 1;
+	if (insert_addr->speed < cur_addr->speed)
+		return 0;
+
+	if (insert_addr->ipaddr.sa.sa_family < cur_addr->ipaddr.sa.sa_family)
+		return 1;
+	if (insert_addr->ipaddr.sa.sa_family > cur_addr->ipaddr.sa.sa_family)
+		return 0;
+
+	return ofi_addr_cmp(&core_prov, &insert_addr->ipaddr.sa,
+			    &cur_addr->ipaddr.sa);
 }
 
 void ofi_set_netmask_str(char *netstr, size_t len, struct ifaddrs *ifa)
@@ -2001,7 +2015,7 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 			"iface name: %s, speed: %zu\n",
 			addr_entry->ipstr, ifa->ifa_name, addr_entry->speed);
 
-		slist_insert_before_first_match(addr_list, ofi_addr_list_entry_comp_speed,
+		slist_insert_before_first_match(addr_list, ofi_compare_addr_entry,
 						&addr_entry->entry);
 	}
 

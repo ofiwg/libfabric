@@ -78,7 +78,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 
 	ret = rxm_get_conn(rxm_ep, msg->addr, &rxm_conn);
-	if (OFI_UNLIKELY(ret))
+	if (ret)
 		goto unlock;
 
 	rma_buf = rxm_get_tx_buf(rxm_ep);
@@ -288,7 +288,7 @@ rxm_ep_rma_inject_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 
 	ret = rxm_get_conn(rxm_ep, msg->addr, &rxm_conn);
-	if (OFI_UNLIKELY(ret))
+	if (ret)
 		goto unlock;
 
 	if ((total_size > rxm_ep->rxm_info->tx_attr->inject_size) ||
@@ -446,7 +446,7 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 
 	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
-	if (OFI_UNLIKELY(ret))
+	if (ret)
 		goto unlock;
 
 	if (len > rxm_ep->inject_limit || rxm_ep->util_ep.wr_cntr) {
@@ -480,7 +480,7 @@ static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 
 	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
-	if (OFI_UNLIKELY(ret))
+	if (ret)
 		goto unlock;
 
 	if (len > rxm_ep->inject_limit || rxm_ep->util_ep.wr_cntr) {

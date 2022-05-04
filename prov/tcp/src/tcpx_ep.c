@@ -159,7 +159,7 @@ static int tcpx_ep_connect(struct fid_ep *ep_fid, const void *addr,
 	cm_ctx = tcpx_alloc_cm_ctx(&ep_fid->fid, TCPX_CM_CONNECTING);
 	if (!cm_ctx) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"cannot allocate memory \n");
+			"cannot allocate memory\n");
 		return -FI_ENOMEM;
 	}
 
@@ -169,6 +169,8 @@ static int tcpx_ep_connect(struct fid_ep *ep_fid, const void *addr,
 	if (ret && !OFI_SOCK_TRY_CONN_AGAIN(ofi_sockerr())) {
 		ep->state = TCPX_IDLE;
 		ret =  -ofi_sockerr();
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"connect failure %d(%s)\n", -ret, fi_strerror(-ret));
 		goto free;
 	}
 
