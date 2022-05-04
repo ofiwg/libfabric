@@ -194,4 +194,8 @@ struct rxr_op_entry {
 	(*((enum rxr_x_entry_type *)	\
 	 ((unsigned char *)((pkt_entry)->x_entry))))
 
+void rxr_tx_entry_try_fill_desc(struct rxr_tx_entry *tx_entry,
+				struct efa_domain *efa_domain,
+				int mr_iov_start, uint64_t access);
+
 #endif

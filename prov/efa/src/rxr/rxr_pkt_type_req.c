@@ -45,54 +45,53 @@
  * types.
  */
 struct rxr_req_inf {
-	uint64_t protover;
+	uint64_t extra_info_id;
 	uint64_t base_hdr_size;
 	uint64_t ex_feature_flag;
 };
 
-/*
- * starting from protocol version 4, each REQ packet type will be assigned a
- * version number, and once assigned, the version number will not change.
- *
- * Baseline features will always be version 4 features, baseline and
- * not have a ex_feature_flag.
- *
- * Each extra feature will be assign a version and an ex_feature_flag.
- * Each extra feature will correspond to 1 or more REQ packet types.
- */
 static const
 struct rxr_req_inf REQ_INF_LIST[] = {
 	/* rtm header */
-	[RXR_EAGER_MSGRTM_PKT] = {4, sizeof(struct rxr_eager_msgrtm_hdr), 0},
-	[RXR_EAGER_TAGRTM_PKT] = {4, sizeof(struct rxr_eager_tagrtm_hdr), 0},
-	[RXR_MEDIUM_MSGRTM_PKT] = {4, sizeof(struct rxr_medium_msgrtm_hdr), 0},
-	[RXR_MEDIUM_TAGRTM_PKT] = {4, sizeof(struct rxr_medium_tagrtm_hdr), 0},
-	[RXR_LONGCTS_MSGRTM_PKT] = {4, sizeof(struct rxr_longcts_msgrtm_hdr), 0},
-	[RXR_LONGCTS_TAGRTM_PKT] = {4, sizeof(struct rxr_longcts_tagrtm_hdr), 0},
-	[RXR_LONGREAD_MSGRTM_PKT] = {4, sizeof(struct rxr_longread_msgrtm_hdr), RXR_EXTRA_FEATURE_RDMA_READ},
-	[RXR_LONGREAD_TAGRTM_PKT] = {4, sizeof(struct rxr_longread_tagrtm_hdr), RXR_EXTRA_FEATURE_RDMA_READ},
-	[RXR_DC_EAGER_MSGRTM_PKT] = {4, sizeof(struct rxr_dc_eager_msgrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_DC_EAGER_TAGRTM_PKT] = {4, sizeof(struct rxr_dc_eager_tagrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_DC_MEDIUM_MSGRTM_PKT] = {4, sizeof(struct rxr_dc_medium_msgrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_DC_MEDIUM_TAGRTM_PKT] = {4, sizeof(struct rxr_dc_medium_tagrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_DC_LONGCTS_MSGRTM_PKT] = {4, sizeof(struct rxr_longcts_msgrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_DC_LONGCTS_TAGRTM_PKT] = {4, sizeof(struct rxr_longcts_tagrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[RXR_EAGER_MSGRTM_PKT] = {0, sizeof(struct rxr_eager_msgrtm_hdr), 0},
+	[RXR_EAGER_TAGRTM_PKT] = {0, sizeof(struct rxr_eager_tagrtm_hdr), 0},
+	[RXR_MEDIUM_MSGRTM_PKT] = {0, sizeof(struct rxr_medium_msgrtm_hdr), 0},
+	[RXR_MEDIUM_TAGRTM_PKT] = {0, sizeof(struct rxr_medium_tagrtm_hdr), 0},
+	[RXR_LONGCTS_MSGRTM_PKT] = {0, sizeof(struct rxr_longcts_msgrtm_hdr), 0},
+	[RXR_LONGCTS_TAGRTM_PKT] = {0, sizeof(struct rxr_longcts_tagrtm_hdr), 0},
+	[RXR_LONGREAD_MSGRTM_PKT] = {0, sizeof(struct rxr_longread_msgrtm_hdr), RXR_EXTRA_FEATURE_RDMA_READ},
+	[RXR_LONGREAD_TAGRTM_PKT] = {0, sizeof(struct rxr_longread_tagrtm_hdr), RXR_EXTRA_FEATURE_RDMA_READ},
+	[RXR_DC_EAGER_MSGRTM_PKT] = {0, sizeof(struct rxr_dc_eager_msgrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[RXR_DC_EAGER_TAGRTM_PKT] = {0, sizeof(struct rxr_dc_eager_tagrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[RXR_DC_MEDIUM_MSGRTM_PKT] = {0, sizeof(struct rxr_dc_medium_msgrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[RXR_DC_MEDIUM_TAGRTM_PKT] = {0, sizeof(struct rxr_dc_medium_tagrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[RXR_DC_LONGCTS_MSGRTM_PKT] = {0, sizeof(struct rxr_longcts_msgrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[RXR_DC_LONGCTS_TAGRTM_PKT] = {0, sizeof(struct rxr_longcts_tagrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
 	/* rtw header */
-	[RXR_EAGER_RTW_PKT] = {4, sizeof(struct rxr_eager_rtw_hdr), 0},
-	[RXR_DC_EAGER_RTW_PKT] = {4, sizeof(struct rxr_dc_eager_rtw_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_LONGCTS_RTW_PKT] = {4, sizeof(struct rxr_longcts_rtw_hdr), 0},
-	[RXR_DC_LONGCTS_RTW_PKT] = {4, sizeof(struct rxr_longcts_rtw_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_LONGREAD_RTW_PKT] = {4, sizeof(struct rxr_longread_rtw_hdr), RXR_EXTRA_FEATURE_RDMA_READ},
+	[RXR_EAGER_RTW_PKT] = {0, sizeof(struct rxr_eager_rtw_hdr), 0},
+	[RXR_DC_EAGER_RTW_PKT] = {0, sizeof(struct rxr_dc_eager_rtw_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[RXR_LONGCTS_RTW_PKT] = {0, sizeof(struct rxr_longcts_rtw_hdr), 0},
+	[RXR_DC_LONGCTS_RTW_PKT] = {0, sizeof(struct rxr_longcts_rtw_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[RXR_LONGREAD_RTW_PKT] = {0, sizeof(struct rxr_longread_rtw_hdr), RXR_EXTRA_FEATURE_RDMA_READ},
 	/* rtr header */
-	[RXR_SHORT_RTR_PKT] = {4, sizeof(struct rxr_rtr_hdr), 0},
-	[RXR_LONGCTS_RTR_PKT] = {4, sizeof(struct rxr_rtr_hdr), 0},
-	[RXR_READ_RTR_PKT] = {4, sizeof(struct rxr_base_hdr), RXR_EXTRA_FEATURE_RDMA_READ},
+	[RXR_SHORT_RTR_PKT] = {0, sizeof(struct rxr_rtr_hdr), 0},
+	[RXR_LONGCTS_RTR_PKT] = {0, sizeof(struct rxr_rtr_hdr), 0},
+	[RXR_READ_RTR_PKT] = {0, sizeof(struct rxr_base_hdr), RXR_EXTRA_FEATURE_RDMA_READ},
 	/* rta header */
-	[RXR_WRITE_RTA_PKT] = {4, sizeof(struct rxr_rta_hdr), 0},
-	[RXR_DC_WRITE_RTA_PKT] = {4, sizeof(struct rxr_rta_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_FETCH_RTA_PKT] = {4, sizeof(struct rxr_rta_hdr), 0},
-	[RXR_COMPARE_RTA_PKT] = {4, sizeof(struct rxr_rta_hdr), 0},
+	[RXR_WRITE_RTA_PKT] = {0, sizeof(struct rxr_rta_hdr), 0},
+	[RXR_DC_WRITE_RTA_PKT] = {0, sizeof(struct rxr_rta_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[RXR_FETCH_RTA_PKT] = {0, sizeof(struct rxr_rta_hdr), 0},
+	[RXR_COMPARE_RTA_PKT] = {0, sizeof(struct rxr_rta_hdr), 0},
 };
+
+bool rxr_pkt_req_supported_by_peer(int req_type, struct rdm_peer *peer)
+{
+	assert(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED);
+
+	int extra_info_id = REQ_INF_LIST[req_type].extra_info_id;
+
+	return peer->extra_info[extra_info_id] & REQ_INF_LIST[req_type].ex_feature_flag;
+}
 
 size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry)
 {
@@ -115,7 +114,7 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 	/* init the base header */
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	base_hdr->type = pkt_type;
-	base_hdr->version = REQ_INF_LIST[pkt_type].protover;
+	base_hdr->version = RXR_PROTOCOL_VERSION;
 	base_hdr->flags = 0;
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
@@ -468,6 +467,7 @@ ssize_t rxr_pkt_init_dc_eager_msgrtm(struct rxr_ep *ep,
 	struct rxr_dc_eager_msgrtm_hdr *dc_eager_msgrtm_hdr;
 	int ret;
 
+	tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 	ret = rxr_pkt_init_rtm(ep, tx_entry, RXR_DC_EAGER_MSGRTM_PKT, 0, pkt_entry);
 	if (ret)
 		return ret;
@@ -501,6 +501,7 @@ ssize_t rxr_pkt_init_dc_eager_tagrtm(struct rxr_ep *ep,
 	struct rxr_dc_eager_tagrtm_hdr *dc_eager_tagrtm_hdr;
 	int ret;
 
+	tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 	ret = rxr_pkt_init_rtm(ep, tx_entry, RXR_DC_EAGER_TAGRTM_PKT, 0, pkt_entry);
 	if (ret)
 		return ret;
@@ -517,6 +518,7 @@ ssize_t rxr_pkt_init_medium_msgrtm(struct rxr_ep *ep,
 				   struct rxr_tx_entry *tx_entry,
 				   struct rxr_pkt_entry *pkt_entry)
 {
+	struct efa_domain *efa_domain;
 	struct rxr_medium_rtm_base_hdr *rtm_hdr;
 	int ret;
 
@@ -524,6 +526,9 @@ ssize_t rxr_pkt_init_medium_msgrtm(struct rxr_ep *ep,
 			       tx_entry->bytes_sent, pkt_entry);
 	if (ret)
 		return ret;
+
+	efa_domain = rxr_ep_domain(ep);
+	rxr_tx_entry_try_fill_desc(tx_entry, efa_domain, 0, FI_SEND);
 
 	rtm_hdr = rxr_get_medium_rtm_base_hdr(pkt_entry->pkt);
 	rtm_hdr->msg_length = tx_entry->total_len;
@@ -535,13 +540,18 @@ ssize_t rxr_pkt_init_dc_medium_msgrtm(struct rxr_ep *ep,
 				      struct rxr_tx_entry *tx_entry,
 				      struct rxr_pkt_entry *pkt_entry)
 {
+	struct efa_domain *efa_domain;
 	struct rxr_dc_medium_msgrtm_hdr *dc_medium_msgrtm_hdr;
 	int ret;
 
+	tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 	ret = rxr_pkt_init_rtm(ep, tx_entry, RXR_DC_MEDIUM_MSGRTM_PKT,
 			       tx_entry->bytes_sent, pkt_entry);
 	if (ret)
 		return ret;
+
+	efa_domain = rxr_ep_domain(ep);
+	rxr_tx_entry_try_fill_desc(tx_entry, efa_domain, 0, FI_SEND);
 
 	dc_medium_msgrtm_hdr = rxr_get_dc_medium_msgrtm_hdr(pkt_entry->pkt);
 	dc_medium_msgrtm_hdr->hdr.msg_length = tx_entry->total_len;
@@ -554,6 +564,7 @@ ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_ep *ep,
 				   struct rxr_tx_entry *tx_entry,
 				   struct rxr_pkt_entry *pkt_entry)
 {
+	struct efa_domain *efa_domain;
 	struct rxr_medium_rtm_base_hdr *rtm_hdr;
 	int ret;
 
@@ -561,6 +572,9 @@ ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_ep *ep,
 			       tx_entry->bytes_sent, pkt_entry);
 	if (ret)
 		return ret;
+
+	efa_domain = rxr_ep_domain(ep);
+	rxr_tx_entry_try_fill_desc(tx_entry, efa_domain, 0, FI_SEND);
 
 	rtm_hdr = rxr_get_medium_rtm_base_hdr(pkt_entry->pkt);
 	rtm_hdr->msg_length = tx_entry->total_len;
@@ -574,13 +588,18 @@ ssize_t rxr_pkt_init_dc_medium_tagrtm(struct rxr_ep *ep,
 				      struct rxr_tx_entry *tx_entry,
 				      struct rxr_pkt_entry *pkt_entry)
 {
+	struct efa_domain *efa_domain;
 	struct rxr_dc_medium_tagrtm_hdr *dc_medium_tagrtm_hdr;
 	int ret;
 
+	tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 	ret = rxr_pkt_init_rtm(ep, tx_entry, RXR_DC_MEDIUM_TAGRTM_PKT,
 			       tx_entry->bytes_sent, pkt_entry);
 	if (ret)
 		return ret;
+
+	efa_domain = rxr_ep_domain(ep);
+	rxr_tx_entry_try_fill_desc(tx_entry, efa_domain, 0, FI_SEND);
 
 	dc_medium_tagrtm_hdr = rxr_get_dc_medium_tagrtm_hdr(pkt_entry->pkt);
 	dc_medium_tagrtm_hdr->hdr.msg_length = tx_entry->total_len;
@@ -599,6 +618,7 @@ int rxr_pkt_init_longcts_rtm(struct rxr_ep *ep,
 	struct rxr_longcts_rtm_base_hdr *rtm_hdr;
 	int ret;
 
+	tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
 	ret = rxr_pkt_init_rtm(ep, tx_entry, pkt_type, 0, pkt_entry);
 	if (ret)
 		return ret;
@@ -621,6 +641,7 @@ ssize_t rxr_pkt_init_dc_longcts_msgrtm(struct rxr_ep *ep,
 				    struct rxr_tx_entry *tx_entry,
 				    struct rxr_pkt_entry *pkt_entry)
 {
+	tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 	return rxr_pkt_init_longcts_rtm(ep, tx_entry, RXR_DC_LONGCTS_MSGRTM_PKT, pkt_entry);
 }
 
@@ -648,6 +669,7 @@ ssize_t rxr_pkt_init_dc_longcts_tagrtm(struct rxr_ep *ep,
 	struct rxr_base_hdr *base_hdr;
 	int ret;
 
+	tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 	ret = rxr_pkt_init_longcts_rtm(ep, tx_entry, RXR_DC_LONGCTS_TAGRTM_PKT, pkt_entry);
 	if (ret)
 		return ret;
@@ -1248,7 +1270,7 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	ep->rx_pending++;
 #endif
 	rx_entry->state = RXR_RX_RECV;
-	ret = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
+	ret = rxr_pkt_post_or_queue(ep, rx_entry, RXR_CTS_PKT, 0);
 
 	return ret;
 }
@@ -1477,6 +1499,7 @@ ssize_t rxr_pkt_init_dc_eager_rtw(struct rxr_ep *ep,
 
 	assert(tx_entry->op == ofi_op_write);
 
+	tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 	dc_eager_rtw_hdr = (struct rxr_dc_eager_rtw_hdr *)pkt_entry->pkt;
 	dc_eager_rtw_hdr->rma_iov_count = tx_entry->rma_iov_count;
 	rxr_pkt_init_req_hdr(ep, tx_entry, RXR_DC_EAGER_RTW_PKT, pkt_entry);
@@ -1493,6 +1516,7 @@ static inline void rxr_pkt_init_longcts_rtw_hdr(struct rxr_ep *ep,
 {
 	struct rxr_longcts_rtw_hdr *rtw_hdr;
 
+	tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
 	rtw_hdr = (struct rxr_longcts_rtw_hdr *)pkt_entry->pkt;
 	rtw_hdr->rma_iov_count = tx_entry->rma_iov_count;
 	rtw_hdr->msg_length = tx_entry->total_len;
@@ -1522,6 +1546,7 @@ ssize_t rxr_pkt_init_dc_longcts_rtw(struct rxr_ep *ep,
 
 	assert(tx_entry->op == ofi_op_write);
 
+	tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 	rtw_hdr = (struct rxr_longcts_rtw_hdr *)pkt_entry->pkt;
 	rxr_pkt_init_longcts_rtw_hdr(ep, tx_entry, pkt_entry, RXR_DC_LONGCTS_RTW_PKT);
 	return rxr_pkt_init_rtw_data(ep, tx_entry, pkt_entry, rtw_hdr->rma_iov);
@@ -1811,7 +1836,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 #endif
 	rx_entry->state = RXR_RX_RECV;
 	rx_entry->tx_id = tx_id;
-	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_CTS_PKT, 0);
+	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_CTS_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Cannot post CTS packet\n");
 		rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
@@ -1983,7 +2008,7 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 		return;
 	}
 
-	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_TX_ENTRY, tx_entry, RXR_READRSP_PKT, 0);
+	err = rxr_pkt_post_or_queue(ep, tx_entry, RXR_READRSP_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Posting of readrsp packet failed! err=%ld\n", err);
 		efa_eq_write_error(&ep->util_ep, FI_EIO, err);
@@ -2046,6 +2071,7 @@ ssize_t rxr_pkt_init_dc_write_rta(struct rxr_ep *ep,
 {
 	struct rxr_rta_hdr *rta_hdr;
 
+	tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 	rxr_pkt_init_rta(ep, tx_entry, RXR_DC_WRITE_RTA_PKT, pkt_entry);
 	rta_hdr = rxr_get_rta_hdr(pkt_entry->pkt);
 	rta_hdr->send_id = tx_entry->tx_id;
@@ -2202,10 +2228,7 @@ int rxr_pkt_proc_dc_write_rta(struct rxr_ep *ep,
 		return ret;
 	}
 
-	err = rxr_pkt_post_ctrl_or_queue(ep,
-					 RXR_RX_ENTRY,
-					 rx_entry,
-					 RXR_RECEIPT_PKT, 0);
+	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_RECEIPT_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Posting of receipt packet failed! err=%s\n",
@@ -2250,7 +2273,7 @@ int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 		offset += rx_entry->iov[i].iov_len;
 	}
 
-	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_ATOMRSP_PKT, 0);
+	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_ATOMRSP_PKT, 0);
 	if (OFI_UNLIKELY(err))
 		rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
 
@@ -2335,7 +2358,7 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	}
 #endif
 
-	err = rxr_pkt_post_ctrl_or_queue(ep, RXR_RX_ENTRY, rx_entry, RXR_ATOMRSP_PKT, 0);
+	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_ATOMRSP_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		efa_eq_write_error(&ep->util_ep, FI_EIO, err);
 		ofi_buf_free(rx_entry->atomrsp_data);

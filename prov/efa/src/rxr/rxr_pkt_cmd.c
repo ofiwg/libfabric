@@ -239,36 +239,33 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
 }
 
 /**
- * @brief post a single control packet.
+ * @brief post one packet.
  *
+ * The function does the following:
+ *  1. construct a packet.
+ *  2. send it
+ *  3. Upon success, call the packet's sent handler.
+ *  4. If inject, call the packet's send completion handler.
  *
  * @param[in]   rxr_ep          endpoint
- * @param[in]   entry_type      type of x_entry, allowed values: RXR_TX_ENTRY, RXR_RX_ENTRY
- * @param[in]   x_entry         x_entry pointer
- * @param[in]   ctrl_type       type of control packet
+ * @param[in]   x_entry         pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
+ * @param[in]   pkt_type        packet type.
  * @param[in]   inject          send control packet via inject or not.
  * @param[in]   flags           additional flags to apply for fi_sendmsg.
  *                              currently only accepted flags is FI_MORE.
- * @return      On success return 0, otherwise return a negative error code
+ * @return      On success return 0, otherwise return a negative libfabric error code.
+ *              Possible error code include (but not limited to):
+ * 		-FI_EAGAIN	temporary out of resource
  */
-ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
-			       int ctrl_type, bool inject, uint64_t flags)
+ssize_t rxr_pkt_post(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
+		     int pkt_type, bool inject, uint64_t flags)
 {
 	struct rxr_pkt_entry *pkt_entry;
-	struct rxr_tx_entry *tx_entry;
-	struct rxr_rx_entry *rx_entry;
 	struct rdm_peer *peer;
 	ssize_t err;
 	fi_addr_t addr;
 
-	if (entry_type == RXR_TX_ENTRY) {
-		tx_entry = (struct rxr_tx_entry *)x_entry;
-		addr = tx_entry->addr;
-	} else {
-		rx_entry = (struct rxr_rx_entry *)x_entry;
-		addr = rx_entry->addr;
-	}
-
+	addr = op_entry->addr;
 	peer = rxr_ep_get_peer(rxr_ep, addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
@@ -283,7 +280,7 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 	/*
 	 * rxr_pkt_init_ctrl will set pkt_entry->send if it want to use multi iov
 	 */
-	err = rxr_pkt_init_ctrl(rxr_ep, entry_type, x_entry, ctrl_type, pkt_entry);
+	err = rxr_pkt_init_ctrl(rxr_ep, op_entry->type, op_entry, pkt_type, pkt_entry);
 	if (OFI_UNLIKELY(err)) {
 		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
 		return err;
@@ -301,8 +298,7 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 		 */
 		assert(!flags);
 		err = rxr_pkt_entry_inject(rxr_ep, pkt_entry, addr);
-	}
-	else
+	} else
 		err = rxr_pkt_entry_send(rxr_ep, pkt_entry, flags);
 
 	if (OFI_UNLIKELY(err)) {
@@ -325,68 +321,34 @@ ssize_t rxr_pkt_post_ctrl_once(struct rxr_ep *rxr_ep, int entry_type, void *x_en
 }
 
 /**
- * @brief post control packets.
- *
+ * @brief post one packet. Queue the send if encountered -FI_EAGAIN.
  *
  * @param[in]   rxr_ep          endpoint
- * @param[in]   entry_type      type of x_entry, allowed values: RXR_TX_ENTRY, RXR_RX_ENTRY
- * @param[in]   x_entry         x_entry pointer
- * @param[in]   ctrl_type       type of control packet
+ * @param[in]   x_entry         pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
+ * @param[in]   pkt_type        packet type.
  * @param[in]   inject          send control packet via inject or not.
- * @param[in]   flags           additional flags to apply for fi_sendmsg.
- *                              currently only accepted flags is FI_MORE.
- * @return      On success return 0, otherwise return a negative error code
+ * @return      On success return 0, otherwise return a negative libfabric error code.
  */
-ssize_t rxr_pkt_post_ctrl(struct rxr_ep *ep, int entry_type, void *x_entry,
-			  int ctrl_type, bool inject, uint64_t flags)
+ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_type, bool inject)
 {
 	ssize_t err;
-	struct rxr_tx_entry *tx_entry;
 
-	if (ctrl_type == RXR_MEDIUM_TAGRTM_PKT ||
-	    ctrl_type == RXR_MEDIUM_MSGRTM_PKT ||
-	    ctrl_type == RXR_DC_MEDIUM_MSGRTM_PKT ||
-	    ctrl_type == RXR_DC_MEDIUM_TAGRTM_PKT) {
-		assert(entry_type == RXR_TX_ENTRY);
-		assert(!inject);
-
-		tx_entry = (struct rxr_tx_entry *)x_entry;
-		while (tx_entry->bytes_sent < tx_entry->total_len) {
-			err = rxr_pkt_post_ctrl_once(ep, RXR_TX_ENTRY, x_entry, ctrl_type, 0, flags);
-			if (OFI_UNLIKELY(err))
-				return err;
-		}
-
-		return 0;
-	}
-
-	return rxr_pkt_post_ctrl_once(ep, entry_type, x_entry, ctrl_type, inject, flags);
-}
-
-ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_entry, int ctrl_type, bool inject)
-{
-	ssize_t err;
-	struct rxr_tx_entry *tx_entry;
-	struct rxr_rx_entry *rx_entry;
-
-	err = rxr_pkt_post_ctrl(ep, entry_type, x_entry, ctrl_type, inject, 0);
+	err = rxr_pkt_post(ep, op_entry, pkt_type, inject, 0);
 	if (err == -FI_EAGAIN) {
-		if (entry_type == RXR_TX_ENTRY) {
-			tx_entry = (struct rxr_tx_entry *)x_entry;
-			assert(!(tx_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR));
-			tx_entry->state = RXR_TX_QUEUED_CTRL;
-			tx_entry->queued_ctrl.type = ctrl_type;
-			tx_entry->queued_ctrl.inject = inject;
-			dlist_insert_tail(&tx_entry->queued_ctrl_entry,
+		if (op_entry->type == RXR_TX_ENTRY) {
+			assert(!(op_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR));
+			op_entry->state = RXR_TX_QUEUED_CTRL;
+			op_entry->queued_ctrl.type = pkt_type;
+			op_entry->queued_ctrl.inject = inject;
+			dlist_insert_tail(&op_entry->queued_ctrl_entry,
 					  &ep->tx_entry_queued_ctrl_list);
 		} else {
-			assert(entry_type == RXR_RX_ENTRY);
-			rx_entry = (struct rxr_rx_entry *)x_entry;
-			assert(rx_entry->state != RXR_RX_QUEUED_CTRL);
-			rx_entry->state = RXR_RX_QUEUED_CTRL;
-			rx_entry->queued_ctrl.type = ctrl_type;
-			rx_entry->queued_ctrl.inject = inject;
-			dlist_insert_tail(&rx_entry->queued_ctrl_entry,
+			assert(op_entry->type == RXR_RX_ENTRY);
+			assert(op_entry->state != RXR_RX_QUEUED_CTRL);
+			op_entry->state = RXR_RX_QUEUED_CTRL;
+			op_entry->queued_ctrl.type = pkt_type;
+			op_entry->queued_ctrl.inject = inject;
+			dlist_insert_tail(&op_entry->queued_ctrl_entry,
 					  &ep->rx_entry_queued_ctrl_list);
 		}
 
@@ -395,6 +357,53 @@ ssize_t rxr_pkt_post_ctrl_or_queue(struct rxr_ep *ep, int entry_type, void *x_en
 
 	return err;
 }
+
+/**
+ * @brief post req packet(s). Queue the post if necessary
+ *
+ * Some REQ packet types must be queued.
+ *
+ * @param[in]   rxr_ep          endpoint
+ * @param[in]   x_entry         pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
+ * @param[in]   pkt_type        packet type.
+ * @param[in]   inject          send control packet via inject or not.
+ * @return      On success return 0, otherwise return a negative libfabric error code.
+ */
+ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int req_type, bool inject, uint64_t flags)
+{
+	ssize_t err;
+
+	assert(tx_entry->type == RXR_TX_ENTRY);
+	assert(req_type >= RXR_REQ_PKT_BEGIN);
+
+	if (req_type == RXR_MEDIUM_TAGRTM_PKT ||
+	    req_type == RXR_MEDIUM_MSGRTM_PKT ||
+	    req_type == RXR_DC_MEDIUM_MSGRTM_PKT ||
+	    req_type == RXR_DC_MEDIUM_TAGRTM_PKT) {
+		assert(!inject);
+
+		while (tx_entry->bytes_sent < tx_entry->total_len) {
+			err = rxr_pkt_post(ep, tx_entry, req_type, 0, flags);
+			if (OFI_UNLIKELY(err == -FI_EAGAIN)) {
+				assert(!(tx_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR));
+				tx_entry->state = RXR_TX_QUEUED_CTRL;
+				tx_entry->queued_ctrl.type = req_type;
+				tx_entry->queued_ctrl.inject = inject;
+				dlist_insert_tail(&tx_entry->queued_ctrl_entry,
+						  &ep->tx_entry_queued_ctrl_list);
+				return 0;
+			}
+
+			if (OFI_UNLIKELY(err))
+				return err;
+		}
+
+		return 0;
+	}
+
+	return rxr_pkt_post(ep, tx_entry, req_type, inject, flags);
+}
+
 
 /*
  * This function is used for any extra feature that does not have an alternative.
@@ -502,7 +511,7 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 
 	dlist_insert_tail(&tx_entry->ep_entry, &ep->tx_entry_list);
 
-	err = rxr_pkt_post_ctrl(ep, RXR_TX_ENTRY, tx_entry, RXR_EAGER_RTW_PKT, 0, 0);
+	err = rxr_pkt_post(ep, tx_entry, RXR_EAGER_RTW_PKT, 0, 0);
 
 	if (OFI_UNLIKELY(err))
 		return err;

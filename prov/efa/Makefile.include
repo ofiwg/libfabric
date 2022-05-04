@@ -58,6 +58,7 @@ _efa_files = \
 	prov/efa/src/rxr/rxr_pkt_type_misc.c \
 	prov/efa/src/rxr/rxr_pkt_cmd.c \
 	prov/efa/src/rxr/rxr_read.c \
+	prov/efa/src/rxr/rxr_op_entry.c \
 	prov/efa/src/rxr/rxr_atomic.c
 
 _efa_headers = \

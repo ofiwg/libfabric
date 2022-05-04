@@ -164,7 +164,6 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 
 	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
 	if (delivery_complete_requested && !(peer->is_local)) {
-		tx_entry->rxr_flags |= RXR_DELIVERY_COMPLETE_REQUESTED;
 		/*
 		 * Because delivery complete is defined as an extra
 		 * feature, the receiver might not support it.
@@ -197,22 +196,22 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 			    peer->next_msg_id++ : ++peer->next_msg_id;
 
 	if (delivery_complete_requested && op == ofi_op_atomic) {
-		err = rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY,
-					tx_entry,
-					RXR_DC_WRITE_RTA_PKT,
-					0,
-					0);
+		err = rxr_pkt_post_req(rxr_ep,
+				       tx_entry,
+				       RXR_DC_WRITE_RTA_PKT,
+				       0,
+				       0);
 	} else {
 		/*
 		 * Fetch atomic and compare atomic
 		 * support DELIVERY_COMPLETE
 		 * by nature
 		 */
-		err = rxr_pkt_post_ctrl(rxr_ep, RXR_TX_ENTRY,
-					tx_entry,
-					req_pkt_type_list[op],
-					0,
-					0);
+		err = rxr_pkt_post_req(rxr_ep,
+				       tx_entry,
+				       req_pkt_type_list[op],
+				       0,
+				       0);
 	}
 
 	if (OFI_UNLIKELY(err)) {

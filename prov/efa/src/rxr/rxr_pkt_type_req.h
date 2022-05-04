@@ -40,6 +40,8 @@
 static_assert(RXR_MSG_PREFIX_SIZE % 8 == 0, "message prefix size alignment check");
 #endif
 
+bool rxr_pkt_req_supported_by_peer(int req_type, struct rdm_peer *peer);
+
 void *rxr_pkt_req_raw_addr(struct rxr_pkt_entry *pkt_entry);
 
 int64_t rxr_pkt_req_cq_data(struct rxr_pkt_entry *pkt_entry);
