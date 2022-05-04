@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
- * Copyright (c) 2020 Cray Inc. All rights reserved.
+ * Copyright (c) 2020-2022 Cray Inc. All rights reserved.
  */
 
 /* Support for Restricted Nomatch Put.
@@ -46,14 +46,15 @@
 #define	PRT(fmt, ...)
 #endif	/* DEVELOPER */
 
+/* set cxip_trace_fn=printf to enable */
+#define	trc CXIP_TRACE
+
 #define	MAGIC		0x1776
 
-#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, \
-		"COLL " __VA_ARGS__)
-#define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, \
-		"COLL " __VA_ARGS__)
-#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, \
-		"COLL " __VA_ARGS__)
+// TODO regularize usage of these
+#define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
 static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 				   struct cxip_coll_buf *buf);
@@ -984,6 +985,7 @@ int cxip_coll_enable(struct cxip_ep_obj *ep_obj)
 	ep_obj->coll.tx_cntr = ep_obj->txcs[0]->send_cntr;
 	ep_obj->coll.rx_cq = ep_obj->rxcs[0]->recv_cq;
 	ep_obj->coll.tx_cq = ep_obj->txcs[0]->send_cq;
+	ep_obj->coll.eq = ep_obj->eq;
 
 	ep_obj->coll.enabled = true;
 
@@ -1003,6 +1005,7 @@ int cxip_coll_disable(struct cxip_ep_obj *ep_obj)
 		return FI_SUCCESS;
 
 	ep_obj->coll.enabled = false;
+	// TODO: should this unlink EP objects?
 
 	return FI_SUCCESS;
 }
@@ -1023,21 +1026,26 @@ void cxip_coll_close(struct cxip_ep_obj *ep_obj)
 
 /* Write a Join Complete event to the endpoint EQ
  */
-static int _post_join_complete(struct cxip_coll_mc *mc_obj, void *context)
+static void _post_join_complete(struct cxip_coll_mc *mc_obj, void *context,
+			        int error)
 {
-	struct fi_eq_entry entry = {};
+	struct fi_eq_err_entry entry = {};
+	size_t size = sizeof(struct fi_eq_entry);
 	int ret;
 
 	entry.fid = &mc_obj->mc_fid.fid;
 	entry.context = context;
 
+	if (error) {
+		size = sizeof(struct fi_eq_err_entry);
+		entry.err = error;
+	}
+
 	ret = ofi_eq_write(&mc_obj->ep_obj->eq->util_eq.eq_fid,
 			   FI_JOIN_COMPLETE, &entry,
-			   sizeof(entry), FI_COLLECTIVE);
+			   size, FI_COLLECTIVE);
 	if (ret < 0)
-		return ret;
-
-	return FI_SUCCESS;
+		CXIP_INFO("FATAL ERROR: cannot post to EQ\n");
 }
 
 /****************************************************************************
@@ -1183,7 +1191,7 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 	pkt->hdr.red_rc = red_rc;
 	pkt->hdr.seqno = reduction->seqno;
 	pkt->hdr.resno = reduction->resno;
-	pkt->hdr.cookie.mcast_id = reduction->mc_obj->mc_unique;
+	pkt->hdr.cookie.mcast_id = reduction->mc_obj->mcast_objid;
 	pkt->hdr.cookie.red_id = reduction->red_id;
 	pkt->hdr.cookie.retry = retry;
 	pkt->hdr.cookie.magic = MAGIC;
@@ -1369,10 +1377,8 @@ static inline int _get_cxi_datasize(enum fi_datatype datatype, size_t count)
 	return size;
 }
 
-/* Find NIC address and convert to index in av_set.
- */
-static int _nic_to_idx(struct cxip_av_set *av_set, uint32_t nic,
-		       unsigned int *set_idx)
+static unsigned int _caddr_to_idx(struct cxip_av_set *av_set,
+				  struct cxip_addr caddr)
 {
 	struct cxip_addr addr;
 	size_t size = sizeof(addr);
@@ -1384,10 +1390,8 @@ static int _nic_to_idx(struct cxip_av_set *av_set, uint32_t nic,
 				   &addr, &size);
 		if (ret)
 			return ret;
-		if (nic == addr.nic) {
-			*set_idx = i;
-			return FI_SUCCESS;
-		}
+		if (CXIP_ADDR_EQUAL(addr, caddr))
+			return i;
 	}
 	return -FI_EADDRNOTAVAIL;
 }
@@ -2147,19 +2151,21 @@ static int _close_mc(struct fid *fid)
 	int ret;
 
 	mc_obj = container_of(fid, struct cxip_coll_mc, mc_fid.fid);
+	if (mc_obj->coll_pte) {
+		do {
+			ret = _coll_pte_disable(mc_obj->coll_pte);
+		} while (ret == -FI_EAGAIN);
 
-	do {
-		ret = _coll_pte_disable(mc_obj->coll_pte);
-	} while (ret == -FI_EAGAIN);
-
-	_coll_destroy_buffers(mc_obj->coll_pte);
-	cxip_pte_free(mc_obj->coll_pte->pte);
-	free(mc_obj->coll_pte);
+		_coll_destroy_buffers(mc_obj->coll_pte);
+		cxip_pte_free(mc_obj->coll_pte->pte);
+		free(mc_obj->coll_pte);
+	}
+	if (mc_obj->reduction_md)
+		cxil_unmap(mc_obj->reduction_md);
 
 	mc_obj->av_set->mc_obj = NULL;
 	ofi_atomic_dec32(&mc_obj->av_set->ref);
 	ofi_atomic_dec32(&mc_obj->ep_obj->coll.mc_count);
-	cxil_unmap(mc_obj->reduction_md);
 	free(mc_obj);
 
 	return FI_SUCCESS;
@@ -2170,162 +2176,97 @@ static struct fi_ops mc_ops = {
 	.close = _close_mc,
 };
 
-/* Allocate a multicast object.
- */
-static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
-		     struct cxip_coll_mc **mc)
-{
-	static int unicast_idcode = 0;
+struct cxip_join_state {
+	struct cxip_ep_obj *ep_obj;
+	struct cxip_av_set *av_set;
+	struct cxip_coll_mc *mc_obj;
+	struct fid_mc **mc;
+	void *context;
+	uint64_t flags;
+	uint64_t bcast_data;
+	bool create_mcast;
+	int mynode_idx;
+	int hwroot_index;
+	int mcast_addr;
+	int mcast_objid;
+	int simrank;
+	int pid_idx;
+};
 
+struct _curl_usrptr {
+	struct cxip_zbcoll_obj *zb;
+	struct cxip_join_state *state;
+};
+
+static struct cxip_join_state **simstates;
+static int num_simstates;
+
+/**
+ * @brief Utility routine to create and initialize the mc_obj.
+ *
+ * @param zb
+ * @param statep
+ */
+static int _mc_initialize(struct cxip_zbcoll_obj *zb, void *statep)
+{
 	struct cxi_pt_alloc_opts pt_opts = {
 		.use_long_event = 1,
 		.do_space_check = 1,
 		.en_restricted_unicast_lm = 1,
 	};
+	struct cxip_join_state *state = statep;
+	struct cxip_ep_obj *ep_obj = state->ep_obj;
+	struct cxip_av_set *av_set = state->av_set;
 	struct cxip_coll_mc *mc_obj;
 	struct cxip_coll_pte *coll_pte;
 	struct cxip_cmdq *cmdq;
-	bool is_multicast;
-	uint32_t mc_unique;
-	uint64_t pid_idx;
-	unsigned int hwroot_idx;
-	unsigned int mynode_idx;
 	int red_id;
 	int ret;
 
-	/* remapping is not allowed */
-	if (av_set->mc_obj) {
-		CXIP_INFO("remap not allowed\n");
-		return -FI_EINVAL;
-	}
-
-	/* PTE receive address */
-	switch (av_set->comm_key.keytype) {
-	case COMM_KEY_MULTICAST:
-		if (is_netsim(ep_obj)) {
-			CXIP_INFO("NETSIM does not support mcast\n");
-			return -FI_EINVAL;
-		}
-		is_multicast = true;
-		pid_idx = av_set->comm_key.mcast.mcast_id;
-		mc_unique = av_set->comm_key.mcast.mcast_id;
-		hwroot_idx = av_set->comm_key.mcast.hwroot_idx;
-		ret = _nic_to_idx(av_set, ep_obj->src_addr.nic, &mynode_idx);
-		if (ret)
-			return ret;
-		break;
-	case COMM_KEY_UNICAST:
-		is_multicast = false;
-		pid_idx = CXIP_PTL_IDX_COLL;
-		fastlock_acquire(&ep_obj->lock);
-		mc_unique = unicast_idcode++;
-		fastlock_release(&ep_obj->lock);
-		ret = _nic_to_idx(av_set, av_set->comm_key.ucast.hwroot_idx,
-				  &hwroot_idx);
-		if (ret)
-			return ret;
-		ret = _nic_to_idx(av_set, ep_obj->src_addr.nic, &mynode_idx);
-		if (ret)
-			return ret;
-		break;
-	case COMM_KEY_RANK:
-		is_multicast = false;
-		pid_idx = CXIP_PTL_IDX_COLL + av_set->comm_key.rank.rank;
-		mc_unique = av_set->comm_key.rank.rank;
-		hwroot_idx = av_set->comm_key.rank.hwroot_idx;
-		if (hwroot_idx >= av_set->fi_addr_cnt) {
-			CXIP_INFO("hwroot_idx out of range: %d\n",
-				  hwroot_idx);
-			return -FI_EINVAL;
-		}
-		mynode_idx = av_set->comm_key.rank.rank;
-		if (mynode_idx >= av_set->fi_addr_cnt) {
-			CXIP_INFO("mynode_idx out of range: %d\n",
-				  mynode_idx);
-			return -FI_EINVAL;
-		}
-		break;
-	default:
-		CXIP_INFO("unexpected comm_key keytype: %d\n",
-			  av_set->comm_key.keytype);
-		return -FI_EINVAL;
-	}
-
-	ret = -FI_ENOMEM;
+	/* Allocate the mc_obj, link, and adjust reference counts */
 	mc_obj = calloc(1, sizeof(*av_set->mc_obj));
 	if (!mc_obj)
-		return ret;
+		return -FI_ENOMEM;
+	state->mc_obj = mc_obj;
+	mc_obj->ep_obj = ep_obj;
+	ofi_atomic_inc32(&ep_obj->coll.mc_count);
 
+	av_set->mc_obj = mc_obj;
+	mc_obj->av_set = av_set;
+	ofi_atomic_inc32(&av_set->ref);
+
+	/* Allocate the PTE structure and link */
 	coll_pte = calloc(1, sizeof(*coll_pte));
 	if (!coll_pte)
-		goto free_mc_obj;
+		return -FI_ENOMEM;
 
-	if (getenv("CXIP_COLL_USE_DMA_PUT")) {	// TODO move to cxi env
-		/* Map the entire reduction block, to minimize MD resources used */
-		/* EXPERIMENTAL */
-		ret = cxil_map(ep_obj->domain->lni->lni,
-			       mc_obj->reduction,
-			       sizeof(mc_obj->reduction),
-			       CXI_MAP_PIN  | CXI_MAP_READ | CXI_MAP_WRITE,
-			       NULL, &mc_obj->reduction_md);
-		if (ret)
-			goto free_coll_pte;
-	}
-
-	dlist_init(&coll_pte->buf_list);
+	/* initialize coll_pte */
 	coll_pte->ep_obj = ep_obj;
+	coll_pte->mc_obj = mc_obj;
+	mc_obj->coll_pte = coll_pte;
+	dlist_init(&coll_pte->buf_list);
 	ofi_atomic_initialize32(&coll_pte->buf_cnt, 0);
 	ofi_atomic_initialize32(&coll_pte->buf_swap_cnt, 0);
+	// TODO should PTE create a reference count on EP?
 
-	ret = cxip_pte_alloc(ep_obj->if_dom[0], ep_obj->coll.rx_cq->eq.eq,
-			     pid_idx, is_multicast, &pt_opts, _coll_pte_cb,
-			     coll_pte, &coll_pte->pte);
-	if (ret)
-		goto free_coll_md;
-
-	ret = _coll_pte_enable(coll_pte, CXIP_PTE_IGNORE_DROPS);
-	if (ret)
-		goto coll_pte_destroy;
-
-	ret = _coll_add_buffers(coll_pte,
-				ep_obj->coll.buffer_size,
-				ep_obj->coll.buffer_count);
-	if (ret)
-		goto coll_pte_disable;
-
+	/* initialize mc_obj */
 	mc_obj->mc_fid.fid.fclass = FI_CLASS_MC;
 	mc_obj->mc_fid.fid.context = mc_obj;
 	mc_obj->mc_fid.fid.ops = &mc_ops;
 	mc_obj->mc_fid.fi_addr = (fi_addr_t)(uintptr_t)mc_obj;
-	mc_obj->coll_pte = coll_pte;
 	mc_obj->ep_obj = ep_obj;
 	mc_obj->av_set = av_set;
-	mc_obj->mc_unique = mc_unique;
-	mc_obj->hwroot_index = hwroot_idx;
-	mc_obj->mynode_index = mynode_idx;
+	mc_obj->coll_pte = coll_pte;
+	mc_obj->mcast_objid = state->mcast_objid;
+	mc_obj->hwroot_index = state->hwroot_index;
+	mc_obj->mcast_addr = state->mcast_addr;
+	mc_obj->mynode_index = state->mynode_idx;
 	mc_obj->max_red_id = CXIP_COLL_MAX_CONCUR;
 	mc_obj->arm_enable = true;
 	mc_obj->is_joined = true;
-	mc_obj->timeout.tv_sec = 20;
+	mc_obj->timeout.tv_sec = 1;
 	mc_obj->timeout.tv_nsec = 0;
 	mc_obj->tc = CXI_TC_BEST_EFFORT;
-	if (is_hw_root(mc_obj)) {
-		mc_obj->tc_type = CXI_TC_TYPE_DEFAULT;
-	} else {
-		mc_obj->tc_type = is_netsim(ep_obj)?
-					    CXI_TC_TYPE_DEFAULT:
-					    CXI_TC_TYPE_COLL_LEAF;
-	}
-
-	/* Set this now to instantiate cmdq CP */
-	cmdq = ep_obj->coll.tx_cmdq;
-	fastlock_acquire(&cmdq->lock);
-	ret = cxip_txq_cp_set(cmdq, ep_obj->auth_key.vni,
-			      mc_obj->tc, mc_obj->tc_type);
-	fastlock_release(&cmdq->lock);
-	if (ret)
-		goto coll_pte_disable;
-
 	for (red_id = 0; red_id < CXIP_COLL_MAX_CONCUR; red_id++) {
 		struct cxip_coll_reduction *reduction;
 
@@ -2342,26 +2283,480 @@ static int _alloc_mc(struct cxip_ep_obj *ep_obj, struct cxip_av_set *av_set,
 	ofi_atomic_initialize32(&mc_obj->pkt_cnt, 0);
 	ofi_atomic_initialize32(&mc_obj->seq_err_cnt, 0);
 
-	ofi_atomic_inc32(&ep_obj->coll.mc_count);
-	ofi_atomic_inc32(&av_set->ref);
-	av_set->mc_obj = mc_obj;
-	coll_pte->mc_obj = mc_obj;
+	/* map entire reduction block if using DMA */
+	if (getenv("CXIP_COLL_USE_DMA_PUT")) {	// TODO move to cxi env
+		/* EXPERIMENTAL */
+		ret = cxil_map(ep_obj->domain->lni->lni,
+			       mc_obj->reduction,
+			       sizeof(mc_obj->reduction),
+			       CXI_MAP_PIN  | CXI_MAP_READ | CXI_MAP_WRITE,
+			       NULL, &mc_obj->reduction_md);
+		if (ret)
+			return ret;
+	}
 
-	*mc = av_set->mc_obj;
+	/* bind PTE to domain */
+	ret = cxip_pte_alloc(ep_obj->if_dom[0], ep_obj->coll.rx_cq->eq.eq,
+			     state->pid_idx, state->create_mcast, &pt_opts,
+			     _coll_pte_cb, coll_pte, &coll_pte->pte);
+	if (ret)
+		return ret;
+
+	/* enable the PTE */
+	ret = _coll_pte_enable(coll_pte, CXIP_PTE_IGNORE_DROPS);
+	if (ret)
+		return ret;
+
+	/* add buffers to the PTE */
+	ret = _coll_add_buffers(coll_pte,
+				ep_obj->coll.buffer_size,
+				ep_obj->coll.buffer_count);
+	if (ret)
+		return ret;
+
+	/* define the traffic class */
+	// TODO revisit for LOW_LATENCY
+	if (is_hw_root(mc_obj))
+		mc_obj->tc_type = CXI_TC_TYPE_DEFAULT;
+	else if (is_netsim(ep_obj))
+		mc_obj->tc_type = CXI_TC_TYPE_DEFAULT;
+	else
+		mc_obj->tc_type = CXI_TC_TYPE_COLL_LEAF;
+
+	/* Set this now to instantiate cmdq CP */
+	cmdq = ep_obj->coll.tx_cmdq;
+	fastlock_acquire(&cmdq->lock);
+	ret = cxip_txq_cp_set(cmdq, ep_obj->auth_key.vni,
+			      mc_obj->tc, mc_obj->tc_type);
+	fastlock_release(&cmdq->lock);
+	if (ret)
+		return ret;
+
+	return FI_SUCCESS;
+}
+
+static void _cleanup_mcast(struct cxip_zbcoll_obj *zb, void *statep)
+{
+	struct cxip_join_state *state = statep;
+
+	if (num_simstates) {
+		int i;
+
+		for (i = 0; i < num_simstates; i++) {
+			state = simstates[i];
+			_post_join_complete(state->mc_obj, state->context,
+					    zb->error);
+			if (state->mc_obj)
+				fi_close(&state->mc_obj->mc_fid.fid);
+		}
+		free(simstates);
+		simstates = NULL;
+		num_simstates = 0;
+	} else {
+		_post_join_complete(state->mc_obj, state->context,
+				    zb->error);
+		if (state->mc_obj)
+			fi_close(&state->mc_obj->mc_fid.fid);
+	}
+	cxip_zbcoll_free(zb);
+	free(state);
+}
+
+static void _barrier_done(struct cxip_zbcoll_obj *zb, void *statep)
+{
+	struct cxip_join_state *state = statep;
+	int ret;
+
+	ret = zb->error;
+	if (ret)
+		goto fail;
+
+	if (num_simstates) {
+		int i;
+
+		for (i = 0; i < num_simstates; i++) {
+			state = simstates[i];
+			*state->mc = &state->mc_obj->mc_fid;
+			_post_join_complete(state->mc_obj, state->context,
+					    FI_SUCCESS);
+		}
+		free(simstates);
+		simstates = NULL;
+		num_simstates = 0;
+	} else {
+		*state->mc = &state->mc_obj->mc_fid;
+		_post_join_complete(state->mc_obj, state->context,
+				    FI_SUCCESS);
+	}
+
+	/* we no longer need the zb object, or the state */
+	cxip_zbcoll_free(zb);
+	free(state);
+	return;
+
+fail:
+	_cleanup_mcast(zb, state);
+}
+
+static void _broadcast_done(struct cxip_zbcoll_obj *zb, void *statep)
+{
+	struct cxip_join_state *state = statep;
+	int ret;
+
+	ret = zb->error;
+	if (ret)
+		goto fail;
+
+	/* unpack the broadcast data */
+	state->mcast_objid = 0;	// TODO
+	state->hwroot_index = 0;
+	state->mcast_addr = 0;
+
+	/* initialize the multicast structure */
+	ret = _mc_initialize(zb, state);
+	if (ret)
+		goto fail;
+
+	/* initiate a barrier to synchronize again after setup */
+	ret = cxip_zbcoll_push_cb(zb, _barrier_done, state);
+	if (ret)
+		goto fail;
+
+	ret = cxip_zbcoll_barrier(zb);
+	if (ret)
+		goto fail;
+
+	return;
+
+fail:
+	_cleanup_mcast(zb, state);
+}
+
+/* Process CURL information and broadcast it */
+static void _curl_done(struct cxip_curl_handle *handle)
+{
+	struct _curl_usrptr *usrptr = (void *)handle->usrptr;
+	struct cxip_zbcoll_obj *zb = usrptr->zb;
+	struct cxip_join_state *state = usrptr->state;
+	int ret;
+
+	// parse handle->response
+	state->bcast_data = 0x0;	// TODO pack data
+
+	cxip_curl_free(handle);
+	free(usrptr);
+
+	/* Broadcast this information */
+	ret = cxip_zbcoll_push_cb(zb, _broadcast_done, state);
+	if (ret)
+		goto fail;
+
+	ret = cxip_zbcoll_broadcast(zb, &state->bcast_data);
+	if (ret)
+		goto fail;
+
+	return;
+
+fail:
+	_cleanup_mcast(zb, state);
+}
+
+/**
+ * @brief Process getgroup completion.
+ *
+ * After zb getgroup completes, there should be no further "normal" zb errors.
+ *
+ * In a production system, the process associated with fi_addr[0] is flagged
+ * with create_mcast == true, and will issue the CURL request to the fabric
+ * manager to acquire a new multicast address for this collective. All other
+ * processes proceed immediately to zb_broadcast(). The completion function for
+ * CURL will issue the zb_broadcast() once the multicast has been acquired, and
+ * as it is on the zb root (fi_addr[0]), it will be used to broadcast the
+ * multicast information.
+ *
+ * In any of the test systems, the broadcast address is explicitly or implicitly
+ * known, so all processes proceed to zb_broadcast(). In this case, the
+ * multicast address is already the same for all processes.
+ *
+ * @param zb     : zb coll object
+ * @param statep : state containing variables
+ */
+static void _getgroup_done(struct cxip_zbcoll_obj *zb, void *statep)
+{
+	struct cxip_join_state *state = statep;
+	int ret;
+
+	ret = zb->error;
+	if (ret)
+		goto fail;
+
+	/* If we don't need to create multicast, initialize */
+	if (!state->create_mcast) {
+		/* initialize the multicast structure */
+		ret = _mc_initialize(zb, state);
+		if (ret)
+			goto fail;
+
+		/* block on barrier */
+		ret = cxip_zbcoll_push_cb(zb, _barrier_done, state);
+		if (ret)
+			goto fail;
+
+		ret = cxip_zbcoll_barrier(zb);
+		if (ret)
+			goto fail;
+
+		return;
+	}
+
+	/* mynode_idx == 0 is the broadcast sender, so create multicast first */
+	if (state->mynode_idx == 0) {
+		struct _curl_usrptr *usrptr;
+		char *endpoint;
+		char *request;
+
+		endpoint = strdup("http://something");	// TODO
+		request = strdup("something");		// TODO
+
+		usrptr = calloc(1, sizeof(*usrptr));
+		if (!usrptr) {
+			zb->error = -FI_ENOMEM;
+			goto fail;
+		}
+		usrptr->zb = zb;
+		usrptr->state = state;
+
+		ret = cxip_curl_perform(endpoint, request, 0, CURL_POST, false,
+					_curl_done, usrptr);
+		/* internal copies are made of endpoint and request */
+		free(request);
+		free(endpoint);
+		if (ret) {
+			free(usrptr);
+			goto fail;
+		}
+		return;
+	}
+
+	/* All other endpoints go straight to broadcast and block */
+	ret = cxip_zbcoll_push_cb(zb, _broadcast_done, state);
+	if (ret)
+		goto fail;
+
+	ret = cxip_zbcoll_broadcast(zb, &state->bcast_data);
+	if (ret)
+		goto fail;
+
+	return;
+
+fail:
+	_cleanup_mcast(zb, state);
+}
+
+/**
+ * @brief fi_join_collective() implementation.
+ *
+ * Calling syntax is defined by libfabric.
+ *
+ * This is a multi-stage collective operation, progressed by calling TX/RX CQs,
+ * and the EQ for the endpoint. The basic sequence is:
+ *
+ * 1) get a collective group ID for zbcoll collectives
+ * 2) acquire a collective address from the fabric manager
+ * 3) broadcast the collective address to all endpoints
+ * 4) initialize the mc_obj structure on all endpoints
+ * 5) block on barrier until all endpoints are ready for collective data
+ *
+ * There are four operational models, one for production, and three for testing.
+ *
+ * In all cases, there must be one join for every address in the av_set
+ * fi_addr_ary, and the collective proceeds among these joined objects.
+ *
+ * COMM_KEY_RANK tests using a single process on a single Cassini, which
+ * supplies the src/tgt, but different pid_idx values, representing different
+ * PTLTE objects, each with its own buffers. The zbcoll operations are performed
+ * using linked zb objects, which represent a single zbcoll collective, so each
+ * zb callback function is called only once for the entire set, yet must provide
+ * a unique mc return value and FI_COLL_COMPLETE event for each joined object.
+ * We manage this with the simstates array, which associates the simulated rank
+ * with the state pointer, so that upon completion, we can provide all of the
+ * return pointers and events.
+ *
+ * COMM_KEY_UNICAST tests on multiple nodes on a real network, but without any
+ * multicast support. It initializes one mc object on each node, and designates
+ * the first node in the multicast list, fiaddr[0], as the hardware root node.
+ * fiaddr[1-N] send directly to fiaddr[0], and fiaddr[0] sends to each of the
+ * other addresses in a simulated broadcast. This is not expected to be
+ * performant, but it does exercise a necessary incast edge case, and it fully
+ * exercises the collectives software across multiple nodes.
+ *
+ * COMM_KEY_MULTICAST is a fully-functioning model, but requires that an
+ * external application prepare the multicast address on the fabric before
+ * calling fi_join_collective() on any node. This information must be supplied
+ * through the av_set->comm_key structure.
+ *
+ * COMM_KEY_NONE is the fully-function production model, in which
+ * fi_join_collective() creates the multicast address by making a CURL call to
+ * the fabric manager REST API. fiaddr[0] manages the CURL call, and broadcasts
+ * the results to all of the other objects across the collective group.
+ *
+ * @param ep          : fabric endpoint fid
+ * @param coll_addr   : FI_ADDR_NOTAVAIL (required)
+ * @param coll_av_set : av_set fid
+ * @param flags       : ignored
+ * @param mc          : return pointer for mc object
+ * @param context     : user context for concurrent joins
+ * @return int error code
+ */
+int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
+			 const struct fid_av_set *coll_av_set,
+			 uint64_t flags, struct fid_mc **mc, void *context)
+{
+	static uint32_t unicast_idcode = 0;
+
+	struct cxip_ep *cxip_ep;
+	struct cxip_ep_obj *ep_obj;
+	struct cxip_av_set *av_set;
+	struct cxip_join_state *state;
+	struct cxip_zbcoll_obj *zb;
+	bool link_zb;
+	int ret;
+
+	/* validate arguments */
+	if (!ep || !coll_av_set || !mc || coll_addr != FI_ADDR_NOTAVAIL)
+		return -FI_EINVAL;
+	/* flags are ignored */
+
+	cxip_ep = container_of(ep, struct cxip_ep, ep.fid);
+	av_set = container_of(coll_av_set, struct cxip_av_set, av_set_fid);
+
+	ep_obj = cxip_ep->ep_obj;
+
+	/* allocate state to pass arguments through callbacks */
+	state = calloc(1, sizeof(*state));
+	if (! state)
+		return -FI_ENOMEM;
+	/* all errors after this must goto fail for cleanup */
+
+	zb = NULL;
+	state->ep_obj = ep_obj;
+	state->av_set = av_set;
+	state->mc = mc;
+	state->context = context;
+	state->flags = flags;
+
+	/* rank 0 (av_set->fi_addr_cnt[0]) does zb broadcast, so all nodes will
+	 * share whatever bcast_data rank 0 ends up with.
+	 */
+	ret = -FI_EINVAL;
+	switch (av_set->comm_key.keytype) {
+	case COMM_KEY_NONE:
+		/* Production case, acquire multicast from FM */
+		if (is_netsim(ep_obj)) {
+			CXIP_INFO("NETSIM COMM_KEY_NONE not supported\n");
+			goto fail;
+		}
+		state->mynode_idx = _caddr_to_idx(av_set, ep_obj->src_addr);
+		state->simrank = ZB_NOSIM;
+		state->pid_idx = CXIP_PTL_IDX_COLL;
+		state->mcast_objid = 0;
+		state->mcast_addr = 0;
+		state->hwroot_index = 0;
+		state->create_mcast = true;
+		link_zb = false;
+		break;
+	case COMM_KEY_MULTICAST:
+		/* Real network test with predefined multicast address */
+		if (is_netsim(ep_obj)) {
+			CXIP_INFO("NETSIM COMM_KEY_MULTICAST not supported\n");
+			goto fail;
+		}
+		state->mynode_idx = _caddr_to_idx(av_set, ep_obj->src_addr);
+		state->simrank = ZB_NOSIM;
+		state->pid_idx = CXIP_PTL_IDX_COLL;
+		state->mcast_objid = av_set->comm_key.mcast.mcast_id;
+		state->hwroot_index = av_set->comm_key.mcast.hwroot_idx;
+		state->mcast_addr = av_set->comm_key.mcast.mcast_id;
+		state->create_mcast = false;
+		link_zb = false;
+		break;
+	case COMM_KEY_UNICAST:
+		/* Real network test without multicast address */
+		if (is_netsim(ep_obj)) {
+			CXIP_INFO("NETSIM OMM_KEY_UNICAST not supported\n");
+			goto fail;
+		}
+		state->mynode_idx = _caddr_to_idx(av_set, ep_obj->src_addr);
+		state->simrank = state->mynode_idx;
+		state->pid_idx = CXIP_PTL_IDX_COLL;
+		state->mcast_objid = unicast_idcode++;
+		state->mcast_addr = ep_obj->src_addr.nic;
+		state->hwroot_index = 0;
+		state->create_mcast = false;
+		link_zb = false;
+		break;
+	case COMM_KEY_RANK:
+		/* Single process simulation, can run under NETSIM */
+		if (!simstates) {
+			/* first join creates the entire array */
+			if (av_set->comm_key.rank.rank != 0) {
+				CXIP_INFO("Rank 0 must be first configured\n");
+				goto fail;
+			}
+			num_simstates = av_set->fi_addr_cnt;
+			simstates = calloc(num_simstates, sizeof(void *));
+		}
+		/* record this state in the array */
+		simstates[av_set->comm_key.rank.rank] = state;
+		state->mynode_idx = av_set->comm_key.rank.rank;
+		state->simrank = state->mynode_idx;
+		state->pid_idx = CXIP_PTL_IDX_COLL + state->simrank;
+		state->mcast_objid = av_set->comm_key.rank.rank;
+		state->mcast_addr = ep_obj->src_addr.nic;
+		state->hwroot_index = 0;
+		state->create_mcast = false;
+		link_zb = true;
+		break;
+	default:
+		CXIP_INFO("unexpected comm_key keytype: %d\n",
+			  av_set->comm_key.keytype);
+		goto fail;
+	}
+
+	/* Acquire a zbcoll identifier */
+	ret = cxip_zbcoll_alloc(state->ep_obj,
+				state->av_set->fi_addr_cnt,
+				state->av_set->fi_addr_ary,
+				state->simrank, &zb);
+	if (ret)
+		goto fail;
+	if (link_zb) {
+		static struct cxip_zbcoll_obj *zb0 = NULL;
+		static int zb0_count = 0;
+
+		if (!zb0)
+			zb0 = zb;
+		cxip_zbcoll_simlink(zb0, zb);
+		if (++zb0_count == av_set->fi_addr_cnt) {
+			zb0 = NULL;
+			zb0_count = 0;
+		}
+	}
+
+	/* Getgroup */
+	ret = cxip_zbcoll_push_cb(zb, _getgroup_done, state);
+	if (ret)
+		goto fail;
+
+	/* -FI_EAGAIN is a race, -FI_EBUSY is all in use */
+	ret = cxip_zbcoll_getgroup(zb);
+	if (ret)
+		goto fail;
 
 	return FI_SUCCESS;
 
-coll_pte_disable:
-	_coll_pte_disable(coll_pte);
-coll_pte_destroy:
-	cxip_pte_free(coll_pte->pte);
-free_coll_md:
-	if (mc_obj->reduction_md)
-		cxil_unmap(mc_obj->reduction_md);
-free_coll_pte:
-	free(coll_pte);
-free_mc_obj:
-	free(mc_obj);
+fail:
+	_cleanup_mcast(zb, state);
 	return ret;
 }
 
@@ -2375,70 +2770,4 @@ void cxip_coll_reset_mc_ctrs(struct fid_mc *mc)
 	ofi_atomic_set32(&mc_obj->pkt_cnt, 0);
 	ofi_atomic_set32(&mc_obj->seq_err_cnt, 0);
 	fastlock_release(&mc_obj->lock);
-}
-
-/**
- * fi_join_collective() implementation.
- *
- * @param ep - endpoint
- * @param addr - pointer to struct fi_collective_addr
- * @param flags - collective flags
- * @param mc - returned multicast object
- * @param context - user-defined context
- *
- * @return int - return code
- */
-int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
-			 const struct fid_av_set *coll_av_set,
-			 uint64_t flags, struct fid_mc **mc, void *context)
-{
-	struct cxip_ep *cxi_ep;
-	struct cxip_av_set *av_set;
-	struct cxip_coll_mc *mc_obj;
-	int ret;
-
-	if (check_red_pkt())
-		return -FI_EINVAL;
-
-	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
-	av_set = container_of(coll_av_set, struct cxip_av_set, av_set_fid);
-
-	if (!cxi_ep->ep_obj->coll.enabled)
-		return -FI_EOPBADSTATE;
-
-	if (coll_addr != FI_ADDR_NOTAVAIL) {
-		CXIP_INFO("coll_addr is not FI_ADDR_NOTAVAIL\n");
-		return -FI_EINVAL;
-	} else if (av_set->comm_key.keytype == COMM_KEY_NONE) {
-		CXIP_INFO("comm_key not specified\n");
-		return -FI_EINVAL;
-	}
-
-	ret = _alloc_mc(cxi_ep->ep_obj, av_set, &mc_obj);
-	if (ret)
-		return ret;
-
-	ret = _post_join_complete(mc_obj, context);
-	if (ret)
-		return ret;
-
-	*mc = &mc_obj->mc_fid;
-	return FI_SUCCESS;
-}
-
-/* Exported through fi_cxi_ext.h. Generates only MULTICAST comm_keys.
- */
-size_t cxip_coll_init_mcast_comm_key(struct cxip_coll_comm_key *comm_key,
-				     uint32_t mcast_ref,
-				     uint32_t mcast_id,
-				     uint32_t hwroot_idx)
-{
-	struct cxip_comm_key *key = (struct cxip_comm_key *)comm_key;
-
-	key->keytype = COMM_KEY_MULTICAST;
-	key->mcast.mcast_ref = mcast_ref;
-	key->mcast.mcast_id = mcast_id;
-	key->mcast.hwroot_idx = hwroot_idx;
-
-	return sizeof(struct cxip_comm_key);
 }

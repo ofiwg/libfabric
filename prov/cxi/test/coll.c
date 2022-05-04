@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017-2019 Intel Corporation. All rights reserved.
- * Copyright (c) 2020 Cray Inc. All rights reserved.
+ * Copyright (c) 2020-2022 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -129,11 +129,56 @@ Test(coll_join, reenable)
 TestSuite(coll_put, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
 	  .disabled = false, .timeout = CXIT_DEFAULT_TIMEOUT);
 
+static int _wait_for_join(int count)
+{
+	struct cxip_ep *ep;
+	struct fid_cq *txcq, *rxcq;
+	struct fid_eq *eq;
+	struct fi_cq_err_entry cqd = {};
+	struct fi_eq_err_entry eqd = {};
+	uint32_t event;
+	int ret;
+
+	ep = container_of(cxit_ep, struct cxip_ep, ep);
+	rxcq = &ep->ep_obj->coll.rx_cq->util_cq.cq_fid;
+	txcq = &ep->ep_obj->coll.tx_cq->util_cq.cq_fid;
+	eq = &ep->ep_obj->coll.eq->util_eq.eq_fid;
+
+	do {
+		sched_yield();
+		ret = fi_eq_read(eq, &event, &eqd, sizeof(eqd), 0);
+		if (ret == -FI_EAVAIL) {
+			ret = fi_eq_readerr(eq, &eqd, 0);
+			break;
+		}
+		if (ret >= 0) {
+			if (event == FI_JOIN_COMPLETE) {
+				count--;
+			}
+		}
+
+		ret = fi_cq_read(rxcq, &cqd, sizeof(cqd));
+		if (ret == -FI_EAVAIL) {
+			ret = fi_cq_readerr(rxcq, &cqd, sizeof(cqd));
+			break;
+		}
+
+		ret = fi_cq_read(txcq, &cqd, sizeof(cqd));
+		if (ret == -FI_EAVAIL) {
+			ret = fi_cq_readerr(txcq, &cqd, sizeof(cqd));
+			break;
+		}
+	} while (count > 0);
+
+	return 0;
+}
+
 /* Basic test of single join.
  */
 Test(coll_put, join1)
 {
 	cxit_create_netsim_collective(1);
+	_wait_for_join(1);
 	cxit_destroy_netsim_collective();
 }
 
@@ -141,7 +186,8 @@ Test(coll_put, join1)
  */
 Test(coll_put, join2)
 {
-	cxit_create_netsim_collective(2);
+	cxit_create_netsim_collective(3);
+	_wait_for_join(2);
 	cxit_destroy_netsim_collective();
 }
 
@@ -283,6 +329,7 @@ Test(coll_put, put_bad_rank)
 	int ret;
 
 	cxit_create_netsim_collective(2);
+	_wait_for_join(2);
 
 	mc_obj = container_of(cxit_coll_mc_list.mc_fid[0],
 			      struct cxip_coll_mc, mc_fid);
@@ -309,6 +356,7 @@ Test(coll_put, put_one)
 Test(coll_put, put_ranks)
 {
 	cxit_create_netsim_collective(2);
+	_wait_for_join(2);
 	_put_data(1, 0, 0);
 	_put_data(1, 0, 1);
 	_put_data(1, 1, 0);
@@ -321,6 +369,7 @@ Test(coll_put, put_ranks)
 Test(coll_put, put_many)
 {
 	cxit_create_netsim_collective(1);
+	_wait_for_join(1);
 	_put_data(4000, 0, 0);
 	cxit_destroy_netsim_collective();
 }
@@ -358,6 +407,7 @@ void _put_red_pkt(int count)
 	int i, ret;
 
 	cxit_create_netsim_collective(1);
+	_wait_for_join(1);
 
 	mc_obj = container_of(cxit_coll_mc_list.mc_fid[0],
 			      struct cxip_coll_mc, mc_fid);
@@ -422,6 +472,7 @@ Test(coll_put, put_red_pkt_distrib)
 	int i, cnt, ret;
 
 	cxit_create_netsim_collective(5);
+	_wait_for_join(5);
 
 	for (i = 0; i < 5; i++) {
 		mc_obj[i] = container_of(cxit_coll_mc_list.mc_fid[i],
@@ -831,6 +882,7 @@ void _reduce(int start_node, int bad_node, int concur)
 void _reduce_test_set(int concur)
 {
 	cxit_create_netsim_collective(5);
+	_wait_for_join(5);
 	/* success with each of the nodes starting */
 	_reduce(0, -1, concur);
 	_reduce(1, -1, concur);

@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (c) 2018,2020-2021 Cray Inc. All rights reserved.
+ * Copyright (c) 2018,2020-2022 Cray Inc. All rights reserved.
  */
 
 #include <stdio.h>
@@ -396,8 +396,8 @@ void cxit_teardown_distributed(void)
 
 void cxit_setup_multicast(void)
 {
-	struct cxip_coll_comm_key comm_key;
 	struct fi_av_set_attr av_set_attr = {};
+	struct cxip_comm_key key = {};
 	size_t size;
 	int ret;
 
@@ -406,11 +406,15 @@ void cxit_setup_multicast(void)
 	cxit_LTU_create_coll_mcast(STD_MCAST_ROOT, STD_MCAST_TIMEOUT,
 				   &cxit_mcast_ref, &cxit_mcast_id);
 
-	size = cxip_coll_init_mcast_comm_key(&comm_key, cxit_mcast_ref,
-					     cxit_mcast_id, STD_MCAST_ROOT);
+	key.keytype = COMM_KEY_MULTICAST;
+	key.mcast.mcast_ref = cxit_mcast_ref;
+	key.mcast.mcast_id = cxit_mcast_id;
+	key.mcast.hwroot_idx = STD_MCAST_ROOT;
+	size = sizeof(key);
+
 	av_set_attr.flags = FI_UNIVERSE;
 	av_set_attr.comm_key_size = size;
-	av_set_attr.comm_key = (uint8_t *)&comm_key;
+	av_set_attr.comm_key = (uint8_t *)&key;
 	ret = fi_av_set(cxit_av, &av_set_attr, &cxit_av_set, NULL);
 	cr_assert_not_null(cxit_av_set);
 

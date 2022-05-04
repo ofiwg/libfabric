@@ -1176,6 +1176,7 @@ struct cxip_ep_coll_obj {
 	struct cxip_cntr *tx_cntr;	// shared with STD EP
 	struct cxip_cq *rx_cq;		// shared with STD EP
 	struct cxip_cq *tx_cq;		// shared with STD EP
+	struct cxip_eq *eq;		// shared with STD EP
 	ofi_atomic32_t mc_count;	// count of MC objects
 	size_t min_multi_recv;		// trigger value to rotate bufs
 	size_t buffer_size;		// size of receive buffers
@@ -1907,6 +1908,7 @@ enum cxip_comm_key_type {
 	COMM_KEY_MULTICAST,
 	COMM_KEY_UNICAST,
 	COMM_KEY_RANK,
+	COMM_KEY_MAX
 };
 
 struct cxip_coll_mcast_key {
@@ -2019,17 +2021,19 @@ struct cxip_coll_mc {
 	struct fid_mc mc_fid;
 	struct cxip_ep_obj *ep_obj;		// Associated endpoint
 	struct cxip_av_set *av_set;		// associated AV set
+	struct cxip_zbcoll_obj *zb;		// zb object for zbcol
 	struct cxip_coll_pte *coll_pte;		// collective PTE
-	bool is_joined;				// true if joined
-	unsigned int mynode_index;		// av_set index of this node
-	unsigned int hwroot_index;		// av_set index of hwroot node
-	uint32_t mc_unique;			// MC object id for cookie
+	struct timespec timeout;		// state machine timeout
+	int mynode_index;			// av_set index of this node
+	int hwroot_index;			// av_set index of hwroot node
+	int mcast_addr;				// multicast target address
+	int mcast_objid;			// object id for cookie
 	int tail_red_id;			// tail active red_id
 	int next_red_id;			// next available red_id
 	int max_red_id;				// limit total concurrency
-	struct timespec timeout;		// state machine timeout
 	int seqno;				// rolling seqno for packets
 	bool arm_enable;			// arm-enable for root
+	bool is_joined;				// true if joined
 	enum cxi_traffic_class tc;		// traffic class
 	enum cxi_traffic_class_type tc_type;	// traffic class type
 	ofi_atomic32_t send_cnt;		// for diagnostics
@@ -2140,7 +2144,6 @@ int cxip_zbcoll_alloc(struct cxip_ep_obj *ep_obj, int num_addrs,
 		      struct cxip_zbcoll_obj **zbp);
 int cxip_zbcoll_simlink(struct cxip_zbcoll_obj *zb0,
 			struct cxip_zbcoll_obj *zb);
-int cxip_zbcoll_simlink_done(struct cxip_zbcoll_obj *zb0);
 
 int cxip_zbcoll_push_cb(struct cxip_zbcoll_obj *zb,
 			zbcomplete_t usrfunc, void *usrptr);

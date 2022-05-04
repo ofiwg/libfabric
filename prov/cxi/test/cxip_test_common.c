@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (c) 2018,2020 Cray Inc. All rights reserved.
+ * Copyright (c) 2018,2020-2022 Cray Inc. All rights reserved.
  */
 
 #include <stdio.h>
@@ -417,10 +417,6 @@ static void _create_av_set(int count, int rank, struct fid_av_set **av_set_fid)
 
 void cxit_create_netsim_collective(int count)
 {
-	struct cxip_ep *ep;
-	fi_addr_t mc_addr;
-	fi_addr_t mc_ref;
-	uint32_t event;
 	int i, ret;
 
 	cxit_coll_mc_list.count = count;
@@ -432,25 +428,11 @@ void cxit_create_netsim_collective(int count)
 	for (i = 0; i < cxit_coll_mc_list.count; i++) {
 		_create_av_set(cxit_coll_mc_list.count, i,
 			       &cxit_coll_mc_list.av_set_fid[i]);
-
 		ret = cxip_join_collective(cxit_ep, FI_ADDR_NOTAVAIL,
 					   cxit_coll_mc_list.av_set_fid[i],
 					   0, &cxit_coll_mc_list.mc_fid[i],
 					   NULL);
 		cr_assert(ret == 0, "cxip_coll_enable failed: %d\n", ret);
-		mc_addr = fi_mc_addr(cxit_coll_mc_list.mc_fid[i]);
-		mc_ref = (fi_addr_t)(uintptr_t)cxit_coll_mc_list.mc_fid[i];
-		cr_assert(mc_addr == mc_ref, "mc_addr, exp %ld, saw %ld\n",
-			  mc_ref, mc_addr);
-
-		ep = container_of(cxit_ep, struct cxip_ep, ep);
-		do {
-			sched_yield();
-			ret = fi_eq_read(&ep->ep_obj->eq->util_eq.eq_fid,
-					 &event, NULL, 0, 0);
-		} while (ret == -FI_EAGAIN);
-		cr_assert(event == FI_JOIN_COMPLETE, "join event = %d\n",
-			  event);
 	}
 }
 

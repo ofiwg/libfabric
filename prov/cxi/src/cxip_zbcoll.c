@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (c) 2021 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2021-2022 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -301,7 +301,13 @@ void cxip_zbcoll_get_counters(struct cxip_ep_obj *ep_obj, uint32_t *dsc,
  * - ...
  * - zb[0]->state[n].zb -> zb[n]
  *
- * This must be completed using cxip_zbcoll_simlink_done().
+ * This also modifies each of the other structures to backlink state[0] to the
+ * root structure. This allows data from the leaf nodes to be placed in the root
+ * structure for sending.
+ *
+ * - zb[1]->state[0].zb -> zb[0]
+ * - ...
+ * - zb[n]->state[0].zb -> zb[0]
  *
  * @param zb0  : primary (root) zb structure
  * @param zb   : secondary zb structure to link to the root
@@ -312,6 +318,8 @@ int cxip_zbcoll_simlink(struct cxip_zbcoll_obj *zb0,
 {
 	int i;
 
+	if (zb0 == zb1)
+		return FI_SUCCESS;
 	if (!zb0 || !zb1) {
 		CXIP_WARN("arguments cannot be NULL\n");
 		return -FI_EINVAL;
@@ -330,7 +338,7 @@ int cxip_zbcoll_simlink(struct cxip_zbcoll_obj *zb0,
 		CXIP_WARN("zb0 simrank != 0\n");
 		return -FI_EINVAL;
 	}
-	/* zb1 must be valid simrank and not root */
+	/* zb1 must be valid simrank */
 	if (zb1->simrank <= 0 || zb1->simrank >= zb1->num_caddrs) {
 		CXIP_WARN("zb1 simrank %d invalid, max = %d\n",
 			  zb1->simrank, zb1->num_caddrs);
@@ -347,43 +355,9 @@ int cxip_zbcoll_simlink(struct cxip_zbcoll_obj *zb0,
 		return -FI_EINVAL;
 	}
 
-	/* redirect from root to secondary */
+	/* link each to the other */
 	zb0->state[zb1->simrank].zb = zb1;
-
-	return FI_SUCCESS;
-}
-
-/**
- * @brief Complete secondary linking.
- *
- * This completes the multi-zb simulation, by changing the back-link of each
- * state[0] to point to the root structure.
- *
- * - zb[0]->state[0].zb -> zb[0]
- * - zb[1]->state[0].zb -> zb[0]
- * - ...
- * - zb[n]->state[0].zb -> zb[0]
- *
- * @param zb0  : primary (root) zb structure
- * @return int error if conditions aren't met
- */
-int cxip_zbcoll_simlink_done(struct cxip_zbcoll_obj *zb0)
-{
-	int i;
-
-	if (!zb0 || zb0->simrank != 0) {
-		CXIP_WARN("zb0 must be root\n");
-		return -FI_EINVAL;
-	}
-	/* all states (except 0) must be redirected to complete */
-	for (i = 1; i < zb0->num_caddrs; i++)
-		if (zb0->state[i].zb == zb0) {
-			CXIP_WARN("zb0 state[%d] may not be relinked\n", i);
-			return -FI_EINVAL;
-		}
-	/* redirect from each secondary back to root */
-	for (i = 1; i < zb0->num_caddrs; i++)
-		zb0->state[i].zb->state[0].zb = zb0;
+	zb1->state[zb0->simrank].zb = zb0;
 
 	return FI_SUCCESS;
 }
@@ -1224,7 +1198,7 @@ static int zbdata_send_cb(struct cxip_ctrl_req *req, const union c_event *event)
 	default:
 		/* fail the send */
 		CXIP_WARN("Unexpected event type: %s\n",
-		       	  cxi_event_to_str(event));
+			  cxi_event_to_str(event));
 		ret = -FI_EIO;
 		break;
 	}
@@ -1275,8 +1249,10 @@ int cxip_zbcoll_push_cb(struct cxip_zbcoll_obj *zb,
 	struct cxip_zbcoll_stack *stk;
 
 	stk = calloc(1, sizeof(*stk));
-	if (!stk)
-		return -FI_ENOMEM;
+	if (!stk) {
+		zb->error = -FI_ENOMEM;
+		return zb->error;
+	}
 	stk->cbstack = zb->cbstack;	// save old stack pointer
 	stk->usrfunc = usrfunc;
 	stk->usrptr = usrptr;

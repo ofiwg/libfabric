@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (c) 2021 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2021-2022 Hewlett Packard Enterprise Development LP
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -535,12 +535,10 @@ void _getgroup_multi(int num_addrs, struct cxip_zbcoll_obj **zb,
 			  zb[i]->simcount, num_addrs);
 	}
 	/* link zb objects to function as a single collective */
-	for (i = 1; i < num_addrs; i++) {
+	for (i = 0; i < num_addrs; i++) {
 		ret = cxip_zbcoll_simlink(zb[0], zb[i]);
 		cr_assert(!ret, "link zb[%d] failed\n", i);
 	}
-	ret = cxip_zbcoll_simlink_done(zb[0]);
-	cr_assert(!ret, "link zb[%d] failed %s\n", i, fi_strerror(-ret));
 
 	/* initiate getgroup across all of the zb objects */
 	for (i = 0; i < num_addrs; i++) {
