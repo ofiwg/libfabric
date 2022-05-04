@@ -742,10 +742,18 @@ int ft_alloc_active_res(struct fi_info *fi)
 
 int ft_init(void)
 {
+	int ret;
+
 	tx_seq = 0;
 	rx_seq = 0;
 	tx_cq_cntr = 0;
 	rx_cq_cntr = 0;
+
+	ret = ft_startup();
+	if (ret) {
+		FT_ERR("ft_startup: %d", ret);
+		return ret;
+	}
 
 	return ft_hmem_init(opts.iface);
 }
@@ -790,7 +798,7 @@ int ft_init_oob(void)
 			return ret;
 		}
 
-		close(listen_sock);
+		ft_close_fd(listen_sock);
 	} else {
 		ret = getaddrinfo(opts.dst_addr, opts.oob_port, NULL, &ai);
 		if (ret) {
@@ -808,7 +816,7 @@ int ft_init_oob(void)
 		ret = connect(oob_sock, ai->ai_addr, ai->ai_addrlen);
 		if (ret) {
 			perror("connect");
-			close(oob_sock);
+			ft_close_fd(oob_sock);
 			goto free;
 		}
 		sleep(1);
@@ -869,9 +877,9 @@ int ft_close_oob()
 	int ret;
 	if (oob_sock == -1)
 		return 0;
-	ret = close(oob_sock);
+	ret = ft_close_fd(oob_sock);
 	if (ret) {
-		FT_PRINTERR("close", errno);
+		FT_PRINTERR("ft_close_fd", errno);
 		return ret;
 	}
 	oob_sock = -1;
@@ -2708,14 +2716,14 @@ int ft_wait_child(void)
 {
 	int ret;
 
-	ret = close(ft_socket_pair[0]);
+	ret = ft_close_fd(ft_socket_pair[0]);
 	if (ret) {
-		FT_PRINTERR("close", errno);
+		FT_PRINTERR("ft_close_fd", errno);
 		return ret;
 	}
-	ret = close(ft_socket_pair[1]);
+	ret = ft_close_fd(ft_socket_pair[1]);
 	if (ret) {
-		FT_PRINTERR("close", errno);
+		FT_PRINTERR("ft_close_fd", errno);
 		return ret;
 	}
 	if (ft_parent_proc) {
@@ -3401,7 +3409,7 @@ int ft_sock_listen(char *node, char *service)
 
 out:
 	if (ret && listen_sock >= 0)
-		close(listen_sock);
+		ft_close_fd(listen_sock);
 	freeaddrinfo(ai);
 	return ret;
 }
@@ -3427,7 +3435,7 @@ int ft_sock_connect(char *node, char *service)
 	ret = connect(sock, ai->ai_addr, ai->ai_addrlen);
 	if (ret) {
 		perror("connect");
-		close(sock);
+		ft_close_fd(sock);
 		goto free;
 	}
 
@@ -3458,13 +3466,13 @@ int ft_sock_send(int fd, void *msg, size_t len)
 	ssize_t ret, err = 0;
 
 	for (sent = 0; sent < len; ) {
-		ret = send(fd, ((char *) msg) + sent, len - sent, 0);
+		ret = ofi_send_socket(fd, ((char *) msg) + sent, len - sent, 0);
 		if (ret > 0) {
 			sent += ret;
-		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+		} else if (ofi_sockerr() == EAGAIN || ofi_sockerr() == EWOULDBLOCK) {
 			ft_force_progress();
 		} else {
-			err = -errno;
+			err = -ofi_sockerr();
 			break;
 		}
 	}
@@ -3478,16 +3486,16 @@ int ft_sock_recv(int fd, void *msg, size_t len)
 	ssize_t ret, err = 0;
 
 	for (rcvd = 0; rcvd < len; ) {
-		ret = recv(fd, ((char *) msg) + rcvd, len - rcvd, 0);
+		ret = ofi_recv_socket(fd, ((char *) msg) + rcvd, len - rcvd, 0);
 		if (ret > 0) {
 			rcvd += ret;
 		} else if (ret == 0) {
 			err = -FI_ENOTCONN;
 			break;
-		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+		} else if (ofi_sockerr() == EAGAIN || ofi_sockerr() == EWOULDBLOCK) {
 			ft_force_progress();
 		} else {
-			err = -errno;
+			err = -ofi_sockerr();
 			break;
 		}
 	}
@@ -3513,7 +3521,7 @@ int ft_sock_sync(int value)
 void ft_sock_shutdown(int fd)
 {
 	shutdown(fd, SHUT_RDWR);
-	close(fd);
+	ft_close_fd(fd);
 }
 
 static int ft_has_util_prefix(const char *str)

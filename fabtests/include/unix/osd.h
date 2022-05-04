@@ -37,6 +37,10 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#ifndef SOCKET
+#define SOCKET int
+#endif
+
 static inline int ft_startup(void)
 {
 	return 0;
@@ -54,6 +58,28 @@ static inline int ft_fd_nonblock(int fd)
 		return -errno;
 
 	return 0;
+}
+
+static inline int ft_close_fd(int fd)
+{
+	return close(fd);
+}
+
+static inline ssize_t ofi_recv_socket(SOCKET fd, void *buf, size_t count,
+				      int flags)
+{
+	return recv(fd, buf, count, flags);
+}
+
+static inline ssize_t ofi_send_socket(SOCKET fd, const void *buf, size_t count,
+				      int flags)
+{
+	return send(fd, buf, count, flags);
+}
+
+static inline int ofi_sockerr(void)
+{
+	return errno;
 }
 
 /* complex operations implementation */
