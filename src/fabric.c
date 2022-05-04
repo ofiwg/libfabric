@@ -41,6 +41,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <execinfo.h>
 
 #include <rdma/fi_errno.h>
 #include "ofi_util.h"
@@ -1337,6 +1338,31 @@ int DEFAULT_SYMVER_PRE(fi_link)(struct fi_info *prov_list,
 	return ofi_create_link(prov_list, fabric, caps, context);
 }
 DEFAULT_SYMVER(fi_link_, fi_link, FABRIC_1.7);
+
+void ofi_backtrace(FILE *file, char *prefix)
+{
+	int i, len;
+	int trace_size;
+	void * trace[32];
+	char buf[6];
+	int fd;
+
+	if (!file)
+		return;
+
+	fd = fileno(file);
+
+	trace_size = backtrace(trace, 32);
+
+	for (i = 0; i < trace_size; i++) {
+		if (NULL != prefix) {
+			write (fd, prefix, strlen (prefix));
+		}
+		len = snprintf (buf, sizeof(buf), "[%2d] ", i);
+		write (fd, buf, len);
+		backtrace_symbols_fd (&trace[i], 1, fd);
+	}
+}
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,

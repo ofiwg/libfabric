@@ -1003,7 +1003,7 @@ char *ofi_strdup_append(const char *head, const char *tail);
 // char *ofi_strdup_head(const char *str);
 // char *ofi_strdup_tail(const char *str);
 int ofi_exclude_prov_name(char **prov_name, const char *util_prov_name);
-
+void ofi_backtrace(FILE *file, char *prefix);
 
 int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
 		int readonly, void **mapped);
