@@ -181,11 +181,11 @@ static int server_connect()
 		pm_job.clients[i] = new_sock;
 		FT_DEBUG("connection established\n");
 	}
-	close(pm_job.sock);
+	ft_close_fd(pm_job.sock);
 	return 0;
 err:
 	while (i--) {
-		close(pm_job.clients[i]);
+		ft_close_fd(pm_job.clients[i]);
 	}
 	free(pm_job.clients);
 	return new_sock;
@@ -234,12 +234,12 @@ static void pm_finalize()
 	int i;
 
 	if (!pm_job.clients) {
-		close(pm_job.sock);
+		ft_close_fd(pm_job.sock);
 		return;
 	}
 
 	for (i = 0; i < pm_job.num_ranks-1; i++) {
-		close(pm_job.clients[i]);
+		ft_close_fd(pm_job.clients[i]);
 	}
 	free(pm_job.clients);
 }
@@ -313,6 +313,10 @@ int main(int argc, char **argv)
 			return EXIT_FAILURE;
 		}
 	}
+
+	ret = ft_startup();
+	if (ret)
+		goto err1;
 
 	ret = pm_get_oob_server_addr();
 	if (ret)
