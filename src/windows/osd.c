@@ -608,33 +608,35 @@ struct ofi_pollfds_ctx *ofi_pollfds_get_ctx(struct ofi_pollfds *pfds, int fd)
 	int i;
 
 	/* 0 is signaling fd */
-	for (i = 1; i < pfds->nfds; i++) {
-		if (pfds->fds[i].fd == fd) {
-			ctx = &pfds->ctx[i];
-			goto found;
-		}
+	for (i = 1; i < pfds->size; i++) {
+		ctx = &pfds->ctx[i];
+		if (ctx->index >= 0 && ctx->index < pfds->nfds &&
+		    pfds->fds[ctx->index].fd == fd)
+			return ctx;
 	}
 
 	return NULL;
-found:
-	if (ctx->index < 0 || ctx->index >= pfds->nfds ||
-	    pfds->fds[ctx->index].fd != fd)
-		return NULL;
-
-	return ctx;
 }
 
 struct ofi_pollfds_ctx *ofi_pollfds_alloc_ctx(struct ofi_pollfds *pfds, int fd)
 {
 	struct ofi_pollfds_ctx *ctx;
+	int i;
 
 	assert(!ofi_pollfds_get_ctx(pfds, fd));
-	if (pfds->nfds == pfds->size) {
-		if (ofi_pollfds_grow(pfds, pfds->size + 1))
-			return NULL;
+	/* 0 is signaling fd */
+	for (i = 1; i < pfds->size; i++) {
+		if (pfds->ctx[i].index == -1) {
+			ctx = &pfds->ctx[i];
+			goto insert;
+		}
 	}
 
+	if (ofi_pollfds_grow(pfds, pfds->size + 1))
+		return NULL;
+
 	ctx = &pfds->ctx[pfds->nfds];
+insert:
 	assert(ctx->index < 0);
 	ctx->index = pfds->nfds++;
 	return ctx;
