@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2022 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -175,15 +175,29 @@ int fi_opx_cq_enqueue_err (struct fi_opx_cq * opx_cq,
 		struct fi_opx_context_ext * ext,
 		const int lock_required);
 
-struct fi_ops_cq * fi_opx_cq_select_non_locking_ops(const enum fi_cq_format format,
+struct fi_ops_cq * fi_opx_cq_select_non_locking_2048_ops(const enum fi_cq_format format,
 							const enum ofi_reliability_kind reliability,
-							const uint16_t hdrq_offset,
 							const uint64_t comm_caps);
 
-struct fi_ops_cq * fi_opx_cq_select_locking_ops(const enum fi_cq_format format,
+struct fi_ops_cq * fi_opx_cq_select_non_locking_8192_ops(const enum fi_cq_format format,
 							const enum ofi_reliability_kind reliability,
-							const uint16_t hdrq_offset,
 							const uint64_t comm_caps);
+
+struct fi_ops_cq * fi_opx_cq_select_non_locking_runtime_ops(const enum fi_cq_format format,
+							const enum ofi_reliability_kind reliability,
+							const uint64_t comm_caps);
+
+struct fi_ops_cq * fi_opx_cq_select_locking_2048_ops(const enum fi_cq_format format,
+							const enum ofi_reliability_kind reliability,
+							const uint64_t comm_caps);
+
+struct fi_ops_cq * fi_opx_cq_select_locking_8192_ops(const enum fi_cq_format format,
+                                                        const enum ofi_reliability_kind reliability,
+                                                        const uint64_t comm_caps);
+
+struct fi_ops_cq * fi_opx_cq_select_locking_runtime_ops(const enum fi_cq_format format,
+                                                        const enum ofi_reliability_kind reliability,
+                                                        const uint64_t comm_caps);
 
 void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 
