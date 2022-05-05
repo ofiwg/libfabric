@@ -139,8 +139,14 @@ class Fabtest(Test):
             else:
                 print("{} Complex test file not found".format(self.core_prov))
 
-        if (self.ofi_build_mode != 'reg' or self.core_prov == 'udp'):
-            opts = "{} -e \'multinode,ubertest\' ".format(opts)
+        if (self.ofi_build_mode != 'reg' or self.core_prov == 'udp' or \
+            self.core_prov == 'psm3'):
+            opts = "{} -e \'ubertest".format(opts)
+
+            if (self.ofi_build_mode != 'reg' or self.core_prov == 'udp'):
+                opts = '{},multinode'.format(opts)
+
+            opts = '{}\''.format(opts)
 
         efile = self.get_exclude_file()
         if efile:
@@ -552,10 +558,11 @@ class MpiTestOSU(MpiTests):
 
     @property
     def execute_condn(self):
+        return False
         # see disable list for ompi failures
-        return True if ((self.mpi == 'impi' or self.mpi == 'mpich') and \
-                        (self.core_prov == 'verbs')) \
-                    else False
+        #return True if ((self.mpi == 'impi' or self.mpi == 'mpich') and \
+        #                (self.core_prov == 'verbs')) \
+        #            else False
 
     def execute_cmd(self):
         assert(self.osu_mpi_path)
