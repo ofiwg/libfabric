@@ -1,6 +1,14 @@
 
 properties([disableConcurrentBuilds(abortPrevious: true)])
 def DO_RUN=1
+def TARGET="main"
+
+def check_target() {
+    echo "CHANGE_TARGET = ${env.CHANGE_TARET}"
+    if (changeRequest()) {
+        TARGET = env.CHANGE_TARGET
+    }
+}
 
 def skip() {
     def file = "${env.WORKSPACE}/commit_id"
@@ -22,6 +30,11 @@ def skip() {
         return 0
     }
 
+    if (changeStrings.isEmpty()) {
+        echo "DONT RUN!"
+        return 0
+    }
+
     return 1
 }
 
@@ -39,12 +52,14 @@ pipeline {
     stages {
         stage ('opt-out') {
             steps {
+                script {
+                    check_target()
+                }
                 withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
                   sh """
                     mkdir py_scripts
                     git clone ${env.UPSTREAM} py_scripts
-                    python3.7 py_scripts/contrib/intel/jenkins/build.py --build_item=skip
-
+                    ${env.SKIP_PATH}/skip.sh ${env.WORKSPACE} ${TARGET}
                   """
                 }
                 script {
