@@ -257,8 +257,9 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
  *              Possible error code include (but not limited to):
  * 		-FI_EAGAIN	temporary out of resource
  */
-ssize_t rxr_pkt_post(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
-		     int pkt_type, bool inject, uint64_t flags)
+static inline
+ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
+			 int pkt_type, bool inject, uint64_t flags)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct rdm_peer *peer;
@@ -321,7 +322,49 @@ ssize_t rxr_pkt_post(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
 }
 
 /**
- * @brief post one packet. Queue the send if encountered -FI_EAGAIN.
+ * @brief post packet(s) according to packet type.
+ *
+ * Depend on packet type, this function may post one packet or multiple packets.
+ * This is because some REQ packet types such as MEDIUM RTM must be sent as a series of packets.
+ *
+ * @param[in]   rxr_ep          endpoint
+ * @param[in]   x_entry         pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
+ * @param[in]   pkt_type        packet type.
+ * @param[in]   inject          send control packet via inject or not.
+ * @return      On success return 0, otherwise return a negative libfabric error code. Possible error codes include:
+ * 		-FI_EAGAIN	temporarily  out of resource
+ */
+ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int pkt_type, bool inject, uint64_t flags)
+{
+	ssize_t err;
+
+	if (pkt_type == RXR_MEDIUM_TAGRTM_PKT ||
+	    pkt_type == RXR_MEDIUM_MSGRTM_PKT ||
+	    pkt_type == RXR_DC_MEDIUM_MSGRTM_PKT ||
+	    pkt_type == RXR_DC_MEDIUM_TAGRTM_PKT) {
+		assert(!inject);
+
+		while (tx_entry->bytes_sent < tx_entry->total_len) {
+			err = rxr_pkt_post_one(ep, tx_entry, pkt_type, 0, flags);
+			if (OFI_UNLIKELY(err))
+				return err;
+		}
+
+		return 0;
+	}
+
+	return rxr_pkt_post_one(ep, tx_entry, pkt_type, inject, flags);
+}
+
+/**
+ * @brief post packet(s) according to packet type. Queue the post if -FI_EAGAIN is encountered.
+ *
+ * This function will cal rxr_pkt_post() to post packet(s) according to packet type.
+ * If rxr_pkt_post() returned -FI_EAGAIN, this function will put the tx_entry in rxr_ep's
+ * queued_ctrl_list. The progress engine will try to post the packet later.
+ *
+ * This function is called by rxr_pkt_post_req() to post MEDIUM RTM packets, and is
+ * called by packet handler to post responsive ctrl packet (such as EOR and CTS).
  *
  * @param[in]   rxr_ep          endpoint
  * @param[in]   x_entry         pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
@@ -359,9 +402,21 @@ ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry, 
 }
 
 /**
- * @brief post req packet(s). Queue the post if necessary
+ * @brief post req packet(s). Queue the post for medium RTM
  *
- * Some REQ packet types must be queued.
+ * We must use rxr_pkt_post_or_queue() for Medium RTM.
+ *
+ * This is for medium RTM, rxr_pkt_post() will send multiple
+ * packets.
+ *
+ * It can happen that 1st packet was sent successfully, and the next
+ * one encountered -FI_EAGAIN, which will cause rxr_pkt_post()
+ * will return -FI_EAGAIN.
+ *
+ * If this function uses rxr_pkt_post() for medium RTM, then -FI_EAGAIN will
+ * be returned to user application. User application will will try to send
+ * the entire message again. This would cause the receiver to receive duplicated
+ * MEDIUM RTM packets (because 1st packet was sent successfully).
  *
  * @param[in]   rxr_ep          endpoint
  * @param[in]   x_entry         pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
@@ -371,8 +426,6 @@ ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry, 
  */
 ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int req_type, bool inject, uint64_t flags)
 {
-	ssize_t err;
-
 	assert(tx_entry->type == RXR_TX_ENTRY);
 	assert(req_type >= RXR_REQ_PKT_BEGIN);
 
@@ -382,28 +435,11 @@ ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int r
 	    req_type == RXR_DC_MEDIUM_TAGRTM_PKT) {
 		assert(!inject);
 
-		while (tx_entry->bytes_sent < tx_entry->total_len) {
-			err = rxr_pkt_post(ep, tx_entry, req_type, 0, flags);
-			if (OFI_UNLIKELY(err == -FI_EAGAIN)) {
-				assert(!(tx_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR));
-				tx_entry->state = RXR_TX_QUEUED_CTRL;
-				tx_entry->queued_ctrl.type = req_type;
-				tx_entry->queued_ctrl.inject = inject;
-				dlist_insert_tail(&tx_entry->queued_ctrl_entry,
-						  &ep->tx_entry_queued_ctrl_list);
-				return 0;
-			}
-
-			if (OFI_UNLIKELY(err))
-				return err;
-		}
-
-		return 0;
+		return rxr_pkt_post_or_queue(ep, tx_entry, req_type, flags);
 	}
 
 	return rxr_pkt_post(ep, tx_entry, req_type, inject, flags);
 }
-
 
 /*
  * This function is used for any extra feature that does not have an alternative.
