@@ -552,10 +552,11 @@ class MpiTestOSU(MpiTests):
 
     @property
     def execute_condn(self):
+        return False
         # see disable list for ompi failures
-        return True if ((self.mpi == 'impi' or self.mpi == 'mpich') and \
-                        (self.core_prov == 'verbs')) \
-                    else False
+        #return True if ((self.mpi == 'impi' or self.mpi == 'mpich') and \
+        #                (self.core_prov == 'verbs')) \
+        #            else False
 
     def execute_cmd(self):
         assert(self.osu_mpi_path)
