@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021 by Cornelis Networks.
+ * Copyright (C) 2022 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -46,9 +46,7 @@
 /* Number of types in enum fi_cq_format */
 #define FI_CQ_FORMAT_COUNT 5
 
-#define FI_OPX_HDRQ_MASK_COUNT 3
-
-typedef struct fi_ops_cq op_matrix_t[FI_CQ_FORMAT_COUNT][OFI_RELIABILITY_KIND_COUNT][FI_OPX_HDRQ_MASK_COUNT][FI_OPX_COMMS_COUNT];
+typedef struct fi_ops_cq op_matrix_t[FI_CQ_FORMAT_COUNT][OFI_RELIABILITY_KIND_COUNT][FI_OPX_COMMS_COUNT];
 
 static ssize_t
 fi_opx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)

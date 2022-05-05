@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 by Cornelis Networks.
+ * Copyright (C) 2022 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -198,28 +198,26 @@ struct fi_ops_cq * fi_opx_cq_select_ops(const enum fi_cq_format format,
 	// 2048 computed mask is FI_OPX_HDRQ_MASK_2048, and is array element 1
 	// 8192 computed mask is FI_OPX_HDRQ_MASK_8192 and is array element 2
 	// Runtime handle is array element 0, use the computed value of fi_opx_hfi1_rxe_static.rx_poll_mask
-	uint16_t  hdrq_offset_array_index;
-	switch(rcvhdrcnt) {	
-		case 2048:
-			hdrq_offset_array_index = 1;
-			break;
-		case 8192:
-			hdrq_offset_array_index = 2;
-			break;
-		default:
-			hdrq_offset_array_index = 0;
-			FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");			
-			break;
-	}
 
 	if (OFI_UNLIKELY(fi_opx_threading_unknown(threading))) {
 		abort();
 	}
 
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading);	
 
-	return lock_required ? fi_opx_cq_select_locking_ops(format, reliability, hdrq_offset_array_index, comm_caps) :
-	                       fi_opx_cq_select_non_locking_ops(format, reliability, hdrq_offset_array_index, comm_caps);
+	switch(rcvhdrcnt) {	
+		case 2048:
+			return lock_required ? fi_opx_cq_select_locking_2048_ops(format, reliability, comm_caps) :
+			                       fi_opx_cq_select_non_locking_2048_ops(format, reliability, comm_caps);
+		case 8192:
+			return lock_required ? fi_opx_cq_select_locking_8192_ops(format, reliability, comm_caps) :
+			                       fi_opx_cq_select_non_locking_8192_ops(format, reliability, comm_caps);
+		default:
+			FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "WARNING: non-optimal setting specified for hfi1 rcvhdrcnt.  Optimal values are 2048 and 8192\n");			
+			return lock_required ? fi_opx_cq_select_locking_runtime_ops(format, reliability, comm_caps) :
+			                       fi_opx_cq_select_non_locking_runtime_ops(format, reliability, comm_caps);
+	}
+
 }
 
 int fi_opx_cq_open(struct fid_domain *dom,

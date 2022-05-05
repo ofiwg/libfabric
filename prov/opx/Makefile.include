@@ -1,6 +1,6 @@
 #
 # Copyright (C) 2016 by Argonne National Laboratory.
-# Copyright (C) 2021 by Cornelis Networks.
+# Copyright (C) 2022 by Cornelis Networks.
 #
 # This software is available to you under a choice of one of two
 # licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,7 +38,11 @@ opx_files =									\
 		prov/opx/src/fi_opx_cntr.c					\
 		prov/opx/src/fi_opx_cq.c					\
 		prov/opx/src/fi_opx_cq_ops_table_locking.c			\
+		prov/opx/src/fi_opx_cq_ops_table_locking_8192.c			\
+		prov/opx/src/fi_opx_cq_ops_table_locking_runtime.c		\
 		prov/opx/src/fi_opx_cq_ops_table_non_locking.c			\
+                prov/opx/src/fi_opx_cq_ops_table_non_locking_8192.c             \
+                prov/opx/src/fi_opx_cq_ops_table_non_locking_runtime.c          \
 		prov/opx/src/fi_opx_domain.c					\
 		prov/opx/src/fi_opx_ep.c					\
 		prov/opx/src/fi_opx_eq.c					\
