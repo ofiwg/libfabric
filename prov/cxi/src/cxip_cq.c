@@ -553,7 +553,7 @@ out:
 }
 
 /*
- * cxip_util_cq_enable() - Progress function wrapper for utility CQ.
+ * cxip_util_cq_progress() - Progress function wrapper for utility CQ.
  */
 void cxip_util_cq_progress(struct util_cq *util_cq)
 {

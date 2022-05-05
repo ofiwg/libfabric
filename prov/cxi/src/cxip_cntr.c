@@ -368,7 +368,7 @@ static void cxip_cntr_progress(struct cxip_cntr *cntr)
 			continue;
 		}
 
-		cxip_cq_progress(cq);
+		cxip_util_cq_progress(&cq->util_cq);
 	}
 
 	fastlock_release(&cntr->lock);

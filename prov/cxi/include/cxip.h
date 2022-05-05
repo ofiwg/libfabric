@@ -2303,6 +2303,7 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
 				   void *req_ctx);
 void cxip_cq_req_free(struct cxip_req *req);
 void cxip_cq_progress(struct cxip_cq *cq);
+void cxip_util_cq_progress(struct util_cq *util_cq);
 int cxip_cq_enable(struct cxip_cq *cxi_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
