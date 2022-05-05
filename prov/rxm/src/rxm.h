@@ -442,7 +442,7 @@ union rxm_sar_ctrl_data {
 static inline enum rxm_sar_seg_type
 rxm_sar_get_seg_type(struct ofi_ctrl_hdr *ctrl_hdr)
 {
-	return ((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->seg_type;
+	return (uint8_t)((union rxm_sar_ctrl_data *)&(ctrl_hdr->ctrl_data))->seg_type & 0x3;
 }
 
 static inline void
