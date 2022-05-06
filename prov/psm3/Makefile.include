@@ -267,13 +267,13 @@ prov_psm3_psm3_libpsm3i_la_DEPENDENCIES = \
 	prov/psm3/psm3/libhal_verbs.la \
 	prov/psm3/psm3/libhal_sockets.la
 
-_psm3_extra_dist = \
+# Mirror EXTRA_DIST to end of file
+prov_psm3_extra_dist = \
 	prov/psm3/psm3/include/psm3_rbtree.c \
 	prov/psm3/psm3/hal_verbs/verbs_spio.c \
 	prov/psm3/psm3/hal_sockets/sockets_spio.c \
 	prov/psm3/psm3/utils/utils_dwordcpy-x86_64-fast.S \
 	prov/psm3/VERSION
-EXTRA_DIST += $(_psm3_extra_dist)
 
 chksum_srcs += \
 	$(prov_psm3_psm3_libptl_am_la_SOURCES) \
@@ -283,7 +283,7 @@ chksum_srcs += \
 	$(prov_psm3_psm3_libhal_verbs_la_SOURCES) \
 	$(prov_psm3_psm3_libhal_sockets_la_SOURCES) \
 	$(prov_psm3_psm3_libpsm3i_la_SOURCES) \
-	$(_psm3_extra_dist)
+	$(prov_psm3_extra_dist)
 
 _psm3_LIBS = prov/psm3/psm3/libpsm3i.la
 
@@ -334,3 +334,9 @@ endif HAVE_PSM3
 
 prov_dist_man_pages += man/man7/fi_psm3.7
 
+prov_extra_dist += \
+	prov/psm3/psm3/include/psm3_rbtree.c \
+	prov/psm3/psm3/hal_verbs/verbs_spio.c \
+	prov/psm3/psm3/hal_sockets/sockets_spio.c \
+	prov/psm3/psm3/utils/utils_dwordcpy-x86_64-fast.S \
+	prov/psm3/VERSION
