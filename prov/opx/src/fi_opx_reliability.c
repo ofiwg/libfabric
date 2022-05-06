@@ -2356,8 +2356,8 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 			 * old packet or REALLY old packet.. drop it
 			 */
 #ifdef OPX_RELIABILITY_DEBUG
-			fprintf(stderr, "(rx) packet %"PRIx64" Dropping %s duplicate packet. psn_24 = %u, psn_64 = %"PRIx64", next_psn = %"PRIx64"\n",
-				key.value, (psn_64 < next_psn) ? "" : "really old", psn, psn_64, next_psn);
+			fprintf(stderr, "(rx) packet %"PRIx64" Dropping%s duplicate packet. psn_24 = %u, psn_64 = %"PRIx64", next_psn = %"PRIx64"\n",
+				key.value, (psn_64 < next_psn) ? "" : " really old", psn, psn_64, next_psn);
 #endif
 			/*
 			 * Send a preemptive ACK here for the packet, since we've already received it.
@@ -2378,16 +2378,17 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 		 * Else This packet's PSN must be > next_psn (if they were equal, we would not be in the
 		 * higher-level else leg for unexpected packet received)
 		 *
-		 * Send a preemptive NACK for the packet we expected to get (and every one in between)...
+		 * Send a preemptive NACK for the packet we expected to get (and every one in between), but
+		 * limit the range size so as not to overwhelm the fabric with too many replays at once.
 		 * NOTE: We'll do this regardless of what preemptive ack rate is set to for the normal flow.
 		 */
 		ssize_t rc __attribute__ ((unused));
 		rc = fi_opx_hfi1_tx_reliability_inject(ep, key.value, key.slid,
 						origin_rx,
 						next_psn, /* psn_start */
-						MAX(psn_64 - next_psn + 1, 128), /* psn_count */
+						MIN(psn_64 - next_psn + 1, 128), /* psn_count */
 						FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK);
-		INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, key.value, next_psn, MAX(psn_64 - next_psn + 1, 128));
+		INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, key.value, next_psn, MIN(psn_64 - next_psn + 1, 128));
 
 		if (flow->uepkt == NULL) {
 			/*
