@@ -440,7 +440,7 @@ size_t ofi_av_size(struct util_av *av)
 static int util_verify_av_util_attr(struct util_domain *domain,
 				    const struct util_av_attr *util_attr)
 {
-	if (util_attr->flags) {
+	if (util_attr->flags & ~(OFI_AV_DYN_ADDRLEN)) {
 		FI_WARN(domain->prov, FI_LOG_AV, "invalid internal flags\n");
 		return -FI_EINVAL;
 	}
@@ -632,9 +632,19 @@ int ofi_ip_av_insertv(struct util_av *av, const void *addr, size_t addrlen,
 	int *sync_err = NULL;
 	size_t i;
 
-	assert(av->addrlen >= addrlen);
-	if (av->addrlen > addrlen)
+	if (!count)
+		goto done;
+
+	if (addrlen > av->addrlen) {
+		FI_WARN(av->prov, FI_LOG_AV, "Address too large for AV\n");
+		return -FI_EINVAL;
+	}
+
+	if (!(av->flags & OFI_AV_DYN_ADDRLEN)) {
 		av->addrlen = addrlen;
+		av->flags &= ~OFI_AV_DYN_ADDRLEN;
+	}
+	assert(av->addrlen == addrlen);
 
 	FI_DBG(av->prov, FI_LOG_AV, "inserting %zu addresses\n", count);
 	if (flags & FI_SYNC_ERR) {
@@ -653,6 +663,7 @@ int ofi_ip_av_insertv(struct util_av *av, const void *addr, size_t addrlen,
 			sync_err[i] = -ret;
 	}
 
+done:
 	FI_DBG(av->prov, FI_LOG_AV, "%d addresses successful\n", success_cnt);
 	if (av->eq) {
 		ofi_av_write_event(av, success_cnt, 0, context);
@@ -966,22 +977,24 @@ static struct fi_ops ip_av_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-int ofi_ip_av_create_flags(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-			   struct fid_av **av, void *context, int flags)
+int ofi_ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		     struct fid_av **av, void *context)
 {
 	struct util_domain *domain;
-	struct util_av_attr util_attr;
+	struct util_av_attr util_attr = { 0 };
 	struct util_av *util_av;
 	int ret;
 
 	domain = container_of(domain_fid, struct util_domain, domain_fid);
-	if (domain->addr_format == FI_SOCKADDR_IN)
-		util_attr.addrlen = sizeof(struct sockaddr_in);
-	else
-		util_attr.addrlen = sizeof(struct sockaddr_in6);
 
-	util_attr.flags = flags;
-	util_attr.context_len = 0;
+	if (domain->addr_format == FI_SOCKADDR_IN) {
+		util_attr.addrlen = sizeof(struct sockaddr_in);
+	} else if (domain->addr_format == FI_SOCKADDR_IN6) {
+		util_attr.addrlen = sizeof(struct sockaddr_in6);
+	} else {
+		util_attr.addrlen = sizeof(struct sockaddr_in6);
+		util_attr.flags = OFI_AV_DYN_ADDRLEN;
+	}
 
 	if (attr->type == FI_AV_UNSPEC)
 		attr->type = FI_AV_MAP;
@@ -1000,10 +1013,4 @@ int ofi_ip_av_create_flags(struct fid_domain *domain_fid, struct fi_av_attr *att
 	(*av)->fid.ops = &ip_av_fi_ops;
 	(*av)->ops = &ip_av_ops;
 	return 0;
-}
-
-int ofi_ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		     struct fid_av **av, void *context)
-{
-	return ofi_ip_av_create_flags(domain_fid, attr, av, context, 0);
 }
