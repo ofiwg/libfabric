@@ -158,33 +158,37 @@ struct fid_peer_srx;
 struct fi_peer_rx_entry {
 	struct fi_peer_rx_entry *next;
 	struct fi_peer_rx_entry *prev;
+	struct fid_peer_srx *srx;
 	fi_addr_t addr;
 	size_t size;
 	uint64_t tag;
+	uint64_t flags;
 	void *context;
 	size_t count;
 	void **desc;
-	struct iovec iov[];
+	void *peer_context;
+	void *owner_context;
+	struct iovec *iov;
 };
 
 struct fi_ops_srx_owner {
 	size_t	size;
-	int	(*get_msg_entry)(struct fid_peer_srx *srx,
-			struct fi_peer_rx_entry *entry);
-	int	(*get_tag_entry)(struct fid_peer_srx *srx,
-			struct fi_peer_rx_entry *entry);
+	int	(*get_msg)(struct fid_peer_srx *srx, fi_addr_t addr,
+			size_t size, struct fi_peer_rx_entry **entry);
+	int	(*get_tag)(struct fid_peer_srx *srx, fi_addr_t addr,
+			uint64_t tag, struct fi_peer_rx_entry **entry);
+	int	(*queue_msg)(struct fi_peer_rx_entry *entry);
+	int	(*queue_tag)(struct fi_peer_rx_entry *entry);
+
+	void	(*free_entry)(struct fi_peer_rx_entry *entry);
 };
 
 struct fi_ops_srx_peer {
 	size_t	size;
-	int	(*start_msg)(struct fid_peer_srx *srx,
-			struct fi_peer_rx_entry *entry);
-	int	(*start_tag)(struct fid_peer_srx *srx,
-			struct fi_peer_rx_entry *entry);
-	int	(*discard_msg)(struct fid_peer_srx *srx,
-			struct fi_peer_rx_entry *entry);
-	int	(*discard_tag)(struct fid_peer_srx *srx,
-			struct fi_peer_rx_entry *entry);
+	int	(*start_msg)(struct fi_peer_rx_entry *entry);
+	int	(*start_tag)(struct fi_peer_rx_entry *entry);
+	int	(*discard_msg)(struct fi_peer_rx_entry *entry);
+	int	(*discard_tag)(struct fi_peer_rx_entry *entry);
 };
 
 struct fid_peer_srx {
