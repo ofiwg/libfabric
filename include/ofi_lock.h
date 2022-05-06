@@ -279,6 +279,13 @@ static inline void ofi_mutex_unlock_noop(ofi_mutex_t *lock)
 	lock->in_use = 0;
 }
 
+static inline int
+ofi_pthread_wait_cond(pthread_cond_t *cond, ofi_mutex_t *lock, int timeout_ms)
+{
+	assert(lock->is_initialized);
+	return ofi_wait_cond(cond, &lock->impl, timeout_ms);
+}
+
 #else /* !ENABLE_DEBUG */
 
 #  define ofi_mutex_t ofi_mutex_t_
@@ -298,6 +305,9 @@ static inline void ofi_mutex_unlock_noop(ofi_mutex_t *lock)
 {
 	(void) lock;
 }
+
+#define ofi_pthread_wait_cond(cond, mut, timeout_ms) \
+	ofi_wait_cond(cond, mut, timeout_ms)
 
 #endif
 
