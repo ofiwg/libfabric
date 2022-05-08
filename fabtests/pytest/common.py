@@ -67,19 +67,25 @@ class UnitTest:
 
 class ClientServerTest:
 
-    def __init__(self, cmdline_args, executable, iteration_type=None, completion_type="transmit_complete",
-                 prefix_type="wout_prefix", datacheck_type="wout_datacheck", message_size=None,
-                 memory_type="host_to_host", timeout=None):
+    def __init__(self, cmdline_args, executable,
+                 iteration_type=None,
+                 completion_type="transmit_complete",
+                 prefix_type="wout_prefix",
+                 datacheck_type="wout_datacheck",
+                 message_size=None,
+                 memory_type="host_to_host",
+                 timeout=None,
+                 warmup_iteration_type=None):
 
         self._cmdline_args = cmdline_args
         self._server_base_command = self.prepare_base_command("server", executable, iteration_type,
                                                               completion_type, prefix_type,
                                                               datacheck_type, message_size,
-                                                              memory_type)
+                                                              memory_type, warmup_iteration_type)
         self._client_base_command = self.prepare_base_command("client", executable, iteration_type,
                                                               completion_type, prefix_type,
                                                               datacheck_type, message_size,
-                                                              memory_type)
+                                                              memory_type, warmup_iteration_type)
 
         if timeout:
             self._timeout = timeout
@@ -89,9 +95,14 @@ class ClientServerTest:
         self._server_command = cmdline_args.populate_command(self._server_base_command, "server", self._timeout)
         self._client_command = cmdline_args.populate_command(self._client_base_command, "client", self._timeout)
 
-    def prepare_base_command(self, command_type, executable, iteration_type=None, completion_type="transmit_complete",
-                             prefix_type="wout_prefix", datacheck_type="wout_datacheck", message_size=None,
-                             memory_type="host_to_host"):
+    def prepare_base_command(self, command_type, executable,
+                             iteration_type=None,
+                             completion_type="transmit_complete",
+                             prefix_type="wout_prefix",
+                             datacheck_type="wout_datacheck",
+                             message_size=None,
+                             memory_type="host_to_host",
+                             warmup_iteration_type=None):
         if executable == "fi_ubertest":
             return "fi_ubertest"
 
@@ -102,6 +113,7 @@ class ClientServerTest:
                 -k: force prefix mode (not force prefix mode if not specified)
                 -v: data verification (no data verification if not specified)
                 -S: message size
+                -w: number of warmup iterations
             this function will construct a command with these options
         '''
 
@@ -116,6 +128,9 @@ class ClientServerTest:
             pass
         else:
             command += " -I " + str(iteration_type)
+
+        if warmup_iteration_type:
+            command += " -w " + str(warmup_iteration_type)
 
         if completion_type == "delivery_complete":
             command += " -U"
