@@ -150,7 +150,8 @@ nobase_dist_config_DATA = \
 	pytest/efa/test_unexpected_msg.py \
 	pytest/efa/test_multi_recv.py \
 	pytest/efa/test_rnr.py \
-	pytest/efa/test_efa_info.py
+	pytest/efa/test_efa_info.py \
+	pytest/efa/test_runt.py
 
 noinst_LTLIBRARIES = libfabtests.la
 
