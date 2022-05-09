@@ -618,12 +618,7 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 		goto unlock;
 	}
 
-	/* Assign resources to the libfabric domain. */
-	ret = cxip_domain_enable(ep_obj->domain);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("cxip_domain_enable returned: %d\n", ret);
-		goto unlock;
-	}
+	assert(ep_obj->domain->enabled);
 
 	/* src_addr.pid may be C_PID_ANY at this point. */
 	ret = cxil_reserve_domain(ep_obj->domain->lni->lni,

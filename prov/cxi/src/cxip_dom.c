@@ -27,7 +27,7 @@ extern struct fi_ops_mr cxip_dom_mr_ops;
  * Allocate hardware resources and initialize software to prepare the Domain
  * for use.
  */
-int cxip_domain_enable(struct cxip_domain *dom)
+static int cxip_domain_enable(struct cxip_domain *dom)
 {
 	int ret = FI_SUCCESS;
 
@@ -912,10 +912,19 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	cxi_domain->hmem_ops.copy_from_hmem_iov = ofi_copy_from_hmem_iov;
 	cxi_domain->hmem_ops.copy_to_hmem_iov = ofi_copy_to_hmem_iov;
 
-	*dom = &cxi_domain->util_domain.domain_fid;
+	/* Allocate/initialize domain hardware resources */
+	ret = cxip_domain_enable(cxi_domain);
+	if (ret) {
+		CXIP_WARN("Resource allocation failed: %d: %s\n",
+			  ret, fi_strerror(-ret));
+		goto cleanup_dom;
+	}
 
+	*dom = &cxi_domain->util_domain.domain_fid;
 	return 0;
 
+cleanup_dom:
+	fastlock_destroy(&cxi_domain->lock);
 close_util_dom:
 	ofi_domain_close(&cxi_domain->util_domain);
 free_dom:

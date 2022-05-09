@@ -146,17 +146,7 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 		return FI_SUCCESS;
 	}
 
-	if (!dom->enabled) {
-		fastlock_release(&dom->lock);
-
-		ret = cxip_domain_enable(dom);
-		if (ret != FI_SUCCESS) {
-			CXIP_WARN("cxip_domain_enable returned: %d\n", ret);
-			return ret;
-		}
-
-		fastlock_acquire(&dom->lock);
-	}
+	assert(dom->enabled);
 
 	cq_opts.count = 64;
 	cq_opts.flags = CXI_CQ_IS_TX | CXI_CQ_TX_WITH_TRIG_CMDS;

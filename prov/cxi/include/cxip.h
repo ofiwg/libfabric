@@ -2237,7 +2237,6 @@ void cxip_cmdq_free(struct cxip_cmdq *cmdq);
 int cxip_cmdq_emit_c_state(struct cxip_cmdq *cmdq,
 			   const struct c_cstate_cmd *cmd);
 
-int cxip_domain_enable(struct cxip_domain *dom);
 int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context);
 
