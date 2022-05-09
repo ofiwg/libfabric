@@ -112,6 +112,12 @@ static int av_removal_test(void)
 	(void) ft_sync();
 out:
 	fprintf(stdout, "%s\n", ret ? "FAIL" : "PASS");
+	/* After calling fi_dupinfo, libfabric owns all the memory for hints,
+	 * so we want to free it all here with fi_freeinfo rather than letting
+	 * ft_free_res do it under the assumption that parts are owned by the
+	 * application. */
+	fi_freeinfo(hints);
+	hints = NULL;
 	ft_free_res();
 	return ret;
 }
@@ -174,6 +180,12 @@ static int av_reinsert_test(void)
 	(void) ft_sync();
 out:
 	fprintf(stdout, "%s\n", ret ? "FAIL" : "PASS");
+	/* After calling fi_dupinfo, libfabric owns all the memory for hints,
+	 * so we want to free it all here with fi_freeinfo rather than letting
+	 * ft_free_res do it under the assumption that parts are owned by the
+	 * application. */
+	fi_freeinfo(hints);
+	hints = NULL;
 	ft_free_res();
 	return ret;
 }

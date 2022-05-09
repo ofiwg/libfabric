@@ -780,6 +780,15 @@ static int getinfo_unit_test(char *node, char *service, uint64_t flags,
 			break;
 	}
 out:
+	/* If init was called, then there is a chance that the hints were
+	 * modified so that the application now owns some of the memory.
+	 * At the moment, only invalid_dom does this and the domain name
+	 * is the only application owned memory. Free the application owned
+	 * memory so that fi_freeinfo only frees memory that it owns. */
+	if (init) {
+		free(test_hints->domain_attr->name);
+		test_hints->domain_attr->name = NULL;
+	}
 	fi_freeinfo(test_hints);
 	fi_freeinfo(info);
 	return ret;

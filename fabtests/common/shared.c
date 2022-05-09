@@ -1626,6 +1626,41 @@ static void ft_close_fids(void)
 	FT_CLOSE_FID(fabric);
 }
 
+/* We need to free any data that we allocated before freeing the
+ * hints.  Windows doesn't like it when a library frees memory that
+ * was allocated by the application.
+ */
+void ft_freehints(struct fi_info *hints)
+{
+	if (!hints)
+		return;
+
+	if (hints->domain_attr->name) {
+		free(hints->domain_attr->name);
+		hints->domain_attr->name = NULL;
+	}
+	if (hints->fabric_attr->name) {
+		free(hints->fabric_attr->name);
+		hints->fabric_attr->name = NULL;
+	}
+	if (hints->fabric_attr->prov_name) {
+		free(hints->fabric_attr->prov_name);
+		hints->fabric_attr->prov_name = NULL;
+	}
+	if (hints->src_addr) {
+		free(hints->src_addr);
+		hints->src_addr = NULL;
+		hints->src_addrlen = 0;
+	}
+	if (hints->dest_addr) {
+		free(hints->dest_addr);
+		hints->dest_addr = NULL;
+		hints->dest_addrlen = 0;
+	}
+
+	fi_freeinfo(hints);
+}
+
 void ft_free_res(void)
 {
 	int ret;
@@ -1662,7 +1697,7 @@ void ft_free_res(void)
 		fi = NULL;
 	}
 	if (hints) {
-		fi_freeinfo(hints);
+		ft_freehints(hints);
 		hints = NULL;
 	}
 
@@ -3116,26 +3151,26 @@ void ft_parse_hmem_opts(int op, char *optarg, struct ft_opts *opts)
 
 void ft_parse_opts_range(char* optarg)
 {
-       size_t start, inc, end;
-       int i, ret;
+	size_t start, inc, end;
+	int i, ret;
 
-       ret = sscanf(optarg, "r:%ld,%ld,%ld", &start, &inc, &end);
-       if (ret != 3) {
-	      perror("sscanf");
-	      exit(EXIT_FAILURE);
-       }
-       assert(end >= start && inc > 0);
-       test_cnt = (end - start) / inc + 1;
-       range_test_size = calloc(test_cnt, sizeof(*range_test_size));
-       if (!range_test_size) {
-	       perror("calloc");
-	       exit(EXIT_FAILURE);
-       }
-       for (i = 0; i < test_cnt && i < end; i++) {
-	       range_test_size[i].size = start + (i * inc);
-	       range_test_size[i].enable_flags = 0;
-       }
-       test_size = range_test_size;
+	ret = sscanf(optarg, "r:%ld,%ld,%ld", &start, &inc, &end);
+	if (ret != 3) {
+		perror("sscanf");
+		exit(EXIT_FAILURE);
+	}
+	assert(end >= start && inc > 0);
+	test_cnt = (end - start) / inc + 1;
+	range_test_size = calloc(test_cnt, sizeof(*range_test_size));
+	if (!range_test_size) {
+		perror("calloc");
+		exit(EXIT_FAILURE);
+	}
+	for (i = 0; i < test_cnt && i < end; i++) {
+		range_test_size[i].size = start + (i * inc);
+		range_test_size[i].enable_flags = 0;
+	}
+	test_size = range_test_size;
 }
 
 void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
@@ -3450,7 +3485,7 @@ int ft_sock_accept()
 	int ret;
 
 	sock = accept(listen_sock, NULL, 0);
-        if (sock < 0) {
+	if (sock < 0) {
 		ret = sock;
 		perror("accept");
 		return ret;
