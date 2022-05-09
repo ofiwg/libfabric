@@ -50,7 +50,6 @@
 
 
 static size_t concurrent_msgs = 5;
-static size_t num_iters = 600;
 static bool send_data = false;
 
 
@@ -129,7 +128,7 @@ static int run_test_loop(void)
 	char *op_buf;
 	int i, j;
 
-	for (i = 0; i < num_iters; i++) {
+	for (i = 0; i < opts.iterations; i++) {
 		for (j = 0; j < concurrent_msgs; j++) {
 			op_buf = get_tx_buf(j);
 			if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
@@ -192,7 +191,7 @@ static int run_test_loop(void)
 
 		if (i % 100 == 0)
 			printf("PID %d GOOD iter %d/%ld completed\n",
-				getpid(), i, num_iters);
+				getpid(), i, opts.iterations);
 	}
 
 	(void) ft_sync();
@@ -223,6 +222,7 @@ int main(int argc, char **argv)
 	int ret;
 
 	opts = INIT_OPTS;
+	opts.iterations = 600; // Change default from 1000.
 	opts.options |= FT_OPT_OOB_CTRL | FT_OPT_SKIP_MSG_ALLOC;
 	opts.mr_mode = FI_MR_LOCAL | FI_MR_ALLOCATED;
 
