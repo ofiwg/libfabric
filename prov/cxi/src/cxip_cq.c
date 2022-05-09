@@ -657,8 +657,14 @@ mmap_success:
 	eq_attr.queue = eq->buf;
 	eq_attr.queue_len = eq->len;
 	eq_attr.flags |= CXI_EQ_TGT_LONG | CXI_EQ_EC_DISABLE;
-	ret = cxil_alloc_evtq(cq->domain->lni->lni, eq->md, &eq_attr, NULL,
-			      NULL, &eq->eq);
+
+	/* CPU number will be ignored if invalid */
+	if (cq->attr.flags & FI_AFFINITY && cq->attr.signaling_vector > 0)
+		eq_attr.cpu_affinity = cq->attr.signaling_vector;
+
+	/* cq->priv_wait is NULL if not backed by wait object */
+	ret = cxil_alloc_evtq(cq->domain->lni->lni, eq->md, &eq_attr,
+			      cq->priv_wait, NULL, &eq->eq);
 	if (ret) {
 		CXIP_WARN("Failed to allocated EQ: %d\n", ret);
 		goto err_unmap_eq_buf;
@@ -679,9 +685,39 @@ err_free_eq_buf:
 }
 
 /*
+ * cxip_cq_trywait - Return success if able to block waiting for CQ events.
+ */
+static int cxip_cq_trywait(void *arg)
+{
+	struct cxip_cq *cq = (struct cxip_cq *)arg;
+
+	assert(cq->util_cq.wait);
+
+	if (!cq->priv_wait) {
+		CXIP_WARN("No CXI wait object\n");
+		return -FI_EINVAL;
+	}
+
+	if (cxi_eq_peek_event(cq->eq.eq))
+		return -FI_EAGAIN;
+
+	/* Clear wait, and check for any events */
+	fastlock_acquire(&cq->lock);
+	cxil_clear_wait_obj(cq->priv_wait);
+
+	if (cxi_eq_peek_event(cq->eq.eq)) {
+		fastlock_release(&cq->lock);
+		return -FI_EAGAIN;
+	}
+	fastlock_release(&cq->lock);
+
+	return FI_SUCCESS;
+}
+
+/*
  * cxip_cq_enable() - Assign hardware resources to the CQ.
  */
-int cxip_cq_enable(struct cxip_cq *cxi_cq)
+int cxip_cq_enable(struct cxip_cq *cxi_cq, struct cxip_ep_obj *ep_obj)
 {
 	struct ofi_bufpool_attr bp_attrs = {};
 	int ret = FI_SUCCESS;
@@ -692,12 +728,26 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq)
 	if (cxi_cq->enabled)
 		goto unlock;
 
+	/* If the CQ is backed by a wait object, add the control
+	 * event queue FD to the CQ wait object.
+	 */
+	if (cxi_cq->util_cq.wait && ep_obj->ctrl_wait) {
+		ret = ofi_wait_add_fd(cxi_cq->util_cq.wait,
+				      cxil_get_wait_obj_fd(ep_obj->ctrl_wait),
+				      POLLIN, cxip_ep_ctrl_trywait, cxi_cq,
+				      &cxi_cq->util_cq.cq_fid.fid);
+		if (ret) {
+			CXIP_WARN("Failed to add wait FD: %d\n", ret);
+			goto unlock;
+		}
+	}
+
 	min_eq_size = (cxi_cq->attr.size + cxi_cq->ack_batch_size) *
 		C_EE_CFG_ECB_SIZE;
 	ret = cxip_cq_eq_init(cxi_cq, &cxi_cq->eq, min_eq_size, 0);
 	if (ret) {
 		CXIP_WARN("Failed to initialize TX EQ: %d\n", ret);
-		goto unlock;
+		goto del_fd;
 	}
 
 	bp_attrs.size = sizeof(struct cxip_req);
@@ -739,6 +789,10 @@ err_free_req_pool:
 	ofi_bufpool_destroy(cxi_cq->req_pool);
 err_eq_fini:
 	cxip_cq_eq_fini(cxi_cq, &cxi_cq->eq);
+del_fd:
+	if (cxi_cq->util_cq.wait && ep_obj->ctrl_wait)
+		ofi_wait_del_fd(cxi_cq->util_cq.wait,
+				cxil_get_wait_obj_fd(ep_obj->ctrl_wait));
 unlock:
 	fastlock_release(&cxi_cq->lock);
 
@@ -776,12 +830,24 @@ unlock:
 static int cxip_cq_close(struct fid *fid)
 {
 	struct cxip_cq *cq;
+	int ret;
 
 	cq = container_of(fid, struct cxip_cq, util_cq.cq_fid.fid);
 	if (ofi_atomic_get32(&cq->ref))
 		return -FI_EBUSY;
 
 	cxip_cq_disable(cq);
+
+	if (cq->priv_wait) {
+		ret = ofi_wait_del_fd(cq->util_cq.wait,
+				      cxil_get_wait_obj_fd(cq->priv_wait));
+		if (ret)
+			CXIP_WARN("Wait FD delete error: %d\n", ret);
+
+		ret = cxil_destroy_wait_obj(cq->priv_wait);
+		if (ret)
+			CXIP_WARN("Release CXI wait object failed: %d\n", ret);
+	}
 
 	ofi_cq_cleanup(&cq->util_cq);
 
@@ -800,7 +866,7 @@ static struct fi_ops cxip_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = cxip_cq_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.control = ofi_cq_control,
 	.ops_open = fi_no_ops_open,
 };
 
@@ -836,8 +902,21 @@ static int cxip_cq_verify_attr(struct fi_cq_attr *attr)
 		return -FI_ENOSYS;
 	}
 
-	if (attr->wait_obj != FI_WAIT_NONE) {
-		CXIP_WARN("CQ wait objects not supported\n");
+	/* Applications should set wait_obj == FI_WAIT_NONE for best
+	 * performance. However, if a wait_obj is required and not
+	 * specified, default to FI_WAIT_FD.
+	 */
+	switch (attr->wait_obj) {
+	case FI_WAIT_UNSPEC:
+		attr->wait_obj = FI_WAIT_FD;
+		break;
+	case FI_WAIT_NONE:
+	case FI_WAIT_FD:
+	case FI_WAIT_POLLFD:
+		break;
+	default:
+		CXIP_WARN("Unsupported CQ wait object: %d\n",
+			  attr->wait_obj);
 		return -FI_ENOSYS;
 	}
 
@@ -848,6 +927,52 @@ static int cxip_cq_verify_attr(struct fi_cq_attr *attr)
 		attr->size = cxip_env.default_cq_size;
 
 	return FI_SUCCESS;
+}
+
+/*
+ * cxip_cq_alloc_priv_wait - Allocate an internal wait channel for the CQ.
+ */
+static int cxip_cq_alloc_priv_wait(struct cxip_cq *cq)
+{
+	int ret;
+	int wait_fd;
+
+	assert(cq->domain);
+
+	/* Not required or already created */
+	if (!cq->util_cq.wait || cq->priv_wait)
+		return FI_SUCCESS;
+
+	ret = cxil_alloc_wait_obj(cq->domain->lni->lni, &cq->priv_wait);
+	if (ret) {
+		CXIP_WARN("Allocation of internal wait object failed %d\n",
+			  ret);
+		return ret;
+	}
+
+	wait_fd = cxil_get_wait_obj_fd(cq->priv_wait);
+	ret = fi_fd_nonblock(wait_fd);
+	if (ret) {
+		CXIP_WARN("Unable to set CQ wait non-blocking mode: %d\n", ret);
+		goto destroy_wait;
+	}
+
+	ret = ofi_wait_add_fd(cq->util_cq.wait, wait_fd, POLLIN,
+			      cxip_cq_trywait, cq, &cq->util_cq.cq_fid.fid);
+	if (ret) {
+		CXIP_WARN("Add FD of internal wait object failed: %d\n", ret);
+		goto destroy_wait;
+	}
+
+	CXIP_DBG("Add CQ private wait object, CQ intr FD: %d\n", wait_fd);
+
+	return FI_SUCCESS;
+
+destroy_wait:
+	cxil_destroy_wait_obj(cq->priv_wait);
+	cq->priv_wait = NULL;
+
+	return ret;
 }
 
 /*
@@ -881,8 +1006,6 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		cxi_cq->attr = *attr;
 	}
 
-	assert(cxi_cq->attr.size > 0);
-
 	ret = ofi_cq_init(&cxip_prov, domain, &cxi_cq->attr, &cxi_cq->util_cq,
 			  cxip_util_cq_progress, context);
 	if (ret != FI_SUCCESS) {
@@ -900,12 +1023,22 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	fastlock_init(&cxi_cq->req_lock);
 	fastlock_init(&cxi_cq->ibuf_lock);
 
-	cxip_domain_add_cq(cxi_dom, cxi_cq);
+	if (cxi_cq->util_cq.wait) {
+		ret = cxip_cq_alloc_priv_wait(cxi_cq);
+		if (ret != FI_SUCCESS) {
+			CXIP_WARN("Unable to allocate CXI wait obj: %d\n",
+				  ret);
+			goto err_wait_alloc;
+		}
+	}
 
+	cxip_domain_add_cq(cxi_dom, cxi_cq);
 	*cq = &cxi_cq->util_cq.cq_fid;
 
 	return FI_SUCCESS;
 
+err_wait_alloc:
+	ofi_cq_cleanup(&cxi_cq->util_cq);
 err_util_cq:
 	free(cxi_cq);
 

@@ -1014,6 +1014,9 @@ struct cxip_cq {
 	/* Wrapper for hardware EQ. */
 	struct cxip_cq_eq eq;
 
+	/* Internal CXI wait object allocated only if required. */
+	struct cxil_wait_obj *priv_wait;
+
 	/* CXI specific fields. */
 	struct cxip_domain *domain;
 	struct cxip_ep_obj *ep_obj;
@@ -1048,9 +1051,7 @@ struct cxip_cntr {
 	struct cxip_domain *domain;	// parent domain
 	ofi_atomic32_t ref;
 	struct fi_cntr_attr attr;	// copy of user or default attributes
-
 	struct fid_wait *wait;
-
 	/* Contexts to which counter is bound */
 	struct dlist_entry ctx_list;
 
@@ -1759,6 +1760,7 @@ struct cxip_ep_obj {
 	fastlock_t tx_id_lock;
 
 	/* Control resources */
+	struct cxil_wait_obj *ctrl_wait;
 	struct cxip_cmdq *ctrl_tgq;
 	struct cxip_cmdq *ctrl_txq;
 	unsigned int ctrl_tx_credits;
@@ -2313,7 +2315,8 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
 void cxip_cq_req_free(struct cxip_req *req);
 void cxip_cq_progress(struct cxip_cq *cq);
 void cxip_util_cq_progress(struct util_cq *util_cq);
-int cxip_cq_enable(struct cxip_cq *cxi_cq);
+int cxip_cq_enable(struct cxip_cq *cxi_cq,
+		   struct cxip_ep_obj *ep_obj);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
 int cxip_cq_adjust_reserved_fc_event_slots(struct cxip_cq *cq, int value);
@@ -2336,6 +2339,7 @@ void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj);
 void cxip_ep_tx_ctrl_progress(struct cxip_ep_obj *ep_obj);
 int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj);
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj);
+int cxip_ep_ctrl_trywait(void *arg);
 
 int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	        struct fid_av_set **av_set_fid, void * context);

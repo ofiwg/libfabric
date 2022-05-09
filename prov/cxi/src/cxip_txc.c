@@ -90,7 +90,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		goto unlock;
 	}
 
-	ret = cxip_cq_enable(txc->send_cq);
+	ret = cxip_cq_enable(txc->send_cq, txc->ep_obj);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_cq_enable returned: %d\n", ret);
 		goto unlock;
