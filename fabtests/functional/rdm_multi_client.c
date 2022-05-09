@@ -221,13 +221,17 @@ int main(int argc, char **argv)
 
 	if (opts.dst_addr) {
 		for (i = 0; i < opts.num_connections; i++) {
-			save = fi_dupinfo(hints);
 			printf("Starting client: %d\n", i);
 			ret = run_client(i, address_reuse);
 			if (ret) {
 				FT_PRINTERR("run_client", -ret);
 				goto out;
 			}
+			// Reuse hints for each iteration without using fi_dupinfo
+			// because that would complicate memory ownership between the
+			// application and the library, which Windows doesn't like.
+			save = hints;
+			hints = NULL;
 			ft_free_res();
 			hints = save;
 		}
