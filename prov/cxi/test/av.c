@@ -423,6 +423,11 @@ Test(av, shmem_unspecified_create)
 	cxit_av_attr.name = NULL;
 }
 
+#if 0
+/* Comment out since cr_skip_test() aborts the test and
+ * libfabric will trip a MR cleanup assertion.
+ */
+
 /* Test basic AV table insert */
 Test(av, table_insert)
 {
@@ -433,6 +438,7 @@ Test(av, table_insert)
 
 	test_insert();
 }
+#endif
 
 Test(av, shmem_table_insert)
 {
@@ -447,6 +453,11 @@ Test(av, shmem_table_insert)
 	test_insert();
 }
 
+#if 0
+/* Comment out since cr_skip_test() aborts the test and
+ * libfabric will trip a MR cleanup assertion.
+ */
+
 /* Test basic AV map insert */
 Test(av, map_insert)
 {
@@ -457,6 +468,7 @@ Test(av, map_insert)
 
 	test_insert();
 }
+#endif
 
 Test(av, shmem_map_insert)
 {
