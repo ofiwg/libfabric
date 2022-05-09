@@ -188,7 +188,7 @@ static int tcpx_ep_connect(struct fid_ep *ep_fid, const void *addr,
 
 disable:
 	ofi_mutex_lock(&ep->lock);
-	tcpx_ep_disable(ep, -ret);
+	tcpx_ep_disable(ep, -ret, NULL, 0);
 	ofi_mutex_unlock(&ep->lock);
 free:
 	tcpx_free_cm_ctx(cm_ctx);
@@ -284,7 +284,8 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 	ofi_bsock_discard(&ep->bsock);
 }
 
-void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
+void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err, void* err_data,
+                     size_t err_data_size)
 {
 	struct util_wait_fd *wait;
 	struct fi_eq_cm_entry cm_entry = {0};
@@ -330,9 +331,14 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err)
 	tcpx_ep_flush_all_queues(ep);
 
 	if (cm_err) {
+		err_entry.err = cm_err;
 		err_entry.fid = &ep->util_ep.ep_fid.fid;
 		err_entry.context = ep->util_ep.ep_fid.fid.context;
-		err_entry.err = cm_err;
+		if (err_data && err_data_size > 0) {
+			err_entry.err_data = mem_dup(err_data, err_data_size);
+			if (err_entry.err_data)
+				err_entry.err_data_size = err_data_size;
+		}
 		(void) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
 				   &err_entry, sizeof(err_entry),
 				   UTIL_FLAG_ERROR);
@@ -352,7 +358,7 @@ static int tcpx_ep_shutdown(struct fid_ep *ep_fid, uint64_t flags)
 	(void) ofi_bsock_flush(&ep->bsock);
 
 	ofi_mutex_lock(&ep->lock);
-	tcpx_ep_disable(ep, 0);
+	tcpx_ep_disable(ep, 0, NULL, 0);
 	ofi_mutex_unlock(&ep->lock);
 
 	return FI_SUCCESS;
