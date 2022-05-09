@@ -1043,6 +1043,8 @@ Test(ep_init, auth_key)
 
 	/* Set custom auth key in EP */
 	auth_key.vni = 200;
+
+	free(cxit_fi->ep_attr->auth_key);
 	cxit_fi->ep_attr->auth_key = mem_dup(&auth_key, sizeof(auth_key));
 	cxit_fi->ep_attr->auth_key_size = sizeof(auth_key);
 
@@ -1052,13 +1054,16 @@ Test(ep_init, auth_key)
 	/* Try mis-matched svc_id */
 	auth_key.svc_id = 10;
 	auth_key.vni = 301;
+
+	free(cxit_fi->ep_attr->auth_key);
 	cxit_fi->ep_attr->auth_key = mem_dup(&auth_key, sizeof(auth_key));
 	cxit_fi->ep_attr->auth_key_size = sizeof(auth_key);
 
 	ret = fi_endpoint(cxit_domain, cxit_fi, &cxit_ep, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 
-	free(cxit_fi->ep_attr->auth_key);
+	cxit_destroy_domain();
+	cxit_teardown_domain();
 }
 
 Test(ep_init, tclass)
