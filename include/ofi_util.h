@@ -770,6 +770,8 @@ struct util_av {
 	ofi_mutex_t		ep_list_lock;
 };
 
+#define OFI_AV_DYN_ADDRLEN (1 << 0)
+
 struct util_av_attr {
 	/* Must be a multiple of 8 bytes */
 	size_t	addrlen;
@@ -803,8 +805,6 @@ void ofi_av_write_event(struct util_av *av, uint64_t data,
 
 int ofi_ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		     struct fid_av **av, void *context);
-int ofi_ip_av_create_flags(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-			   struct fid_av **av, void *context, int flags);
 
 void *ofi_av_get_addr(struct util_av *av, fi_addr_t fi_addr);
 #define ofi_ip_av_get_addr ofi_av_get_addr
