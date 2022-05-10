@@ -187,7 +187,7 @@ pipeline {
                     }
                 }
                 stage('verbs-rxd') {
-                    agent {node {label 'mlx5'}}
+                    agent {node {label 'mlx5 && edr'}}
                     options { skipDefaultCheckout() }
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
@@ -263,7 +263,7 @@ pipeline {
                     }
                 }
                 stage('psm3') {
-                    agent {node {label 'mlx5'}}
+                    agent {node {label 'mlx5 && edr'}}
                     options { skipDefaultCheckout() }
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
