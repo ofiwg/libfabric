@@ -149,6 +149,7 @@ enum op_state {
 
 enum {
 	LONG_OPT_PIN_CORE = 1,
+	LONG_OPT_TIMEOUT,
 };
 
 struct ft_context {

@@ -162,7 +162,8 @@ struct test_size_param *range_test_size;
 int lopt_idx = 0;
 struct option long_opts[] = {
 	{"pin-core", required_argument, NULL, LONG_OPT_PIN_CORE},
-	{0, 0, 0, 0}
+	{"timeout", required_argument, NULL, LONG_OPT_TIMEOUT},
+	{NULL, 0, NULL, 0},
 };
 
 static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -3020,10 +3021,12 @@ void ft_csusage(char *name, char *desc)
 
 void ft_longopts_usage()
 {
-	FT_PRINT_OPTS_USAGE("--pin-core <core_list>", "specify which cores to pin");
-	FT_PRINT_OPTS_USAGE("", "disabled by default. <core_list> format uses");
-	FT_PRINT_OPTS_USAGE("", "a comma-separated list, like 0,2-4");
-	return;
+	FT_PRINT_OPTS_USAGE("--pin-core <core_list>",
+		"Specify which cores to pin process to using a\n"
+		"a comma-separated list format, e.g.: 0,2-4.\n"
+		"Disabled by default.");
+	FT_PRINT_OPTS_USAGE("--timeout <seconds>",
+		"Overrides default timeout for test specific transfers.");
 }
 
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
@@ -3739,6 +3742,9 @@ int ft_parse_long_opts(int op, char *optarg)
 	switch (op) {
 	case LONG_OPT_PIN_CORE:
 		return ft_parse_pin_core_opt(optarg);
+	case LONG_OPT_TIMEOUT:
+		timeout = atoi(optarg);
+		return 0;
 	default:
 		return EXIT_FAILURE;
 	}

@@ -75,12 +75,9 @@ struct rpc_ctrl {
 	struct fid_mr *mr;
 };
 
+int rpc_timeout = 2000; /* ms */
+
 enum {
-#if ENABLE_DEBUG
-	rpc_timeout = 300000, /* ms */
-#else
-	rpc_timeout = 10000, /* ms */
-#endif
 	rpc_write_key = 189,
 	rpc_read_key = 724,
 	rpc_threads = 32,
@@ -1149,9 +1146,12 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "u:h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt_long(argc, argv, "u:h" CS_OPTS INFO_OPTS,
+				  long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		default:
+			if (!ft_parse_long_opts(op, optarg))
+				continue;
 			ft_parsecsopts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
 			break;
@@ -1161,12 +1161,13 @@ int main(int argc, char **argv)
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "An RDM endpoint error stress test.");
-			FT_PRINT_OPTS_USAGE("-u <test control file>",
-			"Sample file - fabtests/test_configs/ofi_rxm/stress.json");
+			ft_longopts_usage();
 			return EXIT_FAILURE;
 		}
 	}
 
+	if (timeout >= 0)
+		rpc_timeout = timeout * 1000;
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
