@@ -325,7 +325,7 @@ static int rpc_hello(struct rpc_ctrl *ctrl)
 	if (ret)
 		return ret;
 
-	assert(resp.cmd == cmd_hello);
+	ft_assert(resp.cmd == cmd_hello);
 	id_at_server = resp.client_id;
 	printf("(%d-%d) we're friends now\n", myid, id_at_server);
 	return (int) resp.data;
@@ -368,7 +368,7 @@ static int rpc_msg_resp(struct rpc_ctrl *ctrl)
 	if (ret)
 		goto free;
 
-	assert(resp->cmd == cmd_msg);
+	ft_assert(resp->cmd == cmd_msg);
 	ret = ft_check_buf(resp + 1, req->size);
 
 free:
@@ -404,7 +404,7 @@ static int rpc_tag_resp(struct rpc_ctrl *ctrl)
 	if (ret)
 		goto free;
 
-	assert(resp->cmd == cmd_tag);
+	ft_assert(resp->cmd == cmd_tag);
 	ret = ft_check_buf(resp + 1, req->size);
 
 free:
@@ -464,7 +464,7 @@ static int rpc_read_resp(struct rpc_ctrl *ctrl)
 	if (ret)
 		goto close;
 
-	assert(resp.cmd == cmd_read);
+	ft_assert(resp.cmd == cmd_read);
 	ret = ft_check_buf(&req->buf[req->offset], req->size);
 
 close:
@@ -524,7 +524,7 @@ static int rpc_write_resp(struct rpc_ctrl *ctrl)
 	if (ret)
 		goto close;
 
-	assert(resp.cmd == cmd_write);
+	ft_assert(resp.cmd == cmd_write);
 	ret = ft_check_buf(&req->buf[req->offset], req->size);
 
 close:
@@ -685,7 +685,7 @@ static bool add_ctrl(const char *js, int njts, jsmntok_t *jts,
 	size_t len;
 	int i;
 
-	assert(jts[*idx].type == JSMN_OBJECT);
+	ft_assert(jts[*idx].type == JSMN_OBJECT);
 
 	init_rpc_ctrl(ctrl);
 	/* i is indexing # of key:value pairs in JSMN_OBJECT */

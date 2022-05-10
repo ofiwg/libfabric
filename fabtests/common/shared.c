@@ -159,13 +159,6 @@ struct test_size_param *test_size = def_test_sizes;
 /* range of messages is dynamically allocated */
 struct test_size_param *range_test_size;
 
-int lopt_idx = 0;
-struct option long_opts[] = {
-	{"pin-core", required_argument, NULL, LONG_OPT_PIN_CORE},
-	{"timeout", required_argument, NULL, LONG_OPT_TIMEOUT},
-	{NULL, 0, NULL, 0},
-};
-
 static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
 
@@ -3019,16 +3012,6 @@ void ft_csusage(char *name, char *desc)
 	return;
 }
 
-void ft_longopts_usage()
-{
-	FT_PRINT_OPTS_USAGE("--pin-core <core_list>",
-		"Specify which cores to pin process to using a\n"
-		"a comma-separated list format, e.g.: 0,2-4.\n"
-		"Disabled by default.");
-	FT_PRINT_OPTS_USAGE("--timeout <seconds>",
-		"Overrides default timeout for test specific transfers.");
-}
-
 void ft_parseinfo(int op, char *optarg, struct fi_info *hints,
 		  struct ft_opts *opts)
 {
@@ -3737,6 +3720,29 @@ static int ft_parse_pin_core_opt(char *optarg)
 	return 0;
 }
 
+void ft_longopts_usage()
+{
+	FT_PRINT_OPTS_USAGE("--pin-core <core_list>",
+		"Specify which cores to pin process to using a\n"
+		"a comma-separated list format, e.g.: 0,2-4.\n"
+		"Disabled by default.");
+	FT_PRINT_OPTS_USAGE("--timeout <seconds>",
+		"Overrides default timeout for test specific transfers.");
+	FT_PRINT_OPTS_USAGE("--debug-assert",
+		"Replace asserts with while loops to force process to\n"
+		"spin until a debugger can be attached.");
+}
+
+int debug_assert;
+
+int lopt_idx = 0;
+struct option long_opts[] = {
+	{"pin-core", required_argument, NULL, LONG_OPT_PIN_CORE},
+	{"timeout", required_argument, NULL, LONG_OPT_TIMEOUT},
+	{"debug-assert", no_argument, &debug_assert, LONG_OPT_DEBUG_ASSERT},
+	{NULL, 0, NULL, 0},
+};
+
 int ft_parse_long_opts(int op, char *optarg)
 {
 	switch (op) {
@@ -3744,6 +3750,8 @@ int ft_parse_long_opts(int op, char *optarg)
 		return ft_parse_pin_core_opt(optarg);
 	case LONG_OPT_TIMEOUT:
 		timeout = atoi(optarg);
+		return 0;
+	case LONG_OPT_DEBUG_ASSERT:
 		return 0;
 	default:
 		return EXIT_FAILURE;
