@@ -1721,9 +1721,14 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		return;
 	}
 
-	if (err_entry.err != FI_ECANCELED)
-		OFI_CQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_CQ,
-				rxm_ep->msg_cq, &err_entry);
+	if (err_entry.err != FI_ECANCELED) {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"fi_cq_readerr: err: %s (%d), prov_err: %s (%d)\n",
+			fi_strerror(err_entry.err), err_entry.err,
+			fi_cq_strerror(rxm_ep->msg_cq, err_entry.prov_errno,
+					err_entry.err_data, NULL, 0),
+			err_entry.prov_errno);
+	}
 
 	cq = rxm_ep->util_ep.tx_cq;
 	cntr = rxm_ep->util_ep.tx_cntr;

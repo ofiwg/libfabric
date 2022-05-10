@@ -786,8 +786,22 @@ static void rxm_handle_error(struct rxm_ep *ep)
 		return;
 	}
 
-	OFI_EQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_EP_CTRL, ep->msg_eq,
-			&entry);
+	if (entry.err == FI_ECONNREFUSED) {
+		FI_LOG_SPARSE(&rxm_prov, FI_LOG_WARN, FI_LOG_CQ,
+			"fi_eq_readerr: err: %s (%d), prov_err: %s (%d)\n",
+			fi_strerror(entry.err), entry.err,
+			fi_eq_strerror(ep->msg_eq, entry.prov_errno,
+					entry.err_data, NULL, 0),
+			entry.prov_errno);
+	} else {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"fi_eq_readerr: err: %s (%d), prov_err: %s (%d)\n",
+			fi_strerror(entry.err), entry.err,
+			fi_eq_strerror(ep->msg_eq, entry.prov_errno,
+					entry.err_data, NULL, 0),
+			entry.prov_errno);
+	}
+
 	if (!entry.fid || entry.fid->fclass != FI_CLASS_EP)
 		return;
 
