@@ -134,7 +134,7 @@ int pm_allgather(void *my_item, void *items, int item_size)
 void pm_barrier()
 {
 	char ch;
-	char chs[pm_job.num_ranks];
+	char *chs = alloca(pm_job.num_ranks);
 
 	pm_allgather(&ch, chs, 1);
 }
@@ -202,12 +202,17 @@ static int pm_conn_setup()
 
 	pm_job.sock = sock;
 
+/* If all instances of this test are running on the same host, then making the
+ * setsockopt call on a windows host will result in all the instances binding
+ * and listening on the same port. */
+#ifndef _WIN32
 	ret = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *) &optval,
 			 sizeof(optval));
 	if (ret) {
 		FT_ERR("error setting socket options\n");
 		return ret;
 	}
+#endif
 
 	ret = bind(sock, (struct sockaddr *)&pm_job.oob_server_addr,
 		  pm_job.server_addr_len);
