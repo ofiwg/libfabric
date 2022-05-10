@@ -991,11 +991,24 @@ int (*handle_rpc[cmd_last])(struct rpc_hdr *req, struct rpc_resp *resp) = {
 
 static void complete_rpc(struct rpc_resp *resp)
 {
+	fi_addr_t addr;
+	int ret;
+
 	printf("(%d) complete rpc %s (%s)\n", resp->hdr.client_id,
 	       rpc_cmd_str(resp->hdr.cmd), fi_strerror(resp->status));
 
-	if (resp->flags & rpc_flag_ack)
-		(void) rpc_inject(&resp->hdr, resp->hdr.client_id);
+	if (!resp->status && (resp->flags & rpc_flag_ack))
+		ret = rpc_inject(&resp->hdr, resp->hdr.client_id);
+	else
+		ret = resp->status;
+
+	if (ret) {
+		printf("(%d) unreachable, removing\n", resp->hdr.client_id);
+		addr = resp->hdr.client_id;
+ 		ret = fi_av_remove(av, &addr, 1, 0);
+		if (ret)
+			FT_PRINTERR("fi_av_remove", ret);
+	}
 
 	if (resp->mr)
 		fi_close(&resp->mr->fid);
