@@ -132,7 +132,7 @@ pipeline {
                     }
                 }
                 stage('MPI-tcp-rxm-2') {
-                    agent {node {label 'eth'}}
+                    agent {node {label 'cvl'}}
                     options { skipDefaultCheckout() }
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
@@ -149,7 +149,7 @@ pipeline {
                     }
                 }
                 stage('tcp') {
-                    agent {node {label 'eth'}}
+                    agent {node {label 'cvl'}}
                     options { skipDefaultCheckout() }
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
@@ -206,7 +206,7 @@ pipeline {
                     }
                 }
                 stage('udp') {
-                    agent {node {label 'eth'}}
+                    agent {node {label 'cvl'}}
                     options { skipDefaultCheckout() }
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
@@ -225,7 +225,7 @@ pipeline {
                     }
                 }
                 stage('shm') {
-                    agent {node {label 'eth'}}
+                    agent {node {label 'cvl'}}
                     options { skipDefaultCheckout() }
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
@@ -244,7 +244,7 @@ pipeline {
                     }
                 }
                 stage('sockets') {
-                    agent {node {label 'eth'}}
+                    agent {node {label 'cvl'}}
                     options { skipDefaultCheckout() }
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
@@ -284,7 +284,7 @@ pipeline {
                     }
                 }
                 stage('MPI-tcp-rxm-1') {
-                    agent {node {label 'eth'}}
+                    agent {node {label 'cvl'}}
                     options { skipDefaultCheckout() }
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
@@ -301,7 +301,7 @@ pipeline {
                     }
                 }
                 stage('MPI-tcp-rxm-3') {
-                    agent {node {label 'eth'}}
+                    agent {node {label 'cvl'}}
                     options { skipDefaultCheckout() }
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
@@ -364,7 +364,7 @@ pipeline {
                     }
                 }
                 stage('oneCCL') {
-                    agent {node {label 'eth'}}
+                    agent {node {label 'cvl'}}
                     options { skipDefaultCheckout() }
                     steps {
                         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])

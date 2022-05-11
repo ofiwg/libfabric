@@ -139,14 +139,8 @@ class Fabtest(Test):
             else:
                 print("{} Complex test file not found".format(self.core_prov))
 
-        if (self.ofi_build_mode != 'reg' or self.core_prov == 'udp' or \
-            self.core_prov == 'psm3'):
-            opts = "{} -e \'ubertest".format(opts)
-
-            if (self.ofi_build_mode != 'reg' or self.core_prov == 'udp'):
-                opts = '{},multinode'.format(opts)
-
-            opts = '{}\''.format(opts)
+        if (self.ofi_build_mode != 'reg' or self.core_prov == 'udp'):
+            opts = "{} -e \'ubertest,multinode\'".format(opts)
 
         efile = self.get_exclude_file()
         if efile:
@@ -538,31 +532,19 @@ class MpiTestOSU(MpiTests):
                                   'osu_get_acc_latency',
                                   'osu_latency_mp'
                               }
-       #these tests have race conditions or segmentation faults
-       #self.disable = {
-       #                   'osu_allgather',
-       #                   'osu_allgatherv',
-       #                   'osu_allreduce',
-       #                   'osu_alltoall'
-       #                   'osu_alltoallv',
-       #                   'osu_iallgather',
-       #                   'osu_iallgatherv',
-       #                   'osu_ialltoall',
-       #                   'osu_ialltoallv',
-       #                   'osu_ialltoallw',
-       #                   'osu_ibarrier'
-       #               }
+        #these tests have race conditions or segmentation faults
+        #self.disable = {
+        #               }
 
         self.osu_mpi_path = '{}/{}/osu/libexec/osu-micro-benchmarks/mpi/'. \
                             format(self.ci_middlewares_path, mpitype)
 
     @property
     def execute_condn(self):
-        return False
         # see disable list for ompi failures
-        #return True if ((self.mpi == 'impi' or self.mpi == 'mpich') and \
-        #                (self.core_prov == 'verbs')) \
-        #            else False
+        return True if ((self.mpi == 'impi' or self.mpi == 'mpich') and \
+                        (self.core_prov == 'verbs')) \
+                    else False
 
     def execute_cmd(self):
         assert(self.osu_mpi_path)
