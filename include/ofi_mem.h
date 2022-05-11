@@ -460,7 +460,7 @@ static inline void *ofi_buf_alloc(struct ofi_bufpool *pool)
 	struct ofi_bufpool_hdr *buf_hdr;
 
 	assert(!(pool->attr.flags & OFI_BUFPOOL_INDEXED));
-	if (OFI_UNLIKELY(ofi_bufpool_empty(pool))) {
+	if (ofi_bufpool_empty(pool)) {
 		if (ofi_bufpool_grow(pool))
 			return NULL;
 	}
@@ -477,7 +477,7 @@ static inline void *ofi_buf_alloc_ex(struct ofi_bufpool *pool,
 	void *buf = ofi_buf_alloc(pool);
 
 	assert(context);
-	if (OFI_UNLIKELY(!buf))
+	if (!buf)
 		return NULL;
 
 	*context = ofi_buf_region(buf)->context;
@@ -490,7 +490,7 @@ static inline void *ofi_ibuf_alloc(struct ofi_bufpool *pool)
 	struct ofi_bufpool_region *buf_region;
 
 	assert(pool->attr.flags & OFI_BUFPOOL_INDEXED);
-	if (OFI_UNLIKELY(ofi_ibufpool_empty(pool))) {
+	if (ofi_ibufpool_empty(pool)) {
 		if (ofi_bufpool_grow(pool))
 			return NULL;
 	}
