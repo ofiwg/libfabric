@@ -114,7 +114,7 @@ class Fabtest(Test):
     @property
     def options(self):
         opts = "-T 300 -vvv -p {} -S ".format(self.fabtestpath)
-        if (self.core_prov == 'verbs' and self.nw_interface):
+        if (self.core_prov != 'shm' and self.nw_interface):
             opts = "{} -s {} ".format(opts, common.get_node_name(self.server,
                     self.nw_interface)) # include common.py
             opts = "{} -c {} ".format(opts, common.get_node_name(self.client,
@@ -285,7 +285,10 @@ class MpiTests(Test):
         if (self.mpi == 'impi' or self.mpi == 'mpich'):
             opts = "-n {} ".format(self.n)
             opts += "-ppn {} ".format(self.ppn)
-            opts += "-hosts {},{} ".format(self.server,self.client)
+            opts += "-hosts {},{} ".format(common.get_node_name(self.server,
+                                           self.nw_interface),
+                                           common.get_node_name(self.client,
+                                           self.nw_interface))
 
             if (self.mpi == 'impi'):
                 opts = "{} -mpi_root={} ".format(opts,
@@ -308,7 +311,8 @@ class MpiTests(Test):
 
         elif (self.mpi == 'ompi'):
             opts = "-np {} ".format(self.n)
-            hosts = ','.join([':'.join([host,str(self.ppn)]) \
+            hosts = ','.join([':'.join([common.get_node_name(host, \
+                             self.nw_interface), str(self.ppn)]) \
                     for host in self.hosts])
 
             opts = "{} --host {} ".format(opts, hosts)
@@ -465,7 +469,10 @@ class MpichTestSuite(MpiTests):
                 os.environ['MPIEXEC_TIMEOUT']=timeout
 
             opts = "-n {np} ".format(np=nprocs)
-            opts += "-hosts {s},{c} ".format(s=self.server, c=self.client)
+            opts += "-hosts {s},{c} ".format(s=common.get_node_name(\
+                                             self.server, self.nw_interface), \
+                                             c=common.get_node_name(\
+                                             self.client, self.nw_interface))
             opts += "-mpi_root={mpiroot} ".format(mpiroot=mpiroot)
             opts += "-libfabric_path={installpath}/lib " \
                     .format(installpath=self.libfab_installpath)
