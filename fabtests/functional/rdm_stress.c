@@ -1151,9 +1151,10 @@ int main(int argc, char **argv)
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SKIP_MSG_ALLOC | FT_OPT_SKIP_ADDR_EXCH;
 	opts.mr_mode = 0;
-	opts.iterations = 1; // remove
-	opts.num_connections = 1; // 16
+	opts.iterations = 1;
+	opts.num_connections = 16;
 	opts.comp_method = FT_COMP_WAIT_FD;
+	opts.av_size = MAX_RPC_CLIENTS;
 
 	hints = fi_allocinfo();
 	if (!hints)
