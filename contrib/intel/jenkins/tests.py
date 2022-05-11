@@ -541,10 +541,10 @@ class MpiTestOSU(MpiTests):
 
     @property
     def execute_condn(self):
-        # see disable list for ompi failures
-        return True if ((self.mpi == 'impi' or self.mpi == 'mpich') and \
-                        (self.core_prov == 'verbs')) \
-                    else False
+        # mpich-tcp and ompi-tcp are the only osu test combinations failing
+        return False if ((self.mpi == 'mpich' and self.core_prov == 'tcp') or \
+                          self.mpi == 'ompi') \
+                    else True
 
     def execute_cmd(self):
         assert(self.osu_mpi_path)
