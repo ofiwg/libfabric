@@ -330,10 +330,6 @@ class MpiTests(Test):
                 opts = "{} -x {}={} ".format(opts,key,val)
         return opts
 
-    @property
-    def mpi_gen_execute_condn(self):
-        return True if (self.mpi == 'impi' or self.mpi == 'mpich') \
-                    else False
 
 class IMBtests:
     def __init__(self, test_name, core_prov, util_prov):

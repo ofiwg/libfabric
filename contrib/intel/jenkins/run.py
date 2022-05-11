@@ -94,8 +94,7 @@ def intel_mpi_benchmark(core, hosts, mpi, mode, group, util):
                                 util_prov=util)
 
     print("-------------------------------------------------------------------")
-    if (imb_test.execute_condn == True and \
-        imb_test.mpi_gen_execute_condn == True):
+    if (imb_test.execute_condn == True):
         print("Running IMB-tests for {}-{}-{}-{}".format(core, util, fab, mpi))
         imb_test.execute_cmd()
     else:
@@ -111,8 +110,7 @@ def mpich_test_suite(core, hosts, mpi, mode, util):
                                        ofi_build_mode=mode, util_prov=util)
 
     print("-------------------------------------------------------------------")
-    if (mpich_tests.execute_condn == True and \
-        mpich_tests.mpi_gen_execute_condn == True):
+    if (mpich_tests.execute_condn == True):
         print("Running mpichtestsuite: Spawn Tests " \
               "for {}-{}-{}-{}".format(core, util, fab, mpi))
         mpich_tests.execute_cmd("spawn")
@@ -129,8 +127,7 @@ def osu_benchmark(core, hosts, mpi, mode, util):
                                 ofi_build_mode=mode, util_prov=util)
 
     print("-------------------------------------------------------------------")
-    if (osu_test.execute_condn == True and \
-        osu_test.mpi_gen_execute_condn == True):
+    if (osu_test.execute_condn == True):
         print("Running OSU-Test for {}-{}-{}-{}".format(core, util, fab, mpi))
         osu_test.execute_cmd()
     else:
