@@ -235,6 +235,7 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		if (!ofi_atomic_dec32(&av_entry->use_cnt)) {
 			rxm_put_peer_addr(av, fi_addr[i]);
 			HASH_DELETE(hh, av->util_av.hash, av_entry);
+			ofi_ibuf_free(av_entry);
 		}
 	}
 
