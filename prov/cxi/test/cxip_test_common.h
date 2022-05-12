@@ -78,7 +78,9 @@ void cxit_teardown_ep(void);
 #define cxit_setup_av cxit_setup_ep
 #define cxit_teardown_av cxit_teardown_ep
 void cxit_setup_enabled_ep(void);
+void cxit_setup_enabled_ep_fd(void);
 void cxit_setup_rma(void);
+void cxit_setup_rma_fd(void);
 void cxit_setup_rma_hybrid_mr_desc(void);
 #define cxit_setup_tagged cxit_setup_rma
 #define cxit_setup_msg cxit_setup_rma
@@ -86,6 +88,7 @@ void cxit_teardown_rma(void);
 #define cxit_teardown_tagged cxit_teardown_rma
 #define cxit_teardown_msg cxit_teardown_rma
 #define	cxit_teardown_enabled_ep cxit_teardown_rma
+#define cxit_teardown_rma_fd cxit_teardown_rma
 void cxit_setup_tx_alias_rma(void);
 void cxit_setup_tx_alias_rma_dc(void);
 #define cxit_setup_tx_alias_tagged cxit_setup_tx_alias_rma

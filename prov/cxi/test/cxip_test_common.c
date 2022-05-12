@@ -614,6 +614,45 @@ void cxit_setup_enabled_ep(void)
 	cr_assert(addrlen == sizeof(cxit_ep_addr));
 }
 
+void cxit_setup_enabled_ep_fd(void)
+{
+	int ret;
+	size_t addrlen = sizeof(cxit_ep_addr);
+
+	cxit_setup_getinfo();
+
+	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
+	cxit_rx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
+	cxit_tx_cq_attr.wait_obj = FI_WAIT_FD;
+	cxit_rx_cq_attr.wait_obj = FI_WAIT_FD;
+	cxit_av_attr.type = FI_AV_TABLE;
+	cxit_av_attr.rx_ctx_bits = 4;
+
+	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+
+	cxit_setup_ep();
+
+	/* Set up RMA objects */
+	cxit_create_ep();
+	cxit_create_eq();
+	cxit_bind_eq();
+	cxit_create_cqs();
+	cxit_bind_cqs();
+	cxit_create_cntrs();
+	cxit_bind_cntrs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	ret = fi_enable(cxit_ep);
+	cr_assert(ret == FI_SUCCESS, "ret is: %d\n", ret);
+
+	/* Find assigned Endpoint address. Address is assigned during enable. */
+	ret = fi_getname(&cxit_ep->fid, &cxit_ep_addr, &addrlen);
+	cr_assert(ret == FI_SUCCESS, "ret is %d\n", ret);
+	cr_assert(addrlen == sizeof(cxit_ep_addr));
+}
+
 void cxit_setup_rma_disable_fi_rma_event(void)
 {
 	int ret;
@@ -761,6 +800,24 @@ void cxit_teardown_rma(void)
 	cxit_destroy_cqs();
 	cxit_destroy_eq();
 	cxit_teardown_ep();
+}
+
+/* Use FI_WAIT_FD CQ wait object */
+void cxit_setup_rma_fd(void)
+{
+	int ret;
+	struct cxip_addr fake_addr = {.nic = 0xad, .pid = 0xbc};
+
+	cxit_setup_enabled_ep_fd();
+
+	/* Insert local address into AV to prepare to send to self */
+	ret = fi_av_insert(cxit_av, (void *)&fake_addr, 1, NULL, 0, NULL);
+	cr_assert(ret == 1);
+
+	/* Insert local address into AV to prepare to send to self */
+	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, &cxit_ep_fi_addr,
+			   0, NULL);
+	cr_assert(ret == 1);
 }
 
 static void cxit_setup_tx_alias_rma_impl(bool delivery_complete)

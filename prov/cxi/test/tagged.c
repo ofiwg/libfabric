@@ -5095,3 +5095,253 @@ Test(tagged_src_err, addr)
 	cxit_teardown_tagged();
 	cxit_teardown_getinfo();
 }
+
+TestSuite(tagged_cq_wait, .init = cxit_setup_rma_fd,
+	  .fini = cxit_teardown_rma_fd,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
+
+struct fd_params {
+	size_t length;
+	size_t num_ios;
+	int timeout;
+	bool poll;
+	bool ux_msg;
+};
+
+struct tagged_cq_wait_event_args {
+	struct fid_cq *cq;
+	struct fi_cq_tagged_entry *cqe;
+	size_t io_num;
+	int timeout;
+	bool poll;
+};
+
+static void *tagged_cq_wait_evt_worker(void *data)
+{
+	int ret;
+	struct tagged_cq_wait_event_args *args;
+	struct fid *fids[1];
+	int cq_fd;
+	size_t completions = 0;
+
+	args = (struct tagged_cq_wait_event_args *)data;
+
+	if (args->poll) {
+		ret = fi_control(&args->cq->fid, FI_GETWAIT, &cq_fd);
+		cr_assert_eq(ret, FI_SUCCESS, "Get CQ wait FD %d", ret);
+		fids[0] = &args->cq->fid;
+	}
+
+	while (completions < args->io_num) {
+		if (args->poll) {
+			ret = fi_trywait(cxit_fabric, fids, 1);
+			if (ret == FI_SUCCESS) {
+				struct pollfd fds;
+
+				fds.fd = cq_fd;
+				fds.events = POLLIN;
+
+				ret = poll(&fds, 1, args->timeout);
+				cr_assert_neq(ret, 0, "Poll timed out");
+				cr_assert_eq(ret, 1, "Poll error");
+			}
+			ret = fi_cq_read(args->cq,
+					 &args->cqe[completions], 1);
+			if (ret == 1)
+				completions++;
+		} else {
+			ret = fi_cq_sread(args->cq, &args->cqe[completions],
+					  1, NULL, args->timeout);
+			cr_assert_eq(ret, 1, "Completion not received\n");
+			completions++;
+		}
+	}
+
+	pthread_exit(NULL);
+}
+
+static void cq_wait_post_sends(struct tagged_thread_args *tx_args,
+			       struct fd_params *param)
+{
+	int ret;
+	size_t buf_len = param->length;
+
+	/* Issue the Sends */
+	for (size_t tx_io = 0; tx_io < param->num_ios; tx_io++) {
+		tx_args[tx_io].len = buf_len;
+		tx_args[tx_io].tag = tx_io;
+		tx_args[tx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		cr_assert_not_null(tx_args[tx_io].buf);
+		for (size_t i = 0; i < buf_len; i++)
+			tx_args[tx_io].buf[i] = i + 0xa0 + tx_io;
+
+		do {
+			ret = fi_tsend(cxit_ep, tx_args[tx_io].buf,
+				       tx_args[tx_io].len, NULL,
+				       cxit_ep_fi_addr, tx_args[tx_io].tag,
+				       NULL);
+			if (ret == -FI_EAGAIN) {
+				fi_cq_read(cxit_tx_cq, NULL, 0);
+				fi_cq_read(cxit_rx_cq, NULL, 0);
+			}
+		} while (ret == -FI_EAGAIN);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsend %ld: unexpected ret %d",
+			     tx_io, ret);
+	}
+}
+
+void do_cq_wait(struct fd_params *param)
+{
+	int ret;
+	size_t buf_len = param->length;
+	struct fi_cq_tagged_entry *rx_cqe;
+	struct fi_cq_tagged_entry *tx_cqe;
+	struct tagged_thread_args *tx_args;
+	struct tagged_thread_args *rx_args;
+	pthread_t tx_thread;
+	pthread_t rx_thread;
+	pthread_attr_t attr;
+	struct tagged_cq_wait_event_args tx_evt_args = {
+		.cq = cxit_tx_cq,
+		.io_num = param->num_ios,
+		.timeout = param->timeout,
+		.poll = param->poll,
+	};
+	struct tagged_cq_wait_event_args rx_evt_args = {
+		.cq = cxit_rx_cq,
+		.io_num = param->num_ios,
+		.timeout = param->timeout,
+		.poll = param->poll,
+	};
+
+	tx_cqe = calloc(param->num_ios, sizeof(struct fi_cq_tagged_entry));
+	cr_assert_not_null(tx_cqe);
+
+	rx_cqe = calloc(param->num_ios, sizeof(struct fi_cq_tagged_entry));
+	cr_assert_not_null(rx_cqe);
+
+	tx_args = calloc(param->num_ios, sizeof(struct tagged_thread_args));
+	cr_assert_not_null(tx_args);
+
+	rx_args = calloc(param->num_ios, sizeof(struct tagged_thread_args));
+	cr_assert_not_null(rx_args);
+
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+	tx_evt_args.cqe = tx_cqe;
+	rx_evt_args.cqe = rx_cqe;
+
+	/* Sends first if testing unexpected message operation */
+	if (param->ux_msg) {
+		cq_wait_post_sends(tx_args, param);
+
+		/* Start processing Send events */
+		ret = pthread_create(&tx_thread, &attr,
+				     tagged_cq_wait_evt_worker,
+				     (void *)&tx_evt_args);
+		cr_assert_eq(ret, 0, "Send thread create failed %d", ret);
+
+		/* Force onloading of UX entries if operating in SW EP mode */
+		fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+	}
+
+	/* Issue the Receives */
+	for (size_t rx_io = 0; rx_io < param->num_ios; rx_io++) {
+		rx_args[rx_io].len = buf_len;
+		rx_args[rx_io].tag = rx_io;
+		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		cr_assert_not_null(rx_args[rx_io].buf);
+		memset(rx_args[rx_io].buf, 0, buf_len);
+
+		do {
+			ret = fi_trecv(cxit_ep, rx_args[rx_io].buf,
+				       rx_args[rx_io].len, NULL,
+				       FI_ADDR_UNSPEC, rx_args[rx_io].tag,
+				       0, NULL);
+			if (ret == -FI_EAGAIN)
+				fi_cq_read(cxit_rx_cq, NULL, 0);
+		} while (ret == -FI_EAGAIN);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_trecv %ld: unexpected ret %d",
+			     rx_io, ret);
+	}
+
+	/* Start processing Receive events */
+	ret = pthread_create(&rx_thread, &attr, tagged_cq_wait_evt_worker,
+			     (void *)&rx_evt_args);
+	cr_assert_eq(ret, 0, "Receive thread create failed %d", ret);
+
+	/* Sends last for expected messaging */
+	if (!param->ux_msg) {
+		/* Make sure receive has blocked */
+		sleep(1);
+		cq_wait_post_sends(tx_args, param);
+
+		/* Start processing Send events */
+		ret = pthread_create(&tx_thread, &attr,
+				     tagged_cq_wait_evt_worker,
+				     (void *)&tx_evt_args);
+	}
+
+	/* Wait for the RX/TX event threads to complete */
+	ret = pthread_join(tx_thread, NULL);
+	cr_assert_eq(ret, 0, "Send thread join failed %d", ret);
+
+	ret = pthread_join(rx_thread, NULL);
+	cr_assert_eq(ret, 0, "Recv thread join failed %d", ret);
+
+	/* Validate results */
+	for (size_t io = 0; io < param->num_ios; io++) {
+		/* Validate sent data */
+		cr_expect_arr_eq(rx_args[io].buf, tx_args[io].buf, buf_len);
+
+		validate_tx_event(&tx_cqe[io], FI_TAGGED | FI_SEND, NULL);
+
+		validate_rx_event(&rx_cqe[io], NULL, buf_len,
+				  FI_TAGGED | FI_RECV, NULL,
+				  0, tx_args[rx_cqe[io].tag].tag);
+
+		free(tx_args[io].buf);
+		free(rx_args[io].buf);
+	}
+
+	pthread_attr_destroy(&attr);
+	free(rx_cqe);
+	free(tx_cqe);
+	free(tx_args);
+	free(rx_args);
+}
+
+ParameterizedTestParameters(tagged_cq_wait, wait_fd)
+{
+	size_t param_sz;
+
+	static struct fd_params params[] = {
+		{.length = 1024,
+		 .num_ios = 4,
+		 .timeout = 5000,
+		 .poll = true},
+		{.length = 8192,
+		 .num_ios = 4,
+		 .timeout = 5000,
+		 .poll = true},
+		{.length = 1024,
+		 .num_ios = 4,
+		 .timeout = 5000,
+		 .poll = false},
+		{.length = 8192,
+		 .num_ios = 4,
+		 .timeout = 5000,
+		 .poll = false},
+	};
+
+	param_sz = ARRAY_SIZE(params);
+	return cr_make_param_array(struct fd_params, params,
+				   param_sz);
+}
+
+ParameterizedTest(struct fd_params *param, tagged_cq_wait, wait_fd,
+		  .timeout = 60)
+{
+	do_cq_wait(param);
+}
