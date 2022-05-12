@@ -54,7 +54,7 @@ void ibv_free_device_list(struct ibv_device **list)
 struct ibv_context *ibv_open_device(struct ibv_device *device)
 {
 	VRB_TRACE(FI_LOG_FABRIC, "\n");
-	return get_context_by_device(device);
+	return nd_get_context_by_device(device);
 }
 
 int ibv_close_device(struct ibv_context *context)
@@ -85,7 +85,7 @@ int ibv_query_device(struct ibv_context *context,
 		return errno;
 	}
 
-	adapter = get_adapter_by_context(context);
+	adapter = nd_get_adapter_by_context(context);
 	if (!adapter) {
 		errno = ENODEV;
 		return errno;
@@ -139,7 +139,7 @@ int ___ibv_query_port(struct ibv_context *context, uint8_t port_num,
 		return errno;
 	}
 
-	adapter = get_adapter_by_context(context);
+	adapter = nd_get_adapter_by_context(context);
 	if (!adapter) {
 		errno = ENODEV;
 		return errno;
@@ -168,8 +168,8 @@ int ibv_query_gid(struct ibv_context *context, uint8_t port_num, int index,
 {
 	VRB_TRACE(FI_LOG_FABRIC, "\n");
 
-	gid->global.subnet_prefix =
-		0x80fe; // little endian representation of link-local address prefix.
+	// little endian representation of link-local address prefix.
+	gid->global.subnet_prefix = 0x80fe;
 	gid->global.interface_id = 0;
 
 	return 0;
@@ -292,7 +292,7 @@ struct ibv_cq *ibv_create_cq(struct ibv_context *context, int cqe,
 		return NULL;
 	}
 
-	adapter = get_adapter_by_context(context);
+	adapter = nd_get_adapter_by_context(context);
 	if (!adapter) {
 		errno = ENODEV;
 		return NULL;
@@ -307,9 +307,10 @@ struct ibv_cq *ibv_create_cq(struct ibv_context *context, int cqe,
 	if (channel)
 		++channel->refcnt;
 
+	ofi_mutex_init(&cq_nd->notification.lock);
+	pthread_cond_init(&cq_nd->notification.cond, 0);
 	cq_nd->notification.event_cb = nd_cq_notify_event;
 	cq_nd->notification.error_cb = nd_cq_notify_error;
-	ofi_mutex_init(&cq_nd->lock);
 
 	cq = &cq_nd->cq;
 	cq->context = context;
@@ -352,8 +353,6 @@ err1:
 int ibv_destroy_cq(struct ibv_cq *cq)
 {
 	struct nd_cq *cq_nd;
-	HRESULT hr;
-	int delay = 0;
 
 	VRB_TRACE(FI_LOG_FABRIC, "\n");
 
@@ -363,29 +362,10 @@ int ibv_destroy_cq(struct ibv_cq *cq)
 	}
 
 	cq_nd = container_of(cq, struct nd_cq, cq);
-	ofi_mutex_lock(&cq_nd->lock);
-	if (cq_nd->notify_pending) {
-		hr = cq_nd->nd2cq->lpVtbl->CancelOverlappedRequests(
-			cq_nd->nd2cq);
-		if (FAILED(hr)) {
-			errno = hresult2fi(hr);
-			return errno;
-		}
-		ofi_mutex_unlock(&cq_nd->lock);
-		pthread_yield();
-
-		ofi_mutex_lock(&cq_nd->lock);
-		while (true) {
-			if (cq_nd->notify_pending) {
-				ofi_mutex_unlock(&cq_nd->lock);
-				usleep(1 << delay++);
-				ofi_mutex_lock(&cq_nd->lock);
-			} else {
-				break;
-			}
-		}
+	if (nd_cancel_pending(&cq_nd->notification,
+			      (IND2Overlapped *)cq_nd->nd2cq)) {
+		return errno;
 	}
-	ofi_mutex_unlock(&cq_nd->lock);
 
 	if (!CloseHandle(cq_nd->ov_file)) {
 		errno = GetLastError();
@@ -403,7 +383,8 @@ int ibv_destroy_cq(struct ibv_cq *cq)
 	if (cq_nd->cq.channel)
 		--cq_nd->cq.channel->refcnt;
 
-	ofi_mutex_destroy(&cq_nd->lock);
+	pthread_cond_destroy(&cq_nd->notification.cond);
+	ofi_mutex_destroy(&cq_nd->notification.lock);
 	free(cq_nd);
 
 	return 0;
@@ -437,7 +418,8 @@ int ibv_poll_cq(struct ibv_cq *cq, int num_entries, struct ibv_wc *wc)
 		wc[num_results].opcode = result.RequestType;
 		FI_LOG(&vrb_prov, result.Status ? FI_LOG_WARN : FI_LOG_DEBUG,
 		       FI_LOG_CQ,
-		       "ibv_poll_cq: context=0x%016llx, numBytes=%d, status=0x%08lx, request=0x%08lx\n",
+		       "ibv_poll_cq: context=0x%016llx, numBytes=%d, "
+		       "status=0x%08lx, request=0x%08lx\n",
 		       (uint64_t)result.RequestContext, result.BytesTransferred,
 		       result.Status, result.RequestType);
 	}
@@ -459,9 +441,9 @@ int ibv_req_notify_cq(struct ibv_cq *cq, int solicited_only)
 
 	cq_nd = container_of(cq, struct nd_cq, cq);
 
-	ofi_mutex_lock(&cq_nd->lock);
-	if (!cq_nd->notify_pending) {
-		cq_nd->notify_pending = true;
+	ofi_mutex_lock(&cq_nd->notification.lock);
+	if (!cq_nd->notification.cb_pending) {
+		cq_nd->notification.cb_pending = 1;
 		hr = cq_nd->nd2cq->lpVtbl->Notify(
 			cq_nd->nd2cq,
 			solicited_only ? ND_CQ_NOTIFY_SOLICITED :
@@ -471,12 +453,12 @@ int ibv_req_notify_cq(struct ibv_cq *cq, int solicited_only)
 			"IND2CompletionQueue::Notify: hr=0x%08lx; ov=%p\n", hr,
 			&cq_nd->notification.ov);
 		if (FAILED(hr)) {
-			cq_nd->notify_pending = false;
+			cq_nd->notification.cb_pending = 0;
 			errno = hresult2fi(hr);
 			return errno;
 		}
 	}
-	ofi_mutex_unlock(&cq_nd->lock);
+	ofi_mutex_unlock(&cq_nd->notification.lock);
 
 	return 0;
 }
@@ -534,7 +516,7 @@ struct ibv_qp *ibv_create_qp(struct ibv_pd *pd,
 		return NULL;
 	}
 
-	adapter = get_adapter_by_context(pd->context);
+	adapter = nd_get_adapter_by_context(pd->context);
 	if (qp_init_attr->cap.max_inline_data >
 	    adapter->info.MaxInlineDataSize) {
 		errno = ENODEV;
@@ -629,7 +611,7 @@ struct ibv_mr *ibv_reg_mr_iova2(struct ibv_pd *pd, void *addr, size_t length,
 		return NULL;
 	}
 
-	adapter = get_adapter_by_context(pd->context);
+	adapter = nd_get_adapter_by_context(pd->context);
 	if (!adapter) {
 		errno = ENODEV;
 		return NULL;
@@ -678,7 +660,8 @@ struct ibv_mr *ibv_reg_mr_iova2(struct ibv_pd *pd, void *addr, size_t length,
 	hr = mr_nd->region->lpVtbl->Register(mr_nd->region, addr, length, flags,
 					     &ov);
 	VRB_DBG(FI_LOG_MR,
-		"IND2MemoryRegion::Register: hr=0x%08lx; ov=%p, addr=0x%016llx, len=0x%016llx\n",
+		"IND2MemoryRegion::Register: hr=0x%08lx; ov=%p, "
+		"addr=0x%016llx, len=0x%016llx\n",
 		hr, &ov, addr, length);
 	if (FAILED(hr)) {
 		errno = hresult2fi(hr);
@@ -777,7 +760,8 @@ int ibv_post_recv(struct ibv_qp *qp, struct ibv_recv_wr *wr,
 						   (ND2_SGE *)wr->sg_list,
 						   wr->num_sge);
 		VRB_DBG(FI_LOG_EP_DATA,
-			"IND2QueuePair::Receive: hr=0x%08lx, context=0x%016llx\n",
+			"IND2QueuePair::Receive: hr=0x%08lx, "
+			"context=0x%016llx\n",
 			hr, wr->wr_id);
 		if (FAILED(hr)) {
 			errno = hresult2fi(hr);
@@ -795,7 +779,6 @@ int ibv_post_send(struct ibv_qp *qp, struct ibv_send_wr *wr,
 		  struct ibv_send_wr **bad_wr)
 {
 	struct nd_qp *qp_nd;
-	uint32_t length = 0;
 	uint32_t flags = 0;
 	HRESULT hr;
 
@@ -806,34 +789,68 @@ int ibv_post_send(struct ibv_qp *qp, struct ibv_send_wr *wr,
 		return errno;
 	}
 
-	// TODO: Add support for other transfer methods.
-	if (wr->opcode != IBV_WR_SEND) {
-		VRB_WARN(FI_LOG_EP_DATA, "Unsupported opcode: %d\n",
-			 wr->opcode);
-		assert(wr->opcode == IBV_WR_SEND);
-		errno = EINVAL;
-		return errno;
-	}
-
 	*bad_wr = NULL;
 
 	qp_nd = container_of(qp, struct nd_qp, qp);
 	while (wr) {
-		length = 0;
-		for (int i = 0; i < wr->num_sge; ++i) {
-			length += wr->sg_list[i].length;
+		switch (wr->opcode) {
+		case IBV_WR_SEND:
+			flags = (wr->send_flags & IBV_SEND_INLINE) ?
+					      ND_OP_FLAG_INLINE :
+					      0;
+			hr = qp_nd->nd2qp->lpVtbl->Send(qp_nd->nd2qp,
+							(void *)wr->wr_id,
+							(ND2_SGE *)wr->sg_list,
+							wr->num_sge, flags);
+			VRB_DBG(FI_LOG_EP_DATA,
+				"IND2QueuePair::Send: hr=0x%08lx, nsge=%d, "
+				"addr=0x%016llx, length=%d, lkey=0x%08lx\n",
+				hr, wr->num_sge, wr->sg_list[0].addr,
+				wr->sg_list[0].length, wr->sg_list[0].lkey);
+			break;
+
+		case IBV_WR_RDMA_READ:
+			hr = qp_nd->nd2qp->lpVtbl->Read(
+				qp_nd->nd2qp, (void *)wr->wr_id,
+				(ND2_SGE *)wr->sg_list, wr->num_sge,
+				wr->wr.rdma.remote_addr, wr->wr.rdma.rkey,
+				flags);
+			VRB_DBG(FI_LOG_EP_DATA,
+				"IND2QueuePair::Read: hr=0x%08lx, nsge=%d, "
+				"addr=0x%016llx, raddr=0x%016llx, "
+				"rkey=0x%08lx, lkey=0x%08lx\n",
+				hr, wr->num_sge, wr->sg_list[0].addr,
+				wr->wr.rdma.remote_addr, wr->wr.rdma.rkey,
+				wr->sg_list[0].lkey);
+			break;
+
+		case IBV_WR_RDMA_WRITE:
+			flags = (wr->send_flags & IBV_SEND_INLINE) ?
+					      ND_OP_FLAG_INLINE :
+					      0;
+			hr = qp_nd->nd2qp->lpVtbl->Write(
+				qp_nd->nd2qp, (void *)wr->wr_id,
+				(ND2_SGE *)wr->sg_list, wr->num_sge,
+				wr->wr.rdma.remote_addr, wr->wr.rdma.rkey,
+				flags);
+			VRB_DBG(FI_LOG_EP_DATA,
+				"IND2QueuePair::Write: hr=0x%08lx, nsge=%d, "
+				"addr=0x%016llx, raddr=0x%016llx, "
+				"rkey=0x%08lx, lkey=0x%08lx\n",
+				hr, wr->num_sge, wr->sg_list[0].addr,
+				wr->wr.rdma.remote_addr, wr->wr.rdma.rkey,
+				wr->sg_list[0].lkey);
+			break;
+
+		default:
+			// TODO: Add support for other transfer methods.
+			VRB_WARN(FI_LOG_EP_DATA, "Unsupported opcode: %d\n",
+				 wr->opcode);
+			assert(false);
+			errno = EINVAL;
+			return errno;
 		}
-		flags = 0;
-		if (length <= qp_nd->max_inline_data) {
-			flags |= ND_OP_FLAG_INLINE;
-		}
-		hr = qp_nd->nd2qp->lpVtbl->Send(qp_nd->nd2qp, (void *)wr->wr_id,
-						(ND2_SGE *)wr->sg_list,
-						wr->num_sge, flags);
-		VRB_DBG(FI_LOG_EP_DATA,
-			"IND2QueuePair::Send: hr=0x%08lx, nsge=%d, addr=0x%016llx, length=%d, lkey=0x%08lx\n",
-			hr, wr->num_sge, wr->sg_list[0].addr,
-			wr->sg_list[0].length, wr->sg_list[0].lkey);
+
 		if (FAILED(hr)) {
 			errno = hresult2fi(hr);
 			*bad_wr = wr;
