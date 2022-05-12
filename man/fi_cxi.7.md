@@ -75,7 +75,9 @@ and control interfaces are always considered thread-safe.
 
 ## Wait Objects
 
-The CXI provider does not currently support wait objects.
+The CXI provider supports FI_WAIT_FD and FI_WAIT_POLLFD CQ wait object types.
+FI_WAIT_UNSPEC will default to FI_WAIT_FD. However FI_WAIT_NONE should achieve
+the lowest latency and reduce interrupt overhead.
 
 ## Additional Features
 
