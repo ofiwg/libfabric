@@ -6,8 +6,23 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v1.15.1, Fri May 13, 2022
+=========================
+
+## Core
+
+- Fix windows implementation to remove fd from poll set
+
+## PSM3
+
+- Add missing files to release tarball
+
+## Util
+
+- Handle NULL address insertion to fi_av_insert
+
 v1.15.0, Fri Apr 29, 2022
-========================
+=========================
 
 ## Core
 
