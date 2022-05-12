@@ -2840,25 +2840,26 @@ ssize_t fi_opx_ep_tx_send_rzv(struct fid_ep *ep,
 			const uint64_t do_cq_completion)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-
+	union fi_opx_context * opx_context = (union fi_opx_context *)context;
 	uintptr_t byte_counter_ptr;
 	uint64_t *byte_counter;
-	uint64_t tmp;
-
-	union fi_opx_context * opx_context = (union fi_opx_context *)context;
+	uint64_t fake_cntr;
+	ssize_t rc;
 
 	if (OFI_LIKELY(do_cq_completion != 0)) {
 		assert(context);
 		assert(((uintptr_t)context & 0x07ull) == 0);	/* must be 8 byte aligned */
-
 		byte_counter_ptr = (uintptr_t) &opx_context->byte_counter;
 		byte_counter = (uint64_t *) &opx_context->byte_counter;
-	} else {
-		byte_counter_ptr = (uintptr_t) &tmp;
-		byte_counter = (uint64_t *) &tmp;
-	}
 
-	ssize_t rc = 0;
+	} else {
+		// Give a 'fake' counter here to 'value' part of the SEND_RZV.  This
+		// does look a bit weird, but it saves from a few if checks in
+		// SEND_RZV and won't store a pointer to the stack variable
+		// fake_cntr in the RZV protocol headers
+		byte_counter_ptr = (uintptr_t) NULL;
+		byte_counter = (uint64_t *) &fake_cntr;
+	}
 
 	do {
 		if (is_contiguous) {
