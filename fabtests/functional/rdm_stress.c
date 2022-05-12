@@ -749,11 +749,15 @@ static int init_ctrls(const char *ctrlfile)
 	int ret = 0;
 
 	ctrl_f = fopen(ctrlfile, "r");
-	if (!ctrl_f)
+	if (!ctrl_f) {
+		FT_PRINTERR("fopen", -errno);
 		return -errno;
+	}
 
-	if (stat(ctrlfile, &sb))
+	if (stat(ctrlfile, &sb)) {
+		FT_PRINTERR("stat", -errno);
 		return -errno;
+	}
 
 	js = malloc(sb.st_size + 1);
 	if (!js) {
