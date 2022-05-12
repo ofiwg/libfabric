@@ -1,12 +1,8 @@
 #!/bin/bash
 
-
-echo "@=$@"
-
-Options=$(getopt --options h:,n:,p:,I:,C: \
-		  		--longoptions hosts:,processes-per-node:,provider:,capability:\
-				  ,iterations:,cleanup,help \
-				--"$@")
+Options=$(getopt --options h:,n:,p:,I:,C:,z: \
+		  		--longoptions hosts:,processes-per-node:,provider:,capability:,iterations:,cleanup,help \
+				-- "$@")
 
 eval set -- "$Options"
 
@@ -14,6 +10,7 @@ hosts=[]
 ppn=1
 iterations=1
 pattern=""
+capability="msg"
 cleanup=false
 help=false
 
@@ -27,10 +24,12 @@ while true; do
 			provider="$2"; shift 2 ;;
 		-I|--iterations)
 			iterations=$2; shift 2 ;;
-		-C|--capability)
-			capability="$2"; shift 2 ;;
+		-z|--pattern)
+			pattern="-z $2"; shift 2 ;;
 		--cleanup)
 			cleanup=true; shift ;;
+		-C|--capability)
+			capability="$2"; shift 2 ;;
 		--help) 
 			help=true; shift ;;
 		--)
@@ -55,16 +54,15 @@ if $help ; then
 fi
 		
 num_hosts=${#hosts[@]}
-ranks=$(($num_hosts*$ppn))
+max_ranks=$(($num_hosts*$ppn))
+ranks=$max_ranks;
 server=${hosts[0]}
 start_server=0
-output="multinode_server_$ranks.out"
-
-cmd="fi_multinode -n $ranks -s $server -p '$provider' -C $capability -I $iterations -T"
-echo $cmd
+output="multinode_server_${num_hosts}_${ppn}.log"
 
 if ! $cleanup ; then
-  
+	cmd="fi_multinode -n $ranks -s $server -p '$provider' -C $capability $pattern -I $iterations -T"
+	echo $cmd
 	for node in "${hosts[@]}"; do
 		for i in $(seq 1 $ppn); do
 			if [ $start_server -eq 0 ]; then
@@ -74,17 +72,23 @@ if ! $cleanup ; then
 				start_server=1
 				sleep .5
 			else
+				echo "starting proc $i/$ppn on $node"
+				tput cuu1
 				ssh $node $cmd &> /dev/null &
 			fi
+			sleep .05
 		done
 	done
 
-	echo Wait for processes to finish...
+	echo "Wait for processes to finish..."
 	wait $server_pid
 fi
 
 echo Cleaning up
-  
 for node in "${hosts[@]}"; do
 	ssh $node "ps -eo comm,pid | grep '^fi_multinode' | awk '{print \$2}' | xargs kill -9" >& /dev/null
 done;
+
+if ! $cleanup ; then
+	echo "Output: $PWD/$output"
+fi
