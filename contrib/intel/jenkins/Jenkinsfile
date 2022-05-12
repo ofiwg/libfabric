@@ -383,6 +383,23 @@ pipeline {
                         }
                     }
                 }
+                stage('oneCCL-GPU') {
+                    agent {node {label 'ze'}}
+                    options { skipDefaultCheckout() }
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                                python3.7 runtests.py --prov=tcp --test=onecclgpu
+                                echo "oneCCL-GPU completed."
+                            )
+                          """
+                        }
+                    }
+                }
                 stage('ze-shm') {
                     agent {node {label 'ze'}}
                     options { skipDefaultCheckout() }

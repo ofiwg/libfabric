@@ -157,5 +157,27 @@ def oneccltest(core, hosts, mode, util):
               .format(runoneccltest.testname))
     print("-------------------------------------------------------------------")
 
+def oneccltestgpu(core, hosts, mode, util):
+
+    runoneccltestgpu = tests.OneCCLTestsGPU(jobname=jbname,buildno=bno,
+                                         testname="oneccl GPU test", core_prov=core,
+                                         fabric=fab, hosts=hosts,
+                                         ofi_build_mode=mode, util_prov=util)
+
+    print("-------------------------------------------------------------------")
+    if (runoneccltestgpu.execute_condn):
+        print("Running oneCCL GPU examples test for {}-{}-{}" \
+              .format(core, util, fab))
+        runoneccltestgpu.execute_cmd('examples')
+
+        print("---------------------------------------------------------------")
+        print("Running oneCCL GPU functional test for {}-{}-{}" \
+              .format(core, util, fab))
+        runoneccltestgpu.execute_cmd('functional')
+    else:
+        print("Skipping {} as execute condition fails" \
+              .format(runoneccltestgpu.testname))
+    print("-------------------------------------------------------------------")
+
 if __name__ == "__main__":
     pass
