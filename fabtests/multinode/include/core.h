@@ -69,6 +69,7 @@ struct pm_job_info {
 	size_t		name_len;
 	fi_addr_t	*fi_addrs;
 	enum multi_xfer transfer_method;
+	int 		pattern;
 };
 
 struct multinode_xfer_state {

@@ -45,7 +45,7 @@
 #include <core.h>
 struct pm_job_info pm_job;
 
-static int parse_caps(char* caps)
+static int parse_caps(char *caps)
 {
 	if (strcmp(caps, "msg") == 0) {
 		return multi_msg;
@@ -55,6 +55,22 @@ static int parse_caps(char* caps)
 		printf("Warn: Invalid capability, defaulting to msg\n");
 		return multi_msg;
 	}
+}
+
+static int parse_pattern(char *pattern)
+{
+	if (strcmp(pattern, "full_mesh") == 0) {
+		return 0;
+	} else if (strcmp(pattern, "ring") == 0) {
+		return 1;
+	} else if (strcmp(pattern, "gather") == 0) {
+		return 2;
+	} else if (strcmp(pattern, "broadcast") == 0) {
+		return 3;
+	} else {
+		printf("Warn: Invalid pattern, defaulting to full_mesh\n");
+		return 0;
+	} 
 }
 
 ssize_t socket_send(int sock, void *buf, size_t len, int flags)
@@ -298,12 +314,13 @@ int main(int argc, char **argv)
 	opts.options |= FT_OPT_SIZE;
 
 	pm_job.clients = NULL;
+	pm_job.pattern = -1;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((c = getopt(argc, argv, "n:C:Th" CS_OPTS INFO_OPTS)) != -1) {
+	while ((c = getopt(argc, argv, "n:C:z:Th" CS_OPTS INFO_OPTS)) != -1) {
 		switch (c) {
 		default:
 			ft_parse_addr_opts(c, optarg, &opts);
@@ -318,6 +335,9 @@ int main(int argc, char **argv)
 			break;
 		case 'T':
 			opts.options |= FT_OPT_PERF;
+			break;
+		case 'z':
+			pm_job.pattern = parse_pattern(optarg);
 			break;
 		case '?':
 		case 'h':
