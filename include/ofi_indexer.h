@@ -92,9 +92,16 @@ static inline int ofi_idx_is_valid(struct indexer *idx, int index)
 	return (index > 0) && (index < idx->size * OFI_IDX_CHUNK_SIZE);
 }
 
+static inline struct ofi_idx_entry *
+ofi_idx_chunk(struct indexer *idx, int index)
+{
+	assert(ofi_idx_is_valid(idx, index));
+	return idx->chunk[ofi_idx_chunk_id(index)];
+}
+
 static inline void *ofi_idx_at(struct indexer *idx, int index)
 {
-	return (idx->chunk[ofi_idx_chunk_id(index)] + ofi_idx_offset(index))->item;
+	return (ofi_idx_chunk(idx, index) + ofi_idx_offset(index))->item;
 }
 
 static inline void *ofi_idx_lookup(struct indexer *idx, int index)
@@ -131,16 +138,23 @@ int ofi_idm_set(struct index_map *idm, int index, void *item);
 void *ofi_idm_clear(struct index_map *idm, int index);
 void ofi_idm_reset(struct index_map *idm, void (*callback)(void *item));
 
+static inline void **ofi_idm_chunk(struct index_map *idm, int index)
+{
+	assert(idm->chunk);
+	return idm->chunk[ofi_idx_chunk_id(index)];
+}
+
 static inline void *ofi_idm_at(struct index_map *idm, int index)
 {
 	void **chunk;
-	chunk = idm->chunk[ofi_idx_chunk_id(index)];
+	chunk = ofi_idm_chunk(idm, index);
+	assert(chunk && idm->count[ofi_idx_chunk_id(index)]);
 	return chunk[ofi_idx_offset(index)];
 }
 
 static inline void *ofi_idm_lookup(struct index_map *idm, int index)
 {
-	return ((index <= OFI_IDX_MAX_INDEX) && idm->chunk[ofi_idx_chunk_id(index)]) ?
+	return ((index <= OFI_IDX_MAX_INDEX) && ofi_idm_chunk(idm, index)) ?
 		ofi_idm_at(idm, index) : NULL;
 }
 
