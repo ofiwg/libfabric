@@ -69,7 +69,7 @@ struct ofi_idx_entry {
 
 struct indexer
 {
-	struct ofi_idx_entry 	*array[OFI_IDX_ARRAY_SIZE];
+	struct ofi_idx_entry 	*chunk[OFI_IDX_ARRAY_SIZE];
 	int		 	free_list;
 	/* Array size (used): [0, OFI_IDX_ARRAY_SIZE) */
 	int		 	size;
@@ -130,9 +130,9 @@ void ofi_idm_reset(struct index_map *idm, void (*callback)(void *item));
 
 static inline void *ofi_idm_at(struct index_map *idm, int index)
 {
-	void **entry;
-	entry = idm->chunk[ofi_idx_array_index(index)];
-	return entry[ofi_idx_entry_index(index)];
+	void **chunk;
+	chunk = idm->chunk[ofi_idx_array_index(index)];
+	return chunk[ofi_idx_entry_index(index)];
 }
 
 static inline void *ofi_idm_lookup(struct index_map *idm, int index)
