@@ -952,12 +952,30 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 			fi_ptr->rx_attr->caps &= ~FI_RMA_EVENT;
 		}
 
+		/* FI_SOURCE_ERR requires that FI_SOURCE be set, it is
+		 * an error if requested but can not be honored.
+		 */
+		if (hints->caps && (hints->caps & FI_SOURCE_ERR) &&
+		    !(hints->caps & FI_SOURCE)) {
+			ret = -FI_ENODATA;
+			goto freeinfo;
+		}
+
 		/* Requesting FI_SOURCE adds overhead to a receive operation.
 		 * Do not set FI_SOURCE unless explicitly requested.
 		 */
 		if (hints->caps && !(hints->caps & FI_SOURCE)) {
 			fi_ptr->caps &= ~FI_SOURCE;
 			fi_ptr->rx_attr->caps &= ~FI_SOURCE;
+		}
+
+		/* Requesting FI_SOURCE_ERR adds additional overhead to receive
+		 * operations beyond FI_SOURCE, do not set if not explicitly
+		 * asked.
+		 */
+		if (hints->caps && !(hints->caps & FI_SOURCE_ERR)) {
+			fi_ptr->caps &= ~FI_SOURCE_ERR;
+			fi_ptr->rx_attr->caps &= ~FI_SOURCE_ERR;
 		}
 
 		/* Requesting FI_FENCE prevents the use PCIe RO for RMA. Do not

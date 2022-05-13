@@ -219,6 +219,38 @@ static void cxip_recv_req_free(struct cxip_req *req)
 }
 
 /*
+ * recv_req_event_success() - Generate successful receive event completions.
+ */
+static inline int recv_req_event_success(struct cxip_rxc *rxc,
+					 struct cxip_req *req)
+{
+	int ret;
+	fi_addr_t src_addr;
+	struct cxip_addr *addr;
+
+	if (req->recv.rxc->attr.caps & FI_SOURCE) {
+		src_addr = recv_req_src_addr(req);
+		if (src_addr != FI_ADDR_NOTAVAIL ||
+		    !(rxc->attr.caps & FI_SOURCE_ERR))
+			return cxip_cq_req_complete_addr(req, src_addr);
+
+		addr = malloc(sizeof(*addr));
+		if (!addr)
+			return -FI_ENOMEM;
+
+		addr->nic = CXI_MATCH_ID_EP(rxc->pid_bits, req->recv.initiator);
+		addr->pid = CXI_MATCH_ID_PID(rxc->pid_bits,
+					     req->recv.initiator);
+		ret = cxip_cq_req_error(req, 0, FI_EADDRNOTAVAIL, req->recv.rc,
+					addr, sizeof(*addr));
+	} else {
+		ret = cxip_cq_req_complete(req);
+	}
+
+	return ret;
+}
+
+/*
  * recv_req_report() - Report the completion of a receive operation.
  */
 static void recv_req_report(struct cxip_req *req)
@@ -226,7 +258,6 @@ static void recv_req_report(struct cxip_req *req)
 	int ret;
 	int truncated;
 	int err;
-	fi_addr_t src_addr;
 	int success_event = (req->flags & FI_COMPLETION);
 	struct cxip_rxc *rxc = req->recv.rxc;
 
@@ -253,12 +284,7 @@ static void recv_req_report(struct cxip_req *req)
 		RXC_DBG(rxc, "Request success: %p\n", req);
 
 		if (success_event) {
-			if (req->recv.rxc->attr.caps & FI_SOURCE) {
-				src_addr = recv_req_src_addr(req);
-				ret = cxip_cq_req_complete_addr(req, src_addr);
-			} else {
-				ret = cxip_cq_req_complete(req);
-			}
+			ret = recv_req_event_success(rxc, req);
 			if (ret != FI_SUCCESS)
 				RXC_WARN(rxc,
 					 "Failed to report completion: %d\n",
