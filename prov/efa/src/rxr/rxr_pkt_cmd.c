@@ -595,14 +595,6 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 		if (rx_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED) {
 			post_ctrl = true;
 			ctrl_type = RXR_RECEIPT_PKT;
-		} else if(rx_entry->bytes_runt > 0 && rx_entry->read_entry) {
-			/* runt read protocol is being used,
-			 * this function is called for the runt part.
-			 * This packet has the last peice of data, therefore
-			 * must send a EOR (End Of RuntRead) back.
-			 */
-			post_ctrl = true;
-			ctrl_type = RXR_EOR_PKT;
 		}
 
 		rxr_cq_complete_rx(ep, rx_entry, post_ctrl, ctrl_type);

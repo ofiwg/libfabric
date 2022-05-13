@@ -123,10 +123,10 @@ size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry)
 	return pkt_entry->pkt_size - rxr_pkt_req_data_offset(pkt_entry);
 }
 
-int rxr_pkt_type_readbase_rtm(int op)
+int rxr_pkt_type_readbase_rtm(int op, uint64_t fi_flags)
 {
 	assert(op == ofi_op_tagged || op == ofi_op_msg);
-	if (rxr_env.efa_runt_size > 0) {
+	if (rxr_env.efa_runt_size > 0 && !(fi_flags & FI_DELIVERY_COMPLETE)) {
 		return (op == ofi_op_tagged) ? RXR_RUNTREAD_TAGRTM_PKT
 					     : RXR_RUNTREAD_MSGRTM_PKT;
 	} else {
@@ -962,6 +962,17 @@ void rxr_pkt_handle_dc_longcts_rtm_send_completion(struct rxr_ep *ep,
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked &&
 	    tx_entry->rxr_flags & RXR_RECEIPT_RECEIVED)
+		rxr_cq_handle_tx_completion(ep, tx_entry);
+}
+
+void rxr_pkt_handle_runtread_rtm_send_completion(struct rxr_ep *ep,
+						 struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_tx_entry *tx_entry;
+
+	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
+	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
+	if (tx_entry->total_len == tx_entry->bytes_acked)
 		rxr_cq_handle_tx_completion(ep, tx_entry);
 }
 

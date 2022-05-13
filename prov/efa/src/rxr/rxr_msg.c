@@ -87,14 +87,14 @@ int rxr_msg_select_rtm_for_cuda(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_e
 	medium_rtm = (delivery_complete_requested) ? RXR_DC_MEDIUM_MSGRTM_PKT + tagged
 						   : RXR_MEDIUM_MSGRTM_PKT + tagged;
 
-	readbase_rtm = rxr_pkt_type_readbase_rtm(tx_entry->op);
+	readbase_rtm = rxr_pkt_type_readbase_rtm(tx_entry->op, tx_entry->fi_flags);
 
 	eager_rtm_max_msg_size = 0;
 	medium_rtm_max_msg_size = 0;
 	if (cuda_is_gdrcopy_enabled())
 		medium_rtm_max_msg_size = rxr_env.efa_max_gdrcopy_msg_size;
 
-	if (rxr_env.efa_runt_size > 0) {
+	if (rxr_pkt_type_is_runt(readbase_rtm)) {
 		/* Default value of efa_runt_size is 0.
 		 * The fact that efa_run_size is 0 means user explicitly set FI_EFA_RUNT_SIZE.
 		 * The user's chice overrides other setting

@@ -568,13 +568,15 @@ void rxr_cq_complete_rx(struct rxr_ep *ep,
 				fi_strerror(-err), -err);
 			rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
 			rxr_release_rx_entry(ep, rx_entry);
-			return;
 		}
-	} else {
-		rxr_release_rx_entry(ep, rx_entry);
+
+		return;
 	}
 
-	return;
+	if (rx_entry->rxr_flags & RXR_EOR_IN_FLIGHT)
+		return;
+
+	rxr_release_rx_entry(ep, rx_entry);
 }
 
 int rxr_cq_reorder_msg(struct rxr_ep *ep,

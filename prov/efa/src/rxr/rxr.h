@@ -179,6 +179,13 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 #define RXR_RX_ENTRY_QUEUED_RNR BIT_ULL(9)
 
 /*
+ * Flag to indicate an rx_entry has an EOR
+ * in flight (the EOR has been sent, but has
+ * not got send completion)
+ * hence cannot be released
+ */
+#define RXR_EOR_IN_FLIGHT BIT_ULL(10)
+/*
  * OFI flags
  * The 64-bit flag field is used as follows:
  * 1-grow up    common (usable with multiple operations)

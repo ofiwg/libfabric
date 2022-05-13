@@ -277,14 +277,8 @@ void rxr_pkt_handle_longread_rtm_send_completion(struct rxr_ep *ep,
 {
 }
 
-static inline
 void rxr_pkt_handle_runtread_rtm_send_completion(struct rxr_ep *ep,
-						 struct rxr_pkt_entry *pkt_entry)
-{
-	/* nothing to do for a send completion of a runtread rtm packet
-	 * because the sender has to wait for EOR to write TX completion
-	 */
-}
+						 struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_rtm_update_rx_entry(struct rxr_pkt_entry *pkt_entry,
 				 struct rxr_rx_entry *rx_entry);

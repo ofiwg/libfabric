@@ -313,7 +313,7 @@ bool rxr_pkt_type_is_runtread(int pkt_type)
 	return pkt_type == RXR_RUNTREAD_TAGRTM_PKT || pkt_type == RXR_RUNTREAD_MSGRTM_PKT;
 }
 
-int rxr_pkt_type_readbase_rtm(int op);
+int rxr_pkt_type_readbase_rtm(int op, uint64_t fi_flags);
 
 #endif
 
