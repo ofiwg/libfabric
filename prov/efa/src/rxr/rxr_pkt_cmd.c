@@ -347,12 +347,28 @@ ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
 ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int pkt_type, bool inject, uint64_t flags)
 {
 	ssize_t err;
+	size_t max_pkt_data_size, remaining_data_size;
+	uint64_t extra_flags;
 
 	if (rxr_pkt_type_is_mulreq(pkt_type)) {
 		assert(!inject);
 
+		max_pkt_data_size = rxr_pkt_req_max_data_size(ep, tx_entry->addr, pkt_type, tx_entry->fi_flags, 0);
+
 		while (tx_entry->bytes_sent < rxr_pkt_mulreq_total_data_size(pkt_type, tx_entry)) {
-			err = rxr_pkt_post_one(ep, tx_entry, pkt_type, 0, flags);
+			if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
+				return -FI_EAGAIN;
+
+			remaining_data_size = rxr_pkt_mulreq_total_data_size(pkt_type, tx_entry) - tx_entry->bytes_sent;
+
+			if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops - 1 ||
+			    remaining_data_size < max_pkt_data_size) {
+				extra_flags = 0;
+			} else {
+				extra_flags = FI_MORE;
+			}
+
+			err = rxr_pkt_post_one(ep, tx_entry, pkt_type, 0, flags | extra_flags);
 			if (OFI_UNLIKELY(err))
 				return err;
 		}
