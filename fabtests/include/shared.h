@@ -147,10 +147,6 @@ enum op_state {
 	OP_PENDING
 };
 
-enum {
-	LONG_OPT_PIN_CORE = 1,
-};
-
 struct ft_context {
 	char *buf;
 	void *desc;
@@ -299,9 +295,6 @@ extern char default_port[8];
 #define FT_RX_MR_KEY 0xFFFF
 #define FT_MSG_MR_ACCESS (FI_SEND | FI_RECV)
 #define FT_RMA_MR_ACCESS (FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE)
-
-extern int lopt_idx;
-extern struct option long_opts[];
 
 int ft_getsrcaddr(char *node, char *service, struct fi_info *hints);
 int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
@@ -566,8 +559,32 @@ const char *ft_util_name(const char *str, size_t *len);
 const char *ft_core_name(const char *str, size_t *len);
 char **ft_split_and_alloc(const char *s, const char *delim, size_t *count);
 void ft_free_string_array(char **s);
+
+
+enum {
+	LONG_OPT_PIN_CORE = 1,
+	LONG_OPT_TIMEOUT,
+	LONG_OPT_DEBUG_ASSERT,
+};
+
+extern int debug_assert;
+
+extern int lopt_idx;
+extern struct option long_opts[];
 int ft_parse_long_opts(int op, char *optarg);
 void ft_longopts_usage();
+
+#define ft_assert(expr)					\
+	do {						\
+		if (!debug_assert) {			\
+			assert(expr);			\
+		} else {				\
+			if (!(expr))			\
+				FT_WARN("assert (pid %d)", getpid()); \
+			while (!(expr))			\
+				;			\
+		}					\
+	} while (0)
 
 #define FT_PROCESS_QUEUE_ERR(readerr, rd, queue, fn, str)	\
 	do {							\

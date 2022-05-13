@@ -75,12 +75,9 @@ struct rpc_ctrl {
 	struct fid_mr *mr;
 };
 
+int rpc_timeout = 2000; /* ms */
+
 enum {
-#if ENABLE_DEBUG
-	rpc_timeout = 300000, /* ms */
-#else
-	rpc_timeout = 10000, /* ms */
-#endif
 	rpc_write_key = 189,
 	rpc_read_key = 724,
 	rpc_threads = 32,
@@ -328,7 +325,7 @@ static int rpc_hello(struct rpc_ctrl *ctrl)
 	if (ret)
 		return ret;
 
-	assert(resp.cmd == cmd_hello);
+	ft_assert(resp.cmd == cmd_hello);
 	id_at_server = resp.client_id;
 	printf("(%d-%d) we're friends now\n", myid, id_at_server);
 	return (int) resp.data;
@@ -371,7 +368,7 @@ static int rpc_msg_resp(struct rpc_ctrl *ctrl)
 	if (ret)
 		goto free;
 
-	assert(resp->cmd == cmd_msg);
+	ft_assert(resp->cmd == cmd_msg);
 	ret = ft_check_buf(resp + 1, req->size);
 
 free:
@@ -407,7 +404,7 @@ static int rpc_tag_resp(struct rpc_ctrl *ctrl)
 	if (ret)
 		goto free;
 
-	assert(resp->cmd == cmd_tag);
+	ft_assert(resp->cmd == cmd_tag);
 	ret = ft_check_buf(resp + 1, req->size);
 
 free:
@@ -467,7 +464,7 @@ static int rpc_read_resp(struct rpc_ctrl *ctrl)
 	if (ret)
 		goto close;
 
-	assert(resp.cmd == cmd_read);
+	ft_assert(resp.cmd == cmd_read);
 	ret = ft_check_buf(&req->buf[req->offset], req->size);
 
 close:
@@ -527,7 +524,7 @@ static int rpc_write_resp(struct rpc_ctrl *ctrl)
 	if (ret)
 		goto close;
 
-	assert(resp.cmd == cmd_write);
+	ft_assert(resp.cmd == cmd_write);
 	ret = ft_check_buf(&req->buf[req->offset], req->size);
 
 close:
@@ -688,7 +685,7 @@ static bool add_ctrl(const char *js, int njts, jsmntok_t *jts,
 	size_t len;
 	int i;
 
-	assert(jts[*idx].type == JSMN_OBJECT);
+	ft_assert(jts[*idx].type == JSMN_OBJECT);
 
 	init_rpc_ctrl(ctrl);
 	/* i is indexing # of key:value pairs in JSMN_OBJECT */
@@ -752,11 +749,15 @@ static int init_ctrls(const char *ctrlfile)
 	int ret = 0;
 
 	ctrl_f = fopen(ctrlfile, "r");
-	if (!ctrl_f)
+	if (!ctrl_f) {
+		FT_PRINTERR("fopen", -errno);
 		return -errno;
+	}
 
-	if (stat(ctrlfile, &sb))
+	if (stat(ctrlfile, &sb)) {
+		FT_PRINTERR("stat", -errno);
 		return -errno;
+	}
 
 	js = malloc(sb.st_size + 1);
 	if (!js) {
@@ -994,11 +995,24 @@ int (*handle_rpc[cmd_last])(struct rpc_hdr *req, struct rpc_resp *resp) = {
 
 static void complete_rpc(struct rpc_resp *resp)
 {
+	fi_addr_t addr;
+	int ret;
+
 	printf("(%d) complete rpc %s (%s)\n", resp->hdr.client_id,
 	       rpc_cmd_str(resp->hdr.cmd), fi_strerror(resp->status));
 
-	if (resp->flags & rpc_flag_ack)
-		(void) rpc_inject(&resp->hdr, resp->hdr.client_id);
+	if (!resp->status && (resp->flags & rpc_flag_ack))
+		ret = rpc_inject(&resp->hdr, resp->hdr.client_id);
+	else
+		ret = resp->status;
+
+	if (ret) {
+		printf("(%d) unreachable, removing\n", resp->hdr.client_id);
+		addr = resp->hdr.client_id;
+ 		ret = fi_av_remove(av, &addr, 1, 0);
+		if (ret)
+			FT_PRINTERR("fi_av_remove", ret);
+	}
 
 	if (resp->mr)
 		fi_close(&resp->mr->fid);
@@ -1141,17 +1155,21 @@ int main(int argc, char **argv)
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SKIP_MSG_ALLOC | FT_OPT_SKIP_ADDR_EXCH;
 	opts.mr_mode = 0;
-	opts.iterations = 1; // remove
-	opts.num_connections = 1; // 16
+	opts.iterations = 1;
+	opts.num_connections = 16;
 	opts.comp_method = FT_COMP_WAIT_FD;
+	opts.av_size = MAX_RPC_CLIENTS;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "u:h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt_long(argc, argv, "u:h" CS_OPTS INFO_OPTS,
+				  long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		default:
+			if (!ft_parse_long_opts(op, optarg))
+				continue;
 			ft_parsecsopts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
 			break;
@@ -1161,12 +1179,13 @@ int main(int argc, char **argv)
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "An RDM endpoint error stress test.");
-			FT_PRINT_OPTS_USAGE("-u <test control file>",
-			"Sample file - fabtests/test_configs/ofi_rxm/stress.json");
+			ft_longopts_usage();
 			return EXIT_FAILURE;
 		}
 	}
 
+	if (timeout >= 0)
+		rpc_timeout = timeout * 1000;
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
