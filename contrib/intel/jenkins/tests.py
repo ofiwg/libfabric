@@ -332,6 +332,68 @@ class MpiTests(Test):
                 opts = "{} -x {}={} ".format(opts,key,val)
         return opts
 
+class OMPI:
+    def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
+                 server, client, environ, ci_middlewares_path, util_prov=None):
+
+        self.ompi_src = '{}/ompi'.format(ci_middlewares_path)
+        self.core_prov = core_prov
+        self.hosts = hosts
+        self.util_prov = util_prov
+        self.libfab_installpath = libfab_installpath
+        self.nw_interface = nw_interface
+        self.server = server
+        self.client = client
+        self.environ = environ
+        self.n = 4
+        self.ppn = 2
+
+    @property
+    def env(self):
+        cmd = "bash -c \'"
+        if (self.util_prov):
+            cmd += "export FI_PROVIDER={}; ".format(self.core_prov)
+        else:
+            cmd += "export FI_PROVIDER={}\\;{}; ".format(self.core_prov,
+                                                         self.util_prov)
+        cmd += "export I_MPI_FABRICS=ofi; "
+        cmd += "export LD_LIBRARY_PATH={}/lib:$LD_LIBRARY_PATH; "\
+               .format(self.ompi_src)
+        cmd += "export LD_LIBRARY_PATH={}/lib/:$LD_LIBRARY_PATH; "\
+               .format(self.libfab_installpath)
+        cmd += "export PATH={}/bin:$PATH; ".format(self.ompi_src)
+        cmd += "export PATH={}/bin:$PATH; ".format(self.libfab_installpath)
+        return cmd
+
+    @property
+    def options(self):
+        opts = "-np {} ".format(self.n)
+        hosts = '\',\''.join([':'.join([common.get_node_name(host, \
+                         self.nw_interface), str(self.ppn)]) \
+                for host in self.hosts])
+        opts += "--host \'{}\' ".format(hosts)
+        if self.util_prov:
+            opts += "--mca mtl_ofi_provider_include {}\\;{} ".format(
+                    self.core_prov, self.util_prov)
+            opts += "--mca btl_ofi_provider_include {}\\;{} ".format(
+                    self.core_prov, self.util_prov)
+        else:
+            opts += "--mca mtl_ofi_provider_include {} ".format(
+                    self.core_prov)
+            opts += "--mca btl_ofi_provider_include {} ".format(
+                    self.core_prov)
+        opts += "--mca orte_base_help_aggregate 0 "
+        opts += "--mca mtl ofi "
+        opts += "--mca pml cm -tag-output "
+        for key, val in self.environ:
+            opts = "{} -x {}={} ".format(opts, key, val)
+
+        return opts
+
+    @property
+    def cmd(self):
+        return "{}/bin/mpirun {}".format(self.ompi_src, self.options)
+
 class MPICH:
     def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
                  server, client, environ, ci_middlewares_path, util_prov=None):
@@ -451,6 +513,7 @@ class IMBtests(Test):
         self.test_group = test_group
         self.mpi_type = mpitype
         self.mpi = ''
+        self.imb_src = ''
         self.imb_tests = {
                              '1' :[
                                       'MPI1',
@@ -501,13 +564,19 @@ class IMBtests(Test):
             self.mpi = IMPI(self.core_prov, self.hosts,
                             self.libfab_installpath, self.nw_interface,
                             self.server, self.client, self.env, self.util_prov)
+            self.imb_src = ci_site_config.impi_root
         elif (self.mpi_type == 'ompi'):
-            print('ompi')
+            self.mpi = OMPI(self.core_prov, self.hosts,
+                             self.libfab_installpath, self.nw_interface,
+                             self.server, self.client, self.env,
+                             self.ci_middlewares_path, self.util_prov)
+            self.imb_src = '{}/ompi/imb'.format(self.ci_middlewares_path)
         elif (self.mpi_type == 'mpich'):
             self.mpi = MPICH(self.core_prov, self.hosts,
                              self.libfab_installpath, self.nw_interface,
                              self.server, self.client, self.env,
                              self.ci_middlewares_path, self.util_prov)
+            self.imb_src = '{}/mpich/imb'.format(self.ci_middlewares_path)
 
     @property
     def execute_condn(self):
@@ -516,7 +585,7 @@ class IMBtests(Test):
 
     def imb_cmd(self, imb_test):
         print("Running IMB-{}".format(imb_test))
-        cmd = "{}/bin/IMB-{} ".format(ci_site_config.impi_root, imb_test)
+        cmd = "{}/bin/IMB-{} ".format(self.imb_src, imb_test)
         if (self.test_name != 'MT'):
             cmd += "-iter {} ".format(self.iter)
 
