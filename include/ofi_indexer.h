@@ -91,7 +91,7 @@ static inline int ofi_idx_is_valid(struct indexer *idx, int index)
 
 static inline void *ofi_idx_at(struct indexer *idx, int index)
 {
-	return (idx->array[ofi_idx_array_index(index)] + ofi_idx_entry_index(index))->item;
+	return (idx->chunk[ofi_idx_array_index(index)] + ofi_idx_entry_index(index))->item;
 }
 
 static inline void *ofi_idx_lookup(struct indexer *idx, int index)
@@ -120,7 +120,7 @@ static inline bool ofi_idx_free_list_empty(struct indexer *idx)
 
 struct index_map
 {
-	void **array[OFI_IDX_ARRAY_SIZE];
+	void **chunk[OFI_IDX_ARRAY_SIZE];
 	int count[OFI_IDX_ARRAY_SIZE];
 };
 
@@ -131,13 +131,13 @@ void ofi_idm_reset(struct index_map *idm, void (*callback)(void *item));
 static inline void *ofi_idm_at(struct index_map *idm, int index)
 {
 	void **entry;
-	entry = idm->array[ofi_idx_array_index(index)];
+	entry = idm->chunk[ofi_idx_array_index(index)];
 	return entry[ofi_idx_entry_index(index)];
 }
 
 static inline void *ofi_idm_lookup(struct index_map *idm, int index)
 {
-	return ((index <= OFI_IDX_MAX_INDEX) && idm->array[ofi_idx_array_index(index)]) ?
+	return ((index <= OFI_IDX_MAX_INDEX) && idm->chunk[ofi_idx_array_index(index)]) ?
 		ofi_idm_at(idm, index) : NULL;
 }
 

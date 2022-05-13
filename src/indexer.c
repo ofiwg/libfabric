@@ -60,11 +60,11 @@ static int ofi_idx_grow(struct indexer *idx)
 	if (idx->size >= OFI_IDX_ARRAY_SIZE)
 		goto nomem;
 
-	idx->array[idx->size] = calloc(OFI_IDX_ENTRY_SIZE, sizeof(struct ofi_idx_entry));
-	if (!idx->array[idx->size])
+	idx->chunk[idx->size] = calloc(OFI_IDX_ENTRY_SIZE, sizeof(struct ofi_idx_entry));
+	if (!idx->chunk[idx->size])
 		goto nomem;
 
-	entry = idx->array[idx->size];
+	entry = idx->chunk[idx->size];
 	start_index = idx->size << OFI_IDX_ENTRY_BITS;
 	entry[OFI_IDX_ENTRY_SIZE - 1].next = idx->free_list;
 
@@ -93,7 +93,7 @@ int ofi_idx_insert(struct indexer *idx, void *item)
 			return index;
 	}
 
-	entry = idx->array[ofi_idx_array_index(index)];
+	entry = idx->chunk[ofi_idx_array_index(index)];
 	idx->free_list = entry[ofi_idx_entry_index(index)].next;
 	entry[ofi_idx_entry_index(index)].item = item;
 	return index;
@@ -105,7 +105,7 @@ void *ofi_idx_remove(struct indexer *idx, int index)
 	void *item;
 	int entry_index = ofi_idx_entry_index(index);
 
-	entry = idx->array[ofi_idx_array_index(index)];
+	entry = idx->chunk[ofi_idx_array_index(index)];
 	item = entry[entry_index].item;
 	entry[entry_index].item = NULL;
 	entry[entry_index].next = idx->free_list;
@@ -120,7 +120,7 @@ void *ofi_idx_remove_ordered(struct indexer *idx, int index)
 	int temp_index;
 	int entry_index = ofi_idx_entry_index(index);
 
-	entry = idx->array[ofi_idx_array_index(index)];
+	entry = idx->chunk[ofi_idx_array_index(index)];
 	item = entry[entry_index].item;
 	entry[entry_index].item = NULL;
 	if (ofi_idx_free_list_empty(idx) || index < idx->free_list) {
@@ -142,15 +142,15 @@ void ofi_idx_replace(struct indexer *idx, int index, void *item)
 {
 	struct ofi_idx_entry *entry;
 
-	entry = idx->array[ofi_idx_array_index(index)];
+	entry = idx->chunk[ofi_idx_array_index(index)];
 	entry[ofi_idx_entry_index(index)].item = item;
 }
 
 void ofi_idx_reset(struct indexer *idx)
 {
 	while (idx->size) {
-		free(idx->array[idx->size - 1]);
-		idx->array[idx->size - 1] = NULL;
+		free(idx->chunk[idx->size - 1]);
+		idx->chunk[idx->size - 1] = NULL;
 		idx->size--;
 	}
 	idx->free_list = 0;
@@ -158,8 +158,8 @@ void ofi_idx_reset(struct indexer *idx)
 
 static int ofi_idm_grow(struct index_map *idm, int index)
 {
-	idm->array[ofi_idx_array_index(index)] = calloc(OFI_IDX_ENTRY_SIZE, sizeof(void *));
-	if (!idm->array[ofi_idx_array_index(index)])
+	idm->chunk[ofi_idx_array_index(index)] = calloc(OFI_IDX_ENTRY_SIZE, sizeof(void *));
+	if (!idm->chunk[ofi_idx_array_index(index)])
 		goto nomem;
 
 	return index;
@@ -178,12 +178,12 @@ int ofi_idm_set(struct index_map *idm, int index, void *item)
 		return -1;
 	}
 
-	if (!idm->array[ofi_idx_array_index(index)]) {
+	if (!idm->chunk[ofi_idx_array_index(index)]) {
 		if (ofi_idm_grow(idm, index) < 0)
 			return -1;
 	}
 
-	entry = idm->array[ofi_idx_array_index(index)];
+	entry = idm->chunk[ofi_idx_array_index(index)];
 	entry[ofi_idx_entry_index(index)] = item;
 	idm->count[ofi_idx_array_index(index)]++;
 	return index;
@@ -194,12 +194,12 @@ void *ofi_idm_clear(struct index_map *idm, int index)
 	void **entry;
 	void *item;
 
-	entry = idm->array[ofi_idx_array_index(index)];
+	entry = idm->chunk[ofi_idx_array_index(index)];
 	item = entry[ofi_idx_entry_index(index)];
 	entry[ofi_idx_entry_index(index)] = NULL;
 	if (--idm->count[ofi_idx_array_index(index)] == 0) {
-		free(idm->array[ofi_idx_array_index(index)]);
-		idm->array[ofi_idx_array_index(index)] = NULL;
+		free(idm->chunk[ofi_idx_array_index(index)]);
+		idm->chunk[ofi_idx_array_index(index)] = NULL;
 	}
 	return item;
 }
@@ -211,13 +211,13 @@ void ofi_idm_reset(struct index_map *idm, void (*callback)(void *item))
 	int a, i;
 
 	for (a = 0; a < OFI_IDX_ARRAY_SIZE; a++) {
-		if (!idm->array[a]) {
+		if (!idm->chunk[a]) {
 			assert(idm->count[a] == 0);
 			continue;
 		}
 
 		for (i = 0; idm->count[a] && i < OFI_IDX_ARRAY_SIZE; i++) {
-			entry = idm->array[a];
+			entry = idm->chunk[a];
 			item = entry[i];
 			if (item) {
 				if (callback)
@@ -225,8 +225,8 @@ void ofi_idm_reset(struct index_map *idm, void (*callback)(void *item))
 				idm->count[a]--;
 			}
 		}
-		free(idm->array[a]);
-		idm->array[a] = NULL;
+		free(idm->chunk[a]);
+		idm->chunk[a] = NULL;
 	}
 }
 
