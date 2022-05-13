@@ -117,6 +117,12 @@ int main(int argc, char **argv)
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 
+	/*
+	 * Because dgram endpoint is not reliable, we
+	 * must use out-of-band sync
+	 */
+	opts.options |= FT_OPT_OOB_SYNC;
+
 	hints->ep_attr->type = FI_EP_DGRAM;
 	if (opts.options & FT_OPT_SIZE)
 		hints->ep_attr->max_msg_size = opts.transfer_size;
