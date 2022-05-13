@@ -61,6 +61,13 @@ struct ofi_idx_entry {
 	int   next;
 };
 
+/* User's index is a bit field of format: [chunk_id:offset] */
+#define OFI_IDX_CHUNK_BITS 10
+#define OFI_IDX_OFFSET_BITS 10
+
+#define OFI_IDX_CHUNK_SIZE (1 << OFI_IDX_OFFSET_BITS)
+#define OFI_IDX_MAX_CHUNKS (1 << OFI_IDX_CHUNK_BITS)
+
 #define OFI_IDX_INDEX_BITS 20
 #define OFI_IDX_ENTRY_BITS 10
 #define OFI_IDX_ENTRY_SIZE (1 << OFI_IDX_ENTRY_BITS)
