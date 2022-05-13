@@ -121,11 +121,10 @@ static ssize_t rx_cm_data(SOCKET fd, int type, struct tcpx_cm_context *cm_ctx)
 			goto out;
 		}
 
-		if (ntohs(cm_ctx->msg.hdr.seg_size) > TCPX_MAX_CM_DATA_SIZE) {
+		if (data_size > TCPX_MAX_CM_DATA_SIZE) {
 			FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 				"Discarding unexpected cm data\n");
-			ofi_discard_socket(fd, ntohs(cm_ctx->msg.hdr.seg_size) -
-					   TCPX_MAX_CM_DATA_SIZE);
+			ofi_discard_socket(fd, data_size - TCPX_MAX_CM_DATA_SIZE);
 		}
 	}
 
@@ -341,8 +340,10 @@ static void tcpx_cm_recv_resp(struct util_wait *wait,
 	}
 
 	cm_entry = calloc(1, sizeof(*cm_entry) + cm_ctx->cm_data_sz);
-	if (!cm_entry)
+	if (!cm_entry) {
+		ret = FI_ENOMEM;
 		goto err1;
+	}
 
 	cm_entry->fid = cm_ctx->hfid;
 	memcpy(cm_entry->data, cm_ctx->msg.data, cm_ctx->cm_data_sz);
@@ -363,7 +364,7 @@ err2:
 	free(cm_entry);
 err1:
 	ofi_mutex_lock(&ep->lock);
-	tcpx_ep_disable(ep, -ret);
+	tcpx_ep_disable(ep, -ret, cm_ctx->msg.data, cm_ctx->cm_data_sz);
 	ofi_mutex_unlock(&ep->lock);
 	tcpx_free_cm_ctx(cm_ctx);
 }
@@ -414,7 +415,7 @@ delfd:
 	ofi_wait_del_fd(wait, ep->bsock.sock);
 disable:
 	ofi_mutex_lock(&ep->lock);
-	tcpx_ep_disable(ep, -ret);
+	tcpx_ep_disable(ep, -ret, NULL, 0);
 	ofi_mutex_unlock(&ep->lock);
 	tcpx_free_cm_ctx(cm_ctx);
 }
@@ -536,7 +537,7 @@ delfd:
 	ofi_wait_del_fd(wait, ep->bsock.sock);
 disable:
 	ofi_mutex_lock(&ep->lock);
-	tcpx_ep_disable(ep, -ret);
+	tcpx_ep_disable(ep, -ret, NULL, 0);
 	ofi_mutex_unlock(&ep->lock);
 	tcpx_free_cm_ctx(cm_ctx);
 }

@@ -365,7 +365,8 @@ int tcpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context);
-void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err);
+void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err, void* err_data,
+		     size_t err_data_size);
 
 
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,

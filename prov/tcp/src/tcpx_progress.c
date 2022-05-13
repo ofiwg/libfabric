@@ -703,7 +703,7 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 	} while (!ret && ofi_bsock_readable(&ep->bsock));
 
 	if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-		tcpx_ep_disable(ep, 0);
+		tcpx_ep_disable(ep, 0, NULL, 0);
 }
 
 void tcpx_progress_async(struct tcpx_ep *ep)
