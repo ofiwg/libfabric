@@ -351,6 +351,7 @@ void fi_reliability_service_print_replay_ring (struct fi_opx_reliability_tx_repl
 	return;
 }
 
+#define OPX_RELIABILITY_MAX_NACK (128)
 
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode (struct fid_ep *ep,
@@ -733,6 +734,17 @@ void fi_opx_hfi1_rx_reliability_ping (struct fid_ep *ep,
 			/* do not underflow 'ping_psn_count' */
 			update_count = MIN(update_count, ping_psn_count);
 			ping_psn_count -= update_count;
+
+			/*
+			 * Since we so far haven't received any unexpected packets,
+			 * chances are any remaining packets in the ping range are
+			 * already enroute and we simply haven't processed them yet.
+			 *
+			 * Return now to avoid sending NACKs for such packets.
+			 * If they really did get dropped, we'll send a NACK for them
+			 * as soon as we receive the first out of order packet.
+			 */
+			return;
 		}
 
 		while (rc == FI_SUCCESS && ping_psn_count > 0) {
@@ -2258,7 +2270,8 @@ struct fi_opx_reliability_rx_uepkt *fi_opx_reliability_allocate_uepkt(const unio
 
 void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * state,
 		uint64_t slid, uint64_t origin_tx, uint32_t psn,
-		struct fid_ep *ep, const union fi_opx_hfi1_packet_hdr * const hdr, const uint8_t * const payload) {
+		struct fid_ep *ep, const union fi_opx_hfi1_packet_hdr * const hdr, const uint8_t * const payload)
+{
 
 	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 	const uint16_t lrh_pktlen_le = ntohs(hdr->stl.lrh.pktlen);
@@ -2316,7 +2329,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 #ifdef OPX_RELIABILITY_DEBUG
 				fprintf(stderr, "(rx) packet %016lx %08lu delivered.\n", key.value, next_psn);
 #endif
-				next_psn += 1;
+				++next_psn;
 
 				struct fi_opx_reliability_rx_uepkt * next = uepkt->next;
 				if (next == uepkt) {
@@ -2338,174 +2351,225 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 			//ofi_spin_unlock(&flow->lock);
 		}
 
-	} else {
-		INC_PING_COUNT(UEPKT_RECV);
+		return;
+	}
 
+	INC_PING_COUNT(UEPKT_RECV);
+
+	/*
+	 * Scale the received PSN up into the same window as the expected PSN.
+	 * If the PSN is very close to the bottom of the window but the expected
+	 * PSN is not, assume the received PSN rolled over and needs to be
+	 * moved into the next, higher, window.
+	 */
+	uint64_t psn_64 = ( (psn + (next_psn & MAX_PSN_MASK)) +
+		(((psn < PSN_LOW_WINDOW) &&
+		  ((next_psn & MAX_PSN) > PSN_HIGH_WINDOW))?PSN_WINDOW_SIZE:0) );
+
+	if (OFI_UNLIKELY((psn_64 < next_psn) || ((psn_64 - next_psn) > PSN_AGE_LIMIT))) {
 		/*
-		 * Scale the received PSN up into the same window as the expected PSN.
-		 * If the PSN is very close to the bottom of the window but the expected
-		 * PSN is not, assume the received PSN rolled over and needs to be
-		 * moved into the next, higher, window.
+		 * old packet or REALLY old packet.. drop it
 		 */
-		uint64_t psn_64 = ( (psn + (next_psn & MAX_PSN_MASK)) +
-			(((psn < PSN_LOW_WINDOW) &&
-			  ((next_psn & MAX_PSN) > PSN_HIGH_WINDOW))?PSN_WINDOW_SIZE:0) );
-
-		if (OFI_UNLIKELY((psn_64 < next_psn) || ((psn_64 - next_psn) > PSN_AGE_LIMIT))) {
-			/*
-			 * old packet or REALLY old packet.. drop it
-			 */
 #ifdef OPX_RELIABILITY_DEBUG
-			fprintf(stderr, "(rx) packet %"PRIx64" Dropping%s duplicate packet. psn_24 = %u, psn_64 = %"PRIx64", next_psn = %"PRIx64"\n",
-				key.value, (psn_64 < next_psn) ? "" : " really old", psn, psn_64, next_psn);
+		fprintf(stderr, "(rx) packet %"PRIx64" Dropping%s duplicate packet. psn_24 = %u, psn_64 = %"PRIx64", next_psn = %"PRIx64"\n",
+			key.value, (psn_64 < next_psn) ? "" : " really old", psn, psn_64, next_psn);
 #endif
-			/*
-			 * Send a preemptive ACK here for the packet, since we've already received it.
-			 * NOTE: We'll do this regardless of what preemptive ack rate is set to for the normal flow.
-			 */
-			ssize_t rc __attribute__ ((unused));
-			rc = fi_opx_hfi1_tx_reliability_inject(ep, key.value, key.slid,
-							origin_rx,
-							psn, /* psn_start */
-							1, /* psn_count */
-							FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK);
-			INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_ACKS_SENT, key.value, psn, 1);
-
-			return;
-		}
-
 		/*
-		 * Else This packet's PSN must be > next_psn (if they were equal, we would not be in the
-		 * higher-level else leg for unexpected packet received)
-		 *
-		 * Send a preemptive NACK for the packet we expected to get (and every one in between), but
-		 * limit the range size so as not to overwhelm the fabric with too many replays at once.
+		 * Send a preemptive ACK here for the packet, since we've already received it.
 		 * NOTE: We'll do this regardless of what preemptive ack rate is set to for the normal flow.
 		 */
 		ssize_t rc __attribute__ ((unused));
 		rc = fi_opx_hfi1_tx_reliability_inject(ep, key.value, key.slid,
 						origin_rx,
-						next_psn, /* psn_start */
-						MIN(psn_64 - next_psn + 1, 128), /* psn_count */
-						FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK);
-		INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, key.value, next_psn, MIN(psn_64 - next_psn + 1, 128));
+						psn, /* psn_start */
+						1, /* psn_count */
+						FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK);
+		INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_ACKS_SENT, key.value, psn, 1);
 
-		if (flow->uepkt == NULL) {
-			/*
-			 * add the out-of-order packet to the empty unexpected queue
-			 */
-
-			struct fi_opx_reliability_rx_uepkt * uepkt =
-				fi_opx_reliability_allocate_uepkt(hdr, payload, payload_bytes_to_copy);
-
-			uepkt->prev = uepkt;
-			uepkt->next = uepkt;
-			uepkt->psn = psn_64;
-
-			//ofi_spin_lock(&flow->lock);
-
-			flow->uepkt = uepkt;
-
-			//ofi_spin_unlock(&flow->lock);
-
-	#ifdef OPX_RELIABILITY_DEBUG
-			fprintf(stderr, "(rx) packet %016lx %08u queued.\n", key.value, psn);
-	#endif
-		} else if (OFI_UNLIKELY(psn_64 < flow->uepkt->psn)) {
-			/* 
- 			 * Hopefully rare situation where this packet is unexpected but
- 			 * falls into the gap between next_psn and the head of the
- 			 * unexpected queue. Make this packet into the new head.
- 			 */
-			struct fi_opx_reliability_rx_uepkt * tmp =
-				fi_opx_reliability_allocate_uepkt(hdr, payload, payload_bytes_to_copy);
-
-			tmp->psn = psn_64;
-
-			//ofi_spin_lock(&flow->lock);
-			
-			struct fi_opx_reliability_rx_uepkt * head = flow->uepkt;
-			struct fi_opx_reliability_rx_uepkt * tail = head->prev;
-			tmp->prev = tail; tmp->next = head;
-			head->prev = tmp; tail->next = tmp;
-			flow->uepkt = tmp;
-
-			//ofi_spin_unlock(&flow->lock);
-	#ifdef OPX_RELIABILITY_DEBUG
-			fprintf(stderr, "(rx) packet %016lx %08u queued as new head of uepkt list.\n",
-				key.value, psn);
-	#endif
-		} else {
-			/*
-			 * insert the out-of-order packet into the unexpected queue;
-			 * check for duplicates
-			 *
-			 * generally if one packet is received out-of-order with psn 'N'
-			 * then the next packet received out-of-order will be psn 'N+1'.
-			 *
-			 * search the unexpected queue in reverse to find the insert
-			 * point for this packet.
-			 */
-			struct fi_opx_reliability_rx_uepkt * head = flow->uepkt;
-			struct fi_opx_reliability_rx_uepkt * tail = head->prev;
-			struct fi_opx_reliability_rx_uepkt * uepkt = tail;
-
-			do {
-				const uint64_t uepkt_psn = uepkt->psn;
-
-				if (uepkt_psn < psn_64) {
-
-					/* insert after this element */
-					struct fi_opx_reliability_rx_uepkt * tmp =
-						fi_opx_reliability_allocate_uepkt(hdr, payload, payload_bytes_to_copy);
-
-					tmp->prev = uepkt;
-					tmp->next = uepkt->next;
-					tmp->psn = psn_64;
-
-					//ofi_spin_lock(&flow->lock);
-
-					uepkt->next->prev = tmp;
-					uepkt->next = tmp;
-
-					//ofi_spin_unlock(&flow->lock);
-
-	#ifdef OPX_RELIABILITY_DEBUG
-					fprintf(stderr, "(rx) packet %016lx %08u queued.\n", key.value, psn);
-	#endif
-					return;
-
-				} else if (uepkt_psn == psn_64) {
-
-					/* drop this duplicate */
-	#ifdef OPX_RELIABILITY_DEBUG
-					fprintf(stderr, "(rx) packet %016lx %08u dropped (unexpected duplicate).\n", key.value, psn);
-	#endif
-					return;
-
-				}
-
-				/* move forward */
-				uepkt = uepkt->prev;
-
-			} while (uepkt != tail);
-
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-						 "Early Packet Enqueue %016lx %08u %08lu\n",
-						 key.value, psn, head->psn);
-
-			struct fi_opx_reliability_rx_uepkt * tmp =
-				fi_opx_reliability_allocate_uepkt(hdr, payload, payload_bytes_to_copy);
-
-			tmp->psn = psn_64;
-
-			head = flow->uepkt;
-			tail = head->prev;
-			tmp->prev = tail; tmp->next = head;
-			head->prev = tmp; tail->next = tmp;
-			flow->uepkt = tmp;
-		}
+		return;
 	}
+
+	/*
+	 * Else This packet's PSN must be > next_psn (if they were equal, we would not be in the
+	 * higher-level else leg for unexpected packet received)
+	 *
+	 * If applicable, we'll also send preemptive NACKs for the range of packet PSNs we were expecting.
+	 * NOTE: We'll do this regardless of what preemptive ack rate is set to for the normal flow.
+	 */
+	ssize_t rc __attribute__ ((unused));
+
+	if (flow->uepkt == NULL) {
+		/*
+		 * add the out-of-order packet to the empty unexpected queue
+		 */
+
+		struct fi_opx_reliability_rx_uepkt * uepkt =
+			fi_opx_reliability_allocate_uepkt(hdr, payload, payload_bytes_to_copy);
+
+		uepkt->prev = uepkt;
+		uepkt->next = uepkt;
+		uepkt->psn = psn_64;
+
+		//ofi_spin_lock(&flow->lock);
+
+		flow->uepkt = uepkt;
+
+		//ofi_spin_unlock(&flow->lock);
+
+		uint64_t nack_count = MIN(psn_64 - next_psn, OPX_RELIABILITY_MAX_NACK);
+		rc = fi_opx_hfi1_tx_reliability_inject(ep, key.value, key.slid,
+					origin_rx,
+					next_psn, /* psn_start */
+					nack_count,
+					FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK);
+		INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, key.value, next_psn, nack_count);
+#ifdef OPX_RELIABILITY_DEBUG
+		fprintf(stderr, "(rx) packet %016lx %08u queued (first).\n", key.value, psn);
+#endif
+		return;
+	}
+
+	if (OFI_UNLIKELY(psn_64 < flow->uepkt->psn)) {
+		/*
+		 * Hopefully rare situation where this packet is unexpected but
+		 * falls into the gap between next_psn and the head of the
+		 * unexpected queue. Make this packet into the new head.
+		 *
+		 * No need to NACK in this case, as we would have already
+		 * NACK'd all the PSNs between our expected PSN and this
+		 * one when we received the first out of order packet.
+		 *
+		 */
+		struct fi_opx_reliability_rx_uepkt * tmp =
+			fi_opx_reliability_allocate_uepkt(hdr, payload, payload_bytes_to_copy);
+
+		tmp->psn = psn_64;
+
+		//ofi_spin_lock(&flow->lock);
+
+		struct fi_opx_reliability_rx_uepkt * head = flow->uepkt;
+		struct fi_opx_reliability_rx_uepkt * tail = head->prev;
+		tmp->prev = tail; tmp->next = head;
+		head->prev = tmp; tail->next = tmp;
+		flow->uepkt = tmp;
+
+		//ofi_spin_unlock(&flow->lock);
+#ifdef OPX_RELIABILITY_DEBUG
+		fprintf(stderr, "(rx) packet %016lx %08u queued as new head of uepkt list.\n",
+			key.value, psn);
+#endif
+		return;
+	}
+
+	struct fi_opx_reliability_rx_uepkt * head = flow->uepkt;
+	struct fi_opx_reliability_rx_uepkt * tail = head->prev;
+
+	if (psn_64 > tail->psn) {
+		/*
+		 * This packet's PSN is > than all other PSNs currently
+		 * in the unexpected queue. Make it the new tail, and
+		 * NACK the packet PSNs between tail and this packet
+		 * if there's a gap.
+		 */
+
+		 uint64_t nack_start_psn = tail->psn + 1;
+		 uint64_t nack_count = MIN(psn_64 - nack_start_psn, OPX_RELIABILITY_MAX_NACK);
+
+		 if (nack_count) {
+			rc = fi_opx_hfi1_tx_reliability_inject(ep, key.value, key.slid,
+					origin_rx,
+					nack_start_psn, /* psn_start */
+					nack_count,
+					FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK);
+			INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, key.value, next_psn, nack_count);
+		 }
+
+		//ofi_spin_lock(&flow->lock);
+		struct fi_opx_reliability_rx_uepkt * tmp =
+			fi_opx_reliability_allocate_uepkt(hdr, payload, payload_bytes_to_copy);
+		tmp->prev = tail;
+		tmp->next = head;
+		tmp->psn = psn_64;
+		tail->next = tmp;
+		head->prev = tmp;
+		//ofi_spin_unlock(&flow->lock);
+#ifdef OPX_RELIABILITY_DEBUG
+		fprintf(stderr, "(rx) packet %016lx %08u queued (new tail).\n", key.value, psn);
+#endif
+		return;
+	} else if (psn_64 == tail->psn) {
+		/* drop this duplicate */
+#ifdef OPX_RELIABILITY_DEBUG
+		fprintf(stderr, "(rx) packet %016lx %08u dropped (unexpected duplicate).\n", key.value, psn);
+#endif
+		return;
+	}
+
+	/*
+	 * insert the out-of-order packet into the unexpected queue;
+	 * check for duplicates
+	 *
+	 * generally if one packet is received out-of-order with psn 'N'
+	 * then the next packet received out-of-order will be psn 'N+1'.
+	 *
+	 * search the unexpected queue in reverse to find the insert
+	 * point for this packet.
+	 *
+	 * No need to NACK in this case, as we would have already
+	 * NACK'd all the applicable PSNs when inserting the unexpected
+	 * packets on either side of this packet's insertion point.
+	 */
+	struct fi_opx_reliability_rx_uepkt * uepkt = tail->prev;
+
+	do {
+		const uint64_t uepkt_psn = uepkt->psn;
+
+		if (uepkt_psn < psn_64) {
+
+			/* insert after this element */
+			struct fi_opx_reliability_rx_uepkt * tmp =
+				fi_opx_reliability_allocate_uepkt(hdr, payload, payload_bytes_to_copy);
+
+			tmp->prev = uepkt;
+			tmp->next = uepkt->next;
+			tmp->psn = psn_64;
+
+			//ofi_spin_lock(&flow->lock);
+
+			uepkt->next->prev = tmp;
+			uepkt->next = tmp;
+
+			//ofi_spin_unlock(&flow->lock);
+
+#ifdef OPX_RELIABILITY_DEBUG
+			fprintf(stderr, "(rx) packet %016lx %08u queued.\n", key.value, psn);
+#endif
+			return;
+
+		} else if (uepkt_psn == psn_64) {
+
+			/* drop this duplicate */
+#ifdef OPX_RELIABILITY_DEBUG
+			fprintf(stderr, "(rx) packet %016lx %08u dropped (unexpected duplicate).\n", key.value, psn);
+#endif
+			return;
+
+		}
+
+		/* move backward */
+		uepkt = uepkt->prev;
+
+	} while (uepkt != tail);
+
+	/* We should never get here. The unexpected list was not
+	   empty, this packet was not a duplicate, and we somehow
+	   determined that the packet did not belong at the beginning,
+	   end or middle of the existing list of unexpected packets.
+	   We should have hit one of those cases.  */
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		 "Could not find suitable place for unexpected packet enqueue %016lx %08u head->psn=%08lu, tail->psn=%08lu\n",
+		 key.value, psn, head->psn, tail->psn);
+	assert(0);
 }
 
 
