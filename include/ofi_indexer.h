@@ -76,9 +76,9 @@ struct ofi_idx_entry {
 
 struct indexer
 {
-	struct ofi_idx_entry 	*chunk[OFI_IDX_ARRAY_SIZE];
+	struct ofi_idx_entry 	*chunk[OFI_IDX_MAX_CHUNKS];
 	int		 	free_list;
-	/* Array size (used): [0, OFI_IDX_ARRAY_SIZE) */
+	/* Array size (used): [0, OFI_IDX_MAX_CHUNKS) */
 	int		 	size;
 };
 
@@ -127,8 +127,8 @@ static inline bool ofi_idx_free_list_empty(struct indexer *idx)
 
 struct index_map
 {
-	void **chunk[OFI_IDX_ARRAY_SIZE];
-	int count[OFI_IDX_ARRAY_SIZE];
+	void **chunk[OFI_IDX_MAX_CHUNKS];
+	int count[OFI_IDX_MAX_CHUNKS];
 };
 
 int ofi_idm_set(struct index_map *idm, int index, void *item);

@@ -57,7 +57,7 @@ static int ofi_idx_grow(struct indexer *idx)
 	struct ofi_idx_entry *chunk;
 	int i, start_index;
 
-	if (idx->size >= OFI_IDX_ARRAY_SIZE)
+	if (idx->size >= OFI_IDX_MAX_CHUNKS)
 		goto nomem;
 
 	idx->chunk[idx->size] = calloc(OFI_IDX_ENTRY_SIZE, sizeof(struct ofi_idx_entry));
@@ -210,7 +210,7 @@ void ofi_idm_reset(struct index_map *idm, void (*callback)(void *item))
 	void *item;
 	int a, i;
 
-	for (a = 0; a < OFI_IDX_ARRAY_SIZE; a++) {
+	for (a = 0; a < OFI_IDX_MAX_CHUNKS; a++) {
 		if (!idm->chunk[a]) {
 			assert(idm->count[a] == 0);
 			continue;
