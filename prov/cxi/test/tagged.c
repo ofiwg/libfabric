@@ -4886,3 +4886,212 @@ ParameterizedTest(struct multi_tc_params *param, tagged_tclass, multi_tc,
 {
 	do_multi_tc(param);
 }
+
+TestSuite(tagged_src_err, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(tagged_src_err, cap_exists)
+{
+	struct fi_info *info;
+	int ret;
+
+	/* No hints, both FI_SOURCE and FI_SOURCE_ERR should be set */
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, NULL,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+	cr_assert_eq(info->caps & FI_SOURCE, FI_SOURCE, "FI_SOURCE");
+	cr_assert_eq(info->caps & FI_SOURCE_ERR, FI_SOURCE_ERR,
+		     "FI_SOURCE_ERR");
+	fi_freeinfo(info);
+
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = 0;
+
+	/* No caps, both FI_SOURCE and FI_SOURCE_ERR should be set */
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+
+	cr_assert_eq(info->caps & FI_SOURCE, FI_SOURCE, "FI_SOURCE");
+	cr_assert_eq(info->caps & FI_SOURCE_ERR, FI_SOURCE_ERR,
+		     "FI_SOURCE_ERR");
+
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+}
+
+Test(tagged_src_err, hints_check)
+{
+	struct fi_info *info;
+	int ret;
+
+	cxit_setup_getinfo();
+
+	/* If only FI_SOURCE then FI_SOURCE_ERR should not be set */
+	cxit_fi_hints->caps = FI_MSG | FI_SOURCE;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+
+	cr_assert_eq(info->caps & FI_SOURCE, FI_SOURCE, "FI_SOURCE");
+	cr_assert_eq(info->caps & FI_SOURCE_ERR, 0, "FI_SOURCE_ERR");
+
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+}
+
+Test(tagged_src_err, invalid_use)
+{
+	struct fi_info *info;
+	int ret;
+
+	cxit_setup_getinfo();
+
+	/* If no FI_SOURCE then FI_SOURCE_ERR is not allowed */
+	cxit_fi_hints->caps = FI_MSG | FI_SOURCE_ERR;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == -FI_ENODATA);
+
+	cxit_teardown_getinfo();
+}
+
+Test(tagged_src_err, addr)
+{
+	struct fid_ep *fid_ep;
+	struct fid_eq *fid_eq;
+	struct fi_eq_attr eq_attr = {
+		.size = 32,
+		.flags = FI_WRITE,
+		.wait_obj = FI_WAIT_NONE
+	};
+	struct fid_cq *fid_tx_cq;
+	struct fid_cq *fid_rx_cq;
+	struct fid_av *fid_av;
+	struct cxip_addr ep_addr;
+	fi_addr_t fi_dest_ep_addr;
+	size_t addr_len = sizeof(ep_addr);
+	int ret;
+	uint8_t *recv_buf,
+		*send_buf;
+	int recv_len = 64;
+	int send_len = 64;
+	struct fi_cq_tagged_entry tx_cqe,
+				  rx_cqe;
+	struct fi_cq_err_entry err_entry;
+	int i;
+
+	/* Create first EP - adds itself to the AV */
+	cxit_setup_enabled_ep();
+	ret = fi_av_insert(cxit_av, (void *)&cxit_ep_addr, 1, NULL, 0, NULL);
+	cr_assert_eq(ret, 1, "First EP AV insert of self %d\n", ret);
+
+	/* Create second EP and resources */
+	cr_assert_eq(cxit_fi->caps &
+		     (FI_TAGGED | FI_SOURCE | FI_SOURCE_ERR | FI_DIRECTED_RECV),
+		     (FI_TAGGED | FI_SOURCE | FI_SOURCE_ERR | FI_DIRECTED_RECV),
+		     "info->caps");
+	ret = fi_endpoint(cxit_domain, cxit_fi, &fid_ep, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "Second EP %d", ret);
+	ret = fi_eq_open(cxit_fabric, &eq_attr, &fid_eq, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "Second EP EQ %d", ret);
+	ret = fi_ep_bind(fid_ep, &fid_eq->fid, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "Second PE EQ bind %d", ret);
+	ret = fi_cq_open(cxit_domain, &cxit_tx_cq_attr, &fid_tx_cq, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "Second EP TXCQ %d", ret);
+	ret = fi_cq_open(cxit_domain, &cxit_rx_cq_attr, &fid_rx_cq, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "Second EP RXCQ %d", ret);
+	ret = fi_ep_bind(fid_ep, &fid_tx_cq->fid, FI_TRANSMIT);
+	cr_assert_eq(ret, FI_SUCCESS, "Second EP bind TXCQ %d", ret);
+	ret = fi_ep_bind(fid_ep, &fid_rx_cq->fid, FI_RECV);
+	cr_assert_eq(ret, FI_SUCCESS, "Second EP bind RXCQ %d", ret);
+
+	/* Needs it's own AV */
+	ret = fi_av_open(cxit_domain, &cxit_av_attr, &fid_av, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "Second AV %d\n", ret);
+	ret = fi_ep_bind(fid_ep, &fid_av->fid, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "Secnd AV bind %d\n", ret);
+
+	ret = fi_enable(fid_ep);
+	cr_assert_eq(ret, FI_SUCCESS, "Second EP enable %d\n", ret);
+	ret = fi_getname(&fid_ep->fid, &ep_addr, &addr_len);
+	cr_assert_eq(ret, FI_SUCCESS, "Second EP getname %d\n", ret);
+
+	/* Insert second EP address into to both AV, but do not insert
+	 * the first EP address into the the second EP AV.
+	 */
+	ret = fi_av_insert(fid_av, (void *)&ep_addr, 1, 0,
+			   0, NULL);
+	cr_assert_eq(ret, 1, "Second EP AV insert local %d\n", ret);
+
+	ret = fi_av_insert(cxit_av, (void *)&ep_addr, 1, &fi_dest_ep_addr,
+			   0, NULL);
+	cr_assert_eq(ret, 1, "Fisrt EP AV insert second EP %d\n", ret);
+
+	/* Setup buffers */
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+	memset(recv_buf, 0, recv_len);
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	/* Test address not found EP1->EP2 */
+	ret = fi_trecv(fid_ep, recv_buf, recv_len, NULL, FI_ADDR_UNSPEC, 0,
+		       0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+	sleep(1);
+
+	ret = fi_tsend(cxit_ep, send_buf, send_len, NULL, fi_dest_ep_addr, 0,
+		       NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+
+	/* Receive should get an -FI_EAVAIL with source error info */
+	ret = cxit_await_completion(fid_rx_cq, &rx_cqe);
+	cr_assert_eq(ret, -FI_EAVAIL);
+	ret = fi_cq_readerr(fid_rx_cq, &err_entry, 0);
+	cr_assert_eq(ret, 1, "Readerr CQ %d\n", ret);
+
+	/* Insert address from FI_SOURCE_ERR into AV */
+	ret = fi_av_insert(fid_av, (void *)err_entry.err_data, 1,
+			   NULL, 0, NULL);
+	cr_assert_eq(ret, 1, "Second EP AV add src address %d\n", ret);
+
+	/* Wait for TX */
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+	cr_assert_eq(ret, 1, "Send completion %d\n", ret);
+
+	/* First EP address should now be found EP1->EP2 */
+	ret = fi_trecv(fid_ep, recv_buf, recv_len, NULL, FI_ADDR_UNSPEC, 0,
+		       0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+	sleep(1);
+
+	ret = fi_tsend(cxit_ep, send_buf, send_len, NULL, fi_dest_ep_addr, 0,
+		       NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+
+	/* Receive should complete successfully */
+	ret = cxit_await_completion(fid_rx_cq, &rx_cqe);
+	cr_assert_eq(ret, 1);
+
+	/* Wait for TX */
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+	cr_assert_eq(ret, 1, "Send completion %d\n", ret);
+
+	/* Cleanup Second EP */
+	fi_close(&fid_ep->fid);
+	fi_close(&fid_av->fid);
+	fi_close(&fid_tx_cq->fid);
+	fi_close(&fid_rx_cq->fid);
+
+	/* Cleanup First EP */
+	cxit_teardown_tagged();
+	cxit_teardown_getinfo();
+}
