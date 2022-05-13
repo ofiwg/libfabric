@@ -87,19 +87,19 @@ def ze_fabtests(core, hosts, mode, util):
 
 def intel_mpi_benchmark(core, hosts, mpi, mode, group, util):
 
-    imb_test = tests.MpiTestIMB(jobname=jbname,buildno=bno,
-                                testname='IntelMPIbenchmark', core_prov=core,
-                                fabric=fab, hosts=hosts, mpitype=mpi,
-                                ofi_build_mode=mode, test_group=group,
-                                util_prov=util)
+    imb = tests.IMBtests(jobname=jbname, buildno=bno,
+                         testname='IntelMPIbenchmark', core_prov=core,
+                         fabric=fab, hosts=hosts, mpitype=mpi,
+                         ofi_build_mode=mode, test_group=group,
+                         util_prov=util)
 
     print("-------------------------------------------------------------------")
-    if (imb_test.execute_condn == True):
+    if (imb.execute_condn == True):
         print("Running IMB-tests for {}-{}-{}-{}".format(core, util, fab, mpi))
-        imb_test.execute_cmd()
+        imb.execute_cmd()
     else:
         print("Skipping {} {} as execute condition fails" \
-              .format(mpi.upper(), imb_test.testname))
+              .format(mpi.upper(), impi.testname))
     print("-------------------------------------------------------------------")
 
 def mpich_test_suite(core, hosts, mpi, mode, util):

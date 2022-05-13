@@ -332,13 +332,88 @@ class MpiTests(Test):
                 opts = "{} -x {}={} ".format(opts,key,val)
         return opts
 
+class IMPI:
+    def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
+                 server, client, environ, util_prov=None):
 
-class IMBtests:
-    def __init__(self, test_name, core_prov, util_prov):
-        self.test_name = test_name
+        self.impi_src = ci_site_config.impi_root
+        self.core_prov = core_prov
+        self.hosts = hosts
+        self.util_prov = util_prov
+        self.libfab_installpath = libfab_installpath
+        self.nw_interface = nw_interface
+        self.server = server
+        self.client = client
+        self.environ = environ
+        self.n = 4
+        self.ppn = 1
+
+    @property
+    def env(self):
+        cmd = "bash -c \'source {}/env/vars.sh -i_mpi_ofi_internal=0; "\
+              .format(self.impi_src)
+        if (self.util_prov):
+            cmd += "export FI_PROVIDER={}; ".format(self.core_prov)
+        else:
+            cmd += "export FI_PROVIDER=\'{};{}\'; ".format(self.core_prov,
+                                                           self.util_prov)
+        cmd += "export I_MPI_FABRICS=ofi; "
+        cmd += "export LD_LIBRARY_PATH={}/lib:$LD_LIBRARY_PATH; "\
+               .format(self.impi_src)
+        cmd += "export LD_LIBRARY_PATH={}/lib/release:$LD_LIBRARY_PATH; "\
+               .format(self.impi_src)
+        cmd += "export LD_LIBRARY_PATH={}/lib/:$LD_LIBRARY_PATH; "\
+               .format(self.libfab_installpath)
+        cmd += "export PATH={}/bin:$PATH; ".format(self.libfab_installpath)
+        return cmd
+
+    @property
+    def options(self):
+        opts = "-n {} ".format(self.n)
+        opts += "-ppn {} ".format(self.ppn)
+        opts += "-hosts {},{} ".format(common.get_node_name(self.server,
+                                       self.nw_interface),
+                                       common.get_node_name(self.client,
+                                       self.nw_interface))
+        for key, val in self.environ:
+            opts = "{} -genv {} {} ".format(opts, key, val)
+
+        return opts
+
+    @property
+    def cmd(self):
+        return "{}/bin/mpiexec {}".format(self.impi_src, self.options)
+
+
+
+class IMBtests(Test):
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+                 hosts, mpitype, ofi_build_mode, test_group, util_prov=None):
+
+        super().__init__(jobname, buildno, testname, core_prov,
+                         fabric, hosts, ofi_build_mode, util_prov)
+
+        self.test_name = testname
         self.core_prov = core_prov
         self.util_prov = util_prov
-        # Iters are limited for time constraints
+        self.test_group = test_group
+        self.mpi_type = mpitype
+        self.mpi = ''
+        self.imb_tests = {
+                             '1' :[
+                                      'MPI1',
+                                      'P2P'
+                                  ],
+                             '2' :[
+                                      'EXT',
+                                      'IO'
+                                  ],
+                             '3' :[
+                                      'NBC',
+                                      'RMA',
+                                      'MT'
+                                  ]
+                         }
         self.iter = 100
         self.include = {
                         'MPI1':[
@@ -370,64 +445,39 @@ class IMBtests:
                               ],
                         'MT':[]
                        }
+        if (self.mpi_type == 'impi'):
+            self.mpi = IMPI(self.core_prov, self.hosts,
+                            self.libfab_installpath, self.nw_interface,
+                            self.server, self.client, self.env, self.util_prov)
+        elif (self.mpi_type == 'ompi'):
+            print('ompi')
+        elif (self.mpi_type == 'mpich'):
+            print('mpich')
 
     @property
-    def imb_cmd(self):
-        print("Running IMB-{}".format(self.test_name))
-        cmd = "{}/bin/IMB-{} ".format(ci_site_config.impi_root, self.test_name)
+    def execute_condn(self):
+        # Mpich and ompi are excluded to save time. Run manually if needed
+        return True if (self.mpi_type == 'impi') else False
+
+    def imb_cmd(self, imb_test):
+        print("Running IMB-{}".format(imb_test))
+        cmd = "{}/bin/IMB-{} ".format(ci_site_config.impi_root, imb_test)
         if (self.test_name != 'MT'):
             cmd += "-iter {} ".format(self.iter)
 
-        if (len(self.include[self.test_name]) > 0):
-            cmd += "-include {} ".format(','.join(self.include[self.test_name]))
+        if (len(self.include[imb_test]) > 0):
+            cmd += "-include {} ".format(','.join(self.include[imb_test]))
 
-        if (len(self.exclude[self.test_name]) > 0):
-            cmd += "-exclude {} ".format(','.join(self.exclude[self.test_name]))
+        if (len(self.exclude[imb_test]) > 0):
+            cmd += "-exclude {} ".format(','.join(self.exclude[imb_test]))
+
         return cmd
 
-    @property
-    def execute_condn(self):
-        return True
-
-class MpiTestIMB(MpiTests):
-
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 mpitype, hosts, ofi_build_mode, test_group, util_prov=None):
-        super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         mpitype, hosts, ofi_build_mode, util_prov)
-
-        self.test_group = test_group
-        self.n = 4
-        self.ppn = 1
-        self.imb_tests = {
-                             '1':[
-                                     'MPI1',
-                                     'P2P'
-                                 ],
-                             '2':[
-                                     'EXT',
-                                     'IO'
-                                 ],
-                             '3':[
-                                     'NBC',
-                                     'RMA',
-                                     'MT'
-                                 ]
-                         }
-
-    @property
-    def execute_condn(self):
-        return True if (self.mpi == 'impi') else False
-
     def execute_cmd(self):
-        command = self.cmd + self.options
         for test_type in self.imb_tests[self.test_group]:
-            self.test_obj = IMBtests(test_type, self.core_prov, self.util_prov)
-            if (self.test_obj.execute_condn):
-                outputcmd = shlex.split(command + self.test_obj.imb_cmd)
+                outputcmd = shlex.split(self.mpi.env + self.mpi.cmd + \
+                                        self.imb_cmd(test_type) + '\'')
                 common.run_command(outputcmd)
-            else:
-                print("IMB-{} not run".format(test_type))
 
 
 class MpichTestSuite(MpiTests):
