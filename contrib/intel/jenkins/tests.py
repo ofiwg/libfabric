@@ -332,6 +332,59 @@ class MpiTests(Test):
                 opts = "{} -x {}={} ".format(opts,key,val)
         return opts
 
+class MPICH:
+    def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
+                 server, client, environ, ci_middlewares_path, util_prov=None):
+
+        self.mpich_src = '{}/mpich'.format(ci_middlewares_path)
+        self.core_prov = core_prov
+        self.hosts = hosts
+        self.util_prov = util_prov
+        self.libfab_installpath = libfab_installpath
+        self.nw_interface = nw_interface
+        self.server = server
+        self.client = client
+        self.environ = environ
+        self.n = 4
+        self.ppn = 1
+
+    @property
+    def env(self):
+        cmd = "bash -c \'"
+        if (self.util_prov):
+            cmd += "export FI_PROVIDER={}; ".format(self.core_prov)
+        else:
+            cmd += "export FI_PROVIDER=\'{};{}\'; ".format(self.core_prov,
+                                                           self.util_prov)
+        cmd += "export I_MPI_FABRICS=ofi; "
+        cmd += "export MPIR_CVAR_CH4_OFI_ENABLE_ATOMICS=0; "
+        cmd += "export MPIR_CVAR_CH4_OFI_CAPABILITY_SETS_DEBUG=1; "
+        cmd += "export LD_LIBRARY_PATH={}/lib:$LD_LIBRARY_PATH; "\
+               .format(self.mpich_src)
+        cmd += "export LD_LIBRARY_PATH={}/lib/:$LD_LIBRARY_PATH; "\
+               .format(self.libfab_installpath)
+        cmd += "export PATH={}/bin:$PATH; ".format(self.mpich_src)
+        cmd += "export PATH={}/bin:$PATH; ".format(self.libfab_installpath)
+        return cmd
+
+    @property
+    def options(self):
+        opts = "-n {} ".format(self.n)
+        opts += "-ppn {} ".format(self.ppn)
+        opts += "-hosts {},{} ".format(common.get_node_name(self.server,
+                                       self.nw_interface),
+                                       common.get_node_name(self.client,
+                                       self.nw_interface))
+        for key, val in self.environ:
+            opts = "{} -genv {} {} ".format(opts, key, val)
+
+        return opts
+
+    @property
+    def cmd(self):
+        return "{}/bin/mpirun {}".format(self.mpich_src, self.options)
+
+
 class IMPI:
     def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
                  server, client, environ, util_prov=None):
@@ -383,7 +436,6 @@ class IMPI:
     @property
     def cmd(self):
         return "{}/bin/mpiexec {}".format(self.impi_src, self.options)
-
 
 
 class IMBtests(Test):
@@ -452,7 +504,10 @@ class IMBtests(Test):
         elif (self.mpi_type == 'ompi'):
             print('ompi')
         elif (self.mpi_type == 'mpich'):
-            print('mpich')
+            self.mpi = MPICH(self.core_prov, self.hosts,
+                             self.libfab_installpath, self.nw_interface,
+                             self.server, self.client, self.env,
+                             self.ci_middlewares_path, self.util_prov)
 
     @property
     def execute_condn(self):
