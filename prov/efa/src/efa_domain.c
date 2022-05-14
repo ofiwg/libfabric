@@ -290,6 +290,7 @@ err_free:
 	}
 
 	efa_domain = NULL;
+	*domain_fid = NULL;
 	return ret;
 }
 
