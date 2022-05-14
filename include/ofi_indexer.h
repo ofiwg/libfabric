@@ -69,7 +69,6 @@ struct ofi_idx_entry {
 #define OFI_IDX_MAX_CHUNKS (1 << OFI_IDX_CHUNK_BITS)
 
 #define OFI_IDX_INDEX_BITS 20
-#define OFI_IDX_ENTRY_BITS 10
 #define OFI_IDX_MAX_INDEX  ((1 << OFI_IDX_INDEX_BITS) - 1)
 
 struct indexer
@@ -80,7 +79,7 @@ struct indexer
 	int		 	size;
 };
 
-#define ofi_idx_chunk_id(index) (index >> OFI_IDX_ENTRY_BITS)
+#define ofi_idx_chunk_id(index) (index >> OFI_IDX_OFFSET_BITS)
 #define ofi_idx_entry_index(index) (index & (OFI_IDX_CHUNK_SIZE - 1))
 
 int ofi_idx_insert(struct indexer *idx, void *item);

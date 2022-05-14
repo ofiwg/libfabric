@@ -65,7 +65,7 @@ static int ofi_idx_grow(struct indexer *idx)
 		goto nomem;
 
 	chunk = idx->chunk[idx->size];
-	start_index = idx->size << OFI_IDX_ENTRY_BITS;
+	start_index = idx->size * OFI_IDX_CHUNK_SIZE;
 	chunk[OFI_IDX_CHUNK_SIZE - 1].next = idx->free_list;
 
 	for (i = OFI_IDX_CHUNK_SIZE - 2; i >= 0; i--)
