@@ -210,25 +210,25 @@ void ofi_idm_reset(struct index_map *idm, void (*callback)(void *item))
 {
 	void **chunk;
 	void *item;
-	int a, i;
+	int c, i;
 
-	for (a = 0; a < OFI_IDX_MAX_CHUNKS; a++) {
-		if (!idm->chunk[a]) {
-			assert(idm->count[a] == 0);
+	for (c = 0; c < OFI_IDX_MAX_CHUNKS; c++) {
+		if (!idm->chunk[c]) {
+			assert(idm->count[c] == 0);
 			continue;
 		}
 
-		for (i = 0; idm->count[a] && i < OFI_IDX_CHUNK_SIZE; i++) {
-			chunk = idm->chunk[a];
+		chunk = idm->chunk[c];
+		for (i = 0; idm->count[c] && i < OFI_IDX_CHUNK_SIZE; i++) {
 			item = chunk[i];
 			if (item) {
 				if (callback)
 					callback(item);
-				idm->count[a]--;
+				idm->count[c]--;
 			}
 		}
-		free(idm->chunk[a]);
-		idm->chunk[a] = NULL;
+		free(chunk);
+		idm->chunk[c] = NULL;
 	}
 }
 
