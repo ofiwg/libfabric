@@ -88,20 +88,12 @@ static struct fi_ops_domain efa_ops_domain_rdm = {
 static int efa_domain_init_device_and_pd(struct efa_domain *efa_domain, const char *domain_name)
 {
 	int i;
-	int name_len, name_diff;
 
 	if (!domain_name)
 		return -FI_EINVAL;
 
-	assert(efa_domain->info);
-	if (EFA_EP_TYPE_IS_RDM(efa_domain->info))
-		name_len = strlen(domain_name) - strlen(efa_rdm_domain.suffix);
-	else
-		name_len = strlen(domain_name) - strlen(efa_dgrm_domain.suffix);
-
 	for (i = 0; i < g_device_cnt; i++) {
-		name_diff = strncmp(domain_name, g_device_list[i].ibv_ctx->device->name, name_len);
-		if (!name_diff) {
+		if (strstr(domain_name, g_device_list[i].ibv_ctx->device->name) == domain_name) {
 			efa_domain->device = &g_device_list[i];
 			break;
 		}
@@ -130,18 +122,6 @@ static int efa_domain_init_qp_table(struct efa_domain *efa_domain)
 static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *info)
 {
 	int err;
-
-	rxr_info.addr_format = info->addr_format;
-	/*
-	 * Set the RxR's tx/rx size here based on core provider the user
-	 * selected so that ofi_prov_check_info succeeds.
-	 *
-	 * TODO: handle the case where a single process opens multiple domains
-	 * with different core providers
-	 */
-	rxr_info.tx_attr->size = info->tx_attr->size;
-	rxr_info.rx_attr->size = info->rx_attr->size;
-	rxr_info.rx_attr->op_flags |= info->rx_attr->op_flags & FI_MULTI_RECV;
 
 	if (efa_domain->fabric->shm_fabric) {
 		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
@@ -204,11 +184,11 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	 */
 	efa_domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
 
-	efa_domain->info = fi_dupinfo(efa_get_efa_info(info->domain_attr->name));
-	if (!efa_domain->info) {
-		ret = -FI_ENOMEM;
-		goto err_free;
+	if (!info->ep_attr || info->ep_attr->type == FI_EP_UNSPEC) {
+		EFA_WARN(FI_LOG_DOMAIN, "ep type not specified when creating domain");
+		return -FI_EINVAL;
 	}
+
 
 	efa_domain->mr_local = ofi_mr_local(info);
 	if (EFA_EP_TYPE_IS_DGRAM(info) && !efa_domain->mr_local) {
@@ -220,6 +200,12 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	err = efa_domain_init_device_and_pd(efa_domain, info->domain_attr->name);
 	if (err) {
 		ret = err;
+		goto err_free;
+	}
+
+	efa_domain->info = fi_dupinfo(EFA_EP_TYPE_IS_RDM(info) ? efa_domain->device->rdm_info : efa_domain->device->dgram_info);
+	if (!efa_domain->info) {
+		ret = -FI_ENOMEM;
 		goto err_free;
 	}
 

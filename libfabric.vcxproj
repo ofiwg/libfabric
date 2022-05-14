@@ -863,7 +863,6 @@
     <ClCompile Include="prov\efa\src\rxr\rxr_op_entry.c" />
     <ClCompile Include="prov\efa\src\windows\efawin.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_atomic.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_attr.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_cntr.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_cq.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_ep.c" />
@@ -876,6 +875,7 @@
     <ClCompile Include="prov\efa\src\rxr\rxr_pkt_type_req.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_read.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_rma.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_prov.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\fasthash.h" />
