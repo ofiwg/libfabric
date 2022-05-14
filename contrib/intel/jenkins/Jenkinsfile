@@ -57,8 +57,8 @@ pipeline {
                 }
                 withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
                   sh """
-                    mkdir py_scripts
-                    git clone ${env.UPSTREAM} py_scripts
+                    mkdir ${env.WORKSPACE}/py_scripts
+                    git clone ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
                     ${env.SKIP_PATH}/skip.sh ${env.WORKSPACE} ${TARGET}
                   """
                 }
@@ -74,30 +74,30 @@ pipeline {
                   sh """
                     echo "-----------------------------------------------------"
                     echo "Copy build dirs."
-                    python3.7 py_scripts/contrib/intel/jenkins/build.py --build_item=builddir
+                    python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=builddir
                     echo "Copy build dirs completed."
                     echo "-----------------------------------------------------"
 
                     echo "-----------------------------------------------------"
                     echo "Building libfabric reg."
-                    python3.7 py_scripts/contrib/intel/jenkins/build.py --build_item=libfabric
+                    python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=libfabric
                     echo "-----------------------------------------------------"
                     echo "Building libfabric dbg."
-                    python3.7 py_scripts/contrib/intel/jenkins/build.py --build_item=libfabric --ofi_build_mode=dbg
+                    python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=libfabric --ofi_build_mode=dbg
                     echo "-----------------------------------------------------"
                     echo "Building libfabric dl."
-                    python3.7 py_scripts/contrib/intel/jenkins/build.py --build_item=libfabric --ofi_build_mode=dl
+                    python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=libfabric --ofi_build_mode=dl
                     echo "Libfabric builds completed."
 
                     echo "-----------------------------------------------------"
                     echo "Building fabtests reg."
-                    python3.7 py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests
+                    python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests
                     echo "-----------------------------------------------------"
                     echo "Building fabtests dbg."
-                    python3.7 py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests --ofi_build_mode=dbg
+                    python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests --ofi_build_mode=dbg
                     echo "-----------------------------------------------------"
                     echo "Building fabtests dl."
-                    python3.7 py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests --ofi_build_mode=dl
+                    python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests --ofi_build_mode=dl
                     echo 'Fabtests builds completed.'
 
                   """
