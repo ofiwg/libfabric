@@ -184,7 +184,7 @@ static int cuda_gdrcopy_dl_hmem_cleanup(void)
 
 int cuda_gdrcopy_hmem_init(void)
 {
-	int err, ret = 0;
+	int err;
 
 	err = cuda_gdrcopy_dl_hmem_init();
 	if (err) {
@@ -199,20 +199,23 @@ int cuda_gdrcopy_hmem_init(void)
 	if (!global_gdr) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"gdr_open failed!\n");
-		ret = -FI_ENOMEM;
-		goto exit;
+		err = -FI_ENOMEM;
+		goto error_exit;
 	}
 
 	err = pthread_spin_init(&global_gdr_lock, 0);
 	if (err) {
 		assert(global_gdrcopy_ops.gdr_close);
 		global_gdrcopy_ops.gdr_close(global_gdr);
-		ret = -err;
+		err = -err;
+		goto error_exit;
 	}
 
-exit:
+	return 0;
+
+error_exit:
 	cuda_gdrcopy_dl_hmem_cleanup();
-	return ret;
+	return err;
 }
 
 int cuda_gdrcopy_hmem_cleanup(void)
