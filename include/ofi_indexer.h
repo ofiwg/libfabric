@@ -70,8 +70,6 @@ struct ofi_idx_entry {
 
 #define OFI_IDX_INDEX_BITS 20
 #define OFI_IDX_ENTRY_BITS 10
-#define OFI_IDX_ENTRY_SIZE (1 << OFI_IDX_ENTRY_BITS)
-#define OFI_IDX_ARRAY_SIZE (1 << (OFI_IDX_INDEX_BITS - OFI_IDX_ENTRY_BITS))
 #define OFI_IDX_MAX_INDEX  ((1 << OFI_IDX_INDEX_BITS) - 1)
 
 struct indexer
@@ -83,7 +81,7 @@ struct indexer
 };
 
 #define ofi_idx_array_index(index) (index >> OFI_IDX_ENTRY_BITS)
-#define ofi_idx_entry_index(index) (index & (OFI_IDX_ENTRY_SIZE - 1))
+#define ofi_idx_entry_index(index) (index & (OFI_IDX_CHUNK_SIZE - 1))
 
 int ofi_idx_insert(struct indexer *idx, void *item);
 void *ofi_idx_remove(struct indexer *idx, int index);
@@ -93,7 +91,7 @@ void ofi_idx_reset(struct indexer *idx);
 
 static inline int ofi_idx_is_valid(struct indexer *idx, int index)
 {
-	return (index > 0) && (index < idx->size * OFI_IDX_ENTRY_SIZE);
+	return (index > 0) && (index < idx->size * OFI_IDX_CHUNK_SIZE);
 }
 
 static inline void *ofi_idx_at(struct indexer *idx, int index)

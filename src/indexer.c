@@ -60,15 +60,15 @@ static int ofi_idx_grow(struct indexer *idx)
 	if (idx->size >= OFI_IDX_MAX_CHUNKS)
 		goto nomem;
 
-	idx->chunk[idx->size] = calloc(OFI_IDX_ENTRY_SIZE, sizeof(struct ofi_idx_entry));
+	idx->chunk[idx->size] = calloc(OFI_IDX_CHUNK_SIZE, sizeof(struct ofi_idx_entry));
 	if (!idx->chunk[idx->size])
 		goto nomem;
 
 	chunk = idx->chunk[idx->size];
 	start_index = idx->size << OFI_IDX_ENTRY_BITS;
-	chunk[OFI_IDX_ENTRY_SIZE - 1].next = idx->free_list;
+	chunk[OFI_IDX_CHUNK_SIZE - 1].next = idx->free_list;
 
-	for (i = OFI_IDX_ENTRY_SIZE - 2; i >= 0; i--)
+	for (i = OFI_IDX_CHUNK_SIZE - 2; i >= 0; i--)
 		chunk[i].next = start_index + i + 1;
 
 	/* Index 0 is reserved */
@@ -158,7 +158,7 @@ void ofi_idx_reset(struct indexer *idx)
 
 static int ofi_idm_grow(struct index_map *idm, int index)
 {
-	idm->chunk[ofi_idx_array_index(index)] = calloc(OFI_IDX_ENTRY_SIZE, sizeof(void *));
+	idm->chunk[ofi_idx_array_index(index)] = calloc(OFI_IDX_CHUNK_SIZE, sizeof(void *));
 	if (!idm->chunk[ofi_idx_array_index(index)])
 		goto nomem;
 
@@ -216,7 +216,7 @@ void ofi_idm_reset(struct index_map *idm, void (*callback)(void *item))
 			continue;
 		}
 
-		for (i = 0; idm->count[a] && i < OFI_IDX_ARRAY_SIZE; i++) {
+		for (i = 0; idm->count[a] && i < OFI_IDX_CHUNK_SIZE; i++) {
 			chunk = idm->chunk[a];
 			item = chunk[i];
 			if (item) {
