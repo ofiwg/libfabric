@@ -94,8 +94,8 @@ int ofi_idx_insert(struct indexer *idx, void *item)
 	}
 
 	chunk = idx->chunk[ofi_idx_chunk_id(index)];
-	idx->free_list = chunk[ofi_idx_entry_index(index)].next;
-	chunk[ofi_idx_entry_index(index)].item = item;
+	idx->free_list = chunk[ofi_idx_offset(index)].next;
+	chunk[ofi_idx_offset(index)].item = item;
 	return index;
 }
 
@@ -103,12 +103,12 @@ void *ofi_idx_remove(struct indexer *idx, int index)
 {
 	struct ofi_idx_entry *chunk;
 	void *item;
-	int entry_index = ofi_idx_entry_index(index);
+	int offset = ofi_idx_offset(index);
 
 	chunk = idx->chunk[ofi_idx_chunk_id(index)];
-	item = chunk[entry_index].item;
-	chunk[entry_index].item = NULL;
-	chunk[entry_index].next = idx->free_list;
+	item = chunk[offset].item;
+	chunk[offset].item = NULL;
+	chunk[offset].next = idx->free_list;
 	idx->free_list = index;
 	return item;
 }
@@ -118,22 +118,22 @@ void *ofi_idx_remove_ordered(struct indexer *idx, int index)
 	struct ofi_idx_entry *chunk;
 	void *item;
 	int temp_index;
-	int entry_index = ofi_idx_entry_index(index);
+	int offset = ofi_idx_offset(index);
 
 	chunk = idx->chunk[ofi_idx_chunk_id(index)];
-	item = chunk[entry_index].item;
-	chunk[entry_index].item = NULL;
+	item = chunk[offset].item;
+	chunk[offset].item = NULL;
 	if (ofi_idx_free_list_empty(idx) || index < idx->free_list) {
-		chunk[entry_index].next = idx->free_list;
+		chunk[offset].next = idx->free_list;
 		idx->free_list = index;
 		return item;
 	}
 	temp_index = idx->free_list;
-	while (chunk[ofi_idx_entry_index(temp_index)].next < index) {
-		temp_index = chunk[ofi_idx_entry_index(temp_index)].next;
+	while (chunk[ofi_idx_offset(temp_index)].next < index) {
+		temp_index = chunk[ofi_idx_offset(temp_index)].next;
 	}
-	chunk[entry_index].next = chunk[ofi_idx_entry_index(temp_index)].next;
-	chunk[ofi_idx_entry_index(temp_index)].next = index;
+	chunk[offset].next = chunk[ofi_idx_offset(temp_index)].next;
+	chunk[ofi_idx_offset(temp_index)].next = index;
 
 	return item;
 }
@@ -143,7 +143,7 @@ void ofi_idx_replace(struct indexer *idx, int index, void *item)
 	struct ofi_idx_entry *chunk;
 
 	chunk = idx->chunk[ofi_idx_chunk_id(index)];
-	chunk[ofi_idx_entry_index(index)].item = item;
+	chunk[ofi_idx_offset(index)].item = item;
 }
 
 void ofi_idx_reset(struct indexer *idx)
@@ -184,7 +184,7 @@ int ofi_idm_set(struct index_map *idm, int index, void *item)
 	}
 
 	chunk = idm->chunk[ofi_idx_chunk_id(index)];
-	chunk[ofi_idx_entry_index(index)] = item;
+	chunk[ofi_idx_offset(index)] = item;
 	idm->count[ofi_idx_chunk_id(index)]++;
 	return index;
 }
@@ -195,8 +195,8 @@ void *ofi_idm_clear(struct index_map *idm, int index)
 	void *item;
 
 	chunk = idm->chunk[ofi_idx_chunk_id(index)];
-	item = chunk[ofi_idx_entry_index(index)];
-	chunk[ofi_idx_entry_index(index)] = NULL;
+	item = chunk[ofi_idx_offset(index)];
+	chunk[ofi_idx_offset(index)] = NULL;
 	if (--idm->count[ofi_idx_chunk_id(index)] == 0) {
 		free(idm->chunk[ofi_idx_chunk_id(index)]);
 		idm->chunk[ofi_idx_chunk_id(index)] = NULL;

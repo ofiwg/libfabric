@@ -79,7 +79,7 @@ struct indexer
 };
 
 #define ofi_idx_chunk_id(index) (index >> OFI_IDX_OFFSET_BITS)
-#define ofi_idx_entry_index(index) (index & (OFI_IDX_CHUNK_SIZE - 1))
+#define ofi_idx_offset(index) (index & (OFI_IDX_CHUNK_SIZE - 1))
 
 int ofi_idx_insert(struct indexer *idx, void *item);
 void *ofi_idx_remove(struct indexer *idx, int index);
@@ -94,7 +94,7 @@ static inline int ofi_idx_is_valid(struct indexer *idx, int index)
 
 static inline void *ofi_idx_at(struct indexer *idx, int index)
 {
-	return (idx->chunk[ofi_idx_chunk_id(index)] + ofi_idx_entry_index(index))->item;
+	return (idx->chunk[ofi_idx_chunk_id(index)] + ofi_idx_offset(index))->item;
 }
 
 static inline void *ofi_idx_lookup(struct indexer *idx, int index)
@@ -135,7 +135,7 @@ static inline void *ofi_idm_at(struct index_map *idm, int index)
 {
 	void **chunk;
 	chunk = idm->chunk[ofi_idx_chunk_id(index)];
-	return chunk[ofi_idx_entry_index(index)];
+	return chunk[ofi_idx_offset(index)];
 }
 
 static inline void *ofi_idm_lookup(struct index_map *idm, int index)
