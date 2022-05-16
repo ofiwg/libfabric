@@ -693,6 +693,9 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 	ssize_t ret;
 
 	assert(ofi_mutex_held(&ep->lock));
+	if (ep->state != TCPX_CONNECTED)
+		return;
+
 	do {
 		if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
 			ret = tcpx_recv_hdr(ep);
@@ -710,6 +713,10 @@ void tcpx_progress_async(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *xfer;
 	uint32_t done;
+
+	assert(ofi_mutex_held(&ep->lock));
+	if (ep->state != TCPX_CONNECTED)
+		return;
 
 	done = ofi_bsock_async_done(&tcpx_prov, &ep->bsock);
 	while (!slist_empty(&ep->async_queue)) {
