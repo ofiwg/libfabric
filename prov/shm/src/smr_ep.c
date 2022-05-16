@@ -37,6 +37,7 @@
 
 #include "ofi_iov.h"
 #include "ofi_hmem.h"
+#include "smr_signal.h"
 #include "smr.h"
 
 extern struct fi_ops_msg smr_msg_ops;
@@ -1352,12 +1353,35 @@ static int smr_endpoint_name(struct smr_ep *ep, char *name, char *addr,
 	return 0;
 }
 
+static void smr_init_sig_handlers(void)
+{
+	static bool sig_init = false;
+
+	pthread_mutex_lock(&ep_list_lock);
+	if (sig_init)
+		goto out;
+
+	/* Signal handlers to cleanup tmpfs files on an unclean shutdown */
+	assert(SIGBUS < SIGRTMIN && SIGSEGV < SIGRTMIN
+	       && SIGTERM < SIGRTMIN && SIGINT < SIGRTMIN);
+	smr_reg_sig_handler(SIGBUS);
+	smr_reg_sig_handler(SIGSEGV);
+	smr_reg_sig_handler(SIGTERM);
+	smr_reg_sig_handler(SIGINT);
+
+	sig_init = true;
+out:
+	pthread_mutex_unlock(&ep_list_lock);
+}
+
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
 	struct smr_ep *ep;
 	int ret;
 	char name[SMR_NAME_MAX];
+
+	smr_init_sig_handlers();
 
 	ep = calloc(1, sizeof(*ep));
 	if (!ep)

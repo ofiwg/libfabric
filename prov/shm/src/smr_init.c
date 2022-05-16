@@ -37,7 +37,8 @@
 #include "smr_signal.h"
 #include <ofi_hmem.h>
 
-extern struct sigaction *old_action;
+struct sigaction *old_action = NULL;
+
 struct smr_env smr_env = {
 	.sar_threshold = SIZE_MAX,
 	.disable_cma = false,
@@ -226,13 +227,6 @@ SHM_INI
 	old_action = calloc(SIGRTMIN, sizeof(*old_action));
 	if (!old_action)
 		return NULL;
-	/* Signal handlers to cleanup tmpfs files on an unclean shutdown */
-	assert(SIGBUS < SIGRTMIN && SIGSEGV < SIGRTMIN
-	       && SIGTERM < SIGRTMIN && SIGINT < SIGRTMIN);
-	smr_reg_sig_hander(SIGBUS);
-	smr_reg_sig_hander(SIGSEGV);
-	smr_reg_sig_hander(SIGTERM);
-	smr_reg_sig_hander(SIGINT);
 
 	return &smr_prov;
 }

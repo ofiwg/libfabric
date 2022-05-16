@@ -199,6 +199,8 @@ struct smr_peer_data {
 
 extern struct dlist_entry ep_name_list;
 extern pthread_mutex_t ep_list_lock;
+extern struct dlist_entry sock_name_list;
+extern pthread_mutex_t sock_list_lock;
 
 struct smr_region;
 
