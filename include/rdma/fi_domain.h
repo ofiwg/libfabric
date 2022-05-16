@@ -140,6 +140,7 @@ struct fi_mr_attr {
 	size_t			auth_key_size;
 	uint8_t			*auth_key;
 	enum fi_hmem_iface	iface;
+	fi_addr_t		addr;
 	union {
 		uint64_t	reserved;
 		int		cuda;

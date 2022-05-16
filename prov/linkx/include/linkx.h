@@ -153,10 +153,17 @@ struct lnx_ep {
 	/* TODO - add the shared queues here */
 };
 
+struct lnx_mem_desc {
+	struct fid_mr *core_mr[LNX_MAX_LOCAL_EPS];
+	struct local_prov_ep *ep[LNX_MAX_LOCAL_EPS];
+	fi_addr_t peer_addr[LNX_MAX_LOCAL_EPS];
+};
+
 extern struct dlist_entry local_prov_table;
 extern struct util_prov lnx_util_prov;
 extern struct fi_provider lnx_prov;
 extern struct local_prov *shm_prov;
+extern struct lnx_peer_table *lnx_peer_tbl;
 
 int lnx_getinfo(uint32_t version, const char *node, const char *service,
 				uint64_t flags, const struct fi_info *hints,
@@ -186,9 +193,20 @@ int lnx_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 
 int lnx_cq2ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
 
+static inline struct lnx_peer *
+lnx_get_peer(struct lnx_peer **peers, fi_addr_t addr)
+{
+	/* TODO: need to support FI_ADDR_UNSPEC */
+	if (!peers || addr == FI_ADDR_UNSPEC)
+		return NULL;
+
+	return peers[addr];
+}
+
 static inline
-int lnx_select_send_pathway(struct lnx_peer *lp, struct fid_ep **cep,
-							fi_addr_t *addr)
+int lnx_select_send_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
+							struct local_prov_ep **cep, fi_addr_t *addr,
+							void **mem_desc)
 {
 	int idx = 0;
 	struct lnx_local2peer_map *lpm;
@@ -196,22 +214,36 @@ int lnx_select_send_pathway(struct lnx_peer *lp, struct fid_ep **cep,
 	/* TODO this will need to be expanded to handle Multi-Rail. For now
 	 * the assumption is that local peers can be reached on shm and remote
 	 * peers have only one interface, hence indexing on 0 and 1
+	 *
+	 * If we did memory registration, then we've already figured out the
+	 * pathway
 	 */
+	if (desc && desc->core_mr[0]) {
+		*cep = desc->ep[0];
+		*addr = desc->peer_addr[0];
+		if (mem_desc)
+			*mem_desc = desc->core_mr[0]->mem_desc;
+		return 0;
+	}
+
 	if (!lp->lp_local)
 		idx = 1;
 
 	/* TODO when we support multi-rail we can have multiple maps */
 	lpm = lp->lp_provs[idx]->lpp_map[0];
 
-	*cep = lpm->local_ep->lpe_ep;
+	*cep = lpm->local_ep;
 	*addr = lpm->peer_addrs[0];
+	if (mem_desc)
+		*mem_desc = NULL;
 
 	return 0;
 }
 
 static inline
-int lnx_select_recv_pathway(struct lnx_peer *lp, struct fid_ep **cep,
-							fi_addr_t *addr)
+int lnx_select_recv_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
+							struct local_prov_ep **cep, fi_addr_t *addr,
+							void **mem_desc)
 {
 	/* TODO for now keeping two different functions. The receive case will
 	 * need to handle FI_ADDR_UNSPEC
@@ -219,7 +251,7 @@ int lnx_select_recv_pathway(struct lnx_peer *lp, struct fid_ep **cep,
 	if (!lp)
 		return -FI_ENOSYS;
 
-	return lnx_select_send_pathway(lp, cep, addr);
+	return lnx_select_send_pathway(lp, desc, cep, addr, mem_desc);
 }
 
 #endif /* LINKX_H */

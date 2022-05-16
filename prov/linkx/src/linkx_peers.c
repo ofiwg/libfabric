@@ -58,6 +58,8 @@
 #include "rdma/fi_ext.h"
 #include "linkx.h"
 
+struct lnx_peer_table *lnx_peer_tbl;
+
 static void lnx_free_peer(struct lnx_peer *lp)
 {
 	int i, j;
@@ -577,6 +579,8 @@ int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	struct local_prov *entry;
 	int rc = 0;
 
+	//sleep(60);
+
 	if (!attr)
 		return -FI_EINVAL;
 
@@ -608,6 +612,13 @@ int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	peer_tbl->lpt_domain = util_domain;
 	peer_tbl->lpt_av.av_fid.fid.ops = &lnx_av_fi_ops;
 	peer_tbl->lpt_av.av_fid.ops = &lnx_av_ops;
+
+	assert(lnx_peer_tbl == NULL);
+
+	/* need this to handle memory registration vi fi_mr_regattr(). We need
+	 * to be able to access the peer table to determine which endpoint
+	 * we'll be using based on the source/destination address */
+	lnx_peer_tbl = peer_tbl;
 
 	/* walk through the rest of the core providers and open their
 	 * respective address vector tables

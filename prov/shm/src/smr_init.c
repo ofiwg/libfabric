@@ -165,6 +165,9 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 			cur->ep_attr->max_order_waw_size = 0;
 			cur->ep_attr->max_order_war_size = 0;
 		}
+
+		if (mr_mode & FI_MR_PROV_KEY)
+			cur->domain_attr->mr_mode |= FI_MR_PROV_KEY;
 	}
 	return 0;
 }

@@ -37,8 +37,8 @@
 #include <assert.h>
 
 
-static struct fi_mr_attr *
-dup_mr_attr(const struct fi_mr_attr *attr)
+struct fi_mr_attr *
+ofi_dup_mr_attr(const struct fi_mr_attr *attr)
 {
 	struct fi_mr_attr *dup_attr;
 
@@ -61,7 +61,7 @@ int ofi_mr_map_insert(struct ofi_mr_map *map, const struct fi_mr_attr *attr,
 	struct fi_mr_attr *item;
 	int ret;
 
-	item = dup_mr_attr(attr);
+	item = ofi_dup_mr_attr(attr);
 	if (!item)
 		return -FI_ENOMEM;
 
