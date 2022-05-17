@@ -823,7 +823,7 @@ ssize_t rxr_pkt_init_runtread_rtm(struct rxr_ep *ep,
 		 * TODO: adjust bytes_runt such that read buffer
 		 *       is page aligned, but must be >= rxr_env.efa_runt_size
 		 */
-		tx_entry->bytes_runt = rxr_env.efa_runt_size;
+		tx_entry->bytes_runt = MIN(tx_entry->total_len, rxr_env.efa_runt_size);
 	}
 
 	assert(tx_entry->bytes_sent < tx_entry->bytes_runt);
@@ -1246,19 +1246,22 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct rxr_ep *ep,
 
 	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
 
-	if (rxr_pkt_type_is_runtread(pkt_type) && !rx_entry->read_entry) {
-		struct fi_rma_iov *read_iov;
+	if (rxr_pkt_type_is_runtread(pkt_type)) {
 		struct rxr_runtread_rtm_base_hdr *runtread_rtm_hdr;
 
 		runtread_rtm_hdr = rxr_get_runtread_rtm_base_hdr(pkt_entry->pkt);
-		read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + rxr_pkt_req_hdr_size(pkt_entry));
-		rx_entry->tx_id = runtread_rtm_hdr->send_id;
-		rx_entry->rma_iov_count = runtread_rtm_hdr->read_iov_count;
 		rx_entry->bytes_runt = runtread_rtm_hdr->runt_length;
-		memcpy(rx_entry->rma_iov, read_iov, rx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
-		err = rxr_read_post_remote_read_or_queue(ep, rx_entry);
-		if (err)
-			return err;
+		if (rx_entry->total_len > rx_entry->bytes_runt && !rx_entry->read_entry) {
+			struct fi_rma_iov *read_iov;
+
+			rx_entry->tx_id = runtread_rtm_hdr->send_id;
+			read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + rxr_pkt_req_hdr_size(pkt_entry));
+			rx_entry->rma_iov_count = runtread_rtm_hdr->read_iov_count;
+			memcpy(rx_entry->rma_iov, read_iov, rx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
+			err = rxr_read_post_remote_read_or_queue(ep, rx_entry);
+			if (err)
+				return err;
+		}
 	}
 
 	ret = 0;
