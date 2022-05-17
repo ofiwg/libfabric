@@ -1078,6 +1078,40 @@ static int handle_cq_error(void)
 	return 0;
 }
 
+static int wait_on_fd(struct fid_cq *cq, struct fi_cq_tagged_entry *comp)
+{
+	struct fid *fids[1];
+	int fd, ret;
+
+	fd = (cq == txcq) ? tx_fd : rx_fd;
+	fids[0] = &cq->fid;
+
+	do {
+		ret = fi_trywait(fabric, fids, 1);
+		if (ret == FI_SUCCESS) {
+			ret = ft_poll_fd(fd, -1);
+			if (ret && ret != -FI_EAGAIN)
+				break;
+		}
+
+		ret = fi_cq_read(cq, comp, 1);
+	} while (ret == -FI_EAGAIN);
+
+	return ret;
+}
+
+static int wait_for_comp(struct fid_cq *cq, struct fi_cq_tagged_entry *comp)
+{
+	int ret;
+
+	if (opts.comp_method == FT_COMP_SREAD)
+		ret = fi_cq_sread(cq, comp, 1, NULL, -1);
+	else
+		ret = wait_on_fd(cq, comp);
+
+	return ret;
+}
+
 static void *process_rpcs(void *context)
 {
 	struct fi_cq_tagged_entry comp = {0};
@@ -1100,7 +1134,7 @@ static void *process_rpcs(void *context)
 
 		do {
 			/* The rx and tx cq's are the same */
-			ret = fi_cq_sread(rxcq, &comp, 1, NULL, -1);
+			ret = wait_for_comp(rxcq, &comp);
 			if (ret < 0) {
 				comp.flags = FI_SEND;
 				ret = handle_cq_error();
