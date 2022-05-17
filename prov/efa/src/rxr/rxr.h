@@ -298,6 +298,17 @@ struct rdm_peer {
 	struct dlist_entry rx_unexp_tagged_list; /* a list of unexpected tagged rx_entry for this peer */
 	struct dlist_entry tx_entry_list; /* a list of tx_entry related to this peer */
 	struct dlist_entry rx_entry_list; /* a list of rx_entry relased to this peer */
+
+	/* number of bytes that has been sent as part of runting protocols
+	 * capped by rxr_env.efa_runt_size
+	 */
+	int64_t num_runt_bytes_in_flight;
+
+	/*
+	 * number of messages that are using read based protocol
+	 */
+	int64_t num_read_msg_in_flight;
+
 };
 
 /** @brief Information of a queued copy.

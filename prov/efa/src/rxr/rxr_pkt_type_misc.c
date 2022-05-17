@@ -524,6 +524,11 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 {
 	struct rxr_eor_hdr *eor_hdr;
 	struct rxr_tx_entry *tx_entry;
+	struct rdm_peer *peer;
+
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
+	peer->num_read_msg_in_flight -= 1;
 
 	eor_hdr = (struct rxr_eor_hdr *)pkt_entry->pkt;
 
@@ -537,6 +542,7 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 	}
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
+
 }
 
 /* receipt packet related functions */

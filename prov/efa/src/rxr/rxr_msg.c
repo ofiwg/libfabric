@@ -74,6 +74,7 @@ int rxr_msg_select_rtm_for_cuda(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_e
 	int eager_rtm, medium_rtm, readbase_rtm;
 	int eager_rtm_max_msg_size, medium_rtm_max_msg_size;
 	bool delivery_complete_requested;
+	struct rdm_peer *peer;
 
 	assert(tx_entry->op == ofi_op_tagged || tx_entry->op == ofi_op_msg);
 	tagged = (tx_entry->op == ofi_op_tagged);
@@ -87,20 +88,14 @@ int rxr_msg_select_rtm_for_cuda(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_e
 	medium_rtm = (delivery_complete_requested) ? RXR_DC_MEDIUM_MSGRTM_PKT + tagged
 						   : RXR_MEDIUM_MSGRTM_PKT + tagged;
 
-	readbase_rtm = rxr_pkt_type_readbase_rtm(tx_entry->op, tx_entry->fi_flags);
+	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+	assert(peer);
+	readbase_rtm = rxr_pkt_type_readbase_rtm(peer, tx_entry->op, tx_entry->fi_flags);
 
 	eager_rtm_max_msg_size = 0;
 	medium_rtm_max_msg_size = 0;
 	if (cuda_is_gdrcopy_enabled())
 		medium_rtm_max_msg_size = rxr_env.efa_max_gdrcopy_msg_size;
-
-	if (rxr_pkt_type_is_runt(readbase_rtm)) {
-		/* Default value of efa_runt_size is 0.
-		 * The fact that efa_run_size is 0 means user explicitly set FI_EFA_RUNT_SIZE.
-		 * The user's chice overrides other setting
-		 */
-		medium_rtm_max_msg_size = rxr_env.efa_runt_size;
-	}
 
 	if (medium_rtm_max_msg_size > 0) {
 		eager_rtm_max_msg_size = rxr_pkt_req_max_data_size(rxr_ep, tx_entry->addr, eager_rtm,

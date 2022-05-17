@@ -123,10 +123,13 @@ size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry)
 	return pkt_entry->pkt_size - rxr_pkt_req_data_offset(pkt_entry);
 }
 
-int rxr_pkt_type_readbase_rtm(int op, uint64_t fi_flags)
+int rxr_pkt_type_readbase_rtm(struct rdm_peer *peer, int op, uint64_t fi_flags)
 {
 	assert(op == ofi_op_tagged || op == ofi_op_msg);
-	if (rxr_env.efa_runt_size > 0 && !(fi_flags & FI_DELIVERY_COMPLETE)) {
+	if (cuda_is_gdrcopy_enabled() &&
+	    peer->num_read_msg_in_flight == 0 &&
+	    rxr_env.efa_runt_size > peer->num_runt_bytes_in_flight &&
+	    !(fi_flags & FI_DELIVERY_COMPLETE)) {
 		return (op == ofi_op_tagged) ? RXR_RUNTREAD_TAGRTM_PKT
 					     : RXR_RUNTREAD_MSGRTM_PKT;
 	} else {
@@ -811,6 +814,7 @@ ssize_t rxr_pkt_init_runtread_rtm(struct rxr_ep *ep,
 				  int pkt_type,
 				  struct rxr_pkt_entry *pkt_entry)
 {
+	struct rdm_peer *peer;
 	struct rxr_runtread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
 	size_t hdr_size, pkt_data_offset, tx_data_offset, data_size;
@@ -823,7 +827,9 @@ ssize_t rxr_pkt_init_runtread_rtm(struct rxr_ep *ep,
 		 * TODO: adjust bytes_runt such that read buffer
 		 *       is page aligned, but must be >= rxr_env.efa_runt_size
 		 */
-		tx_entry->bytes_runt = MIN(tx_entry->total_len, rxr_env.efa_runt_size);
+		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+		assert(peer);
+		tx_entry->bytes_runt = MIN(rxr_env.efa_runt_size - peer->num_runt_bytes_in_flight, tx_entry->total_len);
 	}
 
 	assert(tx_entry->bytes_sent < tx_entry->bytes_runt);
@@ -909,13 +915,34 @@ void rxr_pkt_handle_longcts_rtm_sent(struct rxr_ep *ep,
 		rxr_prepare_desc_send(efa_domain, tx_entry);
 }
 
+
+void rxr_pkt_handle_longread_rtm_sent(struct rxr_ep *ep,
+				      struct rxr_pkt_entry *pkt_entry)
+{
+	struct rdm_peer *peer;
+
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
+	peer->num_read_msg_in_flight += 1;
+}
+
 void rxr_pkt_handle_runtread_rtm_sent(struct rxr_ep *ep,
 				      struct rxr_pkt_entry *pkt_entry)
 {
+	struct rdm_peer *peer;
 	struct rxr_tx_entry *tx_entry;
+	size_t pkt_data_size = rxr_pkt_req_data_size(pkt_entry);
 
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
+ 
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
-	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
+	tx_entry->bytes_sent += pkt_data_size;
+	peer->num_runt_bytes_in_flight += pkt_data_size;
+
+	if (rxr_get_runtread_rtm_base_hdr(pkt_entry->pkt)->seg_offset == 0 &&
+	    tx_entry->total_len > tx_entry->bytes_runt)
+		peer->num_read_msg_in_flight += 1;
 }
 
 /*
@@ -969,9 +996,17 @@ void rxr_pkt_handle_runtread_rtm_send_completion(struct rxr_ep *ep,
 						 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_tx_entry *tx_entry;
+	struct rdm_peer *peer;
+	size_t pkt_data_size;
 
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
-	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
+	pkt_data_size = rxr_pkt_req_data_size(pkt_entry);
+	tx_entry->bytes_acked += pkt_data_size;
+
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
+	assert(peer->num_runt_bytes_in_flight >= pkt_data_size);
+	peer->num_runt_bytes_in_flight -= pkt_data_size;
 	if (tx_entry->total_len == tx_entry->bytes_acked)
 		rxr_cq_handle_tx_completion(ep, tx_entry);
 }
@@ -1278,7 +1313,7 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct rxr_ep *ep,
 		 */
 		rx_entry->bytes_received += data_size;
 		rx_entry->bytes_received_via_mulreq += data_size;
-		if (rxr_pkt_mulreq_total_data_size(pkt_type, rx_entry)== rx_entry->bytes_received_via_mulreq)
+		if (rxr_pkt_mulreq_total_data_size(pkt_type, rx_entry) == rx_entry->bytes_received_via_mulreq)
 			rxr_pkt_rx_map_remove(ep, cur, rx_entry);
 
 		/* rxr_pkt_copy_data_to_rx_entry() will release cur, so

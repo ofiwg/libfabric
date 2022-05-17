@@ -250,11 +250,8 @@ void rxr_pkt_handle_medium_rtm_sent(struct rxr_ep *ep,
 void rxr_pkt_handle_longcts_rtm_sent(struct rxr_ep *ep,
 				  struct rxr_pkt_entry *pkt_entry);
 
-static inline
 void rxr_pkt_handle_longread_rtm_sent(struct rxr_ep *ep,
-				  struct rxr_pkt_entry *pkt_entry)
-{
-}
+				      struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_runtread_rtm_sent(struct rxr_ep *ep,
 				      struct rxr_pkt_entry *pkt_entry);
