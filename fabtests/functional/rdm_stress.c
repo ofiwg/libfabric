@@ -77,6 +77,8 @@ struct rpc_ctrl {
 
 int rpc_timeout = 2000; /* ms */
 
+static const uint32_t invalid_id = ~0;
+
 enum {
 	rpc_write_key = 189,
 	rpc_read_key = 724,
@@ -930,8 +932,10 @@ static int handle_hello(struct rpc_hdr *req, struct rpc_resp *resp)
 	resp->hdr.client_id = (uint32_t) addr;
 	resp->hdr.size = 0;
 	ret = fi_send(ep, &resp->hdr, sizeof(resp->hdr), NULL, addr, resp);
-	if (ret)
+	if (ret) {
 		(void) fi_av_remove(av, &addr, 1, 0);
+		resp->hdr.client_id = invalid_id;
+	}
 	return ret;
 }
 
@@ -1007,11 +1011,13 @@ static void complete_rpc(struct rpc_resp *resp)
 		ret = resp->status;
 
 	if (ret) {
-		printf("(%d) unreachable, removing\n", resp->hdr.client_id);
-		addr = resp->hdr.client_id;
- 		ret = fi_av_remove(av, &addr, 1, 0);
-		if (ret)
-			FT_PRINTERR("fi_av_remove", ret);
+		if (resp->hdr.client_id != invalid_id) {
+			addr = resp->hdr.client_id;
+			printf("(%d) unreachable, removing\n", resp->hdr.client_id);
+			ret = fi_av_remove(av, &addr, 1, 0);
+			if (ret)
+				FT_PRINTERR("fi_av_remove", ret);
+		}
 	}
 
 	if (resp->mr)
