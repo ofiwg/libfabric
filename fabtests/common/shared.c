@@ -163,7 +163,7 @@ static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEF
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
 
 
-static int ft_poll_fd(int fd, int timeout)
+int ft_poll_fd(int fd, int timeout)
 {
 	struct pollfd fds;
 	int ret;

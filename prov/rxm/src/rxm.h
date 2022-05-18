@@ -538,7 +538,7 @@ struct rxm_tx_buf {
 
 /* Used for application transmits, provides credit check */
 struct rxm_tx_buf *rxm_get_tx_buf(struct rxm_ep *ep);
-void rxm_free_rx_buf(struct rxm_ep *ep, struct rxm_tx_buf *buf);
+void rxm_free_tx_buf(struct rxm_ep *ep, struct rxm_tx_buf *buf);
 
 enum rxm_deferred_tx_entry_type {
 	RXM_DEFERRED_TX_RNDV_ACK,
@@ -943,7 +943,7 @@ ssize_t rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
 int rxm_post_recv(struct rxm_rx_buf *rx_buf);
 
 static inline void
-rxm_rx_buf_free(struct rxm_rx_buf *rx_buf)
+rxm_free_rx_buf(struct rxm_rx_buf *rx_buf)
 {
 	if (rx_buf->data != rx_buf->pkt.data) {
 		free(rx_buf->data);

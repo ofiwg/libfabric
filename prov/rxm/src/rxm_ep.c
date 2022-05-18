@@ -666,7 +666,7 @@ struct rxm_tx_buf *rxm_get_tx_buf(struct rxm_ep *ep)
 	return buf;
 }
 
-void rxm_free_rx_buf(struct rxm_ep *ep, struct rxm_tx_buf *buf)
+void rxm_free_tx_buf(struct rxm_ep *ep, struct rxm_tx_buf *buf)
 {
 	assert(ofi_mutex_held(&ep->util_ep.lock));
 	assert(buf->user_tx);
@@ -699,8 +699,8 @@ rxm_ep_sar_tx_cleanup(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->tx_pool,
 					    tx_buf->pkt.ctrl_hdr.msg_id);
-	rxm_free_rx_buf(rxm_ep, first_tx_buf);
-	rxm_free_rx_buf(rxm_ep, tx_buf);
+	rxm_free_tx_buf(rxm_ep, first_tx_buf);
+	rxm_free_tx_buf(rxm_ep, tx_buf);
 }
 
 struct rxm_deferred_tx_entry *

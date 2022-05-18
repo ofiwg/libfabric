@@ -186,7 +186,7 @@ rxm_ep_atomic_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	ret = rxm_ep_send_atomic_req(rxm_ep, rxm_conn, tx_buf, tot_len);
 	if (ret)
-		rxm_free_rx_buf(rxm_ep, tx_buf);
+		rxm_free_tx_buf(rxm_ep, tx_buf);
 
 	return ret;
 }

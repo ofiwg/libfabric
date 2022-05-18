@@ -537,6 +537,7 @@ int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 int ft_cq_read_verify(struct fid_cq *cq, void *op_context);
 
 void eq_readerr(struct fid_eq *eq, const char *eq_str);
+int ft_poll_fd(int fd, int timeout);
 
 int64_t get_elapsed(const struct timespec *b, const struct timespec *a,
 		enum precision p);

@@ -76,7 +76,7 @@ static void rxm_close_conn(struct rxm_conn *conn)
 		buf = container_of(conn->deferred_sar_segments.next,
 				   struct rxm_rx_buf, unexp_msg.entry);
 		dlist_remove(&buf->unexp_msg.entry);
-		rxm_rx_buf_free(buf);
+		rxm_free_rx_buf(buf);
 	}
 
 	while (!dlist_empty(&conn->deferred_sar_msgs)) {

@@ -179,7 +179,7 @@ static void rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 
 release:
 	rxm_recv_entry_release(recv_entry);
-	rxm_rx_buf_free(rx_buf);
+	rxm_free_rx_buf(rx_buf);
 }
 
 static void
@@ -211,7 +211,7 @@ static void rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_tx_buf *rma_buf,
 		rxm_msg_mr_closev(rma_buf->rma.mr, rma_buf->rma.count);
 	}
 
-	rxm_free_rx_buf(rxm_ep, rma_buf);
+	rxm_free_tx_buf(rxm_ep, rma_buf);
 }
 
 void rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
@@ -233,13 +233,13 @@ static bool rxm_complete_sar(struct rxm_ep *rxm_ep,
 	case RXM_SAR_SEG_FIRST:
 		break;
 	case RXM_SAR_SEG_MIDDLE:
-		rxm_free_rx_buf(rxm_ep, tx_buf);
+		rxm_free_tx_buf(rxm_ep, tx_buf);
 		break;
 	case RXM_SAR_SEG_LAST:
 		first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->tx_pool,
 						tx_buf->pkt.ctrl_hdr.msg_id);
-		rxm_free_rx_buf(rxm_ep, first_tx_buf);
-		rxm_free_rx_buf(rxm_ep, tx_buf);
+		rxm_free_tx_buf(rxm_ep, first_tx_buf);
+		rxm_free_tx_buf(rxm_ep, tx_buf);
 		return true;
 	}
 
@@ -297,7 +297,7 @@ static void rxm_rndv_tx_finish(struct rxm_ep *rxm_ep,
 		tx_buf->write_rndv.done_buf = NULL;
 	}
 	ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
-	rxm_free_rx_buf(rxm_ep, tx_buf);
+	rxm_free_tx_buf(rxm_ep, tx_buf);
 }
 
 static void rxm_rndv_handle_rd_done(struct rxm_ep *rxm_ep,
@@ -312,7 +312,7 @@ static void rxm_rndv_handle_rd_done(struct rxm_ep *rxm_ep,
 				      rx_buf->pkt.ctrl_hdr.msg_id);
 	assert(tx_buf->pkt.ctrl_hdr.msg_id == rx_buf->pkt.ctrl_hdr.msg_id);
 
-	rxm_rx_buf_free(rx_buf);
+	rxm_free_rx_buf(rx_buf);
 
 	if (tx_buf->hdr.state == RXM_RNDV_READ_DONE_WAIT) {
 		rxm_rndv_tx_finish(rxm_ep, tx_buf);
@@ -360,7 +360,7 @@ static int rxm_rndv_handle_wr_done(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_
 		RXM_UPDATE_STATE(FI_LOG_CQ, rndv_rx_buf, RXM_RNDV_WRITE_DONE_RECVD);
 	}
 out:
-	rxm_rx_buf_free(rx_buf);
+	rxm_free_rx_buf(rx_buf);
 	return ret;
 }
 
@@ -422,7 +422,7 @@ static void rxm_process_seg_data(struct rxm_rx_buf *rx_buf, int *done)
 
 		/* The RX buffer can be reposted for further re-use */
 		rx_buf->recv_entry = NULL;
-		rxm_rx_buf_free(rx_buf);
+		rxm_free_rx_buf(rx_buf);
 
 		*done = 0;
 	}
@@ -564,7 +564,7 @@ static ssize_t rxm_rndv_handle_wr_data(struct rxm_rx_buf *rx_buf)
 		rxm_cq_write_error(rx_buf->ep->util_ep.rx_cq,
 				   rx_buf->ep->util_ep.rx_cntr,
 				   tx_buf, (int) ret);
-	rxm_rx_buf_free(rx_buf);
+	rxm_free_rx_buf(rx_buf);
 	return ret;
 }
 
@@ -662,7 +662,7 @@ void rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 		ofi_coll_handle_xfer_comp(rx_buf->pkt.hdr.tag,
 				rx_buf->recv_entry->context);
 		rxm_recv_entry_release(rx_buf->recv_entry);
-		rxm_rx_buf_free(rx_buf);
+		rxm_free_rx_buf(rx_buf);
 	} else {
 		rxm_finish_recv(rx_buf, done_len);
 	}
@@ -1002,7 +1002,7 @@ static void rxm_handle_remote_write(struct rxm_ep *rxm_ep,
 		     comp->data, 0);
 	ofi_ep_rem_wr_cntr_inc(&rxm_ep->util_ep);
 	if (comp->op_context)
-		rxm_rx_buf_free(comp->op_context);
+		rxm_free_rx_buf(comp->op_context);
 }
 
 static void rxm_format_atomic_resp_pkt_hdr(struct rxm_conn *rxm_conn,
@@ -1073,7 +1073,7 @@ static ssize_t rxm_atomic_send_resp(struct rxm_ep *rxm_ep,
 			ret = 0;
 		}
 	}
-	rxm_rx_buf_free(rx_buf);
+	rxm_free_rx_buf(rx_buf);
 
 	return ret;
 }
@@ -1307,8 +1307,8 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 		goto write_err;
 	}
 free:
-	rxm_rx_buf_free(rx_buf);
-	rxm_free_rx_buf(rxm_ep, tx_buf);
+	rxm_free_rx_buf(rx_buf);
+	rxm_free_tx_buf(rxm_ep, tx_buf);
 	return ret;
 
 write_err:
@@ -1336,7 +1336,7 @@ static ssize_t rxm_handle_credit(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_bu
 			      util_domain);
 	domain->flow_ctrl_ops->add_credits(rx_buf->rx_ep,
 					   rx_buf->pkt.ctrl_hdr.ctrl_data);
-	rxm_rx_buf_free(rx_buf);
+	rxm_free_rx_buf(rx_buf);
 	return FI_SUCCESS;
 }
 
@@ -1368,7 +1368,7 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_tagged_entry *comp)
 	case RXM_INJECT_TX:
 		tx_buf = comp->op_context;
 		rxm_ep->eager_ops->comp_tx(rxm_ep, tx_buf);
-		rxm_free_rx_buf(rxm_ep, tx_buf);
+		rxm_free_tx_buf(rxm_ep, tx_buf);
 		return 0;
 	case RXM_CREDIT_TX:
 		tx_buf = comp->op_context;
@@ -1741,7 +1741,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		tx_buf = err_entry.op_context;
 		err_entry.op_context = tx_buf->app_context;
 		err_entry.flags = ofi_tx_cq_flags(tx_buf->pkt.hdr.op);
-		rxm_free_rx_buf(rxm_ep, tx_buf);
+		rxm_free_tx_buf(rxm_ep, tx_buf);
 		break;
 	case RXM_RNDV_READ_DONE_RECVD:
 		/* We received the response, so ignore the send error */
@@ -1752,7 +1752,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		rxm_rndv_rx_finish(err_entry.op_context);
 		return;
 	case RXM_INJECT_TX:
-		rxm_free_rx_buf(rxm_ep, err_entry.op_context);
+		rxm_free_tx_buf(rxm_ep, err_entry.op_context);
 		if (cntr)
 			rxm_cntr_incerr(cntr);
 		return;
@@ -1769,7 +1769,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		    rxm_ep->msg_mr_local) {
 			rxm_msg_mr_closev(tx_buf->rma.mr, tx_buf->rma.count);
 		}
-		rxm_free_rx_buf(rxm_ep, tx_buf);
+		rxm_free_tx_buf(rxm_ep, tx_buf);
 		break;
 	case RXM_SAR_TX:
 		tx_buf = err_entry.op_context;

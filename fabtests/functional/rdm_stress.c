@@ -77,6 +77,8 @@ struct rpc_ctrl {
 
 int rpc_timeout = 2000; /* ms */
 
+static const uint32_t invalid_id = ~0;
+
 enum {
 	rpc_write_key = 189,
 	rpc_read_key = 724,
@@ -930,8 +932,10 @@ static int handle_hello(struct rpc_hdr *req, struct rpc_resp *resp)
 	resp->hdr.client_id = (uint32_t) addr;
 	resp->hdr.size = 0;
 	ret = fi_send(ep, &resp->hdr, sizeof(resp->hdr), NULL, addr, resp);
-	if (ret)
+	if (ret) {
 		(void) fi_av_remove(av, &addr, 1, 0);
+		resp->hdr.client_id = invalid_id;
+	}
 	return ret;
 }
 
@@ -1007,11 +1011,13 @@ static void complete_rpc(struct rpc_resp *resp)
 		ret = resp->status;
 
 	if (ret) {
-		printf("(%d) unreachable, removing\n", resp->hdr.client_id);
-		addr = resp->hdr.client_id;
- 		ret = fi_av_remove(av, &addr, 1, 0);
-		if (ret)
-			FT_PRINTERR("fi_av_remove", ret);
+		if (resp->hdr.client_id != invalid_id) {
+			addr = resp->hdr.client_id;
+			printf("(%d) unreachable, removing\n", resp->hdr.client_id);
+			ret = fi_av_remove(av, &addr, 1, 0);
+			if (ret)
+				FT_PRINTERR("fi_av_remove", ret);
+		}
 	}
 
 	if (resp->mr)
@@ -1078,6 +1084,40 @@ static int handle_cq_error(void)
 	return 0;
 }
 
+static int wait_on_fd(struct fid_cq *cq, struct fi_cq_tagged_entry *comp)
+{
+	struct fid *fids[1];
+	int fd, ret;
+
+	fd = (cq == txcq) ? tx_fd : rx_fd;
+	fids[0] = &cq->fid;
+
+	do {
+		ret = fi_trywait(fabric, fids, 1);
+		if (ret == FI_SUCCESS) {
+			ret = ft_poll_fd(fd, -1);
+			if (ret && ret != -FI_EAGAIN)
+				break;
+		}
+
+		ret = fi_cq_read(cq, comp, 1);
+	} while (ret == -FI_EAGAIN);
+
+	return ret;
+}
+
+static int wait_for_comp(struct fid_cq *cq, struct fi_cq_tagged_entry *comp)
+{
+	int ret;
+
+	if (opts.comp_method == FT_COMP_SREAD)
+		ret = fi_cq_sread(cq, comp, 1, NULL, -1);
+	else
+		ret = wait_on_fd(cq, comp);
+
+	return ret;
+}
+
 static void *process_rpcs(void *context)
 {
 	struct fi_cq_tagged_entry comp = {0};
@@ -1100,7 +1140,7 @@ static void *process_rpcs(void *context)
 
 		do {
 			/* The rx and tx cq's are the same */
-			ret = fi_cq_sread(rxcq, &comp, 1, NULL, -1);
+			ret = wait_for_comp(rxcq, &comp);
 			if (ret < 0) {
 				comp.flags = FI_SEND;
 				ret = handle_cq_error();
