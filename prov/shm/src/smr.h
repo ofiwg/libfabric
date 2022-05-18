@@ -234,9 +234,6 @@ static inline void *smr_get_ptr(void *base, uint64_t offset)
 	return (char *) base + (uintptr_t) offset;
 }
 
-extern struct dlist_entry sock_name_list;
-extern pthread_mutex_t sock_list_lock;
-
 struct smr_sock_name {
 	char name[SMR_SOCK_NAME_MAX];
 	struct dlist_entry entry;
