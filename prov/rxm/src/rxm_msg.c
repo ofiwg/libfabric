@@ -227,7 +227,7 @@ rxm_buf_recv(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		assert(flags & FI_DISCARD);
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA,
 		       "Discarding buffered receive\n");
-		rxm_rx_buf_free(rx_buf);
+		rxm_free_rx_buf(rx_buf);
 	}
 unlock:
 	ofi_ep_lock_release(&rxm_ep->util_ep);

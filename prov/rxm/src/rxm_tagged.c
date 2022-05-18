@@ -53,7 +53,7 @@ rxm_discard_recv(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_buf,
 
 	rxm_cq_write(rxm_ep->util_ep.rx_cq, context, FI_TAGGED | FI_RECV,
 		     0, NULL, rx_buf->pkt.hdr.data, rx_buf->pkt.hdr.tag);
-	rxm_rx_buf_free(rx_buf);
+	rxm_free_rx_buf(rx_buf);
 }
 
 static void
@@ -181,7 +181,7 @@ rxm_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 		assert(flags & FI_DISCARD);
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Discarding buffered receive\n");
-		rxm_rx_buf_free(rx_buf);
+		rxm_free_rx_buf(rx_buf);
 		goto unlock;
 	}
 
