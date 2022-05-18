@@ -59,7 +59,8 @@
     <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
-  </PropertyGroup>  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64'" Label="Configuration">
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64'" Label="Configuration">
     <ConfigurationType>Makefile</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
@@ -198,6 +199,21 @@
     <ClCompile Include="common\shared.c" />
     <ClCompile Include="common\windows\getopt.c" />
     <ClCompile Include="common\windows\osd.c" />
+    <ClCompile Include="functional\av_xfer.c" />
+    <ClCompile Include="functional\cm_data.c" />
+    <ClCompile Include="functional\multi_ep.c" />
+    <ClCompile Include="functional\multi_mr.c" />
+    <ClCompile Include="functional\multi_recv.c" />
+    <ClCompile Include="functional\rdm_atomic.c" />
+    <ClCompile Include="functional\rdm_multi_client.c" />
+    <ClCompile Include="functional\rdm_shared_av.c" />
+    <ClCompile Include="functional\recv_cancel.c" />
+    <ClCompile Include="functional\shared_ctx.c" />
+    <ClCompile Include="functional\unexpected_msg.c" />
+    <ClCompile Include="multinode\src\core.c" />
+    <ClCompile Include="multinode\src\core_coll.c" />
+    <ClCompile Include="multinode\src\harness.c" />
+    <ClCompile Include="multinode\src\pattern.c" />
     <ClCompile Include="ubertest\connect.c" />
     <ClCompile Include="ubertest\cq.c" />
     <ClCompile Include="ubertest\config.c" />
@@ -234,6 +250,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="benchmarks\benchmark_shared.h" />
+    <ClInclude Include="include\windows\arpa\inet.h" />
+    <ClInclude Include="include\windows\sched.h" />
+    <ClInclude Include="multinode\include\coll_test.h" />
+    <ClInclude Include="multinode\include\core.h" />
+    <ClInclude Include="multinode\include\pattern.h" />
     <ClInclude Include="ubertest\fabtest.h" />
     <ClInclude Include="include\ft_osd.h" />
     <ClInclude Include="include\jsmn.h" />

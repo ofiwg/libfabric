@@ -46,6 +46,7 @@ struct iovec
 #define strdup _strdup
 #define strcasecmp _stricmp
 #define strncasecmp _strnicmp
+#define alloca _alloca
 #define SHUT_RDWR SD_BOTH
 #define CLOCK_MONOTONIC	1
 
