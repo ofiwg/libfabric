@@ -211,7 +211,7 @@ static void rxm_finish_rma(struct rxm_ep *rxm_ep, struct rxm_tx_buf *rma_buf,
 		rxm_msg_mr_closev(rma_buf->rma.mr, rma_buf->rma.count);
 	}
 
-	rxm_free_rx_buf(rxm_ep, rma_buf);
+	rxm_free_tx_buf(rxm_ep, rma_buf);
 }
 
 void rxm_finish_eager_send(struct rxm_ep *rxm_ep, struct rxm_tx_buf *tx_buf)
@@ -233,13 +233,13 @@ static bool rxm_complete_sar(struct rxm_ep *rxm_ep,
 	case RXM_SAR_SEG_FIRST:
 		break;
 	case RXM_SAR_SEG_MIDDLE:
-		rxm_free_rx_buf(rxm_ep, tx_buf);
+		rxm_free_tx_buf(rxm_ep, tx_buf);
 		break;
 	case RXM_SAR_SEG_LAST:
 		first_tx_buf = ofi_bufpool_get_ibuf(rxm_ep->tx_pool,
 						tx_buf->pkt.ctrl_hdr.msg_id);
-		rxm_free_rx_buf(rxm_ep, first_tx_buf);
-		rxm_free_rx_buf(rxm_ep, tx_buf);
+		rxm_free_tx_buf(rxm_ep, first_tx_buf);
+		rxm_free_tx_buf(rxm_ep, tx_buf);
 		return true;
 	}
 
@@ -297,7 +297,7 @@ static void rxm_rndv_tx_finish(struct rxm_ep *rxm_ep,
 		tx_buf->write_rndv.done_buf = NULL;
 	}
 	ofi_ep_tx_cntr_inc(&rxm_ep->util_ep);
-	rxm_free_rx_buf(rxm_ep, tx_buf);
+	rxm_free_tx_buf(rxm_ep, tx_buf);
 }
 
 static void rxm_rndv_handle_rd_done(struct rxm_ep *rxm_ep,
@@ -1308,7 +1308,7 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 	}
 free:
 	rxm_rx_buf_free(rx_buf);
-	rxm_free_rx_buf(rxm_ep, tx_buf);
+	rxm_free_tx_buf(rxm_ep, tx_buf);
 	return ret;
 
 write_err:
@@ -1368,7 +1368,7 @@ ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_tagged_entry *comp)
 	case RXM_INJECT_TX:
 		tx_buf = comp->op_context;
 		rxm_ep->eager_ops->comp_tx(rxm_ep, tx_buf);
-		rxm_free_rx_buf(rxm_ep, tx_buf);
+		rxm_free_tx_buf(rxm_ep, tx_buf);
 		return 0;
 	case RXM_CREDIT_TX:
 		tx_buf = comp->op_context;
@@ -1741,7 +1741,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		tx_buf = err_entry.op_context;
 		err_entry.op_context = tx_buf->app_context;
 		err_entry.flags = ofi_tx_cq_flags(tx_buf->pkt.hdr.op);
-		rxm_free_rx_buf(rxm_ep, tx_buf);
+		rxm_free_tx_buf(rxm_ep, tx_buf);
 		break;
 	case RXM_RNDV_READ_DONE_RECVD:
 		/* We received the response, so ignore the send error */
@@ -1752,7 +1752,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		rxm_rndv_rx_finish(err_entry.op_context);
 		return;
 	case RXM_INJECT_TX:
-		rxm_free_rx_buf(rxm_ep, err_entry.op_context);
+		rxm_free_tx_buf(rxm_ep, err_entry.op_context);
 		if (cntr)
 			rxm_cntr_incerr(cntr);
 		return;
@@ -1769,7 +1769,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 		    rxm_ep->msg_mr_local) {
 			rxm_msg_mr_closev(tx_buf->rma.mr, tx_buf->rma.count);
 		}
-		rxm_free_rx_buf(rxm_ep, tx_buf);
+		rxm_free_tx_buf(rxm_ep, tx_buf);
 		break;
 	case RXM_SAR_TX:
 		tx_buf = err_entry.op_context;

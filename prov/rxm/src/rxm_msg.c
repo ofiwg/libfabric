@@ -341,7 +341,7 @@ rxm_alloc_rndv_buf(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return len;
 
 err:
-	rxm_free_rx_buf(rxm_ep, *rndv_buf);
+	rxm_free_tx_buf(rxm_ep, *rndv_buf);
 	return ret;
 }
 
@@ -376,7 +376,7 @@ err:
 	       "Transmit for MSG provider failed\n");
 	if (!rxm_ep->rdm_mr_local)
 		rxm_msg_mr_closev(tx_buf->rma.mr, tx_buf->rma.count);
-	rxm_free_rx_buf(rxm_ep, tx_buf);
+	rxm_free_tx_buf(rxm_ep, tx_buf);
 	return ret;
 }
 
@@ -494,7 +494,7 @@ rxm_send_sar(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (ret) {
 		if (ret == -FI_EAGAIN)
 			rxm_ep_do_progress(&rxm_ep->util_ep);
-		rxm_free_rx_buf(rxm_ep, first_tx_buf);
+		rxm_free_tx_buf(rxm_ep, first_tx_buf);
 		return ret;
 	}
 
@@ -517,14 +517,14 @@ rxm_send_sar(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return 0;
 
 free:
-	rxm_free_rx_buf(rxm_ep, first_tx_buf);
+	rxm_free_tx_buf(rxm_ep, first_tx_buf);
 	return ret;
 defer:
 	def_tx = rxm_ep_alloc_deferred_tx_entry(rxm_ep,
 			rxm_conn, RXM_DEFERRED_TX_SAR_SEG);
 	if (!def_tx) {
 		if (tx_buf)
-			rxm_free_rx_buf(rxm_ep, tx_buf);
+			rxm_free_tx_buf(rxm_ep, tx_buf);
 		return -FI_ENOMEM;
 	}
 	memcpy(def_tx->sar_seg.payload.iov,
@@ -573,7 +573,7 @@ rxm_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (ret) {
 		if (ret == -FI_EAGAIN)
 			rxm_ep_do_progress(&rxm_ep->util_ep);
-		rxm_free_rx_buf(rxm_ep, tx_buf);
+		rxm_free_tx_buf(rxm_ep, tx_buf);
 	}
 	return ret;
 }
@@ -774,7 +774,7 @@ rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	if (ret) {
 		if (ret == -FI_EAGAIN)
 			rxm_ep_do_progress(&rxm_ep->util_ep);
-		rxm_free_rx_buf(rxm_ep, eager_buf);
+		rxm_free_tx_buf(rxm_ep, eager_buf);
 	}
 	return ret;
 }
