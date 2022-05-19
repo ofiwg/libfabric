@@ -21,6 +21,18 @@ enum {
 };
 
 /*
+ * Execute a given libfabric atomic memory operation as a PCIe operation as
+ * compared to a NIC operation.
+ *
+ * Note: Ordering between PCIe atomic operations and NIC atomic/RMA operations
+ * is undefined.
+ *
+ * Note: This flag overloads the bit used for FI_SOURCE. But, since FI_SOURCE
+ * is invalid for AMO operations, overloading this bit is not an issue.
+ */
+#define FI_CXI_PCIE_AMO (1ULL << 57)
+
+/*
  * Use CXI High Rate Puts (HRP). Increases message rate performance. Applies to
  * RMA and unreliable, non-fetching AMO operations.
  */
