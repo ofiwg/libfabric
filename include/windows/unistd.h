@@ -33,16 +33,9 @@
 #pragma once
 
 #include <windows.h>
+#include <math.h>
 
 static inline void usleep(DWORD waitTime)
 {
-	LARGE_INTEGER perfCnt, start, now;
-
-	QueryPerformanceFrequency(&perfCnt);
-	QueryPerformanceCounter(&start);
-
-	do {
-		QueryPerformanceCounter((LARGE_INTEGER*)&now);
-	} while ((now.QuadPart - start.QuadPart) /
-		(float)perfCnt.QuadPart * 1000 * 1000 < waitTime);
+    Sleep(ceil(waitTime / 1000.0));
 }
