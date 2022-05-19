@@ -176,6 +176,7 @@ int synapseai_copy_to_hmem(uint64_t device, void *dest, const void *src,
                            size_t size);
 int synapseai_copy_from_hmem(uint64_t device, void *dest, const void *src,
                              size_t size);
+int synapseai_get_dmabuf_fd(uint64_t addr, uint64_t size, int* fd);
 bool synapseai_is_addr_valid(const void *addr, uint64_t *device,
                              uint64_t *flags);
 int synapseai_get_handle(void *dev_buf, void **handle);
