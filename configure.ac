@@ -657,6 +657,34 @@ AS_IF([test x"$with_neuron" != x"no" && test -n "$with_neuron" && test "$have_ne
 
 AC_DEFINE_UNQUOTED([HAVE_NEURON], [$have_neuron], [Build with Neuron support])
 
+dnl Check for SynapseAI runtime libraries
+AC_ARG_WITH([synapseai],
+	[AS_HELP_STRING([--with-synapseai=DIR],
+			[Enable SynapseAI build and fail if not found.
+			 Optional=<Path to where the SynapseAI libraries
+			 and headers are installed.>])])
+
+have_synapseai=0
+AS_IF([test x"$with_synapseai" != x"no"],
+      [
+		_FI_CHECK_PACKAGE_HEADER([synapseai], [habanalabs/synapse_api.h], [$with_synapseai],
+		[
+			AS_IF([test x"$with_dlopen" = "no"],
+				[AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+			have_synapseai=1
+		],)
+	  ]
+)
+
+AS_IF([test x"$with_synapseai" != x"no" && test -n "$with_synapseai" && test "$have_synapseai" = "0" ],
+	[AC_MSG_ERROR([SynapseAI support requested but SynapseAI runtime not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_SYNAPSEAI], [$have_synapseai], [SynapseAI support])
+
+AS_IF([test "$have_synapseai" = "1" && test x"$with_synaposeai" != x"yes"],
+      [CPPFLAGS="$CPPFLAGS $synapseai_CPPFLAGS"
+       LDFLAGS="$LDFLAGS $synapseai_LDFLAGS"])
+
 enable_memhooks=1
 AC_ARG_ENABLE([memhooks-monitor],
               [AS_HELP_STRING([--disable-memhooks-monitor],
