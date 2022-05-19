@@ -568,13 +568,15 @@ void rxr_cq_complete_rx(struct rxr_ep *ep,
 				fi_strerror(-err), -err);
 			rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
 			rxr_release_rx_entry(ep, rx_entry);
-			return;
 		}
-	} else {
-		rxr_release_rx_entry(ep, rx_entry);
+
+		return;
 	}
 
-	return;
+	if (rx_entry->rxr_flags & RXR_EOR_IN_FLIGHT)
+		return;
+
+	rxr_release_rx_entry(ep, rx_entry);
 }
 
 int rxr_cq_reorder_msg(struct rxr_ep *ep,
@@ -633,10 +635,7 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 
 	cur_ooo_entry = *ofi_recvwin_get_msg(robuf, msg_id);
 	if (cur_ooo_entry) {
-		assert(rxr_get_base_hdr(cur_ooo_entry->pkt)->type == RXR_MEDIUM_MSGRTM_PKT ||
-		       rxr_get_base_hdr(cur_ooo_entry->pkt)->type == RXR_MEDIUM_TAGRTM_PKT ||
-		       rxr_get_base_hdr(cur_ooo_entry->pkt)->type == RXR_DC_MEDIUM_MSGRTM_PKT ||
-		       rxr_get_base_hdr(cur_ooo_entry->pkt)->type == RXR_DC_MEDIUM_TAGRTM_PKT);
+		assert(rxr_pkt_type_is_mulreq(rxr_get_base_hdr(cur_ooo_entry->pkt)->type));
 		assert(rxr_pkt_msg_id(cur_ooo_entry) == msg_id);
 		assert(rxr_pkt_rtm_total_len(cur_ooo_entry) == rxr_pkt_rtm_total_len(ooo_entry));
 		rxr_pkt_entry_append(cur_ooo_entry, ooo_entry);

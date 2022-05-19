@@ -52,6 +52,8 @@ size_t rxr_pkt_req_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
 size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
+size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry);
+
 size_t rxr_pkt_req_header_size(int pkt_type, uint16_t flags, size_t rma_iov_count);
 
 size_t rxr_pkt_req_max_header_size(int pkt_type);
@@ -163,12 +165,12 @@ struct rxr_longread_rtm_base_hdr *rxr_get_longread_rtm_base_hdr(void *pkt)
 }
 
 static inline
-int rxr_longread_rtm_pkt_type(int op)
+struct rxr_runtread_rtm_base_hdr *rxr_get_runtread_rtm_base_hdr(void *pkt)
 {
-	assert(op == ofi_op_tagged || op == ofi_op_msg);
-	return (op == ofi_op_tagged) ? RXR_LONGREAD_TAGRTM_PKT
-				     : RXR_LONGREAD_MSGRTM_PKT;
+	return (struct rxr_runtread_rtm_base_hdr *)pkt;
 }
+
+size_t rxr_pkt_mulreq_total_data_size(int pkt_type, struct rxr_op_entry *op_entry);
 
 ssize_t rxr_pkt_init_eager_msgrtm(struct rxr_ep *ep,
 				  struct rxr_tx_entry *tx_entry,
@@ -226,6 +228,14 @@ ssize_t rxr_pkt_init_longread_tagrtm(struct rxr_ep *ep,
 				 struct rxr_tx_entry *tx_entry,
 				 struct rxr_pkt_entry *pkt_entry);
 
+ssize_t rxr_pkt_init_runtread_msgrtm(struct rxr_ep *ep,
+				 struct rxr_tx_entry *tx_entry,
+				 struct rxr_pkt_entry *pkt_entry);
+
+ssize_t rxr_pkt_init_runtread_tagrtm(struct rxr_ep *ep,
+				 struct rxr_tx_entry *tx_entry,
+				 struct rxr_pkt_entry *pkt_entry);
+
 static inline
 void rxr_pkt_handle_eager_rtm_sent(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry)
@@ -240,11 +250,11 @@ void rxr_pkt_handle_medium_rtm_sent(struct rxr_ep *ep,
 void rxr_pkt_handle_longcts_rtm_sent(struct rxr_ep *ep,
 				  struct rxr_pkt_entry *pkt_entry);
 
-static inline
 void rxr_pkt_handle_longread_rtm_sent(struct rxr_ep *ep,
-				  struct rxr_pkt_entry *pkt_entry)
-{
-}
+				      struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_handle_runtread_rtm_sent(struct rxr_ep *ep,
+				      struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_eager_rtm_send_completion(struct rxr_ep *ep,
 					      struct rxr_pkt_entry *pkt_entry);
@@ -263,6 +273,9 @@ void rxr_pkt_handle_longread_rtm_send_completion(struct rxr_ep *ep,
 					     struct rxr_pkt_entry *pkt_entry)
 {
 }
+
+void rxr_pkt_handle_runtread_rtm_send_completion(struct rxr_ep *ep,
+						 struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_rtm_update_rx_entry(struct rxr_pkt_entry *pkt_entry,
 				 struct rxr_rx_entry *rx_entry);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2022 Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -31,26 +31,35 @@
  * SOFTWARE.
  */
 
-#ifndef _RXR_PKT_TYPE_BASE_H
-#define _RXR_PKT_TYPE_BASE_H
+#ifndef _RXR_PKT_HDR_H
+#define _RXR_PKT_HDR_H
 
-#include "rxr.h"
+#include "rdm_proto_v4.h"
 
-uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry);
+/**
+ * @brief return the seg_offset field in a packet entry
+ *
+ * @param[in]	pkt_entry	packet entry
+ * @return	the value of seg_offset in the packet
+ */
+static inline
+size_t rxr_pkt_hdr_seg_offset(char *pkt)
+{
+	static const int offset_of_seg_offset_in_header[] = {
+		[RXR_DATA_PKT] = offsetof(struct rxr_data_hdr, seg_offset),
+		[RXR_MEDIUM_MSGRTM_PKT] = offsetof(struct rxr_medium_rtm_base_hdr, seg_offset),
+		[RXR_MEDIUM_TAGRTM_PKT] = offsetof(struct rxr_medium_rtm_base_hdr, seg_offset),
+		[RXR_DC_MEDIUM_MSGRTM_PKT] = offsetof(struct rxr_dc_medium_rtm_base_hdr, seg_offset),
+		[RXR_DC_MEDIUM_TAGRTM_PKT] = offsetof(struct rxr_dc_medium_rtm_base_hdr, seg_offset),
+		[RXR_RUNTREAD_MSGRTM_PKT] = offsetof(struct rxr_runtread_rtm_base_hdr, seg_offset),
+		[RXR_RUNTREAD_TAGRTM_PKT] = offsetof(struct rxr_runtread_rtm_base_hdr, seg_offset),
+	};
 
-int rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
-				    struct rxr_pkt_entry *pkt_entry,
-				    size_t pkt_data_offset,
-				    struct rxr_tx_entry *tx_entry,
-				    size_t tx_data_offset,
-				    size_t data_size);
+	int pkt_type = rxr_get_base_hdr(pkt)->type;
+	int hdr_offset = offset_of_seg_offset_in_header[pkt_type];
 
-ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
-				      struct rxr_rx_entry *rx_entry,
-				      size_t data_offset,
-				      struct rxr_pkt_entry *pkt_entry,
-				      char *data, size_t data_size);
-
-size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry);
+	assert(hdr_offset);
+	return *(uint64_t *)(pkt + hdr_offset);
+}
 
 #endif

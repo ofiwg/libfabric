@@ -257,15 +257,20 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, struct rxr_op_ent
 
 	read_entry->context = op_entry;
 	read_entry->addr = op_entry->addr;
+	read_entry->lower_ep_type = lower_ep_type;
 
 	if (op_entry->type == RXR_TX_ENTRY) {
 		assert(op_entry->op == ofi_op_read_req);
 		read_entry->context_type = RXR_READ_CONTEXT_TX_ENTRY;
+		read_entry->bytes_submitted = 0;
+		read_entry->bytes_finished = 0;
 	} else {
 		assert(op_entry->type == RXR_RX_ENTRY);
 		assert(op_entry->op == ofi_op_write || op_entry->op == ofi_op_msg ||
 		       op_entry->op == ofi_op_tagged);
 		read_entry->context_type = RXR_READ_CONTEXT_RX_ENTRY;
+		read_entry->bytes_submitted = op_entry->bytes_runt;
+		read_entry->bytes_finished = op_entry->bytes_runt;
 	}
 
 	memset(read_entry->mr, 0, read_entry->iov_count * sizeof(struct fid_mr *));
@@ -279,9 +284,6 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, struct rxr_op_ent
 		}
 	}
 
-	read_entry->lower_ep_type = lower_ep_type;
-	read_entry->bytes_submitted = 0;
-	read_entry->bytes_finished = 0;
 	return read_entry;
 }
 
@@ -347,7 +349,24 @@ int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, struct rxr_op_entry *o
 {
 	struct rdm_peer *peer;
 	struct rxr_read_entry *read_entry;
-	int lower_ep_type;
+	int lower_ep_type, err;
+
+
+	if (op_entry->type == RXR_RX_ENTRY) {
+		/* Often times, application will provide a receiving buffer that is larger
+		 * then the incoming message size. For read based message transfer, the
+		 * receiving buffer need to be registered. Thus truncating rx_entry->iov to
+		 * extact message size to save memory registration pages.
+		 */
+		err = ofi_truncate_iov(op_entry->iov, &op_entry->iov_count,
+				       op_entry->total_len + ep->msg_prefix_size);
+		if (err) {
+			EFA_WARN(FI_LOG_CQ,
+				 "ofi_truncated_iov failed. new_size: %ld\n",
+				 op_entry->total_len + ep->msg_prefix_size);
+			return err;
+		}
+	}
 
 	assert(op_entry->type == RXR_RX_ENTRY || op_entry->type == RXR_TX_ENTRY);
 	peer = rxr_ep_get_peer(ep, op_entry->addr);
@@ -361,6 +380,7 @@ int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, struct rxr_op_entry *o
 		return -FI_ENOBUFS;
 	}
 
+	op_entry->read_entry = read_entry;
 	return rxr_read_post_or_queue(ep, read_entry);
 }
 

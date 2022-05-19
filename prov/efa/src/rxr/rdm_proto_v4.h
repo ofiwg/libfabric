@@ -66,7 +66,8 @@ struct efa_ep_addr {
 #define RXR_EXTRA_FEATURE_DELIVERY_COMPLETE 		BIT_ULL(1)
 #define RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH	BIT_ULL(2)
 #define RXR_EXTRA_REQUEST_CONNID_HEADER			BIT_ULL(3)
-#define RXR_NUM_EXTRA_FEATURE_OR_REQUEST		4
+#define RXR_EXTRA_FEATURE_RUNT				BIT_ULL(4)
+#define RXR_NUM_EXTRA_FEATURE_OR_REQUEST		5
 #define RXR_MAX_NUM_EXINFO	(256)
 
 /*
@@ -123,7 +124,16 @@ struct efa_ep_addr {
 #define RXR_DC_LONGCTS_RTW_PKT     	140
 #define RXR_DC_WRITE_RTA_PKT    	141
 #define RXR_DC_REQ_PKT_END		142
-#define RXR_EXTRA_REQ_PKT_END   	142
+
+#define RXR_RUNT_PKT_BEGIN		142
+#define RXR_RUNTCTS_MSGRTM_PKT		142
+#define RXR_RUNTCTS_TAGRTM_PKT		143
+#define RXR_RUNTCTS_RTW_PKT		144
+#define RXR_RUNTREAD_MSGRTM_PKT		145
+#define RXR_RUNTREAD_TAGRTM_PKT		146
+#define RXR_RUNTREAD_RTW_PKT		147
+#define RXR_RUNT_PKT_END		148
+#define RXR_EXTRA_REQ_PKT_END   	148
 
 /*
  *  Packet fields common to all rxr packets. The other packet headers below must
@@ -709,5 +719,89 @@ struct rxr_dc_longcts_rtw_hdr {
 };
 
 /* DC_WRITE_RTA header format is merged into rxr_rta_hdr */
+
+/* Extra feature runting protocols related headers */
+
+struct rxr_runtcts_rtm_base_hdr {
+	struct rxr_rtm_base_hdr hdr;
+	uint64_t msg_length;
+	uint32_t send_id;
+	uint32_t credit_request;
+	uint64_t seg_offset;
+	uint64_t runt_length;
+};
+
+/**
+ * @brief header format of RUNTCTS_MSGRTM (Packet Type ID 142)
+ */
+struct rxr_runtcts_msgrtm_hdr {
+	struct rxr_runtcts_rtm_base_hdr hdr;
+};
+
+/**
+ * @brief header format of RUNTCTS_TAGRTM (Packet Type ID 143)
+ */
+struct rxr_runtcts_tagrtm_hdr {
+	struct rxr_runtcts_rtm_base_hdr hdr;
+	uint64_t tag;
+};
+
+/**
+ * @brief header format of RUNTCTS_RTW (Packet Type ID 144)
+ */
+struct rxr_runtcts_rtw_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint32_t rma_iov_count;
+	uint64_t msg_length;
+	uint32_t send_id;
+	uint32_t credit_request;
+	uint64_t seg_offset;
+	uint64_t runt_length;
+	struct efa_rma_iov rma_iov[0];
+};
+
+struct rxr_runtread_rtm_base_hdr {
+	struct rxr_rtm_base_hdr hdr;
+	uint64_t msg_length;
+	uint32_t send_id;
+	uint32_t read_iov_count;
+	uint64_t seg_offset;
+	uint64_t runt_length;
+};
+
+/**
+ * @brief header format of RUNTREAD_MSGRTM (Packet Type ID 145)
+ */
+struct rxr_runtread_msgrtm_hdr {
+	struct rxr_runtread_rtm_base_hdr hdr;
+};
+
+/**
+ * @brief header format of RUNTREAD_MSGRTM (Packet Type ID 146)
+ */
+struct rxr_runtread_tagrtm_hdr {
+	struct rxr_runtread_rtm_base_hdr hdr;
+	uint64_t tag;
+};
+
+/**
+ * @brief header format of RUNTREAD_RTW (Packet Type ID 147)
+ */
+struct rxr_runtread_rtw_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of rxr_base_hdr */
+	uint32_t rma_iov_count;
+	uint64_t msg_length;
+	uint32_t send_id;
+	uint32_t read_iov_count;
+	uint64_t seg_offset;
+	uint64_t runt_length;
+	struct efa_rma_iov rma_iov[0];
+};
 
 #endif

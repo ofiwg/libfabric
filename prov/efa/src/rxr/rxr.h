@@ -179,6 +179,13 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 #define RXR_RX_ENTRY_QUEUED_RNR BIT_ULL(9)
 
 /*
+ * Flag to indicate an rx_entry has an EOR
+ * in flight (the EOR has been sent, but has
+ * not got send completion)
+ * hence cannot be released
+ */
+#define RXR_EOR_IN_FLIGHT BIT_ULL(10)
+/*
  * OFI flags
  * The 64-bit flag field is used as follows:
  * 1-grow up    common (usable with multiple operations)
@@ -237,6 +244,7 @@ struct rxr_env {
 	size_t efa_min_read_msg_size;
 	size_t efa_min_read_write_size;
 	size_t efa_read_segment_size;
+	size_t efa_runt_size;
 	/* If first attempt to send a packet failed,
 	 * this value controls how many times firmware
 	 * retries the send before it report an RNR error
@@ -290,6 +298,17 @@ struct rdm_peer {
 	struct dlist_entry rx_unexp_tagged_list; /* a list of unexpected tagged rx_entry for this peer */
 	struct dlist_entry tx_entry_list; /* a list of tx_entry related to this peer */
 	struct dlist_entry rx_entry_list; /* a list of rx_entry relased to this peer */
+
+	/* number of bytes that has been sent as part of runting protocols
+	 * capped by rxr_env.efa_runt_size
+	 */
+	int64_t num_runt_bytes_in_flight;
+
+	/*
+	 * number of messages that are using read based protocol
+	 */
+	int64_t num_read_msg_in_flight;
+
 };
 
 /** @brief Information of a queued copy.
@@ -501,6 +520,8 @@ struct rxr_ep {
 	struct rxr_queued_copy queued_copy_vec[RXR_EP_MAX_QUEUED_COPY];
 	int queued_copy_num;
 };
+
+int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep);
 
 #define rxr_rx_flags(rxr_ep) ((rxr_ep)->util_ep.rx_op_flags)
 #define rxr_tx_flags(rxr_ep) ((rxr_ep)->util_ep.tx_op_flags)

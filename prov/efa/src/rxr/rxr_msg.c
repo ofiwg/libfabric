@@ -61,18 +61,20 @@
  *
  * @param[in]		rxr_ep		endpoint
  * @param[in]		tx_entry	contains information of the send operation
- * @return		the RTM packet type of the two-sided protocol. Four
- *                      types of protocol can be used: eager, medium, longcts, longread.
+ * @return		the RTM packet type of the two-sided protocol.
+ *                      Four types of protocol can be used: eager, medium, longread or runtread.
  *                      Each protocol has tagged/non-tagged version. Some protocols has a DC version.
  *
+ *                      Note longcts protocol is not suited for cuda memory and will not be used.
  */
 static inline
 int rxr_msg_select_rtm_for_cuda(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 {
 	int tagged;
-	int eager_rtm, medium_rtm, longcts_rtm, longread_rtm;
-	int eager_rtm_max_data_size;
+	int eager_rtm, medium_rtm, readbase_rtm;
+	int eager_rtm_max_msg_size, medium_rtm_max_msg_size;
 	bool delivery_complete_requested;
+	struct rdm_peer *peer;
 
 	assert(tx_entry->op == ofi_op_tagged || tx_entry->op == ofi_op_msg);
 	tagged = (tx_entry->op == ofi_op_tagged);
@@ -86,30 +88,29 @@ int rxr_msg_select_rtm_for_cuda(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_e
 	medium_rtm = (delivery_complete_requested) ? RXR_DC_MEDIUM_MSGRTM_PKT + tagged
 						   : RXR_MEDIUM_MSGRTM_PKT + tagged;
 
-	longcts_rtm = (delivery_complete_requested) ? RXR_DC_LONGCTS_MSGRTM_PKT + tagged
-						    : RXR_LONGCTS_MSGRTM_PKT + tagged;
+	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+	assert(peer);
+	readbase_rtm = rxr_pkt_type_readbase_rtm(peer, tx_entry->op, tx_entry->fi_flags);
 
-	longread_rtm = RXR_LONGREAD_MSGRTM_PKT + tagged;
+	eager_rtm_max_msg_size = 0;
+	medium_rtm_max_msg_size = 0;
+	if (cuda_is_gdrcopy_enabled())
+		medium_rtm_max_msg_size = rxr_env.efa_max_gdrcopy_msg_size;
 
-	if (tx_entry->total_len == 0)
-		return eager_rtm;
+	if (medium_rtm_max_msg_size > 0) {
+		eager_rtm_max_msg_size = rxr_pkt_req_max_data_size(rxr_ep, tx_entry->addr, eager_rtm,
+								   tx_entry->fi_flags, 0);
 
-	if (cuda_is_gdrcopy_enabled() && tx_entry->total_len <= rxr_env.efa_max_gdrcopy_msg_size) {
-		eager_rtm_max_data_size = rxr_pkt_req_max_data_size(rxr_ep, tx_entry->addr, eager_rtm,
-								    tx_entry->fi_flags, 0);
-
-		eager_rtm_max_data_size = MIN(eager_rtm_max_data_size, rxr_env.efa_max_gdrcopy_msg_size);
-
-		if (tx_entry->total_len <= eager_rtm_max_data_size)
-			return eager_rtm;
-
-		if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size)
-			return medium_rtm;
-
-		return longcts_rtm;
+		eager_rtm_max_msg_size = MIN(medium_rtm_max_msg_size, eager_rtm_max_msg_size);
 	}
 
-	return longread_rtm;
+	if (tx_entry->total_len <= eager_rtm_max_msg_size)
+		return eager_rtm;
+
+	if (tx_entry->total_len <= medium_rtm_max_msg_size)
+		return medium_rtm;
+
+	return readbase_rtm;
 }
 
 /**
@@ -138,7 +139,7 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int
 	assert(RXR_DC_LONGCTS_MSGRTM_PKT + 1 == RXR_DC_LONGCTS_TAGRTM_PKT);
 
 	int tagged;
-	int eager_rtm, medium_rtm, longcts_rtm, longread_rtm;
+	int eager_rtm, medium_rtm, longcts_rtm, readbase_rtm;
 	size_t eager_rtm_max_data_size;
 	struct rdm_peer *peer;
 	bool delivery_complete_requested;
@@ -190,7 +191,7 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int
 	longcts_rtm = (delivery_complete_requested) ? RXR_DC_LONGCTS_MSGRTM_PKT + tagged
 						    : RXR_LONGCTS_MSGRTM_PKT + tagged;
 
-	longread_rtm = RXR_LONGREAD_MSGRTM_PKT + tagged;
+	readbase_rtm = RXR_LONGREAD_MSGRTM_PKT + tagged;
 
 	eager_rtm_max_data_size = rxr_pkt_req_max_data_size(rxr_ep,
 							    tx_entry->addr,
@@ -205,7 +206,7 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int
 	 * is specified by the user for protocol switch over points.
 	 */
 	if (efa_mr_is_neuron(tx_entry->desc[0]))
-		return longread_rtm;
+		return readbase_rtm;
 
 	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size)
 		return medium_rtm;
@@ -218,7 +219,7 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int
 	if (efa_ep_support_rdma_read(rxr_ep->rdm_ep) &&
 	    tx_entry->total_len >= rxr_env.efa_min_read_msg_size &&
 	    (tx_entry->desc[0] || efa_is_cache_available(rxr_ep_domain(rxr_ep))))
-		return longread_rtm;
+		return readbase_rtm;
 
 	return longcts_rtm;
 }

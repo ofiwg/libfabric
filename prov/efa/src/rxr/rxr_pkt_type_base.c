@@ -90,19 +90,19 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
  *        pkt_entry->iov to tx_entry->iov.
  *        It requires the packet header to be set.
  *
- * @param[in]		ep		end point.
- * @param[in,out]	pkt_entry	packet entry. Header must have been set when the function is called
- * @param[in]		hdr_size	packet header size.
- * @param[in]		tx_entry	This function will use iov, iov_count and desc of tx_entry
- * @param[in]		data_offset	offset of the data to be set up. In reference to tx_entry->total_len.
- * @param[in]		data_size	length of the data to be set up. In reference to tx_entry->total_len.
+ * @param[in]		ep			end point.
+ * @param[in,out]	pkt_entry		packet entry. Header must have been set when the function is called
+ * @param[in]		pkt_data_offset		the data offset in packet, (in reference to pkt_entry->pkt).
+ * @param[in]		tx_entry		This function will use iov, iov_count and desc of tx_entry
+ * @param[in]		tx_data_offset		source offset of the data (in reference to tx_entry->iov)
+ * @param[in]		data_size		length of the data to be set up.
  * @return		0 on success, negative FI code on error
  */
 int rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
 				    struct rxr_pkt_entry *pkt_entry,
-				    size_t hdr_size,
+				    size_t pkt_data_offset,
 				    struct rxr_tx_entry *tx_entry,
-				    size_t data_offset,
+				    size_t tx_data_offset,
 				    size_t data_size)
 {
 	struct efa_ep *efa_ep;
@@ -114,7 +114,7 @@ int rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 
-	assert(hdr_size > 0);
+	assert(pkt_data_offset > 0);
 
 	pkt_entry->x_entry = tx_entry;
 	/* pkt_sendv_pool's size equal efa_tx_pkt_pool size +
@@ -130,11 +130,11 @@ int rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
 
 	if (data_size == 0) {
 		pkt_entry->send->iov_count = 0;
-		pkt_entry->pkt_size = hdr_size;
+		pkt_entry->pkt_size = pkt_data_offset;
 		return 0;
 	}
 
-	rxr_locate_iov_pos(tx_entry->iov, tx_entry->iov_count, data_offset,
+	rxr_locate_iov_pos(tx_entry->iov, tx_entry->iov_count, tx_data_offset,
 			   &tx_iov_index, &tx_iov_offset);
 	desc = tx_entry->desc[0];
 	assert(tx_iov_index < tx_entry->iov_count);
@@ -160,29 +160,29 @@ int rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
 
 		assert(ep->core_iov_limit >= 2);
 		pkt_entry->send->iov[0].iov_base = pkt_entry->pkt;
-		pkt_entry->send->iov[0].iov_len = hdr_size;
+		pkt_entry->send->iov[0].iov_len = pkt_data_offset;
 		pkt_entry->send->desc[0] = pkt_entry->mr ? fi_mr_desc(pkt_entry->mr) : NULL;
 
 		pkt_entry->send->iov[1].iov_base = (char *)tx_entry->iov[tx_iov_index].iov_base + tx_iov_offset;
 		pkt_entry->send->iov[1].iov_len = data_size;
 		pkt_entry->send->desc[1] = tx_entry->desc[tx_iov_index];
 		pkt_entry->send->iov_count = 2;
-		pkt_entry->pkt_size = hdr_size + data_size;
+		pkt_entry->pkt_size = pkt_data_offset + data_size;
 		return 0;
 	}
 
 copy:
-	data = pkt_entry->pkt + hdr_size;
+	data = pkt_entry->pkt + pkt_data_offset;
 	copied = ofi_copy_from_hmem_iov(data,
 					data_size,
 					desc ? desc->peer.iface : FI_HMEM_SYSTEM,
 					desc ? desc->peer.device.reserved : 0,
 					tx_entry->iov,
 					tx_entry->iov_count,
-					data_offset);
+					tx_data_offset);
 	assert(copied == data_size);
 	pkt_entry->send->iov_count = 0;
-	pkt_entry->pkt_size = hdr_size + copied;
+	pkt_entry->pkt_size = pkt_data_offset + copied;
 	return 0;
 }
 
@@ -219,9 +219,11 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
 		       pkt_type == RXR_DC_LONGCTS_MSGRTM_PKT ||
 		       pkt_type == RXR_DC_LONGCTS_TAGRTM_PKT ||
 		       pkt_type == RXR_DC_EAGER_RTW_PKT ||
-		       pkt_type == RXR_DC_LONGCTS_RTW_PKT);
+		       pkt_type == RXR_DC_LONGCTS_RTW_PKT ||
+		       pkt_type == RXR_RUNTREAD_MSGRTM_PKT ||
+		       pkt_type == RXR_RUNTREAD_TAGRTM_PKT);
 
-		return pkt_entry->pkt_size - rxr_pkt_req_hdr_size(pkt_entry);
+		return rxr_pkt_req_data_size(pkt_entry);
 	}
 
 	/* other packet type does not contain data, thus return 0
@@ -229,51 +231,32 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
 	return 0;
 }
 
-
-/*
- * @brief copy data to hmem buffer
+/**
+ * @brief flush queued blocking copy to hmem
  *
- * This function queue multiple (up to RXR_EP_MAX_QUEUED_COPY) copies to
- * device memory, and do them at the same time. This is to avoid any memory
- * barrier between copies, which will cause a flush.
+ * The copying of data from bounce buffer to hmem receiving buffer
+ * is queued, and we copy them in batch.
  *
- * @param[in]		ep		endpoint
- * @param[in]		pkt_entry	the packet entry that contains data, which
- *                                      x_entry pointing to the correct rx_entry.
- * @param[in]		data		the pointer pointing to the beginning of data
- * @param[in]		data_size	the length of data
- * @param[in]		data_offset	the offset of the data in the packet in respect
- *					of the receiving buffer.
- * @return		On success, return 0
- * 			On failure, return libfabric error code
+ * This functions is used to flush all the queued hmem copy.
+ *
+ * It can be called in two scenarios:
+ *
+ * 1. the number of queued hmem copy reached limit
+ *
+ * 2. all the data of one of the queued message has arrived.
+ *
+ * @param[in,out]	ep	endpoint, where queue_copy_num and queued_copy_vec reside.
+ *
  */
-static inline
-int rxr_pkt_copy_data_to_hmem(struct rxr_ep *ep,
-			      struct rxr_pkt_entry *pkt_entry,
-			      char *data,
-			      size_t data_size,
-			      size_t data_offset)
+int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
 {
+	size_t i;
+	size_t bytes_copied[RXR_EP_MAX_QUEUED_COPY] = {0};
 	struct efa_mr *desc;
 	struct rxr_rx_entry *rx_entry;
-	size_t bytes_copied[RXR_EP_MAX_QUEUED_COPY] = {0};
-	size_t i;
-
-	assert(ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY);
-	ep->queued_copy_vec[ep->queued_copy_num].pkt_entry = pkt_entry;
-	ep->queued_copy_vec[ep->queued_copy_num].data = data;
-	ep->queued_copy_vec[ep->queued_copy_num].data_size = data_size;
-	ep->queued_copy_vec[ep->queued_copy_num].data_offset = data_offset;
-	ep->queued_copy_num += 1;
-
-	rx_entry = pkt_entry->x_entry;
-	assert(rx_entry);
-	rx_entry->bytes_queued += data_size;
-
-	if (ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY &&
-	    rx_entry->bytes_copied + rx_entry->bytes_queued < rx_entry->total_len) {
-		return 0;
-	}
+	struct rxr_pkt_entry *pkt_entry;
+	char *data;
+	size_t data_size, data_offset;
 
 	for (i = 0; i < ep->queued_copy_num; ++i) {
 		pkt_entry = ep->queued_copy_vec[i].pkt_entry;
@@ -302,12 +285,57 @@ int rxr_pkt_copy_data_to_hmem(struct rxr_ep *ep,
 			return -FI_EIO;
 		}
 
-		rx_entry->bytes_queued -= data_size;
+		rx_entry->bytes_queued_blocking_copy -= data_size;
 		rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
 	}
 
 	ep->queued_copy_num = 0;
 	return 0;
+}
+
+/*
+ * @brief copy data to hmem buffer
+ *
+ * This function queue multiple (up to RXR_EP_MAX_QUEUED_COPY) copies to
+ * device memory, and do them at the same time. This is to avoid any memory
+ * barrier between copies, which will cause a flush.
+ *
+ * @param[in]		ep		endpoint
+ * @param[in]		pkt_entry	the packet entry that contains data, which
+ *                                      x_entry pointing to the correct rx_entry.
+ * @param[in]		data		the pointer pointing to the beginning of data
+ * @param[in]		data_size	the length of data
+ * @param[in]		data_offset	the offset of the data in the packet in respect
+ *					of the receiving buffer.
+ * @return		On success, return 0
+ * 			On failure, return libfabric error code
+ */
+static inline
+int rxr_pkt_copy_data_to_hmem(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry,
+			      char *data,
+			      size_t data_size,
+			      size_t data_offset)
+{
+	struct rxr_rx_entry *rx_entry;
+
+	assert(ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY);
+	ep->queued_copy_vec[ep->queued_copy_num].pkt_entry = pkt_entry;
+	ep->queued_copy_vec[ep->queued_copy_num].data = data;
+	ep->queued_copy_vec[ep->queued_copy_num].data_size = data_size;
+	ep->queued_copy_vec[ep->queued_copy_num].data_offset = data_offset;
+	ep->queued_copy_num += 1;
+
+	rx_entry = pkt_entry->x_entry;
+	assert(rx_entry);
+	rx_entry->bytes_queued_blocking_copy += data_size;
+
+	if (ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY &&
+	    rx_entry->bytes_copied + rx_entry->bytes_queued_blocking_copy < rx_entry->total_len) {
+		return 0;
+	}
+
+	return rxr_ep_flush_queued_blocking_copy_to_hmem(ep);
 }
 
 /**

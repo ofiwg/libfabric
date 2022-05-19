@@ -393,6 +393,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	struct rxr_read_entry *read_entry;
 	struct rxr_rma_context_pkt *rma_context_pkt;
 	size_t data_size;
+	int err;
 
 	rma_context_pkt = (struct rxr_rma_context_pkt *)context_pkt_entry->pkt;
 	assert(rma_context_pkt->type == RXR_RMA_CONTEXT_PKT);
@@ -410,7 +411,22 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			rxr_release_tx_entry(ep, tx_entry);
 		} else if (read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY) {
 			rx_entry = read_entry->context;
-			rxr_cq_complete_rx(ep, rx_entry, true, RXR_EOR_PKT);
+			err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_EOR_PKT, false);
+			if (OFI_UNLIKELY(err)) {
+				FI_WARN(&rxr_prov, FI_LOG_CQ,
+					"Posting of EOR failed! err=%s(%d)\n",
+					fi_strerror(-err), -err);
+				rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
+				rxr_release_rx_entry(ep, rx_entry);
+			}
+
+			rx_entry->bytes_received += (read_entry->total_len - rx_entry->bytes_runt);
+			rx_entry->bytes_copied += (read_entry->total_len - rx_entry->bytes_runt);
+			if (rx_entry->bytes_copied == rx_entry->total_len) {
+				rxr_cq_complete_rx(ep, rx_entry, false, 0);
+			} else if(rx_entry->bytes_copied + rx_entry->bytes_queued_blocking_copy == rx_entry->total_len) {
+				rxr_ep_flush_queued_blocking_copy_to_hmem(ep);
+			}
 		} else {
 			assert(read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY);
 			pkt_entry = read_entry->context;
@@ -478,6 +494,10 @@ int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struct rx
 
 void rxr_pkt_handle_eor_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
+	struct rxr_rx_entry *rx_entry;
+
+	rx_entry = pkt_entry->x_entry;
+	rx_entry->rxr_flags |= RXR_EOR_IN_FLIGHT;
 }
 
 void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
@@ -487,7 +507,12 @@ void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
 
 	rx_entry = pkt_entry->x_entry;
 	assert(rx_entry && rx_entry->rx_id == rxr_get_eor_hdr(pkt_entry->pkt)->recv_id);
-	rxr_release_rx_entry(ep, rx_entry);
+
+	if (rx_entry->bytes_copied == rx_entry->total_len) {
+		rxr_release_rx_entry(ep, rx_entry);
+	} else {
+		rx_entry->rxr_flags &= ~RXR_EOR_IN_FLIGHT;
+	}
 }
 
 /*
@@ -499,14 +524,25 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 {
 	struct rxr_eor_hdr *eor_hdr;
 	struct rxr_tx_entry *tx_entry;
+	struct rdm_peer *peer;
+
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	assert(peer);
+	peer->num_read_msg_in_flight -= 1;
 
 	eor_hdr = (struct rxr_eor_hdr *)pkt_entry->pkt;
 
 	/* pre-post buf used here, so can NOT track back to tx_entry with x_entry */
 	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, eor_hdr->send_id);
-	rxr_cq_write_tx_completion(ep, tx_entry);
-	rxr_release_tx_entry(ep, tx_entry);
+
+	tx_entry->bytes_acked += tx_entry->total_len - tx_entry->bytes_runt;
+	if (tx_entry->bytes_acked == tx_entry->total_len) {
+		rxr_cq_write_tx_completion(ep, tx_entry);
+		rxr_release_tx_entry(ep, tx_entry);
+	}
+
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
+
 }
 
 /* receipt packet related functions */

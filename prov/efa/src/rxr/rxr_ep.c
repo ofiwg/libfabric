@@ -112,6 +112,8 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 		rx_entry->peer = NULL;
 	}
 
+	rx_entry->bytes_runt = 0;
+	rx_entry->bytes_received_via_mulreq = 0;
 	rx_entry->op = op;
 	switch (op) {
 	case ofi_op_tagged:
@@ -385,6 +387,7 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	if (ep->util_ep.tx_msg_flags == 0)
 		tx_op_flags &= ~FI_COMPLETION;
 	tx_entry->fi_flags = flags | tx_op_flags;
+	tx_entry->bytes_runt = 0;
 
 	switch (op) {
 	case ofi_op_tagged:
@@ -884,6 +887,8 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
 	}
 
 	ep->extra_info[0] |= RXR_EXTRA_REQUEST_CONNID_HEADER;
+
+	ep->extra_info[0] |= RXR_EXTRA_FEATURE_RUNT;
 }
 
 /*
