@@ -769,9 +769,12 @@ psmx2_mq_status_copy(struct psm2_mq_req_user *req, void *status_array, int entry
 			op_context = sendv_rep->user_context;
 			buf = sendv_rep->buf;
 			flags |= sendv_rep->comp_flag;
+			data = PSMX2_GET_CQDATA(sendv_rep->tag);
+			if (PSMX2_HAS_IMM(PSMX2_GET_FLAGS(sendv_rep->tag)))
+				flags |= FI_REMOTE_CQ_DATA;
 			err = psmx2_cq_rx_complete(
 					status_data->poll_cq, ep->recv_cq, ep->av,
-					req, op_context, buf, flags, 0,
+					req, op_context, buf, flags, data,
 					entry, status_data->src_addr, &event_saved);
 			if (OFI_UNLIKELY(err)) {
 				free(sendv_rep);
@@ -1507,9 +1510,12 @@ int psmx2_cq_poll_mq(struct psmx2_fid_cq *cq,
 					buf = sendv_rep->buf;
 					flags = psmx2_comp_flags[context_type] |
 						sendv_rep->comp_flag;
+					data = PSMX2_GET_CQDATA(sendv_rep->tag);
+					if (PSMX2_HAS_IMM(PSMX2_GET_FLAGS(sendv_rep->tag)))
+						flags |= FI_REMOTE_CQ_DATA;
 					err = psmx2_cq_rx_complete(
 							cq, ep->recv_cq, ep->av,
-							status, op_context, buf, flags, 0,
+							status, op_context, buf, flags, data,
 							event_in, count, &read_count,
 							&read_more, src_addr);
 					if (err) {
