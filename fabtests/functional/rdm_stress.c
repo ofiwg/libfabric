@@ -52,6 +52,7 @@ enum {
 	op_hello,
 	op_goodbye,
 	op_msg_req,
+	op_msg_inject_req,
 	op_msg_resp,
 	op_tag_req,
 	op_tag_resp,
@@ -90,6 +91,7 @@ enum {
 	cmd_hello,
 	cmd_goodbye,
 	cmd_msg,
+	cmd_msg_inject,
 	cmd_tag,
 	cmd_read,
 	cmd_write,
@@ -140,6 +142,7 @@ static char *rpc_cmd_str(uint32_t cmd)
 		"hello",
 		"goodbye",
 		"msg",
+		"msg_inject",
 		"tag",
 		"read",
 		"write",
@@ -158,6 +161,7 @@ static char *rpc_op_str(uint32_t op)
 		"hello",
 		"goodbye",
 		"msg_req",
+		"msg_inject_req",
 		"msg_resp",
 		"tag_req",
 		"tag_resp",
@@ -353,6 +357,16 @@ static int rpc_msg_req(struct rpc_ctrl *ctrl)
 	return rpc_send_req(ctrl, &req);
 }
 
+static int rpc_msg_inject_req(struct rpc_ctrl *ctrl)
+{
+	struct rpc_hdr req = {0};
+
+	req.client_id = id_at_server;
+	req.cmd = cmd_msg_inject;
+	req.size = ctrl->size;
+	return rpc_send_req(ctrl, &req);
+}
+
 static int rpc_msg_resp(struct rpc_ctrl *ctrl)
 {
 	struct rpc_ctrl *req;
@@ -370,7 +384,7 @@ static int rpc_msg_resp(struct rpc_ctrl *ctrl)
 	if (ret)
 		goto free;
 
-	ft_assert(resp->cmd == cmd_msg);
+	ft_assert(resp->cmd == cmd_msg || resp->cmd == cmd_msg_inject);
 	ret = ft_check_buf(resp + 1, req->size);
 
 free:
@@ -557,6 +571,7 @@ int (*ctrl_op[op_last])(struct rpc_ctrl *ctrl) = {
 	rpc_hello,
 	rpc_goodbye,
 	rpc_msg_req,
+	rpc_msg_inject_req,
 	rpc_msg_resp,
 	rpc_tag_req,
 	rpc_tag_resp,
@@ -621,6 +636,9 @@ static bool get_op_enum(const char *js, jsmntok_t *t, uint32_t *op)
 
 	if (FT_TOKEN_CHECK(str, len, "msg_req")) {
 		*op = op_msg_req;
+		return true;
+	} else if (FT_TOKEN_CHECK(str, len, "msg_inject_req")) {
+		*op = op_msg_inject_req;
 		return true;
 	} else if (FT_TOKEN_CHECK(str, len, "msg_resp")) {
 		*op = op_msg_resp;
@@ -910,6 +928,35 @@ free:
 	return ret;
 }
 
+static void complete_rpc(struct rpc_resp *resp)
+{
+	fi_addr_t addr;
+	int ret;
+
+	printf("(%d) complete rpc %s (%s)\n", resp->hdr.client_id,
+	       rpc_cmd_str(resp->hdr.cmd), fi_strerror(resp->status));
+
+	if (!resp->status && (resp->flags & rpc_flag_ack))
+		ret = rpc_inject(&resp->hdr, resp->hdr.client_id);
+	else
+		ret = resp->status;
+
+	if (ret) {
+		if (resp->hdr.client_id != invalid_id) {
+			addr = resp->hdr.client_id;
+			printf("(%d) unreachable, removing\n", resp->hdr.client_id);
+			ret = fi_av_remove(av, &addr, 1, 0);
+			if (ret)
+				FT_PRINTERR("fi_av_remove", ret);
+		}
+	}
+
+	if (resp->mr)
+		fi_close(&resp->mr->fid);
+	(void) ft_check_buf(resp + 1, resp->hdr.size);
+	free(resp);
+}
+
 /* If we fail to send the response (e.g. EAGAIN), we need to remove the
  * address from the AV to avoid double insertions.  We could loop on
  * EAGAIN in this call, but by replaying the entire handle_hello sequence
@@ -968,6 +1015,17 @@ static int handle_msg(struct rpc_hdr *req, struct rpc_resp *resp)
 		       NULL, req->client_id, resp);
 }
 
+static int handle_msg_inject(struct rpc_hdr *req, struct rpc_resp *resp)
+{
+	int ret;
+
+	ret = fi_inject(ep, &resp->hdr, sizeof(resp->hdr) + resp->hdr.size,
+		        req->client_id);
+	if (!ret)
+		complete_rpc(resp);
+	return ret;
+}
+
 static int handle_tag(struct rpc_hdr *req, struct rpc_resp *resp)
 {
 	return fi_tsend(ep, &resp->hdr, sizeof(resp->hdr) + resp->hdr.size,
@@ -992,39 +1050,11 @@ int (*handle_rpc[cmd_last])(struct rpc_hdr *req, struct rpc_resp *resp) = {
 	handle_hello,
 	handle_goodbye,
 	handle_msg,
+	handle_msg_inject,
 	handle_tag,
 	handle_read,
 	handle_write,
 };
-
-static void complete_rpc(struct rpc_resp *resp)
-{
-	fi_addr_t addr;
-	int ret;
-
-	printf("(%d) complete rpc %s (%s)\n", resp->hdr.client_id,
-	       rpc_cmd_str(resp->hdr.cmd), fi_strerror(resp->status));
-
-	if (!resp->status && (resp->flags & rpc_flag_ack))
-		ret = rpc_inject(&resp->hdr, resp->hdr.client_id);
-	else
-		ret = resp->status;
-
-	if (ret) {
-		if (resp->hdr.client_id != invalid_id) {
-			addr = resp->hdr.client_id;
-			printf("(%d) unreachable, removing\n", resp->hdr.client_id);
-			ret = fi_av_remove(av, &addr, 1, 0);
-			if (ret)
-				FT_PRINTERR("fi_av_remove", ret);
-		}
-	}
-
-	if (resp->mr)
-		fi_close(&resp->mr->fid);
-	(void) ft_check_buf(resp + 1, resp->hdr.size);
-	free(resp);
-}
 
 static void start_rpc(struct rpc_hdr *req)
 {
