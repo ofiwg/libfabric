@@ -146,10 +146,10 @@ static uint16_t _cxip_amo_valid[CXIP_RQ_AMO_LAST][FI_ATOMIC_OP_LAST] = {
  *
  * @return int 0 on success, -FI_EOPNOTSUPP if operation is not supported
  */
-static int _cxip_atomic_opcode(enum cxip_amo_req_type req_type,
-			       enum fi_datatype dt, enum fi_op op,
-			       enum c_atomic_op *cop, enum c_atomic_type *cdt,
-			       enum c_cswap_op *copswp, unsigned int *cdtlen)
+int _cxip_atomic_opcode(enum cxip_amo_req_type req_type, enum fi_datatype dt,
+			enum fi_op op, enum c_atomic_op *cop,
+			enum c_atomic_type *cdt, enum c_cswap_op *copswp,
+			unsigned int *cdtlen)
 {
 	int opcode;
 	int dtcode;

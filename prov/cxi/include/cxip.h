@@ -2567,6 +2567,10 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		    void **resultdesc, size_t result_count, uint64_t flags,
 		    bool triggered, uint64_t trig_thresh,
 		    struct cxip_cntr *trig_cntr, struct cxip_cntr *comp_cntr);
+int _cxip_atomic_opcode(enum cxip_amo_req_type req_type, enum fi_datatype dt,
+			enum fi_op op, enum c_atomic_op *cop,
+			enum c_atomic_type *cdt, enum c_cswap_op *copswp,
+			unsigned int *cdtlen);
 
 static inline void
 cxip_domain_add_txc(struct cxip_domain *dom, struct cxip_txc *txc)

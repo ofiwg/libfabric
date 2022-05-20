@@ -799,6 +799,36 @@ static int cxip_domain_ops_set(struct fid *fid, const char *name,
 	return -FI_ENOSYS;
 }
 
+static int cxip_query_atomic(struct fid_domain *domain,
+			     enum fi_datatype datatype, enum fi_op op,
+			     struct fi_atomic_attr *attr, uint64_t flags)
+{
+	enum cxip_amo_req_type req_type;
+	int ret;
+	unsigned int datatype_len;
+
+	if (((flags & FI_COMPARE_ATOMIC) &&  (flags & FI_FETCH_ATOMIC)) ||
+	    !attr)
+		return -FI_EINVAL;
+
+	if (flags & FI_COMPARE_ATOMIC)
+		req_type = CXIP_RQ_AMO_SWAP;
+	else if (flags & FI_FETCH_ATOMIC)
+		req_type = CXIP_RQ_AMO_FETCH;
+	else
+		req_type = CXIP_RQ_AMO;
+
+	ret = _cxip_atomic_opcode(req_type, datatype, op, NULL, NULL, NULL,
+				  &datatype_len);
+	if (ret)
+		return ret;
+
+	attr->count = 1;
+	attr->size = datatype_len;
+
+	return FI_SUCCESS;
+}
+
 static struct fi_ops cxip_dom_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = cxip_dom_close,
@@ -818,7 +848,7 @@ static struct fi_ops_domain cxip_dom_ops = {
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
-	.query_atomic = fi_no_query_atomic,
+	.query_atomic = cxip_query_atomic,
 };
 
 /*

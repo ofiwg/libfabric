@@ -3397,3 +3397,84 @@ Test(amo_hybrid_mr_desc, invalid_addr_fetching_amo_failure)
 	mr_destroy(&result_window);
 	mr_destroy(&buf_window);
 }
+
+struct fi_query_atomic_test {
+	enum fi_datatype datatype;
+	enum fi_op op;
+	bool valid_atomic_attr;
+	uint64_t flags;
+	int expected_rc;
+};
+
+ParameterizedTestParameters(atomic, query_atomic)
+{
+	static struct fi_query_atomic_test params[] = {
+		/* NULL atomic attributes. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_MIN,
+			.valid_atomic_attr = false,
+			.flags = 0,
+			.expected_rc = -FI_EINVAL,
+		},
+		/* Bad dataype. */
+		{
+			.datatype = 0xffff,
+			.op = FI_MIN,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = -FI_EINVAL,
+		},
+		/* Bad op. */
+		{
+			.datatype = FI_INT8,
+			.op = 0xffff,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = -FI_EINVAL,
+		},
+		/* Bad flags. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_MIN,
+			.valid_atomic_attr = true,
+			.flags = FI_COMPARE_ATOMIC | FI_FETCH_ATOMIC,
+			.expected_rc = -FI_EINVAL,
+		},
+		/* Valid SUM FI_INT8. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = FI_SUCCESS,
+		},
+		/* Valid SUM FI_INT8 fetching. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_FETCH_ATOMIC,
+			.expected_rc = FI_SUCCESS,
+		}
+	};
+	size_t param_sz = ARRAY_SIZE(params);
+
+	return cr_make_param_array(struct fi_query_atomic_test, params,
+				   param_sz);
+}
+
+ParameterizedTest(struct fi_query_atomic_test *params, atomic, query_atomic)
+{
+	int ret;
+	struct fi_atomic_attr atomic_attr;
+	struct fi_atomic_attr *attr =
+		params->valid_atomic_attr ? &atomic_attr : NULL;
+
+	ret = fi_query_atomic(cxit_domain, params->datatype, params->op, attr,
+			      params->flags);
+
+	cr_assert_eq(ret, params->expected_rc,
+		     "Unexpected fi_query_atomic() rc: expected=%d got=%d\n",
+		     params->expected_rc, ret);
+}
