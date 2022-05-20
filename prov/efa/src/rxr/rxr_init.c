@@ -71,7 +71,7 @@ struct rxr_env rxr_env = {
 	.efa_min_read_write_size = 65536,
 	.efa_read_segment_size = 1073741824,
 	.rnr_retry = 3, /* Setting this value to EFA_RNR_INFINITE_RETRY makes the firmware retry indefinitey */
-	.efa_runt_size = 409600,
+	.efa_runt_size = 307200,
 };
 
 /* @brief Read and store the FI_EFA_* environment variables.
