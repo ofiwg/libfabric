@@ -115,6 +115,26 @@ struct fi_domain_attr smr_domain_attr = {
 	.caps = FI_LOCAL_COMM,
 };
 
+struct fi_domain_attr smr_hmem_domain_attr = {
+	.name = "shm",
+	.threading = FI_THREAD_SAFE,
+	.control_progress = FI_PROGRESS_AUTO,
+	.data_progress = FI_PROGRESS_MANUAL,
+	.resource_mgmt = FI_RM_ENABLED,
+	.av_type = FI_AV_UNSPEC,
+	.mr_mode = FI_MR_HMEM,
+	.mr_key_size = sizeof_field(struct fi_rma_iov, key),
+	.cq_data_size = sizeof_field(struct smr_msg_hdr, data),
+	.cq_cnt = (1 << 10),
+	.ep_cnt = SMR_MAX_PEERS,
+	.tx_ctx_cnt = (1 << 10),
+	.rx_ctx_cnt = (1 << 10),
+	.max_ep_tx_ctx = 1,
+	.max_ep_rx_ctx = 1,
+	.mr_iov_limit = SMR_IOV_LIMIT,
+	.caps = FI_LOCAL_COMM,
+};
+
 struct fi_fabric_attr smr_fabric_attr = {
 	.name = "shm",
 	.prov_version = OFI_VERSION_DEF_PROV
@@ -126,7 +146,7 @@ struct fi_info smr_hmem_info = {
 	.tx_attr = &smr_hmem_tx_attr,
 	.rx_attr = &smr_hmem_rx_attr,
 	.ep_attr = &smr_ep_attr,
-	.domain_attr = &smr_domain_attr,
+	.domain_attr = &smr_hmem_domain_attr,
 	.fabric_attr = &smr_fabric_attr
 };
 

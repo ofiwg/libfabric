@@ -130,7 +130,7 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 	int ret;
 
 	mr_mode = hints && hints->domain_attr ? hints->domain_attr->mr_mode :
-						FI_MR_VIRT_ADDR | FI_MR_HMEM;
+						FI_MR_VIRT_ADDR;
 	msg_order = hints && hints->tx_attr ? hints->tx_attr->msg_order : 0;
 	fast_rma = smr_fast_rma_enabled(mr_mode, msg_order);
 
@@ -159,22 +159,11 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 						 &cur->src_addrlen);
 		}
 		if (fast_rma) {
-			cur->domain_attr->mr_mode = FI_MR_VIRT_ADDR;
+			cur->domain_attr->mr_mode |= FI_MR_VIRT_ADDR;
 			cur->tx_attr->msg_order = FI_ORDER_SAS;
 			cur->ep_attr->max_order_raw_size = 0;
 			cur->ep_attr->max_order_waw_size = 0;
 			cur->ep_attr->max_order_war_size = 0;
-		}
-		if (cur->caps & FI_HMEM) {
-			if (!(mr_mode & FI_MR_HMEM)) {
-				fi_freeinfo(cur);
-				FI_INFO(&smr_prov, FI_LOG_CORE,
-					"mr_mode does not match FI_HMEM capability.\n");
-				return -FI_ENODATA;
-			}
-			cur->domain_attr->mr_mode |= FI_MR_HMEM;
-		} else {
-			cur->domain_attr->mr_mode &= ~FI_MR_HMEM;
 		}
 	}
 	return 0;
