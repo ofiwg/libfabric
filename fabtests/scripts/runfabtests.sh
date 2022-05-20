@@ -230,6 +230,10 @@ unit_tests=(
 	"fi_cntr_test"
 )
 
+regression_tests=(
+	"sighandler_test"
+)
+
 complex_tests=(
 	"fi_ubertest"
 )
@@ -770,7 +774,7 @@ function main {
 		local -r tests="complex"
 		complex_type=$1
 	else
-		local -r tests=$(echo $1 | sed 's/all/unit,functional,standard,complex,multinode/g' | tr ',' ' ')
+		local -r tests=$(echo $1 | sed 's/all/unit,regression,functional,standard,complex,multinode/g' | tr ',' ' ')
 		if [[ $1 == "all" || $1 == "complex" ]]; then
 			complex_type="all"
 		fi
@@ -793,6 +797,11 @@ function main {
 					unit_test "$test" "1"
 				done
 			fi
+		;;
+		regression)
+			for test in "${regression_tests[@]}"; do
+				unit_test "$test" "0"
+			done
 		;;
 		functional)
 			for test in "${functional_tests[@]}"; do
