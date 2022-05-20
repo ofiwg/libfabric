@@ -71,8 +71,8 @@ static inline
 int rxr_msg_select_rtm_for_cuda(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 {
 	int tagged;
-	int eager_rtm, medium_rtm, readbase_rtm;
-	int eager_rtm_max_msg_size, medium_rtm_max_msg_size;
+	int eager_rtm, readbase_rtm;
+	int eager_rtm_max_msg_size;
 	bool delivery_complete_requested;
 	struct rdm_peer *peer;
 
@@ -85,30 +85,18 @@ int rxr_msg_select_rtm_for_cuda(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_e
 	eager_rtm = (delivery_complete_requested) ? RXR_DC_EAGER_MSGRTM_PKT + tagged
 						  : RXR_EAGER_MSGRTM_PKT + tagged;
 
-	medium_rtm = (delivery_complete_requested) ? RXR_DC_MEDIUM_MSGRTM_PKT + tagged
-						   : RXR_MEDIUM_MSGRTM_PKT + tagged;
-
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
 	assert(peer);
 	readbase_rtm = rxr_pkt_type_readbase_rtm(peer, tx_entry->op, tx_entry->fi_flags);
 
 	eager_rtm_max_msg_size = 0;
-	medium_rtm_max_msg_size = 0;
-	if (cuda_is_gdrcopy_enabled())
-		medium_rtm_max_msg_size = rxr_env.efa_max_gdrcopy_msg_size;
-
-	if (medium_rtm_max_msg_size > 0) {
+	if (cuda_is_gdrcopy_enabled()) {
 		eager_rtm_max_msg_size = rxr_pkt_req_max_data_size(rxr_ep, tx_entry->addr, eager_rtm,
 								   tx_entry->fi_flags, 0);
-
-		eager_rtm_max_msg_size = MIN(medium_rtm_max_msg_size, eager_rtm_max_msg_size);
 	}
 
 	if (tx_entry->total_len <= eager_rtm_max_msg_size)
 		return eager_rtm;
-
-	if (tx_entry->total_len <= medium_rtm_max_msg_size)
-		return medium_rtm;
 
 	return readbase_rtm;
 }
