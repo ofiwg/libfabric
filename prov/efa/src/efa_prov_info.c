@@ -332,7 +332,7 @@ static int efa_prov_info_set_nic_attr(struct fi_info *prov_info, struct efa_devi
 	struct fi_link_attr *link_attr;
 	struct fi_bus_attr *bus_attr;
 	struct fi_pci_attr *pci_attr;
-	void *src_addr;
+	void *src_addr = NULL;
 	int ret, link_addr_len;
 
 	/* Sets nic ops and allocates basic structure */
@@ -349,38 +349,37 @@ static int efa_prov_info_set_nic_attr(struct fi_info *prov_info, struct efa_devi
 	device_attr->name = strdup(device->ibv_ctx->device->name);
 	if (!device_attr->name) {
 		ret = -FI_ENOMEM;
-		goto err_free_nic;
+		goto err_free;
 	}
 
 	ret = asprintf(&device_attr->device_id, "0x%x",
 		       device->ibv_attr.vendor_part_id);
-	/* ofi_nic_close will free all attributes of the fi_nic struct */
 	if (ret < 0) {
 		ret = -FI_ENOMEM;
-		goto err_free_nic;
+		goto err_free;
 	}
 
 	ret = efa_device_get_version(device, &device_attr->device_version);
 	if (ret != 0){
-		goto err_free_nic;
+		goto err_free;
 	}
 
 	ret = asprintf(&device_attr->vendor_id, "0x%x",
 		       device->ibv_attr.vendor_id);
 	if (ret < 0) {
 		ret = -FI_ENOMEM;
-		goto err_free_nic;
+		goto err_free;
 	}
 
 	ret = efa_device_get_driver(device, &device_attr->driver);
 	if (ret != 0) {
-		goto err_free_nic;
+		goto err_free;
 	}
 
 	device_attr->firmware = strdup(device->ibv_attr.fw_ver);
 	if (!device_attr->firmware) {
 		ret = -FI_ENOMEM;
-		goto err_free_nic;
+		goto err_free;
 	}
 
 	/* fi_bus_attr */
@@ -389,27 +388,31 @@ static int efa_prov_info_set_nic_attr(struct fi_info *prov_info, struct efa_devi
 	/* fi_pci_attr */
 	ret = efa_device_get_pci_attr(device, pci_attr);
 	if (ret != 0) {
-		goto err_free_nic;
+		goto err_free;
 	}
 	/* fi_link_attr */
 	src_addr = calloc(1, EFA_EP_ADDR_LEN);
 	if (!src_addr) {
 		ret = -FI_ENOMEM;
-		goto err_free_nic;
+		goto err_free;
 	}
 
 	memcpy(src_addr, &device->ibv_gid, sizeof(device->ibv_gid));
 
 	link_addr_len = strlen(EFA_FABRIC_PREFIX) + INET6_ADDRSTRLEN;
 	link_attr->address = calloc(1, link_addr_len + 1);
-	if (!link_attr->address)
-		return -FI_ENOMEM;
+	if (!link_attr->address) {
+		ret = -FI_ENOMEM;
+		goto err_free;
+	}
 
 	strcpy(link_attr->address, EFA_FABRIC_PREFIX);
 	if (!inet_ntop(AF_INET6, device->ibv_gid.raw,
 		       (char *)link_attr->address + strlen(EFA_FABRIC_PREFIX),
-		       INET6_ADDRSTRLEN))
-		return -errno;
+		       INET6_ADDRSTRLEN)) {
+		ret = -errno;
+		goto err_free;
+	}
 
 	link_attr->mtu = device->ibv_port_attr.max_msg_sz - rxr_pkt_max_header_size();
 	link_attr->speed = ofi_vrb_speed(device->ibv_port_attr.active_speed,
@@ -430,15 +433,15 @@ static int efa_prov_info_set_nic_attr(struct fi_info *prov_info, struct efa_devi
 	link_attr->network_type = strdup("Ethernet");
 	if (!link_attr->network_type) {
 		ret = -FI_ENOMEM;
-		goto err_free_src_addr;
+		goto err_free;
 	}
 
 	free(src_addr);
 	return FI_SUCCESS;
 
-err_free_src_addr:
+err_free:
 	free(src_addr);
-err_free_nic:
+	/* fi_close will free all attributes of the fi_nic struct */
 	fi_close(&prov_info->nic->fid);
 	prov_info->nic = NULL;
 	return ret;
