@@ -59,15 +59,17 @@ else
 	git clone https://$HPE_GITHUB_TOKEN@github.hpe.com/hpe/hpc-sshot-slingshot-version.git
 
 	cd hpc-sshot-slingshot-version
-	# Just use master branch for now
 
-	#if ! git checkout $BRANCH ; then
-	#   echo "INFO: Branch "BRANCH" is not an official Slingshot branch, using version string from master branch"
-	#fi
+	if ! git checkout $BRANCH_NAME ; then
+	echo "INFO: Branch '$BRANCH_NAME' does not exist in hpc-sshot-slingshot-version repo, using version string from master branch"
+	else
+	echo "INFO: Using Slingshot release version from '$BRANCH_NAME'"
+	fi
 
 	cd -
 
-	PRODUCT_VERSION=$(cat hpc-sshot-slingshot-version/slingshot-version)
+	PRODUCT_VERSION=$(cat hpc-sshot-slingshot-version/slingshot-version|| echo "0.0.0")
+	echo "INFO: Slingshot release version '$PRODUCT_VERSION'"
 	RELEASE="SSHOT${PRODUCT_VERSION}_${BUILD_METADATA}"
 fi
 
