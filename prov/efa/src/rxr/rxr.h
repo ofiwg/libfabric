@@ -180,9 +180,9 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 
 /*
  * Flag to indicate an rx_entry has an EOR
- * in flight (the EOR has been sent, but has
- * not got send completion)
- * hence cannot be released
+ * in flight (the EOR has been sent or queued,
+ * and has not got send completion)
+ * hence the rx_entry cannot be released
  */
 #define RXR_EOR_IN_FLIGHT BIT_ULL(10)
 /*
