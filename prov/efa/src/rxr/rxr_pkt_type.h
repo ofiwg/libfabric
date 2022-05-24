@@ -187,8 +187,10 @@ int rxr_pkt_init_eor(struct rxr_ep *ep,
 		     struct rxr_rx_entry *rx_entry,
 		     struct rxr_pkt_entry *pkt_entry);
 
-
-void rxr_pkt_handle_eor_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+static inline
+void rxr_pkt_handle_eor_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+}
 
 void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
 					struct rxr_pkt_entry *pkt_entry);
