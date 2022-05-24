@@ -57,6 +57,14 @@ static int cxip_domain_enable(struct cxip_domain *dom)
 		goto free_lni;
 	}
 
+	ret = cxil_get_amo_remap_to_pcie_fadd(dom->iface->dev,
+					      &dom->amo_remap_to_pcie_fadd);
+	if (ret) {
+		CXIP_WARN("Failed to get amo_remap_to_pcie_fadd value: %d\n",
+			  ret);
+		goto iomm_fini;
+	}
+
 	cxip_mr_domain_init(&dom->mr_domain);
 
 	dom->enabled = true;
@@ -78,6 +86,8 @@ static int cxip_domain_enable(struct cxip_domain *dom)
 
 	return FI_SUCCESS;
 
+iomm_fini:
+	cxip_iomm_fini(dom);
 free_lni:
 	cxip_free_lni(dom->lni);
 	dom->lni = NULL;
@@ -799,6 +809,21 @@ static int cxip_domain_ops_set(struct fid *fid, const char *name,
 	return -FI_ENOSYS;
 }
 
+static int cxip_query_atomic_flags_valid(uint64_t flags)
+{
+	/* FI_COMPARE_ATOMIC and FI_FETCH_ATOMIC are mutually exclusive. */
+	if ((flags & FI_COMPARE_ATOMIC) && (flags & FI_FETCH_ATOMIC))
+		return -FI_EINVAL;
+
+	if (flags & FI_CXI_PCIE_AMO) {
+		/* Only FI_FETCH_ATOMIC is support with FI_CXI_PCIE_AMO. */
+		if (!(flags & FI_FETCH_ATOMIC))
+			return -FI_EOPNOTSUPP;
+	}
+
+	return FI_SUCCESS;
+}
+
 static int cxip_query_atomic(struct fid_domain *domain,
 			     enum fi_datatype datatype, enum fi_op op,
 			     struct fi_atomic_attr *attr, uint64_t flags)
@@ -806,19 +831,31 @@ static int cxip_query_atomic(struct fid_domain *domain,
 	enum cxip_amo_req_type req_type;
 	int ret;
 	unsigned int datatype_len;
+	struct cxip_domain *dom;
 
-	if (((flags & FI_COMPARE_ATOMIC) &&  (flags & FI_FETCH_ATOMIC)) ||
-	    !attr)
+	dom = container_of(domain, struct cxip_domain,
+			   util_domain.domain_fid.fid);
+
+	if (!attr)
 		return -FI_EINVAL;
 
-	if (flags & FI_COMPARE_ATOMIC)
-		req_type = CXIP_RQ_AMO_SWAP;
-	else if (flags & FI_FETCH_ATOMIC)
-		req_type = CXIP_RQ_AMO_FETCH;
-	else
-		req_type = CXIP_RQ_AMO;
+	ret = cxip_query_atomic_flags_valid(flags);
+	if (ret)
+		return ret;
 
-	ret = _cxip_atomic_opcode(req_type, datatype, op, NULL, NULL, NULL,
+	if (flags & FI_COMPARE_ATOMIC) {
+		req_type = CXIP_RQ_AMO_SWAP;
+	} else if (flags & FI_FETCH_ATOMIC) {
+		if (flags & FI_CXI_PCIE_AMO)
+			req_type = CXIP_RQ_AMO_PCIE_FETCH;
+		else
+			req_type = CXIP_RQ_AMO_FETCH;
+	} else {
+		req_type = CXIP_RQ_AMO;
+	}
+
+	ret = _cxip_atomic_opcode(req_type, datatype, op,
+				  dom->amo_remap_to_pcie_fadd, NULL, NULL, NULL,
 				  &datatype_len);
 	if (ret)
 		return ret;

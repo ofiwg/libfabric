@@ -130,6 +130,21 @@ static uint16_t _cxip_amo_valid[CXIP_RQ_AMO_LAST][FI_ATOMIC_OP_LAST] = {
 		[FI_CSWAP_GT]	  = 0x03ff,
 		[FI_MSWAP]	  = 0x00ff,
 	},
+
+	[CXIP_RQ_AMO_PCIE_FETCH] = {
+		[FI_MIN]	  = 0x0,
+		[FI_MAX]	  = 0x0,
+		[FI_SUM]	  = 0xf0,
+		[FI_LOR]	  = 0x0,
+		[FI_LAND]	  = 0x0,
+		[FI_LXOR]	  = 0x0,
+		[FI_BOR]	  = 0x0,
+		[FI_BAND]	  = 0x0,
+		[FI_BXOR]	  = 0x0,
+		[FI_ATOMIC_WRITE] = 0x0,
+		[FI_ATOMIC_READ]  = 0x0,
+	},
+
 };
 #define	OP_VALID(rq, op, dt)	(_cxip_amo_valid[rq][op] & (1 << dt))
 
@@ -139,6 +154,8 @@ static uint16_t _cxip_amo_valid[CXIP_RQ_AMO_LAST][FI_ATOMIC_OP_LAST] = {
  * @param req_type basic, fetch, or swap
  * @param dt data type for operation
  * @param op operation
+ * @param amo_remap_to_pcie_fadd NIC AMO operation which is remapped as PCIe
+ * fetch add
  * @param cop Cassini code for operation
  * @param cdt Cassini code for data type
  * @param copswp Cassini code for cswap operation
@@ -147,9 +164,9 @@ static uint16_t _cxip_amo_valid[CXIP_RQ_AMO_LAST][FI_ATOMIC_OP_LAST] = {
  * @return int 0 on success, -FI_EOPNOTSUPP if operation is not supported
  */
 int _cxip_atomic_opcode(enum cxip_amo_req_type req_type, enum fi_datatype dt,
-			enum fi_op op, enum c_atomic_op *cop,
-			enum c_atomic_type *cdt, enum c_cswap_op *copswp,
-			unsigned int *cdtlen)
+			enum fi_op op, int amo_remap_to_pcie_fadd,
+			enum c_atomic_op *cop, enum c_atomic_type *cdt,
+			enum c_cswap_op *copswp, unsigned int *cdtlen)
 {
 	int opcode;
 	int dtcode;
@@ -161,10 +178,33 @@ int _cxip_atomic_opcode(enum cxip_amo_req_type req_type, enum fi_datatype dt,
 	if (!OP_VALID(req_type, op, dt))
 		return -FI_EOPNOTSUPP;
 
-	opcode = _cxip_amo_op_code[op];
+	/* If the request is a PCIe fetching AMO, then the remap opcode is
+	 * used.
+	 *
+	 * Note: Only fetching FI_SUM is supported as a PCIe AMO.
+	 */
+	if (req_type == CXIP_RQ_AMO_PCIE_FETCH) {
+		if (amo_remap_to_pcie_fadd >= 0)
+			opcode = amo_remap_to_pcie_fadd;
+		else
+			return -FI_EOPNOTSUPP;
+	} else {
+		opcode = _cxip_amo_op_code[op];
+		if (opcode == amo_remap_to_pcie_fadd)
+			return -FI_EOPNOTSUPP;
+	}
+
+	/* For fetching FI_SUMs done as a PCIe AMO, force signed data types to
+	 * unsigned. This is required by the NIC to allow libfabric to support
+	 * signed PCIe fetching FI_SUMs.
+	 */
 	dtcode = _cxip_amo_type_code[dt];
-	if (opcode < 0 || dtcode < 0)
-		return -FI_EOPNOTSUPP;
+	if (req_type == CXIP_RQ_AMO_PCIE_FETCH) {
+		if (dtcode == C_AMO_TYPE_INT32_T)
+			dtcode = C_AMO_TYPE_UINT32_T;
+		else if (dtcode == C_AMO_TYPE_INT64_T)
+			dtcode = C_AMO_TYPE_UINT64_T;
+	}
 
 	if (cop)
 		*cop = opcode;
@@ -199,14 +239,20 @@ static inline int _cxip_ep_valid(struct fid_ep *ep,
 				 size_t *count)
 {
 	int ret;
+	struct cxip_txc *txc;
+	struct fi_tx_attr *attr;
 
 	/* Endpoint must have atomics enabled */
 	if (!ep->atomic)
 		return -FI_EINVAL;
 
+	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
+		return -FI_EINVAL;
+
 	/* Check for a valid opcode */
 	ret = _cxip_atomic_opcode(req_type, datatype, op,
-				  NULL, NULL, NULL, NULL);
+				  txc->domain->amo_remap_to_pcie_fadd, NULL,
+				  NULL, NULL, NULL);
 	if (ret < 0)
 		return ret;
 
@@ -1353,6 +1399,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 
 		/* FALLTHRU */
 	case CXIP_RQ_AMO_FETCH:
+	case CXIP_RQ_AMO_PCIE_FETCH:
 		/* Must have a valid result address */
 		if (!_vector_valid(result_count, resultv)) {
 			TXC_WARN(txc, "result IOV invalid\n");
@@ -1400,6 +1447,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 
 	/* Convert FI to CXI codes, fail if operation not supported */
 	ret = _cxip_atomic_opcode(req_type, msg->datatype, msg->op,
+				  txc->domain->amo_remap_to_pcie_fadd,
 				  &atomic_op, &atomic_type, &cswap_op,
 				  &atomic_type_len);
 	if (ret < 0) {
@@ -1683,9 +1731,11 @@ static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 {
 	struct cxip_txc *txc;
 	struct fi_tx_attr *attr;
+	enum cxip_amo_req_type req_type;
 
 	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS |
-		      FI_CXI_UNRELIABLE | FI_CXI_WEAK_FENCE))
+		      FI_CXI_UNRELIABLE | FI_CXI_WEAK_FENCE |
+		      FI_CXI_PCIE_AMO))
 		return -FI_EBADFLAGS;
 
 	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
@@ -1700,9 +1750,14 @@ static ssize_t cxip_ep_atomic_readwritemsg(struct fid_ep *ep,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, attr->tclass, msg,
-			       NULL, NULL, 0, resultv, result_desc,
-			       result_count, flags, false, 0, NULL, NULL);
+	if (flags & FI_CXI_PCIE_AMO)
+		req_type = CXIP_RQ_AMO_PCIE_FETCH;
+	else
+		req_type = CXIP_RQ_AMO_FETCH;
+
+	return cxip_amo_common(req_type, txc, attr->tclass, msg, NULL, NULL, 0,
+			       resultv, result_desc, result_count, flags, false,
+			       0, NULL, NULL);
 }
 
 static ssize_t cxip_ep_atomic_compwrite(struct fid_ep *ep, const void *buf,

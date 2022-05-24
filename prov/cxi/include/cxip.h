@@ -636,6 +636,9 @@ struct cxip_domain {
 
 	/* Counters collected for the duration of the domain existence. */
 	struct cxip_telemetry *telemetry;
+
+	/* NIC AMO operation which is remapped to a PCIe operation. */
+	int amo_remap_to_pcie_fadd;
 };
 
 static inline bool cxip_domain_mr_cache_enabled(struct cxip_domain *dom)
@@ -2552,11 +2555,18 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
  *      replaces the remote memory content with operand1, and returns the prior
  *      content of the remote memory in resultptr.
  *
+ *  CXIP_RQ_AMO_PCIE_FETCH
+ *      Passes two arguments (operand1, resultptr), applies operand1 to a
+ *      remote memory address content, and returns the prior content of the
+ *      remote memory in resultptr.
+ *
+ *      The resulting operation should be a PCIe AMO instead of NIC AMO.
  */
 enum cxip_amo_req_type {
 	CXIP_RQ_AMO,
 	CXIP_RQ_AMO_FETCH,
 	CXIP_RQ_AMO_SWAP,
+	CXIP_RQ_AMO_PCIE_FETCH,
 	CXIP_RQ_AMO_LAST,
 };
 
@@ -2568,9 +2578,9 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		    bool triggered, uint64_t trig_thresh,
 		    struct cxip_cntr *trig_cntr, struct cxip_cntr *comp_cntr);
 int _cxip_atomic_opcode(enum cxip_amo_req_type req_type, enum fi_datatype dt,
-			enum fi_op op, enum c_atomic_op *cop,
-			enum c_atomic_type *cdt, enum c_cswap_op *copswp,
-			unsigned int *cdtlen);
+			enum fi_op op, int amo_remap_to_pcie_fadd,
+			enum c_atomic_op *cop, enum c_atomic_type *cdt,
+			enum c_cswap_op *copswp, unsigned int *cdtlen);
 
 static inline void
 cxip_domain_add_txc(struct cxip_domain *dom, struct cxip_txc *txc)
