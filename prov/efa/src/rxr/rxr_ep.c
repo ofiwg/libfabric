@@ -619,9 +619,9 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	dlist_foreach_safe(&rxr_ep->rx_entry_list, entry, tmp) {
 		rx_entry = container_of(entry, struct rxr_rx_entry,
 					ep_entry);
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-			"Closing ep with unreleased rx_entry: %p\n",
-			rx_entry);
+		if (!(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED))
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"Closing ep with unreleased rx_entry\n");
 		rxr_release_rx_entry(rxr_ep, rx_entry);
 	}
 
