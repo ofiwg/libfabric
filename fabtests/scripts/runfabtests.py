@@ -156,9 +156,6 @@ def fabtests_args_to_pytest_args(fabtests_args, shared_options):
     # -v make pytest to print 1 line for each test
     pytest_args.append("-v")
 
-    if fabtests_args.good_address:
-        pytest_args.append("--good_address " + fabtests_args.good_address)
-
     pytest_verbose_options = {
             0 : "-rN",      # print no extra information
             1 : "-rfE",     # print extra information for failed test(s)
