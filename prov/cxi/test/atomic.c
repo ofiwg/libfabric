@@ -3404,6 +3404,7 @@ struct fi_query_atomic_test {
 	bool valid_atomic_attr;
 	uint64_t flags;
 	int expected_rc;
+	int amo_remap_to_pcie_fadd;
 };
 
 ParameterizedTestParameters(atomic, query_atomic)
@@ -3477,4 +3478,794 @@ ParameterizedTest(struct fi_query_atomic_test *params, atomic, query_atomic)
 	cr_assert_eq(ret, params->expected_rc,
 		     "Unexpected fi_query_atomic() rc: expected=%d got=%d\n",
 		     params->expected_rc, ret);
+}
+
+TestSuite(pcie_atomic, .init = reset_amo_remap_to_pcie_fadd,
+	  .fini = reset_amo_remap_to_pcie_fadd,
+	  .timeout = CXIT_DEFAULT_TIMEOUT);
+
+ParameterizedTestParameters(pcie_atomic, query_atomic)
+{
+	static struct fi_query_atomic_test params[] = {
+		/* Valid SUM FI_INT8. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = FI_SUCCESS,
+			.amo_remap_to_pcie_fadd = -1,
+		},
+
+		/* Invalid PCIe SUM FI_INT8. Only 32 and 64 bit operations are
+		 * supported.
+		 */
+		{
+			.datatype = FI_INT8,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = -1,
+		},
+
+		/* Valid SUM FI_INT32. */
+		{
+			.datatype = FI_INT32,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = FI_SUCCESS,
+			.amo_remap_to_pcie_fadd = -1,
+		},
+
+		/* Invalid PCIe SUM FI_INT32 due to amo_remap_to_pcie_fadd being
+		 * -1.
+		 */
+		{
+			.datatype = FI_INT32,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = -1,
+		},
+
+		/* Invalid PCIe SUM FI_INT32 due to missing FI_FETCH_ATOMIC.
+		 */
+		{
+			.datatype = FI_INT32,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Invalid PCIe SUM FI_INT32 since FI_COMPARE_ATOMIC is invalid.
+		 */
+		{
+			.datatype = FI_INT32,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_COMPARE_ATOMIC,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Valid PCIe SUM FI_INT32 remapping C_AMO_OP_MIN. */
+		{
+			.datatype = FI_INT32,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = FI_SUCCESS,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Valid PCIe SUM FI_UINT32 remapping C_AMO_OP_MIN. */
+		{
+			.datatype = FI_UINT32,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = FI_SUCCESS,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Valid PCIe SUM FI_INT64 remapping C_AMO_OP_MIN. */
+		{
+			.datatype = FI_INT64,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = FI_SUCCESS,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Valid PCIe SUM FI_UINT64 remapping C_AMO_OP_MIN. */
+		{
+			.datatype = FI_UINT64,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = FI_SUCCESS,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Invalid PCIe SUM FI_INT8. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Invalid PCIe SUM FI_UINT8. */
+		{
+			.datatype = FI_UINT8,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Invalid PCIe SUM FI_INT16. */
+		{
+			.datatype = FI_INT16,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Invalid PCIe SUM FI_UINT16. */
+		{
+			.datatype = FI_UINT16,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Invalid PCIe SUM FI_FLOAT. */
+		{
+			.datatype = FI_FLOAT,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Invalid PCIe SUM FI_DOUBLE. */
+		{
+			.datatype = FI_DOUBLE,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Invalid PCIe SUM FI_FLOAT_COMPLEX. */
+		{
+			.datatype = FI_FLOAT_COMPLEX,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Invalid PCIe SUM FI_DOUBLE_COMPLEX. */
+		{
+			.datatype = FI_DOUBLE_COMPLEX,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Invalid PCIe SUM FI_LONG_DOUBLE. */
+		{
+			.datatype = FI_LONG_DOUBLE,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Invalid PCIe SUM FI_LONG_DOUBLE_COMPLEX. */
+		{
+			.datatype = FI_LONG_DOUBLE_COMPLEX,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = FI_CXI_PCIE_AMO | FI_FETCH_ATOMIC,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Invalid FI_MIN operation since it is remapped. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_MIN,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Invalid FI_MAX operation since it is remapped. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_MAX,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MAX,
+		},
+
+		/* Invalid FI_SUM operation without PCIe AMO since it is
+		 * remapped.
+		 */
+		{
+			.datatype = FI_INT8,
+			.op = FI_SUM,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_SUM,
+		},
+
+		/* Invalid FI_LOR operation since it is remapped. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_LOR,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_LOR,
+		},
+
+		/* Invalid FI_LAND operation since it is remapped. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_LAND,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_LAND,
+		},
+
+		/* Invalid FI_BOR operation since it is remapped. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_BOR,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_BOR,
+		},
+
+		/* Invalid FI_BAND operation since it is remapped. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_BAND,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_BAND,
+		},
+
+		/* Invalid FI_LXOR operation since it is remapped. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_LXOR,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_LXOR,
+		},
+
+		/* Invalid FI_BXOR operation since it is remapped. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_BXOR,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_BXOR,
+		},
+
+		/* Invalid FI_ATOMIC_WRITE operation since it is remapped. */
+		{
+			.datatype = FI_INT8,
+			.op = FI_ATOMIC_WRITE,
+			.valid_atomic_attr = true,
+			.flags = 0,
+			.expected_rc = -FI_EOPNOTSUPP,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_SWAP,
+		},
+	};
+	size_t param_sz = ARRAY_SIZE(params);
+
+	return cr_make_param_array(struct fi_query_atomic_test, params,
+				   param_sz);
+}
+
+ParameterizedTest(struct fi_query_atomic_test *params, pcie_atomic,
+		  query_atomic)
+{
+	int ret;
+	struct fi_atomic_attr atomic_attr;
+	struct fi_atomic_attr *attr =
+		params->valid_atomic_attr ? &atomic_attr : NULL;
+
+	/* The AMO remap value must be set before libfabric domain is allocated.
+	 * Else, and inconsistent view of the AMO remap value will be read.
+	 */
+	set_amo_remap_to_pcie_fadd(params->amo_remap_to_pcie_fadd);
+	cxit_setup_rma();
+
+	ret = fi_query_atomic(cxit_domain, params->datatype, params->op, attr,
+			      params->flags);
+
+	cr_assert_eq(ret, params->expected_rc,
+		     "Unexpected fi_query_atomic() rc: expected=%d got=%d\n",
+		     params->expected_rc, ret);
+
+	cxit_teardown_rma();
+}
+
+struct fi_pcie_fadd_test {
+	enum fi_datatype dt;
+	union {
+		uint64_t u64_src;
+		int64_t s64_src;
+		uint32_t u32_src;
+		int32_t s32_src;
+	} src;
+	union {
+		uint64_t u64_dst;
+		int64_t s64_dst;
+		uint32_t u32_dst;
+		int32_t s32_dst;
+	} dst;
+	union {
+		uint64_t u64_result;
+		int64_t s64_result;
+		uint32_t u32_result;
+		int32_t s32_result;
+	} result;
+	int amo_remap_to_pcie_fadd;
+};
+
+ParameterizedTestParameters(pcie_atomic, fadd)
+{
+	static struct fi_pcie_fadd_test params[] = {
+		/* Interger overflow. */
+		{
+			.dt = FI_INT32,
+			.src.s32_src = 2147483647,
+			.dst.s32_dst = 1,
+			.result.s32_result = -2147483648,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_SWAP,
+		},
+
+		/* Unsigned interger overflow. */
+		{
+			.dt = FI_UINT32,
+			.src.u32_src = 0xFFFFFFFF,
+			.dst.u32_dst = 1,
+			.result.u32_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_SWAP,
+		},
+
+		/* Long overflow. */
+		{
+			.dt = FI_INT64,
+			.src.s64_src = 9223372036854775807,
+			.dst.s64_dst = 1,
+			.result.u64_result = 0x8000000000000000,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_SWAP,
+		},
+
+		/* Unsigned long overflow. */
+		{
+			.dt = FI_UINT64,
+			.src.u64_src = 0xFFFFFFFFFFFFFFFF,
+			.dst.u64_dst = 1,
+			.result.u64_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_SWAP,
+		},
+
+		/* Valid 32-bit AMO with C_AMO_OP_MIN remapped. */
+		{
+			.dt = FI_INT32,
+			.src.s32_src = -1,
+			.dst.s32_dst = 1,
+			.result.s32_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Valid 64-bit AMO with C_AMO_OP_MIN remapped. */
+		{
+			.dt = FI_INT64,
+			.src.s64_src = -4294967296,
+			.dst.s64_dst = 4294967296,
+			.result.s64_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MIN,
+		},
+
+		/* Valid 32-bit AMO with C_AMO_OP_MAX remapped. */
+		{
+			.dt = FI_INT32,
+			.src.s32_src = -1,
+			.dst.s32_dst = 1,
+			.result.s32_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MAX,
+		},
+
+		/* Valid 64-bit AMO with C_AMO_OP_MAX remapped. */
+		{
+			.dt = FI_INT64,
+			.src.s64_src = -4294967296,
+			.dst.s64_dst = 4294967296,
+			.result.s64_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_MAX,
+		},
+
+		/* Valid 32-bit AMO with C_AMO_OP_SUM remapped. */
+		{
+			.dt = FI_INT32,
+			.src.s32_src = -1,
+			.dst.s32_dst = 1,
+			.result.s32_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_SUM,
+		},
+
+		/* Valid 64-bit AMO with C_AMO_OP_SUM remapped. */
+		{
+			.dt = FI_INT64,
+			.src.s64_src = -4294967296,
+			.dst.s64_dst = 4294967296,
+			.result.s64_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_SUM,
+		},
+
+		/* Valid 32-bit AMO with C_AMO_OP_LOR remapped. */
+		{
+			.dt = FI_INT32,
+			.src.s32_src = -1,
+			.dst.s32_dst = 1,
+			.result.s32_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_LOR,
+		},
+
+		/* Valid 64-bit AMO with C_AMO_OP_LOR remapped. */
+		{
+			.dt = FI_INT64,
+			.src.s64_src = -4294967296,
+			.dst.s64_dst = 4294967296,
+			.result.s64_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_LOR,
+		},
+
+		/* Valid 32-bit AMO with C_AMO_OP_LAND remapped. */
+		{
+			.dt = FI_INT32,
+			.src.s32_src = -1,
+			.dst.s32_dst = 1,
+			.result.s32_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_LAND,
+		},
+
+		/* Valid 64-bit AMO with C_AMO_OP_LAND remapped. */
+		{
+			.dt = FI_INT64,
+			.src.s64_src = -4294967296,
+			.dst.s64_dst = 4294967296,
+			.result.s64_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_LAND,
+		},
+
+		/* Valid 32-bit AMO with C_AMO_OP_BOR remapped. */
+		{
+			.dt = FI_INT32,
+			.src.s32_src = -1,
+			.dst.s32_dst = 1,
+			.result.s32_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_BOR,
+		},
+
+		/* Valid 64-bit AMO with C_AMO_OP_BOR remapped. */
+		{
+			.dt = FI_INT64,
+			.src.s64_src = -4294967296,
+			.dst.s64_dst = 4294967296,
+			.result.s64_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_BOR,
+		},
+
+		/* Valid 32-bit AMO with C_AMO_OP_BAND remapped. */
+		{
+			.dt = FI_INT32,
+			.src.s32_src = -1,
+			.dst.s32_dst = 1,
+			.result.s32_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_BAND,
+		},
+
+		/* Valid 64-bit AMO with C_AMO_OP_BAND remapped. */
+		{
+			.dt = FI_INT64,
+			.src.s64_src = -4294967296,
+			.dst.s64_dst = 4294967296,
+			.result.s64_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_BAND,
+		},
+
+		/* Valid 32-bit AMO with C_AMO_OP_LXOR remapped. */
+		{
+			.dt = FI_INT32,
+			.src.s32_src = -1,
+			.dst.s32_dst = 1,
+			.result.s32_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_LXOR,
+		},
+
+		/* Valid 64-bit AMO with C_AMO_OP_LXOR remapped. */
+		{
+			.dt = FI_INT64,
+			.src.s64_src = -4294967296,
+			.dst.s64_dst = 4294967296,
+			.result.s64_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_LXOR,
+		},
+
+		/* Valid 32-bit AMO with C_AMO_OP_BXOR remapped. */
+		{
+			.dt = FI_INT32,
+			.src.s32_src = -1,
+			.dst.s32_dst = 1,
+			.result.s32_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_BXOR,
+		},
+
+		/* Valid 64-bit AMO with C_AMO_OP_BXOR remapped. */
+		{
+			.dt = FI_INT64,
+			.src.s64_src = -4294967296,
+			.dst.s64_dst = 4294967296,
+			.result.s64_result = 0,
+			.amo_remap_to_pcie_fadd = C_AMO_OP_BXOR,
+		},
+	};
+	size_t param_sz = ARRAY_SIZE(params);
+
+	return cr_make_param_array(struct fi_pcie_fadd_test, params,
+				   param_sz);
+}
+
+ParameterizedTest(struct fi_pcie_fadd_test *params, pcie_atomic, fadd)
+{
+	int ret;
+	size_t amo_size;
+	uint64_t rkey = 0x1;
+	uint64_t nic_rkey = 0x2;
+	struct mem_region remote_window;
+	struct mem_region nic_remote_window;
+	union {
+		uint64_t u64_fetch;
+		int64_t s64_fetch;
+		uint32_t u32_fetch;
+		int32_t s32_fetch;
+	} fetch;
+	union {
+		uint64_t u64_fetch;
+		int64_t s64_fetch;
+		uint32_t u32_fetch;
+		int32_t s32_fetch;
+	} nic_fetch;
+	struct fi_msg_atomic msg = {};
+	struct fi_ioc ioc = {};
+	struct fi_rma_ioc rma_ioc = {};
+	struct fi_ioc fetch_ioc = {};
+	struct fi_cq_tagged_entry cqe;
+	uint64_t cur_cpu_fetch_cntr;
+	uint64_t new_cpu_fetch_cntr;
+	struct cxip_ep *cxi_ep;
+
+	if (params->dt == FI_INT32 || params->dt == FI_UINT32)
+		amo_size = 4;
+	else
+		amo_size = 8;
+
+	/* The AMO remap value must be set before libfabric domain is allocated.
+	 * Else, and inconsistent view of the AMO remap value will be read.
+	 */
+	set_amo_remap_to_pcie_fadd(params->amo_remap_to_pcie_fadd);
+	cxit_setup_rma();
+
+	/* PCIe AMOs not supported on netsim. */
+	cxi_ep = container_of(cxit_ep, struct cxip_ep, ep);
+	if (is_netsim(cxi_ep->ep_obj))
+		goto teardown;
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_DMAWR_CPU_FTCH_AMO_REQS,
+				 &cur_cpu_fetch_cntr, NULL);
+	cr_assert(ret == 0);
+
+	/* Create target MR and copy destantion contents into it. */
+	ret = mr_create(amo_size, FI_REMOTE_READ | FI_REMOTE_WRITE, 0, rkey,
+			&remote_window);
+	cr_assert(ret == FI_SUCCESS);
+	memcpy(remote_window.mem, &params->dst, amo_size);
+
+	/* Create another target MR to be used for NIC AMO SUM comparison to the
+	 * PCIe AMO.
+	 */
+	ret = mr_create(amo_size, FI_REMOTE_READ | FI_REMOTE_WRITE, 0, nic_rkey,
+			&nic_remote_window);
+	cr_assert(ret == FI_SUCCESS);
+	memcpy(nic_remote_window.mem, &params->dst, amo_size);
+
+	/* Fill in fetching AMO desciptors. */
+	ioc.addr = &params->src;
+	ioc.count = 1;
+
+	rma_ioc.key = rkey;
+	rma_ioc.count = 1;
+
+	fetch_ioc.addr = &fetch;
+	fetch_ioc.count = 1;
+
+	msg.datatype = params->dt;
+	msg.op = FI_SUM;
+	msg.msg_iov = &ioc;
+	msg.iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	msg.rma_iov = &rma_ioc;
+	msg.rma_iov_count = 1;
+
+	/* Issue PCIe fetch add. */
+	ret = fi_fetch_atomicmsg(cxit_ep, &msg, &fetch_ioc, NULL, 1,
+				 FI_TRANSMIT_COMPLETE | FI_COMPLETION |
+				 FI_CXI_PCIE_AMO);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = cxit_await_completion(cxit_tx_cq, &cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+	validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
+
+	/* Issue NIC fetching SUM AMO. */
+	if (params->amo_remap_to_pcie_fadd != C_AMO_OP_SUM) {
+		rma_ioc.key = nic_rkey;
+		fetch_ioc.addr = &nic_fetch;
+
+		ret = fi_fetch_atomicmsg(cxit_ep, &msg, &fetch_ioc, NULL, 1,
+					FI_TRANSMIT_COMPLETE | FI_COMPLETION);
+		cr_assert(ret == FI_SUCCESS);
+
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+		validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
+	}
+
+	if (params->dt == FI_INT32) {
+		/* Compare PCIe FADD to the expected values. */
+		cr_assert_eq(*((int32_t *)remote_window.mem),
+			     params->result.s32_result,
+			     "Unexpected remote AMO result: got=%d expected=%d\n",
+			     *((int32_t *)remote_window.mem),
+			     params->result.s32_result);
+		cr_assert_eq(fetch.s32_fetch, params->dst.s32_dst,
+			     "Unexpected fetch AMO result: got=%d expected=%d\n",
+			     fetch.s32_fetch, params->dst.s32_dst);
+
+		/* Compare PCIe FADD to the NIC fetch add/sum values. */
+		if (params->amo_remap_to_pcie_fadd != C_AMO_OP_SUM) {
+			cr_assert_eq(*((int32_t *)remote_window.mem),
+				     *((int32_t *)nic_remote_window.mem),
+				     "Unexpected remote AMO result: got=%d expected=%d\n",
+				     *((int32_t *)remote_window.mem),
+				     *((int32_t *)nic_remote_window.mem));
+			cr_assert_eq(fetch.s32_fetch, nic_fetch.s32_fetch,
+				     "Unexpected fetch AMO result: got=%d expected=%d\n",
+				     fetch.s32_fetch, nic_fetch.s32_fetch);
+		}
+	} else if (params->dt == FI_UINT32) {
+		/* Compare PCIe FADD to the expected values. */
+		cr_assert_eq(*((uint32_t *)remote_window.mem),
+			     params->result.u32_result,
+			     "Unexpected remote AMO result: got=%u expected=%u\n",
+			     *((uint32_t *)remote_window.mem),
+			     params->result.s32_result);
+		cr_assert_eq(fetch.u32_fetch, params->dst.u32_dst,
+			     "Unexpected fetch AMO result: got=%u expected=%u\n",
+			     fetch.u32_fetch, params->dst.u32_dst);
+
+		/* Compare PCIe FADD to the NIC fetch add/sum values. */
+		if (params->amo_remap_to_pcie_fadd != C_AMO_OP_SUM) {
+			cr_assert_eq(*((uint32_t *)remote_window.mem),
+				     *((uint32_t *)nic_remote_window.mem),
+				     "Unexpected remote AMO result: got=%u expected=%u\n",
+				     *((uint32_t *)remote_window.mem),
+				     *((uint32_t *)nic_remote_window.mem));
+			cr_assert_eq(fetch.u32_fetch, nic_fetch.u32_fetch,
+				     "Unexpected fetch AMO result: got=%u expected=%u\n",
+				      fetch.u32_fetch, nic_fetch.u32_fetch);
+		}
+	} else if (params->dt == FI_INT64) {
+		/* Compare PCIe FADD to the expected values. */
+		cr_assert_eq(*((int64_t *)remote_window.mem),
+			     params->result.s64_result,
+			     "Unexpected remote AMO result: got=%ld expected=%ld\n",
+			     *((int64_t *)remote_window.mem),
+			     params->result.s64_result);
+		cr_assert_eq(fetch.s64_fetch, params->dst.s64_dst,
+			     "Unexpected fetch AMO result: got=%ld expected=%ld\n",
+			     fetch.s64_fetch, params->dst.s64_dst);
+
+		/* Compare PCIe FADD to the NIC fetch add/sum values. */
+		if (params->amo_remap_to_pcie_fadd != C_AMO_OP_SUM) {
+			cr_assert_eq(*((int64_t *)remote_window.mem),
+				     *((int64_t *)nic_remote_window.mem),
+				     "Unexpected remote AMO result: got=%ld expected=%ld\n",
+				     *((int64_t *)remote_window.mem),
+				     *((int64_t *)nic_remote_window.mem));
+			cr_assert_eq(fetch.s64_fetch, nic_fetch.s64_fetch,
+				     "Unexpected fetch AMO result: got=%ld expected=%ld\n",
+				     fetch.s64_fetch, nic_fetch.s64_fetch);
+		}
+	} else {
+		/* Compare PCIe FADD to the expected values. */
+		cr_assert_eq(*((uint64_t *)remote_window.mem),
+			     params->result.u64_result,
+			     "Unexpected remote AMO result: got=%lu expected=%lu\n",
+			     *((uint64_t *)remote_window.mem),
+			     params->result.u64_result);
+		cr_assert_eq(fetch.u64_fetch, params->dst.u64_dst,
+			     "Unexpected fetch AMO result: got=%lu expected=%lu\n",
+			     fetch.u64_fetch, params->dst.u64_dst);
+
+		/* Compare PCIe FADD to the NIC fetch add/sum values. */
+		if (params->amo_remap_to_pcie_fadd != C_AMO_OP_SUM) {
+			cr_assert_eq(*((uint64_t *)remote_window.mem),
+				     *((uint64_t *)nic_remote_window.mem),
+				     "Unexpected remote AMO result: got=%lu expected=%lu\n",
+				     *((uint64_t *)remote_window.mem),
+				     *((uint64_t *)nic_remote_window.mem));
+			cr_assert_eq(fetch.u64_fetch, nic_fetch.u64_fetch,
+				     "Unexpected fetch AMO result: got=%lu expected=%lu\n",
+				     fetch.u64_fetch, nic_fetch.u64_fetch);
+		}
+	}
+
+	/* Counters take 1 second to refresh... */
+	sleep(1);
+
+	ret = dom_ops->cntr_read(&cxit_domain->fid,
+				 C_CNTR_IXE_DMAWR_CPU_FTCH_AMO_REQS,
+				 &new_cpu_fetch_cntr, NULL);
+	cr_assert(ret == 0);
+
+	cr_assert(cur_cpu_fetch_cntr + 1 == new_cpu_fetch_cntr);
+
+	mr_destroy(&nic_remote_window);
+	mr_destroy(&remote_window);
+
+teardown:
+	cxit_teardown_rma();
 }

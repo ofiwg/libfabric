@@ -820,6 +820,31 @@ void cxit_setup_rma_fd(void)
 	cr_assert(ret == 1);
 }
 
+#define CXI0_AMO_REMAP \
+	"/sys/class/cxi/cxi0/device/properties/amo_remap_to_pcie_fadd"
+
+void set_amo_remap_to_pcie_fadd(int amo_remap_to_pcie_fadd)
+{
+	FILE *fd;
+	int ret;
+
+	/* Assume open a single CXI device is present. */
+	fd = fopen(CXI0_AMO_REMAP, "w");
+	cr_assert(fd != NULL, "Failed to open %s: %d\n", CXI0_AMO_REMAP,
+		  -errno);
+
+	ret = fprintf(fd, "%d", amo_remap_to_pcie_fadd);
+	cr_assert(ret >= 0,
+		  "Failed to write AMO remap value: errno=%d\n", -errno);
+
+	fclose(fd);
+}
+
+void reset_amo_remap_to_pcie_fadd(void)
+{
+	set_amo_remap_to_pcie_fadd(-1);
+}
+
 static void cxit_setup_tx_alias_rma_impl(bool delivery_complete)
 {
 	int ret;
