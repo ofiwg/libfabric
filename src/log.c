@@ -227,6 +227,7 @@ static int ofi_logging_import(struct fid *fid)
 	if (impfid->ops->size < sizeof(struct fi_ops_log))
 		return -FI_EINVAL;
 
+	pthread_mutex_lock(&common_locks.ini_lock);
 	if (impfid->ops->enabled)
 		log_fid.ops->enabled = impfid->ops->enabled;
 	if (impfid->ops->ready)
@@ -235,6 +236,7 @@ static int ofi_logging_import(struct fid *fid)
 		log_fid.ops->log = impfid->ops->log;
 
 	impfid->fid.ops = &impfid_ops;
+	pthread_mutex_unlock(&common_locks.ini_lock);
 	return 0;
 }
 
