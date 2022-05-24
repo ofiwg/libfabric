@@ -914,15 +914,15 @@ static int efa_ep_hmem_check(struct efa_domain *efa_domain)
 	    efa_domain->hmem_support_status[FI_HMEM_CUDA].p2p_supported)
 		have_hmem = 1;
 	else
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-			"NVIDIA GPUDirect support is not available, but FI_HMEM was requested.\n");
+		FI_INFO(&rxr_prov, FI_LOG_EP_CTRL,
+			"NVIDIA GPUDirect support is not available.\n");
 
 	if (efa_domain->hmem_support_status[FI_HMEM_NEURON].initialized &&
 	    efa_domain->hmem_support_status[FI_HMEM_NEURON].p2p_supported)
 		have_hmem = 1;
 	else
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-			"AWS Neuron peer to peer support is not available, but FI_HMEM was requested.\n");
+		FI_INFO(&rxr_prov, FI_LOG_EP_CTRL,
+			"AWS Neuron peer to peer support is not available.\n");
 
 	if (!have_hmem) {
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
