@@ -234,7 +234,7 @@ static inline int recv_req_event_success(struct cxip_rxc *rxc,
 		    !(rxc->attr.caps & FI_SOURCE_ERR))
 			return cxip_cq_req_complete_addr(req, src_addr);
 
-		addr = malloc(sizeof(*addr));
+		addr = calloc(1, sizeof(*addr));
 		if (!addr)
 			return -FI_ENOMEM;
 

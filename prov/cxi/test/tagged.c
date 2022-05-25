@@ -5055,6 +5055,10 @@ Test(tagged_src_err, addr)
 	/* Receive should get an -FI_EAVAIL with source error info */
 	ret = cxit_await_completion(fid_rx_cq, &rx_cqe);
 	cr_assert_eq(ret, -FI_EAVAIL);
+	err_entry.err_data_size = sizeof(uint32_t);
+	err_entry.err_data = malloc(sizeof(uint32_t));
+	cr_assert(err_entry.err_data);
+
 	ret = fi_cq_readerr(fid_rx_cq, &err_entry, 0);
 	cr_assert_eq(ret, 1, "Readerr CQ %d\n", ret);
 
@@ -5094,6 +5098,8 @@ Test(tagged_src_err, addr)
 	/* Cleanup First EP */
 	cxit_teardown_tagged();
 	cxit_teardown_getinfo();
+
+	free(err_entry.err_data);
 }
 
 TestSuite(tagged_cq_wait, .init = cxit_setup_rma_fd,
