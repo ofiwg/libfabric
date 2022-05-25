@@ -60,14 +60,12 @@ int ofi_av_set_union(struct fid_av_set *dst, const struct fid_av_set *src)
 {
 	struct util_av_set *src_av_set;
 	struct util_av_set *dst_av_set;
-	size_t temp_count;
 	int i,j;
 
 	src_av_set = container_of(src, struct util_av_set, av_set_fid);
 	dst_av_set = container_of(dst, struct util_av_set, av_set_fid);
 
 	assert(src_av_set->av == dst_av_set->av);
-	temp_count = dst_av_set->fi_addr_count;
 
 	for (i = 0; i < src_av_set->fi_addr_count; i++) {
 		for (j = 0; j < dst_av_set->fi_addr_count; j++) {
@@ -76,12 +74,18 @@ int ofi_av_set_union(struct fid_av_set *dst, const struct fid_av_set *src)
 				break;
 		}
 		if (j == dst_av_set->fi_addr_count) {
-			dst_av_set->fi_addr_array[temp_count++] =
-				src_av_set->fi_addr_array[i];
+			if (dst_av_set->fi_addr_count >= dst_av_set->max_array_size) {
+				FI_INFO(dst_av_set->av->prov, FI_LOG_AV,
+					"av_set_union exceeds dst av addr array size\n");
+				return -FI_ENOMEM;
+			}
+			dst_av_set->fi_addr_array[dst_av_set->fi_addr_count++] =
+							src_av_set->fi_addr_array[i];
+			FI_DBG(dst_av_set->av->prov, FI_LOG_AV,
+				"av_set_union includes fi_addr: %" PRIu64 "\n",
+				src_av_set->fi_addr_array[i]);
 		}
 	}
-
-	dst_av_set->fi_addr_count = temp_count;
 	return FI_SUCCESS;
 }
 
@@ -150,7 +154,14 @@ int ofi_av_set_insert(struct fid_av_set *set, fi_addr_t addr)
 		if (av_set->fi_addr_array[i] == addr)
 			return -FI_EINVAL;
 	}
+	if (av_set->fi_addr_count >= av_set->max_array_size)  {
+		FI_INFO(av_set->av->prov, FI_LOG_AV,
+			"av_set_insert exceeds av addr array size\n");
+		return -FI_ENOMEM;
+    }
 	av_set->fi_addr_array[av_set->fi_addr_count++] = addr;
+	FI_DBG(av_set->av->prov, FI_LOG_AV,
+            "av_set_insert fi_addr: %" PRIu64 "\n", addr);
 	return FI_SUCCESS;
 }
 
@@ -1157,7 +1168,7 @@ ofi_av_set_create(struct util_av *av, struct fi_av_set_attr *attr, void *context
 				       sizeof(*av_set->fi_addr_array));
 	if (!av_set->fi_addr_array)
 		goto destroy;
-
+	av_set->max_array_size = max_size;
 	for (i = attr->start_addr; i <= attr->end_addr; i += attr->stride) {
 		av_set->fi_addr_array[av_set->fi_addr_count++] = av->av_set ?
 			av->av_set->fi_addr_array[i] : i;
