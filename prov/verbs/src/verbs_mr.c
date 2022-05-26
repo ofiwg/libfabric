@@ -78,7 +78,7 @@ struct ibv_mr *vrb_mr_ibv_reg_dmabuf_mr(struct ibv_pd *pd, const void *buf,
 	if (err)
 		return NULL;
 
-	err = ze_hmem_get_base_addr((void *)buf, &base, &len);
+	err = ze_hmem_get_base_addr((void *)buf, &base, NULL);
 	if (err)
 		return NULL;
 
@@ -97,15 +97,19 @@ struct ibv_mr *vrb_mr_ibv_reg_dmabuf_mr(struct ibv_pd *pd, const void *buf,
 failover:
 	mr = ibv_reg_mr(pd, (void *)buf, len, vrb_access);
 	if (!mr) {
-		if (saved_errno)
+		if (saved_errno) {
+			FI_INFO(&vrb_prov, FI_LOG_MR,
+				"Failover failed: ibv_reg_mr(%p, %zd) error %d\n",
+				buf, len, errno);
 			errno = saved_errno;
+		}
 		return NULL;
 	}
 
 	if (failover_policy == TRY) {
 		failover_policy = ALWAYS;
 		FI_INFO(&vrb_prov, FI_LOG_MR,
-			"Failover on: ibv_reg_dmabuf_mr() ==> ibv_reg_mr\n");
+			"Failover on: ibv_reg_dmabuf_mr() ==> ibv_reg_mr()\n");
 	}
 	return mr;
 }
