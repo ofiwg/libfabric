@@ -507,16 +507,10 @@ void cxip_ptelist_buf_put(struct cxip_ptelist_buf *buf, bool repost)
 		 * for reuse. This will help bursty traffic from
 		 * holding on to unnecessary buffers.
 		 */
-
-		/* TODO: To allow for the number of REQUEST list buffers to
-		 * shrink we need to address cxip_req_buf_progress_pending_ux()
-		 * to recognize the buffer can be unreferenced within the
-		 * loop by the function cxip_req_buf_ux_free().
-		 */
-		if (buf->pool->attr.list_type == C_PTL_LIST_REQUEST ||
-		    !buf->pool->attr.max_cached ||
-		    ofi_atomic_get32(&buf->pool->bufs_allocated) <
-		    buf->pool->attr.max_cached) {
+		if (!buf->pool->attr.max_cached ||
+		    (ofi_atomic_get32(&buf->pool->bufs_linked) +
+		     ofi_atomic_get32(&buf->pool->bufs_free) <
+		     buf->pool->attr.max_cached)) {
 
 			dlist_remove(&buf->buf_entry);
 			dlist_insert_tail(&buf->buf_entry,

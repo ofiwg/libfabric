@@ -251,6 +251,7 @@ static int cxip_req_buf_process_put_event(struct cxip_ptelist_buf *buf,
 	struct cxip_ux_send *ux;
 	int ret = FI_SUCCESS;
 	struct cxip_rxc *rxc = buf->rxc;
+	struct cxip_ptelist_bufpool *pool = buf->pool;
 
 	assert(event->tgt_long.mlength >= CXIP_REQ_BUF_HEADER_MIN_SIZE);
 
@@ -280,7 +281,7 @@ static int cxip_req_buf_process_put_event(struct cxip_ptelist_buf *buf,
 		 * buffers processing their pending unexpected lists until a
 		 * request buffer is not consumed.
 		 */
-		while ((buf = dlist_first_entry_or_null(&buf->pool->active_bufs,
+		while ((buf = dlist_first_entry_or_null(&pool->active_bufs,
 							struct cxip_ptelist_buf,
 							buf_entry))) {
 			cxip_req_buf_progress_pending_ux(buf);
