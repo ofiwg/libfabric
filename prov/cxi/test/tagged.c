@@ -4973,6 +4973,7 @@ Test(tagged_src_err, addr)
 	struct fid_av *fid_av;
 	struct cxip_addr ep_addr;
 	fi_addr_t fi_dest_ep_addr;
+	fi_addr_t fi_src_err_ep_addr;
 	size_t addr_len = sizeof(ep_addr);
 	int ret;
 	uint8_t *recv_buf,
@@ -5064,7 +5065,8 @@ Test(tagged_src_err, addr)
 
 	/* Insert address from FI_SOURCE_ERR into AV */
 	ret = fi_av_insert(fid_av, (void *)err_entry.err_data, 1,
-			   NULL, 0, NULL);
+			   &fi_src_err_ep_addr, 0, NULL);
+
 	cr_assert_eq(ret, 1, "Second EP AV add src address %d\n", ret);
 
 	/* Wait for TX */
@@ -5087,6 +5089,26 @@ Test(tagged_src_err, addr)
 
 	/* Wait for TX */
 	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+	cr_assert_eq(ret, 1, "Send completion %d\n", ret);
+
+	/* Validate that the inserted address may be used in send,
+	 * i.e. EP2 can now send to EP1.
+	 */
+	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL, FI_ADDR_UNSPEC, 0,
+		       0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+	sleep(1);
+
+	ret = fi_tsend(fid_ep, send_buf, send_len, NULL, fi_src_err_ep_addr, 0,
+		       NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+
+	/* Receive should complete successfully */
+	ret = cxit_await_completion(cxit_rx_cq, &rx_cqe);
+	cr_assert_eq(ret, 1);
+
+	/* Wait for TX */
+	ret = cxit_await_completion(fid_tx_cq, &tx_cqe);
 	cr_assert_eq(ret, 1, "Send completion %d\n", ret);
 
 	/* Cleanup Second EP */
