@@ -632,6 +632,11 @@ static void process_cm_ctx(struct util_wait *wait,
 	}
 }
 
+void tcpx_run_conn(struct tcpx_conn_handle *conn, bool pin, bool pout, bool perr)
+{
+	/* TODO: placeholder */
+}
+
 void tcpx_conn_mgr_run(struct util_eq *util_eq)
 {
 	struct util_wait_fd *wait_fd;

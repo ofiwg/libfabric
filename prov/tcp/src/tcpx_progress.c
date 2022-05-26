@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2017-2022 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -853,3 +853,332 @@ static ssize_t (*tcpx_start_op[ofi_op_write + 1])(struct tcpx_ep *ep) = {
 	[ofi_op_read_rsp] = tcpx_op_read_rsp,
 	[ofi_op_write] = tcpx_op_write,
 };
+
+
+/* We need to progress receives in the case where we're waiting
+ * on the application to post a buffer to consume a receive
+ * that we've already read from the kernel.  If the message is
+ * of length 0, there's no additional data to read, so calling
+ * poll without forcing progress can result in application hangs.
+ */
+static bool tcpx_active_wait(struct tcpx_ep *ep)
+{
+	return ofi_bsock_readable(&ep->bsock) ||
+	       (ep->cur_rx.handler && !ep->cur_rx.entry);
+}
+
+void tcpx_run_pep(struct tcpx_pep *pep, bool pin, bool pout, bool perr)
+{
+}
+
+void tcpx_run_ep(struct tcpx_ep *ep, bool pin, bool pout, bool perr)
+{
+	ofi_mutex_lock(&ep->lock);
+	if (perr)
+		tcpx_progress_async(ep);
+	if (pin)
+		tcpx_progress_rx(ep);
+	if (pout)
+		tcpx_progress_tx(ep);
+	ofi_mutex_unlock(&ep->lock);
+}
+
+void tcpx_run_progress(struct tcpx_progress *progress, bool internal)
+{
+	struct ofi_epollfds_event events[TCPX_MAX_EVENTS];
+	struct dlist_entry *item, *tmp;
+	struct tcpx_ep *ep;
+	struct fid *fid;
+	int nfds, i;
+	bool pin, pout, perr;
+
+	ofi_mutex_lock(&progress->lock);
+	dlist_foreach_safe(&progress->active_wait_list, item, tmp) {
+		ep = container_of(item, struct tcpx_ep, progress_entry);
+
+		ofi_mutex_lock(&ep->lock);
+
+		if (tcpx_active_wait(ep)) {
+			assert(ep->state == TCPX_CONNECTED);
+			tcpx_progress_rx(ep);
+		} else {
+			dlist_remove_init(&ep->progress_entry);
+		}
+
+		tcpx_update_poll(ep);
+		ofi_mutex_unlock(&ep->lock);
+	}
+
+
+	nfds = ofi_pollfds_wait(progress->pollfds, events,
+				TCPX_MAX_EVENTS, 0);
+	if (nfds <= 0)
+		goto unlock;
+
+	for (i = 0; i < nfds; i++) {
+		fid = events[i].data.ptr;
+		assert(fid);
+
+		pin = events[i].events & POLLIN;
+		pout = events[i].events & POLLOUT;
+		perr = events[i].events & POLLERR;
+
+		switch (fid->fclass) {
+		case FI_CLASS_EP:
+			tcpx_run_ep(events[i].data.ptr, pin, pout, perr);
+
+			/* TODO: update poll as part of progress */
+			ofi_mutex_lock(&ep->lock);
+			tcpx_update_poll(ep);
+			ofi_mutex_unlock(&ep->lock);
+			break;
+		case FI_CLASS_PEP:
+			tcpx_run_pep(events[i].data.ptr, pin, pout, perr);
+			break;
+		case TCPX_CLASS_CM:
+			tcpx_run_conn(events[i].data.ptr, pin, pout, perr);
+			break;
+		default:
+			assert(fid->fclass == TCPX_CLASS_PROGRESS);
+			/* Only allow the internal thread to clear the signal.
+			 * This ensures that its poll set is up to date.
+			 */
+			if (internal)
+				fd_signal_reset(&progress->signal);
+			break;
+		}
+	}
+unlock:
+	ofi_mutex_unlock(&progress->lock);
+}
+
+int tcpx_trywait(struct tcpx_progress *progress)
+{
+	// struct dlist_entry *item;
+	// struct tcpx_ep *ep;
+	int ret;
+
+	ofi_mutex_lock(&progress->lock);
+	ret = dlist_empty(&progress->active_wait_list) ? 0 : -FI_EAGAIN;
+	// dlist_foreach(&progress->ep_list, item) {
+	// 	ep = container_of(item, struct tcpx_ep, progress_entry);
+
+	// 	ofi_mutex_lock(&ep->lock);
+	// 	if (tcpx_active_wait(ep))
+	// 		ret = -FI_EAGAIN;
+	// 	ofi_mutex_unlock(&ep->lock);
+	// 	if (ret)
+	// 		break;
+	// }
+	ofi_mutex_unlock(&progress->lock);
+	return ret;
+}
+
+void tcpx_update_poll(struct tcpx_ep *ep)
+{
+	struct tcpx_progress *progress;
+	uint32_t events;
+
+	progress = tcpx_ep2_progress(ep);
+	assert(ofi_mutex_held(&progress->lock));
+	assert(ofi_mutex_held(&ep->lock));
+	if ((tcpx_tx_pending(ep) && ep->pollout_set) ||
+	    (!tcpx_tx_pending(ep) && !ep->pollout_set))
+		return;
+
+	ep->pollout_set = tcpx_tx_pending(ep);
+	events = ep->pollout_set ? POLLIN | POLLOUT : POLLIN;
+
+	(void) ofi_pollfds_mod(progress->pollfds, ep->bsock.sock,
+			       events, &ep->util_ep.ep_fid.fid);
+	fd_signal_set(&progress->signal);
+}
+
+/* If we're only using auto progress to drive transfers, we end up with an
+ * unfortunate choice.  See the comment in the progress function about
+ * waiting for the application to post a buffer.  If that situation occurs,
+ * then we either need for the progress thread to spin until the application
+ * posts the necessary receive buffer, or we block the thread.  However, if we
+ * block the thread, there's no good way to wake-up the thread to resume
+ * processing.  We could set some state that we check on every posted receive
+ * operation and use that to signal the thread, but that introduces overhead
+ * to every receive call.  As an alternative, we wake-up the thread
+ * periodically, so it can check for progress.
+ */
+static void *tcpx_auto_progress(void *arg)
+{
+	struct tcpx_progress *progress = arg;
+	struct ofi_epollfds_event event;
+	int nfds;
+
+	FI_INFO(&tcpx_prov, FI_LOG_DOMAIN, "progress thread starting\n");
+	ofi_mutex_lock(&progress->lock);
+	while (progress->auto_progress) {
+		ofi_mutex_unlock(&progress->lock);
+
+		/* We can't hold the progress lock around waiting, or we
+		 * can hang another thread trying to obtain the lock.  But
+		 * the poll fds may change while we're waiting for an event.
+		 * To avoid possibly processing an event for an object that
+		 * we just removed from the poll fds, which could access freed
+		 * memory, we must re-acquire the progress lock and re-read
+		 * any queued events before processing it.
+		 */
+		nfds = ofi_pollfds_wait(progress->pollfds, &event, 1, TCPX_SLEEP);
+
+		if (nfds >= 0)
+			tcpx_run_progress(progress, true);
+		ofi_mutex_lock(&progress->lock);
+	}
+	ofi_mutex_unlock(&progress->lock);
+	FI_INFO(&tcpx_prov, FI_LOG_DOMAIN, "progress thread exiting\n");
+	return NULL;
+}
+
+static int
+tcpx_monitor_sock(struct tcpx_progress *progress, SOCKET sock, uint32_t events,
+		  struct fid *fid)
+{
+	int ret;
+
+	ofi_mutex_lock(&progress->lock);
+	ret = ofi_pollfds_add(progress->pollfds, sock, events, fid);
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Failed to add fd to progress\n");
+	}
+	ofi_mutex_unlock(&progress->lock);
+	return ret;
+}
+
+static void tcpx_halt_sock(struct tcpx_progress *progress, SOCKET sock)
+{
+	int ret;
+
+	ofi_mutex_lock(&progress->lock);
+	ret = ofi_pollfds_del(progress->pollfds, sock);
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"Failed to del fd from progress\n");
+	}
+	ofi_mutex_unlock(&progress->lock);
+}
+
+int tcpx_monitor_ep(struct tcpx_ep *ep, uint32_t events)
+{
+	return tcpx_monitor_sock(tcpx_ep2_progress(ep), ep->bsock.sock, events,
+				 &ep->util_ep.ep_fid.fid);
+}
+
+void tcpx_halt_ep(struct tcpx_ep *ep)
+{
+	tcpx_halt_sock(tcpx_ep2_progress(ep), ep->bsock.sock);
+}
+
+int tcpx_monitor_pep(struct tcpx_pep *pep)
+{
+	return tcpx_monitor_sock(tcpx_pep2_progress(pep), pep->sock, POLLIN,
+				 &pep->util_pep.pep_fid.fid);
+}
+
+void tcpx_halt_pep(struct tcpx_pep *pep)
+{
+	tcpx_halt_sock(tcpx_pep2_progress(pep), pep->sock);
+}
+
+int tcpx_monitor_conn(struct tcpx_conn_handle *conn)
+{
+	return -FI_ENOSYS;
+}
+
+void tcpx_halt_conn(struct tcpx_conn_handle *conn)
+{
+}
+
+int tcpx_start_progress(struct tcpx_progress *progress)
+{
+	int ret;
+
+	ofi_mutex_lock(&progress->lock);
+	if (progress->auto_progress) {
+		ret = 0;
+		goto unlock;
+	}
+
+	progress->auto_progress = true;
+	ret = pthread_create(&progress->thread, NULL, tcpx_auto_progress,
+			     progress);
+	if (ret) {
+		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
+			"unable to start progress thread\n");
+		progress->auto_progress = false;
+		ret = -ret;
+	}
+
+unlock:
+	ofi_mutex_unlock(&progress->lock);
+	return ret;
+}
+
+void tcpx_stop_progress(struct tcpx_progress *progress)
+{
+	ofi_mutex_lock(&progress->lock);
+	if (!progress->auto_progress) {
+		ofi_mutex_unlock(&progress->lock);
+		return;
+	}
+
+	progress->auto_progress = false;
+	fd_signal_set(&progress->signal);
+	ofi_mutex_unlock(&progress->lock);
+	(void) pthread_join(progress->thread, NULL);
+}
+
+int tcpx_init_progress(struct tcpx_progress *progress)
+{
+	int ret;
+
+	progress->fid.fclass = TCPX_CLASS_PROGRESS;
+	progress->auto_progress = false;
+	dlist_init(&progress->ep_list);
+	dlist_init(&progress->active_wait_list);
+
+	ret = fd_signal_init(&progress->signal);
+	if (ret)
+		return ret;
+
+	ret = ofi_mutex_init(&progress->lock);
+	if (ret)
+		goto free_sig;
+
+
+	ret = ofi_pollfds_create(&progress->pollfds);
+	if (ret)
+		goto destroy;
+
+	ret = ofi_pollfds_add(progress->pollfds,
+			      progress->signal.fd[FI_READ_FD], POLLIN,
+			      &progress->fid);
+	if (ret) {
+		ofi_pollfds_close(progress->pollfds);
+		goto destroy;
+	}
+
+	return 0;
+
+destroy:
+	ofi_mutex_destroy(&progress->lock);
+free_sig:
+	fd_signal_free(&progress->signal);
+	return ret;
+}
+
+void tcpx_close_progress(struct tcpx_progress *progress)
+{
+	assert(dlist_empty(&progress->ep_list));
+	assert(dlist_empty(&progress->active_wait_list));
+	tcpx_stop_progress(progress);
+	ofi_pollfds_close(progress->pollfds);
+	ofi_mutex_destroy(&progress->lock);
+	fd_signal_free(&progress->signal);
+}

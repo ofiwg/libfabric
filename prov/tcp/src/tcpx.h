@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2017-2022 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -65,7 +65,9 @@
 
 
 #define TCPX_MAX_INJECT		128
+#define TCPX_MAX_EVENTS		1024
 #define MAX_POLL_EVENTS		100
+#define TCPX_SLEEP		2000
 #define TCPX_MIN_MULTI_RECV	16384
 #define TCPX_PORT_MAX_RANGE	(USHRT_MAX)
 
@@ -170,6 +172,7 @@ enum tcpx_cm_state {
 #define OFI_PROV_SPECIFIC_TCP (0x7cb << 16)
 enum {
 	TCPX_CLASS_CM = OFI_PROV_SPECIFIC_TCP,
+	TCPX_CLASS_PROGRESS,
 };
 
 struct tcpx_cm_context {
@@ -256,7 +259,7 @@ struct tcpx_ep {
 	OFI_DBG_VAR(uint8_t, tx_id)
 	OFI_DBG_VAR(uint8_t, rx_id)
 
-	struct dlist_entry	ep_entry;
+	struct dlist_entry	progress_entry; /* protected by progress->lock */
 	struct slist		rx_queue;
 	struct slist		tx_queue;
 	struct slist		priority_queue;
@@ -282,9 +285,62 @@ struct tcpx_ep {
 	bool			pollout_set;
 };
 
+struct tcpx_progress {
+	struct fid		fid;
+	ofi_mutex_t		lock;
+	struct dlist_entry	ep_list;
+	struct dlist_entry	active_wait_list;
+
+	struct fd_signal	signal;
+	struct ofi_pollfds	*pollfds;
+
+	pthread_t		thread;
+	bool			auto_progress;
+};
+
+int tcpx_init_progress(struct tcpx_progress *progress);
+void tcpx_close_progress(struct tcpx_progress *progress);
+int tcpx_start_progress(struct tcpx_progress *progress);
+void tcpx_stop_progress(struct tcpx_progress *progress);
+
+void tcpx_run_progress(struct tcpx_progress *progress, bool internal);
+void tcpx_run_ep(struct tcpx_ep *ep, bool pin, bool pout, bool perr);
+void tcpx_run_pep(struct tcpx_pep *pep, bool pin, bool pout, bool perr);
+void tcpx_run_conn(struct tcpx_conn_handle *conn, bool pin, bool pout, bool perr);
+
+int tcpx_trywait(struct tcpx_progress *progress);
+void tcpx_update_poll(struct tcpx_ep *ep);
+
+int tcpx_monitor_ep(struct tcpx_ep *ep, uint32_t events);
+void tcpx_halt_ep(struct tcpx_ep *ep);
+int tcpx_monitor_pep(struct tcpx_pep *pep);
+void tcpx_halt_pep(struct tcpx_pep *pep);
+int tcpx_monitor_conn(struct tcpx_conn_handle *conn);
+void tcpx_halt_conn(struct tcpx_conn_handle *conn);
+
+
 struct tcpx_fabric {
 	struct util_fabric	util_fabric;
+	struct tcpx_progress	progress;
 };
+
+static inline struct tcpx_progress *tcpx_ep2_progress(struct tcpx_ep *ep)
+{
+	struct tcpx_fabric *fabric;
+
+	fabric = container_of(ep->util_ep.domain->fabric,
+			      struct tcpx_fabric, util_fabric);
+	return &fabric->progress;
+}
+
+static inline struct tcpx_progress *tcpx_pep2_progress(struct tcpx_pep *pep)
+{
+	struct tcpx_fabric *fabric;
+
+	fabric = container_of(pep->util_pep.fabric,
+			      struct tcpx_fabric, util_fabric);
+	return &fabric->progress;
+}
 
 
 /* tcpx_xfer_entry::ctrl_flags */

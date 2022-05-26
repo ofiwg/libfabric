@@ -62,6 +62,7 @@ static int tcpx_fabric_close(fid_t fid)
 	if (ret)
 		return ret;
 
+	tcpx_close_progress(&fabric->progress);
 	free(fabric);
 	return 0;
 }
@@ -86,14 +87,22 @@ int tcpx_create_fabric(struct fi_fabric_attr *attr,
 
 	ret = ofi_fabric_init(&tcpx_prov, tcpx_info.fabric_attr, attr,
 			      &fabric->util_fabric, context);
-	if (ret) {
-		free(fabric);
-		return ret;
-	}
+	if (ret)
+		goto free;
+
+	ret = tcpx_init_progress(&fabric->progress);
+	if (ret)
+		goto close;
 
 	fabric->util_fabric.fabric_fid.fid.ops = &tcpx_fabric_fi_ops;
 	fabric->util_fabric.fabric_fid.ops = &tcpx_fabric_ops;
 	*fabric_fid = &fabric->util_fabric.fabric_fid;
 
 	return 0;
+
+close:
+	(void) ofi_fabric_close(&fabric->util_fabric);
+free:
+	free(fabric);
+	return ret;
 }
