@@ -542,19 +542,14 @@ disable:
 	tcpx_free_cm_ctx(cm_ctx);
 }
 
-static void tcpx_accept(struct util_wait *wait,
-			struct tcpx_cm_context *cm_ctx)
+void tcpx_accept(struct tcpx_pep *pep)
 {
 	struct tcpx_conn_handle *handle;
 	struct tcpx_cm_context *rx_req_cm_ctx;
-	struct tcpx_pep *pep;
 	SOCKET sock;
 	int ret;
 
 	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "accepting connection\n");
-	assert(cm_ctx->hfid->fclass == FI_CLASS_PEP);
-	pep = container_of(cm_ctx->hfid, struct tcpx_pep, util_pep.pep_fid.fid);
-
 	sock = accept(pep->sock, NULL, 0);
 	if (sock < 0) {
 		if (!OFI_SOCK_TRY_ACCEPT_AGAIN(ofi_sockerr())) {
@@ -579,7 +574,7 @@ static void tcpx_accept(struct util_wait *wait,
 	handle->fid.fclass = FI_CLASS_CONNREQ;
 	handle->pep = pep;
 
-	ret = ofi_wait_add_fd(wait, sock, POLLIN,
+	ret = ofi_wait_add_fd(pep->util_pep.eq->wait, sock, POLLIN,
 			      tcpx_eq_wait_try_func,
 			      NULL, (void *) rx_req_cm_ctx);
 	if (ret)
@@ -598,10 +593,6 @@ static void process_cm_ctx(struct util_wait *wait,
 			   struct tcpx_cm_context *cm_ctx)
 {
 	switch (cm_ctx->state) {
-	case TCPX_CM_LISTENING:
-		assert(cm_ctx->hfid->fclass == FI_CLASS_PEP);
-		tcpx_accept(wait, cm_ctx);
-		break;
 	case TCPX_CM_CONNECTING:
 		assert((cm_ctx->hfid->fclass == FI_CLASS_EP) &&
 		       (container_of(cm_ctx->hfid, struct tcpx_ep,

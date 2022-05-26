@@ -169,6 +169,16 @@ enum tcpx_cm_state {
 	/* CM context is freed once connected */
 };
 
+enum tcpx_state {
+	TCPX_IDLE,
+	TCPX_CONNECTING,
+	TCPX_RCVD_REQ,
+	TCPX_ACCEPTING,
+	TCPX_CONNECTED,
+	TCPX_DISCONNECTED,
+	TCPX_LISTENING,
+};
+
 #define OFI_PROV_SPECIFIC_TCP (0x7cb << 16)
 enum {
 	TCPX_CLASS_CM = OFI_PROV_SPECIFIC_TCP,
@@ -202,17 +212,10 @@ struct tcpx_pep {
 	struct util_pep 	util_pep;
 	struct fi_info		*info;
 	SOCKET			sock;
-	struct tcpx_cm_context	cm_ctx;
+	enum tcpx_state		state;
 };
 
-enum tcpx_state {
-	TCPX_IDLE,
-	TCPX_CONNECTING,
-	TCPX_RCVD_REQ,
-	TCPX_ACCEPTING,
-	TCPX_CONNECTED,
-	TCPX_DISCONNECTED,
-};
+void tcpx_accept(struct tcpx_pep *pep);
 
 struct tcpx_cur_rx {
 	union {
@@ -305,7 +308,6 @@ void tcpx_stop_progress(struct tcpx_progress *progress);
 
 void tcpx_run_progress(struct tcpx_progress *progress, bool internal);
 void tcpx_run_ep(struct tcpx_ep *ep, bool pin, bool pout, bool perr);
-void tcpx_run_pep(struct tcpx_pep *pep, bool pin, bool pout, bool perr);
 void tcpx_run_conn(struct tcpx_conn_handle *conn, bool pin, bool pout, bool perr);
 
 int tcpx_trywait(struct tcpx_progress *progress);

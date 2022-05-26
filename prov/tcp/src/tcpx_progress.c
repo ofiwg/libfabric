@@ -867,10 +867,6 @@ static bool tcpx_active_wait(struct tcpx_ep *ep)
 	       (ep->cur_rx.handler && !ep->cur_rx.entry);
 }
 
-void tcpx_run_pep(struct tcpx_pep *pep, bool pin, bool pout, bool perr)
-{
-}
-
 void tcpx_run_ep(struct tcpx_ep *ep, bool pin, bool pout, bool perr)
 {
 	ofi_mutex_lock(&ep->lock);
@@ -933,7 +929,7 @@ void tcpx_run_progress(struct tcpx_progress *progress, bool internal)
 			ofi_mutex_unlock(&ep->lock);
 			break;
 		case FI_CLASS_PEP:
-			tcpx_run_pep(events[i].data.ptr, pin, pout, perr);
+			tcpx_accept(events[i].data.ptr);
 			break;
 		case TCPX_CLASS_CM:
 			tcpx_run_conn(events[i].data.ptr, pin, pout, perr);

@@ -876,9 +876,9 @@ static int tcpx_pep_fi_close(struct fid *fid)
 	struct tcpx_pep *pep;
 
 	pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid.fid);
-	if (pep->util_pep.eq)
-		ofi_wait_del_fd(pep->util_pep.eq->wait, pep->sock);
 
+	if (pep->state == TCPX_LISTENING)
+		tcpx_halt_pep(pep);
 	ofi_close_socket(pep->sock);
 	ofi_pep_close(&pep->util_pep);
 	fi_freeinfo(pep->info);
@@ -961,6 +961,11 @@ static int tcpx_pep_listen(struct fid_pep *pep_fid)
 	int ret;
 
 	pep = container_of(pep_fid, struct tcpx_pep, util_pep.pep_fid);
+	if (pep->state != TCPX_IDLE) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
+			"passive endpoint is not idle\n");
+		return -FI_EINVAL;
+	}
 
 	/* arbitrary backlog value to support larger scale jobs */
 	if (listen(pep->sock, 4096)) {
@@ -969,10 +974,9 @@ static int tcpx_pep_listen(struct fid_pep *pep_fid)
 		return -ofi_sockerr();
 	}
 
-	ret = ofi_wait_add_fd(pep->util_pep.eq->wait, pep->sock,
-			      POLLIN, tcpx_eq_wait_try_func,
-			      NULL, &pep->cm_ctx);
-
+	ret = tcpx_monitor_pep(pep);
+	if (!ret)
+		pep->state = TCPX_LISTENING;
 	return ret;
 }
 
@@ -1085,11 +1089,8 @@ int tcpx_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		goto err2;
 	}
 
-	pep->cm_ctx.fid.fclass = TCPX_CLASS_CM;
-	pep->cm_ctx.hfid = &pep->util_pep.pep_fid.fid;
-	pep->cm_ctx.state = TCPX_CM_LISTENING;
-	pep->cm_ctx.cm_data_sz = 0;
 	pep->sock = INVALID_SOCKET;
+	pep->state = TCPX_IDLE;
 
 	if (info->src_addr) {
 		ret = tcpx_pep_sock_create(pep);

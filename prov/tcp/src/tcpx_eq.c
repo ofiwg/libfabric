@@ -38,10 +38,13 @@
 static ssize_t tcpx_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 			    void *buf, size_t len, uint64_t flags)
 {
+	struct tcpx_fabric *fabric;
 	struct util_eq *eq;
 
 	eq = container_of(eq_fid, struct util_eq, eq_fid);
+	fabric = container_of(eq->fabric, struct tcpx_fabric, util_fabric);
 
+	tcpx_run_progress(&fabric->progress, false);
 	tcpx_conn_mgr_run(eq);
 
 	return ofi_eq_read(eq_fid, event, buf, len, flags);
@@ -83,11 +86,13 @@ static struct fi_ops tcpx_eq_fi_ops = {
 int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		   struct fid_eq **eq_fid, void *context)
 {
+	struct tcpx_fabric *fabric;
 	struct tcpx_eq *eq;
 	struct fi_wait_attr wait_attr;
 	struct fid_wait *wait;
 	int ret;
 
+	fabric = container_of(fabric_fid, struct tcpx_fabric, util_fabric);
 	eq = calloc(1, sizeof(*eq));
 	if (!eq)
 		return -FI_ENOMEM;
@@ -119,6 +124,13 @@ int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		eq->util_eq.wait = container_of(wait, struct util_wait,
 					wait_fid);
 	}
+
+	if (attr->wait_obj != FI_WAIT_NONE) {
+		ret = tcpx_start_progress(&fabric->progress);
+		if (ret)
+			goto err3;
+	}
+
 	*eq_fid = &eq->util_eq.eq_fid;
 	return 0;
 err3:
