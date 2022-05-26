@@ -4889,33 +4889,35 @@ ParameterizedTest(struct multi_tc_params *param, tagged_tclass, multi_tc,
 
 TestSuite(tagged_src_err, .timeout = CXIT_DEFAULT_TIMEOUT);
 
-Test(tagged_src_err, cap_exists)
+Test(tagged_src_err, cap_not_requested)
 {
 	struct fi_info *info;
 	int ret;
 
-	/* No hints, both FI_SOURCE and FI_SOURCE_ERR should be set */
+	/* No hints, both FI_SOURCE and FI_SOURCE_ERR should be removed
+	 * since they are secondary capabilities that impact performance.
+	 */
 	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 			 cxit_node, cxit_service, cxit_flags, NULL,
 			 &info);
 	cr_assert(ret == FI_SUCCESS);
-	cr_assert_eq(info->caps & FI_SOURCE, FI_SOURCE, "FI_SOURCE");
-	cr_assert_eq(info->caps & FI_SOURCE_ERR, FI_SOURCE_ERR,
-		     "FI_SOURCE_ERR");
+	cr_assert_eq(info->caps & FI_SOURCE, 0, "FI_SOURCE");
+	cr_assert_eq(info->caps & FI_SOURCE_ERR, 0, "FI_SOURCE_ERR");
 	fi_freeinfo(info);
 
 	cxit_setup_getinfo();
 	cxit_fi_hints->caps = 0;
 
-	/* No caps, both FI_SOURCE and FI_SOURCE_ERR should be set */
+	/* No caps, both FI_SOURCE and FI_SOURCE_ERR should not be set since
+	 * they are secondary capabilities and they impact performance.
+	 */
 	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
 			 &info);
 	cr_assert(ret == FI_SUCCESS);
 
-	cr_assert_eq(info->caps & FI_SOURCE, FI_SOURCE, "FI_SOURCE");
-	cr_assert_eq(info->caps & FI_SOURCE_ERR, FI_SOURCE_ERR,
-		     "FI_SOURCE_ERR");
+	cr_assert_eq(info->caps & FI_SOURCE, 0, "FI_SOURCE");
+	cr_assert_eq(info->caps & FI_SOURCE_ERR, 0, "FI_SOURCE_ERR");
 
 	fi_freeinfo(info);
 	cxit_teardown_getinfo();
@@ -4926,9 +4928,8 @@ Test(tagged_src_err, hints_check)
 	struct fi_info *info;
 	int ret;
 
-	cxit_setup_getinfo();
-
 	/* If only FI_SOURCE then FI_SOURCE_ERR should not be set */
+	cxit_setup_getinfo();
 	cxit_fi_hints->caps = FI_MSG | FI_SOURCE;
 	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
@@ -4938,6 +4939,35 @@ Test(tagged_src_err, hints_check)
 	cr_assert_eq(info->caps & FI_SOURCE, FI_SOURCE, "FI_SOURCE");
 	cr_assert_eq(info->caps & FI_SOURCE_ERR, 0, "FI_SOURCE_ERR");
 
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+
+	/* Validate FI_SOURCE are set if FI_SOURCE_ERR specified in hints */
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = FI_MSG | FI_SOURCE | FI_SOURCE_ERR;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+
+	cr_assert_eq(info->caps & FI_SOURCE, FI_SOURCE, "FI_SOURCE");
+	cr_assert_eq(info->caps & FI_SOURCE_ERR, FI_SOURCE_ERR,
+		     "FI_SOURCE_ERR");
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+
+	/* Verify that if hints are specified, but do not include FI_SOURCE
+	 * FI_SOURCE_ERR in capabilities they are not returned.
+	 */
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = FI_MSG;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+
+	cr_assert_eq(info->caps & FI_SOURCE, 0, "FI_SOURCE");
+	cr_assert_eq(info->caps & FI_SOURCE_ERR, 0, "FI_SOURCE_ERR");
 	fi_freeinfo(info);
 	cxit_teardown_getinfo();
 }

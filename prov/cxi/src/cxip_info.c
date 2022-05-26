@@ -733,9 +733,18 @@ static void cxip_alter_tx_attr(struct fi_tx_attr *attr,
 static void cxip_alter_info(struct fi_info *info, const struct fi_info *hints,
 			    uint32_t api_version)
 {
-	for (; info; info = info->next)
+	for (; info; info = info->next) {
 		cxip_alter_tx_attr(info->tx_attr, hints ? hints->tx_attr : NULL,
 				   info->caps);
+
+		/* Remove secondary capabilities that impact performance if
+		 * hints are not specified. They must be explicitly requested.
+		 */
+		if (!hints) {
+			info->caps &= ~(FI_SOURCE | FI_SOURCE_ERR);
+			info->rx_attr->caps &= ~(FI_SOURCE | FI_SOURCE_ERR);
+		}
+	}
 }
 
 /*
@@ -955,8 +964,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		/* FI_SOURCE_ERR requires that FI_SOURCE be set, it is
 		 * an error if requested but can not be honored.
 		 */
-		if (hints->caps && (hints->caps & FI_SOURCE_ERR) &&
-		    !(hints->caps & FI_SOURCE)) {
+		if (hints->caps & FI_SOURCE_ERR && !(hints->caps & FI_SOURCE)) {
 			ret = -FI_ENODATA;
 			goto freeinfo;
 		}
@@ -964,7 +972,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		/* Requesting FI_SOURCE adds overhead to a receive operation.
 		 * Do not set FI_SOURCE unless explicitly requested.
 		 */
-		if (hints->caps && !(hints->caps & FI_SOURCE)) {
+		if (!(hints->caps & FI_SOURCE)) {
 			fi_ptr->caps &= ~FI_SOURCE;
 			fi_ptr->rx_attr->caps &= ~FI_SOURCE;
 		}
@@ -973,7 +981,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		 * operations beyond FI_SOURCE, do not set if not explicitly
 		 * asked.
 		 */
-		if (hints->caps && !(hints->caps & FI_SOURCE_ERR)) {
+		if (!(hints->caps & FI_SOURCE_ERR)) {
 			fi_ptr->caps &= ~FI_SOURCE_ERR;
 			fi_ptr->rx_attr->caps &= ~FI_SOURCE_ERR;
 		}

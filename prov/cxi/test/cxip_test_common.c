@@ -103,6 +103,10 @@ void cxit_create_fabric_info(void)
 	cr_assert(ret == FI_SUCCESS, "fi_getinfo");
 	cxit_fi->ep_attr->tx_ctx_cnt = cxit_fi->domain_attr->tx_ctx_cnt;
 	cxit_fi->ep_attr->rx_ctx_cnt = cxit_fi->domain_attr->rx_ctx_cnt;
+
+	/* Add in FI_SOURCE and FI_SOURCE_ERR to include all capabilities */
+	cxit_fi->caps |= FI_SOURCE | FI_SOURCE_ERR;
+	cxit_fi->rx_attr->caps |= FI_SOURCE | FI_SOURCE_ERR;
 }
 
 void cxit_destroy_fabric_info(void)
