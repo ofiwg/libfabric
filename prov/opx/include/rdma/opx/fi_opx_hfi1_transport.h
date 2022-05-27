@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2022 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -39,6 +39,7 @@
 
 #include "rdma/opx/fi_opx_hfi1.h"
 #include <ofi_list.h>
+#include <rdma/hfi/hfi1_user.h>
 
 /*
  * ==== NOTE_COMPLETION_TYPES ====
@@ -68,9 +69,6 @@
  * OPX supports FI_DELIVERY_COMPLETE when required but will use
  * FI_INJECT_COMPLETE when possible.
  */
-
-// Function for performing FI_DELIVERY_COMPLETIONs.
-void fi_opx_delivery_complete(struct fi_opx_completion_counter *cc);
 
 // Function for performing FI_INJECT_COMPLETIONs.
 __OPX_FORCE_INLINE_AND_FLATTEN__
@@ -345,6 +343,8 @@ struct fi_opx_work_elem {
 	struct slist_entry slist_entry;
 	int (*work_fn)(union fi_opx_hfi1_deferred_work * work_state);
 	void (*completion_action)(union fi_opx_hfi1_deferred_work * work_state);
+	uint8_t unused[7];
+	bool pending_hit_zero;
 	union fi_opx_hfi1_packet_payload *payload_copy;
 };
 
@@ -359,6 +359,8 @@ struct fi_opx_hfi1_dput_params {
 	void *fetch_vaddr;
 	void *compare_vaddr;
 	struct fi_opx_completion_counter *cc;
+	struct fi_opx_hfi1_sdma_work_entry *sdma_we;
+	struct slist sdma_reqs;
 	uintptr_t target_byte_counter_vaddr;
 	uint64_t *origin_byte_counter;
 	uint64_t key;
@@ -369,7 +371,10 @@ struct fi_opx_hfi1_dput_params {
 	uint32_t payload_bytes_for_iovec;
 	enum ofi_reliability_kind reliability;
 	uint16_t origin_rs;
+	uint16_t sdma_reqs_used;
 	bool is_intranode;
+	bool is_sdma;
+	bool delivery_completion;
 	uint8_t u8_rx;
 	uint8_t dt;
 	uint8_t op;
@@ -581,7 +586,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	}
 
 	struct fi_opx_reliability_tx_replay * replay = (reliability != OFI_RELIABILITY_KIND_NONE)?
-	fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false) : NULL;
+	fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false) : NULL;
 	if(replay == NULL) {
 		return -FI_EAGAIN;
 	}
@@ -589,7 +594,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	union fi_opx_reliability_tx_psn *psn_ptr;
 	const int64_t psn = (reliability != OFI_RELIABILITY_KIND_NONE) ?	/* compile-time constant expression */
 		fi_opx_reliability_tx_next_psn(ep, &opx_ep->reliability->state, addr.uid.lid,
-						dest_rx, addr.reliability_rx, &psn_ptr) :
+						dest_rx, addr.reliability_rx, &psn_ptr, 1) :
 		0;
 	if(OFI_UNLIKELY(psn == -1)) {
 		fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, replay);
@@ -827,7 +832,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 	/* compile-time constant expression */
 	struct fi_opx_reliability_tx_replay *replay;
 	replay = (reliability != OFI_RELIABILITY_KIND_NONE) ?
-	fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false) :	NULL;
+	fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false) :	NULL;
 	if (replay == NULL) {
 		return -FI_EAGAIN;
 	}
@@ -837,7 +842,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 	const int64_t psn = (reliability != OFI_RELIABILITY_KIND_NONE) ?
 				fi_opx_reliability_tx_next_psn(ep, &opx_ep->reliability->state,
 								addr.uid.lid, dest_rx,
-								addr.reliability_rx, &psn_ptr) :
+								addr.reliability_rx, &psn_ptr, 1) :
 				0;
 	if(OFI_UNLIKELY(psn == -1)) {
 		fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, replay);
@@ -884,34 +889,13 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 		// copy until done;
 	}
 
-	if (OFI_UNLIKELY(!do_cq_completion)) {
-		fi_opx_reliability_client_replay_register_no_update(
-			&opx_ep->reliability->state, addr.uid.lid, addr.reliability_rx,
-			dest_rx, psn_ptr, replay, reliability);
-	} else if (total_len < opx_ep->reliability->service.tx.dcomp_threshold) {
-		fi_opx_reliability_client_replay_register_no_update(
-			&opx_ep->reliability->state, addr.uid.lid, addr.reliability_rx,
-			dest_rx, psn_ptr, replay, reliability);
+	fi_opx_reliability_client_replay_register_no_update(
+		&opx_ep->reliability->state, addr.uid.lid, addr.reliability_rx,
+		dest_rx, psn_ptr, replay, reliability);
 
+	if (OFI_LIKELY(do_cq_completion)) {
 		fi_opx_ep_tx_cq_inject_completion(ep, context, total_len,
 			lock_required, tag, caps);
-	} else {
-		struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
-		cc->byte_counter = total_len;
-		cc->cntr = NULL;
-		cc->cq = opx_ep->tx->cq;
-		cc->context = context;
-		cc->tag = tag;
-		cc->hit_zero = fi_opx_delivery_complete;
-
-		union fi_opx_context * opx_context = (union fi_opx_context *)cc->context;
-		if(opx_context && cc->cq) {
-			opx_context->flags = FI_SEND | (caps & (FI_TAGGED | FI_MSG));
-		}
-
-		fi_opx_reliability_client_replay_register_with_update(
-			&opx_ep->reliability->state, addr.uid.lid, addr.reliability_rx,
-			dest_rx, psn_ptr, replay, cc, total_len, reliability);
 	}
 
 	fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
@@ -1245,7 +1229,7 @@ ssize_t fi_opx_ep_tx_get_replay(struct fi_opx_ep *opx_ep,
 		return FI_SUCCESS;
 	}
 
-	*replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false);
+	*replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false);
 	if(*replay == NULL) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND, HFI -- EAGER (null_reply_buffer)\n");
@@ -1255,7 +1239,7 @@ ssize_t fi_opx_ep_tx_get_replay(struct fi_opx_ep *opx_ep,
 	*psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid,
 					&opx_ep->reliability->state,
 					addr.uid.lid, addr.hfi1_rx,
-					addr.reliability_rx, psn_ptr);
+					addr.reliability_rx, psn_ptr, 1);
 
 	if(OFI_UNLIKELY(*psn == -1)) {
 		fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, *replay);
@@ -1371,32 +1355,8 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 					xfer_bytes_tail, tmp, buf, payload_qws_total, reliability);
 
 	if (OFI_LIKELY(do_cq_completion)) {
-		if (len < opx_ep->reliability->service.tx.dcomp_threshold) {
-			/* MHEINZ: Use inject completions. */
-			fi_opx_ep_tx_cq_inject_completion(ep, context, len,
+		fi_opx_ep_tx_cq_inject_completion(ep, context, len,
 			lock_required, tag, caps);
-		} else {
-			/* fi_opx_hfi1_tx_send_egr_write_replay_data erases any pointers to a
-			 * completion counter, so we add it now. This is safe because we are
-			 * single-threaded. If we move to an "offload" completion model this won't
-			 * be safe at all.
-			 */
-			struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
-			cc->byte_counter = len;
-			cc->cntr = NULL;
-			cc->cq = opx_ep->tx->cq;
-			cc->context = context;
-			cc->tag = tag;
-			cc->hit_zero = fi_opx_delivery_complete;
-
-			union fi_opx_context * opx_context = (union fi_opx_context *)cc->context;
-			if(opx_context && cc->cq) {
-				opx_context->flags = FI_SEND | (caps & (FI_TAGGED | FI_MSG));
-			}
-
-			replay->cc_ptr = cc;
-			replay->cc_dec = len;
-		}
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1404,37 +1364,6 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 
 	return FI_SUCCESS;
 }
-
-/* Max payload size for using Multi-packet Eager */
-#ifndef FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES
-#define FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES 16384
-#endif
-
-/* The total size for a single packet used in a multi-packet eager send.
-   This is packet payload plus 64 bytes for the PBC and packet header.
-   All packets in a multi-packet eager send will be this size, except
-   possibly the last one, which may be smaller.
-   
-   NOTE: This value MUST be a multiple of 64!
-   */
-#ifndef FI_OPX_MP_EGR_CHUNK_SIZE
-#define FI_OPX_MP_EGR_CHUNK_SIZE 4160
-#endif
-
-OPX_COMPILE_TIME_ASSERT(!(FI_OPX_MP_EGR_CHUNK_SIZE & 0x3F), "FI_OPX_MP_EGR_CHUNK_SIZE Must be a multiple of 64!");
-OPX_COMPILE_TIME_ASSERT(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES must be greater than FI_OPX_MP_EGR_CHUNK_SIZE!");
-
-/* For full MP-Eager chunks, we pack 16 bytes of payload data in the
-   packet header. So the actual payload size for a full chunk is the
-   total chunk size minus 64 bytes for PBC and packet header, plus 16
-   bytes for the space we use for payload data in the packet header.
-   Or, more simply, 48 bytes less than the total chunk size. */
-#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE (FI_OPX_MP_EGR_CHUNK_SIZE - 48)
-#define FI_OPX_MP_EGR_CHUNK_CREDITS (FI_OPX_MP_EGR_CHUNK_SIZE >> 6)
-#define FI_OPX_MP_EGR_CHUNK_DWS (FI_OPX_MP_EGR_CHUNK_SIZE >> 2)
-#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS (FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE >> 3)
-#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL 16
-#define FI_OPX_MP_EGR_XFER_BYTES_TAIL 0x0010000000000000ull
 
 /*
  * Write the initial packet header of a multi-packet eager send. This will include the size of
@@ -1872,5 +1801,6 @@ ssize_t fi_opx_hfi1_tx_send_rzv(struct fid_ep *ep, const void *buf, size_t len, 
 				const uint64_t dest_rx, const uintptr_t origin_byte_counter_vaddr,
 				uint64_t *origin_byte_counter_value, const uint64_t caps,
 				const enum ofi_reliability_kind reliability);
+
 
 #endif /* _FI_PROV_OPX_HFI1_TRANSPORT_H_ */

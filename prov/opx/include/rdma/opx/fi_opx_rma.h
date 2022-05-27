@@ -141,11 +141,12 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep, const struct iovec *iov,
 	union fi_opx_reliability_tx_psn *psn_ptr = NULL;
 	int64_t psn = 0;
 	if (reliability != OFI_RELIABILITY_KIND_NONE) {
-		replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, true);
+		replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, true);
 		psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid,
 							&opx_ep->reliability->state,
 							opx_target_addr.uid.lid, dest_rx,
-							opx_target_addr.reliability_rx, &psn_ptr);
+							opx_target_addr.reliability_rx,
+							&psn_ptr, 1);
 #ifndef NDEBUG
 		uint64_t count = 0;
 		while (OFI_UNLIKELY(psn == -1)) {
@@ -161,7 +162,8 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep, const struct iovec *iov,
 			psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid,
 								&opx_ep->reliability->state,
 								opx_target_addr.uid.lid, dest_rx,
-								opx_target_addr.reliability_rx, &psn_ptr);
+								opx_target_addr.reliability_rx,
+								&psn_ptr, 1);
 		}
 	}
 
@@ -261,6 +263,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	params->work_elem.work_fn = fi_opx_hfi1_do_dput;
 	params->work_elem.completion_action = NULL;
 	params->work_elem.payload_copy = NULL;
+	params->work_elem.pending_hit_zero = false;
 	params->opx_ep = opx_ep;
 	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_dst_addr.fi);
 	params->slid = opx_dst_addr.uid.lid;
@@ -283,6 +286,17 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	params->opx_mr = NULL;
 	params->origin_byte_counter = NULL;
 	params->payload_bytes_for_iovec = 0;
+	params->is_sdma = false;
+
+/*
+	if (!params->is_intranode && len >= FI_OPX_SDMA_MIN_LENGTH && opx_ep->tx->use_sdma) {
+		fprintf(stderr, "(%d) %s:%s():%d Getting SDMA Work item\n",
+			getpid(), __FILE__, __func__, __LINE__);
+		params->sdma_we = fi_opx_hfi1_sdma_get_idle_we(opx_ep);
+	} else {
+		params->sdma_we = NULL;
+	}
+	*/
 
 	fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->u8_rx);
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);

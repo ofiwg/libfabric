@@ -39,6 +39,7 @@
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_eq.h"
+#include "rdma/opx/fi_opx_hfi1_sdma.h"
 #include "ofi_mem.h"
 #include "opa_user.h"
 #include "fi_opx_hfi_select.h"
@@ -541,12 +542,13 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		context->sc2vl[i] = rc;
 	}
 
-	context->info.sdma.queue_size = ctxt_info->sdma_ring_size - 1;
+	context->info.sdma.queue_size = ctxt_info->sdma_ring_size;  // This is probably 128
 	context->info.sdma.available_counter = context->info.sdma.queue_size;
 	context->info.sdma.fill_index = 0;
 	context->info.sdma.done_index = 0;
-	context->info.sdma.completion_queue =
-		(struct hfi1_sdma_comp_entry *)base_info->sdma_comp_bufbase;
+	context->info.sdma.completion_queue = (struct hfi1_sdma_comp_entry *)base_info->sdma_comp_bufbase;
+	assert(context->info.sdma.queue_size == FI_OPX_HFI1_SDMA_MAX_COMP_INDEX);
+	memset(context->info.sdma.queued_entries, 0, sizeof(context->info.sdma.queued_entries));
 
 	/*
 	 * initialize the hfi rx context
@@ -713,7 +715,7 @@ int fi_opx_hfi1_do_rx_rzv_rts (union fi_opx_hfi1_deferred_work *work) {
 	}
 
 	struct fi_opx_reliability_tx_replay *replay =
-		fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false);
+		fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false);
 	if (replay == NULL) {
 		return -FI_EAGAIN;
 	}
@@ -725,7 +727,7 @@ int fi_opx_hfi1_do_rx_rzv_rts (union fi_opx_hfi1_deferred_work *work) {
 							params->slid,
 							params->u8_rx,
 							params->origin_rs,
-							&psn_ptr) :
+							&psn_ptr, 1) :
 			0;
 	if(OFI_UNLIKELY(psn == -1)) {
 		fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, replay);
@@ -746,9 +748,10 @@ int fi_opx_hfi1_do_rx_rzv_rts (union fi_opx_hfi1_deferred_work *work) {
 	replay->scb.hdr.qw[5] = params->origin_byte_counter_vaddr;
 	replay->scb.hdr.qw[6] = params->target_byte_counter_vaddr;
 
-	uint8_t *replay_payload = (uint8_t *)replay->payload;
+	//uint8_t *replay_payload = (uint8_t *)replay->payload;
 	union fi_opx_hfi1_packet_payload *const tx_payload =
-		(union fi_opx_hfi1_packet_payload *)replay_payload;
+		(union fi_opx_hfi1_packet_payload *) replay->payload;
+	assert(((uint8_t *)tx_payload) == ((uint8_t *)&replay->data));
 
 	uintptr_t vaddr_with_offset = params->dst_vaddr;
 	for (int i = 0; i < params->niov; i++) {
@@ -798,6 +801,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	params->work_elem.work_fn = fi_opx_hfi1_do_rx_rzv_rts;
 	params->work_elem.completion_action = NULL;
 	params->work_elem.payload_copy = NULL;
+	params->work_elem.pending_hit_zero = false;
 	params->lrh_dlid = (hfi1_hdr->stl.lrh.qw[0] & 0xFFFF000000000000ul) >> 32;
 	params->slid = hfi1_hdr->stl.lrh.slid;
 
@@ -871,6 +875,7 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 	params->work_elem.work_fn = opx_hfi1_do_dput_fence;
 	params->work_elem.completion_action = NULL;
 	params->work_elem.payload_copy = NULL;
+	params->work_elem.pending_hit_zero = false;
 
 	params->lrh_dlid = (hdr->stl.lrh.qw[0] & 0xFFFF000000000000ul) >> 32;
 	params->bth_rx = (uint64_t)u8_rx << 56;
@@ -897,6 +902,8 @@ int opx_hfi1_dput_write_header_and_payload_put(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
+				struct iovec *iov,
+				const bool delivery_completion,
 				const int64_t psn,
 				const uint16_t lrh_dws,
 				const uint64_t op64,
@@ -916,7 +923,13 @@ int opx_hfi1_dput_write_header_and_payload_put(
 			(dt64 << 32) | (op64 << 40) | (payload_bytes << 48);
 	tx_hdr->qw[5] = *rbuf;
 	tx_hdr->qw[6] = key;
-	memcpy((void *)tx_payload->byte, (const void *)*sbuf, payload_bytes);
+
+	if (delivery_completion) {
+		iov->iov_base = (void *) *sbuf;
+		iov->iov_len = payload_bytes;
+	} else {
+		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
+	}
 
 	(*sbuf) += payload_bytes;
 	(*rbuf) += payload_bytes;
@@ -1028,6 +1041,8 @@ int opx_hfi1_dput_write_header_and_payload_default(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
+				struct iovec *iov,
+				const bool delivery_completion,
 				const int64_t psn,
 				const uint16_t lrh_dws,
 				const uint64_t op64,
@@ -1047,7 +1062,13 @@ int opx_hfi1_dput_write_header_and_payload_default(
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | (opcode) | (payload_bytes << 32);
 	tx_hdr->qw[5] = *rbuf;
 	tx_hdr->qw[6] = target_byte_counter_vaddr;
-	memcpy((void *)tx_payload->byte, (const void *)*sbuf, payload_bytes);
+
+	if (delivery_completion) {
+		iov->iov_base = (void *) *sbuf;
+		iov->iov_len = payload_bytes;
+	} else {
+		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
+	}
 
 	(*sbuf) += payload_bytes;
 	(*rbuf) += payload_bytes;
@@ -1060,6 +1081,8 @@ int opx_hfi1_dput_write_header_and_payload(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
+				struct iovec *iov,
+				const bool delivery_completion,
 				const uint32_t opcode,
 				const int64_t psn,
 				const uint16_t lrh_dws,
@@ -1079,7 +1102,8 @@ int opx_hfi1_dput_write_header_and_payload(
 	switch(opcode) {
 	case FI_OPX_HFI_DPUT_OPCODE_PUT:
 		return opx_hfi1_dput_write_header_and_payload_put(
-				opx_ep, tx_hdr, tx_payload, psn, lrh_dws, op64,
+				opx_ep, tx_hdr, tx_payload, iov,
+				delivery_completion, psn, lrh_dws, op64,
 				dt64, lrh_dlid, bth_rx, payload_bytes,
 				key, sbuf, rbuf);
 		break;
@@ -1099,9 +1123,10 @@ int opx_hfi1_dput_write_header_and_payload(
 		break;
 	default:
 		return opx_hfi1_dput_write_header_and_payload_default(
-				opx_ep, tx_hdr, tx_payload, psn, lrh_dws, op64,
-				dt64, lrh_dlid, bth_rx, payload_bytes,
-				opcode, target_byte_counter_vaddr, sbuf, rbuf);
+				opx_ep, tx_hdr, tx_payload, iov, delivery_completion,
+				psn, lrh_dws, op64, dt64, lrh_dlid, bth_rx,
+				payload_bytes, opcode, target_byte_counter_vaddr,
+				sbuf, rbuf);
 	}
 }
 
@@ -1178,7 +1203,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work) {
 
 			const uint16_t lrh_dws = htons(pbc_dws - 1);
 
-			uint64_t payload_bytes_sent_this_packet;
+			uint64_t bytes_sent;
 			if (is_intranode) {
 				uint64_t pos;
 				union fi_opx_hfi1_packet_hdr * tx_hdr =
@@ -1189,10 +1214,10 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work) {
 				union fi_opx_hfi1_packet_payload * const tx_payload =
 					(union fi_opx_hfi1_packet_payload *)(tx_hdr+1);
 
-				payload_bytes_sent_this_packet =
-					opx_hfi1_dput_write_header_and_payload(
-						opx_ep, tx_hdr, tx_payload, opcode,
-						0, lrh_dws, op64, dt64, lrh_dlid, bth_rx,
+				bytes_sent = opx_hfi1_dput_write_header_and_payload(
+						opx_ep, tx_hdr, tx_payload, NULL,
+						false, opcode, 0, lrh_dws, op64,
+						dt64, lrh_dlid, bth_rx,
 						bytes_to_send_this_packet, key,
 						(const uint64_t)params->fetch_vaddr,
 						target_byte_counter_vaddr,
@@ -1202,6 +1227,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work) {
 
 				opx_shm_tx_advance(&opx_ep->tx->shm, (void*)tx_hdr, pos);
 			} else {
+
 				union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 				uint32_t total_credits_available =
 					FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state,
@@ -1225,7 +1251,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work) {
 				union fi_opx_reliability_tx_psn *psn_ptr;
 				int64_t psn;
 				if (reliability != OFI_RELIABILITY_KIND_NONE) {
-					replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false);
+					replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false);
 					if(OFI_UNLIKELY(replay == NULL)) {
 						return -FI_EAGAIN;
 					}
@@ -1235,7 +1261,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work) {
 									params->slid,
 									u8_rx,
 									params->origin_rs,
-									&psn_ptr);
+									&psn_ptr, 1);
 
 					if(OFI_UNLIKELY(psn == -1)) {
 						fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, replay);
@@ -1248,14 +1274,17 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work) {
 				}
 
 				union fi_opx_hfi1_packet_payload *replay_payload =
-					(union fi_opx_hfi1_packet_payload *) &replay->payload;
+					(union fi_opx_hfi1_packet_payload *) replay->payload;
+				assert(!replay->use_iov);
+				assert(((uint8_t *)replay_payload) == ((uint8_t *)&replay->data));
 				replay->scb.qw0 = opx_ep->rx->tx.dput.qw0 | pbc_dws |
 						((opx_ep->tx->force_credit_return & FI_OPX_HFI1_PBC_CR_MASK)
 							<< FI_OPX_HFI1_PBC_CR_SHIFT);
-				payload_bytes_sent_this_packet =
-					opx_hfi1_dput_write_header_and_payload(
-						opx_ep, &replay->scb.hdr, replay_payload, opcode,
-						psn, lrh_dws, op64, dt64, lrh_dlid, bth_rx,
+
+				bytes_sent = opx_hfi1_dput_write_header_and_payload(
+						opx_ep, &replay->scb.hdr, replay_payload,
+						NULL, false, opcode, psn, lrh_dws, op64,
+						dt64, lrh_dlid, bth_rx,
 						bytes_to_send_this_packet, key,
 						(const uint64_t) params->fetch_vaddr,
 						target_byte_counter_vaddr,
@@ -1269,12 +1298,11 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work) {
 					fi_opx_reliability_client_replay_register_with_update(
 						&opx_ep->reliability->state, params->slid,
 						params->origin_rs, u8_rx, psn_ptr, replay, cc,
-						payload_bytes_sent_this_packet, reliability);
+						bytes_sent, reliability);
 
 					fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
 				} else {
 					fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, replay);
-
 					fi_opx_compiler_msync_writes();
 
 					fi_opx_reliability_client_replay_register_no_update(
@@ -1283,11 +1311,11 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work) {
 				}
 			}
 
-			bytes_to_send -= payload_bytes_sent_this_packet;
-			params->bytes_sent += payload_bytes_sent_this_packet;
+			bytes_to_send -= bytes_sent;
+			params->bytes_sent += bytes_sent;
 
 			if(origin_byte_counter) {
-				*origin_byte_counter -= payload_bytes_sent_this_packet;
+				*origin_byte_counter -= bytes_sent;
 				assert(((int64_t)*origin_byte_counter) >= 0);
 			}
 		} /* while bytes_to_send */
@@ -1295,6 +1323,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work) {
 		if (opcode == FI_OPX_HFI_DPUT_OPCODE_PUT && is_intranode) {  // RMA-type put, so send a ping/fence to better latency
 			fi_opx_shm_write_fence(opx_ep, u8_rx, lrh_dlid, cc, params->bytes_sent);
 		}
+
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND DPUT, %s finished IOV=%d bytes_sent=%ld -- (end)\n",
 			is_intranode ? "SHM" : "HFI", params->cur_iov, params->bytes_sent);
@@ -1302,6 +1331,207 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work) {
 		params->bytes_sent = 0;
 		params->cur_iov++;
 	} /* for niov */
+
+	return FI_SUCCESS;
+}
+
+int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
+{
+	struct fi_opx_hfi1_dput_params *params = &work->dput;
+	struct fi_opx_ep * opx_ep = params->opx_ep;
+	struct fi_opx_mr * opx_mr = params->opx_mr;
+	const uint8_t u8_rx = params->u8_rx;
+	const uint32_t niov = params->niov;
+	const struct fi_opx_hfi1_dput_iov * const dput_iov = params->dput_iov;
+	const uintptr_t target_byte_counter_vaddr = params->target_byte_counter_vaddr;
+	uint64_t key = params->key;
+	uint64_t op64 = params->op;
+	uint64_t dt64 = params->dt;
+	uint32_t opcode = params->opcode;
+	const enum ofi_reliability_kind reliability = params->reliability;
+	/* use the slid from the lrh header of the incoming packet
+	 * as the dlid for the lrh header of the outgoing packet */
+	const uint64_t lrh_dlid = params->lrh_dlid;
+	const uint64_t bth_rx = ((uint64_t)u8_rx) << 56;
+	assert ((opx_ep->tx->pio_max_eager_tx_bytes & 0x3fu) == 0);
+	unsigned i;
+	const void* sbuf_start = (opx_mr == NULL) ? 0 : opx_mr->buf;
+	const bool delivery_completion = params->delivery_completion;
+
+	/* Note that lrh_dlid is just the version of params->slid shifted so
+	   that it can be OR'd into the correct position in the packet header */
+	assert(params->slid == (lrh_dlid >> 16));
+
+	assert(opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH &&
+		opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH &&
+		params->payload_bytes_for_iovec == 0);
+
+	// Even though we're using SDMA, replays will still be sent via PIO,
+	// so we still may need to limit the SDMA payload size on credit-constrained systems
+	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
+	const uint64_t max_credits = .66 * pio_state.credits_total; // 66% (33% threshold) look up driver threshold
+	const uint64_t max_eager_bytes = MIN(max_credits << 6,opx_ep->tx->pio_max_eager_tx_bytes);
+	uint64_t max_bytes_per_packet = max_eager_bytes;
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== SEND DPUT SDMA, opcode %d -- (begin)\n", opcode);
+
+	for (i=params->cur_iov; i<niov; ++i) {
+		uint8_t * sbuf = (uint8_t*)((uintptr_t)sbuf_start + (uintptr_t)dput_iov[i].sbuf + params->bytes_sent);
+		uintptr_t rbuf = dput_iov[i].rbuf + params->bytes_sent;
+
+		uint64_t bytes_to_send = dput_iov[i].bytes - params->bytes_sent;
+
+		while (bytes_to_send > 0) {
+			fi_opx_hfi1_sdma_poll_completion(opx_ep);
+			if (!params->sdma_we) {
+				/* Get an SDMA work entry since we don't already have one */
+				params->sdma_we = opx_sdma_get_new_work_entry(opx_ep,
+							&params->sdma_reqs_used,
+							&params->sdma_reqs,
+							params->sdma_we);
+				if (!params->sdma_we) {
+					return -FI_EAGAIN;
+				}
+				assert(params->sdma_we->total_payload == 0);
+			}
+			assert(!fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
+
+			uint64_t packet_count = (bytes_to_send / max_bytes_per_packet) +
+						((bytes_to_send % max_bytes_per_packet) ? 1 : 0);
+
+			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS);
+
+			if (opx_ep->hfi->info.sdma.available_counter < packet_count) {
+				return -FI_EAGAIN;
+			}
+
+			int32_t psns_avail = fi_opx_reliability_tx_available_psns(&opx_ep->ep_fid,
+										  &opx_ep->reliability->state,
+										  params->slid,
+										  params->u8_rx,
+										  params->origin_rs,
+										  &params->sdma_we->psn_ptr,
+										  packet_count,
+										  max_bytes_per_packet);
+
+			if (psns_avail < 1) {
+				return -FI_EAGAIN;
+			}
+
+			// At this point, we have enough SDMA queue entries and PSNs
+			// to send packet_count packets. The only limit now is how
+			// many replays can we get.
+			for (int i = 0; i < packet_count; ++i) {
+				struct fi_opx_reliability_tx_replay *replay;
+				if (reliability != OFI_RELIABILITY_KIND_NONE) {
+					// Passing 'true' as second parm gives us a lightweight/iovec replay object
+					replay = fi_opx_reliability_client_replay_allocate(
+						&opx_ep->reliability->state,
+						delivery_completion, false);
+					if(OFI_UNLIKELY(replay == NULL)) {
+						break;
+					}
+				} else {
+					replay = NULL;
+				}
+
+				assert(bytes_to_send); // If this fails, we did math wrong
+				uint64_t packet_bytes = MIN(bytes_to_send, max_bytes_per_packet);
+
+				uint64_t tail_bytes = packet_bytes & 0x3Ful;
+				uint64_t blocks_to_send_in_this_packet = (packet_bytes >> 6) + (tail_bytes ? 1 : 0);
+
+				const uint64_t pbc_dws = 2 + /* pbc */
+							2 + /* lrh */
+							3 + /* bth */
+							9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
+							(blocks_to_send_in_this_packet << 4);
+
+				const uint16_t lrh_dws = htons(pbc_dws - 1);
+
+				replay->scb.qw0 = opx_ep->rx->tx.dput.qw0 | pbc_dws;
+
+				assert((delivery_completion == replay->use_iov));
+
+				// Keep track of sbuf before it increments in write_header_and_payload
+				void *buf = sbuf;
+
+				// Passing in PSN of 0 for this because we'll set it later
+				uint64_t bytes_sent =
+					opx_hfi1_dput_write_header_and_payload(
+						opx_ep, &replay->scb.hdr,
+						(union fi_opx_hfi1_packet_payload *)replay->payload,
+						replay->iov,
+						delivery_completion,
+						opcode, 0, lrh_dws, op64, dt64, lrh_dlid, bth_rx,
+						packet_bytes, key,
+						(const uint64_t) params->fetch_vaddr,
+						target_byte_counter_vaddr,
+						params->bytes_sent,
+						&sbuf, (uint8_t **) &params->compare_vaddr,
+						&rbuf);
+				assert(bytes_sent == packet_bytes);
+
+				fi_opx_hfi1_sdma_add_packet(params->sdma_we, replay,
+							params->cc,
+							buf,
+							bytes_sent,
+							params->slid,
+							params->origin_rs, u8_rx,
+							delivery_completion,
+							max_bytes_per_packet);
+
+				bytes_to_send -= bytes_sent;
+				params->bytes_sent += bytes_sent;
+			}
+
+			// Must be we had trouble getting a replay buffer
+			if (OFI_UNLIKELY(params->sdma_we->num_packets == 0)) {
+				return -FI_EAGAIN;
+			}
+
+			fi_opx_hfi1_sdma_flush(opx_ep,
+						params->sdma_we,
+						&params->sdma_reqs,
+						params->origin_byte_counter,
+						delivery_completion,
+						reliability);
+			params->sdma_we = NULL;
+		} /* while bytes_to_send */
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== SEND DPUT SDMA, finished IOV=%d bytes_sent=%ld -- (end)\n",
+			params->cur_iov, params->bytes_sent);
+
+		params->bytes_sent = 0;
+		params->cur_iov++;
+	} /* for niov */
+
+	// At this point, all SDMA WE should have succeeded sending, and only reside on the reqs list
+	assert(params->sdma_we == NULL);
+
+	// Wait for each SDMA WE to reach COMPLETE status before we return it/consider this operation done.
+	if (!slist_empty(&params->sdma_reqs)) {
+		fi_opx_hfi1_sdma_poll_completion(opx_ep);
+		struct fi_opx_hfi1_sdma_work_entry *we = (struct fi_opx_hfi1_sdma_work_entry *) params->sdma_reqs.head;
+		while (we) {
+			enum hfi1_sdma_comp_state we_status = fi_opx_hfi1_sdma_get_status(opx_ep, we);
+			if (we_status == QUEUED) {
+				return -FI_EAGAIN;
+			}
+			we = we->next;
+		}
+	}
+	if (!delivery_completion) {
+		fi_opx_hfi1_sdma_finish(params);
+	} else {
+		// If true, this tells the deferred worker to not free params,
+		// and to move this work item to the back of the queue,
+		// as at this point there's nothing left to do but wait for the
+		// ACKs to be received for the packets we've sent
+		params->work_elem.pending_hit_zero = (*params->origin_byte_counter > 0);
+	}
 
 	return FI_SUCCESS;
 }
@@ -1329,6 +1559,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	params->work_elem.work_fn = fi_opx_hfi1_do_dput;
 	params->work_elem.completion_action = completion_action;
 	params->work_elem.payload_copy = NULL;
+	params->work_elem.pending_hit_zero = false;
 	params->opx_ep = opx_ep;
 	params->opx_mr = opx_mr;
 	params->lrh_dlid = (hfi1_hdr->stl.lrh.qw[0] & 0xFFFF000000000000ul) >> 32;
@@ -1341,6 +1572,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	params->bytes_sent = 0;
 	params->cc = NULL;
 	params->payload_bytes_for_iovec = 0;
+	params->delivery_completion = false;
 
 	params->target_byte_counter_vaddr = target_byte_counter_vaddr;
 	params->origin_byte_counter = origin_byte_counter;
@@ -1348,16 +1580,44 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	params->is_intranode = is_intranode;
 	params->reliability = reliability;
 
+	uint64_t iov_total_bytes = 0;
 	for(int idx=0; idx < niov; idx++) {
 		params->iov[idx] = dput_iov[idx];
+		iov_total_bytes += dput_iov[idx].bytes;
 	}
 
-	int rc = fi_opx_hfi1_do_dput(work);
-	if(rc == FI_SUCCESS) {
-		ofi_buf_free(work);
-		return NULL;
+	assert(iov_total_bytes == *origin_byte_counter);
+
+	if (fi_opx_hfi1_sdma_use_sdma(opx_ep, origin_byte_counter, opcode, is_intranode)) {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== Doing SDMA, len is %ld\n", *origin_byte_counter);
+
+		params->delivery_completion = (*origin_byte_counter >= FI_OPX_SDMA_DC_MIN);
+		fi_opx_hfi1_sdma_init_cc(opx_ep, params);
+
+		slist_init(&params->sdma_reqs);
+
+		params->sdma_we = NULL;
+		params->sdma_reqs_used = 0;
+		params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma;
 	}
-	assert(rc == -FI_EAGAIN);
+
+	// We can't/shouldn't start this work until any pending work is finished.
+	if (slist_empty(&opx_ep->tx->work_pending)) {
+		int rc = params->work_elem.work_fn(work);
+		if(rc == FI_SUCCESS) {
+			if (!params->work_elem.pending_hit_zero) {
+				ofi_buf_free(work);
+			} else {
+				// The work is done, but we need to wait for the ACKs
+				// and the call to our hit zero function before we can
+				// free this work item
+				slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+			}
+			return NULL;
+		}
+		assert(rc == -FI_EAGAIN);
+	}
 
 	/* Try again later*/
 	if(payload_bytes_to_copy) {
@@ -1481,7 +1741,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	}
 
 	struct fi_opx_reliability_tx_replay *replay = (reliability != OFI_RELIABILITY_KIND_NONE) ?
-		fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false) : NULL;
+		fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false) : NULL;
 	if (replay == NULL) {
 		return -FI_EAGAIN;
 	}
@@ -1495,7 +1755,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 							addr.uid.lid,
 							dest_rx,
 							addr.reliability_rx,
-							&psn_ptr) :
+							&psn_ptr, 1) :
 			0;
 	if(OFI_UNLIKELY(psn == -1)) {
 		fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, replay);
@@ -1642,6 +1902,8 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 		iov_idx = 0;
 		iov_base_offset = 0;
 		uint64_t *payload = replay->payload;
+		assert(!replay->use_iov);
+		assert(((uint8_t *)payload) == ((uint8_t *) &replay->data));
 		int64_t remain = total_payload_bytes;
 		while (false ==
 		       fi_opx_hfi1_fill_from_iov8(
@@ -1834,7 +2096,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 	struct fi_opx_reliability_tx_replay * replay = NULL;
 	if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
-		replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false);
+		replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false);
 		if(replay == NULL) {
 			return -FI_EAGAIN;
 		}
@@ -1843,7 +2105,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	union fi_opx_reliability_tx_psn *psn_ptr = NULL;
 	const int64_t psn = (reliability != OFI_RELIABILITY_KIND_NONE) ?	/* compile-time constant expression */
 		fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid, &opx_ep->reliability->state,
-						addr.uid.lid, dest_rx, addr.reliability_rx, &psn_ptr) :
+						addr.uid.lid, dest_rx, addr.reliability_rx, &psn_ptr, 1) :
 		0;
 	if(OFI_UNLIKELY(psn == -1)) {
 		fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, replay);
@@ -1920,6 +2182,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		replay->payload : NULL;
 
 	if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
+		assert(!replay->use_iov);
+		assert(((uint8_t *)replay_payload) == ((uint8_t *)&replay->data));
 		fi_opx_copy_scb(replay_payload, tmp);
 		replay_payload += 8;
 	}
@@ -2016,8 +2280,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 	if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
 		fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state,
-															addr.uid.lid, addr.reliability_rx, dest_rx, psn_ptr, replay,
-															reliability);
+								    addr.uid.lid, addr.reliability_rx,
+								    dest_rx, psn_ptr, replay, reliability);
 	}
 
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
@@ -2036,12 +2300,12 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 
 unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep * opx_ep,
-									   volatile uint32_t * rhf_ptr,
-									   const uint32_t rhf_msb,
-									   const uint32_t rhf_lsb,
-									   const uint32_t rhf_seq,
-									   const uint64_t hdrq_offset,
-									   const uint32_t hdrq_offset_notifyhw)
+					volatile uint32_t * rhf_ptr,
+					const uint32_t rhf_msb,
+					const uint32_t rhf_lsb,
+					const uint32_t rhf_seq,
+					const uint64_t hdrq_offset,
+					const uint32_t hdrq_offset_notifyhw)
 {
 #define HFI1_RHF_ICRCERR (0x80000000u)
 #define HFI1_RHF_ECCERR (0x20000000u)

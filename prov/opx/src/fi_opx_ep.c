@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2022 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -39,6 +39,7 @@
 #include "rdma/opx/fi_opx_eq.h"
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_rma.h"
+#include "rdma/opx/fi_opx_hfi1_sdma.h"
 
 #include <ofi_enosys.h>
 
@@ -468,6 +469,9 @@ static int fi_opx_close_ep(fid_t fid)
 				if (opx_ep->tx->rma_payload_pool)
 					ofi_bufpool_destroy(opx_ep->tx->rma_payload_pool);
 			}
+			if (opx_ep->tx->use_sdma && opx_ep->tx->sdma_work_pool) {
+				ofi_bufpool_destroy(opx_ep->tx->sdma_work_pool);
+			}
 			if(opx_ep->tx->ref_cnt == 0) {
 				free(opx_ep->tx->mem);
 			}
@@ -645,12 +649,21 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	opx_ep->tx->pio_max_eager_tx_bytes = l_pio_max_eager_tx_bytes;
 	
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "credits_total is %d, so set pio_max_eager_tx_bytes to %d \n", 
-	hfi->state.pio.credits_total, opx_ep->tx->pio_max_eager_tx_bytes);
+		hfi->state.pio.credits_total, opx_ep->tx->pio_max_eager_tx_bytes);
 
 	opx_ep->tx->force_credit_return = 0;
 
 	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
 		opx_shm_tx_init(&opx_ep->tx->shm, fi_opx_global.prov);
+	}
+
+	int sdma_disable;
+	if (fi_param_get_int(fi_opx_global.prov, "sdma_disable", &sdma_disable) == FI_SUCCESS) {
+		opx_ep->tx->use_sdma = !sdma_disable;
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "sdma_disable parm specified as %0hhX; opx_ep->tx->use_sdma set to %0hhX\n", sdma_disable, opx_ep->tx->use_sdma);
+	} else {
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "sdma_disable parm not specified; using SDMA\n");
+		opx_ep->tx->use_sdma = 1;
 	}
 
 	slist_init(&opx_ep->tx->work_pending);
@@ -662,6 +675,14 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 					   sizeof(union fi_opx_hfi1_packet_payload),
 					   0, UINT_MAX, 16, 0);
 
+	if (opx_ep->tx->use_sdma) {
+		ofi_bufpool_create(&opx_ep->tx->sdma_work_pool,
+				sizeof(struct fi_opx_hfi1_sdma_work_entry),
+				64, FI_OPX_HFI1_SDMA_MAX_WE,
+				FI_OPX_HFI1_SDMA_MAX_WE, 0);
+	} else {
+		opx_ep->tx->sdma_work_pool = NULL;
+	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "tx init'd\n");
 	return 0;
 }

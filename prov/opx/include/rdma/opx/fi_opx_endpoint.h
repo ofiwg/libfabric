@@ -223,7 +223,7 @@ struct fi_opx_ep_tx {
 	uint32_t				do_cq_completion;
 	uint16_t 				pio_max_eager_tx_bytes;
 	uint8_t					force_credit_return;
-	uint8_t					unused;
+	uint8_t					use_sdma;
 
 	/* == CACHE LINE 2,3 == */
 
@@ -244,14 +244,16 @@ struct fi_opx_ep_tx {
 	/* == CACHE LINE 5, ... == */
 
 	struct opx_shm_tx			shm;
-	struct fi_opx_stx *		stx;
+	struct fi_opx_stx			*stx;
 	struct fi_opx_stx			exclusive_stx;
-	struct slist                work_pending;
-	struct ofi_bufpool         *work_pending_pool;
-	struct ofi_bufpool         *rma_payload_pool;
-
-    void                       *mem;
-    int64_t	ref_cnt;
+	struct slist				work_pending;
+	//struct slist				sdma_work_pool;
+	struct ofi_bufpool			*work_pending_pool;
+	struct ofi_bufpool			*rma_payload_pool;
+	struct ofi_bufpool			*sdma_work_pool;
+	//void					*sdma_work_entries;
+	void					*mem;
+	int64_t					ref_cnt;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
 
@@ -377,56 +379,56 @@ struct fi_opx_ep_reliability {
  *   -- no FI_CLASS_SRX_CTX
  */
 struct fi_opx_ep {
-	struct fid_ep		ep_fid;
-	struct fi_opx_ep_tx	*tx;
-	struct fi_opx_ep_rx	*rx;
-    struct fi_opx_ep_reliability *reliability;
-	struct fi_opx_cntr	*read_cntr;
-	struct fi_opx_cntr	*write_cntr;
-	struct fi_opx_cntr	*send_cntr;
-	struct fi_opx_cntr	*recv_cntr;
-	struct fi_opx_domain	*domain;
-	struct ofi_bufpool  *rma_counter_pool;
-    void			    *mem;
+	struct fid_ep				ep_fid;
+	struct fi_opx_ep_tx			*tx;
+	struct fi_opx_ep_rx			*rx;
+	struct fi_opx_ep_reliability		*reliability;
+	struct fi_opx_cntr			*read_cntr;
+	struct fi_opx_cntr			*write_cntr;
+	struct fi_opx_cntr			*send_cntr;
+	struct fi_opx_cntr			*recv_cntr;
+	struct fi_opx_domain			*domain;
+	struct ofi_bufpool			*rma_counter_pool;
+	void					*mem;
 
-	struct fi_opx_av	*av;
-    struct fi_opx_sep *sep;
-	struct fi_opx_hfi1_context *	hfi;
-    int				 sep_index;
-
-
+	struct fi_opx_av			*av;
+	struct fi_opx_sep			*sep;
+	struct fi_opx_hfi1_context		*hfi;
+	//struct fi_opx_hfi1_sdma_work_entry	*sdma_we;
+	int					sep_index;
 	struct {
-		volatile uint64_t	enabled;
-		volatile uint64_t	active;
-		pthread_t		thread;
+		volatile uint64_t		enabled;
+		volatile uint64_t		active;
+		pthread_t			thread;
 	} async;
-	enum fi_opx_ep_state	state;
+	enum fi_opx_ep_state			state;
 
-	uint32_t            threading;
-	uint32_t            av_type;
-	uint32_t            mr_mode;
-	enum fi_ep_type		type;
-    // Only used for initialization
-    // free these flags
-    struct fi_info     *common_info;
-    struct fi_info     *tx_info;
-    struct fi_info     *rx_info;
-    uint32_t            tx_cq_bflags;
-    uint32_t            rx_cq_bflags;
-    struct fi_opx_cq   *init_tx_cq;
-    struct fi_opx_cq   *init_rx_cq;
-    struct fi_opx_cntr *init_read_cntr;
-	struct fi_opx_cntr *init_write_cntr;
-	struct fi_opx_cntr *init_send_cntr;
-	struct fi_opx_cntr *init_recv_cntr;
-	bool                is_tx_cq_bound;
-	bool                is_rx_cq_bound;
-	ofi_spin_t	 		lock;
-	bool                do_resynch_remote_ep;
+	uint32_t				threading;
+	uint32_t				av_type;
+	uint32_t				mr_mode;
+	enum fi_ep_type				type;
+
+	// Only used for initialization
+	// free these flags
+	struct fi_info				*common_info;
+	struct fi_info				*tx_info;
+	struct fi_info				*rx_info;
+	uint32_t				tx_cq_bflags;
+	uint32_t				rx_cq_bflags;
+	struct fi_opx_cq			*init_tx_cq;
+	struct fi_opx_cq			*init_rx_cq;
+	struct fi_opx_cntr			*init_read_cntr;
+	struct fi_opx_cntr			*init_write_cntr;
+	struct fi_opx_cntr			*init_send_cntr;
+	struct fi_opx_cntr			*init_recv_cntr;
+	bool					is_tx_cq_bound;
+	bool					is_rx_cq_bound;
+	bool					do_resynch_remote_ep;
+	ofi_spin_t				lock;
 
 
 #ifdef FLIGHT_RECORDER_ENABLE
-    struct flight_recorder *fr;
+	struct flight_recorder *fr;
 #endif
 
 
@@ -2045,18 +2047,33 @@ static inline void fi_opx_ep_rx_poll (struct fid_ep *ep,
 	if (work_pending) {
 		union fi_opx_hfi1_deferred_work *work = (union fi_opx_hfi1_deferred_work *)slist_remove_head(&opx_ep->tx->work_pending);
 		work->work_elem.slist_entry.next = NULL;
-		int rc = work->work_elem.work_fn(work);
-		if(rc == FI_SUCCESS) {
-			if(work->work_elem.completion_action) {
-				work->work_elem.completion_action(work);
+		if (work->work_elem.pending_hit_zero) {
+			if (*work->dput.origin_byte_counter == 0) {
+				ofi_buf_free(work);
+			} else {
+				// Note that we are purposely appending this to
+				// the tail instead of putting back in front, in
+				// order to unblock other deferred work.
+				slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
 			}
-			if(work->work_elem.payload_copy) {
-				ofi_buf_free(work->work_elem.payload_copy);
-			}
-			ofi_buf_free(work);
 		} else {
-			assert(work->work_elem.slist_entry.next == NULL);
-			slist_insert_head(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+			int rc = work->work_elem.work_fn(work);
+				if(rc == FI_SUCCESS) {
+					if(work->work_elem.completion_action) {
+						work->work_elem.completion_action(work);
+					}
+					if(work->work_elem.payload_copy) {
+						ofi_buf_free(work->work_elem.payload_copy);
+					}
+					if(!work->work_elem.pending_hit_zero) {
+						ofi_buf_free(work);
+					} else {
+						slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+					}
+				} else {
+					assert(work->work_elem.slist_entry.next == NULL);
+					slist_insert_head(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+				}
 		}
 	}
 

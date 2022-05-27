@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2022 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -38,11 +38,13 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 #include <arpa/inet.h>
 
 #include "rdma/fi_errno.h"	// only for FI_* errno return codes
 #include "rdma/fabric.h" // only for 'fi_addr_t' ... which is a typedef to uint64_t
+#include <rdma/hfi/hfi1_user.h>
 #include <uuid/uuid.h>
 
 // #define FI_OPX_TRACE 1
@@ -144,6 +146,60 @@
 #define FI_OPX_HFI1_TX_CREDIT_DELTA_THRESHOLD 		(63)  // If the incomming request asks for more credits than this, force a return.  Lower number here is more agressive 
 #define FI_OPX_HFI1_TX_CREDIT_MIN_FORCE_CR			(130) // We won't force a credit return for FI_OPX_HFI1_TX_CREDIT_DELTA_THRESHOLD if the number 
                                                           // of avalible credits is above this number
+														  
+#define FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES				(16384) /* Max payload size for using Multi-packet Eager */
+
+/* The total size for a single packet used in a multi-packet eager send.
+   This is packet payload plus 64 bytes for the PBC and packet header.
+   All packets in a multi-packet eager send will be this size, except
+   possibly the last one, which may be smaller.
+   
+   NOTE: This value MUST be a multiple of 64!
+   */
+#define FI_OPX_MP_EGR_CHUNK_SIZE 					(4160)
+
+/* For full MP-Eager chunks, we pack 16 bytes of payload data in the
+   packet header. So the actual payload size for a full chunk is the
+   total chunk size minus 64 bytes for PBC and packet header, plus 16
+   bytes for the space we use for payload data in the packet header.
+   Or, more simply, 48 bytes less than the total chunk size. */
+#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE (FI_OPX_MP_EGR_CHUNK_SIZE - 48)
+#define FI_OPX_MP_EGR_CHUNK_CREDITS (FI_OPX_MP_EGR_CHUNK_SIZE >> 6)
+#define FI_OPX_MP_EGR_CHUNK_DWS (FI_OPX_MP_EGR_CHUNK_SIZE >> 2)
+#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_QWS (FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE >> 3)
+#define FI_OPX_MP_EGR_CHUNK_PAYLOAD_TAIL 16
+#define FI_OPX_MP_EGR_XFER_BYTES_TAIL 0x0010000000000000ull
+
+static_assert(!(FI_OPX_MP_EGR_CHUNK_SIZE & 0x3F), "FI_OPX_MP_EGR_CHUNK_SIZE Must be a multiple of 64!");
+static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES must be greater than FI_OPX_MP_EGR_CHUNK_SIZE!");
+
+/* SDMA tuning constants */
+#define FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS		(32)   // Number of packets to send per SDMA dispatch/call to writev
+#define FI_OPX_HFI1_SDMA_MAX_IOV_LEN			(FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS * 2)  // 2 IOVs are required per packet 
+#define FI_OPX_HFI1_SDMA_MAX_WE				(32) // Number of concurrent SDMA requests (SDMA work entries) in flight at once.  HFI1 has 16 SDMA engines
+#define FI_OPX_HFI1_SDMA_MAX_COMP_INDEX			(128) // This should what opx_ep->hfi->info.sdma.queue_size is set to.
+#define FI_OPX_SDMA_FRAG_SIZE				(FI_OPX_HFI1_PACKET_MTU)
+#define FI_OPX_SDMA_MIN_LENGTH				(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES + 1)
+#define FI_OPX_SDMA_ALWAYS_MIN				(128 * 1024) // Minimum payload size Threshold for which we will always use SDMA
+#define FI_OPX_SDMA_DC_MIN				(2 * 1024 * 1024) // Minimum payload size Threshold for which we will use delivery completion instead of copying the payload for reliability.
+static_assert(FI_OPX_HFI1_SDMA_MAX_IOV_LEN <= 255, "num_iovs is only a byte");
+static_assert(!(FI_OPX_HFI1_SDMA_MAX_COMP_INDEX & (FI_OPX_HFI1_SDMA_MAX_COMP_INDEX - 1)), "FI_OPX_HFI1_SDMA_MAX_COMP_INDEX must be power of 2!\n");
+static_assert(FI_OPX_SDMA_ALWAYS_MIN >= FI_OPX_SDMA_MIN_LENGTH, "FI_OPX_SDMA_ALWAYS_MIN Must be >= FI_OPX_SDMA_MIN_LENGHT!\n");
+static_assert(FI_OPX_SDMA_DC_MIN >= FI_OPX_SDMA_MIN_LENGTH, "FI_OPX_SDMA_DC_MIN Must be >= FI_OPX_SDMA_MIN_LENGHT!\n");
+
+/*
+ * SDMA includes 8B sdma hdr, 8B PBC, and message header.
+ * If we are using GPU workloads, we need to set a new
+ * "flags" member which takes another 2 bytes in the
+ * sdma hdr. We let the driver know of this 2 extra bytes
+ * at runtime when we set the length for the iovecs.
+ * See HFI_SDMA_HDR_SIZE for historical info
+ */
+#define FI_OPX_HFI1_SDMA_HDR_SIZE      (8+8+56)  //TODO, Will change if using GPU (header gets 2 bytes bigger)
+
+
+//Version 1, EAGER opcode (1)(byte 0), 2 iovectors (byte 1)
+#define FI_OPX_HFI1_SDMA_REQ_HEADER_FIXEDBITS	(0x0211)
 
 static inline
 uint32_t fi_opx_addr_calculate_base_rx (const uint32_t process_id, const uint32_t processes_per_node) {
@@ -260,11 +316,12 @@ union fi_opx_hfi1_sdma_state {
 /* This 'static' information will not change after it is set by the driver
  * and can be safely copied into other structures to improve cache layout */
 struct fi_opx_hfi1_sdma_static {
-	uint16_t			available_counter;
-	uint16_t			fill_index;
-	uint16_t			done_index;
-	uint16_t			queue_size;
-	struct hfi1_sdma_comp_entry *	completion_queue;
+	uint16_t				available_counter;
+	uint16_t				fill_index;
+	uint16_t				done_index;
+	uint16_t				queue_size;
+	volatile struct hfi1_sdma_comp_entry *	completion_queue;
+	struct hfi1_sdma_comp_entry *		queued_entries[FI_OPX_HFI1_SDMA_MAX_COMP_INDEX];
 };
 
 
@@ -316,9 +373,6 @@ struct fi_opx_hfi1_rxe_static {
 	volatile uint64_t *		uregbase;
 	uint8_t				id;		/* hfi receive context id [0..159] */
 };
-
-
-
 
 struct fi_opx_hfi1_context {
 

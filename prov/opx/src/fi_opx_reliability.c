@@ -1248,7 +1248,12 @@ void fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service * s
 	unsigned consumed_credits = 1;
 #endif
 
-	uint64_t * buf_qws = replay->payload;
+	uint64_t * buf_qws;
+	if (replay->use_iov) {
+		buf_qws = replay->iov[0].iov_base;
+	} else {
+		buf_qws = replay->payload;
+	}
 
 	while (payload_credits_needed > 0) {
 
@@ -1296,6 +1301,8 @@ void fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service * s
 
 	/* save the updated txe state */
 	service->tx.hfi1.pio_state->qw0 = pio_state.qw0;
+
+	replay->nack_count = 0;
 }
 
 
@@ -1406,8 +1413,13 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 	start->psn_ptr->psn.nack_count = 1;
 
 	do {
-		inject_count++;
-		fi_opx_reliability_service_do_replay(service, replay);
+		// The do_replay will reset replay->nack_count to 0 upon successful send
+		// So once we hit this threshold, we'll keep retrying the replay until it
+		// succeeds
+		if (++replay->nack_count >= service->nack_threshold) {
+			inject_count++;
+			fi_opx_reliability_service_do_replay(service, replay);
+		}
 
 		replay = replay->next;
 
@@ -1907,6 +1919,24 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 		"FI_OPX_DELIVERY_COMPLETION_THRESHOLD set to %ld\n",
 		service->tx.dcomp_threshold);
 
+	int nack_threshold;
+	rc = fi_param_get_int(fi_opx_global.prov, "reliability_service_nack_threshold", &nack_threshold);
+	if (rc == FI_SUCCESS) {
+		if (nack_threshold > 0 && nack_threshold <= 32767) {
+			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_NACK_THRESHOLD set to %d\n", nack_threshold);
+		} else {
+			FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Invalid value %d specified for FI_OPX_RELIABILITY_SERVICE_NACK_THRESHOLD. Valid values are 1-32767. Using default value of 1\n",
+				nack_threshold);
+			nack_threshold = 1;
+		}
+	} else {
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"FI_OPX_RELIABILITY_SERVICE_NACK_THRESHOLD not specified, using default value of 1\n");
+		nack_threshold = 1;
+	}
+	service->nack_threshold = nack_threshold;
+
 	/*
 	 * Maximum number of commands to process from atomic fifo before
 	 * stopping to do something else
@@ -2166,16 +2196,22 @@ void fi_opx_reliability_client_init (struct fi_opx_reliability_client_state * st
  	 * to grow a few elements at a time.
  	 */
 	(void)ofi_bufpool_create(&(state->replay_pool), 
-		sizeof(struct fi_opx_reliability_tx_replay), // element size
+		OPX_RELIABILITY_TX_REPLAY_SIZE, // element size
 		sizeof(void *), // byte alignment
 		FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS, // max # of elements
 		FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS, // # of elements to allocate at once
 		OFI_BUFPOOL_NO_TRACK); // flags
-	(void)ofi_bufpool_create(&(state->reserve_pool), 
-		sizeof(struct fi_opx_reliability_tx_replay), // element size
+	(void)ofi_bufpool_create(&(state->reserve_pool),
+		OPX_RELIABILITY_TX_REPLAY_SIZE, // element size
 		sizeof(void *), // byte alignment
 		0, // unlimited # of elements.
 		FI_OPX_RELIABILITY_TX_RESERVE_BLOCKS, // # of elements to allocate at once
+		OFI_BUFPOOL_NO_TRACK); // flags
+	(void)ofi_bufpool_create(&(state->replay_iov_pool), 
+		OPX_RELIABILITY_TX_REPLAY_IOV_SIZE, // element size
+		sizeof(void *), // byte alignment
+		FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS, // max # of elements
+		FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS, // # of elements to allocate at once
 		OFI_BUFPOOL_NO_TRACK); // flags
 #ifdef OPX_RELIABILITY_DEBUG
 	fprintf(stderr,"%s:%s():%d replay_pool = %p\n", __FILE__, __func__, __LINE__,
@@ -2210,6 +2246,7 @@ unsigned fi_opx_reliability_client_active (struct fi_opx_reliability_client_stat
 
 	if (state->replay_pool && !ofi_bufpool_empty(state->replay_pool)) return 1;
 	if (state->reserve_pool && !ofi_bufpool_empty(state->reserve_pool)) return 1;
+	if (state->replay_iov_pool && !ofi_bufpool_empty(state->replay_iov_pool)) return 1;
 
 	return 0;
 }
@@ -2243,6 +2280,10 @@ void fi_opx_reliability_client_fini (struct fi_opx_reliability_client_state * st
 		ofi_bufpool_destroy(state->reserve_pool);
 		state->replay_pool = NULL;
 		state->reserve_pool = NULL;
+	}
+	if (state->replay_iov_pool) {
+		ofi_bufpool_destroy(state->replay_iov_pool);
+		state->replay_iov_pool = NULL;
 	}
 
 
@@ -2419,7 +2460,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 		uint64_t nack_count = MIN(psn_64 - next_psn, OPX_RELIABILITY_MAX_NACK);
 		rc = fi_opx_hfi1_tx_reliability_inject(ep, key.value, key.slid,
 					origin_rx,
-					next_psn, /* psn_start */
+					next_psn,
 					nack_count,
 					FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK);
 		INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, key.value, next_psn, nack_count);
@@ -2478,7 +2519,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 		 if (nack_count) {
 			rc = fi_opx_hfi1_tx_reliability_inject(ep, key.value, key.slid,
 					origin_rx,
-					nack_start_psn, /* psn_start */
+					nack_start_psn,
 					nack_count,
 					FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK);
 			INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, key.value, next_psn, nack_count);
