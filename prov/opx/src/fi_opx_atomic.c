@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2022 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -122,6 +122,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 	params->work_elem.work_fn = fi_opx_hfi1_do_dput;
 	params->work_elem.completion_action = NULL;
 	params->work_elem.payload_copy = NULL;
+	params->work_elem.pending_hit_zero = false;
 	params->opx_ep = opx_ep;
 	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_dst_addr.fi);
 	params->slid = opx_dst_addr.uid.lid;

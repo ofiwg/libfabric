@@ -491,7 +491,8 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "selinux", FI_PARAM_BOOL, "Set to true if you're running a security-enhanced Linux. This enables updating the Jkey used based on system settings. Defaults to \"No\"");
 	fi_param_define(&fi_opx_provider, "hfi_select", FI_PARAM_STRING, "Overrides the normal algorithm used to choose which HFI a process will use. See the documentation for more information.");
 	fi_param_define(&fi_opx_provider, "delivery_completion_threshold", FI_PARAM_INT, "The minimum size message for doing full delivery completions. Smaller messages will provide injection completions.Value must be between %d and %d. Defaults to %d.", OPX_MIN_DCOMP_THRESHOLD, OPX_MAX_DCOMP_THRESHOLD, OPX_DEFAULT_DCOMP_THRESHOLD);
-	// fi_param_define(&fi_opx_provider, "varname", FI_PARAM_*, "help");
+ 	fi_param_define(&fi_opx_provider, "sdma_disable", FI_PARAM_INT, "Disables SDMA offload hardware. Default is 0");
+ 	fi_param_define(&fi_opx_provider, "reliability_service_nack_threshold", FI_PARAM_INT, "The number of NACKs needed to be seen before a replay is initiated. Valid values are 1-32767. Default is 1");
 	// fi_param_define(&fi_opx_provider, "varname", FI_PARAM_*, "help");
 	return (&fi_opx_provider);
 }

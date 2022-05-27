@@ -597,7 +597,7 @@ void fi_opx_hfi1_poll_many (struct fid_ep *ep,
 
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
-	static const unsigned hfi1_poll_max = 100;
+	static const unsigned hfi1_poll_max = 256;
 	unsigned hfi1_poll_count = 0;
 	unsigned packets = 0;
 

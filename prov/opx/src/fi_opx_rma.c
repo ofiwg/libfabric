@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2022 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -42,32 +42,6 @@
 #include <ofi_enosys.h>
 #include <errno.h>
 
-/* Delivery completion callback for simple sends.
- * This is only used for simple sends but it is included here
- * due to the complex dependencies of all the inlined code.
- *
- * This differs from the other completion callback in that it adds
- * the message tag from the original message to the completion item.
- */
-void fi_opx_delivery_complete(struct fi_opx_completion_counter *cc)
-{
-	if (cc->cntr) {
-		ofi_atomic_inc64(&cc->cntr->std);
-	}
-	if (cc->cq && cc->context) {
-		assert(cc->context);
-		union fi_opx_context * opx_context = (union fi_opx_context *)cc->context;
-		opx_context->next = NULL;
-		opx_context->len = 0;
-		opx_context->buf = NULL;
-		opx_context->byte_counter = 0;
-		opx_context->tag = cc->tag;
-
-		fi_opx_cq_enqueue_completed(cc->cq, cc->context, 0);
-	}
-	ofi_buf_free(cc);
-}
-
 /* Delivery completion callback for atomics, RMA operations.
  *
  * This differs from the other completion callback in that it ignores
@@ -81,6 +55,10 @@ void fi_opx_hit_zero(struct fi_opx_completion_counter *cc)
 	if (cc->cq && cc->context) {
 		assert(cc->context);
 		union fi_opx_context * opx_context = (union fi_opx_context *)cc->context;
+		assert(opx_context->next == NULL);
+		assert((opx_context->next == NULL) ||
+			(opx_context->next == cc->cq->err.head) ||
+			(opx_context->next == cc->cq->pending.head));
 		opx_context->next = NULL;
 		opx_context->len = 0;
 		opx_context->buf = NULL;
