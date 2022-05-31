@@ -469,10 +469,9 @@ static int fi_opx_close_ep(fid_t fid)
 				if (opx_ep->tx->rma_payload_pool)
 					ofi_bufpool_destroy(opx_ep->tx->rma_payload_pool);
 			}
-			if (opx_ep->tx->use_sdma && opx_ep->tx->sdma_work_pool) {
-				ofi_bufpool_destroy(opx_ep->tx->sdma_work_pool);
-			}
 			if(opx_ep->tx->ref_cnt == 0) {
+				if (opx_ep->tx->sdma_work_pool)
+					ofi_bufpool_destroy(opx_ep->tx->sdma_work_pool);
 				free(opx_ep->tx->mem);
 			}
 			opx_ep->tx = NULL;

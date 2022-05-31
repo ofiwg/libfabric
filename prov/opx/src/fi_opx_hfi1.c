@@ -1494,7 +1494,6 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			fi_opx_hfi1_sdma_flush(opx_ep,
 						params->sdma_we,
 						&params->sdma_reqs,
-						params->origin_byte_counter,
 						delivery_completion,
 						reliability);
 			params->sdma_we = NULL;
@@ -1524,6 +1523,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 		}
 	}
 	if (!delivery_completion) {
+		*params->origin_byte_counter = 0;
 		fi_opx_hfi1_sdma_finish(params);
 	} else {
 		// If true, this tells the deferred worker to not free params,
