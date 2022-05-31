@@ -435,6 +435,8 @@ static void getgroup_func(struct cxip_zbcoll_obj *zb, void *usrptr)
 	struct getgroup_data *data = (struct getgroup_data *)usrptr;
 	data->count++;
 }
+
+/* Test getgroup single-zb simulation */
 Test(ctrl, zb_getgroup)
 {
 	struct cxip_ep *cxip_ep;
@@ -510,8 +512,7 @@ Test(ctrl, zb_getgroup)
 
 /*****************************************************************/
 /**
- * @brief Test simulated getgroup with multiple zb objects.
- *
+ * @brief Test simulated getgroup with multi-zb model.
  */
 
 void _getgroup_multi(int num_addrs, struct cxip_zbcoll_obj **zb,
@@ -533,9 +534,6 @@ void _getgroup_multi(int num_addrs, struct cxip_zbcoll_obj **zb,
 		cr_assert(zb[i]->simcount == num_addrs,
 			  "zb->simcount = %d, != %d\n",
 			  zb[i]->simcount, num_addrs);
-	}
-	/* link zb objects to function as a single collective */
-	for (i = 0; i < num_addrs; i++) {
 		ret = cxip_zbcoll_simlink(zb[0], zb[i]);
 		cr_assert(!ret, "link zb[%d] failed\n", i);
 	}
@@ -589,6 +587,7 @@ void _free_getgroup_multi(int num_addrs, struct cxip_zbcoll_obj **zb)
 	free(zb);
 }
 
+/* Test getgroup multi-zb simulation */
 Test(ctrl, zb_getgroup2)
 {
 	struct cxip_zbcoll_obj **zb1, **zb2;
@@ -610,7 +609,7 @@ Test(ctrl, zb_getgroup2)
 /**
  * @brief Test simulated barrier.
  *
- * This exercises the basic broad operation, the user callback, and the
+ * This exercises the basic barrier operation, the user callback, and the
  * non-concurrency lockout.
  *
  * This is done in a single thread, so it tests only a single barrier across
@@ -628,6 +627,7 @@ static void barrier_func(struct cxip_zbcoll_obj *zb, void *usrptr)
 	data->count++;
 }
 
+/* Test barrier single-zb simulation */
 Test(ctrl, zb_barrier)
 {
 	struct cxip_ep *cxip_ep;
@@ -685,6 +685,7 @@ Test(ctrl, zb_barrier)
 	cxip_zbcoll_free(zb);
 }
 
+/* Test barrier multi-zb simulation */
 Test(ctrl, zb_barrier2)
 {
 	struct cxip_zbcoll_obj **zb1, **zb2;
@@ -713,10 +714,10 @@ Test(ctrl, zb_barrier2)
 
 	/* Poll until all are complete */
 	ret = _await_complete_all(zb1, num_addrs);
-	cr_assert(ret == FI_SUCCESS, "zb1 broadcast = %s\n",
+	cr_assert(ret == FI_SUCCESS, "zb1 barrier = %s\n",
 		  fi_strerror(-ret));
 	ret = _await_complete_all(zb2, num_addrs);
-	cr_assert(ret == FI_SUCCESS, "zb2 broadcast = %s\n",
+	cr_assert(ret == FI_SUCCESS, "zb2 barrier = %s\n",
 		  fi_strerror(-ret));
 
 	/* Validate data */
@@ -733,13 +734,13 @@ Test(ctrl, zb_barrier2)
 /**
  * @brief Perform a simulated broadcast.
  *
- * This exercises the basic broad operation, the user callback, and the
+ * This exercises the basic broadcast operation, the user callback, and the
  * non-concurrency lockout. The user callback captures all of the results and
  * ensures they all match the broadcast value.
  *
- * This is done in a single thread, so it tests only a single bcast across
+ * This is done in a single thread, so it tests only a single broadcast across
  * multiple addrs. It randomizes the nid processing order, and performs multiple
- * barriers to uncover any ordering issues.
+ * broadcasts to uncover any ordering issues.
  */
 struct bcast_data {
 	uint64_t *data;
@@ -760,15 +761,15 @@ static void bcast_func(struct cxip_zbcoll_obj *zb, void *usrptr)
 	data->count++;
 }
 
-/* Test bcast in simulation */
+/* Test broadcast single-zb simulation */
 Test(ctrl, zb_broadcast)
 {
 	struct cxip_ep *cxip_ep;
 	struct cxip_ep_obj *ep_obj;
 	struct cxip_zbcoll_obj *zb;
 	struct bcast_data zbd = {};
-	int i, rep, ret;
-	uint64_t data;
+	int i, n, rep, ret;
+	uint64_t *data;
 
 	int num_addrs = 25;
 
@@ -781,6 +782,8 @@ Test(ctrl, zb_broadcast)
 		  "zb->simcount = %d, != %d\n", zb->simcount, num_addrs);
 	_addr_shuffle(zb, false);
 
+	data = calloc(num_addrs, sizeof(uint64_t));
+
 	/* Acquire a group id */
 	ret = cxip_zbcoll_getgroup(zb);
 	cr_assert(ret == 0, "getgroup = %s\n", fi_strerror(-ret));
@@ -791,16 +794,18 @@ Test(ctrl, zb_broadcast)
 	zbd.data = calloc(num_addrs, sizeof(uint64_t));
 	for (rep = 0; rep < 20; rep++) {
 		_addr_shuffle(zb, true);
+		n = zb->shuffle[0];
 		memset(zbd.data, -1, num_addrs*sizeof(uint64_t));
 		/* Perform a broadcast */
-		data = (rand() & ((1 << 29) - 1)) | (1 << 28);
+		for (i = 0; i < num_addrs; i++)
+			data[i] = (rand() & ((1 << 29) - 1)) | (1 << 28);
 		cxip_zbcoll_push_cb(zb, bcast_func, &zbd);
-		ret = cxip_zbcoll_broadcast(zb, &data);
+		ret = cxip_zbcoll_broadcast(zb, data);
 		cr_assert(ret == 0, "%d bcast = %s\n",
 			  rep, fi_strerror(-ret));
 		/* Try again immediately, should fail */
 		cxip_zbcoll_push_cb(zb, bcast_func, &zbd);
-		ret = cxip_zbcoll_broadcast(zb, &data);
+		ret = cxip_zbcoll_broadcast(zb, data);
 		cr_assert(ret == -FI_EAGAIN, "%d bcast = %s\n",
 			  rep, fi_strerror(-ret));
 		/* Poll until complete */
@@ -809,8 +814,8 @@ Test(ctrl, zb_broadcast)
 			  rep, fi_strerror(-ret));
 		/* Validate the data */
 		for (i = 0; i < num_addrs; i++)
-			cr_assert(zbd.data[i] == data, "[%d] %ld != %ld\n",
-				  i, zbd.data[i], data);
+			cr_assert(zbd.data[i] == data[n], "[%d] %ld != %ld\n",
+				  i, zbd.data[i], data[n]);
 	}
 	cr_assert(zbd.count == rep, "zbd.count=%d rep=%d\n",
 		  zbd.count, rep);
@@ -822,9 +827,11 @@ Test(ctrl, zb_broadcast)
 		  dsc, err, ack, rcv);
 
 	free(zbd.data);
+	free(data);
 	cxip_zbcoll_free(zb);
 }
 
+/* Test broadcast multi-zb simulation */
 Test(ctrl, zb_broadcast2)
 {
 	struct cxip_zbcoll_obj **zb1, **zb2;
@@ -865,6 +872,175 @@ Test(ctrl, zb_broadcast2)
 		  fi_strerror(-ret));
 	ret = _await_complete_all(zb2, num_addrs);
 	cr_assert(ret == FI_SUCCESS, "zb2 broadcast = %s\n",
+		  fi_strerror(-ret));
+
+	/* Validate data */
+	cr_assert(zbd1.count == num_addrs, "count=%d != %d\n",
+		  zbd1.count, num_addrs);
+	for (i = 0; i < num_addrs; i++) {
+		cr_assert(data1 == zbd1.data[i],
+			  "data1=%ld != zbd1[%d]=%ld\n",
+			  data1, i, zbd1.data[i]);
+	}
+	cr_assert(zbd2.count == num_addrs, "count=%d != %d\n",
+		  zbd2.count, num_addrs);
+	for (i = 0; i < zbd2.count; i++) {
+		cr_assert(data2 == zbd2.data[i],
+			  "data2=%ld != zbd2[%d]=%ld\n",
+			  data2, i, zbd2.data[i]);
+	}
+
+	_free_getgroup_multi(num_addrs, zb2);
+	_free_getgroup_multi(num_addrs, zb1);
+}
+
+/*****************************************************************/
+/**
+ * @brief Perform a simulated reduce.
+ *
+ * This exercises the basic reduce operation, the user callback, and the
+ * non-concurrency lockout. The user callback captures all of the results and
+ * ensures they all match the reduce value.
+ *
+ * This is done in a single thread, so it tests only a single reduce across
+ * multiple addrs. It randomizes the nid processing order, and performs multiple
+ * reductions to uncover any ordering issues.
+ */
+struct reduce_data {
+	uint64_t *data;
+	int count;
+};
+
+static void reduce_func(struct cxip_zbcoll_obj *zb, void *usrptr)
+{
+	struct reduce_data *data = (struct reduce_data *)usrptr;
+	int i;
+
+	if (zb->simrank >= 0) {
+		data->data[zb->simrank] = *zb->state[zb->simrank].dataptr;
+	} else {
+		for (i = 0; i < zb->simcount; i++)
+			data->data[i] = *zb->state[i].dataptr;
+	}
+	data->count++;
+}
+
+/* Test reduce single-zb simulation */
+Test(ctrl, zb_reduce)
+{
+	struct cxip_ep *cxip_ep;
+	struct cxip_ep_obj *ep_obj;
+	struct cxip_zbcoll_obj *zb;
+	struct reduce_data zbd = {};
+	int i, rep, ret;
+	uint64_t *data, rslt;
+
+	int num_addrs = 25;
+
+	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
+	ep_obj = cxip_ep->ep_obj;
+
+	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, ZB_ALLSIM, &zb);
+	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %s\n", fi_strerror(-ret));
+	cr_assert(zb->simcount == num_addrs,
+		  "zb->simcount = %d, != %d\n", zb->simcount, num_addrs);
+	_addr_shuffle(zb, false);
+
+	data = calloc(num_addrs, sizeof(uint64_t));
+
+	/* Acquire a group id */
+	ret = cxip_zbcoll_getgroup(zb);
+	cr_assert(ret == 0, "getgroup = %s\n", fi_strerror(-ret));
+	ret = _await_complete(zb);
+	cr_assert(ret == 0, "getgroup done = %s\n", fi_strerror(-ret));
+
+	memset(&zbd, 0, sizeof(zbd));
+	zbd.data = calloc(num_addrs, sizeof(uint64_t));
+	for (rep = 0; rep < 20; rep++) {
+		_addr_shuffle(zb, false);
+		memset(zbd.data, -1, num_addrs*sizeof(uint64_t));
+		/* Perform a reduce */
+		for (i = 0; i < num_addrs; i++) {
+			data[i] = (rand() & ((1 << 29) - 1)) | (1 << 28);
+			data[i] |= 3;
+		}
+		rslt = -1L;
+		for (i = 1; i < num_addrs; i++) {
+			rslt &= data[i];
+		}
+		cxip_zbcoll_push_cb(zb, reduce_func, &zbd);
+		ret = cxip_zbcoll_reduce(zb, data);
+		cr_assert(ret == 0, "%d reduce = %s\n",
+			  rep, fi_strerror(-ret));
+		/* Try again immediately, should fail */
+		cxip_zbcoll_push_cb(zb, reduce_func, &zbd);
+		ret = cxip_zbcoll_reduce(zb, data);
+		cr_assert(ret == -FI_EAGAIN, "%d reduce = %s\n",
+			  rep, fi_strerror(-ret));
+		/* Poll until complete */
+		ret = _await_complete(zb);
+		cr_assert(ret == FI_SUCCESS, "%d reduce = %s\n",
+			  rep, fi_strerror(-ret));
+		/* Validate the data */
+		for (i = 0; i < num_addrs; i++)
+			cr_assert(zbd.data[i] == rslt, "[%d] %lx != %lx\n",
+				  i, zbd.data[i], rslt);
+	}
+	cr_assert(zbd.count == rep, "zbd.count=%d rep=%d\n",
+		  zbd.count, rep);
+
+	uint32_t dsc, err, ack, rcv;
+	cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
+	cr_assert(dsc == 0 && err == 0,
+		  "FAILED dsc=%d err=%d ack=%d rcv=%d\n",
+		  dsc, err, ack, rcv);
+
+	free(zbd.data);
+	free(data);
+	cxip_zbcoll_free(zb);
+}
+
+/* Test reduce multi-zb simulation */
+Test(ctrl, zb_reduce2)
+{
+	struct cxip_zbcoll_obj **zb1, **zb2;
+	int num_addrs = 11;	// arbitrary
+	uint64_t data1, data2;
+	struct reduce_data zbd1 = {};
+	struct reduce_data zbd2 = {};
+	int i, ret;
+
+	zb1 = calloc(num_addrs, sizeof(*zb1));
+	cr_assert(zb1);
+	zb2 = calloc(num_addrs, sizeof(*zb2));
+	cr_assert(zb2);
+	zbd1.data = calloc(num_addrs, sizeof(*zbd1.data));
+	cr_assert(zbd1.data);
+	zbd2.data = calloc(num_addrs, sizeof(*zbd2.data));
+	cr_assert(zbd2.data);
+
+	_getgroup_multi(num_addrs, zb1, 0);
+	_getgroup_multi(num_addrs, zb2, 1);
+
+	data1 = (rand() & ((1 << 29) - 1)) | (1 << 28);
+	data2 = (rand() & ((1 << 29) - 1)) | (1 << 28);
+
+	for (i = 0; i < num_addrs; i++) {
+		cxip_zbcoll_push_cb(zb1[i], reduce_func, &zbd1);
+		ret = cxip_zbcoll_reduce(zb1[i], &data1);
+		cr_assert(!ret, "zb1 reduce[%d]=%s\n", i, fi_strerror(-ret));
+
+		cxip_zbcoll_push_cb(zb2[i], reduce_func, &zbd2);
+		ret = cxip_zbcoll_reduce(zb2[i], &data2);
+		cr_assert(!ret, "zb2 reduce[%d]=%s\n", i, fi_strerror(-ret));
+	}
+
+	/* Poll until all are complete */
+	ret = _await_complete_all(zb1, num_addrs);
+	cr_assert(ret == FI_SUCCESS, "zb1 reduce = %s\n",
+		  fi_strerror(-ret));
+	ret = _await_complete_all(zb2, num_addrs);
+	cr_assert(ret == FI_SUCCESS, "zb2 reduce = %s\n",
 		  fi_strerror(-ret));
 
 	/* Validate data */

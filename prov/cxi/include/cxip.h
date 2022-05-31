@@ -1150,6 +1150,7 @@ struct cxip_zbcoll_obj {
 	int grpid;			// zb collective grpid
 	int error;			// error code
 	int flush;			// flush callback stack
+	int reduce;			// set to report reduction data
 	void *cbstack;			// callback stack
 };
 
@@ -2163,6 +2164,7 @@ int cxip_zbcoll_max_grps(bool sim);
 int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb);
 void cxip_zbcoll_rlsgroup(struct cxip_zbcoll_obj *zb);
 int cxip_zbcoll_broadcast(struct cxip_zbcoll_obj *zb, uint64_t *dataptr);
+int cxip_zbcoll_reduce(struct cxip_zbcoll_obj *zb, uint64_t *dataptr);
 int cxip_zbcoll_barrier(struct cxip_zbcoll_obj *zb);
 
 void cxip_zbcoll_reset_counters(struct cxip_ep_obj *ep_obj);

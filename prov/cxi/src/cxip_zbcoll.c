@@ -716,29 +716,40 @@ static inline int zbunpack(uint64_t data, int *src, int *dst, int *grpid,
  * The leaf (childless) NIDs contribute immediately and send the zb->dataval
  * data upstream. Each parent collects data from its children and bitwise-ANDs
  * the data with its own zb->dataval. When all children have reported to the
- * root, the root sends *zb->dataval downstream, and the children simply
- * propagate the data to the leaves. This fixed behavior covers all our
- * use-cases.
+ * root, the root sends the root contents of *zb->dataptr downstream, and the
+ * children simply propagate the received data to the leaves. This fixed
+ * behavior covers all our use-cases.
  *
- * For the barrier operation, zb->dataptr is set to NULL, and both it and
- * zb->dataval are ignored.
+ * For the barrier operation, zb->dataptr is set to NULL, and zb->dataval is set
+ * to zero. Both are effectively ignored.
  *
- * For the broadcast operation, zb->dataptr is a caller-supplied pointer,
- * containing the data to be broadcast on the root and unspecified on the other
- * NIDs, and zb->dataval is ignored.
+ * For the broadcast operation, zb->dataptr is a caller-supplied pointer, and
+ * zb->dataval is ignored. When all contributions have arrived on the root, the
+ * user-supplied value of *zb->dataptr is sent downstream, and propagated to all
+ * leaves, overwriting *zb->dataptr on each endpoint.
  *
- * Both barrier and broadcast must be preceded by a getgroup operation, to
+ * For the reduce operation, zb->dataptr is set to a caller-supplied pointer,
+ * and zb->dataval is set to the value contained in this pointer. All of these
+ * caller values are sent upstream and reduced using a bitwise-AND reduction.
+ * When all contributions have arrived on the root, the value of the root
+ * *zb->dataptr is overwritten with the reduced zb->dataval, and then propagated
+ * to all leaves.
+ *
+ * Barrier, broadcast, and reduce must be preceded by a getgroup operation, to
  * obtain a grpid value for the zb object.
  *
- * For the getgroup operation, zb->dataval is a copy of the endpoint zbcoll
- * grpmsk, which has a bit set to 1 for every grpid that is available for that
- * NID. NIDs may have different grpmsk values. All of these masks are passed
- * upstream through zb->dataval in a bitwise-AND reduction. When it reaches the
- * root, the set bits in zb->dataval are the grpid values still available across
- * all of the NIDs in the group. Because zb->dataptr is set to &zb->dataval,
- * downstream propagation automatically distributes this bitmask back to all of
- * the other NIDs. The negotiated group id is the lowest numbered bit still set,
- * and every NID computes this from the bitmask.
+ * For the getgroup operation, zb->dataptr points to &zb->dataval, and
+ * zb->dataval contains a copy of the endpoint zbcoll grpmsk, which has a bit
+ * set to 1 for every grpid that is available for that NID. NIDs may have
+ * different grpmsk values. All of these masks are passed upstream through
+ * zb->dataval in a bitwise-AND reduction. When it reaches the root, the set
+ * bits in zb->dataval are the grpid values still available across all of the
+ * NIDs in the group. Because zb->dataptr == &zb-dataval, *zb->dataptr on the
+ * root contains the final reduced value, which is then propagated to all the
+ * leaves.
+ *
+ * The negotiated group id is the lowest numbered bit still set, and every NID
+ * computes this from the bitmask.
  *
  * It is possible for all group ID values to be exhausted. In this case, the
  * getgroup operation will report -FI_EBUSY, and the caller should retry until a
@@ -888,24 +899,16 @@ static inline bool rcvcomplete(struct cxip_zbcoll_state *zbs)
 static void zbsend_up(struct cxip_zbcoll_state *zbs,
 		      uint64_t mbv)
 {
-	union cxip_match_bits mb = {.raw = mbv};
-	int sim, src, dst, grpid;
-	uint64_t dat;
-
 	trc("%04x->%04x: %-10s %-10s %d/%d\n",
 		zbs->grp_rank, zbs->relatives[0], "", __func__,
 		zbs->contribs, zbs->num_relatives);
-	sim = zbunpack(mb.raw, &src, &dst, &grpid, &dat);
-	dat &= zbs->dataval;
-	zbpack(sim, src, dst, grpid, dat);
-	cxip_zbcoll_send(zbs->zb, zbs->grp_rank, zbs->relatives[0], mb.raw);
-}
+	cxip_zbcoll_send(zbs->zb, zbs->grp_rank, zbs->relatives[0], mbv);
+ }
 
 /* send downstream to all of the children */
 static void zbsend_dn(struct cxip_zbcoll_state *zbs,
 		      uint64_t mbv)
 {
-	union cxip_match_bits mb = {.raw = mbv};
 	int relidx;
 
  	for (relidx = 1; relidx < zbs->num_relatives; relidx++) {
@@ -913,7 +916,7 @@ static void zbsend_dn(struct cxip_zbcoll_state *zbs,
 			zbs->grp_rank, zbs->relatives[relidx],
 			__func__, "");
 		cxip_zbcoll_send(zbs->zb, zbs->grp_rank,
-				 zbs->relatives[relidx], mb.raw);
+				 zbs->relatives[relidx], mbv);
 	}
 }
 
@@ -926,7 +929,10 @@ static void advance(struct cxip_zbcoll_state *zbs, uint64_t mbv)
 		return;
 
 	if (isroot(zbs)) {
-		/* The root always reflects bcast data down */
+		/* Reduction overwrites root data */
+		if (zbs->dataptr && zbs->zb->reduce)
+			*zbs->dataptr = zbs->dataval;
+		/* The root always reflects its data down */
 		mb.zb_data = (zbs->dataptr) ? (*zbs->dataptr) : 0;
 		zbsend_dn(zbs, mb.raw);
 		zbdone(zbs);
@@ -1080,11 +1086,10 @@ int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
 	if (relidx == 0) {
 		/* downstream recv from parent */
 
-		/* copy the data back to the root */
-		zb->state[0].dataval = dat;
-		if (zb->state[0].dataptr)
-			*zb->state[0].dataptr = dat;
-
+		/* copy the data to the zbs */
+		zbs->dataval = dat;
+		if (zbs->dataptr)
+			*zbs->dataptr = dat;
 		trc("%04x<-%04x: %-10s %-10s %d/%d (%016lx)\n",
 			zbs->grp_rank, zbs->relatives[0], "dn_recvd", "",
 			zbs->contribs, zbs->num_relatives, dat);
@@ -1097,7 +1102,7 @@ int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
 
 		/* bitwise-AND the upstream data value */
 		zbs->dataval &= mb.raw;
-
+		mb.zb_data = zbs->dataval;
 		/* upstream packets contribute */
 		zbs->contribs += 1;
 		trc("%04x<-%04x: %-10s %-10s %d/%d\n",
@@ -1324,7 +1329,7 @@ static bool _skip_or_shuffle(struct cxip_zbcoll_obj *zb, int i, int *n)
 static void _getgroup_done(struct cxip_zbcoll_obj *zb, void *usrptr)
 {
 	struct cxip_ep_zbcoll_obj *zbcoll;
-	uint64_t v;
+	uint64_t v, mask;
 	int grpid;
 
 	zbcoll = &zb->ep_obj->zbcoll;
@@ -1332,9 +1337,10 @@ static void _getgroup_done(struct cxip_zbcoll_obj *zb, void *usrptr)
 		goto fail;
 
 	/* find the LSBit in returned data */
+	mask = zb->state[0].zb->state[0].dataval;
 	trc("search for grpid in %016lx\n", zb->state[0].dataval);
 	for (grpid = 0, v= 1ULL; grpid <= ZB_NEG_BIT; grpid++, v<<=1)
-		if (v & zb->state[0].dataval)
+		if (v & mask)
 			break;
 	trc("grpid = %d\n", grpid);
 
@@ -1492,6 +1498,7 @@ int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb)
 
 	/* process all states */
 	zb->error = FI_SUCCESS;
+	zb->reduce = false;
 	for (i = 0; i < zb->simcount; i++) {
 		if (_skip_or_shuffle(zb, i, &n))
 			continue;
@@ -1501,7 +1508,7 @@ int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb)
 		zbs->contribs++;
 		zb->busy++;
 		/* if terminal leaf node, will send up immediately */
-		mb.zb_data = zbcoll->grpmsk;
+		mb.zb_data = zbs->dataval;
 		advance(zbs, mb.raw);
 	}
 	return FI_SUCCESS;
@@ -1528,21 +1535,8 @@ void cxip_zbcoll_rlsgroup(struct cxip_zbcoll_obj *zb)
 	fastlock_release(&zbcoll->lock);
 }
 
-/**
- * @brief Initiate a data broadcast.
- *
- * All participants call this.
- *
- * The data is supplied by the root node data buffer.
- * The data is delivered to the child node data buffers.
- *
- * @param zb      : zbcoll structure
- * @param dataptr : pointer to data buffer
- * @param usrfunc : completion callback function
- * @param usrptr  : data pointer for callback
- * @return int : FI_SUCCESS or error value
- */
-int cxip_zbcoll_broadcast(struct cxip_zbcoll_obj *zb, uint64_t *dataptr)
+/* All exported functions are variants of this core function */
+static int _reduce(struct cxip_zbcoll_obj *zb, uint64_t *dataptr, bool reduce)
 {
 	struct cxip_ep_zbcoll_obj *zbcoll;
 	struct cxip_zbcoll_state *zbs;
@@ -1576,18 +1570,62 @@ int cxip_zbcoll_broadcast(struct cxip_zbcoll_obj *zb, uint64_t *dataptr)
 
 	/* process all states */
 	zb->error = FI_SUCCESS;
+	zb->reduce = reduce;
+	/* Note that for simulation, dataptr must be an array */
 	for (i = 0; i < zb->simcount; i++) {
 		if (_skip_or_shuffle(zb, i, &n))
 			continue;
 		zbs = &zb->state[n];
-		zbs->dataptr = dataptr;
+		zbs->dataval = (dataptr) ? *dataptr : 0;
+		zbs->dataptr = (dataptr) ? dataptr++ : NULL;
 		zbs->contribs++;
 		zb->busy++;
 		/* if terminal leaf node, will send up immediately */
+		mb.zb_data = zbs->dataval;
 		advance(zbs, mb.raw);
 	}
 
 	return FI_SUCCESS;
+}
+
+/**
+ * @brief Initiate a bitwise-AND reduction.
+ *
+ * All participants call this.
+ *
+ * On entry, *dataptr contains the data to be reduced. On return, *dataptr
+ * contains the reduced data.
+ *
+ * NOTE: When testing in simulation, dataptr should reference an array of
+ * uint64_t with one item for each endpoint.
+ *
+ * @param zb      : zbcoll structure
+ * @param dataptr : pointer to return data
+ * @return int    : FI_SUCCESS or error value
+ */
+int cxip_zbcoll_reduce(struct cxip_zbcoll_obj *zb, uint64_t *dataptr)
+{
+	return _reduce(zb, dataptr, true);
+}
+
+/**
+ * @brief Initiate a broadcast from root to leaves.
+ *
+ * All participants call this.
+ *
+ * On entry, *dataptr on root contains the data to be broadcast.
+ * On return, *dataptr contains the broadcast data from root.
+ *
+ * NOTE: When testing in simulation, dataptr should reference an array of
+ * uint64_t with one item for each endpoint.
+ *
+ * @param zb      : zbcoll structure
+ * @param dataptr : pointer to return data
+ * @return int    : FI_SUCCESS or error value
+ */
+int cxip_zbcoll_broadcast(struct cxip_zbcoll_obj *zb, uint64_t *dataptr)
+{
+	return _reduce(zb, dataptr, false);
 }
 
 /**
@@ -1596,13 +1634,11 @@ int cxip_zbcoll_broadcast(struct cxip_zbcoll_obj *zb, uint64_t *dataptr)
  * All participants call this.
  *
  * @param zb      : zbcoll structure
- * @param usrfunc : completion callback function
- * @param usrptr  : data pointer for callback
  * @return int : FI_SUCCESS or error value
  */
 int cxip_zbcoll_barrier(struct cxip_zbcoll_obj *zb)
 {
-	return cxip_zbcoll_broadcast(zb, NULL);
+	return _reduce(zb, NULL, false);
 }
 
 /**

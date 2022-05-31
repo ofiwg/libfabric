@@ -52,7 +52,7 @@
 
 #define	MIN(a,b) (((a)<(b))?(a):(b))
 
-TestSuite(coll_join, .disabled = false, .timeout = CXIT_DEFAULT_TIMEOUT);
+TestSuite(coll_join, .disabled = true, .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Test EP close without explicitly enabling collectives.
  */
@@ -127,7 +127,7 @@ Test(coll_join, reenable)
 /***************************************/
 
 TestSuite(coll_put, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
-	  .disabled = false, .timeout = CXIT_DEFAULT_TIMEOUT);
+	  .disabled = true, .timeout = CXIT_DEFAULT_TIMEOUT);
 
 static int _wait_for_join(int count)
 {
@@ -534,7 +534,7 @@ Test(coll_put, put_red_pkt_distrib)
 /***************************************/
 
 TestSuite(coll_reduce, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
-	  .disabled = false, .timeout = CXIT_DEFAULT_TIMEOUT);
+	  .disabled = true, .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Simulated user context, specifically to return error codes */
 struct user_context {
