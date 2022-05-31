@@ -247,11 +247,9 @@ struct fi_opx_ep_tx {
 	struct fi_opx_stx			*stx;
 	struct fi_opx_stx			exclusive_stx;
 	struct slist				work_pending;
-	//struct slist				sdma_work_pool;
 	struct ofi_bufpool			*work_pending_pool;
 	struct ofi_bufpool			*rma_payload_pool;
 	struct ofi_bufpool			*sdma_work_pool;
-	//void					*sdma_work_entries;
 	void					*mem;
 	int64_t					ref_cnt;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));

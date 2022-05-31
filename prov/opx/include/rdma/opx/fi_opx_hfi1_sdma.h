@@ -432,17 +432,12 @@ __OPX_FORCE_INLINE__
 void fi_opx_hfi1_sdma_flush(struct fi_opx_ep *opx_ep,
 			    struct fi_opx_hfi1_sdma_work_entry *we,
 			    struct slist *sdma_reqs,
-			    uint64_t *origin_byte_counter,
 			    bool delivery_completion,
 			    enum ofi_reliability_kind reliability)
 {
 	fi_opx_hfi1_sdma_do_sdma(opx_ep, we,
 				delivery_completion,
 				reliability);
-
-	if (!delivery_completion) {
-		*origin_byte_counter -= we->total_payload;
-	}
 
 	assert(we->next == NULL);
 	slist_insert_tail((struct slist_entry *)we, sdma_reqs);
