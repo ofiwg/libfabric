@@ -56,7 +56,7 @@
 #include "psm_user.h"
 #include "psm_mq_internal.h"
 
-typedef void (*memcpy_fn_t) (void *dst, const void *src, size_t n);
+typedef void *(*memcpy_fn_t) (void *dst, const void *src, size_t n);
 static int psmi_test_memcpy(memcpy_fn_t, const char *name);
 static int psmi_test_epid_table(int numelems);
 
@@ -147,7 +147,7 @@ static int psmi_test_epid_table(int numelems)
 	for (i = 0; i < numelems; i++) {
 		epaddr = psm3_epid_lookup(ep, epid_array[i]);
 		diags_assert(epaddr != NULL);
-		diags_assert(!psm3_epid_cmp(epaddr->epid, epid_array[i]));
+		diags_assert(!psm3_epid_cmp_internal(epaddr->epid, epid_array[i]));
 		diags_assert(epaddr->ptlctl->ep == ep);
 	}
 
@@ -164,14 +164,14 @@ static int psmi_test_epid_table(int numelems)
 	for (i = 0; i < numelems / 2; i++) {
 		epaddr = psm3_epid_remove(ep, epid_array[i]);
 		diags_assert(epaddr != NULL);
-		diags_assert(!psm3_epid_cmp(epaddr->epid, epid_array[i]));
+		diags_assert(!psm3_epid_cmp_internal(epaddr->epid, epid_array[i]));
 		diags_assert(epaddr->ptlctl->ep == ep);
 	}
 	/* Lookup other half -- expect non-NULL, then delete */
 	for (i = numelems / 2; i < numelems; i++) {
 		epaddr = psm3_epid_lookup(ep, epid_array[i]);
 		diags_assert(epaddr != NULL);
-		diags_assert(!psm3_epid_cmp(epaddr->epid, epid_array[i]));
+		diags_assert(!psm3_epid_cmp_internal(epaddr->epid, epid_array[i]));
 		diags_assert(epaddr->ptlctl->ep == ep);
 		epaddr = psm3_epid_remove(ep, epid_array[i]);
 		epaddr = psm3_epid_lookup(ep, epid_array[i]);

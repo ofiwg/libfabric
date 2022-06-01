@@ -76,6 +76,25 @@
 #define DEF_LIMITS_STRING "4294967295:4294967295"
 #define DEF_LIMITS_VALUE 4294967295
 
+#ifdef PSM_OPA
+static enum psm3_ibv_rate ips_default_hfi_rate(uint16_t hfi_type)
+{
+	enum psm3_ibv_rate rate;
+
+	switch (hfi_type) {
+	case PSMI_HFI_TYPE_OPA1:
+		rate = PSM3_IBV_RATE_100_GBPS;
+		break;
+	case PSMI_HFI_TYPE_OPA2:
+		rate = PSM3_IBV_RATE_120_GBPS;
+		break;
+	default:
+		rate = PSM3_IBV_RATE_MAX;
+	}
+
+	return rate;
+}
+#endif // PSM_OPA
 
 // unfortunately ibv_rate_to_mult and mult_to_ibv_rate have a bug as they
 // omit 100g rate and some others, so we create our own
@@ -243,7 +262,11 @@ uint8_t psm3_timeout_usec_to_mult(uint64_t timeout_us)
 static psm2_error_t
 ips_none_get_path_rec(struct ips_proto *proto,
 		      __be16 slid, __be16 dlid,
+#ifndef PSM_OPA
 		      __be64 gid_hi, __be64 gid_lo,
+#else
+		      uint16_t desthfi_type,
+#endif
 		      unsigned long timeout, ips_path_rec_t **ppath_rec)
 {
 	psm2_error_t err = PSM2_OK;
@@ -257,8 +280,12 @@ ips_none_get_path_rec(struct ips_proto *proto,
 	 * endian CPU, this will put low bits earlier in string and cause
 	 * quicker discovery of differences when doing strcmp to sort/search
 	 */
+#ifndef PSM_OPA
 	// TBD - slid same until have dispersive LMC-like, could just use dest
 	snprintf(eplid, sizeof(eplid), "%x_%"PRIx64"_%"PRIx64"_%x", slid, (uint64_t)gid_lo, (uint64_t)gid_hi, dlid);
+#else
+	snprintf(eplid, sizeof(eplid), "%x_%x", slid, dlid);
+#endif
 	elid.key = eplid;
 	hsearch_r(elid, FIND, &epath, &proto->ips_path_rec_hash);
 
@@ -279,9 +306,19 @@ ips_none_get_path_rec(struct ips_proto *proto,
 		path_rec->pr_mtu = proto->epinfo.ep_mtu;
 		path_rec->pr_pkey = proto->epinfo.ep_pkey;
 		path_rec->pr_sl = proto->epinfo.ep_sl;
+#ifndef PSM_OPA
 		path_rec->pr_gid_hi = gid_hi;	/* __be64 */
 		path_rec->pr_gid_lo = gid_lo;	/* __be64 */
 		path_rec->pr_static_rate = proto->epinfo.ep_link_rate;
+#else
+		/* Determine the IPD based on our local link rate and default link rate for
+		 * remote hfi type.
+		 */
+		path_rec->pr_static_ipd =
+		    proto->ips_ipd_delay[ips_default_hfi_rate(desthfi_type)];
+
+		_HFI_CCADBG("pr_static_ipd = %d\n", (int) path_rec->pr_static_ipd);
+#endif
 
 		if (path_rec->pr_sl > PSMI_SL_MAX) {
 			err =  PSM2_INTERNAL_ERR;
@@ -314,7 +351,11 @@ fail:
 static psm2_error_t
 ips_none_path_rec(struct ips_proto *proto,
 		  __be16 slid, __be16 dlid,
+#ifndef PSM_OPA
 		  __be64 gid_hi, __be64 gid_lo,
+#else
+		  uint16_t desthfi_type,
+#endif
 		  unsigned long timeout, ips_path_grp_t **ppathgrp)
 {
 	psm2_error_t err = PSM2_OK;
@@ -339,8 +380,12 @@ ips_none_path_rec(struct ips_proto *proto,
 	 * endian CPU, this will put low bits earlier in string and cause
 	 * quicker discovery of differences when doing strcmp to sort/search
 	 */
+#ifndef PSM_OPA
 	// TBD - slid same until have dispersive LMC-like, could just use dest
 	snprintf(eplid, sizeof(eplid), "%x_%"PRIx64"_%"PRIx64"_%x", slid, (uint64_t)gid_lo, (uint64_t)gid_hi, dlid);
+#else
+	snprintf(eplid, sizeof(eplid), "%x_%x", slid, dlid);
+#endif
 	elid.key = eplid;
 	hsearch_r(elid, FIND, &epath, &proto->ips_path_grp_hash);
 
@@ -398,7 +443,11 @@ ips_none_path_rec(struct ips_proto *proto,
 
 		err =
 		    ips_none_get_path_rec(proto, path_slid, path_dlid,
+#ifndef PSM_OPA
 					  gid_hi, gid_lo,
+#else
+					  desthfi_type,
+#endif
 					  timeout, &path);
 		if (err != PSM2_OK) {
 			psmi_free(elid.key);
@@ -425,12 +474,19 @@ ips_none_path_rec(struct ips_proto *proto,
 			pathgrp->pg_path[0][IPS_PATH_NORMAL_PRIORITY] = path;
 			pathgrp->pg_path[0][IPS_PATH_LOW_PRIORITY] = path;
 		}
+#ifndef PSM_OPA
                 PSM2_LOG_MSG("path %p slid %hu dlid %hu gid %0x"PRIx64":%"PRIx64"\n",
                               path,
 			      __be16_to_cpu(path->pr_slid),
 			      __be16_to_cpu(path->pr_dlid),
 			      __be64_to_cpu(path->pr_gid_hi),
 			      __be64_to_cpu(path->pr_gid_lo));
+#else
+                PSM2_LOG_MSG("path %p slid %hu dlid %hu %hu\n",
+                              path,
+			      __be16_to_cpu(path->pr_slid),
+			      __be16_to_cpu(path->pr_dlid));
+#endif
 
 	}
 
@@ -527,6 +583,16 @@ static psm2_error_t ips_none_path_rec_init(struct ips_proto *proto)
 	proto->ibta.get_path_rec = ips_none_path_rec;
 	proto->ibta.fini = NULL;
 
+#ifdef PSM_OPA
+	/* With no path records queries set pkey manually */
+	if (psmi_hal_set_pkey(proto->ep->context.psm_hw_ctxt,
+			      (uint16_t) proto->ep->network_pkey) != 0) {
+		err = psm3_handle_error(proto->ep, PSM2_EP_DEVICE_FAILURE,
+					"Couldn't set device pkey 0x%x for %s port %u: %s",
+					(int)proto->ep->network_pkey,
+					proto->ep->dev_name, proto->ep->portnum, strerror(errno));
+	}
+#endif
 
 	return err;
 }

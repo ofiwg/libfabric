@@ -101,7 +101,7 @@ static void amsh_conn_handler(void *toki, psm2_amarg_t *args, int narg,
 #if _HFI_DEBUGGING
 static const char *psmi_kassist_getmode(int mode);
 #endif
-static int psmi_get_kassist_mode();
+static int psm3_get_kassist_mode();
 int psm3_epaddr_pid(psm2_epaddr_t epaddr);
 
 static inline void
@@ -258,7 +258,7 @@ psm2_error_t psm3_shm_create(ptl_t *ptl_gen)
 	char *amsh_keyname = NULL;
 	int iterator;
 	/* Get which kassist mode to use. */
-	ptl->psmi_kassist_mode = psmi_get_kassist_mode();
+	ptl->psmi_kassist_mode = psm3_get_kassist_mode();
 
 	_HFI_PRDBG("kassist_mode %d %s use_kassist %d\n",
 			ptl->psmi_kassist_mode,
@@ -271,7 +271,7 @@ psm2_error_t psm3_shm_create(ptl_t *ptl_gen)
 			 sizeof(shmbuf),
 			 "/psm3_shm.%ld.%s.%d",
 			 (long int) getuid(),
-			 psm3_epid_fmt(ep->epid, 0),
+			 psm3_epid_fmt_internal(ep->epid, 0),
 			 iterator);
 		amsh_keyname = psmi_strdup(NULL, shmbuf);
 		if (amsh_keyname == NULL) {
@@ -430,10 +430,10 @@ psm2_error_t psm3_shm_map_remote(ptl_t *ptl_gen, psm2_epid_t epid, uint16_t *shm
 	shmidx = *shmidx_o = -1;
 
 	for (i = 0; i <= ptl->max_ep_idx; i++) {
-		if (!psm3_epid_cmp(ptl->am_ep[i].epid, epid)) {
+		if (!psm3_epid_cmp_internal(ptl->am_ep[i].epid, epid)) {
 			if (force_remap) {
 				ptl->am_ep[i].epaddr = NULL;
-				ptl->am_ep[i].epid = psm3_epid_zeroed();
+				ptl->am_ep[i].epid = psm3_epid_zeroed_internal();
 				break;
 			}
 			*shmidx_o = shmidx = i;
@@ -450,7 +450,7 @@ psm2_error_t psm3_shm_map_remote(ptl_t *ptl_gen, psm2_epid_t epid, uint16_t *shm
 			 sizeof(shmbuf),
 			 "/psm3_shm.%ld.%s.%d",
 			 (long int) getuid(),
-			 psm3_epid_fmt(epid, 0),
+			 psm3_epid_fmt_internal(epid, 0),
 			 iterator);
 		dest_shmfd = shm_open(shmbuf, O_RDWR, S_IRWXU);
 		if (dest_shmfd < 0) {
@@ -532,13 +532,13 @@ psm2_error_t psm3_shm_map_remote(ptl_t *ptl_gen, psm2_epid_t epid, uint16_t *shm
 			goto fail;
 
 		for (i = 0; i <= ptl->max_ep_idx; i++) {
-			if (!psm3_epid_zero(ptl->am_ep[i].epid))
+			if (!psm3_epid_zero_internal(ptl->am_ep[i].epid))
 				am_update_directory(&ptl->am_ep[i]);
 		}
 	}
 	for (i = 0; i < ptl->am_ep_size; i++) {
-		psmi_assert(psm3_epid_cmp(ptl->am_ep[i].epid, epid));
-		if (psm3_epid_zero(ptl->am_ep[i].epid)) {
+		psmi_assert(psm3_epid_cmp_internal(ptl->am_ep[i].epid, epid));
+		if (psm3_epid_zero_internal(ptl->am_ep[i].epid)) {
 			ptl->am_ep[i].epid = epid;
 			ptl->am_ep[i].psm_verno = dest_nodeinfo->psm_verno;
 			ptl->am_ep[i].pid = dest_nodeinfo->pid;
@@ -567,7 +567,7 @@ psm2_error_t psm3_shm_map_remote(ptl_t *ptl_gen, psm2_epid_t epid, uint16_t *shm
 			_HFI_CONNDBG("KASSIST MODE: %s\n",
 				   psmi_kassist_getmode(ptl->psmi_kassist_mode));
 			shmidx = *shmidx_o = i;
-			_HFI_CONNDBG("Mapped epid %s into shmidx %d\n", psm3_epid_fmt(epid, 0), shmidx);
+			_HFI_CONNDBG("Mapped epid %s into shmidx %d\n", psm3_epid_fmt_internal(epid, 0), shmidx);
 			ptl->am_ep[i].amsh_shmbase = (uintptr_t) dest_mapptr;
 			ptl->am_ep[i].amsh_qsizes = dest_nodeinfo->amsh_qsizes;
 			if (i > ptl->max_ep_idx)
@@ -604,7 +604,7 @@ static psm2_error_t amsh_init_segment(ptl_t *ptl_gen)
 	psmi_assert_always(ptl != NULL);
 	psmi_assert_always(ptl->ep != NULL);
 	psmi_assert_always(ptl->epaddr != NULL);
-	psmi_assert_always(!psm3_epid_zero(ptl->ep->epid));
+	psmi_assert_always(!psm3_epid_zero_internal(ptl->ep->epid));
 
 	if ((err = psm3_shm_create(ptl_gen)))
 		goto fail;
@@ -781,7 +781,7 @@ amsh_epaddr_add(ptl_t *ptl_gen, psm2_epid_t epid, uint16_t shmidx, psm2_epaddr_t
 	psmi_assert(psm3_epid_lookup(ptl->ep, epid) == NULL);
 
 	/* The self PTL handles loopback communication. */
-	psmi_assert(psm3_epid_cmp(epid, ptl->epid));
+	psmi_assert(psm3_epid_cmp_internal(epid, ptl->epid));
 
 	/* note the size of the memory is am_epaddr_t */
 	epaddr = (psm2_epaddr_t) psmi_calloc(ptl->ep,
@@ -933,13 +933,13 @@ amsh_ep_connreq_init(ptl_t *ptl_gen, int op, /* connect, disconnect or abort */
 			   The self PTL handles loopback communication, so explicitly
 			   refuse to connect to self. */
 			if (!amsh_epid_reachable(ptl_gen, epid)
-			    || !psm3_epid_cmp(epid, ptl->epid)) {
+			    || !psm3_epid_cmp_internal(epid, ptl->epid)) {
 				array_of_errors[i] = PSM2_EPID_UNREACHABLE;
 				array_of_epaddr[i] = NULL;
 				continue;
 			}
 
-			_HFI_CONNDBG("Connect epid %s\n", psm3_epid_fmt(epid, 0));
+			_HFI_CONNDBG("Connect epid %s\n", psm3_epid_fmt_internal(epid, 0));
 			epaddr = psm3_epid_lookup(ptl->ep, epid);
 			if (epaddr != NULL) {
 				if (epaddr->ptlctl->ptl != ptl_gen) {
@@ -970,7 +970,7 @@ amsh_ep_connreq_init(ptl_t *ptl_gen, int op, /* connect, disconnect or abort */
 
 			psmi_assert(epaddr != NULL);
 			_HFI_CONNDBG("Disconnect force=%d epid %s\n",
-					(op == PTL_OP_ABORT), psm3_epid_fmt(epaddr->epid, 0));
+					(op == PTL_OP_ABORT), psm3_epid_fmt_internal(epaddr->epid, 0));
 			cstate = ((am_epaddr_t *) epaddr)->cstate_outgoing;
 			if (cstate == AMSH_CSTATE_OUTGOING_ESTABLISHED) {
 				req->epid_mask[i] = AMSH_CMASK_PREREQ;
@@ -1026,7 +1026,7 @@ amsh_ep_connreq_poll(ptl_t *ptl_gen, struct ptl_connection_req *req)
 			if (req->epid_mask[i] == AMSH_CMASK_PREREQ) {
 				shmidx = ((am_epaddr_t *) epaddr)->shmidx;
 				/* Make sure the target of the disconnect is still there */
-				if (psm3_epid_cmp(ptl->am_ep[shmidx].epid, epaddr->epid)) {
+				if (psm3_epid_cmp_internal(ptl->am_ep[shmidx].epid, epaddr->epid)) {
 					req->numep_left--;
 					req->epid_mask[i] = AMSH_CMASK_DONE;
 					((am_epaddr_t *) epaddr)->cstate_outgoing =
@@ -1123,7 +1123,7 @@ amsh_ep_connreq_poll(ptl_t *ptl_gen, struct ptl_connection_req *req)
 				for (shmidx = -1, j = 0;
 				     j <= ptl->max_ep_idx; j++) {
 					/* epid is connected and ready to go */
-					if (!psm3_epid_cmp(ptl->am_ep[j].epid,
+					if (!psm3_epid_cmp_internal(ptl->am_ep[j].epid,
 								 epid)) {
 						shmidx = j;
 						break;
@@ -1155,7 +1155,7 @@ amsh_ep_connreq_poll(ptl_t *ptl_gen, struct ptl_connection_req *req)
 					_HFI_INFO("Local endpoint id %s"
 						  " has version %s "
 						  "which is not supported by library version %d.%d",
-						  psm3_epid_fmt(epid, 0), buf, PSM2_VERNO_MAJOR,
+						  psm3_epid_fmt_internal(epid, 0), buf, PSM2_VERNO_MAJOR,
 						  PSM2_VERNO_MINOR);
 					req->errors[i] =
 					    PSM2_EPID_INVALID_VERSION;
@@ -1197,7 +1197,7 @@ amsh_ep_connreq_poll(ptl_t *ptl_gen, struct ptl_connection_req *req)
 							req->args, 6, NULL, 0,
 							0);
 				_HFI_CONNDBG("epaddr=%p, epid=%s at shmidx=%d\n",
-						   epaddr, psm3_epid_fmt(epid, 0), shmidx);
+						   epaddr, psm3_epid_fmt_internal(epid, 0), shmidx);
 			}
 		}
 	}
@@ -2029,7 +2029,7 @@ amsh_mq_rndv(ptl_t *ptl, psm2_mq_t mq, psm2_mq_req_t req,
 		/* Offset in GPU buffer from which we copy data, we have to
 			* send it separetly because this offset is lost
 			* when cuIpcGetMemHandle  is called */
-		req->cuda_ipc_offset = buf - (void*)buf_base_ptr;
+		req->cuda_ipc_offset = (uint32_t)((uintptr_t)buf - (uintptr_t)buf_base_ptr);
 		args[2].u32w0 = (uint32_t)req->cuda_ipc_offset;
 
 		PSMI_CUDA_CALL(cuIpcGetMemHandle,
@@ -2141,7 +2141,7 @@ amsh_mq_send_inner(psm2_mq_t mq, psm2_mq_req_t req, psm2_epaddr_t epaddr,
 	int gpu_mem = 0;
 	int ep_supports_p2p = (1 << ((am_epaddr_t *) epaddr)->gpuid) & gpu_p2p_supported();
 
-	if (PSMI_IS_CUDA_ENABLED && PSMI_IS_CUDA_MEM(ubuf)) {
+	if (PSMI_IS_GPU_ENABLED && PSMI_IS_GPU_MEM(ubuf)) {
 		gpu_mem = 1;
 
 		/* All sends from a gpu buffer use the rendezvous protocol if p2p is supported */
@@ -2192,7 +2192,7 @@ do_rendezvous:
 		 * This will be only used with blocking requests. */
 		if (!ep_supports_p2p) {
 			host_buf = psmi_malloc(epaddr->ptlctl->ep, UNDEFINED, len);
-			PSMI_CUDA_CALL(cuMemcpyDtoH, host_buf, (CUdeviceptr)ubuf, len);
+			PSM3_GPU_MEMCPY_DTOH(host_buf, ubuf, len);
 
 			/* Reset is_buf_gpu_mem since host buffer is being used
 			 * instead of one from GPU. */
@@ -2281,7 +2281,7 @@ const char *psmi_kassist_getmode(int mode)
 #endif
 
 static
-int psmi_get_kassist_mode()
+int psm3_get_kassist_mode()
 {
 	/* Cuda PSM2 supports only KASSIST_CMA_GET */
 	int mode = PSMI_KASSIST_CMA_GET;
@@ -2343,7 +2343,7 @@ amsh_conn_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 	read_extra_ep_data(args[2].u32w0, &pid, &gpuid);
 
 	_HFI_CONNDBG("Conn op=%d, phase=%d, epid=%s, err=%d\n",
-			  op, phase, psm3_epid_fmt(epid, 0), err);
+			  op, phase, psm3_epid_fmt_internal(epid, 0), err);
 
 	switch (op) {
 	case PSMI_AM_CONN_REQ:
@@ -2435,7 +2435,7 @@ amsh_conn_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 	case PSMI_AM_DISC_REQ:
 		epaddr = psm3_epid_lookup(ptl->ep, epid);
 		if (!epaddr) {
-			_HFI_CONNDBG("Dropping disconnect request from an epid that we are not connected to %s\n", psm3_epid_fmt(epid, 0));
+			_HFI_CONNDBG("Dropping disconnect request from an epid that we are not connected to %s\n", psm3_epid_fmt_internal(epid, 0));
 			return;
 		}
 		args[0].u16w0 = PSMI_AM_DISC_REP;
@@ -2446,7 +2446,7 @@ amsh_conn_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 		/* Before sending the reply, make sure the process
 		 * is still connected */
 
-		if (psm3_epid_cmp(ptl->am_ep[shmidx].epid, epaddr->epid))
+		if (psm3_epid_cmp_internal(ptl->am_ep[shmidx].epid, epaddr->epid))
 			is_valid = 0;
 		else
 			is_valid = 1;
@@ -2528,7 +2528,7 @@ amsh_init(psm2_ep_t ep, ptl_t *ptl_gen, ptl_ctl_t *ctl)
 	/* Preconditions */
 	psmi_assert_always(ep != NULL);
 	psmi_assert_always(ep->epaddr != NULL);
-	psmi_assert_always(!psm3_epid_zero(ep->epid));
+	psmi_assert_always(!psm3_epid_zero_internal(ep->epid));
 
 	ptl->ep = ep;		/* back pointer */
 	ptl->epid = ep->epid;	/* cache epid */
@@ -2613,7 +2613,7 @@ amsh_init(psm2_ep_t ep, ptl_t *ptl_gen, ptl_ctl_t *ctl)
 		     PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 		     (union psmi_envvar_val)
 		      1, &env_memcache_enabled);
-	if (PSMI_IS_CUDA_ENABLED && env_memcache_enabled.e_uint) {
+	if (PSMI_IS_GPU_ENABLED && env_memcache_enabled.e_uint) {
 		union psmi_envvar_val env_memcache_size;
 		psm3_getenv("PSM3_CUDA_MEMCACHE_SIZE",
 			    "Size of the cuda ipc memhandle cache ",
@@ -2729,7 +2729,7 @@ poll:
 		psmi_free(ptl->am_ep);
 
 #ifdef PSM_CUDA
-	if (PSMI_IS_CUDA_ENABLED)
+	if (PSMI_IS_GPU_ENABLED)
 		am_cuda_memhandle_cache_map_fini();
 #endif
 	return PSM2_OK;

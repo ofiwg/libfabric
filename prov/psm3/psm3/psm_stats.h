@@ -63,9 +63,7 @@
 #include "mpspawn_stats.h"
 
 #define PSMI_STATSTYPE_MQ	    	0x00001
-#ifdef PSM_CUDA
-#define PSMI_STATSTYPE_CUDA	    	0x00002 /* count of cuda calls */
-#endif
+#define PSMI_STATSTYPE_GPU	    	0x00002 /* count of GPU calls */
 #define PSMI_STATSTYPE_RCVTHREAD    0x00100	/* num_wakups, ratio, etc. */
 #define PSMI_STATSTYPE_IPSPROTO	    0x00200	/* acks,naks,err_chks */
 #define PSMI_STATSTYPE_RDMA	    	0x00400	/* RDMA */
@@ -81,6 +79,11 @@
 #define PSMI_STATSTYPE_RV_RDMA	    0x04000	/* RV shared conn RDMA */
 #endif /* PSM_VERBS */
 #define PSMI_STATSTYPE_FAULTINJ	    0x08000	/* fault injection - PSM_FI */
+#ifdef PSM_OPA
+#define PSMI_STATSTYPE_DEVCOUNTERS  0x10000
+#define PSMI_STATSTYPE_DEVSTATS	    0x20000
+#define _PSMI_STATSTYPE_DEVMASK	    0xf0000
+#endif
 #define PSMI_STATSTYPE_ALL	    	0xfffff
 #define _PSMI_STATSTYPE_SHOWZERO	0x100000
 
@@ -144,18 +147,18 @@ psm3_stats_register_type(const char *heading,
 
 /* deregister old copy and register a new one in it's place */
 psm2_error_t
-psmi_stats_reregister_type(const char *heading,
+psm3_stats_reregister_type(const char *heading,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries,
 			 int num_entries, const char *id, void *context,
 			 const char *info);
 
-psm2_error_t psmi_stats_deregister_type(uint32_t statstype, void *context);
+psm2_error_t psm3_stats_deregister_type(uint32_t statstype, void *context);
 
-psm2_error_t  psmi_stats_initialize(void);
+psm2_error_t  psm3_stats_initialize(void);
 
-void psmi_stats_finalize(void);
+void psm3_stats_finalize(void);
 
-void psmi_stats_ep_close(void);	// let stats react to 1st ep close if desired
+void psm3_stats_ep_close(void);	// let stats react to 1st ep close if desired
 
 #endif /* PSM_STATS_H */

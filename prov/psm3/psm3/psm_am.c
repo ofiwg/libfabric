@@ -247,10 +247,10 @@ psm3_am_request_short(psm2_epaddr_t epaddr, psm2_handler_t handler,
 	PSM2_LOG_MSG("entering");
 	PSMI_ASSERT_INITIALIZED();
 	psmi_assert(epaddr != NULL);
-	psmi_assert(handler >= 0 && handler < psm3_am_parameters.max_handlers);
+	psmi_assert(handler < psm3_am_parameters.max_handlers);
 	psmi_assert(nargs >= 0 && nargs <= psm3_am_parameters.max_nargs);
 	psmi_assert(nargs > 0 ? args != NULL : 1);
-	psmi_assert(len >= 0 && len <= psm3_am_parameters.max_request_short);
+	psmi_assert(len <= psm3_am_parameters.max_request_short);
 	psmi_assert(len > 0 ? src != NULL : 1);
 
 	PSMI_LOCK(ptlc->ep->mq->progress_lock);
@@ -278,10 +278,10 @@ psm3_am_reply_short(psm2_am_token_t token, psm2_handler_t handler,
 	PSM2_LOG_MSG("entering");
 	PSMI_ASSERT_INITIALIZED();
 	psmi_assert_always(token != NULL);
-	psmi_assert(handler >= 0 && handler < psm3_am_parameters.max_handlers);
+	psmi_assert(handler < psm3_am_parameters.max_handlers);
 	psmi_assert(nargs >= 0 && nargs <= psm3_am_parameters.max_nargs);
 	psmi_assert(nargs > 0 ? args != NULL : 1);
-	psmi_assert(len >= 0 && len <= psm3_am_parameters.max_reply_short);
+	psmi_assert(len <= psm3_am_parameters.max_reply_short);
 	psmi_assert(len > 0 ? src != NULL : 1);
 
 	tok = (struct psmi_am_token *)token;

@@ -147,11 +147,11 @@ psm2_error_t psm3_mq_req_init(psm2_mq_t mq)
 	/* Warm up the allocators */
 	warmup_req = psm3_mq_req_alloc(mq, MQE_TYPE_RECV);
 	psmi_assert_always(warmup_req != NULL);
-	psmi_mq_req_free(warmup_req);
+	psm3_mq_req_free_internal(warmup_req);
 
 	warmup_req = psm3_mq_req_alloc(mq, MQE_TYPE_SEND);
 	psmi_assert_always(warmup_req != NULL);
-	psmi_mq_req_free(warmup_req);
+	psm3_mq_req_free_internal(warmup_req);
 
 fail:
 	return err;
@@ -171,7 +171,7 @@ psm2_error_t psm3_mq_req_fini(psm2_mq_t mq)
  */
 
 static
-void psmi_mq_stats_callback(struct mpspawn_stats_req_args *args)
+void psm3_mq_stats_callback(struct mpspawn_stats_req_args *args)
 {
 	uint64_t *entry = args->stats;
 	psm2_mq_t mq = (psm2_mq_t) args->context;
@@ -193,7 +193,7 @@ void psmi_mq_stats_callback(struct mpspawn_stats_req_args *args)
 	entry[7] = mqstats.rx_sys_bytes;
 }
 
-void psmi_mq_stats_register(psm2_mq_t mq, mpspawn_stats_add_fn add_fn)
+void psm3_mq_stats_register(psm2_mq_t mq, mpspawn_stats_add_fn add_fn)
 {
 	char *desc[8];
 	uint16_t flags[8];
@@ -218,7 +218,7 @@ void psmi_mq_stats_register(psm2_mq_t mq, mpspawn_stats_add_fn add_fn)
 	mp_add.version = MPSPAWN_STATS_VERSION;
 	mp_add.num = 8;
 	mp_add.header = "MPI Statistics Summary (max,min @ rank)";
-	mp_add.req_fn = psmi_mq_stats_callback;
+	mp_add.req_fn = psm3_mq_stats_callback;
 	mp_add.desc = desc;
 	mp_add.flags = flags;
 	mp_add.context = mq;

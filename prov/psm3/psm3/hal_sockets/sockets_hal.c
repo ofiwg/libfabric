@@ -132,25 +132,25 @@ static const char *psm3_hfp_sockets_get_unit_name(int unit)
 }
 
 // used as fabric.name for fi_info
-static int psm3_hfp_sockets_get_port_subnet_name(int unit, int port, char *buf, size_t bufsize)
+static int psm3_hfp_sockets_get_port_subnet_name(int unit, int port, int addr_index, char *buf, size_t bufsize)
 {
 	psmi_subnet128_t subnet;
 
-	if (psm3_hfp_sockets_get_port_subnet(unit, 1, &subnet, NULL, NULL, NULL))
+	if (psm3_hfp_sockets_get_port_subnet(unit, 1, addr_index, &subnet, NULL, NULL, NULL))
 		return -1;
 
 	if (psm3_sockets_parse_inet(0) == PSM3_SOCKETS_TCP)
-		psmi_subnet128_fmt_name(PSMI_ETH_PROTO_TCP, subnet,
+		psm3_subnet128_fmt_name(PSMI_ETH_PROTO_TCP, subnet,
 					buf, bufsize);
 	else
-		psmi_subnet128_fmt_name(PSMI_ETH_PROTO_UDP, subnet,
+		psm3_subnet128_fmt_name(PSMI_ETH_PROTO_UDP, subnet,
 					buf, bufsize);
 	return 0;
 }
 
-static int psm3_hfp_sockets_get_port_lid(int unit, int port)
+static int psm3_hfp_sockets_get_port_lid(int unit, int port, int addr_index)
 {
-	return psm3_sockets_get_port_lid(unit, port, SIMS_FILTER);
+	return psm3_sockets_get_port_lid(unit, port, addr_index, SIMS_FILTER);
 }
 
 // initialize default MQ thresholds
@@ -168,8 +168,8 @@ static void psm3_hfp_sockets_mq_init_defaults(struct psm2_mq *mq)
 	// even without RDMA, the receiver controlled pacing helps scalability
 	mq->hfi_thresh_rv = (~(uint32_t)0); // disable rendezvous
 	mq->hfi_thresh_tiny = PSM_MQ_NIC_MAX_TINY;
-#ifdef PSM_CUDA
-	if (PSMI_IS_CUDA_ENABLED)
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	if (PSMI_IS_GPU_ENABLED)
 		mq->hfi_base_window_rv = 2097152;
 #endif
 	// we parse inet and rv_gpu_cache_size here so we can cache it
@@ -260,6 +260,8 @@ static hfp_sockets_t psm3_sockets_hi = {
 #endif
 #ifdef PSM_CUDA
 								" (cuda)"
+#elif defined(PSM_ONEAPI)
+								" (OneAPI ZE)"
 #endif
 									,
 		.nic_sys_class_path			  = "/sys/class/net",
@@ -304,6 +306,7 @@ static hfp_sockets_t psm3_sockets_hi = {
 #if PSMI_HAL_INST_CNT > 1 || defined(PSM_DEBUG)
 		.hfp_context_open			  = psm3_hfp_sockets_context_open,
 		.hfp_close_context			  = psm3_hfp_sockets_close_context,
+		.hfp_context_check_status		  = psm3_hfp_sockets_context_check_status,
 #ifdef PSM_FI
 		.hfp_faultinj_allowed			  = psm3_hfp_sockets_faultinj_allowed,
 #endif
@@ -324,14 +327,14 @@ static hfp_sockets_t psm3_sockets_hi = {
 		.hfp_ips_ibta_init			  = psm3_hfp_sockets_ips_ibta_init,
 		.hfp_ips_path_rec_init			  = psm3_hfp_sockets_ips_path_rec_init,
 		.hfp_ips_ptl_pollintr			  = psm3_hfp_sockets_ips_ptl_pollintr,
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		.hfp_gdr_close				  = psm3_hfp_sockets_gdr_close,
 		.hfp_gdr_convert_gpu_to_host_addr	  = psm3_hfp_sockets_gdr_convert_gpu_to_host_addr,
-#endif /* PSM_CUDA */
+#endif /* PSM_CUDA || PSM_ONEAPI */
 		.hfp_get_port_index2pkey		  = psm3_hfp_sockets_get_port_index2pkey,
 		.hfp_poll_type				  = psm3_hfp_sockets_poll_type,
 		.hfp_spio_transfer_frame		  = psm3_hfp_sockets_spio_transfer_frame,
-		.hfp_spio_process_events		  = psm3_hfp_sockets_spio_process_events,
+		.hfp_transfer_frame			  = psm3_hfp_sockets_transfer_frame,
 		.hfp_drain_sdma_completions		  = psm3_hfp_sockets_drain_sdma_completions,
 		.hfp_get_node_id			  = psm3_hfp_sockets_get_node_id,
 #endif /* PSMI_HAL_INST_CNT > 1 || defined(PSM_DEBUG) */

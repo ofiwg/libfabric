@@ -184,14 +184,14 @@ void psmx3_trx_ctxt_free(struct psmx3_trx_ctxt *trx_ctxt, int usage_flags)
 	trx_ctxt->usage_flags &= ~usage_flags;
 	if (trx_ctxt->usage_flags) {
 		FI_INFO(&psmx3_prov, FI_LOG_CORE, "epid: %s (%s -> %s)\n",
-			psm2_epid_fmt(trx_ctxt->psm2_epid, 0),
+			psm3_epid_fmt(trx_ctxt->psm2_epid, 0),
 			psmx3_usage_flags_to_string(old_flags),
 			psmx3_usage_flags_to_string(trx_ctxt->usage_flags));
 		return;
 	}
 
 	FI_INFO(&psmx3_prov, FI_LOG_CORE, "epid: %s (%s)\n",
-		psm2_epid_fmt(trx_ctxt->psm2_epid, 0), psmx3_usage_flags_to_string(old_flags));
+		psm3_epid_fmt(trx_ctxt->psm2_epid, 0), psmx3_usage_flags_to_string(old_flags));
 
 	trx_ctxt->am_progress = 0;
 	trx_ctxt->poll_active = 0;
@@ -264,7 +264,7 @@ struct psmx3_trx_ctxt *psmx3_trx_ctxt_alloc(struct psmx3_fid_domain *domain,
 				domain->trx_ctxt_unlock_fn(&domain->trx_ctxt_lock, 1);
 				FI_INFO(&psmx3_prov, FI_LOG_CORE,
 					"use existing context. epid: %s "
-					"(%s -> tx+rx).\n", psm2_epid_fmt(trx_ctxt->psm2_epid, 0),
+					"(%s -> tx+rx).\n", psm3_epid_fmt(trx_ctxt->psm2_epid, 0),
 					psmx3_usage_flags_to_string(compatible_flags));
 				return trx_ctxt;
 			}
@@ -300,10 +300,16 @@ struct psmx3_trx_ctxt *psmx3_trx_ctxt_alloc(struct psmx3_fid_domain *domain,
 	FI_INFO(&psmx3_prov, FI_LOG_CORE,
 		"uuid: %s\n", psmx3_uuid_to_string(uuid));
 
-	opts.unit = src_addr ? src_addr->unit : PSMX3_DEFAULT_UNIT;
+	if (src_addr && src_addr->unit >= 0) {
+		opts.unit = psmx3_domain_info.unit_id[src_addr->unit];
+		opts.addr_index = psmx3_domain_info.addr_index[src_addr->unit];
+	} else {
+		opts.unit = PSMX3_DEFAULT_UNIT;
+		opts.addr_index = PSMX3_DEFAULT_ADDR_INDEX;
+	}
 	opts.port = src_addr ? src_addr->port : PSMX3_DEFAULT_PORT;
 	FI_INFO(&psmx3_prov, FI_LOG_CORE,
-		"ep_open_opts: unit=%d port=%u\n", opts.unit, opts.port);
+		"ep_open_opts: unit=%d port=%u addr_index=%d\n", opts.unit, opts.port, opts.addr_index);
 
 	err = psm3_ep_open(uuid, &opts,
 			   &trx_ctxt->psm2_ep, &trx_ctxt->psm2_epid);
@@ -314,7 +320,7 @@ struct psmx3_trx_ctxt *psmx3_trx_ctxt_alloc(struct psmx3_fid_domain *domain,
 	}
 
 	FI_INFO(&psmx3_prov, FI_LOG_CORE,
-		"epid: %s (%s)\n", psm2_epid_fmt(trx_ctxt->psm2_epid, 0),
+		"epid: %s (%s)\n", psm3_epid_fmt(trx_ctxt->psm2_epid, 0),
 		psmx3_usage_flags_to_string(usage_flags));
 
 	err = psm3_mq_init(trx_ctxt->psm2_ep, PSM2_MQ_ORDERMASK_ALL,

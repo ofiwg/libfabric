@@ -265,7 +265,7 @@ fail:
 #define psmx3_dupinfo fi_dupinfo
 #endif /* HAVE_PSM3_DL */
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 /* mimic parsing functionality of psm3_getenv */
 static long get_psm3_env(const char *var, int default_value) {
 	char *ep;
@@ -283,12 +283,19 @@ static long get_psm3_env(const char *var, int default_value) {
 	}
 	return val;
 }
-#endif
+#endif // defined(PSM_CUDA) || defined(PSM_ONEAPI)
+
 static uint64_t psmx3_check_fi_hmem_cap(void) {
 #ifdef PSM_CUDA
 	if ((get_psm3_env("PSM3_CUDA", 0) || get_psm3_env("PSM3_GPUDIRECT", 0)) &&
 		!ofi_hmem_p2p_disabled())
 		return FI_HMEM;
+#endif
+#ifdef PSM_ONEAPI
+	if ((get_psm3_env("PSM3_ONEAPI_ZE", 0) || get_psm3_env("PSM3_GPUDIRECT", 0)) &&
+		!ofi_hmem_p2p_disabled()) {
+		return FI_HMEM;
+	}
 #endif
 	return 0;
 }
@@ -507,6 +514,7 @@ void psmx3_update_prov_info(struct fi_info *info,
 
 	for (p = info; p; p = p->next) {
 		int unit = ((struct psmx3_ep_name *)p->src_addr)->unit;
+		int port = ((struct psmx3_ep_name *)p->src_addr)->port;
 
 		if (unit == PSMX3_DEFAULT_UNIT || !psmx3_env.multi_ep) {
 			p->domain_attr->tx_ctx_cnt = psmx3_domain_info.free_trx_ctxt;
@@ -527,23 +535,30 @@ void psmx3_update_prov_info(struct fi_info *info,
 			p->domain_attr->name = strdup(psmx3_domain_info.default_domain_name);
 		else {
 			char unit_name[NAME_MAX];
-			psm2_info_query_arg_t args[2];
+			psm2_info_query_arg_t args[4];
+			int unit_id = psmx3_domain_info.unit_id[unit];
+			int addr_index = psmx3_domain_info.addr_index[unit];
 
-			args[0].unit = unit;
-			args[1].length = sizeof(unit_name);
+			args[0].unit = unit_id;
+			args[1].port = port;
+			args[2].addr_index = addr_index;
+			args[3].length = sizeof(unit_name);
 
-			if (PSM2_OK != psm3_info_query(PSM2_INFO_QUERY_UNIT_NAME,
-				unit_name, 2, args)) {
+			if (PSM2_OK != psm3_info_query(PSM2_INFO_QUERY_UNIT_ADDR_NAME,
+				unit_name, 4, args)) {
 				FI_WARN(&psmx3_prov, FI_LOG_CORE,
-					"Failed to read unit name for NIC unit %d\n", unit);
+					"Failed to read domain name for NIC unit %d (id %d, port %d, index %d)\n",
+					unit, unit_id, port, addr_index);
 				if (asprintf(&p->domain_attr->name, "UNKNOWN") < 0) {
 					FI_WARN(&psmx3_prov, FI_LOG_CORE,
-						"Failed to allocate memory for unit name for NIC unit %d\n", unit);
+						"Failed to allocate memory for domain name for NIC unit %d\n", unit);
 				}
 			} else {
 				if (asprintf(&p->domain_attr->name, "%s", unit_name) <0) {
 					FI_WARN(&psmx3_prov, FI_LOG_CORE,
-						"Failed to allocate memory for unit name for NIC unit %d\n", unit);
+						"Failed to allocate memory for domain name for NIC unit %d "
+						"(id %d, port %d, index %d)\n",
+						unit, unit_id, port, addr_index);
 				}
 			}
 		}
@@ -552,15 +567,19 @@ void psmx3_update_prov_info(struct fi_info *info,
 			p->fabric_attr->name = strdup(psmx3_domain_info.default_fabric_name);
 		else {
 			char fabric_name[NAME_MAX];
-			psm2_info_query_arg_t args[2];
+			psm2_info_query_arg_t args[4];
+			int unit_id = psmx3_domain_info.unit_id[unit];
+			int addr_index = psmx3_domain_info.addr_index[unit];
 
-			args[0].unit = unit;
-			args[1].length = sizeof(fabric_name);
+			args[0].unit = unit_id;
+			args[1].port = port;
+			args[2].addr_index = addr_index;
+			args[3].length = sizeof(fabric_name);
 
 			if (PSM2_OK != psm3_info_query(PSM2_INFO_QUERY_UNIT_SUBNET_NAME,
-				fabric_name, 2, args)) {
+				fabric_name, 4, args)) {
 				FI_WARN(&psmx3_prov, FI_LOG_CORE,
-					"Failed to read unit fabric name for NIC unit %d\n", unit);
+					"Failed to read unit fabric name for NIC unit_id %d port %d addr %d\n", unit_id, port, addr_index);
 				if (asprintf(&p->fabric_attr->name, "UNKNOWN") < 0) {
 					FI_WARN(&psmx3_prov, FI_LOG_CORE,
 						"Failed to allocate memory for unit fabric name for NIC unit %d\n", unit);
@@ -568,7 +587,7 @@ void psmx3_update_prov_info(struct fi_info *info,
 			} else {
 				if (asprintf(&p->fabric_attr->name, "%s", fabric_name) <0) {
 					FI_WARN(&psmx3_prov, FI_LOG_CORE,
-						"Failed to allocate memory for unit fabric name for NIC unit %d\n", unit);
+						"Failed to allocate memory for unit fabric name for NIC unit %d port %d addr %d\n", unit, port, addr_index);
 				}
 			}
 		}

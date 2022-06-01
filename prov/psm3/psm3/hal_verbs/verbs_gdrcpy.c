@@ -92,7 +92,7 @@ psm3_verbs_gdr_convert_gpu_to_host_addr(unsigned long buf,
 	psmi_assert_always(0);	// unimplemented, should not get here
 	host_addr_buf = NULL;
 #endif /* RNDV_MOD */
-	return host_addr_buf + (buf & GPU_PAGE_OFFSET_MASK);
+	return (void *)((uintptr_t)host_addr_buf + (buf & GPU_PAGE_OFFSET_MASK));
 }
 #endif /* PSM_CUDA */
 #endif /* PSM_VERBS */

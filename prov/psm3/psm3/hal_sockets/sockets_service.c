@@ -107,8 +107,9 @@ int psm3_hfp_sockets_get_num_units(void)
 }
 
 /* Given a unit number, returns 1 if any port on the unit is active.
- * ports are also filtered based on PSM3_ADDR_FMT and PSM3_SUBNETS and
- * ports without appropriate addresses are treated as not active
+ * ports are also filtered based on PSM3_ADDR_FMT, PSM3_ADDR_PER_NIC
+ * and PSM3_SUBNETS and ports without appropriate addresses are treated as
+ * not active
  * returns <= 0 if no port on the unit is active.
  */
 int psm3_sockets_get_unit_active(int unit, enum sockets_init_max_speed init_max_speed)
@@ -116,7 +117,7 @@ int psm3_sockets_get_unit_active(int unit, enum sockets_init_max_speed init_max_
 	int p, lid;
 
 	for (p = HFI_MIN_PORT; p <= HFI_MAX_PORT; p++) {
-		lid = psm3_sockets_get_port_lid(unit, p, init_max_speed);
+		lid = psm3_sockets_get_port_lid(unit, p, 0 /*addr_index */, init_max_speed);
 		if (lid > 0)
 			break;
 	}
@@ -190,9 +191,9 @@ int psm3_hfp_sockets_get_port_active(int unit, int port)
  *
  * This routine is used in many places, such as get_unit_active, to
  * confirm the port is usable.  As such it includes additional checks that
- * the port is active and has an appropriate address based on PSM3_ADDR_FMT
- * and PSM3_SUBNETS.  Ports without appropriate addresses are treated as not
- * initialized and return -1.
+ * the port is active and has an appropriate address based on PSM3_ADDR_FMT,
+ * PSM3_ADDR_PER_NIC and PSM3_SUBNETS.  Ports without appropriate addresses
+ * are treated as not initialized and return -1.
  *
  * For IB/OPA - actual LID is returned, values of 0 indicate
  *	port is not yet ready for use
@@ -202,7 +203,7 @@ int psm3_hfp_sockets_get_port_active(int unit, int port)
  * No error print because we call this for both potential
  * ports without knowing if both ports exist (or are connected)
  */
-int psm3_sockets_get_port_lid(int unit, int port, enum sockets_init_max_speed init_max_speed)
+int psm3_sockets_get_port_lid(int unit, int port, int addr_index, enum sockets_init_max_speed init_max_speed)
 {
 	uint64_t speed;
 
@@ -216,7 +217,7 @@ int psm3_sockets_get_port_lid(int unit, int port, enum sockets_init_max_speed in
 		return -1;
 
 	// make sure can find acceptable addresses and subnets
-	if (0 != psm3_hfp_sockets_get_port_subnet(unit, port,
+	if (0 != psm3_hfp_sockets_get_port_subnet(unit, port, addr_index,
 					NULL, NULL, NULL, NULL)) {
 		_HFI_DBG("Failed to find acceptable subnet for unit %u:%u: %s\n",
 			unit, port, strerror(errno));
@@ -241,8 +242,9 @@ int psm3_sockets_get_port_lid(int unit, int port, enum sockets_init_max_speed in
 	return 1;	// fake a valid LID, similar to value reported by RoCE
 }
 
-/* Given the unit number, return an error, or the corresponding subnet
- * address and GID selected for the unit
+/* Given the unit number, port and addr_index
+ * return an error, or the corresponding subnet
+ * address and GID selected for the unit/port/addr_index
  * For IB/OPA the subnet.hi is the hi 64b of the GID, subnet.lo is 0
  *		addr is the 128b GID
  *		prefix_len is always 64
@@ -258,7 +260,7 @@ int psm3_sockets_get_port_lid(int unit, int port, enum sockets_init_max_speed in
  * All output values are in host byte order
  * Note this layout means (subnet | addr) == addr for all formats
  *
- * PSM3_FMT_ADDR (psmi_addr_fmt) sets preferred address type.
+ * PSM3_FMT_ADDR (psm3_addr_fmt) sets preferred address type.
  *  0 (default) - consider all ports
  *	For Ethernet return first IPv4 addr found, if no IPv4 return 1st IPv6
  *	For OPA/IBA return 1st GID found
@@ -275,23 +277,28 @@ int psm3_sockets_get_port_lid(int unit, int port, enum sockets_init_max_speed in
  * For Ethernet a unit will only have a single port (port 1), for IB a unit
  * may have more than 1 port.
 */
-int psm3_hfp_sockets_get_port_subnet(int unit, int port, 
+int psm3_hfp_sockets_get_port_subnet(int unit, int port, int addr_index,
 			psmi_subnet128_t *subnet, psmi_naddr128_t *addr,
 			int *idx, psmi_gid128_t *gid)
 {
-	int have_ipv4_subnet = 0;
+	int cnt_ipv4_subnet = 0;	// count of IPv4 addrs found
 	uint8_t ipv4_prefix_len = 0;
 	uint32_t ipv4_addr = 0, ipv4_netmask = 0;
-	int have_ipv6_subnet = 0;
+	int cnt_ipv6_subnet = 0;	// count of IPv6 addrs found
 	uint8_t ipv6_prefix_len = 0;
 	psmi_bare_netaddr128_t ipv6_netmask = { };
 	psmi_gid128_t ipv6_gid = { };
 	struct ifaddrs *ifap, *ifa;
 	const char *ifname;
 
+	if (addr_index < 0 || addr_index > psm3_addr_per_nic) {
+		errno = EINVAL;
+		return -1;
+	}
+
 	// when PSM3_ADDR_FMT is FMT_IB all ethernet ports filtered out
-	if (psmi_addr_fmt == PSMI_ADDR_FMT_IB) {
-		_HFI_DBG("Skipped Ethernet unit %d port %d PSM3_ADDR_FMT %u\n", unit, port, psmi_addr_fmt);
+	if (psm3_addr_fmt == PSMI_ADDR_FMT_IB) {
+		_HFI_DBG("Skipped Ethernet unit %d port %d PSM3_ADDR_FMT %u\n", unit, port, psm3_addr_fmt);
 		return -1;
 	}
 
@@ -311,92 +318,116 @@ int psm3_hfp_sockets_get_port_subnet(int unit, int port,
 		return -1;
 
 	for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
-		struct sockaddr *addr = ifa->ifa_addr;
+		struct sockaddr *saddr = ifa->ifa_addr;
 		struct sockaddr *nmask = ifa->ifa_netmask;
 
-		if (! addr || ! nmask) continue;
-		if (addr->sa_family != AF_INET
-			&& addr->sa_family != AF_INET6)
+		if (! saddr || ! nmask) continue;
+		if (saddr->sa_family != AF_INET
+			&& saddr->sa_family != AF_INET6)
 			continue;
-		if (addr->sa_family != nmask->sa_family) continue;
+		if (saddr->sa_family != nmask->sa_family) continue;
 		if (strcmp(ifname, ifa->ifa_name)) continue;
 
 		_HFI_DBG("Examine Ethernet addr %s unit %d port %d %s\n",
-				ifname, unit, port, psmi_sockaddr_fmt_addr(addr, 0));
+				ifname, unit, port, psm3_sockaddr_fmt_addr(saddr, 0));
 		// when PSM3_ADDR_FMT is FMT_IPV4 or FMT_IPV6,
 		// filter out addr of wrong type
-		if (psmi_addr_fmt == PSMI_ADDR_FMT_IPV4
-			&& addr->sa_family != AF_INET) {
+		if (psm3_addr_fmt == PSMI_ADDR_FMT_IPV4
+			&& saddr->sa_family != AF_INET) {
 			_HFI_DBG("Skipped addr %s unit %d port %d PSM3_ADDR_FMT %u %s\n",
-				ifname, unit, port, psmi_addr_fmt, psmi_sockaddr_fmt_addr(addr, 0));
+				ifname, unit, port, psm3_addr_fmt, psm3_sockaddr_fmt_addr(saddr, 0));
 			continue;	// skip IPv6 addr if only want IPv4
 		}
-		if (psmi_addr_fmt == PSMI_ADDR_FMT_IPV6
-			&& addr->sa_family != AF_INET6) {
+		if (psm3_addr_fmt == PSMI_ADDR_FMT_IPV6
+			&& saddr->sa_family != AF_INET6) {
 			_HFI_DBG("Skipped addr %s unit %d port %d PSM3_ADDR_FMT %u %s\n",
-				ifname, unit, port, psmi_addr_fmt, psmi_sockaddr_fmt_addr(addr, 0));
+				ifname, unit, port, psm3_addr_fmt, psm3_sockaddr_fmt_addr(saddr, 0));
 			continue;	// skip IPv4 addr if only want IPv6
 		}
 
-		if (! have_ipv4_subnet && addr->sa_family == AF_INET) {
-			ipv4_addr = __be32_to_cpu(((struct sockaddr_in*)addr)->sin_addr.s_addr);
-			ipv4_netmask = __be32_to_cpu(((struct sockaddr_in*)nmask)->sin_addr.s_addr);
-			ipv4_prefix_len = psmi_compute_ipv4_prefix_len(ipv4_netmask);
-			if (ipv4_prefix_len <= 0) {
+		if (cnt_ipv4_subnet < psm3_addr_per_nic
+				&& saddr->sa_family == AF_INET) {
+			uint8_t prefix_len;
+			uint32_t ip_addr, netmask;
+
+			ip_addr = __be32_to_cpu(((struct sockaddr_in*)saddr)->sin_addr.s_addr);
+			netmask = __be32_to_cpu(((struct sockaddr_in*)nmask)->sin_addr.s_addr);
+			prefix_len = psm3_compute_ipv4_prefix_len(netmask);
+			if (prefix_len <= 0) {
 				_HFI_DBG("Invalid netmask for IPv4 %s unit %d port %d %s: %s\n",
 					ifname, unit, port,
-					psmi_sockaddr_fmt_addr(addr, 0),
-					psmi_sockaddr_fmt_addr(nmask, 0));
+					psm3_sockaddr_fmt_addr(saddr, 0),
+					psm3_sockaddr_fmt_addr(nmask, 0));
 				continue;
 			}
 
 			// allow subnets DBG logging explains choices
-			if (!psm3_allow_ipv4_subnet(ipv4_addr & ipv4_netmask, ipv4_prefix_len))
+			if (!psm3_allow_ipv4_subnet(ip_addr & netmask, prefix_len))
 				continue;
 
-			// save 1st valid ipv4 gid
-			have_ipv4_subnet = 1;
-			_HFI_DBG("Found IPv4 addr %s unit %d port %d %s\n",
-				ifname, unit, port, psmi_sockaddr_fmt_addr(addr, 0));
-			// is 1st IPv4 address sufficient to finalize decision?
-			if (psmi_addr_fmt == PSMI_ADDR_FMT_IPV4
-				|| ! psmi_addr_fmt)
+			cnt_ipv4_subnet++;
+			_HFI_DBG("Found IPv4 addr %s unit %d port %d addr_index %d %s\n",
+				ifname, unit, port, cnt_ipv4_subnet-1, psm3_sockaddr_fmt_addr(saddr, 0));
+
+			if (cnt_ipv4_subnet-1 != addr_index)
+				continue;
+
+			// save addr_index'th valid ipv4 addr
+			ipv4_addr = ip_addr;
+			ipv4_netmask = netmask;
+			ipv4_prefix_len = prefix_len;
+			// enough IPv4 address on port to finalize decision?
+			if (cnt_ipv4_subnet >= psm3_addr_per_nic
+				&& (psm3_addr_fmt == PSMI_ADDR_FMT_IPV4 || ! psm3_addr_fmt))
 				break;
 		}
-		if (! have_ipv6_subnet && addr->sa_family == AF_INET6) {
+		if (cnt_ipv6_subnet < psm3_addr_per_nic
+				&& saddr->sa_family == AF_INET6) {
 			uint32_t *s6;
+			uint8_t prefix_len = 0;
+			psmi_bare_netaddr128_t netmask = { };
+			psmi_gid128_t ip_gid = { };
 
-			s6 = ((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32;
-			ipv6_gid.hi = (uint64_t)__be32_to_cpu(s6[0]) << 32 | __be32_to_cpu(s6[1]);
-			ipv6_gid.lo = (uint64_t)__be32_to_cpu(s6[2]) << 32 | __be32_to_cpu(s6[3]);
+			s6 = ((struct sockaddr_in6 *)saddr)->sin6_addr.s6_addr32;
+			ip_gid.hi = (uint64_t)__be32_to_cpu(s6[0]) << 32 | __be32_to_cpu(s6[1]);
+			ip_gid.lo = (uint64_t)__be32_to_cpu(s6[2]) << 32 | __be32_to_cpu(s6[3]);
 
 			s6 = ((struct sockaddr_in6 *)nmask)->sin6_addr.s6_addr32;
-			ipv6_netmask.hi = (uint64_t)__be32_to_cpu(s6[0]) << 32 | __be32_to_cpu(s6[1]);
-			ipv6_netmask.lo = (uint64_t)__be32_to_cpu(s6[2]) << 32 | __be32_to_cpu(s6[3]);
+			netmask.hi = (uint64_t)__be32_to_cpu(s6[0]) << 32 | __be32_to_cpu(s6[1]);
+			netmask.lo = (uint64_t)__be32_to_cpu(s6[2]) << 32 | __be32_to_cpu(s6[3]);
 
-			ipv6_prefix_len = psmi_compute_ipv6_prefix_len(ipv6_netmask);
-			if (ipv6_prefix_len <= 0) {
+			prefix_len = psm3_compute_ipv6_prefix_len(netmask);
+			if (prefix_len <= 0) {
 				_HFI_DBG("Invalid netmask for IPv6 %s unit %d port %d %s: %s\n",
 					ifname, unit, port,
-					psmi_sockaddr_fmt_addr(addr, 0),
-					psmi_sockaddr_fmt_addr(nmask, 0));
+					psm3_sockaddr_fmt_addr(saddr, 0),
+					psm3_sockaddr_fmt_addr(nmask, 0));
 				continue;
 			}
 
 			// allow subnets DBG logging explains choices
-			if (!psm3_allow_ipv6_subnet(psmi_bare_netaddr128_and(ipv6_gid, ipv6_netmask), ipv6_prefix_len))
+			if (!psm3_allow_ipv6_subnet(psmi_bare_netaddr128_and(ip_gid, netmask), prefix_len))
 				continue;
-			// save 1st valid ipv6
-			have_ipv6_subnet = 1;
-			_HFI_DBG("Found IPv6 addr %s unit %d port %d %s\n",
-				ifname, unit, port, psmi_sockaddr_fmt_addr(addr, 0));
-			// is 1st IPv6 address sufficient to finalize decision?
-			if (psmi_addr_fmt == PSMI_ADDR_FMT_IPV6)
+
+			cnt_ipv6_subnet++;
+			_HFI_DBG("Found IPv6 addr %s unit %d port %d addr_index %d %s\n",
+				ifname, unit, port, cnt_ipv6_subnet-1, psm3_sockaddr_fmt_addr(saddr, 0));
+
+			if (cnt_ipv6_subnet-1 != addr_index)
+				continue;
+
+			// save addr_index'th valid ipv6 addr
+			ipv6_gid = ip_gid;
+			ipv6_netmask = netmask;
+			ipv6_prefix_len = prefix_len;
+			// enough IPv6 address on port to finalize decision?
+			if (cnt_ipv6_subnet >= psm3_addr_per_nic
+				&& psm3_addr_fmt == PSMI_ADDR_FMT_IPV6)
 				break;
 		}
 	}
 	(void)freeifaddrs(ifap);
-	if (have_ipv4_subnet) {
+	if (cnt_ipv4_subnet >= psm3_addr_per_nic) {
 		// IPv4 Ethernet
 		if (idx) *idx = 0;	// N/A
 		if (subnet) *subnet = psm3_build_ipv4_subnet128(ipv4_addr, ipv4_netmask, ipv4_prefix_len);
@@ -405,21 +436,25 @@ int psm3_hfp_sockets_get_port_subnet(int unit, int port,
 			gid->hi = PSMI_IPV4_GID_HI(ipv4_addr);
 			gid->lo = PSMI_IPV4_GID_LO(ipv4_addr);
 		}
-		_HFI_DBG("Selected IPv4 for %s unit %d port %d %s\n",
-			ifname, unit, port, psmi_ipv4_fmt(ipv4_addr, ipv4_prefix_len, 0));
+		_HFI_DBG("Selected IPv4 for %s unit %d port %d addr_index %d %s\n",
+			ifname, unit, port, addr_index, psm3_ipv4_fmt(ipv4_addr, ipv4_prefix_len, 0));
 		return 0;
-	} else if (have_ipv6_subnet) {
+	} else if (cnt_ipv6_subnet >= psm3_addr_per_nic) {
 		// IPv6 Ethernet
 		if (idx) *idx = 0;	// N/A
 		if (subnet) *subnet = psm3_build_ipv6_subnet128(ipv6_gid, ipv6_netmask, ipv6_prefix_len);
 		if (addr) *addr = psm3_build_ipv6_naddr128(ipv6_gid, ipv6_prefix_len);
 		if (gid) *gid = ipv6_gid;
-		_HFI_DBG("Selected IPv6 for %s unit %d port %d %s\n",
-			ifname, unit, port, psmi_ipv6_fmt(ipv6_gid, ipv6_prefix_len, 0));
+		_HFI_DBG("Selected IPv6 for %s unit %d port %d addr_index %d %s\n",
+			ifname, unit, port, addr_index, psm3_ipv6_fmt(ipv6_gid, ipv6_prefix_len, 0));
 		return 0;
 	} else {
-		_HFI_DBG("None Found Ethernet %s unit %d port %d\n",
-			ifname, unit, port);
+		if ((cnt_ipv4_subnet || cnt_ipv6_subnet) && psm3_addr_per_nic > 1)
+			_HFI_DBG("None Found Ethernet %s unit %d port %d addr_index %d (%d IPv4 addrs and %d IPv6 addrs < PSM3_ADDR_PER_NIC %d)\n",
+				ifname, unit, port, addr_index, cnt_ipv4_subnet, cnt_ipv6_subnet, psm3_addr_per_nic);
+		else
+			_HFI_DBG("None Found Ethernet %s unit %d port %d addr_index %d\n",
+			ifname, unit, port, addr_index);
 		errno = ENXIO;
 		return -1;
 	}

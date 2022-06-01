@@ -67,19 +67,6 @@
 #include "ips_proto_internal.h"
 #include "ips_proto_params.h"
 
-/*
- * Check and process events
- * return value:
- *  PSM2_OK: normal events processing;
- *  PSM2_OK_NO_PROGRESS: no event is processed;
- */
-static inline psm2_error_t
-psm3_verbs_spio_process_events(const struct ptl *ptl_gen)
-{
-	// TODD - TBD - check link status events for UD/UDP
-	return PSM2_OK;
-}
-
 // TBD we could get also get scb->cksum out of scb
 // when called:
 //		scb->ips_lrh has fixed size PSM header including OPA LRH
@@ -113,8 +100,8 @@ psm3_verbs_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 			struct ips_scb *scb, uint32_t *payload,
 			uint32_t length, uint32_t isCtrlMsg,
 			uint32_t cksum_valid, uint32_t cksum
-#ifdef PSM_CUDA
-			, uint32_t is_cuda_payload
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+			, uint32_t is_gpu_payload
 #endif
 			)
 {
@@ -129,6 +116,7 @@ psm3_verbs_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 	struct ips_message_header *ips_lrh = &scb->ips_lrh;
 	int send_dma = ips_scb_flags(scb) & IPS_SEND_FLAG_SEND_MR;
 
+	psmi_assert(flow->transfer == PSM_TRANSFER_PIO);
 	// these defines are bit ugly, but make code below simpler with less ifdefs
 	// once we decide if USE_RC is valuable we can cleanup
 #ifdef USE_RC
@@ -183,15 +171,15 @@ psm3_verbs_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 	memcpy(sbuf_to_buffer(sbuf), ips_lrh, sizeof(*ips_lrh));
 	if (!send_dma) {
 		// copy payload to send buffer, length could be zero, be safe
-		_HFI_VDBG("copy payload %p %u\n",  payload, length);
-#ifdef PSM_CUDA
-		if (is_cuda_payload) {
-			//_HFI_ERROR("cuMemcpyDtoH %p %u\n", payload, length);
-			PSMI_CUDA_CALL(cuMemcpyDtoH, sbuf_to_buffer(sbuf)+sizeof(*ips_lrh),
-				(CUdeviceptr)payload, length);
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+		if (is_gpu_payload) {
+			_HFI_VDBG("copy gpu payload %p %u\n",  payload, length);
+			PSM3_GPU_MEMCPY_DTOH(sbuf_to_buffer(sbuf) + sizeof(*ips_lrh),
+				payload, length);
 		} else
 #endif
 		{
+			_HFI_VDBG("copy host payload %p %u\n",  payload, length);
 			memcpy(sbuf_to_buffer(sbuf)+sizeof(*ips_lrh), payload, length);
 		}
 	}
@@ -277,8 +265,9 @@ psm3_verbs_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 	wr.wr.ud.remote_qkey = ep->verbs_ep.qkey;
 
 	if (_HFI_PDBG_ON) {
-		_HFI_PDBG_ALWAYS("ud_transfer_frame: len %u, remote qpn %u payload %u\n",
+		_HFI_PDBG_ALWAYS("len %u, QP %p (%u) remote qpn %u payload %u\n",
 			list[0].length+list[1].length,
+			USE_QP, USE_QP->qp_num,
 #ifdef USE_RC
 				(USE_QP->qp_type != IBV_QPT_UD)? flow->ipsaddr->verbs.remote_qpn :
 #endif
@@ -287,7 +276,6 @@ psm3_verbs_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *flow,
 		_HFI_PDBG_DUMP_ALWAYS((uint8_t*)list[0].addr, list[0].length);
 		// cannot dump list[1] since SDMA may be a GPU address or iova
 		// could be different from CPU virtual
-		_HFI_PDBG_ALWAYS("post send: QP %p (%u)\n", USE_QP, USE_QP->qp_num);
 	}
 	if_pf (ibv_post_send(USE_QP, &wr, &bad_wr)) {
 		if (errno != EBUSY && errno != EAGAIN && errno != ENOMEM)

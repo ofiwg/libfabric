@@ -67,9 +67,13 @@
  * version will be added later for scalability.
  * version kept in 2 nibbles in this format: 0xMMmm MM=major, mm=minor version
  */
+#ifdef PSM_OPA
+#define IPS_CONNECT_VERNO	  0x0002 // 0.2
+#else
 // a litle paranod as a UD or UDP connect can't reach a STL100 PSM recv context
 // but we don't worry about UDP vs UD since can't reach eachother either
 #define IPS_CONNECT_VERNO	  0x0200 // 2.0 - epid_size of 24 bytes (3 word)
+#endif
 #define IPS_CONNECT_VER_MAJOR(verno) (((verno) & 0xff00) >> 8)
 #define IPS_CONNECT_VER_MINOR(verno) ((verno) & 0x00ff)
 
@@ -155,7 +159,13 @@ struct ips_connect_reqrep {
 #define IPS_CONNECT_RAIL_ADDR_LEN (3*sizeof(uint64_t)) // length in bytes
 	// For a multi-rail and/or multi-QP run, Up to PSMI_MAX_QPS of rail_addr
 	// follow (24 bytes per rail).
+#ifdef PSM_OPA
+	//		epid - 1 word epid formats (8 bytes)
+	//		subnet - (hi 8 bytes of psmi_subnet128)
+	//		8 bytes of zero (reserved)
+#else
 	//		3 word epid format - has full IB/OPA/IPv4/IPv6 subnet
+#endif
 	// if we run out of space in a future IPS_CONNECT_VERNO we could
 	// probably compact the IPv6 epid into 20 bytes per rail but leave at
 	// 24 bytes in connect_hdr for good field alignment

@@ -45,6 +45,7 @@ common_srcs = \
 	shared/hmem_cuda.c \
 	shared/hmem_cuda_gdrcopy.c \
 	shared/hmem_ze.c \
+	shared/hmem_neuron.c \
 	shared/common.c \
 	shared/enosys.c \
 	shared/rbtree.c \
@@ -207,7 +208,7 @@ src_libpsm3_fi_la_LDFLAGS += -lpsm2
 endif !HAVE_PSM3_SRC
 
 if !EMBEDDED
-src_libpsm3_fi_la_LDFLAGS += -version-info 18:0:17
+src_libpsm3_fi_la_LDFLAGS += -version-info 19:0:18
 endif
 
 prov_install_man_pages = man/man7/fi_psm3.7

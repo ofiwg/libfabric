@@ -99,12 +99,13 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 		/* cuMemcpy into the receive side buffer
 		 * based on its location */
 		if (req->is_buf_gpu_mem) {
-			PSMI_CUDA_CALL(cuMemcpyDtoD, (CUdeviceptr)req->req_data.buf, cuda_ipc_dev_ptr,
+			PSM3_GPU_MEMCPY_DTOD(req->req_data.buf, cuda_ipc_dev_ptr,
 				       req->req_data.recv_msglen);
-			PSMI_CUDA_CALL(cuStreamSynchronize, 0);
-		} else
-			PSMI_CUDA_CALL(cuMemcpyDtoH, req->req_data.buf, cuda_ipc_dev_ptr,
-				       req->req_data.recv_msglen);
+			PSM3_GPU_SYNCHRONIZE_MEMCPY();
+		} else {
+			PSM3_GPU_MEMCPY_DTOH(req->req_data.buf, cuda_ipc_dev_ptr,
+				req->req_data.recv_msglen);
+		}
 		cuda_ipc_send_completion = 1;
 		am_cuda_memhandle_release(cuda_ipc_dev_ptr - req->cuda_ipc_offset);
 		req->cuda_ipc_handle_attached = 0;
@@ -126,14 +127,14 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 			size_t nbytes = psm3_cma_get(pid, (void *)req->rts_sbuf,
 					cuda_ipc_bounce_buf, req->req_data.recv_msglen);
 			psmi_assert_always(nbytes == req->req_data.recv_msglen);
-			PSMI_CUDA_CALL(cuMemcpyHtoD, (CUdeviceptr)req->req_data.buf, cuda_ipc_bounce_buf,
-				       req->req_data.recv_msglen);
+			PSM3_GPU_MEMCPY_HTOD(req->req_data.buf, cuda_ipc_bounce_buf,
+				req->req_data.recv_msglen);
 			/* Cuda library has recent optimizations where they do
 			 * not guarantee synchronus nature for Host to Device
 			 * copies for msg sizes less than 64k. The event record
 			 * and synchronize calls are to guarentee completion.
 			 */
-			PSMI_CUDA_CALL(cuStreamSynchronize, 0);
+			PSM3_GPU_SYNCHRONIZE_MEMCPY();
 			psmi_free(cuda_ipc_bounce_buf);
 		} else {
 			/* cma can be done in handler context or not. */
@@ -277,7 +278,7 @@ psm3_am_mq_handler_data(void *toki, psm2_amarg_t *args, int narg, void *buf,
 	psm2_epaddr_t epaddr = (psm2_epaddr_t) tok->tok.epaddr_incoming;
 	psm2_mq_req_t req = mq_eager_match(tok->mq, epaddr, 0);	/* using seqnum 0 */
 	psmi_assert_always(req != NULL);
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	psm3_mq_handle_data(tok->mq, req, args[2].u32w0, buf, len, 0, NULL);
 #else
 	psm3_mq_handle_data(tok->mq, req, args[2].u32w0, buf, len);

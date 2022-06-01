@@ -90,7 +90,7 @@ static int cuda_cache_key_cmp(const cuda_cache_item *a, const cuda_cache_item *b
 	// But when multi-ep is enabled, one process can have many epids, so in this case
 	// cannot use epid as part of cache key.
 	if (!psm3_multi_ep_enabled) {
-		switch (psm3_epid_cmp(a->epid, b->epid)) {
+		switch (psm3_epid_cmp_internal(a->epid, b->epid)) {
 		case -1: return -1;
 		case 1: return 1;
 		default:
@@ -194,7 +194,7 @@ am_cuda_memhandle_mpool_init(uint32_t memcache_size)
 	/* Creating a memory pool of size PSM3_CUDA_MEMCACHE_SIZE
 	 * which includes the Root and NIL items
 	 */
-	cuda_memhandle_mpool = psm3_mpool_create_for_cuda(sizeof(cl_map_item_t),
+	cuda_memhandle_mpool = psm3_mpool_create_for_gpu(sizeof(cl_map_item_t),
 					cuda_memhandle_cache_size,
 					cuda_memhandle_cache_size, 0,
 					UNDEFINED, NULL, NULL,
@@ -228,7 +228,7 @@ psm2_error_t am_cuda_memhandle_cache_init(uint32_t memcache_size)
 	}
 
 	nil_item->payload.start = 0;
-	nil_item->payload.epid = psm3_epid_zeroed();
+	nil_item->payload.epid = psm3_epid_zeroed_internal();
 	nil_item->payload.length = 0;
 	cuda_memhandle_cache_enabled = 1;
 	ips_cl_qmap_init(&cuda_memhandle_cachemap,root,nil_item);
@@ -344,7 +344,7 @@ am_cuda_memhandle_cache_validate(cl_map_item_t* memcache_item,
 	if ((0 == memcmp(handle, &memcache_item->payload.cuda_ipc_handle,
 			 sizeof(CUipcMemHandle)))
 			 && sbuf == memcache_item->payload.start
-			 && !psm3_epid_cmp(epid, memcache_item->payload.epid)) {
+			 && !psm3_epid_cmp_internal(epid, memcache_item->payload.epid)) {
 		return PSM2_OK;
 	}
 	_HFI_DBG("cache collision: new entry start=%lu,length=%u\n", sbuf, length);
@@ -368,7 +368,7 @@ am_cuda_memhandle_cache_evict(void)
 	cache_evict_counter++;
 	cl_map_item_t *p_item = LAST;
 	_HFI_VDBG("Removing (epid=%s,start=%lu,length=%u,dev_ptr=0x%llX,it=%p) from cuda_memhandle_cachemap.\n",
-			psm3_epid_fmt(p_item->payload.epid, 0), p_item->payload.start, p_item->payload.length,
+			psm3_epid_fmt_internal(p_item->payload.epid, 0), p_item->payload.start, p_item->payload.length,
 			p_item->payload.cuda_ipc_dev_ptr, p_item);
 	ips_cl_qmap_remove_item(&cuda_memhandle_cachemap, p_item);
 	PSMI_CUDA_CALL(cuIpcCloseMemHandle, p_item->payload.cuda_ipc_dev_ptr);
@@ -421,7 +421,7 @@ am_cuda_memhandle_acquire(uintptr_t sbuf, CUipcMemHandle* handle,
 				uint32_t length, psm2_epid_t epid)
 {
 	_HFI_VDBG("sbuf=%lu,handle=%p,length=%u,epid=%s\n",
-			sbuf, handle, length, psm3_epid_fmt(epid, 0));
+			sbuf, handle, length, psm3_epid_fmt_internal(epid, 0));
 
 	CUdeviceptr cuda_ipc_dev_ptr;
 	if(!cuda_memhandle_cache_enabled) {

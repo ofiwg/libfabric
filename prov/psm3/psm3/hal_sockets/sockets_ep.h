@@ -101,6 +101,8 @@
 
 #define MAX_PSM_HEADER 64			// sizeof(ips_lrh) == 56, round up to 64
 
+#define TCP_MAX_PSM_HEADER 56			// sizeof(ips_lrh) == 56
+
 #define NETDEV_PORT 1			// default port if not specified
 
 #define BUFFER_HEADROOM 0		// how much extra to allocate in buffers
@@ -124,8 +126,11 @@
 						// the middle of draining a packet.
 #define TCP_MAX_PKTLEN	((64*1024-1)*4)	// pktlen in LRH is 16 bits, so the
 										// max pktlen is (64k-1)*4 = 256k-4
-#define TCP_MAX_MTU (TCP_MAX_PKTLEN - MAX_PSM_HEADER)
+#define TCP_MAX_MTU (TCP_MAX_PKTLEN - TCP_MAX_PSM_HEADER)
 #define TCP_DEFAULT_MTU (64*1024)
+#define TCP_IOV_SIZE	1024
+#define TCP_INACT_SKIP_POLLS	20
+#define TCP_ACT_SKIP_POLLS	10
 
 // this structure can be part of psm2_ep
 // one instance of this per local end point (NIC)
@@ -144,7 +149,13 @@ struct psm3_sockets_ep {
 	struct pollfd *fds; // one extra for listening socket
 	int nfds;
 	int max_fds;
+        int *map_fds; // map  fd -> index
+        int map_nfds; // map size
+  
 	uint32_t snd_pace_thresh; // send pace threshold
+	int inactive_skip_polls; // polls to skip under inactive connections
+	int active_skip_polls_offset; // tailored for internal use. it's inactive_skip_polls - active_skip_polls
+	struct msghdr snd_msg; // struct used for sendmsg
 	/* fields specific to UDP */
 	int udp_gso;	// is GSO enabled for UDP
 	uint8_t *sbuf_udp_gso;	// buffer to compose UDP GSO packet sequence
@@ -175,15 +186,10 @@ struct psm3_sockets_ep {
 	int rbuf_next_fd; // socket to continue read if last pkt is partial
 	uint32_t rbuf_next_offset; // position in rbuf for the next pkt
 	uint32_t rbuf_next_len; // total length of the extra data
-
-	// send out partial pkt from sbuf
-	struct ips_flow *sbuf_flow; // the flow where we will continue sending data
-	uint32_t sbuf_offset; // position in sbuf to continue pkt send
-	uint32_t sbuf_remainder; // length of remainder data to send out
 };
 
 extern psm2_error_t psm3_ep_open_sockets(psm2_ep_t ep, int unit, int port,
-			psm2_uuid_t const job_key);
+			int addr_index, psm2_uuid_t const job_key);
 extern void psm3_hfp_sockets_context_initstats(psm2_ep_t ep);
 extern void psm3_ep_free_sockets(psm2_ep_t ep);
 extern psm2_error_t psm3_sockets_ips_proto_init(struct ips_proto *proto,

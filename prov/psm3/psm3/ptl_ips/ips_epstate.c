@@ -96,10 +96,11 @@ void ips_epstate_dump(struct ips_epstate *eps)
 			eps->eps_base_idx, eps->eps_tabsize,
 			eps->eps_tabsizeused, eps->eps_tab_nextidx);
 		for (i=0; i<eps->eps_tabsize; i++) {
-			_HFI_DBG_ALWAYS("%03d: ipsaddr = %p, cstate-o: %u, cstate-i: %u\n", i,
-				eps->eps_tab[i].ipsaddr,
-				eps->eps_tab[i].ipsaddr->cstate_outgoing,
-				eps->eps_tab[i].ipsaddr->cstate_incoming);
+			if (eps->eps_tab[i].ipsaddr)	// skip empty slots
+				_HFI_DBG_ALWAYS("%03d: ipsaddr = %p, cstate-o: %u, cstate-i: %u\n", i,
+					eps->eps_tab[i].ipsaddr,
+					eps->eps_tab[i].ipsaddr->cstate_outgoing,
+					eps->eps_tab[i].ipsaddr->cstate_incoming);
 		}
 	}
 }

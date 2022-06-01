@@ -22,145 +22,135 @@ dnl Override Default flags
 CPPFLAGS="-D_DEFAULT_SOURCE -D_SVID_SOURCE -D_BSD_SOURCE"
 AS_IF([test ! -z "$CC" && test "x$CC" = "xicc"],
       [ dnl ICC
-	CFLAGS="-Werror -xATOM_SSE4.2 -DPSM_AVX512 -fpic -fPIC -D_GNU_SOURCE -DPACK_STRUCT_STL=packed,"
-	LDFLAGS="-Wc,-static-intel"
+        CFLAGS="-Werror -xATOM_SSE4.2 -DPSM_AVX512 -fpic -fPIC -D_GNU_SOURCE -DPACK_STRUCT_STL=packed,"
+        LDFLAGS="-Wc,-static-intel"
       ], [ dnl GCC/other
-	CFLAGS="-Werror -mavx2 -fpic -fPIC -funwind-tables -Wformat -Wformat-security"
+        CFLAGS="-Werror -mavx2 -fpic -fPIC -funwind-tables -Wformat -Wformat-security"
       ])
 
 AC_ARG_ENABLE([psm3-src],
-	      [AS_HELP_STRING([--enable-psm3-src],
-			      [Enable Monolithic provider @<:@default=yes@:>@])],
-			      [],
-			      [enable_psm3_src=yes])
+    [AS_HELP_STRING([--enable-psm3-src],
+        [Enable Monolithic provider @<:@default=yes@:>@])
+    ],[],[enable_psm3_src=yes])
 AC_ARG_WITH([psm3-headers],
-	    [AC_HELP_STRING([--with-psm3-headers=DIR],
-			    [Provide path to where the psm headers are installed for split build. @<:@default=no@:>@])],
-	    [], [with_psm3_headers="no"])
+    [AS_HELP_STRING([--with-psm3-headers=DIR],
+        [Provide path to where the psm headers are installed for split build. @<:@default=no@:>@])
+    ],[], [with_psm3_headers="no"])
 AS_IF([test "x$enable_psm3_src" != "xno"], [psm3_src=1], [psm3_src=0])
 AM_CONDITIONAL([HAVE_PSM3_SRC], [test "x$enable_psm3_src" != "xno"], [build PSM3 src into provider])
 AC_DEFINE_UNQUOTED([HAVE_PSM3_SRC], $psm3_src, [PSM3 source is built-in])
 
 AS_IF([test "$psm3_src" -eq 0],
       [
-	AS_IF([test "$with_psm3_headers" != "" && test "$with_psm3_headers" != "no"],
-	      [
-		CPPFLAGS="$CPPFLAGS -I$with_psm3_headers"
-		AC_CHECK_HEADER(psm2.h, [],
-			AC_MSG_ERROR([PSM3 Headers requested but <psm2.h> not found.]))
-	      ])
+        AS_IF([test "$with_psm3_headers" != "" && test "$with_psm3_headers" != "no"],
+              [
+                CPPFLAGS="$CPPFLAGS -I$with_psm3_headers"
+                AC_CHECK_HEADER(psm2.h, [],
+                AC_MSG_ERROR([PSM3 Headers requested but <psm2.h> not found.]))
+              ])
       ])
 
 dnl ------------ HALs
 AC_ARG_ENABLE([psm3-verbs],
-	      [AS_HELP_STRING([--enable-psm3-verbs],
-			      [Enable PSM3 support on Verbs HAL (UD QPs) @<:@default=yes@:>@])],
-	      [],
-	      [enable_psm3_verbs=yes])
+    [AS_HELP_STRING([--enable-psm3-verbs],
+        [Enable PSM3 support on Verbs HAL (UD QPs) @<:@default=yes@:>@])
+    ],[],[enable_psm3_verbs=yes])
 AC_ARG_ENABLE([psm3-sockets],
-	      [AS_HELP_STRING([--enable-psm3-sockets],
-			      [Enable PSM3 support on Sockets HAL (TCP) @<:@default=yes@:>@])],
-	      [],
-	      [enable_psm3_sockets=yes])
+    [AS_HELP_STRING([--enable-psm3-sockets],
+        [Enable PSM3 support on Sockets HAL (TCP) @<:@default=yes@:>@])
+    ],[],[enable_psm3_sockets=yes])
 
 PSM3_HAL_INST=""
 PSM3_HAL_CNT=0
 AS_IF([test "x$enable_psm3_verbs" = "xyes"],
       [
-	PSM3_HAL_INST="$PSM3_HAL_INST verbs"
-	PSM3_HAL_CNT=$((PSM3_HAL_CNT+1))
-	CPPFLAGS="$CPPFLAGS -DPSM_VERBS"
+        PSM3_HAL_INST="$PSM3_HAL_INST verbs"
+        PSM3_HAL_CNT=$((PSM3_HAL_CNT+1))
+        CPPFLAGS="$CPPFLAGS -DPSM_VERBS"
       ])
 AS_IF([test "x$enable_psm3_sockets" = "xyes"],
       [
-	PSM3_HAL_INST="$PSM3_HAL_INST sockets"
-	PSM3_HAL_CNT=$((PSM3_HAL_CNT+1))
-	CPPFLAGS="$CPPFLAGS -DPSM_SOCKETS"
+        PSM3_HAL_INST="$PSM3_HAL_INST sockets"
+        PSM3_HAL_CNT=$((PSM3_HAL_CNT+1))
+        CPPFLAGS="$CPPFLAGS -DPSM_SOCKETS"
       ])
-PSM3_HAL_INST=${PSM3_HAL_INST# }
+PSM3_HAL_INST=${PSM3_HAL_INST:1}
 
 dnl ------------- HAL Extensions
 AC_ARG_ENABLE([psm3-udp],
-	      [AS_HELP_STRING([--enable-psm3-udp],
-			      [EXPERIMENTAL: Enable UDP on applicable HALs @<:@default=no@:>@])],
-	      [],
-	      [enable_psm3_udp=no])
+    [AS_HELP_STRING([--enable-psm3-udp],
+        [EXPERIMENTAL: Enable UDP on applicable HALs @<:@default=no@:>@])
+    ],[],[enable_psm3_udp=no])
 AC_ARG_ENABLE([psm3-rc],
-	      [AS_HELP_STRING([--enable-psm3-rc],
-			      [EXPERIMENTAL: Enable User Space RC QPs on applicable HALs @<:@default=[Verbs HAL]@:>@])],
-	      [],
-	      [enable_psm3_rc=check])
+    [AS_HELP_STRING([--enable-psm3-rc],
+        [EXPERIMENTAL: Enable User Space RC QPs on applicable HALs @<:@default=[Verbs HAL]@:>@])
+    ],[],[enable_psm3_rc=check])
 AC_ARG_ENABLE([psm3-umr-cache],
-	      [AS_HELP_STRING([--enable-psm3-umr-cache],
-			      [EXPERIMENTAL: Enable User MR Cache @<:@default=no@:>@])],
-	      [],
-	      [enable_psm3_umr_cache=no])
+    [AS_HELP_STRING([--enable-psm3-umr-cache],
+        [EXPERIMENTAL: Enable User MR Cache @<:@default=no@:>@])
+    ],[],[enable_psm3_umr_cache=no])
 
 AS_IF([test "x$enable_psm3_udp" = "xyes"],
       [
-	AS_IF([test "x$enable_psm3_sockets" = "xyes"],
-	      [CPPFLAGS="$CPPFLAGS -DUSE_UDP"],
-	      [AC_MSG_ERROR([UDP requires Scokets HAL active])])
+       AS_IF([test "x$enable_psm3_sockets" = "xyes"],
+             [CPPFLAGS="$CPPFLAGS -DUSE_UDP"],
+             [AC_MSG_ERROR([UDP requires Scokets HAL active])])
       ])
 dnl RC requires the Verbs HAL, so if Verbs HAL is disabled, then this should default to match verbs HAL
 AS_IF([test "x$enable_psm3_rc" = "xcheck"],
       [enable_psm3_rc=$enable_psm3_verbs])
 AS_IF([test "x$enable_psm3_rc" = "xyes"],
       [
-	AS_IF([test "x$enable_psm3_verbs" = "xyes"],
-	      [CPPFLAGS="$CPPFLAGS -DUSE_RC"],
-	      [AC_MSG_ERROR([User RC QPs requires Verbs HAL active])])
+       AS_IF([test "x$enable_psm3_verbs" = "xyes"],
+             [CPPFLAGS="$CPPFLAGS -DUSE_RC"],
+             [AC_MSG_ERROR([User RC QPs requires Verbs HAL active])])
       ])
 AS_IF([test "x$enable_psm3_umr_cache" = "xyes"],
       [
-	AS_IF([test "$PSM3_HAL_INST" = "verbs" && test "$PSM3_HAL_CNT" -eq 1],
-	      [CPPFLAGS="$CPPFLAGS -DUMR_CACHE"],
-	      [AC_MSG_ERROR([User MR Cache must only have Verbs HAL active])])
+       AS_IF([test "$PSM3_HAL_INST" = "verbs" && test "$PSM3_HAL_CNT" -eq 1],
+             [CPPFLAGS="$CPPFLAGS -DUMR_CACHE"],
+             [AC_MSG_ERROR([User MR Cache must only have Verbs HAL active])])
       ])
 
 AS_IF([test "x$enable_psm3_src" = "xyes"],
       [
-	AC_SEARCH_LIBS([shm_open], [rt], [], [AC_MSG_ERROR([unable to find shm_open() in librt])])
-	AC_SEARCH_LIBS([dlopen], [dl], [], [AC_MSG_ERROR([unable to find dlopen() in libdl])])
-	AC_SEARCH_LIBS([numa_node_of_cpu], [numa], [], [AC_MSG_ERROR([unable to find numa_node_of_cpu() in libnuma])])
-	AS_IF([test "x$enable_psm3_verbs" = "xyes"],
-	      [AC_SEARCH_LIBS([ibv_get_device_list], [ibverbs], [],
-			      [AC_MSG_ERROR([unable to find ibv_get_device_list() in libibverbs])])
-	      ], [])
-	AC_SEARCH_LIBS([uuid_parse], [uuid], [], [AC_MSG_ERROR([unable to find uuid_parse() in libuuid])])
+        AC_SEARCH_LIBS([shm_open], [rt], [], [AC_MSG_ERROR([unable to find shm_open() in librt])])
+        AC_SEARCH_LIBS([dlopen], [dl], [], [AC_MSG_ERROR([unable to find dlopen() in libdl])])
+        AC_SEARCH_LIBS([numa_node_of_cpu], [numa], [], [AC_MSG_ERROR([unable to find numa_node_of_cpu() in libnuma])])
+        AS_IF([test "x$enable_psm3_verbs" = "xyes"],
+              [AC_SEARCH_LIBS([ibv_get_device_list], [ibverbs], [], [AC_MSG_ERROR([unable to find ibv_get_device_list() in libibverbs])])])
+        AC_SEARCH_LIBS([uuid_parse], [uuid], [], [AC_MSG_ERROR([unable to find uuid_parse() in libuuid])])
 
 
-	AS_IF([test ! -z "$PSM2_MOCK_TESTING"], [CPPFLAGS="$CPPFLAGS -DPSM2_MOCK_TESTING=1"], [])
-	AS_IF([test ! -z "$PSM_FI"], [CPPFLAGS="$CPPFLAGS -DPSM_FI"], [])
-	AS_IF([test ! -z "$PSM_DEBUG"],
-	      [
-		CFLAGS="-O0 -g3 $CFLAGS"
-		CPPFLAGS="$CPPFLAGS -DPSM_DEBUG -D_HFI_DEBUGGING -funit-at-a-time"
-	      ],
-	      [CFLAGS="-O3 -g3 $CFLAGS"])
+        AS_IF([test ! -z "$PSM2_MOCK_TESTING"], [CPPFLAGS="$CPPFLAGS -DPSM2_MOCK_TESTING=1"])
+        AS_IF([test ! -z "$PSM_FI"], [CPPFLAGS="$CPPFLAGS -DPSM_FI"])
+        AS_IF([test ! -z "$PSM_DEBUG"],
+              [
+                CFLAGS="-O0 -g3 $CFLAGS"
+                CPPFLAGS="$CPPFLAGS -DPSM_DEBUG -D_HFI_DEBUGGING -funit-at-a-time"
+              ],[CFLAGS="-O3 -g3 $CFLAGS"])
 
-	AS_IF([test ! -z "$PSM_COVERAGE"],
-	      [
-		CFLAGS="$CFLAGS -O -fprofile-arcs -ftest-coverage"
-		LDFLAGS="$LDFLAGS -fprofile-arcs"
-	      ])
+        AS_IF([test ! -z "$PSM_COVERAGE"],
+              [
+                CFLAGS="$CFLAGS -O -fprofile-arcs -ftest-coverage"
+                LDFLAGS="$LDFLAGS -fprofile-arcs"
+              ])
 
-	AS_IF([test ! -z "$PSM_LOG"],
-	      [
-		CPPFLAGS="$CPPFLAGS -DPSM_LOG"
-		AS_IF([test ! -z "$PSM_LOG_FAST_IO"],
-		      [CPPFLAGS="$CPPFLAGS -DPSM_LOG"], [])
-	      ])
-	AS_IF([test ! -z "$PSM_PERF"], [CPPFLAGS="$CPPFLAGS -DRDPMC_PERF_FRAMEWORK"], [])
-	AS_IF([test ! -z "$PSM_HEAP_DEBUG"], [CPPFLAGS="$CPPFLAGS -DPSM_HEAP_DEBUG"], [])
-	AS_IF([test ! -z "$PSM_PROFILE"], [CPPFLAGS="$CPPFLAGS -DPSM_PROFILE"], [])
+        AS_IF([test ! -z "$PSM_LOG"],
+              [
+                CPPFLAGS="$CPPFLAGS -DPSM_LOG"
+                AS_IF([test ! -z "$PSM_LOG_FAST_IO"], [CPPFLAGS="$CPPFLAGS -DPSM_LOG"])
+              ])
+        AS_IF([test ! -z "$PSM_PERF"], [CPPFLAGS="$CPPFLAGS -DRDPMC_PERF_FRAMEWORK"])
+        AS_IF([test ! -z "$PSM_HEAP_DEBUG"], [CPPFLAGS="$CPPFLAGS -DPSM_HEAP_DEBUG"])
+        AS_IF([test ! -z "$PSM_PROFILE"], [CPPFLAGS="$CPPFLAGS -DPSM_PROFILE"])
 
-	AS_IF([test ! -z "$PSM_HAL_INST"], [PSM3_HAL_INST="$PSM_HAL_INST"])
-	AS_IF([test ! -z "$PSM_HAL_CNT"], [PSM3_HAL_CNT="$PSM_HAL_CNT"])
+        AS_IF([test ! -z "$PSM_HAL_INST"], [PSM3_HAL_INST="$PSM_HAL_INST"])
+        AS_IF([test ! -z "$PSM_HAL_CNT"], [PSM3_HAL_CNT="$PSM_HAL_CNT"])
       ])
 
-AM_CONDITIONAL([HAVE_PSM3_ADDITIONAL_GLOBALS], [test ! -z "$PSM3_ADDITIONAL_GLOBALS"], [])
-AM_COND_IF([HAVE_PSM3_ADDITIONAL_GLOBALS], [PSM3_ADDITIONAL_GLOBALS="$PSM3_ADDITIONAL_GLOBALS"],[])
+AM_CONDITIONAL([HAVE_PSM3_ADDITIONAL_GLOBALS], [test ! -z "$PSM3_ADDITIONAL_GLOBALS"])
+AM_COND_IF([HAVE_PSM3_ADDITIONAL_GLOBALS], [PSM3_ADDITIONAL_GLOBALS="$PSM3_ADDITIONAL_GLOBALS"])
 
 
 psm3_happy=1
@@ -173,17 +163,17 @@ freebsd=0
 
 case $host_os in
 *darwin*)
-	macos=1
-	;;
+   macos=1
+   ;;
 *linux*)
-	linux=1
-	;;
+   linux=1
+   ;;
 *freebsd*)
-	freebsd=1
-	;;
+   freebsd=1
+   ;;
 *)
-	AC_MSG_ERROR([libfabric only builds on Linux, OS X, and FreeBSD])
-	;;
+   AC_MSG_ERROR([libfabric only builds on Linux, OS X, and FreeBSD])
+   ;;
 esac
 
 AM_CONDITIONAL([MACOS], [test "x$macos" = "x1"])
@@ -196,9 +186,9 @@ debug_c_other_flags="-fstack-protector-strong"
 picky_c_warn_flags="-Wno-long-long -Wmissing-prototypes -Wstrict-prototypes -Wcomment -pedantic"
 
 AC_ARG_WITH([build_id],
-	    [AS_HELP_STRING([--with-build_id],
-			    [Enable build_id annotation @<:@default=no@:>@])],
-	    [], [with_build_id=no])
+    [AS_HELP_STRING([--with-build_id],
+        [Enable build_id annotation @<:@default=no@:>@])],
+    [],[with_build_id=no])
 AS_IF([test x"$with_build_id" = x"no"], [with_build_id=""])
 AC_DEFINE_UNQUOTED([BUILD_ID],["$with_build_id"],
                    [adds build_id to version if it was defined])
@@ -218,22 +208,21 @@ m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
 AC_ARG_WITH([valgrind],
     AS_HELP_STRING([--with-valgrind],
-		   [Enable valgrind annotations @<:@default=no@:>@]))
-
+        [Enable valgrind annotations @<:@default=no@:>@]))
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
-	AC_DEFINE([INCLUDE_VALGRIND], 1,
-		  [Define to 1 to enable valgrind annotations])
-	if test -d $with_valgrind; then
-		CPPFLAGS="$CPPFLAGS -I$with_valgrind/include"
-	fi
+   AC_DEFINE([INCLUDE_VALGRIND], 1,
+        [Define to 1 to enable valgrind annotations])
+   if test -d $with_valgrind; then
+      CPPFLAGS="$CPPFLAGS -I$with_valgrind/include"
+   fi
 fi
 
 AC_ARG_ENABLE([atomics],
-	[AS_HELP_STRING([--enable-atomics],
-		[Enable atomics support @<:@default=yes@:>@])
-	],
-	[],
-	[enable_atomics=yes])
+   [AS_HELP_STRING([--enable-atomics],
+      [Enable atomics support @<:@default=yes@:>@])
+   ],
+   [],
+   [enable_atomics=yes])
 
 dnl Checks for programs
 AC_PROG_CC_C99
@@ -244,11 +233,8 @@ AM_PROG_CC_C_O
 AC_PROG_CPP
 
 AC_ARG_ENABLE([debug],
-	      [AS_HELP_STRING([--enable-debug],
-			      [Enable debugging @<:@default=no@:>@])
-	      ],
-	      [],
-	      [enable_debug=no])
+    [AS_HELP_STRING([--enable-debug],[Enable debugging @<:@default=no@:>@])],
+    [],[enable_debug=no])
 
 AS_IF([test x"$enable_debug" != x"no"],
       [dbg=1
@@ -259,9 +245,9 @@ AS_IF([test x"$enable_debug" != x"no"],
            AC_MSG_CHECKING([to see if compiler supports $flag])
            CFLAGS="$flag $CFLAGS_save"
            AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[int i = 3;]])],
-	                     [AC_MSG_RESULT([yes])
-			      good_flags="$flag $good_flags"],
-			     [AC_MSG_RESULT([no])])
+                        [AC_MSG_RESULT([yes])
+               good_flags="$flag $good_flags"],
+              [AC_MSG_RESULT([no])])
        done
        debug_c_other_flags=$good_flags
        unset good_flags
@@ -285,9 +271,9 @@ LT_OUTPUT
 
 dnl dlopen support is optional
 AC_ARG_WITH([dlopen],
-	AS_HELP_STRING([--with-dlopen],
-		       [dl-loadable provider support @<:@default=yes@:>@]),
-	)
+    AS_HELP_STRING([--with-dlopen],
+        [dl-loadable provider support @<:@default=yes@:>@]),
+    )
 
 if test "$freebsd" = "0"; then
 AS_IF([test x"$with_dlopen" != x"no"], [
@@ -311,13 +297,13 @@ AC_CHECK_LIB(pthread, pthread_mutex_init, [],
     AC_MSG_ERROR([pthread_mutex_init() not found.  libfabric requires libpthread.]))
 
 AC_CHECK_FUNC([pthread_spin_init],
-	[have_spinlock=1],
-	[have_spinlock=0])
+   [have_spinlock=1],
+   [have_spinlock=0])
 
 dnl shm_open not used in the common code on os-x
 
 AC_DEFINE_UNQUOTED([PT_LOCK_SPIN], [$have_spinlock],
-	[Define to 1 if pthread_spin_init is available.])
+   [Define to 1 if pthread_spin_init is available.])
 
 AC_ARG_ENABLE([epoll],
     [AS_HELP_STRING([--disable-epoll],
@@ -336,11 +322,11 @@ AS_IF([test x"$enable_epoll" != x"no"],
 AC_CHECK_HEADER([linux/perf_event.h],
     [AC_CHECK_DECL([__builtin_ia32_rdpmc],
         [
-            AC_TRY_LINK([#include <linux/perf_event.h>],
-                [__builtin_ia32_rdpmc(0);],
+            AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <linux/perf_event.h>]],
+                [[__builtin_ia32_rdpmc(0);]])],
                 [linux_perf_rdpmc=1],
                 [linux_perf_rdpmc=0])
-	],
+   ],
         [linux_perf_rdpmc=0],
         [#include <linux/perf_event.h>])],
     [linux_perf_rdpmc=0])
@@ -351,33 +337,27 @@ AM_CONDITIONAL([HAVE_LINUX_PERF_RDPMC], [test "x$linux_perf_rdpmc" = "x1"])
 dnl Check for gcc atomic intrinsics
 AS_IF([test x"$enable_atomics" != x"no"],
     AC_MSG_CHECKING(compiler support for c11 atomics)
-    AC_TRY_LINK([#include <stdatomic.h>],
-        [atomic_int a;
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdatomic.h>]], [[atomic_int a;
          atomic_init(&a, 0);
          #ifdef __STDC_NO_ATOMICS__
            #error c11 atomics are not supported
          #else
            return 0;
          #endif
-        ],
-        [
+        ]])],[
         AC_MSG_RESULT(yes)
             AC_DEFINE(HAVE_ATOMICS, 1, [Set to 1 to use c11 atomic functions])
-        ],
-        [AC_MSG_RESULT(no)])
+        ],[AC_MSG_RESULT(no)])
 
 
     AC_MSG_CHECKING(compiler support for c11 atomic `least` types)
-    AC_TRY_LINK([#include <stdatomic.h>],
-        [atomic_int_least32_t a;
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdatomic.h>]],[[atomic_int_least32_t a;
          atomic_int_least64_t b;
-        ],
-        [
+        ]])],[
             AC_MSG_RESULT(yes)
             AC_DEFINE(HAVE_ATOMICS_LEAST_TYPES, 1,
                       [Set to 1 to use c11 atomic `least` types])
-        ],
-        [
+        ],[
             AC_MSG_RESULT(no)
         ]),
 [
@@ -387,8 +367,7 @@ AS_IF([test x"$enable_atomics" != x"no"],
 dnl Check for gcc built-in atomics
 AS_IF([test x"$enable_atomics" != x"no"],
     AC_MSG_CHECKING(compiler support for built-in atomics)
-    AC_TRY_LINK([#include <stdint.h>],
-        [int32_t a;
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdint.h>]],[[int32_t a;
          __sync_add_and_fetch(&a, 0);
          __sync_sub_and_fetch(&a, 0);
          #if defined(__PPC__) && !defined(__PPC64__)
@@ -396,12 +375,10 @@ AS_IF([test x"$enable_atomics" != x"no"],
          #else
            return 0;
          #endif
-        ],
-        [
+        ]])],[
         AC_MSG_RESULT(yes)
             AC_DEFINE(HAVE_BUILTIN_ATOMICS, 1, [Set to 1 to use built-in intrincics atomics])
-        ],
-        [AC_MSG_RESULT(no)]),
+        ],[AC_MSG_RESULT(no)]),
 [
     AC_MSG_RESULT(configure: atomics support built-in is disabled)
 ])
@@ -443,18 +420,15 @@ unset LIBS_save
 
 dnl Check for gcc cpuid intrinsics
 AC_MSG_CHECKING(compiler support for cpuid)
-AC_TRY_LINK([
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
      #include <stddef.h>
-     #include <cpuid.h>],
-    [
+     #include <cpuid.h>]], [[
      int a, b, c, d;
      __cpuid_count(0, 0, a, b, c, d);
-    ],
-    [
-	AC_MSG_RESULT(yes)
+    ]])],[
+        AC_MSG_RESULT(yes)
         AC_DEFINE(HAVE_CPUID, 1, [Set to 1 to use cpuid])
-    ],
-    [AC_MSG_RESULT(no)])
+    ],[AC_MSG_RESULT(no)])
 
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
 AC_CHECK_HEADER(valgrind/memcheck.h, [],
@@ -469,12 +443,12 @@ AC_CACHE_CHECK(whether ld accepts --version-script, ac_cv_version_script,
     fi])
 
 AC_ARG_ENABLE([embedded],
-	      [AS_HELP_STRING([--enable-embedded],
-			      [Enable embedded support (turns off symbol versioning) @<:@default=no@:>@])
-	      ],
-	      [ac_asm_symver_support=0
+         [AS_HELP_STRING([--enable-embedded],
+               [Enable embedded support (turns off symbol versioning) @<:@default=no@:>@])
+         ],
+         [ac_asm_symver_support=0
                icc_symver_hack=1],
-	      [enable_embedded=no])
+         [enable_embedded=no])
 AM_CONDITIONAL([EMBEDDED], [test x"$enable_embedded" = x"yes"])
 
 AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
@@ -482,79 +456,69 @@ AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 dnl Disable symbol versioning when -ipo is in CFLAGS or ipo is disabled by icc.
 dnl The gcc equivalent ipo (-fwhole-program) seems to work fine.
 AS_CASE([$CFLAGS],
-	[*-ipo*],[
-		AC_MSG_NOTICE([disabling symbol versioning support with -ipo CFLAG])
-		icc_symver_hack=1
-		ac_asm_symver_support=0
-	],
-	[]
+   [*-ipo*],[
+      AC_MSG_NOTICE([disabling symbol versioning support with -ipo CFLAG])
+      icc_symver_hack=1
+      ac_asm_symver_support=0
+   ],
+   []
 )
 
 dnl Check for symbol versioning compiler + linker support.
 dnl If icc + ipo, then print disabled and skip check
 AC_MSG_CHECKING(for .symver assembler support)
 AS_IF([test "$icc_symver_hack"],
-	[AC_MSG_RESULT(disabled)],
+   [AC_MSG_RESULT(disabled)],
 [
 
-AC_TRY_LINK([],
-	[__asm__(".symver main_, main@ABIVER_1.0");],
-	[
-		AC_MSG_RESULT(yes)
-		ac_asm_symver_support=1
-	],
-	[
-		AC_MSG_RESULT(no)
-		ac_asm_symver_support=0
-	])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[__asm__(".symver main_, main@ABIVER_1.0");]], [[]])],[
+      AC_MSG_RESULT(yes)
+      ac_asm_symver_support=1
+   ],[
+      AC_MSG_RESULT(no)
+      ac_asm_symver_support=0
+   ])
 
 ]) dnl AS_IF icc_symver_hack
 
 AC_DEFINE_UNQUOTED([HAVE_SYMVER_SUPPORT], [$ac_asm_symver_support],
-	  	   [Define to 1 if compiler/linker support symbol versioning.])
+           [Define to 1 if compiler/linker support symbol versioning.])
 
 AC_MSG_CHECKING(for __alias__ attribute support)
-AC_TRY_LINK(
-	[
-		int foo(int arg);
-		int foo(int arg) { return arg + 3; };
-		int foo2(int arg) __attribute__ (( __alias__("foo")));
-	],
-	[ /* empty main */ ],
-	[
-		AC_MSG_RESULT(yes)
-		ac_prog_cc_alias_symbols=1
-	],
-	[
-		AC_MSG_RESULT(no)
-		ac_prog_cc_alias_symbols=0
-	])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+      int foo(int arg);
+      int foo(int arg) { return arg + 3; };
+      int foo2(int arg) __attribute__ (( __alias__("foo")));
+   ]], [[ foo2(1); ]])],[
+      AC_MSG_RESULT(yes)
+      ac_prog_cc_alias_symbols=1
+   ],[
+      AC_MSG_RESULT(no)
+      ac_prog_cc_alias_symbols=0
+   ])
 
 AC_DEFINE_UNQUOTED([HAVE_ALIAS_ATTRIBUTE], [$ac_prog_cc_alias_symbols],
-	  	   [Define to 1 if the linker supports alias attribute.])
+           [Define to 1 if the linker supports alias attribute.])
 AC_CHECK_FUNCS([getifaddrs])
 
 dnl Check for ethtool support
 AC_MSG_CHECKING(ethtool support)
-AC_TRY_LINK([
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
     #include <net/if.h>
     #include <sys/types.h>
     #include <linux/ethtool.h>
     #include <linux/sockios.h>
-    #include <sys/ioctl.h>],
-    [
+    #include <sys/ioctl.h>]], [[
         unsigned long ioctl_req = SIOCETHTOOL;
         struct ethtool_cmd cmd = {
             .cmd = ETHTOOL_GSET,
         };
         long speed = cmd.speed;
-    ],
-    [
-	AC_MSG_RESULT(yes)
+    ]])],[
+        AC_MSG_RESULT(yes)
         AC_DEFINE(HAVE_ETHTOOL, 1, [Set to 1 to use ethtool])
 
-    ],
-    [AC_MSG_RESULT(no)])
+    ],[AC_MSG_RESULT(no)])
 
 dnl Check for ethtool SPEED_UNKNOWN macro (suppoirted in the linux
 dnl kernel >= 3.2) and ethtool_cmd_speed function declarations
@@ -565,39 +529,39 @@ AC_CHECK_DECLS([ethtool_cmd_speed, SPEED_UNKNOWN], [], [],
 dnl Check for userfault fd support
 have_uffd=0
 AC_CHECK_HEADERS([linux/userfaultfd.h],
-	[AC_CHECK_DECL([__NR_userfaultfd],
-		[have_uffd=1],
-		[],
-		[[#include <sys/syscall.h>]])],
-	[], [])
+   [AC_CHECK_DECL([__NR_userfaultfd],
+      [have_uffd=1],
+      [],
+      [[#include <sys/syscall.h>]])],
+   [], [])
 
 AS_IF([test $have_uffd -eq 1],
-	[AC_MSG_CHECKING([for userfaultfd unmap support])
-	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-			#include <sys/types.h>
-			#include <linux/userfaultfd.h>
-			#include <unistd.h>
-			#include <sys/syscall.h>
-			#include <fcntl.h>
-			#include <sys/ioctl.h>
-		]],
-		[[
-			int fd;
-			struct uffdio_api api_obj;
-			api_obj.api = UFFD_API;
-			api_obj.features = UFFD_FEATURE_EVENT_UNMAP |
-					UFFD_FEATURE_EVENT_REMOVE |
-					UFFD_FEATURE_EVENT_REMAP;
-			fd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
-			return ioctl(fd, UFFDIO_API, &api_obj);
-		]])
-	],
-	[AC_MSG_RESULT([yes])],
-	[AC_MSG_RESULT([no])
-		have_uffd=0])])
+   [AC_MSG_CHECKING([for userfaultfd unmap support])
+   AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+         #include <sys/types.h>
+         #include <linux/userfaultfd.h>
+         #include <unistd.h>
+         #include <sys/syscall.h>
+         #include <fcntl.h>
+         #include <sys/ioctl.h>
+      ]],
+      [[
+         int fd;
+         struct uffdio_api api_obj;
+         api_obj.api = UFFD_API;
+         api_obj.features = UFFD_FEATURE_EVENT_UNMAP |
+               UFFD_FEATURE_EVENT_REMOVE |
+               UFFD_FEATURE_EVENT_REMAP;
+         fd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
+         return ioctl(fd, UFFDIO_API, &api_obj);
+      ]])
+   ],
+   [AC_MSG_RESULT([yes])],
+   [AC_MSG_RESULT([no])
+      have_uffd=0])])
 
 AC_DEFINE_UNQUOTED([HAVE_UFFD_UNMAP], [$have_uffd],
-	[Define to 1 if platform supports userfault fd unmap])
+   [Define to 1 if platform supports userfault fd unmap])
 
 dnl Check support to intercept syscalls
 AC_CHECK_HEADERS_ONCE(elf.h sys/auxv.h)
@@ -613,38 +577,77 @@ AC_DEFINE_UNQUOTED(HAVE_CLOCK_GETTIME, [$have_clock_gettime],
        [Define to 1 if clock_gettime is available.])
 AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
 
-dnl Check for CUDA runtime libraries.
+dnl Check for CUDA runtime libraries
 AC_ARG_WITH([cuda],
-	    [AS_HELP_STRING([--with-cuda=DIR],
-			    [Provide path to where the CUDA development
-			    and runtime libraries are installed.])],
-	    [], [with_cuda=no])
+    [AS_HELP_STRING([--with-cuda=DIR],
+        [Enable CUDA build and fail if not found.
+         Optional=<Path to where the CUDA libraries
+         and headers are installed.>])],
+    [],[with_cuda=no])
 AS_IF([test ! -z "$PSM_CUDA"], [with_cuda=/usr/local/cuda])
-have_libcuda=0
-AS_IF([test "x$with_cuda" != "xno"],
-      [FI_CHECK_PACKAGE([cuda],
-			[cuda_runtime.h],
-			[cudart],
-			[cudaMemcpy],
-			[-lcuda],
-			[$with_cuda],
-			[],
-			[have_libcuda=1],
-			[],
-			[])],
-      [])
-AS_IF([test "x$with_cuda" != "xno" && test "$have_libcuda" = "0" ],
-      [AC_MSG_ERROR([CUDA support requested but CUDA runtime not available.])],
-      [])
-AC_DEFINE_UNQUOTED([HAVE_LIBCUDA], [$have_libcuda], [Whether we have CUDA runtime or not])
-if test $have_libcuda -eq 1; then
-	cuda_CPPFLAGS="$cuda_CPPFLAGS -DPSM_CUDA -DNVIDIA_GPU_DIRECT"
-fi
-AC_DEFINE_UNQUOTED([PSM3_CUDA], [$have_libcuda], [Whether we have CUDA runtime or not])
+have_cuda=0
+AS_IF([test x"$with_cuda" != x"no"],
+      [
+        FI_CHECK_PACKAGE([cuda],
+                 [cuda_runtime.h],
+                 [cudart],
+                 [cudaMemcpy],
+                 [-lcuda],
+                 [$with_cuda],
+                 [],
+                 [have_cuda=1])
+      ])
 
-CPPFLAGS="$CPPFLAGS $cuda_CPPFLAGS"
-LDFLAGS="$LDFLAGS $cuda_LDFLAGS"
-LIBS="$LIBS $cuda_LIBS"
+AS_IF([test x"$with_cuda" != x"no" && test -n "$with_cuda" && test "$have_cuda" = "0" ],
+    [AC_MSG_ERROR([CUDA support requested but CUDA runtime not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_CUDA], [$have_cuda], [CUDA support])
+AC_DEFINE_UNQUOTED([PSM3_CUDA], [$have_cuda], [CUDA support])
+
+AS_IF([test "$have_cuda" = "1" && test x"$with_cuda" != x"yes"],
+      [CPPFLAGS="$CPPFLAGS -DPSM_CUDA -DNVIDIA_GPU_DIRECT $cuda_CPPFLAGS"
+       LDFLAGS="$LDFLAGS $cuda_LDFLAGS"
+       LIBS="$LIBS $cuda_LIBS"])
+
+dnl Check for Level Zero libraries.
+AC_ARG_WITH([oneapi-ze],
+    [AS_HELP_STRING([--with-oneapi-ze=DIR],
+        [Enable OneAPI Level Zero (ZE) build and fail if not found.
+         Optional=<Path to where the ZE libraries and headers are installed.>])],
+    [],[with_oneapi_ze=no])
+have_oneapi_ze=0
+AS_IF([test x"$with_oneapi_ze" != x"no"],
+      [
+        FI_CHECK_PACKAGE([ze],
+                [level_zero/ze_api.h],
+                [ze_loader],
+                [zeInit],
+                [],
+                [$with_oneapi_ze],
+                [],
+                [have_oneapi_ze=1])
+      ])
+
+have_drm=0
+AS_IF([test "$have_oneapi_ze" = "1"],
+      [AC_CHECK_HEADER(drm/i915_drm.h, [have_drm=1])])
+
+AS_IF([test x"$with_oneapi_ze" != x"no" && test -n "$with_oneapi_ze" && test "$have_oneapi_ze" = "0" ],
+      [AC_MSG_ERROR([ZE support requested but ZE runtime not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_ZE], [$have_oneapi_ze], [ZE support])
+AC_DEFINE_UNQUOTED([PSM3_ONEAPI], [$have_oneapi_ze], [ZE support])
+AC_DEFINE_UNQUOTED([HAVE_DRM], [$have_drm], [i915 DRM header])
+
+AS_IF([test "$have_oneapi_ze" = "1"],
+      [CPPFLAGS="$CPPFLAGS -DPSM_ONEAPI $ze_CPPFLAGS"
+       LDFLAGS="$LDFLAGS $ze_LDFLAGS"
+       LIBS="$LIBS $ze_LIBS"])
+
+AS_IF([test "x$with_oneapi_ze" != "xno" && test "x$with_cuda" != "xno" ],
+      [AC_MSG_ERROR([PSM3 only supports one accelerator API at a time:
+                    oneAPI Level Zero ($with_oneapi_ze | $have_oneapi_ze) or CUDA ($with_cuda | $have_cuda])],
+      [])
 
 AC_PROG_GREP()
 
@@ -653,106 +656,133 @@ save_CFLAGS="$CFLAGS"
 dnl - Invalid flag will only show on failure for some reason
 CFLAGS="-Wno-address-of-packed-member -Werror"
 AC_COMPILE_IFELSE(
-	[AC_LANG_PROGRAM([#error "Error on purpose"])],	[],
-	[
-		dnl - Check if flag is in error message
-		if $GREP 'Wno-address-of-packed-member' conftest.err >/dev/null; then
-			AC_MSG_RESULT(no)
-			CFLAGS="$save_CFLAGS"
-		else
-			AC_MSG_RESULT(yes)
-			CFLAGS="$save_CFLAGS -Wno-address-of-packed-member"
-		fi
-	])
+   [AC_LANG_PROGRAM([#error "Error on purpose"])],   [],
+   [
+      dnl - Check if flag is in error message
+      if $GREP 'Wno-address-of-packed-member' conftest.err >/dev/null; then
+         AC_MSG_RESULT(no)
+         CFLAGS="$save_CFLAGS"
+      else
+         AC_MSG_RESULT(yes)
+         CFLAGS="$save_CFLAGS -Wno-address-of-packed-member"
+      fi
+   ])
 
 dnl ------------- Driver Modules
 psm3_rv_happy=0
 AC_ARG_WITH([psm3-rv],
             [AS_HELP_STRING([--with-psm3-rv],
                             [Enable PSM3 support for RV module (MR caching, GPU Direct, and Kernel RC QPs) @<:@default=check@:>@])],
-	    [psm3_rv_check=0],
-	    [psm3_rv_check=1])
+       [psm3_rv_check=0],
+       [psm3_rv_check=1])
 AS_IF([test "x$with_psm3_rv" != "xno"],
       [
-	AS_IF([test "$psm3_rv_check" -eq 1],
-	      [with_psm3_rv=/usr/include])
-	psm3_rv_old_header=0
-	save_CPPFLAGS=$CPPFLAGS
-	CPPFLAGS="$CPPFLAGS -I$with_psm3_rv"
-	dnl Check for /usr/include/rdma/rv_user_ioctls.h first
-	_FI_CHECK_PACKAGE_HEADER([psm3_rv],
-	                         [rdma/rv_user_ioctls.h],
-	                         [],
-	                         [psm3_rv_happy=1],
-	                         [psm3_rv_happy=0])
+        AS_IF([test "$psm3_rv_check" -eq 1],
+              [with_psm3_rv=/usr/include])
+        save_CPPFLAGS=$CPPFLAGS
+        CPPFLAGS="$CPPFLAGS -I$with_psm3_rv"
+        _FI_CHECK_PACKAGE_HEADER([psm3_rv],
+                                 [rdma/rv_user_ioctls.h],
+                                 [],
+                                 [psm3_rv_happy=1],
+                                 [psm3_rv_happy=0])
 
-	AS_IF([test $psm3_rv_happy -eq 0], [
-		dnl If not found and path is default, try searching old default path
-		AS_IF([test "$psm3_rv_check" -eq 1 || test "$with_psm3_rv" = "/usr/include"],
-		      [with_psm3_rv=/usr/include/uapi])
-		CPPFLAGS="$save_CPPFLAGS -I$with_psm3_rv"
-		_FI_CHECK_PACKAGE_HEADER([psm3_rv],
-		                         [rv/rv_user_ioctls.h],
-		                         [],
-		                         [psm3_rv_happy=1
-		                          psm3_rv_old_header=1],
-		                         [psm3_rv_happy=0])
-	      ])
-	CPPFLAGS=$save_CPPFLAGS
-	AS_IF([test "$psm3_rv_happy" -eq 0],
-	      [
-		AS_IF([test "$psm3_rv_check" -eq 0], [
-			psm3_happy=0
-			AC_MSG_ERROR([RV Module headers requested but rv_user_ioctls.h not found.])
-		])
-	      ],[
-		AS_IF([test "$psm3_rv_check" -eq 1],
-		      [
-			dnl Include under any of the following cases
-			dnl - Verbs
-			dnl - Sockets and CUDA
-			AS_IF([test "x$enable_psm3_sockets" = "xyes" && test "$have_libcuda" -eq 1],
-			      [psm3_sockets_with_cuda=1],
-			      [psm3_sockets_with_cuda=0])
-			AS_IF([test "x$enable_psm3_verbs" = "xyes" || test "$psm3_sockets_with_cuda" -eq 1],
-			      [
-				CPPFLAGS="$CPPFLAGS -DRNDV_MOD -I$with_psm3_rv"
-				AS_IF([test "$psm3_rv_old_header" -eq 1],
-				      [CPPFLAGS="$CPPFLAGS -DHAVE_OLD_RV_HEADER"])
-			      ],[
-				AC_MSG_NOTICE([RV Module headers found, but not included, as current config does not support RV])
-				psm3_rv_happy=0
-			      ])
-		      ],[
-			CPPFLAGS="$CPPFLAGS -DRNDV_MOD -I$with_psm3_rv"
-			AS_IF([test "$psm3_rv_old_header" -eq 1],
-			      [CPPFLAGS="$CPPFLAGS -DHAVE_OLD_RV_HEADER"])
-		      ])
-	      ])
-	AS_IF([test "$psm3_rv_happy" -eq 1],
-	      [
-		AC_MSG_CHECKING([for RV support for ring.overflow_cnt])
-		AC_COMPILE_IFELSE(
-			[AC_LANG_PROGRAM(
-				[[#include <sys/types.h>
-				  #include <stdint.h>
-				  #include <rdma/rv_user_ioctls.h>
-				]],[[struct rv_ring_header ring; ring.overflow_cnt=0;]])
-			],[
-				AC_MSG_RESULT(yes)
-			],[
-				AC_MSG_RESULT(no)
-				CPPFLAGS="$CPPFLAGS -DHAVE_NO_PSM3_RV_OVERFLOW_CNT"
-			])
-	      ])
+        CPPFLAGS=$save_CPPFLAGS
+        AS_IF([test "$psm3_rv_happy" -eq 0],
+              [
+                AS_IF([test "$psm3_rv_check" -eq 0], [
+                    psm3_happy=0
+                    AC_MSG_ERROR([RV Module headers requested but rv_user_ioctls.h not found.])
+                      ])
+              ],[
+                AS_IF([test "$psm3_rv_check" -eq 1],
+                      [
+                        dnl Include under any of the following cases
+                        dnl - Verbs
+                        dnl - Sockets and CUDA
+                        AS_IF([test "x$enable_psm3_sockets" = "xyes" && test "$have_cuda" -eq 1],
+                              [psm3_sockets_with_cuda=1],
+                              [psm3_sockets_with_cuda=0])
+                        AS_IF([test "x$enable_psm3_verbs" = "xyes" || test "$psm3_sockets_with_cuda" -eq 1],
+                              [CPPFLAGS="$CPPFLAGS -DRNDV_MOD -I$with_psm3_rv"],
+                              [
+                                AC_MSG_NOTICE([RV Module headers found, but not included, as current config does not support RV])
+                                psm3_rv_happy=0
+                              ])
+                      ],[
+                        CPPFLAGS="$CPPFLAGS -DRNDV_MOD -I$with_psm3_rv"
+                      ])
+              ])
+        AS_IF([test "$psm3_rv_happy" -eq 1],
+              [
+                AC_MSG_CHECKING([for RV support for ring.overflow_cnt])
+                AC_COMPILE_IFELSE(
+                    [AC_LANG_PROGRAM(
+                        [[#include <sys/types.h>
+                          #include <stdint.h>
+                          #include <rdma/rv_user_ioctls.h>
+                        ]],[[struct rv_ring_header ring; ring.overflow_cnt=0;]])
+                    ],[
+                        AC_MSG_RESULT(yes)
+                    ],[
+                        AC_MSG_RESULT(no)
+                        CPPFLAGS="$CPPFLAGS -DHAVE_NO_PSM3_RV_OVERFLOW_CNT"
+                    ])
+              ])
       ])
 
+AS_IF([test "$psm3_rv_happy" -eq 1 && test "$have_oneapi_ze" -eq 1],
+      [CPPFLAGS="$CPPFLAGS -DINTEL_GPU_DIRECT"],
+      [])
 
 AS_IF([test ! -z "$PSM_CPPFLAGS"], [CPPFLAGS="$CPPFLAGS $PSM_CPPFLAGS"], [])
 AS_IF([test ! -z "$PSM_CFLAGS"], [CFLAGS="$CFLAGS $PSM_CFLAGS"], [])
+
+dnl Defines not used in PSM3 provider
+AC_DEFINE([HAVE_DMABUF_PEER_MEM], 0, [Ignore HAVE_DMABUF_PEER_MEM])
+AC_DEFINE([HAVE_GDRCOPY], 0, [Ignore HAVE_GDRCOPY])
+AC_DEFINE([HAVE_HOOK_DEBUG], 0, [Ignore HAVE_HOOK_DEBUG])
+AC_DEFINE([HAVE_HOOK_HMEM], 0, [Ignore HAVE_HOOK_HMEM])
+AC_DEFINE([HAVE_MEMHOOKS_MONITOR], 0, [Ignore HAVE_MEMHOOKS_MONITOR])
+AC_DEFINE([HAVE_NEURON], 0, [Ignore HAVE_NEURON])
+AC_DEFINE([HAVE_ROCR], 0, [Ignore HAVE_ROCR])
+AC_DEFINE([HAVE_UFFD_MONITOR], 0, [Ignore HAVE_UFFD_MONITOR])
 dnl Provider-specific checks
 dnl FI_PROVIDER_INIT
+AC_DEFINE([HAVE_BGQ], 0, [Ignore HAVE_BGQ])
+AC_DEFINE([HAVE_BGQ_DL], 0, [Ignore HAVE_BGQ_DL])
+AC_DEFINE([HAVE_EFA], 0, [Ignore HAVE_EFA])
+AC_DEFINE([HAVE_EFA_DL], 0, [Ignore HAVE_EFA_DL])
+AC_DEFINE([HAVE_GNI], 0, [Ignore HAVE_GNI])
+AC_DEFINE([HAVE_GNI_DL], 0, [Ignore HAVE_GNI_DL])
+AC_DEFINE([HAVE_MRAIL], 0, [Ignore HAVE_MRAIL])
+AC_DEFINE([HAVE_MRAIL_DL], 0, [Ignore HAVE_MRAIL_DL])
+AC_DEFINE([HAVE_PERF], 0, [Ignore HAVE_PERF])
+AC_DEFINE([HAVE_PSM], 0, [Ignore HAVE_PSM])
+AC_DEFINE([HAVE_PSM_DL], 0, [Ignore HAVE_PSM_DL])
+AC_DEFINE([HAVE_PSM2], 0, [Ignore HAVE_PSM2])
+AC_DEFINE([HAVE_PSM2_DL], 0, [Ignore HAVE_PSM2_DL])
 dnl FI_PROVIDER_SETUP([psm3])
+AC_DEFINE([HAVE_OPX], 0, [Ignore HAVE_OPX])
+AC_DEFINE([HAVE_OPX_DL], 0, [Ignore HAVE_OPX_DL])
+AC_DEFINE([HAVE_RSTREAM], 0, [Ignore HAVE_RSTREAM])
+AC_DEFINE([HAVE_RSTREAM_DL], 0, [Ignore HAVE_RSTREAM_DL])
+AC_DEFINE([HAVE_RXD], 0, [Ignore HAVE_RXD])
+AC_DEFINE([HAVE_RXD_DL], 0, [Ignore HAVE_RXD_DL])
+AC_DEFINE([HAVE_RXM], 0, [Ignore HAVE_RXM])
+AC_DEFINE([HAVE_RXM_DL], 0, [Ignore HAVE_RXM_DL])
+AC_DEFINE([HAVE_SHM], 0, [Ignore HAVE_SHM])
+AC_DEFINE([HAVE_SHM_DL], 0, [Ignore HAVE_SHM_DL])
+AC_DEFINE([HAVE_SOCKETS], 0, [Ignore HAVE_SOCKETS])
+AC_DEFINE([HAVE_SOCKETS_DL], 0, [Ignore HAVE_SOCKETS_DL])
+AC_DEFINE([HAVE_TCP], 0, [Ignore HAVE_TCP])
+AC_DEFINE([HAVE_TCP_DL], 0, [Ignore HAVE_TCP_DL])
+AC_DEFINE([HAVE_UDP], 0, [Ignore HAVE_UDP])
+AC_DEFINE([HAVE_UDP_DL], 0, [Ignore HAVE_UDP_DL])
+AC_DEFINE([HAVE_USNIC], 0, [Ignore HAVE_USNIC])
+AC_DEFINE([HAVE_USNIC_DL], 0, [Ignore HAVE_USNIC_DL])
+AC_DEFINE([HAVE_VERBS], 0, [Ignore HAVE_VERBS])
+AC_DEFINE([HAVE_VERBS_DL], 0, [Ignore HAVE_VERBS_DL])
 dnl FI_PROVIDER_FINI
 dnl Configure the .pc file
 #FI_PROVIDER_SETUP_PC
@@ -761,24 +791,25 @@ AC_SUBST(PSM3_HAL_CNT)
 AC_SUBST(PSM3_HAL_INST)
 
 AM_COND_IF([HAVE_PSM3_SRC],
-	   [
-		PSM3_IEFS_VERSION="${RELEASE_TAG:-$(git describe --dirty --always --abbrev=8 --broken --tags 2>/dev/null \
-			|| git describe --dirty --always --abbrev=8 --broken 2>/dev/null || echo 'unknown commit')}"
-		PSM3_IEFS_VERSION=${PSM3_IEFS_VERSION//./_}
-		PSM3_GIT_HASH="$(git log --oneline --format='%H' -1)"
-		RPM_RELEASE=$(echo "${PSM3_IEFS_VERSION}" | cut -d'_' -f5)
-		RELEASE_VER=$(echo "${PSM3_IEFS_VERSION}" | cut -d'_' -f1-4 | sed 's/_/./g')
-		AS_IF([test x"${RELEASE_VER}" = x"${PACKAGE_VERSION}"], [], [
-			AC_MSG_NOTICE([Release Tag does not match VERSION file])
-			AC_MSG_NOTICE([${RELEASE_VER} != ${PACKAGE_VERSION}])
-			RPM_RELEASE=999
-		])
-		PSM3_PROV_VER_MAJOR=$(echo "${PACKAGE_VERSION}" | cut -d'.' -f1)
-		PSM3_PROV_VER_MINOR=$(echo "${PACKAGE_VERSION}" | cut -d'.' -f2)
-		PSM3_PROV_VER_MAINT=$(echo "${PACKAGE_VERSION}" | cut -d'.' -f3)
-		PSM3_PROV_VER_PATCH=$(echo "${PACKAGE_VERSION}" | cut -d'.' -f4)
-	   ])
-AS_IF([test $have_libcuda -eq 1], [RPM_RELEASE=${RPM_RELEASE}cuda])
+    [
+        PSM3_IEFS_VERSION="${RELEASE_TAG:-$(git describe --dirty --always --abbrev=8 --broken --tags 2>/dev/null \
+            || git describe --dirty --always --abbrev=8 --broken 2>/dev/null || echo 'unknown commit')}"
+        PSM3_IEFS_VERSION=${PSM3_IEFS_VERSION//./_}
+        PSM3_GIT_HASH="$(git log --oneline --format='%H' -1)"
+        RPM_RELEASE=$(echo "${PSM3_IEFS_VERSION}" | cut -d'_' -f5)
+        RELEASE_VER=$(echo "${PSM3_IEFS_VERSION}" | cut -d'_' -f1-4 | sed 's/_/./g')
+        AS_IF([test x"${RELEASE_VER}" = x"${PACKAGE_VERSION}"], [], [
+            AC_MSG_NOTICE([Release Tag does not match VERSION file])
+            AC_MSG_NOTICE([${RELEASE_VER} != ${PACKAGE_VERSION}])
+            RPM_RELEASE=999
+        ])
+        PSM3_PROV_VER_MAJOR=$(echo "${PACKAGE_VERSION}" | cut -d'.' -f1)
+        PSM3_PROV_VER_MINOR=$(echo "${PACKAGE_VERSION}" | cut -d'.' -f2)
+        PSM3_PROV_VER_MAINT=$(echo "${PACKAGE_VERSION}" | cut -d'.' -f3)
+        PSM3_PROV_VER_PATCH=$(echo "${PACKAGE_VERSION}" | cut -d'.' -f4)
+    ])
+AS_IF([test $have_cuda -eq 1], [RPM_RELEASE=${RPM_RELEASE}cuda])
+AS_IF([test $have_oneapi_ze -eq 1], [RPM_RELEASE=${RPM_RELEASE}ze])
 
 AC_SUBST(PSM3_IEFS_VERSION)
 AC_SUBST(PSM3_GIT_HASH)
@@ -795,5 +826,36 @@ AC_SUBST(PSM3_ADDITIONAL_GLOBALS)
 
 AC_CONFIG_FILES([Makefile libpsm3-fi.spec libpsm3-fi.map libpsm3-fi.pc])
 AM_COND_IF([HAVE_PSM3_SRC],
-	   [AC_CONFIG_FILES([psm3/psm2_hal_inlines_i.h psm3/psm2_hal_inlines_d.h src/psm3_revision.c])])
+    [AC_CONFIG_FILES([psm3/psm2_hal_inlines_i.h psm3/psm2_hal_inlines_d.h src/psm3_revision.c])])
 AC_OUTPUT
+
+dnl Summary output
+
+echo "***"
+hals=""
+for hal in $PSM3_HAL_INST; do
+    hals="$hals, $hal"
+done
+echo "*** Build with the following HALs: ${hals:2}"
+echo "***"
+afeatures=""
+if test $have_cuda -eq 1; then
+    afeatures="$afeatures, CUDA/GPUDirect"
+fi
+if test $have_oneapi_ze -eq 1; then
+    afeatures="$afeatures, OneAPI/LevelZero"
+fi
+if test $psm3_rv_happy -eq 1; then
+    afeatures="$afeatures, RV Module"
+fi
+if test "x$enable_psm3_udp" = "xyes"; then
+    afeatures="$afeatures, UDP"
+fi
+if test "x$enable_psm3_rc" = "xyes"; then
+    afeatures="$afeatures, Userspace RC QPs"
+fi
+if test "x$enable_psm3_umr_cache" = "xyes"; then
+    afeatures="$afeatures, Userspace MR Cache"
+fi
+echo "*** Additional Features: ${afeatures:2}"
+echo "***"

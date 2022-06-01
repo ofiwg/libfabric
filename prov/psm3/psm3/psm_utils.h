@@ -165,6 +165,10 @@ void psm3_epid_itor_fini(struct psmi_eptab_iterator *itor);
 
 /* These functions build the local epid */
 // for typical job which includes IPS inter-node comms
+#ifdef PSM_OPA
+psm2_epid_t psm3_epid_pack_ips(uint16_t lid, uint8_t context,
+	uint8_t subcontext, uint8_t hfiunit, psmi_naddr128_t addr);
+#else
 psm2_epid_t psm3_epid_pack_ib(uint16_t lid, uint32_t qp_num,
 	psmi_naddr128_t addr);
 // IPv4 Ethernet (RoCE or UDP/TCP)
@@ -177,6 +181,7 @@ psm2_epid_t psm3_epid_pack_ipv4(psmi_naddr128_t ipv4_addr,
 psm2_epid_t psm3_epid_pack_ipv6(psmi_naddr128_t ipv6_addr,
 				psmi_eth_proto_t protocol,
 				uint32_t context, uint16_t aux_sock);
+#endif
 
 // for a shm-only job (1 node job)
 psm2_epid_t psm3_epid_pack_shm(const psm2_uuid_t unique_job_key);
@@ -189,9 +194,11 @@ psm2_epid_t psm3_epid_pack_diag(int val);
 
 // These functions extract fields/information from the epid
 uint8_t psm3_epid_addr_fmt(psm2_epid_t epid);
+#ifndef PSM_OPA
 psmi_eth_proto_t psm3_epid_protocol(psm2_epid_t epid);
+#endif
 psm2_nid_t psm3_epid_nid(psm2_epid_t epid);
-const char *psmi_subnet_epid_subset_fmt(psmi_subnet128_t subnet, int bufno);
+const char *psm3_subnet_epid_subset_fmt(psmi_subnet128_t subnet, int bufno);
 psmi_subnet128_t psm3_epid_subnet(psm2_epid_t epid);
 uint8_t psm3_epid_prefix_len(psm2_epid_t epid);
 uint64_t psm3_epid_port(psm2_epid_t epid);
@@ -199,8 +206,12 @@ uint64_t psm3_epid_context(psm2_epid_t epid);
 #ifdef PSM_SOCKETS
 uint16_t psm3_epid_aux_socket(psm2_epid_t epid);
 #endif
+#ifdef PSM_OPA
+uint64_t psm3_epid_subcontext(psm2_epid_t epid);
+#else
 void psm3_epid_get_av(psm2_epid_t epid, uint16_t *lid, psmi_gid128_t *gid);
 uint32_t psm3_epid_get_rem_addr(psm2_epid_t epid);
+#endif
 uint16_t psm3_epid_lid(psm2_epid_t epid);
 uint64_t psm3_epid_hash(psm2_epid_t epid);
 
@@ -208,15 +219,15 @@ psm2_nid_t psm3_build_nid(uint8_t unit, psmi_naddr128_t addr, unsigned lid);
 
 // compare subnets based on comparison rules for given addr_fmt
 // This considers whether routing is possible and PSM3_ALLOW_ROUTERS is set
-int psmi_subnets_match(psmi_subnet128_t a, psmi_subnet128_t b);
+int psm3_subnets_match(psmi_subnet128_t a, psmi_subnet128_t b);
 
 // for some formats the epid only has a subset of the subnet, compare
 // just the subset available in epid
-int psmi_subnets_match_epid(psmi_subnet128_t subnet, psm2_epid_t epid);
+int psm3_subnets_match_epid(psmi_subnet128_t subnet, psm2_epid_t epid);
 
 #ifdef PSM_SOCKETS
 // manage sockaddr fundamentals
-int psmi_sockaddr_cmp(struct sockaddr_in6 *a, struct sockaddr_in6 *b);
+int psm3_sockaddr_cmp(struct sockaddr_in6 *a, struct sockaddr_in6 *b);
 // build an AF_INET6 sockaddr
 // can be for a IPv4 (GID ::ffff:<ipaddr>) or IPv6 style GID
 void psm3_build_sockaddr(struct sockaddr_in6 *in6, uint16_t port,
@@ -227,60 +238,79 @@ void psm3_epid_build_sockaddr(struct sockaddr_in6 *in6, psm2_epid_t epid,
 void psm3_epid_build_aux_sockaddr(struct sockaddr_in6 *in6, psm2_epid_t epid,
 				uint32_t scope_id);
 #endif
-int psm3_epid_cmp(psm2_epid_t a, psm2_epid_t b);
-int psm3_epid_zero(psm2_epid_t a);
-psm2_epid_t psm3_epid_zeroed(void);
+int psm3_epid_cmp_internal(psm2_epid_t a, psm2_epid_t b);
+int psm3_epid_zero_internal(psm2_epid_t a);
+psm2_epid_t psm3_epid_zeroed_internal(void);
 
 // NID is just a special subset of epid values where context/subctxt/qp_num == 0
 // so we can use the epid function to cmp and clear a psm2_nid_t
-PSMI_ALWAYS_INLINE(int psmi_nid_cmp(psm2_nid_t a, psm2_nid_t b))
+PSMI_ALWAYS_INLINE(int psm3_nid_cmp_internal(psm2_nid_t a, psm2_nid_t b))
 {
-	return psm3_epid_cmp(a, b);
+	return psm3_epid_cmp_internal(a, b);
 }
 
-PSMI_ALWAYS_INLINE(int psmi_nid_zero(psm2_nid_t a))
+PSMI_ALWAYS_INLINE(int psm3_nid_zero_internal(psm2_nid_t a))
 {
-	return psm3_epid_zero(a);
+	return psm3_epid_zero_internal(a);
 }
 
-PSMI_ALWAYS_INLINE(psm2_nid_t psmi_nid_zeroed(void))
+PSMI_ALWAYS_INLINE(psm2_nid_t psm3_nid_zeroed_internal(void))
 {
-	return psm3_epid_zeroed();
+	return psm3_epid_zeroed_internal();
 }
 
+#ifdef PSM_OPA
+// to and from 64b words for inclusion in connection packets
+#define PSMI_EPID_LEN (sizeof(uint64_t)*1) // in bytes
+#else
 #define PSMI_EPID_LEN (sizeof(uint64_t)*3) // in bytes
+#endif
 psm2_epid_t psm3_epid_pack_words(uint64_t w0, uint64_t w1, uint64_t w2);
+#ifdef PSM_OPA
+psm2_epid_t psm3_epid_pack_word(uint64_t w0);
+//psm2_epid_t psm2_epid_pack_word(uint64_t w0);
+#endif
 uint64_t psm3_epid_w0(psm2_epid_t epid);
 uint64_t psm3_epid_w1(psm2_epid_t epid);
 uint64_t psm3_epid_w2(psm2_epid_t epid);
+#ifdef PSM_OPA
+// for IPS connect we get 1 extra 64b word
+// to hold enough information to reconstruct the full psmi_subnet128_t from the
+// epid and this value (for some addr_fmt, the epid can only reconstruct a
+// subset of the subnet information)
+uint64_t psm3_epid_subnet_extra_word(psmi_subnet128_t subnet);
+psmi_subnet128_t psmi_subnet_pack(psm2_epid_t epid, uint64_t extra_word);
+#endif
 
 
 /*
  * Hostname manipulation
  */
 char *psm3_gethostname(void);
-const char *psm3_epid_fmt(psm2_epid_t epid, int bufno);
+const char *psm3_epid_fmt_internal(psm2_epid_t epid, int bufno);
 const char *psm3_epid_fmt_context(psm2_epid_t epid, int bufno);
 const char *psm3_epid_fmt_nid(psm2_epid_t epid, int bufno);
 const char *psm3_epid_fmt_addr(psm2_epid_t epid, int bufno);
 const char *psm3_epid_fmt_subnet(psm2_epid_t epid, int bufno);
 const char *psm3_epid_str_addr_fmt(psm2_epid_t epid);
+#ifndef PSM_OPA
 const char *psm3_epid_str_protocol(psm2_epid_t epid);
+#endif
 const char *psm3_epaddr_get_hostname(psm2_epid_t epid, int bufno);
 const char *psm3_epaddr_get_name(psm2_epid_t epid, int bufno);
 psm2_error_t psm3_epid_set_hostname(psm2_nid_t nid, const char *hostname,
 				   int overwrite);
-const char *psmi_nid_fmt(psm2_nid_t nid, int bufno);
+const char *psm3_nid_fmt(psm2_nid_t nid, int bufno);
 
 #ifdef PSM_VERBS
-const char *psmi_ibv_gid_fmt(union ibv_gid gid, int bufno);
-int psmi_nonzero_gid(const union ibv_gid *gid);
+const char *psm3_ibv_gid_fmt(union ibv_gid gid, int bufno);
+int psm3_nonzero_gid(const union ibv_gid *gid);
 #endif
 
 /* PSM3_IDENTIFY output */
 
-void psmi_print_rank_identify(void);
-void psmi_print_ep_identify(psm2_ep_t ep);
+void psm3_print_rank_identify(void);
+void psm3_print_ep_identify(psm2_ep_t ep);
 
 
 /*
@@ -343,7 +373,7 @@ struct psmi_stats_malloc {
 
 extern struct psmi_stats_malloc psm3_stats_memory;
 
-void psmi_mem_stats_register(void);
+void psm3_mem_stats_register(void);
 
 void *psm3_malloc_internal(psm2_ep_t ep, psmi_memtype_t mt, size_t sz,
 			   const char *curloc);
@@ -410,7 +440,7 @@ void psm3_log_memstats(psmi_memtype_t type, int64_t nbytes);
  * Parse int parameters
  * -1 -> parse error
  */
-long psmi_parse_str_long(const char *str);
+long psm3_parse_str_long(const char *str);
 
 /*
  * Parsing int parameters set in string tuples.
@@ -440,11 +470,11 @@ psm2_error_t psm3_parse_mpool_env(const psm2_mq_t mq, int level,
 				 const struct psmi_rlimit_mpool *rlim,
 				 uint32_t *valo, uint32_t *chunkszo);
 int psm3_parse_memmode(void);
-int psmi_parse_identify(void);
+int psm3_parse_identify(void);
 #ifdef PSM_HAVE_REG_MR
-unsigned psmi_parse_senddma(void);
+unsigned psm3_parse_senddma(void);
 #endif
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 unsigned psmi_parse_gpudirect(void);
 unsigned psmi_parse_gpudirect_rdma_send_limit(int force);
 unsigned psmi_parse_gpudirect_rdma_recv_limit(int force);
@@ -487,11 +517,11 @@ MOCKABLE(psm3_getenv)(const char *name, const char *descr, int level,
 		int type, union psmi_envvar_val defval,
 		union psmi_envvar_val *newval);
 MOCK_DCL_EPILOGUE(psm3_getenv);
-int psmi_parse_val_pattern(const char *env, int def, int def_syntax);
+int psm3_parse_val_pattern(const char *env, int def, int def_syntax);
 /*
  * Misc functionality
  */
-long int psmi_rand(long int seed);
+long int psm3_rand(long int seed);
 uintptr_t psm3_getpagesize(void);
 uint64_t psm3_cycles_left(uint64_t start_cycles, int64_t timeout_ns);
 void psm3_syslog(psm2_ep_t ep, int to_console, int level,
