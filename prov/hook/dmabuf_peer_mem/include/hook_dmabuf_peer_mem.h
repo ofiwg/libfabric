@@ -39,10 +39,13 @@
 struct dmabuf_peer_mem_fabric {
 	struct hook_fabric fabric_hook;
 	int dmabuf_reg_fd;
+	ofi_mutex_t mutex;
 };
 
 struct dmabuf_peer_mem_mr {
 	struct hook_mr mr_hook;
+	uint64_t base;
+	uint64_t size;
 	int fd;
 };
 
