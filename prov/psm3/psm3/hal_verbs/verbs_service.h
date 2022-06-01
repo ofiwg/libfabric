@@ -79,18 +79,21 @@
    returns 0 if the unit and port are not active. returns -1 when an error occurred. */
 int psm3_hfp_verbs_get_port_active(int, int);
 
-/* Given the unit number and port, return an error, or the corresponding LID */
+/* Given the unit number, port and addr_index, */
+/* return an error, or the corresponding LID */
 /* Returns an int, so -1 indicates a general error.  -2 indicates that the unit/port
    are not active.  0 indicates that the unit is valid, but no LID has been assigned. */
 enum verbs_init_max_speed { VIMS_NOFILTER, VIMS_FILTER, VIMS_FINDMAX };
-int psm3_verbs_get_port_lid(int, int, enum verbs_init_max_speed init_max_speed);
+int psm3_verbs_get_port_lid(int, int, int, enum verbs_init_max_speed init_max_speed);
 
-/* Given the unit number and port, return an error, or the corresponding */
+/* Given the unit number, port and addr_index, */
+/* return an error, or the corresponding */
 /* subnet, addr and gid.  For ethernet uses 1st IPv4 RoCE gid. */
 /* For IB/OPA uses 1st valid gid */
 /* Returns an int, so -1 indicates an error. */
-int psm3_hfp_verbs_get_port_subnet(int unit, int port, psmi_subnet128_t *subnet,
-	psmi_naddr128_t *addr, int *idx, psmi_gid128_t *gid);
+int psm3_hfp_verbs_get_port_subnet(int unit, int port, int addr_index,
+	psmi_subnet128_t *subnet, psmi_naddr128_t *addr,
+	int *idx, psmi_gid128_t *gid);
 
 /* Given a unit and port umber, return an error, or the corresponding speed in bps. */
 /* Returns an int, so -1 indicates an error. 0 on success */

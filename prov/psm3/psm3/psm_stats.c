@@ -56,6 +56,9 @@
 #include "psm_user.h"
 #include "psm_mq_internal.h"
 #include <sys/syscall.h>
+#ifdef PSM_OPA
+#include "hal_gen1/gen1_service.h"	// for OPA specific stats
+#endif
 
 struct psmi_stats_type {
 	STAILQ_ENTRY(psmi_stats_type) next;
@@ -73,7 +76,7 @@ struct psmi_stats_type {
 static STAILQ_HEAD(, psmi_stats_type) psmi_stats =
 STAILQ_HEAD_INITIALIZER(psmi_stats);
 
-pthread_spinlock_t psmi_stats_lock;	// protects psmi_stats list
+pthread_spinlock_t psm3_stats_lock;	// protects psmi_stats list
 // stats output
 static int print_statsmask;
 static time_t stats_start;
@@ -98,9 +101,9 @@ static void psmi_open_stats_fd()
 	}
 }
 
-// caller must get psmi_stats_lock
+// caller must get psm3_stats_lock
 static psm2_error_t
-psmi_stats_deregister_type_internal(uint32_t statstype,
+psm3_stats_deregister_type_internal(uint32_t statstype,
 					 void *context)
 {
 	struct psmi_stats_type *type;
@@ -165,11 +168,11 @@ psm3_stats_register_type_internal(const char *heading,
 		type->entries[i].u.val = entries_i[i].u.val;
 	}
 
-	pthread_spin_lock(&psmi_stats_lock);
+	pthread_spin_lock(&psm3_stats_lock);
 	if (rereg)
-		(void) psmi_stats_deregister_type_internal(statstype, context);
+		(void) psm3_stats_deregister_type_internal(statstype, context);
 	STAILQ_INSERT_TAIL(&psmi_stats, type, next);
-	pthread_spin_unlock(&psmi_stats_lock);
+	pthread_spin_unlock(&psm3_stats_lock);
 	return err;
 
 fail:
@@ -197,7 +200,7 @@ psm3_stats_register_type(const char *heading,
 }
 
 psm2_error_t
-psmi_stats_reregister_type(const char *heading,
+psm3_stats_reregister_type(const char *heading,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries_i,
 			 int num_entries, const char *id, void *context,
@@ -207,13 +210,13 @@ psmi_stats_reregister_type(const char *heading,
 			 num_entries, id, context, info, 1);
 }
 
-void psmi_stats_show(uint32_t statsmask)
+void psm3_stats_show(uint32_t statsmask)
 {
 	struct psmi_stats_type *type;
 	time_t now;
 	char buf[100];
 
-	pthread_spin_lock(&psmi_stats_lock);
+	pthread_spin_lock(&psm3_stats_lock);
 	psmi_open_stats_fd();
 	if (! perf_stats_fd)
 		goto unlock;
@@ -240,6 +243,13 @@ void psmi_stats_show(uint32_t statsmask)
 			fprintf(perf_stats_fd, " %s%s%s\n",
 				type->heading, type->info?" ":"",
 				type->info?type->info:"");
+#ifdef PSM_OPA
+		if (type->statstype == PSMI_STATSTYPE_DEVCOUNTERS ||
+				type->statstype == PSMI_STATSTYPE_DEVSTATS) {
+			fprintf(perf_stats_fd, "    skipping device stats\n");
+			continue;
+		}
+#endif
 		for (i=0, entry=&type->entries[0]; i<type->num_entries; i++, entry++) {
 			uint64_t value;
 			value = (entry->getfn != NULL)? entry->getfn(type->context)
@@ -254,16 +264,16 @@ void psmi_stats_show(uint32_t statsmask)
 	fprintf(perf_stats_fd, "\n");
 	fflush(perf_stats_fd);
 unlock:
-	pthread_spin_unlock(&psmi_stats_lock);
+	pthread_spin_unlock(&psm3_stats_lock);
 }
 
-psm2_error_t psmi_stats_deregister_type(uint32_t statstype, void *context)
+psm2_error_t psm3_stats_deregister_type(uint32_t statstype, void *context)
 {
 	psm2_error_t err;
 
-	pthread_spin_lock(&psmi_stats_lock);
-	err = psmi_stats_deregister_type_internal(statstype, context);
-	pthread_spin_unlock(&psmi_stats_lock);
+	pthread_spin_lock(&psm3_stats_lock);
+	err = psm3_stats_deregister_type_internal(statstype, context);
+	pthread_spin_unlock(&psm3_stats_lock);
 	return err;
 }
 
@@ -273,7 +283,7 @@ psm2_error_t psm3_stats_deregister_all(void)
 
 	/* Currently our mpi still reads stats after finalize so this isn't safe
 	 * yet */
-	pthread_spin_lock(&psmi_stats_lock);
+	pthread_spin_lock(&psm3_stats_lock);
 	while ((type = STAILQ_FIRST(&psmi_stats)) != NULL) {
 		STAILQ_REMOVE_HEAD(&psmi_stats, next);
 		psmi_free(type->entries);
@@ -283,14 +293,14 @@ psm2_error_t psm3_stats_deregister_all(void)
 			psmi_free(type->id);
 		psmi_free(type);
 	}
-	pthread_spin_unlock(&psmi_stats_lock);
+	pthread_spin_unlock(&psm3_stats_lock);
 
 	return PSM2_OK;
 }
 
 static
 void
-*psmi_print_stats_thread(void *unused)
+*psm3_print_stats_thread(void *unused)
 {
 	if (print_stats_freq <= 0)
 		goto end;
@@ -301,7 +311,7 @@ void
 
 	/* Performance stats will be printed every $PSM3_PRINT_STATS seconds */
 	do {
-		psmi_stats_show(print_statsmask);
+		psm3_stats_show(print_statsmask);
 		usleep(MICRO_SEC * print_stats_freq);
 	} while (print_stats_running);
 
@@ -310,11 +320,11 @@ end:
 }
 
 static void
-psmi_print_stats_init_thread(void)
+psm3_print_stats_init_thread(void)
 {
 	print_stats_running = 1;
 	if (pthread_create(&perf_print_thread, NULL,
-				psmi_print_stats_thread, (void*)NULL))
+				psm3_print_stats_thread, (void*)NULL))
 	{
 		print_stats_running = 0;
 		_HFI_ERROR("Failed to create logging thread\n");
@@ -322,7 +332,7 @@ psmi_print_stats_init_thread(void)
 }
 
 psm2_error_t
-psmi_stats_initialize(void)
+psm3_stats_initialize(void)
 {
 	union psmi_envvar_val env_stats;
 
@@ -337,7 +347,9 @@ psmi_stats_initialize(void)
 	psm3_getenv("PSM3_PRINT_STATSMASK",
 			"Mask of statistic types to print: "
 			"MQ=1, RCVTHREAD=0x100, IPS=0x200"
-#if   defined(PSM_HAVE_REG_MR)
+#ifdef PSM_OPA
+			", TID=0x400"
+#elif defined(PSM_HAVE_REG_MR)
 			", RDMA=0x400, MRCache=0x800"
 #endif
 #ifdef PSM_DEBUG
@@ -354,7 +366,7 @@ psmi_stats_initialize(void)
 			(union psmi_envvar_val) PSMI_STATSTYPE_ALL, &env_stats);
 	print_statsmask = env_stats.e_uint;
 
-	pthread_spin_init(&psmi_stats_lock, PTHREAD_PROCESS_PRIVATE);
+	pthread_spin_init(&psm3_stats_lock, PTHREAD_PROCESS_PRIVATE);
 	stats_start = time(NULL);
 
 	snprintf(perf_file_name, sizeof(perf_file_name),
@@ -362,15 +374,15 @@ psmi_stats_initialize(void)
 			psm3_gethostname(), getpid());
 
 	if (print_stats_freq > 0)
-		psmi_print_stats_init_thread();
+		psm3_print_stats_init_thread();
 	return PSM2_OK;
 }
 
 void
-psmi_stats_finalize(void)
+psm3_stats_finalize(void)
 {
 	if (print_stats_freq == -1) {
-		psmi_stats_show(print_statsmask);
+		psm3_stats_show(print_statsmask);
 	} else if (print_stats_running) {
 		print_stats_running = 0;
 		pthread_join(perf_print_thread, NULL);
@@ -387,10 +399,10 @@ psmi_stats_finalize(void)
 // we only output if we have done no previous outputs, so
 // if there are multiple EPs this only outputs on 1st EP close
 void
-psmi_stats_ep_close(void)
+psm3_stats_ep_close(void)
 {
 	if (print_stats_freq == -1 && ! perf_stats_fd)
-		psmi_stats_show(print_statsmask);
+		psm3_stats_show(print_statsmask);
 }
 
 #if 0   // unused code, specific to QLogic MPI
@@ -414,6 +426,13 @@ static uint32_t typestring_to_type(const char *typestr)
 	else if ((strncasecmp(typestr, "tid", 4) == 0) ||
 		 (strncasecmp(typestr, "tids", 5) == 0))
 		return PSMI_STATSTYPE_RDMA;
+#ifdef PSM_OPA
+	else if ((strncasecmp(typestr, "counter", 8) == 0) ||
+		 (strncasecmp(typestr, "counters", 9) == 0))
+		return PSMI_STATSTYPE_DEVCOUNTERS;
+	else if (strncasecmp(typestr, "devstats", 9) == 0)
+		return PSMI_STATSTYPE_DEVSTATS;
+#endif
 	else if ((strncasecmp(typestr, "memory", 7) == 0) ||
 		 (strncasecmp(typestr, "alloc", 6) == 0) ||
 		 (strncasecmp(typestr, "malloc", 7) == 0))
@@ -460,6 +479,54 @@ void psmi_stats_mpspawn_callback(struct mpspawn_stats_req_args *args)
 
 	psmi_assert(num == type->num_entries);
 
+#ifdef PSM_OPA
+	if (type->statstype == PSMI_STATSTYPE_DEVCOUNTERS ||
+	    type->statstype == PSMI_STATSTYPE_DEVSTATS) {
+		int unit_id = ((psm2_ep_t) type->context)->unit_id;
+		int portno = ((psm2_ep_t) type->context)->portnum;
+		uintptr_t off;
+		uint8_t *p = NULL;
+		int nc, npc, ns;
+		int nstats = psm3_gen1_get_stats_names_count();
+		int nctrs = psm3_gen1_get_ctrs_unit_names_count(unit_id);
+		int npctrs = psm3_gen1_get_ctrs_port_names_count(unit_id);
+
+		if (nctrs != -1 && npctrs != -1)
+			c = psmi_calloc(PSMI_EP_NONE, STATS, nctrs + npctrs,
+					sizeof(uint64_t));
+		if (nstats != -1)
+			s = psmi_calloc(PSMI_EP_NONE, STATS, nstats,
+					sizeof(uint64_t));
+
+		/*
+		 * If hfifs is not loaded, we set NAN everywhere.  We don't want
+		 * stats to break just because 1 node didn't have hfi-stats
+		 */
+		if (type->statstype == PSMI_STATSTYPE_DEVCOUNTERS && c != NULL) {
+			nc = psm3_gen1_get_ctrs_unit(unit_id, c, nctrs);
+			if (nc != -1 && nc == nctrs)
+				p = (uint8_t *) c;
+			if (nc == -1)
+				nc = 0;
+			npc =
+			    psm3_gen1_get_ctrs_port(unit_id, portno, c + nc, npctrs);
+			if (!p && npc > 0 && npc == npctrs)
+				p = (uint8_t *) c;
+		} else if (s != NULL) {
+			ns = psm3_gen1_get_stats(s, nstats);
+			if (ns != -1)
+				p = (uint8_t *) s;
+		}
+		for (i = 0; i < num; i++) {
+			entry = &type->entries[i];
+			if (p) {
+				off = (uintptr_t) entry->u.off;
+				stats[i] = *((uint64_t *) (p + off));
+			} else
+				stats[i] = MPSPAWN_NAN_U64;
+		}
+	} else
+#endif
 	 if (type->statstype == PSMI_STATSTYPE_MEMORY) {
 		for (i = 0; i < num; i++) {
 			entry = &type->entries[i];
@@ -515,6 +582,10 @@ stats_register_mpspawn_single(mpspawn_stats_add_fn add_fn,
 	return;
 }
 
+#ifdef PSM_OPA
+static void stats_register_hfi_counters(psm2_ep_t ep);
+static void stats_register_hfi_stats(psm2_ep_t ep);
+#endif
 static void stats_register_mem_stats(psm2_ep_t ep);
 static psm2_error_t psmi_stats_epaddr_register(struct mpspawn_stats_init_args
 					      *args);
@@ -542,8 +613,18 @@ void *psmi_stats_register(struct mpspawn_stats_init_args *args)
 
 	/* MQ (MPI-level) statistics */
 	if (statsmask & PSMI_STATSTYPE_MQ)
-		psmi_mq_stats_register(args->mq, args->add_fn);
+		psm3_mq_stats_register(args->mq, args->add_fn);
 
+#ifdef PSM_OPA
+	if (psm3_ep_device_is_enabled(ep, PTL_DEVID_IPS)) {
+		/* PSM and hfi level statistics */
+		if (statsmask & PSMI_STATSTYPE_DEVCOUNTERS)
+			stats_register_hfi_counters(args->mq->ep);
+
+		if (statsmask & PSMI_STATSTYPE_DEVSTATS)
+			stats_register_hfi_stats(args->mq->ep);
+	}
+#endif
 
 	if (statsmask & PSMI_STATSTYPE_MEMORY)
 		stats_register_mem_stats(args->mq->ep);
@@ -760,7 +841,96 @@ clean:
 	return err;
 }
 
+#ifdef PSM_OPA
+static
+void stats_register_hfi_counters(psm2_ep_t ep)
+{
+	int i, nc, npc;
+	char *cnames = NULL, *pcnames = NULL;
+	struct psmi_stats_entry *entries = NULL;
 
+	nc = psm3_gen1_get_ctrs_unit_names(ep->unit_id, &cnames);
+	if (nc == -1 || cnames == NULL)
+		goto bail;
+	npc = psm3_gen1_get_ctrs_port_names(ep->unit_id, &pcnames);
+	if (npc == -1 || pcnames == NULL)
+		goto bail;
+	entries =
+	    psmi_calloc(ep, STATS, nc + npc, sizeof(struct psmi_stats_entry));
+	if (entries == NULL)
+		goto bail;
+
+	for (i = 0; i < nc; i++) {
+		entries[i].desc = psm3_gen1_get_next_name(&cnames);
+		entries[i].flags = MPSPAWN_STATS_REDUCTION_ALL |
+		    MPSPAWN_STATS_SKIP_IF_ZERO;
+		entries[i].getfn = NULL;
+		entries[i].u.off = i * sizeof(uint64_t);
+	}
+	for (i = nc; i < nc + npc; i++) {
+		entries[i].desc = psm3_gen1_get_next_name(&pcnames);
+		entries[i].flags = MPSPAWN_STATS_REDUCTION_ALL |
+		    MPSPAWN_STATS_SKIP_IF_ZERO;
+		entries[i].getfn = NULL;
+		entries[i].u.off = i * sizeof(uint64_t);
+	}
+	psm3_stats_register_type("OPA_device_counters",
+				 PSMI_STATSTYPE_DEVCOUNTERS,
+				 entries, nc + npc, ep, ep->dev_name);
+	// psm3_stats_register_type makes it's own copy of entries
+	// so we should free the entries buffer.
+	// The snames will be freed when we deregister the hfi.
+	psmi_free(entries);
+	return;
+
+bail:
+	if (cnames != NULL)
+		psm3_gen1_release_names(cnames);
+	if (pcnames != NULL)
+		psm3_gen1_release_names(pcnames);
+	if (entries != NULL)
+		psmi_free(entries);
+}
+#endif
+
+#ifdef PSM_OPA
+static
+void stats_register_hfi_stats(psm2_ep_t ep)
+{
+	int i, ns;
+	char *snames = NULL;
+	struct psmi_stats_entry *entries = NULL;
+
+	ns = psm3_gen1_get_stats_names(&snames);
+	if (ns <= 0 || snames == NULL)
+		goto bail;
+	entries = psmi_calloc(ep, STATS, ns, sizeof(struct psmi_stats_entry));
+	if (entries == NULL)
+		goto bail;
+
+	for (i = 0; i < ns; i++) {
+		entries[i].desc = psm3_gen1_get_next_name(&snames);
+		entries[i].flags = MPSPAWN_STATS_REDUCTION_ALL |
+		    MPSPAWN_STATS_SKIP_IF_ZERO;
+		entries[i].getfn = NULL;
+		entries[i].u.off = i * sizeof(uint64_t);
+	}
+	psm3_stats_register_type("OPA_device_statistics",
+				 PSMI_STATSTYPE_DEVSTATS, entries, ns, ep,
+				 ep->dev_name);
+	// psm3_stats_register_type makes it's own copy of entries
+	// so we should free the entries buffer.
+	// The snames will be freed when we deregister the hfi.
+	psmi_free(entries);
+	return;
+
+bail:
+	if (snames != NULL)
+		psm3_gen1_release_names(snames);
+	if (entries != NULL)
+		psmi_free(entries);
+}
+#endif
 
 #undef _SDECL
 #define _SDECL(_desc, _param) {					\

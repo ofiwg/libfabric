@@ -96,7 +96,7 @@ ptl_handle_rtsmatch(psm2_mq_req_t recv_req, int was_posted)
 			psm3_mq_sysbuf_free(send_req->mq, send_req->req_data.buf);
 		/* req was left "live" even though the sender was told that the
 		 * send was done */
-		psmi_mq_req_free(send_req);
+		psm3_mq_req_free_internal(send_req);
 	} else
 		psm3_mq_handle_rts_complete(send_req);
 
@@ -150,7 +150,7 @@ self_mq_isend(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags_user,
 	    return PSM2_NO_MEMORY;
 
 #ifdef PSM_CUDA
-	if (len && PSMI_IS_CUDA_ENABLED && PSMI_IS_CUDA_MEM(ubuf)) {
+	if (len && PSMI_IS_GPU_ENABLED && PSMI_IS_GPU_MEM(ubuf)) {
 		psmi_cuda_set_attr_sync_memops(ubuf);
 		send_req->is_buf_gpu_mem = 1;
 	} else
@@ -303,7 +303,7 @@ self_connect(ptl_t *ptl_gen,
 		if (!array_of_epid_mask[i])
 			continue;
 
-		if (!psm3_epid_cmp(array_of_epid[i], ptl->epid)) {
+		if (!psm3_epid_cmp_internal(array_of_epid[i], ptl->epid)) {
 			_HFI_CONNDBG("connect self\n");
 			array_of_epaddr[i] = ptl->epaddr;
 			array_of_epaddr[i]->ptlctl = ptl->ctl;
@@ -359,7 +359,7 @@ psm2_error_t self_ptl_init(const psm2_ep_t ep, ptl_t *ptl_gen, ptl_ctl_t *ctl)
 	struct ptl_self *ptl = (struct ptl_self *)ptl_gen;
 	psmi_assert_always(ep != NULL);
 	psmi_assert_always(ep->epaddr != NULL);
-	psmi_assert_always(!psm3_epid_zero(ep->epid));
+	psmi_assert_always(!psm3_epid_zero_internal(ep->epid));
 
 	ptl->ep = ep;
 	ptl->epid = ep->epid;

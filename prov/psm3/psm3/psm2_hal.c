@@ -70,7 +70,7 @@ psmi_hal_instance_t *psm3_hal_current_hal_instance = NULL;
 extern hfp_loopback_t psm3_loopback_hi;
 
 /* for internal sanity checks, this indicates if we are examinging a HAL
- * in psmi_hal_get_pi_inst so we can detect invalid recursive calls
+ * in psm3_hal_get_pi_inst so we can detect invalid recursive calls
  * to psmi_hal_* during sysfs_init or have_active_unit.
  */
 static int psm3_examining_hal = 0;
@@ -128,6 +128,7 @@ void psm3_hal_register_instance(psmi_hal_instance_t *psm_hi)
 #if PSMI_HAL_INST_CNT > 1 || defined(PSM_DEBUG)
 	REJECT_IMPROPER_HI(hfp_context_open);
 	REJECT_IMPROPER_HI(hfp_close_context);
+	REJECT_IMPROPER_HI(hfp_context_check_status);
 #ifdef PSM_FI
 	REJECT_IMPROPER_HI(hfp_faultinj_allowed);
 #endif
@@ -148,18 +149,44 @@ void psm3_hal_register_instance(psmi_hal_instance_t *psm_hi)
 	REJECT_IMPROPER_HI(hfp_ips_ibta_init);
 	REJECT_IMPROPER_HI(hfp_ips_path_rec_init);
 	REJECT_IMPROPER_HI(hfp_ips_ptl_pollintr);
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	REJECT_IMPROPER_HI(hfp_gdr_close);
 	REJECT_IMPROPER_HI(hfp_gdr_convert_gpu_to_host_addr);
-#endif /* PSM_CUDA */
+#endif /* PSM_CUDA || PSM_ONEAPI */
 	REJECT_IMPROPER_HI(hfp_get_port_index2pkey);
+#ifdef PSM_OPA
+	REJECT_IMPROPER_HI(hfp_set_pkey);
+#endif
 	REJECT_IMPROPER_HI(hfp_poll_type);
+#ifdef PSM_OPA
+	REJECT_IMPROPER_HI(hfp_free_tid);
+	REJECT_IMPROPER_HI(hfp_get_tidcache_invalidation);
+	REJECT_IMPROPER_HI(hfp_update_tid);
+	REJECT_IMPROPER_HI(hfp_tidflow_check_update_pkt_seq);
+	REJECT_IMPROPER_HI(hfp_tidflow_get);
+	REJECT_IMPROPER_HI(hfp_tidflow_get_hw);
+	REJECT_IMPROPER_HI(hfp_tidflow_get_seqnum);
+	REJECT_IMPROPER_HI(hfp_tidflow_reset);
+	REJECT_IMPROPER_HI(hfp_tidflow_set_entry);
+	REJECT_IMPROPER_HI(hfp_get_hfi_event_bits);
+#endif
 
 	REJECT_IMPROPER_HI(hfp_spio_transfer_frame);
-	REJECT_IMPROPER_HI(hfp_spio_process_events);
+	REJECT_IMPROPER_HI(hfp_transfer_frame);
+#ifdef PSM_OPA
+	REJECT_IMPROPER_HI(hfp_dma_send_pending_scbs);
+#endif
 	REJECT_IMPROPER_HI(hfp_drain_sdma_completions);
 	REJECT_IMPROPER_HI(hfp_get_node_id);
 
+#ifdef PSM_OPA
+	REJECT_IMPROPER_HI(hfp_get_jkey);
+	REJECT_IMPROPER_HI(hfp_get_pio_size);
+	REJECT_IMPROPER_HI(hfp_get_pio_stall_cnt);
+	REJECT_IMPROPER_HI(hfp_get_subctxt);
+	REJECT_IMPROPER_HI(hfp_get_subctxt_cnt);
+	REJECT_IMPROPER_HI(hfp_get_tid_exp_cnt);
+#endif
 
 #endif /* PSMI_HAL_INST_CNT > 1 || defined(PSM_DEBUG) */
 
@@ -168,7 +195,7 @@ void psm3_hal_register_instance(psmi_hal_instance_t *psm_hi)
 	psm3_num_hal++;
 }
 
-static struct _psmi_hal_instance *psmi_hal_get_pi_inst(void);
+static struct _psmi_hal_instance *psm3_hal_get_pi_inst(void);
 
 int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 {
@@ -176,7 +203,7 @@ int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 	va_start(ap, k);
 
 	int rv = 0;
-	struct _psmi_hal_instance *p = psmi_hal_get_pi_inst();
+	struct _psmi_hal_instance *p = psm3_hal_get_pi_inst();
 
 	if (!p)
 		rv = -1;
@@ -215,11 +242,12 @@ int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 					int port = va_arg(ap,int);
 					if ((port >= 1) && (port <= p->params.num_ports))
 					{
-						if (!p->params.port_active_valid[unit*port]) {
-							p->params.port_active_valid[unit*port] = 1;
-							p->params.port_active[unit*port] = p->hfp_get_port_active(unit,port);
+						int i = unit * (p->params.num_ports+1) + port;
+						if (!p->params.port_active_valid[i]) {
+							p->params.port_active_valid[i] = 1;
+							p->params.port_active[i] = p->hfp_get_port_active(unit,port);
 						}
-						rv = p->params.port_active[unit*port];
+						rv = p->params.port_active[i];
 					}
 					else
 						rv = -1;
@@ -271,28 +299,35 @@ int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 					int port = va_arg(ap,int);
 					if ((port >= 1) && (port <= p->params.num_ports))
 					{
-						if (!p->params.port_subnet_valid[unit*port]) {
-							rv = p->hfp_get_port_subnet(unit, port,
-									&p->params.port_subnet[unit*port],
-									&p->params.port_subnet_addr[unit*port],
-									&p->params.port_subnet_idx[unit*port],
-									&p->params.port_subnet_gid[unit*port]);
-							if (rv == 0)
-								p->params.port_subnet_valid[unit*port] = 1;
-							else
-								p->params.port_subnet_valid[unit*port] = -1;
+						int addr_index = va_arg(ap,int);
+						if (addr_index >= 0 && addr_index < psm3_addr_per_nic)
+						{
+							int i = unit * ((p->params.num_ports+1) * psm3_addr_per_nic) + port * psm3_addr_per_nic + addr_index;
+							if (!p->params.port_subnet_valid[i]) {
+								rv = p->hfp_get_port_subnet(unit, port, addr_index,
+									&p->params.port_subnet[i],
+									&p->params.port_subnet_addr[i],
+									&p->params.port_subnet_idx[i],
+									&p->params.port_subnet_gid[i]);
+								if (rv == 0)
+									p->params.port_subnet_valid[i] = 1;
+								else
+									p->params.port_subnet_valid[i] = -1;
+							}
+							psmi_subnet128_t* subnet = va_arg(ap,psmi_subnet128_t*);
+							psmi_subnet128_t* addr = va_arg(ap,psmi_subnet128_t*);
+							int* idx = va_arg(ap,int*);
+							psmi_gid128_t* gid = va_arg(ap,psmi_gid128_t*);
+							rv = (p->params.port_subnet_valid[i] ==1)? 0: -1;
+							if (rv == 0) {
+								if (subnet) *subnet = p->params.port_subnet[i];
+								if (addr) *addr = p->params.port_subnet_addr[i];
+								if (idx) *idx = p->params.port_subnet_idx[i];
+								if (gid) *gid = p->params.port_subnet_gid[i];
+							}
 						}
-						psmi_subnet128_t* subnet = va_arg(ap,psmi_subnet128_t*);
-						psmi_subnet128_t* addr = va_arg(ap,psmi_subnet128_t*);
-						int* idx = va_arg(ap,int*);
-						psmi_gid128_t* gid = va_arg(ap,psmi_gid128_t*);
-						rv = (p->params.port_subnet_valid[unit*port] ==1)? 0: -1;
-						if (rv == 0) {
-							if (subnet) *subnet = p->params.port_subnet[unit*port];
-							if (addr) *addr = p->params.port_subnet_addr[unit*port];
-							if (idx) *idx = p->params.port_subnet_idx[unit*port];
-							if (gid) *gid = p->params.port_subnet_gid[unit*port];
-						}
+						else
+							rv = -1;
 					}
 					else
 						rv = -1;
@@ -434,7 +469,7 @@ int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 	return rv;
 }
 
-static void psmi_hal_free_cache(struct _psmi_hal_instance *p)
+static void psm3_hal_free_cache(struct _psmi_hal_instance *p)
 {
 #define FREE_HAL_CACHE(field) \
 	do { \
@@ -516,11 +551,11 @@ static psmi_hal_instance_t *psm3_hal_select_hal(psmi_hal_instance_t *p,
 	ALLOC_HAL_CACHE(num_contexts_valid, uint16_t, nunits);
 	ALLOC_HAL_CACHE(num_free_contexts, uint16_t, nunits);
 	ALLOC_HAL_CACHE(num_free_contexts_valid, uint16_t, nunits);
-	ALLOC_HAL_CACHE(port_subnet_valid, int8_t, nunits*(nports+1));
-	ALLOC_HAL_CACHE(port_subnet, psmi_subnet128_t, nunits*(nports+1));
-	ALLOC_HAL_CACHE(port_subnet_addr, psmi_naddr128_t, nunits*(nports+1));
-	ALLOC_HAL_CACHE(port_subnet_idx, int, nunits*(nports+1));
-	ALLOC_HAL_CACHE(port_subnet_gid, psmi_gid128_t, nunits*(nports+1));
+	ALLOC_HAL_CACHE(port_subnet_valid, int8_t, nunits*(nports+1)*psm3_addr_per_nic);
+	ALLOC_HAL_CACHE(port_subnet, psmi_subnet128_t, nunits*(nports+1)*psm3_addr_per_nic);
+	ALLOC_HAL_CACHE(port_subnet_addr, psmi_naddr128_t, nunits*(nports+1)*psm3_addr_per_nic);
+	ALLOC_HAL_CACHE(port_subnet_idx, int, nunits*(nports+1)*psm3_addr_per_nic);
+	ALLOC_HAL_CACHE(port_subnet_gid, psmi_gid128_t, nunits*(nports+1)*psm3_addr_per_nic);
 
 	ALLOC_HAL_CACHE(unit_pci_bus_valid, int8_t, nunits);
 	ALLOC_HAL_CACHE(unit_pci_bus_domain, uint32_t, nunits);
@@ -544,11 +579,11 @@ static psmi_hal_instance_t *psm3_hal_select_hal(psmi_hal_instance_t *p,
 
 fail_cache_alloc:
 	_HFI_ERROR("Unable to allocate memory for HAL cache\n");
-	psmi_hal_free_cache(p);
+	psm3_hal_free_cache(p);
 	return NULL;
 }
 
-static struct _psmi_hal_instance *psmi_hal_get_pi_inst(void)
+static struct _psmi_hal_instance *psm3_hal_get_pi_inst(void)
 {
 	int i;
 	psmi_hal_instance_t *p = NULL;
@@ -575,19 +610,16 @@ static struct _psmi_hal_instance *psmi_hal_get_pi_inst(void)
 	 */
 
 	union psmi_envvar_val env_hal; /* HAL instance preference */
-#ifdef PSM_VERBS
-	psm3_getenv("PSM3_HAL",
-		    "Hardware Abstraction Layer to use (Default verbs)",
-		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
-		    (union psmi_envvar_val)"verbs", &env_hal);
-#else
 	psm3_getenv("PSM3_HAL",
 		    "Hardware Abstraction Layer to use (Default is first HAL"
 		    " to find a valid, unfiltered NIC [any])",
 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
 		    (union psmi_envvar_val)"any", &env_hal);
-#endif
 
+#ifdef PSM_OPA
+	/* The hfp_get_num_units() call below, will not wait for the HFI driver
+	   to come up and create device nodes in /dev/.) */
+#endif
 	for (i=0; i <= PSM_HAL_INDEX_MAX; i++)
 	{
 		p = psm3_hal_table[i];
@@ -647,7 +679,7 @@ int psm3_hal_initialize(int devid_enabled[PTL_MAX_INIT])
 	struct _psmi_hal_instance *p = NULL;
 
 	if (! psm3_hal_current_hal_instance) {
-		if (! psmi_device_is_enabled(devid_enabled, PTL_DEVID_IPS)) {
+		if (! psm3_device_is_enabled(devid_enabled, PTL_DEVID_IPS)) {
 			// register the loopback HAL and select it.  Unlike normal HALs
 			// we don't call psm3_hal_register_instance because it would enforce
 			// all functions must be non-NULL.  But loopback only needs the
@@ -663,7 +695,7 @@ int psm3_hal_initialize(int devid_enabled[PTL_MAX_INIT])
 		}
 	}
 	if (!p)
-		p = psmi_hal_get_pi_inst();
+		p = psm3_hal_get_pi_inst();
 	if (!p)
 		return -PSM_HAL_ERROR_INIT_FAILED;
 
@@ -682,7 +714,7 @@ int psm3_hal_finalize(void)
 	struct _psmi_hal_instance *p = psm3_hal_current_hal_instance;
 
 	int rv = psmi_hal_finalize_();
-	psmi_hal_free_cache(p);
+	psm3_hal_free_cache(p);
 	psm3_hal_current_hal_instance = NULL;
 	psm3_sysfs_fini();
 	return rv;

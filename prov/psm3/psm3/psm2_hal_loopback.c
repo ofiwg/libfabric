@@ -81,7 +81,7 @@ static int psm3_hfp_loopback_initialize(psmi_hal_instance_t *phi,
 {
 	hfp_loopback_t *loopback_hi = (hfp_loopback_t*)phi;
 	phi->params.cap_mask = 0;
-	if (psmi_device_is_enabled(devid_enabled, PTL_DEVID_AMSH)) {
+	if (psm3_device_is_enabled(devid_enabled, PTL_DEVID_AMSH)) {
 		loopback_hi->hfp_private.unit_name = "shm";
 		loopback_hi->hfp_private.subnet_name = "shm";
 	} else {
@@ -141,7 +141,7 @@ static int psm3_hfp_loopback_get_num_free_contexts(int unit)
 	return 1024;
 }
 
-static int psm3_hfp_loopback_get_port_subnet(int unit, int port,
+static int psm3_hfp_loopback_get_port_subnet(int unit, int port, int addr_index,
 	psmi_subnet128_t *subnet, psmi_naddr128_t *addr,
 	int *idx, psmi_gid128_t *gid)
 {
@@ -155,7 +155,7 @@ static PSMI_HAL_INLINE const char *psm3_hfp_loopback_get_unit_name(int unit)
 	return get_psm_loopback_hi()->hfp_private.unit_name;
 }
 
-static PSMI_HAL_INLINE int psm3_hfp_loopback_get_port_subnet_name(int unit, int port, char *buf, size_t bufsize)
+static PSMI_HAL_INLINE int psm3_hfp_loopback_get_port_subnet_name(int unit, int port, int addr_index, char *buf, size_t bufsize)
 {
 	snprintf(buf, bufsize, "%s", get_psm_loopback_hi()->hfp_private.subnet_name);
 	return 0;
@@ -198,9 +198,9 @@ static int psm3_hfp_loopback_get_port_speed(int unit, int port, uint64_t *speed)
 	return -3;	/* no NIC to report details for */
 }
 
-static int psm3_hfp_loopback_get_port_lid(int unit, int port)
+static int psm3_hfp_loopback_get_port_lid(int unit, int port, int addr_index)
 {
-	if (unit != 0 || port != 1) return -1;
+	if (unit != 0 || port != 1 || addr_index != 0) return -1;
 	return 1;
 }
 
@@ -291,6 +291,7 @@ hfp_loopback_t psm3_loopback_hi = {
 #if PSMI_HAL_INST_CNT > 1 || defined(PSM_DEBUG)
 		.hfp_context_open			  = NULL,
 		.hfp_close_context			  = NULL,
+		.hfp_context_check_status		  = NULL,
 #ifdef PSM_FI
 		.hfp_faultinj_allowed		  = NULL,
 #endif
@@ -311,14 +312,14 @@ hfp_loopback_t psm3_loopback_hi = {
 		.hfp_ips_ibta_init			  = NULL,
 		.hfp_ips_path_rec_init			  = NULL,
 		.hfp_ips_ptl_pollintr			  = NULL,
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		.hfp_gdr_close				  = NULL,
 		.hfp_gdr_convert_gpu_to_host_addr	  = NULL,
-#endif /* PSM_CUDA */
+#endif /* PSM_CUDA || PSM_ONEAPI */
 		.hfp_get_port_index2pkey		  = NULL,
 		.hfp_poll_type				  = NULL,
 		.hfp_spio_transfer_frame		  = NULL,
-		.hfp_spio_process_events		  = NULL,
+		.hfp_transfer_frame			  = NULL,
 		.hfp_get_node_id			  = NULL,
 #endif /* PSMI_HAL_INST_CNT > 1 || defined(PSM_DEBUG) */
 	},

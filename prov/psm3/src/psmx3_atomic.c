@@ -834,7 +834,7 @@ ssize_t psmx3_atomic_write_generic(struct fid_ep *ep,
 	psm2_epaddr = psmx3_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm3_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	if (!psm2_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
+	if (!psm3_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
 		return psmx3_atomic_self(PSMX3_AM_REQ_ATOMIC_WRITE, ep_priv,
 					 buf, count, desc, NULL, NULL, NULL,
 					 NULL, addr, key, datatype, op,
@@ -940,7 +940,7 @@ ssize_t psmx3_atomic_writev_generic(struct fid_ep *ep,
 	psm2_epaddr = psmx3_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm3_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	if (!psm2_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid)) {
+	if (!psm3_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid)) {
 		buf = malloc(len);
 		if (!buf)
 			return -FI_ENOMEM;
@@ -1140,7 +1140,7 @@ ssize_t psmx3_atomic_readwrite_generic(struct fid_ep *ep,
 	psm2_epaddr = psmx3_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm3_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	if (!psm2_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
+	if (!psm3_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
 		return psmx3_atomic_self(PSMX3_AM_REQ_ATOMIC_READWRITE, ep_priv,
 					 buf, count, desc, NULL, NULL, result,
 					 result_desc, addr, key, datatype, op,
@@ -1277,7 +1277,7 @@ ssize_t psmx3_atomic_readwritev_generic(struct fid_ep *ep,
 	psm2_epaddr = psmx3_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm3_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	if (!psm2_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid)) {
+	if (!psm3_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid)) {
 		if (buf && count > 1) {
 			buf = malloc(len);
 			psmx3_ioc_read(iov, count, datatype, buf, len);
@@ -1538,7 +1538,7 @@ ssize_t psmx3_atomic_compwrite_generic(struct fid_ep *ep,
 	psm2_epaddr = psmx3_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm3_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	if (!psm2_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
+	if (!psm3_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
 		return psmx3_atomic_self(PSMX3_AM_REQ_ATOMIC_COMPWRITE, ep_priv,
 					 buf, count, desc, compare,
 					 compare_desc, result, result_desc,
@@ -1674,7 +1674,7 @@ ssize_t psmx3_atomic_compwritev_generic(struct fid_ep *ep,
 	psm2_epaddr = psmx3_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm3_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	if (!psm2_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid)) {
+	if (!psm3_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid)) {
 		if (count > 1) {
 			buf = malloc(len);
 			if (!buf)

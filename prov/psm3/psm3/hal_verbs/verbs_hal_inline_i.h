@@ -66,6 +66,20 @@ static PSMI_HAL_INLINE int psm3_hfp_verbs_close_context(psm2_ep_t ep)
 	return PSM_HAL_ERROR_OK;
 }
 
+/* Check NIC and context status, returns one of
+ *
+ * PSM2_OK: Port status is ok (or context not initialized yet but still "ok")
+ * PSM2_OK_NO_PROGRESS: Cable pulled
+ * PSM2_EP_NO_NETWORK: No network, no lid, ...
+ * PSM2_EP_DEVICE_FAILURE: Chip failures, rxe/txe parity, etc.
+ */
+static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_context_check_status(struct ptl_ips *ptl)
+{
+	// TBD - we need to check NIC (ptl->ep) and QP status, especially link status
+	// and call psm3_handle_error
+	return PSM2_OK;
+}
+
 #ifdef PSM_FI
 static PSMI_HAL_INLINE int psm3_hfp_verbs_faultinj_allowed(const char *name,
 			psm2_ep_t ep)
@@ -75,7 +89,7 @@ static PSMI_HAL_INLINE int psm3_hfp_verbs_faultinj_allowed(const char *name,
 #endif
 
 static PSMI_HAL_INLINE int psm3_hfp_verbs_context_open(int unit,
-				 int port,
+				 int port, int addr_index,
 				 uint64_t open_timeout,
 				 psm2_ep_t ep,
 				 psm2_uuid_t const job_key,
@@ -83,9 +97,9 @@ static PSMI_HAL_INLINE int psm3_hfp_verbs_context_open(int unit,
 {
 	psm2_error_t err = PSM2_OK;
 
-	psmi_assert_always(psm3_epid_zero(ep->epid));
+	psmi_assert_always(psm3_epid_zero_internal(ep->epid));
 	// open verbs 1st so psm3_context_open can get pkey, lid, etc
-	if ((err = psm3_ep_open_verbs(ep, unit, port, job_key)) != PSM2_OK) {
+	if ((err = psm3_ep_open_verbs(ep, unit, port, addr_index, job_key)) != PSM2_OK) {
 		const char* unit_path = psm3_sysfs_unit_path(unit);
 		_HFI_ERROR( "Unable to initialize verbs NIC %s (unit %d:%d)\n",
 				unit_path ? unit_path : "NULL", unit, port);
@@ -110,7 +124,7 @@ static PSMI_HAL_INLINE int psm3_hfp_verbs_context_open(int unit,
 
 bail:
 	 psm3_ep_free_verbs(ep);
-	ep->epid = psm3_epid_zeroed();
+	ep->epid = psm3_epid_zeroed_internal();
 
 	return -PSM_HAL_ERROR_GENERAL_ERROR;
 }
@@ -232,7 +246,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_ips_ipsaddr_set_req_params(
 	if (ipsaddr->verbs.rv_conn) {
 		psmi_assert(IPS_PROTOEXP_FLAG_KERNEL_QP(proto->ep->rdmamode));
 		psmi_assert(proto->ep->rv);
-		if (!  psmi_nonzero_gid(&req->verbs.gid)) {
+		if (!  psm3_nonzero_gid(&req->verbs.gid)) {
 			_HFI_ERROR("mismatched PSM3_RDMA config, remote end not in mode 1\n");
 			return PSM2_INTERNAL_ERR;
 			// TBD - if we wanted to allow mismatched config to run in UD mode
@@ -243,7 +257,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_ips_ipsaddr_set_req_params(
 			if (! ipsaddr->pathgrp->pg_path[0][IPS_PATH_LOW_PRIORITY]->verbs.pr_connecting) {
 				struct ib_user_path_rec path;
 				_HFI_MMDBG("rv_connect to: %s\n",
-					psmi_ibv_gid_fmt(ipsaddr->verbs.remote_gid, 0));
+					psm3_ibv_gid_fmt(ipsaddr->verbs.remote_gid, 0));
 				// pg_path has negotiated pr_mtu and pr_static_rate
 				psm3_verbs_ips_path_rec_to_ib_user_path_rec(proto->ep,
 					ipsaddr->pathgrp->pg_path[0][IPS_PATH_LOW_PRIORITY],
@@ -255,7 +269,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_ips_ipsaddr_set_req_params(
 				ipsaddr->pathgrp->pg_path[0][IPS_PATH_LOW_PRIORITY]->verbs.pr_connecting = 1;
 			}
 		}
-	// } else if (psmi_nonzero_gid(&req->verbs.gid)) {
+	// } else if (psm3_nonzero_gid(&req->verbs.gid)) {
 	//	 We could fail here, but we just let remote end decide
 	//	_HFI_ERROR("mismatched PSM3_RDMA config, remote end in mode 1\n");
 	//	return PSM2_INTERNAL_ERR;
@@ -386,8 +400,14 @@ static PSMI_HAL_INLINE void psm3_hfp_verbs_ips_proto_build_connect_message(
 			req->verbs.qp_attr.resv = 0;
 			req->verbs.qp_attr.target_ack_delay = 0; // TBD; - from local device
 			req->verbs.qp_attr.resv2 = 0;
+#ifdef USE_RDMA_READ
+			// Send our RDMA Read capabilities
+			req->verbs.qp_attr.responder_resources = proto->ep->verbs_ep.max_qp_rd_atom;
+			req->verbs.qp_attr.initiator_depth = proto->ep->verbs_ep.max_qp_init_rd_atom;
+#else
 			req->verbs.qp_attr.responder_resources = 0;
 			req->verbs.qp_attr.initiator_depth = 0;
+#endif
 			memset(&req->verbs.qp_attr.resv3, 0, sizeof(req->verbs.qp_attr.resv3));
 		} else
 #endif // USE_RC
@@ -423,7 +443,7 @@ static PSMI_HAL_INLINE void psm3_hfp_verbs_ips_ipsaddr_init_addressing(
 	psm3_epid_get_av(epid, lidp, gidp);
 	_HFI_CONNDBG("qpn=0x%x lid=0x%x GID=%s\n",
 			ipsaddr->verbs.remote_qpn, *lidp,
-			psmi_gid128_fmt(*gidp, 0));
+			psm3_gid128_fmt(*gidp, 0));
 }
 
 /* handle HAL specific ipsaddr initialization for any HAL specific connections
@@ -646,6 +666,18 @@ static PSMI_HAL_INLINE void* psm3_hfp_verbs_gdr_convert_gpu_to_host_addr(unsigne
 	return psm3_verbs_gdr_convert_gpu_to_host_addr(buf, size, flags,
                                 ep);
 }
+#elif defined(PSM_ONEAPI)
+static PSMI_HAL_INLINE void psm3_hfp_verbs_gdr_close(void)
+{
+	// not yet supported for OneAPI
+}
+static PSMI_HAL_INLINE void* psm3_hfp_verbs_gdr_convert_gpu_to_host_addr(unsigned long buf,
+                                size_t size, int flags,
+                                psm2_ep_t ep)
+{
+	// not yet supported for OneAPI
+	return NULL;
+}
 #endif /* PSM_CUDA */
 
 #include "verbs_spio.c"
@@ -655,23 +687,37 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_spio_transfer_frame(struct ip
 					uint32_t *payload, uint32_t length,
 					uint32_t isCtrlMsg, uint32_t cksum_valid,
 					uint32_t cksum
-#ifdef PSM_CUDA
-				, uint32_t is_cuda_payload
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+				, uint32_t is_gpu_payload
 #endif
 	)
 {
 	return psm3_verbs_spio_transfer_frame(proto, flow, scb,
 					 payload, length, isCtrlMsg,
 					 cksum_valid, cksum
-#ifdef PSM_CUDA
-				, is_cuda_payload
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+				, is_gpu_payload
 #endif
 	);
 }
 
-static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_spio_process_events(const struct ptl *ptl)
+static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_transfer_frame(struct ips_proto *proto,
+					struct ips_flow *flow, struct ips_scb *scb,
+					uint32_t *payload, uint32_t length,
+					uint32_t isCtrlMsg, uint32_t cksum_valid,
+					uint32_t cksum
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+				, uint32_t is_gpu_payload
+#endif
+	)
 {
-	return psm3_verbs_spio_process_events(ptl);
+	return psm3_verbs_spio_transfer_frame(proto, flow, scb,
+					 payload, length, isCtrlMsg,
+					 cksum_valid, cksum
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+				, is_gpu_payload
+#endif
+	);
 }
 
 static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_drain_sdma_completions(struct ips_proto *proto)

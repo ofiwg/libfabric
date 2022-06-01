@@ -86,6 +86,10 @@
 #define __HFI_MMDBG       0x200
 /* low-level environment variables */
 #define __HFI_ENVDBG	    0x400
+#ifdef PSM_OPA
+#define __HFI_EPKTDBG     0x800	/* print error packet data */
+#define __HFI_CCADBG      0x1000	/* print CCA related events */
+#endif
 
 #define __HFI_DEBUG_DEFAULT __HFI_INFO
 #define __HFI_DEBUG_DEFAULT_STR "0x0001"
@@ -106,6 +110,10 @@
 #define __HFI_PROCDBG   0x0	/* print process startup (init)/exit messages */
 /* print MR, mmap/nopage stuff, not using VDBG any more */
 #define __HFI_MMDBG     0x0
+#ifdef PSM_OPA
+#define __HFI_EPKTDBG   0x0	/* print error packet data */
+#define __HFI_CCADBG    0x0	/* print CCA related events */
+#endif
 
 #define __HFI_DEBUG_DEFAULT __HFI_INFO
 #define __HFI_DEBUG_DEFAULT_STR "0x0000"
@@ -147,7 +155,7 @@ extern char psm3_mylabel[];
 void psm3_set_mylabel(char *);
 extern FILE *psm3_dbgout;
 extern void psm3_dump_buf(uint8_t *buf, uint32_t len);
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 extern void psm3_dump_gpu_buf(uint8_t *buf, uint32_t len);
 #endif
 
@@ -201,6 +209,10 @@ extern void psm3_dump_gpu_buf(uint8_t *buf, uint32_t len);
 		(lev == 0) ? __HFI_INFO : __HFI_ENVDBG,\
 		"env " fmt, ##__VA_ARGS__)
 #define _HFI_MMDBG(fmt, ...) __HFI_DBG_WHICH(__HFI_MMDBG, fmt, ##__VA_ARGS__)
+#ifdef PSM_OPA
+#define _HFI_EPDBG(fmt, ...) __HFI_DBG_WHICH(__HFI_EPKTDBG, fmt, ##__VA_ARGS__)
+#define _HFI_CCADBG(fmt, ...) __HFI_DBG_WHICH(__HFI_CCADBG, fmt, ##__VA_ARGS__)
+#endif
 
 /*
  * Use these macros (_HFI_DBG_ON and _HFI_DBG_ALWAYS) together
@@ -214,8 +226,8 @@ extern void psm3_dump_gpu_buf(uint8_t *buf, uint32_t len);
 #define _HFI_DBG_ALWAYS(fmt, ...) \
 	do { \
 		_Pragma_unlikely \
-		fprintf(psm3_dbgout, "%s: " fmt, psm3_mylabel, \
-			##__VA_ARGS__); \
+		fprintf(psm3_dbgout, "%s.%s: " fmt, psm3_mylabel, __func__, \
+			       ##__VA_ARGS__); \
 	} while (0)
 
 #define _HFI_CONNDBG_ON unlikely(psm3_dbgmask & __HFI_CONNDBG)
@@ -227,7 +239,7 @@ extern void psm3_dump_gpu_buf(uint8_t *buf, uint32_t len);
 #define _HFI_PDBG_ON unlikely(psm3_dbgmask & __HFI_PKTDBG)
 #define _HFI_PDBG_ALWAYS(fmt, ...) _HFI_DBG_ALWAYS(fmt, ##__VA_ARGS__)
 #define _HFI_PDBG_DUMP_ALWAYS(buf, len) psm3_dump_buf(buf, len)
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #define _HFI_PDBG_DUMP_GPU_ALWAYS(buf, len) psm3_dump_gpu_buf(buf, len)
 #endif
 
@@ -237,6 +249,10 @@ extern void psm3_dump_gpu_buf(uint8_t *buf, uint32_t len);
 #define _HFI_MMDBG_ON unlikely(psm3_dbgmask & __HFI_MMDBG)
 #define _HFI_MMDBG_ALWAYS(fmt, ...) _HFI_DBG_ALWAYS(fmt, ##__VA_ARGS__)
 
+#ifdef PSM_OPA
+#define _HFI_CCADBG_ON unlikely(psm3_dbgmask & __HFI_CCADBG)
+#define _HFI_CCADBG_ALWAYS(fmt, ...) _HFI_DBG_ALWAYS(fmt, ##__VA_ARGS__)
+#endif
 
 #define _HFI_INFO_ON unlikely(psm3_dbgmask & __HFI_INFO)
 #define _HFI_INFO_ALWAYS(fmt, ...) _HFI_DBG_ALWAYS(fmt, ##__VA_ARGS__)
@@ -264,6 +280,10 @@ extern void psm3_dump_gpu_buf(uint8_t *buf, uint32_t len);
 #define _HFI_CONNDBG(fmt, ...)
 #define _HFI_VDBG(fmt, ...)
 #define _HFI_MMDBG(fmt, ...)
+#ifdef PSM_OPA
+#define _HFI_EPDBG(fmt, ...)
+#define _HFI_CCADBG(fmt, ...)
+#endif
 
 #define _HFI_DBG_ON 0
 #define _HFI_DBG_ALWAYS(fmt, ...)
@@ -276,8 +296,12 @@ extern void psm3_dump_gpu_buf(uint8_t *buf, uint32_t len);
 #define _HFI_MMDBG_ON 0
 #define _HFI_MMDBG_ALWAYS(fmt, ...)
 #define _HFI_PDBG_DUMP_ALWAYS(buf, len)
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #define _HFI_PDBG_DUMP_GPU_ALWAYS(buf, len)
+#endif
+#ifdef PSM_OPA
+#define _HFI_CCADBG_ON 0
+#define _HFI_CCADBG_ALWAYS(fmt, ...)
 #endif
 #define _HFI_INFO_ON 0
 #define _HFI_INFO_ALWAYS(fmt, ...)

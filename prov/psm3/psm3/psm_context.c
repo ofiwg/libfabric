@@ -91,11 +91,43 @@ int psm3_context_interrupt_isenabled(psm2_ep_t ep)
 	return psmi_hal_has_sw_status(PSM_HAL_PSMI_RUNTIME_INTR_ENABLED);
 }
 
+#ifdef PSM_OPA
+/* Returns 1 when all of the active units have their free contexts
+ * equal the number of contexts.  This is an indication that no
+ * jobs are currently running.
+ *
+ * Note that this code is clearly racy (this code may happen concurrently
+ * by two or more processes, and this point of observation,
+ * occurs earlier in time to when the decision is made for deciding which
+ * context to assign, which will also occurs earlier in time to when the
+ * context is actually assigned.  And, when the context is finally
+ * assigned, this will change the "nfreectxts" observed below.)
+ */
+static int psmi_all_active_units_have_max_freecontexts(int nunits)
+{
+	int u;
+
+	for (u=0;u < nunits;u++)
+	{
+		if (psmi_hal_get_unit_active(u) > 0)
+		{
+			int nfreectxts=psmi_hal_get_num_free_contexts(u),
+				nctxts=psmi_hal_get_num_contexts(u);
+			if (nfreectxts > 0 && nctxts > 0)
+			{
+				if (nfreectxts != nctxts)
+					return 0;
+			}
+		}
+	}
+	return 1;
+}
+#endif
 
 /* returns the 8-bit hash value of an uuid. */
 static inline
 uint8_t
-psmi_get_uuid_hash(psm2_uuid_t const uuid)
+psm3_get_uuid_hash(psm2_uuid_t const uuid)
 {
 	int i;
 	uint8_t hashed_uuid = 0;
@@ -156,7 +188,21 @@ static void
 psmi_spread_nic_selection(psm2_uuid_t const job_key, long *unit_start,
 			     long *unit_end, int nunits)
 {
+#ifdef PSM_OPA
+	/* if the number of ranks on the host is 1 and ... */
+	if ((psm3_get_mylocalrank_count() == 1) &&
+		/*
+		 * All of the active units have free contexts equal the
+		 * number of contexts.
+		 */
+	    psmi_all_active_units_have_max_freecontexts(nunits)) {
+		/* we start looking at unit 0, and end at nunits-1: */
+		*unit_start = 0;
+		*unit_end = nunits - 1;
+	} else {
+#else
 	{
+#endif
 		int found, saved_hfis[nunits];
 
 		/* else, we are going to look at:
@@ -164,7 +210,7 @@ psmi_spread_nic_selection(psm2_uuid_t const job_key, long *unit_start,
 		found = hfi_find_active_hfis(nunits, -1, saved_hfis);
 		if (found)
 			*unit_start = saved_hfis[((psm3_get_mylocalrank()+1) +
-				psmi_get_uuid_hash(job_key)) % found];
+				psm3_get_uuid_hash(job_key)) % found];
 		else
 			*unit_start = 0; // caller will fail
 		/* just in case, caller will check all other units, with wrap */
@@ -178,7 +224,7 @@ psmi_spread_nic_selection(psm2_uuid_t const job_key, long *unit_start,
 }
 
 static int
-psmi_create_and_open_affinity_shm(psm2_uuid_t const job_key)
+psm3_create_and_open_affinity_shm(psm2_uuid_t const job_key)
 {
 	int shm_fd, ret;
 	int first_to_create = 0;
@@ -198,7 +244,7 @@ psmi_create_and_open_affinity_shm(psm2_uuid_t const job_key)
 	psmi_assert_always(psm3_affinity_shm_name != NULL);
 	snprintf(psm3_affinity_shm_name, shm_name_len,
 		 AFFINITY_SHM_BASENAME".%d",
-		 psmi_get_uuid_hash(job_key));
+		 psm3_get_uuid_hash(job_key));
 	shm_fd = shm_open(psm3_affinity_shm_name, O_RDWR | O_CREAT | O_EXCL,
 			  S_IRUSR | S_IWUSR);
 	if ((shm_fd < 0) && (errno == EEXIST)) {
@@ -295,7 +341,7 @@ psmi_spread_hfi_within_socket(long *unit_start, long *unit_end, int node_id,
 	if (!psm3_affinity_semaphore_open)
 		goto spread_hfi_fallback;
 
-	ret = psmi_create_and_open_affinity_shm(job_key);
+	ret = psm3_create_and_open_affinity_shm(job_key);
 	if (ret < 0)
 		goto spread_hfi_fallback;
 
@@ -326,7 +372,7 @@ spread_hfi_fallback:
 }
 
 static void
-psmi_create_affinity_semaphores(psm2_uuid_t const job_key)
+psm3_create_affinity_semaphores(psm2_uuid_t const job_key)
 {
 	int ret;
 	size_t sem_len = 256;
@@ -345,7 +391,7 @@ psmi_create_affinity_semaphores(psm2_uuid_t const job_key)
 	psmi_assert_always(psm3_sem_affinity_shm_rw_name != NULL);
 	snprintf(psm3_sem_affinity_shm_rw_name, sem_len,
 		 SEM_AFFINITY_SHM_RW_BASENAME".%d",
-		 psmi_get_uuid_hash(job_key));
+		 psm3_get_uuid_hash(job_key));
 
 	ret = psmi_init_semaphore(&psm3_sem_affinity_shm_rw, psm3_sem_affinity_shm_rw_name,
 				  S_IRUSR | S_IWUSR, 0);
@@ -374,7 +420,8 @@ psmi_create_affinity_semaphores(psm2_uuid_t const job_key)
 // walk through desired units and unit_param will specify a specific unit
 static
 psm2_error_t
-psmi_compute_start_and_end_unit(long unit_param,int nunitsactive,int nunits,
+psmi_compute_start_and_end_unit(long unit_param, long addr_index,
+				int nunitsactive,int nunits,
 				psm2_uuid_t const job_key,
 				long *unit_start,long *unit_end)
 {
@@ -385,6 +432,7 @@ psmi_compute_start_and_end_unit(long unit_param,int nunitsactive,int nunits,
 	/* if the user did not set PSM3_NIC then ... */
 	if (unit_param == PSM3_NIC_ANY)
 	{
+#ifndef PSM_OPA
 		if (nunitsactive > 1) {
 			// if NICs are on different planes (non-routed subnets)
 			// we need to have all ranks default to the same plane
@@ -396,12 +444,13 @@ psmi_compute_start_and_end_unit(long unit_param,int nunitsactive,int nunits,
 				if (psmi_hal_get_unit_active(unit_id) <= 0)
 					continue;
 				if (0 != psmi_hal_get_port_subnet(unit_id, 1 /* VERBS_PORT*/,
+								addr_index>0?addr_index:0,
 								&subnet, NULL, NULL, NULL))
 					continue; // can't access NIC
 				if (! have_subnet) {
 					have_subnet = 1;
 					got_subnet = subnet;
-				} else if (! psmi_subnets_match(got_subnet,
+				} else if (! psm3_subnets_match(got_subnet,
 								subnet)) {
 					// active units have different tech
 					// (IB/OPA vs Eth) or different subnets
@@ -414,6 +463,7 @@ psmi_compute_start_and_end_unit(long unit_param,int nunitsactive,int nunits,
 				}
 			}
 		}
+#endif
 
 		/* Get the actual selection algorithm from the environment: */
 		nic_sel_alg = psmi_parse_nic_selection_algorithm();
@@ -432,7 +482,7 @@ psmi_compute_start_and_end_unit(long unit_param,int nunitsactive,int nunits,
 				found = hfi_find_active_hfis(nunits, node_id,
 								saved_hfis);
 				if (found > 1) {
-					psmi_create_affinity_semaphores(job_key);
+					psm3_create_affinity_semaphores(job_key);
 					psmi_spread_hfi_within_socket(unit_start, unit_end,
 								      node_id, saved_hfis,
 								      found, job_key);
@@ -479,8 +529,19 @@ psmi_compute_start_and_end_unit(long unit_param,int nunitsactive,int nunits,
 	return PSM2_OK;
 }
 
+static int psmi_hash_addr_index(long unit, long port, long addr_index)
+{
+	/* if the user did not set addr_index, then use a hash */
+	if (addr_index == PSM3_ADDR_INDEX_ANY) {
+		addr_index = (psm3_get_mylocalrank() + psm3_opened_endpoint_count) % psm3_addr_per_nic;
+		if (psmi_hal_get_port_lid(unit, port?port:1, addr_index) <= 0)
+			return 0;
+	}
+	return addr_index;
+}
+
 psm2_error_t
-psm3_context_open(const psm2_ep_t ep, long unit_param, long port,
+psm3_context_open(const psm2_ep_t ep, long unit_param, long port, long addr_index,
 		  psm2_uuid_t const job_key, uint16_t network_pkey,
 		  int64_t timeout_ns)
 {
@@ -521,8 +582,8 @@ psm3_context_open(const psm2_ep_t ep, long unit_param, long port,
 
 
 	unit_start = 0; unit_end = nunits - 1;
-	err = psmi_compute_start_and_end_unit(unit_param, nunitsactive,
-					      nunits, job_key,
+	err = psmi_compute_start_and_end_unit(unit_param, addr_index,
+					      nunitsactive, nunits, job_key,
 					      &unit_start, &unit_end);
 	if (err != PSM2_OK)
 		goto ret;
@@ -542,18 +603,21 @@ psm3_context_open(const psm2_ep_t ep, long unit_param, long port,
 		}
 
 		/* open this unit. */
-		if (psmi_hal_context_open(unit_id, port, open_timeout,
-					       ep, job_key, HAL_CONTEXT_OPEN_RETRY_MAX)) {
+		if (psmi_hal_context_open(unit_id, port,
+				psmi_hash_addr_index(unit_id, port, addr_index),
+				open_timeout,
+				ep, job_key, HAL_CONTEXT_OPEN_RETRY_MAX)) {
 			/* go to next unit if failed to open. */
 			unit_id_prev = unit_id;
 			unit_id = (unit_id + 1) % nunits;
 			continue;
 		}
-		// HAL context_open has initialized: ep->unit_id, ep->portnum,
+		// HAL context_open has initialized:
+		// ep->unit_id, ep->portnum, ep->addr_index,
 		// ep->dev_name, ep->subnet, ep->addr, ep->gid, ep->wiremode,
 		// ep->epid and
 		// HAL specific ep fields (context, verbs_ep or sockets_ep)
-		psmi_assert_always(! psm3_epid_zero(ep->epid));
+		psmi_assert_always(! psm3_epid_zero_internal(ep->epid));
 		success = 1;
 		break;
 
@@ -573,7 +637,7 @@ psm3_context_open(const psm2_ep_t ep, long unit_param, long port,
 	psmi_assert_always(ep->addr.prefix_len == ep->subnet.prefix_len);
 	ep->addr_fmt = ep->addr.fmt;
 
-	_HFI_DBG("[%d]use unit %d port %d\n", getpid(), ep->unit_id, 1);
+	_HFI_DBG("[%d]use unit %d port %d addr %d\n", getpid(), ep->unit_id, 1, ep->addr_index);
 
 	/* device is opened, make sure we can find a valid desirable pkey */
 	if ((err =
@@ -601,7 +665,7 @@ psm3_context_open(const psm2_ep_t ep, long unit_param, long port,
 #endif
 	}
 	_HFI_PRDBG("Opened unit %ld port %ld: EPID=%s %s\n", unit_id, port,
-		psm3_epid_fmt(ep->epid, 0), psm3_epid_fmt_addr(ep->epid, 1));
+		psm3_epid_fmt_internal(ep->epid, 0), psm3_epid_fmt_addr(ep->epid, 1));
 
 	goto ret;
 
@@ -745,26 +809,6 @@ bail:
 	return -1;
 }
 
-/*
- * This function works whether a context is initialized or not in a psm2_ep.
- *
- * Returns one of
- *
- * PSM2_OK: Port status is ok (or context not initialized yet but still "ok")
- * PSM2_OK_NO_PROGRESS: Cable pulled
- * PSM2_EP_NO_NETWORK: No network, no lid, ...
- * PSM2_EP_DEVICE_FAILURE: Chip failures, rxe/txe parity, etc.
- * The message follows the per-port status
- * As of 7322-ready driver, need to check port-specific qword for IB
- * as well as older unit-only.  For now, we don't have the port interface
- * defined, so just check port 0 qword for spi_status
- */
-psm2_error_t psm3_context_check_status(psm2_ep_t ep)
-{
-	psm2_error_t err = PSM2_OK;
-	return err;
-}
-
 static psm2_error_t
 psm3_ep_verify_pkey(psm2_ep_t ep, uint16_t pkey, uint16_t *opkey, uint16_t* oindex)
 {
@@ -778,10 +822,16 @@ psm3_ep_verify_pkey(psm2_ep_t ep, uint16_t pkey, uint16_t *opkey, uint16_t* oind
 			err = psm3_handle_error(NULL, PSM2_EP_DEVICE_FAILURE,
 						"Can't get a valid pkey value from pkey table on %s port %u\n", ep->dev_name, ep->portnum);
 			return err;
+#ifdef PSM_OPA // allow 0x7fff and 0xffff
+		} else if ((ret & 0x7fff) == 0x7fff) {
+			continue;	/* management pkey, not for app traffic. */
+#endif
 		}
+#ifndef PSM_OPA
 		// pkey == 0 means just get slot 0
 		if (! pkey && ! i)
 			break;
+#endif
 		if ((pkey & 0x7fff) == (uint16_t)(ret & 0x7fff)) {
 			break;
 		}

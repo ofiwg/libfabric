@@ -606,7 +606,7 @@ ssize_t psmx3_read_generic(struct fid_ep *ep, void *buf, size_t len,
 	psm2_epaddr = psmx3_av_translate_addr(av, ep_priv->tx, src_addr, av->type);
 	psm3_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	if (!psm2_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
+	if (!psm3_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
 		return psmx3_rma_self(PSMX3_AM_REQ_READ, ep_priv,
 				      buf, len, desc, addr, key,
 				      context, flags, 0);
@@ -731,7 +731,7 @@ ssize_t psmx3_readv_generic(struct fid_ep *ep, const struct iovec *iov,
 	psm2_epaddr = psmx3_av_translate_addr(av, ep_priv->tx, src_addr, av->type);
 	psm3_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	if (!psm2_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
+	if (!psm3_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
 		return psmx3_rma_self(PSMX3_AM_REQ_READV, ep_priv,
 				      (void *)iov, count, desc, addr,
 				      key, context, flags, 0);
@@ -960,7 +960,7 @@ ssize_t psmx3_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	psm2_epaddr = psmx3_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm3_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	if (!psm2_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
+	if (!psm3_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
 		return psmx3_rma_self(PSMX3_AM_REQ_WRITE, ep_priv,
 				      (void *)buf, len, desc, addr,
 				      key, context, flags, data);
@@ -1134,7 +1134,7 @@ ssize_t psmx3_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	psm2_epaddr = psmx3_av_translate_addr(av, ep_priv->tx, dest_addr, av->type);
 	psm3_epaddr_to_epid(psm2_epaddr, &psm2_epid);
 
-	if (!psm2_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
+	if (!psm3_epid_cmp(psm2_epid, ep_priv->tx->psm2_epid))
 		return psmx3_rma_self(PSMX3_AM_REQ_WRITEV, ep_priv,
 				      (void *)iov, count, desc, addr,
 				      key, context, flags, data);

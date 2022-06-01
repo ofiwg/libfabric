@@ -59,6 +59,9 @@
 #include "psm_user.h"
 #include "ips_proto_params.h"
 #include "ips_proto_header.h"
+#ifdef PSM_OPA
+#include "hal_gen1/gen1_types.h" /* get psm3_gen1_cl_idx and psm3_gen1_cl_q, psm3_gen1_rhf_t */
+#endif
 
 struct ips_recvhdrq;
 struct ips_recvhdrq_state;
@@ -71,6 +74,11 @@ struct ips_epstate;
 /* keep current packet, revisit the same packet next time */
 #define IPS_RECVHDRQ_REVISIT	2
 
+#ifdef PSM_OPA
+/* CCA related receive events */
+#define IPS_RECV_EVENT_FECN 0x1
+#define IPS_RECV_EVENT_BECN 0x2
+#endif
 
 struct ips_recvhdrq_event {
 	struct ips_proto *proto;
@@ -80,10 +88,21 @@ struct ips_recvhdrq_event {
 	// we point to the payload part of our recv buffer
 	uint8_t *payload;
 	uint32_t payload_size;
+#ifdef PSM_OPA
+	psm3_gen1_rhf_t gen1_rhf;
+	uint8_t has_cksum;	/* payload has cksum */
+	uint8_t is_congested;	/* Packet faced congestion */
+	psm3_gen1_cl_q gen1_hdr_q;
+#endif
 };
 
 struct ips_recvhdrq_callbacks {
 	int (*callback_packet_unknown) (const struct ips_recvhdrq_event *);
+#ifdef PSM_OPA
+	int (*callback_subcontext) (struct ips_recvhdrq_event *,
+				    uint32_t subcontext);
+	int (*callback_error) (struct ips_recvhdrq_event *);
+#endif
 };
 
 /*
@@ -96,6 +115,16 @@ struct ips_recvhdrq_callbacks {
  */
 #define NO_EAGER_UPDATE ~0U
 struct ips_recvhdrq_state {
+#ifdef PSM_OPA
+	psm3_gen1_cl_idx hdrq_head; /* software copy of head */
+	psm3_gen1_cl_idx rcv_egr_index_head; /* software copy of eager index head */
+	uint32_t head_update_interval;	/* Header update interval */
+	uint32_t num_hdrq_done;	/* Num header queue done */
+	uint32_t egrq_update_interval; /* Eager buffer update interval */
+	uint32_t num_egrq_done; /* num eager buffer done */
+	uint32_t hdr_countdown;	/* for false-egr-full tracing */
+	uint32_t hdrq_cachedlastscan;	/* last element to be prescanned */
+#endif
 };
 
 /*
@@ -103,8 +132,18 @@ struct ips_recvhdrq_state {
  */
 struct ips_recvhdrq {
 	struct ips_proto *proto;
+#ifdef PSM_OPA
+	const psmi_context_t *context;	/* error handling, epid id, etc. */
+	struct ips_recvhdrq_state *state;
+	uint32_t subcontext;	/* messages that don't match subcontext call
+				 * recv_callback_subcontext */
+	psm3_gen1_cl_q gen1_cl_hdrq;
+#endif
 	/* Header queue handling */
 	pthread_spinlock_t hdrq_lock;	/* Lock for thread-safe polling */
+#ifdef PSM_OPA
+	uint32_t hdrq_elemlast;	/* last element precomputed */
+#endif
 	/* Lookup endpoints epid -> ptladdr (rank)) */
 	const struct ips_epstate *epstate;
 
@@ -114,6 +153,9 @@ struct ips_recvhdrq {
 	/* List of flows with pending acks for receive queue */
 	SLIST_HEAD(pending_flows, ips_flow) pending_acks;
 
+#ifdef PSM_OPA
+	volatile __u64 *spi_status;
+#endif
 };
 
 PSMI_INLINE(

@@ -89,6 +89,7 @@
 
 #define HFI_TF_NFLOWS                       32
 
+#ifndef PSM_OPA
 // The sender uses an RDMA Write with Immediate.  The immediate data
 // carries the receiver's desc genc and idx from which the receiver can
 // locate the ips_tid_recv_desc
@@ -108,6 +109,7 @@
 // source of the immediate callback
 #define RDMA_IMMED_USER_RC 0	// from a user space RC QP
 #define RDMA_IMMED_RV 1			// from RV module kernel QP
+#endif
 
 /* IB - LRH header consts */
 #define HFI_LRH_BTH 0x0002	/* 1. word of IB LRH - next header: BTH */
@@ -122,8 +124,18 @@
 #define HFI_BTH_OPCODE_SHIFT 24
 #define HFI_BTH_OPCODE_MASK 0xff
 // bth[1]
+#ifdef PSM_OPA
+#define HFI_BTH_BECN_SHIFT 30
+#define HFI_BTH_FECN_SHIFT 31
+#define HFI_BTH_QP_SHIFT 16
+#define HFI_BTH_QP_MASK 0xff
+#endif
 #define HFI_BTH_FLOWID_SHIFT 11
 #define HFI_BTH_FLOWID_MASK 0x1f
+#ifdef PSM_OPA
+#define HFI_BTH_SUBCTXT_SHIFT 8
+#define HFI_BTH_SUBCTXT_MASK 0x7
+#endif
 // bth[2]
 #define HFI_BTH_SEQ_SHIFT 0
 #define HFI_BTH_SEQ_MASK 0x7ff	//  tidflow sequence number
@@ -135,6 +147,12 @@
 /* KDETH header consts */
 #define HFI_KHDR_OFFSET_MASK 0x7fff
 #define HFI_KHDR_OM_SHIFT 15
+#ifdef PSM_OPA
+#define HFI_KHDR_TID_SHIFT 16
+#define HFI_KHDR_TID_MASK 0x3ff
+#define HFI_KHDR_TIDCTRL_SHIFT 26
+#define HFI_KHDR_TIDCTRL_MASK 0x3
+#endif
 #define HFI_KHDR_INTR_SHIFT 28
 #define HFI_KHDR_SH_SHIFT 29
 #define HFI_KHDR_KVER_SHIFT 30
@@ -144,8 +162,13 @@
 #define HFI_KHDR_TINYLEN_MASK 0xf
 #define HFI_KHDR_TINYLEN_SHIFT 16
 
+#ifdef PSM_OPA
+#define GET_HFI_KHDR_TIDCTRL(val) \
+	(((val) >> HFI_KHDR_TIDCTRL_SHIFT) & \
+	HFI_KHDR_TIDCTRL_MASK)
+#endif
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 extern int is_driver_gpudirect_enabled;
 
 #define PSMI_IS_DRIVER_GPUDIRECT_ENABLED  likely(is_driver_gpudirect_enabled)
@@ -172,8 +195,12 @@ struct hfi_kdeth {
 #define HFI_CRC_SIZE_IN_BYTES 4
 #endif
 
+#ifndef PSM_OPA
 //#define HFI_DEFAULT_SERVICE_ID 0 /* let rv module decide */
 #define HFI_DEFAULT_SERVICE_ID 0x1000125500000001ULL
+#else
+#define HFI_DEFAULT_SERVICE_ID 0x1000117500000000ULL
+#endif
 
 #if 0
 #define HFI_PERMISSIVE_LID 0xFFFF
@@ -187,6 +214,16 @@ struct hfi_kdeth {
 #define HFI_MULTICAST_QPN 0xFFFFFF
 #endif
 
+#ifdef PSM_OPA
+/* Receive Header Queue: receive type (from hfi) */
+#define RCVHQ_RCV_TYPE_EXPECTED  0
+#define RCVHQ_RCV_TYPE_EAGER     1
+#define RCVHQ_RCV_TYPE_NON_KD    2
+#define RCVHQ_RCV_TYPE_ERROR     3
+
+/* OPA PSM assumes that the message header is always 56 bytes. */
+#define HFI_MESSAGE_HDR_SIZE	56
+#endif
 
 /* interval timing routines */
 /* Convert a count of cycles to elapsed nanoseconds */
@@ -238,6 +275,25 @@ void psm3_qwordcpy_safe(volatile uint64_t *dest, const uint64_t *src,
 #define psm3_qwordcpy_safe psm3_qwordcpy
 #endif
 
+#ifdef PSM_OPA
+/* 64B move instruction support */
+#define AVX512F_BIT		16	/* level 07h, ebx */
+/* 32B move instruction support */
+#define AVX2_BIT		 5	/* level 07h, ebx */
+/* 16B move instruction support */
+#define SSE2_BIT		26	/* level 01h, edx */
+
+#ifdef PSM_AVX512
+void psm3_pio_blockcpy_512(volatile uint64_t *dest,
+				const uint64_t *src, uint32_t nblock);
+#endif
+void psm3_pio_blockcpy_256(volatile uint64_t *dest,
+				const uint64_t *src, uint32_t nblock);
+void psm3_pio_blockcpy_128(volatile uint64_t *dest,
+				const uint64_t *src, uint32_t nblock);
+void psm3_pio_blockcpy_64(volatile uint64_t *dest,
+				const uint64_t *src, uint32_t nblock);
+#endif /* PSM_OPA */
 
 extern uint32_t psm3_pico_per_cycle;	/* only for use in these functions */
 

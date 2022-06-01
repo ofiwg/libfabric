@@ -62,6 +62,9 @@
 
 
 typedef struct psmi_timer psmi_timer;
+/* when invoked by a timer, the return code from callback is ignored.  A
+ * return is allowed so a function may be used directly and as a timer callback
+ */
 typedef psm2_error_t(*psmi_timer_expire_callback_t) (struct psmi_timer *,
 						    uint64_t);
 

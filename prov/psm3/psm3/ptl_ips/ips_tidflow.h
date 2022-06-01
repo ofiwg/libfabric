@@ -78,6 +78,9 @@ struct ips_tf_entry {
 };
 
 struct ips_tf_ctrl {
+#ifdef PSM_OPA
+	pthread_spinlock_t tf_ctrl_lock;	// for shared context */
+#endif
 	uint32_t tf_num_max;
 	uint32_t tf_num_avail;
 	uint32_t tf_head;
@@ -85,6 +88,9 @@ struct ips_tf_ctrl {
 } __attribute__ ((aligned(64)));
 
 struct ips_tf {
+#ifdef PSM_OPA
+	const psmi_context_t *context;
+#endif
 	ips_tf_avail_cb_fn_t tf_avail_cb;
 	void *tf_avail_context;
 	struct ips_tf_ctrl *tf_ctrl;
@@ -121,5 +127,10 @@ psm2_error_t psm3_ips_tf_allocate(struct ips_tf *tfc,
 /* Deallocate a tidflow */
 psm2_error_t psm3_ips_tf_deallocate(struct ips_tf *tfc, uint32_t tf_idx, int used);
 
+#ifdef PSM_OPA
+/* Allocate a generation for a flow */
+psm2_error_t ips_tfgen_allocate(struct ips_tf *tfc,
+			uint32_t tf_idx, uint32_t *tfgen);
+#endif
 
 #endif
