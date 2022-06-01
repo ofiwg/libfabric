@@ -189,6 +189,9 @@ def fabtests_args_to_pytest_args(fabtests_args, shared_options):
         pytest_args.append("--junit-xml")
         pytest_args.append(os.path.abspath(fabtests_args.junit_xml))
         pytest_args.append("--self-contained-html")
+        if fabtests_args.junit_logging:
+            pytest_args.append("-o")
+            pytest_args.append("junit_logging=" + fabtests_args.junit_logging)
 
     # add options shared between runfabtests.py and libfabric pytest
     for option_name in shared_options.keys():
@@ -294,6 +297,8 @@ def main():
                         help="only run tests which match the given substring expression.")
     parser.add_argument("--html", type=str, help="path to generated html report")
     parser.add_argument("--junit-xml", type=str, help="path to generated junit xml report")
+    parser.add_argument("--junit-logging", choices=['no', 'log', 'system-out', 'system-err', 'out-err', 'all'], type=str,
+                        help="Write captured log messages to JUnit report")
 
     add_common_arguments(parser, shared_options)
 
