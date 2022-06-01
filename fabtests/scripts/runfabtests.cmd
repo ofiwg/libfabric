@@ -1,267 +1,778 @@
 @echo off
 setlocal EnableDelayedExpansion
 
+if not "%selfWrapped%" == "%~0" (
+	rem This is necessary so that we can use "exit' to terminate the
+	rem batch file, and all subroutines, but not the original cmd.exe.
+	set selfWrapped=%~0
+	%ComSpec% /s /c ""%~0" %*"
+	goto :EOF
+)
+
+set BIN_PATH=
+set PROV=
+set TEST_TYPE=quick
+set VERBOSE=0
+set SKIP_NEG=0
+set SERVER=127.0.0.1
+set S_INTERFACE=
+set CLIENT=127.0.0.1
+set C_INTERFACE=
+set GOOD_ADDR=
+set TIMEOUT_VAL=180
+set STRICT_MODE=0
+set OOB=0
+set C_ARGS=
+set S_ARGS=
+
+set OPTIND=0
 set PATH=%~dp0;%PATH%
 
 
-set S_INTERFACE=127.0.0.1
-set C_INTERFACE=127.0.0.1
 
-set TEST_FAIL_TIMEOUT=90
+set c_res=fabtests.c_res
+set c_outp=fabtests.c_outp
+set s_res=fabtests.s_res
+set s_outp=fabtests.s_outp
+
+set /a pass_count=0
+set /a skip_count=0
+set /a fail_count=0
+set /a total_failures=0
+
+set "spaces=                                                                                "
 
 set unit_tests=^
-	"av_test -g 192.168.10.1 -n 1 -s 127.0.0.1"^
-	"eq_test"
-rem Disabling this test since it fails on windows (appveyor). Re-enable after root cause is identified and fixed
-rem "dom_test -n 2"
+	"getinfo_test -s SERVER_ADDR GOOD_ADDR"^
+	"av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR -e rdm"^
+	"av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR -e dgram"^
+	"dom_test -n 2"^
+	"eq_test"^
+	"cq_test -L 4096"^
+	"mr_test"^
+	"cntr_test"
+
+set neg_unit_tests=^
+	"dgram g00n13s"^
+	"rdm g00n13s"^
+	"msg g00n13s"
 
 set functional_tests=^
-	"cq_data"^
-	"dgram -p sockets"^
-	"dgram_waitset -p sockets"^
+	"av_xfer -e rdm"^
+	"av_xfer -e dgram"^
+	"cm_data"^
+	"cq_data -e rdm"^
+	"cq_data -e dgram"^
+	"dgram"^
+	"dgram_waitset"^
 	"msg"^
+	"msg_epoll"^
 	"msg_sockets"^
 	"poll -t queue"^
 	"poll -t counter"^
 	"rdm"^
-	"rdm_rma_event"^
+	"rdm -U"^
+	"shared_ctx"^
+	"shared_ctx --no-tx-shared-ctx"^
+	"shared_ctx --no-rx-shared-ctx"^
+	"shared_ctx -e msg"^
+	"shared_ctx -e msg --no-rx-shared-ctx"^
+	"shared_ctx -e dgram"^
+	"shared_ctx -e dgram --no-tx-shared-ctx"^
+	"shared_ctx -e dgram --no-rx-shared-ctx"^
 	"rdm_tagged_peek"^
+	"scalable_ep"^
+	"multi_mr -e msg -V"^
+	"multi_ep -e rdm -v"^
+	"recv_cancel -e rdm -V"^
+	"unexpected_msg -e msg -I 10"^
+	"unexpected_msg -e rdm -I 10"^
+	"msg_inject -A inject -v"^
+	"msg_inject -N -A inject -v"^
+	"msg_inject -A inj_complete -v"^
+	"msg_inject -N -A inj_complete -v"^
 	"bw -e rdm -v -T 1"^
+	"bw -e rdm -v -T 1 -U"^
 	"bw -e msg -v -T 1"^
-	"scalable_ep"
-rem	"rdm_rma_trigger"^  disabled because of frequent failures
-rem	"msg_epoll"
+	"rdm_multi_client -C 10 -I 5"^
+	"rdm_multi_client -C 10 -I 5 -U"
+rem	"rdm_rma_trigger"^ disabled due to frequent CI failures
+rem	"multi_ep -e msg -v"^ disabled due to frequent CI failures
+rem	"rdm_shared_av"^ Uses fork, so no go on Windows
+rem	"cq_data -e msg"^ Uses IBV_WR_RDMA_SEND_WITH_IMM, which is not implemented for verbs via NetworkDirect
+rem	"rdm_rma_event"^ Uses ibv_create_ah, which is not implemented for verbs via NetworkDirect
+rem	"shared_ctx -e msg --no-tx-shared-ctx"^ Uses ibv_create_arq, which is not implemented for verbs via NetworkDirect
+rem	"multi_mr -e rdm -V" [Fails on Linux and Windows with server returning ENOSYS and client ENODATA]
 
 set short_tests=^
 	"msg_pingpong -I 5"^
 	"msg_pingpong -I 5 -v"^
+	"msg_bw -I 5"^
+	"msg_bw -I 5 -v"^
+	"rma_bw -e msg -o write -I 5"^
+	"rma_bw -e msg -o read -I 5"^
+	"rma_bw -e rdm -o write -I 5"^
+	"rma_bw -e rdm -o write -I 5 -U"^
+	"rma_bw -e rdm -o read -I 5"^
+	"rma_bw -e rdm -o read -I 5 -U"^
+	"rdm_atomic -I 5 -o all"^
+	"rdm_atomic -I 5 -o all -U"^
 	"rdm_cntr_pingpong -I 5"^
+	"multi_recv -e rdm -I 5"^
+	"multi_recv -e msg -I 5"^
 	"rdm_pingpong -I 5"^
+	"rdm_pingpong -I 5 -U"^
 	"rdm_pingpong -I 5 -v"^
+	"rdm_pingpong -I 5 -v -U"^
 	"rdm_tagged_pingpong -I 5"^
-	"rdm_tagged_pingpong -I 5 -v"
-rem	"msg_bw -I 5"^
-rem	"msg_bw -I 5 -v"^
-rem	"rma_bw -e msg -o write -I 5"^
-rem	"rma_bw -e msg -o read -I 5"^
-rem	"rma_bw -e msg -o writedata -I 5"^
-rem	"rma_bw -e rdm -o write -I 5"^
-rem	"rma_bw -e rdm -o read -I 5"^
-rem	"rma_bw -e rdm -o writedata -I 5"^
-rem	"msg_rma -o write -I 5"^
-rem	"msg_rma -o read -I 5"^
-rem	"msg_rma -o writedata -I 5"^
-rem	"msg_stream -I 5"^
-rem	"rdm_atomic -I 5 -o all"^
-rem	"rdm_multi_recv -I 5"^
-rem	"rdm_rma -o write -I 5"^
-rem	"rdm_rma -o read -I 5"^
-rem	"rdm_rma -o writedata -I 5"^
-rem	"rdm_tagged_bw -I 5"^
-rem	"rdm_tagged_bw -I 5 -v"^
-rem	"dgram_pingpong -I 5"^
-
+	"rdm_tagged_pingpong -I 5 -U"^
+	"rdm_tagged_pingpong -I 5 -v"^
+	"rdm_tagged_pingpong -I 5 -v -U"^
+	"rdm_tagged_bw -I 5"^
+	"rdm_tagged_bw -I 5 -U"^
+	"rdm_tagged_bw -I 5 -v"^
+	"rdm_tagged_bw -I 5 -v -U"^
+	"dgram_pingpong -I 5"
+rem	"rma_bw -e msg -o writedata -I 5"^ Uses IBV_WR_RDMA_WRITE_WITH_IMM, which is not implemented for verbs via NetworkDirect
+rem	"rma_bw -e rdm -o writedata -I 5"^ Uses IBV_WR_RDMA_WRITE_WITH_IMM, which is not implemented for verbs via NetworkDirect
+rem	"rma_bw -e rdm -o writedata -I 5 -U"^ Uses IBV_WR_RDMA_WRITE_WITH_IMM, which is not implemented for verbs via NetworkDirect
 
 set standard_tests=^
 	"msg_pingpong"^
 	"msg_pingpong -v"^
 	"msg_pingpong -k"^
 	"msg_pingpong -k -v"^
+	"msg_bw"^
+	"msg_bw -v"^
+	"rma_bw -e msg -o write"^
+	"rma_bw -e msg -o read"^
+	"rma_bw -e rdm -o write"^
+	"rma_bw -e rdm -o write -U"^
+	"rma_bw -e rdm -o read"^
+	"rma_bw -e rdm -o read -U"^
+	"rdm_atomic -o all -I 1000"^
+	"rdm_atomic -o all -I 1000 -U"^
 	"rdm_cntr_pingpong"^
+	"multi_recv -e rdm"^
+	"multi_recv -e msg"^
 	"rdm_pingpong"^
+	"rdm_pingpong -U"^
 	"rdm_pingpong -v"^
+	"rdm_pingpong -v -U"^
 	"rdm_pingpong -k"^
+	"rdm_pingpong -k -U"^
 	"rdm_pingpong -k -v"^
+	"rdm_pingpong -k -v -U"^
 	"rdm_tagged_pingpong"^
-	"rdm_tagged_pingpong -v"
-rem	"msg_bw"^
-rem	"msg_bw -v"^
-rem	"rma_bw -e msg -o write"^
-rem	"rma_bw -e msg -o read"^
-rem	"rma_bw -e msg -o writedata"^
-rem	"rma_bw -e rdm -o write"^
-rem	"rma_bw -e rdm -o read"^
-rem	"rma_bw -e rdm -o writedata"^
-rem	"msg_rma -o write"^
-rem	"msg_rma -o read"^
-rem	"msg_rma -o writedata"^
-rem	"msg_stream"^
-rem	"rdm_atomic -o all -I 1000"^
-rem	"rdm_multi_recv"^
-rem	"rdm_rma -o write"^
-rem	"rdm_rma -o read"^
-rem	"rdm_rma -o writedata"^
-rem	"rdm_tagged_bw"^
-rem	"rdm_tagged_bw -v"^
-rem	"dgram_pingpong"^
-rem	"dgram_pingpong -k"^
+	"rdm_tagged_pingpong -U"^
+	"rdm_tagged_pingpong -v"^
+	"rdm_tagged_pingpong -v -U"^
+	"rdm_tagged_bw"^
+	"rdm_tagged_bw -U"^
+	"rdm_tagged_bw -v"^
+	"rdm_tagged_bw -v -U"^
+	"dgram_pingpong"^
+	"dgram_pingpong -k"
+rem	"rma_bw -e msg -o writedata -I 5"^ Uses IBV_WR_RDMA_WRITE_WITH_IMM, which is not implemented for verbs via NetworkDirect
+rem	"rma_bw -e rdm -o writedata -I 5"^ Uses IBV_WR_RDMA_WRITE_WITH_IMM, which is not implemented for verbs via NetworkDirect
+rem	"rma_bw -e rdm -o writedata -I 5 -U"^ Uses IBV_WR_RDMA_WRITE_WITH_IMM, which is not implemented for verbs via NetworkDirect
+
+set multinode_tests=^
+	"multinode -C msg"^
+	"multinode -C rma"^
+	"multinode_coll"
 
 
-set test_types=unit functional short
+goto :global_main
 
+:print_border
+	echo # ------------------------------------------------------------------------------
+	exit /b 0
 
-goto :main
+:print_results
+	set test_name=%~1
+	set test_result=%~2
+	set test_time=%~3
+	set server_out_file=%~4
+	set server_cmd=%~5
+	set client_out_file=%~6
+	set client_cmd=%~7
 
-
-:single__clear_txt
-	del out.txt res.txt >nul 2>nul
-exit /b 0
-:single__start_job
-	start /b run_with_output.cmd "!test_cmdline!" out.txt res.txt >nul 2>nul
-exit /b 0
-:single__check_is_job_ended
-	if not exist res.txt exit /b 1
-exit /b 0
-:single__print_output
-	echo OUTPUT: & type out.txt & echo ----
-exit /b 0
-:single__print_and_check_err_code
-	setlocal
-	set err=0
-	set /p err_code= <res.txt || ( echo error getting error code >&2 & exit /b 2 )
-	set /a err_code=err_code
-	if not "!err_code!"=="0" ( set err=1 & echo error code = !err_code! )
-exit /b !err!
-
-
-:client_server__clear_txt
-	del out_sv.txt res_sv.txt out_cl.txt res_cl.txt >nul 2>nul
-exit /b 0
-:client_server__start_job
-	start /b run_with_output.cmd "!test_cmdline! -s !S_INTERFACE!" out_sv.txt res_sv.txt >nul 2>nul
-	start /b run_with_output.cmd "!test_cmdline! -s !C_INTERFACE! !S_INTERFACE!" out_cl.txt res_cl.txt >nul 2>nul
-exit /b 0
-:client_server__check_is_job_ended
-	if not exist res_sv.txt exit /b 1
-	if not exist res_cl.txt exit /b 1
-exit /b 0
-:client_server__print_output
-	echo SERVER OUTPUT: & type out_sv.txt & echo ----
-	echo CLIENT OUTPUT: & type out_cl.txt & echo ----
-exit /b 0
-:client_server__print_and_check_err_code
-	setlocal
-	set err=0
-	set /p sv_err_code= <res_sv.txt || ( echo error getting server error code >&2 & exit /b 2 )
-	set /p cl_err_code= <res_cl.txt || ( echo error getting client error code >&2 & exit /b 2 )
-	set /a sv_err_code=sv_err_code
-	set /a cl_err_code=cl_err_code
-	if not "!sv_err_code!"=="0" ( set err=1 & echo server error code = !sv_err_code! )
-	if not "!cl_err_code!"=="0" ( set err=1 & echo client error code = !cl_err_code! )
-exit /b !err!
-
-
-:results
-	setlocal
-	set err=%1
-	call :!test_type!__print_output
-	if "!err!"=="2" (
-		echo test failed due to timeout
+	if %VERBOSE% EQU 0 (
+		rem print a simple, single-line format that is still valid YAML
+		set left=%test_exe%:%spaces%
+		set right=%spaces%%test_result%
+		echo !left:~0,70!!right:~-10,10!
 	) else (
-		if not "!err!"=="0" (
-			echo UNKNOWN ERROR
-			exit -1
-		) else (
-			call :!test_type!__print_and_check_err_code
-			set err=!errorlevel!
-			if not "!err!"=="0" echo test failed
+		rem Print a more detailed YAML format that is not a superset of
+		rem the non-verbose output.  See ofiwg/fabtests#259 for a
+		rem rationale.
+		set emit_stdout=0
+		call :switch result %test_result% || (
+:result-Pass
+			if %VERBOSE% GEQ 3 set emit_stdout=1
+			goto :EOF
+:result-Notrun
+			if %VERBOSE% GEQ 2 set emit_stdout=1
+			goto :EOF
+:result-Fail
+			if %VERBOSE% GEQ 1 set emit_stdout=1
+			goto :EOF
+:result-
+			echo Unknown result: %1 1>&2
+			exit 1
 		)
-	)
-exit /b !err!
 
+		echo - name:   %test_exe%
+		echo   timestamp: %DATE% %TIME%
+		echo   result: %test_result%
+		echo   time:   %test_time%
 
-
-
-:run
-	setlocal
-	for /f "tokens=1" %%n in ("!test_cmdline!") do set test_exename=%%n.exe
-
-	call :!test_type!__start_job
-	set /a secs=0
-	:run_client_server__WAIT
-		set /a secs=secs+1
-		timeout /t 1 >nul
-		if /I !secs! geq %TEST_FAIL_TIMEOUT% (
-			echo timeout, killing job
-			taskkill /f /im !test_exename! >nul
-			exit /b 2
-		)
-		call :!test_type!__check_is_job_ended || goto :run_client_server__WAIT
-	:run_client_server__WAIT_END
-exit /b 0
-
-
-
-
-
-:test
-	setlocal
-	set test_type=%1
-	for /f "tokens=*" %%n in (%2) do set test_cmdline=%%n
-	echo !test_cmdline!
-
-	call :!test_type!__clear_txt
-	call :run
-	call :results !errorlevel!
-	set err=!errorlevel!
-	call :!test_type!__clear_txt
-exit /b !err!
-
-
-
-
-:run_test__unit
-	call :test single %*
-exit /b
-
-
-:run_test__functional
-	call :test client_server %*
-exit /b
-
-
-:run_test__standard
-	call :test client_server %*
-exit /b
-
-
-:run_test__short
-	call :test client_server %*
-exit /b
-
-
-
-
-:main
-	set /a tests_count=0
-	set /a failed_tests_count=0
-	for %%a in (!test_types!) do (
-		for %%t in (!%%a_tests!) do (
-			set /a tests_count=tests_count+1
-		)
-	)
-
-	for %%a in (!test_types!) do (
-		echo %%a tests:
-		set run=run_test__%%a
-		for %%t in (!%%a_tests!) do (
-			call :!run! %%t || (
-				set failed=!failed! %%t
-				set /a failed_tests_count=failed_tests_count+1
+		if !emit_stdout! EQU 1 (
+			if not "%server_out_file%" == "" (
+				if not "%server_cmd%" == "" (
+					echo   server_cmd: %server_cmd%
+				)
+				echo   server_stdout: 
+				type %server_out_file%
+				echo.
+			)
+			if not "%client_out_file%" == "" (
+				if not "%client_cmd%" == "" (
+					echo   client_cmd: %client_cmd%
+				)
+				echo   client_stdout: 
+				type %client_out_file%
+				echo.
 			)
 		)
-		echo.
-		echo ==============================
 	)
+	exit /b 0
 
-
-	if not "!failed!"=="" (
-		echo !failed_tests_count! of !tests_count! tests failed:
-		for %%t in (!failed!) do (
-			echo %%t
+:cleanup
+	if exist %c_res% del /f %c_res%
+	if exist %c_outp% del /f %c_outp%
+	if exist %s_outp% del /f %s_outp%
+	if exist %s_res% del /f %s_res%
+	if not "%1" == "" (
+		for /l %%i in (1,1,%1) do (
+			if exist %c_res%%%i del /f %c_res%%%i
+			if exist %c_outp%%%i del /f %c_outp%%%i
 		)
-		exit /b !failed_tests_count!
+	)
+	exit /b
+
+:compute_duration
+	set start=%1
+	set end=%2
+	set /a s_m=%start:~-8,1%
+	set /a s_m=%s_m% * 10 + %start:~-7,1%
+	set /a s_s=%start:~-5,1%
+	set /a s_s=%s_s% * 10 + %start:~-4,1%
+	set /a e_m=%end:~-8,1%
+	set /a e_m=%e_m% * 10 + %end:~-7,1%
+	set /a e_s=%end:~-5,1%
+	set /a e_s=%e_s% * 10 + %end:~-4,1%
+	set /a min=(%e_m% - %s_m%)
+	set /a sec=(%e_s% - %s_s%)
+	set /a dur=%min% * 60 + %sec%
+	if %dur% EQU 0 set /a dur=1
+	set %3=%dur%
+	exit /b 0
+
+:wait_for_timeout
+	set /a secs=0
+:wait
+	timeout /t 1 /nobreak >nul
+	set /a secs+=1
+	if %secs% GTR %TIMEOUT_VAL% (
+		for /f "tokens=1" %%x in ("%test_exe%") do set image_name=%%x.exe
+		taskkill /f /im !image_name! >nul
+		set /a s_ret=124
+		if %1 GEQ 2 set /a c_ret=124
+		timeout /t 1 /nobreak >nul
+		goto :wait_end
+	)
+	if not exist %s_res% goto :wait
+	if %1 EQU 2 if not exist %c_res% goto :wait
+	if %1 GTR 2 (
+		set /a num_clients=%1 - 1
+		for /l %%i in (1,1,!num_clients!) do (
+		   if not exist %c_res%%%i goto :wait 
+		)
+	)
+	set /p s_ret=<%s_res%
+	set /a s_ret=s_ret
+	del %s_res%
+	if %1 EQU 2 (
+		set /p c_ret=<%c_res%
+		set /a c_ret=c_ret
+		del %c_res%
+	)
+	if %1 GTR 2 (
+		set /a num_clients=%1 - 1
+		for /l %%i in (1,1,!num_clients!) do (
+			set /p ret=<%c_res%%%i
+			set /a ret=ret
+			del %c_res%%%i
+			if !ret! NEQ 0 set c_ret=!ret!
+		)
+	)
+:wait_end
+	exit /b 0
+
+:unit_test
+	set test=%~1
+	set is_neg=%2
+	set s_ret=
+	set start_time=
+	set end_time=
+	set test_time=
+
+	if %OOB% EQU 1 (
+		set interface=%GOOD_ADDR%
+	) else (
+		set interface=%S_INTERFACE%
+	)
+	set test_exe=%test% -p %PROV%
+	set test_exe=%test_exe:GOOD_ADDR=!GOOD_ADDR!%
+	set test_exe=%test_exe:SERVER_ADDR=!interface!%
+
+	rem getinfo_test will fail without having set FI_PROVIDER
+	rem due to how putenv works on Windows.
+	rem https://github.com/ofiwg/libfabric/issues/7565
+	if "%test:~0,12%" == "getinfo_test" set FI_PROVIDER=%PROV%
+
+	set start_time=%TIME%
+
+	set cmd=%BIN_PATH%%test_exe%
+	start /b run_with_output.cmd "%cmd%" %s_outp% %s_res% >nul 2>nul
+	call :wait_for_timeout 1
+
+	set end_time=%TIME%
+	call :compute_duration %start_time% %end_time% test_time
+
+	if "%test:~0,12%" == "getinfo_test" set FI_PROVIDER=
+
+	if "%is_neg%%s_ret%" == "1120" (
+		rem Negative test passed.
+		set s_ret=0
+	)
+	if "%STRICT_MODE%%s_ret%" == "0120" (
+		call :print_results "%test_exe%" "Notrun" "%test_time%" "%s_outp%" "%cmd%"
+		set /a skip_count+=1
+	) else (
+		if "%STRICT_MODE%%s_ret%" == "040" (
+			call :print_results "%test_exe%" "Notrun" "%test_time%" "%s_outp%" "%cmd%"
+			set /a skip_count+=1
+		) else (
+			if %s_ret% NEQ 0 (
+				call :print_results "%test_exe%" "Fail" "%test_time%" "%s_outp%" "%cmd%"
+				if %s_ret% EQU 124 (
+					rem timed out
+					call :cleanup
+				)
+				set /a fail_count+=1
+			) else (
+				call :print_results "%test_exe%" "Pass" "%test_time%" "%s_outp%" "%cmd%"
+				set /a pass_count+=1
+			)
+		)
+	)
+	exit /b 0
+
+:cs_test
+	set test=%~1
+	set s_ret=0
+	set c_ret=0
+	set test_exe=%test% -p %PROV%
+	set start_time=
+	set end_time=
+	set test_time=
+
+	set start_time=%TIME%
+
+	if %OOB% EQU 1 (
+		set s_arg=-E
+	) else (
+		set s_arg=-s %S_INTERFACE%
+	)
+	set s_cmd=%BIN_PATH%%test_exe% %S_ARGS% %s_arg%
+	start /b run_with_output.cmd "%s_cmd%" %s_outp% %s_res% >nul 2>nul
+	timeout /t 1 /nobreak >nul
+
+	if %OOB% EQU 1 (
+		set c_arg=-E %S_INTERFACE%
+	) else (
+		set c_arg=-s %C_INTERFACE% %S_INTERFACE%
+	)
+	set c_cmd=%BIN_PATH%%test_exe% %C_ARGS% %c_arg%
+	start /b run_with_output.cmd "%c_cmd%" %c_outp% %c_res% >nul 2>nul
+	call :wait_for_timeout 2
+
+	set end_time=%TIME%
+	call :compute_duration %start_time% %end_time% test_time
+
+	if "%STRICT_MODE%%s_ret%%c_ret%" == "0120120" (
+		call :print_results "%test_exe%" "Notrun" "%test_time%" "%s_outp%" "%s_cmd%" "%c_outp%" "%c_cmd%"
+		set /a skip_count+=1
+	) else (
+		if "%STRICT_MODE%%s_ret%%c_ret%" == "04040" (
+			call :print_results "%test_exe%" "Notrun" "%test_time%" "%s_outp%" "%s_cmd%" "%c_outp%" "%c_cmd%"
+			set /a skip_count+=1
+		) else (
+			if %s_ret% NEQ 0 (
+				call :print_results "%test_exe%" "Fail" "%test_time%" "%s_outp%" "%s_cmd%" "%c_outp%" "%c_cmd%"
+				if %s_ret% EQU 124 (
+					rem timed out
+					call :cleanup
+				) else (
+					if %c_ret% EQU 124 (
+						rem timed out
+						call :cleanup
+					)
+				)
+				set /a fail_count+=1
+			) else (
+				if %c_ret% NEQ 0 (
+					call :print_results "%test_exe%" "Fail" "%test_time%" "%s_outp%" "%s_cmd%" "%c_outp%" "%c_cmd%"
+					if %s_ret% EQU 124 (
+						rem timed out
+						call :cleanup
+					) else (
+						if %c_ret% EQU 124 (
+							rem timed out
+							call :cleanup
+						)
+					)
+					set /a fail_count+=1
+				) else (
+					call :print_results "%test_exe%" "Pass" "%test_time%" "%s_outp%" "%s_cmd%" "%c_outp%" "%c_cmd%"
+					set /a pass_count+=1
+				)
+			)
+		)
+	)
+	exit /b 0
+
+:multinode_test
+	set test=%~1
+	set s_ret=0
+	set c_ret=0
+	set /a num_procs=%2
+	set /a num_clients=%num_procs% - 1
+	set test_exe=%test% -n %num_procs% -p "%PROV%"
+	set c_out=
+	set start_time=
+	set end_time=
+	set test_time=
+
+	set start_time=%TIME%
+
+	set s_cmd=%BIN_PATH%%test_exe% %S_ARGS% -s %S_INTERFACE%
+	start /b run_with_output.cmd "%s_cmd%" %s_outp% %s_res% >nul 2>nul
+	timeout /t 1 /nobreak >nul
+
+	for /l %%i in (1,1,%num_clients%) do (
+		set res=%c_res%%%i
+		set out=%c_outp%%%i
+		set c_cmd=%BIN_PATH%%test_exe% %S_ARGS% -s %S_INTERFACE%
+		start /b run_with_output.cmd "!c_cmd!" !out! !res! >nul 2>nul
 	)
 
-	echo all !tests_count! tests passed
+	call :wait_for_timeout %num_procs%
+	echo server finished
 
+	set end_time=%TIME%
+	call :compute_duration %start_time% %end_time% test_time
+
+	set /a pe=1
+	if "%STRICT_MODE%%s_ret%%c_ret%" == "0120120" (
+		call :print_results "%test_exe%" "Notrun" "%test_time%" "%s_outp%" "%s_cmd%" "" "%c_cmd%"
+		for /l %%i in (1,1,%num_clients%) do (
+			echo   client_stdout !pe!:
+			type !c_outp!%%i
+			echo.
+			set /a pe+=1
+		)
+		set /a skip_count+=1
+	) else (
+		if "%STRICT_MODE%%s_ret%%c_ret%" == "04040" (
+			call :print_results "%test_exe%" "Notrun" "%test_time%" "%s_outp%" "%s_cmd%" "" "%c_cmd%"
+			for /l %%i in (1,1,%num_clients%) do (
+				echo   client_stdout !pe!:
+				type !c_outp!%%i
+				echo.
+				set /a pe+=1
+			)
+			set /a skip_count+=1
+		) else (
+			if %s_ret% NEQ 0 (
+				call :print_results "%test_exe%" "Fail" "%test_time%" "%s_outp%" "%s_cmd%" "" "%c_cmd%"
+				for /l %%i in (1,1,%num_clients%) do (
+					echo   client_stdout !pe!:
+					type !c_outp!%%i
+					echo.
+					set /a pe+=1
+				)
+				if %s_ret% EQU 124 (
+					rem timed out
+					call :cleanup
+				) else (
+					if %c_ret% EQU 124 (
+						rem timed out
+						call :cleanup
+					)
+				)
+				set /a fail_count+=1
+			) else (
+				if %c_ret% NEQ 0 (
+					call :print_results "%test_exe%" "Fail" "%test_time%" "%s_outp%" "%s_cmd%" "" "%c_cmd%"
+					for /l %%i in (1,1,%num_clients%) do (
+						echo   client_stdout !pe!:
+						type !c_outp!%%i
+						echo.
+						set /a pe+=1
+					)
+					if %s_ret% EQU 124 (
+						rem timed out
+						call :cleanup
+					) else (
+						if %c_ret% EQU 124 (
+							rem timed out
+							call :cleanup
+						)
+					)
+					set /a fail_count+=1
+				) else (
+					call :print_results "%test_exe%" "Pass" "%test_time%" "%s_outp%" "%s_cmd%" "" "%c_cmd%"
+					for /l %%i in (1,1,%num_clients%) do (
+						echo   client_stdout !pe!:
+						type !c_outp!%%i
+						echo.
+						set /a pe+=1
+					)
+					set /a pass_count+=1
+				)
+			)
+		)
+	)
+	call :cleanup %num_clients%
+	exit /b 0
+
+:switch
+	goto :%1-%2 2>nul || (
+		type nul>nul
+		call :%1- %2
+	)
+	exit /b
+
+:main
+	set skip_count=0
+	set pass_count=0
+	set fail_count=0
+
+	set tests=
+	if /i "%~1" == "quick" set tests=unit,functional,short
+	if /i "%~1" == "all" set tests=unit,functional,standard,multinode
+	if /i "%tests%" == "" set tests=%~1
+	set tests=%tests:,= %
+
+	if %VERBOSE% == 0 (
+		echo # Test                                                                    Result
+		call :print_border
+	)
+
+	for %%s in (%tests%) do (
+		call :switch set %%s || (
+:set-unit            
+			for %%t in (%unit_tests%) do (
+				call :unit_test %%t 0
+			)
+			if "%SKIP_NEG%" == "0" (
+				for %%t in (%neg_unit_tests%) do (
+					call :unit_test %%t 1
+				)
+			)
+			goto :EOF
+:set-functional            
+			for %%t in (%functional_tests%) do (
+				call :cs_test %%t
+			)
+			goto :EOF
+:set-short            
+			for %%t in (%short_tests%) do (
+				call :cs_test %%t
+			)
+			goto :EOF
+:set-standard            
+			for %%t in (%standard_tests%) do (
+				call :cs_test %%t
+			)
+			goto :EOF
+:set-multinode            
+			for %%t in (%multinode_tests%) do (
+				call :multinode_test %%t 3
+			)
+			goto :EOF
+:set-
+			echo Unknown test set: %1 1>&2
+			exit 1
+		)
+	)
+
+	set /a total= %pass_count% + %fail_count%
+
+	call :print_border
+
+	set left=Total Pass%spaces%
+	set right=%spaces%%pass_count%
+	echo # %left:~0,50%%right:~-10,10%
+	set left=Total Notrun/Excluded%spaces%
+	set right=%spaces%%skip_count%
+	echo # %left:~0,50%%right:~-10,10%
+	set left=Total Fail%spaces%
+	set right=%spaces%%fail_count%
+	echo # %left:~0,50%%right:~-10,10%
+
+	if %total% GTR 0 (
+		set /a pass_pct="(%pass_count% * 100) / %total%"
+		set left=Percentage of Pass%spaces%
+		set right=%spaces%!pass_pct!
+		echo # !left:~0,50!!right:~-10,10!
+	)
+
+	call :print_border
+
+	call :cleanup
+	set /a total_failures+=%fail_count%
+	exit /b
+
+:usage
+	echo.Usage: 1>&2
+	echo.  runfabtests.cmd [OPTIONS] [provider] [host] [client] 1>&2
+	echo. 1>&2
+	echo.Run fabtests using provider between host and client (default 1>&2
+	echo.'sockets' provider in loopback-mode).  Report pass/fail/notrun status. 1>&2
+	echo. 1>&2
+	echo.Options... 1>&2
+	echo.  -g       good IP address from [host]'s perspective (default %GOOD_ADDR%) 1>&2
+	echo.  -v       print output of failing 1>&2
+	echo.  -v -v    print output of failing/notrun 1>&2
+	echo.  -v -v -v print output of failing/notrun/passing 1>&2
+	echo.  -t       test set(s): all,quick,unit,functional,standard,short,complex (default quick) 1>&2
+	echo.  -N       skip negative unit tests 1>&2
+	echo.  -p       path to test bins (default PATH) 1>&2
+	echo.  -c       client interface 1>&2
+	echo.  -s       server/host interface 1>&2
+	echo.  -T       timeout value in seconds 1>&2
+	echo.  -S       Strict mode: -FI_ENODATA, -FI_ENOSYS errors would be treated as failures instead of skipped/notrun 1>&2
+	echo.  -C       Additional client test arguments: Parameters to pass to client fabtests 1>&2
+	echo.  -L       Additional server test arguments: Parameters to pass to server fabtests 1>&2
+	echo.  -b       enable out-of-band address exchange over the default port 1>&2
+	exit 1
+
+:getopts
+	if "%1" == "-t" (
+		set TEST_TYPE=%~2
+		shift
+		set /a OPTIND+=1
+		goto nextopt
+	)
+	if "%1" == "-v" (
+		set /a VERBOSE+=1
+		goto nextopt
+	)
+	if "%1" == "-p" (
+		set BIN_PATH=%~2\
+		shift
+		set /a OPTIND+=1
+		goto nextopt
+	)
+	if "%1" == "-g" (
+		set GOOD_ADDR=%~2\
+		shift
+		set /a OPTIND+=1
+		goto nextopt
+	)
+	if "%1" == "-c" (
+		set C_INTERFACE=%~2
+		shift
+		set /a OPTIND+=1
+		goto nextopt
+	)
+	if "%1" == "-s" (
+		set S_INTERFACE=%~2
+		shift
+		set /a OPTIND+=1
+		goto nextopt
+	)
+	if "%1" == "-T" (
+		set /a TIMEOUT_VAL=%~2
+		shift
+		set /a OPTIND+=1
+		goto nextopt
+	)
+	if "%1" == "-N" (
+		set /a SKIP_NEG+=1
+		goto nextopt
+	)
+	if "%1" == "-S" (
+		set /a STRICT_MODE+=1
+		goto nextopt
+	)
+	if "%1" == "-b" (
+		set /a OOB+=1
+		goto nextopt
+	)
+	if "%1" == "-C" (
+		set C_ARGS=%~2
+		shift
+		set /a OPTIND+=1
+		goto nextopt
+	)
+	if "%1" == "-L" (
+		set S_ARGS=%~2
+		shift
+		set /a OPTIND+=1
+		goto nextopt
+	)
+	if "%1" == "-h" (
+		goto :usage
+	)
+:nextopt
+	shift & set /a OPTIND+=1
+	set x=%1
+	if /i "%x:~0,1%" == "-" goto getopts
+	exit /b 0
+
+:global_main
+	call :getopts %*
+	for /L %%a in (1,1,!OPTIND!) do shift
+
+	if not "%1" == "" (
+		set PROV=%1
+		shift
+	)
+	if not "%1" == "" (
+		set SERVER=%1
+		shift
+	)
+	if not "%1" == "" (
+		set CLIENT=%1
+		shift
+	)
+	if not "%1" == "" goto :usage
+
+	if "%C_INTERFACE%" == "" set C_INTERFACE=%CLIENT%
+	if "%S_INTERFACE%" == "" set S_INTERFACE=%SERVER%
+	if "%GOOD_ADDR%" == "" set GOOD_ADDR=%S_INTERFACE%
+
+	if "%PROV%" == "" (
+		set PROV=sockets
+		call :main "%TEST_TYPE%"
+	) else (
+		call :main "%TEST_TYPE%"
+	)
+
+	exit /b %total_failures%
