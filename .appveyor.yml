@@ -53,10 +53,50 @@ before_test:
   - cd fabtests
   - msbuild fabtests.sln
 
-test_script:
-  - set PATH=%CD%\x64\%CONFIGURATION%;%PATH%
-  - set FI_PROVIDER=sockets
-  - scripts\runfabtests.cmd
+for:
+-
+  matrix:
+    only:
+      - image: Visual Studio 2017
+        configuration: Debug-v140
+      - image: Visual Studio 2017
+        configuration: Release-v140
+
+  test_script:
+    - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -t unit sockets
+
+-
+  matrix:
+    only:
+      - image: Visual Studio 2017
+        configuration: Debug-v141
+      - image: Visual Studio 2017
+        configuration: Release-v141
+
+  test_script:
+    - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -t functional sockets
+
+-
+  matrix:
+    only:
+      - image: Visual Studio 2019
+        configuration: Debug-v141
+      - image: Visual Studio 2019
+        configuration: Release-v141
+
+  test_script:
+    - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -C "-I 10" -L "-I 10" -t standard sockets
+
+-
+  matrix:
+    only:
+      - image: Visual Studio 2019
+        configuration: Debug-v142
+      - image: Visual Studio 2019
+        configuration: Release-v142
+
+  test_script:
+    - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -C "-I 10" -L "-I 10" -t multinode sockets
 
 skip_commits:
   files:
