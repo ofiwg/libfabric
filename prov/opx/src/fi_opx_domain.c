@@ -174,7 +174,7 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 
 	if (hints) {
 		if (hints->domain) {
-			struct fi_opx_domain *opx_domain = opx_domain = container_of(hints->domain, struct fi_opx_domain, domain_fid);
+			struct fi_opx_domain *opx_domain = container_of(hints->domain, struct fi_opx_domain, domain_fid);
 
 			domain_attr->threading		= opx_domain->threading;
 			domain_attr->resource_mgmt	= opx_domain->resource_mgmt;

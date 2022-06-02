@@ -288,7 +288,5 @@ int fi_opx_cntr_open(struct fid_domain *domain,
 	*cntr = &opx_cntr->cntr_fid;
 	return 0;
 err:
-	if (opx_cntr)
-		free(opx_cntr);
 	return -errno;
 }

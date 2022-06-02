@@ -211,10 +211,10 @@ void fi_opx_ep_tx_model_init (struct fi_opx_hfi1_context * hfi,
 	memset(send, 0, sizeof(*send));
 	memset(inject, 0, sizeof(*inject));
 	memset(rendezvous, 0, sizeof(*rendezvous));
-	send->qw0 = (0 |
-		0 /* length_dws */ |
-		((hfi->vl & FI_OPX_HFI1_PBC_VL_MASK) << FI_OPX_HFI1_PBC_VL_SHIFT) |
-		(((hfi->sc >> FI_OPX_HFI1_PBC_SC4_SHIFT) & FI_OPX_HFI1_PBC_SC4_MASK) << FI_OPX_HFI1_PBC_DCINFO_SHIFT));
+//	send->qw0 = (0 |
+//		0 /* length_dws */ |
+//		((hfi->vl & FI_OPX_HFI1_PBC_VL_MASK) << FI_OPX_HFI1_PBC_VL_SHIFT) |
+//		(((hfi->sc >> FI_OPX_HFI1_PBC_SC4_SHIFT) & FI_OPX_HFI1_PBC_SC4_MASK) << FI_OPX_HFI1_PBC_DCINFO_SHIFT));
 
 	send->qw0 = 0;	/* "pbc" FIXME ?? */
 

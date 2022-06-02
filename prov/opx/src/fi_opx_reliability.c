@@ -2040,7 +2040,7 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 			int cpu_num_used_max = 1;
 			int cpu_num_used = 0;
 
-			if (local_ranks < cpu_num_used_total) {
+			if (local_ranks != 0 && local_ranks < cpu_num_used_total) {
 				cpu_num_used_max = cpu_num_used_total / local_ranks;
 			}
 
@@ -2050,16 +2050,18 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 				"cpu_num_used_offset = %d, cpu_num_used_max = %d, cpu_num_used_total = %d\n",
 				cpu_num_used_offset, cpu_num_used_max, cpu_num_used_total);
 
-			for (cpu_id = 0; cpu_id < cpu_num; cpu_id++) {
-				if (CPU_ISSET(cpu_id, &cpu_set)) {
-					if (cpu_num_used_offset) {
-						CPU_CLR(cpu_id, &cpu_set); /* clear head */
-						cpu_num_used_offset--;
-					} else {
-						if (cpu_num_used != cpu_num_used_max) {
-							cpu_num_used++; /* leave body */
+			if(cpu_num >= 0){
+				for (cpu_id = 0; cpu_id < cpu_num; cpu_id++) {
+					if (CPU_ISSET(cpu_id, &cpu_set)) {
+						if (cpu_num_used_offset) {
+							CPU_CLR(cpu_id, &cpu_set); /* clear head */
+							cpu_num_used_offset--;
 						} else {
-							CPU_CLR(cpu_id, &cpu_set); /* clear tail */
+							if (cpu_num_used != cpu_num_used_max) {
+								cpu_num_used++; /* leave body */
+							} else {
+								CPU_CLR(cpu_id, &cpu_set); /* clear tail */
+							}
 						}
 					}
 				}

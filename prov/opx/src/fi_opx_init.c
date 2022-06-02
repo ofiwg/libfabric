@@ -350,11 +350,13 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 	return 0;
 
 err:
-	free(fi->domain_attr->name); fi->domain_attr->name = NULL;
-	free(fi->fabric_attr->name); fi->fabric_attr->name = NULL;
-	free(fi->fabric_attr->prov_name); fi->fabric_attr->prov_name = NULL;
-	free(fi->src_addr); fi->src_addr = NULL; fi->src_addrlen=0;
-	free(fi->dest_addr); fi->dest_addr = NULL; fi->dest_addrlen=0;
+	if(fi){
+		free(fi->domain_attr->name); fi->domain_attr->name = NULL;
+		free(fi->fabric_attr->name); fi->fabric_attr->name = NULL;
+		free(fi->fabric_attr->prov_name); fi->fabric_attr->prov_name = NULL;
+		free(fi->src_addr); fi->src_addr = NULL; fi->src_addrlen=0;
+		free(fi->dest_addr); fi->dest_addr = NULL; fi->dest_addrlen=0;
+	}
 	return -errno;
 }
 
