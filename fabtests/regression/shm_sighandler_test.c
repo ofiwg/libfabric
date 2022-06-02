@@ -42,13 +42,14 @@
 #include <rdma/fabric.h>
 #include "shared.h"
 
-int main(void)
+int main(int argc, char **argv)
 {
 	int child;
 	int status;
+	opts = INIT_OPTS;
 
 	if ((child = fork())) {
-		usleep(100000); /* give child time to finish initialization */
+		usleep(500000); /* give child time to finish initialization */
 		kill(child, SIGINT);
 		usleep(100000); /* give child time to handle the signal */
 		kill(child, SIGKILL);
