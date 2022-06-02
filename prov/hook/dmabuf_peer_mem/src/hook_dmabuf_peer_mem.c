@@ -30,6 +30,7 @@
  * SOFTWARE.
  */
 
+#include <inttypes.h>
 #include <sys/ioctl.h>
 #include "ofi.h"
 #include "ofi_prov.h"
@@ -60,7 +61,7 @@ static int dmabuf_reg_add(int reg_fd, uint64_t base, uint64_t size, int fd)
 /*
  * Remove a dmabuf entry from the registry, using dmabuf fd as the key.
  */
-static void dmabuf_reg_remove(int reg_fd, uint32_t fd)
+static void dmabuf_reg_remove(int reg_fd, int fd)
 {
 	struct dmabuf_reg_param args = {
 		.op = DMABUF_REG_REMOVE_FD,
@@ -82,8 +83,7 @@ static void dmabuf_reg_remove(int reg_fd, uint32_t fd)
  *  Others ----- Various errors including: invalid range (e.g. overflow), range
  * 		 partially overlapping with entries in the registry, and I/O error.
  */
-static int dmabuf_reg_query(int reg_fd, uint64_t addr, uint64_t size,
-			    uint32_t *fd)
+static int dmabuf_reg_query(int reg_fd, uint64_t addr, uint64_t size, int *fd)
 {
 	struct dmabuf_reg_param args = {
 		.op = DMABUF_REG_QUERY,
@@ -99,22 +99,28 @@ static int dmabuf_reg_query(int reg_fd, uint64_t addr, uint64_t size,
 }
 
 /*
- * Add buffer to registry if it is associated with a dmabuf. Return dmabuf fd
- * on success or -EINVAL on error.
+ * If the MR buffer is associated with a dmabuf, get the dmabuf fd and add to
+ * the registry.
  *
  * The assumption is that the memory region to be registered is homogeneous:
  * either all system memory or belong to the same dmabuf object. We only need
  * to check the first non-zero iov.
+ *
+ * Set the fd to -1 if the buffer is not associated with a dmabuf, or failed
+ * to be added to the registry.
  */
-static int dmabuf_reg_add_iov(int reg_fd, size_t iov_count,
-			      const struct iovec *iov)
+static void get_mr_fd(struct dmabuf_peer_mem_mr *mr,
+		      size_t iov_count, const struct iovec *iov)
 {
-	void *base;
 	void *handle;
-	size_t size;
-	int fd = 0;
+	int fd;
 	int err;
-	int ret = -EINVAL;
+	struct dmabuf_peer_mem_fabric *fab;
+
+	fab = container_of(mr->mr_hook.domain->fabric,
+			   struct dmabuf_peer_mem_fabric, fabric_hook);
+
+	mr->fd = -1;
 
 	while (iov_count && !iov->iov_len) {
 		iov_count--;
@@ -124,44 +130,100 @@ static int dmabuf_reg_add_iov(int reg_fd, size_t iov_count,
 	if (!iov_count)
 		goto out;
 
-	err = ze_hmem_get_base_addr(iov->iov_base, &base, &size);
+	err = ze_hmem_get_base_addr(iov->iov_base, (void **)&mr->base,
+				    &mr->size);
 	if (err)
 		goto out;
 
-	err = dmabuf_reg_query(reg_fd, (uint64_t)base, size, (uint32_t *)&fd);
+	ofi_mutex_lock(&fab->mutex);
+
+	err = dmabuf_reg_query(fab->dmabuf_reg_fd, mr->base, mr->size, &fd);
 	switch (err) {
 	case -ENOENT:
+		/*
+		 * The region is not covered by any entry in the registry, add a
+		 * new entry to the registry now.
+		 */
 		err = ze_hmem_get_handle(iov->iov_base, &handle);
 		if (err)
-			goto out;
+			goto out_unlock;
 
 		fd = (int)(uintptr_t)handle;
-		/* Fall through */
+		assert(fd >= 0);
+
+		err = dmabuf_reg_add(fab->dmabuf_reg_fd, mr->base, mr->size, fd);
+		if (err) {
+			close(fd);
+		} else {
+			mr->fd = fd;
+			FI_INFO(fab->fabric_hook.hprov, FI_LOG_MR,
+				"Add new entry: base 0x%"PRIx64" size %"PRIu64" fd %d\n",
+				mr->base, mr->size, mr->fd);
+		}
+		break;
 
 	case 0:
-		err = dmabuf_reg_add(reg_fd, (uint64_t)base, size, fd);
-		ret = err ? err : fd;
+		/*
+		 * The region is already covered by an entry in the registry,
+		 * add a reference to it.
+		 */
+		err = dmabuf_reg_add(fab->dmabuf_reg_fd, mr->base, mr->size, fd);
+		if (!err)
+			mr->fd = fd;
 		break;
 
 	default:
+		/*
+		 * Error happened: range overflow, range conflict with existing
+		 * entries, or I/O error.
+		 */
 		break;
 	}
 
+out_unlock:
+	ofi_mutex_unlock(&fab->mutex);
+
 out:
-	return ret;
+	return;
+}
+
+static void release_mr_fd(struct dmabuf_peer_mem_mr *mr)
+{
+	int fd;
+	int err;
+	struct dmabuf_peer_mem_fabric *fab;
+
+	fab = container_of(mr->mr_hook.domain->fabric,
+			   struct dmabuf_peer_mem_fabric, fabric_hook);
+
+	if (mr->fd < 0)
+		return;
+
+	/*
+	 * Remove this MR's reference to the fd in the kernel registry. The
+	 * fd would be removed from the registry if the refcnt reaches 0.
+	 * In that case, the fd is no longer used by any MR and should be
+	 * closed.
+	 */
+	ofi_mutex_lock(&fab->mutex);
+	dmabuf_reg_remove(fab->dmabuf_reg_fd, mr->fd);
+	err = dmabuf_reg_query(fab->dmabuf_reg_fd, mr->base, mr->size, &fd);
+	if (err == -ENOENT) {
+		FI_INFO(fab->fabric_hook.hprov, FI_LOG_MR,
+			"Remove entry: base 0x%"PRIx64" size %"PRIu64" fd %d\n",
+			mr->base, mr->size, mr->fd);
+		close(mr->fd);
+	}
+	ofi_mutex_unlock(&fab->mutex);
 }
 
 static int hook_dmabuf_peer_mem_mr_close(struct fid *fid)
 {
 	struct dmabuf_peer_mem_mr *mr;
-	struct dmabuf_peer_mem_fabric *fab;
 
 	mr = container_of(fid, struct dmabuf_peer_mem_mr, mr_hook.mr.fid);
-	fab = container_of(mr->mr_hook.domain->fabric,
-			   struct dmabuf_peer_mem_fabric, fabric_hook);
 
-	if (mr->fd >= 0)
-		dmabuf_reg_remove(fab->dmabuf_reg_fd, mr->fd);
+	release_mr_fd(mr);
 
 	hook_close(fid);
 
@@ -181,7 +243,6 @@ static int hook_dmabuf_peer_mem_mr_regattr(struct fid *fid,
 					   uint64_t flags, struct fid_mr **mr)
 {
 	struct hook_domain *dom;
-	struct dmabuf_peer_mem_fabric *fab;
 	struct dmabuf_peer_mem_mr *mymr;
 	int ret;
 
@@ -190,21 +251,17 @@ static int hook_dmabuf_peer_mem_mr_regattr(struct fid *fid,
 		return -FI_ENOMEM;
 
 	dom = container_of(fid, struct hook_domain, domain.fid);
-	fab = container_of(dom->fabric, struct dmabuf_peer_mem_fabric,
-			   fabric_hook);
 
 	mymr->mr_hook.domain = dom;
 	mymr->mr_hook.mr.fid.fclass = FI_CLASS_MR;
 	mymr->mr_hook.mr.fid.context = attr->context;
 	mymr->mr_hook.mr.fid.ops = &dmabuf_peer_mem_mr_fid_ops;
 
-	mymr->fd = dmabuf_reg_add_iov(fab->dmabuf_reg_fd, attr->iov_count,
-				      attr->mr_iov);
+	get_mr_fd(mymr, attr->iov_count, attr->mr_iov);
 
 	ret = fi_mr_regattr(dom->hdomain, attr, flags, &mymr->mr_hook.hmr);
 	if (ret) {
-		if (mymr->fd >= 0)
-			dmabuf_reg_remove(fab->dmabuf_reg_fd, mymr->fd);
+		release_mr_fd(mymr);
 		free(mymr);
 	} else {
 		mymr->mr_hook.mr.mem_desc = mymr->mr_hook.hmr->mem_desc;
@@ -271,6 +328,7 @@ static int hook_dmabuf_peer_mem_fabric_close(struct fid *fid)
 
 	fab = container_of(fid, struct dmabuf_peer_mem_fabric, fabric_hook);
 	close(fab->dmabuf_reg_fd);
+	ofi_mutex_destroy(&fab->mutex);
 	hook_close(fid);
 
 	return FI_SUCCESS;
@@ -316,6 +374,7 @@ static int hook_dmabuf_peer_mem_fabric(struct fi_fabric_attr *attr,
 		return -FI_ENOMEM;
 	}
 
+	ofi_mutex_init(&fab->mutex);
 	fab->dmabuf_reg_fd = fd;
 	hook_fabric_init(&fab->fabric_hook, HOOK_DMABUF_PEER_MEM, attr->fabric,
 			 hprov, &dmabuf_peer_mem_fabric_fid_ops,
