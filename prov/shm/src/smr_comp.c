@@ -45,7 +45,7 @@ int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
 	if (!err && !(flags & FI_COMPLETION))
 		return 0;
 
-	return ep->tx_comp(ep, context, op, flags, err);
+	return ep->tx_comp(ep, context, op, err);
 }
 
 static int
@@ -100,19 +100,18 @@ smr_write_src_comp(struct util_cq *cq, void *context,
 	}
 }
 
-int smr_tx_comp(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, uint64_t err)
+int smr_tx_comp(struct smr_ep *ep, void *context, uint32_t op, uint64_t err)
 {
 	return smr_write_comp(ep->util_ep.tx_cq, context,
 			      ofi_tx_cq_flags(op), 0, NULL, 0, 0, err);
 }
 
 int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
-		       uint16_t flags, uint64_t err)
+		       uint64_t err)
 {
 	int ret;
 
-	ret = smr_tx_comp(ep, context, op, flags, err);
+	ret = smr_tx_comp(ep, context, op, err);
 	if (ret)
 		return ret;
 	ep->util_ep.tx_cq->wait->signal(ep->util_ep.tx_cq->wait);
