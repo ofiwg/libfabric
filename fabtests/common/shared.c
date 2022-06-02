@@ -2211,7 +2211,7 @@ ssize_t ft_post_rx_buf(struct fid_ep *ep, size_t size, void *ctx,
 			remote_fi_addr, op_tag, 0, ctx);
 	} else {
 		FT_POST(fi_recv, ft_progress, rxcq, rx_seq, &rx_cq_cntr,
-			"receive", ep, op_buf, size, op_mr_desc, 0, ctx);
+			"receive", ep, op_buf, size, op_mr_desc, remote_fi_addr, ctx);
 	}
 	return 0;
 }
