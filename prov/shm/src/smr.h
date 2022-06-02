@@ -154,7 +154,7 @@ typedef int (*smr_rx_comp_func)(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
 		uint64_t tag, uint64_t data, uint64_t err);
 typedef int (*smr_tx_comp_func)(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, uint64_t err);
+				uint64_t err);
 
 
 struct smr_match_attr {
@@ -338,9 +338,9 @@ extern smr_proto_func smr_proto_ops[smr_src_max];
 int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
 		uint64_t flags, uint64_t err);
 int smr_tx_comp(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, uint64_t err);
+		uint64_t err);
 int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, uint64_t err);
+		       uint64_t err);
 int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
 		uint16_t flags, size_t len, void *buf, int64_t id,
 		uint64_t tag, uint64_t data, uint64_t err);
