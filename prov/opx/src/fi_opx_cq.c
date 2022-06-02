@@ -278,8 +278,6 @@ int fi_opx_cq_open(struct fid_domain *dom,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_CQ, "cq opened\n");
 	return 0;
 err:
-	if(opx_cq)
-		free(opx_cq);
 	return -errno;
 }
 

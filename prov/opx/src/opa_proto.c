@@ -81,7 +81,7 @@ static int map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt)
 #define CREDITS_NUM     64
 	struct hfi1_ctxt_info *cinfo = &ctrl->ctxt_info;
 	struct hfi1_base_info *binfo = &ctrl->base_info;
-	size_t sz;
+	ssize_t sz;
 	__u64 off;
 	void *maddr;
 
@@ -90,6 +90,9 @@ static int map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt)
 	off = binfo->sc_credits_addr &~ HFI_MMAP_PGMASK;
 
 	sz = HFI_MMAP_PGSIZE;
+	if(sz < 0){
+		return -1;
+	}
 	maddr = HFI_MMAP_ERRCHECK(fd, binfo, sc_credits_addr, sz, PROT_READ);
 	opx_hfi_touch_mmap(maddr, sz);
 	arrsz[SC_CREDITS] = sz;
