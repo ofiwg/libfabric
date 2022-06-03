@@ -38,84 +38,13 @@
 #define TCPX_DEF_CQ_SIZE (1024)
 
 
-/*
- * Must hold lock protecting ep_list
- */
-void tcpx_progress(struct dlist_entry *ep_list, struct util_wait *wait)
-{
-	struct ofi_epollfds_event events[MAX_POLL_EVENTS];
-	struct fid_list_entry *fid_entry;
-	struct util_wait_fd *wait_fd;
-	struct dlist_entry *item;
-	struct tcpx_ep *ep;
-	struct fid *fid;
-	uint32_t inevent, outevent, errevent;
-	int nfds, i;
-
-	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
-
-	dlist_foreach(ep_list, item) {
-		fid_entry = container_of(item, struct fid_list_entry, entry);
-		ep = container_of(fid_entry->fid, struct tcpx_ep,
-				  util_ep.ep_fid.fid);
-
-		ofi_mutex_lock(&ep->lock);
-		/* We need to progress receives in the case where we're waiting
-		 * on the application to post a buffer to consume a receive
-		 * that we've already read from the kernel.  If the message is
-		 * of length 0, there's no additional data to read, so failing
-		 * to progress can result in application hangs.
-		 */
-		if (ofi_bsock_readable(&ep->bsock) ||
-		    (ep->cur_rx.handler && !ep->cur_rx.entry)) {
-			assert(ep->state == TCPX_CONNECTED);
-			tcpx_progress_rx(ep);
-		}
-
-		(void) tcpx_update_epoll(ep);
-		ofi_mutex_unlock(&ep->lock);
-	}
-
-	if (wait_fd->util_wait.wait_obj == FI_WAIT_FD) {
-		nfds = ofi_epoll_wait(wait_fd->epoll_fd, events,
-				      MAX_POLL_EVENTS, 0);
-		inevent = OFI_EPOLL_IN;
-		outevent = OFI_EPOLL_OUT;
-		errevent = OFI_EPOLL_ERR;
-	} else {
-		nfds = ofi_pollfds_wait(wait_fd->pollfds, events,
-					MAX_POLL_EVENTS, 0);
-		inevent = POLLIN;
-		outevent = POLLOUT;
-		errevent = POLLERR;
-	}
-	if (nfds <= 0)
-		return;
-
-	for (i = 0; i < nfds; i++) {
-		fid = events[i].data.ptr;
-		if (fid->fclass != FI_CLASS_EP) {
-			fd_signal_reset(&wait_fd->signal);
-			continue;
-		}
-
-		ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
-		ofi_mutex_lock(&ep->lock);
-		if (events[i].events & errevent)
-			tcpx_progress_async(ep);
-		if (events[i].events & inevent)
-			tcpx_progress_rx(ep);
-		if (events[i].events & outevent)
-			tcpx_progress_tx(ep);
-		ofi_mutex_unlock(&ep->lock);
-	}
-}
-
 void tcpx_cq_progress(struct util_cq *cq)
 {
-	ofi_mutex_lock(&cq->ep_list_lock);
-	tcpx_progress(&cq->ep_list, cq->wait);
-	ofi_mutex_unlock(&cq->ep_list_lock);
+	struct tcpx_fabric *fabric;
+
+	fabric = container_of(cq->domain->fabric, struct tcpx_fabric,
+			      util_fabric);
+	tcpx_run_progress(&fabric->progress, false);
 }
 
 static int tcpx_cq_close(struct fid *fid)
@@ -265,6 +194,7 @@ static struct fi_ops tcpx_cq_fi_ops = {
 int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
+	struct tcpx_fabric *fabric;
 	struct tcpx_cq *cq;
 	struct fi_cq_attr cq_attr;
 	int ret;
@@ -282,8 +212,7 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		goto free_cq;
 
-	if (attr->wait_obj == FI_WAIT_NONE ||
-	    attr->wait_obj == FI_WAIT_UNSPEC) {
+	if (attr->wait_obj == FI_WAIT_UNSPEC) {
 		cq_attr = *attr;
 		cq_attr.wait_obj = FI_WAIT_POLLFD;
 		attr = &cq_attr;
@@ -294,10 +223,20 @@ int tcpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		goto destroy_pool;
 
+	if (attr->wait_obj != FI_WAIT_NONE) {
+		fabric = container_of(cq->util_cq.domain->fabric,
+				      struct tcpx_fabric, util_fabric);
+		ret = tcpx_start_progress(&fabric->progress);
+		if (ret)
+			goto cleanup;
+	}
+
 	*cq_fid = &cq->util_cq.cq_fid;
 	(*cq_fid)->fid.ops = &tcpx_cq_fi_ops;
 	return 0;
 
+cleanup:
+	ofi_cq_cleanup(&cq->util_cq);
 destroy_pool:
 	ofi_bufpool_destroy(cq->xfer_pool);
 free_cq:
@@ -308,9 +247,11 @@ free_cq:
 
 void tcpx_cntr_progress(struct util_cntr *cntr)
 {
-	ofi_mutex_lock(&cntr->ep_list_lock);
-	tcpx_progress(&cntr->ep_list, cntr->wait);
-	ofi_mutex_unlock(&cntr->ep_list_lock);
+	struct tcpx_fabric *fabric;
+
+	fabric = container_of(cntr->domain->fabric, struct tcpx_fabric,
+			      util_fabric);
+	tcpx_run_progress(&fabric->progress, false);
 }
 
 static struct util_cntr *

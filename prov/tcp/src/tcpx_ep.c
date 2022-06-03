@@ -147,20 +147,22 @@ static int tcpx_setup_socket(SOCKET sock, struct fi_info *info)
 static int tcpx_ep_connect(struct fid_ep *ep_fid, const void *addr,
 			   const void *param, size_t paramlen)
 {
+	struct tcpx_progress *progress;
 	struct tcpx_ep *ep;
-	struct tcpx_cm_context *cm_ctx;
 	int ret;
 
+	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "connecting endpoint\n");
 	ep = container_of(ep_fid, struct tcpx_ep, util_ep.ep_fid);
 	if (!addr || (ep->bsock.sock == INVALID_SOCKET) ||
 	    (paramlen > TCPX_MAX_CM_DATA_SIZE) || (ep->state != TCPX_IDLE))
 		return -FI_EINVAL;
 
-	cm_ctx = tcpx_alloc_cm_ctx(&ep_fid->fid, TCPX_CM_CONNECTING);
-	if (!cm_ctx) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"cannot allocate memory\n");
-		return -FI_ENOMEM;
+	ep->cm_msg->hdr.version = TCPX_CTRL_HDR_VERSION;
+	ep->cm_msg->hdr.type = ofi_ctrl_connreq;
+	ep->cm_msg->hdr.conn_data = 1; /* tests endianess mismatch at peer */
+	if (paramlen) {
+		memcpy(ep->cm_msg->data, param, paramlen);
+		ep->cm_msg->hdr.seg_size = htons((uint16_t) paramlen);
 	}
 
 	ep->state = TCPX_CONNECTING;
@@ -168,74 +170,95 @@ static int tcpx_ep_connect(struct fid_ep *ep_fid, const void *addr,
 		      (socklen_t) ofi_sizeofaddr(addr));
 	if (ret && !OFI_SOCK_TRY_CONN_AGAIN(ofi_sockerr())) {
 		ep->state = TCPX_IDLE;
-		ret =  -ofi_sockerr();
+		ret = -ofi_sockerr();
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"connect failure %d(%s)\n", -ret, fi_strerror(-ret));
-		goto free;
+		return ret;
 	}
 
-	if (paramlen) {
-		cm_ctx->cm_data_sz = paramlen;
-		memcpy(cm_ctx->msg.data, param, paramlen);
-	}
-
-	ret = ofi_wait_add_fd(ep->util_ep.eq->wait, ep->bsock.sock,
-			      POLLOUT, tcpx_eq_wait_try_func, NULL, cm_ctx);
+	ep->pollout_set = true;
+	progress = tcpx_ep2_progress(ep);
+	ofi_mutex_lock(&progress->lock);
+	ret = tcpx_monitor_sock(progress, ep->bsock.sock, POLLOUT,
+				&ep->util_ep.ep_fid.fid);
+	ofi_mutex_unlock(&progress->lock);
 	if (ret)
 		goto disable;
 
 	return 0;
 
 disable:
+	ofi_mutex_lock(&progress->lock);
 	ofi_mutex_lock(&ep->lock);
 	tcpx_ep_disable(ep, -ret, NULL, 0);
 	ofi_mutex_unlock(&ep->lock);
-free:
-	tcpx_free_cm_ctx(cm_ctx);
+	ofi_mutex_unlock(&progress->lock);
 	return ret;
 }
 
 static int
 tcpx_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 {
+	struct tcpx_progress *progress;
 	struct tcpx_ep *ep;
-	struct tcpx_cm_context *cm_ctx;
-	struct tcpx_conn_handle *handle;
+	struct tcpx_conn_handle *conn;
+	struct fi_eq_cm_entry cm_entry;
 	int ret;
 
+	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "accepting endpoint connection\n");
 	ep = container_of(ep_fid, struct tcpx_ep, util_ep.ep_fid);
-	handle = ep->handle;
-	if (ep->bsock.sock == INVALID_SOCKET || ep->state != TCPX_RCVD_REQ ||
-	    !handle || (handle->fid.fclass != FI_CLASS_CONNREQ))
+	conn = ep->conn;
+	if (ep->bsock.sock == INVALID_SOCKET || ep->state != TCPX_ACCEPTING ||
+	    !conn || (conn->fid.fclass != FI_CLASS_CONNREQ) ||
+	    (paramlen > TCPX_MAX_CM_DATA_SIZE))
 		return -FI_EINVAL;
 
-	ep->handle = NULL;
-	cm_ctx = tcpx_alloc_cm_ctx(&ep->util_ep.ep_fid.fid, TCPX_CM_RESP_READY);
-	if (!cm_ctx) {
-		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
-			"cannot allocate memory \n");
-		return -FI_ENOMEM;
-	}
+	ep->conn = NULL;
 
-	ep->state = TCPX_ACCEPTING;
-
+	assert(ep->cm_msg);
+	ep->cm_msg->hdr.version = TCPX_CTRL_HDR_VERSION;
+	ep->cm_msg->hdr.type = ofi_ctrl_connresp;
+	ep->cm_msg->hdr.conn_data = 1; /* tests endianess mismatch at peer */
 	if (paramlen) {
-		cm_ctx->cm_data_sz = paramlen;
-		memcpy(cm_ctx->msg.data, param, paramlen);
+		memcpy(ep->cm_msg->data, param, paramlen);
+		ep->cm_msg->hdr.seg_size = htons((uint16_t) paramlen);
 	}
 
-	ret = ofi_wait_add_fd(ep->util_ep.eq->wait, ep->bsock.sock,
-			      POLLOUT, tcpx_eq_wait_try_func, NULL, cm_ctx);
+	ret = tcpx_send_cm_msg(ep);
 	if (ret)
-		goto free;
+		return ret;
 
-	free(handle);
+	free(ep->cm_msg);
+	ep->cm_msg = NULL;
+	ep->state = TCPX_CONNECTED;
+
+	progress = tcpx_ep2_progress(ep);
+	ofi_mutex_lock(&progress->lock);
+	ofi_mutex_lock(&ep->lock);
+	ret = tcpx_monitor_sock(progress, ep->bsock.sock, POLLIN,
+				&ep->util_ep.ep_fid.fid);
+	if (!ret && tcpx_active_wait(ep)) {
+		dlist_insert_tail(&ep->progress_entry,
+				  &progress->active_wait_list);
+		fd_signal_set(&progress->signal);
+	}
+	ofi_mutex_unlock(&ep->lock);
+	ofi_mutex_unlock(&progress->lock);
+	if (ret)
+		return ret;
+
+	cm_entry.fid = &ep->util_ep.ep_fid.fid;
+	cm_entry.info = NULL;
+	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, &cm_entry,
+				sizeof(cm_entry), 0);
+	if (ret < 0) {
+		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
+		return ret;
+	}
+
+	/* Only free conn on success; on failure, app may try to reject */
+	free(conn);
 	return 0;
-
-free:
-	ep->state = TCPX_RCVD_REQ;
-	tcpx_free_cm_ctx(cm_ctx);
-	return ret;
 }
 
 /* must hold ep->lock */
@@ -287,42 +310,23 @@ static void tcpx_ep_flush_all_queues(struct tcpx_ep *ep)
 void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err, void* err_data,
                      size_t err_data_size)
 {
-	struct util_wait_fd *wait;
 	struct fi_eq_cm_entry cm_entry = {0};
 	struct fi_eq_err_entry err_entry = {0};
 	int ret;
 
+	assert(ofi_mutex_held(&tcpx_ep2_progress(ep)->lock));
 	assert(ofi_mutex_held(&ep->lock));
 	switch (ep->state) {
-	case TCPX_RCVD_REQ:
-		break;
-	case TCPX_CONNECTED:
-		/* We need to remove the socket from the CQ's fdset,
-		 * or the CQ will be left in a 'signaled' state.  This
-		 * can result in threads spinning on the CQs fdset.
-		 */
-		if (ep->util_ep.tx_cq) {
-			wait = container_of(ep->util_ep.tx_cq->wait,
-					    struct util_wait_fd, util_wait);
-			ofi_wait_fdset_del(wait, ep->bsock.sock);
-		}
-
-		if (ep->util_ep.rx_cq) {
-			wait = container_of(ep->util_ep.rx_cq->wait,
-					    struct util_wait_fd, util_wait);
-			ofi_wait_fdset_del(wait, ep->bsock.sock);
-		}
-		/* fall through */
-	case TCPX_ACCEPTING:
 	case TCPX_CONNECTING:
-		wait = container_of(ep->util_ep.eq->wait,
-				    struct util_wait_fd, util_wait);
-		ofi_wait_fdset_del(wait, ep->bsock.sock);
+	case TCPX_REQ_SENT:
+	case TCPX_CONNECTED:
 		break;
-
 	default:
 		return;
-	}
+	};
+
+	dlist_remove_init(&ep->progress_entry);
+	tcpx_halt_sock(tcpx_ep2_progress(ep), ep->bsock.sock);
 
 	ret = ofi_shutdown(ep->bsock.sock, SHUT_RDWR);
 	if (ret && ofi_sockerr() != ENOTCONN)
@@ -352,14 +356,18 @@ void tcpx_ep_disable(struct tcpx_ep *ep, int cm_err, void* err_data,
 
 static int tcpx_ep_shutdown(struct fid_ep *ep_fid, uint64_t flags)
 {
+	struct tcpx_progress *progress;
 	struct tcpx_ep *ep;
 
 	ep = container_of(ep_fid, struct tcpx_ep, util_ep.ep_fid);
 	(void) ofi_bsock_flush(&ep->bsock);
 
+	progress = tcpx_ep2_progress(ep);
+	ofi_mutex_lock(&progress->lock);
 	ofi_mutex_lock(&ep->lock);
 	tcpx_ep_disable(ep, 0, NULL, 0);
 	ofi_mutex_unlock(&ep->lock);
+	ofi_mutex_unlock(&progress->lock);
 
 	return FI_SUCCESS;
 }
@@ -553,59 +561,18 @@ static ssize_t tcpx_ep_cancel(fid_t fid, void *context)
 	return 0;
 }
 
-/* Hold progress lock around removing ep from progress list and
- * removing the socket from the pollfd set to ensure that all
- * progress is halted at once and we don't pick up any data.
- */
-#define tcpx_halt_progress(ep, comp_obj)				\
-	do {								\
-		if (comp_obj) {						\
-			ofi_mutex_lock(&comp_obj->ep_list_lock);	\
-			fid_list_remove(&comp_obj->ep_list, NULL,	\
-					&ep->util_ep.ep_fid.fid);	\
-			ofi_wait_del_fd(comp_obj->wait, ep->bsock.sock);\
-			ofi_mutex_unlock(&comp_obj->ep_list_lock);	\
-			ofi_atomic_dec32(&comp_obj->ref);		\
-		}							\
-	} while (0)
-
-static void tcpx_ep_halt(struct tcpx_ep *ep)
-{
-	struct tcpx_eq *eq;
-
-	eq = ep->util_ep.eq ?
-	     container_of(ep->util_ep.eq, struct tcpx_eq, util_eq) : NULL;
-
-	/* eq->close_lock protects from processing stale connection events */
-	if (eq)
-		ofi_mutex_lock(&eq->close_lock);
-
-	tcpx_halt_progress(ep, ep->util_ep.rx_cq);
-	tcpx_halt_progress(ep, ep->util_ep.tx_cq);
-	tcpx_halt_progress(ep, ep->util_ep.rx_cntr);
-	tcpx_halt_progress(ep, ep->util_ep.tx_cntr);
-	tcpx_halt_progress(ep, ep->util_ep.wr_cntr);
-	tcpx_halt_progress(ep, ep->util_ep.rd_cntr);
-	tcpx_halt_progress(ep, ep->util_ep.rem_wr_cntr);
-	tcpx_halt_progress(ep, ep->util_ep.rem_rd_cntr);
-
-	/* There's no ep_list with an EQ.  We only need to remove the
-	 * socket from the pollfd set to disable progress.
-	 */
-	if (ep->util_ep.eq && ep->util_ep.eq->wait)
-		ofi_wait_del_fd(ep->util_ep.eq->wait, ep->bsock.sock);
-
-	if (eq)
-		ofi_mutex_unlock(&eq->close_lock);
-}
-
 static int tcpx_ep_close(struct fid *fid)
 {
+	struct tcpx_progress *progress;
 	struct tcpx_ep *ep;
 
 	ep = container_of(fid, struct tcpx_ep, util_ep.ep_fid.fid);
 
-	tcpx_ep_halt(ep);
+	progress = tcpx_ep2_progress(ep);
+	ofi_mutex_lock(&progress->lock);
+	dlist_remove_init(&ep->progress_entry);
+	tcpx_halt_sock(progress, ep->bsock.sock);
+	ofi_mutex_unlock(&progress->lock);
 
 	/* Lock not technically needed, since we're freeing the EP.  But it's
 	 * harmless to acquire and silences static code analysis tools.
@@ -617,14 +584,29 @@ static int tcpx_ep_close(struct fid *fid)
 	if (ep->util_ep.eq) {
 		ofi_eq_remove_fid_events(ep->util_ep.eq,
 					 &ep->util_ep.ep_fid.fid);
+		ofi_atomic_dec32(&ep->util_ep.eq->ref);
 	}
 
-	if (ep->fid && ep->fid->fclass == TCPX_CLASS_CM)
-		tcpx_free_cm_ctx(ep->cm_ctx);
-
+	free(ep->cm_msg);
 	ofi_close_socket(ep->bsock.sock);
-	if (ep->util_ep.eq)
-		ofi_atomic_dec32(&ep->util_ep.eq->ref);
+
+	if (ep->util_ep.rx_cq)
+		ofi_atomic_dec32(&ep->util_ep.rx_cq->ref);
+	if (ep->util_ep.tx_cq)
+		ofi_atomic_dec32(&ep->util_ep.tx_cq->ref);
+	if (ep->util_ep.rx_cntr)
+		ofi_atomic_dec32(&ep->util_ep.rx_cntr->ref);
+	if (ep->util_ep.tx_cntr)
+		ofi_atomic_dec32(&ep->util_ep.tx_cntr->ref);
+	if (ep->util_ep.wr_cntr)
+		ofi_atomic_dec32(&ep->util_ep.wr_cntr->ref);
+	if (ep->util_ep.rd_cntr)
+		ofi_atomic_dec32(&ep->util_ep.rd_cntr->ref);
+	if (ep->util_ep.rem_wr_cntr)
+		ofi_atomic_dec32(&ep->util_ep.rem_wr_cntr->ref);
+	if (ep->util_ep.rem_rd_cntr)
+		ofi_atomic_dec32(&ep->util_ep.rem_rd_cntr->ref);
+
 	ofi_atomic_dec32(&ep->util_ep.domain->ref);
 	ofi_mutex_destroy(&ep->util_ep.lock);
 	ofi_mutex_destroy(&ep->lock);
@@ -763,7 +745,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 {
 	struct tcpx_ep *ep;
 	struct tcpx_pep *pep;
-	struct tcpx_conn_handle *handle;
+	struct tcpx_conn_handle *conn;
 	int ret;
 
 	ep = calloc(1, sizeof(*ep));
@@ -785,18 +767,18 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 			ep->bsock.sock = pep->sock;
 			pep->sock = INVALID_SOCKET;
 		} else {
-			ep->state = TCPX_RCVD_REQ;
-			handle = container_of(info->handle,
-					      struct tcpx_conn_handle, fid);
+			ep->state = TCPX_ACCEPTING;
+			conn = container_of(info->handle,
+					    struct tcpx_conn_handle, fid);
 			/* EP now owns socket */
-			ep->bsock.sock = handle->sock;
-			handle->sock = INVALID_SOCKET;
-			ep->hdr_bswap = handle->endian_match ?
+			ep->bsock.sock = conn->sock;
+			conn->sock = INVALID_SOCKET;
+			ep->hdr_bswap = conn->endian_match ?
 					tcpx_hdr_none : tcpx_hdr_bswap;
 			/* Save handle, but we only free if user calls accept.
 			 * Otherwise, user will call reject, which will free it.
 			 */
-			ep->handle = handle;
+			ep->conn = conn;
 
 			ret = tcpx_setup_socket(ep->bsock.sock, info);
 			if (ret)
@@ -836,6 +818,12 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err3;
 
+	ep->cm_msg = calloc(1, sizeof(*ep->cm_msg));
+	if (!ep->cm_msg) {
+		ret = -FI_ENOMEM;
+		goto err4;
+	}
+
 	dlist_init(&ep->progress_entry);
 	slist_init(&ep->rx_queue);
 	slist_init(&ep->tx_queue);
@@ -862,6 +850,9 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->tagged = &tcpx_tagged_ops;
 
 	return 0;
+
+err4:
+	ofi_mutex_destroy(&ep->lock);
 err3:
 	ofi_close_socket(ep->bsock.sock);
 err2:
@@ -873,12 +864,22 @@ err1:
 
 static int tcpx_pep_fi_close(struct fid *fid)
 {
+	struct tcpx_progress *progress;
 	struct tcpx_pep *pep;
 
 	pep = container_of(fid, struct tcpx_pep, util_pep.pep_fid.fid);
+	/* TODO: We need to abort any outstanding active connection requests.
+	 * The tcpx_conn_handle points back to the pep and will dereference
+	 * the freed memory if we continue.
+	 */
 
-	if (pep->state == TCPX_LISTENING)
-		tcpx_halt_pep(pep);
+	if (pep->state == TCPX_LISTENING) {
+		progress = tcpx_pep2_progress(pep);
+		ofi_mutex_lock(&progress->lock);
+		tcpx_halt_sock(progress, pep->sock);
+		ofi_mutex_unlock(&progress->lock);
+	}
+
 	ofi_close_socket(pep->sock);
 	ofi_pep_close(&pep->util_pep);
 	fi_freeinfo(pep->info);
@@ -957,6 +958,7 @@ static int tcpx_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 
 static int tcpx_pep_listen(struct fid_pep *pep_fid)
 {
+	struct tcpx_progress *progress;
 	struct tcpx_pep *pep;
 	int ret;
 
@@ -974,9 +976,14 @@ static int tcpx_pep_listen(struct fid_pep *pep_fid)
 		return -ofi_sockerr();
 	}
 
-	ret = tcpx_monitor_pep(pep);
+	progress = tcpx_pep2_progress(pep);
+	ofi_mutex_lock(&progress->lock);
+	ret = tcpx_monitor_sock(progress, pep->sock, POLLIN,
+				&pep->util_pep.pep_fid.fid);
+	ofi_mutex_unlock(&progress->lock);
 	if (!ret)
 		pep->state = TCPX_LISTENING;
+
 	return ret;
 }
 
@@ -984,13 +991,14 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t fid_handle,
 			   const void *param, size_t paramlen)
 {
 	struct tcpx_cm_msg msg;
-	struct tcpx_conn_handle *handle;
+	struct tcpx_conn_handle *conn;
 	ssize_t size_ret;
 	int ret;
 
-	handle = container_of(fid_handle, struct tcpx_conn_handle, fid);
+	FI_DBG(&tcpx_prov, FI_LOG_EP_CTRL, "rejecting connection");
+	conn = container_of(fid_handle, struct tcpx_conn_handle, fid);
 	/* If we created an endpoint, it owns the socket */
-	if (handle->sock == INVALID_SOCKET)
+	if (conn->sock == INVALID_SOCKET)
 		goto free;
 
 	memset(&msg.hdr, 0, sizeof(msg.hdr));
@@ -1000,19 +1008,19 @@ static int tcpx_pep_reject(struct fid_pep *pep, fid_t fid_handle,
 	if (paramlen)
 		memcpy(&msg.data, param, paramlen);
 
-	size_ret = ofi_send_socket(handle->sock, &msg,
+	size_ret = ofi_send_socket(conn->sock, &msg,
 				   sizeof(msg.hdr) + paramlen, MSG_NOSIGNAL);
 	if ((size_t) size_ret != sizeof(msg.hdr) + paramlen)
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"sending of reject message failed\n");
 
-	ofi_shutdown(handle->sock, SHUT_RDWR);
-	ret = ofi_close_socket(handle->sock);
+	ofi_shutdown(conn->sock, SHUT_RDWR);
+	ret = ofi_close_socket(conn->sock);
 	if (ret)
 		return ret;
 
 free:
-	free(handle);
+	free(conn);
 	return FI_SUCCESS;
 }
 

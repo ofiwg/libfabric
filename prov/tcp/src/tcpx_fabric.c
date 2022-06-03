@@ -47,7 +47,7 @@ struct fi_ops_fabric tcpx_fabric_ops = {
 	.passive_ep = tcpx_passive_ep,
 	.eq_open = tcpx_eq_create,
 	.wait_open = ofi_wait_fd_open,
-	.trywait = ofi_trywait
+	.trywait = tcpx_trywait,
 };
 
 static int tcpx_fabric_close(fid_t fid)

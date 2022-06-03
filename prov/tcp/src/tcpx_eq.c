@@ -45,8 +45,6 @@ static ssize_t tcpx_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 	fabric = container_of(eq->fabric, struct tcpx_fabric, util_fabric);
 
 	tcpx_run_progress(&fabric->progress, false);
-	tcpx_conn_mgr_run(eq);
-
 	return ofi_eq_read(eq_fid, event, buf, len, flags);
 }
 
@@ -88,8 +86,6 @@ int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 {
 	struct tcpx_fabric *fabric;
 	struct tcpx_eq *eq;
-	struct fi_wait_attr wait_attr;
-	struct fid_wait *wait;
 	int ret;
 
 	fabric = container_of(fabric_fid, struct tcpx_fabric, util_fabric);
@@ -111,20 +107,6 @@ int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 	eq->util_eq.eq_fid.ops	= &tcpx_eq_ops;
 	eq->util_eq.eq_fid.fid.ops = &tcpx_eq_fi_ops;
 
-	if (!eq->util_eq.wait) {
-		memset(&wait_attr, 0, sizeof wait_attr);
-		wait_attr.wait_obj = FI_WAIT_POLLFD;
-		ret = fi_wait_open(fabric_fid, &wait_attr, &wait);
-		if (ret) {
-			FI_WARN(&tcpx_prov, FI_LOG_EQ,
-				"opening wait failed\n");
-			goto err3;
-		}
-		eq->util_eq.internal_wait = 1;
-		eq->util_eq.wait = container_of(wait, struct util_wait,
-					wait_fid);
-	}
-
 	if (attr->wait_obj != FI_WAIT_NONE) {
 		ret = tcpx_start_progress(&fabric->progress);
 		if (ret)
@@ -133,6 +115,7 @@ int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 
 	*eq_fid = &eq->util_eq.eq_fid;
 	return 0;
+
 err3:
 	ofi_mutex_destroy(&eq->close_lock);
 err2:

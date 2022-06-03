@@ -66,8 +66,6 @@
 
 #define TCPX_MAX_INJECT		128
 #define TCPX_MAX_EVENTS		1024
-#define MAX_POLL_EVENTS		100
-#define TCPX_SLEEP		2000
 #define TCPX_MIN_MULTI_RECV	16384
 #define TCPX_PORT_MAX_RANGE	(USHRT_MAX)
 
@@ -159,21 +157,11 @@ struct tcpx_tag_data_hdr {
  */
 
 
-enum tcpx_cm_state {
-	TCPX_CM_LISTENING,
-	TCPX_CM_CONNECTING,
-	TCPX_CM_WAIT_REQ,
-	TCPX_CM_REQ_SENT,
-	TCPX_CM_REQ_RVCD,
-	TCPX_CM_RESP_READY,
-	/* CM context is freed once connected */
-};
-
 enum tcpx_state {
 	TCPX_IDLE,
 	TCPX_CONNECTING,
-	TCPX_RCVD_REQ,
 	TCPX_ACCEPTING,
+	TCPX_REQ_SENT,
 	TCPX_CONNECTED,
 	TCPX_DISCONNECTED,
 	TCPX_LISTENING,
@@ -184,17 +172,6 @@ enum {
 	TCPX_CLASS_CM = OFI_PROV_SPECIFIC_TCP,
 	TCPX_CLASS_PROGRESS,
 };
-
-struct tcpx_cm_context {
-	struct fid		fid;
-	struct fid		*hfid;
-	enum tcpx_cm_state	state;
-	size_t			cm_data_sz;
-	struct tcpx_cm_msg	msg;
-};
-
-struct tcpx_cm_context *tcpx_alloc_cm_ctx(fid_t fid, enum tcpx_cm_state state);
-void tcpx_free_cm_ctx(struct tcpx_cm_context *cm_ctx);
 
 struct tcpx_port_range {
 	int high;
@@ -215,7 +192,10 @@ struct tcpx_pep {
 	enum tcpx_state		state;
 };
 
-void tcpx_accept(struct tcpx_pep *pep);
+void tcpx_accept_sock(struct tcpx_pep *pep);
+void tcpx_connect_done(struct tcpx_ep *ep);
+void tcpx_req_done(struct tcpx_ep *ep);
+int tcpx_send_cm_msg(struct tcpx_ep *ep);
 
 struct tcpx_cur_rx {
 	union {
@@ -271,13 +251,11 @@ struct tcpx_ep {
 	struct slist		rma_read_queue;
 	int			rx_avail;
 	struct tcpx_rx_ctx	*srx_ctx;
+
 	enum tcpx_state		state;
 	fi_addr_t		src_addr;
-	union {
-		struct fid		*fid;
-		struct tcpx_cm_context	*cm_ctx;
-		struct tcpx_conn_handle *handle;
-	};
+	struct tcpx_conn_handle *conn;
+	struct tcpx_cm_msg	*cm_msg;
 
 	/* lock for protecting tx/rx queues, rma list, state*/
 	ofi_mutex_t		lock;
@@ -290,7 +268,7 @@ struct tcpx_ep {
 
 struct tcpx_progress {
 	struct fid		fid;
-	ofi_mutex_t		lock;
+	ofi_mutex_t		lock; /* acquire before all other locks */
 	struct dlist_entry	ep_list;
 	struct dlist_entry	active_wait_list;
 
@@ -307,18 +285,13 @@ int tcpx_start_progress(struct tcpx_progress *progress);
 void tcpx_stop_progress(struct tcpx_progress *progress);
 
 void tcpx_run_progress(struct tcpx_progress *progress, bool internal);
-void tcpx_run_ep(struct tcpx_ep *ep, bool pin, bool pout, bool perr);
 void tcpx_run_conn(struct tcpx_conn_handle *conn, bool pin, bool pout, bool perr);
 
-int tcpx_trywait(struct tcpx_progress *progress);
+int tcpx_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 void tcpx_update_poll(struct tcpx_ep *ep);
-
-int tcpx_monitor_ep(struct tcpx_ep *ep, uint32_t events);
-void tcpx_halt_ep(struct tcpx_ep *ep);
-int tcpx_monitor_pep(struct tcpx_pep *pep);
-void tcpx_halt_pep(struct tcpx_pep *pep);
-int tcpx_monitor_conn(struct tcpx_conn_handle *conn);
-void tcpx_halt_conn(struct tcpx_conn_handle *conn);
+int tcpx_monitor_sock(struct tcpx_progress *progress, SOCKET sock,
+		      uint32_t events, struct fid *fid);
+void tcpx_halt_sock(struct tcpx_progress *progress, SOCKET sock);
 
 
 struct tcpx_fabric {
@@ -444,11 +417,8 @@ void tcpx_cntr_incerr(struct tcpx_ep *ep, struct tcpx_xfer_entry *xfer_entry);
 
 void tcpx_reset_rx(struct tcpx_ep *ep);
 
-void tcpx_progress_tx(struct tcpx_ep *ep);
 void tcpx_progress_rx(struct tcpx_ep *ep);
 void tcpx_progress_async(struct tcpx_ep *ep);
-int tcpx_try_func(void *util_ep);
-int tcpx_update_epoll(struct tcpx_ep *ep);
 
 void tcpx_hdr_none(struct tcpx_base_hdr *hdr);
 void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr);
@@ -456,8 +426,6 @@ void tcpx_hdr_bswap(struct tcpx_base_hdr *hdr);
 void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 			  struct tcpx_xfer_entry *tx_entry);
 
-void tcpx_conn_mgr_run(struct util_eq *eq);
-int tcpx_eq_wait_try_func(void *arg);
 int tcpx_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		   struct fid_eq **eq_fid, void *context);
 
@@ -580,6 +548,31 @@ tcpx_free_tx(struct tcpx_xfer_entry *xfer)
 	struct tcpx_cq *cq;
 	cq = container_of(xfer->ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 	tcpx_free_xfer(cq, xfer);
+}
+
+static inline void
+tcpx_queue_send(struct tcpx_ep *ep, struct tcpx_xfer_entry *tx_entry)
+{
+	ofi_mutex_lock(&tcpx_ep2_progress(ep)->lock);
+	ofi_mutex_lock(&ep->lock);
+	tcpx_tx_queue_insert(ep, tx_entry);
+	ofi_mutex_unlock(&ep->lock);
+	ofi_mutex_unlock(&tcpx_ep2_progress(ep)->lock);
+}
+
+/* If we've buffered receive data, it counts the same as if a POLLIN
+ * event were set, and we need to process the data.
+ * We also need to progress receives in the case where we're waiting
+ * on the application to post a buffer to consume a receive
+ * that we've already read from the kernel.  If the message is
+ * of length 0, there's no additional data to read, so calling
+ * poll without forcing progress can result in application hangs.
+ */
+static inline bool tcpx_active_wait(struct tcpx_ep *ep)
+{
+	assert(ofi_mutex_held(&ep->lock));
+	return ofi_bsock_readable(&ep->bsock) ||
+	       (ep->cur_rx.handler && !ep->cur_rx.entry);
 }
 
 #endif //_TCP_H_

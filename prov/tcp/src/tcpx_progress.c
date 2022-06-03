@@ -102,7 +102,7 @@ static ssize_t tcpx_recv_msg_data(struct tcpx_ep *ep)
 	return -FI_EAGAIN;
 }
 
-void tcpx_progress_tx(struct tcpx_ep *ep)
+static void tcpx_progress_tx(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *tx_entry;
 	struct tcpx_cq *cq;
@@ -112,7 +112,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 	while (ep->cur_tx.entry) {
 		ret = tcpx_send_msg(ep);
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-			return;
+			goto update;
 
 		tx_entry = ep->cur_tx.entry;
 		cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
@@ -167,6 +167,8 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 	 * have other data to send, we need to try flushing any buffered data.
 	 */
 	(void) ofi_bsock_flush(&ep->bsock);
+update:
+	tcpx_update_poll(ep);
 }
 
 static int tcpx_queue_ack(struct tcpx_xfer_entry *rx_entry)
@@ -693,9 +695,6 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 	ssize_t ret;
 
 	assert(ofi_mutex_held(&ep->lock));
-	if (ep->state != TCPX_CONNECTED)
-		return;
-
 	do {
 		if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
 			ret = tcpx_recv_hdr(ep);
@@ -705,8 +704,12 @@ void tcpx_progress_rx(struct tcpx_ep *ep)
 
 	} while (!ret && ofi_bsock_readable(&ep->bsock));
 
-	if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+	if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret)) {
 		tcpx_ep_disable(ep, 0, NULL, 0);
+	} else if (tcpx_active_wait(ep) && dlist_empty(&ep->progress_entry)) {
+		dlist_insert_tail(&ep->progress_entry,
+				  &tcpx_ep2_progress(ep)->active_wait_list);
+	}
 }
 
 void tcpx_progress_async(struct tcpx_ep *ep)
@@ -715,9 +718,6 @@ void tcpx_progress_async(struct tcpx_ep *ep)
 	uint32_t done;
 
 	assert(ofi_mutex_held(&ep->lock));
-	if (ep->state != TCPX_CONNECTED)
-		return;
-
 	done = ofi_bsock_async_done(&tcpx_prov, &ep->bsock);
 	while (!slist_empty(&ep->async_queue)) {
 		xfer = container_of(ep->async_queue.head,
@@ -736,90 +736,11 @@ static bool tcpx_tx_pending(struct tcpx_ep *ep)
 	return ep->cur_tx.entry || ofi_bsock_tosend(&ep->bsock);
 }
 
-static int tcpx_mod_epoll(struct tcpx_ep *ep, struct util_wait_fd *wait_fd)
-{
-	uint32_t events;
-	int ret;
-
-	assert(ofi_mutex_held(&ep->lock));
-	if (ep->pollout_set) {
-		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
-			 (OFI_EPOLL_IN | OFI_EPOLL_OUT) : (POLLIN | POLLOUT);
-	} else {
-		events = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
-			 OFI_EPOLL_IN : POLLIN;
-	}
-
-	ret = (wait_fd->util_wait.wait_obj == FI_WAIT_FD) ?
-	      ofi_epoll_mod(wait_fd->epoll_fd, ep->bsock.sock, events,
-			    &ep->util_ep.ep_fid.fid) :
-	      ofi_pollfds_mod(wait_fd->pollfds, ep->bsock.sock, events,
-			      &ep->util_ep.ep_fid.fid);
-	if (ret)
-		FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
-			"epoll modify failed\n");
-
-	return ret;
-}
-
-/* We may need to send data in response to received requests,
- * such as delivery complete acks or RMA read responses.  So,
- * even if this is the Rx CQ, we need to progress transmits.
- * We also need to keep the rx and tx epoll wait fd's in sync,
- * such that we ask for POLLOUT on both or neither.  This is
- * required in case they share the same wait set and underlying
- * epoll fd.  So we only maintain a single pollout_set state
- * variable rather than trying to track them independently.
- * The latter does not work if the epoll fd behind the tx
- * and rx CQs is the same fd.
- */
-int tcpx_update_epoll(struct tcpx_ep *ep)
-{
-	struct util_wait_fd *rx_wait, *tx_wait;
-	int ret;
-
-	assert(ofi_mutex_held(&ep->lock));
-	if ((tcpx_tx_pending(ep) && ep->pollout_set) ||
-	    (!tcpx_tx_pending(ep) && !ep->pollout_set))
-		return FI_SUCCESS;
-
-	rx_wait = ep->util_ep.rx_cq ?
-		  container_of(ep->util_ep.rx_cq->wait,
-		  	       struct util_wait_fd, util_wait) : NULL;
-	tx_wait = ep->util_ep.tx_cq ?
-		  container_of(ep->util_ep.tx_cq->wait,
-		  	       struct util_wait_fd, util_wait) : NULL;
-
-	ep->pollout_set = tcpx_tx_pending(ep);
-	ret = tcpx_mod_epoll(ep, rx_wait);
-	if (!ret && rx_wait != tx_wait)
-		ret = tcpx_mod_epoll(ep, tx_wait);
-
-	if (ret)
-		ep->pollout_set = false;
-	return ret;
-}
-
-int tcpx_try_func(void *util_ep)
-{
-	struct tcpx_ep *ep;
-	int ret;
-
-	ep = container_of(util_ep, struct tcpx_ep, util_ep);
-	ofi_mutex_lock(&ep->lock);
-	if (ofi_bsock_readable(&ep->bsock)) {
-		ret = -FI_EAGAIN;
-	} else {
-		ret = tcpx_update_epoll(ep);
-	}
-	ofi_mutex_unlock(&ep->lock);
-	return ret;
-}
-
 void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 			  struct tcpx_xfer_entry *tx_entry)
 {
-	struct util_wait *rx_wait, *tx_wait;
+	assert(ofi_mutex_held(&tcpx_ep2_progress(ep)->lock));
+	assert(ofi_mutex_held(&ep->lock));
 
 	if (!ep->cur_tx.entry) {
 		ep->cur_tx.entry = tx_entry;
@@ -827,18 +748,6 @@ void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 		OFI_DBG_SET(tx_entry->hdr.base_hdr.id, ep->tx_id++);
 		ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 		tcpx_progress_tx(ep);
-
-		/* Wake-up blocked threads if they need to add POLLOUT to
-		 * their events to monitor for this socket.
-		 */
-		tx_wait = ep->util_ep.tx_cq->wait;
-		rx_wait = ep->util_ep.rx_cq->wait;
-		if (ep->cur_tx.entry) {
-			if (tx_wait)
-				tx_wait->signal(tx_wait);
-			if (rx_wait && rx_wait != tx_wait)
-				rx_wait->signal(rx_wait);
-		}
 	} else if (tx_entry->ctrl_flags & TCPX_INTERNAL_XFER) {
 		slist_insert_tail(&tx_entry->entry, &ep->priority_queue);
 	} else {
@@ -854,28 +763,27 @@ static ssize_t (*tcpx_start_op[ofi_op_write + 1])(struct tcpx_ep *ep) = {
 	[ofi_op_write] = tcpx_op_write,
 };
 
-
-/* We need to progress receives in the case where we're waiting
- * on the application to post a buffer to consume a receive
- * that we've already read from the kernel.  If the message is
- * of length 0, there's no additional data to read, so calling
- * poll without forcing progress can result in application hangs.
- */
-static bool tcpx_active_wait(struct tcpx_ep *ep)
-{
-	return ofi_bsock_readable(&ep->bsock) ||
-	       (ep->cur_rx.handler && !ep->cur_rx.entry);
-}
-
 void tcpx_run_ep(struct tcpx_ep *ep, bool pin, bool pout, bool perr)
 {
 	ofi_mutex_lock(&ep->lock);
-	if (perr)
-		tcpx_progress_async(ep);
-	if (pin)
-		tcpx_progress_rx(ep);
-	if (pout)
-		tcpx_progress_tx(ep);
+	switch (ep->state) {
+	case TCPX_CONNECTED:
+		if (perr)
+			tcpx_progress_async(ep);
+		if (pin)
+			tcpx_progress_rx(ep);
+		if (pout)
+			tcpx_progress_tx(ep);
+		break;
+	case TCPX_CONNECTING:
+		tcpx_connect_done(ep);
+		break;
+	case TCPX_REQ_SENT:
+		tcpx_req_done(ep);
+		break;
+	default:
+		break;
+	};
 	ofi_mutex_unlock(&ep->lock);
 }
 
@@ -900,8 +808,6 @@ void tcpx_run_progress(struct tcpx_progress *progress, bool internal)
 		} else {
 			dlist_remove_init(&ep->progress_entry);
 		}
-
-		tcpx_update_poll(ep);
 		ofi_mutex_unlock(&ep->lock);
 	}
 
@@ -922,16 +828,11 @@ void tcpx_run_progress(struct tcpx_progress *progress, bool internal)
 		switch (fid->fclass) {
 		case FI_CLASS_EP:
 			tcpx_run_ep(events[i].data.ptr, pin, pout, perr);
-
-			/* TODO: update poll as part of progress */
-			ofi_mutex_lock(&ep->lock);
-			tcpx_update_poll(ep);
-			ofi_mutex_unlock(&ep->lock);
 			break;
 		case FI_CLASS_PEP:
-			tcpx_accept(events[i].data.ptr);
+			tcpx_accept_sock(events[i].data.ptr);
 			break;
-		case TCPX_CLASS_CM:
+		case FI_CLASS_CONNREQ:
 			tcpx_run_conn(events[i].data.ptr, pin, pout, perr);
 			break;
 		default:
@@ -948,11 +849,17 @@ unlock:
 	ofi_mutex_unlock(&progress->lock);
 }
 
-int tcpx_trywait(struct tcpx_progress *progress)
+int tcpx_trywait(struct fid_fabric *fabric_fid, struct fid **fids, int count)
 {
-	// struct dlist_entry *item;
-	// struct tcpx_ep *ep;
+	struct tcpx_fabric *fabric;
+	struct tcpx_progress *progress;
+//	struct dlist_entry *item;
+//	struct tcpx_ep *ep;
 	int ret;
+
+	fabric = container_of(fabric_fid, struct tcpx_fabric,
+			      util_fabric.fabric_fid);
+	progress = &fabric->progress;
 
 	ofi_mutex_lock(&progress->lock);
 	ret = dlist_empty(&progress->active_wait_list) ? 0 : -FI_EAGAIN;
@@ -1005,11 +912,12 @@ static void *tcpx_auto_progress(void *arg)
 {
 	struct tcpx_progress *progress = arg;
 	struct ofi_epollfds_event event;
-	int nfds;
+	int timeout, nfds;
 
 	FI_INFO(&tcpx_prov, FI_LOG_DOMAIN, "progress thread starting\n");
 	ofi_mutex_lock(&progress->lock);
 	while (progress->auto_progress) {
+		timeout = dlist_empty(&progress->active_wait_list) ? -1 : 1;
 		ofi_mutex_unlock(&progress->lock);
 
 		/* We can't hold the progress lock around waiting, or we
@@ -1020,7 +928,7 @@ static void *tcpx_auto_progress(void *arg)
 		 * memory, we must re-acquire the progress lock and re-read
 		 * any queued events before processing it.
 		 */
-		nfds = ofi_pollfds_wait(progress->pollfds, &event, 1, TCPX_SLEEP);
+		nfds = ofi_pollfds_wait(progress->pollfds, &event, 1, timeout);
 
 		if (nfds >= 0)
 			tcpx_run_progress(progress, true);
@@ -1031,64 +939,31 @@ static void *tcpx_auto_progress(void *arg)
 	return NULL;
 }
 
-static int
-tcpx_monitor_sock(struct tcpx_progress *progress, SOCKET sock, uint32_t events,
-		  struct fid *fid)
+int tcpx_monitor_sock(struct tcpx_progress *progress, SOCKET sock,
+		      uint32_t events, struct fid *fid)
 {
 	int ret;
 
-	ofi_mutex_lock(&progress->lock);
+	assert(ofi_mutex_held(&progress->lock));
 	ret = ofi_pollfds_add(progress->pollfds, sock, events, fid);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Failed to add fd to progress\n");
 	}
-	ofi_mutex_unlock(&progress->lock);
 	return ret;
 }
 
-static void tcpx_halt_sock(struct tcpx_progress *progress, SOCKET sock)
+/* May be called from progress thread to disable endpoint. */
+void tcpx_halt_sock(struct tcpx_progress *progress, SOCKET sock)
 {
 	int ret;
 
-	ofi_mutex_lock(&progress->lock);
+	assert(ofi_mutex_held(&progress->lock));
 	ret = ofi_pollfds_del(progress->pollfds, sock);
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_EP_CTRL,
 			"Failed to del fd from progress\n");
 	}
-	ofi_mutex_unlock(&progress->lock);
-}
-
-int tcpx_monitor_ep(struct tcpx_ep *ep, uint32_t events)
-{
-	return tcpx_monitor_sock(tcpx_ep2_progress(ep), ep->bsock.sock, events,
-				 &ep->util_ep.ep_fid.fid);
-}
-
-void tcpx_halt_ep(struct tcpx_ep *ep)
-{
-	tcpx_halt_sock(tcpx_ep2_progress(ep), ep->bsock.sock);
-}
-
-int tcpx_monitor_pep(struct tcpx_pep *pep)
-{
-	return tcpx_monitor_sock(tcpx_pep2_progress(pep), pep->sock, POLLIN,
-				 &pep->util_pep.pep_fid.fid);
-}
-
-void tcpx_halt_pep(struct tcpx_pep *pep)
-{
-	tcpx_halt_sock(tcpx_pep2_progress(pep), pep->sock);
-}
-
-int tcpx_monitor_conn(struct tcpx_conn_handle *conn)
-{
-	return -FI_ENOSYS;
-}
-
-void tcpx_halt_conn(struct tcpx_conn_handle *conn)
-{
 }
 
 int tcpx_start_progress(struct tcpx_progress *progress)

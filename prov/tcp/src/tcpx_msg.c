@@ -257,14 +257,6 @@ tcpx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	return FI_SUCCESS;
 }
 
-static inline void
-tcpx_queue_send(struct tcpx_ep *ep, struct tcpx_xfer_entry *tx_entry)
-{
-	ofi_mutex_lock(&ep->lock);
-	tcpx_tx_queue_insert(ep, tx_entry);
-	ofi_mutex_unlock(&ep->lock);
-}
-
 static ssize_t
 tcpx_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
