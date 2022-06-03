@@ -46,6 +46,7 @@ int main(int argc, char **argv)
 {
 	int child;
 	int status;
+	int op;
 	opts = INIT_OPTS;
 
 	if ((child = fork())) {
@@ -66,9 +67,18 @@ int main(int argc, char **argv)
 		if (!hints)
 			exit(EXIT_FAILURE);
 
-		hints->fabric_attr->prov_name = strdup("shm");
+		while ((op = getopt(argc, argv, "p:h")) != -1) {
+			switch (op) {
+			case 'p':
+				hints->fabric_attr->prov_name = strdup(optarg);
+				break;
+			case '?':
+			case 'h':
+				FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg shm, efa");
+				return EXIT_FAILURE;
+			}
+		}
 		if (ft_init_fabric()) {
-			fprintf(stderr, "Failed to initialize shm provider\n");
 			ft_freehints(hints);
 			exit(EXIT_FAILURE);
 		}
