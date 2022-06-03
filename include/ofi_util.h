@@ -512,6 +512,7 @@ struct util_cq {
 	struct dlist_entry	ep_list;
 	ofi_mutex_t		ep_list_lock;
 	struct ofi_genlock	cq_lock;
+	uint64_t		flags;
 
 	struct util_comp_cirq	*cirq;
 	fi_addr_t		*src;

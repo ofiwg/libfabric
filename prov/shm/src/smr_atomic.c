@@ -217,12 +217,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 		goto unlock_region;
 	}
 
-	ofi_genlock_lock(&ep->util_ep.tx_cq->cq_lock);
-	if (ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
-		ret = -FI_EAGAIN;
-		goto unlock_cq;
-	}
-
+	ofi_spin_lock(&ep->tx_lock);
 	total_len = ofi_datatype_size(datatype) * ofi_total_ioc_cnt(ioc, count);
 
 	switch (op) {
@@ -282,7 +277,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	peer_smr->cmd_cnt--;
 	smr_signal(peer_smr);
 unlock_cq:
-	ofi_genlock_unlock(&ep->util_ep.tx_cq->cq_lock);
+	ofi_spin_unlock(&ep->tx_lock);
 unlock_region:
 	pthread_spin_unlock(&peer_smr->lock);
 	return ret;

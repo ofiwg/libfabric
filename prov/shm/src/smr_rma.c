@@ -135,11 +135,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 		goto unlock_region;
 	}
 
-	ofi_genlock_lock(&ep->util_ep.tx_cq->cq_lock);
-	if (ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
-		ret = -FI_EAGAIN;
-		goto unlock_cq;
-	}
+	ofi_spin_lock(&ep->tx_lock);
 
 	if (cmds == 1) {
 		err = smr_rma_fast(peer_smr, iov, iov_count, rma_iov,
@@ -194,7 +190,7 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 signal:
 	smr_signal(peer_smr);
 unlock_cq:
-	ofi_genlock_unlock(&ep->util_ep.tx_cq->cq_lock);
+	ofi_spin_unlock(&ep->tx_lock);
 unlock_region:
 	pthread_spin_unlock(&peer_smr->lock);
 	return ret;
