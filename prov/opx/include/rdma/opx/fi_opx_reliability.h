@@ -358,7 +358,6 @@ union fi_opx_reliability_tx_psn {
  
 // TODO - make these tunable.
 #define FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS	(2048)
-#define FI_OPX_RELIABILITY_TX_RESERVE_BLOCKS	(64)
 #define FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS	(8192)
 
 #define OPX_REPLAY_BASE_SIZE			(sizeof(struct fi_opx_reliability_tx_replay))
@@ -382,22 +381,21 @@ struct fi_opx_reliability_client_state {
 	// 72 bytes
 	struct ofi_bufpool *		replay_pool; // for main data path
 	struct ofi_bufpool *		replay_iov_pool; // for main data path
-	struct ofi_bufpool *		reserve_pool; // when you can't EAGAIN.
-	// 96 bytes
+	// 88 bytes
 	struct fi_opx_reliability_service *		service;
 	void (*process_fn)(struct fid_ep *, const union fi_opx_hfi1_packet_hdr * const, const uint8_t * const);
-	// 112 bytes
+	// 104 bytes
 	uint32_t					lid_be;
 	uint8_t						tx;
 	uint8_t						rx;
-	// 118 bytes
+	// 110 bytes
 	/* -- not critical; only for debug, init/fini, etc. -- */
 	uint16_t					drop_count;
 	uint16_t					drop_mask;
 	enum ofi_reliability_kind	reliability_kind;
-	// 126 bytes
+	// 118 bytes
 	RbtHandle	flow_rbtree_resynch;
-	// 134 bytes
+	// 126 bytes
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 
 void fi_opx_reliability_client_init (struct fi_opx_reliability_client_state * state,
@@ -406,9 +404,15 @@ void fi_opx_reliability_client_init (struct fi_opx_reliability_client_state * st
 		const uint8_t tx,
 		void (*process_fn)(struct fid_ep *ep, const union fi_opx_hfi1_packet_hdr * const hdr, const uint8_t * const payload));
 
-unsigned fi_opx_reliability_client_active (struct fi_opx_reliability_client_state * state);
-
 void fi_opx_reliability_client_fini (struct fi_opx_reliability_client_state * state);
+
+__OPX_FORCE_INLINE__
+unsigned fi_opx_reliability_client_active (struct fi_opx_reliability_client_state * state)
+{
+	return (state->service->reliability_kind != OFI_RELIABILITY_KIND_NONE) &&
+		((state->replay_pool && !ofi_bufpool_empty(state->replay_pool)) ||
+		 (state->replay_iov_pool && !ofi_bufpool_empty(state->replay_iov_pool)));
+}
 
 static inline
 void fi_reliability_service_process_command (struct fi_opx_reliability_client_state *state,
@@ -864,16 +868,12 @@ int32_t fi_opx_reliability_tx_next_psn (struct fid_ep *ep,
 static inline
 struct fi_opx_reliability_tx_replay *
 fi_opx_reliability_client_replay_allocate(struct fi_opx_reliability_client_state * state,
-	const bool use_iov,
-	const bool allow_grow)
+	const bool use_iov)
 {
 	struct fi_opx_reliability_tx_replay * return_value;
 
 	if (!use_iov) {
 		return_value = (struct fi_opx_reliability_tx_replay *)ofi_buf_alloc(state->replay_pool);
-		if (OFI_UNLIKELY(return_value == NULL) && allow_grow) {
-			return_value = (struct fi_opx_reliability_tx_replay *)ofi_buf_alloc(state->reserve_pool);
-		}
 		if (OFI_LIKELY(return_value != NULL)) {
 			return_value->use_iov = 0;
 			return_value->payload = (uint64_t *) &return_value->data;

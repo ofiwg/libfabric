@@ -2188,26 +2188,16 @@ void fi_opx_reliability_client_init (struct fi_opx_reliability_client_state * st
 
 
 	/*
- 	 * The replay pool is used for the main send path. The pool has
- 	 * a fixed size and is not permitted to grow, in the theory that
- 	 * if a receiver is dropping packets, we should throttle the sender
- 	 * by returning an EAGAIN until the # of outstanding packets falls.
- 	 *
- 	 * The reserved pool is used for sending protocol messages that must
- 	 * absolutely get through. This pool starts small but is permitted
- 	 * to grow a few elements at a time.
- 	 */
+	 * The replay pools are used for the main send path. The pools have
+	 * a fixed size and are not permitted to grow, in the theory that
+	 * if a receiver is dropping packets, we should throttle the sender
+	 * by returning an EAGAIN until the # of outstanding packets falls.
+	 */
 	(void)ofi_bufpool_create(&(state->replay_pool), 
 		OPX_RELIABILITY_TX_REPLAY_SIZE, // element size
 		sizeof(void *), // byte alignment
 		FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS, // max # of elements
 		FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS, // # of elements to allocate at once
-		OFI_BUFPOOL_NO_TRACK); // flags
-	(void)ofi_bufpool_create(&(state->reserve_pool),
-		OPX_RELIABILITY_TX_REPLAY_SIZE, // element size
-		sizeof(void *), // byte alignment
-		0, // unlimited # of elements.
-		FI_OPX_RELIABILITY_TX_RESERVE_BLOCKS, // # of elements to allocate at once
 		OFI_BUFPOOL_NO_TRACK); // flags
 	(void)ofi_bufpool_create(&(state->replay_iov_pool), 
 		OPX_RELIABILITY_TX_REPLAY_IOV_SIZE, // element size
@@ -2218,8 +2208,8 @@ void fi_opx_reliability_client_init (struct fi_opx_reliability_client_state * st
 #ifdef OPX_RELIABILITY_DEBUG
 	fprintf(stderr,"%s:%s():%d replay_pool = %p\n", __FILE__, __func__, __LINE__,
 		state->replay_pool);
-	fprintf(stderr,"%s:%s():%d reserve_pool = %p\n", __FILE__, __func__, __LINE__,
-		state->reserve_pool);
+	fprintf(stderr,"%s:%s():%d replay_iov_pool = %p\n", __FILE__, __func__, __LINE__,
+		state->replay_iov_pool);
 #endif
 
 #ifdef OPX_RELIABILITY_TEST
@@ -2238,19 +2228,6 @@ void fi_opx_reliability_client_init (struct fi_opx_reliability_client_state * st
 #endif
 
 	return;
-}
-
-
-unsigned fi_opx_reliability_client_active (struct fi_opx_reliability_client_state * state)
-{
-	if (state->service->reliability_kind == OFI_RELIABILITY_KIND_NONE)
-		return 0;
-
-	if (state->replay_pool && !ofi_bufpool_empty(state->replay_pool)) return 1;
-	if (state->reserve_pool && !ofi_bufpool_empty(state->reserve_pool)) return 1;
-	if (state->replay_iov_pool && !ofi_bufpool_empty(state->replay_iov_pool)) return 1;
-
-	return 0;
 }
 
 void fi_opx_reliability_client_fini (struct fi_opx_reliability_client_state * state)
@@ -2279,9 +2256,7 @@ void fi_opx_reliability_client_fini (struct fi_opx_reliability_client_state * st
 
 	if (state->replay_pool) {
 		ofi_bufpool_destroy(state->replay_pool);
-		ofi_bufpool_destroy(state->reserve_pool);
 		state->replay_pool = NULL;
-		state->reserve_pool = NULL;
 	}
 	if (state->replay_iov_pool) {
 		ofi_bufpool_destroy(state->replay_iov_pool);
