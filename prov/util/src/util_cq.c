@@ -500,6 +500,7 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		return ret;
 
+	cq->flags = attr->flags;
 	cq->read_entry = read_entry;
 	cq->cq_fid.fid.fclass = FI_CLASS_CQ;
 	cq->cq_fid.fid.context = context;

@@ -228,9 +228,8 @@ static void smr_progress_resp(struct smr_ep *ep)
 	int ret;
 
 	pthread_spin_lock(&ep->region->lock);
-	ofi_genlock_lock(&ep->util_ep.tx_cq->cq_lock);
-	while (!ofi_cirque_isempty(smr_resp_queue(ep->region)) &&
-	       !ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
+	ofi_spin_lock(&ep->tx_lock);
+	while (!ofi_cirque_isempty(smr_resp_queue(ep->region))) {
 		resp = ofi_cirque_head(smr_resp_queue(ep->region));
 		if (resp->status == FI_EBUSY)
 			break;
@@ -255,7 +254,7 @@ static void smr_progress_resp(struct smr_ep *ep)
 		ofi_freestack_push(ep->pend_fs, pending);
 		ofi_cirque_discard(smr_resp_queue(ep->region));
 	}
-	ofi_genlock_unlock(&ep->util_ep.tx_cq->cq_lock);
+	ofi_spin_unlock(&ep->tx_lock);
 	pthread_spin_unlock(&ep->region->lock);
 }
 
@@ -811,12 +810,6 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 	struct smr_unexp_msg *unexp;
 	int ret;
 
-	if (ofi_cirque_isfull(ep->util_ep.rx_cq->cirq)) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"rx cq full\n");
-		return -FI_ENOSPC;
-	}
-
 	recv_queue = (cmd->msg.hdr.op == ofi_op_tagged) ?
 		      &ep->trecv_queue : &ep->recv_queue;
 
@@ -862,13 +855,6 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 
 	domain = container_of(ep->util_ep.domain, struct smr_domain,
 			      util_domain);
-
-	if (cmd->msg.hdr.op_flags & SMR_REMOTE_CQ_DATA &&
-	    ofi_cirque_isfull(ep->util_ep.rx_cq->cirq)) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"rx cq full\n");
-		return -FI_ENOSPC;
-	}
 
 	ofi_cirque_discard(smr_cmd_queue(ep->region));
 	ep->region->cmd_cnt++;
@@ -1050,8 +1036,6 @@ static void smr_progress_cmd(struct smr_ep *ep)
 	int ret = 0;
 
 	pthread_spin_lock(&ep->region->lock);
-	ofi_genlock_lock(&ep->util_ep.rx_cq->cq_lock);
-
 	while (!ofi_cirque_isempty(smr_cmd_queue(ep->region))) {
 		cmd = ofi_cirque_head(smr_cmd_queue(ep->region));
 
@@ -1093,7 +1077,6 @@ static void smr_progress_cmd(struct smr_ep *ep)
 			break;
 		}
 	}
-	ofi_genlock_unlock(&ep->util_ep.rx_cq->cq_lock);
 	pthread_spin_unlock(&ep->region->lock);
 }
 
@@ -1106,8 +1089,6 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 	int ret;
 
 	pthread_spin_lock(&ep->region->lock);
-	ofi_genlock_lock(&ep->util_ep.rx_cq->cq_lock);
-
 	dlist_foreach_container_safe(&ep->sar_list, struct smr_sar_entry,
 				     sar_entry, entry, tmp) {
 		peer_smr = smr_peer_region(ep->region, sar_entry->cmd.msg.hdr.id);
@@ -1142,7 +1123,6 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 			ofi_freestack_push(ep->sar_fs, sar_entry);
 		}
 	}
-	ofi_genlock_unlock(&ep->util_ep.rx_cq->cq_lock);
 	pthread_spin_unlock(&ep->region->lock);
 }
 

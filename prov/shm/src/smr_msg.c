@@ -44,8 +44,7 @@ static struct smr_rx_entry *smr_get_recv_entry(struct smr_ep *ep,
 {
 	struct smr_rx_entry *entry;
 
-	if (ofi_cirque_isfull(ep->util_ep.rx_cq->cirq) ||
-	    ofi_freestack_isempty(ep->recv_fs)) {
+	if (ofi_freestack_isempty(ep->recv_fs)) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"not enough space to post recv\n");
 		return NULL;
@@ -83,7 +82,7 @@ ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov, void **desc
 	assert(!(flags & FI_MULTI_RECV) || iov_count == 1);
 
 	pthread_spin_lock(&ep->region->lock);
-	ofi_genlock_lock(&ep->util_ep.rx_cq->cq_lock);
+	ofi_spin_lock(&ep->rx_lock);
 
 	entry = smr_get_recv_entry(ep, iov, desc, iov_count, addr, context, tag,
 				   ignore, flags);
@@ -93,7 +92,7 @@ ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov, void **desc
 	dlist_insert_tail(&entry->entry, &recv_queue->list);
 	ret = smr_progress_unexp_queue(ep, entry, unexp_queue);
 out:
-	ofi_genlock_unlock(&ep->util_ep.rx_cq->cq_lock);
+	ofi_spin_unlock(&ep->rx_lock);
 	pthread_spin_unlock(&ep->region->lock);
 	return ret;
 }
@@ -168,12 +167,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 		goto unlock_region;
 	}
 
-	ofi_genlock_lock(&ep->util_ep.tx_cq->cq_lock);
-	if (ofi_cirque_isfull(ep->util_ep.tx_cq->cirq)) {
-		ret = -FI_EAGAIN;
-		goto unlock_cq;
-	}
-
+	ofi_spin_lock(&ep->tx_lock);
 	iface = smr_get_mr_hmem_iface(ep->util_ep.domain, desc, &device);
 
 	total_len = ofi_total_iov_len(iov, iov_count);
@@ -206,7 +200,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	}
 
 unlock_cq:
-	ofi_genlock_unlock(&ep->util_ep.tx_cq->cq_lock);
+	ofi_spin_unlock(&ep->tx_lock);
 unlock_region:
 	pthread_spin_unlock(&peer_smr->lock);
 	return ret;

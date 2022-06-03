@@ -155,7 +155,7 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 	struct dlist_entry *entry;
 	int ret = 0;
 
-	ofi_genlock_lock(&ep->util_ep.rx_cq->cq_lock);
+	ofi_spin_lock(&ep->rx_lock);
 	entry = dlist_remove_first_match(&queue->list, smr_match_recv_ctx,
 					 context);
 	if (entry) {
@@ -167,7 +167,7 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 		ret = ret ? ret : 1;
 	}
 
-	ofi_genlock_unlock(&ep->util_ep.rx_cq->cq_lock);
+	ofi_spin_unlock(&ep->rx_lock);
 	return ret;
 }
 
@@ -902,6 +902,8 @@ static int smr_ep_close(struct fid *fid)
 	smr_unexp_fs_free(ep->unexp_fs);
 	smr_pend_fs_free(ep->pend_fs);
 	smr_sar_fs_free(ep->sar_fs);
+	ofi_spin_destroy(&ep->rx_lock);
+	ofi_spin_destroy(&ep->tx_lock);
 	free((void *)ep->name);
 	free(ep);
 	return 0;
@@ -926,20 +928,9 @@ static int smr_ep_bind_cq(struct smr_ep *ep, struct util_cq *cq, uint64_t flags)
 	if (ret)
 		return ret;
 
-	if (flags & FI_TRANSMIT) {
-		ep->tx_comp = cq->wait ? smr_tx_comp_signal : smr_tx_comp;
-	}
-
-	if (flags & FI_RECV) {
-		if (cq->wait) {
-			ep->rx_comp = (cq->domain->info_domain_caps & FI_SOURCE) ?
-				      smr_rx_src_comp_signal :
-				      smr_rx_comp_signal;
-		} else {
-			ep->rx_comp = (cq->domain->info_domain_caps & FI_SOURCE) ?
-				      smr_rx_src_comp : smr_rx_comp;
-		}
-	}
+	if (flags & FI_RECV)
+		ep->rx_comp = cq->domain->info_domain_caps & FI_SOURCE ?
+				smr_rx_src_comp: smr_rx_comp;
 
 	if (cq->wait) {
 		ret = ofi_wait_add_fid(cq->wait, &ep->util_ep.ep_fid.fid, 0,
@@ -1449,6 +1440,9 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ret = smr_setname(&ep->util_ep.ep_fid.fid, name, SMR_NAME_MAX);
 	if (ret)
 		goto err2;
+
+	ofi_spin_init(&ep->rx_lock);
+	ofi_spin_init(&ep->tx_lock);
 
 	ep->rx_size = info->rx_attr->size;
 	ep->tx_size = info->tx_attr->size;

@@ -51,6 +51,7 @@
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
 #include <rdma/providers/fi_prov.h>
+#include <rdma/fi_ext.h>
 
 #include <ofi.h>
 #include <ofi_enosys.h>
@@ -63,6 +64,7 @@
 #include <ofi_atomic.h>
 #include <ofi_iov.h>
 #include <ofi_mr.h>
+#include <ofi_lock.h>
 
 #ifndef _SMR_H_
 #define _SMR_H_
@@ -150,11 +152,15 @@ struct smr_sar_entry {
 };
 
 struct smr_ep;
-typedef int (*smr_rx_comp_func)(struct smr_ep *ep, void *context,
-		uint64_t flags, size_t len, void *buf, fi_addr_t addr,
-		uint64_t tag, uint64_t data);
-typedef int (*smr_tx_comp_func)(struct smr_ep *ep, void *context, uint32_t op);
 
+struct smr_cq {
+	struct util_cq util_cq;
+	struct fid_peer_cq *peer_cq;
+};
+
+typedef int (*smr_rx_comp_func)(struct smr_ep *ep, void *context,
+		uint64_t flags, size_t len, void *buf, int64_t addr,
+		uint64_t tag, uint64_t data);
 
 struct smr_match_attr {
 	int64_t		id;
@@ -267,14 +273,18 @@ struct smr_sock_info {
 struct smr_ep {
 	struct util_ep		util_ep;
 	smr_rx_comp_func	rx_comp;
-	smr_tx_comp_func	tx_comp;
 	size_t			tx_size;
 	size_t			rx_size;
 	size_t			min_multi_recv_size;
 	const char		*name;
 	uint64_t		msg_id;
 	struct smr_region	*volatile region;
-	struct smr_recv_fs	*recv_fs; /* protected by rx_cq lock */
+	//if double locking is needed, shm region lock must
+	//be acquired before any shm EP locks
+	ofi_spin_t		rx_lock;
+	ofi_spin_t		tx_lock;
+
+	struct smr_recv_fs	*recv_fs;
 	struct smr_queue	recv_queue;
 	struct smr_queue	trecv_queue;
 	struct smr_unexp_fs	*unexp_fs;
@@ -338,23 +348,15 @@ int smr_write_err_comp(struct util_cq *cq, void *context,
 		       uint64_t flags, uint64_t tag, uint64_t err);
 int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
 		    uint64_t flags);
-int smr_tx_comp(struct smr_ep *ep, void *context, uint32_t op);
-int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint32_t op);
 int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
 		    uint64_t flags, size_t len, void *buf, int64_t id,
 		    uint64_t tag, uint64_t data);
 int smr_rx_comp(struct smr_ep *ep, void *context,
-		uint64_t flags, size_t len, void *buf, fi_addr_t addr,
+		uint64_t flags, size_t len, void *buf, int64_t addr,
 		uint64_t tag, uint64_t data);
-int smr_rx_src_comp(struct smr_ep *ep, void *context,
-		uint64_t flags, size_t len, void *buf, fi_addr_t addr,
-		uint64_t tag, uint64_t data);
-int smr_rx_comp_signal(struct smr_ep *ep, void *context,
-		uint64_t flags, size_t len, void *buf, fi_addr_t addr,
-		uint64_t tag, uint64_t data);
-int smr_rx_src_comp_signal(struct smr_ep *ep, void *context,
-		uint64_t flags, size_t len, void *buf, fi_addr_t addr,
-		uint64_t tag, uint64_t data);
+int smr_rx_src_comp(struct smr_ep *ep, void *context, uint64_t flags,
+		    size_t len, void *buf, int64_t id, uint64_t tag,
+		    uint64_t data);
 
 static inline uint64_t smr_rx_cq_flags(uint32_t op, uint64_t rx_flags,
 				       uint16_t op_flags)
