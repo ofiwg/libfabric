@@ -89,6 +89,145 @@ inline int fi_opx_check_rma(struct fi_opx_ep *opx_ep)
 	return 0;
 }
 
+__OPX_FORCE_INLINE__
+int fi_opx_readv_internal_intranode(struct fi_opx_hfi1_rx_readv_params *params)
+{
+	struct fi_opx_ep *opx_ep = params->opx_ep;
+	// This clears any shm conditions
+	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
+
+	fi_opx_shm_dynamic_tx_connect(1, opx_ep, params->dest_rx);
+
+	uint64_t pos;
+	union fi_opx_hfi1_packet_hdr * tx_hdr = opx_shm_tx_next(&opx_ep->tx->shm, params->dest_rx, &pos);
+	if (OFI_UNLIKELY(tx_hdr == NULL)) {
+		return -FI_EAGAIN;
+	}
+	uint64_t niov = params->niov << 48;
+	uint64_t op64 = params->op << 40;
+	uint64_t dt64 = params->dt << 32;
+	assert(FI_OPX_HFI_DPUT_OPCODE_GET == params->opcode); // double check packet type
+	tx_hdr->qw[0] = opx_ep->rx->tx.cts.hdr.qw[0] | params->lrh_dlid | (params->lrh_dws << 32);
+	tx_hdr->qw[1] = opx_ep->rx->tx.cts.hdr.qw[1] | params->bth_rx;
+	tx_hdr->qw[2] = opx_ep->rx->tx.cts.hdr.qw[2];
+	tx_hdr->qw[3] = opx_ep->rx->tx.cts.hdr.qw[3];
+	tx_hdr->qw[4] = opx_ep->rx->tx.cts.hdr.qw[4] | params->opcode | dt64 | op64 | niov;
+	tx_hdr->qw[5] = (uintptr_t)params->cc;
+	tx_hdr->qw[6] = params->key;
+
+	union fi_opx_hfi1_packet_payload *const tx_payload =
+		(union fi_opx_hfi1_packet_payload *)(tx_hdr + 1);
+
+	tx_payload->cts.iov[0].rbuf = (uintptr_t)params->iov.iov_base; /* receive buffer virtual address */
+	tx_payload->cts.iov[0].sbuf = params->addr_offset; /* send buffer virtual address */
+	tx_payload->cts.iov[0].bytes = params->iov.iov_len; /* number of bytes to transfer */
+
+	opx_shm_tx_advance(&opx_ep->tx->shm, (void *)tx_hdr, pos);
+
+	return FI_SUCCESS;
+}
+
+int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
+{
+	struct fi_opx_hfi1_rx_readv_params *params = &work->readv;
+	assert(params->niov <= 1); // TODO, support something ... bigger
+
+	if (params->is_intranode) {	/* compile-time constant expression */
+		return fi_opx_readv_internal_intranode(params);
+	}
+
+	struct fi_opx_ep *opx_ep = params->opx_ep;
+
+	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
+	uint16_t total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, 2);
+	if (OFI_UNLIKELY(total_credits_available < 2)) {
+		fi_opx_compiler_msync_writes(); // credit return
+		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, opx_ep->tx->pio_credits_addr);
+		total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, 2);
+		if (total_credits_available < 2) {
+			return -FI_EAGAIN;
+		}
+	}
+
+	struct fi_opx_reliability_tx_replay *replay;
+	union fi_opx_reliability_tx_psn *psn_ptr;
+	int32_t psn;
+
+	ssize_t rc = fi_opx_ep_tx_get_replay(opx_ep, params->opx_target_addr,
+					     &replay, &psn_ptr, &psn,
+					     params->reliability);
+
+	if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
+		return -FI_EAGAIN;
+	}
+
+	volatile uint64_t * const scb = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_sop_first, pio_state);
+
+	uint64_t tmp[8];
+	uint64_t niov = params->niov << 48;
+	uint64_t op64 = params->op << 40;
+	uint64_t dt64 = params->dt << 32;
+	uint64_t credit_return = (opx_ep->tx->force_credit_return & FI_OPX_HFI1_PBC_CR_MASK)
+				 << FI_OPX_HFI1_PBC_CR_SHIFT;
+	assert(FI_OPX_HFI_DPUT_OPCODE_GET == params->opcode); // double check packet type
+	fi_opx_set_scb(scb, tmp,
+			opx_ep->rx->tx.cts.qw0 | params->pbc_dws | credit_return,
+			opx_ep->rx->tx.cts.hdr.qw[0] | params->lrh_dlid | (params->lrh_dws << 32),
+			opx_ep->rx->tx.cts.hdr.qw[1] | params->bth_rx,
+			opx_ep->rx->tx.cts.hdr.qw[2] | psn,
+			opx_ep->rx->tx.cts.hdr.qw[3],
+			opx_ep->rx->tx.cts.hdr.qw[4] | params->opcode | dt64 | op64 | niov,
+			(uintptr_t)params->cc, // target_completion_counter_vaddr
+			params->key); // key
+
+	/* consume one credit for the packet header */
+	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+
+	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
+
+	if (OFI_LIKELY(params->reliability != OFI_RELIABILITY_KIND_NONE)) {
+		replay->scb.qw0 = tmp[0];
+		replay->scb.hdr.qw[0] = tmp[1];
+		replay->scb.hdr.qw[1] = tmp[2];
+		replay->scb.hdr.qw[2] = tmp[3];
+		replay->scb.hdr.qw[3] = tmp[4];
+		replay->scb.hdr.qw[4] = tmp[5];
+		replay->scb.hdr.qw[5] = tmp[6];
+		replay->scb.hdr.qw[6] = tmp[7];
+	}
+
+	/* write the CTS payload "send control block"  */
+	volatile uint64_t * scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
+
+	fi_opx_set_scb(scb_payload, tmp,
+			(uintptr_t)params->iov.iov_base, /* receive buffer virtual address */
+			params->addr_offset, /* send buffer virtual address */
+			params->iov.iov_len, /* number of bytes to transfer */
+			0, 0, 0, 0, 0);
+
+	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
+	if (OFI_LIKELY(params->reliability != OFI_RELIABILITY_KIND_NONE)) {
+		replay->payload[0] = tmp[0];
+		replay->payload[1] = tmp[1];
+		replay->payload[2] = tmp[2];
+		replay->payload[3] = tmp[3];
+		replay->payload[4] = tmp[4];
+		replay->payload[5] = tmp[5];
+		replay->payload[6] = tmp[6];
+		replay->payload[7] = tmp[7];
+
+		fi_opx_reliability_client_replay_register_no_update(
+			&opx_ep->reliability->state,
+			params->opx_target_addr.uid.lid,
+			params->opx_target_addr.reliability_rx,
+			params->dest_rx, psn_ptr, replay, params->reliability);
+	}
+	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
+	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
+
+	return FI_SUCCESS;
+}
+
 __OPX_FORCE_INLINE_AND_FLATTEN__
 ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t len,
 				     fi_addr_t dst_addr, uint64_t addr_offset, uint64_t key,

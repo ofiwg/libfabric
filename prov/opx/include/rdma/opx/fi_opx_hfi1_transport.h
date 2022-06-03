@@ -410,11 +410,33 @@ struct fi_opx_hfi1_rx_dput_fence_params {
 	uint8_t u8_rx;
 };
 
+struct fi_opx_hfi1_rx_readv_params {
+	struct fi_opx_work_elem work_elem;
+	struct fi_opx_ep *opx_ep;
+	struct iovec iov;
+	size_t niov;
+	union fi_opx_addr opx_target_addr;
+	struct fi_opx_completion_counter *cc;
+	uint64_t addr_offset;
+	uint64_t key;
+	uint64_t dest_rx;
+	uint64_t lrh_dlid;
+	uint64_t bth_rx;
+	uint64_t pbc_dws;
+	uint64_t lrh_dws;
+	uint64_t op;
+	uint64_t dt;
+	uint32_t opcode;
+	enum ofi_reliability_kind reliability;
+	bool is_intranode;
+};
+
 union fi_opx_hfi1_deferred_work {
 	struct fi_opx_work_elem work_elem;
 	struct fi_opx_hfi1_dput_params dput;
 	struct fi_opx_hfi1_rx_rzv_rts_params rx_rzv_rts;
 	struct fi_opx_hfi1_rx_dput_fence_params fence;
+	struct fi_opx_hfi1_rx_readv_params readv;
 };
 
 int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work);
@@ -586,7 +608,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	}
 
 	struct fi_opx_reliability_tx_replay * replay = (reliability != OFI_RELIABILITY_KIND_NONE)?
-	fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false) : NULL;
+	fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false) : NULL;
 	if(replay == NULL) {
 		return -FI_EAGAIN;
 	}
@@ -832,7 +854,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 	/* compile-time constant expression */
 	struct fi_opx_reliability_tx_replay *replay;
 	replay = (reliability != OFI_RELIABILITY_KIND_NONE) ?
-	fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false) :	NULL;
+	fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false) :	NULL;
 	if (replay == NULL) {
 		return -FI_EAGAIN;
 	}
@@ -1229,7 +1251,7 @@ ssize_t fi_opx_ep_tx_get_replay(struct fi_opx_ep *opx_ep,
 		return FI_SUCCESS;
 	}
 
-	*replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false);
+	*replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false);
 	if(*replay == NULL) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND, HFI -- EAGER (null_reply_buffer)\n");

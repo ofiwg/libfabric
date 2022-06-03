@@ -715,7 +715,7 @@ int fi_opx_hfi1_do_rx_rzv_rts (union fi_opx_hfi1_deferred_work *work) {
 	}
 
 	struct fi_opx_reliability_tx_replay *replay =
-		fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false);
+		fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false);
 	if (replay == NULL) {
 		return -FI_EAGAIN;
 	}
@@ -1251,7 +1251,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work) {
 				union fi_opx_reliability_tx_psn *psn_ptr;
 				int64_t psn;
 				if (reliability != OFI_RELIABILITY_KIND_NONE) {
-					replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false);
+					replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false);
 					if(OFI_UNLIKELY(replay == NULL)) {
 						return -FI_EAGAIN;
 					}
@@ -1427,8 +1427,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 				if (reliability != OFI_RELIABILITY_KIND_NONE) {
 					// Passing 'true' as second parm gives us a lightweight/iovec replay object
 					replay = fi_opx_reliability_client_replay_allocate(
-						&opx_ep->reliability->state,
-						delivery_completion, false);
+						&opx_ep->reliability->state, delivery_completion);
 					if(OFI_UNLIKELY(replay == NULL)) {
 						break;
 					}
@@ -1586,7 +1585,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 		iov_total_bytes += dput_iov[idx].bytes;
 	}
 
-	assert(iov_total_bytes == *origin_byte_counter);
+	assert(origin_byte_counter == NULL || iov_total_bytes == *origin_byte_counter);
 
 	if (fi_opx_hfi1_sdma_use_sdma(opx_ep, origin_byte_counter, opcode, is_intranode)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1741,7 +1740,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	}
 
 	struct fi_opx_reliability_tx_replay *replay = (reliability != OFI_RELIABILITY_KIND_NONE) ?
-		fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false) : NULL;
+		fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false) : NULL;
 	if (replay == NULL) {
 		return -FI_EAGAIN;
 	}
@@ -2096,7 +2095,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 	struct fi_opx_reliability_tx_replay * replay = NULL;
 	if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
-		replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false, false);
+		replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false);
 		if(replay == NULL) {
 			return -FI_EAGAIN;
 		}
