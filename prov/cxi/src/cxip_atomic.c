@@ -65,7 +65,11 @@ static enum c_atomic_op _cxip_amo_op_code[FI_ATOMIC_OP_LAST] = {
 	[FI_LXOR]	  = C_AMO_OP_LXOR,
 	[FI_BXOR]	  = C_AMO_OP_BXOR,
 	[FI_ATOMIC_READ]  = C_AMO_OP_SUM,
-	[FI_ATOMIC_WRITE] = C_AMO_OP_SWAP,
+
+	/* ATOMIC_WRITE is implemented as a CSWAP NE instead of SWAP. This
+	 * allows for SWAP to be remapped to PCIe fadd.
+	 */
+	[FI_ATOMIC_WRITE] = C_AMO_OP_CSWAP,
 	[FI_CSWAP]	  = C_AMO_OP_CSWAP,
 	[FI_CSWAP_NE]	  = C_AMO_OP_CSWAP,
 	[FI_CSWAP_LE]	  = C_AMO_OP_CSWAP,
@@ -212,8 +216,12 @@ int _cxip_atomic_opcode(enum cxip_amo_req_type req_type, enum fi_datatype dt,
 		*cdt = dtcode;
 	if (cdtlen)
 		*cdtlen = ofi_datatype_size(dt);
-	if (copswp)
-		*copswp = _cxip_amo_swpcode[op];
+	if (copswp) {
+		if (op == FI_ATOMIC_WRITE)
+			*copswp = C_AMO_OP_CSWAP_NE;
+		else
+			*copswp = _cxip_amo_swpcode[op];
+	}
 
 	return 0;
 }
@@ -714,6 +722,18 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	case FI_ATOMIC_READ:
 		break;
 
+	/* FI_ATOMIC_WRITE is implemented as a CSWAP NE operation. For this to
+	 * work, the compare buffer (i.e. operand 2) needs to have the same
+	 * contents as the write payload (i.e. operand 1).
+	 */
+	case FI_ATOMIC_WRITE:
+		assert(compare == NULL);
+
+		ret = cxip_txc_copy_from_hmem(txc, &idc_amo_cmd.op2_word1, buf,
+					      atomic_type_len);
+		assert(ret == atomic_type_len);
+
+		/* Fall through. */
 	default:
 		ret = cxip_txc_copy_from_hmem(txc, &idc_amo_cmd.op1_word1, buf,
 					      atomic_type_len);
@@ -1220,7 +1240,17 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 		dma_amo_cmd.event_success_disable = 1;
 	}
 
-	if (compare) {
+	/* FI_ATOMIC_WRITE is implemented as a CSWAP NE operation. For this to
+	 * work, the compare buffer (i.e. operand 2) needs to have the same
+	 * contents as the write payload (i.e. operand 1).
+	 */
+	if (msg->op == FI_ATOMIC_WRITE) {
+		assert(compare == NULL);
+
+		ret = cxip_txc_copy_from_hmem(txc, &dma_amo_cmd.op2_word1, buf,
+					      atomic_type_len);
+		assert(ret == atomic_type_len);
+	} else if (compare) {
 		/* Note: 16-byte value will overflow into op2_word2 */
 		ret = cxip_txc_copy_from_hmem(txc, &dma_amo_cmd.op2_word1,
 					      compare, atomic_type_len);

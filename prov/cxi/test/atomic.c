@@ -968,6 +968,10 @@ static struct test_int_parms int_parms[] = {
 		0x1234123412341234,
 		0xabcdabcdabcdabcd,
 		0x1234123412341234 },
+	{ _AMO|_FAMO, 102, FI_ATOMIC_WRITE, 0, 0,
+		0x1234123412341234,
+		0x1234123412341234,
+		0x1234123412341234 },
 	{ _FAMO, 111, FI_ATOMIC_READ, 0, 0,
 		0x1010101010101010,
 		0x4321432143214321,
@@ -3783,16 +3787,6 @@ ParameterizedTestParameters(pcie_atomic, query_atomic)
 			.flags = 0,
 			.expected_rc = -FI_EOPNOTSUPP,
 			.amo_remap_to_pcie_fadd = C_AMO_OP_BXOR,
-		},
-
-		/* Invalid FI_ATOMIC_WRITE operation since it is remapped. */
-		{
-			.datatype = FI_INT8,
-			.op = FI_ATOMIC_WRITE,
-			.valid_atomic_attr = true,
-			.flags = 0,
-			.expected_rc = -FI_EOPNOTSUPP,
-			.amo_remap_to_pcie_fadd = C_AMO_OP_SWAP,
 		},
 	};
 	size_t param_sz = ARRAY_SIZE(params);
