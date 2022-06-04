@@ -417,9 +417,10 @@ static int cxip_ep_ctrl_eq_alloc(struct cxip_ep_obj *ep_obj, size_t len,
 		.flags = CXI_EQ_TGT_LONG,
 	};
 	int ret;
+	int unmap_ret __attribute__((unused));
 
 	/* Align up length to C_PAGE_SIZE boundary. */
-	len = (len + C_PAGE_SIZE) & ~C_PAGE_SIZE;
+	len = (len + C_PAGE_MASK) & ~C_PAGE_MASK;
 
 	*eq_buf = aligned_alloc(C_PAGE_SIZE, len);
 	if (!eq_buf) {
@@ -444,8 +445,8 @@ static int cxip_ep_ctrl_eq_alloc(struct cxip_ep_obj *ep_obj, size_t len,
 	return FI_SUCCESS;
 
 err_free_eq_md:
-	ret = cxil_unmap(*eq_md);
-	assert(ret == 0);
+	unmap_ret = cxil_unmap(*eq_md);
+	assert(unmap_ret == 0);
 
 err_free_eq_buf:
 	free(*eq_buf);
