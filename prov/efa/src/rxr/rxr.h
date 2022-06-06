@@ -67,6 +67,7 @@
 #include "rxr_op_entry.h"
 #include "rxr_pkt_entry.h"
 #include "rxr_pkt_type.h"
+#include "rxr_env.h"
 
 #define RXR_FI_VERSION		OFI_VERSION_LATEST
 
@@ -203,61 +204,9 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 
 #define RXR_MTU_MAX_LIMIT	BIT_ULL(15)
 
-
-
-extern struct fi_info *shm_info;
-
 extern struct fi_provider rxr_prov;
-extern struct rxr_env rxr_env;
 extern struct fi_fabric_attr rxr_fabric_attr;
 extern struct util_prov rxr_util_prov;
-
-struct rxr_env {
-	int tx_min_credits;
-	int tx_queue_size;
-	int use_device_rdma;
-	int use_zcpy_rx;
-	int zcpy_rx_seed;
-	int enable_shm_transfer;
-	int shm_av_size;
-	int shm_max_medium_size;
-	int recvwin_size;
-	int ooo_pool_chunk_size;
-	int unexp_pool_chunk_size;
-	int readcopy_pool_size;
-	int atomrsp_pool_size;
-	int cq_size;
-	size_t max_memcpy_size;
-	size_t mtu_size;
-	size_t tx_size;
-	size_t rx_size;
-	size_t tx_iov_limit;
-	size_t rx_iov_limit;
-	int rx_copy_unexp;
-	int rx_copy_ooo;
-	int rnr_backoff_wait_time_cap; /* unit is us */
-	int rnr_backoff_initial_wait_time; /* unit is us */
-	size_t efa_cq_read_size;
-	size_t shm_cq_read_size;
-	size_t efa_max_medium_msg_size;
-	size_t efa_max_gdrcopy_msg_size;
-	size_t efa_min_read_msg_size;
-	size_t efa_min_read_write_size;
-	size_t efa_read_segment_size;
-	size_t efa_runt_size;
-	/* If first attempt to send a packet failed,
-	 * this value controls how many times firmware
-	 * retries the send before it report an RNR error
-	 * (via rdma-core error cq entry).
-	 *
-	 * The valid number is from
-	 *      0 (no retry)
-	 * to
-	 *      EFA_RNR_INFINITY_RETRY (retry infinitely)
-	 */
-	int rnr_retry;
-};
-
 enum rxr_lower_ep_type {
 	EFA_EP = 1,
 	SHM_EP,
@@ -704,8 +653,6 @@ struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
 					   struct rxr_rx_entry *posted_entry,
 					   struct rxr_rx_entry *consumer_entry,
 					   struct rxr_pkt_entry *pkt_entry);
-
-int rxr_raw_addr_to_smr_name(void *addr, char *smr_name, size_t *smr_name_len);
 
 /* CQ sub-functions */
 void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,

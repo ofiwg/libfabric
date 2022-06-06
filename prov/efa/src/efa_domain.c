@@ -124,8 +124,8 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	int err;
 
 	if (efa_domain->fabric->shm_fabric) {
-		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
-		err = fi_domain(efa_domain->fabric->shm_fabric, shm_info,
+		assert(!strcmp(g_shm_info->fabric_attr->name, "shm"));
+		err = fi_domain(efa_domain->fabric->shm_fabric, g_shm_info,
 				&efa_domain->shm_domain, NULL);
 		if (err)
 			return err;

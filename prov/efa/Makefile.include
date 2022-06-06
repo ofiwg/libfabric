@@ -33,6 +33,7 @@ if HAVE_EFA
 _efa_files = \
 	prov/efa/src/efa_device.c \
 	prov/efa/src/efa_hmem.c \
+	prov/efa/src/efa_shm.c \
 	prov/efa/src/efa_av.c \
 	prov/efa/src/efa_domain.c \
 	prov/efa/src/efa_cm.c \
@@ -42,10 +43,11 @@ _efa_files = \
 	prov/efa/src/efa_msg.c \
 	prov/efa/src/efa_mr.c \
 	prov/efa/src/efa_rma.c \
+	prov/efa/src/efa_user_info.c \
 	prov/efa/src/efa_prov_info.c \
 	prov/efa/src/efa_fork_support.c \
 	prov/efa/src/rxr/rxr_prov.c	\
-	prov/efa/src/rxr/rxr_init.c	\
+	prov/efa/src/rxr/rxr_env.c	\
 	prov/efa/src/rxr/rxr_cq.c	\
 	prov/efa/src/rxr/rxr_ep.c	\
 	prov/efa/src/rxr/rxr_cntr.c	\
@@ -64,13 +66,15 @@ _efa_files = \
 _efa_headers = \
 	prov/efa/src/efa.h \
 	prov/efa/src/efa_mr.h \
+	prov/efa/src/efa_shm.h \
 	prov/efa/src/efa_hmem.h \
 	prov/efa/src/efa_device.h \
 	prov/efa/src/efa_domain.h \
+	prov/efa/src/efa_user_info.h \
 	prov/efa/src/efa_prov_info.h \
 	prov/efa/src/efa_fork_support.h \
 	prov/efa/src/rxr/rxr.h \
-	prov/efa/src/rxr/rxr_init.h \
+	prov/efa/src/rxr/rxr_env.h \
 	prov/efa/src/rxr/rxr_cntr.h \
 	prov/efa/src/rxr/rxr_rma.h \
 	prov/efa/src/rxr/rxr_msg.h \

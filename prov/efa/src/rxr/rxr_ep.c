@@ -975,7 +975,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		 */
 		if (ep->shm_ep) {
 			shm_ep_name_len = EFA_SHM_NAME_MAX;
-			ret = rxr_raw_addr_to_smr_name(ep->core_addr, shm_ep_name, &shm_ep_name_len);
+			ret = efa_shm_ep_name_construct(shm_ep_name, &shm_ep_name_len, (struct efa_ep_addr *)ep->core_addr);
 			if (ret < 0)
 				goto out;
 			fi_setname(&ep->shm_ep->fid, shm_ep_name, shm_ep_name_len);
@@ -1431,7 +1431,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 
 	sendv_pool_size = rxr_get_tx_pool_chunk_cnt(ep);
 	if (ep->use_shm_for_tx)
-		sendv_pool_size += shm_info->tx_attr->size;
+		sendv_pool_size += g_shm_info->tx_attr->size;
 	ret = ofi_bufpool_create(&ep->pkt_sendv_pool,
 				 sizeof(struct rxr_pkt_sendv),
 				 RXR_BUF_POOL_ALIGNMENT,
@@ -1445,8 +1445,8 @@ int rxr_ep_init(struct rxr_ep *ep)
 		ret = ofi_bufpool_create(&ep->shm_tx_pkt_pool,
 					 entry_sz,
 					 RXR_BUF_POOL_ALIGNMENT,
-					 shm_info->tx_attr->size,
-					 shm_info->tx_attr->size, 0);
+					 g_shm_info->tx_attr->size,
+					 g_shm_info->tx_attr->size, 0);
 		if (ret)
 			goto err_free;
 	}
@@ -1455,8 +1455,8 @@ int rxr_ep_init(struct rxr_ep *ep)
 		ret = ofi_bufpool_create(&ep->shm_rx_pkt_pool,
 					 entry_sz,
 					 RXR_BUF_POOL_ALIGNMENT,
-					 shm_info->rx_attr->size,
-					 shm_info->rx_attr->size, 0);
+					 g_shm_info->rx_attr->size,
+					 g_shm_info->rx_attr->size, 0);
 		if (ret)
 			goto err_free;
 
@@ -1720,7 +1720,7 @@ void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
 
 			if (ep->shm_ep) {
 				assert(ep->shm_rx_pkts_posted == 0 && ep->shm_rx_pkts_to_post == 0);
-				ep->shm_rx_pkts_to_post = shm_info->rx_attr->size;
+				ep->shm_rx_pkts_to_post = g_shm_info->rx_attr->size;
 			}
 		}
 	}
@@ -2373,8 +2373,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err_free_rdm_info;
 
 	if (efa_domain->shm_domain) {
-		assert(!strcmp(shm_info->fabric_attr->name, "shm"));
-		ret = fi_endpoint(efa_domain->shm_domain, shm_info,
+		assert(!strcmp(g_shm_info->fabric_attr->name, "shm"));
+		ret = fi_endpoint(efa_domain->shm_domain, g_shm_info,
 				  &rxr_ep->shm_ep, rxr_ep);
 		if (ret)
 			goto err_close_core_ep;

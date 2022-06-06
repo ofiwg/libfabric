@@ -29,20 +29,19 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#ifndef _EFA_SHM_H
+#define _EFA_SHM_H
 
-#ifndef EFA_DEVICE_INFO_H
-#define EFA_DEVICE_INFO_H
+#include <rdma/fabric.h>
 
-#include "efa.h"
+extern struct fi_info *g_shm_info;
 
-int efa_prov_info_alloc(struct fi_info **prov_info,
-			struct efa_device *device,
-			enum fi_ep_type ep_type);
+struct efa_ep_addr;
 
-int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr,
-				struct efa_device *device);
+int efa_shm_ep_name_construct(char *smr_name, size_t *smr_name_len, struct efa_ep_addr *raw_addr);
 
-int efa_prov_info_compare_src_addr(const char *node, uint64_t flags, const struct fi_info *hints,
-				   const struct fi_info *fi);
+void efa_shm_info_initialize(const struct fi_info *app_hints);
+
+void efa_shm_info_finalize();
 
 #endif

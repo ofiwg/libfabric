@@ -174,7 +174,7 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 	rxr_pkt_init_write_context(tx_entry, pkt_entry);
 
 	/* If no FI_MR_VIRT_ADDR being set, have to use 0-based offset */
-	if (!(shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
+	if (!(g_shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
 		for (i = 0; i < tx_entry->iov_count; i++)
 			tx_entry->rma_iov[i].addr = 0;
 	}

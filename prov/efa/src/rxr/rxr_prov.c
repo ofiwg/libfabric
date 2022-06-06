@@ -34,7 +34,7 @@
 #include <ofi_prov.h>
 #include "efa.h"
 #include "rxr.h"
-#include "rxr_init.h"
+#include "rxr_env.h"
 #include "efa_prov_info.h"
 
 #ifdef ENABLE_EFA_POISONING
@@ -47,7 +47,7 @@ struct fi_provider rxr_prov = {
 	.name = "efa",
 	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
-	.getinfo = rxr_getinfo,
+	.getinfo = efa_getinfo,
 	.fabric = efa_fabric,
 	.cleanup = rxr_fini
 };
@@ -100,8 +100,7 @@ static void rxr_util_prov_finalize()
 
 EFA_INI
 {
-	rxr_define_env();
-	rxr_init_env();
+	rxr_env_initialize();
 
 #if HAVE_EFA_DL
 	ofi_mem_init();
@@ -124,8 +123,7 @@ static void rxr_fini(void)
 
 	efa_prov_finalize();
 
-	if (shm_info)
-		fi_freeinfo(shm_info);
+	efa_shm_info_finalize();
 
 #if HAVE_EFA_DL
 	ofi_monitors_cleanup();
