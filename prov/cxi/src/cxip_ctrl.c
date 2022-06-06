@@ -420,7 +420,7 @@ static int cxip_ep_ctrl_eq_alloc(struct cxip_ep_obj *ep_obj, size_t len,
 	int unmap_ret __attribute__((unused));
 
 	/* Align up length to C_PAGE_SIZE boundary. */
-	len = (len + C_PAGE_MASK) & ~C_PAGE_MASK;
+	len = CXIP_ALIGN(len, C_PAGE_SIZE);
 
 	*eq_buf = aligned_alloc(C_PAGE_SIZE, len);
 	if (!eq_buf) {

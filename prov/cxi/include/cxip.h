@@ -58,6 +58,10 @@
 #define CEILING(a, b) ((long long)(a) <= 0LL ? 0 : (FLOOR((a)-1, b) + (b)))
 #endif
 
+#define CXIP_ALIGN_MASK(x, mask) (((x) + (mask)) & ~(mask))
+#define CXIP_ALIGN(x, a) CXIP_ALIGN_MASK(x, (typeof(x))(a) - 1)
+#define CXIP_ALIGN_DOWN(x, a) CXIP_ALIGN((x) - ((a) - 1), (a))
+
 #define CXIP_REQ_CLEANUP_TO		3000
 
 #define CXIP_BUFFER_ID_MAX		(1 << 16)
