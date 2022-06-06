@@ -66,7 +66,7 @@ bin_PROGRAMS = \
 	multinode/fi_multinode	\
 	multinode/fi_multinode_coll \
 	component/sock_test \
-	regression/shm_sighandler_test
+	regression/sighandler_test
 
 dist_bin_SCRIPTS = \
 	scripts/runfabtests.sh \
@@ -444,12 +444,12 @@ component_sock_test_LDADD = libfabtests.la
 component_sock_test_CFLAGS = \
 	$(AM_CFLAGS)
 
-regression_shm_sighandler_test_SOURCES = \
-	regression/shm_sighandler_test.c
+regression_sighandler_test_SOURCES = \
+	regression/sighandler_test.c
 
-regression_shm_sighandler_test_LDADD = libfabtests.la
+regression_sighandler_test_LDADD = libfabtests.la
 
-regression_shm_sighandler_test_CFLAGS = \
+regression_sighandler_test_CFLAGS = \
 	$(AM_CFLAGS)
 
 real_man_pages = \
