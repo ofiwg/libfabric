@@ -148,12 +148,17 @@ static int efa_device_construct(struct efa_device *efa_device,
 
 err_close:
 	ibv_close_device(efa_device->ibv_ctx);
+	efa_device->ibv_ctx = NULL;
 
-	if (efa_device->rdm_info)
+	if (efa_device->rdm_info) {
 		fi_freeinfo(efa_device->rdm_info);
+		efa_device->rdm_info = NULL;
+	}
 
-	if (efa_device->dgram_info)
+	if (efa_device->dgram_info) {
 		fi_freeinfo(efa_device->dgram_info);
+		efa_device->dgram_info = NULL;
+	}
 
 	return err;
 }
