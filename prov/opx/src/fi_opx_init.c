@@ -488,8 +488,8 @@ OPX_INI
 	fi_param_define(&fi_opx_provider, "uuid", FI_PARAM_STRING, "Globally unique ID for preventing OPX jobs from conflicting either in shared memory or over the OPX fabric. Defaults to \"%s\"",
 		OPX_DEFAULT_JOB_KEY_STR);
 	fi_param_define(&fi_opx_provider, "force_cpuaffinity", FI_PARAM_BOOL, "Causes the thread to bind itself to the cpu core it is running on. Defaults to \"No\"");
-	fi_param_define(&fi_opx_provider, "reliability_service_usec_max", FI_PARAM_INT, "The number of microseconds between pings for un-acknowledged packets. Defaults to 100 usec.");
-	fi_param_define(&fi_opx_provider, "reliability_service_pre_ack_rate", FI_PARAM_INT, "The number of packets to receive from a particular sender before preemptively acknowledging them without waiting for a ping. Valid values are powers of 2 in the range of 0-32,768, where 0 indicates no preemptive acking. Defaults to 0.");
+	fi_param_define(&fi_opx_provider, "reliability_service_usec_max", FI_PARAM_INT, "The number of microseconds between pings for un-acknowledged packets. Defaults to 500 usec.");
+	fi_param_define(&fi_opx_provider, "reliability_service_pre_ack_rate", FI_PARAM_INT, "The number of packets to receive from a particular sender before preemptively acknowledging them without waiting for a ping. Valid values are powers of 2 in the range of 0-32,768, where 0 indicates no preemptive acking. Defaults to 64.");
 	fi_param_define(&fi_opx_provider, "selinux", FI_PARAM_BOOL, "Set to true if you're running a security-enhanced Linux. This enables updating the Jkey used based on system settings. Defaults to \"No\"");
 	fi_param_define(&fi_opx_provider, "hfi_select", FI_PARAM_STRING, "Overrides the normal algorithm used to choose which HFI a process will use. See the documentation for more information.");
 	fi_param_define(&fi_opx_provider, "delivery_completion_threshold", FI_PARAM_INT, "The minimum size message for doing full delivery completions. Smaller messages will provide injection completions.Value must be between %d and %d. Defaults to %d.", OPX_MIN_DCOMP_THRESHOLD, OPX_MAX_DCOMP_THRESHOLD, OPX_DEFAULT_DCOMP_THRESHOLD);
