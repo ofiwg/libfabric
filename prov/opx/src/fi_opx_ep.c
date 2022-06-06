@@ -108,6 +108,7 @@ enum ofi_reliability_kind fi_opx_select_reliability(struct fi_opx_ep *opx_ep) {
 
 }
 
+void fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count, fi_addr_t *peers);
 
 __OPX_FORCE_INLINE__
 enum ofi_reliability_app_kind fi_opx_select_app_reliability(struct fi_opx_ep *opx_ep) {
@@ -1240,6 +1241,10 @@ static int fi_opx_enable_ep(struct fid_ep *ep)
 		return -errno;
 	}
 
+	/* connect any inserted table (av) addresses */
+	if(opx_ep->av->table_addr)
+		fi_opx_ep_tx_connect(opx_ep,opx_ep->av->addr_count,&opx_ep->av->table_addr->fi);
+
 	opx_ep->state = FI_OPX_EP_INITITALIZED_ENABLED;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "ep enabled\n");
@@ -2170,18 +2175,20 @@ void fi_opx_ep_rx_append_ue_egr (struct fi_opx_ep_rx * const rx,
 	fi_opx_ep_rx_append_ue(rx, &rx->mp_egr_queue.ue, hdr, payload, payload_bytes);
 }
 
-void fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, fi_addr_t peer)
+void fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count, fi_addr_t *peers)
 {
+	int n;
 	opx_ep->rx->av_addr = opx_ep->av->table_addr;
 	opx_ep->tx->av_addr = opx_ep->av->table_addr;
 	opx_ep->rx->av_count = opx_ep->av->addr_count;
 	opx_ep->tx->av_count = opx_ep->av->addr_count;
-
-	FI_OPX_FABRIC_TX_CONNECT(opx_ep, peer);
+	for (n=0; n<count; ++n) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_AV,"opx_ep %p, opx_ep->tx %p, peer %#lX\n",opx_ep,opx_ep->tx,peers[n]);
+		FI_OPX_FABRIC_TX_CONNECT(opx_ep, peers[n]);
+	}
 
 	return;
 }
-
 
 
 FI_OPX_MSG_SPECIALIZED_FUNC(OPX_LOCK, OPX_AV, OPX_EP_CAPS, OPX_RELIABILITY)

@@ -136,8 +136,9 @@ struct fi_opx_av {
 
 	/* == ALL OTHER CACHE LINES == */
 
-	union fi_opx_addr *	table_addr;
+	union fi_opx_addr *	table_addr; /* allocated buffer to free */
 	uint64_t		rx_ctx_bits;
+	uint32_t		table_count;/* table, not av, count */
 };
 
 struct fi_opx_mr {
