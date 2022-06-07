@@ -75,6 +75,8 @@
 #define PSM3_NIC_ANY ((long)-1)
 /* any port num to match. */
 #define PSM3_NIC_PORT_ANY ((long)0)
+/* any addr_index to match. */
+#define PSM3_ADDR_INDEX_ANY ((long)-1)
 
 
 /* format args: char *unitpath, uint32_t port, char *attr */
@@ -115,6 +117,18 @@ int psm3_sysfs_port_read_s64(uint32_t unit, uint32_t port, const char *attr,
 			    int64_t *valp, int base);
 int64_t psm3_sysfs_unit_read_node_s64(uint32_t unit);
 
+#ifdef PSM_OPA
+void psm3_hfifs_free(char *data);
+/* read up to one page of malloc'ed data returning
+   number of bytes read or -1 */
+/* caller must use psm3_hfifs_free to free *datap */
+int psm3_hfifs_read(const char *attr, char **datap);
+int psm3_hfifs_unit_read(uint32_t unit, const char *attr, char **data);
+
+/* these read directly into supplied buffer and take a count */
+int psm3_hfifs_rd(const char *, void *, int);
+int psm3_hfifs_unit_rd(uint32_t unit, const char *, void *, int);
+#endif
 
 /* Given a unit number, return an error, or the corresponding cpuset. */
 /* Returns an int, so -1 indicates an error. */

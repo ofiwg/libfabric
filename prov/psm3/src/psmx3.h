@@ -593,6 +593,7 @@ struct psmx3_fid_domain {
 
 #define PSMX3_DEFAULT_UNIT	(-1)
 #define PSMX3_DEFAULT_PORT	0
+#define PSMX3_DEFAULT_ADDR_INDEX	(-1)
 #define PSMX3_ANY_SERVICE	0
 
 struct psmx3_ep_name {
@@ -844,6 +845,8 @@ struct psmx3_domain_info {
 	int num_active_units;	/* total active found, >= num_reported_units */
 	int active_units[PSMX3_MAX_UNITS];
 	int unit_is_active[PSMX3_MAX_UNITS];
+	int unit_id[PSMX3_MAX_UNITS];	/* PSM3 unit_id */
+	int addr_index[PSMX3_MAX_UNITS];/* PSM3 address index within unit_id */
 	int unit_nctxts[PSMX3_MAX_UNITS];
 	int unit_nfreectxts[PSMX3_MAX_UNITS];
 	char default_domain_name[PSMX3_MAX_UNITS * NAME_MAX]; /* autoselect:irdma0;irdma1;..... */

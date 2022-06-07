@@ -62,6 +62,24 @@
 
 #define INC_TIME_SPEND(timer)
 
+// return 1 if seq is between first and last inclusive.  Accounts for possible
+// wraparound where numerically first >= last
+PSMI_INLINE(
+int
+between(int first_seq, int last_seq, int seq))
+{
+	if (last_seq >= first_seq) {
+		if (seq < first_seq || seq > last_seq) {
+			return 0;
+		}
+	} else {
+		if (seq > last_seq && seq < first_seq) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
 /*
  * Connect protocol.
  *
@@ -76,6 +94,12 @@ psm2_error_t psm3_ips_proto_timer_ack_callback(struct psmi_timer *, uint64_t);
 psm2_error_t psm3_ips_proto_timer_send_callback(struct psmi_timer *, uint64_t);
 psm2_error_t psm3_ips_proto_timer_ctrlq_callback(struct psmi_timer *, uint64_t);
 psm2_error_t psm3_ips_proto_timer_pendq_callback(struct psmi_timer *, uint64_t);
+#ifdef PSM_OPA
+psm2_error_t ips_cca_timer_callback(struct psmi_timer *current_timer,
+				   uint64_t current);
+
+psm2_error_t ips_cca_adjust_rate(ips_path_rec_t *path_rec, int cct_increment);
+#endif
 void psm3_ips_proto_rv_scbavail_callback(struct ips_scbctrl *scbc, void *context);
 
 psm2_error_t psm3_ips_proto_recv_init(struct ips_proto *proto);

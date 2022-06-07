@@ -158,7 +158,7 @@ psm2_error_t psm3_verbs_check_rv_completion(psm2_ep_t ep, struct ips_proto *prot
 						break;	/* let sender handle errors */
 					psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 							"failed rv recv RDMA '%s' (%d) on %s port %u epid %s\n",
-							ibv_wc_status_str(ev.wc.status), (int)ev.wc.status, ep->dev_name, ep->portnum, psm3_epid_fmt(ep->epid, 0));
+							ibv_wc_status_str(ev.wc.status), (int)ev.wc.status, ep->dev_name, ep->portnum, psm3_epid_fmt_internal(ep->epid, 0));
 					return PSM2_INTERNAL_ERR;
 				}
 				_HFI_MMDBG("got RV RDMA Write Immediate RQ CQE %u bytes\n",
@@ -171,7 +171,7 @@ psm2_error_t psm3_verbs_check_rv_completion(psm2_ep_t ep, struct ips_proto *prot
 				psm3_handle_error( PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 					"unexpected rv event %d status '%s' (%d) on %s port %u epid %s\n",
 					ev.event_type, ibv_wc_status_str(ev.wc.status),
-					(int)ev.wc.status, ep->dev_name, ep->portnum, psm3_epid_fmt(ep->epid, 0));
+					(int)ev.wc.status, ep->dev_name, ep->portnum, psm3_epid_fmt_internal(ep->epid, 0));
 				break;
 			}
 	}
@@ -225,7 +225,7 @@ psm2_error_t psm3_verbs_recvhdrq_progress(struct ips_recvhdrq *recvq)
 				    || errno == EBUSY || errno = EINTR)
 					break;
 				_HFI_ERROR("failed ibv_poll_cq '%s' (%d) on %s port %u epid %s\n",
-					strerror(errno), errno, ep->dev_name, ep->portnum, psm3_epid_fmt(ep->epid, 0));
+					strerror(errno), errno, ep->dev_name, ep->portnum, psm3_epid_fmt_internal(ep->epid, 0));
 				goto fail;
 			}
 			ep->verbs_ep.recv_wc_count = err;
@@ -258,7 +258,7 @@ psm2_error_t psm3_verbs_recvhdrq_progress(struct ips_recvhdrq *recvq)
 			    || errno == EBUSY || errno == EINTR)
 				break;
 			_HFI_ERROR("failed ibv_poll_cq '%s' (%d) on %s port %u epid %s\n",
-				strerror(errno), errno, ep->dev_name, ep->portnum, psm3_epid_fmt(ep->epid, 0));
+				strerror(errno), errno, ep->dev_name, ep->portnum, psm3_epid_fmt_internal(ep->epid, 0));
 			goto fail;
 		} else {
 #endif	// VERBS_RECV_CQE_BATCH > 1
@@ -267,7 +267,7 @@ psm2_error_t psm3_verbs_recvhdrq_progress(struct ips_recvhdrq *recvq)
 			if_pf (WC(status)) {
 				if (WC(status) != IBV_WC_WR_FLUSH_ERR)
 					_HFI_ERROR("failed recv '%s' (%d) on %s port %u epid %s QP %u\n",
-						ibv_wc_status_str(WC(status)), (int)WC(status), ep->dev_name, ep->portnum, psm3_epid_fmt(ep->epid, 0), WC(qp_num));
+						ibv_wc_status_str(WC(status)), (int)WC(status), ep->dev_name, ep->portnum, psm3_epid_fmt_internal(ep->epid, 0), WC(qp_num));
 				goto fail;
 			}
 			switch (WC(opcode)) {
@@ -285,7 +285,7 @@ psm2_error_t psm3_verbs_recvhdrq_progress(struct ips_recvhdrq *recvq)
 #endif
 			default:
 				_HFI_ERROR("unexpected recv opcode %d on %s port %u epid %s QP %u\n",
-					WC(opcode), ep->dev_name, ep->portnum, psm3_epid_fmt(ep->epid, 0), WC(qp_num));
+					WC(opcode), ep->dev_name, ep->portnum, psm3_epid_fmt_internal(ep->epid, 0), WC(qp_num));
 				goto repost;
 				break;
 			case IBV_WC_RECV:

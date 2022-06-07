@@ -96,8 +96,8 @@ static void psm3_ep_close_device(const psm2_ep_t ep);
  * hfi.
  */
 
-psm2_error_t psmi_parse_devices(int devices[PTL_MAX_INIT]);
-int psmi_device_is_enabled(const int devices[PTL_MAX_INIT], int devid);
+psm2_error_t psm3_parse_devices(int devices[PTL_MAX_INIT]);
+int psm3_device_is_enabled(const int devices[PTL_MAX_INIT], int devid);
 int psm3_ep_device_is_enabled(const psm2_ep_t ep, int devid);
 
 psm2_error_t psm3_ep_num_devunits(uint32_t *num_units_o)
@@ -123,27 +123,37 @@ struct rail_info {
 	psmi_subnet128_t subnet;
 	unsigned unit;
 	unsigned port;
+	unsigned addr_index;
 };
 
 static int cmpfunc(const void *p1, const void *p2)
 {
 	struct rail_info *a = ((struct rail_info *) p1);
 	struct rail_info *b = ((struct rail_info *) p2);
+	int ret;
 
-	return psmi_subnet128_cmp(a->subnet, b->subnet);
+	ret = psmi_subnet128_cmp(a->subnet, b->subnet);
+	if (ret == 0) {
+		if (a->addr_index < b->addr_index)
+			return -1;
+		else if (a->addr_index > b->addr_index)
+			return 1;
+	}
+	return ret;
 }
 
 // process PSM3_MULTIRAIL and PSM3_MULTIRAIL_MAP and return the
-// list of unit/port in unit[0-*num_rails] and port[0-*num_rails]
+// list of unit/port/addr_index in unit[0-(*num_rails-1)],
+// port[0-(*num_rails-1)] and addr_index[0-(*num_rails-1)]
 // When *num_rails is returned as 0, multirail is not enabled and
 // other mechanisms (PSM3_NIC, PSM3_NIC_SELECTION_ALG) must be
 // used by the caller to select a single NIC for the process
 static psm2_error_t
-psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port)
+psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port, int *addr_index)
 {
 	uint32_t num_units;
 	psmi_subnet128_t subnet;
-	unsigned i, j, count = 0;
+	unsigned i, j, k, count = 0;
 	int ret;
 	psm2_error_t err = PSM2_OK;
 	struct rail_info rail_info[PSMI_MAX_RAILS];
@@ -175,6 +185,8 @@ psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port)
 /*
  * map is in format: unit:port,unit:port,...
  * where :port is optional (default of 1) and unit can be name or number
+ * May eventually want addr_index here for PSM3_ADDR_PER_NIC>1
+ * for now we just hardcode as 0 when using MULTIRAIL_MAP
  */
 #define MAX_MAP_LEN (PSMI_MAX_RAILS*128)
 	if (!psm3_getenv("PSM3_MULTIRAIL_MAP",
@@ -230,7 +242,7 @@ psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port)
 				delim = strchr(s, ',');
 				if (delim)
 					*delim = '\0';
-				p = psmi_parse_str_long(s);
+				p = psm3_parse_str_long(s);
 				if (p < 0)
 					return psm3_handle_error(NULL, PSM2_EP_DEVICE_FAILURE,
 						"PSM3_MULTIRAIL_MAP invalid port: '%s'", s);
@@ -240,6 +252,7 @@ psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port)
 
 			unit[count] = u;
 			port[count] = p;
+			addr_index[count] = PSM3_ADDR_INDEX_ANY; // caller will pick
 			count++;
 		} while (delim);
 		*num_rails = count;
@@ -257,14 +270,14 @@ psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port)
 						"PSM3_MULTIRAIL_MAP: Unit/port: %d(%s):%d is not active.",
 						unit[i], psm3_sysfs_unit_dev_name(unit[i]),
 						port[i]);
-			ret = psmi_hal_get_port_lid(unit[i], port[i]);
+			ret = psmi_hal_get_port_lid(unit[i], port[i], 0 /* addr_index*/);
 			if (ret <= 0)
 				return psm3_handle_error(NULL,
 						PSM2_EP_DEVICE_FAILURE,
 						"PSM3_MULTIRAIL_MAP: unit %d(%s):%d was filtered out, unable to use",
 						unit[i], psm3_sysfs_unit_dev_name(unit[i]),
 						port[i]);
-			ret = psmi_hal_get_port_subnet(unit[i], port[i], NULL, NULL, NULL, NULL);
+			ret = psmi_hal_get_port_subnet(unit[i], port[i], 0 /* addr_index*/, NULL, NULL, NULL, NULL);
 			if (ret == -1)
 				return psm3_handle_error(NULL,
 						PSM2_EP_DEVICE_FAILURE,
@@ -309,7 +322,8 @@ psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port)
 		}
 	}
 /*
- * Get all the ports with a valid lid and gid, one per unit.
+ * Get all the ports and addr_index with a valid lid and gid, one port per unit.
+ * but up to PSM3_ADDR_PER_NIC addresses
  */
 	for (i = 0; i < num_units; i++) {
 		int node_id_i;
@@ -322,18 +336,24 @@ psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port)
 		}
 
 		for (j = PSM3_NIC_MIN_PORT; j <= PSM3_NIC_MAX_PORT; j++) {
-			ret = psmi_hal_get_port_lid(i, j);
-			if (ret <= 0)
-				continue;
-			ret = psmi_hal_get_port_subnet(i, j, &subnet, NULL, NULL, NULL);
-			if (ret == -1)
-				continue;
+			int got_port = 0;
+			for (k = 0; k < psm3_addr_per_nic; k++) {
+				ret = psmi_hal_get_port_lid(i, j, k);
+				if (ret <= 0)
+					continue;
+				ret = psmi_hal_get_port_subnet(i, j, k, &subnet, NULL, NULL, NULL);
+				if (ret == -1)
+					continue;
 
-			rail_info[count].subnet = subnet;
-			rail_info[count].unit = i;
-			rail_info[count].port = j;
-			count++;
-			break;
+				rail_info[count].subnet = subnet;
+				rail_info[count].unit = i;
+				rail_info[count].port = j;
+				rail_info[count].addr_index = k;
+				got_port = 1;
+				count++;
+			}
+			if (got_port)	// one port per unit
+				break;
 		}
 	}
 
@@ -347,6 +367,7 @@ psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port)
 	for (i = 0; i < count; i++) {
 		unit[i] = rail_info[i].unit;
 		port[i] = rail_info[i].port;
+		addr_index[i] = rail_info[i].addr_index;
 	}
 	*num_rails = count;
 	return PSM2_OK;
@@ -378,7 +399,7 @@ psm3_ep_devnids(psm2_nid_t **nids, uint32_t *num_nids_o)
 			goto fail;
 		hfi_nids = (psm2_nid_t *)
 		    psmi_calloc(PSMI_EP_NONE, UNDEFINED,
-				num_units * psmi_hal_get_num_ports(), sizeof(*hfi_nids));
+				num_units * psmi_hal_get_num_ports()*psm3_addr_per_nic, sizeof(*hfi_nids));
 		if (hfi_nids == NULL) {
 			err = psm3_handle_error(NULL, PSM2_NO_MEMORY,
 						"Couldn't allocate memory for dev_nids structure");
@@ -388,26 +409,29 @@ psm3_ep_devnids(psm2_nid_t **nids, uint32_t *num_nids_o)
 		for (i = 0; i < num_units; i++) {
 			int j;
 			for (j = PSM3_NIC_MIN_PORT; j <= PSM3_NIC_MAX_PORT; j++) {
-				int lid = psmi_hal_get_port_lid(i, j);
-				int ret, idx = 0;
-				psmi_subnet128_t subnet = { };
-				psmi_naddr128_t addr = { };
-				psmi_gid128_t gid = { };
+				int k;
+				for (k = 0; k < psm3_addr_per_nic; k++) {
+					int lid = psmi_hal_get_port_lid(i, j, k);
+					int ret, idx = 0;
+					psmi_subnet128_t subnet = { };
+					psmi_naddr128_t addr = { };
+					psmi_gid128_t gid = { };
 
-				// skip ports which aren't ready for use
-				if (lid <= 0)
-					continue;
-				ret = psmi_hal_get_port_subnet(i, j, &subnet, &addr, &idx, &gid);
-				if (ret == -1)
-					continue;
-				hfi_nids[nnids] = psm3_build_nid(i, addr, lid);
-				_HFI_VDBG("NIC unit %d, port %d, found %s "
-					  "GID[%d] %s subnet %s\n",
-					i, j,
-					psmi_nid_fmt(hfi_nids[nnids], 0),
-					idx, psmi_gid128_fmt(gid, 1),
-					psmi_subnet128_fmt(subnet, 2));
-				nnids++;
+					// skip ports which aren't ready for use
+					if (lid <= 0)
+						continue;
+					ret = psmi_hal_get_port_subnet(i, j, k, &subnet, &addr, &idx, &gid);
+					if (ret == -1)
+						continue;
+					hfi_nids[nnids] = psm3_build_nid(i, addr, lid);
+					_HFI_VDBG("NIC unit %d, port %d addr_index %d, found %s "
+						  "GID[%d] %s subnet %s\n",
+						i, j, k,
+						psm3_nid_fmt(hfi_nids[nnids], 0),
+						idx, psm3_gid128_fmt(gid, 1),
+						psm3_subnet128_fmt(subnet, 2));
+					nnids++;
+				}
 			}
 		}
 		if (nnids == 0) {
@@ -576,11 +600,11 @@ psm3_ep_epid_share_memory(psm2_ep_t ep, psm2_epid_t epid, int *result_o)
 	if ((!psm3_ep_device_is_enabled(ep, PTL_DEVID_IPS)) ||
 		(psm3_epid_addr_fmt(epid) == PSMI_ADDR_FMT_SHM)) {
 		// FMT_SHM has a NID based on 1st local NIC
-		if (0 == psm2_nid_cmp(psm3_epid_nid(ep->epid), psm3_epid_nid(epid)))
+		if (0 == psm3_nid_cmp_internal(psm3_epid_nid(ep->epid), psm3_epid_nid(epid)))
 			result = 1;	// same node
 		else
 			_HFI_ERROR("attempting to run multi-node job without 'nic' in PSM3_DEVICES: remote process %s NIC %s doesn't match local NIC %s\n",
-					psm3_epid_fmt(epid, 0),
+					psm3_epid_fmt_internal(epid, 0),
 					psm3_epid_fmt_addr(epid, 1),
 					psm3_epid_fmt_addr(ep->epid, 2));
 	} else {
@@ -591,13 +615,13 @@ psm3_ep_epid_share_memory(psm2_ep_t ep, psm2_epid_t epid, int *result_o)
 			return err;
 		}
 		for (i = 0; i < num_nids; i++) {
-			if (0 == psmi_nid_cmp(nid, nids[i])) {
+			if (0 == psm3_nid_cmp_internal(nid, nids[i])) {
 				/* we share memory if the nid is the same. */
 				result = 1;
 				_HFI_VDBG("remote process %s NIC %s matches local NIC %s\n",
-					psm3_epid_fmt(epid, 0),
+					psm3_epid_fmt_internal(epid, 0),
 					psm3_epid_fmt_addr(epid, 1),
-					psmi_nid_fmt(nids[i], 2));
+					psm3_nid_fmt(nids[i], 2));
 				break;
 			}
 		}
@@ -624,6 +648,7 @@ psm2_error_t psm3_ep_open_opts_get_defaults(struct psm3_ep_open_opts *opts)
 	opts->sendbufs_num = 1024;
 	opts->network_pkey = psmi_hal_get_default_pkey();
 	opts->port = PSM3_NIC_PORT_ANY;
+	opts->addr_index = PSM3_ADDR_INDEX_ANY;
 	opts->outsl = PSMI_SL_DEFAULT;
 	opts->service_id = HFI_DEFAULT_SERVICE_ID;
 	opts->path_res_type = PSM2_PATH_RES_NONE;
@@ -672,10 +697,16 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 		opts.network_pkey = opts_i->network_pkey;
 	if (opts_i->port != 0)
 		opts.port = opts_i->port;
+	if (opts_i->addr_index != -1)
+		opts.addr_index = opts_i->addr_index;
 	if (opts_i->outsl != -1)
 		opts.outsl = opts_i->outsl;
 	if (opts_i->service_id)
 		opts.service_id = (uint64_t) opts_i->service_id;
+#ifdef PSM_OPA
+	if (opts_i->path_res_type != PSM2_PATH_RES_NONE)
+		opts.path_res_type = opts_i->path_res_type;
+#endif
 	if (opts_i->senddesc_num)
 		opts.senddesc_num = opts_i->senddesc_num;
 	if (opts_i->imm_size)
@@ -683,7 +714,11 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 
 	/* Get Service ID from environment */
 	if (!psm3_getenv("PSM3_IB_SERVICE_ID",
+#ifdef PSM_OPA
+			 "Service ID for path resolution",
+#else
 			 "Service ID for RV module RC QP connection establishment",
+#endif
 			 PSMI_ENVVAR_LEVEL_USER,
 			 PSMI_ENVVAR_TYPE_ULONG_FLAGS, // FLAGS only affects output: hex
 			 (union psmi_envvar_val)HFI_DEFAULT_SERVICE_ID,
@@ -691,7 +726,33 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 		opts.service_id = (uint64_t) envvar_val.e_ulonglong;
 	}
 
+#ifdef PSM_OPA
+	/* Get Path resolution type from environment Possible choices are:
+	 *
+	 * NONE : Default same as previous instances. Utilizes static data.
+	 * OPP  : Use OFED Plus Plus library to do path record queries.
+	 * UMAD : Use raw libibumad interface to form and process path records.
+	 */
+	if (!psm3_getenv("PSM3_PATH_REC",
+			 "Mechanism to query NIC path record (default is no path query)",
+			 PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
+			 (union psmi_envvar_val)"none", &envvar_val)) {
+		if (!strcasecmp(envvar_val.e_str, "none"))
+			opts.path_res_type = PSM2_PATH_RES_NONE;
+		else if (!strcasecmp(envvar_val.e_str, "opp"))
+			opts.path_res_type = PSM2_PATH_RES_OPP;
+		else if (!strcasecmp(envvar_val.e_str, "umad"))
+			opts.path_res_type = PSM2_PATH_RES_UMAD;
+		else {
+			_HFI_ERROR("Unknown path resolution type %s. "
+				"Disabling use of path record query.\n",
+				envvar_val.e_str);
+			opts.path_res_type = PSM2_PATH_RES_NONE;
+		}
+	}
+#else
 	opts.path_res_type = PSM2_PATH_RES_NONE;
+#endif
 
 	/* Get user specified port number to use. */
 	if (!psm3_getenv("PSM3_NIC_PORT", "NIC Port number (0 autodetects)",
@@ -704,7 +765,11 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 	/* Get service level from environment, path-query overrides it */
 	if (!psm3_getenv
 	    ("PSM3_NIC_SL", "NIC outging ServiceLevel number (default 0)",
+#ifdef PSM_OPA
+	     PSMI_ENVVAR_LEVEL_USER,
+#else
 	     PSMI_ENVVAR_LEVEL_HIDDEN,
+#endif
 	     PSMI_ENVVAR_TYPE_LONG,
 	     (union psmi_envvar_val)PSMI_SL_DEFAULT, &envvar_val)) {
 		opts.outsl = envvar_val.e_long;
@@ -716,7 +781,11 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 	 */
 	if (!psm3_getenv("PSM3_PKEY",
 			 "PKey to use for endpoint (0=use slot 0)",
+#ifdef PSM_OPA
+			 PSMI_ENVVAR_LEVEL_USER,
+#else
 			 PSMI_ENVVAR_LEVEL_HIDDEN,
+#endif
 			 PSMI_ENVVAR_TYPE_ULONG_FLAGS,	// show in hex
 			 (union psmi_envvar_val)((unsigned int)(psmi_hal_get_default_pkey())),
 			 &envvar_val)) {
@@ -773,7 +842,7 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 			goto fail;
 		}
 	}
-	if (psmi_device_is_enabled(devid_enabled, PTL_DEVID_IPS)) {
+	if (psm3_device_is_enabled(devid_enabled, PTL_DEVID_IPS)) {
 		if ((err = psm3_ep_num_devunits(&num_units)) != PSM2_OK)
 			goto fail;
 	} else
@@ -796,6 +865,11 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 					"Invalid Device port number %d",
 					opts.port);
 		goto fail;
+	} else if ((opts.addr_index < -1 || opts.addr_index >= (int)psm3_addr_per_nic)) {
+		err = psm3_handle_error(NULL, PSM2_PARAM_ERR,
+					"Invalid Device Address Index %d (%d addrs configured)",
+					opts.addr_index, psm3_addr_per_nic);
+		goto fail;
 	} else if (opts.affinity < 0
 		   || opts.affinity > PSM2_EP_OPEN_AFFINITY_FORCE) {
 		err =
@@ -812,11 +886,11 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 
 	/* Allocate end point structure storage */
 	ptl_sizes =
-	    (psmi_device_is_enabled(devid_enabled, PTL_DEVID_SELF) ?
+	    (psm3_device_is_enabled(devid_enabled, PTL_DEVID_SELF) ?
 	     psm3_ptl_self.sizeof_ptl() : 0) +
-	    (psmi_device_is_enabled(devid_enabled, PTL_DEVID_IPS) ?
+	    (psm3_device_is_enabled(devid_enabled, PTL_DEVID_IPS) ?
 	     psm3_ptl_ips.sizeof_ptl() : 0) +
-	    (psmi_device_is_enabled(devid_enabled, PTL_DEVID_AMSH) ?
+	    (psm3_device_is_enabled(devid_enabled, PTL_DEVID_AMSH) ?
 	     psm3_ptl_amsh.sizeof_ptl() : 0);
 	if (ptl_sizes == 0)
 		return PSM2_EP_NO_DEVICE;
@@ -899,7 +973,7 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 	// HFI Interface.
 	if ((err = psm3_ep_open_device(ep, &opts, unique_job_key)))
 		goto fail;
-	psmi_assert_always(!psm3_epid_zero(ep->epid));
+	psmi_assert_always(!psm3_epid_zero_internal(ep->epid));
 	ep->epaddr->epid = ep->epid;
 
 	_HFI_VDBG("psm3_ep_open_device() passed\n");
@@ -930,10 +1004,10 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 		goto close;
 
 	if (! mq->ep)	// only call on 1st EP within MQ
-		psmi_mq_initstats(mq, ep->epid);
+		psm3_mq_initstats(mq, ep->epid);
 
 #ifdef PSM_CUDA
-	if (PSMI_IS_CUDA_ENABLED)
+	if (PSMI_IS_GPU_ENABLED)
 		verify_device_support_unified_addr();
 #endif
 
@@ -1047,6 +1121,7 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 	psm2_ep_t ep, tmp;
 	uint32_t units[PSMI_MAX_QPS];
 	uint16_t ports[PSMI_MAX_QPS];
+	int addr_indexes[PSMI_MAX_QPS];
 	int i, num_rails = 0;
 	int devid_enabled[PTL_MAX_INIT];
 	struct psm3_ep_open_opts opts = *opts_i;
@@ -1057,13 +1132,23 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 	if (!epo || !epido)
 		return PSM2_PARAM_ERR;
 
-	psmi_print_rank_identify();
+	psm3_print_rank_identify();
 
 	/* Allowing only one EP (unless explicitly enabled). */
 	if (psm3_opened_endpoint_count > 0 && !psm3_multi_ep_enabled) {
 		PSM2_LOG_MSG("leaving");
 		return PSM2_TOO_MANY_ENDPOINTS;
 	}
+
+#if defined(PSM_ONEAPI)
+	/* Make sure the ze_cq and ze_cl are available.
+	 * Both could be destroyed when there is no more endpoints.
+	 * If another endpoint is created after that, the code here can
+	 * recreates the command queue and list.
+	 */
+	if (PSMI_IS_GPU_ENABLED && (!ze_cq || !ze_cl))
+		psmi_oneapi_cmd_create(ze_device);
+#endif //PSM_ONEAPI
 
 	/* Matched Queue initialization.  We do this early because we have to
 	 * make sure ep->mq exists and is valid before calling ips_do_work.
@@ -1082,11 +1167,11 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 
 	psmi_init_lock(&(mq->progress_lock));
 
-	if ((err = psmi_parse_devices(devid_enabled)))
+	if ((err = psm3_parse_devices(devid_enabled)))
 		goto fail;
 
-	if (psmi_device_is_enabled(devid_enabled, PTL_DEVID_IPS)) {
-		err = psm3_ep_multirail(&num_rails, units, ports);
+	if (psm3_device_is_enabled(devid_enabled, PTL_DEVID_IPS)) {
+		err = psm3_ep_multirail(&num_rails, units, ports, addr_indexes);
 		if (err != PSM2_OK)
 			goto fail;
 
@@ -1094,6 +1179,7 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 		if (num_rails > 0) {
 			opts.unit = units[0];
 			opts.port = ports[0];
+			opts.addr_index = addr_indexes[0];
 		}
 	}
 #ifdef PSM_CUDA
@@ -1125,7 +1211,7 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 	ep->mctxt_master = ep;
 	mq->ep = ep;
 
-	psmi_print_ep_identify(ep);
+	psm3_print_ep_identify(ep);
 
 	/* Active Message initialization */
 	err = psm3_am_init_internal(ep);
@@ -1135,10 +1221,11 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 	*epo = ep;
 	*epido = epid;
 
-	if (psmi_device_is_enabled(devid_enabled, PTL_DEVID_IPS)) {
+	if (psm3_device_is_enabled(devid_enabled, PTL_DEVID_IPS)) {
 		int j;
 
 		psmi_hal_context_initstats(ep);
+#ifndef PSM_OPA
 		union psmi_envvar_val envvar_val;
 
 		if (num_rails <= 0) {
@@ -1147,6 +1234,7 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 			num_rails = 1;
 			units[0] = ep->unit_id;
 			ports[0] = ep->portnum;
+			addr_indexes[0] = ep->addr_index;
 		}
 		// When QP_PER_NIC >1, creates more than 1 QP on each NIC and then
 		// uses the multi-rail algorithms to spread the traffic across QPs
@@ -1169,13 +1257,18 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 		}
 
 		for (j= 0; j< envvar_val.e_uint; j++) {
+#else
+		j=0;
+		{
+#endif
 			for (i = 0; i < num_rails; i++) {
-				_HFI_VDBG("rail %d unit %u port %u\n", i, units[i], ports[i]);
+				_HFI_VDBG("rail %d unit %u port %u addr_index %d\n", i, units[i], ports[i], addr_indexes[i]);
 				// did 0, 0 already above
 				if (i == 0 && j== 0)
 					continue;
 				opts.unit = units[i];
 				opts.port = ports[i];
+				opts.addr_index = addr_indexes[i];
 
 				/* Create secondary EP */
 				err = psm3_ep_open_internal(unique_job_key,
@@ -1190,7 +1283,7 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 				/* Link secondary EP after master EP. */
 				PSM_MCTXT_APPEND(ep, tmp);
 				if (j == 0)
-					psmi_print_ep_identify(tmp);
+					psm3_print_ep_identify(tmp);
 				psmi_hal_context_initstats(tmp);
 			}
 		}
@@ -1201,6 +1294,10 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 fail:
 	fflush(stdout);
 	PSMI_UNLOCK(psm3_creation_lock);
+#if defined(PSM_ONEAPI)
+	if (PSMI_IS_GPU_ENABLED && psm3_opened_endpoint_count == 0)
+		psmi_oneapi_cmd_destroy();
+#endif //PSM_ONEAPI
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
@@ -1209,7 +1306,7 @@ psm2_error_t psm3_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 {
 	psm2_error_t err = PSM2_OK;
 
-	psmi_stats_ep_close();	// allow output of stats on 1st ep close if desired
+	psm3_stats_ep_close();	// allow output of stats on 1st ep close if desired
 
 #if _HFI_DEBUGGING
 	uint64_t t_start = 0;
@@ -1417,6 +1514,15 @@ psm2_error_t psm3_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 				 (double)cycles_to_nanosecs(get_cycles() -
 				 t_start) / SEC_ULL);
 	}
+#if defined(PSM_ONEAPI)
+	/*
+	 * It would be ideal to destroy the global command list and queue in
+	 * psm3_finalize(). Unfortunately, it will cause segfaults in
+	 * Level-zero library.
+	 */
+	if (PSMI_IS_GPU_ENABLED && psm3_opened_endpoint_count == 0)
+		psmi_oneapi_cmd_destroy();
+#endif //PSM_ONEAPI
 	PSM2_LOG_MSG("leaving");
 	return err;
 }
@@ -1431,7 +1537,7 @@ psm3_ep_open_device(const psm2_ep_t ep, const struct psm3_ep_open_opts *opts,
 	if (psm3_ep_device_is_enabled(ep, PTL_DEVID_IPS)) {
 		ep->out_sl = opts->outsl;
 		if ((err =
-		     psm3_context_open(ep, opts->unit, opts->port,
+		     psm3_context_open(ep, opts->unit, opts->port, opts->addr_index,
 				       unique_job_key,
 				       (uint16_t) opts->network_pkey,
 				       opts->timeout)) != PSM2_OK)
@@ -1445,14 +1551,14 @@ psm3_ep_open_device(const psm2_ep_t ep, const struct psm3_ep_open_opts *opts,
 		ep->addr_fmt = psm3_epid_addr_fmt(ep->epid);
 		ep->dev_name = "shm";
 		_HFI_VDBG("construct epid shm-only: %s\n",
-					psm3_epid_fmt(ep->epid, 0));
+					psm3_epid_fmt_internal(ep->epid, 0));
 	} else {
 		/* Self-only, meaning only 1 proc max */
 		ep->epid = psm3_epid_pack_self();
 		ep->addr_fmt = psm3_epid_addr_fmt(ep->epid);
 		ep->dev_name = "self";
 		_HFI_VDBG("construct epid self-only: %s\n",
-					psm3_epid_fmt(ep->epid, 0));
+					psm3_epid_fmt_internal(ep->epid, 0));
 	}
 
 fail:
@@ -1475,7 +1581,7 @@ psm3_ep_close_device(const psm2_ep_t ep)
  * given EP for intra-node comms
  */
 psm2_error_t
-psmi_parse_devices(int devices[PTL_MAX_INIT])
+psm3_parse_devices(int devices[PTL_MAX_INIT])
 {
 	char *devstr = NULL;
 	char *b_new, *e, *ee, *b;
@@ -1553,7 +1659,7 @@ fail:
 
 }
 
-int psmi_device_is_enabled(const int devid_enabled[PTL_MAX_INIT], int devid)
+int psm3_device_is_enabled(const int devid_enabled[PTL_MAX_INIT], int devid)
 {
 	int i;
 	for (i = 0; i < PTL_MAX_INIT; i++)
@@ -1564,11 +1670,11 @@ int psmi_device_is_enabled(const int devid_enabled[PTL_MAX_INIT], int devid)
 
 int psm3_ep_device_is_enabled(const psm2_ep_t ep, int devid)
 {
-	return psmi_device_is_enabled(ep->devid_enabled, devid);
+	return psm3_device_is_enabled(ep->devid_enabled, devid);
 }
 
 #ifdef PSM_HAVE_RNDV_MOD
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 // used for GdrCopy
 
 // given an ep this returns the "next one".
@@ -1709,5 +1815,5 @@ done:
 	}
 	return evicted;
 }
-#endif /* PSM_CUDA */
+#endif /* PSM_CUDA || PSM_ONEAPI */
 #endif /* PSM_HAVE_RNDV_MOD */

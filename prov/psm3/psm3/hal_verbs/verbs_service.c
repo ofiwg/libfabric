@@ -98,8 +98,9 @@ int psm3_hfp_verbs_get_num_units(void)
 }
 
 /* Given a unit number, returns 1 if any port on the unit is active.
- * ports are also filtered based on PSM3_ADDR_FMT and PSM3_SUBNETS and
- * ports without appropriate addresses are treated as not active
+ * ports are also filtered based on PSM3_ADDR_FMT, PSM3_ADDR_PER_NIC and
+ * PSM3_SUBNETS and ports without appropriate addresses are treated as
+ * not active
  * returns <= 0 if no port on the unit is active.
  */
 int psm3_verbs_get_unit_active(int unit, enum verbs_init_max_speed init_max_speed)
@@ -107,7 +108,7 @@ int psm3_verbs_get_unit_active(int unit, enum verbs_init_max_speed init_max_spee
 	int p, lid;
 
 	for (p = HFI_MIN_PORT; p <= HFI_MAX_PORT; p++) {
-		lid = psm3_verbs_get_port_lid(unit, p, init_max_speed);
+		lid = psm3_verbs_get_port_lid(unit, p, 0/*addr_index*/, init_max_speed);
 		if (lid > 0)
 			break;
 	}
@@ -205,7 +206,8 @@ static int psm3_verbs_get_port_is_ethernet(int unit, int port)
 	}
 }
 
-/* Given the unit number, return an error, or the corresponding LID
+/* Given the unit number, port and addr_index
+ * return an error, or the corresponding LID
  * Used so the MPI code can determine it's own
  * LID, and which other LIDs (if any) are also assigned to this node
  * Returns an int, so <0 indicates an error.  0 may indicate that
@@ -213,9 +215,9 @@ static int psm3_verbs_get_port_is_ethernet(int unit, int port)
  *
  * This routine is used in many places, such as get_unit_active, to
  * confirm the port is usable.  As such it includes additional checks that
- * the port is active and has an appropriate address based on PSM3_ADDR_FMT
- * and PSM3_SUBNETS.  Ports without appropriate addresses are treated as not
- * initialized and return -1.
+ * the port is active and has an appropriate address based on PSM3_ADDR_FMT,
+ * PSM3_ADDR_PER_NIC and PSM3_SUBNETS.  Ports without appropriate addresses
+ * are treated as not initialized and return -1.
  *
  * For IB/OPA - actual LID is returned, values of 0 indicate
  *	port is not yet ready for use
@@ -225,7 +227,7 @@ static int psm3_verbs_get_port_is_ethernet(int unit, int port)
  * No error print because we call this for both potential
  * ports without knowing if both ports exist (or are connected)
  */
-int psm3_verbs_get_port_lid(int unit, int port, enum verbs_init_max_speed init_max_speed)
+int psm3_verbs_get_port_lid(int unit, int port, int addr_index, enum verbs_init_max_speed init_max_speed)
 {
 	int ret = 0;
 	int64_t val = 0;
@@ -256,6 +258,15 @@ int psm3_verbs_get_port_lid(int unit, int port, enum verbs_init_max_speed init_m
 					unit, port, strerror(errno));
 			return -1;
 		}
+		// For IB/OPA, PSM3_ADDR_PER_NIC is essentially ignored and addr_index>0
+		// reports no LID available.  In future could use addr_index to select
+		// among the LMC LIDs and check LMC has > PSM3_ADDR_PER_NIC here and in
+		// get_port_subnet filtering of ports
+		if (addr_index > 0) {
+			_HFI_DBG("Only addr_index 0 supported for IB/OPA for unit %u:%u\n",
+					unit, port);
+			return 0;
+		}
 		// be paranoid, for an active port we should have a valid
 		// LID 1-0xfffe (technically 1-0xbffff due to multicast)
 		if (val == 0xffff)	// uninitialized IB LID
@@ -271,7 +282,7 @@ int psm3_verbs_get_port_lid(int unit, int port, enum verbs_init_max_speed init_m
 	}
 
 	// make sure can find acceptable addresses and subnets
-	if (0 != psm3_hfp_verbs_get_port_subnet(unit, port,
+	if (0 != psm3_hfp_verbs_get_port_subnet(unit, port, addr_index,
 					NULL, NULL, NULL, NULL)) {
 		_HFI_DBG("Failed to find acceptable subnet for unit %u:%u: %s\n",
 			unit, port, strerror(errno));
@@ -359,7 +370,7 @@ static int psm3_verbs_get_port_gid(int unit, int port, int idx, int filter,
 				/* treat filtered entries as empty */
 				_HFI_DBG("Filtered out GID unit %d port %d idx %d %s %s",
 					unit, port, idx,
-					psmi_gid128_fmt(*gidp, 0), gid_str);
+					psm3_gid128_fmt(*gidp, 0), gid_str);
 				gidp->hi = gidp->lo = 0;
 			}
 			psm3_sysfs_free(gid_str);
@@ -370,8 +381,9 @@ static int psm3_verbs_get_port_gid(int unit, int port, int idx, int filter,
 	return ret;
 }
 
-/* Given the unit number, return an error, or the corresponding subnet
- * address and GID selected for the unit
+/* Given the unit number, port and addr_index,
+ * return an error, or the corresponding subnet
+ * address and GID selected for the unit/port/addr_index
  * For IB/OPA the subnet.hi is the hi 64b of the GID, subnet.lo is 0
  *		addr is the 128b GID
  *		prefix_len is always 64
@@ -387,7 +399,7 @@ static int psm3_verbs_get_port_gid(int unit, int port, int idx, int filter,
  * All output values are in host byte order
  * Note this layout means (subnet | addr) == addr for all formats
  *
- * PSM3_FMT_ADDR (psmi_addr_fmt) sets preferred address type.
+ * PSM3_FMT_ADDR (psm3_addr_fmt) sets preferred address type.
  *  0 (default) - consider all ports
  *	For Ethernet return first IPv4 addr found, if no IPv4 return 1st IPv6
  *	For OPA/IBA return 1st GID found
@@ -404,18 +416,18 @@ static int psm3_verbs_get_port_gid(int unit, int port, int idx, int filter,
  * For Ethernet a unit will only have a single port (port 1), for IB a unit
  * may have more than 1 port.
 */
-int psm3_hfp_verbs_get_port_subnet(int unit, int port, 
+int psm3_hfp_verbs_get_port_subnet(int unit, int port, int addr_index,
 			psmi_subnet128_t *subnet, psmi_naddr128_t *addr,
 			int *idx, psmi_gid128_t *gid)
 {
 	int i;
 	int is_eth = psm3_verbs_get_port_is_ethernet(unit, port);
-	int have_ipv4_subnet = 0;
+	int cnt_ipv4_subnet = 0;	// count of IPv4 addrs found
 	int ipv4_idx = INT_MAX;
 	psmi_gid128_t ipv4_gid = { };
 	uint8_t ipv4_prefix_len = 0;
 	uint32_t ipv4_addr = 0, ipv4_netmask = 0;
-	int have_ipv6_subnet = 0;
+	int cnt_ipv6_subnet = 0;	// count of IPv6 addrs found
 	int ipv6_idx = INT_MAX;
 	psmi_gid128_t ipv6_gid = { };
 	uint8_t ipv6_prefix_len = 0;
@@ -428,15 +440,26 @@ int psm3_hfp_verbs_get_port_subnet(int unit, int port,
 		errno = ENODEV;
 		return -1;
 	}
-	// when PSM3_ADDR_FMT is FMT_IB, FMT_IPV4 or FMT_IPV6,
-	// filter out ports of wrong type
-	if (is_eth && psmi_addr_fmt == PSMI_ADDR_FMT_IB) {
-		_HFI_DBG("Skipped Ethernet unit %d port %d PSM3_ADDR_FMT %u\n", unit, port, psmi_addr_fmt);
+	if (addr_index < 0 || addr_index > psm3_addr_per_nic) {
+		errno = EINVAL;
 		return -1;
 	}
-	if (!is_eth && (psmi_addr_fmt == PSMI_ADDR_FMT_IPV4
-		|| psmi_addr_fmt == PSMI_ADDR_FMT_IPV6)) {
-		_HFI_DBG("Skipped IB/OPA unit %d port %d PSM3_ADDR_FMT %u\n", unit, port, psmi_addr_fmt);
+
+	// when PSM3_ADDR_FMT is FMT_IB, FMT_IPV4 or FMT_IPV6,
+	// filter out ports of wrong type
+	if (is_eth && psm3_addr_fmt == PSMI_ADDR_FMT_IB) {
+		_HFI_DBG("Skipped Ethernet unit %d port %d PSM3_ADDR_FMT %u\n", unit, port, psm3_addr_fmt);
+		return -1;
+	}
+	if (!is_eth && (psm3_addr_fmt == PSMI_ADDR_FMT_IPV4
+		|| psm3_addr_fmt == PSMI_ADDR_FMT_IPV6)) {
+		_HFI_DBG("Skipped IB/OPA unit %d port %d PSM3_ADDR_FMT %u\n", unit, port, psm3_addr_fmt);
+		return -1;
+	}
+	// for IB/OPA we only allow addr_index==0 even if PSM3_ADDR_PER_NIC>1
+	// In future might use addr_index to select among the LMC LIDs
+	if (!is_eth && addr_index > 0) {
+		_HFI_DBG("Skipped IB/OPA unit %d port %d addr_index %d\n", unit, port, addr_index);
 		return -1;
 	}
 
@@ -452,19 +475,19 @@ int psm3_hfp_verbs_get_port_subnet(int unit, int port,
 
 		_HFI_DBG("Examine %s GID unit %d port %d idx %d %s\n",
 				is_eth? "Ethernet" : "IB/OPA",
-				unit, port, i, psmi_gid128_fmt(tmp_gid, 0));
+				unit, port, i, psm3_gid128_fmt(tmp_gid, 0));
 		// when PSM3_ADDR_FMT is FMT_IB, FMT_IPV4 or FMT_IPV6,
 		// filter out GIDs of wrong type
-		if (psmi_addr_fmt == PSMI_ADDR_FMT_IPV4
+		if (psm3_addr_fmt == PSMI_ADDR_FMT_IPV4
 			&& (!is_eth || ! psmi_is_ipv4_gid(tmp_gid))) {
 			_HFI_DBG("Skipped GID unit %d port %d PSM3_ADDR_FMT %u idx %d %s\n",
-				unit, port, psmi_addr_fmt, i, psmi_gid128_fmt(tmp_gid, 0));
+				unit, port, psm3_addr_fmt, i, psm3_gid128_fmt(tmp_gid, 0));
 			continue;	// skip IPv6 GIDs if only want IPv4
 		}
-		if (psmi_addr_fmt == PSMI_ADDR_FMT_IPV6
+		if (psm3_addr_fmt == PSMI_ADDR_FMT_IPV6
 			&& (!is_eth || psmi_is_ipv4_gid(tmp_gid))) {
 			_HFI_DBG("Skipped GID unit %d port %d PSM3_ADDR_FMT %u idx %d %s\n",
-				unit, port, psmi_addr_fmt, i, psmi_gid128_fmt(tmp_gid, 0));
+				unit, port, psm3_addr_fmt, i, psm3_gid128_fmt(tmp_gid, 0));
 			continue;	// skip IPv4 GIDs if only want IPv6
 		}
 
@@ -476,28 +499,29 @@ int psm3_hfp_verbs_get_port_subnet(int unit, int port,
 			ib_idx = i;
 			ib_gid = tmp_gid;
 			have_ib_subnet = 1;
-			_HFI_DBG("Found IB/OPA GID unit %d port %d idx %d %s\n",
-				unit, port, i, psmi_gid128_fmt(tmp_gid, 0));
+			_HFI_DBG("Found IB/OPA GID unit %d port %d addr_index %d idx %d %s\n",
+				unit, port, 0, i, psm3_gid128_fmt(tmp_gid, 0));
 			// 1st IB address finalizes decision
 			break;
 		}
-		if (! have_ipv4_subnet && is_eth && psmi_is_ipv4_gid(tmp_gid)) {
+		if (cnt_ipv4_subnet < psm3_addr_per_nic
+				&& is_eth && psmi_is_ipv4_gid(tmp_gid)) {
 			uint32_t ipaddr = 0;	// leave as 0 when IB/OPA
 			uint32_t nm = 0;;	// leave as 0 when IB/OPA
 			uint8_t nm_len = 0;
 			ipaddr = psmi_ipv4_from_gid(tmp_gid);
-			if (psmi_get_eth_ipv4_netmask(ipaddr, &nm)) {
+			if (psm3_get_eth_ipv4_netmask(ipaddr, &nm)) {
 				_HFI_DBG("Can't determine netmask for IPv4 unit %d port %d idx %d %s\n",
-					unit, port, i, psmi_gid128_fmt(tmp_gid, 0));
+					unit, port, i, psm3_gid128_fmt(tmp_gid, 0));
 				continue;
 			}
 
-			nm_len = psmi_compute_ipv4_prefix_len(nm);
+			nm_len = psm3_compute_ipv4_prefix_len(nm);
 			if (nm_len <= 0) {
 				_HFI_DBG("Invalid netmask for IPv4 unit %d port %d idx %d %s: %s\n",
 					unit, port, i,
-					psmi_gid128_fmt(tmp_gid, 0),
-					psmi_ipv4_fmt(nm, 0, 1));
+					psm3_gid128_fmt(tmp_gid, 0),
+					psm3_ipv4_fmt(nm, 0, 1));
 				continue;
 			}
 
@@ -505,50 +529,61 @@ int psm3_hfp_verbs_get_port_subnet(int unit, int port,
 			if (!psm3_allow_ipv4_subnet(ipaddr & nm, nm_len))
 				continue;
 
-			// save 1st valid ipv4 gid
+			cnt_ipv4_subnet++;
+			_HFI_DBG("Found IPv4 GID unit %d port %d addr_index %d idx %d %s\n",
+				unit, port, cnt_ipv4_subnet-1, i, psm3_gid128_fmt(tmp_gid, 0));
+
+			if (cnt_ipv4_subnet-1 != addr_index)
+				continue;
+
+			// save addr_index'th valid ipv4 gid
 			ipv4_idx = i;
 			ipv4_gid = tmp_gid;
 			ipv4_prefix_len = nm_len;
 			ipv4_addr = ipaddr;
 			ipv4_netmask = nm;
-			have_ipv4_subnet = 1;
-			_HFI_DBG("Found IPv4 GID unit %d port %d idx %d %s\n",
-				unit, port, i, psmi_gid128_fmt(tmp_gid, 0));
-			// is 1st IPv4 address sufficient to finalize decision?
-			if (psmi_addr_fmt == PSMI_ADDR_FMT_IPV4
-				|| ! psmi_addr_fmt)
+			// enough IPv4 address on port to finalize decision?
+			if (cnt_ipv4_subnet >= psm3_addr_per_nic
+				&& (psm3_addr_fmt == PSMI_ADDR_FMT_IPV4 || ! psm3_addr_fmt))
 				break;
 		}
-		if (! have_ipv6_subnet && is_eth && ! psmi_is_ipv4_gid(tmp_gid)) {
+		if (cnt_ipv6_subnet < psm3_addr_per_nic
+				&& is_eth && ! psmi_is_ipv4_gid(tmp_gid)) {
 			psmi_bare_netaddr128_t nm = { };
 			uint8_t nm_len = 0;
-			if (psmi_get_eth_ipv6_netmask(tmp_gid, &nm)) {
+			if (psm3_get_eth_ipv6_netmask(tmp_gid, &nm)) {
 				_HFI_DBG("Can't determine netmask for IPv6 unit %d port %d idx %d %s\n",
-					unit, port, i, psmi_gid128_fmt(tmp_gid, 0));
+					unit, port, i, psm3_gid128_fmt(tmp_gid, 0));
 				continue;
 			}
-			nm_len = psmi_compute_ipv6_prefix_len(nm);
+			nm_len = psm3_compute_ipv6_prefix_len(nm);
 			if (nm_len <= 0) {
 				_HFI_DBG("Invalid netmask for IPv6 unit %d port %d idx %d %s: %s\n",
 					unit, port, i,
-					psmi_gid128_fmt(tmp_gid, 0),
-					psmi_ipv6_fmt(nm, 0, 1));
+					psm3_gid128_fmt(tmp_gid, 0),
+					psm3_ipv6_fmt(nm, 0, 1));
 				continue;
 			}
 
 			// allow subnets DBG logging explains choices
 			if (!psm3_allow_ipv6_subnet(psmi_bare_netaddr128_and(tmp_gid, nm), nm_len))
 				continue;
-			// save 1st valid ipv6
+
+			cnt_ipv6_subnet++;
+			_HFI_DBG("Found IPv6 GID unit %d port %d addr_index %d idx %d %s\n",
+				unit, port,  cnt_ipv6_subnet-1, i, psm3_gid128_fmt(tmp_gid, 0));
+
+			if (cnt_ipv6_subnet-1 != addr_index)
+				continue;
+
+			// addr_index'th valid ipv6
 			ipv6_idx = i;
 			ipv6_gid = tmp_gid;
 			ipv6_prefix_len = nm_len;
 			ipv6_netmask = nm;
-			have_ipv6_subnet = 1;
-			_HFI_DBG("Found IPv6 GID unit %d port %d idx %d %s\n",
-				unit, port, i, psmi_gid128_fmt(tmp_gid, 0));
-			// is 1st IPv6 address sufficient to finalize decision?
-			if (psmi_addr_fmt == PSMI_ADDR_FMT_IPV6)
+			// enough IPv6 address on port to finalize decision?
+			if (cnt_ipv6_subnet >= psm3_addr_per_nic
+				&& psm3_addr_fmt == PSMI_ADDR_FMT_IPV6)
 				break;
 		}
 	}
@@ -559,34 +594,38 @@ int psm3_hfp_verbs_get_port_subnet(int unit, int port,
 			if (subnet) *subnet = psm3_build_ib_subnet128(ib_gid.hi);
 			if (addr) *addr = psm3_build_ib_naddr128(ib_gid);
 			if (gid) *gid = ib_gid;
-			_HFI_DBG("Selected IB/OPA for unit %d port %d idx %d %s\n",
-				unit, port, ib_idx, psmi_gid128_fmt(ib_gid, 0));
+			_HFI_DBG("Selected IB/OPA for unit %d port %d addr_index %d idx %d %s\n",
+				unit, port, addr_index, ib_idx, psm3_gid128_fmt(ib_gid, 0));
 			return 0;
 		} else {
 			_HFI_DBG("None Found IB/OPA unit %d port %d\n", unit, port);
 			errno = ENXIO;
 			return -1;
 		}
-	} else if (have_ipv4_subnet) {
+	} else if (cnt_ipv4_subnet >= psm3_addr_per_nic) {
 		// IPv4 Ethernet
 		if (idx) *idx = ipv4_idx;
 		if (subnet) *subnet = psm3_build_ipv4_subnet128(ipv4_addr, ipv4_netmask, ipv4_prefix_len);
 		if (addr) *addr = psm3_build_ipv4_naddr128(ipv4_addr, ipv4_prefix_len);
 		if (gid) *gid = ipv4_gid;
-		_HFI_DBG("Selected IPv4 for unit %d port %d idx %d %s\n",
-			unit, port, ipv4_idx, psmi_gid128_fmt(ipv4_gid, 0));
+		_HFI_DBG("Selected IPv4 for unit %d port %d addr_index %d idx %d %s\n",
+			unit, port, addr_index, ipv4_idx, psm3_gid128_fmt(ipv4_gid, 0));
 		return 0;
-	} else if (have_ipv6_subnet) {
+	} else if (cnt_ipv6_subnet >= psm3_addr_per_nic) {
 		// IPv6 Ethernet
 		if (idx) *idx = ipv6_idx;
 		if (subnet) *subnet = psm3_build_ipv6_subnet128(ipv6_gid, ipv6_netmask, ipv6_prefix_len);
 		if (addr) *addr = psm3_build_ipv6_naddr128(ipv6_gid, ipv6_prefix_len);
 		if (gid) *gid = ipv6_gid;
-		_HFI_DBG("Selected IPv6 for unit %d port %d idx %d %s\n",
-			unit, port, ipv6_idx, psmi_gid128_fmt(ipv6_gid, 0));
+		_HFI_DBG("Selected IPv6 for unit %d port %d addr_index %d idx %d %s\n",
+			unit, port, addr_index, ipv6_idx, psm3_gid128_fmt(ipv6_gid, 0));
 		return 0;
 	} else {
-		_HFI_DBG("None Found Ethernet unit %d port %d\n", unit, port);
+		if ((cnt_ipv4_subnet || cnt_ipv6_subnet) && psm3_addr_per_nic > 1)
+			_HFI_DBG("None Found Ethernet unit %d port %d addr_index %d (%d IPv4 addrs and %d IPv6 addrs < PSM3_ADDR_PER_NIC %d)\n",
+				unit, port, addr_index, cnt_ipv4_subnet, cnt_ipv6_subnet, psm3_addr_per_nic);
+		else
+			_HFI_DBG("None Found Ethernet unit %d port %d addr_index %d\n", unit, port, addr_index);
 		errno = ENXIO;
 		return -1;
 	}

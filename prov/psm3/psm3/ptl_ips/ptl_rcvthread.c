@@ -123,7 +123,7 @@ psm2_error_t psm3_ips_ptl_rcvthread_init(ptl_t *ptl_gen, struct ips_recvhdrq *re
 	rcvc->t_start_cyc = get_cycles();
 
 #ifdef PSM_CUDA
-	if (PSMI_IS_CUDA_ENABLED)
+	if (PSMI_IS_GPU_ENABLED)
 		PSMI_CUDA_CALL(cuCtxGetCurrent, &cu_ctxt);
 #endif
 
@@ -172,7 +172,7 @@ psm2_error_t psm3_ips_ptl_rcvthread_fini(ptl_t *ptl_gen)
 	if (ptl->rcvthread == NULL)
 		return err;
 
-	psmi_stats_deregister_type(PSMI_STATSTYPE_RCVTHREAD, rcvc);
+	psm3_stats_deregister_type(PSMI_STATSTYPE_RCVTHREAD, rcvc);
 	if (rcvc->hdrq_threadid && psmi_hal_has_sw_status(PSM_HAL_PSMI_RUNTIME_RX_THREAD_STARTED)) {
 		t_now = get_cycles();
 
@@ -342,7 +342,7 @@ void *ips_ptl_pollintr(void *rcvthreadc)
 	psm2_error_t err;
 
 #ifdef PSM_CUDA
-	if (PSMI_IS_CUDA_ENABLED && cu_ctxt != NULL)
+	if (PSMI_IS_GPU_ENABLED && cu_ctxt != NULL)
 		PSMI_CUDA_CALL(cuCtxSetCurrent, cu_ctxt);
 #endif
 

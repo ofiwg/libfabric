@@ -75,6 +75,9 @@ psm2_error_t psm3_ips_tf_init(struct ips_protoexp *protoexp,
 {
 	int tf_idx;
 	psm2_ep_t ep = protoexp->proto->ep;
+#ifdef PSM_OPA
+	psmi_context_t *context = &ep->context;
+#endif
 
 #if TF_ADD
 	struct psmi_stats_entry entries[] = {
@@ -84,11 +87,22 @@ psm2_error_t psm3_ips_tf_init(struct ips_protoexp *protoexp,
 	};
 #endif
 
+#ifdef PSM_OPA
+	tfc->context = context;
+#endif
 	tfc->tf_num_total = 0;
 	tfc->tf_num_inuse = 0;
 	tfc->tf_avail_cb = cb;
 	tfc->tf_avail_context = (void *)protoexp;
+#ifndef PSM_OPA
 	tfc->tf_gen_mask = 0xFFFFF;
+#else
+	if (psmi_hal_has_cap(PSM_HAL_CAP_EXTENDED_PSN)) {
+		tfc->tf_gen_mask = 0xFFFFF;
+	} else {
+		tfc->tf_gen_mask = 0x1FFF;
+	}
+#endif
 
 	/* Allocate and Initialize tidrecvc array. */
 	tfc->tidrecvc = (struct ips_tid_recv_desc *)
@@ -98,12 +112,26 @@ psm2_error_t psm3_ips_tf_init(struct ips_protoexp *protoexp,
 		return PSM2_NO_MEMORY;
 
 	for (tf_idx = 0; tf_idx < HFI_TF_NFLOWS; tf_idx++) {
+#ifdef PSM_OPA
+		tfc->tidrecvc[tf_idx].context = context;
+#endif
 		tfc->tidrecvc[tf_idx].protoexp = protoexp;
 		tfc->tidrecvc[tf_idx].rdescid._desc_idx = tf_idx;
 		tfc->tidrecvc[tf_idx].rdescid._desc_genc = tf_idx;
+#ifdef PSM_OPA
+		tfc->tidrecvc[tf_idx].tidflow.flowid = EP_FLOW_TIDFLOW;
+		tfc->tidrecvc[tf_idx].tidflow.frag_size = protoexp->proto->epinfo.ep_mtu;
+#endif
 	}
 
+#ifdef PSM_OPA
+	/* Shared control structure, it will be in shared memory
+	 * for context sharing, otherwise calloc() it */
+	tfc->tf_ctrl = (struct ips_tf_ctrl *)context->tf_ctrl;
+	if (!tfc->tf_ctrl) {
+#else
 	{
+#endif
 		tfc->tf_ctrl = (struct ips_tf_ctrl *)
 		    psmi_calloc(ep, UNDEFINED, 1,
 				sizeof(struct ips_tf_ctrl));
@@ -115,7 +143,13 @@ psm2_error_t psm3_ips_tf_init(struct ips_protoexp *protoexp,
 	/*
 	 * Only the master process can initialize.
 	 */
+#ifdef PSM_OPA
+	if (psmi_hal_get_subctxt(context->psm_hw_ctxt) == 0) {
+		pthread_spin_init(&tfc->tf_ctrl->tf_ctrl_lock,
+					PTHREAD_PROCESS_SHARED);
+#else
 	{
+#endif
 		tfc->tf_ctrl->tf_num_max = HFI_TF_NFLOWS;
 		tfc->tf_ctrl->tf_num_avail = HFI_TF_NFLOWS;
 
@@ -136,6 +170,10 @@ psm2_error_t psm3_ips_tf_init(struct ips_protoexp *protoexp,
 			tfc->tf_ctrl->tf[tf_idx].next_free = tf_idx + 1;
 #endif
 
+#ifdef PSM_OPA
+			psmi_hal_tidflow_reset(tfc->context->psm_hw_ctxt, tf_idx,
+					       tfc->tf_gen_mask, 0x7FF);
+#endif
 		}
 #if 1
 		for (tf_idx = 0; tf_idx < HFI_TF_NFLOWS; tf_idx++) {
@@ -151,7 +189,7 @@ psm2_error_t psm3_ips_tf_init(struct ips_protoexp *protoexp,
 					PSMI_STATSTYPE_RDMA,
 					entries,
 					PSMI_HOWMANY(entries),
-					psm3_epid_fmt(ep->epid, 0), tfc,
+					psm3_epid_fmt_internal(ep->epid, 0), tfc,
 					ep->dev_name);
 #else
 	return PSM2_OK;
@@ -160,7 +198,10 @@ psm2_error_t psm3_ips_tf_init(struct ips_protoexp *protoexp,
 
 psm2_error_t psm3_ips_tf_fini(struct ips_tf *tfc)
 {
-	psmi_stats_deregister_type(PSMI_STATSTYPE_RDMA, tfc);
+	psm3_stats_deregister_type(PSMI_STATSTYPE_RDMA, tfc);
+#ifdef PSM_OPA
+	if (!tfc->context->tf_ctrl)
+#endif
 		psmi_free(tfc->tf_ctrl);
 	psmi_free(tfc->tidrecvc);
 	return PSM2_OK;
@@ -173,11 +214,20 @@ psm2_error_t psm3_ips_tf_allocate(struct ips_tf *tfc,
 	struct ips_tf_ctrl *ctrl = tfc->tf_ctrl;
 	struct ips_tf_entry *entry;
 
+#ifdef PSM_OPA
+	// shared context needs lock
+	if (tfc->context->tf_ctrl)
+		pthread_spin_lock(&ctrl->tf_ctrl_lock);
+#endif
 
 	if (!ctrl->tf_num_avail) {
 		psmi_assert(ctrl->tf_head == HFI_TF_NFLOWS);
 		*tidrecvc = NULL;
 
+#ifdef PSM_OPA
+		if (tfc->context->tf_ctrl)
+			pthread_spin_unlock(&ctrl->tf_ctrl_lock);
+#endif
 
 		return PSM2_EP_NO_RESOURCES;
 	}
@@ -186,6 +236,10 @@ psm2_error_t psm3_ips_tf_allocate(struct ips_tf *tfc,
 	ctrl->tf_head = entry->next_free;
 	ctrl->tf_num_avail--;
 
+#ifdef PSM_OPA
+	if (tfc->context->tf_ctrl)
+		pthread_spin_unlock(&ctrl->tf_ctrl_lock);
+#endif
 
 	tfc->tf_num_total++;
 	tfc->tf_num_inuse++;
@@ -200,6 +254,11 @@ psm2_error_t psm3_ips_tf_allocate(struct ips_tf *tfc,
 	psmi_assert((*tidrecvc)->rdescid._desc_idx == entry->tf_idx);
 	psmi_assert_always(entry->next_gen < tfc->tf_gen_mask);
 
+#ifdef PSM_OPA
+	entry->next_gen++;
+	if (entry->next_gen == tfc->tf_gen_mask)
+		entry->next_gen = 0;
+#endif
 
 	return PSM2_OK;
 }
@@ -211,12 +270,22 @@ psm2_error_t psm3_ips_tf_deallocate(struct ips_tf *tfc, uint32_t tf_idx, int use
 	struct ips_tf_entry *entry;
 
 	psmi_assert(tf_idx < HFI_TF_NFLOWS);
-	psmi_assert(tf_idx >= 0);
 
 	entry = &ctrl->tf[tf_idx];
 	psmi_assert(entry->state == TF_STATE_ALLOCATED);
 	entry->state = TF_STATE_DEALLOCATED;
 
+#ifdef PSM_OPA
+	/*
+	 * The wire protocol only uses 16bits tidrecvc generation
+	 * count in exptid packet, this should be bigger enough,
+	 * u16w3 is the lower 16bits of _desc_genc
+	 */
+	tfc->tidrecvc[tf_idx].rdescid.u16w3++;
+	/* Mark invalid generation for flow (stale packets will be dropped) */
+	psmi_hal_tidflow_reset(tfc->context->psm_hw_ctxt, tf_idx,
+			       tfc->tf_gen_mask, 0x7FF);
+#else
 	if (used) {
 		entry->next_gen++;
 		if (entry->next_gen == tfc->tf_gen_mask)
@@ -227,12 +296,22 @@ psm2_error_t psm3_ips_tf_deallocate(struct ips_tf *tfc, uint32_t tf_idx, int use
 		 */
 		tfc->tidrecvc[tf_idx].rdescid.u32w1++;
 	}
+#endif
 
+#ifdef PSM_OPA
+	// shared context needs lock
+	if (tfc->context->tf_ctrl)
+		pthread_spin_lock(&ctrl->tf_ctrl_lock);
+#endif
 
 	entry->next_free = ctrl->tf_head;
 	ctrl->tf_head = tf_idx;
 	ctrl->tf_num_avail++;
 
+#ifdef PSM_OPA
+	if (tfc->context->tf_ctrl)
+		pthread_spin_unlock(&ctrl->tf_ctrl_lock);
+#endif
 
 	tfc->tf_num_inuse--;
 	/* If an available callback is registered invoke it */
@@ -242,3 +321,28 @@ psm2_error_t psm3_ips_tf_deallocate(struct ips_tf *tfc, uint32_t tf_idx, int use
 	return PSM2_OK;
 }
 
+#ifdef PSM_OPA
+/* Allocate a generation for a flow */
+psm2_error_t ips_tfgen_allocate(struct ips_tf *tfc,
+			       uint32_t tf_idx, uint32_t *tfgen)
+{
+	struct ips_tf_entry *entry;
+	int ret = PSM2_OK;
+
+	psmi_assert(tf_idx < HFI_TF_NFLOWS);
+	psmi_assert(tf_idx >= 0);
+
+	entry = &tfc->tf_ctrl->tf[tf_idx];
+	psmi_assert(entry->state == TF_STATE_ALLOCATED);
+
+	*tfgen = entry->next_gen;
+
+	entry->next_gen++;
+	if (entry->next_gen == tfc->tf_gen_mask)
+		entry->next_gen = 0;
+
+	psmi_assert_always(*tfgen < tfc->tf_gen_mask);
+
+	return ret;
+}
+#endif

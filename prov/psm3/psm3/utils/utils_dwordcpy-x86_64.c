@@ -165,14 +165,140 @@ void psm3_qwordcpy(volatile uint64_t *dest, const uint64_t *src, uint32_t nqword
 	}
 }
 
+#ifdef PSM_OPA
+#ifdef PSM_AVX512
+void psm3_pio_blockcpy_512(volatile uint64_t *dest, const uint64_t *src, uint32_t nblock)
+{
+	volatile __m512i *dp = (volatile __m512i *) dest;
+	const __m512i *sp = (const __m512i *) src;
+
+	psmi_assert((dp != NULL) && (sp != NULL));
+	psmi_assert((((uintptr_t) dp) & 0x3f) == 0x0);
+
+	if ((((uintptr_t) sp) & 0x3f) == 0x0) {
+		/* source and destination are both 64 byte aligned */
+		do {
+			__m512i tmp0 = _mm512_load_si512(sp);
+			_mm512_store_si512((__m512i *)dp, tmp0);
+		} while ((--nblock) && (++dp) && (++sp));
+	} else {
+		/* only destination is 64 byte aligned - use unaligned loads */
+		do {
+			__m512i tmp0 = _mm512_loadu_si512(sp);
+			_mm512_store_si512((__m512i *)dp, tmp0);
+		} while ((--nblock) && (++dp) && (++sp));
+	}
+}
+#endif
+
+void psm3_pio_blockcpy_256(volatile uint64_t *dest, const uint64_t *src, uint32_t nblock)
+{
+	volatile __m256i *dp = (volatile __m256i *) dest;
+	const __m256i *sp = (const __m256i *) src;
+
+	psmi_assert((dp != NULL) && (sp != NULL));
+	psmi_assert((((uintptr_t) dp) & 0x3f) == 0x0);
+
+	if ((((uintptr_t) sp) & 0x1f) == 0x0) {
+		/* source and destination are both 32 byte aligned */
+		do {
+			__m256i tmp0 = _mm256_load_si256(sp);
+			__m256i tmp1 = _mm256_load_si256(sp + 1);
+			_mm256_store_si256((__m256i *)dp, tmp0);
+			_mm256_store_si256((__m256i *)(dp + 1), tmp1);
+		} while ((--nblock) && (dp = dp+2) && (sp = sp+2));
+	} else {
+		/* only destination is 32 byte aligned - use unaligned loads */
+		do {
+			__m256i tmp0 = _mm256_loadu_si256(sp);
+			__m256i tmp1 = _mm256_loadu_si256(sp + 1);
+			_mm256_store_si256((__m256i *)dp, tmp0);
+			_mm256_store_si256((__m256i *)(dp + 1), tmp1);
+		} while ((--nblock) && (dp = dp+2) && (sp = sp+2));
+	}
+}
+
+void psm3_pio_blockcpy_128(volatile uint64_t *dest, const uint64_t *src, uint32_t nblock)
+{
+	volatile __m128i *dp = (volatile __m128i *) dest;
+	const __m128i *sp = (const __m128i *) src;
+
+	psmi_assert((dp != NULL) && (sp != NULL));
+	psmi_assert((((uintptr_t) dp) & 0x3f) == 0x0);
+
+	if ((((uintptr_t) sp) & 0xf) == 0x0) {
+		/* source and destination are both 16 byte aligned */
+		do {
+			__m128i tmp0 = _mm_load_si128(sp);
+			__m128i tmp1 = _mm_load_si128(sp + 1);
+			__m128i tmp2 = _mm_load_si128(sp + 2);
+			__m128i tmp3 = _mm_load_si128(sp + 3);
+			_mm_store_si128((__m128i *)dp, tmp0);
+			_mm_store_si128((__m128i *)(dp + 1), tmp1);
+			_mm_store_si128((__m128i *)(dp + 2), tmp2);
+			_mm_store_si128((__m128i *)(dp + 3), tmp3);
+		} while ((--nblock) && (dp = dp+4) && (sp = sp+4));
+	} else {
+		/* only destination is 16 byte aligned - use unaligned loads */
+		do {
+			__m128i tmp0 = _mm_loadu_si128(sp);
+			__m128i tmp1 = _mm_loadu_si128(sp + 1);
+			__m128i tmp2 = _mm_loadu_si128(sp + 2);
+			__m128i tmp3 = _mm_loadu_si128(sp + 3);
+			_mm_store_si128((__m128i *)dp, tmp0);
+			_mm_store_si128((__m128i *)(dp + 1), tmp1);
+			_mm_store_si128((__m128i *)(dp + 2), tmp2);
+			_mm_store_si128((__m128i *)(dp + 3), tmp3);
+		} while ((--nblock) && (dp = dp+4) && (sp = sp+4));
+	}
+}
+
+void psm3_pio_blockcpy_64(volatile uint64_t *dest, const uint64_t *src, uint32_t nblock)
+{
+	const uint64_t *src64[4];
+	volatile uint64_t *dst64[4];
+	src64[0] = src;
+	dst64[0] = dest;
+
+	psmi_assert((dst64[0] != NULL) && (src64[0] != NULL));
+	psmi_assert((((uintptr_t) dest) & 0x3f) == 0x0);
+
+	do {
+		*dst64[0] = *src64[0];
+		src64[1] = src64[0] + 1;
+		src64[2] = src64[0] + 2;
+		src64[3] = src64[0] + 3;
+		dst64[1] = dst64[0] + 1;
+		dst64[2] = dst64[0] + 2;
+		dst64[3] = dst64[0] + 3;
+		*dst64[1] = *src64[1];
+		*dst64[2] = *src64[2];
+		*dst64[3] = *src64[3];
+		src64[0] += 4;
+		dst64[0] += 4;
+
+		*dst64[0] = *src64[0];
+		src64[1] = src64[0] + 1;
+		src64[2] = src64[0] + 2;
+		src64[3] = src64[0] + 3;
+		dst64[1] = dst64[0] + 1;
+		dst64[2] = dst64[0] + 2;
+		dst64[3] = dst64[0] + 3;
+		*dst64[1] = *src64[1];
+		*dst64[2] = *src64[2];
+		*dst64[3] = *src64[3];
+		src64[0] += 4;
+		dst64[0] += 4;
+	} while (--nblock);
+}
+#endif /* PSM_OPA */
 
 void MOCKABLE(psm3_mq_mtucpy)(void *vdest, const void *vsrc, uint32_t nchars)
 {
 
-#ifdef PSM_CUDA
-	if (nchars && PSMI_IS_CUDA_ENABLED && (PSMI_IS_CUDA_MEM(vdest) || PSMI_IS_CUDA_MEM((void *) vsrc))) {
-		PSMI_CUDA_CALL(cuMemcpy,
-			       (CUdeviceptr)vdest, (CUdeviceptr)vsrc, nchars);
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	if (nchars && PSMI_IS_GPU_ENABLED && (PSMI_IS_GPU_MEM(vdest) || PSMI_IS_GPU_MEM((void *) vsrc))) {
+		PSM3_GPU_MEMCPY(vdest, vsrc, nchars);
 		return;
 	}
 #endif

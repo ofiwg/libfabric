@@ -216,10 +216,18 @@ static psm2_error_t psm2_check_phys_addr(uint64_t phys_addr)
 	}
 	return PSM2_OK;
 }
+#endif
 
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 uint64_t psm3_min_gpu_bar_size(void)
 {
+#ifdef PSM_ONEAPI
+	// not yet implemented
+	// psmi_assert_always(0);
+	return 0;
+#else
 	return min_gpu_bar_size;
+#endif
 }
 #endif
 
@@ -386,7 +394,7 @@ psm3_rv_t psm3_rv_open(const char *devname, struct local_info *loc_info)
  #define RV_CAP_GPU_DIRECT (1UL << 63)
 #endif
  #endif
-	if (psmi_parse_identify()) {
+	if (psm3_parse_identify()) {
 		if (loc_info->capability & RV_CAP_GPU_DIRECT)
 #ifdef PSM_CUDA
 			printf("%s %s run-time rv interface v%d.%d%s gpu v%d.%d cuda\n",
@@ -477,7 +485,7 @@ fail:
 	return -1;
 }
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 int psm3_rv_gpu_get_cache_stats(psm3_rv_t rv, struct psm3_rv_gpu_cache_stats *stats)
 {
 	struct rv_gpu_cache_stats_params_out sparams;
@@ -1151,7 +1159,7 @@ int64_t psm3_rv_evict_amount(psm3_rv_t rv, uint64_t bytes, uint32_t count)
 #endif
 }
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 // this will remove from the GPU cache up to the amount specified
 // Only entries with a refcount of 0 are removed.
 // In the case of reg_mem, a matching call
@@ -1185,7 +1193,7 @@ int64_t psm3_rv_evict_gpu_amount(psm3_rv_t rv, uint64_t bytes, uint32_t count)
 	return -1;
 #endif
 }
-#endif // PSM_CUDA
+#endif // PSM_CUDA || PSM_ONEAPI
 
 int psm3_rv_post_rdma_write_immed(psm3_rv_t rv, psm3_rv_conn_t conn,
 				void *loc_buf, psm3_rv_mr_t loc_mr,

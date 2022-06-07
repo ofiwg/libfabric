@@ -1603,7 +1603,7 @@ struct psm2_mq_stats {
 	/** rank in MPI_COMM_WORLD, while unchanging, easiest to put here */
 	uint64_t comm_world_rank;
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	/** Messages transmitted eagerly from CPU buffer */
 	uint64_t tx_eager_cpu_num;
 	/** Bytes transmitted eagerly from CPU buffer */

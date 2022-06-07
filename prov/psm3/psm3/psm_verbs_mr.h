@@ -162,7 +162,7 @@ typedef struct psm2_mr_cache *psm2_mr_cache_t;
 extern psm2_mr_cache_t psm3_verbs_alloc_mr_cache(psm2_ep_t ep,
 				uint32_t num_entries, uint8_t cache_mode,
 				uint32_t pri_entries, uint64_t pri_size
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 				, uint64_t gpu_pri_size
 #endif
 				);

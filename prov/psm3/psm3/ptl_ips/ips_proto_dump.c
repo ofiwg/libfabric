@@ -116,7 +116,11 @@ void psm3_ips_proto_show_header(struct ips_message_header *p_hdr, char *msg)
 
 	printf("BTH: OpCode8-SE1-M1-PC2-TVer4-Pkey16 %x\n",
 	       __be32_to_cpu(p_hdr->bth[0]));
+#ifdef PSM_OPA
+	printf("BTH: F1-B1-Res6-DestQP24 %x\n", __be32_to_cpu(p_hdr->bth[1]));
+#else
 	printf("BTH: Res24-Flow8 %x\n", __be32_to_cpu(p_hdr->bth[1]));
+#endif
 	printf("BTH: A1-PSN31 %x\n", __be32_to_cpu(p_hdr->bth[2]));
 
 	printf("IPH: jkey-hcrc %x\n", __le32_to_cpu(p_hdr->khdr.kdeth1));
@@ -126,8 +130,26 @@ void psm3_ips_proto_show_header(struct ips_message_header *p_hdr, char *msg)
 	printf("opcode %x\n", _get_proto_hfi_opcode(p_hdr));
 
 	ack_seq_num.psn_num = p_hdr->ack_seq_num;
+#ifdef PSM_OPA
+	if (GET_HFI_KHDR_TIDCTRL(__le32_to_cpu(p_hdr->khdr.kdeth0)))
+		printf("TidFlow Flow: %x, Gen: %x, Seq: %x\n",
+		       (__be32_to_cpu(p_hdr->bth[1]) >>
+			HFI_BTH_FLOWID_SHIFT) & HFI_BTH_FLOWID_MASK,
+		       (__be32_to_cpu(p_hdr->bth[2]) >>
+			HFI_BTH_GEN_SHIFT) & HFI_BTH_GEN_MASK,
+		       (__be32_to_cpu(p_hdr->bth[2]) >>
+			HFI_BTH_SEQ_SHIFT) & HFI_BTH_SEQ_MASK);
+	else if (ips_proto_flowid(p_hdr) == EP_FLOW_TIDFLOW)
+		printf("ack_seq_num gen %x, seq %x\n",
+		       ack_seq_num.psn_gen, ack_seq_num.psn_seq);
+	else
+#endif
 		printf("ack_seq_num %x\n", ack_seq_num.psn_num);
 
 	printf("src_rank/connidx %x\n", p_hdr->connidx);
+#ifdef PSM_OPA
+	if (GET_HFI_KHDR_TIDCTRL(__le32_to_cpu(p_hdr->khdr.kdeth0)))
+		printf("tid_session_gen %d\n", p_hdr->exp_rdescid_genc);
+#endif
 	printf("flags %x\n", p_hdr->flags);
 }

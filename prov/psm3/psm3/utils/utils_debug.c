@@ -485,7 +485,7 @@ void psm3_dump_buf(uint8_t *buf, uint32_t len)
 	}
 }
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 void psm3_dump_gpu_buf(uint8_t *buf, uint32_t len)
 {
 	int i, j;
@@ -494,7 +494,7 @@ void psm3_dump_gpu_buf(uint8_t *buf, uint32_t len)
 	for (i=0; i<len; i += 16 ) {
 		fprintf(psm3_dbgout, "%s: 0x%04x:", psm3_mylabel, i);
 		if (0 == i % 1024)
-			PSMI_CUDA_CALL(cuMemcpyDtoH, hbuf, (CUdeviceptr)buf,
+			PSM3_GPU_MEMCPY_DTOH(hbuf, buf,
                                                 min(len-i, 1024));
 		for (j=0; j<16 && i+j < len; j++)
 			fprintf(psm3_dbgout, " %02x", (unsigned)hbuf[i%1024+j]);

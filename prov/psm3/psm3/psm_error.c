@@ -294,7 +294,11 @@ struct psmi_error_item psmi_error_items[] = {
 	{PSMI_NOLOG, "Endpoint was already connected"},	/* PSM2_EPID_ALREADY_CONNECTED = 48 */
 	{LOG_CRIT, "Two or more endpoints have the same network id (LID)"},	/* PSM2_EPID_NETWORK_ERROR = 49 */
 	{LOG_CRIT, "Endpoint provided incompatible Partition Key"},
+#ifdef PSM_OPA
+	{LOG_CRIT, "Unable to resolve network path. Is the SM running?"},
+#else
 	{LOG_CRIT, "Unable to resolve network path. Check connectivity and routing between nodes"},
+#endif
 	{LOG_CRIT, "Unable to establish RV RC QP connection"}, /* PSM2_EPID_RV_CONNECT_ERROR */
 	{LOG_INFO, "Recovering RV RC QP connection"}, /* PSM2_EPID_RV_CONNECT_RECOVERING */
 	{PSMI_NOLOG, "unknown 54"},

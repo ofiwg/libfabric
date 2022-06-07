@@ -80,6 +80,7 @@
 #include "ips_proto.h"
 #include "ips_path_rec.h"
 #include "hal_sockets/sockets_service.h"
+#include "hal_sockets/sockets_hal.h"
 #if defined(PSM_LIBCAP)
 #include <sys/capability.h>
 #endif
@@ -304,7 +305,7 @@ psm3_ep_open_udp_internal(psm2_ep_t ep, int unit, int port,
 		sizeof(loc_addr)) < 0) {
 		_HFI_ERROR( "Failed to bind recv UDP socket for %s: to %s: %s\n",
 			ep->dev_name,
-			psmi_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
+			psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
 			strerror(errno));
 		goto fail;
 	}
@@ -313,7 +314,7 @@ psm3_ep_open_udp_internal(psm2_ep_t ep, int unit, int port,
 		sizeof(loc_addr)) < 0) {
 		_HFI_ERROR( "Failed to bind send UDP socket for %s: to %s: %s\n",
 			ep->dev_name,
-			psmi_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
+			psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
 			strerror(errno));
 		goto fail;
 	}
@@ -328,8 +329,8 @@ psm3_ep_open_udp_internal(psm2_ep_t ep, int unit, int port,
 	if (!psmi_ipv6_equal_gid(&loc_addr, ep->gid)) {
 		_HFI_ERROR("Unexpected mismatch of bound UDP IP address for %s: %s %s\n",
 			ep->dev_name,
-			psmi_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
-			psmi_ipv6_fmt(ep->gid, 0, 1));
+			psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
+			psm3_ipv6_fmt(ep->gid, 0, 1));
 		goto fail;
 	}
 	if (is_aux) {
@@ -339,7 +340,7 @@ psm3_ep_open_udp_internal(psm2_ep_t ep, int unit, int port,
 	}
 	_HFI_PRDBG("bound UDP IP address for %s: %s\n",
 			ep->dev_name,
-			psmi_sockaddr_fmt((struct sockaddr *)&loc_addr, 0));
+			psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0));
 
 	flags = fcntl(ep->sockets_ep.udp_rx_fd, F_GETFL);
 	flags |= O_NONBLOCK;
@@ -357,8 +358,8 @@ psm3_ep_open_udp_internal(psm2_ep_t ep, int unit, int port,
 							ep->sockets_ep.pri_socket,
 							0);
 			_HFI_VDBG("construct epid ipv4: %s: ip %s UDP %u mtu %d\n",
-						psm3_epid_fmt(ep->epid, 0),
-						psmi_naddr128_fmt(ep->addr, 1),
+						psm3_epid_fmt_internal(ep->epid, 0),
+						psm3_naddr128_fmt(ep->addr, 1),
 						ep->sockets_ep.pri_socket, ep->mtu);
 		} else {
 			psmi_assert(ep->addr.fmt == PSMI_ADDR_FMT_IPV6);
@@ -367,8 +368,8 @@ psm3_ep_open_udp_internal(psm2_ep_t ep, int unit, int port,
 							ep->sockets_ep.pri_socket,
 							0);
 			_HFI_VDBG("construct epid ipv6: %s: ip %s UDP %u mtu %d\n",
-						psm3_epid_fmt(ep->epid, 0),
-						psmi_naddr128_fmt(ep->addr, 1),
+						psm3_epid_fmt_internal(ep->epid, 0),
+						psm3_naddr128_fmt(ep->addr, 1),
 						ep->sockets_ep.pri_socket, ep->mtu);
 		}
 	}
@@ -566,7 +567,7 @@ psm2_error_t listen_to_port(psm2_ep_t ep, int sockfd, struct sockaddr_in6 *addr,
 		_HFI_DBG("Binding to OS provided port\n");
 	} else if (tvals[0] > 0 && tvals[0] <= tvals[1] && tvals[1] <= UINT16_MAX) {
 		// start with a random port, find the first available one.
-		port = psmi_rand((long int) getpid());
+		port = psm3_rand((long int) getpid());
 		port = port % (tvals[1] + 1 - tvals[0]) + tvals[0];
 		start = (uint16_t)tvals[0];
 		end = (uint16_t)tvals[1];
@@ -634,6 +635,17 @@ psm3_ep_open_tcp_internal(psm2_ep_t ep, int unit, int port,
 		return PSM2_NO_MEMORY;
 	}
 
+	// Allocate map to handle fd <-> index dependency
+	ep->sockets_ep.map_nfds = TCP_INI_CONN + 1;
+	ep->sockets_ep.map_fds = (int*) psmi_calloc(
+		ep, NETWORK_BUFFERS, ep->sockets_ep.map_nfds, sizeof(int));
+	if (ep->sockets_ep.map_fds == NULL) {
+		_HFI_ERROR( "Unable to allocate memory for fd map\n");
+		return PSM2_NO_MEMORY;
+	}
+	// Initialize map by -1 values
+	psm3_sockets_init_map_fds(ep->sockets_ep.map_fds, ep->sockets_ep.map_nfds);
+	
 	if (PSM2_OK != tcp_open_dev(ep, unit, port, job_key)) {
 		// tcp_open_dev already posted error.
 		goto fail;
@@ -672,8 +684,8 @@ psm3_ep_open_tcp_internal(psm2_ep_t ep, int unit, int port,
 	if (!psmi_ipv6_equal_gid(&loc_addr, ep->gid)) {
 		_HFI_ERROR("Unexpected mismatch of bound TCP IP address for %s: %s %s\n",
 			ep->dev_name,
-			psmi_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
-			psmi_ipv6_fmt(ep->gid, 0, 1));
+			psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
+			psm3_ipv6_fmt(ep->gid, 0, 1));
 		goto fail;
 	}
 	ep->sockets_ep.pri_socket = __be16_to_cpu(loc_addr.sin6_port);
@@ -688,8 +700,8 @@ psm3_ep_open_tcp_internal(psm2_ep_t ep, int unit, int port,
 							ep->sockets_ep.pri_socket,
 							ep->sockets_ep.aux_socket);
 		_HFI_VDBG("construct epid ipv4: %s: ip %s TCP %u UDP %u mtu %d\n",
-						psm3_epid_fmt(ep->epid, 0),
-						psmi_naddr128_fmt(ep->addr, 1),
+						psm3_epid_fmt_internal(ep->epid, 0),
+						psm3_naddr128_fmt(ep->addr, 1),
 						ep->sockets_ep.pri_socket,
 						ep->sockets_ep.aux_socket, ep->mtu);
 	} else {
@@ -699,11 +711,42 @@ psm3_ep_open_tcp_internal(psm2_ep_t ep, int unit, int port,
 							ep->sockets_ep.pri_socket,
 							ep->sockets_ep.aux_socket);
 		_HFI_VDBG("construct epid ipv6: %s: ip %s TCP %u UDP %u mtu %d\n",
-						psm3_epid_fmt(ep->epid, 0),
-						psmi_naddr128_fmt(ep->addr, 1),
+						psm3_epid_fmt_internal(ep->epid, 0),
+						psm3_naddr128_fmt(ep->addr, 1),
 						ep->sockets_ep.pri_socket,
 						ep->sockets_ep.aux_socket, ep->mtu);
 	}
+
+	ep->sockets_ep.snd_msg.msg_iov =
+		(struct iovec *) psmi_calloc(ep, NETWORK_BUFFERS, TCP_IOV_SIZE, sizeof(struct iovec));
+	if (ep->sockets_ep.snd_msg.msg_iov == NULL) {
+        		_HFI_ERROR( "Unable to allocate memory for msg_iov\n");
+        		return PSM2_NO_MEMORY;
+        }
+        ep->sockets_ep.snd_msg.msg_iovlen = 0;
+
+	union psmi_envvar_val env_val;
+	char buf[32];
+	snprintf(buf, sizeof(buf), "%d:%d", TCP_INACT_SKIP_POLLS, TCP_ACT_SKIP_POLLS);
+	int tvals[2] = {TCP_INACT_SKIP_POLLS, TCP_ACT_SKIP_POLLS};
+	if (!psm3_getenv("PSM3_TCP_SKIPPOLL_COUNT",
+		"Polls to skip under inactive and active connections <inactive_polls[:active_polls]> "
+		"where inactive_polls >= active_polls.",
+		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
+		(union psmi_envvar_val) buf, &env_val)) {
+		psm3_parse_str_tuples(env_val.e_str, 2, tvals);
+		if (tvals[0] < 0) {
+			tvals[0] = TCP_INACT_SKIP_POLLS;
+		}
+		if (tvals[1] < 0) {
+			tvals[1] = TCP_ACT_SKIP_POLLS;
+		}
+		if (tvals[1] > tvals[0]) {
+			tvals[1] = tvals[0];
+		}
+	}
+	ep->sockets_ep.inactive_skip_polls = tvals[0];
+	ep->sockets_ep.active_skip_polls_offset = tvals[0] - tvals[1];
 
 	// rest of resources initialized by psm3_sockets_ips_proto_init after we
 	// have processed ips_proto configuration such as PSM3_MTU
@@ -759,7 +802,7 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 #endif /* RNDV_MOD */
 
 psm2_error_t
-psm3_ep_open_sockets(psm2_ep_t ep, int unit, int port, psm2_uuid_t const job_key)
+psm3_ep_open_sockets(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid_t const job_key)
 {
 	// make sure all fields are empty.
 	memset(&ep->sockets_ep,0,sizeof(ep->sockets_ep));
@@ -793,11 +836,13 @@ psm3_ep_open_sockets(psm2_ep_t ep, int unit, int port, psm2_uuid_t const job_key
 		return PSM2_INTERNAL_ERR;
 	}
 
-	char *dev_name = strrchr(unitpath, '/') + 1;
-	if (dev_name == NULL + 1) {
+	char *dev_name = strrchr(unitpath, '/');
+	if (dev_name == NULL) {
 		_HFI_ERROR( "invalid sysfs unitpath for unit %d\n", unit);
 		return PSM2_INTERNAL_ERR;
 	}
+	dev_name++; // Inc past last '/'
+
 	ep->dev_name = psmi_strdup(ep, dev_name);
 	if (! ep->dev_name) {
 		_HFI_ERROR( "can't alloc devname");
@@ -821,6 +866,7 @@ psm3_ep_open_sockets(psm2_ep_t ep, int unit, int port, psm2_uuid_t const job_key
 #endif
 #endif
 	ep->wiremode = 0; // TCP vs UDP are separate EPID protocols
+	ep->addr_index = addr_index;
 	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP) {
 		// TCP requires packets be multiple of 32b because in tcp_recv
 		// PSM uses the lrh[2] pkt size (multiple of 32b) to decide how
@@ -911,7 +957,7 @@ psm3_sockets_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 	// be conservative (+BUFFER_HEADROOM)
 	// TODO should be aligned with gro ?
 	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP) {
-		ep->sockets_ep.buf_size = ep->mtu + MAX_PSM_HEADER + BUFFER_HEADROOM;
+		ep->sockets_ep.buf_size = ep->mtu + TCP_MAX_PSM_HEADER + BUFFER_HEADROOM;
 		psmi_assert(ep->sockets_ep.buf_size-BUFFER_HEADROOM <= TCP_MAX_PKTLEN);
 	} else {
 		ep->sockets_ep.buf_size = ep->mtu + MAX_PSM_HEADER + BUFFER_HEADROOM;
@@ -948,9 +994,9 @@ psm3_sockets_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 		psmi_assert(!ep->sockets_ep.udp_gso);
 		union psmi_envvar_val env_val;
 		psm3_getenv("PSM3_TCP_SNDPACING_THRESH",
-			"PSM level send pacing threshold in bytes. Default is PSM MTU. "
+			"PSM level send pacing threshold in bytes. Default is PSM3 MTU. "
 			"Zero will disable send pacing.",
-			PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
+			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
 			(union psmi_envvar_val) ep->mtu, &env_val);
 		if (env_val.e_int >= 0) {
 			ep->sockets_ep.snd_pace_thresh = env_val.e_int;
@@ -1089,8 +1135,15 @@ void psm3_ep_free_sockets(psm2_ep_t ep)
 			}
 		}
 		psmi_free(ep->sockets_ep.fds);
-                ep->sockets_ep.fds = NULL;
-                ep->sockets_ep.nfds = 0;
+		ep->sockets_ep.fds = NULL;
+		ep->sockets_ep.nfds = 0;
+
+		// Just free map, as we do not need it anymore
+		if (ep->sockets_ep.map_fds) {
+			psmi_free(ep->sockets_ep.map_fds);
+			ep->sockets_ep.map_fds = NULL;
+			ep->sockets_ep.map_nfds = 0;
+		}
 	}
 	psm3_ep_sockets_free_buffers(ep);
 	if (ep->sockets_ep.udp_tx_fd) {
@@ -1101,11 +1154,16 @@ void psm3_ep_free_sockets(psm2_ep_t ep)
 		close(ep->sockets_ep.udp_rx_fd);
 		ep->sockets_ep.udp_rx_fd = 0;
 	}
-	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP
-		&& ep->sockets_ep.listener_fd) {
-		// shall already closed when we close all fds in sockets_ep.fds
-		//close(ep->sockets_ep.listener_fd);
-		ep->sockets_ep.listener_fd = 0;
+	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP) {
+		if (ep->sockets_ep.listener_fd) {
+			// shall already closed when we close all fds in sockets_ep.fds
+			//close(ep->sockets_ep.listener_fd);
+			ep->sockets_ep.listener_fd = 0;
+		}
+		if (ep->sockets_ep.snd_msg.msg_iov) {
+			psmi_free(ep->sockets_ep.snd_msg.msg_iov);
+			ep->sockets_ep.snd_msg.msg_iov = NULL;
+		}
 	}
 #ifdef RNDV_MOD
 #ifdef PSM_CUDA
@@ -1260,10 +1318,14 @@ done:
 		ep->sockets_ep.fds[0].fd = ep->sockets_ep.listener_fd;
 		ep->sockets_ep.fds[0].events = POLLIN;
 		ep->sockets_ep.nfds = 1;
+		psm3_sockets_tcp_insert_fd_index_to_map(ep, ep->sockets_ep.listener_fd, 0);
+
 	}
 	if (ep->sockets_ep.udp_rx_fd > 0) {
 		ep->sockets_ep.fds[ep->sockets_ep.nfds].fd = ep->sockets_ep.udp_rx_fd;
 		ep->sockets_ep.fds[ep->sockets_ep.nfds].events = POLLIN;
+                psm3_sockets_tcp_insert_fd_index_to_map(ep, ep->sockets_ep.udp_rx_fd, 
+				ep->sockets_ep.nfds);
 		ep->sockets_ep.nfds += 1;
 	}
 	ep->sockets_ep.tcp_incoming_fd = 0;
@@ -1306,7 +1368,11 @@ static psm2_error_t psm3_update_mtu(psm2_ep_t ep)
 	// include headers as OPA allowed up to an additional 128 bytes of headers.
 	// However all UD QP payloads (including PSM headers) are
 	// counted toward MTU in UD verbs.  So need to discount by PSM header size
-	ep->mtu = active_mtu - sizeof(struct iphdr) - sizeof(struct udphdr) - MAX_PSM_HEADER;
+	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP) {
+		ep->mtu = active_mtu - sizeof(struct iphdr) - sizeof(struct tcphdr) - TCP_MAX_PSM_HEADER;
+	} else {
+		ep->mtu = active_mtu - sizeof(struct iphdr) - sizeof(struct udphdr) - MAX_PSM_HEADER;
+	}
 	_HFI_PRDBG("Max PSM payload (aka MTU): %u\n", ep->mtu);
 	return PSM2_OK;
 }
@@ -1317,7 +1383,7 @@ psm3_dump_sockets_ep(psm2_ep_t ep)
 	struct psm3_sockets_ep *uep = &(ep->sockets_ep);
 
 	printf("devname = %s\n", ep->dev_name);
-	printf("IP      = %s\n", psmi_naddr128_fmt(ep->addr, 0));
+	printf("IP      = %s\n", psm3_naddr128_fmt(ep->addr, 0));
 	printf("socket  = %u\n", uep->pri_socket);
 	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP) {
 		printf("aux socket = %u\n", uep->aux_socket);
@@ -1328,17 +1394,17 @@ psm3_dump_sockets_ep(psm2_ep_t ep)
 static psm2_error_t psm3_update_subnet(psm2_ep_t ep)
 {
 	int result = PSM2_OK;
-	if (0 != psmi_hal_get_port_subnet(ep->unit_id, ep->portnum,
+	if (0 != psmi_hal_get_port_subnet(ep->unit_id, ep->portnum, ep->addr_index,
 			&ep->subnet, &ep->addr, NULL, &ep->gid)) {
-		_HFI_ERROR( "Unable to get subnet for port %u of %s: %s\n",
-				 ep->portnum, ep->dev_name, strerror(errno));
+		_HFI_ERROR( "Unable to get subnet for port %u addr %u of %s: %s\n",
+				 ep->portnum, ep->addr_index, ep->dev_name, strerror(errno));
 		result = PSM2_INTERNAL_ERR;
 	} else {
-		_HFI_PRDBG("Subnet for port %u of %s: %s addr %s gid %s\n",
-				ep->portnum, ep->dev_name,
-				psmi_subnet128_fmt(ep->subnet, 0),
-				psmi_naddr128_fmt(ep->addr, 1),
-				psmi_gid128_fmt(ep->gid, 2));
+		_HFI_PRDBG("Subnet for port %u addr %u of %s: %s addr %s gid %s\n",
+				ep->portnum, ep->addr_index, ep->dev_name,
+				psm3_subnet128_fmt(ep->subnet, 0),
+				psm3_naddr128_fmt(ep->addr, 1),
+				psm3_gid128_fmt(ep->gid, 2));
 	}
 	return result;
 }

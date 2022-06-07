@@ -143,20 +143,38 @@
 #ifdef PSM_CUDA
 /* XXX TODO: Getting the gpu page size from driver at init time */
 #define PSMI_GPU_PAGESIZE 65536
+
+#ifdef PSM_OPA
+#define GDR_COPY_LIMIT_SEND 32
+#else
+#define GDR_COPY_LIMIT_SEND 128
+#endif
+#define GDR_COPY_LIMIT_RECV 64000
+
+#elif defined(PSM_ONEAPI)
+
+#define PSMI_GPU_PAGESIZE 4096
+
+#endif // PSM_CUDA
+
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#define CUDA_WINDOW_PREFETCH_DEFAULT	2
+#define CUDA_SMALLHOSTBUF_SZ	(256*1024)
 #define GPU_PAGE_OFFSET_MASK (PSMI_GPU_PAGESIZE -1)
 #define GPU_PAGE_MASK ~GPU_PAGE_OFFSET_MASK
-
-#define CUDA_SMALLHOSTBUF_SZ	(256*1024)
-#define CUDA_WINDOW_PREFETCH_DEFAULT	2
-#define GPUDIRECT_THRESH_RV 3
-
-#define GDR_COPY_LIMIT_SEND 128
-#define GDR_COPY_LIMIT_RECV 64000
 /* All GPU transfers beyond this threshold use
  * RNDV protocol. It is mostly a send side knob.
  */
+#ifdef PSM_OPA
+#define CUDA_THRESH_RNDV 32768
+#else
 #define CUDA_THRESH_RNDV 8000
 #endif
+
+#define GPUDIRECT_THRESH_RV 3
+
+#endif /* PSM_CUDA || PSM_ONEAPI */
+
 
 #define PSM_MQ_NIC_MAX_TINY		8	/* max TINY payload allowed */
 #define PSM_MQ_NIC_MAX_RNDV_WINDOW	(4 * 1024 * 1024) /* max rndv window */

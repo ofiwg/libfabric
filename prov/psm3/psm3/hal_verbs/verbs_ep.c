@@ -88,7 +88,7 @@
 #define MTU_SIZE(mtu_ind) (((uint64_t)1 << (MTU_FIX + mtu_ind)))
 
 static void psm3_verbs_parse_params(psm2_ep_t ep);
-static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t const job_key);
+static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid_t const job_key);
 static psm2_error_t
 check_port_state(psm2_ep_t ep);
 static struct ibv_qp* ud_qp_create(psm2_ep_t ep);
@@ -106,7 +106,7 @@ static void deregister_rv_event_stats(psm2_ep_t ep);
 
 // initialize the ep->verbs_ep portion of the ep
 psm2_error_t
-psm3_ep_open_verbs(psm2_ep_t ep, int unit, int port, psm2_uuid_t const job_key)
+psm3_ep_open_verbs(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid_t const job_key)
 {
 	int flags;
 
@@ -124,7 +124,7 @@ psm3_ep_open_verbs(psm2_ep_t ep, int unit, int port, psm2_uuid_t const job_key)
 
 	psm3_verbs_parse_params(ep);
 
-	if (PSM2_OK != verbs_open_dev(ep, unit, port, job_key)) {
+	if (PSM2_OK != verbs_open_dev(ep, unit, port, addr_index, job_key)) {
 		// verbs_open_dev already posted error.
 		goto fail;
 	}
@@ -226,16 +226,16 @@ psm3_ep_open_verbs(psm2_ep_t ep, int unit, int port, psm2_uuid_t const job_key)
 						PSMI_ETH_PROTO_ROCE,
 						ep->verbs_ep.qp->qp_num, 0);
 		_HFI_VDBG("construct epid ipv4: %s: ip %s qp %d mtu %d\n",
-						psm3_epid_fmt(ep->epid, 0),
-						psmi_naddr128_fmt(ep->addr, 1),
+						psm3_epid_fmt_internal(ep->epid, 0),
+						psm3_naddr128_fmt(ep->addr, 1),
 						ep->verbs_ep.qp->qp_num, ep->mtu);
 	} else if (ep->addr.fmt == PSMI_ADDR_FMT_IPV6) {
 		ep->epid = psm3_epid_pack_ipv6(ep->addr,
 						PSMI_ETH_PROTO_ROCE,
 						ep->verbs_ep.qp->qp_num, 0);
 		_HFI_VDBG("construct epid ipv6: %s: ip %s qp %d mtu %d\n",
-						psm3_epid_fmt(ep->epid, 0),
-						psmi_naddr128_fmt(ep->addr, 1),
+						psm3_epid_fmt_internal(ep->epid, 0),
+						psm3_naddr128_fmt(ep->addr, 1),
 						ep->verbs_ep.qp->qp_num, ep->mtu);
 	} else {
 		psmi_assert(ep->addr.fmt == PSMI_ADDR_FMT_IB);
@@ -243,9 +243,9 @@ psm3_ep_open_verbs(psm2_ep_t ep, int unit, int port, psm2_uuid_t const job_key)
 							ep->verbs_ep.qp->qp_num,
 							ep->addr);
 		_HFI_VDBG("construct epid ib: %s: lid %d qp %d addr %s mtu %d\n",
-						psm3_epid_fmt(ep->epid, 0), ep->verbs_ep.port_attr.lid,
+						psm3_epid_fmt_internal(ep->epid, 0), ep->verbs_ep.port_attr.lid,
 						ep->verbs_ep.qp->qp_num,
-						psmi_naddr128_fmt(ep->addr, 1),
+						psm3_naddr128_fmt(ep->addr, 1),
 						ep->mtu);
 	}
 	ep->wiremode = ep->rdmamode & IPS_PROTOEXP_FLAG_RDMA_MASK;
@@ -352,7 +352,7 @@ psm3_verbs_parse_params(psm2_ep_t ep)
 	// TBD - we could check cache_size >= minimum based on:
 	// 		(HFI_TF_NFLOWS + ep->hfi_num_send_rdma) * mq->hfi_base_window_rv 
 	// and automatically increase with warning if not?
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	ep->rv_gpu_cache_size = psmi_parse_gpudirect_rv_gpu_cache_size(0);
 	// TBD - we could check gpu_cache_size >= minimum based on:
 	// 		(HFI_TF_NFLOWS + ep->hfi_num_send_rdma) * mq->hfi_base_window_rv 
@@ -401,7 +401,7 @@ psm3_verbs_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 	// PSM3_* env for SDMA are parsed later in psm3_ips_proto_init.
 	proto->iovec_thresh_eager = 8192;
 	proto->iovec_thresh_eager_blocking = 8192;
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	proto->iovec_gpu_thresh_eager = 128;
 	proto->iovec_gpu_thresh_eager_blocking = 128;
 #endif
@@ -573,7 +573,7 @@ psm2_error_t psm3_verbs_ips_path_rec_to_ah_attr(psm2_ep_t ep,
 		ah_attr->grh.hop_limit = 0xFF;
 		ah_attr->grh.traffic_class = 0;
 		_HFI_CONNDBG("creating AH with DLID %u DGID: %s\n",
-			ah_attr->dlid, psmi_ibv_gid_fmt(ah_attr->grh.dgid, 0));
+			ah_attr->dlid, psm3_ibv_gid_fmt(ah_attr->grh.dgid, 0));
 	}
 	return PSM2_OK;
 }
@@ -1694,12 +1694,12 @@ static void register_rv_conn_stats(psm2_ep_t ep)
 					PSMI_STATSTYPE_RV_RDMA,
 					entries,
 					PSMI_HOWMANY(entries),
-					psm3_epid_fmt(ep->epid, 0), ep, ep->dev_name);
+					psm3_epid_fmt_internal(ep->epid, 0), ep, ep->dev_name);
 }
 
 static void deregister_rv_conn_stats(psm2_ep_t ep)
 {
-	psmi_stats_deregister_type(PSMI_STATSTYPE_RV_RDMA, ep);
+	psm3_stats_deregister_type(PSMI_STATSTYPE_RV_RDMA, ep);
 }
 
 // accessor functions for event statistics
@@ -1753,12 +1753,12 @@ static void register_rv_event_stats(psm2_ep_t ep)
 					PSMI_STATSTYPE_RV_EVENT,
 					entries,
 					PSMI_HOWMANY(entries),
-					psm3_epid_fmt(ep->epid, 0), ep, ep->dev_name);
+					psm3_epid_fmt_internal(ep->epid, 0), ep, ep->dev_name);
 }
 
 static void deregister_rv_event_stats(psm2_ep_t ep)
 {
-	psmi_stats_deregister_type(PSMI_STATSTYPE_RV_EVENT, ep);
+	psm3_stats_deregister_type(PSMI_STATSTYPE_RV_EVENT, ep);
 }
 
 static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
@@ -1768,14 +1768,14 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 	// we always fill in everything we might need in loc_info
 	// in some modes, some of the fields are not used by RV
 	loc_info.mr_cache_size = ep->rv_mr_cache_size;
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	/* gpu_cache_size ignored unless RV_RDMA_MODE_GPU */
 	loc_info.gpu_cache_size = ep->rv_gpu_cache_size;
 #endif
 	loc_info.rdma_mode = IPS_PROTOEXP_FLAG_KERNEL_QP(ep->rdmamode)?
 					RV_RDMA_MODE_KERNEL: RV_RDMA_MODE_USER;
-#ifdef PSM_CUDA
-	if (PSMI_IS_CUDA_ENABLED) {
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	if (PSMI_IS_GPU_ENABLED) {
 		// when Cuda is enabled we will have larger window_sz and
 		// need to upsize the caches we will use for priority MRs
 		if (ep->rdmamode & IPS_PROTOEXP_FLAG_ENABLED) {
@@ -1851,7 +1851,7 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 	}
 	ep->verbs_ep.rv_index = loc_info.rv_index;
 	ep->rv_mr_cache_size = loc_info.mr_cache_size;
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	ep->rv_gpu_cache_size = loc_info.gpu_cache_size;
 #endif
 	ep->verbs_ep.rv_q_depth = loc_info.q_depth;
@@ -1876,7 +1876,7 @@ psm3_hfp_verbs_context_initstats(psm2_ep_t ep)
 #endif
 }
 
-static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t const job_key)
+static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid_t const job_key)
 {
 	// similar to code in ifs-all/Topology, enumerates devices and picks one
 	int i, num_of_devices;
@@ -1963,25 +1963,26 @@ static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t
 	}
 	// When IPv4 or IPv6 is requested, must be an Ethernet port (RoCE)
 	// when OPA/IB is requested, must be IB/OPA port
-	if (! psmi_addr_fmt) {
+	if (! psm3_addr_fmt) {
 		// all port types ok
-	} else if (PSMI_ADDR_FMT_IS_ETH(psmi_addr_fmt)
+	} else if (PSMI_ADDR_FMT_IS_ETH(psm3_addr_fmt)
 		&& ep->verbs_ep.port_attr.link_layer != IBV_LINK_LAYER_ETHERNET) {
 		_HFI_ERROR("PSM3_ADDR_FMT=%u specified, but selected port is not Ethernet: port %u of %s\n",
-				psmi_addr_fmt, ep->portnum,
+				psm3_addr_fmt, ep->portnum,
 				ep->dev_name);
 		err = PSM2_INTERNAL_ERR;
 		goto fail;
-	} else if (! PSMI_ADDR_FMT_IS_ETH(psmi_addr_fmt)
+	} else if (! PSMI_ADDR_FMT_IS_ETH(psm3_addr_fmt)
 		&& ep->verbs_ep.port_attr.link_layer == IBV_LINK_LAYER_ETHERNET) {
 		_HFI_ERROR("PSM3_ADDR_FMT=%u specified, but selected port is Ethernet: port %u of %s\n",
-				psmi_addr_fmt, ep->portnum,
+				psm3_addr_fmt, ep->portnum,
 				ep->dev_name);
 		err = PSM2_INTERNAL_ERR;
 		goto fail;
 	}
 
-	if (0 != psmi_hal_get_port_subnet(ep->unit_id, ep->portnum,
+	ep->addr_index = addr_index;
+	if (0 != psmi_hal_get_port_subnet(ep->unit_id, ep->portnum, ep->addr_index,
 			&ep->subnet, &ep->addr,
 			&ep->verbs_ep.lgid_index, &ep->gid)) {
 		_HFI_ERROR( "Unable to get subnet for port %u of %s: %s\n",
@@ -1993,12 +1994,29 @@ static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t
 		ep->verbs_ep.lgid.global.interface_id = __cpu_to_be64(ep->gid.lo);
 		_HFI_PRDBG("Subnet for port %u of %s: %s addr %s gid %s\n",
 				ep->portnum, ep->dev_name,
-				psmi_subnet128_fmt(ep->subnet, 0),
-				psmi_naddr128_fmt(ep->addr, 1),
-				psmi_gid128_fmt(ep->gid, 2));
+				psm3_subnet128_fmt(ep->subnet, 0),
+				psm3_naddr128_fmt(ep->addr, 1),
+				psm3_gid128_fmt(ep->gid, 2));
 	}
 
 #if defined(USE_RC)
+#if defined(USE_RDMA_READ)
+	{
+		struct ibv_device_attr dev_attr;
+		// get RDMA capabilities of device
+		if (ibv_query_device(ep->verbs_ep.context, &dev_attr)) {
+			_HFI_ERROR("Unable query device %s: %s\n", ep->dev_name,
+						strerror(errno));
+			err = PSM2_INTERNAL_ERR;
+			goto fail;
+		}
+		ep->verbs_ep.max_qp_rd_atom = dev_attr.max_qp_rd_atom;
+		ep->verbs_ep.max_qp_init_rd_atom = dev_attr.max_qp_init_rd_atom;
+		_HFI_PRDBG("got device attr: rd_atom %u init_rd_atom %u\n",
+						dev_attr.max_qp_rd_atom, dev_attr.max_qp_init_rd_atom);
+		// TBD could have an env variable to reduce requested values
+	}
+#endif
 #endif // USE_RC
 #ifdef UMR_CACHE
 	if (ep->mr_cache_mode == MR_CACHE_MODE_USER) {
@@ -2330,6 +2348,9 @@ psm2_error_t modify_rc_qp_to_init(psm2_ep_t ep, struct ibv_qp *qp)
 	//attr.qkey = ep->verbs_ep.qkey;
 	//flags |= IBV_QP_QKEY;	// only allowed for UD
 	attr.qp_access_flags = 0;
+#ifdef USE_RDMA_READ
+	attr.qp_access_flags |= IBV_ACCESS_REMOTE_READ;
+#endif
 	attr.qp_access_flags |= IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
 	//attr.qp_access_flags |= IBV_ACCESS_REMOTE_ATOMIC;
 	flags |= IBV_QP_ACCESS_FLAGS;
@@ -2365,6 +2386,10 @@ psm2_error_t modify_rc_qp_to_rtr(psm2_ep_t ep, struct ibv_qp *qp,
 	attr.rq_psn = initpsn;
 	flags |= (IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN);
 
+#ifdef USE_RDMA_READ
+	attr.max_dest_rd_atomic = min(ep->verbs_ep.max_qp_rd_atom,
+									req_attr->initiator_depth);
+#endif
 	_HFI_PRDBG("set max_dest_rd_atomic to %u\n", attr.max_dest_rd_atomic);
 	attr.min_rnr_timer = 12;	// TBD well known
 	flags |= (IBV_QP_MIN_RNR_TIMER | IBV_QP_MAX_DEST_RD_ATOMIC);
@@ -2392,6 +2417,10 @@ psm2_error_t modify_rc_qp_to_rts(psm2_ep_t ep, struct ibv_qp *qp,
 	attr.sq_psn = initpsn;	// value we told other side
 	flags |= IBV_QP_SQ_PSN;
 
+#ifdef USE_RDMA_READ
+	attr.max_rd_atomic = min(ep->verbs_ep.max_qp_init_rd_atom,
+									req_attr->responder_resources);
+#endif
 	_HFI_PRDBG("set max_rd_atomic to %u\n", attr.max_rd_atomic);
 	flags |=  IBV_QP_MAX_QP_RD_ATOMIC;
 
@@ -2438,10 +2467,10 @@ unsigned psm3_verbs_parse_rdmamode(int reload)
 	// IPS_PROTOEXP_FLAGS_INTERLEAVE are N/A when RDMA not enabled
 
 	default_value = 0;
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #ifdef RNDV_MOD
 	// GPUDIRECT causes default_value of RDMA=1
-	if (PSMI_IS_CUDA_ENABLED && psmi_parse_gpudirect())
+	if (PSMI_IS_GPU_ENABLED && psmi_parse_gpudirect())
 		default_value = IPS_PROTOEXP_FLAG_RDMA_KERNEL;
 #endif
 #endif
@@ -2503,21 +2532,21 @@ unsigned psm3_verbs_parse_mr_cache_mode(unsigned rdmamode, int reload)
 	// PSM_HAL_CAP_GPUDIRECT_* flags not known until after HAL device open,
 	// so we test SDMA and RDMA here as prereqs for GPUDIRECT_SDMA and RDMA.
 	if (! (rdmamode & IPS_PROTOEXP_FLAG_ENABLED)
-#ifdef PSM_CUDA
-		&& (PSMI_IS_CUDA_DISABLED || ! psmi_parse_gpudirect()
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+		&& (PSMI_IS_GPU_DISABLED || ! psmi_parse_gpudirect()
 			//verbs always has these HAL capabilities set
 			//|| (!psmi_hal_has_cap(PSM_HAL_CAP_SDMA)
 			//	&& !psmi_hal_has_cap(PSM_HAL_CAP_RDMA)))
 			)
 #endif
-		&& ! psmi_parse_senddma()) {
+		&& ! psm3_parse_senddma()) {
 		envval.e_uint = MR_CACHE_MODE_NONE;
 	} else if (IPS_PROTOEXP_FLAG_KERNEL_QP(rdmamode)) {
 		// RDMA enabled in kernel mode.  Must use rv MR cache
 		envval.e_uint = MR_CACHE_MODE_RV;
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #ifdef PSM_HAVE_RNDV_MOD
-	} else if (PSMI_IS_CUDA_ENABLED && psmi_parse_gpudirect()) {
+	} else if (PSMI_IS_GPU_ENABLED && psmi_parse_gpudirect()) {
 		// GPU Direct (RDMA, send DMA and/or gdrcopy) must
 		// use kernel MR cache in RV
 		envval.e_uint = MR_CACHE_MODE_KERNEL;
@@ -2599,7 +2628,7 @@ psm3_dump_verbs_ep(psm2_ep_t ep, unsigned igid)
 	printf("qp_num     = %u\n", vep->qp->qp_num);
 	printf("GID        = ");
 	if (0 == ibv_query_gid(vep->context, ep->portnum, igid, &gid))
-		printf("%s\n", psmi_ibv_gid_fmt(gid, 0));
+		printf("%s\n", psm3_ibv_gid_fmt(gid, 0));
 	else
 		printf("unavailable.\n");
 }
@@ -2654,7 +2683,7 @@ psm3_dump_verbs_qp(struct ibv_qp *qp)
 			attr.ah_attr.is_global);
 		if (attr.ah_attr.is_global) {
 			printf("           dgid: %s\n",
-				psmi_ibv_gid_fmt(attr.ah_attr.grh.dgid, 0));
+				psm3_ibv_gid_fmt(attr.ah_attr.grh.dgid, 0));
 			printf("           flow %u sgid_idx %u hop %u tc %u\n",
 				attr.ah_attr.grh.flow_label, attr.ah_attr.grh.sgid_index,
 				attr.ah_attr.grh.hop_limit, attr.ah_attr.grh.traffic_class);
@@ -2666,7 +2695,7 @@ psm3_dump_verbs_qp(struct ibv_qp *qp)
 			attr.alt_ah_attr.is_global);
 		if (attr.alt_ah_attr.is_global) {
 			printf("              dgid: %s\n",
-				psmi_ibv_gid_fmt(attr.alt_ah_attr.grh.dgid, 0));
+				psm3_ibv_gid_fmt(attr.alt_ah_attr.grh.dgid, 0));
 			printf("              flow %u sgid_idx %u hop %u tc %u\n",
 				attr.alt_ah_attr.grh.flow_label, attr.alt_ah_attr.grh.sgid_index,
 				attr.alt_ah_attr.grh.hop_limit, attr.alt_ah_attr.grh.traffic_class);

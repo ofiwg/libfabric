@@ -4,7 +4,7 @@
 
 Name: lib%{provider}-fi
 Version: @VERSION@
-Release: 259_@RPM_RELEASE@
+Release: @RPM_RELEASE@
 Summary: Dynamic %{provider_formal} provider for Libfabric
 
 Group: System Environment/Libraries

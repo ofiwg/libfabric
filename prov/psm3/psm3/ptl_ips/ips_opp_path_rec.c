@@ -66,6 +66,9 @@
 static psm2_error_t
 ips_opp_get_path_rec(ips_path_type_t type, struct ips_proto *proto,
 		     __be16 slid, __be16 dlid,
+#ifdef PSM_OPA
+		     uint16_t desthfi_type,
+#endif
 		     ips_path_rec_t **ppath_rec)
 {
 	psm2_error_t err = PSM2_OK;
@@ -141,6 +144,7 @@ ips_opp_get_path_rec(ips_path_type_t type, struct ips_proto *proto,
 			proto->epinfo.ep_mtu);
 		path_rec->pr_pkey = ntohs(opp_response.pkey);
 		path_rec->pr_sl = ntohs(opp_response.qos_class_sl);
+#ifndef PSM_OPA
 		path_rec->pr_static_rate = opp_response.rate & 0x3f;
 		/* this function is N/A to RoCE.
 		 * We don't support routing for IB/OPA so set gid to 0
@@ -148,6 +152,10 @@ ips_opp_get_path_rec(ips_path_type_t type, struct ips_proto *proto,
 		 */
 		path_rec->pr_gid_hi = 0;
 		path_rec->pr_gid_lo = 0;
+#else
+		path_rec->pr_static_ipd =
+		    proto->ips_ipd_delay[opp_response.rate & 0x3f];
+#endif
 
 		if (path_rec->pr_sl > PSMI_SL_MAX) {
 			err = PSM2_INTERNAL_ERR;
@@ -186,7 +194,12 @@ ips_opp_get_path_rec(ips_path_type_t type, struct ips_proto *proto,
 			   path_rec->pr_mtu);
 		_HFI_CONNDBG("PKEY: 0x%04x\n", ntohs(opp_response.pkey));
 		_HFI_CONNDBG("SL: 0x%04x\n", ntohs(opp_response.qos_class_sl));
+#ifdef PSM_OPA
+		_HFI_CONNDBG("Rate: %x, IPD: %x\n", (opp_response.rate & 0x3f),
+			   path_rec->pr_static_ipd);
+#else
 		_HFI_CONNDBG("Rate: %x\n", (opp_response.rate & 0x3f));
+#endif
 	}
 	_HFI_CONNDBG("Timeout Init.: 0x%" PRIx64 " Max: 0x%" PRIx64 "\n",
 		   proto->epinfo.ep_timeout_ack,
@@ -207,7 +220,11 @@ fail:
 static psm2_error_t
 ips_opp_path_rec(struct ips_proto *proto,
 		 __be16 slid, __be16 dlid,
+#ifndef PSM_OPA
 		 __be64 gid_hi, __be64 gid_lo,// unused here, but must match API signature
+#else
+		 uint16_t desthfi_type,
+#endif
 		 unsigned long timeout, ips_path_grp_t **ppathgrp)
 {
 	psm2_error_t err = PSM2_OK;
@@ -337,6 +354,9 @@ ips_opp_path_rec(struct ips_proto *proto,
 
 		err = ips_opp_get_path_rec(IPS_PATH_HIGH_PRIORITY, proto,
 					   path_slid, path_dlid,
+#ifdef PSM_OPA
+					   desthfi_type,
+#endif
 					   &path);
 
 		if (err == PSM2_OK) {	/* Valid high priority path found */
@@ -366,6 +386,20 @@ ips_opp_path_rec(struct ips_proto *proto,
 		goto fail;
 	}
 
+#ifdef PSM_OPA
+	/* Once we have the high-priority path, set the partition key */
+	if (psmi_hal_set_pkey(proto->ep->context.psm_hw_ctxt,
+			      (uint16_t) pathgrp->pg_path[0][IPS_PATH_HIGH_PRIORITY]->pr_pkey)
+	    != 0) {
+		err = psm3_handle_error(proto->ep, PSM2_EP_DEVICE_FAILURE,
+					"Couldn't set device pkey 0x%x for %s port %u: %s",
+					(int)pathgrp->pg_path[0][IPS_PATH_HIGH_PRIORITY]->pr_pkey,
+					proto->ep->dev_name, proto->ep->portnum, strerror(errno));
+		psmi_free(elid.key);
+		psmi_free(pathgrp);
+		goto fail;
+	}
+#endif
 
 
 	/* Next setup the bulk paths. If the subnet administrator has misconfigured
@@ -381,6 +415,9 @@ ips_opp_path_rec(struct ips_proto *proto,
 retry_normal_path_res:
 		err = ips_opp_get_path_rec(path_type, proto,
 					   path_slid, path_dlid,
+#ifdef PSM_OPA
+					   desthfi_type,
+#endif
 					   &path);
 		if (err != PSM2_OK) {
 			if (path_type == IPS_PATH_NORMAL_PRIORITY) {
@@ -424,6 +461,9 @@ retry_normal_path_res:
 retry_low_path_res:
 		err = ips_opp_get_path_rec(path_type, proto,
 					   path_slid, path_dlid,
+#ifdef PSM_OPA
+					   desthfi_type,
+#endif
 					   &path);
 		if (err != PSM2_OK) {
 			if (path_type == IPS_PATH_LOW_PRIORITY) {
@@ -524,7 +564,7 @@ psm2_error_t psm3_ips_opp_init(struct ips_proto *proto)
 	}
 
 	/* If PSM3_IDENTIFY is set display the OPP library location being used. */
-	if (psmi_parse_identify()) {
+	if (psm3_parse_identify()) {
 		Dl_info info_opp;
 		printf
 		    ("PSM3 path record queries using OFED Plus Plus (%s) from %s\n",

@@ -147,6 +147,15 @@ ips_do_cksum(struct ips_proto *proto, struct ips_message_header *p_hdr,
 	return 0;
 }
 
+#ifdef PSM_OPA
+PSMI_ALWAYS_INLINE(
+uint32_t
+ips_proto_dest_context_from_header(struct ips_proto *proto,
+				   struct ips_message_header *p_hdr))
+{
+	return (__be32_to_cpu(p_hdr->bth[1]) & 0xFF);
+}
+#endif
 
 PSMI_ALWAYS_INLINE(
 void
@@ -179,6 +188,13 @@ ips_proto_hdr(struct ips_proto *proto, struct ips_epaddr *ipsaddr,
 						   (scb->
 						    offset_mode <<
 						    HFI_KHDR_OM_SHIFT)
+#ifdef PSM_OPA
+						   | (scb-> tid <<
+						    HFI_KHDR_TID_SHIFT)
+						   | (scb->
+						      tidctrl <<
+						      HFI_KHDR_TIDCTRL_SHIFT) |
+#endif
 						   (scb->
 						    flags & IPS_SEND_FLAG_INTR)
 						   | (scb->
@@ -206,6 +222,10 @@ ips_proto_hdr(struct ips_proto *proto, struct ips_epaddr *ipsaddr,
 	p_hdr->lrh[0] = __cpu_to_be16(HFI_LRH_BTH |
 				      ((flow->path->pr_sl & HFI_LRH_SL_MASK) <<
 				       HFI_LRH_SL_SHIFT)
+#ifdef PSM_OPA
+				      | ((proto->sl2sc[flow->path->pr_sl] &
+					HFI_LRH_SC_MASK) << HFI_LRH_SC_SHIFT)
+#endif
 					);
 	p_hdr->lrh[1] = dlid;
 	p_hdr->lrh[2] = lrh2_be;
@@ -217,9 +237,44 @@ ips_proto_hdr(struct ips_proto *proto, struct ips_epaddr *ipsaddr,
 	p_hdr->bth[2] = __cpu_to_be32(flow->xmit_seq_num.psn_num |
 				      (scb->scb_flags & IPS_SEND_FLAG_ACKREQ));
 
+#ifdef PSM_OPA
+	if (scb->tidctrl) {	/* expected receive packet */
+		psmi_assert(scb->tidsendc != NULL);
+		p_hdr->bth[1] = __cpu_to_be32(ipsaddr->opa.context |
+					      (ipsaddr->opa.subcontext <<
+					       HFI_BTH_SUBCTXT_SHIFT) |
+						(scb->tidsendc->
+						rdescid._desc_idx
+						 << HFI_BTH_FLOWID_SHIFT)
+					      | (proto->epinfo.
+						 ep_baseqp <<
+						 HFI_BTH_QP_SHIFT));
+
+		/* Setup KHDR fields */
+		p_hdr->khdr.kdeth0 = __cpu_to_le32(p_hdr->khdr.kdeth0 |
+						   (scb->tidctrl <<
+						    HFI_KHDR_TIDCTRL_SHIFT) |
+						   (scb->scb_flags &
+							IPS_SEND_FLAG_INTR)
+						   | (scb->scb_flags &
+						      IPS_SEND_FLAG_HDRSUPP)
+						   | (IPS_PROTO_VERSION <<
+						    HFI_KHDR_KVER_SHIFT));
+	} else {		/* eager receive packet */
+		p_hdr->bth[1] = __cpu_to_be32(ipsaddr->opa.context |
+					      (ipsaddr->
+					       opa.subcontext <<
+					       HFI_BTH_SUBCTXT_SHIFT) |
+						(flow->flowid
+						 << HFI_BTH_FLOWID_SHIFT)
+					      | (proto->epinfo.
+						 ep_baseqp <<
+						 HFI_BTH_QP_SHIFT));
+#else
 	{
 		p_hdr->bth[1] = __cpu_to_be32((flow->flowid
 						 << HFI_BTH_FLOWID_SHIFT));
+#endif // PSM_OPA
 		/* Setup KHDR fields */
 		p_hdr->khdr.kdeth0 = __cpu_to_le32(p_hdr->khdr.kdeth0 |
 						   (scb->scb_flags &
@@ -230,7 +285,11 @@ ips_proto_hdr(struct ips_proto *proto, struct ips_epaddr *ipsaddr,
 		p_hdr->ack_seq_num = flow->recv_seq_num.psn_num;
 	}
 
+#ifndef PSM_OPA
 	p_hdr->khdr.job_key = 0;
+#else
+	p_hdr->khdr.job_key = __cpu_to_le32(proto->epinfo.ep_jkey);
+#endif
 	p_hdr->connidx = ipsaddr->connidx_outgoing;
 	p_hdr->flags = flags;
 
@@ -250,10 +309,14 @@ void
 ips_scb_prepare_flow_inner(struct ips_proto *proto, struct ips_epaddr *ipsaddr,
 			   struct ips_flow *flow, ips_scb_t *scb))
 {
+#ifdef PSM_OPA
+	psmi_assert((scb->payload_size & 3) == 0);
+#else
 	// On UD and UDP, ips_ptl_mq_rndv can allow small odd sized payload
 	// in RTS and eager can do odd length send
 	psmi_assert(psmi_hal_has_cap(PSM_HAL_CAP_NON_DW_PKT_SIZE)
 			|| ((scb->payload_size & 3) == 0));
+#endif
 	ips_proto_hdr(proto, ipsaddr, flow, scb,
 		      ips_flow_gen_ackflags(scb, flow));
 
@@ -283,6 +346,9 @@ ips_proto_epaddr_stats_set(struct ips_proto *proto, uint8_t msgtype))
 	case OPCODE_ACK:
 		break;
 	case OPCODE_ERR_CHK:
+#ifdef PSM_OPA
+	case OPCODE_ERR_CHK_GEN:
+#endif
 		proto->epaddr_stats.err_chk_send++;
 		break;
 	case OPCODE_NAK:
@@ -380,8 +446,25 @@ ips_proto_is_expected_or_nak(struct ips_recvhdrq_event *rcv_ev))
 	struct ips_flow *flow;
 	psmi_seqnum_t sequence_num;
 
+#ifdef PSM_OPA
+	psmi_assert((flowid == EP_FLOW_GO_BACK_N_PIO) ||
+		           (flowid == EP_FLOW_GO_BACK_N_DMA)
+	    );
+#else
 	psmi_assert(flowid == EP_FLOW_GO_BACK_N_PIO);
+#endif
 	flow = &ipsaddr->flows[flowid];
+#ifdef PSM_OPA
+	/* If packet faced congestion generate BECN in NAK. */
+	if_pf((rcv_ev->is_congested & IPS_RECV_EVENT_FECN) &&
+	      ((flow->cca_ooo_pkts & 0xf) == 0)) {
+		/* Generate a BECN for every 16th OOO packet marked with a FECN. */
+		flow->flags |= IPS_FLOW_FLAG_GEN_BECN;
+		flow->cca_ooo_pkts++;
+		rcv_ev->proto->epaddr_stats.congestion_pkts++;
+		rcv_ev->is_congested &= ~IPS_RECV_EVENT_FECN;	/* Clear FECN event */
+	}
+#endif
 
 	sequence_num.psn_val = __be32_to_cpu(p_hdr->bth[2]);
 	if_pf(flow->recv_seq_num.psn_num == sequence_num.psn_num) {
@@ -389,6 +472,9 @@ ips_proto_is_expected_or_nak(struct ips_recvhdrq_event *rcv_ev))
 
 		flow->recv_seq_num.psn_num =
 		    (flow->recv_seq_num.psn_num + 1) & proto->psn_mask;
+#ifdef PSM_OPA
+		flow->cca_ooo_pkts = 0;
+#endif
 
 		/* don't process ack, caller will do it. */
 		return 1;
@@ -403,6 +489,36 @@ ips_proto_is_expected_or_nak(struct ips_recvhdrq_event *rcv_ev))
 			ips_proto_send_nak((struct ips_recvhdrq *)
 					   rcv_ev->recvq, flow);
 			flow->flags |= IPS_FLOW_FLAG_NAK_SEND;
+#ifdef PSM_OPA
+			flow->cca_ooo_pkts = 0;
+		} else if (proto->flags & IPS_PROTO_FLAG_CCA) {
+			flow->cca_ooo_pkts = diff;
+			// for OPA, ack_interval_bytes >= ack_interval*mtu
+			// so only need to check ack_interval here
+			if (flow->cca_ooo_pkts > flow->ack_interval) {
+				ips_scb_t ctrlscb;
+
+				rcv_ev->proto->epaddr_stats.congestion_pkts++;
+				flow->flags |= IPS_FLOW_FLAG_GEN_BECN;
+				_HFI_CCADBG
+				    ("BECN Generation. Expected: %d, Got: %d.\n",
+				     flow->recv_seq_num.psn_num,
+				     sequence_num.psn_num);
+
+				ctrlscb.scb_flags = 0;
+				ctrlscb.ips_lrh.data[0].u32w0 =
+						flow->cca_ooo_pkts;
+				/* Send Control message to throttle flow. Will clear flow flag and
+				 * reset cca_ooo_pkts.
+				 */
+				// no payload, pass cksum so non-NULL
+				psm3_ips_proto_send_ctrl_message(flow,
+					    OPCODE_BECN,
+					    &flow->ipsaddr->
+					    ctrl_msg_queued,
+					    &ctrlscb, ctrlscb.cksum, 0);
+			}
+#endif // PSM_OPA
 		}
 	}
 
@@ -470,6 +586,24 @@ ips_proto_process_packet(const struct ips_recvhdrq_event *rcv_ev,
 	uint32_t index;
 
 #ifdef PSM_FI
+#ifdef PSM_OPA
+	/* NOTE: Fault injection will currently not work with hardware
+	 * suppression. See note below for reason why as we currently
+	 * do not update the hardware tidflow table if FI is dropping
+	 * the packet.
+	 *
+	 * We need to look into the packet before dropping it and
+	 * if it's an expected packet AND we have hardware suppression
+	 * then we need to update the hardware tidflow table and the
+	 * associated tidrecvc state to fake having received a packet
+	 * until some point in the window defined by the loss rate.
+	 * This way the subsequent err chk will be NAKd and we can resync
+	 * the flow with the sender.
+	 *
+	 * Note: For real errors the hardware generates seq/gen errors
+	 * which are handled appropriately by the protocol.
+	 */
+#endif
 
 	if_pf(PSM3_FAULTINJ_ENABLED_EP(rcv_ev->proto->ep)) {
 		PSM3_FAULTINJ_STATIC_DECL(fi_recv, "recvlost",

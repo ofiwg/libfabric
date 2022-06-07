@@ -63,7 +63,7 @@ int psmx3_am_init(struct psmx3_trx_ctxt *trx_ctxt)
 	int err = 0;
 	uint32_t max_atomic_size;
 
-	FI_INFO(&psmx3_prov, FI_LOG_CORE, "epid %s\n", psm2_epid_fmt(trx_ctxt->psm2_epid, 0));
+	FI_INFO(&psmx3_prov, FI_LOG_CORE, "epid %s\n", psm3_epid_fmt(trx_ctxt->psm2_epid, 0));
 
 	if (!trx_ctxt->am_initialized) {
 		err = psm3_am_get_parameters(psm2_ep, &trx_ctxt->psm2_am_param,

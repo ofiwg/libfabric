@@ -103,7 +103,11 @@ MOCKABLE(psm3_ips_proto_am_init)(struct ips_proto *proto,
 		  struct ips_proto_am *proto_am)
 {
 	psm2_error_t err = PSM2_OK;
+#ifdef PSM_OPA
+	int send_buf_size = psmi_hal_get_pio_size(proto->ep->context.psm_hw_ctxt);
+#else
 	int send_buf_size = proto->epinfo.ep_mtu;
+#endif
 	int num_rep_slots = calc_optimal_num_reply_slots(num_send_slots);
 	int num_req_slots = num_send_slots - num_rep_slots;
 
@@ -174,7 +178,11 @@ psm3_ips_am_get_parameters(psm2_ep_t ep, struct psm2_am_parameters *parameters)
 {
 	int max_nargs = min(1 << IPS_AM_HDR_NARGS_BITS, PSMI_AM_MAX_ARGS);
 	int max_payload =
+#ifdef PSM_OPA
+		psmi_hal_get_pio_size(ep->context.psm_hw_ctxt) -
+#else
 		ep->mtu -
+#endif
 		((max_nargs - IPS_AM_HDR_NARGS) * sizeof(psm2_amarg_t));
 
 	if (parameters == NULL) {
