@@ -11,4 +11,6 @@
 
 void test_duplicate_efa_ah_creation();
 
+void test_efa_device_construct_error_handling();
+
 #endif

@@ -32,3 +32,18 @@ int __wrap_efadv_query_ah(struct ibv_ah *ibvah, struct efadv_ah_attr *attr, uint
     check_expected(inlen);
     return (int) mock();
 }
+
+int __real_efadv_query_device(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
+			     uint32_t inlen);
+
+int __wrap_efadv_query_device(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
+			     uint32_t inlen)
+{
+	int retval;
+
+	retval = mock();
+	/* Expected return value being 0 means we want this function to work as expected
+	 * hence call the real function in this case
+	 */
+	return (retval == 0) ? __real_efadv_query_device(ibvctx, attr, inlen) : retval;
+}
