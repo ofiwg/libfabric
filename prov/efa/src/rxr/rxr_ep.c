@@ -1840,13 +1840,13 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 				/* When no completions are available on the CQ, ENOENT is returned,
 				 * but the CQ remains in a valid state.
 				 */
-				goto end_poll;
+				break;
 		    }
 			/* ret = 0 iff start_poll or next_poll was successful */
 			if (ret < 0)
 				ret = -ret;
 			efa_eq_write_error(&ep->util_ep, ret, ret);
-			goto end_poll;
+			break;
 		}
 
 		if (ret || efa_cq->ibv_cq_ex->status) {
@@ -1862,8 +1862,7 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 				assert(ibv_wc_read_opcode(efa_cq->ibv_cq_ex) == IBV_WC_RECV);
 				rxr_pkt_handle_recv_error(ep, pkt_entry, err, prov_errno);
 			}
-
-			goto end_poll;
+			break;
 		}
 
 		pkt_entry = (void *)(uintptr_t)efa_cq->ibv_cq_ex->wr_id;
@@ -1890,9 +1889,7 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 			assert(0 && "Unhandled cq type");
 		}
 	}
-	goto end_poll;
 
-end_poll:
 	if (should_end_poll)
 		ibv_end_poll(efa_cq->ibv_cq_ex);
 }
