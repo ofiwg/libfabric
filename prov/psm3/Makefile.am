@@ -45,6 +45,7 @@ common_srcs = \
 	shared/hmem_cuda.c \
 	shared/hmem_cuda_gdrcopy.c \
 	shared/hmem_ze.c \
+	shared/hmem_neuron.c \
 	shared/common.c \
 	shared/enosys.c \
 	shared/rbtree.c \
