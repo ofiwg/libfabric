@@ -32,10 +32,9 @@
  */
 
 #include "config.h"
-
 #include <ofi_mem.h>
-
 #include "efa.h"
+#include <infiniband/verbs.h>
 
 static uint64_t efa_cq_wc_to_fi_flags(struct efa_wc *wc)
 {
@@ -118,15 +117,38 @@ static void efa_cq_read_data_entry(struct efa_wc *wc, int i, void *buf)
 	entry[i].len = (uint64_t)wc->ibv_wc.byte_len;
 }
 
+/* Unlike ibv_poll_cq, wide completion APIs do not write to ibv_wc struct. We need to do this manually.
+ * This is inspired by rdma-core, i.e. `efa_process_cqe` and `efa_process_ex_cqe`.
+ */
+static inline void efa_unsafe_write_ibv_cq_ex_wc(struct ibv_cq_ex *cq, struct ibv_wc *wc) {
+	wc->status = cq->status;
+	wc->vendor_err = ibv_wc_read_vendor_err(cq);
+	wc->wc_flags = ibv_wc_read_wc_flags(cq);
+	wc->qp_num = ibv_wc_read_qp_num(cq);
+	wc->opcode = ibv_wc_read_opcode(cq);
+	wc->byte_len = ibv_wc_read_byte_len(cq);
+	wc->src_qp = ibv_wc_read_src_qp(cq);
+	wc->sl = ibv_wc_read_sl(cq);
+	wc->slid = ibv_wc_read_slid(cq);
+	wc->imm_data = ibv_wc_read_imm_data(cq);
+	wc->wr_id = cq->wr_id;
+}
+
 ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			fi_addr_t *src_addr)
 {
+	bool poll_started = false, should_end_poll = false;
 	struct efa_cq *cq;
 	struct efa_wce *wce;
 	struct slist_entry *entry;
 	struct efa_av *av;
 	struct efa_wc wc = {0};
 	ssize_t ret = 0, i;
+
+	/* Initialize an empty ibv_poll_cq_attr struct for ibv_start_poll.
+	 * EFA expects .comp_mask = 0, or otherwise returns EINVAL.
+	 */
+	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 
 	cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
 
@@ -146,19 +168,36 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			continue;
 		}
 
-		ret = ibv_poll_cq(cq->ibv_cq, 1, &wc.ibv_wc);
-		if (ret != 1) {
+		if (!poll_started) {
+			poll_started = true;
+			/* Call ibv_start_poll only once */
+			ret = ibv_start_poll(cq->ibv_cq_ex, &poll_cq_attr);
 			if (!ret)
+				/* Remember to call end_poll */
+				should_end_poll = true;
+		} else {
+			ret = ibv_next_poll(cq->ibv_cq_ex);
+		}
+
+		if (ret) {
+			if (ret == ENOENT) {
+				/* When no completions are available on the CQ, ENOENT is returned,
+				 * but the CQ remains in a valid state.
+				 */
 				ret = -FI_EAGAIN;
+			} else if (ret > 0)
+				ret = -ret;
 			break;
 		}
 
+		efa_unsafe_write_ibv_cq_ex_wc(cq->ibv_cq_ex, &wc.ibv_wc);
+
 		/* Insert error entry into wcq */
-		if (wc.ibv_wc.status) {
+		if (cq->ibv_cq_ex->status) {
 			wce = ofi_buf_alloc(cq->wce_pool);
 			if (!wce) {
-				ofi_spin_unlock(&cq->lock);
-				return -FI_ENOMEM;
+				ret = -FI_ENOMEM;
+				break;
 			}
 			memset(wce, 0, sizeof(*wce));
 			memcpy(&wce->wc, &wc, sizeof(wc));
@@ -177,6 +216,9 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		}
 		cq->read_entry(&wc, i, buf);
 	}
+
+	if (should_end_poll)
+		ibv_end_poll(cq->ibv_cq_ex);
 
 	ofi_spin_unlock(&cq->lock);
 	return i ? i : ret;
@@ -236,7 +278,7 @@ static int efa_cq_close(fid_t fid)
 
 	ofi_spin_destroy(&cq->lock);
 
-	ret = -ibv_destroy_cq(cq->ibv_cq);
+	ret = -ibv_destroy_cq(ibv_cq_ex_to_cq(cq->ibv_cq_ex));
 	if (ret)
 		return ret;
 
@@ -282,9 +324,21 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 				  util_domain.domain_fid);
 
 	size = attr->size ? attr->size : EFA_DEF_CQ_SIZE;
-	cq->ibv_cq = ibv_create_cq(cq->domain->device->ibv_ctx, size, NULL, NULL, 0);
-	if (!cq->ibv_cq) {
-		EFA_WARN(FI_LOG_CQ, "Unable to create CQ\n");
+
+	struct ibv_cq_init_attr_ex init_attr_ex = {
+		.cqe = size,
+		.cq_context = NULL,
+		.channel = NULL,
+		.comp_vector = 0,
+		/* EFA requires these values for wc_flags and comp_mask.
+		 * See `efa_create_cq_ex` in rdma-core.
+		 */
+		.wc_flags = IBV_WC_STANDARD_FLAGS,
+		.comp_mask = 0,
+	};
+	cq->ibv_cq_ex = ibv_create_cq_ex(cq->domain->device->ibv_ctx, &init_attr_ex);
+	if (!cq->ibv_cq_ex) {
+		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ\n");
 		ret = -FI_EINVAL;
 		goto err_free_util_cq;
 	}
@@ -331,7 +385,7 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 err_destroy_pool:
 	ofi_bufpool_destroy(cq->wce_pool);
 err_destroy_cq:
-	ibv_destroy_cq(cq->ibv_cq);
+	ibv_destroy_cq(ibv_cq_ex_to_cq(cq->ibv_cq_ex));
 err_free_util_cq:
 	ofi_cq_cleanup(&cq->util_cq);
 err_free_cq:

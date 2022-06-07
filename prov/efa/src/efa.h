@@ -193,7 +193,7 @@ struct efa_cq {
 	ofi_spin_t		lock;
 	struct ofi_bufpool	*wce_pool;
 
-	struct ibv_cq		*ibv_cq;
+	struct ibv_cq_ex	*ibv_cq_ex;
 };
 
 struct efa_qp {
