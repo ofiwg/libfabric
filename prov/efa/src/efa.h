@@ -189,11 +189,10 @@ struct efa_cq {
 	struct efa_domain	*domain;
 	size_t			entry_size;
 	efa_cq_read_entry	read_entry;
-	struct slist		wcq;
 	ofi_spin_t		lock;
 	struct ofi_bufpool	*wce_pool;
 
-	struct ibv_cq		*ibv_cq;
+	struct ibv_cq_ex	*ibv_cq_ex;
 };
 
 struct efa_qp {
