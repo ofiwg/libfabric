@@ -4,7 +4,8 @@ int main(void)
 {
 	int ret;
 	const struct CMUnitTest efa_unit_tests[] = {
-		cmocka_unit_test(test_duplicate_efa_ah_creation)    /* Requires an EFA device to work */
+		cmocka_unit_test(test_duplicate_efa_ah_creation),    /* Requires an EFA device to work */
+		cmocka_unit_test(test_efa_device_construct_error_handling),    /* Requires an EFA device to work */
 	};
 	cmocka_set_message_output(CM_OUTPUT_XML);
 

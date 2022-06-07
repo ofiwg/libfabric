@@ -1148,6 +1148,7 @@ void test_duplicate_efa_ah_creation() {
 	uint8_t gid[EFA_GID_LEN];
 	memset(gid, 7, EFA_GID_LEN);
 
+	will_return(__wrap_efadv_query_device, 0);
 	resource = create_efa_resource();
 	assert_non_null(resource);
 	av = container_of(resource->av, struct efa_av, util_av.av_fid);
