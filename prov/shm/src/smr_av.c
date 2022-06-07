@@ -102,7 +102,12 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			continue;
 		} else {
 			assert(shm_id >= 0 && shm_id < SMR_MAX_PEERS);
-			smr_av->smr_map->peers[shm_id].fiaddr = util_addr;
+			if (flags & FI_AV_USER_ID) {
+				assert(fi_addr && fi_addr[count]);
+				smr_av->smr_map->peers[shm_id].fiaddr = fi_addr[count];
+			} else {
+				smr_av->smr_map->peers[shm_id].fiaddr = util_addr;
+			}
 			succ_count++;
 			smr_av->used++;
 		}
