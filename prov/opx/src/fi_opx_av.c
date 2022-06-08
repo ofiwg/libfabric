@@ -70,8 +70,7 @@ static int fi_opx_close_av(fid_t fid)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "av closed\n");
 	return 0;
 }
-void fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, fi_addr_t *peers);
-
+void fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers);
 /*
  * The 'addr' is a representation of the address - not a string
  *
@@ -135,7 +134,7 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 				opx_addr[t].fi = input[n];
 			}
 			for (i=0; i<ep_tx_count; ++i) {
-				fi_opx_ep_tx_connect(opx_av->ep_tx[i],count,input);
+				fi_opx_ep_tx_connect(opx_av->ep_tx[i],count,opx_addr);
 			}
 		}
 		break;
@@ -156,7 +155,7 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 				output[n].fi = input[n];
 			}
 			for (i=0; i<ep_tx_count; ++i) {
-				fi_opx_ep_tx_connect(opx_av->ep_tx[i],count,input);
+				fi_opx_ep_tx_connect(opx_av->ep_tx[i], count, output);
 			}
 		}
 		break;
