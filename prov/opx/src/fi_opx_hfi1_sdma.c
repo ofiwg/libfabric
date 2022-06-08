@@ -37,16 +37,24 @@
 void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc)
 {
 	struct fi_opx_hfi1_dput_params *params = (struct fi_opx_hfi1_dput_params *) cc->work_elem;
+	if (params->work_elem.complete) {
+		assert(!params->work_elem.complete);
+		return;
+	}
+
 	assert(params->delivery_completion);
 	assert(params->sdma_we == NULL || !fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
 
 	fi_opx_hfi1_sdma_finish(params);
 
-	// Set the sender's byte counter to 0 to notify them that the send is complete
+	/* Set the sender's byte counter to 0 to notify them that the send is
+	   complete. We should assume that the instant we set it to 0, the
+	   pointer will become invalid, so NULL it. */
 	*params->origin_byte_counter = 0;
-	cc->context = NULL;
-	params->cc = NULL;
-	ofi_buf_free(cc);
+	params->origin_byte_counter = NULL;
+
+	// Set the work element to complete so it can be removed from the work pending queue and freed
+	params->work_elem.complete = true;
 }
 
 void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry* we, uint8_t code)
