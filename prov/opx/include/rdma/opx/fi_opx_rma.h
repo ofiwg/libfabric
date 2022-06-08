@@ -87,7 +87,8 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	params->work_elem.work_fn = fi_opx_do_readv_internal;
 	params->work_elem.completion_action = NULL;
 	params->work_elem.payload_copy = NULL;
-	params->work_elem.pending_hit_zero = false;
+	params->work_elem.complete = false;
+	params->work_elem.low_priority = false;
 
 	params->iov.iov_base = iov->iov_base;
 	params->iov.iov_len = iov->iov_len;
@@ -152,7 +153,8 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	params->work_elem.work_fn = fi_opx_hfi1_do_dput;
 	params->work_elem.completion_action = NULL;
 	params->work_elem.payload_copy = NULL;
-	params->work_elem.pending_hit_zero = false;
+	params->work_elem.complete = false;
+	params->work_elem.low_priority = false;
 	params->opx_ep = opx_ep;
 	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_dst_addr.fi);
 	params->slid = opx_dst_addr.uid.lid;

@@ -2045,33 +2045,22 @@ static inline void fi_opx_ep_rx_poll (struct fid_ep *ep,
 	if (work_pending) {
 		union fi_opx_hfi1_deferred_work *work = (union fi_opx_hfi1_deferred_work *)slist_remove_head(&opx_ep->tx->work_pending);
 		work->work_elem.slist_entry.next = NULL;
-		if (work->work_elem.pending_hit_zero) {
-			if (*work->dput.origin_byte_counter == 0) {
-				ofi_buf_free(work);
-			} else {
-				// Note that we are purposely appending this to
-				// the tail instead of putting back in front, in
-				// order to unblock other deferred work.
-				slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+		int rc = work->work_elem.work_fn(work);
+		if(rc == FI_SUCCESS) {
+			if(work->work_elem.completion_action) {
+				work->work_elem.completion_action(work);
 			}
+			if(work->work_elem.payload_copy) {
+				ofi_buf_free(work->work_elem.payload_copy);
+			}
+			ofi_buf_free(work);
 		} else {
-			int rc = work->work_elem.work_fn(work);
-				if(rc == FI_SUCCESS) {
-					if(work->work_elem.completion_action) {
-						work->work_elem.completion_action(work);
-					}
-					if(work->work_elem.payload_copy) {
-						ofi_buf_free(work->work_elem.payload_copy);
-					}
-					if(!work->work_elem.pending_hit_zero) {
-						ofi_buf_free(work);
-					} else {
-						slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
-					}
-				} else {
-					assert(work->work_elem.slist_entry.next == NULL);
-					slist_insert_head(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
-				}
+			assert(work->work_elem.slist_entry.next == NULL);
+			if (work->work_elem.low_priority) {
+				slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+			} else {
+				slist_insert_head(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+			}
 		}
 	}
 
