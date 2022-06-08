@@ -1737,14 +1737,15 @@ static int ofi_pollfds_waitall(struct ofi_pollfds *pfds,
 			return 0;
 
 		ofi_mutex_lock(&pfds->lock);
-		if (!slist_empty(&pfds->work_item_list))
-			ofi_pollfds_process_work(pfds);
-		ofi_mutex_unlock(&pfds->lock);
-
 		if (pfds->fds[0].revents) {
+			assert(ret > 0);
 			fd_signal_reset(&pfds->signal);
 			ret--;
 		}
+
+		if (!slist_empty(&pfds->work_item_list))
+			ofi_pollfds_process_work(pfds);
+		ofi_mutex_unlock(&pfds->lock);
 
 		ret = MIN(maxevents, ret);
 
