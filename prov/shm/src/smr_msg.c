@@ -176,7 +176,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	peer_smr = smr_peer_region(ep->region, id);
 
 	pthread_spin_lock(&peer_smr->lock);
-	if (!peer_smr->cmd_cnt || smr_peer_data(ep->region)[peer_id].sar_status) {
+	if (!peer_smr->cmd_cnt || smr_peer_data(ep->region)[id].sar_status) {
 		ret = -FI_EAGAIN;
 		goto unlock_region;
 	}
