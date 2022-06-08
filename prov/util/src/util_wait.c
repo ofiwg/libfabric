@@ -40,17 +40,6 @@
 #include <ofi_epoll.h>
 
 
-static uint32_t ofi_poll_to_epoll(uint32_t events)
-{
-	uint32_t epoll_events = 0;
-
-	if (events & POLLIN)
-		epoll_events |= OFI_EPOLL_IN;
-	if (events & POLLOUT)
-		epoll_events |= OFI_EPOLL_OUT;
-	return epoll_events;
-}
-
 int ofi_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 {
 	struct util_cq *cq;
