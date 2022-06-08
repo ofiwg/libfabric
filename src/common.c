@@ -1736,7 +1736,7 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 {
 	struct ofi_pollfds_ctx *ctx;
 	uint64_t endtime;
-	int i, ret;
+	int i, ret, skip;
 	int index = 0;
 
 	ofi_mutex_lock(&pfds->lock);
@@ -1751,17 +1751,18 @@ int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 		return ret;
 	}
 
+	skip = (timeout == 0);
 	endtime = ofi_timeout_time(timeout);
 	do {
 		ofi_mutex_unlock(&pfds->lock);
-		ret = poll(pfds->fds, pfds->nfds, timeout);
+		ret = poll(pfds->fds + skip, pfds->nfds - skip, timeout);
 		if (ret == SOCKET_ERROR)
 			return -ofi_sockerr();
 		else if (ret == 0)
 			return 0;
 
 		ofi_mutex_lock(&pfds->lock);
-		if (pfds->fds[0].revents) {
+		if (!skip && pfds->fds[0].revents) {
 			assert(ret > 0);
 			fd_signal_reset(&pfds->signal);
 			ret--;
