@@ -199,4 +199,18 @@ typedef struct ofi_pollfds *ofi_epoll_t;
 
 #endif /* HAVE_EPOLL */
 
+/* If we HAVE_EPOLL, the values for EPOLLIN and EPOLLOUT are the same as
+ * POLLIN and POLLOUT, at least in the gnu headers.  If we don't have
+ * epoll support, then we're emulating it using poll, in which case the
+ * values are also the same (e.g. OFI_EPOLL_IN == POLLIN).
+ *
+ * This use of this function helps make it clear that we're passing the
+ * correct event values to epoll, versus poll, without actually incurring
+ * the unnecessary overhead of converting the values.
+ */
+static inline uint32_t ofi_poll_to_epoll(uint32_t events)
+{
+	return events;
+}
+
 #endif  /* _OFI_EPOLL_H_ */
