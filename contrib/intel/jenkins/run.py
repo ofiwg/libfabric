@@ -82,7 +82,7 @@ def ze_fabtests(core, hosts, mode, util):
         runzefabtests.execute_cmd()
     else:
         print("Skipping {} {} as execute condition fails"\
-              .format(core, runfabzetests.testname))
+              .format(core, runzefabtests.testname))
     print("-------------------------------------------------------------------")
 
 def intel_mpi_benchmark(core, hosts, mpi, mode, group, util):
