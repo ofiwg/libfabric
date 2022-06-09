@@ -827,7 +827,7 @@ ssize_t rxr_pkt_init_runtread_rtm(struct rxr_ep *ep,
 		 * TODO: adjust bytes_runt such that read buffer
 		 *       is page aligned, but must be >= rxr_env.efa_runt_size
 		 */
-		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+		peer = rxr_ep_get_peer(ep, tx_entry->addr);
 		assert(peer);
 		tx_entry->bytes_runt = MIN(rxr_env.efa_runt_size - peer->num_runt_bytes_in_flight, tx_entry->total_len);
 	}
