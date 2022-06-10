@@ -8,7 +8,7 @@ tagline: Development
 # Man pages
 
 These man pages are from [libfabric
-v1.14.1](https://github.com/ofiwg/libfabric/releases/tag/v1.14.1).
+v1.15.0](https://github.com/ofiwg/libfabric/releases/tag/v1.15.0).
 
 * General information
   * [fabric(7)](fabric.7.html)
