@@ -96,9 +96,12 @@ TESTS += prov/efa/test/efa_unit_test
 nodist_prov_efa_test_efa_unit_test_SOURCES = \
 	prov/efa/test/efa_unit_tests.h \
 	prov/efa/test/efa_unit_tests.c \
-	prov/efa/test/rdma_core_mocks.c
+	prov/efa/test/rdma_core_mocks.c \
+	prov/efa/test/efa_unit_test_common.c \
+	prov/efa/test/efa_unit_test_ep.c
 
-efa_CPPFLAGS += -I$(top_srcdir)/prov/efa/test $(cmocka_CPPFLAGS)
+_efa_files += prov/efa/test/efa_unit_test_common.c
+efa_CPPFLAGS += -I$(top_srcdir)/include -I$(top_srcdir)/prov/efa/test $(cmocka_CPPFLAGS)
 
 
 prov_efa_test_efa_unit_test_CPPFLAGS = $(efa_CPPFLAGS)

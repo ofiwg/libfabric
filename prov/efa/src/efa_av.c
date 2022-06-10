@@ -1078,61 +1078,6 @@ err:
 
 #include "efa_unit_tests.h"
 
-/* Common Setup/Teardown */
-
-struct efa_resource {
-	struct fid_fabric *fabric;
-	struct fid_domain *domain;
-	struct fid_av *av;
-};
-
-struct efa_resource *create_efa_resource() {
-	struct efa_resource *resource = (struct efa_resource*) malloc(sizeof(struct efa_resource));
-	struct fi_info *info;
-	struct fi_av_attr av_attr = {0};
-	int err;
-
-	resource->fabric = NULL;
-	resource->domain = NULL;
-	resource->av = NULL;
-
-	err = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, NULL, &info);
-	if (err) {
-		free(resource);
-		return NULL;
-	}
-
-	err = fi_fabric(info->fabric_attr, &resource->fabric, NULL);
-	if (err) {
-		free(resource);
-		return NULL;
-	}
-
-	err = fi_domain(resource->fabric, info, &resource->domain, NULL);
-	if (err) {
-		fi_close(&resource->fabric->fid);
-		free(resource);
-		return NULL;
-	}
-
-	err = fi_av_open(resource->domain, &av_attr, &resource->av, NULL);
-	if (err) {
-		fi_close(&resource->domain->fid);
-		fi_close(&resource->fabric->fid);
-		free(resource);
-		return NULL;
-	}
-
-	return resource;
-}
-
-void delete_efa_resource(struct efa_resource *resource) {
-	fi_close(&resource->av->fid);
-	fi_close(&resource->domain->fid);
-	fi_close(&resource->fabric->fid);
-	free(resource);
-}
-
 /*
  * Only works on nodes with EFA devices
  * This test calls efa_ah_alloc twice with the same GID,
@@ -1141,7 +1086,8 @@ void delete_efa_resource(struct efa_resource *resource) {
 void test_duplicate_efa_ah_creation() {
 	/* Setup Local Variables */
 	int ibv_err = 4242;
-	struct efa_resource *resource;
+	struct efa_resource resource = {0};
+	int ret;
 	struct efa_av *av;
 	struct efa_ah *efa_ah;
 	struct efa_ah *efa_ah2;
@@ -1149,9 +1095,9 @@ void test_duplicate_efa_ah_creation() {
 	memset(gid, 7, EFA_GID_LEN);
 
 	will_return(__wrap_efadv_query_device, 0);
-	resource = create_efa_resource();
-	assert_non_null(resource);
-	av = container_of(resource->av, struct efa_av, util_av.av_fid);
+	ret = efa_unit_test_resource_construct(&resource);
+	assert_int_equal(ret, 0);
+	av = container_of(resource.av, struct efa_av, util_av.av_fid);
 	assert_non_null(av);
 
 	/* Set mock expectations and call UUT, success */
@@ -1171,6 +1117,6 @@ void test_duplicate_efa_ah_creation() {
 	assert_true(efa_ah->refcnt == 2);
 	assert_true(av->ah_map->refcnt == 2);
 
-	delete_efa_resource(resource);
+	efa_unit_test_resource_destroy(&resource);
 }
 #endif
