@@ -62,6 +62,7 @@
 #include <ofi_util.h>
 #include <ofi_atomic.h>
 #include <ofi_iov.h>
+#include <hmem_cache.h>
 
 #ifndef _SMR_H_
 #define _SMR_H_
@@ -286,6 +287,8 @@ struct smr_ep {
 	struct smr_queue	unexp_msg_queue;
 	struct smr_queue	unexp_tagged_queue;
 	struct dlist_entry	sar_list;
+	/* cache for use with hmem ifaces */
+	struct hmem_cache *hmem_cache;
 
 	int			ep_idx;
 	struct smr_sock_info	*sock_info;

@@ -492,9 +492,9 @@ static int smr_progress_ipc(struct smr_cmd *cmd, enum fi_hmem_iface iface,
 				(void **) &cmd->msg.data.ipc_info.fd_handle,
 				&ipc_fd, ipc_device, &base);
 	} else {
-		ret = ofi_hmem_open_handle(cmd->msg.data.ipc_info.iface,
-				(void **) &cmd->msg.data.ipc_info.ipc_handle,
-				device, &base);
+		ret = ipc_cache_map_memhandle(ep->hmem_cache,
+									  &cmd->msg.data.ipc_info,
+									  &base);
 	}
 	if (ret)
 		goto out;

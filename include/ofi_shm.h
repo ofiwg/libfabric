@@ -44,6 +44,7 @@
 #include <ofi_mem.h>
 #include <ofi_rbuf.h>
 #include <ofi_tree.h>
+#include <hmem_cache.h>
 
 #include <rdma/providers/fi_prov.h>
 
@@ -128,19 +129,6 @@ struct smr_msg_hdr {
 
 #define SMR_MSG_DATA_LEN	(SMR_CMD_SIZE - sizeof(struct smr_msg_hdr))
 
-#define IPC_HANDLE_SIZE		64
-struct smr_ipc_info {
-	uint64_t	iface;
-	union {
-		uint8_t		ipc_handle[IPC_HANDLE_SIZE];
-		struct {
-			uint64_t	device;
-			uint64_t	offset;
-			uint64_t	fd_handle;
-		};
-	};
-};
-
 union smr_cmd_data {
 	uint8_t			msg[SMR_MSG_DATA_LEN];
 	struct {
@@ -151,7 +139,7 @@ union smr_cmd_data {
 	struct {
 		uint64_t	sar;
 	};
-	struct smr_ipc_info	ipc_info;
+	struct ipc_info	ipc_info;
 };
 
 struct smr_cmd_msg {

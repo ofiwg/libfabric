@@ -149,7 +149,20 @@ extern "C" {
 		_a > _b ? _a : _b; })
 #endif
 
+#define BIT(i) (1ul << (i))
+#define ALIGNED(_align) __attribute__((aligned(_align)))
+/* Mask of bits 0..i-1 */
+#define MASK(i) (BIT(i) - 1)
+#define MASK_SAFE(_i) \
+    (((_i) >= 64) ? ((uint64_t)(-1)) : MASK(_i))
+
 #define ofi_div_ceil(a, b) ((a + b - 1) / b)
+
+#ifdef __GNUC__
+#define ALWAYS_INLINE inline __attribute__ ((always_inline))
+#else
+#define ALWAYS_INLINE inline
+#endif
 
 static inline int ofi_val64_gt(uint64_t x, uint64_t y) {
 	return ((int64_t) (x - y)) > 0;

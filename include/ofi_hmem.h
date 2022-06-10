@@ -101,8 +101,8 @@ struct ofi_hmem_ops {
 	int (*copy_from_hmem)(uint64_t device, void *dest, const void *src,
 			      size_t size);
 	bool (*is_addr_valid)(const void *addr, uint64_t *device, uint64_t *flags);
-	int (*get_handle)(void *dev_buf, void **handle);
-	int (*open_handle)(void **handle, uint64_t device, void **ipc_ptr);
+	int (*get_handle)(void *dev_buf, size_t *len, void **handle, uint64_t *offset);
+	int (*open_handle)(void **handle, size_t len, uint64_t device, void **ipc_ptr);
 	int (*close_handle)(void *ipc_ptr);
 	int (*host_register)(void *ptr, size_t size);
 	int (*host_unregister)(void *ptr);
@@ -121,6 +121,10 @@ int rocr_hmem_cleanup(void);
 bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 int rocr_host_register(void *ptr, size_t size);
 int rocr_host_unregister(void *ptr);
+int rocr_get_handle(void *dev_buf, size_t *len, void **handle, uint64_t *offset);
+int rocr_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr);
+int rocr_close_handle(void *ipc_ptr);
+bool rocr_is_ipc_enabled(void);
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
@@ -131,8 +135,8 @@ int cuda_host_register(void *ptr, size_t size);
 int cuda_host_unregister(void *ptr);
 int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
 int cuda_dev_unregister(uint64_t handle);
-int cuda_get_handle(void *dev_buf, void **handle);
-int cuda_open_handle(void **handle, uint64_t device, void **ipc_ptr);
+int cuda_get_handle(void *dev_buf, size_t *len, void **handle, uint64_t *offset);
+int cuda_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr);
 int cuda_close_handle(void *ipc_ptr);
 bool cuda_is_ipc_enabled(void);
 bool cuda_is_gdrcopy_enabled(void);
@@ -151,8 +155,8 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);
 int ze_hmem_init(void);
 int ze_hmem_cleanup(void);
 bool ze_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
-int ze_hmem_get_handle(void *dev_buf, void **handle);
-int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr);
+int ze_hmem_get_handle(void *dev_buf, size_t *len, void **handle, uint64_t *offset);
+int ze_hmem_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr);
 int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
 			      void **handle);
 int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
@@ -178,8 +182,8 @@ int synapseai_copy_from_hmem(uint64_t device, void *dest, const void *src,
                              size_t size);
 bool synapseai_is_addr_valid(const void *addr, uint64_t *device,
                              uint64_t *flags);
-int synapseai_get_handle(void *dev_buf, void **handle);
-int synapseai_open_handle(void **handle, uint64_t device, void **ipc_ptr);
+int synapseai_get_handle(void *dev_buf, size_t *len, void **handle, uint64_t *offset);
+int synapseai_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr);
 int synapseai_close_handle(void *ipc_ptr);
 int synapseai_host_register(void *ptr, size_t size);
 int synapseai_host_unregister(void *ptr);
@@ -203,12 +207,12 @@ static inline int ofi_hmem_cleanup_noop(void)
 	return FI_SUCCESS;
 }
 
-static inline int ofi_hmem_no_get_handle(void *dev_buffer, void **handle)
+static inline int ofi_hmem_no_get_handle(void *dev_buffer, size_t *len, void **handle, uint64_t *offset)
 {
 	return -FI_ENOSYS;
 }
 
-static inline int ofi_hmem_no_open_handle(void **handle, uint64_t device, void **ipc_ptr)
+static inline int ofi_hmem_no_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr)
 {
 	return -FI_ENOSYS;
 }
@@ -253,9 +257,10 @@ ssize_t ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
 			     size_t hmem_iov_count, uint64_t hmem_iov_offset,
 			     const void *src, size_t size);
 
-int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *dev_buf, void **handle);
+int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *dev_buf,
+						size_t *len, void **handle, uint64_t *offset);
 int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
-			 uint64_t device, void **ipc_ptr);
+			 size_t len, uint64_t device, void **ipc_ptr);
 int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr);
 int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *ptr,
 			   void **base, size_t *size);

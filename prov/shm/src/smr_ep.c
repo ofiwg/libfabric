@@ -415,7 +415,9 @@ static int smr_format_ipc(struct smr_cmd *cmd, void *ptr, size_t len,
 	cmd->msg.data.ipc_info.iface = iface;
 
 	return ofi_hmem_get_handle(cmd->msg.data.ipc_info.iface, ptr,
-				   (void **)&cmd->msg.data.ipc_info.ipc_handle);
+			&cmd->msg.data.ipc_info.base_length,
+			(void **)&cmd->msg.data.ipc_info.ipc_handle,
+			&cmd->msg.data.ipc_info.base_offset);
 }
 
 static int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
@@ -845,6 +847,8 @@ static int smr_ep_close(struct fid *fid)
 
 	if (ep->region)
 		smr_free(ep->region);
+
+	ipc_destroy_hmem_cache(ep->hmem_cache);
 
 	smr_recv_fs_free(ep->recv_fs);
 	smr_unexp_fs_free(ep->unexp_fs);
@@ -1400,6 +1404,12 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 				smr_ep_progress);
 	if (ret)
 		goto err1;
+
+	ret = ipc_create_hmem_cache(&ep->hmem_cache, "smr_hmem_cache");
+	if (ret) {
+		ofi_endpoint_close(&ep->util_ep);
+		goto err1;
+	}
 
 	ep->recv_fs = smr_recv_fs_create(info->rx_attr->size, NULL, NULL);
 	ep->unexp_fs = smr_unexp_fs_create(info->rx_attr->size, NULL, NULL);

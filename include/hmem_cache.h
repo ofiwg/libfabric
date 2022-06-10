@@ -1,5 +1,7 @@
 /*
- * Copyright (c) 2022 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2022 UT-Battelle, LLC. All rights reserved.
+ * Copyright (C) Mellanox Technologies Ltd. 2018.  ALL RIGHTS RESERVED.
+ * Copyright (C) Advanced Micro Devices, Inc. 2019. ALL RIGHTS RESERVED.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,72 +32,54 @@
  * SOFTWARE.
  */
 
-#if HAVE_CONFIG_H
-#include <config.h>
-#endif
+#ifndef HMEM_CACHE_H
+#define HMEM_CACHE_H
 
-#include "ofi_hmem.h"
+#include <pgtable.h>
+#include <rdma/fi_errno.h>
+#include "ofi_util.h"
 #include "ofi.h"
+#include "shared/ofi_str.h"
+#include "ofi_prov.h"
+#include "ofi_perf.h"
+#include "ofi_hmem.h"
+#include "rdma/fi_ext.h"
 
-int synapseai_init(void)
-{
-	return -FI_ENOSYS;
-}
+#define IPC_HANDLE_SIZE		64
+struct ipc_info {
+	uint64_t	iface;
+	uintptr_t	address;
+	size_t		length;
+	size_t		base_length;
+	uint64_t	base_offset;
+	int			dev_num;
+	union {
+		uint8_t		ipc_handle[IPC_HANDLE_SIZE];
+		struct {
+			uint64_t	device;
+			uint64_t	offset;
+			uint64_t	fd_handle;
+		};
+	};
+};
 
-int synapseai_cleanup(void)
-{
-	return -FI_ENOSYS;
-}
+struct ipc_cache_region {
+	pgt_region_t		super;
+	struct dlist_entry	list;
+	struct ipc_info		key;
+	void				*mapped_addr;
+};
 
-int synapseai_copy_to_hmem(uint64_t device, void *dest, const void *src,
-                           size_t size)
-{
-	return -FI_ENOSYS;
-}
+struct hmem_cache {
+	pthread_rwlock_t lock;
+	pgtable_t pgtable;
+	char *name;
+};
 
-int synapseai_copy_from_hmem(uint64_t device, void *dest, const void *src,
-                             size_t size)
-{
-	return -FI_ENOSYS;
-}
+int ipc_create_hmem_cache(struct hmem_cache **cache,
+						  const char *name);
+void ipc_destroy_hmem_cache(struct hmem_cache *cache);
+int ipc_cache_map_memhandle(struct hmem_cache *cache, struct ipc_info *key,
+							void **mapped_addr);
 
-bool synapseai_is_addr_valid(const void *addr, uint64_t *device,
-                             uint64_t *flags)
-{
-	return false;
-}
-
-int synapseai_get_handle(void *dev_buf, size_t *len, void **handle, uint64_t *offset)
-{
-	return -FI_ENOSYS;
-}
-
-int synapseai_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr)
-{
-	return -FI_ENOSYS;
-}
-
-int synapseai_close_handle(void *ipc_ptr)
-{
-	return -FI_ENOSYS;
-}
-
-int synapseai_host_register(void *ptr, size_t size)
-{
-	return -FI_ENOSYS;
-}
-
-int synapseai_host_unregister(void *ptr)
-{
-	return -FI_ENOSYS;
-}
-
-int synapseai_get_base_addr(const void *ptr, void **base, size_t *size)
-{
-	return -FI_ENOSYS;
-}
-
-bool synapseai_is_ipc_enabled(void)
-{
-	return false;
-}
+#endif /* HMEM_CACHE_H */

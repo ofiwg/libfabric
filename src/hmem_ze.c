@@ -359,7 +359,7 @@ int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
 	ze_ipc_mem_handle_t ze_handle;
 	int ret;
 
-	ret = ze_hmem_get_handle(dev_buf, (void **) &ze_handle);
+	ret = ze_hmem_get_handle(dev_buf, NULL, (void **) &ze_handle, NULL);
 	if (ret)
 		return ret;
 
@@ -396,7 +396,8 @@ int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
 	*ze_fd = open_fd.fd;
 	memset(&ze_handle, 0, sizeof(ze_handle));
 	memcpy(&ze_handle, &open_fd.fd, sizeof(open_fd.fd));
-	return ze_hmem_open_handle((void **) &ze_handle, device, ipc_ptr);
+
+	return ze_hmem_open_handle((void **) &ze_handle, NULL, device, ipc_ptr);
 }
 
 bool ze_hmem_p2p_enabled(void)
@@ -851,7 +852,7 @@ bool ze_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 	return true;
 }
 
-int ze_hmem_get_handle(void *dev_buf, void **handle)
+int ze_hmem_get_handle(void *dev_buf, size_t *len, void **handle, uint64_t *offset)
 {
 	ze_result_t ze_ret;
 
@@ -865,7 +866,7 @@ int ze_hmem_get_handle(void *dev_buf, void **handle)
 	return FI_SUCCESS;
 }
 
-int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr)
+int ze_hmem_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr)
 {
 	ze_result_t ze_ret;
 	int dev_id = (int) device;
@@ -959,12 +960,12 @@ bool ze_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 	return false;
 }
 
-int ze_hmem_get_handle(void *dev_buf, void **handle)
+int ze_hmem_get_handle(void *dev_buf, size_t *len, void **handle, uint64_t *offset)
 {
 	return -FI_ENOSYS;
 }
 
-int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr)
+int ze_hmem_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr)
 {
 	return -FI_ENOSYS;
 }

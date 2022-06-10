@@ -58,6 +58,8 @@ common_srcs =				\
 	src/indexer.c			\
 	src/mem.c			\
 	src/iov.c			\
+	src/pgtable.c		\
+	src/hmem_cache.c	\
 	src/shared/ofi_str.c		\
 	prov/util/src/util_atomic.c	\
 	prov/util/src/util_attr.c	\
@@ -186,6 +188,12 @@ src_libfabric_la_SOURCES =			\
 	include/uthash.h			\
 	include/ofi_prov.h			\
 	include/ofi_linkx.h			\
+	include/pgtable.h			\
+	include/hmem_cache.h		\
+	include/bitops.h			\
+	include/aarch64/bitops.h	\
+	include/ppc64/bitops.h		\
+	include/x86_64/bitops.h		\
 	include/rdma/providers/fi_log.h		\
 	include/rdma/providers/fi_prov.h	\
 	src/fabric.c				\
