@@ -23,7 +23,7 @@
 		      " NIC HW2SW append fail: %d\n"
 
 /*
- * rxc_msg_enable() - Enable RXC messaging.
+ * cxip_rxc_msg_enable() - Enable RXC messaging.
  *
  * Change the RXC RX PtlTE to enabled state. Once in enabled state, messages
  * will be accepted by hardware. Prepare all messaging resources before
@@ -34,21 +34,21 @@
 int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count)
 {
 	int ret;
-	enum c_ptlte_state new_state;
 
-	/* If hybrid endpoints are enabled, the endpoint will transition to
-	 * software matching; otherwise it will attempt to re-enable hardware
-	 * match mode.
+	/* If transitioning from disabled to the software managed state a
+	 * synchronous call is used which handles drop count mismatches.
 	 */
-	if (cxip_software_pte_allowed())
-		new_state = C_PTLTE_SOFTWARE_MANAGED;
-	else
-		new_state = C_PTLTE_ENABLED;
+	if (rxc->new_state == RXC_ENABLED_SOFTWARE) {
+		ret = cxil_pte_transition_sm(rxc->rx_pte->pte, drop_count);
+		if (ret)
+			RXC_WARN(rxc,
+				 "Error transitioning to SW EP %d %s\n",
+				  ret, fi_strerror(-ret));
+		return ret;
+	}
 
-	ret = cxip_pte_set_state(rxc->rx_pte, rxc->rx_cmdq, new_state,
-				 drop_count);
-
-	return ret;
+	return cxip_pte_set_state(rxc->rx_pte, rxc->rx_cmdq,
+				  C_PTLTE_ENABLED, drop_count);
 }
 
 /*

@@ -1207,39 +1207,55 @@ enum cxip_rxc_state {
 	 *
 	 * Validate state changes:
 	 * RXC_ENABLED: User has successfully enabled the RXC.
-	 * RXC_ENABLED_SOFTWARE: User has successfully enabled the RXC
+	 * RXC_ENABLED_SOFTWARE: User has successfully initialized the RXC
 	 * in a software only RX matching mode.
 	 */
 	RXC_DISABLED = 0,
 
-	/* User posted receives are matched against the software unexpected list
-	 * before being offloaded to hardware. Hardware matches against the
-	 * corresponding PtlTE priority and overflow list.
+	/* User posted receives are matched against the software unexpected
+	 * list before being offloaded to hardware. Hardware matches against
+	 * the corresponding PtlTE priority and overflow list.
 	 *
 	 * Validate state changes:
-	 * RXC_ONLOAD_FLOW_CONTROL: Two scenarios can cause this state change.
-	 *    1. Hardware fails to allocate an LE for an unexpected message,
-	 *    or a priority list LE append fails. Hardware automatically
-	 *    transitions the PtlTE from Enabled to Disabled.
+	 * RXC_ONLOAD_FLOW_CONTROL: Several scenarios can initiate this state
+	 * change.
+	 *    1. Hardware fails to allocate an LE for an unexpected message
+	 *    or a priority list LE append fails, and hybrid mode is not
+	 *    enabled. Hardware transitions the PtlTE from enabled to disabled.
 	 *    2. Hardware fails to allocate an LE during an overflow list
-	 *    append. The PtlTE remains in the Enabled state but appends to
+	 *    append. The PtlTE remains in the enabled state but appends to
 	 *    the overflow list are disabled. Software manually disables
 	 *    the PtlTE.
-	 *    3. Hardware fails to successfully match on the overflow list or
-	 *    the overflow buffer is full. Hardware automatically transitions
-	 *    the PtlTE from Enabled to Disabled.
-	 * RXC_PENDING_PTLTE_SOFTWARE_MANAGED: If the provider is configured
+	 *    3. Hardware fails to successfully match on the overflow list.
+	 *    Hardware automatically transitions the PtlTE from enabled to
+	 *    disabled.
+	 * RXC_ONLOAD_FLOW_CONTROL_REENABLE: Several scenarios can initiate
+	 * it this state change:
+	 *    1. The hardware EQ is full, hardware transitions the PtlTE from
+	 *    enabled/software managed to disabled to recover drops, but it
+	 *    can re-enable if an LE resource is not recovered.
+	 *    2. Running "hardware" RX match mode and matching failed because
+	 *    the overflow list buffers were full. Hardware transitions the
+	 *    PtlTE from enabled to disabled. The overflow list must be
+	 *    replenished and processing can continue if an LE resource is not
+	 *    recovered.
+	 *    3. Running "hybrid" or "software" RX match mode and a message
+	 *    is received, but there is not a buffer available on the request
+	 *    list. Hardware transitions the PtlTE from software managed to
+	 *    disabled. The request list must be replenished and processing
+	 *    can continue if an LE resource is not recovered.
+	 * RXC_PENDING_PTLTE_SOFTWARE_MANAGED: When the provider is configured
 	 * to run in "hybrid" RX match mode and hardware fails to allocate an
-	 * LE for an overflow list or priority list append. Hardware will
-	 * automatically transition the PtlTE from Enabled to Software Managed.
+	 * LE for an unexpected message match or an priority list append fails.
+	 * Hardware will automatically transition the PtlTE from enabled to
+	 * software managed and onload of UX messages will be initiated.
 	 */
 	RXC_ENABLED,
 
-	/* Hardware has initiated an automated transition from hardware
-	 * to software managed PtlTE matching due to resource load.
+	/* The NIC has initiated a transition to software managed EP matching.
 	 *
-	 * Software is onloading the hardware unexpected list while creating
-	 * a pending unexpected list from entries received on the PtlTE
+	 * Software must onload/reonload the hardware unexpected list while
+	 * creating a pending unexpected list from entries received on the PtlTE
 	 * request list. Any in flight appends will fail and be added to
 	 * a receive replay list, further attempts to post receive operations
 	 * will return -FI_EAGAIN. When onloading completes, the pending
@@ -1247,8 +1263,9 @@ enum cxip_rxc_state {
 	 * are replayed prior to enabling the posting of receive operations.
 	 *
 	 * Validate state changes:
-	 * RXC_ENABLED_SOFTWARE: The HW to SW transition completes and software
-	 * managed endpoint PtlTE matching is operating.
+	 * RXC_ENABLED_SOFTWARE: The HW to SW transition onloading has
+	 * completed and the onloaded and pending request UX list have been
+	 * combined.
 	 */
 	RXC_PENDING_PTLTE_SOFTWARE_MANAGED,
 
@@ -1260,8 +1277,11 @@ enum cxip_rxc_state {
 	 * RXC_PENDING_PTLTE_HARDWARE: TODO: When able, software may
 	 * initiate a transition from software managed mode back to
 	 * fully offloaded operation.
-	 * RXC_FLOW_CONTROL: Hardware was unable to match on the request
-	 * list and Disabled the PtlTE initiating flow control.
+	 * RXC_ONLODAD_FLOW_CONTROL_REENABLE: Hardware was unable to match
+	 * on the request list or the EQ is full. Hardware has disabled the
+	 * PtlTE initiating flow control. Operation can continue if LE
+	 * resources are not recovered as long as request buffers can be
+	 * replenished.
 	 */
 	RXC_ENABLED_SOFTWARE,
 
@@ -1295,9 +1315,10 @@ enum cxip_rxc_state {
 	 * disabled.
 	 *
 	 * Validate state changes:
-	 * RXC_ONLOAD_FLOW_CONTROL_REENABLE: An unexpected list entry matched a
-	 * user posted receive or the search and delete command free a
-	 * unexpected list entry.
+	 * RXC_ONLOAD_FLOW_CONTROL_REENABLE: An unexpected list entry matched
+	 * a user posted receive, the search and delete command free a
+	 * unexpected list entry, or a transition to software managed EP is
+	 * occuring.
 	 */
 	RXC_ONLOAD_FLOW_CONTROL,
 
@@ -1323,9 +1344,9 @@ enum cxip_rxc_state {
 	 * Validate state changes:
 	 * RXC_ENABLED: Sideband communication is complete and PtlTE is
 	 * successfully re-enabled.
-	 * RXC_ENABLED_SOFTWARE: Executing in hybrid or software mode,
-	 * and sideband communication is completed; the PtlTE was
-	 * successfully transitioned to software managed operation.
+	 * RXC_SOFTWARE_MANAGED: When executing in "hybrid" or "software"
+	 * RX match mode and processing has requested to re-enable as a
+	 * software managed EP.
 	 */
 	RXC_FLOW_CONTROL,
 };
@@ -1467,6 +1488,7 @@ struct cxip_rxc {
 
 	enum cxip_rxc_state state;
 	enum cxip_rxc_state prev_state;
+	enum cxip_rxc_state new_state;
 	enum c_sc_reason fc_reason;
 
 	bool msg_offload;
@@ -2713,7 +2735,7 @@ extern cxip_trace_t cxip_trace_attr cxip_trace_fn;
 		   (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
 		   (rxc)->rx_id, (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_FATAL(rxc, fmt, ...) \
-	CXIP_FATAL("RXC (%#x:%u:%u): PtlTE %u" fmt "", \
+	CXIP_FATAL("RXC (%#x:%u:%u) PtlTE %u:[Fatal] " fmt "", \
 		   (rxc)->ep_obj->src_addr.nic, \
 		   (rxc)->ep_obj->src_addr.pid, (rxc)->rx_id, \
 		   (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)

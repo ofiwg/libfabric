@@ -485,6 +485,10 @@ void cxip_ptelist_buf_put(struct cxip_ptelist_buf *buf, bool repost)
 		    (!buf->rxc->msg_offload || buf->rxc->state != RXC_ENABLED))
 			goto free_buf;
 
+		if (buf->pool->attr.list_type == C_PTL_LIST_REQUEST &&
+		    buf->rxc->state != RXC_ENABLED_SOFTWARE)
+			goto skip_repost;
+
 		/* Limit immediate repost if already sufficient */
 		if (ofi_atomic_get32(&buf->pool->bufs_linked) <
 		    buf->pool->attr.max_posted) {
@@ -502,6 +506,7 @@ void cxip_ptelist_buf_put(struct cxip_ptelist_buf *buf, bool repost)
 			return;
 		}
 
+skip_repost:
 		/* To avoid thrashing on buffer allocation, cache
 		 * free buffers until a sufficient number are kept
 		 * for reuse. This will help bursty traffic from
