@@ -258,7 +258,7 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lowe
 
 	msg_iov.iov_base = (void *)rxr_pkt_start(rx_pkt_entry);
 	msg_iov.iov_len = ep->mtu_size;
-	rxr_setup_msg(&msg, &msg_iov, NULL, 1, FI_ADDR_UNSPEC, rx_pkt_entry, 0);
+	rxr_msg_construct(&msg, &msg_iov, NULL, 1, FI_ADDR_UNSPEC, rx_pkt_entry, 0);
 
 	switch (lower_ep_type) {
 	case SHM_EP:

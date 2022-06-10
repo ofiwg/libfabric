@@ -31,9 +31,23 @@
  * SOFTWARE.
  */
 
+static inline
+void rxr_msg_construct(struct fi_msg *msg, const struct iovec *iov, void **desc,
+		       size_t count, fi_addr_t addr, void *context, uint32_t data)
+{
+	msg->msg_iov = iov;
+	msg->desc = desc;
+	msg->iov_count = count;
+	msg->addr = addr;
+	msg->context = context;
+	msg->data = data;
+}
+
 /**
  * multi recv related functions
  */
+
+
 bool rxr_msg_multi_recv_buffer_available(struct rxr_ep *ep,
 					 struct rxr_rx_entry *rx_entry);
 

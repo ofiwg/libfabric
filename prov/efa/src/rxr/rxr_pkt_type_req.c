@@ -1127,7 +1127,7 @@ int rxr_pkt_rtm_match_recv(struct dlist_entry *item, const void *arg)
 	struct rxr_rx_entry *rx_entry;
 
 	rx_entry = container_of(item, struct rxr_rx_entry, entry);
-	return rxr_match_addr(rx_entry->addr, pkt_entry->addr);
+	return ofi_match_addr(rx_entry->addr, pkt_entry->addr);
 }
 
 static
@@ -1140,7 +1140,7 @@ int rxr_pkt_rtm_match_trecv_anyaddr(struct dlist_entry *item, const void *arg)
 	rx_entry = container_of(item, struct rxr_rx_entry, entry);
 	match_tag = rxr_pkt_rtm_tag(pkt_entry);
 
-	return rxr_match_tag(rx_entry->cq_entry.tag, rx_entry->ignore,
+	return ofi_match_tag(rx_entry->cq_entry.tag, rx_entry->ignore,
 			     match_tag);
 }
 
@@ -1154,9 +1154,8 @@ int rxr_pkt_rtm_match_trecv(struct dlist_entry *item, const void *arg)
 	rx_entry = container_of(item, struct rxr_rx_entry, entry);
 	match_tag = rxr_pkt_rtm_tag(pkt_entry);
 
-	return rxr_match_addr(rx_entry->addr, pkt_entry->addr) &&
-	       rxr_match_tag(rx_entry->cq_entry.tag, rx_entry->ignore,
-			     match_tag);
+	return ofi_match_addr(rx_entry->addr, pkt_entry->addr) &&
+	       ofi_match_tag(rx_entry->cq_entry.tag, rx_entry->ignore, match_tag);
 }
 
 static

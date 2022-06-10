@@ -222,7 +222,6 @@ enum rxr_lower_ep_type {
  * Progress engine will retry sending handshake.
  */
 #define RXR_PEER_HANDSHAKE_QUEUED      BIT_ULL(5)
-#define RXR_MAX_NUM_PROTOCOLS (RXR_MAX_PROTOCOL_VERSION - RXR_BASE_PROTOCOL_VERSION + 1)
 
 struct rdm_peer {
 	bool is_self;			/* self flag */
@@ -492,17 +491,6 @@ static inline void rxr_copy_shm_cq_entry(struct fi_cq_tagged_entry *cq_tagged_en
 
 }
 
-static inline void rxr_setup_msg(struct fi_msg *msg, const struct iovec *iov, void **desc,
-				 size_t count, fi_addr_t addr, void *context, uint32_t data)
-{
-	msg->msg_iov = iov;
-	msg->desc = desc;
-	msg->iov_count = count;
-	msg->addr = addr;
-	msg->context = context;
-	msg->data = data;
-}
-
 struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep);
 
 const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen);
@@ -510,13 +498,6 @@ const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen);
 struct efa_ep_addr *rxr_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr);
 
 const char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen);
-
-struct rxr_rx_entry *rxr_ep_get_rx_entry(struct rxr_ep *ep,
-					 const struct fi_msg *msg,
-					 uint64_t tag,
-					 uint64_t ignore,
-					 uint32_t op,
-					 uint64_t flags);
 
 struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
 					  struct rxr_rx_entry *rx_entry,
@@ -568,17 +549,6 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 #endif
 	rx_entry->state = RXR_OP_FREE;
 	ofi_buf_free(rx_entry);
-}
-
-static inline int rxr_match_addr(fi_addr_t addr, fi_addr_t match_addr)
-{
-	return (addr == FI_ADDR_UNSPEC || addr == match_addr);
-}
-
-static inline int rxr_match_tag(uint64_t tag, uint64_t ignore,
-				uint64_t match_tag)
-{
-	return ((tag | ignore) == (match_tag | ignore));
 }
 
 void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
@@ -642,17 +612,6 @@ struct rxr_rx_entry *rxr_ep_lookup_mediumrtm_rx_entry(struct rxr_ep *ep,
 void rxr_ep_record_mediumrtm_rx_entry(struct rxr_ep *ep,
 				      struct rxr_pkt_entry *pkt_entry,
 				      struct rxr_rx_entry *rx_entry);
-
-struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
-							    struct rxr_pkt_entry **pkt_entry);
-
-struct rxr_rx_entry *rxr_ep_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
-							    struct rxr_pkt_entry **pkt_entry);
-
-struct rxr_rx_entry *rxr_ep_split_rx_entry(struct rxr_ep *ep,
-					   struct rxr_rx_entry *posted_entry,
-					   struct rxr_rx_entry *consumer_entry,
-					   struct rxr_pkt_entry *pkt_entry);
 
 /* CQ sub-functions */
 void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
