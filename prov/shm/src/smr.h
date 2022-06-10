@@ -136,7 +136,7 @@ struct smr_tx_entry {
 	int			fd;
 };
 
-struct smr_sar_entry {
+struct smr_pend_entry {
 	struct dlist_entry	entry;
 	struct smr_cmd		cmd;
 	struct smr_rx_entry	rx_entry;
@@ -146,6 +146,7 @@ struct smr_sar_entry {
 	size_t			iov_count;
 	enum fi_hmem_iface	iface;
 	uint64_t		device;
+	void			*stream;
 };
 
 struct smr_ep;
@@ -198,7 +199,8 @@ struct smr_unexp_msg {
 OFI_DECLARE_FREESTACK(struct smr_rx_entry, smr_recv_fs);
 OFI_DECLARE_FREESTACK(struct smr_unexp_msg, smr_unexp_fs);
 OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_pend_fs);
-OFI_DECLARE_FREESTACK(struct smr_sar_entry, smr_sar_fs);
+OFI_DECLARE_FREESTACK(struct smr_pend_entry, smr_sar_fs);
+OFI_DECLARE_FREESTACK(struct smr_pend_entry, smr_ipc_fs);
 
 struct smr_queue {
 	struct dlist_entry list;
@@ -284,9 +286,11 @@ struct smr_ep {
 	struct smr_unexp_fs	*unexp_fs;
 	struct smr_pend_fs	*pend_fs;
 	struct smr_sar_fs	*sar_fs;
+	struct smr_ipc_fs	*ipc_pend_fs;
 	struct smr_queue	unexp_msg_queue;
 	struct smr_queue	unexp_tagged_queue;
 	struct dlist_entry	sar_list;
+	struct dlist_entry	ipc_cpy_pend_list[HMEM_NUM_STREAMS];
 	/* cache for use with hmem ifaces */
 	struct hmem_cache *hmem_cache;
 

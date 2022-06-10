@@ -413,6 +413,9 @@ static int smr_format_ipc(struct smr_cmd *cmd, void *ptr, size_t len,
 	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
 	cmd->msg.hdr.size = len;
 	cmd->msg.data.ipc_info.iface = iface;
+	cmd->msg.data.ipc_info.address = (uintptr_t) ptr;
+	cmd->msg.data.ipc_info.length = len;
+	cmd->msg.data.ipc_info.base_length = len;
 
 	return ofi_hmem_get_handle(cmd->msg.data.ipc_info.iface, ptr,
 			&cmd->msg.data.ipc_info.base_length,
@@ -854,6 +857,7 @@ static int smr_ep_close(struct fid *fid)
 	smr_unexp_fs_free(ep->unexp_fs);
 	smr_pend_fs_free(ep->pend_fs);
 	smr_sar_fs_free(ep->sar_fs);
+	smr_ipc_fs_free(ep->ipc_pend_fs);
 	free((void *)ep->name);
 	free(ep);
 	return 0;
@@ -1382,7 +1386,7 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
 	struct smr_ep *ep;
-	int ret;
+	int ret, i;
 	char name[SMR_NAME_MAX];
 
 	smr_init_sig_handlers();
@@ -1415,11 +1419,14 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ep->unexp_fs = smr_unexp_fs_create(info->rx_attr->size, NULL, NULL);
 	ep->pend_fs = smr_pend_fs_create(info->tx_attr->size, NULL, NULL);
 	ep->sar_fs = smr_sar_fs_create(info->rx_attr->size, NULL, NULL);
+	ep->ipc_pend_fs = smr_ipc_fs_create(info->rx_attr->size, NULL, NULL);
 	smr_init_queue(&ep->recv_queue, smr_match_msg);
 	smr_init_queue(&ep->trecv_queue, smr_match_tagged);
 	smr_init_queue(&ep->unexp_msg_queue, smr_match_unexp_msg);
 	smr_init_queue(&ep->unexp_tagged_queue, smr_match_unexp_tagged);
 	dlist_init(&ep->sar_list);
+	for (i = 0; i < HMEM_NUM_STREAMS; i++)
+		dlist_init(&ep->ipc_cpy_pend_list[i]);
 
 	ep->min_multi_recv_size = SMR_INJECT_SIZE;
 

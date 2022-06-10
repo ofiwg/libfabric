@@ -43,6 +43,8 @@
 
 extern bool ofi_hmem_disable_p2p;
 
+#define HMEM_NUM_STREAMS 2
+
 #if HAVE_CUDA
 
 #include <cuda.h>
@@ -68,15 +70,10 @@ cudaError_t ofi_cudaFree(void *ptr);
 
 /* Libfabric support ROCr operations. */
 
-hsa_status_t ofi_hsa_memory_copy(void *dst, const void *src, size_t size);
 hsa_status_t ofi_hsa_amd_pointer_info(void *ptr, hsa_amd_pointer_info_t *info,
 				      void *(*alloc)(size_t),
 				      uint32_t *num_agents_accessible,
 				      hsa_agent_t **accessible);
-hsa_status_t ofi_hsa_init(void);
-hsa_status_t ofi_hsa_shut_down(void);
-hsa_status_t ofi_hsa_status_string(hsa_status_t status,
-				   const char **status_string);
 const char *ofi_hsa_status_to_string(hsa_status_t status);
 
 hsa_status_t ofi_hsa_amd_dereg_dealloc_cb(void *ptr,
@@ -85,17 +82,17 @@ hsa_status_t ofi_hsa_amd_reg_dealloc_cb(void *ptr,
 					hsa_amd_deallocation_callback_t cb,
 					void *user_data);
 
-hsa_status_t ofi_hsa_amd_memory_lock(void *host_ptr, size_t size,
-				     hsa_agent_t *agents, int num_agents,
-				     void **agent_ptr);
-hsa_status_t ofi_hsa_amd_memory_unlock(void *host_ptr);
-
 #endif /* HAVE_ROCR */
 
 struct ofi_hmem_ops {
 	bool initialized;
 	int (*init)(void);
 	int (*cleanup)(void);
+	int (*async_copy_to_hmem)(uint64_t device, void *dest, const void *src,
+			    size_t size, void *istream, void **ostream);
+	int (*async_copy_from_hmem)(uint64_t device, void *dest, const void *src,
+			      size_t size, void *istream, void **ostream);
+	int (*async_copy_query)(void *stream);
 	int (*copy_to_hmem)(uint64_t device, void *dest, const void *src,
 			    size_t size);
 	int (*copy_from_hmem)(uint64_t device, void *dest, const void *src,
@@ -125,6 +122,11 @@ int rocr_get_handle(void *dev_buf, size_t *len, void **handle, uint64_t *offset)
 int rocr_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr);
 int rocr_close_handle(void *ipc_ptr);
 bool rocr_is_ipc_enabled(void);
+int rocr_async_copy_to_dev(uint64_t device, void *dst, const void *src,
+						size_t size, void *istream, void **ostream);
+int rocr_async_copy_from_dev(uint64_t device, void *dst, const void *src,
+						size_t size, void *istream, void **ostream);
+int rocr_async_copy_query(void *stream);
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
@@ -197,6 +199,12 @@ static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
 	return FI_SUCCESS;
 }
 
+static inline int ofi_no_async_memcpy(uint64_t device, void *dest, const void *src,
+			     size_t size, void *istream, void **ostream)
+{
+	return -FI_ENOSYS;
+}
+
 static inline int ofi_hmem_init_noop(void)
 {
 	return FI_SUCCESS;
@@ -205,6 +213,11 @@ static inline int ofi_hmem_init_noop(void)
 static inline int ofi_hmem_cleanup_noop(void)
 {
 	return FI_SUCCESS;
+}
+
+static inline int ofi_no_async_copy_query(void *stream)
+{
+	return -FI_ENOSYS;
 }
 
 static inline int ofi_hmem_no_get_handle(void *dev_buffer, size_t *len, void **handle, uint64_t *offset)
@@ -246,6 +259,19 @@ static inline bool ofi_hmem_p2p_disabled(void)
 {
 	return ofi_hmem_disable_p2p;
 }
+
+ssize_t ofi_async_copy_from_hmem_iov(void *dest, size_t size,
+				enum fi_hmem_iface hmem_iface, uint64_t device,
+				const struct iovec *hmem_iov,
+				size_t hmem_iov_count, uint64_t hmem_iov_offset,
+				void **stream);
+
+ssize_t ofi_async_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
+				const struct iovec *hmem_iov,
+				size_t hmem_iov_count, uint64_t hmem_iov_offset,
+				const void *src, size_t size, void **stream);
+
+int ofi_async_copy_query(enum fi_hmem_iface iface, void *stream);
 
 ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,
 			       enum fi_hmem_iface hmem_iface, uint64_t device,

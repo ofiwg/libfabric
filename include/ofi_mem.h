@@ -150,6 +150,9 @@ struct name {							\
 typedef void (*name ## _entry_init_func)(entrytype *buf,	\
 					 void *arg);		\
 								\
+typedef void (*name ## _entry_destroy_func)(entrytype *buf,	\
+					 void *arg);		\
+								\
 static inline void						\
 name ## _init(struct name *fs, size_t size,			\
 	      name ## _entry_init_func init, void *arg)		\
@@ -192,7 +195,17 @@ static inline void name ## _free(struct name *fs)		\
 {								\
 	free(fs);						\
 }								\
-void dummy ## name (void) /* work-around global ; scope */
+static inline void name ## _destroy(struct name *fs, \
+					size_t size, name ## _entry_destroy_func destroy, \
+					void *arg)		\
+{								\
+	ssize_t i;						\
+	for (i = size - 1; i >= 0; i--) {			\
+		if (destroy)					\
+			destroy(&fs->entry[i].buf, arg);		\
+	}							\
+	free(fs);						\
+}void dummy ## name (void) /* work-around global ; scope */
 
 
 /*

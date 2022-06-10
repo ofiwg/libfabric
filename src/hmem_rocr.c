@@ -39,11 +39,28 @@
 
 #if HAVE_ROCR
 
-#include <hsa/hsa_ext_amd.h>
+#define HSA_MAX_SIGNALS 4096
+#define D2H_THRESHOLD 16384
+#define H2D_THRESHOLD 1048576
+
+struct ofi_hsa_signal_info {
+	hsa_signal_t sig;
+	void *addr;
+};
+
+OFI_DECLARE_FREESTACK(struct ofi_hsa_signal_info, rocm_ipc_signal_fs);
+
+struct rocm_ipc_signal_fs *ipc_signal_fs;
 
 struct hsa_ops {
 	hsa_status_t (*hsa_memory_copy)(void *dst, const void *src,
 					size_t size);
+	hsa_status_t (*hsa_amd_memory_async_copy)(void* dst, hsa_agent_t dst_agent,
+					const void* src,
+					hsa_agent_t src_agent, size_t size,
+					uint32_t num_dep_signals,
+					const hsa_signal_t* dep_signals,
+					hsa_signal_t completion_signal);
 	hsa_status_t (*hsa_amd_pointer_info)(void *ptr,
 					     hsa_amd_pointer_info_t *info,
 					     void *(*alloc)(size_t),
@@ -73,6 +90,17 @@ struct hsa_ops {
 		const hsa_agent_t* mapping_agents,
 		void** mapped_ptr);
 	hsa_status_t (*hsa_amd_ipc_memory_detach)(void* mapped_ptr);
+	void (*hsa_signal_store_screlease)(hsa_signal_t signal,
+							hsa_signal_value_t value);
+	hsa_signal_value_t (*hsa_signal_load_scacquire)(hsa_signal_t signal);
+	hsa_status_t (*hsa_amd_agents_allow_access)(uint32_t num_agents,
+								const hsa_agent_t* agents,
+								const uint32_t* flags, const void* ptr);
+	hsa_status_t (*hsa_signal_create)(hsa_signal_value_t initial_value,
+									  uint32_t num_consumers,
+									  const hsa_agent_t *consumers,
+									  hsa_signal_t *signal);
+	hsa_status_t (*hsa_signal_destroy)(hsa_signal_t signal);
 };
 
 #if ENABLE_ROCR_DLOPEN
@@ -87,14 +115,22 @@ static struct hsa_ops hsa_ops;
 static struct hsa_ops hsa_ops = {
 	/* mem copy ops */
 	.hsa_memory_copy = hsa_memory_copy,
+	/* Asynchronously copy a block of memory from the location pointed to by
+	 * src on the src_agent to the memory block pointed to by dst on the
+	 * dst_agent. */
+	.hsa_amd_memory_async_copy = hsa_amd_memory_async_copy,
+	/* gets information about the device mem pointer */
 	.hsa_amd_pointer_info = hsa_amd_pointer_info,
+	/* initialize the runt time library */
 	.hsa_init = hsa_init,
 	.hsa_shut_down = hsa_shut_down,
 	.hsa_status_string = hsa_status_string,
+	/* used for memory monitoring */
 	.hsa_amd_dereg_dealloc_cb =
 		hsa_amd_deregister_deallocation_callback,
 	.hsa_amd_reg_dealloc_cb =
 		hsa_amd_register_deallocation_callback,
+	/* memory lock/unlock used for registration */
 	.hsa_amd_memory_lock = hsa_amd_memory_lock,
 	.hsa_amd_memory_unlock = hsa_amd_memory_unlock,
 	.hsa_agent_get_info = hsa_agent_get_info,
@@ -109,9 +145,57 @@ static struct hsa_ops hsa_ops = {
 	 * releases access to shared memory imported with
 	 * hsa_amd_ipc_memory_attach */
 	.hsa_amd_ipc_memory_detach = hsa_amd_ipc_memory_detach,
+	.hsa_signal_store_screlease = hsa_signal_store_screlease,
+	.hsa_signal_load_scacquire = hsa_signal_load_scacquire,
+	.hsa_amd_agents_allow_access = hsa_amd_agents_allow_access,
+	.hsa_signal_create = hsa_signal_create,
+	.hsa_signal_destroy = hsa_signal_destroy,
 };
 
 #endif /* ENABLE_ROCR_DLOPEN */
+
+static hsa_status_t
+ofi_hsa_amd_agents_allow_access(uint32_t num_agents, const hsa_agent_t* agents,
+								const uint32_t* flags, const void* ptr)
+{
+	return hsa_ops.hsa_amd_agents_allow_access(num_agents, agents, flags,
+											   ptr);
+}
+
+static void
+ofi_hsa_signal_store_screlease(hsa_signal_t signal, hsa_signal_value_t value)
+{
+	hsa_ops.hsa_signal_store_screlease(signal, value);
+}
+
+static hsa_signal_value_t ofi_hsa_signal_load_scacquire(hsa_signal_t signal)
+{
+	return hsa_ops.hsa_signal_load_scacquire(signal);
+}
+
+static void ofi_hsa_signal_create(struct ofi_hsa_signal_info *info, void *arg)
+{
+	hsa_status_t hsa_ret;
+
+	if ((hsa_ret = hsa_ops.hsa_signal_create(1, 0, NULL, &info->sig) !=
+		HSA_STATUS_SUCCESS)) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+				"Failed to perform hsa_signal_create: %s\n",
+				ofi_hsa_status_to_string(hsa_ret));
+	}
+}
+
+static void ofi_hsa_signal_destroy(struct ofi_hsa_signal_info *info, void *arg)
+{
+	hsa_status_t hsa_ret;
+
+	if ((hsa_ret = hsa_ops.hsa_signal_destroy(info->sig) !=
+		HSA_STATUS_SUCCESS)) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+				"Failed to perform hsa_signal_destroy: %s\n",
+				ofi_hsa_status_to_string(hsa_ret));
+	}
+}
 
 hsa_status_t ofi_hsa_amd_memory_lock(void *host_ptr, size_t size,
 				     hsa_agent_t *agents, int num_agents,
@@ -129,6 +213,18 @@ hsa_status_t ofi_hsa_amd_memory_unlock(void *host_ptr)
 hsa_status_t ofi_hsa_memory_copy(void *dst, const void *src, size_t size)
 {
 	return hsa_ops.hsa_memory_copy(dst, src, size);
+}
+
+hsa_status_t ofi_hsa_amd_memory_async_copy(void* dst, hsa_agent_t dst_agent,
+					const void* src,
+					hsa_agent_t src_agent, size_t size,
+					uint32_t num_dep_signals,
+					const hsa_signal_t* dep_signals,
+					hsa_signal_t completion_signal)
+{
+	return hsa_ops.hsa_amd_memory_async_copy(dst, dst_agent,
+				src, src_agent, size, num_dep_signals,
+				dep_signals, completion_signal);
 }
 
 hsa_status_t ofi_hsa_amd_pointer_info(void *ptr, hsa_amd_pointer_info_t *info,
@@ -285,6 +381,123 @@ int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
 	return ret;
 }
 
+static int
+rocr_dev_async_copy(void *dst, const void *src, size_t size,
+					void **ostream)
+{
+	void *src_hsa_ptr;
+	void *dst_hsa_ptr;
+	int ret;
+	hsa_status_t hsa_ret;
+	struct ofi_hsa_signal_info *ipc_signal;
+	/* 0 - source agent
+	 * 1 - destination agent
+	 */
+	hsa_agent_t agents[2];
+	bool src_local, dst_local;
+
+	if (!ostream)
+		return -FI_EINVAL;
+
+	ret = rocr_host_memory_ptr((void *)src, &src_hsa_ptr, &agents[0], NULL, NULL,
+							   &src_local);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	ret = rocr_host_memory_ptr(dst, &dst_hsa_ptr, &agents[1], NULL, NULL,
+							   &dst_local);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	ipc_signal = ofi_freestack_pop(ipc_signal_fs);
+	/* device to device */
+	if (!src_local && !dst_local) {
+		hsa_ret = ofi_hsa_amd_agents_allow_access(2, agents, NULL, dst_hsa_ptr);
+		if (hsa_ret != HSA_STATUS_SUCCESS) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+					"Failed to perform hsa_amd_agents_allow_access %s\n",
+					ofi_hsa_status_to_string(hsa_ret));
+			ret = -FI_EINVAL;
+			goto fail;
+		}
+		ipc_signal->addr = NULL;
+	/* host to device */
+	} else if (src_local && !dst_local) {
+		agents[0] = agents[1];
+	/* device to host */
+	} else if (!src_local && dst_local) {
+		size_t d2h_thresh;
+
+		if (fi_param_get_size_t(&core_prov, "rcor_d2h_threshold",
+							&d2h_thresh) < 0)
+			d2h_thresh = D2H_THRESHOLD;
+		if (size < d2h_thresh) {
+			memcpy(dst, src, size);
+			ofi_hsa_signal_store_screlease(ipc_signal->sig, 0);
+			ipc_signal->addr = NULL;
+			goto finish;
+		}
+		hsa_ret = ofi_hsa_amd_memory_lock(dst, size, NULL, 0, &dst_hsa_ptr);
+		if (hsa_ret != HSA_STATUS_SUCCESS) {
+			ret = -FI_EINVAL;
+			goto fail;
+		}
+		ipc_signal->addr = dst;
+		agents[1] = agents[0];
+	}
+
+	ofi_hsa_signal_store_screlease(ipc_signal->sig, 1);
+
+	hsa_ret = ofi_hsa_amd_memory_async_copy(dst_hsa_ptr, agents[1],
+								src_hsa_ptr, agents[0],
+								size, 0, NULL, ipc_signal->sig);
+
+	if (hsa_ret != HSA_STATUS_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+				"Failed to perform hsa_amd_memory_async_copy %s\n",
+				ofi_hsa_status_to_string(hsa_ret));
+		ret = -FI_EINVAL;
+		goto fail;
+	}
+
+finish:
+	*ostream = ipc_signal;
+
+	return 0;
+
+fail:
+	ofi_freestack_push(ipc_signal_fs, ipc_signal);
+	return ret;
+}
+
+int rocr_async_copy_to_dev(uint64_t device, void *dst, const void *src,
+						size_t size, void *istream, void **ostream)
+{
+	return rocr_dev_async_copy(dst, src, size, ostream);
+}
+
+int rocr_async_copy_from_dev(uint64_t device, void *dst, const void *src,
+						size_t size, void *istream, void **ostream)
+{
+	return rocr_dev_async_copy(dst, src, size, ostream);
+}
+
+int rocr_async_copy_query(void *stream)
+{
+	struct ofi_hsa_signal_info *ipc_signal = stream;
+	hsa_signal_value_t v;
+
+	v = ofi_hsa_signal_load_scacquire(ipc_signal->sig);
+	if (v != 0)
+		return -FI_EBUSY;
+
+	if (ipc_signal->addr)
+		ofi_hsa_amd_memory_unlock(ipc_signal->addr);
+	ofi_freestack_push(ipc_signal_fs, ipc_signal);
+
+	return FI_SUCCESS;
+}
+
 bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 {
 	hsa_amd_pointer_info_t hsa_info = {
@@ -401,6 +614,13 @@ static int rocr_hmem_dl_init(void)
 		goto err;
 	}
 
+	hsa_ops.hsa_amd_memory_async_copy = dlsym(hsa_handle, "hsa_amd_memory_async_copy");
+	if (!hsa_ops.hsa_amd_memory_async_copy) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_amd_memory_async_copy\n");
+		goto err;
+	}
+
 	hsa_ops.hsa_amd_pointer_info = dlsym(hsa_handle,
 					      "hsa_amd_pointer_info");
 	if (!hsa_ops.hsa_amd_pointer_info) {
@@ -489,6 +709,20 @@ static int rocr_hmem_dl_init(void)
 		goto err;
 	}
 
+	hsa_ops.hsa_signal_create = dlsym(hsa_handle, "hsa_signal_create");
+	if (!hsa_ops.hsa_signal_create) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_signal_create\n");
+		goto err;
+	}
+
+	hsa_ops.hsa_signal_destroy = dlsym(hsa_handle, "hsa_signal_destroy");
+	if (!hsa_ops.hsa_signal_destroy) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_signal_destroy\n");
+		goto err;
+	}
+
 	return FI_SUCCESS;
 
 err:
@@ -505,6 +739,8 @@ static void rocr_hmem_dl_cleanup(void)
 #if ENABLE_ROCR_DLOPEN
 	dlclose(hsa_handle);
 #endif
+	rocm_ipc_signal_fs_destroy(ipc_signal_fs, HSA_MAX_SIGNALS,
+							   ofi_hsa_signal_destroy, NULL);
 }
 
 int rocr_hmem_init(void)
@@ -513,14 +749,29 @@ int rocr_hmem_init(void)
 	int ret;
 	int log_level;
 
+	fi_param_define(NULL, "rcor_d2h_threshold", FI_PARAM_SIZE_T,
+			"Threshold for switching to hsa memcpy for device-to-host copies."
+			" (Default 16384");
+
+	fi_param_define(NULL, "rcor_h2d_threshold", FI_PARAM_SIZE_T,
+			"Threshold for switching to hsa memcpy for host-to-device copies."
+			" (Default 1048576");
+
 	ret = rocr_hmem_dl_init();
 	if (ret != FI_SUCCESS)
 		return ret;
 
 	hsa_ret = ofi_hsa_init();
-	if (hsa_ret == HSA_STATUS_SUCCESS)
-		return FI_SUCCESS;
+	if (hsa_ret != HSA_STATUS_SUCCESS)
+		goto fail;
 
+	ipc_signal_fs = rocm_ipc_signal_fs_create(HSA_MAX_SIGNALS, ofi_hsa_signal_create, NULL);
+	if (!ipc_signal_fs)
+		goto fail;
+
+	return 0;
+
+fail:
 	/* Treat HSA_STATUS_ERROR_OUT_OF_RESOURCES as ROCR not being supported
 	 * instead of an error. This ROCR error is typically returned if no
 	 * devices are supported.
@@ -647,6 +898,23 @@ int rocr_close_handle(void *ipc_ptr)
 bool rocr_is_ipc_enabled(void)
 {
 	return false;
+}
+
+int rocr_async_copy_to_dev(uint64_t device, void *dst, const void *src,
+						size_t size, void *istream, void **ostream)
+{
+	return -FI_ENOSYS;
+}
+
+int rocr_async_copy_from_dev(uint64_t device, void *dst, const void *src,
+						size_t size, void *istream, void **ostream)
+{
+	return -FI_ENOSYS;
+}
+
+int rocr_async_copy_query(void *stream)
+{
+	return -FI_ENOSYS;
 }
 
 #endif /* HAVE_ROCR */
