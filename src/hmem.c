@@ -52,6 +52,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.async_copy_to_hmem = ofi_no_async_memcpy,
 		.async_copy_from_hmem = ofi_no_async_memcpy,
 		.async_copy_query = ofi_no_async_copy_query,
+		.stream_synchronize = ofi_no_stream_synchronize,
 		.get_handle = ofi_hmem_no_get_handle,
 		.open_handle = ofi_hmem_no_open_handle,
 		.close_handle = ofi_hmem_no_close_handle,
@@ -87,6 +88,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.async_copy_to_hmem = ofi_no_async_memcpy,
 		.async_copy_from_hmem = ofi_no_async_memcpy,
 		.async_copy_query = ofi_no_async_copy_query,
+		.stream_synchronize = ofi_no_stream_synchronize,
 		.is_addr_valid = cuda_is_addr_valid,
 		.get_handle = cuda_get_handle,
 		.open_handle = cuda_open_handle,
@@ -105,6 +107,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.async_copy_to_hmem = rocr_async_copy_to_dev,
 		.async_copy_from_hmem = rocr_async_copy_from_dev,
 		.async_copy_query = rocr_async_copy_query,
+		.stream_synchronize = ofi_no_stream_synchronize,
 		.is_addr_valid = rocr_is_addr_valid,
 		.get_handle = rocr_get_handle,
 		.open_handle = rocr_open_handle,
@@ -113,6 +116,25 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.host_unregister = rocr_host_unregister,
 		.get_base_addr = ofi_hmem_no_base_addr,
 		.is_ipc_enabled = rocr_is_ipc_enabled,
+	},
+	[FI_HMEM_HIP] = {
+		.initialized = false,
+		.init = hip_hmem_init,
+		.cleanup = hip_hmem_cleanup,
+		.copy_to_hmem = hip_copy_to_dev,
+		.copy_from_hmem = hip_copy_from_dev,
+		.async_copy_to_hmem = hip_async_copy_to_dev,
+		.async_copy_from_hmem = hip_async_copy_from_dev,
+		.async_copy_query = hip_async_copy_query,
+		.stream_synchronize = hip_stream_synchronize,
+		.is_addr_valid = hip_is_addr_valid,
+		.get_handle = hip_get_handle,
+		.open_handle = hip_open_handle,
+		.close_handle = hip_close_handle,
+		.host_register = hip_host_register,
+		.host_unregister = hip_host_unregister,
+		.get_base_addr = ofi_hmem_no_base_addr,
+		.is_ipc_enabled = hip_is_ipc_enabled,
 	},
 	[FI_HMEM_ZE] = {
 		.initialized = false,
@@ -123,6 +145,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.async_copy_to_hmem = ofi_no_async_memcpy,
 		.async_copy_from_hmem = ofi_no_async_memcpy,
 		.async_copy_query = ofi_no_async_copy_query,
+		.stream_synchronize = ofi_no_stream_synchronize,
 		.is_addr_valid = ze_is_addr_valid,
 		.get_handle = ze_hmem_get_handle,
 		.open_handle = ze_hmem_open_handle,
@@ -141,6 +164,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.async_copy_to_hmem = ofi_no_async_memcpy,
 		.async_copy_from_hmem = ofi_no_async_memcpy,
 		.async_copy_query = ofi_no_async_copy_query,
+		.stream_synchronize = ofi_no_stream_synchronize,
 	},
 	[FI_HMEM_SYNAPSEAI] = {
 		.initialized = false,
@@ -273,6 +297,11 @@ ssize_t ofi_async_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t devic
 int ofi_async_copy_query(enum fi_hmem_iface iface, void *stream)
 {
 	return hmem_ops[iface].async_copy_query(stream);
+}
+
+int ofi_hmem_stream_synchronize(enum fi_hmem_iface iface, int stream_id)
+{
+	return hmem_ops[iface].stream_synchronize(stream_id);
 }
 
 ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,

@@ -48,6 +48,7 @@
 extern bool ofi_hmem_disable_p2p;
 
 #define HMEM_NUM_STREAMS 2
+#define HMEM_MAX_STREAM_WAIT_NS 3600
 
 #if HAVE_CUDA
 
@@ -71,6 +72,7 @@ cudaError_t ofi_cudaFree(void *ptr);
 #if HAVE_ROCR
 
 #include <hsa/hsa_ext_amd.h>
+#include <hip/hip_runtime_api.h>
 
 /* Libfabric support ROCr operations. */
 
@@ -97,6 +99,7 @@ struct ofi_hmem_ops {
 	int (*async_copy_from_hmem)(uint64_t device, void *dest, const void *src,
 			      size_t size, void *istream, void **ostream);
 	int (*async_copy_query)(void *stream);
+	int (*stream_synchronize)(int stream_id);
 	int (*copy_to_hmem)(uint64_t device, void *dest, const void *src,
 			    size_t size);
 	int (*copy_from_hmem)(uint64_t device, void *dest, const void *src,
@@ -124,6 +127,26 @@ int xpmem_copy_to(uint64_t device, void *dest, const void *src,
 bool xpmem_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 int xpmem_host_register(void *ptr, size_t size, uint64_t *key);
 int xpmem_host_unregister(void *ptr);
+
+int hip_async_copy_from_dev(uint64_t device, void *dest, const void *src,
+		       size_t size, void *istream, void **ostream);
+int hip_async_copy_to_dev(uint64_t device, void *dest, const void *src,
+		     size_t size, void *istream, void **ostream);
+int hip_async_copy_query(void *stream);
+int hip_stream_synchronize(int stream_id);
+int hip_copy_from_dev(uint64_t device, void *dest, const void *src,
+		       size_t size);
+int hip_copy_to_dev(uint64_t device, void *dest, const void *src,
+		     size_t size);
+int hip_hmem_init(void);
+int hip_hmem_cleanup(void);
+bool hip_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
+int hip_host_register(void *ptr, size_t size);
+int hip_host_unregister(void *ptr);
+int hip_get_handle(void *dev_buf, size_t *len, void **handle, uint64_t *offset);
+int hip_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr);
+int hip_close_handle(void *ipc_ptr);
+bool hip_is_ipc_enabled(void);
 
 int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
 		       size_t size);
@@ -236,6 +259,11 @@ static inline int ofi_no_async_copy_query(void *stream)
 	return -FI_ENOSYS;
 }
 
+static inline int ofi_no_stream_synchronize(int stream_id)
+{
+	return -FI_ENOSYS;
+}
+
 static inline int ofi_hmem_no_get_handle(void *dev_buffer, size_t *len, void **handle, uint64_t *offset)
 {
 	return -FI_ENOSYS;
@@ -288,6 +316,7 @@ ssize_t ofi_async_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t devic
 				const void *src, size_t size, void **stream);
 
 int ofi_async_copy_query(enum fi_hmem_iface iface, void *stream);
+int ofi_hmem_stream_synchronize(enum fi_hmem_iface iface, int stream_id);
 
 ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,
 			       enum fi_hmem_iface hmem_iface, uint64_t device,
