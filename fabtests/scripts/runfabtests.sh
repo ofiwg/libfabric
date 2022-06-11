@@ -63,6 +63,7 @@ declare C_ARGS=""
 declare S_ARGS=""
 declare PIN_CORE=""
 declare PROVIDER_TESTS=0
+declare SLEEP_TIME=1
 
 declare cur_excludes=""
 declare file_excludes=""
@@ -507,7 +508,7 @@ function cs_test {
 	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} ${pin_core} $s_arg"
 	${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	s_pid=$!
-	sleep 1
+	sleep $SLEEP_TIME
 
 	if [[ $OOB -eq 1 ]]; then
 		c_arg="-E $S_INTERFACE"
@@ -608,7 +609,7 @@ function complex_test {
 	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} -x $opts"
 	FI_LOG_LEVEL=error ${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	s_pid=$!
-	sleep 1
+	sleep $SLEEP_TIME
 
 	c_cmd="${BIN_PATH}${test_exe} ${C_ARGS} -u "${COMPLEX_CFG}" $S_INTERFACE $opts"
 	FI_LOG_LEVEL=error ${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
@@ -671,7 +672,7 @@ function multinode_test {
 	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} -s ${S_INTERFACE}"
 	${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	s_pid=$!
-	sleep 1
+	sleep $SLEEP_TIME
 
 	c_pid_arr=()
 	for ((i=1; i<num_procs; i++))
@@ -927,6 +928,8 @@ while true; do
 		    COMPLEX_CFG=$2; shift 2 ;;
 		-T)
 		    TIMEOUT_VAL=$2; shift 2 ;;
+		-W)
+		    SLEEP_TIME=$2; shift 2 ;;
 		-N)
 		    SKIP_NEG+=1; shift ;;
 		-P)
