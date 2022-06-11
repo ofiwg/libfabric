@@ -2348,6 +2348,7 @@ void cxip_unmap(struct cxip_md *md);
 int cxip_ctrl_msg_send(struct cxip_ctrl_req *req);
 void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj);
 void cxip_ep_tx_ctrl_progress(struct cxip_ep_obj *ep_obj);
+void cxip_ep_tx_ctrl_progress_locked(struct cxip_ep_obj *ep_obj);
 int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj);
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj);
 int cxip_ep_ctrl_trywait(void *arg);

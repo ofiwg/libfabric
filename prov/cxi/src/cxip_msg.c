@@ -2520,7 +2520,8 @@ void cxip_fc_progress_ctrl(struct cxip_rxc *rxc)
 
 	while ((ret = cxip_recv_resume(rxc)) == -FI_EAGAIN) {
 		ofi_spin_unlock(&rxc->lock);
-		cxip_ep_tx_ctrl_progress(rxc->ep_obj);
+		/* ep_obj lock is held */
+		cxip_ep_tx_ctrl_progress_locked(rxc->ep_obj);
 		ofi_spin_lock(&rxc->lock);
 	}
 	assert(ret == FI_SUCCESS);
