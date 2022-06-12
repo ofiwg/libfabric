@@ -364,26 +364,25 @@ int send_recv_barrier(int sync)
 
 	for (i = 0; i < pm_job.num_ranks; i++) {
 		ret = ft_post_rx_buf(ep, opts.transfer_size,
-			     &barrier_rx_ctx[i],
-			     rx_buf, mr_desc, 0);
+				     &barrier_rx_ctx[i],
+				     rx_buf, mr_desc, 0);
 		if (ret)
 			return ret;
 	}
 
 	for (i = 0; i < pm_job.num_ranks; i++) {
-		ret = ft_post_tx_buf(ep, pm_job.fi_addrs[i], 0,
-				     NO_CQ_DATA, &barrier_tx_ctx[i],
-		                     tx_buf, mr_desc, 0);
+		ret = ft_deliver_msg(ep, pm_job.fi_addrs[i], 0,
+				     &barrier_tx_ctx[i]);
 		if (ret)
 			return ret;
+		tx_seq++;
 	}
 
-	ret = ft_get_tx_comp(tx_seq);
+	ret = ft_get_rx_comp(rx_seq);
 	if (ret)
 		return ret;
 
-	ret = ft_get_rx_comp(rx_seq);
-
+	ret = ft_get_tx_comp(tx_seq);
 	return ret;
 }
 
@@ -408,8 +407,8 @@ static int multi_run_test()
 	for (iter = 0; iter < opts.iterations; iter++) {
 		multi_init_state();
 		while (!state.all_completions_done ||
-				!state.all_recvs_posted ||
-				!state.all_sends_posted) {
+		       !state.all_recvs_posted ||
+		       !state.all_sends_posted) {
 			ret = method.recv();
 			if (ret)
 				return ret;

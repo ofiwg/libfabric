@@ -2483,10 +2483,10 @@ int ft_get_tx_comp(uint64_t total)
 int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		size_t size, void *ctx, int flags)
 {
-	int ret;
 	struct fi_msg msg;
 	struct fi_msg_tagged tagged_msg;
 	struct iovec msg_iov;
+	int ret;
 
 	msg_iov.iov_base = tx_buf;
 	msg_iov.iov_len = size;
@@ -2502,10 +2502,8 @@ int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		tagged_msg.ignore = 0;
 
 		ret = fi_tsendmsg(ep, &tagged_msg, flags);
-		if (ret) {
+		if (ret && ret != -FI_EAGAIN)
 			FT_PRINTERR("fi_tsendmsg", ret);
-			return ret;
-		}
 	} else {
 		msg.msg_iov = &msg_iov;
 		msg.desc = &mr_desc;
@@ -2515,13 +2513,25 @@ int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		msg.context = ctx;
 
 		ret = fi_sendmsg(ep, &msg, flags);
-		if (ret) {
+		if (ret && ret != -FI_EAGAIN)
 			FT_PRINTERR("fi_sendmsg", ret);
-			return ret;
-		}
 	}
 
-	return 0;
+	return ret;
+}
+
+int ft_deliver_msg(struct fid_ep *ep, fi_addr_t fi_addr,
+		   size_t size, void *ctx)
+{
+	int ret;
+
+	do {
+		ret = ft_sendmsg(ep, fi_addr, size, ctx, FI_DELIVERY_COMPLETE);
+		if (ret == -FI_EAGAIN)
+			ft_force_progress();
+	} while (ret == -FI_EAGAIN);
+
+	return ret;
 }
 
 int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
