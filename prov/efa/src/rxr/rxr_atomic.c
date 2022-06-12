@@ -180,13 +180,17 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 		 * support it or not.
 		 */
 		err = rxr_pkt_trigger_handshake(rxr_ep, tx_entry->addr, peer);
-		if (OFI_UNLIKELY(err))
+		if (OFI_UNLIKELY(err)) {
+			rxr_release_tx_entry(rxr_ep, tx_entry);
 			goto out;
+		}
 
 		if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)) {
+			rxr_release_tx_entry(rxr_ep, tx_entry);
 			err = -FI_EAGAIN;
 			goto out;
 		} else if (!rxr_peer_support_delivery_complete(peer)) {
+			rxr_release_tx_entry(rxr_ep, tx_entry);
 			err = -FI_EOPNOTSUPP;
 			goto out;
 		}
