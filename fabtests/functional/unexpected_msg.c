@@ -190,7 +190,7 @@ static int run_test_loop(void)
 		}
 
 		if (i % 100 == 0)
-			printf("PID %d GOOD iter %d/%ld completed\n",
+			printf("PID %d GOOD iter %d/%d completed\n",
 				getpid(), i, opts.iterations);
 	}
 
