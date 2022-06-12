@@ -146,14 +146,16 @@ static int pm_init_ranks()
 	size_t send_rank;
 
 	if (pm_job.clients) {
-		for(i = 0; i < pm_job.num_ranks-1; i++) {
+		for (i = 0; i < pm_job.num_ranks-1; i++) {
 			send_rank = i + 1;
-			ret = socket_send(pm_job.clients[i], &send_rank, sizeof(send_rank), 0);
+			ret = socket_send(pm_job.clients[i], &send_rank,
+					  sizeof(send_rank), 0);
 			if (ret < 0)
-				return ret;
+				break;
 		}
 	} else {
-		ret = socket_recv(pm_job.sock, &(pm_job.my_rank), sizeof(pm_job.my_rank), 0);
+		ret = socket_recv(pm_job.sock, &(pm_job.my_rank),
+				  sizeof(pm_job.my_rank), 0);
 	}
 
 	return ret;
@@ -181,8 +183,10 @@ static int server_connect()
 		pm_job.clients[i] = new_sock;
 		FT_DEBUG("connection established\n");
 	}
+
 	ft_close_fd(pm_job.sock);
 	return 0;
+
 err:
 	while (i--) {
 		ft_close_fd(pm_job.clients[i]);
@@ -223,15 +227,15 @@ static int pm_conn_setup()
 		opts.dst_port = opts.src_port;
 		opts.src_addr = NULL;
 		opts.src_port = 0;
-		ret = connect(pm_job.sock, (struct sockaddr *)&pm_job.oob_server_addr,
+		ret = connect(pm_job.sock,
+			      (struct sockaddr *) &pm_job.oob_server_addr,
 			      pm_job.server_addr_len);
 	}
-	if (ret) {
-		FT_ERR("OOB conn failed - %s\n", strerror(errno));
-		return ret;
-	}
 
-	return 0;
+	if (ret)
+		FT_ERR("OOB conn failed - %s\n", strerror(errno));
+
+	return ret;
 }
 
 static void pm_finalize()
@@ -243,9 +247,9 @@ static void pm_finalize()
 		return;
 	}
 
-	for (i = 0; i < pm_job.num_ranks-1; i++) {
+	for (i = 0; i < pm_job.num_ranks-1; i++)
 		ft_close_fd(pm_job.clients[i]);
-	}
+
 	free(pm_job.clients);
 }
 
@@ -332,7 +336,7 @@ int main(int argc, char **argv)
 		FT_ERR("connection setup failed\n");
 		goto err1;
 	}
-	
+
 	ret = pm_init_ranks();
 	if (ret < 0) {
 		FT_ERR("rank initialization failed\n");
