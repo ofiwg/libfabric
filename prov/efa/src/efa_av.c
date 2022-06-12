@@ -554,7 +554,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		memset(context, 0, sizeof(int));
 
 	if (!efa_av_is_valid_address(raw_addr)) {
-		EFA_WARN(FI_LOG_AV, "Failed to insert bad addr");
+		EFA_WARN(FI_LOG_AV, "Failed to insert bad addr\n");
 		errno = FI_EINVAL;
 		return NULL;
 	}
