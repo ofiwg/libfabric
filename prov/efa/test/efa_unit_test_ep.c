@@ -62,4 +62,6 @@ void test_rxr_ep_pkt_pool_page_alignment()
 
 	fi_close(&ep->fid);
 	efa_unit_test_resource_destroy(&resource);
+
+	g_efa_fork_status = EFA_FORK_SUPPORT_OFF;
 }
