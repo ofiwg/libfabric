@@ -108,6 +108,7 @@ prov_efa_test_efa_unit_test_CPPFLAGS = $(efa_CPPFLAGS)
 prov_efa_test_efa_unit_test_LDADD = $(cmocka_LIBS) $(linkback)
 prov_efa_test_efa_unit_test_LDFLAGS = $(cmocka_rpath) $(efa_LDFLAGS) $(cmocka_LDFLAGS) \
 					-Wl,--wrap=ibv_create_ah \
+					-Wl,--wrap=ibv_destroy_ah \
 					-Wl,--wrap=efadv_query_ah \
 					-Wl,--wrap=efadv_query_device
 prov_efa_test_efa_unit_test_LIBS = $(efa_LIBS) $(linkback)
