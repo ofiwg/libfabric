@@ -2912,6 +2912,15 @@ void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
 		}
 	}
 
+	/* Reset handshake flow rbtree */
+	itr = fi_opx_rbt_find(opx_ep->reliability->service.handshake_init, (void*)tx_key.value);
+	if (itr) {
+		uint64_t *count_ptr = (uint64_t *) fi_opx_rbt_value_ptr(opx_ep->reliability->service.handshake_init, itr);
+		*count_ptr = 0;
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"(tx) Server reverse flow__ %016lx is reset.\n", tx_key.value);
+	}
+
 	/* 
 	 * Create record of the RESYNCH operation being completed for all (rx) & (tx)
 	 * related reliability protocol data.

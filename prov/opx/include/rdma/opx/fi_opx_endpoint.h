@@ -2929,6 +2929,19 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 			dest_addr
 	};
 
+	ssize_t rc = 0;
+
+	/* Resynch of all the Reliability Protocol(RP) related data maintained by the
+	 * remote EP, must be done first before any other RP related operations are
+	 * done with the remote EP.
+	 */
+	if (opx_ep->do_resynch_remote_ep) {
+		rc = fi_opx_reliability_do_remote_ep_resynch(ep, addr, caps);
+		if (OFI_UNLIKELY(rc == -FI_EAGAIN)) {
+			return rc;
+		}
+	}
+
 	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
 			&opx_ep->reliability->state,
 			addr.uid.lid,
@@ -2954,15 +2967,6 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 
 	const uint64_t do_cq_completion =
 		fi_opx_ep_tx_do_cq_completion(opx_ep, override_flags, tx_op_flags);
-
-	ssize_t rc = 0;
-
-	if (opx_ep->do_resynch_remote_ep) {
-		rc = fi_opx_reliability_do_remote_ep_resynch(ep, addr, caps);
-		if (OFI_UNLIKELY(rc == -FI_EAGAIN)) {
-			return rc;
-		}
-	}
 
 	if (total_len <= opx_ep->tx->pio_max_eager_tx_bytes) {
 
