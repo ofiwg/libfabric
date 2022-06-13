@@ -104,6 +104,12 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			smr_av->used++;
 		}
 
+		ofi_straddr_dbg(&smr_prov, FI_LOG_DEBUG, FI_LOG_AV,
+				"smr_av_insert addr", addr);
+		if (fi_addr)
+			FI_DBG(&smr_prov, FI_LOG_AV, "smr_av_insert fi_addr: %" PRIu64 "\n",
+				fi_addr[i]);
+
 		dlist_foreach(&util_av->ep_list, av_entry) {
 			util_ep = container_of(av_entry, struct util_ep, av_entry);
 			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
@@ -134,6 +140,8 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 
 	ofi_mutex_lock(&util_av->lock);
 	for (i = 0; i < count; i++) {
+		FI_DBG(&smr_prov, FI_LOG_AV, "smr_av_remove fi_addr: %" PRIu64 "\n",
+			*fi_addr[i]);
 		id = smr_addr_lookup(util_av, fi_addr[i]);
 		ret = ofi_av_remove_addr(util_av, fi_addr[i]);
 		if (ret) {
@@ -213,11 +221,15 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	struct smr_av *smr_av;
 	int ret;
 
-	if (!attr)
+	if (!attr) {
+		FI_INFO(&smr_prov, FI_LOG_AV, "smr_av_open with invalid attr\n");
 		return -FI_EINVAL;
+	}
 
-	if (attr->name)
+	if (attr->name) {
+		FI_INFO(&smr_prov, FI_LOG_AV, "smr_av_open with invalid attr name\n");
 		return -FI_ENOSYS;
+	}
 
 	if (attr->type == FI_AV_UNSPEC)
 		attr->type = FI_AV_TABLE;
@@ -232,6 +244,8 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	util_attr.context_len = 0;
 	util_attr.flags = 0;
 	if (attr->count > SMR_MAX_PEERS) {
+		FI_INFO(&smr_prov, FI_LOG_AV,
+			"smr_av_open count %d exceeds max peers\n", (int)attr->count);
 		ret = -FI_ENOSYS;
 		goto out;
 	}

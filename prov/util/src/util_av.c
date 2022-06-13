@@ -309,6 +309,10 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 		memcpy(entry->data, addr, av->addrlen);
 		ofi_atomic_initialize32(&entry->use_cnt, 1);
 		HASH_ADD(hh, av->hash, data, av->addrlen, entry);
+		ofi_straddr_dbg(av->prov, FI_LOG_AV, "av_insert addr", addr);
+		if (fi_addr)
+			FI_DBG(av->prov, FI_LOG_AV, "av_insert fi_addr: %" PRIu64 "\n",
+				*fi_addr);
 	}
 	return 0;
 }
@@ -326,6 +330,7 @@ int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr)
 		return FI_SUCCESS;
 
 	HASH_DELETE(hh, av->hash, av_entry);
+	FI_DBG(av->prov, FI_LOG_AV, "av_remove fi_addr: %" PRIu64 "\n", fi_addr);
 	ofi_ibuf_free(av_entry);
 	return 0;
 }

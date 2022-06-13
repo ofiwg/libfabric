@@ -224,6 +224,8 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	 */
 	ofi_mutex_lock(&av->util_av.lock);
 	for (i = count - 1; i >= 0; i--) {
+		FI_DBG(&rxm_prov, FI_LOG_AV,
+			"rxm_av_remove fi_addr %"PRIu64"\n", fi_addr[i]);
 		av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool,
 						fi_addr[i]);
 		if (!av_entry) {
