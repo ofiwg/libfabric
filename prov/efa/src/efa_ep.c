@@ -436,19 +436,19 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 	if (ep->scq) {
 		attr_ex.cap.max_send_wr = ep->info->tx_attr->size;
 		attr_ex.cap.max_send_sge = ep->info->tx_attr->iov_limit;
-		attr_ex.send_cq = ep->scq->ibv_cq;
+		attr_ex.send_cq = ibv_cq_ex_to_cq(ep->scq->ibv_cq_ex);
 		ibv_pd = ep->scq->domain->ibv_pd;
 	} else {
-		attr_ex.send_cq = ep->rcq->ibv_cq;
+		attr_ex.send_cq = ibv_cq_ex_to_cq(ep->rcq->ibv_cq_ex);
 		ibv_pd = ep->rcq->domain->ibv_pd;
 	}
 
 	if (ep->rcq) {
 		attr_ex.cap.max_recv_wr = ep->info->rx_attr->size;
 		attr_ex.cap.max_recv_sge = ep->info->rx_attr->iov_limit;
-		attr_ex.recv_cq = ep->rcq->ibv_cq;
+		attr_ex.recv_cq = ibv_cq_ex_to_cq(ep->rcq->ibv_cq_ex);
 	} else {
-		attr_ex.recv_cq = ep->scq->ibv_cq;
+		attr_ex.recv_cq = ibv_cq_ex_to_cq(ep->scq->ibv_cq_ex);
 	}
 
 	attr_ex.cap.max_inline_data = ep->domain->device->efa_attr.inline_buf_size;

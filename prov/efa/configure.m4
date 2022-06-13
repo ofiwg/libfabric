@@ -52,7 +52,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 				[efa_happy=1],
 				[
 					efa_happy=0
-					AC_MSG_WARN([The EFA provider requires rdma-core v27 or newer.])
+					AC_MSG_WARN([The EFA provider requires rdma-core v31 or newer.])
 				])
 	      ])
 
@@ -148,6 +148,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 						 [
 							#include <stdarg.h>
 							#include <stddef.h>
+							#include <stdint.h>
 							#include <setjmp.h>
 					 	 ])
         if [ test x"$cmocka_dir" != x""]; then
