@@ -14,7 +14,6 @@ rpmBuild(
         ,['csm-1.0.11',['sle15sp2'],'ncn'] \
         ,['csm-1.2.0', ['sle15sp3'],'ncn'] \
         ,['',['sle15sp2','sle15sp3','centos8', 'rhel_8_6'],'ncn'] \
-        ,['',['sle15sp3'],'cn'] \
     ]",
     masterBranch: "integration",
     recv_triggers: ["libcxi-built"]
