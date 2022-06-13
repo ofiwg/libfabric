@@ -355,9 +355,9 @@ static int tcpx_ep_shutdown(struct fid_ep *ep_fid, uint64_t flags)
 	struct tcpx_ep *ep;
 
 	ep = container_of(ep_fid, struct tcpx_ep, util_ep.ep_fid);
-	(void) ofi_bsock_flush(&ep->bsock);
 
 	ofi_mutex_lock(&ep->lock);
+	(void) ofi_bsock_flush(&ep->bsock);
 	tcpx_ep_disable(ep, 0, NULL, 0);
 	ofi_mutex_unlock(&ep->lock);
 
