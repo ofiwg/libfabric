@@ -26,6 +26,13 @@ struct ibv_ah *__wrap_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr)
     return (struct ibv_ah*) mock();
 }
 
+int __real_ibv_destroy_ah(struct ibv_ah *ibv_ah);
+
+int __wrap_ibv_destroy_ah(struct ibv_ah *ibv_ah)
+{
+	return (ibv_ah->context == NULL) ? 0 : __real_ibv_destroy_ah(ibv_ah);
+}
+
 int __wrap_efadv_query_ah(struct ibv_ah *ibvah, struct efadv_ah_attr *attr, uint32_t inlen) {
     check_expected(ibvah);
     check_expected(attr);
