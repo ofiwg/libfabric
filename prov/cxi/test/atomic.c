@@ -629,6 +629,104 @@ Test(atomic, simple_fetch)
 	}
 }
 
+Test(atomic, simple_fetch_read)
+{
+	struct mem_region mr;
+	struct fi_cq_tagged_entry cqe;
+	uint64_t exp_remote;
+	uint64_t exp_result;
+	uint64_t *rma;
+	uint64_t *loc;
+	int ret;
+	int i;
+	uint64_t key;
+
+	for (i = 0; i < 2; i++) {
+		key = 199 + i;
+
+		rma = _cxit_create_mr(&mr, key);
+		exp_remote = 0;
+		exp_result = 0;
+		cr_assert_eq(*rma, exp_remote,
+			     "Result = %ld, expected = %ld",
+			     *rma, exp_remote);
+		loc = calloc(1, RMA_WIN_LEN);
+		cr_assert_not_null(loc);
+
+		fi_cntr_set(cxit_read_cntr, 0);
+		while (fi_cntr_read(cxit_read_cntr))
+			;
+		*rma = 1;
+		*loc = -1;
+		exp_remote = *rma;
+		exp_result = exp_remote;
+
+		ret = fi_fetch_atomic(cxit_ep, NULL, 1, NULL,
+				      loc, 0,
+				      cxit_ep_fi_addr, 0, key,
+				      FI_UINT64, FI_ATOMIC_READ, NULL);
+		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+		validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
+		cr_assert_eq(*rma, exp_remote,
+			     "Read Result = %ld, expected = %ld",
+			     *rma, exp_remote);
+		cr_assert_eq(*loc, exp_result,
+			     "Fetch Result = %016lx, expected = %016lx",
+			     *loc, exp_result);
+
+		*rma = 10;
+		*loc = -1;
+		exp_remote = *rma;
+		exp_result = exp_remote;
+
+		ret = fi_fetch_atomic(cxit_ep, NULL, 1, NULL,
+				      loc, 0,
+				      cxit_ep_fi_addr, 0, key,
+				      FI_UINT64, FI_ATOMIC_READ, NULL);
+		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+		validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
+		cr_assert_eq(*rma, exp_remote,
+			     "Read Result = %ld, expected = %ld",
+			     *rma, exp_remote);
+		cr_assert_eq(*loc, exp_result,
+			     "Fetch Result = %016lx, expected = %016lx",
+			     *loc, exp_result);
+
+		*rma = 0x0123456789abcdef;
+		*loc = -1;
+		exp_remote = *rma;
+		exp_result = exp_remote;
+
+		ret = fi_fetch_atomic(cxit_ep, NULL, 1, NULL,
+				      loc, 0,
+				      cxit_ep_fi_addr, 0, key,
+				      FI_UINT64, FI_ATOMIC_READ, NULL);
+		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
+
+		ret = cxit_await_completion(cxit_tx_cq, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+		validate_tx_event(&cqe, FI_ATOMIC | FI_READ, NULL);
+		cr_assert_eq(*rma, exp_remote,
+			     "Read Result = %ld, expected = %ld",
+			     *rma, exp_remote);
+		cr_assert_eq(*loc, exp_result,
+			     "Fetch Result = %016lx, expected = %016lx",
+			     *loc, exp_result);
+
+		while (fi_cntr_read(cxit_read_cntr) != 3)
+			;
+
+		free(loc);
+		_cxit_destroy_mr(&mr);
+	}
+}
+
 Test(atomic, simple_swap)
 {
 	struct mem_region mr;
