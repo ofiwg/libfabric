@@ -28,7 +28,7 @@ def efa_retrieve_hw_counter_value(hostname, hw_counter_name):
                      rx_drops, send_bytes, tx_bytes, rdma_read_bytes,  rdma_read_wr_err, recv_bytes, rx_bytes, rx_pkts, send_wrs, tx_pkts
     return: an integer that is sum of all EFA device's counter
     """
-    command = "ssh {} cat /sys/class/infiniband/*/ports/*/hw_counters/{}".format(hostname, hw_counter_name)
+    command = "ssh {} cat \"/sys/class/infiniband/*/ports/*/hw_counters/{}\"".format(hostname, hw_counter_name)
     process = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE)
     linelist = process.stdout.split()
     sumvalue = 0
