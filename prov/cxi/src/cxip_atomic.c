@@ -1442,9 +1442,17 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 
 		/* FALLTHRU */
 	case CXIP_RQ_AMO:
-		if (!_vector_valid(msg->iov_count, msg->msg_iov)) {
-			TXC_WARN(txc, "msg IOV invalid\n");
-			return -FI_EINVAL;
+		if (msg->op != FI_ATOMIC_READ) {
+			if (!_vector_valid(msg->iov_count, msg->msg_iov)) {
+				TXC_WARN(txc, "msg IOV invalid\n");
+				return -FI_EINVAL;
+			}
+			buf = msg->msg_iov[0].addr;
+			if (msg->desc && msg->desc[0])
+				buf_mr = msg->desc[0];
+		} else {
+			buf = NULL;
+			buf_mr = NULL;
 		}
 
 		/* The supplied RMA address is actually an offset into a
@@ -1454,10 +1462,6 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			TXC_WARN(txc, "RMA IOV invalid\n");
 			return -FI_EINVAL;
 		}
-
-		buf = msg->msg_iov[0].addr;
-		if (msg->desc && msg->desc[0])
-			buf_mr = msg->desc[0];
 
 		remote_offset = msg->rma_iov[0].addr;
 		key = msg->rma_iov[0].key;
