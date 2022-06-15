@@ -84,9 +84,17 @@ elif command -v zypper > /dev/null; then
                         ;;
             csm_1_0_11*)    CUDA_RPMS="nvhpc-2021"
                         ;;
+            sle15_sp2*)     CUDA_RPMS="nvhpc-2022"
+                        ;;
             cos_2_3*)       CUDA_RPMS="nvhpc-2022"
                         ;;
             csm_1_2_0*)     CUDA_RPMS="nvhpc-2022"
+                        ;;
+            sle15_sp3*)     CUDA_RPMS="nvhpc-2022"
+                        ;;
+            csm_1_3_0*)     CUDA_RPMS="nvhpc-2022"
+                        ;;
+            sle15_sp4*)     CUDA_RPMS="nvhpc-2022"
                         ;;
         esac
     else
@@ -94,6 +102,8 @@ elif command -v zypper > /dev/null; then
             sle15_sp2*) CUDA_RPMS="nvhpc-2021"
                         ;;
             sle15_sp3*) CUDA_RPMS="nvhpc-2022"
+                        ;;
+            sle15_sp4*) CUDA_RPMS="nvhpc-2022"
                         ;;
         esac
     fi

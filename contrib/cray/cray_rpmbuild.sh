@@ -11,15 +11,11 @@ function cleanup {
 
 trap cleanup EXIT
 
-if [[ "${TARGET_OS}" == "sle15_sp2_cn" || "${TARGET_OS}" == "sle15_sp2_ncn" || "${TARGET_OS}" == "sle15_sp3_cn" || "${TARGET_OS}" == "sle15_sp3_ncn" ]]; then
-    ROCM_CONFIG="-c --with-rocr=/opt/rocm -c --enable-rocr-dlopen"
-else
-    ROCM_CONFIG=""
-fi
-
 if [[ "${TARGET_OS}" == sle* ]]; then
+    ROCM_CONFIG="-c --with-rocr=/opt/rocm -c --enable-rocr-dlopen"
     CUDA_CONFIG="-c --with-cuda=/usr/local/cuda -c --enable-cuda-dlopen"
 else
+    ROCM_CONFIG=""
     CUDA_CONFIG=""
 fi
 
