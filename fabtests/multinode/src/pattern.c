@@ -33,10 +33,12 @@
 #include <core.h>
 #include <shared.h>
 
+
 static int broadcast_gather_next(int *cur)
 {
 	int next;
-	if (pm_job.my_rank) 
+
+	if (pm_job.my_rank)
 		return -FI_ENODATA;
 	next = *cur + 1;
 
@@ -46,47 +48,47 @@ static int broadcast_gather_next(int *cur)
 		next = 1;
 
 	*cur = next;
-	
+
 	return 0;
 }
 
 static int broadcast_gather_current(int *cur)
 {
 	int next;
-	if (!pm_job.my_rank) 
+
+	if (!pm_job.my_rank)
 		return -FI_ENODATA;
-	
+
 	next = *cur + 1;
 
-	if (next > 0)			
+	if (next > 0)
 		return -FI_ENODATA;
 
 	*cur = next;
-	
-	return 0; 
+
+	return 0;
 }
 
 static int ring_next(int *cur)
 {
 	if ((pm_job.my_rank == 0 && pm_job.num_ranks - 1 == *cur) ||
-		(pm_job.my_rank != 0 && pm_job.my_rank - 1   == *cur))
+	    (pm_job.my_rank != 0 && pm_job.my_rank - 1   == *cur))
 		return -FI_ENODATA;
-		
+
 	if (pm_job.my_rank == 0)
 		*cur = pm_job.num_ranks - 1;
-	else 			
+	else
 		*cur = pm_job.my_rank - 1;
-	return 0; 
+	return 0;
 }
 
 static int ring_current(int *cur)
 {
-	if ((pm_job.my_rank + 1) % pm_job.num_ranks == *cur) 
+	if ((pm_job.my_rank + 1) % pm_job.num_ranks == *cur)
 		return -FI_ENODATA;
-	
+
 	*cur = (pm_job.my_rank + 1) % pm_job.num_ranks;
-	return 0; 
-	
+	return 0;
 }
 
 static int mesh_next(int *cur)

@@ -188,9 +188,8 @@ static int multi_setup_fabric(int argc, char **argv)
 		FT_ERR("error exchanging rma_iovs\n");
 		goto err;
 	}
-	for (i = 0; i < pm_job.num_ranks; i++) {
+	for (i = 0; i < pm_job.num_ranks; i++)
 		pm_job.multi_iovs[i].addr += (tx_size * pm_job.my_rank);
-	}
 
 	return 0;
 err:
@@ -204,14 +203,13 @@ int multi_msg_recv()
 
 	/* post receives */
 	while (!state.all_recvs_posted && state.rx_window) {
-
 		ret = pattern->next_source(&state.cur_source);
 		if (ret == -FI_ENODATA) {
 			state.all_recvs_posted = true;
 			break;
-		} else if (ret < 0) {
-			return ret;
 		}
+		if (ret < 0)
+			return ret;
 
 		offset = state.recvs_posted % opts.window_size ;
 		assert(rx_ctx_arr[offset].state == OP_DONE);
@@ -236,14 +234,13 @@ int multi_msg_send()
 	fi_addr_t dest;
 
 	while (!state.all_sends_posted && state.tx_window) {
-
 		ret = pattern->next_target(&state.cur_target);
 		if (ret == -FI_ENODATA) {
 			state.all_sends_posted = true;
 			break;
-		} else if (ret < 0) {
-			return ret;
 		}
+		if (ret < 0)
+			return ret;
 
 		offset = state.sends_posted % opts.window_size;
 		assert(tx_ctx_arr[offset].state == OP_DONE);
@@ -295,14 +292,13 @@ int multi_rma_write()
 	int ret, rc;
 
 	while (!state.all_sends_posted && state.tx_window) {
-
 		ret = pattern->next_target(&state.cur_target);
 		if (ret == -FI_ENODATA) {
 			state.all_sends_posted = true;
 			break;
-		} else if (ret < 0) {
-			return ret;
 		}
+		if (ret < 0)
+			return ret;
 
 		snprintf((char*) tx_buf + tx_size * state.cur_target, tx_size,
 		        "Hello World! from %zu to %i on the %zuth iteration, %s test",
@@ -366,8 +362,7 @@ int send_recv_barrier(int sync)
 {
 	int ret, i;
 
-	for(i = 0; i < pm_job.num_ranks; i++) {
-
+	for (i = 0; i < pm_job.num_ranks; i++) {
 		ret = ft_post_rx_buf(ep, opts.transfer_size,
 			     &barrier_rx_ctx[i],
 			     rx_buf, mr_desc, 0);
@@ -411,7 +406,6 @@ static int multi_run_test()
 	int iter;
 
 	for (iter = 0; iter < opts.iterations; iter++) {
-
 		multi_init_state();
 		while (!state.all_completions_done ||
 				!state.all_recvs_posted ||
@@ -466,7 +460,6 @@ int multinode_run_tests(int argc, char **argv)
 	if (ret)
 		return ret;
 
-
 	for (i = 0; i < NUM_TESTS && !ret; i++) {
 		printf("starting %s... ", patterns[i].name);
 		pattern = &patterns[i];
@@ -483,4 +476,3 @@ int multinode_run_tests(int argc, char **argv)
 	ft_free_res();
 	return ft_exit_code(ret);
 }
-
