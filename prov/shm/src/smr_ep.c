@@ -599,7 +599,7 @@ int smr_select_proto(bool use_ipc, bool cma_avail, enum fi_hmem_iface iface,
 	if (op == ofi_op_read_req) {
 		if (use_ipc)
 			return smr_src_ipc;
-		if (cma_avail && FI_HMEM_SYSTEM)
+		if (cma_avail && iface == FI_HMEM_SYSTEM)
 			return smr_src_iov;
 		return smr_src_sar;
 	}
@@ -1317,8 +1317,6 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 			return ret;
 
 		if (ep->util_ep.caps & FI_HMEM || smr_env.disable_cma) {
-			ep->region->cma_cap_peer = SMR_CMA_CAP_OFF;
-			ep->region->cma_cap_self = SMR_CMA_CAP_OFF;
 			if (ep->util_ep.caps & FI_HMEM) {
 				if (ze_hmem_p2p_enabled())
 					smr_init_ipc_socket(ep);
