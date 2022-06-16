@@ -362,6 +362,9 @@ int tcp2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		     struct fid_domain **domain, void *context);
 
 
+int tcp2_setup_socket(SOCKET sock, struct fi_info *info);
+void tcp2_set_zerocopy(SOCKET sock);
+
 int tcp2_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context);
 void tcp2_ep_disable(struct tcp2_ep *ep, int cm_err, void* err_data,
