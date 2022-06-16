@@ -446,6 +446,10 @@ sa_sin6:
 	case FI_ADDR_STR:
 		size = snprintf(buf, *len, "%s", (const char *) addr);
 		break;
+	case FI_ADDR_CXI:
+		size = snprintf(buf, *len, "fi_addr_cxi://0x%08" PRIx32,
+				*(uint32_t *)addr);
+		break;
 	default:
 		return NULL;
 	}
