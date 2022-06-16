@@ -346,6 +346,8 @@ static int rxm_connect(struct rxm_conn *conn)
 
 static void rxm_free_conn(struct rxm_conn *conn)
 {
+	struct rxm_av *av;
+
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "free conn %p\n", conn);
 	assert(ofi_ep_lock_held(&conn->ep->util_ep));
 
@@ -353,7 +355,8 @@ static void rxm_free_conn(struct rxm_conn *conn)
 		ofi_idm_clear(&conn->ep->conn_idx_map, conn->peer->index);
 
 	util_put_peer(conn->peer);
-	rxm_av_free_conn(conn);
+	av = container_of(conn->ep->util_ep.av, struct rxm_av, util_av);
+	rxm_av_free_conn(av, conn);
 }
 
 void rxm_freeall_conns(struct rxm_ep *ep)
