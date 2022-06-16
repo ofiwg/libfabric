@@ -1,0 +1,28 @@
+if HAVE_TCP2
+_tcp2_files = \
+	prov/tcp2/src/tcp2_fabric.c	\
+	prov/tcp2/src/tcp2_attr.c	\
+	prov/tcp2/src/tcp2_cm.c		\
+	prov/tcp2/src/tcp2_domain.c	\
+	prov/tcp2/src/tcp2_rma.c	\
+	prov/tcp2/src/tcp2_msg.c	\
+	prov/tcp2/src/tcp2_ep.c		\
+	prov/tcp2/src/tcp2_srx.c	\
+	prov/tcp2/src/tcp2_cq.c		\
+	prov/tcp2/src/tcp2_eq.c		\
+	prov/tcp2/src/tcp2_init.c	\
+	prov/tcp2/src/tcp2_progress.c	\
+	prov/tcp2/src/tcp2.h
+
+if HAVE_TCP2_DL
+pkglib_LTLIBRARIES += libtcp2-fi.la
+libtcp2_fi_la_SOURCES = $(_tcp2_files) $(common_srcs)
+libtcp2_fi_la_LIBADD = $(linkback) $(tcp2_shm_LIBS)
+libtcp2_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libtcp2_fi_la_DEPENDENCIES = $(linkback)
+else !HAVE_TCP2_DL
+src_libfabric_la_SOURCES += $(_tcp2_files)
+src_libfabric_la_LIBADD += $(tcp2_shm_LIBS)
+endif !HAVE_TCP2_DL
+
+endif HAVE_TCP2

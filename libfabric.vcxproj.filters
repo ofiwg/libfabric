@@ -97,6 +97,15 @@
     <Filter Include="Source Files\prov\tcp\src">
       <UniqueIdentifier>{8c151366-dd08-48d5-aa21-50a500cbde73}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\prov\tcp2">
+      <UniqueIdentifier>{5547753c-42f5-4cb6-a311-07911724f5cf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\prov\tcp2\include">
+      <UniqueIdentifier>{00fbcfe1-a2f8-4ca2-af0a-803ae78a25d9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\prov\tcp2\src">
+      <UniqueIdentifier>{f23f596f-673f-4158-b648-3f17c7f162a1}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source Files\prov\hook">
       <UniqueIdentifier>{b85ecf6c-fb76-4d65-a7f0-cba470a0adee}</UniqueIdentifier>
     </Filter>
@@ -501,6 +510,42 @@
     <ClCompile Include="prov\tcp\src\tcpx_progress.c">
       <Filter>Source Files\prov\tcp\src</Filter>
     </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_attr.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_cm.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_srx.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_cq.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_domain.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_rma.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_msg.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_ep.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_fabric.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_eq.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_init.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_progress.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
     <ClCompile Include="prov\util\src\util_pep.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
@@ -832,6 +877,9 @@
     </ClInclude>
     <ClInclude Include="prov\tcp\src\tcpx.h">
       <Filter>Source Files\prov\tcp\include</Filter>
+    </ClInclude>
+    <ClInclude Include="prov\tcp2\src\tcp2.h">
+      <Filter>Source Files\prov\tcp2\include</Filter>
     </ClInclude>
     <ClInclude Include="include\windows\sys\uio.h">
       <Filter>Header Files\windows\sys</Filter>
