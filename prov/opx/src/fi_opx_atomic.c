@@ -263,10 +263,8 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 		abort();
 	}
 
-	union fi_opx_addr opx_addr = { .fi = dst_addr };
-	if (av_type == FI_AV_TABLE) {
-		opx_addr = opx_ep->tx->av_addr[dst_addr];
-	}
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
+	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,dst_addr);
 
 	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
 			&opx_ep->reliability->state,
@@ -323,9 +321,11 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep,
 		abort();
 	}
 
-	const union fi_opx_addr opx_dst_addr = { .fi = (av_type == FI_AV_TABLE) ?
-							       opx_ep->tx->av_addr[msg->addr].fi :
-							       msg->addr };
+	assert(msg->addr != FI_ADDR_UNSPEC);
+	/* This function is NOT called with build constants.  It's called
+	   with constant FI_AV_MAP or FI_AV_TABLE based on the endpoint */
+	assert((FI_AV_TABLE == av_type) || (FI_AV_MAP == av_type));
+	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,msg->addr);
 
 	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
 			&opx_ep->reliability->state,
@@ -424,9 +424,11 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep,
 		abort();
 	}
 
-	const union fi_opx_addr opx_dst_addr = { .fi = (av_type == FI_AV_TABLE) ?
-							       opx_ep->tx->av_addr[msg->addr].fi :
-							       msg->addr };
+	assert(msg->addr != FI_ADDR_UNSPEC);
+	/* This function is NOT called with build constants.  It's called
+	   with constant FI_AV_MAP or FI_AV_TABLE based on the endpoint */
+	assert((FI_AV_TABLE == av_type) || (FI_AV_MAP == av_type));
+	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,msg->addr);
 
 	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
 			&opx_ep->reliability->state,
@@ -580,9 +582,11 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep,
 		abort();
 	}
 
-	const union fi_opx_addr opx_dst_addr = { .fi = (av_type == FI_AV_TABLE) ?
-							       opx_ep->tx->av_addr[msg->addr].fi :
-							       msg->addr };
+	assert(msg->addr != FI_ADDR_UNSPEC);
+	/* This function is NOT called with build constants.  It's called
+	   with constant FI_AV_MAP or FI_AV_TABLE based on the endpoint */
+	assert((FI_AV_TABLE == av_type) || (FI_AV_MAP == av_type));
+	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,msg->addr);
 
 	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
 			&opx_ep->reliability->state,
@@ -707,10 +711,8 @@ ssize_t fi_opx_fetch_compare_atomic_generic(
 		abort();
 	}
 
-	union fi_opx_addr opx_addr = { .fi = dest_addr };
-	if (av_type == FI_AV_TABLE) {
-		opx_addr = opx_ep->tx->av_addr[dest_addr];
-	}
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
+	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,dest_addr);
 
 	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
 			&opx_ep->reliability->state,
@@ -787,9 +789,8 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 		abort();
 	}
 	assert(dest_addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_dst_addr = { .fi = (av_type == FI_AV_TABLE) ?
-							       opx_ep->tx->av_addr[dest_addr].fi :
-							       dest_addr };
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
+	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,dest_addr);
 
 	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
 			&opx_ep->reliability->state,
@@ -863,6 +864,7 @@ ssize_t fi_opx_fetch_atomic(struct fid_ep *ep, const void *buf, size_t count, vo
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	if (opx_ep->av_type == FI_AV_MAP) {
 		rc = fi_opx_fetch_atomic_generic(
 			ep, buf, count, desc, result, result_desc, dest_addr, addr, key,
@@ -897,6 +899,7 @@ ssize_t fi_opx_compare_atomic(struct fid_ep *ep, const void *buf, size_t count, 
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	if (opx_ep->av_type == FI_AV_MAP) {
 		rc = fi_opx_compare_atomic_generic(
 			ep, buf, count, desc, compare, compare_desc, result, result_desc,
@@ -929,6 +932,7 @@ ssize_t fi_opx_inject_atomic(struct fid_ep *ep, const void *buf, size_t count, f
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	if (opx_ep->av_type == FI_AV_MAP) {
 		rc = fi_opx_inject_atomic_generic(ep, buf, count, dest_addr, addr, key,
 						  datatype, op, FI_OPX_LOCK_NOT_REQUIRED,
@@ -940,7 +944,6 @@ ssize_t fi_opx_inject_atomic(struct fid_ep *ep, const void *buf, size_t count, f
 						  FI_AV_TABLE, 0x0018000000000000ull,
 						  OPX_RELIABILITY);
 	}
-
 	fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
 	return rc;
 }
@@ -967,6 +970,7 @@ ssize_t fi_opx_atomic_writemsg(struct fid_ep *ep, const struct fi_msg_atomic *ms
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	if (opx_ep->av_type == FI_AV_MAP) {
 		rc = fi_opx_atomic_writemsg_generic(ep, msg, flags, FI_OPX_LOCK_NOT_REQUIRED,
 						    FI_AV_MAP,
@@ -999,6 +1003,7 @@ ssize_t fi_opx_atomic_readwritemsg(struct fid_ep *ep, const struct fi_msg_atomic
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	if (opx_ep->av_type == FI_AV_MAP) {
 		rc = fi_opx_atomic_readwritemsg_generic(ep, msg, resultv, result_count,
 							flags, FI_OPX_LOCK_NOT_REQUIRED,
@@ -1034,6 +1039,7 @@ ssize_t fi_opx_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	if (opx_ep->av_type == FI_AV_MAP) {
 		rc = fi_opx_atomic_compwritemsg_generic(ep, msg, comparev, compare_count,
 							resultv, result_count, flags,

@@ -116,6 +116,8 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			}
 			if ((count + opx_av->addr_count) > opx_av->table_count) {
 				union fi_opx_addr * opx_addr = opx_av->table_addr;
+				assert(opx_addr!=NULL); /* realloc - can't be null */
+				assert(opx_av->addr_count); /* relloc - can't be zero */
 				opx_av->table_count = count + opx_av->table_count;
 				posix_memalign((void**)&opx_av->table_addr, sizeof(union fi_opx_addr), sizeof(union fi_opx_addr) * opx_av->table_count);
 				if (!opx_av->table_addr) {
@@ -124,17 +126,16 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 					return -errno;
 				}
 				memcpy(opx_av->table_addr, opx_addr, sizeof(union fi_opx_addr) * opx_av->addr_count);
-				if (opx_addr) {/* free previous table allocation after expansion */
-					free(opx_addr);
-				}
+				free(opx_addr);
 			}
 			union fi_opx_addr * opx_addr = opx_av->table_addr;
+			/* append <count> to table, starting at <addr_count> */
 			for (n=0,t=opx_av->addr_count; n<count; ++n,++t) {
 				if (fi_addr != NULL) fi_addr[n] = t;
 				opx_addr[t].fi = input[n];
 			}
 			for (i=0; i<ep_tx_count; ++i) {
-				fi_opx_ep_tx_connect(opx_av->ep_tx[i],count,opx_addr);
+				fi_opx_ep_tx_connect(opx_av->ep_tx[i],(opx_av->addr_count+count),opx_addr);
 			}
 		}
 		break;
@@ -407,16 +408,12 @@ int fi_opx_av_open(struct fid_domain *dom,
 	}
 	
 	if ((attr->type == FI_AV_TABLE) && (OPX_AV != FI_AV_MAP)) {
-
-		/* allocate the address table in-line with the av object */
-		ret = posix_memalign((void**)&opx_av, 32, sizeof(struct fi_opx_av) + (attr->count * sizeof(union fi_opx_addr)));
-		if (ret != 0) {
+		/* allocate the av object now, allocate the address table at av_insert */
+		opx_av = calloc(1, sizeof(*opx_av));
+		if (!opx_av) {
 			errno = FI_ENOMEM;
-			FI_DBG(fi_opx_global.prov, FI_LOG_AV, "FI_ENOMEM\n");
 			goto err;
 		}
-		opx_av->table_addr = NULL;
-		opx_av->table_count = attr->count;
 	} else if ((attr->type == FI_AV_MAP) && (OPX_AV != FI_AV_TABLE)) {
 
 		opx_av = calloc(1, sizeof(*opx_av));
@@ -450,7 +447,8 @@ int fi_opx_av_open(struct fid_domain *dom,
 	opx_av->rx_ctx_bits = attr->rx_ctx_bits;
 
 	opx_av->addr_count = 0;
-	opx_av->table_addr = NULL; /* part of av, not separately allocated*/
+	opx_av->table_addr = NULL; /* table is separately allocated*/
+	opx_av->table_count = 0;   /* count allocated */
 
 	*av = &opx_av->av_fid;
 

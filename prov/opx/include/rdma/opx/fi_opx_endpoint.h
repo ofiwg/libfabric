@@ -66,6 +66,18 @@ void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 
 /* #define IS_MATCH_DEBUG */
 
+/* Macro for declaring a compile/constant fi_opx_addr based on AV type.
+ * const FI_AV_MAP/FI_AV_TABLE compile optimized.
+ * const FI_AV_UNSPEC requires a conditional pulling it out of the endpoint   */
+
+#define FI_OPX_EP_AV_ADDR(const_av_type, ep, addr)                             \
+{                                                                              \
+        (const_av_type == FI_AV_TABLE) ? ep->tx->av_addr[addr].fi :            \
+            ( (const_av_type == FI_AV_MAP) ? addr :             	       \
+                ( (ep->av_type == FI_AV_TABLE) ?                	       \
+                    ep->tx->av_addr[addr].fi : addr) )          	       \
+}       								       \
+
 /* Macro indirection in order to support other macros as arguments
  * C requires another indirection for expanding macros since
  * operands of the token pasting operator are not expanded */
@@ -2328,14 +2340,26 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 	opx_context->buf = buf;
 
 	if (rx_caps & FI_DIRECTED_RECV) {
-		if (av_type == FI_AV_TABLE) {		/* constand compile-time expression */
+		if (av_type == FI_AV_TABLE) {		/* constant compile-time expression */
 			if (OFI_LIKELY(src_addr != FI_ADDR_UNSPEC)) {
 				opx_context->src_addr = opx_ep->rx->av_addr[src_addr].fi;
 			} else {
 				opx_context->src_addr = FI_ADDR_UNSPEC;
 			}
-		} else {
+		} else if (av_type == FI_AV_MAP) {
 			opx_context->src_addr = src_addr;
+		} else if (av_type == FI_AV_UNSPEC)  { /* use runtime endpoint value*/
+			if (opx_ep->av_type == FI_AV_TABLE) {
+				if (OFI_LIKELY(src_addr != FI_ADDR_UNSPEC)) {
+					opx_context->src_addr = opx_ep->rx->av_addr[src_addr].fi;
+				} else {
+					opx_context->src_addr = FI_ADDR_UNSPEC;
+				}
+			} else {
+				opx_context->src_addr = src_addr;
+			}
+		} else {
+			assert((av_type==FI_AV_TABLE)||(av_type==FI_AV_MAP)||(av_type==FI_AV_UNSPEC));
 		}
 	} else {
 		opx_context->src_addr = FI_ADDR_UNSPEC;
@@ -2429,8 +2453,20 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 				(OFI_LIKELY(msg_addr != FI_ADDR_UNSPEC)) ?
 					opx_ep->rx->av_addr[msg_addr].fi :
 					(fi_addr_t)-1;
-		} else {
+		} else  if (av_type == FI_AV_MAP) {
 			opx_context->src_addr = msg->addr;
+		} else if (av_type == FI_AV_UNSPEC)  { /* use runtime endpoint value*/
+			if (opx_ep->av_type == FI_AV_TABLE) {
+				const fi_addr_t msg_addr = msg->addr;
+				opx_context->src_addr =
+					(OFI_LIKELY(msg_addr != FI_ADDR_UNSPEC)) ?
+						opx_ep->rx->av_addr[msg_addr].fi :
+						(fi_addr_t)-1;
+			} else {
+				opx_context->src_addr = msg->addr;
+			}
+		} else {
+			assert((av_type==FI_AV_TABLE)||(av_type==FI_AV_MAP)||(av_type==FI_AV_UNSPEC));
 		}
 		opx_context->byte_counter = 0;
 		opx_context->multi_recv_next = (union fi_opx_context *)base;
@@ -2459,8 +2495,20 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 				(OFI_LIKELY(msg_addr != FI_ADDR_UNSPEC)) ?
 					opx_ep->rx->av_addr[msg_addr].fi :
 					(fi_addr_t)-1;
-		} else {
+		} else  if (av_type == FI_AV_MAP) {
 			opx_context->src_addr = msg->addr;
+		} else if (av_type == FI_AV_UNSPEC)  { /* use runtime endpoint value*/
+			if (opx_ep->av_type == FI_AV_TABLE) {
+				const fi_addr_t msg_addr = msg->addr;
+				opx_context->src_addr =
+					(OFI_LIKELY(msg_addr != FI_ADDR_UNSPEC)) ?
+						opx_ep->rx->av_addr[msg_addr].fi :
+						(fi_addr_t)-1;
+			} else {
+				opx_context->src_addr = msg->addr;
+			}
+		} else {
+			assert((av_type==FI_AV_TABLE)||(av_type==FI_AV_MAP)||(av_type==FI_AV_UNSPEC));
 		}
 		opx_context->tag = 0;
 		opx_context->ignore = (uint64_t)-1;
@@ -2481,14 +2529,26 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 		opx_context->len = msg->msg_iov[0].iov_len;
 		opx_context->buf = msg->msg_iov[0].iov_base;
 
-		if (av_type == FI_AV_TABLE) {	/* constand compile-time expression */
+		if (av_type == FI_AV_TABLE) {	/* constant compile-time expression */
 			const fi_addr_t msg_addr = msg->addr;
 			opx_context->src_addr =
 				(OFI_LIKELY(msg_addr != FI_ADDR_UNSPEC)) ?
 					opx_ep->rx->av_addr[msg_addr].fi :
 					(fi_addr_t)-1;
-		} else {
+		} else  if (av_type == FI_AV_MAP) {
 			opx_context->src_addr = msg->addr;
+		} else if (av_type == FI_AV_UNSPEC)  { /* use runtime endpoint value*/
+			if (opx_ep->av_type == FI_AV_TABLE) {
+				const fi_addr_t msg_addr = msg->addr;
+				opx_context->src_addr =
+					(OFI_LIKELY(msg_addr != FI_ADDR_UNSPEC)) ?
+						opx_ep->rx->av_addr[msg_addr].fi :
+						(fi_addr_t)-1;
+			} else {
+				opx_context->src_addr = msg->addr;
+			}
+		} else {
+			assert((av_type==FI_AV_TABLE)||(av_type==FI_AV_MAP)||(av_type==FI_AV_UNSPEC));
 		}
 		opx_context->tag = 0;
 		opx_context->ignore = (uint64_t)-1;
@@ -2513,8 +2573,20 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 				(OFI_LIKELY(msg_addr != FI_ADDR_UNSPEC)) ?
 					opx_ep->rx->av_addr[msg_addr].fi :
 					(fi_addr_t)-1;
-		} else {
+		} else  if (av_type == FI_AV_MAP) {
 			ext->opx_context.src_addr = msg->addr;
+		} else if (av_type == FI_AV_UNSPEC) { /* use runtime endpoint value*/
+			if (opx_ep->av_type == FI_AV_TABLE) {
+				const fi_addr_t msg_addr = msg->addr;
+				ext->opx_context.src_addr =
+					(OFI_LIKELY(msg_addr != FI_ADDR_UNSPEC)) ?
+						opx_ep->rx->av_addr[msg_addr].fi :
+						(fi_addr_t)-1;
+			} else {
+				ext->opx_context.src_addr = msg->addr;
+			}
+		} else {
+			assert((av_type==FI_AV_TABLE)||(av_type==FI_AV_MAP)||(av_type==FI_AV_UNSPEC));
 		}
 		ext->opx_context.tag = 0;
 		ext->opx_context.ignore = (uint64_t)-1;
@@ -2922,12 +2994,8 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 #endif
 
 	assert(dest_addr != FI_ADDR_UNSPEC);
-
-	const union fi_opx_addr addr = {
-		.fi = (av_type == FI_AV_TABLE) ?	/* constant compile-time expression */
-			opx_ep->tx->av_addr[dest_addr].fi :
-			dest_addr
-	};
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
+	const union fi_opx_addr addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,dest_addr);
 
 	ssize_t rc = 0;
 
@@ -2985,8 +3053,8 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 	if (is_contiguous &&
 	    total_len <= FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES &&
 	    total_len > FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE && 
-		!fi_opx_hfi1_tx_is_intranode(ep, dest_addr, caps)) {
-		rc = fi_opx_hfi1_tx_send_try_mp_egr(ep, buf, len, desc, dest_addr, tag,
+		!fi_opx_hfi1_tx_is_intranode(ep, addr.fi, caps)) {
+		rc = fi_opx_hfi1_tx_send_try_mp_egr(ep, buf, len, desc, addr.fi, tag,
 						context, data, lock_required, override_flags,
 						tx_op_flags, caps, reliability, do_cq_completion);
 		if (OFI_LIKELY(rc == FI_SUCCESS)) {
@@ -3094,12 +3162,8 @@ ssize_t fi_opx_ep_tx_inject_internal (struct fid_ep *ep,
 	if (ret) return ret;
 #endif
 	assert(dest_addr != FI_ADDR_UNSPEC);
-
-	const union fi_opx_addr addr = {
-		.fi = (av_type == FI_AV_TABLE) ?	/* constant compile-time expression */
-			opx_ep->tx->av_addr[dest_addr].fi :
-			dest_addr
-	};
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
+	const union fi_opx_addr addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,dest_addr);
 
 	const ssize_t rc = FI_OPX_FABRIC_TX_INJECT(ep, buf, len, addr.fi, tag, data,
 			lock_required, addr.hfi1_rx, caps, reliability);

@@ -1686,6 +1686,8 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 	fi_opx_ref_inc(&opx_domain->ref_cnt, "domain");
 
 	opx_ep->common_info = fi_dupinfo(info);
+	opx_ep->av_type = info->domain_attr->av_type; /* Use input av_type */
+
 	*ep = &opx_ep->ep_fid;
 
 #ifdef OPX_DEBUG_COUNTERS
@@ -1776,6 +1778,13 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 			const fi_addr_t original_src_addr = context->src_addr;
 			if (OFI_LIKELY(original_src_addr != FI_ADDR_UNSPEC)) {
 				context->src_addr = opx_ep->rx->av_addr[original_src_addr].fi;
+			}
+		} else if (av_type == FI_AV_UNSPEC) {/* use runtime endpoint value*/
+			if (opx_ep->av_type == FI_AV_TABLE) {
+				const fi_addr_t original_src_addr = context->src_addr;
+				if (OFI_LIKELY(original_src_addr != FI_ADDR_UNSPEC)) {
+					context->src_addr = opx_ep->rx->av_addr[original_src_addr].fi;
+				}
 			}
 		}
 
@@ -1889,6 +1898,12 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		if (av_type == FI_AV_TABLE) {	/* constant compile-time expression */
 			if (OFI_LIKELY(context->src_addr != FI_ADDR_UNSPEC)) {
 				context->src_addr = opx_ep->rx->av_addr[context->src_addr].fi;
+			}
+		} else if (av_type == FI_AV_UNSPEC) { /* use runtime endpoint value*/
+			if (opx_ep->av_type == FI_AV_TABLE) {
+				if (OFI_LIKELY(context->src_addr != FI_ADDR_UNSPEC)) {
+					context->src_addr = opx_ep->rx->av_addr[context->src_addr].fi;
+				}
 			}
 		}
 
