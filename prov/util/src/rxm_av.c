@@ -32,7 +32,7 @@
 
 #include <ofi_coll.h>
 
-#include "rxm.h"
+#include "ofi_util.h"
 #include "uthash.h"
 
 

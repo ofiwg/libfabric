@@ -378,7 +378,7 @@
     <ClCompile Include="prov\rxm\src\rxm_cq.c">
       <Filter>Source Files\prov\rxm\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\rxm\src\rxm_av.c">
+    <ClCompile Include="prov\util\src\rxm_av.c">
       <Filter>Source Files\prov\rxm\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\rxm\src\rxm_domain.c">

@@ -62,6 +62,7 @@ common_srcs =				\
 	prov/util/src/util_atomic.c	\
 	prov/util/src/util_attr.c	\
 	prov/util/src/util_av.c		\
+	prov/util/src/rxm_av.c		\
 	prov/util/src/util_cq.c		\
 	prov/util/src/util_cntr.c	\
 	prov/util/src/util_domain.c	\
