@@ -248,11 +248,10 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 		fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 		abort();
 	}
-	const union fi_opx_addr opx_dst_addr = { .fi = (av_type == FI_AV_TABLE) ?
-							       opx_ep->tx->av_addr[dst_addr].fi :
-							       dst_addr };
 
 	assert(dst_addr != FI_ADDR_UNSPEC);
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
+	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,dst_addr);
 
 	if (OFI_UNLIKELY(!opx_reliability_ready(ep,
 			&opx_ep->reliability->state,
@@ -315,11 +314,11 @@ ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 		abort();
 	}
-	const union fi_opx_addr opx_dst_addr = { .fi = (av_type == FI_AV_TABLE) ?
-							       opx_ep->tx->av_addr[dst_addr].fi :
-							       dst_addr };
 
 	assert(dst_addr != FI_ADDR_UNSPEC);
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
+	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,dst_addr);
+
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->byte_counter = len;
 	cc->cntr = opx_ep->write_cntr;
@@ -375,9 +374,8 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 	}
 
 	assert(dst_addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_dst_addr = { .fi = (av_type == FI_AV_TABLE) ?
-							       opx_ep->tx->av_addr[dst_addr].fi :
-							       dst_addr };
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
+	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,dst_addr);
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	size_t index;
@@ -443,10 +441,8 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 	}
 
 	assert(msg->addr != FI_ADDR_UNSPEC);
-	/* constant compile-time expression */
-	const union fi_opx_addr opx_dst_addr = { .fi = (av_type == FI_AV_TABLE) ?
-							       opx_ep->tx->av_addr[msg->addr].fi :
-							       msg->addr };
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
+	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,msg->addr);
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	size_t index;
@@ -541,10 +537,10 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	iov.iov_base = buf;
 	iov.iov_len = len;
 
+
 	assert(src_addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_addr = { .fi = (av_type == FI_AV_TABLE) ?
-							   opx_ep->tx->av_addr[src_addr].fi :
-							   src_addr };
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
+	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,src_addr);
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->byte_counter = len;
@@ -600,9 +596,8 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	}
 
 	assert(src_addr != FI_ADDR_UNSPEC);
-	const union fi_opx_addr opx_addr = { .fi = (av_type == FI_AV_TABLE) ?
-							   opx_ep->tx->av_addr[src_addr].fi :
-							   src_addr };
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
+	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,src_addr);
 
 	union fi_opx_context *opx_context = (union fi_opx_context *)context;
 	const uint64_t tx_op_flags = opx_ep->tx->op_flags;
@@ -684,9 +679,10 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	}
 
 	union fi_opx_context *opx_context = (union fi_opx_context *)msg->context;
-	const union fi_opx_addr opx_src_addr = { .fi = (av_type == FI_AV_TABLE) ?
-							       opx_ep->tx->av_addr[msg->addr].fi :
-							       msg->addr };
+
+	assert(msg->addr != FI_ADDR_UNSPEC);
+	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
+	const union fi_opx_addr opx_src_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,msg->addr);
 
 	/* for fi_read*(), the 'src' is the remote data */
 	size_t src_iov_index = 0;
