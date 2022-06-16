@@ -534,6 +534,9 @@
     <ClCompile Include="prov\tcp2\src\tcp2_ep.c">
       <Filter>Source Files\prov\tcp2\src</Filter>
     </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_pep.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
     <ClCompile Include="prov\tcp2\src\tcp2_fabric.c">
       <Filter>Source Files\prov\tcp2\src</Filter>
     </ClCompile>
