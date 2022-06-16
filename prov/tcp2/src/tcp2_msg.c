@@ -61,20 +61,6 @@ tcp2_alloc_send(struct tcp2_ep *ep)
 	return send_entry;
 }
 
-/* When dynamic receive buffers are enabled, receive buffer matching
- * is handled by the upper layer (rxm).  The tcp provider is only
- * carrying the tag to reduce header overhead.  The transport operation
- * is still op_msg at the tcp provider.  This is needed for backwards
- * compatibility.
- *
- * If dynamic receive buffers are disabled, then tagged messages are
- * being handled entirely by the tcp provider.  We use the op_tagged
- * protocol for this, which allows distinguishing between the two
- * cases at the receiver.
- *
- * We assume the peer is configured similar to the local side, which
- * is all we can check.
- */
 static inline struct tcp2_xfer_entry *
 tcp2_alloc_tsend(struct tcp2_ep *ep)
 {
@@ -82,13 +68,8 @@ tcp2_alloc_tsend(struct tcp2_ep *ep)
 
 	send_entry = tcp2_alloc_tx(ep);
 	if (send_entry) {
-		if (tcp2_dynamic_rbuf(ep)) {
-			send_entry->hdr.base_hdr.op = ofi_op_msg;
-			send_entry->hdr.base_hdr.flags = TCP2_TAGGED;
-		} else {
-			assert(ep->srx_ctx);
-			send_entry->hdr.base_hdr.op = ofi_op_tagged;
-		}
+		assert(ep->srx_ctx);
+		send_entry->hdr.base_hdr.op = ofi_op_tagged;
 	}
 
 	return send_entry;
@@ -420,15 +401,6 @@ struct fi_ops_msg tcp2_msg_ops = {
 	.injectdata = tcp2_injectdata,
 };
 
-
-/* There's no application driven need for tagged message operations over
- * connected endpoints.  The tcp provider exposes the ability to send
- * tagged messages using the tcp header, with the expectation that the
- * peer side is using dynamic receive buffers to match the tagged messages
- * with application buffers.  This provides an optimized path for rxm
- * over tcp, that allows rxm to drop its header in certain cases an only
- * use a minimal tcp header.
- */
 static ssize_t
 tcp2_tsendmsg(struct fid_ep *fid_ep, const struct fi_msg_tagged *msg,
 	      uint64_t flags)
