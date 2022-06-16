@@ -765,6 +765,54 @@ struct util_av_attr {
 	int	flags;
 };
 
+/* For AVs supporting RDM over MSG EPs. */
+
+/* There will be at most 1 peer address per AV entry.  There
+ * may be addresses that have not been inserted into the local
+ * AV, and have no matching entry.  This can occur if we are
+ * only receiving data from the remote rxm ep.
+ */
+struct util_peer_addr {
+	struct rxm_av *av;
+	fi_addr_t fi_addr;
+	struct ofi_rbnode *node;
+	int index;
+	int refcnt;
+	union ofi_sock_ip addr;
+};
+
+struct util_peer_addr *util_get_peer(struct rxm_av *av, const void *addr);
+void util_put_peer(struct util_peer_addr *peer);
+
+/* All peer addresses, whether they've been inserted into the AV
+ * or an endpoint has an active connection to it, are stored in
+ * the addr_map.  Peers are allocated from a buffer pool and
+ * assigned a local index using the pool.  All rxm endpoints
+ * maintain a connection array which is aligned with the peer_pool.
+ *
+ * We technically only need to store the index of each peer in
+ * the AV itself.  The 'util_av' could basically be replaced by
+ * an ofi_index_map.  However, too much of the existing code
+ * relies on the util_av existing and storing the AV addresses.
+ *
+ * A future cleanup would be to remove using the util_av and have the
+ * rxm_av implementation be independent.
+ */
+ struct rxm_av {
+	struct util_av util_av;
+	struct ofi_rbmap addr_map;
+	struct ofi_bufpool *peer_pool;
+	struct ofi_bufpool *conn_pool;
+};
+
+int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		     struct fid_av **fid_av, void *context, size_t conn_size);
+size_t rxm_av_max_peers(struct rxm_av *av);
+void rxm_ref_peer(struct util_peer_addr *peer);
+void *rxm_av_alloc_conn(struct rxm_av *av);
+void rxm_av_free_conn(struct rxm_av *av, void *conn_ctx);
+
+
 typedef int (*ofi_av_apply_func)(struct util_av *av, void *addr,
 				 fi_addr_t fi_addr, void *arg);
 
