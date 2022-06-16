@@ -50,29 +50,6 @@ static struct fi_ops_domain tcp2_domain_ops = {
 	.query_collective = fi_no_query_collective,
 };
 
-static int tcp2_set_ops(struct fid *fid, const char *name,
-			uint64_t flags, void *ops, void *context)
-{
-	struct tcp2_domain *domain;
-
-	domain = container_of(fid, struct tcp2_domain,
-			      util_domain.domain_fid.fid);
-	if (flags)
-		return -FI_EBADFLAGS;
-
-	if (!strcasecmp(name, OFI_OPS_DYNAMIC_RBUF)) {
-		domain->dynamic_rbuf = ops;
-		if (domain->dynamic_rbuf->size != sizeof(*domain->dynamic_rbuf)) {
-			domain->dynamic_rbuf = NULL;
-			return -FI_ENOSYS;
-		}
-
-		return 0;
-	}
-
-	return -FI_ENOSYS;
-}
-
 static int tcp2_domain_close(fid_t fid)
 {
 	struct tcp2_domain *domain;
@@ -96,8 +73,8 @@ static struct fi_ops tcp2_domain_fi_ops = {
 	.bind = ofi_domain_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
-	.tostr = NULL,
-	.ops_set = tcp2_set_ops,
+	.tostr = fi_no_tostr,
+	.ops_set = fi_no_ops_set,
 };
 
 static struct fi_ops_mr tcp2_domain_fi_ops_mr = {

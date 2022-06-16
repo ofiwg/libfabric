@@ -202,68 +202,18 @@ static int tcp2_queue_ack(struct tcp2_xfer_entry *rx_entry)
 	return FI_SUCCESS;
 }
 
-static int tcp2_update_rx_iov(struct tcp2_xfer_entry *rx_entry)
-{
-	struct ofi_cq_rbuf_entry cq_entry;
-	int ret;
-
-	assert(tcp2_dynamic_rbuf(rx_entry->ep));
-
-	cq_entry.ep_context = rx_entry->ep->util_ep.ep_fid.fid.context;
-	cq_entry.op_context = rx_entry->context;
-	cq_entry.flags = 0;
-	cq_entry.len = rx_entry->hdr.base_hdr.size -
-		       rx_entry->hdr.base_hdr.hdr_size;
-	cq_entry.buf = rx_entry->mrecv_msg_start;
-	tcp2_get_cq_info(rx_entry, &cq_entry.flags, &cq_entry.data,
-			 &cq_entry.tag);
-
-	rx_entry->iov_cnt = TCP2_IOV_LIMIT;
-	ret = (int) tcp2_dynamic_rbuf(rx_entry->ep)->
-		    get_rbuf(&cq_entry, &rx_entry->iov[0], &rx_entry->iov_cnt);
-	if (ret) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_DATA,
-			"get_rbuf callback failed %s\n",
-			fi_strerror(-ret));
-		return ret;
-	}
-
-	assert(rx_entry->iov_cnt <= TCP2_IOV_LIMIT);
-	ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt,
-			       rx_entry->ep->cur_rx.data_left);
-	if (ret) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_DATA,
-			"dynamically provided rbuf is too small\n");
-		return ret;
-	}
-
-	return 0;
-}
-
 static ssize_t tcp2_process_recv(struct tcp2_ep *ep)
 {
 	struct tcp2_xfer_entry *rx_entry;
 	ssize_t ret;
 
 	rx_entry = ep->cur_rx.entry;
-retry:
 	ret = tcp2_recv_msg_data(ep);
 	if (ret) {
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 			return ret;
 
-		if (ret != -FI_ETRUNC)
-			goto err;
-		assert(rx_entry->ctrl_flags & TCP2_NEED_DYN_RBUF);
-	}
-
-	if (rx_entry->ctrl_flags & TCP2_NEED_DYN_RBUF) {
-		ret = tcp2_update_rx_iov(rx_entry);
-		if (ret)
-			goto err;
-
-		rx_entry->ctrl_flags &= ~TCP2_NEED_DYN_RBUF;
-		goto retry;
+		goto err;
 	}
 
 	if (rx_entry->hdr.base_hdr.flags & TCP2_DELIVERY_COMPLETE) {
@@ -447,23 +397,10 @@ static ssize_t tcp2_op_msg(struct tcp2_ep *ep)
 	rx_entry->ep = ep;
 	rx_entry->mrecv_msg_start = rx_entry->iov[0].iov_base;
 
-	if (tcp2_dynamic_rbuf(ep)) {
-		rx_entry->ctrl_flags = TCP2_NEED_DYN_RBUF;
-
-		if (msg->hdr.base_hdr.flags & TCP2_TAGGED) {
-			/* Raw message, no rxm header */
-			rx_entry->iov_cnt = 0;
-		} else {
-			/* Receiving only rxm header */
-			assert(msg_len >= ofi_total_iov_len(rx_entry->iov,
-							    rx_entry->iov_cnt));
-		}
-	} else {
-		ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt,
-				       msg_len);
-		if (ret)
-			goto truncate_err;
-	}
+	ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt,
+				msg_len);
+	if (ret)
+		goto truncate_err;
 
 	ep->cur_rx.entry = rx_entry;
 	ep->cur_rx.handler = tcp2_process_recv;
@@ -486,7 +423,7 @@ static ssize_t tcp2_op_tagged(struct tcp2_ep *ep)
 	uint64_t tag;
 	ssize_t ret;
 
-	assert(ep->srx_ctx && !tcp2_dynamic_rbuf(ep));
+	assert(ep->srx_ctx);
 	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.hdr_size);
 
 	tag = (msg->hdr.base_hdr.flags & TCP2_REMOTE_CQ_DATA) ?

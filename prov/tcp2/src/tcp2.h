@@ -369,17 +369,8 @@ struct tcp2_xfer_entry {
 
 struct tcp2_domain {
 	struct util_domain		util_domain;
-	struct ofi_ops_dynamic_rbuf	*dynamic_rbuf;
 	struct tcp2_progress		progress;
 };
-
-static inline struct ofi_ops_dynamic_rbuf *tcp2_dynamic_rbuf(struct tcp2_ep *ep)
-{
-	struct tcp2_domain *domain;
-	domain = container_of(ep->util_ep.domain, struct tcp2_domain,
-			      util_domain);
-	return domain->dynamic_rbuf;
-}
 
 static inline struct tcp2_progress *tcp2_ep2_progress(struct tcp2_ep *ep)
 {
