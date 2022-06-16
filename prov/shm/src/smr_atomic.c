@@ -195,7 +195,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	uint64_t device;
 	uint16_t smr_flags = 0;
 	int64_t id, peer_id;
-	int err = 0, proto;
+	int proto;
 	ssize_t ret = 0;
 	size_t total_len;
 
@@ -269,7 +269,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	}
 
 	if (!(smr_flags & SMR_RMA_REQ) && !(op_flags & FI_DELIVERY_COMPLETE)) {
-		ret = smr_complete_tx(ep, context, op, op_flags, err);
+		ret = smr_complete_tx(ep, context, op, op_flags);
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"unable to process tx completion\n");

@@ -239,9 +239,14 @@ static void smr_progress_resp(struct smr_ep *ep)
 		if (smr_progress_resp_entry(ep, resp, pending, &resp->status))
 			break;
 
-		ret = smr_complete_tx(ep, pending->context,
-				  pending->cmd.msg.hdr.op, pending->op_flags,
-				  -(resp->status));
+		if (-resp->status) {
+			ret = smr_write_err_comp(ep->util_ep.rx_cq, pending->context,
+					 pending->op_flags, pending->cmd.msg.hdr.tag,
+					 -(resp->status));
+		} else {
+			ret = smr_complete_tx(ep, pending->context,
+					  pending->cmd.msg.hdr.op, pending->op_flags);
+		}
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"unable to process tx completion\n");
@@ -735,9 +740,18 @@ static int smr_progress_msg_common(struct smr_ep *ep, struct smr_cmd *cmd,
 	}
 
 	if (!sar) {
-		ret = smr_complete_rx(ep, entry->context, cmd->msg.hdr.op,
-				comp_flags, total_len, comp_buf, cmd->msg.hdr.id,
-				cmd->msg.hdr.tag, cmd->msg.hdr.data, entry->err);
+		if (entry->err) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"error processing op\n");
+			ret = smr_write_err_comp(ep->util_ep.rx_cq, entry->context,
+						 comp_flags, entry->tag,
+						 entry->err);
+		} else {
+			ret = smr_complete_rx(ep, entry->context, cmd->msg.hdr.op,
+					      comp_flags, total_len, comp_buf,
+					      cmd->msg.hdr.id, cmd->msg.hdr.tag,
+					      cmd->msg.hdr.data);
+		}
 		if (ret) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"unable to process rx completion\n");
@@ -928,11 +942,19 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 		err = -FI_EINVAL;
 	}
 
-	ret = smr_complete_rx(ep, (void *) cmd->msg.hdr.msg_id, cmd->msg.hdr.op,
-			      smr_rx_cq_flags(cmd->msg.hdr.op, 0,
-			      cmd->msg.hdr.op_flags), total_len,
+	if (err) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"error processing rma op\n");
+		ret = smr_write_err_comp(ep->util_ep.rx_cq, NULL,
+					 smr_rx_cq_flags(cmd->msg.hdr.op, 0,
+					 cmd->msg.hdr.op_flags), 0, err);
+	} else {
+		ret = smr_complete_rx(ep, (void *) cmd->msg.hdr.msg_id,
+			      cmd->msg.hdr.op, smr_rx_cq_flags(cmd->msg.hdr.op,
+			      0, cmd->msg.hdr.op_flags), total_len,
 			      iov_count ? iov[0].iov_base : NULL,
-			      cmd->msg.hdr.id, 0, cmd->msg.hdr.data, err);
+			      cmd->msg.hdr.id, 0, cmd->msg.hdr.data);
+	}
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 		"unable to process rx completion\n");
@@ -1000,17 +1022,24 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 		ep->region->cmd_cnt++;
 	}
 
-	if (err)
+	if (err) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"error processing atomic op\n");
-
-	ret = smr_complete_rx(ep, NULL, cmd->msg.hdr.op,
-			      smr_rx_cq_flags(cmd->msg.hdr.op, 0,
-			      cmd->msg.hdr.op_flags), total_len,
-			      ioc_count ? ioc[0].addr : NULL,
-			      cmd->msg.hdr.id, 0, cmd->msg.hdr.data, err);
-	if (ret)
+		ret = smr_write_err_comp(ep->util_ep.rx_cq, NULL,
+					 smr_rx_cq_flags(cmd->msg.hdr.op, 0,
+					 cmd->msg.hdr.op_flags), 0, err);
+	} else {
+		ret = smr_complete_rx(ep, NULL, cmd->msg.hdr.op,
+				      smr_rx_cq_flags(cmd->msg.hdr.op, 0,
+				      cmd->msg.hdr.op_flags), total_len,
+				      ioc_count ? ioc[0].addr : NULL,
+				      cmd->msg.hdr.id, 0, cmd->msg.hdr.data);
+	}
+	if (ret) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"unable to process rx completion\n");
 		return ret;
+	}
 
 	return err;
 }
@@ -1104,7 +1133,7 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 					sar_entry->rx_entry.iov[0].iov_base,
 					sar_entry->cmd.msg.hdr.id,
 					sar_entry->cmd.msg.hdr.tag,
-					sar_entry->cmd.msg.hdr.data, 0);
+					sar_entry->cmd.msg.hdr.data);
 			if (ret) {
 				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 					"unable to process rx completion\n");

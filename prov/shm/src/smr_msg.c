@@ -198,7 +198,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	if (proto != smr_src_inline && proto != smr_src_inject)
 		goto unlock_cq;
 
-	ret = smr_complete_tx(ep, context, op, op_flags, 0);
+	ret = smr_complete_tx(ep, context, op, op_flags);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process tx completion\n");

@@ -145,7 +145,20 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 		err = smr_rma_fast(peer_smr, iov, iov_count, rma_iov,
 				   rma_count, desc, peer_id,  context, op,
 				   op_flags);
-		goto signal_comp;
+		if (err) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"error doing fast RMA\n");
+			ret = smr_write_err_comp(ep->util_ep.rx_cq, NULL,
+						op_flags, 0, err);
+		} else {
+			ret = smr_complete_tx(ep, context, op, op_flags);
+		}
+
+		if (ret) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"unable to process tx completion\n");
+		}
+		goto signal;
 	}
 
 	iface = smr_get_mr_hmem_iface(ep->util_ep.domain, desc, &device);
@@ -169,18 +182,17 @@ ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 
 	smr_add_rma_cmd(peer_smr, rma_iov, rma_count);
 
-signal_comp:
-	smr_signal(peer_smr);
-
 	if (proto != smr_src_inline && proto != smr_src_inject)
-		goto unlock_cq;
+		goto signal;
 
-	ret = smr_complete_tx(ep, context, op, op_flags, err);
+	ret = smr_complete_tx(ep, context, op, op_flags);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"unable to process tx completion\n");
 	}
 
+signal:
+	smr_signal(peer_smr);
 unlock_cq:
 	ofi_genlock_unlock(&ep->util_ep.tx_cq->cq_lock);
 unlock_region:
