@@ -160,10 +160,9 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 					 context);
 	if (entry) {
 		recv_entry = container_of(entry, struct smr_rx_entry, entry);
-		ret = smr_complete_rx(ep, (void *) recv_entry->context, op,
-				      smr_rx_cq_flags(op, recv_entry->flags, 0),
-				      0, NULL, recv_entry->peer_id,
-				      recv_entry->tag, 0, FI_ECANCELED);
+		ret = smr_write_err_comp(ep->util_ep.rx_cq, recv_entry->context,
+					 smr_rx_cq_flags(op, recv_entry->flags, 0),
+					 recv_entry->tag, FI_ECANCELED);
 		ofi_freestack_push(ep->recv_fs, recv_entry);
 		ret = ret ? ret : 1;
 	}
