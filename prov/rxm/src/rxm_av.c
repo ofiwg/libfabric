@@ -369,7 +369,7 @@ static struct fi_ops_av rxm_av_ops = {
 int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		struct fid_av **fid_av, void *context)
 {
-	struct rxm_domain *domain;
+	struct util_domain *domain;
 	struct util_av_attr util_attr;
 	struct rxm_av *av;
 	int ret;
@@ -390,18 +390,15 @@ int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		goto destroy1;
 
 	ofi_rbmap_init(&av->addr_map, rxm_addr_compare);
-	domain = container_of(domain_fid, struct rxm_domain,
-			      util_domain.domain_fid);
+	domain = container_of(domain_fid, struct util_domain, domain_fid);
 
 	util_attr.context_len = sizeof(struct rxm_peer_addr *);
 	util_attr.flags = 0;
-	util_attr.addrlen = ofi_sizeof_addr_format(domain->util_domain.
-						   addr_format);
+	util_attr.addrlen = ofi_sizeof_addr_format(domain->addr_format);
 	if (attr->type == FI_AV_UNSPEC)
 		attr->type = FI_AV_TABLE;
 
-	ret = ofi_av_init(&domain->util_domain, attr, &util_attr,
-			  &av->util_av, context);
+	ret = ofi_av_init(domain, attr, &util_attr, &av->util_av, context);
 	if (ret)
 		goto destroy2;
 
