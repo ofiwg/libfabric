@@ -732,6 +732,8 @@
     <ClCompile Include="prov\tcp2\src\tcp2_msg.c" />
     <ClCompile Include="prov\tcp2\src\tcp2_pep.c" />
     <ClCompile Include="prov\tcp2\src\tcp2_progress.c" />
+    <ClCompile Include="prov\tcp2\src\tcp2_rdm.c" />
+    <ClCompile Include="prov\tcp2\src\tcp2_rdm_cm.c" />
     <ClCompile Include="prov\tcp2\src\tcp2_rma.c" />
     <ClCompile Include="prov\tcp2\src\tcp2_srx.c" />
     <ClCompile Include="prov\udp\src\udpx_attr.c" />

@@ -867,6 +867,7 @@ void tcp2_run_progress(struct tcp2_progress *progress, bool internal)
 	}
 unlock:
 	ofi_mutex_unlock(&progress->lock);
+	tcp2_progress_rdm(progress);
 }
 
 void tcp2_progress_all(struct tcp2_fabric *fabric)
@@ -1052,6 +1053,8 @@ int tcp2_init_progress(struct tcp2_progress *progress, bool use_epoll)
 	progress->fid.fclass = TCP2_CLASS_PROGRESS;
 	progress->auto_progress = false;
 	dlist_init(&progress->active_wait_list);
+	dlist_init(&progress->rdm_list);
+	progress->rdm_event_cnt = 0;
 
 	ret = fd_signal_init(&progress->signal);
 	if (ret)
@@ -1059,24 +1062,30 @@ int tcp2_init_progress(struct tcp2_progress *progress, bool use_epoll)
 
 	ret = ofi_mutex_init(&progress->lock);
 	if (ret)
-		goto free_sig;
+		goto err1;
+
+	ret = ofi_mutex_init(&progress->list_lock);
+	if (ret)
+		goto err2;
 
 	ret = tcp2_poll_create(progress, use_epoll);
 	if (ret)
-		goto destroy;
+		goto err3;
 
 	ret = progress->poll_add(progress, progress->signal.fd[FI_READ_FD],
 				 POLLIN, &progress->fid);
 	if (ret) {
 		progress->poll_close(progress);
-		goto destroy;
+		goto err3;
 	}
 
 	return 0;
 
-destroy:
+err3:
+	ofi_mutex_destroy(&progress->list_lock);
+err2:
 	ofi_mutex_destroy(&progress->lock);
-free_sig:
+err1:
 	fd_signal_free(&progress->signal);
 	return ret;
 }
@@ -1084,8 +1093,10 @@ free_sig:
 void tcp2_close_progress(struct tcp2_progress *progress)
 {
 	assert(dlist_empty(&progress->active_wait_list));
+	assert(dlist_empty(&progress->rdm_list));
 	tcp2_stop_progress(progress);
 	progress->poll_close(progress);
 	ofi_mutex_destroy(&progress->lock);
+	ofi_mutex_destroy(&progress->list_lock);
 	fd_signal_free(&progress->signal);
 }
