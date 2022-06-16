@@ -516,6 +516,9 @@
     <ClCompile Include="prov\tcp2\src\tcp2_cm.c">
       <Filter>Source Files\prov\tcp2\src</Filter>
     </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_rdm_cm.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
     <ClCompile Include="prov\tcp2\src\tcp2_srx.c">
       <Filter>Source Files\prov\tcp2\src</Filter>
     </ClCompile>
@@ -532,6 +535,9 @@
       <Filter>Source Files\prov\tcp2\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\tcp2\src\tcp2_ep.c">
+      <Filter>Source Files\prov\tcp2\src</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\tcp2\src\tcp2_rdm.c">
       <Filter>Source Files\prov\tcp2\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\tcp2\src\tcp2_pep.c">

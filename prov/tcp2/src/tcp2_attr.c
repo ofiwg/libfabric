@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017-2022 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -116,6 +116,18 @@ static struct fi_ep_attr tcp2_ep_srx_attr = {
 	.mem_tag_format = FI_TAG_GENERIC,
 };
 
+static struct fi_ep_attr tcp2_rdm_ep_attr = {
+	.type = FI_EP_RDM,
+	.protocol = FI_PROTO_TCPX,
+	.protocol_version = TCP2_RDM_VERSION,
+	.max_msg_size = SIZE_MAX,
+	.tx_ctx_cnt = 1,
+	.rx_ctx_cnt = 1,
+	.max_order_raw_size = SIZE_MAX,
+	.max_order_waw_size = SIZE_MAX,
+	.mem_tag_format = FI_TAG_GENERIC,
+};
+
 static struct fi_domain_attr tcp2_domain_attr = {
 	.name = "tcp2",
 	.caps = TCP2_DOMAIN_CAPS,
@@ -137,12 +149,44 @@ static struct fi_domain_attr tcp2_domain_attr = {
 	.mr_iov_limit = 1,
 };
 
+static struct fi_domain_attr tcp2_rdm_domain_attr = {
+	.name = "tcp2",
+	.caps = TCP2_DOMAIN_CAPS,
+	.threading = FI_THREAD_SAFE,
+	.control_progress = FI_PROGRESS_AUTO,
+	.data_progress = FI_PROGRESS_AUTO,
+	.resource_mgmt = FI_RM_ENABLED,
+	.mr_mode = FI_MR_SCALABLE | FI_MR_BASIC,
+	.mr_key_size = sizeof(uint64_t),
+	.av_type = FI_AV_UNSPEC,
+	.cq_data_size = sizeof(uint64_t),
+	.cq_cnt = 256,
+	.ep_cnt = 128,
+	.tx_ctx_cnt = 128,
+	.rx_ctx_cnt = 128,
+	.max_ep_srx_ctx = 0,
+	.max_ep_tx_ctx = 1,
+	.max_ep_rx_ctx = 1,
+	.mr_iov_limit = 1,
+};
+
 static struct fi_fabric_attr tcp2_fabric_attr = {
 	.name = "TCP-IP",
 	.prov_version = OFI_VERSION_DEF_PROV,
 };
 
+struct fi_info tcp2_rdm_info = {
+	.caps = TCP2_DOMAIN_CAPS | TCP2_EP_SRX_CAPS | TCP2_TX_CAPS | TCP2_RX_CAPS,
+	.addr_format = FI_SOCKADDR,
+	.tx_attr = &tcp2_tx_srx_attr,
+	.rx_attr = &tcp2_rx_srx_attr,
+	.ep_attr = &tcp2_rdm_ep_attr,
+	.domain_attr = &tcp2_rdm_domain_attr,
+	.fabric_attr = &tcp2_fabric_attr
+};
+
 struct fi_info tcp2_srx_info = {
+	.next = NULL, /* &tcp2_rdm_info, */
 	.caps = TCP2_DOMAIN_CAPS | TCP2_EP_SRX_CAPS | TCP2_TX_CAPS | TCP2_RX_CAPS,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &tcp2_tx_srx_attr,

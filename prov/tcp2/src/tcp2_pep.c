@@ -221,7 +221,7 @@ static int tcp2_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 	return (addrlen_in < *addrlen) ? -FI_ETOOSMALL: FI_SUCCESS;
 }
 
-static int tcp2_listen(struct tcp2_pep *pep, struct tcp2_progress *progress)
+int tcp2_listen(struct tcp2_pep *pep, struct tcp2_progress *progress)
 {
 	int ret;
 

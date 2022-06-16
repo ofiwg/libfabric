@@ -66,6 +66,7 @@
 #define _TCP2_H_
 
 
+#define TCP2_RDM_VERSION	0
 #define TCP2_MAX_INJECT		128
 #define TCP2_MAX_EVENTS		1024
 #define TCP2_MIN_MULTI_RECV	16384
@@ -87,6 +88,15 @@ struct tcp2_xfer_entry;
 struct tcp2_ep;
 struct tcp2_progress;
 
+
+/* Lock ordering:
+ * progress->list_lock - protects against rdm destruction
+ * rdm->lock - protects rdm_conn lookup and access
+ * progress->lock - serializes ep connection, transfers, destruction
+ * ep->lock - protects ep state
+ * cq->lock or eq->lock - protects event queues
+ * TODO: simplify locking now that progress locks are available
+ */
 
 enum tcp2_state {
 	TCP2_IDLE,
@@ -124,6 +134,7 @@ struct tcp2_pep {
 	enum tcp2_state		state;
 };
 
+int tcp2_listen(struct tcp2_pep *pep, struct tcp2_progress *progress);
 void tcp2_accept_sock(struct tcp2_pep *pep);
 void tcp2_connect_done(struct tcp2_ep *ep);
 void tcp2_req_done(struct tcp2_ep *ep);
@@ -189,7 +200,7 @@ struct tcp2_ep {
 	struct tcp2_conn_handle *conn;
 	struct tcp2_cm_msg	*cm_msg;
 
-	/* lock for protecting tx/rx queues, rma list, state*/
+	/* lock for protecting tx/rx queues, rma list, state */
 	ofi_mutex_t		lock;
 	void (*hdr_bswap)(struct tcp2_base_hdr *hdr);
 	void (*report_success)(struct tcp2_ep *ep, struct util_cq *cq,
@@ -198,12 +209,55 @@ struct tcp2_ep {
 	bool			pollout_set;
 };
 
+struct tcp2_rdm_event {
+	struct slist_entry list_entry;
+	uint32_t event;
+	struct fi_eq_cm_entry cm_entry;
+};
+
+enum {
+	TCP2_CONN_INDEXED = BIT(0),
+};
+
+struct tcp2_conn {
+	struct tcp2_ep		*ep;
+	struct tcp2_rdm		*rdm;
+	struct util_peer_addr	*peer;
+	uint32_t		remote_pid;
+	int			flags;
+	struct dlist_entry	loopback_entry;
+};
+
+struct tcp2_rdm {
+	struct util_ep		util_ep;
+
+	struct tcp2_pep		*pep;
+	struct tcp2_rx_ctx	*srx;
+
+	struct index_map	conn_idx_map;
+	struct dlist_entry	loopback_list;
+	union ofi_sock_ip	addr;
+
+	struct slist		event_list; /* protected by progress lock */
+	struct dlist_entry	progress_entry;
+};
+
+int tcp2_rdm_ep(struct fid_domain *domain, struct fi_info *info,
+		struct fid_ep **ep_fid, void *context);
+ssize_t tcp2_get_conn(struct tcp2_rdm *rdm, fi_addr_t dest_addr,
+		      struct tcp2_conn **conn);
+void tcp2_freeall_conns(struct tcp2_rdm *rdm);
+
 struct tcp2_progress {
 	struct fid		fid;
-	ofi_mutex_t		lock; /* acquire before all other locks */
+	ofi_mutex_t		lock;
 	struct dlist_entry	active_wait_list;
 
 	struct fd_signal	signal;
+
+	ofi_mutex_t		list_lock;
+	struct dlist_entry	rdm_list;
+	uint32_t		rdm_event_cnt;
 
 	/* epoll works better for apps that wait on the fd,
 	 * but tests show that poll performs better
@@ -235,6 +289,7 @@ void tcp2_stop_progress(struct tcp2_progress *progress);
 
 void tcp2_run_progress(struct tcp2_progress *progress, bool internal);
 void tcp2_run_conn(struct tcp2_conn_handle *conn, bool pin, bool pout, bool perr);
+void tcp2_progress_rdm(struct tcp2_progress *progress);
 
 int tcp2_trywait(struct fid_fabric *fid_fabric, struct fid **fids, int count);
 void tcp2_update_poll(struct tcp2_ep *ep);
@@ -304,6 +359,14 @@ static inline struct tcp2_progress *tcp2_ep2_progress(struct tcp2_ep *ep)
 	return &domain->progress;
 }
 
+static inline struct tcp2_progress *tcp2_rdm2_progress(struct tcp2_rdm *rdm)
+{
+	struct tcp2_domain *domain;
+	domain = container_of(rdm->util_ep.domain, struct tcp2_domain,
+			      util_domain);
+	return &domain->progress;
+}
+
 struct tcp2_cq {
 	struct util_cq		util_cq;
 	struct ofi_bufpool	*xfer_pool;
@@ -342,6 +405,9 @@ static inline struct tcp2_progress *tcp2_eq2_progress(struct tcp2_eq *eq)
 			      util_fabric);
 	return &fabric->progress;
 }
+
+int tcp2_eq_write(struct util_eq *eq, uint32_t event,
+		  const void *buf, size_t len, uint64_t flags);
 
 int tcp2_create_fabric(struct fi_fabric_attr *attr,
 		       struct fid_fabric **fabric,
@@ -539,5 +605,9 @@ static inline bool tcp2_active_wait(struct tcp2_ep *ep)
 	return ofi_bsock_readable(&ep->bsock) ||
 	       (ep->cur_rx.handler && !ep->cur_rx.entry);
 }
+
+#define TCP2_WARN_ERR(subsystem, log_str, err) \
+	FI_WARN(&tcp2_prov, subsystem, log_str "%s (%d)\n", \
+		fi_strerror((int) -(err)), (int) err)
 
 #endif //_TCP2_H_

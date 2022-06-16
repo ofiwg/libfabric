@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020 Intel Corporation. All rights reserved.
+ * Copyright (c) 2017-2022 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -220,6 +220,7 @@ int tcp2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			  &tcp2_cq_progress, context);
 	if (ret)
 		goto destroy_pool;
+
 
 	fabric = container_of(cq->util_cq.domain->fabric, struct tcp2_fabric,
 			      util_fabric);

@@ -3,10 +3,12 @@ _tcp2_files = \
 	prov/tcp2/src/tcp2_fabric.c	\
 	prov/tcp2/src/tcp2_attr.c	\
 	prov/tcp2/src/tcp2_cm.c		\
+	prov/tcp2/src/tcp2_rdm_cm.c	\
 	prov/tcp2/src/tcp2_domain.c	\
 	prov/tcp2/src/tcp2_rma.c	\
 	prov/tcp2/src/tcp2_msg.c	\
 	prov/tcp2/src/tcp2_ep.c		\
+	prov/tcp2/src/tcp2_rdm.c	\
 	prov/tcp2/src/tcp2_pep.c	\
 	prov/tcp2/src/tcp2_srx.c	\
 	prov/tcp2/src/tcp2_cq.c		\

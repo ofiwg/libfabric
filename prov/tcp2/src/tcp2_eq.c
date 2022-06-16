@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2018-2022 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -35,6 +35,42 @@
 
 #include "tcp2.h"
 
+
+/* If we don't have an EQ, then we're writing an event for an rdm ep.
+ * That goes directly on the rdm event list.
+ */
+int tcp2_eq_write(struct util_eq *eq, uint32_t event,
+		  const void *buf, size_t len, uint64_t flags)
+{
+	struct tcp2_rdm_event *rdm_event;
+	const struct fi_eq_entry *eq_event;
+	struct tcp2_rdm *rdm;
+
+	if (eq)
+		return (int) fi_eq_write(&eq->eq_fid, event, buf, len, flags);
+
+	eq_event = buf;
+	if (eq_event->fid->fclass == FI_CLASS_EP) {
+		rdm = ((struct tcp2_conn *) eq_event->fid->context)->rdm;
+	} else {
+		assert(eq_event->fid->fclass == FI_CLASS_PEP);
+		rdm = eq_event->fid->context;
+	}
+
+	assert(rdm->util_ep.ep_fid.fid.fclass == FI_CLASS_EP);
+	assert(ofi_mutex_held(&tcp2_rdm2_progress(rdm)->lock));
+	rdm_event = malloc(sizeof(*rdm_event));
+	if (!rdm_event)
+		return -FI_ENOMEM;
+
+	rdm_event->event = event;
+	assert(len >= sizeof(rdm_event->cm_entry));
+	memcpy(&rdm_event->cm_entry, buf, sizeof(rdm_event->cm_entry));
+	slist_insert_tail(&rdm_event->list_entry, &rdm->event_list);
+	tcp2_rdm2_progress(rdm)->rdm_event_cnt++;
+
+	return 0;
+}
 
 static ssize_t tcp2_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 			    void *buf, size_t len, uint64_t flags)

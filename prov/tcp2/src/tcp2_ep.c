@@ -253,8 +253,8 @@ tcp2_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 
 	cm_entry.fid = &ep->util_ep.ep_fid.fid;
 	cm_entry.info = NULL;
-	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, &cm_entry,
-				sizeof(cm_entry), 0);
+	ret = tcp2_eq_write(ep->util_ep.eq, FI_CONNECTED, &cm_entry,
+			    sizeof(cm_entry), 0);
 	if (ret < 0) {
 		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		return ret;
