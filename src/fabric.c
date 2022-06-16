@@ -500,14 +500,15 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	if (ofi_apply_filter(&prov_log_filter, provider->name))
 		ctx->disable_logging = 1;
 
-	/*
-	 * Prevent utility providers from layering on these core providers
+	/* Prevent utility providers from layering on these core providers
 	 * unless explicitly requested.
 	 */
 	if (!strcasecmp(provider->name, "sockets") ||
 	    !strcasecmp(provider->name, "shm") ||
 	    !strcasecmp(provider->name, "efa") ||
-	    !strcasecmp(provider->name, "psm3") || ofi_is_util_prov(provider))
+	    !strcasecmp(provider->name, "psm3") ||
+	    !strcasecmp(provider->name, "tcp2") ||
+	    ofi_is_util_prov(provider))
 		ctx->disable_layering = 1;
 
 	prov = ofi_getprov(provider->name, strlen(provider->name));
