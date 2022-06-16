@@ -60,6 +60,8 @@
 #include <ofi_proto.h>
 #include <ofi_net.h>
 
+#include "tcp2_proto.h"
+
 #ifndef _TCP2_H_
 #define _TCP2_H_
 
@@ -83,78 +85,6 @@ extern size_t tcp2_zerocopy_size;
 
 struct tcp2_xfer_entry;
 struct tcp2_ep;
-
-
-/*
- * Wire protocol structures and definitions
- */
-
-#define TCP2_CTRL_HDR_VERSION	3
-
-enum {
-	TCP2_MAX_CM_DATA_SIZE = (1 << 8)
-};
-
-struct tcp2_cm_msg {
-	struct ofi_ctrl_hdr hdr;
-	char data[TCP2_MAX_CM_DATA_SIZE];
-};
-
-#define TCP2_HDR_VERSION	3
-
-enum {
-	TCP2_IOV_LIMIT = 4
-};
-
-/* base_hdr::op_data */
-enum {
-	/* backward compatible value */
-	TCP2_OP_ACK = 2, /* indicates ack message - should be a flag */
-};
-
-/* Flags */
-#define TCP2_REMOTE_CQ_DATA	(1 << 0)
-/* not used TCP2_TRANSMIT_COMPLETE	(1 << 1) */
-#define TCP2_DELIVERY_COMPLETE	(1 << 2)
-#define TCP2_COMMIT_COMPLETE	(1 << 3)
-#define TCP2_TAGGED		(1 << 7)
-
-struct tcp2_base_hdr {
-	uint8_t			version;
-	uint8_t			op;
-	uint16_t		flags;
-	uint8_t			op_data;
-	uint8_t			rma_iov_cnt;
-	uint8_t			hdr_size;
-	union {
-		uint8_t		rsvd;
-		uint8_t		id; /* debug */
-	};
-	uint64_t		size;
-};
-
-struct tcp2_tag_hdr {
-	struct tcp2_base_hdr	base_hdr;
-	uint64_t		tag;
-};
-
-struct tcp2_cq_data_hdr {
-	struct tcp2_base_hdr 	base_hdr;
-	uint64_t		cq_data;
-};
-
-struct tcp2_tag_data_hdr {
-	struct tcp2_cq_data_hdr	cq_data_hdr;
-	uint64_t		tag;
-};
-
-/* Maximum header is scatter RMA with CQ data */
-#define TCP2_MAX_HDR (sizeof(struct tcp2_cq_data_hdr) + \
-		     sizeof(struct ofi_rma_iov) * TCP2_IOV_LIMIT)
-
-/*
- * End wire protocol definitions
- */
 
 
 enum tcp2_state {
