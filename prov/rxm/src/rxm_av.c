@@ -66,14 +66,14 @@ void rxm_av_free_conn(struct rxm_conn *conn)
 
 static int rxm_addr_compare(struct ofi_rbmap *map, void *key, void *data)
 {
-	return memcmp(&((struct rxm_peer_addr *) data)->addr, key,
+	return memcmp(&((struct util_peer_addr *) data)->addr, key,
 		container_of(map, struct rxm_av, addr_map)->util_av.addrlen);
 }
 
-static struct rxm_peer_addr *
+static struct util_peer_addr *
 rxm_alloc_peer(struct rxm_av *av, const void *addr)
 {
-	struct rxm_peer_addr *peer;
+	struct util_peer_addr *peer;
 
 	assert(ofi_mutex_held(&av->util_av.lock));
 	peer = ofi_ibuf_alloc(av->peer_pool);
@@ -94,7 +94,7 @@ rxm_alloc_peer(struct rxm_av *av, const void *addr)
 	return peer;
 }
 
-static void rxm_free_peer(struct rxm_peer_addr *peer)
+static void rxm_free_peer(struct util_peer_addr *peer)
 {
 	assert(ofi_mutex_held(&peer->av->util_av.lock));
 	assert(!peer->refcnt);
@@ -102,10 +102,10 @@ static void rxm_free_peer(struct rxm_peer_addr *peer)
 	ofi_ibuf_free(peer);
 }
 
-struct rxm_peer_addr *
-rxm_get_peer(struct rxm_av *av, const void *addr)
+struct util_peer_addr *
+util_get_peer(struct rxm_av *av, const void *addr)
 {
-	struct rxm_peer_addr *peer;
+	struct util_peer_addr *peer;
 	struct ofi_rbnode *node;
 
 	ofi_mutex_lock(&av->util_av.lock);
@@ -121,7 +121,7 @@ rxm_get_peer(struct rxm_av *av, const void *addr)
 	return peer;
 }
 
-void rxm_put_peer(struct rxm_peer_addr *peer)
+void util_put_peer(struct util_peer_addr *peer)
 {
 	struct rxm_av *av;
 
@@ -132,7 +132,7 @@ void rxm_put_peer(struct rxm_peer_addr *peer)
 	ofi_mutex_unlock(&av->util_av.lock);
 }
 
-void rxm_ref_peer(struct rxm_peer_addr *peer)
+void rxm_ref_peer(struct util_peer_addr *peer)
 {
 	ofi_mutex_lock(&peer->av->util_av.lock);
 	peer->refcnt++;
@@ -141,9 +141,9 @@ void rxm_ref_peer(struct rxm_peer_addr *peer)
 
 static void
 rxm_set_av_context(struct rxm_av *av, fi_addr_t fi_addr,
-		   struct rxm_peer_addr *peer)
+		   struct util_peer_addr *peer)
 {
-	struct rxm_peer_addr **peer_ctx;
+	struct util_peer_addr **peer_ctx;
 
 	peer_ctx = ofi_av_addr_context(&av->util_av, fi_addr);
 	*peer_ctx = peer;
@@ -152,7 +152,7 @@ rxm_set_av_context(struct rxm_av *av, fi_addr_t fi_addr,
 static void
 rxm_put_peer_addr(struct rxm_av *av, fi_addr_t fi_addr)
 {
-	struct rxm_peer_addr **peer;
+	struct util_peer_addr **peer;
 
 	peer = ofi_av_addr_context(&av->util_av, fi_addr);
 	if (--(*peer)->refcnt == 0)
@@ -165,14 +165,14 @@ static int
 rxm_av_add_peers(struct rxm_av *av, const void *addr, size_t count,
 		 fi_addr_t *fi_addr)
 {
-	struct rxm_peer_addr *peer;
+	struct util_peer_addr *peer;
 	const void *cur_addr;
 	fi_addr_t cur_fi_addr;
 	size_t i;
 
 	for (i = 0; i < count; i++) {
 		cur_addr = ((char *) addr + i * av->util_av.addrlen);
-		peer = rxm_get_peer(av, cur_addr);
+		peer = util_get_peer(av, cur_addr);
 		if (!peer)
 			goto err;
 
@@ -378,7 +378,7 @@ int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (!av)
 		return -FI_ENOMEM;
 
-	ret = ofi_bufpool_create(&av->peer_pool, sizeof(struct rxm_peer_addr),
+	ret = ofi_bufpool_create(&av->peer_pool, sizeof(struct util_peer_addr),
 				 0, 0, 0, OFI_BUFPOOL_INDEXED |
 				 OFI_BUFPOOL_NO_TRACK);
 	if (ret)
@@ -392,7 +392,7 @@ int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	ofi_rbmap_init(&av->addr_map, rxm_addr_compare);
 	domain = container_of(domain_fid, struct util_domain, domain_fid);
 
-	util_attr.context_len = sizeof(struct rxm_peer_addr *);
+	util_attr.context_len = sizeof(struct util_peer_addr *);
 	util_attr.flags = 0;
 	util_attr.addrlen = ofi_sizeof_addr_format(domain->addr_format);
 	if (attr->type == FI_AV_UNSPEC)
