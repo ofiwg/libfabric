@@ -975,6 +975,7 @@
     <ClInclude Include="prov\sockets\include\sock_util.h" />
     <ClInclude Include="prov\tcp\src\tcpx.h" />
     <ClInclude Include="prov\tcp\src\tcp2.h" />
+    <ClInclude Include="prov\tcp\src\tcp2_proto.h" />
     <ClInclude Include="prov\udp\src\udpx.h" />
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)|$(Platform)'!='Debug-Efa-v142|x64' AND '$(Configuration)|$(Platform)'!='Release-Efa-v142|x64'">

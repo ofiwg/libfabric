@@ -881,6 +881,9 @@
     <ClInclude Include="prov\tcp2\src\tcp2.h">
       <Filter>Source Files\prov\tcp2\include</Filter>
     </ClInclude>
+    <ClInclude Include="prov\tcp2\src\tcp2_proto.h">
+      <Filter>Source Files\prov\tcp2\include</Filter>
+    </ClInclude>
     <ClInclude Include="include\windows\sys\uio.h">
       <Filter>Header Files\windows\sys</Filter>
     </ClInclude>

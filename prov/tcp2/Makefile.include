@@ -12,6 +12,7 @@ _tcp2_files = \
 	prov/tcp2/src/tcp2_eq.c		\
 	prov/tcp2/src/tcp2_init.c	\
 	prov/tcp2/src/tcp2_progress.c	\
+	prov/tcp2/src/tcp2_proto.h	\
 	prov/tcp2/src/tcp2.h
 
 if HAVE_TCP2_DL
