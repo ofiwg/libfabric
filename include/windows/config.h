@@ -107,6 +107,12 @@
 /* TCP provider is built as DSO */
 /* #undef HAVE_TCP_DL */
 
+/* TCP2 provider is built */
+#define HAVE_TCP2 1
+
+/* TCP2 provider is built as DSO */
+/* #undef HAVE_TCP2_DL */
+
 /* Define to 1 if you have the <stdint.h> header file. */
 /* #undef HAVE_STDINT_H */
 

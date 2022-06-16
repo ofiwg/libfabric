@@ -419,7 +419,7 @@ static void ofi_ordered_provs_init(void)
 		 */
 
 		/* Before you add ANYTHING here, read the comment above!!! */
-		"udp", "tcp", "sockets", /* NOTHING GOES HERE! */
+		"udp", "tcp", "sockets", "tcp2", /* NOTHING GOES HERE! */
 		/* Seriously, read it! */
 
 		/* These are hooking providers only.  Their order
@@ -858,6 +858,7 @@ void fi_ini(void)
 	ofi_register_provider(UDP_INIT, NULL);
 	ofi_register_provider(SOCKETS_INIT, NULL);
 	ofi_register_provider(TCP_INIT, NULL);
+	ofi_register_provider(TCP2_INIT, NULL);
 
 	ofi_register_provider(HOOK_PERF_INIT, NULL);
 	ofi_register_provider(HOOK_DEBUG_INIT, NULL);

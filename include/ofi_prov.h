@@ -167,6 +167,17 @@ TCP_INI ;
 #  define TCP_INIT NULL
 #endif
 
+#if (HAVE_TCP2) && (HAVE_TCP2_DL)
+#  define TCP2_INI FI_EXT_INI
+#  define TCP2_INIT NULL
+#elif (HAVE_TCP2)
+#  define TCP2_INI INI_SIG(fi_tcp2_ini)
+#  define TCP2_INIT fi_tcp2_ini()
+TCP2_INI ;
+#else
+#  define TCP2_INIT NULL
+#endif
+
 #if (HAVE_RXM) && (HAVE_RXM_DL)
 #  define RXM_INI FI_EXT_INI
 #  define RXM_INIT NULL
