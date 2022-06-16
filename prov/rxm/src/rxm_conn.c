@@ -352,7 +352,7 @@ static void rxm_free_conn(struct rxm_conn *conn)
 	if (conn->flags & RXM_CONN_INDEXED)
 		ofi_idm_clear(&conn->ep->conn_idx_map, conn->peer->index);
 
-	rxm_put_peer(conn->peer);
+	util_put_peer(conn->peer);
 	rxm_av_free_conn(conn);
 }
 
@@ -390,7 +390,7 @@ void rxm_freeall_conns(struct rxm_ep *ep)
 }
 
 static struct rxm_conn *
-rxm_alloc_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
+rxm_alloc_conn(struct rxm_ep *ep, struct util_peer_addr *peer)
 {
 	struct rxm_conn *conn;
 	struct rxm_av *av;
@@ -421,7 +421,7 @@ rxm_alloc_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
 }
 
 static struct rxm_conn *
-rxm_add_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
+rxm_add_conn(struct rxm_ep *ep, struct util_peer_addr *peer)
 {
 	struct rxm_conn *conn;
 
@@ -447,7 +447,7 @@ rxm_add_conn(struct rxm_ep *ep, struct rxm_peer_addr *peer)
 /* The returned conn is only valid if the function returns success. */
 ssize_t rxm_get_conn(struct rxm_ep *ep, fi_addr_t addr, struct rxm_conn **conn)
 {
-	struct rxm_peer_addr **peer;
+	struct util_peer_addr **peer;
 	ssize_t ret;
 
 	assert(ofi_ep_lock_held(&ep->util_ep));
@@ -647,7 +647,7 @@ static void
 rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 {
 	union ofi_sock_ip peer_addr;
-	struct rxm_peer_addr *peer;
+	struct util_peer_addr *peer;
 	struct rxm_conn *conn;
 	struct rxm_av *av;
 	ssize_t ret;
@@ -662,9 +662,9 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 	ofi_addr_set_port(&peer_addr.sa, cm_entry->data.connect.port);
 
 	av = container_of(ep->util_ep.av, struct rxm_av, util_av);
-	peer = rxm_get_peer(av, &peer_addr);
+	peer = util_get_peer(av, &peer_addr);
 	if (!peer) {
-		RXM_WARN_ERR(FI_LOG_EP_CTRL, "rxm_get_peer", -FI_ENOMEM);
+		RXM_WARN_ERR(FI_LOG_EP_CTRL, "util_get_peer", -FI_ENOMEM);
 		goto reject;
 	}
 
@@ -739,7 +739,7 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 	conn->state = RXM_CM_ACCEPTING;
 	conn->ep->connecting_cnt++;
 put:
-	rxm_put_peer(peer);
+	util_put_peer(peer);
 	fi_freeinfo(cm_entry->info);
 	return;
 
@@ -748,7 +748,7 @@ close:
 free:
 	rxm_free_conn(conn);
 remove:
-	rxm_put_peer(peer);
+	util_put_peer(peer);
 reject:
 	rxm_reject_connreq(ep, cm_entry, RXM_REJECT_ECONNREFUSED);
 	fi_freeinfo(cm_entry->info);
