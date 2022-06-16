@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 Intel Corporation. All rights reserved.
+ * Copyright (c) 2018-2022 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -46,21 +46,19 @@ size_t rxm_av_max_peers(struct rxm_av *av)
 	return cnt;
 }
 
-struct rxm_conn *rxm_av_alloc_conn(struct rxm_av *av)
+void *rxm_av_alloc_conn(struct rxm_av *av)
 {
-	struct rxm_conn *conn;
+	void *conn_ctx;
 	ofi_mutex_lock(&av->util_av.lock);
-	conn = ofi_buf_alloc(av->conn_pool);
+	conn_ctx = ofi_buf_alloc(av->conn_pool);
 	ofi_mutex_unlock(&av->util_av.lock);
-	return conn;
+	return conn_ctx;
 }
 
-void rxm_av_free_conn(struct rxm_conn *conn)
+void rxm_av_free_conn(struct rxm_av *av, void *conn_ctx)
 {
-	struct rxm_av *av;
-	av = container_of(conn->ep->util_ep.av, struct rxm_av, util_av);
 	ofi_mutex_lock(&av->util_av.lock);
-	ofi_buf_free(conn);
+	ofi_buf_free(conn_ctx);
 	ofi_mutex_unlock(&av->util_av.lock);
 }
 
@@ -211,10 +209,8 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	ssize_t i;
 
 	av = container_of(av_fid, struct rxm_av, util_av.av_fid);
-	if (flags) {
-		FI_WARN(&rxm_prov, FI_LOG_AV, "invalid flags\n");
+	if (flags)
 		return -FI_EINVAL;
-	}
 
 	/*
 	 * It's more efficient to remove addresses from high to low index.
@@ -226,11 +222,8 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	for (i = count - 1; i >= 0; i--) {
 		av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool,
 						fi_addr[i]);
-		if (!av_entry) {
-			FI_WARN(&rxm_prov, FI_LOG_AV,
-				"fi_addr %"PRIu64" not found\n", fi_addr[i]);
+		if (!av_entry)
 			continue;
-		}
 
 		if (!ofi_atomic_dec32(&av_entry->use_cnt)) {
 			rxm_put_peer_addr(av, fi_addr[i]);
@@ -366,8 +359,8 @@ static struct fi_ops_av rxm_av_ops = {
 	.av_set = ofi_av_set
 };
 
-int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		struct fid_av **fid_av, void *context)
+int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+		     struct fid_av **fid_av, void *context, size_t conn_size)
 {
 	struct util_domain *domain;
 	struct util_av_attr util_attr;
@@ -384,8 +377,7 @@ int rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	if (ret)
 		goto free;
 
-	ret = ofi_bufpool_create(&av->conn_pool, sizeof(struct rxm_conn),
-				 0, 0, 0, 0);
+	ret = ofi_bufpool_create(&av->conn_pool, conn_size, 0, 0, 0, 0);
 	if (ret)
 		goto destroy1;
 

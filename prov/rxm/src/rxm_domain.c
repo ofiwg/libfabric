@@ -166,6 +166,14 @@ static struct fi_ops rxm_passthru_cntr_fi_ops = {
 };
 
 static int
+rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+	    struct fid_av **fid_av, void *context)
+{
+	return rxm_util_av_open(domain_fid, attr, fid_av, context,
+				sizeof(struct rxm_conn));
+}
+
+static int
 rxm_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 	      struct fid_cntr **cntr_fid, void *context)
 {
