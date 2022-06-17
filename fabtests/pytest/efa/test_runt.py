@@ -18,7 +18,7 @@ def test_runt_read_functional(cmdline_args):
     else:
         cmdline_args_copy.environments = ""
 
-    cmdline_args_copy.environments = "FI_EFA_USE_DEVICE_RDMA_READ=1 FI_EFA_RUNT_SIZE=65536 FI_HMEM_CUDA_USE_GDRCOPY=1"
+    cmdline_args_copy.environments += "FI_EFA_USE_DEVICE_RDMA_READ=1 FI_EFA_RUNT_SIZE=65536 FI_HMEM_CUDA_USE_GDRCOPY=1"
 
     # currently, runting read is enabled only if gdrcopy is available.
     # thus skip the test if gdrcopy is not available
