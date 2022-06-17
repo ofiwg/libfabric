@@ -364,6 +364,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *att
 
 		if (*entry &&
 		    ofi_iov_within(attr->mr_iov, &(*entry)->info.iov) &&
+		    ((*entry)->info.iface == attr->iface) &&
 		    monitor->valid(monitor,
 				   (const void *)(*entry)->info.iov.iov_base,
 				   (*entry)->info.iov.iov_len,
