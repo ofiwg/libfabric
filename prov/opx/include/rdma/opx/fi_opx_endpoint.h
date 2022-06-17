@@ -2104,6 +2104,10 @@ static inline void fi_opx_ep_rx_poll (struct fid_ep *ep,
 	} else {
 		FI_OPX_FABRIC_POLL_MANY(ep, 0, caps, reliability, hdrq_mask);
 	}
+
+	if (!slist_empty(&opx_ep->reliability->service.work_pending)) {
+		fi_opx_reliability_service_process_pending(&opx_ep->reliability->service);
+	}
 }
 
 __OPX_FORCE_INLINE_AND_FLATTEN__
