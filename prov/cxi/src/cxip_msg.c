@@ -3652,9 +3652,15 @@ static int cxip_send_rdzv_put_cb(struct cxip_req *req,
 	 * These events should just be dropped.
 	 */
 	case C_EVENT_SEND:
-		TXC_WARN(txc, "Unexpected %s event: rc=%s\n",
+	{
+		struct cxi_md *md = req->send.send_md->md;
+
+		TXC_WARN(txc, "Unexpected %s event: rc:%s buf:%p len:0x%lx iova:0x%llx md.va:0x%llx lac:%d\n",
 			 cxi_event_to_str(event),
-			 cxi_rc_to_str(cxi_event_rc(event)));
+			 cxi_rc_to_str(cxi_event_rc(event)), req->send.buf,
+			 req->send.len, CXI_VA_TO_IOVA(md, req->send.buf),
+			 md->iova, md->lac);
+	}
 		return FI_SUCCESS;
 
 	default:
