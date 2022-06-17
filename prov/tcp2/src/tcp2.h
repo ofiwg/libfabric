@@ -85,6 +85,7 @@ extern size_t tcp2_zerocopy_size;
 
 struct tcp2_xfer_entry;
 struct tcp2_ep;
+struct tcp2_progress;
 
 
 enum tcp2_state {
@@ -118,6 +119,7 @@ struct tcp2_conn_handle {
 struct tcp2_pep {
 	struct util_pep 	util_pep;
 	struct fi_info		*info;
+	struct tcp2_progress	*progress;
 	SOCKET			sock;
 	enum tcp2_state		state;
 };
@@ -248,14 +250,6 @@ struct tcp2_fabric {
 
 int tcp2_start_all(struct tcp2_fabric *fabric);
 void tcp2_progress_all(struct tcp2_fabric *fabric);
-
-static inline struct tcp2_progress *tcp2_pep2_progress(struct tcp2_pep *pep)
-{
-	struct tcp2_fabric *fabric;
-	fabric = container_of(pep->util_pep.fabric,
-			      struct tcp2_fabric, util_fabric);
-	return &fabric->progress;
-}
 
 static inline void tcp2_signal_progress(struct tcp2_progress *progress)
 {

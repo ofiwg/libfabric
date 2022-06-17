@@ -195,10 +195,10 @@ void tcp2_run_conn(struct tcp2_conn_handle *conn, bool pin, bool pout, bool perr
 	int ret;
 
 	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "Receiving connect request\n");
-	assert(ofi_mutex_held(&tcp2_pep2_progress(conn->pep)->lock));
+	assert(ofi_mutex_held(&conn->pep->progress->lock));
 
 	/* Don't monitor the socket until the user calls fi_accept */
-	tcp2_halt_sock(tcp2_pep2_progress(conn->pep), conn->sock);
+	tcp2_halt_sock(conn->pep->progress, conn->sock);
 
 	if (perr) {
 		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL, "socket error\n");
@@ -290,7 +290,7 @@ void tcp2_accept_sock(struct tcp2_pep *pep)
 	int ret;
 
 	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "accepting socket\n");
-	assert(ofi_mutex_held(&tcp2_pep2_progress(pep)->lock));
+	assert(ofi_mutex_held(&pep->progress->lock));
 
 	sock = accept(pep->sock, NULL, 0);
 	if (sock < 0) {
@@ -313,8 +313,7 @@ void tcp2_accept_sock(struct tcp2_pep *pep)
 	/* TODO: We need to hold a reference on the pep to defer destruction */
 	conn->pep = pep;
 
-	ret = tcp2_monitor_sock(tcp2_pep2_progress(pep), sock, POLLIN,
-				&conn->fid);
+	ret = tcp2_monitor_sock(pep->progress, sock, POLLIN, &conn->fid);
 	if (ret)
 		goto free;
 
