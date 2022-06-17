@@ -83,6 +83,35 @@ struct fi_opx_completion_counter {
 		void (*hit_zero)(struct fi_opx_completion_counter*);
 };
 
+union fi_opx_reliability_deferred_work;
+struct fi_opx_reliability_work_elem {
+	struct slist_entry slist_entry;
+	ssize_t (*work_fn)(union fi_opx_reliability_deferred_work * work_state);
+};
+
+struct fi_opx_reliability_tx_sdma_replay_params {
+	struct fi_opx_reliability_work_elem work_elem;
+	void *opx_ep;
+	struct slist sdma_reqs;
+	uint64_t flow_key;
+};
+
+#define OPX_RELIABILITY_TX_MAX_REPLAYS		(32)
+struct fi_opx_reliability_tx_pio_replay_params {
+	struct fi_opx_reliability_work_elem work_elem;
+	void *opx_ep;
+	struct fi_opx_reliability_tx_replay *replays[OPX_RELIABILITY_TX_MAX_REPLAYS];
+	uint64_t flow_key;
+	uint16_t num_replays;
+	uint16_t start_index;
+};
+
+union fi_opx_reliability_deferred_work {
+	struct fi_opx_reliability_work_elem work_elem;
+	struct fi_opx_reliability_tx_sdma_replay_params sdma_replay;
+	struct fi_opx_reliability_tx_pio_replay_params pio_replay;
+};
+
 struct fi_opx_reliability_service {
 
 	struct fi_opx_atomic_fifo			fifo;		/* 27 qws = 216 bytes */
@@ -160,7 +189,10 @@ struct fi_opx_reliability_service {
 	uint8_t				fifo_max;
 	uint8_t				hfi1_max;
 	RbtHandle			handshake_init;		/*  1 qw  =   8 bytes */
-	/* 40 bytes left in cacheline */
+	struct ofi_bufpool 		*uepkt_pool;
+	struct slist			work_pending;		/* 16 bytes */
+	struct ofi_bufpool 		*work_pending_pool;
+	/* 8 bytes left in cacheline */
 
 } __attribute__((__aligned__(64))) __attribute__((__packed__));
 
@@ -211,10 +243,12 @@ struct fi_opx_reliability_tx_replay {
 		uint64_t				*payload;
 		struct iovec				*iov;
 	};
-	uint32_t					unused1;
+	uint16_t					unused1;
 	uint16_t					nack_count;
-	uint8_t						unused2;
-	uint8_t						use_iov;
+	bool						acked;
+	bool						pinned;
+	bool						use_sdma;
+	bool						use_iov;
 
 	/* --- MUST BE 64 BYTE ALIGNED --- */
 
@@ -321,6 +355,8 @@ void fi_opx_reliability_service_fini (struct fi_opx_reliability_service * servic
 void fi_reliability_service_ping_remote (struct fid_ep *ep, struct fi_opx_reliability_service * service);
 unsigned fi_opx_reliability_service_poll_hfi1 (struct fid_ep *ep, struct fi_opx_reliability_service * service);
 
+void fi_opx_reliability_service_process_pending (struct fi_opx_reliability_service * service);
+
 #define RX_CMD	(0x0000000000000008ul)
 #define TX_CMD	(0x0000000000000010ul)
 
@@ -342,7 +378,7 @@ struct fi_opx_reliability_rx_uepkt {
 
 	/* == CACHE LINE == */
 
-	uint8_t					payload[];
+	uint8_t					payload[FI_OPX_HFI1_PACKET_MTU];
 
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 
@@ -359,12 +395,92 @@ union fi_opx_reliability_tx_psn {
 // TODO - make these tunable.
 #define FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS	(2048)
 #define FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS	(8192)
+#define OPX_MAX_OUTSTANDING_REPLAYS	(FI_OPX_RELIABILITY_TX_REPLAY_BLOCKS + FI_OPX_RELIABILITY_TX_REPLAY_IOV_BLOCKS)
 
 #define OPX_REPLAY_BASE_SIZE			(sizeof(struct fi_opx_reliability_tx_replay))
 #define OPX_REPLAY_IOV_SIZE			(sizeof(struct iovec) << 1)
 #define OPX_REPLAY_PAYLOAD_SIZE			(FI_OPX_HFI1_PACKET_MTU + 64)
 #define OPX_RELIABILITY_TX_REPLAY_SIZE		(OPX_REPLAY_BASE_SIZE + OPX_REPLAY_PAYLOAD_SIZE)
 #define OPX_RELIABILITY_TX_REPLAY_IOV_SIZE	(OPX_REPLAY_BASE_SIZE + OPX_REPLAY_IOV_SIZE)
+
+// Maximum PSNs to NACK when receiving an out of order packet or responding to a ping
+#ifndef OPX_RELIABILITY_RX_MAX_NACK
+#define OPX_RELIABILITY_RX_MAX_NACK		(1)
+#endif
+
+/*
+ * For incoming packets:
+ * Normally, we can simply add the high 40 bits of the receiver's 64-bit PSN
+ * to the 24-bit PSN of an incoming packet to get the 64-bit PSN. However,
+ * we have to deal with the case where the Sender's PSN has rolled over but
+ * the receiver's hasn't. The difficulty is determining when this is the case.
+ *
+ * In the ideal case, the Sender's PSN will always be greater than or equal to
+ * the PSN the receiver expects to see (the expected PSN). However, this is
+ * not the case when the packet is a duplicate of one that was already
+ * received. This can happen when a packet gets NACK'ed twice for some reason,
+ * resulting in the sender sending two new copies. This is futher complicated
+ * by the fact that the sender's replay list has a fixed size but does not
+ * have to contain a continuous range of PSNs - there can be gaps. Thus it
+ * is hard to recognize packets that are "too old" to be legitimate.
+ *
+ * Definitions:
+ * R-PSN-64 = The next expected PSN.
+ * R-PSN-24 = (R-PSN-64 & 0xFFFFFF)
+ * S-PSN-24 = 24-bit OPA PSN from the incoming packet.
+ * S-PSN-64 = 64-bit "scaled up" PSN of incoming packet.
+ *
+ * (Note: I'm deliberately not defining "Low", "High", or "Middle" yet.)
+ *
+ * S-PSN-24		R-PSN-24
+ * Middle		Middle		S-PSN-64 = S-PSN-24 + (high 40 bits of R-PSN-64)
+ *
+ * Low			High		Sender has rolled over. Add an extra 2^24.
+ * 							S-PSN-64 = S-PSN-24 + (high 40 bits of R-PSN-64) +
+ * 							2^24
+ *
+ * High			Low			Packet is old and should be discarded. (The only
+ * 							way for this to occur is if the R-PSN-24 has rolled
+ * 							over but the incoming S-PSN-24 has not. Since
+ * 							R-PSN-64 represents the highest PSN successfully
+ * 							received, we must have already received this packet.
+ *
+ * The risks in defining "High" and "Low" is that if they are too generous we
+ * might scale up S-PSN-24 incorrectly, causing us to discard a valid packet,
+ * or assign a packet an invalid PSN (causing it to be processed in the wrong
+ * order).
+ *
+ * First we will assume we will never have to deal with PSNs that are correctly
+ * close to 2^24 apart because that would indicate much more fundamental
+ * problems with the protocol - how did we manage to drop ~2^24 packets?
+ *
+ * This assumption allows us to be generous in how we define "Low" and "High"
+ * for the Low/High case. If we define "Low" as < 10k and "High" as > "2^24-10k"
+ * that should be adequate. Why 10K? We currently allocate 2048 replay buffers
+ * with room for payloads, and 8192 replay buffers for IOV only, meaning a
+ * sender could have up to 10K PSNs "in flight" at once.
+ *
+ * In the "High/Low" case, if we say S-PSN-64 = S-PSN-24 + (high 40 bits of
+ * R-PSN-64) then S-PSN-64 will be much, much, higher than R-PSN-64. Presumably
+ * close to 2^24 apart but it is hard to say "how close". Let's assume anything
+ * greater than 2^23 is enough to reject a packet as "too old".
+ *
+ * Ping/Ack/Nack Handling:
+ * Ping/Ack/Nack packets can hold 64-bit PSNs but the replay queue stores
+ * packets it uses 24 bit PSNs. Therefore, a ping will contain a 24-bit PSN
+ * and a count. To prevent rollover issues, code sending pings
+ * will truncate the count in the case where the replay queue contains a
+ * rollover. Because of this limitation the Ack and Nack replies are similarly
+ * constrained.
+ *
+ */
+#define MAX_PSN		0x0000000000FFFFFFull
+#define MAX_PSN_MASK	0xFFFFFFFFFF000000ull
+
+#define PSN_WINDOW_SIZE 0x0000000001000000ull
+#define PSN_LOW_WINDOW	OPX_MAX_OUTSTANDING_REPLAYS
+#define PSN_HIGH_WINDOW (PSN_WINDOW_SIZE - PSN_LOW_WINDOW)
+#define PSN_AGE_LIMIT	0x0000000000F00000ull
 
 struct fi_opx_reliability_client_state {
 
@@ -720,6 +836,8 @@ int32_t fi_opx_reliability_tx_max_nacks () {
 }
 
 void fi_opx_reliability_inc_throttle_count();
+void fi_opx_reliability_inc_throttle_nacks();
+void fi_opx_reliability_inc_throttle_maxo();
 
 __OPX_FORCE_INLINE_AND_FLATTEN__
 bool opx_reliability_ready(struct fid_ep *ep,
@@ -794,12 +912,14 @@ int32_t fi_opx_reliability_tx_available_psns (struct fid_ep *ep,
 	if(OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
 		(*psn_ptr)->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count();
+		fi_opx_reliability_inc_throttle_nacks();
 		return -1;
 	}
 	uint32_t max_outstanding = fi_opx_reliability_tx_max_outstanding();
 	if(OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > max_outstanding)) {
 		(*psn_ptr)->psn.throttle = 1;
 		fi_opx_reliability_inc_throttle_count();
+		fi_opx_reliability_inc_throttle_maxo();
 		return -1;
 	}
 
@@ -865,7 +985,7 @@ int32_t fi_opx_reliability_tx_next_psn (struct fid_ep *ep,
 
 	return psn;
 }
-static inline
+__OPX_FORCE_INLINE__
 struct fi_opx_reliability_tx_replay *
 fi_opx_reliability_client_replay_allocate(struct fi_opx_reliability_client_state * state,
 	const bool use_iov)
@@ -874,18 +994,18 @@ fi_opx_reliability_client_replay_allocate(struct fi_opx_reliability_client_state
 
 	if (!use_iov) {
 		return_value = (struct fi_opx_reliability_tx_replay *)ofi_buf_alloc(state->replay_pool);
-		if (OFI_LIKELY(return_value != NULL)) {
-			return_value->use_iov = 0;
-			return_value->payload = (uint64_t *) &return_value->data;
-			return_value->nack_count = 0;
-		}
 	} else {
 		return_value = (struct fi_opx_reliability_tx_replay *)ofi_buf_alloc(state->replay_iov_pool);
-		if (OFI_LIKELY(return_value != NULL)) {
-			return_value->use_iov = 1;
-			return_value->iov = (struct iovec *) &return_value->data;
+	}
+	if (OFI_LIKELY(return_value != NULL)) {
 			return_value->nack_count = 0;
-		}
+			return_value->pinned = false;
+			return_value->acked = false;
+			return_value->use_sdma = false;
+			return_value->use_iov = use_iov;
+
+			// This will implicitly set return_value->iov correctly
+			return_value->payload = (uint64_t *) &return_value->data;
 	}
 
 	return return_value;
@@ -974,7 +1094,7 @@ void fi_opx_reliability_client_replay_register_with_update (struct fi_opx_reliab
 	return;
 }
 
-void fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service * service,
+ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service * service,
 					struct fi_opx_reliability_tx_replay * replay);
 
 

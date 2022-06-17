@@ -64,6 +64,8 @@ enum ping_count_name {
 	/* ======== Stats below this line are counts only. ========
 	   When adding new ones, keep UEPKT_RECV first and THROTTLED last! ===== */
 	UEPKT_RECV,
+	THROTTLED_MAX_OUTSTANDING,
+	THROTTLED_NACKS,
 	THROTTLED
 };
 
@@ -161,6 +163,8 @@ void dump_ping_counts()
 	fprintf(stderr,"(%d) Nacks Recv'd     %lu\n", pid, ping_counts[NACKS_RECV]);
 	fprintf(stderr,"(%d) Nacks Ignored    %lu\n", pid, ping_counts[NACKS_IGNORED]);
 	fprintf(stderr,"(%d) UEPKT Recv'd     %lu\n", pid, ping_counts[UEPKT_RECV]);
+	fprintf(stderr,"(%d) Throttle MaxOut  %lu\n", pid, ping_counts[THROTTLED_MAX_OUTSTANDING]);
+	fprintf(stderr,"(%d) Throttle Nacks   %lu\n", pid, ping_counts[THROTTLED_NACKS]);
 	fprintf(stderr,"(%d) Throttle Cnt     %lu\n", pid, ping_counts[THROTTLED]);
 	fprintf(stderr,"(%d) ==== PING COUNT ====\n", pid);
 
@@ -189,6 +193,16 @@ void dump_ping_counts()
 void fi_opx_reliability_inc_throttle_count()
 {
 	INC_PING_COUNT(THROTTLED);
+}
+
+void fi_opx_reliability_inc_throttle_nacks()
+{
+	INC_PING_COUNT(THROTTLED_NACKS);
+}
+
+void fi_opx_reliability_inc_throttle_maxo()
+{
+	INC_PING_COUNT(THROTTLED_MAX_OUTSTANDING);
 }
 
 static inline
@@ -350,8 +364,6 @@ void fi_reliability_service_print_replay_ring (struct fi_opx_reliability_tx_repl
 
 	return;
 }
-
-#define OPX_RELIABILITY_MAX_NACK (128)
 
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_reliability_inject_ud_opcode (struct fid_ep *ep,
@@ -634,6 +646,44 @@ void fi_opx_hfi1_rx_reliability_send_pre_acks(struct fid_ep *ep, const uint64_t 
 	INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_ACKS_SENT, key.value, psn_start, psn_count);
 }
 
+/**
+ * Send a ping response over a given range of PSNs. If the specified
+ * range crosses a PSN rollover boundary, the response will be sent across
+ * multiple packets such that no single packet will contain a range that
+ * rolls over.
+ */
+__OPX_FORCE_INLINE__
+ssize_t fi_opx_hfi1_rx_reliability_ping_response (struct fid_ep *ep,
+						const uint64_t key,
+						uint64_t psn_start,
+						uint64_t psn_stop,
+						const uint64_t slid,
+						const uint64_t rx,
+						const uint64_t opcode)
+{
+	assert(psn_stop >= psn_start);
+	uint64_t psn_count = (psn_stop - psn_start) + 1;
+	ssize_t rc;
+	do {
+		uint64_t psn_start_24 = psn_start & MAX_PSN;
+		const uint64_t psn_count_24 = MIN(psn_count, (MAX_PSN - psn_start_24) + 1);
+
+		rc = fi_opx_hfi1_tx_reliability_inject(ep,
+				key, slid, rx,
+				psn_start_24,
+				psn_count_24,
+				opcode);
+		INC_PING_STAT_COND(rc == FI_SUCCESS,
+			opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK ? ACKS_SENT : NACKS_SENT,
+			key, ping_start_24, ack_count_24);
+
+		psn_count -= psn_count_24;
+		psn_start += psn_count_24;
+	} while (psn_count > 0 && rc == FI_SUCCESS);
+
+	return rc;
+}
+
 void fi_opx_hfi1_rx_reliability_ping (struct fid_ep *ep,
 		struct fi_opx_reliability_service * service,
 		const uint64_t key, uint64_t psn_count, uint64_t psn_start,
@@ -695,231 +745,121 @@ void fi_opx_hfi1_rx_reliability_ping (struct fid_ep *ep,
 
 	const uint64_t ping_stop_psn = ping_start_psn + ping_psn_count - 1;
 
-	struct fi_opx_reliability_service_range ping;
-	ping.begin = ping_start_psn;
-	ping.end = ping_stop_psn;
+	/*
+	 * ping_start_psn                               ping_stop_psn
+	 *      |                                               |
+	 *      |---------------- Ping PSN Range ---------------|
+	 *
+	 *      |-------------------- RX Flow ------------------|
+	 *      |                                               |
+	 *      |           flow->          flow->              |
+	 *      |            next_psn        uepkt->psn         |
+	 *      |             |                |                |
+	 *      |-------------+----------------+----------------|
+	 *      | ACK range 1 | NACK range 1   | ACK range 2    |
+	 *      |-------------+----------------+----------------|
+	 *
+	 *  !IMPORTANT! We need to avoid sending any ACKs right after we
+	 *     send any NACKs. When the sender receives a NACK, they will
+	 *     turn on throttling to prevent sending more packets while
+	 *     they catch up on replaying. However, as soon as they receive
+	 *     an ACK, they will turn the throttling off.
+	 *
+	 *  Note that the Ping PSN Range as illustrated above is only one
+	 *  possibility; The actual start and stop points may exclude any
+	 *  or all of the ACK/NACK ranges.
+	 *
+	 * 1) ACK range 1: ACK all the packets we've received up to the
+	 *    next expected PSN or the last PSN in the requested range,
+	 *    whichever is smaller
+	 */
+	uint64_t ack_stop_psn = MIN(flow->next_psn - 1, ping_stop_psn);
 
-	if (OFI_LIKELY(flow->uepkt == NULL)) {
-
-		/* fast path - no unexpected packets were received */
-
-		//uint64_t ack_start_psn = 0;
-		uint64_t ack_stop_psn = flow->next_psn - 1;
-
-		ssize_t rc = FI_SUCCESS;
-		if (ping_start_psn <= ack_stop_psn) {
-
-			/* need to ack some, or all, packets in the range
-			 * requested by the ping */
-
-			uint64_t ack_count = ack_stop_psn - ping_start_psn + 1;
-
-			// We want to avoid sending ACK ranges that include a 24-bit
-			// rollover.
-			uint64_t update_count = 0;
-			do {
-				uint64_t ping_start_24 = ping_start_psn & MAX_PSN;
-				const uint64_t ack_count_24 = MIN(ack_count, MAX_PSN-ping_start_24 + 1);
-				rc = fi_opx_hfi1_tx_reliability_inject(ep,
-						key, slid, rx,
-						ping_start_24,
-						ack_count_24,
+	ssize_t rc;
+	if (ping_start_psn <= ack_stop_psn) {
+		rc = fi_opx_hfi1_rx_reliability_ping_response (ep,
+						key, ping_start_psn,
+						ack_stop_psn, slid, rx,
 						FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK);
-				INC_PING_STAT_COND(rc == FI_SUCCESS, ACKS_SENT, key, ping_start_24, ack_count_24);
-				ack_count -= ack_count_24;
-				update_count += ack_count_24;
-				ping_start_psn += ack_count_24;
-			} while (ack_count > 0 && rc == FI_SUCCESS);
 
-			/* do not underflow 'ping_psn_count' */
-			update_count = MIN(update_count, ping_psn_count);
-			ping_psn_count -= update_count;
-
-			/*
-			 * Since we so far haven't received any unexpected packets,
-			 * chances are any remaining packets in the ping range are
-			 * already enroute and we simply haven't processed them yet.
-			 *
-			 * Return now to avoid sending NACKs for such packets.
-			 * If they really did get dropped, we'll send a NACK for them
-			 * as soon as we receive the first out of order packet.
-			 */
+		/*
+		 * If we failed to send the ack, stop now.
+		 *
+		 * Or, if we haven't received any unexpected packets,
+		 * chances are any remaining packets in the ping range are
+		 * already enroute and we simply haven't processed them yet.
+		 *
+		 * Return now to avoid sending NACKs for such packets.
+		 * If they really did get dropped, we'll send a NACK for them
+		 * as soon as we receive the first out of order packet, or on
+		 * subsequent ping requests where ACK range 1 is excluded
+		 * from the range.
+		 */
+		if (OFI_LIKELY(flow->uepkt == NULL) || rc != FI_SUCCESS) {
 			return;
 		}
-
-		while (rc == FI_SUCCESS && ping_psn_count > 0) {
-
-			/* no unexpected packets have been received; nack the remaining
-			 * portion of the range requested by the ping and return */
-
-			// We want to avoid sending NACK ranges that include a 24-bit
-			// rollover.
-			uint64_t ping_start_24 = ping_start_psn & MAX_PSN;
-			uint64_t ack_count_24 = MIN(ping_psn_count, MAX_PSN-ping_start_24 + 1);
-			rc = fi_opx_hfi1_tx_reliability_inject(ep,
-					key, slid, rx,
-					ping_start_24,
-					ack_count_24,
-					FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK);
-			INC_PING_STAT_COND(rc == FI_SUCCESS, NACKS_SENT, key, ping_start_24, ack_count_24);
-			ping_psn_count -= ack_count_24;
-			ping_start_psn += ack_count_24;
-		}
-
-		return;
 	}
-
-
-//	fi_opx_reliability_ticketlock_acquire(&flow->lock);			/* LOCK */
-	//ofi_spin_lock(&flow->lock);
 
 	/*
-	 * odd index == nack range
-	 * even index == ack range
+	 * 2) ACK range 2: Either the ping range starts after ACK range 1,
+	 *    or we've received at least some unexpected packets.
+	 *    Send ACKs for the first set of consecutive unexpected packets
+	 *    we've received that fall into the requested ping range
 	 */
+	if (flow->uepkt != NULL) {
+		struct fi_opx_reliability_rx_uepkt *uepkt = flow->uepkt;
 
-	/* WHY 3?
-	   This is currently set to 3 to prevent aggressive nacking of gaps
-	   If the sender(s) gets way ahead, we can have several gaps in the flow
-	   and if we nack aggressively, the sender will replay those, potentially
-	   getting us right back into the gapping issue immediately.
-	   This anomalous event (gaps) should be rare, so the aggressive acking
-	   can still take place with the 0th and 2nd range.
-
-	   This can be demonstrated with a benchmark like pingping from the
-	   MPICH test suite.  Change this to a higher range and the performance
-	   will be prohibitively/pathalogically bad.  This nack throttling leads to much
-	   better behavior in flood situations, though the real solution
-	   is some combination of exponential back off on the sender
-	   and light nacking in this range handling code
-	   0       1(gap)   2       3(gap)   4       5(gap)
-	   |--ACK--|--NACK--|--ACK--|--NACK--|--ACK--|--NACK--|--ACK--|
-	    <---------------------->
-		 CAP it at 3 to
-		 communicate a gap to
-		 the sender
-		<---------------------->
-	*/
-	const unsigned range_max = 3;
-	struct fi_opx_reliability_service_range range[range_max];
-
-	unsigned range_count = 1;
-
-	/* initial ack range */
-	range[0].begin = 0;
-	range[0].end = flow_next_psn - 1;
-
-	const struct fi_opx_reliability_rx_uepkt * const head = flow->uepkt;	/* read head again now that queue is locked; avoid race */
-
-
-	if (head == NULL) {
-
-		range_count = 2;
-		range[1].begin = flow_next_psn;
-		range[1].end = (uint64_t)-1;
-
-	} else {
-
-		struct fi_opx_reliability_rx_uepkt * uepkt =
-			(struct fi_opx_reliability_rx_uepkt *) head;
-
-		/* initial nack range */
-		assert(range_count < range_max);
-		range[range_count].begin = range[range_count-1].end + 1;
-		range[range_count].end = uepkt->psn - 1;
-		range_count++;
-
-		/* start next ack range */
-		assert(range_count < range_max);
-		range[range_count].begin = uepkt->psn;
-		range[range_count].end = uepkt->psn;
-		uepkt = uepkt->next;
-
-		/* Ack the entire range of all consecutive unexpected packets we've received */
-		while ((uepkt != head) && (uepkt->psn == (range[range_count].end + 1))) {
-			range[range_count].end++;
+		// Find the first unexpected packet who's PSN is in the ping range
+		// The unexpected packet queue is a ring, so uepkt->next
+		// will never be NULL, and if we make it all the way around,
+		// the psn check will fail
+		while (uepkt->psn < ping_start_psn && uepkt->psn < uepkt->next->psn) {
 			uepkt = uepkt->next;
 		}
 
-		/* The omitted code below will build further ack/nack ranges if we ever
-		   increase range_max beyond 3. However, with range_max == 3, neither the
-		   while nor the following if block will ever be executed */
-#if 0
-		while ((uepkt != head) && (range_count < range_max - 1)) {
+		if (uepkt->psn >= ping_start_psn && uepkt->psn <= ping_stop_psn) {
+			uint64_t first_uepkt_psn = uepkt->psn;
+			uint64_t last_uepkt_psn = first_uepkt_psn;
 
-			if (uepkt->psn == (range[range_count].end + 1)) {
-				assert(range_count < range_max);
-				range[range_count].end++;
-			} else {
-				/* nack range */
-				range_count++;
-				assert(range_count < range_max);
-				range[range_count].begin = range[range_count-1].end + 1;
-				range[range_count].end = uepkt->psn - 1;
+			while (last_uepkt_psn <= ping_stop_psn &&
+				uepkt->psn == (last_uepkt_psn + 1)) {
 
-				if (range_count < range_max - 1) {
-					/* start next ack range */
-					range_count++;
-					assert(range_count < range_max);
-					range[range_count].begin = uepkt->psn;
-					range[range_count].end = uepkt->psn;
-				}
+				++last_uepkt_psn;
+				uepkt = uepkt->next;
 			}
-			uepkt = uepkt->next;
+
+			rc = fi_opx_hfi1_rx_reliability_ping_response (ep,
+							key, first_uepkt_psn,
+							last_uepkt_psn, slid, rx,
+							FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK);
+			if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
+				return;
+			}
 		}
-
-		range_count++;
-
-		if ((uepkt == head) && (range_count < range_max)) {
-
-			/* tail nack range */
-			assert(range_count < range_max);
-			range[range_count].begin = range[range_count-1].end + 1;
-			range[range_count].end = (uint64_t)-1;
-			range_count++;
-		}
-#endif
 	}
 
-//	fi_opx_reliability_ticketlock_release(&flow->lock);			/* UNLOCK */
-	//ofi_spin_unlock(&flow->lock);
+	/*
+	 * 3) NACK Range 1: Finally, NACK the range between next expected PSN
+	 *    and the first unexpected packet's PSN or stop PSN, whichever is
+	 *    smaller, but only if the specified ping range starts on the next
+	 *    expected PSN.
+	 */
+	if (ping_start_psn == flow->next_psn) {
+		uint64_t nack_start_psn = MAX(flow->next_psn, ping_start_psn);
+		uint64_t nack_stop_psn = flow->uepkt == NULL ?
+						ping_stop_psn :
+						MIN(flow->uepkt->psn, ping_stop_psn);
 
-	/* first ack range begins at psn 0 */
-	unsigned index = 0;
-	uint64_t ping_count = ping.end - ping.begin + 1;
+		if (nack_start_psn <= nack_stop_psn) {
 
-	ssize_t rc = FI_SUCCESS;
+			uint64_t nack_count = MIN((nack_stop_psn - nack_start_psn) + 1, OPX_RELIABILITY_RX_MAX_NACK);
+			nack_stop_psn = nack_start_psn + nack_count;
 
-	while (rc == FI_SUCCESS && (ping_count > 0) && (index < range_count)) {
-
-		if (ping.begin <= range[index].end) {
-			const uint64_t start = ping.begin;
-			const uint64_t stop = MIN(ping.end, range[index].end);
-			const uint64_t count = stop - start + 1;
-
-			if ((index & 0x01u) == 0) {
-				/* even index == ack */
-				rc = fi_opx_hfi1_tx_reliability_inject(ep,
-						key, slid, rx,
-						start,		/* psn_start */
-						count,		/* psn_count */
-						FI_OPX_HFI_UD_OPCODE_RELIABILITY_ACK);
-				INC_PING_STAT_COND(rc == FI_SUCCESS, ACKS_SENT, key, start, count);
-			} else {
-				/* odd index == nack */
-				rc = fi_opx_hfi1_tx_reliability_inject(ep,
-						key, slid, rx,
-						start,		/* psn_start */
-						count,		/* psn_count */
+			fi_opx_hfi1_rx_reliability_ping_response (ep,
+						key, nack_start_psn,
+						nack_start_psn, slid, rx,
 						FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK);
-				INC_PING_STAT_COND(rc == FI_SUCCESS, NACKS_SENT, key, start, count);
-			}
-
-			ping.begin += count;
-			ping_count -= count;
 		}
-
-		++index;
 	}
 }
 
@@ -1031,7 +971,18 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 			const size_t total_bytes = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
 			tmp->psn_ptr->psn.bytes_outstanding -= total_bytes;
 			assert((int32_t)tmp->psn_ptr->psn.bytes_outstanding >= 0);
-			fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, tmp);
+
+			/* If the replay is pinned, then don't free it and just mark it as ACK'd. It is the
+			   responsibility of the pinner to free it after it's ACK'd */
+			if (!tmp->pinned) {
+				fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, tmp);
+			} else {
+#ifdef OPX_RELIABILITY_DEBUG
+				fprintf(stderr, "(tx) packet %016lx %08u ACK'd but pinned, marking as ACK'd and skipping free of replay.\n",
+					key, tmp->scb.hdr.reliability.psn);
+#endif
+				tmp->acked = true;
+			}
 			tmp = next;
 
 		} while (tmp != head);
@@ -1148,7 +1099,18 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 		const size_t total_bytes = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
 		tmp->psn_ptr->psn.bytes_outstanding -= total_bytes;
 		assert((int32_t)tmp->psn_ptr->psn.bytes_outstanding >= 0);
-		fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, tmp);
+
+		/* If the replay is pinned, then don't free it and just mark it as ACK'd. It is the
+		   responsibility of the pinner to free it after it's ACK'd */
+		if (!tmp->pinned) {
+			fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, tmp);
+		} else {
+#ifdef OPX_RELIABILITY_DEBUG
+			fprintf(stderr, "(tx) packet %016lx %08u ACK'd but pinned, marking as ACK'd and skipping free of replay.\n",
+				key, tmp->scb.hdr.reliability.psn);
+#endif
+			tmp->acked = true;
+		}
 		tmp = next;
 
 	} while (tmp != halt);
@@ -1160,9 +1122,18 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 }
 
 
-void fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service * service,
+ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service * service,
 					struct fi_opx_reliability_tx_replay * replay)
 {
+
+#ifdef OPX_RELIABILITY_DEBUG
+	union fi_opx_reliability_service_flow_key key;
+	key.slid = (uint32_t)replay->scb.hdr.stl.lrh.slid;
+	key.tx = (uint32_t)replay->scb.hdr.reliability.origin_tx;
+	key.dlid = (uint32_t)replay->scb.hdr.stl.lrh.dlid;
+	key.rx = (uint32_t)replay->scb.hdr.stl.bth.rx;
+
+#endif
 
 	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 	const uint16_t lrh_pktlen_le = ntohs(replay->scb.hdr.stl.lrh.pktlen);
@@ -1177,50 +1148,18 @@ void fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service * s
 
 	FI_OPX_HFI1_UPDATE_CREDITS(pio_state, service->tx.hfi1.pio_credits_addr);
 
-#ifdef OPX_RELIABILITY_DEBUG
-	union fi_opx_reliability_service_flow_key key;
-	key.slid = (uint32_t)replay->scb.hdr.stl.lrh.slid;
-	key.tx = (uint32_t)replay->scb.hdr.reliability.origin_tx;
-	key.dlid = (uint32_t)replay->scb.hdr.stl.lrh.dlid;
-	key.rx = (uint32_t)replay->scb.hdr.stl.bth.rx;
-
-#endif
-
-
-	/*
-	 * if not enough credits are available, spin a few time and wait for
-	 * more credits to free up. if the replay has 8192 bytes of payload
-	 * then it will need 129 credits in total, but the total number of
-	 * credits is around 160.
-	 *
-	 * it is ok to pause, it is not ok to block
-	 */
 	const uint16_t total_credits_needed = payload_credits_needed + 1;
 	uint16_t total_credits_available = FI_OPX_HFI1_AVAILABLE_RELIABILITY_CREDITS(pio_state);
-	unsigned loop = 0;
-	/*
-	 * TODO: Implement PAUSE time-out functionality using time-out configuration
-	 * parameter(s).
-	 */
-	while ((total_credits_available < total_credits_needed) &&
-		   (loop++ < FI_OPX_HFI1_TX_DO_REPLAY_CREDIT_MAX_WAIT)) {
+	if (total_credits_available < total_credits_needed) {
 		FI_OPX_HFI1_UPDATE_CREDITS(pio_state, service->tx.hfi1.pio_credits_addr);
 		total_credits_available = FI_OPX_HFI1_AVAILABLE_RELIABILITY_CREDITS(pio_state);
-	}
-
-	if (total_credits_available < total_credits_needed) {
-
-		/*
-		 * not enough credits available
-		 *
-		 * DO NOT BLOCK - instead, drop this request and allow the
-		 * reliability protocol to time out and try again
-		 */
+		if (total_credits_available < total_credits_needed) {
 #ifdef OPX_RELIABILITY_DEBUG
-		fprintf(stderr, "(tx) packet %016lx %08u replay dropped (no credits)\n", key.value, (uint32_t)replay->scb.hdr.reliability.psn);
+			fprintf(stderr, "(tx) packet %016lx %08u Couldn't do replay (no credits)\n", key.value, (uint32_t)replay->scb.hdr.reliability.psn);
 #endif
-		service->tx.hfi1.pio_state->qw0 = pio_state.qw0;
-		return;
+			service->tx.hfi1.pio_state->qw0 = pio_state.qw0;
+			return -FI_EAGAIN;
+		}
 	}
 
 #ifdef OPX_RELIABILITY_DEBUG
@@ -1302,14 +1241,48 @@ void fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service * s
 	/* save the updated txe state */
 	service->tx.hfi1.pio_state->qw0 = pio_state.qw0;
 
-	replay->nack_count = 0;
+	return FI_SUCCESS;
 }
 
+ssize_t fi_opx_reliability_pio_replay (union fi_opx_reliability_deferred_work *work)
+{
+	struct fi_opx_reliability_tx_pio_replay_params *params = &work->pio_replay;
+	struct fi_opx_ep *opx_ep = (struct fi_opx_ep *) params->opx_ep;
+
+#ifdef OPX_RELIABILITY_DEBUG
+	fprintf(stderr, "(tx) flow %016lx Executing deferred PIO Replay (%p) with start_index=%u, num_replay=%u\n",
+		params->flow_key, params, params->start_index, params->num_replays);
+#endif
+
+	for (int i = params->start_index; i < params->num_replays; ++i) {
+		if (params->replays[i]->acked) {
+#ifdef OPX_RELIABILITY_DEBUG
+		fprintf(stderr, "(tx) packet %016lx %08u replay already ACK'd, skipping deferred replay\n",
+			params->flow_key, params->replays[i]->scb.hdr.reliability.psn);
+#endif
+			fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, params->replays[i]);
+			params->replays[i] = NULL;
+			continue;
+		}
+
+		ssize_t rc = fi_opx_reliability_service_do_replay(&opx_ep->reliability->service, params->replays[i]);
+		if (rc == FI_SUCCESS) {
+			params->replays[i]->pinned = false;
+			params->replays[i] = NULL;
+		} else {
+			params->start_index = i;
+			return -FI_EAGAIN;
+		}
+	}
+
+	return FI_SUCCESS;
+}
 
 void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 		struct fi_opx_reliability_service * service,
 		const uint64_t key, const uint64_t psn_count, const uint64_t psn_start)
 {
+	assert(psn_count > 0);
 	const uint64_t stop_psn = psn_start + psn_count - 1;
 
 	INC_PING_STAT(NACKS_RECV, key, psn_start, psn_count);
@@ -1349,6 +1322,10 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 		 * there are no unack'd elements in the replay queue;
 		 * do nothing and return
 		 */
+#ifdef OPX_RELIABILITY_DEBUG
+		fprintf(stderr, "(tx) flow__ %016lx rcv nack %08lu..%08lu No Unack'd replays in queue, ignoring\n",
+			key, psn_start, stop_psn);
+#endif
 		INC_PING_STAT(NACKS_IGNORED, key, psn_start, psn_count);
 		return;
 	}
@@ -1356,74 +1333,118 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 	struct fi_opx_reliability_tx_replay * tail = head->prev;
 
 	/*
-	 * find the first replay to retransmit
+	 * find the first replay to retransmit. Skip any pinned (in progress) replays.
 	 */
 
 	struct fi_opx_reliability_tx_replay * start = head;
-	while ((start->scb.hdr.reliability.psn < psn_start) && (start != tail)) {
+	while ((start->scb.hdr.reliability.psn < psn_start || start->pinned) && (start != tail)) {
 		start = start->next;
 	}
 
-	if (OFI_UNLIKELY(start->scb.hdr.reliability.psn < psn_start)) {
+	if (OFI_UNLIKELY(start->scb.hdr.reliability.psn < psn_start ||
+			 start->scb.hdr.reliability.psn > stop_psn ||
+			 start->pinned)) {
 
 		/*
-		 * all elements in replay queue are 'younger' than the
-		 * first psn to retransmit; do nothing and return
+		 * There are no unpinned replays within the nack range.
+		 * Do nothing and return.
 		 */
+#ifdef OPX_RELIABILITY_DEBUG
+		fprintf(stderr, "(tx) flow__ %016lx rcv nack %08lu..%08lu No Unack'd, unpinned replays in range, ignoring\n",
+			key, psn_start, stop_psn);
+#endif
 		INC_PING_STAT(NACKS_IGNORED, key, psn_start, psn_count);
 		return;
 	}
 
 	/*
-	 * find the last replay to retransmit
+	 * We limit how many replays we do here (OPX_RELIABILITY_TX_MAX_REPLAYS)
+	 * to limit running out of credits, although if the # of credits
+	 * assigned us by the driver is low, or our packets are large, we will
+	 * probably run out of credits before we hit the limit. Running out of
+	 * credits here isn't an error but it results in wasted work and a
+	 * delay, but given that we're already dropping packets (we wouldn't be
+	 * here if we weren't) being a little inefficient in re-sending them
+	 * might actually allow the receiver time to catch up.
 	 */
 
+	/*
+	 * We have at least 1 replay to retransmit, now find the last.
+	 */
+
+	uint64_t replay_count = 1;
 	struct fi_opx_reliability_tx_replay * stop = start;
-	while ((stop->next != head) && (stop->next->scb.hdr.reliability.psn <= stop_psn)) {
+	while ((stop->next != head) &&
+		(stop->next->scb.hdr.reliability.psn <= stop_psn) &&
+		(replay_count < OPX_RELIABILITY_TX_MAX_REPLAYS)) {
+
+		// We won't retransmit pinned replays, so don't count those
+		if (!stop->pinned) {
+			++replay_count;
+			++stop->nack_count;
+		}
 		stop = stop->next;
-	}
-
-	if (OFI_UNLIKELY(stop->scb.hdr.reliability.psn > stop_psn)) {
-
-		/*
-		 * all elements in the replay queue are 'older' than the
-		 * last psn to retransmit; do nothing an return
-		 */
-		INC_PING_STAT(NACKS_IGNORED, key, psn_start, psn_count);
-		return;
 	}
 
 	const struct fi_opx_reliability_tx_replay * const halt = stop->next;
 	struct fi_opx_reliability_tx_replay * replay = start;
 
-	/*
-	 * We limit how many replays we do at here to limit running out of
-	 * credits, although if the # of credits assigned us by the driver is
-	 * low, or our packets are large, we will probably run out of credits
-	 * before we hit the limit. Running out of credits here isn't an error
-	 * but it results in wasted work and a delay, but given that we're already
-	 * dropping packets (we wouldn't be here if we weren't) being a little
-	 * inefficient in re-sending them might actually allow the receiver time
-	 * to catch up.
-	 */
-
-	uint64_t inject_count = 0;
-	const uint64_t inject_max = 10; // TODO: Try tuning this.
-
+#ifdef OPX_RELIABILITY_DEBUG
+	fprintf(stderr, "(tx) flow__ %016lx rcv nack %08lu..%08lu Replaying PSNs %08u - %08u\n",
+		key, psn_start, stop_psn,
+		(uint32_t)start->scb.hdr.reliability.psn,
+		(uint32_t)stop->scb.hdr.reliability.psn);
+#endif
+	// Turn on throttling for this flow while we catch up on replays
 	start->psn_ptr->psn.nack_count = 1;
 
+	union fi_opx_reliability_deferred_work *work = NULL;
+	struct fi_opx_reliability_tx_pio_replay_params *params = NULL;
+	bool queing_replays = false;
+
+	/* We'll attempt to send each replay on the spot as long as sending the replay
+	   succeeds. As soon as replaying fails, we'll queue the failed replay and
+	   the remaining replays for retrying later */
 	do {
-		// The do_replay will reset replay->nack_count to 0 upon successful send
-		// So once we hit this threshold, we'll keep retrying the replay until it
-		// succeeds
-		if (++replay->nack_count >= service->nack_threshold) {
-			inject_count++;
-			fi_opx_reliability_service_do_replay(service, replay);
+		if (replay->pinned) {
+			replay = replay->next;
+			continue;
+		}
+
+		if (!queing_replays) {
+			if (fi_opx_reliability_service_do_replay(service, replay) != FI_SUCCESS) {
+				queing_replays = true;
+
+				work = ofi_buf_alloc(service->work_pending_pool);
+				assert(work);
+				params = &work->pio_replay;
+				params->work_elem.slist_entry.next = NULL;
+				params->work_elem.work_fn = fi_opx_reliability_pio_replay;
+				params->opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+				params->start_index = 0;
+
+				/* Add this replay to the queue */
+				replay->pinned = true;
+				params->replays[0] = replay;
+				params->num_replays = 1;
+			}
+		} else {
+			replay->pinned = true;
+			params->replays[params->num_replays] = replay;
+			++params->num_replays;
 		}
 
 		replay = replay->next;
+	} while (replay != halt);
 
-	} while ((replay != halt) && (inject_count < inject_max));
+	if (queing_replays) {
+		assert(params->num_replays <= OPX_RELIABILITY_TX_MAX_REPLAYS);
+#ifdef OPX_RELIABILITY_DEBUG
+		fprintf(stderr, "(tx) flow %016lx Queuing deferred PIO Replay (%p) with num_replays=%u\n",
+			params->flow_key, params, params->num_replays);
+#endif
+		slist_insert_tail(&work->work_elem.slist_entry, &service->work_pending);
+	}
 }
 
 __OPX_FORCE_INLINE_AND_FLATTEN__
@@ -1524,6 +1545,22 @@ void fi_reliability_service_ping_remote (struct fid_ep *ep,
 		service->tx.ping_start_key = fail_key;
 	} else {
 		service->tx.ping_start_key = 0;
+	}
+}
+
+void fi_opx_reliability_service_process_pending (struct fi_opx_reliability_service * service)
+{
+	assert(!slist_empty(&service->work_pending));
+
+	union fi_opx_reliability_deferred_work *work =
+		(union fi_opx_reliability_deferred_work *) slist_remove_head(&service->work_pending);
+
+	work->work_elem.slist_entry.next = NULL;
+	ssize_t rc = work->work_elem.work_fn(work);
+	if(rc == FI_SUCCESS) {
+		ofi_buf_free(work);
+	} else {
+		slist_insert_head(&work->work_elem.slist_entry, &service->work_pending);
 	}
 }
 
@@ -2127,6 +2164,15 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 
 	service->pending_rx_reliability_ops_hashmap = NULL;
 
+	ofi_bufpool_create(&service->uepkt_pool,
+					sizeof(struct fi_opx_reliability_rx_uepkt),
+					64, UINT_MAX, 1024, 0);
+
+	ofi_bufpool_create(&service->work_pending_pool,
+					sizeof(union fi_opx_reliability_deferred_work),
+					0, UINT_MAX, 1024, 0);
+
+	slist_init(&service->work_pending);
 
 	return origin_reliability_rx;
 }
@@ -2146,6 +2192,14 @@ void fi_opx_reliability_service_fini (struct fi_opx_reliability_service * servic
 
 	if (service->pending_rx_reliability_pool) {
 		ofi_bufpool_destroy(service->pending_rx_reliability_pool);
+	}
+
+	if (service->uepkt_pool) {
+		ofi_bufpool_destroy(service->uepkt_pool);
+	}
+
+	if (service->work_pending_pool) {
+		ofi_bufpool_destroy(service->work_pending_pool);
 	}
 
 	return;
@@ -2269,14 +2323,13 @@ void fi_opx_reliability_client_fini (struct fi_opx_reliability_client_state * st
 }
 
 __OPX_FORCE_INLINE__
-struct fi_opx_reliability_rx_uepkt *fi_opx_reliability_allocate_uepkt(const union fi_opx_hfi1_packet_hdr * const hdr,
-									const uint8_t * const payload,
-									const size_t payload_bytes_to_copy)
+struct fi_opx_reliability_rx_uepkt *fi_opx_reliability_allocate_uepkt(struct fi_opx_reliability_service *service,
+								const union fi_opx_hfi1_packet_hdr * const hdr,
+								const uint8_t * const payload,
+								const size_t payload_bytes_to_copy)
 {
-	struct fi_opx_reliability_rx_uepkt * tmp = NULL;
-	int rc __attribute__ ((unused));
-	rc = posix_memalign((void **)&tmp, 64, sizeof(*tmp) + payload_bytes_to_copy);
-	assert(rc==0);
+	struct fi_opx_reliability_rx_uepkt * tmp = ofi_buf_alloc(service->uepkt_pool);
+	assert(tmp);
 
 	memcpy((void*)&tmp->hdr, hdr, sizeof(union fi_opx_hfi1_packet_hdr));
 
@@ -2328,6 +2381,16 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 		fprintf(stderr, "(rx) packet %016lx %08u received (process out-of-order).\n", key.value, psn);
 #endif
 		state->process_fn(ep, hdr, payload);
+
+		if (!(psn & state->service->preemptive_ack_rate_mask) && psn) {
+			fi_opx_hfi1_rx_reliability_send_pre_acks(ep,
+					state->lid_be,
+					state->rx,
+					psn - state->service->preemptive_ack_rate + 1, /* psn_start */
+					state->service->preemptive_ack_rate, /* psn_count */
+					hdr, origin_rx);
+		}
+
 		next_psn += 1;
 
 		flow->next_psn = next_psn;
@@ -2347,6 +2410,16 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 #ifdef OPX_RELIABILITY_DEBUG
 				fprintf(stderr, "(rx) packet %016lx %08lu delivered.\n", key.value, next_psn);
 #endif
+				psn = next_psn & MAX_PSN;
+				if (!(psn & state->service->preemptive_ack_rate_mask) && psn) {
+					fi_opx_hfi1_rx_reliability_send_pre_acks(ep,
+							state->lid_be,
+							state->rx,
+							psn - state->service->preemptive_ack_rate + 1, /* psn_start */
+							state->service->preemptive_ack_rate, /* psn_count */
+							hdr, origin_rx);
+				}
+
 				++next_psn;
 
 				struct fi_opx_reliability_rx_uepkt * next = uepkt->next;
@@ -2358,7 +2431,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 
 				uepkt->prev->next = uepkt->next;
 				uepkt->next->prev = uepkt->prev;
-				free(uepkt);
+				ofi_buf_free(uepkt);
 				head = next;
 				uepkt = next;
 			}
@@ -2422,7 +2495,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 		 */
 
 		struct fi_opx_reliability_rx_uepkt * uepkt =
-			fi_opx_reliability_allocate_uepkt(hdr, payload, payload_bytes_to_copy);
+			fi_opx_reliability_allocate_uepkt(state->service, hdr, payload, payload_bytes_to_copy);
 
 		uepkt->prev = uepkt;
 		uepkt->next = uepkt;
@@ -2434,7 +2507,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 
 		//ofi_spin_unlock(&flow->lock);
 
-		uint64_t nack_count = MIN(psn_64 - next_psn, OPX_RELIABILITY_MAX_NACK);
+		uint64_t nack_count = MIN(psn_64 - next_psn, OPX_RELIABILITY_RX_MAX_NACK);
 		rc = fi_opx_hfi1_tx_reliability_inject(ep, key.value, key.slid,
 					origin_rx,
 					next_psn,
@@ -2459,7 +2532,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 		 *
 		 */
 		struct fi_opx_reliability_rx_uepkt * tmp =
-			fi_opx_reliability_allocate_uepkt(hdr, payload, payload_bytes_to_copy);
+			fi_opx_reliability_allocate_uepkt(state->service, hdr, payload, payload_bytes_to_copy);
 
 		tmp->psn = psn_64;
 
@@ -2491,7 +2564,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 		 */
 
 		 uint64_t nack_start_psn = tail->psn + 1;
-		 uint64_t nack_count = MIN(psn_64 - nack_start_psn, OPX_RELIABILITY_MAX_NACK);
+		 uint64_t nack_count = MIN(psn_64 - nack_start_psn, OPX_RELIABILITY_RX_MAX_NACK);
 
 		 if (nack_count) {
 			rc = fi_opx_hfi1_tx_reliability_inject(ep, key.value, key.slid,
@@ -2504,7 +2577,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 
 		//ofi_spin_lock(&flow->lock);
 		struct fi_opx_reliability_rx_uepkt * tmp =
-			fi_opx_reliability_allocate_uepkt(hdr, payload, payload_bytes_to_copy);
+			fi_opx_reliability_allocate_uepkt(state->service, hdr, payload, payload_bytes_to_copy);
 		tmp->prev = tail;
 		tmp->next = head;
 		tmp->psn = psn_64;
@@ -2546,7 +2619,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 
 			/* insert after this element */
 			struct fi_opx_reliability_rx_uepkt * tmp =
-				fi_opx_reliability_allocate_uepkt(hdr, payload, payload_bytes_to_copy);
+				fi_opx_reliability_allocate_uepkt(state->service, hdr, payload, payload_bytes_to_copy);
 
 			tmp->prev = uepkt;
 			tmp->next = uepkt->next;
@@ -2592,9 +2665,9 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 
 
 /*
- * The following function will itterate thru the unsorted hashmap of 
+ * The following function will iterate thru the unsorted hashmap of
  * coalesced PING requests.  An ACK/NAK will be sent as a response to
- * the reqeusts procssed. We might not make it thru the entire hashmap, 
+ * the requests processed. We might not make it thru the entire hashmap,
  * so don't deallocate any requests that cannot be sent.
  * 
  * This function is capable to handle an incomplete run thru the loop
@@ -2604,23 +2677,24 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
  * then adding those ops would be a good idea.
  */ 
 
-// TODO: Should add some feedback from the amount of PIO send credits avalible
-//       Each op procssed takes one credit to send
+// TODO: Should add some feedback from the amount of PIO send credits available
+//       Each op processed takes one credit to send
 
-void fi_opx_hfi_rx_reliablity_process_requests(struct fid_ep *ep, int max_to_send) {
+void fi_opx_hfi_rx_reliablity_process_requests(struct fid_ep *ep, int max_to_send)
+{
 
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
- 	struct fi_opx_reliability_service *service = opx_ep->reliability->state.service;
+	struct fi_opx_reliability_service *service = opx_ep->reliability->state.service;
 	struct fi_opx_pending_rx_reliability_op *cur_op, *tmp_op = NULL;
 	int pending_op_count = 0;
 
 	//FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=========Doing HASH_ITER\n");
 
-	// Itterate thru the unsorted hash list and do all ops in it
+	// Iterate thru the unsorted hash list and do all ops in it
 	 HASH_ITER(hh, service->pending_rx_reliability_ops_hashmap, cur_op, tmp_op) {
 
 		assert(cur_op->key.key);
-		assert(cur_op->ud_opcode  == FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING);  // No other opcodes suppoered
+		assert(cur_op->ud_opcode  == FI_OPX_HFI_UD_OPCODE_RELIABILITY_PING);  // No other opcodes supported
 
 		// Detect if we Coalesced any packets since responding to the first ping, then respond to them here
 		if (cur_op->psn_count < cur_op->psn_count_coalesce) {
@@ -2858,7 +2932,7 @@ void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
 
 			head->prev->next = head->next;
 			head->next->prev = head->prev;
-			free(head);
+			ofi_buf_free(head);
 			head = next;
 		};
 
@@ -2959,7 +3033,7 @@ void fi_opx_hfi1_rx_reliability_ack_resynch (struct fid_ep *ep,
 	itr = fi_opx_rbt_find(state->flow_rbtree_resynch, (void*)rx_key.value);
 
 	if (itr) {
-        fi_opx_rbt_key_value(state->flow_rbtree_resynch, itr, &rx_key_ptr, (void **)&resynch_flow);
+		fi_opx_rbt_key_value(state->flow_rbtree_resynch, itr, &rx_key_ptr, (void **)&resynch_flow);
 
 		resynch_flow->remote_ep_resynch_completed = 1;
 	}

@@ -1132,7 +1132,8 @@ int opx_hfi1_dput_write_header_and_payload(
 	}
 }
 
-int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work) {
+int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
+{
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
 	struct fi_opx_ep * opx_ep = params->opx_ep;
 	struct fi_opx_mr * opx_mr = params->opx_mr;
@@ -1387,10 +1388,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 
 	// Even though we're using SDMA, replays will still be sent via PIO,
 	// so we still may need to limit the SDMA payload size on credit-constrained systems
-	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
-	const uint64_t max_credits = .66 * pio_state.credits_total; // 66% (33% threshold) look up driver threshold
-	const uint64_t max_eager_bytes = MIN(max_credits << 6,opx_ep->tx->pio_max_eager_tx_bytes);
-	uint64_t max_bytes_per_packet = max_eager_bytes;
+	const uint64_t max_eager_bytes = opx_ep->tx->pio_max_eager_tx_bytes;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND DPUT SDMA, opcode %d -- (begin)\n", opcode);
@@ -1416,8 +1414,8 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			}
 			assert(!fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
 
-			uint64_t packet_count = (bytes_to_send / max_bytes_per_packet) +
-						((bytes_to_send % max_bytes_per_packet) ? 1 : 0);
+			uint64_t packet_count = (bytes_to_send / max_eager_bytes) +
+						((bytes_to_send % max_eager_bytes) ? 1 : 0);
 
 			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS);
 
@@ -1432,7 +1430,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 										  params->origin_rs,
 										  &params->sdma_we->psn_ptr,
 										  packet_count,
-										  max_bytes_per_packet);
+										  max_eager_bytes);
 
 			if (psns_avail < 1) {
 				return -FI_EAGAIN;
@@ -1455,7 +1453,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 				}
 
 				assert(bytes_to_send); // If this fails, we did math wrong
-				uint64_t packet_bytes = MIN(bytes_to_send, max_bytes_per_packet);
+				uint64_t packet_bytes = MIN(bytes_to_send, max_eager_bytes);
 
 				uint64_t tail_bytes = packet_bytes & 0x3Ful;
 				uint64_t blocks_to_send_in_this_packet = (packet_bytes >> 6) + (tail_bytes ? 1 : 0);
@@ -1498,7 +1496,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 							params->slid,
 							params->origin_rs, u8_rx,
 							delivery_completion,
-							max_bytes_per_packet);
+							max_eager_bytes);
 
 				bytes_to_send -= bytes_sent;
 				params->bytes_sent += bytes_sent;
