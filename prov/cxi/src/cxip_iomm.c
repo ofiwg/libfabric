@@ -101,6 +101,11 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 		md->dom = dom;
 		md->info = entry->info;
 		md->cached = true;
+		CXIP_DBG("addr:%p end:%p len:0x%lx iova:%llx lac:%d device:%d\n",
+			 entry->info.iov.iov_base,
+			 (char *)entry->info.iov.iov_base + entry->info.iov.iov_len,
+			 entry->info.iov.iov_len, md->md->iova, md->md->lac,
+			 !!(map_flags & CXI_MAP_DEVICE));
 	}
 
 	return ret;
@@ -121,6 +126,11 @@ static void cxip_do_unmap(struct ofi_mr_cache *cache,
 	ret = cxil_unmap(md->md);
 	if (ret)
 		CXIP_WARN("cxil_unmap failed: %d\n", ret);
+
+	CXIP_DBG("addr:%p end:%p len:0x%lx iova:%llx lac:%d\n",
+		 entry->info.iov.iov_base,
+		 (char *)entry->info.iov.iov_base + entry->info.iov.iov_len,
+		 entry->info.iov.iov_len, md->md->iova, md->md->lac);
 }
 
 static int cxip_scalable_iomm_init(struct cxip_domain *dom)
@@ -442,6 +452,62 @@ static void cxip_map_get_rocr_mem_region_size(const void *buf,
 
 #endif
 
+#if HAVE_LIBCUDA
+
+#include <cuda.h>
+#include <cuda_runtime.h>
+
+static void cxip_map_get_cuda_mem_region_size(const void *buf,
+					      unsigned long len, void **out_buf,
+					      unsigned long *out_len)
+{
+	CUresult ret;
+	unsigned long addr;
+	unsigned long length;
+
+	ret = ofi_cuPointerGetAttribute(&addr,
+					CU_POINTER_ATTRIBUTE_RANGE_START_ADDR,
+					(CUdeviceptr)buf);
+
+	if (ret != CUDA_SUCCESS) {
+		CXIP_WARN("Failed to get cuda start addr:%d\n", ret);
+		goto fail;
+	}
+
+	ret = ofi_cuPointerGetAttribute(&length,
+					CU_POINTER_ATTRIBUTE_RANGE_SIZE,
+					(CUdeviceptr)buf);
+
+	if (ret != CUDA_SUCCESS) {
+		CXIP_WARN("Failed to get cuda range size:%d\n", ret);
+		goto fail;
+	}
+
+	CXIP_DBG("User:addr=%p len=%lu Region:addr=0x%lx len=0x%lx\n",
+		 buf, len, addr, length);
+
+	*out_buf = (void *)addr;
+	*out_len = length;
+
+	return;
+
+fail:
+	*out_buf = (void *)buf;
+	*out_len = len;
+}
+
+#else
+
+static void cxip_map_get_cuda_mem_region_size(const void *buf,
+					      unsigned long len, void **out_buf,
+					      unsigned long *out_len)
+{
+	*out_buf = (void *)buf;
+	*out_len = len;
+}
+
+#endif
+
 static void cxip_map_get_mem_region_size(const void *buf, unsigned long len,
 					 enum fi_hmem_iface iface,
 					 void **out_buf, unsigned long *out_len)
@@ -449,6 +515,9 @@ static void cxip_map_get_mem_region_size(const void *buf, unsigned long len,
 	switch (iface) {
 	case FI_HMEM_ROCR:
 		cxip_map_get_rocr_mem_region_size(buf, len, out_buf, out_len);
+		break;
+	case FI_HMEM_CUDA:
+		cxip_map_get_cuda_mem_region_size(buf, len, out_buf, out_len);
 		break;
 	default:
 		*out_buf = (void *)buf;
