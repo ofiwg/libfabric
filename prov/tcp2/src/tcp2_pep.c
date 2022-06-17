@@ -42,7 +42,6 @@
 
 static int tcp2_pep_close(struct fid *fid)
 {
-	struct tcp2_progress *progress;
 	struct tcp2_pep *pep;
 
 	pep = container_of(fid, struct tcp2_pep, util_pep.pep_fid.fid);
@@ -52,10 +51,9 @@ static int tcp2_pep_close(struct fid *fid)
 	 */
 
 	if (pep->state == TCP2_LISTENING) {
-		progress = tcp2_pep2_progress(pep);
-		ofi_mutex_lock(&progress->lock);
-		tcp2_halt_sock(progress, pep->sock);
-		ofi_mutex_unlock(&progress->lock);
+		ofi_mutex_lock(&pep->progress->lock);
+		tcp2_halt_sock(pep->progress, pep->sock);
+		ofi_mutex_unlock(&pep->progress->lock);
 	}
 
 	ofi_close_socket(pep->sock);
@@ -223,13 +221,10 @@ static int tcp2_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 	return (addrlen_in < *addrlen) ? -FI_ETOOSMALL: FI_SUCCESS;
 }
 
-static int tcp2_pep_listen(struct fid_pep *pep_fid)
+static int tcp2_listen(struct tcp2_pep *pep, struct tcp2_progress *progress)
 {
-	struct tcp2_progress *progress;
-	struct tcp2_pep *pep;
 	int ret;
 
-	pep = container_of(pep_fid, struct tcp2_pep, util_pep.pep_fid);
 	if (pep->state != TCP2_IDLE) {
 		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
 			"passive endpoint is not idle\n");
@@ -243,15 +238,27 @@ static int tcp2_pep_listen(struct fid_pep *pep_fid)
 		return -ofi_sockerr();
 	}
 
-	progress = tcp2_pep2_progress(pep);
 	ofi_mutex_lock(&progress->lock);
 	ret = tcp2_monitor_sock(progress, pep->sock, POLLIN,
 				&pep->util_pep.pep_fid.fid);
-	ofi_mutex_unlock(&progress->lock);
-	if (!ret)
+	if (!ret) {
+		pep->progress = progress;
 		pep->state = TCP2_LISTENING;
+	}
+	ofi_mutex_unlock(&progress->lock);
 
 	return ret;
+}
+
+static int tcp2_pep_listen(struct fid_pep *pep_fid)
+{
+	struct tcp2_fabric *fabric;
+	struct tcp2_pep *pep;
+
+	pep = container_of(pep_fid, struct tcp2_pep, util_pep.pep_fid);
+	fabric = container_of(pep->util_pep.fabric, struct tcp2_fabric,
+			      util_fabric);
+	return tcp2_listen(pep, &fabric->progress);
 }
 
 static int tcp2_pep_reject(struct fid_pep *pep, fid_t fid_handle,
@@ -304,8 +311,8 @@ static struct fi_ops_cm tcp2_pep_cm_ops = {
 	.join = fi_no_join,
 };
 
-static int  tcp2_pep_getopt(fid_t fid, int level, int optname,
-			    void *optval, size_t *optlen)
+static int tcp2_pep_getopt(fid_t fid, int level, int optname,
+			   void *optval, size_t *optlen)
 {
 	if ( level != FI_OPT_ENDPOINT ||
 	     optname != FI_OPT_CM_DATA_SIZE)
