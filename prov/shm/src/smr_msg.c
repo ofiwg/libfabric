@@ -38,19 +38,6 @@
 #include "ofi_iov.h"
 #include "smr.h"
 
-
-static inline uint16_t smr_convert_rx_flags(uint64_t fi_flags)
-{
-	uint16_t flags = 0;
-
-	if (fi_flags & FI_COMPLETION)
-		flags |= SMR_RX_COMPLETION;
-	if (fi_flags & FI_MULTI_RECV)
-		flags |= SMR_MULTI_RECV;
-
-	return flags;
-}
-
 static struct smr_rx_entry *smr_get_recv_entry(struct smr_ep *ep,
 		const struct iovec *iov, void **desc, size_t count, fi_addr_t addr,
 		void *context, uint64_t tag, uint64_t ignore, uint64_t flags)
@@ -70,7 +57,7 @@ static struct smr_rx_entry *smr_get_recv_entry(struct smr_ep *ep,
 	entry->iov_count = count;
 	entry->context = context;
 	entry->err = 0;
-	entry->flags = smr_convert_rx_flags(flags);
+	entry->flags = flags;
 	entry->peer_id = ep->util_ep.caps & FI_DIRECTED_RECV &&
 				addr != FI_ADDR_UNSPEC ?
 				smr_addr_lookup(ep->util_ep.av, addr) : -1;
