@@ -1,0 +1,21 @@
+import pytest
+
+
+@pytest.mark.functional
+@pytest.mark.parametrize("environment_variable", ["FI_EFA_FORK_SAFE", "RDMAV_FORK_SAFE"])
+def test_fork_support(cmdline_args, completion_type, environment_variable):
+    from common import ClientServerTest
+    import copy
+    cmdline_args_copy = copy.copy(cmdline_args)
+
+    if cmdline_args_copy.environments:
+        cmdline_args_copy.environments += " "
+    else:
+        cmdline_args_copy.environments = ""
+
+    cmdline_args_copy.environments += "{}=1".format(environment_variable)
+    test = ClientServerTest(cmdline_args_copy, "fi_rdm_tagged_bw -K",
+                            completion_type=completion_type,
+                            datacheck_type="with_datacheck")
+    test.run()
+
