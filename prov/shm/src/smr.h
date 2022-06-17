@@ -115,7 +115,7 @@ struct smr_rx_entry {
 	uint64_t		ignore;
 	struct iovec		iov[SMR_IOV_LIMIT];
 	uint32_t		iov_count;
-	uint16_t		flags;
+	uint64_t		flags;
 	uint64_t		err;
 	enum fi_hmem_iface	iface;
 	uint64_t		device;
@@ -150,8 +150,8 @@ struct smr_sar_entry {
 };
 
 struct smr_ep;
-typedef int (*smr_rx_comp_func)(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
+typedef int (*smr_rx_comp_func)(struct smr_ep *ep, void *context,
+		uint64_t flags, size_t len, void *buf, fi_addr_t addr,
 		uint64_t tag, uint64_t data, uint64_t err);
 typedef int (*smr_tx_comp_func)(struct smr_ep *ep, void *context, uint32_t op,
 				uint64_t err);
@@ -342,22 +342,29 @@ int smr_tx_comp(struct smr_ep *ep, void *context, uint32_t op,
 int smr_tx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
 		       uint64_t err);
 int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, int64_t id,
+		uint64_t flags, size_t len, void *buf, int64_t id,
 		uint64_t tag, uint64_t data, uint64_t err);
-int smr_rx_comp(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
-		uint64_t tag, uint64_t data, uint64_t err);
-int smr_rx_src_comp(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
-		uint64_t tag, uint64_t data, uint64_t err);
-int smr_rx_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
-		uint64_t tag, uint64_t data, uint64_t err);
-int smr_rx_src_comp_signal(struct smr_ep *ep, void *context, uint32_t op,
-		uint16_t flags, size_t len, void *buf, fi_addr_t addr,
-		uint64_t tag, uint64_t data, uint64_t err);
+int smr_rx_comp(struct smr_ep *ep, void *context, uint64_t flags,
+		size_t len, void *buf, fi_addr_t addr, uint64_t tag,
+		uint64_t data, uint64_t err);
+int smr_rx_src_comp(struct smr_ep *ep, void *context, uint64_t flags,
+		    size_t len, void *buf, fi_addr_t addr, uint64_t tag,
+		    uint64_t data, uint64_t err);
+int smr_rx_comp_signal(struct smr_ep *ep, void *context, uint64_t flags,
+		       size_t len, void *buf, fi_addr_t addr, uint64_t tag,
+		       uint64_t data, uint64_t err);
+int smr_rx_src_comp_signal(struct smr_ep *ep, void *context, uint64_t flags,
+			   size_t len, void *buf, fi_addr_t addr, uint64_t tag,
+			   uint64_t data, uint64_t err);
 
-uint64_t smr_rx_cq_flags(uint32_t op, uint16_t op_flags);
+static inline uint64_t smr_rx_cq_flags(uint32_t op, uint64_t rx_flags,
+				       uint16_t op_flags)
+{
+	rx_flags |= ofi_rx_cq_flags(op);
+	if (op_flags & SMR_REMOTE_CQ_DATA)
+		rx_flags |= FI_REMOTE_CQ_DATA;
+	return rx_flags;
+}
 
 void smr_ep_progress(struct util_ep *util_ep);
 

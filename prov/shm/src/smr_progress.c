@@ -477,13 +477,10 @@ static struct smr_sar_entry *smr_progress_sar(struct smr_cmd *cmd,
 	sar_entry->next = next;
 	memcpy(sar_entry->iov, sar_iov, sizeof(*sar_iov) * iov_count);
 	sar_entry->iov_count = iov_count;
-	if (rx_entry) {
+	sar_entry->rx_entry.flags = smr_rx_cq_flags(cmd->msg.hdr.op, 0,
+						    cmd->msg.hdr.op_flags);
+	if (rx_entry)
 		sar_entry->rx_entry = *rx_entry;
-		sar_entry->rx_entry.flags |= cmd->msg.hdr.op_flags;
-		sar_entry->rx_entry.flags &= ~SMR_MULTI_RECV;
-	} else {
-		sar_entry->rx_entry.flags = cmd->msg.hdr.op_flags;
-	}
 
 	sar_entry->iface = iface;
 	sar_entry->device = device;
@@ -684,7 +681,7 @@ static int smr_progress_msg_common(struct smr_ep *ep, struct smr_cmd *cmd,
 {
 	struct smr_sar_entry *sar = NULL;
 	size_t total_len = 0;
-	uint16_t comp_flags;
+	uint64_t comp_flags;
 	void *comp_buf;
 	int ret;
 	bool free_entry = true;
@@ -727,15 +724,14 @@ static int smr_progress_msg_common(struct smr_ep *ep, struct smr_cmd *cmd,
 	}
 
 	comp_buf = entry->iov[0].iov_base;
-	comp_flags = (cmd->msg.hdr.op_flags | entry->flags) & ~SMR_MULTI_RECV;
-
-	if (entry->flags & SMR_MULTI_RECV) {
+	comp_flags = smr_rx_cq_flags(cmd->msg.hdr.op, entry->flags,
+				     cmd->msg.hdr.op_flags);
+	if (entry->flags & FI_MULTI_RECV) {
 		free_entry = smr_progress_multi_recv(ep, entry, total_len);
-		if (free_entry) {
-			comp_flags |= SMR_MULTI_RECV;
-			if (sar)
-				sar->rx_entry.flags |= SMR_MULTI_RECV;
-		}
+		if (!free_entry)
+			comp_flags &= ~ FI_MULTI_RECV;
+		else if (sar)
+			sar->rx_entry.flags |= FI_MULTI_RECV;
 	}
 
 	if (!sar) {
@@ -932,9 +928,10 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 		err = -FI_EINVAL;
 	}
 
-	ret = smr_complete_rx(ep, (void *) cmd->msg.hdr.msg_id,
-			      cmd->msg.hdr.op, cmd->msg.hdr.op_flags,
-			      total_len, iov_count ? iov[0].iov_base : NULL,
+	ret = smr_complete_rx(ep, (void *) cmd->msg.hdr.msg_id, cmd->msg.hdr.op,
+			      smr_rx_cq_flags(cmd->msg.hdr.op, 0,
+			      cmd->msg.hdr.op_flags), total_len,
+			      iov_count ? iov[0].iov_base : NULL,
 			      cmd->msg.hdr.id, 0, cmd->msg.hdr.data, err);
 	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -1007,8 +1004,10 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"error processing atomic op\n");
 
-	ret = smr_complete_rx(ep, NULL, cmd->msg.hdr.op, cmd->msg.hdr.op_flags,
-			      total_len, ioc_count ? ioc[0].addr : NULL,
+	ret = smr_complete_rx(ep, NULL, cmd->msg.hdr.op,
+			      smr_rx_cq_flags(cmd->msg.hdr.op, 0,
+			      cmd->msg.hdr.op_flags), total_len,
+			      ioc_count ? ioc[0].addr : NULL,
 			      cmd->msg.hdr.id, 0, cmd->msg.hdr.data, err);
 	if (ret)
 		return ret;
