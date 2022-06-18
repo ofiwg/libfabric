@@ -44,6 +44,7 @@
 #include "rxr_pkt_type_base.h"
 #include "rxr_read.h"
 #include "rxr_atomic.h"
+#include <infiniband/verbs.h>
 
 struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep)
 {
@@ -1803,51 +1804,47 @@ static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
  * @param[in]	ep		end point
  * @param[in]	cqe_to_process	max number of cq entry to poll and process
  */
-static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
-				      size_t cqe_to_process)
+static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep)
 {
-	struct ibv_wc ibv_wc;
+	bool should_end_poll = false;
 	struct efa_cq *efa_cq;
+	/* Initialize an empty ibv_poll_cq_attr struct for ibv_start_poll.
+	 * EFA expects .comp_mask = 0, or otherwise returns EINVAL.
+	 */
+	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 	struct efa_av *efa_av;
 	struct efa_ep *efa_ep;
 	struct rxr_pkt_entry *pkt_entry;
-	ssize_t ret;
-	int i, err, prov_errno;
+	ssize_t err;
+	int prov_errno;
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	efa_av = efa_ep->av;
 	efa_cq = container_of(ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
-	for (i = 0; i < cqe_to_process; i++) {
-		ret = ibv_poll_cq(efa_cq->ibv_cq, 1, &ibv_wc);
 
-		if (ret == 0)
-			return;
+	/* Call ibv_start_poll only once */
+	err = ibv_start_poll(efa_cq->ibv_cq_ex, &poll_cq_attr);
+	should_end_poll = !err;
 
-		if (OFI_UNLIKELY(ret < 0 || ibv_wc.status)) {
-			if (ret < 0) {
-				efa_eq_write_error(&ep->util_ep, -ret, -ret);
-				return;
-			}
-
-			pkt_entry = (void *)(uintptr_t)ibv_wc.wr_id;
-			err = ibv_wc.status;
-			prov_errno = ibv_wc.status;
-			if (ibv_wc.opcode == IBV_WC_SEND) {
+	while (!err) {
+		if (efa_cq->ibv_cq_ex->status) {
+			pkt_entry = (void *)(uintptr_t)efa_cq->ibv_cq_ex->wr_id;
+			prov_errno = efa_cq->ibv_cq_ex->status;
+			if (ibv_wc_read_opcode(efa_cq->ibv_cq_ex) == IBV_WC_SEND) {
 #if ENABLE_DEBUG
 				ep->failed_send_comps++;
 #endif
-				rxr_pkt_handle_send_error(ep, pkt_entry, err, prov_errno);
+				rxr_pkt_handle_send_error(ep, pkt_entry, prov_errno, prov_errno);
 			} else {
-				assert(ibv_wc.opcode == IBV_WC_RECV);
-				rxr_pkt_handle_recv_error(ep, pkt_entry, err, prov_errno);
+				assert(ibv_wc_read_opcode(efa_cq->ibv_cq_ex) == IBV_WC_RECV);
+				rxr_pkt_handle_recv_error(ep, pkt_entry, prov_errno, prov_errno);
 			}
-
-			return;
+			break;
 		}
 
-		pkt_entry = (void *)(uintptr_t)ibv_wc.wr_id;
+		pkt_entry = (void *)(uintptr_t)efa_cq->ibv_cq_ex->wr_id;
 
-		switch (ibv_wc.opcode) {
+		switch (ibv_wc_read_opcode(efa_cq->ibv_cq_ex)) {
 		case IBV_WC_SEND:
 #if ENABLE_DEBUG
 			ep->send_comps++;
@@ -1855,8 +1852,8 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 			rxr_pkt_handle_send_completion(ep, pkt_entry);
 			break;
 		case IBV_WC_RECV:
-			pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc.slid, ibv_wc.src_qp, pkt_entry);
-			pkt_entry->pkt_size = ibv_wc.byte_len;
+			pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc_read_slid(efa_cq->ibv_cq_ex), ibv_wc_read_src_qp(efa_cq->ibv_cq_ex), pkt_entry);
+			pkt_entry->pkt_size = ibv_wc_read_byte_len(efa_cq->ibv_cq_ex);
 			assert(pkt_entry->pkt_size > 0);
 			rxr_pkt_handle_recv_completion(ep, pkt_entry, EFA_EP);
 #if ENABLE_DEBUG
@@ -1868,7 +1865,17 @@ static inline void rdm_ep_poll_ibv_cq(struct rxr_ep *ep,
 				"Unhandled cq type\n");
 			assert(0 && "Unhandled cq type");
 		}
+
+		err = ibv_next_poll(efa_cq->ibv_cq_ex);
 	}
+
+	if (err && err != ENOENT) {
+		err = err > 0 ? err : -err;
+		efa_eq_write_error(&ep->util_ep, err, err);
+	}
+
+	if (should_end_poll)
+		ibv_end_poll(efa_cq->ibv_cq_ex);
 }
 
 static inline
@@ -1975,7 +1982,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	uint64_t flags;
 
 	// Poll the EFA completion queue
-	rdm_ep_poll_ibv_cq(ep, rxr_env.efa_cq_read_size);
+	rdm_ep_poll_ibv_cq_ex(ep);
 
 	if (ep->shm_cq) {
 		// Poll the SHM completion queue
@@ -2637,4 +2644,3 @@ void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 			peer->shm_outstanding_tx_ops--;
 	}
 }
-
