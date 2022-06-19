@@ -121,7 +121,7 @@ static void tcp2_progress_tx(struct tcp2_ep *ep)
 			FI_WARN(&tcp2_prov, FI_LOG_DOMAIN, "msg send failed\n");
 			tcp2_cntr_incerr(ep, tx_entry);
 			tcp2_cq_report_error(&cq->util_cq, tx_entry, (int) -ret);
-			tcp2_free_xfer(cq, tx_entry);
+			tcp2_free_xfer(ep, tx_entry);
 		} else if (tx_entry->ctrl_flags & TCP2_NEED_ACK) {
 			/* A SW ack guarantees the peer received the data, so
 			 * we can skip the async completion.
@@ -132,7 +132,7 @@ static void tcp2_progress_tx(struct tcp2_ep *ep)
 			// discard send but enable receive for completeion
 			assert(tx_entry->resp_entry);
 			tx_entry->resp_entry->ctrl_flags &= ~TCP2_INTERNAL_XFER;
-			tcp2_free_xfer(cq, tx_entry);
+			tcp2_free_xfer(ep, tx_entry);
 		} else if ((tx_entry->ctrl_flags & TCP2_ASYNC) &&
 			   (ofi_val32_gt(tx_entry->async_index,
 					 ep->bsock.done_index))) {
@@ -140,7 +140,7 @@ static void tcp2_progress_tx(struct tcp2_ep *ep)
 						&ep->async_queue);
 		} else {
 			ep->report_success(ep, &cq->util_cq, tx_entry);
-			tcp2_free_xfer(cq, tx_entry);
+			tcp2_free_xfer(ep, tx_entry);
 		}
 
 		if (!slist_empty(&ep->priority_queue)) {
@@ -173,14 +173,9 @@ update:
 
 static int tcp2_queue_ack(struct tcp2_xfer_entry *rx_entry)
 {
-	struct tcp2_ep *ep;
-	struct tcp2_cq *cq;
 	struct tcp2_xfer_entry *resp;
 
-	ep = rx_entry->ep;
-	cq = container_of(ep->util_ep.tx_cq, struct tcp2_cq, util_cq);
-
-	resp = tcp2_alloc_xfer(cq);
+	resp = tcp2_alloc_xfer(tcp2_ep2_progress(rx_entry->ep));
 	if (!resp)
 		return -FI_ENOMEM;
 
@@ -196,9 +191,9 @@ static int tcp2_queue_ack(struct tcp2_xfer_entry *rx_entry)
 
 	resp->ctrl_flags = TCP2_INTERNAL_XFER;
 	resp->context = NULL;
-	resp->ep = ep;
+	resp->ep = rx_entry->ep;
 
-	tcp2_tx_queue_insert(ep, resp);
+	tcp2_tx_queue_insert(rx_entry->ep, resp);
 	return FI_SUCCESS;
 }
 
@@ -223,7 +218,7 @@ static ssize_t tcp2_process_recv(struct tcp2_ep *ep)
 	}
 
 	ep->report_success(ep, ep->util_ep.rx_cq, rx_entry);
-	tcp2_free_rx(rx_entry);
+	tcp2_free_xfer(ep, rx_entry);
 	tcp2_reset_rx(ep);
 	return 0;
 
@@ -232,7 +227,7 @@ err:
 		"msg recv failed ret = %zd (%s)\n", ret, fi_strerror((int)-ret));
 	tcp2_cntr_incerr(ep, rx_entry);
 	tcp2_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
-	tcp2_free_rx(rx_entry);
+	tcp2_free_xfer(ep, rx_entry);
 	tcp2_reset_rx(ep);
 	return ret;
 }
@@ -263,17 +258,12 @@ static void tcp2_pmem_commit(struct tcp2_xfer_entry *rx_entry)
 static ssize_t tcp2_process_remote_write(struct tcp2_ep *ep)
 {
 	struct tcp2_xfer_entry *rx_entry;
-	struct tcp2_cq *cq;
 	ssize_t ret;
 
 	rx_entry = ep->cur_rx.entry;
 	ret = tcp2_recv_msg_data(ep);
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 		return ret;
-
-	cq = container_of(ep->util_ep.rx_cq, struct tcp2_cq, util_cq);
-	if (ret)
-		goto err;
 
 	if (rx_entry->hdr.base_hdr.flags &
 	    (TCP2_DELIVERY_COMPLETE | TCP2_COMMIT_COMPLETE)) {
@@ -287,13 +277,13 @@ static ssize_t tcp2_process_remote_write(struct tcp2_ep *ep)
 	}
 
 	ep->report_success(ep, ep->util_ep.rx_cq, rx_entry);
-	tcp2_free_xfer(cq, rx_entry);
+	tcp2_free_xfer(ep, rx_entry);
 	tcp2_reset_rx(ep);
 	return FI_SUCCESS;
 
 err:
 	FI_WARN(&tcp2_prov, FI_LOG_DOMAIN, "remote write failed %zd\n", ret);
-	tcp2_free_xfer(cq, rx_entry);
+	tcp2_free_xfer(ep, rx_entry);
 	tcp2_reset_rx(ep);
 	return ret;
 }
@@ -321,7 +311,7 @@ static ssize_t tcp2_process_remote_read(struct tcp2_ep *ep)
 	}
 
 	slist_remove_head(&rx_entry->ep->rma_read_queue);
-	tcp2_free_xfer(cq, rx_entry);
+	tcp2_free_xfer(ep, rx_entry);
 	tcp2_reset_rx(ep);
 	return ret;
 }
@@ -357,7 +347,6 @@ static struct tcp2_xfer_entry *tcp2_get_rx_entry(struct tcp2_ep *ep)
 static int tcp2_handle_ack(struct tcp2_ep *ep)
 {
 	struct tcp2_xfer_entry *tx_entry;
-	struct tcp2_cq *cq;
 
 	if (ep->cur_rx.hdr.base_hdr.size !=
 	    sizeof(ep->cur_rx.hdr.base_hdr))
@@ -367,9 +356,8 @@ static int tcp2_handle_ack(struct tcp2_ep *ep)
 	tx_entry = container_of(slist_remove_head(&ep->need_ack_queue),
 				struct tcp2_xfer_entry, entry);
 
-	cq = container_of(ep->util_ep.tx_cq, struct tcp2_cq, util_cq);
 	ep->report_success(ep, ep->util_ep.tx_cq, tx_entry);
-	tcp2_free_xfer(cq, tx_entry);
+	tcp2_free_xfer(ep, tx_entry);
 	tcp2_reset_rx(ep);
 	return FI_SUCCESS;
 }
@@ -409,7 +397,7 @@ truncate_err:
 		"posted rx buffer size is not big enough\n");
 	tcp2_cntr_incerr(ep, rx_entry);
 	tcp2_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
-	tcp2_free_rx(rx_entry);
+	tcp2_free_xfer(ep, rx_entry);
 	return ret;
 }
 
@@ -449,19 +437,17 @@ truncate_err:
 		"posted rx buffer size is not big enough\n");
 	tcp2_cntr_incerr(ep, rx_entry);
 	tcp2_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
-	tcp2_free_rx(rx_entry);
+	tcp2_free_xfer(ep, rx_entry);
 	return ret;
 }
 
 static ssize_t tcp2_op_read_req(struct tcp2_ep *ep)
 {
 	struct tcp2_xfer_entry *resp;
-	struct tcp2_cq *cq;
 	struct ofi_rma_iov *rma_iov;
 	ssize_t i, ret;
 
-	cq = container_of(ep->util_ep.tx_cq, struct tcp2_cq, util_cq);
-	resp = tcp2_alloc_xfer(cq);
+	resp = tcp2_alloc_xfer(tcp2_ep2_progress(ep));
 	if (!resp)
 		return -FI_ENOMEM;
 
@@ -485,7 +471,7 @@ static ssize_t tcp2_op_read_req(struct tcp2_ep *ep)
 		if (ret) {
 			FI_WARN(&tcp2_prov, FI_LOG_EP_DATA,
 			       "invalid rma iov received\n");
-			tcp2_free_xfer(cq, resp);
+			tcp2_free_xfer(ep, resp);
 			return ret;
 		}
 
@@ -509,12 +495,10 @@ static ssize_t tcp2_op_read_req(struct tcp2_ep *ep)
 static ssize_t tcp2_op_write(struct tcp2_ep *ep)
 {
 	struct tcp2_xfer_entry *rx_entry;
-	struct tcp2_cq *cq;
 	struct ofi_rma_iov *rma_iov;
 	ssize_t ret, i;
 
-	cq = container_of(ep->util_ep.rx_cq, struct tcp2_cq, util_cq);
-	rx_entry = tcp2_alloc_xfer(cq);
+	rx_entry = tcp2_alloc_xfer(tcp2_ep2_progress(ep));
 	if (!rx_entry)
 		return -FI_ENOMEM;
 
@@ -542,7 +526,7 @@ static ssize_t tcp2_op_write(struct tcp2_ep *ep)
 		if (ret) {
 			FI_WARN(&tcp2_prov, FI_LOG_EP_DATA,
 			       "invalid rma iov received\n");
-			tcp2_free_xfer(cq, rx_entry);
+			tcp2_free_xfer(ep, rx_entry);
 			return ret;
 		}
 		rx_entry->iov[i].iov_base = (void *) (uintptr_t)
@@ -660,7 +644,7 @@ void tcp2_progress_async(struct tcp2_ep *ep)
 
 		slist_remove_head(&ep->async_queue);
 		ep->report_success(ep, ep->util_ep.tx_cq, xfer);
-		tcp2_free_tx(xfer);
+		tcp2_free_xfer(ep, xfer);
 	}
 }
 
@@ -1063,15 +1047,23 @@ int tcp2_init_progress(struct tcp2_progress *progress, bool use_epoll)
 	if (ret)
 		goto err3;
 
+	ret = ofi_bufpool_create(&progress->xfer_pool,
+				 sizeof(struct tcp2_xfer_entry), 16, 0,
+				 1024, 0);
+	if (ret)
+		goto err4;
+
 	ret = progress->poll_add(progress, progress->signal.fd[FI_READ_FD],
 				 POLLIN, &progress->fid);
-	if (ret) {
-		progress->poll_close(progress);
-		goto err3;
-	}
+	if (ret)
+		goto err5;
 
 	return 0;
 
+err5:
+	ofi_bufpool_destroy(progress->xfer_pool);
+err4:
+	progress->poll_close(progress);
 err3:
 	ofi_mutex_destroy(&progress->list_lock);
 err2:
@@ -1087,6 +1079,7 @@ void tcp2_close_progress(struct tcp2_progress *progress)
 	assert(dlist_empty(&progress->rdm_list));
 	tcp2_stop_progress(progress);
 	progress->poll_close(progress);
+	ofi_bufpool_destroy(progress->xfer_pool);
 	ofi_genlock_destroy(&progress->lock);
 	ofi_mutex_destroy(&progress->list_lock);
 	fd_signal_free(&progress->signal);
