@@ -226,15 +226,11 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 
+	cq->progress(cq);
 	ofi_genlock_lock(&cq->cq_lock);
-	if (ofi_cirque_isempty(cq->cirq) || !count) {
-		ofi_genlock_unlock(&cq->cq_lock);
-		cq->progress(cq);
-		ofi_genlock_lock(&cq->cq_lock);
-		if (ofi_cirque_isempty(cq->cirq)) {
-			i = -FI_EAGAIN;
-			goto out;
-		}
+	if (ofi_cirque_isempty(cq->cirq)) {
+		i = -FI_EAGAIN;
+		goto out;
 	}
 
 	if (count > ofi_cirque_usedcnt(cq->cirq))
