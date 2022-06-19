@@ -44,10 +44,10 @@ tcp2_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		 uint64_t flags)
 {
 	struct tcp2_xfer_entry *recv_entry;
-	struct tcp2_rx_ctx *srx;
+	struct tcp2_srx *srx;
 	ssize_t ret = FI_SUCCESS;
 
-	srx = container_of(ep_fid, struct tcp2_rx_ctx, rx_fid);
+	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 	assert(msg->iov_count <= TCP2_IOV_LIMIT);
 
 	ofi_mutex_lock(&srx->lock);
@@ -74,10 +74,10 @@ tcp2_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	      fi_addr_t src_addr, void *context)
 {
 	struct tcp2_xfer_entry *recv_entry;
-	struct tcp2_rx_ctx *srx;
+	struct tcp2_srx *srx;
 	ssize_t ret = FI_SUCCESS;
 
-	srx = container_of(ep_fid, struct tcp2_rx_ctx, rx_fid);
+	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 
 	ofi_mutex_lock(&srx->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
@@ -103,10 +103,10 @@ tcp2_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	       size_t count, fi_addr_t src_addr, void *context)
 {
 	struct tcp2_xfer_entry *recv_entry;
-	struct tcp2_rx_ctx *srx;
+	struct tcp2_srx *srx;
 	ssize_t ret = FI_SUCCESS;
 
-	srx = container_of(ep_fid, struct tcp2_rx_ctx, rx_fid);
+	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 	assert(count <= TCP2_IOV_LIMIT);
 
 	ofi_mutex_lock(&srx->lock);
@@ -141,7 +141,7 @@ static struct fi_ops_msg tcp2_srx_msg_ops = {
 };
 
 static ssize_t
-tcp2_srx_peek(struct tcp2_rx_ctx *srx, const struct fi_msg_tagged *msg,
+tcp2_srx_peek(struct tcp2_srx *srx, const struct fi_msg_tagged *msg,
 	      uint64_t flags)
 {
 	struct fi_cq_err_entry err_entry = {0};
@@ -160,10 +160,10 @@ tcp2_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 		  uint64_t flags)
 {
 	struct tcp2_xfer_entry *recv_entry;
-	struct tcp2_rx_ctx *srx;
+	struct tcp2_srx *srx;
 	ssize_t ret = FI_SUCCESS;
 
-	srx = container_of(ep_fid, struct tcp2_rx_ctx, rx_fid);
+	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 	assert(msg->iov_count <= TCP2_IOV_LIMIT);
 
 	if (flags & FI_PEEK)
@@ -196,10 +196,10 @@ tcp2_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	       fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context)
 {
 	struct tcp2_xfer_entry *recv_entry;
-	struct tcp2_rx_ctx *srx;
+	struct tcp2_srx *srx;
 	ssize_t ret = FI_SUCCESS;
 
-	srx = container_of(ep_fid, struct tcp2_rx_ctx, rx_fid);
+	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 
 	ofi_mutex_lock(&srx->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
@@ -229,10 +229,10 @@ tcp2_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		uint64_t ignore, void *context)
 {
 	struct tcp2_xfer_entry *recv_entry;
-	struct tcp2_rx_ctx *srx;
+	struct tcp2_srx *srx;
 	ssize_t ret = FI_SUCCESS;
 
-	srx = container_of(ep_fid, struct tcp2_rx_ctx, rx_fid);
+	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 	assert(count <= TCP2_IOV_LIMIT);
 
 	ofi_mutex_lock(&srx->lock);
@@ -270,7 +270,7 @@ static struct fi_ops_tagged tcp2_srx_tag_ops = {
 };
 
 static struct tcp2_xfer_entry *
-tcp2_match_tag(struct tcp2_rx_ctx *srx, struct tcp2_ep *ep, uint64_t tag)
+tcp2_match_tag(struct tcp2_srx *srx, struct tcp2_ep *ep, uint64_t tag)
 {
 	struct tcp2_xfer_entry *rx_entry;
 	struct slist_entry *item, *prev;
@@ -290,7 +290,7 @@ tcp2_match_tag(struct tcp2_rx_ctx *srx, struct tcp2_ep *ep, uint64_t tag)
 }
 
 static struct tcp2_xfer_entry *
-tcp2_match_tag_addr(struct tcp2_rx_ctx *srx, struct tcp2_ep *ep, uint64_t tag)
+tcp2_match_tag_addr(struct tcp2_srx *srx, struct tcp2_ep *ep, uint64_t tag)
 {
 	struct tcp2_xfer_entry *rx_entry;
 	struct slist_entry *item, *prev;
@@ -311,7 +311,7 @@ tcp2_match_tag_addr(struct tcp2_rx_ctx *srx, struct tcp2_ep *ep, uint64_t tag)
 }
 
 static bool
-tcp2_srx_cancel_rx(struct tcp2_rx_ctx *srx, struct slist *queue, void *context)
+tcp2_srx_cancel_rx(struct tcp2_srx *srx, struct slist *queue, void *context)
 {
 	struct slist_entry *cur, *prev;
 	struct tcp2_xfer_entry *xfer_entry;
@@ -334,9 +334,9 @@ tcp2_srx_cancel_rx(struct tcp2_rx_ctx *srx, struct slist *queue, void *context)
 
 static ssize_t tcp2_srx_cancel(fid_t fid, void *context)
 {
-	struct tcp2_rx_ctx *srx;
+	struct tcp2_srx *srx;
 
-	srx = container_of(fid, struct tcp2_rx_ctx, rx_fid.fid);
+	srx = container_of(fid, struct tcp2_srx, rx_fid.fid);
 
 	ofi_mutex_lock(&srx->lock);
 	if (!tcp2_srx_cancel_rx(srx, &srx->tag_queue, context))
@@ -359,12 +359,12 @@ static struct fi_ops_ep tcp2_srx_ops = {
 
 int tcp2_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	struct tcp2_rx_ctx *srx;
+	struct tcp2_srx *srx;
 
 	if (flags != FI_RECV || bfid->fclass != FI_CLASS_CQ)
 		return -FI_EINVAL;
 
-	srx = container_of(fid, struct tcp2_rx_ctx, rx_fid.fid);
+	srx = container_of(fid, struct tcp2_srx, rx_fid.fid);
 	srx->cq = container_of(bfid, struct tcp2_cq, util_cq.cq_fid.fid);
 	ofi_atomic_inc32(&srx->cq->util_cq.ref);
 	return FI_SUCCESS;
@@ -372,11 +372,11 @@ int tcp2_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 static int tcp2_srx_close(struct fid *fid)
 {
-	struct tcp2_rx_ctx *srx;
+	struct tcp2_srx *srx;
 	struct slist_entry *entry;
 	struct tcp2_xfer_entry *xfer_entry;
 
-	srx = container_of(fid, struct tcp2_rx_ctx, rx_fid.fid);
+	srx = container_of(fid, struct tcp2_srx, rx_fid.fid);
 
 	while (!slist_empty(&srx->rx_queue)) {
 		entry = slist_remove_head(&srx->rx_queue);
@@ -417,7 +417,7 @@ static struct fi_ops tcp2_srx_fid_ops = {
 int tcp2_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		     struct fid_ep **rx_ep, void *context)
 {
-	struct tcp2_rx_ctx *srx;
+	struct tcp2_srx *srx;
 	int ret = FI_SUCCESS;
 
 	srx = calloc(1, sizeof(*srx));

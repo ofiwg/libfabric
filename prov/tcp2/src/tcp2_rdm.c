@@ -775,7 +775,7 @@ static int tcp2_init_rdm(struct tcp2_rdm *rdm, struct fi_info *info)
 	}
 
 	dlist_init(&rdm->loopback_list);
-	rdm->srx = container_of(srx, struct tcp2_rx_ctx, rx_fid);
+	rdm->srx = container_of(srx, struct tcp2_srx, rx_fid);
 	rdm->pep = container_of(pep, struct tcp2_pep, util_pep);
 	return 0;
 

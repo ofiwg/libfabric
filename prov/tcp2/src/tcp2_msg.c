@@ -68,7 +68,7 @@ tcp2_alloc_tsend(struct tcp2_ep *ep)
 
 	send_entry = tcp2_alloc_tx(ep);
 	if (send_entry) {
-		assert(ep->srx_ctx);
+		assert(ep->srx);
 		send_entry->hdr.base_hdr.op = ofi_op_tagged;
 	}
 

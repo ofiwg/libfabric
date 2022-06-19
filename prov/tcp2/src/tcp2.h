@@ -159,12 +159,12 @@ struct tcp2_cur_tx {
 	struct tcp2_xfer_entry	*entry;
 };
 
-struct tcp2_rx_ctx {
+struct tcp2_srx {
 	struct fid_ep		rx_fid;
 	struct tcp2_cq		*cq;
 	struct slist		rx_queue;
 	struct slist		tag_queue;
-	struct tcp2_xfer_entry	*(*match_tag_rx)(struct tcp2_rx_ctx *srx,
+	struct tcp2_xfer_entry	*(*match_tag_rx)(struct tcp2_srx *srx,
 						 struct tcp2_ep *ep,
 						 uint64_t tag);
 
@@ -192,7 +192,7 @@ struct tcp2_ep {
 	struct slist		async_queue;
 	struct slist		rma_read_queue;
 	int			rx_avail;
-	struct tcp2_rx_ctx	*srx_ctx;
+	struct tcp2_srx		*srx;
 
 	enum tcp2_state		state;
 	fi_addr_t		src_addr;
@@ -229,7 +229,7 @@ struct tcp2_rdm {
 	struct util_ep		util_ep;
 
 	struct tcp2_pep		*pep;
-	struct tcp2_rx_ctx	*srx;
+	struct tcp2_srx		*srx;
 
 	struct index_map	conn_idx_map;
 	struct dlist_entry	loopback_list;
@@ -538,10 +538,10 @@ static inline void
 tcp2_free_rx(struct tcp2_xfer_entry *xfer)
 {
 	struct tcp2_cq *cq;
-	struct tcp2_rx_ctx *srx;
+	struct tcp2_srx *srx;
 
-	if (xfer->ep->srx_ctx) {
-		srx = xfer->ep->srx_ctx;
+	if (xfer->ep->srx) {
+		srx = xfer->ep->srx;
 		ofi_mutex_lock(&srx->lock);
 		ofi_buf_free(xfer);
 		ofi_mutex_unlock(&srx->lock);

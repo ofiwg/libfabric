@@ -329,10 +329,10 @@ static ssize_t tcp2_process_remote_read(struct tcp2_ep *ep)
 static struct tcp2_xfer_entry *tcp2_get_rx_entry(struct tcp2_ep *ep)
 {
 	struct tcp2_xfer_entry *xfer;
-	struct tcp2_rx_ctx *srx;
+	struct tcp2_srx *srx;
 
-	if (ep->srx_ctx) {
-		srx = ep->srx_ctx;
+	if (ep->srx) {
+		srx = ep->srx;
 		ofi_mutex_lock(&srx->lock);
 		if (!slist_empty(&srx->rx_queue)) {
 			xfer = container_of(slist_remove_head(&srx->rx_queue),
@@ -341,7 +341,7 @@ static struct tcp2_xfer_entry *tcp2_get_rx_entry(struct tcp2_ep *ep)
 		} else {
 			xfer = NULL;
 		}
-		ofi_mutex_unlock(&ep->srx_ctx->lock);
+		ofi_mutex_unlock(&ep->srx->lock);
 	} else {
 		assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 		if (!slist_empty(&ep->rx_queue)) {
@@ -423,13 +423,13 @@ static ssize_t tcp2_op_tagged(struct tcp2_ep *ep)
 	uint64_t tag;
 	ssize_t ret;
 
-	assert(ep->srx_ctx);
+	assert(ep->srx);
 	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.hdr_size);
 
 	tag = (msg->hdr.base_hdr.flags & TCP2_REMOTE_CQ_DATA) ?
 	      msg->hdr.tag_data_hdr.tag : msg->hdr.tag_hdr.tag;
 
-	rx_entry = ep->srx_ctx->match_tag_rx(ep->srx_ctx, ep, tag);
+	rx_entry = ep->srx->match_tag_rx(ep->srx, ep, tag);
 	if (!rx_entry)
 		return -FI_EAGAIN;
 
