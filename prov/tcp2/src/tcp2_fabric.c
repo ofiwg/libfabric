@@ -90,7 +90,7 @@ int tcp2_create_fabric(struct fi_fabric_attr *attr,
 	if (ret)
 		goto free;
 
-	ret = tcp2_init_progress(&fabric->progress, false);
+	ret = tcp2_init_progress(&fabric->progress, NULL);
 	if (ret)
 		goto close;
 

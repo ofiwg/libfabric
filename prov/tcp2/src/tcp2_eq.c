@@ -58,7 +58,7 @@ int tcp2_eq_write(struct util_eq *eq, uint32_t event,
 	}
 
 	assert(rdm->util_ep.ep_fid.fid.fclass == FI_CLASS_EP);
-	assert(ofi_genlock_held(&tcp2_rdm2_progress(rdm)->lock));
+	assert(tcp2_progress_locked(tcp2_rdm2_progress(rdm)));
 	rdm_event = malloc(sizeof(*rdm_event));
 	if (!rdm_event)
 		return -FI_ENOMEM;

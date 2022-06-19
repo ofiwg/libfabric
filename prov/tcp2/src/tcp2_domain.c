@@ -105,7 +105,7 @@ int tcp2_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	if (ret)
 		goto free;
 
-	ret = tcp2_init_progress(&domain->progress, false);
+	ret = tcp2_init_progress(&domain->progress, info);
 	if (ret)
 		goto close;
 

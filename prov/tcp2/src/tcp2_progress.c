@@ -52,6 +52,7 @@ static ssize_t tcp2_send_msg(struct tcp2_ep *ep)
 	ssize_t ret;
 	size_t len;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	assert(ep->cur_tx.entry);
 	tx_entry = ep->cur_tx.entry;
 	ret = ofi_bsock_sendv(&ep->bsock, tx_entry->iov, tx_entry->iov_cnt,
@@ -83,6 +84,7 @@ static ssize_t tcp2_recv_msg_data(struct tcp2_ep *ep)
 	struct tcp2_xfer_entry *rx_entry;
 	ssize_t ret;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	if (!ep->cur_rx.data_left)
 		return FI_SUCCESS;
 
@@ -108,7 +110,7 @@ static void tcp2_progress_tx(struct tcp2_ep *ep)
 	struct tcp2_cq *cq;
 	ssize_t ret;
 
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	while (ep->cur_tx.entry) {
 		ret = tcp2_send_msg(ep);
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
@@ -175,6 +177,7 @@ static int tcp2_queue_ack(struct tcp2_xfer_entry *rx_entry)
 {
 	struct tcp2_xfer_entry *resp;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(rx_entry->ep)));
 	resp = tcp2_alloc_xfer(tcp2_ep2_progress(rx_entry->ep));
 	if (!resp)
 		return -FI_ENOMEM;
@@ -202,6 +205,7 @@ static ssize_t tcp2_process_recv(struct tcp2_ep *ep)
 	struct tcp2_xfer_entry *rx_entry;
 	ssize_t ret;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	rx_entry = ep->cur_rx.entry;
 	ret = tcp2_recv_msg_data(ep);
 	if (ret) {
@@ -238,6 +242,7 @@ static void tcp2_pmem_commit(struct tcp2_xfer_entry *rx_entry)
 	size_t offset;
 	int i;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(rx_entry->ep)));
 	if (!ofi_pmem_commit)
 		return ;
 
@@ -260,6 +265,7 @@ static ssize_t tcp2_process_remote_write(struct tcp2_ep *ep)
 	struct tcp2_xfer_entry *rx_entry;
 	ssize_t ret;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	rx_entry = ep->cur_rx.entry;
 	ret = tcp2_recv_msg_data(ep);
 	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
@@ -294,6 +300,7 @@ static ssize_t tcp2_process_remote_read(struct tcp2_ep *ep)
 	struct tcp2_cq *cq;
 	ssize_t ret;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	rx_entry = ep->cur_rx.entry;
 	cq = container_of(ep->util_ep.tx_cq, struct tcp2_cq, util_cq);
 
@@ -321,7 +328,7 @@ static struct tcp2_xfer_entry *tcp2_get_rx_entry(struct tcp2_ep *ep)
 	struct tcp2_xfer_entry *xfer;
 	struct tcp2_srx *srx;
 
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	if (ep->srx) {
 		srx = ep->srx;
 		if (!slist_empty(&srx->rx_queue)) {
@@ -348,6 +355,7 @@ static int tcp2_handle_ack(struct tcp2_ep *ep)
 {
 	struct tcp2_xfer_entry *tx_entry;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	if (ep->cur_rx.hdr.base_hdr.size !=
 	    sizeof(ep->cur_rx.hdr.base_hdr))
 		return -FI_EIO;
@@ -369,6 +377,7 @@ static ssize_t tcp2_op_msg(struct tcp2_ep *ep)
 	size_t msg_len;
 	ssize_t ret;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	if (msg->hdr.base_hdr.op_data == TCP2_OP_ACK)
 		return tcp2_handle_ack(ep);
 
@@ -409,6 +418,7 @@ static ssize_t tcp2_op_tagged(struct tcp2_ep *ep)
 	uint64_t tag;
 	ssize_t ret;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	assert(ep->srx);
 	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.hdr_size);
 
@@ -447,6 +457,7 @@ static ssize_t tcp2_op_read_req(struct tcp2_ep *ep)
 	struct ofi_rma_iov *rma_iov;
 	ssize_t i, ret;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	resp = tcp2_alloc_xfer(tcp2_ep2_progress(ep));
 	if (!resp)
 		return -FI_ENOMEM;
@@ -498,6 +509,7 @@ static ssize_t tcp2_op_write(struct tcp2_ep *ep)
 	struct ofi_rma_iov *rma_iov;
 	ssize_t ret, i;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	rx_entry = tcp2_alloc_xfer(tcp2_ep2_progress(ep));
 	if (!rx_entry)
 		return -FI_ENOMEM;
@@ -544,6 +556,7 @@ static ssize_t tcp2_op_read_rsp(struct tcp2_ep *ep)
 	struct tcp2_xfer_entry *rx_entry;
 	struct slist_entry *entry;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	if (slist_empty(&ep->rma_read_queue))
 		return -FI_EINVAL;
 
@@ -565,6 +578,7 @@ static ssize_t tcp2_recv_hdr(struct tcp2_ep *ep)
 	void *buf;
 	ssize_t ret;
 
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	assert(ep->cur_rx.hdr_done < ep->cur_rx.hdr_len);
 
 next_hdr:
@@ -610,7 +624,7 @@ void tcp2_progress_rx(struct tcp2_ep *ep)
 {
 	ssize_t ret;
 
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	do {
 		if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
 			ret = tcp2_recv_hdr(ep);
@@ -634,7 +648,7 @@ void tcp2_progress_async(struct tcp2_ep *ep)
 	struct tcp2_xfer_entry *xfer;
 	uint32_t done;
 
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	done = ofi_bsock_async_done(&tcp2_prov, &ep->bsock);
 	while (!slist_empty(&ep->async_queue)) {
 		xfer = container_of(ep->async_queue.head,
@@ -656,7 +670,7 @@ static bool tcp2_tx_pending(struct tcp2_ep *ep)
 void tcp2_tx_queue_insert(struct tcp2_ep *ep,
 			  struct tcp2_xfer_entry *tx_entry)
 {
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 
 	if (!ep->cur_tx.entry) {
 		ep->cur_tx.entry = tx_entry;
@@ -681,7 +695,7 @@ static ssize_t (*tcp2_start_op[ofi_op_write + 1])(struct tcp2_ep *ep) = {
 
 static void tcp2_run_ep(struct tcp2_ep *ep, bool pin, bool pout, bool perr)
 {
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	switch (ep->state) {
 	case TCP2_CONNECTED:
 		if (perr)
@@ -797,7 +811,7 @@ void tcp2_run_progress(struct tcp2_progress *progress, bool internal)
 	int nfds, i;
 	bool pin, pout, perr;
 
-	ofi_genlock_lock(&progress->lock);
+	ofi_genlock_lock(progress->active_lock);
 	dlist_foreach_safe(&progress->active_wait_list, item, tmp) {
 		ep = container_of(item, struct tcp2_ep, progress_entry);
 
@@ -811,7 +825,7 @@ void tcp2_run_progress(struct tcp2_progress *progress, bool internal)
 
 	nfds = progress->poll_wait(progress, events, TCP2_MAX_EVENTS, 0);
 	if (nfds <= 0)
-		goto unlock;
+		goto out;
 
 	for (i = 0; i < nfds; i++) {
 		fid = events[i].data.ptr;
@@ -841,9 +855,9 @@ void tcp2_run_progress(struct tcp2_progress *progress, bool internal)
 			break;
 		}
 	}
-unlock:
-	ofi_genlock_unlock(&progress->lock);
+out:
 	tcp2_progress_rdm(progress);
+	ofi_genlock_unlock(progress->active_lock);
 }
 
 void tcp2_progress_all(struct tcp2_fabric *fabric)
@@ -876,7 +890,7 @@ void tcp2_update_poll(struct tcp2_ep *ep)
 	bool tx_pending;
 
 	progress = tcp2_ep2_progress(ep);
-	assert(ofi_genlock_held(&progress->lock));
+	assert(tcp2_progress_locked(progress));
 	tx_pending = tcp2_tx_pending(ep);
 	if ((tx_pending && ep->pollout_set) ||
 	    (!tx_pending && !ep->pollout_set))
@@ -908,10 +922,10 @@ static void *tcp2_auto_progress(void *arg)
 	int timeout, nfds;
 
 	FI_INFO(&tcp2_prov, FI_LOG_DOMAIN, "progress thread starting\n");
-	ofi_genlock_lock(&progress->lock);
+	ofi_genlock_lock(progress->active_lock);
 	while (progress->auto_progress) {
 		timeout = dlist_empty(&progress->active_wait_list) ? -1 : 1;
-		ofi_genlock_unlock(&progress->lock);
+		ofi_genlock_unlock(progress->active_lock);
 
 		/* We can't hold the progress lock around waiting, or we
 		 * can hang another thread trying to obtain the lock.  But
@@ -925,9 +939,9 @@ static void *tcp2_auto_progress(void *arg)
 
 		if (nfds >= 0)
 			tcp2_run_progress(progress, true);
-		ofi_genlock_lock(&progress->lock);
+		ofi_genlock_lock(progress->active_lock);
 	}
-	ofi_genlock_unlock(&progress->lock);
+	ofi_genlock_unlock(progress->active_lock);
 	FI_INFO(&tcp2_prov, FI_LOG_DOMAIN, "progress thread exiting\n");
 	return NULL;
 }
@@ -937,7 +951,7 @@ int tcp2_monitor_sock(struct tcp2_progress *progress, SOCKET sock,
 {
 	int ret;
 
-	assert(ofi_genlock_held(&progress->lock));
+	assert(tcp2_progress_locked(progress));
 	ret = progress->poll_add(progress, sock, events, fid);
 	if (ret) {
 		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
@@ -951,7 +965,7 @@ void tcp2_halt_sock(struct tcp2_progress *progress, SOCKET sock)
 {
 	int ret;
 
-	assert(ofi_genlock_held(&progress->lock));
+	assert(tcp2_progress_locked(progress));
 	ret = progress->poll_del(progress, sock);
 	if (ret) {
 		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
@@ -1009,19 +1023,54 @@ int tcp2_start_all(struct tcp2_fabric *fabric)
 
 void tcp2_stop_progress(struct tcp2_progress *progress)
 {
-	ofi_genlock_lock(&progress->lock);
+	ofi_genlock_lock(progress->active_lock);
 	if (!progress->auto_progress) {
-		ofi_genlock_unlock(&progress->lock);
+		ofi_genlock_unlock(progress->active_lock);
 		return;
 	}
 
 	progress->auto_progress = false;
 	fd_signal_set(&progress->signal);
-	ofi_genlock_unlock(&progress->lock);
+	ofi_genlock_unlock(progress->active_lock);
 	(void) pthread_join(progress->thread, NULL);
 }
 
-int tcp2_init_progress(struct tcp2_progress *progress, bool use_epoll)
+static int tcp2_init_locks(struct tcp2_progress *progress, struct fi_info *info)
+{
+	enum ofi_lock_type base_lock, rdm_lock;
+	int ret;
+
+	if (!info) {
+		base_lock = OFI_LOCK_MUTEX;
+		rdm_lock = OFI_LOCK_NONE;
+		progress->active_lock = &progress->lock;
+	} else if (info->domain_attr &&
+		   info->domain_attr->threading == FI_THREAD_DOMAIN) {
+		base_lock = OFI_LOCK_NONE;
+		rdm_lock = OFI_LOCK_NONE;
+		progress->active_lock = &progress->lock;
+	} else if (info->ep_attr && info->ep_attr->type == FI_EP_RDM) {
+		base_lock = OFI_LOCK_NONE;
+		rdm_lock = OFI_LOCK_MUTEX;
+		progress->active_lock = &progress->rdm_lock;
+	} else {
+		base_lock = OFI_LOCK_MUTEX;
+		rdm_lock = OFI_LOCK_NONE;
+		progress->active_lock = &progress->lock;
+	}
+
+	ret = ofi_genlock_init(&progress->lock, base_lock);
+	if (ret)
+		return ret;
+
+	ret = ofi_genlock_init(&progress->rdm_lock, rdm_lock);
+	if (ret)
+		ofi_genlock_destroy(&progress->lock);
+
+	return ret;
+}
+
+int tcp2_init_progress(struct tcp2_progress *progress, struct fi_info *info)
 {
 	int ret;
 
@@ -1035,38 +1084,33 @@ int tcp2_init_progress(struct tcp2_progress *progress, bool use_epoll)
 	if (ret)
 		return ret;
 
-	ret = ofi_genlock_init(&progress->lock, OFI_LOCK_MUTEX);
+	ret = tcp2_init_locks(progress, info);
 	if (ret)
 		goto err1;
 
-	ret = ofi_mutex_init(&progress->list_lock);
+	ret = tcp2_poll_create(progress, false);
 	if (ret)
 		goto err2;
-
-	ret = tcp2_poll_create(progress, use_epoll);
-	if (ret)
-		goto err3;
 
 	ret = ofi_bufpool_create(&progress->xfer_pool,
 				 sizeof(struct tcp2_xfer_entry), 16, 0,
 				 1024, 0);
 	if (ret)
-		goto err4;
+		goto err3;
 
 	ret = progress->poll_add(progress, progress->signal.fd[FI_READ_FD],
 				 POLLIN, &progress->fid);
 	if (ret)
-		goto err5;
+		goto err4;
 
 	return 0;
 
-err5:
-	ofi_bufpool_destroy(progress->xfer_pool);
 err4:
-	progress->poll_close(progress);
+	ofi_bufpool_destroy(progress->xfer_pool);
 err3:
-	ofi_mutex_destroy(&progress->list_lock);
+	progress->poll_close(progress);
 err2:
+	ofi_genlock_destroy(&progress->rdm_lock);
 	ofi_genlock_destroy(&progress->lock);
 err1:
 	fd_signal_free(&progress->signal);
@@ -1081,6 +1125,6 @@ void tcp2_close_progress(struct tcp2_progress *progress)
 	progress->poll_close(progress);
 	ofi_bufpool_destroy(progress->xfer_pool);
 	ofi_genlock_destroy(&progress->lock);
-	ofi_mutex_destroy(&progress->list_lock);
+	ofi_genlock_destroy(&progress->rdm_lock);
 	fd_signal_free(&progress->signal);
 }

@@ -64,8 +64,7 @@ static void tcp2_close_conn(struct tcp2_conn *conn)
 	struct slist_entry *item;
 
 	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "closing conn %p\n", conn);
-	assert(ofi_ep_lock_held(&conn->rdm->util_ep));
-	assert(ofi_genlock_held(&tcp2_rdm2_progress(conn->rdm)->lock));
+	assert(tcp2_progress_locked(tcp2_rdm2_progress(conn->rdm)));
 	dlist_remove_init(&conn->loopback_entry);
 
 	if (conn->ep) {
@@ -86,13 +85,12 @@ static void tcp2_close_conn(struct tcp2_conn *conn)
 	conn->ep = NULL;
 }
 
+/* MSG EPs under an RDM EP do not write events to the EQ. */
 static int tcp2_bind_conn(struct tcp2_rdm *rdm, struct tcp2_ep *ep)
 {
 	int ret;
 
-	/* MSG EPs under an RDM EP do not write events to the EQ.  Events
-	 * are handled by RDM.
-	 */
+	assert(tcp2_progress_locked(tcp2_rdm2_progress(rdm)));
 
 	ret = fi_ep_bind(&ep->util_ep.ep_fid, &rdm->srx->rx_fid.fid, 0);
 	if (ret)
@@ -160,7 +158,7 @@ static int tcp2_open_conn(struct tcp2_conn *conn, struct fi_info *info)
 	struct fid_ep *ep_fid;
 	int ret;
 
-	assert(ofi_ep_lock_held(&conn->rdm->util_ep));
+	assert(tcp2_progress_locked(tcp2_rdm2_progress(conn->rdm)));
 	ret = fi_endpoint(&conn->rdm->util_ep.domain->domain_fid, info,
 			  &ep_fid, conn);
 	if (ret) {
@@ -194,8 +192,7 @@ static int tcp2_rdm_connect(struct tcp2_conn *conn)
 	int ret;
 
 	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "connecting %p\n", conn);
-	assert(ofi_ep_lock_held(&conn->rdm->util_ep));
-	assert(ofi_genlock_held(&tcp2_rdm2_progress(conn->rdm)->lock));
+	assert(tcp2_progress_locked(tcp2_rdm2_progress(conn->rdm)));
 
 	info = conn->rdm->pep->info;
 	info->dest_addrlen = info->src_addrlen;
@@ -232,7 +229,7 @@ static void tcp2_free_conn(struct tcp2_conn *conn)
 	struct rxm_av *av;
 
 	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "free conn %p\n", conn);
-	assert(ofi_ep_lock_held(&conn->rdm->util_ep));
+	assert(tcp2_progress_locked(tcp2_rdm2_progress(conn->rdm)));
 
 	if (conn->flags & TCP2_CONN_INDEXED)
 		ofi_idm_clear(&conn->rdm->conn_idx_map, conn->peer->index);
@@ -250,7 +247,7 @@ void tcp2_freeall_conns(struct tcp2_rdm *rdm)
 	int i, cnt;
 
 	av = container_of(rdm->util_ep.av, struct rxm_av, util_av);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	assert(tcp2_progress_locked(tcp2_rdm2_progress(rdm)));
 
 	/* We can't have more connections than the current number of
 	 * possible peers.
@@ -270,8 +267,6 @@ void tcp2_freeall_conns(struct tcp2_rdm *rdm)
 		tcp2_close_conn(conn);
 		tcp2_free_conn(conn);
 	}
-
-	ofi_ep_lock_release(&rdm->util_ep);
 }
 
 static struct tcp2_conn *
@@ -280,7 +275,7 @@ tcp2_alloc_conn(struct tcp2_rdm *rdm, struct util_peer_addr *peer)
 	struct tcp2_conn *conn;
 	struct rxm_av *av;
 
-	assert(ofi_ep_lock_held(&rdm->util_ep));
+	assert(tcp2_progress_locked(tcp2_rdm2_progress(rdm)));
 	av = container_of(rdm->util_ep.av, struct rxm_av, util_av);
 	conn = rxm_av_alloc_conn(av);
 	if (!conn) {
@@ -304,7 +299,7 @@ tcp2_add_conn(struct tcp2_rdm *rdm, struct util_peer_addr *peer)
 {
 	struct tcp2_conn *conn;
 
-	assert(ofi_ep_lock_held(&rdm->util_ep));
+	assert(tcp2_progress_locked(tcp2_rdm2_progress(rdm)));
 	conn = ofi_idm_lookup(&rdm->conn_idx_map, peer->index);
 	if (conn)
 		return conn;
@@ -332,7 +327,7 @@ ssize_t tcp2_get_conn(struct tcp2_rdm *rdm, fi_addr_t addr,
 {
 	struct util_peer_addr **peer;
 
-	assert(ofi_ep_lock_held(&rdm->util_ep));
+	assert(tcp2_progress_locked(tcp2_rdm2_progress(rdm)));
 	peer = ofi_av_addr_context(rdm->util_ep.av, addr);
 	*conn = tcp2_add_conn(rdm, *peer);
 	if (!*conn)
@@ -354,7 +349,7 @@ void tcp2_process_connect(struct fi_eq_cm_entry *cm_entry)
 	assert(cm_entry->fid->fclass == TCP2_CLASS_CM);
 	conn = cm_entry->fid->context;
 
-	assert(ofi_ep_lock_held(&conn->rdm->util_ep));
+	assert(tcp2_progress_locked(tcp2_rdm2_progress(conn->rdm)));
 	msg = (struct tcp2_rdm_cm *) cm_entry->data;
 	conn->remote_pid = ntohl(msg->pid);
 }
@@ -371,8 +366,7 @@ static void tcp2_process_connreq(struct fi_eq_cm_entry *cm_entry)
 
 	assert(cm_entry->fid->fclass == FI_CLASS_PEP);
 	rdm = cm_entry->fid->context;
-	assert(ofi_ep_lock_held(&rdm->util_ep));
-	assert(ofi_genlock_held(&tcp2_rdm2_progress(rdm)->lock));
+	assert(tcp2_progress_locked(tcp2_rdm2_progress(rdm)));
 	msg = (struct tcp2_rdm_cm *) cm_entry->data;
 
 	memcpy(&peer_addr, cm_entry->info->dest_addr,
@@ -476,12 +470,9 @@ void tcp2_progress_rdm(struct tcp2_progress *progress)
 	if (!progress->rdm_event_cnt)
 		return;
 
-	ofi_mutex_lock(&progress->list_lock);
+	ofi_genlock_held(&progress->rdm_lock);
 	dlist_foreach_container(&progress->rdm_list, struct tcp2_rdm, rdm,
 				progress_entry) {
-
-		ofi_ep_lock_acquire(&rdm->util_ep);
-		ofi_genlock_lock(&progress->lock);
 		while (!slist_empty(&rdm->event_list)) {
 			item = slist_remove_head(&rdm->event_list);
 			progress->rdm_event_cnt--;
@@ -509,12 +500,7 @@ void tcp2_progress_rdm(struct tcp2_progress *progress)
 				assert(0);
 				break;
 			}
-
 			free(event);
 		};
-
-		ofi_genlock_unlock(&progress->lock);
-		ofi_ep_lock_release(&rdm->util_ep);
 	}
-	ofi_mutex_unlock(&progress->list_lock);
 }

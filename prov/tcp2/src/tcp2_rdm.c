@@ -76,14 +76,14 @@ tcp2_rdm_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
 
 	ret = fi_send(&conn->ep->util_ep.ep_fid, buf, len, desc, 0, context);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -96,14 +96,14 @@ tcp2_rdm_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
 
 	ret = fi_sendv(&conn->ep->util_ep.ep_fid, iov, desc, count, 0, context);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -116,14 +116,14 @@ tcp2_rdm_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, msg->addr, &conn);
 	if (ret)
 		goto unlock;
 
 	ret = fi_sendmsg(&conn->ep->util_ep.ep_fid, msg, flags);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -136,14 +136,14 @@ tcp2_rdm_inject(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
 
 	ret = fi_inject(&conn->ep->util_ep.ep_fid, buf, len, 0);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -156,7 +156,7 @@ tcp2_rdm_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
@@ -164,7 +164,7 @@ tcp2_rdm_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ret = fi_senddata(&conn->ep->util_ep.ep_fid, buf, len, desc, data, 0,
 			  context);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -177,14 +177,14 @@ tcp2_rdm_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
 
 	ret = fi_injectdata(&conn->ep->util_ep.ep_fid, buf, len, data, 0);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -244,7 +244,7 @@ tcp2_rdm_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
@@ -252,7 +252,7 @@ tcp2_rdm_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ret = fi_tsend(&conn->ep->util_ep.ep_fid, buf, len, desc, 0, tag,
 		       context);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -266,7 +266,7 @@ tcp2_rdm_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
@@ -274,7 +274,7 @@ tcp2_rdm_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	ret = fi_tsendv(&conn->ep->util_ep.ep_fid, iov, desc, count, 0, tag,
 			context);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -287,14 +287,14 @@ tcp2_rdm_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, msg->addr, &conn);
 	if (ret)
 		goto unlock;
 
 	ret = fi_tsendmsg(&conn->ep->util_ep.ep_fid, msg, flags);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -307,14 +307,14 @@ tcp2_rdm_tinject(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
 
 	ret = fi_tinject(&conn->ep->util_ep.ep_fid, buf, len, 0, tag);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -328,7 +328,7 @@ tcp2_rdm_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
@@ -336,7 +336,7 @@ tcp2_rdm_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ret = fi_tsenddata(&conn->ep->util_ep.ep_fid, buf, len, desc, data, 0,
 			   tag, context);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -349,14 +349,14 @@ tcp2_rdm_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
 
 	ret = fi_tinjectdata(&conn->ep->util_ep.ep_fid, buf, len, data, 0, tag);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -383,7 +383,7 @@ tcp2_rdm_read(struct fid_ep *ep_fid, void *buf, size_t len,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, src_addr, &conn);
 	if (ret)
 		goto unlock;
@@ -391,7 +391,7 @@ tcp2_rdm_read(struct fid_ep *ep_fid, void *buf, size_t len,
 	ret = fi_read(&conn->ep->util_ep.ep_fid, buf, len, desc, src_addr, addr,
 		      key, context);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -405,7 +405,7 @@ tcp2_rdm_readv(struct fid_ep *ep_fid, const struct iovec *iov,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, src_addr, &conn);
 	if (ret)
 		goto unlock;
@@ -413,7 +413,7 @@ tcp2_rdm_readv(struct fid_ep *ep_fid, const struct iovec *iov,
 	ret = fi_readv(&conn->ep->util_ep.ep_fid, iov, desc, count, src_addr, addr,
 		       key, context);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -426,14 +426,14 @@ tcp2_rdm_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, msg->addr, &conn);
 	if (ret)
 		goto unlock;
 
 	ret = fi_readmsg(&conn->ep->util_ep.ep_fid, msg, flags);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -447,7 +447,7 @@ tcp2_rdm_write(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
@@ -455,7 +455,7 @@ tcp2_rdm_write(struct fid_ep *ep_fid, const void *buf,
 	ret = fi_write(&conn->ep->util_ep.ep_fid, buf, len, desc, dest_addr,
 		       addr, key, context);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -469,7 +469,7 @@ tcp2_rdm_writev(struct fid_ep *ep_fid, const struct iovec *iov,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
@@ -477,7 +477,7 @@ tcp2_rdm_writev(struct fid_ep *ep_fid, const struct iovec *iov,
 	ret = fi_writev(&conn->ep->util_ep.ep_fid, iov, desc, count, dest_addr,
 			addr, key, context);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -490,14 +490,14 @@ tcp2_rdm_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, msg->addr, &conn);
 	if (ret)
 		goto unlock;
 
 	ret = fi_writemsg(&conn->ep->util_ep.ep_fid, msg, flags);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -511,7 +511,7 @@ tcp2_rdm_inject_write(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
@@ -519,7 +519,7 @@ tcp2_rdm_inject_write(struct fid_ep *ep_fid, const void *buf,
 	ret = fi_inject_write(&conn->ep->util_ep.ep_fid, buf, len, dest_addr,
 			      addr, key);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -534,7 +534,7 @@ tcp2_rdm_writedata(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
@@ -542,7 +542,7 @@ tcp2_rdm_writedata(struct fid_ep *ep_fid, const void *buf,
 	ret = fi_writedata(&conn->ep->util_ep.ep_fid, buf, len, desc, data,
 			   dest_addr, addr, key, context);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -556,7 +556,7 @@ tcp2_rdm_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	rdm = container_of(ep_fid, struct tcp2_rdm, util_ep.ep_fid);
-	ofi_ep_lock_acquire(&rdm->util_ep);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = tcp2_get_conn(rdm, dest_addr, &conn);
 	if (ret)
 		goto unlock;
@@ -564,7 +564,7 @@ tcp2_rdm_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 	ret = fi_inject_writedata(&conn->ep->util_ep.ep_fid, buf, len, data,
 				  dest_addr, addr, key);
 unlock:
-	ofi_ep_lock_release(&rdm->util_ep);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	return ret;
 }
 
@@ -649,8 +649,7 @@ static int tcp2_enable_rdm(struct tcp2_rdm *rdm)
 	int ret;
 
 	progress = tcp2_rdm2_progress(rdm);
-	ofi_mutex_lock(&progress->list_lock);
-	ofi_genlock_lock(&progress->lock);
+	ofi_genlock_lock(&progress->rdm_lock);
 
 	ret = tcp2_listen(rdm->pep, progress);
 	if (ret)
@@ -684,8 +683,7 @@ static int tcp2_enable_rdm(struct tcp2_rdm *rdm)
 	dlist_insert_tail(&rdm->progress_entry, &progress->rdm_list);
 
 unlock:
-	ofi_genlock_unlock(&progress->lock);
-	ofi_mutex_unlock(&progress->list_lock);
+	ofi_genlock_unlock(&progress->rdm_lock);
 	return ret;
 }
 
@@ -715,6 +713,7 @@ static int tcp2_rdm_close(struct fid *fid)
 	int ret;
 
 	rdm = container_of(fid, struct tcp2_rdm, util_ep.ep_fid.fid);
+	ofi_genlock_lock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 	ret = fi_close(&rdm->pep->util_pep.pep_fid.fid);
 	if (ret) {
 		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL, \
@@ -723,6 +722,7 @@ static int tcp2_rdm_close(struct fid *fid)
 	}
 
 	tcp2_freeall_conns(rdm);
+	ofi_genlock_unlock(&tcp2_rdm2_progress(rdm)->rdm_lock);
 
 	ret = fi_close(&rdm->srx->rx_fid.fid);
 	if (ret) {
