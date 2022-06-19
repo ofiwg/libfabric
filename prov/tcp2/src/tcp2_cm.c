@@ -140,7 +140,6 @@ void tcp2_req_done(struct tcp2_ep *ep)
 
 	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "connect request done\n");
 	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
-	assert(ofi_mutex_held(&ep->lock));
 
 	ret = tcp2_recv_cm_msg(ep->bsock.sock, ep->cm_msg, ofi_ctrl_connresp);
 	if (ret) {
@@ -259,7 +258,6 @@ void tcp2_connect_done(struct tcp2_ep *ep)
 
 	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "socket connected, sending req\n");
 	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
-	assert(ofi_mutex_held(&ep->lock));
 
 	len = sizeof(status);
 	ret = getsockopt(ep->bsock.sock, SOL_SOCKET, SO_ERROR,

@@ -125,10 +125,8 @@ tcp2_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	tcp2_rma_read_recv_entry_fill(recv_entry, ep, msg, flags);
 
 	ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
-	ofi_mutex_lock(&ep->lock);
 	slist_insert_tail(&recv_entry->entry, &ep->rma_read_queue);
 	tcp2_tx_queue_insert(ep, send_entry);
-	ofi_mutex_unlock(&ep->lock);
 	ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
 	return FI_SUCCESS;
 }
