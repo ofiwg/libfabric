@@ -54,7 +54,7 @@ tcp2_alloc_send(struct tcp2_ep *ep)
 {
 	struct tcp2_xfer_entry *send_entry;
 
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	send_entry = tcp2_alloc_tx(ep);
 	if (send_entry)
 		send_entry->hdr.base_hdr.op = ofi_op_msg;
@@ -67,7 +67,7 @@ tcp2_alloc_tsend(struct tcp2_ep *ep)
 {
 	struct tcp2_xfer_entry *send_entry;
 
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	send_entry = tcp2_alloc_tx(ep);
 	if (send_entry) {
 		assert(ep->srx);
@@ -144,7 +144,7 @@ tcp2_queue_recv(struct tcp2_ep *ep, struct tcp2_xfer_entry *recv_entry)
 {
 	bool ret;
 
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	ret = ep->rx_avail;
 	if (ret) {
 		slist_insert_tail(&recv_entry->entry, &ep->rx_queue);

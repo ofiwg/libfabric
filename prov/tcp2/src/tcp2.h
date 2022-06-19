@@ -249,11 +249,12 @@ void tcp2_freeall_conns(struct tcp2_rdm *rdm);
 struct tcp2_progress {
 	struct fid		fid;
 	struct ofi_genlock	lock;
+	struct ofi_genlock	rdm_lock;
+	struct ofi_genlock	*active_lock;
 
 	struct dlist_entry	active_wait_list;
 	struct fd_signal	signal;
 
-	ofi_mutex_t		list_lock;
 	struct dlist_entry	rdm_list;
 	uint32_t		rdm_event_cnt;
 	struct ofi_bufpool	*xfer_pool;
@@ -281,7 +282,7 @@ struct tcp2_progress {
 	bool			auto_progress;
 };
 
-int tcp2_init_progress(struct tcp2_progress *progress, bool use_epoll);
+int tcp2_init_progress(struct tcp2_progress *progress, struct fi_info *info);
 void tcp2_close_progress(struct tcp2_progress *progress);
 int tcp2_start_progress(struct tcp2_progress *progress);
 void tcp2_stop_progress(struct tcp2_progress *progress);
@@ -295,6 +296,11 @@ void tcp2_update_poll(struct tcp2_ep *ep);
 int tcp2_monitor_sock(struct tcp2_progress *progress, SOCKET sock,
 		      uint32_t events, struct fid *fid);
 void tcp2_halt_sock(struct tcp2_progress *progress, SOCKET sock);
+
+static inline int tcp2_progress_locked(struct tcp2_progress *progress)
+{
+	return ofi_genlock_held(progress->active_lock);
+}
 
 
 struct tcp2_fabric {
@@ -505,14 +511,14 @@ tcp2_rx_completion_flag(struct tcp2_ep *ep, uint64_t op_flags)
 static inline struct tcp2_xfer_entry *
 tcp2_alloc_xfer(struct tcp2_progress *progress)
 {
-	assert(ofi_genlock_held(&progress->lock));
+	assert(tcp2_progress_locked(progress));
 	return ofi_buf_alloc(progress->xfer_pool);
 }
 
 static inline void
 tcp2_free_xfer(struct tcp2_ep *ep, struct tcp2_xfer_entry *xfer)
 {
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	xfer->hdr.base_hdr.flags = 0;
 	xfer->cq_flags = 0;
 	xfer->ctrl_flags = 0;
@@ -525,7 +531,7 @@ tcp2_alloc_rx(struct tcp2_ep *ep)
 {
 	struct tcp2_xfer_entry *xfer;
 
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	xfer = tcp2_alloc_xfer(tcp2_ep2_progress(ep));
 	if (xfer)
 		xfer->ep = ep;
@@ -538,7 +544,7 @@ tcp2_alloc_tx(struct tcp2_ep *ep)
 {
 	struct tcp2_xfer_entry *xfer;
 
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	xfer = tcp2_alloc_xfer(tcp2_ep2_progress(ep));
 	if (xfer) {
 		xfer->hdr.base_hdr.version = TCP2_HDR_VERSION;
@@ -559,7 +565,7 @@ tcp2_alloc_tx(struct tcp2_ep *ep)
  */
 static inline bool tcp2_active_wait(struct tcp2_ep *ep)
 {
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	return ofi_bsock_readable(&ep->bsock) ||
 	       (ep->cur_rx.handler && !ep->cur_rx.entry);
 }

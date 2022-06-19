@@ -266,7 +266,7 @@ tcp2_ep_flush_queue(struct tcp2_ep *ep, struct slist *queue, struct tcp2_cq *cq)
 {
 	struct tcp2_xfer_entry *xfer_entry;
 
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	while (!slist_empty(queue)) {
 		xfer_entry = container_of(queue->head, struct tcp2_xfer_entry,
 					  entry);
@@ -280,7 +280,7 @@ static void tcp2_ep_flush_all_queues(struct tcp2_ep *ep)
 {
 	struct tcp2_cq *cq;
 
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	cq = container_of(ep->util_ep.tx_cq, struct tcp2_cq, util_cq);
 	if (ep->cur_tx.entry) {
 		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
@@ -314,7 +314,7 @@ void tcp2_ep_disable(struct tcp2_ep *ep, int cm_err, void* err_data,
 	struct fi_eq_err_entry err_entry = {0};
 	int ret;
 
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 	switch (ep->state) {
 	case TCP2_CONNECTING:
 	case TCP2_REQ_SENT:
@@ -355,16 +355,14 @@ void tcp2_ep_disable(struct tcp2_ep *ep, int cm_err, void* err_data,
 
 static int tcp2_ep_shutdown(struct fid_ep *ep_fid, uint64_t flags)
 {
-	struct tcp2_progress *progress;
 	struct tcp2_ep *ep;
 
 	ep = container_of(ep_fid, struct tcp2_ep, util_ep.ep_fid);
 
-	progress = tcp2_ep2_progress(ep);
-	ofi_genlock_lock(&progress->lock);
+	ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
 	(void) ofi_bsock_flush(&ep->bsock);
 	tcp2_ep_disable(ep, 0, NULL, 0);
-	ofi_genlock_unlock(&progress->lock);
+	ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
 
 	return FI_SUCCESS;
 }
@@ -425,7 +423,7 @@ static void tcp2_ep_cancel_rx(struct tcp2_ep *ep, void *context)
 	struct tcp2_xfer_entry *xfer_entry;
 	struct tcp2_cq *cq;
 
-	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
+	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
 
 	/* To cancel an active receive, we would need to flush the socket of
 	 * all data associated with that message.  Since some of that data

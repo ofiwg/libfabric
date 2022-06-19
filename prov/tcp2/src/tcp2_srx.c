@@ -39,6 +39,10 @@
 #include <ofi_iov.h>
 
 
+/* The rdm ep calls directly through to the srx calls, so we need to use the
+ * progress active_lock for protection.
+ */
+
 static ssize_t
 tcp2_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		 uint64_t flags)
@@ -50,7 +54,7 @@ tcp2_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 	assert(msg->iov_count <= TCP2_IOV_LIMIT);
 
-	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_lock(tcp2_srx2_progress(srx)->active_lock);
 	recv_entry = tcp2_alloc_xfer(tcp2_srx2_progress(srx));
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -65,7 +69,7 @@ tcp2_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
 unlock:
-	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_unlock(tcp2_srx2_progress(srx)->active_lock);
 	return ret;
 }
 
@@ -79,7 +83,7 @@ tcp2_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 
-	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_lock(tcp2_srx2_progress(srx)->active_lock);
 	recv_entry = tcp2_alloc_xfer(tcp2_srx2_progress(srx));
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -94,7 +98,7 @@ tcp2_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
 unlock:
-	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_unlock(tcp2_srx2_progress(srx)->active_lock);
 	return ret;
 }
 
@@ -109,7 +113,7 @@ tcp2_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 	assert(count <= TCP2_IOV_LIMIT);
 
-	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_lock(tcp2_srx2_progress(srx)->active_lock);
 	recv_entry = tcp2_alloc_xfer(tcp2_srx2_progress(srx));
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -123,7 +127,7 @@ tcp2_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
 unlock:
-	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_unlock(tcp2_srx2_progress(srx)->active_lock);
 	return ret;
 }
 
@@ -146,7 +150,7 @@ tcp2_srx_peek(struct tcp2_srx *srx, const struct fi_msg_tagged *msg,
 {
 	struct fi_cq_err_entry err_entry = {0};
 
-	assert(ofi_genlock_held(&tcp2_srx2_progress(srx)->lock));
+	assert(tcp2_progress_locked(tcp2_srx2_progress(srx)));
 	err_entry.op_context = msg->context;
 	err_entry.flags = FI_RECV | FI_TAGGED;
 	err_entry.tag = msg->tag;
@@ -166,7 +170,7 @@ tcp2_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 	assert(msg->iov_count <= TCP2_IOV_LIMIT);
 
-	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_lock(tcp2_srx2_progress(srx)->active_lock);
 	if (flags & FI_PEEK) {
 		tcp2_srx_peek(srx, msg, flags);
 		goto unlock;
@@ -189,7 +193,7 @@ tcp2_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	slist_insert_tail(&recv_entry->entry, &srx->tag_queue);
 unlock:
-	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_unlock(tcp2_srx2_progress(srx)->active_lock);
 	return ret;
 }
 
@@ -203,7 +207,7 @@ tcp2_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 
-	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_lock(tcp2_srx2_progress(srx)->active_lock);
 	recv_entry = tcp2_alloc_xfer(tcp2_srx2_progress(srx));
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -221,7 +225,7 @@ tcp2_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	slist_insert_tail(&recv_entry->entry, &srx->tag_queue);
 unlock:
-	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_unlock(tcp2_srx2_progress(srx)->active_lock);
 	return ret;
 }
 
@@ -237,7 +241,7 @@ tcp2_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 	assert(count <= TCP2_IOV_LIMIT);
 
-	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_lock(tcp2_srx2_progress(srx)->active_lock);
 	recv_entry = tcp2_alloc_xfer(tcp2_srx2_progress(srx));
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -254,7 +258,7 @@ tcp2_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	slist_insert_tail(&recv_entry->entry, &srx->tag_queue);
 unlock:
-	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_unlock(tcp2_srx2_progress(srx)->active_lock);
 	return ret;
 }
 
@@ -277,7 +281,7 @@ tcp2_match_tag(struct tcp2_srx *srx, struct tcp2_ep *ep, uint64_t tag)
 	struct tcp2_xfer_entry *rx_entry;
 	struct slist_entry *item, *prev;
 
-	assert(ofi_genlock_held(&tcp2_srx2_progress(srx)->lock));
+	assert(tcp2_progress_locked(tcp2_srx2_progress(srx)));
 	slist_foreach(&srx->tag_queue, item, prev) {
 		rx_entry = container_of(item, struct tcp2_xfer_entry, entry);
 		if (ofi_match_tag(rx_entry->tag, rx_entry->ignore, tag)) {
@@ -295,7 +299,7 @@ tcp2_match_tag_addr(struct tcp2_srx *srx, struct tcp2_ep *ep, uint64_t tag)
 	struct tcp2_xfer_entry *rx_entry;
 	struct slist_entry *item, *prev;
 
-	assert(ofi_genlock_held(&tcp2_srx2_progress(srx)->lock));
+	assert(tcp2_progress_locked(tcp2_srx2_progress(srx)));
 	slist_foreach(&srx->tag_queue, item, prev) {
 		rx_entry = container_of(item, struct tcp2_xfer_entry, entry);
 		if (ofi_match_tag(rx_entry->tag, rx_entry->ignore, tag) &&
@@ -314,7 +318,7 @@ tcp2_srx_cancel_rx(struct tcp2_srx *srx, struct slist *queue, void *context)
 	struct slist_entry *cur, *prev;
 	struct tcp2_xfer_entry *xfer_entry;
 
-	assert(ofi_genlock_held(&tcp2_srx2_progress(srx)->lock));
+	assert(tcp2_progress_locked(tcp2_srx2_progress(srx)));
 	slist_foreach(queue, cur, prev) {
 		xfer_entry = container_of(cur, struct tcp2_xfer_entry, entry);
 		if (xfer_entry->context == context) {
@@ -335,10 +339,10 @@ static ssize_t tcp2_srx_cancel(fid_t fid, void *context)
 
 	srx = container_of(fid, struct tcp2_srx, rx_fid.fid);
 
-	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_lock(tcp2_srx2_progress(srx)->active_lock);
 	if (!tcp2_srx_cancel_rx(srx, &srx->tag_queue, context))
 		tcp2_srx_cancel_rx(srx, &srx->rx_queue, context);
-	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
+	ofi_genlock_unlock(tcp2_srx2_progress(srx)->active_lock);
 
 	return 0;
 }
