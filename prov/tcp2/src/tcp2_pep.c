@@ -51,9 +51,9 @@ static int tcp2_pep_close(struct fid *fid)
 	 */
 
 	if (pep->state == TCP2_LISTENING) {
-		ofi_mutex_lock(&pep->progress->lock);
+		ofi_genlock_lock(&pep->progress->lock);
 		tcp2_halt_sock(pep->progress, pep->sock);
-		ofi_mutex_unlock(&pep->progress->lock);
+		ofi_genlock_unlock(&pep->progress->lock);
 	}
 
 	ofi_close_socket(pep->sock);
@@ -238,14 +238,14 @@ int tcp2_listen(struct tcp2_pep *pep, struct tcp2_progress *progress)
 		return -ofi_sockerr();
 	}
 
-	ofi_mutex_lock(&progress->lock);
+	ofi_genlock_lock(&progress->lock);
 	ret = tcp2_monitor_sock(progress, pep->sock, POLLIN,
 				&pep->util_pep.pep_fid.fid);
 	if (!ret) {
 		pep->progress = progress;
 		pep->state = TCP2_LISTENING;
 	}
-	ofi_mutex_unlock(&progress->lock);
+	ofi_genlock_unlock(&progress->lock);
 
 	return ret;
 }

@@ -674,7 +674,7 @@ static bool tcp2_tx_pending(struct tcp2_ep *ep)
 void tcp2_tx_queue_insert(struct tcp2_ep *ep,
 			  struct tcp2_xfer_entry *tx_entry)
 {
-	assert(ofi_mutex_held(&tcp2_ep2_progress(ep)->lock));
+	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 	assert(ofi_mutex_held(&ep->lock));
 
 	if (!ep->cur_tx.entry) {
@@ -700,7 +700,7 @@ static ssize_t (*tcp2_start_op[ofi_op_write + 1])(struct tcp2_ep *ep) = {
 
 static void tcp2_run_ep(struct tcp2_ep *ep, bool pin, bool pout, bool perr)
 {
-	assert(ofi_mutex_held(&tcp2_ep2_progress(ep)->lock));
+	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 	ofi_mutex_lock(&ep->lock);
 	switch (ep->state) {
 	case TCP2_CONNECTED:
@@ -818,7 +818,7 @@ void tcp2_run_progress(struct tcp2_progress *progress, bool internal)
 	int nfds, i;
 	bool pin, pout, perr;
 
-	ofi_mutex_lock(&progress->lock);
+	ofi_genlock_lock(&progress->lock);
 	dlist_foreach_safe(&progress->active_wait_list, item, tmp) {
 		ep = container_of(item, struct tcp2_ep, progress_entry);
 
@@ -866,7 +866,7 @@ void tcp2_run_progress(struct tcp2_progress *progress, bool internal)
 		}
 	}
 unlock:
-	ofi_mutex_unlock(&progress->lock);
+	ofi_genlock_unlock(&progress->lock);
 	tcp2_progress_rdm(progress);
 }
 
@@ -900,7 +900,7 @@ void tcp2_update_poll(struct tcp2_ep *ep)
 	bool tx_pending;
 
 	progress = tcp2_ep2_progress(ep);
-	assert(ofi_mutex_held(&progress->lock));
+	assert(ofi_genlock_held(&progress->lock));
 	assert(ofi_mutex_held(&ep->lock));
 	tx_pending = tcp2_tx_pending(ep);
 	if ((tx_pending && ep->pollout_set) ||
@@ -933,10 +933,10 @@ static void *tcp2_auto_progress(void *arg)
 	int timeout, nfds;
 
 	FI_INFO(&tcp2_prov, FI_LOG_DOMAIN, "progress thread starting\n");
-	ofi_mutex_lock(&progress->lock);
+	ofi_genlock_lock(&progress->lock);
 	while (progress->auto_progress) {
 		timeout = dlist_empty(&progress->active_wait_list) ? -1 : 1;
-		ofi_mutex_unlock(&progress->lock);
+		ofi_genlock_unlock(&progress->lock);
 
 		/* We can't hold the progress lock around waiting, or we
 		 * can hang another thread trying to obtain the lock.  But
@@ -950,9 +950,9 @@ static void *tcp2_auto_progress(void *arg)
 
 		if (nfds >= 0)
 			tcp2_run_progress(progress, true);
-		ofi_mutex_lock(&progress->lock);
+		ofi_genlock_lock(&progress->lock);
 	}
-	ofi_mutex_unlock(&progress->lock);
+	ofi_genlock_unlock(&progress->lock);
 	FI_INFO(&tcp2_prov, FI_LOG_DOMAIN, "progress thread exiting\n");
 	return NULL;
 }
@@ -962,7 +962,7 @@ int tcp2_monitor_sock(struct tcp2_progress *progress, SOCKET sock,
 {
 	int ret;
 
-	assert(ofi_mutex_held(&progress->lock));
+	assert(ofi_genlock_held(&progress->lock));
 	ret = progress->poll_add(progress, sock, events, fid);
 	if (ret) {
 		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
@@ -976,7 +976,7 @@ void tcp2_halt_sock(struct tcp2_progress *progress, SOCKET sock)
 {
 	int ret;
 
-	assert(ofi_mutex_held(&progress->lock));
+	assert(ofi_genlock_held(&progress->lock));
 	ret = progress->poll_del(progress, sock);
 	if (ret) {
 		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
@@ -988,7 +988,7 @@ int tcp2_start_progress(struct tcp2_progress *progress)
 {
 	int ret;
 
-	ofi_mutex_lock(&progress->lock);
+	ofi_genlock_lock(&progress->lock);
 	if (progress->auto_progress) {
 		ret = 0;
 		goto unlock;
@@ -1005,7 +1005,7 @@ int tcp2_start_progress(struct tcp2_progress *progress)
 	}
 
 unlock:
-	ofi_mutex_unlock(&progress->lock);
+	ofi_genlock_unlock(&progress->lock);
 	return ret;
 }
 
@@ -1034,15 +1034,15 @@ int tcp2_start_all(struct tcp2_fabric *fabric)
 
 void tcp2_stop_progress(struct tcp2_progress *progress)
 {
-	ofi_mutex_lock(&progress->lock);
+	ofi_genlock_lock(&progress->lock);
 	if (!progress->auto_progress) {
-		ofi_mutex_unlock(&progress->lock);
+		ofi_genlock_unlock(&progress->lock);
 		return;
 	}
 
 	progress->auto_progress = false;
 	fd_signal_set(&progress->signal);
-	ofi_mutex_unlock(&progress->lock);
+	ofi_genlock_unlock(&progress->lock);
 	(void) pthread_join(progress->thread, NULL);
 }
 
@@ -1060,7 +1060,7 @@ int tcp2_init_progress(struct tcp2_progress *progress, bool use_epoll)
 	if (ret)
 		return ret;
 
-	ret = ofi_mutex_init(&progress->lock);
+	ret = ofi_genlock_init(&progress->lock, OFI_LOCK_MUTEX);
 	if (ret)
 		goto err1;
 
@@ -1084,7 +1084,7 @@ int tcp2_init_progress(struct tcp2_progress *progress, bool use_epoll)
 err3:
 	ofi_mutex_destroy(&progress->list_lock);
 err2:
-	ofi_mutex_destroy(&progress->lock);
+	ofi_genlock_destroy(&progress->lock);
 err1:
 	fd_signal_free(&progress->signal);
 	return ret;
@@ -1096,7 +1096,7 @@ void tcp2_close_progress(struct tcp2_progress *progress)
 	assert(dlist_empty(&progress->rdm_list));
 	tcp2_stop_progress(progress);
 	progress->poll_close(progress);
-	ofi_mutex_destroy(&progress->lock);
+	ofi_genlock_destroy(&progress->lock);
 	ofi_mutex_destroy(&progress->list_lock);
 	fd_signal_free(&progress->signal);
 }
