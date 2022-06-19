@@ -193,9 +193,7 @@ static int tcp2_ep_connect(struct fid_ep *ep_fid, const void *addr,
 
 disable:
 	ofi_genlock_lock(&progress->lock);
-	ofi_mutex_lock(&ep->lock);
 	tcp2_ep_disable(ep, -ret, NULL, 0);
-	ofi_mutex_unlock(&ep->lock);
 	ofi_genlock_unlock(&progress->lock);
 	return ret;
 }
@@ -238,7 +236,6 @@ tcp2_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 
 	progress = tcp2_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
-	ofi_mutex_lock(&ep->lock);
 	ret = tcp2_monitor_sock(progress, ep->bsock.sock, POLLIN,
 				&ep->util_ep.ep_fid.fid);
 	if (!ret && tcp2_active_wait(ep)) {
@@ -246,7 +243,6 @@ tcp2_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 				  &progress->active_wait_list);
 		tcp2_signal_progress(progress);
 	}
-	ofi_mutex_unlock(&ep->lock);
 	ofi_genlock_unlock(&progress->lock);
 	if (ret)
 		return ret;
@@ -265,12 +261,12 @@ tcp2_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 	return 0;
 }
 
-/* must hold ep->lock */
 static void tcp2_ep_flush_queue(struct slist *queue,
 				struct tcp2_cq *cq)
 {
 	struct tcp2_xfer_entry *xfer_entry;
 
+	assert(ofi_genlock_held(&tcp2_cq2_progress(cq)->lock));
 	while (!slist_empty(queue)) {
 		xfer_entry = container_of(queue->head, struct tcp2_xfer_entry,
 					  entry);
@@ -284,7 +280,7 @@ static void tcp2_ep_flush_all_queues(struct tcp2_ep *ep)
 {
 	struct tcp2_cq *cq;
 
-	assert(ofi_mutex_held(&ep->lock));
+	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 	cq = container_of(ep->util_ep.tx_cq, struct tcp2_cq, util_cq);
 	if (ep->cur_tx.entry) {
 		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
@@ -319,7 +315,6 @@ void tcp2_ep_disable(struct tcp2_ep *ep, int cm_err, void* err_data,
 	int ret;
 
 	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
-	assert(ofi_mutex_held(&ep->lock));
 	switch (ep->state) {
 	case TCP2_CONNECTING:
 	case TCP2_REQ_SENT:
@@ -367,10 +362,8 @@ static int tcp2_ep_shutdown(struct fid_ep *ep_fid, uint64_t flags)
 
 	progress = tcp2_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
-	ofi_mutex_lock(&ep->lock);
 	(void) ofi_bsock_flush(&ep->bsock);
 	tcp2_ep_disable(ep, 0, NULL, 0);
-	ofi_mutex_unlock(&ep->lock);
 	ofi_genlock_unlock(&progress->lock);
 
 	return FI_SUCCESS;
@@ -432,7 +425,7 @@ static void tcp2_ep_cancel_rx(struct tcp2_ep *ep, void *context)
 	struct tcp2_xfer_entry *xfer_entry;
 	struct tcp2_cq *cq;
 
-	assert(ofi_mutex_held(&ep->lock));
+	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 
 	/* To cancel an active receive, we would need to flush the socket of
 	 * all data associated with that message.  Since some of that data
@@ -470,9 +463,9 @@ static ssize_t tcp2_ep_cancel(fid_t fid, void *context)
 
 	ep = container_of(fid, struct tcp2_ep, util_ep.ep_fid.fid);
 
-	ofi_mutex_lock(&ep->lock);
+	ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
 	tcp2_ep_cancel_rx(ep, context);
-	ofi_mutex_unlock(&ep->lock);
+	ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
 
 	return 0;
 }
@@ -488,14 +481,8 @@ static int tcp2_ep_close(struct fid *fid)
 	ofi_genlock_lock(&progress->lock);
 	dlist_remove_init(&ep->progress_entry);
 	tcp2_halt_sock(progress, ep->bsock.sock);
-	ofi_genlock_unlock(&progress->lock);
-
-	/* Lock not technically needed, since we're freeing the EP.  But it's
-	 * harmless to acquire and silences static code analysis tools.
-	 */
-	ofi_mutex_lock(&ep->lock);
 	tcp2_ep_flush_all_queues(ep);
-	ofi_mutex_unlock(&ep->lock);
+	ofi_genlock_unlock(&progress->lock);
 
 	if (ep->util_ep.eq) {
 		ofi_eq_remove_fid_events(ep->util_ep.eq,
@@ -525,7 +512,6 @@ static int tcp2_ep_close(struct fid *fid)
 
 	ofi_atomic_dec32(&ep->util_ep.domain->ref);
 	ofi_mutex_destroy(&ep->util_ep.lock);
-	ofi_mutex_destroy(&ep->lock);
 
 	free(ep);
 	return 0;
@@ -730,14 +716,10 @@ int tcp2_endpoint(struct fid_domain *domain, struct fi_info *info,
 		}
 	}
 
-	ret = ofi_mutex_init(&ep->lock);
-	if (ret)
-		goto err3;
-
 	ep->cm_msg = calloc(1, sizeof(*ep->cm_msg));
 	if (!ep->cm_msg) {
 		ret = -FI_ENOMEM;
-		goto err4;
+		goto err3;
 	}
 
 	dlist_init(&ep->progress_entry);
@@ -764,11 +746,8 @@ int tcp2_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->msg = &tcp2_msg_ops;
 	(*ep_fid)->rma = &tcp2_rma_ops;
 	(*ep_fid)->tagged = &tcp2_tagged_ops;
-
 	return 0;
 
-err4:
-	ofi_mutex_destroy(&ep->lock);
 err3:
 	ofi_close_socket(ep->bsock.sock);
 err2:

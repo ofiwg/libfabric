@@ -142,13 +142,13 @@ tcp2_queue_recv(struct tcp2_ep *ep, struct tcp2_xfer_entry *recv_entry)
 {
 	bool ret;
 
-	ofi_mutex_lock(&ep->lock);
+	ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
 	ret = ep->rx_avail;
 	if (ret) {
 		slist_insert_tail(&recv_entry->entry, &ep->rx_queue);
 		ep->rx_avail--;
 	}
-	ofi_mutex_unlock(&ep->lock);
+	ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
 	return ret;
 }
 

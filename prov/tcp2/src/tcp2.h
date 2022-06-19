@@ -93,7 +93,6 @@ struct tcp2_progress;
  * progress->list_lock - protects against rdm destruction
  * rdm->lock - protects rdm_conn lookup and access
  * progress->lock - serializes ep connection, transfers, destruction
- * ep->lock - protects ep state
  * cq->lock or eq->lock - protects event queues
  * TODO: simplify locking now that progress locks are available
  */
@@ -200,8 +199,6 @@ struct tcp2_ep {
 	struct tcp2_conn_handle *conn;
 	struct tcp2_cm_msg	*cm_msg;
 
-	/* lock for protecting tx/rx queues, rma list, state */
-	ofi_mutex_t		lock;
 	void (*hdr_bswap)(struct tcp2_base_hdr *hdr);
 	void (*report_success)(struct tcp2_ep *ep, struct util_cq *cq,
 			       struct tcp2_xfer_entry *xfer_entry);
@@ -585,9 +582,7 @@ static inline void
 tcp2_queue_send(struct tcp2_ep *ep, struct tcp2_xfer_entry *tx_entry)
 {
 	ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
-	ofi_mutex_lock(&ep->lock);
 	tcp2_tx_queue_insert(ep, tx_entry);
-	ofi_mutex_unlock(&ep->lock);
 	ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
 }
 
@@ -601,7 +596,7 @@ tcp2_queue_send(struct tcp2_ep *ep, struct tcp2_xfer_entry *tx_entry)
  */
 static inline bool tcp2_active_wait(struct tcp2_ep *ep)
 {
-	assert(ofi_mutex_held(&ep->lock));
+	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 	return ofi_bsock_readable(&ep->bsock) ||
 	       (ep->cur_rx.handler && !ep->cur_rx.entry);
 }
