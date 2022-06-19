@@ -250,9 +250,9 @@ void tcp2_freeall_conns(struct tcp2_rdm *rdm);
 
 struct tcp2_progress {
 	struct fid		fid;
-	ofi_mutex_t		lock;
-	struct dlist_entry	active_wait_list;
+	struct ofi_genlock	lock;
 
+	struct dlist_entry	active_wait_list;
 	struct fd_signal	signal;
 
 	ofi_mutex_t		list_lock;
@@ -584,11 +584,11 @@ tcp2_free_tx(struct tcp2_xfer_entry *xfer)
 static inline void
 tcp2_queue_send(struct tcp2_ep *ep, struct tcp2_xfer_entry *tx_entry)
 {
-	ofi_mutex_lock(&tcp2_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
 	ofi_mutex_lock(&ep->lock);
 	tcp2_tx_queue_insert(ep, tx_entry);
 	ofi_mutex_unlock(&ep->lock);
-	ofi_mutex_unlock(&tcp2_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
 }
 
 /* If we've buffered receive data, it counts the same as if a POLLIN

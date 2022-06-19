@@ -182,21 +182,21 @@ static int tcp2_ep_connect(struct fid_ep *ep_fid, const void *addr,
 
 	ep->pollout_set = true;
 	progress = tcp2_ep2_progress(ep);
-	ofi_mutex_lock(&progress->lock);
+	ofi_genlock_lock(&progress->lock);
 	ret = tcp2_monitor_sock(progress, ep->bsock.sock, POLLOUT,
 				&ep->util_ep.ep_fid.fid);
-	ofi_mutex_unlock(&progress->lock);
+	ofi_genlock_unlock(&progress->lock);
 	if (ret)
 		goto disable;
 
 	return 0;
 
 disable:
-	ofi_mutex_lock(&progress->lock);
+	ofi_genlock_lock(&progress->lock);
 	ofi_mutex_lock(&ep->lock);
 	tcp2_ep_disable(ep, -ret, NULL, 0);
 	ofi_mutex_unlock(&ep->lock);
-	ofi_mutex_unlock(&progress->lock);
+	ofi_genlock_unlock(&progress->lock);
 	return ret;
 }
 
@@ -237,7 +237,7 @@ tcp2_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 	ep->state = TCP2_CONNECTED;
 
 	progress = tcp2_ep2_progress(ep);
-	ofi_mutex_lock(&progress->lock);
+	ofi_genlock_lock(&progress->lock);
 	ofi_mutex_lock(&ep->lock);
 	ret = tcp2_monitor_sock(progress, ep->bsock.sock, POLLIN,
 				&ep->util_ep.ep_fid.fid);
@@ -247,7 +247,7 @@ tcp2_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 		tcp2_signal_progress(progress);
 	}
 	ofi_mutex_unlock(&ep->lock);
-	ofi_mutex_unlock(&progress->lock);
+	ofi_genlock_unlock(&progress->lock);
 	if (ret)
 		return ret;
 
@@ -318,7 +318,7 @@ void tcp2_ep_disable(struct tcp2_ep *ep, int cm_err, void* err_data,
 	struct fi_eq_err_entry err_entry = {0};
 	int ret;
 
-	assert(ofi_mutex_held(&tcp2_ep2_progress(ep)->lock));
+	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 	assert(ofi_mutex_held(&ep->lock));
 	switch (ep->state) {
 	case TCP2_CONNECTING:
@@ -366,12 +366,12 @@ static int tcp2_ep_shutdown(struct fid_ep *ep_fid, uint64_t flags)
 	ep = container_of(ep_fid, struct tcp2_ep, util_ep.ep_fid);
 
 	progress = tcp2_ep2_progress(ep);
-	ofi_mutex_lock(&progress->lock);
+	ofi_genlock_lock(&progress->lock);
 	ofi_mutex_lock(&ep->lock);
 	(void) ofi_bsock_flush(&ep->bsock);
 	tcp2_ep_disable(ep, 0, NULL, 0);
 	ofi_mutex_unlock(&ep->lock);
-	ofi_mutex_unlock(&progress->lock);
+	ofi_genlock_unlock(&progress->lock);
 
 	return FI_SUCCESS;
 }
@@ -485,10 +485,10 @@ static int tcp2_ep_close(struct fid *fid)
 	ep = container_of(fid, struct tcp2_ep, util_ep.ep_fid.fid);
 
 	progress = tcp2_ep2_progress(ep);
-	ofi_mutex_lock(&progress->lock);
+	ofi_genlock_lock(&progress->lock);
 	dlist_remove_init(&ep->progress_entry);
 	tcp2_halt_sock(progress, ep->bsock.sock);
-	ofi_mutex_unlock(&progress->lock);
+	ofi_genlock_unlock(&progress->lock);
 
 	/* Lock not technically needed, since we're freeing the EP.  But it's
 	 * harmless to acquire and silences static code analysis tools.

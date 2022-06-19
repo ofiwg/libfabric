@@ -139,7 +139,7 @@ void tcp2_req_done(struct tcp2_ep *ep)
 	ssize_t ret;
 
 	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "connect request done\n");
-	assert(ofi_mutex_held(&tcp2_ep2_progress(ep)->lock));
+	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 	assert(ofi_mutex_held(&ep->lock));
 
 	ret = tcp2_recv_cm_msg(ep->bsock.sock, ep->cm_msg, ofi_ctrl_connresp);
@@ -195,7 +195,7 @@ void tcp2_run_conn(struct tcp2_conn_handle *conn, bool pin, bool pout, bool perr
 	int ret;
 
 	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "Receiving connect request\n");
-	assert(ofi_mutex_held(&conn->pep->progress->lock));
+	assert(ofi_genlock_held(&conn->pep->progress->lock));
 
 	/* Don't monitor the socket until the user calls fi_accept */
 	tcp2_halt_sock(conn->pep->progress, conn->sock);
@@ -258,7 +258,7 @@ void tcp2_connect_done(struct tcp2_ep *ep)
 	int status, ret;
 
 	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "socket connected, sending req\n");
-	assert(ofi_mutex_held(&tcp2_ep2_progress(ep)->lock));
+	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 	assert(ofi_mutex_held(&ep->lock));
 
 	len = sizeof(status);
@@ -290,7 +290,7 @@ void tcp2_accept_sock(struct tcp2_pep *pep)
 	int ret;
 
 	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "accepting socket\n");
-	assert(ofi_mutex_held(&pep->progress->lock));
+	assert(ofi_genlock_held(&pep->progress->lock));
 
 	sock = accept(pep->sock, NULL, 0);
 	if (sock < 0) {

@@ -650,7 +650,7 @@ static int tcp2_enable_rdm(struct tcp2_rdm *rdm)
 
 	progress = tcp2_rdm2_progress(rdm);
 	ofi_mutex_lock(&progress->list_lock);
-	ofi_mutex_lock(&progress->lock);
+	ofi_genlock_lock(&progress->lock);
 
 	ret = tcp2_listen(rdm->pep, progress);
 	if (ret)
@@ -684,7 +684,7 @@ static int tcp2_enable_rdm(struct tcp2_rdm *rdm)
 	dlist_insert_tail(&rdm->progress_entry, &progress->rdm_list);
 
 unlock:
-	ofi_mutex_unlock(&progress->lock);
+	ofi_genlock_unlock(&progress->lock);
 	ofi_mutex_unlock(&progress->list_lock);
 	return ret;
 }
