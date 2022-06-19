@@ -87,6 +87,7 @@ extern size_t tcp2_zerocopy_size;
 struct tcp2_xfer_entry;
 struct tcp2_ep;
 struct tcp2_progress;
+struct tcp2_domain;
 
 
 /* Lock ordering:
@@ -161,6 +162,7 @@ struct tcp2_cur_tx {
 
 struct tcp2_srx {
 	struct fid_ep		rx_fid;
+	struct tcp2_domain	*domain;
 	struct tcp2_cq		*cq;
 	struct slist		rx_queue;
 	struct slist		tag_queue;
@@ -170,7 +172,6 @@ struct tcp2_srx {
 
 	struct ofi_bufpool	*buf_pool;
 	uint64_t		op_flags;
-	ofi_mutex_t		lock;
 };
 
 int tcp2_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
@@ -364,6 +365,11 @@ static inline struct tcp2_progress *tcp2_rdm2_progress(struct tcp2_rdm *rdm)
 	return &domain->progress;
 }
 
+static inline struct tcp2_progress *tcp2_srx2_progress(struct tcp2_srx *srx)
+{
+	return &srx->domain->progress;
+}
+
 struct tcp2_cq {
 	struct util_cq		util_cq;
 	struct ofi_bufpool	*xfer_pool;
@@ -538,13 +544,10 @@ static inline void
 tcp2_free_rx(struct tcp2_xfer_entry *xfer)
 {
 	struct tcp2_cq *cq;
-	struct tcp2_srx *srx;
 
+	assert(ofi_genlock_held(&tcp2_ep2_progress(xfer->ep)->lock));
 	if (xfer->ep->srx) {
-		srx = xfer->ep->srx;
-		ofi_mutex_lock(&srx->lock);
 		ofi_buf_free(xfer);
-		ofi_mutex_unlock(&srx->lock);
 	} else {
 		cq = container_of(xfer->ep->util_ep.rx_cq,
 				  struct tcp2_cq, util_cq);

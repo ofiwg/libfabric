@@ -50,7 +50,7 @@ tcp2_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 	assert(msg->iov_count <= TCP2_IOV_LIMIT);
 
-	ofi_mutex_lock(&srx->lock);
+	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -65,7 +65,7 @@ tcp2_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
 unlock:
-	ofi_mutex_unlock(&srx->lock);
+	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
 	return ret;
 }
 
@@ -79,7 +79,7 @@ tcp2_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 
-	ofi_mutex_lock(&srx->lock);
+	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -94,7 +94,7 @@ tcp2_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
 unlock:
-	ofi_mutex_unlock(&srx->lock);
+	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
 	return ret;
 }
 
@@ -109,7 +109,7 @@ tcp2_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 	assert(count <= TCP2_IOV_LIMIT);
 
-	ofi_mutex_lock(&srx->lock);
+	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -123,7 +123,7 @@ tcp2_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
 unlock:
-	ofi_mutex_unlock(&srx->lock);
+	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
 	return ret;
 }
 
@@ -140,19 +140,19 @@ static struct fi_ops_msg tcp2_srx_msg_ops = {
 	.injectdata = fi_no_msg_injectdata,
 };
 
-static ssize_t
+static void
 tcp2_srx_peek(struct tcp2_srx *srx, const struct fi_msg_tagged *msg,
 	      uint64_t flags)
 {
 	struct fi_cq_err_entry err_entry = {0};
 
+	assert(ofi_genlock_held(&tcp2_srx2_progress(srx)->lock));
 	err_entry.op_context = msg->context;
 	err_entry.flags = FI_RECV | FI_TAGGED;
 	err_entry.tag = msg->tag;
 	err_entry.err = FI_ENOMSG;
 
 	ofi_cq_write_error(&srx->cq->util_cq, &err_entry);
-	return FI_SUCCESS;
 }
 
 static ssize_t
@@ -166,10 +166,12 @@ tcp2_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 	assert(msg->iov_count <= TCP2_IOV_LIMIT);
 
-	if (flags & FI_PEEK)
-		return tcp2_srx_peek(srx, msg, flags);
+	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
+	if (flags & FI_PEEK) {
+		tcp2_srx_peek(srx, msg, flags);
+		goto unlock;
+	}
 
-	ofi_mutex_lock(&srx->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -187,7 +189,7 @@ tcp2_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	slist_insert_tail(&recv_entry->entry, &srx->tag_queue);
 unlock:
-	ofi_mutex_unlock(&srx->lock);
+	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
 	return ret;
 }
 
@@ -201,7 +203,7 @@ tcp2_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 
-	ofi_mutex_lock(&srx->lock);
+	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -219,7 +221,7 @@ tcp2_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	slist_insert_tail(&recv_entry->entry, &srx->tag_queue);
 unlock:
-	ofi_mutex_unlock(&srx->lock);
+	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
 	return ret;
 }
 
@@ -235,7 +237,7 @@ tcp2_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	srx = container_of(ep_fid, struct tcp2_srx, rx_fid);
 	assert(count <= TCP2_IOV_LIMIT);
 
-	ofi_mutex_lock(&srx->lock);
+	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
 	recv_entry = ofi_buf_alloc(srx->buf_pool);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -252,7 +254,7 @@ tcp2_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	slist_insert_tail(&recv_entry->entry, &srx->tag_queue);
 unlock:
-	ofi_mutex_unlock(&srx->lock);
+	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
 	return ret;
 }
 
@@ -275,16 +277,14 @@ tcp2_match_tag(struct tcp2_srx *srx, struct tcp2_ep *ep, uint64_t tag)
 	struct tcp2_xfer_entry *rx_entry;
 	struct slist_entry *item, *prev;
 
-	ofi_mutex_lock(&srx->lock);
+	assert(ofi_genlock_held(&tcp2_srx2_progress(srx)->lock));
 	slist_foreach(&srx->tag_queue, item, prev) {
 		rx_entry = container_of(item, struct tcp2_xfer_entry, entry);
 		if (ofi_match_tag(rx_entry->tag, rx_entry->ignore, tag)) {
 			slist_remove(&srx->tag_queue, item, prev);
-			ofi_mutex_unlock(&srx->lock);
 			return rx_entry;
 		}
 	}
-	ofi_mutex_unlock(&srx->lock);
 
 	return NULL;
 }
@@ -295,17 +295,15 @@ tcp2_match_tag_addr(struct tcp2_srx *srx, struct tcp2_ep *ep, uint64_t tag)
 	struct tcp2_xfer_entry *rx_entry;
 	struct slist_entry *item, *prev;
 
-	ofi_mutex_lock(&srx->lock);
+	assert(ofi_genlock_held(&tcp2_srx2_progress(srx)->lock));
 	slist_foreach(&srx->tag_queue, item, prev) {
 		rx_entry = container_of(item, struct tcp2_xfer_entry, entry);
 		if (ofi_match_tag(rx_entry->tag, rx_entry->ignore, tag) &&
 		    ofi_match_addr(rx_entry->src_addr, ep->src_addr)) {
 			slist_remove(&srx->tag_queue, item, prev);
-			ofi_mutex_unlock(&srx->lock);
 			return rx_entry;
 		}
 	}
-	ofi_mutex_unlock(&srx->lock);
 
 	return NULL;
 }
@@ -316,8 +314,7 @@ tcp2_srx_cancel_rx(struct tcp2_srx *srx, struct slist *queue, void *context)
 	struct slist_entry *cur, *prev;
 	struct tcp2_xfer_entry *xfer_entry;
 
-	assert(ofi_mutex_held(&srx->lock));
-
+	assert(ofi_genlock_held(&tcp2_srx2_progress(srx)->lock));
 	slist_foreach(queue, cur, prev) {
 		xfer_entry = container_of(cur, struct tcp2_xfer_entry, entry);
 		if (xfer_entry->context == context) {
@@ -338,10 +335,10 @@ static ssize_t tcp2_srx_cancel(fid_t fid, void *context)
 
 	srx = container_of(fid, struct tcp2_srx, rx_fid.fid);
 
-	ofi_mutex_lock(&srx->lock);
+	ofi_genlock_lock(&tcp2_srx2_progress(srx)->lock);
 	if (!tcp2_srx_cancel_rx(srx, &srx->tag_queue, context))
 		tcp2_srx_cancel_rx(srx, &srx->rx_queue, context);
-	ofi_mutex_unlock(&srx->lock);
+	ofi_genlock_unlock(&tcp2_srx2_progress(srx)->lock);
 
 	return 0;
 }
@@ -400,8 +397,8 @@ static int tcp2_srx_close(struct fid *fid)
 
 	if (srx->cq)
 		ofi_atomic_dec32(&srx->cq->util_cq.ref);
+	ofi_atomic_dec32(&srx->domain->util_domain.ref);
 	ofi_bufpool_destroy(srx->buf_pool);
-	ofi_mutex_destroy(&srx->lock);
 	free(srx);
 	return FI_SUCCESS;
 }
@@ -434,23 +431,21 @@ int tcp2_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 	slist_init(&srx->rx_queue);
 	slist_init(&srx->tag_queue);
 
-	ret = ofi_mutex_init(&srx->lock);
-	if (ret)
-		goto err1;
-
 	ret = ofi_bufpool_create(&srx->buf_pool,
 				 sizeof(struct tcp2_xfer_entry),
 				 16, attr->size, 1024, 0);
 	if (ret)
-		goto err2;
+		goto err1;
 
+	srx->domain = container_of(domain, struct tcp2_domain,
+				   util_domain.domain_fid);
+	ofi_atomic_inc32(&srx->domain->util_domain.ref);
 	srx->match_tag_rx = (attr->caps & FI_DIRECTED_RECV) ?
 			    tcp2_match_tag_addr : tcp2_match_tag;
 	srx->op_flags = attr->op_flags;
 	*rx_ep = &srx->rx_fid;
 	return FI_SUCCESS;
-err2:
-	ofi_mutex_destroy(&srx->lock);
+
 err1:
 	free(srx);
 	return ret;

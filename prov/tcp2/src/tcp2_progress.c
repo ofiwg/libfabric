@@ -331,9 +331,9 @@ static struct tcp2_xfer_entry *tcp2_get_rx_entry(struct tcp2_ep *ep)
 	struct tcp2_xfer_entry *xfer;
 	struct tcp2_srx *srx;
 
+	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 	if (ep->srx) {
 		srx = ep->srx;
-		ofi_mutex_lock(&srx->lock);
 		if (!slist_empty(&srx->rx_queue)) {
 			xfer = container_of(slist_remove_head(&srx->rx_queue),
 					    struct tcp2_xfer_entry, entry);
@@ -341,9 +341,7 @@ static struct tcp2_xfer_entry *tcp2_get_rx_entry(struct tcp2_ep *ep)
 		} else {
 			xfer = NULL;
 		}
-		ofi_mutex_unlock(&ep->srx->lock);
 	} else {
-		assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 		if (!slist_empty(&ep->rx_queue)) {
 			xfer = container_of(slist_remove_head(&ep->rx_queue),
 					    struct tcp2_xfer_entry, entry);
