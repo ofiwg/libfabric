@@ -98,37 +98,41 @@ static ssize_t
 tcp2_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		 uint64_t flags)
 {
-	struct tcp2_ep *ep;
-	struct tcp2_cq *cq;
 	struct tcp2_xfer_entry *send_entry;
 	struct tcp2_xfer_entry *recv_entry;
+	struct tcp2_ep *ep;
+	struct tcp2_cq *cq;
+	ssize_t ret = 0;
 
 	ep = container_of(ep_fid, struct tcp2_ep, util_ep.ep_fid);
-	cq = container_of(ep->util_ep.tx_cq, struct tcp2_cq,
-			       util_cq);
+	cq = container_of(ep->util_ep.tx_cq, struct tcp2_cq, util_cq);
 
 	assert(msg->iov_count <= TCP2_IOV_LIMIT);
 	assert(msg->rma_iov_count <= TCP2_IOV_LIMIT);
 	assert(ofi_total_iov_len(msg->msg_iov, msg->iov_count) ==
 	       ofi_total_rma_iov_len(msg->rma_iov, msg->rma_iov_count));
 
+	ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
 	send_entry = tcp2_alloc_tx(ep);
-	if (!send_entry)
-		return -FI_EAGAIN;
+	if (!send_entry) {
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
 
 	recv_entry = tcp2_alloc_xfer(cq);
 	if (!recv_entry) {
 		tcp2_free_xfer(cq, send_entry);
-		return -FI_EAGAIN;
+		ret = -FI_EAGAIN;
+		goto unlock;
 	}
 	tcp2_rma_read_send_entry_fill(send_entry, recv_entry, ep, msg);
 	tcp2_rma_read_recv_entry_fill(recv_entry, ep, msg, flags);
 
-	ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
 	slist_insert_tail(&recv_entry->entry, &ep->rma_read_queue);
 	tcp2_tx_queue_insert(ep, send_entry);
+unlock:
 	ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
-	return FI_SUCCESS;
+	return ret;
 }
 
 static ssize_t
@@ -191,11 +195,16 @@ tcp2_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	struct ofi_rma_iov *rma_iov;
 	uint64_t data_len;
 	size_t offset;
+	ssize_t ret = 0;
 
 	ep = container_of(ep_fid, struct tcp2_ep, util_ep.ep_fid);
+
+	ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
 	send_entry = tcp2_alloc_tx(ep);
-	if (!send_entry)
-		return -FI_EAGAIN;
+	if (!send_entry) {
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
 
 	assert(msg->iov_count <= TCP2_IOV_LIMIT);
 	assert(msg->rma_iov_count <= TCP2_IOV_LIMIT);
@@ -246,8 +255,10 @@ tcp2_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	tcp2_set_commit_flags(send_entry, flags);
 	send_entry->context = msg->context;
 
-	tcp2_queue_send(ep, send_entry);
-	return FI_SUCCESS;
+	tcp2_tx_queue_insert(ep, send_entry);
+unlock:
+	ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
+	return ret;
 }
 
 static ssize_t
@@ -340,11 +351,16 @@ tcp2_rma_inject_common(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct ofi_rma_iov *rma_iov;
 	uint64_t *cq_data;
 	size_t offset;
+	ssize_t ret = 0;
 
 	ep = container_of(ep_fid, struct tcp2_ep, util_ep.ep_fid);
+
+	ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
 	send_entry = tcp2_alloc_tx(ep);
-	if (!send_entry)
-		return -FI_EAGAIN;
+	if (!send_entry) {
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
 
 	assert(len <= TCP2_MAX_INJECT);
 	offset = sizeof(send_entry->hdr.base_hdr);
@@ -374,8 +390,10 @@ tcp2_rma_inject_common(struct fid_ep *ep_fid, const void *buf, size_t len,
 	send_entry->iov_cnt = 1;
 
 	send_entry->hdr.base_hdr.size = offset;
-	tcp2_queue_send(ep, send_entry);
-	return FI_SUCCESS;
+	tcp2_tx_queue_insert(ep, send_entry);
+unlock:
+	ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
+	return ret;
 }
 
 static ssize_t

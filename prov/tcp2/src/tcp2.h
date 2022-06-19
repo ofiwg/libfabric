@@ -504,26 +504,19 @@ tcp2_rx_completion_flag(struct tcp2_ep *ep, uint64_t op_flags)
 static inline struct tcp2_xfer_entry *
 tcp2_alloc_xfer(struct tcp2_cq *cq)
 {
-	struct tcp2_xfer_entry *xfer;
-
-	ofi_genlock_lock(&cq->util_cq.cq_lock);
-	xfer = ofi_buf_alloc(cq->xfer_pool);
-	ofi_genlock_unlock(&cq->util_cq.cq_lock);
-
-	return xfer;
+	assert(ofi_genlock_held(&tcp2_cq2_progress(cq)->lock));
+	return ofi_buf_alloc(cq->xfer_pool);
 }
 
 static inline void
 tcp2_free_xfer(struct tcp2_cq *cq, struct tcp2_xfer_entry *xfer)
 {
+	assert(ofi_genlock_held(&tcp2_cq2_progress(cq)->lock));
 	xfer->hdr.base_hdr.flags = 0;
 	xfer->cq_flags = 0;
 	xfer->ctrl_flags = 0;
 	xfer->context = 0;
-
-	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	ofi_buf_free(xfer);
-	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 }
 
 static inline struct tcp2_xfer_entry *
@@ -532,6 +525,7 @@ tcp2_alloc_rx(struct tcp2_ep *ep)
 	struct tcp2_xfer_entry *xfer;
 	struct tcp2_cq *cq;
 
+	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 	cq = container_of(ep->util_ep.rx_cq, struct tcp2_cq, util_cq);
 	xfer = tcp2_alloc_xfer(cq);
 	if (xfer)
@@ -561,8 +555,8 @@ tcp2_alloc_tx(struct tcp2_ep *ep)
 	struct tcp2_xfer_entry *xfer;
 	struct tcp2_cq *cq;
 
+	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 	cq = container_of(ep->util_ep.tx_cq, struct tcp2_cq, util_cq);
-
 	xfer = tcp2_alloc_xfer(cq);
 	if (xfer) {
 		xfer->hdr.base_hdr.version = TCP2_HDR_VERSION;
@@ -577,16 +571,10 @@ static inline void
 tcp2_free_tx(struct tcp2_xfer_entry *xfer)
 {
 	struct tcp2_cq *cq;
+
+	assert(ofi_genlock_held(&tcp2_ep2_progress(xfer->ep)->lock));
 	cq = container_of(xfer->ep->util_ep.tx_cq, struct tcp2_cq, util_cq);
 	tcp2_free_xfer(cq, xfer);
-}
-
-static inline void
-tcp2_queue_send(struct tcp2_ep *ep, struct tcp2_xfer_entry *tx_entry)
-{
-	ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
-	tcp2_tx_queue_insert(ep, tx_entry);
-	ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
 }
 
 /* If we've buffered receive data, it counts the same as if a POLLIN
