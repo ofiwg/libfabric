@@ -101,12 +101,9 @@ tcp2_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	struct tcp2_xfer_entry *send_entry;
 	struct tcp2_xfer_entry *recv_entry;
 	struct tcp2_ep *ep;
-	struct tcp2_cq *cq;
 	ssize_t ret = 0;
 
 	ep = container_of(ep_fid, struct tcp2_ep, util_ep.ep_fid);
-	cq = container_of(ep->util_ep.tx_cq, struct tcp2_cq, util_cq);
-
 	assert(msg->iov_count <= TCP2_IOV_LIMIT);
 	assert(msg->rma_iov_count <= TCP2_IOV_LIMIT);
 	assert(ofi_total_iov_len(msg->msg_iov, msg->iov_count) ==
@@ -119,9 +116,9 @@ tcp2_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 		goto unlock;
 	}
 
-	recv_entry = tcp2_alloc_xfer(cq);
+	recv_entry = tcp2_alloc_xfer(tcp2_ep2_progress(ep));
 	if (!recv_entry) {
-		tcp2_free_xfer(cq, send_entry);
+		tcp2_free_xfer(ep, send_entry);
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}

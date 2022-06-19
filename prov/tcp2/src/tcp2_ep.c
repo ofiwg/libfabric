@@ -261,18 +261,18 @@ tcp2_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 	return 0;
 }
 
-static void tcp2_ep_flush_queue(struct slist *queue,
-				struct tcp2_cq *cq)
+static void
+tcp2_ep_flush_queue(struct tcp2_ep *ep, struct slist *queue, struct tcp2_cq *cq)
 {
 	struct tcp2_xfer_entry *xfer_entry;
 
-	assert(ofi_genlock_held(&tcp2_cq2_progress(cq)->lock));
+	assert(ofi_genlock_held(&tcp2_ep2_progress(ep)->lock));
 	while (!slist_empty(queue)) {
 		xfer_entry = container_of(queue->head, struct tcp2_xfer_entry,
 					  entry);
 		slist_remove_head(queue);
 		tcp2_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
-		tcp2_free_xfer(cq, xfer_entry);
+		tcp2_free_xfer(ep, xfer_entry);
 	}
 }
 
@@ -286,24 +286,24 @@ static void tcp2_ep_flush_all_queues(struct tcp2_ep *ep)
 		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
 		tcp2_cq_report_error(&cq->util_cq, ep->cur_tx.entry,
 				     FI_ECANCELED);
-		tcp2_free_xfer(cq, ep->cur_tx.entry);
+		tcp2_free_xfer(ep, ep->cur_tx.entry);
 		ep->cur_tx.entry = NULL;
 	}
 
-	tcp2_ep_flush_queue(&ep->tx_queue, cq);
-	tcp2_ep_flush_queue(&ep->priority_queue, cq);
-	tcp2_ep_flush_queue(&ep->rma_read_queue, cq);
-	tcp2_ep_flush_queue(&ep->need_ack_queue, cq);
-	tcp2_ep_flush_queue(&ep->async_queue, cq);
+	tcp2_ep_flush_queue(ep, &ep->tx_queue, cq);
+	tcp2_ep_flush_queue(ep, &ep->priority_queue, cq);
+	tcp2_ep_flush_queue(ep, &ep->rma_read_queue, cq);
+	tcp2_ep_flush_queue(ep, &ep->need_ack_queue, cq);
+	tcp2_ep_flush_queue(ep, &ep->async_queue, cq);
 
 	cq = container_of(ep->util_ep.rx_cq, struct tcp2_cq, util_cq);
 	if (ep->cur_rx.entry) {
 		tcp2_cq_report_error(&cq->util_cq, ep->cur_rx.entry,
 				     FI_ECANCELED);
-		tcp2_free_xfer(cq, ep->cur_rx.entry);
+		tcp2_free_xfer(ep, ep->cur_rx.entry);
 	}
 	tcp2_reset_rx(ep);
-	tcp2_ep_flush_queue(&ep->rx_queue, cq);
+	tcp2_ep_flush_queue(ep, &ep->rx_queue, cq);
 	ofi_bsock_discard(&ep->bsock);
 }
 
@@ -450,7 +450,7 @@ found:
 	slist_remove(&ep->rx_queue, cur, prev);
 	ep->rx_avail++;
 	tcp2_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
-	tcp2_free_xfer(cq, xfer_entry);
+	tcp2_free_xfer(ep, xfer_entry);
 }
 
 /* We currently only support canceling receives, which is the common case.
