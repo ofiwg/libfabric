@@ -541,14 +541,14 @@ static int tcp2_ep_ctrl(struct fid *fid, int command, void *arg)
 static int tcp2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct tcp2_ep *ep;
-	struct tcp2_rx_ctx *rx_ctx;
+	struct tcp2_srx *srx;
 	int ret;
 
 	ep = container_of(fid, struct tcp2_ep, util_ep.ep_fid.fid);
 
 	if (bfid->fclass == FI_CLASS_SRX_CTX) {
-		rx_ctx = container_of(bfid, struct tcp2_rx_ctx, rx_fid.fid);
-		ep->srx_ctx = rx_ctx;
+		srx = container_of(bfid, struct tcp2_srx, rx_fid.fid);
+		ep->srx = srx;
 		return FI_SUCCESS;
 	}
 
