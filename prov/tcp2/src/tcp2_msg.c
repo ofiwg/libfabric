@@ -175,7 +175,9 @@ tcp2_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 	recv_entry->context = msg->context;
 
 	if (!tcp2_queue_recv(ep, recv_entry)) {
+		ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
 		tcp2_free_rx(recv_entry);
+		ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
 		return -FI_EAGAIN;
 	}
 	return FI_SUCCESS;
@@ -203,7 +205,9 @@ tcp2_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	recv_entry->context = context;
 
 	if (!tcp2_queue_recv(ep, recv_entry)) {
+		ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
 		tcp2_free_rx(recv_entry);
+		ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
 		return -FI_EAGAIN;
 	}
 	return FI_SUCCESS;
@@ -232,7 +236,9 @@ tcp2_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	recv_entry->context = context;
 
 	if (!tcp2_queue_recv(ep, recv_entry)) {
+		ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
 		tcp2_free_rx(recv_entry);
+		ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
 		return -FI_EAGAIN;
 	}
 	return FI_SUCCESS;
