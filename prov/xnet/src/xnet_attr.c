@@ -186,7 +186,7 @@ struct fi_info xnet_rdm_info = {
 };
 
 struct fi_info xnet_srx_info = {
-	.next = NULL, /* &xnet_rdm_info, */
+	.next = &xnet_rdm_info,
 	.caps = XNET_DOMAIN_CAPS | XNET_EP_SRX_CAPS | XNET_TX_CAPS | XNET_RX_CAPS,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &xnet_tx_srx_attr,

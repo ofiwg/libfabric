@@ -358,7 +358,7 @@ static struct fi_ops_ep xnet_srx_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-int xnet_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+static int xnet_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct xnet_srx *srx;
 

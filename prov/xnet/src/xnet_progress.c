@@ -977,7 +977,7 @@ int xnet_start_progress(struct xnet_progress *progress)
 {
 	int ret;
 
-	ofi_genlock_lock(&progress->lock);
+	ofi_genlock_lock(progress->active_lock);
 	if (progress->auto_progress) {
 		ret = 0;
 		goto unlock;
@@ -994,7 +994,7 @@ int xnet_start_progress(struct xnet_progress *progress)
 	}
 
 unlock:
-	ofi_genlock_unlock(&progress->lock);
+	ofi_genlock_unlock(progress->active_lock);
 	return ret;
 }
 

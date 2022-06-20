@@ -648,6 +648,8 @@ static int xnet_enable_rdm(struct xnet_rdm *rdm)
 	size_t len;
 	int ret;
 
+	(void) fi_ep_bind(&rdm->srx->rx_fid, &rdm->util_ep.rx_cq->cq_fid.fid,
+			  FI_RECV);
 	progress = xnet_rdm2_progress(rdm);
 	ofi_genlock_lock(&progress->rdm_lock);
 
@@ -755,6 +757,7 @@ static int xnet_init_rdm(struct xnet_rdm *rdm, struct fi_info *info)
 		return -FI_ENOMEM;
 
 	msg_info->ep_attr->type = FI_EP_MSG;
+	msg_info->ep_attr->protocol = FI_PROTO_SOCK_TCP;
 	msg_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
 
 	ret = fi_srx_context(&rdm->util_ep.domain->domain_fid, info->rx_attr,
