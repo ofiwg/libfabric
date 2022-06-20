@@ -33,7 +33,7 @@
 #include <rdma/fi_errno.h>
 
 #include <ofi_prov.h>
-#include "tcp2.h"
+#include "xnet.h"
 #include <poll.h>
 
 #include <sys/types.h>
@@ -41,61 +41,61 @@
 #include <net/if.h>
 #include <ofi_util.h>
 
-struct fi_ops_fabric tcp2_fabric_ops = {
+struct fi_ops_fabric xnet_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
-	.domain = tcp2_domain_open,
-	.passive_ep = tcp2_passive_ep,
-	.eq_open = tcp2_eq_create,
+	.domain = xnet_domain_open,
+	.passive_ep = xnet_passive_ep,
+	.eq_open = xnet_eq_create,
 	.wait_open = ofi_wait_fd_open,
-	.trywait = tcp2_trywait,
+	.trywait = xnet_trywait,
 };
 
-static int tcp2_fabric_close(fid_t fid)
+static int xnet_fabric_close(fid_t fid)
 {
 	int ret;
-	struct tcp2_fabric *fabric;
+	struct xnet_fabric *fabric;
 
-	fabric = container_of(fid, struct tcp2_fabric,
+	fabric = container_of(fid, struct xnet_fabric,
 			      util_fabric.fabric_fid.fid);
 
 	ret = ofi_fabric_close(&fabric->util_fabric);
 	if (ret)
 		return ret;
 
-	tcp2_close_progress(&fabric->progress);
+	xnet_close_progress(&fabric->progress);
 	free(fabric);
 	return 0;
 }
 
-struct fi_ops tcp2_fabric_fi_ops = {
+struct fi_ops xnet_fabric_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = tcp2_fabric_close,
+	.close = xnet_fabric_close,
 	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
 
-int tcp2_create_fabric(struct fi_fabric_attr *attr,
+int xnet_create_fabric(struct fi_fabric_attr *attr,
 		       struct fid_fabric **fabric_fid, void *context)
 {
-	struct tcp2_fabric *fabric;
+	struct xnet_fabric *fabric;
 	int ret;
 
 	fabric = calloc(1, sizeof(*fabric));
 	if (!fabric)
 		return -FI_ENOMEM;
 
-	ret = ofi_fabric_init(&tcp2_prov, tcp2_info.fabric_attr, attr,
+	ret = ofi_fabric_init(&xnet_prov, xnet_info.fabric_attr, attr,
 			      &fabric->util_fabric, context);
 	if (ret)
 		goto free;
 
-	ret = tcp2_init_progress(&fabric->progress, NULL);
+	ret = xnet_init_progress(&fabric->progress, NULL);
 	if (ret)
 		goto close;
 
-	fabric->util_fabric.fabric_fid.fid.ops = &tcp2_fabric_fi_ops;
-	fabric->util_fabric.fabric_fid.ops = &tcp2_fabric_ops;
+	fabric->util_fabric.fabric_fid.fid.ops = &xnet_fabric_fi_ops;
+	fabric->util_fabric.fabric_fid.ops = &xnet_fabric_ops;
 	*fabric_fid = &fabric->util_fabric.fabric_fid;
 
 	return 0;

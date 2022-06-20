@@ -33,115 +33,115 @@
 #include <rdma/fi_errno.h>
 
 #include <ofi_prov.h>
-#include "tcp2.h"
+#include "xnet.h"
 
 #include <sys/types.h>
 #include <ofi_util.h>
 #include <stdlib.h>
 
-static int tcp2_getinfo(uint32_t version, const char *node, const char *service,
+static int xnet_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints,
 			struct fi_info **info)
 {
-	return ofi_ip_getinfo(&tcp2_util_prov, version, node, service, flags,
+	return ofi_ip_getinfo(&xnet_util_prov, version, node, service, flags,
 			      hints, info);
 }
 
-struct tcp2_port_range tcp2_ports = {
+struct xnet_port_range xnet_ports = {
 	.low  = 0,
 	.high = 0,
 };
 
-int tcp2_nodelay = -1;
+int xnet_nodelay = -1;
 
-int tcp2_staging_sbuf_size = 9000;
-int tcp2_prefetch_rbuf_size = 9000;
-size_t tcp2_default_tx_size = 256;
-size_t tcp2_default_rx_size = 256;
-size_t tcp2_zerocopy_size = SIZE_MAX;
+int xnet_staging_sbuf_size = 9000;
+int xnet_prefetch_rbuf_size = 9000;
+size_t xnet_default_tx_size = 256;
+size_t xnet_default_rx_size = 256;
+size_t xnet_zerocopy_size = SIZE_MAX;
 
 
-static void tcp2_init_env(void)
+static void xnet_init_env(void)
 {
 	size_t tx_size;
 	size_t rx_size;
 
 	/* Checked in util code */
-	fi_param_define(&tcp2_prov, "iface", FI_PARAM_STRING,
+	fi_param_define(&xnet_prov, "iface", FI_PARAM_STRING,
 			"Specify interface name");
 
-	fi_param_define(&tcp2_prov,"port_low_range", FI_PARAM_INT,
+	fi_param_define(&xnet_prov,"port_low_range", FI_PARAM_INT,
 			"define port low range");
-	fi_param_define(&tcp2_prov,"port_high_range", FI_PARAM_INT,
+	fi_param_define(&xnet_prov,"port_high_range", FI_PARAM_INT,
 			"define port high range");
-	fi_param_get_int(&tcp2_prov, "port_high_range", &tcp2_ports.high);
-	fi_param_get_int(&tcp2_prov, "port_low_range", &tcp2_ports.low);
+	fi_param_get_int(&xnet_prov, "port_high_range", &xnet_ports.high);
+	fi_param_get_int(&xnet_prov, "port_low_range", &xnet_ports.low);
 
-	if (tcp2_ports.high > TCP2_PORT_MAX_RANGE)
-		tcp2_ports.high = TCP2_PORT_MAX_RANGE;
+	if (xnet_ports.high > XNET_PORT_MAX_RANGE)
+		xnet_ports.high = XNET_PORT_MAX_RANGE;
 
-	if (tcp2_ports.low < 0 || tcp2_ports.high < 0 ||
-	    tcp2_ports.low > tcp2_ports.high) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,"User provided "
+	if (xnet_ports.low < 0 || xnet_ports.high < 0 ||
+	    xnet_ports.low > xnet_ports.high) {
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,"User provided "
 			"port range invalid. Ignoring. \n");
-		tcp2_ports.low  = 0;
-		tcp2_ports.high = 0;
+		xnet_ports.low  = 0;
+		xnet_ports.high = 0;
 	}
 
-	fi_param_define(&tcp2_prov,"tx_size", FI_PARAM_SIZE_T,
+	fi_param_define(&xnet_prov,"tx_size", FI_PARAM_SIZE_T,
 			"define default tx context size (default: %zu)",
-			tcp2_default_tx_size);
-	fi_param_define(&tcp2_prov,"rx_size", FI_PARAM_SIZE_T,
+			xnet_default_tx_size);
+	fi_param_define(&xnet_prov,"rx_size", FI_PARAM_SIZE_T,
 			"define default rx context size (default: %zu)",
-			tcp2_default_rx_size);
-	if (!fi_param_get_size_t(&tcp2_prov, "tx_size", &tx_size)) {
-		tcp2_default_tx_size = tx_size;
+			xnet_default_rx_size);
+	if (!fi_param_get_size_t(&xnet_prov, "tx_size", &tx_size)) {
+		xnet_default_tx_size = tx_size;
 	}
-	if (!fi_param_get_size_t(&tcp2_prov, "rx_size", &rx_size)) {
-		tcp2_default_rx_size = rx_size;
+	if (!fi_param_get_size_t(&xnet_prov, "rx_size", &rx_size)) {
+		xnet_default_rx_size = rx_size;
 	}
 
-	fi_param_define(&tcp2_prov, "nodelay", FI_PARAM_BOOL,
+	fi_param_define(&xnet_prov, "nodelay", FI_PARAM_BOOL,
 			"overrides default TCP_NODELAY socket setting");
-	fi_param_get_bool(&tcp2_prov, "nodelay", &tcp2_nodelay);
+	fi_param_get_bool(&xnet_prov, "nodelay", &xnet_nodelay);
 
-	fi_param_define(&tcp2_prov, "staging_sbuf_size", FI_PARAM_INT,
+	fi_param_define(&xnet_prov, "staging_sbuf_size", FI_PARAM_INT,
 			"size of buffer used to coalesce iovec's or "
 			"send requests before posting to the kernel, "
 			"set to 0 to disable");
-	fi_param_define(&tcp2_prov, "prefetch_rbuf_size", FI_PARAM_INT,
+	fi_param_define(&xnet_prov, "prefetch_rbuf_size", FI_PARAM_INT,
 			"size of buffer used to prefetch received data from "
 			"the kernel, set to 0 to disable");
-	fi_param_define(&tcp2_prov, "zerocopy_size", FI_PARAM_SIZE_T,
+	fi_param_define(&xnet_prov, "zerocopy_size", FI_PARAM_SIZE_T,
 			"lower threshold where zero copy transfers will be "
 			"used, if supported by the platform, set to -1 to "
-			"disable (default: %zu)", tcp2_zerocopy_size);
-	fi_param_get_int(&tcp2_prov, "staging_sbuf_size",
-			 &tcp2_staging_sbuf_size);
-	fi_param_get_int(&tcp2_prov, "prefetch_rbuf_size",
-			 &tcp2_prefetch_rbuf_size);
-	fi_param_get_size_t(&tcp2_prov, "zerocopy_size", &tcp2_zerocopy_size);
+			"disable (default: %zu)", xnet_zerocopy_size);
+	fi_param_get_int(&xnet_prov, "staging_sbuf_size",
+			 &xnet_staging_sbuf_size);
+	fi_param_get_int(&xnet_prov, "prefetch_rbuf_size",
+			 &xnet_prefetch_rbuf_size);
+	fi_param_get_size_t(&xnet_prov, "zerocopy_size", &xnet_zerocopy_size);
 }
 
-static void tcp2_fini(void)
+static void xnet_fini(void)
 {
 	/* empty as of now */
 }
 
-struct fi_provider tcp2_prov = {
-	.name = "tcp2",
+struct fi_provider xnet_prov = {
+	.name = "net",
 	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
-	.getinfo = tcp2_getinfo,
-	.fabric = tcp2_create_fabric,
-	.cleanup = tcp2_fini,
+	.getinfo = xnet_getinfo,
+	.fabric = xnet_create_fabric,
+	.cleanup = xnet_fini,
 };
 
-TCP2_INI
+XNET_INI
 {
-#if HAVE_TCP2_DL
+#if HAVE_XNET_DL
 	ofi_pmem_init();
 #endif
-	tcp2_init_env();
-	return &tcp2_prov;
+	xnet_init_env();
+	return &xnet_prov;
 }

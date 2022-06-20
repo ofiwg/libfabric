@@ -33,43 +33,43 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "tcp2.h"
+#include "xnet.h"
 
 
-static struct fi_ops_domain tcp2_domain_ops = {
+static struct fi_ops_domain xnet_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = ofi_ip_av_create,
-	.cq_open = tcp2_cq_open,
-	.endpoint = tcp2_endpoint,
+	.cq_open = xnet_cq_open,
+	.endpoint = xnet_endpoint,
 	.scalable_ep = fi_no_scalable_ep,
-	.cntr_open = tcp2_cntr_open,
+	.cntr_open = xnet_cntr_open,
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
-	.srx_ctx = tcp2_srx_context,
+	.srx_ctx = xnet_srx_context,
 	.query_atomic = fi_no_query_atomic,
 	.query_collective = fi_no_query_collective,
 };
 
-static int tcp2_domain_close(fid_t fid)
+static int xnet_domain_close(fid_t fid)
 {
-	struct tcp2_domain *domain;
+	struct xnet_domain *domain;
 	int ret;
 
-	domain = container_of(fid, struct tcp2_domain,
+	domain = container_of(fid, struct xnet_domain,
 			      util_domain.domain_fid.fid);
 
 	ret = ofi_domain_close(&domain->util_domain);
 	if (ret)
 		return ret;
 
-	tcp2_close_progress(&domain->progress);
+	xnet_close_progress(&domain->progress);
 	free(domain);
 	return FI_SUCCESS;
 }
 
-static struct fi_ops tcp2_domain_fi_ops = {
+static struct fi_ops xnet_domain_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = tcp2_domain_close,
+	.close = xnet_domain_close,
 	.bind = ofi_domain_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
@@ -77,23 +77,23 @@ static struct fi_ops tcp2_domain_fi_ops = {
 	.ops_set = fi_no_ops_set,
 };
 
-static struct fi_ops_mr tcp2_domain_fi_ops_mr = {
+static struct fi_ops_mr xnet_domain_fi_ops_mr = {
 	.size = sizeof(struct fi_ops_mr),
 	.reg = ofi_mr_reg,
 	.regv = ofi_mr_regv,
 	.regattr = ofi_mr_regattr,
 };
 
-int tcp2_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
+int xnet_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		     struct fid_domain **domain_fid, void *context)
 {
-	struct tcp2_fabric *fabric;
-	struct tcp2_domain *domain;
+	struct xnet_fabric *fabric;
+	struct xnet_domain *domain;
 	int ret;
 
-	fabric = container_of(fabric_fid, struct tcp2_fabric,
+	fabric = container_of(fabric_fid, struct xnet_fabric,
 			      util_fabric.fabric_fid);
-	ret = ofi_prov_check_info(&tcp2_util_prov, fabric_fid->api_version, info);
+	ret = ofi_prov_check_info(&xnet_util_prov, fabric_fid->api_version, info);
 	if (ret)
 		return ret;
 
@@ -105,25 +105,25 @@ int tcp2_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	if (ret)
 		goto free;
 
-	ret = tcp2_init_progress(&domain->progress, info);
+	ret = xnet_init_progress(&domain->progress, info);
 	if (ret)
 		goto close;
 
 	if (fabric->progress.auto_progress) {
-		ret = tcp2_start_progress(&domain->progress);
+		ret = xnet_start_progress(&domain->progress);
 		if (ret)
 			goto close_prog;
 	}
 
-	domain->util_domain.domain_fid.fid.ops = &tcp2_domain_fi_ops;
-	domain->util_domain.domain_fid.ops = &tcp2_domain_ops;
-	domain->util_domain.domain_fid.mr = &tcp2_domain_fi_ops_mr;
+	domain->util_domain.domain_fid.fid.ops = &xnet_domain_fi_ops;
+	domain->util_domain.domain_fid.ops = &xnet_domain_ops;
+	domain->util_domain.domain_fid.mr = &xnet_domain_fi_ops_mr;
 	*domain_fid = &domain->util_domain.domain_fid;
 
 	return FI_SUCCESS;
 
 close_prog:
-	tcp2_close_progress(&domain->progress);
+	xnet_close_progress(&domain->progress);
 close:
 	(void) ofi_domain_close(&domain->util_domain);
 free:

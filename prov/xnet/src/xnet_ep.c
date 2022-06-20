@@ -36,20 +36,20 @@
 
 #include <ofi_prov.h>
 #include <ofi_iov.h>
-#include "tcp2.h"
+#include "xnet.h"
 #include <errno.h>
 
-extern struct fi_ops_rma tcp2_rma_ops;
-extern struct fi_ops_msg tcp2_msg_ops;
-extern struct fi_ops_tagged tcp2_tagged_ops;
+extern struct fi_ops_rma xnet_rma_ops;
+extern struct fi_ops_msg xnet_msg_ops;
+extern struct fi_ops_tagged xnet_tagged_ops;
 
 
-void tcp2_hdr_none(struct tcp2_base_hdr *hdr)
+void xnet_hdr_none(struct xnet_base_hdr *hdr)
 {
 	/* no-op */
 }
 
-void tcp2_hdr_bswap(struct tcp2_base_hdr *hdr)
+void xnet_hdr_bswap(struct xnet_base_hdr *hdr)
 {
 	uint64_t *cur;
 	int i, cnt;
@@ -64,43 +64,43 @@ void tcp2_hdr_bswap(struct tcp2_base_hdr *hdr)
 }
 
 #ifdef MSG_ZEROCOPY
-void tcp2_set_zerocopy(SOCKET sock)
+void xnet_set_zerocopy(SOCKET sock)
 {
 	int val = 1;
 
-	if (tcp2_zerocopy_size == SIZE_MAX)
+	if (xnet_zerocopy_size == SIZE_MAX)
 		return;
 
 	(void) setsockopt(sock, SOL_SOCKET, SO_ZEROCOPY, &val, sizeof(val));
 }
 
-static void tcp2_config_bsock(struct ofi_bsock *bsock)
+static void xnet_config_bsock(struct ofi_bsock *bsock)
 {
 	int ret, val = 0;
 	socklen_t len = sizeof(val);
 
-	if (tcp2_zerocopy_size == SIZE_MAX)
+	if (xnet_zerocopy_size == SIZE_MAX)
 		return;
 
 	ret = getsockopt(bsock->sock, SOL_SOCKET, SO_ZEROCOPY, &val, &len);
 	if (!ret && val) {
-		bsock->zerocopy_size = tcp2_zerocopy_size;
-		FI_INFO(&tcp2_prov, FI_LOG_EP_CTRL,
+		bsock->zerocopy_size = xnet_zerocopy_size;
+		FI_INFO(&xnet_prov, FI_LOG_EP_CTRL,
 			"zero copy enabled for transfers > %zu\n",
 			bsock->zerocopy_size);
 	}
 }
 #else
-void tcp2_set_zerocopy(SOCKET sock)
+void xnet_set_zerocopy(SOCKET sock)
 {
 	OFI_UNUSED(sock);
 }
 
-#define tcp2_config_bsock(bsock)
+#define xnet_config_bsock(bsock)
 #endif
 
 #ifdef IP_BIND_ADDRESS_NO_PORT
-static void tcp2_set_no_port(SOCKET sock)
+static void xnet_set_no_port(SOCKET sock)
 {
 	int val = 1;
 
@@ -108,31 +108,31 @@ static void tcp2_set_no_port(SOCKET sock)
 			  &val, sizeof(val));
 }
 #else
-#define tcp2_set_no_port(sock)
+#define xnet_set_no_port(sock)
 #endif
 
-int tcp2_setup_socket(SOCKET sock, struct fi_info *info)
+int xnet_setup_socket(SOCKET sock, struct fi_info *info)
 {
 	int ret, optval = 1;
 
 	ret = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *) &optval,
 			 sizeof(optval));
 	if (ret) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,"setsockopt reuseaddr failed\n");
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,"setsockopt reuseaddr failed\n");
 		return -ofi_sockerr();
 	}
 
 	/* Do not enable nodelay for bulk data traffic class, unless nodelay
 	 * has explicitly been requested.
 	 */
-	if (tcp2_nodelay && !((tcp2_nodelay < 0) &&
+	if (xnet_nodelay && !((xnet_nodelay < 0) &&
 	    (info->fabric_attr->api_version >= FI_VERSION(1, 9) &&
 	    info->tx_attr->tclass == FI_TC_BULK_DATA))) {
 
 		ret = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY,
 				 (char *) &optval, sizeof(optval));
 		if (ret) {
-			FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 				"setsockopt nodelay failed\n");
 			return -ofi_sockerr();
 		}
@@ -140,7 +140,7 @@ int tcp2_setup_socket(SOCKET sock, struct fi_info *info)
 
 	ret = fi_fd_nonblock(sock);
 	if (ret) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"failed to set socket to nonblocking\n");
 		return ret;
 	}
@@ -148,20 +148,20 @@ int tcp2_setup_socket(SOCKET sock, struct fi_info *info)
 	return 0;
 }
 
-static int tcp2_ep_connect(struct fid_ep *ep_fid, const void *addr,
+static int xnet_ep_connect(struct fid_ep *ep_fid, const void *addr,
 			   const void *param, size_t paramlen)
 {
-	struct tcp2_progress *progress;
-	struct tcp2_ep *ep;
+	struct xnet_progress *progress;
+	struct xnet_ep *ep;
 	int ret;
 
-	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "connecting endpoint\n");
-	ep = container_of(ep_fid, struct tcp2_ep, util_ep.ep_fid);
+	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "connecting endpoint\n");
+	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
 	if (!addr || (ep->bsock.sock == INVALID_SOCKET) ||
-	    (paramlen > TCP2_MAX_CM_DATA_SIZE) || (ep->state != TCP2_IDLE))
+	    (paramlen > XNET_MAX_CM_DATA_SIZE) || (ep->state != XNET_IDLE))
 		return -FI_EINVAL;
 
-	ep->cm_msg->hdr.version = TCP2_CTRL_HDR_VERSION;
+	ep->cm_msg->hdr.version = XNET_CTRL_HDR_VERSION;
 	ep->cm_msg->hdr.type = ofi_ctrl_connreq;
 	ep->cm_msg->hdr.conn_data = 1; /* tests endianess mismatch at peer */
 	if (paramlen) {
@@ -169,21 +169,21 @@ static int tcp2_ep_connect(struct fid_ep *ep_fid, const void *addr,
 		ep->cm_msg->hdr.seg_size = htons((uint16_t) paramlen);
 	}
 
-	ep->state = TCP2_CONNECTING;
+	ep->state = XNET_CONNECTING;
 	ret = connect(ep->bsock.sock, (struct sockaddr *) addr,
 		      (socklen_t) ofi_sizeofaddr(addr));
 	if (ret && !OFI_SOCK_TRY_CONN_AGAIN(ofi_sockerr())) {
-		ep->state = TCP2_IDLE;
+		ep->state = XNET_IDLE;
 		ret = -ofi_sockerr();
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"connect failure %d(%s)\n", -ret, fi_strerror(-ret));
 		return ret;
 	}
 
 	ep->pollout_set = true;
-	progress = tcp2_ep2_progress(ep);
+	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
-	ret = tcp2_monitor_sock(progress, ep->bsock.sock, POLLOUT,
+	ret = xnet_monitor_sock(progress, ep->bsock.sock, POLLOUT,
 				&ep->util_ep.ep_fid.fid);
 	ofi_genlock_unlock(&progress->lock);
 	if (ret)
@@ -193,32 +193,32 @@ static int tcp2_ep_connect(struct fid_ep *ep_fid, const void *addr,
 
 disable:
 	ofi_genlock_lock(&progress->lock);
-	tcp2_ep_disable(ep, -ret, NULL, 0);
+	xnet_ep_disable(ep, -ret, NULL, 0);
 	ofi_genlock_unlock(&progress->lock);
 	return ret;
 }
 
 static int
-tcp2_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
+xnet_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 {
-	struct tcp2_progress *progress;
-	struct tcp2_ep *ep;
-	struct tcp2_conn_handle *conn;
+	struct xnet_progress *progress;
+	struct xnet_ep *ep;
+	struct xnet_conn_handle *conn;
 	struct fi_eq_cm_entry cm_entry;
 	int ret;
 
-	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "accepting endpoint connection\n");
-	ep = container_of(ep_fid, struct tcp2_ep, util_ep.ep_fid);
+	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "accepting endpoint connection\n");
+	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
 	conn = ep->conn;
-	if (ep->bsock.sock == INVALID_SOCKET || ep->state != TCP2_ACCEPTING ||
+	if (ep->bsock.sock == INVALID_SOCKET || ep->state != XNET_ACCEPTING ||
 	    !conn || (conn->fid.fclass != FI_CLASS_CONNREQ) ||
-	    (paramlen > TCP2_MAX_CM_DATA_SIZE))
+	    (paramlen > XNET_MAX_CM_DATA_SIZE))
 		return -FI_EINVAL;
 
 	ep->conn = NULL;
 
 	assert(ep->cm_msg);
-	ep->cm_msg->hdr.version = TCP2_CTRL_HDR_VERSION;
+	ep->cm_msg->hdr.version = XNET_CTRL_HDR_VERSION;
 	ep->cm_msg->hdr.type = ofi_ctrl_connresp;
 	ep->cm_msg->hdr.conn_data = 1; /* tests endianess mismatch at peer */
 	if (paramlen) {
@@ -226,22 +226,22 @@ tcp2_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 		ep->cm_msg->hdr.seg_size = htons((uint16_t) paramlen);
 	}
 
-	ret = tcp2_send_cm_msg(ep);
+	ret = xnet_send_cm_msg(ep);
 	if (ret)
 		return ret;
 
 	free(ep->cm_msg);
 	ep->cm_msg = NULL;
-	ep->state = TCP2_CONNECTED;
+	ep->state = XNET_CONNECTED;
 
-	progress = tcp2_ep2_progress(ep);
+	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
-	ret = tcp2_monitor_sock(progress, ep->bsock.sock, POLLIN,
+	ret = xnet_monitor_sock(progress, ep->bsock.sock, POLLIN,
 				&ep->util_ep.ep_fid.fid);
-	if (!ret && tcp2_active_wait(ep)) {
+	if (!ret && xnet_active_wait(ep)) {
 		dlist_insert_tail(&ep->progress_entry,
 				  &progress->active_wait_list);
-		tcp2_signal_progress(progress);
+		xnet_signal_progress(progress);
 	}
 	ofi_genlock_unlock(&progress->lock);
 	if (ret)
@@ -249,10 +249,10 @@ tcp2_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 
 	cm_entry.fid = &ep->util_ep.ep_fid.fid;
 	cm_entry.info = NULL;
-	ret = tcp2_eq_write(ep->util_ep.eq, FI_CONNECTED, &cm_entry,
+	ret = xnet_eq_write(ep->util_ep.eq, FI_CONNECTED, &cm_entry,
 			    sizeof(cm_entry), 0);
 	if (ret < 0) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		return ret;
 	}
 
@@ -262,76 +262,76 @@ tcp2_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 }
 
 static void
-tcp2_ep_flush_queue(struct tcp2_ep *ep, struct slist *queue, struct tcp2_cq *cq)
+xnet_ep_flush_queue(struct xnet_ep *ep, struct slist *queue, struct xnet_cq *cq)
 {
-	struct tcp2_xfer_entry *xfer_entry;
+	struct xnet_xfer_entry *xfer_entry;
 
-	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	while (!slist_empty(queue)) {
-		xfer_entry = container_of(queue->head, struct tcp2_xfer_entry,
+		xfer_entry = container_of(queue->head, struct xnet_xfer_entry,
 					  entry);
 		slist_remove_head(queue);
-		tcp2_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
-		tcp2_free_xfer(ep, xfer_entry);
+		xnet_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
+		xnet_free_xfer(ep, xfer_entry);
 	}
 }
 
-static void tcp2_ep_flush_all_queues(struct tcp2_ep *ep)
+static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 {
-	struct tcp2_cq *cq;
+	struct xnet_cq *cq;
 
-	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
-	cq = container_of(ep->util_ep.tx_cq, struct tcp2_cq, util_cq);
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	cq = container_of(ep->util_ep.tx_cq, struct xnet_cq, util_cq);
 	if (ep->cur_tx.entry) {
 		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
-		tcp2_cq_report_error(&cq->util_cq, ep->cur_tx.entry,
+		xnet_cq_report_error(&cq->util_cq, ep->cur_tx.entry,
 				     FI_ECANCELED);
-		tcp2_free_xfer(ep, ep->cur_tx.entry);
+		xnet_free_xfer(ep, ep->cur_tx.entry);
 		ep->cur_tx.entry = NULL;
 	}
 
-	tcp2_ep_flush_queue(ep, &ep->tx_queue, cq);
-	tcp2_ep_flush_queue(ep, &ep->priority_queue, cq);
-	tcp2_ep_flush_queue(ep, &ep->rma_read_queue, cq);
-	tcp2_ep_flush_queue(ep, &ep->need_ack_queue, cq);
-	tcp2_ep_flush_queue(ep, &ep->async_queue, cq);
+	xnet_ep_flush_queue(ep, &ep->tx_queue, cq);
+	xnet_ep_flush_queue(ep, &ep->priority_queue, cq);
+	xnet_ep_flush_queue(ep, &ep->rma_read_queue, cq);
+	xnet_ep_flush_queue(ep, &ep->need_ack_queue, cq);
+	xnet_ep_flush_queue(ep, &ep->async_queue, cq);
 
-	cq = container_of(ep->util_ep.rx_cq, struct tcp2_cq, util_cq);
+	cq = container_of(ep->util_ep.rx_cq, struct xnet_cq, util_cq);
 	if (ep->cur_rx.entry) {
-		tcp2_cq_report_error(&cq->util_cq, ep->cur_rx.entry,
+		xnet_cq_report_error(&cq->util_cq, ep->cur_rx.entry,
 				     FI_ECANCELED);
-		tcp2_free_xfer(ep, ep->cur_rx.entry);
+		xnet_free_xfer(ep, ep->cur_rx.entry);
 	}
-	tcp2_reset_rx(ep);
-	tcp2_ep_flush_queue(ep, &ep->rx_queue, cq);
+	xnet_reset_rx(ep);
+	xnet_ep_flush_queue(ep, &ep->rx_queue, cq);
 	ofi_bsock_discard(&ep->bsock);
 }
 
-void tcp2_ep_disable(struct tcp2_ep *ep, int cm_err, void* err_data,
+void xnet_ep_disable(struct xnet_ep *ep, int cm_err, void* err_data,
                      size_t err_data_size)
 {
 	struct fi_eq_cm_entry cm_entry = {0};
 	struct fi_eq_err_entry err_entry = {0};
 	int ret;
 
-	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	switch (ep->state) {
-	case TCP2_CONNECTING:
-	case TCP2_REQ_SENT:
-	case TCP2_CONNECTED:
+	case XNET_CONNECTING:
+	case XNET_REQ_SENT:
+	case XNET_CONNECTED:
 		break;
 	default:
 		return;
 	};
 
 	dlist_remove_init(&ep->progress_entry);
-	tcp2_halt_sock(tcp2_ep2_progress(ep), ep->bsock.sock);
+	xnet_halt_sock(xnet_ep2_progress(ep), ep->bsock.sock);
 
 	ret = ofi_shutdown(ep->bsock.sock, SHUT_RDWR);
 	if (ret && ofi_sockerr() != ENOTCONN)
-		FI_WARN(&tcp2_prov, FI_LOG_EP_DATA, "shutdown failed\n");
+		FI_WARN(&xnet_prov, FI_LOG_EP_DATA, "shutdown failed\n");
 
-	tcp2_ep_flush_all_queues(ep);
+	xnet_ep_flush_all_queues(ep);
 
 	if (cm_err) {
 		err_entry.err = cm_err;
@@ -342,38 +342,38 @@ void tcp2_ep_disable(struct tcp2_ep *ep, int cm_err, void* err_data,
 			if (err_entry.err_data)
 				err_entry.err_data_size = err_data_size;
 		}
-		(void) tcp2_eq_write(ep->util_ep.eq, FI_SHUTDOWN,
+		(void) xnet_eq_write(ep->util_ep.eq, FI_SHUTDOWN,
 				     &err_entry, sizeof(err_entry),
 				     UTIL_FLAG_ERROR);
 	} else {
 		cm_entry.fid = &ep->util_ep.ep_fid.fid;
-		(void) tcp2_eq_write(ep->util_ep.eq, FI_SHUTDOWN,
+		(void) xnet_eq_write(ep->util_ep.eq, FI_SHUTDOWN,
 				     &cm_entry, sizeof(cm_entry), 0);
 	}
-	ep->state = TCP2_DISCONNECTED;
+	ep->state = XNET_DISCONNECTED;
 }
 
-static int tcp2_ep_shutdown(struct fid_ep *ep_fid, uint64_t flags)
+static int xnet_ep_shutdown(struct fid_ep *ep_fid, uint64_t flags)
 {
-	struct tcp2_ep *ep;
+	struct xnet_ep *ep;
 
-	ep = container_of(ep_fid, struct tcp2_ep, util_ep.ep_fid);
+	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
 	(void) ofi_bsock_flush(&ep->bsock);
-	tcp2_ep_disable(ep, 0, NULL, 0);
-	ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
+	xnet_ep_disable(ep, 0, NULL, 0);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
 
 	return FI_SUCCESS;
 }
 
-static int tcp2_ep_getname(fid_t fid, void *addr, size_t *addrlen)
+static int xnet_ep_getname(fid_t fid, void *addr, size_t *addrlen)
 {
-	struct tcp2_ep *ep;
+	struct xnet_ep *ep;
 	size_t addrlen_in = *addrlen;
 	int ret;
 
-	ep = container_of(fid, struct tcp2_ep, util_ep.ep_fid);
+	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid);
 	ret = ofi_getsockname(ep->bsock.sock, addr, (socklen_t *) addrlen);
 	if (ret)
 		return -ofi_sockerr();
@@ -381,13 +381,13 @@ static int tcp2_ep_getname(fid_t fid, void *addr, size_t *addrlen)
 	return (addrlen_in < *addrlen)? -FI_ETOOSMALL: FI_SUCCESS;
 }
 
-static int tcp2_ep_getpeer(struct fid_ep *ep_fid, void *addr, size_t *addrlen)
+static int xnet_ep_getpeer(struct fid_ep *ep_fid, void *addr, size_t *addrlen)
 {
-	struct tcp2_ep *ep;
+	struct xnet_ep *ep;
 	size_t addrlen_in = *addrlen;
 	int ret;
 
-	ep = container_of(ep_fid, struct tcp2_ep, util_ep.ep_fid);
+	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
 	ret = ofi_getpeername(ep->bsock.sock, addr, (socklen_t *) addrlen);
 	if (ret)
 		return -ofi_sockerr();
@@ -395,20 +395,20 @@ static int tcp2_ep_getpeer(struct fid_ep *ep_fid, void *addr, size_t *addrlen)
 	return (addrlen_in < *addrlen) ? -FI_ETOOSMALL: FI_SUCCESS;
 }
 
-static struct fi_ops_cm tcp2_cm_ops = {
+static struct fi_ops_cm xnet_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = fi_no_setname,
-	.getname = tcp2_ep_getname,
-	.getpeer = tcp2_ep_getpeer,
-	.connect = tcp2_ep_connect,
+	.getname = xnet_ep_getname,
+	.getpeer = xnet_ep_getpeer,
+	.connect = xnet_ep_connect,
 	.listen = fi_no_listen,
-	.accept = tcp2_ep_accept,
+	.accept = xnet_ep_accept,
 	.reject = fi_no_reject,
-	.shutdown = tcp2_ep_shutdown,
+	.shutdown = xnet_ep_shutdown,
 	.join = fi_no_join,
 };
 
-void tcp2_reset_rx(struct tcp2_ep *ep)
+void xnet_reset_rx(struct xnet_ep *ep)
 {
 	ep->cur_rx.handler = NULL;
 	ep->cur_rx.entry = NULL;
@@ -417,13 +417,13 @@ void tcp2_reset_rx(struct tcp2_ep *ep)
 	OFI_DBG_SET(ep->cur_rx.hdr.base_hdr.version, 0);
 }
 
-static void tcp2_ep_cancel_rx(struct tcp2_ep *ep, void *context)
+static void xnet_ep_cancel_rx(struct xnet_ep *ep, void *context)
 {
 	struct slist_entry *cur, *prev;
-	struct tcp2_xfer_entry *xfer_entry;
-	struct tcp2_cq *cq;
+	struct xnet_xfer_entry *xfer_entry;
+	struct xnet_cq *cq;
 
-	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 
 	/* To cancel an active receive, we would need to flush the socket of
 	 * all data associated with that message.  Since some of that data
@@ -432,7 +432,7 @@ static void tcp2_ep_cancel_rx(struct tcp2_ep *ep, void *context)
 	 * the receive is already in process anyway.
 	 */
 	slist_foreach(&ep->rx_queue, cur, prev) {
-		xfer_entry = container_of(cur, struct tcp2_xfer_entry, entry);
+		xfer_entry = container_of(cur, struct xnet_xfer_entry, entry);
 		if (xfer_entry->context == context) {
 			if (ep->cur_rx.entry != xfer_entry)
 				goto found;
@@ -443,43 +443,43 @@ static void tcp2_ep_cancel_rx(struct tcp2_ep *ep, void *context)
 	return;
 
 found:
-	cq = container_of(ep->util_ep.rx_cq, struct tcp2_cq, util_cq);
+	cq = container_of(ep->util_ep.rx_cq, struct xnet_cq, util_cq);
 
 	slist_remove(&ep->rx_queue, cur, prev);
 	ep->rx_avail++;
-	tcp2_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
-	tcp2_free_xfer(ep, xfer_entry);
+	xnet_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
+	xnet_free_xfer(ep, xfer_entry);
 }
 
 /* We currently only support canceling receives, which is the common case.
  * Canceling an operation from the other queues is not trivial,
  * especially if the operation has already been initiated.
  */
-static ssize_t tcp2_ep_cancel(fid_t fid, void *context)
+static ssize_t xnet_ep_cancel(fid_t fid, void *context)
 {
-	struct tcp2_ep *ep;
+	struct xnet_ep *ep;
 
-	ep = container_of(fid, struct tcp2_ep, util_ep.ep_fid.fid);
+	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
 
-	ofi_genlock_lock(&tcp2_ep2_progress(ep)->lock);
-	tcp2_ep_cancel_rx(ep, context);
-	ofi_genlock_unlock(&tcp2_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	xnet_ep_cancel_rx(ep, context);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
 
 	return 0;
 }
 
-static int tcp2_ep_close(struct fid *fid)
+static int xnet_ep_close(struct fid *fid)
 {
-	struct tcp2_progress *progress;
-	struct tcp2_ep *ep;
+	struct xnet_progress *progress;
+	struct xnet_ep *ep;
 
-	ep = container_of(fid, struct tcp2_ep, util_ep.ep_fid.fid);
+	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
 
-	progress = tcp2_ep2_progress(ep);
+	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
 	dlist_remove_init(&ep->progress_entry);
-	tcp2_halt_sock(progress, ep->bsock.sock);
-	tcp2_ep_flush_all_queues(ep);
+	xnet_halt_sock(progress, ep->bsock.sock);
+	xnet_ep_flush_all_queues(ep);
 	ofi_genlock_unlock(&progress->lock);
 
 	if (ep->util_ep.eq) {
@@ -515,60 +515,60 @@ static int tcp2_ep_close(struct fid *fid)
 	return 0;
 }
 
-static int tcp2_ep_ctrl(struct fid *fid, int command, void *arg)
+static int xnet_ep_ctrl(struct fid *fid, int command, void *arg)
 {
-	struct tcp2_ep *ep;
+	struct xnet_ep *ep;
 
-	ep = container_of(fid, struct tcp2_ep, util_ep.ep_fid.fid);
+	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
 	switch (command) {
 	case FI_ENABLE:
 		if ((ofi_needs_rx(ep->util_ep.caps) && !ep->util_ep.rx_cq) ||
 		    (ofi_needs_tx(ep->util_ep.caps) && !ep->util_ep.tx_cq)) {
-			FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 				"missing needed CQ binding\n");
 			return -FI_ENOCQ;
 		}
 		break;
 	default:
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL, "unsupported command\n");
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "unsupported command\n");
 		return -FI_ENOSYS;
 	}
 	return FI_SUCCESS;
 }
 
-static int tcp2_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+static int xnet_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	struct tcp2_ep *ep;
-	struct tcp2_srx *srx;
+	struct xnet_ep *ep;
+	struct xnet_srx *srx;
 	int ret;
 
-	ep = container_of(fid, struct tcp2_ep, util_ep.ep_fid.fid);
+	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
 
 	if (bfid->fclass == FI_CLASS_SRX_CTX) {
-		srx = container_of(bfid, struct tcp2_srx, rx_fid.fid);
+		srx = container_of(bfid, struct xnet_srx, rx_fid.fid);
 		ep->srx = srx;
 		return FI_SUCCESS;
 	}
 
 	ret = ofi_ep_bind(&ep->util_ep, bfid, flags);
 	if (!ret && (bfid->fclass == FI_CLASS_CNTR))
-		ep->report_success = tcp2_report_cntr_success;
+		ep->report_success = xnet_report_cntr_success;
 
 	return ret;
 }
 
-static struct fi_ops tcp2_ep_fi_ops = {
+static struct fi_ops xnet_ep_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = tcp2_ep_close,
-	.bind = tcp2_ep_bind,
-	.control = tcp2_ep_ctrl,
+	.close = xnet_ep_close,
+	.bind = xnet_ep_bind,
+	.control = xnet_ep_ctrl,
 	.ops_open = fi_no_ops_open,
 };
 
-static int tcp2_ep_getopt(fid_t fid, int level, int optname,
+static int xnet_ep_getopt(fid_t fid, int level, int optname,
 			  void *optval, size_t *optlen)
 {
-	struct tcp2_ep *ep;
+	struct xnet_ep *ep;
 
 	if (level != FI_OPT_ENDPOINT)
 		return -ENOPROTOOPT;
@@ -579,7 +579,7 @@ static int tcp2_ep_getopt(fid_t fid, int level, int optname,
 			*optlen = sizeof(size_t);
 			return -FI_ETOOSMALL;
 		}
-		ep = container_of(fid, struct tcp2_ep,
+		ep = container_of(fid, struct xnet_ep,
 				  util_ep.ep_fid.fid);
 		*((size_t *) optval) = ep->min_multi_recv_size;
 		*optlen = sizeof(size_t);
@@ -589,7 +589,7 @@ static int tcp2_ep_getopt(fid_t fid, int level, int optname,
 			*optlen = sizeof(size_t);
 			return -FI_ETOOSMALL;
 		}
-		*((size_t *) optval) = TCP2_MAX_CM_DATA_SIZE;
+		*((size_t *) optval) = XNET_MAX_CM_DATA_SIZE;
 		*optlen = sizeof(size_t);
 		break;
 	default:
@@ -598,22 +598,22 @@ static int tcp2_ep_getopt(fid_t fid, int level, int optname,
 	return FI_SUCCESS;
 }
 
-int tcp2_ep_setopt(fid_t fid, int level, int optname,
+int xnet_ep_setopt(fid_t fid, int level, int optname,
 		   const void *optval, size_t optlen)
 {
-	struct tcp2_ep *ep;
+	struct xnet_ep *ep;
 
 	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
 
-	ep = container_of(fid, struct tcp2_ep, util_ep.ep_fid.fid);
+	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
 		if (optlen != sizeof(size_t))
 			return -FI_EINVAL;
 
 		ep->min_multi_recv_size = *(size_t *) optval;
-		FI_INFO(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_INFO(&xnet_prov, FI_LOG_EP_CTRL,
 			"FI_OPT_MIN_MULTI_RECV set to %zu\n",
 			ep->min_multi_recv_size);
 		break;
@@ -629,58 +629,58 @@ int tcp2_ep_setopt(fid_t fid, int level, int optname,
 	return FI_SUCCESS;
 }
 
-static struct fi_ops_ep tcp2_ep_ops = {
+static struct fi_ops_ep xnet_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = tcp2_ep_cancel,
-	.getopt = tcp2_ep_getopt,
-	.setopt = tcp2_ep_setopt,
+	.cancel = xnet_ep_cancel,
+	.getopt = xnet_ep_getopt,
+	.setopt = xnet_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-int tcp2_endpoint(struct fid_domain *domain, struct fi_info *info,
+int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
-	struct tcp2_ep *ep;
-	struct tcp2_pep *pep;
-	struct tcp2_conn_handle *conn;
+	struct xnet_ep *ep;
+	struct xnet_pep *pep;
+	struct xnet_conn_handle *conn;
 	int ret;
 
 	ep = calloc(1, sizeof(*ep));
 	if (!ep)
 		return -FI_ENOMEM;
 
-	ret = ofi_endpoint_init(domain, &tcp2_util_prov, info, &ep->util_ep,
+	ret = ofi_endpoint_init(domain, &xnet_util_prov, info, &ep->util_ep,
 				context, NULL);
 	if (ret)
 		goto err1;
 
-	ofi_bsock_init(&ep->bsock, tcp2_staging_sbuf_size,
-		       tcp2_prefetch_rbuf_size);
+	ofi_bsock_init(&ep->bsock, xnet_staging_sbuf_size,
+		       xnet_prefetch_rbuf_size);
 	if (info->handle) {
 		if (((fid_t) info->handle)->fclass == FI_CLASS_PEP) {
-			pep = container_of(info->handle, struct tcp2_pep,
+			pep = container_of(info->handle, struct xnet_pep,
 					   util_pep.pep_fid.fid);
 
 			ep->bsock.sock = pep->sock;
 			pep->sock = INVALID_SOCKET;
 		} else {
-			ep->state = TCP2_ACCEPTING;
+			ep->state = XNET_ACCEPTING;
 			conn = container_of(info->handle,
-					    struct tcp2_conn_handle, fid);
+					    struct xnet_conn_handle, fid);
 			/* EP now owns socket */
 			ep->bsock.sock = conn->sock;
 			conn->sock = INVALID_SOCKET;
 			ep->hdr_bswap = conn->endian_match ?
-					tcp2_hdr_none : tcp2_hdr_bswap;
+					xnet_hdr_none : xnet_hdr_bswap;
 			/* Save handle, but we only free if user calls accept.
 			 * Otherwise, user will call reject, which will free it.
 			 */
 			ep->conn = conn;
 
-			ret = tcp2_setup_socket(ep->bsock.sock, info);
+			ret = xnet_setup_socket(ep->bsock.sock, info);
 			if (ret)
 				goto err3;
 		}
@@ -691,23 +691,23 @@ int tcp2_endpoint(struct fid_domain *domain, struct fi_info *info,
 			goto err2;
 		}
 
-		ret = tcp2_setup_socket(ep->bsock.sock, info);
+		ret = xnet_setup_socket(ep->bsock.sock, info);
 		if (ret)
 			goto err3;
 
-		tcp2_set_zerocopy(ep->bsock.sock);
+		xnet_set_zerocopy(ep->bsock.sock);
 
 		if (info->src_addr && (!ofi_is_any_addr(info->src_addr) ||
 					ofi_addr_get_port(info->src_addr))) {
 
 			if (!ofi_addr_get_port(info->src_addr)) {
-				tcp2_set_no_port(ep->bsock.sock);
+				xnet_set_no_port(ep->bsock.sock);
 			}
 
 			ret = bind(ep->bsock.sock, info->src_addr,
 				(socklen_t) info->src_addrlen);
 			if (ret) {
-				FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL, "bind failed\n");
+				FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "bind failed\n");
 				ret = -ofi_sockerr();
 				goto err3;
 			}
@@ -733,17 +733,17 @@ int tcp2_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	ep->cur_rx.hdr_done = 0;
 	ep->cur_rx.hdr_len = sizeof(ep->cur_rx.hdr.base_hdr);
-	ep->min_multi_recv_size = TCP2_MIN_MULTI_RECV;
-	tcp2_config_bsock(&ep->bsock);
-	ep->report_success = tcp2_report_success;
+	ep->min_multi_recv_size = XNET_MIN_MULTI_RECV;
+	xnet_config_bsock(&ep->bsock);
+	ep->report_success = xnet_report_success;
 
 	*ep_fid = &ep->util_ep.ep_fid;
-	(*ep_fid)->fid.ops = &tcp2_ep_fi_ops;
-	(*ep_fid)->ops = &tcp2_ep_ops;
-	(*ep_fid)->cm = &tcp2_cm_ops;
-	(*ep_fid)->msg = &tcp2_msg_ops;
-	(*ep_fid)->rma = &tcp2_rma_ops;
-	(*ep_fid)->tagged = &tcp2_tagged_ops;
+	(*ep_fid)->fid.ops = &xnet_ep_fi_ops;
+	(*ep_fid)->ops = &xnet_ep_ops;
+	(*ep_fid)->cm = &xnet_cm_ops;
+	(*ep_fid)->msg = &xnet_msg_ops;
+	(*ep_fid)->rma = &xnet_rma_ops;
+	(*ep_fid)->tagged = &xnet_tagged_ops;
 	return 0;
 
 err3:

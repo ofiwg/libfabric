@@ -33,24 +33,24 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "tcp2.h"
+#include "xnet.h"
 
-#define TCP2_DEF_CQ_SIZE (1024)
+#define XNET_DEF_CQ_SIZE (1024)
 
 
-static void tcp2_cq_progress(struct util_cq *util_cq)
+static void xnet_cq_progress(struct util_cq *util_cq)
 {
-	struct tcp2_cq *cq;
-	cq = container_of(util_cq, struct tcp2_cq, util_cq);
-	tcp2_run_progress(tcp2_cq2_progress(cq), false);
+	struct xnet_cq *cq;
+	cq = container_of(util_cq, struct xnet_cq, util_cq);
+	xnet_run_progress(xnet_cq2_progress(cq), false);
 }
 
-static int tcp2_cq_close(struct fid *fid)
+static int xnet_cq_close(struct fid *fid)
 {
 	int ret;
-	struct tcp2_cq *cq;
+	struct xnet_cq *cq;
 
-	cq = container_of(fid, struct tcp2_cq, util_cq.cq_fid.fid);
+	cq = container_of(fid, struct xnet_cq, util_cq.cq_fid.fid);
 	ofi_bufpool_destroy(cq->xfer_pool);
 	ret = ofi_cq_cleanup(&cq->util_cq);
 	if (ret)
@@ -60,14 +60,14 @@ static int tcp2_cq_close(struct fid *fid)
 	return 0;
 }
 
-void tcp2_get_cq_info(struct tcp2_xfer_entry *entry, uint64_t *flags,
+void xnet_get_cq_info(struct xnet_xfer_entry *entry, uint64_t *flags,
 		      uint64_t *data, uint64_t *tag)
 {
-	if (entry->hdr.base_hdr.flags & TCP2_REMOTE_CQ_DATA) {
+	if (entry->hdr.base_hdr.flags & XNET_REMOTE_CQ_DATA) {
 		*data = entry->hdr.cq_data_hdr.cq_data;
 
 		if ((entry->hdr.base_hdr.op == ofi_op_tagged) ||
-		    (entry->hdr.base_hdr.flags & TCP2_TAGGED)) {
+		    (entry->hdr.base_hdr.flags & XNET_TAGGED)) {
 			*flags |= FI_REMOTE_CQ_DATA | FI_TAGGED;
 			*tag = entry->hdr.tag_data_hdr.tag;
 		} else {
@@ -76,7 +76,7 @@ void tcp2_get_cq_info(struct tcp2_xfer_entry *entry, uint64_t *flags,
 		}
 
 	} else if ((entry->hdr.base_hdr.op == ofi_op_tagged) ||
-		   (entry->hdr.base_hdr.flags & TCP2_TAGGED)) {
+		   (entry->hdr.base_hdr.flags & XNET_TAGGED)) {
 		*flags |= FI_TAGGED;
 		*data = 0;
 		*tag = entry->hdr.tag_hdr.tag;
@@ -86,21 +86,21 @@ void tcp2_get_cq_info(struct tcp2_xfer_entry *entry, uint64_t *flags,
 	}
 }
 
-void tcp2_report_success(struct tcp2_ep *ep, struct util_cq *cq,
-			 struct tcp2_xfer_entry *xfer_entry)
+void xnet_report_success(struct xnet_ep *ep, struct util_cq *cq,
+			 struct xnet_xfer_entry *xfer_entry)
 {
 	uint64_t flags, data, tag;
 	size_t len;
 
 	if (!(xfer_entry->cq_flags & FI_COMPLETION) ||
-	    (xfer_entry->ctrl_flags & TCP2_INTERNAL_XFER))
+	    (xfer_entry->ctrl_flags & XNET_INTERNAL_XFER))
 		return;
 
 	flags = xfer_entry->cq_flags & ~FI_COMPLETION;
 	if (flags & FI_RECV) {
 		len = xfer_entry->hdr.base_hdr.size -
 		      xfer_entry->hdr.base_hdr.hdr_size;
-		tcp2_get_cq_info(xfer_entry, &flags, &data, &tag);
+		xnet_get_cq_info(xfer_entry, &flags, &data, &tag);
 	} else if (flags & FI_REMOTE_CQ_DATA) {
 		assert(flags & FI_REMOTE_WRITE);
 		len = 0;
@@ -118,25 +118,25 @@ void tcp2_report_success(struct tcp2_ep *ep, struct util_cq *cq,
 		ofi_cq_signal(&cq->cq_fid);
 }
 
-void tcp2_cq_report_error(struct util_cq *cq,
-			  struct tcp2_xfer_entry *xfer_entry,
+void xnet_cq_report_error(struct util_cq *cq,
+			  struct xnet_xfer_entry *xfer_entry,
 			  int err)
 {
 	struct fi_cq_err_entry err_entry;
 
-	if (xfer_entry->ctrl_flags & (TCP2_INTERNAL_XFER | TCP2_INJECT_OP)) {
-		if (xfer_entry->ctrl_flags & TCP2_INTERNAL_XFER)
-			FI_WARN(&tcp2_prov, FI_LOG_CQ, "internal transfer "
+	if (xfer_entry->ctrl_flags & (XNET_INTERNAL_XFER | XNET_INJECT_OP)) {
+		if (xfer_entry->ctrl_flags & XNET_INTERNAL_XFER)
+			FI_WARN(&xnet_prov, FI_LOG_CQ, "internal transfer "
 				"failed (%s)\n", fi_strerror(err));
 		else
-			FI_WARN(&tcp2_prov, FI_LOG_CQ, "inject transfer "
+			FI_WARN(&xnet_prov, FI_LOG_CQ, "inject transfer "
 				"failed (%s)\n", fi_strerror(err));
 		return;
 	}
 
 	err_entry.flags = xfer_entry->cq_flags & ~FI_COMPLETION;
 	if (err_entry.flags & FI_RECV) {
-		tcp2_get_cq_info(xfer_entry, &err_entry.flags, &err_entry.data,
+		xnet_get_cq_info(xfer_entry, &err_entry.flags, &err_entry.data,
 				 &err_entry.tag);
 	} else if (err_entry.flags & FI_REMOTE_CQ_DATA) {
 		assert(err_entry.flags & FI_REMOTE_WRITE);
@@ -159,7 +159,7 @@ void tcp2_cq_report_error(struct util_cq *cq,
 	ofi_cq_write_error(cq, &err_entry);
 }
 
-static int tcp2_cq_control(struct fid *fid, int command, void *arg)
+static int xnet_cq_control(struct fid *fid, int command, void *arg)
 {
 	struct util_cq *cq;
 	int ret;
@@ -181,19 +181,19 @@ static int tcp2_cq_control(struct fid *fid, int command, void *arg)
 	return ret;
 }
 
-static struct fi_ops tcp2_cq_fi_ops = {
+static struct fi_ops xnet_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = tcp2_cq_close,
+	.close = xnet_cq_close,
 	.bind = fi_no_bind,
-	.control = tcp2_cq_control,
+	.control = xnet_cq_control,
 	.ops_open = fi_no_ops_open,
 };
 
-int tcp2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
-	struct tcp2_fabric *fabric;
-	struct tcp2_cq *cq;
+	struct xnet_fabric *fabric;
+	struct xnet_cq *cq;
 	struct fi_cq_attr cq_attr;
 	int ret;
 
@@ -202,10 +202,10 @@ int tcp2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return -FI_ENOMEM;
 
 	if (!attr->size)
-		attr->size = TCP2_DEF_CQ_SIZE;
+		attr->size = XNET_DEF_CQ_SIZE;
 
 	ret = ofi_bufpool_create(&cq->xfer_pool,
-				 sizeof(struct tcp2_xfer_entry), 16, 0,
+				 sizeof(struct xnet_xfer_entry), 16, 0,
 				 1024, 0);
 	if (ret)
 		goto free_cq;
@@ -216,22 +216,22 @@ int tcp2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		attr = &cq_attr;
 	}
 
-	ret = ofi_cq_init(&tcp2_prov, domain, attr, &cq->util_cq,
-			  &tcp2_cq_progress, context);
+	ret = ofi_cq_init(&xnet_prov, domain, attr, &cq->util_cq,
+			  &xnet_cq_progress, context);
 	if (ret)
 		goto destroy_pool;
 
 
-	fabric = container_of(cq->util_cq.domain->fabric, struct tcp2_fabric,
+	fabric = container_of(cq->util_cq.domain->fabric, struct xnet_fabric,
 			      util_fabric);
 	if (attr->wait_obj != FI_WAIT_NONE || fabric->progress.auto_progress) {
-		ret = tcp2_start_progress(tcp2_cq2_progress(cq));
+		ret = xnet_start_progress(xnet_cq2_progress(cq));
 		if (ret)
 			goto cleanup;
 	}
 
 	*cq_fid = &cq->util_cq.cq_fid;
-	(*cq_fid)->fid.ops = &tcp2_cq_fi_ops;
+	(*cq_fid)->fid.ops = &xnet_cq_fi_ops;
 	return 0;
 
 cleanup:
@@ -244,13 +244,13 @@ free_cq:
 }
 
 
-static void tcp2_cntr_progress(struct util_cntr *cntr)
+static void xnet_cntr_progress(struct util_cntr *cntr)
 {
-	tcp2_run_progress(tcp2_cntr2_progress(cntr), false);
+	xnet_run_progress(xnet_cntr2_progress(cntr), false);
 }
 
 static struct util_cntr *
-tcp2_get_cntr(struct tcp2_ep *ep, struct tcp2_xfer_entry *xfer_entry)
+xnet_get_cntr(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
 {
 	struct util_cntr *cntr;
 
@@ -275,42 +275,42 @@ tcp2_get_cntr(struct tcp2_ep *ep, struct tcp2_xfer_entry *xfer_entry)
 }
 
 static void
-tcp2_cntr_inc(struct tcp2_ep *ep, struct tcp2_xfer_entry *xfer_entry)
+xnet_cntr_inc(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
 {
 	struct util_cntr *cntr;
 
-	if (xfer_entry->ctrl_flags & TCP2_INTERNAL_XFER)
+	if (xfer_entry->ctrl_flags & XNET_INTERNAL_XFER)
 		return;
 
-	cntr = tcp2_get_cntr(ep, xfer_entry);
+	cntr = xnet_get_cntr(ep, xfer_entry);
 	if (cntr)
 		fi_cntr_add(&cntr->cntr_fid, 1);
 }
 
-void tcp2_report_cntr_success(struct tcp2_ep *ep, struct util_cq *cq,
-			      struct tcp2_xfer_entry *xfer_entry)
+void xnet_report_cntr_success(struct xnet_ep *ep, struct util_cq *cq,
+			      struct xnet_xfer_entry *xfer_entry)
 {
-	tcp2_cntr_inc(ep, xfer_entry);
-	tcp2_report_success(ep, cq, xfer_entry);
+	xnet_cntr_inc(ep, xfer_entry);
+	xnet_report_success(ep, cq, xfer_entry);
 }
 
-void tcp2_cntr_incerr(struct tcp2_ep *ep, struct tcp2_xfer_entry *xfer_entry)
+void xnet_cntr_incerr(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
 {
 	struct util_cntr *cntr;
 
-	if (ep->report_success == tcp2_report_success ||
-	    xfer_entry->ctrl_flags & TCP2_INTERNAL_XFER)
+	if (ep->report_success == xnet_report_success ||
+	    xfer_entry->ctrl_flags & XNET_INTERNAL_XFER)
 		return;
 
-	cntr = tcp2_get_cntr(ep, xfer_entry);
+	cntr = xnet_get_cntr(ep, xfer_entry);
 	if (cntr)
 		fi_cntr_adderr(&cntr->cntr_fid, 1);
 }
 
-int tcp2_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
+int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr_fid, void *context)
 {
-	struct tcp2_fabric *fabric;
+	struct xnet_fabric *fabric;
 	struct util_cntr *cntr;
 	struct fi_cntr_attr cntr_attr;
 	int ret;
@@ -325,15 +325,15 @@ int tcp2_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 		attr = &cntr_attr;
 	}
 
-	ret = ofi_cntr_init(&tcp2_prov, fid_domain, attr, cntr,
-			    &tcp2_cntr_progress, context);
+	ret = ofi_cntr_init(&xnet_prov, fid_domain, attr, cntr,
+			    &xnet_cntr_progress, context);
 	if (ret)
 		goto free;
 
-	fabric = container_of(cntr->domain->fabric, struct tcp2_fabric,
+	fabric = container_of(cntr->domain->fabric, struct xnet_fabric,
 			      util_fabric);
 	if (attr->wait_obj != FI_WAIT_NONE || fabric->progress.auto_progress) {
-		ret = tcp2_start_progress(tcp2_cntr2_progress(cntr));
+		ret = xnet_start_progress(xnet_cntr2_progress(cntr));
 		if (ret)
 			goto cleanup;
 	}

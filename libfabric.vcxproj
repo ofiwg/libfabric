@@ -721,21 +721,21 @@
     <ClCompile Include="prov\tcp\src\tcpx_eq.c" />
     <ClCompile Include="prov\tcp\src\tcpx_init.c" />
     <ClCompile Include="prov\tcp\src\tcpx_progress.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_attr.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_cm.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_cq.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_domain.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_ep.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_eq.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_fabric.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_init.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_msg.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_pep.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_progress.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_rdm.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_rdm_cm.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_rma.c" />
-    <ClCompile Include="prov\tcp2\src\tcp2_srx.c" />
+    <ClCompile Include="prov\xnet\src\xnet_attr.c" />
+    <ClCompile Include="prov\xnet\src\xnet_cm.c" />
+    <ClCompile Include="prov\xnet\src\xnet_cq.c" />
+    <ClCompile Include="prov\xnet\src\xnet_domain.c" />
+    <ClCompile Include="prov\xnet\src\xnet_ep.c" />
+    <ClCompile Include="prov\xnet\src\xnet_eq.c" />
+    <ClCompile Include="prov\xnet\src\xnet_fabric.c" />
+    <ClCompile Include="prov\xnet\src\xnet_init.c" />
+    <ClCompile Include="prov\xnet\src\xnet_msg.c" />
+    <ClCompile Include="prov\xnet\src\xnet_pep.c" />
+    <ClCompile Include="prov\xnet\src\xnet_progress.c" />
+    <ClCompile Include="prov\xnet\src\xnet_rdm.c" />
+    <ClCompile Include="prov\xnet\src\xnet_rdm_cm.c" />
+    <ClCompile Include="prov\xnet\src\xnet_rma.c" />
+    <ClCompile Include="prov\xnet\src\xnet_srx.c" />
     <ClCompile Include="prov\udp\src\udpx_attr.c" />
     <ClCompile Include="prov\udp\src\udpx_cq.c" />
     <ClCompile Include="prov\udp\src\udpx_domain.c" />
@@ -977,8 +977,8 @@
     <ClInclude Include="prov\sockets\include\sock.h" />
     <ClInclude Include="prov\sockets\include\sock_util.h" />
     <ClInclude Include="prov\tcp\src\tcpx.h" />
-    <ClInclude Include="prov\tcp\src\tcp2.h" />
-    <ClInclude Include="prov\tcp\src\tcp2_proto.h" />
+    <ClInclude Include="prov\tcp\src\xnet.h" />
+    <ClInclude Include="prov\tcp\src\xnet_proto.h" />
     <ClInclude Include="prov\udp\src\udpx.h" />
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)|$(Platform)'!='Debug-Efa-v142|x64' AND '$(Configuration)|$(Platform)'!='Release-Efa-v142|x64'">

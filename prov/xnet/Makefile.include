@@ -1,0 +1,32 @@
+if HAVE_XNET
+_xnet_files = \
+	prov/xnet/src/xnet_fabric.c	\
+	prov/xnet/src/xnet_attr.c	\
+	prov/xnet/src/xnet_cm.c		\
+	prov/xnet/src/xnet_rdm_cm.c	\
+	prov/xnet/src/xnet_domain.c	\
+	prov/xnet/src/xnet_rma.c	\
+	prov/xnet/src/xnet_msg.c	\
+	prov/xnet/src/xnet_ep.c		\
+	prov/xnet/src/xnet_rdm.c	\
+	prov/xnet/src/xnet_pep.c	\
+	prov/xnet/src/xnet_srx.c	\
+	prov/xnet/src/xnet_cq.c		\
+	prov/xnet/src/xnet_eq.c		\
+	prov/xnet/src/xnet_init.c	\
+	prov/xnet/src/xnet_progress.c	\
+	prov/xnet/src/xnet_proto.h	\
+	prov/xnet/src/xnet.h
+
+if HAVE_XNET_DL
+pkglib_LTLIBRARIES += libxnet-fi.la
+libxnet_fi_la_SOURCES = $(_xnet_files) $(common_srcs)
+libxnet_fi_la_LIBADD = $(linkback) $(xnet_shm_LIBS)
+libxnet_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libxnet_fi_la_DEPENDENCIES = $(linkback)
+else !HAVE_XNET_DL
+src_libfabric_la_SOURCES += $(_xnet_files)
+src_libfabric_la_LIBADD += $(xnet_shm_LIBS)
+endif !HAVE_XNET_DL
+
+endif HAVE_XNET

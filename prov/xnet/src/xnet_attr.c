@@ -30,49 +30,49 @@
  * SOFTWARE.
  */
 
-#include "tcp2.h"
+#include "xnet.h"
 
 
-#define TCP2_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
-#define TCP2_EP_CAPS	 (FI_MSG | FI_RMA | FI_RMA_PMEM)
-#define TCP2_EP_SRX_CAPS (TCP2_EP_CAPS | FI_TAGGED)
-#define TCP2_TX_CAPS	 (FI_SEND | FI_WRITE | FI_READ)
-#define TCP2_RX_CAPS	 (FI_RECV | FI_REMOTE_READ | 			\
+#define XNET_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
+#define XNET_EP_CAPS	 (FI_MSG | FI_RMA | FI_RMA_PMEM)
+#define XNET_EP_SRX_CAPS (XNET_EP_CAPS | FI_TAGGED)
+#define XNET_TX_CAPS	 (FI_SEND | FI_WRITE | FI_READ)
+#define XNET_RX_CAPS	 (FI_RECV | FI_REMOTE_READ | 			\
 			  FI_REMOTE_WRITE | FI_RMA_EVENT)
 
 
-#define TCP2_MSG_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS | \
+#define XNET_MSG_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS | \
 			OFI_ORDER_WAW_SET | FI_ORDER_WAS | \
 			FI_ORDER_SAW | FI_ORDER_SAS)
 
-#define TCP2_TX_OP_FLAGS \
+#define XNET_TX_OP_FLAGS \
 	(FI_INJECT | FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | \
 	 FI_DELIVERY_COMPLETE | FI_COMMIT_COMPLETE | FI_COMPLETION)
 
-#define TCP2_RX_OP_FLAGS (FI_COMPLETION)
+#define XNET_RX_OP_FLAGS (FI_COMPLETION)
 
-static struct fi_tx_attr tcp2_tx_attr = {
-	.caps = TCP2_EP_CAPS | TCP2_TX_CAPS,
-	.op_flags = TCP2_TX_OP_FLAGS,
+static struct fi_tx_attr xnet_tx_attr = {
+	.caps = XNET_EP_CAPS | XNET_TX_CAPS,
+	.op_flags = XNET_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
-	.msg_order = TCP2_MSG_ORDER,
-	.inject_size = TCP2_MAX_INJECT,
+	.msg_order = XNET_MSG_ORDER,
+	.inject_size = XNET_MAX_INJECT,
 	.size = 1024,
-	.iov_limit = TCP2_IOV_LIMIT,
-	.rma_iov_limit = TCP2_IOV_LIMIT,
+	.iov_limit = XNET_IOV_LIMIT,
+	.rma_iov_limit = XNET_IOV_LIMIT,
 };
 
-static struct fi_rx_attr tcp2_rx_attr = {
-	.caps = TCP2_EP_CAPS | TCP2_RX_CAPS,
-	.op_flags = TCP2_RX_OP_FLAGS,
+static struct fi_rx_attr xnet_rx_attr = {
+	.caps = XNET_EP_CAPS | XNET_RX_CAPS,
+	.op_flags = XNET_RX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
-	.msg_order = TCP2_MSG_ORDER,
+	.msg_order = XNET_MSG_ORDER,
 	.total_buffered_recv = 0,
 	.size = 65536,
-	.iov_limit = TCP2_IOV_LIMIT
+	.iov_limit = XNET_IOV_LIMIT
 };
 
-static struct fi_ep_attr tcp2_ep_attr = {
+static struct fi_ep_attr xnet_ep_attr = {
 	.type = FI_EP_MSG,
 	.protocol = FI_PROTO_SOCK_TCP,
 	.protocol_version = 0,
@@ -83,28 +83,28 @@ static struct fi_ep_attr tcp2_ep_attr = {
 	.max_order_waw_size = SIZE_MAX,
 };
 
-static struct fi_tx_attr tcp2_tx_srx_attr = {
-	.caps = TCP2_EP_SRX_CAPS | TCP2_TX_CAPS,
-	.op_flags = TCP2_TX_OP_FLAGS,
+static struct fi_tx_attr xnet_tx_srx_attr = {
+	.caps = XNET_EP_SRX_CAPS | XNET_TX_CAPS,
+	.op_flags = XNET_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
-	.msg_order = TCP2_MSG_ORDER,
-	.inject_size = TCP2_MAX_INJECT,
+	.msg_order = XNET_MSG_ORDER,
+	.inject_size = XNET_MAX_INJECT,
 	.size = 1024,
-	.iov_limit = TCP2_IOV_LIMIT,
-	.rma_iov_limit = TCP2_IOV_LIMIT,
+	.iov_limit = XNET_IOV_LIMIT,
+	.rma_iov_limit = XNET_IOV_LIMIT,
 };
 
-static struct fi_rx_attr tcp2_rx_srx_attr = {
-	.caps = TCP2_EP_SRX_CAPS | TCP2_RX_CAPS,
-	.op_flags = TCP2_RX_OP_FLAGS,
+static struct fi_rx_attr xnet_rx_srx_attr = {
+	.caps = XNET_EP_SRX_CAPS | XNET_RX_CAPS,
+	.op_flags = XNET_RX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
-	.msg_order = TCP2_MSG_ORDER,
+	.msg_order = XNET_MSG_ORDER,
 	.total_buffered_recv = 0,
 	.size = 65536,
-	.iov_limit = TCP2_IOV_LIMIT
+	.iov_limit = XNET_IOV_LIMIT
 };
 
-static struct fi_ep_attr tcp2_ep_srx_attr = {
+static struct fi_ep_attr xnet_ep_srx_attr = {
 	.type = FI_EP_MSG,
 	.protocol = FI_PROTO_SOCK_TCP,
 	.protocol_version = 0,
@@ -116,10 +116,10 @@ static struct fi_ep_attr tcp2_ep_srx_attr = {
 	.mem_tag_format = FI_TAG_GENERIC,
 };
 
-static struct fi_ep_attr tcp2_rdm_ep_attr = {
+static struct fi_ep_attr xnet_rdm_ep_attr = {
 	.type = FI_EP_RDM,
-	.protocol = FI_PROTO_TCPX,
-	.protocol_version = TCP2_RDM_VERSION,
+	.protocol = FI_PROTO_XNET,
+	.protocol_version = XNET_RDM_VERSION,
 	.max_msg_size = SIZE_MAX,
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1,
@@ -128,9 +128,9 @@ static struct fi_ep_attr tcp2_rdm_ep_attr = {
 	.mem_tag_format = FI_TAG_GENERIC,
 };
 
-static struct fi_domain_attr tcp2_domain_attr = {
-	.name = "tcp2",
-	.caps = TCP2_DOMAIN_CAPS,
+static struct fi_domain_attr xnet_domain_attr = {
+	.name = "xnet",
+	.caps = XNET_DOMAIN_CAPS,
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
@@ -149,9 +149,9 @@ static struct fi_domain_attr tcp2_domain_attr = {
 	.mr_iov_limit = 1,
 };
 
-static struct fi_domain_attr tcp2_rdm_domain_attr = {
-	.name = "tcp2",
-	.caps = TCP2_DOMAIN_CAPS,
+static struct fi_domain_attr xnet_rdm_domain_attr = {
+	.name = "xnet",
+	.caps = XNET_DOMAIN_CAPS,
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
@@ -170,41 +170,41 @@ static struct fi_domain_attr tcp2_rdm_domain_attr = {
 	.mr_iov_limit = 1,
 };
 
-static struct fi_fabric_attr tcp2_fabric_attr = {
+static struct fi_fabric_attr xnet_fabric_attr = {
 	.name = "TCP-IP",
 	.prov_version = OFI_VERSION_DEF_PROV,
 };
 
-struct fi_info tcp2_rdm_info = {
-	.caps = TCP2_DOMAIN_CAPS | TCP2_EP_SRX_CAPS | TCP2_TX_CAPS | TCP2_RX_CAPS,
+struct fi_info xnet_rdm_info = {
+	.caps = XNET_DOMAIN_CAPS | XNET_EP_SRX_CAPS | XNET_TX_CAPS | XNET_RX_CAPS,
 	.addr_format = FI_SOCKADDR,
-	.tx_attr = &tcp2_tx_srx_attr,
-	.rx_attr = &tcp2_rx_srx_attr,
-	.ep_attr = &tcp2_rdm_ep_attr,
-	.domain_attr = &tcp2_rdm_domain_attr,
-	.fabric_attr = &tcp2_fabric_attr
+	.tx_attr = &xnet_tx_srx_attr,
+	.rx_attr = &xnet_rx_srx_attr,
+	.ep_attr = &xnet_rdm_ep_attr,
+	.domain_attr = &xnet_rdm_domain_attr,
+	.fabric_attr = &xnet_fabric_attr
 };
 
-struct fi_info tcp2_srx_info = {
-	.next = NULL, /* &tcp2_rdm_info, */
-	.caps = TCP2_DOMAIN_CAPS | TCP2_EP_SRX_CAPS | TCP2_TX_CAPS | TCP2_RX_CAPS,
+struct fi_info xnet_srx_info = {
+	.next = NULL, /* &xnet_rdm_info, */
+	.caps = XNET_DOMAIN_CAPS | XNET_EP_SRX_CAPS | XNET_TX_CAPS | XNET_RX_CAPS,
 	.addr_format = FI_SOCKADDR,
-	.tx_attr = &tcp2_tx_srx_attr,
-	.rx_attr = &tcp2_rx_srx_attr,
-	.ep_attr = &tcp2_ep_srx_attr,
-	.domain_attr = &tcp2_domain_attr,
-	.fabric_attr = &tcp2_fabric_attr
+	.tx_attr = &xnet_tx_srx_attr,
+	.rx_attr = &xnet_rx_srx_attr,
+	.ep_attr = &xnet_ep_srx_attr,
+	.domain_attr = &xnet_domain_attr,
+	.fabric_attr = &xnet_fabric_attr
 };
 
-struct fi_info tcp2_info = {
-	.next = &tcp2_srx_info,
-	.caps = TCP2_DOMAIN_CAPS | TCP2_EP_CAPS | TCP2_TX_CAPS | TCP2_RX_CAPS,
+struct fi_info xnet_info = {
+	.next = &xnet_srx_info,
+	.caps = XNET_DOMAIN_CAPS | XNET_EP_CAPS | XNET_TX_CAPS | XNET_RX_CAPS,
 	.addr_format = FI_SOCKADDR,
-	.tx_attr = &tcp2_tx_attr,
-	.rx_attr = &tcp2_rx_attr,
-	.ep_attr = &tcp2_ep_attr,
-	.domain_attr = &tcp2_domain_attr,
-	.fabric_attr = &tcp2_fabric_attr
+	.tx_attr = &xnet_tx_attr,
+	.rx_attr = &xnet_rx_attr,
+	.ep_attr = &xnet_ep_attr,
+	.domain_attr = &xnet_domain_attr,
+	.fabric_attr = &xnet_fabric_attr
 };
 
 
@@ -212,21 +212,21 @@ struct fi_info tcp2_info = {
  * through ofi_alter_info
  */
 static void
-tcp2_alter_defaults(uint32_t version, const struct fi_info *hints,
+xnet_alter_defaults(uint32_t version, const struct fi_info *hints,
 		    const struct fi_info *base_info,
 		    struct fi_info *dest_info)
 {
-	dest_info->tx_attr->size = tcp2_default_tx_size;
+	dest_info->tx_attr->size = xnet_default_tx_size;
 	if ((base_info->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT) &&
 	    hints && hints->ep_attr &&
 	    (hints->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT))
-		dest_info->rx_attr->size = tcp2_default_rx_size;
+		dest_info->rx_attr->size = xnet_default_rx_size;
 }
 
 
-struct util_prov tcp2_util_prov = {
-	.prov = &tcp2_prov,
-	.info = &tcp2_info,
-	.alter_defaults = &tcp2_alter_defaults,
+struct util_prov xnet_util_prov = {
+	.prov = &xnet_prov,
+	.info = &xnet_info,
+	.alter_defaults = &xnet_alter_defaults,
 	.flags = 0,
 };

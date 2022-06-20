@@ -419,7 +419,7 @@ static void ofi_ordered_provs_init(void)
 		 */
 
 		/* Before you add ANYTHING here, read the comment above!!! */
-		"udp", "tcp", "sockets", "tcp2", /* NOTHING GOES HERE! */
+		"udp", "tcp", "sockets", "net", /* NOTHING GOES HERE! */
 		/* Seriously, read it! */
 
 		/* These are hooking providers only.  Their order
@@ -507,7 +507,7 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	    !strcasecmp(provider->name, "shm") ||
 	    !strcasecmp(provider->name, "efa") ||
 	    !strcasecmp(provider->name, "psm3") ||
-	    !strcasecmp(provider->name, "tcp2") ||
+	    !strcasecmp(provider->name, "net") ||
 	    ofi_is_util_prov(provider))
 		ctx->disable_layering = 1;
 
@@ -859,7 +859,7 @@ void fi_ini(void)
 	ofi_register_provider(UDP_INIT, NULL);
 	ofi_register_provider(SOCKETS_INIT, NULL);
 	ofi_register_provider(TCP_INIT, NULL);
-	ofi_register_provider(TCP2_INIT, NULL);
+	ofi_register_provider(XNET_INIT, NULL);
 
 	ofi_register_provider(HOOK_PERF_INIT, NULL);
 	ofi_register_provider(HOOK_DEBUG_INIT, NULL);
