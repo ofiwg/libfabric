@@ -471,10 +471,7 @@ size_t rxr_pkt_mulreq_total_data_size(int pkt_type, struct rxr_tx_entry *op_entr
 	}
 
 	assert(rxr_pkt_type_is_runt(pkt_type));
-	if (op_entry->bytes_runt)
-		return op_entry->bytes_runt;
-
-	return rxr_env.efa_runt_size;
+	return op_entry->bytes_runt;
 }
 
 /*
@@ -814,24 +811,12 @@ ssize_t rxr_pkt_init_runtread_rtm(struct rxr_ep *ep,
 				  int pkt_type,
 				  struct rxr_pkt_entry *pkt_entry)
 {
-	struct rdm_peer *peer;
 	struct rxr_runtread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
 	size_t hdr_size, pkt_data_offset, tx_data_offset, data_size;
 	int err;
 
-	if (!tx_entry->bytes_sent) {
-		assert(tx_entry->bytes_runt == 0);
-		/* This is the 1st runtread RTM for the tx_entry,
-		 * thus initialize bytes_runt here.
-		 * TODO: adjust bytes_runt such that read buffer
-		 *       is page aligned, but must be >= rxr_env.efa_runt_size
-		 */
-		peer = rxr_ep_get_peer(ep, tx_entry->addr);
-		assert(peer);
-		tx_entry->bytes_runt = MIN(rxr_env.efa_runt_size - peer->num_runt_bytes_in_flight, tx_entry->total_len);
-	}
-
+	assert(tx_entry->bytes_runt);
 	assert(tx_entry->bytes_sent < tx_entry->bytes_runt);
 
 	rxr_pkt_init_req_hdr(ep, tx_entry, pkt_type, pkt_entry);

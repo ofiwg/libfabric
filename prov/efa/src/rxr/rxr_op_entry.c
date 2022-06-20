@@ -118,3 +118,25 @@ void rxr_tx_entry_try_fill_desc(struct rxr_tx_entry *tx_entry,
 	}
 }
 
+/**
+ * @brief calculate and set the bytes_runt field of a tx_entry
+ *
+ * bytes_runt is number of bytes for a message to be sent by runting
+ *
+ * @param		ep[in]			endpoint
+ * @param		tx_entry[in,out]	tx_entry to be set
+ */
+void rxr_tx_entry_set_runt_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
+{
+	struct rdm_peer *peer;
+
+	assert(tx_entry->type == RXR_TX_ENTRY);
+
+	if (tx_entry->bytes_runt > 0)
+		return;
+
+	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	assert(peer);
+	tx_entry->bytes_runt = MIN(rxr_env.efa_runt_size - peer->num_runt_bytes_in_flight, tx_entry->total_len);
+}
+
