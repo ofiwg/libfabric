@@ -140,3 +140,32 @@ void rxr_tx_entry_set_runt_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry
 	tx_entry->bytes_runt = MIN(rxr_env.efa_runt_size - peer->num_runt_bytes_in_flight, tx_entry->total_len);
 }
 
+/**
+ * @brief total data size that will be sent/received via the multiple REQ packets
+ *
+ * Multi-req protocols send/receive data via multiple REQ packets. Different
+ * protocols have different behavior:
+ *
+ *     Medium protocols send/receive all data via REQ packets
+ *
+ *     Runting read protocols send/receive part of the data via REQ packets.
+ *     The reminder of the data is sent via other type of packets or via RDMA operations.
+ *
+ * which is why this function is needed.
+ *
+ * param[in]		pkt_type		REQ packet type
+ * param[in]		op_entry		contains operation information
+ * return		size of total data transfered by REQ packets
+ */
+size_t rxr_op_entry_mulreq_total_data_size(struct rxr_op_entry *op_entry, int pkt_type)
+{
+	assert(rxr_pkt_type_is_mulreq(pkt_type));
+
+	if (rxr_pkt_type_is_medium(pkt_type)) {
+		return op_entry->total_len;
+	}
+
+	assert(rxr_pkt_type_is_runt(pkt_type));
+	return op_entry->bytes_runt;
+}
+

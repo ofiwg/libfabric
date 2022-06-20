@@ -449,31 +449,6 @@ size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type
 						      rma_iov_count);
 }
 
-/**
- * @brief total data size in the multiple REQ packets
- *
- * For an op_entry that uses multi-req protocol, this function return
- * how many bytes will be sent via the REQ packets.
- *
- * Note some multi-req protocols send only part of the data via REQ packets.
- * The reminder of the data is sent via other type of packets or via RDMA operations.
- *
- * param[in]		pkt_type		REQ packet type
- * param[in]		op_entry		contains operation information
- * return		size of total data transfered by REQ packets
- */
-size_t rxr_pkt_mulreq_total_data_size(int pkt_type, struct rxr_tx_entry *op_entry)
-{
-	assert(rxr_pkt_type_is_mulreq(pkt_type));
-
-	if (rxr_pkt_type_is_medium(pkt_type)) {
-		return op_entry->total_len;
-	}
-
-	assert(rxr_pkt_type_is_runt(pkt_type));
-	return op_entry->bytes_runt;
-}
-
 /*
  * REQ packet type functions
  *
@@ -1297,7 +1272,7 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct rxr_ep *ep,
 		 */
 		rx_entry->bytes_received += data_size;
 		rx_entry->bytes_received_via_mulreq += data_size;
-		if (rxr_pkt_mulreq_total_data_size(pkt_type, rx_entry) == rx_entry->bytes_received_via_mulreq)
+		if (rxr_op_entry_mulreq_total_data_size(rx_entry, pkt_type) == rx_entry->bytes_received_via_mulreq)
 			rxr_pkt_rx_map_remove(ep, cur, rx_entry);
 
 		/* rxr_pkt_copy_data_to_rx_entry() will release cur, so
