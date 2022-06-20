@@ -7,9 +7,9 @@ dnl
 dnl $1: action if configured successfully
 dnl $2: action if not configured successfully
 dnl
-AC_DEFUN([FI_TCP2_CONFIGURE],[
+AC_DEFUN([FI_XNET_CONFIGURE],[
        # Determine if we can support the tcp provider
-       tcp2_h_happy=0
-       AS_IF([test x"$enable_tcp2" != x"no"], [tcp2_h_happy=1])
-       AS_IF([test $tcp2_h_happy -eq 1], [$1], [$2])
+       xnet_h_happy=0
+       AS_IF([test x"$enable_xnet" != x"no"], [xnet_h_happy=1])
+       AS_IF([test $xnet_h_happy -eq 1], [$1], [$2])
 ])

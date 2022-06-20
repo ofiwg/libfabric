@@ -36,23 +36,23 @@
 
 #include <ofi_prov.h>
 #include <ofi_iov.h>
-#include "tcp2.h"
+#include "xnet.h"
 #include <errno.h>
 
 
-static int tcp2_pep_close(struct fid *fid)
+static int xnet_pep_close(struct fid *fid)
 {
-	struct tcp2_pep *pep;
+	struct xnet_pep *pep;
 
-	pep = container_of(fid, struct tcp2_pep, util_pep.pep_fid.fid);
+	pep = container_of(fid, struct xnet_pep, util_pep.pep_fid.fid);
 	/* TODO: We need to abort any outstanding active connection requests.
-	 * The tcp2_conn_handle points back to the pep and will dereference
+	 * The xnet_conn_handle points back to the pep and will dereference
 	 * the freed memory if we continue.
 	 */
 
-	if (pep->state == TCP2_LISTENING) {
+	if (pep->state == XNET_LISTENING) {
 		ofi_genlock_lock(&pep->progress->lock);
-		tcp2_halt_sock(pep->progress, pep->sock);
+		xnet_halt_sock(pep->progress, pep->sock);
 		ofi_genlock_unlock(&pep->progress->lock);
 	}
 
@@ -63,11 +63,11 @@ static int tcp2_pep_close(struct fid *fid)
 	return 0;
 }
 
-static int tcp2_pep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+static int xnet_pep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	struct tcp2_pep *pep;
+	struct xnet_pep *pep;
 
-	pep = container_of(fid, struct tcp2_pep, util_pep.pep_fid.fid);
+	pep = container_of(fid, struct xnet_pep, util_pep.pep_fid.fid);
 
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:
@@ -75,21 +75,21 @@ static int tcp2_pep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				       container_of(bfid, struct util_eq,
 						    eq_fid.fid), flags);
 	default:
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"invalid FID class for binding\n");
 		return -FI_EINVAL;
 	}
 }
 
-static struct fi_ops tcp2_pep_fi_ops = {
+static struct fi_ops xnet_pep_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = tcp2_pep_close,
-	.bind = tcp2_pep_bind,
+	.close = xnet_pep_close,
+	.bind = xnet_pep_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
 
-static int tcp2_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen)
+static int xnet_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen)
 {
 	int ret, i, rand_port_number;
 	static uint32_t seed;
@@ -97,12 +97,12 @@ static int tcp2_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen)
 		seed = ofi_generate_seed();
 
 	rand_port_number = ofi_xorshift_random_r(&seed) %
-			   (tcp2_ports.high + 1 - tcp2_ports.low) +
-			   tcp2_ports.low;
+			   (xnet_ports.high + 1 - xnet_ports.low) +
+			   xnet_ports.low;
 
-	for (i = tcp2_ports.low; i <= tcp2_ports.high; i++, rand_port_number++) {
-		if (rand_port_number > tcp2_ports.high)
-			rand_port_number = tcp2_ports.low;
+	for (i = xnet_ports.low; i <= xnet_ports.high; i++, rand_port_number++) {
+		if (rand_port_number > xnet_ports.high)
+			rand_port_number = xnet_ports.low;
 
 		ofi_addr_set_port(src_addr, (uint16_t) rand_port_number);
 		ret = bind(sock, src_addr, (socklen_t) addrlen);
@@ -110,17 +110,17 @@ static int tcp2_bind_to_port_range(SOCKET sock, void* src_addr, size_t addrlen)
 			if (ofi_sockerr() == EADDRINUSE)
 				continue;
 
-			FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 				"failed to bind listener: %s\n",
 				strerror(ofi_sockerr()));
 			return -ofi_sockerr();
 		}
 		break;
 	}
-	return (i <= tcp2_ports.high) ? FI_SUCCESS : -FI_EADDRNOTAVAIL;
+	return (i <= xnet_ports.high) ? FI_SUCCESS : -FI_EADDRNOTAVAIL;
 }
 
-static int tcp2_pep_sock_create(struct tcp2_pep *pep)
+static int xnet_pep_sock_create(struct xnet_pep *pep)
 {
 	int ret, af;
 
@@ -131,42 +131,42 @@ static int tcp2_pep_sock_create(struct tcp2_pep *pep)
 		af = ((struct sockaddr *)pep->info->src_addr)->sa_family;
 		break;
 	default:
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"invalid source address format\n");
 		return -FI_EINVAL;
 	}
 
 	pep->sock = ofi_socket(af, SOCK_STREAM, 0);
 	if (pep->sock == INVALID_SOCKET) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"failed to create listener: %s\n",
 			strerror(ofi_sockerr()));
 		return -FI_EIO;
 	}
-	ret = tcp2_setup_socket(pep->sock, pep->info);
+	ret = xnet_setup_socket(pep->sock, pep->info);
 	if (ret)
 		goto err;
 
-	tcp2_set_zerocopy(pep->sock);
+	xnet_set_zerocopy(pep->sock);
 	ret = fi_fd_nonblock(pep->sock);
 	if (ret) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"failed to set listener socket to nonblocking\n");
 		goto err;
 	}
 
-	if (ofi_addr_get_port(pep->info->src_addr) != 0 || tcp2_ports.high == 0) {
+	if (ofi_addr_get_port(pep->info->src_addr) != 0 || xnet_ports.high == 0) {
 		ret = bind(pep->sock, pep->info->src_addr,
 			  (socklen_t) pep->info->src_addrlen);
 		if (ret)
 			ret = -ofi_sockerr();
 	} else {
-		ret = tcp2_bind_to_port_range(pep->sock, pep->info->src_addr,
+		ret = xnet_bind_to_port_range(pep->sock, pep->info->src_addr,
 					      pep->info->src_addrlen);
 	}
 
 	if (ret) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"failed to bind listener: %s\n",
 			strerror(ofi_sockerr()));
 		goto err;
@@ -178,15 +178,15 @@ err:
 	return ret;
 }
 
-static int tcp2_pep_setname(fid_t fid, void *addr, size_t addrlen)
+static int xnet_pep_setname(fid_t fid, void *addr, size_t addrlen)
 {
-	struct tcp2_pep *pep;
+	struct xnet_pep *pep;
 
 	if ((addrlen != sizeof(struct sockaddr_in)) &&
 	    (addrlen != sizeof(struct sockaddr_in6)))
 		return -FI_EINVAL;
 
-	pep = container_of(fid, struct tcp2_pep,
+	pep = container_of(fid, struct xnet_pep,
 				util_pep.pep_fid);
 
 	if (pep->sock != INVALID_SOCKET) {
@@ -204,16 +204,16 @@ static int tcp2_pep_setname(fid_t fid, void *addr, size_t addrlen)
 		return -FI_ENOMEM;
 	pep->info->src_addrlen = addrlen;
 
-	return tcp2_pep_sock_create(pep);
+	return xnet_pep_sock_create(pep);
 }
 
-static int tcp2_pep_getname(fid_t fid, void *addr, size_t *addrlen)
+static int xnet_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 {
-	struct tcp2_pep *pep;
+	struct xnet_pep *pep;
 	size_t addrlen_in = *addrlen;
 	int ret;
 
-	pep = container_of(fid, struct tcp2_pep, util_pep.pep_fid);
+	pep = container_of(fid, struct xnet_pep, util_pep.pep_fid);
 	ret = ofi_getsockname(pep->sock, addr, (socklen_t *) addrlen);
 	if (ret)
 		return -ofi_sockerr();
@@ -221,62 +221,62 @@ static int tcp2_pep_getname(fid_t fid, void *addr, size_t *addrlen)
 	return (addrlen_in < *addrlen) ? -FI_ETOOSMALL: FI_SUCCESS;
 }
 
-int tcp2_listen(struct tcp2_pep *pep, struct tcp2_progress *progress)
+int xnet_listen(struct xnet_pep *pep, struct xnet_progress *progress)
 {
 	int ret;
 
-	if (pep->state != TCP2_IDLE) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+	if (pep->state != XNET_IDLE) {
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"passive endpoint is not idle\n");
 		return -FI_EINVAL;
 	}
 
 	/* arbitrary backlog value to support larger scale jobs */
 	if (listen(pep->sock, 4096)) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"socket listen failed\n");
 		return -ofi_sockerr();
 	}
 
 	ofi_genlock_lock(&progress->lock);
-	ret = tcp2_monitor_sock(progress, pep->sock, POLLIN,
+	ret = xnet_monitor_sock(progress, pep->sock, POLLIN,
 				&pep->util_pep.pep_fid.fid);
 	if (!ret) {
 		pep->progress = progress;
-		pep->state = TCP2_LISTENING;
+		pep->state = XNET_LISTENING;
 	}
 	ofi_genlock_unlock(&progress->lock);
 
 	return ret;
 }
 
-static int tcp2_pep_listen(struct fid_pep *pep_fid)
+static int xnet_pep_listen(struct fid_pep *pep_fid)
 {
-	struct tcp2_fabric *fabric;
-	struct tcp2_pep *pep;
+	struct xnet_fabric *fabric;
+	struct xnet_pep *pep;
 
-	pep = container_of(pep_fid, struct tcp2_pep, util_pep.pep_fid);
-	fabric = container_of(pep->util_pep.fabric, struct tcp2_fabric,
+	pep = container_of(pep_fid, struct xnet_pep, util_pep.pep_fid);
+	fabric = container_of(pep->util_pep.fabric, struct xnet_fabric,
 			      util_fabric);
-	return tcp2_listen(pep, &fabric->progress);
+	return xnet_listen(pep, &fabric->progress);
 }
 
-static int tcp2_pep_reject(struct fid_pep *pep, fid_t fid_handle,
+static int xnet_pep_reject(struct fid_pep *pep, fid_t fid_handle,
 			   const void *param, size_t paramlen)
 {
-	struct tcp2_cm_msg msg;
-	struct tcp2_conn_handle *conn;
+	struct xnet_cm_msg msg;
+	struct xnet_conn_handle *conn;
 	ssize_t size_ret;
 	int ret;
 
-	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "rejecting connection");
-	conn = container_of(fid_handle, struct tcp2_conn_handle, fid);
+	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "rejecting connection");
+	conn = container_of(fid_handle, struct xnet_conn_handle, fid);
 	/* If we created an endpoint, it owns the socket */
 	if (conn->sock == INVALID_SOCKET)
 		goto free;
 
 	memset(&msg.hdr, 0, sizeof(msg.hdr));
-	msg.hdr.version = TCP2_CTRL_HDR_VERSION;
+	msg.hdr.version = XNET_CTRL_HDR_VERSION;
 	msg.hdr.type = ofi_ctrl_nack;
 	msg.hdr.seg_size = htons((uint16_t) paramlen);
 	if (paramlen)
@@ -285,7 +285,7 @@ static int tcp2_pep_reject(struct fid_pep *pep, fid_t fid_handle,
 	size_ret = ofi_send_socket(conn->sock, &msg,
 				   sizeof(msg.hdr) + paramlen, MSG_NOSIGNAL);
 	if ((size_t) size_ret != sizeof(msg.hdr) + paramlen)
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"sending of reject message failed\n");
 
 	ofi_shutdown(conn->sock, SHUT_RDWR);
@@ -298,20 +298,20 @@ free:
 	return FI_SUCCESS;
 }
 
-static struct fi_ops_cm tcp2_pep_cm_ops = {
+static struct fi_ops_cm xnet_pep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = tcp2_pep_setname,
-	.getname = tcp2_pep_getname,
+	.setname = xnet_pep_setname,
+	.getname = xnet_pep_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
-	.listen = tcp2_pep_listen,
+	.listen = xnet_pep_listen,
 	.accept = fi_no_accept,
-	.reject = tcp2_pep_reject,
+	.reject = xnet_pep_reject,
 	.shutdown = fi_no_shutdown,
 	.join = fi_no_join,
 };
 
-static int tcp2_pep_getopt(fid_t fid, int level, int optname,
+static int xnet_pep_getopt(fid_t fid, int level, int optname,
 			   void *optval, size_t *optlen)
 {
 	if ( level != FI_OPT_ENDPOINT ||
@@ -323,14 +323,14 @@ static int tcp2_pep_getopt(fid_t fid, int level, int optname,
 		return -FI_ETOOSMALL;
 	}
 
-	*((size_t *) optval) = TCP2_MAX_CM_DATA_SIZE;
+	*((size_t *) optval) = XNET_MAX_CM_DATA_SIZE;
 	*optlen = sizeof(size_t);
 	return FI_SUCCESS;
 }
 
-static struct fi_ops_ep tcp2_pep_ops = {
+static struct fi_ops_ep xnet_pep_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.getopt = tcp2_pep_getopt,
+	.getopt = xnet_pep_getopt,
 	.setopt = fi_no_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
@@ -338,18 +338,18 @@ static struct fi_ops_ep tcp2_pep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-int tcp2_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
+int xnet_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		    struct fid_pep **pep_fid, void *context)
 {
-	struct tcp2_pep *pep;
+	struct xnet_pep *pep;
 	int ret;
 
 	if (!info) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,"invalid info\n");
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,"invalid info\n");
 		return -FI_EINVAL;
 	}
 
-	ret = ofi_prov_check_info(&tcp2_util_prov, fabric->api_version, info);
+	ret = ofi_prov_check_info(&xnet_util_prov, fabric->api_version, info);
 	if (ret)
 		return ret;
 
@@ -361,9 +361,9 @@ int tcp2_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret)
 		goto err1;
 
-	pep->util_pep.pep_fid.fid.ops = &tcp2_pep_fi_ops;
-	pep->util_pep.pep_fid.cm = &tcp2_pep_cm_ops;
-	pep->util_pep.pep_fid.ops = &tcp2_pep_ops;
+	pep->util_pep.pep_fid.fid.ops = &xnet_pep_fi_ops;
+	pep->util_pep.pep_fid.cm = &xnet_pep_cm_ops;
+	pep->util_pep.pep_fid.ops = &xnet_pep_ops;
 
 	pep->info = fi_dupinfo(info);
 	if (!pep->info) {
@@ -372,10 +372,10 @@ int tcp2_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	pep->sock = INVALID_SOCKET;
-	pep->state = TCP2_IDLE;
+	pep->state = XNET_IDLE;
 
 	if (info->src_addr) {
-		ret = tcp2_pep_sock_create(pep);
+		ret = xnet_pep_sock_create(pep);
 		if (ret)
 			goto err3;
 	}

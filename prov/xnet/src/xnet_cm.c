@@ -33,17 +33,17 @@
 #include <rdma/fi_errno.h>
 
 #include <ofi_prov.h>
-#include "tcp2.h"
+#include "xnet.h"
 #include <poll.h>
 #include <sys/types.h>
 #include <ofi_util.h>
 
 
 /* Must be castable to struct fi_eq_cm_entry */
-struct tcp2_cm_entry {
+struct xnet_cm_entry {
 	fid_t			fid;
 	struct fi_info		*info;
-	uint8_t			data[TCP2_MAX_CM_DATA_SIZE];
+	uint8_t			data[XNET_MAX_CM_DATA_SIZE];
 };
 
 /* The underlying socket has the POLLIN event set.  The entire
@@ -51,7 +51,7 @@ struct tcp2_cm_entry {
  * and is the first data transferred over the socket.
  */
 static int
-tcp2_recv_cm_msg(SOCKET sock, struct tcp2_cm_msg *msg, uint8_t exp_msg)
+xnet_recv_cm_msg(SOCKET sock, struct xnet_cm_msg *msg, uint8_t exp_msg)
 {
 	size_t len;
 	ssize_t ret;
@@ -59,21 +59,21 @@ tcp2_recv_cm_msg(SOCKET sock, struct tcp2_cm_msg *msg, uint8_t exp_msg)
 	len = sizeof(msg->hdr);
 	ret = ofi_recv_socket(sock, &msg->hdr, len, 0);
 	if ((size_t) ret != len) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"Failed to read cm header\n");
 		ret = ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
 		goto err;
 	}
 
-	if (msg->hdr.version != TCP2_CTRL_HDR_VERSION) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+	if (msg->hdr.version != XNET_CTRL_HDR_VERSION) {
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"cm protocol version mismatch\n");
 		ret = -FI_ENOPROTOOPT;
 		goto err;
 	}
 
 	if (msg->hdr.type != exp_msg && msg->hdr.type != ofi_ctrl_nack) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"unexpected message, expected %d or %d got: %d\n",
 			exp_msg, ofi_ctrl_nack, msg->hdr.type);
 		ret = -FI_ECONNREFUSED;
@@ -82,8 +82,8 @@ tcp2_recv_cm_msg(SOCKET sock, struct tcp2_cm_msg *msg, uint8_t exp_msg)
 
 	len = ntohs(msg->hdr.seg_size);
 	if (len) {
-		if (len > TCP2_MAX_CM_DATA_SIZE) {
-			FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+		if (len > XNET_MAX_CM_DATA_SIZE) {
+			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 				"cm data size is too large\n");
 			ret = -FI_ENOPROTOOPT;
 			goto err;
@@ -91,7 +91,7 @@ tcp2_recv_cm_msg(SOCKET sock, struct tcp2_cm_msg *msg, uint8_t exp_msg)
 
 		ret = ofi_recv_socket(sock, msg->data, len, 0);
 		if ((size_t) ret != len) {
-			FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 				"Failed to read cm data\n");
 			ret = ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
 			goto err;
@@ -99,7 +99,7 @@ tcp2_recv_cm_msg(SOCKET sock, struct tcp2_cm_msg *msg, uint8_t exp_msg)
 	}
 
 	if (msg->hdr.type == ofi_ctrl_nack) {
-		FI_INFO(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_INFO(&xnet_prov, FI_LOG_EP_CTRL,
 			"Connection refused from remote\n");
 		return -FI_ECONNREFUSED;
 	}
@@ -117,7 +117,7 @@ err:
  * message as it fits into a single MTU and is the first data
  * transferred over the socket.
  */
-int tcp2_send_cm_msg(struct tcp2_ep *ep)
+int xnet_send_cm_msg(struct xnet_ep *ep)
 {
 	size_t len;
 	ssize_t ret;
@@ -131,30 +131,30 @@ int tcp2_send_cm_msg(struct tcp2_ep *ep)
 	return FI_SUCCESS;
 }
 
-void tcp2_req_done(struct tcp2_ep *ep)
+void xnet_req_done(struct xnet_ep *ep)
 {
-	struct tcp2_progress *progress;
-	struct tcp2_cm_entry cm_entry;
+	struct xnet_progress *progress;
+	struct xnet_cm_entry cm_entry;
 	uint16_t len;
 	ssize_t ret;
 
-	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "connect request done\n");
-	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
+	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "connect request done\n");
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 
-	ret = tcp2_recv_cm_msg(ep->bsock.sock, ep->cm_msg, ofi_ctrl_connresp);
+	ret = xnet_recv_cm_msg(ep->bsock.sock, ep->cm_msg, ofi_ctrl_connresp);
 	if (ret) {
 		if (ret == -FI_EAGAIN)
 			return; /* This shouldn't happen */
 
 		enum fi_log_level level = (ret == -FI_ECONNREFUSED) ?
 				FI_LOG_INFO : FI_LOG_WARN;
-		FI_LOG(&tcp2_prov, level, FI_LOG_EP_CTRL,
+		FI_LOG(&xnet_prov, level, FI_LOG_EP_CTRL,
 			"Failed to receive connect response\n");
 		goto disable;
 	}
 
 	ep->hdr_bswap = (ep->cm_msg->hdr.conn_data == 1) ?
-			tcp2_hdr_none : tcp2_hdr_bswap;
+			xnet_hdr_none : xnet_hdr_bswap;
 
 	len = ntohs(ep->cm_msg->hdr.seg_size);
 	cm_entry.fid = &ep->util_ep.ep_fid.fid;
@@ -162,49 +162,49 @@ void tcp2_req_done(struct tcp2_ep *ep)
 	if (len)
 		memcpy(cm_entry.data, ep->cm_msg->data, len);
 
-	ret = tcp2_eq_write(ep->util_ep.eq, FI_CONNECTED, &cm_entry,
+	ret = xnet_eq_write(ep->util_ep.eq, FI_CONNECTED, &cm_entry,
 			    sizeof(struct fi_eq_cm_entry) + len, 0);
 	if (ret < 0) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto disable;
 	}
 
-	if (tcp2_active_wait(ep)) {
-		progress = tcp2_ep2_progress(ep);
+	if (xnet_active_wait(ep)) {
+		progress = xnet_ep2_progress(ep);
 		dlist_insert_tail(&ep->progress_entry,
 				  &progress->active_wait_list);
-		tcp2_signal_progress(progress);
+		xnet_signal_progress(progress);
 	}
-	ep->state = TCP2_CONNECTED;
+	ep->state = XNET_CONNECTED;
 	free(ep->cm_msg);
 	ep->cm_msg = NULL;
 	return;
 
 disable:
-	tcp2_ep_disable(ep, -ret, ep->cm_msg->data,
+	xnet_ep_disable(ep, -ret, ep->cm_msg->data,
 			ntohs(ep->cm_msg->hdr.seg_size));
 }
 
-void tcp2_run_conn(struct tcp2_conn_handle *conn, bool pin, bool pout, bool perr)
+void xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr)
 {
-	struct tcp2_cm_msg msg;
-	struct tcp2_cm_entry cm_entry;
+	struct xnet_cm_msg msg;
+	struct xnet_cm_entry cm_entry;
 	socklen_t len;
 	uint16_t datalen;
 	int ret;
 
-	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "Receiving connect request\n");
-	assert(tcp2_progress_locked(conn->pep->progress));
+	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "Receiving connect request\n");
+	assert(xnet_progress_locked(conn->pep->progress));
 
 	/* Don't monitor the socket until the user calls fi_accept */
-	tcp2_halt_sock(conn->pep->progress, conn->sock);
+	xnet_halt_sock(conn->pep->progress, conn->sock);
 
 	if (perr) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL, "socket error\n");
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "socket error\n");
 		goto close;
 	}
 
-	ret = tcp2_recv_cm_msg(conn->sock, &msg, ofi_ctrl_connreq);
+	ret = xnet_recv_cm_msg(conn->sock, &msg, ofi_ctrl_connreq);
 	if (ret) {
 		if (ret == -FI_EAGAIN)
 			return;
@@ -234,11 +234,11 @@ void tcp2_run_conn(struct tcp2_conn_handle *conn, bool pin, bool pout, bool perr
 	if (datalen)
 		memcpy(cm_entry.data, msg.data, datalen);
 
-	ret = tcp2_eq_write(conn->pep->util_pep.eq,
+	ret = xnet_eq_write(conn->pep->util_pep.eq,
 			    FI_CONNREQ, &cm_entry,
 			    sizeof(struct fi_eq_cm_entry) + datalen, 0);
 	if (ret < 0) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto freeinfo;
 	}
 
@@ -251,49 +251,49 @@ close:
 	free(conn);
 }
 
-void tcp2_connect_done(struct tcp2_ep *ep)
+void xnet_connect_done(struct xnet_ep *ep)
 {
 	socklen_t len;
 	int status, ret;
 
-	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "socket connected, sending req\n");
-	assert(tcp2_progress_locked(tcp2_ep2_progress(ep)));
+	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "socket connected, sending req\n");
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 
 	len = sizeof(status);
 	ret = getsockopt(ep->bsock.sock, SOL_SOCKET, SO_ERROR,
 			 (char *) &status, &len);
 	if (ret < 0 || status) {
 		ret = (ret < 0)? -ofi_sockerr() : -status;
-		FI_WARN_SPARSE(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_WARN_SPARSE(&xnet_prov, FI_LOG_EP_CTRL,
 				"connection failure (sockerr %d)\n", ret);
 		goto disable;
 	}
 
-	ret = tcp2_send_cm_msg(ep);
+	ret = xnet_send_cm_msg(ep);
 	if (ret)
 		goto disable;
 
-	ep->state = TCP2_REQ_SENT;
-	tcp2_update_poll(ep);
+	ep->state = XNET_REQ_SENT;
+	xnet_update_poll(ep);
 	return;
 
 disable:
-	tcp2_ep_disable(ep, -ret, NULL, 0);
+	xnet_ep_disable(ep, -ret, NULL, 0);
 }
 
-void tcp2_accept_sock(struct tcp2_pep *pep)
+void xnet_accept_sock(struct xnet_pep *pep)
 {
-	struct tcp2_conn_handle *conn;
+	struct xnet_conn_handle *conn;
 	SOCKET sock;
 	int ret;
 
-	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "accepting socket\n");
-	assert(tcp2_progress_locked(pep->progress));
+	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "accepting socket\n");
+	assert(xnet_progress_locked(pep->progress));
 
 	sock = accept(pep->sock, NULL, 0);
 	if (sock < 0) {
 		if (!OFI_SOCK_TRY_ACCEPT_AGAIN(ofi_sockerr())) {
-			FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 				"accept error: %d\n", ofi_sockerr());
 		}
 		return;
@@ -301,7 +301,7 @@ void tcp2_accept_sock(struct tcp2_pep *pep)
 
 	conn = calloc(1, sizeof(*conn));
 	if (!conn) {
-		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL,
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"cannot allocate memory\n");
 		goto close;
 	}
@@ -311,7 +311,7 @@ void tcp2_accept_sock(struct tcp2_pep *pep)
 	/* TODO: We need to hold a reference on the pep to defer destruction */
 	conn->pep = pep;
 
-	ret = tcp2_monitor_sock(pep->progress, sock, POLLIN, &conn->fid);
+	ret = xnet_monitor_sock(pep->progress, sock, POLLIN, &conn->fid);
 	if (ret)
 		goto free;
 

@@ -33,32 +33,32 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "tcp2.h"
+#include "xnet.h"
 
 
 /* If we don't have an EQ, then we're writing an event for an rdm ep.
  * That goes directly on the rdm event list.
  */
-int tcp2_eq_write(struct util_eq *eq, uint32_t event,
+int xnet_eq_write(struct util_eq *eq, uint32_t event,
 		  const void *buf, size_t len, uint64_t flags)
 {
-	struct tcp2_event *entry;
+	struct xnet_event *entry;
 	const struct fi_eq_entry *eq_event;
-	struct tcp2_rdm *rdm;
+	struct xnet_rdm *rdm;
 
 	if (eq)
 		return (int) fi_eq_write(&eq->eq_fid, event, buf, len, flags);
 
 	eq_event = buf;
 	if (eq_event->fid->fclass == FI_CLASS_EP) {
-		rdm = ((struct tcp2_conn *) eq_event->fid->context)->rdm;
+		rdm = ((struct xnet_conn *) eq_event->fid->context)->rdm;
 	} else {
 		assert(eq_event->fid->fclass == FI_CLASS_PEP);
 		rdm = eq_event->fid->context;
 	}
 
 	assert(rdm->util_ep.ep_fid.fid.fclass == FI_CLASS_EP);
-	assert(tcp2_progress_locked(tcp2_rdm2_progress(rdm)));
+	assert(xnet_progress_locked(xnet_rdm2_progress(rdm)));
 	entry = malloc(sizeof(*entry));
 	if (!entry)
 		return -FI_ENOMEM;
@@ -67,63 +67,63 @@ int tcp2_eq_write(struct util_eq *eq, uint32_t event,
 	assert(len >= sizeof(entry->cm_entry));
 	memcpy(&entry->cm_entry, buf, sizeof(entry->cm_entry));
 	slist_insert_tail(&entry->list_entry, &rdm->event_list);
-	tcp2_rdm2_progress(rdm)->event_cnt++;
+	xnet_rdm2_progress(rdm)->event_cnt++;
 
 	return 0;
 }
 
-static ssize_t tcp2_eq_read(struct fid_eq *eq_fid, uint32_t *event,
+static ssize_t xnet_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 			    void *buf, size_t len, uint64_t flags)
 {
-	struct tcp2_fabric *fabric;
-	struct tcp2_eq *eq;
+	struct xnet_fabric *fabric;
+	struct xnet_eq *eq;
 
-	eq = container_of(eq_fid, struct tcp2_eq, util_eq.eq_fid);
-	fabric = container_of(eq->util_eq.fabric, struct tcp2_fabric,
+	eq = container_of(eq_fid, struct xnet_eq, util_eq.eq_fid);
+	fabric = container_of(eq->util_eq.fabric, struct xnet_fabric,
 			      util_fabric);
-	tcp2_progress_all(fabric);
+	xnet_progress_all(fabric);
 
 	return ofi_eq_read(eq_fid, event, buf, len, flags);
 }
 
-static int tcp2_eq_close(struct fid *fid)
+static int xnet_eq_close(struct fid *fid)
 {
-	struct tcp2_eq *eq;
+	struct xnet_eq *eq;
 	int ret;
 
 	ret = ofi_eq_cleanup(fid);
 	if (ret)
 		return ret;
 
-	eq = container_of(fid, struct tcp2_eq, util_eq.eq_fid.fid);
+	eq = container_of(fid, struct xnet_eq, util_eq.eq_fid.fid);
 
 	ofi_mutex_destroy(&eq->close_lock);
 	free(eq);
 	return 0;
 }
 
-static struct fi_ops_eq tcp2_eq_ops = {
+static struct fi_ops_eq xnet_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
-	.read = tcp2_eq_read,
+	.read = xnet_eq_read,
 	.readerr = ofi_eq_readerr,
 	.sread = ofi_eq_sread,
 	.write = ofi_eq_write,
 	.strerror = ofi_eq_strerror,
 };
 
-static struct fi_ops tcp2_eq_fi_ops = {
+static struct fi_ops xnet_eq_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = tcp2_eq_close,
+	.close = xnet_eq_close,
 	.bind = fi_no_bind,
 	.control = ofi_eq_control,
 	.ops_open = fi_no_ops_open,
 };
 
-int tcp2_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
+int xnet_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		   struct fid_eq **eq_fid, void *context)
 {
-	struct tcp2_fabric *fabric;
-	struct tcp2_eq *eq;
+	struct xnet_fabric *fabric;
+	struct xnet_eq *eq;
 	int ret;
 
 	eq = calloc(1, sizeof(*eq));
@@ -132,7 +132,7 @@ int tcp2_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 
 	ret = ofi_eq_init(fabric_fid, attr, &eq->util_eq.eq_fid, context);
 	if (ret) {
-		FI_WARN(&tcp2_prov, FI_LOG_EQ,
+		FI_WARN(&xnet_prov, FI_LOG_EQ,
 			"EQ creation failed\n");
 		goto err1;
 	}
@@ -141,13 +141,13 @@ int tcp2_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 	if (ret)
 		goto err2;
 
-	eq->util_eq.eq_fid.ops	= &tcp2_eq_ops;
-	eq->util_eq.eq_fid.fid.ops = &tcp2_eq_fi_ops;
+	eq->util_eq.eq_fid.ops	= &xnet_eq_ops;
+	eq->util_eq.eq_fid.fid.ops = &xnet_eq_fi_ops;
 
 	if (attr->wait_obj != FI_WAIT_NONE) {
-		fabric = container_of(fabric_fid, struct tcp2_fabric,
+		fabric = container_of(fabric_fid, struct xnet_fabric,
 				      util_fabric.fabric_fid);
-		ret = tcp2_start_all(fabric);
+		ret = xnet_start_all(fabric);
 		if (ret)
 			goto err3;
 	}
