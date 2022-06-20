@@ -856,7 +856,7 @@ void tcp2_run_progress(struct tcp2_progress *progress, bool internal)
 		}
 	}
 out:
-	tcp2_progress_rdm(progress);
+	tcp2_handle_events(progress);
 	ofi_genlock_unlock(progress->active_lock);
 }
 
@@ -1077,8 +1077,8 @@ int tcp2_init_progress(struct tcp2_progress *progress, struct fi_info *info)
 	progress->fid.fclass = TCP2_CLASS_PROGRESS;
 	progress->auto_progress = false;
 	dlist_init(&progress->active_wait_list);
-	dlist_init(&progress->rdm_list);
-	progress->rdm_event_cnt = 0;
+	dlist_init(&progress->event_list);
+	progress->event_cnt = 0;
 
 	ret = fd_signal_init(&progress->signal);
 	if (ret)
@@ -1120,7 +1120,7 @@ err1:
 void tcp2_close_progress(struct tcp2_progress *progress)
 {
 	assert(dlist_empty(&progress->active_wait_list));
-	assert(dlist_empty(&progress->rdm_list));
+	assert(dlist_empty(&progress->event_list));
 	tcp2_stop_progress(progress);
 	progress->poll_close(progress);
 	ofi_bufpool_destroy(progress->xfer_pool);

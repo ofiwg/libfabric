@@ -53,14 +53,14 @@ struct tcp2_rdm_cm {
 
 static int tcp2_match_event(struct slist_entry *item, const void *arg)
 {
-	struct tcp2_rdm_event *event;
-	event = container_of(item, struct tcp2_rdm_event, list_entry);
+	struct tcp2_event *event;
+	event = container_of(item, struct tcp2_event, list_entry);
 	return event->cm_entry.fid == arg;
 }
 
 static void tcp2_close_conn(struct tcp2_conn *conn)
 {
-	struct tcp2_rdm_event *event;
+	struct tcp2_event *event;
 	struct slist_entry *item;
 
 	FI_DBG(&tcp2_prov, FI_LOG_EP_CTRL, "closing conn %p\n", conn);
@@ -75,9 +75,8 @@ static void tcp2_close_conn(struct tcp2_conn *conn)
 			if (!item)
 				break;
 
-			tcp2_rdm2_progress(conn->rdm)->rdm_event_cnt--;
-			event = container_of(item, struct tcp2_rdm_event,
-					     list_entry);
+			tcp2_rdm2_progress(conn->rdm)->event_cnt--;
+			event = container_of(item, struct tcp2_event, list_entry);
 			free(event);
 		} while (item);
 	}
@@ -458,26 +457,25 @@ reject:
 	fi_freeinfo(cm_entry->info);
 }
 
-void tcp2_progress_rdm(struct tcp2_progress *progress)
+void tcp2_handle_events(struct tcp2_progress *progress)
 {
-	struct tcp2_rdm_event *event;
+	struct tcp2_event *event;
 	struct slist_entry *item;
 	struct tcp2_rdm_cm *msg;
 	struct tcp2_conn *conn;
 
 	struct tcp2_rdm *rdm;
 
-	if (!progress->rdm_event_cnt)
+	ofi_genlock_held(&progress->rdm_lock);
+	if (!progress->event_cnt)
 		return;
 
-	ofi_genlock_held(&progress->rdm_lock);
-	dlist_foreach_container(&progress->rdm_list, struct tcp2_rdm, rdm,
+	dlist_foreach_container(&progress->event_list, struct tcp2_rdm, rdm,
 				progress_entry) {
 		while (!slist_empty(&rdm->event_list)) {
 			item = slist_remove_head(&rdm->event_list);
-			progress->rdm_event_cnt--;
-			event = container_of(item, struct tcp2_rdm_event,
-					     list_entry);
+			progress->event_cnt--;
+			event = container_of(item, struct tcp2_event, list_entry);
 
 			FI_INFO(&tcp2_prov, FI_LOG_EP_CTRL, "event %s\n",
 				fi_tostr(&event->event, FI_TYPE_EQ_EVENT));

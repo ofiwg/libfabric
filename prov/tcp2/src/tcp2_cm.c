@@ -162,8 +162,8 @@ void tcp2_req_done(struct tcp2_ep *ep)
 	if (len)
 		memcpy(cm_entry.data, ep->cm_msg->data, len);
 
-	ret = (int) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_CONNECTED, &cm_entry,
-				sizeof(struct fi_eq_cm_entry) + len, 0);
+	ret = tcp2_eq_write(ep->util_ep.eq, FI_CONNECTED, &cm_entry,
+			    sizeof(struct fi_eq_cm_entry) + len, 0);
 	if (ret < 0) {
 		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto disable;
@@ -234,9 +234,9 @@ void tcp2_run_conn(struct tcp2_conn_handle *conn, bool pin, bool pout, bool perr
 	if (datalen)
 		memcpy(cm_entry.data, msg.data, datalen);
 
-	ret = (int) fi_eq_write(&conn->pep->util_pep.eq->eq_fid,
-				FI_CONNREQ, &cm_entry,
-				sizeof(struct fi_eq_cm_entry) + datalen, 0);
+	ret = tcp2_eq_write(conn->pep->util_pep.eq,
+			    FI_CONNREQ, &cm_entry,
+			    sizeof(struct fi_eq_cm_entry) + datalen, 0);
 	if (ret < 0) {
 		FI_WARN(&tcp2_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
 		goto freeinfo;

@@ -207,7 +207,7 @@ struct tcp2_ep {
 	bool			pollout_set;
 };
 
-struct tcp2_rdm_event {
+struct tcp2_event {
 	struct slist_entry list_entry;
 	uint32_t event;
 	struct fi_eq_cm_entry cm_entry;
@@ -255,8 +255,8 @@ struct tcp2_progress {
 	struct dlist_entry	active_wait_list;
 	struct fd_signal	signal;
 
-	struct dlist_entry	rdm_list;
-	uint32_t		rdm_event_cnt;
+	struct dlist_entry	event_list;
+	uint32_t		event_cnt;
 	struct ofi_bufpool	*xfer_pool;
 
 	/* epoll works better for apps that wait on the fd,
@@ -289,7 +289,7 @@ void tcp2_stop_progress(struct tcp2_progress *progress);
 
 void tcp2_run_progress(struct tcp2_progress *progress, bool internal);
 void tcp2_run_conn(struct tcp2_conn_handle *conn, bool pin, bool pout, bool perr);
-void tcp2_progress_rdm(struct tcp2_progress *progress);
+void tcp2_handle_events(struct tcp2_progress *progress);
 
 int tcp2_trywait(struct fid_fabric *fid_fabric, struct fid **fids, int count);
 void tcp2_update_poll(struct tcp2_ep *ep);

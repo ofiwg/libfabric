@@ -680,7 +680,7 @@ static int tcp2_enable_rdm(struct tcp2_rdm *rdm)
 
 	info->src_addrlen = len;
 	ofi_addr_set_port(info->src_addr, 0);
-	dlist_insert_tail(&rdm->progress_entry, &progress->rdm_list);
+	dlist_insert_tail(&rdm->progress_entry, &progress->event_list);
 
 unlock:
 	ofi_genlock_unlock(&progress->rdm_lock);

@@ -342,13 +342,13 @@ void tcp2_ep_disable(struct tcp2_ep *ep, int cm_err, void* err_data,
 			if (err_entry.err_data)
 				err_entry.err_data_size = err_data_size;
 		}
-		(void) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
-				   &err_entry, sizeof(err_entry),
-				   UTIL_FLAG_ERROR);
+		(void) tcp2_eq_write(ep->util_ep.eq, FI_SHUTDOWN,
+				     &err_entry, sizeof(err_entry),
+				     UTIL_FLAG_ERROR);
 	} else {
 		cm_entry.fid = &ep->util_ep.ep_fid.fid;
-		(void) fi_eq_write(&ep->util_ep.eq->eq_fid, FI_SHUTDOWN,
-				   &cm_entry, sizeof(cm_entry), 0);
+		(void) tcp2_eq_write(ep->util_ep.eq, FI_SHUTDOWN,
+				     &cm_entry, sizeof(cm_entry), 0);
 	}
 	ep->state = TCP2_DISCONNECTED;
 }

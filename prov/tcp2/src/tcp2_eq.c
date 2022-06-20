@@ -42,7 +42,7 @@
 int tcp2_eq_write(struct util_eq *eq, uint32_t event,
 		  const void *buf, size_t len, uint64_t flags)
 {
-	struct tcp2_rdm_event *rdm_event;
+	struct tcp2_event *entry;
 	const struct fi_eq_entry *eq_event;
 	struct tcp2_rdm *rdm;
 
@@ -59,15 +59,15 @@ int tcp2_eq_write(struct util_eq *eq, uint32_t event,
 
 	assert(rdm->util_ep.ep_fid.fid.fclass == FI_CLASS_EP);
 	assert(tcp2_progress_locked(tcp2_rdm2_progress(rdm)));
-	rdm_event = malloc(sizeof(*rdm_event));
-	if (!rdm_event)
+	entry = malloc(sizeof(*entry));
+	if (!entry)
 		return -FI_ENOMEM;
 
-	rdm_event->event = event;
-	assert(len >= sizeof(rdm_event->cm_entry));
-	memcpy(&rdm_event->cm_entry, buf, sizeof(rdm_event->cm_entry));
-	slist_insert_tail(&rdm_event->list_entry, &rdm->event_list);
-	tcp2_rdm2_progress(rdm)->rdm_event_cnt++;
+	entry->event = event;
+	assert(len >= sizeof(entry->cm_entry));
+	memcpy(&entry->cm_entry, buf, sizeof(entry->cm_entry));
+	slist_insert_tail(&entry->list_entry, &rdm->event_list);
+	tcp2_rdm2_progress(rdm)->event_cnt++;
 
 	return 0;
 }
