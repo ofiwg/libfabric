@@ -203,4 +203,8 @@ void rxr_tx_entry_try_fill_desc(struct rxr_tx_entry *tx_entry,
 				struct efa_domain *efa_domain,
 				int mr_iov_start, uint64_t access);
 
+struct rxr_ep;
+
+void rxr_tx_entry_set_runt_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry);
+
 #endif
