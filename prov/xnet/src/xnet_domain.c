@@ -36,11 +36,30 @@
 #include "xnet.h"
 
 
+static int xnet_open_ep(struct fid_domain *domain, struct fi_info *info,
+			struct fid_ep **ep_fid, void *context)
+{
+	if (info->ep_attr->type == FI_EP_MSG)
+		return xnet_endpoint(domain, info, ep_fid, context);
+
+	if (info->ep_attr->type == FI_EP_RDM)
+		return xnet_rdm_ep(domain, info, ep_fid, context);
+
+	return -FI_EINVAL;
+}
+
+static int xnet_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
+			struct fid_av **fid_av, void *context)
+{
+	return rxm_util_av_open(domain_fid, attr, fid_av, context,
+				sizeof(struct xnet_conn));
+}
+
 static struct fi_ops_domain xnet_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
-	.av_open = ofi_ip_av_create,
+	.av_open = xnet_av_open,
 	.cq_open = xnet_cq_open,
-	.endpoint = xnet_endpoint,
+	.endpoint = xnet_open_ep,
 	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = xnet_cntr_open,
 	.poll_open = fi_poll_create,

@@ -1,5 +1,27 @@
 # Regex patterns of tests to exclude in runfabtests.sh
 
+# atomic ops not supported
+atomic
+
+# dgram endpoints not supported
 dgram
-multi_mr
+
 multi_ep
+
+# tests use counters, but counters not supported
+multi_mr
+rma_event
+
+# scalable endpoints not supported
+scalable_ep
+
+# shared av not supported
+shared_av
+
+# triggered ops not supported
+trigger
+
+# tests assume an unexpected msg queue
+# provider does not queue unexpected msgs
+rdm_tagged_peek
+unexpected_msg

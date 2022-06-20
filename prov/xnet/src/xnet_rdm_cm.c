@@ -325,6 +325,7 @@ ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t addr,
 		      struct xnet_conn **conn)
 {
 	struct util_peer_addr **peer;
+	ssize_t ret;
 
 	assert(xnet_progress_locked(xnet_rdm2_progress(rdm)));
 	peer = ofi_av_addr_context(rdm->util_ep.av, addr);
@@ -332,9 +333,13 @@ ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t addr,
 	if (!*conn)
 		return -FI_ENOMEM;
 
-	if (!(*conn)->ep)
-		return xnet_rdm_connect(*conn);
-	else if((*conn)->ep->state != XNET_CONNECTED)
+	if (!(*conn)->ep) {
+		ret = xnet_rdm_connect(*conn);
+		if (ret)
+			return ret;
+	}
+
+	if ((*conn)->ep->state != XNET_CONNECTED)
 		return -FI_EAGAIN;
 
 	return 0;

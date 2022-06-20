@@ -115,7 +115,7 @@ void xnet_report_success(struct xnet_ep *ep, struct util_cq *cq,
 	ofi_cq_write(cq, xfer_entry->context,
 		     flags, len, NULL, data, tag);
 	if (cq->wait)
-		ofi_cq_signal(&cq->cq_fid);
+		cq->wait->signal(cq->wait);
 }
 
 void xnet_cq_report_error(struct util_cq *cq,
