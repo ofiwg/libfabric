@@ -207,4 +207,6 @@ struct rxr_ep;
 
 void rxr_tx_entry_set_runt_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry);
 
+size_t rxr_op_entry_mulreq_total_data_size(struct rxr_op_entry *op_entry, int pkt_type);
+
 #endif

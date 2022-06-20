@@ -359,7 +359,7 @@ ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int pkt_t
 			rxr_tx_entry_set_runt_size(ep, tx_entry);
 
 		max_pkt_data_size = rxr_pkt_req_max_data_size(ep, tx_entry->addr, pkt_type, tx_entry->fi_flags, 0);
-		mulreq_total_data_size = rxr_pkt_mulreq_total_data_size(pkt_type, tx_entry);
+		mulreq_total_data_size = rxr_op_entry_mulreq_total_data_size(tx_entry, pkt_type);
 
 		while (tx_entry->bytes_sent < mulreq_total_data_size) {
 			if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
