@@ -1801,10 +1801,10 @@ static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
 /**
  * @brief poll rdma-core cq and process the cq entry
  *
- * @param[in]	ep		end point
- * @param[in]	cqe_to_process	max number of cq entry to poll and process
+ * @param[in]	ep	RDM endpoint
+ * @param[in]	cqe_to_process	Max number of cq entry to poll and process. Must be positive.
  */
-static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep)
+static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_process)
 {
 	bool should_end_poll = false;
 	struct efa_cq *efa_cq;
@@ -1816,7 +1816,10 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep)
 	struct efa_ep *efa_ep;
 	struct rxr_pkt_entry *pkt_entry;
 	ssize_t err;
+	size_t i = 0;
 	int prov_errno;
+
+	assert(cqe_to_process > 0);
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	efa_av = efa_ep->av;
@@ -1864,6 +1867,11 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep)
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Unhandled cq type\n");
 			assert(0 && "Unhandled cq type");
+		}
+
+		i++;
+		if (i == cqe_to_process) {
+			break;
 		}
 
 		err = ibv_next_poll(efa_cq->ibv_cq_ex);
@@ -1981,8 +1989,9 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	ssize_t ret;
 	uint64_t flags;
 
-	// Poll the EFA completion queue
-	rdm_ep_poll_ibv_cq_ex(ep);
+	/* Poll the EFA completion queue. Restrict poll size
+	 * to avoid CQE flooding and thereby blocking user thread. */
+	rdm_ep_poll_ibv_cq_ex(ep, rxr_env.efa_cq_read_size);
 
 	if (ep->shm_cq) {
 		// Poll the SHM completion queue
