@@ -680,7 +680,6 @@ static int xnet_enable_rdm(struct xnet_rdm *rdm)
 
 	info->src_addrlen = len;
 	ofi_addr_set_port(info->src_addr, 0);
-	dlist_insert_tail(&rdm->progress_entry, &progress->event_list);
 
 unlock:
 	ofi_genlock_unlock(&progress->rdm_lock);
@@ -796,8 +795,6 @@ int xnet_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	if (!rdm)
 		return -FI_ENOMEM;
 
-	slist_init(&rdm->event_list);
-	dlist_init(&rdm->progress_entry);
 	ret = ofi_endpoint_init(domain, &xnet_util_prov, info, &rdm->util_ep,
 				context, NULL);
 	if (ret)
