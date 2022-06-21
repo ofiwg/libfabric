@@ -1136,8 +1136,7 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep)
 	if (rxm_ep->msg_info->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT)
 		cq_attr.size *= ofi_universe_size;
 	cq_attr.size += rxm_ep->msg_info->tx_attr->size * ofi_universe_size;
-	cq_attr.format = domain->passthru ? FI_CQ_FORMAT_TAGGED :
-			 FI_CQ_FORMAT_DATA;
+	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = rxm_get_wait_obj(rxm_ep);
 
 	ret = fi_cq_open(domain->msg_domain, &cq_attr, &rxm_ep->msg_cq,

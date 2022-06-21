@@ -723,6 +723,10 @@ RXM_INI
 			"related overhead.  Pass thru is an optimized path "
 			"to the tcp provider, depending on the capabilities "
 			"requested by the application.");
+	/* passthru supported disabled - to re-enable would need to fix call to
+	 * fi_cq_read to pass in the correct data structure.  However, passthru
+	 * will not be needed at all with in-work tcp changes.
+	 */
 	fi_param_get_bool(&rxm_prov, "enable_passthru", &rxm_passthru);
 
 	rxm_init_infos();
