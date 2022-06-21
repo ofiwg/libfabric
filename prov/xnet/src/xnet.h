@@ -185,7 +185,7 @@ struct xnet_ep {
 	OFI_DBG_VAR(uint8_t, tx_id)
 	OFI_DBG_VAR(uint8_t, rx_id)
 
-	struct dlist_entry	progress_entry; /* protected by progress->lock */
+	struct dlist_entry	active_entry; /* protected by progress->lock */
 	struct slist		rx_queue;
 	struct slist		tx_queue;
 	struct slist		priority_queue;
@@ -209,6 +209,7 @@ struct xnet_ep {
 
 struct xnet_event {
 	struct slist_entry list_entry;
+	struct xnet_rdm *rdm;
 	uint32_t event;
 	struct fi_eq_cm_entry cm_entry;
 };
@@ -235,9 +236,6 @@ struct xnet_rdm {
 	struct index_map	conn_idx_map;
 	struct dlist_entry	loopback_list;
 	union ofi_sock_ip	addr;
-
-	struct slist		event_list; /* protected by progress lock */
-	struct dlist_entry	progress_entry;
 };
 
 int xnet_rdm_ep(struct fid_domain *domain, struct fi_info *info,
@@ -255,8 +253,7 @@ struct xnet_progress {
 	struct dlist_entry	active_wait_list;
 	struct fd_signal	signal;
 
-	struct dlist_entry	event_list;
-	uint32_t		event_cnt;
+	struct slist		event_list;
 	struct ofi_bufpool	*xfer_pool;
 
 	/* epoll works better for apps that wait on the fd,

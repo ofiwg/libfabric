@@ -171,7 +171,7 @@ void xnet_req_done(struct xnet_ep *ep)
 
 	if (xnet_active_wait(ep)) {
 		progress = xnet_ep2_progress(ep);
-		dlist_insert_tail(&ep->progress_entry,
+		dlist_insert_tail(&ep->active_entry,
 				  &progress->active_wait_list);
 		xnet_signal_progress(progress);
 	}

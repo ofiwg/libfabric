@@ -63,12 +63,12 @@ int xnet_eq_write(struct util_eq *eq, uint32_t event,
 	if (!entry)
 		return -FI_ENOMEM;
 
+	entry->rdm = rdm;
 	entry->event = event;
 	assert(len >= sizeof(entry->cm_entry));
 	memcpy(&entry->cm_entry, buf, sizeof(entry->cm_entry));
-	slist_insert_tail(&entry->list_entry, &rdm->event_list);
-	xnet_rdm2_progress(rdm)->event_cnt++;
-
+	slist_insert_tail(&entry->list_entry,
+			  &xnet_rdm2_progress(rdm)->event_list);
 	return 0;
 }
 

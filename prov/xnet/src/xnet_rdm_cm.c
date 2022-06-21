@@ -51,11 +51,11 @@ struct xnet_rdm_cm {
 	uint32_t pid;
 };
 
-static int xnet_match_event(struct slist_entry *item, const void *arg)
+static int xnet_match_rdm(struct slist_entry *item, const void *arg)
 {
 	struct xnet_event *event;
 	event = container_of(item, struct xnet_event, list_entry);
-	return event->cm_entry.fid == arg;
+	return event->rdm == arg;
 }
 
 static void xnet_close_conn(struct xnet_conn *conn)
@@ -70,12 +70,12 @@ static void xnet_close_conn(struct xnet_conn *conn)
 	if (conn->ep) {
 		fi_close(&conn->ep->util_ep.ep_fid.fid);
 		do {
-			item = slist_remove_first_match(&conn->rdm->event_list,
-				xnet_match_event, &conn->ep->util_ep.ep_fid.fid);
+			item = slist_remove_first_match(
+				&xnet_rdm2_progress(conn->rdm)->event_list,
+				xnet_match_rdm, conn->rdm);
 			if (!item)
 				break;
 
-			xnet_rdm2_progress(conn->rdm)->event_cnt--;
 			event = container_of(item, struct xnet_event, list_entry);
 			free(event);
 		} while (item);
@@ -464,41 +464,32 @@ void xnet_handle_events(struct xnet_progress *progress)
 	struct xnet_rdm_cm *msg;
 	struct xnet_conn *conn;
 
-	struct xnet_rdm *rdm;
-
 	ofi_genlock_held(&progress->rdm_lock);
-	if (!progress->event_cnt)
-		return;
+	while (!slist_empty(&progress->event_list)) {
+		item = slist_remove_head(&progress->event_list);
+		event = container_of(item, struct xnet_event, list_entry);
 
-	dlist_foreach_container(&progress->event_list, struct xnet_rdm, rdm,
-				progress_entry) {
-		while (!slist_empty(&rdm->event_list)) {
-			item = slist_remove_head(&rdm->event_list);
-			progress->event_cnt--;
-			event = container_of(item, struct xnet_event, list_entry);
+		FI_INFO(&xnet_prov, FI_LOG_EP_CTRL, "event %s\n",
+			fi_tostr(&event->event, FI_TYPE_EQ_EVENT));
 
-			FI_INFO(&xnet_prov, FI_LOG_EP_CTRL, "event %s\n",
-				fi_tostr(&event->event, FI_TYPE_EQ_EVENT));
-
-			switch (event->event) {
-			case FI_CONNREQ:
-				xnet_process_connreq(&event->cm_entry);
-				break;
-			case FI_CONNECTED:
-				conn = event->cm_entry.fid->context;
-				msg = (struct xnet_rdm_cm *) event->cm_entry.data;
-				conn->remote_pid = ntohl(msg->pid);
-				break;
-			case FI_SHUTDOWN:
-				conn = event->cm_entry.fid->context;
-				xnet_close_conn(conn);
-				xnet_free_conn(conn);
-				break;
-			default:
-				assert(0);
-				break;
-			}
-			free(event);
-		};
-	}
+		switch (event->event) {
+		case FI_CONNREQ:
+			xnet_process_connreq(&event->cm_entry);
+			break;
+		case FI_CONNECTED:
+			conn = event->cm_entry.fid->context;
+			msg = (struct xnet_rdm_cm *) event->cm_entry.data;
+			conn->remote_pid = ntohl(msg->pid);
+			break;
+		case FI_SHUTDOWN:
+			conn = event->cm_entry.fid->context;
+			xnet_close_conn(conn);
+			xnet_free_conn(conn);
+			break;
+		default:
+			assert(0);
+			break;
+		}
+		free(event);
+	};
 }

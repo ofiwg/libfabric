@@ -636,8 +636,8 @@ void xnet_progress_rx(struct xnet_ep *ep)
 
 	if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret)) {
 		xnet_ep_disable(ep, 0, NULL, 0);
-	} else if (xnet_active_wait(ep) && dlist_empty(&ep->progress_entry)) {
-		dlist_insert_tail(&ep->progress_entry,
+	} else if (xnet_active_wait(ep) && dlist_empty(&ep->active_entry)) {
+		dlist_insert_tail(&ep->active_entry,
 				  &xnet_ep2_progress(ep)->active_wait_list);
 		xnet_signal_progress(xnet_ep2_progress(ep));
 	}
@@ -813,13 +813,13 @@ void xnet_run_progress(struct xnet_progress *progress, bool internal)
 
 	ofi_genlock_lock(progress->active_lock);
 	dlist_foreach_safe(&progress->active_wait_list, item, tmp) {
-		ep = container_of(item, struct xnet_ep, progress_entry);
+		ep = container_of(item, struct xnet_ep, active_entry);
 
 		if (xnet_active_wait(ep)) {
 			assert(ep->state == XNET_CONNECTED);
 			xnet_progress_rx(ep);
 		} else {
-			dlist_remove_init(&ep->progress_entry);
+			dlist_remove_init(&ep->active_entry);
 		}
 	}
 
@@ -1077,8 +1077,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 	progress->fid.fclass = XNET_CLASS_PROGRESS;
 	progress->auto_progress = false;
 	dlist_init(&progress->active_wait_list);
-	dlist_init(&progress->event_list);
-	progress->event_cnt = 0;
+	slist_init(&progress->event_list);
 
 	ret = fd_signal_init(&progress->signal);
 	if (ret)
@@ -1120,7 +1119,7 @@ err1:
 void xnet_close_progress(struct xnet_progress *progress)
 {
 	assert(dlist_empty(&progress->active_wait_list));
-	assert(dlist_empty(&progress->event_list));
+	assert(slist_empty(&progress->event_list));
 	xnet_stop_progress(progress);
 	progress->poll_close(progress);
 	ofi_bufpool_destroy(progress->xfer_pool);
