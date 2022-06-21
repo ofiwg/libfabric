@@ -423,31 +423,6 @@ size_t rxr_pkt_max_header_size(void)
 	return max_hdr_size;
 }
 
-size_t rxr_pkt_req_max_data_size(struct rxr_ep *ep, fi_addr_t addr, int pkt_type,
-				 uint64_t fi_flags, size_t rma_iov_count)
-{
-	struct rdm_peer *peer;
-	uint16_t header_flags = 0;
-
-	peer = rxr_ep_get_peer(ep, addr);
-	assert(peer);
-
-	if (peer->is_local && ep->use_shm_for_tx) {
-		return rxr_env.shm_max_medium_size;
-	}
-
-	if (rxr_peer_need_raw_addr_hdr(peer))
-		header_flags |= RXR_REQ_OPT_RAW_ADDR_HDR;
-	else if (rxr_peer_need_connid(peer))
-		header_flags |= RXR_PKT_CONNID_HDR;
-
-	if (fi_flags & FI_REMOTE_CQ_DATA)
-		header_flags |= RXR_REQ_OPT_CQ_DATA_HDR;
-
-	return ep->mtu_size - rxr_pkt_req_header_size(pkt_type,
-						      header_flags,
-						      rma_iov_count);
-}
 
 /*
  * REQ packet type functions

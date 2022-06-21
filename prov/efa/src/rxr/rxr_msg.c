@@ -89,10 +89,8 @@ int rxr_msg_select_rtm_for_cuda(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_e
 	readbase_rtm = rxr_pkt_type_readbase_rtm(peer, tx_entry->op, tx_entry->fi_flags);
 
 	eager_rtm_max_msg_size = 0;
-	if (cuda_is_gdrcopy_enabled()) {
-		eager_rtm_max_msg_size = rxr_pkt_req_max_data_size(rxr_ep, tx_entry->addr, eager_rtm,
-								   tx_entry->fi_flags, 0);
-	}
+	if (cuda_is_gdrcopy_enabled())
+		eager_rtm_max_msg_size = rxr_tx_entry_max_req_data_capacity(rxr_ep, tx_entry, eager_rtm);
 
 	if (tx_entry->total_len <= eager_rtm_max_msg_size)
 		return eager_rtm;
@@ -180,10 +178,7 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int
 
 	readbase_rtm = RXR_LONGREAD_MSGRTM_PKT + tagged;
 
-	eager_rtm_max_data_size = rxr_pkt_req_max_data_size(rxr_ep,
-							    tx_entry->addr,
-							    eager_rtm,
-							    tx_entry->fi_flags, 0);
+	eager_rtm_max_data_size = rxr_tx_entry_max_req_data_capacity(rxr_ep, tx_entry, eager_rtm);
 
 	if (tx_entry->total_len <= eager_rtm_max_data_size)
 		return eager_rtm;

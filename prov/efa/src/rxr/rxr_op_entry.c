@@ -169,3 +169,50 @@ size_t rxr_op_entry_mulreq_total_data_size(struct rxr_op_entry *op_entry, int pk
 	return op_entry->bytes_runt;
 }
 
+/**
+ * @brief return the maximum data capacity of a REQ packet for an send operation
+ *
+ * The REQ packet header length is a variable that depends on a number of factors,
+ * including:
+ *
+ *   packet_type, peer_type, cq_data and number of rma iov.
+ *
+ * As a result the maximum data capacity of a REQ packet for a send operation,(
+ * which is the number of bytes of data can be saved in a REQ packet) is different.
+ *
+ * This function is used to caculate the maxium data capacity.
+ *
+ * @param[in]		ep		endpoint
+ * @param[in]		tx_entry	tx_entry that has all information of
+ * 					a send operation
+ * @param[in]		pkt_type	type of REQ packet
+ *
+ * @return		maxiumum number of bytes of data can be save in a REQ packet
+ * 			for given send operation and REQ packet type.
+ */
+size_t rxr_tx_entry_max_req_data_capacity(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int pkt_type)
+{
+	struct rdm_peer *peer;
+	uint16_t header_flags = 0;
+
+	assert(pkt_type >= RXR_REQ_PKT_BEGIN);
+
+	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	assert(peer);
+
+	if (peer->is_local && ep->use_shm_for_tx) {
+		return rxr_env.shm_max_medium_size;
+	}
+
+	if (rxr_peer_need_raw_addr_hdr(peer))
+		header_flags |= RXR_REQ_OPT_RAW_ADDR_HDR;
+	else if (rxr_peer_need_connid(peer))
+		header_flags |= RXR_PKT_CONNID_HDR;
+
+	if (tx_entry->fi_flags & FI_REMOTE_CQ_DATA)
+		header_flags |= RXR_REQ_OPT_CQ_DATA_HDR;
+
+	return ep->mtu_size - rxr_pkt_req_header_size(pkt_type,
+						      header_flags,
+						      tx_entry->rma_iov_count);
+}
