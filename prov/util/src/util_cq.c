@@ -486,10 +486,10 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	ofi_atomic_initialize32(&cq->wakeup, 0);
 	dlist_init(&cq->ep_list);
 	ofi_mutex_init(&cq->ep_list_lock);
-	if (cq->domain->lock.lock_type == OFI_LOCK_NONE ||
+	if (cq->domain->lock.lock_type == OFI_LOCK_NOOP ||
 	    cq->domain->threading == FI_THREAD_COMPLETION ||
 	    cq->domain->threading == FI_THREAD_DOMAIN) {
-		ret = ofi_genlock_init(&cq->cq_lock, OFI_LOCK_NONE);
+		ret = ofi_genlock_init(&cq->cq_lock, OFI_LOCK_NOOP);
 	} else if (cq->domain->lock.lock_type == OFI_LOCK_SPINLOCK) {
 		ret = ofi_genlock_init(&cq->cq_lock, OFI_LOCK_SPINLOCK);
 	} else {
