@@ -125,6 +125,10 @@ The *shm* provider checks for the following environment variables:
 *FI_SHM_DISABLE_CMA*
 : Manually disables CMA. Default false
 
+*FI_SHM_USE_XPMEM*
+ : SHM requires the use of either CMA or XPMEM. If FI_SHM_USE_XPMEM is set to 1,
+   the provider will select XPMEM over CMA if XPMEM is availble.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),

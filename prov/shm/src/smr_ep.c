@@ -40,6 +40,10 @@
 #include "smr_signal.h"
 #include "smr.h"
 
+#if HAVE_XPMEM
+#include "ofi_xpmem.h"
+#endif
+
 extern struct fi_ops_msg smr_msg_ops;
 extern struct fi_ops_tagged smr_tagged_ops;
 extern struct fi_ops_rma smr_rma_ops;
@@ -852,6 +856,9 @@ static int smr_ep_close(struct fid *fid)
 		smr_free(ep->region);
 
 	ipc_destroy_hmem_cache(ep->hmem_cache);
+#if HAVE_XPMEM
+	ipc_destroy_hmem_cache(ep->xpmem_cache);
+#endif
 
 	smr_recv_fs_free(ep->recv_fs);
 	smr_unexp_fs_free(ep->unexp_fs);
@@ -1316,12 +1323,26 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
-		if (ep->util_ep.caps & FI_HMEM || smr_env.disable_cma) {
+		if (ep->util_ep.caps & FI_HMEM) {
 			if (ep->util_ep.caps & FI_HMEM) {
 				if (ze_hmem_p2p_enabled())
 					smr_init_ipc_socket(ep);
 			}
 		}
+
+		if (smr_env.disable_cma) {
+			ep->region->cma_cap_peer = SMR_VMA_CAP_OFF;
+			ep->region->cma_cap_self = SMR_VMA_CAP_OFF;
+		}
+
+#if HAVE_XPMEM
+		if (smr_env.use_xpmem && xpmem)
+			ep->region->xpmem_cap_self = SMR_VMA_CAP_ON;
+		else
+			ep->region->xpmem_cap_self = SMR_VMA_CAP_OFF;
+#else
+		ep->region->xpmem_cap_self = SMR_VMA_CAP_OFF;
+#endif
 
 		smr_exchange_all_peers(ep->region);
 		break;
@@ -1395,23 +1416,27 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	ret = smr_endpoint_name(ep, name, info->src_addr, info->src_addrlen);
 	if (ret)
-		goto err2;
+		goto err3;
 	ret = smr_setname(&ep->util_ep.ep_fid.fid, name, SMR_NAME_MAX);
 	if (ret)
-		goto err2;
+		goto err3;
 
 	ep->rx_size = info->rx_attr->size;
 	ep->tx_size = info->tx_attr->size;
 	ret = ofi_endpoint_init(domain, &smr_util_prov, info, &ep->util_ep, context,
 				smr_ep_progress);
 	if (ret)
-		goto err1;
+		goto err2;
 
 	ret = ipc_create_hmem_cache(&ep->hmem_cache, "smr_hmem_cache");
-	if (ret) {
-		ofi_endpoint_close(&ep->util_ep);
+	if (ret)
 		goto err1;
-	}
+
+#if HAVE_XPMEM
+	ret = ipc_create_hmem_cache(&ep->xpmem_cache, "smr_xpmem_cache");
+	if (ret)
+		goto err0;
+#endif
 
 	ep->recv_fs = smr_recv_fs_create(info->rx_attr->size, NULL, NULL);
 	ep->unexp_fs = smr_unexp_fs_create(info->rx_attr->size, NULL, NULL);
@@ -1439,9 +1464,15 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	*ep_fid = &ep->util_ep.ep_fid;
 	return 0;
 
+#if HAVE_XPMEM
+err0:
+	ipc_destroy_hmem_cache(ep->hmem_cache);
+#endif
 err1:
-	free((void *)ep->name);
+	ofi_endpoint_close(&ep->util_ep);
 err2:
+	free((void *)ep->name);
+err3:
 	free(ep);
 	return ret;
 }

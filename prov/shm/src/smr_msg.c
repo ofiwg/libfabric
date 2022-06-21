@@ -198,7 +198,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 		  desc && (smr_get_mr_flags(desc) & FI_HMEM_DEVICE_ONLY) &&
 		  !(op_flags & FI_INJECT);
 
-	proto = smr_select_proto(use_ipc, smr_cma_enabled(ep, peer_smr), iface,
+	proto = smr_select_proto(use_ipc, smr_vma_enabled(ep, peer_smr), iface,
 				 op, total_len, op_flags);
 
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, tag, data, op_flags,

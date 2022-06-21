@@ -398,6 +398,33 @@ AM_CONDITIONAL([EMBEDDED], [test x"$enable_embedded" = x"yes"])
 
 AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 
+xpmem_happy=0
+AC_ARG_ENABLE([xpmem],
+	      [AS_HELP_STRING([--enable-xpmem@<:@=yes|no|PATH@:>@],
+			      [Enable xpmem (gni and shm providers) @<:@default=yes@:>@
+			      (yes: enable xpmem; no: disable xpmem;
+			      PATH: enable xpmem and use xpmem installed under PATH)])],
+	      )	
+
+FI_CHECK_PACKAGE([xpmem],
+		 [xpmem.h],
+		 [xpmem],
+		 [xpmem_make],
+		 [],
+		 [$enable_xpmem],
+		 [$enable_xpmem/lib64],
+		 [xpmem_happy=1])
+
+AS_IF([test x"$enable_xpmem" != x"no" && test -n "$enable_xpmem" && test "$xpmem_happy" = "0" ],
+	[AC_MSG_ERROR([XPMEM support requested but XPMEM runtime not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_XPMEM], [$xpmem_happy],
+	  	   [XPMEM support availability])
+
+LIBS="$LIBS $xpmem_LIBS"
+CPPFLAGS="$CPPFLAGS $xpmem_CPPFLAGS"
+LDFLAGS="$LDFLAGS $xpmem_LDFLAGS"
+
 dnl Disable symbol versioning when -ipo is in CFLAGS or ipo is disabled by icc.
 dnl The gcc equivalent ipo (-fwhole-program) seems to work fine.
 AS_CASE([$CFLAGS],

@@ -41,6 +41,10 @@
 #include <rdma/fi_domain.h>
 #include <stdbool.h>
 
+#if HAVE_XPMEM
+#include <xpmem.h>
+#endif
+
 extern bool ofi_hmem_disable_p2p;
 
 #define HMEM_NUM_STREAMS 2
@@ -108,6 +112,16 @@ struct ofi_hmem_ops {
 };
 
 extern struct ofi_hmem_ops hmem_ops[];
+
+int xpmem_init(void);
+int xpmem_cleanup(void);
+int xpmem_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr);
+int xpmem_close_handle(void *ipc_ptr);
+int xpmem_copy_from(uint64_t device, void *dest, const void *src,
+		       size_t size);
+int xpmem_copy_to(uint64_t device, void *dest, const void *src,
+		     size_t size);
+bool xpmem_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 
 int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
 		       size_t size);

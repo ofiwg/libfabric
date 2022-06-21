@@ -143,8 +143,9 @@ int ipc_cache_map_memhandle(struct hmem_cache *cache, struct ipc_info *key,
 	pgt_region = pgtable_lookup(&cache->pgtable, key->address);
 	if (OFI_LIKELY(pgt_region != NULL)) {
 		region = container_of(pgt_region, struct ipc_cache_region, super);
-		if (memcmp(&key->ipc_handle, &region->key.ipc_handle,
-				   IPC_HANDLE_SIZE) == 0) {
+		if ((memcmp(&key->ipc_handle, &region->key.ipc_handle,
+				   IPC_HANDLE_SIZE) == 0) &&
+			(region->super.end >= key->address+key->length)) {
 			/*cache hit */
 			FI_INFO(&core_prov, FI_LOG_CORE,
 					"%s: ipc cache hit addr:%p size:%lu region:"

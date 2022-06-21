@@ -123,6 +123,7 @@ struct fid_mr {
 
 enum fi_hmem_iface {
 	FI_HMEM_SYSTEM	= 0,
+	FI_HMEM_XPMEM,
 	FI_HMEM_CUDA,
 	FI_HMEM_ROCR,
 	FI_HMEM_ZE,

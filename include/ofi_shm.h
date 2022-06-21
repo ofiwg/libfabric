@@ -52,6 +52,9 @@
 extern "C" {
 #endif
 
+#if HAVE_XPMEM
+#include <ofi_xpmem.h>
+#endif
 
 #define SMR_VERSION	2
 
@@ -92,11 +95,12 @@ enum {
 #define SMR_RX_COMPLETION	(1 << 3)
 #define SMR_MULTI_RECV		(1 << 4)
 
-/* CMA capability */
+/* CMA/XPMEM capability. Generic acronym used:
+ * VMA: Virtual Memory Address */
 enum {
-	SMR_CMA_CAP_NA,
-	SMR_CMA_CAP_ON,
-	SMR_CMA_CAP_OFF,
+	SMR_VMA_CAP_NA,
+	SMR_VMA_CAP_ON,
+	SMR_VMA_CAP_OFF,
 };
 
 /*
@@ -183,6 +187,9 @@ struct smr_peer_data {
 	struct smr_addr		addr;
 	uint32_t		sar_status;
 	uint32_t		name_sent;
+#if HAVE_XPMEM
+	struct xpmem_client xpmem;
+#endif
 };
 
 extern struct dlist_entry ep_name_list;
@@ -227,6 +234,11 @@ struct smr_region {
 	int		pid;
 	uint8_t		cma_cap_peer;
 	uint8_t		cma_cap_self;
+	uint8_t		xpmem_cap_self;
+#if HAVE_XPMEM
+	struct xpmem_pinfo xpmem_self;
+	struct xpmem_pinfo xpmem_peer;
+#endif
 	void		*base_addr;
 	pthread_spinlock_t	lock; /* lock for shm access
 				 Must hold smr->lock before tx/rx cq locks

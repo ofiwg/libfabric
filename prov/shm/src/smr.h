@@ -70,6 +70,7 @@
 struct smr_env {
 	size_t sar_threshold;
 	int disable_cma;
+	int use_xpmem;
 };
 
 extern struct smr_env smr_env;
@@ -293,6 +294,9 @@ struct smr_ep {
 	struct dlist_entry	ipc_cpy_pend_list[HMEM_NUM_STREAMS];
 	/* cache for use with hmem ifaces */
 	struct hmem_cache *hmem_cache;
+#if HAVE_XPMEM
+	struct hmem_cache *xpmem_cache;
+#endif
 
 	int			ep_idx;
 	struct smr_sock_info	*sock_info;
@@ -382,13 +386,15 @@ uint64_t smr_rx_cq_flags(uint32_t op, uint16_t op_flags);
 
 void smr_ep_progress(struct util_ep *util_ep);
 
-static inline bool smr_cma_enabled(struct smr_ep *ep,
+static inline bool smr_vma_enabled(struct smr_ep *ep,
 				   struct smr_region *peer_smr)
 {
 	if (ep->region == peer_smr)
-		return ep->region->cma_cap_self == SMR_CMA_CAP_ON;
+		return (ep->region->cma_cap_self == SMR_VMA_CAP_ON ||
+				ep->region->xpmem_cap_self == SMR_VMA_CAP_ON);
 	else
-		return ep->region->cma_cap_peer == SMR_CMA_CAP_ON;
+		return (ep->region->cma_cap_peer == SMR_VMA_CAP_ON ||
+				peer_smr->xpmem_cap_self == SMR_VMA_CAP_ON);
 }
 
 static inline bool smr_ze_ipc_enabled(struct smr_region *smr,
@@ -397,6 +403,51 @@ static inline bool smr_ze_ipc_enabled(struct smr_region *smr,
 	return (smr->flags & SMR_FLAG_IPC_SOCK) &&
 	       (peer_smr->flags & SMR_FLAG_IPC_SOCK);
 }
+
+#if HAVE_XPMEM
+static inline int smr_xpmem_loop(struct smr_ep *ep, struct xpmem_client *xpmem,
+			struct iovec *local, unsigned long local_cnt, struct iovec *remote,
+			unsigned long remote_cnt, unsigned long flags, size_t total, bool write)
+{
+	int ret, i;
+	ssize_t copy_ret;
+	void *mapped_addr;
+	struct ipc_info key;
+	struct xpmem_addr xpmem_addr;
+
+	assert(local_cnt == remote_cnt);
+
+	for (i = 0; i < remote_cnt; i++) {
+		memset(&key, 0, sizeof(key));
+		key.iface = FI_HMEM_XPMEM,
+		key.address = (uintptr_t) remote[i].iov_base;
+		key.length = remote[i].iov_len;
+		key.base_length = remote[i].iov_len;
+		key.base_offset = 0;
+		xpmem_addr.apid = xpmem->apid;
+		xpmem_addr.offset = (uintptr_t)remote[i].iov_base;
+		memcpy(key.ipc_handle, &xpmem_addr, sizeof(xpmem_addr));
+
+		ret = ipc_cache_map_memhandle(ep->xpmem_cache, &key, &mapped_addr);
+		if (ret)
+			return ret;
+
+		if (write)
+			copy_ret = ofi_copy_to_hmem_iov(FI_HMEM_XPMEM,
+								0, &local[i], 1, 0,
+								mapped_addr, local[i].iov_len);
+		else
+			copy_ret = ofi_copy_from_hmem_iov(mapped_addr,
+								local[i].iov_len, FI_HMEM_XPMEM,
+								0, &local[i], 1, 0);
+
+		if (copy_ret != local[i].iov_len)
+			return -FI_EIO;
+	}
+
+	return 0;
+}
+#endif /* HAVE_XPMEM */
 
 static inline int smr_cma_loop(pid_t pid, struct iovec *local,
 			unsigned long local_cnt, struct iovec *remote,

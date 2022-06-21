@@ -312,9 +312,25 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 		goto out;
 	}
 
-	ret = smr_cma_loop(peer_smr->pid, iov, iov_count, cmd->msg.data.iov,
-			   cmd->msg.data.iov_count, 0, cmd->msg.hdr.size,
-			   cmd->msg.hdr.op == ofi_op_read_req);
+#if HAVE_XPMEM
+	struct xpmem_client *xpmem = &smr_peer_data(ep->region)[cmd->msg.hdr.id].xpmem;
+
+	if (ep->region->xpmem_cap_self == SMR_VMA_CAP_ON &&
+		xpmem->cap == SMR_VMA_CAP_ON) {
+		ret = smr_xpmem_loop(ep, xpmem, iov, iov_count, cmd->msg.data.iov,
+				cmd->msg.data.iov_count, 0, cmd->msg.hdr.size,
+				cmd->msg.hdr.op == ofi_op_read_req);
+	} else {
+		ret = smr_cma_loop(peer_smr->pid, iov, iov_count, cmd->msg.data.iov,
+				cmd->msg.data.iov_count, 0, cmd->msg.hdr.size,
+				cmd->msg.hdr.op == ofi_op_read_req);
+	}
+#else
+		ret = smr_cma_loop(peer_smr->pid, iov, iov_count, cmd->msg.data.iov,
+				cmd->msg.data.iov_count, 0, cmd->msg.hdr.size,
+				cmd->msg.hdr.op == ofi_op_read_req);
+#endif /* HAVE_XPMEM */
+
 	if (!ret)
 		*total_len = cmd->msg.hdr.size;
 

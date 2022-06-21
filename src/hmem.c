@@ -60,6 +60,24 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.get_base_addr = ofi_hmem_no_base_addr,
 		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
 	},
+	[FI_HMEM_XPMEM] = {
+		.initialized = false,
+		.init = xpmem_init,
+		.cleanup = xpmem_cleanup,
+		.copy_to_hmem = xpmem_copy_to,
+		.copy_from_hmem = xpmem_copy_from,
+		.async_copy_to_hmem = ofi_no_async_memcpy,
+		.async_copy_from_hmem = ofi_no_async_memcpy,
+		.async_copy_query = ofi_no_async_copy_query,
+		.is_addr_valid = xpmem_is_addr_valid,
+		.get_handle = ofi_hmem_no_get_handle,
+		.open_handle = xpmem_open_handle,
+		.close_handle = xpmem_close_handle,
+		.host_register = ofi_hmem_register_noop,
+		.host_unregister = ofi_hmem_host_unregister_noop,
+		.get_base_addr = ofi_hmem_no_base_addr,
+		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
+	},
 	[FI_HMEM_CUDA] = {
 		.initialized = false,
 		.init = cuda_hmem_init,
@@ -312,6 +330,8 @@ void ofi_hmem_init(void)
 	int disable_p2p = 0;
 
 	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
+		if (ofi_hmem_is_initialized(iface))
+			continue;
 		ret = hmem_ops[iface].init();
 		if (ret != FI_SUCCESS) {
 			if (ret == -FI_ENOSYS)

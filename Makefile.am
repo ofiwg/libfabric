@@ -50,6 +50,7 @@ common_srcs =				\
 	src/hmem_ze.c			\
 	src/hmem_neuron.c		\
 	src/hmem_synapseai.c		\
+	src/hmem_xpmem.c		\
 	src/common.c			\
 	src/enosys.c			\
 	src/rbtree.c			\
@@ -156,6 +157,7 @@ util_fi_pingpong_LDADD = $(linkback)
 nodist_src_libfabric_la_SOURCES =
 src_libfabric_la_SOURCES =			\
 	include/ofi_hmem.h			\
+	include/ofi_xpmem.h			\
 	include/ofi.h				\
 	include/ofi_abi.h			\
 	include/ofi_atom.h			\

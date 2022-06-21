@@ -42,6 +42,7 @@ struct sigaction *old_action = NULL;
 struct smr_env smr_env = {
 	.sar_threshold = SIZE_MAX,
 	.disable_cma = false,
+	.use_xpmem = false,
 };
 
 static void smr_init_env(void)
@@ -50,6 +51,7 @@ static void smr_init_env(void)
 	fi_param_get_size_t(&smr_prov, "tx_size", &smr_info.tx_attr->size);
 	fi_param_get_size_t(&smr_prov, "rx_size", &smr_info.rx_attr->size);
 	fi_param_get_bool(&smr_prov, "disable_cma", &smr_env.disable_cma);
+	fi_param_get_bool(&core_prov, "use_xpmem", &smr_env.use_xpmem);
 }
 
 static void smr_resolve_addr(const char *node, const char *service,
@@ -169,6 +171,7 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 		if (mr_mode & FI_MR_PROV_KEY)
 			cur->domain_attr->mr_mode |= FI_MR_PROV_KEY;
 	}
+
 	return 0;
 }
 
@@ -198,9 +201,6 @@ struct util_prov smr_util_prov = {
 
 SHM_INI
 {
-#if HAVE_SHM_DL
-	ofi_hmem_init();
-#endif
 	fi_param_define(&smr_prov, "sar_threshold", FI_PARAM_SIZE_T,
 			"Max size to use for alternate SAR protocol if CMA \
 			 is not available before switching to mmap protocol \
@@ -213,6 +213,9 @@ SHM_INI
 			 Default: 1024");
 	fi_param_define(&smr_prov, "disable_cma", FI_PARAM_BOOL,
 			"Manually disables CMA. Default: false");
+#if HAVE_SHM_DL
+	ofi_hmem_init();
+#endif
 
 	smr_init_env();
 
