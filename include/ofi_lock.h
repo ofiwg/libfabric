@@ -329,6 +329,22 @@ static inline int ofi_mutex_held_op(ofi_mutex_t *lock)
 	return ofi_mutex_held(lock);
 }
 
+static inline void ofi_nolock_lock_op(void *nolock)
+{
+	(void) nolock;
+}
+
+static inline void ofi_nolock_unlock_op(void *nolock)
+{
+	(void) nolock;
+}
+
+/* No way to verify, so return false.  User needs another check. */
+static inline int ofi_nolock_held_op(void *nolock)
+{
+	return 0;
+}
+
 
 /*
  * Generic lock abstraction
@@ -337,6 +353,7 @@ static inline int ofi_mutex_held_op(ofi_mutex_t *lock)
 enum ofi_lock_type {
 	OFI_LOCK_MUTEX,		/* default */
 	OFI_LOCK_SPINLOCK,
+	OFI_LOCK_NOOP,
 	OFI_LOCK_NONE,
 };
 
@@ -348,6 +365,7 @@ struct ofi_genlock {
 	union {
 		ofi_mutex_t	mutex;
 		ofi_spin_t	spinlock;
+		void		*nolock;
 	} base;
 
 	ofi_genlock_lockheld_t	held;

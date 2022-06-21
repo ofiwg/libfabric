@@ -106,12 +106,18 @@ int ofi_genlock_init(struct ofi_genlock *lock,
 		lock->unlock = (ofi_genlock_lockop_t) ofi_mutex_unlock_op;
 		lock->held = (ofi_genlock_lockheld_t) ofi_mutex_held_op;
 		break;
-	case OFI_LOCK_NONE:
+	case OFI_LOCK_NOOP:
 		/* Use mutex for debug no-op support */
 		ret = ofi_mutex_init(&lock->base.mutex);
 		lock->lock = (ofi_genlock_lockop_t) ofi_mutex_lock_noop;
 		lock->unlock = (ofi_genlock_lockop_t) ofi_mutex_unlock_noop;
 		lock->held = (ofi_genlock_lockheld_t) ofi_mutex_held_op;
+		break;
+	case OFI_LOCK_NONE:
+		lock->base.nolock = NULL;
+		lock->lock = (ofi_genlock_lockop_t) ofi_nolock_lock_op;
+		lock->unlock = (ofi_genlock_lockop_t) ofi_nolock_unlock_op;
+		lock->held = (ofi_genlock_lockheld_t) ofi_nolock_held_op;
 		break;
 	default:
 		ret = -FI_EINVAL;
@@ -128,8 +134,10 @@ void ofi_genlock_destroy(struct ofi_genlock *lock)
 		ofi_spin_destroy(&lock->base.spinlock);
 		break;
 	case OFI_LOCK_MUTEX:
-	case OFI_LOCK_NONE:
+	case OFI_LOCK_NOOP:
 		ofi_mutex_destroy(&lock->base.mutex);
+		break;
+	case OFI_LOCK_NONE:
 		break;
 	default:
 		assert(0);

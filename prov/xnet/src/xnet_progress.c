@@ -1035,35 +1035,30 @@ void xnet_stop_progress(struct xnet_progress *progress)
 	(void) pthread_join(progress->thread, NULL);
 }
 
+/* Because we may need to start the progress thread to support blocking CQ
+ * or EQ calls, we always need to enable an active lock, independent from
+ * the threading model requested by the app.
+ */
 static int xnet_init_locks(struct xnet_progress *progress, struct fi_info *info)
 {
-	enum ofi_lock_type base_lock, rdm_lock;
+	enum ofi_lock_type base_type, rdm_type;
 	int ret;
 
-	if (!info) {
-		base_lock = OFI_LOCK_MUTEX;
-		rdm_lock = OFI_LOCK_NONE;
-		progress->active_lock = &progress->lock;
-	} else if (info->domain_attr &&
-		   info->domain_attr->threading == FI_THREAD_DOMAIN) {
-		base_lock = OFI_LOCK_NONE;
-		rdm_lock = OFI_LOCK_NONE;
-		progress->active_lock = &progress->lock;
-	} else if (info->ep_attr && info->ep_attr->type == FI_EP_RDM) {
-		base_lock = OFI_LOCK_NONE;
-		rdm_lock = OFI_LOCK_MUTEX;
+	if (info && info->ep_attr && info->ep_attr->type == FI_EP_RDM) {
+		base_type = OFI_LOCK_NONE;
+		rdm_type = OFI_LOCK_MUTEX;
 		progress->active_lock = &progress->rdm_lock;
 	} else {
-		base_lock = OFI_LOCK_MUTEX;
-		rdm_lock = OFI_LOCK_NONE;
+		base_type = OFI_LOCK_MUTEX;
+		rdm_type = OFI_LOCK_NONE;
 		progress->active_lock = &progress->lock;
 	}
 
-	ret = ofi_genlock_init(&progress->lock, base_lock);
+	ret = ofi_genlock_init(&progress->lock, base_type);
 	if (ret)
 		return ret;
 
-	ret = ofi_genlock_init(&progress->rdm_lock, rdm_lock);
+	ret = ofi_genlock_init(&progress->rdm_lock, rdm_type);
 	if (ret)
 		ofi_genlock_destroy(&progress->lock);
 
