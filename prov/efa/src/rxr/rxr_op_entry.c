@@ -216,3 +216,61 @@ size_t rxr_tx_entry_max_req_data_capacity(struct rxr_ep *ep, struct rxr_op_entry
 						      header_flags,
 						      tx_entry->rma_iov_count);
 }
+
+/**
+ * @brief set the max_req_data_size field of a tx_entry for multi-req
+ *
+ * Multi-REQ protocols send multiple REQ packets via one call to ibv_post_send() for efficiency.
+ * Under such circumstance, it is better that the data size of mulitple REQ packets to be close.
+ *
+ * To achieve the closeness, the field of max_req_data_size was introduced to rxr_op_entry,
+ * and used to limit data size when construct REQ packet.
+ *
+ * This function set the max_req_data_size properly.
+ *
+ *
+ * @param[in]		ep		endpoint
+ * @param[in,out]	tx_entry	tx_entry that has all information of
+ * 					a send operation
+ * @param[in]		pkt_type	type of REQ packet
+ *
+ */
+void rxr_tx_entry_set_max_req_data_size(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry, int pkt_type)
+{
+	int max_req_data_capacity;
+	int mulreq_total_data_size;
+	int num_req;
+	static int MEMORY_ALIGNMENT = 8;
+
+	assert(rxr_pkt_type_is_mulreq(pkt_type));
+
+	max_req_data_capacity = rxr_tx_entry_max_req_data_capacity(ep, tx_entry, pkt_type);
+	assert(max_req_data_capacity);
+
+	mulreq_total_data_size = rxr_op_entry_mulreq_total_data_size(tx_entry, pkt_type);
+	assert(mulreq_total_data_size);
+
+	num_req = (mulreq_total_data_size - 1)/max_req_data_capacity + 1;
+
+	tx_entry->max_req_data_size = ofi_get_aligned_size((mulreq_total_data_size - 1)/num_req + 1, MEMORY_ALIGNMENT);
+	if (tx_entry->max_req_data_size > max_req_data_capacity)
+		tx_entry->max_req_data_size = max_req_data_capacity;
+}
+
+/**
+ * @brief return number of REQ packets needed to send a message using mulit-req protocol
+ *
+ * @param[in]		tx_entry		tx_entry with information of the message
+ * @param[in]		pkt_type		packet type of the mulit-req protocol
+ * @return		number of REQ packets
+ */
+size_t rxr_tx_entry_num_req(struct rxr_op_entry *tx_entry, int pkt_type)
+{
+	assert(rxr_pkt_type_is_mulreq(pkt_type));
+	assert(tx_entry->max_req_data_size);
+
+	size_t total_size = rxr_op_entry_mulreq_total_data_size(tx_entry, pkt_type);
+
+	return (total_size - tx_entry->bytes_sent - 1)/tx_entry->max_req_data_size + 1;
+}
+
