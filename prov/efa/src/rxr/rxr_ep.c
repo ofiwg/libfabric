@@ -389,6 +389,7 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 		tx_op_flags &= ~FI_COMPLETION;
 	tx_entry->fi_flags = flags | tx_op_flags;
 	tx_entry->bytes_runt = 0;
+	tx_entry->max_req_data_size = 0;
 
 	switch (op) {
 	case ofi_op_tagged:

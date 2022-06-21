@@ -189,6 +189,7 @@ struct rxr_op_entry {
 	/* the following variables are for TX operation only */
 	uint64_t bytes_acked;
 	uint64_t bytes_sent;
+	uint64_t max_req_data_size;
 	/* end of TX only variables */
 };
 
@@ -210,5 +211,9 @@ void rxr_tx_entry_set_runt_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry
 size_t rxr_op_entry_mulreq_total_data_size(struct rxr_op_entry *op_entry, int pkt_type);
 
 size_t rxr_tx_entry_max_req_data_capacity(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int pkt_type);
+
+void rxr_tx_entry_set_max_req_data_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int pkt_type);
+
+size_t rxr_tx_entry_num_req(struct rxr_op_entry *tx_entry, int pkt_type);
 
 #endif
