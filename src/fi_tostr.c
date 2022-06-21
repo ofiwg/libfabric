@@ -275,6 +275,7 @@ static void ofi_tostr_protocol(char *buf, size_t len, uint32_t protocol)
 	CASEENUMSTRN(FI_PROTO_RXM_TCP, len);
 	CASEENUMSTRN(FI_PROTO_OPX, len);
 	CASEENUMSTRN(FI_PROTO_CXI, len);
+	CASEENUMSTRN(FI_PROTO_XNET, len);
 	default:
 		if (protocol & FI_PROV_SPECIFIC)
 			ofi_strncatf(buf, len, "Provider specific");
