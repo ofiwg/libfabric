@@ -92,6 +92,7 @@ int ofi_genlock_init(struct ofi_genlock *lock,
 {
 	int ret;
 
+	lock->lock_type = lock_type;
 	switch (lock->lock_type) {
 	case OFI_LOCK_SPINLOCK:
 		ret = ofi_spin_init(&lock->base.spinlock);
