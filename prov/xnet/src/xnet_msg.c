@@ -371,6 +371,7 @@ xnet_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	xnet_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.base_hdr), buf, len);
 	tx_entry->ctrl_flags = XNET_INJECT_OP;
+	tx_entry->cq_flags = FI_INJECT | FI_MSG | FI_SEND;
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
@@ -436,6 +437,7 @@ xnet_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	xnet_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.cq_data_hdr),
 			    buf, len);
 	tx_entry->ctrl_flags = XNET_INJECT_OP;
+	tx_entry->cq_flags = FI_INJECT | FI_MSG | FI_SEND;
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
@@ -580,6 +582,7 @@ xnet_tinject(struct fid_ep *fid_ep, const void *buf, size_t len,
 
 	xnet_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.tag_hdr), buf, len);
 	tx_entry->ctrl_flags = XNET_INJECT_OP;
+	tx_entry->cq_flags = FI_INJECT | FI_TAGGED | FI_SEND;
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
@@ -645,6 +648,7 @@ xnet_tinjectdata(struct fid_ep *fid_ep, const void *buf, size_t len,
 	xnet_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.tag_data_hdr),
 			    buf, len);
 	tx_entry->ctrl_flags = XNET_INJECT_OP;
+	tx_entry->cq_flags = FI_INJECT | FI_TAGGED | FI_SEND;
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
