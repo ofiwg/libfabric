@@ -92,8 +92,11 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 		/* If the md len is larger than the iov_len, the va and
 		 * length have been aligned to a larger page size.
 		 * Update the cache memory region by returning -EAGAIN.
+		 * Cuda memory cannot be aligned since the aligned iov_base
+		 * may fall outside the valid cuda address range.
 		 */
-		if (entry->info.iov.iov_len < md->md->len) {
+		if (entry->info.iov.iov_len < md->md->len &&
+				entry->info.iface != FI_HMEM_CUDA) {
 			entry->info.iov.iov_base = (void*)md->md->va;
 			entry->info.iov.iov_len = md->md->len;
 			ret = -FI_EAGAIN;
