@@ -387,6 +387,7 @@ xnet_rma_inject_common(struct fid_ep *ep_fid, const void *buf, size_t len,
 	send_entry->iov_cnt = 1;
 
 	send_entry->hdr.base_hdr.size = offset;
+	send_entry->cq_flags = FI_INJECT | FI_WRITE;
 	xnet_tx_queue_insert(ep, send_entry);
 unlock:
 	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
