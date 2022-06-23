@@ -399,7 +399,7 @@ err_free_uncached_md:
 	return ret;
 }
 
-#ifdef HAVE_ROCR
+#if HAVE_ROCR
 
 #include <hsa/hsa_ext_amd.h>
 
