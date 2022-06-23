@@ -45,7 +45,7 @@ int cxip_tx_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
 {
 	int id;
 
-	fastlock_acquire(&ep_obj->tx_id_lock);
+	ofi_spin_lock(&ep_obj->tx_id_lock);
 
 	id = ofi_idx_insert(&ep_obj->tx_ids, ctx);
 
@@ -53,11 +53,11 @@ int cxip_tx_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
 		CXIP_DBG("Failed to allocate TX ID: %d\n", id);
 		if (id > 0)
 			ofi_idx_remove(&ep_obj->tx_ids, id);
-		fastlock_release(&ep_obj->tx_id_lock);
+		ofi_spin_unlock(&ep_obj->tx_id_lock);
 		return -FI_ENOSPC;
 	}
 
-	fastlock_release(&ep_obj->tx_id_lock);
+	ofi_spin_unlock(&ep_obj->tx_id_lock);
 
 	CXIP_DBG("Allocated ID: %d\n", id);
 
@@ -72,9 +72,9 @@ int cxip_tx_id_free(struct cxip_ep_obj *ep_obj, int id)
 	if (id < 0 || id >= CXIP_TX_IDS)
 		return -FI_EINVAL;
 
-	fastlock_acquire(&ep_obj->tx_id_lock);
+	ofi_spin_lock(&ep_obj->tx_id_lock);
 	ofi_idx_remove(&ep_obj->tx_ids, id);
-	fastlock_release(&ep_obj->tx_id_lock);
+	ofi_spin_unlock(&ep_obj->tx_id_lock);
 
 	CXIP_DBG("Freed ID: %d\n", id);
 
@@ -85,9 +85,9 @@ void *cxip_tx_id_lookup(struct cxip_ep_obj *ep_obj, int id)
 {
 	void *entry;
 
-	fastlock_acquire(&ep_obj->tx_id_lock);
+	ofi_spin_lock(&ep_obj->tx_id_lock);
 	entry = ofi_idx_lookup(&ep_obj->tx_ids, id);
-	fastlock_release(&ep_obj->tx_id_lock);
+	ofi_spin_unlock(&ep_obj->tx_id_lock);
 
 	return entry;
 }
@@ -103,7 +103,7 @@ int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
 {
 	int id;
 
-	fastlock_acquire(&ep_obj->rdzv_id_lock);
+	ofi_spin_lock(&ep_obj->rdzv_id_lock);
 
 	id = ofi_idx_insert(&ep_obj->rdzv_ids, ctx);
 
@@ -111,11 +111,11 @@ int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
 		CXIP_DBG("Failed to allocate rdzv ID: %d\n", id);
 		if (id > 0)
 			ofi_idx_remove(&ep_obj->rdzv_ids, id);
-		fastlock_release(&ep_obj->rdzv_id_lock);
+		ofi_spin_unlock(&ep_obj->rdzv_id_lock);
 		return -FI_ENOSPC;
 	}
 
-	fastlock_release(&ep_obj->rdzv_id_lock);
+	ofi_spin_unlock(&ep_obj->rdzv_id_lock);
 
 	CXIP_DBG("Allocated ID: %d\n", id);
 
@@ -130,9 +130,9 @@ int cxip_rdzv_id_free(struct cxip_ep_obj *ep_obj, int id)
 	if (id < 0 || id >= CXIP_RDZV_IDS)
 		return -FI_EINVAL;
 
-	fastlock_acquire(&ep_obj->rdzv_id_lock);
+	ofi_spin_lock(&ep_obj->rdzv_id_lock);
 	ofi_idx_remove(&ep_obj->rdzv_ids, id);
-	fastlock_release(&ep_obj->rdzv_id_lock);
+	ofi_spin_unlock(&ep_obj->rdzv_id_lock);
 
 	CXIP_DBG("Freed ID: %d\n", id);
 
@@ -143,9 +143,9 @@ void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id)
 {
 	void *entry;
 
-	fastlock_acquire(&ep_obj->rdzv_id_lock);
+	ofi_spin_lock(&ep_obj->rdzv_id_lock);
 	entry = ofi_idx_lookup(&ep_obj->rdzv_ids, id);
-	fastlock_release(&ep_obj->rdzv_id_lock);
+	ofi_spin_unlock(&ep_obj->rdzv_id_lock);
 
 	return entry;
 }
@@ -169,11 +169,11 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 		size = ep_obj->tgq_size;
 	}
 
-	fastlock_acquire(&ep_obj->cmdq_lock);
+	ofi_spin_lock(&ep_obj->cmdq_lock);
 
 	if (cmdqs[ctx_id]) {
 		ofi_atomic_inc32(&cmdq_refs[ctx_id]);
-		fastlock_release(&ep_obj->cmdq_lock);
+		ofi_spin_unlock(&ep_obj->cmdq_lock);
 
 		CXIP_DBG("Reusing %s CMDQ[%d]: %p\n",
 			 transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
@@ -201,12 +201,12 @@ int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 	CXIP_DBG("Allocated %s CMDQ[%d]: %p CP: %u\n",
 		 transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id], cq_opts.lcid);
 
-	fastlock_release(&ep_obj->cmdq_lock);
+	ofi_spin_unlock(&ep_obj->cmdq_lock);
 
 	return FI_SUCCESS;
 
 unlock:
-	fastlock_release(&ep_obj->cmdq_lock);
+	ofi_spin_unlock(&ep_obj->cmdq_lock);
 
 	return ret;
 }
@@ -225,7 +225,7 @@ void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj,
 		cmdq_ref = &ep_obj->tgq_refs[ctx_id];
 	}
 
-	fastlock_acquire(&ep_obj->cmdq_lock);
+	ofi_spin_lock(&ep_obj->cmdq_lock);
 
 	if (!ofi_atomic_dec32(cmdq_ref)) {
 		cxip_cmdq_free(cmdqs[ctx_id]);
@@ -238,7 +238,7 @@ void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj,
 			 transmit ? "TX" : "RX", ctx_id, cmdqs[ctx_id]);
 	}
 
-	fastlock_release(&ep_obj->cmdq_lock);
+	ofi_spin_unlock(&ep_obj->cmdq_lock);
 }
 
 static int cxip_ep_cm_getname(fid_t fid, void *addr, size_t *addrlen)
@@ -597,7 +597,7 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 	int ret = FI_SUCCESS;
 	int i;
 
-	fastlock_acquire(&ep_obj->lock);
+	ofi_mutex_lock(&ep_obj->lock);
 
 	if (ep_obj->enabled)
 		goto unlock;
@@ -664,7 +664,7 @@ static int ep_enable(struct cxip_ep_obj *ep_obj)
 
 	ep_obj->enabled = true;
 
-	fastlock_release(&ep_obj->lock);
+	ofi_mutex_unlock(&ep_obj->lock);
 
 	return FI_SUCCESS;
 
@@ -675,7 +675,7 @@ free_if_domains:
 	for (i--; i >= 0; i--)
 		cxip_free_if_domain(ep_obj->if_dom[i]);
 unlock:
-	fastlock_release(&ep_obj->lock);
+	ofi_mutex_unlock(&ep_obj->lock);
 
 	return ret;
 }
@@ -1182,11 +1182,11 @@ static int cxip_ep_close(struct fid *fid)
 	if (cxi_ep->ep_obj->av) {
 		ofi_atomic_dec32(&cxi_ep->ep_obj->av->ref);
 
-		fastlock_acquire(&cxi_ep->ep_obj->av->list_lock);
+		ofi_mutex_lock(&cxi_ep->ep_obj->av->list_lock);
 		fid_list_remove(&cxi_ep->ep_obj->av->ep_list,
 				&cxi_ep->ep_obj->lock,
 				&cxi_ep->ep.fid);
-		fastlock_release(&cxi_ep->ep_obj->av->list_lock);
+		ofi_mutex_unlock(&cxi_ep->ep_obj->av->list_lock);
 	}
 
 	if (cxi_ep->ep_obj->fclass == FI_CLASS_EP) {
@@ -1205,7 +1205,7 @@ static int cxip_ep_close(struct fid *fid)
 	free(cxi_ep->ep_obj->rxcs);
 
 	ofi_atomic_dec32(&cxi_ep->ep_obj->domain->ref);
-	fastlock_destroy(&cxi_ep->ep_obj->lock);
+	ofi_mutex_destroy(&cxi_ep->ep_obj->lock);
 	ofi_idx_reset(&cxi_ep->ep_obj->rdzv_ids);
 	free(cxi_ep->ep_obj);
 	free(cxi_ep);
@@ -1348,10 +1348,10 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		ep->ep_obj->av = av;
 		ofi_atomic_inc32(&av->ref);
 
-		fastlock_acquire(&av->list_lock);
+		ofi_mutex_lock(&av->list_lock);
 		ret = fid_list_insert(&av->ep_list, &ep->ep_obj->lock,
 				      &ep->ep.fid);
-		fastlock_release(&av->list_lock);
+		ofi_mutex_unlock(&av->list_lock);
 		if (ret) {
 			CXIP_WARN("Error in adding fid in the EP list\n");
 			return ret;
@@ -1947,8 +1947,8 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	ofi_atomic_initialize32(&cxi_ep->ep_obj->ref, 0);
 	ofi_atomic_initialize32(&cxi_ep->ep_obj->num_txc, 0);
 	ofi_atomic_initialize32(&cxi_ep->ep_obj->num_rxc, 0);
-	fastlock_init(&cxi_ep->ep_obj->lock);
-	fastlock_init(&cxi_ep->ep_obj->cmdq_lock);
+	ofi_mutex_init(&cxi_ep->ep_obj->lock);
+	ofi_spin_init(&cxi_ep->ep_obj->cmdq_lock);
 
 	cxi_ep->ep_obj->fclass = fclass;
 	cxi_ep->ep_obj->domain = cxi_dom;
@@ -1959,10 +1959,10 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	cxi_ep->ep_obj->fi_addr = FI_ADDR_NOTAVAIL;
 
 	memset(&cxi_ep->ep_obj->rdzv_ids, 0, sizeof(cxi_ep->ep_obj->rdzv_ids));
-	fastlock_init(&cxi_ep->ep_obj->rdzv_id_lock);
+	ofi_spin_init(&cxi_ep->ep_obj->rdzv_id_lock);
 
 	memset(&cxi_ep->ep_obj->tx_ids, 0, sizeof(cxi_ep->ep_obj->tx_ids));
-	fastlock_init(&cxi_ep->ep_obj->tx_id_lock);
+	ofi_spin_init(&cxi_ep->ep_obj->tx_id_lock);
 	dlist_init(&cxi_ep->ep_obj->mr_list);
 
 	for (i = 0; i < CXIP_EP_MAX_TX_CNT; i++) {

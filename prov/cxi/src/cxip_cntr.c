@@ -139,10 +139,10 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 	struct cxi_cq_alloc_opts cq_opts = {};
 	int ret;
 
-	fastlock_acquire(&dom->lock);
+	ofi_spin_lock(&dom->lock);
 
 	if (dom->cntr_init) {
-		fastlock_release(&dom->lock);
+		ofi_spin_unlock(&dom->lock);
 		return FI_SUCCESS;
 	}
 
@@ -160,7 +160,7 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate trig_cmdq: %d\n", ret);
 
-		fastlock_release(&dom->lock);
+		ofi_spin_unlock(&dom->lock);
 		return -FI_ENOSPC;
 	}
 
@@ -168,7 +168,7 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 
 	CXIP_DBG("Domain counters enabled: %p\n", dom);
 
-	fastlock_release(&dom->lock);
+	ofi_spin_unlock(&dom->lock);
 
 	return FI_SUCCESS;
 }
@@ -225,15 +225,15 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 				cmd.ct_success = value;
 			}
 
-			fastlock_acquire(&cmdq->lock);
+			ofi_spin_lock(&cmdq->lock);
 			ret = cxi_cq_emit_ct(cmdq->dev_cmdq, C_CMD_CT_SET,
 					     &cmd);
 			if (ret) {
-				fastlock_release(&cmdq->lock);
+				ofi_spin_unlock(&cmdq->lock);
 				return -FI_EAGAIN;
 			}
 			cxi_cq_ring(cmdq->dev_cmdq);
-			fastlock_release(&cmdq->lock);
+			ofi_spin_unlock(&cmdq->lock);
 		}
 	}
 
@@ -247,7 +247,7 @@ static int cxip_cntr_issue_ct_get(struct cxip_cntr *cntr, bool *issue_ct_get)
 	/* The calling thread which changes CT writeback bit from 1 to 0 must
 	 * issue a CT get command.
 	 */
-	fastlock_acquire(&cntr->lock);
+	ofi_mutex_lock(&cntr->lock);
 
 	ret = cxip_cntr_get_ct_writeback(cntr);
 	if (ret < 0) {
@@ -268,12 +268,12 @@ static int cxip_cntr_issue_ct_get(struct cxip_cntr *cntr, bool *issue_ct_get)
 		*issue_ct_get = false;
 	}
 
-	fastlock_release(&cntr->lock);
+	ofi_mutex_unlock(&cntr->lock);
 
 	return FI_SUCCESS;
 
 err_unlock:
-	fastlock_release(&cntr->lock);
+	ofi_mutex_unlock(&cntr->lock);
 
 	*issue_ct_get = false;
 	return ret;
@@ -311,14 +311,14 @@ static int cxip_cntr_get(struct cxip_cntr *cxi_cntr, bool force)
 	/* Request a write-back */
 	cmd.ct = cxi_cntr->ct->ctn;
 
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 	ret = cxi_cq_emit_ct(cmdq->dev_cmdq, C_CMD_CT_GET, &cmd);
 	if (ret) {
-		fastlock_release(&cmdq->lock);
+		ofi_spin_unlock(&cmdq->lock);
 		return -FI_EAGAIN;
 	}
 	cxi_cq_ring(cmdq->dev_cmdq);
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	return FI_SUCCESS;
 }
@@ -338,7 +338,7 @@ static void cxip_cntr_progress(struct cxip_cntr *cntr)
 	 * CQ processing updates counters via doorbells, use of
 	 * cntr->lock is not required by CQ processing.
 	 */
-	fastlock_acquire(&cntr->lock);
+	ofi_mutex_lock(&cntr->lock);
 
 	dlist_foreach(&cntr->ctx_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
@@ -361,7 +361,7 @@ static void cxip_cntr_progress(struct cxip_cntr *cntr)
 		cxip_util_cq_progress(&cq->util_cq);
 	}
 
-	fastlock_release(&cntr->lock);
+	ofi_mutex_unlock(&cntr->lock);
 }
 
 /*
@@ -480,11 +480,11 @@ static int cxip_cntr_emit_trig_event_cmd(struct cxip_cntr *cntr,
 	int ret;
 
 	/* TODO: Need to handle TLE exhaustion. */
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 	ret = cxi_cq_emit_ct(cmdq->dev_cmdq, C_CMD_CT_TRIG_EVENT, &cmd);
 	if (!ret)
 		cxi_cq_ring(cmdq->dev_cmdq);
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	if (ret)
 		return -FI_EAGAIN;
@@ -635,7 +635,7 @@ static int cxip_cntr_close(struct fid *fid)
 	else
 		CXIP_DBG("Counter disabled: %p\n", cntr);
 
-	fastlock_destroy(&cntr->lock);
+	ofi_mutex_destroy(&cntr->lock);
 
 	cxip_domain_remove_cntr(cntr->domain, cntr);
 
@@ -778,7 +778,7 @@ int cxip_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	ofi_atomic_initialize32(&_cntr->ref, 0);
 	dlist_init(&_cntr->ctx_list);
 
-	fastlock_init(&_cntr->lock);
+	ofi_mutex_init(&_cntr->lock);
 
 	_cntr->cntr_fid.fid.fclass = FI_CLASS_CNTR;
 	_cntr->cntr_fid.fid.context = context;

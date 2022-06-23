@@ -464,7 +464,7 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 		cmd.full_dma.local_addr = CXI_VA_TO_IOVA(md, buffer);
 		cmd.full_dma.request_len = buflen;
 
-		fastlock_acquire(&cmdq->lock);
+		ofi_spin_lock(&cmdq->lock);
 
 		/* this uses cached values */
 		ret = cxip_txq_cp_set(cmdq, ep_obj->auth_key.vni,
@@ -484,7 +484,7 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 			ep_obj->domain->iface->dev->info.pid_bits,
 			ep_obj->src_addr.pid, ep_obj->src_addr.nic);
 
-		fastlock_acquire(&cmdq->lock);
+		ofi_spin_lock(&cmdq->lock);
 
 		/* this uses cached values */
 		ret = cxip_txq_cp_set(cmdq, ep_obj->auth_key.vni,
@@ -515,7 +515,7 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 	ofi_atomic_inc32(&reduction->mc_obj->send_cnt);
 
 err_unlock:
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 	return ret;
 }
 
@@ -2277,7 +2277,7 @@ static int _mc_initialize(struct cxip_zbcoll_obj *zb, void *statep)
 		reduction->in_use = false;
 		reduction->completed = false;
 	}
-	fastlock_init(&mc_obj->lock);
+	ofi_spin_init(&mc_obj->lock);
 	ofi_atomic_initialize32(&mc_obj->send_cnt, 0);
 	ofi_atomic_initialize32(&mc_obj->recv_cnt, 0);
 	ofi_atomic_initialize32(&mc_obj->pkt_cnt, 0);
@@ -2325,10 +2325,10 @@ static int _mc_initialize(struct cxip_zbcoll_obj *zb, void *statep)
 
 	/* Set this now to instantiate cmdq CP */
 	cmdq = ep_obj->coll.tx_cmdq;
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 	ret = cxip_txq_cp_set(cmdq, ep_obj->auth_key.vni,
 			      mc_obj->tc, mc_obj->tc_type);
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 	if (ret)
 		return ret;
 
@@ -2764,10 +2764,10 @@ void cxip_coll_reset_mc_ctrs(struct fid_mc *mc)
 {
 	struct cxip_coll_mc *mc_obj = (struct cxip_coll_mc *)mc;
 
-	fastlock_acquire(&mc_obj->lock);
+	ofi_spin_lock(&mc_obj->lock);
 	ofi_atomic_set32(&mc_obj->send_cnt, 0);
 	ofi_atomic_set32(&mc_obj->recv_cnt, 0);
 	ofi_atomic_set32(&mc_obj->pkt_cnt, 0);
 	ofi_atomic_set32(&mc_obj->seq_err_cnt, 0);
-	fastlock_release(&mc_obj->lock);
+	ofi_spin_unlock(&mc_obj->lock);
 }

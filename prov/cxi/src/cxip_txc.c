@@ -79,7 +79,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 {
 	int ret = FI_SUCCESS;
 
-	fastlock_acquire(&txc->lock);
+	ofi_spin_lock(&txc->lock);
 
 	if (txc->enabled)
 		goto unlock;
@@ -115,14 +115,14 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	txc->pid_bits = txc->domain->iface->dev->info.pid_bits;
 	txc->enabled = true;
 
-	fastlock_release(&txc->lock);
+	ofi_spin_unlock(&txc->lock);
 
 	return FI_SUCCESS;
 
 put_tx_cmdq:
 	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, true);
 unlock:
-	fastlock_release(&txc->lock);
+	ofi_spin_unlock(&txc->lock);
 
 	return ret;
 }
@@ -177,16 +177,16 @@ static void txc_disable(struct cxip_txc *txc)
 {
 	int ret;
 
-	fastlock_acquire(&txc->lock);
+	ofi_spin_lock(&txc->lock);
 
 	if (!txc->enabled) {
-		fastlock_release(&txc->lock);
+		ofi_spin_unlock(&txc->lock);
 		return;
 	}
 
 	txc->enabled = false;
 
-	fastlock_release(&txc->lock);
+	ofi_spin_unlock(&txc->lock);
 
 	txc_cleanup(txc);
 
@@ -214,7 +214,7 @@ struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context)
 		return NULL;
 
 	dlist_init(&txc->ep_list);
-	fastlock_init(&txc->lock);
+	ofi_spin_init(&txc->lock);
 	ofi_atomic_initialize32(&txc->otx_reqs, 0);
 	dlist_init(&txc->msg_queue);
 	dlist_init(&txc->fc_peers);
@@ -236,7 +236,7 @@ struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context)
 void cxip_txc_free(struct cxip_txc *txc)
 {
 	txc_disable(txc);
-	fastlock_destroy(&txc->lock);
+	ofi_spin_destroy(&txc->lock);
 	free(txc);
 }
 
@@ -245,7 +245,7 @@ void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc)
 	struct cxip_req *req;
 	struct dlist_entry *tmp;
 
-	fastlock_acquire(&txc->lock);
+	ofi_spin_lock(&txc->lock);
 
 	/* Drain the message queue. */
 	dlist_foreach_container_safe(&txc->msg_queue, struct cxip_req, req,
@@ -257,5 +257,5 @@ void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc)
 		}
 	}
 
-	fastlock_release(&txc->lock);
+	ofi_spin_unlock(&txc->lock);
 }

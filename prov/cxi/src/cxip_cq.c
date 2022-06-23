@@ -53,7 +53,7 @@ int cxip_cq_adjust_reserved_fc_event_slots(struct cxip_cq *cq, int value)
 {
 	int ret;
 
-	fastlock_acquire(&cq->lock);
+	ofi_spin_lock(&cq->lock);
 
 	if (!cq->enabled) {
 		ret = -FI_EINVAL;
@@ -65,7 +65,7 @@ int cxip_cq_adjust_reserved_fc_event_slots(struct cxip_cq *cq, int value)
 		ret = 0;
 
 unlock_out:
-	fastlock_release(&cq->lock);
+	ofi_spin_unlock(&cq->lock);
 
 	return ret;
 }
@@ -82,9 +82,9 @@ void *cxip_cq_ibuf_alloc(struct cxip_cq *cq)
 {
 	void *ibuf;
 
-	fastlock_acquire(&cq->ibuf_lock);
+	ofi_spin_lock(&cq->ibuf_lock);
 	ibuf = (struct cxip_req *)ofi_buf_alloc(cq->ibuf_pool);
-	fastlock_release(&cq->ibuf_lock);
+	ofi_spin_unlock(&cq->ibuf_lock);
 
 	if (ibuf)
 		CXIP_DBG("Allocated inject buffer: %p\n", ibuf);
@@ -99,9 +99,9 @@ void *cxip_cq_ibuf_alloc(struct cxip_cq *cq)
  */
 void cxip_cq_ibuf_free(struct cxip_cq *cq, void *ibuf)
 {
-	fastlock_acquire(&cq->ibuf_lock);
+	ofi_spin_lock(&cq->ibuf_lock);
 	ofi_buf_free(ibuf);
-	fastlock_release(&cq->ibuf_lock);
+	ofi_spin_unlock(&cq->ibuf_lock);
 
 	CXIP_DBG("Freed inject buffer: %p\n", ibuf);
 }
@@ -143,7 +143,7 @@ int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
 	struct dlist_entry *tmp;
 
 	/* Serialize with event processing that could update request state. */
-	fastlock_acquire(&cq->lock);
+	ofi_spin_lock(&cq->lock);
 
 	dlist_foreach_container_safe(&cq->req_list, struct cxip_req, req,
 				     cq_entry, tmp) {
@@ -156,7 +156,7 @@ int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
 		}
 	}
 
-	fastlock_release(&cq->lock);
+	ofi_spin_unlock(&cq->lock);
 
 	return ret;
 }
@@ -192,7 +192,7 @@ void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
 	struct dlist_entry *tmp;
 	struct cxip_txc *txc;
 
-	fastlock_acquire(&cq->lock);
+	ofi_spin_lock(&cq->lock);
 
 	dlist_foreach_container_safe(&cq->req_list, struct cxip_req, req,
 				     cq_entry, tmp) {
@@ -244,7 +244,7 @@ void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
 
 	}
 
-	fastlock_release(&cq->lock);
+	ofi_spin_unlock(&cq->lock);
 }
 
 /*
@@ -260,7 +260,7 @@ void cxip_cq_req_discard(struct cxip_cq *cq, void *req_ctx)
 	int discards = 0;
 
 	/* Serialize with event processing that could update request state. */
-	fastlock_acquire(&cq->lock);
+	ofi_spin_lock(&cq->lock);
 
 	dlist_foreach_container(&cq->req_list, struct cxip_req, req,
 				cq_entry) {
@@ -273,7 +273,7 @@ void cxip_cq_req_discard(struct cxip_cq *cq, void *req_ctx)
 	if (discards)
 		CXIP_DBG("Marked %d requests\n", discards);
 
-	fastlock_release(&cq->lock);
+	ofi_spin_unlock(&cq->lock);
 }
 
 /*
@@ -355,7 +355,7 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
 {
 	struct cxip_req *req;
 
-	fastlock_acquire(&cq->req_lock);
+	ofi_spin_lock(&cq->req_lock);
 
 	req = (struct cxip_req *)ofi_buf_alloc(cq->req_pool);
 	if (!req) {
@@ -388,7 +388,7 @@ struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
 	dlist_insert_tail(&req->cq_entry, &cq->req_list);
 
 out:
-	fastlock_release(&cq->req_lock);
+	ofi_spin_unlock(&cq->req_lock);
 
 	return req;
 }
@@ -398,9 +398,9 @@ out:
  */
 void cxip_cq_req_free(struct cxip_req *req)
 {
-	fastlock_acquire(&req->cq->req_lock);
+	ofi_spin_lock(&req->cq->req_lock);
 	cxip_cq_req_free_no_lock(req);
-	fastlock_release(&req->cq->req_lock);
+	ofi_spin_unlock(&req->cq->req_lock);
 }
 
 /*
@@ -541,7 +541,7 @@ static void cxip_cq_eq_progress(struct cxip_cq *cq, struct cxip_cq_eq *eq)
  */
 void cxip_cq_progress(struct cxip_cq *cq)
 {
-	fastlock_acquire(&cq->lock);
+	ofi_spin_lock(&cq->lock);
 
 	if (!cq->enabled)
 		goto out;
@@ -549,7 +549,7 @@ void cxip_cq_progress(struct cxip_cq *cq)
 	cxip_cq_eq_progress(cq, &cq->eq);
 
 out:
-	fastlock_release(&cq->lock);
+	ofi_spin_unlock(&cq->lock);
 }
 
 /*
@@ -702,14 +702,14 @@ static int cxip_cq_trywait(void *arg)
 		return -FI_EAGAIN;
 
 	/* Clear wait, and check for any events */
-	fastlock_acquire(&cq->lock);
+	ofi_spin_lock(&cq->lock);
 	cxil_clear_wait_obj(cq->priv_wait);
 
 	if (cxi_eq_peek_event(cq->eq.eq)) {
-		fastlock_release(&cq->lock);
+		ofi_spin_unlock(&cq->lock);
 		return -FI_EAGAIN;
 	}
-	fastlock_release(&cq->lock);
+	ofi_spin_unlock(&cq->lock);
 
 	return FI_SUCCESS;
 }
@@ -723,7 +723,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq, struct cxip_ep_obj *ep_obj)
 	int ret = FI_SUCCESS;
 	size_t min_eq_size;
 
-	fastlock_acquire(&cxi_cq->lock);
+	ofi_spin_lock(&cxi_cq->lock);
 
 	if (cxi_cq->enabled)
 		goto unlock;
@@ -780,7 +780,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq, struct cxip_ep_obj *ep_obj)
 
 	cxi_cq->enabled = true;
 	dlist_init(&cxi_cq->req_list);
-	fastlock_release(&cxi_cq->lock);
+	ofi_spin_unlock(&cxi_cq->lock);
 
 	CXIP_DBG("CQ enabled: %p (EQ:%d)\n", cxi_cq, cxi_cq->eq.eq->eqn);
 	return FI_SUCCESS;
@@ -794,7 +794,7 @@ del_fd:
 		ofi_wait_del_fd(cxi_cq->util_cq.wait,
 				cxil_get_wait_obj_fd(ep_obj->ctrl_wait));
 unlock:
-	fastlock_release(&cxi_cq->lock);
+	ofi_spin_unlock(&cxi_cq->lock);
 
 	return ret;
 }
@@ -804,7 +804,7 @@ unlock:
  */
 static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 {
-	fastlock_acquire(&cxi_cq->lock);
+	ofi_spin_lock(&cxi_cq->lock);
 
 	if (!cxi_cq->enabled)
 		goto unlock;
@@ -821,7 +821,7 @@ static void cxip_cq_disable(struct cxip_cq *cxi_cq)
 
 	CXIP_DBG("CQ disabled: %p\n", cxi_cq);
 unlock:
-	fastlock_release(&cxi_cq->lock);
+	ofi_spin_unlock(&cxi_cq->lock);
 }
 
 /*
@@ -851,9 +851,9 @@ static int cxip_cq_close(struct fid *fid)
 
 	ofi_cq_cleanup(&cq->util_cq);
 
-	fastlock_destroy(&cq->lock);
-	fastlock_destroy(&cq->ibuf_lock);
-	fastlock_destroy(&cq->req_lock);
+	ofi_spin_destroy(&cq->lock);
+	ofi_spin_destroy(&cq->ibuf_lock);
+	ofi_spin_destroy(&cq->req_lock);
 
 	cxip_domain_remove_cq(cq->domain, cq);
 
@@ -1019,9 +1019,9 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	cxi_cq->domain = cxi_dom;
 	cxi_cq->ack_batch_size = cxip_env.eq_ack_batch_size;
 	ofi_atomic_initialize32(&cxi_cq->ref, 0);
-	fastlock_init(&cxi_cq->lock);
-	fastlock_init(&cxi_cq->req_lock);
-	fastlock_init(&cxi_cq->ibuf_lock);
+	ofi_spin_init(&cxi_cq->lock);
+	ofi_spin_init(&cxi_cq->req_lock);
+	ofi_spin_init(&cxi_cq->ibuf_lock);
 
 	if (cxi_cq->util_cq.wait) {
 		ret = cxip_cq_alloc_priv_wait(cxi_cq);

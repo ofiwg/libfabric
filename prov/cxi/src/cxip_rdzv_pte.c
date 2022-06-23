@@ -84,9 +84,9 @@ int cxip_rdzv_pte_src_req_alloc(struct cxip_rdzv_pte *pte, int lac)
 	if (pte->src_reqs[lac])
 		return FI_SUCCESS;
 
-	fastlock_acquire(&pte->src_reqs_lock);
+	ofi_spin_lock(&pte->src_reqs_lock);
 	if (pte->src_reqs[lac]) {
-		fastlock_release(&pte->src_reqs_lock);
+		ofi_spin_unlock(&pte->src_reqs_lock);
 		return FI_SUCCESS;
 	}
 
@@ -134,14 +134,14 @@ int cxip_rdzv_pte_src_req_alloc(struct cxip_rdzv_pte *pte, int lac)
 
 	pte->src_reqs[lac] = req;
 
-	fastlock_release(&pte->src_reqs_lock);
+	ofi_spin_unlock(&pte->src_reqs_lock);
 
 	return FI_SUCCESS;
 
 err_free_req:
 	cxip_cq_req_free(req);
 err_unlock:
-	fastlock_release(&pte->src_reqs_lock);
+	ofi_spin_unlock(&pte->src_reqs_lock);
 
 	return ret;
 }
@@ -255,7 +255,7 @@ int cxip_rdzv_pte_alloc(struct cxip_txc *txc, struct cxip_rdzv_pte **rdzv_pte)
 	pte->txc = txc;
 	ofi_atomic_initialize32(&pte->le_linked_success_count, 0);
 	ofi_atomic_initialize32(&pte->le_linked_failure_count, 0);
-	fastlock_init(&pte->src_reqs_lock);
+	ofi_spin_init(&pte->src_reqs_lock);
 
 	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC)
 		pt_opts.use_logical = 1;

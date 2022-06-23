@@ -70,14 +70,14 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 
 	rxc->state = RXC_DISABLED;
 
-	fastlock_release(&rxc->lock);
+	ofi_spin_unlock(&rxc->lock);
 
 	ret = cxip_pte_set_state_wait(rxc->rx_pte, rxc->rx_cmdq, rxc->recv_cq,
 				      C_PTLTE_DISABLED, 0);
 	if (ret == FI_SUCCESS)
 		CXIP_DBG("RXC PtlTE disabled: %p\n", rxc);
 
-	fastlock_acquire(&rxc->lock);
+	ofi_spin_lock(&rxc->lock);
 
 	return ret;
 }
@@ -263,33 +263,33 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	int tmp;
 	enum c_ptlte_state state;
 
-	fastlock_acquire(&rxc->lock);
+	ofi_spin_lock(&rxc->lock);
 
 	if (rxc->state != RXC_DISABLED) {
-		fastlock_release(&rxc->lock);
+		ofi_spin_unlock(&rxc->lock);
 		return FI_SUCCESS;
 	}
 
 	if (!ofi_recv_allowed(rxc->attr.caps)) {
 		rxc->state = RXC_ENABLED;
-		fastlock_release(&rxc->lock);
+		ofi_spin_unlock(&rxc->lock);
 		return FI_SUCCESS;
 	}
 
 	if (!rxc->recv_cq) {
 		CXIP_WARN("Undefined recv CQ\n");
-		fastlock_release(&rxc->lock);
+		ofi_spin_unlock(&rxc->lock);
 		return -FI_ENOCQ;
 	}
 
 	ret = cxip_cq_enable(rxc->recv_cq, rxc->ep_obj);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_cq_enable returned: %d\n", ret);
-		fastlock_release(&rxc->lock);
+		ofi_spin_unlock(&rxc->lock);
 		return ret;
 	}
 
-	fastlock_release(&rxc->lock);
+	ofi_spin_unlock(&rxc->lock);
 
 	ret = rxc_msg_init(rxc);
 	if (ret != FI_SUCCESS) {
@@ -419,10 +419,10 @@ static void rxc_disable(struct cxip_rxc *rxc)
 {
 	int ret;
 
-	fastlock_acquire(&rxc->lock);
+	ofi_spin_lock(&rxc->lock);
 
 	if (rxc->state == RXC_DISABLED) {
-		fastlock_release(&rxc->lock);
+		ofi_spin_unlock(&rxc->lock);
 		return;
 	}
 
@@ -432,7 +432,7 @@ static void rxc_disable(struct cxip_rxc *rxc)
 		if (ret != FI_SUCCESS)
 			CXIP_WARN("rxc_msg_disable returned: %d\n", ret);
 
-		fastlock_release(&rxc->lock);
+		ofi_spin_unlock(&rxc->lock);
 
 		cxip_rxc_free_ux_entries(rxc);
 
@@ -449,7 +449,7 @@ static void rxc_disable(struct cxip_rxc *rxc)
 		if (ret != FI_SUCCESS)
 			CXIP_WARN("rxc_msg_fini returned: %d\n", ret);
 	} else {
-		fastlock_release(&rxc->lock);
+		ofi_spin_unlock(&rxc->lock);
 	}
 }
 
@@ -507,14 +507,14 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context)
 		return NULL;
 
 	dlist_init(&rxc->ep_list);
-	fastlock_init(&rxc->lock);
+	ofi_spin_init(&rxc->lock);
 	ofi_atomic_initialize32(&rxc->orx_reqs, 0);
 
 	rxc->ctx.fid.fclass = FI_CLASS_RX_CTX;
 	rxc->ctx.fid.context = context;
 	rxc->attr = *attr;
 
-	fastlock_init(&rxc->rx_lock);
+	ofi_spin_init(&rxc->rx_lock);
 
 	for (i = 0; i < CXIP_DEF_EVENT_HT_BUCKETS; i++)
 		dlist_init(&rxc->deferred_events.bh[i]);
@@ -549,6 +549,6 @@ void cxip_rxc_free(struct cxip_rxc *rxc)
 	cxip_rxc_dump_counters(rxc);
 
 	rxc_disable(rxc);
-	fastlock_destroy(&rxc->lock);
+	ofi_spin_destroy(&rxc->lock);
 	free(rxc);
 }

@@ -312,12 +312,12 @@ static struct cxip_req *cxip_amo_selective_completion_req(struct cxip_txc *txc)
 		req->flags = FI_ATOMIC | FI_WRITE;
 		req->addr = FI_ADDR_UNSPEC;
 
-		fastlock_acquire(&txc->lock);
+		ofi_spin_lock(&txc->lock);
 		if (!txc->amo_selective_completion_req)
 			txc->amo_selective_completion_req = req;
 		else
 			free_request = true;
-		fastlock_release(&txc->lock);
+		ofi_spin_unlock(&txc->lock);
 
 		if (free_request)
 			cxip_cq_req_free(req);
@@ -348,12 +348,12 @@ cxip_amo_fetching_selective_completion_req(struct cxip_txc *txc)
 		req->flags = FI_ATOMIC | FI_READ;
 		req->addr = FI_ADDR_UNSPEC;
 
-		fastlock_acquire(&txc->lock);
+		ofi_spin_lock(&txc->lock);
 		if (!txc->amo_fetch_selective_completion_req)
 			txc->amo_fetch_selective_completion_req = req;
 		else
 			free_request = true;
-		fastlock_release(&txc->lock);
+		ofi_spin_unlock(&txc->lock);
 
 		if (free_request)
 			cxip_cq_req_free(req);
@@ -774,7 +774,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 		goto err_unmap_result_buf;
 	}
 
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 
 	/* Ensure correct traffic class is used. */
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
@@ -835,12 +835,12 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	if (req)
 		ofi_atomic_inc32(&txc->otx_reqs);
 
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	return FI_SUCCESS;
 
 err_cq_unlock:
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 err_unmap_result_buf:
 	if (req && req->amo.result_md)
 		cxip_unmap(req->amo.result_md);
@@ -885,7 +885,7 @@ static int cxip_amo_emit_trig_dma(struct cxip_txc *txc, struct cxip_cmdq *cmdq,
 		return -FI_ENOSYS;
 	}
 
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 
 	/* Fetching AMO with FI_DELIVERY_COMPLETE requires two commands. Ensure
 	 * there is enough space. At worse at least 16x 32-byte slots are
@@ -916,12 +916,12 @@ static int cxip_amo_emit_trig_dma(struct cxip_txc *txc, struct cxip_cmdq *cmdq,
 
 	cxip_txq_ring(cmdq, flags & FI_MORE, ofi_atomic_get32(&txc->otx_reqs));
 
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	return FI_SUCCESS;
 
 err_unlock:
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	return ret;
 }
@@ -935,7 +935,7 @@ static int cxip_amo_emit_non_trig_dma(struct cxip_txc *txc,
 {
 	int ret;
 
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 
 	/* Only CXI_TC_TYPE_DEFAULT is supported with DMA AMO commands. */
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
@@ -984,12 +984,12 @@ static int cxip_amo_emit_non_trig_dma(struct cxip_txc *txc,
 
 	cxip_txq_ring(cmdq, flags & FI_MORE, ofi_atomic_get32(&txc->otx_reqs));
 
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	return FI_SUCCESS;
 
 err_unlock:
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	return ret;
 }

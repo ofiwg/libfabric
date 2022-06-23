@@ -668,7 +668,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 		(uint64_t)cmd.local_addr, cmd.request_len,
 		(uint64_t)cmd.remote_offset);
 
-	fastlock_acquire(&rxc->tx_cmdq->lock);
+	ofi_spin_lock(&rxc->tx_cmdq->lock);
 
 	/* Issue Rendezvous Get command */
 	ret = cxi_cq_emit_dma(rxc->tx_cmdq->dev_cmdq, &cmd);
@@ -683,7 +683,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 
 	ret = FI_SUCCESS;
 unlock:
-	fastlock_release(&rxc->tx_cmdq->lock);
+	ofi_spin_unlock(&rxc->tx_cmdq->lock);
 	return ret;
 }
 
@@ -738,7 +738,7 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 	cmd.c_state.index_ext = idx_ext;
 	cmd.c_state.eq = cxip_cq_tx_eqn(rxc->recv_cq);
 
-	fastlock_acquire(&rxc->tx_cmdq->lock);
+	ofi_spin_lock(&rxc->tx_cmdq->lock);
 
 	ret = cxip_cmdq_emit_c_state(rxc->tx_cmdq, &cmd.c_state);
 	if (ret) {
@@ -767,14 +767,14 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 
 	cxi_cq_ring(rxc->tx_cmdq->dev_cmdq);
 
-	fastlock_release(&rxc->tx_cmdq->lock);
+	ofi_spin_unlock(&rxc->tx_cmdq->lock);
 
 	RXC_DBG(rxc, "Queued match completion message: %p\n", req);
 
 	return FI_SUCCESS;
 
 err_unlock:
-	fastlock_release(&rxc->tx_cmdq->lock);
+	ofi_spin_unlock(&rxc->tx_cmdq->lock);
 
 	return ret;
 }
@@ -992,7 +992,8 @@ static int cxip_ux_send_zb(struct cxip_req *match_req,
 		}
 
 		if (remove_recv_entry) {
-			assert(fastlock_tryacquire(&parent_req->recv.rxc->lock) == EBUSY);
+			assert(ofi_spin_trylock(&parent_req->recv.rxc->lock) ==
+			       EBUSY);
 			dlist_remove_init(&parent_req->recv.rxc_entry);
 		}
 
@@ -1000,7 +1001,7 @@ static int cxip_ux_send_zb(struct cxip_req *match_req,
 	}
 
 	if (remove_recv_entry) {
-		assert(fastlock_tryacquire(&parent_req->recv.rxc->lock) ==
+		assert(ofi_spin_trylock(&parent_req->recv.rxc->lock) ==
 		       EBUSY);
 		dlist_remove_init(&parent_req->recv.rxc_entry);
 	}
@@ -1042,12 +1043,12 @@ static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 		def_ev->req->search.puts_pending--;
 		RXC_DBG(rxc, "put complete: %p\n", def_ev->req);
 
-		fastlock_acquire(&rxc->lock);
+		ofi_spin_lock(&rxc->lock);
 
 		if (cxip_ux_is_onload_complete(def_ev->req))
 			cxip_ux_onload_complete(def_ev->req);
 
-		fastlock_release(&rxc->lock);
+		ofi_spin_unlock(&rxc->lock);
 
 	} else {
 		ret = cxip_ux_send(def_ev->req, req, event, def_ev->mrecv_start,
@@ -1164,7 +1165,7 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_rxc *rxc = oflow_buf->rxc;
 	int ret = FI_SUCCESS;
 
-	fastlock_acquire(&rxc->rx_lock);
+	ofi_spin_lock(&rxc->rx_lock);
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
@@ -1173,21 +1174,21 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 			assert(cxip_env.hybrid_preemptive);
 
 			if (!cxip_software_pte_allowed()) {
-				fastlock_release(&rxc->rx_lock);
+				ofi_spin_unlock(&rxc->rx_lock);
 				return FI_SUCCESS;
 			}
 
 			/* Check for possible hybrid mode preemptive
 			 * transitions to software managed mode.
 			 */
-			fastlock_acquire(&rxc->lock);
+			ofi_spin_lock(&rxc->lock);
 
 			if (cxip_check_hybrid_preempt(rxc, event))
 				RXC_WARN(rxc, "Forced FC/SW EP\n");
 
-			fastlock_release(&rxc->lock);
+			ofi_spin_unlock(&rxc->lock);
 
-			fastlock_release(&rxc->rx_lock);
+			ofi_spin_unlock(&rxc->rx_lock);
 
 			return FI_SUCCESS;
 		}
@@ -1196,22 +1197,22 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 		RXC_DBG(rxc, "Oflow LE append failed\n");
 
-		fastlock_acquire(&rxc->lock);
+		ofi_spin_lock(&rxc->lock);
 		ret = cxip_recv_pending_ptlte_disable(rxc, true);
-		fastlock_release(&rxc->lock);
+		ofi_spin_unlock(&rxc->lock);
 
 		if (ret != FI_SUCCESS)
 			RXC_WARN(rxc, "Force disable failed %d %s\n",
 				 ret, fi_strerror(-ret));
 		cxip_ptelist_buf_link_err(oflow_buf, cxi_event_rc(event));
-		fastlock_release(&rxc->rx_lock);
+		ofi_spin_unlock(&rxc->rx_lock);
 
 		return ret;
 	case C_EVENT_UNLINK:
 		assert(!event->tgt_long.auto_unlinked);
 
 		cxip_ptelist_buf_unlink(oflow_buf);
-		fastlock_release(&rxc->rx_lock);
+		ofi_spin_unlock(&rxc->rx_lock);
 
 		return FI_SUCCESS;
 	case C_EVENT_PUT:
@@ -1239,13 +1240,13 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 
 	/* Drop all unexpected 0-byte Put events. */
 	if (!event->tgt_long.rlength) {
-		fastlock_release(&rxc->rx_lock);
+		ofi_spin_unlock(&rxc->rx_lock);
 		return FI_SUCCESS;
 	}
 
 	/* Handle Put events */
 	ret = cxip_oflow_process_put_event(rxc, req, event);
-	fastlock_release(&rxc->rx_lock);
+	ofi_spin_unlock(&rxc->rx_lock);
 
 	return ret;
 }
@@ -1450,7 +1451,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_PUT_OVERFLOW:
 		/* We matched an unexpected header */
 
-		fastlock_acquire(&rxc->rx_lock);
+		ofi_spin_lock(&rxc->rx_lock);
 
 		/* Check for a previously received unexpected Put event,
 		 * if not found defer until it arrives.
@@ -1463,7 +1464,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 				def_ev->mrecv_len = mrecv_req_put_bytes(req,
 						event->tgt_long.rlength);
 			}
-			fastlock_release(&rxc->rx_lock);
+			ofi_spin_unlock(&rxc->rx_lock);
 
 			return !def_ev ? -FI_EAGAIN : FI_SUCCESS;
 		}
@@ -1484,7 +1485,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			/* undo mrecv_req_put_bytes() */
 			req->recv.start_offset -= def_ev->mrecv_len;
 
-		fastlock_release(&rxc->rx_lock);
+		ofi_spin_unlock(&rxc->rx_lock);
 
 		return ret;
 	case C_EVENT_PUT:
@@ -1632,7 +1633,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
 
-		fastlock_acquire(&rxc->lock);
+		ofi_spin_lock(&rxc->lock);
 
 		/* In cases where the LE pool entry reservation is insufficient
 		 * to meet priority list buffers (due to multiple EP sharing an
@@ -1644,7 +1645,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 			if (!cxip_software_pte_allowed() ||
 			    !cxip_env.hybrid_recv_preemptive) {
-				fastlock_release(&rxc->lock);
+				ofi_spin_unlock(&rxc->lock);
 				return FI_SUCCESS;
 			}
 
@@ -1654,7 +1655,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			if (cxip_check_hybrid_preempt(rxc, event))
 				RXC_WARN(rxc, "Forced FC/SW EP\n");
 
-			fastlock_release(&rxc->lock);
+			ofi_spin_unlock(&rxc->lock);
 
 			return FI_SUCCESS;
 		}
@@ -1664,7 +1665,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		 */
 		if (rxc->state == RXC_DISABLED) {
 			cxip_recv_req_free(req);
-			fastlock_release(&rxc->lock);
+			ofi_spin_unlock(&rxc->lock);
 
 			return FI_SUCCESS;
 		}
@@ -1676,7 +1677,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			RXC_WARN(rxc, "Append err, transition to SW\n");
 
 			cxip_recv_req_dropped(req);
-			fastlock_release(&rxc->lock);
+			ofi_spin_unlock(&rxc->lock);
 
 			return FI_SUCCESS;
 		}
@@ -1702,7 +1703,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		ret = FI_SUCCESS;
 		cxip_recv_req_dropped(req);
 
-		fastlock_release(&rxc->lock);
+		ofi_spin_unlock(&rxc->lock);
 
 		return ret;
 
@@ -1759,13 +1760,13 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_PUT_OVERFLOW:
 		/* We matched an unexpected header */
 
-		fastlock_acquire(&rxc->rx_lock);
+		ofi_spin_lock(&rxc->rx_lock);
 
 		/* Unexpected 0-byte Put events are dropped. Skip matching. */
 		if (!event->tgt_long.rlength) {
 			ret = cxip_ux_send_zb(req, event,
 					      req->recv.start_offset, false);
-			fastlock_release(&rxc->rx_lock);
+			ofi_spin_unlock(&rxc->rx_lock);
 			return ret;
 		}
 
@@ -1781,7 +1782,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 						event->tgt_long.rlength);
 			}
 
-			fastlock_release(&rxc->rx_lock);
+			ofi_spin_unlock(&rxc->rx_lock);
 
 			return !def_ev ? -FI_EAGAIN : FI_SUCCESS;
 		}
@@ -1800,7 +1801,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			/* undo mrecv_req_put_bytes() */
 			req->recv.start_offset -= def_ev->mrecv_len;
 
-		fastlock_release(&rxc->rx_lock);
+		ofi_spin_unlock(&rxc->rx_lock);
 
 		return ret;
 	case C_EVENT_PUT:
@@ -1858,7 +1859,7 @@ int cxip_recv_cancel(struct cxip_req *req)
 	 */
 	if (req->recv.software_list) {
 
-		fastlock_acquire(&rxc->lock);
+		ofi_spin_lock(&rxc->lock);
 
 		dlist_remove_init(&req->recv.rxc_entry);
 		req->recv.canceled = true;
@@ -1866,7 +1867,7 @@ int cxip_recv_cancel(struct cxip_req *req)
 		recv_req_report(req);
 		cxip_recv_req_free(req);
 
-		fastlock_release(&rxc->lock);
+		ofi_spin_unlock(&rxc->lock);
 	} else {
 		ret = cxip_pte_unlink(rxc->rx_pte, C_PTL_LIST_PRIORITY,
 				req->req_id, rxc->rx_cmdq);
@@ -1928,7 +1929,7 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 	struct cxip_rxc *rxc = fc_drops->rxc;
 	int ret = FI_SUCCESS;
 
-	fastlock_acquire(&rxc->lock);
+	ofi_spin_lock(&rxc->lock);
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_ACK:
@@ -1966,7 +1967,7 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 			  event->hdr.event_type);
 	}
 
-	fastlock_release(&rxc->lock);
+	ofi_spin_unlock(&rxc->lock);
 
 	return ret;
 }
@@ -2015,7 +2016,7 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
 	fc_drops->req.cb = cxip_fc_resume_cb;
 	fc_drops->req.ep_obj = rxc->ep_obj;
 
-	fastlock_acquire(&rxc->lock);
+	ofi_spin_lock(&rxc->lock);
 
 	dlist_insert_tail(&fc_drops->rxc_entry, &rxc->fc_drops);
 
@@ -2032,7 +2033,7 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
 		assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
 	}
 
-	fastlock_release(&rxc->lock);
+	ofi_spin_unlock(&rxc->lock);
 
 	return FI_SUCCESS;
 }
@@ -2213,7 +2214,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_ux_send *ux_send;
 	bool matched;
 
-	fastlock_acquire(&rxc->lock);
+	ofi_spin_lock(&rxc->lock);
 
 	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
 	       rxc->state == RXC_ONLOAD_FLOW_CONTROL_REENABLE ||
@@ -2226,7 +2227,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 		ux_send = calloc(1, sizeof(*ux_send));
 		if (!ux_send) {
 			RXC_WARN(rxc, "Failed allocate to memory\n");
-			fastlock_release(&rxc->lock);
+			ofi_spin_unlock(&rxc->lock);
 			return -FI_EAGAIN;
 		}
 
@@ -2238,7 +2239,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 			def_ev = match_put_event(rxc, req, event, &matched);
 			if (!matched) {
 				if (!def_ev) {
-					fastlock_release(&rxc->lock);
+					ofi_spin_unlock(&rxc->lock);
 					free(ux_send);
 					return -FI_EAGAIN;
 				}
@@ -2297,7 +2298,7 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 			  event->hdr.event_type);
 	}
 
-	fastlock_release(&rxc->lock);
+	ofi_spin_unlock(&rxc->lock);
 
 	return FI_SUCCESS;
 }
@@ -2377,11 +2378,11 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	cmd.target.ignore_bits = -1UL;
 	cmd.target.match_id = CXI_MATCH_ID_ANY;
 
-	fastlock_acquire(&rxc->rx_cmdq->lock);
+	ofi_spin_lock(&rxc->rx_cmdq->lock);
 
 	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
-		fastlock_release(&rxc->rx_cmdq->lock);
+		ofi_spin_unlock(&rxc->rx_cmdq->lock);
 
 		RXC_WARN(rxc, "Failed to write Search command: %d\n", ret);
 		ret = -FI_EAGAIN;
@@ -2390,7 +2391,7 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 
 	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
 
-	fastlock_release(&rxc->rx_cmdq->lock);
+	ofi_spin_unlock(&rxc->rx_cmdq->lock);
 
 	return FI_SUCCESS;
 
@@ -2418,9 +2419,9 @@ static int cxip_flush_appends_cb(struct cxip_req *req,
 	assert(event->hdr.event_type == C_EVENT_SEARCH);
 	assert(cxi_event_rc(event) == C_RC_NO_MATCH);
 
-	fastlock_acquire(&rxc->lock);
+	ofi_spin_lock(&rxc->lock);
 	ret = cxip_ux_onload(rxc);
-	fastlock_release(&rxc->lock);
+	ofi_spin_unlock(&rxc->lock);
 
 	if (ret == FI_SUCCESS) {
 		ofi_atomic_dec32(&rxc->orx_reqs);
@@ -2472,11 +2473,11 @@ static int cxip_flush_appends(struct cxip_rxc *rxc)
 	cmd.target.match_bits = -1UL;
 	cmd.target.length = 0;
 
-	fastlock_acquire(&rxc->rx_cmdq->lock);
+	ofi_spin_lock(&rxc->rx_cmdq->lock);
 
 	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
-		fastlock_release(&rxc->rx_cmdq->lock);
+		ofi_spin_unlock(&rxc->rx_cmdq->lock);
 		RXC_WARN(rxc, "Failed to write Search command: %d\n", ret);
 		ret = -FI_EAGAIN;
 		goto err_dec_free_cq_req;
@@ -2484,7 +2485,7 @@ static int cxip_flush_appends(struct cxip_rxc *rxc)
 
 	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
 
-	fastlock_release(&rxc->rx_cmdq->lock);
+	ofi_spin_unlock(&rxc->rx_cmdq->lock);
 
 	return FI_SUCCESS;
 
@@ -2518,9 +2519,9 @@ void cxip_fc_progress_ctrl(struct cxip_rxc *rxc)
 		rxc->drop_count = -1;
 
 	while ((ret = cxip_recv_resume(rxc)) == -FI_EAGAIN) {
-		fastlock_release(&rxc->lock);
+		ofi_spin_unlock(&rxc->lock);
 		cxip_ep_tx_ctrl_progress(rxc->ep_obj);
-		fastlock_acquire(&rxc->lock);
+		ofi_spin_lock(&rxc->lock);
 	}
 	assert(ret == FI_SUCCESS);
 }
@@ -2534,7 +2535,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 	int fc_reason;
 	int ret __attribute__((unused));
 
-	fastlock_acquire(&rxc->lock);
+	ofi_spin_lock(&rxc->lock);
 
 	switch (pte->state) {
 	case C_PTLTE_ENABLED:
@@ -2737,7 +2738,7 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 		RXC_FATAL(rxc, "Unexpected state received: %u\n", pte->state);
 	}
 
-	fastlock_release(&rxc->lock);
+	ofi_spin_unlock(&rxc->lock);
 }
 
 /*
@@ -2856,17 +2857,17 @@ static int cxip_ux_peek(struct cxip_req *req)
 	RXC_DBG(rxc, "Peek UX search req: %p mb.raw: 0x%" PRIx64 " match_id: 0x%x ignore: 0x%" PRIx64 "\n",
 		req, mb.raw, req->recv.match_id, req->recv.ignore);
 
-	fastlock_acquire(&rxc->rx_cmdq->lock);
+	ofi_spin_lock(&rxc->rx_cmdq->lock);
 	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
 	if (ret) {
-		fastlock_release(&rxc->rx_cmdq->lock);
+		ofi_spin_unlock(&rxc->rx_cmdq->lock);
 
 		RXC_WARN(rxc, "Failed to write Search command: %d\n", ret);
 		return -FI_EAGAIN;
 	}
 
 	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
-	fastlock_release(&rxc->rx_cmdq->lock);
+	ofi_spin_unlock(&rxc->rx_cmdq->lock);
 
 	return FI_SUCCESS;
 }
@@ -3345,9 +3346,9 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	req->recv.multi_recv = (flags & FI_MULTI_RECV ? true : false);
 
 	if (!(req->recv.flags & FI_PEEK)) {
-		fastlock_acquire(&rxc->lock);
+		ofi_spin_lock(&rxc->lock);
 		ret = cxip_recv_req_queue(req, true, false);
-		fastlock_release(&rxc->lock);
+		ofi_spin_unlock(&rxc->lock);
 
 		/* Match made in software? */
 		if (ret == -FI_EALREADY)
@@ -3367,9 +3368,9 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	}
 
 	/* FI_PEEK */
-	fastlock_acquire(&rxc->lock);
+	ofi_spin_lock(&rxc->lock);
 	ret = cxip_recv_req_peek(req, true);
-	fastlock_release(&rxc->lock);
+	ofi_spin_unlock(&rxc->lock);
 
 	if (ret == FI_SUCCESS)
 		return ret;
@@ -3732,7 +3733,7 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	cmd.match_bits = put_mb.raw;
 	cmd.rendezvous_id = rdzv_id;
 
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 
 	ret = cxip_send_prep_cmdq(cmdq, req, req->send.tclass);
 	if (ret)
@@ -3763,12 +3764,12 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
 		      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
 
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	return FI_SUCCESS;
 
 err_unlock:
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 err_unmap:
 	cxip_unmap(send_md);
 	req->send.send_md = NULL;
@@ -3961,7 +3962,7 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 	idc_cmd.user_ptr = (uint64_t)req;
 
 	/* Submit command */
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 
 	ret = cxip_send_prep_cmdq(cmdq, req, req->send.tclass);
 	if (ret)
@@ -3985,12 +3986,12 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 	cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
 		      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
 
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	return FI_SUCCESS;
 
 err_unlock:
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 	if (mb.match_comp)
 		cxip_tx_id_free(txc->ep_obj, req->send.tx_id);
 err_free_ibuf:
@@ -4062,7 +4063,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	}
 
 	/* Submit command */
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 
 	ret = cxip_send_prep_cmdq(cmdq, req, req->send.tclass);
 	if (ret)
@@ -4096,12 +4097,12 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	cxip_txq_ring(cmdq, !!(req->send.flags & FI_MORE),
 		      ofi_atomic_get32(&req->send.txc->otx_reqs) - 1);
 
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	return FI_SUCCESS;
 
 err_unlock:
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 	if (mb.match_comp)
 		cxip_tx_id_free(txc->ep_obj, req->send.tx_id);
 err_unmap:
@@ -4215,7 +4216,7 @@ int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
 				peer->caddr.nic, peer->caddr.pid,
 				peer->retry_count);
 
-			fastlock_acquire(&txc->lock);
+			ofi_spin_lock(&txc->lock);
 
 			/* Peer flow control structure can only be freed if
 			 * replay is complete and all acks accounted for.
@@ -4223,7 +4224,7 @@ int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
 			peer->pending_acks--;
 			if (!peer->pending_acks && peer->replayed)
 				cxip_fc_peer_fini(peer);
-			fastlock_release(&txc->lock);
+			ofi_spin_unlock(&txc->lock);
 			return FI_SUCCESS;
 
 		/* This error occurs when the target's control event queue has
@@ -4326,7 +4327,7 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
 	struct dlist_entry *tmp;
 	int ret __attribute__((unused));
 
-	fastlock_acquire(&txc->lock);
+	ofi_spin_lock(&txc->lock);
 
 	peer = cxip_fc_peer_lookup(txc, caddr, rxc_id);
 	if (!peer)
@@ -4357,7 +4358,7 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
 	else
 		peer->replayed = true;
 
-	fastlock_release(&txc->lock);
+	ofi_spin_unlock(&txc->lock);
 
 	return FI_SUCCESS;
 }
@@ -4374,7 +4375,7 @@ static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req)
 	struct cxip_fc_peer *peer;
 	int ret;
 
-	fastlock_acquire(&txc->lock);
+	ofi_spin_lock(&txc->lock);
 
 	/* Check if peer is already disabled */
 	peer = cxip_fc_peer_lookup(txc, req->send.caddr, req->send.rxc_id);
@@ -4382,7 +4383,7 @@ static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req)
 		ret = cxip_fc_peer_init(txc, req->send.caddr, req->send.rxc_id,
 					&peer);
 		if (ret != FI_SUCCESS) {
-			fastlock_release(&txc->lock);
+			ofi_spin_unlock(&txc->lock);
 			return ret;
 		}
 
@@ -4402,7 +4403,7 @@ static int cxip_send_req_dropped(struct cxip_txc *txc, struct cxip_req *req)
 			req, peer->caddr.nic, peer->caddr.pid, peer->pending,
 			peer->dropped);
 
-	fastlock_release(&txc->lock);
+	ofi_spin_unlock(&txc->lock);
 
 	return ret;
 }
@@ -4417,7 +4418,7 @@ static int cxip_send_req_queue(struct cxip_txc *txc, struct cxip_req *req)
 {
 	struct cxip_fc_peer *peer;
 
-	fastlock_acquire(&txc->lock);
+	ofi_spin_lock(&txc->lock);
 
 	if (!dlist_empty(&txc->fc_peers)) {
 		peer = cxip_fc_peer_lookup(txc, req->send.caddr,
@@ -4426,7 +4427,7 @@ static int cxip_send_req_queue(struct cxip_txc *txc, struct cxip_req *req)
 			/* Peer is disabled. Progress control EQs so future
 			 * cxip_send_req_queue() may succeed.
 			 */
-			fastlock_release(&txc->lock);
+			ofi_spin_unlock(&txc->lock);
 			cxip_ep_ctrl_progress(txc->ep_obj);
 			return -FI_EAGAIN;
 		}
@@ -4434,7 +4435,7 @@ static int cxip_send_req_queue(struct cxip_txc *txc, struct cxip_req *req)
 
 	dlist_insert_tail(&req->send.txc_entry, &txc->msg_queue);
 
-	fastlock_release(&txc->lock);
+	ofi_spin_unlock(&txc->lock);
 
 	return FI_SUCCESS;
 }
@@ -4449,7 +4450,7 @@ static int cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req)
 {
 	int ret = FI_SUCCESS;
 
-	fastlock_acquire(&txc->lock);
+	ofi_spin_lock(&txc->lock);
 
 	if (req->send.fc_peer) {
 		/* The peer was disabled after this message arrived. */
@@ -4469,7 +4470,7 @@ static int cxip_send_req_dequeue(struct cxip_txc *txc, struct cxip_req *req)
 	dlist_remove(&req->send.txc_entry);
 
 out_unlock:
-	fastlock_release(&txc->lock);
+	ofi_spin_unlock(&txc->lock);
 
 	return ret;
 }

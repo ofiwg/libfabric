@@ -20,9 +20,9 @@
 static void cxip_mr_domain_remove(struct cxip_mr_domain *mr_domain,
 				  struct cxip_mr *mr)
 {
-	fastlock_acquire(&mr_domain->lock);
+	ofi_spin_lock(&mr_domain->lock);
 	dlist_remove(&mr->mr_domain_entry);
-	fastlock_release(&mr_domain->lock);
+	ofi_spin_unlock(&mr_domain->lock);
 }
 
 static int cxip_mr_domain_insert(struct cxip_mr_domain *mr_domain,
@@ -37,19 +37,19 @@ static int cxip_mr_domain_insert(struct cxip_mr_domain *mr_domain,
 	bucket = fasthash64(&mr->key, sizeof(mr->key), 0) %
 		CXIP_MR_DOMAIN_HT_BUCKETS;
 
-	fastlock_acquire(&mr_domain->lock);
+	ofi_spin_lock(&mr_domain->lock);
 
 	dlist_foreach_container(&mr_domain->buckets[bucket], struct cxip_mr,
 				clash_mr, mr_domain_entry) {
 		if (clash_mr->key == mr->key) {
-			fastlock_release(&mr_domain->lock);
+			ofi_spin_unlock(&mr_domain->lock);
 			return -FI_ENOKEY;
 		}
 	}
 
 	dlist_insert_tail(&mr->mr_domain_entry, &mr_domain->buckets[bucket]);
 
-	fastlock_release(&mr_domain->lock);
+	ofi_spin_unlock(&mr_domain->lock);
 
 	return FI_SUCCESS;
 }
@@ -66,14 +66,14 @@ void cxip_mr_domain_fini(struct cxip_mr_domain *mr_domain)
 			CXIP_WARN("MR domain bucket %d is not empty\n", i);
 	}
 
-	fastlock_destroy(&mr_domain->lock);
+	ofi_spin_destroy(&mr_domain->lock);
 }
 
 void cxip_mr_domain_init(struct cxip_mr_domain *mr_domain)
 {
 	int i;
 
-	fastlock_init(&mr_domain->lock);
+	ofi_spin_init(&mr_domain->lock);
 
 	for (i = 0; i < CXIP_MR_DOMAIN_HT_BUCKETS; i++)
 		dlist_init(&mr_domain->buckets[i]);
@@ -86,9 +86,9 @@ void cxip_mr_domain_init(struct cxip_mr_domain *mr_domain)
  */
 static void cxip_ep_mr_insert(struct cxip_ep_obj *ep_obj, struct cxip_mr *mr)
 {
-	fastlock_acquire(&ep_obj->lock);
+	ofi_mutex_lock(&ep_obj->lock);
 	dlist_insert_tail(&mr->ep_entry, &ep_obj->mr_list);
-	fastlock_release(&ep_obj->lock);
+	ofi_mutex_unlock(&ep_obj->lock);
 }
 
 /*
@@ -96,9 +96,9 @@ static void cxip_ep_mr_insert(struct cxip_ep_obj *ep_obj, struct cxip_mr *mr)
  */
 static void cxip_ep_mr_remove(struct cxip_mr *mr)
 {
-	fastlock_acquire(&mr->ep->ep_obj->lock);
+	ofi_mutex_lock(&mr->ep->ep_obj->lock);
 	dlist_remove(&mr->ep_entry);
-	fastlock_release(&mr->ep->ep_obj->lock);
+	ofi_mutex_unlock(&mr->ep->ep_obj->lock);
 }
 
 /*
@@ -155,15 +155,15 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 	uint32_t le_flags;
 
-	fastlock_acquire(&ep_obj->lock);
+	ofi_mutex_lock(&ep_obj->lock);
 	buffer_id = ofi_idx_insert(&ep_obj->req_ids, &mr->req);
 	if (buffer_id < 0 || buffer_id >= CXIP_BUFFER_ID_MAX) {
 		CXIP_WARN("Failed to allocate MR buffer ID: %d\n",
 			  buffer_id);
-		fastlock_release(&ep_obj->lock);
+		ofi_mutex_unlock(&ep_obj->lock);
 		return -FI_ENOSPC;
 	}
-	fastlock_release(&ep_obj->lock);
+	ofi_mutex_unlock(&ep_obj->lock);
 
 	mr->req.req_id = buffer_id;
 	mr->req.cb = cxip_mr_cb;
@@ -201,9 +201,9 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	return FI_SUCCESS;
 
 err_free_idx:
-	fastlock_acquire(&ep_obj->lock);
+	ofi_mutex_lock(&ep_obj->lock);
 	ofi_idx_remove(&ep_obj->req_ids, mr->req.req_id);
-	fastlock_release(&ep_obj->lock);
+	ofi_mutex_unlock(&ep_obj->lock);
 
 	return ret;
 }
@@ -234,9 +234,9 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 		CXIP_WARN("MR invalidate failed: %d (mr: %p key %lu)\n",
 			  ret, mr, mr->key);
 
-	fastlock_acquire(&ep_obj->lock);
+	ofi_mutex_lock(&ep_obj->lock);
 	ofi_idx_remove(&ep_obj->req_ids, mr->req.req_id);
-	fastlock_release(&ep_obj->lock);
+	ofi_mutex_unlock(&ep_obj->lock);
 
 	mr->enabled = false;
 
@@ -284,15 +284,15 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	uint32_t le_flags;
 	uint64_t ib = 0;
 
-	fastlock_acquire(&ep_obj->lock);
+	ofi_mutex_lock(&ep_obj->lock);
 	buffer_id = ofi_idx_insert(&ep_obj->req_ids, &mr->req);
 	if (buffer_id < 0 || buffer_id >= CXIP_BUFFER_ID_MAX) {
 		CXIP_WARN("Failed to allocate MR buffer ID: %d\n",
 			  buffer_id);
-		fastlock_release(&ep_obj->lock);
+		ofi_mutex_unlock(&ep_obj->lock);
 		return -FI_ENOSPC;
 	}
-	fastlock_release(&ep_obj->lock);
+	ofi_mutex_unlock(&ep_obj->lock);
 
 	mr->req.req_id = buffer_id;
 	mr->req.cb = cxip_mr_cb;
@@ -370,9 +370,9 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 err_pte_free:
 	cxip_pte_free(mr->pte);
 err_free_idx:
-	fastlock_acquire(&ep_obj->lock);
+	ofi_mutex_lock(&ep_obj->lock);
 	ofi_idx_remove(&ep_obj->req_ids, mr->req.req_id);
-	fastlock_release(&ep_obj->lock);
+	ofi_mutex_unlock(&ep_obj->lock);
 
 	return ret;
 }
@@ -402,9 +402,9 @@ static int cxip_mr_disable_opt(struct cxip_mr *mr)
 cleanup:
 	cxip_pte_free(mr->pte);
 
-	fastlock_acquire(&ep_obj->lock);
+	ofi_mutex_lock(&ep_obj->lock);
 	ofi_idx_remove(&ep_obj->req_ids, mr->req.req_id);
-	fastlock_release(&ep_obj->lock);
+	ofi_mutex_unlock(&ep_obj->lock);
 
 	mr->enabled = false;
 
@@ -473,7 +473,7 @@ static int cxip_mr_close(struct fid *fid)
 
 	mr = container_of(fid, struct cxip_mr, mr_fid.fid);
 
-	fastlock_acquire(&mr->lock);
+	ofi_spin_lock(&mr->lock);
 
 	ret = cxip_mr_disable(mr);
 	if (ret != FI_SUCCESS)
@@ -492,7 +492,7 @@ static int cxip_mr_close(struct fid *fid)
 
 	ofi_atomic_dec32(&mr->domain->ref);
 
-	fastlock_release(&mr->lock);
+	ofi_spin_unlock(&mr->lock);
 
 	free(mr);
 
@@ -511,7 +511,7 @@ static int cxip_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	mr = container_of(fid, struct cxip_mr, mr_fid.fid);
 
-	fastlock_acquire(&mr->lock);
+	ofi_spin_lock(&mr->lock);
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CNTR:
@@ -556,7 +556,7 @@ static int cxip_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		ret = -FI_EINVAL;
 	}
 
-	fastlock_release(&mr->lock);
+	ofi_spin_unlock(&mr->lock);
 
 	return ret;
 }
@@ -571,7 +571,7 @@ static int cxip_mr_control(struct fid *fid, int command, void *arg)
 
 	mr = container_of(fid, struct cxip_mr, mr_fid.fid);
 
-	fastlock_acquire(&mr->lock);
+	ofi_spin_lock(&mr->lock);
 
 	switch (command) {
 	case FI_ENABLE:
@@ -591,7 +591,7 @@ static int cxip_mr_control(struct fid *fid, int command, void *arg)
 		ret = -FI_EINVAL;
 	}
 
-	fastlock_release(&mr->lock);
+	ofi_spin_unlock(&mr->lock);
 
 	return ret;
 }
@@ -607,7 +607,7 @@ static struct fi_ops cxip_mr_fi_ops = {
 static void cxip_mr_init(struct cxip_mr *mr, struct cxip_domain *dom,
 			 const struct fi_mr_attr *attr, uint64_t flags)
 {
-	fastlock_init(&mr->lock);
+	ofi_spin_init(&mr->lock);
 
 	mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	mr->mr_fid.fid.context = attr->context;

@@ -551,7 +551,7 @@ static int cxip_av_close(struct fid *fid)
 	}
 
 	ofi_atomic_dec32(&av->domain->ref);
-	fastlock_destroy(&av->list_lock);
+	ofi_mutex_destroy(&av->list_lock);
 	free(av);
 
 	return 0;
@@ -685,7 +685,7 @@ int cxip_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		((uint64_t)1 << (64 - av->attr.rx_ctx_bits)) - 1 : ~0;
 
 	dlist_init(&av->ep_list);
-	fastlock_init(&av->list_lock);
+	ofi_mutex_init(&av->list_lock);
 	ofi_atomic_initialize32(&av->ref, 0);
 
 	/* zero count is allowed, means default size */

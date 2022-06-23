@@ -31,7 +31,7 @@ static int cxip_domain_enable(struct cxip_domain *dom)
 {
 	int ret = FI_SUCCESS;
 
-	fastlock_acquire(&dom->lock);
+	ofi_spin_lock(&dom->lock);
 
 	if (dom->enabled)
 		goto unlock;
@@ -68,7 +68,7 @@ static int cxip_domain_enable(struct cxip_domain *dom)
 	cxip_mr_domain_init(&dom->mr_domain);
 
 	dom->enabled = true;
-	fastlock_release(&dom->lock);
+	ofi_spin_unlock(&dom->lock);
 
 	/* Telemetry are considered optional and will not stop domain
 	 * allocation.
@@ -95,7 +95,7 @@ put_if:
 	cxip_put_if(dom->iface);
 	dom->iface = NULL;
 unlock:
-	fastlock_release(&dom->lock);
+	ofi_spin_unlock(&dom->lock);
 
 	return ret;
 }
@@ -105,7 +105,7 @@ unlock:
  */
 static void cxip_domain_disable(struct cxip_domain *dom)
 {
-	fastlock_acquire(&dom->lock);
+	ofi_spin_lock(&dom->lock);
 
 	if (!dom->enabled)
 		goto unlock;
@@ -128,7 +128,7 @@ static void cxip_domain_disable(struct cxip_domain *dom)
 	dom->enabled = false;
 
 unlock:
-	fastlock_release(&dom->lock);
+	ofi_spin_unlock(&dom->lock);
 }
 
 /*
@@ -150,7 +150,7 @@ static int cxip_dom_close(struct fid *fid)
 
 	cxip_domain_disable(dom);
 
-	fastlock_destroy(&dom->lock);
+	ofi_spin_destroy(&dom->lock);
 	ofi_domain_close(&dom->util_domain);
 	free(dom);
 
@@ -417,14 +417,14 @@ static int cxip_dom_dwq_op_cntr(struct cxip_domain *dom,
 	cmd.set_ct_success = 1;
 	cmd.ct_success = cntr->value;
 
-	fastlock_acquire(&dom->trig_cmdq->lock);
+	ofi_spin_lock(&dom->trig_cmdq->lock);
 	ret = cxi_cq_emit_ct(dom->trig_cmdq->dev_cmdq, opcode, &cmd);
 	if (ret) {
 		/* TODO: Handle this assert. */
 		assert(!ret);
 	}
 	cxi_cq_ring(dom->trig_cmdq->dev_cmdq);
-	fastlock_release(&dom->trig_cmdq->lock);
+	ofi_spin_unlock(&dom->trig_cmdq->lock);
 
 	return FI_SUCCESS;
 }
@@ -620,13 +620,13 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 		return ret;
 
 	case FI_FLUSH_WORK:
-		fastlock_acquire(&dom->lock);
+		ofi_spin_lock(&dom->lock);
 		if (!dom->cntr_init) {
-			fastlock_release(&dom->lock);
+			ofi_spin_unlock(&dom->lock);
 			return FI_SUCCESS;
 		}
 
-		fastlock_acquire(&dom->trig_cmdq->lock);
+		ofi_spin_lock(&dom->trig_cmdq->lock);
 
 		/* Issue cancels to all allocated counters. */
 		dlist_foreach_container(&dom->cntr_list, struct cxip_cntr,
@@ -690,8 +690,8 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 				dom_entry)
 			cxip_cq_flush_trig_reqs(cq);
 
-		fastlock_release(&dom->trig_cmdq->lock);
-		fastlock_release(&dom->lock);
+		ofi_spin_unlock(&dom->trig_cmdq->lock);
+		ofi_spin_unlock(&dom->lock);
 
 		return FI_SUCCESS;
 	default:
@@ -924,7 +924,8 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	ret = ofi_domain_init(&fab->util_fabric.fabric_fid, info,
-			      &cxi_domain->util_domain, context);
+			      &cxi_domain->util_domain, context,
+			      OFI_DOMAIN_SPINLOCK);
 	if (ret)
 		goto free_dom;
 
@@ -972,7 +973,7 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	dlist_init(&cxi_domain->txc_list);
 	dlist_init(&cxi_domain->cntr_list);
 	dlist_init(&cxi_domain->cq_list);
-	fastlock_init(&cxi_domain->lock);
+	ofi_spin_init(&cxi_domain->lock);
 	ofi_atomic_initialize32(&cxi_domain->ref, 0);
 	cxi_domain->fab = fab;
 
@@ -991,7 +992,7 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	return 0;
 
 cleanup_dom:
-	fastlock_destroy(&cxi_domain->lock);
+	ofi_spin_destroy(&cxi_domain->lock);
 close_util_dom:
 	ofi_domain_close(&cxi_domain->util_domain);
 free_dom:

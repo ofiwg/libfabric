@@ -1361,7 +1361,7 @@ static void _getgroup_done(struct cxip_zbcoll_obj *zb, void *usrptr)
 	}
 
 	/* we found our group ID */
-	fastlock_acquire(&zbcoll->lock);
+	ofi_spin_lock(&zbcoll->lock);
 	zb->grpid = grpid;
 	trc("found grpid=%d refcnt=%d\n", grpid, zbcoll->refcnt);
 	if (zbcoll->refcnt && !--zbcoll->refcnt) {
@@ -1369,7 +1369,7 @@ static void _getgroup_done(struct cxip_zbcoll_obj *zb, void *usrptr)
 		_clrbit(&zbcoll->grpmsk, grpid);
 		zbcoll->grptbl[ZB_NEG_BIT] = NULL;
 	}
-	fastlock_release(&zbcoll->lock);
+	ofi_spin_unlock(&zbcoll->lock);
 	zb->error = FI_SUCCESS;
 
 	/* chain to the next callback */
@@ -1377,10 +1377,10 @@ static void _getgroup_done(struct cxip_zbcoll_obj *zb, void *usrptr)
 	return;
 
 fail:
-	fastlock_acquire(&zbcoll->lock);
+	ofi_spin_lock(&zbcoll->lock);
 	if (zbcoll->refcnt && !--zbcoll->refcnt)
 		zbcoll->grptbl[ZB_NEG_BIT] = NULL;
-	fastlock_release(&zbcoll->lock);
+	ofi_spin_unlock(&zbcoll->lock);
 	/* leave cb stack intact for retry */
 }
 
@@ -1462,7 +1462,7 @@ int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb)
 
 	/* getgroup operations must be serialized */
 	ret = FI_SUCCESS;
-	fastlock_acquire(&zbcoll->lock);
+	ofi_spin_lock(&zbcoll->lock);
 	if (!zbcoll->grptbl[ZB_NEG_BIT]) {
 		/* free to start negotiating */
 		zbcoll->grptbl[ZB_NEG_BIT] = zb->state[0].zb;
@@ -1478,7 +1478,7 @@ int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb)
 		/* any other attempt has to wait */
 		ret = -FI_EAGAIN;
 	}
-	fastlock_release(&zbcoll->lock);
+	ofi_spin_unlock(&zbcoll->lock);
 	if (ret)
 		return ret;
 
@@ -1528,11 +1528,11 @@ void cxip_zbcoll_rlsgroup(struct cxip_zbcoll_obj *zb)
 
 	zbcoll = &zb->ep_obj->zbcoll;
 
-	fastlock_acquire(&zbcoll->lock);
+	ofi_spin_lock(&zbcoll->lock);
 	_setbit(&zbcoll->grpmsk, zb->grpid);
 	zbcoll->grptbl[zb->grpid] = NULL;
 	zb->grpid = ZB_NEG_BIT;
-	fastlock_release(&zbcoll->lock);
+	ofi_spin_unlock(&zbcoll->lock);
 }
 
 /* All exported functions are variants of this core function */
@@ -1657,7 +1657,7 @@ int cxip_zbcoll_init(struct cxip_ep_obj *ep_obj)
 	zbcoll->grptbl = calloc(ZB_MAP_BITS, sizeof(void *));
 	if (!zbcoll->grptbl)
 		return -FI_ENOMEM;
-	fastlock_init(&zbcoll->lock);
+	ofi_spin_init(&zbcoll->lock);
 	ofi_atomic_initialize32(&zbcoll->dsc_count, 0);
 	ofi_atomic_initialize32(&zbcoll->err_count, 0);
 	ofi_atomic_initialize32(&zbcoll->ack_count, 0);

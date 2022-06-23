@@ -146,7 +146,7 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **iface)
 	}
 
 	/* Lock the IF to serialize opening the device */
-	fastlock_acquire(&if_entry->lock);
+	ofi_spin_lock(&if_entry->lock);
 
 	if (!if_entry->dev) {
 		ret = cxil_open_device(if_entry->info->dev_id, &if_entry->dev);
@@ -162,12 +162,12 @@ int cxip_get_if(uint32_t nic_addr, struct cxip_if **iface)
 	ofi_atomic_inc32(&if_entry->ref);
 	*iface = if_entry;
 
-	fastlock_release(&if_entry->lock);
+	ofi_spin_unlock(&if_entry->lock);
 
 	return FI_SUCCESS;
 
 unlock:
-	fastlock_release(&if_entry->lock);
+	ofi_spin_unlock(&if_entry->lock);
 
 	return ret;
 }
@@ -177,7 +177,7 @@ unlock:
  */
 void cxip_put_if(struct cxip_if *iface)
 {
-	fastlock_acquire(&iface->lock);
+	ofi_spin_lock(&iface->lock);
 
 	if (!ofi_atomic_dec32(&iface->ref)) {
 		cxil_close_device(iface->dev);
@@ -186,7 +186,7 @@ void cxip_put_if(struct cxip_if *iface)
 		CXIP_DBG("Closed %s\n", iface->info->device_name);
 	}
 
-	fastlock_release(&iface->lock);
+	ofi_spin_unlock(&iface->lock);
 }
 
 /*
@@ -212,7 +212,7 @@ int cxip_alloc_lni(struct cxip_if *iface, uint32_t svc_id,
 	}
 
 	lni->iface = iface;
-	fastlock_init(&lni->lock);
+	ofi_spin_init(&lni->lock);
 	dlist_init(&lni->remap_cps);
 
 	CXIP_DBG("Allocated LNI, %s RGID: %u\n",
@@ -287,7 +287,7 @@ static int cxip_cp_get(struct cxip_lni *lni, uint16_t vni,
 	struct cxip_remap_cp *sw_cp;
 	static const enum cxi_traffic_class remap_tc = CXI_TC_BEST_EFFORT;
 
-	fastlock_acquire(&lni->lock);
+	ofi_spin_lock(&lni->lock);
 
 	/* Always prefer SW remapped CPs over allocating HW CP. */
 	dlist_foreach_container(&lni->remap_cps, struct cxip_remap_cp, sw_cp,
@@ -365,14 +365,14 @@ found_hw_cp:
 	*cp = &sw_cp->remap_cp;
 
 success_unlock:
-	fastlock_release(&lni->lock);
+	ofi_spin_unlock(&lni->lock);
 
 	return FI_SUCCESS;
 
 err_free_sw_cp:
 	free(sw_cp);
 err_unlock:
-	fastlock_release(&lni->lock);
+	ofi_spin_unlock(&lni->lock);
 
 	return ret;
 }
@@ -476,18 +476,18 @@ int cxip_pte_set_state(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
 		.drop_count = drop_count,
 	};
 
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 
 	ret = cxi_cq_emit_target(cmdq->dev_cmdq, &set_state);
 	if (ret) {
 		CXIP_WARN("Failed to enqueue command: %d\n", ret);
-		fastlock_release(&cmdq->lock);
+		ofi_spin_unlock(&cmdq->lock);
 		return -FI_EAGAIN;
 	}
 
 	cxi_cq_ring(cmdq->dev_cmdq);
 
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	return FI_SUCCESS;
 }
@@ -538,13 +538,13 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 
 	cxi_target_cmd_setopts(&cmd.target, flags);
 
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 
 	rc = cxi_cq_emit_target(cmdq->dev_cmdq, &cmd);
 	if (rc) {
 		CXIP_DBG("Failed to write Append command: %d\n", rc);
 
-		fastlock_release(&cmdq->lock);
+		ofi_spin_unlock(&cmdq->lock);
 
 		/* Return error according to Domain Resource Management */
 		return -FI_EAGAIN;
@@ -553,7 +553,7 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 	if (ring)
 		cxi_cq_ring(cmdq->dev_cmdq);
 
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	return FI_SUCCESS;
 }
@@ -572,13 +572,13 @@ int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 	cmd.target.ptlte_index  = pte->pte->ptn;
 	cmd.target.buffer_id = buffer_id;
 
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 
 	rc = cxi_cq_emit_target(cmdq->dev_cmdq, &cmd);
 	if (rc) {
 		CXIP_DBG("Failed to write Append command: %d\n", rc);
 
-		fastlock_release(&cmdq->lock);
+		ofi_spin_unlock(&cmdq->lock);
 
 		/* Return error according to Domain Resource Management */
 		return -FI_EAGAIN;
@@ -586,7 +586,7 @@ int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 
 	cxi_cq_ring(cmdq->dev_cmdq);
 
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	return FI_SUCCESS;
 }
@@ -642,9 +642,9 @@ int cxip_pte_alloc_nomap(struct cxip_if_domain *if_dom, struct cxi_eq *evtq,
 		goto free_mem;
 	}
 
-	fastlock_acquire(&if_dom->lni->iface->lock);
+	ofi_spin_lock(&if_dom->lni->iface->lock);
 	dlist_insert_tail(&new_pte->pte_entry, &if_dom->lni->iface->ptes);
-	fastlock_release(&if_dom->lni->iface->lock);
+	ofi_spin_unlock(&if_dom->lni->iface->lock);
 
 	new_pte->if_dom = if_dom;
 	new_pte->state_change_cb = state_change_cb;
@@ -698,9 +698,9 @@ void cxip_pte_free(struct cxip_pte *pte)
 	int ret;
 	int i;
 
-	fastlock_acquire(&pte->if_dom->lni->iface->lock);
+	ofi_spin_lock(&pte->if_dom->lni->iface->lock);
 	dlist_remove(&pte->pte_entry);
-	fastlock_release(&pte->if_dom->lni->iface->lock);
+	ofi_spin_unlock(&pte->if_dom->lni->iface->lock);
 
 	for (i = pte->pte_map_count; i > 0; i--) {
 		ret = cxil_unmap_pte(pte->pte_map[i - 1]);
@@ -723,7 +723,7 @@ int cxip_pte_state_change(struct cxip_if *dev_if, const union c_event *event)
 {
 	struct cxip_pte *pte;
 
-	fastlock_acquire(&dev_if->lock);
+	ofi_spin_lock(&dev_if->lock);
 
 	dlist_foreach_container(&dev_if->ptes,
 				struct cxip_pte, pte, pte_entry) {
@@ -732,12 +732,12 @@ int cxip_pte_state_change(struct cxip_if *dev_if, const union c_event *event)
 			if (pte->state_change_cb)
 				pte->state_change_cb(pte, event);
 
-			fastlock_release(&dev_if->lock);
+			ofi_spin_unlock(&dev_if->lock);
 			return FI_SUCCESS;
 		}
 	}
 
-	fastlock_release(&dev_if->lock);
+	ofi_spin_unlock(&dev_if->lock);
 
 	return -FI_EINVAL;
 }
@@ -793,7 +793,7 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 	new_cmdq->dev_cmdq = dev_cmdq;
 	new_cmdq->lni = lni;
 
-	fastlock_init(&new_cmdq->lock);
+	ofi_spin_init(&new_cmdq->lock);
 	*cmdq = new_cmdq;
 
 	return FI_SUCCESS;
@@ -815,7 +815,7 @@ void cxip_cmdq_free(struct cxip_cmdq *cmdq)
 	if (ret)
 		CXIP_WARN("cxil_destroy_cmdq failed, ret: %d\n", ret);
 
-	fastlock_destroy(&cmdq->lock);
+	ofi_spin_destroy(&cmdq->lock);
 	free(cmdq);
 }
 
@@ -1131,7 +1131,7 @@ static void cxip_query_if_list(struct slist *if_list)
 
 		ofi_atomic_initialize32(&if_entry->ref, 0);
 		dlist_init(&if_entry->ptes);
-		fastlock_init(&if_entry->lock);
+		ofi_spin_init(&if_entry->lock);
 		slist_insert_tail(&if_entry->if_entry, if_list);
 	}
 }
@@ -1147,7 +1147,7 @@ static void cxip_free_if_list(struct slist *if_list)
 	while (!slist_empty(if_list)) {
 		entry = slist_remove_head(if_list);
 		if_entry = container_of(entry, struct cxip_if, if_entry);
-		fastlock_destroy(&if_entry->lock);
+		ofi_spin_destroy(&if_entry->lock);
 		free(if_entry);
 	}
 

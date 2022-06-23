@@ -447,7 +447,7 @@ struct cxip_if {
 	struct dlist_entry ptes;
 
 	ofi_atomic32_t ref;
-	fastlock_t lock;
+	ofi_spin_t lock;
 };
 
 /*
@@ -478,7 +478,7 @@ struct cxip_lni {
 	/* Software remapped communication profiles. */
 	struct dlist_entry remap_cps;
 
-	fastlock_t lock;
+	ofi_spin_t lock;
 };
 
 /*
@@ -518,7 +518,7 @@ struct cxip_pte {
  */
 struct cxip_cmdq {
 	struct cxi_cq *dev_cmdq;
-	fastlock_t lock;
+	ofi_spin_t lock;
 	struct c_cstate_cmd c_state;
 	enum cxip_llring_mode llring_mode;
 
@@ -553,7 +553,7 @@ struct cxip_md {
 
 struct cxip_mr_domain {
 	struct dlist_entry buckets[CXIP_MR_DOMAIN_HT_BUCKETS];
-	fastlock_t lock;
+	ofi_spin_t lock;
 };
 
 void cxip_mr_domain_init(struct cxip_mr_domain *mr_domain);
@@ -590,7 +590,7 @@ struct cxip_telemetry_entry {
 struct cxip_domain {
 	struct util_domain util_domain;
 	struct cxip_fabric *fab;
-	fastlock_t lock;
+	ofi_spin_t lock;
 	ofi_atomic32_t ref;
 
 	struct cxi_auth_key auth_key;
@@ -1029,16 +1029,16 @@ struct cxip_cq {
 	/* CXI specific fields. */
 	struct cxip_domain *domain;
 	struct cxip_ep_obj *ep_obj;
-	fastlock_t lock;
+	ofi_spin_t lock;
 	bool enabled;
 	unsigned int ack_batch_size;
-	fastlock_t req_lock;
+	ofi_spin_t req_lock;
 	struct ofi_bufpool *req_pool;
 	struct indexer req_table;
 	struct dlist_entry req_list;
 
 	struct ofi_bufpool *ibuf_pool;
-	fastlock_t ibuf_lock;
+	ofi_spin_t ibuf_lock;
 
 	struct dlist_entry dom_entry;
 };
@@ -1064,7 +1064,7 @@ struct cxip_cntr {
 	/* Contexts to which counter is bound */
 	struct dlist_entry ctx_list;
 
-	fastlock_t lock;
+	ofi_mutex_t lock;
 
 	struct cxi_ct *ct;
 	struct c_ct_writeback *wb;
@@ -1166,7 +1166,7 @@ struct cxip_ep_zbcoll_obj {
 	uint64_t grpmsk;		// group use mask
 	int refcnt;			// grptbl reference count
 	bool disable;			// low level tests
-	fastlock_t lock;		// group ID negotiation lock
+	ofi_spin_t lock;		// group ID negotiation lock
 	ofi_atomic32_t dsc_count;	// cumulative RCV discard count
 	ofi_atomic32_t err_count;	// cumulative ACK error count
 	ofi_atomic32_t ack_count;	// cumulative ACK success count
@@ -1402,7 +1402,7 @@ cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
  */
 struct cxip_rxc {
 	struct fid_ep ctx;
-	fastlock_t lock;		// Control ops lock
+	ofi_spin_t lock;		// Control ops lock
 
 	uint16_t rx_id;			// SEP index
 
@@ -1438,7 +1438,7 @@ struct cxip_rxc {
 	int num_sc_nic_hw2sw_unexp;
 
 	/* Unexpected message handling */
-	fastlock_t rx_lock;			// RX message lock
+	ofi_spin_t rx_lock;			// RX message lock
 	struct cxip_ptelist_bufpool *req_list_bufpool;
 	struct cxip_ptelist_bufpool *oflow_list_bufpool;
 
@@ -1627,7 +1627,7 @@ struct cxip_rdzv_pte {
 	 * There is one request structure (and LE) for each LAC.
 	 */
 	struct cxip_req *src_reqs[RDZV_SRC_LES];
-	fastlock_t src_reqs_lock;
+	ofi_spin_t src_reqs_lock;
 
 	/* Count of the number of buffers successfully linked on this PtlTE. */
 	ofi_atomic32_t le_linked_success_count;
@@ -1664,7 +1664,7 @@ struct cxip_txc {
 	uint8_t pid_bits;
 
 	struct dlist_entry ep_list;	// contains EPs using shared context
-	fastlock_t lock;
+	ofi_spin_t lock;
 
 	struct fi_tx_attr attr;		// attributes
 	bool selective_completion;
@@ -1741,7 +1741,7 @@ struct cxip_ep_obj {
 	ofi_atomic32_t txq_refs[CXIP_EP_MAX_TX_CNT];
 	struct cxip_cmdq *tgqs[CXIP_EP_MAX_TX_CNT];
 	ofi_atomic32_t tgq_refs[CXIP_EP_MAX_TX_CNT];
-	fastlock_t cmdq_lock;
+	ofi_spin_t cmdq_lock;
 
 	uint64_t caps;
 	struct fi_ep_attr ep_attr;
@@ -1751,7 +1751,7 @@ struct cxip_ep_obj {
 	struct cxi_auth_key auth_key;
 
 	bool enabled;
-	fastlock_t lock;
+	ofi_mutex_t lock;
 
 	struct cxip_addr src_addr;	// address of this NIC
 	fi_addr_t fi_addr;		// AV address of this EP
@@ -1764,10 +1764,10 @@ struct cxip_ep_obj {
 
 	struct indexer rdzv_ids;
 	int max_rdzv_ids;
-	fastlock_t rdzv_id_lock;
+	ofi_spin_t rdzv_id_lock;
 
 	struct indexer tx_ids;
-	fastlock_t tx_id_lock;
+	ofi_spin_t tx_id_lock;
 
 	/* Control resources */
 	struct cxil_wait_obj *ctrl_wait;
@@ -1826,7 +1826,7 @@ struct cxip_mr {
 	uint64_t flags;			// special flags
 	struct fi_mr_attr attr;		// attributes
 	struct cxip_cntr *cntr;		// if bound to cntr
-	fastlock_t lock;
+	ofi_spin_t lock;
 
 	bool enabled;
 	struct cxip_pte *pte;
@@ -1875,7 +1875,7 @@ struct cxip_av {
 	struct util_shm shm;		// OFI shared memory structure
 	int shared;			// set if shared
 	struct dlist_entry ep_list;	// contains EP fid objects
-	fastlock_t list_lock;
+	ofi_mutex_t list_lock;
 };
 
 /*
@@ -2052,7 +2052,7 @@ struct cxip_coll_mc {
 	ofi_atomic32_t recv_cnt;		// for diagnostics
 	ofi_atomic32_t pkt_cnt;			// for diagnostics
 	ofi_atomic32_t seq_err_cnt;		// for diagnostics
-	fastlock_t lock;
+	ofi_spin_t lock;
 
 	struct cxi_md *reduction_md;		// memory descriptor for DMA
 	struct cxip_coll_reduction reduction[CXIP_COLL_MAX_CONCUR];
@@ -2593,53 +2593,53 @@ int _cxip_atomic_opcode(enum cxip_amo_req_type req_type, enum fi_datatype dt,
 static inline void
 cxip_domain_add_txc(struct cxip_domain *dom, struct cxip_txc *txc)
 {
-	fastlock_acquire(&dom->lock);
+	ofi_spin_lock(&dom->lock);
 	dlist_insert_tail(&txc->dom_entry, &dom->txc_list);
-	fastlock_release(&dom->lock);
+	ofi_spin_unlock(&dom->lock);
 }
 
 static inline void
 cxip_domain_remove_txc(struct cxip_domain *dom, struct cxip_txc *txc)
 {
-	fastlock_acquire(&dom->lock);
+	ofi_spin_lock(&dom->lock);
 	dlist_remove(&txc->dom_entry);
-	fastlock_release(&dom->lock);
+	ofi_spin_unlock(&dom->lock);
 }
 
 static inline void
 cxip_domain_add_cntr(struct cxip_domain *dom, struct cxip_cntr *cntr)
 {
-	fastlock_acquire(&dom->lock);
+	ofi_spin_lock(&dom->lock);
 	dlist_insert_tail(&cntr->dom_entry, &dom->cntr_list);
 	ofi_atomic_inc32(&dom->ref);
-	fastlock_release(&dom->lock);
+	ofi_spin_unlock(&dom->lock);
 }
 
 static inline void
 cxip_domain_remove_cntr(struct cxip_domain *dom, struct cxip_cntr *cntr)
 {
-	fastlock_acquire(&dom->lock);
+	ofi_spin_lock(&dom->lock);
 	dlist_remove(&cntr->dom_entry);
 	ofi_atomic_dec32(&dom->ref);
-	fastlock_release(&dom->lock);
+	ofi_spin_unlock(&dom->lock);
 }
 
 static inline void
 cxip_domain_add_cq(struct cxip_domain *dom, struct cxip_cq *cq)
 {
-	fastlock_acquire(&dom->lock);
+	ofi_spin_lock(&dom->lock);
 	dlist_insert_tail(&cq->dom_entry, &dom->cq_list);
 	ofi_atomic_inc32(&dom->ref);
-	fastlock_release(&dom->lock);
+	ofi_spin_unlock(&dom->lock);
 }
 
 static inline void
 cxip_domain_remove_cq(struct cxip_domain *dom, struct cxip_cq *cq)
 {
-	fastlock_acquire(&dom->lock);
+	ofi_spin_lock(&dom->lock);
 	dlist_remove(&cq->dom_entry);
 	ofi_atomic_dec32(&dom->ref);
-	fastlock_release(&dom->lock);
+	ofi_spin_unlock(&dom->lock);
 }
 
 static inline uint32_t cxip_mac_to_nic(struct ether_addr *mac)

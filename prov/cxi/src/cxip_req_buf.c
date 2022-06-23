@@ -255,7 +255,7 @@ static int cxip_req_buf_process_put_event(struct cxip_ptelist_buf *buf,
 
 	assert(event->tgt_long.mlength >= CXIP_REQ_BUF_HEADER_MIN_SIZE);
 
-	fastlock_acquire(&rxc->lock);
+	ofi_spin_lock(&rxc->lock);
 
 	ux = cxip_req_buf_ux_alloc(buf, event);
 	if (!ux) {
@@ -304,7 +304,7 @@ static int cxip_req_buf_process_put_event(struct cxip_ptelist_buf *buf,
 	}
 
 unlock:
-	fastlock_release(&rxc->lock);
+	ofi_spin_unlock(&rxc->lock);
 
 	return ret;
 }

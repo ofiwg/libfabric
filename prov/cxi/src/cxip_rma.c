@@ -308,7 +308,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	/* Triggered operations do not support changing of traffic classes.
 	 * Thus, communication profile cannot be changed.
 	 */
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 
 	if (triggered) {
 		memset(&ct_cmd, 0, sizeof(ct_cmd));
@@ -370,12 +370,12 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	if (req)
 		ofi_atomic_inc32(&txc->otx_reqs);
 
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	return FI_SUCCESS;
 
 err_cq_unlock:
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 err_free_rma_buf:
 	if (req->rma.ibuf)
 		cxip_cq_ibuf_free(txc->send_cq, req->rma.ibuf);
@@ -486,7 +486,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	/* Emit all commands. Note that if any of the operations do not take,
 	 * no cleaning up of the command queue is needed.
 	 */
-	fastlock_acquire(&cmdq->lock);
+	ofi_spin_lock(&cmdq->lock);
 
 	/* Ensure correct traffic class is used. */
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
@@ -537,7 +537,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	if (req)
 		ofi_atomic_inc32(&txc->otx_reqs);
 
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 
 	if (hmem_buf)
 		cxip_cq_ibuf_free(txc->send_cq, hmem_buf);
@@ -545,7 +545,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	return FI_SUCCESS;
 
 err_cq_unlock:
-	fastlock_release(&cmdq->lock);
+	ofi_spin_unlock(&cmdq->lock);
 err_free_hmem_buf:
 	if (hmem_buf)
 		cxip_cq_ibuf_free(txc->send_cq, hmem_buf);
