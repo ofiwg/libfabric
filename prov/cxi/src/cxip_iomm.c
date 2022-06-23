@@ -455,7 +455,7 @@ static void cxip_map_get_rocr_mem_region_size(const void *buf,
 
 #endif
 
-#if HAVE_LIBCUDA
+#if HAVE_CUDA
 
 #include <cuda.h>
 #include <cuda_runtime.h>
