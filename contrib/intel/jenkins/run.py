@@ -121,7 +121,7 @@ def mpich_test_suite(core, hosts, mpi, mode, util):
 
 def osu_benchmark(core, hosts, mpi, mode, util):
 
-    osu_test = tests.MpiTestOSU(jobname=jbname, buildno=bno,
+    osu_test = tests.OSUtests(jobname=jbname, buildno=bno,
                                 testname='osu-benchmarks', core_prov=core,
                                 fabric=fab, mpitype=mpi, hosts=hosts,
                                 ofi_build_mode=mode, util_prov=util)
