@@ -60,14 +60,12 @@ int ofi_av_set_union(struct fid_av_set *dst, const struct fid_av_set *src)
 {
 	struct util_av_set *src_av_set;
 	struct util_av_set *dst_av_set;
-	size_t temp_count;
 	int i,j;
 
 	src_av_set = container_of(src, struct util_av_set, av_set_fid);
 	dst_av_set = container_of(dst, struct util_av_set, av_set_fid);
 
 	assert(src_av_set->av == dst_av_set->av);
-	temp_count = dst_av_set->fi_addr_count;
 
 	for (i = 0; i < src_av_set->fi_addr_count; i++) {
 		for (j = 0; j < dst_av_set->fi_addr_count; j++) {
@@ -76,12 +74,20 @@ int ofi_av_set_union(struct fid_av_set *dst, const struct fid_av_set *src)
 				break;
 		}
 		if (j == dst_av_set->fi_addr_count) {
-			dst_av_set->fi_addr_array[temp_count++] =
-				src_av_set->fi_addr_array[i];
+			if (dst_av_set->fi_addr_count >=
+			    dst_av_set->max_array_size) {
+				FI_INFO(dst_av_set->av->prov, FI_LOG_AV,
+					"destination AV is full\n");
+				return -FI_ENOMEM;
+			}
+
+			dst_av_set->fi_addr_array[dst_av_set->fi_addr_count++] =
+						src_av_set->fi_addr_array[i];
+			FI_DBG(dst_av_set->av->prov, FI_LOG_AV,
+				"Adding fi_addr: %" PRIu64 "\n",
+				src_av_set->fi_addr_array[i]);
 		}
 	}
-
-	dst_av_set->fi_addr_count = temp_count;
 	return FI_SUCCESS;
 }
 
@@ -145,12 +151,19 @@ int ofi_av_set_insert(struct fid_av_set *set, fi_addr_t addr)
 	int i;
 
 	av_set = container_of(set, struct util_av_set, av_set_fid);
+	if (av_set->fi_addr_count >= av_set->max_array_size)  {
+		FI_INFO(av_set->av->prov, FI_LOG_AV, "AV set full\n");
+		return -FI_ENOMEM;
+	}
 
 	for (i = 0; i < av_set->fi_addr_count; i++) {
 		if (av_set->fi_addr_array[i] == addr)
 			return -FI_EINVAL;
 	}
+
 	av_set->fi_addr_array[av_set->fi_addr_count++] = addr;
+	FI_DBG(av_set->av->prov, FI_LOG_AV,
+		"fi_addr: %" PRIu64 "\n", addr);
 	return FI_SUCCESS;
 }
 
@@ -1142,7 +1155,6 @@ static struct util_av_set *
 ofi_av_set_create(struct util_av *av, struct fi_av_set_attr *attr, void *context)
 {
 	struct util_av_set *av_set;
-	size_t max_size;
 	uint64_t i;
 
 	av_set = calloc(1, sizeof(*av_set));
@@ -1150,19 +1162,21 @@ ofi_av_set_create(struct util_av *av, struct fi_av_set_attr *attr, void *context
 		return NULL;
 
 	if (ofi_mutex_init(&av_set->lock))
-		goto free;
+		goto err1;
 
-	max_size = attr->count ? attr->count : ofi_av_size(av);
-	av_set->fi_addr_array = calloc(max_size,
+	av_set->max_array_size = attr->count ? attr->count : ofi_av_size(av);
+	av_set->fi_addr_array = calloc(av_set->max_array_size,
 				       sizeof(*av_set->fi_addr_array));
 	if (!av_set->fi_addr_array)
-		goto destroy;
+		goto err2;
 
 	for (i = attr->start_addr; i <= attr->end_addr; i += attr->stride) {
+		if (av_set->fi_addr_count >= av_set->max_array_size)
+			goto err3;
+
 		av_set->fi_addr_array[av_set->fi_addr_count++] = av->av_set ?
 			av->av_set->fi_addr_array[i] : i;
 	}
-	assert(av_set->fi_addr_count <= max_size);
 
 	ofi_atomic_initialize32(&av_set->ref, 0);
 	av_set->coll_mc.av_set = av_set;
@@ -1176,9 +1190,11 @@ ofi_av_set_create(struct util_av *av, struct fi_av_set_attr *attr, void *context
 	ofi_atomic_inc32(&av->ref);
 	return av_set;
 
-destroy:
+err3:
+	free(av_set->fi_addr_array);
+err2:
 	ofi_mutex_destroy(&av_set->lock);
-free:
+err1:
 	free(av_set);
 	return NULL;
 }
