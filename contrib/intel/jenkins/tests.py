@@ -262,75 +262,6 @@ class ZeFabtests(Test):
         common.run_command(outputcmd)
         os.chdir(curdir)
 
-class MpiTests(Test):
-
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 mpitype, hosts, ofi_build_mode, imb_group, util_prov=None):
-
-        super().__init__(jobname, buildno, testname, core_prov,
-                         fabric, hosts, ofi_build_mode, util_prov)
-        self.mpi = mpitype
-        self.imb_group=imb_group
-
-    @property
-    def cmd(self):
-        if (self.mpi == 'impi' or self.mpi == 'mpich'):
-            self.testpath = ci_site_config.testpath
-            return "{}/run_{}.sh ".format(self.testpath,self.mpi)
-        elif(self.mpi == 'ompi'):
-            self.testpath = "{}/ompi/bin".format(self.ci_middlewares_path)
-            return "{}/mpirun ".format(self.testpath)
-
-    @property
-    def options(self):
-        opts = []
-        if (self.mpi == 'impi' or self.mpi == 'mpich'):
-            opts = "-n {} ".format(self.n)
-            opts += "-ppn {} ".format(self.ppn)
-            opts += "-hosts {},{} ".format(common.get_node_name(self.server,
-                                           self.nw_interface),
-                                           common.get_node_name(self.client,
-                                           self.nw_interface))
-
-            if (self.mpi == 'impi'):
-                opts = "{} -mpi_root={} ".format(opts,
-                        ci_site_config.impi_root)
-            else:
-                opts = "{} -mpi_root={}/mpich".format(opts,
-                        self.ci_middlewares_path)
-
-            opts = "{} -libfabric_path={}/lib ".format(opts,
-                    self.libfab_installpath)
-
-            if self.util_prov:
-                opts = "{options} -prov {core};{util} ".format(options=opts,
-                        core=self.core_prov, util=self.util_prov)
-            else:
-                opts = "{} -prov {} ".format(opts, self.core_prov)
-
-            for key, val in self.env:
-                opts = "{} -genv {} {} ".format(opts, key, val)
-
-        elif (self.mpi == 'ompi'):
-            opts = "-np {} ".format(self.n)
-            hosts = ','.join([':'.join([common.get_node_name(host, \
-                             self.nw_interface), str(self.ppn)]) \
-                    for host in self.hosts])
-
-            opts = "{} --host {} ".format(opts, hosts)
-
-            if self.util_prov:
-                opts = "{} --mca mtl_ofi_provider_include {};{} ".format(opts,
-                        self.core_prov,self.util_prov)
-            else:
-                opts = "{} --mca mtl_ofi_provider_include {} ".format(opts,
-                        self.core_prov)
-
-            opts += "--mca orte_base_help_aggregate 0 "
-            opts += "--mca mtl ofi --mca pml cm -tag-output "
-            for key,val in self.env:
-                opts = "{} -x {}={} ".format(opts,key,val)
-        return opts
 
 class OMPI:
     def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
@@ -604,6 +535,72 @@ class IMBtests(Test):
                 common.run_command(outputcmd)
 
 
+class OSUtests(Test):
+
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+                 hosts, mpitype, ofi_build_mode, util_prov=None):
+
+        super().__init__(jobname, buildno, testname, core_prov,
+                         fabric, hosts, ofi_build_mode, util_prov)
+
+        self.n_ppn = {
+                          'pt2pt':      (2, 1),
+                          'collective': (4, 2),
+                          'one-sided':  (2, 1),
+                          'startup':    (2, 1)
+                     }
+        self.osu_src = '{}/{}/osu/libexec/osu-micro-benchmarks/mpi/'. \
+                            format(self.ci_middlewares_path, mpitype)
+        self.mpi_type = mpitype
+        self.mpi = ''
+        if (self.mpi_type == 'impi'):
+            self.mpi = IMPI(self.core_prov, self.hosts,
+                            self.libfab_installpath, self.nw_interface,
+                            self.server, self.client, self.env, self.util_prov)
+        elif (self.mpi_type == 'ompi'):
+            self.mpi = OMPI(self.core_prov, self.hosts,
+                             self.libfab_installpath, self.nw_interface,
+                             self.server, self.client, self.env,
+                             self.ci_middlewares_path, self.util_prov)
+        elif (self.mpi_type == 'mpich'):
+            self.mpi = MPICH(self.core_prov, self.hosts,
+                             self.libfab_installpath, self.nw_interface,
+                             self.server, self.client, self.env,
+                             self.ci_middlewares_path, self.util_prov)
+
+    @property
+    def execute_condn(self):
+        # mpich-tcp and ompi-tcp are the only osu test combinations failing
+        return False if ((self.mpi == 'mpich' and self.core_prov == 'tcp') or \
+                          self.mpi == 'ompi') \
+                    else True
+
+    def osu_cmd(self, test_type, test):
+        print("Running OSU-{}-{}".format(test_type, test))
+        cmd = '{}/{}/{} '.format(self.osu_src, test_type, test)
+        return cmd
+
+    def execute_cmd(self):
+        assert(self.osu_src)
+        p = re.compile('osu_put*')
+        for root, dirs, tests in os.walk(self.osu_src):
+            for test in tests:
+                self.mpi.n = self.n_ppn[os.path.basename(root)][0]
+                self.mpi.ppn = self.n_ppn[os.path.basename(root)][1]
+        
+                if (test == 'osu_latency_mp' and self.core_prov == 'verbs'):
+                    self.env.append(('IBV_FORK_SAFE', '1'))
+
+                if(p.search(test) == None):
+                    osu_command = self.osu_cmd(os.path.basename(root), test)
+                    outputcmd = shlex.split(self.mpi.env + self.mpi.cmd + \
+                                            osu_command + '\'')
+                    common.run_command(outputcmd)
+
+                if (test == 'osu_latency_mp' and self.core_prov == 'verbs'):
+                    self.env.remove(('IBV_FORK_SAFE', '1'))
+
+
 class MpichTestSuite(MpiTests):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
@@ -684,74 +681,6 @@ class MpichTestSuite(MpiTests):
             common.run_command(outputcmd)
         os.chdir(self.pwd)
 
-
-class MpiTestOSU(MpiTests):
-
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 mpitype, hosts, ofi_build_mode, imb_group=None,
-                 util_prov=None):
-        super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         mpitype, hosts, ofi_build_mode, util_prov)
-
-        self.n = 4
-        self.ppn = 2
-        self.two_proc_tests = {
-                                  'osu_latency',
-                                  'osu_bibw',
-                                  'osu_latency_mt',
-                                  'osu_bw',
-                                  'osu_get_latency',
-                                  'osu_fop_latency',
-                                  'osu_acc_latency',
-                                  'osu_get_bw',
-                                  'osu_put_latency',
-                                  'osu_put_bw',
-                                  'osu_put_bibw',
-                                  'osu_cas_latency',
-                                  'osu_get_acc_latency',
-                                  'osu_latency_mp'
-                              }
-        #these tests have race conditions or segmentation faults
-        #self.disable = {
-        #               }
-
-        self.osu_mpi_path = '{}/{}/osu/libexec/osu-micro-benchmarks/mpi/'. \
-                            format(self.ci_middlewares_path, mpitype)
-
-    @property
-    def execute_condn(self):
-        # mpich-tcp and ompi-tcp are the only osu test combinations failing
-        return False if ((self.mpi == 'mpich' and self.core_prov == 'tcp') or \
-                          self.mpi == 'ompi') \
-                    else True
-
-    def execute_cmd(self):
-        assert(self.osu_mpi_path)
-        p = re.compile('osu_put*')
-        for root, dirs, tests in os.walk(self.osu_mpi_path):
-            for test in tests:
-#                if test in self.disable:
-#                    continue
-
-                if test in self.two_proc_tests:
-                    self.n=2
-                    self.ppn=1
-                else:
-                    self.n=4
-                    self.ppn=2
-
-                if (test == 'osu_latency_mp' and self.core_prov == 'verbs'):
-                    self.env.append(('IBV_FORK_SAFE', '1'))
-
-                if(p.search(test) == None):
-                    launcher = self.cmd + self.options
-                    osu_cmd = os.path.join(root, test)
-                    command = launcher + osu_cmd
-                    outputcmd = shlex.split(command)
-                    common.run_command(outputcmd)
-
-                if (test == 'osu_latency_mp' and self.core_prov == 'verbs'):
-                    self.env.remove(('IBV_FORK_SAFE', '1'))
 
 class OneCCLTests(Test):
 
