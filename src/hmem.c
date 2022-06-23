@@ -261,8 +261,6 @@ enum fi_hmem_iface ofi_get_hmem_iface(const void *addr, uint64_t *device,
                                       uint64_t *flags)
 {
         int iface;
-        uint64_t flags;
-        bool is_addr_valid;
 
         /* Since a is_addr_valid function is not implemented for FI_HMEM_SYSTEM,
          * HMEM iface is skipped. In addition, if no other HMEM ifaces claim the
@@ -270,10 +268,10 @@ enum fi_hmem_iface ofi_get_hmem_iface(const void *addr, uint64_t *device,
          */
         for (iface = ARRAY_SIZE(hmem_ops) - 1; iface > FI_HMEM_SYSTEM;
              iface--) {
-                if (ofi_hmem_is_initialized(iface)) {
-                        is_addr_valid = hmem_ops[iface].is_addr_valid(addr, NULL, &flags);
-                        if (is_addr_valid && (flags & FI_HMEM_DEVICE_ONLY))
-                                return iface;
+		if (ofi_hmem_is_initialized(iface) &&
+		    hmem_ops[iface].is_addr_valid(addr, device, flags)) {
+			if (flags && (*flags & FI_HMEM_DEVICE_ONLY))
+				return iface;
                 }
         }
 

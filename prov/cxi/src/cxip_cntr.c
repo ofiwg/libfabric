@@ -648,6 +648,7 @@ int cxip_set_wb_buffer(struct fid *fid, void *buf, size_t len)
 {
 	int ret;
 	struct cxip_cntr *cntr;
+	uint64_t flags;
 
 	if (!buf)
 		return -FI_EINVAL;
@@ -662,7 +663,7 @@ int cxip_set_wb_buffer(struct fid *fid, void *buf, size_t len)
 		return ret;
 
 	cntr->wb = buf;
-	cntr->wb_iface = ofi_get_hmem_iface(buf);
+	cntr->wb_iface = ofi_get_hmem_iface(buf, NULL, &flags);
 
 	/* Force a counter writeback into the user's provider buffer. */
 	do {

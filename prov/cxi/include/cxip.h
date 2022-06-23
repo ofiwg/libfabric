@@ -703,6 +703,7 @@ cxip_domain_copy_to_hmem(struct cxip_domain *domain, uint64_t device,
 		.iov_base = (void *)hmem_dest,
 		.iov_len = size,
 	};
+	uint64_t flags;
 
 	/* If device memory not supported or device supports access via
 	 * load/store, just use memcpy to avoid expensive pointer query.
@@ -714,7 +715,7 @@ cxip_domain_copy_to_hmem(struct cxip_domain *domain, uint64_t device,
 	}
 
 	if (!hmem_iface_valid)
-		hmem_iface = ofi_get_hmem_iface(hmem_dest);
+		hmem_iface = ofi_get_hmem_iface(hmem_dest, NULL, &flags);
 
 	return cxip_copy_to_hmem_iov(domain, hmem_iface, device,
 				     &hmem_iov, 1, 0, src, size);
@@ -729,6 +730,7 @@ cxip_domain_copy_from_hmem(struct cxip_domain *domain, void *dest,
 		.iov_base = (void *)hmem_src,
 		.iov_len = size,
 	};
+	uint64_t flags;
 
 	/* If device memory not supported or device supports access via
 	 * load/store, just use memcpy to avoid expensive pointer query.
@@ -740,7 +742,7 @@ cxip_domain_copy_from_hmem(struct cxip_domain *domain, void *dest,
 	}
 
 	if (!hmem_iface_valid)
-		hmem_iface = ofi_get_hmem_iface(hmem_src);
+		hmem_iface = ofi_get_hmem_iface(hmem_src, NULL, &flags);
 
 	return domain->hmem_ops.copy_from_hmem_iov(dest, size, hmem_iface, 0,
 						   &hmem_iov, 1, 0);
