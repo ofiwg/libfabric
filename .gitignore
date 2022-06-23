@@ -1,6 +1,7 @@
 .libs
 .deps
 .dirstamp
+.vscode
 *.o
 *.lo
 *.la
@@ -26,6 +27,8 @@
 *.orig
 *.c~
 *.h~
+*.tap
+[nr]0.dbg
 stamp-h?
 Makefile
 Makefile.in
@@ -39,6 +42,7 @@ config.log
 config.lt
 config.status
 configure
+install
 libtool
 
 libfabric.spec

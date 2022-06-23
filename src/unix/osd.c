@@ -180,7 +180,7 @@ int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
 		goto failed;
 	}
 
-	if (mapstat.st_size == 0) {
+	if (mapstat.st_size == 0 && size > 0) {
 		if (ftruncate(shm->shared_fd, size)) {
 			FI_WARN(&core_prov, FI_LOG_CORE,
 				"ftruncate failed: %s\n", strerror(errno));
@@ -191,6 +191,8 @@ int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
 		FI_WARN(&core_prov, FI_LOG_CORE, "shm file too small\n");
 		ret = -FI_EINVAL;
 		goto failed;
+	} else if (size == 0) {
+		size = mapstat.st_size;
 	}
 
 	shm->ptr = mmap(NULL, size, PROT_READ | PROT_WRITE,
