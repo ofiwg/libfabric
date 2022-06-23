@@ -714,6 +714,7 @@ struct util_av_set {
 	struct util_coll_mc     coll_mc;
 	ofi_atomic32_t		ref;
 	ofi_mutex_t		lock;
+	size_t			max_array_size;
 };
 
 struct util_av_entry {
