@@ -372,6 +372,17 @@ static void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov,
 	cmd->msg.data.iov_count = count;
 	cmd->msg.hdr.size = total_len;
 	memcpy(cmd->msg.data.iov, iov, sizeof(*iov) * count);
+#if HAVE_XPMEM
+	xpmem_segid_t seg_id;
+	int ret;
+
+	ret = ofi_hmem_host_register_iface(FI_HMEM_XPMEM, iov->iov_base,
+									   iov->iov_len, (uint64_t*) &seg_id);
+	if (ret)
+		cmd->msg.data.mr_key = -1;
+	else
+		cmd->msg.data.mr_key = seg_id;
+#endif
 }
 
 static int smr_format_ze_ipc(struct smr_ep *ep, int64_t id, struct smr_cmd *cmd,
@@ -1336,7 +1347,7 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		}
 
 #if HAVE_XPMEM
-		if (smr_env.use_xpmem && xpmem)
+		if (xpmem->use_xpmem && xpmem)
 			ep->region->xpmem_cap_self = SMR_VMA_CAP_ON;
 		else
 			ep->region->xpmem_cap_self = SMR_VMA_CAP_OFF;
@@ -1428,12 +1439,16 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err2;
 
-	ret = ipc_create_hmem_cache(&ep->hmem_cache, "smr_hmem_cache");
+	ret = ipc_create_hmem_cache(&ep->hmem_cache, "smr_hmem_cache",
+								ofi_hmem_open_handle,
+								ofi_hmem_close_handle);
 	if (ret)
 		goto err1;
 
 #if HAVE_XPMEM
-	ret = ipc_create_hmem_cache(&ep->xpmem_cache, "smr_xpmem_cache");
+	ret = ipc_create_hmem_cache(&ep->xpmem_cache, "smr_xpmem_cache",
+								ofi_hmem_open_handle,
+								ofi_hmem_close_handle);
 	if (ret)
 		goto err0;
 #endif

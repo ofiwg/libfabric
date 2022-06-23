@@ -105,7 +105,7 @@ struct ofi_hmem_ops {
 	int (*get_handle)(void *dev_buf, size_t *len, void **handle, uint64_t *offset);
 	int (*open_handle)(void **handle, size_t len, uint64_t device, void **ipc_ptr);
 	int (*close_handle)(void *ipc_ptr);
-	int (*host_register)(void *ptr, size_t size);
+	int (*host_register)(void *ptr, size_t size, uint64_t *key);
 	int (*host_unregister)(void *ptr);
 	int (*get_base_addr)(const void *ptr, void **base, size_t *size);
 	bool (*is_ipc_enabled)(void);
@@ -122,6 +122,8 @@ int xpmem_copy_from(uint64_t device, void *dest, const void *src,
 int xpmem_copy_to(uint64_t device, void *dest, const void *src,
 		     size_t size);
 bool xpmem_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
+int xpmem_host_register(void *ptr, size_t size, uint64_t *key);
+int xpmem_host_unregister(void *ptr);
 
 int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
 		       size_t size);
@@ -130,7 +132,7 @@ int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
 int rocr_hmem_init(void);
 int rocr_hmem_cleanup(void);
 bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
-int rocr_host_register(void *ptr, size_t size);
+int rocr_host_register(void *ptr, size_t size, uint64_t *key);
 int rocr_host_unregister(void *ptr);
 int rocr_get_handle(void *dev_buf, size_t *len, void **handle, uint64_t *offset);
 int rocr_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr);
@@ -147,7 +149,7 @@ int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size
 int cuda_hmem_init(void);
 int cuda_hmem_cleanup(void);
 bool cuda_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
-int cuda_host_register(void *ptr, size_t size);
+int cuda_host_register(void *ptr, size_t size, uint64_t *key);
 int cuda_host_unregister(void *ptr);
 int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
 int cuda_dev_unregister(uint64_t handle);
@@ -201,7 +203,7 @@ bool synapseai_is_addr_valid(const void *addr, uint64_t *device,
 int synapseai_get_handle(void *dev_buf, size_t *len, void **handle, uint64_t *offset);
 int synapseai_open_handle(void **handle, size_t len, uint64_t device, void **ipc_ptr);
 int synapseai_close_handle(void *ipc_ptr);
-int synapseai_host_register(void *ptr, size_t size);
+int synapseai_host_register(void *ptr, size_t size, uint64_t *key);
 int synapseai_host_unregister(void *ptr);
 int synapseai_get_base_addr(const void *ptr, void **base, size_t *size);
 bool synapseai_is_ipc_enabled(void);
@@ -249,7 +251,7 @@ static inline int ofi_hmem_no_close_handle(void *ipc_ptr)
 	return -FI_ENOSYS;
 }
 
-static inline int ofi_hmem_register_noop(void *ptr, size_t size)
+static inline int ofi_hmem_register_noop(void *ptr, size_t size, uint64_t *key)
 {
 	return FI_SUCCESS;
 }
@@ -310,6 +312,9 @@ void ofi_hmem_init(void);
 void ofi_hmem_cleanup(void);
 enum fi_hmem_iface ofi_get_hmem_iface(const void *addr, uint64_t *device,
 				      uint64_t *flags);
+int ofi_hmem_host_register_iface(enum fi_hmem_iface iface, void *ptr,
+								 size_t size, uint64_t *key);
+int ofi_hmem_host_unregister_iface(enum fi_hmem_iface iface, void *ptr);
 int ofi_hmem_host_register(void *ptr, size_t size);
 int ofi_hmem_host_unregister(void *ptr);
 bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface);

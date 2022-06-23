@@ -387,15 +387,62 @@ enum fi_hmem_iface ofi_get_hmem_iface(const void *addr, uint64_t *device,
 	return FI_HMEM_SYSTEM;
 }
 
+int ofi_hmem_host_register_iface(enum fi_hmem_iface iface,
+								 void *ptr, size_t size,
+								 uint64_t *key)
+{
+	int ret;
+
+	if (!ofi_hmem_is_initialized(iface))
+		return -FI_ENOSYS;
+
+	ret = hmem_ops[iface].host_register(ptr, size, key);
+	if (ret != FI_SUCCESS)
+		goto err;
+
+	return FI_SUCCESS;
+
+err:
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to register host memory with hmem iface %s: %s\n",
+		fi_tostr(&iface, FI_TYPE_HMEM_IFACE),
+		fi_strerror(-ret));
+
+	return ret;
+}
+
+int ofi_hmem_host_unregister_iface(enum fi_hmem_iface iface, void *ptr)
+{
+	int ret;
+
+	if (!ofi_hmem_is_initialized(iface))
+		return -FI_ENOSYS;
+
+	ret = hmem_ops[iface].host_unregister(ptr);
+	if (ret != FI_SUCCESS)
+		goto err;
+
+	return FI_SUCCESS;
+
+err:
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to unregister host memory with hmem iface %s: %s\n",
+		fi_tostr(&iface, FI_TYPE_HMEM_IFACE),
+		fi_strerror(-ret));
+
+	return ret;
+}
+
 int ofi_hmem_host_register(void *ptr, size_t size)
 {
 	int iface, ret;
+	uint64_t key;
 
 	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
 		if (!ofi_hmem_is_initialized(iface))
 			continue;
 
-		ret = hmem_ops[iface].host_register(ptr, size);
+		ret = hmem_ops[iface].host_register(ptr, size, &key);
 		if (ret != FI_SUCCESS)
 			goto err;
 	}

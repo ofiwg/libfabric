@@ -68,6 +68,7 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 			uint32_t op, uint64_t op_flags)
 {
 	struct iovec vma_iovec[SMR_IOV_LIMIT], rma_iovec[SMR_IOV_LIMIT];
+	uint64_t keys[SMR_IOV_LIMIT];
 	struct smr_cmd *cmd;
 	size_t total_len;
 	int ret, i;
@@ -76,6 +77,7 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 	for (i = 0; i < rma_count; i++) {
 		rma_iovec[i].iov_base = (void *) rma_iov[i].addr;
 		rma_iovec[i].iov_len = rma_iov[i].len;
+		keys[i] = rma_iov[i].key;
 	}
 
 	total_len = ofi_total_iov_len(iov, iov_count);
@@ -86,7 +88,7 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 	if (ep->region->xpmem_cap_self == SMR_VMA_CAP_ON &&
 		xpmem->cap == SMR_VMA_CAP_ON) {
 		ret = smr_xpmem_loop(ep, xpmem, vma_iovec, iov_count, rma_iovec,
-				rma_count, 0, total_len, op == ofi_op_write);
+				rma_count, 0, total_len, keys, op == ofi_op_write);
 	} else {
 		ret = smr_cma_loop(peer_smr->pid, vma_iovec, iov_count, rma_iovec,
 				rma_count, 0, total_len, op == ofi_op_write);

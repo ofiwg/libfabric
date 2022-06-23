@@ -810,12 +810,14 @@ int rocr_hmem_cleanup(void)
 	return FI_SUCCESS;
 }
 
-int rocr_host_register(void *ptr, size_t size)
+int rocr_host_register(void *ptr, size_t size, uint64_t *key)
 {
 	hsa_status_t hsa_ret;
-	void *tmp;
 
-	hsa_ret = ofi_hsa_amd_memory_lock(ptr, size, NULL, 0, &tmp);
+	if (!rocr_is_addr_valid(ptr, 0, 0))
+		return FI_SUCCESS;
+
+	hsa_ret = ofi_hsa_amd_memory_lock(ptr, size, NULL, 0, (void*) key);
 	if (hsa_ret == HSA_STATUS_SUCCESS)
 		return FI_SUCCESS;
 
@@ -829,6 +831,9 @@ int rocr_host_register(void *ptr, size_t size)
 int rocr_host_unregister(void *ptr)
 {
 	hsa_status_t hsa_ret;
+
+	if (!rocr_is_addr_valid(ptr, 0, 0))
+		return FI_SUCCESS;
 
 	hsa_ret = ofi_hsa_amd_memory_unlock(ptr);
 	if (hsa_ret == HSA_STATUS_SUCCESS)
@@ -870,7 +875,7 @@ bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 	return false;
 }
 
-int rocr_host_register(void *ptr, size_t size)
+int rocr_host_register(void *ptr, size_t size, uint64_t key)
 {
 	return -FI_ENOSYS;
 }

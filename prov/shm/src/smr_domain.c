@@ -63,6 +63,92 @@ static int smr_domain_close(fid_t fid)
 	return 0;
 }
 
+struct smr_mr {
+	struct ofi_mr *mr;
+	enum fi_hmem_iface	iface;
+	struct fi_rma_iov *iov;
+	int iov_count;
+};
+
+static int smr_mr_close(struct fid *fid)
+{
+	int i;
+	struct smr_mr *smr_mr;
+	struct ofi_mr *mr;
+
+	mr = container_of(fid, struct ofi_mr, mr_fid.fid);
+	smr_mr = container_of(mr, struct smr_mr, mr);
+
+	for (i = 0; i < smr_mr->iov_count; i++)
+		ofi_hmem_host_unregister_iface(smr_mr->iface,
+					(void *) smr_mr->iov[i].addr);
+
+	free(smr_mr->iov);
+	free(smr_mr);
+
+	return ofi_mr_close(fid);
+}
+
+static int smr_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+	uint64_t flags, struct fid_mr **mr_fid)
+{
+	int ret = 0, i, j;
+	uint64_t key;
+	struct smr_mr *smr_mr;
+
+	if (attr->iface < 0)
+		goto out;
+
+	smr_mr = calloc(sizeof(*smr_mr), 1);
+	if (!smr_mr)
+		return -FI_ENOMEM;
+
+	smr_mr->iov = calloc(sizeof(*smr_mr->iov), attr->iov_count);
+	if (!smr_mr->iov) {
+		free(smr_mr);
+		return -FI_ENOMEM;
+	}
+
+	ret = ofi_mr_regattr(fid, attr, flags, mr_fid);
+	if (ret)
+		goto free_smr;
+
+	smr_mr->mr = container_of(fid, struct ofi_mr, mr_fid.fid);
+	smr_mr->iface = attr->iface;
+	smr_mr->iov_count = attr->iov_count;
+
+	for (i = 0; i < attr->iov_count; i++) {
+		ret = ofi_hmem_host_register_iface(attr->iface,
+						attr->mr_iov[i].iov_base,
+						attr->mr_iov[i].iov_len, &key);
+		if (ret)
+			goto fail;
+
+		smr_mr->iov[i].addr = (uint64_t) attr->mr_iov[i].iov_base;
+		smr_mr->iov[i].len = attr->mr_iov[i].iov_len;
+		smr_mr->iov[i].key = key;
+	}
+
+	/* TODO: assume that all the keys are the same? 
+	 * AFAIU, mr_fid.key will be returned as part of fi_mr_key() call.
+	 * This is called by the application and the key returned is passed to
+	 * the rma operations */
+	smr_mr->mr->mr_fid.key = smr_mr->iov[0].key;
+	smr_mr->mr->mr_fid.fid.ops->close = smr_mr_close;
+
+	goto out;
+
+fail:
+	for (j = i; j >= 0; j--)
+		ofi_hmem_host_unregister_iface(attr->iface,
+					attr->mr_iov[i].iov_base);
+free_smr:
+	free(smr_mr->iov);
+	free(smr_mr);
+out:
+	return ret;
+}
+
 static struct fi_ops smr_domain_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = smr_domain_close,
@@ -75,7 +161,7 @@ static struct fi_ops_mr smr_mr_ops = {
 	.size = sizeof(struct fi_ops_mr),
 	.reg = ofi_mr_reg,
 	.regv = ofi_mr_regv,
-	.regattr = ofi_mr_regattr,
+	.regattr = smr_mr_regattr,
 };
 
 int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,

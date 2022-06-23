@@ -70,16 +70,26 @@ struct ipc_cache_region {
 	void				*mapped_addr;
 };
 
+typedef int (*map_cb_t)(enum fi_hmem_iface iface, void **handle,
+			 size_t len, uint64_t device, void **ipc_ptr);
+typedef int (*unmap_cb_t)(enum fi_hmem_iface iface, void *ipc_ptr);
+
 struct hmem_cache {
 	pthread_rwlock_t lock;
 	pgtable_t pgtable;
 	char *name;
+	/* Callbacks for mapping and unmapping*/
+	map_cb_t map_cb;
+	unmap_cb_t unmap_cb;
+	struct hmem_cache *make_cache;
 };
 
 int ipc_create_hmem_cache(struct hmem_cache **cache,
-						  const char *name);
+						  const char *name,
+						  map_cb_t map_cb, unmap_cb_t unmap_cb);
 void ipc_destroy_hmem_cache(struct hmem_cache *cache);
 int ipc_cache_map_memhandle(struct hmem_cache *cache, struct ipc_info *key,
 							void **mapped_addr);
+void ipc_cache_invalidate(struct hmem_cache *cache, void *address);
 
 #endif /* HMEM_CACHE_H */

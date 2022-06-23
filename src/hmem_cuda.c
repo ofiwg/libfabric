@@ -572,7 +572,7 @@ bool cuda_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 	return false;
 }
 
-int cuda_host_register(void *ptr, size_t size)
+int cuda_host_register(void *ptr, size_t size, uint64_t *key)
 {
 	cudaError_t cuda_ret;
 
@@ -641,7 +641,7 @@ bool cuda_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 	return false;
 }
 
-int cuda_host_register(void *ptr, size_t size)
+int cuda_host_register(void *ptr, size_t size, uint64_t *key)
 {
 	return -FI_ENOSYS;
 }

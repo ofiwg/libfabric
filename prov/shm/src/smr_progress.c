@@ -319,7 +319,7 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 		xpmem->cap == SMR_VMA_CAP_ON) {
 		ret = smr_xpmem_loop(ep, xpmem, iov, iov_count, cmd->msg.data.iov,
 				cmd->msg.data.iov_count, 0, cmd->msg.hdr.size,
-				cmd->msg.hdr.op == ofi_op_read_req);
+				&cmd->msg.data.mr_key, cmd->msg.hdr.op == ofi_op_read_req);
 	} else {
 		ret = smr_cma_loop(peer_smr->pid, iov, iov_count, cmd->msg.data.iov,
 				cmd->msg.data.iov_count, 0, cmd->msg.hdr.size,

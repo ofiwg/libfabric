@@ -405,9 +405,10 @@ static inline bool smr_ze_ipc_enabled(struct smr_region *smr,
 }
 
 #if HAVE_XPMEM
-static inline int smr_xpmem_loop(struct smr_ep *ep, struct xpmem_client *xpmem,
+static inline int smr_xpmem_loop(struct smr_ep *ep, struct xpmem_client *cli_xpmem,
 			struct iovec *local, unsigned long local_cnt, struct iovec *remote,
-			unsigned long remote_cnt, unsigned long flags, size_t total, bool write)
+			unsigned long remote_cnt, unsigned long flags, size_t total,
+			uint64_t *mr_keys, bool write)
 {
 	int ret, i;
 	ssize_t copy_ret;
@@ -418,13 +419,25 @@ static inline int smr_xpmem_loop(struct smr_ep *ep, struct xpmem_client *xpmem,
 	assert(local_cnt == remote_cnt);
 
 	for (i = 0; i < remote_cnt; i++) {
+		/* the remote virtual address given to us is out of bounds */
+		if (remote[i].iov_base + remote[i].iov_len > (void*)cli_xpmem->addr_max)
+			return -FI_EIO;
 		memset(&key, 0, sizeof(key));
 		key.iface = FI_HMEM_XPMEM,
 		key.address = (uintptr_t) remote[i].iov_base;
 		key.length = remote[i].iov_len;
 		key.base_length = remote[i].iov_len;
 		key.base_offset = 0;
-		xpmem_addr.apid = xpmem->apid;
+		if (xpmem->global_export) {
+			xpmem_addr.apid = cli_xpmem->apid;
+		} else {
+			/* TODO: assume only one mr_key */
+			memcpy(key.ipc_handle, &mr_keys[0], sizeof(mr_keys[0]));
+			ret = ipc_cache_map_memhandle(xpmem->make_cache,
+							&key, (void**)&xpmem_addr.apid);
+			if (ret)
+				return -FI_EIO;
+		}
 		xpmem_addr.offset = (uintptr_t)remote[i].iov_base;
 		memcpy(key.ipc_handle, &xpmem_addr, sizeof(xpmem_addr));
 

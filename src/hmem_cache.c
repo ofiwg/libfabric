@@ -85,7 +85,7 @@ static void ipc_cache_purge(struct hmem_cache *cache)
 
 	dlist_foreach_container_safe(&region_list, struct ipc_cache_region,
 								region, list, tmp) {
-		ret = ofi_hmem_close_handle(region->key.iface, region->mapped_addr);
+		ret = cache->unmap_cb(region->key.iface, region->mapped_addr);
 		if (ret) {
 			FI_WARN(&core_prov, FI_LOG_CORE,
 					 "failed to unmap addr:%p\n", region->mapped_addr);
@@ -120,7 +120,7 @@ static void ipc_cache_invalidate_regions(struct hmem_cache *cache,
 					 (void *)region->key.address, ret);
 		}
 
-		ret = ofi_hmem_close_handle(region->key.iface, region->mapped_addr);
+		ret = cache->unmap_cb(region->key.iface, region->mapped_addr);
 		if (ret) {
 			FI_WARN(&core_prov, FI_LOG_CORE,
 					 "failed to unmap addr:%p\n", region->mapped_addr);
@@ -130,6 +130,22 @@ static void ipc_cache_invalidate_regions(struct hmem_cache *cache,
 	FI_INFO(&core_prov, FI_LOG_CORE,
 			"%s: closed memhandles in the range [%p..%p]\n",
 			cache->name, from, to);
+}
+
+void ipc_cache_invalidate(struct hmem_cache *cache, void *address)
+{
+	pgt_region_t *pgt_region;
+	struct ipc_cache_region *region;
+
+	pthread_rwlock_rdlock(&cache->lock);
+	pgt_region = pgtable_lookup(&cache->pgtable, (uintptr_t) address);
+	if (OFI_LIKELY(pgt_region != NULL)) {
+		region = container_of(pgt_region, struct ipc_cache_region, super);
+		ipc_cache_invalidate_regions(cache,
+								(void *)region->super.start,
+								(void *)region->super.end);
+	}
+	pthread_rwlock_unlock(&cache->lock);
 }
 
 int ipc_cache_map_memhandle(struct hmem_cache *cache, struct ipc_info *key,
@@ -170,7 +186,7 @@ int ipc_cache_map_memhandle(struct hmem_cache *cache, struct ipc_info *key,
 				goto err;
 			}
 
-			ret = ofi_hmem_close_handle(key->iface, region->mapped_addr);
+			ret = cache->unmap_cb(key->iface, region->mapped_addr);
 			if (ret) {
 				FI_WARN(&core_prov, FI_LOG_CORE,
 						 "failed to unmap addr:%p\n", region->mapped_addr);
@@ -180,8 +196,8 @@ int ipc_cache_map_memhandle(struct hmem_cache *cache, struct ipc_info *key,
 		}
 	}
 
-	ret = ofi_hmem_open_handle(key->iface, (void**) &key->ipc_handle,
-							   key->base_length, key->dev_num, mapped_addr);
+	ret = cache->map_cb(key->iface, (void**) &key->ipc_handle,
+						key->base_length, key->dev_num, mapped_addr);
 	if (OFI_UNLIKELY(ret)) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 				 "%s: failed to open ipc mem handle. addr:%p len:%lu\n",
@@ -232,7 +248,8 @@ err:
 }
 
 int ipc_create_hmem_cache(struct hmem_cache **cache,
-						  const char *name)
+						  const char *name, map_cb_t map_cb,
+						  unmap_cb_t unmap_cb)
 {
 	struct hmem_cache *cache_desc;
 	int ret;
@@ -264,6 +281,9 @@ int ipc_create_hmem_cache(struct hmem_cache **cache,
 		ret = -FI_ENOMEM;
 		goto err_destroy_rwlock;
 	}
+
+	cache_desc->map_cb = map_cb;
+	cache_desc->unmap_cb = unmap_cb;
 
 	*cache = cache_desc;
 	return 0;

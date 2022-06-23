@@ -139,6 +139,8 @@ union smr_cmd_data {
 		size_t		iov_count;
 		struct iovec	iov[(SMR_MSG_DATA_LEN - sizeof(size_t)) /
 				    sizeof(struct iovec)];
+		/* TODO - assume there is only one key */
+		uint64_t mr_key;
 	};
 	struct {
 		uint64_t	sar;

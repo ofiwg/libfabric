@@ -80,7 +80,7 @@ int synapseai_close_handle(void *ipc_ptr)
 	return -FI_ENOSYS;
 }
 
-int synapseai_host_register(void *ptr, size_t size)
+int synapseai_host_register(void *ptr, size_t size, uint64_t *key)
 {
 	return -FI_ENOSYS;
 }

@@ -42,7 +42,6 @@ struct sigaction *old_action = NULL;
 struct smr_env smr_env = {
 	.sar_threshold = SIZE_MAX,
 	.disable_cma = false,
-	.use_xpmem = false,
 };
 
 static void smr_init_env(void)
@@ -51,7 +50,6 @@ static void smr_init_env(void)
 	fi_param_get_size_t(&smr_prov, "tx_size", &smr_info.tx_attr->size);
 	fi_param_get_size_t(&smr_prov, "rx_size", &smr_info.rx_attr->size);
 	fi_param_get_bool(&smr_prov, "disable_cma", &smr_env.disable_cma);
-	fi_param_get_bool(&core_prov, "use_xpmem", &smr_env.use_xpmem);
 }
 
 static void smr_resolve_addr(const char *node, const char *service,

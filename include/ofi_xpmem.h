@@ -35,6 +35,7 @@
 
 #if HAVE_XPMEM
 #include <xpmem.h>
+#include "hmem_cache.h"
 
 struct xpmem_client {
 	uint8_t cap;
@@ -56,6 +57,10 @@ struct xpmem {
 	 * On some systems we see better peformance if we chunk the
 	 * copy into multiple memcpy calls. */
 	uint64_t memcpy_chunk_size;
+	int use_xpmem;
+	int global_export;
+	struct hmem_cache *make_cache;
+	struct hmem_cache *get_cache;
 };
 
 extern struct xpmem *xpmem;
