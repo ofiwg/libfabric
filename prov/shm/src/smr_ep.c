@@ -149,7 +149,7 @@ static int smr_match_recv_ctx(struct dlist_entry *item, const void *args)
 }
 
 static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
-			      void *context)
+			      void *context, uint32_t op)
 {
 	struct smr_rx_entry *recv_entry;
 	struct dlist_entry *entry;
@@ -160,7 +160,7 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 					 context);
 	if (entry) {
 		recv_entry = container_of(entry, struct smr_rx_entry, entry);
-		ret = smr_complete_rx(ep, (void *) recv_entry->context, ofi_op_msg,
+		ret = smr_complete_rx(ep, (void *) recv_entry->context, op,
 				  recv_entry->flags, 0,
 				  NULL, recv_entry->peer_id,
 				  recv_entry->tag, 0, FI_ECANCELED);
@@ -179,11 +179,11 @@ static ssize_t smr_ep_cancel(fid_t ep_fid, void *context)
 
 	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid);
 
-	ret = smr_ep_cancel_recv(ep, &ep->trecv_queue, context);
+	ret = smr_ep_cancel_recv(ep, &ep->trecv_queue, context, ofi_op_tagged);
 	if (ret)
 		return (ret < 0) ? ret : 0;
 
-	ret = smr_ep_cancel_recv(ep, &ep->recv_queue, context);
+	ret = smr_ep_cancel_recv(ep, &ep->recv_queue, context, ofi_op_msg);
 	return (ret < 0) ? ret : 0;
 }
 
