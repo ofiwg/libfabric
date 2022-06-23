@@ -163,7 +163,8 @@ static int cxip_info_alloc(struct cxip_if *nic_if, struct fi_info **info)
 		goto err;
 
 	fi->nic->link_attr->mtu = nic_if->info->link_mtu;
-	fi->nic->link_attr->speed = nic_if->speed * 1000;
+	/* Convert Mb/s to libfabric reported b/s */
+	fi->nic->link_attr->speed = (size_t)nic_if->speed * 1000000;
 	fi->nic->link_attr->state = nic_if->link ?  FI_LINK_UP : FI_LINK_DOWN;
 	fi->nic->link_attr->network_type = strdup("HPC Ethernet");
 
