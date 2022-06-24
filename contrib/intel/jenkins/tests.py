@@ -20,7 +20,7 @@ class Test:
         self.buildno = buildno
         self.testname = testname
         self.core_prov = core_prov
-        self.util_prov = 'ofi_{}'.format(util_prov) if util_prov != None else ''
+        self.util_prov = f'ofi_{util_prov}' if util_prov != None else ''
         self.fabric = fabric
         self.hosts = hosts
         self.mpi_type = mpitype
@@ -30,13 +30,12 @@ class Test:
             self.client = hosts[1]
 
         self.nw_interface = ci_site_config.interface_map[self.fabric]
-        self.libfab_installpath = '{}/{}/{}/{}' \
-                                  .format(ci_site_config.install_dir,
-                                  self.jobname, self.buildno,
-                                  self.ofi_build_mode)
-        self.ci_middlewares_path = '{}/{}/{}/ci_middlewares' \
-                                   .format(ci_site_config.install_dir,
-                                   self.jobname, self.buildno)
+        self.libfab_installpath = f'{ci_site_config.install_dir}/'\
+                                  f'{self.jobname}/{self.buildno}/'\
+                                  f'{self.ofi_build_mode}'
+        self.ci_middlewares_path = f'{ci_site_config.install_dir}/'\
+                                   f'{self.jobname}/{self.buildno}/'\
+                                   'ci_middlewares'
 
         self.env = [('FI_VERBS_MR_CACHE_ENABLE', '1'),\
                     ('FI_VERBS_INLINE_SIZE', '256')] \
@@ -67,20 +66,20 @@ class FiInfoTest(Test):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                      hosts, ofi_build_mode, None, util_prov)
 
-        self.fi_info_testpath =  '{}/bin'.format(self.libfab_installpath)
+        self.fi_info_testpath =  f'{self.libfab_installpath}/bin'
 
     @property
     def cmd(self):
-        return "{}/fi_info ".format(self.fi_info_testpath)
+        return f"{self.fi_info_testpath}/fi_info "
 
     @property
     def options(self):
         if (self.util_prov):
-            opts  = "-f {} -p {};{}".format(self.fabric, self.core_prov, self.util_prov)
+            opts  = f"-f {self.fabric} -p {self.core_prov};{self.util_prov}"
         elif (self.core_prov == 'psm3'):
-            opts = "-p {}".format(self.core_prov)
+            opts = f"-p {self.core_prov}"
         else:
-            opts = "-f {} -p {}".format(self.fabric, self.core_prov)
+            opts = f"-f {self.fabric} -p {self.core_prov}"
 
         return opts
 
@@ -97,88 +96,78 @@ class Fabtest(Test):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          hosts, ofi_build_mode, None, util_prov)
-        self.fabtestpath = '{}/bin'.format(self.libfab_installpath)
-        self.fabtestconfigpath = '{}/share/fabtests'.format(self.libfab_installpath)
+        self.fabtestpath = f'{self.libfab_installpath}/bin'
+        self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
 
     def get_exclude_file(self):
         path = self.libfab_installpath
-        efile_path = '{}/share/fabtests/test_configs'.format(path)
+        efile_path = f'{path}/share/fabtests/test_configs'
 
         prov = self.util_prov if self.util_prov else self.core_prov
-        efile_old = '{path}/{prov}/{prov}.exclude'.format(path=efile_path,
-                      prov=prov)
+        efile_old = f'{efile_path}/{prov}/{prov}.exclude'
 
         if self.util_prov:
-            efile = '{path}/{util_prov}/{core_prov}/exclude' \
-                    .format(path=efile_path, util_prov=self.util_prov,
-                    core_prov=self.core_prov)
+            efile = f'{efile_path}/{self.util_prov}/{self.core_prov}/exclude'
         else:
-            efile = '{path}/{prov}/exclude'.format(path=efile_path,
-                      prov=self.core_prov)
+            efile = f'{efile_path}/{self.core_prov}/exclude'
 
         if os.path.isfile(efile):
             return efile
         elif os.path.isfile(efile_old):
             return efile_old
         else:
-            print("Exclude file: {} not found!".format(efile))
+            print(f"Exclude file: {efile} not found!")
             return None
 
     @property
     def cmd(self):
-        return "{}/runfabtests.sh ".format(self.fabtestpath)
+        return f"{self.fabtestpath}/runfabtests.sh "
 
     @property
     def options(self):
-        opts = "-T 300 -vvv -p {} -S ".format(self.fabtestpath)
+        opts = f"-T 300 -vvv -p {self.fabtestpath} -S "
         if (self.core_prov != 'shm' and self.nw_interface):
-            opts = "{} -s {} ".format(opts, common.get_node_name(self.server,
-                    self.nw_interface)) # include common.py
-            opts = "{} -c {} ".format(opts, common.get_node_name(self.client,
-                    self.nw_interface)) # from common.py
+            opts += f"-s {common.get_node_name(self.server, self.nw_interface)} "
+            opts += f"-c {common.get_node_name(self.client, self.nw_interface)} "
 
         if (self.core_prov == 'shm'):
-            opts = "{} -s {} ".format(opts, self.server)
-            opts = "{} -c {} ".format(opts, self.client)
+            opts += f"-s {self.server} "
+            opts += f"-c {self.client} "
             opts += "-N "
 
         if (self.ofi_build_mode == 'dl'):
-            opts = "{} -t short ".format(opts)
+            opts += "-t short "
         else:
-            opts = "{} -t all ".format(opts)
+            opts += "-t all "
 
         if (self.core_prov == 'sockets' and self.ofi_build_mode == 'reg'):
-            complex_test_file = '{}/share/fabtests/test_configs/{}/quick.test' \
-                                .format(self.libfab_installpath,
-                                self.core_prov)
+            complex_test_file = f'{self.libfab_installpath}/share/fabtests/'\
+                                f'test_configs/{self.core_prov}/quick.test'
             if (os.path.isfile(complex_test_file)):
-                opts = "{} -u {} ".format(opts, complex_test_file)
+                opts += "-u {complex_test_file} "
             else:
-                print("{} Complex test file not found".format(self.core_prov))
+                print(f"{self.core_prov} Complex test file not found")
 
         if (self.ofi_build_mode != 'reg' or self.core_prov == 'udp'):
-            opts = "{} -e \'ubertest,multinode\'".format(opts)
+            opts += "-e \'ubertest,multinode\'"
 
         efile = self.get_exclude_file()
         if efile:
-            opts = "{} -R ".format(opts)
-            opts = "{} -f {} ".format(opts, efile)
+            opts += "-R "
+            opts += f"-f {efile} "
 
         for key,val in self.env:
-            opts = "{options} -E {key}={value} ".format(options = opts,
-                    key=key, value=val)
+            opts += f"-E {key}={val} "
 
         if self.util_prov:
-            opts = "{options} {core};{util} ".format(options=opts,
-                    core=self.core_prov, util=self.util_prov)
+            opts += f"{self.core_prov};{self.util_prov} "
         else:
-            opts = "{options} {core} ".format(options=opts,
-                    core=self.core_prov)
+            opts += f"{self.core_prov} "
 
         if (self.core_prov == 'shm'):
-            opts += "{} {} ".format(self.server, self.server)
+            opts += f"{self.server} {self.server} "
         else:
-            opts += "{} {} ".format(self.server, self.client)
+            opts += f"{self.server} {self.client} "
 
         return opts
 
@@ -207,29 +196,27 @@ class ShmemTest(Test):
         self.n = 4
         # self.ppn - number of processes per node.
         self.ppn = 2
-        self.shmem_dir = '{}/shmem'.format(self.ci_middlewares_path)
+        self.shmem_dir = f'{self.ci_middlewares_path}/shmem'
 
     @property
     def cmd(self):
-        return "{}/run_shmem.sh ".format(ci_site_config.testpath)
+        return f"{ci_site_config.testpath}/run_shmem.sh "
 
     def options(self, shmem_testname):
 
         if self.util_prov:
-            prov = "{core};{util} ".format(core=self.core_prov,
-                    util=self.util_prov)
+            prov = f"{self.core_prov};{self.util_prov} "
         else:
             prov = self.core_prov
 
-        opts = "-n {n} ".format(n=self.n)
-        opts += "-hosts {server},{client} ".format(server=self.server, \
-                                                   client=self.client)
-        opts += "-shmem_dir={shmemdir} ".format(shmemdir=self.shmem_dir)
-        opts += "-libfabric_path={path}/lib ".format(path=self.libfab_installpath)
-        opts += "-prov {provider} ".format(provider=prov)
-        opts += "-test {test} ".format(test=shmem_testname)
-        opts += "-server {server} ".format(server=self.server)
-        opts += "-inf {inf}".format(inf=ci_site_config.interface_map[self.fabric])
+        opts = f"-n {self.n} "
+        opts += f"-hosts {self.server},{self.client} "
+        opts += f"-shmem_dir={self.shmem_dir} "
+        opts += f"-libfabric_path={self.libfab_installpath}/lib "
+        opts += f"-prov {prov} "
+        opts += f"-test {shmem_testname} "
+        opts += f"-server {self.server} "
+        opts += f"-inf {ci_site_config.interface_map[self.fabric]}"
         return opts
 
     @property
@@ -250,20 +237,19 @@ class ZeFabtests(Test):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          hosts, ofi_build_mode, None, util_prov)
 
-        self.fabtestpath = '{}/bin'.format(self.libfab_installpath)
-        self.zefabtest_script_path = '{}'.format(ci_site_config.ze_testpath)
-        self.fabtestconfigpath = '{}/share/fabtests'.format(self.libfab_installpath)
+        self.fabtestpath = f'{self.libfab_installpath}/bin'
+        self.zefabtest_script_path = f'{ci_site_config.ze_testpath}'
+        self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
 
     @property
     def cmd(self):
-        return '{}/runfabtests_ze.sh '.format(self.zefabtest_script_path)
+        return f'{self.zefabtest_script_path}/runfabtests_ze.sh '
 
     @property
     def options(self):
-        opts = "-p {} ".format(self.fabtestpath)
-        opts += "-B {} ".format(self.fabtestpath)
-        opts += "{} {} ".format(self.server, self.client)
-
+        opts = f"-p {self.fabtestpath} "
+        opts += f"-B {self.fabtestpath} "
+        opts += f"{self.server} {self.client} "
         return opts
 
     @property
@@ -285,7 +271,7 @@ class OMPI:
     def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
                  server, client, environ, ci_middlewares_path, util_prov=None):
 
-        self.ompi_src = '{}/ompi'.format(ci_middlewares_path)
+        self.ompi_src = f'{ci_middlewares_path}/ompi'
         self.core_prov = core_prov
         self.hosts = hosts
         self.util_prov = util_prov
@@ -301,53 +287,49 @@ class OMPI:
     def env(self):
         cmd = "bash -c \'"
         if (self.util_prov):
-            cmd += "export FI_PROVIDER={}; ".format(self.core_prov)
+            cmd += f"export FI_PROVIDER={self.core_prov}\\;{self.util_prov}; "
         else:
-            cmd += "export FI_PROVIDER={}\\;{}; ".format(self.core_prov,
-                                                         self.util_prov)
+            cmd += f"export FI_PROVIDER={self.core_prov}; "
         cmd += "export I_MPI_FABRICS=ofi; "
-        cmd += "export LD_LIBRARY_PATH={}/lib:$LD_LIBRARY_PATH; "\
-               .format(self.ompi_src)
-        cmd += "export LD_LIBRARY_PATH={}/lib/:$LD_LIBRARY_PATH; "\
-               .format(self.libfab_installpath)
-        cmd += "export PATH={}/bin:$PATH; ".format(self.ompi_src)
-        cmd += "export PATH={}/bin:$PATH; ".format(self.libfab_installpath)
+        cmd += f"export LD_LIBRARY_PATH={self.ompi_src}/lib:$LD_LIBRARY_PATH; "
+        cmd += f"export LD_LIBRARY_PATH={self.libfab_installpath}/lib/:"\
+                "$LD_LIBRARY_PATH; "
+        cmd += f"export PATH={self.ompi_src}/bin:$PATH; "
+        cmd += f"export PATH={self.libfab_installpath}/bin:$PATH; "
         return cmd
 
     @property
     def options(self):
-        opts = "-np {} ".format(self.n)
+        opts = f"-np {self.n} "
         hosts = '\',\''.join([':'.join([common.get_node_name(host, \
                          self.nw_interface), str(self.ppn)]) \
                 for host in self.hosts])
-        opts += "--host \'{}\' ".format(hosts)
+        opts += f"--host \'{hosts}\' "
         if self.util_prov:
-            opts += "--mca mtl_ofi_provider_include {}\\;{} ".format(
-                    self.core_prov, self.util_prov)
-            opts += "--mca btl_ofi_provider_include {}\\;{} ".format(
-                    self.core_prov, self.util_prov)
+            opts += f"--mca mtl_ofi_provider_include {self.core_prov}\\;"\
+                    f"{self.util_prov} "
+            opts += f"--mca btl_ofi_provider_include {self.core_prov}\\;"\
+                    f"{self.util_prov} "
         else:
-            opts += "--mca mtl_ofi_provider_include {} ".format(
-                    self.core_prov)
-            opts += "--mca btl_ofi_provider_include {} ".format(
-                    self.core_prov)
+            opts += f"--mca mtl_ofi_provider_include {self.core_prov} "
+            opts += f"--mca btl_ofi_provider_include {self.core_prov} "
         opts += "--mca orte_base_help_aggregate 0 "
         opts += "--mca mtl ofi "
         opts += "--mca pml cm -tag-output "
         for key, val in self.environ:
-            opts = "{} -x {}={} ".format(opts, key, val)
+            opts += f"-x {key}={val} "
 
         return opts
 
     @property
     def cmd(self):
-        return "{}/bin/mpirun {}".format(self.ompi_src, self.options)
+        return f"{self.ompi_src}/bin/mpirun {self.options}"
 
 class MPICH:
     def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
                  server, client, environ, ci_middlewares_path, util_prov=None):
 
-        self.mpich_src = '{}/mpich'.format(ci_middlewares_path)
+        self.mpich_src = f'{ci_middlewares_path}/mpich'
         self.core_prov = core_prov
         self.hosts = hosts
         self.util_prov = util_prov
@@ -363,37 +345,33 @@ class MPICH:
     def env(self):
         cmd = "bash -c \'"
         if (self.util_prov):
-            cmd += "export FI_PROVIDER={}; ".format(self.core_prov)
+            cmd += f"export FI_PROVIDER={self.core_prov}; "
         else:
-            cmd += "export FI_PROVIDER=\'{};{}\'; ".format(self.core_prov,
-                                                           self.util_prov)
+            cmd += f"export FI_PROVIDER={self.core_prov}\\;{self.util_prov}; "
         cmd += "export I_MPI_FABRICS=ofi; "
         cmd += "export MPIR_CVAR_CH4_OFI_ENABLE_ATOMICS=0; "
         cmd += "export MPIR_CVAR_CH4_OFI_CAPABILITY_SETS_DEBUG=1; "
-        cmd += "export LD_LIBRARY_PATH={}/lib:$LD_LIBRARY_PATH; "\
-               .format(self.mpich_src)
-        cmd += "export LD_LIBRARY_PATH={}/lib/:$LD_LIBRARY_PATH; "\
-               .format(self.libfab_installpath)
-        cmd += "export PATH={}/bin:$PATH; ".format(self.mpich_src)
-        cmd += "export PATH={}/bin:$PATH; ".format(self.libfab_installpath)
+        cmd += f"export LD_LIBRARY_PATH={self.mpich_src}/lib:$LD_LIBRARY_PATH; "
+        cmd += f"export LD_LIBRARY_PATH={self.libfab_installpath}/lib/:"\
+               "$LD_LIBRARY_PATH; "
+        cmd += f"export PATH={self.mpich_src}/bin:$PATH; "
+        cmd += f"export PATH={self.libfab_installpath}/bin:$PATH; "
         return cmd
 
     @property
     def options(self):
-        opts = "-n {} ".format(self.n)
-        opts += "-ppn {} ".format(self.ppn)
-        opts += "-hosts {},{} ".format(common.get_node_name(self.server,
-                                       self.nw_interface),
-                                       common.get_node_name(self.client,
-                                       self.nw_interface))
+        opts = f"-n {self.n} "
+        opts += f"-ppn {self.ppn} "
+        opts += f"-hosts {common.get_node_name(self.server, self.nw_interface)},"\
+                f"{common.get_node_name(self.client, self.nw_interface)} "
         for key, val in self.environ:
-            opts = "{} -genv {} {} ".format(opts, key, val)
+            opts += f"-genv {key} {val} "
 
         return opts
 
     @property
     def cmd(self):
-        return "{}/bin/mpirun {}".format(self.mpich_src, self.options)
+        return f"{self.mpich_src}/bin/mpirun {self.options}"
 
 
 class IMPI:
@@ -414,39 +392,35 @@ class IMPI:
 
     @property
     def env(self):
-        cmd = "bash -c \'source {}/env/vars.sh -i_mpi_ofi_internal=0; "\
-              .format(self.impi_src)
+        cmd = f"bash -c \'source {self.impi_src}/env/vars.sh "\
+              "-i_mpi_ofi_internal=0; "
         if (self.util_prov):
-            cmd += "export FI_PROVIDER={}; ".format(self.core_prov)
+            cmd += f"export FI_PROVIDER={self.core_prov}\\;{self.util_prov}; "
         else:
-            cmd += "export FI_PROVIDER=\'{};{}\'; ".format(self.core_prov,
-                                                           self.util_prov)
+            cmd += f"export FI_PROVIDER={self.core_prov}; "
         cmd += "export I_MPI_FABRICS=ofi; "
-        cmd += "export LD_LIBRARY_PATH={}/lib:$LD_LIBRARY_PATH; "\
-               .format(self.impi_src)
-        cmd += "export LD_LIBRARY_PATH={}/lib/release:$LD_LIBRARY_PATH; "\
-               .format(self.impi_src)
-        cmd += "export LD_LIBRARY_PATH={}/lib/:$LD_LIBRARY_PATH; "\
-               .format(self.libfab_installpath)
-        cmd += "export PATH={}/bin:$PATH; ".format(self.libfab_installpath)
+        cmd += f"export LD_LIBRARY_PATH={self.impi_src}/lib:$LD_LIBRARY_PATH; "
+        cmd += f"export LD_LIBRARY_PATH={self.impi_src}/lib/release:"\
+               "$LD_LIBRARY_PATH; "
+        cmd += f"export LD_LIBRARY_PATH={self.libfab_installpath}/lib/:"\
+               "$LD_LIBRARY_PATH; "
+        cmd += f"export PATH={self.libfab_installpath}/bin:$PATH; "
         return cmd
 
     @property
     def options(self):
-        opts = "-n {} ".format(self.n)
-        opts += "-ppn {} ".format(self.ppn)
-        opts += "-hosts {},{} ".format(common.get_node_name(self.server,
-                                       self.nw_interface),
-                                       common.get_node_name(self.client,
-                                       self.nw_interface))
+        opts = f"-n {self.n} "
+        opts += f"-ppn {self.ppn} "
+        opts += f"-hosts {common.get_node_name(self.server, self.nw_interface)},"\
+                f"{common.get_node_name(self.client, self.nw_interface)} "
         for key, val in self.environ:
-            opts = "{} -genv {} {} ".format(opts, key, val)
+            opts += f"-genv {key} {val} "
 
         return opts
 
     @property
     def cmd(self):
-        return "{}/bin/mpiexec {}".format(self.impi_src, self.options)
+        return f"{self.impi_src}/bin/mpiexec {self.options}"
 
 
 class IMBtests(Test):
@@ -507,10 +481,8 @@ class IMBtests(Test):
                        }
         if (self.mpi_type == 'impi'):
             self.imb_src = ci_site_config.impi_root
-        elif (self.mpi_type == 'ompi'):
-            self.imb_src = '{}/ompi/imb'.format(self.ci_middlewares_path)
-        elif (self.mpi_type == 'mpich'):
-            self.imb_src = '{}/mpich/imb'.format(self.ci_middlewares_path)
+        elif (self.mpi_type == 'ompi' or self.mpi_type == 'mpich'):
+            self.imb_src = f'{self.ci_middlewares_path}/{self.mpi_type}/imb'
 
     @property
     def execute_condn(self):
@@ -518,16 +490,16 @@ class IMBtests(Test):
         return True if (self.mpi_type == 'impi') else False
 
     def imb_cmd(self, imb_test):
-        print("Running IMB-{}".format(imb_test))
-        cmd = "{}/bin/IMB-{} ".format(self.imb_src, imb_test)
+        print(f"Running IMB-{imb_test}")
+        cmd = f"{self.imb_src}/bin/IMB-{imb_test} "
         if (imb_test != 'MT'):
-            cmd += "-iter {} ".format(self.iter)
+            cmd += f"-iter {self.iter} "
 
         if (len(self.include[imb_test]) > 0):
-            cmd += "-include {} ".format(','.join(self.include[imb_test]))
+            cmd += f"-include {','.join(self.include[imb_test])}"
 
         if (len(self.exclude[imb_test]) > 0):
-            cmd += "-exclude {} ".format(','.join(self.exclude[imb_test]))
+            cmd += f"-exclude {','.join(self.exclude[imb_test])}"
 
         return cmd
 
@@ -552,8 +524,8 @@ class OSUtests(Test):
                           'one-sided':  (2, 1),
                           'startup':    (2, 1)
                      }
-        self.osu_src = '{}/{}/osu/libexec/osu-micro-benchmarks/mpi/'. \
-                            format(self.ci_middlewares_path, mpitype)
+        self.osu_src = f'{self.ci_middlewares_path}/{mpitype}/osu/libexec/'\
+                       'osu-micro-benchmarks/mpi/'
         self.mpi_type = mpitype
 
     @property
@@ -564,8 +536,8 @@ class OSUtests(Test):
                     else True
 
     def osu_cmd(self, test_type, test):
-        print("Running OSU-{}-{}".format(test_type, test))
-        cmd = '{}/{}/{} '.format(self.osu_src, test_type, test)
+        print(f"Running OSU-{test_type}-{test}")
+        cmd = f'{self.osu_src}/{test_type}/{test} '
         return cmd
 
     def execute_cmd(self):
@@ -597,16 +569,15 @@ class MpichTestSuite(Test):
         super().__init__(jobname, buildno, testname, core_prov,
                          fabric, hosts, ofi_build_mode, mpitype, util_prov)
 
-        self.mpichsuitepath = '{}/{}/mpichsuite/test/mpi/' \
-                              .format(self.ci_middlewares_path, mpitype)
+        self.mpichsuitepath = f'{self.ci_middlewares_path}/{mpitype}/'\
+                              'mpichsuite/test/mpi/'
         self.pwd = os.getcwd()
         self.mpi_type = mpitype
 
     def testgroup(self, testgroupname):
-        testpath = '{}/{}'.format(self.mpichsuitepath, testgroupname)
+        testpath = f'{self.mpichsuitepath}/{testgroupname}'
         tests = []
-        print(f'{testpath}/testlist')
-        with open('{}/testlist'.format(testpath)) as file:
+        with open(f'{testpath}/testlist') as file:
             for line in file:
                 if(line[0] != '#' and  line[0] != '\n'):
                     tests.append((line.rstrip('\n')).split(' '))
@@ -630,7 +601,7 @@ class MpichTestSuite(Test):
         print("Running Tests: " + testgroupname)
         tests = []
         time = None
-        os.chdir("{}/{}".format(self.mpichsuitepath, testgroupname))
+        os.chdir(f'{self.mpichsuitepath}/{testgroupname}')
         tests = self.testgroup(testgroupname)
         for test in tests:
             testname = test[0]
@@ -641,7 +612,7 @@ class MpichTestSuite(Test):
                if (itemlist[0] == 'timelimit'):
                    time = itemlist[1]
             self.set_options(nprocs, timeout=time)
-            testcmd = "./{}".format(testname)
+            testcmd = f'./{testname}'
             outputcmd = shlex.split(self.mpi.env + self.mpi.cmd + testcmd + '\'')
             common.run_command(outputcmd)
         os.chdir(self.pwd)
@@ -656,7 +627,7 @@ class OneCCLTests(Test):
 
         self.n = 2
         self.ppn = 1
-        self.oneccl_path = '{}/oneccl/build'.format(self.ci_middlewares_path)
+        self.oneccl_path = f'{self.ci_middlewares_path}/oneccl/build'
 
         self.examples_tests = {
                                   'allgatherv',
@@ -687,19 +658,16 @@ class OneCCLTests(Test):
 
     @property
     def cmd(self):
-        return "{}/run_oneccl.sh ".format(ci_site_config.testpath)
+        return f"{ci_site_config.testpath}/run_oneccl.sh "
 
     def options(self, oneccl_test):
-        opts = "-n {n} ".format(n=self.n)
-        opts += "-ppn {ppn} ".format(ppn=self.ppn)
-        opts += "-hosts {server},{client} ".format(server=self.server,
-                                                   client=self.client)
-        opts += "-prov '{provider}' ".format(provider=self.core_prov)
-        opts += "-test {test_suite} ".format(test_suite=oneccl_test)
-        opts += "-libfabric_path={path}/lib " \
-                .format(path=self.libfab_installpath)
-        opts += '-oneccl_root={oneccl_path}' \
-                .format(oneccl_path=self.oneccl_path)
+        opts = f"-n {self.n} "
+        opts += f"-ppn {self.ppn} "
+        opts += f"-hosts {self.server},{self.client} "
+        opts += f"-prov '{self.core_prov}' "
+        opts += f"-test {oneccl_test} "
+        opts += f"-libfabric_path={self.libfab_installpath}/lib "
+        opts += f'-oneccl_root={self.oneccl_path}'
         return opts
 
     @property
@@ -711,13 +679,13 @@ class OneCCLTests(Test):
         if oneccl_test == 'examples':
                 for test in self.examples_tests:
                         command = self.cmd + self.options(oneccl_test) + \
-                                  " {}".format(test)
+                                  f" {test}"
                         outputcmd = shlex.split(command)
                         common.run_command(outputcmd)
         elif oneccl_test == 'functional':
                 for test in self.functional_tests:
                         command = self.cmd + self.options(oneccl_test) + \
-                                  " {}".format(test)
+                                  f" {test}"
                         outputcmd = shlex.split(command)
                         common.run_command(outputcmd)
 
@@ -730,7 +698,7 @@ class OneCCLTestsGPU(Test):
 
         self.n = 2
         self.ppn = 4
-        self.oneccl_path = '{}/oneccl_gpu/build'.format(self.ci_middlewares_path)
+        self.oneccl_path = f'{self.ci_middlewares_path}/oneccl_gpu/build'
 
         self.examples_tests = {
                                   'sycl_allgatherv_custom_usm_test',
@@ -764,18 +732,15 @@ class OneCCLTestsGPU(Test):
 
     @property
     def cmd(self):
-        return "{}/run_oneccl_gpu.sh ".format(ci_site_config.testpath)
+        return f"{ci_site_config.testpath}/run_oneccl_gpu.sh "
 
     def options(self, oneccl_test_gpu):
-        opts = "-n {n} ".format(n=self.n)
-        opts += "-ppn {ppn} ".format(ppn=self.ppn)
-        opts += "-hosts {server},{client} ".format(server=self.server,
-                                                   client=self.client)
-        opts += "-test {test_suite} ".format(test_suite=oneccl_test_gpu)
-        opts += "-libfabric_path={path}/lib " \
-                .format(path=self.libfab_installpath)
-        opts += '-oneccl_root={oneccl_path}' \
-                .format(oneccl_path=self.oneccl_path)
+        opts = f"-n {self.n} "
+        opts += f"-ppn {self.ppn} "
+        opts += f"-hosts {self.server},{self.client} "
+        opts += f"-test {oneccl_test_gpu} "
+        opts += f"-libfabric_path={self.libfab_installpath}/lib "
+        opts += f'-oneccl_root={self.oneccl_path}'
         return opts
 
     @property
@@ -787,12 +752,13 @@ class OneCCLTestsGPU(Test):
         if oneccl_test_gpu == 'examples':
                 for test in self.examples_tests:
                         command = self.cmd + self.options(oneccl_test_gpu) + \
-                                  " {}".format(test)
+                                  f" {test}"
                         outputcmd = shlex.split(command)
                         common.run_command(outputcmd)
         elif oneccl_test_gpu == 'functional':
                 for test in self.functional_tests:
                         command = self.cmd + self.options(oneccl_test_gpu) + \
-                                  " {}".format(test)
+                                  f" {test}"
                         outputcmd = shlex.split(command)
                         common.run_command(outputcmd)
+

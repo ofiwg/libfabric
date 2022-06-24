@@ -18,7 +18,7 @@ def build_libfabric(libfab_install_path, mode):
     if (os.path.exists(libfab_install_path) != True):
         os.makedirs(libfab_install_path)
 
-    config_cmd = ['./configure', '--prefix={}'.format(libfab_install_path)]
+    config_cmd = ['./configure', f'--prefix={libfab_install_path}']
     enable_prov_val = 'yes'
 
     if (mode == 'dbg'):
@@ -27,9 +27,9 @@ def build_libfabric(libfab_install_path, mode):
         enable_prov_val='dl'
 
     for prov in common.enabled_prov_list:
-        config_cmd.append('--enable-{}={}'.format(prov, enable_prov_val))
+        config_cmd.append(f'--enable-{prov}={enable_prov_val}')
     for prov in common.disabled_prov_list:
-         config_cmd.append('--enable-{}=no'.format(prov))
+         config_cmd.append(f'--enable-{prov}=no')
 
     config_cmd.append('--disable-opx') # we do not test opx in intel jenkins ci
     config_cmd.append('--disable-efa') # we do not test efa in intel jenkins ci
@@ -45,14 +45,14 @@ def build_libfabric(libfab_install_path, mode):
 
 def build_fabtests(libfab_install_path, mode):
 
-    os.chdir('{}/fabtests'.format(workspace))
+    os.chdir(f'{workspace}/fabtests')
     if (mode == 'dbg'):
-        config_cmd = ['./configure', '--enable-debug', '--prefix={}' \
-                      .format(libfab_install_path),'--with-libfabric={}' \
-                      .format(libfab_install_path)]
+        config_cmd = ['./configure', '--enable-debug',
+                      f'--prefix={libfab_install_path}',
+                      f'--with-libfabric={libfab_install_path}']
     else:
-        config_cmd = ['./configure', '--prefix={}'.format(libfab_install_path),
-                      '--with-libfabric={}'.format(libfab_install_path)]
+        config_cmd = ['./configure', f'--prefix={libfab_install_path}',
+                      f'--with-libfabric={libfab_install_path}']
 
     common.run_command(['./autogen.sh'])
     common.run_command(config_cmd)
@@ -62,7 +62,7 @@ def build_fabtests(libfab_install_path, mode):
 
 def copy_build_dir(install_path):
     shutil.copytree(ci_site_config.build_dir,
-                    '{}/ci_middlewares'.format(install_path))
+                    f'{install_path}/ci_middlewares')
 
 if __name__ == "__main__":
 #read Jenkins environment variables
@@ -87,12 +87,8 @@ if __name__ == "__main__":
     else:
         ofi_build_mode = 'reg'
 
-    ci_middlewares_install_path = '{installdir}/{jbname}/{bno}' \
-                                .format(installdir=ci_site_config.install_dir, \
-                                jbname=jobname, bno=buildno)
-    install_path = '{installdir}/{jbname}/{bno}/{bmode}' \
-                   .format(installdir=ci_site_config.install_dir,
-                   jbname=jobname, bno=buildno,bmode=ofi_build_mode)
+    ci_middlewares_install_path = f'{ci_site_config.install_dir}/{jobname}/{buildno}'
+    install_path = f'{ci_site_config.install_dir}/{jobname}/{buildno}/{ofi_build_mode}'
 
     p = re.compile('mpi*')
 
