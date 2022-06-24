@@ -38,7 +38,7 @@ int efa_unit_test_resource_construct(struct efa_resource *resource)
 
 	return 0;
 err:
-	efa_unit_test_resource_destroy(resource);
+	efa_unit_test_resource_destruct(resource);
 	return ret;
 }
 
@@ -47,7 +47,7 @@ err:
  * Note: Resources should be destroyed in order.
  * @param[in] resource	struct efa_resource to clean up.
  */
-void efa_unit_test_resource_destroy(struct efa_resource *resource)
+void efa_unit_test_resource_destruct(struct efa_resource *resource)
 {
 	if (resource->ep) {
 		assert_int_equal(fi_close(&resource->ep->fid), 0);

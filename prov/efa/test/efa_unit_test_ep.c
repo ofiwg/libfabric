@@ -44,7 +44,7 @@ static void dgram_ep_resource_construct(struct efa_resource *resource)
 	err = fi_enable(resource->ep);
 	if (err) {
 		/* Don't leak reource */
-		efa_unit_test_resource_destroy(resource);
+		efa_unit_test_resource_destruct(resource);
 	}
 	assert_int_equal(err, 0);
 }
@@ -88,7 +88,7 @@ static void rdm_ep_resource_construct(struct efa_resource *resource)
 	err = fi_enable(resource->ep);
 	if (err) {
 		/* Don't leak reource */
-		efa_unit_test_resource_destroy(resource);
+		efa_unit_test_resource_destruct(resource);
 	}
 	assert_int_equal(err, 0);
 }
@@ -128,7 +128,7 @@ void test_rxr_ep_pkt_pool_flags()
 	g_efa_fork_status = EFA_FORK_SUPPORT_UNNEEDED;
 	check_ep_pkt_pool_flags(resource, OFI_BUFPOOL_HUGEPAGES);
 
-	efa_unit_test_resource_destroy(&resource);
+	efa_unit_test_resource_destruct(&resource);
 }
 
 /**
@@ -161,7 +161,7 @@ void test_rxr_ep_pkt_pool_page_alignment()
 	ofi_buf_free(buf);
 
 	fi_close(&ep->fid);
-	efa_unit_test_resource_destroy(&resource);
+	efa_unit_test_resource_destruct(&resource);
 
 	g_efa_fork_status = EFA_FORK_SUPPORT_OFF;
 }
@@ -230,7 +230,7 @@ void test_rxr_ep_dc_atomic_error_handling()
 	assert_true(dlist_empty(&rxr_ep->tx_entry_list));
 
 	will_return_maybe(__wrap_ibv_destroy_ah, 0);
-	efa_unit_test_resource_destroy(&resource);
+	efa_unit_test_resource_destruct(&resource);
 }
 
 /* Verify that DGRAM endpoint progress works with normal work completions */
@@ -257,7 +257,7 @@ void test_dgram_ep_progress_happy()
 
 	/* Cleanup resource before assertion */
 	will_return_maybe(__wrap_ibv_destroy_ah, 0);
-	efa_unit_test_resource_destroy(&resource);
+	efa_unit_test_resource_destruct(&resource);
 
 	assert_int_equal(err, 0);
 }
@@ -283,7 +283,7 @@ void test_dgram_ep_progress_with_empty_cq()
 
 	/* Cleanup resource before assertion */
 	will_return_maybe(__wrap_ibv_destroy_ah, 0);
-	efa_unit_test_resource_destroy(&resource);
+	efa_unit_test_resource_destruct(&resource);
 
 	assert_int_equal(err, 0);
 }
@@ -311,7 +311,7 @@ void test_dgram_ep_progress_encounter_bad_wc_status()
 
 	/* Cleanup resource before assertion */
 	will_return_maybe(__wrap_ibv_destroy_ah, 0);
-	efa_unit_test_resource_destroy(&resource);
+	efa_unit_test_resource_destruct(&resource);
 
 	assert_int_equal(err, 0);
 	assert_int_equal(err_entry.err, EIO);
@@ -346,7 +346,7 @@ void test_rdm_ep_progress_send_completion_happy()
 	rxr_ep->util_ep.progress(&rxr_ep->util_ep);
 
 	will_return_maybe(__wrap_ibv_destroy_ah, 0);
-	efa_unit_test_resource_destroy(&resource);
+	efa_unit_test_resource_destruct(&resource);
 }
 
 /* Verify that RDM endpoint progress works with normal receive completions */
@@ -378,7 +378,7 @@ void test_rdm_ep_progress_recv_completion_happy()
 	rxr_ep->util_ep.progress(&rxr_ep->util_ep);
 
 	will_return_maybe(__wrap_ibv_destroy_ah, 0);
-	efa_unit_test_resource_destroy(&resource);
+	efa_unit_test_resource_destruct(&resource);
 }
 
 /* Verify that RDM endpoint progress works with empty CQ */
@@ -402,7 +402,7 @@ void test_rdm_ep_progress_send_empty_cq()
 	rxr_ep->util_ep.progress(&rxr_ep->util_ep);
 
 	will_return_maybe(__wrap_ibv_destroy_ah, 0);
-	efa_unit_test_resource_destroy(&resource);
+	efa_unit_test_resource_destruct(&resource);
 }
 
 /* Verify that RDM endpoint progress works when cq poll returns an unexpected error */
@@ -446,7 +446,7 @@ void test_rdm_ep_progress_failed_poll()
 	rxr_ep->util_ep.progress(&rxr_ep->util_ep);
 
 	will_return(__wrap_ibv_destroy_ah, 0);
-	efa_unit_test_resource_destroy(&resource);
+	efa_unit_test_resource_destruct(&resource);
 }
 
 /* Verify that RDM endpoint progress works with with bad send wc status */
@@ -478,7 +478,7 @@ void test_rdm_ep_progress_bad_send_wc_status()
 	rxr_ep->util_ep.progress(&rxr_ep->util_ep);
 
 	will_return_maybe(__wrap_ibv_destroy_ah, 0);
-	efa_unit_test_resource_destroy(&resource);
+	efa_unit_test_resource_destruct(&resource);
 }
 
 /* Verify that RDM endpoint progress works with with bad receive wc status */
@@ -510,5 +510,5 @@ void test_rdm_ep_progress_bad_recv_wc_status()
 	rxr_ep->util_ep.progress(&rxr_ep->util_ep);
 
 	will_return_maybe(__wrap_ibv_destroy_ah, 0);
-	efa_unit_test_resource_destroy(&resource);
+	efa_unit_test_resource_destruct(&resource);
 }
