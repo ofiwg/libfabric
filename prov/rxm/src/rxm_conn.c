@@ -869,7 +869,7 @@ void rxm_stop_listen(struct rxm_ep *ep)
 
 static void rxm_flush_msg_cq(struct rxm_ep *ep)
 {
-	struct fi_cq_tagged_entry comp;
+	struct fi_cq_data_entry comp;
 	ssize_t ret;
 
 	assert(ofi_ep_lock_held(&ep->util_ep));
