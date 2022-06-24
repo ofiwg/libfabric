@@ -598,7 +598,7 @@ err:
 static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 		struct fi_opx_domain *opx_domain)
 {
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "tx init\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "==== TX init.  Calculating optimal Tx send thresholds\n");
 
 	assert(opx_ep);
 	assert(opx_domain);
@@ -639,17 +639,59 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	opx_ep->tx->pio_credits_addr = hfi->info.pio.credits_addr;
 
 	/* Now that we know how many PIO Tx send credits we have, calculate the threshold to switch from EAGER send to RTS/CTS
-	   With max credits, there should be enough PIO Eager buffer to send 1 full-size message and 1 credit leftover for min reliablity.  */
+	 * With max credits, there should be enough PIO Eager buffer to send 1 full-size message and 1 credit leftover for min reliablity.  
+	 */
 	uint64_t l_pio_max_eager_tx_bytes = MIN(FI_OPX_HFI1_PACKET_MTU, 
 	((hfi->state.pio.credits_total - FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS) * 64));
 
-	assert(l_pio_max_eager_tx_bytes < ((2<<15) -1) ); //Make sure the value won't wrap a uint16_t
-	assert(l_pio_max_eager_tx_bytes != 0); // If we only got 1 credit from the context, this will be a short trip..
+	assert(l_pio_max_eager_tx_bytes < ((2<<15) -1) ); // Make sure the value won't wrap a uint16_t
+	assert(l_pio_max_eager_tx_bytes != 0);
 
 	opx_ep->tx->pio_max_eager_tx_bytes = l_pio_max_eager_tx_bytes;
-	
-	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "credits_total is %d, so set pio_max_eager_tx_bytes to %d \n", 
+
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Credits_total is %d, so set pio_max_eager_tx_bytes to %d \n", 
 		hfi->state.pio.credits_total, opx_ep->tx->pio_max_eager_tx_bytes);
+
+	/* Similar logic to l_pio_max_eager_tx_bytes, calculate l_pio_flow_eager_tx_bytes to be an 'optimal' value for PIO
+	 * credit count that respects the HFI credit return threshold.  The threshold is default 33%, so multiply credits_total 
+	 * by .66.  The idea is to not wait for an overly long time on credit-constrained systems to get almost all the PIO 
+	 * send credits back, rather wait to get the optimal number of credits determined by the return threshold.
+	 * TODO: multiply by user_credit_return_threshold from the hfi1 driver parms.  Default is 33   
+	 */
+	uint64_t l_pio_flow_eager_tx_bytes = MIN(FI_OPX_HFI1_PACKET_MTU, 
+	(((hfi->state.pio.credits_total - FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS) * .66) * 64) );
+
+	assert(l_pio_flow_eager_tx_bytes < ((2<<15) -1) ); //Make sure the value won't wrap a uint16_t
+	assert(l_pio_flow_eager_tx_bytes != 0); // Can't be 0
+	assert(l_pio_flow_eager_tx_bytes <= l_pio_max_eager_tx_bytes); // On credit constrained systems, max is bigger than flow
+
+	opx_ep->tx->pio_flow_eager_tx_bytes = l_pio_flow_eager_tx_bytes;
+
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Set pio_flow_eager_tx_bytes to %d \n", opx_ep->tx->pio_flow_eager_tx_bytes);
+
+	/* Set delivery completion max threshold.  Any messages larger than this value in bytes will not be copied to 
+	 * replay bounce buffers.  Instead, hold the sender's large message buffer until we get all ACKs back from the Rx 
+	 * side of the message.  Since no copy of the message is made, it will need to be used to handle NAKs.
+	 */
+	int l_dcomp_threshold;
+	ssize_t rc = fi_param_get_int(fi_opx_global.prov, "delivery_completion_threshold", &l_dcomp_threshold);
+	if (rc != FI_SUCCESS) {
+		opx_ep->tx->dcomp_threshold = OPX_DEFAULT_DCOMP_THRESHOLD;
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_DELIVERY_COMPLETION_THRESHOLD not set.  Using default setting of %d\n",
+		opx_ep->tx->dcomp_threshold);
+	} else if (l_dcomp_threshold < OPX_MIN_DCOMP_THRESHOLD || l_dcomp_threshold > OPX_MAX_DCOMP_THRESHOLD) {
+		opx_ep->tx->dcomp_threshold = OPX_DEFAULT_DCOMP_THRESHOLD;
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, 
+			"Error: FI_OPX_DELIVERY_COMPLETION_THRESHOLD was set but is outside of MIN/MAX thresholds.  Using default setting of %d\n", 
+			opx_ep->tx->dcomp_threshold);
+	} else {
+		opx_ep->tx->dcomp_threshold = l_dcomp_threshold;
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_DELIVERY_COMPLETION_THRESHOLD was specified.  Set to %d\n", 
+			opx_ep->tx->dcomp_threshold);
+	}
+
+	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Multi-packet eager max message length is %d, chunk-size is %d.\n", 
+		FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES, FI_OPX_MP_EGR_CHUNK_SIZE);	
 
 	opx_ep->tx->force_credit_return = 0;
 
@@ -683,7 +725,7 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	} else {
 		opx_ep->tx->sdma_work_pool = NULL;
 	}
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "tx init'd\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "==== TX init finished\n");
 	return 0;
 }
 

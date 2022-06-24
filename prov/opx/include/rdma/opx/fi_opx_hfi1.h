@@ -110,7 +110,7 @@ static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OP
 #define FI_OPX_SDMA_FRAG_SIZE				(FI_OPX_HFI1_PACKET_MTU)
 #define FI_OPX_SDMA_MIN_LENGTH				(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES + 1)
 #define FI_OPX_SDMA_ALWAYS_MIN				(128 * 1024) // Minimum payload size Threshold for which we will always use SDMA
-#define FI_OPX_SDMA_DC_MIN				(2 * 1024 * 1024) // Minimum payload size Threshold for which we will use delivery completion instead of copying the payload for reliability.
+#define FI_OPX_SDMA_DC_MIN				(1024 * 1024) // Minimum payload size Threshold for which we will use delivery completion instead of copying the payload for reliability.
 static_assert(FI_OPX_HFI1_SDMA_MAX_IOV_LEN <= 255, "num_iovs is only a byte");
 static_assert(!(FI_OPX_HFI1_SDMA_MAX_COMP_INDEX & (FI_OPX_HFI1_SDMA_MAX_COMP_INDEX - 1)), "FI_OPX_HFI1_SDMA_MAX_COMP_INDEX must be power of 2!\n");
 static_assert(FI_OPX_SDMA_ALWAYS_MIN >= FI_OPX_SDMA_MIN_LENGTH, "FI_OPX_SDMA_ALWAYS_MIN Must be >= FI_OPX_SDMA_MIN_LENGHT!\n");

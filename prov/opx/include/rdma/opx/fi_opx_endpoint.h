@@ -224,7 +224,9 @@ struct fi_opx_ep_tx {
 
 	volatile union fi_opx_hfi1_pio_state	*pio_state;			/* 1 qw = 8 bytes */
 	volatile uint64_t *			pio_scb_sop_first;
-	uint64_t				unused_1;
+	uint32_t				dcomp_threshold;            /* const; messages over this size will always force delivery completition */
+	uint16_t 				pio_max_eager_tx_bytes;
+	uint16_t 				pio_flow_eager_tx_bytes;
 
 	struct fi_opx_hfi1_txe_scb		inject;				/* qws 5,6, and 7 specified at runtime */
 
@@ -233,7 +235,7 @@ struct fi_opx_ep_tx {
 	uint64_t				cq_bind_flags;
 	struct fi_opx_context_slist *		cq_completed_ptr;
 	uint32_t				do_cq_completion;
-	uint16_t 				pio_max_eager_tx_bytes;
+	uint16_t 				unused_1;
 	uint8_t					force_credit_return;
 	uint8_t					use_sdma;
 
