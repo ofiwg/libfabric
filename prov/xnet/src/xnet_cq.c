@@ -38,6 +38,45 @@
 #define XNET_DEF_CQ_SIZE (1024)
 
 
+static ssize_t
+xnet_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+		 fi_addr_t *src_addr)
+{
+	struct xnet_cq *cq;
+	ssize_t ret;
+
+	cq = container_of(cq_fid, struct xnet_cq, util_cq.cq_fid);
+	ofi_genlock_lock(xnet_cq2_progress(cq)->active_lock);
+	ret = ofi_cq_readfrom(cq_fid, buf, count, src_addr);
+	ofi_genlock_unlock(xnet_cq2_progress(cq)->active_lock);
+	return ret;
+}
+
+static ssize_t
+xnet_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
+		uint64_t flags)
+{
+	struct xnet_cq *cq;
+	ssize_t ret;
+
+	cq = container_of(cq_fid, struct xnet_cq, util_cq.cq_fid);
+	ofi_genlock_lock(xnet_cq2_progress(cq)->active_lock);
+	ret = ofi_cq_readerr(cq_fid, buf, flags);
+	ofi_genlock_unlock(xnet_cq2_progress(cq)->active_lock);
+	return ret;
+}
+
+static struct fi_ops_cq xnet_cq_ops = {
+	.size = sizeof(struct fi_ops_cq),
+	.read = ofi_cq_read,
+	.readfrom = xnet_cq_readfrom,
+	.readerr = xnet_cq_readerr,
+	.sread = ofi_cq_sread,
+	.sreadfrom = ofi_cq_sreadfrom,
+	.signal = ofi_cq_signal,
+	.strerror = ofi_cq_strerror,
+};
+
 static void xnet_cq_progress(struct util_cq *util_cq)
 {
 	struct xnet_cq *cq;
@@ -232,6 +271,7 @@ int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	*cq_fid = &cq->util_cq.cq_fid;
 	(*cq_fid)->fid.ops = &xnet_cq_fi_ops;
+	(*cq_fid)->ops = &xnet_cq_ops;
 	return 0;
 
 cleanup:
@@ -246,7 +286,7 @@ free_cq:
 
 static void xnet_cntr_progress(struct util_cntr *cntr)
 {
-	xnet_run_progress(xnet_cntr2_progress(cntr), false);
+	xnet_progress(xnet_cntr2_progress(cntr), false);
 }
 
 static struct util_cntr *

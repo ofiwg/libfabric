@@ -284,6 +284,7 @@ void xnet_close_progress(struct xnet_progress *progress);
 int xnet_start_progress(struct xnet_progress *progress);
 void xnet_stop_progress(struct xnet_progress *progress);
 
+void xnet_progress(struct xnet_progress *progress, bool internal);
 void xnet_run_progress(struct xnet_progress *progress, bool internal);
 void xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr);
 void xnet_handle_events(struct xnet_progress *progress);
