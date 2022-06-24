@@ -137,7 +137,8 @@ int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	rxd_domain->max_seg_sz = rxd_domain->max_mtu_sz - sizeof(struct rxd_data_pkt) -
 				 dg_info->ep_attr->msg_prefix_size;
 
-	ret = ofi_domain_init(fabric, info, &rxd_domain->util_domain, context, 0);
+	ret = ofi_domain_init(fabric, info, &rxd_domain->util_domain, context,
+			      OFI_LOCK_MUTEX);
 	if (ret) {
 		goto err3;
 	}

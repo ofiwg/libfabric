@@ -98,16 +98,14 @@ static struct fi_ops_mr util_domain_mr_ops = {
 	.regattr = fi_no_mr_regattr,
 };
 
-static int util_domain_init(struct util_domain *domain,
-			    const struct fi_info *info, uint64_t flags)
+static int
+util_domain_init(struct util_domain *domain, const struct fi_info *info,
+		 enum ofi_lock_type lock_type)
 {
 	int ret;
 
 	ofi_atomic_initialize32(&domain->ref, 0);
-	if (flags & OFI_DOMAIN_SPINLOCK)
-		ret = ofi_genlock_init(&domain->lock, OFI_LOCK_SPINLOCK);
-	else
-		ret = ofi_genlock_init(&domain->lock, OFI_LOCK_MUTEX);
+	ret = ofi_genlock_init(&domain->lock, lock_type);
 	if (ret)
 		return ret;
 
@@ -127,7 +125,8 @@ static int util_domain_init(struct util_domain *domain,
 }
 
 int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
-		   struct util_domain *domain, void *context, uint64_t flags)
+		    struct util_domain *domain, void *context,
+		    enum ofi_lock_type lock_type)
 {
 	struct util_fabric *fabric;
 	int ret;
@@ -135,7 +134,7 @@ int ofi_domain_init(struct fid_fabric *fabric_fid, const struct fi_info *info,
 	fabric = container_of(fabric_fid, struct util_fabric, fabric_fid);
 	domain->fabric = fabric;
 	domain->prov = fabric->prov;
-	ret = util_domain_init(domain, info, flags);
+	ret = util_domain_init(domain, info, lock_type);
 	if (ret)
 		return ret;
 

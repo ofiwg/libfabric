@@ -165,7 +165,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 					  util_fabric.fabric_fid);
 
 	err = ofi_domain_init(fabric_fid, info, &efa_domain->util_domain,
-			      context, 0);
+			      context, OFI_LOCK_MUTEX);
 	if (err) {
 		ret = err;
 		goto err_free;

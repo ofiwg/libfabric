@@ -315,7 +315,8 @@ int psmx3_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err_out;
 	}
 
-	err = ofi_domain_init(fabric, info, &domain_priv->util_domain, context, 0);
+	err = ofi_domain_init(fabric, info, &domain_priv->util_domain, context,
+			      OFI_LOCK_MUTEX);
 	if (err)
 		goto err_out_free_domain;
 
