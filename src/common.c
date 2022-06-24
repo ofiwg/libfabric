@@ -114,6 +114,7 @@ int ofi_genlock_init(struct ofi_genlock *lock,
 		lock->held = (ofi_genlock_lockheld_t) ofi_mutex_held_op;
 		break;
 	case OFI_LOCK_NONE:
+		ret = 0;
 		lock->base.nolock = NULL;
 		lock->lock = (ofi_genlock_lockop_t) ofi_nolock_lock_op;
 		lock->unlock = (ofi_genlock_lockop_t) ofi_nolock_unlock_op;
