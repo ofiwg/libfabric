@@ -1,6 +1,6 @@
 dnl
 dnl Copyright (C) 2016 by Argonne National Laboratory.
-dnl Copyright (C) 2021 by Cornelis Networks.
+dnl Copyright (C) 2022 by Cornelis Networks.
 dnl
 dnl This software is available to you under a choice of one of two
 dnl licenses.  You may choose to be licensed under the terms of the GNU
@@ -116,6 +116,11 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		   	[],
 		   	[],
 		   	[opx_happy=0])
+		_FI_CHECK_PACKAGE_HEADER([opx_hfi1],
+		    [rdma/hfi/hfi1_user.h],
+		    [],
+		    [],
+		    [opx_happy=0])
 
                AC_CHECK_DECL([HAVE_ATOMICS],
                              [],
