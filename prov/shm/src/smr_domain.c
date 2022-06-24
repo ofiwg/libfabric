@@ -94,7 +94,7 @@ int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	ret = ofi_domain_init(fabric, info, &smr_domain->util_domain, context,
-			      OFI_DOMAIN_SPINLOCK);
+			      OFI_LOCK_SPINLOCK);
 	if (ret) {
 		free(smr_domain);
 		return ret;
