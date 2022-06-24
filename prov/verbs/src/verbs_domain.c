@@ -336,7 +336,8 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 	if (!_domain)
 		return -FI_ENOMEM;
 
-	ret = ofi_domain_init(fabric, info, &_domain->util_domain, context, 0);
+	ret = ofi_domain_init(fabric, info, &_domain->util_domain, context,
+			      OFI_LOCK_MUTEX);
 	if (ret)
 		goto err1;
 

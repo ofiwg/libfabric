@@ -120,7 +120,8 @@ int xnet_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	if (!domain)
 		return -FI_ENOMEM;
 
-	ret = ofi_domain_init(fabric_fid, info, &domain->util_domain, context, 0);
+	ret = ofi_domain_init(fabric_fid, info, &domain->util_domain, context,
+			      OFI_LOCK_MUTEX);
 	if (ret)
 		goto free;
 
