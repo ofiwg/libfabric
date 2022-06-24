@@ -145,6 +145,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	}
 
 	assert((opx_ep->tx->pio_max_eager_tx_bytes & 0x3f) == 0);
+	assert((opx_ep->tx->pio_flow_eager_tx_bytes & 0x3f) == 0);
 	
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	struct fi_opx_hfi1_dput_params *params = &work->dput;

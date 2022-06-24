@@ -1943,19 +1943,6 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 
 	service->usec_next = fi_opx_timer_next_event_usec(&service->tx.timer, &service->tx.timestamp, service->usec_max);
 
-	int dcomp_threshold;  //TODO, this ENV is for SDMA testing.  Remove this at some point.
-	rc = fi_param_get_int(fi_opx_global.prov, "delivery_completion_threshold",
-		&dcomp_threshold);
-	if (rc != FI_SUCCESS || dcomp_threshold < OPX_MIN_DCOMP_THRESHOLD ||
-		dcomp_threshold > OPX_MAX_DCOMP_THRESHOLD) {
-		service->tx.dcomp_threshold = OPX_DEFAULT_DCOMP_THRESHOLD;
-	} else {
-		service->tx.dcomp_threshold = dcomp_threshold;
-	}
-	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"FI_OPX_DELIVERY_COMPLETION_THRESHOLD set to %ld\n",
-		service->tx.dcomp_threshold);
-
 	int nack_threshold;
 	rc = fi_param_get_int(fi_opx_global.prov, "reliability_service_nack_threshold", &nack_threshold);
 	if (rc == FI_SUCCESS) {

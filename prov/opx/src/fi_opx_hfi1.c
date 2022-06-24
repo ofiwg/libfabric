@@ -1166,13 +1166,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 	if (is_intranode) {
 		max_bytes_per_packet = FI_OPX_HFI1_PACKET_MTU;
 	} else {
-		/* TODO: This calculation should be done in init and stored
-			somewhere in opx_ep->tx so we don't have to repeat the
-			calculation every time this function is called. */
-		union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
-		const uint64_t max_credits = .66 * pio_state.credits_total; // 66% (33% threshold) look up driver threshold
-		const uint64_t max_eager_bytes = MIN(max_credits << 6,opx_ep->tx->pio_max_eager_tx_bytes);
-		max_bytes_per_packet = max_eager_bytes;
+		max_bytes_per_packet = opx_ep->tx->pio_flow_eager_tx_bytes;
 	}
 
 	assert(((opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
@@ -1612,7 +1606,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== Doing SDMA, len is %ld\n", *origin_byte_counter);
 
-		params->delivery_completion = (*origin_byte_counter >= FI_OPX_SDMA_DC_MIN);
+		params->delivery_completion = (*origin_byte_counter >= opx_ep->tx->dcomp_threshold);
 		fi_opx_hfi1_sdma_init_cc(opx_ep, params);
 
 		slist_init(&params->sdma_reqs);

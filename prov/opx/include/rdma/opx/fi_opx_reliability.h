@@ -128,7 +128,7 @@ struct fi_opx_reliability_service {
 	/* == CACHE LINE == */
 		RbtHandle				flow;		/*  1 qw  =   8 bytes */
 		uint64_t				ping_start_key;
-		uint64_t				dcomp_threshold;
+		uint64_t				unused;
 
 		struct {
 			uint64_t			unused_cacheline_1;
