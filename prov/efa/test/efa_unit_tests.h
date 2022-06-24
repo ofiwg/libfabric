@@ -35,7 +35,7 @@ void test_rxr_ep_dc_atomic_error_handling();
 
 int efa_unit_test_resource_construct(struct efa_resource *resource);
 
-void efa_unit_test_resource_destroy(struct efa_resource *resource);
+void efa_unit_test_resource_destruct(struct efa_resource *resource);
 
 void test_efa_cq_readerr_happy();
 void test_efa_cq_readerr_sad();

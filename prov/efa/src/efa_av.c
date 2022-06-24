@@ -1118,6 +1118,6 @@ void test_duplicate_efa_ah_creation() {
 	assert_true(efa_ah->refcnt == 2);
 	assert_true(av->ah_map->refcnt == 2);
 
-	efa_unit_test_resource_destroy(&resource);
+	efa_unit_test_resource_destruct(&resource);
 }
 #endif
