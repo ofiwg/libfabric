@@ -15,7 +15,7 @@ import shlex
 class Test:
 
     def __init__ (self, jobname, buildno, testname, core_prov, fabric,
-                  hosts, ofi_build_mode, util_prov=None):
+                  hosts, ofi_build_mode, mpitype=None, util_prov=None):
         self.jobname = jobname
         self.buildno = buildno
         self.testname = testname
@@ -23,6 +23,7 @@ class Test:
         self.util_prov = 'ofi_{}'.format(util_prov) if util_prov != None else ''
         self.fabric = fabric
         self.hosts = hosts
+        self.mpi_type = mpitype
         self.ofi_build_mode = ofi_build_mode
         if (len(hosts) == 2):
             self.server = hosts[0]
@@ -41,6 +42,22 @@ class Test:
                     ('FI_VERBS_INLINE_SIZE', '256')] \
                     if self.core_prov == 'verbs' else []
 
+        self.mpi = ''
+        if (self.mpi_type == 'impi'):
+            self.mpi = IMPI(self.core_prov, self.hosts,
+                            self.libfab_installpath, self.nw_interface,
+                            self.server, self.client, self.env, self.util_prov)
+        elif (self.mpi_type == 'ompi'):
+            self.mpi = OMPI(self.core_prov, self.hosts,
+                             self.libfab_installpath, self.nw_interface,
+                             self.server, self.client, self.env,
+                             self.ci_middlewares_path, self.util_prov)
+        elif (self.mpi_type == 'mpich'):
+            self.mpi = MPICH(self.core_prov, self.hosts,
+                             self.libfab_installpath, self.nw_interface,
+                             self.server, self.client, self.env,
+                             self.ci_middlewares_path, self.util_prov)
+
 
 class FiInfoTest(Test):
 
@@ -48,7 +65,7 @@ class FiInfoTest(Test):
                  hosts, ofi_build_mode, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                     hosts, ofi_build_mode, util_prov)
+                     hosts, ofi_build_mode, None, util_prov)
 
         self.fi_info_testpath =  '{}/bin'.format(self.libfab_installpath)
 
@@ -79,7 +96,7 @@ class Fabtest(Test):
                  hosts, ofi_build_mode, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, util_prov)
+                         hosts, ofi_build_mode, None, util_prov)
         self.fabtestpath = '{}/bin'.format(self.libfab_installpath)
         self.fabtestconfigpath = '{}/share/fabtests'.format(self.libfab_installpath)
 
@@ -184,7 +201,7 @@ class ShmemTest(Test):
                  hosts, ofi_build_mode, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, util_prov)
+                         hosts, ofi_build_mode, None, util_prov)
 
         #self.n - number of hosts * number of processes per host
         self.n = 4
@@ -231,7 +248,8 @@ class ZeFabtests(Test):
                  hosts, ofi_build_mode, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, util_prov)
+                         hosts, ofi_build_mode, None, util_prov)
+
         self.fabtestpath = '{}/bin'.format(self.libfab_installpath)
         self.zefabtest_script_path = '{}'.format(ci_site_config.ze_testpath)
         self.fabtestconfigpath = '{}/share/fabtests'.format(self.libfab_installpath)
@@ -436,14 +454,10 @@ class IMBtests(Test):
                  hosts, mpitype, ofi_build_mode, test_group, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
-                         fabric, hosts, ofi_build_mode, util_prov)
+                         fabric, hosts, ofi_build_mode, mpitype, util_prov)
 
-        self.test_name = testname
-        self.core_prov = core_prov
-        self.util_prov = util_prov
         self.test_group = test_group
         self.mpi_type = mpitype
-        self.mpi = ''
         self.imb_src = ''
         self.imb_tests = {
                              '1' :[
@@ -492,21 +506,10 @@ class IMBtests(Test):
                         'MT':[]
                        }
         if (self.mpi_type == 'impi'):
-            self.mpi = IMPI(self.core_prov, self.hosts,
-                            self.libfab_installpath, self.nw_interface,
-                            self.server, self.client, self.env, self.util_prov)
             self.imb_src = ci_site_config.impi_root
         elif (self.mpi_type == 'ompi'):
-            self.mpi = OMPI(self.core_prov, self.hosts,
-                             self.libfab_installpath, self.nw_interface,
-                             self.server, self.client, self.env,
-                             self.ci_middlewares_path, self.util_prov)
             self.imb_src = '{}/ompi/imb'.format(self.ci_middlewares_path)
         elif (self.mpi_type == 'mpich'):
-            self.mpi = MPICH(self.core_prov, self.hosts,
-                             self.libfab_installpath, self.nw_interface,
-                             self.server, self.client, self.env,
-                             self.ci_middlewares_path, self.util_prov)
             self.imb_src = '{}/mpich/imb'.format(self.ci_middlewares_path)
 
     @property
@@ -517,7 +520,7 @@ class IMBtests(Test):
     def imb_cmd(self, imb_test):
         print("Running IMB-{}".format(imb_test))
         cmd = "{}/bin/IMB-{} ".format(self.imb_src, imb_test)
-        if (self.test_name != 'MT'):
+        if (imb_test != 'MT'):
             cmd += "-iter {} ".format(self.iter)
 
         if (len(self.include[imb_test]) > 0):
@@ -541,7 +544,7 @@ class OSUtests(Test):
                  hosts, mpitype, ofi_build_mode, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
-                         fabric, hosts, ofi_build_mode, util_prov)
+                         fabric, hosts, ofi_build_mode, mpitype, util_prov)
 
         self.n_ppn = {
                           'pt2pt':      (2, 1),
@@ -552,27 +555,12 @@ class OSUtests(Test):
         self.osu_src = '{}/{}/osu/libexec/osu-micro-benchmarks/mpi/'. \
                             format(self.ci_middlewares_path, mpitype)
         self.mpi_type = mpitype
-        self.mpi = ''
-        if (self.mpi_type == 'impi'):
-            self.mpi = IMPI(self.core_prov, self.hosts,
-                            self.libfab_installpath, self.nw_interface,
-                            self.server, self.client, self.env, self.util_prov)
-        elif (self.mpi_type == 'ompi'):
-            self.mpi = OMPI(self.core_prov, self.hosts,
-                             self.libfab_installpath, self.nw_interface,
-                             self.server, self.client, self.env,
-                             self.ci_middlewares_path, self.util_prov)
-        elif (self.mpi_type == 'mpich'):
-            self.mpi = MPICH(self.core_prov, self.hosts,
-                             self.libfab_installpath, self.nw_interface,
-                             self.server, self.client, self.env,
-                             self.ci_middlewares_path, self.util_prov)
 
     @property
     def execute_condn(self):
         # mpich-tcp and ompi-tcp are the only osu test combinations failing
-        return False if ((self.mpi == 'mpich' and self.core_prov == 'tcp') or \
-                          self.mpi == 'ompi') \
+        return False if ((self.mpi_type == 'mpich' and self.core_prov == 'tcp') or \
+                          self.mpi_type == 'ompi') \
                     else True
 
     def osu_cmd(self, test_type, test):
@@ -607,27 +595,12 @@ class MpichTestSuite(Test):
                  hosts, mpitype, ofi_build_mode, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
-                         fabric, hosts, ofi_build_mode, util_prov)
+                         fabric, hosts, ofi_build_mode, mpitype, util_prov)
 
         self.mpichsuitepath = '{}/{}/mpichsuite/test/mpi/' \
                               .format(self.ci_middlewares_path, mpitype)
         self.pwd = os.getcwd()
         self.mpi_type = mpitype
-        self.mpi = ''
-        if (self.mpi_type == 'impi'):
-            self.mpi = IMPI(self.core_prov, self.hosts,
-                            self.libfab_installpath, self.nw_interface,
-                            self.server, self.client, self.env, self.util_prov)
-        elif (self.mpi_type == 'ompi'):
-            self.mpi = OMPI(self.core_prov, self.hosts,
-                             self.libfab_installpath, self.nw_interface,
-                             self.server, self.client, self.env,
-                             self.ci_middlewares_path, self.util_prov)
-        elif (self.mpi_type == 'mpich'):
-            self.mpi = MPICH(self.core_prov, self.hosts,
-                             self.libfab_installpath, self.nw_interface,
-                             self.server, self.client, self.env,
-                             self.ci_middlewares_path, self.util_prov)
 
     def testgroup(self, testgroupname):
         testpath = '{}/{}'.format(self.mpichsuitepath, testgroupname)
@@ -679,7 +652,7 @@ class OneCCLTests(Test):
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  hosts, ofi_build_mode, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, util_prov)
+                         hosts, ofi_build_mode, None, util_prov)
 
         self.n = 2
         self.ppn = 1
@@ -753,7 +726,7 @@ class OneCCLTestsGPU(Test):
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  hosts, ofi_build_mode, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, util_prov)
+                         hosts, ofi_build_mode, None, util_prov)
 
         self.n = 2
         self.ppn = 4
