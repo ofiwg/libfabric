@@ -43,7 +43,8 @@ DISABLED_PROVIDERS="-e psm \
 -e shm \
 -e verbs \
 -e sockets \
--e psm3"
+-e psm3 \
+-e opx"
 
 ORIGINAL_VERSION=$(echo ${LIBFABRIC_VERSION} | \
 	sed -e 's/b.*//g' \
