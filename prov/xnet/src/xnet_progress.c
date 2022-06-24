@@ -811,7 +811,7 @@ void xnet_run_progress(struct xnet_progress *progress, bool internal)
 	int nfds, i;
 	bool pin, pout, perr;
 
-	ofi_genlock_lock(progress->active_lock);
+	ofi_genlock_held(progress->active_lock);
 	dlist_foreach_safe(&progress->active_wait_list, item, tmp) {
 		ep = container_of(item, struct xnet_ep, active_entry);
 
@@ -857,6 +857,12 @@ void xnet_run_progress(struct xnet_progress *progress, bool internal)
 	}
 out:
 	xnet_handle_events(progress);
+}
+
+void xnet_progress(struct xnet_progress *progress, bool internal)
+{
+	ofi_genlock_lock(progress->active_lock);
+	xnet_run_progress(progress, internal);
 	ofi_genlock_unlock(progress->active_lock);
 }
 
@@ -869,12 +875,12 @@ void xnet_progress_all(struct xnet_fabric *fabric)
 	dlist_foreach(&fabric->util_fabric.domain_list, item) {
 		domain = container_of(item, struct xnet_domain,
 				      util_domain.list_entry);
-		xnet_run_progress(&domain->progress, false);
+		xnet_progress(&domain->progress, false);
 	}
 
 	ofi_mutex_unlock(&fabric->util_fabric.lock);
 
-	xnet_run_progress(&fabric->progress, false);
+	xnet_progress(&fabric->progress, false);
 }
 
 /* We start progress thread(s) if app requests blocking reads */
@@ -937,9 +943,9 @@ static void *xnet_auto_progress(void *arg)
 		 */
 		nfds = progress->poll_wait(progress, &event, 1, timeout);
 
+		ofi_genlock_lock(progress->active_lock);
 		if (nfds >= 0)
 			xnet_run_progress(progress, true);
-		ofi_genlock_lock(progress->active_lock);
 	}
 	ofi_genlock_unlock(progress->active_lock);
 	FI_INFO(&xnet_prov, FI_LOG_DOMAIN, "progress thread exiting\n");

@@ -45,6 +45,7 @@
 static void ofi_cq_insert_aux(struct util_cq *cq,
 			      struct util_cq_aux_entry *entry)
 {
+	assert(ofi_genlock_held(&cq->cq_lock));
 	if (!ofi_cirque_isfull(cq->cirq))
 		ofi_cirque_commit(cq->cirq);
 
@@ -278,7 +279,7 @@ out:
 
 ssize_t ofi_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 {
-	return ofi_cq_readfrom(cq_fid, buf, count, NULL);
+	return fi_cq_readfrom(cq_fid, buf, count, NULL);
 }
 
 ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
@@ -355,7 +356,7 @@ ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	endtime = ofi_timeout_time(timeout);
 
 	do {
-		ret = ofi_cq_readfrom(cq_fid, buf, count, src_addr);
+		ret = fi_cq_readfrom(cq_fid, buf, count, src_addr);
 		if (ret != -FI_EAGAIN)
 			break;
 
@@ -374,7 +375,7 @@ ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 }
 
 ssize_t ofi_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
-		const void *cond, int timeout)
+		     const void *cond, int timeout)
 {
 	return ofi_cq_sreadfrom(cq_fid, buf, count, NULL, cond, timeout);
 }
@@ -389,8 +390,8 @@ int ofi_cq_signal(struct fid_cq *cq_fid)
 	return 0;
 }
 
-static const char *util_cq_strerror(struct fid_cq *cq, int prov_errno,
-				    const void *err_data, char *buf, size_t len)
+const char *ofi_cq_strerror(struct fid_cq *cq, int prov_errno,
+			    const void *err_data, char *buf, size_t len)
 {
 	return fi_strerror(prov_errno);
 }
@@ -403,7 +404,7 @@ static struct fi_ops_cq util_cq_ops = {
 	.sread = ofi_cq_sread,
 	.sreadfrom = ofi_cq_sreadfrom,
 	.signal = ofi_cq_signal,
-	.strerror = util_cq_strerror,
+	.strerror = ofi_cq_strerror,
 };
 
 int ofi_cq_cleanup(struct util_cq *cq)
@@ -478,6 +479,7 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 		      void *context)
 {
 	struct fi_wait_attr wait_attr;
+	enum ofi_lock_type lock_type;
 	struct fid_wait *wait;
 	int ret;
 
@@ -486,15 +488,13 @@ static int fi_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	ofi_atomic_initialize32(&cq->wakeup, 0);
 	dlist_init(&cq->ep_list);
 	ofi_mutex_init(&cq->ep_list_lock);
-	if (cq->domain->lock.lock_type == OFI_LOCK_NOOP ||
-	    cq->domain->threading == FI_THREAD_COMPLETION ||
-	    cq->domain->threading == FI_THREAD_DOMAIN) {
-		ret = ofi_genlock_init(&cq->cq_lock, OFI_LOCK_NOOP);
-	} else if (cq->domain->lock.lock_type == OFI_LOCK_SPINLOCK) {
-		ret = ofi_genlock_init(&cq->cq_lock, OFI_LOCK_SPINLOCK);
-	} else {
-		ret = ofi_genlock_init(&cq->cq_lock, OFI_LOCK_MUTEX);
-	}
+
+	if (cq->domain->threading == FI_THREAD_COMPLETION ||
+	    cq->domain->threading == FI_THREAD_DOMAIN)
+		lock_type = OFI_LOCK_NOOP;
+	else
+		lock_type = cq->domain->lock.lock_type;
+	ret = ofi_genlock_init(&cq->cq_lock, lock_type);
 	slist_init(&cq->aux_queue);
 	if (ret)
 		return ret;
