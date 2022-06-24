@@ -49,8 +49,6 @@
 
 #define FC_SW_LE_MSG_FATAL "LE exhaustion during flow control, "\
 	"FI_CXI_RX_MATCH_MODE=[hybrid|software] is required\n"
-#define FC_HW_TO_SW_MSG_FATAL "Flow control during HW to SW matching "\
-	"transition. Increase FI_CXI_REQ_BUF_SIZE value (current is %ldB)\n"
 #define FC_SW_ONLOAD_MSG_FATAL "LE resources not recovered during "\
 	"flow control. FI_CXI_RX_MATCH_MODE=[hybrid|software] is required\n"
 #define FC_OFLOW_NO_MATCH_MSG "Flow control overflow no match, increasing "\
@@ -2631,14 +2629,21 @@ void cxip_recv_pte_cb(struct cxip_pte *pte, const union c_event *event)
 			break;
 		}
 
-		/* Flow control occurred during onloading during a NIC initiated
-		 * transition to software managed EP. Must increase request list
-		 * buffer capacity.
+		/* Flow control occurred while transitioning from HW to SW
+		 * managed PTE. Since onloading of all UX entries will have
+		 * been initiated (i.e. no new ones will be added) and the
+		 * PTE state change from RXC_PENDING_PTLTE_SOFTWARE_MANAGED
+		 * to RXC_ENABLED_SOFTWARE following onload complete is
+		 * protected by the rxc->lock, it is safe to indicate that
+		 * SW managed EP must be re-enabled on onload complete.
+		 * The request list will have been replenished.
 		 */
-		if (rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED)
-			RXC_FATAL(rxc, FC_HW_TO_SW_MSG_FATAL,
-				  cxip_env.req_buf_size);
-
+		if (rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED) {
+			RXC_WARN(rxc,
+				 "Flow control during HW to SW transition\n");
+			rxc->state = RXC_ONLOAD_FLOW_CONTROL_REENABLE;
+			break;
+		}
 
 		/* Check for flow control during flow control */
 		if (rxc->state != RXC_ENABLED &&
