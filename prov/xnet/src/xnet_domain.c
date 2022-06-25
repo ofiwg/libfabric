@@ -36,6 +36,56 @@
 #include "xnet.h"
 
 
+static int
+xnet_mr_reg(struct fid *fid, const void *buf, size_t len,
+	    uint64_t access, uint64_t offset, uint64_t requested_key,
+	    uint64_t flags, struct fid_mr **mr, void *context)
+{
+	struct xnet_domain *domain;
+	int ret;
+
+	domain = container_of(fid, struct xnet_domain,
+			      util_domain.domain_fid.fid);
+	ofi_genlock_lock(&domain->progress.lock);
+	ret = ofi_mr_reg(fid, buf, len, access, offset, requested_key, flags,
+			 mr, context);
+	ofi_genlock_unlock(&domain->progress.lock);
+	return ret;
+}
+
+static int
+xnet_mr_regv(struct fid *fid, const struct iovec *iov,
+	     size_t count, uint64_t access,
+	     uint64_t offset, uint64_t requested_key,
+	     uint64_t flags, struct fid_mr **mr, void *context)
+{
+	struct xnet_domain *domain;
+	int ret;
+
+	domain = container_of(fid, struct xnet_domain,
+			      util_domain.domain_fid.fid);
+	ofi_genlock_lock(&domain->progress.lock);
+	ret = ofi_mr_regv(fid, iov, count, access, offset, requested_key, flags,
+			 mr, context);
+	ofi_genlock_unlock(&domain->progress.lock);
+	return ret;
+}
+
+static int
+xnet_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
+		uint64_t flags, struct fid_mr **mr)
+{
+	struct xnet_domain *domain;
+	int ret;
+
+	domain = container_of(fid, struct xnet_domain,
+			      util_domain.domain_fid.fid);
+	ofi_genlock_lock(&domain->progress.lock);
+	ret = ofi_mr_regattr(fid, attr, flags, mr);
+	ofi_genlock_unlock(&domain->progress.lock);
+	return ret;
+}
+
 static int xnet_open_ep(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep_fid, void *context)
 {
@@ -98,9 +148,9 @@ static struct fi_ops xnet_domain_fi_ops = {
 
 static struct fi_ops_mr xnet_domain_fi_ops_mr = {
 	.size = sizeof(struct fi_ops_mr),
-	.reg = ofi_mr_reg,
-	.regv = ofi_mr_regv,
-	.regattr = ofi_mr_regattr,
+	.reg = xnet_mr_reg,
+	.regv = xnet_mr_regv,
+	.regattr = xnet_mr_regattr,
 };
 
 int xnet_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
@@ -121,7 +171,7 @@ int xnet_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	ret = ofi_domain_init(fabric_fid, info, &domain->util_domain, context,
-			      OFI_LOCK_MUTEX);
+			      OFI_LOCK_NONE);
 	if (ret)
 		goto free;
 
