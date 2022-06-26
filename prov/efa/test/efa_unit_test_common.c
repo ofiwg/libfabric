@@ -48,9 +48,6 @@ int efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_t
 	if (!resource->hints)
 		goto err;
 
-	/* efadv_query_device is only called once during global initialization */
-	will_return_maybe(__wrap_efadv_query_device, 0);
-
 	ret = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, resource->hints, &resource->info);
 	if (ret)
 		goto err;

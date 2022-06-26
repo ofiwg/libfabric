@@ -10,6 +10,7 @@
 #include "stdio.h"
 #include "efa.h"
 #include "rxr.h"
+#include "efa_unit_test_mocks.h"
 
 struct efa_resource {
 	struct fi_info *hints;
