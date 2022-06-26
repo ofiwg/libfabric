@@ -1,5 +1,4 @@
 #include "efa_unit_tests.h"
-#include "rdma_core_mocks.h"
 
 /*
  * Only works on nodes with EFA devices
@@ -18,6 +17,7 @@ void test_av_insert_duplicate_raw_addr()
 
 	err = efa_unit_test_resource_construct(&resource, FI_EP_RDM);
 	assert_int_equal(err, 0);
+	g_efa_unit_test_mocks.ibv_create_ah = &efa_mock_ibv_create_ah_increase_call_counter;
 
 	err = fi_getname(&resource.ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(err, 0);
@@ -35,6 +35,7 @@ void test_av_insert_duplicate_raw_addr()
 	assert_int_equal(ibv_create_ah_call_counter_before_insert, g_ibv_create_ah_call_counter);
 	assert_int_equal(addr1, addr2);
 
+	g_efa_unit_test_mocks.ibv_create_ah = __real_ibv_create_ah;
 	efa_unit_test_resource_destruct(&resource);
 }
 
@@ -53,9 +54,9 @@ void test_av_insert_duplicate_gid()
 	int err, num_addr;
 	int ibv_create_ah_call_counter_before_insert;
 
-
 	err = efa_unit_test_resource_construct(&resource, FI_EP_RDM);
 	assert_int_equal(err, 0);
+	g_efa_unit_test_mocks.ibv_create_ah = &efa_mock_ibv_create_ah_increase_call_counter;
 
 	err = fi_getname(&resource.ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(err, 0);
@@ -75,6 +76,7 @@ void test_av_insert_duplicate_gid()
 	assert_int_equal(ibv_create_ah_call_counter_before_insert, g_ibv_create_ah_call_counter);
 	assert_int_not_equal(addr1, addr2);
 
+	g_efa_unit_test_mocks.ibv_create_ah = __real_ibv_create_ah;
 	efa_unit_test_resource_destruct(&resource);
 }
 

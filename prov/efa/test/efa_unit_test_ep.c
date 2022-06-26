@@ -1,13 +1,12 @@
 #include "efa_unit_tests.h"
-#include "rdma_core_mocks.h"
 
 static
-void efa_unit_test_mock_efa_cq_read_entry(struct ibv_cq_ex *ibv_cqx, int index, void *buf)
+void efa_mock_efa_cq_read_entry(struct ibv_cq_ex *ibv_cqx, int index, void *buf)
 {
 }
 
 static
-ssize_t efa_unit_test_mock_eq_write_successful(struct fid_eq *eq, uint32_t event,
+ssize_t efa_mock_eq_write_successful(struct fid_eq *eq, uint32_t event,
 					       const void *buf, size_t len, uint64_t flags)
 {
 	check_expected(eq);
@@ -156,13 +155,13 @@ void test_dgram_ep_progress_happy()
 
 	efa_ep = container_of(resource.ep, struct efa_ep, util_ep.ep_fid);
 	efa_unit_test_ibv_cq_ex_use_mock(efa_ep->rcq->ibv_cq_ex);
-	efa_ep->rcq->read_entry = &efa_unit_test_mock_efa_cq_read_entry;
+	efa_ep->rcq->read_entry = &efa_mock_efa_cq_read_entry;
 
 	/* Read 5 entries from CQ and then ENOENT */
-	will_return(efa_unit_test_mock_ibv_start_poll, 0);
-	will_return_count(efa_unit_test_mock_ibv_next_poll, 0, 4);
-	will_return(efa_unit_test_mock_ibv_next_poll, ENOENT);
-	will_return(efa_unit_test_mock_ibv_end_poll, NULL);
+	will_return(efa_mock_ibv_start_poll_return_mock, 0);
+	will_return_count(efa_mock_ibv_next_poll_return_mock, 0, 4);
+	will_return(efa_mock_ibv_next_poll_return_mock, ENOENT);
+	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
 
 	efa_ep->util_ep.progress(&efa_ep->util_ep);
 
@@ -186,11 +185,11 @@ void test_dgram_ep_progress_with_empty_cq()
 
 	efa_ep = container_of(resource.ep, struct efa_ep, util_ep.ep_fid);
 	efa_unit_test_ibv_cq_ex_use_mock(efa_ep->rcq->ibv_cq_ex);
-	efa_ep->rcq->read_entry = &efa_unit_test_mock_efa_cq_read_entry;
+	efa_ep->rcq->read_entry = &efa_mock_efa_cq_read_entry;
 
 
 	/* Read 5 entries from CQ and then ENOENT */
-	will_return(efa_unit_test_mock_ibv_start_poll, ENOENT);
+	will_return(efa_mock_ibv_start_poll_return_mock, ENOENT);
 
 	efa_ep->util_ep.progress(&efa_ep->util_ep);
 
@@ -214,13 +213,13 @@ void test_dgram_ep_progress_encounter_bad_wc_status()
 	efa_unit_test_resource_construct(&resource, FI_EP_DGRAM);
 
 	/* Read 1 entry from CQ and encounter a bad wc status */
-	will_return(efa_unit_test_mock_ibv_start_poll, 0);
-	will_return(efa_unit_test_mock_ibv_end_poll, NULL);
-	will_return(efa_unit_test_mock_ibv_read_opcode, IBV_WC_SEND);
+	will_return(efa_mock_ibv_start_poll_return_mock, 0);
+	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
+	will_return(efa_mock_ibv_read_opcode_return_mock, IBV_WC_SEND);
 
 	efa_ep = container_of(resource.ep, struct efa_ep, util_ep.ep_fid);
 	efa_unit_test_ibv_cq_ex_use_mock(efa_ep->rcq->ibv_cq_ex);
-	efa_ep->rcq->read_entry = &efa_unit_test_mock_efa_cq_read_entry;
+	efa_ep->rcq->read_entry = &efa_mock_efa_cq_read_entry;
 
 
 	efa_ep->rcq->ibv_cq_ex->status = 1;
@@ -250,22 +249,24 @@ void test_rdm_ep_progress_send_completion_happy()
 	rxr_ep = container_of(resource.ep, struct rxr_ep, util_ep.ep_fid);
 	efa_cq = container_of(rxr_ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
 	efa_unit_test_ibv_cq_ex_use_mock(efa_cq->ibv_cq_ex);
-	efa_cq->read_entry = &efa_unit_test_mock_efa_cq_read_entry;
+	efa_cq->read_entry = &efa_mock_efa_cq_read_entry;
 
 	efa_cq->ibv_cq_ex->wr_id = (uint64_t)&entry;
 
+	g_efa_unit_test_mocks.rxr_pkt_handle_send_completion = &efa_mock_rxr_pkt_handle_send_completion_check_args_only;
+
 	/* Read 5 entries from CQ and then ENOENT */
-	will_return(efa_unit_test_mock_ibv_start_poll, 0);
-	will_return_count(efa_unit_test_mock_ibv_next_poll, 0, 4);
-	will_return(efa_unit_test_mock_ibv_next_poll, ENOENT);
-	will_return(efa_unit_test_mock_ibv_end_poll, NULL);
-	will_return_maybe(efa_unit_test_mock_ibv_read_opcode, IBV_WC_SEND);
-	will_return_count(__wrap_rxr_pkt_handle_send_completion, NULL, 5);
-	expect_value_count(__wrap_rxr_pkt_handle_send_completion, ep, rxr_ep, 5);
-	expect_value_count(__wrap_rxr_pkt_handle_send_completion, pkt_entry, &entry, 5);
+	will_return(efa_mock_ibv_start_poll_return_mock, 0);
+	will_return_count(efa_mock_ibv_next_poll_return_mock, 0, 4);
+	will_return(efa_mock_ibv_next_poll_return_mock, ENOENT);
+	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
+	will_return_maybe(efa_mock_ibv_read_opcode_return_mock, IBV_WC_SEND);
+	expect_value_count(efa_mock_rxr_pkt_handle_send_completion_check_args_only, ep, rxr_ep, 5);
+	expect_value_count(efa_mock_rxr_pkt_handle_send_completion_check_args_only, pkt_entry, &entry, 5);
 
 	rxr_ep->util_ep.progress(&rxr_ep->util_ep);
 
+	g_efa_unit_test_mocks.rxr_pkt_handle_send_completion = &__real_rxr_pkt_handle_send_completion;
 	efa_unit_test_resource_destruct(&resource);
 }
 
@@ -282,23 +283,24 @@ void test_rdm_ep_progress_recv_completion_happy()
 	rxr_ep = container_of(resource.ep, struct rxr_ep, util_ep.ep_fid);
 	efa_cq = container_of(rxr_ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
 	efa_unit_test_ibv_cq_ex_use_mock(efa_cq->ibv_cq_ex);
-	efa_cq->read_entry = &efa_unit_test_mock_efa_cq_read_entry;
+	efa_cq->read_entry = &efa_mock_efa_cq_read_entry;
+	g_efa_unit_test_mocks.rxr_pkt_handle_recv_completion = &efa_mock_rxr_pkt_handle_recv_completion_check_args_only;
 
 	efa_cq->ibv_cq_ex->wr_id = (uint64_t)&entry;
 
 	/* Read 5 entries from CQ and then ENOENT */
-	will_return(efa_unit_test_mock_ibv_start_poll, 0);
-	will_return_count(efa_unit_test_mock_ibv_next_poll, 0, 4);
-	will_return(efa_unit_test_mock_ibv_next_poll, ENOENT);
-	will_return(efa_unit_test_mock_ibv_end_poll, NULL);
-	will_return_maybe(efa_unit_test_mock_ibv_read_opcode, IBV_WC_RECV);
-	will_return_count(__wrap_rxr_pkt_handle_recv_completion, NULL, 5);
-	expect_value_count(__wrap_rxr_pkt_handle_recv_completion, ep, rxr_ep, 5);
-	expect_value_count(__wrap_rxr_pkt_handle_recv_completion, pkt_entry, &entry, 5);
-	expect_value_count(__wrap_rxr_pkt_handle_recv_completion, lower_ep_type, EFA_EP, 5);
+	will_return(efa_mock_ibv_start_poll_return_mock, 0);
+	will_return_count(efa_mock_ibv_next_poll_return_mock, 0, 4);
+	will_return(efa_mock_ibv_next_poll_return_mock, ENOENT);
+	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
+	will_return_maybe(efa_mock_ibv_read_opcode_return_mock, IBV_WC_RECV);
+	expect_value_count(efa_mock_rxr_pkt_handle_recv_completion_check_args_only, ep, rxr_ep, 5);
+	expect_value_count(efa_mock_rxr_pkt_handle_recv_completion_check_args_only, pkt_entry, &entry, 5);
+	expect_value_count(efa_mock_rxr_pkt_handle_recv_completion_check_args_only, lower_ep_type, EFA_EP, 5);
 
 	rxr_ep->util_ep.progress(&rxr_ep->util_ep);
 
+	g_efa_unit_test_mocks.rxr_pkt_handle_recv_completion = &__real_rxr_pkt_handle_recv_completion;
 	efa_unit_test_resource_destruct(&resource);
 }
 
@@ -315,12 +317,12 @@ void test_rdm_ep_progress_send_empty_cq()
 	rxr_ep = container_of(resource.ep, struct rxr_ep, util_ep.ep_fid);
 	efa_cq = container_of(rxr_ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
 	efa_unit_test_ibv_cq_ex_use_mock(efa_cq->ibv_cq_ex);
-	efa_cq->read_entry = &efa_unit_test_mock_efa_cq_read_entry;
+	efa_cq->read_entry = &efa_mock_efa_cq_read_entry;
 
 	efa_cq->ibv_cq_ex->wr_id = (uint64_t)&entry;
 
 	/* Empty CQ */
-	will_return(efa_unit_test_mock_ibv_start_poll, ENOENT);
+	will_return(efa_mock_ibv_start_poll_return_mock, ENOENT);
 
 	rxr_ep->util_ep.progress(&rxr_ep->util_ep);
 
@@ -340,36 +342,37 @@ void test_rdm_ep_progress_failed_poll()
 
 	resource.eq_attr = &eq_attr;
 	efa_unit_test_resource_construct(&resource, FI_EP_RDM);
+	g_efa_unit_test_mocks.rxr_pkt_handle_send_completion = &efa_mock_rxr_pkt_handle_send_completion_check_args_only;
 
 	rxr_ep = container_of(resource.ep, struct rxr_ep, util_ep.ep_fid);
 	efa_cq = container_of(rxr_ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
 
 	efa_cq->ibv_cq_ex->wr_id = (uint64_t)&entry;
 	efa_unit_test_ibv_cq_ex_use_mock(efa_cq->ibv_cq_ex);
-	efa_cq->read_entry = &efa_unit_test_mock_efa_cq_read_entry;
+	efa_cq->read_entry = &efa_mock_efa_cq_read_entry;
 
 	efa_cq->ibv_cq_ex->status = 0;
 
 	/* Bind EQ to the RDM endpoint to write error to */
-	fi_ops_eq.write = &efa_unit_test_mock_eq_write_successful;
+	fi_ops_eq.write = &efa_mock_eq_write_successful;
 	resource.eq->ops = &fi_ops_eq;
 
 	err = fi_ep_bind(&rxr_ep->util_ep.ep_fid, &resource.eq->fid, 0);
 	assert_int_equal(err, 0);
 
 	/* Read 5 entries from CQ and then EFAULT */
-	will_return(efa_unit_test_mock_ibv_start_poll, 0);
-	will_return_count(efa_unit_test_mock_ibv_next_poll, 0, 4);
-	will_return(efa_unit_test_mock_ibv_next_poll, EFAULT);
-	will_return(efa_unit_test_mock_ibv_end_poll, NULL);
-	will_return_maybe(efa_unit_test_mock_ibv_read_opcode, IBV_WC_SEND);
-	will_return_count(__wrap_rxr_pkt_handle_send_completion, NULL, 5);
-	expect_value_count(__wrap_rxr_pkt_handle_send_completion, ep, rxr_ep, 5);
-	expect_value_count(__wrap_rxr_pkt_handle_send_completion, pkt_entry, &entry, 5);
-	expect_value(efa_unit_test_mock_eq_write_successful, eq, resource.eq);
+	will_return(efa_mock_ibv_start_poll_return_mock, 0);
+	will_return_count(efa_mock_ibv_next_poll_return_mock, 0, 4);
+	will_return(efa_mock_ibv_next_poll_return_mock, EFAULT);
+	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
+	will_return_count(efa_mock_ibv_read_opcode_return_mock, IBV_WC_SEND, 5);
+	expect_value_count(efa_mock_rxr_pkt_handle_send_completion_check_args_only, ep, rxr_ep, 5);
+	expect_value_count(efa_mock_rxr_pkt_handle_send_completion_check_args_only, pkt_entry, &entry, 5);
+	expect_value(efa_mock_eq_write_successful, eq, resource.eq);
 
 	rxr_ep->util_ep.progress(&rxr_ep->util_ep);
 
+	g_efa_unit_test_mocks.rxr_pkt_handle_send_completion = &__real_rxr_pkt_handle_send_completion;
 	efa_unit_test_resource_destruct(&resource);
 }
 
@@ -386,23 +389,24 @@ void test_rdm_ep_progress_bad_send_wc_status()
 	rxr_ep = container_of(resource.ep, struct rxr_ep, util_ep.ep_fid);
 	efa_cq = container_of(rxr_ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
 	efa_unit_test_ibv_cq_ex_use_mock(efa_cq->ibv_cq_ex);
-	efa_cq->read_entry = &efa_unit_test_mock_efa_cq_read_entry;
+	efa_cq->read_entry = &efa_mock_efa_cq_read_entry;
+	g_efa_unit_test_mocks.rxr_pkt_handle_send_error = &efa_mock_rxr_pkt_handle_send_error_check_args_only;
 
 	efa_cq->ibv_cq_ex->wr_id = (uint64_t)&entry;
 	efa_cq->ibv_cq_ex->status = 1;
 
 	/* Read 1 entries with bad wc status */
-	will_return(efa_unit_test_mock_ibv_start_poll, 0);
-	will_return(efa_unit_test_mock_ibv_end_poll, NULL);
-	will_return_maybe(efa_unit_test_mock_ibv_read_opcode, IBV_WC_SEND);
-	will_return(__wrap_rxr_pkt_handle_send_error, NULL);
-	expect_value(__wrap_rxr_pkt_handle_send_error, ep, rxr_ep);
-	expect_value(__wrap_rxr_pkt_handle_send_error, pkt_entry, &entry);
-	expect_any(__wrap_rxr_pkt_handle_send_error, err);
-	expect_any(__wrap_rxr_pkt_handle_send_error, prov_errno);
+	will_return(efa_mock_ibv_start_poll_return_mock, 0);
+	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
+	will_return_maybe(efa_mock_ibv_read_opcode_return_mock, IBV_WC_SEND);
+	expect_value(efa_mock_rxr_pkt_handle_send_error_check_args_only, ep, rxr_ep);
+	expect_value(efa_mock_rxr_pkt_handle_send_error_check_args_only, pkt_entry, &entry);
+	expect_any(efa_mock_rxr_pkt_handle_send_error_check_args_only, err);
+	expect_any(efa_mock_rxr_pkt_handle_send_error_check_args_only, prov_errno);
 
 	rxr_ep->util_ep.progress(&rxr_ep->util_ep);
 
+	g_efa_unit_test_mocks.rxr_pkt_handle_send_error = &__real_rxr_pkt_handle_send_error;
 	efa_unit_test_resource_destruct(&resource);
 }
 
@@ -415,26 +419,28 @@ void test_rdm_ep_progress_bad_recv_wc_status()
 	struct rxr_pkt_entry entry = {0};
 
 	efa_unit_test_resource_construct(&resource, FI_EP_RDM);
+	g_efa_unit_test_mocks.rxr_pkt_handle_recv_error = &efa_mock_rxr_pkt_handle_recv_error_check_args_only;
 
 	rxr_ep = container_of(resource.ep, struct rxr_ep, util_ep.ep_fid);
 	efa_cq = container_of(rxr_ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
 	efa_unit_test_ibv_cq_ex_use_mock(efa_cq->ibv_cq_ex);
-	efa_cq->read_entry = &efa_unit_test_mock_efa_cq_read_entry;
+	efa_cq->read_entry = &efa_mock_efa_cq_read_entry;
 
 	efa_cq->ibv_cq_ex->wr_id = (uint64_t)&entry;
 	efa_cq->ibv_cq_ex->status = 1;
 
 	/* Read 1 entries with bad wc status */
-	will_return(efa_unit_test_mock_ibv_start_poll, 0);
-	will_return(efa_unit_test_mock_ibv_end_poll, NULL);
-	will_return_maybe(efa_unit_test_mock_ibv_read_opcode, IBV_WC_RECV);
-	will_return(__wrap_rxr_pkt_handle_recv_error, NULL);
-	expect_value(__wrap_rxr_pkt_handle_recv_error, ep, rxr_ep);
-	expect_value(__wrap_rxr_pkt_handle_recv_error, pkt_entry, &entry);
-	expect_any(__wrap_rxr_pkt_handle_recv_error, err);
-	expect_any(__wrap_rxr_pkt_handle_recv_error, prov_errno);
+	will_return(efa_mock_ibv_start_poll_return_mock, 0);
+	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
+	will_return_maybe(efa_mock_ibv_read_opcode_return_mock, IBV_WC_RECV);
+
+	expect_value(efa_mock_rxr_pkt_handle_recv_error_check_args_only, ep, rxr_ep);
+	expect_value(efa_mock_rxr_pkt_handle_recv_error_check_args_only, pkt_entry, &entry);
+	expect_any(efa_mock_rxr_pkt_handle_recv_error_check_args_only, err);
+	expect_any(efa_mock_rxr_pkt_handle_recv_error_check_args_only, prov_errno);
 
 	rxr_ep->util_ep.progress(&rxr_ep->util_ep);
 
+	g_efa_unit_test_mocks.rxr_pkt_handle_recv_error = &__real_rxr_pkt_handle_recv_error;
 	efa_unit_test_resource_destruct(&resource);
 }

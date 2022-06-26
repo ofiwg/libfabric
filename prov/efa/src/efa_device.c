@@ -65,9 +65,9 @@
  * @return	0 on success
  * 		a negative libfabric error code on failure.
  */
-static int efa_device_construct(struct efa_device *efa_device,
-				int device_idx,
-				struct ibv_device *ibv_device)
+int efa_device_construct(struct efa_device *efa_device,
+			 int device_idx,
+			 struct ibv_device *ibv_device)
 {
 	int err;
 
@@ -508,33 +508,3 @@ int efa_device_get_pci_attr(struct efa_device *device,
 }
 
 #endif // _WIN32
-
-#if EFA_UNIT_TEST
-
-#include "efa_unit_tests.h"
-
-/*
- * test the error handling path of efa_device_construct()
- */
-void test_efa_device_construct_error_handling()
-{
-	int ibv_err = 4242;
-	struct ibv_device **ibv_device_list;
-	struct efa_device efa_device = {0};
-
-	ibv_device_list = ibv_get_device_list(&g_device_cnt);
-	if (ibv_device_list == NULL) {
-		skip();
-		return;
-	}
-
-	will_return(__wrap_efadv_query_device, ibv_err);
-	efa_device_construct(&efa_device, 0, ibv_device_list[0]);
-
-	/* when error happend, resources in efa_device should be NULL */
-	assert_null(efa_device.ibv_ctx);
-	assert_null(efa_device.rdm_info);
-	assert_null(efa_device.dgram_info);
-}
-
-#endif
