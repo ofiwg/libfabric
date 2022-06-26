@@ -6,29 +6,16 @@
 #include <stddef.h>
 #include <setjmp.h>
 #include <cmocka.h>
+#include "efa.h"
 
-struct ibv_ah *__wrap_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr) {
-    check_expected(pd);
-    check_expected(attr);
-    return (struct ibv_ah*) mock();
-}
+int g_ibv_create_ah_call_counter = 0;
 
-int __real_ibv_destroy_ah(struct ibv_ah *ibv_ah);
+struct ibv_ah *__real_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr);
 
-int __wrap_ibv_destroy_ah(struct ibv_ah *ibv_ah)
+struct ibv_ah *__wrap_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr)
 {
-	int val = mock();
-	if (val == 4242) {
-		return __real_ibv_destroy_ah(ibv_ah);
-	}
-	return val;
-}
-
-int __wrap_efadv_query_ah(struct ibv_ah *ibvah, struct efadv_ah_attr *attr, uint32_t inlen) {
-    check_expected(ibvah);
-    check_expected(attr);
-    check_expected(inlen);
-    return (int) mock();
+	g_ibv_create_ah_call_counter += 1;
+	return  __real_ibv_create_ah(pd, attr);
 }
 
 int __real_efadv_query_device(struct ibv_context *ibvctx, struct efadv_device_attr *attr,

@@ -23,7 +23,9 @@ struct efa_resource {
 	struct fid_cq *cq;
 };
 
-void test_duplicate_efa_ah_creation();
+void test_av_insert_duplicate_raw_addr();
+
+void test_av_insert_duplicate_gid();
 
 void test_efa_device_construct_error_handling();
 

@@ -1,4 +1,5 @@
 #include "efa_unit_tests.h"
+#include "rdma_core_mocks.h"
 
 static
 void efa_unit_test_mock_efa_cq_read_entry(struct ibv_cq_ex *ibv_cqx, int index, void *buf)
@@ -95,7 +96,7 @@ void test_rxr_ep_dc_atomic_error_handling()
 	struct fi_msg_atomic msg = {0};
 	struct efa_resource resource = {0};
 	struct efa_ep_addr raw_addr = {0};
-	struct ibv_ah ibv_ah = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
 	fi_addr_t peer_addr;
 	int buf[1] = {0}, err, numaddr;
 
@@ -103,16 +104,10 @@ void test_rxr_ep_dc_atomic_error_handling()
 	assert_int_equal(err, 0);
 
 	/* create a fake peer */
-	raw_addr.raw[0] = 0xfe;
+	err = fi_getname(&resource.ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
 	raw_addr.qpn = 1;
 	raw_addr.qkey = 0x1234;
-	expect_any(__wrap_ibv_create_ah, pd);
-	expect_any(__wrap_ibv_create_ah, attr);
-	will_return(__wrap_ibv_create_ah, &ibv_ah);
-	expect_any(__wrap_efadv_query_ah, ibvah);
-	expect_any(__wrap_efadv_query_ah, attr);
-	expect_any(__wrap_efadv_query_ah, inlen);
-	will_return(__wrap_efadv_query_ah, 0);
 	numaddr = fi_av_insert(resource.av, &raw_addr, 1, &peer_addr, 0, NULL);
 	assert_int_equal(numaddr, 1);
 
@@ -136,6 +131,7 @@ void test_rxr_ep_dc_atomic_error_handling()
 	 */
 	peer = rxr_ep_get_peer(rxr_ep, peer_addr);
 	peer->flags = RXR_PEER_REQ_SENT;
+	peer->is_local = false;
 
 	assert_true(dlist_empty(&rxr_ep->tx_entry_list));
 	err = fi_atomicmsg(resource.ep, &msg, FI_DELIVERY_COMPLETE);

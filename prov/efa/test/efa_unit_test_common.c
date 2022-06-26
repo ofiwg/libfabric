@@ -43,7 +43,6 @@ int efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_t
 	int ret = 0;
 	struct fi_av_attr av_attr = {0};
 	struct fi_cq_attr cq_attr = {0};
-	struct ibv_ah ibv_ah = {0};
 
 	resource->hints = efa_unit_test_alloc_hints(ep_type);
 	if (!resource->hints)
@@ -86,9 +85,6 @@ int efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_t
 
 	fi_ep_bind(resource->ep, &resource->cq->fid, FI_SEND | FI_RECV);
 
-	expect_any(__wrap_ibv_create_ah, pd);
-	expect_any(__wrap_ibv_create_ah, attr);
-	will_return(__wrap_ibv_create_ah, &ibv_ah);
 	ret = fi_enable(resource->ep);
 	if (ret)
 		goto err;
@@ -108,7 +104,6 @@ err:
 void efa_unit_test_resource_destruct(struct efa_resource *resource)
 {
 	if (resource->ep) {
-		will_return_maybe(__wrap_ibv_destroy_ah, 0);
 		assert_int_equal(fi_close(&resource->ep->fid), 0);
 	}
 
