@@ -5,7 +5,8 @@ int main(void)
 	int ret;
 	/* Requires an EFA device to work */
 	const struct CMUnitTest efa_unit_tests[] = {
-		cmocka_unit_test(test_duplicate_efa_ah_creation),
+		cmocka_unit_test(test_av_insert_duplicate_raw_addr),
+		cmocka_unit_test(test_av_insert_duplicate_gid),
 		cmocka_unit_test(test_efa_device_construct_error_handling),
 		cmocka_unit_test(test_rxr_ep_pkt_pool_flags),
 		cmocka_unit_test(test_rxr_ep_pkt_pool_page_alignment),
