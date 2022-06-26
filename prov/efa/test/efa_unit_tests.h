@@ -33,9 +33,11 @@ void test_rxr_ep_pkt_pool_page_alignment();
 
 void test_rxr_ep_dc_atomic_error_handling();
 
-int efa_unit_test_resource_construct(struct efa_resource *resource);
+int efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type);
 
 void efa_unit_test_resource_destruct(struct efa_resource *resource);
+
+void efa_unit_test_ibv_cq_ex_use_mock(struct ibv_cq_ex *ibv_cq_ex);
 
 void test_efa_cq_readerr_happy();
 void test_efa_cq_readerr_sad();
