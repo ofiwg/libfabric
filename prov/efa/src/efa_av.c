@@ -1094,9 +1094,8 @@ void test_duplicate_efa_ah_creation() {
 	uint8_t gid[EFA_GID_LEN];
 	memset(gid, 7, EFA_GID_LEN);
 
-	/* efadv_query_device is only called once during global initialization */
-	will_return_maybe(__wrap_efadv_query_device, 0);
-	ret = efa_unit_test_resource_construct(&resource);
+	ret = efa_unit_test_resource_construct(&resource, FI_EP_RDM);
+
 	assert_int_equal(ret, 0);
 	av = container_of(resource.av, struct efa_av, util_av.av_fid);
 	assert_non_null(av);
