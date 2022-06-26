@@ -39,6 +39,7 @@
 #define XNET_TX_CAPS	 (FI_SEND | FI_WRITE | FI_READ)
 #define XNET_RX_CAPS	 (FI_RECV | FI_REMOTE_READ | 			\
 			  FI_REMOTE_WRITE | FI_RMA_EVENT)
+#define XNET_SRX_CAPS	 (XNET_RX_CAPS | FI_DIRECTED_RECV | FI_SOURCE)
 
 
 #define XNET_MSG_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS | \
@@ -95,7 +96,7 @@ static struct fi_tx_attr xnet_tx_srx_attr = {
 };
 
 static struct fi_rx_attr xnet_rx_srx_attr = {
-	.caps = XNET_EP_SRX_CAPS | XNET_RX_CAPS,
+	.caps = XNET_EP_SRX_CAPS | XNET_SRX_CAPS,
 	.op_flags = XNET_RX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = XNET_MSG_ORDER,
@@ -176,7 +177,7 @@ static struct fi_fabric_attr xnet_fabric_attr = {
 };
 
 struct fi_info xnet_rdm_info = {
-	.caps = XNET_DOMAIN_CAPS | XNET_EP_SRX_CAPS | XNET_TX_CAPS | XNET_RX_CAPS,
+	.caps = XNET_DOMAIN_CAPS | XNET_EP_SRX_CAPS | XNET_TX_CAPS | XNET_SRX_CAPS,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &xnet_tx_srx_attr,
 	.rx_attr = &xnet_rx_srx_attr,
@@ -187,7 +188,7 @@ struct fi_info xnet_rdm_info = {
 
 struct fi_info xnet_srx_info = {
 	.next = &xnet_rdm_info,
-	.caps = XNET_DOMAIN_CAPS | XNET_EP_SRX_CAPS | XNET_TX_CAPS | XNET_RX_CAPS,
+	.caps = XNET_DOMAIN_CAPS | XNET_EP_SRX_CAPS | XNET_TX_CAPS | XNET_SRX_CAPS,
 	.addr_format = FI_SOCKADDR,
 	.tx_attr = &xnet_tx_srx_attr,
 	.rx_attr = &xnet_rx_srx_attr,
