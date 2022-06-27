@@ -18,7 +18,6 @@ struct efa_resource {
 	struct fid_fabric *fabric;
 	struct fid_domain *domain;
 	struct fid_ep *ep;
-	struct fi_eq_attr *eq_attr;
 	struct fid_eq *eq;
 	struct fid_av *av;
 	struct fid_cq *cq;
