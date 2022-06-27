@@ -4665,6 +4665,7 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 
 	if (cxip_cq_saturated(txc->send_cq)) {
 		TXC_DBG(txc, "CQ saturated\n");
+		ret = -FI_EAGAIN;
 		goto req_free;
 	}
 
