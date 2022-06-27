@@ -43,6 +43,7 @@ int efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_t
 	int ret = 0;
 	struct fi_av_attr av_attr = {0};
 	struct fi_cq_attr cq_attr = {0};
+	struct fi_eq_attr eq_attr = {0};
 
 	resource->hints = efa_unit_test_alloc_hints(ep_type);
 	if (!resource->hints)
@@ -64,11 +65,11 @@ int efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_t
 	if (ret)
 		goto err;
 
-	if (resource->eq_attr) {
-		ret = fi_eq_open(resource->fabric, resource->eq_attr, &resource->eq, NULL);
-		if (ret)
-			goto err;
-	}
+	ret = fi_eq_open(resource->fabric, &eq_attr, &resource->eq, NULL);
+	if (ret)
+		goto err;
+
+	fi_ep_bind(resource->ep, &resource->eq->fid, 0);
 
 	ret = fi_av_open(resource->domain, &av_attr, &resource->av, NULL);
 	if (ret)
