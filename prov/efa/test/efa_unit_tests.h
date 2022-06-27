@@ -23,36 +23,32 @@ struct efa_resource {
 	struct fid_cq *cq;
 };
 
-void test_av_insert_duplicate_raw_addr();
-
-void test_av_insert_duplicate_gid();
-
-void test_efa_device_construct_error_handling();
-
-void test_rxr_ep_pkt_pool_flags();
-
-void test_rxr_ep_pkt_pool_page_alignment();
-
-void test_rxr_ep_dc_atomic_error_handling();
-
 int efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type);
 
 void efa_unit_test_resource_destruct(struct efa_resource *resource);
 
-void efa_unit_test_ibv_cq_ex_use_mock(struct ibv_cq_ex *ibv_cq_ex);
+struct efa_unit_test_buff {
+	uint8_t *buff;
+	size_t  size;
+	struct fid_mr *mr;
+};
 
-void test_efa_cq_readerr_happy();
-void test_efa_cq_readerr_sad();
+void efa_unit_test_buff_construct(struct efa_unit_test_buff *buff, struct efa_resource *resource, size_t buff_size);
 
-void test_dgram_ep_progress_happy();
-void test_dgram_ep_progress_with_empty_cq();
-void test_dgram_ep_progress_encounter_bad_wc_status();
+void efa_unit_test_buff_destruct(struct efa_unit_test_buff *buff);
 
-void test_rdm_ep_progress_send_completion_happy();
-void test_rdm_ep_progress_recv_completion_happy();
-void test_rdm_ep_progress_send_empty_cq();
-void test_rdm_ep_progress_failed_poll();
-void test_rdm_ep_progress_bad_send_wc_status();
-void test_rdm_ep_progress_bad_recv_wc_status();
+/* test cases */
+void test_av_insert_duplicate_raw_addr();
+void test_av_insert_duplicate_gid();
+void test_efa_device_construct_error_handling();
+void test_rxr_ep_pkt_pool_flags();
+void test_rxr_ep_pkt_pool_page_alignment();
+void test_rxr_ep_dc_atomic_error_handling();
+void test_dgram_cq_read_empty_cq();
+void test_dgram_cq_read_bad_wc_status();
+void test_rdm_cq_read_empty_cq();
+void test_rdm_cq_read_failed_poll();
+void test_rdm_cq_read_bad_send_status();
+void test_rdm_cq_read_bad_recv_status();
 
 #endif

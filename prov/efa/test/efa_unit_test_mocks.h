@@ -1,10 +1,15 @@
 #ifndef EFA_UNIT_TEST_RDMA_CORE_MOCKS_H
 #define EFA_UNIT_TEST_RDMA_CORE_MOCKS_H
 
-extern int g_ibv_create_ah_call_counter;
+struct efa_mock_ibv_send_wr_list
+{
+	struct ibv_send_wr *head;
+	struct ibv_send_wr *tail;
+};
 
 struct ibv_ah *__real_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr);
 
+extern int g_ibv_create_ah_call_counter;
 struct ibv_ah *efa_mock_ibv_create_ah_increase_call_counter(struct ibv_pd *pd, struct ibv_ah_attr *attr);
 
 int __real_efadv_query_device(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
@@ -13,33 +18,25 @@ int __real_efadv_query_device(struct ibv_context *ibvctx, struct efadv_device_at
 int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
 					    uint32_t inlen);
 
-void __real_rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+extern struct efa_mock_ibv_send_wr_list g_ibv_send_wr_list;
+int efa_mock_ibv_post_send_save_send_wr(struct ibv_qp *qp, struct ibv_send_wr *wr,
+					struct ibv_send_wr **bad_wr);
 
-void efa_mock_rxr_pkt_handle_send_completion_check_args_only(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+int efa_mock_ibv_start_poll_return_mock(struct ibv_cq_ex *ibvcqx,
+					struct ibv_poll_cq_attr *attr);
 
-void __real_rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
-					   struct rxr_pkt_entry *pkt_entry,
-					   enum rxr_lower_ep_type lower_ep_type);
+int efa_mock_ibv_start_poll_use_saved_send_wr_with_mock_status(struct ibv_cq_ex *ibvcqx,
+							       struct ibv_poll_cq_attr *attr);
 
-void efa_mock_rxr_pkt_handle_recv_completion_check_args_only(struct rxr_ep *ep,
-							     struct rxr_pkt_entry *pkt_entry,
-							     enum rxr_lower_ep_type lower_ep_type);
+int efa_mock_ibv_next_poll_return_mock(struct ibv_cq_ex *ibvcqx);
 
-void __real_rxr_pkt_handle_send_error(struct rxr_ep *ep,
-				      struct rxr_pkt_entry *pkt_entry,
-				      int err, int prov_errno);
+int efa_mock_ibv_next_poll_use_saved_send_wr_with_mock_status(struct ibv_cq_ex *ibvcqx);
 
-void efa_mock_rxr_pkt_handle_send_error_check_args_only(struct rxr_ep *ep,
-							struct rxr_pkt_entry *pkt_entry,
-							int err, int prov_errno);
+void efa_mock_ibv_end_poll_check_mock(struct ibv_cq_ex *ibvcqx);
 
-void __real_rxr_pkt_handle_recv_error(struct rxr_ep *ep,
-				      struct rxr_pkt_entry *pkt_entry,
-				      int err, int prov_errno);
+uint32_t efa_mock_ibv_read_opcode_return_mock(struct ibv_cq_ex *current);
 
-void efa_mock_rxr_pkt_handle_recv_error_check_args_only(struct rxr_ep *ep,
-							struct rxr_pkt_entry *pkt_entry,
-							int err, int prov_errno);
+uint32_t efa_mock_ibv_read_vendor_err_return_mock(struct ibv_cq_ex *current);
 
 struct efa_unit_test_mocks
 {
@@ -47,17 +44,6 @@ struct efa_unit_test_mocks
 
 	int (*efadv_query_device)(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
 				  uint32_t inlen);
-
-	void (*rxr_pkt_handle_send_completion)(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
-
-	void (*rxr_pkt_handle_recv_completion)(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
-					       enum rxr_lower_ep_type lower_ep_type);
-
-	void (*rxr_pkt_handle_send_error)(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
-					  int err, int prov_errno);
-
-	void (*rxr_pkt_handle_recv_error)(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
-					  int err, int prov_errno);
 };
 
 extern struct efa_unit_test_mocks g_efa_unit_test_mocks;

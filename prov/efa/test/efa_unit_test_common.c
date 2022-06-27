@@ -129,3 +129,27 @@ void efa_unit_test_resource_destruct(struct efa_resource *resource)
 		fi_freeinfo(resource->info);
 	}
 }
+
+void efa_unit_test_buff_construct(struct efa_unit_test_buff *buff, struct efa_resource *resource, size_t buff_size)
+{
+	int err;
+
+	buff->buff = calloc(buff_size, sizeof(uint8_t));
+	assert_non_null(buff->buff);
+
+	buff->size = buff_size;
+	err = fi_mr_reg(resource->domain, buff, buff_size, FI_SEND | FI_RECV,
+			0 /*offset*/, 0 /*requested_key*/, 0 /*flags*/, &buff->mr, NULL);
+	assert_int_equal(err, 0);
+}
+
+void efa_unit_test_buff_destruct(struct efa_unit_test_buff *buff)
+{
+	int err;
+
+	assert_non_null(buff->mr);
+	err = fi_close(&buff->mr->fid);
+	assert_int_equal(err, 0);
+
+	free(buff->buff);
+}
