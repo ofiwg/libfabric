@@ -896,7 +896,7 @@ void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 {
 	if (!pkt_entry->x_entry) {
 		efa_eq_write_error(&ep->util_ep, err, prov_errno);
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 
