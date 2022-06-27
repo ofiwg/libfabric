@@ -100,6 +100,7 @@ nodist_prov_efa_test_efa_unit_test_SOURCES = \
 	prov/efa/test/efa_unit_test_common.c \
 	prov/efa/test/efa_unit_test_ep.c \
 	prov/efa/test/efa_unit_test_av.c \
+	prov/efa/test/efa_unit_test_cq.c \
 	prov/efa/test/efa_unit_test_device.c
 
 efa_CPPFLAGS += -I$(top_srcdir)/include -I$(top_srcdir)/prov/efa/test $(cmocka_CPPFLAGS)
@@ -108,11 +109,7 @@ prov_efa_test_efa_unit_test_CPPFLAGS = $(efa_CPPFLAGS)
 prov_efa_test_efa_unit_test_LDADD = $(cmocka_LIBS) $(linkback)
 prov_efa_test_efa_unit_test_LDFLAGS = $(cmocka_rpath) $(efa_LDFLAGS) $(cmocka_LDFLAGS) \
 					-Wl,--wrap=ibv_create_ah \
-					-Wl,--wrap=efadv_query_device \
-					-Wl,--wrap=rxr_pkt_handle_send_completion \
-					-Wl,--wrap=rxr_pkt_handle_recv_completion \
-					-Wl,--wrap=rxr_pkt_handle_send_error \
-					-Wl,--wrap=rxr_pkt_handle_recv_error
+					-Wl,--wrap=efadv_query_device
 prov_efa_test_efa_unit_test_LIBS = $(efa_LIBS) $(linkback)
 
 endif ENABLE_EFA_UNIT_TEST

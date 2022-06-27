@@ -11,15 +11,12 @@ int main(void)
 		cmocka_unit_test(test_rxr_ep_pkt_pool_flags),
 		cmocka_unit_test(test_rxr_ep_pkt_pool_page_alignment),
 		cmocka_unit_test(test_rxr_ep_dc_atomic_error_handling),
-		cmocka_unit_test(test_dgram_ep_progress_happy),
-		cmocka_unit_test(test_dgram_ep_progress_with_empty_cq),
-		cmocka_unit_test(test_dgram_ep_progress_encounter_bad_wc_status),
-		cmocka_unit_test(test_rdm_ep_progress_send_completion_happy),
-		cmocka_unit_test(test_rdm_ep_progress_recv_completion_happy),
-		cmocka_unit_test(test_rdm_ep_progress_send_empty_cq),
-		cmocka_unit_test(test_rdm_ep_progress_failed_poll),
-		cmocka_unit_test(test_rdm_ep_progress_bad_send_wc_status),
-		cmocka_unit_test(test_rdm_ep_progress_bad_recv_wc_status),
+		cmocka_unit_test(test_dgram_cq_read_empty_cq),
+		cmocka_unit_test(test_dgram_cq_read_bad_wc_status),
+		cmocka_unit_test(test_rdm_cq_read_empty_cq),
+		cmocka_unit_test(test_rdm_cq_read_failed_poll),
+		cmocka_unit_test(test_rdm_cq_read_bad_send_status),
+		cmocka_unit_test(test_rdm_cq_read_bad_recv_status),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);
