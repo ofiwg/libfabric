@@ -182,7 +182,7 @@ struct efa_wce {
 	struct efa_wc		wc;
 };
 
-typedef void (*efa_cq_read_entry)(struct efa_wc *wc, int index, void *buf);
+typedef void (*efa_cq_read_entry)(struct ibv_cq_ex *ibv_cqx, int index, void *buf);
 
 struct efa_cq {
 	struct util_cq		util_cq;

@@ -48,31 +48,6 @@ static inline uint64_t efa_cq_opcode_to_fi_flags(enum ibv_wc_opcode	opcode) {
 	}
 }
 
-static uint64_t efa_cq_wc_to_fi_flags(struct efa_wc *wc)
-{
-	return efa_cq_opcode_to_fi_flags(wc->ibv_wc.opcode);
-}
-
-/**
- * @brief Unlike ibv_poll_cq, wide completion APIs do not write to ibv_wc struct. We need to do this manually.
- * This is inspired by rdma-core, i.e. `efa_process_cqe` and `efa_process_ex_cqe`.
- * @param[in]		cq	the current extended CQ
- * @param[in,out]	wc	WC struct to write result to
- */
-static inline void efa_cq_wc_from_ibv_cq_ex_unsafe(struct ibv_cq_ex *cq, struct ibv_wc *wc) {
-	wc->status = cq->status;
-	wc->vendor_err = ibv_wc_read_vendor_err(cq);
-	wc->wc_flags = ibv_wc_read_wc_flags(cq);
-	wc->qp_num = ibv_wc_read_qp_num(cq);
-	wc->opcode = ibv_wc_read_opcode(cq);
-	wc->byte_len = ibv_wc_read_byte_len(cq);
-	wc->src_qp = ibv_wc_read_src_qp(cq);
-	wc->sl = ibv_wc_read_sl(cq);
-	wc->slid = ibv_wc_read_slid(cq);
-	wc->imm_data = ibv_wc_read_imm_data(cq);
-	wc->wr_id = cq->wr_id;
-}
-
 static inline uint32_t efa_cq_api_version(struct efa_cq *cq) {
 	return cq->domain->fabric->util_fabric.fabric_fid.api_version;
 }
@@ -110,30 +85,30 @@ err:
 	return -FI_EAGAIN;
 }
 
-static void efa_cq_read_context_entry(struct efa_wc *wc, int i, void *buf)
+static void efa_cq_read_context_entry(struct ibv_cq_ex *ibv_cqx, int i, void *buf)
 {
 	struct fi_cq_entry *entry = buf;
 
-	entry[i].op_context = (void *)(uintptr_t)wc->ibv_wc.wr_id;
+	entry[i].op_context = (void *)ibv_cqx->wr_id;
 }
 
-static void efa_cq_read_msg_entry(struct efa_wc *wc, int i, void *buf)
+static void efa_cq_read_msg_entry(struct ibv_cq_ex *ibv_cqx, int i, void *buf)
 {
 	struct fi_cq_msg_entry *entry = buf;
 
-	entry[i].op_context = (void *)(uintptr_t)wc->ibv_wc.wr_id;
-	entry[i].flags = efa_cq_wc_to_fi_flags(wc);
-	entry[i].len = (uint64_t)wc->ibv_wc.byte_len;
+	entry[i].op_context = (void *)(uintptr_t)ibv_cqx->wr_id;
+	entry[i].flags = efa_cq_opcode_to_fi_flags(ibv_wc_read_opcode(ibv_cqx));
+	entry[i].len = ibv_wc_read_byte_len(ibv_cqx);
 }
 
-static void efa_cq_read_data_entry(struct efa_wc *wc, int i, void *buf)
+static void efa_cq_read_data_entry(struct ibv_cq_ex *ibv_cqx, int i, void *buf)
 {
 	struct fi_cq_data_entry *entry = buf;
 
-	entry[i].op_context = (void *)(uintptr_t)wc->ibv_wc.wr_id;
-	entry[i].flags = efa_cq_wc_to_fi_flags(wc);
+	entry[i].op_context = (void *)ibv_cqx->wr_id;
+	entry[i].flags = efa_cq_opcode_to_fi_flags(ibv_wc_read_opcode(ibv_cqx));
 	entry[i].data = 0;
-	entry[i].len = (uint64_t)wc->ibv_wc.byte_len;
+	entry[i].len = ibv_wc_read_byte_len(ibv_cqx);
 }
 
 /**
@@ -179,8 +154,6 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	should_end_poll = !err;
 
 	while (!err && num_cqe < count) {
-		efa_cq_wc_from_ibv_cq_ex_unsafe(cq->ibv_cq_ex, &wc.ibv_wc);
-
 		if (cq->ibv_cq_ex->status) {
 			err = -FI_EAVAIL;
 			break;
@@ -195,7 +168,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 				wc.ibv_wc.src_qp);
 		}
 
-		cq->read_entry(&wc, num_cqe, buf);
+		cq->read_entry(cq->ibv_cq_ex, num_cqe, buf);
 		num_cqe++;
 
 		err = ibv_next_poll(cq->ibv_cq_ex);
