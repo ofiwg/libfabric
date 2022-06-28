@@ -167,10 +167,10 @@ TCP_INI ;
 #  define TCP_INIT NULL
 #endif
 
-#if (HAVE_XNET) && (HAVE_XNET_DL)
+#if (HAVE_NET) && (HAVE_NET_DL)
 #  define XNET_INI FI_EXT_INI
 #  define XNET_INIT NULL
-#elif (HAVE_XNET)
+#elif (HAVE_NET)
 #  define XNET_INI INI_SIG(fi_xnet_ini)
 #  define XNET_INIT fi_xnet_ini()
 XNET_INI ;

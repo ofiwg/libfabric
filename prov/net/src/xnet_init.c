@@ -139,7 +139,7 @@ struct fi_provider xnet_prov = {
 
 XNET_INI
 {
-#if HAVE_XNET_DL
+#if HAVE_NET_DL
 	ofi_pmem_init();
 #endif
 	xnet_init_env();
