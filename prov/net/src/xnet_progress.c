@@ -323,6 +323,46 @@ static ssize_t xnet_process_remote_read(struct xnet_ep *ep)
 	return ret;
 }
 
+static int xnet_alter_mrecv(struct xnet_ep *ep, struct xnet_xfer_entry *xfer,
+			    size_t msg_len)
+{
+	struct xnet_xfer_entry *recv_entry;
+	size_t left;
+	int ret = FI_SUCCESS;
+
+	assert(ep->srx);
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+
+	if ((msg_len && !xfer->iov_cnt) || (msg_len > xfer->iov[0].iov_len)) {
+		ret = -FI_ETRUNC;
+		goto complete;
+	}
+
+	left = xfer->iov[0].iov_len - msg_len;
+	if (!xfer->iov_cnt || (left <= ep->srx->min_multi_recv_size))
+		goto complete;
+
+	/* If we can't repost the remaining buffer, return it to the user. */
+	recv_entry = xnet_alloc_xfer(xnet_ep2_progress(ep));
+	if (!recv_entry)
+		goto complete;
+
+	recv_entry->ctrl_flags = XNET_MULTI_RECV;
+	recv_entry->cq_flags = FI_MSG | FI_RECV;
+	recv_entry->context = xfer->context;
+
+	recv_entry->iov_cnt = 1;
+	recv_entry->iov[0].iov_base = (char *) xfer->iov[0].iov_base + msg_len;
+	recv_entry->iov[0].iov_len = left;
+
+	slist_insert_head(&recv_entry->entry, &ep->srx->rx_queue);
+	return 0;
+
+complete:
+	xfer->cq_flags |= FI_MULTI_RECV;
+	return ret;
+}
+
 static struct xnet_xfer_entry *xnet_get_rx_entry(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *xfer;
@@ -335,6 +375,7 @@ static struct xnet_xfer_entry *xnet_get_rx_entry(struct xnet_ep *ep)
 			xfer = container_of(slist_remove_head(&srx->rx_queue),
 					    struct xnet_xfer_entry, entry);
 			xfer->cq_flags |= xnet_rx_completion_flag(ep, 0);
+
 		} else {
 			xfer = NULL;
 		}
@@ -390,7 +431,12 @@ static ssize_t xnet_op_msg(struct xnet_ep *ep)
 	memcpy(&rx_entry->hdr, &msg->hdr,
 	       (size_t) msg->hdr.base_hdr.hdr_size);
 	rx_entry->ep = ep;
-	rx_entry->mrecv_msg_start = rx_entry->iov[0].iov_base;
+
+	if (rx_entry->ctrl_flags & XNET_MULTI_RECV) {
+		ret = xnet_alter_mrecv(ep, rx_entry, msg_len);
+		if (ret)
+			goto truncate_err;
+	}
 
 	ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt,
 				msg_len);

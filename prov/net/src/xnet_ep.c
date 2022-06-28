@@ -568,22 +568,10 @@ static struct fi_ops xnet_ep_fi_ops = {
 static int xnet_ep_getopt(fid_t fid, int level, int optname,
 			  void *optval, size_t *optlen)
 {
-	struct xnet_ep *ep;
-
 	if (level != FI_OPT_ENDPOINT)
 		return -ENOPROTOOPT;
 
 	switch (optname) {
-	case FI_OPT_MIN_MULTI_RECV:
-		if (*optlen < sizeof(size_t)) {
-			*optlen = sizeof(size_t);
-			return -FI_ETOOSMALL;
-		}
-		ep = container_of(fid, struct xnet_ep,
-				  util_ep.ep_fid.fid);
-		*((size_t *) optval) = ep->min_multi_recv_size;
-		*optlen = sizeof(size_t);
-		break;
 	case FI_OPT_CM_DATA_SIZE:
 		if (*optlen < sizeof(size_t)) {
 			*optlen = sizeof(size_t);
@@ -601,27 +589,7 @@ static int xnet_ep_getopt(fid_t fid, int level, int optname,
 int xnet_ep_setopt(fid_t fid, int level, int optname,
 		   const void *optval, size_t optlen)
 {
-	struct xnet_ep *ep;
-
-	if (level != FI_OPT_ENDPOINT)
-		return -FI_ENOPROTOOPT;
-
-	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
-	switch (optname) {
-	case FI_OPT_MIN_MULTI_RECV:
-		if (optlen != sizeof(size_t))
-			return -FI_EINVAL;
-
-		ep->min_multi_recv_size = *(size_t *) optval;
-		FI_INFO(&xnet_prov, FI_LOG_EP_CTRL,
-			"FI_OPT_MIN_MULTI_RECV set to %zu\n",
-			ep->min_multi_recv_size);
-		break;
-	default:
-		return -ENOPROTOOPT;
-	}
-
-	return FI_SUCCESS;
+	return -FI_ENOPROTOOPT;
 }
 
 static struct fi_ops_ep xnet_ep_ops = {
@@ -728,7 +696,6 @@ int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	ep->cur_rx.hdr_done = 0;
 	ep->cur_rx.hdr_len = sizeof(ep->cur_rx.hdr.base_hdr);
-	ep->min_multi_recv_size = XNET_MIN_MULTI_RECV;
 	xnet_config_bsock(&ep->bsock);
 	ep->report_success = xnet_report_success;
 

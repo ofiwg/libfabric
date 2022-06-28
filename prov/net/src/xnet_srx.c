@@ -53,6 +53,7 @@ xnet_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	srx = container_of(ep_fid, struct xnet_srx, rx_fid);
 	assert(msg->iov_count <= XNET_IOV_LIMIT);
+	assert(!(flags & FI_MULTI_RECV) || msg->iov_count == 1);
 
 	ofi_genlock_lock(xnet_srx2_progress(srx)->active_lock);
 	recv_entry = xnet_alloc_xfer(xnet_srx2_progress(srx));
@@ -61,6 +62,7 @@ xnet_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		goto unlock;
 	}
 
+	recv_entry->ctrl_flags = flags & FI_MULTI_RECV;
 	recv_entry->cq_flags = FI_MSG | FI_RECV;
 	recv_entry->context = msg->context;
 	recv_entry->iov_cnt = msg->iov_count;
@@ -439,6 +441,7 @@ int xnet_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 	srx->match_tag_rx = (attr->caps & FI_DIRECTED_RECV) ?
 			    xnet_match_tag_addr : xnet_match_tag;
 	srx->op_flags = attr->op_flags;
+	srx->min_multi_recv_size = XNET_MIN_MULTI_RECV;
 	*rx_ep = &srx->rx_fid;
 	return FI_SUCCESS;
 }
