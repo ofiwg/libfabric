@@ -17,7 +17,7 @@ static uint32_t _read_slid(struct ibv_cq_ex *current) { return 0; }
 static __be32 _read_imm_data(struct ibv_cq_ex *current) { return 0; }
 static enum ibv_wc_opcode _read_send_code(struct ibv_cq_ex *current) { return IBV_WC_SEND; }
 static enum ibv_wc_opcode _read_opcode(struct ibv_cq_ex *current) { return mock(); }
-static void _read_entry(struct efa_wc *wc, int index, void *buf) {}
+static void _read_entry(struct ibv_cq_ex *ibv_cqx, int index, void *buf) {}
 static ssize_t _eq_write_successful(struct fid_eq *eq, uint32_t event,
                                     const void *buf, size_t len, uint64_t flags)
 {
