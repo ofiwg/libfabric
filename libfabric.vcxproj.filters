@@ -97,13 +97,13 @@
     <Filter Include="Source Files\prov\tcp\src">
       <UniqueIdentifier>{8c151366-dd08-48d5-aa21-50a500cbde73}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\prov\xnet">
+    <Filter Include="Source Files\prov\net">
       <UniqueIdentifier>{5547753c-42f5-4cb6-a311-07911724f5cf}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\prov\xnet\include">
+    <Filter Include="Source Files\prov\net\include">
       <UniqueIdentifier>{00fbcfe1-a2f8-4ca2-af0a-803ae78a25d9}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\prov\xnet\src">
+    <Filter Include="Source Files\prov\net\src">
       <UniqueIdentifier>{f23f596f-673f-4158-b648-3f17c7f162a1}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\prov\hook">
@@ -510,50 +510,50 @@
     <ClCompile Include="prov\tcp\src\tcpx_progress.c">
       <Filter>Source Files\prov\tcp\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_attr.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_attr.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_cm.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_cm.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_rdm_cm.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_rdm_cm.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_srx.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_srx.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_cq.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_cq.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_domain.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_domain.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_rma.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_rma.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_msg.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_msg.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_ep.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_ep.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_rdm.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_rdm.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_pep.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_pep.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_fabric.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_fabric.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_eq.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_eq.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_init.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_init.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\xnet\src\xnet_progress.c">
-      <Filter>Source Files\prov\xnet\src</Filter>
+    <ClCompile Include="prov\net\src\xnet_progress.c">
+      <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\util\src\util_pep.c">
       <Filter>Source Files\prov\util</Filter>
@@ -887,11 +887,11 @@
     <ClInclude Include="prov\tcp\src\tcpx.h">
       <Filter>Source Files\prov\tcp\include</Filter>
     </ClInclude>
-    <ClInclude Include="prov\xnet\src\xnet.h">
-      <Filter>Source Files\prov\xnet\include</Filter>
+    <ClInclude Include="prov\net\src\xnet.h">
+      <Filter>Source Files\prov\net\include</Filter>
     </ClInclude>
-    <ClInclude Include="prov\xnet\src\xnet_proto.h">
-      <Filter>Source Files\prov\xnet\include</Filter>
+    <ClInclude Include="prov\net\src\xnet_proto.h">
+      <Filter>Source Files\prov\net\include</Filter>
     </ClInclude>
     <ClInclude Include="include\windows\sys\uio.h">
       <Filter>Header Files\windows\sys</Filter>
