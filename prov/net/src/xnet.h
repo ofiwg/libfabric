@@ -172,6 +172,7 @@ struct xnet_srx {
 
 	struct ofi_bufpool	*buf_pool;
 	uint64_t		op_flags;
+	size_t			min_multi_recv_size;
 };
 
 int xnet_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
@@ -203,7 +204,6 @@ struct xnet_ep {
 	void (*hdr_bswap)(struct xnet_base_hdr *hdr);
 	void (*report_success)(struct xnet_ep *ep, struct util_cq *cq,
 			       struct xnet_xfer_entry *xfer_entry);
-	size_t			min_multi_recv_size;
 	bool			pollout_set;
 };
 
@@ -323,6 +323,7 @@ static inline void xnet_signal_progress(struct xnet_progress *progress)
 #define XNET_NEED_DYN_RBUF 	BIT(4)
 #define XNET_ASYNC		BIT(5)
 #define XNET_INJECT_OP		BIT(6)
+#define XNET_MULTI_RECV		FI_MULTI_RECV /* BIT(16) */
 
 struct xnet_xfer_entry {
 	struct slist_entry	entry;
@@ -343,7 +344,6 @@ struct xnet_xfer_entry {
 	uint32_t		ctrl_flags;
 	uint32_t		async_index;
 	void			*context;
-	void			*mrecv_msg_start;
 	// for RMA read requests, we need a way to track the request response
 	// so that we don't propagate multiple completions for the same operation
 	struct xnet_xfer_entry  *resp_entry;

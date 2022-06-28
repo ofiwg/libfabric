@@ -621,13 +621,50 @@ static ssize_t xnet_rdm_cancel(struct fid *fid, void *context)
 static int xnet_rdm_getopt(struct fid *fid, int level, int optname,
 			   void *optval, size_t *optlen)
 {
-	return -FI_ENOPROTOOPT;
+	struct xnet_rdm *rdm;
+
+	rdm = container_of(fid, struct xnet_rdm, util_ep.ep_fid.fid);
+	if (level != FI_OPT_ENDPOINT)
+		return -ENOPROTOOPT;
+
+	switch (optname) {
+	case FI_OPT_MIN_MULTI_RECV:
+		if (*optlen < sizeof(size_t)) {
+			*optlen = sizeof(size_t);
+			return -FI_ETOOSMALL;
+		}
+		*((size_t *) optval) = rdm->srx->min_multi_recv_size;
+		*optlen = sizeof(size_t);
+		break;
+	default:
+		return -FI_ENOPROTOOPT;
+	}
+	return FI_SUCCESS;
 }
 
 static int xnet_rdm_setopt(struct fid *fid, int level, int optname,
 			   const void *optval, size_t optlen)
 {
-	return -FI_ENOPROTOOPT;
+	struct xnet_rdm *rdm;
+
+	rdm = container_of(fid, struct xnet_rdm, util_ep.ep_fid.fid);
+	if (level != FI_OPT_ENDPOINT)
+		return -FI_ENOPROTOOPT;
+
+	switch (optname) {
+	case FI_OPT_MIN_MULTI_RECV:
+		if (optlen != sizeof(size_t))
+			return -FI_EINVAL;
+
+		rdm->srx->min_multi_recv_size = *(size_t *) optval;
+		FI_INFO(&xnet_prov, FI_LOG_EP_CTRL,
+			"FI_OPT_MIN_MULTI_RECV set to %zu\n",
+			rdm->srx->min_multi_recv_size);
+		break;
+	default:
+		return -ENOPROTOOPT;
+	}
+	return FI_SUCCESS;
 }
 
 static struct fi_ops_ep xnet_rdm_ep_ops = {
