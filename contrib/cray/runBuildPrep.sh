@@ -1,7 +1,7 @@
 #!/bin/bash
 set -ex
 
-ARTI_URL=https://arti.dev.cray.com/artifactory
+ARTI_URL=https://${ARTIFACT_REPO_HOST}/artifactory
 
 # Override product since we are only using the internal product stream to avoid
 # clashing with slingshot10 libfabric
