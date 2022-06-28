@@ -617,11 +617,6 @@ int xnet_ep_setopt(fid_t fid, int level, int optname,
 			"FI_OPT_MIN_MULTI_RECV set to %zu\n",
 			ep->min_multi_recv_size);
 		break;
-	case OFI_OPT_TCP_FI_ADDR:
-		if (optlen != sizeof(fi_addr_t))
-			return -FI_EINVAL;
-		ep->src_addr = *(fi_addr_t *) optval;
-		break;
 	default:
 		return -ENOPROTOOPT;
 	}
