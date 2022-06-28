@@ -170,6 +170,7 @@ static int xnet_open_conn(struct xnet_conn *conn, struct fi_info *info)
 	if (ret)
 		goto err;
 
+	conn->ep->src_addr = conn->peer->index;
 	ret = fi_enable(&conn->ep->util_ep.ep_fid);
 	if (ret) {
 		XNET_WARN_ERR(FI_LOG_EP_CTRL, "fi_enable", ret);
