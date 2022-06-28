@@ -1351,7 +1351,7 @@ void rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep,
 	}
 }
 
-ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_tagged_entry *comp)
+ssize_t rxm_handle_comp(struct rxm_ep *rxm_ep, struct fi_cq_data_entry *comp)
 {
 	struct rxm_rx_buf *rx_buf;
 	struct rxm_tx_buf *tx_buf;
@@ -1823,7 +1823,7 @@ void rxm_handle_comp_error(struct rxm_ep *rxm_ep)
 	}
 }
 
-ssize_t rxm_thru_comp(struct rxm_ep *ep, struct fi_cq_tagged_entry *comp)
+ssize_t rxm_thru_comp(struct rxm_ep *ep, struct fi_cq_data_entry *comp)
 {
 	struct util_cq *cq;
 	int ret;
@@ -1832,7 +1832,7 @@ ssize_t rxm_thru_comp(struct rxm_ep *ep, struct fi_cq_tagged_entry *comp)
 	     ep->util_ep.rx_cq : ep->util_ep.tx_cq;
 
 	ret = ofi_cq_write(cq, comp->op_context, comp->flags, comp->len,
-			   comp->buf, comp->data, comp->tag);
+			   comp->buf, comp->data, 0);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Unable to report completion\n");
 		assert(0);
@@ -1913,23 +1913,24 @@ int rxm_prepost_recv(struct rxm_ep *ep, struct fid_ep *rx_ep)
 void rxm_ep_do_progress(struct util_ep *util_ep)
 {
 	struct rxm_ep *rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
-	struct fi_cq_tagged_entry comp;
+	struct fi_cq_data_entry comp[32];
 	struct dlist_entry *conn_entry_tmp;
 	struct rxm_conn *rxm_conn;
 	size_t comp_read = 0;
 	uint64_t timestamp;
-	ssize_t ret;
+	ssize_t ret, i, err;
 
 	do {
-		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 1);
+		ret = fi_cq_read(rxm_ep->msg_cq, &comp, 32);
 		if (ret > 0) {
-			ret = rxm_ep->handle_comp(rxm_ep, &comp);
-			if (ret) {
-				// We don't have enough info to write a good
-				// error entry to the CQ at this point
-				rxm_cq_write_error_all(rxm_ep, (int) ret);
-			} else {
-				ret = 1;
+			comp_read += ret;
+			for (i = 0; i < ret; i++) {
+				err = rxm_ep->handle_comp(rxm_ep, &comp[i]);
+				if (err) {
+					// We don't have enough info to write a good
+					// error entry to the CQ at this point
+					rxm_cq_write_error_all(rxm_ep, (int) err);
+				}
 			}
 		} else if (ret < 0 && (ret != -FI_EAGAIN)) {
 			if (ret == -FI_EAVAIL)
@@ -1953,7 +1954,7 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 					rxm_conn_progress(rxm_ep);
 			}
 		}
-	} while ((ret > 0) && (++comp_read < rxm_ep->comp_per_progress));
+	} while ((ret > 0) && (comp_read < rxm_ep->comp_per_progress));
 
 	if (!dlist_empty(&rxm_ep->deferred_queue)) {
 		dlist_foreach_container_safe(&rxm_ep->deferred_queue,
