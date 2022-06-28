@@ -2,6 +2,8 @@
 set -ex
 
 ARTI_URL=https://${ARTIFACT_REPO_HOST}/artifactory
+OS_TYPE=`cat /etc/os-release | grep "^ID=" | sed "s/\"//g" | cut -d "=" -f 2`
+OS_VERSION=`cat /etc/os-release | grep "^VERSION_ID=" | sed "s/\"//g" | cut -d "=" -f 2`
 
 # Override product since we are only using the internal product stream to avoid
 # clashing with slingshot10 libfabric
@@ -11,6 +13,8 @@ echo "$0: --> BRANCH_NAME: '${BRANCH_NAME}'"
 echo "$0: --> PRODUCT: '${PRODUCT}'"
 echo "$0: --> TARGET_ARCH: '${TARGET_ARCH}'"
 echo "$0: --> TARGET_OS: '${TARGET_OS}'"
+echo "$0: --> OS_TYPE: '${OS_TYPE}'"
+echo "$0: --> OS_VERSION: '${OS_VERSION}'"
 
 if [[ "${BRANCH_NAME}" == release/* ]]; then
     ARTI_LOCATION='rpm-stable-local'
@@ -72,6 +76,15 @@ fi
 if command -v yum > /dev/null; then
     yum-config-manager --add-repo=${ARTI_URL}/${PRODUCT}-${ARTI_LOCATION}/${ARTI_BRANCH}/${TARGET_OS}/
     yum-config-manager --setopt=gpgcheck=0 --save
+    if [ $OS_TYPE = "rhel"  ] && [ $OS_VERSION = "8.6"  ]; then
+        with_rocm=1
+        with_cuda=1
+        yum-config-manager --add-repo=${ARTI_URL}/radeon-rocm-remote/centos8/5.2/main
+        yum-config-manager --add-repo=${ARTI_URL}/radeon-amdgpu-remote/22.10.3/${OS_TYPE}/${OS_VERSION}/main/x86_64/
+        yum-config-manager --add-repo=${ARTI_URL}/mirror-nvidia/
+        yum-config-manager --add-repo=${ARTI_URL}/pe-internal-rpm-stable-local/nvidia-hpc-sdk/rhel8/
+        RPMS+=" rocm-dev hip-devel nvhpc-2022"
+    fi
 
     yum install -y $RPMS
 elif command -v zypper > /dev/null; then

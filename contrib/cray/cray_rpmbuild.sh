@@ -11,7 +11,7 @@ function cleanup {
 
 trap cleanup EXIT
 
-if [[ "${TARGET_OS}" == sle* ]]; then
+if [[ "${TARGET_OS}" == sle*  || "${TARGET_OS}" == rhel_8_6* ]]; then
     ROCM_CONFIG="-c --with-rocr=/opt/rocm -c --enable-rocr-dlopen"
     CUDA_CONFIG="-c --with-cuda=/usr/local/cuda -c --enable-cuda-dlopen"
 else
