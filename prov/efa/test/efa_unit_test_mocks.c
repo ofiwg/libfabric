@@ -8,10 +8,16 @@
 #include "efa_unit_test_mocks.h"
 
 /* mock of rdma-core functions */
-int g_ibv_create_ah_call_counter = 0;
-struct ibv_ah *efa_mock_ibv_create_ah_increase_call_counter(struct ibv_pd *pd, struct ibv_ah_attr *attr)
+
+/**
+ * @brief call real ibv_create_ah and mock()
+ *
+ * When combined with will_return_count(), this mock of ibv_create_ah() can be used to verify
+ * number of times ibv_create_ah() is called.
+ */
+struct ibv_ah *efa_mock_ibv_create_ah_check_mock(struct ibv_pd *pd, struct ibv_ah_attr *attr)
 {
-	g_ibv_create_ah_call_counter += 1;
+	mock();
 	return  __real_ibv_create_ah(pd, attr);
 }
 

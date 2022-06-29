@@ -9,8 +9,7 @@ struct efa_mock_ibv_send_wr_list
 
 struct ibv_ah *__real_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr);
 
-extern int g_ibv_create_ah_call_counter;
-struct ibv_ah *efa_mock_ibv_create_ah_increase_call_counter(struct ibv_pd *pd, struct ibv_ah_attr *attr);
+struct ibv_ah *efa_mock_ibv_create_ah_check_mock(struct ibv_pd *pd, struct ibv_ah_attr *attr);
 
 int __real_efadv_query_device(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
 			      uint32_t inlen);
