@@ -679,6 +679,16 @@ The CXI provider checks for the following environment variables:
     provider returning -FI_EAGAIN for data transfer and other related libfabric
     operations.
 
+*FI_CXI_COMPAT*
+:   Temporary compatibility to allow use of pre-upstream values for FI_ADDR_CXI and
+    FI_PROTO_CXI. Compatibility can be disabled to verify operation with upstream
+    constant values and to enable access to conflicting provider values. The default
+    setting of 1 specifies both old and new constants are supported. A setting of 0
+    disables support for old constants and can be used to test that an application is
+    compatible with the upstream values. A setting of 2 is a safety fallback that if
+    used the provider will only export fi_info with old constants and will be incompatible
+    with libfabric clients that been recompiled.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 

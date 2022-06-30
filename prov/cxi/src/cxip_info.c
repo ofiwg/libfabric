@@ -189,12 +189,42 @@ static int cxip_info_init(void)
 
 	slist_foreach(&cxip_if_list, entry, prev) {
 		nic_if = container_of(entry, struct cxip_if, if_entry);
+
+		/* TODO: Remove check before pushing upstream. This is a
+		 * CXI provider helper to not export the new constants if
+		 * the two info compatibility breaks an application. Upstream
+		 * we will always add the new constants.
+		 */
+		if (ofi_cxi_compat != 2) {
+			ret = cxip_info_alloc(nic_if, &fi);
+			if (ret != FI_SUCCESS) {
+				fi_freeinfo((void *)cxip_util_prov.info);
+				break;
+			}
+
+			CXIP_DBG("%s info created\n",
+				 nic_if->info->device_name);
+			*fi_list = fi;
+			fi_list = &(fi->next);
+		}
+
+		/* TODO: This MUST be remove before pushing upstream. This is a
+		 * CXI provider helper to handle constant collision.
+		 */
+		if (!ofi_cxi_compat)
+			continue;
+
+		/* Add a compat fi_info following the current one */
 		ret = cxip_info_alloc(nic_if, &fi);
 		if (ret != FI_SUCCESS) {
 			fi_freeinfo((void *)cxip_util_prov.info);
 			break;
 		}
-		CXIP_DBG("%s info created\n", nic_if->info->device_name);
+
+		fi->addr_format = FI_ADDR_OPX;
+		fi->ep_attr->protocol = FI_PROTO_OPX;
+
+		CXIP_DBG("%s compat info created\n", nic_if->info->device_name);
 
 		*fi_list = fi;
 		fi_list = &(fi->next);

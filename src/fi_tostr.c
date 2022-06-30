@@ -122,7 +122,15 @@ static void ofi_tostr_addr_format(char *buf, size_t len, uint32_t addr_format)
 	CASEENUMSTRN(FI_ADDR_IB_UD, len);
 	CASEENUMSTRN(FI_ADDR_EFA, len);
 	CASEENUMSTRN(FI_ADDR_PSMX3, len);
-	CASEENUMSTRN(FI_ADDR_OPX, len);
+	/* TODO: This MUST be removed before pushing upstream. This is a
+	 * CXI provider helper to handle constant collision.
+	 */
+	case FI_ADDR_OPX:
+		if (ofi_cxi_compat)
+			ofi_strncatf(buf, len, "FI_ADDR_CXI_COMPAT");
+		else
+			ofi_strncatf(buf, len, "FI_ADDR_OPX");
+		break;
 	CASEENUMSTRN(FI_ADDR_CXI, len);
 	default:
 		if (addr_format & FI_PROV_SPECIFIC)
@@ -272,7 +280,16 @@ static void ofi_tostr_protocol(char *buf, size_t len, uint32_t protocol)
 	CASEENUMSTRN(FI_PROTO_EFA, len);
 	CASEENUMSTRN(FI_PROTO_PSMX3, len);
 	CASEENUMSTRN(FI_PROTO_RXM_TCP, len);
-	CASEENUMSTRN(FI_PROTO_OPX, len);
+
+	/* TODO: This MUST be removed before pushing upstream. This is a
+	 * CXI provider helper to handle constant collision.
+	 */
+	case FI_PROTO_OPX:
+		if (ofi_cxi_compat)
+			ofi_strncatf(buf, len, "FI_PROTO_CXI_COMPAT");
+		else
+			ofi_strncatf(buf, len, "FI_PROTO_OPX");
+		break;
 	CASEENUMSTRN(FI_PROTO_CXI, len);
 	default:
 		if (protocol & FI_PROV_SPECIFIC)

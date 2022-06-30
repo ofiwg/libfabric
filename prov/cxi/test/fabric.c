@@ -38,13 +38,13 @@ Test(getinfo, prov_name)
 	cxit_create_fabric_info();
 	cr_assert(cxit_fi != NULL);
 
-	/* Make sure we have 1 FI for each IF */
+	/* Make sure we have at least 1 FI for each IF */
 	do {
 		cr_assert(!strcmp(cxit_fi->fabric_attr->prov_name,
 				  cxip_prov_name));
 		infos++;
 	} while ((cxit_fi = cxit_fi->next));
-	cr_assert(infos == cxit_n_ifs);
+	cr_assert(infos >= cxit_n_ifs);
 }
 
 /* Test fabric selection with domain name */
@@ -65,7 +65,7 @@ Test(getinfo, dom_name)
 		cxit_create_fabric_info();
 		cr_assert(cxit_fi != NULL);
 
-		/* Make sure we have 1 FI for each IF */
+		/* Make sure we have at least 1 FI for each IF */
 		do {
 			cr_expect(!strcmp(cxit_fi->domain_attr->name,
 					  cxit_node),
@@ -81,11 +81,11 @@ Test(getinfo, dom_name)
 
 			infos++;
 		} while ((cxit_fi = cxit_fi->next));
-		cr_assert(infos == 1);
+		cr_assert(infos >= 1);
 
 		cxit_destroy_fabric_info();
 	}
-	cr_assert(infos == 1);
+	cr_assert(infos >= 1);
 }
 
 /* Test fabric selection with fabric name */

@@ -86,6 +86,10 @@ struct ofi_common_locks common_locks = {
 size_t ofi_universe_size = 1024;
 int ofi_poll_fairness = 0;
 
+/* TODO: This MUST be remove before pushing upstream. This is a
+ * CXI provider helper to handle constant collision.
+ */
+int ofi_cxi_compat = 1;
 
 int ofi_genlock_init(struct ofi_genlock *lock,
 		     enum ofi_lock_type lock_type)
@@ -426,7 +430,15 @@ sa_sin6:
 		size = snprintf(buf, *len, "fi_addr_bgq://%p", addr);
 		break;
 	case FI_ADDR_OPX:
-		size = snprintf(buf, *len, "fi_addr_opx://%016lx", *(uint64_t *)addr);
+		/* TODO: This MUST be removed before pushing upstream. This is a
+		 * CXI provider helper to handle constant collision.
+		 */
+		if (ofi_cxi_compat)
+			size = snprintf(buf, *len, "fi_addr_cxi://0x%08" PRIx32,
+					*(uint32_t *)addr);
+		else
+			size = snprintf(buf, *len, "fi_addr_opx://%016lx",
+					*(uint64_t *)addr);
 		break;
 	case FI_ADDR_MLX:
 		size = snprintf(buf, *len, "fi_addr_mlx://%p", addr);

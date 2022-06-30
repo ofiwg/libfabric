@@ -650,6 +650,17 @@ int cxip_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	}
 
 	switch (dom->util_domain.addr_format) {
+
+	/* TODO: This MUST be remove before pushing upstream. This is a
+	 * CXI provider helper to handle constant collision.
+	 */
+	case FI_ADDR_OPX:
+		if (!ofi_cxi_compat) {
+			CXIP_WARN("Invalid address format\n");
+			return -FI_EINVAL;
+		}
+		/* FALLTHRU */
+
 	case FI_ADDR_CXI:
 		addrlen = sizeof(struct cxip_addr);
 		break;

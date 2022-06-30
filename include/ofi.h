@@ -316,6 +316,11 @@ uint8_t ofi_lsb(uint64_t num);
 
 extern size_t ofi_universe_size;
 
+/* TODO: This MUST be removed before pushing upstream. This is a
+ * CXI provider helper to handle constant collision.
+ */
+extern int ofi_cxi_compat;
+
 bool ofi_send_allowed(uint64_t caps);
 bool ofi_recv_allowed(uint64_t caps);
 bool ofi_rma_initiate_allowed(uint64_t caps);
