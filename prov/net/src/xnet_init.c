@@ -44,7 +44,7 @@ static int xnet_getinfo(uint32_t version, const char *node, const char *service,
 			struct fi_info **info)
 {
 	return ofi_ip_getinfo(&xnet_util_prov, version, node, service, flags,
-			      hints, info);
+			     hints, info);
 }
 
 struct xnet_port_range xnet_ports = {

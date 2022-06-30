@@ -85,7 +85,7 @@ int xnet_create_fabric(struct fi_fabric_attr *attr,
 	if (!fabric)
 		return -FI_ENOMEM;
 
-	ret = ofi_fabric_init(&xnet_prov, xnet_info.fabric_attr, attr,
+	ret = ofi_fabric_init(&xnet_prov, &xnet_fabric_attr, attr,
 			      &fabric->util_fabric, context);
 	if (ret)
 		goto free;

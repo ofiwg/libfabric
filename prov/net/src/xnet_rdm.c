@@ -568,7 +568,7 @@ unlock:
 	return ret;
 }
 
-struct fi_ops_rma xnet_rdm_rma_ops = {
+static struct fi_ops_rma xnet_rdm_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
 	.read = xnet_rdm_read,
 	.readv = xnet_rdm_readv,
@@ -579,6 +579,23 @@ struct fi_ops_rma xnet_rdm_rma_ops = {
 	.inject = xnet_rdm_inject_write,
 	.writedata = xnet_rdm_writedata,
 	.injectdata = xnet_rdm_inject_writedata,
+};
+
+static struct fi_ops_atomic xnet_rdm_atomic_ops = {
+	.size = sizeof(struct fi_ops_atomic),
+	.write = fi_no_atomic_write,
+	.writev = fi_no_atomic_writev,
+	.writemsg = fi_no_atomic_writemsg,
+	.inject = fi_no_atomic_inject,
+	.readwrite = fi_no_atomic_readwrite,
+	.readwritev = fi_no_atomic_readwritev,
+	.readwritemsg = fi_no_atomic_readwritemsg,
+	.compwrite = fi_no_atomic_compwrite,
+	.compwritev = fi_no_atomic_compwritev,
+	.compwritemsg = fi_no_atomic_compwritemsg,
+	.writevalid = fi_no_atomic_writevalid,
+	.readwritevalid = fi_no_atomic_readwritevalid,
+	.compwritevalid = fi_no_atomic_compwritevalid,
 };
 
 static int xnet_rdm_setname(fid_t fid, void *addr, size_t addrlen)
@@ -789,13 +806,27 @@ static int xnet_init_rdm(struct xnet_rdm *rdm, struct fi_info *info)
 	struct fid_pep *pep;
 	int ret;
 
-	msg_info = fi_dupinfo(info);
+	msg_info = fi_dupinfo(&xnet_srx_info);
 	if (!msg_info)
 		return -FI_ENOMEM;
 
-	msg_info->ep_attr->type = FI_EP_MSG;
-	msg_info->ep_attr->protocol = FI_PROTO_SOCK_TCP;
-	msg_info->ep_attr->rx_ctx_cnt = FI_SHARED_CONTEXT;
+	msg_info->caps &= info->caps;
+	msg_info->mode = info->mode;
+	msg_info->addr_format = info->addr_format;
+	if (info->src_addrlen) {
+		msg_info->src_addr = mem_dup(info->src_addr, info->src_addrlen);
+		if (!msg_info->src_addr) {
+			ret = -FI_ENOMEM;
+			goto err1;
+		}
+		msg_info->src_addrlen = info->src_addrlen;
+	}
+	msg_info->domain_attr->caps &= info->domain_attr->caps;
+	msg_info->domain_attr->mr_mode = info->domain_attr->mr_mode;
+	msg_info->tx_attr->caps &= info->tx_attr->caps;
+	msg_info->tx_attr->op_flags = info->tx_attr->op_flags;
+	msg_info->rx_attr->caps &= info->rx_attr->caps;
+	msg_info->rx_attr->op_flags = info->rx_attr->op_flags;
 
 	ret = fi_srx_context(&rdm->util_ep.domain->domain_fid, info->rx_attr,
 			     &srx, rdm);
@@ -851,6 +882,7 @@ int xnet_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	(*ep_fid)->msg = &xnet_rdm_msg_ops;
 	(*ep_fid)->rma = &xnet_rdm_rma_ops;
 	(*ep_fid)->tagged = &xnet_rdm_tagged_ops;
+	(*ep_fid)->atomic = &xnet_rdm_atomic_ops;
 
 	return 0;
 

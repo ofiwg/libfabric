@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ofi_atomic.h"
 #include "xnet.h"
 
 
@@ -105,6 +106,19 @@ static int xnet_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 				sizeof(struct xnet_conn));
 }
 
+static int
+xnet_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
+		  enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags)
+{
+	int ret;
+
+	ret = ofi_atomic_valid(&xnet_prov, datatype, op, flags);
+	if (ret || !attr)
+		return ret;
+
+	return -FI_EOPNOTSUPP;
+}
+
 static struct fi_ops_domain xnet_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = xnet_av_open,
@@ -115,7 +129,7 @@ static struct fi_ops_domain xnet_domain_ops = {
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = xnet_srx_context,
-	.query_atomic = fi_no_query_atomic,
+	.query_atomic = xnet_query_atomic,
 	.query_collective = fi_no_query_collective,
 };
 
