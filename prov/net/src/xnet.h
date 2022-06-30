@@ -74,7 +74,8 @@
 
 extern struct fi_provider	xnet_prov;
 extern struct util_prov		xnet_util_prov;
-extern struct fi_info		xnet_info;
+extern struct fi_fabric_attr	xnet_fabric_attr;
+extern struct fi_info		xnet_srx_info;
 extern struct xnet_port_range	xnet_ports;
 
 extern int xnet_nodelay;

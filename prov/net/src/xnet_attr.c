@@ -35,16 +35,17 @@
 
 #define XNET_DOMAIN_CAPS (FI_LOCAL_COMM | FI_REMOTE_COMM)
 #define XNET_EP_CAPS	 (FI_MSG | FI_RMA | FI_RMA_PMEM)
-#define XNET_EP_SRX_CAPS (XNET_EP_CAPS | FI_TAGGED)
+#define XNET_SRX_EP_CAPS (XNET_EP_CAPS | FI_TAGGED)
+#define XNET_RDM_EP_CAPS (XNET_EP_CAPS | FI_TAGGED | FI_ATOMIC)
 #define XNET_TX_CAPS	 (FI_SEND | FI_WRITE | FI_READ)
 #define XNET_RX_CAPS	 (FI_RECV | FI_REMOTE_READ | \
 			  FI_REMOTE_WRITE | FI_RMA_EVENT)
 #define XNET_SRX_CAPS	 (XNET_RX_CAPS | FI_DIRECTED_RECV | FI_SOURCE | \
 			  FI_MULTI_RECV)
 
-
-#define XNET_MSG_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS | \
-			OFI_ORDER_WAW_SET | FI_ORDER_WAS | \
+#define XNET_MSG_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | \
+			OFI_ORDER_WAW_SET | OFI_ORDER_WAR_SET | \
+			FI_ORDER_RAS | FI_ORDER_WAS | FI_ORDER_SAR | \
 			FI_ORDER_SAW | FI_ORDER_SAS)
 
 #define XNET_TX_OP_FLAGS \
@@ -70,8 +71,8 @@ static struct fi_rx_attr xnet_rx_attr = {
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = XNET_MSG_ORDER,
 	.total_buffered_recv = 0,
-	.size = 65536,
-	.iov_limit = XNET_IOV_LIMIT
+	.size = 1024,
+	.iov_limit = XNET_IOV_LIMIT,
 };
 
 static struct fi_ep_attr xnet_ep_attr = {
@@ -85,8 +86,8 @@ static struct fi_ep_attr xnet_ep_attr = {
 	.max_order_waw_size = SIZE_MAX,
 };
 
-static struct fi_tx_attr xnet_tx_srx_attr = {
-	.caps = XNET_EP_SRX_CAPS | XNET_TX_CAPS,
+static struct fi_tx_attr xnet_srx_tx_attr = {
+	.caps = XNET_SRX_EP_CAPS | XNET_TX_CAPS,
 	.op_flags = XNET_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
 	.msg_order = XNET_MSG_ORDER,
@@ -96,17 +97,17 @@ static struct fi_tx_attr xnet_tx_srx_attr = {
 	.rma_iov_limit = XNET_IOV_LIMIT,
 };
 
-static struct fi_rx_attr xnet_rx_srx_attr = {
-	.caps = XNET_EP_SRX_CAPS | XNET_SRX_CAPS,
+static struct fi_rx_attr xnet_srx_rx_attr = {
+	.caps = XNET_SRX_EP_CAPS | XNET_SRX_CAPS,
 	.op_flags = XNET_RX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
 	.msg_order = XNET_MSG_ORDER,
 	.total_buffered_recv = 0,
 	.size = 65536,
-	.iov_limit = XNET_IOV_LIMIT
+	.iov_limit = XNET_IOV_LIMIT,
 };
 
-static struct fi_ep_attr xnet_ep_srx_attr = {
+static struct fi_ep_attr xnet_srx_ep_attr = {
 	.type = FI_EP_MSG,
 	.protocol = FI_PROTO_SOCK_TCP,
 	.protocol_version = 0,
@@ -116,6 +117,27 @@ static struct fi_ep_attr xnet_ep_srx_attr = {
 	.max_order_raw_size = SIZE_MAX,
 	.max_order_waw_size = SIZE_MAX,
 	.mem_tag_format = FI_TAG_GENERIC,
+};
+
+static struct fi_tx_attr xnet_rdm_tx_attr = {
+	.caps = XNET_RDM_EP_CAPS | XNET_TX_CAPS,
+	.op_flags = XNET_TX_OP_FLAGS,
+	.comp_order = FI_ORDER_STRICT,
+	.msg_order = XNET_MSG_ORDER,
+	.inject_size = XNET_MAX_INJECT,
+	.size = 65536,
+	.iov_limit = XNET_IOV_LIMIT,
+	.rma_iov_limit = XNET_IOV_LIMIT,
+};
+
+static struct fi_rx_attr xnet_rdm_rx_attr = {
+	.caps = XNET_RDM_EP_CAPS | XNET_SRX_CAPS,
+	.op_flags = XNET_RX_OP_FLAGS,
+	.comp_order = FI_ORDER_STRICT,
+	.msg_order = XNET_MSG_ORDER,
+	.total_buffered_recv = 0,
+	.size = 65536,
+	.iov_limit = XNET_IOV_LIMIT,
 };
 
 static struct fi_ep_attr xnet_rdm_ep_attr = {
@@ -131,7 +153,7 @@ static struct fi_ep_attr xnet_rdm_ep_attr = {
 };
 
 static struct fi_domain_attr xnet_domain_attr = {
-	.name = "xnet",
+	.name = "net",
 	.caps = XNET_DOMAIN_CAPS,
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
@@ -152,7 +174,7 @@ static struct fi_domain_attr xnet_domain_attr = {
 };
 
 static struct fi_domain_attr xnet_rdm_domain_attr = {
-	.name = "xnet",
+	.name = "net",
 	.caps = XNET_DOMAIN_CAPS,
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
@@ -163,42 +185,42 @@ static struct fi_domain_attr xnet_rdm_domain_attr = {
 	.av_type = FI_AV_UNSPEC,
 	.cq_data_size = sizeof(uint64_t),
 	.cq_cnt = 256,
-	.ep_cnt = 128,
-	.tx_ctx_cnt = 128,
-	.rx_ctx_cnt = 128,
+	.ep_cnt = 256,
+	.tx_ctx_cnt = 256,
+	.rx_ctx_cnt = 256,
 	.max_ep_srx_ctx = 0,
 	.max_ep_tx_ctx = 1,
 	.max_ep_rx_ctx = 1,
 	.mr_iov_limit = 1,
 };
 
-static struct fi_fabric_attr xnet_fabric_attr = {
-	.name = "TCP-IP",
+struct fi_fabric_attr xnet_fabric_attr = {
+	.name = "net",
 	.prov_version = OFI_VERSION_DEF_PROV,
 };
 
-struct fi_info xnet_rdm_info = {
-	.caps = XNET_DOMAIN_CAPS | XNET_EP_SRX_CAPS | XNET_TX_CAPS | XNET_SRX_CAPS,
+static struct fi_info xnet_rdm_info = {
+	.caps = XNET_DOMAIN_CAPS | XNET_RDM_EP_CAPS | XNET_TX_CAPS | XNET_SRX_CAPS,
 	.addr_format = FI_SOCKADDR,
-	.tx_attr = &xnet_tx_srx_attr,
-	.rx_attr = &xnet_rx_srx_attr,
+	.tx_attr = &xnet_rdm_tx_attr,
+	.rx_attr = &xnet_rdm_rx_attr,
 	.ep_attr = &xnet_rdm_ep_attr,
 	.domain_attr = &xnet_rdm_domain_attr,
-	.fabric_attr = &xnet_fabric_attr
+	.fabric_attr = &xnet_fabric_attr,
 };
 
 struct fi_info xnet_srx_info = {
 	.next = &xnet_rdm_info,
-	.caps = XNET_DOMAIN_CAPS | XNET_EP_SRX_CAPS | XNET_TX_CAPS | XNET_SRX_CAPS,
+	.caps = XNET_DOMAIN_CAPS | XNET_SRX_EP_CAPS | XNET_TX_CAPS | XNET_SRX_CAPS,
 	.addr_format = FI_SOCKADDR,
-	.tx_attr = &xnet_tx_srx_attr,
-	.rx_attr = &xnet_rx_srx_attr,
-	.ep_attr = &xnet_ep_srx_attr,
+	.tx_attr = &xnet_srx_tx_attr,
+	.rx_attr = &xnet_srx_rx_attr,
+	.ep_attr = &xnet_srx_ep_attr,
 	.domain_attr = &xnet_domain_attr,
-	.fabric_attr = &xnet_fabric_attr
+	.fabric_attr = &xnet_fabric_attr,
 };
 
-struct fi_info xnet_info = {
+static struct fi_info xnet_info = {
 	.next = &xnet_srx_info,
 	.caps = XNET_DOMAIN_CAPS | XNET_EP_CAPS | XNET_TX_CAPS | XNET_RX_CAPS,
 	.addr_format = FI_SOCKADDR,
@@ -206,7 +228,7 @@ struct fi_info xnet_info = {
 	.rx_attr = &xnet_rx_attr,
 	.ep_attr = &xnet_ep_attr,
 	.domain_attr = &xnet_domain_attr,
-	.fabric_attr = &xnet_fabric_attr
+	.fabric_attr = &xnet_fabric_attr,
 };
 
 
