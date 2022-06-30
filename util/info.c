@@ -199,6 +199,7 @@ static int str2addr_format(char *inputstr, uint32_t *value)
 	ORCASE(FI_ADDR_STR);
 	ORCASE(FI_ADDR_PSMX2);
 	ORCASE(FI_ADDR_EFA);
+	ORCASE(FI_ADDR_CXI);
 
 	fprintf(stderr, "error: Unrecognized address format: %s\n", inputstr);
 
