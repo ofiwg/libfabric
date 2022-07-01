@@ -18,7 +18,7 @@ def test_runt_read_functional(cmdline_args):
     else:
         cmdline_args_copy.environments = ""
 
-    cmdline_args_copy.environments += "FI_EFA_USE_DEVICE_RDMA_READ=1 FI_EFA_RUNT_SIZE=65536 FI_HMEM_CUDA_USE_GDRCOPY=1"
+    cmdline_args_copy.environments += "FI_EFA_USE_DEVICE_RDMA=1 FI_EFA_RUNT_SIZE=65536 FI_HMEM_CUDA_USE_GDRCOPY=1"
 
     # currently, runting read is enabled only if gdrcopy is available.
     # thus skip the test if gdrcopy is not available
@@ -59,9 +59,10 @@ def test_runt_read_functional(cmdline_args):
     client_send_bytes = client_send_bytes_after_test - client_send_bytes_before_test
 
     # Among the 256 KB of data, 64 KB data will be sent via 8 RUNTREAD RTM packets.
-    # Each packet has a packet header, therefore the total number of send bytes
-    # is slightly larger than 64 K.
-    assert client_send_bytes > 65536 and client_send_bytes < 66560
+    # The total number of send bytes will be larger than 64K because:
+    #    a. each packet has a header
+    #    b. when runing on single node, server will use the same EFA device to send control packets
+    assert client_send_bytes > 65536
 
     # The other 192 KB is transfer by RDMA read
     # for which the server (receiver) will issue 1 read request.
