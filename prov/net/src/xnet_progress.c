@@ -762,92 +762,6 @@ static void xnet_run_ep(struct xnet_ep *ep, bool pin, bool pout, bool perr)
 	};
 }
 
-static int
-xnet_epoll_wait(struct xnet_progress *progress,
-		struct ofi_epollfds_event *events, int max_events, int timeout)
-{
-	return ofi_epoll_wait(progress->epoll, events, max_events, timeout);
-}
-
-static int
-xnet_epoll_add(struct xnet_progress *progress, int fd, uint32_t events,
-	       void *context)
-{
-	return ofi_epoll_add(progress->epoll, fd, events, context);
-}
-
-static void
-xnet_epoll_mod(struct xnet_progress *progress, int fd, uint32_t events,
-	       void *context)
-{
-	(void) ofi_epoll_mod(progress->epoll, fd, events, context);
-}
-
-static int xnet_epoll_del(struct xnet_progress *progress, int fd)
-{
-	return ofi_epoll_del(progress->epoll, fd);
-}
-
-static void xnet_epoll_close(struct xnet_progress *progress)
-{
-	ofi_epoll_close(progress->epoll);
-}
-
-static int
-xnet_pollfds_wait(struct xnet_progress *progress,
-		  struct ofi_epollfds_event *events, int max_events, int timeout)
-{
-	return ofi_pollfds_wait(progress->pollfds, events, max_events, timeout);
-}
-
-static int
-xnet_pollfds_add(struct xnet_progress *progress, int fd, uint32_t events,
-		 void *context)
-{
-	return ofi_pollfds_add(progress->pollfds, fd, events, context);
-}
-
-static void
-xnet_pollfds_mod(struct xnet_progress *progress, int fd, uint32_t events,
-		 void *context)
-{
-	(void) ofi_pollfds_mod(progress->pollfds, fd, events, context);
-}
-
-static int xnet_pollfds_del(struct xnet_progress *progress, int fd)
-{
-	return ofi_pollfds_del(progress->pollfds, fd);
-}
-
-static void xnet_pollfds_close(struct xnet_progress *progress)
-{
-	ofi_pollfds_close(progress->pollfds);
-}
-
-static int xnet_poll_create(struct xnet_progress *progress, bool use_epoll)
-{
-	int ret;
-
-	progress->use_epoll = use_epoll;
-	if (use_epoll) {
-		ret = ofi_epoll_create(&progress->epoll);
-		progress->poll_wait = xnet_epoll_wait;
-		progress->poll_add = xnet_epoll_add;
-		progress->poll_mod = xnet_epoll_mod;
-		progress->poll_del = xnet_epoll_del;
-		progress->poll_close = xnet_epoll_close;
-	} else {
-		ret = ofi_pollfds_create(&progress->pollfds);
-		progress->poll_wait = xnet_pollfds_wait;
-		progress->poll_add = xnet_pollfds_add;
-		progress->poll_mod = xnet_pollfds_mod;
-		progress->poll_del = xnet_pollfds_del;
-		progress->poll_close = xnet_pollfds_close;
-	}
-
-	return ret;
-}
-
 void xnet_run_progress(struct xnet_progress *progress, bool internal)
 {
 	struct ofi_epollfds_event events[XNET_MAX_EVENTS];
@@ -869,7 +783,7 @@ void xnet_run_progress(struct xnet_progress *progress, bool internal)
 		}
 	}
 
-	nfds = progress->poll_wait(progress, events, XNET_MAX_EVENTS, 0);
+	nfds = ofi_pollfds_wait(progress->pollfds, events, XNET_MAX_EVENTS, 0);
 	if (nfds <= 0)
 		goto out;
 
@@ -951,8 +865,8 @@ void xnet_update_poll(struct xnet_ep *ep)
 	ep->pollout_set = tx_pending;
 	events = ep->pollout_set ? POLLIN | POLLOUT : POLLIN;
 
-	progress->poll_mod(progress, ep->bsock.sock,
-			   events, &ep->util_ep.ep_fid.fid);
+	ofi_pollfds_mod(progress->pollfds, ep->bsock.sock,
+			events, &ep->util_ep.ep_fid.fid);
 	xnet_signal_progress(progress);
 }
 
@@ -987,7 +901,7 @@ static void *xnet_auto_progress(void *arg)
 		 * memory, we must re-acquire the progress lock and re-read
 		 * any queued events before processing it.
 		 */
-		nfds = progress->poll_wait(progress, &event, 1, timeout);
+		nfds = ofi_pollfds_wait(progress->pollfds, &event, 1, timeout);
 
 		ofi_genlock_lock(progress->active_lock);
 		if (nfds >= 0)
@@ -1004,7 +918,7 @@ int xnet_monitor_sock(struct xnet_progress *progress, SOCKET sock,
 	int ret;
 
 	assert(xnet_progress_locked(progress));
-	ret = progress->poll_add(progress, sock, events, fid);
+	ret = ofi_pollfds_add(progress->pollfds, sock, events, fid);
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"Failed to add fd to progress\n");
@@ -1018,7 +932,7 @@ void xnet_halt_sock(struct xnet_progress *progress, SOCKET sock)
 	int ret;
 
 	assert(xnet_progress_locked(progress));
-	ret = progress->poll_del(progress, sock);
+	ret = ofi_pollfds_del(progress->pollfds, sock);
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"Failed to del fd from progress\n");
@@ -1134,7 +1048,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 	if (ret)
 		goto err1;
 
-	ret = xnet_poll_create(progress, false);
+	ret = ofi_pollfds_create(&progress->pollfds);
 	if (ret)
 		goto err2;
 
@@ -1144,8 +1058,8 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 	if (ret)
 		goto err3;
 
-	ret = progress->poll_add(progress, progress->signal.fd[FI_READ_FD],
-				 POLLIN, &progress->fid);
+	ret = ofi_pollfds_add(progress->pollfds, progress->signal.fd[FI_READ_FD],
+			      POLLIN, &progress->fid);
 	if (ret)
 		goto err4;
 
@@ -1154,7 +1068,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 err4:
 	ofi_bufpool_destroy(progress->xfer_pool);
 err3:
-	progress->poll_close(progress);
+	ofi_pollfds_close(progress->pollfds);
 err2:
 	ofi_genlock_destroy(&progress->rdm_lock);
 	ofi_genlock_destroy(&progress->lock);
@@ -1168,7 +1082,7 @@ void xnet_close_progress(struct xnet_progress *progress)
 	assert(dlist_empty(&progress->active_wait_list));
 	assert(slist_empty(&progress->event_list));
 	xnet_stop_progress(progress);
-	progress->poll_close(progress);
+	ofi_pollfds_close(progress->pollfds);
 	ofi_bufpool_destroy(progress->xfer_pool);
 	ofi_genlock_destroy(&progress->lock);
 	ofi_genlock_destroy(&progress->rdm_lock);

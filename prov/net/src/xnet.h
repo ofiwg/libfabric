@@ -257,24 +257,7 @@ struct xnet_progress {
 	struct slist		event_list;
 	struct ofi_bufpool	*xfer_pool;
 
-	/* epoll works better for apps that wait on the fd,
-	 * but tests show that poll performs better
-	 */
-	bool			use_epoll;
-	union {
-		struct ofi_pollfds *pollfds;
-		ofi_epoll_t	epoll;
-	};
-
-	int (*poll_wait)(struct xnet_progress *progress,
-			struct ofi_epollfds_event *events, int max_events,
-			int timeout);
-	int (*poll_add)(struct xnet_progress *progress, int fd, uint32_t events,
-			void *context);
-	void (*poll_mod)(struct xnet_progress *progress, int fd, uint32_t events,
-			void *context);
-	int (*poll_del)(struct xnet_progress *progress, int fd);
-	void (*poll_close)(struct xnet_progress *progress);
+	struct ofi_pollfds	*pollfds;
 
 	pthread_t		thread;
 	bool			auto_progress;
