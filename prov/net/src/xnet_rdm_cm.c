@@ -212,7 +212,7 @@ static int xnet_rdm_connect(struct xnet_conn *conn)
 	msg.version = XNET_RDM_VERSION;
 	msg.pid = htonl((uint32_t) getpid());
 	msg.resv = 0;
-	msg.port = htons(ofi_addr_get_port(info->src_addr));
+	msg.port = htons(ofi_addr_get_port(&conn->rdm->addr.sa));
 
 	ret = fi_connect(&conn->ep->util_ep.ep_fid, info->dest_addr,
 			 &msg, sizeof msg);
