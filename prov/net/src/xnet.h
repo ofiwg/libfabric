@@ -198,7 +198,7 @@ struct xnet_ep {
 	struct xnet_srx		*srx;
 
 	enum xnet_state		state;
-	fi_addr_t		src_addr;
+	struct util_peer_addr	*peer;
 	struct xnet_conn_handle *conn;
 	struct xnet_cm_msg	*cm_msg;
 

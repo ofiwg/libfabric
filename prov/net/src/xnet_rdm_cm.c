@@ -79,6 +79,8 @@ static void xnet_close_conn(struct xnet_conn *conn)
 			event = container_of(item, struct xnet_event, list_entry);
 			free(event);
 		} while (item);
+		if (conn->ep->peer)
+			util_put_peer(conn->ep->peer);
 	}
 
 	conn->ep = NULL;
@@ -170,7 +172,8 @@ static int xnet_open_conn(struct xnet_conn *conn, struct fi_info *info)
 	if (ret)
 		goto err;
 
-	conn->ep->src_addr = conn->peer->index;
+	conn->ep->peer = conn->peer;
+	rxm_ref_peer(conn->peer);
 	ret = fi_enable(&conn->ep->util_ep.ep_fid);
 	if (ret) {
 		XNET_WARN_ERR(FI_LOG_EP_CTRL, "fi_enable", ret);

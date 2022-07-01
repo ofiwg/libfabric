@@ -305,7 +305,7 @@ xnet_match_tag_addr(struct xnet_srx *srx, struct xnet_ep *ep, uint64_t tag)
 	slist_foreach(&srx->tag_queue, item, prev) {
 		rx_entry = container_of(item, struct xnet_xfer_entry, entry);
 		if (ofi_match_tag(rx_entry->tag, rx_entry->ignore, tag) &&
-		    ofi_match_addr(rx_entry->src_addr, ep->src_addr)) {
+		    ofi_match_addr(rx_entry->src_addr, ep->peer->fi_addr)) {
 			slist_remove(&srx->tag_queue, item, prev);
 			return rx_entry;
 		}
