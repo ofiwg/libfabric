@@ -69,14 +69,13 @@ struct ofi_pollfds_work_item {
 	int		fd;
 	uint32_t	events;
 	void		*context;
-	enum ofi_pollfds_ctl type;
+	enum ofi_pollfds_ctl op;
 	struct slist_entry entry;
 };
 
 struct ofi_pollfds_ctx {
 	void		*context;
 	int		index;
-	int		hit_cnt;
 	int		hot_index;
 };
 
@@ -89,7 +88,7 @@ struct ofi_pollfds {
 	struct slist	work_item_list;
 	ofi_mutex_t	lock;
 
-	int		fairness_cntr;
+	bool		enable_hot;
 	int		hot_size;
 	int		hot_nfds;
 	struct pollfd	*hot_fds;
@@ -102,13 +101,16 @@ int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
 int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context);
 int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd);
+int ofi_pollfds_hotties(struct ofi_pollfds *pfds,
+		        struct ofi_epollfds_event *events, int maxevents);
 int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 		     struct ofi_epollfds_event *events,
 		     int maxevents, int timeout);
 void ofi_pollfds_close(struct ofi_pollfds *pfds);
 
-void ofi_pollfds_coolfd(struct ofi_pollfds *pfds, int fd);
-void ofi_pollfds_heatfd(struct ofi_pollfds *pfds, int fd);
+void ofi_pollfds_hotfd(struct ofi_pollfds *pfds, int fd);
+void ofi_pollfds_check_heat(struct ofi_pollfds *pfds,
+			    bool (*is_hot)(void *context));
 
 /* OS specific */
 struct ofi_pollfds_ctx *ofi_pollfds_get_ctx(struct ofi_pollfds *pfds, int fd);
