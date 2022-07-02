@@ -1,24 +1,33 @@
 import pytest
+import errno
 
 def has_cuda(ip):
     from subprocess import run
     proc = run(["ssh", ip, "nvidia-smi", "-L"])
     return proc.returncode == 0
 
-def check_returncode(returncode, strict):
-    import errno
+PASS = 1
+SKIP = 2
+FAIL = 3
 
+def check_returncode(returncode, strict):
+    """
+    check one return code
+    @param returncode: input
+    @param strict: whether to use strict mode, which treat all error as failure.
+                   In none strict mode, ENODATA and ENOSYS is treated as pass
+    @return: a tuple with return type (PASS, SKIP and FAIL), and a messge.
+             when return type is PASs, message will be None
+    """
     if returncode == 0:
-        return
+        return PASS, None
 
     if not strict:
         if returncode == errno.ENODATA:
-            pytest.skip("ENODATA")
-            return
+            return SKIP, "ENODATA"
 
         if returncode == errno.ENOSYS:
-            pytest.skip("ENOSYS")
-            return
+            return SKIP, "ENOSYS"
 
     error_msg = "returncode {}".format(returncode)
     # all tests are run under the timeout command
@@ -26,7 +35,41 @@ def check_returncode(returncode, strict):
     if returncode == 124:
         error_msg += ", timeout"
 
-    pytest.fail(error_msg)
+    return FAIL, error_msg
+
+def check_returncode_list(returncode_list, strict):
+    """
+    check a list of returncode, and call pytest's handler accordingly.
+        If there is failure in return, call pytest.fail()
+        If there is no failure, but there is skip in return, call pytest.skip()
+        If there is no failure or skip, do nothing
+    @param resultcode_list: a list of return code
+    @param strict: a boolean indicating wether strict mode should be used.
+    @return: no return
+    """
+    result = PASS
+    reason = None
+    for returncode in returncode_list:
+        # note that failure has higher priority than skip, therefore:
+        #
+        #     if a failure is encoutered, we break out immediately
+        #     if a skip is encountered, we record it and continue
+        #
+        # this ensures skip can be overwritten by failure
+        cur_result,cur_reason = check_returncode(returncode, strict)
+
+        if cur_result != PASS:
+            result = cur_result
+            reason = cur_reason
+
+        if cur_result == FAIL:
+            break
+
+    if result == FAIL:
+        pytest.fail(reason)
+
+    if result == SKIP:
+        pytest.skip(reason)
 
 class UnitTest:
 
@@ -63,7 +106,7 @@ class UnitTest:
         os.unlink(outfile)
 
         assert not timeout, "timed out"
-        check_returncode(process.returncode, self._cmdline_args.strict_fabtests_mode)
+        check_returncode_list([process.returncode], self._cmdline_args.strict_fabtests_mode)
 
 class ClientServerTest:
 
@@ -219,8 +262,7 @@ class ClientServerTest:
         assert not client_timed_out, "client timed out"
 
         strict = self._cmdline_args.strict_fabtests_mode
-        check_returncode(server_process.returncode, strict)
-        check_returncode(client_process.returncode, strict)
+        check_returncode_list([server_process.returncode, client_process.returncode], strict)
 
 class MultinodeTest:
 
@@ -288,7 +330,10 @@ class MultinodeTest:
         assert not client_timed_out, "client timed out"
 
         strict = self._cmdline_args.strict_fabtests_mode
-        check_returncode(server_process.returncode, strict)
+
+        returncode_list = [server_process.returncode]
         for i in range(numclient):
-            check_returncode(client_process_list[i].returncode, strict)
+            returncode_list.append(client_process_list[i].returncode)
+
+        check_returncode_list(returncode_list, strict)
 
