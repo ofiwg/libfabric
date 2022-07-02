@@ -136,9 +136,9 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	bool should_end_poll = false;
 	struct efa_cq *cq;
 	struct efa_av *av;
-	struct efa_wc wc = {0};
 	ssize_t err = 0;
 	size_t num_cqe = 0; /* Count of read entries */
+	uint32_t qp_num, src_qp, slid;
 
 	/* Initialize an empty ibv_poll_cq_attr struct for ibv_start_poll.
 	 * EFA expects .comp_mask = 0, or otherwise returns EINVAL.
@@ -160,12 +160,12 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		}
 
 		if (src_addr) {
-			av = cq->domain->qp_table[wc.ibv_wc.qp_num &
-				cq->domain->qp_table_sz_m1]->ep->av;
+			qp_num = ibv_wc_read_qp_num(cq->ibv_cq_ex);
+			src_qp = ibv_wc_read_src_qp(cq->ibv_cq_ex);
+			slid = ibv_wc_read_slid(cq->ibv_cq_ex);
+			av = cq->domain->qp_table[qp_num & cq->domain->qp_table_sz_m1]->ep->av;
 
-			src_addr[num_cqe] = efa_av_reverse_lookup_dgram(av,
-				wc.ibv_wc.slid,
-				wc.ibv_wc.src_qp);
+			src_addr[num_cqe] = efa_av_reverse_lookup_dgram(av, slid, src_qp);
 		}
 
 		cq->read_entry(cq->ibv_cq_ex, num_cqe, buf);
