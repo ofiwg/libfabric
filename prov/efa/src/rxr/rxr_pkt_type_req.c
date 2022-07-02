@@ -797,6 +797,9 @@ ssize_t rxr_pkt_init_runtread_rtm(struct rxr_ep *ep,
 	data_size = MIN(tx_entry->bytes_runt - tx_entry->bytes_sent,
 			ep->mtu_size - pkt_data_offset);
 
+	if (tx_entry->max_req_data_size && data_size > tx_entry->max_req_data_size)
+		data_size = tx_entry->max_req_data_size;
+
 	return rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, pkt_data_offset, tx_entry, tx_data_offset, data_size);
 }
 
