@@ -194,6 +194,7 @@ size_t rxr_tx_entry_max_req_data_capacity(struct rxr_ep *ep, struct rxr_op_entry
 {
 	struct rdm_peer *peer;
 	uint16_t header_flags = 0;
+	int max_data_offset;
 
 	assert(pkt_type >= RXR_REQ_PKT_BEGIN);
 
@@ -212,9 +213,14 @@ size_t rxr_tx_entry_max_req_data_capacity(struct rxr_ep *ep, struct rxr_op_entry
 	if (tx_entry->fi_flags & FI_REMOTE_CQ_DATA)
 		header_flags |= RXR_REQ_OPT_CQ_DATA_HDR;
 
-	return ep->mtu_size - rxr_pkt_req_header_size(pkt_type,
-						      header_flags,
-						      tx_entry->rma_iov_count);
+	max_data_offset = rxr_pkt_req_header_size(pkt_type, header_flags,
+						  tx_entry->rma_iov_count);
+
+	if (rxr_pkt_type_is_runtread(pkt_type)) {
+		max_data_offset += tx_entry->iov_count * sizeof(struct fi_rma_iov);
+	}
+
+	return ep->mtu_size - max_data_offset;
 }
 
 /**
