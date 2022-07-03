@@ -466,7 +466,7 @@ reject:
 	fi_freeinfo(cm_entry->info);
 }
 
-void xnet_handle_events(struct xnet_progress *progress)
+void xnet_handle_event_list(struct xnet_progress *progress)
 {
 	struct xnet_event *event;
 	struct slist_entry *item;
