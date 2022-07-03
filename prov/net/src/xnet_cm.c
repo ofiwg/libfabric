@@ -171,10 +171,10 @@ void xnet_req_done(struct xnet_ep *ep)
 		goto disable;
 	}
 
-	if (xnet_active_wait(ep)) {
+	if (xnet_need_rx(ep)) {
 		progress = xnet_ep2_progress(ep);
-		dlist_insert_tail(&ep->active_entry,
-				  &progress->active_wait_list);
+		dlist_insert_tail(&ep->need_rx_entry,
+				  &progress->rx_poll_list);
 		xnet_signal_progress(progress);
 	}
 	ep->state = XNET_CONNECTED;

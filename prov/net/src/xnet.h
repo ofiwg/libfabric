@@ -187,7 +187,7 @@ struct xnet_ep {
 	OFI_DBG_VAR(uint8_t, tx_id)
 	OFI_DBG_VAR(uint8_t, rx_id)
 
-	struct dlist_entry	active_entry; /* protected by progress->lock */
+	struct dlist_entry	need_rx_entry; /* protected by progress->lock */
 	struct slist		rx_queue;
 	struct slist		tx_queue;
 	struct slist		priority_queue;
@@ -207,6 +207,7 @@ struct xnet_ep {
 	void (*report_success)(struct xnet_ep *ep, struct util_cq *cq,
 			       struct xnet_xfer_entry *xfer_entry);
 	bool			pollout_set;
+	bool			is_active;
 };
 
 struct xnet_event {
@@ -252,16 +253,18 @@ struct xnet_progress {
 	struct ofi_genlock	rdm_lock;
 	struct ofi_genlock	*active_lock;
 
-	struct dlist_entry	active_wait_list;
+	struct dlist_entry	rx_wait_list;
+	struct dlist_entry	rx_poll_list;
 	struct fd_signal	signal;
 
 	struct slist		event_list;
 	struct ofi_bufpool	*xfer_pool;
 
 	struct ofi_pollfds	*pollfds;
+	int			fairness_cntr;
 
-	pthread_t		thread;
 	bool			auto_progress;
+	pthread_t		thread;
 };
 
 int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info);
@@ -272,7 +275,7 @@ void xnet_stop_progress(struct xnet_progress *progress);
 void xnet_progress(struct xnet_progress *progress, bool internal);
 void xnet_run_progress(struct xnet_progress *progress, bool internal);
 void xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr);
-void xnet_handle_events(struct xnet_progress *progress);
+void xnet_handle_event_list(struct xnet_progress *progress);
 
 int xnet_trywait(struct fid_fabric *fid_fabric, struct fid **fids, int count);
 void xnet_update_pollout(struct xnet_ep *ep);
@@ -546,7 +549,7 @@ xnet_alloc_tx(struct xnet_ep *ep)
  * of length 0, there's no additional data to read, so calling
  * poll without forcing progress can result in application hangs.
  */
-static inline bool xnet_active_wait(struct xnet_ep *ep)
+static inline bool xnet_need_rx(struct xnet_ep *ep)
 {
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	return ofi_bsock_readable(&ep->bsock) ||
