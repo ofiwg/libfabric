@@ -71,6 +71,7 @@ static ssize_t xnet_send_msg(struct xnet_ep *ep)
 		len = ret;
 	}
 
+	ep->progress_cnt++;
 	ep->cur_tx.data_left -= len;
 	if (ep->cur_tx.data_left) {
 		ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt, len);
@@ -93,6 +94,7 @@ static ssize_t xnet_recv_msg_data(struct xnet_ep *ep)
 	if (ret < 0)
 		return ret;
 
+	ep->progress_cnt++;
 	ep->cur_rx.data_left -= ret;
 	if (!ep->cur_rx.data_left)
 		return FI_SUCCESS;
@@ -634,6 +636,7 @@ next_hdr:
 	if (ret < 0)
 		return ret;
 
+	ep->progress_cnt++;
 	ep->cur_rx.hdr_done += ret;
 	if (ep->cur_rx.hdr_done == sizeof(ep->cur_rx.hdr.base_hdr)) {
 		assert(ep->cur_rx.hdr_len == sizeof(ep->cur_rx.hdr.base_hdr));
