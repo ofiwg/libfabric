@@ -172,7 +172,7 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 	 */
 	(void) ofi_bsock_flush(&ep->bsock);
 update:
-	xnet_update_poll(ep);
+	xnet_update_pollout(ep);
 }
 
 static int xnet_queue_ack(struct xnet_xfer_entry *rx_entry)
@@ -852,7 +852,7 @@ int xnet_trywait(struct fid_fabric *fabric_fid, struct fid **fid, int count)
 	return 0;
 }
 
-void xnet_update_poll(struct xnet_ep *ep)
+void xnet_update_pollout(struct xnet_ep *ep)
 {
 	struct xnet_progress *progress;
 	uint32_t events;

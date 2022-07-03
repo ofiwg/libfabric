@@ -275,7 +275,7 @@ void xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr
 void xnet_handle_events(struct xnet_progress *progress);
 
 int xnet_trywait(struct fid_fabric *fid_fabric, struct fid **fids, int count);
-void xnet_update_poll(struct xnet_ep *ep);
+void xnet_update_pollout(struct xnet_ep *ep);
 int xnet_monitor_sock(struct xnet_progress *progress, SOCKET sock,
 		      uint32_t events, struct fid *fid);
 void xnet_halt_sock(struct xnet_progress *progress, SOCKET sock);
