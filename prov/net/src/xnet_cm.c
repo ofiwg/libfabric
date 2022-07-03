@@ -276,7 +276,7 @@ void xnet_connect_done(struct xnet_ep *ep)
 		goto disable;
 
 	ep->state = XNET_REQ_SENT;
-	xnet_update_poll(ep);
+	xnet_update_pollout(ep);
 	return;
 
 disable:
