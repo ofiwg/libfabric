@@ -69,6 +69,7 @@
 #include "efa_hmem.h"
 #include "efa_device.h"
 #include "efa_domain.h"
+#include "efa_errno.h"
 #include "efa_user_info.h"
 #include "efa_fork_support.h"
 #include "rxr.h"

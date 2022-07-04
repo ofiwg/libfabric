@@ -157,6 +157,11 @@ uint32_t efa_mock_ibv_read_opcode_return_mock(struct ibv_cq_ex *current)
 	return mock();
 }
 
+uint32_t efa_mock_ibv_read_vendor_err_return_mock(struct ibv_cq_ex *current)
+{
+	return mock();
+}
+
 struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 	.ibv_create_ah = __real_ibv_create_ah,
 	.efadv_query_device = __real_efadv_query_device,

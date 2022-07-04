@@ -82,6 +82,8 @@ void test_cq_read_bad_send_status(enum fi_ep_type ep_type)
 	struct efa_unit_test_buff send_buff;
 	fi_addr_t addr;
 	int ret, err;
+	const char *strerror;
+	char err_buf;
 
 	efa_unit_test_resource_construct(&resource, ep_type);
 	efa_unit_test_buff_construct(&send_buff, &resource, 4096 /* buff_size */);
@@ -120,10 +122,12 @@ void test_cq_read_bad_send_status(enum fi_ep_type ep_type)
 
 	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
 	ibv_cqx->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	ibv_cqx->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
 
 	will_return(efa_mock_ibv_start_poll_use_saved_send_wr_with_mock_status, IBV_WC_GENERAL_ERR);
 	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
 	will_return(efa_mock_ibv_read_opcode_return_mock, IBV_WC_SEND);
+	will_return(efa_mock_ibv_read_vendor_err_return_mock, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
 
 	ret = fi_getname(&resource.ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(ret, 0);
@@ -147,22 +151,11 @@ void test_cq_read_bad_send_status(enum fi_ep_type ep_type)
 	assert_int_equal(ret, -FI_EAVAIL);
 
 	ret = fi_cq_readerr(resource.cq, &cq_err_entry, 0);
+	strerror = fi_cq_strerror(resource.cq, cq_err_entry.prov_errno, NULL, &err_buf, 0);
 	assert_int_equal(ret, 1);
-
-	if (ep_type == FI_EP_DGRAM) {
-		assert_int_equal(cq_err_entry.err, FI_EIO);
-	} else {
-		assert_int_equal(ep_type, FI_EP_RDM);
-		/* TODO:
-		 *
-		 * Our current behavior under such circumstance is to set cq_err_entry.err
-		 * to IBV_WC_GENERIC_ERR, which is not right.
-		 * cq_err_entry.err should be a libfabric error code.
-		 * We need to fix the behavior in provider, then update the assertion here.
-		 */
-		assert_int_equal(cq_err_entry.err, IBV_WC_GENERAL_ERR);
-	}
-	assert_int_equal(cq_err_entry.prov_errno, IBV_WC_GENERAL_ERR);
+	assert_int_equal(cq_err_entry.err, FI_EIO);
+	assert_int_equal(cq_err_entry.prov_errno, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
+	assert_string_equal(strerror, "Unresponsive receiver");
 
 	efa_unit_test_buff_destruct(&send_buff);
 	efa_unit_test_resource_destruct(&resource);
@@ -216,6 +209,7 @@ void test_rdm_cq_read_bad_recv_status()
 	efa_cq->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
 	efa_cq->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
 	efa_cq->ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	efa_cq->ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
 
 	will_return(efa_mock_ibv_start_poll_return_mock, 0);
 	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
@@ -224,6 +218,7 @@ void test_rdm_cq_read_bad_recv_status()
 	 * therefore use will_return_always()
 	 */
 	will_return_always(efa_mock_ibv_read_opcode_return_mock, IBV_WC_RECV);
+	will_return(efa_mock_ibv_read_vendor_err_return_mock, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
 	efa_cq->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
 	efa_cq->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
 	ret = fi_cq_read(resource.cq, &cq_entry, 1);
@@ -236,14 +231,8 @@ void test_rdm_cq_read_bad_recv_status()
 
 	ret = fi_eq_readerr(resource.eq, &eq_err_entry, 0);
 	assert_int_equal(ret, sizeof(eq_err_entry));
-	/* TODO:
-	 *
-	 * Our current behavior under such circumstance is to set eq_err_entry.err to IBV_WC_GENERAL_ERR,
-	 * which is not right. eq_err_entry.err should be a libfabric error code.
-	 * We need to fix eq_err_entry.err in provider, then update the assertion
-	 */
-	assert_int_equal(eq_err_entry.err, IBV_WC_GENERAL_ERR);
-	assert_int_equal(eq_err_entry.prov_errno, IBV_WC_GENERAL_ERR);
+	assert_int_equal(eq_err_entry.err, FI_EIO);
+	assert_int_equal(eq_err_entry.prov_errno, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
 
 	efa_unit_test_resource_destruct(&resource);
 }
@@ -268,8 +257,10 @@ void test_rdm_cq_read_failed_poll()
 	efa_cq = container_of(rxr_ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
 	efa_cq->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
 	efa_cq->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	efa_cq->ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
 
 	will_return(efa_mock_ibv_start_poll_return_mock, EFAULT);
+	will_return(efa_mock_ibv_read_vendor_err_return_mock, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
 
 	ret = fi_cq_read(resource.cq, &cq_entry, 1);
 	/* TODO:
@@ -280,8 +271,8 @@ void test_rdm_cq_read_failed_poll()
 
 	ret = fi_eq_readerr(resource.eq, &eq_err_entry, 0);
 	assert_int_equal(ret, sizeof(eq_err_entry));
-	assert_int_equal(eq_err_entry.err, EFAULT);
-	assert_int_equal(eq_err_entry.prov_errno, EFAULT);
+	assert_int_not_equal(eq_err_entry.err, FI_ENOENT);
+	assert_int_equal(eq_err_entry.prov_errno, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
 
 	efa_unit_test_resource_destruct(&resource);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2022 Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -47,24 +47,7 @@
 static const char *rxr_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 				   const void *err_data, char *buf, size_t len)
 {
-	struct fid_list_entry *fid_entry;
-	struct util_ep *util_ep;
-	struct util_cq *cq;
-	struct rxr_ep *ep;
-	const char *str;
-
-	cq = container_of(cq_fid, struct util_cq, cq_fid);
-
-	ofi_mutex_lock(&cq->ep_list_lock);
-	assert(!dlist_empty(&cq->ep_list));
-	fid_entry = container_of(cq->ep_list.next,
-				 struct fid_list_entry, entry);
-	util_ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
-	ep = container_of(util_ep, struct rxr_ep, util_ep);
-
-	str = fi_cq_strerror(ep->rdm_cq, prov_errno, err_data, buf, len);
-	ofi_mutex_unlock(&cq->ep_list_lock);
-	return str;
+	return efa_strerror(prov_errno);
 }
 
 /**
@@ -152,7 +135,7 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 
         FI_WARN(&rxr_prov, FI_LOG_CQ,
 		"rxr_cq_write_rx_error: err: %d, prov_err: %s (%d)\n",
-		err_entry.err, fi_strerror(-err_entry.prov_errno),
+		err_entry.err, efa_strerror(err_entry.prov_errno),
 		err_entry.prov_errno);
 
 	/*
@@ -242,7 +225,7 @@ void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 
 	FI_WARN(&rxr_prov, FI_LOG_CQ,
 		"rxr_cq_write_tx_error: err: %d, prov_err: %s (%d)\n",
-		err_entry.err, fi_strerror(-err_entry.prov_errno),
+		err_entry.err, efa_strerror(err_entry.prov_errno),
 		err_entry.prov_errno);
 
 	/*
@@ -440,7 +423,7 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"Unable to write recv completion: %s\n",
 				fi_strerror(-ret));
-			rxr_cq_write_rx_error(ep, rx_entry, -ret, -ret);
+			rxr_cq_write_rx_error(ep, rx_entry, -ret, FI_EFA_ERR_WRITE_RECV_COMP);
 			return;
 		}
 
@@ -566,7 +549,7 @@ void rxr_cq_complete_rx(struct rxr_ep *ep,
 				FI_LOG_CQ,
 				"Posting of ctrl packet failed when complete rx! err=%s(%d)\n",
 				fi_strerror(-err), -err);
-			rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
+			rxr_cq_write_rx_error(ep, rx_entry, -err, FI_EFA_ERR_PKT_POST);
 			rxr_release_rx_entry(ep, rx_entry);
 		}
 
@@ -715,7 +698,7 @@ void rxr_cq_handle_shm_completion(struct rxr_ep *ep, struct fi_cq_data_entry *cq
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Unable to write a cq entry for shm operation: %s\n",
 			fi_strerror(-ret));
-		efa_eq_write_error(&ep->util_ep, FI_EIO, ret);
+		efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EFA_ERR_WRITE_SHM_CQ_ENTRY);
 	}
 
 	if (cq_entry->flags & FI_ATOMIC) {
@@ -793,7 +776,7 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"Unable to write send completion: %s\n",
 				fi_strerror(-ret));
-			rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
+			rxr_cq_write_tx_error(ep, tx_entry, -ret, FI_EFA_ERR_WRITE_SEND_COMP);
 			return;
 		}
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2022 Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -659,8 +659,10 @@ static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
 	struct fi_eq_err_entry err_entry;
 	int ret = -FI_ENOEQ;
 
-	FI_WARN(&rxr_prov, FI_LOG_EQ, "Writing error %s to EQ.\n",
-		fi_strerror(err));
+	FI_WARN(&rxr_prov, FI_LOG_EQ,
+		"Writing error to EQ: err: %s (%zd) prov_errno: %s (%zd)\n",
+		fi_strerror(err), err,
+		efa_strerror(prov_errno), prov_errno);
 	if (ep->eq) {
 		memset(&err_entry, 0, sizeof(err_entry));
 		err_entry.err = err;
@@ -673,14 +675,14 @@ static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
 			return;
 	}
 
-	FI_WARN(&rxr_prov, FI_LOG_EQ,
-		"Unable to write to EQ: %s. err: %s (%zd) prov_errno: %s (%zd)\n",
-		fi_strerror(-ret), fi_strerror(err), err,
-		fi_strerror(prov_errno), prov_errno);
+	FI_WARN(&rxr_prov, FI_LOG_EQ, "Unable to write to EQ\n");
 	fprintf(stderr,
-		"Unable to write to EQ: %s. err: %s (%zd) prov_errno: %s (%zd) %s:%d\n",
-		fi_strerror(-ret), fi_strerror(err), err,
-		fi_strerror(prov_errno), prov_errno, __FILE__, __LINE__);
+		"Libfabric EFA provider has encounterd an internal error:\n\n"
+		"Libfabric error: (%zd) %s\n"
+		"EFA internal error: (%zd) %s\n\n"
+		"Your application will now abort().\n",
+		err, fi_strerror(err),
+		prov_errno, efa_strerror(prov_errno));
 	abort();
 }
 
