@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2022 Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -456,7 +456,7 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 			err = fi_close((struct fid *)tx_entry->mr[i]);
 			if (OFI_UNLIKELY(err)) {
 				FI_WARN(&rxr_prov, FI_LOG_CQ, "mr dereg failed. err=%d\n", err);
-				efa_eq_write_error(&ep->util_ep, err, -err);
+				efa_eq_write_error(&ep->util_ep, err, FI_EFA_ERR_MR_DEREG);
 			}
 
 			tx_entry->mr[i] = NULL;
@@ -1745,7 +1745,7 @@ void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
 
 err_exit:
 
-	efa_eq_write_error(&ep->util_ep, err, err);
+	efa_eq_write_error(&ep->util_ep, err, FI_EFA_ERR_INTERNAL_RX_BUF_POST);
 }
 
 static inline ssize_t rxr_ep_send_queued_pkts(struct rxr_ep *ep,
@@ -1931,15 +1931,15 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 	while (!err) {
 		if (efa_cq->ibv_cq_ex->status) {
 			pkt_entry = (void *)(uintptr_t)efa_cq->ibv_cq_ex->wr_id;
-			prov_errno = efa_cq->ibv_cq_ex->status;
+			prov_errno = ibv_wc_read_vendor_err(efa_cq->ibv_cq_ex);
 			if (ibv_wc_read_opcode(efa_cq->ibv_cq_ex) == IBV_WC_SEND) {
 #if ENABLE_DEBUG
 				ep->failed_send_comps++;
 #endif
-				rxr_pkt_handle_send_error(ep, pkt_entry, prov_errno, prov_errno);
+				rxr_pkt_handle_send_error(ep, pkt_entry, FI_EIO, prov_errno);
 			} else {
 				assert(ibv_wc_read_opcode(efa_cq->ibv_cq_ex) == IBV_WC_RECV);
-				rxr_pkt_handle_recv_error(ep, pkt_entry, prov_errno, prov_errno);
+				rxr_pkt_handle_recv_error(ep, pkt_entry, FI_EIO, prov_errno);
 			}
 			break;
 		}
@@ -1987,7 +1987,8 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 
 	if (err && err != ENOENT) {
 		err = err > 0 ? err : -err;
-		efa_eq_write_error(&ep->util_ep, err, err);
+		prov_errno = ibv_wc_read_vendor_err(efa_cq->ibv_cq_ex);
+		efa_eq_write_error(&ep->util_ep, err, prov_errno);
 	}
 
 	if (should_end_poll)
@@ -2007,13 +2008,13 @@ void rdm_ep_poll_shm_err_cq(struct fid_cq *shm_cq, struct fi_cq_err_entry *cq_er
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "encountered error when fi_cq_readerr: %s\n",
 			fi_strerror(-ret));
 		cq_err_entry->err = -ret;
-		cq_err_entry->prov_errno = -ret;
+		cq_err_entry->prov_errno = FI_EFA_ERR_SHM_INTERNAL_ERROR;
 		return;
 	}
 
 	FI_WARN(&rxr_prov, FI_LOG_CQ, "fi_cq_readerr got expected return: %d\n", ret);
 	cq_err_entry->err = FI_EIO;
-	cq_err_entry->prov_errno = FI_EIO;
+	cq_err_entry->prov_errno = FI_EFA_ERR_SHM_INTERNAL_ERROR;
 }
 
 static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
@@ -2040,7 +2041,7 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 
 		if (OFI_UNLIKELY(ret < 0)) {
 			if (ret != -FI_EAVAIL) {
-				efa_eq_write_error(&ep->util_ep, -ret, -ret);
+				efa_eq_write_error(&ep->util_ep, -ret, FI_EFA_ERR_SHM_INTERNAL_ERROR);
 				return;
 			}
 
@@ -2136,7 +2137,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Failed to post HANDSHAKE to peer %ld: %s\n",
 				peer->efa_fiaddr, fi_strerror(-ret));
-			efa_eq_write_error(&ep->util_ep, FI_EIO, -ret);
+			efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
 			return;
 		}
 
@@ -2165,7 +2166,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			break;
 
 		if (OFI_UNLIKELY(ret)) {
-			rxr_cq_write_rx_error(ep, rx_entry, -ret, -ret);
+			rxr_cq_write_rx_error(ep, rx_entry, -ret, FI_EFA_ERR_PKT_SEND);
 			return;
 		}
 
@@ -2192,7 +2193,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			break;
 
 		if (OFI_UNLIKELY(ret)) {
-			rxr_cq_write_rx_error(ep, rx_entry, -ret, -ret);
+			rxr_cq_write_rx_error(ep, rx_entry, -ret, FI_EFA_ERR_PKT_POST);
 			return;
 		}
 
@@ -2230,7 +2231,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			break;
 
 		if (OFI_UNLIKELY(ret)) {
-			rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
+			rxr_cq_write_tx_error(ep, tx_entry, -ret, FI_EFA_ERR_PKT_SEND);
 			return;
 		}
 
@@ -2257,7 +2258,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			break;
 
 		if (OFI_UNLIKELY(ret)) {
-			rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
+			rxr_cq_write_tx_error(ep, tx_entry, -ret, FI_EFA_ERR_PKT_POST);
 			return;
 		}
 
@@ -2321,7 +2322,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 				if (ret == -FI_EAGAIN)
 					goto out;
 
-				rxr_cq_write_tx_error(ep, tx_entry, -ret, -ret);
+				rxr_cq_write_tx_error(ep, tx_entry, -ret, FI_EFA_ERR_PKT_POST);
 				return;
 			}
 		}
@@ -2353,7 +2354,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			break;
 
 		if (OFI_UNLIKELY(ret)) {
-			rxr_read_write_error(ep, read_entry, -ret, -ret);
+			rxr_read_write_error(ep, read_entry, -ret, FI_EFA_ERR_READ_POST);
 			return;
 		}
 
@@ -2366,7 +2367,7 @@ out:
 	if (efa_ep->xmit_more_wr_tail != &efa_ep->xmit_more_wr_head) {
 		ret = efa_post_flush(efa_ep, &bad_wr);
 		if (OFI_UNLIKELY(ret))
-			efa_eq_write_error(&ep->util_ep, -ret, -ret);
+			efa_eq_write_error(&ep->util_ep, -ret, FI_EFA_ERR_WR_POST_SEND);
 	}
 
 	return;

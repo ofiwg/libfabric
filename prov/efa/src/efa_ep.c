@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2017-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2017-2022 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -545,14 +545,14 @@ static void efa_ep_progress_internal(struct efa_ep *ep, struct efa_cq *efa_cq)
 	if (OFI_UNLIKELY(ret < 0)) {
 		if (OFI_UNLIKELY(ret != -FI_EAVAIL)) {
 			EFA_WARN(FI_LOG_CQ, "no error available errno: %ld\n", ret);
-			efa_eq_write_error(&ep->util_ep, FI_EOTHER, ret);
+			efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EFA_ERR_DGRAM_CQ_READ);
 			return;
 		}
 
 		err = efa_cq_readerr(&cq->cq_fid, &cq_err_entry, flags);
 		if (OFI_UNLIKELY(err < 0)) {
 			EFA_WARN(FI_LOG_CQ, "unable to read error entry errno: %ld\n", err);
-			efa_eq_write_error(&ep->util_ep, FI_EOTHER, err);
+			efa_eq_write_error(&ep->util_ep, FI_EIO, cq_err_entry.prov_errno);
 			return;
 		}
 

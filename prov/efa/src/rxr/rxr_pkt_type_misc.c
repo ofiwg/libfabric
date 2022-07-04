@@ -156,7 +156,7 @@ void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep, struct rdm_peer *peer)
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Failed to post HANDSHAKE to peer %ld: %s\n",
 			peer->efa_fiaddr, fi_strerror(-err));
-		efa_eq_write_error(&ep->util_ep, FI_EIO, -err);
+		efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
 		return;
 	}
 
@@ -416,7 +416,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 				FI_WARN(&rxr_prov, FI_LOG_CQ,
 					"Posting of EOR failed! err=%s(%d)\n",
 					fi_strerror(-err), -err);
-				rxr_cq_write_rx_error(ep, rx_entry, -err, -err);
+				rxr_cq_write_rx_error(ep, rx_entry, -err, FI_EFA_ERR_PKT_POST);
 				rxr_release_rx_entry(ep, rx_entry);
 			}
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2022 Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -434,7 +434,7 @@ void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 	if (OFI_UNLIKELY(!entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Map entries for medium size message exhausted.\n");
-			efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, -FI_ENOBUFS);
+		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
 		return;
 	}
 

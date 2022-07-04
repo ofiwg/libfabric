@@ -873,6 +873,7 @@
     <ClCompile Include="prov\efa\src\efa_msg.c" />
     <ClCompile Include="prov\efa\src\efa_rma.c" />
     <ClCompile Include="prov\efa\src\efa_shm.c" />
+    <ClCompile Include="prov\efa\src\efa_strerror.c" />
     <ClCompile Include="prov\efa\src\efa_user_info.c" />
     <ClCompile Include="prov\efa\src\efa_prov_info.c" />
     <ClCompile Include="prov\efa\src\efa_fork_support.c" />

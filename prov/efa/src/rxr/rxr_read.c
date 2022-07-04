@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2022 Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -296,7 +296,7 @@ void rxr_read_release_entry(struct rxr_ep *ep, struct rxr_read_entry *read_entry
 			err = fi_close((struct fid *)read_entry->mr[i]);
 			if (err) {
 				FI_WARN(&rxr_prov, FI_LOG_MR, "Unable to close mr\n");
-				rxr_read_write_error(ep, read_entry, -err, -err);
+				rxr_read_write_error(ep, read_entry, -err, FI_EFA_ERR_MR_DEREG);
 			}
 		}
 	}
