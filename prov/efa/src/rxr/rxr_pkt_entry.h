@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2022 Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -64,7 +64,7 @@ struct rxr_pkt_sendv {
 	void *desc[2];
 };
 
-/* rxr_pkt_entry is used both for sending data to a peer and for receiving dat from a peer.
+/* rxr_pkt_entry is used both for sending data to and receiving data from a peer.
  */
 struct rxr_pkt_entry {
 	/* entry is used for sending only.
@@ -91,11 +91,11 @@ struct rxr_pkt_entry {
 	 * address vector (AV), `lower device will set `addr` to FI_ADDR_NOTAVAIL. This can happen in
 	 * two scenarios:
 	 *
-	 * 1. there has been no prior communication with the peer. In this case, the packet should have
-	 *    peer's raw address in the header, and progress engien will insert the raw address into
-	 *    addres vector, and update `addr`.
+	 * 1. There has been no prior communication with the peer. In this case, the packet should have
+	 *    peer's raw address in the header, and progress engine will insert the raw address into
+	 *    address vector, and update `addr`.
 	 *
-	 * 2. this packet is from a peer whose address has been removed from AV. In this case, the
+	 * 2. This packet is from a peer whose address has been removed from AV. In this case, the
 	 *    recived packet will be ignored because all resources associated with peer has been released.
 	 */
 	fi_addr_t addr;

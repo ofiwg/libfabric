@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2022 Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -679,4 +679,3 @@ void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
-

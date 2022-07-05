@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2022 Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -1056,6 +1056,27 @@ void rxr_pkt_proc_received(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 }
 
 /**
+ * @brief Read peer raw address from packet header and insert the peer in AV.
+ * @param ep Pointer to RDM endpoint
+ * @param pkt_entry Pointer to packet entry
+ * @returns Peer address, or FI_ADDR_NOTAVIL if the packet header does not include raw address
+ */
+fi_addr_t rxr_pkt_determine_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_base_hdr *base_hdr;
+
+	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	if (base_hdr->type >= RXR_REQ_PKT_BEGIN && rxr_pkt_req_raw_addr(pkt_entry)) {
+		void *raw_addr;
+		raw_addr = rxr_pkt_req_raw_addr(pkt_entry);
+		assert(raw_addr);
+		return rxr_pkt_insert_addr(ep, pkt_entry, raw_addr);
+	}
+
+	return FI_ADDR_NOTAVAIL;
+}
+
+/**
  * @brief handle a received packet
  *
  * @param	ep[in,out]		endpoint
@@ -1084,34 +1105,20 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
-	
+
+	/*
+	 * Ignore packet if peer address cannot be determined. This ususally happens if
+	 * we had prior communication with the peer, but
+	 * application called fi_av_remove() to remove the address
+	 * from address vector.
+	 */
 	if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
-		if (pkt_type >= RXR_REQ_PKT_BEGIN && rxr_pkt_req_raw_addr(pkt_entry)) {
-			/*
-			 * We have not communicated with this peer before.
-			 * rxr_pkt_insert_addr() will insert the address to address vector,
-			 * and pkt_entry->addr should be updated accordingly.
-			 */
-			void *raw_addr;
-
-			raw_addr = rxr_pkt_req_raw_addr(pkt_entry);
-			assert(raw_addr);
-			pkt_entry->addr = rxr_pkt_insert_addr(ep, pkt_entry, raw_addr);
-		} else {
-			/*
-			 * We had prior communication with the peer.
-			 * Application called fi_av_remove() to remove the address
-			 * from address vector. In this case, this packet should be ignored.
-			 */
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
-				"Warning: ignoring a received packet from a removed address. packet type: %" PRIu8
-				", packet flags: %x\n", rxr_get_base_hdr(pkt_entry->pkt)->type, rxr_get_base_hdr(pkt_entry->pkt)->flags);
-			rxr_pkt_entry_release_rx(ep, pkt_entry);
-			return;
-		}
+		FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"Warning: ignoring a received packet from a removed address. packet type: %" PRIu8
+			", packet flags: %x\n", rxr_get_base_hdr(pkt_entry->pkt)->type, rxr_get_base_hdr(pkt_entry->pkt)->flags);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		return;
 	}
-
-	assert(pkt_entry->addr != FI_ADDR_NOTAVAIL);
 
 #if ENABLE_DEBUG
 	if (!ep->use_zcpy_rx) {

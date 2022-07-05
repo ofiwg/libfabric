@@ -1,4 +1,5 @@
 #include "efa_unit_tests.h"
+#include "rxr_pkt_type_base.h"
 
 static
 struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
@@ -152,4 +153,29 @@ void efa_unit_test_buff_destruct(struct efa_unit_test_buff *buff)
 	assert_int_equal(err, 0);
 
 	free(buff->buff);
+}
+
+/**
+ * @brief Construct RXR_EAGER_MSGRTM_PKT
+ *
+ * @param[in] pkt_entry Packet entry. Must be non-NULL.
+ * @param[in] attr Packet attributes.
+ */
+void efa_unit_test_eager_msgrtm_pkt_construct(struct rxr_pkt_entry *pkt_entry, struct efa_unit_test_eager_rtm_pkt_attr *attr)
+{
+	struct rxr_eager_msgrtm_hdr base_hdr = {0};
+	struct rxr_req_opt_connid_hdr opt_connid_hdr = {0};
+	uint32_t *connid = NULL;
+
+	base_hdr.hdr.type = RXR_EAGER_MSGRTM_PKT;
+	base_hdr.hdr.flags |= RXR_PKT_CONNID_HDR | RXR_REQ_MSG;
+	base_hdr.hdr.msg_id = attr->msg_id;
+	memcpy(pkt_entry->pkt, &base_hdr, sizeof(struct rxr_eager_msgrtm_hdr));
+	assert_int_equal(rxr_get_base_hdr(pkt_entry->pkt)->type, RXR_EAGER_MSGRTM_PKT);
+	assert_int_equal(rxr_pkt_req_base_hdr_size(pkt_entry), sizeof(struct rxr_eager_msgrtm_hdr));
+	opt_connid_hdr.connid = attr->connid;
+	memcpy(pkt_entry->pkt + sizeof(struct rxr_eager_msgrtm_hdr), &opt_connid_hdr, sizeof(struct rxr_req_opt_connid_hdr));
+	connid = rxr_pkt_connid_ptr(pkt_entry);
+	assert_int_equal(*connid, attr->connid);
+	pkt_entry->pkt_size = sizeof(base_hdr) + sizeof(opt_connid_hdr);
 }
