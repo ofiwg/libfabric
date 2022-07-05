@@ -146,17 +146,6 @@ struct ips_message_header {
 			ptl_arg_t hdr_data;
 		} PACK_SUFFIX;
 
-#ifdef PSM_OPA
-		/* for expected tid packet only */
-		struct {
-			__u8	  exp_ustart[3]; /* unaligned start bytes */
-			__u8	  exp_uend[3];   /* unaligned end bytes */
-			__u16	  exp_rdescid_genc; /* tidrecvc gen count */
-			ptl_arg_t exp_sdescid;  /* sender descriptor id */
-			__u32     exp_cksum;	/* optional checksum */
-			__u32     exp_offset;	/* packet offset */
-		} PACK_SUFFIX;
-#endif
 	};
 } PACK_SUFFIX;
 /* desc_genc is up to 32 bits, but EXPTID header (and RDMA immediate data)
@@ -177,13 +166,8 @@ struct ips_message_header {
 #define OPCODE_LONG_RTS			0xC4	/* ready to send */
 #define OPCODE_LONG_CTS			0xC5	/* confirm to send */
 #define OPCODE_LONG_DATA		0xC6	/* long data packets */
-#ifdef PSM_OPA
-#define OPCODE_EXPTID			0xC7	/* expected tid data */
-#define OPCODE_EXPTID_COMPLETION	0xC8	/* expected tid completion */
-#else
 #define OPCODE_ERR_CHK_RDMA		0xC7	/* RDMA error recovery */
 #define OPCODE_ERR_CHK_RDMA_RESP 0xC8	/* RDMA error recovery response */
-#endif
 /* ACK to ERR_CHK_GEN are "level 0 control packets" state machine driven send */
 /* reissue if given state persists */
 /* duplicates can occur with no consequences */
@@ -191,11 +175,7 @@ struct ips_message_header {
 #define OPCODE_NAK			0xCA	/* explicit NAK packet */
 #define OPCODE_BECN			0xCB	/* congestion control */
 #define OPCODE_ERR_CHK			0xCC	/* query eager receiving */
-#ifdef PSM_OPA
-#define OPCODE_ERR_CHK_GEN		0xCD	/* query tid receiving */
-#else
 //					0xCD	/* reserved */
-#endif
 /* CONNECT_REQUEST to DISCONNECT_REPLY are "level 1 control packets" */
 /* timer based resend, but rebuild on fly when resend */
 /* consumer must deal with duplicates */

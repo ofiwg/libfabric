@@ -783,20 +783,11 @@ psm3_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 		 * any more than copysz.  After that, swap system with user buffer
 		 */
 		req->recv_msgoff = min(req->recv_msgoff, msglen);
-#ifdef PSM_OPA
-		psm3_mq_recv_copy(mq, req,
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-				req->is_buf_gpu_mem,
-#endif
-				buf, req->req_data.send_msglen,
-				req->recv_msgoff);
-#else
 		psm3_mq_recv_copy(mq, req,
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 				req->is_buf_gpu_mem,
 #endif
 				buf, len, req->recv_msgoff);
-#endif
 		psm3_mq_sysbuf_free(mq, req->req_data.buf);
 
 		req->state = MQ_STATE_MATCHED;
@@ -811,16 +802,11 @@ psm3_mq_irecv_inner(psm2_mq_t mq, psm2_mq_req_t req, void *buf, uint32_t len)
 		 */
 		req->recv_msgoff = min(req->recv_msgoff, msglen);
 		if (req->send_msgoff) {	// only have sysbuf if RTS w/payload
-#ifdef PSM_OPA
-			psm3_mq_mtucpy(buf, (const void *)req->req_data.buf,
-                                       req->recv_msgoff);
-#else
 			psm3_mq_recv_copy(mq, req,
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 					req->is_buf_gpu_mem,
 #endif
 					buf, len, req->recv_msgoff);
-#endif
 			psm3_mq_sysbuf_free(mq, req->req_data.buf);
 		}
 

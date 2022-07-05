@@ -130,12 +130,6 @@ psm3_ep_connect(psm2_ep_t ep, int num_of_epid, psm2_epid_t const *array_of_epid,
 			array_of_errors[j] = PSM2_EPID_UNKNOWN;
 			array_of_epaddr[j] = NULL;
 			if (psm3_epid_addr_fmt(array_of_epid[j]) != ep->addr_fmt) {
-#ifdef PSM_OPA
-				psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-					  " Unknown version of EPID - %u\n"
-					  "Please upgrade PSM3 or set PSM3_ADDR_FMT=1 in the environment to force EPID version 1 \n",
-					  psm3_epid_addr_fmt(array_of_epid[j]));
-#else /* PSM_OPA */
 				psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 					  " Mismatched address format: remote EP (%s): %s (%u) Local EP: %s (%u)\n"
 					  "Confirm all nodes are running the same interconnect HW, addressing format and PSM version\n",
@@ -144,9 +138,7 @@ psm3_ep_connect(psm2_ep_t ep, int num_of_epid, psm2_epid_t const *array_of_epid,
 					  psm3_epid_addr_fmt(array_of_epid[j]),
 					  psm3_epid_str_addr_fmt(ep->epid),
 					  ep->addr_fmt);
-#endif
 			}
-#ifndef PSM_OPA
 			if (psm3_epid_protocol(array_of_epid[j]) != psm3_epid_protocol(ep->epid)) {
 				psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 					  " Mismatched protocol: remote EP (%s): %s (%u) Local EP: %s (%u)\n"
@@ -157,7 +149,6 @@ psm3_ep_connect(psm2_ep_t ep, int num_of_epid, psm2_epid_t const *array_of_epid,
 					  psm3_epid_str_protocol(ep->epid),
 					  psm3_epid_protocol(ep->epid));
 			}
-#endif /* PSM_OPA */
 			num_toconnect++;
 		}
 		epid_mask_isdupof[j] = -1;

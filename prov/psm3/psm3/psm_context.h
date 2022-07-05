@@ -60,32 +60,6 @@
 #ifndef _PSM_CONTEXT_H
 #define _PSM_CONTEXT_H
 
-#ifdef PSM_OPA
-typedef
-struct psmi_context {
-#ifdef PSM_OPA
-	/* The following three member variables are used for sharing contexts among
-	   subcontexts and they have the following common properties:
-
-	   a. They are all initialized below HAL layer when the context is opened.
-	   b. If they are NULL that means no context is being shared among subcontexts,
-	   non-NULL means a context is being shared among some number of subcontexts.
-	   c. The initialization code is currently found in the gen1 hal instance.
-	*/
-	void *spio_ctrl;
-	void *tid_ctrl;
-	void *tf_ctrl;	/* ips_tf_ctrl in shared memory */
-	/* end of shared context member variables. */
-#endif
-
-	psmi_hal_hw_context psm_hw_ctxt;
-
-	psm2_ep_t ep;		/* psm ep handle */
-	psm2_epid_t epid;	/* psm integral ep id */
-	psm2_error_t status_lasterr;
-	time_t networkLostTime;
-} psmi_context_t;
-#endif
 
 psm2_error_t
 psm3_context_open(const psm2_ep_t ep, long unit_id, long port, long addr_index,

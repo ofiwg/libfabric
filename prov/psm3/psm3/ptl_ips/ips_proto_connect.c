@@ -161,14 +161,6 @@ ips_ipsaddr_configure_flows(struct ips_epaddr *ipsaddr, struct ips_proto *proto)
 		      ipsaddr, PSM_TRANSFER_PIO, PSM_PROTOCOL_GO_BACK_N,
 		      IPS_PATH_NORMAL_PRIORITY, EP_FLOW_GO_BACK_N_PIO);
 
-#ifdef PSM_OPA
-	/* DMA flow uses the low priority path, multi MTU sized eager
-	 * message uses the same flow to transfer to avoid out of order.
-	 */
-	psm3_ips_flow_init(&ipsaddr->flows[EP_FLOW_GO_BACK_N_DMA], proto,
-		      ipsaddr, PSM_TRANSFER_DMA, PSM_PROTOCOL_GO_BACK_N,
-		      IPS_PATH_LOW_PRIORITY, EP_FLOW_GO_BACK_N_DMA);
-#endif
 }
 
 /*
@@ -207,9 +199,6 @@ static
 psm2_epaddr_t
 ips_alloc_epaddr(struct ips_proto *proto, int master, psm2_epid_t epid,
 		 const char *hostname,
-#ifdef PSM_OPA
-		 uint16_t hfi_type,
-#endif
 		 unsigned long timeout, psm2_error_t *err_out);
 
 /* we check connect_verno and parse the epid
@@ -241,19 +230,12 @@ static int ips_proto_connect_hdr_parse(void *payload, uint32_t paylen, psm2_epid
 	// connect_hdr, so a failed connect due to connect_verno mismatch
 	// can't really be replied to with an error in req->connect_result
 	// so we just exit with a fatal error here.
-#ifdef PSM_OPA
-	if (hdr->connect_verno < IPS_CONNECT_VERNO)
-		goto bad_verno;
-#endif
 	// for now we are strict about major rev, if we add additional optional
 	// features they can be minor revs and may need more sophisticated handling
 	if (IPS_CONNECT_VER_MAJOR(hdr->connect_verno) == IPS_CONNECT_VER_MAJOR(IPS_CONNECT_VERNO)) {
 		*epid = psm3_epid_pack_words(hdr->epid_w[0], hdr->epid_w[1],
 						hdr->epid_w[2]);
 	} else {
-#ifdef PSM_OPA
-bad_verno:
-#endif
 		psm3_handle_error(PSMI_EP_NORETURN, PSM2_EPID_INVALID_VERSION,
 				  "Connect protocol (%x.%x) is incompatible with %x.%x",
 				  IPS_CONNECT_VER_MAJOR(hdr->connect_verno),
@@ -292,22 +274,10 @@ ips_ipsaddr_set_req_params(struct ips_proto *proto,
 	// common_mtu will be further reduced by pr_mtu to set frag_size and RC mtu
 	uint32_t common_mtu = min(req->mtu, proto->epinfo.ep_mtu);
 	psmi_assert_always(req->static_rate > 0);
-#ifndef PSM_OPA
 	enum psm3_ibv_rate common_rate = min_rate(req->static_rate,
 						 proto->epinfo.ep_link_rate);
-#endif
 	int ptype, pidx;
 
-#ifdef PSM_OPA
-	/*
-	 * Make RNDV window size being dependent on MTU size;
-	 * This is due to fact that number of send packets
-	 * within a given window must not exceed 2048 (@ref PSM_TID_MAX_PKTS).
-	 * Use smaller of two values:
-	 * unified MTU * PSM_TID_MAX_PKTS vs already configured window size.
-	 */
-	ipsaddr->opa.window_rv = min(common_mtu * PSM_TID_MAX_PKTS, proto->mq->hfi_base_window_rv);
-#endif
 
 	/*
 	 * For static routes i.e. "none" path resolution update all paths to
@@ -323,19 +293,15 @@ ips_ipsaddr_set_req_params(struct ips_proto *proto,
 			if (proto->ep->path_res_type == PSM2_PATH_RES_NONE) {
 				ipsaddr->pathgrp->pg_path[pidx][ptype]->pr_mtu =
 					common_mtu;
-#ifndef PSM_OPA
 				ipsaddr->pathgrp->pg_path[pidx][ptype]->pr_static_rate =
 					common_rate;
-#endif
 			} else {
 				ipsaddr->pathgrp->pg_path[pidx][ptype]->pr_mtu =
 				    min(common_mtu,
 					ipsaddr->pathgrp->pg_path[pidx][ptype]->pr_mtu);
-#ifndef PSM_OPA
 				ipsaddr->pathgrp->pg_path[pidx][ptype]->pr_static_rate =
 				    min_rate(common_rate,
 					ipsaddr->pathgrp->pg_path[pidx][ptype]->pr_static_rate);
-#endif
 			}
 		}
 
@@ -402,17 +368,10 @@ ips_ipsaddr_set_req_params(struct ips_proto *proto,
 			psm2_epid_t rail_epid;
 			psmi_subnet128_t rail_subnet;
 
-#ifdef PSM_OPA
-			// 3 64b word rail_addr, but only 1 word epid
-			rail_epid = psm3_epid_pack_word(rail_addr[0]);
-			rail_subnet = psmi_subnet_pack(rail_epid, rail_addr[1]);
-			// ignore 3rd word of rail_addr (should be 0)
-#else
 			// 3 64b word rail_addr with 3 64b word epid
 			// epid contains subnet (IPv6 subnet prefix)
 			rail_epid = psm3_epid_pack_words(rail_addr[0], rail_addr[1], rail_addr[2]);
 			rail_subnet = psm3_epid_subnet(rail_epid);
-#endif
 
 			// match rails by address format and full subnet
 			// and associate with matching local ep
@@ -421,9 +380,6 @@ ips_ipsaddr_set_req_params(struct ips_proto *proto,
 				epaddr =
 					ips_alloc_epaddr(&((struct ptl_ips *)(ep->ptl_ips.ptl))->proto, 0,
 							 rail_epid, NULL,
-#ifdef PSM_OPA
-							  PSMI_HFI_TYPE_OPA1,
-#endif
 							  5000, &err);
 				if (epaddr == NULL)
 					return err;
@@ -583,20 +539,6 @@ ips_proto_build_connect_message(struct ips_proto *proto,
 
 			while (ep != proto->ep) {
 				psmi_assert(PSMI_EPID_LEN <= IPS_CONNECT_RAIL_ADDR_LEN);
-#ifdef PSM_OPA
-				// 3 64b word rail_addr, but only 1 word epid
-				// epid 1st so can parse size
-				*data = psm3_epid_w0(ep->epid);
-				paylen += sizeof(uint64_t);
-				data++;
-				*data = psm3_epid_subnet_extra_word(ep->subnet);
-				paylen += sizeof(uint64_t);
-				data++;
-
-				*data = 0;
-				paylen += sizeof(uint64_t);
-				data++;
-#else
 				// 3 64b word rail_addr with 3 64b word epid
 				// epid contains full subnet
 				*data = psm3_epid_w0(ep->epid);
@@ -610,7 +552,6 @@ ips_proto_build_connect_message(struct ips_proto *proto,
 				*data = psm3_epid_w2(ep->epid);
 				paylen += sizeof(uint64_t);
 				data++;
-#endif
 				psmi_assert_always(paylen <= max_paylen);
 				ep = ep->mctxt_next;
 			}
@@ -693,9 +634,6 @@ static
 psm2_epaddr_t
 ips_alloc_epaddr(struct ips_proto *proto, int master, psm2_epid_t epid,
 		 const char *hostname,
-#ifdef PSM_OPA
-		 uint16_t hfi_type,
-#endif
 		 unsigned long timeout, psm2_error_t *err_out)
 {
 	psm2_error_t err = PSM2_OK;
@@ -703,9 +641,7 @@ ips_alloc_epaddr(struct ips_proto *proto, int master, psm2_epid_t epid,
 	ips_epaddr_t *ipsaddr;
 	ips_path_grp_t *pathgrp;
 	uint16_t lid;
-#ifndef PSM_OPA
 	psmi_gid128_t gid;
-#endif
 
 	/* The PSM/PTL-level epaddr, ips-level epaddr, and per-peer msgctl
 	 * structures are collocated in memory for performance reasons -- this is
@@ -768,21 +704,13 @@ ips_alloc_epaddr(struct ips_proto *proto, int master, psm2_epid_t epid,
 	/* get HAL specific addressing fields initialized in ipsaddr as well as
 	 * fetching lid and gid for our path record query
 	 */
-#ifdef PSM_OPA
-	psmi_hal_ips_ipsaddr_init_addressing(proto, epid, ipsaddr, &lid);
-#else
 	psmi_hal_ips_ipsaddr_init_addressing(proto, epid, ipsaddr, &lid, &gid);
-#endif
 
 	/* Get path record for <service, slid, dlid> tuple */
 	err = proto->ibta.get_path_rec(proto, proto->epinfo.ep_base_lid, /* __be16 */
 				       __cpu_to_be16(lid),
-#ifndef PSM_OPA
 				       __cpu_to_be64(gid.hi),
 				       __cpu_to_be64(gid.lo),
-#else
-				       hfi_type,
-#endif
 				       timeout,
 				       &pathgrp);
 	if (err != PSM2_OK) {
@@ -939,32 +867,21 @@ psm3_ips_proto_process_connect(struct ips_proto *proto, uint8_t opcode,
 			if (ipsaddr == NULL) {
 				ips_path_grp_t *pathgrp;
 				uint16_t lid;
-#ifndef PSM_OPA
 				psmi_gid128_t gid;
-#endif
 
 				ipsaddr = &ipsaddr_f;
 				memset(&ipsaddr_f, 0, sizeof(ips_epaddr_t));
 				ipsaddr_f.hash = psm3_epid_context(epid);
-#ifdef PSM_OPA
-				psmi_hal_ips_ipsaddr_init_addressing(proto,
-							epid, &ipsaddr_f, &lid);
-#else
 				psmi_hal_ips_ipsaddr_init_addressing(proto,
 							epid, &ipsaddr_f, &lid,
 							&gid);
-#endif
 				/* Get path record for peer */
 				err = proto->ibta.get_path_rec(proto,
 							       proto->epinfo.
 								   ep_base_lid, /* __be16 */
 							       __cpu_to_be16(lid),
-#ifndef PSM_OPA
 							       __cpu_to_be64(gid.hi),
 							       __cpu_to_be64(gid.lo),
-#else
-							       PSMI_HFI_TYPE_OPA1,
-#endif
 								   3000, &pathgrp);
 				if (err != PSM2_OK)
 					goto fail;
@@ -1059,9 +976,6 @@ ptl_handle_connect_req(struct ips_proto *proto, psm2_epaddr_t epaddr,
 		newconnect = 1;
 		if ((epaddr =
 		     ips_alloc_epaddr(proto, 1, epid, req->hostname,
-#ifdef PSM_OPA
-					      PSMI_HFI_TYPE_OPA1,
-#endif
 					      5000, &err)) == NULL) {
 			goto fail;
 		}
@@ -1107,7 +1021,6 @@ ptl_handle_connect_req(struct ips_proto *proto, psm2_epaddr_t epaddr,
 					psm3_epid_str_addr_fmt(proto->ep->epid),
 					proto->ep->addr_fmt);
 		connect_result = PSM2_EPID_INVALID_CONNECT;
-#ifndef PSM_OPA
 	} else if (psm3_epid_protocol(epid) != psm3_epid_protocol(proto->ep->epid)) {
 		// before connections started, sender should have confirmed
 		// epid formats match for master and each rail
@@ -1120,7 +1033,6 @@ ptl_handle_connect_req(struct ips_proto *proto, psm2_epaddr_t epaddr,
 					psm3_epid_str_protocol(proto->ep->epid),
 					psm3_epid_protocol(proto->ep->epid));
 		connect_result = PSM2_EPID_INVALID_CONNECT;
-#endif /* PSM_OPA */
 	} else if (!(proto->flags & IPS_PROTO_FLAG_QUERY_PATH_REC) &&
 		   proto->epinfo.ep_pkey != psmi_hal_get_default_pkey() &&
 		   proto->epinfo.ep_pkey != req->job_pkey) {
@@ -1137,11 +1049,7 @@ ptl_handle_connect_req(struct ips_proto *proto, psm2_epaddr_t epaddr,
 		connect_result = PSM2_EPID_INVALID_CONNECT;
 		_HFI_ERROR("Remote Connection error (%s %s): %s Wire Mode mismatch (local:%d, remote:%d)\n",
 			req->hostname, psm3_epid_fmt_addr(epid, 0),
-#ifndef PSM_OPA
 			psm3_epid_str_protocol(epid),
-#else
-			"",
-#endif
 			proto->ep->wiremode, req->wiremode);
 	} else {
 		connect_result = PSM2_OK;
@@ -1270,9 +1178,6 @@ psm3_ips_proto_connect(struct ips_proto *proto, int numep,
 			// so we lack it's hostname, rv and qpn info
 			epaddr = ips_alloc_epaddr(proto, 1, array_of_epid[i],
 						  NULL,
-#ifdef PSM_OPA
-						  PSMI_HFI_TYPE_OPA1,
-#endif
 						  (timeout_in / 1000000UL), &err);
 			if (epaddr == NULL) {
 				_HFI_ERROR("Unable to issue connect from %s to %s: %s\n",
@@ -1686,12 +1591,6 @@ psm3_ips_proto_disconnect(struct ips_proto *proto, int force, int numep,
 					    !STAILQ_EMPTY(&ipsaddr->flows
 							  [EP_FLOW_GO_BACK_N_PIO].
 							  scb_unacked)
-#ifdef PSM_OPA
-					    ||
-					    !STAILQ_EMPTY(&ipsaddr->flows
-							  [EP_FLOW_GO_BACK_N_DMA].
-							  scb_unacked)
-#endif
 						;
 					if (has_pending)
 						continue;

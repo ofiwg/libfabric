@@ -221,210 +221,7 @@ pio_dma_ack_valid(struct ips_proto *proto, struct ips_flow *flow,
 				last_num, ack_seq_num.psn_num);
 }
 
-#ifdef PSM_OPA
-PSMI_INLINE(
-struct ips_flow *
-get_tidflow(struct ips_proto *proto, ips_epaddr_t *ipsaddr,
-	    struct ips_message_header *p_hdr, psmi_seqnum_t ack_seq_num))
-{
-	struct ips_protoexp *protoexp = proto->protoexp;
-	ptl_arg_t desc_id = p_hdr->data[0];
-	struct ips_tid_send_desc *tidsendc;
-	ptl_arg_t desc_tidsendc;
-	struct ips_flow *flow;
-	uint32_t last_seq;
-	struct ips_scb_unackedq *unackedq;
 
-	tidsendc = (struct ips_tid_send_desc *)
-	    psm3_mpool_find_obj_by_index(protoexp->tid_desc_send_pool,
-					 desc_id._desc_idx);
-	if (tidsendc == NULL) {
-		_HFI_ERROR
-		    ("OPCODE_ACK: Index %d is out of range in tidflow ack\n",
-		     desc_id._desc_idx);
-		return NULL;
-	}
-
-	/* Ensure generation matches */
-	psm3_mpool_get_obj_index_gen_count(tidsendc,
-					   &desc_tidsendc._desc_idx,
-					   &desc_tidsendc._desc_genc);
-	if (desc_tidsendc.u64 != desc_id.u64)
-		return NULL;
-
-	/* Ensure ack is within window */
-	flow = &tidsendc->tidflow;
-	unackedq = &flow->scb_unacked;
-
-	/* No unacked scbs */
-	if (STAILQ_EMPTY(unackedq))
-		return NULL;
-
-	/* Generation for ack should match */
-	if (STAILQ_FIRST(unackedq)->seq_num.psn_gen != ack_seq_num.psn_gen)
-		return NULL;
-
-	/* scb_pend will be moved back when an nak is received, but
-	 * the packet may actually be received and acked after the nak,
-	 * so we use the tail of unacked queue, which may include packets
-	 * not being sent out yet, this is over do, but it should be OK. */
-	last_seq = STAILQ_LAST(unackedq, ips_scb, nextq)->seq_num.psn_seq;
-
-	if (between(flow->xmit_ack_num.psn_seq,
-				last_seq, ack_seq_num.psn_seq) == 0)
-		return NULL;
-
-	return flow;
-}
-#endif // PSM_OPA
-
-#ifdef PSM_OPA
-/* NAK post process for tid flow */
-void ips_tidflow_nak_post_process(struct ips_proto *proto,
-				  struct ips_flow *flow)
-{
-	ips_scb_t *scb;
-	uint32_t first_seq, ack_seq;
-
-	scb = STAILQ_FIRST(&flow->scb_unacked);
-	first_seq = __be32_to_cpu(scb->ips_lrh.bth[2]) & HFI_BTH_SEQ_MASK;
-	ack_seq = (flow->xmit_ack_num.psn_seq - 1) & HFI_BTH_SEQ_MASK;
-
-	/* If the ack SEQ falls into a multi-packets scb,
-	 * don't re-send the packets already acked. */
-	if (scb->nfrag > 1 &&
-	between(first_seq, scb->seq_num.psn_seq, ack_seq)) {
-		uint32_t om, offset_in_tid, remaining_bytes_in_tid;
-		uint32_t npkt, pktlen, nbytes;
-		uint32_t idx, loop;
-
-		/* how many packets acked in this scb */
-		npkt = ((ack_seq - first_seq) & HFI_BTH_SEQ_MASK) + 1;
-
-		/* Get offset/om from current packet header */
-		offset_in_tid = __le32_to_cpu(scb->ips_lrh.khdr.kdeth0) &
-				HFI_KHDR_OFFSET_MASK;
-		om = (__le32_to_cpu(scb->ips_lrh.khdr.kdeth0) >>
-				HFI_KHDR_OM_SHIFT) & 0x1;
-		if (om)
-			offset_in_tid *= 64;
-		else
-			offset_in_tid *= 4;
-		/* bytes remaining in current tid */
-		remaining_bytes_in_tid =
-			(IPS_TIDINFO_GET_LENGTH(scb->tsess[0]) << 12) -
-			offset_in_tid;
-
-		/* packet length in current header */
-		pktlen = scb->payload_size;
-		psmi_assert(min(remaining_bytes_in_tid,
-			scb->frag_size) >= pktlen);
-		psmi_assert((ips_proto_lrh2_be_to_bytes(proto,
-							scb->ips_lrh.lrh[2])
-			- sizeof(struct ips_message_header) -
-			HFI_CRC_SIZE_IN_BYTES) == pktlen);
-
-		/* Loop to find the position to start */
-		idx = 0;
-		nbytes = 0;
-		loop = npkt;
-		while (loop) {
-			remaining_bytes_in_tid -= pktlen;
-			offset_in_tid += pktlen;
-			nbytes += pktlen;
-			first_seq++;
-			loop--;
-
-			if (remaining_bytes_in_tid == 0) {
-				idx++;
-				remaining_bytes_in_tid =
-					IPS_TIDINFO_GET_LENGTH(scb->
-					tsess[idx]) << 12;
-				offset_in_tid = 0;
-			}
-
-			pktlen = min(remaining_bytes_in_tid, scb->frag_size);
-		}
-		psmi_assert((first_seq & HFI_BTH_SEQ_MASK) ==
-				((ack_seq + 1) & HFI_BTH_SEQ_MASK));
-
-		/* 0. update scb info */
-		psmi_assert(scb->nfrag_remaining > npkt);
-		scb->nfrag_remaining -= npkt;
-		psmi_assert(scb->chunk_size_remaining > nbytes);
-		scb->chunk_size_remaining -= nbytes;
-		ips_scb_buffer(scb) = (void *)((char *)ips_scb_buffer(scb) + nbytes);
-
-		/* 1. if last packet in sequence, set ACK, clear SH */
-		if (scb->nfrag_remaining == 1) {
-			psmi_assert(scb->chunk_size_remaining <=
-				    scb->frag_size);
-			scb->scb_flags |= IPS_SEND_FLAG_ACKREQ;
-			scb->scb_flags &= ~IPS_SEND_FLAG_HDRSUPP;
-
-			/* last packet is what remaining */
-			pktlen = scb->chunk_size_remaining;
-		}
-
-		/* 2. set new packet sequence number */
-		scb->ips_lrh.bth[2] = __cpu_to_be32(
-			((first_seq & HFI_BTH_SEQ_MASK) << HFI_BTH_SEQ_SHIFT) |
-			((scb->seq_num.psn_gen &
-			HFI_BTH_GEN_MASK) << HFI_BTH_GEN_SHIFT) |
-			(scb->scb_flags & IPS_SEND_FLAG_ACKREQ));
-
-		/* 3. set new packet offset */
-		scb->ips_lrh.exp_offset += nbytes;
-
-		/* 4. if packet length is changed, set new length */
-		if (scb->payload_size != pktlen) {
-			scb->payload_size = pktlen;
-			scb->ips_lrh.lrh[2] = __cpu_to_be16((
-				(scb->payload_size +
-				sizeof(struct ips_message_header) +
-				HFI_CRC_SIZE_IN_BYTES) >>
-				BYTE2DWORD_SHIFT) & proto->pktlen_mask);
-		}
-
-		/* 5. set new tidctrl and tidinfo array */
-		scb->tsess = &scb->tsess[idx];
-		scb->tsess_length -= idx * sizeof(uint32_t);
-		scb->tidctrl = IPS_TIDINFO_GET_TIDCTRL(scb->tsess[0]);
-
-		/* 6. calculate new offset mode */
-		if (offset_in_tid < 131072) { /* 2^15 * 4 */
-			offset_in_tid /= 4;
-			om = 0;
-		} else {
-			offset_in_tid /= 64;
-			om = 1;
-		}
-
-		/* 7. set new tidinfo */
-		scb->ips_lrh.khdr.kdeth0 = __cpu_to_le32(
-			(offset_in_tid & HFI_KHDR_OFFSET_MASK) |
-			(om << HFI_KHDR_OM_SHIFT) |
-			(IPS_TIDINFO_GET_TID(scb->tsess[0])
-					<< HFI_KHDR_TID_SHIFT) |
-			(scb->tidctrl << HFI_KHDR_TIDCTRL_SHIFT) |
-			(scb->scb_flags & IPS_SEND_FLAG_INTR) |
-			(scb->scb_flags & IPS_SEND_FLAG_HDRSUPP) |
-			(IPS_PROTO_VERSION << HFI_KHDR_KVER_SHIFT));
-	}
-
-	/* Update unacked scb's to use the new generation */
-	while (scb) {
-		/* update with new generation */
-		scb->ips_lrh.bth[2] = __cpu_to_be32(
-			(__be32_to_cpu(scb->ips_lrh.bth[2]) &
-			(~(HFI_BTH_GEN_MASK << HFI_BTH_GEN_SHIFT))) |
-			((flow->xmit_seq_num.psn_gen &
-			HFI_BTH_GEN_MASK) << HFI_BTH_GEN_SHIFT));
-		scb->seq_num.psn_gen = flow->xmit_seq_num.psn_gen;
-		scb = SLIST_NEXT(scb, next);
-	}
-}
-#endif // PSM_OPA
 
 /* NAK post process for any flow where an scb may describe more than 1 packet
  * (OPA dma flow or GSO PIO flow). In which case we may need to resume in
@@ -516,19 +313,11 @@ psm3_ips_proto_process_ack(struct ips_recvhdrq_event *rcv_ev)
 	psmi_seqnum_t ack_seq_num, last_seq_num;
 	ips_epaddr_flow_t flowid;
 	ips_scb_t *scb;
-#ifdef PSM_OPA
-	uint32_t tidctrl;
-#endif
 
 	ack_seq_num.psn_num = p_hdr->ack_seq_num;
 	// check actual psn acked (ack_seq_num-1), we only want to process acks
 	// for packets we never got an ack for
-#ifdef PSM_OPA
-	tidctrl = GET_HFI_KHDR_TIDCTRL(__le32_to_cpu(p_hdr->khdr.kdeth0));
-	if (!tidctrl && ((flowid = ips_proto_flowid(p_hdr)) < EP_FLOW_TIDFLOW)) {
-#else
 	if ((flowid = ips_proto_flowid(p_hdr)) < EP_FLOW_TIDFLOW) {
-#endif
 		ack_seq_num.psn_num =
 		    (ack_seq_num.psn_num - 1) & proto->psn_mask;
 		psmi_assert(flowid < EP_FLOW_LAST);
@@ -536,23 +325,14 @@ psm3_ips_proto_process_ack(struct ips_recvhdrq_event *rcv_ev)
 		if (!pio_dma_ack_valid(proto, flow, ack_seq_num))
 			goto ret;
 	} else {
-#ifndef PSM_OPA
 		// we don't put TID (aka RDMA) pkts on UD, shouldn't get ACKs about it
 		_HFI_ERROR("Got ack for invalid flowid\n");
 		goto ret;
-#else
-		ack_seq_num.psn_seq -= 1;
-		flow = get_tidflow(proto, ipsaddr, p_hdr, ack_seq_num);
-		if (!flow)	/* Invalid ack for flow */
-			goto ret;
-#endif
 	}
-#ifndef PSM_OPA
 #ifndef PSM_TCP_ACK
 	// for ack-less TCP we should have acked self-packet before recv reports
 	// the given ack_seq_num
 	psmi_assert(psm3_epid_protocol(proto->ep->epid) != PSMI_ETH_PROTO_TCP);
-#endif
 #endif
 	flow->xmit_ack_num.psn_num = p_hdr->ack_seq_num;
 
@@ -638,9 +418,6 @@ psm3_ips_proto_process_ack(struct ips_recvhdrq_event *rcv_ev)
 			_HFI_VDBG("after all ACKed: flow_credits %d\n",
 				flow->credits);
 #endif
-#ifdef PSM_OPA
-			flow->flags &= ~IPS_FLOW_FLAG_CONGESTED;
-#endif
 			goto ret;
 		} else if (flow->timer_ack == scb->timer_ack) {
 			/*
@@ -669,23 +446,7 @@ psm3_ips_proto_process_ack(struct ips_recvhdrq_event *rcv_ev)
 
 	psmi_assert(!STAILQ_EMPTY(unackedq));	/* sanity for above loop */
 
-#ifdef PSM_OPA
-	/* CCA: If flow is congested adjust rate */
-	if_pf(rcv_ev->is_congested & IPS_RECV_EVENT_BECN) {
-		if ((flow->path->opa.pr_ccti +
-		     proto->cace[flow->path->pr_sl].ccti_increase) <=
-		    proto->ccti_limit) {
-			ips_cca_adjust_rate(flow->path,
-					    proto->cace[flow->path->pr_sl].
-					    ccti_increase);
-			/* Clear congestion event */
-			rcv_ev->is_congested &= ~IPS_RECV_EVENT_BECN;
-		}
-	}
-	else {
-#else
 	{
-#endif
 		/* Increase congestion window if flow is not congested */
 		if_pf(flow->cwin < proto->flow_credits) {
 			// this only happens for OPA, so we don't have to
@@ -738,9 +499,6 @@ int psm3_ips_proto_process_nak(struct ips_recvhdrq_event *rcv_ev)
 	psm_protocol_type_t protocol;
 	ips_epaddr_flow_t flowid;
 	ips_scb_t *scb;
-#ifdef PSM_OPA
-	uint32_t tidctrl;
-#endif
 
 	INC_TIME_SPEND(TIME_SPEND_USER3);
 
@@ -748,12 +506,7 @@ int psm3_ips_proto_process_nak(struct ips_recvhdrq_event *rcv_ev)
 	// we are likely to get a previous ack_seq_num in NAK, in which case
 	// we need to resend unacked packets starting with ack_seq_num.  So check
 	// psn of 1st NAK would like us to retransmit (e.g. don't -1 before check)
-#ifdef PSM_OPA
-	tidctrl = GET_HFI_KHDR_TIDCTRL(__le32_to_cpu(p_hdr->khdr.kdeth0));
-	if (!tidctrl && ((flowid = ips_proto_flowid(p_hdr)) < EP_FLOW_TIDFLOW)) {
-#else
 	if ((flowid = ips_proto_flowid(p_hdr)) < EP_FLOW_TIDFLOW) {
-#endif
 		protocol = PSM_PROTOCOL_GO_BACK_N;
 		psmi_assert(flowid < EP_FLOW_LAST);
 		flow = &ipsaddr->flows[flowid];
@@ -763,26 +516,9 @@ int psm3_ips_proto_process_nak(struct ips_recvhdrq_event *rcv_ev)
 		    (ack_seq_num.psn_num - 1) & proto->psn_mask;
 		flow->xmit_ack_num.psn_num = p_hdr->ack_seq_num;
 	} else {
-#ifndef PSM_OPA
 		// we don't put TID (aka RDMA) pkts on UD, shouldn't get NAKs about it
 		_HFI_ERROR("Got nak for invalid flowid\n");
 		goto ret;
-#else
-		protocol = PSM_PROTOCOL_TIDFLOW;
-		flow = get_tidflow(proto, ipsaddr, p_hdr, ack_seq_num);
-		if (!flow)
-			goto ret;	/* Invalid ack for flow */
-		ack_seq_num.psn_seq--;
-
-		psmi_assert(flow->xmit_seq_num.psn_gen == ack_seq_num.psn_gen);
-		psmi_assert(flow->xmit_ack_num.psn_gen == ack_seq_num.psn_gen);
-		/* Update xmit_ack_num with both new generation and new
-		 * acked sequence; update xmit_seq_num with the new flow
-		 * generation, don't change the sequence number. */
-		flow->xmit_ack_num = (psmi_seqnum_t) p_hdr->data[1].u32w0;
-		flow->xmit_seq_num.psn_gen = flow->xmit_ack_num.psn_gen;
-		psmi_assert(flow->xmit_seq_num.psn_gen != ack_seq_num.psn_gen);
-#endif
 	}
 
 	unackedq = &flow->scb_unacked;
@@ -865,9 +601,6 @@ int psm3_ips_proto_process_nak(struct ips_recvhdrq_event *rcv_ev)
 			_HFI_VDBG("after all NAKed: flow_credits %d\n",
 				flow->credits);
 #endif
-#ifdef PSM_OPA
-			flow->flags &= ~IPS_FLOW_FLAG_CONGESTED;
-#endif
 			goto ret;
 		} else if (flow->timer_ack == scb->timer_ack) {
 			/*
@@ -897,14 +630,8 @@ int psm3_ips_proto_process_nak(struct ips_recvhdrq_event *rcv_ev)
 	psmi_assert(!STAILQ_EMPTY(unackedq));	/* sanity for above loop */
 
 	if (protocol == PSM_PROTOCOL_TIDFLOW)
-#ifndef PSM_OPA
 		// we don't put TID (aka RDMA) pkts on UD, shouldn't get NAKs about it
 		_HFI_ERROR("post processing, Got nak for TID flow, not allowed for UD\n");
-#else
-		// updates remaining scb's which will be resent
-		// including new generation
-		ips_tidflow_nak_post_process(proto, flow);
-#endif
 	else if (scb->nfrag > 1)
 		psm3_ips_segmentation_nak_post_process(proto, flow);
 
@@ -936,70 +663,18 @@ int psm3_ips_proto_process_nak(struct ips_recvhdrq_event *rcv_ev)
 		scb = SLIST_NEXT(scb, next);
 	}
 
-#ifdef PSM_OPA
-	/* If NAK with congestion bit set - delay re-transmitting and THEN adjust
-	 * CCA rate.
-	 */
-	if_pf(rcv_ev->is_congested & IPS_RECV_EVENT_BECN) {
-		uint64_t offset;
-
-		/* Clear congestion event and mark flow as congested */
-		rcv_ev->is_congested &= ~IPS_RECV_EVENT_BECN;
-		flow->flags |= IPS_FLOW_FLAG_CONGESTED;
-
-		/* For congested flow use slow start i.e. reduce congestion window.
-		 * For TIDFLOW we cannot reduce congestion window as peer expects
-		 * header packets at regular intervals (protoexp->hdr_pkt_interval).
-		 */
-		if (flow->protocol != PSM_PROTOCOL_TIDFLOW)
-			flow->credits = flow->cwin = 1;
-		else
-			flow->credits = flow->cwin;
-		// OPA doesn't need flow_credit_bytes nor ack_internal_bytes
-		// so no change to flow_credit_bytes nor ack_interval_bytes
-
-		flow->ack_interval = max((flow->credits >> 2) - 1, 1);
-
-		/* During congestion cancel send timer and delay retransmission by
-		 * random interval.  Can get away with using just 1st epid word
-		 */
-		psmi_timer_cancel(proto->timerq, flow->timer_send);
-		if (SLIST_FIRST(scb_pend)->ack_timeout != TIMEOUT_INFINITE)
-			offset = (SLIST_FIRST(scb_pend)->ack_timeout >> 1);
-		else
-			offset = 0;
-		struct drand48_data drand48_data;
-		srand48_r((long int)(psm3_epid_hash(ipsaddr->epaddr.epid) + psm3_epid_hash(proto->ep->epid)), &drand48_data);
-		double rnum;
-		drand48_r(&drand48_data, &rnum);
-		psmi_timer_request(proto->timerq, flow->timer_send,
-				   (get_cycles() +
-				    (uint64_t) (offset *
-						(rnum + 1.0))));
-	}
-	else {
-#else
 	{
-#endif
 		int num_resent = 0;
 
 		/* Reclaim all credits upto congestion window only */
 		flow->credits = flow->cwin;
 		flow->ack_interval = max((flow->credits >> 2) - 1, 1);
 #ifdef PSM_BYTE_FLOW_CREDITS
-#ifdef PSM_OPA
-		// on OPA cwin can decrease when get BECN
-		// but we know how credit_bytes was initialized
-		// we never decrease ack_interval_bytes for
-		// congestion, so no need to increase here
- 		flow->credit_bytes = proto->ep->mtu * flow->credits;
-#else
 		// TBD cwin not implemented for UD and UDP so can predict
 		// credit_bytes here
 		psmi_assert(flow->cwin == proto->flow_credits);
 		flow->credit_bytes = proto->flow_credit_bytes;
 		flow->ack_interval_bytes = max((flow->credit_bytes >> 2) - 1, 1);
-#endif
 		_HFI_VDBG("after reclaim cwin: flow_credits %d\n",
 				flow->credits);
 #else /* PSM_BYTE_FLOW_CREDITS */
@@ -1033,10 +708,6 @@ psm3_ips_proto_process_err_chk(struct ips_recvhdrq_event *rcv_ev)
 	psmi_assert(flowid < EP_FLOW_LAST);
 	flow = &ipsaddr->flows[flowid];
 	recvq->proto->epaddr_stats.err_chk_recv++;
-#ifdef PSM_OPA
-	/* Ignore FECN bit since this is the control path */
-	rcv_ev->is_congested &= ~IPS_RECV_EVENT_FECN;
-#endif
 
 	seq_num.psn_val = __be32_to_cpu(p_hdr->bth[2]);
 	seq_off = (int16_t) (flow->recv_seq_num.psn_num - seq_num.psn_num);

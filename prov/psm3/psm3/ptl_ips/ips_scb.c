@@ -71,9 +71,6 @@ psm3_ips_scbctrl_init(psm2_ep_t ep,
 	size_t scb_size;
 	size_t alloc_sz;
 	uintptr_t base, imm_base;
-#ifdef PSM_OPA
-	/* scbc->context = &ep->context; */
-#endif
 	psm2_error_t err = PSM2_OK;
 
 	psmi_assert_always(numscb > 0);
@@ -276,9 +273,6 @@ ips_scb_t *MOCKABLE(psm3_ips_scbctrl_alloc)(struct ips_scbctrl *scbc, int scbnum
 
 		scb->tidsendc = NULL;
 		scb->callback = NULL;
-#ifdef PSM_OPA
-		scb->tidctrl = 0;
-#endif
 		scb->nfrag = 1;
 		scb->frag_size = 0;
 		scb->chunk_size = 0;
@@ -349,9 +343,6 @@ ips_scb_t *MOCKABLE(psm3_ips_scbctrl_alloc_tiny)(struct ips_scbctrl *scbc)
 	scb->scb_flags = 0;
 	scb->tidsendc = NULL;
 	scb->callback = NULL;
-#ifdef PSM_OPA
-	scb->tidctrl = 0;
-#endif
 	scb->nfrag = 1;
 	scb->frag_size = 0;
 	scb->chunk_size = 0;

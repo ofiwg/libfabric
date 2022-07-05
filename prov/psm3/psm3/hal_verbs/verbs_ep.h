@@ -299,12 +299,6 @@ struct psm3_verbs_ep {
 	uint32_t qkey;
 	//uint8_t link_layer;         // IBV_LINK_LAYER_ETHERNET or other
 	uint8_t active_rate;
-#if defined(USE_RC)
-#if defined(USE_RDMA_READ)
-	uint8_t max_qp_rd_atom;
-	uint8_t max_qp_init_rd_atom;
-#endif
-#endif // USE_RC
 	struct psm3_verbs_send_pool send_pool;
 	struct psm3_verbs_send_allocator send_allocator;
 	uint32_t send_rdma_outstanding;	// number of outstanding RDMAs

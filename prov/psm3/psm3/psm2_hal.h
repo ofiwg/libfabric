@@ -59,9 +59,6 @@
 
 /* Forward declaration of PSM structs: */
 struct psm2_mq;
-#ifdef PSM_OPA
-struct ips_tid_session_list_tag;
-#endif
 struct ips_recvhdrq_event;
 struct ips_scb_pendlist;
 struct ips_flow;
@@ -86,9 +83,6 @@ struct psm3_ep_open_opts;
  */
 typedef enum
 {
-#ifdef PSM_OPA
-	PSM_HAL_INDEX_OPA	=  0,
-#endif
 	PSM_HAL_INDEX_VERBS	=  1,
 	PSM_HAL_INDEX_SOCKETS	=  2,
 	PSM_HAL_INDEX_LOOPBACK	=  3,
@@ -101,9 +95,6 @@ typedef enum
 static inline const char* psm3_hal_index_to_str(int index)
 {
 	switch (index) {
-#ifdef PSM_OPA
-	case PSM_HAL_INDEX_OPA: return "opa";
-#endif
 	case PSM_HAL_INDEX_VERBS: return "verbs";
 	case PSM_HAL_INDEX_SOCKETS: return "sockets";
 	case PSM_HAL_INDEX_LOOPBACK: return "loopback";
@@ -140,28 +131,7 @@ typedef enum
 	PSM_HAL_ERROR_RESERVED_BY_HAL_API	= 1000,
 } psmi_hal_errors;
 
-#ifdef PSM_OPA
-typedef enum
-{
-	PSM_HAL_HW_STATUS_INITTED	  = (1UL << 0),
-	PSM_HAL_HW_STATUS_CHIP_PRESENT	  = (1UL << 1),
-	PSM_HAL_HW_STATUS_IB_READY	  = (1UL << 2),
-	PSM_HAL_HW_STATUS_IB_CONF	  = (1UL << 3),
-	PSM_HAL_HW_STATUS_HWERROR	  = (1UL << 4)
-} psmi_hal_hw_status;
-#endif
 
-#ifdef PSM_OPA
-typedef enum
-{
-	PSM_HAL_HFI_EVENT_FROZEN	  = (1UL << 0),
-	PSM_HAL_HFI_EVENT_LINKDOWN	  = (1UL << 1),
-	PSM_HAL_HFI_EVENT_LID_CHANGE	  = (1UL << 2),
-	PSM_HAL_HFI_EVENT_LMC_CHANGE	  = (1UL << 3),
-	PSM_HAL_HFI_EVENT_SL2VL_CHANGE	  = (1UL << 4),
-	PSM_HAL_HFI_EVENT_TID_MMU_NOTIFY  = (1UL << 5)
-} psmi_hal_hfi_events;
-#endif
 
 /* The following enum constants correspond to the bits in the
  * cap_mask member of the psmi_hal_params_t.
@@ -177,47 +147,6 @@ typedef enum
  */
 typedef enum
 {
-#ifdef PSM_OPA
-	PSM_HAL_CAP_SDMA			= (1UL <<  0),
-	PSM_HAL_CAP_SDMA_AHG			= (1UL <<  1),
-	PSM_HAL_CAP_EXTENDED_PSN		= (1UL <<  2),
-	PSM_HAL_CAP_HDRSUPP			= (1UL <<  3),
-	PSM_HAL_CAP_USE_SDMA_HEAD		= (1UL <<  4),
-	PSM_HAL_CAP_MULTI_PKT_EGR		= (1UL <<  5),
-	PSM_HAL_CAP_NODROP_RHQ_FULL		= (1UL <<  6),
-	PSM_HAL_CAP_NODROP_EGR_FULL		= (1UL <<  7),
-	PSM_HAL_CAP_TID_UNMAP			= (1UL <<  8),
-	PSM_HAL_CAP_PRINT_UNIMPL		= (1UL <<  9),
-	PSM_HAL_CAP_ALLOW_PERM_JKEY		= (1UL << 10),
-	PSM_HAL_CAP_NO_INTEGRITY		= (1UL << 11),
-	PSM_HAL_CAP_PKEY_CHECK			= (1UL << 12),
-	PSM_HAL_CAP_STATIC_RATE_CTRL		= (1UL << 13),
-	PSM_HAL_CAP_SDMA_HEAD_CHECK		= (1UL << 14),
-	PSM_HAL_CAP_EARLY_CREDIT_RETURN		= (1UL << 15),
-		/* are any GPUDIRECT features (Copy, Send DMA or RDMA)
-		 * currently available for the given HAL.  Otherwise
-		 * PSM3_GPUDIRECT=1 is disallowed (fatal).
-		 * Only true if HFI driver also enabled for GPU.
-		 * At a minimum when this is set, GPUDirect Copy must be allowed
-		 */
-	PSM_HAL_CAP_GPUDIRECT			= (1UL << 16),
-	PSM_HAL_CAP_DMA_HSUPP_FOR_32B_MSGS	= (1UL << 17),
-	PSM_HAL_CAP_RSM_FECN_SUPP		= (1UL << 18),
-	PSM_HAL_CAP_MERGED_TID_CTRLS		= (1UL << 19),
-		/* can segmentation offload (OPA Send DMA)
-		 * handle a non 32b mult total payload length and properly
-		 * send a odd lengthed packet in the packet sequence.
-		 */
-	PSM_HAL_CAP_NON_DW_MULTIPLE_MSG_SIZE	= (1UL << 20),
-		/* Is GPUDIRECT RDMA (send and recv) currently available for
-		 * the given HAL.  Otherwise we ignore
-		 * PSM3_GPUDIRECT_RDMA_SEND_LIMIT
-		 * and PSM3_GPUDIRECT_RDMA_RECV_LIMIT.
-		 * Upper level will only attempt to use GPUDIRECT RDMA if both
-		 * this and PSM_HAL_CAP_GPUDIRECT are true.
-		 */
-	PSM_HAL_CAP_GPUDIRECT_RDMA		= (1UL << 21),
-#else /* PSM_OPA */
 		/* can spio_transfer_frame handle a non 32b multiple
 		 * payload length for both single packets and PIO
 		 * segmentation (UDP GSO)
@@ -261,7 +190,6 @@ typedef enum
 		 */
 	PSM_HAL_CAP_GPUDIRECT_RDMA              = (1UL << 6),
 
-#endif /* PSM_OPA */
 } psmi_hal_capability_bits;
 
 /* The following enum constants correspond to the bits in the
@@ -273,10 +201,6 @@ typedef enum
 	/* Rx thread is started. */
 	PSM_HAL_PSMI_RUNTIME_RX_THREAD_STARTED	= (1UL <<  1),
 	PSM_HAL_PSMI_RUNTIME_INTR_ENABLED       = (1UL <<  2),
-#ifdef PSM_OPA
-	/* Header suppression is enabled: */
-	PSM_HAL_HDRSUPP_ENABLED                 = (1UL <<  3),
-#endif
 	PSM_HAL_PARAMS_VALID_NUM_UNITS          = (1UL <<  4),
 	PSM_HAL_PARAMS_VALID_NUM_PORTS          = (1UL <<  5),
 	PSM_HAL_PARAMS_VALID_DEFAULT_PKEY       = (1UL <<  6),
@@ -319,84 +243,11 @@ typedef struct _psmi_hal_params
 	char **unit_driver;
 } psmi_hal_params_t;
 
-#ifdef PSM_OPA
-#define PSM_HAL_MAX_SHARED_CTXTS 8
-#endif // PSM_OPA
 
 #define PSM_HAL_ALG_ACROSS     0
 #define PSM_HAL_ALG_WITHIN     1
 #define PSM_HAL_ALG_ACROSS_ALL 2
 
-#ifdef PSM_OPA
-typedef enum
-{
-	PSM_HAL_EXP   = 0,
-	PSM_HAL_EGR   = 1,
-} psmi_hal_set_sdma_req_type;
-
-#define PSM_HAL_SDMA_REQ_VERSION_MASK 0xF
-#define PSM_HAL_SDMA_REQ_VERSION_SHIFT 0x0
-#define PSM_HAL_SDMA_REQ_OPCODE_MASK 0xF
-#define PSM_HAL_SDMA_REQ_OPCODE_SHIFT 0x4
-#define PSM_HAL_SDMA_REQ_IOVCNT_MASK 0xFF
-#define PSM_HAL_SDMA_REQ_IOVCNT_SHIFT 0x8
-
-#ifdef PSM_CUDA
-#define PSM_HAL_BUF_GPU_MEM  1
-#endif
-
-struct psm_hal_sdma_req_info {
-	/*
-	 * bits 0-3 - version (currently used only for GPU direct)
-	 *               1 - user space is NOT using flags field
-	 *               2 - user space is using flags field
-	 * bits 4-7 - opcode (enum sdma_req_opcode)
-	 * bits 8-15 - io vector count
-	 */
-	__u16 ctrl;
-	/*
-	 * Number of fragments contained in this request.
-	 * User-space has already computed how many
-	 * fragment-sized packet the user buffer will be
-	 * split into.
-	 */
-	__u16 npkts;
-	/*
-	 * Size of each fragment the user buffer will be
-	 * split into.
-	 */
-	__u16 fragsize;
-	/*
-	 * Index of the slot in the SDMA completion ring
-	 * this request should be using. User-space is
-	 * in charge of managing its own ring.
-	 */
-	__u16 comp_idx;
-#ifdef PSM_CUDA
-	/*
-	 * Buffer flags for this request. See HFI1_BUF_*
-	 */
-	__u16 flags;
-	/* The extra bytes for the PSM_CUDA version of the sdma req info
-	 * struct is the size of the flags member. */
-#define PSM_HAL_CUDA_SDMA_REQ_INFO_EXTRA sizeof(__u16)
-#endif
-} __attribute__((packed));
-
-
-typedef enum {
-	PSM_HAL_SDMA_RING_AVAILABLE = 0,
-	PSM_HAL_SDMA_RING_QUEUED    = 1,
-	PSM_HAL_SDMA_RING_COMPLETE  = 2,
-	PSM_HAL_SDMA_RING_ERROR     = 3,
-} psmi_hal_sdma_ring_slot_status;
-
-struct psm_hal_pbc {
-	__le32 pbc0;
-	__le16 PbcStaticRateControlCnt;
-	__le16 fill1;
-};
-#endif // PSM_OPA
 
 typedef enum {
 	PSMI_HAL_POLL_TYPE_URGENT = 1
@@ -533,9 +384,7 @@ struct _psmi_hal_instance
 	void (*hfp_ips_ipsaddr_init_addressing)(struct ips_proto *proto,
 				psm2_epid_t epid, ips_epaddr_t *ipsaddr,
 				uint16_t *lidp
-#ifndef PSM_OPA
 				, psmi_gid128_t *gidp
-#endif
 				);
 	psm2_error_t (*hfp_ips_ipsaddr_init_connections)(
 				struct ips_proto *proto,
@@ -563,58 +412,8 @@ struct _psmi_hal_instance
 	 * corresponding pkey for the index as programmed by the SM */
 	/* Returns an int, so -1 indicates an error. */
 	int (*hfp_get_port_index2pkey)(psm2_ep_t ep, int index);
-#ifdef PSM_OPA
-	int (*hfp_set_pkey)(psmi_hal_hw_context, uint16_t);
-#endif // PSM_OPA
 	int (*hfp_poll_type)(uint16_t poll_type, psm2_ep_t ep);
 
-#ifdef PSM_OPA
-	int (*hfp_free_tid)(psmi_hal_hw_context, uint64_t tidlist, uint32_t tidcnt);
-	int (*hfp_get_tidcache_invalidation)(psmi_hal_hw_context, uint64_t tidlist, uint32_t *tidcnt);
-	int (*hfp_update_tid)(psmi_hal_hw_context, uint64_t vaddr, uint32_t *length,
-			      uint64_t tidlist, uint32_t *tidcnt,
-			      uint16_t flags);
-	/* Start of tid flow functions. */
-	int (*hfp_tidflow_check_update_pkt_seq)(void *vpprotoexp
-						/* actually a:
-						   struct ips_protoexp *protoexp */,
-						psmi_seqnum_t sequence_num,
-						void *vptidrecvc
-						/* actually a:
-						   struct ips_tid_recv_desc *tidrecvc */,
-						struct ips_message_header *p_hdr,
-						void (*ips_protoexp_do_tf_generr)
-						(void *vpprotoexp
-						 /* actually a:
-						    struct ips_protoexp *protoexp */,
-						 void *vptidrecvc
-						 /* actually a:
-						    struct ips_tid_recv_desc *tidrecvc */,
-						 struct ips_message_header *p_hdr),
-						void (*ips_protoexp_do_tf_seqerr)
-						(void *vpprotoexp
-						 /* actually a:
-						    struct ips_protoexp *protoexp */,
-						 void *vptidrecvc
-						 /* actually a:
-						    struct ips_tid_recv_desc *tidrecvc */,
-						 struct ips_message_header *p_hdr)
-		);
-	int (*hfp_tidflow_get)(uint32_t flowid, uint64_t *ptf, psmi_hal_hw_context);
-
-	/* hfp_tidflow_get_hw is identical to hfp_tidflow_get(), but guarantees to get
-	   its information fron h/w, and not from cached values, but may be significantly
-	   slower than hfp_tidflow_get(), so should be used for debug only. */
-	int (*hfp_tidflow_get_hw)(uint32_t flowid, uint64_t *ptf, psmi_hal_hw_context);
-	int (*hfp_tidflow_get_seqnum)(uint64_t val, uint32_t *pseqn);
-	int (*hfp_tidflow_reset)(psmi_hal_hw_context, uint32_t flowid, uint32_t genval,
-				 uint32_t seqnum);
-	int (*hfp_tidflow_set_entry)(uint32_t flowid, uint32_t genval,
-				     uint32_t seqnum, psmi_hal_hw_context);
-	/* End of tid flow functions. */
-
-	int (*hfp_get_hfi_event_bits) (uint64_t *event_bits, psmi_hal_hw_context);
-#endif /* PSM_OPA */
 
 	psm2_error_t (*hfp_spio_transfer_frame)(struct ips_proto *proto,
 				       struct ips_flow *flow, struct ips_scb *scb,
@@ -634,22 +433,9 @@ struct _psmi_hal_instance
 				, uint32_t is_gpu_payload
 #endif
 		);
-#ifdef PSM_OPA
-	psm2_error_t (*hfp_dma_send_pending_scbs)(struct ips_proto *proto,
-				       struct ips_flow *flow, struct ips_scb_pendlist *slist,
-				       int *num_sent);
-#endif
 	psm2_error_t (*hfp_drain_sdma_completions)(struct ips_proto *proto);
 	int (*hfp_get_node_id)(int unit, int *nodep);
 
-#ifdef PSM_OPA
-	int      (*hfp_get_jkey)(psm2_ep_t);
-	int      (*hfp_get_pio_size)(psmi_hal_hw_context);
-	int      (*hfp_get_pio_stall_cnt)(psmi_hal_hw_context, uint64_t **);
-	int      (*hfp_get_subctxt)(psmi_hal_hw_context);
-	int      (*hfp_get_subctxt_cnt)(psmi_hal_hw_context);
-	int      (*hfp_get_tid_exp_cnt)(psmi_hal_hw_context);
-#endif /* PSM_OPA */
 #endif /* PSMI_HAL_INST_CNT > 1 || defined(PSM_DEBUG) */
 };
 
@@ -781,41 +567,14 @@ int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 #endif /* PSM_CUDA || PSM_ONEAPI */
 
 #define psmi_hal_get_port_index2pkey(...)			PSMI_HAL_DISPATCH(get_port_index2pkey,__VA_ARGS__)
-#ifdef PSM_OPA
-#define psmi_hal_set_pkey(...)					PSMI_HAL_DISPATCH(set_pkey,__VA_ARGS__)
-#endif // PSM_OPA
 #define psmi_hal_poll_type(...)					PSMI_HAL_DISPATCH(poll_type,__VA_ARGS__)
 
-#ifdef PSM_OPA
-#define psmi_hal_free_tid(...)					PSMI_HAL_DISPATCH(free_tid,__VA_ARGS__)
-#define psmi_hal_get_tidcache_invalidation(...)			PSMI_HAL_DISPATCH(get_tidcache_invalidation,__VA_ARGS__)
-#define psmi_hal_update_tid(...)				PSMI_HAL_DISPATCH(update_tid,__VA_ARGS__)
-#define psmi_hal_tidflow_check_update_pkt_seq(...)		PSMI_HAL_DISPATCH(tidflow_check_update_pkt_seq,__VA_ARGS__)
-#define psmi_hal_tidflow_get(...)				PSMI_HAL_DISPATCH(tidflow_get,__VA_ARGS__)
-#define psmi_hal_tidflow_get_hw(...)				PSMI_HAL_DISPATCH(tidflow_get_hw,__VA_ARGS__)
-#define psmi_hal_tidflow_get_seqnum(...)			PSMI_HAL_DISPATCH(tidflow_get_seqnum,__VA_ARGS__)
-#define psmi_hal_tidflow_reset(...)				PSMI_HAL_DISPATCH(tidflow_reset,__VA_ARGS__)
-#define psmi_hal_tidflow_set_entry(...)				PSMI_HAL_DISPATCH(tidflow_set_entry,__VA_ARGS__)
-#define psmi_hal_get_hfi_event_bits(...)			PSMI_HAL_DISPATCH(get_hfi_event_bits,__VA_ARGS__)
-#endif // PSM_OPA
 
 #define psmi_hal_spio_transfer_frame(...)			PSMI_HAL_DISPATCH(spio_transfer_frame,__VA_ARGS__)
 #define psmi_hal_transfer_frame(...)				PSMI_HAL_DISPATCH(transfer_frame,__VA_ARGS__)
-#ifdef PSM_OPA
-#define psmi_hal_dma_send_pending_scbs(...)				PSMI_HAL_DISPATCH(dma_send_pending_scbs,__VA_ARGS__)
-#endif
 #define psmi_hal_drain_sdma_completions(...)			PSMI_HAL_DISPATCH(drain_sdma_completions,__VA_ARGS__)
 #define psmi_hal_get_node_id(...)				PSMI_HAL_DISPATCH(get_node_id,__VA_ARGS__)
 
-#ifdef PSM_OPA
-#define psmi_hal_get_jkey(...)					PSMI_HAL_DISPATCH(get_jkey,__VA_ARGS__)
-#define psmi_hal_get_pio_size(...)				PSMI_HAL_DISPATCH(get_pio_size,__VA_ARGS__)
-#define psmi_hal_get_pio_stall_cnt(...)                         PSMI_HAL_DISPATCH(get_pio_stall_cnt,__VA_ARGS__)
-#define psmi_hal_get_subctxt(...)				PSMI_HAL_DISPATCH(get_subctxt,__VA_ARGS__)
-#define psmi_hal_get_subctxt_cnt(...)				PSMI_HAL_DISPATCH(get_subctxt_cnt,__VA_ARGS__)
-#define psmi_hal_get_tid_exp_cnt(...)				PSMI_HAL_DISPATCH(get_tid_exp_cnt,__VA_ARGS__)
-
-#endif // PSM_OPA
 
 #define psmi_hal_get_hal_instance_index()			psm3_hal_current_hal_instance->hal_index
 #define psmi_hal_get_hal_instance_name()			psm3_hal_index_to_str(psm3_hal_current_hal_instance->hal_index)

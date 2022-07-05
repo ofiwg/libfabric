@@ -81,17 +81,11 @@ extern "C" {
 #endif
 
 /* This indicates at least 1 HAL in the build can perform Send DMA */
-#ifdef PSM_OPA
-#define PSM_HAVE_SDMA
-#endif
 #ifdef PSM_VERBS
 #define PSM_HAVE_SDMA
 #endif
 
 /* This indicates at least 1 HAL in the build can perform RDMA */
-#ifdef PSM_OPA
-#define PSM_HAVE_RDMA
-#endif
 #ifdef PSM_VERBS
 #define PSM_HAVE_RDMA
 #endif
@@ -110,9 +104,6 @@ extern "C" {
 #endif /* UD || (UDP & CUDA) */
 #endif /* RNDV_MOD */
 
-#if defined(PSM_ONEAPI) && defined(PSM_OPA)
-#error "No support for OneAPI ZE for OPA"
-#endif
 
 #include "psm_config.h"
 #include <inttypes.h>
@@ -194,9 +185,7 @@ psm2_error_t psm3_mq_wait_internal(psm2_mq_req_t *ireq);
 
 int psm3_get_current_proc_location();
 
-#ifndef PSM_OPA
 extern int psm3_allow_routers;
-#endif
 extern uint32_t non_dw_mul_sdma;
 extern psmi_lock_t psm3_creation_lock;
 extern psm2_ep_t psm3_opened_endpoint;

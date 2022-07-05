@@ -90,11 +90,6 @@
 #define IPS_FAULTINJ_SENDFULL	5000	/* 1 every X pkts no resource at send */
 #define IPS_FAULTINJ_SENDFULLCTRL 5000	/* 1 every X pkts no resource at send ctrl */
 #define IPS_FAULTINJ_SENDFULLCB	5000	/* 1 every X pkts no resource at send ctrl callback */
-#ifdef PSM_OPA
-#define IPS_FAULTINJ_DMALOST	20	/* 1 every X dma writev get lost */
-#define IPS_FAULTINJ_PIOLOST	100	/* 1 every X pio writes get lost */
-#define IPS_FAULTINJ_PIOBUSY	10	/* 1 every X pio sends get busy */
-#endif
 #define IPS_FAULTINJ_SENDLOST	5000	/* 1 every X pkts dropped at send */
 #define IPS_FAULTINJ_SENDPART	10	/* 1 every X pkts partial send */
 #define IPS_FAULTINJ_RECVPART	10	/* 1 every X pkts partial recv */
@@ -115,28 +110,6 @@
 #endif
 #endif /* PSM_FI */
 
-#ifdef PSM_OPA
-/* We have to get an MTU of at least 2K, or else this breaks some assumptions
- * in the packets that handle tid descriptors
- */
-#define IPS_PROTOEXP_MIN_MTU		2048
-
-/* TID */
-
-/* Max tids a context can support */
-#define IPS_TID_MAX_TIDS    2048
-/* Max tid-session buffer size */
-#define PSM_TIDLIST_BUFSIZE 4096
-/* Max tid-session window size */
-#define PSM_TID_WINSIZE     (4*1024*1024)
-/* Max number of packets for a single TID flow, fitting tid-session window.
- * In PSM2 packet integrity is realized by PSN (Packet Sequence Number),
- * which is kept as 11 bits field (for 9B KDETH),
- * giving max value 2048 (0 - 2047) */
-#define PSM_TID_MAX_PKTS    2048
-/* Total number of combined pages from the Tid-pair to be merged */
-#define PSM_MAX_NUM_PAGES_IN_TIDPAIR    512
-#endif
 
 
 /* rcv thread */

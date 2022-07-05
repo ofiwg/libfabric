@@ -66,7 +66,6 @@
 #include "ips_tidflow.h"
 #include "ips_path_rec.h"
 
-#ifndef PSM_OPA
 // when defined, this enables use of byte based flow credits in addition
 // to packet based.
 // It can help UDP to avoid overflowing the sockets kernel buffers.
@@ -74,9 +73,6 @@
 // memory at scale.
 // UD/RC, TCP and OPA HALs self configure so this has no effect
 #define PSM_BYTE_FLOW_CREDITS
-#else
-#undef PSM_BYTE_FLOW_CREDITS
-#endif
 
 typedef enum ips_path_type {
 	IPS_PATH_LOW_PRIORITY,
@@ -93,28 +89,13 @@ typedef enum ips_path_type {
  */
 struct ips_epinfo {
 	__be16 ep_base_lid;
-#ifdef PSM_OPA
-	uint8_t ep_baseqp;
-#else
-#endif
 	uint8_t ep_hash;	// for hashing adaptive dispersive routing
 	uint8_t ep_lmc;
 	enum psm3_ibv_rate ep_link_rate;
-#ifdef PSM_OPA
-	uint16_t ep_context;
-	uint16_t ep_subcontext;
-	uint16_t ep_hfi_type;
-#endif
 	uint16_t ep_sl;		/* PSM3_NIC_SL only when path record not used */
 	uint32_t ep_mtu;	// PSM payload after potential hdr & PSM3_MTU decrease
 				// or TCP increase beyond wire size
-#ifdef PSM_OPA
-	uint16_t ep_piosize;
-#endif
 	uint16_t ep_pkey;	/* PSM3_PKEY only when path record not used */
-#ifdef PSM_OPA
-	uint16_t ep_jkey;	// for STL100 kdeth header
-#endif
 	uint64_t ep_timeout_ack;	/* PSM3_ERRCHK_TIMEOUT if no path record */
 	uint64_t ep_timeout_ack_max;
 	uint32_t ep_timeout_ack_factor;
@@ -252,10 +233,6 @@ struct ips_proto_stats {
 	uint64_t post_send_fail;
 #endif
 #ifdef PSM_HAVE_SDMA
-#ifdef PSM_OPA
-	uint64_t sdma_busy_cnt;
-	uint64_t sdma_compl_wait_ctrl;
-#endif
 	uint64_t sdma_compl_wait_ack;
 	uint64_t sdma_compl_wait_resend;
 	uint64_t sdma_compl_slow;
@@ -263,12 +240,6 @@ struct ips_proto_stats {
 #endif
 
 	uint64_t scb_egr_unavail_cnt;
-#ifdef PSM_OPA
-	uint64_t scb_exp_unavail_cnt;
-	uint64_t hdr_overflow;
-	uint64_t egr_overflow;
-	uint64_t lid_zero_errs;
-#endif
 	uint64_t unknown_packets;
 	uint64_t stray_packets;
 #ifdef PSM_SOCKETS
@@ -277,17 +248,6 @@ struct ips_proto_stats {
 #endif
 };
 
-#ifdef PSM_OPA
-struct ips_proto_error_stats {
-	uint64_t num_icrc_err;
-	uint64_t num_ecc_err;
-	uint64_t num_len_err;
-	uint64_t num_tid_err;
-	uint64_t num_dc_err;
-	uint64_t num_dcunc_err;
-	uint64_t num_khdrlen_err;
-};
-#endif
 
 /*
  * Updates to these stats must be reflected in ips_ptl_epaddr_stats_init
@@ -325,9 +285,6 @@ struct ips_proto_epaddr_stats {
 	uint64_t rdma_rexmit;
 #endif
 #endif
-#ifdef PSM_OPA
-	uint64_t congestion_pkts;	/* IB CCA FECN packets */
-#endif
 };
 
 /* OPP support structure. */
@@ -342,11 +299,7 @@ struct opp_api {
 struct ips_ibta_compliance_fn {
 	psm2_error_t(*get_path_rec) (struct ips_proto *proto, __be16 slid,
 				    __be16 dlid,
-#ifndef PSM_OPA
 				    __be64 gid_hi, __be64 gid_lo,
-#else
-				    uint16_t desthfi_type,
-#endif
 				    unsigned long timeout,
 				    ips_path_grp_t **ppathgrp);
 	psm2_error_t(*fini) (struct ips_proto *proto);
@@ -355,18 +308,12 @@ struct ips_ibta_compliance_fn {
 /* please don't change the flow id order */
 typedef enum ips_epaddr_flow {
 	EP_FLOW_GO_BACK_N_PIO,
-#ifdef PSM_OPA
-	EP_FLOW_GO_BACK_N_DMA,
-#endif
 	EP_FLOW_TIDFLOW,	/* Can either pio or dma for tidflow */
 	EP_FLOW_LAST		/* Keep this the last endpoint flow */
 } ips_epaddr_flow_t;
 
 typedef enum psm_transfer_type {
 	PSM_TRANSFER_PIO,
-#ifdef PSM_OPA
-	PSM_TRANSFER_DMA,
-#endif
 	PSM_TRANSFER_LAST	/* Keep this the last transfer type */
 } psm_transfer_type_t;
 
@@ -391,29 +338,10 @@ struct ips_proto {
 	struct ips_scbctrl scbc_egr;
 	struct ips_epinfo epinfo;
 
-#ifdef PSM_OPA
-	// TBD move this into gen1 HALs ep or psmi_context
-	ips_scb_t **sdma_scb_queue;
-	uint16_t sdma_queue_size;
-	uint16_t sdma_fill_index;
-	uint16_t sdma_done_index;
-	uint16_t sdma_avail_counter;
-#endif
 
 	uint64_t timeout_send;
-#ifdef PSM_OPA
-	uint32_t flags;		/* < if IPS_PROTO_FLAG_SDMA is NOT set, SPIO flow will be initialized
-				 * < if IPS_PROTO_FLAG_SPIO is NOT set, SDMA flow will be initialized
-				 * < so both flows (SDMA and PIO) will be initialized if both of the
-				 * < IPS_PROTO_FLAG_S{DMA,PIO} are CLEARED
-				 */
-#else
 	uint32_t flags;
-#endif
-#ifdef PSM_OPA
-	uint32_t iovec_thresh_eager;
-	uint32_t iovec_thresh_eager_blocking;
-#elif defined(PSM_HAVE_REG_MR)
+#if   defined(PSM_HAVE_REG_MR)
 	// TBD adjust rest of Send DMA code to use PSM_HAVE_SDMA
 	uint32_t iovec_thresh_eager;
 	uint32_t iovec_thresh_eager_blocking;
@@ -433,14 +361,8 @@ struct ips_proto {
 	uint32_t flow_credit_bytes;	// credit limit in bytes
 #endif
 	mpool_t pend_sends_pool;
-#ifdef PSM_OPA
-	mpool_t timer_pool;
-#endif
 	struct ips_ibta_compliance_fn ibta;
 	struct ips_proto_stats stats;
-#ifdef PSM_OPA
-	struct ips_proto_error_stats error_stats;
-#endif
 	struct ips_proto_epaddr_stats epaddr_stats;
 	struct ptl_strategy_stats strat_stats;
 
@@ -455,13 +377,6 @@ struct ips_proto {
 	psm2_mr_cache_t mr_cache;
 #endif
 
-#ifdef PSM_OPA
-	/* Handling tid errors */
-	uint32_t tiderr_cnt;
-	uint32_t tiderr_max;
-	uint64_t tiderr_tnext;
-	uint64_t tiderr_warn_interval;
-#endif
 
 	uint64_t t_init;
 	uint64_t t_fini;
@@ -488,27 +403,6 @@ struct ips_proto {
 		uint64_t count;
 	} psmi_logevent_tid_send_reqs;
 
-#ifdef PSM_OPA
-	/* SL2SC and SC2VL table for protocol */
-	uint16_t sl2sc[32];
-	/* CCA per port */
-	uint16_t *cct;		/* cct table */
-	uint16_t ccti_size;	/* ccti table size */
-	uint16_t ccti_limit;	/* should be <= size-1 */
-
-	uint16_t ccti_portctrl;	/* QP or SL CC */
-	uint32_t ccti_ctrlmap;	/* map for valid sl */
-	struct cace {		/* CACongestionEntry */
-		uint8_t ccti_increase;	/* steps to increase */
-		/* uint16_t  ccti_timer;*/ /* CCTI Timer in units of 1.024 usec */
-		uint64_t ccti_timer_cycles; /* converted from us_2_cycles() */
-		uint8_t ccti_threshold;	/* threshold to make log */
-		uint8_t ccti_min;	/* min value for ccti */
-	} cace[32];		/* 32 service levels */
-
-	/* Path record support */
-	uint8_t ips_ipd_delay[PSM3_IBV_RATE_300_GBPS + 1];
-#endif
 	/*
 	 * Disable the LMC based dispersive routing for all message
 	 * sizes in bytes between ips_lmc_disable_low and ips_lmc_disable_high,
@@ -559,19 +453,6 @@ struct ips_proto {
 	time_t writevFailTime;
 };
 
-#ifdef PSM_OPA
-static inline int
-ips_proto_is_disabled_pio(struct ips_proto *proto)
-{
-	return !!(proto->flags & IPS_PROTO_FLAG_SDMA);
-}
-
-static inline int
-ips_proto_is_disabled_sdma(struct ips_proto *proto)
-{
-	return !!(proto->flags & IPS_PROTO_FLAG_SPIO);
-}
-#endif
 
 /*
  * Test the payload length against the lmc_disable_low and lmc_disable_hi
@@ -619,9 +500,6 @@ struct ips_flow {
 	uint16_t protocol:3;	/* go-back-n or tidflow */
 	uint16_t flags:8;	/* flow state flags */
 
-#ifdef PSM_OPA
-	uint16_t cca_ooo_pkts;	/* cca out of order packets */
-#endif
 	// TBD - cwin only needed for OPA for CCA
 	uint16_t cwin;		/* Size of congestion window in packets */
 	// to allow for good pipelining of send/ACK need to trigger an ack at
@@ -774,16 +652,6 @@ struct ips_epaddr {
 			int tcp_fd;
 		} sockets;
 #endif /* PSM_SOCKETS */
-#ifdef PSM_OPA
-		struct {
-			// For PSM_OPA this is computed based on
-			// min(negotiated mtu * TID_MAX, mq->hfi_base_window_rv)
-			// For PSM_VERBS/UDP this is always mq->hfi_base_window_rv
-			uint32_t window_rv;	/* RNDV window size per conn */
-			uint8_t  context;	/* real context */
-			uint8_t  subcontext;	/* sub context, 3 bits, 5 bits for future */
-		} opa;
-#endif /* PSM_OPA */
 	};
 
 	/* this portion is only for connect/disconnect */
@@ -878,22 +746,10 @@ void MOCKABLE(psm3_ips_proto_flow_enqueue)(struct ips_flow *flow, ips_scb_t *scb
 MOCK_DCL_EPILOGUE(psm3_ips_proto_flow_enqueue);
 
 psm2_error_t psm3_ips_proto_flow_flush_pio(struct ips_flow *flow, int *nflushed);
-#ifdef PSM_OPA
-psm2_error_t ips_proto_flow_flush_dma(struct ips_flow *flow, int *nflushed);
-#endif
 
 /* Wrapper for enqueue + flush */
 psm2_error_t ips_proto_scb_pio_send(struct ips_flow *flow, ips_scb_t *scb);
 
-#ifdef PSM_OPA
-void ips_proto_scb_dma_enqueue(struct ips_proto *proto, ips_scb_t *scb);
-psm2_error_t ips_proto_scb_dma_flush(struct ips_proto *proto,
-				    ips_epaddr_t *ipsaddr, int *nflushed);
-psm2_error_t ips_dma_transfer_frame(struct ips_proto *proto,
-				   struct ips_flow *flow, ips_scb_t *scb,
-				   void *payload, uint32_t paylen,
-				   uint32_t have_cksum, uint32_t cksum);
-#endif
 #ifdef PSM_HAVE_SDMA
 psm2_error_t ips_proto_dma_wait_until(struct ips_proto *proto, ips_scb_t *scb);
 #endif
@@ -963,24 +819,6 @@ MOCK_DCL_EPILOGUE(psm3_ips_ibta_init);
 
 psm2_error_t psm3_ips_ibta_fini(struct ips_proto *proto);
 
-#ifdef PSM_OPA
-PSMI_ALWAYS_INLINE(
-struct psm_hal_sdma_req_info *
-psm3_get_sdma_req_info(struct ips_scb *scb, size_t *extra))
-{
-	*extra = 0;
-#ifdef PSM_CUDA
-	if (PSMI_IS_DRIVER_GPUDIRECT_DISABLED)
-		return (struct psm_hal_sdma_req_info *)(((char *)&scb->pbc) -
-				(sizeof(struct psm_hal_sdma_req_info) -
-				 PSM_HAL_CUDA_SDMA_REQ_INFO_EXTRA));
-
-	*extra = PSM_HAL_CUDA_SDMA_REQ_INFO_EXTRA;
-#endif // PSM_CUDA
-
-	return (struct psm_hal_sdma_req_info *)(((char *)&scb->pbc) - (sizeof(struct psm_hal_sdma_req_info)));
-}
-#endif // PSM_OPA
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 PSMI_ALWAYS_INLINE(
@@ -995,21 +833,5 @@ uint32_t ips_cuda_next_window(uint32_t max_window, uint32_t offset,
 }
 #endif
 
-#ifdef PSM_OPA
-/* Determine if FECN bit is set IBTA 1.2.1 CCA Annex A*/
-
-static __inline__ uint8_t
-_is_cca_fecn_set(const struct ips_message_header *p_hdr)
-{
-	return (__be32_to_cpu(p_hdr->bth[1]) >> HFI_BTH_FECN_SHIFT) & 0x1;
-}
-
-/* Detrmine if BECN bit is set IBTA 1.2.1 CCA Annex A*/
-static __inline__ uint8_t
-_is_cca_becn_set(const struct ips_message_header *p_hdr)
-{
-	return (__be32_to_cpu(p_hdr->bth[1]) >> HFI_BTH_BECN_SHIFT) & 0x1;
-}
-#endif
 
 #endif /* _IPS_PROTO_H */

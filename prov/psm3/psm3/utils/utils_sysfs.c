@@ -85,9 +85,6 @@ static char psm3_sysfs_paths[PSMI_MAX_RAILS][PATH_MAX];
 static psm3_port_path_type psm3_sysfs_port_path_fmt;
 static int  psm3_sysfs_path_count = -1;
 static long psm3_sysfs_page_size;
-#ifdef PSM_OPA
-static char *hfifs_path;
-#endif
 
 static int filter_dir(const struct dirent *item) {
 	if (item->d_name[0] == '.') return 0;
@@ -143,12 +140,6 @@ int psm3_sysfs_init(const char *nic_class_path, const psm3_port_path_type port_p
 	// for psm3_sysfs_port_open construction of path to port attr
 	psm3_sysfs_port_path_fmt = port_path_fmt;
 
-#ifdef PSM_OPA
-	if (hfifs_path == NULL)
-		hfifs_path = getenv("PSM3_HFIFS_PATH");
-	if (hfifs_path == NULL)
-		hfifs_path = "/hfifs";
-#endif
 
 	if (!psm3_sysfs_page_size)
 		psm3_sysfs_page_size = sysconf(_SC_PAGESIZE);
@@ -222,32 +213,6 @@ int psm3_sysfs_find_unit(const char *name)
 	return -1;
 }
 
-#ifdef PSM_OPA
-const char *psm3_hfifs_path(void)
-{
-	return hfifs_path;
-}
-
-static int psm3_hfifs_open(const char *attr, int flags)
-{
-	char buf[1024];
-	int saved_errno;
-	int fd;
-
-	snprintf(buf, sizeof(buf), "%s/%s", psm3_hfifs_path(), attr);
-	fd = open(buf, flags);
-	saved_errno = errno;
-
-	if (fd == -1) {
-		_HFI_DBG("Failed to open driver attribute '%s': %s\n", attr,
-			 strerror(errno));
-		_HFI_DBG("Offending file name: %s\n", buf);
-	}
-
-	errno = saved_errno;
-	return fd;
-}
-#endif // PSM_OPA
 
 static int psm3_sysfs_unit_open(uint32_t unit, const char *attr, int flags)
 {
@@ -346,27 +311,6 @@ static int psm3_sysfs_port_open(uint32_t unit, uint32_t port, const char *attr,
 	return fd;
 }
 
-#ifdef PSM_OPA
-static int psm3_hfifs_unit_open(uint32_t unit, const char *attr, int flags)
-{
-	int saved_errno;
-	char buf[1024];
-	int fd;
-
-	snprintf(buf, sizeof(buf), "%s/%u/%s", psm3_hfifs_path(), unit, attr);
-	fd = open(buf, flags);
-	saved_errno = errno;
-
-	if (fd == -1) {
-		_HFI_DBG("Failed to open attribute '%s' of unit %d: %s\n", attr,
-			 unit, strerror(errno));
-		_HFI_DBG("Offending file name: %s\n", buf);
-	}
-
-	errno = saved_errno;
-	return fd;
-}
-#endif // PSM_OPA
 
 static int read_page(int fd, char **datap)
 {
@@ -497,124 +441,6 @@ bail:
 	return ret;
 }
 
-#ifdef PSM_OPA
-
-/* free data allocated by read_page or any of the other hfifs functions in this
- * file which use it
- */
-void psm3_hfifs_free(char *data)
-{
-	psm3_sysfs_free(data);
-}
-
-/*
- * On return, caller must free *datap via psm3_hfifs_free
- */
-int psm3_hfifs_read(const char *attr, char **datap)
-{
-	int fd = -1, ret = -1;
-	int saved_errno;
-
-	fd = psm3_hfifs_open(attr, O_RDONLY);
-	saved_errno = errno;
-
-	if (fd == -1)
-		goto bail;
-
-	ret = read_page(fd, datap);
-	saved_errno = errno;
-
-bail:
-	if (ret == -1)
-		*datap = NULL;
-
-	if (fd != -1) {
-		close(fd);
-	}
-
-	errno = saved_errno;
-	return ret;
-}
-
-/*
- * On return, caller must free *datap via psm3_hfifs_free
- */
-int psm3_hfifs_unit_read(uint32_t unit, const char *attr, char **datap)
-{
-	int fd = -1, ret = -1;
-	int saved_errno;
-
-	fd = psm3_hfifs_unit_open(unit, attr, O_RDONLY);
-	saved_errno = errno;
-
-	if (fd == -1)
-		goto bail;
-
-	ret = read_page(fd, datap);
-	saved_errno = errno;
-
-bail:
-	if (ret == -1)
-		*datap = NULL;
-
-	if (fd != -1) {
-		close(fd);
-	}
-
-	errno = saved_errno;
-	return ret;
-}
-
-/*
- * The _rd routines jread directly into a supplied buffer,
- * unlike  the _read routines.
- */
-int psm3_hfifs_rd(const char *attr, void *buf, int n)
-{
-	int fd = -1, ret = -1;
-	int saved_errno;
-
-	fd = psm3_hfifs_open(attr, O_RDONLY);
-	saved_errno = errno;
-
-	if (fd == -1)
-		goto bail;
-
-	ret = read(fd, buf, n);
-	saved_errno = errno;
-
-bail:
-	if (fd != -1) {
-		close(fd);
-	}
-
-	errno = saved_errno;
-	return ret;
-}
-
-int psm3_hfifs_unit_rd(uint32_t unit, const char *attr, void *buf, int n)
-{
-	int fd = -1, ret = -1;
-	int saved_errno;
-
-	fd = psm3_hfifs_unit_open(unit, attr, O_RDONLY);
-	saved_errno = errno;
-
-	if (fd == -1)
-		goto bail;
-
-	ret = read(fd, buf, n);
-	saved_errno = errno;
-
-bail:
-	if (fd != -1) {
-		close(fd);
-	}
-
-	errno = saved_errno;
-	return ret;
-}
-#endif // PSM_OPA
 
 int psm3_sysfs_unit_read_s64(uint32_t unit, const char *attr,
 			    int64_t *valp, int base)

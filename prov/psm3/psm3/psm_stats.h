@@ -79,11 +79,6 @@
 #define PSMI_STATSTYPE_RV_RDMA	    0x04000	/* RV shared conn RDMA */
 #endif /* PSM_VERBS */
 #define PSMI_STATSTYPE_FAULTINJ	    0x08000	/* fault injection - PSM_FI */
-#ifdef PSM_OPA
-#define PSMI_STATSTYPE_DEVCOUNTERS  0x10000
-#define PSMI_STATSTYPE_DEVSTATS	    0x20000
-#define _PSMI_STATSTYPE_DEVMASK	    0xf0000
-#endif
 #define PSMI_STATSTYPE_ALL	    	0xfffff
 #define _PSMI_STATSTYPE_SHOWZERO	0x100000
 

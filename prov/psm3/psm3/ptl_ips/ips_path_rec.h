@@ -229,35 +229,13 @@ typedef struct ips_path_rec {
 	__be16 pr_dlid;
 	uint16_t pr_pkey;
 	uint8_t pr_sl;
-#ifdef PSM_OPA
-	uint8_t pr_pad[3];	// for alignment
-	uint16_t pr_static_ipd;	/* Static rate IPD from path record */
-#else
 	uint8_t pr_static_rate;	// psm3_ibv_rate enum
 	__be64 pr_gid_hi;	// for ethernet, has IPv4 or IPv6
 	__be64 pr_gid_lo;	// addr in IPv6 style
-#endif
 	uint32_t pr_mtu;	/* PSM payload in bytes, <= Path's MTU */
 				// TBD - could reduce to 2 bytes by storing
 				// as number of dwords instead of bytes
 	union {
-#ifdef PSM_OPA
-		struct {
-			// 64b aligned at start of struct
-			/* IBTA CCA parameters per path */
-				/* CCA divisor [14:15] in CCT entry */
-			uint8_t pr_cca_divisor;
-			uint8_t pr_pad[3];
-				/* The current active IPD. max(static,cct) */
-			uint16_t pr_active_ipd;
-				/* CCA table index */
-			uint16_t pr_ccti;
-				/* Congestion timer for epr_ccti increment. */
-			psmi_timer *pr_timer_cca;
-				/* for global info */
-			struct ips_proto *pr_proto;
-		} PACK_SUFFIX opa;
-#endif /* PSM_OPA */
 #ifdef PSM_VERBS
 		// each path_rec is shared for all remote processes on a
 		// a given node.  So this is a convenient place to have

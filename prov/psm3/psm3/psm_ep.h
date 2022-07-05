@@ -60,18 +60,12 @@
 #ifndef _PSMI_EP_H
 #define _PSMI_EP_H
 
-#ifdef PSM_OPA
-#if defined(PSM_VERBS) || defined(PSM_SOCKETS)
-#error "PSM_OPA not allowed with PSM_VERBS and/or PSM_SOCKETS"
-#endif
-#else // PSM_OPA
 #if !defined(PSM_VERBS) && !defined(PSM_SOCKETS) && !defined(PSM_NONE)
 #error "At least one of PSM_VERBS or PSM_SOCKETS must be defined"
 #endif
 #if defined(PSM_VERBS) && defined(PSM_SOCKETS) && defined(UMR_CACHE)
 #error "UMR_CACHE not yet allowed with both PSM_VERBS and PSM_SOCKETS enabled"
 #endif
-#endif // PSM_OPA
 
 #ifdef PSM_VERBS
 #include "hal_verbs/verbs_ep.h"
@@ -88,23 +82,10 @@
 /* any port num to match. */
 #define PSM3_NIC_PORT_ANY ((long)0)
 
-#ifdef PSM_OPA
-#define PSMI_HFI_TYPE_UNKNOWN 0
-#define PSMI_HFI_TYPE_OPA1    1
-#define PSMI_HFI_TYPE_OPA2    2
-#endif
 
 #define PSMI_SL_DEFAULT 0
 #define PSMI_SL_MIN	0
 #define PSMI_SL_MAX	31
-#ifdef PSM_OPA
-#define PSMI_SC_DEFAULT 0
-#define PSMI_VL_DEFAULT 0
-#define PSMI_SC_ADMIN	15
-#define PSMI_VL_ADMIN	15
-#define PSMI_SC_NBITS   5  /* Number of bits in SC */
-#define PSMI_N_SCS       (1 << PSMI_SC_NBITS)  /* The number of SC's */
-#endif
 
 #define PSM_MCTXT_APPEND(head, node)	\
 	node->mctxt_prev = head->mctxt_prev; \
@@ -128,10 +109,6 @@ struct psm2_ep {
 #endif
 #ifdef PSM_SOCKETS
 		struct psm3_sockets_ep sockets_ep;
-#endif
-#ifdef PSM_OPA
-		/* OPA specific device pointer */
-		psmi_context_t context;
 #endif
 	};
 
@@ -177,9 +154,6 @@ struct psm2_ep {
 			   * Note UDP vs TCP are separate EPID protocols
 			   */
 	uint8_t rdmamode; /* PSM3_RDMA */
-#ifdef PSM_OPA
-				/* PSM3_TID (OPA100) */
-#endif
 #ifdef PSM_HAVE_REG_MR
 	/* per EP information needed to create verbs MR cache */
 	uint8_t mr_cache_mode; /** PSM3_MR_CACHE_MODE */
@@ -191,7 +165,6 @@ struct psm2_ep {
 	uint32_t hfi_imm_size;	  /** Immediate data size */
 	uint32_t connections;	    /**> Number of connections */
 
-#ifndef PSM_OPA
 	/* HAL indicates send segmentation support (OPA Send DMA or UDP GSO)
 	 * by setting max_segs>1 and max_size > 1 MTU.
 	 * chunk_size used will be min(chunk_max_segs*frag_size, chunk_max_size)
@@ -201,7 +174,6 @@ struct psm2_ep {
 	 */
 	uint16_t chunk_max_segs;	/* max fragments in 1 HAL send call */
 	uint32_t chunk_max_size;	/* max payload in 1 HAL send call */
-#endif
 	char *context_mylabel;
 	uint32_t yield_spin_cnt;
 

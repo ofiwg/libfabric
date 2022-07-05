@@ -400,14 +400,8 @@ static PSMI_HAL_INLINE void psm3_hfp_verbs_ips_proto_build_connect_message(
 			req->verbs.qp_attr.resv = 0;
 			req->verbs.qp_attr.target_ack_delay = 0; // TBD; - from local device
 			req->verbs.qp_attr.resv2 = 0;
-#ifdef USE_RDMA_READ
-			// Send our RDMA Read capabilities
-			req->verbs.qp_attr.responder_resources = proto->ep->verbs_ep.max_qp_rd_atom;
-			req->verbs.qp_attr.initiator_depth = proto->ep->verbs_ep.max_qp_init_rd_atom;
-#else
 			req->verbs.qp_attr.responder_resources = 0;
 			req->verbs.qp_attr.initiator_depth = 0;
-#endif
 			memset(&req->verbs.qp_attr.resv3, 0, sizeof(req->verbs.qp_attr.resv3));
 		} else
 #endif // USE_RC

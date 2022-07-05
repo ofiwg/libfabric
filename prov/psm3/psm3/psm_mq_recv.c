@@ -257,16 +257,7 @@ psm3_mq_handle_data(psm2_mq_t mq, psm2_mq_req_t req,
 		}
 
 		if (req->state == MQ_STATE_MATCHED) {
-#if 0 && defined(PSM_HAVE_REG_MR)
-			// this is a bit paranoid, if the receiver selected LONG_DATA in CTS
-			// it will not have registered an MR
-			if (req->mr) {
-				_HFI_MMDBG("LONG_DATA recv complete, releasing MR: rkey: 0x%x\n", req->mr->rkey);
-				psm3_verbs_release_mr(req->mr);
-				req->mr = NULL;
-				ips_tid_mravail_callback(req->rts_peer->proto);
-			}
-#elif defined(PSM_HAVE_REG_MR)
+#if   defined(PSM_HAVE_REG_MR)
 			psmi_assert(! req->mr);
 #endif
 			req->state = MQ_STATE_COMPLETE;
@@ -848,17 +839,12 @@ int psm3_mq_handle_outoforder(psm2_mq_t mq, psm2_mq_req_t ureq)
 	switch (ureq->state) {
 	case MQ_STATE_COMPLETE:
 		if (ureq->req_data.buf != NULL) {	/* 0-byte don't alloc a sysreq_data.buf */
-#ifdef PSM_OPA
-			psm3_mq_mtucpy(ereq->req_data.buf, (const void *)ureq->req_data.buf,
-                                       msglen);
-#else
 			psm3_mq_recv_copy(mq, ureq,
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 					ereq->is_buf_gpu_mem,
 #endif
 					ereq->req_data.buf,
 					ereq->req_data.buf_len, msglen);
-#endif
 			psm3_mq_sysbuf_free(mq, ureq->req_data.buf);
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		} else {
@@ -875,20 +861,12 @@ int psm3_mq_handle_outoforder(psm2_mq_t mq, psm2_mq_req_t ureq)
 		ereq->ptl_req_ptr = ureq->ptl_req_ptr;
 		ereq->send_msgoff = ureq->send_msgoff;
 		ereq->recv_msgoff = min(ureq->recv_msgoff, msglen);
-#ifdef PSM_OPA
-		if (ereq->recv_msgoff) {
-			psm3_mq_mtucpy(ereq->req_data.buf,
-				       (const void *)ureq->req_data.buf,
-				       ereq->recv_msgoff);
-		}
-#else
 		psm3_mq_recv_copy(mq, ureq,
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 				ereq->is_buf_gpu_mem,
 #endif
 				ereq->req_data.buf,
 			 	ereq->req_data.buf_len, ereq->recv_msgoff);
-#endif
 		psm3_mq_sysbuf_free(mq, ureq->req_data.buf);
 		ereq->type = ureq->type;
 		STAILQ_INSERT_AFTER(&mq->eager_q, ureq, ereq, nextq);
@@ -901,11 +879,6 @@ int psm3_mq_handle_outoforder(psm2_mq_t mq, psm2_mq_req_t ureq)
 		ereq->send_msgoff = ureq->send_msgoff;
 		ereq->recv_msgoff = min(ureq->recv_msgoff, msglen);
 		if (ereq->send_msgoff) { // only have sysbuf if RTS w/payload
-#ifdef PSM_OPA
-			psm3_mq_mtucpy(ereq->req_data.buf,
-				       (const void *)ureq->req_data.buf,
-				       ereq->recv_msgoff);
-#else
 			psm3_mq_recv_copy(mq, ureq,
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 					ereq->is_buf_gpu_mem,
@@ -913,7 +886,6 @@ int psm3_mq_handle_outoforder(psm2_mq_t mq, psm2_mq_req_t ureq)
 					ereq->req_data.buf,
 			 		ereq->req_data.buf_len,
 					ereq->recv_msgoff);
-#endif
 			psm3_mq_sysbuf_free(mq, ureq->req_data.buf);
 		}
 		ereq->rts_callback = ureq->rts_callback;
