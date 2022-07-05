@@ -144,11 +144,7 @@
 /* XXX TODO: Getting the gpu page size from driver at init time */
 #define PSMI_GPU_PAGESIZE 65536
 
-#ifdef PSM_OPA
-#define GDR_COPY_LIMIT_SEND 32
-#else
 #define GDR_COPY_LIMIT_SEND 128
-#endif
 #define GDR_COPY_LIMIT_RECV 64000
 
 #elif defined(PSM_ONEAPI)
@@ -165,11 +161,7 @@
 /* All GPU transfers beyond this threshold use
  * RNDV protocol. It is mostly a send side knob.
  */
-#ifdef PSM_OPA
-#define CUDA_THRESH_RNDV 32768
-#else
 #define CUDA_THRESH_RNDV 8000
-#endif
 
 #define GPUDIRECT_THRESH_RV 3
 

@@ -75,11 +75,7 @@
 #define CTRL_MSG_NAK_QUEUED                     0x0002
 #define CTRL_MSG_BECN_QUEUED                    0x0004
 #define CTRL_MSG_ERR_CHK_QUEUED                 0x0008
-#ifdef PSM_OPA
-#define CTRL_MSG_ERR_CHK_GEN_QUEUED             0x0010
-#else
 // reserved                                     0x0010
-#endif
 #define CTRL_MSG_CONNECT_REQUEST_QUEUED		0x0020
 #define CTRL_MSG_CONNECT_REPLY_QUEUED		0x0040
 #define CTRL_MSG_DISCONNECT_REQUEST_QUEUED	0x0080
@@ -93,8 +89,6 @@ uint32_t gpudirect_rdma_recv_limit;
 static void ctrlq_init(struct ips_ctrlq *ctrlq, struct ips_proto *proto);
 
 #ifdef PSM_HAVE_REG_MR
-static psm2_error_t proto_sdma_init(struct ips_proto *proto);
-#elif defined(PSM_OPA)
 static psm2_error_t proto_sdma_init(struct ips_proto *proto);
 #endif
 static psm2_error_t ips_proto_register_stats(struct ips_proto *proto);
@@ -221,15 +215,6 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 			proto->flags |= IPS_PROTO_FLAG_LOOPBACK;
 	}
 
-#ifdef PSM_OPA
-	/* for SELINUX, psm3_ips_ibta_init will set the driver pkey which
-	 * causes hfi1 driver to recompute the jkey, so
-	 * we need to refetch it here
-	 */
-	/* Update JKey if necessary */
-	if (getenv("PSM3_SELINUX"))
-		proto->epinfo.ep_jkey = psmi_hal_get_jkey(ep);
-#endif
 
 	{
 		/* Disable coalesced ACKs? */
@@ -245,32 +230,13 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 	/*
 	 * Initialize SDMA, otherwise, turn on all PIO.
 	 */
-#ifdef PSM_OPA
-	if (psmi_hal_has_cap(PSM_HAL_CAP_SDMA)) {
-		if ((err = proto_sdma_init(proto)))
-			goto fail;
-	} else {
-		proto->flags |= IPS_PROTO_FLAG_SPIO;
-		proto->iovec_thresh_eager = proto->iovec_thresh_eager_blocking =
-		    ~0U;
-	}
-#else
 	// initialize sdma after PSM3_MR_CACHE_MODE
 	proto->flags |= IPS_PROTO_FLAG_SPIO;
-#endif
 
 	/*
 	 * Setup the protocol wide short message ep flow.
 	 */
-#ifdef PSM_OPA
-	if (proto->flags & IPS_PROTO_FLAG_SDMA) {
-		proto->msgflowid = EP_FLOW_GO_BACK_N_DMA;
-	} else {
-		proto->msgflowid = EP_FLOW_GO_BACK_N_PIO;
-	}
-#else
 	proto->msgflowid = EP_FLOW_GO_BACK_N_PIO;
-#endif
 
 	/*
 	 * Clone sendreq mpool configuration for pend sends config
@@ -291,26 +257,6 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		}
 	}
 
-#ifdef PSM_OPA
-	/*
-	 * Create a pool of CCA timers for path_rec. The timers should not
-	 * exceed the scb number num_of_send_desc(default 4K).
-	 */
-	{
-		uint32_t chunks, maxsz;
-
-		chunks = 256;
-		maxsz = num_of_send_desc;
-
-		proto->timer_pool =
-		    psm3_mpool_create(sizeof(struct psmi_timer), chunks, maxsz,
-				      0, DESCRIPTORS, NULL, NULL);
-		if (proto->timer_pool == NULL) {
-			err = PSM2_NO_MEMORY;
-			goto fail;
-		}
-	}
-#endif
 
 	/*
 	 * Register ips protocol statistics
@@ -371,17 +317,11 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 
 	// protoexp implements RDMA for UD and TID for STL100 native.  N/A to UDP
 	// when proto->protoexp is NULL, we will not attempt to use TID nor RDMA
-#ifdef PSM_OPA
-	if (protoexp_flags & IPS_PROTOEXP_FLAG_ENABLED) {
-		proto->scbc_rv = NULL;
-	} else {
-#else
 	{
 		(void)protoexp_flags;
 		// for UD, even when RDMA is enabled, we may fall back to LONG_DATA
 		// in which case we want the scbc_rv scb's so we don't exhaust the
 		// scbc_egr pool
-#endif
 		proto->scbc_rv = (struct ips_scbctrl *)
 		    psmi_calloc(proto->ep, DESCRIPTORS,
 				1, sizeof(struct ips_scbctrl));
@@ -415,41 +355,6 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		proto->protoexp = NULL;
 	}
 
-#ifdef PSM_OPA
-// TBD - put in HAL specific protoexp_init routine
-	// only used for STL100 native mode
-	/*
-	 * Parse the tid error settings from the environment.
-	 * <interval_secs>:<max_count_before_exit>
-	 */
-	{
-		int tvals[2];
-		char *tid_err;
-		union psmi_envvar_val env_tiderr;
-
-		tid_err = "-1:0";	/* no tiderr warnings, never exits */
-		tvals[0] = -1;
-		tvals[1] = 0;
-
-		if (!psm3_getenv("PSM3_TID_ERROR",
-				 "Tid error control <intval_secs:max_errors>",
-				 PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_STR,
-				 (union psmi_envvar_val)tid_err, &env_tiderr)) {
-			/* not using default values */
-			tid_err = env_tiderr.e_str;
-			psm3_parse_str_tuples(tid_err, 2, tvals);
-		}
-		if (tvals[0] >= 0)
-			proto->tiderr_warn_interval = sec_2_cycles(tvals[0]);
-		else
-			proto->tiderr_warn_interval = UINT64_MAX;
-		proto->tiderr_max = tvals[1];
-		_HFI_PRDBG("Tid error control: warning every %d secs%s, "
-			   "fatal error after %d tid errors%s\n",
-			   tvals[0], (tvals[0] < 0) ? " (no warnings)" : "",
-			   tvals[1], (tvals[1] == 0) ? " (never fatal)" : "");
-	}
-#endif
 
 	/* Active Message interface. AM requests compete with MQ for eager
 	 * buffers, since request establish the amount of buffering in the
@@ -471,9 +376,6 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 	is_gpudirect_enabled = psmi_parse_gpudirect();
 	gpudirect_rdma_send_limit = psmi_parse_gpudirect_rdma_send_limit(0);
 	gpudirect_rdma_recv_limit = psmi_parse_gpudirect_rdma_recv_limit(0);
-#ifdef PSM_OPA
-	// driver capability affects driver API, so always check capability
-#endif
 	if (psmi_hal_has_cap(PSM_HAL_CAP_GPUDIRECT))
 		is_driver_gpudirect_enabled = 1;
 
@@ -489,20 +391,10 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		is_gpudirect_enabled = 0;
 		gpudirect_rdma_send_limit = gpudirect_rdma_recv_limit = 0;
 	} else if (
-#ifdef PSM_OPA // for OPA need SDMA and TID RDMA
-		/* All pio, No SDMA*/
-		(proto->flags & IPS_PROTO_FLAG_SPIO) ||
-		!(protoexp_flags & IPS_PROTOEXP_FLAG_ENABLED) ||
-#else	// for UD and UDP, allow any RDMA mode, no SDMA (always PIO)
-#endif
 		PSMI_IS_DRIVER_GPUDIRECT_DISABLED) {
 		err = psm3_handle_error(PSMI_EP_NORETURN,
 				PSM2_INTERNAL_ERR,
-#ifdef PSM_OPA
-				"Unable to start run, Requires SDMA, TID recv and hfi1 driver with GPU-Direct feature enabled.\n");
-#else
 				"Unable to start run, PSM3_GPUDIRECT requires rv module with CUDA support.\n");
-#endif
 	} else if (!(protoexp_flags & IPS_PROTOEXP_FLAG_ENABLED)) {
 		// only GDR Copy and GPU Send DMA allowed
 		gpudirect_rdma_send_limit = gpudirect_rdma_recv_limit = 0;
@@ -580,11 +472,7 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		union psmi_envvar_val env_prefetch_limit;
 
 		psm3_getenv("PSM3_CUDA_PREFETCH_LIMIT",
-#ifdef PSM_OPA
-			    "How many TID windows to prefetch at RTS time(default is 2)",
-#else
 			    "How many RDMA windows to prefetch at RTS time(default is 2)",
-#endif
 			    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT_FLAGS,
 			    (union psmi_envvar_val)CUDA_WINDOW_PREFETCH_DEFAULT,
 			    &env_prefetch_limit);
@@ -961,60 +849,13 @@ psm3_ips_proto_fini(struct ips_proto *proto, int force, uint64_t timeout_in)
 
 	psm3_mpool_destroy(proto->pend_sends_pool);
 
-#ifdef PSM_OPA
-	psm3_mpool_destroy(proto->timer_pool);
-	psmi_free(proto->sdma_scb_queue);
-#endif
 
 fail:
 	proto->t_fini = proto->t_init = 0;
 	return err;
 }
 
-#ifdef PSM_OPA
-static
-psm2_error_t
-proto_sdma_init(struct ips_proto *proto)
-{
-	union psmi_envvar_val env_sdma, env_hfiegr;
-	psm2_error_t err = PSM2_OK;
-
-	/*
-	 * Only initialize if RUNTIME_SDMA is enabled.
-	 */
-	psmi_assert_always(psmi_hal_has_cap(PSM_HAL_CAP_SDMA));
-
-	psm3_getenv("PSM3_SDMA",
-		    "hfi send dma flags (0 disables send dma, 2 disables send pio, "
-		    "1 for both sdma/spio, default 1)",
-		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT_FLAGS,
-		    (union psmi_envvar_val)1, &env_sdma);
-	if (env_sdma.e_uint == 0)
-		proto->flags |= IPS_PROTO_FLAG_SPIO;
-	else if (env_sdma.e_uint == 2)
-		proto->flags |= IPS_PROTO_FLAG_SDMA;
-
-	if (!(proto->flags & (IPS_PROTO_FLAG_SDMA | IPS_PROTO_FLAG_SPIO))) {
-		/* use both spio and sdma */
-		if (!psm3_getenv("PSM3_MQ_EAGER_SDMA_THRESH",
-				"hfi pio-to-sdma eager switchover threshold",
-				PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
-				(union psmi_envvar_val) proto->iovec_thresh_eager,
-				&env_hfiegr)) {
-			proto->iovec_thresh_eager = proto->iovec_thresh_eager_blocking =
-				 env_hfiegr.e_uint;
-		}
-	} else if (proto->flags & IPS_PROTO_FLAG_SDMA) {	/* all sdma */
-		proto->iovec_thresh_eager = proto->iovec_thresh_eager_blocking =
-		    0;
-	} else if (proto->flags & IPS_PROTO_FLAG_SPIO) {	/* all spio */
-		proto->iovec_thresh_eager = proto->iovec_thresh_eager_blocking =
-		    ~0U;
-	}
-
-	return err;
-}
-#elif defined(PSM_HAVE_REG_MR)
+#if   defined(PSM_HAVE_REG_MR)
 static
 psm2_error_t
 proto_sdma_init(struct ips_proto *proto)
@@ -1083,10 +924,6 @@ void ctrlq_init(struct ips_ctrlq *ctrlq, struct ips_proto *proto)
 	proto->message_type_to_mask[OPCODE_NAK] = CTRL_MSG_NAK_QUEUED;
 	proto->message_type_to_mask[OPCODE_BECN] = CTRL_MSG_BECN_QUEUED;
 	proto->message_type_to_mask[OPCODE_ERR_CHK] = CTRL_MSG_ERR_CHK_QUEUED;
-#ifdef PSM_OPA
-	proto->message_type_to_mask[OPCODE_ERR_CHK_GEN] =
-	    CTRL_MSG_ERR_CHK_GEN_QUEUED;
-#endif
 	proto->message_type_to_mask[OPCODE_CONNECT_REQUEST] =
 	    CTRL_MSG_CONNECT_REQUEST_QUEUED;
 	proto->message_type_to_mask[OPCODE_CONNECT_REPLY] =
@@ -1150,10 +987,6 @@ static __inline__ void _build_ctrl_message(struct ips_proto *proto,
 	p_hdr->lrh[0] = __cpu_to_be16(HFI_LRH_BTH |
 				      ((ctrl_path->pr_sl & HFI_LRH_SL_MASK) <<
 				       HFI_LRH_SL_SHIFT)
-#ifdef PSM_OPA
-				      | ((proto->sl2sc[ctrl_path->pr_sl] &
-					HFI_LRH_SC_MASK) << HFI_LRH_SC_SHIFT)
-#endif
 					);
 	p_hdr->lrh[1] = dlid;
 	p_hdr->lrh[2] = ips_proto_bytes_to_lrh2_be(proto,
@@ -1164,30 +997,8 @@ static __inline__ void _build_ctrl_message(struct ips_proto *proto,
 	p_hdr->bth[0] = __cpu_to_be32(ctrl_path->pr_pkey |
 				      (message_type << HFI_BTH_OPCODE_SHIFT));
 
-#ifdef PSM_OPA
-	/* If flow is congested then generate a BECN for path. */
-	if_pf(flow->flags & IPS_FLOW_FLAG_GEN_BECN) {
-		p_hdr->bth[1] = __cpu_to_be32(ipsaddr->opa.context |
-					      ipsaddr->opa.subcontext <<
-					      HFI_BTH_SUBCTXT_SHIFT | flow->
-					      flowid << HFI_BTH_FLOWID_SHIFT
-					      | proto->epinfo.
-					      ep_baseqp << HFI_BTH_QP_SHIFT |
-					      1 << HFI_BTH_BECN_SHIFT);
-		flow->flags &= ~IPS_FLOW_FLAG_GEN_BECN;
-	}
-	else {
-		p_hdr->bth[1] = __cpu_to_be32(ipsaddr->opa.context |
-					      ipsaddr->opa.subcontext <<
-					      HFI_BTH_SUBCTXT_SHIFT | flow->
-					      flowid << HFI_BTH_FLOWID_SHIFT
-					      | proto->epinfo.
-					      ep_baseqp << HFI_BTH_QP_SHIFT);
-	}
-#else
 	p_hdr->bth[1] = __cpu_to_be32(flow->flowid << HFI_BTH_FLOWID_SHIFT);
 	flow->flags &= ~IPS_FLOW_FLAG_GEN_BECN;
-#endif // PSM_OPA
 
 	/* p_hdr->bth[2] already set by caller, or don't care */
 	/* p_hdr->ack_seq_num already set by caller, or don't care */
@@ -1198,11 +1009,7 @@ static __inline__ void _build_ctrl_message(struct ips_proto *proto,
 	p_hdr->khdr.kdeth0 = __cpu_to_le32(
 			(ctrlscb->scb_flags & IPS_SEND_FLAG_INTR) |
 			(IPS_PROTO_VERSION << HFI_KHDR_KVER_SHIFT));
-#ifndef PSM_OPA
 	p_hdr->khdr.kdeth1 = 0;
-#else
-	p_hdr->khdr.kdeth1 = __cpu_to_le32(proto->epinfo.ep_jkey);
-#endif
 
 	return;
 }
@@ -1257,14 +1064,7 @@ sendfullcb:
 		} else {
 			psmi_assert(err == PSM2_EP_NO_RESOURCES);
 
-#ifdef PSM_OPA
-			if (proto->flags & IPS_PROTO_FLAG_SDMA)
-				proto->stats.sdma_busy_cnt++;
-			else
-				proto->stats.pio_busy_cnt++;
-#else
 			proto->stats.pio_busy_cnt++;
-#endif
 			/* re-request a timer expiration */
 			psmi_timer_request(proto->timerq, &ctrlq->ctrlq_timer,
 					   PSMI_TIMER_PRIO_0);
@@ -1374,14 +1174,7 @@ sendfullctrl:
 
 	if (err != PSM2_EP_NO_RESOURCES)
 		return err;
-#ifdef PSM_OPA
-	if (proto->flags & IPS_PROTO_FLAG_SDMA)
-		proto->stats.sdma_busy_cnt++;
-	else
-		proto->stats.pio_busy_cnt++;
-#else
 	proto->stats.pio_busy_cnt++;
-#endif
 
 	/* to limit the performance penalty when transfer_frame is out
 	 * of resources, we can queue a modest number of zero payload
@@ -1448,9 +1241,6 @@ void MOCKABLE(psm3_ips_proto_flow_enqueue)(struct ips_flow *flow, ips_scb_t *scb
 
 	ips_scb_prepare_flow_inner(proto, ipsaddr, flow, scb);
 	if ((proto->flags & IPS_PROTO_FLAG_CKSUM) &&
-#ifdef PSM_OPA
-	    (scb->tidctrl == 0) &&
-#endif
 	    (scb->nfrag == 1)) {
 		scb->ips_lrh.flags |= IPS_SEND_FLAG_PKTCKSUM;
 		ips_do_cksum(proto, &scb->ips_lrh,
@@ -1514,9 +1304,6 @@ psm3_ips_proto_flow_flush_pio(struct ips_flow *flow, int *nflushed)
 	if_pf(flow->credits <= 0
 #ifdef PSM_BYTE_FLOW_CREDITS
 		 || flow->credit_bytes <= 0
-#endif
-#ifdef PSM_OPA
-		 || (flow->flags & IPS_FLOW_FLAG_CONGESTED)
 #endif
 		) {
 		if (nflushed)
@@ -1680,197 +1467,6 @@ sendfull:
 	return err;
 }
 
-#ifdef PSM_OPA
-/*
- * Flush all packets queued up on a flow via send DMA.
- *
- * Recoverable errors:
- * PSM2_OK: Able to flush entire pending queue for DMA.
- * PSM2_OK_NO_PROGRESS: Flushed at least 1 but not all pending packets for DMA.
- * PSM2_EP_NO_RESOURCES: No scb's available to handle unaligned packets
- *                      or writev returned a recoverable error (no mem for
- *                      descriptors, dma interrupted or no space left in dma
- *                      queue).
- *
- * Unrecoverable errors:
- * PSM2_EP_DEVICE_FAILURE: Unexpected error calling writev(), chip failure,
- *			  rxe/txe parity error.
- * PSM2_EP_NO_NETWORK: No network, no lid, ...
- */
-psm2_error_t
-ips_proto_flow_flush_dma(struct ips_flow *flow, int *nflushed)
-{
-	struct ips_proto *proto = ((psm2_epaddr_t) (flow->ipsaddr))->proto;
-	struct ips_scb_pendlist *scb_pend = &flow->scb_pend;
-	ips_scb_t *scb = NULL;
-	psm2_error_t err = PSM2_OK;
-	int nsent = 0;
-
-	psmi_assert(!SLIST_EMPTY(scb_pend));
-
-	/* Out of credits - ACKs/NAKs reclaim recredit or congested flow */
-	if_pf(flow->credits <= 0
-#ifdef PSM_BYTE_FLOW_CREDITS
-			 || flow->credit_bytes <= 0
-#endif
-#ifdef PSM_OPA
-			 || (flow->flags & IPS_FLOW_FLAG_CONGESTED)
-#endif
-		) {
-		if (nflushed)
-			*nflushed = 0;
-		return PSM2_EP_NO_RESOURCES;
-	}
-
-	// scb will descrbe header needed, which may be TID
-	err = psmi_hal_dma_send_pending_scbs(proto, flow, scb_pend, &nsent);
-	if (err != PSM2_OK && err != PSM2_EP_NO_RESOURCES &&
-	    err != PSM2_OK_NO_PROGRESS)
-		goto fail;
-
-	if (nsent > 0) {
-		uint64_t t_cyc = get_cycles();
-		int i = 0;
-		/*
-		 * inflight counter proto->iovec_cntr_next_inflight should not drift
-		 * from completion counter proto->iovec_cntr_last_completed away too
-		 * far because we only have very small scb counter compared with
-		 * uint32_t counter value.
-		 */
-#ifdef PSM_DEBUG
-		flow->scb_num_pending -= nsent;
-#endif
-		SLIST_FOREACH(scb, scb_pend, next) {
-			if (++i > nsent)
-				break;
-
-			PSM2_LOG_PKT_STRM(PSM2_LOG_TX,&scb->ips_lrh,"PKT_STRM: (dma)");
-
-			scb->scb_flags &= ~IPS_SEND_FLAG_PENDING;
-			scb->ack_timeout =
-			    scb->nfrag * proto->epinfo.ep_timeout_ack;
-			scb->abs_timeout =
-			    scb->nfrag * proto->epinfo.ep_timeout_ack + t_cyc;
-
-			psmi_assert(proto->sdma_scb_queue
-					[proto->sdma_fill_index] == NULL);
-			proto->sdma_scb_queue[proto->sdma_fill_index] = scb;
-			scb->sdma_outstanding++;
-
-			proto->sdma_avail_counter--;
-			proto->sdma_fill_index++;
-			if (proto->sdma_fill_index == proto->sdma_queue_size)
-				proto->sdma_fill_index = 0;
-
-			/* Flow credits can temporarily go to negative for
-			 * packets tracking purpose, because we have sdma
-			 * chunk processing which can't send exact number
-			 * of packets as the number of credits.
-			 */
-			flow->credits -= scb->nfrag;
-#ifdef PSM_BYTE_FLOW_CREDITS
-			flow->credit_bytes -= scb->chunk_size;
-			_HFI_VDBG("after DMA send: credits %d bytes %d sent %u bytes %u\n",
-					flow->credits, flow->credit_bytes,
-					scb->nfrag, scb->chunk_size);
-#else
-			_HFI_VDBG("after DMA send: credits %d sent %u bytes %u\n",
-					flow->credits,
-					scb->nfrag, scb->chunk_size);
-#endif
-		}
-		SLIST_FIRST(scb_pend) = scb;
-	}
-
-	if (SLIST_FIRST(scb_pend) != NULL) {
-		psmi_assert(flow->scb_num_pending > 0);
-
-		switch (flow->protocol) {
-		case PSM_PROTOCOL_TIDFLOW:
-#ifndef PSM_OPA
-			// for UD we use RC QP instead of STL100's TIDFLOW HW
-			// UDP has no RDMA
-			psmi_assert_always(0);	// we don't allocate ips_flow for TID
-#else
-			// some tidflow specific cleanup
-			/* For Tidflow we can cancel the ack timer if we have flow credits
-			 * available and schedule the send timer. If we are out of flow
-			 * credits then the ack timer is scheduled as we are waiting for
-			 * an ACK to reclaim credits. This is required since multiple
-			 * tidflows may be active concurrently.
-			 */
-			if (flow->credits > 0
-#ifdef PSM_BYTE_FLOW_CREDITS
-				&& flow->credit_bytes > 0
-#endif
-				) {
-				/* Cancel ack timer and reschedule send timer. Increment
-				 * sdma_busy_cnt as this really is DMA buffer exhaustion.
-				 */
-				psmi_timer_cancel(proto->timerq,
-						  flow->timer_ack);
-				psmi_timer_request(proto->timerq,
-						   flow->timer_send,
-						   get_cycles() +
-						   (proto->timeout_send << 1));
-				proto->stats.sdma_busy_cnt++;
-			} else {
-				/* Re-instate ACK timer to reap flow credits */
-				psmi_timer_request(proto->timerq,
-						   flow->timer_ack,
-						   get_cycles() +
-						   (proto->epinfo.
-						    ep_timeout_ack >> 2));
-			}
-#endif // ! PSM_OPA
-
-			break;
-		case PSM_PROTOCOL_GO_BACK_N:
-		default:
-			if (flow->credits > 0
-#ifdef PSM_BYTE_FLOW_CREDITS
-				&& flow->credit_bytes > 0
-#endif
-				) {
-				/* Schedule send timer and increment sdma_busy_cnt */
-				psmi_timer_request(proto->timerq,
-						   flow->timer_send,
-						   get_cycles() +
-						   (proto->timeout_send << 1));
-				proto->stats.sdma_busy_cnt++;
-			} else {
-				/* Schedule ACK timer to reap flow credits */
-				psmi_timer_request(proto->timerq,
-						   flow->timer_ack,
-						   get_cycles() +
-						   (proto->epinfo.
-						    ep_timeout_ack >> 2));
-			}
-			break;
-		}
-	} else {
-		/* Schedule ack timer */
-		psmi_timer_cancel(proto->timerq, flow->timer_send);
-		psmi_timer_request(proto->timerq, flow->timer_ack,
-				   get_cycles() + proto->epinfo.ep_timeout_ack);
-	}
-
-	/* We overwrite error with its new meaning for flushing packets */
-	if (nsent > 0)
-		if (scb)
-			err = PSM2_OK_NO_PROGRESS;	/* partial flush */
-		else
-			err = PSM2_OK;	/* complete flush */
-	else
-		err = PSM2_EP_NO_RESOURCES;	/* no flush at all */
-
-fail:
-	if (nflushed)
-		*nflushed = nsent;
-
-	return err;
-}
-#endif // PSM_OPA
 
 #ifdef PSM_HAVE_SDMA
 /*
@@ -1984,21 +1580,10 @@ psm3_ips_proto_timer_ack_callback(struct psmi_timer *current_timer,
 					SLIST_FIRST(&flow->scb_pend)->seq_num;
 
 			if (flow->protocol == PSM_PROTOCOL_TIDFLOW) {
-#ifndef PSM_OPA
 				// for UD we use RC QP instead of STL100's TIDFLOW HW
 				// UDP has no RDMA
 				psmi_assert_always(0);	// we don't allocate ips_flow for TID
 				message_type = OPCODE_ERR_CHK;	// keep KlockWorks happy
-#else
-				message_type = OPCODE_ERR_CHK_GEN;
-				err_chk_seq.psn_seq -= 1;
-				/* Receive descriptor index */
-				ctrlscb.ips_lrh.data[0].u64 =
-					scb->tidsendc->rdescid.u64;
-				/* Send descriptor index */
-				ctrlscb.ips_lrh.data[1].u64 =
-					scb->tidsendc->sdescid.u64;
-#endif
 			} else {
 				PSM2_LOG_MSG("sending ERR_CHK message");
 				message_type = OPCODE_ERR_CHK;
@@ -2027,24 +1612,6 @@ psm3_ips_proto_timer_send_callback(struct psmi_timer *current_timer,
 			      uint64_t current)
 {
 	struct ips_flow *flow = ((ips_scb_t *)current_timer->context)->flow;
-#ifdef PSM_OPA
-	struct ips_proto *proto = ((psm2_epaddr_t) (flow->ipsaddr))->proto;
-
-	/* If flow is marked as congested adjust injection rate - see process nak
-	 * when a congestion NAK is received.
-	 */
-	if_pf(flow->flags & IPS_FLOW_FLAG_CONGESTED) {
-
-		/* Clear congestion flag and decrease injection rate */
-		flow->flags &= ~IPS_FLOW_FLAG_CONGESTED;
-		if ((flow->path->opa.pr_ccti +
-		     proto->cace[flow->path->pr_sl].ccti_increase) <=
-		    proto->ccti_limit)
-			ips_cca_adjust_rate(flow->path,
-					    proto->cace[flow->path->pr_sl].
-					    ccti_increase);
-	}
-#endif
 
 	if (!SLIST_EMPTY(&flow->scb_pend))
 		flow->flush(flow, NULL);
@@ -2052,83 +1619,6 @@ psm3_ips_proto_timer_send_callback(struct psmi_timer *current_timer,
 	return PSM2_OK;
 }
 
-#ifdef PSM_OPA
-psm2_error_t ips_cca_adjust_rate(ips_path_rec_t *path_rec, int cct_increment)
-{
-	struct ips_proto *proto = path_rec->opa.pr_proto;
-
-	/* Increment/decrement ccti for path */
-	psmi_assert_always(path_rec->opa.pr_ccti >=
-			   proto->cace[path_rec->pr_sl].ccti_min);
-	path_rec->opa.pr_ccti += cct_increment;
-
-	/* Determine new active IPD.  */
-#if _HFI_DEBUGGING
-	uint16_t prev_ipd = 0;
-	uint16_t prev_divisor = 0;
-	if (_HFI_CCADBG_ON) {
-		prev_ipd = path_rec->opa.pr_active_ipd;
-		prev_divisor = path_rec->opa.pr_cca_divisor;
-	}
-#endif
-	if ((path_rec->pr_static_ipd) &&
-	    ((path_rec->pr_static_ipd + 1) >
-	     (proto->cct[path_rec->opa.pr_ccti] & CCA_IPD_MASK))) {
-		path_rec->opa.pr_active_ipd = path_rec->pr_static_ipd + 1;
-		path_rec->opa.pr_cca_divisor = 0;
-	} else {
-		path_rec->opa.pr_active_ipd =
-		    proto->cct[path_rec->opa.pr_ccti] & CCA_IPD_MASK;
-		path_rec->opa.pr_cca_divisor =
-		    proto->cct[path_rec->opa.pr_ccti] >> CCA_DIVISOR_SHIFT;
-	}
-
-#if _HFI_DEBUGGING
-	if (_HFI_CCADBG_ON) {
-		_HFI_CCADBG_ALWAYS("CCA: %s injection rate to <%x.%x> from <%x.%x>\n",
-			(cct_increment > 0) ? "Decreasing" : "Increasing",
-			path_rec->opa.pr_cca_divisor, path_rec->opa.pr_active_ipd,
-			prev_divisor, prev_ipd);
-	}
-#endif
-
-	/* Reschedule CCA timer if this path is still marked as congested */
-	if (path_rec->opa.pr_ccti > proto->cace[path_rec->pr_sl].ccti_min) {
-		if (path_rec->opa.pr_timer_cca == NULL) {
-			path_rec->opa.pr_timer_cca =
-			    (struct psmi_timer *)psm3_mpool_get(proto->
-								timer_pool);
-			psmi_assert(path_rec->opa.pr_timer_cca != NULL);
-			psmi_timer_entry_init(path_rec->opa.pr_timer_cca,
-					      ips_cca_timer_callback, path_rec);
-		}
-		psmi_timer_request(proto->timerq,
-				   path_rec->opa.pr_timer_cca,
-				   get_cycles() +
-				   proto->cace[path_rec->pr_sl].
-				   ccti_timer_cycles);
-	} else if (path_rec->opa.pr_timer_cca) {
-		psm3_mpool_put(path_rec->opa.pr_timer_cca);
-		path_rec->opa.pr_timer_cca = NULL;
-	}
-
-	return PSM2_OK;
-}
-
-psm2_error_t
-ips_cca_timer_callback(struct psmi_timer *current_timer, uint64_t current)
-{
-	ips_path_rec_t *path_rec = (ips_path_rec_t *) current_timer->context;
-
-	/* Increase injection rate for flow. Decrement CCTI */
-	if (path_rec->opa.pr_ccti > path_rec->opa.pr_proto->cace[path_rec->pr_sl].ccti_min)
-		return ips_cca_adjust_rate(path_rec, -1);
-
-	psm3_mpool_put(path_rec->opa.pr_timer_cca);
-	path_rec->opa.pr_timer_cca = NULL;
-	return PSM2_OK;
-}
-#endif // PSM_OPA
 
 #ifdef PSM_VERBS
 static uint64_t verbs_ep_send_num_free(void *context)
@@ -2161,11 +1651,6 @@ ips_proto_register_stats(struct ips_proto *proto)
 	 *
 	 * We put a (**) in the output of those stats that "should never happen"
 	 */
-#ifdef PSM_OPA
-	uint64_t *pio_stall_cnt = NULL;
-
-	psmi_hal_get_pio_stall_cnt(proto->ep->context.psm_hw_ctxt,&pio_stall_cnt);
-#endif
 
 	struct psmi_stats_entry entries[] = {
 		PSMI_STATS_DECLU64("pio_busy_count",
@@ -2190,17 +1675,7 @@ ips_proto_register_stats(struct ips_proto *proto)
 
 #ifdef PSM_HAVE_SDMA
 		/* SDMA statistics only applicable to HALs with send DMA */
-#ifdef PSM_OPA
-		/* SDMA Throttling by kernel */
-		PSMI_STATS_DECLU64("sdma_busy_cnt",
-				   &proto->stats.sdma_busy_cnt),
-#endif
 		// When must wait for local SDMA completions.
-#ifdef PSM_OPA
-		// wait for completion of SDMA for sync control message send
-		PSMI_STATS_DECLU64("sdma_compl_wait_ctrl",
-				   &proto->stats.sdma_compl_wait_ctrl),
-#endif
 		// wait for completion of SDMA as part of ACK processing.
 		// got an ACK for original SDMA which we did not yet complete.
 		// can imply late arrival of original at remote end after we
@@ -2224,16 +1699,6 @@ ips_proto_register_stats(struct ips_proto *proto)
 
 		PSMI_STATS_DECLU64("scb_unavail_eager_count",
 				   &proto->stats.scb_egr_unavail_cnt),
-#ifdef PSM_OPA
-		PSMI_STATS_DECLU64("scb_unavail_exp_count",
-				   &proto->stats.scb_exp_unavail_cnt),
-		PSMI_STATS_DECLU64("rcvhdr_overflows",	/* Normal egr/hdr ovflw */
-				   &proto->stats.hdr_overflow),
-		PSMI_STATS_DECLU64("rcveager_overflows",
-				   &proto->stats.egr_overflow),
-		PSMI_STATS_DECLU64("lid_zero_errs_(**)",	/* shouldn't happen */
-				   &proto->stats.lid_zero_errs),
-#endif // PSM_OPA
 		PSMI_STATS_DECLU64("unknown_packets_(**)",	/* shouldn't happen */
 				   &proto->stats.unknown_packets),
 		PSMI_STATS_DECLU64("stray_packets_(*)",
@@ -2244,24 +1709,6 @@ ips_proto_register_stats(struct ips_proto *proto)
 		PSMI_STATS_DECLU64("partial_read_cnt",
 				   &proto->stats.partial_read_cnt),
 #endif
-#ifdef PSM_OPA
-		PSMI_STATS_DECLU64("pio_stalls_(*)",	/* shouldn't happen too often */
-				   pio_stall_cnt),
-		PSMI_STATS_DECLU64("ICRC_error_(*)",
-				   &proto->error_stats.num_icrc_err),
-		PSMI_STATS_DECLU64("ECC_error",
-				   &proto->error_stats.num_ecc_err),
-		PSMI_STATS_DECLU64("Len_error",
-				   &proto->error_stats.num_len_err),
-		PSMI_STATS_DECLU64("TID_error",
-				   &proto->error_stats.num_tid_err),
-		PSMI_STATS_DECLU64("DC_error",
-				   &proto->error_stats.num_dc_err),
-		PSMI_STATS_DECLU64("DCUNC_error",
-				   &proto->error_stats.num_dcunc_err),
-		PSMI_STATS_DECLU64("KHDRLEN_error",
-				   &proto->error_stats.num_khdrlen_err),
-#endif // PSM_OPA
 		PSMI_STATS_DECLU64("err_chk_send",
 				   &proto->epaddr_stats.err_chk_send),
 		PSMI_STATS_DECLU64("err_chk_recv",
@@ -2317,10 +1764,6 @@ ips_proto_register_stats(struct ips_proto *proto)
 		PSMI_STATS_DECLU64("rdma_rexmit_(*)",
 				   &proto->epaddr_stats.rdma_rexmit),
 #endif
-#endif
-#ifdef PSM_OPA
-		PSMI_STATS_DECLU64("congestion_pkts",
-				   &proto->epaddr_stats.congestion_pkts),
 #endif
 		PSMI_STATS_DECLU64("tiny_cpu_isend",
 				   &proto->strat_stats.tiny_cpu_isend),

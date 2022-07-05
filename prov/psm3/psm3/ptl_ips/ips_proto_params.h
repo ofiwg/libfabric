@@ -125,9 +125,6 @@
 #define IPS_FLOW_FLAG_PENDING_ACK   0x02
 #define IPS_FLOW_FLAG_PENDING_NAK   0x04
 #define IPS_FLOW_FLAG_GEN_BECN      0x08
-#ifdef PSM_OPA
-#define IPS_FLOW_FLAG_CONGESTED     0x10
-#endif
 #define IPS_FLOW_FLAG_SKIP_CTS      0x20
 
 /* tid session expected send flags  */
@@ -183,18 +180,11 @@
 /* 0x10000000, interrupt when done */
 #define IPS_SEND_FLAG_INTR		(1<<HFI_KHDR_INTR_SHIFT)
 
-#ifdef PSM_OPA
-/* 0x20000000, header suppression */
-#define IPS_SEND_FLAG_HDRSUPP		(1<<HFI_KHDR_SH_SHIFT)
-#endif
 
 /* 0x80000000, request ack (normal) */
 #define IPS_SEND_FLAG_ACKREQ		(1<<HFI_BTH_ACK_SHIFT)
 
 /* proto flags */
-#ifdef PSM_OPA
-#define IPS_PROTO_FLAG_SDMA		0x01	/* all sdma, no pio */
-#endif
 #define IPS_PROTO_FLAG_SPIO		0x02	/* all spio, no dma */
 #define IPS_PROTO_FLAG_RCVTHREAD	0x04	/* psm recv thread is on */
 #define IPS_PROTO_FLAG_LOOPBACK		0x08	/* psm loopback over hfi */
@@ -229,13 +219,6 @@
 /* All static policies */
 #define IPS_PROTO_FLAG_PPOLICY_STATIC 0x1c00
 
-#ifdef PSM_OPA
-/* IBTA CCA Protocol support */
-#define IPS_PROTO_FLAG_CCA 0x2000		/* Enables full-fledged CCA */
-#define IPS_PROTO_FLAG_CCA_PRESCAN 0x4000	/* Enable RAPID CCA prescanning */
-#define IPS_PROTO_FLAG_CC_REPL_BECN  0x8000	/* A simple congestion control scheme */
-						/* that simply replies a BECN on rx FECN. */
-#endif
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 /* Use RNDV (TID) for all message sizes */
@@ -268,21 +251,12 @@
 #define IPS_PROTOEXP_FLAG_KERNEL_QP(flag) \
 		(((flag)&IPS_PROTOEXP_FLAG_RDMA_MASK) == IPS_PROTOEXP_FLAG_RDMA_KERNEL)
 #endif
-#ifdef PSM_OPA
-// OPA100 specific RDMA modes
-#define IPS_PROTOEXP_FLAG_TID                0x01    /* TID RDMA */
-#endif
 
 // These are additional flags only applicable when RDMA is enabled.
 // If needed their values could be changed to permit additional bits for
 // RDMA modes.
 // PSM3_RTS_CTS_INTERLEAVE set's it's flag and TID_DEBUG and CTS_SERIALIZED
 // are automatically when when appropriate.  None go on the wire.
-#if defined(PSM_OPA)
-// If appropriate, this flag can enable additional debugi for any HAL.
-// however it is only implemented for gen1 HAL at this time
-#define IPS_PROTOEXP_FLAG_TID_DEBUG	     0x04    /* *not* default */
-#endif
 #define IPS_PROTOEXP_FLAG_RTS_CTS_INTERLEAVE 0x08    /* Interleave RTS handling */
 #define IPS_PROTOEXP_FLAG_CTS_SERIALIZED     0x10    /* CTS serialized */
 

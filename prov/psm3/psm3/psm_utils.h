@@ -165,10 +165,6 @@ void psm3_epid_itor_fini(struct psmi_eptab_iterator *itor);
 
 /* These functions build the local epid */
 // for typical job which includes IPS inter-node comms
-#ifdef PSM_OPA
-psm2_epid_t psm3_epid_pack_ips(uint16_t lid, uint8_t context,
-	uint8_t subcontext, uint8_t hfiunit, psmi_naddr128_t addr);
-#else
 psm2_epid_t psm3_epid_pack_ib(uint16_t lid, uint32_t qp_num,
 	psmi_naddr128_t addr);
 // IPv4 Ethernet (RoCE or UDP/TCP)
@@ -181,7 +177,6 @@ psm2_epid_t psm3_epid_pack_ipv4(psmi_naddr128_t ipv4_addr,
 psm2_epid_t psm3_epid_pack_ipv6(psmi_naddr128_t ipv6_addr,
 				psmi_eth_proto_t protocol,
 				uint32_t context, uint16_t aux_sock);
-#endif
 
 // for a shm-only job (1 node job)
 psm2_epid_t psm3_epid_pack_shm(const psm2_uuid_t unique_job_key);
@@ -194,9 +189,7 @@ psm2_epid_t psm3_epid_pack_diag(int val);
 
 // These functions extract fields/information from the epid
 uint8_t psm3_epid_addr_fmt(psm2_epid_t epid);
-#ifndef PSM_OPA
 psmi_eth_proto_t psm3_epid_protocol(psm2_epid_t epid);
-#endif
 psm2_nid_t psm3_epid_nid(psm2_epid_t epid);
 const char *psm3_subnet_epid_subset_fmt(psmi_subnet128_t subnet, int bufno);
 psmi_subnet128_t psm3_epid_subnet(psm2_epid_t epid);
@@ -206,12 +199,8 @@ uint64_t psm3_epid_context(psm2_epid_t epid);
 #ifdef PSM_SOCKETS
 uint16_t psm3_epid_aux_socket(psm2_epid_t epid);
 #endif
-#ifdef PSM_OPA
-uint64_t psm3_epid_subcontext(psm2_epid_t epid);
-#else
 void psm3_epid_get_av(psm2_epid_t epid, uint16_t *lid, psmi_gid128_t *gid);
 uint32_t psm3_epid_get_rem_addr(psm2_epid_t epid);
-#endif
 uint16_t psm3_epid_lid(psm2_epid_t epid);
 uint64_t psm3_epid_hash(psm2_epid_t epid);
 
@@ -259,28 +248,11 @@ PSMI_ALWAYS_INLINE(psm2_nid_t psm3_nid_zeroed_internal(void))
 	return psm3_epid_zeroed_internal();
 }
 
-#ifdef PSM_OPA
-// to and from 64b words for inclusion in connection packets
-#define PSMI_EPID_LEN (sizeof(uint64_t)*1) // in bytes
-#else
 #define PSMI_EPID_LEN (sizeof(uint64_t)*3) // in bytes
-#endif
 psm2_epid_t psm3_epid_pack_words(uint64_t w0, uint64_t w1, uint64_t w2);
-#ifdef PSM_OPA
-psm2_epid_t psm3_epid_pack_word(uint64_t w0);
-//psm2_epid_t psm2_epid_pack_word(uint64_t w0);
-#endif
 uint64_t psm3_epid_w0(psm2_epid_t epid);
 uint64_t psm3_epid_w1(psm2_epid_t epid);
 uint64_t psm3_epid_w2(psm2_epid_t epid);
-#ifdef PSM_OPA
-// for IPS connect we get 1 extra 64b word
-// to hold enough information to reconstruct the full psmi_subnet128_t from the
-// epid and this value (for some addr_fmt, the epid can only reconstruct a
-// subset of the subnet information)
-uint64_t psm3_epid_subnet_extra_word(psmi_subnet128_t subnet);
-psmi_subnet128_t psmi_subnet_pack(psm2_epid_t epid, uint64_t extra_word);
-#endif
 
 
 /*
@@ -293,9 +265,7 @@ const char *psm3_epid_fmt_nid(psm2_epid_t epid, int bufno);
 const char *psm3_epid_fmt_addr(psm2_epid_t epid, int bufno);
 const char *psm3_epid_fmt_subnet(psm2_epid_t epid, int bufno);
 const char *psm3_epid_str_addr_fmt(psm2_epid_t epid);
-#ifndef PSM_OPA
 const char *psm3_epid_str_protocol(psm2_epid_t epid);
-#endif
 const char *psm3_epaddr_get_hostname(psm2_epid_t epid, int bufno);
 const char *psm3_epaddr_get_name(psm2_epid_t epid, int bufno);
 psm2_error_t psm3_epid_set_hostname(psm2_nid_t nid, const char *hostname,

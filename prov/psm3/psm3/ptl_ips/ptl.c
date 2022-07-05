@@ -340,10 +340,6 @@ ips_ptl_optctl(const void *core_obj, int optname,
 				/* Set new SL for all flows */
 				ipsaddr->flows[EP_FLOW_GO_BACK_N_PIO].path->
 				    pr_sl = new_sl;
-#ifdef PSM_OPA
-				ipsaddr->flows[EP_FLOW_GO_BACK_N_DMA].path->
-				    pr_sl = new_sl;
-#endif
 			}
 		}
 		break;

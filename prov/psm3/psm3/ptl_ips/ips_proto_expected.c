@@ -90,16 +90,8 @@ static void ips_tid_reissue_rdma_write(struct ips_tid_send_desc *tidsendc);
 #endif
 
 static void ips_tid_scbavail_callback(struct ips_scbctrl *scbc, void *context);
-#ifdef PSM_OPA
-static void ips_tid_avail_callback(struct ips_tid *tidc, void *context);
-#endif
 static void ips_tidflow_avail_callback(struct ips_tf *tfc, void *context);
 
-#ifdef PSM_OPA
-/* Defined at the ptl-level (breaks abstractions but needed for shared vs
- * non-shared contexts */
-extern int psm3_gen1_ips_ptl_recvq_isempty(const struct ptl *ptl);
-#endif
 
 #ifdef PSM_HAVE_RDMA
 static psm2_error_t ips_tid_recv_free(struct ips_tid_recv_desc *tidrecvc);
@@ -128,12 +120,8 @@ MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 {
 	struct ips_protoexp *protoexp = NULL;
 	psm2_ep_t ep = proto->ep;
-#ifdef PSM_OPA
-	uint32_t tidmtu_max;
-#endif
 	psm2_error_t err = PSM2_OK;
 
-#ifndef PSM_OPA
 #ifdef PSM_HAVE_REG_MR
 	if (!psmi_hal_has_cap(PSM_HAL_CAP_RDMA)) {
 #else
@@ -143,7 +131,6 @@ MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 		err = PSM2_INTERNAL_ERR;
 		goto fail;
 	}
-#endif
 
 	protoexp = (struct ips_protoexp *)
 	    psmi_calloc(ep, UNDEFINED, 1, sizeof(struct ips_protoexp));
@@ -156,49 +143,12 @@ MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 	protoexp->ptl = (const struct ptl *)proto->ptl;
 	protoexp->proto = (struct ips_proto *)proto;
 	protoexp->timerq = proto->timerq;
-#ifdef PSM_OPA
-	srand48_r((long int) getpid(), &protoexp->tidflow_drand48_data);
-#endif
 	protoexp->tid_flags = protoexp_flags;
 
 	if (ep->memmode == PSMI_MEMMODE_MINIMAL) {
 		protoexp->tid_flags |= IPS_PROTOEXP_FLAG_CTS_SERIALIZED;
 	}
 
-#ifdef PSM_OPA
-	// for RDMA Rendezvous we use a single MR for the message so
-	// we only need 1 entry in the CTS.
-	// For native mode, the CTS contains a list of TIDs and the window's
-	// size must be constrained such that the list for all pages in a window
-	// won't exceed an MTU (eg. CTS message must fit in an MTU)
-	{
-		/*
-		 * Adjust the session window size so that tid-grant (CTS) message can
-		 * fit into a single frag size packet for single transfer, PSM
-		 * must send tid-grant message with a single packet.
-		 */
-		uint32_t fragsize, winsize;
-
-#ifndef PSM_OPA
-		fragsize = proto->epinfo.ep_mtu;
-#else
-		if (proto->flags & IPS_PROTO_FLAG_SDMA)
-			fragsize = proto->epinfo.ep_mtu;
-		else
-			fragsize = proto->epinfo.ep_piosize;
-#endif
-
-		winsize = 2 * PSMI_PAGESIZE	/* bytes per tid-pair */
-			/* space in packet */
-			* min((fragsize - sizeof(ips_tid_session_list)),
-			/* space in tidsendc/tidrecvc descriptor */
-			PSM_TIDLIST_BUFSIZE)
-			/ sizeof(uint32_t);	/* convert to tid-pair */
-
-		if (proto->mq->hfi_base_window_rv > winsize)
-			proto->mq->hfi_base_window_rv = winsize;
-	}
-#endif
 
 	/* Must be initialized already */
 	/* Comment out because of Klockwork scanning critical error. CQ 11/16/2012
@@ -212,21 +162,7 @@ MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 	protoexp->tid_sreq_pool = proto->ep->mq->sreq_pool;
 	protoexp->tid_rreq_pool = proto->ep->mq->rreq_pool;
 
-#ifdef PSM_OPA
-	/* tid traffic xfer type */
-	if (proto->flags & IPS_PROTO_FLAG_SPIO)
-		protoexp->tid_xfer_type = PSM_TRANSFER_PIO;
-	else
-		protoexp->tid_xfer_type = PSM_TRANSFER_DMA;
-
-	/* ctrl ack/nak xfer type */
-	if (proto->flags & IPS_PROTO_FLAG_SDMA)
-		protoexp->ctrl_xfer_type = PSM_TRANSFER_DMA;
-	else
-		protoexp->ctrl_xfer_type = PSM_TRANSFER_PIO;
-#else
 	protoexp->ctrl_xfer_type = PSM_TRANSFER_PIO;
-#endif
 
 	/* Initialize tid flow control. */
 	err = psm3_ips_tf_init(protoexp, &protoexp->tfc,
@@ -234,63 +170,12 @@ MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 	if (err != PSM2_OK)
 		goto fail;
 
-#ifdef PSM_OPA
-	if (proto->flags & IPS_PROTO_FLAG_SPIO)
-		tidmtu_max = proto->epinfo.ep_piosize;
-	else
-		tidmtu_max = proto->epinfo.ep_mtu;
-
-	protoexp->tid_send_fragsize = tidmtu_max;
-
-	if ((err = ips_tid_init(&ep->context, protoexp,
-				ips_tid_avail_callback, protoexp)))
-		goto fail;
-#endif
 
 	if ((err = psm3_ips_scbctrl_init(ep, num_of_send_desc, 0,
 				    0, 0, ips_tid_scbavail_callback,
 				    protoexp, &protoexp->tid_scbc_rv)))
 		goto fail;
 
-#ifdef PSM_OPA
-	{
-		/* Determine interval to generate headers (relevant only when header
-		 * suppression is enabled) else headers will always be generated.
-		 *
-		 * The PSM3_EXPECTED_HEADERS environment variable can specify the
-		 * packet interval to generate headers at. Else a header packet is
-		 * generated every
-		 * min(PSM_DEFAULT_EXPECTED_HEADER, window_size/tid_send_fragsize).
-		 * Note: A header is always generated for the last packet in the flow.
-		 */
-
-		union psmi_envvar_val env_exp_hdr;
-		uint32_t defval = min(PSM_DEFAULT_EXPECTED_HEADER,
-				      proto->mq->hfi_base_window_rv /
-				      protoexp->tid_send_fragsize);
-
-		psm3_getenv("PSM3_EXPECTED_HEADERS",
-			    "Interval to generate expected protocol headers",
-			    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT_FLAGS,
-			    (union psmi_envvar_val)defval, &env_exp_hdr);
-
-		protoexp->hdr_pkt_interval = env_exp_hdr.e_uint;
-		/* Account for flow credits - Should try to have atleast 4 headers
-		 * generated per window.
-		 */
-		protoexp->hdr_pkt_interval =
-		    max(min
-			(protoexp->hdr_pkt_interval, proto->flow_credits >> 2),
-			1);
-
-		if (protoexp->hdr_pkt_interval != env_exp_hdr.e_uint) {
-			_HFI_VDBG
-			    ("Overriding PSM3_EXPECTED_HEADERS=%u to be '%u'\n",
-			     env_exp_hdr.e_uint, protoexp->hdr_pkt_interval);
-		}
-
-	}
-#endif
 
 	{
 		union psmi_envvar_val env_rts_cts_interleave;
@@ -367,36 +252,6 @@ MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 #endif
 
 
-#ifdef PSM_OPA
-	protoexp->tid_page_offset_mask = PSMI_PAGESIZE - 1;
-	protoexp->tid_page_mask = ~(PSMI_PAGESIZE - 1);
-
-	/*
-	 * After ips_tid_init(), we know if we use tidcache or not.
-	 * if tid cache is used, we can't use tid debug.
-	 */
-#ifdef PSM_DEBUG
-	if (protoexp->tidc.tid_array == NULL)
-		protoexp->tid_flags |= IPS_PROTOEXP_FLAG_TID_DEBUG;
-#endif
-
-	if (protoexp->tid_flags & IPS_PROTOEXP_FLAG_TID_DEBUG) {
-		int i;
-		protoexp->tid_info = (struct ips_tidinfo *)
-		    psmi_calloc(ep, UNDEFINED, IPS_TID_MAX_TIDS,
-				sizeof(struct ips_tidinfo));
-		if (protoexp->tid_info == NULL) {
-			err = PSM2_NO_MEMORY;
-			goto fail;
-		}
-		for (i = 0; i < IPS_TID_MAX_TIDS; i++) {
-			protoexp->tid_info[i].state = TIDSTATE_FREE;
-			protoexp->tid_info[i].tidrecvc = NULL;
-			protoexp->tid_info[i].tid = 0xFFFFFFFF;
-		}
-	} else
-		protoexp->tid_info = NULL;
-#endif // PSM_OPA
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	{
@@ -494,19 +349,11 @@ psm2_error_t psm3_ips_protoexp_fini(struct ips_protoexp *protoexp)
 	if ((err = psm3_ips_scbctrl_fini(&protoexp->tid_scbc_rv)))
 		goto fail;
 
-#ifdef PSM_OPA
-	if ((err = ips_tid_fini(&protoexp->tidc)))
-		goto fail;
-#endif
 
 	/* finalize tid flow control. */
 	if ((err = psm3_ips_tf_fini(&protoexp->tfc)))
 		goto fail;
 
-#ifdef PSM_OPA
-	if (protoexp->tid_flags & IPS_PROTOEXP_FLAG_TID_DEBUG)
-		psmi_free(protoexp->tid_info);
-#endif
 
 	psmi_free(protoexp);
 
@@ -547,20 +394,6 @@ void ips_tid_mravail_callback(struct ips_proto *proto)
 }
 #endif
 
-#ifdef PSM_OPA
-/* New Tids are available. If there are pending get requests put the
- * get timer on the timerq so it can be processed. */
-static
-void ips_tid_avail_callback(struct ips_tid *tidc, void *context)
-{
-	struct ips_protoexp *protoexp = (struct ips_protoexp *)context;
-
-	if (!STAILQ_EMPTY(&protoexp->pend_getreqsq))
-		psmi_timer_request(protoexp->timerq,
-				   &protoexp->timer_getreqs, PSMI_TIMER_PRIO_1);
-	return;
-}
-#endif
 
 // On STL100 ips_tf is a user space control for the HW tidflow which
 // would fully process most valid inbound EXPTID packets within an RV Window.
@@ -615,18 +448,11 @@ psm3_ips_protoexp_tid_get_from_token(struct ips_protoexp *protoexp,
 {
 	struct ips_tid_get_request *getreq;
 	int count;
-#ifdef PSM_OPA
-	int tids;
-#endif
 	int tidflows;
 	uint64_t nbytes;
 
 	PSM2_LOG_MSG("entering");
-#ifdef PSM_OPA
-	psmi_assert((((ips_epaddr_t *) epaddr)->opa.window_rv % PSMI_PAGESIZE) == 0);
-#else
 	psmi_assert((req->mq->hfi_base_window_rv % PSMI_PAGESIZE) == 0);
-#endif
 	getreq = (struct ips_tid_get_request *)
 	    psm3_mpool_get(protoexp->tid_getreq_pool);
 
@@ -656,9 +482,7 @@ psm3_ips_protoexp_tid_get_from_token(struct ips_protoexp *protoexp,
 	    ((req->is_buf_gpu_mem &&
 	     (protoexp->proto->flags & IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV) &&
 	     (length > gpudirect_rdma_recv_limit
-#ifndef PSM_OPA
 		|| length & 0x03 || (uintptr_t)buf & 0x03
-#endif
  		)))) {
 		getreq->gpu_hostbuf_used = 1;
 		getreq->tidgr_cuda_bytesdone = 0;
@@ -688,37 +512,21 @@ psm3_ips_protoexp_tid_get_from_token(struct ips_protoexp *protoexp,
 #endif
 		nbytes = PSMI_ALIGNUP((length + count - 1) / count, PSMI_PAGESIZE);
 	getreq->tidgr_rndv_winsz =
-#ifndef PSM_OPA
 	    min(nbytes, req->mq->hfi_base_window_rv);
-#else
-	    min(nbytes, ((ips_epaddr_t *) epaddr)->opa.window_rv);
-	/* must be within the tid window size */
-	if (getreq->tidgr_rndv_winsz > PSM_TID_WINSIZE)
-		getreq->tidgr_rndv_winsz = PSM_TID_WINSIZE;
-#endif
 	_HFI_MMDBG("posting TID get request: nbytes=%"PRIu64" winsz=%u len=%u\n",
 				 nbytes, getreq->tidgr_rndv_winsz, getreq->tidgr_length);
 	// we have now computed the size of each TID sequence (tidgr_rndv_winsz)
 
 	STAILQ_INSERT_TAIL(&protoexp->pend_getreqsq, getreq, tidgr_next);
-#ifdef PSM_OPA
-	tids = ips_tid_num_available(&protoexp->tidc);
-#endif
 	// by using tidflow we also constrain amount of concurrent RDMA to our NIC
 	tidflows = ips_tf_available(&protoexp->tfc);
 	_HFI_MMDBG("available tidflow %u\n", tidflows);
 
 	if (
-#ifdef PSM_OPA
-		tids > 0 &&
-#endif
 		tidflows > 0)
 		// get the actual TIDs and tidflows and send the CTS
 		ips_tid_pendtids_timer_callback(&protoexp->timer_getreqs, 0);
 	else if (
-#ifdef PSM_OPA
-		tids != -1 &&
-#endif
 		tidflows != -1)
 		// out of TIDs, set a timer to try again later
 		psmi_timer_request(protoexp->timerq, &protoexp->timer_getreqs,
@@ -746,11 +554,7 @@ void ips_logevent_inner(struct ips_proto *proto, int eventid, void *context)
 			if (t_now >=
 			    proto->psmi_logevent_tid_send_reqs.next_warning) {
 				psm3_handle_error(PSMI_EP_LOGEVENT, PSM2_OK,
-#ifndef PSM_OPA
 						  "Non-fatal temporary exhaustion of send rdma descriptors "
-#else
-						  "Non-fatal temporary exhaustion of send tid dma descriptors "
-#endif
 						  "(elapsed=%.3fs, source %s, count=%lld)",
 						  (double)
 						  cycles_to_nanosecs(t_now -
@@ -809,11 +613,7 @@ psm3_ips_protoexp_send_tid_grant(struct ips_tid_recv_desc *tidrecvc)
 	scb->ips_lrh.data[1].u32w0 = tidrecvc->getreq->tidgr_sendtoken;
 
 	ips_scb_buffer(scb) = (void *)&tidrecvc->tid_list;
-#ifndef PSM_OPA
 	scb->chunk_size = ips_scb_length(scb) = sizeof(tidrecvc->tid_list);
-#else
-	scb->chunk_size = ips_scb_length(scb) = tidrecvc->tsess_tidlist_length;
-#endif
 	_HFI_MMDBG("sending CTS\n");
 
 	PSM2_LOG_EPM(OPCODE_LONG_CTS,PSM2_LOG_TX, proto->ep->epid,
@@ -825,42 +625,6 @@ psm3_ips_protoexp_send_tid_grant(struct ips_tid_recv_desc *tidrecvc)
 	flow->flush(flow, NULL);
 }
 
-#ifdef PSM_OPA
-// build and send EXPTID completion ACK. Indicates receiever has gotten
-// all TIDs for a given CTS
-// for RC QP RDMA, we can use the RC send completion on sender to know
-// when all data has been successfully delivered
-void
-ips_protoexp_send_tid_completion(struct ips_tid_recv_desc *tidrecvc,
-				ptl_arg_t sdescid)
-{
-	ips_epaddr_t *ipsaddr = tidrecvc->ipsaddr;
-	struct ips_proto *proto = tidrecvc->protoexp->proto;
-	psmi_assert(proto->msgflowid < EP_FLOW_LAST);
-	struct ips_flow *flow = &ipsaddr->flows[proto->msgflowid];
-	ips_scb_t *scb;
-
-	PSM2_LOG_EPM(OPCODE_EXPTID_COMPLETION,PSM2_LOG_TX, proto->ep->epid,
-		    flow->ipsaddr->epaddr.epid ,"sdescid._desc_idx: %d",
-		    sdescid._desc_idx);
-	scb = tidrecvc->completescb;
-
-	ips_scb_opcode(scb) = OPCODE_EXPTID_COMPLETION;
-	scb->ips_lrh.khdr.kdeth0 = 0;
-	scb->ips_lrh.data[0] = sdescid;
-
-	/* Attached tidflow gen/seq */
-	scb->ips_lrh.mdata = tidrecvc->tidflow_genseq.psn_val;
-
-	psm3_ips_proto_flow_enqueue(flow, scb);
-	flow->flush(flow, NULL);
-
-	if (tidrecvc->protoexp->tid_flags & IPS_PROTOEXP_FLAG_CTS_SERIALIZED) {
-		flow->flags &= ~IPS_FLOW_FLAG_SKIP_CTS;                                  /* Let the next CTS be processed */
-		ips_tid_pendtids_timer_callback(&tidrecvc->protoexp->timer_getreqs, 0);  /* and make explicit progress for it. */
-	}
-}
-#endif // PSM_OPA
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 static
@@ -879,10 +643,6 @@ ips_protoexp_tidsendc_complete(struct ips_tid_send_desc *tidsendc)
 {
 #ifdef PSM_VERBS
 	struct ips_protoexp *protoexp = tidsendc->protoexp;
-#elif defined(PSM_OPA)
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	struct ips_protoexp *protoexp = tidsendc->protoexp;
-#endif
 #endif
 	psm2_mq_req_t req = tidsendc->mqreq;
 
@@ -965,96 +725,6 @@ ips_protoexp_rdma_write_completion(uint64_t wr_id)
 
 	_HFI_MMDBG("ips_protoexp_rdma_write_completion\n");
 	PSM2_LOG_MSG("entering");
-
-	ips_protoexp_tidsendc_complete(tidsendc);
-
-	PSM2_LOG_MSG("leaving");
-	return IPS_RECVHDRQ_CONTINUE;
-}
-#elif defined(PSM_OPA)
-// sender processing of EXPTID_COMPLETION message from receiver indicating
-// receiver has completely received a given TID sequence
-int
-ips_protoexp_recv_tid_completion(struct ips_recvhdrq_event *rcv_ev)
-{
-	struct ips_protoexp *protoexp = rcv_ev->proto->protoexp;
-	struct ips_message_header *p_hdr = rcv_ev->p_hdr;
-	struct ips_epaddr *ipsaddr = rcv_ev->ipsaddr;
-	ptl_arg_t desc_id = p_hdr->data[0];
-	struct ips_tid_send_desc *tidsendc;
-
-	_HFI_MMDBG("ips_protoexp_recv_tid_completion\n");
-	PSM2_LOG_MSG("entering");
-	PSM2_LOG_EPM(OPCODE_EXPTID_COMPLETION,PSM2_LOG_RX,rcv_ev->ipsaddr->epaddr.epid,
-		    rcv_ev->proto->ep->mq->ep->epid,"desc_id._desc_idx: %d",desc_id._desc_idx);
-
-	/* normal packet reliabilty protocol handling */
-	if (!ips_proto_is_expected_or_nak(rcv_ev))
-	{
-		PSM2_LOG_MSG("leaving");
-		return IPS_RECVHDRQ_CONTINUE;
-	}
-
-	if (__be32_to_cpu(p_hdr->bth[2]) & IPS_SEND_FLAG_ACKREQ)
-		ips_proto_send_ack((struct ips_recvhdrq *)rcv_ev->recvq,
-				   &ipsaddr->flows[ips_proto_flowid(p_hdr)]);
-
-	psm3_ips_proto_process_ack(rcv_ev);
-
-	/* processing specific to tid_completion packet */
-	/*
-	 * Get the session send descriptor and complete.
-	 */
-	tidsendc = (struct ips_tid_send_desc *)
-	    psm3_mpool_find_obj_by_index(protoexp->tid_desc_send_pool,
-					 desc_id._desc_idx);
-	_HFI_VDBG("desc_id=%d (%p)\n", desc_id._desc_idx, tidsendc);
-	if (tidsendc == NULL) {
-		_HFI_ERROR
-		    ("exptid comp: Index %d is out of range\n",
-		     desc_id._desc_idx);
-		PSM2_LOG_MSG("leaving");
-		return IPS_RECVHDRQ_CONTINUE;
-	} else {
-		ptl_arg_t desc_tidsendc;
-
-		psm3_mpool_get_obj_index_gen_count(tidsendc,
-						   &desc_tidsendc._desc_idx,
-						   &desc_tidsendc._desc_genc);
-
-		_HFI_VDBG("desc_req:id=%d,gen=%d desc_sendc:id=%d,gen=%d\n",
-			  desc_id._desc_idx, desc_id._desc_genc,
-			  desc_tidsendc._desc_idx, desc_tidsendc._desc_genc);
-
-		/* See if the reference is still live and valid */
-		if (desc_tidsendc.u64 != desc_id.u64) {
-			_HFI_ERROR("exptid comp: Genc %d does not match\n",
-				desc_id._desc_genc);
-			PSM2_LOG_MSG("leaving");
-			return IPS_RECVHDRQ_CONTINUE;
-		}
-	}
-
-	if (!STAILQ_EMPTY(&tidsendc->tidflow.scb_unacked)) {
-		struct ips_message_header hdr;
-
-		/* Hack to handle the tidflow */
-		hdr.data[0] = rcv_ev->p_hdr->data[0];
-		hdr.ack_seq_num = rcv_ev->p_hdr->mdata;
-		hdr.khdr.kdeth0 = __cpu_to_le32(3 << HFI_KHDR_TIDCTRL_SHIFT);
-		rcv_ev->p_hdr = &hdr;
-
-		/*
-		 * This call should directly complete the tidflow
-		 * and free all scb on the unacked queue.
-		 */
-		psm3_ips_proto_process_ack(rcv_ev);
-
-		/* Keep KW happy. */
-		rcv_ev->p_hdr = NULL;
-		/* Prove that the scb will not leak in the unacked queue: */
-		psmi_assert(STAILQ_EMPTY(&tidsendc->tidflow.scb_unacked));
-	}
 
 	ips_protoexp_tidsendc_complete(tidsendc);
 
@@ -1501,44 +1171,19 @@ int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
 	PSM2_LOG_MSG("entering");
 	desc_id._desc_genc = RDMA_UNPACK_IMMED_GENC(immed);
 	desc_id._desc_idx = RDMA_UNPACK_IMMED_IDX(immed);
-#elif defined(PSM_OPA)
-int ips_protoexp_data(struct ips_recvhdrq_event *rcv_ev)
-{
-	struct ips_proto *proto = rcv_ev->proto;
-	struct ips_protoexp *protoexp = proto->protoexp;
-	struct ips_message_header *p_hdr = rcv_ev->p_hdr;
-	struct ips_tid_recv_desc *tidrecvc;
-	ptl_arg_t desc_id;
-	psmi_seqnum_t sequence_num;
-
-	psmi_assert(_get_proto_hfi_opcode(p_hdr) == OPCODE_EXPTID);
-	_HFI_MMDBG("ips_protoexp_data\n");
-	// final packet in a TID sequence, we do some processing here
-	// for unaligned start and end bytes and send a OPCODE_EXPTID_COMPLETION
-
-	PSM2_LOG_MSG("entering");
-
-	desc_id._desc_idx = ips_proto_flowid(p_hdr);
-	PSM2_LOG_EPM(OPCODE_EXPTID,PSM2_LOG_RX,rcv_ev->ipsaddr->epaddr.epid,
-		    proto->ep->mq->ep->epid,"desc_id._desc_idx: %d", desc_id._desc_idx);
-
-	desc_id._desc_genc = p_hdr->exp_rdescid_genc;
 #endif
 
 	tidrecvc = &protoexp->tfc.tidrecvc[desc_id._desc_idx];
 
 	if ((tidrecvc->rdescid._desc_genc & IPS_HDR_RDESCID_GENC_MASK)
 		!= desc_id._desc_genc) {
-#ifndef PSM_OPA
 		_HFI_ERROR("stale inbound rv RDMA generation: expected %u got %u\n",
 				tidrecvc->rdescid._desc_genc, desc_id._desc_genc);
 		tidrecvc->stats.nGenErr++;
-#endif
 		PSM2_LOG_MSG("leaving");
 		return IPS_RECVHDRQ_CONTINUE;		/* skip */
 	}
 
-#ifndef PSM_OPA
 	// maybe should use assert below so don't add test in production code
 	if (tidrecvc->state != TIDRECVC_STATE_BUSY) {
 		_HFI_ERROR("stale inbound rv RDMA (tidrecvc not busy)\n");
@@ -1594,31 +1239,12 @@ int ips_protoexp_data(struct ips_recvhdrq_event *rcv_ev)
 #endif
 			_HFI_PDBG_DUMP_ALWAYS(tidrecvc->buffer, len);
 	}
-#else // PSM_OPA
-	/* IBTA CCA handling for expected flow. */
-	if (rcv_ev->is_congested & IPS_RECV_EVENT_FECN) {
-		/* Mark flow to generate BECN in control packet */
-		tidrecvc->tidflow.flags |= IPS_FLOW_FLAG_GEN_BECN;
-		/* Update stats for congestion encountered */
-		proto->epaddr_stats.congestion_pkts++;
-		/* Clear FECN event */
-		rcv_ev->is_congested &= ~IPS_RECV_EVENT_FECN;
-	}
-
-	sequence_num.psn_val = __be32_to_cpu(p_hdr->bth[2]);
-
-	if_pf (PSM_HAL_ERROR_OK != psmi_hal_tidflow_check_update_pkt_seq(
-		    protoexp,sequence_num,tidrecvc,p_hdr,
-		    ips_protoexp_do_tf_generr,ips_protoexp_do_tf_seqerr))
-			return IPS_RECVHDRQ_CONTINUE;
-#endif // PSM_OPA
 
 	/* Reset the swapped generation count as we received a valid packet */
 	tidrecvc->tidflow_nswap_gen = 0;
 
 	/* Do some sanity checking */
 	psmi_assert_always(tidrecvc->state == TIDRECVC_STATE_BUSY);
-#ifndef PSM_OPA
 	// STL100 does this at the end of ips_protoexp_send_tid_completion
 	// TBD - seems like this should be done after ips_tid_recv_free
 	// so we have more likelihood of getting freshly freed resources?
@@ -1626,150 +1252,17 @@ int ips_protoexp_data(struct ips_recvhdrq_event *rcv_ev)
 		tidrecvc->ipsaddr->flows[protoexp->proto->msgflowid].flags &= ~IPS_FLOW_FLAG_SKIP_CTS;                                  /* Let the next CTS be processed */
 		ips_tid_pendtids_timer_callback(&tidrecvc->protoexp->timer_getreqs, 0);  /* and make explicit progress for it. */
 	}
-#else
-	int recv_completion = (tidrecvc->recv_tidbytes ==
-			       (p_hdr->exp_offset + ips_recvhdrq_event_paylen(rcv_ev)));
-
-	/* If sender requested an ACK with the packet and it is not the last
-	 * packet, or if the incoming flow faced congestion, respond with an
-	 * ACK packet. The ACK when congested will have the BECN bit set.
-	 */
-	if (((__be32_to_cpu(p_hdr->bth[2]) & IPS_SEND_FLAG_ACKREQ) &&
-		!recv_completion) ||
-	    (tidrecvc->tidflow.flags & IPS_FLOW_FLAG_GEN_BECN)) {
-		ips_scb_t ctrlscb;
-
-		/* Ack sender with descriptor index */
-		ctrlscb.scb_flags = 0;
-		ctrlscb.ips_lrh.data[0] = p_hdr->exp_sdescid;
-		ctrlscb.ips_lrh.ack_seq_num = tidrecvc->tidflow_genseq.psn_val;
-
-		// no payload, pass cksum so non-NULL
-		psm3_ips_proto_send_ctrl_message(&tidrecvc->tidflow,
-					    OPCODE_ACK,
-					    &tidrecvc->ctrl_msg_queued,
-					    &ctrlscb, ctrlscb.cksum, 0);
-	}
-
-	/* If RSM is a HW capability, and RSM has found a TID packet marked
-	 * with FECN, the payload will be written to the eager buffer, and
-	 * we will have a payload pointer here.  In that case, copy the payload
-	 * into the user's buffer.  If RSM did not intercept this EXPTID
-	 * packet, the HFI will handle the packet payload. Possibly should
-	 * assert(0 < paylen < MTU).
-	 */
-	if (psmi_hal_has_cap(PSM_HAL_CAP_RSM_FECN_SUPP) &&
-	    ips_recvhdrq_event_payload(rcv_ev) &&
-	    ips_recvhdrq_event_paylen(rcv_ev))
-		psm3_mq_mtucpy(tidrecvc->buffer + p_hdr->exp_offset,
-			       ips_recvhdrq_event_payload(rcv_ev),
-			       ips_recvhdrq_event_paylen(rcv_ev));
-
-	/* If last packet then we are done. We send a tid transfer completion
-	 * packet back to sender, free all tids and close the current tidflow
-	 * as well as tidrecvc descriptor.
-	 * Note: If we were out of tidflow, this will invoke the callback to
-	 * schedule pending transfer.
-	 */
-	if (recv_completion) {
-		/* copy unaligned data if any */
-		uint8_t *dst, *src;
-
-		if (tidrecvc->tid_list.tsess_unaligned_start) {
-			dst = (uint8_t *)tidrecvc->buffer;
-			src = (uint8_t *)p_hdr->exp_ustart;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-			if (tidrecvc->is_ptr_gpu_backed) {
-				PSM3_GPU_MEMCPY_HTOD(dst, src,
-					tidrecvc->tid_list.tsess_unaligned_start);
-			} else
-#endif
-				ips_protoexp_unaligned_copy(dst, src,
-							    tidrecvc->tid_list.tsess_unaligned_start);
-		}
-
-		if (tidrecvc->tid_list.tsess_unaligned_end) {
-			dst = (uint8_t *)tidrecvc->buffer +
-				tidrecvc->recv_msglen -
-				tidrecvc->tid_list.tsess_unaligned_end;
-			src = (uint8_t *)p_hdr->exp_uend;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-			if (tidrecvc->is_ptr_gpu_backed) {
-				PSM3_GPU_MEMCPY_HTOD(dst, src,
-					tidrecvc->tid_list.tsess_unaligned_end);
-			} else
-#endif
-			  ips_protoexp_unaligned_copy(dst, src,
-						      tidrecvc->tid_list.tsess_unaligned_end);
-		}
-
-		/* reply tid transfer completion packet to sender */
-		ips_protoexp_send_tid_completion(tidrecvc, p_hdr->exp_sdescid);
-#endif
 
 		/* Mark receive as done */
 		ips_tid_recv_free(tidrecvc);
 		_HFI_MMDBG("tidrecv done\n");
-#ifdef PSM_OPA
-	}
-#endif
 	PSM2_LOG_MSG("leaving");
 
 	return IPS_RECVHDRQ_CONTINUE;
 }
 #endif // PSM_HAVE_RDMA
 
-#ifdef PSM_OPA
-#ifndef PSM_DEBUG
-#  define ips_dump_tids(tid_list, msg, ...)
-#else
-static
-void ips_dump_tids(ips_tid_session_list *tid_list, const char *msg, ...)
-{
-	char buf[256];
-	size_t off = 0;
-	int i, num_tids = tid_list->tsess_tidcount;
 
-	va_list argptr;
-	va_start(argptr, msg);
-	off += vsnprintf(buf, sizeof(buf) - off, msg, argptr);
-	va_end(argptr);
-
-	for (i = 0; i < num_tids && off < (sizeof(buf) - 1); i++)
-		off += snprintf(buf + off, sizeof(buf) - off, "%d%s",
-				IPS_TIDINFO_GET_TID(tid_list->tsess_list[i]),
-				i < num_tids - 1 ? "," : "");
-
-	_HFI_VDBG("%s\n", buf);
-	return;
-}
-#endif
-#endif // PSM_OPA
-
-#ifdef PSM_OPA
-static
-void ips_expsend_tiderr(struct ips_tid_send_desc *tidsendc)
-{
-	char buf[256];
-	size_t off = 0;
-	int i;
-
-	off += snprintf(buf + off, sizeof(buf) - off,
-			"Remaining bytes: %d Member id %d is not in tid_session_id=%d :",
-			tidsendc->remaining_tidbytes, tidsendc->tid_idx,
-			tidsendc->rdescid._desc_idx);
-
-	for (i = 0; i < tidsendc->tid_list.tsess_tidcount + 1; i++)
-		off += snprintf(buf + off, sizeof(buf) - off, "%d,",
-				IPS_TIDINFO_GET_TID(tidsendc->tid_list.
-						    tsess_list[i]));
-	psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
-			  "Trying to use tid idx %d and there are %d members: %s\n",
-			  tidsendc->tid_idx, tidsendc->tid_list.tsess_tidcount,
-			  buf);
-	return;
-}
-#endif // PSM_OPA
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 static
@@ -1833,11 +1326,7 @@ void psmi_cuda_run_prefetcher(struct ips_protoexp *protoexp,
 		offset = req->prefetch_send_msgoff;
 		window_len =
 			ips_cuda_next_window(
-#ifdef PSM_OPA
-					     tidsendc->ipsaddr->opa.window_rv,
-#else
 					     proto->mq->hfi_base_window_rv,
-#endif
 					     offset, req->req_data.buf_len);
 		unsigned bufsz = 0;
 		if (window_len <= CUDA_SMALLHOSTBUF_SZ) {
@@ -1888,11 +1377,7 @@ void psmi_attach_chb_to_tidsendc(struct ips_protoexp *protoexp,
 		offset = req->prefetch_send_msgoff;
 		window_len =
 			ips_cuda_next_window(
-#ifdef PSM_OPA
-					     tidsendc->ipsaddr->opa.window_rv,
-#else
 					     proto->mq->hfi_base_window_rv,
-#endif
 					     offset, req->req_data.buf_len);
 		unsigned bufsz = 0;
 		if (window_len <= CUDA_SMALLHOSTBUF_SZ) {
@@ -2023,20 +1508,10 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 			   uint32_t tid_list_size)
 {
 	struct ips_tid_send_desc *tidsendc;
-#ifdef PSM_OPA
-	uint32_t i, j, *src, *dst;
-#endif
 	_HFI_MMDBG("psm3_ips_tid_send_handle_tidreq\n");
 
 	PSM2_LOG_MSG("entering");
-#ifdef PSM_OPA
-	psmi_assert(tid_list_size > sizeof(ips_tid_session_list));
-	psmi_assert(tid_list_size <= sizeof(tidsendc->filler));
-	psmi_assert(tid_list->tsess_tidcount > 0);
-	psmi_assert((rdescid._desc_genc>>16) == 0);
-#else
 	psmi_assert(tid_list_size == sizeof(ips_tid_session_list));
-#endif
 
 	tidsendc = (struct ips_tid_send_desc *)
 	    psm3_mpool_get(protoexp->tid_desc_send_pool);
@@ -2070,89 +1545,15 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 	_HFI_VDBG("recv'd CTS: rkey 0x%x srcoff %u raddr 0x%"PRIx64" len %u\n",
 		tid_list->tsess_rkey, tid_list->tsess_srcoff, tid_list->tsess_raddr,
 		tid_list->tsess_length);
-#elif defined(PSM_OPA)
-	/*
-	 * while doing the copy, we try to merge the tids based on
-	 * following rules:
-	 * 1. both tids are virtually contiguous(i and i+1 in the array);
-	 * 2. both tids have the same tidpair value;
-	 * 3. first tid (i) has tidctrl=1;
-	 * 4. second tid (i+1) has tidctrl=2;
-	 * 5. total length does not exceed 512 pages (2M);
-	 * 6. The h/w supports merged tid_ctrl's.
-	 *
-	 * The restriction of 512 pages comes from the limited number
-	 * of bits we have for KDETH.OFFSET:
-	 *   - The entire mapping space provided through TIDs is to be
-	 *     viewed as a zero-based address mapping.
-	 *   - We have 15 bits in KDETH offset field through which we
-	 *     can address upto a maximum of 2MB.
-	 *     (with 64-byte offset mode or KDETH.OM = 1)
-	 *   - Assuming a 4KB page size, 2MB/4KB = 512 pages.
-	 */
-	ips_dump_tids(tid_list, "Received %d tids: ",
-				tid_list->tsess_tidcount);
-
-	if (psmi_hal_has_cap(PSM_HAL_CAP_MERGED_TID_CTRLS))
-	{
-		src = tid_list->tsess_list;
-		dst = tidsendc->tid_list.tsess_list;
-		dst[0] = src[0];
-		j = 0; i = 1;
-		while (i < tid_list->tsess_tidcount) {
-			if ((((dst[j]>>IPS_TIDINFO_TIDCTRL_SHIFT)+1) ==
-			     (src[i]>>IPS_TIDINFO_TIDCTRL_SHIFT)) &&
-			    (((dst[j]&IPS_TIDINFO_LENGTH_MASK)+
-			      (src[i]&IPS_TIDINFO_LENGTH_MASK)) <=
-			     		PSM_MAX_NUM_PAGES_IN_TIDPAIR)) {
-				/* merge 'i' to 'j'
-				 * (We need to specify "tidctrl" value as 3
-				 *  if we merge the individual tid-pairs.
-				 *  Doing that here) */
-				dst[j] += (2 << IPS_TIDINFO_TIDCTRL_SHIFT) +
-					(src[i] & IPS_TIDINFO_LENGTH_MASK);
-				i++;
-				if (i == tid_list->tsess_tidcount) break;
-			}
-			j++;
-			/* copy 'i' to 'j' */
-			dst[j] = src[i];
-			i++;
-		}
-		tidsendc->tid_list.tsess_tidcount = j + 1;
-		tid_list = &tidsendc->tid_list;
-	}
-	else
-	{
-		tidsendc->tid_list.tsess_tidcount = tid_list->tsess_tidcount;
-		psm3_mq_mtucpy(&tidsendc->tid_list.tsess_list, tid_list->tsess_list,
-			       tid_list->tsess_tidcount * sizeof(tid_list->tsess_list[0]));
-		tid_list = &tidsendc->tid_list;
-	}
-
-	/* Initialize tidflow for window. Use path requested by remote endpoint */
-	psm3_ips_flow_init(&tidsendc->tidflow, protoexp->proto, ipsaddr,
-		      protoexp->tid_xfer_type, PSM_PROTOCOL_TIDFLOW,
-		      IPS_PATH_LOW_PRIORITY, EP_FLOW_TIDFLOW);
-	tidsendc->tidflow.xmit_seq_num.psn_val = tidflow_genseq;
-	tidsendc->tidflow.xmit_ack_num.psn_val = tidflow_genseq;
-	tidsendc->frag_size = min(protoexp->tid_send_fragsize,
-		tidsendc->tidflow.frag_size);
 #endif // defined(PSM_VERBS)
 
 	tidsendc->userbuf =
 	    (void *)((uintptr_t) req->req_data.buf + tid_list->tsess_srcoff);
 	tidsendc->buffer = (void *)((uintptr_t)tidsendc->userbuf
-#ifdef PSM_OPA
-				+ tid_list->tsess_unaligned_start
-#endif
 				);
 	tidsendc->length = tid_list->tsess_length;
 	_HFI_MMDBG("tidsendc created userbuf %p buffer %p length %u\n",
 			tidsendc->userbuf,  tidsendc->buffer, tidsendc->length);
-#ifdef PSM_OPA
-	tidsendc->ctrl_msg_queued = 0;
-#endif
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	/* Matching on previous prefetches and initiating next prefetch */
@@ -2184,9 +1585,6 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 					 tid_list->tsess_srcoff - chb->offset);
 			tidsendc->buffer =
 				(void *)((uintptr_t)tidsendc->userbuf
-#ifdef PSM_OPA
-					 + tid_list->tsess_unaligned_start
-#endif
 					);
 			/* now associate the buffer with the tidsendc */
 			tidsendc->cuda_hostbuf[0] = chb;
@@ -2199,9 +1597,6 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 				(void *)((uintptr_t) buffer);
 			tidsendc->buffer =
 				(void *)((uintptr_t)tidsendc->userbuf
-#ifdef PSM_OPA
-				+ tid_list->tsess_unaligned_start
-#endif
 				);
 			chb_next = STAILQ_NEXT(chb, req_next);
 			tidsendc->cuda_hostbuf[0] = chb;
@@ -2213,11 +1608,7 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 						    chb,
 						    tid_list->tsess_srcoff,
 						    tid_list->tsess_length,
-#ifdef PSM_OPA
-						    tid_list->tsess_unaligned_start,
-#else
 							0,
-#endif
 						    rc);
 		} else {
 			psmi_attach_chb_to_tidsendc(protoexp, req,
@@ -2225,11 +1616,7 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 						    NULL,
 						    tid_list->tsess_srcoff,
 						    tid_list->tsess_length,
-#ifdef PSM_OPA
-						    tid_list->tsess_unaligned_start,
-#else
 							0,
-#endif
 						    PSMI_CUDA_CONTINUE);
 		}
 		protoexp->proto->strat_stats.rndv_rdma_hbuf_send++;
@@ -2244,44 +1631,20 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 		protoexp->proto->strat_stats.rndv_rdma_cpu_send_bytes += tid_list->tsess_length;
 	}
 
-#ifdef PSM_OPA
-	/* frag size must be 64B multiples */
-	tidsendc->frag_size &= (~63);
-#endif
 	tidsendc->is_complete = 0;
-#ifdef PSM_OPA
-	tidsendc->tid_idx = 0;
-	tidsendc->frame_send = 0;
-#else
 	tidsendc->reserved = 0;
 #ifdef PSM_HAVE_RNDV_MOD
 	tidsendc->rv_need_err_chk_rdma = 0;
 	tidsendc->rv_sconn_index = 0;
 	tidsendc->rv_conn_count = 0;
 #endif
-#endif
 
-#ifdef PSM_OPA
-	tidsendc->tidbytes = 0;
-	tidsendc->remaining_tidbytes = tid_list->tsess_length
-	    - tid_list->tsess_unaligned_start - tid_list->tsess_unaligned_end;
-	tidsendc->remaining_bytes_in_tid =
-	    (IPS_TIDINFO_GET_LENGTH(tid_list->tsess_list[0]) << 12) -
-	    tid_list->tsess_tidoffset;
-	tidsendc->offset_in_tid = tid_list->tsess_tidoffset;
-#endif
 
 	_HFI_EXP
 	    ("alloc tidsend=%4d tidrecv=%4d srcoff=%6d length=%6d"
-#ifdef PSM_OPA
-		",s=%d,e=%d"
-#endif
 		"\n",
 	     tidsendc->sdescid._desc_idx, rdescid._desc_idx,
 	     tid_list->tsess_srcoff, tid_list->tsess_length
-#ifdef PSM_OPA
-	     , tid_list->tsess_unaligned_start, tid_list->tsess_unaligned_end
-#endif
 		);
 
 	// start sending TIDEXP packets
@@ -2299,231 +1662,6 @@ psm3_ips_tid_send_handle_tidreq(struct ips_protoexp *protoexp,
 	return PSM2_OK;
 }
 
-#ifdef PSM_OPA
-// compose a sequence of EXPTID packets to be sent
-// builds one scb with proper headers and tids.  When using PIO
-// the scb is for a single packet. When using SDMA, header generation
-// will let the scb describe a frag_size larger than a packet
-static
-ips_scb_t *
-ips_scb_prepare_tid_sendctrl(struct ips_flow *flow,
-			     struct ips_tid_send_desc *tidsendc)
-{
-	struct ips_protoexp *protoexp = tidsendc->protoexp;
-	uint32_t *tsess_list = tidsendc->tid_list.tsess_list;
-	uint32_t tid, omode, offset, chunk_size;
-	uint32_t startidx, endidx;
-	uint32_t frame_len, nfrag;
-	uint8_t *bufptr = tidsendc->buffer;
-	ips_scb_t *scb;
-
-	uint8_t is_payload_per_frag_leq_8dw = 0;
-	 /* If payload in the first and last nfrag is less then or equal
-	  * to 8DW we disable header suppression so as to detect uncorrectable
-	  * errors which will otherwise be non-detectable(since header is
-	  * suppressed we lose RHF.EccErr)
-	  */
-	if ((scb = psm3_ips_scbctrl_alloc(&protoexp->tid_scbc_rv, 1, 0, 0)) == NULL)
-		return NULL;
-
-	/*
-	 * Make sure the next offset is in 64B multiples with the tid.
-	 */
-	frame_len =
-	    min(tidsendc->remaining_bytes_in_tid, tidsendc->remaining_tidbytes);
-	if (frame_len > tidsendc->frag_size) {
-		frame_len =
-		    tidsendc->frag_size - (tidsendc->offset_in_tid & 63);
-	}
-	/*
-	 * Frame length is the amount of payload to be included in a particular
-	 * frag of the scb, so we check if frame len is less than or equal
-	 * to 8DW. If length is less then then or equal to 8DW for the first
-	 * frag then we avoid header suppression
-	 */
-	if (frame_len <= 32)
-		is_payload_per_frag_leq_8dw = 1;
-
-	/*
-	 * Using large offset mode based on offset length.
-	 */
-	if (tidsendc->offset_in_tid < 131072) {	/* 2^15 * 4 */
-		psmi_assert((tidsendc->offset_in_tid % 4) == 0);
-		offset = tidsendc->offset_in_tid / 4;
-		omode = 0;
-	} else {
-		psmi_assert((tidsendc->offset_in_tid % 64) == 0);
-		offset = tidsendc->offset_in_tid / 64;
-		omode = 1;
-	}
-	startidx = tidsendc->tid_idx;
-	tid = IPS_TIDINFO_GET_TID(tsess_list[startidx]);
-	scb->ips_lrh.khdr.kdeth0 = __cpu_to_le32((offset & HFI_KHDR_OFFSET_MASK)
-	    | (omode << HFI_KHDR_OM_SHIFT) | (tid << HFI_KHDR_TID_SHIFT));
-
-	scb->tidctrl = IPS_TIDINFO_GET_TIDCTRL(tsess_list[startidx]);
-	scb->tsess = (uint32_t *) &tsess_list[startidx];
-
-	/*
-	 * Payload and buffer address for current packet. payload_size
-	 * must be the first packet size because it is used to initialize
-	 * the packet header.
-	 */
-	scb->payload_size = frame_len;
-	ips_scb_buffer(scb) = (void *)bufptr;
-	scb->frag_size = tidsendc->frag_size;
-
-	/*
-	 * Other packet fields.
-	 */
-	PSM2_LOG_EPM(OPCODE_EXPTID,PSM2_LOG_TX, protoexp->proto->ep->epid,
-		    flow->ipsaddr->epaddr.epid,
-		    "psm3_mpool_get_obj_index(tidsendc->mqreq): %d, tidsendc->rdescid._desc_idx: %d, tidsendc->sdescid._desc_idx: %d",
-		    psm3_mpool_get_obj_index(tidsendc->mqreq),tidsendc->rdescid._desc_idx,tidsendc->sdescid._desc_idx);
-	ips_scb_opcode(scb) = OPCODE_EXPTID;
-	scb->ips_lrh.exp_sdescid = tidsendc->sdescid;
-	scb->ips_lrh.exp_rdescid_genc = (uint16_t)tidsendc->rdescid._desc_genc;
-	scb->ips_lrh.exp_offset = tidsendc->tidbytes;
-
-	scb->tidsendc = tidsendc;
-	SLIST_NEXT(scb, next) = NULL;
-
-	/*
-	 * Loop over the tid session list, count the frag number and payload size.
-	 */
-	nfrag = 1;
-	chunk_size = frame_len;
-	while (1) {
-		/* Record last tididx used */
-		endidx = tidsendc->tid_idx;
-		/* Check if all tidbytes are done */
-		tidsendc->remaining_tidbytes -= frame_len;
-		if (!tidsendc->remaining_tidbytes) {
-			/* We do another frame length check for the last frag */
-			if (frame_len <= 32)
-				is_payload_per_frag_leq_8dw = 1;
-			break;
-		}
-
-		/* Update in current tid */
-		tidsendc->remaining_bytes_in_tid -= frame_len;
-		tidsendc->offset_in_tid += frame_len;
-		psmi_assert((tidsendc->offset_in_tid >= 128*1024) ?
-			    ((tidsendc->offset_in_tid % 64) == 0) :
-			    ((tidsendc->offset_in_tid %  4) == 0));
-
-		/* Done with this tid, move on to the next tid */
-		if (!tidsendc->remaining_bytes_in_tid) {
-			tidsendc->tid_idx++;
-			psmi_assert_always(tidsendc->tid_idx <
-				    tidsendc->tid_list.tsess_tidcount);
-			tidsendc->remaining_bytes_in_tid =
-			    IPS_TIDINFO_GET_LENGTH(tsess_list
-						   [tidsendc->tid_idx]) << 12;
-			tidsendc->offset_in_tid = 0;
-		}
-
-		/* For PIO, only single packet per scb allowed */
-		if (flow->transfer == PSM_TRANSFER_PIO) {
-			break;
-		}
-
-		frame_len =
-		    min(tidsendc->remaining_bytes_in_tid,
-			tidsendc->remaining_tidbytes);
-		if (frame_len > tidsendc->frag_size)
-			frame_len = tidsendc->frag_size;
-		nfrag++;
-		chunk_size += frame_len;
-	}
-
-	scb->nfrag = nfrag;
-	scb->chunk_size = chunk_size;
-	if (nfrag > 1) {
-		scb->nfrag_remaining = scb->nfrag;
-		scb->chunk_size_remaining = scb->chunk_size;
-	}
-	scb->tsess_length = (endidx - startidx + 1) * sizeof(uint32_t);
-
-	/* Keep track of latest buffer location so we restart at the
-	 * right location, if we don't complete the transfer */
-	tidsendc->buffer = bufptr + chunk_size;
-	tidsendc->tidbytes += chunk_size;
-
-	if (flow->transfer == PSM_TRANSFER_DMA &&
-	    psmi_hal_has_cap(PSM_HAL_CAP_DMA_HSUPP_FOR_32B_MSGS)) {
-		is_payload_per_frag_leq_8dw = 0;
-	}
-
-	/* If last packet, we want a completion notification */
-	if (!tidsendc->remaining_tidbytes) {
-		/* last packet/chunk, attach unaligned data */
-		uint8_t *dst, *src;
-
-		if (tidsendc->tid_list.tsess_unaligned_start) {
-			dst = (uint8_t *)scb->ips_lrh.exp_ustart;
-			src = (uint8_t *)tidsendc->userbuf;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-			if (IS_TRANSFER_BUF_GPU_MEM(scb) && !tidsendc->mqreq->gpu_hostbuf_used) {
-				PSM3_GPU_MEMCPY_DTOH(dst, src,
-						tidsendc->tid_list.tsess_unaligned_start);
-			} else
-#endif
-				ips_protoexp_unaligned_copy(dst, src,
-						tidsendc->tid_list.tsess_unaligned_start);
-		}
-
-		if (tidsendc->tid_list.tsess_unaligned_end) {
-			dst = (uint8_t *)&scb->ips_lrh.exp_uend;
-			src = (uint8_t *)tidsendc->userbuf +
-				tidsendc->length -
-				tidsendc->tid_list.tsess_unaligned_end;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-			if (IS_TRANSFER_BUF_GPU_MEM(scb) && !tidsendc->mqreq->gpu_hostbuf_used) {
-				PSM3_GPU_MEMCPY_DTOH(dst, src,
-						tidsendc->tid_list.tsess_unaligned_end);
-			} else
-#endif
-				ips_protoexp_unaligned_copy(dst, src,
-						tidsendc->tid_list.tsess_unaligned_end);
-		}
-		/*
-		 * If the number of fragments is greater then one and
-		 * "no header suppression" flag is unset then we go
-		 * ahead and suppress the header */
-		if ((scb->nfrag > 1) && (!is_payload_per_frag_leq_8dw))
-			scb->scb_flags |= IPS_SEND_FLAG_HDRSUPP;
-		else
-			scb->scb_flags |= IPS_SEND_FLAG_ACKREQ;
-
-		tidsendc->is_complete = 1;	// all scb's queued for send
-	} else {
-		/* Do not suppress header every hdr_pkt_interval */
-		if ((++tidsendc->frame_send %
-				protoexp->hdr_pkt_interval) == 0)
-			/* Request an ACK */
-			scb->scb_flags |= IPS_SEND_FLAG_ACKREQ;
-		else {
-			if (!is_payload_per_frag_leq_8dw) {
-				/* Request hdr supp */
-				scb->scb_flags |= IPS_SEND_FLAG_HDRSUPP;
-			}
-		}
-		/* assert only single packet per scb */
-		psmi_assert(scb->nfrag == 1);
-	}
-
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	if (tidsendc->mqreq->is_buf_gpu_mem &&		/* request's buffer comes from GPU realm */
-	   !tidsendc->mqreq->gpu_hostbuf_used) {	/* and it was NOT moved to HOST memory */
-		scb->mq_req = tidsendc->mqreq;		/* so let's mark it per scb, not to check its locality again */
-		ips_scb_flags(scb) |= IPS_SEND_FLAG_PAYLOAD_BUF_GPU;
-	}
-#endif
-
-	return scb;
-}
-#endif // PSM_OPA
 
 #if defined(PSM_VERBS)
 /*
@@ -2694,16 +1832,8 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 static
 psm2_error_t ips_tid_send_exp(struct ips_tid_send_desc *tidsendc)
 {
-#ifdef PSM_OPA
-	ips_scb_t *scb = NULL;
-#endif
 	psm2_error_t err = PSM2_OK;
-#ifdef PSM_OPA
-	psm2_error_t err_f;
-	struct ips_protoexp *protoexp = tidsendc->protoexp;
-	struct ips_proto *proto = protoexp->proto;
-	struct ips_flow *flow = &tidsendc->tidflow;
-#elif defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#if   defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	struct ips_protoexp *protoexp = tidsendc->protoexp;
 #endif
 
@@ -2774,48 +1904,7 @@ psm2_error_t ips_tid_send_exp(struct ips_tid_send_desc *tidsendc)
 		tidsendc->cuda_hostbuf[1] = NULL;
 	}
 #endif
-#ifdef PSM_OPA
-	/*
-	 * We aggressively try to grab as many scbs as possible, enqueue them to a
-	 * flow and flush them when either we're out of scbs or we've completely
-	 * filled the send request.
-	 */
-	while (!tidsendc->is_complete) {
-		if_pf(tidsendc->tid_list.tsess_tidcount &&
-		      (tidsendc->tid_idx >= tidsendc->tid_list.tsess_tidcount ||
-		       tidsendc->tid_idx < 0))
-			ips_expsend_tiderr(tidsendc);
-
-		if ((scb =
-		     ips_scb_prepare_tid_sendctrl(flow, tidsendc)) == NULL) {
-			proto->stats.scb_exp_unavail_cnt++;
-			err = PSM2_EP_NO_RESOURCES;
-			break;
-		} else {
-			// queue up the sends, likely to be SDMA
-			psm3_ips_proto_flow_enqueue(flow, scb);
-		}
-	}
-
-	if (!SLIST_EMPTY(&flow->scb_pend)) {	/* Something to flush */
-		int num_sent;
-
-		// this will kick off the sends, likely to be SDMA
-		err_f = flow->flush(flow, &num_sent);
-
-		// since we are using the tidflow, we ensure a future
-		// timer callback will flush the remaining scbs or
-		// process the rcvhdrq
-		if (err != PSM2_EP_NO_RESOURCES) {
-			/* PSM2_EP_NO_RESOURCES is reserved for out-of-scbs */
-			if (err_f == PSM2_EP_NO_RESOURCES)
-				err = PSM2_TIMEOUT;	/* force a resend reschedule */
-			else if (err_f == PSM2_OK && num_sent > 0 &&
-				 !psm3_gen1_ips_ptl_recvq_isempty(protoexp->ptl))
-				err = PSM2_OK_NO_PROGRESS;	/* force a rcvhdrq service */
-		}
-	}
-#elif defined(PSM_VERBS)
+#if   defined(PSM_VERBS)
 	err = ips_tid_issue_rdma_write(tidsendc);
 #endif
 
@@ -2918,123 +2007,6 @@ ips_tid_pendsend_timer_callback(struct psmi_timer *timer, uint64_t current)
    and allows for a single call to the core VM code in the kernel,
    rather than one per page, definitely improving performance. */
 
-#ifdef PSM_OPA
-static
-psm2_error_t
-ips_tid_recv_alloc_frag(struct ips_protoexp *protoexp,
-			struct ips_tid_recv_desc *tidrecvc,
-			uint32_t nbytes_this)
-{
-	ips_tid_session_list *tid_list = &tidrecvc->tid_list;
-	uintptr_t bufptr = (uintptr_t) tidrecvc->buffer;
-	uint32_t size = nbytes_this;
-	psm2_error_t err = PSM2_OK;
-	uintptr_t pageaddr;
-	uint32_t tidoff, pageoff, pagelen, reglen, num_tids;
-
-	psmi_assert(size >= 4);
-
-	/*
-	 * The following calculation does not work when size < 4
-	 * and bufptr is byte aligned, it can get negative value.
-	 */
-	tid_list->tsess_unaligned_start = (bufptr & 3) ? (4 - (bufptr & 3)) : 0;
-	size -= tid_list->tsess_unaligned_start;
-	bufptr += tid_list->tsess_unaligned_start;
-
-	tid_list->tsess_unaligned_end = size & 3;
-	size -= tid_list->tsess_unaligned_end;
-
-	psmi_assert(size > 0);
-
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	/* Driver pins GPU pages when using GPU Direct RDMA for TID recieves,
-	 * to accomadate this change the calculations of pageaddr, pagelen
-	 * and pageoff have been modified to take GPU page size into
-	 * consideration.
-	 */
-	if (tidrecvc->is_ptr_gpu_backed) {
-		uint64_t page_mask = ~(PSMI_GPU_PAGESIZE -1);
-		uint32_t page_offset_mask = (PSMI_GPU_PAGESIZE -1);
-		pageaddr = bufptr & page_mask;
-		pagelen = (uint32_t) (PSMI_GPU_PAGESIZE +
-			  ((bufptr + size - 1) & page_mask) -
-			  (bufptr & page_mask));
-		tidoff = pageoff = (uint32_t) (bufptr & page_offset_mask);
-	} else
-#endif
-	{
-		pageaddr = bufptr & protoexp->tid_page_mask;
-		pagelen = (uint32_t) (PSMI_PAGESIZE +
-			  ((bufptr + size - 1) & protoexp->tid_page_mask) -
-			  (bufptr & protoexp->tid_page_mask));
-		tidoff = pageoff = (uint32_t) (bufptr & protoexp->tid_page_offset_mask);
-	}
-
-	reglen = pagelen;
-	if (protoexp->tidc.tid_array) {
-		if ((err = ips_tidcache_acquire(&protoexp->tidc,
-			    (void *)pageaddr, &reglen,
-			    (uint32_t *) tid_list->tsess_list, &num_tids,
-			    &tidoff
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-			    , tidrecvc->is_ptr_gpu_backed
-#endif
-			    )))
-			goto fail;
-	} else {
-		if ((err = ips_tid_acquire(&protoexp->tidc,
-			    (void *)pageaddr, &reglen,
-			    (uint32_t *) tid_list->tsess_list, &num_tids
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-			    , tidrecvc->is_ptr_gpu_backed
-#endif
-			)))
-			goto fail;
-	}
-
-	/*
-	 * PSM2 currently provides storage space enough to hold upto
-	 * 1024 tids. (PSM_TIDLIST_BUFSIZE). So, make sure we
-	 * don't get more than what we can hold from the tidcache here.
-	 *
-	 * The reason for 1024 tids comes from the PSM_TID_WINSIZE value
-	 * (currently 4MB. So, if in future, there is a change to this macro,
-	 * then you would need a change to PSM_TIDLIST_BUFSIZE as well).
-	 *
-	 * Assuming a 4KB page size, to be able to receive
-	 * a message of 4MB size, we'd need an maximum of 4MB/4KB = 1024 tids.
-	 */
-	psmi_assert(num_tids > 0);
-	psmi_assert(num_tids <= (PSM_TID_WINSIZE/PSM_TIDLIST_BUFSIZE));
-	if (reglen > pagelen) {
-		err = psm3_handle_error(protoexp->tidc.context->ep,
-			    PSM2_EP_DEVICE_FAILURE,
-			    "PSM tid registration: "
-			    "register more pages than asked");
-		goto fail;
-	} else if (reglen < pagelen) {
-		/*
-		 * driver registered less pages, update PSM records.
-		 */
-		tid_list->tsess_unaligned_end = 0;
-		tidrecvc->recv_tidbytes = reglen - pageoff;
-		tidrecvc->recv_msglen = tid_list->tsess_unaligned_start +
-		    tidrecvc->recv_tidbytes;
-	} else {
-		tidrecvc->recv_tidbytes = size;
-		tidrecvc->recv_msglen = nbytes_this;
-	}
-
-	tid_list->tsess_tidcount = num_tids;
-	tid_list->tsess_tidoffset = tidoff;
-
-	ips_dump_tids(tid_list, "Registered %d tids: ", num_tids);
-
-fail:
-	return err;
-}
-#endif // PSM_OPA
 
 static
 psm2_error_t
@@ -3045,9 +2017,6 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 {
 	psm2_error_t err;
 	ips_scb_t *grantscb;
-#ifdef PSM_OPA
-	ips_scb_t *completescb;
-#endif
 #ifdef PSM_VERBS
 	psm2_mq_req_t req = getreq->tidgr_req;
 #elif defined(PSM_CUDA) || defined(PSM_ONEAPI)
@@ -3075,24 +2044,11 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 		return PSM2_EP_NO_RESOURCES;
 	}
 
-#ifdef PSM_OPA
-	/* 2. allocate a tid complete (final ACK) scb. */
-	completescb = psm3_ips_scbctrl_alloc(&protoexp->tid_scbc_rv, 1, 0, 0);
-	if (completescb == NULL) {
-		psm3_ips_scbctrl_free(grantscb);
-		/* ips_tid_scbavail_callback() will reschedule */
-		PSM2_LOG_MSG("leaving");
-		return PSM2_EP_NO_RESOURCES;
-	}
-#endif
 
 	/* 3. allocate a tid flow entry. */
 	err = psm3_ips_tf_allocate(&protoexp->tfc, &tidrecvc);
 	if (err != PSM2_OK) {
 		_HFI_MMDBG("Wait: NO tid flow\n");
-#ifdef PSM_OPA
-		psm3_ips_scbctrl_free(completescb);
-#endif
 		psm3_ips_scbctrl_free(grantscb);
 		/* Unable to get a tidflow for expected protocol. */
 		psmi_timer_request(protoexp->timerq,
@@ -3131,9 +2087,6 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 			 * Release the resources we're holding and reschedule.*/
 			psm3_ips_tf_deallocate(&protoexp->tfc,
 					  tidrecvc->rdescid._desc_idx, 0);
-#ifdef PSM_OPA
-			psm3_ips_scbctrl_free(completescb);
-#endif
 			psm3_ips_scbctrl_free(grantscb);
 			psmi_timer_request(protoexp->timerq,
 					   &protoexp->timer_getreqs,
@@ -3198,70 +2151,17 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 	}
 
 	tidrecvc->recv_msglen = nbytes_this;
-#elif defined(PSM_OPA)
-	/* 5. allocate some tids from driver. */
-	err = ips_tid_recv_alloc_frag(protoexp, tidrecvc, nbytes_this);
-	if (err != PSM2_OK) {
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-		if (chb)
-			psm3_mpool_put(chb);
-#endif
-		psm3_ips_tf_deallocate(&protoexp->tfc, tidrecvc->rdescid._desc_idx, 0);
-		psm3_ips_scbctrl_free(completescb);
-		psm3_ips_scbctrl_free(grantscb);
-		/* Unable to register tids */
-		psmi_timer_request(protoexp->timerq,
-			&protoexp->timer_getreqs, PSMI_TIMER_PRIO_1);
-		PSM2_LOG_MSG("leaving");
-		return err;
-	}
-
-	if (protoexp->tid_flags & IPS_PROTOEXP_FLAG_TID_DEBUG) {
-		int num_tids = tidrecvc->tid_list.tsess_tidcount;
-		int tid, i;
-		for (i = 0; i < num_tids; i++) {
-			tid =
-			    IPS_TIDINFO_GET_TID(tidrecvc->tid_list.
-					tsess_list[i]) * 2 +
-			    IPS_TIDINFO_GET_TIDCTRL(tidrecvc->tid_list.
-					tsess_list[i]) - 1;
-			psmi_assert(protoexp->tid_info[tid].state ==
-				    TIDSTATE_FREE);
-			psmi_assert(protoexp->tid_info[tid].tidrecvc == NULL);
-			psmi_assert(protoexp->tid_info[tid].tid == 0xFFFFFFFF);
-			protoexp->tid_info[tid].state = TIDSTATE_USED;
-			protoexp->tid_info[tid].tidrecvc = tidrecvc;
-			protoexp->tid_info[tid].tid =
-			    tidrecvc->tid_list.tsess_list[i];
-		}
-	}
 #endif
 
 	/* Initialize recv descriptor */
 	tidrecvc->ipsaddr = ipsaddr;
 	tidrecvc->getreq = (struct ips_tid_get_request *)getreq;
 
-#ifdef PSM_OPA
-	/* Initialize tidflow, instead calling generic routine:
-	   psm3_ips_flow_init(&tidrecvc->tidflow, protoexp->proto, ipsaddr,
-		      protoexp->ctrl_xfer_type, PSM_PROTOCOL_TIDFLOW,
-		      IPS_PATH_LOW_PRIORITY, EP_FLOW_TIDFLOW);
-	 * only reset following necessary field. */
-	tidrecvc->tidflow.ipsaddr = ipsaddr;
-	tidrecvc->tidflow.flags = 0;
-#endif
 
 	tidrecvc->tidflow_nswap_gen = 0;
 	tidrecvc->tidflow_genseq.psn_gen = tidrecvc->tidflow_active_gen;
 	tidrecvc->tidflow_genseq.psn_seq = 0;	/* Always start sequence number at 0 (zero),
 	 	 	 	 	 	   in order to prevent wraparound sequence numbers */
-#ifdef PSM_OPA
-	psmi_hal_tidflow_set_entry(
-			      tidrecvc->rdescid._desc_idx,
-			      tidrecvc->tidflow_genseq.psn_gen,
-			      tidrecvc->tidflow_genseq.psn_seq,
-			      tidrecvc->context->psm_hw_ctxt);
-#endif
 
 	tidrecvc->tid_list.tsess_srcoff = getreq->tidgr_offset;
 	tidrecvc->tid_list.tsess_length = tidrecvc->recv_msglen;
@@ -3273,9 +2173,6 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 	tidrecvc->tid_list.tsess_raddr = tidrecvc->mr->iova + ((uintptr_t)tidrecvc->buffer -  (uintptr_t)tidrecvc->mr->addr);
 #endif
 
-#ifdef PSM_OPA
-	tidrecvc->ctrl_msg_queued = 0;
-#endif
 	tidrecvc->state = TIDRECVC_STATE_BUSY;
 
 	tidrecvc->stats.nSeqErr = 0;
@@ -3283,27 +2180,10 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 	tidrecvc->stats.nReXmit = 0;
 	tidrecvc->stats.nErrChkReceived = 0;
 
-#ifdef PSM_OPA
-	/* This gets sent out as a control message, so we need to force 4-byte IB
-	 * alignment */
-	tidrecvc->tsess_tidlist_length = (uint16_t)
-	    PSMI_ALIGNUP((sizeof(ips_tid_session_list) +
-			  (tidrecvc->tid_list.tsess_tidcount *
-			   sizeof(uint32_t))), 4);
-
-	_HFI_EXP("alloc tidrecv=%d, paylen=%d, ntid=%d\n",
-		 tidrecvc->rdescid._desc_idx,
-		 tidrecvc->tsess_tidlist_length,
-		 tidrecvc->tid_list.tsess_tidcount);
-#else
 	_HFI_EXP("alloc tidrecv=%d\n",
 		 tidrecvc->rdescid._desc_idx);
-#endif
 
 	tidrecvc->grantscb = grantscb;
-#ifdef PSM_OPA
-	tidrecvc->completescb = completescb;
-#endif
 
 	*ptidrecvc = tidrecvc; /* return to caller */
 	PSM2_LOG_MSG("leaving");
@@ -3354,15 +2234,7 @@ ips_tid_pendtids_timer_callback(struct psmi_timer *timer, uint64_t current)
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	if (
-#ifdef PSM_OPA
-	    !(((struct ips_protoexp *)timer->context)->proto->flags
-		& IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV) ||
-		((((struct ips_protoexp *)timer->context)->proto->flags &
-		   IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV) &&
-		   gpudirect_rdma_recv_limit < UINT_MAX)
-#else
 	    1	/* due to unaligned recv using hostbuf, must always do this */
-#endif
 	) {
 		/* Before processing pending TID requests, first try to free up
 		 * any CUDA host buffers that are now idle. */
@@ -3491,25 +2363,9 @@ ipsaddr_next:
 		_HFI_MMDBG("ips_tid_pendtids_timer_callback: page align nbytes_this %u\n", nbytes_this);
 
 		psmi_assert(nbytes_this >= 4);
-#ifdef PSM_OPA
-		psmi_assert(nbytes_this <= PSM_TID_WINSIZE);
-#endif
 
 		// for STL native the tids and tidflows available pace incoming TIDs
 		// for UD we still use tidflows available to pace incoming RDMA
-#ifdef PSM_OPA
-		if ((ret = ips_tid_num_available(&protoexp->tidc)) <= 0) {
-			/* We're out of tids. If this process used all the resource,
-			 * the free callback will reschedule the operation, otherwise,
-			 * we reschedule it here */
-			if (ret == 0)
-			{
-				psmi_timer_request(protoexp->timerq,
-						   &protoexp->timer_getreqs,
-						   PSMI_TIMER_PRIO_1);
-			}
-		} else
-#endif
 			if ((ret = ips_tf_available(&protoexp->tfc)) <= 0) {
 			/* We're out of tidflow. If this process used all the resource,
 			 * the free callback will reschedule the operation, otherwise,
@@ -3611,13 +2467,7 @@ void psmi_cudamemcpy_tid_to_device(struct ips_tid_recv_desc *tidrecvc)
 	struct ips_protoexp *protoexp = tidrecvc->protoexp;
 	struct ips_gpu_hostbuf *chb;
 	const uint32_t transfer_size =
-#ifndef PSM_OPA
 		tidrecvc->recv_msglen;
-#else
-		tidrecvc->recv_tidbytes
-			+ tidrecvc->tid_list.tsess_unaligned_start
-			+ tidrecvc->tid_list.tsess_unaligned_end;
-#endif
 	chb = tidrecvc->cuda_hostbuf;
 	chb->size += transfer_size;
 
@@ -3638,15 +2488,9 @@ psm2_error_t ips_tid_recv_free(struct ips_tid_recv_desc *tidrecvc)
 {
 	struct ips_protoexp *protoexp = tidrecvc->protoexp;
 	struct ips_tid_get_request *getreq = tidrecvc->getreq;
-#ifdef PSM_OPA
-	int tidcount = tidrecvc->tid_list.tsess_tidcount;
-#endif
 	psm2_error_t err = PSM2_OK;
 
 	psmi_assert(getreq != NULL);
-#ifdef PSM_OPA
-	psmi_assert(tidcount > 0);
-#endif
 	psmi_assert(tidrecvc->state == TIDRECVC_STATE_BUSY);
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
@@ -3654,47 +2498,11 @@ psm2_error_t ips_tid_recv_free(struct ips_tid_recv_desc *tidrecvc)
 		psmi_cudamemcpy_tid_to_device(tidrecvc);
 #endif
 
-#ifndef PSM_OPA
 	if (tidrecvc->mr) {
 		_HFI_MMDBG("CTS recv chunk complete, releasing MR: rkey: 0x%x\n", tidrecvc->mr->rkey);
         psm3_verbs_release_mr(tidrecvc->mr);
         tidrecvc->mr = NULL;
     }
-#elif defined(PSM_OPA)
-	if (protoexp->tid_flags & IPS_PROTOEXP_FLAG_TID_DEBUG) {
-		int tid, i;
-
-		for (i = 0; i < tidcount; i++) {
-			tid =
-			    IPS_TIDINFO_GET_TID(tidrecvc->tid_list.
-					tsess_list[i]) * 2 +
-			    IPS_TIDINFO_GET_TIDCTRL(tidrecvc->tid_list.
-					tsess_list[i]) - 1;
-			psmi_assert(protoexp->tid_info[tid].state ==
-				    TIDSTATE_USED);
-			psmi_assert(protoexp->tid_info[tid].tidrecvc ==
-				    tidrecvc);
-			psmi_assert(protoexp->tid_info[tid].tid ==
-				    tidrecvc->tid_list.tsess_list[i]);
-			protoexp->tid_info[tid].state = TIDSTATE_FREE;
-			protoexp->tid_info[tid].tidrecvc = NULL;
-			protoexp->tid_info[tid].tid = 0xFFFFFFFF;
-		}
-	}
-
-	ips_dump_tids(&tidrecvc->tid_list, "Deregistered %d tids: ",
-		      tidrecvc->tid_list.tsess_tidcount);
-
-	if (protoexp->tidc.tid_array) {
-		if ((err = ips_tidcache_release(&protoexp->tidc,
-			tidrecvc->tid_list.tsess_list, tidcount)))
-			goto fail;
-	} else {
-		if ((err = ips_tid_release(&protoexp->tidc,
-			tidrecvc->tid_list.tsess_list, tidcount)))
-			goto fail;
-	}
-#endif
 
 	getreq->tidgr_bytesdone += tidrecvc->recv_msglen;
 
@@ -3735,159 +2543,11 @@ psm2_error_t ips_tid_recv_free(struct ips_tid_recv_desc *tidrecvc)
 	/* we freed some an MR  If we have pending sends or pending get requests,
 	 * turn on the timer so it can be processed. */
 	ips_tid_mravail_callback(protoexp->proto);
-#elif defined(PSM_OPA)
-	if (!STAILQ_EMPTY(&protoexp->pend_getreqsq)) {
-		psmi_timer_request(protoexp->timerq,
-				   &protoexp->timer_getreqs,
-				   PSMI_TIMER_PRIO_1);
-	}
 #endif
 
-#ifdef PSM_OPA
-fail:
-#endif
 	return err;
 }
 #endif // PSM_HAVE_RDMA
 
-#ifdef PSM_OPA
-// This advancaes the generation for our tidflow
-psm2_error_t
-ips_protoexp_flow_newgen(struct ips_tid_recv_desc *tidrecvc)
-{
-	psmi_assert_always(tidrecvc->state == TIDRECVC_STATE_BUSY);
-	ips_tfgen_allocate(&tidrecvc->protoexp->tfc,
-				 tidrecvc->rdescid._desc_idx,
-				 &tidrecvc->tidflow_active_gen);
 
-	/* Update tidflow table with new generation number */
-	tidrecvc->tidflow_genseq.psn_gen = tidrecvc->tidflow_active_gen;
-	psmi_hal_tidflow_set_entry(
-			      tidrecvc->rdescid._desc_idx,
-			      tidrecvc->tidflow_genseq.psn_gen,
-			      tidrecvc->tidflow_genseq.psn_seq,
-			      tidrecvc->context->psm_hw_ctxt);
-	/* Increment swapped generation count for tidflow */
-	tidrecvc->tidflow_nswap_gen++;
-	return PSM2_OK;
-}
-#endif // PSM_OPA
 
-#ifdef PSM_OPA
-void ips_protoexp_do_tf_seqerr(void *vpprotoexp
-			       /* actually: struct ips_protoexp *protoexp */,
-			       void *vptidrecvc
-			       /* actually: struct ips_tid_recv_desc *tidrecvc */,
-			       struct ips_message_header *p_hdr)
-{
-	struct ips_protoexp *protoexp = (struct ips_protoexp *) vpprotoexp;
-	struct ips_tid_recv_desc *tidrecvc = (struct ips_tid_recv_desc *) vptidrecvc;
-	psmi_seqnum_t sequence_num, tf_sequence_num;
-	ips_scb_t ctrlscb;
-
-	/* Update stats for sequence errors */
-	tidrecvc->stats.nSeqErr++;
-
-	sequence_num.psn_val = __be32_to_cpu(p_hdr->bth[2]);
-
-	/* Only care about sequence error for currently active generation */
-	if (tidrecvc->tidflow_active_gen != sequence_num.psn_gen)
-		return;
-
-	/* If a "large" number of swapped generation we are loosing packets
-	 * for this flow. Request throttling of tidflow by generating a
-	 * BECN. With header suppression we will miss some FECN packet
-	 * on OPA hence keeping track of swapped generation is another
-	 * mechanism to do congestion control for tidflows.
-	 *
-	 * For mismatched sender/receiver/link speeds we can get into a
-	 * deadly embrace where minimal progress is made due to generation
-	 * mismatch errors. This can occur if we wrap around the generation
-	 * count without making progress. Hence in cases where the swapped
-	 * generation count is > 254 stop sending BECN (and the NAK) so the
-	 * send -> receiver pipeline is flushed with an error check and things
-	 * can sync up. This should be an extremely rare event.
-	 */
-
-	if_pf(tidrecvc->tidflow_nswap_gen >= 254)
-		return;	/* Do not send NAK. Let error check kick in. */
-
-	if_pf((tidrecvc->tidflow_nswap_gen > 4) &&
-	      (protoexp->proto->flags & IPS_PROTO_FLAG_CCA)) {
-		_HFI_CCADBG("Generating BECN. Number of swapped gen: %d.\n",
-				tidrecvc->tidflow_nswap_gen);
-		/* Mark flow to generate BECN in control packet */
-		tidrecvc->tidflow.flags |= IPS_FLOW_FLAG_GEN_BECN;
-
-		/* Update stats for congestion encountered */
-		protoexp->proto->epaddr_stats.congestion_pkts++;
-	}
-
-	/* Get the latest seq from hardware tidflow table, if that value is
-	 * reliable. The value is not reliable if context sharing is used,
-	 * because context sharing might drop packet even though hardware
-	 * has received it successfully. The hardware table may also be
-	 * incorrect if RSM is intercepting TID & FECN & SH packets.
-	 * We can handle this condition by taking the most recent PSN whether
-	 * it comes from the tidflow table or from PSM's own accounting.
-	 */
-	if (!tidrecvc->context->tf_ctrl) {
-		uint64_t tf;
-		uint32_t seqno=0;
-
-		psmi_hal_tidflow_get(tidrecvc->rdescid._desc_idx, &tf,
-				     tidrecvc->context->psm_hw_ctxt);
-		psmi_hal_tidflow_get_seqnum(tf, &seqno);
-		tf_sequence_num.psn_val = seqno;
-
-		if (psmi_hal_has_cap(PSM_HAL_CAP_RSM_FECN_SUPP)) {
-			if (tf_sequence_num.psn_val > tidrecvc->tidflow_genseq.psn_seq)
-				tidrecvc->tidflow_genseq.psn_seq = tf_sequence_num.psn_seq;
-		}
-		else
-			tidrecvc->tidflow_genseq.psn_seq = tf_sequence_num.psn_seq;
-	}
-
-	/* Swap generation for the flow. */
-	ips_protoexp_flow_newgen(tidrecvc);
-
-	ctrlscb.scb_flags = 0;
-	ctrlscb.ips_lrh.data[0] = p_hdr->exp_sdescid;
-	/* Keep peer generation but use my last received sequence */
-	sequence_num.psn_seq = tidrecvc->tidflow_genseq.psn_seq;
-	ctrlscb.ips_lrh.ack_seq_num = sequence_num.psn_val;
-
-	/* My new generation and last received sequence */
-	ctrlscb.ips_lrh.data[1].u32w0 = tidrecvc->tidflow_genseq.psn_val;
-
-	// no payload, pass cksum so non-NULL
-	psm3_ips_proto_send_ctrl_message(&tidrecvc->tidflow,
-				    OPCODE_NAK,
-				    &tidrecvc->ctrl_msg_queued,
-				    &ctrlscb, ctrlscb.cksum, 0);
-
-	/* Update stats for retransmit */
-	tidrecvc->stats.nReXmit++;
-
-	return;
-}
-#endif // PSM_OPA
-
-#ifdef PSM_OPA
-void ips_protoexp_do_tf_generr(void *vpprotoexp
-			       /* actually: struct ips_protoexp *protoexp */,
-			       void *vptidrecvc
-			       /* actually: struct ips_tid_recv_desc *tidrecvc */,
-			       struct ips_message_header *p_hdr)
-{
-	struct ips_tid_recv_desc *tidrecvc = (struct ips_tid_recv_desc *) vptidrecvc;
-	/* Update stats for generation errors */
-	tidrecvc->stats.nGenErr++;
-
-	/* If packet faced congestion we may want to generate
-	 * a CN packet to rate control sender.
-	 */
-
-	return;
-}
-#endif // PSM_OPA

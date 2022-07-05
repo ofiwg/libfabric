@@ -1999,25 +1999,6 @@ static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, int addr_in
 				psm3_gid128_fmt(ep->gid, 2));
 	}
 
-#if defined(USE_RC)
-#if defined(USE_RDMA_READ)
-	{
-		struct ibv_device_attr dev_attr;
-		// get RDMA capabilities of device
-		if (ibv_query_device(ep->verbs_ep.context, &dev_attr)) {
-			_HFI_ERROR("Unable query device %s: %s\n", ep->dev_name,
-						strerror(errno));
-			err = PSM2_INTERNAL_ERR;
-			goto fail;
-		}
-		ep->verbs_ep.max_qp_rd_atom = dev_attr.max_qp_rd_atom;
-		ep->verbs_ep.max_qp_init_rd_atom = dev_attr.max_qp_init_rd_atom;
-		_HFI_PRDBG("got device attr: rd_atom %u init_rd_atom %u\n",
-						dev_attr.max_qp_rd_atom, dev_attr.max_qp_init_rd_atom);
-		// TBD could have an env variable to reduce requested values
-	}
-#endif
-#endif // USE_RC
 #ifdef UMR_CACHE
 	if (ep->mr_cache_mode == MR_CACHE_MODE_USER) {
 		ep->verbs_ep.umrc.ep = ep;
@@ -2348,9 +2329,6 @@ psm2_error_t modify_rc_qp_to_init(psm2_ep_t ep, struct ibv_qp *qp)
 	//attr.qkey = ep->verbs_ep.qkey;
 	//flags |= IBV_QP_QKEY;	// only allowed for UD
 	attr.qp_access_flags = 0;
-#ifdef USE_RDMA_READ
-	attr.qp_access_flags |= IBV_ACCESS_REMOTE_READ;
-#endif
 	attr.qp_access_flags |= IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
 	//attr.qp_access_flags |= IBV_ACCESS_REMOTE_ATOMIC;
 	flags |= IBV_QP_ACCESS_FLAGS;
@@ -2386,10 +2364,6 @@ psm2_error_t modify_rc_qp_to_rtr(psm2_ep_t ep, struct ibv_qp *qp,
 	attr.rq_psn = initpsn;
 	flags |= (IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN);
 
-#ifdef USE_RDMA_READ
-	attr.max_dest_rd_atomic = min(ep->verbs_ep.max_qp_rd_atom,
-									req_attr->initiator_depth);
-#endif
 	_HFI_PRDBG("set max_dest_rd_atomic to %u\n", attr.max_dest_rd_atomic);
 	attr.min_rnr_timer = 12;	// TBD well known
 	flags |= (IBV_QP_MIN_RNR_TIMER | IBV_QP_MAX_DEST_RD_ATOMIC);
@@ -2417,10 +2391,6 @@ psm2_error_t modify_rc_qp_to_rts(psm2_ep_t ep, struct ibv_qp *qp,
 	attr.sq_psn = initpsn;	// value we told other side
 	flags |= IBV_QP_SQ_PSN;
 
-#ifdef USE_RDMA_READ
-	attr.max_rd_atomic = min(ep->verbs_ep.max_qp_init_rd_atom,
-									req_attr->responder_resources);
-#endif
 	_HFI_PRDBG("set max_rd_atomic to %u\n", attr.max_rd_atomic);
 	flags |=  IBV_QP_MAX_QP_RD_ATOMIC;
 

@@ -50,7 +50,6 @@ noinst_LTLIBRARIES += \
 	prov/psm3/psm3/libptl_am.la \
 	prov/psm3/psm3/libptl_ips.la \
 	prov/psm3/psm3/libptl_self.la \
-	prov/psm3/psm3/libhal_gen1.la \
 	prov/psm3/psm3/libhal_verbs.la \
 	prov/psm3/psm3/libhal_sockets.la \
 	prov/psm3/psm3/libpsm3i.la
@@ -151,37 +150,6 @@ prov_psm3_psm3_libutils_la_CPPFLAGS = \
 prov_psm3_psm3_libutils_la_CFLAGS = \
 	$(AM_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
 
-#ifdef PSM_OPA
-prov_psm3_psm3_libhal_gen1_la_SOURCES = \
-	prov/psm3/psm3/hal_gen1/gen1_types.h \
-	prov/psm3/psm3/hal_gen1/gen1_hfi1_deprecated.h \
-	prov/psm3/psm3/hal_gen1/gen1_common.h \
-	prov/psm3/psm3/hal_gen1/gen1_i2cflash.c \
-	prov/psm3/psm3/hal_gen1/gen1_proto.c \
-	prov/psm3/psm3/hal_gen1/gen1_sdma.c \
-	prov/psm3/psm3/hal_gen1/gen1_sdma.h \
-	prov/psm3/psm3/hal_gen1/gen1_service.c \
-	prov/psm3/psm3/hal_gen1/gen1_service.h \
-	prov/psm3/psm3/hal_gen1/gen1_user.h \
-	prov/psm3/psm3/hal_gen1/gen1_utils.c \
-	prov/psm3/psm3/hal_gen1/gen1_gdrcpy.c \
-	prov/psm3/psm3/hal_gen1/gen1_hal.c \
-	prov/psm3/psm3/hal_gen1/gen1_hal.h \
-	prov/psm3/psm3/hal_gen1/gen1_hal_inline_i.h \
-	prov/psm3/psm3/hal_gen1/gen1_ptl_ips_subcontext.h \
-	prov/psm3/psm3/hal_gen1/gen1_ptl_ips_writehdrq.h \
-	prov/psm3/psm3/hal_gen1/gen1_ptl_ips.c \
-	prov/psm3/psm3/hal_gen1/gen1_ptl_ips_expected.c \
-	prov/psm3/psm3/hal_gen1/gen1_rcvthread.c \
-	prov/psm3/psm3/hal_gen1/gen1_recvhdrq.c \
-	prov/psm3/psm3/hal_gen1/gen1_spio.h
-prov_psm3_psm3_libhal_gen1_la_CPPFLAGS = \
-	-I$(top_srcdir)/prov/psm3/psm3/hal_gen1/ \
-	$(AM_CPPFLAGS) $(psm3_CPPFLAGS) $(_psm3_cppflags)
-prov_psm3_psm3_libhal_gen1_la_CFLAGS = \
-	$(AM_CFLAGS) $(psm3_CFLAGS) $(_psm3_cflags)
-
-#endif PSM_OPA
 prov_psm3_psm3_libhal_verbs_la_SOURCES = \
 	prov/psm3/psm3/hal_verbs/verbs_ep.c \
 	prov/psm3/psm3/hal_verbs/verbs_ep.h \
@@ -289,7 +257,6 @@ prov_psm3_psm3_libpsm3i_la_LIBADD = \
 	prov/psm3/psm3/libptl_am.la \
 	prov/psm3/psm3/libptl_ips.la \
 	prov/psm3/psm3/libptl_self.la \
-	prov/psm3/psm3/libhal_gen1.la \
 	prov/psm3/psm3/libhal_verbs.la \
 	prov/psm3/psm3/libhal_sockets.la
 
@@ -298,14 +265,12 @@ prov_psm3_psm3_libpsm3i_la_DEPENDENCIES = \
 	prov/psm3/psm3/libptl_am.la \
 	prov/psm3/psm3/libptl_ips.la \
 	prov/psm3/psm3/libptl_self.la \
-	prov/psm3/psm3/libhal_gen1.la \
 	prov/psm3/psm3/libhal_verbs.la \
 	prov/psm3/psm3/libhal_sockets.la
 
 # Mirror EXTRA_DIST to end of file
 prov_psm3_extra_dist = \
 	prov/psm3/psm3/include/psm3_rbtree.c \
-	prov/psm3/psm3/hal_gen1/gen1_spio.c \
 	prov/psm3/psm3/hal_verbs/verbs_spio.c \
 	prov/psm3/psm3/hal_sockets/sockets_spio.c \
 	prov/psm3/psm3/utils/utils_dwordcpy-x86_64-fast.S \
@@ -316,7 +281,6 @@ chksum_srcs += \
 	$(prov_psm3_psm3_libptl_ips_la_SOURCES) \
 	$(prov_psm3_psm3_libptl_self_la_SOURCES) \
 	$(prov_psm3_psm3_libutils_la_SOURCES) \
-	$(prov_psm3_psm3_libhal_gen1_la_SOURCES) \
 	$(prov_psm3_psm3_libhal_verbs_la_SOURCES) \
 	$(prov_psm3_psm3_libhal_sockets_la_SOURCES) \
 	$(prov_psm3_psm3_libpsm3i_la_SOURCES) \
@@ -373,7 +337,6 @@ prov_dist_man_pages += man/man7/fi_psm3.7
 
 prov_extra_dist += \
 	prov/psm3/psm3/include/psm3_rbtree.c \
-	prov/psm3/psm3/hal_gen1/gen1_spio.c \
 	prov/psm3/psm3/hal_verbs/verbs_spio.c \
 	prov/psm3/psm3/hal_sockets/sockets_spio.c \
 	prov/psm3/psm3/utils/utils_dwordcpy-x86_64-fast.S \

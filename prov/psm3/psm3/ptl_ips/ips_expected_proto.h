@@ -101,15 +101,9 @@ struct ips_protoexp {
 	const struct ptl *ptl;
 	struct ips_proto *proto;
 	struct psmi_timer_ctrl *timerq;
-#ifdef PSM_OPA
-	struct ips_tid tidc;
-#endif
 	struct ips_tf tfc;
 
 	psm_transfer_type_t ctrl_xfer_type;
-#ifdef PSM_OPA
-	psm_transfer_type_t tid_xfer_type;
-#endif
 	struct ips_scbctrl tid_scbc_rv;	// pool of SCBs for TID sends
 									// for OPA this includes: TIDEXP, CTS,
 									// EXPTID_COMPLETION
@@ -119,17 +113,7 @@ struct ips_protoexp {
 	mpool_t tid_getreq_pool;
 	mpool_t tid_sreq_pool;	/* backptr into proto->ep->mq */
 	mpool_t tid_rreq_pool;	/* backptr into proto->ep->mq */
-#ifdef PSM_OPA
-	struct drand48_data tidflow_drand48_data;
-#endif
 	uint32_t tid_flags;
-#ifdef PSM_OPA
-	uint32_t tid_send_fragsize;
-	uint32_t tid_page_offset_mask;
-	uint64_t tid_page_mask;
-	uint32_t hdr_pkt_interval;
-	struct ips_tidinfo *tid_info;
-#endif
 
 	STAILQ_HEAD(ips_tid_send_pend,	/* pending exp. sends */
 		    ips_tid_send_desc) pend_sendq;
@@ -157,55 +141,17 @@ struct ips_protoexp {
 #endif
 };
 
-#ifdef PSM_OPA
-/*
- * TID member list format used in communication.
- * Since the compiler does not make sure the bit fields order,
- * we use mask and shift defined below.
-typedef struct {
-	uint32_t length:11;	// in page unit, max 1024 pages
-	uint32_t reserved:9;	// for future usage
-	uint32_t tidctrl:2;	// hardware defined tidctrl value
-	uint32_t tid:10;	// hardware only support 10bits
-}
-ips_tid_session_member;
- */
-#define IPS_TIDINFO_LENGTH_SHIFT	0
-#define IPS_TIDINFO_LENGTH_MASK		0x7ff
-#define IPS_TIDINFO_TIDCTRL_SHIFT	20
-#define IPS_TIDINFO_TIDCTRL_MASK	0x3
-#define IPS_TIDINFO_TID_SHIFT		22
-#define IPS_TIDINFO_TID_MASK		0x3ff
-
-#define IPS_TIDINFO_GET_LENGTH(tidinfo)	\
-	(((tidinfo)>>IPS_TIDINFO_LENGTH_SHIFT)&IPS_TIDINFO_LENGTH_MASK)
-#define IPS_TIDINFO_GET_TIDCTRL(tidinfo) \
-	(((tidinfo)>>IPS_TIDINFO_TIDCTRL_SHIFT)&IPS_TIDINFO_TIDCTRL_MASK)
-#define IPS_TIDINFO_GET_TID(tidinfo) \
-	(((tidinfo)>>IPS_TIDINFO_TID_SHIFT)&IPS_TIDINFO_TID_MASK)
-#endif
 
 // This structure is used as CTS payload to describe TID receive
 // for UD it describes the destination for an RDMA Write
 // N/A for UDP
 typedef struct ips_tid_session_list_tag {
-#ifndef PSM_OPA
 	// TBD on how we will handle unaligned start/end at receiver
 	uint32_t tsess_srcoff;	/* source offset from beginning */
 	uint32_t tsess_length;	/* session length, including start/end */
 	uint64_t tsess_raddr;	/* RDMA virt addr this part of receiver's buffer */
 							/* already adjusted for srcoff */
 	uint32_t tsess_rkey;	/* rkey for receiver's buffer */
-#else
-	uint8_t  tsess_unaligned_start;	/* unaligned bytes at starting */
-	uint8_t  tsess_unaligned_end;	/* unaligned bytes at ending */
-	uint16_t tsess_tidcount;	/* tid number for the session */
-	uint32_t tsess_tidoffset;	/* offset in first tid */
-	uint32_t tsess_srcoff;	/* source offset from beginning */
-	uint32_t tsess_length;	/* session length, including start/end */
-
-	uint32_t tsess_list[0];	/* must be last in struct */
-#endif
 } PACK_SUFFIX  ips_tid_session_list;
 
 /*
@@ -231,9 +177,6 @@ struct ips_tid_send_desc {
 
 #if defined(PSM_VERBS)
 	psm3_verbs_mr_t mr;
-#elif defined(PSM_OPA)
-	/* tidflow to send tid traffic */
-	struct ips_flow tidflow;
 #endif
 
 	/* Iterated during send progress */
@@ -241,21 +184,7 @@ struct ips_tid_send_desc {
 	void *buffer;
 	uint32_t length;	/* total length, includint start/end */
 
-#ifdef PSM_OPA
-	uint32_t tidbytes;	/* bytes sent over tid so far */
-	uint32_t remaining_tidbytes;
-	uint32_t offset_in_tid;	/* could be more than page */
-	uint32_t remaining_bytes_in_tid;
-#endif
 
-#ifdef PSM_OPA
-	uint16_t frame_send;
-	uint16_t tid_idx;
-	uint16_t is_complete;
-	uint16_t frag_size;
-	/* bitmap of queued control messages for flow */
-	uint16_t ctrl_msg_queued;
-#else
 	uint8_t is_complete:1;	// all packets for send queued, waiting CQE/response
 #ifdef PSM_HAVE_RNDV_MOD
 	uint8_t rv_need_err_chk_rdma:1; // need to determine if a retry is required
@@ -264,7 +193,6 @@ struct ips_tid_send_desc {
 	uint32_t rv_conn_count;// Count of sconn completed conn establishments
 #else
 	uint8_t reserved:7;
-#endif
 #endif
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
@@ -276,24 +204,9 @@ struct ips_tid_send_desc {
 	/* Number of hostbufs attached */
 	uint8_t cuda_num_buf;
 #endif
-#ifndef PSM_OPA
 	// ips_tid_session_list is fixed sized for UD
 	// N/A to UDP
 	ips_tid_session_list tid_list;
-#else
-	/*
-	 * tid_session_list is 24 bytes, plus 512 tidpair for 2048 bytes,
-	 * so the max possible tid window size mq->hfi_base_window_rv is 4M.
-	 * However, PSM must fit tid grant message into a single transfer
-	 * unit, either PIO or SDMA, PSM will shrink the window accordingly.
-	 */
-	uint16_t tsess_tidlist_length;
-	union {
-		ips_tid_session_list tid_list;
-		uint8_t filler[PSM_TIDLIST_BUFSIZE+
-			sizeof(ips_tid_session_list)];
-	};
-#endif
 };
 
 #define TIDRECVC_STATE_FREE      0
@@ -307,10 +220,6 @@ struct ips_expected_recv_stats {
 };
 
 struct ips_tid_recv_desc {
-#ifdef PSM_OPA
-	// could use protoexp->proto->ep->context, but this is more efficient
-	const psmi_context_t *context;
-#endif
 	struct ips_protoexp *protoexp;
 
 	ptl_arg_t rdescid;	/* reciever descid */
@@ -321,12 +230,6 @@ struct ips_tid_recv_desc {
 	ips_scb_t *grantscb;
 #if defined(PSM_VERBS)
 	psm3_verbs_mr_t mr;	// MR for this message window/chunk
-#elif defined(PSM_OPA)
-	/* scb to send tid data completion */
-	ips_scb_t *completescb;
-
-	/* tidflow to only send ctrl msg ACK and NAK */
-	struct ips_flow tidflow;
 #endif
 
 	/* TF protocol state (recv) */
@@ -343,32 +246,12 @@ struct ips_tid_recv_desc {
 
 	void *buffer;
 	uint32_t recv_msglen;
-#ifdef PSM_OPA
-	uint32_t recv_tidbytes;	/* exlcude start/end trim */
-#endif
 
 	struct ips_expected_recv_stats stats;
 
-#ifndef PSM_OPA
 	// ips_tid_session_list is fixed sized for UD
 	// N/A to UDP
 	ips_tid_session_list tid_list;
-#else
-	/* bitmap of queued control messages for */
-	uint16_t ctrl_msg_queued;
-	/*
-	 * tid_session_list is 24 bytes, plus 512 tidpair for 2048 bytes,
-	 * so the max possible tid window size mq->hfi_base_window_rv is 4M.
-	 * However, PSM must fit tid grant message into a single transfer
-	 * unit, either PIO or SDMA, PSM will shrink the window accordingly.
-	 */
-	uint16_t tsess_tidlist_length;
-	union {
-		ips_tid_session_list tid_list;
-		uint8_t filler[PSM_TIDLIST_BUFSIZE+
-			sizeof(ips_tid_session_list)];
-	};
-#endif
 };
 
 /*
@@ -411,7 +294,6 @@ struct ips_tid_get_request {
  * Descriptor limits, structure contents of struct psmi_rlimit_mpool for
  * normal, min and large configurations.
  */
-#ifndef PSM_OPA
 #define TID_SENDSESSIONS_LIMITS {				\
 	    .env = "PSM3_RDMA_SENDSESSIONS_MAX",			\
 	    .descr = "RDMA max send session descriptors",	\
@@ -422,18 +304,6 @@ struct ips_tid_get_request {
 	    .mode[PSMI_MEMMODE_MINIMAL] = {   1,     1 },	\
 	    .mode[PSMI_MEMMODE_LARGE]   = { 512, 16384 }	\
 	}
-#else
-#define TID_SENDSESSIONS_LIMITS {				\
-	    .env = "PSM3_TID_SENDSESSIONS_MAX",			\
-	    .descr = "Tid max send session descriptors",	\
-	    .env_level = PSMI_ENVVAR_LEVEL_HIDDEN,		\
-	    .minval = 1,					\
-	    .maxval = 1<<30,					\
-	    .mode[PSMI_MEMMODE_NORMAL]  = { 256,  8192 },	\
-	    .mode[PSMI_MEMMODE_MINIMAL] = {   1,     1 },	\
-	    .mode[PSMI_MEMMODE_LARGE]   = { 512, 16384 }	\
-	}
-#endif
 
 /*
  * Expected send support
@@ -451,20 +321,6 @@ MOCKABLE(psm3_ips_protoexp_init)(const struct ips_proto *proto,
 MOCK_DCL_EPILOGUE(psm3_ips_protoexp_init);
 
 psm2_error_t psm3_ips_protoexp_fini(struct ips_protoexp *protoexp);
-#ifdef PSM_OPA
-void
-ips_protoexp_do_tf_seqerr(void *vpprotoexp
-			  /* actually: struct ips_protoexp *protoexp */,
-			  void *vptidrecvc
-			  /* actually: struct ips_tid_recv_desc *tidrecvc */,
-			  struct ips_message_header *p_hdr);
-void
-ips_protoexp_do_tf_generr(void *vpprotoexp
-			  /* actually: struct ips_protoexp *protoexp */,
-			  void *vptidrecvc
-			  /* actually: struct ips_tid_recv_desc *tidrecvc */,
-			   struct ips_message_header *p_hdr);
-#endif
 
 #ifdef PSM_VERBS
 int ips_protoexp_handle_immed_data(struct ips_proto *proto, uint64_t conn_ref,
@@ -477,14 +333,8 @@ int ips_protoexp_process_err_chk_rdma(struct ips_recvhdrq_event *rcv_ev);
 int ips_protoexp_process_err_chk_rdma_resp(struct ips_recvhdrq_event *rcv_ev);
 #endif // PSM_HAVE_RNDV_MOD
 
-#elif defined(PSM_OPA)
-int ips_protoexp_data(struct ips_recvhdrq_event *rcv_ev);
-int ips_protoexp_recv_tid_completion(struct ips_recvhdrq_event *rcv_ev);
 #endif //PSM_VERBS
 
-#ifdef PSM_OPA
-psm2_error_t ips_protoexp_flow_newgen(struct ips_tid_recv_desc *tidrecvc);
-#endif
 
 PSMI_ALWAYS_INLINE(
 void ips_protoexp_unaligned_copy(uint8_t *dst, uint8_t *src, uint16_t len))

@@ -104,43 +104,6 @@ typedef union {
 		uint32_t addr_fmt:3;
 		uint32_t rest:29;
 	};
-#ifdef PSM_OPA
-	struct {	// InfiniPath shm and self when IPS device disabled
-		uint32_t addr_fmt:3;	// = PSMI_ADDR_FMT_SHM
-		uint32_t reserved1:2;	// = 0
-		uint32_t rank_low:3;	// rank bits 0-2
-		uint32_t rank_high:8;	// rank bits 3-11
-		uint32_t job_key:16;	// low 16 bits of uuid_t job_key
-		uint32_t rank:30;
-		uint32_t reserved2:2;
-	} v1_shm;
-	struct {	// InfiniPath
-		uint32_t addr_fmt:3;	// = PSMI_ADDR_FMT_IPATH
-		uint32_t unit:2;
-		uint32_t subctxt:3;
-		uint32_t context:8;
-		uint32_t lid:16;
-		uint32_t subnet:30;	// low 30 bits of subnet_prefix
-		uint32_t reserved:2;
-	} v1;
-	struct {	// OPA100 Native
-		uint32_t addr_fmt:3;	// = PSMI_ADDR_FMT_OPA
-		uint32_t shm_only:1;	// = 0
-		uint32_t reserved1:1;
-		uint32_t subctxt:3;
-		uint32_t context:8;
-		uint32_t lid:16;
-		uint32_t reserved2:16;
-		uint32_t subnet:16;	// low 16 bits of subnet_prefix
-	} v2;
-	struct {	// OPA100 Native shm and self when IPS device disabled
-		uint32_t addr_fmt:3;	// = PSMI_ADDR_FMT_OPA
-		uint32_t shm_only:1;	// = PSMI_EPID_SHM_ONLY
-		uint32_t reserved:28;
-		uint32_t pid:32;
-	} v2_shm;
-	// addr_fmt>2 invalid
-#else
 	struct {	// shm and self when IPS device disabled
 		uint32_t addr_fmt:3;	// = PSMI_ADDR_FMT_SHM
 		// TBD don't need shm_only field anymore, EPID will be non-zero
@@ -201,7 +164,6 @@ typedef union {
 		uint64_t gid_hi;	// subnet_prefix
 		uint64_t gid_lo;	// interface_id
 	} v6;
-#endif
 } psmi_epid_t;
 
 int psm3_ep_device_is_enabled(const psm2_ep_t ep, int devid);
@@ -535,53 +497,6 @@ static inline psmi_bare_netaddr128_t psmi_prefix_len_to_ipv6_netmask(int count)
 
 /* These functions build the local epid */
 /* This is a typical multi-node job */
-#ifdef PSM_OPA
-psm2_epid_t psm3_epid_pack_ips(uint16_t lid, uint8_t context,
-	uint8_t subcontext, uint8_t hfiunit, psmi_naddr128_t addr)
-{
-	psmi_epid_t epid;
-
-	psmi_assert(sizeof(psm2_epid_t) == sizeof(psmi_epid_t));
-	psmi_assert(addr.fmt == psm3_addr_fmt);
-	psmi_assert(addr.prefix_len == 64);
-	switch (psm3_addr_fmt) {
-	case PSMI_ADDR_FMT_IPATH:
-		epid.v1.addr_fmt = PSMI_ADDR_FMT_IPATH;
-		epid.v1.unit = hfiunit;
-		epid.v1.subctxt = subcontext;
-		epid.v1.context = context;
-		epid.v1.lid = lid;
-		epid.v1.subnet = 0x3ffffff;
-		epid.v1.reserved = 0;
-		epid.w[1] = 0;
-		epid.w[2] = 0;
-
-		psmi_assert(psm3_epid_addr_fmt(epid.psm2_epid) == PSMI_ADDR_FMT_IPATH);
-		break;
-	case PSMI_ADDR_FMT_OPA:
-		epid.v2.addr_fmt = PSMI_ADDR_FMT_OPA;
-		epid.v2.shm_only = PSMI_EPID_IPS_SHM;
-		epid.v2.reserved1 = 0;
-		epid.v2.subctxt = subcontext;
-		epid.v2.context = context;
-		epid.v2.lid = lid;
-		epid.v2.reserved2 = 0;
-		epid.v2.subnet = addr.bare.hi & 0xffff;
-		epid.w[1] = 0;
-		epid.w[2] = 0;
-		psmi_assert(psm3_epid_addr_fmt(epid.psm2_epid) == PSMI_ADDR_FMT_OPA);
-		break;
-	default:
-		/* Epid addr_fmt is greater than max supported formats. */
-		psmi_assert_always(psm3_addr_fmt <= PSMI_ADDR_FMT_OPA);
-		psmi_assert_always(psm3_addr_fmt != PSMI_ADDR_FMT_SHM);
-		epid.w[0] = 0; // keep compiler happy, never reached
-		break;
-	}
-	psmi_assert(sizeof(psm2_epid_t) == sizeof(psmi_epid_t));
-	return epid.psm2_epid;
-}
-#else // PSM_OPA
 	// IB or OPA with Verbs
 psm2_epid_t psm3_epid_pack_ib(uint16_t lid, uint32_t qp_num,
 				psmi_naddr128_t addr)
@@ -696,9 +611,7 @@ psm2_epid_t psm3_epid_pack_ipv6(psmi_naddr128_t ipv6_addr,
 	psmi_assert(psm3_epid_protocol(epid.psm2_epid) == protocol);
 	return epid.psm2_epid;
 }
-#endif // PSM_OPA
 
-#ifndef PSM_OPA
 // find the 1st IPv4 or IPv6 address (excluding loopback) in the node
 // we will use this as the NID for a FMT_SHM EPID so we can detect incorrect
 // attempts to run a multi-node job across shm (or self)
@@ -746,13 +659,11 @@ static void psmi_get_shm_nid(uint64_t *gid_hi, uint64_t *gid_lo)
 	}
 	return;
 }
-#endif /* PSM_OPA */
 
 /* This is a shm-only epid (single node job) */
 psm2_epid_t psm3_epid_pack_shm(const psm2_uuid_t unique_job_key)
 {
 	psmi_epid_t epid;
-#ifndef PSM_OPA
 // TBD - possible duplicate epid for shm-only job with multi-ep
 // but probably not an issue since we don't cross connect shm ep's?
 	epid.shm.addr_fmt = PSMI_ADDR_FMT_SHM;
@@ -761,57 +672,6 @@ psm2_epid_t psm3_epid_pack_shm(const psm2_uuid_t unique_job_key)
 	epid.shm.pid = getpid();
 	psmi_get_shm_nid(&epid.shm.gid_hi, &epid.shm.gid_lo);
 	psmi_assert(psm3_epid_addr_fmt(epid.psm2_epid) == PSMI_ADDR_FMT_SHM);
-#else
-	int rank;
-
-	/* In shm-only mode, we need to derive a valid epid
-	 * based on our rank.  We try to get it from the
-	 * environment if its available, or resort to using
-	 * our PID as the rank.
-	 */
-	rank = psm3_get_mylocalrank();
-	if (rank < 0)
-		rank = getpid();
-
-	/*
-	 * We use a LID of 0 for non-HFI communication.
-	 * Since a jobkey is not available from IPS, pull the
-	 * first 16 bits from the UUID.
-	 */
-	switch (psm3_addr_fmt) {
-	case PSMI_ADDR_FMT_IPATH:
-		// OPA did it like this, odd to specify addr_fmt SHM but
-		// pack into a V1 format
-		epid.v1_shm.addr_fmt = PSMI_ADDR_FMT_SHM;
-		epid.v1_shm.reserved1 = 0;
-		epid.v1_shm.rank_low = rank & 0x7;
-		epid.v1_shm.rank_high = rank >> 3;
-		epid.v1_shm.job_key = ((uint16_t *) unique_job_key)[0];
-		epid.v1_shm.rank = rank;
-		epid.v1_shm.reserved2 = 0;
-		epid.w[1] = 0;
-		epid.w[2] = 0;
-		psmi_assert(psm3_epid_addr_fmt(epid.psm2_epid) == PSMI_ADDR_FMT_SHM);
-		break;
-	case PSMI_ADDR_FMT_OPA:
-		// also odd we pack a special varision of V2 format for SHM
-		// but call it v2, flag tells us it's odd, no one checks
-		epid.v2_shm.addr_fmt = PSMI_ADDR_FMT_OPA;
-		epid.v2_shm.shm_only = PSMI_EPID_SHM_ONLY;
-		epid.v2_shm.reserved = 0;
-		epid.v2_shm.pid = getpid();
-		epid.w[1] = 0;
-		epid.w[2] = 0;
-		psmi_assert(psm3_epid_addr_fmt(epid.psm2_epid) == PSMI_ADDR_FMT_OPA);
-		break;
-	default:
-		/* Epid addr_fmt is greater than max supported addr_fmt. */
-		psmi_assert_always(psm3_addr_fmt <= PSMI_ADDR_FMT_OPA);
-		psmi_assert_always(psm3_addr_fmt != PSMI_ADDR_FMT_SHM);
-		epid.w[0] = 0; // keep compiler happy, never reached
-		break;
-	}
-#endif // PSM_OPA
 	psmi_assert(sizeof(psm2_epid_t) == sizeof(psmi_epid_t));
 	return epid.psm2_epid;
 }
@@ -820,7 +680,6 @@ psm2_epid_t psm3_epid_pack_shm(const psm2_uuid_t unique_job_key)
 psm2_epid_t psm3_epid_pack_self(void)
 {
 	psmi_epid_t epid;
-#ifndef PSM_OPA
 // TBD - possible duplicate epid for self-only job with multi-ep
 // but probably not an issue since we don't cross connect self ep's?
 	epid.shm.addr_fmt = PSMI_ADDR_FMT_SHM;
@@ -828,37 +687,6 @@ psm2_epid_t psm3_epid_pack_self(void)
 	epid.shm.reserved = 0;
 	epid.shm.pid = getpid();
 	psmi_get_shm_nid(&epid.shm.gid_hi, &epid.shm.gid_lo);
-#else
-	switch (psm3_addr_fmt) {
-	case PSMI_ADDR_FMT_IPATH:
-		epid.v1_shm.addr_fmt = PSMI_ADDR_FMT_SHM;
-		epid.v1_shm.reserved1 = 0;
-		epid.v1_shm.rank_low = 0;
-		epid.v1_shm.rank_high = 0;
-		epid.v1_shm.job_key = 0;
-		epid.v1_shm.rank = 0x3ffffff;
-		epid.v1_shm.reserved2 = 0;
-		epid.w[1] = 0;
-		epid.w[2] = 0;
-		psmi_assert(psm3_epid_addr_fmt(epid.psm2_epid) == PSMI_ADDR_FMT_SHM);
-		break;
-	case PSMI_ADDR_FMT_OPA:
-		epid.v2_shm.addr_fmt = PSMI_ADDR_FMT_OPA;
-		epid.v2_shm.shm_only = PSMI_EPID_SHM_ONLY;
-		epid.v2_shm.reserved = 0;
-		epid.v2_shm.pid = 0;
-		epid.w[1] = 0;
-		epid.w[2] = 0;
-		psmi_assert(psm3_epid_addr_fmt(epid.psm2_epid) == PSMI_ADDR_FMT_OPA);
-		break;
-	default:
-		/* Epid addr_fmt is greater than max supportd addr_fmt. */
-		psmi_assert_always(psm3_addr_fmt <= PSMI_ADDR_FMT_OPA);
-		psmi_assert_always(psm3_addr_fmt != PSMI_ADDR_FMT_SHM);
-		epid.w[0] = 0; // keep compiler happy, never reached
-		break;
-	}
-#endif // PSM_OPA
 	psmi_assert(sizeof(psm2_epid_t) == sizeof(psmi_epid_t));
 	return epid.psm2_epid;
 }
@@ -868,21 +696,11 @@ psm2_epid_t psm3_epid_pack_diag(int val)
 {
 	// just need a valid epid which is different for each val given
 	psmi_epid_t epid;
-#ifndef PSM_OPA
 	epid.shm.addr_fmt = PSMI_ADDR_FMT_SHM;
 	epid.shm.shm_only = PSMI_EPID_SHM_ONLY;
 	epid.shm.reserved = 0;
 	epid.shm.pid = val;
 	psmi_get_shm_nid(&epid.shm.gid_hi, &epid.shm.gid_lo);
-#else
-	epid.v2_shm.addr_fmt = PSMI_ADDR_FMT_OPA;
-	epid.v2_shm.shm_only = PSMI_EPID_SHM_ONLY;
-	epid.v2_shm.reserved = 0;
-	epid.v2_shm.pid = val;
-	epid.w[1] = 0;
-	epid.w[2] = 0;
-	psmi_assert(psm3_epid_addr_fmt(epid.psm2_epid) == PSMI_ADDR_FMT_OPA);
-#endif
 	psmi_assert(sizeof(psm2_epid_t) == sizeof(psmi_epid_t));
 	return epid.psm2_epid;
 }
@@ -894,7 +712,6 @@ uint8_t psm3_epid_addr_fmt(psm2_epid_t epid)
 	return e.addr_fmt;
 }
 
-#ifndef PSM_OPA
 psmi_eth_proto_t psm3_epid_protocol(psm2_epid_t epid)
 {
 	psmi_epid_t e = { .psm2_epid = epid };
@@ -920,7 +737,6 @@ psmi_eth_proto_t psm3_epid_protocol(psm2_epid_t epid)
 		break;
 	}
 }
-#endif
 
 // The network id (address) from the epid
 // depending on epid addr_fmt this may be a lid/subnet or ipv4 address
@@ -934,26 +750,6 @@ psm2_nid_t psm3_epid_nid(psm2_epid_t epid)
 {
 	psmi_epid_t ret = { .psm2_epid = epid };
 	switch (ret.addr_fmt) {
-#ifdef PSM_OPA
-	case PSMI_ADDR_FMT_SHM:
-		ret.v1_shm.rank_low = 0;
-		ret.v1_shm.rank_high = 0;
-		ret.v1_shm.rank = 0;
-		ret.v1_shm.reserved1 = 1;	// make sure nid != 0
-		break;
-	case PSMI_ADDR_FMT_IPATH:
-		ret.v1.subctxt = 0;
-		ret.v1.context = 0;
-		break;
-	case PSMI_ADDR_FMT_OPA:
-		if (ret.v2.shm_only) {
-			ret.v2_shm.pid = 0;
-		} else {
-			ret.v2.subctxt = 0;
-			ret.v2.context = 0;
-		}
-		break;
-#else // PSM_OPA
 	case PSMI_ADDR_FMT_SHM:
 		ret.shm.pid = 0;
 		break;
@@ -968,7 +764,6 @@ psm2_nid_t psm3_epid_nid(psm2_epid_t epid)
 		ret.v6.protocol = 0;
 		ret.v6.context = 0;
 		break;
-#endif // PSM_OPA
 	default:
 		psmi_assert_always(0);	// unexpected addr_fmt
 		break;
@@ -983,15 +778,7 @@ psm2_nid_t psm3_epid_nid(psm2_epid_t epid)
 // Only valid for subnet used in remote IPS connections
 static psmi_subnet128_t psmi_subnet_epid_subset(psmi_subnet128_t subnet)
 {
-#ifdef PSM_OPA
-	psmi_subnet128_t ret = subnet;
-	// TBD for FMT_IPATH subnet.bare.hi == 0x3ffffff;
-	// for OPA we only pass low 16 bits of subnet in epid
-	ret.bare.hi &= 0xffff;
-	return ret;
-#else
 	return subnet;
-#endif
 }
 
 // Get the subnet for the given EPID.
@@ -1001,29 +788,6 @@ psmi_subnet128_t psm3_epid_subnet(psm2_epid_t epid)
 {
 	psmi_epid_t e = { .psm2_epid = epid };
 	psmi_subnet128_t ret = { };
-#ifdef PSM_OPA
-	switch (e.addr_fmt) {
-	case PSMI_ADDR_FMT_IPATH:
-		ret.bare.hi = e.v1.subnet;
-		ret.bare.lo = 0;
-		ret.fmt = PSMI_ADDR_FMT_IPATH;
-		ret.prefix_len = 64;
-		return ret;
-		break;
-	case PSMI_ADDR_FMT_OPA:
-		ret.bare.hi = e.v2.subnet;
-		ret.bare.lo = 0;
-		ret.fmt = PSMI_ADDR_FMT_OPA;
-		ret.prefix_len = 64;
-		return ret;
-		break;
-	case PSMI_ADDR_FMT_SHM:
-	default:
-		psmi_assert_always(0);	// unexpected addr_fmt
-		return ret; // keep compiler happy, never reached
-		break;
-	}
-#else // PSM_OPA
 	psmi_bare_netaddr128_t nm;
 	switch (e.addr_fmt) {
 	case PSMI_ADDR_FMT_SHM: // only called for remote IPS connections
@@ -1057,7 +821,6 @@ psmi_subnet128_t psm3_epid_subnet(psm2_epid_t epid)
 		return ret; // keep compiler happy, never reached
 		break;
 	}
-#endif // PSM_OPA
 }
 
 // Get the subnet prefix_len for the given EPID.
@@ -1065,21 +828,6 @@ psmi_subnet128_t psm3_epid_subnet(psm2_epid_t epid)
 uint8_t psm3_epid_prefix_len(psm2_epid_t epid)
 {
 	psmi_epid_t e = { .psm2_epid = epid };
-#ifdef PSM_OPA
-	switch (e.addr_fmt) {
-	case PSMI_ADDR_FMT_IPATH:
-		return 64;
-		break;
-	case PSMI_ADDR_FMT_OPA:
-		return 64;
-		break;
-	case PSMI_ADDR_FMT_SHM:
-	default:
-		psmi_assert_always(0);	// unexpected addr_fmt
-		return 0; // keep compiler happy, never reached
-		break;
-	}
-#else // PSM_OPA
 	switch (e.addr_fmt) {
 	case PSMI_ADDR_FMT_SHM: // only called for remote IPS connections
 		psmi_assert_always(0);	// unexpected addr_fmt
@@ -1099,7 +847,6 @@ uint8_t psm3_epid_prefix_len(psm2_epid_t epid)
 		return 0; // keep compiler happy, never reached
 		break;
 	}
-#endif // PSM_OPA
 }
 
 // The locally unique identifiers for the HW resources
@@ -1110,23 +857,6 @@ uint8_t psm3_epid_prefix_len(psm2_epid_t epid)
 uint64_t psm3_epid_context(psm2_epid_t epid)
 {
 	psmi_epid_t e = { .psm2_epid = epid };
-#ifdef PSM_OPA
-	switch (e.addr_fmt) {
-	case PSMI_ADDR_FMT_SHM: // can be called by psm3_epid_fmt_addr
-		return e.v1_shm.rank_high;
-		break;
-	case PSMI_ADDR_FMT_IPATH:
-		return e.v1.context;
-		break;
-	case PSMI_ADDR_FMT_OPA:
-		return e.v2.context;
-		break;
-	default:
-		psmi_assert_always(0);	// unexpected addr_fmt
-		return 0; // keep compiler happy, never reached
-		break;
-	}
-#else // PSM_OPA
 	switch (e.addr_fmt) {
 	case PSMI_ADDR_FMT_SHM: // can be called by psm3_epid_fmt_addr
 		return e.shm.pid;
@@ -1167,7 +897,6 @@ uint64_t psm3_epid_context(psm2_epid_t epid)
 		return 0; // keep compiler happy, never reached
 		break;
 	}
-#endif // PSM_OPA
 }
 
 #ifdef PSM_SOCKETS
@@ -1214,27 +943,6 @@ uint16_t psm3_epid_aux_socket(psm2_epid_t epid)
 }
 #endif /* PSM_SOCKETS */
 
-#ifdef PSM_OPA
-uint64_t psm3_epid_subcontext(psm2_epid_t epid)
-{
-	psmi_epid_t e = { .psm2_epid = epid };
-	switch (e.addr_fmt) {
-	case PSMI_ADDR_FMT_SHM: // can be called by psm3_epid_fmt_addr
-		return e.v1_shm.rank_low;
-		break;
-	case PSMI_ADDR_FMT_IPATH:
-		return e.v1.subctxt;
-		break;
-	case PSMI_ADDR_FMT_OPA:
-		return e.v2.subctxt;
-		break;
-	default:
-		psmi_assert_always(0);	// unexpected addr_fmt
-		return 0; // keep compiler happy, never reached
-		break;
-	}
-}
-#endif
 
 // return appropriate LID to use
 // for Ethernet, 1 is returned but not used beyond checkng LID != 0
@@ -1242,14 +950,6 @@ uint16_t psm3_epid_lid(psm2_epid_t epid)
 {
 	psmi_epid_t e = { .psm2_epid = epid };
 	switch (e.addr_fmt) {
-#ifdef PSM_OPA
-	case PSMI_ADDR_FMT_IPATH:
-		return e.v1.lid;
-		break;
-	case PSMI_ADDR_FMT_OPA:
-		return e.v2.lid;
-		break;
-#else
 	case PSMI_ADDR_FMT_IB:
 		return e.v3.lid;
 		break;
@@ -1259,7 +959,6 @@ uint16_t psm3_epid_lid(psm2_epid_t epid)
 	case PSMI_ADDR_FMT_IPV6:
 		return 1;	// not really used, but lid must be != 0
 		break;
-#endif
 	default:
 		psmi_assert_always(0);	// unexpected addr_fmt
 		return 0; // keep compiler happy, never reached
@@ -1267,7 +966,6 @@ uint16_t psm3_epid_lid(psm2_epid_t epid)
 	}
 }
 
-#ifndef PSM_OPA
 // get information needed to build a verbs AV
 // gid returned in format suitable to build an IPv6 GID for AV
 // lid and gid in host byte order
@@ -1325,14 +1023,10 @@ uint32_t psm3_epid_get_rem_addr(psm2_epid_t epid)
 		break;
 	}
 }
-#endif
 
 // return a good portion of epid which can be used for hashing and randomizing
 uint64_t psm3_epid_hash(psm2_epid_t epid)
 {
-#ifdef PSM_OPA
-	return epid.w[0];
-#else
 	psmi_epid_t e = { .psm2_epid = epid };
 	switch (e.addr_fmt) {
 	case PSMI_ADDR_FMT_SHM:
@@ -1347,7 +1041,6 @@ uint64_t psm3_epid_hash(psm2_epid_t epid)
 		return e.v6.gid_lo;
 		break;
 	}
-#endif
 }
 
 /*
@@ -1426,7 +1119,6 @@ int psm3_is_speed_allowed(int unit, uint64_t speed)
 }
 #undef MBPS
 
-#ifndef PSM_OPA
 static int psm3_allow_subnet(const char *subnet, const char *subnet_type)
 {
 	int i;
@@ -1485,7 +1177,6 @@ int psm3_allow_ipv6_subnet(psmi_bare_netaddr128_t subnet, uint8_t prefix_len)
 	const char *subnet_str = psmi_ipv6_ntop(subnet, prefix_len, buf, sizeof(buf));
 	return  psm3_allow_subnet(subnet_str, "IPv6");
 }
-#endif /* PSM_OPA */
 
 // build an IB/OPA subnet from basic addressing information
 psmi_subnet128_t psm3_build_ib_subnet128(uint64_t hi)
@@ -1494,11 +1185,7 @@ psmi_subnet128_t psm3_build_ib_subnet128(uint64_t hi)
 
 	subnet.bare.hi = hi;
 	subnet.bare.lo = 0;
-#ifdef PSM_OPA
-	subnet.fmt = psm3_addr_fmt;
-#else
 	subnet.fmt = PSMI_ADDR_FMT_IB;
-#endif
 	subnet.prefix_len = 64;
 	return subnet;
 }
@@ -1510,16 +1197,11 @@ psmi_naddr128_t psm3_build_ib_naddr128(psmi_gid128_t gid)
 
 	addr.bare.hi = gid.hi;
 	addr.bare.lo = gid.lo;
-#ifdef PSM_OPA
-	addr.fmt = psm3_addr_fmt;
-#else
 	addr.fmt = PSMI_ADDR_FMT_IB;
-#endif
 	addr.prefix_len = 64;
 	return addr;
 }
 
-#ifndef PSM_OPA
 // build an IPv4 subnet from basic addressing information
 psmi_subnet128_t psm3_build_ipv4_subnet128(uint32_t ip_addr,
 		uint32_t ip_netmask, uint8_t prefix_len)
@@ -1568,7 +1250,6 @@ psmi_naddr128_t psm3_build_ipv6_naddr128(psmi_bare_netaddr128_t ip_addr,
 	addr.prefix_len = prefix_len;
 	return addr;
 }
-#endif
 
 // build a NID from basic addressing information for later comparison to
 // psm3_epid_nid()
@@ -1580,11 +1261,6 @@ psm2_nid_t psm3_build_nid(uint8_t unit, psmi_naddr128_t addr, unsigned lid)
 {
 	psm2_nid_t ret = { };	// never used, keep compiler happy below
 	switch (addr.fmt) {
-#ifdef PSM_OPA
-	case PSMI_ADDR_FMT_IPATH:
-	case PSMI_ADDR_FMT_OPA:
-		return psm3_epid_pack_ips(lid, 0, 0, unit, addr);
-#else
 	case PSMI_ADDR_FMT_IB:
 		return psm3_epid_pack_ib(lid, 0, addr);
 		break;
@@ -1594,40 +1270,18 @@ psm2_nid_t psm3_build_nid(uint8_t unit, psmi_naddr128_t addr, unsigned lid)
 	case PSMI_ADDR_FMT_IPV6:
 		return psm3_epid_pack_ipv6(addr, 0, 0, 0);
 		break;
-#endif
 	default:
 		psmi_assert_always(0);	// unexpected addr_fmt
 		return ret; // keep compiler happy, never reached
 	}
 }
 
-#ifdef PSM_OPA
-// for IPS connect we get 1 extra 64b word
-// to hold enough information to reconstruct the full psmi_subnet128_t from the
-// epid and this value (for some addr_fmt, the epid can only reconstruct a
-// subset of the subnet information)
-uint64_t psm3_epid_subnet_extra_word(psmi_subnet128_t subnet)
-{
-	return subnet.bare.hi;
-}
-#endif
 
-#ifdef PSM_OPA
-psmi_subnet128_t psmi_subnet_pack(psm2_epid_t epid, uint64_t extra_word)
-{
-	return psm3_build_ib_subnet128(extra_word);
-}
-#endif
 
 // impose the addr_fmt specific rules for when we allow
 // diferent subnets to still be able to connect
 int psm3_subnets_match(psmi_subnet128_t a, psmi_subnet128_t b)
 {
-#ifdef PSM_OPA
-	if (a.fmt != b.fmt)
-		return 0;	// for PSM_OPA V1 and V2 can't interop
-	return (a.bare.hi == b.bare.hi);
-#else
 	int is_eth = PSMI_ADDR_FMT_IS_ETH(a.fmt);
 	// note psm3_ep_connect enforces that addr_fmt must match
 	// so when we get down to comparing subnets of each rail we
@@ -1641,7 +1295,6 @@ int psm3_subnets_match(psmi_subnet128_t a, psmi_subnet128_t b)
 	return ((a.prefix_len == b.prefix_len
 			&& a.bare.hi == b.bare.hi && a.bare.lo == b.bare.lo)
 		|| (is_eth && psm3_allow_routers));
-#endif
 }
 
 // compare our local subnet to a remote epids's subnet
@@ -1742,7 +1395,6 @@ psm2_epid_t psm3_epid_pack_words(uint64_t w0, uint64_t w1, uint64_t w2)
 	e.w[0] = w0;
 	e.w[1] = w1;
 	e.w[2] = w2;
-#ifndef PSM_OPA
 	psmi_assert(e.addr_fmt == PSMI_ADDR_FMT_SHM || PSMI_IPS_ADDR_FMT_IS_VALID(e.addr_fmt));
 #ifdef PSM_DEBUG
 	if (e.addr_fmt == PSMI_ADDR_FMT_IPV6 || e.addr_fmt == PSMI_ADDR_FMT_IB)
@@ -1750,17 +1402,9 @@ psm2_epid_t psm3_epid_pack_words(uint64_t w0, uint64_t w1, uint64_t w2)
 	else if (e.addr_fmt == PSMI_ADDR_FMT_IPV4)
 		psmi_assert(w2 == 0);
 #endif
-#endif
 	return e.psm2_epid;
 }
 
-#ifdef PSM_OPA
-/* pack a single word epid */
-psm2_epid_t psm3_epid_pack_word(uint64_t w0)
-{
-	return psm3_epid_pack_words(w0, 0, 0);
-}
-#endif
 
 #if 0
 psm2_epid_t psm2_epid_pack_word(uint64_t w0)
@@ -1890,14 +1534,6 @@ const char *psm3_epid_str_addr_fmt(psm2_epid_t epid)
 	case PSMI_ADDR_FMT_SHM:
 		return "shm";
 		break;
-#ifdef PSM_OPA
-	case PSMI_ADDR_FMT_IPATH:
-		return "Truescale";
-		break;
-	case PSMI_ADDR_FMT_OPA:
-		return "OPA";
-		break;
-#else
 	case PSMI_ADDR_FMT_IB:
 		return "IB/OPA";
 		break;
@@ -1907,14 +1543,12 @@ const char *psm3_epid_str_addr_fmt(psm2_epid_t epid)
 	case PSMI_ADDR_FMT_IPV6:
 		return "IPv6";
 		break;
-#endif
 	default:
 		return "Unknown";
 		break;
 	}
 }
 
-#ifndef PSM_OPA
 // for error messages and psm3_subnet128_fmt_name
 // note that psm3_subnet128_fmt_name sets the OFI fi_info
 // fabric name
@@ -1939,9 +1573,7 @@ static const char *psm3_protocol_str(psmi_eth_proto_t protocol)
 		break;
 	}
 }
-#endif
 
-#ifndef PSM_OPA
 // returns for psmi_epid_fmt_addr a string describing psm3_epid_context
 static const char *psm3_protocol_context_str(psmi_eth_proto_t protocol)
 {
@@ -1962,14 +1594,11 @@ static const char *psm3_protocol_context_str(psmi_eth_proto_t protocol)
 		break;
 	}
 }
-#endif
 
-#ifndef PSM_OPA
 const char *psm3_epid_str_protocol(psm2_epid_t epid)
 {
 	return psm3_protocol_str(psm3_epid_protocol(epid));
 }
-#endif
 
 // for sockets just show primary context
 // this is used for process label in logs if rank is not available
@@ -1977,14 +1606,8 @@ const char *psm3_epid_fmt_context(psm2_epid_t epid, int bufno)
 {
 	char *outstr = outstrbufs[bufno];
 
-#ifdef PSM_OPA
-	snprintf(outstr, sizeof(outstrbufs[0]), "%u.%u",
-			(uint8_t)psm3_epid_context(epid),
-			(uint8_t)psm3_epid_subcontext(epid));
-#else
 	snprintf(outstr, sizeof(outstrbufs[0]), "%u",
 			(uint32_t)psm3_epid_context(epid));
-#endif
 	return outstr;
 }
 
@@ -1999,30 +1622,6 @@ const char *psm3_nid_fmt(psm2_nid_t nid, int bufno)
 {
 	char *outstr = outstrbufs[bufno];
 	psmi_epid_t e = { .psm2_epid = nid };
-#ifdef PSM_OPA
-
-	switch (e.addr_fmt) {
-	case PSMI_ADDR_FMT_SHM:
-		snprintf(outstr, sizeof(outstrbufs[0]), "RANK=%u",
-			 (uint32_t)e.v1_shm.rank);
-		break;
-	case PSMI_ADDR_FMT_IPATH:
-		snprintf(outstr, sizeof(outstrbufs[0]), "LID=%u",
-			 (uint16_t)e.v1.lid);
-		break;
-	case PSMI_ADDR_FMT_OPA:
-		if ( e.v2.shm_only)
-			snprintf(outstr, sizeof(outstrbufs[0]), "PID=%u",
-				 (uint32_t)e.v2_shm.pid);
-		else
-			snprintf(outstr, sizeof(outstrbufs[0]), "LID=%u",
-			 	(uint16_t)e.v2.lid);
-		break;
-	default:
-		psmi_assert_always(0);	// unexpected addr_fmt
-		break;
-	}
-#else // PSM_OPA
 	psmi_bare_netaddr128_t bare;
 	char buf[INET6_ADDRSTRLEN+4];
 
@@ -2052,7 +1651,6 @@ const char *psm3_nid_fmt(psm2_nid_t nid, int bufno)
 		psmi_assert_always(0);	// unexpected addr_fmt
 		break;
 	}
-#endif
 	return outstr;
 }
 
@@ -2082,36 +1680,6 @@ const char *psm3_epid_fmt_addr(psm2_epid_t epid, int bufno)
 {
 	char *outstr = outstrbufs[bufno];
 	psmi_epid_t e = { .psm2_epid = epid };
-#ifdef PSM_OPA
-
-	switch (e.addr_fmt) {
-	case PSMI_ADDR_FMT_SHM:
-		snprintf(outstr, sizeof(outstrbufs[0]), "RANK=%u",
-			 (uint32_t)e.v1_shm.rank);
-		break;
-	case PSMI_ADDR_FMT_IPATH:
-		snprintf(outstr, sizeof(outstrbufs[0]), "LID=%u:%u.%u",
-			 (uint16_t)e.v1.lid,
-			 (uint16_t)e.v1.context,
-			 (uint16_t)e.v1.subctxt);
-		break;
-	case PSMI_ADDR_FMT_OPA:
-		if ( e.v2.shm_only)
-			snprintf(outstr, sizeof(outstrbufs[0]), "PID=%u",
-				 (uint32_t)e.v2_shm.pid);
-		else
-			snprintf(outstr, sizeof(outstrbufs[0]), "LID=%u:%u.%u",
-				 (uint16_t)e.v2.lid,
-				 (uint16_t)e.v2.context,
-				 (uint16_t)e.v2.subctxt);
-		break;
-	default:
-		// might be called in psm3_handle_error, so output something instead of
-		// asserting
-		snprintf(outstr, sizeof(outstrbufs[0]), "Invalid Fmt");
-		break;
-	}
-#else // PSM_OPA
 	psmi_bare_netaddr128_t bare;
 	char buf[INET6_ADDRSTRLEN+4];
 
@@ -2170,7 +1738,6 @@ const char *psm3_epid_fmt_addr(psm2_epid_t epid, int bufno)
 		snprintf(outstr, sizeof(outstrbufs[0]), "Invalid Fmt");
 		break;
 	}
-#endif
 	return outstr;
 }
 
@@ -2193,34 +1760,15 @@ const char *psm3_subnet128_fmt(psmi_subnet128_t subnet, int bufno)
 	char *outstr = outstrbufs[bufno];
 
 // TBD - handle V_SHM
-#ifndef PSM_OPA
 	if (subnet.fmt == PSMI_ADDR_FMT_IPV4)
 		return psmi_ipv4_ntop(subnet.bare.lo, subnet.prefix_len, outstr, sizeof(outstrbufs[0]));
 	else if (subnet.fmt == PSMI_ADDR_FMT_IPV6)
 		return psmi_ipv6_ntop(subnet.bare, subnet.prefix_len, outstr, sizeof(outstrbufs[0]));
 	else
 		snprintf(outstr, sizeof(outstrbufs[0]), "0x%"PRIx64, subnet.bare.hi);
-#else
-	snprintf(outstr, sizeof(outstrbufs[0]), "0x%"PRIx64, subnet.bare.hi);
-#endif
 	return outstr;
 }
 
-#ifdef PSM_OPA
-void psm3_subnet128_fmt_name(psmi_subnet128_t subnet,
-				char *buf, int buflen)
-{
-	switch (subnet.fmt) {
-	case PSMI_ADDR_FMT_IPATH:
-	case PSMI_ADDR_FMT_OPA:
-		snprintf(buf, buflen, "OPA-%s", psm3_subnet128_fmt(subnet, 0));
-		break;
-	default:
-		psmi_assert_always(0);	// unexpected addr_fmt
-		break;
-	}
-}
-#else /* PSM_OPA */
 void psm3_subnet128_fmt_name(psmi_eth_proto_t protocol, psmi_subnet128_t subnet,
 				char *buf, int buflen)
 {
@@ -2251,7 +1799,6 @@ void psm3_subnet128_fmt_name(psmi_eth_proto_t protocol, psmi_subnet128_t subnet,
 		break;
 	}
 }
-#endif	/* PSM_OPA */
 
 /* this returns just the subnet from decoding the epid
  * output has subnet in a more human readable format
@@ -2269,7 +1816,6 @@ const char *psm3_epid_fmt_subnet(psm2_epid_t epid, int bufno)
 // IB/OPA addresses shown as a full 128b GID
 const char *psm3_naddr128_fmt(psmi_naddr128_t addr, int bufno)
 {
-#ifndef PSM_OPA
 	char *outstr = outstrbufs[bufno];
 
 	if (addr.fmt == PSMI_ADDR_FMT_IPV4)
@@ -2278,9 +1824,6 @@ const char *psm3_naddr128_fmt(psmi_naddr128_t addr, int bufno)
 		return psmi_ipv6_ntop(addr.bare, addr.prefix_len, outstr, sizeof(outstrbufs[0]));
 	else
 		return psm3_gid128_fmt(addr.bare, bufno);
-#else
-	return psm3_gid128_fmt(addr.bare, bufno);
-#endif
 }
 
 #ifdef PSM_VERBS
@@ -2363,7 +1906,6 @@ int psm3_epid_cmp_internal(psm2_epid_t a, psm2_epid_t b)
 	int ret;
 
 	ret = psm3_epid_cmp_word(a.w[0], b.w[0]);
-#ifndef PSM_OPA
 	if (ret)
 		return ret;
 	// 1st word's match, so addr_fmt should match
@@ -2372,9 +1914,6 @@ int psm3_epid_cmp_internal(psm2_epid_t a, psm2_epid_t b)
 	if (ret)
 		return ret;
 	return psm3_epid_cmp_word(a.w[2], b.w[2]);
-#else
-	return ret;
-#endif
 }
 
 int psm3_epid_cmp(psm2_epid_t a, psm2_epid_t b)
@@ -2716,7 +2255,6 @@ int psm3_get_eth_ipv4_netmask(uint32_t ip_addr, uint32_t *netmask)
 }
 #endif /* PSM_VERBS */
 
-#ifndef PSM_OPA
 // used for IPv4 netmask processing.  A valid netmask has a sequence of 1s
 // and then all other bits are 0.
 // This counts how many 1s are in the high end of the netmask and confirms
@@ -2769,7 +2307,6 @@ int psm3_compute_ipv6_prefix_len(psmi_bare_netaddr128_t netmask)
 		return i;
 	}
 }
-#endif
 
 #ifdef PSM_VERBS
 // given an IPv6 address, figure out which ifconfig entry matches and
@@ -3254,17 +2791,10 @@ unsigned psmi_parse_gpudirect(void)
 		return saved;
 
 	psm3_getenv("PSM3_GPUDIRECT",
-#ifdef PSM_OPA
-		"Use GPUDirect RDMA support to allow the NIC to directly read"
-		" from the GPU for SDMA and write to the GPU for TID RDMA."
-		" Also enable GPUDirect copy for more efficient CPU to/from GPU copies."
-		" Requires driver support.(default is disabled i.e. 0)",
-#else
 		"Use GPUDirect DMA and RDMA support to allow the NIC to directly read"
 		" from the GPU for send DMA and write to the GPU for recv RDMA."
 		" Also enable GPUDirect copy for more efficient CPU to/from GPU copies."
 		" Requires rv module support.(default is disabled i.e. 0)",
-#endif
 		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT_FLAGS,
 		(union psmi_envvar_val)0, /* Disabled by default */
 		&envval);
@@ -5059,13 +4589,8 @@ static const char * OpcodeString(int opcode)
 	case OPCODE_LONG_RTS:          return "RTS";
 	case OPCODE_LONG_CTS:          return "CTS";
 	case OPCODE_LONG_DATA:         return "DATA";
-#ifdef PSM_OPA
-	case OPCODE_EXPTID:            return "EXPTID";
-	case OPCODE_EXPTID_COMPLETION: return "EXPTID_COMPLETION";
-#else
 	case OPCODE_ERR_CHK_RDMA:      return "ERR_CHK_RDMA";
 	case OPCODE_ERR_CHK_RDMA_RESP: return "ERR_CHK_RDMA_RESP";
-#endif
 	default:                       return "UNKNOWN";
 	}
 }
@@ -5420,13 +4945,6 @@ void psmi_log_message(const char *fileName,
 		{
 			txrx        = va_arg(ap,psmi_log_tx_rx_t);
 			dumpAddr[0] = va_arg(ap,struct ips_message_header *);
-#ifdef PSM_OPA
-			if (txrx == PSM2_LOG_RX)
-			{
-				dumpAddr[1] = va_arg(ap,uint32_t *);
-				dumpSize[1] = sizeof(uint64_t);
-			}
-#endif
 			newFormat   = va_arg(ap,const char *);
 			dumpSize[0] = sizeof(struct ips_message_header);
 		}
@@ -5541,15 +5059,8 @@ void psmi_log_message(const char *fileName,
 		}
 		else if (format == PSM2_LOG_PKT_STRM_MAGIC)
 		{
-#ifdef PSM_OPA
-			MY_FPRINTF(IO_PORT,"PKT_STRM: %s: imh: %p%s ", TxRxString(txrx),
-				   dumpAddr[0], (txrx == PSM2_LOG_RX) ? "," : "");
-			if (txrx == PSM2_LOG_RX)
-				MY_FPRINTF(IO_PORT,"rhf: %p ", dumpAddr[1]);
-#else
 			MY_FPRINTF(IO_PORT,"PKT_STRM: %s: imh: %p ", TxRxString(txrx),
 				   dumpAddr[0]);
-#endif
 			goto dumpit;
 		}
 		else if (format == PSM2_LOG_DUMP_MAGIC)

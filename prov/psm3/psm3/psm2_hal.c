@@ -154,39 +154,13 @@ void psm3_hal_register_instance(psmi_hal_instance_t *psm_hi)
 	REJECT_IMPROPER_HI(hfp_gdr_convert_gpu_to_host_addr);
 #endif /* PSM_CUDA || PSM_ONEAPI */
 	REJECT_IMPROPER_HI(hfp_get_port_index2pkey);
-#ifdef PSM_OPA
-	REJECT_IMPROPER_HI(hfp_set_pkey);
-#endif
 	REJECT_IMPROPER_HI(hfp_poll_type);
-#ifdef PSM_OPA
-	REJECT_IMPROPER_HI(hfp_free_tid);
-	REJECT_IMPROPER_HI(hfp_get_tidcache_invalidation);
-	REJECT_IMPROPER_HI(hfp_update_tid);
-	REJECT_IMPROPER_HI(hfp_tidflow_check_update_pkt_seq);
-	REJECT_IMPROPER_HI(hfp_tidflow_get);
-	REJECT_IMPROPER_HI(hfp_tidflow_get_hw);
-	REJECT_IMPROPER_HI(hfp_tidflow_get_seqnum);
-	REJECT_IMPROPER_HI(hfp_tidflow_reset);
-	REJECT_IMPROPER_HI(hfp_tidflow_set_entry);
-	REJECT_IMPROPER_HI(hfp_get_hfi_event_bits);
-#endif
 
 	REJECT_IMPROPER_HI(hfp_spio_transfer_frame);
 	REJECT_IMPROPER_HI(hfp_transfer_frame);
-#ifdef PSM_OPA
-	REJECT_IMPROPER_HI(hfp_dma_send_pending_scbs);
-#endif
 	REJECT_IMPROPER_HI(hfp_drain_sdma_completions);
 	REJECT_IMPROPER_HI(hfp_get_node_id);
 
-#ifdef PSM_OPA
-	REJECT_IMPROPER_HI(hfp_get_jkey);
-	REJECT_IMPROPER_HI(hfp_get_pio_size);
-	REJECT_IMPROPER_HI(hfp_get_pio_stall_cnt);
-	REJECT_IMPROPER_HI(hfp_get_subctxt);
-	REJECT_IMPROPER_HI(hfp_get_subctxt_cnt);
-	REJECT_IMPROPER_HI(hfp_get_tid_exp_cnt);
-#endif
 
 #endif /* PSMI_HAL_INST_CNT > 1 || defined(PSM_DEBUG) */
 
@@ -616,10 +590,6 @@ static struct _psmi_hal_instance *psm3_hal_get_pi_inst(void)
 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
 		    (union psmi_envvar_val)"any", &env_hal);
 
-#ifdef PSM_OPA
-	/* The hfp_get_num_units() call below, will not wait for the HFI driver
-	   to come up and create device nodes in /dev/.) */
-#endif
 	for (i=0; i <= PSM_HAL_INDEX_MAX; i++)
 	{
 		p = psm3_hal_table[i];

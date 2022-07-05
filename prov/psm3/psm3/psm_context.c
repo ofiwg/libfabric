@@ -91,38 +91,6 @@ int psm3_context_interrupt_isenabled(psm2_ep_t ep)
 	return psmi_hal_has_sw_status(PSM_HAL_PSMI_RUNTIME_INTR_ENABLED);
 }
 
-#ifdef PSM_OPA
-/* Returns 1 when all of the active units have their free contexts
- * equal the number of contexts.  This is an indication that no
- * jobs are currently running.
- *
- * Note that this code is clearly racy (this code may happen concurrently
- * by two or more processes, and this point of observation,
- * occurs earlier in time to when the decision is made for deciding which
- * context to assign, which will also occurs earlier in time to when the
- * context is actually assigned.  And, when the context is finally
- * assigned, this will change the "nfreectxts" observed below.)
- */
-static int psmi_all_active_units_have_max_freecontexts(int nunits)
-{
-	int u;
-
-	for (u=0;u < nunits;u++)
-	{
-		if (psmi_hal_get_unit_active(u) > 0)
-		{
-			int nfreectxts=psmi_hal_get_num_free_contexts(u),
-				nctxts=psmi_hal_get_num_contexts(u);
-			if (nfreectxts > 0 && nctxts > 0)
-			{
-				if (nfreectxts != nctxts)
-					return 0;
-			}
-		}
-	}
-	return 1;
-}
-#endif
 
 /* returns the 8-bit hash value of an uuid. */
 static inline
@@ -188,21 +156,7 @@ static void
 psmi_spread_nic_selection(psm2_uuid_t const job_key, long *unit_start,
 			     long *unit_end, int nunits)
 {
-#ifdef PSM_OPA
-	/* if the number of ranks on the host is 1 and ... */
-	if ((psm3_get_mylocalrank_count() == 1) &&
-		/*
-		 * All of the active units have free contexts equal the
-		 * number of contexts.
-		 */
-	    psmi_all_active_units_have_max_freecontexts(nunits)) {
-		/* we start looking at unit 0, and end at nunits-1: */
-		*unit_start = 0;
-		*unit_end = nunits - 1;
-	} else {
-#else
 	{
-#endif
 		int found, saved_hfis[nunits];
 
 		/* else, we are going to look at:
@@ -432,7 +386,6 @@ psmi_compute_start_and_end_unit(long unit_param, long addr_index,
 	/* if the user did not set PSM3_NIC then ... */
 	if (unit_param == PSM3_NIC_ANY)
 	{
-#ifndef PSM_OPA
 		if (nunitsactive > 1) {
 			// if NICs are on different planes (non-routed subnets)
 			// we need to have all ranks default to the same plane
@@ -463,7 +416,6 @@ psmi_compute_start_and_end_unit(long unit_param, long addr_index,
 				}
 			}
 		}
-#endif
 
 		/* Get the actual selection algorithm from the environment: */
 		nic_sel_alg = psmi_parse_nic_selection_algorithm();
@@ -822,16 +774,10 @@ psm3_ep_verify_pkey(psm2_ep_t ep, uint16_t pkey, uint16_t *opkey, uint16_t* oind
 			err = psm3_handle_error(NULL, PSM2_EP_DEVICE_FAILURE,
 						"Can't get a valid pkey value from pkey table on %s port %u\n", ep->dev_name, ep->portnum);
 			return err;
-#ifdef PSM_OPA // allow 0x7fff and 0xffff
-		} else if ((ret & 0x7fff) == 0x7fff) {
-			continue;	/* management pkey, not for app traffic. */
-#endif
 		}
-#ifndef PSM_OPA
 		// pkey == 0 means just get slot 0
 		if (! pkey && ! i)
 			break;
-#endif
 		if ((pkey & 0x7fff) == (uint16_t)(ret & 0x7fff)) {
 			break;
 		}

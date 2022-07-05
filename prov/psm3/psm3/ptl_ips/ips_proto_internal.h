@@ -94,12 +94,6 @@ psm2_error_t psm3_ips_proto_timer_ack_callback(struct psmi_timer *, uint64_t);
 psm2_error_t psm3_ips_proto_timer_send_callback(struct psmi_timer *, uint64_t);
 psm2_error_t psm3_ips_proto_timer_ctrlq_callback(struct psmi_timer *, uint64_t);
 psm2_error_t psm3_ips_proto_timer_pendq_callback(struct psmi_timer *, uint64_t);
-#ifdef PSM_OPA
-psm2_error_t ips_cca_timer_callback(struct psmi_timer *current_timer,
-				   uint64_t current);
-
-psm2_error_t ips_cca_adjust_rate(ips_path_rec_t *path_rec, int cct_increment);
-#endif
 void psm3_ips_proto_rv_scbavail_callback(struct ips_scbctrl *scbc, void *context);
 
 psm2_error_t psm3_ips_proto_recv_init(struct ips_proto *proto);

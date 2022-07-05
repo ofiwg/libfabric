@@ -93,9 +93,6 @@ STAILQ_HEAD(ips_scb_stailq, ips_scb);
 SLIST_HEAD(ips_scb_slist, ips_scb);
 
 struct ips_scbctrl {
-#ifdef PSM_OPA
-	/* const psmi_context_t *context; */
-#endif
 	/* Send control blocks for each send */
 	uint32_t scb_num;
 	uint32_t scb_num_cur;
@@ -170,17 +167,10 @@ struct ips_scb {
 	/* for nfrag>1, initially nfrag_remaining = nfrag */
 	uint16_t nfrag_remaining; /* remaining packets to transmit */
 	uint32_t frag_size;	/* max packet size in sequence */
-#ifdef PSM_OPA
-	uint16_t tidctrl;
-#endif
 #ifdef PSM_HAVE_SDMA
 	uint16_t sdma_outstanding;
 #endif
 	uint16_t opcode;
-#ifdef PSM_OPA
-	uint16_t tsess_length;
-	uint32_t *tsess;
-#endif
 #ifdef PSM_HAVE_REG_MR
 	psm3_verbs_mr_t mr;
 #endif
@@ -198,34 +188,11 @@ struct ips_scb {
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	psm2_mq_req_t mq_req;		/* back pointer to original request */
 #endif
-#ifdef PSM_OPA
-	/* sdma header place holder, PSM2 code should access
-	 * the psm_hal_sdma_req_info only using the psm3_get_sdma_req_info()
-	 * accessor function. */
-	/*
-	 * The size of struct psm_hal_sdma_req_info is variable. (10 bytes for
-	 * GPU-direct and 8 bytes for non GPU-Direct)
-	 * When GPU-Direct feature is used, all 10 bytes of the space is used.
-	 * Otherwise, we only use upto 8 bytes. The usage is controlled by
-	 * psm3_get_sdma_req_info() in ips_proto.h
-	 */
-	struct psm_hal_sdma_req_info _DO_NOT_USE_;
-#endif
 	struct {
-#ifdef PSM_OPA
-		struct psm_hal_pbc pbc;
-#endif
 		struct ips_message_header ips_lrh;
 	} PSMI_CACHEALIGN;
 };
 
-#ifdef PSM_OPA
-/* Make sure pbc is at the right place before the message header */
-
-COMPILE_TIME_ASSERT(PBC_ABUTS_IPS_MSG_HDR,(sizeof(struct psm_hal_pbc) ==
-    (size_t) (offsetof(struct ips_scb, ips_lrh) -
-              offsetof(struct ips_scb, pbc))));
-#endif
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #define IS_TRANSFER_BUF_GPU_MEM(scb) (ips_scb_flags(scb) & IPS_SEND_FLAG_PAYLOAD_BUF_GPU)

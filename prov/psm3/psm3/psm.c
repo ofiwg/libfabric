@@ -64,12 +64,10 @@ static int psm3_verno_minor = PSM2_VERNO_MINOR;
 static int psm3_verno = PSMI_VERNO_MAKE(PSM2_VERNO_MAJOR, PSM2_VERNO_MINOR);
 static int psm3_verno_client_val;
 uint8_t  psm3_addr_fmt;	// PSM3_ADDR_FMT
-#ifndef PSM_OPA
 int psm3_allow_routers;	// PSM3_ALLOW_ROUTERS
 
 char *psm3_allow_subnets[PSMI_MAX_SUBNETS];	// PSM3_SUBNETS
 int psm3_num_allow_subnets;
-#endif
 unsigned int psm3_addr_per_nic = 1;
 
 const char *psm3_nic_wildcard = NULL;
@@ -583,10 +581,6 @@ int psmi_cuda_initialize()
 				(union psmi_envvar_val)CUDA_THRESH_RNDV, &env_cuda_thresh_rndv);
 	cuda_thresh_rndv = env_cuda_thresh_rndv.e_int;
 
-#ifdef PSM_OPA
-	if (cuda_thresh_rndv > CUDA_THRESH_RNDV)
-	    cuda_thresh_rndv = CUDA_THRESH_RNDV;
-#endif
 
 	union psmi_envvar_val env_gdr_copy_limit_send;
 	psm3_getenv("PSM3_GDRCOPY_LIMIT_SEND",
@@ -711,7 +705,6 @@ fail:
 }
 #endif // PSM_ONEAPI
 
-#ifndef PSM_OPA
 /* parse PSM3_SUBNETS to get a list of subnets we'll consider */
 static
 psm2_error_t
@@ -765,7 +758,6 @@ fail:
 	return err;
 
 }
-#endif
 
 static
 void psmi_parse_nic_var()
@@ -961,7 +953,6 @@ psm2_error_t psm3_init(int *major, int *minor)
 		}
 		psm3_addr_fmt = env_addr_fmt.e_int;
 	}
-#ifndef PSM_OPA
 	{
 		union psmi_envvar_val env_addr_per_nic;
 		psm3_getenv("PSM3_ADDR_PER_NIC",
@@ -996,7 +987,6 @@ psm2_error_t psm3_init(int *major, int *minor)
 		if ((err = psmi_parse_subnets(env_subnets.e_str)))
 			goto fail_unref;
 	}
-#endif
 	psmi_parse_nic_var();
 
 

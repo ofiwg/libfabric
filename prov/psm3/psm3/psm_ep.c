@@ -703,10 +703,6 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 		opts.outsl = opts_i->outsl;
 	if (opts_i->service_id)
 		opts.service_id = (uint64_t) opts_i->service_id;
-#ifdef PSM_OPA
-	if (opts_i->path_res_type != PSM2_PATH_RES_NONE)
-		opts.path_res_type = opts_i->path_res_type;
-#endif
 	if (opts_i->senddesc_num)
 		opts.senddesc_num = opts_i->senddesc_num;
 	if (opts_i->imm_size)
@@ -714,11 +710,7 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 
 	/* Get Service ID from environment */
 	if (!psm3_getenv("PSM3_IB_SERVICE_ID",
-#ifdef PSM_OPA
-			 "Service ID for path resolution",
-#else
 			 "Service ID for RV module RC QP connection establishment",
-#endif
 			 PSMI_ENVVAR_LEVEL_USER,
 			 PSMI_ENVVAR_TYPE_ULONG_FLAGS, // FLAGS only affects output: hex
 			 (union psmi_envvar_val)HFI_DEFAULT_SERVICE_ID,
@@ -726,33 +718,7 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 		opts.service_id = (uint64_t) envvar_val.e_ulonglong;
 	}
 
-#ifdef PSM_OPA
-	/* Get Path resolution type from environment Possible choices are:
-	 *
-	 * NONE : Default same as previous instances. Utilizes static data.
-	 * OPP  : Use OFED Plus Plus library to do path record queries.
-	 * UMAD : Use raw libibumad interface to form and process path records.
-	 */
-	if (!psm3_getenv("PSM3_PATH_REC",
-			 "Mechanism to query NIC path record (default is no path query)",
-			 PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
-			 (union psmi_envvar_val)"none", &envvar_val)) {
-		if (!strcasecmp(envvar_val.e_str, "none"))
-			opts.path_res_type = PSM2_PATH_RES_NONE;
-		else if (!strcasecmp(envvar_val.e_str, "opp"))
-			opts.path_res_type = PSM2_PATH_RES_OPP;
-		else if (!strcasecmp(envvar_val.e_str, "umad"))
-			opts.path_res_type = PSM2_PATH_RES_UMAD;
-		else {
-			_HFI_ERROR("Unknown path resolution type %s. "
-				"Disabling use of path record query.\n",
-				envvar_val.e_str);
-			opts.path_res_type = PSM2_PATH_RES_NONE;
-		}
-	}
-#else
 	opts.path_res_type = PSM2_PATH_RES_NONE;
-#endif
 
 	/* Get user specified port number to use. */
 	if (!psm3_getenv("PSM3_NIC_PORT", "NIC Port number (0 autodetects)",
@@ -765,11 +731,7 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 	/* Get service level from environment, path-query overrides it */
 	if (!psm3_getenv
 	    ("PSM3_NIC_SL", "NIC outging ServiceLevel number (default 0)",
-#ifdef PSM_OPA
-	     PSMI_ENVVAR_LEVEL_USER,
-#else
 	     PSMI_ENVVAR_LEVEL_HIDDEN,
-#endif
 	     PSMI_ENVVAR_TYPE_LONG,
 	     (union psmi_envvar_val)PSMI_SL_DEFAULT, &envvar_val)) {
 		opts.outsl = envvar_val.e_long;
@@ -781,11 +743,7 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 	 */
 	if (!psm3_getenv("PSM3_PKEY",
 			 "PKey to use for endpoint (0=use slot 0)",
-#ifdef PSM_OPA
-			 PSMI_ENVVAR_LEVEL_USER,
-#else
 			 PSMI_ENVVAR_LEVEL_HIDDEN,
-#endif
 			 PSMI_ENVVAR_TYPE_ULONG_FLAGS,	// show in hex
 			 (union psmi_envvar_val)((unsigned int)(psmi_hal_get_default_pkey())),
 			 &envvar_val)) {
@@ -1225,7 +1183,6 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 		int j;
 
 		psmi_hal_context_initstats(ep);
-#ifndef PSM_OPA
 		union psmi_envvar_val envvar_val;
 
 		if (num_rails <= 0) {
@@ -1257,10 +1214,6 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 		}
 
 		for (j= 0; j< envvar_val.e_uint; j++) {
-#else
-		j=0;
-		{
-#endif
 			for (i = 0; i < num_rails; i++) {
 				_HFI_VDBG("rail %d unit %u port %u addr_index %d\n", i, units[i], ports[i], addr_indexes[i]);
 				// did 0, 0 already above
