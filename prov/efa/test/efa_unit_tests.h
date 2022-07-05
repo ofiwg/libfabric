@@ -60,5 +60,7 @@ void test_rdm_cq_read_empty_cq();
 void test_rdm_cq_read_failed_poll();
 void test_rdm_cq_read_bad_send_status();
 void test_rdm_cq_read_bad_recv_status();
+void test_rdm_cq_read_recover_forgotten_peer_ah();
+void test_rdm_cq_read_ignore_removed_peer();
 
 #endif

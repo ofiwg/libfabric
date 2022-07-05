@@ -11,6 +11,8 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	# Determine if we can support the efa provider
 	efa_happy=0
 	efa_h_enable_poisoning=0
+	# Determine if efa device supports extensible CQ with access to additional fields from WC
+	efadv_support_extended_cq=1
 
 	AS_IF([test x"$enable_efa" != x"no"],
 	      [FI_CHECK_PACKAGE([efa_ibverbs],
@@ -107,6 +109,37 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 		])
 
 	AS_IF([test $efa_happy -eq 1 ], [$1], [$2])
+
+	AS_IF([test $efadv_support_extended_cq -eq 1],
+		[FI_CHECK_PACKAGE([efadv],
+			[infiniband/efadv.h],
+			[efa],
+			[efadv_create_cq],
+			[-libverbs],
+			[$efa_PREFIX],
+			[$efa_LIBDIR],
+			[],
+			[efadv_support_extended_cq=0])
+	      ])
+
+	AS_IF([test $efadv_support_extended_cq -eq 1],
+		[FI_CHECK_PACKAGE([efadv],
+			[infiniband/efadv.h],
+			[efa],
+			[efadv_cq_from_ibv_cq_ex],
+			[-libverbs],
+			[$efa_PREFIX],
+			[$efa_LIBDIR],
+			[],
+			[efadv_support_extended_cq=0])
+	      ])
+
+	AS_IF([test $efadv_support_extended_cq -eq 1],
+		[AC_DEFINE([HAVE_EFADV_CQ_EX], [1], [EFA device support extensible CQ])],
+		[AC_DEFINE([HAVE_EFADV_CQ_EX], [0], [EFA device does not support extensible CQ])]
+		)
+
+	AM_CONDITIONAL([HAVE_EFADV_CQ_EX], [test $efadv_support_extended_cq -eq 1])
 
 	efa_CPPFLAGS="$efa_ibverbs_CPPFLAGS $efadv_CPPFLAGS"
 	efa_LDFLAGS="$efa_ibverbs_LDFLAGS $efadv_LDFLAGS"

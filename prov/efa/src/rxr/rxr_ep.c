@@ -1799,6 +1799,104 @@ static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
 	}
 }
 
+#if HAVE_EFADV_CQ_EX
+/**
+ * @brief Read peer raw address from EFA device and look up the peer address in AV.
+ * The caller must guarantee that the peer AH is unknown.
+ * @return Peer address, or FI_ADDR_NOTAVAIL if unavailable.
+ */
+static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct rxr_ep *ep,
+																 struct ibv_cq_ex *ibv_cqx)
+{
+	struct rxr_pkt_entry *pkt_entry;
+	struct efa_ep *efa_ep;
+	struct efa_ep_addr efa_ep_addr = {0};
+	fi_addr_t addr;
+	union ibv_gid gid = {0};
+	uint32_t *connid = NULL;
+
+
+	/* Attempt to read AH from EFA firmware */
+	if (efadv_wc_read_ah(efadv_cq_from_ibv_cq_ex(ibv_cqx), &gid) >= 0) {
+		/* AH should be unknown (negative) */
+		return FI_ADDR_NOTAVAIL;
+	}
+
+	pkt_entry = (void *)(uintptr_t)ibv_cqx->wr_id;
+
+	connid = rxr_pkt_connid_ptr(pkt_entry);
+	if (!connid) {
+		return FI_ADDR_NOTAVAIL;
+	}
+
+	/*
+	 * If AH is negative, use raw:qpn:connid as the key to lookup AV for peer's fi_addr
+	 */
+	memcpy(efa_ep_addr.raw, gid.raw, sizeof(efa_ep_addr.raw));
+	efa_ep_addr.qpn = ibv_wc_read_src_qp(ibv_cqx);
+	efa_ep_addr.qkey = *connid;
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	addr = ofi_av_lookup_fi_addr(&efa_ep->av->util_av, &efa_ep_addr);
+	if (addr != FI_ADDR_NOTAVAIL) {
+		char gid_str_cdesc[INET6_ADDRSTRLEN];
+		inet_ntop(AF_INET6, gid.raw, gid_str_cdesc, INET6_ADDRSTRLEN);
+		FI_WARN(&rxr_prov, FI_LOG_AV,
+				"Recovered peer fi_addr. [Raw]:[QPN]:[QKey] = [%s]:[%" PRIu16 "]:[%" PRIu32 "]\n",
+				gid_str_cdesc, efa_ep_addr.qpn, efa_ep_addr.qkey);
+	}
+
+	return addr;
+}
+
+/**
+ * @brief Determine peer address from ibv_cq_ex
+ * Attempt to inject or determine peer address if not available. This usually
+ * happens when the endpoint receives the first packet from a new peer.
+ * There is an edge case for EFA endpoint - the device might lose the address
+ * handle of a known peer due to a firmware bug and return FI_ADDR_NOTAVAIL.
+ * The provider needs to look up the address using Raw address:QPN:QKey.
+ * Note: This function introduces addtional overhead. It should only be called if
+ * efa_av_lookup_address_rdm fails to find the peer address.
+ * @param ep Pointer to RDM endpoint
+ * @param ibv_cqx Pointer to CQ
+ * @returns Peer address, or FI_ADDR_NOTAVAIL if unsuccessful.
+ */
+static inline fi_addr_t rdm_ep_determine_addr_from_ibv_cq_ex(struct rxr_ep *ep, struct ibv_cq_ex *ibv_cqx)
+{
+	struct rxr_pkt_entry *pkt_entry;
+	fi_addr_t addr = FI_ADDR_NOTAVAIL;
+
+	pkt_entry = (void *)(uintptr_t)ibv_cqx->wr_id;
+
+	addr = rxr_pkt_determine_addr(ep, pkt_entry);
+
+	if (addr == FI_ADDR_NOTAVAIL) {
+		addr = rdm_ep_determine_peer_address_from_efadv(ep, ibv_cqx);
+	}
+
+	return addr;
+}
+#else
+/**
+ * @brief Determine peer address from ibv_cq_ex
+ * Attempt to inject peer address if not available. This usually
+ * happens when the endpoint receives the first packet from a new peer.
+ * Note: This function introduces addtional overhead. It should only be called if
+ * efa_av_lookup_address_rdm fails to find the peer address.
+ * @param ep Pointer to RDM endpoint
+ * @param ibv_cqx Pointer to CQ
+ * @returns Peer address, or FI_ADDR_NOTAVAIL if unsuccessful.
+ */
+static inline fi_addr_t rdm_ep_determine_addr_from_ibv_cq_ex(struct rxr_ep *ep, struct ibv_cq_ex *ibv_cqx)
+{
+	struct rxr_pkt_entry *pkt_entry;
+
+	pkt_entry = (void *)(uintptr_t)ibv_cqx->wr_id;
+
+	return rxr_pkt_determine_addr(ep, pkt_entry);
+}
+#endif
+
 /**
  * @brief poll rdma-core cq and process the cq entry
  *
@@ -1857,6 +1955,11 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 			break;
 		case IBV_WC_RECV:
 			pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc_read_slid(efa_cq->ibv_cq_ex), ibv_wc_read_src_qp(efa_cq->ibv_cq_ex), pkt_entry);
+
+			if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
+				pkt_entry->addr = rdm_ep_determine_addr_from_ibv_cq_ex(ep, efa_cq->ibv_cq_ex);
+			}
+
 			pkt_entry->pkt_size = ibv_wc_read_byte_len(efa_cq->ibv_cq_ex);
 			assert(pkt_entry->pkt_size > 0);
 			rxr_pkt_handle_recv_completion(ep, pkt_entry, EFA_EP);
@@ -1875,6 +1978,10 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 			break;
 		}
 
+		/*
+		 * ibv_next_poll MUST be call after the current WC is fully processed,
+		 * which prevents later calls on ibv_cq_ex from reading the wrong WC.
+		 */
 		err = ibv_next_poll(efa_cq->ibv_cq_ex);
 	}
 
@@ -1967,6 +2074,15 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 			rxr_pkt_handle_send_completion(ep, pkt_entry);
 		} else if (cq_entry.flags & (FI_RECV | FI_REMOTE_CQ_DATA)) {
 			pkt_entry->addr = src_addr;
+
+			if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
+				/*
+				 * Attempt to inject or determine peer address if not available. This usually
+				 * happens when the endpoint receives the first packet from a new peer.
+				 */
+				pkt_entry->addr = rxr_pkt_determine_addr(ep, pkt_entry);
+			}
+
 			pkt_entry->pkt_size = cq_entry.len;
 			assert(pkt_entry->pkt_size > 0);
 			rxr_pkt_handle_recv_completion(ep, pkt_entry, SHM_EP);

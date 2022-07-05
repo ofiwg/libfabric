@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2018-2022 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -243,7 +243,7 @@ struct efa_av {
 	enum fi_av_type		type;
 	/* cur_reverse_av is a map from (ahn + qpn) to current (latest) efa_conn.
 	 * prv_reverse_av is a map from (ahn + qpn + connid) to all previous efa_conns.
-	 * cur_revsere_av is faster to search because its key's size is smaller
+	 * cur_reverse_av is faster to search because its key size is smaller
 	 */
 	struct efa_cur_reverse_av *cur_reverse_av;
 	struct efa_prv_reverse_av *prv_reverse_av;

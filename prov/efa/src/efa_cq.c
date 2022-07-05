@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2017-2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2017-2022 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -249,13 +249,49 @@ static struct fi_ops efa_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
-		struct fid_cq **cq_fid, void *context)
-{
-	struct efa_cq *cq;
-	int ret;
+
+/**
+ * @brief Create and set cq->ibv_cq_ex
+ *
+ * @param[in] cq Pointer to the efa_cq. cq->ibv_cq_ex must be NULL.
+ * @param[in] attr Pointer to fi_cq_attr.
+ * @param[out] Return code = 0 if successful, or negative otherwise.
+ */
+#if HAVE_EFADV_CQ_EX
+static inline int efa_cq_set_ibv_cq_ex(struct efa_cq *cq, struct fi_cq_attr *attr) {
 	struct ibv_cq_init_attr_ex init_attr_ex = {
-		.cqe = 0,
+		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
+		.cq_context = NULL,
+		.channel = NULL,
+		.comp_vector = 0,
+		/* EFA requires these values for wc_flags and comp_mask.
+		 * See `efa_create_cq_ex` in rdma-core.
+		 */
+		.wc_flags = IBV_WC_STANDARD_FLAGS,
+		.comp_mask = 0,
+	};
+	struct efadv_cq_init_attr efadv_cq_init_attr = {
+		.comp_mask = 0,
+		.wc_flags = EFADV_WC_EX_WITH_AH,
+	};
+
+	if (cq->ibv_cq_ex) {
+		EFA_WARN(FI_LOG_CQ, "CQ already has attached ibv_cq_ex\n");
+		return -FI_EALREADY;
+	}
+
+	/* To enable additional WC fields, create CQ with efadv_create_cq verb instead. */
+	cq->ibv_cq_ex = efadv_create_cq(cq->domain->device->ibv_ctx,
+									&init_attr_ex,
+									&efadv_cq_init_attr,
+									sizeof(efadv_cq_init_attr));
+
+	return cq->ibv_cq_ex ? 0 : -FI_ENOCQ;
+}
+#else
+static inline int efa_cq_set_ibv_cq_ex(struct efa_cq *cq, struct fi_cq_attr *attr) {
+	struct ibv_cq_init_attr_ex init_attr_ex = {
+		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
 		.cq_context = NULL,
 		.channel = NULL,
 		.comp_vector = 0,
@@ -266,6 +302,24 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		.comp_mask = 0,
 	};
 
+	if (cq->ibv_cq_ex) {
+		EFA_WARN(FI_LOG_CQ, "CQ already has attached ibv_cq_ex\n");
+		return -FI_EALREADY;
+	}
+
+	/* To enable additional WC fields, create CQ with efadv_create_cq verb instead. */
+	cq->ibv_cq_ex = ibv_create_cq_ex(cq->domain->device->ibv_ctx, &init_attr_ex);
+
+	return cq->ibv_cq_ex ? 0 : -FI_ENOCQ;
+}
+#endif
+
+int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
+		struct fid_cq **cq_fid, void *context)
+{
+	struct efa_cq *cq;
+	int err;
+
 	if (attr->wait_obj != FI_WAIT_NONE)
 		return -FI_ENOSYS;
 
@@ -273,9 +327,9 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	if (!cq)
 		return -FI_ENOMEM;
 
-	ret = ofi_cq_init(&efa_prov, domain_fid, attr, &cq->util_cq,
+	err = ofi_cq_init(&efa_prov, domain_fid, attr, &cq->util_cq,
 			  &ofi_cq_progress, context);
-	if (ret) {
+	if (err) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create UTIL_CQ\n");
 		goto err_free_cq;
 	}
@@ -283,18 +337,16 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	cq->domain = container_of(domain_fid, struct efa_domain,
 				  util_domain.domain_fid);
 
-	init_attr_ex.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE;
-
-	cq->ibv_cq_ex = ibv_create_cq_ex(cq->domain->device->ibv_ctx, &init_attr_ex);
-	if (!cq->ibv_cq_ex) {
+	err = efa_cq_set_ibv_cq_ex(cq, attr);
+	if (err) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ\n");
-		ret = -FI_EINVAL;
+		err = -FI_EINVAL;
 		goto err_free_util_cq;
 	}
 
-	ret = ofi_bufpool_create(&cq->wce_pool, sizeof(struct efa_wce), 16, 0,
+	err = ofi_bufpool_create(&cq->wce_pool, sizeof(struct efa_wce), 16, 0,
 				 EFA_WCE_CNT, 0);
-	if (ret) {
+	if (err) {
 		EFA_WARN(FI_LOG_CQ, "Failed to create wce_pool\n");
 		goto err_destroy_cq;
 	}
@@ -315,7 +367,7 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		break;
 	case FI_CQ_FORMAT_TAGGED:
 	default:
-		ret = -FI_ENOSYS;
+		err = -FI_ENOSYS;
 		goto err_destroy_pool;
 	}
 
@@ -337,5 +389,5 @@ err_free_util_cq:
 	ofi_cq_cleanup(&cq->util_cq);
 err_free_cq:
 	free(cq);
-	return ret;
+	return err;
 }

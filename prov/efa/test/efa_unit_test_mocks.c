@@ -39,6 +39,23 @@ struct efa_mock_ibv_send_wr_list g_ibv_send_wr_list =
 };
 
 /**
+ * @brief Destruct efa_mock_ibv_send_wr_list and free up memory
+ *
+ * @param[in] wr_list Pointer to efa_mock_ibv_send_wr_list
+ */
+void efa_mock_ibv_send_wr_list_destruct(struct efa_mock_ibv_send_wr_list *wr_list) {
+	struct ibv_send_wr *wr;
+
+	while (wr_list->head) {
+		wr = wr_list->head;
+		wr_list->head = wr_list->head->next;
+		free(wr);
+	}
+
+	wr_list->tail = NULL;
+}
+
+/**
  * @brief save send_wr in global variable g_ibv_send_wr_list
  *
  * This mock of ibv_post_send will NOT actually send data over wire,
@@ -155,3 +172,35 @@ int __wrap_efadv_query_device(struct ibv_context *ibv_ctx, struct efadv_device_a
 {
 	return g_efa_unit_test_mocks.efadv_query_device(ibv_ctx, attr, inlen);
 }
+
+#if HAVE_EFADV_CQ_EX
+uint32_t efa_mock_ibv_read_src_qp_return_mock(struct ibv_cq_ex *current)
+{
+	return mock();
+}
+
+uint32_t efa_mock_ibv_read_byte_len_return_mock(struct ibv_cq_ex *current)
+{
+	return mock();
+};
+
+uint32_t efa_mock_ibv_read_slid_return_mock(struct ibv_cq_ex *current)
+{
+	return mock();
+}
+
+int efa_mock_efadv_wc_read_ah_return_unknown_ah_and_expect_next_poll_and_set_gid(struct efadv_cq *efadv_cq, union ibv_gid *sgid)
+{
+	/* Make sure this mock is always called before ibv_next_poll */
+	expect_function_call(efa_mock_ibv_next_poll_check_function_called_and_return_mock);
+	memcpy(sgid->raw, (uint8_t *)mock(), sizeof(sgid->raw));
+	/* Must return a negative value for unknown AH */
+	return -ENOENT;
+};
+
+int efa_mock_ibv_next_poll_check_function_called_and_return_mock(struct ibv_cq_ex *ibvcqx)
+{
+	function_called();
+	return mock();
+};
+#endif

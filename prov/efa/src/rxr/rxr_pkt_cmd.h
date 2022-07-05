@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2022 Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -44,6 +44,8 @@ ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry,
 
 ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 			 int req_type, bool inject, uint64_t flags);
+
+fi_addr_t rxr_pkt_determine_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 				struct rxr_pkt_entry *pkt_entry,

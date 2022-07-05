@@ -1,11 +1,15 @@
 #ifndef EFA_UNIT_TEST_RDMA_CORE_MOCKS_H
 #define EFA_UNIT_TEST_RDMA_CORE_MOCKS_H
 
+extern struct efa_unit_test_mocks g_efa_unit_test_mocks;
+
 struct efa_mock_ibv_send_wr_list
 {
 	struct ibv_send_wr *head;
 	struct ibv_send_wr *tail;
 };
+
+void efa_mock_ibv_send_wr_list_destruct(struct efa_mock_ibv_send_wr_list *wr_list);
 
 struct ibv_ah *__real_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr);
 
@@ -45,6 +49,14 @@ struct efa_unit_test_mocks
 				  uint32_t inlen);
 };
 
-extern struct efa_unit_test_mocks g_efa_unit_test_mocks;
+#if HAVE_EFADV_CQ_EX
+uint32_t efa_mock_ibv_read_src_qp_return_mock(struct ibv_cq_ex *current);
+uint32_t efa_mock_ibv_read_byte_len_return_mock(struct ibv_cq_ex *current);
+uint32_t efa_mock_ibv_read_slid_return_mock(struct ibv_cq_ex *current);
+int efa_mock_efadv_wc_read_ah_return_unknown_ah_and_expect_next_poll_and_set_gid(struct efadv_cq *efadv_cq, union ibv_gid *sgid);
+int efa_mock_ibv_start_poll_expect_efadv_wc_read_ah_and_return_mock(struct ibv_cq_ex *ibvcqx,
+																	struct ibv_poll_cq_attr *attr);
+int efa_mock_ibv_next_poll_check_function_called_and_return_mock(struct ibv_cq_ex *ibvcqx);
+#endif
 
 #endif
