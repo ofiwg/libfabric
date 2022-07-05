@@ -1389,8 +1389,10 @@ uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
 		FI_WARN(prov, FI_LOG_EP_DATA,
 			"Zerocopy data was copied\n");
 disable:
-		FI_WARN(prov, FI_LOG_EP_DATA, "disabling zerocopy\n");
-		bsock->zerocopy_size = SIZE_MAX;
+		if (bsock->zerocopy_size != SIZE_MAX) {
+			FI_WARN(prov, FI_LOG_EP_DATA, "disabling zerocopy\n");
+			bsock->zerocopy_size = SIZE_MAX;
+		}
 	}
 	return bsock->done_index;
 }
