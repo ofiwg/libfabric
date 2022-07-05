@@ -611,7 +611,7 @@ static int vrb_get_device_attrs(struct ibv_context *ctx,
 	}
 
 	if (port_num == device_attr.phys_port_cnt + 1) {
-		FI_WARN(&vrb_prov, FI_LOG_FABRIC, "device %s: there are no "
+		FI_INFO(&vrb_prov, FI_LOG_FABRIC, "device %s: there are no "
 			"active ports\n", dev_name);
 		return -FI_ENODATA;
 	} else {
