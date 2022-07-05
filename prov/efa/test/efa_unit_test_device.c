@@ -28,8 +28,5 @@ void test_efa_device_construct_error_handling()
 	assert_null(efa_device.ibv_ctx);
 	assert_null(efa_device.rdm_info);
 	assert_null(efa_device.dgram_info);
-
-	g_efa_unit_test_mocks.efadv_query_device = &__real_efadv_query_device;
-
 }
 
