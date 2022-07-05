@@ -33,7 +33,6 @@ void test_av_insert_duplicate_raw_addr()
 	assert_int_equal(num_addr, 1);
 	assert_int_equal(addr1, addr2);
 
-	g_efa_unit_test_mocks.ibv_create_ah = __real_ibv_create_ah;
 	efa_unit_test_resource_destruct(&resource);
 }
 
@@ -72,7 +71,6 @@ void test_av_insert_duplicate_gid()
 	assert_int_equal(num_addr, 1);
 	assert_int_not_equal(addr1, addr2);
 
-	g_efa_unit_test_mocks.ibv_create_ah = __real_ibv_create_ah;
 	efa_unit_test_resource_destruct(&resource);
 }
 

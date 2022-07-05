@@ -12,6 +12,9 @@
 #include "rxr.h"
 #include "efa_unit_test_mocks.h"
 
+extern struct efa_mock_ibv_send_wr_list g_ibv_send_wr_list;
+extern struct efa_unit_test_mocks g_efa_unit_test_mocks;
+
 struct efa_resource {
 	struct fi_info *hints;
 	struct fi_info *info;
@@ -33,9 +36,16 @@ struct efa_unit_test_buff {
 	struct fid_mr *mr;
 };
 
+struct efa_unit_test_eager_rtm_pkt_attr {
+	uint32_t msg_id;
+	uint32_t connid;
+};
+
 void efa_unit_test_buff_construct(struct efa_unit_test_buff *buff, struct efa_resource *resource, size_t buff_size);
 
 void efa_unit_test_buff_destruct(struct efa_unit_test_buff *buff);
+
+void efa_unit_test_eager_msgrtm_pkt_construct(struct rxr_pkt_entry *pkt_entry, struct efa_unit_test_eager_rtm_pkt_attr *attr);
 
 /* test cases */
 void test_av_insert_duplicate_raw_addr();
