@@ -2430,12 +2430,14 @@ bool rxr_ep_use_shm_for_tx(struct fi_info *info)
  *
  * @param	app_device_info[out]		output
  * @param	device_prov_info[in]		info from efa_prov_info_alloc(FI_EP_RDM)
+ * @param	api_version			API version of the output
  * @return	0 on success.
  * 		-FI_ENOMEM if memory allocation of fi_info object failed.
  */
 static
 int rxr_ep_alloc_app_device_info(struct fi_info **app_device_info,
-				 struct fi_info *device_prov_info)
+				 struct fi_info *device_prov_info,
+				 uint32_t api_version)
 {
 	struct fi_info *result;
 
@@ -2462,11 +2464,23 @@ int rxr_ep_alloc_app_device_info(struct fi_info **app_device_info,
 	 * When opening a device endpoint, the info object cannot have both
 	 * FI_MR_BASIC and OFI_MR_BASIC_MAP, because FI_MR_BASIC cannot be
 	 * used with other MR modes.
-	 *
-	 * Hence unsetting the FI_MR_BASIC flag here to use the newer API
-	 * (>= 1.5).
 	 */
-	result->domain_attr->mr_mode &= ~FI_MR_BASIC;
+	if (FI_VERSION_LT(api_version, FI_VERSION(1,5))) {
+		EFA_INFO(FI_LOG_EP_CTRL, "libfabric API version: %d.%d was used to construct device info.\n",
+			 FI_MAJOR(api_version), FI_MINOR(api_version));
+		/*
+		 * For older API(< 1.5), keep using FI_MR_BASIC.
+		 * and we need to set the FI_LOCAL_MR flag in mode to
+		 * indicate that device need memory registration.
+		 */
+		result->domain_attr->mr_mode = FI_MR_BASIC;
+		result->mode |= FI_LOCAL_MR | FI_MR_ALLOCATED;
+	} else {
+		/* For newer API(>= 1.5), unset FI_MR_BASIC because it has been deprecated.
+		 */
+		result->domain_attr->mr_mode &= ~FI_MR_BASIC;
+	}
+
 	*app_device_info = result;
 	return 0;
 }
@@ -2496,7 +2510,9 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err_free_ep;
 
 	ret = rxr_ep_alloc_app_device_info(&rdm_info,
-					   efa_domain->device->rdm_info);
+					   efa_domain->device->rdm_info,
+					   efa_domain->util_domain.fabric->fabric_fid.api_version
+					   );
 	if (ret)
 		goto err_close_ofi_ep;
 
