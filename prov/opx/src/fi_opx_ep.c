@@ -394,9 +394,7 @@ static int fi_opx_close_ep(fid_t fid)
 	int ret;
 	struct fi_opx_ep *opx_ep = container_of(fid, struct fi_opx_ep, ep_fid);
 
-#ifdef OPX_DEBUG_COUNTERS
-	fi_opx_print_debug_counters(&opx_ep->debug_counters);
-#endif
+	FI_OPX_DEBUG_COUNTERS_PRINT(opx_ep->debug_counters);
 
 	if (opx_ep->reliability && opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD) {
 		struct fi_opx_reliability_service *service = opx_ep->reliability->state.service;
@@ -1732,9 +1730,7 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 
 	*ep = &opx_ep->ep_fid;
 
-#ifdef OPX_DEBUG_COUNTERS
-	fi_opx_init_debug_counters(&opx_ep->debug_counters);
-#endif
+	FI_OPX_DEBUG_COUNTERS_INIT(opx_ep->debug_counters);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
 	return 0;
 err:

@@ -1402,6 +1402,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 							&params->sdma_reqs,
 							params->sdma_we);
 				if (!params->sdma_we) {
+					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_sdma_we);
 					return -FI_EAGAIN;
 				}
 				assert(params->sdma_we->total_payload == 0);
@@ -1414,6 +1415,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS);
 
 			if (opx_ep->hfi->info.sdma.available_counter < packet_count) {
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_fill_index);
 				return -FI_EAGAIN;
 			}
 
@@ -1427,6 +1429,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 										  max_eager_bytes);
 
 			if (psns_avail < 1) {
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
 				return -FI_EAGAIN;
 			}
 
@@ -1498,6 +1501,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 
 			// Must be we had trouble getting a replay buffer
 			if (OFI_UNLIKELY(params->sdma_we->num_packets == 0)) {
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_replay);
 				return -FI_EAGAIN;
 			}
 
