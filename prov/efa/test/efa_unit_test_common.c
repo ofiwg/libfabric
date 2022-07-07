@@ -1,7 +1,6 @@
 #include "efa_unit_tests.h"
 #include "rxr_pkt_type_base.h"
 
-static
 struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
 {
 	struct fi_info *hints;

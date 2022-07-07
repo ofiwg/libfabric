@@ -26,6 +26,8 @@ struct efa_resource {
 	struct fid_cq *cq;
 };
 
+struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type);
+
 int efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type);
 
 void efa_unit_test_resource_destruct(struct efa_resource *resource);
@@ -62,5 +64,6 @@ void test_rdm_cq_read_bad_send_status();
 void test_rdm_cq_read_bad_recv_status();
 void test_rdm_cq_read_recover_forgotten_peer_ah();
 void test_rdm_cq_read_ignore_removed_peer();
+void test_info_open_ep_with_wrong_info();
 
 #endif
