@@ -65,5 +65,6 @@ void test_rdm_cq_read_bad_recv_status();
 void test_rdm_cq_read_recover_forgotten_peer_ah();
 void test_rdm_cq_read_ignore_removed_peer();
 void test_info_open_ep_with_wrong_info();
+void test_info_open_ep_with_api_1_1_info();
 
 #endif
