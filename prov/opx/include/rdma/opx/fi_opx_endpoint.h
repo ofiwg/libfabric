@@ -444,9 +444,7 @@ struct fi_opx_ep {
 #endif
 
 
-#ifdef OPX_DEBUG_COUNTERS
-	struct fi_opx_debug_counters debug_counters;
-#endif
+	FI_OPX_DEBUG_COUNTERS_DECLARE_COUNTERS;
 
 } __attribute((aligned(L2_CACHE_LINE_SIZE)));
 
@@ -1684,9 +1682,7 @@ void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep,
 	struct fi_opx_hfi1_ue_packet *uepkt = opx_ep->rx->mp_egr_queue.ue.head;
 	struct fi_opx_hfi1_ue_packet *prev = NULL;
 
-#ifdef OPX_DEBUG_COUNTERS
-	uint64_t length = 0;
-#endif
+	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(length);
 
 	while (uepkt && context->byte_counter) {
 		if (fi_opx_mp_egr_id_from_nth_packet(&uepkt->hdr) == mp_egr_id.id) {
@@ -1711,14 +1707,10 @@ void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep,
 			prev = uepkt;
 			uepkt = uepkt->next;
 		}
-#ifdef OPX_DEBUG_COUNTERS
-		++length;
-#endif
+		FI_OPX_DEBUG_COUNTERS_INC(length);
 	}
 
-#ifdef OPX_DEBUG_COUNTERS
-	fi_opx_debug_counters_max_of(&opx_ep->debug_counters.mp_eager_recv_max_ue_queue_length, length);
-#endif
+	FI_OPX_DEBUG_COUNTERS_MAX_OF(opx_ep->debug_counters.mp_eager.recv_max_ue_queue_length, length);
 }
 
 __OPX_FORCE_INLINE_AND_FLATTEN__
@@ -1734,9 +1726,7 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 {
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
-#ifdef OPX_DEBUG_COUNTERS
-	++opx_ep->debug_counters.mp_eager_recv_first_packets;
-#endif
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_first_packets);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "search the match queue\n");
 
@@ -1800,9 +1790,7 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 		} else {
 			fi_opx_context_slist_insert_tail(context, opx_ep->rx->cq_completed_ptr);
 		}
-#ifdef OPX_DEBUG_COUNTERS
-		++opx_ep->debug_counters.mp_eager_recv_completed_eager_first;
-#endif
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_completed_eager_first);
 	}
 }
 
@@ -1819,46 +1807,38 @@ void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep,
 {
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
-#ifdef OPX_DEBUG_COUNTERS
-	++opx_ep->debug_counters.mp_eager_recv_nth_packets;
-#endif
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_nth_packets);
+
 	/* Search mp-eager queue for the context w/ matching mp-eager ID */
 
 	const uint64_t mp_egr_id = fi_opx_mp_egr_id_from_nth_packet(hdr);
 	union fi_opx_context *context = opx_ep->rx->mp_egr_queue.mq.head;
 	union fi_opx_context *prev = NULL;
 
-#ifdef OPX_DEBUG_COUNTERS
-	uint64_t length = 0;
-#endif
+	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(length);
 
 	while (context && context->mp_egr_id.id != mp_egr_id) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"process_header_mp_eager_nth: Searching mp_egr match queue, context = %p\n", context);
 		prev = context;
 		context = context->next;
-#ifdef OPX_DEBUG_COUNTERS
-		++length;
-#endif
+		FI_OPX_DEBUG_COUNTERS_INC(length);
 	}
 
-#ifdef OPX_DEBUG_COUNTERS
-	fi_opx_debug_counters_max_of(&opx_ep->debug_counters.mp_eager_recv_max_mq_queue_length, length);
-#endif
+	FI_OPX_DEBUG_COUNTERS_MAX_OF(opx_ep->debug_counters.mp_eager.recv_max_mq_queue_length, length);
+
 	if (!context) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"process_header_mp_eager_nth: did not find a match .. add this packet to the unexpected queue\n");
-#ifdef OPX_DEBUG_COUNTERS
-		++opx_ep->debug_counters.mp_eager_recv_nth_no_match;
-#endif
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_nth_no_match);
+
 		fi_opx_ep_rx_append_ue_egr(opx_ep->rx, hdr, payload, payload_bytes);
 
 		return;
 	}
 
-#ifdef OPX_DEBUG_COUNTERS
-	++opx_ep->debug_counters.mp_eager_recv_nth_match;
-#endif
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_nth_match);
+
 	/* We found a match!  */
 	const uint64_t is_context_ext = context->flags & FI_OPX_CQ_CONTEXT_EXT;
 	complete_receive_operation(ep,
@@ -1885,9 +1865,7 @@ void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep,
 			fi_opx_context_slist_insert_tail(context, opx_ep->rx->cq_completed_ptr);
 		}
 
-#ifdef OPX_DEBUG_COUNTERS
-		++opx_ep->debug_counters.mp_eager_recv_completed_eager_nth;
-#endif
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_completed_eager_nth);
 	}
 }
 
@@ -2221,9 +2199,8 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 				context->mp_egr_id = mp_egr_id;
 				fi_opx_context_slist_insert_tail(context, &opx_ep->rx->mp_egr_queue.mq);
 			} else {
-#ifdef OPX_DEBUG_COUNTERS
-				++opx_ep->debug_counters.mp_eager_recv_completed_process_context;
-#endif
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_completed_process_context);
+
 				context->buf = NULL;
 				context->next = NULL;
 				if (OFI_UNLIKELY(context->flags & FI_OPX_CQ_CONTEXT_EXT &&
@@ -2732,15 +2709,12 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 						caps, reliability, &first_packet_psn);
 
 	if (rc != FI_SUCCESS) {
-#ifdef OPX_DEBUG_COUNTERS
-		++opx_ep->debug_counters.mp_eager_send_fall_back_to_rzv;
-#endif
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_fall_back_to_rzv);
 		return rc;
 	}
 
-#ifdef OPX_DEBUG_COUNTERS
-	++opx_ep->debug_counters.mp_eager_send_first_packets;
-#endif
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_first_packets);
+
 	/* The first packet was successful. We're now committed to finishing this */
 	ssize_t payload_remaining = len - FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE;
 	uint32_t payload_offset = FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE;
@@ -2756,14 +2730,10 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 			if (rc == -FI_ENOBUFS) {
 				/* Insufficient credits. Try forcing a credit return and retry. */
 				fi_opx_force_credit_return(ep, addr.fi, addr.hfi1_rx, caps);
-#ifdef OPX_DEBUG_COUNTERS
-				++opx_ep->debug_counters.mp_eager_send_nth_force_cr;
-#endif
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_nth_force_cr);
 			} else {
 				fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
-#ifdef OPX_DEBUG_COUNTERS
-				++opx_ep->debug_counters.mp_eager_send_full_replay_buffer_rx_poll;
-#endif
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);
 			}
 
 			do {
@@ -2771,16 +2741,12 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 								first_packet_psn, bth_rx, lrh_dlid, addr,
 								lock_required, reliability);
 				if (rc == -FI_EAGAIN) {
-#ifdef OPX_DEBUG_COUNTERS
-					++opx_ep->debug_counters.mp_eager_send_full_replay_buffer_rx_poll;
-#endif
+					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);
 					fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 				}
 			} while (rc != FI_SUCCESS);
 		}
-#ifdef OPX_DEBUG_COUNTERS
-		++opx_ep->debug_counters.mp_eager_send_nth_packets;
-#endif
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_nth_packets);
 
 		payload_remaining -= FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE;
 		buf_bytes_ptr += FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE;
@@ -2798,14 +2764,10 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 			if (rc == -FI_ENOBUFS) {
 				/* Insufficient credits. Try forcing a credit return and retry. */
 				fi_opx_force_credit_return(ep, addr.fi, addr.hfi1_rx, caps);
-#ifdef OPX_DEBUG_COUNTERS
-				++opx_ep->debug_counters.mp_eager_send_nth_force_cr;
-#endif
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_nth_force_cr);
 			} else {
 				fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
-#ifdef OPX_DEBUG_COUNTERS
-				++opx_ep->debug_counters.mp_eager_send_full_replay_buffer_rx_poll;
-#endif
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);
 			}
 
 			do {
@@ -2813,16 +2775,12 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 								payload_remaining, first_packet_psn, bth_rx, lrh_dlid,
 								addr, lock_required, reliability);
 				if (rc == -FI_EAGAIN) {
-#ifdef OPX_DEBUG_COUNTERS
-					++opx_ep->debug_counters.mp_eager_send_full_replay_buffer_rx_poll;
-#endif
+					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_full_replay_buffer_rx_poll);
 					fi_opx_ep_rx_poll(ep, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 				}
 			} while (rc != FI_SUCCESS);
 		}
-#ifdef OPX_DEBUG_COUNTERS
-		++opx_ep->debug_counters.mp_eager_send_nth_packets;
-#endif
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.send_nth_packets);
 	}
 
 	if (OFI_LIKELY(do_cq_completion)) {

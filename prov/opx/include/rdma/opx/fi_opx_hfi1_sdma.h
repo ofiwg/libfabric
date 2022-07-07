@@ -413,6 +413,7 @@ void fi_opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 		psn = (psn + 1) & MAX_PSN;
 	}
 
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.writev_calls[we->num_packets]);
 	//rc will be the number of packets being processed concurrently by SDMA, or -1 if error
 	ssize_t rc = writev(opx_ep->hfi->fd, we->iovecs, we->num_iovs);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
