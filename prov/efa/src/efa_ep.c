@@ -228,14 +228,20 @@ err:
 
 static void efa_ep_destroy(struct efa_ep *ep)
 {
+	int err;
+
 	if (ep->self_ah)
 		ibv_destroy_ah(ep->self_ah);
 
 	efa_ep_destroy_qp(ep->qp);
 	fi_freeinfo(ep->info);
 	free(ep->src_addr);
-	if (ofi_endpoint_close(&ep->util_ep))
-		FI_WARN(&efa_prov, FI_LOG_EP_CTRL, "Unable to close util EP\n");
+	if (ep->util_ep_initialized) {
+		err = ofi_endpoint_close(&ep->util_ep);
+		if (err)
+			FI_WARN(&efa_prov, FI_LOG_EP_CTRL, "Unable to close util EP\n");
+	}
+
 	free(ep);
 }
 
@@ -662,6 +668,8 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 				context, efa_ep_progress);
 	if (ret)
 		goto err_ep_destroy;
+
+	ep->util_ep_initialized = true;
 
 	ret = ofi_bufpool_create(&ep->send_wr_pool,
 		sizeof(struct efa_send_wr) +

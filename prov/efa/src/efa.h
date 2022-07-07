@@ -221,6 +221,7 @@ struct efa_ep {
 	struct ofi_bufpool	*recv_wr_pool;
 	struct ibv_ah		*self_ah;
 	int			hmem_p2p_opt; /* what to do for hmem transfers */
+	bool			util_ep_initialized;
 };
 
 struct efa_send_wr {
