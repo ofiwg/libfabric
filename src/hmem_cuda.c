@@ -69,6 +69,7 @@ struct cuda_ops {
 
 static bool hmem_cuda_use_gdrcopy;
 static bool cuda_ipc_enabled;
+static int cuda_device_count;
 
 static cudaError_t cuda_disabled_cudaMemcpy(void *dst, const void *src,
 					    size_t size, enum cudaMemcpyKind kind);
@@ -139,6 +140,10 @@ static cudaError_t ofi_cudaGetDeviceCount(int *count)
 	return cuda_ops.cudaGetDeviceCount(count);
 }
 
+static bool ofi_cudaIsDeviceId(uint64_t device) {
+	return device < cuda_device_count;
+}
+
 cudaError_t ofi_cudaMalloc(void **ptr, size_t size)
 {
 	return cuda_ops.cudaMalloc(ptr, size);
@@ -151,7 +156,7 @@ cudaError_t ofi_cudaFree(void *ptr)
 
 int cuda_copy_to_dev(uint64_t device, void *dst, const void *src, size_t size)
 {
-	if (hmem_cuda_use_gdrcopy) {
+	if (hmem_cuda_use_gdrcopy && !ofi_cudaIsDeviceId(device)) {
 		cuda_gdrcopy_to_dev(device, dst, src, size);
 		return FI_SUCCESS;
 	}
@@ -172,7 +177,7 @@ int cuda_copy_to_dev(uint64_t device, void *dst, const void *src, size_t size)
 
 int cuda_copy_from_dev(uint64_t device, void *dst, const void *src, size_t size)
 {
-	if (hmem_cuda_use_gdrcopy) {
+	if (hmem_cuda_use_gdrcopy && !ofi_cudaIsDeviceId(device)) {
 		cuda_gdrcopy_from_dev(device, dst, src, size);
 		return FI_SUCCESS;
 	}
@@ -419,11 +424,10 @@ static void cuda_hmem_dl_cleanup(void)
 
 static int cuda_hmem_verify_devices(void)
 {
-	int device_count;
 	cudaError_t cuda_ret;
 
 	/* Verify CUDA compute-capable devices are present on the host. */
-	cuda_ret = ofi_cudaGetDeviceCount(&device_count);
+	cuda_ret = ofi_cudaGetDeviceCount(&cuda_device_count);
 	switch (cuda_ret) {
 	case cudaSuccess:
 		break;
@@ -439,7 +443,7 @@ static int cuda_hmem_verify_devices(void)
 		return -FI_EIO;
 	}
 
-	if (device_count == 0)
+	if (cuda_device_count == 0)
 		return -FI_ENOSYS;
 
 	return FI_SUCCESS;
@@ -492,10 +496,9 @@ int cuda_hmem_init(void)
 		cuda_ops.cudaMemcpy = cuda_disabled_cudaMemcpy;
 
 	/*
-	 * CUDA IPC is only enabled if gdrcopy is not in use and
-	 * cudaMemcpy can be used.
+	 * CUDA IPC is only enabled if cudaMemcpy can be used.
 	 */
-	cuda_ipc_enabled = !hmem_cuda_use_gdrcopy && cuda_enable_xfer;
+	cuda_ipc_enabled = cuda_enable_xfer;
 
 	return FI_SUCCESS;
 
