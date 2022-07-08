@@ -480,13 +480,20 @@ static void cxit_init(void)
 struct fi_info *cxit_allocinfo(void)
 {
 	struct fi_info *info;
+	char *odp_env;
 
 	info = fi_allocinfo();
 	cr_assert(info, "fi_allocinfo");
 
 	/* Always select CXI */
 	info->fabric_attr->prov_name = strdup(cxip_prov_name);
-	info->domain_attr->mr_mode = FI_MR_ENDPOINT;
+
+	info->domain_attr->mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED;
+
+	/* If remote ODP is enabled then test with ODP */
+	odp_env = getenv("CXIP_TEST_ODP");
+	if (odp_env && strtol(odp_env, NULL, 10))
+		info->domain_attr->mr_mode &= ~FI_MR_ALLOCATED;
 
 	return info;
 }
