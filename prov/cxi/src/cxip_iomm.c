@@ -246,7 +246,7 @@ int cxip_iomm_init(struct cxip_domain *dom)
 	if (cxip_env.ats && cxip_ats_check(dom))
 		dom->ats = true;
 
-	if (cxip_env.odp)
+	if (!(dom->util_domain.mr_mode & FI_MR_ALLOCATED))
 		dom->odp = true;
 
 	if (dom->util_domain.info_domain_caps & FI_HMEM)

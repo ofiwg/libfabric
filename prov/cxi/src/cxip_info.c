@@ -11,6 +11,7 @@
 
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_FABRIC, __VA_ARGS__)
+#define CXIP_INFO(...) _CXIP_INFO(FI_LOG_FABRIC, __VA_ARGS__)
 
 char cxip_prov_name[] = "cxi";
 
@@ -26,7 +27,7 @@ struct fi_domain_attr cxip_domain_attr = {
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_ENABLED,
 	.av_type = FI_AV_UNSPEC,
-	.mr_mode = FI_MR_ENDPOINT,
+	.mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED,
 	.mr_key_size = CXIP_MR_KEY_SIZE,
 	.cq_data_size = 8,
 	.cq_cnt = 32,
@@ -197,29 +198,39 @@ static int cxip_info_init(void)
 		 */
 		if (ofi_cxi_compat != 2) {
 			ret = cxip_info_alloc(nic_if, &fi);
-			if (ret != FI_SUCCESS) {
-				fi_freeinfo((void *)cxip_util_prov.info);
-				break;
-			}
+			if (ret != FI_SUCCESS)
+				goto free_info;
 
 			CXIP_DBG("%s info created\n",
 				 nic_if->info->device_name);
 			*fi_list = fi;
 			fi_list = &(fi->next);
+
+			if (cxip_env.odp) {
+				fi = fi_dupinfo(fi);
+				if (!fi) {
+					ret = -FI_ENOMEM;
+					goto free_info;
+				}
+				fi->domain_attr->mr_mode &= ~FI_MR_ALLOCATED;
+				CXIP_DBG("%s ODP info created\n",
+					 nic_if->info->device_name);
+				*fi_list = fi;
+				fi_list = &(fi->next);
+			}
 		}
 
-		/* TODO: This MUST be remove before pushing upstream. This is a
-		 * CXI provider helper to handle constant collision.
+		/* TODO: The compat infos MUST be removed before pushing
+		 * upstream. These are CXI provider helper fi_info to handle
+		 * client usage of old values for FI_ADDR_CXI and FI_PROTO_CXI.
 		 */
 		if (!ofi_cxi_compat)
 			continue;
 
 		/* Add a compat fi_info following the current one */
 		ret = cxip_info_alloc(nic_if, &fi);
-		if (ret != FI_SUCCESS) {
-			fi_freeinfo((void *)cxip_util_prov.info);
-			break;
-		}
+		if (ret != FI_SUCCESS)
+			goto free_info;
 
 		fi->addr_format = FI_ADDR_OPX;
 		fi->ep_attr->protocol = FI_PROTO_OPX;
@@ -228,8 +239,25 @@ static int cxip_info_init(void)
 
 		*fi_list = fi;
 		fi_list = &(fi->next);
+
+		if (cxip_env.odp) {
+			fi = fi_dupinfo(fi);
+			if (!fi) {
+				ret = -FI_ENOMEM;
+				goto free_info;
+			}
+			fi->domain_attr->mr_mode &= ~FI_MR_ALLOCATED;
+			CXIP_DBG("%s compat ODP info created\n",
+				 nic_if->info->device_name);
+			*fi_list = fi;
+			fi_list = &(fi->next);
+		}
 	}
 
+	return FI_SUCCESS;
+
+free_info:
+	fi_freeinfo((void *)cxip_util_prov.info);
 	return ret;
 }
 
@@ -809,6 +837,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	struct cxip_addr *addr;
 	struct cxip_if *iface;
 	bool copy_dest = NULL;
+	struct fi_info *temp_hints = NULL;
 
 	if (flags & FI_SOURCE) {
 		if (!node && !service) {
@@ -846,9 +875,34 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		CXIP_DBG("Service PID: %u\n", scan_pid);
 	}
 
+	/* Previously when remote access ODP was not enabled, the provider
+	 * did not indicate it required FI_MR_ALLOCATED. To correct this
+	 * while not breaking applications, when ODP is NOT enabled add
+	 * FI_MR_ALLOCATED to the hints. Note that if the client sets
+	 * FI_MR_UNSPEC in hints the correct provider required mode
+	 * bits will be returned that the applicaiton must support.
+	 *
+	 * TODO: When ODP is enabled by default, this should be removed
+	 * and applications should use hints to pick the desired mode.
+	 */
+	if (!cxip_env.odp && hints && hints->domain_attr &&
+	    hints->domain_attr->mr_mode  == FI_MR_ENDPOINT) {
+		temp_hints = fi_dupinfo(hints);
+		if (!temp_hints)
+			return -FI_ENOMEM;
+
+		temp_hints->domain_attr->mr_mode |= FI_MR_ALLOCATED;
+
+		CXIP_INFO("FI_MR_ALLOCATED added to hints MR mode\n");
+	}
+
 	/* Find all matching domains, ignoring addresses. */
-	ret = util_getinfo(&cxip_util_prov, version, NULL, NULL, 0, hints,
+	ret = util_getinfo(&cxip_util_prov, version, NULL, NULL, 0,
+			   temp_hints ? temp_hints : hints,
 			   info);
+	if (temp_hints)
+		fi_freeinfo(temp_hints);
+
 	if (ret)
 		return ret;
 
