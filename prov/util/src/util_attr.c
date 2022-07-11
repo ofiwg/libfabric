@@ -540,7 +540,8 @@ int ofi_check_mr_mode(const struct fi_provider *prov, uint32_t api_version,
 				goto out;
 		} else {
 			prov_mode = ofi_cap_mr_mode(user_info->caps, prov_mode);
-			if ((user_mode & prov_mode) != prov_mode)
+			if (user_mode != FI_MR_UNSPEC &&
+			    (user_mode & prov_mode) != prov_mode)
 				goto out;
 		}
 	}
