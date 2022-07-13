@@ -19,23 +19,22 @@ echo "$0: --> OS_VERSION: '${OS_VERSION}'"
 if [[ "${BRANCH_NAME}" == release/* ]]; then
     ARTI_LOCATION='rpm-stable-local'
     ARTI_BRANCH=${BRANCH_NAME}
-
-    case "${OBS_TARGET_OS}" in
-        cos_2_2*)       GPU_BRANCH='release/cos-2.2' ;;
-        csm_1_0_11*)    GPU_BRANCH='release/cos-2.2' ;;
-        cos_2_3*)       GPU_BRANCH='release/cos-2.3' ;;
-        csm_1_2_0*)     GPU_BRANCH='release/cos-2.3' ;;
-        *)              GPU_BRANCH=${BRANCH_NAME} ;;
-    esac
 else
     ARTI_LOCATION='rpm-master-local'
     ARTI_BRANCH=dev/master
-    GPU_BRANCH=dev/master
 fi
+
+case "${OBS_TARGET_OS}" in
+    cos_2_2*)       COS_BRANCH='release/cos-2.2' ;;
+    csm_1_0_11*)    COS_BRANCH='release/cos-2.2' ;;
+    cos_2_3*)       COS_BRANCH='release/cos-2.3' ;;
+    csm_1_2_0*)     COS_BRANCH='release/cos-2.3' ;;
+    *)              COS_BRANCH='dev/master' ;;
+esac
 
 echo "$0: --> ARTI_LOCATION: '${ARTI_LOCATION}'"
 echo "$0: --> ARTI_BRANCH: '${ARTI_BRANCH}'"
-echo "$0: --> GPU_BRANCH: '${GPU_BRANCH}'"
+echo "$0: --> COS_BRANCH: '${COS_BRANCH}'"
 
 ZE_ARTI_BRANCH=dev/master
 
@@ -91,34 +90,46 @@ elif command -v zypper > /dev/null; then
     with_cuda=1
     with_rocm=1
 
-    if [[ "${BRANCH_NAME}" == release/* ]]; then
-        case "${OBS_TARGET_OS}" in
-            cos_2_2*)       CUDA_RPMS="nvhpc-2021"
-                        ;;
-            csm_1_0_11*)    CUDA_RPMS="nvhpc-2021"
-                        ;;
-            sle15_sp2*)     CUDA_RPMS="nvhpc-2022"
-                        ;;
-            cos_2_3*)       CUDA_RPMS="nvhpc-2022"
-                        ;;
-            csm_1_2_0*)     CUDA_RPMS="nvhpc-2022"
-                        ;;
-            sle15_sp3*)     CUDA_RPMS="nvhpc-2022"
-                        ;;
-            csm_1_3_0*)     CUDA_RPMS="nvhpc-2022"
-                        ;;
-            sle15_sp4*)     CUDA_RPMS="nvhpc-2022"
-                        ;;
+    case "${OBS_TARGET_OS}" in
+        cos_2_2*)       CUDA_RPMS="nvhpc-2021"
+                    ;;
+        csm_1_0_11*)    CUDA_RPMS="nvhpc-2021"
+                    ;;
+        sle15_sp2*)     CUDA_RPMS="nvhpc-2021"
+                    ;;
+        cos_2_3*)       CUDA_RPMS="nvhpc-2022"
+                    ;;
+        csm_1_2_0*)     CUDA_RPMS="nvhpc-2022"
+                    ;;
+        sle15_sp3*)     CUDA_RPMS="nvhpc-2022"
+                    ;;
+        cos_2_4*)       CUDA_RPMS="nvhpc-2022"
+                    ;;
+        csm_1_3_0*)     CUDA_RPMS="nvhpc-2022"
+                    ;;
+        sle15_sp4*)     CUDA_RPMS="nvhpc-2022"
+                    ;;
+        *)              CUDA_RPMS="nvhpc-2022"
+                    ;;
+    esac
+
+
+    if [[ ${OBS_TARGET_OS} == cos* ]]; then
+        GDRCOPY_RPMS="gdrcopy-devel"
+
+        case ${COS_BRANCH} in
+            release/*)
+                COS_ARTI_LOCATION=cos-rpm-stable-local
+                ;;
+            *)
+                COS_ARTI_LOCATION=cos-rpm-master-local
+                ;;
         esac
-    else
-        case ${TARGET_OS} in
-            sle15_sp2*) CUDA_RPMS="nvhpc-2021"
-                        ;;
-            sle15_sp3*) CUDA_RPMS="nvhpc-2022"
-                        ;;
-            sle15_sp4*) CUDA_RPMS="nvhpc-2022"
-                        ;;
-        esac
+
+        zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
+            --priority 20 --name=cos \
+            ${ARTI_URL}/${COS_ARTI_LOCATION}/${COS_BRANCH}/${TARGET_OS} \
+            cos
     fi
 
     zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
@@ -128,12 +139,12 @@ elif command -v zypper > /dev/null; then
 
     zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
         --priority 20 --name=cuda \
-        ${ARTI_URL}/cos-internal-third-party-generic-local/nvidia_hpc_sdk/${TARGET_OS}/${TARGET_ARCH}/${GPU_BRANCH}/ \
+        ${ARTI_URL}/cos-internal-third-party-generic-local/nvidia_hpc_sdk/${TARGET_OS}/${TARGET_ARCH}/${COS_BRANCH}/ \
         cuda
 
     zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
         --priority 20 --name=rocm \
-        ${ARTI_URL}/cos-internal-third-party-generic-local/rocm/latest/${TARGET_OS}/${TARGET_ARCH}/${GPU_BRANCH}/ \
+        ${ARTI_URL}/cos-internal-third-party-generic-local/rocm/latest/${TARGET_OS}/${TARGET_ARCH}/${COS_BRANCH}/ \
         rocm
 
     if [[ $with_ze -eq 1 ]]; then
@@ -144,12 +155,7 @@ elif command -v zypper > /dev/null; then
     fi
 
     zypper refresh
-    zypper --non-interactive --no-gpg-checks install $RPMS
-    zypper --non-interactive --no-gpg-checks install $CUDA_RPMS
-    zypper --non-interactive --no-gpg-checks install $ROCR_RPMS
-    if [[ $with_ze -eq 1 ]]; then
-        zypper --non-interactive --no-gpg-checks install $ZE_RPMS
-    fi
+    zypper --non-interactive --no-gpg-checks install $RPMS $GDRCOPY_RPMS $CUDA_RPMS $ROCR_RPMS $ZE_RPMS
 else
     "Unsupported package manager or package manager not found -- installing nothing"
 fi

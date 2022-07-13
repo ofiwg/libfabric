@@ -14,9 +14,15 @@ trap cleanup EXIT
 if [[ "${TARGET_OS}" == sle*  || "${TARGET_OS}" == rhel_8_6* ]]; then
     ROCM_CONFIG="-c --with-rocr=/opt/rocm -c --enable-rocr-dlopen"
     CUDA_CONFIG="-c --with-cuda=/usr/local/cuda -c --enable-cuda-dlopen"
+    if [[ "${OBS_TARGET_OS}" == cos* ]]; then
+        GDRCOPY_CONFIG="-c --enable-gdrcopy-dlopen"
+    else
+        GDRCOPY_CONFIG=""
+    fi
 else
     ROCM_CONFIG=""
     CUDA_CONFIG=""
+    GDRCOPY_CONFIG=""
 fi
 
 if [[ ${TARGET_OS} == "sle15_sp3_ncn" && ! ${BRANCH_NAME} == release/* ]]; then
@@ -103,6 +109,7 @@ cleanup
     -M /opt/cray/modulefiles \
     -V ${NEW_VERSION} \
     ${CUDA_CONFIG} \
+    ${GDRCOPY_CONFIG} \
     ${ROCM_CONFIG} \
     ${ZE_CONFIG} \
     -D \
