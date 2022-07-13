@@ -80,9 +80,9 @@ int ft_neuron_init(void)
 	if (neuron_handle)
 		return FI_SUCCESS;
 
-	neuron_handle = dlopen("libnrt.so", RTLD_NOW);
+	neuron_handle = dlopen("libnrt.so.1", RTLD_NOW);
 	if (!neuron_handle) {
-		FT_ERR("Failed to dlopen libnrt.so\n");
+		FT_ERR("Failed to dlopen libnrt.so.1\n");
 		return -FI_ENOSYS;
 	}
 
