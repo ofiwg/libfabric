@@ -433,7 +433,7 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 	if (err) {
 		EFA_WARN(FI_LOG_MR,
 			"Unable to remove MR entry from util map (%s)\n",
-			fi_strerror(-ret));
+			fi_strerror(-err));
 		ret = err;
 	}
 	if (efa_mr->shm_mr) {
