@@ -613,7 +613,7 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
  *         If user wants to manager RNR by itself (FI_RM_DISABLED),
  *         an error CQ entry will be written.
  *
- *         Otherwise, the packet will be queued and resnt by progress engine.
+ *         Otherwise, the packet will be queued and resent by progress engine.
  *
  *    For other type of error, an error CQ entry is written.
  *
@@ -625,12 +625,12 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
  *
  *      For other types of error, an error CQ entry is written.
  *
- * If the packet is not associated with an user operation (such packet include
+ * If the packet is not associated with a user operation (such packet include
  * HANDSHAKE):
  *
  *      If the error is RNR, the packet is queued and resent by progress engine.
  *
- *      For othre types of error, an error EQ entry is written.
+ *      For other types of error, an error EQ entry is written.
  *
  * @param[in]	ep		endpoint
  * @param[in]	pkt_entry	pkt entry
@@ -646,9 +646,10 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL ||
 	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
 
-	FI_WARN(&rxr_prov, FI_LOG_CQ,
+	FI_DBG(&rxr_prov, FI_LOG_CQ,
 			"Packet send error: %s (%d)\n",
 			efa_strerror(prov_errno), prov_errno);
+
 	rxr_ep_record_tx_op_completed(ep, pkt_entry);
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
@@ -890,9 +891,10 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
  */
 void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
 {
-	FI_WARN(&rxr_prov, FI_LOG_CQ,
+	FI_DBG(&rxr_prov, FI_LOG_CQ,
 			"Packet receive error: %s (%d)\n",
 			efa_strerror(prov_errno), prov_errno);
+
 	if (!pkt_entry->x_entry) {
 		efa_eq_write_error(&ep->util_ep, err, prov_errno);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
