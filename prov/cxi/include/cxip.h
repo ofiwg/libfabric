@@ -1833,6 +1833,7 @@ enum cxip_mr_state {
 	CXIP_MR_ENABLED,
 	CXIP_MR_LINKED,
 	CXIP_MR_UNLINKED,
+	CXIP_MR_LINK_ERR,
 };
 
 /*

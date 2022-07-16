@@ -110,16 +110,20 @@ int cxip_mr_cb(struct cxip_ctrl_req *req, const union c_event *event)
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
-		assert(cxi_event_rc(event) == C_RC_OK);
-
 		if (mr->optimized)
 			assert(mr->mr_state == CXIP_MR_ENABLED);
 		else
 			assert(mr->mr_state == CXIP_MR_DISABLED);
 
-		mr->mr_state = CXIP_MR_LINKED;
+		if (cxi_event_rc(event) == C_RC_OK) {
+			mr->mr_state = CXIP_MR_LINKED;
+			CXIP_DBG("MR PTE linked: %p\n", mr);
+			break;
+		}
 
-		CXIP_DBG("MR PTE linked: %p\n", mr);
+		mr->mr_state = CXIP_MR_LINK_ERR;
+		CXIP_WARN("MR PTE link: %p failed %d\n",
+			  mr, cxi_event_rc(event));
 		break;
 	case C_EVENT_UNLINK:
 		assert(cxi_event_rc(event) == C_RC_OK);
@@ -133,6 +137,23 @@ int cxip_mr_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		CXIP_WARN("Unexpected event received: %s\n",
 			  cxi_event_to_str(event));
 	}
+
+	return FI_SUCCESS;
+}
+
+static int cxip_mr_wait_append(struct cxip_mr *mr)
+{
+	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
+
+	/* Wait for PTE LE append status update */
+	do {
+		sched_yield();
+		cxip_ep_ctrl_progress(ep_obj);
+	} while (mr->mr_state != CXIP_MR_LINKED &&
+		 mr->mr_state != CXIP_MR_LINK_ERR);
+
+	if (mr->mr_state == CXIP_MR_LINK_ERR)
+		return -FI_ENOSPC;
 
 	return FI_SUCCESS;
 }
@@ -188,11 +209,9 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 		goto err_free_idx;
 	}
 
-	/* Wait for Rendezvous PTE state changes */
-	do {
-		sched_yield();
-		cxip_ep_ctrl_progress(ep_obj);
-	} while (mr->mr_state != CXIP_MR_LINKED);
+	ret = cxip_mr_wait_append(mr);
+	if (ret)
+		goto err_free_idx;
 
 	mr->enabled = true;
 
@@ -355,11 +374,9 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		goto err_pte_free;
 	}
 
-	/* Wait for Rendezvous PTE state changes */
-	do {
-		sched_yield();
-		cxip_ep_ctrl_progress(ep_obj);
-	} while (mr->mr_state != CXIP_MR_LINKED);
+	ret = cxip_mr_wait_append(mr);
+	if (ret)
+		goto err_pte_free;
 
 	mr->enabled = true;
 
