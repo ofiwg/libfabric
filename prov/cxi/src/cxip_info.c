@@ -293,6 +293,8 @@ struct cxip_environment cxip_env = {
 	.rdzv_get_min = 2049, /* Avoid single packet Gets */
 	.rdzv_eager_size = CXIP_RDZV_THRESHOLD,
 	.rdzv_aligned_sw_rget = 1,
+	.disable_non_inject_msg_idc = 0,
+	.disable_host_register = 0,
 	.oflow_buf_size = CXIP_OFLOW_BUF_SIZE,
 	.oflow_buf_min_posted = CXIP_OFLOW_BUF_MIN_POSTED,
 	.oflow_buf_max_cached = CXIP_OFLOW_BUF_MAX_CACHED,
@@ -357,6 +359,18 @@ static void cxip_env_init(void)
 			cxip_env.rdzv_aligned_sw_rget);
 	fi_param_get_bool(&cxip_prov, "rdzv_aligned_sw_rget",
 			  &cxip_env.rdzv_aligned_sw_rget);
+
+	fi_param_define(&cxip_prov, "disable_non_inject_msg_idc", FI_PARAM_BOOL,
+			"Disables IDC for non-inject messages (default: %d).",
+			cxip_env.disable_non_inject_msg_idc);
+	fi_param_get_bool(&cxip_prov, "disable_non_inject_msg_idc",
+			  &cxip_env.disable_non_inject_msg_idc);
+
+	fi_param_define(&cxip_prov, "disable_host_register", FI_PARAM_BOOL,
+			"Disables host buffer GPU registration (default: %d).",
+			cxip_env.disable_host_register);
+	fi_param_get_bool(&cxip_prov, "disable_host_register",
+			  &cxip_env.disable_host_register);
 
 	fi_param_define(&cxip_prov, "enable_unrestricted_end_ro", FI_PARAM_BOOL,
 			"Default: %d", cxip_env.enable_unrestricted_end_ro);

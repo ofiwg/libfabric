@@ -4220,10 +4220,14 @@ err_unmap:
 
 static ssize_t _cxip_send_req(struct cxip_req *req)
 {
-	/* Prefer IDC if possible, all injects take the IDC path
-	 * since triggered operations do not support FI_INJECT.
+	/* All FI_INJECT messages will be done via IDC; triggered operations
+	 * do not support FI_INJECT. IDC will be preferred for other small
+	 * non-triggered messages unless non-inject preference for IDC is
+	 * disabled.
 	 */
-	if (req->send.len <= CXIP_INJECT_SIZE && !req->triggered)
+	if ((req->send.flags & FI_INJECT ||
+	     (req->send.len <= CXIP_INJECT_SIZE &&
+	      !cxip_env.disable_non_inject_msg_idc)) && !req->triggered)
 		return _cxip_send_eager_idc(req);
 
 	if (req->send.len <= req->send.txc->max_eager_size)

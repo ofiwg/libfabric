@@ -525,6 +525,18 @@ The CXI provider checks for the following environment variables:
 *FI_CXI_RDZV_EAGER_SIZE*
 :   Eager data size for rendezvous protocol.
 
+*FI_CXI_DISABLE_NON_INJECT_MSG_IDC*
+:   Experimental option to disable favoring IDC for transmit of small messages
+    when FI_INJECT is not specified. This can be useful with GPU source buffers
+    to avoid the host copy in cases a performant copy can not be used. The default
+    is to use IDC for all messages less than IDC size.
+
+*FI_CXI_DISABLE_HOST_REGISTER*
+:   Disable registration of host buffers (overflow and request) with GPU. There
+    are scenarios where using a large number of processes per GPU results in page
+    locking excessive amounts of memory degrading performance and/or restricting
+    process counts. The default is to register buffers with the GPU.
+
 *FI_CXI_OFLOW_BUF_SIZE*
 :   Size of overflow buffers. Increasing the overflow buffer size allows for
     more unexpected message eager data to be held in single overflow buffer.

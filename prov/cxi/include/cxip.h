@@ -234,6 +234,8 @@ struct cxip_environment {
 	size_t rdzv_get_min;
 	size_t rdzv_eager_size;
 	int rdzv_aligned_sw_rget;
+	int disable_non_inject_msg_idc;
+	int disable_host_register;
 	size_t oflow_buf_size;
 	size_t oflow_buf_min_posted;
 	size_t oflow_buf_max_cached;

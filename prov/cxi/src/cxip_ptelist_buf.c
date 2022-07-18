@@ -146,7 +146,7 @@ cxip_ptelist_buf_alloc(struct cxip_ptelist_bufpool *pool)
 	if (!buf)
 		goto err;
 
-	if (rxc->hmem) {
+	if (rxc->hmem && !cxip_env.disable_host_register) {
 		ret = ofi_hmem_host_register(buf, buf_size);
 		if (ret)
 			goto err_free_buf;
@@ -187,7 +187,7 @@ cxip_ptelist_buf_alloc(struct cxip_ptelist_bufpool *pool)
 err_unmap_buf:
 	cxip_unmap(buf->md);
 err_unreg_buf:
-	if (rxc->hmem)
+	if (rxc->hmem && !cxip_env.disable_host_register)
 		ofi_hmem_host_unregister(buf);
 err_free_buf:
 	free(buf);
@@ -221,7 +221,7 @@ static void cxip_ptelist_buf_free(struct cxip_ptelist_buf *buf)
 			  ofi_atomic_get32(&buf->refcount));
 	cxip_cq_req_free(buf->req);
 	cxip_unmap(buf->md);
-	if (rxc->hmem)
+	if (rxc->hmem && !cxip_env.disable_host_register)
 		ofi_hmem_host_unregister(buf);
 
 	ofi_atomic_dec32(&buf->pool->bufs_allocated);
