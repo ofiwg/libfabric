@@ -66,7 +66,8 @@ bin_PROGRAMS = \
 	multinode/fi_multinode	\
 	multinode/fi_multinode_coll \
 	component/sock_test \
-	regression/sighandler_test
+	regression/sighandler_test \
+	common/check_hmem
 
 dist_bin_SCRIPTS = \
 	scripts/runfabtests.sh \
@@ -452,6 +453,14 @@ regression_sighandler_test_SOURCES = \
 regression_sighandler_test_LDADD = libfabtests.la
 
 regression_sighandler_test_CFLAGS = \
+	$(AM_CFLAGS)
+
+common_check_hmem_SOURCES = \
+	common/check_hmem.c
+
+common_check_hmem_LDADD = libfabtests.la
+
+common_checK_hmem_CFLAGS = \
 	$(AM_CFLAGS)
 
 real_man_pages = \

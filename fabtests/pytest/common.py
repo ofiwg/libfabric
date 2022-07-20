@@ -6,6 +6,12 @@ def has_cuda(ip):
     proc = run(["ssh", ip, "nvidia-smi", "-L"])
     return proc.returncode == 0
 
+def has_hmem_support(cmdline_args, host_type, ip):
+    from subprocess import run
+    cmd = cmdline_args.populate_command("check_hmem " + cmdline_args.provider, host_type, 10)
+    proc = run(["ssh", ip, cmd])
+    return proc.returncode == 0
+
 PASS = 1
 SKIP = 2
 FAIL = 3
@@ -201,12 +207,18 @@ class ClientServerTest:
             if not has_cuda(self._cmdline_args.server_id):
                 pytest.skip("no cuda device")
                 return
+            if not has_hmem_support(self._cmdline_args, "server", self._cmdline_args.server_id):
+                pytest.skip("no hmem support")
+                return
 
             return command + " -D cuda"
 
         if command_type == "client" and client_memory_type == "cuda":
             if not has_cuda(self._cmdline_args.client_id):
                 pytest.skip("no cuda device")
+                return
+            if not has_hmem_support(self._cmdline_args, "client", self._cmdline_args.client_id):
+                pytest.skip("no hmem support")
                 return
 
             return command + " -D cuda"
