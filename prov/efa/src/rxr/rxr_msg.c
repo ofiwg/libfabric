@@ -230,7 +230,16 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int u
 	assert(rtm_type >= RXR_REQ_PKT_BEGIN);
 
 	if (peer->is_local && ep->use_shm_for_tx) {
-		/* we know shm's capablity, so no need to check handshake */
+		/*
+		 * We know shm's capablity, so no need to check handshake.
+		 * AWS Neuron is currently not supported by the SHM provider.
+		 */
+
+		if (efa_mr_is_neuron(tx_entry->desc[0])) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			"AWS Neuron is currently not supported by the SHM provider\n");
+			return -FI_EINVAL;
+		}
 		return rxr_pkt_post_req(ep, tx_entry, rtm_type, 0, 0);
 	}
 
