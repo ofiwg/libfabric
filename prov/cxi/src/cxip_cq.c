@@ -752,7 +752,6 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq, struct cxip_ep_obj *ep_obj)
 
 	bp_attrs.size = sizeof(struct cxip_req);
 	bp_attrs.alignment = 8;
-	bp_attrs.max_cnt = UINT16_MAX;
 	bp_attrs.chunk_cnt = 64;
 	bp_attrs.flags = OFI_BUFPOOL_NO_TRACK;
 	ret = ofi_bufpool_create_attr(&bp_attrs, &cxi_cq->req_pool);
