@@ -38,6 +38,7 @@
 #include <dlfcn.h>
 #include <stdio.h>
 #include <cuda_runtime.h>
+#include <cuda.h>
 
 struct cuda_ops {
 	cudaError_t (*cudaMemcpy)(void *dst, const void *src, size_t count,
@@ -49,14 +50,54 @@ struct cuda_ops {
 	cudaError_t (*cudaMemset)(void *ptr, int value, size_t count);
 	const char *(*cudaGetErrorName)(cudaError_t error);
 	const char *(*cudaGetErrorString)(cudaError_t error);
+	CUresult (*cuPointerSetAttribute)(void *data,
+					  CUpointer_attribute attribute,
+					  CUdeviceptr ptr);
+	CUresult (*cuGetErrorName)(CUresult error, const char** pStr);
+	CUresult (*cuGetErrorString)(CUresult error, const char** pStr);
 };
 
 static struct cuda_ops cuda_ops;
 static void *cudart_handle;
+static void *cuda_handle;
+
+/**
+ * Since function names can get redefined in cuda.h/cuda_runtime.h files,
+ * we need to do this stringifying to get the latest function name from
+ * the header files.  For example, cuda.h may have something like this:
+ * #define cuMemFree cuMemFree_v2
+ * We want to make sure we find cuMemFree_v2, not cuMemFree.
+ */
+#define STRINGIFY2(x) #x
+#define STRINGIFY(x)  STRINGIFY2(x)
 
 #define CUDA_ERR(err, fmt, ...) \
 	FT_ERR(fmt ": %s %s", ##__VA_ARGS__, cuda_ops.cudaGetErrorName(err), \
 	       cuda_ops.cudaGetErrorString(err))
+
+static void ft_cuda_driver_api_print_error(CUresult cu_result, char *cuda_api_name)
+{
+	const char *cu_error_name;
+	const char *cu_error_str;
+	cuda_ops.cuGetErrorName(cu_result, &cu_error_name);
+	cuda_ops.cuGetErrorString(cu_result, &cu_error_str);
+	FT_ERR("%s failed: %s:%s\n",
+		   cuda_api_name, cu_error_name, cu_error_str);
+}
+
+static int ft_cuda_pointer_set_attribute(void *buf)
+{
+	int true_flag = 1;
+	CUresult cu_result;
+	cu_result = cuda_ops.cuPointerSetAttribute((void *) &true_flag,
+						  CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
+						  (CUdeviceptr) buf);
+	if (cu_result != CUDA_SUCCESS) {
+	    ft_cuda_driver_api_print_error(cu_result, "cuPointerSetAttribute");
+		return -FI_EIO;
+	}
+	return FI_SUCCESS;
+}
 
 int ft_cuda_init(void)
 {
@@ -66,58 +107,87 @@ int ft_cuda_init(void)
 		goto err;
 	}
 
-	cuda_ops.cudaMemcpy = dlsym(cudart_handle, "cudaMemcpy");
+	cuda_handle = dlopen("libcuda.so", RTLD_NOW);
+	if (!cuda_handle) {
+		FT_ERR("Failed to dlopen libcuda.so\n");
+		goto err_dlclose_cudart;
+	}
+
+	cuda_ops.cudaMemcpy = dlsym(cudart_handle, STRINGIFY(cudaMemcpy));
 	if (!cuda_ops.cudaMemcpy) {
 		FT_ERR("Failed to find cudaMemcpy");
 		goto err_dlclose_cuda;
 	}
 
-	cuda_ops.cudaMalloc = dlsym(cudart_handle, "cudaMalloc");
+	cuda_ops.cudaMalloc = dlsym(cudart_handle, STRINGIFY(cudaMalloc));
 	if (!cuda_ops.cudaMalloc) {
 		FT_ERR("Failed to find cudaMalloc");
 		goto err_dlclose_cuda;
 	}
 
-	cuda_ops.cudaMallocHost = dlsym(cudart_handle, "cudaMallocHost");
+	cuda_ops.cudaMallocHost = dlsym(cudart_handle, STRINGIFY(cudaMallocHost));
 	if (!cuda_ops.cudaMallocHost) {
 		FT_ERR("Failed to find cudaMallocHost");
 		goto err_dlclose_cuda;
 	}
 
-	cuda_ops.cudaFree = dlsym(cudart_handle, "cudaFree");
+	cuda_ops.cudaFree = dlsym(cudart_handle, STRINGIFY(cudaFree));
 	if (!cuda_ops.cudaFree) {
 		FT_ERR("Failed to find cudaFree");
 		goto err_dlclose_cuda;
 	}
 
-	cuda_ops.cudaFreeHost = dlsym(cudart_handle, "cudaFreeHost");
+	cuda_ops.cudaFreeHost = dlsym(cudart_handle, STRINGIFY(cudaFreeHost));
 	if (!cuda_ops.cudaFree) {
 		FT_ERR("Failed to find cudaFreeHost");
 		goto err_dlclose_cuda;
 	}
 
-	cuda_ops.cudaMemset = dlsym(cudart_handle, "cudaMemset");
+	cuda_ops.cudaMemset = dlsym(cudart_handle, STRINGIFY(cudaMemset));
 	if (!cuda_ops.cudaMemset) {
 		FT_ERR("Failed to find cudaMemset");
 		goto err_dlclose_cuda;
 	}
 
-	cuda_ops.cudaGetErrorName = dlsym(cudart_handle, "cudaGetErrorName");
+	cuda_ops.cudaGetErrorName = dlsym(cudart_handle, STRINGIFY(cudaGetErrorName));
 	if (!cuda_ops.cudaGetErrorName) {
 		FT_ERR("Failed to find cudaGetErrorName");
 		goto err_dlclose_cuda;
 	}
 
 	cuda_ops.cudaGetErrorString = dlsym(cudart_handle,
-					    "cudaGetErrorString");
+					    STRINGIFY(cudaGetErrorString));
 	if (!cuda_ops.cudaGetErrorString) {
 		FT_ERR("Failed to find cudaGetErrorString");
+		goto err_dlclose_cuda;
+	}
+
+	cuda_ops.cuPointerSetAttribute = dlsym(cuda_handle,
+					       STRINGIFY(cuPointerSetAttribute));
+	if (!cuda_ops.cuPointerSetAttribute) {
+		FT_ERR("Failed to find cuPointerSetAttribute\n");
+		goto err_dlclose_cuda;
+	}
+
+	cuda_ops.cuGetErrorName = dlsym(cuda_handle,
+					       STRINGIFY(cuGetErrorName));
+	if (!cuda_ops.cuGetErrorName) {
+		FT_ERR("Failed to find cuGetErrorName\n");
+		goto err_dlclose_cuda;
+	}
+
+	cuda_ops.cuGetErrorString = dlsym(cuda_handle,
+					       STRINGIFY(cuGetErrorString));
+	if (!cuda_ops.cuGetErrorString) {
+		FT_ERR("Failed to find cuGetErrorString\n");
 		goto err_dlclose_cuda;
 	}
 
 	return FI_SUCCESS;
 
 err_dlclose_cuda:
+	dlclose(cuda_handle);
+err_dlclose_cudart:
 	dlclose(cudart_handle);
 err:
 	return -FI_ENODATA;
@@ -132,14 +202,24 @@ int ft_cuda_cleanup(void)
 int ft_cuda_alloc(uint64_t device, void **buf, size_t size)
 {
 	cudaError_t cuda_ret;
+	int ret;
 
 	cuda_ret = cuda_ops.cudaMalloc(buf, size);
-	if (cuda_ret == cudaSuccess)
-		return FI_SUCCESS;
 
-	CUDA_ERR(cuda_ret, "cudaMalloc failed");
+	if (cuda_ret != cudaSuccess) {
+	        CUDA_ERR(cuda_ret, "cudaMalloc failed");
+		return -FI_ENOMEM;
+	}
 
-	return -FI_ENOMEM;
+	ret = ft_cuda_pointer_set_attribute(*buf);
+
+	if (ret != FI_SUCCESS) {
+		ft_cuda_free(*buf);
+		*buf = NULL;
+		return -FI_EIO;
+	}
+
+	return FI_SUCCESS;
 }
 
 int ft_cuda_alloc_host(void **buf, size_t size)
