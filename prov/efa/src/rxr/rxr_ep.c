@@ -2414,26 +2414,6 @@ bool rxr_ep_use_shm_for_tx(struct fi_info *info)
 	    && !(info->caps & FI_LOCAL_COMM))
 		return 0;
 
-	/*
-	 * Currently, shm provider uses the SAR protocol for cuda
-	 * memory buffer, whose performance is worse than using EFA device.
-	 *
-	 * To address this issue, shm usage is disabled if application
-	 * requested the FI_HMEM capablity.
-	 *
-	 * This is not ideal, because host memory commuications are
-	 * also going through device.
-	 *
-	 * The long term fix is make shm provider to support cuda
-	 * buffers through cuda IPC. Once that is implemented, the
-	 * following two lines need to be removed.
-	 *
-	 * In addition, AWS Neuron is currently not supported by the SHM
-	 * provider.
-	 */
-	if (info && (info->caps & FI_HMEM))
-		return 0;
-
 	return rxr_env.enable_shm_transfer;
 }
 
