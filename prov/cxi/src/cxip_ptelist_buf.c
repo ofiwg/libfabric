@@ -158,10 +158,8 @@ cxip_ptelist_buf_alloc(struct cxip_ptelist_bufpool *pool)
 		goto err_unreg_buf;
 
 	buf->req = cxip_cq_req_alloc(rxc->recv_cq, true, buf);
-	if (!buf->req) {
-		ret = -FI_ENOMEM;
+	if (!buf->req)
 		goto err_unmap_buf;
-	}
 
 	buf->pool = pool;
 	buf->req->cb = pool->attr.ptelist_cb;

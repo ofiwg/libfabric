@@ -99,7 +99,7 @@ int cxip_rdzv_pte_src_req_alloc(struct cxip_rdzv_pte *pte, int lac)
 
 	req = cxip_cq_req_alloc(pte->txc->send_cq, 1, pte);
 	if (!req) {
-		ret = -FI_ENOMEM;
+		ret = -FI_EAGAIN;
 		CXIP_WARN("Failed to allocate %d rendezvous source request: %d:%s\n",
 			  lac, ret, fi_strerror(-ret));
 		goto err_unlock;
