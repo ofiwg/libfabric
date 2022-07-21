@@ -35,16 +35,26 @@
 #include <getopt.h>
 #include <shared.h>
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
 	int ret;
+	int op;
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
-	if (argc == 2) {
-		hints->fabric_attr->prov_name=strdup(argv[1]);
-	} else if (argc > 2) {
-		return EXIT_FAILURE;
+	hints->mode = ~0;
+	hints->domain_attr->mode = ~0;
+	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
+	while ((op = getopt(argc, argv, "p:h")) != -1) {
+		switch (op) {
+		case 'p':
+			hints->fabric_attr->prov_name = strdup(optarg);
+			break;
+		case '?':
+		case 'h':
+			FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg shm, efa");
+			return EXIT_FAILURE;
+		}
 	}
 
 	ret = ft_init();
