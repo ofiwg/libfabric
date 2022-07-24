@@ -467,6 +467,7 @@ struct rxr_ep {
 
 	struct rxr_queued_copy queued_copy_vec[RXR_EP_MAX_QUEUED_COPY];
 	int queued_copy_num;
+	int gdrcopy_rx_entry_num; /* number of RX entries that are using gdrcopy */
 };
 
 int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep);

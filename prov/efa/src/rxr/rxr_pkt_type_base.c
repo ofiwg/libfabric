@@ -338,6 +338,109 @@ int rxr_pkt_queued_copy_data_to_hmem(struct rxr_ep *ep,
 	return rxr_ep_flush_queued_blocking_copy_to_hmem(ep);
 }
 
+/* @brief copy data in pkt_entry to CUDA memory
+ *
+ * CUDA is different from other types of device memory in two ways:
+ *
+ * First, we might not be able to use ofi_copy_iov_hmem_iov(). This is because
+ * that function may call cudaMemcpy(), when gdrcopy is not available, and
+ * Nvidia Collective Communications Library (NCCL) forbids its plugins (hence
+ * libfabric) to call cudaMemcpy. (Doing so can result in a deadlock). so
+ * ofi_copy_iov_hmem_iov() can only be used when gdrcopy is available.
+ *
+ * Second, there is another method to copy data: local RDMA read based copy.
+ * This method is slower than gdrcopy in some cases, but it does not consume
+ * CPU resources so we want to use it when possible.
+ *
+ * This function picks the proper method to perform the copy to CUDA memory.
+ * The decision is made based on multiple factors:
+ *
+ * 1) whether gdrcopy is available.
+ * 2) whether data in the packet is the last piece
+ * 3) number of inflight RX entry that is using gdrcopy.
+ *
+ * @param[in]		ep		endpoint
+ * @param[in]		pkt_entry	the packet entry that contains data, which
+ *                                      x_entry pointing to the correct rx_entry.
+ * @param[in]		data		the pointer pointing to the beginning of data
+ * @param[in]		data_size	the length of data
+ * @param[in]		data_offset	the offset of the data in the packet in respect
+ *					of the receiving buffer.
+ * @return		On success, return 0
+ * 			On failure, return libfabric error code
+ */
+static inline
+int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
+			      struct rxr_pkt_entry *pkt_entry,
+			      char *data,
+			      size_t data_size,
+			      size_t data_offset)
+{
+	static const int max_gdrcopy_rx_entry_num = 4;
+	struct rxr_rx_entry *rx_entry;
+	struct efa_mr *desc;
+	struct efa_ep *efa_ep;
+	int use_p2p, err;
+
+	rx_entry = pkt_entry->x_entry;
+	desc = rx_entry->desc[0];
+	assert(efa_mr_is_cuda(desc));
+
+	if (cuda_is_gdrcopy_enabled() && rx_entry->cuda_copy_method != RXR_CUDA_COPY_LOCALREAD) {
+		assert(rx_entry->bytes_copied + data_size <= rx_entry->total_len);
+
+		/* If this packet is the last uncopied piece (or the only piece), copy it right away
+		 * to achieve best latency.
+		 */
+		if (rx_entry->bytes_copied + data_size == rx_entry->total_len) {
+			ofi_copy_to_hmem_iov(desc->peer.iface, desc->peer.device.reserved,
+					     rx_entry->iov, rx_entry->iov_count,
+					     data_offset + ep->msg_prefix_size,
+					     data, data_size);
+			rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
+			return 0;
+		}
+
+		/* If this rx_entry is already been chosen to use gdrcopy, keep using gdrcopy on it */
+		if (rx_entry->cuda_copy_method == RXR_CUDA_COPY_GDRCOPY)
+			return rxr_pkt_queued_copy_data_to_hmem(ep, pkt_entry, data, data_size, data_offset);
+
+		/* If there are still empty slot for using gdrcopy, use gdrcopy on this rx_entry */
+		if (rx_entry->cuda_copy_method == RXR_CUDA_COPY_UNSPEC && ep->gdrcopy_rx_entry_num < max_gdrcopy_rx_entry_num) {
+			rx_entry->cuda_copy_method = RXR_CUDA_COPY_GDRCOPY;
+			ep->gdrcopy_rx_entry_num += 1;
+			return rxr_pkt_queued_copy_data_to_hmem(ep, pkt_entry, data, data_size, data_offset);
+		}
+	}
+
+	if (rx_entry->cuda_copy_method == RXR_CUDA_COPY_UNSPEC)
+		rx_entry->cuda_copy_method = RXR_CUDA_COPY_LOCALREAD;
+
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	use_p2p = efa_ep_use_p2p(efa_ep, desc);
+	if (use_p2p < 0)
+		return use_p2p;
+
+	if (use_p2p == 0) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "Neither p2p nor gdrcopy is available,"
+			"thus libfabric is not able to copy received data to Nvidia GPU");
+		return -FI_EINVAL;
+	}
+
+	err = rxr_read_post_local_read_or_queue(ep, rx_entry, data_offset,
+						pkt_entry, data, data_size);
+	if (err)
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "cannot post read to copy data\n");
+
+	/* At this point data has NOT been copied yet, thus we cannot call
+	 * rxr_pkt_handle_data_copied(). The function will be called
+	 * when the completion of the local read request is received
+	 * (by progress engine).
+	 */
+	return err;
+}
+
+
 /**
  * @brief copy data to application's receive buffer and update counter in rx_entry.
  *
@@ -376,10 +479,8 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 				      struct rxr_pkt_entry *pkt_entry,
 				      char *data, size_t data_size)
 {
-	struct efa_ep *efa_ep;
 	struct efa_mr *desc;
 	ssize_t bytes_copied;
-	int use_p2p, err;
 
 	pkt_entry->x_entry = rx_entry;
 
@@ -409,43 +510,8 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 
 	desc = rx_entry->desc[0];
 
-	/* local read is used to copy data from receiving bounce buffer (on host memory)
-	 * to device memory.
-	 *
-	 * It is an expensive operation thus should be used when CUDA memory is used
-	 * and gdrcopy is not available.
-	 * 
-	 * CUDA memory is special because Nvidia Collective Communications Library (NCCL) forbids
-	 * its plugins (hence libfabric) to call cudaMemcpy. Doing so will result in a deadlock.
-	 *
-	 * Therefore, if gdrcopy is not available, we will have to use local read to do the
-	 * copy.
-	 * Other types of device memory (neuron) does not have this limitation.
-	 */
-	if (efa_mr_is_cuda(desc) && !cuda_is_gdrcopy_enabled()) {
-		efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-		use_p2p = efa_ep_use_p2p(efa_ep, desc);
-		if (use_p2p < 0)
-			return use_p2p;
-
-		if (use_p2p == 0) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "Neither p2p nor gdrcopy is available,"
-				"thus libfabric is not able to copy received data to Nvidia GPU");
-			return -FI_EINVAL;
-		}
-
-		err = rxr_read_post_local_read_or_queue(ep, rx_entry, data_offset,
-							pkt_entry, data, data_size);
-		if (err)
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "cannot post read to copy data\n");
-
-		/* At this point data has NOT been copied yet, thus we cannot call
-		 * rxr_pkt_handle_data_copied(). The function will be called
-		 * when the completion of the local read request is received
-		 * (by progress engine).
-		 */
-		return err;
-	}
+	if (efa_mr_is_cuda(desc))
+		return rxr_pkt_copy_data_to_cuda(ep, pkt_entry, data, data_size, data_offset);
 
 	if (efa_mr_is_hmem(desc))
 		return rxr_pkt_queued_copy_data_to_hmem(ep, pkt_entry, data, data_size, data_offset);
