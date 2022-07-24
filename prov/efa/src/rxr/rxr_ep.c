@@ -115,6 +115,7 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 
 	rx_entry->bytes_runt = 0;
 	rx_entry->bytes_received_via_mulreq = 0;
+	rx_entry->cuda_copy_method = RXR_CUDA_COPY_UNSPEC;
 	rx_entry->op = op;
 	switch (op) {
 	case ofi_op_tagged:

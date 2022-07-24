@@ -83,6 +83,12 @@ struct rxr_atomic_ex {
 	int comp_iov_count;
 };
 
+enum rxr_cuda_copy_method {
+	RXR_CUDA_COPY_UNSPEC = 0,
+	RXR_CUDA_COPY_GDRCOPY,
+	RXR_CUDA_COPY_LOCALREAD
+};
+
 struct rxr_op_entry {
 	/* type must remain at the top, can be RXR_TX_ENTRY or RXR_RX_ENTRY */
 	enum rxr_x_entry_type type;
@@ -184,6 +190,7 @@ struct rxr_op_entry {
 	struct fi_msg *posted_recv;
 	struct rxr_pkt_entry *unexp_pkt;
 	char *atomrsp_data;
+	enum rxr_cuda_copy_method cuda_copy_method;
 	/* end of RX related variables */
 
 	/* the following variables are for TX operation only */

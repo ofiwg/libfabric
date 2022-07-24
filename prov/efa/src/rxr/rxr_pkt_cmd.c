@@ -589,6 +589,12 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 
 	if (rx_entry->total_len == rx_entry->bytes_copied) {
+		if (rx_entry->cuda_copy_method == RXR_CUDA_COPY_GDRCOPY) {
+			assert(ep->gdrcopy_rx_entry_num > 0);
+			rx_entry->cuda_copy_method = RXR_CUDA_COPY_UNSPEC;
+			ep->gdrcopy_rx_entry_num -= 1;
+		}
+
 		post_ctrl = false;
 		ctrl_type = 0;
 		if (rx_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED) {
