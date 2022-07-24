@@ -126,8 +126,7 @@ size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry)
 int rxr_pkt_type_readbase_rtm(struct rdm_peer *peer, int op, uint64_t fi_flags)
 {
 	assert(op == ofi_op_tagged || op == ofi_op_msg);
-	if (cuda_is_gdrcopy_enabled() &&
-	    peer->num_read_msg_in_flight == 0 &&
+	if (peer->num_read_msg_in_flight == 0 &&
 	    rxr_env.efa_runt_size > peer->num_runt_bytes_in_flight &&
 	    !(fi_flags & FI_DELIVERY_COMPLETE)) {
 		return (op == ofi_op_tagged) ? RXR_RUNTREAD_TAGRTM_PKT
