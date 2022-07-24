@@ -294,7 +294,7 @@ int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
 }
 
 /*
- * @brief copy data to hmem buffer
+ * @brief copy data to hmem buffer by queueing
  *
  * This function queue multiple (up to RXR_EP_MAX_QUEUED_COPY) copies to
  * device memory, and do them at the same time. This is to avoid any memory
@@ -311,11 +311,11 @@ int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
  * 			On failure, return libfabric error code
  */
 static inline
-int rxr_pkt_copy_data_to_hmem(struct rxr_ep *ep,
-			      struct rxr_pkt_entry *pkt_entry,
-			      char *data,
-			      size_t data_size,
-			      size_t data_offset)
+int rxr_pkt_queued_copy_data_to_hmem(struct rxr_ep *ep,
+				     struct rxr_pkt_entry *pkt_entry,
+				     char *data,
+				     size_t data_size,
+				     size_t data_offset)
 {
 	struct rxr_rx_entry *rx_entry;
 
@@ -448,7 +448,7 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 	}
 
 	if (efa_mr_is_hmem(desc))
-		return rxr_pkt_copy_data_to_hmem(ep, pkt_entry, data, data_size, data_offset);
+		return rxr_pkt_queued_copy_data_to_hmem(ep, pkt_entry, data, data_size, data_offset);
 
 	assert( !desc || desc->peer.iface == FI_HMEM_SYSTEM);
 	bytes_copied = ofi_copy_to_iov(rx_entry->iov, rx_entry->iov_count,
