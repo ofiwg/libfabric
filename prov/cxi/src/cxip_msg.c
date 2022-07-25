@@ -196,7 +196,10 @@ static struct cxip_req *cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf,
 	struct cxip_md *recv_md = NULL;
 	int ret;
 
-	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc);
+	/* Software EP only mode receives are not posted to hardware
+	 * and are not constrained by hardware buffer ID limits.
+	 */
+	req = cxip_cq_req_alloc(rxc->recv_cq, !rxc->sw_ep_only, rxc);
 	if (!req) {
 		RXC_WARN(rxc, "Failed to allocate recv request\n");
 		goto err;

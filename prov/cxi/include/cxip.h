@@ -1440,6 +1440,7 @@ struct cxip_rxc {
 
 	struct fi_rx_attr attr;
 	bool selective_completion;
+	bool sw_ep_only;
 
 	struct cxip_pte *rx_pte;	// HW RX Queue
 	struct cxip_cmdq *rx_cmdq;	// RX CMDQ for posting receive buffers

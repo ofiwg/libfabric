@@ -148,6 +148,7 @@ int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
 	dlist_foreach_container_safe(&cq->req_list, struct cxip_req, req,
 				     cq_entry, tmp) {
 		if (req->req_ctx == req_ctx &&
+		    req->type == CXIP_REQ_RECV &&
 		    !req->recv.canceled &&
 		    !req->recv.parent &&
 		    (!match || (void *)req->context == op_ctx)) {
