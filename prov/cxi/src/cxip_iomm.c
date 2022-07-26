@@ -144,7 +144,7 @@ static int cxip_scalable_iomm_init(struct cxip_domain *dom)
 	if (!cxip_env.iotlb)
 		map_flags |= CXI_MAP_NOCACHE;
 
-	ret = cxil_map(dom->lni->lni, 0, -1, map_flags, NULL,
+	ret = cxil_map(dom->lni->lni, 0, 0xfffffffffffff000, map_flags, NULL,
 		       &dom->scalable_md.md);
 	if (!ret) {
 		dom->scalable_md.dom = dom;
