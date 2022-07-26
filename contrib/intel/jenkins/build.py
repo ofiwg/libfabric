@@ -32,6 +32,8 @@ def build_libfabric(libfab_install_path, mode, cluster=None):
 
     if (cluster == 'daos'):
         prov_list = common.daos_prov_list
+    elif (cluster == 'dsa'):
+        prov_list = common.dsa_prov_list
     else:
         prov_list = common.default_prov_list
 
@@ -96,7 +98,7 @@ if __name__ == "__main__":
                         choices=['dbg', 'dl'])
 
     parser.add_argument('--build_cluster', help="build libfabric on specified cluster", \
-                        choices=['daos'], default='default')
+                        choices=['daos', 'dsa'], default='default')
 
     args = parser.parse_args()
     build_item = args.build_item

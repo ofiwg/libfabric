@@ -65,6 +65,9 @@ daos_prov_list = [
     'verbs',
     'tcp'
 ]
+dsa_prov_list = [
+    'shm'
+]
 common_disable_list = [
     'usnic',
     'psm',
