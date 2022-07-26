@@ -1,6 +1,7 @@
 import pytest
 
 @pytest.mark.functional
+@pytest.mark.parametrize("cuda_copy_method", ["gdrcopy", "localread"])
 def test_runt_read_functional(cmdline_args):
     """
     Verify runt reading protocol is working as expected by sending 1 message of 256 KB.
@@ -18,13 +19,14 @@ def test_runt_read_functional(cmdline_args):
     else:
         cmdline_args_copy.environments = ""
 
-    cmdline_args_copy.environments += "FI_EFA_USE_DEVICE_RDMA=1 FI_EFA_RUNT_SIZE=65536 FI_HMEM_CUDA_USE_GDRCOPY=1"
+    cmdline_args_copy.environments += "FI_EFA_USE_DEVICE_RDMA=1 FI_EFA_RUNT_SIZE=65536"
 
-    # currently, runting read is enabled only if gdrcopy is available.
-    # thus skip the test if gdrcopy is not available
-    if not has_gdrcopy(cmdline_args.server_id) or not has_gdrcopy(cmdline_args.client_id):
-        pytest.skip("No gdrcopy")
-        return
+    if cuda_copy_method == "gdrcopy":
+
+        if not has_gdrcopy(cmdline_args.server_id) or not has_gdrcopy(cmdline_args.client_id):
+            pytest.skip("No gdrcopy")
+            return
+    else:
  
     # wrs stands for work requests
     server_read_wrs_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_wrs")
