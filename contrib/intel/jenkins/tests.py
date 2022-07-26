@@ -15,7 +15,7 @@ import shlex
 class Test:
 
     def __init__ (self, jobname, buildno, testname, core_prov, fabric,
-                  hosts, ofi_build_mode, mpitype=None, util_prov=None):
+                  hosts, ofi_build_mode, user_env, mpitype=None, util_prov=None):
         self.jobname = jobname
         self.buildno = buildno
         self.testname = testname
@@ -36,10 +36,7 @@ class Test:
         self.ci_middlewares_path = f'{ci_site_config.install_dir}/'\
                                    f'{self.jobname}/{self.buildno}/'\
                                    'ci_middlewares'
-
-        self.env = [('FI_VERBS_MR_CACHE_ENABLE', '1'),\
-                    ('FI_VERBS_INLINE_SIZE', '256')] \
-                    if self.core_prov == 'verbs' else []
+        self.env = eval(user_env)
 
         self.mpi = ''
         if (self.mpi_type == 'impi'):
@@ -61,10 +58,10 @@ class Test:
 class FiInfoTest(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, util_prov=None):
+                 hosts, ofi_build_mode, user_env, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                     hosts, ofi_build_mode, None, util_prov)
+                     hosts, ofi_build_mode, user_env, None, util_prov)
 
         self.fi_info_testpath =  f'{self.libfab_installpath}/bin'
 
@@ -92,10 +89,10 @@ class FiInfoTest(Test):
 class Fabtest(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, util_prov=None):
+                 hosts, ofi_build_mode, user_env, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, None, util_prov)
+                         hosts, ofi_build_mode, user_env, None, util_prov)
         self.fabtestpath = f'{self.libfab_installpath}/bin'
         self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
 
@@ -156,8 +153,8 @@ class Fabtest(Test):
             opts += "-R "
             opts += f"-f {efile} "
 
-        for key,val in self.env:
-            opts += f"-E {key}={val} "
+        for key in self.env:
+            opts += f"-E {key}={self.env[key]} "
 
         if self.util_prov:
             opts += f"{self.core_prov};{self.util_prov} "
@@ -187,10 +184,10 @@ class Fabtest(Test):
 class ShmemTest(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, util_prov=None):
+                 hosts, ofi_build_mode, user_env, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, None, util_prov)
+                         hosts, ofi_build_mode, user_env, None, util_prov)
 
         #self.n - number of hosts * number of processes per host
         self.n = 4
@@ -232,10 +229,10 @@ class ShmemTest(Test):
 
 class ZeFabtests(Test):
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, util_prov=None):
+                 hosts, ofi_build_mode, user_env, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, None, util_prov)
+                         hosts, ofi_build_mode, user_env, None, util_prov)
 
         self.fabtestpath = f'{self.libfab_installpath}/bin'
         self.zefabtest_script_path = f'{ci_site_config.ze_testpath}'
@@ -315,8 +312,8 @@ class OMPI:
         opts += "--mca orte_base_help_aggregate 0 "
         opts += "--mca mtl ofi "
         opts += "--mca pml cm -tag-output "
-        for key, val in self.environ:
-            opts += f"-x {key}={val} "
+        for key in self.environ:
+            opts += f"-x {key}={self.environ[key]} "
 
         return opts
 
@@ -363,8 +360,8 @@ class MPICH:
         opts += f"-ppn {self.ppn} "
         opts += f"-hosts {common.get_node_name(self.server, self.nw_interface)},"\
                 f"{common.get_node_name(self.client, self.nw_interface)} "
-        for key, val in self.environ:
-            opts += f"-genv {key} {val} "
+        for key in self.environ:
+            opts += f"-genv {key} {self.environ[key]} "
 
         return opts
 
@@ -412,8 +409,8 @@ class IMPI:
         opts += f"-ppn {self.ppn} "
         opts += f"-hosts {common.get_node_name(self.server, self.nw_interface)},"\
                 f"{common.get_node_name(self.client, self.nw_interface)} "
-        for key, val in self.environ:
-            opts += f"-genv {key} {val} "
+        for key in self.environ:
+            opts += f"-genv {key} {self.environ[key]} "
 
         return opts
 
@@ -424,10 +421,12 @@ class IMPI:
 
 class IMBtests(Test):
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, mpitype, ofi_build_mode, test_group, util_prov=None):
+                 hosts, mpitype, ofi_build_mode, user_env, test_group,
+                 util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
-                         fabric, hosts, ofi_build_mode, mpitype, util_prov)
+                         fabric, hosts, ofi_build_mode, user_env, mpitype,
+                         util_prov)
 
         self.test_group = test_group
         self.mpi_type = mpitype
@@ -512,10 +511,11 @@ class IMBtests(Test):
 class OSUtests(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, mpitype, ofi_build_mode, util_prov=None):
+                 hosts, mpitype, ofi_build_mode, user_env, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
-                         fabric, hosts, ofi_build_mode, mpitype, util_prov)
+                         fabric, hosts, ofi_build_mode, user_env, mpitype,
+                         util_prov)
 
         self.n_ppn = {
                           'pt2pt':      (2, 1),
@@ -548,7 +548,7 @@ class OSUtests(Test):
                 self.mpi.ppn = self.n_ppn[os.path.basename(root)][1]
         
                 if (test == 'osu_latency_mp' and self.core_prov == 'verbs'):
-                    self.env.append(('IBV_FORK_SAFE', '1'))
+                    self.env['IBV_FORK_SAFE'] = '1'
 
                 if(p.search(test) == None):
                     osu_command = self.osu_cmd(os.path.basename(root), test)
@@ -557,16 +557,17 @@ class OSUtests(Test):
                     common.run_command(outputcmd)
 
                 if (test == 'osu_latency_mp' and self.core_prov == 'verbs'):
-                    self.env.remove(('IBV_FORK_SAFE', '1'))
+                    self.env.pop('IBV_FORK_SAFE')
 
 
 class MpichTestSuite(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, mpitype, ofi_build_mode, util_prov=None):
+                 hosts, mpitype, ofi_build_mode, user_env, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
-                         fabric, hosts, ofi_build_mode, mpitype, util_prov)
+                         fabric, hosts, ofi_build_mode, user_env, mpitype,
+                         util_prov)
 
         self.mpichsuitepath = f'{self.ci_middlewares_path}/{mpitype}/'\
                               'mpichsuite/test/mpi/'
@@ -620,9 +621,9 @@ class MpichTestSuite(Test):
 class OneCCLTests(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, util_prov=None):
+                 hosts, ofi_build_mode, user_env, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, None, util_prov)
+                         hosts, ofi_build_mode, user_env, None, util_prov)
 
         self.n = 2
         self.ppn = 1
@@ -691,9 +692,9 @@ class OneCCLTests(Test):
 class OneCCLTestsGPU(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, util_prov=None):
+                 hosts, ofi_build_mode, user_env, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, None, util_prov)
+                         hosts, ofi_build_mode, user_env, None, util_prov)
 
         self.n = 2
         self.ppn = 4
