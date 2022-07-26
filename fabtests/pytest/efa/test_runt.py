@@ -1,7 +1,8 @@
 import pytest
 
 @pytest.mark.functional
-def test_runt_read_functional(cmdline_args):
+@pytest.mark.parametrize("cuda_copy_method", ["gdrcopy", "localread"])
+def test_runt_read_functional(cmdline_args, cuda_copy_method):
     """
     Verify runt reading protocol is working as expected by sending 1 message of 256 KB.
     64 KB of the message will be transfered using EFA device's send capability
@@ -18,14 +19,18 @@ def test_runt_read_functional(cmdline_args):
     else:
         cmdline_args_copy.environments = ""
 
-    cmdline_args_copy.environments += "FI_EFA_USE_DEVICE_RDMA=1 FI_EFA_RUNT_SIZE=65536 FI_HMEM_CUDA_USE_GDRCOPY=1"
+    cmdline_args_copy.environments += "FI_EFA_USE_DEVICE_RDMA=1 FI_EFA_RUNT_SIZE=65536"
 
-    # currently, runting read is enabled only if gdrcopy is available.
-    # thus skip the test if gdrcopy is not available
-    if not has_gdrcopy(cmdline_args.server_id) or not has_gdrcopy(cmdline_args.client_id):
-        pytest.skip("No gdrcopy")
-        return
- 
+    if cuda_copy_method == "gdrcopy":
+
+        if not has_gdrcopy(cmdline_args.server_id) or not has_gdrcopy(cmdline_args.client_id):
+            pytest.skip("No gdrcopy")
+            return
+
+        cmdline_args_copy.environments += " FI_HMEM_CUDA_USE_GDRCOPY=1"
+    else:
+        cmdline_args_copy.environments += " FI_HMEM_CUDA_USE_GDRCOPY=0"
+
     # wrs stands for work requests
     server_read_wrs_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_wrs")
     server_read_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_bytes")
@@ -64,7 +69,21 @@ def test_runt_read_functional(cmdline_args):
     #    b. when runing on single node, server will use the same EFA device to send control packets
     assert client_send_bytes > 65536
 
-    # The other 192 KB is transfer by RDMA read
-    # for which the server (receiver) will issue 1 read request.
-    assert server_read_wrs == 1
-    assert server_read_bytes == 196608
+    if cuda_copy_method == "gdrcopy":
+        # The other 192 KB is transfer by RDMA read
+        # for which the server (receiver) will issue 1 read request.
+        assert server_read_wrs == 1
+        assert server_read_bytes == 196608
+    else:
+        # when local read copy is used, server issue RDMA requests to copy received data
+        #
+        # so in this case, total read wr is 11, which is
+        #    1 remote read of 192k
+        #    8 local read for the 64k data transfer by send
+        #    2 local read for 2 fabtests control messages
+        #
+        # and total read_bytes will be 262149, which is:
+        #        256k message + 2 fabtests control messages (1 byte and 4 byte each)
+        #
+        assert server_read_wrs == 11
+        assert server_read_bytes == 262149
