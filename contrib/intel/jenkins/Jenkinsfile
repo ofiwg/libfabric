@@ -124,6 +124,27 @@ pipeline {
             }
           }
         }
+        stage ('build-dsa') {
+          agent {node {label 'dsa'}}
+          steps {
+            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+              sh """
+                env
+                (
+                  if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
+                    mkdir ${env.WORKSPACE}/py_scripts
+                  else
+                    rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
+                  fi
+                  git clone ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
+                  python3.9 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=logdir
+                  python3.9 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=libfabric --build_cluster='dsa'
+                  python3.9 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests
+                )
+              """
+            }
+          }
+        }
       }
     }
     stage('parallel-tests') {
@@ -474,6 +495,22 @@ pipeline {
             }
           }
         }
+        stage('dsa') {
+          agent {node {label 'dsa'}}
+          when { equals expected: 1, actual: DO_RUN }
+          steps {
+            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+              sh """
+              env
+              (
+                echo `hostname`
+                cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                python3.9 runtests.py --prov=shm --test=fabtests --user_env="{'FI_SHM_DISABLE_CMA':1, 'FI_SHM_USE_DSA_IN_SAR':1}"
+              )
+              """
+            }
+          }
+        }
       }
     }
     stage ('Summary') {
@@ -499,6 +536,19 @@ pipeline {
     }
     cleanup {
       node ('daos') {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+          dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
+            deleteDir()
+          }
+          dir("${env.WORKSPACE}") {
+            deleteDir()
+          }
+          dir("${env.WORKSPACE}@tmp") {
+            deleteDir()
+          }
+        }
+      }
+      node ('dsa') {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
           dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
             deleteDir()
