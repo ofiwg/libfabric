@@ -104,6 +104,7 @@
 #define CXIP_EQ_DEF_SZ			(1 << 8)
 #define CXIP_CQ_DEF_SZ			1024U
 #define CXIP_AV_DEF_SZ			(1 << 8)
+#define CXIP_REMOTE_CQ_DATA_SZ		8
 
 #define CXIP_PTE_IGNORE_DROPS		((1 << 24) - 1)
 #define CXIP_RDZV_THRESHOLD		2048
@@ -170,11 +171,29 @@
 #define CXIP_REQ_BUF_HEADER_MIN_SIZE (sizeof(struct c_port_fab_hdr) + \
 	sizeof(struct c_port_small_msg_hdr))
 
-/* 16 bits of MR keys equals the hardware MR resource limit. Could explore
- * increasing key range if needed.
+/* 16 bits of MR keys equals the hardware MR resource limit. For user
+ * defined keys we expose a 32-bit key size and only 64K keys can be
+ * enabled at any given time.
  */
 #define CXIP_MR_KEY_SIZE sizeof(uint32_t)
 #define CXIP_MR_KEY_MASK ((1ULL << (8 * CXIP_MR_KEY_SIZE)) - 1)
+
+/* For provider defined keys we define a 64 bit MR key that maps
+ * to provider required information.
+ */
+struct cxip_prov_key {
+	union {
+		struct {
+			uint64_t lac	:3;
+			uint64_t opt	:1;
+			uint64_t lac_off:58;
+			uint64_t unused	:2;
+		};
+		uint64_t key;
+	};
+};
+
+#define CXIP_MR_PROV_KEY_SIZE sizeof(struct cxip_prov_key)
 
 static inline bool cxip_is_valid_mr_key(uint64_t key)
 {

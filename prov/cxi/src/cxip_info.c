@@ -20,6 +20,7 @@ struct fi_fabric_attr cxip_fabric_attr = {
 	.name = cxip_prov_name,
 };
 
+/* No ODP, client specified MR keys */
 struct fi_domain_attr cxip_domain_attr = {
 	.name = NULL,
 	.threading = FI_THREAD_SAFE,
@@ -29,7 +30,85 @@ struct fi_domain_attr cxip_domain_attr = {
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED,
 	.mr_key_size = CXIP_MR_KEY_SIZE,
-	.cq_data_size = 8,
+	.cq_data_size = CXIP_REMOTE_CQ_DATA_SZ,
+	.cq_cnt = 32,
+	.ep_cnt = 128,
+	.tx_ctx_cnt = CXIP_EP_MAX_TX_CNT,
+	.rx_ctx_cnt = CXIP_EP_MAX_RX_CNT,
+	.max_ep_tx_ctx = CXIP_EP_MAX_TX_CNT,
+	.max_ep_rx_ctx = CXIP_EP_MAX_RX_CNT,
+	.max_ep_stx_ctx = 0,
+	.max_ep_srx_ctx = 0,
+	.cntr_cnt = 16,
+	.mr_iov_limit = 1,
+	.mr_cnt = 100,
+	.caps = FI_LOCAL_COMM | FI_REMOTE_COMM,
+	.auth_key_size = sizeof(struct cxi_auth_key),
+};
+
+/* ODP, client specified MR keys */
+struct fi_domain_attr cxip_odp_domain_attr = {
+	.name = NULL,
+	.threading = FI_THREAD_SAFE,
+	.control_progress = FI_PROGRESS_MANUAL,
+	.data_progress = FI_PROGRESS_MANUAL,
+	.resource_mgmt = FI_RM_ENABLED,
+	.av_type = FI_AV_UNSPEC,
+	.mr_mode = FI_MR_ENDPOINT,
+	.mr_key_size = CXIP_MR_KEY_SIZE,
+	.cq_data_size = CXIP_REMOTE_CQ_DATA_SZ,
+	.cq_cnt = 32,
+	.ep_cnt = 128,
+	.tx_ctx_cnt = CXIP_EP_MAX_TX_CNT,
+	.rx_ctx_cnt = CXIP_EP_MAX_RX_CNT,
+	.max_ep_tx_ctx = CXIP_EP_MAX_TX_CNT,
+	.max_ep_rx_ctx = CXIP_EP_MAX_RX_CNT,
+	.max_ep_stx_ctx = 0,
+	.max_ep_srx_ctx = 0,
+	.cntr_cnt = 16,
+	.mr_iov_limit = 1,
+	.mr_cnt = 100,
+	.caps = FI_LOCAL_COMM | FI_REMOTE_COMM,
+	.auth_key_size = sizeof(struct cxi_auth_key),
+};
+
+/* No ODP, provider specified MR keys */
+struct fi_domain_attr cxip_prov_key_domain_attr = {
+	.name = NULL,
+	.threading = FI_THREAD_SAFE,
+	.control_progress = FI_PROGRESS_MANUAL,
+	.data_progress = FI_PROGRESS_MANUAL,
+	.resource_mgmt = FI_RM_ENABLED,
+	.av_type = FI_AV_UNSPEC,
+	.mr_mode = FI_MR_PROV_KEY | FI_MR_ALLOCATED | FI_MR_ENDPOINT,
+	.mr_key_size = CXIP_MR_PROV_KEY_SIZE,
+	.cq_data_size = CXIP_REMOTE_CQ_DATA_SZ,
+	.cq_cnt = 32,
+	.ep_cnt = 128,
+	.tx_ctx_cnt = CXIP_EP_MAX_TX_CNT,
+	.rx_ctx_cnt = CXIP_EP_MAX_RX_CNT,
+	.max_ep_tx_ctx = CXIP_EP_MAX_TX_CNT,
+	.max_ep_rx_ctx = CXIP_EP_MAX_RX_CNT,
+	.max_ep_stx_ctx = 0,
+	.max_ep_srx_ctx = 0,
+	.cntr_cnt = 16,
+	.mr_iov_limit = 1,
+	.mr_cnt = 100,
+	.caps = FI_LOCAL_COMM | FI_REMOTE_COMM,
+	.auth_key_size = sizeof(struct cxi_auth_key),
+};
+
+/* ODP, provider specified MR keys */
+struct fi_domain_attr cxip_odp_prov_key_domain_attr = {
+	.name = NULL,
+	.threading = FI_THREAD_SAFE,
+	.control_progress = FI_PROGRESS_MANUAL,
+	.data_progress = FI_PROGRESS_MANUAL,
+	.resource_mgmt = FI_RM_ENABLED,
+	.av_type = FI_AV_UNSPEC,
+	.mr_mode = FI_MR_PROV_KEY | FI_MR_ENDPOINT,
+	.mr_key_size = CXIP_MR_PROV_KEY_SIZE,
+	.cq_data_size = CXIP_REMOTE_CQ_DATA_SZ,
 	.cq_cnt = 32,
 	.ep_cnt = 128,
 	.tx_ctx_cnt = CXIP_EP_MAX_TX_CNT,
@@ -77,14 +156,54 @@ struct fi_rx_attr cxip_rx_attr = {
 	.iov_limit = 1,
 };
 
-struct fi_info cxip_info = {
-	.caps = CXIP_EP_CAPS,
-	.addr_format = FI_ADDR_CXI,
-	.tx_attr = &cxip_tx_attr,
-	.rx_attr = &cxip_rx_attr,
-	.ep_attr = &cxip_ep_attr,
-	.domain_attr = &cxip_domain_attr,
-	.fabric_attr = &cxip_fabric_attr,
+/* The CXI provider supports multiple operating modes by exporting
+ * several fi_info structures. The application can filter the fi_info
+ * with hints, or choose the fi_info based on desired application
+ * behavior. Matched fi_info are returned in the order of highest
+ * to lowest provider performance.:
+ *
+ * 1. Pinned memory with provider MR Keys
+ * 2. Pinned memory with application provided MR Keys
+ * 3. On-Demand paging with provider MR Keys
+ * 4. On-Demand paging with application provided MR Keys
+ */
+struct fi_info cxip_infos[] = {
+	{
+		.caps = CXIP_EP_CAPS,
+		.addr_format = FI_ADDR_CXI,
+		.tx_attr = &cxip_tx_attr,
+		.rx_attr = &cxip_rx_attr,
+		.ep_attr = &cxip_ep_attr,
+		.domain_attr = &cxip_prov_key_domain_attr,
+		.fabric_attr = &cxip_fabric_attr,
+	},
+	{
+		.caps = CXIP_EP_CAPS,
+		.addr_format = FI_ADDR_CXI,
+		.tx_attr = &cxip_tx_attr,
+		.rx_attr = &cxip_rx_attr,
+		.ep_attr = &cxip_ep_attr,
+		.domain_attr = &cxip_domain_attr,
+		.fabric_attr = &cxip_fabric_attr,
+	},
+	{
+		.caps = CXIP_EP_CAPS,
+		.addr_format = FI_ADDR_CXI,
+		.tx_attr = &cxip_tx_attr,
+		.rx_attr = &cxip_rx_attr,
+		.ep_attr = &cxip_ep_attr,
+		.domain_attr = &cxip_odp_prov_key_domain_attr,
+		.fabric_attr = &cxip_fabric_attr,
+	},
+	{
+		.caps = CXIP_EP_CAPS,
+		.addr_format = FI_ADDR_CXI,
+		.tx_attr = &cxip_tx_attr,
+		.rx_attr = &cxip_rx_attr,
+		.ep_attr = &cxip_ep_attr,
+		.domain_attr = &cxip_odp_domain_attr,
+		.fabric_attr = &cxip_fabric_attr,
+	},
 };
 
 struct fi_provider cxip_prov;
@@ -100,13 +219,21 @@ cxip_trace_t cxip_trace_attr cxip_trace_fn = NULL;
 /*
  * cxip_info_alloc() - Create a fabric info structure for the CXI interface.
  */
-static int cxip_info_alloc(struct cxip_if *nic_if, struct fi_info **info)
+static int cxip_info_alloc(struct cxip_if *nic_if, int info_index,
+			   struct fi_info **info)
 {
 	int ret;
 	struct fi_info *fi;
 	struct cxip_addr addr = {};
 
-	fi = fi_dupinfo(&cxip_info);
+	/* For now only expose ODP fi_info if ODP selection is enabled.
+	 * TODO: When ODP is always available remove this filter.
+	 */
+	if (!(cxip_infos[info_index].domain_attr->mr_mode & FI_MR_ALLOCATED) &&
+	    !cxip_env.odp)
+		return -FI_ENODATA;
+
+	fi = fi_dupinfo(&cxip_infos[info_index]);
 	if (!fi)
 		return -FI_ENOMEM;
 
@@ -186,6 +313,7 @@ static int cxip_info_init(void)
 	struct cxip_if *nic_if;
 	struct fi_info **fi_list = (void *)&cxip_util_prov.info;
 	struct fi_info *fi;
+	int ndx;
 	int ret;
 
 	slist_foreach(&cxip_if_list, entry, prev) {
@@ -193,11 +321,16 @@ static int cxip_info_init(void)
 
 		/* TODO: Remove check before pushing upstream. This is a
 		 * CXI provider helper to not export the new constants if
-		 * the two info compatibility breaks an application. Upstream
-		 * we will always add the new constants.
+		 * they break an application. Upstream we will always add
+		 * the new constants.
 		 */
-		if (ofi_cxi_compat != 2) {
-			ret = cxip_info_alloc(nic_if, &fi);
+		if (ofi_cxi_compat == 2)
+			goto add_compat;
+
+		for (ndx = 0; ndx < ARRAY_SIZE(cxip_infos); ndx++) {
+			ret = cxip_info_alloc(nic_if, ndx, &fi);
+			if (ret == -FI_ENODATA)
+				continue;
 			if (ret != FI_SUCCESS)
 				goto free_info;
 
@@ -205,49 +338,28 @@ static int cxip_info_init(void)
 				 nic_if->info->device_name);
 			*fi_list = fi;
 			fi_list = &(fi->next);
-
-			if (cxip_env.odp) {
-				fi = fi_dupinfo(fi);
-				if (!fi) {
-					ret = -FI_ENOMEM;
-					goto free_info;
-				}
-				fi->domain_attr->mr_mode &= ~FI_MR_ALLOCATED;
-				CXIP_DBG("%s ODP info created\n",
-					 nic_if->info->device_name);
-				*fi_list = fi;
-				fi_list = &(fi->next);
-			}
 		}
 
 		/* TODO: The compat infos MUST be removed before pushing
-		 * upstream. These are CXI provider helper fi_info to handle
-		 * client usage of old values for FI_ADDR_CXI and FI_PROTO_CXI.
+		 * upstream. If requested add the CXI provider helper fi_info
+		 * to handle client usage of old values for FI_ADDR_CXI and
+		 * FI_PROTO_CXI.
 		 */
 		if (!ofi_cxi_compat)
 			continue;
 
-		/* Add a compat fi_info following the current one */
-		ret = cxip_info_alloc(nic_if, &fi);
-		if (ret != FI_SUCCESS)
-			goto free_info;
-
-		fi->addr_format = FI_ADDR_OPX;
-		fi->ep_attr->protocol = FI_PROTO_OPX;
-
-		CXIP_DBG("%s compat info created\n", nic_if->info->device_name);
-
-		*fi_list = fi;
-		fi_list = &(fi->next);
-
-		if (cxip_env.odp) {
-			fi = fi_dupinfo(fi);
-			if (!fi) {
-				ret = -FI_ENOMEM;
+add_compat:
+		for (ndx = 0; ndx < ARRAY_SIZE(cxip_infos); ndx++) {
+			ret = cxip_info_alloc(nic_if, ndx, &fi);
+			if (ret == -FI_ENODATA)
+				continue;
+			if (ret != FI_SUCCESS)
 				goto free_info;
-			}
-			fi->domain_attr->mr_mode &= ~FI_MR_ALLOCATED;
-			CXIP_DBG("%s compat ODP info created\n",
+
+			fi->addr_format = FI_ADDR_OPX;
+			fi->ep_attr->protocol = FI_PROTO_OPX;
+
+			CXIP_DBG("%s compat info created\n",
 				 nic_if->info->device_name);
 			*fi_list = fi;
 			fi_list = &(fi->next);
