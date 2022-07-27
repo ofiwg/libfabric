@@ -536,7 +536,7 @@ void fi_reliability_service_process_command (struct fi_opx_reliability_client_st
 {
 	union fi_opx_reliability_service_flow_key key = {
 		.slid = replay->scb.hdr.stl.lrh.slid,
-		.tx = replay->scb.hdr.reliability.origin_tx,
+		.tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(&replay->scb.hdr),
 		.dlid = replay->scb.hdr.stl.lrh.dlid,
 		.rx = replay->scb.hdr.stl.bth.rx
 	};
@@ -544,7 +544,7 @@ void fi_reliability_service_process_command (struct fi_opx_reliability_client_st
 	void * itr = NULL;
 
 #ifdef OPX_RELIABILITY_DEBUG
-	fprintf(stderr, "(tx) packet %016lx %08u posted.\n", key.value, replay->scb.hdr.reliability.psn);
+	fprintf(stderr, "(tx) packet %016lx %08u posted.\n", key.value, FI_OPX_HFI1_PACKET_PSN(&replay->scb.hdr));
 #endif
 
 #ifndef NDEBUG
@@ -554,7 +554,7 @@ void fi_reliability_service_process_command (struct fi_opx_reliability_client_st
 			getpid(), __FILE__, __func__, __LINE__,
 			key.value,
 			replay->scb.hdr.stl.lrh.slid,
-			replay->scb.hdr.reliability.origin_tx,
+			FI_OPX_HFI1_PACKET_ORIGIN_TX(&replay->scb.hdr),
 			replay->scb.hdr.stl.lrh.dlid,
 			replay->scb.hdr.stl.bth.rx);
 		assert(itr);
@@ -752,6 +752,11 @@ unsigned fi_opx_reliability_rx_check (struct fi_opx_reliability_client_state * s
 	};
 
 	itr = fi_opx_rbt_find(state->rx_flow_rbtree, (void*)key.value);
+#ifdef OPX_RELIABILITY_DEBUG
+	if (!itr) {
+		fprintf(stderr, "(rx) packet %016lx %08u received but no flow for this found!\n", key.value, psn);
+	}
+#endif
 
 	assert(itr);
 

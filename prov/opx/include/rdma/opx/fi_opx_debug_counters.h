@@ -81,10 +81,13 @@ struct fi_opx_debug_counters {
 
 	struct {
 		uint64_t	writev_calls[33];
+		uint64_t	total_requests;
 		uint64_t	eagain_fill_index;
 		uint64_t	eagain_psn;
 		uint64_t	eagain_replay;
 		uint64_t	eagain_sdma_we;
+		uint64_t	eagain_pending_writev;
+		uint64_t	eagain_pending_dc;
 	} sdma;
 };
 
@@ -176,10 +179,13 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
 	#endif
 
 	#ifdef OPX_DEBUG_COUNTERS_SDMA
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.total_requests);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_fill_index);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_psn);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_replay);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_sdma_we);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_pending_writev);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_pending_dc);
 
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, sdma.writev_calls, 33);
 	#endif

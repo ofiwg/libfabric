@@ -923,8 +923,8 @@ int opx_hfi1_dput_write_header_and_payload_put(
 	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_PUT |
 			(dt64 << 32) | (op64 << 40) | (payload_bytes << 48);
-	tx_hdr->qw[5] = *rbuf;
-	tx_hdr->qw[6] = key;
+	tx_hdr->qw[5] = key;
+	tx_hdr->qw[6] = *rbuf;
 
 	if (delivery_completion) {
 		iov->iov_base = (void *) *sbuf;
@@ -1039,6 +1039,46 @@ int opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
 }
 
 __OPX_FORCE_INLINE__
+int opx_hfi1_dput_write_header_and_payload_rzv(
+				struct fi_opx_ep *opx_ep,
+				union fi_opx_hfi1_packet_hdr *tx_hdr,
+				union fi_opx_hfi1_packet_payload *tx_payload,
+				struct iovec *iov,
+				const bool delivery_completion,
+				const int64_t psn,
+				const uint16_t lrh_dws,
+				const uint64_t op64,
+				const uint64_t dt64,
+				const uint64_t lrh_dlid,
+				const uint64_t bth_rx,
+				const uint64_t payload_bytes,
+				const uint32_t opcode,
+				const uintptr_t target_byte_counter_vaddr,
+				uint8_t **sbuf,
+				uintptr_t *rbuf)
+{
+	tx_hdr->qw[0] = opx_ep->rx->tx.dput.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
+	tx_hdr->qw[1] = opx_ep->rx->tx.dput.hdr.qw[1] | bth_rx;
+	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
+	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
+	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | (opcode) | (payload_bytes << 48);
+	tx_hdr->qw[5] = target_byte_counter_vaddr;
+	tx_hdr->qw[6] = fi_opx_dput_rbuf_out(*rbuf);
+
+	if (delivery_completion) {
+		iov->iov_base = (void *) *sbuf;
+		iov->iov_len = payload_bytes;
+	} else {
+		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
+	}
+
+	(*sbuf) += payload_bytes;
+	(*rbuf) += payload_bytes;
+
+	return payload_bytes;
+}
+
+__OPX_FORCE_INLINE__
 int opx_hfi1_dput_write_header_and_payload_default(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
@@ -1061,9 +1101,9 @@ int opx_hfi1_dput_write_header_and_payload_default(
 	tx_hdr->qw[1] = opx_ep->rx->tx.dput.hdr.qw[1] | bth_rx;
 	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
 	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
-	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | (opcode) | (payload_bytes << 32);
-	tx_hdr->qw[5] = *rbuf;
-	tx_hdr->qw[6] = target_byte_counter_vaddr;
+	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | (opcode) | (payload_bytes << 48);
+	tx_hdr->qw[5] = target_byte_counter_vaddr;
+	tx_hdr->qw[6] = *rbuf;
 
 	if (delivery_completion) {
 		iov->iov_base = (void *) *sbuf;
@@ -1086,7 +1126,7 @@ int opx_hfi1_dput_write_header_and_payload(
 				struct iovec *iov,
 				const bool delivery_completion,
 				const uint32_t opcode,
-				const int64_t psn,
+				const int64_t psn_orig,
 				const uint16_t lrh_dws,
 				const uint64_t op64,
 				const uint64_t dt64,
@@ -1101,7 +1141,16 @@ int opx_hfi1_dput_write_header_and_payload(
 				uint8_t **cbuf,
 				uintptr_t *rbuf)
 {
+	uint64_t psn = (uint64_t) htonl((uint32_t)psn_orig);
 	switch(opcode) {
+	case FI_OPX_HFI_DPUT_OPCODE_RZV:
+	case FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG:
+		return opx_hfi1_dput_write_header_and_payload_rzv(
+				opx_ep, tx_hdr, tx_payload, iov, delivery_completion,
+				psn, lrh_dws, op64, dt64, lrh_dlid, bth_rx,
+				payload_bytes, opcode, target_byte_counter_vaddr,
+				sbuf, rbuf);
+		break;
 	case FI_OPX_HFI_DPUT_OPCODE_PUT:
 		return opx_hfi1_dput_write_header_and_payload_put(
 				opx_ep, tx_hdr, tx_payload, iov,
@@ -1406,19 +1455,31 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 					return -FI_EAGAIN;
 				}
 				assert(params->sdma_we->total_payload == 0);
+				fi_opx_hfi1_sdma_init_we(params->sdma_we,
+							params->cc,
+							params->slid,
+							params->origin_rs,
+							params->u8_rx);
 			}
 			assert(!fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
 
-			uint64_t packet_count = (bytes_to_send / max_eager_bytes) +
-						((bytes_to_send % max_eager_bytes) ? 1 : 0);
+			/* The driver treats the offset as a 4-byte value, so we
+			 * need to avoid sending a payload size that would wrap
+			 * that in a single SDMA send */
+			uintptr_t rbuf_wrap = (rbuf + 0x100000000ul) & 0xFFFFFFFF00000000ul;
+			uint64_t sdma_we_bytes = MIN(bytes_to_send, rbuf_wrap - rbuf);
+			uint64_t packet_count = (sdma_we_bytes / max_eager_bytes) +
+						((sdma_we_bytes % max_eager_bytes) ? 1 : 0);
 
-			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS);
+			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS(delivery_completion));
 
-			if (opx_ep->hfi->info.sdma.available_counter < packet_count) {
+			if (opx_ep->hfi->info.sdma.available_counter < 1) {
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_fill_index);
 				return -FI_EAGAIN;
 			}
 
+			const int32_t min_packets_to_send = (int32_t) MAX(1, packet_count >> 1);
+			//const int32_t min_packets_to_send = (int32_t) packet_count;
 			int32_t psns_avail = fi_opx_reliability_tx_available_psns(&opx_ep->ep_fid,
 										  &opx_ep->reliability->state,
 										  params->slid,
@@ -1428,7 +1489,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 										  packet_count,
 										  max_eager_bytes);
 
-			if (psns_avail < 1) {
+			if (psns_avail < min_packets_to_send) {
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
 				return -FI_EAGAIN;
 			}
@@ -1449,8 +1510,8 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 					replay = NULL;
 				}
 
-				assert(bytes_to_send); // If this fails, we did math wrong
-				uint64_t packet_bytes = MIN(bytes_to_send, max_eager_bytes);
+				assert(sdma_we_bytes); // If this fails, we did math wrong
+				uint64_t packet_bytes = MIN(sdma_we_bytes, max_eager_bytes);
 
 				uint64_t tail_bytes = packet_bytes & 0x3Ful;
 				uint64_t blocks_to_send_in_this_packet = (packet_bytes >> 6) + (tail_bytes ? 1 : 0);
@@ -1465,10 +1526,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 
 				replay->scb.qw0 = opx_ep->rx->tx.dput.qw0 | pbc_dws;
 
-				assert((delivery_completion == replay->use_iov));
-
-				// Keep track of sbuf before it increments in write_header_and_payload
-				void *buf = sbuf;
+				assert(delivery_completion == replay->use_iov);
 
 				// Passing in PSN of 0 for this because we'll set it later
 				uint64_t bytes_sent =
@@ -1486,16 +1544,10 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 						&rbuf);
 				assert(bytes_sent == packet_bytes);
 
-				fi_opx_hfi1_sdma_add_packet(params->sdma_we, replay,
-							params->cc,
-							buf,
-							bytes_sent,
-							params->slid,
-							params->origin_rs, u8_rx,
-							delivery_completion,
-							max_eager_bytes);
+				fi_opx_hfi1_sdma_add_packet(params->sdma_we, replay, bytes_sent);
 
 				bytes_to_send -= bytes_sent;
+				sdma_we_bytes -= bytes_sent;
 				params->bytes_sent += bytes_sent;
 			}
 
@@ -1531,6 +1583,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 		while (we) {
 			enum hfi1_sdma_comp_state we_status = fi_opx_hfi1_sdma_get_status(opx_ep, we);
 			if (we_status == QUEUED) {
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_pending_writev);
 				return -FI_EAGAIN;
 			}
 			we = we->next;
@@ -1550,6 +1603,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	// to the tail of the deferred work queue.
 	params->work_elem.work_fn = fi_opx_hfi1_dput_pending_delivery_complete;
 	params->work_elem.low_priority = true;
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_pending_dc);
 	return -FI_EAGAIN;
 }
 
@@ -1618,6 +1672,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 		params->sdma_we = NULL;
 		params->sdma_reqs_used = 0;
 		params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma;
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.total_requests);
 	}
 
 	// We can't/shouldn't start this work until any pending work is finished.
@@ -2076,15 +2131,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		"===================================== SEND, HFI -- RENDEZVOUS RTS (begin)\n");
 
 	/*
-	 * For now this is implemented as PIO-only protocol, no SDMA
-	 * engines are used and no TIDs are allocated for expected
-	 * receives.
-	 *
-	 * This will have lower performance because software on the
-	 * initiator must copy the data into the injection buffer,
-	 * rather than the hardware via SDMA engines, and the
-	 * target must copy the data into the receive buffer, rather
-	 * than the hardware.
+	 * While the bulk of the payload data will be sent via SDMA once we
+	 * get the CTS from the receiver, the initial RTS packet is sent via PIO.
 	 */
 
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
@@ -2349,7 +2397,7 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep * opx_ep,
 
 			fprintf(stderr,
 				"%s:%s():%d drop this packet and allow reliability protocol to retry, psn = %u\n",
-				__FILE__, __func__, __LINE__, hdr->reliability.psn);
+				__FILE__, __func__, __LINE__, FI_OPX_HFI1_PACKET_PSN(hdr));
 #endif
 			if ((rhf_lsb & 0x00008000u) == 0x00008000u) {
 				/* "consume" this egrq element */

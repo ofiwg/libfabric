@@ -266,8 +266,8 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
 	 * Check for 'reliability' exceptions
 	 */
 	const uint64_t slid = hdr->stl.lrh.slid;
-	const uint64_t origin_tx = hdr->reliability.origin_tx;
-	const uint64_t psn = hdr->reliability.psn;
+	const uint64_t origin_tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(hdr);
+	const uint64_t psn = FI_OPX_HFI1_PACKET_PSN(hdr);
 	if (OFI_UNLIKELY(fi_opx_reliability_rx_check(&opx_ep->reliability->state, slid, origin_tx,
 						     psn, origin_rx) == FI_OPX_RELIABILITY_EXCEPTION)) {
 		if (!(rhf_lsb & 0x00008000u)) {
@@ -401,13 +401,13 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 	 *       2^24 times for the 1 time we'd see that edge case isn't worth the payoff.
 	 */
 
-	if (!(hdr->reliability.psn & opx_ep->reliability->service.preemptive_ack_rate_mask) &&
-		hdr->reliability.psn) {
+	uint32_t psn = FI_OPX_HFI1_PACKET_PSN(hdr);
+	if (!(psn & opx_ep->reliability->service.preemptive_ack_rate_mask) && psn) {
 
 		fi_opx_hfi1_rx_reliability_send_pre_acks(&opx_ep->ep_fid,
 				opx_ep->reliability->state.lid_be,
 				opx_ep->reliability->state.rx,
-				hdr->reliability.psn - opx_ep->reliability->service.preemptive_ack_rate + 1, /* psn_start */
+				psn - opx_ep->reliability->service.preemptive_ack_rate + 1, /* psn_start */
 				opx_ep->reliability->service.preemptive_ack_rate, /* psn_count */
 				hdr, origin_rx);
 	} else if (hdr->stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA &&
@@ -417,7 +417,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 		fi_opx_hfi1_rx_reliability_send_pre_acks(&opx_ep->ep_fid,
 				opx_ep->reliability->state.lid_be,
 				opx_ep->reliability->state.rx,
-				hdr->reliability.psn, /* psn_start */
+				psn, /* psn_start */
 				1, /* psn_count */
 				hdr, origin_rx);
 	}

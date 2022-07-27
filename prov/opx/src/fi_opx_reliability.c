@@ -634,7 +634,7 @@ void fi_opx_hfi1_rx_reliability_send_pre_acks(struct fid_ep *ep, const uint64_t 
 
 	const union fi_opx_reliability_service_flow_key key = {
 		.slid = slid, 
-		.tx = hdr->reliability.origin_tx,
+		.tx = FI_OPX_HFI1_PACKET_ORIGIN_TX(hdr),
 		.dlid = dlid,
 		.rx = reliability_rx };
 
@@ -880,15 +880,16 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 		const uint64_t key, const uint64_t psn_count, const uint64_t psn_start)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	const uint64_t stop_psn = psn_start + psn_count - 1;
+	//const uint64_t stop_psn = psn_start + psn_count - 1;
+	const uint64_t psn_stop = psn_start + psn_count - 1;
 
 	INC_PING_STAT(ACKS_RECV, key, psn_start, psn_count);
 
 #ifdef OPX_RELIABILITY_DEBUG
-	fprintf(stderr, "(tx) flow__ %016lx rcv ack  %08lu..%08lu\n", key, psn_start, stop_psn);
+	fprintf(stderr, "(tx) flow__ %016lx rcv ack  %08lu..%08lu\n", key, psn_start, psn_stop);
 #endif
 
-	assert(stop_psn <= MAX_PSN);
+	assert(psn_stop <= MAX_PSN);
 
 	void * itr = NULL;
 
@@ -902,7 +903,7 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 		 * the flow identified by the key is invalid ...?
 		 */
 		fprintf(stderr, "(%d) %s:%s():%d invalid key (%016lX) psn_start = %lx, psn_count = %lx, stop_psn = %lx\n",
-			getpid(), __FILE__, __func__, __LINE__, key, psn_start, psn_count, stop_psn);
+			getpid(), __FILE__, __func__, __LINE__, key, psn_start, psn_count, psn_stop);
 		abort();
 	}
 #endif
@@ -930,14 +931,14 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 	 * q doesn't contain a rollover (i.e, the tail's PSN >= the head's PSN)
 	 * we can just retire all elements in the queue
 	 */
-	if ((head->scb.hdr.reliability.psn >= psn_start) &&
-		(tail->scb.hdr.reliability.psn <= stop_psn) &&
-		(tail->scb.hdr.reliability.psn >= head->scb.hdr.reliability.psn)) {
+	uint32_t head_psn = FI_OPX_HFI1_PACKET_PSN(&head->scb.hdr);
+	uint32_t tail_psn = FI_OPX_HFI1_PACKET_PSN(&tail->scb.hdr);
+	if ((head_psn >= psn_start) && (tail_psn <= psn_stop) && (tail_psn >= head_psn)) {
 
 #ifdef OPX_RELIABILITY_DEBUG
-	last_ack_index = snprintf(last_ack, LAST_ACK_LEN, "(tx) Retiring on the fast path: %"PRIx64", %"PRIx64", %"PRIx64", H: %d, T: %d\n",
-		psn_start, psn_count, stop_psn, head->scb.hdr.reliability.psn,
-		tail->scb.hdr.reliability.psn);
+		last_ack_index = snprintf(last_ack, LAST_ACK_LEN,
+					"(tx) Retiring on the fast path: %"PRIx64", %"PRIx64", %"PRIx64", H: %d, T: %d\n",
+					psn_start, psn_count, psn_stop, head_psn, tail_psn);
 #endif
 		/* retire all queue elements */
 		*value_ptr = NULL;
@@ -952,8 +953,10 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 		do {
 #ifdef OPX_RELIABILITY_DEBUG
 			if (last_ack_index < LAST_ACK_LEN)
-			last_ack_index+=snprintf(&last_ack[last_ack_index],LAST_ACK_LEN-last_ack_index,
-				"(tx) packet %016lx %08x retired (fast path).\n", key, tmp->scb.hdr.reliability.psn);
+				last_ack_index += snprintf(&last_ack[last_ack_index],
+							   LAST_ACK_LEN-last_ack_index,
+							   "(tx) packet %016lx %08x retired (fast path).\n",
+							   key, FI_OPX_HFI1_PACKET_PSN(&tmp->scb.hdr));
 #endif
 			next = tmp->next;
 
@@ -979,7 +982,7 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 			} else {
 #ifdef OPX_RELIABILITY_DEBUG
 				fprintf(stderr, "(tx) packet %016lx %08u ACK'd but pinned, marking as ACK'd and skipping free of replay.\n",
-					key, tmp->scb.hdr.reliability.psn);
+					key, FI_OPX_HFI1_PACKET_PSN(&tmp->scb.hdr));
 #endif
 				tmp->acked = true;
 			}
@@ -994,17 +997,18 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 	 * find the first replay to ack
 	 */
 #ifdef OPX_RELIABILITY_DEBUG
-	last_ack_index=snprintf(last_ack, LAST_ACK_LEN, "(tx) Retiring on the slow path: %lx, %lx, %lx, H: %x, T: %x\n",
-		psn_start, psn_count, stop_psn, head->scb.hdr.reliability.psn,
-		tail->scb.hdr.reliability.psn);
+	last_ack_index = snprintf(last_ack, LAST_ACK_LEN, "(tx) Retiring on the slow path: %lx, %lx, %lx, H: %x, T: %x\n",
+				psn_start, psn_count, psn_stop, head_psn, tail_psn);
 #endif
 
 	struct fi_opx_reliability_tx_replay * start = head;
-	while ((start->scb.hdr.reliability.psn < psn_start) && (start != tail)) {
+	uint32_t start_psn = head_psn;
+	while ((start_psn < psn_start) && (start != tail)) {
 		start = start->next;
+		start_psn = FI_OPX_HFI1_PACKET_PSN(&start->scb.hdr);
 	}
 
-	if (OFI_UNLIKELY(start->scb.hdr.reliability.psn < psn_start)) {
+	if (OFI_UNLIKELY(start_psn < psn_start)) {
 
 		/*
 		 * all elements in replay queue are 'younger' than the
@@ -1021,16 +1025,20 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 
 	/*
 	 * find the last replay to ack. the replay psn must be contained in the
-	 * range [start_psn,stop_psn] and cannot contain a rollover.
+	 * range [start_psn,psn_stop] and cannot contain a rollover.
 	 */
 
 	struct fi_opx_reliability_tx_replay * stop = start;
-	while ((stop->next != head) && (stop->next->scb.hdr.reliability.psn <= stop_psn) &&
-		(stop->next->scb.hdr.reliability.psn > psn_start)) {
+	uint32_t stop_psn = start_psn;
+	uint32_t stop_next_psn = FI_OPX_HFI1_PACKET_PSN(&stop->next->scb.hdr);
+	while ((stop->next != head) && (stop_next_psn <= psn_stop) &&
+			(stop_next_psn > psn_start)) {
+		stop_psn = stop_next_psn;
 		stop = stop->next;
+		stop_next_psn = FI_OPX_HFI1_PACKET_PSN(&stop->next->scb.hdr);
 	}
 
-	if (OFI_UNLIKELY(stop->scb.hdr.reliability.psn > stop_psn)) {
+	if (OFI_UNLIKELY(stop_psn > psn_stop)) {
 
 		/*
 		 * all elements in the replay queue are 'older' than the
@@ -1063,9 +1071,9 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 	if (last_ack_index < LAST_ACK_LEN)
 		last_ack_index+=snprintf(&last_ack[last_ack_index],LAST_ACK_LEN-last_ack_index,
 			"(tx) Start = %x, Stop = %x, Halt = %x\n",
-			start->scb.hdr.reliability.psn,
-			stop->scb.hdr.reliability.psn,
-			halt->scb.hdr.reliability.psn);
+			FI_OPX_HFI1_PACKET_PSN(&start->scb.hdr),
+			FI_OPX_HFI1_PACKET_PSN(&stop->scb.hdr),
+			FI_OPX_HFI1_PACKET_PSN(&halt->scb.hdr));
 #endif
 
 	/* remove the psn range to ack from the queue */
@@ -1081,7 +1089,8 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 #ifdef OPX_RELIABILITY_DEBUG
 		if (last_ack_index < LAST_ACK_LEN)
 			last_ack_index+=snprintf(&last_ack[last_ack_index],LAST_ACK_LEN-last_ack_index,
-				"(tx) packet %016lx %08x retired (slow path).\n", key, tmp->scb.hdr.reliability.psn);
+				"(tx) packet %016lx %08x retired (slow path).\n", key,
+				FI_OPX_HFI1_PACKET_PSN(&tmp->scb.hdr));
 #endif
 		struct fi_opx_reliability_tx_replay * next = tmp->next;
 
@@ -1107,7 +1116,7 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 		} else {
 #ifdef OPX_RELIABILITY_DEBUG
 			fprintf(stderr, "(tx) packet %016lx %08u ACK'd but pinned, marking as ACK'd and skipping free of replay.\n",
-				key, tmp->scb.hdr.reliability.psn);
+				key, FI_OPX_HFI1_PACKET_PSN(&tmp->scb.hdr));
 #endif
 			tmp->acked = true;
 		}
@@ -1129,12 +1138,11 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 #ifdef OPX_RELIABILITY_DEBUG
 	union fi_opx_reliability_service_flow_key key;
 	key.slid = (uint32_t)replay->scb.hdr.stl.lrh.slid;
-	key.tx = (uint32_t)replay->scb.hdr.reliability.origin_tx;
+	key.tx = (uint32_t)FI_OPX_HFI1_PACKET_ORIGIN_TX(&replay->scb.hdr);
 	key.dlid = (uint32_t)replay->scb.hdr.stl.lrh.dlid;
 	key.rx = (uint32_t)replay->scb.hdr.stl.bth.rx;
 
 #endif
-
 	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 	const uint16_t lrh_pktlen_le = ntohs(replay->scb.hdr.stl.lrh.pktlen);
 	const size_t total_bytes_to_copy = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
@@ -1155,7 +1163,8 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 		total_credits_available = FI_OPX_HFI1_AVAILABLE_RELIABILITY_CREDITS(pio_state);
 		if (total_credits_available < total_credits_needed) {
 #ifdef OPX_RELIABILITY_DEBUG
-			fprintf(stderr, "(tx) packet %016lx %08u Couldn't do replay (no credits)\n", key.value, (uint32_t)replay->scb.hdr.reliability.psn);
+			fprintf(stderr, "(tx) packet %016lx %08u Couldn't do replay (no credits)\n",
+				key.value, (uint32_t)FI_OPX_HFI1_PACKET_PSN(&replay->scb.hdr));
 #endif
 			service->tx.hfi1.pio_state->qw0 = pio_state.qw0;
 			return -FI_EAGAIN;
@@ -1163,7 +1172,8 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 	}
 
 #ifdef OPX_RELIABILITY_DEBUG
-	fprintf(stderr, "(tx) packet %016lx %08u replay injected\n", key.value, (uint32_t)replay->scb.hdr.reliability.psn);
+	fprintf(stderr, "(tx) packet %016lx %08u replay injected\n",
+		key.value, (uint32_t)FI_OPX_HFI1_PACKET_PSN(&replay->scb.hdr));
 #endif
 
 	volatile uint64_t * const scb =
@@ -1258,7 +1268,7 @@ ssize_t fi_opx_reliability_pio_replay (union fi_opx_reliability_deferred_work *w
 		if (params->replays[i]->acked) {
 #ifdef OPX_RELIABILITY_DEBUG
 		fprintf(stderr, "(tx) packet %016lx %08u replay already ACK'd, skipping deferred replay\n",
-			params->flow_key, params->replays[i]->scb.hdr.reliability.psn);
+			params->flow_key, FI_OPX_HFI1_PACKET_PSN(&params->replays[i]->scb.hdr));
 #endif
 			fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, params->replays[i]);
 			params->replays[i] = NULL;
@@ -1283,19 +1293,19 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 		const uint64_t key, const uint64_t psn_count, const uint64_t psn_start)
 {
 	assert(psn_count > 0);
-	const uint64_t stop_psn = psn_start + psn_count - 1;
+	const uint64_t psn_stop = psn_start + psn_count - 1;
 
 	INC_PING_STAT(NACKS_RECV, key, psn_start, psn_count);
-	if (psn_start > stop_psn) {
-		fprintf(stderr, "%s:%s():%d (%016lx) invalid nack received; psn_start = %lu, psn_count = %lu, stop_psn = %lu\n",
-			__FILE__, __func__, __LINE__, key, psn_start, psn_count, stop_psn);
+	if (psn_start > psn_stop) {
+		fprintf(stderr, "%s:%s():%d (%016lx) invalid nack received; psn_start = %lu, psn_count = %lu, psn_stop = %lu\n",
+			__FILE__, __func__, __LINE__, key, psn_start, psn_count, psn_stop);
 		abort();
 	}
 
-	assert(stop_psn <= MAX_PSN);
+	assert(psn_stop <= MAX_PSN);
 
 #ifdef OPX_RELIABILITY_DEBUG
-	fprintf(stderr, "(tx) flow__ %016lx rcv nack %08lu..%08lu\n", key, psn_start, stop_psn);
+	fprintf(stderr, "(tx) flow__ %016lx rcv nack %08lu..%08lu\n", key, psn_start, psn_stop);
 #endif
 	void * itr = NULL;
 
@@ -1307,7 +1317,7 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 		/*
 		 * the flow identified by the key is invalid ...?
 		 */
-		fprintf(stderr, "%s:%s():%d invalid key (%016lx) psn_start = %lx, psn_count = %lx, stop_psn = %lx\n", __FILE__, __func__, __LINE__, key, psn_start, psn_count, stop_psn);
+		fprintf(stderr, "%s:%s():%d invalid key (%016lx) psn_start = %lx, psn_count = %lx, psn_stop = %lx\n", __FILE__, __func__, __LINE__, key, psn_start, psn_count, psn_stop);
 		abort();
 	}
 #endif
@@ -1324,7 +1334,7 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 		 */
 #ifdef OPX_RELIABILITY_DEBUG
 		fprintf(stderr, "(tx) flow__ %016lx rcv nack %08lu..%08lu No Unack'd replays in queue, ignoring\n",
-			key, psn_start, stop_psn);
+			key, psn_start, psn_stop);
 #endif
 		INC_PING_STAT(NACKS_IGNORED, key, psn_start, psn_count);
 		return;
@@ -1337,21 +1347,27 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 	 */
 
 	struct fi_opx_reliability_tx_replay * start = head;
-	while ((start->scb.hdr.reliability.psn < psn_start || start->pinned) && (start != tail)) {
+	uint32_t start_psn = FI_OPX_HFI1_PACKET_PSN(&start->scb.hdr);
+	while ((start_psn < psn_start || start->pinned) && (start != tail)) {
+#ifdef OPX_RELIABILITY_DEBUG
+		fprintf(stderr, "(tx) flow__ %016lx rcv nack %lu..%lu Looking for start replay, current start->psn == %u, start->pinned == %d\n",
+			key, psn_start, psn_stop,
+			FI_OPX_HFI1_PACKET_PSN(&start->scb.hdr),
+			start->pinned);
+#endif
 		start = start->next;
+		start_psn = FI_OPX_HFI1_PACKET_PSN(&start->scb.hdr);
 	}
 
-	if (OFI_UNLIKELY(start->scb.hdr.reliability.psn < psn_start ||
-			 start->scb.hdr.reliability.psn > stop_psn ||
-			 start->pinned)) {
+	if (OFI_UNLIKELY(start_psn < psn_start || start_psn > psn_stop || start->pinned)) {
 
 		/*
 		 * There are no unpinned replays within the nack range.
 		 * Do nothing and return.
 		 */
 #ifdef OPX_RELIABILITY_DEBUG
-		fprintf(stderr, "(tx) flow__ %016lx rcv nack %08lu..%08lu No Unack'd, unpinned replays in range, ignoring\n",
-			key, psn_start, stop_psn);
+		fprintf(stderr, "(tx) flow__ %016lx rcv nack %lu..%lu No Unack'd, unpinned replays in range, ignoring (start->psn == %u, start->pinned == %d\n",
+			key, psn_start, psn_stop, start_psn, start->pinned);
 #endif
 		INC_PING_STAT(NACKS_IGNORED, key, psn_start, psn_count);
 		return;
@@ -1375,7 +1391,7 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 	uint64_t replay_count = 1;
 	struct fi_opx_reliability_tx_replay * stop = start;
 	while ((stop->next != head) &&
-		(stop->next->scb.hdr.reliability.psn <= stop_psn) &&
+		(FI_OPX_HFI1_PACKET_PSN(&stop->next->scb.hdr) <= psn_stop) &&
 		(replay_count < OPX_RELIABILITY_TX_MAX_REPLAYS)) {
 
 		// We won't retransmit pinned replays, so don't count those
@@ -1391,9 +1407,8 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 
 #ifdef OPX_RELIABILITY_DEBUG
 	fprintf(stderr, "(tx) flow__ %016lx rcv nack %08lu..%08lu Replaying PSNs %08u - %08u\n",
-		key, psn_start, stop_psn,
-		(uint32_t)start->scb.hdr.reliability.psn,
-		(uint32_t)stop->scb.hdr.reliability.psn);
+		key, psn_start, psn_stop, start_psn,
+		(uint32_t)FI_OPX_HFI1_PACKET_PSN(&stop->scb.hdr));
 #endif
 	// Turn on throttling for this flow while we catch up on replays
 	start->psn_ptr->psn.nack_count = 1;
@@ -1463,7 +1478,7 @@ uint64_t fi_opx_reliability_send_ping(struct fid_ep *ep,
 
 	const union fi_opx_reliability_service_flow_key key = {
 		.slid = (uint32_t)head->scb.hdr.stl.lrh.slid,
-		.tx = (uint32_t)head->scb.hdr.reliability.origin_tx,
+		.tx = (uint32_t)FI_OPX_HFI1_PACKET_ORIGIN_TX(&head->scb.hdr),
 		.dlid = (uint32_t)head->scb.hdr.stl.lrh.dlid,
 		.rx = (uint32_t)head->scb.hdr.stl.bth.rx,
 	};
@@ -1472,8 +1487,8 @@ uint64_t fi_opx_reliability_send_ping(struct fid_ep *ep,
 	const uint64_t rx = (uint64_t)head->target_reliability_rx;
 
 	// psn_start will always be 24-bit max number here
-	uint64_t psn_start = head->scb.hdr.reliability.psn;
-	uint64_t psn_stop = head->prev->scb.hdr.reliability.psn;
+	uint64_t psn_start = FI_OPX_HFI1_PACKET_PSN(&head->scb.hdr);
+	uint64_t psn_stop = FI_OPX_HFI1_PACKET_PSN(&head->prev->scb.hdr);
 
 	// if the PSN of the tail is less than the PSN of the head, the
 	// PSN has rolled over. In that case, truncate the ping range
@@ -2960,7 +2975,7 @@ void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
 
 			do {
 #ifdef OPX_RELIABILITY_DEBUG
-				fprintf(stderr, "(tx) packet %016lx %08u retired.\n", tx_key.value, tmp->scb.hdr.reliability.psn);
+				fprintf(stderr, "(tx) packet %016lx %08u retired.\n", tx_key.value, FI_OPX_HFI1_PACKET_PSN(&tmp->scb.hdr));
 #endif
 				next = tmp->next;
 

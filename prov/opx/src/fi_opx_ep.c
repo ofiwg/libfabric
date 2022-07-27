@@ -815,6 +815,8 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 
 
 		opx_ep->rx->tx.dput = opx_ep->rx->tx.cts;
+		opx_ep->rx->tx.dput.hdr.reliability.origin_tx = 0;
+		opx_ep->rx->tx.dput.hdr.dput.target.origin_tx = hfi1->send_ctxt;
 		opx_ep->rx->tx.dput.hdr.dput.origin_rx = hfi1->info.rxe.id;
 		opx_ep->rx->tx.dput.hdr.stl.bth.opcode = FI_OPX_HFI_BTH_OPCODE_RZV_DATA;
 	}

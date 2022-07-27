@@ -1305,6 +1305,20 @@ void fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode,
 	}
 }
 
+__OPX_FORCE_INLINE__
+uintptr_t fi_opx_dput_rbuf_out(const uintptr_t rbuf_in) {
+	union fi_opx_hfi1_dput_rbuf rbuf_out = { .ptr = htonll(rbuf_in)};
+	rbuf_out.dw[1] = ntohl(rbuf_out.dw[1]);
+	return rbuf_out.ptr;
+}
+
+__OPX_FORCE_INLINE__
+uintptr_t fi_opx_dput_rbuf_in(const uintptr_t rbuf_out) {
+	union fi_opx_hfi1_dput_rbuf rbuf_in = { .ptr = rbuf_out};
+	rbuf_in.dw[1] = htonl(rbuf_in.dw[1]);
+	return ntohll(rbuf_in.ptr);
+}
+
 
 static inline void fi_opx_atomic_completion_action(union fi_opx_hfi1_deferred_work * work_state) {
     // TODO:  This function should be written for atomic access
@@ -1425,12 +1439,20 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		"===================================== RECV -- RENDEZVOUS DATA Opcode=%0hhX (begin)\n", hdr->dput.target.opcode);
 	switch(hdr->dput.target.opcode) {
 	case FI_OPX_HFI_DPUT_OPCODE_RZV:
+	case FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG:
 	{
 		assert(payload != NULL);
 		uint64_t* target_byte_counter_vaddr = (uint64_t *)hdr->dput.target.vaddr.target_byte_counter_vaddr;
-		uint64_t* rbuf_qws = (uint64_t *)hdr->dput.target.vaddr.rbuf;
+		uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.vaddr.rbuf);
 		const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
-		const uint32_t bytes = hdr->dput.target.vaddr.bytes;
+
+		/* In a multi-packet SDMA send, the driver sets the high bit on
+		 * in the PSN to indicate this is the last packet. The payload
+		 * size of the last packet may be smaller than the other packets
+		 * in the multi-packet send, so set the payload bytes accordingly */
+		const uint16_t bytes = (ntohl(hdr->stl.bth.psn) & 0x80000000) ?
+					hdr->dput.target.vaddr.last_bytes :
+					hdr->dput.target.vaddr.bytes;
 
 		if(bytes > FI_OPX_HFI1_PACKET_MTU) {
 			fprintf(stderr, "bytes is %d\n", bytes);
@@ -1441,29 +1463,11 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 
 		if(target_byte_counter_vaddr != NULL) {
 			const uint64_t value = *target_byte_counter_vaddr;
+			assert(value >= bytes);
 			*target_byte_counter_vaddr = value - bytes;
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"target_byte_counter_vaddr = %p, %lu -> %lu\n",
-				target_byte_counter_vaddr, value, value - bytes);
-		}
-	}
-	break;
-	case FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG:
-	{
-		assert(payload != NULL);
-		uint64_t* target_byte_counter_vaddr = (uint64_t *)hdr->dput.target.vaddr.target_byte_counter_vaddr;
-		uint64_t* rbuf_qws = (uint64_t *)hdr->dput.target.vaddr.rbuf;
-		const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
-		const uint32_t bytes = hdr->dput.target.vaddr.bytes;
-
-		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
-		memcpy(rbuf_qws, sbuf_qws, bytes);
-		if(target_byte_counter_vaddr != NULL) {
-			const uint64_t value = *target_byte_counter_vaddr;
-			*target_byte_counter_vaddr = value - bytes;
-			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"target_byte_counter_vaddr = %p, %lu -> %lu\n",
-				target_byte_counter_vaddr, value, value - bytes);
+				"hdr->dput.target.vaddr.last_bytes = %hu, hdr->dput.target.vaddr.bytes = %u, target_byte_counter_vaddr = %p, %lu -> %lu\n",
+				hdr->dput.target.vaddr.last_bytes, hdr->dput.target.vaddr.bytes, target_byte_counter_vaddr, value, value - bytes);
 		}
 	}
 	break;
@@ -1502,6 +1506,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
 		// Optimize Memcpy
 		memcpy(rbuf_qws, sbuf_qws, bytes);
+		assert(cc->byte_counter >= bytes);
 		cc->byte_counter -= bytes;
 		assert(cc->byte_counter >= 0);
 
@@ -1665,7 +1670,7 @@ __OPX_FORCE_INLINE_AND_FLATTEN__
 uint64_t fi_opx_mp_egr_id_from_nth_packet(const union fi_opx_hfi1_packet_hdr *hdr) {
 
 	return ((uint64_t) hdr->mp_eager_nth.mp_egr_uid) |
-		(((uint64_t)(hdr->stl.bth.psn & 0xFF000000)) << 24) |
+		(((uint64_t)hdr->reliability.origin_tx) << 48) |
 		(((uint64_t)hdr->stl.lrh.slid) << 32);
 }
 
@@ -1768,8 +1773,8 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 			reliability);
 
 	const union fi_opx_mp_egr_id mp_egr_id = {
-		.uid = hdr->stl.bth.psn & 0x00FFFFFF,
-		.origin_tx = ((hdr->stl.bth.psn & 0xFF000000) >> 24),
+		.uid = hdr->reliability.psn,
+		.origin_tx = hdr->reliability.origin_tx,
 		.slid = hdr->stl.lrh.slid,
 		.unused = 0};
 
@@ -2187,8 +2192,8 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 			/* Since this is the first multi-packet eager packet,
 			   the uid portion of the mp_egr_id will be this packet's PSN */
 			const union fi_opx_mp_egr_id mp_egr_id = {
-					.uid = uepkt->hdr.stl.bth.psn & 0x00FFFFFF,
-					.origin_tx = ((uepkt->hdr.stl.bth.psn & 0xFF000000) >> 24),
+					.uid = uepkt->hdr.reliability.psn,
+					.origin_tx = uepkt->hdr.reliability.origin_tx,
 					.slid = uepkt->hdr.stl.lrh.slid,
 					.unused = 0
 			};

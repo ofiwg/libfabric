@@ -103,18 +103,61 @@ static_assert(!(FI_OPX_MP_EGR_CHUNK_SIZE & 0x3F), "FI_OPX_MP_EGR_CHUNK_SIZE Must
 static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES must be greater than FI_OPX_MP_EGR_CHUNK_SIZE!");
 
 /* SDMA tuning constants */
-#define FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS		(32)   // Number of packets to send per SDMA dispatch/call to writev
-#define FI_OPX_HFI1_SDMA_MAX_IOV_LEN			(FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS * 2)  // 2 IOVs are required per packet 
-#define FI_OPX_HFI1_SDMA_MAX_WE				(32) // Number of concurrent SDMA requests (SDMA work entries) in flight at once.  HFI1 has 16 SDMA engines
+
+/*
+ * The maximum number of packets to send for a single SDMA call to writev.
+ */
+#ifndef FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS
+#define FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS		(32)
+#endif
+
+/*
+ * The number of SDMA requests (SDMA work entries) available.
+ * Each of these will use a single comp index entry in the SDMA ring buffer
+ * queue when writev is called. There should be at least as many of these as
+ * there are queue entries (FI_OPX_HFI1_SDMA_MAX_COMP_INDEX), but ideally more
+ * so that new requests can be built while others are in flight.
+ */
+#ifndef FI_OPX_HFI1_SDMA_MAX_WE
+#define FI_OPX_HFI1_SDMA_MAX_WE				(128)
+#endif
+
+/*
+ * The maximum number of SDMA work entries that a single DPUT operation can use.
+ */
+#ifndef FI_OPX_HFI1_SDMA_MAX_WE_PER_REQ
+#define FI_OPX_HFI1_SDMA_MAX_WE_PER_REQ			(8)
+#endif
+
+/*
+ * The maximum number of data iovecs attached to a single header vec.
+ * This value should match MAX_VECTORS_PER_REQ in the driver code's user_sdma.h.
+ */
+#define FI_OPX_HFI1_SDMA_MAX_DATA_IOVS			(8)
+#define FI_OPX_HFI1_SDMA_MAX_IOV_LEN			(FI_OPX_HFI1_SDMA_MAX_DATA_IOVS + 1)  // 1 header vec + data vecs
 #define FI_OPX_HFI1_SDMA_MAX_COMP_INDEX			(128) // This should what opx_ep->hfi->info.sdma.queue_size is set to.
-#define FI_OPX_SDMA_FRAG_SIZE				(FI_OPX_HFI1_PACKET_MTU)
+
 #define FI_OPX_SDMA_MIN_LENGTH				(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES + 1)
-#define FI_OPX_SDMA_ALWAYS_MIN				(128 * 1024) // Minimum payload size Threshold for which we will always use SDMA
-#define FI_OPX_SDMA_DC_MIN				(1024 * 1024) // Minimum payload size Threshold for which we will use delivery completion instead of copying the payload for reliability.
-static_assert(FI_OPX_HFI1_SDMA_MAX_IOV_LEN <= 255, "num_iovs is only a byte");
+
+/*
+ * The minimum payload size threshold for which we will use delivery completion
+ * instead of copying the payload for reliability.
+ */
+#define FI_OPX_SDMA_DC_MIN				(1024 * 1024)
+
+/*
+ * Determine the maximum number of packets that can be send in an SDMA work entry.
+ * When delivery completion is being used, only 2 iovecs are required: one for
+ * the request header, and one for the payload. When delivery completion is not
+ * being used, each packet will require its own iovec (the replay's bounce
+ * buffer), so in that case we're limited to the iovec max.
+ */
+#define FI_OPX_HFI1_SDMA_MAX_PACKETS(use_dc)	\
+	((use_dc) ? FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS : FI_OPX_HFI1_SDMA_MAX_DATA_IOVS)
+
 static_assert(!(FI_OPX_HFI1_SDMA_MAX_COMP_INDEX & (FI_OPX_HFI1_SDMA_MAX_COMP_INDEX - 1)), "FI_OPX_HFI1_SDMA_MAX_COMP_INDEX must be power of 2!\n");
-static_assert(FI_OPX_SDMA_ALWAYS_MIN >= FI_OPX_SDMA_MIN_LENGTH, "FI_OPX_SDMA_ALWAYS_MIN Must be >= FI_OPX_SDMA_MIN_LENGHT!\n");
 static_assert(FI_OPX_SDMA_DC_MIN >= FI_OPX_SDMA_MIN_LENGTH, "FI_OPX_SDMA_DC_MIN Must be >= FI_OPX_SDMA_MIN_LENGHT!\n");
+static_assert(FI_OPX_HFI1_SDMA_MAX_WE >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX, "FI_OPX_HFI1_SDMA_MAX_WE must be >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX!\n");
 
 /*
  * SDMA includes 8B sdma hdr, 8B PBC, and message header.
@@ -127,8 +170,8 @@ static_assert(FI_OPX_SDMA_DC_MIN >= FI_OPX_SDMA_MIN_LENGTH, "FI_OPX_SDMA_DC_MIN 
 #define FI_OPX_HFI1_SDMA_HDR_SIZE      (8+8+56)  //TODO, Will change if using GPU (header gets 2 bytes bigger)
 
 
-//Version 1, EAGER opcode (1)(byte 0), 2 iovectors (byte 1)
-#define FI_OPX_HFI1_SDMA_REQ_HEADER_FIXEDBITS	(0x0211)
+//Version 1, EAGER opcode (1)(byte 0), 0 iovectors (byte 1, set at runtime)
+#define FI_OPX_HFI1_SDMA_REQ_HEADER_FIXEDBITS	(0x0011)
 
 static inline
 uint32_t fi_opx_addr_calculate_base_rx (const uint32_t process_id, const uint32_t processes_per_node) {
