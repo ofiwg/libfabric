@@ -39,6 +39,7 @@
 
 #include <sys/types.h>
 #include <stdbool.h>
+#include <string.h>
 
 /*
  * Indexer:
@@ -113,6 +114,8 @@ static inline bool ofi_idx_free_list_empty(struct indexer *idx)
 {
 	return (idx->free_list == 0);
 }
+
+
 /*
  * Index map:
  * The index map is similar in concept to the indexer.  It allows the user
@@ -156,6 +159,53 @@ static inline void *ofi_idm_lookup(struct index_map *idm, int index)
 {
 	return ((index <= OFI_IDX_MAX_INDEX) && ofi_idm_chunk(idm, index)) ?
 		ofi_idm_at(idm, index) : NULL;
+}
+
+
+struct ofi_dyn_arr
+{
+	char *chunk[OFI_IDX_MAX_CHUNKS];
+	size_t item_size;
+	void (*init)(struct ofi_dyn_arr *arr, void *item);
+};
+
+static inline void
+ofi_array_init(struct ofi_dyn_arr *arr, size_t item_size,
+	       void (*init)(struct ofi_dyn_arr *arr, void *item))
+{
+	memset(arr, 0, sizeof(*arr));
+	arr->item_size = item_size;
+	arr->init = init;
+}
+
+int ofi_array_grow(struct ofi_dyn_arr *arr, int index);
+void ofi_array_iter(struct ofi_dyn_arr *arr,
+		    void (*callback)(struct ofi_dyn_arr *arr, void *item));
+void ofi_array_destroy(struct ofi_dyn_arr *arr);
+
+static inline char *ofi_array_chunk(struct ofi_dyn_arr *arr, int index)
+{
+	assert(arr->chunk);
+	return arr->chunk[ofi_idx_chunk_id(index)];
+}
+
+static inline void *
+ofi_array_item(struct ofi_dyn_arr *arr, char *chunk, int offset)
+{
+	return chunk + arr->item_size * offset;
+}
+
+static inline void *ofi_array_at(struct ofi_dyn_arr *arr, int index)
+{
+	assert(index <= OFI_IDX_MAX_INDEX);
+
+	if (!ofi_array_chunk(arr, index)) {
+		if (ofi_array_grow(arr, index) < 0)
+			return NULL;
+	}
+
+	return ofi_array_item(arr, ofi_array_chunk(arr, index),
+			      ofi_idx_offset(index));
 }
 
 #endif /* _OFI_INDEXER_H_ */

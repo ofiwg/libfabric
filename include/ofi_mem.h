@@ -97,6 +97,8 @@ static inline int ofi_str_dup(const char *src, char **dst)
 	return 0;
 }
 
+/* Dynamic array -- see ofi_indexer.h */
+
 /*
  * Buffer pool (free stack) template
  */
