@@ -525,6 +525,10 @@ the list available for that test.
 *-v*
 : Add data verification check to data transfers.
 
+*-O <addr>*
+: Specify the out of band address to use, mainly useful if the address is not
+  an IP address.
+
 # USAGE EXAMPLES
 
 ## A simple example
