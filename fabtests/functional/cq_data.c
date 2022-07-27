@@ -167,6 +167,7 @@ int main(int argc, char **argv)
 		hints->caps |= FI_RMA;
 
 	hints->domain_attr->mr_mode = opts.mr_mode;
+	hints->addr_format = opts.address_format;
 
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 

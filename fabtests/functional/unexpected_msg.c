@@ -381,6 +381,7 @@ int main(int argc, char **argv)
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->rx_attr->total_buffered_recv = 0;
 	hints->caps = FI_TAGGED;
+	hints->addr_format = opts.address_format;
 
 	if (hints->ep_attr->type != FI_EP_MSG)
 		hints->caps |= FI_DIRECTED_RECV;

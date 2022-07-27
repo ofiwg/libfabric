@@ -429,6 +429,7 @@ int main(int argc, char **argv)
 	hints->caps = FI_RMA | FI_RMA_EVENT | FI_MSG;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
+	hints->addr_format = opts.address_format;
 
 	ret = run_test();
 

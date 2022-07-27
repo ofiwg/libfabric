@@ -633,6 +633,7 @@ int main(int argc, char **argv)
 
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
+	hints->addr_format = opts.address_format;
 
 	ret = ft_init_fabric();
 	if (ret)

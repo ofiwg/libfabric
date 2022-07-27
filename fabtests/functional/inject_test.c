@@ -212,6 +212,7 @@ int main(int argc, char **argv)
 	hints->caps = FI_TAGGED;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->domain_attr->mr_mode = opts.mr_mode;
+	hints->addr_format = opts.address_format;
 
 	ret = run_test();
 
