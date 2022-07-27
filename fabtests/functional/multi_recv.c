@@ -331,6 +331,7 @@ int main(int argc, char **argv)
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->rx_attr->op_flags = FI_MULTI_RECV;
+	hints->addr_format = opts.address_format;
 
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 

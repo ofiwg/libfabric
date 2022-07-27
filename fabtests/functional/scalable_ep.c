@@ -392,6 +392,7 @@ int main(int argc, char **argv)
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_NAMED_RX_CTX;
 	hints->domain_attr->mr_mode = opts.mr_mode;
+	hints->addr_format = opts.address_format;
 
 	ret = run();
 

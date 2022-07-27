@@ -1833,7 +1833,15 @@ int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
 {
 	int ret;
 
-	if (opts->dst_addr && (opts->src_addr || !opts->oob_port)){
+	if (opts->address_format == FI_ADDR_STR) {
+		*service = NULL;
+		if (opts->dst_addr) {
+			*node = opts->dst_addr;
+		} else {
+			*node = opts->src_addr;
+			*flags = FI_SOURCE;
+		}
+	} else if (opts->dst_addr && (opts->src_addr || !opts->oob_port)) {
 		if (!opts->dst_port)
 			opts->dst_port = default_port;
 
@@ -3175,7 +3183,9 @@ void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts)
 			opts->oob_port = default_oob_port;
 		break;
 	case 'F':
-		if (!strncasecmp("fi_sockaddr_in6", optarg, 15))
+		if (!strncasecmp("fi_addr_str", optarg, 11))
+			opts->address_format = FI_ADDR_STR;
+		else if (!strncasecmp("fi_sockaddr_in6", optarg, 15))
 			opts->address_format = FI_SOCKADDR_IN6;
 		else if (!strncasecmp("fi_sockaddr_in", optarg, 14))
 			opts->address_format = FI_SOCKADDR_IN;
