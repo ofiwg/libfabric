@@ -232,3 +232,54 @@ void ofi_idm_reset(struct index_map *idm, void (*callback)(void *item))
 	}
 }
 
+
+int ofi_array_grow(struct ofi_dyn_arr *arr, int index)
+{
+	int c, i;
+
+	assert(arr->item_size);
+	assert(!ofi_array_chunk(arr, index));
+
+	c = ofi_idx_chunk_id(index);
+	arr->chunk[c] = calloc(OFI_IDX_CHUNK_SIZE, arr->item_size);
+	if (!arr->chunk[c])
+		goto nomem;
+
+	if (arr->init) {
+		for (i = 0; i < OFI_IDX_CHUNK_SIZE; i++)
+			arr->init(arr, ofi_array_item(arr, arr->chunk[c], i));
+	}
+
+	return index;
+
+nomem:
+	errno = ENOMEM;
+	return -1;
+}
+
+void ofi_array_iter(struct ofi_dyn_arr *arr,
+		    void (*callback)(struct ofi_dyn_arr *arr, void *item))
+{
+	int c, i;
+
+	for (c = 0; c < OFI_IDX_MAX_CHUNKS; c++) {
+		if (!arr->chunk[c])
+			continue;
+
+		for (i = 0; i < OFI_IDX_CHUNK_SIZE; i++)
+			callback(arr, ofi_array_item(arr, arr->chunk[c], i));
+	}
+}
+
+void ofi_array_destroy(struct ofi_dyn_arr *arr)
+{
+	int c;
+
+	for (c = 0; c < OFI_IDX_MAX_CHUNKS; c++) {
+		if (!arr->chunk[c])
+			continue;
+
+		free(arr->chunk[c]);
+		arr->chunk[c] = NULL;
+	}
+}
