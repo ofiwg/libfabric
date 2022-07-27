@@ -190,6 +190,7 @@ struct ft_opts {
 	enum ft_rma_opcodes rma_op;
 	enum ft_cqdata_opcodes cqdata_op;
 	char *oob_port;
+	char *oob_addr;
 	int argc;
 	int num_connections;
 	int address_format;
@@ -274,7 +275,7 @@ extern int ft_parent_proc;
 extern int ft_socket_pair[2];
 extern int sock, oob_sock;
 extern int listen_sock;
-#define ADDR_OPTS "B:P:s:a:b::E::C:F:"
+#define ADDR_OPTS "B:P:s:a:b::E::C:F:O:"
 #define FAB_OPTS "f:d:p:K"
 #define HMEM_OPTS "D:i:H"
 #define INFO_OPTS FAB_OPTS HMEM_OPTS "e:M:"
@@ -299,6 +300,7 @@ extern char default_port[8];
 		.rma_op = FT_RMA_WRITE, \
 		.cqdata_op = FT_CQDATA_SENDDATA, \
 		.oob_port = NULL, \
+		.oob_addr = NULL, \
 		.mr_mode = FI_MR_LOCAL | FI_MR_ENDPOINT | OFI_MR_BASIC_MAP | FI_MR_RAW, \
 		.iface = FI_HMEM_SYSTEM, \
 		.device = 0, \

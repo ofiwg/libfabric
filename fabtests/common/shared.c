@@ -850,6 +850,7 @@ int ft_init_oob(void)
 {
 	struct addrinfo *ai = NULL;
 	int ret;
+	char *addr = opts.oob_addr;
 
 	if (!(opts.options & FT_OPT_OOB_CTRL) || oob_sock != -1)
 		return 0;
@@ -858,7 +859,10 @@ int ft_init_oob(void)
 		opts.oob_port = default_oob_port;
 
 	if (!opts.dst_addr) {
-		ret = ft_sock_listen(opts.src_addr, opts.oob_port);
+		if (!addr)
+			addr = opts.src_addr;
+
+		ret = ft_sock_listen(addr, opts.oob_port);
 		if (ret)
 			return ret;
 
@@ -871,7 +875,10 @@ int ft_init_oob(void)
 
 		ft_close_fd(listen_sock);
 	} else {
-		ret = getaddrinfo(opts.dst_addr, opts.oob_port, NULL, &ai);
+		if (!addr)
+			addr = opts.dst_addr;
+
+		ret = getaddrinfo(addr, opts.oob_port, NULL, &ai);
 		if (ret) {
 			perror("getaddrinfo");
 			return ret;
@@ -3030,6 +3037,7 @@ void ft_addr_usage()
 	FT_PRINT_OPTS_USAGE("-E[=<oob_port>]", "enable out-of-band address exchange only "
 			"over the, optional, port");
 	FT_PRINT_OPTS_USAGE("-C <number>", "simultaneous connections to server");
+	FT_PRINT_OPTS_USAGE("-O <addr>", "use the provided addr for out of band");
 	FT_PRINT_OPTS_USAGE("-F <addr_format>", "Address format (default:FI_FORMAT_UNSPEC)");
 }
 
@@ -3216,6 +3224,10 @@ void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts)
 	case 'C':
 		opts->options |= FT_OPT_SERVER_PERSIST;
 		opts->num_connections = atoi(optarg);
+		break;
+	case 'O':
+		opts->oob_addr = optarg;
+		break;
 	default:
 		/* let getopt handle unknown opts*/
 		break;
