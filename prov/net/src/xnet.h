@@ -167,10 +167,12 @@ struct xnet_srx {
 	struct xnet_cq		*cq;
 	struct slist		rx_queue;
 	struct slist		tag_queue;
+	struct ofi_dyn_arr	src_tag_queues;
 	struct xnet_xfer_entry	*(*match_tag_rx)(struct xnet_srx *srx,
 						 struct xnet_ep *ep,
 						 uint64_t tag);
 
+	uint64_t		tag_seq_no;
 	struct ofi_bufpool	*buf_pool;
 	uint64_t		op_flags;
 	size_t			min_multi_recv_size;
@@ -325,6 +327,7 @@ struct xnet_xfer_entry {
 	size_t			iov_cnt;
 	struct iovec		iov[XNET_IOV_LIMIT+1];
 	struct xnet_ep		*ep;
+	uint64_t		tag_seq_no;
 	uint64_t		tag;
 	uint64_t		ignore;
 	fi_addr_t		src_addr;
