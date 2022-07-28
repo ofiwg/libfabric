@@ -184,6 +184,13 @@ AS_IF([test x"$with_ze" != x"no" && test -n "$with_ze" && test "$have_ze" = "0" 
 
 AC_DEFINE_UNQUOTED([HAVE_LIBZE], [$have_ze], [ZE support])
 
+dnl Checks for presence of ZE library. Needed for building dmabuf rdma component tests.
+have_ze_devel=0
+AS_IF([test "$have_ze" = "1"],
+      [AC_CHECK_LIB(ze_loader, zeInit, [have_ze_devel=1])],
+      [])
+AM_CONDITIONAL([HAVE_LIBZE_DEVEL], [test $have_ze_devel -eq 1])
+
 AC_MSG_CHECKING([for fi_trywait support])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <rdma/fi_eq.h>]],
 	       [[fi_trywait(NULL, NULL, 0);]])],
