@@ -86,6 +86,11 @@ union fi_opx_context {
 	};
 };
 
+struct fi_opx_extended_context {
+	union fi_opx_context context;
+	void *src_addr;
+};
+
 struct fi_opx_context_slist {
 	union fi_opx_context *	head;
 	union fi_opx_context *	tail;

@@ -190,7 +190,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	}
 	*/
 
-	fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->u8_rx);
+	fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->u8_rx, opx_dst_addr.hfi1_unit);
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
 	int rc = fi_opx_hfi1_do_dput(work);

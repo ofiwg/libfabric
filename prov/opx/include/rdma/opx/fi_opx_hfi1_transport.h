@@ -566,10 +566,13 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 			(opx_ep->tx->inject.hdr.stl.lrh.slid == addr.uid.lid))) {
 
 		uint64_t pos;
+		ssize_t rc;
 		union fi_opx_hfi1_packet_hdr * const hdr =
-			opx_shm_tx_next(&opx_ep->tx->shm, dest_rx, &pos);
+			opx_shm_tx_next(&opx_ep->tx->shm, dest_rx, &pos,
+				opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
+				opx_ep->daos_info.rank_inst, &rc);
 
-		if (!hdr) return -FI_EAGAIN;
+		if (!hdr) return rc;
 
 		hdr->qw[0] = opx_ep->tx->inject.hdr.qw[0] | lrh_dlid;
 
@@ -774,10 +777,12 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 	    (((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == (FI_LOCAL_COMM | FI_REMOTE_COMM)) &&
 	     (opx_ep->tx->send.hdr.stl.lrh.slid == addr.uid.lid))) {
 		uint64_t pos;
+		ssize_t rc;
 		union fi_opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
-			&opx_ep->tx->shm, dest_rx, &pos);
+			&opx_ep->tx->shm, dest_rx, &pos, opx_ep->daos_info.hfi_rank_enabled,
+			opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, &rc);
 
-		if (!hdr) return -FI_EAGAIN;
+		if (!hdr) return rc;
 
 		hdr->qw[0] = opx_ep->tx->send.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
 		hdr->qw[1] = opx_ep->tx->send.hdr.qw[1] | bth_rx | (xfer_bytes_tail << 48) |
@@ -997,11 +1002,20 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 
 	const uint16_t lrh_dws = htons(pbc_dws-1);	/* does not include pbc (8 bytes), but does include icrc (4 bytes) */
 
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== SEND, SHM -- EAGER (begin)\n");
 	uint64_t pos;
+	ssize_t rc;
 	union fi_opx_hfi1_packet_hdr * const hdr =
-		opx_shm_tx_next(&opx_ep->tx->shm, dest_rx, &pos);
+		opx_shm_tx_next(&opx_ep->tx->shm, dest_rx, &pos,
+			opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
+			opx_ep->daos_info.rank_inst, &rc);
 
-	if (!hdr) return -FI_EAGAIN;
+	if (!hdr) {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== SEND, SHM -- EAGER (end) - No packet available.\n");
+		return rc;
+	}
 
 	hdr->qw[0] = opx_ep->tx->send.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
 
@@ -1027,7 +1041,6 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 
 	hdr->qw[6] = tag;
 
-
 	union fi_opx_hfi1_packet_payload * const payload =
 		(union fi_opx_hfi1_packet_payload *)(hdr+1);
 
@@ -1042,6 +1055,8 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 		fi_opx_ep_tx_cq_inject_completion(ep, context, len, lock_required,
 			tag, caps);
 	}
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== SEND, SHM -- EAGER (end)\n");
 
 	return FI_SUCCESS;
 
@@ -1790,12 +1805,16 @@ static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep, const uint64
 	const uint16_t lrh_dws = htons(pbc_dws - 1);
 	const uint64_t bth_rx = dest_rx << 56;
 	uint64_t pos;
+	ssize_t rc;
 	union fi_opx_hfi1_packet_hdr * tx_hdr = opx_shm_tx_next(
-		&opx_ep->tx->shm, dest_rx, &pos);
+		&opx_ep->tx->shm, dest_rx, &pos, opx_ep->daos_info.hfi_rank_enabled,
+		opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, &rc);
+	/* Potential infinite loop, unable to return result to application */
 	while(OFI_UNLIKELY(tx_hdr == NULL)) {  //TODO: Verify that all callers of this function can tolderate a NULL rc
 		fi_opx_shm_poll_many(&opx_ep->ep_fid, FI_OPX_LOCK_NOT_REQUIRED);
 		tx_hdr = opx_shm_tx_next(
-			&opx_ep->tx->shm, dest_rx, &pos);
+			&opx_ep->tx->shm, dest_rx, &pos, opx_ep->daos_info.hfi_rank_enabled,
+			opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, &rc);
 	}
 
 	tx_hdr->qw[0] = opx_ep->rx->tx.cts.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);

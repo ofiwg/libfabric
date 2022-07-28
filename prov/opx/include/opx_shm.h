@@ -59,7 +59,7 @@
 #include <limits.h>
 #include <signal.h>
 
-#define OPX_SHM_MAX_CONN_NUM (UINT8_MAX)
+#define OPX_SHM_MAX_CONN_NUM 0xfff
 #define OPX_SHM_SEGMENT_NAME_MAX_LENGTH (512)
 #define OPX_SHM_SEGMENT_NAME_PREFIX "/opx.shm."
 
@@ -70,6 +70,7 @@ struct opx_shm_connection {
 	void	*segment_ptr;
 	size_t	segment_size;
 	bool	inuse;
+	char segment_key[OPX_SHM_SEGMENT_NAME_MAX_LENGTH];
 };
 
 struct opx_shm_tx {
@@ -77,7 +78,9 @@ struct opx_shm_tx {
 	struct opx_shm_connection  connection[OPX_SHM_MAX_CONN_NUM];
 	struct fi_provider		  *prov;
 	struct opx_shm_tx		  *next; // for signal handler
-
+	uint32_t				  rank;
+	uint32_t				  rank_inst;
+	int						  rank_pid;
 };
 
 struct opx_shm_resynch {
@@ -101,7 +104,11 @@ extern struct opx_shm_rx *shm_rx_head;
 struct opx_shm_packet
 {
 	ofi_atomic64_t sequence_;
-	uint8_t        data[FI_OPX_SHM_PACKET_SIZE];
+	uint32_t		origin_rank;
+	uint32_t		origin_rank_inst;
+	int				origin_rank_pid;
+	uint32_t		pad;
+	uint8_t			data[FI_OPX_SHM_PACKET_SIZE];
 }__attribute__((__aligned__(64)));
 
 struct opx_shm_fifo {
@@ -198,6 +205,9 @@ ssize_t opx_shm_rx_init (struct opx_shm_rx *rx,
 	// TODO: MHEINZ we probably need a lock here.
 	rx->next = shm_rx_head; shm_rx_head = rx; // add to signal handler list.
 
+	FI_LOG(prov, FI_LOG_WARN, FI_LOG_FABRIC,
+		"SHM creation of %u context passed. Segment (%s)\n", rx_id, rx->segment_key);
+
 	return FI_SUCCESS;
 
 error_return:
@@ -222,7 +232,10 @@ ssize_t opx_shm_rx_fini (struct opx_shm_rx *rx)
 
 static inline
 ssize_t opx_shm_tx_init (struct opx_shm_tx *tx,
-		struct fi_provider *prov)
+		struct fi_provider *prov,
+		uint32_t hfi_rank,
+		uint32_t hfi_rank_inst,
+		int hfi_rank_pid)
 {
 	int i = 0;
 	for (i = 0; i < OPX_SHM_MAX_CONN_NUM; ++i) {
@@ -233,6 +246,9 @@ ssize_t opx_shm_tx_init (struct opx_shm_tx *tx,
 	}
 
 	tx->prov = prov;
+	tx->rank = hfi_rank;
+	tx->rank_inst = hfi_rank_inst;
+	tx->rank_pid = hfi_rank_pid;
 
 	// TODO: MHEINZ we probably need a lock here.
 	tx->next = shm_tx_head; shm_tx_head = tx; // add to signal handler list.
@@ -282,8 +298,9 @@ ssize_t opx_shm_tx_connect (struct opx_shm_tx *tx,
 	tx->connection[rx_id].segment_size = segment_size;
 	tx->connection[rx_id].inuse = false;
 	tx->fifo[rx_id] = (struct opx_shm_fifo *)(((uintptr_t)segment_ptr + 64) & (~0x03Full));
+	strcpy(tx->connection[rx_id].segment_key, segment_key);
 
-	FI_LOG(tx->prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
+	FI_LOG(tx->prov, FI_LOG_WARN, FI_LOG_FABRIC,
 		"SHM connection to %u context passed. Segment (%s), %d, (%p)\n",
 		rx_id, segment_key, segment_fd, segment_ptr);
 
@@ -333,9 +350,33 @@ ssize_t opx_shm_tx_fini (struct opx_shm_tx *tx)
 }
 
 static inline
-void * opx_shm_tx_next (struct opx_shm_tx *tx, unsigned peer, uint64_t *pos)
+unsigned opx_shm_daos_rank_index (unsigned rank, unsigned rank_inst)
 {
-	struct opx_shm_fifo *tx_fifo = tx->fifo[peer];
+	unsigned index = rank_inst << 8 | rank;
+
+	return index;
+}
+
+static inline
+void * opx_shm_tx_next (struct opx_shm_tx *tx, unsigned peer, uint64_t *pos,
+		bool use_rank, unsigned rank, unsigned rank_inst, ssize_t *rc)
+{
+	/* HFI Rank Support:  Used HFI rank index instead of HFI index. */
+	unsigned rx_index = (!use_rank) ? peer : opx_shm_daos_rank_index(rank, rank_inst);
+
+	if (rx_index >= OPX_SHM_MAX_CONN_NUM) {
+		*rc = -FI_EIO;
+		FI_LOG(tx->prov, FI_LOG_WARN, FI_LOG_FABRIC,
+			"SHM %u context exceeds maximum contexts supported.\n", rx_index);
+		return NULL;
+	}
+
+	struct opx_shm_fifo *tx_fifo = tx->fifo[rx_index];
+
+	FI_LOG(tx->prov, FI_LOG_WARN, FI_LOG_FABRIC,
+		"SHM sending to %u context. Segment (%s)\n", rx_index,
+			tx->connection[rx_index].segment_key);
+
     struct opx_shm_packet* packet;
 	*pos = atomic_load_explicit(&tx_fifo->enqueue_pos_.val, memory_order_relaxed);
     for (;;)
@@ -351,6 +392,7 @@ void * opx_shm_tx_next (struct opx_shm_tx *tx, unsigned peer, uint64_t *pos)
         else if (dif < 0) {
 			// queue is full. can't return a packet.
 			FI_LOG(tx->prov, FI_LOG_DEBUG, FI_LOG_FABRIC, "Handle NULL enqueue\n");
+			*rc = -FI_EAGAIN;
             return NULL;
 		}
         else {
@@ -360,7 +402,8 @@ void * opx_shm_tx_next (struct opx_shm_tx *tx, unsigned peer, uint64_t *pos)
 
     }
 
-	tx->connection[peer].inuse = true;
+	tx->connection[rx_index].inuse = true;
+	*rc = FI_SUCCESS;
 
 	return (void*) packet->data;
 }
@@ -369,13 +412,16 @@ static inline
 void opx_shm_tx_advance (struct opx_shm_tx *tx, void *packet_data, uint64_t pos)
 {
 	struct opx_shm_packet *packet = container_of(packet_data, struct opx_shm_packet, data);
+	/* HFI Rank Support:  Rank and PID included with packet sequence and data */
+	packet->origin_rank = tx->rank;
+	packet->origin_rank_inst = tx->rank_inst;
+	packet->origin_rank_pid = tx->rank_pid;
 	atomic_store_explicit(&packet->sequence_.val, pos+1, memory_order_release);
 	return;
 }
 
-
 static inline
-void * opx_shm_rx_next (struct opx_shm_rx *rx, uint64_t * pos)
+struct opx_shm_packet * opx_shm_rx_next (struct opx_shm_rx *rx, uint64_t * pos)
 {
 	struct opx_shm_fifo *rx_fifo = rx->fifo;
 
@@ -400,7 +446,7 @@ void * opx_shm_rx_next (struct opx_shm_rx *rx, uint64_t * pos)
 			//opx_shm_x86_pause();
 		}
     }
-	return packet->data;
+	return packet;
 }
 
 static inline

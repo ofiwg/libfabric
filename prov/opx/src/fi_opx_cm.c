@@ -52,23 +52,40 @@ int fi_opx_getname(fid_t fid, void *addr, size_t *addrlen)
 
 	switch(fid->fclass) {
 	case FI_CLASS_EP:
-
-		*addrlen = sizeof(union fi_opx_addr);
-		if (len > 0) {
-			if (!addr) {
-				errno = FI_EINVAL;
-				return -errno;
-			}
-
+		{
 			struct fi_opx_ep *opx_ep;
 			opx_ep = container_of(fid, struct fi_opx_ep, ep_fid);
 
-			memcpy(addr, (void*)&opx_ep->rx->self, MIN(len, *addrlen));
-		}
+			if (!opx_ep->daos_info.hfi_rank_enabled) {
+				*addrlen = sizeof(union fi_opx_addr);
+				if (len > 0) {
+					if (!addr) {
+						errno = FI_EINVAL;
+						return -errno;
+					}
 
-		if (len < sizeof(union fi_opx_addr)) {
-			errno = FI_ETOOSMALL;
-			return -errno;
+					memcpy(addr, (void*)&opx_ep->rx->self, MIN(len, *addrlen));
+				}
+			} else {
+				*addrlen = sizeof(struct fi_opx_extended_addr);
+				if (len > 0) {
+					if (!addr) {
+						errno = FI_EINVAL;
+						return -errno;
+					}
+
+					struct fi_opx_extended_addr *ext_addr = (struct fi_opx_extended_addr *)addr;
+					memcpy(&ext_addr->addr, (void*)&opx_ep->rx->self, sizeof(union fi_opx_addr));
+					ext_addr->rank = opx_ep->hfi->daos_info.rank;
+					ext_addr->rank_inst = opx_ep->hfi->daos_info.rank_inst;
+					ext_addr->pid =  opx_ep->hfi->daos_info.rank_pid;
+				}
+			}
+
+			if (len < *addrlen) {
+				errno = FI_ETOOSMALL;
+				return -errno;
+			}
 		}
 		break;
 	case FI_CLASS_SEP:

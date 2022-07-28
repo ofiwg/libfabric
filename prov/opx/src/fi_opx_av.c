@@ -70,7 +70,8 @@ static int fi_opx_close_av(fid_t fid)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "av closed\n");
 	return 0;
 }
-void fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers);
+void fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers,
+		struct fi_opx_extended_addr *peers_ext);
 /*
  * The 'addr' is a representation of the address - not a string
  *
@@ -135,7 +136,7 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 				opx_addr[t].fi = input[n];
 			}
 			for (i=0; i<ep_tx_count; ++i) {
-				fi_opx_ep_tx_connect(opx_av->ep_tx[i],(opx_av->addr_count+count),opx_addr);
+				fi_opx_ep_tx_connect(opx_av->ep_tx[i],(opx_av->addr_count+count),opx_addr, NULL);
 			}
 		}
 		break;
@@ -152,12 +153,39 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			fprintf(stderr, "%s:%s():%d abort\n", __FILE__, __func__, __LINE__); abort();
 		} else {
 			union fi_opx_addr * output = (union fi_opx_addr *) fi_addr;
-			for (n=0; n<count; ++n) {
-				output[n].fi = input[n];
+			struct fi_opx_extended_addr * output_ext = NULL;
+
+			if (opx_av->ep_tx[0] == NULL ||
+				!opx_av->ep_tx[0]->daos_info.hfi_rank_enabled) {
+				for (n=0; n<count; ++n) {
+					output[n].fi = input[n];
+				}
+			} else {
+				struct fi_opx_extended_addr * input =
+					(struct fi_opx_extended_addr *) addr;
+
+				posix_memalign((void**)&output_ext, 32/*sizeof(struct fi_opx_extended_addr)*/,
+					sizeof(struct fi_opx_extended_addr) * count);
+				if (!output_ext) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_ENOMEM\n");
+					errno = FI_ENOMEM;
+					return -errno;
+				}
+
+				for (n=0; n<count; ++n) {
+					output[n].fi = input[n].addr.fi;
+					output_ext[n].rank = input[n].rank;
+					output_ext[n].rank_inst = input[n].rank_inst;
+					output_ext[n].pid = input[n].pid;
+				}
 			}
+
 			for (i=0; i<ep_tx_count; ++i) {
-				fi_opx_ep_tx_connect(opx_av->ep_tx[i], count, output);
+				fi_opx_ep_tx_connect(opx_av->ep_tx[i], count, output, output_ext);
 			}
+
+			if (output_ext)
+				free(output_ext);
 		}
 		break;
 	default:
@@ -309,14 +337,31 @@ fi_opx_av_straddr(struct fid_av *av, const void *addr,
 		return NULL;
 	}
 
-	union fi_opx_addr * opx_addr = (union fi_opx_addr *)addr;
+	struct fi_opx_av *opx_av =
+		container_of(av, struct fi_opx_av, av_fid);
+	char tmp[100];
+	int n;
 
-	char tmp[32];
-	int n = 1 + snprintf(tmp, sizeof(tmp), "%04x.%04x.%02x.%02x.%02x.%02x",
-		opx_addr->uid.lid,
-		opx_addr->uid.endpoint_id, opx_addr->rx_index,
-		opx_addr->hfi1_rx, opx_addr->hfi1_unit,
-		opx_addr->reliability_rx);
+	if (opx_av->ep_tx[0] == NULL ||
+		!opx_av->ep_tx[0]->daos_info.hfi_rank_enabled) {
+		union fi_opx_addr * opx_addr = (union fi_opx_addr *)addr;
+		/* Parse address with standard address format */
+		n = 1 + snprintf(tmp, sizeof(tmp), "%04x.%04x.%02x.%02x.%02x.%02x",
+			opx_addr->uid.lid,
+			opx_addr->uid.endpoint_id, opx_addr->rx_index,
+			opx_addr->hfi1_rx, opx_addr->hfi1_unit,
+			opx_addr->reliability_rx);
+	} else {
+		struct fi_opx_extended_addr * opx_addr = (struct fi_opx_extended_addr *)addr;
+		/* Parse address with extended address format */
+		n = 1 + snprintf(tmp, sizeof(tmp), "%04x.%04x.%02x.%02x.%02x.%02x.%04x.%04x.%d",
+			opx_addr->addr.uid.lid,
+			opx_addr->addr.uid.endpoint_id, opx_addr->addr.rx_index,
+			opx_addr->addr.hfi1_rx, opx_addr->addr.hfi1_unit,
+			opx_addr->addr.reliability_rx,
+			opx_addr->rank, opx_addr->rank_inst, opx_addr->pid);
+	}
+
 	memcpy(buf, tmp, MIN(n, *len));
 	*len = n;
 
