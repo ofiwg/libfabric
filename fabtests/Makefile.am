@@ -69,6 +69,15 @@ bin_PROGRAMS = \
 	regression/sighandler_test \
 	common/check_hmem
 
+if HAVE_LIBZE_DEVEL
+bin_PROGRAMS += \
+	component/dmabuf-rdma/rdmabw-xe \
+	component/dmabuf-rdma/fi-rdmabw-xe \
+	component/dmabuf-rdma/mr-reg-xe \
+	component/dmabuf-rdma/fi-mr-reg-xe \
+	component/dmabuf-rdma/memcopy-xe
+endif HAVE_LIBZE_DEVEL
+
 dist_bin_SCRIPTS = \
 	scripts/runfabtests.sh \
 	scripts/runfabtests.py \
@@ -446,6 +455,76 @@ component_sock_test_LDADD = libfabtests.la
 
 component_sock_test_CFLAGS = \
 	$(AM_CFLAGS)
+
+if HAVE_LIBZE_DEVEL
+component_dmabuf_rdma_rdmabw_xe_SOURCES = \
+	component/dmabuf-rdma/rdmabw-xe.c \
+	component/dmabuf-rdma/util.c \
+	component/dmabuf-rdma/util.h \
+	component/dmabuf-rdma/xe.c \
+	component/dmabuf-rdma/xe.h \
+	component/dmabuf-rdma/dmabuf_reg.c \
+	component/dmabuf-rdma/dmabuf_reg.h
+
+component_dmabuf_rdma_rdmabw_xe_LDADD = libfabtests.la
+
+component_dmabuf_rdma_rdmabw_xe_CFLAGS = \
+	$(AM_CFLAGS) \
+	-I$(srcdir)/component/dmabuf-rdma
+
+component_dmabuf_rdma_fi_rdmabw_xe_SOURCES = \
+	component/dmabuf-rdma/fi-rdmabw-xe.c \
+	component/dmabuf-rdma/util.c \
+	component/dmabuf-rdma/util.h \
+	component/dmabuf-rdma/xe.c \
+	component/dmabuf-rdma/xe.h \
+	component/dmabuf-rdma/dmabuf_reg.c \
+	component/dmabuf-rdma/dmabuf_reg.h
+
+component_dmabuf_rdma_fi_rdmabw_xe_LDADD = libfabtests.la
+
+component_dmabuf_rdma_fi_rdmabw_xe_CFLAGS = \
+	$(AM_CFLAGS) \
+	-I$(srcdir)/component/dmabuf-rdma
+
+component_dmabuf_rdma_mr_reg_xe_SOURCES = \
+	component/dmabuf-rdma/mr-reg-xe.c \
+	component/dmabuf-rdma/util.h \
+	component/dmabuf-rdma/xe.c \
+	component/dmabuf-rdma/xe.h \
+	component/dmabuf-rdma/dmabuf_reg.c \
+	component/dmabuf-rdma/dmabuf_reg.h
+
+component_dmabuf_rdma_mr_reg_xe_LDADD = libfabtests.la
+
+component_dmabuf_rdma_mr_reg_xe_CFLAGS = \
+	$(AM_CFLAGS) \
+	-I$(srcdir)/component/dmabuf-rdma
+
+component_dmabuf_rdma_fi_mr_reg_xe_SOURCES = \
+	component/dmabuf-rdma/fi-mr-reg-xe.c \
+	component/dmabuf-rdma/util.h \
+	component/dmabuf-rdma/xe.c \
+	component/dmabuf-rdma/xe.h \
+	component/dmabuf-rdma/dmabuf_reg.c \
+	component/dmabuf-rdma/dmabuf_reg.h
+
+component_dmabuf_rdma_fi_mr_reg_xe_LDADD = libfabtests.la
+
+component_dmabuf_rdma_fi_mr_reg_xe_CFLAGS = \
+	$(AM_CFLAGS) \
+	-I$(srcdir)/component/dmabuf-rdma
+
+component_dmabuf_rdma_memcopy_xe_SOURCES = \
+	component/dmabuf-rdma/memcopy-xe.c \
+	component/dmabuf-rdma/util.c \
+	component/dmabuf-rdma/util.h
+
+component_dmabuf_rdma_memcopy_xe_LDADD = libfabtests.la
+
+component_dmabuf_rdma_memcopy_xe_CFLAGS = \
+	$(AM_CFLAGS)
+endif HAVE_LIBZE_DEVEL
 
 regression_sighandler_test_SOURCES = \
 	regression/sighandler_test.c
