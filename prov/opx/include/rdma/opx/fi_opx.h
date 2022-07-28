@@ -47,7 +47,7 @@
 #include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
 #include <ofi_lock.h>
-
+#include <uthash.h>
 
 // #define FI_OPX_TRACE 1
 
@@ -98,6 +98,17 @@
 #define OPX_TAGGED_CAPS		0x0018000000000000ull
 
 extern struct fi_provider fi_opx_provider;
+struct fi_opx_daos_hfi_rank_key {
+	uint8_t		hfi_unit_number;
+	uint32_t	rank;
+	int			pid;
+};
+
+struct fi_opx_daos_hfi_rank {
+	struct fi_opx_daos_hfi_rank_key key;
+	uint32_t instance;
+	UT_hash_handle 	hh;         /* makes this structure hashable */
+};
 
 struct fi_opx_global_data {
 	struct fi_info		*info;
@@ -106,6 +117,7 @@ struct fi_opx_global_data {
 	struct fi_tx_attr	*default_tx_attr;
 	struct fi_rx_attr	*default_rx_attr;
 	struct fi_provider 	*prov;
+	struct fi_opx_daos_hfi_rank	*daos_hfi_rank_hashmap;
 };
 
 extern struct fi_opx_global_data fi_opx_global;

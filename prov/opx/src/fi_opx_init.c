@@ -421,6 +421,18 @@ static void fi_opx_fini()
 	always_assert(fi_opx_init == 1,
 		"OPX provider finalize called before initialize\n");
 	fi_freeinfo(fi_opx_global.info);
+
+	if (fi_opx_global.daos_hfi_rank_hashmap) {
+		struct fi_opx_daos_hfi_rank *cur_hfi_rank = NULL;
+		struct fi_opx_daos_hfi_rank *tmp_hfi_rank = NULL;
+
+		HASH_ITER(hh, fi_opx_global.daos_hfi_rank_hashmap, cur_hfi_rank, tmp_hfi_rank) {
+			if (cur_hfi_rank) {
+				HASH_DEL(fi_opx_global.daos_hfi_rank_hashmap, cur_hfi_rank);
+				free(cur_hfi_rank);
+			}
+		}
+	}
 }
 
 struct fi_provider fi_opx_provider = {
@@ -482,6 +494,7 @@ OPX_INI
 	}
 
 	fi_opx_global.prov = &fi_opx_provider;
+	fi_opx_global.daos_hfi_rank_hashmap = NULL;
 
 	fi_opx_init = 1;
 

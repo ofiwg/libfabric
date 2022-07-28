@@ -136,6 +136,43 @@ static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl,
 	return fd;
 }
 
+static int fi_opx_get_daos_hfi_rank_inst(const uint8_t hfi_unit_number, const uint32_t rank)
+{
+	struct fi_opx_daos_hfi_rank_key key;
+	struct fi_opx_daos_hfi_rank *hfi_rank = NULL;
+
+	memset(&key, 0, sizeof(key));
+	key.hfi_unit_number = hfi_unit_number;
+	key.rank = rank;
+	key.pid = getpid();
+
+	HASH_FIND(hh, fi_opx_global.daos_hfi_rank_hashmap, &key,
+		  sizeof(key), hfi_rank);
+
+	if (hfi_rank) {
+		hfi_rank->instance++;
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"HFI %d used by PID %d assigned rank %d again: %d.\n",
+			key.hfi_unit_number, key.pid, key.rank, hfi_rank->instance);
+	} else {
+		int rc __attribute__ ((unused));
+		rc = posix_memalign((void **)&hfi_rank, 32, sizeof(*hfi_rank));
+		assert(rc==0);
+
+		hfi_rank->key = key;
+		hfi_rank->instance = 0;
+		HASH_ADD(hh, fi_opx_global.daos_hfi_rank_hashmap, key,
+			 sizeof(hfi_rank->key), hfi_rank);
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"HFI %d used by PID %d assigned rank %d entry created.\n",
+			key.hfi_unit_number, key.pid, key.rank);
+	}
+
+	return hfi_rank->instance;
+}
+
 /*
  * Open a context on the first HFI that shares our process' NUMA node.
  * If no HFI shares our NUMA node, grab the first active HFI.
@@ -145,6 +182,8 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	struct fi_opx_ep *opx_ep = (ep == NULL) ? NULL : container_of(ep, struct fi_opx_ep, ep_fid);
 	int fd = -1;
 	int hfi_unit_number = -1;
+	int hfi_context_rank = -1;
+	int hfi_context_rank_inst = -1;
 	const int numa_node_id = opx_get_current_proc_location();
 	const int core_id = opx_get_current_proc_core();
 	const int hfi_count = opx_hfi_get_num_units();
@@ -316,13 +355,25 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		memset(&addr, 0, sizeof(addr));
 		memcpy(&addr.fi, opx_ep->common_info->src_addr, opx_ep->common_info->src_addrlen);
 
+		if (addr.uid.fi != UINT32_MAX)
+			hfi_context_rank = addr.uid.fi;
 		hfi_unit_number = addr.hfi1_unit;
 		hfi_candidates[0] = hfi_unit_number;
 		hfi_distances[0] = 0;
 		hfi_candidates_count = 1;
-		FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
-			"Application-specified HFI selection set to %d. Skipping HFI selection algorithm \n",
-			hfi_unit_number);
+
+		if (hfi_context_rank != -1) {
+			hfi_context_rank_inst =
+				fi_opx_get_daos_hfi_rank_inst(hfi_unit_number, hfi_context_rank);
+				
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+				"Application-specified HFI selection set to %d rank %d.%d. Skipping HFI selection algorithm\n",
+				hfi_unit_number, hfi_context_rank, hfi_context_rank_inst);
+		} else {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
+				"Application-specified HFI selection set to %d. Skipping HFI selection algorithm\n",
+				hfi_unit_number);
+		}
 
 		fd = opx_open_hfi_and_context(&ctrl, internal, unique_job_key, hfi_unit_number);
 		if (fd < 0) {
@@ -478,6 +529,9 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	context->lid = (uint16_t)lid;
 	context->gid_hi = gid_hi;
 	context->gid_lo = gid_lo;
+	context->daos_info.rank = hfi_context_rank;
+	context->daos_info.rank_inst = hfi_context_rank_inst;
+	context->daos_info.rank_pid = getpid();
 
 	context->sl = ESSP_SL_DEFAULT;
 
@@ -625,10 +679,23 @@ void fi_opx_hfi1_tx_connect (struct fi_opx_ep *opx_ep, fi_addr_t peer)
 			union fi_opx_addr addr;
 			addr.raw64b = (uint64_t)peer;
 
-			snprintf(buffer,sizeof(buffer),"%s-%02x",
-				opx_ep->domain->unique_job_key_str, addr.hfi1_unit);
+			uint32_t hfi_unit = addr.hfi1_unit;
+			unsigned rx_index = addr.hfi1_rx;
+			int pid = 0, inst = 0;
+
+			/* HFI Rank Support:  Rank and PID included in the SHM file name */
+			if (opx_ep->daos_info.hfi_rank_enabled) {
+				rx_index = opx_shm_daos_rank_index(opx_ep->daos_info.rank,
+					opx_ep->daos_info.rank_inst);
+				inst = opx_ep->daos_info.rank_inst;
+				pid = opx_ep->daos_info.rank_pid;
+			}
+
+			snprintf(buffer,sizeof(buffer),"%s-%02x.%d.%d",
+				opx_ep->domain->unique_job_key_str, hfi_unit, pid, inst);
+
 			opx_shm_tx_connect(&opx_ep->tx->shm, (const char * const)buffer,
-				addr.hfi1_rx, FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
+				rx_index, FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
 		}
 	}
 
@@ -645,10 +712,13 @@ int fi_opx_hfi1_do_rx_rzv_rts_intranode (struct fi_opx_hfi1_rx_rzv_rts_params *p
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, SHM -- RENDEZVOUS RTS (begin)\n");
 	uint64_t pos;
+	ssize_t rc;
 	union fi_opx_hfi1_packet_hdr * const tx_hdr =
-		opx_shm_tx_next(&opx_ep->tx->shm, params->u8_rx, &pos);
+		opx_shm_tx_next(&opx_ep->tx->shm, params->u8_rx, &pos,
+			opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
+			opx_ep->daos_info.rank_inst, &rc);
 
-	if(!tx_hdr) return -FI_EAGAIN;
+	if(!tx_hdr) return rc;
 	tx_hdr->qw[0] = opx_ep->rx->tx.cts.hdr.qw[0] | lrh_dlid;
 	tx_hdr->qw[1] = opx_ep->rx->tx.cts.hdr.qw[1] | bth_rx;
 	tx_hdr->qw[2] = opx_ep->rx->tx.cts.hdr.qw[2];
@@ -656,7 +726,6 @@ int fi_opx_hfi1_do_rx_rzv_rts_intranode (struct fi_opx_hfi1_rx_rzv_rts_params *p
 	tx_hdr->qw[4] = opx_ep->rx->tx.cts.hdr.qw[4] | (params->niov << 32) | params->opcode;
 	tx_hdr->qw[5] = params->origin_byte_counter_vaddr;
 	tx_hdr->qw[6] = params->target_byte_counter_vaddr;
-
 
 	union fi_opx_hfi1_packet_payload * const tx_payload =
 		(union fi_opx_hfi1_packet_payload *)(tx_hdr+1);
@@ -845,10 +914,13 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_ep * opx_ep = params->opx_ep;
 
 	uint64_t pos;
+	ssize_t rc;
 	union fi_opx_hfi1_packet_hdr *const tx_hdr =
-			opx_shm_tx_next(&opx_ep->tx->shm, params->u8_rx, &pos);
+			opx_shm_tx_next(&opx_ep->tx->shm, params->u8_rx, &pos,
+				opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
+				opx_ep->daos_info.rank_inst, &rc);
 	if (tx_hdr == NULL) {
-		return -FI_EAGAIN;
+		return rc;
 	}
 
 	tx_hdr->qw[0] = opx_ep->rx->tx.dput.hdr.qw[0] | params->lrh_dlid | ((uint64_t)lrh_dws << 32);
@@ -885,7 +957,7 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 	params->bytes_to_fence = hdr->dput.target.fence.bytes_to_fence;
 	params->cc = (struct fi_opx_completion_counter *) hdr->dput.target.fence.completion_counter;
 
-	fi_opx_shm_dynamic_tx_connect(1, opx_ep, u8_rx);
+	fi_opx_shm_dynamic_tx_connect(1, opx_ep, u8_rx, 0);
 
 	int rc = opx_hfi1_do_dput_fence(work);
 
@@ -1252,10 +1324,13 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 			uint64_t bytes_sent;
 			if (is_intranode) {
 				uint64_t pos;
+				ssize_t rc;
 				union fi_opx_hfi1_packet_hdr * tx_hdr =
-					opx_shm_tx_next(&opx_ep->tx->shm, u8_rx, &pos);
+					opx_shm_tx_next(&opx_ep->tx->shm, u8_rx, &pos,
+						opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
+						opx_ep->daos_info.rank_inst, &rc);
 
-				if(!tx_hdr) return -FI_EAGAIN;
+				if(!tx_hdr) return rc;
 
 				union fi_opx_hfi1_packet_payload * const tx_payload =
 					(union fi_opx_hfi1_packet_payload *)(tx_hdr+1);
@@ -1621,7 +1696,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 							 const enum ofi_reliability_kind reliability) {
 	const union fi_opx_hfi1_packet_hdr * const hfi1_hdr =
 		(const union fi_opx_hfi1_packet_hdr * const) hdr;
-	fi_opx_shm_dynamic_tx_connect(is_intranode, opx_ep, u8_rx);
+	fi_opx_shm_dynamic_tx_connect(is_intranode, opx_ep, u8_rx, 0);
 
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
@@ -1759,10 +1834,12 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 			"===================================== SEND, SHM -- RENDEZVOUS RTS Noncontig (begin)\n");
 
 		uint64_t pos;
+		ssize_t rc;
 		union fi_opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
-			&opx_ep->tx->shm, dest_rx, &pos);
+			&opx_ep->tx->shm, dest_rx, &pos, opx_ep->daos_info.hfi_rank_enabled,
+			opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, &rc);
 
-		if (!hdr) return -FI_EAGAIN;
+		if (!hdr) return rc;
 
 		hdr->qw[0] = opx_ep->tx->rzv.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
 		hdr->qw[1] = opx_ep->tx->rzv.hdr.qw[1] | bth_rx |
@@ -1774,6 +1851,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 		hdr->qw[4] = opx_ep->tx->rzv.hdr.qw[4] | (niov << 48);
 		hdr->qw[5] = total_len;
 		hdr->qw[6] = tag;
+
 		union fi_opx_hfi1_packet_payload *const payload =
 			(union fi_opx_hfi1_packet_payload *)(hdr + 1);
 
@@ -2067,10 +2145,13 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND, SHM -- RENDEZVOUS RTS (begin)\n");
 		uint64_t pos;
+		ssize_t rc;
 		union fi_opx_hfi1_packet_hdr * const hdr =
-			opx_shm_tx_next(&opx_ep->tx->shm, dest_rx, &pos);
+			opx_shm_tx_next(&opx_ep->tx->shm, dest_rx, &pos,
+				opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
+				opx_ep->daos_info.rank_inst, &rc);
 
-		if (!hdr) return -FI_EAGAIN;
+		if (!hdr) return rc;
 
 		hdr->qw[0] = opx_ep->tx->rzv.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
 
@@ -2084,7 +2165,6 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		hdr->qw[4] = opx_ep->tx->rzv.hdr.qw[4] | (1ull << 48); /* effectively 1 iov */
 		hdr->qw[5] = len;
 		hdr->qw[6] = tag;
-
 
 		union fi_opx_hfi1_packet_payload * const payload =
 			(union fi_opx_hfi1_packet_payload *)(hdr+1);

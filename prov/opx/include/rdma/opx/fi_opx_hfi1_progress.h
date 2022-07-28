@@ -196,7 +196,11 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep,
 				fi_opx_reliability_handle_ud_init_ack(&opx_ep->reliability->state, hdr);
 				break;
 			case FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH:
-				fi_opx_hfi1_rx_reliability_resynch(&opx_ep->ep_fid, opx_ep->reliability->state.service, hdr);
+				fi_opx_hfi1_rx_reliability_resynch(&opx_ep->ep_fid,
+					opx_ep->reliability->state.service,
+					hdr->service.origin_reliability_rx,
+					0,
+					hdr);
 				break;
 			case FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK:
 				fi_opx_hfi1_rx_reliability_ack_resynch(&opx_ep->ep_fid, opx_ep->reliability->state.service, hdr);
@@ -527,10 +531,18 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 {
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	uint64_t pos;
-	union fi_opx_hfi1_packet_hdr * hdr =
-		(union fi_opx_hfi1_packet_hdr *) opx_shm_rx_next(&opx_ep->rx->shm, &pos);
+	struct opx_shm_packet* packet = opx_shm_rx_next(&opx_ep->rx->shm, &pos);
+	union fi_opx_hfi1_packet_hdr * hdr = (packet) ? 
+		(union fi_opx_hfi1_packet_hdr *) packet->data : NULL; 
+
 	while (hdr != NULL) {
 		const uint8_t opcode = hdr->stl.bth.opcode;
+		uint32_t origin_reliability_rx = hdr->service.origin_reliability_rx;
+
+		/* HFI Rank Support: origin_reliability_rx is HFI rank instead of HFI rx */
+		if (opx_ep->daos_info.hfi_rank_enabled) {
+			origin_reliability_rx = packet->origin_rank;
+		}
 
 		if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
 			fi_opx_ep_rx_process_header(ep, hdr, NULL, 0,
@@ -545,10 +557,13 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 
 			if (ud_opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH) {
 				fi_opx_hfi1_rx_reliability_resynch(&opx_ep->ep_fid,
-								opx_ep->reliability->state.service, hdr);
+					opx_ep->reliability->state.service, origin_reliability_rx,
+					packet->origin_rank_pid, hdr);
+
 			} else if (ud_opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK) {
 				fi_opx_hfi1_rx_reliability_ack_resynch(&opx_ep->ep_fid,
-								opx_ep->reliability->state.service, hdr);
+					opx_ep->reliability->state.service, hdr);
+
 			} else {
 				fprintf(stderr, "%s:%s():%d bad ud opcode (%u); abort.\n",
 					__FILE__, __func__, __LINE__, ud_opcode);
@@ -579,7 +594,8 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 		}
 
 		opx_shm_rx_advance(&opx_ep->rx->shm, (void *)hdr, pos);
-		hdr = (union fi_opx_hfi1_packet_hdr *) opx_shm_rx_next(&opx_ep->rx->shm, &pos);
+		packet = opx_shm_rx_next(&opx_ep->rx->shm, &pos);
+		hdr = (packet) ? (union fi_opx_hfi1_packet_hdr *) packet->data : NULL;
 	}
 }
 

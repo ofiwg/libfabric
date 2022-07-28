@@ -373,6 +373,15 @@ struct fi_opx_ep_reliability {
         int64_t	ref_cnt;
 };
 
+
+struct fi_opx_ep_daos_info {
+	bool					do_resynch_remote_ep;
+	bool                	hfi_rank_enabled;
+	uint32_t            	rank;
+	uint32_t            	rank_inst;
+	int						rank_pid;
+};
+
 /*
  * The 'fi_opx_ep' struct defines an endpoint with a single tx context and a
  * single rx context. The tx context is only valid if the FI_READ, FI_WRITE,
@@ -435,8 +444,8 @@ struct fi_opx_ep {
 	struct fi_opx_cntr			*init_recv_cntr;
 	bool					is_tx_cq_bound;
 	bool					is_rx_cq_bound;
-	bool					do_resynch_remote_ep;
 	ofi_spin_t				lock;
+	struct fi_opx_ep_daos_info	daos_info;
 
 
 #ifdef FLIGHT_RECORDER_ENABLE
@@ -1295,11 +1304,19 @@ void complete_receive_operation(struct fid_ep *ep,
 static inline
 void fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode,
 								   struct fi_opx_ep * opx_ep,
-								   const unsigned rx_id) {
-	if(is_intranode && opx_ep->tx->shm.fifo[rx_id] == NULL) {
+								   const unsigned rx_id,
+								   const uint8_t hfi1_unit) {
+	if (is_intranode && opx_ep->tx->shm.fifo[rx_id] == NULL) {
 		char buffer[128];
-		snprintf(buffer,sizeof(buffer),"%s-%02x",
-				 opx_ep->domain->unique_job_key_str, 0);
+		int pid = 0, inst = 0;
+
+		if (opx_ep->daos_info.hfi_rank_enabled) {
+			pid = opx_ep->daos_info.rank_pid;
+			inst = opx_ep->daos_info.rank_inst;
+		}
+
+		snprintf(buffer,sizeof(buffer),"%s-%02x.%d.%d",
+				 opx_ep->domain->unique_job_key_str, hfi1_unit, pid, inst);
 		opx_shm_tx_connect(&opx_ep->tx->shm, (const char * const)buffer,
 						   rx_id, FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
 	}
@@ -2357,6 +2374,13 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 	fprintf(stderr,"fi_opx_recv_generic from source addr:\n");
 	FI_OPX_ADDR_DUMP(&opx_context->src_addr);
 #endif
+	/* HFI Rank Support: This is a temporary patch for DAOS.  When a source address
+	 * is specified, sometimes RPC intra-node related packets get stuck in the
+	 * unexpected queue.  This issue is still under investigation.
+	 */
+	if (opx_ep->daos_info.hfi_rank_enabled && opx_context->src_addr != FI_ADDR_UNSPEC) {
+		opx_context->src_addr = FI_ADDR_UNSPEC;
+	}
 
 	opx_context->tag = tag;
 	opx_context->ignore = ignore;
@@ -2972,8 +2996,8 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 	 * remote EP, must be done first before any other RP related operations are
 	 * done with the remote EP.
 	 */
-	if (opx_ep->do_resynch_remote_ep) {
-		rc = fi_opx_reliability_do_remote_ep_resynch(ep, addr, caps);
+	if (opx_ep->daos_info.do_resynch_remote_ep) {
+		rc = fi_opx_reliability_do_remote_ep_resynch(ep, addr, context, caps);
 		if (OFI_UNLIKELY(rc == -FI_EAGAIN)) {
 			return rc;
 		}

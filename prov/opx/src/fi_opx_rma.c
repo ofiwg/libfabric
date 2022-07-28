@@ -96,12 +96,15 @@ int fi_opx_readv_internal_intranode(struct fi_opx_hfi1_rx_readv_params *params)
 	// This clears any shm conditions
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
-	fi_opx_shm_dynamic_tx_connect(1, opx_ep, params->dest_rx);
+	fi_opx_shm_dynamic_tx_connect(1, opx_ep, params->dest_rx, params->opx_target_addr.hfi1_unit);
 
 	uint64_t pos;
-	union fi_opx_hfi1_packet_hdr * tx_hdr = opx_shm_tx_next(&opx_ep->tx->shm, params->dest_rx, &pos);
+	ssize_t rc;
+	union fi_opx_hfi1_packet_hdr * tx_hdr = opx_shm_tx_next(&opx_ep->tx->shm,
+		params->dest_rx, &pos, opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
+		opx_ep->daos_info.rank_inst, &rc);
 	if (OFI_UNLIKELY(tx_hdr == NULL)) {
-		return -FI_EAGAIN;
+		return rc;
 	}
 	uint64_t niov = params->niov << 48;
 	uint64_t op64 = params->op << 40;

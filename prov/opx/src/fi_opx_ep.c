@@ -108,7 +108,8 @@ enum ofi_reliability_kind fi_opx_select_reliability(struct fi_opx_ep *opx_ep) {
 
 }
 
-void fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers);
+void fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers,
+		struct fi_opx_extended_addr *peers_ext);
 
 __OPX_FORCE_INLINE__
 enum ofi_reliability_app_kind fi_opx_select_app_reliability(struct fi_opx_ep *opx_ep) {
@@ -694,7 +695,9 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	opx_ep->tx->force_credit_return = 0;
 
 	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
-		opx_shm_tx_init(&opx_ep->tx->shm, fi_opx_global.prov);
+		opx_shm_tx_init(&opx_ep->tx->shm, fi_opx_global.prov,
+			opx_ep->hfi->daos_info.rank, opx_ep->hfi->daos_info.rank_inst,
+			opx_ep->hfi->daos_info.rank_pid);
 	}
 
 	int sdma_disable;
@@ -823,9 +826,23 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 
 	if ((opx_ep->rx->caps & FI_LOCAL_COMM) || ((opx_ep->rx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
 		char buffer[128];
-		snprintf(buffer,sizeof(buffer),"%s-%02x",opx_domain->unique_job_key_str,hfi1->hfi_unit);
+
+		uint32_t hfi_unit = hfi1->hfi_unit;
+		unsigned rx_index = hfi1->info.rxe.id;
+		int pid = 0, inst = 0;
+
+		/* HFI Rank Support:  Rank and PID included in the SHM file name */
+		if (opx_ep->daos_info.hfi_rank_enabled) {
+			rx_index = opx_shm_daos_rank_index(hfi1->daos_info.rank,
+				hfi1->daos_info.rank_inst);
+			inst = hfi1->daos_info.rank_inst;
+			pid = getpid();
+		}
+
+		snprintf(buffer,sizeof(buffer),"%s-%02x.%d.%d",
+			opx_domain->unique_job_key_str, hfi_unit, pid, inst);
 		opx_shm_rx_init(&opx_ep->rx->shm, fi_opx_global.prov,
-			(const char *)buffer, hfi1->info.rxe.id,
+			(const char *)buffer, rx_index,
 			FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
 	}
 
@@ -1046,9 +1063,11 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 
 			if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD &&
 				fi_opx_select_app_reliability(opx_ep) == OFI_RELIABILITY_APP_KIND_DAOS) {
-				opx_ep->do_resynch_remote_ep = true;
+				opx_ep->daos_info.do_resynch_remote_ep = true;
+				opx_ep->daos_info.hfi_rank_enabled = (opx_ep->hfi->daos_info.rank != -1);
 			} else {
-				opx_ep->do_resynch_remote_ep = false;
+				opx_ep->daos_info.do_resynch_remote_ep = false;
+				opx_ep->daos_info.hfi_rank_enabled = false;
 			}
 
 			// Allocate both the tx and the rx side of the endpoint
@@ -1285,7 +1304,7 @@ static int fi_opx_enable_ep(struct fid_ep *ep)
 
         /* connect any inserted table (av) addresses */
 	if(opx_ep->av->table_addr)
-		fi_opx_ep_tx_connect(opx_ep,opx_ep->av->addr_count,opx_ep->av->table_addr);
+		fi_opx_ep_tx_connect(opx_ep,opx_ep->av->addr_count,opx_ep->av->table_addr, NULL);
 
 	opx_ep->state = FI_OPX_EP_INITITALIZED_ENABLED;
 
@@ -2230,7 +2249,9 @@ void fi_opx_ep_rx_append_ue_egr (struct fi_opx_ep_rx * const rx,
 	fi_opx_ep_rx_append_ue(rx, &rx->mp_egr_queue.ue, hdr, payload, payload_bytes);
 }
 
-void fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers)
+void fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count,
+		union fi_opx_addr *peers,
+		struct fi_opx_extended_addr *peers_ext)
 {
 	int n;
 	opx_ep->rx->av_addr = opx_ep->av->table_addr;
@@ -2239,6 +2260,15 @@ void fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count, union fi_opx_
 	opx_ep->tx->av_count = opx_ep->av->addr_count;
 	for (n=0; n<count; ++n) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_AV,"opx_ep %p, opx_ep->tx %p, peer %#lX\n",opx_ep,opx_ep->tx,peers[n].fi);
+		if (peers_ext) {
+			/* Set rank information to be used by ep */
+			opx_ep->daos_info.rank = peers_ext[n].rank;
+			opx_ep->daos_info.rank_inst = peers_ext[n].rank_inst;
+			opx_ep->daos_info.rank_pid = peers_ext[n].pid;
+			FI_WARN(fi_opx_global.prov, FI_LOG_AV, "    DAOS: rank %d, rank_inst %d, rank_pid %d\n",
+				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, opx_ep->daos_info.rank_pid);
+		}
+
 		FI_OPX_FABRIC_TX_CONNECT(opx_ep, peers[n].fi);
 	}
 

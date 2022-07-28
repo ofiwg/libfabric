@@ -2728,7 +2728,7 @@ void fi_opx_hfi_rx_reliablity_process_requests(struct fid_ep *ep, int max_to_sen
 __OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_reliability_inject_shm (struct fid_ep *ep,
 		const uint64_t key, const uint64_t dlid, const uint64_t reliability_rx,
-		const uint64_t opcode)
+		const uint8_t hfi1_unit, const uint64_t opcode)
 {
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
@@ -2746,16 +2746,19 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_shm (struct fid_ep *ep,
 #endif
 
 	/* Make sure the connection to remote EP exists. */
-	fi_opx_shm_dynamic_tx_connect(1, opx_ep, (unsigned)reliability_rx);
+	fi_opx_shm_dynamic_tx_connect(1, opx_ep, (unsigned)reliability_rx, hfi1_unit);
 
 	/*
 	 * Construct and send packet to send to remote EP
 	 */
 	uint64_t pos;
+	ssize_t rc;
+	/* HFI Rank Support:  Rank already set in reliability_rx */
 	union fi_opx_hfi1_packet_hdr * const hdr =
-		opx_shm_tx_next(&opx_ep->tx->shm, reliability_rx, &pos);
+		opx_shm_tx_next(&opx_ep->tx->shm, reliability_rx, &pos,
+			false, opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, &rc);
 
-	if (!hdr) return -FI_EAGAIN;
+	if (!hdr) return rc;
 
 	const uint64_t lrh_dlid = dlid << 16;
 	const uint64_t bth_rx = reliability_rx << 56;
@@ -2838,11 +2841,12 @@ struct fi_opx_reliability_resynch_flow * fi_opx_reliability_resynch_flow_init (
 
 void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
 		struct fi_opx_reliability_service * service,
+		uint32_t origin_reliability_rx,
+		int origin_rank_pid,
 		const union fi_opx_hfi1_packet_hdr *const hdr)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	struct fi_opx_reliability_client_state * state = &opx_ep->reliability->state;
-	uint8_t origin_reliability_rx = hdr->service.origin_reliability_rx;
 
 	union fi_opx_reliability_service_flow_key rx_key = { .value = hdr->service.key };
 	union fi_opx_reliability_service_flow_key tx_key = {
@@ -2877,8 +2881,11 @@ void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
 		opx_shm_tx_close(&opx_ep->tx->shm, origin_reliability_rx);
 
 	 	/* Send ack to notify the remote ep that the resynch was completed */
+		opx_ep->daos_info.rank_pid = origin_rank_pid;
+
 		fi_opx_hfi1_tx_reliability_inject_shm(ep,
 			rx_key.value, tx_key.dlid, origin_reliability_rx,
+			opx_ep->hfi->hfi_unit,
 			FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK);
 		
 		return;
@@ -3051,12 +3058,12 @@ void fi_opx_hfi1_rx_reliability_ack_resynch (struct fid_ep *ep,
 
 ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep,
 	union fi_opx_addr dest_addr,
+	void *context,
 	const uint64_t caps)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	ssize_t rc = FI_SUCCESS;
 	bool inject_done = false;
-
 	union fi_opx_reliability_service_flow_key tx_key = {
 		.slid = opx_ep->tx->send.hdr.stl.lrh.slid,
 		.tx = opx_ep->tx->send.hdr.reliability.origin_tx,
@@ -3065,8 +3072,7 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep,
 	};
 
 	if (!opx_ep->reliability ||
-		opx_ep->reliability->state.kind != OFI_RELIABILITY_KIND_ONLOAD ||
-		opx_ep->rx->self.fi == dest_addr.fi) {
+		opx_ep->reliability->state.kind != OFI_RELIABILITY_KIND_ONLOAD) {
 		/* Nothing to do */
 		return FI_SUCCESS;
 	}
@@ -3074,16 +3080,48 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep,
 	if (fi_opx_hfi1_tx_is_intranode(ep, dest_addr.fi, caps)) {
 		/* INTRA-NODE */
 
+		/* HFI Rank Support: Retreive extended addressing data
+		 */
+		struct fi_context2 * opx_context = (struct fi_context2 *) context;
+
+		if (opx_context) {
+			if (opx_context->internal[0]) {
+				struct fi_opx_extended_addr * opx_addr =
+					(struct fi_opx_extended_addr *) opx_context->internal[0];
+
+				opx_ep->daos_info.rank_pid = opx_addr->pid;
+				opx_ep->daos_info.rank = opx_addr->rank;
+				opx_ep->daos_info.rank_inst = opx_addr->rank_inst;
+			} else {
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"(rx) SHM - Extended address not available\n");
+			}
+		} else {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"(rx) SHM - Extended address not available\n");
+		}
+
+		if (opx_ep->daos_info.rank == opx_ep->hfi->daos_info.rank &&
+			opx_ep->daos_info.rank_pid == opx_ep->hfi->daos_info.rank_pid) {
+			/* Nothing to do */
+			return FI_SUCCESS;
+		}
+
+		unsigned rx_index =
+			(opx_ep->daos_info.hfi_rank_enabled) ?
+				opx_shm_daos_rank_index(opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst) :
+				dest_addr.hfi1_rx;
+
 		/* 
 		 * Check whether RESYNCH request has been received from the remote EP.
 		 * If so, then this is a Server EP amd there is nothing to be done.
 		 */
-		if (opx_ep->rx->shm.resynch_connection[dest_addr.hfi1_rx].completed) {
+		if (opx_ep->rx->shm.resynch_connection[rx_index].completed) {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"(rx) SHM - Server already received resynch from Client %016lx 0x%x: %ld\n",
 				tx_key.value,
-				dest_addr.hfi1_rx,
-				opx_ep->rx->shm.resynch_connection[dest_addr.hfi1_rx].counter);
+				rx_index,
+				opx_ep->rx->shm.resynch_connection[rx_index].counter);
 
 			return FI_SUCCESS;
 		}
@@ -3094,16 +3132,17 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep,
 		 * Server EP to resynch all SHM related data that it maintains associated
 		 * with this Client EP.
 		 */
-		if (opx_ep->tx->shm.fifo[dest_addr.hfi1_rx] &&
-			!opx_ep->tx->shm.connection[dest_addr.hfi1_rx].inuse) {
+		if (!opx_ep->tx->shm.fifo[rx_index] ||
+			!opx_ep->tx->shm.connection[rx_index].inuse) {
+			fi_opx_shm_dynamic_tx_connect(1, opx_ep, rx_index, dest_addr.hfi1_unit);
 			inject_done = true;
 			rc = fi_opx_hfi1_tx_reliability_inject_shm(ep,
-					tx_key.value, dest_addr.uid.lid, dest_addr.hfi1_rx,
+					tx_key.value, dest_addr.uid.lid, rx_index,
+					dest_addr.hfi1_unit,
 					FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH);
 			if (rc)
 				return -FI_EAGAIN;
 		}
-
 	} else {
 		/* INTER-NODE */
 
