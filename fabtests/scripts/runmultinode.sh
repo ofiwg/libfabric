@@ -1,7 +1,7 @@
 #!/bin/bash
 
 Options=$(getopt --options h:,n:,p:,I:,C:,z: \
-		  		--longoptions hosts:,processes-per-node:,provider:,capability:,iterations:,cleanup,help \
+		  		--longoptions hosts:,processes-per-node:,provider:,capability:,iterations:,ci:,cleanup,help \
 				-- "$@")
 
 eval set -- "$Options"
@@ -13,6 +13,7 @@ pattern=""
 capability="msg"
 cleanup=false
 help=false
+ci=""
 
 while true; do
 	case "$1" in
@@ -30,6 +31,8 @@ while true; do
 			cleanup=true; shift ;;
 		-C|--capability)
 			capability="$2"; shift 2 ;;
+		--ci)
+			ci="$2"; shift 2 ;;
 		--help) 
 			help=true; shift ;;
 		--)
@@ -41,7 +44,7 @@ if $help ; then
 	echo "Run the multinode test suite on the nodes provided for many procceses" 
 	echo "multinode tests are run in performance mode"
 	echo "Options"
-	echo "\t-h,--hosts list of host names to run thests on"
+	echo "\t-h,--hosts list of host names to run the tests on"
 	echo "\t-n,--processes-per-node number of processes to be run on each node.\
 				Total number of fi_mulinode tests run will be n*number of hosts"
 	echo "\t-p,--provider libfabric provider to run the multinode tests on"
@@ -59,21 +62,28 @@ ranks=$max_ranks;
 server=${hosts[0]}
 start_server=0
 output="multinode_server_${num_hosts}_${ppn}.log"
+ret=0
 
 if ! $cleanup ; then
-	cmd="fi_multinode -n $ranks -s $server -p '$provider' -C $capability $pattern -I $iterations -T"
+	cmd="${ci}fi_multinode -n $ranks -s $server -p '$provider' -C $capability $pattern -I $iterations -T"
 	echo $cmd
 	for node in "${hosts[@]}"; do
 		for i in $(seq 1 $ppn); do
 			if [ $start_server -eq 0 ]; then
 				echo STARTING SERVER
-				ssh $node $cmd &> $output &
+				if [ "$ci" == "" ]; then
+					ssh $node $cmd &> $output &
+				else 
+					ssh $node $cmd | tee $output &
+				fi
 				server_pid=$!
 				start_server=1
 				sleep .5
 			else
 				echo "starting proc $i/$ppn on $node"
-				tput cuu1
+				if [ "$ci" == "" ]; then
+					tput cuu1
+				fi
 				ssh $node $cmd &> /dev/null &
 			fi
 			sleep .05
@@ -82,6 +92,7 @@ if ! $cleanup ; then
 
 	echo "Wait for processes to finish..."
 	wait $server_pid
+	ret=$?
 fi
 
 echo Cleaning up
@@ -92,3 +103,5 @@ done;
 if ! $cleanup ; then
 	echo "Output: $PWD/$output"
 fi
+
+exit $ret 
