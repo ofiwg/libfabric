@@ -59,6 +59,7 @@ int xnet_prefetch_rbuf_size = 9000;
 size_t xnet_default_tx_size = 256;
 size_t xnet_default_rx_size = 256;
 size_t xnet_zerocopy_size = SIZE_MAX;
+int xnet_disable_autoprog;
 
 
 static void xnet_init_env(void)
@@ -70,9 +71,9 @@ static void xnet_init_env(void)
 	fi_param_define(&xnet_prov, "iface", FI_PARAM_STRING,
 			"Specify interface name");
 
-	fi_param_define(&xnet_prov,"port_low_range", FI_PARAM_INT,
+	fi_param_define(&xnet_prov, "port_low_range", FI_PARAM_INT,
 			"define port low range");
-	fi_param_define(&xnet_prov,"port_high_range", FI_PARAM_INT,
+	fi_param_define(&xnet_prov, "port_high_range", FI_PARAM_INT,
 			"define port high range");
 	fi_param_get_int(&xnet_prov, "port_high_range", &xnet_ports.high);
 	fi_param_get_int(&xnet_prov, "port_low_range", &xnet_ports.low);
@@ -88,18 +89,16 @@ static void xnet_init_env(void)
 		xnet_ports.high = 0;
 	}
 
-	fi_param_define(&xnet_prov,"tx_size", FI_PARAM_SIZE_T,
+	fi_param_define(&xnet_prov, "tx_size", FI_PARAM_SIZE_T,
 			"define default tx context size (default: %zu)",
 			xnet_default_tx_size);
-	fi_param_define(&xnet_prov,"rx_size", FI_PARAM_SIZE_T,
+	fi_param_define(&xnet_prov, "rx_size", FI_PARAM_SIZE_T,
 			"define default rx context size (default: %zu)",
 			xnet_default_rx_size);
-	if (!fi_param_get_size_t(&xnet_prov, "tx_size", &tx_size)) {
+	if (!fi_param_get_size_t(&xnet_prov, "tx_size", &tx_size))
 		xnet_default_tx_size = tx_size;
-	}
-	if (!fi_param_get_size_t(&xnet_prov, "rx_size", &rx_size)) {
+	if (!fi_param_get_size_t(&xnet_prov, "rx_size", &rx_size))
 		xnet_default_rx_size = rx_size;
-	}
 
 	fi_param_define(&xnet_prov, "nodelay", FI_PARAM_BOOL,
 			"overrides default TCP_NODELAY socket setting");
@@ -121,6 +120,11 @@ static void xnet_init_env(void)
 	fi_param_get_int(&xnet_prov, "prefetch_rbuf_size",
 			 &xnet_prefetch_rbuf_size);
 	fi_param_get_size_t(&xnet_prov, "zerocopy_size", &xnet_zerocopy_size);
+
+	fi_param_define(&xnet_prov, "disable_auto_progress", FI_PARAM_BOOL,
+			"prevent auto-progress thread from starting");
+	fi_param_get_bool(&xnet_prov, "disable_auto_progress",
+			&xnet_disable_autoprog);
 }
 
 static void xnet_fini(void)
