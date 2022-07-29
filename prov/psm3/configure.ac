@@ -792,9 +792,11 @@ AC_SUBST(PSM3_HAL_INST)
 
 AM_COND_IF([HAVE_PSM3_SRC],
     [
-        PSM3_IEFS_VERSION="${RELEASE_TAG:-$(git describe --dirty --always --abbrev=8 --broken --tags 2>/dev/null \
-            || git describe --dirty --always --abbrev=8 --broken 2>/dev/null || echo 'unknown commit')}"
-        PSM3_IEFS_VERSION=${PSM3_IEFS_VERSION//./_}
+        PSM3_IEFS_VERSION="${RELEASE_TAG}"
+        AS_IF([test -z "${PSM3_IEFS_VERSION}"], [
+            PSM3_IEFS_VERSION="$(git describe --dirty --always --abbrev=8 --broken --tags 2>/dev/null \
+                || git describe --dirty --always --abbrev=8 --broken 2>/dev/null || echo 'unknown commit')"])
+        PSM3_IEFS_VERSION=$(echo "${PSM3_IEFS_VERSION}" | tr '.' '_')
         PSM3_GIT_HASH="$(git log --oneline --format='%H' -1)"
         RPM_RELEASE=$(echo "${PSM3_IEFS_VERSION}" | cut -d'_' -f5)
         RELEASE_VER=$(echo "${PSM3_IEFS_VERSION}" | cut -d'_' -f1-4 | sed 's/_/./g')
@@ -832,11 +834,13 @@ AC_OUTPUT
 dnl Summary output
 
 echo "***"
+echo "*** Version: ${PACKAGE_VERSION}-${RPM_RELEASE}"
+echo "***"
 hals=""
 for hal in $PSM3_HAL_INST; do
     hals="$hals, $hal"
 done
-echo "*** Build with the following HALs: ${hals:2}"
+echo "*** Build with the following HALs: ${hals#, }"
 echo "***"
 afeatures=""
 if test $have_cuda -eq 1; then
@@ -857,5 +861,5 @@ fi
 if test "x$enable_psm3_umr_cache" = "xyes"; then
     afeatures="$afeatures, Userspace MR Cache"
 fi
-echo "*** Additional Features: ${afeatures:2}"
+echo "*** Additional Features: ${afeatures#, }"
 echo "***"
