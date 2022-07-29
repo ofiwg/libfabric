@@ -31,6 +31,7 @@
  */
 
 #include <rdma/fi_errno.h>
+#include <rdma/fabric.h>
 
 #include <ofi_prov.h>
 #include "xnet.h"
@@ -38,6 +39,9 @@
 #include <sys/types.h>
 #include <ofi_util.h>
 #include <stdlib.h>
+
+
+static char xnet_prov_name[FI_NAME_MAX] = "net";
 
 static int xnet_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints,
@@ -64,8 +68,16 @@ int xnet_disable_autoprog;
 
 static void xnet_init_env(void)
 {
+	char *param = NULL;
 	size_t tx_size;
 	size_t rx_size;
+
+	/* Allow renaming the provider for testing */
+	fi_param_define(&xnet_prov, "prov_name", FI_PARAM_STRING,
+			"Rename provider for testing");
+	fi_param_get_str(&xnet_prov, "prov_name", &param);
+	if (param && strlen(param) && strlen(param) < sizeof(xnet_prov_name))
+		strncpy(xnet_prov_name, param, strlen(param));
 
 	/* Checked in util code */
 	fi_param_define(&xnet_prov, "iface", FI_PARAM_STRING,
@@ -133,7 +145,7 @@ static void xnet_fini(void)
 }
 
 struct fi_provider xnet_prov = {
-	.name = "net",
+	.name = xnet_prov_name,
 	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = xnet_getinfo,
