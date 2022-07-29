@@ -1028,6 +1028,9 @@ int xnet_start_progress(struct xnet_progress *progress)
 {
 	int ret;
 
+	if (xnet_disable_autoprog)
+		return 0;
+
 	ofi_genlock_lock(progress->active_lock);
 	if (progress->auto_progress) {
 		ret = 0;
