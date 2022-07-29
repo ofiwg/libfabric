@@ -77,7 +77,7 @@ AS_IF([test "x$enable_psm3_sockets" = "xyes"],
 	PSM3_HAL_CNT=$((PSM3_HAL_CNT+1))
 	CPPFLAGS="$CPPFLAGS -DPSM_SOCKETS"
       ])
-PSM3_HAL_INST=${PSM3_HAL_INST:1}
+PSM3_HAL_INST=${PSM3_HAL_INST# }
 
 dnl ------------- HAL Extensions
 AC_ARG_ENABLE([psm3-udp],
