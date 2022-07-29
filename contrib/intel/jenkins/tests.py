@@ -235,6 +235,53 @@ class ShmemTest(Test):
                            f'{shmem_testname}_{self.run_test}',
                            self.ofi_build_mode)
 
+class MultinodeTests(Test):
+
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+                 hosts, ofi_build_mode, user_env, run_test, util_prov=None):
+
+        super().__init__(jobname, buildno, testname, core_prov, fabric,
+                         hosts, ofi_build_mode, user_env, run_test, None, util_prov)
+        self.fabtestpath = f'{self.libfab_installpath}/bin'
+        self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
+        self.n = 2
+        self.ppn = 64
+        self.iterations = 1
+        self.method = 'msg'
+        self.pattern = "full_mesh"
+
+    @property
+    def cmd(self):
+        return f"{self.fabtestpath}/runmultinode.sh "
+
+    @property
+    def options(self):
+        opts = f"-h {common.get_node_name(self.server, self.nw_interface)}"
+        opts += f",{common.get_node_name(self.client, self.nw_interface)}"
+        opts += f" -n {self.ppn}"
+        opts += f" -I {self.iterations}"
+        opts += f" -z {self.pattern}"
+        opts += f" -C {self.method}"
+        if self.util_prov:
+            opts += f" -p {self.core_prov};{self.util_prov}"
+        else:
+            opts += f" -p {self.core_prov}"
+        opts += f" --ci {self.fabtestpath}/" #enable ci mode to disable tput
+
+        return opts
+
+    @property
+    def execute_condn(self):
+        return True
+
+    def execute_cmd(self):
+        curdir = os.getcwd()
+        os.chdir(self.fabtestconfigpath)
+        command = self.cmd + self.options
+        outputcmd = shlex.split(command)
+        common.run_command(outputcmd)
+        os.chdir(curdir)
+
 class ZeFabtests(Test):
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
                  hosts, ofi_build_mode, user_env, run_test, util_prov=None):

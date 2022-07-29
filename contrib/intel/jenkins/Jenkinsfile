@@ -372,6 +372,23 @@ pipeline {
             }
           }
         }
+        stage('multinode-tcp-performance') {
+          agent {node {label 'cvl'}}
+          options { skipDefaultCheckout() }
+          steps {
+              withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+              {
+                sh """
+                  env
+                  (
+                      cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                      python3.7 runtests.py --prov=tcp --test=multinode
+                      echo "multinode performance completed."
+                  )
+                """
+              }
+          }
+        }
         stage('oneCCL') {
           agent {node {label 'cvl'}}
           options { skipDefaultCheckout() }
