@@ -88,7 +88,7 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 
 	fprintf(stderr, "(%d) PBC: %016lX\n", pid, we->header_vec.scb_qws[0]);
 #ifndef NDEBUG
-	fi_opx_hfi1_dump_stl_packet_hdr((struct fi_opx_hfi1_stl_packet_hdr *) &we->header_vec.scb_qws[1], "fi_opx_hfi1_sdma_handle_errors", 92);
+	fi_opx_hfi1_dump_packet_hdr((union fi_opx_hfi1_packet_hdr *) &we->header_vec.scb_qws[1], "fi_opx_hfi1_sdma_handle_errors", 92);
 #endif
 
 	abort();

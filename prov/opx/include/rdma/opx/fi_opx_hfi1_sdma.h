@@ -325,8 +325,10 @@ void fi_opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 
 	if (delivery_completion) {
 		we->num_iovs = 2;
-		we->iovecs[1].iov_len = we->total_payload;
-		we->iovecs[1].iov_base = we->packets[0].replay->iov[0].iov_base;
+		we->iovecs[1].iov_len = (we->total_payload + 3) & -4;
+		we->iovecs[1].iov_base = we->packets[0].replay->use_iov ?
+						we->packets[0].replay->iov[0].iov_base :
+						we->packets[0].replay->payload;
 		for (int i = 0; i < we->num_packets; ++i) {
 			we->packets[i].replay->scb.hdr.qw[2] |= (uint64_t) htonl((uint32_t)psn);
 			fi_opx_reliability_client_replay_register_with_update(
@@ -340,7 +342,7 @@ void fi_opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 	} else {
 		we->num_iovs = 1;
 		for (int i = 0; i < we->num_packets; ++i) {
-			we->iovecs[we->num_iovs].iov_len = we->packets[i].length;
+			we->iovecs[we->num_iovs].iov_len = (we->packets[i].length + 3) & -4;
 			we->iovecs[we->num_iovs++].iov_base = we->packets[i].replay->payload;
 			we->packets[i].replay->scb.hdr.qw[2] |= (uint64_t) htonl((uint32_t)psn);
 			fi_opx_reliability_client_replay_register_no_update(

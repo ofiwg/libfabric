@@ -976,8 +976,6 @@ int opx_hfi1_dput_write_header_and_payload_put(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
-				struct iovec *iov,
-				const bool delivery_completion,
 				const int64_t psn,
 				const uint16_t lrh_dws,
 				const uint64_t op64,
@@ -998,12 +996,7 @@ int opx_hfi1_dput_write_header_and_payload_put(
 	tx_hdr->qw[5] = key;
 	tx_hdr->qw[6] = *rbuf;
 
-	if (delivery_completion) {
-		iov->iov_base = (void *) *sbuf;
-		iov->iov_len = payload_bytes;
-	} else {
-		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
-	}
+	memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
 
 	(*sbuf) += payload_bytes;
 	(*rbuf) += payload_bytes;
@@ -1116,7 +1109,7 @@ int opx_hfi1_dput_write_header_and_payload_rzv(
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
 				struct iovec *iov,
-				const bool delivery_completion,
+				const bool copy_payload,
 				const int64_t psn,
 				const uint16_t lrh_dws,
 				const uint64_t op64,
@@ -1137,11 +1130,11 @@ int opx_hfi1_dput_write_header_and_payload_rzv(
 	tx_hdr->qw[5] = target_byte_counter_vaddr;
 	tx_hdr->qw[6] = fi_opx_dput_rbuf_out(*rbuf);
 
-	if (delivery_completion) {
+	if (copy_payload) {
+		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
+	} else {
 		iov->iov_base = (void *) *sbuf;
 		iov->iov_len = payload_bytes;
-	} else {
-		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
 	}
 
 	(*sbuf) += payload_bytes;
@@ -1155,8 +1148,6 @@ int opx_hfi1_dput_write_header_and_payload_default(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
-				struct iovec *iov,
-				const bool delivery_completion,
 				const int64_t psn,
 				const uint16_t lrh_dws,
 				const uint64_t op64,
@@ -1177,12 +1168,7 @@ int opx_hfi1_dput_write_header_and_payload_default(
 	tx_hdr->qw[5] = target_byte_counter_vaddr;
 	tx_hdr->qw[6] = *rbuf;
 
-	if (delivery_completion) {
-		iov->iov_base = (void *) *sbuf;
-		iov->iov_len = payload_bytes;
-	} else {
-		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
-	}
+	memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
 
 	(*sbuf) += payload_bytes;
 	(*rbuf) += payload_bytes;
@@ -1196,7 +1182,7 @@ int opx_hfi1_dput_write_header_and_payload(
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
 				struct iovec *iov,
-				const bool delivery_completion,
+				const bool copy_payload,
 				const uint32_t opcode,
 				const int64_t psn_orig,
 				const uint16_t lrh_dws,
@@ -1218,15 +1204,15 @@ int opx_hfi1_dput_write_header_and_payload(
 	case FI_OPX_HFI_DPUT_OPCODE_RZV:
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG:
 		return opx_hfi1_dput_write_header_and_payload_rzv(
-				opx_ep, tx_hdr, tx_payload, iov, delivery_completion,
+				opx_ep, tx_hdr, tx_payload, iov, copy_payload,
 				psn, lrh_dws, op64, dt64, lrh_dlid, bth_rx,
 				payload_bytes, opcode, target_byte_counter_vaddr,
 				sbuf, rbuf);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_PUT:
 		return opx_hfi1_dput_write_header_and_payload_put(
-				opx_ep, tx_hdr, tx_payload, iov,
-				delivery_completion, psn, lrh_dws, op64,
+				opx_ep, tx_hdr, tx_payload,
+				psn, lrh_dws, op64,
 				dt64, lrh_dlid, bth_rx, payload_bytes,
 				key, sbuf, rbuf);
 		break;
@@ -1246,7 +1232,7 @@ int opx_hfi1_dput_write_header_and_payload(
 		break;
 	default:
 		return opx_hfi1_dput_write_header_and_payload_default(
-				opx_ep, tx_hdr, tx_payload, iov, delivery_completion,
+				opx_ep, tx_hdr, tx_payload,
 				psn, lrh_dws, op64, dt64, lrh_dlid, bth_rx,
 				payload_bytes, opcode, target_byte_counter_vaddr,
 				sbuf, rbuf);
@@ -1337,7 +1323,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 
 				bytes_sent = opx_hfi1_dput_write_header_and_payload(
 						opx_ep, tx_hdr, tx_payload, NULL,
-						false, opcode, 0, lrh_dws, op64,
+						true, opcode, 0, lrh_dws, op64,
 						dt64, lrh_dlid, bth_rx,
 						bytes_to_send_this_packet, key,
 						(const uint64_t)params->fetch_vaddr,
@@ -1404,7 +1390,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 
 				bytes_sent = opx_hfi1_dput_write_header_and_payload(
 						opx_ep, &replay->scb.hdr, replay_payload,
-						NULL, false, opcode, psn, lrh_dws, op64,
+						NULL, true, opcode, psn, lrh_dws, op64,
 						dt64, lrh_dlid, bth_rx,
 						bytes_to_send_this_packet, key,
 						(const uint64_t) params->fetch_vaddr,
@@ -1506,6 +1492,8 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 
 	// Even though we're using SDMA, replays will still be sent via PIO,
 	// so we still may need to limit the SDMA payload size on credit-constrained systems
+	// Note that max_eager_bytes will always be a multiple of 64, since
+	// it is calculated based on number of credits * 64 bytes.
 	const uint64_t max_eager_bytes = opx_ep->tx->pio_max_eager_tx_bytes;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -1573,11 +1561,35 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			// to send packet_count packets. The only limit now is how
 			// many replays can we get.
 			for (int i = 0; i < packet_count; ++i) {
+				assert(sdma_we_bytes); // If this fails, we did math wrong
+				uint64_t packet_bytes = MIN(sdma_we_bytes, max_eager_bytes);
+
+				/* In the unlikely event that we'll be sending a single
+				 * packet who's payload size is not a multiple of 4,
+				 * we'll need to add padding, in which case we need a
+				 * replay with a bounce buffer, regardless if we're
+				 * doing delivery completion. This is because the
+				 * SDMA engine requires the LRH DWs add up to exactly
+				 * the number of bytes used to fill the packet. To do
+				 * the padding, we'll copy the payload to the replay's
+				 * bounce buffer, and then add the necessary padding
+				 * to the iovec length we pass to the SDMA engine.
+				 * The extra pad bytes will be ignored by the receiver,
+				 * since it uses the byte count in the DPUT header
+				 * which will still be set correctly.
+				 */
+				bool replay_use_iov;
+
+				if (OFI_UNLIKELY(packet_count == 1 && (packet_bytes & 0x3ul))) {
+					replay_use_iov = false;
+				} else {
+					replay_use_iov = delivery_completion;
+				}
+
 				struct fi_opx_reliability_tx_replay *replay;
 				if (reliability != OFI_RELIABILITY_KIND_NONE) {
-					// Passing 'true' as second parm gives us a lightweight/iovec replay object
 					replay = fi_opx_reliability_client_replay_allocate(
-						&opx_ep->reliability->state, delivery_completion);
+						&opx_ep->reliability->state, replay_use_iov);
 					if(OFI_UNLIKELY(replay == NULL)) {
 						break;
 					}
@@ -1585,23 +1597,20 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 					replay = NULL;
 				}
 
-				assert(sdma_we_bytes); // If this fails, we did math wrong
-				uint64_t packet_bytes = MIN(sdma_we_bytes, max_eager_bytes);
-
-				uint64_t tail_bytes = packet_bytes & 0x3Ful;
-				uint64_t blocks_to_send_in_this_packet = (packet_bytes >> 6) + (tail_bytes ? 1 : 0);
-
+				// Round packet_bytes up to the next multiple of 4,
+				// then divide by 4 to get the correct number of dws.
+				uint64_t payload_dws = ((packet_bytes + 3) & -4) >> 2;
 				const uint64_t pbc_dws = 2 + /* pbc */
 							2 + /* lrh */
 							3 + /* bth */
 							9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-							(blocks_to_send_in_this_packet << 4);
+							payload_dws;
 
 				const uint16_t lrh_dws = htons(pbc_dws - 1);
 
 				replay->scb.qw0 = opx_ep->rx->tx.dput.qw0 | pbc_dws;
 
-				assert(delivery_completion == replay->use_iov);
+				assert(replay_use_iov == replay->use_iov);
 
 				// Passing in PSN of 0 for this because we'll set it later
 				uint64_t bytes_sent =
@@ -1609,7 +1618,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 						opx_ep, &replay->scb.hdr,
 						(union fi_opx_hfi1_packet_payload *)replay->payload,
 						replay->iov,
-						delivery_completion,
+						!replay_use_iov,
 						opcode, 0, lrh_dws, op64, dt64, lrh_dlid, bth_rx,
 						packet_bytes, key,
 						(const uint64_t) params->fetch_vaddr,
