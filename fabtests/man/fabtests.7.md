@@ -32,7 +32,7 @@ restricted to verifying a single endpoint type.  These tests typically
 include the endpoint type as part of the test name, such as dgram, msg, or
 rdm.
 
-# Functional
+## Functional
 
 These tests are a mix of very basic functionality tests that show major
 features of libfabric.
@@ -156,7 +156,7 @@ features of libfabric.
 : Tests a persistent server communicating with multiple clients, one at a
   time, in sequence.
 
-# Benchmarks
+## Benchmarks
 
 The client and the server exchange messages in either a ping-pong manner,
 for pingpong named tests, or transfer messages one-way, for bw named tests.
@@ -191,7 +191,7 @@ given provider or system may achieve.
 *fi_rma_bw*
 : An RMA read and write bandwidth test for reliable (MSG and RDM) endpoints.
 
-# Unit
+## Unit
 
 These are simple one-sided unit tests that validate basic behavior of the API.
 Because these are single system tests that do not perform data transfers their
@@ -221,7 +221,7 @@ testing scope is limited.
 *fi_mr_cache_evict*
 : Tests provider MR cache eviction capabilities.
 
-# Multinode
+## Multinode
 
 This test runs a series of tests over multiple formats and patterns to help
 validate at scale. The patterns are an all to all, one to all, all to one and
@@ -230,7 +230,7 @@ atomics, and tagged messages. Currently, there is no option to run these
 capabilities and patterns independently, however the test is short enough to be
 all run at once.
 
-# Ubertest
+## Ubertest
 
 This is a comprehensive latency, bandwidth, and functionality test that can
 handle a variety of test configurations.  The test is able to run a large
@@ -257,17 +257,58 @@ specific features/functionalities. These EFA provider specific fabtests
 show users how to correctly use them.
 
 *fi_efa_rnr_read_cq_error*
-  This test modifies the RNR retry count (rnr_retry) to 0 via
+: This test modifies the RNR retry count (rnr_retry) to 0 via
   fi_setopt, and then runs a simple program to test if the error cq entry
   (with error FI_ENORX) can be read by the application, if RNR happens.
 
 *fi_efa_rnr_queue_resend*
-  This test modifies the RNR retry count (rnr_retry) to 0 via fi_setopt,
+: This test modifies the RNR retry count (rnr_retry) to 0 via fi_setopt,
   and then tests RNR queue/re-send logic for different packet types.
   To run the test, one needs to use `-c` option to specify the category
   of packet types.
 
-### Config file options
+## Component tests
+
+These stand-alone tests don't test libfabric functionalities. Instead,
+they test some components that libfabric depend on. They are not called
+by runfabtests.sh, either, and don't follow the fabtests coventions for
+naming, config file, and command line options.
+
+### Dmabuf RDMA tests
+
+These tests check the functionality or performance of dmabuf based GPU
+RDMA mechanism. They use oneAPI level-zero API to allocate buffer from
+device memory, get dmabuf handle, and perform some device memory related
+operations. Run with the *-h* option to see all available options for
+each of the tests.
+
+*rdmabw-xe*
+: This Verbs test measures the bandwidth of RDMA operations. It runs in
+  client-server mode. It has options to choose buffer location, test type
+  (write, read, send/recv), device unit(s), NIC unit(s), message size, and
+  the number of iterations per message size.
+
+*fi-rdmabw-xe*
+: This test is similar to *rdmabw-xe*, but uses libfabric instead of Verbs.
+
+*mr-reg-xe*
+: This Verbs test tries to register a buffer with the RDMA NIC.
+
+*fi-mr-reg-xe*
+: This test is similar to *mr-reg-xe*, but uses libfabric instead of Verbs.
+
+*memcopy-xe*
+: This test measures the performance of memory copy operations between
+  buffers. It has options for buffer locations, as well as memory copying
+  methods to use (memcpy, mmap + memcpy, copy with device command queue, etc).
+
+### Other component tests
+
+*sock_test*
+: This client-server test establishes socket connections and tests the
+  functionality of select/poll/epoll with different set sizes.
+
+## Config file options
 
 The following keys and respective key values may be used in the config file.
 
