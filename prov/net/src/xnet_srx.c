@@ -192,7 +192,7 @@ xnet_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 {
 	struct xnet_xfer_entry *recv_entry;
 	struct xnet_srx *srx;
-	ssize_t ret = FI_SUCCESS;
+	ssize_t ret;
 
 	srx = container_of(ep_fid, struct xnet_srx, rx_fid);
 	assert(msg->iov_count <= XNET_IOV_LIMIT);
@@ -200,6 +200,7 @@ xnet_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	ofi_genlock_lock(xnet_srx2_progress(srx)->active_lock);
 	if (flags & FI_PEEK) {
 		xnet_srx_peek(srx, msg, flags);
+		ret = 0;
 		goto unlock;
 	}
 
@@ -232,7 +233,7 @@ xnet_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 {
 	struct xnet_xfer_entry *recv_entry;
 	struct xnet_srx *srx;
-	ssize_t ret = FI_SUCCESS;
+	ssize_t ret;
 
 	srx = container_of(ep_fid, struct xnet_srx, rx_fid);
 
@@ -252,7 +253,7 @@ xnet_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
 
-	xnet_srx_tqueue(srx, recv_entry);
+	ret = xnet_srx_tqueue(srx, recv_entry);
 	if (ret)
 		ofi_buf_free(recv_entry);
 unlock:
@@ -267,7 +268,7 @@ xnet_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 {
 	struct xnet_xfer_entry *recv_entry;
 	struct xnet_srx *srx;
-	ssize_t ret = FI_SUCCESS;
+	ssize_t ret;
 
 	srx = container_of(ep_fid, struct xnet_srx, rx_fid);
 	assert(count <= XNET_IOV_LIMIT);
@@ -287,7 +288,7 @@ xnet_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	recv_entry->iov_cnt = count;
 	memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
 
-	xnet_srx_tqueue(srx, recv_entry);
+	ret = xnet_srx_tqueue(srx, recv_entry);
 	if (ret)
 		ofi_buf_free(recv_entry);
 unlock:
