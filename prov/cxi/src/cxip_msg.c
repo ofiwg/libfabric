@@ -3347,7 +3347,7 @@ static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq)
 			      recv_md ? recv_md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, req->req_id,
 			      mb.raw, ib.raw, req->recv.match_id,
-			      rxc->min_multi_recv,
+			      req->recv.multi_recv ? rxc->min_multi_recv : 0,
 			      le_flags, NULL, rxc->rx_cmdq,
 			      !(req->recv.flags & FI_MORE));
 	if (ret != FI_SUCCESS) {
@@ -3387,11 +3387,14 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	if (!ofi_recv_allowed(rxc->attr.caps))
 		return -FI_ENOPROTOOPT;
 
-	if (tagged && (tag & ~CXIP_TAG_MASK || ignore & ~CXIP_TAG_MASK)) {
-		RXC_WARN(rxc,
-			 "Invalid tag: %#018lx ignore: %#018lx (%#018lx)\n",
-			 tag, ignore, CXIP_TAG_MASK);
-		return -FI_EINVAL;
+	if (tagged) {
+		if (tag & ~CXIP_TAG_MASK || ignore & ~CXIP_TAG_MASK) {
+			RXC_WARN(rxc,
+				 "Invalid tag: %#018lx ignore: %#018lx (%#018lx)\n",
+				 tag, ignore, CXIP_TAG_MASK);
+			return -FI_EINVAL;
+		}
+		flags &= ~FI_MULTI_RECV;
 	}
 
 	/* If FI_DIRECTED_RECV and a src_addr is specified, encode the address
