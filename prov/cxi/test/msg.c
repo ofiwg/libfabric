@@ -1014,16 +1014,13 @@ Test(msg, tagged_interop)
 
 void do_multi_recv(uint8_t *send_buf, size_t send_len,
 		   uint8_t *recv_buf, size_t recv_len,
-		   bool send_first, size_t sends, size_t olen,
-		   bool tagged)
+		   bool send_first, size_t sends, size_t olen)
 {
 	int i, j, ret;
 	int err = 0;
 	fi_addr_t from;
 	struct fi_msg rmsg = {};
-	struct fi_msg_tagged trmsg = {};
 	struct fi_msg smsg = {};
-	struct fi_msg_tagged tsmsg = {};
 	struct iovec riovec;
 	struct iovec siovec;
 	uint64_t rxe_flags;
@@ -1053,11 +1050,6 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 	rmsg.addr = FI_ADDR_UNSPEC;
 	rmsg.context = RECV_CTX;
 
-	trmsg.msg_iov = &riovec;
-	trmsg.iov_count = 1;
-	trmsg.addr = FI_ADDR_UNSPEC;
-	trmsg.context = RECV_CTX;
-
 	siovec.iov_base = send_buf;
 	siovec.iov_len = send_len;
 	smsg.msg_iov = &siovec;
@@ -1065,22 +1057,11 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 	smsg.addr = cxit_ep_fi_addr;
 	smsg.context = SEND_CTX;
 
-	tsmsg.msg_iov = &siovec;
-	tsmsg.iov_count = 1;
-	tsmsg.addr = cxit_ep_fi_addr;
-	tsmsg.context = SEND_CTX;
-
 	if (send_first) {
 		for (i = 0; i < sends; i++) {
-			if (tagged) {
-				ret = fi_tsendmsg(cxit_ep, &tsmsg, 0);
-				cr_assert_eq(ret, FI_SUCCESS,
-					     "fi_tsendmsg failed %d", ret);
-			} else {
-				ret = fi_sendmsg(cxit_ep, &smsg, 0);
-				cr_assert_eq(ret, FI_SUCCESS,
-					     "fi_sendmsg failed %d", ret);
-			}
+			ret = fi_sendmsg(cxit_ep, &smsg, 0);
+			cr_assert_eq(ret, FI_SUCCESS,
+				     "fi_sendmsg failed %d", ret);
 		}
 
 		/* Progress send to ensure it arrives unexpected */
@@ -1096,26 +1077,15 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 		} while (i++ < 100000);
 	}
 
-	if (tagged) {
-		ret = fi_trecvmsg(cxit_ep, &trmsg, FI_MULTI_RECV);
-		cr_assert_eq(ret, FI_SUCCESS, "fi_trecvmsg failed %d", ret);
-	} else {
-		ret = fi_recvmsg(cxit_ep, &rmsg, FI_MULTI_RECV);
-		cr_assert_eq(ret, FI_SUCCESS, "fi_recvmsg failed %d", ret);
-	}
+	ret = fi_recvmsg(cxit_ep, &rmsg, FI_MULTI_RECV);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_recvmsg failed %d", ret);
 
 	if (!send_first) {
 		sleep(1);
 		for (i = 0; i < sends; i++) {
-			if (tagged) {
-				ret = fi_tsendmsg(cxit_ep, &tsmsg, 0);
-				cr_assert_eq(ret, FI_SUCCESS,
-					     "fi_tsendmsg failed %d", ret);
-			} else {
-				ret = fi_sendmsg(cxit_ep, &smsg, 0);
-				cr_assert_eq(ret, FI_SUCCESS,
-					     "fi_sendmsg failed %d", ret);
-			}
+			ret = fi_sendmsg(cxit_ep, &smsg, 0);
+			cr_assert_eq(ret, FI_SUCCESS,
+				     "fi_sendmsg failed %d", ret);
 		}
 	}
 
@@ -1123,7 +1093,7 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 	do {
 		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
 		if (ret == 1) {
-			rxe_flags = (tagged ? FI_TAGGED : FI_MSG) | FI_RECV;
+			rxe_flags = FI_MSG | FI_RECV;
 
 			validate_multi_recv_rx_event(&rx_cqe, RECV_CTX,
 						     send_len, rxe_flags,
@@ -1161,7 +1131,7 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 			/* The truncated transfer is always the last, which
 			 * dequeued the multi-recv buffer.
 			 */
-			rxe_flags = (tagged ? FI_TAGGED : FI_MSG) | FI_RECV;
+			rxe_flags = FI_MSG | FI_RECV;
 
 			cr_assert(err_cqe.op_context == RECV_CTX,
 				  "Error RX CQE Context mismatch");
@@ -1211,7 +1181,7 @@ void do_multi_recv(uint8_t *send_buf, size_t send_len,
 
 		ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
 		if (ret == 1) {
-			txe_flags = (tagged ? FI_TAGGED : FI_MSG) | FI_SEND;
+			txe_flags = FI_MSG | FI_SEND;
 			sent++;
 			validate_tx_event(&tx_cqe, txe_flags, SEND_CTX);
 		} else {
@@ -1308,11 +1278,7 @@ ParameterizedTest(struct msg_multi_recv_params *param, msg, multi_recv)
 
 	do_multi_recv(send_buf, param->send_len, recv_buf,
 		      param->recv_len, param->ux, param->sends,
-		      param->olen, false);
-
-	do_multi_recv(send_buf, param->send_len, recv_buf,
-		      param->recv_len, param->ux, param->sends,
-		      param->olen, true);
+		      param->olen);
 
 	free(send_buf);
 	free(recv_buf);
@@ -1487,4 +1453,314 @@ Test(msg, multi_recv_ooo)
 
 	free(send_buf);
 	free(recv_buf);
+}
+
+Test(msg, fc_multi_recv, .timeout = 30)
+{
+	int i, j, k, ret, tx_ret;
+	uint8_t *send_bufs;
+	uint8_t *send_buf;
+	int send_len = 64;
+	uint8_t *recv_buf;
+	int recv_len = 64;
+	int mrecv_msgs = 10;
+	struct fi_msg rmsg = {};
+	struct iovec riovec;
+	struct fi_cq_tagged_entry tx_cqe;
+	struct fi_cq_tagged_entry rx_cqe;
+	int nsends_concurrent = 3; /* must be less than the LE pool min. */
+	int nsends = 20;
+	int sends = 0;
+	fi_addr_t from;
+
+	cr_assert(!(nsends % mrecv_msgs));
+
+	send_bufs = aligned_alloc(C_PAGE_SIZE, send_len * nsends_concurrent);
+	cr_assert(send_bufs);
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len * mrecv_msgs);
+	cr_assert(recv_buf);
+
+	for (i = 0; i < nsends_concurrent - 1; i++) {
+		send_buf = send_bufs + (i % nsends_concurrent) * send_len;
+		memset(send_buf, i, send_len);
+
+		tx_ret = fi_send(cxit_ep, send_buf, send_len, NULL,
+				 cxit_ep_fi_addr, NULL);
+	}
+
+	for (i = nsends_concurrent - 1; i < nsends; i++) {
+		send_buf = send_bufs + (i % nsends_concurrent) * send_len;
+		memset(send_buf, i, send_len);
+
+		do {
+			tx_ret = fi_send(cxit_ep, send_buf, send_len, NULL,
+					 cxit_ep_fi_addr, NULL);
+
+			/* Progress RX to avoid EQ drops */
+			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+			cr_assert_eq(ret, -FI_EAGAIN,
+				     "fi_cq_read unexpected value %d", ret);
+
+			/* Just progress */
+			fi_cq_read(cxit_tx_cq, NULL, 0);
+		} while (tx_ret == -FI_EAGAIN);
+
+		cr_assert_eq(tx_ret, FI_SUCCESS, "fi_tsend failed %d", tx_ret);
+
+		do {
+			tx_ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+
+			/* Progress RX to avoid EQ drops */
+			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+			cr_assert_eq(ret, -FI_EAGAIN,
+				     "fi_cq_read unexpected value %d", ret);
+		} while (tx_ret == -FI_EAGAIN);
+
+		cr_assert_eq(tx_ret, 1, "fi_cq_read unexpected value %d",
+			     tx_ret);
+
+		validate_tx_event(&tx_cqe, FI_MSG | FI_SEND, NULL);
+
+		if (!(++sends % 1000))
+			printf("%u Sends complete.\n", sends);
+	}
+
+	for (i = 0; i < nsends_concurrent - 1; i++) {
+		do {
+			tx_ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+
+			/* Progress RX to avoid EQ drops */
+			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 1);
+			cr_assert_eq(ret, -FI_EAGAIN,
+				     "fi_cq_read unexpected value %d", ret);
+		} while (tx_ret == -FI_EAGAIN);
+
+		cr_assert_eq(tx_ret, 1, "fi_cq_read unexpected value %d",
+			     tx_ret);
+
+		validate_tx_event(&tx_cqe, FI_MSG | FI_SEND, NULL);
+
+		if (!(++sends % 1000))
+			printf("%u Sends complete.\n", sends);
+	}
+
+	riovec.iov_base = recv_buf;
+	riovec.iov_len = recv_len * mrecv_msgs;
+	rmsg.msg_iov = &riovec;
+	rmsg.iov_count = 1;
+	rmsg.addr = FI_ADDR_UNSPEC;
+	rmsg.context = NULL;
+
+	for (i = 0; i < nsends / mrecv_msgs; i++) {
+		memset(recv_buf, 0, recv_len * mrecv_msgs);
+		do {
+			ret = fi_cq_read(cxit_rx_cq, &rx_cqe, 0);
+			assert(ret == FI_SUCCESS || ret == -FI_EAGAIN);
+
+			ret = fi_recvmsg(cxit_ep, &rmsg, FI_MULTI_RECV);
+			cr_assert_eq(ret, FI_SUCCESS, "fi_trecvmsg failed %d",
+				     ret);
+		} while (ret == -FI_EAGAIN);
+
+		cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+
+		for (k = 0; k < mrecv_msgs; k++) {
+			do {
+				ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1,
+						     &from);
+			} while (ret == -FI_EAGAIN);
+
+			cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d",
+				     ret);
+
+			validate_multi_recv_rx_event(&rx_cqe, NULL, recv_len,
+						     FI_MSG | FI_RECV, 0, 0);
+			cr_assert(from == cxit_ep_fi_addr,
+				  "Invalid source address");
+			bool last_msg = (k == (mrecv_msgs - 1));
+			bool dequeued = rx_cqe.flags & FI_MULTI_RECV;
+
+			cr_assert(!(last_msg ^ dequeued));
+
+			for (j = 0; j < recv_len; j++) {
+				cr_assert_eq(recv_buf[k * recv_len + j],
+					     (uint8_t)i * mrecv_msgs + k,
+					     "data mismatch, recv: %d,%d element[%d], exp=%d saw=%d\n",
+					     i, k, j,
+					     (uint8_t)i * mrecv_msgs + k,
+					     recv_buf[k * recv_len + j]);
+			}
+		}
+	}
+
+	free(send_bufs);
+	free(recv_buf);
+}
+
+static void test_fc_multi_recv(size_t xfer_len, bool progress_before_post)
+{
+	int ret;
+	char *recv_buf;
+	char *send_buf;
+	int i;
+	struct fi_msg rmsg = {};
+	struct iovec riovec;
+	unsigned int send_events = 0;
+	unsigned int recv_events = 0;
+	struct fi_cq_tagged_entry cqe;
+	size_t min_mrecv = 0;
+	size_t opt_len = sizeof(size_t);
+	bool unlinked = false;
+
+	/* Needs to exceed available LEs. */
+	unsigned int num_xfers = 100;
+
+	ret = fi_setopt(&cxit_ep->fid, FI_OPT_ENDPOINT, FI_OPT_MIN_MULTI_RECV,
+			&min_mrecv, opt_len);
+	cr_assert(ret == FI_SUCCESS);
+
+	recv_buf = calloc(num_xfers, xfer_len);
+	cr_assert(recv_buf);
+
+	send_buf = calloc(num_xfers, xfer_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < (num_xfers * xfer_len); i++)
+		send_buf[i] = (char)(rand() % 256);
+
+	/* Fire off all the unexpected sends expect 1. Last send will be sent
+	 * expectedly to verify that hardware has updates the manage local LE
+	 * start and length fields accordingly.
+	 */
+	for (i = 0; i < num_xfers - 1; i++) {
+		do {
+			ret = fi_send(cxit_ep, &send_buf[i * xfer_len],
+				      xfer_len, NULL, cxit_ep_fi_addr, NULL);
+			if (ret == -FI_EAGAIN) {
+				fi_cq_read(cxit_rx_cq, &cqe, 0);
+				fi_cq_read(cxit_tx_cq, &cqe, 0);
+			}
+		} while (ret == -FI_EAGAIN);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* Progress before post will cause all ULEs to be onloaded before the
+	 * append occurs.
+	 */
+	if (progress_before_post)
+		fi_cq_read(cxit_rx_cq, &cqe, 0);
+
+	/* Append late multi-recv buffer. */
+	riovec.iov_base = recv_buf;
+	riovec.iov_len = num_xfers * xfer_len;
+	rmsg.msg_iov = &riovec;
+	rmsg.iov_count = 1;
+	rmsg.addr = cxit_ep_fi_addr;
+	rmsg.context = NULL;
+
+	do {
+		ret = fi_recvmsg(cxit_ep, &rmsg, FI_MULTI_RECV);
+		if (ret == -FI_EAGAIN) {
+			fi_cq_read(cxit_tx_cq, NULL, 0);
+			fi_cq_read(cxit_rx_cq, NULL, 0);
+		}
+	} while (ret == -FI_EAGAIN);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* Wait for all send events. Since this test can be run with or without
+	 * flow control, progressing the RX CQ may be required.
+	 */
+	while (send_events != (num_xfers - 1)) {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		cr_assert(ret == -FI_EAGAIN || ret == 1);
+		if (ret == 1)
+			send_events++;
+
+		/* Progress RXC. */
+		fi_cq_read(cxit_rx_cq, &cqe, 0);
+	}
+
+	/* Wait for all receive events. */
+	while (recv_events != (num_xfers - 1)) {
+		ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+		cr_assert(ret == -FI_EAGAIN || ret == 1);
+		if (ret == 1 && cqe.flags & FI_RECV)
+			recv_events++;
+	}
+
+	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+	cr_assert(ret == -FI_EAGAIN);
+
+	/* Make last send expected. This ensures that hardware and/or software
+	 * has correctly updated the LE start and length fields correctly.
+	 */
+	do {
+		ret = fi_send(cxit_ep, &send_buf[(num_xfers - 1) * xfer_len],
+			      xfer_len, NULL, cxit_ep_fi_addr, NULL);
+	} while (ret == -FI_EAGAIN);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* Wait for all send events. Since this test can be run with or without
+	 * flow control, progressing the RX CQ may be required.
+	 */
+	while (send_events != num_xfers) {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		cr_assert(ret == -FI_EAGAIN || ret == 1);
+		if (ret == 1)
+			send_events++;
+
+		/* Progress RXC. */
+		fi_cq_read(cxit_rx_cq, &cqe, 0);
+	}
+
+	/* Process the last receive event and the multi-receive event signaling
+	 * the provider is no longer using the buffer.
+	 */
+	while (recv_events != num_xfers && !unlinked) {
+		ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+		cr_assert(ret == -FI_EAGAIN || ret == 1);
+		if (ret == 1) {
+			if (cqe.flags & FI_RECV)
+				recv_events++;
+			if (cqe.flags & FI_MULTI_RECV)
+				unlinked = true;
+		}
+	}
+
+	/* Data integrity check. If hardware/software mismanaged the multi-recv
+	 * start and/or length fields on the expected send, data will be
+	 * corrupted.
+	 */
+	for (i = 0; i < (num_xfers * xfer_len); i++)
+		cr_assert_eq(send_buf[i], recv_buf[i],
+			     "Data miscompare: byte=%u", i);
+
+	free(send_buf);
+	free(recv_buf);
+}
+
+Test(msg, fc_multi_recv_rdzv, .timeout = 10)
+{
+	/* Transfer size needs to be large enough to trigger rendezvous. */
+	test_fc_multi_recv(16384, false);
+}
+
+Test(msg, fc_multi_recv_rdzv_onload_ules, .timeout = 10)
+{
+	/* Transfer size needs to be large enough to trigger rendezvous. */
+	test_fc_multi_recv(16384, true);
+}
+
+Test(msg, fc_no_eq_space_expected_multi_recv, .timeout = 10)
+{
+	test_fc_multi_recv(1, false);
+}
+
+Test(msg, fc_no_eq_space_expected_multi_recv_onload_ules, .timeout = 10)
+{
+	test_fc_multi_recv(1, false);
 }
