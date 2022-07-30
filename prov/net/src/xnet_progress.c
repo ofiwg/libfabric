@@ -950,6 +950,21 @@ void xnet_update_pollout(struct xnet_ep *ep)
 	xnet_signal_progress(progress);
 }
 
+/* We can't hold the progress lock around waiting, or we
+ * can hang another thread trying to obtain the lock.  But
+ * the poll fds may change while we're waiting for an event.
+ * To avoid possibly processing an event for an object that
+ * we just removed from the poll fds, which could access freed
+ * memory, we must re-acquire the progress lock and re-read
+ * any queued events before processing it.
+ */
+int xnet_progress_wait(struct xnet_progress *progress, int timeout)
+{
+	struct ofi_epollfds_event event;
+
+	return ofi_pollfds_wait(progress->pollfds, &event, 1, timeout);
+}
+
 /* If we're only using auto progress to drive transfers, we end up with an
  * unfortunate choice.  See the comment in the progress function about
  * waiting for the application to post a buffer.  If that situation occurs,
@@ -964,7 +979,6 @@ void xnet_update_pollout(struct xnet_ep *ep)
 static void *xnet_auto_progress(void *arg)
 {
 	struct xnet_progress *progress = arg;
-	struct ofi_epollfds_event event;
 	int timeout, nfds;
 
 	FI_INFO(&xnet_prov, FI_LOG_DOMAIN, "progress thread starting\n");
@@ -974,16 +988,7 @@ static void *xnet_auto_progress(void *arg)
 			  dlist_empty(&progress->rx_poll_list) ? -1 : 1;
 		ofi_genlock_unlock(progress->active_lock);
 
-		/* We can't hold the progress lock around waiting, or we
-		 * can hang another thread trying to obtain the lock.  But
-		 * the poll fds may change while we're waiting for an event.
-		 * To avoid possibly processing an event for an object that
-		 * we just removed from the poll fds, which could access freed
-		 * memory, we must re-acquire the progress lock and re-read
-		 * any queued events before processing it.
-		 */
-		nfds = ofi_pollfds_wait(progress->pollfds, &event, 1, timeout);
-
+		nfds = xnet_progress_wait(progress, timeout);
 		ofi_genlock_lock(progress->active_lock);
 		if (nfds >= 0) {
 			progress->fairness_cntr = 0;

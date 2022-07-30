@@ -277,6 +277,7 @@ void xnet_stop_progress(struct xnet_progress *progress);
 
 void xnet_progress(struct xnet_progress *progress, bool clear_signal);
 void xnet_run_progress(struct xnet_progress *progress, bool clear_signal);
+int xnet_progress_wait(struct xnet_progress *progress, int timeout);
 void xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr);
 void xnet_handle_event_list(struct xnet_progress *progress);
 
