@@ -347,10 +347,118 @@ void xnet_cntr_incerr(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
 		fi_cntr_adderr(&cntr->cntr_fid, 1);
 }
 
+
+
+static uint64_t xnet_cntr_read(struct fid_cntr *cntr_fid)
+{
+	struct util_cntr *cntr;
+
+	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+	xnet_progress(xnet_cntr2_progress(cntr), false);
+	return ofi_atomic_get64(&cntr->cnt);
+}
+
+static uint64_t xnet_cntr_readerr(struct fid_cntr *cntr_fid)
+{
+	struct util_cntr *cntr;
+
+	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+	xnet_progress(xnet_cntr2_progress(cntr), false);
+	return ofi_atomic_get64(&cntr->err);
+}
+
+static int xnet_cntr_add(struct fid_cntr *cntr_fid, uint64_t value)
+{
+	struct util_cntr *cntr;
+
+	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+	ofi_atomic_add64(&cntr->cnt, value);
+	/* No need to signal, see comment above xnet_cntr_ops */
+	return FI_SUCCESS;
+}
+
+static int xnet_cntr_adderr(struct fid_cntr *cntr_fid, uint64_t value)
+{
+	struct util_cntr *cntr;
+
+	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+	ofi_atomic_add64(&cntr->err, value);
+	/* No need to signal, see comment above xnet_cntr_ops */
+	return FI_SUCCESS;
+}
+
+static int xnet_cntr_set(struct fid_cntr *cntr_fid, uint64_t value)
+{
+	struct util_cntr *cntr;
+
+	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+	ofi_atomic_set64(&cntr->cnt, value);
+	/* No need to signal, see comment above xnet_cntr_ops */
+	return FI_SUCCESS;
+}
+
+static int xnet_cntr_seterr(struct fid_cntr *cntr_fid, uint64_t value)
+{
+	struct util_cntr *cntr;
+
+	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+	ofi_atomic_set64(&cntr->err, value);
+	/* No need to signal, see comment above xnet_cntr_ops */
+	return FI_SUCCESS;
+}
+
+static int
+xnet_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
+{
+	struct util_cntr *cntr;
+	uint64_t endtime, errcnt;
+	int ret;
+
+	cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
+	errcnt = xnet_cntr_readerr(cntr_fid);
+	endtime = ofi_timeout_time(timeout);
+
+	do {
+		if (threshold <= (uint64_t) ofi_atomic_get64(&cntr->cnt))
+			return FI_SUCCESS;
+
+		if (errcnt != (uint64_t) ofi_atomic_get64(&cntr->err))
+			return -FI_EAVAIL;
+
+		if (ofi_adjust_timeout(endtime, &timeout))
+			return -FI_ETIMEDOUT;
+
+		ret = xnet_progress_wait(xnet_cntr2_progress(cntr), timeout);
+		if (ret < 0)
+			break;
+
+		xnet_progress(xnet_cntr2_progress(cntr), true);
+	} while (true);
+
+	return ret;
+}
+
+/* We use these calls if the app uses a single thread around any access
+ * to the counter (e.g. FI_THREAD_DOMAIN).  There should be no other
+ * threads updating the counter or waiting for a value in parallel with
+ * these calls.
+ */
+static struct fi_ops_cntr xnet_cntr_ops = {
+	.size = sizeof(struct fi_ops_cntr),
+	.read = xnet_cntr_read,
+	.readerr = xnet_cntr_readerr,
+	.add = xnet_cntr_add,
+	.adderr = xnet_cntr_adderr,
+	.set = xnet_cntr_set,
+	.seterr = xnet_cntr_seterr,
+	.wait = xnet_cntr_wait
+};
+
+
 int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr_fid, void *context)
 {
-	struct xnet_fabric *fabric;
+	struct xnet_domain *domain;
 	struct util_cntr *cntr;
 	struct fi_cntr_attr cntr_attr;
 	int ret;
@@ -359,9 +467,17 @@ int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 	if (!cntr)
 		return -FI_ENOMEM;
 
+	domain = container_of(fid_domain, struct xnet_domain,
+			      util_domain.domain_fid);
 	if (attr->wait_obj == FI_WAIT_UNSPEC) {
 		cntr_attr = *attr;
-		cntr_attr.wait_obj = FI_WAIT_POLLFD;
+		if (domain->progress.auto_progress ||
+		    domain->util_domain.threading != FI_THREAD_DOMAIN) {
+			cntr_attr.wait_obj = FI_WAIT_FD;
+		} else {
+			/* We can wait on the progress pollfds */
+			cntr_attr.wait_obj = FI_WAIT_NONE;
+		}
 		attr = &cntr_attr;
 	}
 
@@ -370,9 +486,9 @@ int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 	if (ret)
 		goto free;
 
-	fabric = container_of(cntr->domain->fabric, struct xnet_fabric,
-			      util_fabric);
-	if (attr->wait_obj != FI_WAIT_NONE || fabric->progress.auto_progress) {
+	if (attr->wait_obj == FI_WAIT_NONE) {
+		cntr->cntr_fid.ops = &xnet_cntr_ops;
+	} else {
 		ret = xnet_start_progress(xnet_cntr2_progress(cntr));
 		if (ret)
 			goto cleanup;
