@@ -177,6 +177,7 @@ xnet_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 
 	recv_entry->cq_flags = xnet_rx_completion_flag(ep, flags) |
 			       FI_MSG | FI_RECV;
+	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = msg->context;
 
 	if (!xnet_queue_recv(ep, recv_entry)) {
@@ -211,6 +212,7 @@ xnet_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	recv_entry->cq_flags = xnet_rx_completion_flag(ep, 0) |
 			       FI_MSG | FI_RECV;
+	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
 
 	if (!xnet_queue_recv(ep, recv_entry)) {
@@ -245,6 +247,7 @@ xnet_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	memcpy(recv_entry->iov, iov, count * sizeof(*iov));
 	recv_entry->cq_flags = xnet_rx_completion_flag(ep, 0) |
 			       FI_MSG | FI_RECV;
+	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
 
 	if (!xnet_queue_recv(ep, recv_entry)) {
@@ -284,6 +287,7 @@ xnet_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 	xnet_init_tx_iov(tx_entry, hdr_len, msg->msg_iov, msg->iov_count);
 	tx_entry->cq_flags = xnet_tx_completion_flag(ep, flags) |
 			     FI_MSG | FI_SEND;
+	tx_entry->cntr_inc = ofi_ep_tx_cntr_inc;
 	xnet_set_ack_flags(tx_entry, flags);
 	tx_entry->context = msg->context;
 
@@ -314,6 +318,7 @@ xnet_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	tx_entry->context = context;
 	tx_entry->cq_flags = xnet_tx_completion_flag(ep, 0) |
 			     FI_MSG | FI_SEND;
+	tx_entry->cntr_inc = ofi_ep_tx_cntr_inc;
 	xnet_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
 	xnet_tx_queue_insert(ep, tx_entry);
@@ -343,6 +348,7 @@ xnet_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	tx_entry->context = context;
 	tx_entry->cq_flags = xnet_tx_completion_flag(ep, 0) |
 			     FI_MSG | FI_SEND;
+	tx_entry->cntr_inc = ofi_ep_tx_cntr_inc;
 	xnet_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
 	xnet_tx_queue_insert(ep, tx_entry);
@@ -372,6 +378,7 @@ xnet_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	xnet_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.base_hdr), buf, len);
 	tx_entry->ctrl_flags = XNET_INJECT_OP;
 	tx_entry->cq_flags = FI_INJECT | FI_MSG | FI_SEND;
+	tx_entry->cntr_inc = ofi_ep_tx_cntr_inc;
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
@@ -406,6 +413,7 @@ xnet_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	tx_entry->context = context;
 	tx_entry->cq_flags = xnet_tx_completion_flag(ep, 0) |
 			     FI_MSG | FI_SEND;
+	tx_entry->cntr_inc = ofi_ep_tx_cntr_inc;
 	xnet_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
 	xnet_tx_queue_insert(ep, tx_entry);
@@ -438,6 +446,7 @@ xnet_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 			    buf, len);
 	tx_entry->ctrl_flags = XNET_INJECT_OP;
 	tx_entry->cq_flags = FI_INJECT | FI_MSG | FI_SEND;
+	tx_entry->cntr_inc = ofi_ep_tx_cntr_inc;
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
@@ -489,6 +498,7 @@ xnet_tsendmsg(struct fid_ep *fid_ep, const struct fi_msg_tagged *msg,
 	xnet_init_tx_iov(tx_entry, hdr_len, msg->msg_iov, msg->iov_count);
 	tx_entry->cq_flags = xnet_tx_completion_flag(ep, flags) |
 			     FI_TAGGED | FI_SEND;
+	tx_entry->cntr_inc = ofi_ep_tx_cntr_inc;
 	xnet_set_ack_flags(tx_entry, flags);
 	tx_entry->context = msg->context;
 
@@ -521,6 +531,7 @@ xnet_tsend(struct fid_ep *fid_ep, const void *buf, size_t len,
 	tx_entry->context = context;
 	tx_entry->cq_flags = xnet_tx_completion_flag(ep, 0) |
 			     FI_TAGGED | FI_SEND;
+	tx_entry->cntr_inc = ofi_ep_tx_cntr_inc;
 	xnet_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
 	xnet_tx_queue_insert(ep, tx_entry);
@@ -552,6 +563,7 @@ xnet_tsendv(struct fid_ep *fid_ep, const struct iovec *iov, void **desc,
 	tx_entry->context = context;
 	tx_entry->cq_flags = xnet_tx_completion_flag(ep, 0) |
 			     FI_TAGGED | FI_SEND;
+	tx_entry->cntr_inc = ofi_ep_tx_cntr_inc;
 	xnet_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
 	xnet_tx_queue_insert(ep, tx_entry);
@@ -583,6 +595,7 @@ xnet_tinject(struct fid_ep *fid_ep, const void *buf, size_t len,
 	xnet_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.tag_hdr), buf, len);
 	tx_entry->ctrl_flags = XNET_INJECT_OP;
 	tx_entry->cq_flags = FI_INJECT | FI_TAGGED | FI_SEND;
+	tx_entry->cntr_inc = ofi_ep_tx_cntr_inc;
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
@@ -616,6 +629,7 @@ xnet_tsenddata(struct fid_ep *fid_ep, const void *buf, size_t len, void *desc,
 	tx_entry->context = context;
 	tx_entry->cq_flags = xnet_tx_completion_flag(ep, 0) |
 			     FI_TAGGED | FI_SEND;
+	tx_entry->cntr_inc = ofi_ep_tx_cntr_inc;
 	xnet_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
 	xnet_tx_queue_insert(ep, tx_entry);
@@ -649,6 +663,7 @@ xnet_tinjectdata(struct fid_ep *fid_ep, const void *buf, size_t len,
 			    buf, len);
 	tx_entry->ctrl_flags = XNET_INJECT_OP;
 	tx_entry->cq_flags = FI_INJECT | FI_TAGGED | FI_SEND;
+	tx_entry->cntr_inc = ofi_ep_tx_cntr_inc;
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:

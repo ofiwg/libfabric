@@ -68,6 +68,7 @@ xnet_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	recv_entry->ctrl_flags = flags & FI_MULTI_RECV;
 	recv_entry->cq_flags = FI_MSG | FI_RECV;
+	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = msg->context;
 	recv_entry->iov_cnt = msg->iov_count;
 	memcpy(&recv_entry->iov[0], msg->msg_iov,
@@ -97,6 +98,7 @@ xnet_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	}
 
 	recv_entry->cq_flags = FI_MSG | FI_RECV;
+	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
 	recv_entry->iov_cnt = 1;
 	recv_entry->iov[0].iov_base = buf;
@@ -127,6 +129,7 @@ xnet_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	}
 
 	recv_entry->cq_flags = FI_MSG | FI_RECV;
+	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
 	recv_entry->iov_cnt = count;
 	memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
@@ -214,6 +217,7 @@ xnet_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	recv_entry->ignore = msg->ignore;
 	recv_entry->src_addr = msg->addr;
 	recv_entry->cq_flags = FI_TAGGED | FI_RECV;
+	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = msg->context;
 	recv_entry->iov_cnt = msg->iov_count;
 	memcpy(&recv_entry->iov[0], msg->msg_iov,
@@ -248,6 +252,7 @@ xnet_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	recv_entry->ignore = ignore;
 	recv_entry->src_addr = src_addr;
 	recv_entry->cq_flags = FI_TAGGED | FI_RECV;
+	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
 	recv_entry->iov_cnt = 1;
 	recv_entry->iov[0].iov_base = buf;
@@ -284,6 +289,7 @@ xnet_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	recv_entry->ignore = ignore;
 	recv_entry->src_addr = src_addr;
 	recv_entry->cq_flags = FI_TAGGED | FI_RECV;
+	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
 	recv_entry->iov_cnt = count;
 	memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));

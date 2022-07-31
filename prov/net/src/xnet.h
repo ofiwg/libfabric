@@ -329,6 +329,7 @@ struct xnet_xfer_entry {
 	size_t			iov_cnt;
 	struct iovec		iov[XNET_IOV_LIMIT+1];
 	struct xnet_ep		*ep;
+	void			(*cntr_inc)(struct util_ep *ep);
 	uint64_t		tag_seq_no;
 	uint64_t		tag;
 	uint64_t		ignore;
@@ -512,6 +513,7 @@ xnet_free_xfer(struct xnet_ep *ep, struct xnet_xfer_entry *xfer)
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	xfer->hdr.base_hdr.flags = 0;
 	xfer->cq_flags = 0;
+	xfer->cntr_inc = NULL;
 	xfer->ctrl_flags = 0;
 	xfer->context = 0;
 	ofi_buf_free(xfer);
