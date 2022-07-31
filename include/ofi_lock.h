@@ -339,10 +339,12 @@ static inline void ofi_nolock_unlock_op(void *nolock)
 	(void) nolock;
 }
 
-/* No way to verify, so return false.  User needs another check. */
+/* No way to verify, so return true to pass all asserts.
+ * User should provide their own checks higher-up.
+ */
 static inline int ofi_nolock_held_op(void *nolock)
 {
-	return 0;
+	return 1;
 }
 
 
