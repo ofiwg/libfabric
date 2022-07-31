@@ -171,37 +171,6 @@
 #define CXIP_REQ_BUF_HEADER_MIN_SIZE (sizeof(struct c_port_fab_hdr) + \
 	sizeof(struct c_port_small_msg_hdr))
 
-/* 16 bits of MR keys equals the hardware MR resource limit. For user
- * defined keys we expose a 32-bit key size and only 64K keys can be
- * enabled at any given time.
- */
-#define CXIP_MR_KEY_SIZE sizeof(uint32_t)
-#define CXIP_MR_KEY_MASK ((1ULL << (8 * CXIP_MR_KEY_SIZE)) - 1)
-
-/* For provider defined keys we define a 64 bit MR key that maps
- * to provider required information.
- */
-struct cxip_prov_key {
-	union {
-		struct {
-			uint64_t lac	:3;
-			uint64_t opt	:1;
-			uint64_t lac_off:58;
-			uint64_t unused	:2;
-		};
-		uint64_t key;
-	};
-};
-
-#define CXIP_MR_PROV_KEY_SIZE sizeof(struct cxip_prov_key)
-
-static inline bool cxip_is_valid_mr_key(uint64_t key)
-{
-	if (key & ~CXIP_MR_KEY_MASK)
-		return false;
-	return true;
-}
-
 extern char cxip_prov_name[];
 extern struct fi_provider cxip_prov;
 extern struct util_prov cxip_util_prov;
@@ -359,18 +328,58 @@ struct cxip_addr {
 #define CXIP_PTL_IDX_READ_MR_STD	228
 #define CXIP_PTL_IDX_RDZV_SRC		255
 
-static inline bool cxip_mr_key_opt(int key)
-{
-	return cxip_env.optimized_mrs && key < CXIP_PTL_IDX_MR_OPT_CNT;
-}
+/* The CXI provider supports both provider specified MR keys
+ * (FI_MR_PROV_KEY MR mode) and client specified keys on a per-domain
+ * basis.
+ *
+ * User specified keys:
+ * Hardware resources limit the number of active keys to 16 bits.
+ * Key size is 32-bit so there are only 64K unique keys.
+ *
+ * Provider specified keys:
+ * TODO
+ */
+#define CXIP_MR_KEY_SIZE sizeof(uint32_t)
+#define CXIP_MR_KEY_MASK ((1ULL << (8 * CXIP_MR_KEY_SIZE)) - 1)
 
-static inline int cxip_mr_key_to_ptl_idx(int key, bool write)
-{
-	if (cxip_mr_key_opt(key))
-		return write ? CXIP_PTL_IDX_WRITE_MR_OPT(key) :
-			CXIP_PTL_IDX_READ_MR_OPT(key);
-	return write ? CXIP_PTL_IDX_WRITE_MR_STD : CXIP_PTL_IDX_READ_MR_STD;
-}
+/* For provider defined keys we define a 64 bit MR key that maps
+ * to provider required information.
+ */
+struct cxip_mr_key {
+	union {
+		/* Provider generated cached */
+		struct {
+			uint64_t lac	:3;
+			uint64_t opt	:1;
+			uint64_t lac_off:58;
+			uint64_t unused	:2;
+		};
+		/* Client or Provider non-cached */
+		uint64_t raw;
+	};
+};
+
+#define CXIP_MR_PROV_KEY_SIZE sizeof(struct cxip_mr_key)
+
+struct cxip_domain;
+struct cxip_mr_domain;
+struct cxip_mr;
+
+struct cxip_mr_util_ops {
+	bool is_prov;
+	bool is_cached;
+	int (*init_key)(struct cxip_mr *mr, uint64_t req_key);
+	bool (*key_is_valid)(uint64_t key);
+	bool (*key_is_opt)(uint64_t key);
+	int (*key_to_ptl_idx)(struct cxip_domain *dom, uint64_t key,
+			      bool write);
+	int (*domain_insert)(struct cxip_mr *mr);
+	void (*domain_remove)(struct cxip_mr *mr);
+	int (*enable_opt)(struct cxip_mr *mr);
+	int (*disable_opt)(struct cxip_mr *mr);
+	int (*enable_std)(struct cxip_mr *mr);
+	int (*disable_std)(struct cxip_mr *mr);
+};
 
 /* Messaging Match Bit layout */
 #define CXIP_TAG_WIDTH		48
@@ -558,8 +567,6 @@ struct cxip_fabric {
 	ofi_atomic32_t ref;
 };
 
-struct cxip_domain;
-
 /*
  * CXI Provider Memory Descriptor
  */
@@ -632,6 +639,9 @@ struct cxip_domain {
 	/* Trigger and CT support */
 	struct cxip_cmdq *trig_cmdq;
 	bool cntr_init;
+
+	/* MR utilitly ops */
+	struct cxip_mr_util_ops *mr_util;
 
 	/* MR are a domain resource, control buffer IDs
 	 * are from a common pool for the domain.
@@ -1715,7 +1725,6 @@ struct cxip_txc {
 
 	struct dlist_entry ep_list;	// contains EPs using shared context
 	ofi_spin_t lock;
-
 	struct fi_tx_attr attr;		// attributes
 	bool selective_completion;
 	uint32_t tclass;

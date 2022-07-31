@@ -1373,7 +1373,7 @@ static bool cxip_amo_is_idc(struct cxip_txc *txc, uint64_t key, bool triggered)
 		return false;
 
 	/* Only optimized MR can be used for IDCs. */
-	return cxip_mr_key_opt(key);
+	return txc->domain->mr_util->key_is_opt(key);
 }
 
 int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
@@ -1472,7 +1472,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		return -FI_EINVAL;
 	}
 
-	if (!cxip_is_valid_mr_key(key)) {
+	if (!txc->domain->mr_util->key_is_valid(key)) {
 		TXC_WARN(txc, "Invalid remote key: %lx\n", key);
 		return -FI_EKEYREJECTED;
 	}
@@ -1496,7 +1496,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		return ret;
 	}
 
-	pid_idx = cxip_mr_key_to_ptl_idx(key, !result);
+	pid_idx = txc->domain->mr_util->key_to_ptl_idx(txc->domain, key,
+						       !result);
 	cxi_build_dfa(caddr.nic, caddr.pid, txc->pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 

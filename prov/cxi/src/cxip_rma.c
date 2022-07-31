@@ -562,7 +562,7 @@ static bool cxip_rma_is_unrestricted(struct cxip_txc *txc, uint64_t key,
 	/* Unoptimized keys are implemented with match bits and must always be
 	 * unrestricted.
 	 */
-	if (!cxip_mr_key_opt(key))
+	if (!txc->domain->mr_util->key_is_opt(key))
 		return true;
 
 	/* If FI_RMA_EVENTS are requested, it is assumed that the user will bind
@@ -590,7 +590,7 @@ static bool cxip_rma_is_idc(struct cxip_txc *txc, uint64_t key, size_t len,
 	 * small message format does not support remote offset which is needed
 	 * for RMA commands.
 	 */
-	if (!cxip_mr_key_opt(key))
+	if (!txc->domain->mr_util->key_is_opt(key))
 		return false;
 
 	/* IDC commands are only support with RMA writes. */
@@ -668,7 +668,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		return -FI_EMSGSIZE;
 	}
 
-	if (!cxip_is_valid_mr_key(key)) {
+	if (!txc->domain->mr_util->key_is_valid(key)) {
 		TXC_WARN(txc, "Invalid remote key: %lx\n", key);
 		return -FI_EKEYREJECTED;
 	}
@@ -692,7 +692,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		return ret;
 	}
 
-	pid_idx = cxip_mr_key_to_ptl_idx(key, write);
+	pid_idx = txc->domain->mr_util->key_to_ptl_idx(txc->domain, key, write);
 	cxi_build_dfa(caddr.nic, caddr.pid, txc->pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 
