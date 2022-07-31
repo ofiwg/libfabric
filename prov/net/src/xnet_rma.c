@@ -91,6 +91,7 @@ static void xnet_rma_read_recv_entry_fill(struct xnet_xfer_entry *recv_entry,
 	recv_entry->context = msg->context;
 	recv_entry->cq_flags = xnet_tx_completion_flag(ep, flags) |
 			       FI_RMA | FI_READ;
+	recv_entry->cntr_inc = ofi_ep_rd_cntr_inc;
 	recv_entry->ctrl_flags = XNET_INTERNAL_XFER;
 }
 
@@ -249,6 +250,7 @@ xnet_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 
 	send_entry->cq_flags = xnet_tx_completion_flag(ep, flags) |
 			       FI_RMA | FI_WRITE;
+	send_entry->cntr_inc = ofi_ep_wr_cntr_inc;
 	xnet_set_commit_flags(send_entry, flags);
 	send_entry->context = msg->context;
 
@@ -388,6 +390,7 @@ xnet_rma_inject_common(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	send_entry->hdr.base_hdr.size = offset;
 	send_entry->cq_flags = FI_INJECT | FI_WRITE;
+	send_entry->cntr_inc = ofi_ep_wr_cntr_inc;
 	xnet_tx_queue_insert(ep, send_entry);
 unlock:
 	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);

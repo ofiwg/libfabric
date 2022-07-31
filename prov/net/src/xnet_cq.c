@@ -317,14 +317,11 @@ xnet_get_cntr(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
 static void
 xnet_cntr_inc(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
 {
-	struct util_cntr *cntr;
-
 	if (xfer_entry->ctrl_flags & XNET_INTERNAL_XFER)
 		return;
 
-	cntr = xnet_get_cntr(ep, xfer_entry);
-	if (cntr)
-		fi_cntr_add(&cntr->cntr_fid, 1);
+	assert(xfer_entry->cntr_inc);
+	xfer_entry->cntr_inc(&ep->util_ep);
 }
 
 void xnet_report_cntr_success(struct xnet_ep *ep, struct util_cq *cq,
@@ -346,8 +343,6 @@ void xnet_cntr_incerr(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
 	if (cntr)
 		fi_cntr_adderr(&cntr->cntr_fid, 1);
 }
-
-
 
 static uint64_t xnet_cntr_read(struct fid_cntr *cntr_fid)
 {

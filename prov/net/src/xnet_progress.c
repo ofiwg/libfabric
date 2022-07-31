@@ -366,6 +366,7 @@ static int xnet_alter_mrecv(struct xnet_ep *ep, struct xnet_xfer_entry *xfer,
 
 	recv_entry->ctrl_flags = XNET_MULTI_RECV;
 	recv_entry->cq_flags = FI_MSG | FI_RECV;
+	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = xfer->context;
 
 	recv_entry->iov_cnt = 1;
@@ -392,7 +393,6 @@ static struct xnet_xfer_entry *xnet_get_rx_entry(struct xnet_ep *ep)
 			xfer = container_of(slist_remove_head(&srx->rx_queue),
 					    struct xnet_xfer_entry, entry);
 			xfer->cq_flags |= xnet_rx_completion_flag(ep, 0);
-
 		} else {
 			xfer = NULL;
 		}
@@ -587,6 +587,7 @@ static ssize_t xnet_op_write(struct xnet_ep *ep)
 		rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &rx_entry->hdr +
 			  sizeof(rx_entry->hdr.base_hdr));
 	}
+	rx_entry->cntr_inc = ofi_ep_rem_wr_cntr_inc;
 
 	memcpy(&rx_entry->hdr, &ep->cur_rx.hdr,
 	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
