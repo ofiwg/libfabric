@@ -818,7 +818,8 @@ static bool xnet_is_active(void *ctx)
 
 static void
 xnet_handle_events(struct xnet_progress *progress,
-		   struct ofi_epollfds_event *events, int nfds, bool internal)
+		   struct ofi_epollfds_event *events, int nfds,
+		   bool clear_signal)
 {
 	struct fid *fid;
 	bool pin, pout, perr;
@@ -845,10 +846,7 @@ xnet_handle_events(struct xnet_progress *progress,
 			break;
 		default:
 			assert(fid->fclass == XNET_CLASS_PROGRESS);
-			/* Only allow the internal thread to clear the signal.
-			 * This ensures that its poll set is up to date.
-			 */
-			if (internal)
+			if (clear_signal)
 				fd_signal_reset(&progress->signal);
 			break;
 		}
@@ -875,7 +873,7 @@ xnet_progress_rx_list(struct xnet_progress *progress, struct dlist_entry *rx_lis
 	}
 }
 
-void xnet_run_progress(struct xnet_progress *progress, bool internal)
+void xnet_run_progress(struct xnet_progress *progress, bool clear_signal)
 {
 	struct ofi_epollfds_event events[XNET_MAX_EVENTS];
 	int nfds;
@@ -888,12 +886,12 @@ void xnet_run_progress(struct xnet_progress *progress, bool internal)
 	if (progress->fairness_cntr) {
 		nfds = ofi_pollfds_hotties(progress->pollfds, events,
 					   XNET_MAX_EVENTS);
-		xnet_handle_events(progress, events, nfds, internal);
+		xnet_handle_events(progress, events, nfds, clear_signal);
 		progress->fairness_cntr--;
 	} else {
 		nfds = ofi_pollfds_wait(progress->pollfds, events,
 					XNET_MAX_EVENTS, 0);
-		xnet_handle_events(progress, events, nfds, internal);
+		xnet_handle_events(progress, events, nfds, clear_signal);
 		if (ofi_poll_fairness) {
 			progress->fairness_cntr = ofi_poll_fairness;
 			ofi_pollfds_check_heat(progress->pollfds, xnet_is_active);
@@ -901,10 +899,10 @@ void xnet_run_progress(struct xnet_progress *progress, bool internal)
 	}
 }
 
-void xnet_progress(struct xnet_progress *progress, bool internal)
+void xnet_progress(struct xnet_progress *progress, bool clear_signal)
 {
 	ofi_genlock_lock(progress->active_lock);
-	xnet_run_progress(progress, internal);
+	xnet_run_progress(progress, clear_signal);
 	ofi_genlock_unlock(progress->active_lock);
 }
 
