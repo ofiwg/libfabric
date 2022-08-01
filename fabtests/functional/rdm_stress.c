@@ -1250,6 +1250,13 @@ int main(int argc, char **argv)
 		case 'h':
 			ft_csusage(argv[0], "An RDM endpoint error stress test.");
 			ft_longopts_usage();
+			FT_PRINT_OPTS_USAGE("-u <test_config.json>",
+				"specify test control file at client");
+			fprintf(stderr, "\nExample execution:\n");
+			fprintf(stderr, "  server: %s -p tcp -s 127.0.0.1\n", argv[0]);
+			fprintf(stderr, "  client: %s -p tcp -u "
+				"fabtests/test_configs/rdm_stress/stress.json "
+				"127.0.0.1\n", argv[0]);
 			return EXIT_FAILURE;
 		}
 	}

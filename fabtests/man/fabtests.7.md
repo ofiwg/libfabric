@@ -517,6 +517,11 @@ the list available for that test.
 *-M <mcast_addr>*
 : For multicast tests, specifies the address of the multicast group to join.
 
+*-u <test_config_file>*
+: Specify the input file to use for test control.  This is specified at the
+  client for fi_ubertest and fi_rdm_stress and controls the behavior of the
+  testing.
+
 *-v*
 : Add data verification check to data transfers.
 
@@ -550,19 +555,23 @@ This will run "fi_rdm_atomic" for all atomic operations with
 	succesfully. -C lists the mode that the tests will run in. Currently the options are
   for rma and msg. If not provided, the test will default to msg.
 
+## Run fi_rdm_stress
+
+  run server: fi_rdm_stress
+  run client: fi_rdm_stress -u fabtests/test_configs/rdm_stress/stress.json 127.0.0.1
+
 ## Run fi_ubertest
 
 	run server: fi_ubertest
-	run client: fi_ubertest -u /usr/share/fabtests/test_configs/sockets/quick.test 192.168.0.123
+	run client: fi_ubertest -u fabtests/test_configs/tcp/all.test 127.0.0.1
 
 This will run "fi_ubertest" with
 
-	- sockets provider
-	- configurations defined in /usr/share/fabtests/test_configs/sockets/quick.test
-	- server node as 192.168.0.123
+	- tcp provider
+	- configurations defined in fabtests/test_configs/tcp/all.test
+	- server running on the same node
 
-The config files are provided in /test_configs for sockets, verbs, udp,
-and usnic providers and distributed with fabtests installation.
+Usable config files are provided in fabtests/test_configs/<provider_name>.
 
 For more usage options: fi_ubertest -h
 
